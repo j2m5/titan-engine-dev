@@ -1,0 +1,58 @@
+import { PostEffectBuilder } from '@/core/graphic/postprocessing/PostEffectBuilder'
+import { ScenePostProcessor } from '@/core/graphic/postprocessing/ScenePostProcessor'
+import { threeJS } from '@/core/graphic/ThreeJS'
+import { BlendFunction, ToneMappingMode } from 'postprocessing'
+
+class PostEffectPipeline {
+  private builder: PostEffectBuilder
+
+  public constructor(builder: PostEffectBuilder) {
+    this.builder = builder
+  }
+
+  public collectForGalaxyScene(): ScenePostProcessor {
+    return this.builder.start(threeJS.galaxyScene, threeJS.camera).build()
+  }
+
+  public collectForGalaxySceneWithWarp(): ScenePostProcessor {
+    return this.builder
+      .start(threeJS.galaxyScene, threeJS.camera)
+      .addZoomBlur({ blendFunction: BlendFunction.NORMAL, strength: 0.2 })
+      .addToneMapping({
+        mode: ToneMappingMode.ACES_FILMIC,
+        blendFunction: BlendFunction.SET,
+        resolution: 256,
+        whitePoint: 16,
+        middleGrey: 0.6,
+        minLuminance: 0.01,
+        averageLuminance: 0.5,
+        adaptationRate: 1
+      })
+      .build()
+  }
+
+  public collectForMainScene(): ScenePostProcessor {
+    return this.builder
+      .start(threeJS.scene, threeJS.camera)
+      .addBloom({
+        blendFunction: BlendFunction.ADD,
+        mipmapBlur: true,
+        luminanceThreshold: 1.4,
+        luminanceSmoothing: 0.0025,
+        intensity: 5
+      })
+      .addToneMapping({
+        mode: ToneMappingMode.ACES_FILMIC,
+        blendFunction: BlendFunction.SET,
+        resolution: 256,
+        whitePoint: 16,
+        middleGrey: 0.6,
+        minLuminance: 0.01,
+        averageLuminance: 0.5,
+        adaptationRate: 1
+      })
+      .build()
+  }
+}
+
+export { PostEffectPipeline }
