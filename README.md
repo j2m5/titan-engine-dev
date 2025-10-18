@@ -1,54 +1,22 @@
-# React + TypeScript + Vite
+# TitanEngine
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Space simulator based on WebGL-library Three.js, source code written with TypeScript, UI made with React and MaterialUI library, the most object visualised with custom GLSL-shaders
 
-Currently, two official plugins are available:
+Currently available three star systems - Sol, TOI-519 and Tatooine from fictional universe Star Wars
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Below some screenshots of the most famous celestial objects taken from Sol system scene
 
-## Expanding the ESLint configuration
+Earth
+![earth](https://github.com/user-attachments/assets/3c87abd8-790e-4ea4-b541-cfd094f0b600)
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Saturn
+![saturn](https://github.com/user-attachments/assets/42de41d2-fa33-4ae8-89c3-4655e7b89612)
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+Uranus with one of its satellites
+![uranus](https://github.com/user-attachments/assets/dbf32848-bc4f-442e-8c29-f3a3a295b484)
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Neptune
+![neptune](https://github.com/user-attachments/assets/45ee5775-8b7d-4d0a-b0da-5d43b662d4a0)
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
-```
+Pluto and Charon
+![pluto](https://github.com/user-attachments/assets/cfec26e7-d187-44a5-bedd-507374ccc5e5)
