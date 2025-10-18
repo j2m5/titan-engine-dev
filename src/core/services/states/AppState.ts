@@ -1,7 +1,7 @@
 import { Application } from '@/Application'
 import { Scene } from 'three'
-import { Actor } from '@/core/models/Actor.ts'
-import { AppStates } from '@/core/models/types.ts'
+import { Actor } from '@/core/models/Actor'
+import { AppStates } from '@/core/models/types'
 
 abstract class AppState {
   protected entityId: number | null = null

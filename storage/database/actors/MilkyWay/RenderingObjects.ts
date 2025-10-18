@@ -1,6 +1,6 @@
 import { IRenderingObject } from '@/core/models/types'
 import { JupiterRadius } from '@/core/constants'
-import { hexToRGB } from '@/core/materials/shaders/lib/helpers.ts'
+import { hexToRGB } from '@/core/materials/shaders/lib/helpers'
 
 const TOI519PlanetRenderingObjects: IRenderingObject[] = [
   {

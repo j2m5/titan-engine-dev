@@ -1,7 +1,7 @@
-import { Model } from '../framework/Memoquent/Model.ts'
+import { Model } from '../framework/Memoquent/Model'
 import { IPhysicalObject } from '@/core/models/types'
-import { Actor } from '@/core/models/Actor.ts'
-import { belongsTo } from '@/core/framework/Memoquent/decorators.ts'
+import { Actor } from '@/core/models/Actor'
+import { belongsTo } from '@/core/framework/Memoquent/decorators'
 
 class PhysicalObject extends Model<IPhysicalObject> {
   protected table: string = 'physicalObjects'

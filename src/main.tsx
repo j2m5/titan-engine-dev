@@ -1,12 +1,12 @@
 import './styles/App.scss'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import App from '@/ui/App.tsx'
-import { Actor } from '@/core/models/Actor.ts'
-import { Category } from '@/core/models/Category.ts'
-import { PlanetShader } from '@/core/materials/shaders/PlanetShader.ts'
-import { PhysicalObject } from '@/core/models/PhysicalObject.ts'
-import { Collection } from '@/core/framework/Memoquent/Collection.ts'
+import App from '@/ui/App'
+import { Actor } from '@/core/models/Actor'
+import { Category } from '@/core/models/Category'
+import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
+import { PhysicalObject } from '@/core/models/PhysicalObject'
+import { Collection } from '@/core/framework/Memoquent/Collection'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

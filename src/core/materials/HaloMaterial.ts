@@ -1,8 +1,8 @@
 import { AdditiveBlending, BackSide } from 'three'
-import { Actor } from '@/core/models/Actor.ts'
+import { Actor } from '@/core/models/Actor'
 import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
-import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial.ts'
-import { HaloShader } from '@/core/materials/shaders/HaloShader.ts'
+import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
+import { HaloShader } from '@/core/materials/shaders/HaloShader'
 
 class HaloMaterial extends AbstractShaderMaterial {
   public model: Actor

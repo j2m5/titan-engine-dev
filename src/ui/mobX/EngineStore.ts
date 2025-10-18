@@ -1,6 +1,6 @@
 import { makeAutoObservable } from 'mobx'
-import DIServices from '@/core/framework/DI/DIServices.ts'
-import container from '@/core/framework/DI/container.ts'
+import DIServices from '@/core/framework/DI/DIServices'
+import container from '@/core/framework/DI/container'
 import { Application } from '@/Application'
 import { ScenarioConfig } from '@/config/scenarios'
 import { GalaxyAppState } from '@/core/services/states/GalaxyAppState'

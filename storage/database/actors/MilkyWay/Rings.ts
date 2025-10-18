@@ -1,4 +1,4 @@
-import { IActor } from '@/core/models/types.ts'
+import { IActor } from '@/core/models/types'
 
 const SolarRings: IActor[] = [
   {

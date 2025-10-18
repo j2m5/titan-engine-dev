@@ -1,8 +1,8 @@
-import { Actor } from '@/core/models/Actor.ts'
-import { KeplerianModel } from '@/core/libs/KeplerianModel.ts'
+import { Actor } from '@/core/models/Actor'
+import { KeplerianModel } from '@/core/libs/KeplerianModel'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Quaternion, Vector3 } from 'three'
-import { TRotationModel } from '@/core/models/types.ts'
+import { TRotationModel } from '@/core/models/types'
 
 class RotationModel implements TRotationModel {
   private readonly epoch: number

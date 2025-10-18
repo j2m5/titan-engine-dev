@@ -10,8 +10,8 @@ import {
   SpriteMaterial,
   Vector3
 } from 'three'
-import { IRenderable } from '@/core/renderables/IRenderable.ts'
-import { getTextureByKey } from '@/config/textures.ts'
+import { IRenderable } from '@/core/renderables/IRenderable'
+import { getTextureByKey } from '@/config/textures'
 import {
   generateArms,
   generateInnerCore,

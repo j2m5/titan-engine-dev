@@ -4,12 +4,8 @@ import RocketLaunchIcon from '@mui/icons-material/RocketLaunch'
 import DoubleArrowIcon from '@mui/icons-material/DoubleArrow'
 import DescriptionIcon from '@mui/icons-material/Description'
 import { FC } from 'react'
-import { TravelAnimation } from '@/core/animations/TravelAnimation'
-import { IAnimation } from '@/core/animations/IAnimation'
 
 const ActionPanel: FC<{ name: string }> = observer(({ name }) => {
-  const animation: IAnimation = new TravelAnimation(name)
-
   return (
     <>
       <Box sx={{ width: '200px', margin: '10px auto' }}>
@@ -18,7 +14,7 @@ const ActionPanel: FC<{ name: string }> = observer(({ name }) => {
             size="small"
             startIcon={<RocketLaunchIcon />}
             onClick={(): void => {
-              animation.execute()
+              return
             }}
           >
             Move to {name}

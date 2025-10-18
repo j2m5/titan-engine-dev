@@ -1,4 +1,4 @@
-import { ShaderProps } from '@/core/materials/shaders/AbstractShader.ts'
+import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { Color, ShaderChunk, Uniform, Vector3 } from 'three'
 
 export const HaloShaderTemplate: ShaderProps = {

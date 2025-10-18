@@ -1,5 +1,5 @@
 import { BlendFunction, Effect } from 'postprocessing'
-import { ZoomBlurEffectOptions } from '@/core/graphic/postprocessing/types.ts'
+import { ZoomBlurEffectOptions } from '@/core/graphic/postprocessing/types'
 import { Uniform } from 'three'
 
 const fragmentShader: string = `

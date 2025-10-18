@@ -8,4 +8,4 @@ interface ModalWindowProps extends IVisible {
   close(value: boolean): void
 }
 
-export { ModalWindowProps }
+export type { ModalWindowProps }

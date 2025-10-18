@@ -1,7 +1,7 @@
-import { PostEffectStep } from '@/core/graphic/postprocessing/PostEffectStep.ts'
+import { PostEffectStep } from '@/core/graphic/postprocessing/PostEffectStep'
 import { Effect } from 'postprocessing'
-import { ZoomBlurEffect } from '@/core/graphic/postprocessing/effects/ZoomBlurEffect.ts'
-import { ZoomBlurEffectOptions } from '@/core/graphic/postprocessing/types.ts'
+import { ZoomBlurEffect } from '@/core/graphic/postprocessing/effects/ZoomBlurEffect'
+import { ZoomBlurEffectOptions } from '@/core/graphic/postprocessing/types'
 
 class ZoomBlurStep implements PostEffectStep {
   private readonly config: ZoomBlurEffectOptions

@@ -11,7 +11,7 @@ import { degToRad } from 'three/src/math/MathUtils'
 import { AppConfig } from '@/config/app'
 import { FakePlanet } from '@/core/renderables/utils/FakePlanet'
 import { timeStore } from '@/ui/mobX/TimeStore'
-import { KeplerianModel } from '@/core/libs/KeplerianModel.ts'
+import { KeplerianModel } from '@/core/libs/KeplerianModel'
 import { AU, SpaceScale } from '@/core/constants'
 
 class Planet extends RenderableObject implements IRenderable {

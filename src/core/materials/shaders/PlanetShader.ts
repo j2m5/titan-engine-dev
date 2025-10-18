@@ -1,15 +1,10 @@
-import { AbstractShader } from '@/core/materials/shaders/AbstractShader.ts'
-import { PlanetShaderTemplate as Shader } from '@/core/materials/shaders/lib/PlanetShaderTemplate.ts'
+import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
+import { PlanetShaderTemplate as Shader } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
 import { Texture, Uniform, Vector3 } from 'three'
-import { Actor } from '@/core/models/Actor.ts'
-import { getTextureByKey, getTextureByKeyWithDefault } from '@/config/textures.ts'
-import {
-  IAtmosphereRenderingObject,
-  IPlanetRenderingObject,
-  IRingRenderingObject,
-  ValueOf
-} from '@/core/models/types.ts'
-import { toThreeJSUnits } from '@/core/helpers/scaling.ts'
+import { Actor } from '@/core/models/Actor'
+import { getTextureByKey, getTextureByKeyWithDefault } from '@/config/textures'
+import { IAtmosphereRenderingObject, IPlanetRenderingObject, IRingRenderingObject, ValueOf } from '@/core/models/types'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 interface PlanetUniforms {
   lightPosition: Vector3

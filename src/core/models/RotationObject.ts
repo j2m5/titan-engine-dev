@@ -1,7 +1,7 @@
-import { Model } from '@/core/framework/Memoquent/Model.ts'
-import { IRotationObject } from '@/core/models/types.ts'
-import { belongsTo } from '@/core/framework/Memoquent/decorators.ts'
-import { Actor } from '@/core/models/Actor.ts'
+import { Model } from '@/core/framework/Memoquent/Model'
+import { IRotationObject } from '@/core/models/types'
+import { belongsTo } from '@/core/framework/Memoquent/decorators'
+import { Actor } from '@/core/models/Actor'
 
 class RotationObject extends Model<IRotationObject> {
   protected table: string = 'rotationObjects'

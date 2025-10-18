@@ -4,7 +4,7 @@ import type { Theme } from '@mui/material'
 import { ThemeProvider, createTheme } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
 import LoadingScreen from '@/ui/components/modules/LoadingScreen'
-import { engineStore } from '@/ui/mobX/EngineStore.ts'
+import { engineStore } from '@/ui/mobX/EngineStore'
 import { audioPlayerStore } from '@/ui/mobX/AudioPlayerStore'
 import MainAppBar from '@/ui/components/modules/MainAppBar'
 import MainMenu from '@/ui/components/modules/MainMenu'
@@ -17,7 +17,7 @@ import SettingsContent from '@/ui/components/general/SettingsContent'
 import { modalWindowStore } from '@/ui/mobX/ModalWindowStore'
 import { ITrack } from '@/ui/components/modules/audio/interfaces/ITrack'
 import HomePage from '@/ui/components/modules/HomePage'
-import { notificationStore } from '@/ui/mobX/NotificationStore.ts'
+import { notificationStore } from '@/ui/mobX/NotificationStore'
 
 const darkTheme: Theme = createTheme({
   palette: {

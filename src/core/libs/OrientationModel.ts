@@ -1,5 +1,5 @@
 import { TOrientationModel } from '@/core/models/types'
-import { Actor } from '@/core/models/Actor.ts'
+import { Actor } from '@/core/models/Actor'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Quaternion, Vector3 } from 'three'
 

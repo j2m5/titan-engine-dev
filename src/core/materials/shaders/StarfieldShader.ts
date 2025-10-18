@@ -1,7 +1,7 @@
-import { AbstractShader } from '@/core/materials/shaders/AbstractShader.ts'
+import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { Texture, Uniform } from 'three'
-import { StarfieldShaderTemplate as Shader } from '@/core/materials/shaders/lib/StarfieldShaderTemplate.ts'
-import { getTextureByKey } from '@/config/textures.ts'
+import { StarfieldShaderTemplate as Shader } from '@/core/materials/shaders/lib/StarfieldShaderTemplate'
+import { getTextureByKey } from '@/config/textures'
 
 interface StarfieldUniforms {
   time: number

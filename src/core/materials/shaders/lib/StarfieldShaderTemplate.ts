@@ -1,4 +1,4 @@
-import { ShaderProps } from '@/core/materials/shaders/AbstractShader.ts'
+import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { ShaderChunk, Uniform } from 'three'
 
 export const StarfieldShaderTemplate: ShaderProps = {

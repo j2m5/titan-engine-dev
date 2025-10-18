@@ -1,5 +1,5 @@
 import { TKeplerianModel } from '@/core/models/types'
-import { Actor } from '@/core/models/Actor.ts'
+import { Actor } from '@/core/models/Actor'
 import { AUM, CIRCLE, G } from '@/core/constants'
 import { Quaternion, Vector3 } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'

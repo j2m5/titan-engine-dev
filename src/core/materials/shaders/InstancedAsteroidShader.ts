@@ -1,8 +1,8 @@
-import { AbstractShader } from '@/core/materials/shaders/AbstractShader.ts'
+import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { Texture, Uniform, Vector3 } from 'three'
-import { InstancedAsteroidShaderTemplate as Shader } from '@/core/materials/shaders/lib/InstancedAsteroidShaderTemplate.ts'
-import { getTextureByKey } from '@/config/textures.ts'
-import { toThreeJSUnits } from '@/core/helpers/scaling.ts'
+import { InstancedAsteroidShaderTemplate as Shader } from '@/core/materials/shaders/lib/InstancedAsteroidShaderTemplate'
+import { getTextureByKey } from '@/config/textures'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 interface InstancedAsteroidUniforms {
   lightPosition: Vector3

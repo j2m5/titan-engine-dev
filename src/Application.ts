@@ -14,7 +14,7 @@ import { notificationStore } from '@/ui/mobX/NotificationStore'
 import { DefaultLoadingManager } from 'three'
 import { TextureConfig } from '@/config/textures'
 import { inject, injectable } from 'inversify'
-import DIServices from '@/core/framework/DI/DIServices.ts'
+import DIServices from '@/core/framework/DI/DIServices'
 
 @injectable()
 class Application {

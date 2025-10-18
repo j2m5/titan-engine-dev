@@ -1,4 +1,4 @@
-import { PostEffectStep } from '@/core/graphic/postprocessing/PostEffectStep.ts'
+import { PostEffectStep } from '@/core/graphic/postprocessing/PostEffectStep'
 import { BloomEffect, BloomEffectOptions, Effect } from 'postprocessing'
 
 class BloomStep implements PostEffectStep {

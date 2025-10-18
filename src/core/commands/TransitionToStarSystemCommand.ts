@@ -1,6 +1,6 @@
-import { ICommand } from '@/core/commands/ICommand.ts'
-import { TransitionReceiver } from '@/core/commands/receivers/TransitionReceiver.ts'
-import { Application } from '@/Application.ts'
+import { ICommand } from '@/core/commands/ICommand'
+import { TransitionReceiver } from '@/core/commands/receivers/TransitionReceiver'
+import { Application } from '@/Application'
 import { Entity } from '@/core/framework/Entity'
 
 class TransitionToStarSystemCommand implements ICommand {

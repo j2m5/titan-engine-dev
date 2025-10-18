@@ -1,5 +1,5 @@
 import { clamp } from 'three/src/math/MathUtils'
-import { Colorable } from '@/core/models/types.ts'
+import { Colorable } from '@/core/models/types'
 
 export function normalizeColor(color: Colorable): Colorable {
   return {

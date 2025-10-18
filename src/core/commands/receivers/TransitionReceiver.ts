@@ -1,11 +1,11 @@
-import { Application } from '@/Application.ts'
+import { Application } from '@/Application'
 import { Entity } from '@/core/framework/Entity'
 import { LinearSRGBColorSpace, Quaternion, Vector3 } from 'three'
 import anime from 'animejs/lib/anime.es'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { StarSystemAppState } from '@/core/services/states/StarSystemAppState.ts'
+import { StarSystemAppState } from '@/core/services/states/StarSystemAppState'
 import { Actor } from '@/core/models/Actor'
-import { AppState } from '@/core/services/states/AppState.ts'
+import { AppState } from '@/core/services/states/AppState'
 
 class TransitionReceiver {
   public transitionToStarSystem(context: Application, starSystem: Entity): void {

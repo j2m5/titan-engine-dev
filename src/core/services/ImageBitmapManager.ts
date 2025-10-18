@@ -1,4 +1,4 @@
-import { ResourceManager } from '@/core/services/ResourceManager.ts'
+import { ResourceManager } from '@/core/services/ResourceManager'
 import { IResource } from '@/core/models/types'
 import { CanvasTexture, ImageBitmapLoader, Texture } from 'three'
 import {
@@ -7,7 +7,7 @@ import {
   getLoadedTextures,
   getTextureByKey,
   getTexturesDirname
-} from '@/config/textures.ts'
+} from '@/config/textures'
 import { injectable } from 'inversify'
 
 @injectable()
@@ -43,7 +43,7 @@ class ImageBitmapManager extends ResourceManager<IResource, ImageBitmap> {
   }
 
   public remove(key: string): void {
-    const texture: Texture | undefined = getTextureByKey(key)
+    const texture: Texture | null = getTextureByKey(key)
 
     if (texture) texture.dispose()
 

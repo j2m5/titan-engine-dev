@@ -1,4 +1,4 @@
-import { ShaderProps } from '@/core/materials/shaders/AbstractShader.ts'
+import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { Uniform } from 'three'
 
 export const AdditiveBlendingShaderTemplate: ShaderProps = {

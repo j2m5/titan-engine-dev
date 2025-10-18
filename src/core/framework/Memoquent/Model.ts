@@ -2,7 +2,7 @@ import 'reflect-metadata'
 import { getData } from '@/config/app'
 import { LazyRelationProxy } from '@/core/framework/Memoquent/LazyRelationProxy'
 import { QueryBuilder } from '@/core/framework/Memoquent/QueryBuilder'
-import { Collection } from '@/core/framework/Memoquent/Collection.ts'
+import { Collection } from '@/core/framework/Memoquent/Collection'
 
 export type Identity = Record<string, number>
 export type DataSource = Record<string, any>

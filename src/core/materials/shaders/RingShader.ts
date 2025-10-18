@@ -1,10 +1,10 @@
-import { AbstractShader } from '@/core/materials/shaders/AbstractShader.ts'
+import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { Texture, Uniform, Vector3 } from 'three'
-import { Actor } from '@/core/models/Actor.ts'
-import { RingShaderTemplate as Shader } from '@/core/materials/shaders/lib/RingShaderTemplate.ts'
-import { IRingRenderingObject, ValueOf } from '@/core/models/types.ts'
-import { getTextureByKeyWithDefault } from '@/config/textures.ts'
-import { toThreeJSUnits } from '@/core/helpers/scaling.ts'
+import { Actor } from '@/core/models/Actor'
+import { RingShaderTemplate as Shader } from '@/core/materials/shaders/lib/RingShaderTemplate'
+import { IRingRenderingObject, ValueOf } from '@/core/models/types'
+import { getTextureByKeyWithDefault } from '@/config/textures'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 interface RingUniforms {
   diffuseMap: Texture | null

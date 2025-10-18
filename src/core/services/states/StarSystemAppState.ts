@@ -6,8 +6,8 @@ import { AppStates, IActor, IResource } from '@/core/models/types'
 import { ScenarioConfig } from '@/config/scenarios'
 import { engineStore } from '@/ui/mobX/EngineStore'
 import { getTextureByKey, TextureConfig } from '@/config/textures'
-import { Resource } from '@/core/models/Resource.ts'
-import { Collection } from '@/core/framework/Memoquent/Collection.ts'
+import { Resource } from '@/core/models/Resource'
+import { Collection } from '@/core/framework/Memoquent/Collection'
 
 class StarSystemAppState extends AppState {
   public readonly uuid: AppStates = 'starSystem'

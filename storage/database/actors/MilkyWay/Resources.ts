@@ -1,5 +1,5 @@
 import { IResource } from '@/core/models/types'
-import { SolarSystemResources } from './SolarSystem/Resources.ts'
+import { SolarSystemResources } from './SolarSystem/Resources'
 
 const TOI519Resources: IResource[] = [
   {

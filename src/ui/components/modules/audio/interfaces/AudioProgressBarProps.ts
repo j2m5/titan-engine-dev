@@ -5,4 +5,4 @@ interface AudioProgressBarProps {
   onProgressChanged(value: number): void
 }
 
-export { AudioProgressBarProps }
+export type { AudioProgressBarProps }

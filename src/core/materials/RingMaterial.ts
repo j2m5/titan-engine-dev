@@ -2,7 +2,7 @@ import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
 import { DoubleSide } from 'three'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
-import { RingShader } from '@/core/materials/shaders/RingShader.ts'
+import { RingShader } from '@/core/materials/shaders/RingShader'
 
 class RingMaterial extends AbstractShaderMaterial {
   public model: Actor

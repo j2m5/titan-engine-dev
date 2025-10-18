@@ -1,5 +1,5 @@
 import { DataSource, Model, ModelConstructor } from '@/core/framework/Memoquent/Model'
-import { Collection } from '@/core/framework/Memoquent/Collection.ts'
+import { Collection } from '@/core/framework/Memoquent/Collection'
 
 class QueryBuilder<TData extends DataSource, TModel extends Model<TData>> {
   private _conditions?: Partial<TData>

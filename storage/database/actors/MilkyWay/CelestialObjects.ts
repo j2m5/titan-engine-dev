@@ -1,5 +1,5 @@
 import { IActor } from '@/core/models/types'
-import { SolarSystemCelestialObjects } from './SolarSystem/CelestialObjects.ts'
+import { SolarSystemCelestialObjects } from './SolarSystem/CelestialObjects'
 
 const TOI519CelestialObjects: IActor[] = [
   {

@@ -1,8 +1,8 @@
-import { AbstractShader } from '@/core/materials/shaders/AbstractShader.ts'
+import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { Color, Uniform } from 'three'
-import { Actor } from '@/core/models/Actor.ts'
-import { StarShaderTemplate as Shader } from '@/core/materials/shaders/lib/StarShaderTemplate.ts'
-import { colorTemperatureToRGB, normalizeColor } from '@/core/materials/shaders/lib/helpers.ts'
+import { Actor } from '@/core/models/Actor'
+import { StarShaderTemplate as Shader } from '@/core/materials/shaders/lib/StarShaderTemplate'
+import { colorTemperatureToRGB, normalizeColor } from '@/core/materials/shaders/lib/helpers'
 
 interface StarUniforms {
   spectralColor: Color

@@ -1,14 +1,14 @@
 import { Container } from 'inversify'
 import 'reflect-metadata'
-import DIServices from '@/core/framework/DI/DIServices.ts'
-import { Engine } from '@/core/Engine.ts'
-import { Application } from '@/Application.ts'
-import { RenderManager } from '@/core/services/RenderManager.ts'
-import { CubeMapTextureManager } from '@/core/services/CubeMapTextureManager.ts'
-import { TextureManager } from '@/core/services/TextureManager.ts'
-import { ImageBitmapManager } from '@/core/services/ImageBitmapManager.ts'
-import { SceneManager } from '@/core/services/SceneManager.ts'
-import { MarkerManager } from '@/core/services/MarkerManager.ts'
+import DIServices from '@/core/framework/DI/DIServices'
+import { Engine } from '@/core/Engine'
+import { Application } from '@/Application'
+import { RenderManager } from '@/core/services/RenderManager'
+import { CubeMapTextureManager } from '@/core/services/CubeMapTextureManager'
+import { TextureManager } from '@/core/services/TextureManager'
+import { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
+import { SceneManager } from '@/core/services/SceneManager'
+import { MarkerManager } from '@/core/services/MarkerManager'
 
 const container: Container = new Container()
 

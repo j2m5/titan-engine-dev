@@ -1,4 +1,4 @@
-import { ShaderProps } from '@/core/materials/shaders/AbstractShader.ts'
+import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { ShaderChunk, Uniform, UniformsUtils, Vector3 } from 'three'
 import { AppUniformsChunk } from './chunks'
 

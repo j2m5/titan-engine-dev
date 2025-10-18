@@ -1,7 +1,7 @@
 import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
-import { Actor } from '@/core/models/Actor.ts'
-import { PlanetShader } from '@/core/materials/shaders/PlanetShader.ts'
+import { Actor } from '@/core/models/Actor'
+import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
 
 class PlanetMaterial extends AbstractShaderMaterial {
   public model: Actor

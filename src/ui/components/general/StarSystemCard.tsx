@@ -1,8 +1,8 @@
 import { FC } from 'react'
 import { observer } from 'mobx-react-lite'
 import { Button, Card, CardActions, CardContent, CardMedia, Tooltip, Typography } from '@mui/material'
-import { ScenarioConfig } from '@/config/scenarios.ts'
-import { engineStore } from '@/ui/mobX/EngineStore.ts'
+import { ScenarioConfig } from '@/config/scenarios'
+import { engineStore } from '@/ui/mobX/EngineStore'
 
 const getFullURL = (url: string): string => {
   return `/images/${url}`

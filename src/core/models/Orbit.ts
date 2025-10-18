@@ -1,7 +1,7 @@
-import { Model } from '../framework/Memoquent/Model.ts'
+import { Model } from '../framework/Memoquent/Model'
 import { IOrbit } from '@/core/models/types'
-import { belongsTo } from '@/core/framework/Memoquent/decorators.ts'
-import { Actor } from '@/core/models/Actor.ts'
+import { belongsTo } from '@/core/framework/Memoquent/decorators'
+import { Actor } from '@/core/models/Actor'
 
 class Orbit extends Model<IOrbit> {
   protected table: string = 'orbits'

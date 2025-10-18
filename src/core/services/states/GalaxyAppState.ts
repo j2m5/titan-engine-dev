@@ -6,7 +6,7 @@ import { ScenarioConfig } from '@/config/scenarios'
 import { engineStore } from '@/ui/mobX/EngineStore'
 import { AppStates, IActor } from '@/core/models/types'
 import { Actor } from '@/core/models/Actor'
-import { Collection } from '@/core/framework/Memoquent/Collection.ts'
+import { Collection } from '@/core/framework/Memoquent/Collection'
 
 class GalaxyAppState extends AppState {
   public readonly uuid: AppStates = 'galaxy'

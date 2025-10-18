@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { titanStore } from '@/core/mobX/TitanStore.ts'
+import { notificationStore } from '@/ui/mobX/NotificationStore'
 
 export type SaveFunction = (value: string) => void
 
@@ -19,7 +19,7 @@ export function useDebounce(
   const debouncedSave = useCallback(
     debounce((newValue: string) => {
       saveFunction(newValue)
-      titanStore.openNotification({ type: 'success', message: 'Changes saved' })
+      notificationStore.openNotification({ type: 'success', message: 'Changes saved' })
     }, delay),
     [saveFunction, delay]
   )

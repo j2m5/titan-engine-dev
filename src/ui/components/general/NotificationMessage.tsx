@@ -1,6 +1,6 @@
 import { observer } from 'mobx-react-lite'
 import { Alert, Slide, Snackbar } from '@mui/material'
-import { notificationStore } from '@/ui/mobX/NotificationStore.ts'
+import { notificationStore } from '@/ui/mobX/NotificationStore'
 import { FC } from 'react'
 import { NotificationMessageProps } from '@/ui/interfaces/NotificationMessageProps'
 

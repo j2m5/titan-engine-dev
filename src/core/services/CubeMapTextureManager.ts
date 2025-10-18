@@ -1,4 +1,4 @@
-import { ResourceManager } from '@/core/services/ResourceManager.ts'
+import { ResourceManager } from '@/core/services/ResourceManager'
 import { CubeTexture, CubeTextureLoader, Texture } from 'three'
 import { IResource } from '@/core/models/types'
 import {
@@ -7,7 +7,7 @@ import {
   getLoadedTextures,
   getTextureByKey,
   getTexturesDirname
-} from '@/config/textures.ts'
+} from '@/config/textures'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { injectable } from 'inversify'
 

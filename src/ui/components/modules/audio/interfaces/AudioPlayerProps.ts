@@ -9,4 +9,4 @@ interface AudioPlayerProps {
   onPrev(): void
 }
 
-export { AudioPlayerProps }
+export type { AudioPlayerProps }

@@ -2,7 +2,7 @@ import { AdditiveBlending, BackSide } from 'three'
 import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
-import { AtmosphereShader } from '@/core/materials/shaders/AtmosphereShader.ts'
+import { AtmosphereShader } from '@/core/materials/shaders/AtmosphereShader'
 
 class AtmosphereMaterial extends AbstractShaderMaterial {
   public model: Actor

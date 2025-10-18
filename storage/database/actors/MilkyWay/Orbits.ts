@@ -1,5 +1,5 @@
 import { IOrbit } from '@/core/models/types'
-import { SolarSystemOrbits } from './SolarSystem/Orbits.ts'
+import { SolarSystemOrbits } from './SolarSystem/Orbits'
 
 const TOI519Orbits: IOrbit[] = [
   {

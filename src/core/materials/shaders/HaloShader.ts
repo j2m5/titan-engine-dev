@@ -1,8 +1,8 @@
-import { AbstractShader } from '@/core/materials/shaders/AbstractShader.ts'
+import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { Color, Uniform, Vector3 } from 'three'
-import { Actor } from '@/core/models/Actor.ts'
-import { HaloShaderTemplate as Shader } from '@/core/materials/shaders/lib/HaloShaderTemplate.ts'
-import { IHaloRenderingObject, ValueOf } from '@/core/models/types.ts'
+import { Actor } from '@/core/models/Actor'
+import { HaloShaderTemplate as Shader } from '@/core/materials/shaders/lib/HaloShaderTemplate'
+import { IHaloRenderingObject, ValueOf } from '@/core/models/types'
 
 interface HaloUniforms {
   lightDirection: Vector3

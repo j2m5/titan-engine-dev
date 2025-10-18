@@ -14,8 +14,8 @@ import TimeSpeedCounter from '@/ui/components/general/TimeSpeedCounter'
 import TimerChunk from '@/ui/components/general/TimerChunk'
 import SpeedPanel from '@/ui/components/general/SpeedPanel'
 import { modalWindowStore } from '@/ui/mobX/ModalWindowStore'
-import { engineStore } from '@/ui/mobX/EngineStore.ts'
-import { timeStore } from '@/ui/mobX/TimeStore.ts'
+import { engineStore } from '@/ui/mobX/EngineStore'
+import { timeStore } from '@/ui/mobX/TimeStore'
 
 interface AppBarProps extends MuiAppBarProps {
   open?: boolean

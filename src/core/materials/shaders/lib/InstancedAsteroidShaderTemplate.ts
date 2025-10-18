@@ -1,6 +1,6 @@
-import { ShaderProps } from '@/core/materials/shaders/AbstractShader.ts'
+import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { ShaderChunk, Uniform, Vector3 } from 'three'
-import { toThreeJSUnits } from '@/core/helpers/scaling.ts'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 export const InstancedAsteroidShaderTemplate: ShaderProps = {
   uniforms: {

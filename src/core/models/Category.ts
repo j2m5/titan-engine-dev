@@ -1,7 +1,7 @@
-import { Model } from '../framework/Memoquent/Model.ts'
+import { Model } from '../framework/Memoquent/Model'
 import { ICategory } from '@/core/models/types'
-import { Actor } from '@/core/models/Actor.ts'
-import { hasMany } from '@/core/framework/Memoquent/decorators.ts'
+import { Actor } from '@/core/models/Actor'
+import { hasMany } from '@/core/framework/Memoquent/decorators'
 
 class Category extends Model<ICategory> {
   protected table: string = 'categories'

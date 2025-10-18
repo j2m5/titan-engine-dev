@@ -1,6 +1,6 @@
 import { IPhysicalObject } from '@/core/models/types'
 import { JupiterMass, JupiterRadius, SolarMass, SolarRadius } from '@/core/constants'
-import { SolarSystemPhysicalObjects } from './SolarSystem/PhysicalObjects.ts'
+import { SolarSystemPhysicalObjects } from './SolarSystem/PhysicalObjects'
 
 const TOI519PhysicalObjects: IPhysicalObject[] = [
   {

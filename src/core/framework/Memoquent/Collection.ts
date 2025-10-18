@@ -1,4 +1,4 @@
-import { DataSource, Model } from '@/core/framework/Memoquent/Model.ts'
+import { DataSource, Model } from '@/core/framework/Memoquent/Model'
 
 class Collection<TModel extends Model<any>> implements Iterable<TModel> {
   public constructor(protected items: TModel[] = []) {}

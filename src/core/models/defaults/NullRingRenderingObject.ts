@@ -1,7 +1,7 @@
-import { ExtractedRenderingObject } from '@/core/models/types'
+import { IRingRenderingObject } from '@/core/models/types'
 import { randInt } from 'three/src/math/MathUtils'
 
-class NullRingRenderingObject implements ExtractedRenderingObject<10> {
+class NullRingRenderingObject implements IRingRenderingObject {
   public readonly id: number
   public readonly actorId: number
   public innerRadius: number

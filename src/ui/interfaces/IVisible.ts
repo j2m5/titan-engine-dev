@@ -2,4 +2,4 @@ interface IVisible {
   visible: boolean
 }
 
-export { IVisible }
+export type { IVisible }

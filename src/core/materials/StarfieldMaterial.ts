@@ -1,7 +1,7 @@
 import { AdditiveBlending } from 'three'
 import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
-import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial.ts'
-import { StarfieldShader } from '@/core/materials/shaders/StarfieldShader.ts'
+import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
+import { StarfieldShader } from '@/core/materials/shaders/StarfieldShader'
 
 class StarfieldMaterial extends AbstractShaderMaterial {
   public constructor(parameters?: ShaderMaterialParameters) {

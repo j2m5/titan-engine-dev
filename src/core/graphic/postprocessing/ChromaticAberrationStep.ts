@@ -1,6 +1,6 @@
-import { PostEffectStep } from '@/core/graphic/postprocessing/PostEffectStep.ts'
+import { PostEffectStep } from '@/core/graphic/postprocessing/PostEffectStep'
 import { ChromaticAberrationEffect, Effect } from 'postprocessing'
-import { ChromaticAberrationOptions } from '@/core/graphic/postprocessing/types.ts'
+import { ChromaticAberrationOptions } from '@/core/graphic/postprocessing/types'
 
 class ChromaticAberrationStep implements PostEffectStep {
   private readonly config: ChromaticAberrationOptions

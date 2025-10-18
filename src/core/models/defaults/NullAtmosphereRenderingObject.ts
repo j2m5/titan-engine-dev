@@ -1,4 +1,4 @@
-import { Colorable, IAtmosphereRenderingObject } from '@/core/models/types.ts'
+import { Colorable, IAtmosphereRenderingObject } from '@/core/models/types'
 import { randInt } from 'three/src/math/MathUtils'
 
 class NullAtmosphereRenderingObject implements IAtmosphereRenderingObject {

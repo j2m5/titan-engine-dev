@@ -1,10 +1,10 @@
-import { AbstractShader } from '@/core/materials/shaders/AbstractShader.ts'
+import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { Uniform, Vector3 } from 'three'
-import { Actor } from '@/core/models/Actor.ts'
-import { AtmosphereShaderTemplate as Shader } from '@/core/materials/shaders/lib/AtmosphereShaderTemplate.ts'
-import { toThreeJSUnits } from '@/core/helpers/scaling.ts'
-import { Colorable, IAtmosphereRenderingObject, ValueOf } from '@/core/models/types.ts'
-import { calculateScatterRGB } from '@/core/materials/helpers.ts'
+import { Actor } from '@/core/models/Actor'
+import { AtmosphereShaderTemplate as Shader } from '@/core/materials/shaders/lib/AtmosphereShaderTemplate'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { Colorable, IAtmosphereRenderingObject, ValueOf } from '@/core/models/types'
+import { calculateScatterRGB } from '@/core/materials/helpers'
 
 interface AtmosphereUniforms {
   targetRadius: number

@@ -1,5 +1,5 @@
 import 'reflect-metadata'
-import { DataSource, Model, RelationConfig, RelationMetadata, RELATIONS_KEY } from '@/core/framework/Memoquent/Model.ts'
+import { DataSource, Model, RelationConfig, RelationMetadata, RELATIONS_KEY } from '@/core/framework/Memoquent/Model'
 
 export function belongsTo<T extends DataSource>(
   modelFactory: () => new (attributes?: Partial<T>) => Model<T>,

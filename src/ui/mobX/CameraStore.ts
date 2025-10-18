@@ -1,7 +1,7 @@
 import { makeAutoObservable } from 'mobx'
 import { Object3D, Vector3 } from 'three'
 import { clamp } from 'three/src/math/MathUtils'
-import { AppConfig } from '@/config/app.ts'
+import { AppConfig } from '@/config/app'
 import { AU, LightSpeed } from '@/core/constants'
 
 class CameraStore {

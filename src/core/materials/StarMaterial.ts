@@ -1,7 +1,7 @@
 import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
-import { Actor } from '@/core/models/Actor.ts'
-import { StarShader } from '@/core/materials/shaders/StarShader.ts'
+import { Actor } from '@/core/models/Actor'
+import { StarShader } from '@/core/materials/shaders/StarShader'
 
 class StarMaterial extends AbstractShaderMaterial {
   public model: Actor

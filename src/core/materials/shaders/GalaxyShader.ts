@@ -1,7 +1,7 @@
-import { AbstractShader } from '@/core/materials/shaders/AbstractShader.ts'
+import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { Texture, Uniform } from 'three'
-import { GalaxyShaderTemplate as Shader } from '@/core/materials/shaders/lib/GalaxyShaderTemplate.ts'
-import { getTextureByKey } from '@/config/textures.ts'
+import { GalaxyShaderTemplate as Shader } from '@/core/materials/shaders/lib/GalaxyShaderTemplate'
+import { getTextureByKey } from '@/config/textures'
 
 interface GalaxyUniforms {
   map: Texture | null

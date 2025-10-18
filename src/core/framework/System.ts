@@ -1,5 +1,5 @@
-import { Entity } from '@/core/framework/Entity.ts'
-import { Engine } from '@/core/Engine.ts'
+import { Entity } from '@/core/framework/Entity'
+import { Engine } from '@/core/Engine'
 
 abstract class System {
   protected readonly filteredEntities: Entity[] = []

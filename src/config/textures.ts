@@ -1,7 +1,7 @@
 import { IResource } from '@/core/models/types'
 import type { Texture } from 'three'
 import { Resources } from '@storage/database'
-import { generateTexture } from '@/core/materials/helpers.ts'
+import { generateTexture } from '@/core/materials/helpers'
 
 export type TTextureConfig = {
   TexturesDirectoryName: string

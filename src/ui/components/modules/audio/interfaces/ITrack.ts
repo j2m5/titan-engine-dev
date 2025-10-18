@@ -6,4 +6,4 @@ interface ITrack {
   metadata?: TrackMetadata
 }
 
-export { ITrack }
+export type { ITrack }

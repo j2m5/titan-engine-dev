@@ -8,4 +8,4 @@ interface TrackListProps {
   onTogglePlaying(): void
 }
 
-export { TrackListProps }
+export type { TrackListProps }

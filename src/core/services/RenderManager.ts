@@ -1,9 +1,9 @@
 import { Scene } from 'three'
-import { ScenePostProcessor } from '@/core/graphic/postprocessing/ScenePostProcessor.ts'
+import { ScenePostProcessor } from '@/core/graphic/postprocessing/ScenePostProcessor'
 import { injectable } from 'inversify'
-import { PostEffectPipeline } from '@/core/graphic/postprocessing/PostEffectPipeline.ts'
-import { PostEffectBuilder } from '@/core/graphic/postprocessing/PostEffectBuilder.ts'
-import { threeJS } from '@/core/graphic/ThreeJS.ts'
+import { PostEffectPipeline } from '@/core/graphic/postprocessing/PostEffectPipeline'
+import { PostEffectBuilder } from '@/core/graphic/postprocessing/PostEffectBuilder'
+import { threeJS } from '@/core/graphic/ThreeJS'
 
 export enum PostprocessingPresets {
   GalaxyDefault,

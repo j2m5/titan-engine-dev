@@ -6,4 +6,4 @@ interface NotificationMessageProps {
   message: string
 }
 
-export { NotificationMessageProps }
+export type { NotificationMessageProps }

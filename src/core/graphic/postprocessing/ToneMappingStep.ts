@@ -1,5 +1,5 @@
-import { PostEffectStep } from '@/core/graphic/postprocessing/PostEffectStep.ts'
-import { ToneMappingOptions } from '@/core/graphic/postprocessing/types.ts'
+import { PostEffectStep } from '@/core/graphic/postprocessing/PostEffectStep'
+import { ToneMappingOptions } from '@/core/graphic/postprocessing/types'
 import { Effect, ToneMappingEffect } from 'postprocessing'
 
 class ToneMappingStep implements PostEffectStep {

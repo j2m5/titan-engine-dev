@@ -1,8 +1,8 @@
-import { ringShadowFragment, ringShadowFunctions, ringShadowUniforms } from './RingShadow.ts'
-import { noiseFunctions } from './Noise.ts'
-import { bumpFunctions } from '@/core/materials/shaders/lib/chunks/Bump.ts'
+import { ringShadowFragment, ringShadowFunctions, ringShadowUniforms } from './RingShadow'
+import { noiseFunctions } from './Noise'
+import { bumpFunctions } from '@/core/materials/shaders/lib/chunks/Bump'
 import { IUniform, Uniform } from 'three'
-import { atmosphereFunctions, atmosphereFragment } from '@/core/materials/shaders/lib/chunks/Atmosphere.ts'
+import { atmosphereFunctions, atmosphereFragment } from '@/core/materials/shaders/lib/chunks/Atmosphere'
 
 export const AppUniformsChunk: Record<string, Record<string, IUniform>> = {
   ringShadowUniforms: {

@@ -4,4 +4,4 @@ interface INotification extends NotificationMessageProps {
   isOpen: boolean
 }
 
-export { INotification }
+export type { INotification }

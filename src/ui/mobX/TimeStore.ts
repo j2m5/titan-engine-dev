@@ -1,5 +1,5 @@
 import { makeAutoObservable } from 'mobx'
-import { getDateFromJD, getJD } from '@/core/helpers/jd.ts'
+import { getDateFromJD, getJD } from '@/core/helpers/jd'
 import dayjs from 'dayjs'
 
 class TimeStore {

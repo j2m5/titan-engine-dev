@@ -1,6 +1,6 @@
 import { makeAutoObservable } from 'mobx'
-import { INotification } from '@/ui/interfaces/INotification.ts'
-import { NotificationMessageProps } from '@/ui/interfaces/NotificationMessageProps.ts'
+import { INotification } from '@/ui/interfaces/INotification'
+import { NotificationMessageProps } from '@/ui/interfaces/NotificationMessageProps'
 
 class NotificationStore {
   public notification: INotification = {
