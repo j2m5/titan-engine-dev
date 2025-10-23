@@ -10,8 +10,6 @@ import type {
 
 export type ValueOf<T> = T[keyof T]
 
-export type AppStates = 'galaxy' | 'starSystem'
-
 export enum AllowedCategories {
   universe,
   galaxy,

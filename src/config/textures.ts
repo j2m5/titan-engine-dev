@@ -11,17 +11,15 @@ export type TTextureConfig = {
   LoadedTextures: Map<string, Texture>
 }
 
-const commonFiles: IResource[] = Resources.filter((resource: IResource): boolean => resource.actorId === null)
-
-const commonCubemapFiles: IResource[] = Resources.filter(
-  (resource: IResource): boolean => resource.resourceType === 'cube'
+const commonFiles: IResource[] = Resources.filter(
+  (resource: IResource): boolean => resource.actorId === null && resource.resourceType === 'diffuse'
 )
 
 export const TextureConfig: TTextureConfig = {
   TexturesDirectoryName: 'textures',
   FilesToLoad: [...commonFiles],
   BitmapsToLoad: [],
-  CubeFilesToLoad: [[...commonCubemapFiles]],
+  CubeFilesToLoad: [],
   LoadedTextures: new Map<string, Texture>()
 }
 

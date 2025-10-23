@@ -31,7 +31,6 @@ class CubeMapTextureManager extends ResourceManager<IResource[], CubeTexture, re
       const name: string = first.replace(/(.*)\/.*?\..*$/, '$1').replace(/\//g, '-')
       const fullURLs: string[] = this.getFullURLs(source.map((item: IResource) => item.path))
       const texture: CubeTexture = await this.loader.loadAsync(fullURLs)
-      console.log(name)
 
       texture.name = name
       texture.anisotropy = 8

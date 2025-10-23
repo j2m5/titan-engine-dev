@@ -9,9 +9,7 @@ import {
   getTexturesDirname
 } from '@/config/textures'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { injectable } from 'inversify'
 
-@injectable()
 class TextureManager extends ResourceManager<IResource, Texture> {
   protected loader: TextureLoader
 

@@ -1,5 +1,4 @@
 import { System } from '@/core/framework/System'
-import { AppState } from '@/core/services/states/AppState'
 import { Entity } from '@/core/framework/Entity'
 import { Engine } from '@/core/Engine'
 import { threeJS } from '@/core/graphic/ThreeJS'
@@ -9,21 +8,18 @@ import { cameraStore } from '@/ui/mobX/CameraStore'
 import { DAY } from '@/core/constants'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { Object3D } from 'three'
+import { inject, injectable } from 'inversify'
+import DIServices from '@/core/framework/DI/DIServices'
 
+@injectable()
 class RenderSystem extends System {
   private readonly canvas: HTMLCanvasElement
   private readonly overlay: HTMLElement
 
-  private state: AppState
-  private readonly renderManager: RenderManager
-
-  public constructor(state: AppState, renderManager: RenderManager) {
+  public constructor(@inject(DIServices.RenderManager) private renderManager: RenderManager) {
     super()
     this.canvas = threeJS.renderer.domElement
     this.overlay = threeJS.labelRenderer.domElement
-
-    this.state = state
-    this.renderManager = renderManager
   }
 
   public appliesTo(entity: Entity): boolean {
@@ -47,7 +43,7 @@ class RenderSystem extends System {
     timeStore.setEpoch(timeStore.epoch + (dt * timeStore.speedOfTime) / DAY)
     threeJS.astroControls.movementSpeed = toThreeJSUnits(cameraStore.speed)
     threeJS.astroControls.update(dt)
-    threeJS.labelRenderer.render(this.state.scene, threeJS.camera)
+    threeJS.labelRenderer.render(threeJS.scene, threeJS.camera)
     this.renderManager.render(dt)
   }
 

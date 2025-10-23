@@ -1,40 +1,33 @@
-import { Application } from '@/Application'
-import { ICommand } from '@/core/commands/ICommand'
 import { Entity } from '@/core/framework/Entity'
 import { Actor } from '@/core/models/Actor'
 import { Object3D, Vector3 } from 'three'
 import { UsesMark } from '@/core/framework/components/UsesMark'
-import { MarkerOptions } from '@/core/services/MarkerManager'
-import { TransitionToStarSystemCommand } from '@/core/commands/TransitionToStarSystemCommand'
-import { TransitionReceiver } from '@/core/commands/receivers/TransitionReceiver'
+import { MarkerManager, MarkerOptions } from '@/core/services/MarkerManager'
 import { OrbitLine } from '@/core/renderables/utils/OrbitLine'
 import { Placeable } from '@/core/framework/components/Placeable'
 import { Movable } from '@/core/framework/components/Movable'
-import { injectable } from 'inversify'
+import { inject, injectable } from 'inversify'
+import { ScenarioLoader } from '@/core/services/ScenarioLoader'
+import { Engine } from '@/core/Engine'
+import DIServices from '@/core/framework/DI/DIServices'
 
 @injectable()
 class SceneManager {
-  private context!: Application
-  private command!: ICommand
-
-  public setContext(context: Application): void {
-    this.context = context
-  }
-
-  private setCommand(command: ICommand): void {
-    this.command = command
-  }
+  public constructor(
+    @inject(DIServices.ScenarioLoader) private scenarioLoader: ScenarioLoader,
+    @inject(DIServices.Engine) private engine: Engine,
+    @inject(DIServices.MarkerManager) private markerManager: MarkerManager
+  ) {}
 
   public build(): void {
-    if (!this.context) throw new Error('Context is not set')
-    if (this.context.state) {
+    if (this.scenarioLoader?.map) {
       // если не в главном меню строим граф сцены
-      this.context.engine.entities.forEach((value: Entity, index: number, array: Entity[]): void => {
+      this.engine.entities.forEach((value: Entity, index: number, array: Entity[]): void => {
         // пробегаем по массиву зарегистрированных сущностей
         if (value.hasComponent(Actor) && !value.getComponent(Actor).parent) {
           // если у сущности есть модель данных и отсутствует родитель
           // добавляем привязанный к сущности 3D-объект напрямую в сцену из стейта
-          this.context.state?.scene.add(value.getComponent(Object3D))
+          this.scenarioLoader?.scene.add(value.getComponent(Object3D))
         } else if (value.hasComponent(Actor) && value.getComponent(Actor).parent) {
           // если у сущности есть модель данных и есть родитель
           // ищем его и добавляем привязанный к сущности 3D-объект в контейнер 3D-объекта родителя
@@ -70,15 +63,7 @@ class SceneManager {
             offset: placement
           }
 
-          // если находимся на сцене галактики добавляем к маркерам обработчик клика
-          if (this.context.state?.uuid === 'galaxy') {
-            mark.onClick = (): void => {
-              this.setCommand(new TransitionToStarSystemCommand(new TransitionReceiver(), this.context, value))
-              this.command.execute()
-            }
-          }
-
-          this.context.markerManager.add(mark)
+          this.markerManager.add(mark)
         }
       })
     } else {

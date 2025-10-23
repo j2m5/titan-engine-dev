@@ -9,6 +9,9 @@ import { TextureManager } from '@/core/services/TextureManager'
 import { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
 import { SceneManager } from '@/core/services/SceneManager'
 import { MarkerManager } from '@/core/services/MarkerManager'
+import { ScenarioLoader } from '@/core/services/ScenarioLoader'
+import { RenderSystem } from '@/core/systems/RenderSystem'
+import { EntitySystem } from '@/core/systems/EntitySystem'
 
 const container: Container = new Container()
 
@@ -20,5 +23,8 @@ container.bind(DIServices.TextureManager).to(TextureManager).inSingletonScope()
 container.bind(DIServices.ImageBitmapManager).to(ImageBitmapManager).inSingletonScope()
 container.bind(DIServices.SceneManager).to(SceneManager).inSingletonScope()
 container.bind(DIServices.MarkerManager).to(MarkerManager).inSingletonScope()
+container.bind(DIServices.ScenarioLoader).to(ScenarioLoader).inSingletonScope()
+container.bind(DIServices.RenderSystem).to(RenderSystem).inSingletonScope()
+container.bind(DIServices.EntitySystem).to(EntitySystem).inSingletonScope()
 
 export default container

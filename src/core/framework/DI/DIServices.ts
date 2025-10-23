@@ -6,5 +6,8 @@ export default {
   TextureManager: Symbol.for('TextureManager'),
   ImageBitmapManager: Symbol.for('ImageBitmapManager'),
   SceneManager: Symbol.for('SceneManager'),
-  MarkerManager: Symbol.for('MarkerManager')
+  MarkerManager: Symbol.for('MarkerManager'),
+  ScenarioLoader: Symbol.for('ScenarioLoader'),
+  RenderSystem: Symbol.for('RenderSystem'),
+  EntitySystem: Symbol.for('EntitySystem')
 }

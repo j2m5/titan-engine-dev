@@ -98,7 +98,7 @@ const CommonResources: IResource[] = [
 ]
 
 const CommonCubemapResources: IResource[] = [
-  /*{
+  {
     id: 94,
     actorId: null,
     resourceType: 'cube',
@@ -133,7 +133,7 @@ const CommonCubemapResources: IResource[] = [
     actorId: null,
     resourceType: 'cube',
     path: 'cubemaps/scene/main/nz.jpg'
-  },*/
+  },
   {
     id: 107,
     actorId: null,

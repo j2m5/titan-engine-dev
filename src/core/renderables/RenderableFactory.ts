@@ -11,13 +11,12 @@ import { Ring } from '@/core/renderables/Ring'
 import { BlackHoleV2 } from '@/core/renderables/BlackHoleV2'
 import { GalaxyStateStrategy } from '@/core/renderables/galaxy/GalaxyStateStrategy'
 import { StarSystemStateStrategy } from '@/core/renderables/galaxy/StarSystemStateStrategy'
-import { AppStates } from '@/core/models/types'
 
 class RenderableFactory {
-  public static resolveAndCreateActor(actor: Actor, state: AppStates): IRenderable {
+  public static resolveAndCreateActor(actor: Actor): IRenderable {
     switch (actor.getAttribute('categoryId')) {
       case 2:
-        return state === 'galaxy' ? this.createGalaxy(actor) : this.createFakeGalaxy(actor)
+        return this.createFakeGalaxy(actor)
       case 3:
         return this.createStarSystem(actor)
       case 4:
@@ -39,6 +38,8 @@ class RenderableFactory {
     }
   }
 
+  // пока пусть полежит метод
+  // @ts-ignore
   private static createGalaxy(actor: Actor): IRenderable {
     return new Galaxy(actor, new GalaxyStateStrategy())
   }

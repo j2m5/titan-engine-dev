@@ -1,24 +1,49 @@
+import { fromAstronomicalUnits } from '@/core/helpers/scaling'
+
 export type ScenarioConfig = {
   id: number
-  actorId: number
+  galaxyId: number
+  rootId: number
   name: string
   description: string
   preview: string
+  skybox: number[]
+  defaultCameraPosition: [number, number, number]
+  lightSources: number[]
 }
 
 export const Scenarios: ScenarioConfig[] = [
   {
     id: 1,
-    actorId: 19,
-    name: 'Milky Way',
-    description: '',
-    preview: 'unknown.png'
+    galaxyId: 19,
+    rootId: 86,
+    name: 'Solar system',
+    description: 'Solar system',
+    preview: 'SolarSystem.jpg',
+    skybox: [94, 95, 96, 97, 98, 99],
+    defaultCameraPosition: [0, fromAstronomicalUnits(2), fromAstronomicalUnits(2)],
+    lightSources: [31]
   },
   {
     id: 2,
-    actorId: 1,
-    name: 'Star Wars Galaxy',
-    description: '',
-    preview: 'unknown.png'
+    galaxyId: 19,
+    rootId: 20,
+    name: 'TOI-519 system',
+    description: 'System with distant red-dwarf star and its satellite as hot-neptune',
+    preview: 'TOI519System.jpg',
+    skybox: [94, 95, 96, 97, 98, 99],
+    defaultCameraPosition: [0, fromAstronomicalUnits(0.03), fromAstronomicalUnits(0.03)],
+    lightSources: [21]
+  },
+  {
+    id: 3,
+    galaxyId: 1,
+    rootId: 2,
+    name: 'Tatoo system',
+    description: 'Approximate Tatoo system from Star Wars Universe',
+    preview: 'TatooSystem.jpg',
+    skybox: [94, 95, 96, 97, 98, 99],
+    defaultCameraPosition: [0, fromAstronomicalUnits(1.2), fromAstronomicalUnits(1.2)],
+    lightSources: [4, 5]
   }
 ]

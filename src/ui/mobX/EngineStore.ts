@@ -3,10 +3,8 @@ import DIServices from '@/core/framework/DI/DIServices'
 import container from '@/core/framework/DI/container'
 import { Application } from '@/Application'
 import { ScenarioConfig } from '@/config/scenarios'
-import { GalaxyAppState } from '@/core/services/states/GalaxyAppState'
 import { timeStore } from '@/ui/mobX/TimeStore'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { AppConfig } from '@/config/app'
 import { Vector3 } from 'three'
 
 const app: Application = container.get(DIServices.Application)
@@ -28,9 +26,10 @@ class EngineStore {
     if (this.scenario) {
       this.setAppLoadingStatus(true)
       timeStore.setSpeedOfTime(1)
-      await app.setState(new GalaxyAppState())
+      await app.run(this.scenario)
+      this.setAppLoadingStatus(false)
 
-      threeJS.camera.position.set(...AppConfig.DefaultCameraPosition)
+      threeJS.camera.position.set(...this.scenario.defaultCameraPosition)
       threeJS.camera.lookAt(new Vector3())
     }
   }

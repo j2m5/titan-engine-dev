@@ -1,6 +1,5 @@
 import { AllowedCategory } from '@/core/models/types'
 import { System } from '@/core/framework/System'
-import { AppState } from '@/core/services/states/AppState'
 import { Entity } from '@/core/framework/Entity'
 import { Engine } from '@/core/Engine'
 import { Object3D } from 'three'
@@ -11,15 +10,16 @@ import { UsesMark } from '@/core/framework/components/UsesMark'
 import { RenderableObject } from '@/core/renderables/RenderableObject'
 import { Placeable } from '@/core/framework/components/Placeable'
 import { Movable } from '@/core/framework/components/Movable'
+import { ScenarioLoader } from '@/core/services/ScenarioLoader'
+import { inject, injectable } from 'inversify'
+import DIServices from '@/core/framework/DI/DIServices'
 
 export const PrimaryActors: AllowedCategory[] = ['barycenter', 'star', 'planet', 'blackHole']
 
+@injectable()
 class EntitySystem extends System {
-  private state: AppState
-
-  public constructor(state: AppState) {
+  public constructor(@inject(DIServices.ScenarioLoader) private scenarioLoader: ScenarioLoader) {
     super()
-    this.state = state
   }
 
   public appliesTo(entity: Entity): boolean {
@@ -27,11 +27,11 @@ class EntitySystem extends System {
   }
 
   public initialize(engine: Engine): void {
-    this.state.map.forEach((actor: Actor): void => {
+    this.scenarioLoader.map.forEach((actor: Actor): void => {
       const entity: Entity = new Entity()
       entity.id = actor.getAttribute('id')
 
-      const object: IRenderable = RenderableFactory.resolveAndCreateActor(actor, this.state.uuid)
+      const object: IRenderable = RenderableFactory.resolveAndCreateActor(actor)
 
       entity.addComponents(actor, object, object.build())
 
@@ -39,14 +39,7 @@ class EntitySystem extends System {
         entity.addComponents(new Placeable(), new Movable())
       }
 
-      if (this.state.uuid === 'galaxy' && actor.category.getAttribute('id') === 3) {
-        entity.addComponent(new UsesMark('diamond'))
-      }
-
-      if (
-        this.state.uuid === 'starSystem' &&
-        (actor.category.getAttribute('id') === 7 || actor.category.getAttribute('id') === 5)
-      ) {
+      if (actor.category.getAttribute('id') === 7 || actor.category.getAttribute('id') === 5) {
         entity.addComponent(new UsesMark('circle'))
       }
 

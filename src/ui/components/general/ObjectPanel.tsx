@@ -1,39 +1,51 @@
 import { observer } from 'mobx-react-lite'
 import { Divider, FormControl, InputLabel, Select, MenuItem, SelectChangeEvent } from '@mui/material'
 import ActionPanel from '@/ui/components/general/ActionPanel'
-import { simulationStore } from '@/core/mobX/SimulationStore'
-import { ModelState } from '@/core/data/types'
+import { Actor } from '@/core/models/Actor'
+import { engineStore } from '@/ui/mobX/EngineStore'
+import { useState } from 'react'
 
 const ObjectPanel = observer(() => {
-  /*const names: string[] = simulationStore.modelState.map((item: ModelState) => item.name)
+  const [selected, setSelected] = useState('')
+  const [name, setName] = useState('')
+
+  const objects: Actor[] = Actor.query()
+    .where({ parentId: engineStore.scenario?.rootId })
+    .get()
+    .flatten()
+    .filter((actor: Actor): boolean => actor.attributes.categoryId !== 4)
+    .toArray()
 
   const handleChange = (event: SelectChangeEvent): void => {
-    simulationStore.updateSelectedModel(event.target.value)
-    simulationStore.updateSelection(event.target.value)
-  }*/
+    const selectedId = event.target.value
+    const selectedObject = objects.find((actor) => actor.attributes.id === Number(selectedId))!
 
-  return <div>ObjectPanel</div>
+    if (selectedObject) {
+      setSelected(selectedId)
+      setName(selectedObject.attributes.name!)
+    }
+  }
 
-  /*return (
+  return (
     <>
-      <ActionPanel name={simulationStore.selectedModel} />
+      <ActionPanel name={name} />
       <Divider />
       <FormControl variant="standard" sx={{ width: '200px', margin: '10px auto' }}>
         <InputLabel id="name">Name</InputLabel>
-        <Select label="Name" labelId="name" value={simulationStore.selectedModel} onChange={handleChange}>
+        <Select label="Name" labelId="name" value={selected} onChange={handleChange}>
           <MenuItem disabled value="">
             <em>Select object</em>
           </MenuItem>
-          {names.map((name: string) => (
-            <MenuItem key={name} value={name}>
-              {name}
+          {objects.map((actor: Actor) => (
+            <MenuItem key={actor.attributes.id} value={actor.attributes.id}>
+              {actor.attributes.name}
             </MenuItem>
           ))}
         </Select>
       </FormControl>
       <Divider />
     </>
-  )*/
+  )
 })
 
 export default ObjectPanel
