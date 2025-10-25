@@ -12,6 +12,7 @@ import { MarkerManager } from '@/core/services/MarkerManager'
 import { ScenarioLoader } from '@/core/services/ScenarioLoader'
 import { RenderSystem } from '@/core/systems/RenderSystem'
 import { EntitySystem } from '@/core/systems/EntitySystem'
+import { CameraObserver } from '@/core/services/CameraObserver'
 
 const container: Container = new Container()
 
@@ -26,5 +27,6 @@ container.bind(DIServices.MarkerManager).to(MarkerManager).inSingletonScope()
 container.bind(DIServices.ScenarioLoader).to(ScenarioLoader).inSingletonScope()
 container.bind(DIServices.RenderSystem).to(RenderSystem).inSingletonScope()
 container.bind(DIServices.EntitySystem).to(EntitySystem).inSingletonScope()
+container.bind(DIServices.CameraObserver).to(CameraObserver).inSingletonScope()
 
 export default container

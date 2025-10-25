@@ -1,15 +1,12 @@
 import { makeAutoObservable } from 'mobx'
-import DIServices from '@/core/framework/DI/DIServices'
-import container from '@/core/framework/DI/container'
 import { Application } from '@/Application'
 import { ScenarioConfig } from '@/config/scenarios'
 import { timeStore } from '@/ui/mobX/TimeStore'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { Vector3 } from 'three'
 
-const app: Application = container.get(DIServices.Application)
-
 class EngineStore {
+  private app: Application | null = null
   public scenario: ScenarioConfig | null = null
   public appLoadingStatus: boolean = true
   public appLoadingProgress: number = 0
@@ -20,13 +17,20 @@ class EngineStore {
     makeAutoObservable(this)
   }
 
+  public async initialize(app: Application): Promise<void> {
+    this.app = app
+  }
+
   public async setScenario(payload: ScenarioConfig | null): Promise<void> {
     this.scenario = payload
 
-    if (this.scenario) {
+    if (this.scenario && this.app) {
       this.setAppLoadingStatus(true)
+
       timeStore.setSpeedOfTime(1)
-      await app.run(this.scenario)
+
+      await this.app.run(this.scenario)
+
       this.setAppLoadingStatus(false)
 
       threeJS.camera.position.set(...this.scenario.defaultCameraPosition)

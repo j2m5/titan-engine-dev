@@ -47,7 +47,8 @@ class Star extends RenderableObject implements IRenderable {
     lod.name = this.model.attributes.name + 'LOD'
     lod.addLevel(this.object3D)
     lod.addLevel(new FakeStar().build(), this.computeDistanceLOD(3))
-    lod.userData.type = this.model.category.getAttribute('name')
+    lod.userData.type = this.model.category.getAttribute('alias')
+    lod.userData.model = this.model.getAttribute('name')
 
     this.object3D.rotateX(degToRad(-90))
     this.object3D.rotateX(degToRad(-this.model.physicalObject.getAttribute('axialTilt', 0)))

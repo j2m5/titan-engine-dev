@@ -45,7 +45,8 @@ class Planet extends RenderableObject implements IRenderable {
     lod.name = this.model.getAttribute('name') + 'LOD'
     lod.addLevel(this.object3D)
     lod.addLevel(new FakePlanet().build(), this.computeDistanceLOD())
-    lod.userData.type = this.model.category.getAttribute('name')
+    lod.userData.type = this.model.category.getAttribute('alias')
+    lod.userData.model = this.model.getAttribute('name')
 
     this.object3D.rotateX(degToRad(-90))
     this.object3D.rotateX(degToRad(-this.model.physicalObject.getAttribute('axialTilt', 0)))

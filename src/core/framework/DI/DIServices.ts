@@ -9,5 +9,6 @@ export default {
   MarkerManager: Symbol.for('MarkerManager'),
   ScenarioLoader: Symbol.for('ScenarioLoader'),
   RenderSystem: Symbol.for('RenderSystem'),
-  EntitySystem: Symbol.for('EntitySystem')
+  EntitySystem: Symbol.for('EntitySystem'),
+  CameraObserver: Symbol.for('CameraObserver')
 }

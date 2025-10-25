@@ -10,32 +10,11 @@ class PostEffectPipeline {
     this.builder = builder
   }
 
-  public collectForGalaxyScene(): ScenePostProcessor {
-    return this.builder.start(threeJS.galaxyScene, threeJS.camera).build()
-  }
-
-  public collectForGalaxySceneWithWarp(): ScenePostProcessor {
-    return this.builder
-      .start(threeJS.galaxyScene, threeJS.camera)
-      .addZoomBlur({ blendFunction: BlendFunction.NORMAL, strength: 0.2 })
-      .addToneMapping({
-        mode: ToneMappingMode.ACES_FILMIC,
-        blendFunction: BlendFunction.SET,
-        resolution: 256,
-        whitePoint: 16,
-        middleGrey: 0.6,
-        minLuminance: 0.01,
-        averageLuminance: 0.5,
-        adaptationRate: 1
-      })
-      .build()
-  }
-
   public collectForMainScene(): ScenePostProcessor {
     return this.builder
       .start(threeJS.scene, threeJS.camera)
       .addBloom({
-        blendFunction: BlendFunction.ADD,
+        blendFunction: BlendFunction.SCREEN,
         mipmapBlur: true,
         luminanceThreshold: 1.4,
         luminanceSmoothing: 0.0025,

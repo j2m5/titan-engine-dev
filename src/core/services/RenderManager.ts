@@ -6,8 +6,6 @@ import { PostEffectBuilder } from '@/core/graphic/postprocessing/PostEffectBuild
 import { threeJS } from '@/core/graphic/ThreeJS'
 
 export enum PostprocessingPresets {
-  GalaxyDefault,
-  GalaxyWithWarp,
   StarSystemDefault
 }
 
@@ -48,15 +46,11 @@ class RenderManager {
   }
 
   private registerRenderPipelines(): void {
-    const galaxyDefaultPipeline: PostEffectPipeline = new PostEffectPipeline(new PostEffectBuilder(threeJS.renderer))
-    const galaxyWithWarpPipeline: PostEffectPipeline = new PostEffectPipeline(new PostEffectBuilder(threeJS.renderer))
     const starSystemDefaultPipeline: PostEffectPipeline = new PostEffectPipeline(
       new PostEffectBuilder(threeJS.renderer)
     )
 
-    this.register('GalaxyDefault', galaxyDefaultPipeline.collectForGalaxyScene())
-      .register('GalaxyWithWarp', galaxyWithWarpPipeline.collectForGalaxySceneWithWarp())
-      .register('StarSystemDefault', starSystemDefaultPipeline.collectForMainScene())
+    this.register('StarSystemDefault', starSystemDefaultPipeline.collectForMainScene())
   }
 }
 

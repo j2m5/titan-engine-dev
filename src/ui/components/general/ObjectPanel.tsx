@@ -1,19 +1,31 @@
 import { observer } from 'mobx-react-lite'
-import { Divider, FormControl, InputLabel, Select, MenuItem, SelectChangeEvent } from '@mui/material'
+import { Divider, FormControl, InputLabel, Select, MenuItem, Typography, SelectChangeEvent } from '@mui/material'
 import ActionPanel from '@/ui/components/general/ActionPanel'
 import { Actor } from '@/core/models/Actor'
 import { engineStore } from '@/ui/mobX/EngineStore'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import DIServices from '@/core/framework/DI/DIServices'
+import { CameraObserver, DistanceRecord } from '@/core/services/CameraObserver'
+import { useInjection } from '@/ui/inversify-react'
+import { fromKilometers } from '@/core/helpers/scaling'
+import { formatter } from '@/ui/helpers'
 
 const ObjectPanel = observer(() => {
   const [selected, setSelected] = useState('')
   const [name, setName] = useState('')
+  const [distance, setDistance] = useState<number | null>(null)
+  const selectedName = useRef('')
+
+  const cameraObserver = useInjection<CameraObserver>(DIServices.CameraObserver)
+
+  const filter = (actor: Actor): boolean => ['planet', 'star'].includes(actor.category.attributes.alias!)
 
   const objects: Actor[] = Actor.query()
     .where({ parentId: engineStore.scenario?.rootId })
     .get()
     .flatten()
-    .filter((actor: Actor): boolean => actor.attributes.categoryId !== 4)
+    .filter(filter)
+    .sortBy('id')
     .toArray()
 
   const handleChange = (event: SelectChangeEvent): void => {
@@ -21,10 +33,32 @@ const ObjectPanel = observer(() => {
     const selectedObject = objects.find((actor) => actor.attributes.id === Number(selectedId))!
 
     if (selectedObject) {
+      const objectName: string = selectedObject.attributes.name!
+
       setSelected(selectedId)
-      setName(selectedObject.attributes.name!)
+      setName(objectName)
+      selectedName.current = objectName
+
+      const response = cameraObserver.getDistance(objectName)
+
+      setDistance(response ?? null)
     }
   }
+
+  useEffect((): void => {
+    selectedName.current = name
+  }, [name])
+
+  useEffect(() => {
+    const listener = (event: DistanceRecord): void => {
+      if (event.name === selectedName.current) {
+        setDistance(event.distance)
+      }
+    }
+    cameraObserver.subscribe('distanceChange', listener)
+
+    return () => cameraObserver.unsubscribe('distanceChange', listener)
+  }, [])
 
   return (
     <>
@@ -44,6 +78,11 @@ const ObjectPanel = observer(() => {
         </Select>
       </FormControl>
       <Divider />
+      {selected && (
+        <Typography variant="caption" sx={{ margin: '10px 20px 0' }}>
+          Distance: {formatter().format(fromKilometers(distance ?? 0))} km
+        </Typography>
+      )}
     </>
   )
 })

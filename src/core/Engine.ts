@@ -81,9 +81,6 @@ class Engine extends EventEmitter {
         }
       })
 
-      console.log('entities', this._entities)
-      console.log('systems', this._systems)
-
       this.update()
     }
   }

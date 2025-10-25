@@ -1,8 +1,8 @@
-import { BaseEvent, Camera, EventDispatcher, Quaternion, Sphere, Spherical, Vector2, Vector3 } from 'three'
+import { Camera, EventDispatcher, Quaternion, Sphere, Spherical, Vector2, Vector3 } from 'three'
 import { height, width } from '@/core/constants/resolution'
 
 type AstroControlsEventMap = {
-  change: NonNullable<unknown>
+  change: { data: Vector3 }
 }
 
 type MoveState = {
@@ -19,8 +19,6 @@ type MoveState = {
   rollLeft: number
   rollRight: number
 }
-
-const _changeEvent: BaseEvent<'change'> = { type: 'change' }
 
 const EPS: number = 0.000001
 const lastQuaternion: Quaternion = new Quaternion()
@@ -282,7 +280,7 @@ class AstroControls extends EventDispatcher<AstroControlsEventMap> {
       lastPosition.distanceToSquared(this.object.position) > EPS ||
       8 * (1 - lastQuaternion.dot(this.object.quaternion)) > EPS
     ) {
-      this.dispatchEvent(_changeEvent)
+      this.dispatchEvent({ type: 'change', data: lastPosition })
       lastQuaternion.copy(this.object.quaternion)
       lastPosition.copy(this.object.position)
     }
