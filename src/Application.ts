@@ -6,7 +6,7 @@ import { SceneManager } from '@/core/services/SceneManager'
 import { RenderSystem } from '@/core/systems/RenderSystem'
 import { EntitySystem } from '@/core/systems/EntitySystem'
 import { ScenarioConfig } from '@/config/scenarios'
-import { CameraObserver } from '@/core/services/CameraObserver'
+import { SceneObserver } from '@/core/services/SceneObserver'
 import { threeJS } from '@/core/graphic/ThreeJS'
 
 @injectable()
@@ -17,7 +17,7 @@ class Application {
     @inject(DIServices.SceneManager) private sceneManager: SceneManager,
     @inject(DIServices.RenderSystem) private renderSystem: RenderSystem,
     @inject(DIServices.EntitySystem) private entitySystem: EntitySystem,
-    @inject(DIServices.CameraObserver) private cameraObserver: CameraObserver
+    @inject(DIServices.SceneObserver) private sceneObserver: SceneObserver
   ) {}
 
   public async run(scenario: ScenarioConfig): Promise<void> {
@@ -31,8 +31,8 @@ class Application {
 
     this.sceneManager.build()
 
-    this.cameraObserver.observable = threeJS.astroControls
-    this.cameraObserver.scene = threeJS.scene
+    this.sceneObserver.observable = threeJS.astroControls
+    this.sceneObserver.scene = threeJS.scene
 
     this.engine.start()
   }

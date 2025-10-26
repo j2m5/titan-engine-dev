@@ -10,5 +10,5 @@ export default {
   ScenarioLoader: Symbol.for('ScenarioLoader'),
   RenderSystem: Symbol.for('RenderSystem'),
   EntitySystem: Symbol.for('EntitySystem'),
-  CameraObserver: Symbol.for('CameraObserver')
+  SceneObserver: Symbol.for('SceneObserver')
 }

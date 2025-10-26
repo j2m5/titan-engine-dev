@@ -5,18 +5,25 @@ import { Actor } from '@/core/models/Actor'
 import { engineStore } from '@/ui/mobX/EngineStore'
 import { useEffect, useRef, useState } from 'react'
 import DIServices from '@/core/framework/DI/DIServices'
-import { CameraObserver, DistanceRecord } from '@/core/services/CameraObserver'
+import { SceneObserver, SceneObserverRecord } from '@/core/services/SceneObserver'
 import { useInjection } from '@/ui/inversify-react'
 import { fromKilometers } from '@/core/helpers/scaling'
 import { formatter } from '@/ui/helpers'
+import { Vector3 } from 'three'
+
+export interface ObserverData {
+  cameraPosition: Vector3
+  objectPosition: Vector3
+}
 
 const ObjectPanel = observer(() => {
   const [selected, setSelected] = useState('')
   const [name, setName] = useState('')
   const [distance, setDistance] = useState<number | null>(null)
+  const [objectPosition, setObjectPosition] = useState(new Vector3())
   const selectedName = useRef('')
 
-  const cameraObserver = useInjection<CameraObserver>(DIServices.CameraObserver)
+  const sceneObserver = useInjection<SceneObserver>(DIServices.SceneObserver)
 
   const filter = (actor: Actor): boolean => ['planet', 'star'].includes(actor.category.attributes.alias!)
 
@@ -30,7 +37,7 @@ const ObjectPanel = observer(() => {
 
   const handleChange = (event: SelectChangeEvent): void => {
     const selectedId = event.target.value
-    const selectedObject = objects.find((actor) => actor.attributes.id === Number(selectedId))!
+    const selectedObject = objects.find((actor) => actor.attributes.id === Number(selectedId))
 
     if (selectedObject) {
       const objectName: string = selectedObject.attributes.name!
@@ -39,9 +46,10 @@ const ObjectPanel = observer(() => {
       setName(objectName)
       selectedName.current = objectName
 
-      const response = cameraObserver.getDistance(objectName)
+      const response = sceneObserver.getData(objectName)
 
-      setDistance(response ?? null)
+      setDistance(response?.distance ?? null)
+      setObjectPosition(response?.position ?? new Vector3())
     }
   }
 
@@ -50,19 +58,24 @@ const ObjectPanel = observer(() => {
   }, [name])
 
   useEffect(() => {
-    const listener = (event: DistanceRecord): void => {
+    const listener = (event: SceneObserverRecord): void => {
       if (event.name === selectedName.current) {
-        setDistance(event.distance)
+        setDistance(event.data.distance)
       }
     }
-    cameraObserver.subscribe('distanceChange', listener)
+    sceneObserver.subscribe('distanceChange', listener)
 
-    return () => cameraObserver.unsubscribe('distanceChange', listener)
+    return () => sceneObserver.unsubscribe('distanceChange', listener)
   }, [])
+
+  const actionPanelData: ObserverData = {
+    cameraPosition: sceneObserver.cameraPosition,
+    objectPosition: objectPosition
+  }
 
   return (
     <>
-      <ActionPanel name={name} />
+      <ActionPanel actor={Actor.find(selected)} data={actionPanelData} />
       <Divider />
       <FormControl variant="standard" sx={{ width: '200px', margin: '10px auto' }}>
         <InputLabel id="name">Name</InputLabel>

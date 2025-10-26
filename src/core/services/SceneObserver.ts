@@ -4,18 +4,23 @@ import { AstroControls } from '@/core/libs/AstroControls'
 import { Object3D, Scene, Vector3 } from 'three'
 import { getObjectsByUserDataProperty } from '@/core/helpers/finder'
 
-export type DistanceRecord = {
-  name: string
+export type ObservableRecord = {
   distance: number
+  position: Vector3
+}
+
+export type SceneObserverRecord = {
+  name: string
+  data: ObservableRecord
 }
 
 @injectable()
-class CameraObserver extends EventEmitter {
+class SceneObserver extends EventEmitter {
   private _observable: AstroControls | null = null
   private _scene: Scene | null = null
 
-  public distances: Map<string, number> = new Map()
-  public objects: Object3D[] = []
+  private data: Map<string, ObservableRecord> = new Map()
+  private objects: Object3D[] = []
 
   private readonly categories: string[] = ['planet', 'star']
   private vector: Vector3 = new Vector3()
@@ -25,7 +30,7 @@ class CameraObserver extends EventEmitter {
   }
 
   private readonly onChange = (): void => {
-    this.defineDistanceRecords()
+    this.defineDataRecords()
   }
 
   public constructor() {
@@ -57,17 +62,23 @@ class CameraObserver extends EventEmitter {
     this.defineObservableObjects()
   }
 
-  public getDistance(name: string): number | undefined {
-    return this.distances.get(name)
+  public get cameraPosition(): Vector3 {
+    if (!this._observable) return new Vector3()
+
+    return this._observable.object.position.clone()
   }
 
-  public add({ name, distance }: DistanceRecord): void {
-    this.emit('distanceChange', { name, distance })
-    this.distances.set(name, distance)
+  public getData(name: string): ObservableRecord | undefined {
+    return this.data.get(name)
+  }
+
+  public add({ name, data }: SceneObserverRecord): void {
+    this.emit('distanceChange', { name, data })
+    this.data.set(name, data)
   }
 
   public remove(name: string): void {
-    this.distances.delete(name)
+    this.data.delete(name)
   }
 
   public dispose(): void {
@@ -78,8 +89,8 @@ class CameraObserver extends EventEmitter {
 
     this.unsubscribe('change', this.onChange)
 
+    this.data.clear()
     this.objects = []
-    this.distances.clear()
     this._scene = null
   }
 
@@ -93,18 +104,21 @@ class CameraObserver extends EventEmitter {
     })
   }
 
-  private defineDistanceRecords(): void {
+  private defineDataRecords(): void {
     this.objects.forEach((object: Object3D): void => {
-      this.add(this.computeDistanceFromCamera(object))
+      this.add(this.makeRecord(object))
     })
   }
 
-  private computeDistanceFromCamera(object: Object3D): DistanceRecord {
+  private makeRecord(object: Object3D): SceneObserverRecord {
     return {
       name: object.userData.model,
-      distance: this._observable!.object.position.distanceTo(object.getWorldPosition(this.vector))
+      data: {
+        distance: this._observable!.object.position.distanceTo(object.getWorldPosition(this.vector)),
+        position: object.getWorldPosition(this.vector)
+      }
     }
   }
 }
 
-export { CameraObserver }
+export { SceneObserver }
