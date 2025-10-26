@@ -1,5 +1,4 @@
 import { Camera, EventDispatcher, Quaternion, Sphere, Spherical, Vector2, Vector3 } from 'three'
-import { height, width } from '@/core/constants/resolution'
 
 type AstroControlsEventMap = {
   change: { data: Vector3 }
@@ -120,8 +119,8 @@ class AstroControls extends EventDispatcher<AstroControlsEventMap> {
 
   private rotateCamera(deltaX: number, deltaY: number): void {
     const rotationSpeed: number = 1.0
-    const theta: number = 2 * Math.PI * (deltaX / width) * rotationSpeed
-    const phi: number = 2 * Math.PI * (deltaY / height) * rotationSpeed
+    const theta: number = 2 * Math.PI * (deltaX / window.innerWidth) * rotationSpeed
+    const phi: number = 2 * Math.PI * (deltaY / window.innerHeight) * rotationSpeed
 
     this.spherical.theta -= theta
     this.spherical.phi -= phi

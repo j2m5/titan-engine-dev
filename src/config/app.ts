@@ -1,6 +1,5 @@
 import { fromAstronomicalUnits } from '@/core/helpers/scaling'
 import { WebGLRendererParameters } from 'three'
-import { height, width } from '@/core/constants/resolution'
 import {
   Actors,
   Categories,
@@ -37,7 +36,7 @@ export const AppConfig: TAppConfig = {
   },
   PerspectiveCameraParameters: {
     fov: 50,
-    aspect: width / height,
+    aspect: window.innerWidth / window.innerHeight,
     near: 0.000001,
     far: fromAstronomicalUnits(2000)
   },
