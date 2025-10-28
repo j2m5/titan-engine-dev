@@ -6,15 +6,14 @@ import DescriptionIcon from '@mui/icons-material/Description'
 import { FC } from 'react'
 import { Actor } from '@/core/models/Actor'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
-import { ObserverData } from '@/ui/components/general/ObjectPanel'
 
-const ActionPanel: FC<{ actor: Actor | null; data: ObserverData }> = observer(({ actor, data }) => {
-  const name = actor && actor.attributes.name ? actor.attributes.name : ''
+const ActionPanel: FC<{ actor: Actor | null }> = observer(({ actor }) => {
+  const name: string = actor && actor.attributes.name ? actor.attributes.name : ''
 
   const handleMove = async (): Promise<void> => {
     if (!actor) return
 
-    await CameraToObjectTransition.execute({ model: actor, from: data.cameraPosition, to: data.objectPosition })
+    await CameraToObjectTransition.execute({ model: actor })
   }
 
   return (

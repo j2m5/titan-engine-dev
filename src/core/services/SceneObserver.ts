@@ -19,7 +19,7 @@ class SceneObserver extends EventEmitter {
   private _observable: AstroControls | null = null
   private _scene: Scene | null = null
 
-  private data: Map<string, ObservableRecord> = new Map()
+  public data: Map<string, ObservableRecord> = new Map()
   private objects: Object3D[] = []
 
   private readonly categories: string[] = ['planet', 'star']
@@ -114,8 +114,8 @@ class SceneObserver extends EventEmitter {
     return {
       name: object.userData.model,
       data: {
-        distance: this._observable!.object.position.distanceTo(object.getWorldPosition(this.vector)),
-        position: object.getWorldPosition(this.vector)
+        distance: this._observable!.object.position.distanceTo(object.getWorldPosition(this.vector.clone())),
+        position: object.getWorldPosition(this.vector.clone())
       }
     }
   }

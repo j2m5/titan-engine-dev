@@ -9,18 +9,11 @@ import { SceneObserver, SceneObserverRecord } from '@/core/services/SceneObserve
 import { useInjection } from '@/ui/inversify-react'
 import { fromKilometers } from '@/core/helpers/scaling'
 import { formatter } from '@/ui/helpers'
-import { Vector3 } from 'three'
-
-export interface ObserverData {
-  cameraPosition: Vector3
-  objectPosition: Vector3
-}
 
 const ObjectPanel = observer(() => {
   const [selected, setSelected] = useState('')
   const [name, setName] = useState('')
   const [distance, setDistance] = useState<number | null>(null)
-  const [objectPosition, setObjectPosition] = useState(new Vector3())
   const selectedName = useRef('')
 
   const sceneObserver = useInjection<SceneObserver>(DIServices.SceneObserver)
@@ -49,7 +42,6 @@ const ObjectPanel = observer(() => {
       const response = sceneObserver.getData(objectName)
 
       setDistance(response?.distance ?? null)
-      setObjectPosition(response?.position ?? new Vector3())
     }
   }
 
@@ -68,14 +60,9 @@ const ObjectPanel = observer(() => {
     return () => sceneObserver.unsubscribe('distanceChange', listener)
   }, [])
 
-  const actionPanelData: ObserverData = {
-    cameraPosition: sceneObserver.cameraPosition,
-    objectPosition: objectPosition
-  }
-
   return (
     <>
-      <ActionPanel actor={Actor.find(selected)} data={actionPanelData} />
+      <ActionPanel actor={Actor.find(selected)} />
       <Divider />
       <FormControl variant="standard" sx={{ width: '200px', margin: '10px auto' }}>
         <InputLabel id="name">Name</InputLabel>

@@ -1,6 +1,6 @@
-import { Container } from 'inversify'
 import 'reflect-metadata'
 import DIServices from '@/core/framework/DI/DIServices'
+import { Container } from 'inversify'
 import { Engine } from '@/core/Engine'
 import { Application } from '@/Application'
 import { RenderManager } from '@/core/services/RenderManager'
@@ -13,6 +13,7 @@ import { ScenarioLoader } from '@/core/services/ScenarioLoader'
 import { RenderSystem } from '@/core/systems/RenderSystem'
 import { EntitySystem } from '@/core/systems/EntitySystem'
 import { SceneObserver } from '@/core/services/SceneObserver'
+import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
 
 const container: Container = new Container()
 
@@ -28,5 +29,6 @@ container.bind(DIServices.ScenarioLoader).to(ScenarioLoader).inSingletonScope()
 container.bind(DIServices.RenderSystem).to(RenderSystem).inSingletonScope()
 container.bind(DIServices.EntitySystem).to(EntitySystem).inSingletonScope()
 container.bind(DIServices.SceneObserver).to(SceneObserver).inSingletonScope()
+container.bind(CameraToObjectTransition).toSelf().inTransientScope()
 
 export default container
