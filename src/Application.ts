@@ -1,5 +1,4 @@
 import { inject, injectable } from 'inversify'
-import DIServices from '@/core/framework/DI/DIServices'
 import { Engine } from '@/core/Engine'
 import { ScenarioLoader } from '@/core/services/ScenarioLoader'
 import { SceneManager } from '@/core/services/SceneManager'
@@ -12,12 +11,12 @@ import { threeJS } from '@/core/graphic/ThreeJS'
 @injectable()
 class Application {
   public constructor(
-    @inject(DIServices.Engine) private engine: Engine,
-    @inject(DIServices.ScenarioLoader) private scenarioLoader: ScenarioLoader,
-    @inject(DIServices.SceneManager) private sceneManager: SceneManager,
-    @inject(DIServices.RenderSystem) private renderSystem: RenderSystem,
-    @inject(DIServices.EntitySystem) private entitySystem: EntitySystem,
-    @inject(DIServices.SceneObserver) private sceneObserver: SceneObserver
+    @inject('Engine') private engine: Engine,
+    @inject('ScenarioLoader') private scenarioLoader: ScenarioLoader,
+    @inject('SceneManager') private sceneManager: SceneManager,
+    @inject('RenderSystem') private renderSystem: RenderSystem,
+    @inject('EntitySystem') private entitySystem: EntitySystem,
+    @inject('SceneObserver') private sceneObserver: SceneObserver
   ) {}
 
   public async run(scenario: ScenarioConfig): Promise<void> {

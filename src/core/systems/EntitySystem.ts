@@ -12,13 +12,12 @@ import { Placeable } from '@/core/framework/components/Placeable'
 import { Movable } from '@/core/framework/components/Movable'
 import { ScenarioLoader } from '@/core/services/ScenarioLoader'
 import { inject, injectable } from 'inversify'
-import DIServices from '@/core/framework/DI/DIServices'
 
 export const PrimaryActors: AllowedCategory[] = ['barycenter', 'star', 'planet', 'blackHole']
 
 @injectable()
 class EntitySystem extends System {
-  public constructor(@inject(DIServices.ScenarioLoader) private scenarioLoader: ScenarioLoader) {
+  public constructor(@inject('ScenarioLoader') private scenarioLoader: ScenarioLoader) {
     super()
   }
 

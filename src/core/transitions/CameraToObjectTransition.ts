@@ -2,7 +2,6 @@ import { Command } from '@/core/framework/commands/Command'
 import { Actor } from '@/core/models/Actor'
 import { Quaternion, Vector3 } from 'three'
 import { inject, injectable } from 'inversify'
-import DIServices from '@/core/framework/DI/DIServices'
 import { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { menuStore } from '@/ui/mobX/MenuStore'
@@ -19,7 +18,7 @@ interface CameraToObjectTransitionArgs {
 class CameraToObjectTransition extends Command<CameraToObjectTransitionArgs> {
   declare public model: Actor
 
-  public constructor(@inject(DIServices.SceneObserver) private sceneObserver: SceneObserver) {
+  public constructor(@inject('SceneObserver') private sceneObserver: SceneObserver) {
     super()
   }
 

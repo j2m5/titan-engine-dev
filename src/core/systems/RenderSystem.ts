@@ -9,14 +9,13 @@ import { DAY } from '@/core/constants'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { Object3D } from 'three'
 import { inject, injectable } from 'inversify'
-import DIServices from '@/core/framework/DI/DIServices'
 
 @injectable()
 class RenderSystem extends System {
   private readonly canvas: HTMLCanvasElement
   private readonly overlay: HTMLElement
 
-  public constructor(@inject(DIServices.RenderManager) private renderManager: RenderManager) {
+  public constructor(@inject('RenderManager') private renderManager: RenderManager) {
     super()
     this.canvas = threeJS.renderer.domElement
     this.overlay = threeJS.labelRenderer.domElement

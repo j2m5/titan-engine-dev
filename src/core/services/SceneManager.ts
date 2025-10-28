@@ -9,14 +9,13 @@ import { Movable } from '@/core/framework/components/Movable'
 import { inject, injectable } from 'inversify'
 import { ScenarioLoader } from '@/core/services/ScenarioLoader'
 import { Engine } from '@/core/Engine'
-import DIServices from '@/core/framework/DI/DIServices'
 
 @injectable()
 class SceneManager {
   public constructor(
-    @inject(DIServices.ScenarioLoader) private scenarioLoader: ScenarioLoader,
-    @inject(DIServices.Engine) private engine: Engine,
-    @inject(DIServices.MarkerManager) private markerManager: MarkerManager
+    @inject('ScenarioLoader') private scenarioLoader: ScenarioLoader,
+    @inject('Engine') private engine: Engine,
+    @inject('MarkerManager') private markerManager: MarkerManager
   ) {}
 
   public build(): void {

@@ -14,7 +14,6 @@ import { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
 import { MarkerManager } from '@/core/services/MarkerManager'
 import { RenderManager } from '@/core/services/RenderManager'
 import { inject, injectable } from 'inversify'
-import DIServices from '@/core/framework/DI/DIServices'
 
 @injectable()
 class ScenarioLoader {
@@ -23,11 +22,11 @@ class ScenarioLoader {
   private readonly _map: Map<number, Actor>
 
   public constructor(
-    @inject(DIServices.CubeMapTextureManager) private cubeMapTextureManager: CubeMapTextureManager,
-    @inject(DIServices.TextureManager) private textureManager: TextureManager,
-    @inject(DIServices.ImageBitmapManager) private imageBitmapManager: ImageBitmapManager,
-    @inject(DIServices.MarkerManager) private markerManager: MarkerManager,
-    @inject(DIServices.RenderManager) private renderManager: RenderManager
+    @inject('CubeMapTextureManager') private cubeMapTextureManager: CubeMapTextureManager,
+    @inject('TextureManager') private textureManager: TextureManager,
+    @inject('ImageBitmapManager') private imageBitmapManager: ImageBitmapManager,
+    @inject('MarkerManager') private markerManager: MarkerManager,
+    @inject('RenderManager') private renderManager: RenderManager
   ) {
     this._scenario = null
     this._scene = threeJS.scene

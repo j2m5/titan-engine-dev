@@ -4,7 +4,6 @@ import ActionPanel from '@/ui/components/general/ActionPanel'
 import { Actor } from '@/core/models/Actor'
 import { engineStore } from '@/ui/mobX/EngineStore'
 import { useEffect, useRef, useState } from 'react'
-import DIServices from '@/core/framework/DI/DIServices'
 import { SceneObserver, SceneObserverRecord } from '@/core/services/SceneObserver'
 import { useInjection } from '@/ui/inversify-react'
 import { fromKilometers } from '@/core/helpers/scaling'
@@ -16,7 +15,7 @@ const ObjectPanel = observer(() => {
   const [distance, setDistance] = useState<number | null>(null)
   const selectedName = useRef('')
 
-  const sceneObserver = useInjection<SceneObserver>(DIServices.SceneObserver)
+  const sceneObserver = useInjection<SceneObserver>('SceneObserver')
 
   const filter = (actor: Actor): boolean => ['planet', 'star'].includes(actor.category.attributes.alias!)
 

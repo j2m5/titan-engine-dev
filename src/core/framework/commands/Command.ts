@@ -10,7 +10,8 @@ abstract class Command<TArgs extends Record<string, any> = any, TResult = void> 
     this: new (...args: any[]) => Command<TArgs, TResult>,
     args: TArgs
   ): Promise<TResult> {
-    const { default: container } = await import('@/core/framework/DI/container')
+    const { container } = await import('@/main')
+
     const instance = container.get<Command<TArgs, TResult>>(this as any)
 
     Object.assign(instance, args)
