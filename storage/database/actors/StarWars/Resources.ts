@@ -6,84 +6,84 @@ const TatooResources: IResource[] = [
     actorId: 6,
     resourceType: 'diffuse',
     path: 'planets/StarWars/tatooine/tatooine.png',
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 2,
     actorId: 7,
     resourceType: 'diffuse',
     path: 'planets/StarWars/ohann/ohann.png',
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 3,
     actorId: 8,
     resourceType: 'diffuse',
     path: 'planets/StarWars/adriana/adriana.png',
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 4,
     actorId: 9,
     resourceType: 'diffuse',
     path: 'planets/StarWars/ghomrassen/ghomrassen.png',
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 5,
     actorId: 10,
     resourceType: 'diffuse',
     path: 'planets/StarWars/guermessa/guermessa.png',
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 6,
     actorId: 11,
     resourceType: 'diffuse',
     path: 'planets/StarWars/chenini/chenini.png',
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 7,
     actorId: 12,
     resourceType: 'diffuse',
     path: 'planets/unnamed/unnamed_planet_5.png',
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 8,
     actorId: 13,
     resourceType: 'diffuse',
     path: 'planets/unnamed/unnamed_planet_6.png',
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 9,
     actorId: 14,
     resourceType: 'diffuse',
     path: 'planets/unnamed/unnamed_planet_7.png',
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 10,
     actorId: 15,
     resourceType: 'diffuse',
     path: 'planets/unnamed/unnamed_planet_1.png',
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 11,
     actorId: 16,
     resourceType: 'diffuse',
     path: 'planets/unnamed/unnamed_planet_3.png',
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 12,
     actorId: 17,
     resourceType: 'diffuse',
     path: 'planets/StarWars/adriana3/adriana3.jpg',
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 13,
@@ -96,7 +96,7 @@ const TatooResources: IResource[] = [
     actorId: 18,
     resourceType: 'diffuse',
     path: 'planets/unnamed/unnamed_planet_5.png',
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 15,

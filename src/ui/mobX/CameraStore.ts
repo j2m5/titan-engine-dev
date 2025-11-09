@@ -1,8 +1,8 @@
 import { makeAutoObservable } from 'mobx'
 import { Object3D, Vector3 } from 'three'
 import { clamp } from 'three/src/math/MathUtils'
-import { AppConfig } from '@/config/app'
 import { AU, LightSpeed } from '@/core/constants'
+import { config } from '@/core/framework/config'
 
 class CameraStore {
   public readonly minSpeed: number = 10
@@ -10,7 +10,7 @@ class CameraStore {
   public speed: number = 100000
   public distanceTo: number = 0
   public currentTarget: Object3D | null = null
-  public position: Vector3 = new Vector3().fromArray(AppConfig.DefaultCameraPosition)
+  public position: Vector3 = new Vector3().fromArray(config('cameraPosition'))
 
   public constructor() {
     makeAutoObservable(this)

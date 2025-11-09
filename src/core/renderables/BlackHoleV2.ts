@@ -1,3 +1,24 @@
+// опасный для здоровья код, не работать тут людям с сердечными заболеваниями
+// ███████████████████████████
+// ███████▀▀▀░░░░░░░▀▀▀███████
+// ████▀░░░░░░░░░░░░░░░░░▀████
+// ███│░░░░░░░░░░░░░░░░░░░│███
+// ██▌│░░░░░░░░░░░░░░░░░░░│▐██
+// ██░└┐░░░░░░░░░░░░░░░░░┌┘░██
+// ██░░└┐░░░░░░░░░░░░░░░┌┘░░██
+// ██░░┌┘▄▄▄▄▄░░░░░▄▄▄▄▄└┐░░██
+// ██▌░│██████▌░░░▐██████│░▐██
+// ███░│▐███▀▀░░▄░░▀▀███▌│░███
+// ██▀─┘░░░░░░░▐█▌░░░░░░░└─▀██
+// ██▄░░░▄▄▄▓░░▀█▀░░▓▄▄▄░░░▄██
+// ████▄─┘██▌░░░░░░░▐██└─▄████
+// █████░░▐█─┬┬┬┬┬┬┬─█▌░░█████
+// ████▌░░░▀┬┼┼┼┼┼┼┼┬▀░░░▐████
+// █████▄░░░└┴┴┴┴┴┴┴┘░░░▄█████
+// ███████▄░░░░░░░░░░░▄███████
+// ██████████▄▄▄▄▄▄▄██████████
+// ███████████████████████████
+
 import { RenderableObject } from '@/core/renderables/RenderableObject'
 import { IRenderable } from '@/core/renderables/IRenderable'
 import { Actor } from '@/core/models/Actor'
@@ -22,7 +43,6 @@ import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { BlackHoleDistortionMaterial } from '@/core/materials/BlackHole/V2/BlackHoleDistortionMaterial'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { AccretionDiskMaterial } from '@/core/materials/BlackHole/AccretionDiskMaterial'
-// какая то багованная хуйня палучается
 
 class BlackHoleV2 extends RenderableObject implements IRenderable {
   private readonly model: Actor

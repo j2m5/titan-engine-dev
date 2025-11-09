@@ -8,11 +8,11 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { NullPhysicalObject } from '@/core/models/defaults/NullPhysicalObject'
 import { degToRad } from 'three/src/math/MathUtils'
-import { AppConfig } from '@/config/app'
 import { FakePlanet } from '@/core/renderables/utils/FakePlanet'
 import { timeStore } from '@/ui/mobX/TimeStore'
 import { KeplerianModel } from '@/core/libs/KeplerianModel'
 import { AU, SpaceScale } from '@/core/constants'
+import { config } from '@/core/framework/config'
 
 class Planet extends RenderableObject implements IRenderable {
   private readonly model: Actor
@@ -60,7 +60,7 @@ class Planet extends RenderableObject implements IRenderable {
 
   private computeDistanceLOD(): number {
     const radius: number = this.physicalObject.getAttribute('radius')
-    const fov: number = degToRad(AppConfig.PerspectiveCameraParameters.fov)
+    const fov: number = degToRad(config('camera.fov'))
     const pixels: number = 3
 
     return toThreeJSUnits((2 * radius * window.innerHeight) / (fov * pixels))

@@ -1,5 +1,5 @@
 import 'reflect-metadata'
-import { getData } from '@/config/app'
+import { db } from '@/core/framework/utils/helpers'
 import { LazyRelationProxy } from '@/core/framework/Memoquent/LazyRelationProxy'
 import { QueryBuilder } from '@/core/framework/Memoquent/QueryBuilder'
 import { Collection } from '@/core/framework/Memoquent/Collection'
@@ -41,7 +41,7 @@ abstract class Model<TData extends DataSource = DataSource> {
   }
 
   public get source(): TData[] {
-    return getData(this.table)
+    return db(this.table)
   }
 
   private setupRelations(): void {

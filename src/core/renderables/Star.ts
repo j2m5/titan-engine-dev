@@ -8,11 +8,11 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { StarMaterial } from '@/core/materials/StarMaterial'
 import { NullPhysicalObject } from '@/core/models/defaults/NullPhysicalObject'
 import { degToRad } from 'three/src/math/MathUtils'
-import { AppConfig } from '@/config/app'
 import { FakeStar } from '@/core/renderables/utils/FakeStar'
 import { KeplerianModel } from '@/core/libs/KeplerianModel'
 import { timeStore } from '@/ui/mobX/TimeStore'
 import { AU, SpaceScale } from '@/core/constants'
+import { config } from '@/core/framework/config'
 
 class Star extends RenderableObject implements IRenderable {
   private readonly model: Actor
@@ -62,7 +62,7 @@ class Star extends RenderableObject implements IRenderable {
 
   private computeDistanceLOD(pixels: number): number {
     const radius: number = this.physicalObject.getAttribute('radius')
-    const fov: number = degToRad(AppConfig.PerspectiveCameraParameters.fov)
+    const fov: number = degToRad(config('camera.fov'))
 
     return toThreeJSUnits((2 * radius * window.innerHeight) / (fov * pixels))
   }
