@@ -152,6 +152,8 @@ export const PlanetShaderTemplate: ShaderProps = {
       #ifdef USE_ATMOSPHERE
         #include <atmosphereFragment>
 
+        atmosphereColor *= 0.2;
+
         gl_FragColor = vec4(atmosphereColor.rgb + finalColor, 1.0);
       #else
         gl_FragColor = vec4(finalColor, 1.0);

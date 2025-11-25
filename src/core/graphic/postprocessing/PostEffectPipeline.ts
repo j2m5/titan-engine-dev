@@ -22,13 +22,7 @@ class PostEffectPipeline {
       })
       .addToneMapping({
         mode: ToneMappingMode.ACES_FILMIC,
-        blendFunction: BlendFunction.SET,
-        resolution: 256,
-        whitePoint: 16,
-        middleGrey: 0.6,
-        minLuminance: 0.01,
-        averageLuminance: 0.5,
-        adaptationRate: 1
+        blendFunction: BlendFunction.SET
       })
       .build()
   }

@@ -8,7 +8,7 @@ const TatooAtmosphereRenderingObjects: IRenderingObject[] = [
     data: {
       radius: 5471,
       scatter: { r: 750, g: 690, b: 580 },
-      scatteringStrength: 15,
+      scatteringStrength: 10,
       densityFalloff: 10
     }
   },
