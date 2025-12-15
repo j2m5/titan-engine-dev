@@ -473,6 +473,13 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/neptune/neptune_rings.png',
     colorSpace: 'srgb-linear'
+  },
+  {
+    id: 113,
+    actorId: 34,
+    resourceType: 'specular',
+    path: 'planets/earth/earth_specular.jpg',
+    colorSpace: 'srgb-linear'
   }
 ]
 

@@ -2,7 +2,8 @@ import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { Color, Uniform, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { HaloShaderTemplate as Shader } from '@/core/materials/shaders/lib/HaloShaderTemplate'
-import { IHaloRenderingObject, ValueOf } from '@/core/models/types'
+import { Colorable, IHaloRenderingObject, ValueOf } from '@/core/models/types'
+import { normalizeColor } from '@/core/materials/shaders/lib/helpers'
 
 interface HaloUniforms {
   lightDirection: Vector3
@@ -22,10 +23,13 @@ class HaloShader extends AbstractShader<keyof HaloUniforms> {
       ValueOf<IHaloRenderingObject>
     > = this.model.renderingObject.getAttribute('data')
 
+    const day: Colorable = normalizeColor(haloData.day as Colorable)
+    const night: Colorable = normalizeColor(haloData.night as Colorable)
+
     this.uniforms = {
       lightDirection: new Uniform(new Vector3()),
-      dayColor: new Uniform(haloData.day),
-      nightColor: new Uniform(haloData.night)
+      dayColor: new Uniform(day),
+      nightColor: new Uniform(night)
     }
     this.name = 'HaloShader'
   }

@@ -1,7 +1,7 @@
 import { PostEffectBuilder } from '@/core/graphic/postprocessing/PostEffectBuilder'
 import { ScenePostProcessor } from '@/core/graphic/postprocessing/ScenePostProcessor'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { BlendFunction, ToneMappingMode } from 'postprocessing'
+import { BlendFunction } from 'postprocessing'
 
 class PostEffectPipeline {
   private builder: PostEffectBuilder
@@ -19,10 +19,6 @@ class PostEffectPipeline {
         luminanceThreshold: 1.4,
         luminanceSmoothing: 0.0025,
         intensity: 5
-      })
-      .addToneMapping({
-        mode: ToneMappingMode.ACES_FILMIC,
-        blendFunction: BlendFunction.SET
       })
       .build()
   }

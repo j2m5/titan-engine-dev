@@ -25,7 +25,7 @@ const CommonResources: IResource[] = [
     actorId: null,
     resourceType: 'diffuse',
     path: 'sun_glow.png',
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 91,

@@ -42,7 +42,8 @@ export const three: ThreeConfig = {
   },
   renderer: {
     logarithmicDepthBuffer: true,
-    antialias: false
+    antialias: false,
+    alpha: true
   },
   clock: {
     startTime: 0

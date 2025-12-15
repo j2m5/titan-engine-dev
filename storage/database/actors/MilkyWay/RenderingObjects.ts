@@ -19,8 +19,8 @@ const TOI519AtmosphereRenderingObjects: IRenderingObject[] = [
     actorId: 71,
     data: {
       radius: JupiterRadius * 0.209 * 1.02,
-      scatter: { r: 500, g: 530, b: 600 },
-      scatteringStrength: 10,
+      scatter: { r: 650, g: 530, b: 380 },
+      scatteringStrength: 20,
       densityFalloff: 10
     }
   }
@@ -139,8 +139,8 @@ const SolarAtmosphereRenderingObjects: IRenderingObject[] = [
     actorId: 76,
     data: {
       radius: 59232,
-      scatter: { r: 700, g: 650, b: 500 },
-      scatteringStrength: 10,
+      scatter: { r: 600, g: 530, b: 440 },
+      scatteringStrength: 20,
       densityFalloff: 10
     }
   },
@@ -182,8 +182,8 @@ const SolarHaloRenderingObjects: IRenderingObject[] = [
     actorId: 83,
     data: {
       radius: 1400,
-      day: hexToRGB('#546880'),
-      night: hexToRGB('#546880')
+      day: hexToRGB('#699de1'),
+      night: hexToRGB('#699de1')
     }
   },
   {

@@ -35,6 +35,7 @@ class RenderSystem extends System {
     document.body.appendChild(this.canvas)
     document.body.appendChild(this.overlay)
 
+    this.renderManager.initialize()
     this.registerEvents()
   }
 

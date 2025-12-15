@@ -152,7 +152,7 @@ export const PlanetShaderTemplate: ShaderProps = {
       #ifdef USE_ATMOSPHERE
         #include <atmosphereFragment>
 
-        atmosphereColor *= 0.2;
+        // atmosphereColor *= 0.2; костыль чтобы убрать засвеченность, вылечится только переделкой процесса постобработки
 
         gl_FragColor = vec4(atmosphereColor.rgb + finalColor, 1.0);
       #else

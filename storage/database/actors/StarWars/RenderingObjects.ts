@@ -26,10 +26,10 @@ const TatooAtmosphereRenderingObjects: IRenderingObject[] = [
     id: 27,
     actorId: 68,
     data: {
-      radius: JupiterRadius * 0.8 + 1500,
-      scatter: { r: 750, g: 690, b: 580 },
+      radius: JupiterRadius * 0.8 + 1000,
+      scatter: { r: 650, g: 530, b: 380 },
       scatteringStrength: 10,
-      densityFalloff: 10
+      densityFalloff: 15
     }
   },
   {

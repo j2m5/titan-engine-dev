@@ -7,13 +7,9 @@ import { engineStore } from '@/ui/mobX/EngineStore'
 import { Application } from '@/Application'
 import { AppServiceProvider } from '@/core/providers/AppServiceProvider'
 import { Container } from 'inversify'
-import { GraphicServiceProvider } from '@/core/framework/services/GraphicServiceProvider'
 
 const provider: AppServiceProvider = new AppServiceProvider()
 provider.register()
-
-const graphicProvider: GraphicServiceProvider = new GraphicServiceProvider()
-graphicProvider.register()
 
 export const container: Container = provider.container
 

@@ -12,7 +12,6 @@ import { CubeMapTextureManager } from '@/core/services/CubeMapTextureManager'
 import { TextureManager } from '@/core/services/TextureManager'
 import { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
 import { MarkerManager } from '@/core/services/MarkerManager'
-import { RenderManager } from '@/core/services/RenderManager'
 import { inject, injectable } from 'inversify'
 
 @injectable()
@@ -25,8 +24,7 @@ class ScenarioLoader {
     @inject('CubeMapTextureManager') private cubeMapTextureManager: CubeMapTextureManager,
     @inject('TextureManager') private textureManager: TextureManager,
     @inject('ImageBitmapManager') private imageBitmapManager: ImageBitmapManager,
-    @inject('MarkerManager') private markerManager: MarkerManager,
-    @inject('RenderManager') private renderManager: RenderManager
+    @inject('MarkerManager') private markerManager: MarkerManager
   ) {
     this._scenario = null
     this._scene = threeJS.scene
@@ -70,8 +68,6 @@ class ScenarioLoader {
     await this.cubeMapTextureManager.loadAll([cubeMap])
 
     this.scene.background = getTextureByKey('cubemaps-scene-main')!
-
-    this.renderManager.setActivePipeline('StarSystemDefault', this.scene)
   }
 
   public clear(): void {
