@@ -1,15 +1,10 @@
 import { ResourceManager } from '@/core/services/ResourceManager'
-import { CubeTexture, CubeTextureLoader, Texture } from 'three'
+import { CubeTexture, CubeTextureLoader } from 'three'
 import { IResource } from '@/core/models/types'
-import {
-  addTexture,
-  deleteTextureByKey,
-  getLoadedTextures,
-  getTextureByKey,
-  getTexturesDirname
-} from '@/config/textures'
+import { addTexture } from '@/config/textures'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { injectable } from 'inversify'
+import { Storage } from '@/core/framework/file/Storage'
 
 @injectable()
 class CubeMapTextureManager extends ResourceManager<IResource[], CubeTexture, readonly string[]> {
@@ -45,24 +40,8 @@ class CubeMapTextureManager extends ResourceManager<IResource[], CubeTexture, re
     }
   }
 
-  public remove(key: string): void {
-    const texture: Texture | null = getTextureByKey(key)
-
-    if (texture) texture.dispose()
-
-    deleteTextureByKey(key)
-  }
-
-  public removeAll(): void {
-    const textures: Map<string, Texture> = getLoadedTextures()
-
-    textures.forEach((texture: Texture, key: string): void => {
-      this.remove(key)
-    })
-  }
-
   private getFullURLs(urls: string[]): string[] {
-    return urls.map((url: string): string => `/images/${getTexturesDirname()}/${url}`)
+    return urls.map((url: string): string => Storage.url(url))
   }
 }
 

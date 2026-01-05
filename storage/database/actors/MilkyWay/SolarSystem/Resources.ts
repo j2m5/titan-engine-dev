@@ -103,7 +103,7 @@ const Common: IResource[] = [
     id: 33,
     actorId: 39,
     resourceType: 'diffuse',
-    path: 'planets/uranus/uranus.jpg',
+    path: 'planets/uranus/uranus2.png',
     colorSpace: 'srgb'
   },
   {

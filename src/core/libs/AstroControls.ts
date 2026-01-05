@@ -258,6 +258,12 @@ class AstroControls extends EventDispatcher<AstroControlsEventMap> {
     event.preventDefault()
   }
 
+  public setTarget(target: Vector3 | null): void {
+    if (!target) return
+
+    this.target.copy(target)
+  }
+
   public update(delta: number): void {
     if (!this.enabled) return
 

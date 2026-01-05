@@ -2,7 +2,7 @@ import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { PlanetShaderTemplate as Shader } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
 import { Texture, Uniform, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
-import { getTextureByKey, getTextureByKeyWithDefault } from '@/config/textures'
+import { getTextureByKeyWithDefault } from '@/config/textures'
 import { IAtmosphereRenderingObject, IPlanetRenderingObject, IRingRenderingObject, ValueOf } from '@/core/models/types'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 
@@ -30,22 +30,6 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
   public constructor(model: Actor) {
     super(Shader)
     this.model = model
-
-    const diffuseMap: Texture = getTextureByKeyWithDefault(
-      this.model.resources.where('resourceType', 'diffuse').first()?.getAttribute('path')
-    )
-    const nightMap: Texture | null = getTextureByKey(
-      this.model.resources.where('resourceType', 'night').first()?.getAttribute('path')
-    )
-    const cloudMap: Texture | null = getTextureByKey(
-      this.model.resources.where('resourceType', 'cloud').first()?.getAttribute('path')
-    )
-    const specularMap: Texture | null = getTextureByKey(
-      this.model.resources.where('resourceType', 'specular').first()?.getAttribute('path')
-    )
-    const bumpMap: Texture | null = getTextureByKey(
-      this.model.resources.where('resourceType', 'bump').first()?.getAttribute('path')
-    )
 
     const planetData: Record<
       keyof IPlanetRenderingObject,
@@ -76,11 +60,11 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
 
     this.uniforms = {
       lightPosition: new Uniform(new Vector3()),
-      diffuseMap: new Uniform(diffuseMap),
-      nightMap: new Uniform(nightMap),
-      cloudMap: new Uniform(cloudMap),
-      specularMap: new Uniform(specularMap),
-      bumpMap: new Uniform(bumpMap),
+      diffuseMap: new Uniform(getTextureByKeyWithDefault('default.png')),
+      nightMap: new Uniform(getTextureByKeyWithDefault('night.jpg')),
+      cloudMap: new Uniform(null),
+      specularMap: new Uniform(null),
+      bumpMap: new Uniform(null),
       bumpScale: new Uniform(planetData.bumpScale),
       emission: new Uniform(planetData.emission),
       targetRadius: new Uniform(toThreeJSUnits(this.model.physicalObject.getAttribute('radius', 1))),
@@ -93,9 +77,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
     }
     this.defines = {
       ...(USE_ATMOSPHERE && { USE_ATMOSPHERE: '1' }),
-      ...(USE_RING && { USE_RING: '1' }),
-      ...(bumpMap && { USE_BUMP: '1' }),
-      ...(specularMap && { USE_SPECULAR: '1' })
+      ...(USE_RING && { USE_RING: '1' })
     }
     this.name = 'PlanetShader'
   }

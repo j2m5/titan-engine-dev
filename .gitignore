@@ -12,6 +12,7 @@ dist
 dist-ssr
 **/textures/
 *.local
+.env
 
 # Editor directories and files
 .vscode/*

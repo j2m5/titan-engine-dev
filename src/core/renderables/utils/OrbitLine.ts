@@ -1,7 +1,7 @@
 import { IRenderable } from '@/core/renderables/IRenderable'
 import { Actor } from '@/core/models/Actor'
 import { BufferGeometry, Line, LineBasicMaterial, Object3D, Vector3 } from 'three'
-import { KeplerianModel } from '@/core/libs/KeplerianModel.ts'
+import { KeplerianModel } from '@/core/libs/KeplerianModel'
 import { timeStore } from '@/ui/mobX/TimeStore'
 import { AU, SpaceScale } from '@/core/constants'
 

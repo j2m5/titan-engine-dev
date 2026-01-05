@@ -11,13 +11,13 @@ import MainMenu from '@/ui/components/modules/MainMenu'
 import NotificationMessage from '@/ui/components/general/NotificationMessage'
 import ModalWindow from '@/ui/components/general/ModalWindow'
 import AudioPlayer from '@/ui/components/modules/audio/AudioPlayer'
-import DevelopmentDataContent from '@/ui/components/general/DevelopmentDataContent'
 import TutorialContent from '@/ui/components/general/TutorialContent'
 import SettingsContent from '@/ui/components/general/SettingsContent'
 import { modalWindowStore } from '@/ui/mobX/ModalWindowStore'
 import { ITrack } from '@/ui/components/modules/audio/interfaces/ITrack'
 import HomePage from '@/ui/components/modules/HomePage'
 import { notificationStore } from '@/ui/mobX/NotificationStore'
+import ObjectList from '@/ui/components/general/ObjectList'
 
 const darkTheme: Theme = createTheme({
   palette: {
@@ -33,49 +33,41 @@ const App = observer(() => {
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
       <MainAppBar />
-      <MainMenu />
+      <ObjectList />
+      {/*<MainMenu />*/}
       <NotificationMessage
         type={notificationStore.notification.type}
         message={notificationStore.notification.message}
       />
       <ModalWindow
-        title="Development data"
-        visible={modalWindowStore.developmentDataWindowState}
-        content={<DevelopmentDataContent />}
-        keepMounted={false}
-        close={() => modalWindowStore.setDevelopmentDataWindowState(false)}
-      />
-      <ModalWindow
         title="Tutorial"
         visible={modalWindowStore.tutorialWindowState}
-        content={<TutorialContent />}
-        keepMounted={false}
-        close={() => modalWindowStore.setTutorialWindowState(false)}
-      />
+        onClose={() => modalWindowStore.setTutorialWindowState(false)}
+      >
+        <TutorialContent />
+      </ModalWindow>
       <ModalWindow
         title="Audio player"
         visible={modalWindowStore.audioPlayerWindowState}
-        content={
-          <AudioPlayer
-            key={currentTrackIndex}
-            currentTrack={currentTrack}
-            trackIndex={currentTrackIndex}
-            trackCount={audioPlayerStore.tracks.length}
-            onPlay={setCurrentTrackIndex}
-            onNext={() => setCurrentTrackIndex((i: number) => i + 1)}
-            onPrev={() => setCurrentTrackIndex((i: number) => i - 1)}
-          />
-        }
-        keepMounted={true}
-        close={() => modalWindowStore.setAudioPlayerWindowState(false)}
-      />
+        onClose={() => modalWindowStore.setAudioPlayerWindowState(false)}
+      >
+        <AudioPlayer
+          key={currentTrackIndex}
+          currentTrack={currentTrack}
+          trackIndex={currentTrackIndex}
+          trackCount={audioPlayerStore.tracks.length}
+          onPlay={setCurrentTrackIndex}
+          onNext={() => setCurrentTrackIndex((i: number) => i + 1)}
+          onPrev={() => setCurrentTrackIndex((i: number) => i - 1)}
+        />
+      </ModalWindow>
       <ModalWindow
         title="Settings"
         visible={modalWindowStore.settingsWindowState}
-        content={<SettingsContent />}
-        keepMounted={false}
-        close={() => modalWindowStore.setSettingsWindowState(false)}
-      />
+        onClose={() => modalWindowStore.setSettingsWindowState(false)}
+      >
+        <SettingsContent />
+      </ModalWindow>
     </ThemeProvider>
   )
 
@@ -94,3 +86,17 @@ const App = observer(() => {
 })
 
 export default App
+
+/*
+
+<AudioPlayer
+            key={currentTrackIndex}
+            currentTrack={currentTrack}
+            trackIndex={currentTrackIndex}
+            trackCount={audioPlayerStore.tracks.length}
+            onPlay={setCurrentTrackIndex}
+            onNext={() => setCurrentTrackIndex((i: number) => i + 1)}
+            onPrev={() => setCurrentTrackIndex((i: number) => i - 1)}
+          />
+
+ */

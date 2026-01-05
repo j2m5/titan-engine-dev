@@ -5,6 +5,7 @@ import { Object3D, Scene, Vector3 } from 'three'
 import { getObjectsByUserDataProperty } from '@/core/helpers/finder'
 
 export type ObservableRecord = {
+  name: string
   distance: number
   position: Vector3
 }
@@ -20,7 +21,7 @@ class SceneObserver extends EventEmitter {
   private _scene: Scene | null = null
 
   public data: Map<string, ObservableRecord> = new Map()
-  private objects: Object3D[] = []
+  public objects: Object3D[] = []
 
   private readonly categories: string[] = ['planet', 'star']
   private vector: Vector3 = new Vector3()
@@ -31,6 +32,12 @@ class SceneObserver extends EventEmitter {
 
   private readonly onChange = (): void => {
     this.defineDataRecords()
+
+    if (this.observable) {
+      const closest = this.calculateClosestObject()
+      this.observable.setTarget(closest.position)
+      this.emit('ClosestChange', closest)
+    }
   }
 
   public constructor() {
@@ -110,10 +117,19 @@ class SceneObserver extends EventEmitter {
     })
   }
 
+  public calculateClosestObject(): ObservableRecord {
+    return Array.from(this.data.values()).reduce(
+      (closest: ObservableRecord, current: ObservableRecord): ObservableRecord => {
+        return current.distance < closest.distance ? current : closest
+      }
+    )
+  }
+
   private makeRecord(object: Object3D): SceneObserverRecord {
     return {
       name: object.userData.model,
       data: {
+        name: object.userData.model,
         distance: this._observable!.object.position.distanceTo(object.getWorldPosition(this.vector.clone())),
         position: object.getWorldPosition(this.vector.clone())
       }

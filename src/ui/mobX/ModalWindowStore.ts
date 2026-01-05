@@ -1,7 +1,6 @@
 import { makeAutoObservable } from 'mobx'
 
 class ModalWindowStore {
-  public developmentDataWindowState: boolean = false
   public settingsWindowState: boolean = false
   public tutorialWindowState: boolean = false
   public audioPlayerWindowState: boolean = false
@@ -9,10 +8,6 @@ class ModalWindowStore {
 
   public constructor() {
     makeAutoObservable(this)
-  }
-
-  public setDevelopmentDataWindowState(payload: boolean): void {
-    this.developmentDataWindowState = payload
   }
 
   public setSettingsWindowState(payload: boolean): void {

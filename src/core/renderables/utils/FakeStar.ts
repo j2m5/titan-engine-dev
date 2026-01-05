@@ -9,11 +9,11 @@ class FakeStar implements IRenderable {
   public material: SpriteMaterial
   public object3D: Object3D
 
-  public constructor(scale: number = 0.04) {
+  public constructor(scale: number = 0.05) {
     this.scale = scale
 
     const map: Texture = getTextureByKey('sun_glow.png')!
-    const rgb: Colorable = colorTemperatureToRGB(8000)
+    const rgb: Colorable = colorTemperatureToRGB(5700)
     const color: string = rgbToHex(rgb)
 
     this.material = new SpriteMaterial({

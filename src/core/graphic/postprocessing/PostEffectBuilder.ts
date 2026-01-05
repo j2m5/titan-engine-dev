@@ -1,4 +1,4 @@
-import { PostEffectStep } from '@/core/graphic/postprocessing/PostEffectStep'
+import { PostEffectStep } from '@/core/graphic/postprocessing/PostEffectStep.ts'
 import { Camera, HalfFloatType, Scene, WebGLRenderer } from 'three'
 import { BloomEffectOptions, Effect, EffectComposer, EffectPass, RenderPass } from 'postprocessing'
 import {
@@ -6,14 +6,14 @@ import {
   LensFlareEffectOptions,
   ToneMappingOptions,
   ZoomBlurEffectOptions
-} from '@/core/graphic/postprocessing/types'
-import { ScenePostProcessor } from '@/core/graphic/postprocessing/ScenePostProcessor'
-import { BloomStep } from '@/core/graphic/postprocessing/BloomStep'
-import { ToneMappingStep } from '@/core/graphic/postprocessing/ToneMappingStep'
-import { SelectiveBloomStep } from '@/core/graphic/postprocessing/SelectiveBloomStep'
-import { ChromaticAberrationStep } from '@/core/graphic/postprocessing/ChromaticAberrationStep'
-import { ZoomBlurStep } from '@/core/graphic/postprocessing/ZoomBlurStep'
-import { LensFlareStep } from '@/core/graphic/postprocessing/LensFlareStep'
+} from '@/core/graphic/postprocessing/types.ts'
+import { ScenePostProcessor } from '@/core/graphic/postprocessing/ScenePostProcessor.ts'
+import { BloomStep } from '@/core/graphic/postprocessing/BloomStep.ts'
+import { ToneMappingStep } from '@/core/graphic/postprocessing/ToneMappingStep.ts'
+import { SelectiveBloomStep } from '@/core/graphic/postprocessing/SelectiveBloomStep.ts'
+import { ChromaticAberrationStep } from '@/core/graphic/postprocessing/ChromaticAberrationStep.ts'
+import { ZoomBlurStep } from '@/core/graphic/postprocessing/ZoomBlurStep.ts'
+import { LensFlareStep } from '@/core/graphic/postprocessing/LensFlareStep.ts'
 
 class PostEffectBuilder {
   private steps: PostEffectStep[] = []

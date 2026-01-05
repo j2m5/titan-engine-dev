@@ -1,45 +1,37 @@
 import { observer } from 'mobx-react-lite'
-import { AppBar, Box, Theme, Toolbar, Typography } from '@mui/material'
-import { createTheme, ThemeProvider } from '@mui/material/styles'
-import CssBaseline from '@mui/material/CssBaseline'
 import { ScenarioConfig, Scenarios } from '@/config/scenarios'
-import StarSystemCard from '@/ui/components/general/StarSystemCard'
-
-const darkTheme: Theme = createTheme({
-  palette: {
-    mode: 'dark'
-  }
-})
+import { engineStore } from '@/ui/mobX/EngineStore'
+import { getFullURL } from '@/core/helpers/finder'
+import TitanTopbar from '@/ui/TitanUI/components/TitanTopbar'
+import TitanDivider from '@/ui/TitanUI/components/TitanDivider'
+import TitanCard from '@/ui/TitanUI/components/TitanCard'
+import TitanButton from '@/ui/TitanUI/components/TitanButton'
+import TitanGrid from '@/ui/TitanUI/components/TitanGrid'
+import TitanFlex from '@/ui/TitanUI/components/TitanFlex'
 
 const HomePage = observer(() => {
   return (
     <div className="loading-screen">
-      <ThemeProvider theme={darkTheme}>
-        <CssBaseline />
-        <Box sx={{ flexGrow: 1 }}>
-          <AppBar position="static">
-            <Toolbar>
-              <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-                Titan Engine
-              </Typography>
-            </Toolbar>
-          </AppBar>
-        </Box>
-        <Box
-          display="grid"
-          sx={{
-            justifyContent: 'space-evenly',
-            gridTemplateColumns: 'repeat(auto-fill, 250px)',
-            gridGap: '2rem',
-            margin: '10px 0',
-            padding: '0 10px'
-          }}
-        >
-          {Scenarios.map((scenario: ScenarioConfig) => (
-            <StarSystemCard data={scenario} key={scenario.id} />
-          ))}
-        </Box>
-      </ThemeProvider>
+      <TitanTopbar>
+        <TitanFlex align="center">
+          <TitanFlex>
+            <img src={getFullURL('logo_white.png')} height="60" width="60" alt="" />
+          </TitanFlex>
+          <TitanFlex>Titan Engine</TitanFlex>
+        </TitanFlex>
+      </TitanTopbar>
+      <TitanDivider offsetTop={0} />
+      <TitanGrid min={272} gap={20}>
+        {Scenarios.map((scenario: ScenarioConfig) => (
+          <TitanCard
+            key={scenario.id}
+            header={scenario.name}
+            content={scenario.description}
+            footer={<TitanButton onClick={() => engineStore.setScenario(scenario)}>Run</TitanButton>}
+            media={<img src={getFullURL(scenario.preview)} alt={scenario.name} style={{ width: '100%' }} />}
+          />
+        ))}
+      </TitanGrid>
     </div>
   )
 })

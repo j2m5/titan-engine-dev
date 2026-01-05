@@ -92,7 +92,7 @@ const CommonResources: IResource[] = [
     id: 106,
     actorId: null,
     resourceType: 'diffuse',
-    path: 'test-bg.jpg',
+    path: 'default.png',
     colorSpace: 'srgb-linear'
   }
 ]

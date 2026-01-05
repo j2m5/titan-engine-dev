@@ -1,3 +1,4 @@
+import { EventEmitter } from '@/core/framework/EventEmitter'
 import { DefaultLoadingManager, Scene } from 'three'
 import { ScenarioConfig } from '@/config/scenarios'
 import { Actor } from '@/core/models/Actor'
@@ -15,7 +16,7 @@ import { MarkerManager } from '@/core/services/MarkerManager'
 import { inject, injectable } from 'inversify'
 
 @injectable()
-class ScenarioLoader {
+class ScenarioLoader extends EventEmitter {
   private _scenario: ScenarioConfig | null
   private readonly _scene: Scene
   private readonly _map: Map<number, Actor>
@@ -26,6 +27,7 @@ class ScenarioLoader {
     @inject('ImageBitmapManager') private imageBitmapManager: ImageBitmapManager,
     @inject('MarkerManager') private markerManager: MarkerManager
   ) {
+    super()
     this._scenario = null
     this._scene = threeJS.scene
     this._map = new Map()
@@ -37,6 +39,7 @@ class ScenarioLoader {
 
   public set scenario(scenario: ScenarioConfig | null) {
     this._scenario = scenario
+    this.emit('changeScenario', scenario)
   }
 
   public get scene(): Scene {
@@ -65,7 +68,7 @@ class ScenarioLoader {
     this.setLoadingProgress()
     await this.imageBitmapManager.loadAll(TextureConfig.BitmapsToLoad)
     await this.textureManager.loadAll(TextureConfig.FilesToLoad)
-    await this.cubeMapTextureManager.loadAll([cubeMap])
+    await this.cubeMapTextureManager.load(cubeMap)
 
     this.scene.background = getTextureByKey('cubemaps-scene-main')!
   }

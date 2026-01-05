@@ -16,3 +16,7 @@ export function getObjectsByUserDataProperty(
 
   return result
 }
+
+export function getFullURL(url: string): string {
+  return `/images/${url}`
+}

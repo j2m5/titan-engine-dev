@@ -13,6 +13,7 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "animejs": "^3.2.2",
     "dayjs": "^1.11.13",
     "inversify": "^7.0.0-alpha.5",

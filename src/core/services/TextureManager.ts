@@ -1,13 +1,7 @@
 import { ResourceManager } from '@/core/services/ResourceManager'
 import { Texture, TextureLoader } from 'three'
 import { IResource } from '@/core/models/types'
-import {
-  addTexture,
-  deleteTextureByKey,
-  getLoadedTextures,
-  getTextureByKey,
-  getTexturesDirname
-} from '@/config/textures'
+import { addTexture } from '@/config/textures'
 import { threeJS } from '@/core/graphic/ThreeJS'
 
 class TextureManager extends ResourceManager<IResource, Texture> {
@@ -38,26 +32,6 @@ class TextureManager extends ResourceManager<IResource, Texture> {
     } catch (e) {
       console.log(e)
     }
-  }
-
-  public remove(key: string): void {
-    const texture: Texture | null = getTextureByKey(key)
-
-    if (texture) texture.dispose()
-
-    deleteTextureByKey(key)
-  }
-
-  public removeAll(): void {
-    const textures: Map<string, Texture> = getLoadedTextures()
-
-    textures.forEach((texture: Texture, key: string): void => {
-      this.remove(key)
-    })
-  }
-
-  private getFullURL(url: string): string {
-    return `/images/${getTexturesDirname()}/${url}`
   }
 }
 

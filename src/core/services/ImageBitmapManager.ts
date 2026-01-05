@@ -1,13 +1,7 @@
 import { ResourceManager } from '@/core/services/ResourceManager'
 import { IResource } from '@/core/models/types'
 import { CanvasTexture, ImageBitmapLoader, Texture } from 'three'
-import {
-  addTexture,
-  deleteTextureByKey,
-  getLoadedTextures,
-  getTextureByKey,
-  getTexturesDirname
-} from '@/config/textures'
+import { addTexture } from '@/config/textures'
 import { injectable } from 'inversify'
 
 @injectable()
@@ -40,28 +34,6 @@ class ImageBitmapManager extends ResourceManager<IResource, ImageBitmap> {
     } catch (e) {
       console.log(e)
     }
-  }
-
-  public remove(key: string): void {
-    const texture: Texture | null = getTextureByKey(key)
-
-    if (texture) texture.dispose()
-
-    deleteTextureByKey(key)
-  }
-
-  public removeAll(): void {
-    const textures: Map<string, Texture> = getLoadedTextures()
-
-    textures.forEach((texture: Texture, key: string): void => {
-      if (texture.source.data instanceof ImageBitmap) {
-        this.remove(key)
-      }
-    })
-  }
-
-  private getFullURL(url: string): string {
-    return `/images/${getTexturesDirname()}/${url}`
   }
 }
 

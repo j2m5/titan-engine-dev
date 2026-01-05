@@ -7,6 +7,7 @@ import { TextureManager } from '@/core/services/TextureManager'
 import { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
 import { SceneManager } from '@/core/services/SceneManager'
 import { MarkerManager } from '@/core/services/MarkerManager'
+import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { ScenarioLoader } from '@/core/services/ScenarioLoader'
 import { RenderSystem } from '@/core/systems/RenderSystem'
 import { EntitySystem } from '@/core/systems/EntitySystem'
@@ -23,6 +24,7 @@ class AppServiceProvider extends ServiceProvider {
     this.container.bind('ImageBitmapManager').to(ImageBitmapManager).inSingletonScope()
     this.container.bind('SceneManager').to(SceneManager).inSingletonScope()
     this.container.bind('MarkerManager').to(MarkerManager).inSingletonScope()
+    this.container.bind('ResourceObserver').to(ResourceObserver).inSingletonScope()
     this.container.bind('ScenarioLoader').to(ScenarioLoader).inSingletonScope()
     this.container.bind('RenderSystem').to(RenderSystem).inSingletonScope()
     this.container.bind('EntitySystem').to(EntitySystem).inSingletonScope()

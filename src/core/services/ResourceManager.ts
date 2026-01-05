@@ -1,7 +1,17 @@
 import type { Loader } from 'three'
+import { deleteTextureByKey, getLoadedTextures, getTextureByKey } from '@/config/textures'
+import { Texture } from 'three'
+import { FileSystemDrivers } from '@/config/filesystem'
+import { config } from '@/core/framework/config'
+import { Storage } from '@/core/framework/file/Storage'
 
 abstract class ResourceManager<TSource, TData = unknown, TUrl = string> {
+  public driver: FileSystemDrivers
   protected abstract loader: Loader<TData, TUrl>
+
+  protected constructor() {
+    this.driver = config('driver')
+  }
 
   public abstract load(source: TSource): Promise<TData | undefined>
 
@@ -10,8 +20,25 @@ abstract class ResourceManager<TSource, TData = unknown, TUrl = string> {
     await Promise.all(loadPromises)
   }
 
-  public abstract remove(key: string): void
-  public abstract removeAll(): void
+  public remove(key: string): void {
+    const texture: Texture | null = getTextureByKey(key)
+
+    if (texture) texture.dispose()
+
+    deleteTextureByKey(key)
+  }
+
+  public removeAll(): void {
+    const textures: Map<string, Texture> = getLoadedTextures()
+
+    textures.forEach((texture: Texture, key: string): void => {
+      this.remove(key)
+    })
+  }
+
+  protected getFullURL(url: string): string {
+    return Storage.url(url)
+  }
 }
 
 export { ResourceManager }

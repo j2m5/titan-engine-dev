@@ -10,14 +10,14 @@ import { UsesMark } from '@/core/framework/components/UsesMark'
 import { RenderableObject } from '@/core/renderables/RenderableObject'
 import { Placeable } from '@/core/framework/components/Placeable'
 import { Movable } from '@/core/framework/components/Movable'
-import { ScenarioLoader } from '@/core/services/ScenarioLoader'
+import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { inject, injectable } from 'inversify'
 
 export const PrimaryActors: AllowedCategory[] = ['barycenter', 'star', 'planet', 'blackHole']
 
 @injectable()
 class EntitySystem extends System {
-  public constructor(@inject('ScenarioLoader') private scenarioLoader: ScenarioLoader) {
+  public constructor(@inject('ResourceObserver') private resourceObserver: ResourceObserver) {
     super()
   }
 
@@ -26,7 +26,7 @@ class EntitySystem extends System {
   }
 
   public initialize(engine: Engine): void {
-    this.scenarioLoader.map.forEach((actor: Actor): void => {
+    this.resourceObserver.map.forEach((actor: Actor): void => {
       const entity: Entity = new Entity()
       entity.id = actor.getAttribute('id')
 

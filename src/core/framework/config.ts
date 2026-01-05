@@ -1,3 +1,5 @@
+import { app } from '@/config/app'
+import { filesystem } from '@/config/filesystem'
 import { three } from '@/config/three'
 import { database } from '@/config/database'
 
@@ -26,6 +28,8 @@ function createConfig<T>(data: Readonly<T>) {
 }
 
 export const config = createConfig({
+  ...app,
+  ...filesystem,
   ...three,
   database
 })

@@ -7,6 +7,7 @@ import { engineStore } from '@/ui/mobX/EngineStore'
 import { Application } from '@/Application'
 import { AppServiceProvider } from '@/core/providers/AppServiceProvider'
 import { Container } from 'inversify'
+import { Resource } from '@/core/models/Resource'
 
 const provider: AppServiceProvider = new AppServiceProvider()
 provider.register()
@@ -28,3 +29,10 @@ async function bootstrap(): Promise<void> {
 }
 
 await bootstrap()
+
+const list: string[] = ['sun_glow.png', 'star.png', 'asteroid.jpg', 'night.jpg']
+
+const required = Resource.all().whereIn('path', list).toJSON()
+console.log(required)
+
+console.log(Resource.all().last())

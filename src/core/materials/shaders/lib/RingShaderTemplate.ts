@@ -95,7 +95,6 @@ export const RingShaderTemplate: ShaderProps = {
 
       color.a *= transparencyFactor;
 
-      float noise = fract(sin(dot(vPosition.xy, vec2(12.9898, 78.233))) * 43758.5453);
       float shadow = getShadowFromSphere(vLightDirectionL, vPosition, planetRadius);
 
       vec3 corrNormal = gl_FrontFacing ? vNormal : -vNormal;
@@ -119,7 +118,7 @@ export const RingShaderTemplate: ShaderProps = {
         finalColor += backscatter * scatterColor;
       }
 
-      finalColor += 0.05 * noise;
+      finalColor += 0.05;
 
       gl_FragColor = vec4(finalColor * shadow, color.a);
 

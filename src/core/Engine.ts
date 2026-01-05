@@ -1,3 +1,4 @@
+import { injectable } from 'inversify'
 import { EventEmitter } from '@/core/framework/EventEmitter'
 import { Entity } from '@/core/framework/Entity'
 import { System } from '@/core/framework/System'
@@ -5,6 +6,7 @@ import { threeJS } from '@/core/graphic/ThreeJS'
 import { timeStore } from '@/ui/mobX/TimeStore'
 import { DAY } from '@/core/constants'
 
+@injectable()
 class Engine extends EventEmitter {
   private _entities: Entity[] = []
   private _systems: System[] = []

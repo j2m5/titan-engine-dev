@@ -1,32 +1,37 @@
 import { Entity } from '@/core/framework/Entity'
 import { Actor } from '@/core/models/Actor'
-import { Object3D, Vector3 } from 'three'
+import { Object3D, Scene, Vector3 } from 'three'
 import { UsesMark } from '@/core/framework/components/UsesMark'
 import { MarkerManager, MarkerOptions } from '@/core/services/MarkerManager'
 import { OrbitLine } from '@/core/renderables/utils/OrbitLine'
 import { Placeable } from '@/core/framework/components/Placeable'
 import { Movable } from '@/core/framework/components/Movable'
 import { inject, injectable } from 'inversify'
-import { ScenarioLoader } from '@/core/services/ScenarioLoader'
+import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { Engine } from '@/core/Engine'
+import { threeJS } from '@/core/graphic/ThreeJS'
 
 @injectable()
 class SceneManager {
+  private scene: Scene
+
   public constructor(
-    @inject('ScenarioLoader') private scenarioLoader: ScenarioLoader,
+    @inject('ResourceObserver') private resourceObserver: ResourceObserver,
     @inject('Engine') private engine: Engine,
     @inject('MarkerManager') private markerManager: MarkerManager
-  ) {}
+  ) {
+    this.scene = threeJS.scene
+  }
 
   public build(): void {
-    if (this.scenarioLoader?.map) {
+    if (this.resourceObserver?.map) {
       // если не в главном меню строим граф сцены
       this.engine.entities.forEach((value: Entity, index: number, array: Entity[]): void => {
         // пробегаем по массиву зарегистрированных сущностей
         if (value.hasComponent(Actor) && !value.getComponent(Actor).parent) {
           // если у сущности есть модель данных и отсутствует родитель
           // добавляем привязанный к сущности 3D-объект напрямую в сцену из стейта
-          this.scenarioLoader?.scene.add(value.getComponent(Object3D))
+          this.scene.add(value.getComponent(Object3D))
         } else if (value.hasComponent(Actor) && value.getComponent(Actor).parent) {
           // если у сущности есть модель данных и есть родитель
           // ищем его и добавляем привязанный к сущности 3D-объект в контейнер 3D-объекта родителя
