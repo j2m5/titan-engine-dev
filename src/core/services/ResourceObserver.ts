@@ -61,7 +61,7 @@ class ResourceObserver {
         (resource: IResource) => !this.deferred.some((r: IResource): boolean => r.id === resource.id)
       )
 
-      if (isNotLoaded.count()) {
+      if (isNotLoaded.isNotEmpty()) {
         this.deferred.push(...isNotLoaded)
         await this.loadDeferredTextures(isNotLoaded.toArray())
 

@@ -7,7 +7,7 @@ class FakePlanet implements IRenderable {
   public material: SpriteMaterial
   public object3D: Object3D
 
-  public constructor(scale: number = 0.004) {
+  public constructor(scale: number = 0.003) {
     this.scale = scale
 
     const map: Texture = getTextureByKey('star.png')!

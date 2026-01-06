@@ -1,5 +1,5 @@
 import { DataSource, Model, ModelConstructor } from '@/core/framework/Memoquent/Model'
-import { Collection } from '@/core/framework/support/Collection'
+import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
 
 class QueryBuilder<TData extends DataSource, TModel extends Model<TData>> {
   private _conditions?: Partial<TData>
@@ -52,9 +52,9 @@ class QueryBuilder<TData extends DataSource, TModel extends Model<TData>> {
     return this.orderBy(field, 'desc')
   }
 
-  public get(): Collection<TModel> {
+  public get(): ModelCollection<TModel> {
     const ModelClass = this.modelClass as any
-    let collection: Collection<TModel> = this._conditions ? ModelClass.where(this._conditions) : ModelClass.all()
+    let collection: ModelCollection<TModel> = this._conditions ? ModelClass.where(this._conditions) : ModelClass.all()
 
     if (this._orderBy) {
       collection = collection.sortBy(this._orderBy.field as any, this._orderBy.direction)
@@ -75,7 +75,7 @@ class QueryBuilder<TData extends DataSource, TModel extends Model<TData>> {
     page: number,
     perPage: number = 15
   ): {
-    data: Collection<TModel>
+    data: ModelCollection<TModel>
     total: number
     perPage: number
     currentPage: number
@@ -99,7 +99,7 @@ class QueryBuilder<TData extends DataSource, TModel extends Model<TData>> {
   }
 
   public first(): TModel | null {
-    const collection: Collection<TModel> = this.limit(1).get()
+    const collection: ModelCollection<TModel> = this.limit(1).get()
 
     return collection.first() || null
   }
@@ -110,7 +110,7 @@ class QueryBuilder<TData extends DataSource, TModel extends Model<TData>> {
 
   public count(): number {
     const ModelClass = this.modelClass as any
-    const collection: Collection<TModel> = this._conditions ? ModelClass.where(this._conditions) : ModelClass.all()
+    const collection: ModelCollection<TModel> = this._conditions ? ModelClass.where(this._conditions) : ModelClass.all()
 
     return collection.count()
   }

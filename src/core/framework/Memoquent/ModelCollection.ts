@@ -45,16 +45,14 @@ class ModelCollection<TModel extends Model<any>> extends Collection<TModel> {
     return this
   }
 
-  public expand<TRelation extends keyof TModel>(
-    childrenRelation: TRelation = 'children' as TRelation
-  ): ModelCollection<TModel> {
+  public expand<TRelation extends keyof TModel>(childrenRelation: TRelation = 'children' as TRelation): this {
     const flattened: TModel[] = []
 
     this.eachRecursive((item: TModel): void => {
       flattened.push(item)
     }, childrenRelation)
 
-    return new (this.constructor as any)(flattened)
+    return this.instance(flattened)
   }
 
   protected override value(item: TModel, key: keyof TModel['attributes']): any {

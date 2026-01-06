@@ -21,6 +21,7 @@ class Collection<T> implements Iterable<T> {
     }
 
     let count: number = 0
+
     for (const item of this.items) {
       if (callback(item)) count++
     }
@@ -81,15 +82,15 @@ class Collection<T> implements Iterable<T> {
     return new (this.constructor as any)(this.items.map(callback))
   }
 
-  public filter(callback: (item: T, index: number) => boolean): Collection<T> {
-    return new (this.constructor as any)(this.items.filter(callback))
+  public filter(callback: (item: T, index: number) => boolean): this {
+    return this.instance(this.items.filter(callback))
   }
 
-  public reject(callback: (item: T, index: number) => boolean): Collection<T> {
-    return new (this.constructor as any)(this.items.filter((item, index) => !callback(item, index)))
+  public reject(callback: (item: T, index: number) => boolean): this {
+    return this.instance(this.items.filter((item, index) => !callback(item, index)))
   }
 
-  public sortBy(key: string, direction: 'asc' | 'desc' = 'asc'): Collection<T> {
+  public sortBy(key: string, direction: 'asc' | 'desc' = 'asc'): this {
     const sorted = [...this.items].sort((a, b) => {
       const aVal = this.value(a, key)
       const bVal = this.value(b, key)
@@ -108,16 +109,16 @@ class Collection<T> implements Iterable<T> {
       return 0
     })
 
-    return new (this.constructor as any)(sorted)
+    return this.instance(sorted)
   }
 
-  public sortByDesc(key: string): Collection<T> {
+  public sortByDesc(key: string): this {
     return this.sortBy(key, 'desc')
   }
 
-  public unique(key?: string): Collection<T> {
+  public unique(key?: string): this {
     if (!key) {
-      return new (this.constructor as any)(Array.from(new Set(this.items)))
+      return this.instance(Array.from(new Set(this.items)))
     }
 
     const seen = new Set()
@@ -133,21 +134,22 @@ class Collection<T> implements Iterable<T> {
     })
   }
 
-  public chunk(size: number): Collection<T>[] {
-    const chunks: Collection<T>[] = []
-    for (let i: number = 0; i < this.items.length; i += size) {
-      chunks.push(new (this.constructor as any)(this.items.slice(i, i + size)))
+  public chunk(size: number): this[] {
+    const chunks: this[] = []
+
+    for (let i = 0; i < this.items.length; i += size) {
+      chunks.push(this.instance(this.items.slice(i, i + size)))
     }
 
     return chunks
   }
 
-  public take(limit: number): Collection<T> {
-    return new (this.constructor as any)(this.items.slice(0, limit))
+  public take(limit: number): this {
+    return this.instance(this.items.slice(0, limit))
   }
 
-  public skip(offset: number): Collection<T> {
-    return new (this.constructor as any)(this.items.slice(offset))
+  public skip(offset: number): this {
+    return this.instance(this.items.slice(offset))
   }
 
   public unshift(...items: T[]): this {
@@ -170,8 +172,8 @@ class Collection<T> implements Iterable<T> {
     return this.items.shift()
   }
 
-  public slice(start?: number, end?: number): Collection<T> {
-    return new (this.constructor as any)(this.items.slice(start, end))
+  public slice(start?: number, end?: number): this {
+    return this.instance(this.items.slice(start, end))
   }
 
   public each(callback: (item: T, index: number) => void | false): this {
@@ -218,7 +220,7 @@ class Collection<T> implements Iterable<T> {
     return !shouldExecute ? callback(this) : this
   }
 
-  public flatten(depth: number = Infinity): Collection<T> {
+  public flatten(depth: number = Infinity): this {
     const flattenRecursive = (arr: T[], currentDepth: number): T[] => {
       if (currentDepth === 0) return arr.slice()
 
@@ -232,7 +234,7 @@ class Collection<T> implements Iterable<T> {
       }, [])
     }
 
-    return new (this.constructor as any)(flattenRecursive(this.items, depth))
+    return this.instance(flattenRecursive(this.items, depth))
   }
 
   public pluck(key: string): any[] {
@@ -299,29 +301,29 @@ class Collection<T> implements Iterable<T> {
     return result
   }
 
-  public groupBy(key: string | ((item: T) => any)): Map<any, Collection<T>> {
-    const groups = new Map<any, T[]>()
+  public groupBy<K extends PropertyKey>(key: string | ((item: T) => K)): Map<K, this> {
+    const result = new Map<K, T[]>()
 
     for (const item of this.items) {
       const groupKey = typeof key === 'function' ? key(item) : this.value(item, key)
 
-      if (!groups.has(groupKey)) {
-        groups.set(groupKey, [])
+      if (!result.has(groupKey)) {
+        result.set(groupKey, [])
       }
 
-      groups.get(groupKey)!.push(item)
+      result.get(groupKey)!.push(item)
     }
 
-    const result = new Map<any, Collection<T>>()
-    for (const [groupKey, items] of groups.entries()) {
-      result.set(groupKey, new (this.constructor as any)(items))
+    const groups = new Map<K, this>()
+    for (const [groupKey, items] of result.entries()) {
+      groups.set(groupKey, this.instance(items))
     }
 
-    return result
+    return groups
   }
 
-  public keyBy(key: string | ((item: T) => any)): Map<any, T> {
-    const map = new Map<any, T>()
+  public keyBy<K extends PropertyKey>(key: string | ((item: T) => K)): Map<K, T> {
+    const map = new Map<K, T>()
 
     for (const item of this.items) {
       const mapKey = typeof key === 'function' ? key(item) : this.value(item, key)
@@ -352,10 +354,10 @@ class Collection<T> implements Iterable<T> {
     return this.some(key as any, operator, value)
   }
 
-  public where(key: string, value: any): Collection<T>
-  public where(key: string, operator: ComparisonOperator, value: any): Collection<T>
-  public where(conditions: Record<string, any>): Collection<T>
-  public where(...args: any[]): Collection<T> {
+  public where(key: string, value: any): this
+  public where(key: string, operator: ComparisonOperator, value: any): this
+  public where(conditions: Record<string, any>): this
+  public where(...args: any[]): this {
     let filtered: T[]
 
     // where({ a: 1, b: 2 })
@@ -369,32 +371,32 @@ class Collection<T> implements Iterable<T> {
       filtered = this.items.filter((item) => this.compare(this.value(item, key), operator, value))
     }
 
-    return new (this.constructor as any)(filtered)
+    return this.instance(filtered)
   }
 
-  public whereIn(key: string, values: any[]): Collection<T> {
+  public whereIn(key: string, values: any[]): this {
     return this.filter((item) => values.includes(this.value(item, key)))
   }
 
-  public whereNotIn(key: string, values: any[]): Collection<T> {
+  public whereNotIn(key: string, values: any[]): this {
     return this.filter((item) => !values.includes(this.value(item, key)))
   }
 
-  public whereNull(key: string): Collection<T> {
+  public whereNull(key: string): this {
     return this.where(key, '===', null)
   }
 
-  public whereNotNull(key: string): Collection<T> {
+  public whereNotNull(key: string): this {
     return this.where(key, '!==', null)
   }
 
-  public whereBetween(key: string, range: [any, any]): Collection<T> {
+  public whereBetween(key: string, range: [any, any]): this {
     const [min, max] = range
 
     return this.where(key, '>=', min).where(key, '<=', max)
   }
 
-  public whereNotBetween(key: string, range: [any, any]): Collection<T> {
+  public whereNotBetween(key: string, range: [any, any]): this {
     const [min, max] = range
 
     return this.filter((item) => this.value(item, key) < min || this.value(item, key) > max)
@@ -406,6 +408,10 @@ class Collection<T> implements Iterable<T> {
 
   protected value(item: T, key: keyof any): any {
     return (item as any)?.[key]
+  }
+
+  protected instance(items: T[]): this {
+    return new (this.constructor as new (items: T[]) => this)(items)
   }
 
   protected operatorForWhere(args: any[]): { key: any; operator: ComparisonOperator; value: any } {
