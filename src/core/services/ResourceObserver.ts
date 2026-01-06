@@ -8,7 +8,7 @@ import { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
 import { CubeMapTextureManager } from '@/core/services/CubeMapTextureManager'
 import { TextureManager } from '@/core/services/TextureManager'
 import { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
-import { Collection } from '@/core/framework/Memoquent/Collection'
+import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
 import { DefaultLoadingManager } from 'three'
 import { engineStore } from '@/ui/mobX/EngineStore'
 import { notificationStore } from '@/ui/mobX/NotificationStore'
@@ -55,15 +55,15 @@ class ResourceObserver {
     const actor: Actor | undefined = Actor.withRelations('resources').where({ name: event.name }).first()
 
     if (actor && actor.resources.isNotEmpty()) {
-      const toLoad: IResource[] = actor.resources.map((resource: Resource) => resource.toJSON() as IResource)
+      const toLoad = actor.resources.map((resource: Resource) => resource.toJSON() as IResource)
 
-      const isNotLoaded: IResource[] = toLoad.filter(
+      const isNotLoaded = toLoad.filter(
         (resource: IResource) => !this.deferred.some((r: IResource): boolean => r.id === resource.id)
       )
 
-      if (isNotLoaded.length) {
+      if (isNotLoaded.count()) {
         this.deferred.push(...isNotLoaded)
-        await this.loadDeferredTextures(isNotLoaded)
+        await this.loadDeferredTextures(isNotLoaded.toArray())
 
         const target: Entity | undefined = this.engine.entities.find(
           (entity: Entity): boolean => entity.id === actor.getAttribute('id')
@@ -161,11 +161,13 @@ class ResourceObserver {
    */
   private setMisc(): void {
     if (this.scenario) {
-      const collection: Collection<Actor> = Collection.make(Array.from(this.map.values()))
+      const collection = ModelCollection.make(Array.from(this.map.values()))
       const rings: IResource[] = collection
         .where({ categoryId: 10 })
-        .map((actor: Actor) => actor.resources.map((resource: Resource) => resource.toJSON() as IResource))
-        .flat()
+        .flatMap((actor: Actor) => actor.resources.map((resource: Resource) => resource.toJSON() as IResource))
+        .toArray()
+
+      console.log('=========', rings)
 
       this.misc.push(...rings)
     }
@@ -184,7 +186,7 @@ class ResourceObserver {
 
       if (!root) return
 
-      const children: Collection<Actor> = root.children
+      const children: ModelCollection<Actor> = root.children
 
       const starSystem: Actor | undefined = children.find(this.scenario.rootId)
 

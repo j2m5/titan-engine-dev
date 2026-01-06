@@ -2,7 +2,7 @@ import 'reflect-metadata'
 import { database } from '@/config/database'
 import { LazyRelationProxy } from '@/core/framework/Memoquent/LazyRelationProxy'
 import { QueryBuilder } from '@/core/framework/Memoquent/QueryBuilder'
-import { Collection } from '@/core/framework/Memoquent/Collection'
+import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
 
 export type Identity = Record<string, number>
 export type DataSource = Record<string, any>
@@ -88,27 +88,27 @@ abstract class Model<TData extends DataSource = DataSource> {
   protected hasMany<TRelated extends DataSource>(
     modelClass: new (attributes?: Partial<TRelated>) => Model<TRelated>,
     config: RelationConfig
-  ): Collection<Model<TRelated>> {
+  ): ModelCollection<Model<TRelated>> {
     const relatedInstance: Model<TRelated> = new modelClass()
     const ownerKey: string = config.ownerKey || this.primaryKey
     const ownerValue: TData[string] | undefined = this.attributes[ownerKey]
 
     if (ownerValue === undefined) {
-      return new Collection([])
+      return new ModelCollection([])
     }
 
     const models: Model<TRelated>[] = relatedInstance.source
       .filter((item: TRelated): boolean => item[config.foreignKey] === ownerValue)
       .map((item: TRelated) => new modelClass(item))
 
-    return new Collection(models)
+    return new ModelCollection(models)
   }
 
   protected hasOne<TRelated extends DataSource>(
     modelClass: new (attributes?: Partial<TRelated>) => Model<TRelated>,
     config: RelationConfig
   ): Model<TRelated> | null {
-    const results: Collection<Model<TRelated>> = this.hasMany(modelClass, config)
+    const results: ModelCollection<Model<TRelated>> = this.hasMany(modelClass, config)
 
     return results.first() || null
   }
@@ -151,21 +151,21 @@ abstract class Model<TData extends DataSource = DataSource> {
   public static where<TData extends DataSource, TModel extends Model<TData>>(
     this: ModelConstructor<TData, TModel>,
     conditions: Partial<TData>
-  ): Collection<TModel> {
+  ): ModelCollection<TModel> {
     const instance: TModel = new this()
     const items: TData[] = instance.source.filter((item: TData) =>
       Object.entries(conditions).every(([key, value]): boolean => item[key] === value)
     )
 
-    return new Collection(items.map((item: TData) => new this(item)))
+    return new ModelCollection(items.map((item: TData) => new this(item)))
   }
 
   public static all<TData extends DataSource, TModel extends Model<TData>>(
     this: ModelConstructor<TData, TModel>
-  ): Collection<TModel> {
+  ): ModelCollection<TModel> {
     const instance: TModel = new this()
 
-    return new Collection(instance.source.map((item: TData) => new this(item)))
+    return new ModelCollection(instance.source.map((item: TData) => new this(item)))
   }
 
   public static first<TData extends DataSource, TModel extends Model<TData>>(
@@ -185,10 +185,10 @@ abstract class Model<TData extends DataSource = DataSource> {
   public static withRelations<TData extends DataSource, TModel extends Model<TData>>(
     this: ModelConstructor<TData, TModel>,
     ...relations: string[]
-  ): Collection<TModel> {
+  ): ModelCollection<TModel> {
     const instance: TModel = new this()
 
-    return new Collection(instance.source.map((item: TData) => new this(item).with(...relations)))
+    return new ModelCollection(instance.source.map((item: TData) => new this(item).with(...relations)))
   }
 
   public isRelationLoaded(relationName: string): boolean {

@@ -7,14 +7,14 @@ class FakePlanet implements IRenderable {
   public material: SpriteMaterial
   public object3D: Object3D
 
-  public constructor(scale: number = 0.002) {
+  public constructor(scale: number = 0.004) {
     this.scale = scale
 
     const map: Texture = getTextureByKey('star.png')!
 
     this.material = new SpriteMaterial({
       map,
-      color: '#96948b',
+      color: '#ffffff',
       sizeAttenuation: false,
       depthWrite: false,
       blending: AdditiveBlending

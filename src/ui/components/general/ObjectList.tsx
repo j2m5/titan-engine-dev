@@ -15,10 +15,12 @@ const ObjectList = observer(() => {
   const actors: Actor[] = Actor.query()
     .where({ parentId: engineStore.scenario?.rootId })
     .get()
-    .flatten()
+    .expand()
     .filter(filter)
     .sortBy('id')
     .toArray()
+
+  console.log('ObjectList', actors)
 
   const icon = (actor: Actor): JSX.Element =>
     actor.category.attributes.alias === 'planet' ? <PlanetIcon size={24} /> : <SunIcon size={24} />

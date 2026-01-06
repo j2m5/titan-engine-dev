@@ -8,7 +8,7 @@ import { RenderingObject } from '@/core/models/RenderingObject'
 import { Placement } from '@/core/models/Placement'
 import { Resource } from '@/core/models/Resource'
 import { belongsTo, hasMany, hasOne } from '@/core/framework/Memoquent/decorators'
-import { Collection } from '@/core/framework/Memoquent/Collection'
+import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
 
 class Actor extends Model<IActor> {
   protected table: string = 'actors'
@@ -35,10 +35,10 @@ class Actor extends Model<IActor> {
   declare public placement: Placement
 
   @hasMany(() => Resource, { foreignKey: 'actorId' })
-  declare public resources: Collection<Resource>
+  declare public resources: ModelCollection<Resource>
 
   @hasMany(() => Actor, { foreignKey: 'parentId' })
-  declare public children: Collection<Actor>
+  declare public children: ModelCollection<Actor>
 }
 
 export { Actor }

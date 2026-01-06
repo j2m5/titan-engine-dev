@@ -1,5 +1,5 @@
 import { DataSource, Model, ModelConstructor } from '@/core/framework/Memoquent/Model'
-import { Collection } from '@/core/framework/Memoquent/Collection'
+import { Collection } from '@/core/framework/support/Collection'
 
 class QueryBuilder<TData extends DataSource, TModel extends Model<TData>> {
   private _conditions?: Partial<TData>
@@ -66,10 +66,6 @@ class QueryBuilder<TData extends DataSource, TModel extends Model<TData>> {
 
     if (this._limit !== undefined && this._limit > 0) {
       collection = collection.take(this._limit)
-    }
-
-    if (this._relations.length > 0) {
-      collection.load(...this._relations)
     }
 
     return collection
