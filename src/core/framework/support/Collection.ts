@@ -75,11 +75,11 @@ class Collection<T> implements Iterable<T> {
       }
     })
 
-    return new (this.constructor as any)(result)
+    return new Collection(result)
   }
 
   public map<U>(callback: (item: T, index: number) => U): Collection<U> {
-    return new (this.constructor as any)(this.items.map(callback))
+    return new Collection(this.items.map(callback))
   }
 
   public filter(callback: (item: T, index: number) => boolean): this {
@@ -144,6 +144,17 @@ class Collection<T> implements Iterable<T> {
     return chunks
   }
 
+  public partition(key: (item: T) => boolean): [this, this] {
+    const passed: T[] = []
+    const failed: T[] = []
+
+    this.items.forEach((item: T): void => {
+      ;(key(item) ? passed : failed).push(item)
+    })
+
+    return [this.instance(passed), this.instance(failed)]
+  }
+
   public take(limit: number): this {
     return this.instance(this.items.slice(0, limit))
   }
@@ -206,6 +217,18 @@ class Collection<T> implements Iterable<T> {
 
   public pipe<U>(callback: (collection: Collection<T>) => U): U {
     return callback(this)
+  }
+
+  public intersect(other: Collection<T>): this {
+    const set = new Set(other.all())
+
+    return this.filter((item) => set.has(item))
+  }
+
+  public diff(other: Collection<T>): this {
+    const set = new Set(other.all())
+
+    return this.filter((item) => !set.has(item))
   }
 
   public when<U>(condition: boolean | ((collection: this) => boolean), callback: (collection: this) => U): U | this {
