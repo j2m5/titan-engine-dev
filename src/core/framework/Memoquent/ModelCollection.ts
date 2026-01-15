@@ -10,14 +10,6 @@ class ModelCollection<TModel extends Model<any>> extends Collection<TModel> {
     return this.where('id', '===', id).first()
   }
 
-  public load(...relations: string[]): this {
-    this.items.forEach((item: TModel): void => {
-      item.with(...relations)
-    })
-
-    return this
-  }
-
   public eachRecursive<TRelation extends keyof TModel>(
     callback: (item: TModel, depth: number, parent?: TModel) => void | false,
     childrenRelation: TRelation = 'children' as TRelation
