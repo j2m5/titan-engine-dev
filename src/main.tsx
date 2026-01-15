@@ -7,8 +7,6 @@ import { InversifyProvider } from '@/ui/inversify-react'
 import { engineStore } from '@/ui/mobX/EngineStore'
 import { Application } from '@/Application'
 import { AppServiceProvider } from '@/core/providers/AppServiceProvider'
-import { Actor } from '@/core/models/Actor'
-import { Resource } from '@/core/models/Resource'
 
 const provider: AppServiceProvider = new AppServiceProvider()
 provider.register()
@@ -30,19 +28,3 @@ async function bootstrap(): Promise<void> {
 }
 
 await bootstrap()
-
-const actors = Actor.query()
-  /*.whereDoesntHave('resources', (items) => {
-    return items.where('resourceType', 'bump')
-  })*/
-  //.whereIn('categoryId', [2, 3])
-  //.whereNotNull('parentId')
-  .whereNotBetween('id', [10, 15])
-  .get()
-
-console.log(11111, actors)
-console.log('232323', Actor.query().get())
-
-console.log(Resource.first())
-
-console.log(Actor.query().get())

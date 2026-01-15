@@ -8,8 +8,6 @@ import { ScenarioConfig } from '@/config/scenarios'
 import { SceneObserver } from '@/core/services/SceneObserver'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { resourceStorage } from '@/core/services/ResourceStorage'
-import { Resource } from '@/core/models/Resource'
-import { Actor } from '@/core/models/Actor'
 
 @injectable()
 class Application {
@@ -39,13 +37,6 @@ class Application {
     this.sceneObserver.scene = threeJS.scene
 
     this.engine.start()
-    console.log(threeJS.renderer.info)
-    console.log(Resource.all())
-    console.log(Resource.query().get())
-    console.log('all', Actor.all())
-    console.log('withGlobalScopes', Actor.query().get())
-    console.log('withoutGlobalScopes', Actor.query().withoutGlobalScopes().get())
-    console.log('withoutGlobalScope', Actor.query().withoutGlobalScope('scenario').get())
   }
 
   public dispose(): void {

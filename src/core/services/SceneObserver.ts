@@ -126,7 +126,7 @@ class SceneObserver extends EventEmitter {
   }
 
   public calculateFarthestObjects(count: number = 1, filtered?: ObservableRecord[]): ObservableRecord[] {
-    const data = filtered && filtered.length ? filtered : this.data.values()
+    const data = filtered && filtered.length ? filtered : Array.from(this.data.values())
     const result: ObservableRecord[] = []
 
     for (const record of data) {

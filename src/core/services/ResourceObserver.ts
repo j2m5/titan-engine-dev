@@ -118,10 +118,30 @@ class ResourceObserver {
    * Выгружает текстуры определенные как неиспользуемые в данный момент времени
    */
   private releaseUnusedTextures(): void {
-    // получает 3 наиболее отдаленных объекта, возвращая массив их имен
+    // сколько отдаленных объектов нужно получить для удаления их текстур
+    const minCountFarthest: number = 3
+
+    // определение для каких объектов текстуры уже были загружены
+    // именно их и надо прослушивать на предмет необходимости удаления текстур
+    const uniqueDefers: Collection<IResource> = new Collection(this.deferred)
+      .whereNotNull('actorId')
+      .where('resourceType', 'diffuse')
+    const actorIds: number[] = uniqueDefers.map((el: IResource) => el.actorId!).toArray()
+    const preparedActors: string[] = Actor.query().whereIn('id', actorIds).pluck('name')
+    const filterPreparedActors: ObservableRecord[] = Array.from(this.sceneObserver.data.values()).filter(
+      (record: ObservableRecord) => preparedActors.includes(record.name)
+    )
+    // получает minCountFarthest (по умолчанию 3) наиболее отдаленных объекта, возвращая массив их имен
+    // вторым параметром принимает фильтрованный массив ObservableRecord
+    // в котором остаются только те элементы для которых текстуры уже были загружены
     const farthestObjects: string[] = this.sceneObserver
-      .calculateFarthestObjects(3)
+      .calculateFarthestObjects(minCountFarthest, filterPreparedActors)
       .map((object: ObservableRecord) => object.name)
+
+    // если фактическое количество объектов с загруженными текстурами меньше minCountFarthest
+    // завершается выполнение метода, поскольку нет необходимости удалять текстуры в данный момент
+    if (filterPreparedActors.length <= minCountFarthest) return
+
     // извлекает коллекцию ресурсов
     const resources: IResource[] = Actor.all()
       .where('categoryId', 7)
@@ -239,7 +259,6 @@ class ResourceObserver {
     }
 
     DefaultLoadingManager.onProgress = (url: string, loaded: number, total: number): void => {
-      console.log(url, loaded, total)
       engineStore.setAppLoadingAsset(url)
       engineStore.setAppLoadingProgress(loaded)
       engineStore.setAppLoadingTotal(total)
