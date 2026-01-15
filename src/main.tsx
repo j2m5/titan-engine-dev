@@ -1,12 +1,15 @@
 import './styles/App.scss'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { Container } from 'inversify'
 import App from '@/ui/App'
 import { InversifyProvider } from '@/ui/inversify-react'
 import { engineStore } from '@/ui/mobX/EngineStore'
 import { Application } from '@/Application'
 import { AppServiceProvider } from '@/core/providers/AppServiceProvider'
-import { Container } from 'inversify'
+import { Actor } from '@/core/models/Actor'
+import { Resource } from '@/core/models/Resource'
+import { test } from '@/core/framework/testground'
 
 const provider: AppServiceProvider = new AppServiceProvider()
 provider.register()
@@ -28,3 +31,21 @@ async function bootstrap(): Promise<void> {
 }
 
 await bootstrap()
+
+const actors = Actor.query()
+  /*.whereDoesntHave('resources', (items) => {
+    return items.where('resourceType', 'bump')
+  })*/
+  //.whereIn('categoryId', [2, 3])
+  //.whereNotNull('parentId')
+  .whereNotBetween('id', [10, 15])
+  .get()
+
+console.log(11111, actors)
+console.log('232323', Actor.query().get())
+
+console.log(Resource.first())
+
+test()
+
+console.log(Actor.query().get())

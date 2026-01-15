@@ -6,6 +6,7 @@ const TatooResources: IResource[] = [
     actorId: 6,
     resourceType: 'diffuse',
     path: 'planets/StarWars/tatooine/tatooine.png',
+    lifetime: 60000,
     colorSpace: 'srgb'
   },
   {
@@ -13,6 +14,7 @@ const TatooResources: IResource[] = [
     actorId: 7,
     resourceType: 'diffuse',
     path: 'planets/StarWars/ohann/ohann.png',
+    lifetime: 60000,
     colorSpace: 'srgb'
   },
   {
@@ -20,6 +22,7 @@ const TatooResources: IResource[] = [
     actorId: 8,
     resourceType: 'diffuse',
     path: 'planets/StarWars/adriana/adriana.png',
+    lifetime: 60000,
     colorSpace: 'srgb'
   },
   {
@@ -27,6 +30,7 @@ const TatooResources: IResource[] = [
     actorId: 9,
     resourceType: 'diffuse',
     path: 'planets/StarWars/ghomrassen/ghomrassen.png',
+    lifetime: 60000,
     colorSpace: 'srgb'
   },
   {
@@ -34,6 +38,7 @@ const TatooResources: IResource[] = [
     actorId: 10,
     resourceType: 'diffuse',
     path: 'planets/StarWars/guermessa/guermessa.png',
+    lifetime: 60000,
     colorSpace: 'srgb'
   },
   {
@@ -41,6 +46,7 @@ const TatooResources: IResource[] = [
     actorId: 11,
     resourceType: 'diffuse',
     path: 'planets/StarWars/chenini/chenini.png',
+    lifetime: 60000,
     colorSpace: 'srgb'
   },
   {
@@ -48,6 +54,7 @@ const TatooResources: IResource[] = [
     actorId: 12,
     resourceType: 'diffuse',
     path: 'planets/unnamed/unnamed_planet_5.png',
+    lifetime: 60000,
     colorSpace: 'srgb'
   },
   {
@@ -55,6 +62,7 @@ const TatooResources: IResource[] = [
     actorId: 13,
     resourceType: 'diffuse',
     path: 'planets/unnamed/unnamed_planet_6.png',
+    lifetime: 60000,
     colorSpace: 'srgb'
   },
   {
@@ -62,6 +70,7 @@ const TatooResources: IResource[] = [
     actorId: 14,
     resourceType: 'diffuse',
     path: 'planets/unnamed/unnamed_planet_7.png',
+    lifetime: 60000,
     colorSpace: 'srgb'
   },
   {
@@ -69,6 +78,7 @@ const TatooResources: IResource[] = [
     actorId: 15,
     resourceType: 'diffuse',
     path: 'planets/unnamed/unnamed_planet_1.png',
+    lifetime: 60000,
     colorSpace: 'srgb'
   },
   {
@@ -76,6 +86,7 @@ const TatooResources: IResource[] = [
     actorId: 16,
     resourceType: 'diffuse',
     path: 'planets/unnamed/unnamed_planet_3.png',
+    lifetime: 60000,
     colorSpace: 'srgb'
   },
   {
@@ -83,19 +94,22 @@ const TatooResources: IResource[] = [
     actorId: 17,
     resourceType: 'diffuse',
     path: 'planets/StarWars/adriana3/adriana3.jpg',
+    lifetime: 60000,
     colorSpace: 'srgb'
   },
   {
     id: 13,
     actorId: 17,
     resourceType: 'bump',
-    path: 'planets/StarWars/adriana3/adriana3_bump.jpg'
+    path: 'planets/StarWars/adriana3/adriana3_bump.jpg',
+    lifetime: 60000
   },
   {
     id: 14,
     actorId: 18,
     resourceType: 'diffuse',
     path: 'planets/unnamed/unnamed_planet_5.png',
+    lifetime: 60000,
     colorSpace: 'srgb'
   },
   {
@@ -103,6 +117,7 @@ const TatooResources: IResource[] = [
     actorId: 70,
     resourceType: 'diffuse',
     path: 'planets/StarWars/adriana/adriana_rings.png',
+    lifetime: 60000,
     colorSpace: 'srgb-linear'
   }
 ]

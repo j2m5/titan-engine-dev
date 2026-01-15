@@ -1,9 +1,11 @@
+import { injectable } from 'inversify'
 import { ResourceManager } from '@/core/services/ResourceManager'
 import { Texture, TextureLoader } from 'three'
 import { IResource } from '@/core/models/types'
-import { addTexture } from '@/config/textures'
 import { threeJS } from '@/core/graphic/ThreeJS'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 
+@injectable()
 class TextureManager extends ResourceManager<IResource, Texture> {
   protected loader: TextureLoader
 
@@ -14,17 +16,14 @@ class TextureManager extends ResourceManager<IResource, Texture> {
 
   public async load(source: IResource): Promise<Texture | undefined> {
     try {
-      const regex: RegExp = /(?:.+\/)?([a-zA-Z0-9_-]+\.(?:png|jpg|jpeg|gif|bmp|svg|webp))/
       const fullURL: string = this.getFullURL(source.path)
-      const match: RegExpMatchArray | null = fullURL.match(regex)
-      const imageName: string = match ? match[1] : ''
       const texture: Texture = await this.loader.loadAsync(fullURL)
 
-      texture.name = imageName
+      texture.name = source.path
       texture.colorSpace = source.colorSpace ? source.colorSpace : ''
       texture.anisotropy = 8
 
-      addTexture(source.path, texture)
+      resourceStorage.addTexture(texture)
 
       threeJS.renderer.initTexture(texture)
 

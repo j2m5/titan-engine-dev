@@ -1,10 +1,12 @@
+import { injectable } from 'inversify'
 import { ResourceManager } from '@/core/services/ResourceManager'
 import { IResource } from '@/core/models/types'
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { CompressedTexture } from 'three'
-import { addTexture } from '@/config/textures'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 
+@injectable()
 class CompressedTextureManager extends ResourceManager<IResource> {
   protected loader: KTX2Loader
 
@@ -17,17 +19,14 @@ class CompressedTextureManager extends ResourceManager<IResource> {
 
   public async load(source: IResource): Promise<CompressedTexture | undefined> {
     try {
-      const regex: RegExp = /(?:.+\/)?([a-zA-Z0-9_-]+\.?:ktx2)/
       const fullURL: string = this.getFullURL(source.path)
-      const match: RegExpMatchArray | null = fullURL.match(regex)
-      const fileName: string = match ? match[1] : ''
       const texture: CompressedTexture = await this.loader.loadAsync(fullURL)
 
-      texture.name = fileName
+      texture.name = source.path
       texture.colorSpace = source.colorSpace ? source.colorSpace : ''
       texture.anisotropy = Math.min(8, threeJS.renderer.capabilities.getMaxAnisotropy())
 
-      addTexture(source.path, texture)
+      resourceStorage.addTexture(texture)
 
       return texture
     } catch (e) {

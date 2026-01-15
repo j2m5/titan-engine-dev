@@ -1,8 +1,8 @@
 import { IRenderable } from '@/core/renderables/IRenderable'
 import { AdditiveBlending, Object3D, Sprite, SpriteMaterial, Texture } from 'three'
-import { getTextureByKey } from '@/config/textures'
 import { Colorable } from '@/core/models/types'
 import { colorTemperatureToRGB, rgbToHex } from '@/core/materials/shaders/lib/helpers'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 
 class FakeStar implements IRenderable {
   private readonly scale: number
@@ -12,7 +12,7 @@ class FakeStar implements IRenderable {
   public constructor(scale: number = 0.05) {
     this.scale = scale
 
-    const map: Texture = getTextureByKey('sun_glow.png')!
+    const map: Texture = resourceStorage.getTexture('sun_glow.png')!
     const rgb: Colorable = colorTemperatureToRGB(5700)
     const color: string = rgbToHex(rgb)
 

@@ -2,9 +2,9 @@ import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { PlanetShaderTemplate as Shader } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
 import { Texture, Uniform, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
-import { getTextureByKeyWithDefault } from '@/config/textures'
 import { IAtmosphereRenderingObject, IPlanetRenderingObject, IRingRenderingObject, ValueOf } from '@/core/models/types'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 
 interface PlanetUniforms {
   lightPosition: Vector3
@@ -52,7 +52,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       .where('categoryId', 10)
       .first()
       ?.renderingObject.getAttribute('data') || { innerRadius: 0, outerRadius: 0, alphaTest: 0, countParticles: 0 }
-    const ringMap: Texture = getTextureByKeyWithDefault(
+    const ringMap: Texture = resourceStorage.getTextureOrMake(
       this.model.children.where('categoryId', 10).first()?.resources.first()?.getAttribute('path')
     )
 
@@ -60,8 +60,8 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
 
     this.uniforms = {
       lightPosition: new Uniform(new Vector3()),
-      diffuseMap: new Uniform(getTextureByKeyWithDefault('default.png')),
-      nightMap: new Uniform(getTextureByKeyWithDefault('night.jpg')),
+      diffuseMap: new Uniform(resourceStorage.getTextureOrMake('default.png')),
+      nightMap: new Uniform(resourceStorage.getTextureOrMake('night.jpg')),
       cloudMap: new Uniform(null),
       specularMap: new Uniform(null),
       bumpMap: new Uniform(null),

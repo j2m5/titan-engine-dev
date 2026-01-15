@@ -7,6 +7,7 @@ abstract class AbstractShaderMaterial extends ShaderMaterial {
   }
 
   public abstract updateMaterial(): void
+  public abstract resetMaterial(): void
 }
 
 export { AbstractShaderMaterial }

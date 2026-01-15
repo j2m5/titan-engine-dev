@@ -1,7 +1,7 @@
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { Texture, Uniform, Vector3 } from 'three'
 import { InstancedAsteroidShaderTemplate as Shader } from '@/core/materials/shaders/lib/InstancedAsteroidShaderTemplate'
-import { getTextureByKey } from '@/config/textures'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 interface InstancedAsteroidUniforms {
@@ -18,8 +18,8 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
 
     this.uniforms = {
       lightPosition: new Uniform(new Vector3()),
-      diffuseMap: new Uniform(getTextureByKey('asteroid.jpg')),
-      nightMap: new Uniform(getTextureByKey('night.jpg')),
+      diffuseMap: new Uniform(resourceStorage.getTexture('asteroid.jpg')),
+      nightMap: new Uniform(resourceStorage.getTexture('night.jpg')),
       minDistance: new Uniform(toThreeJSUnits(100)),
       maxDistance: new Uniform(toThreeJSUnits(5000))
     }

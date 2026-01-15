@@ -1,7 +1,7 @@
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { Texture, Uniform } from 'three'
 import { StarfieldShaderTemplate as Shader } from '@/core/materials/shaders/lib/StarfieldShaderTemplate'
-import { getTextureByKey } from '@/config/textures'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 
 interface StarfieldUniforms {
   time: number
@@ -14,7 +14,7 @@ class StarfieldShader extends AbstractShader<keyof StarfieldUniforms> {
 
     this.uniforms = {
       time: new Uniform(0),
-      starTexture: new Uniform(getTextureByKey('star.png'))
+      starTexture: new Uniform(resourceStorage.getTexture('star.png'))
     }
     this.name = 'StarfieldShader'
   }

@@ -18,6 +18,8 @@ class GalaxyMaterial extends AbstractShaderMaterial {
   }
 
   public updateMaterial(): void {}
+
+  public resetMaterial(): void {}
 }
 
 export { GalaxyMaterial }

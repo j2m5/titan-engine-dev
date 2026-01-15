@@ -18,6 +18,8 @@ class StarMaterial extends AbstractShaderMaterial {
   }
 
   public updateMaterial(): void {}
+
+  public resetMaterial(): void {}
 }
 
 export { StarMaterial }

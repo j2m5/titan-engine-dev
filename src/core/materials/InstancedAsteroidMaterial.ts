@@ -14,6 +14,8 @@ class InstancedAsteroidMaterial extends AbstractShaderMaterial {
   }
 
   public updateMaterial(): void {}
+
+  public resetMaterial(): void {}
 }
 
 export { InstancedAsteroidMaterial }

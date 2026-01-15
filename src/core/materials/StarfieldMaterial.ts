@@ -17,6 +17,8 @@ class StarfieldMaterial extends AbstractShaderMaterial {
   }
 
   public updateMaterial(): void {}
+
+  public resetMaterial(): void {}
 }
 
 export { StarfieldMaterial }

@@ -25,6 +25,7 @@ const CommonResources: IResource[] = [
     actorId: null,
     resourceType: 'diffuse',
     path: 'sun_glow.png',
+    lifetime: 0,
     colorSpace: 'srgb'
   },
   {
@@ -32,6 +33,7 @@ const CommonResources: IResource[] = [
     actorId: null,
     resourceType: 'diffuse',
     path: 'star.png',
+    lifetime: 0,
     colorSpace: 'srgb-linear'
   },
   {
@@ -39,25 +41,29 @@ const CommonResources: IResource[] = [
     actorId: null,
     resourceType: 'diffuse',
     path: 'asteroid.jpg',
+    lifetime: 0,
     colorSpace: 'srgb-linear'
   },
   {
     id: 93,
     actorId: null,
     resourceType: 'diffuse',
-    path: 'night.jpg'
+    path: 'night.jpg',
+    lifetime: 0
   },
   {
     id: 100,
     actorId: null,
     resourceType: 'diffuse',
-    path: 'galaxy.png'
+    path: 'galaxy.png',
+    lifetime: 0
   },
   {
     id: 101,
     actorId: null,
     resourceType: 'diffuse',
     path: 'lensflare1.png',
+    lifetime: 0,
     colorSpace: 'srgb'
   },
   {
@@ -65,6 +71,7 @@ const CommonResources: IResource[] = [
     actorId: null,
     resourceType: 'diffuse',
     path: 'lensflare2.png',
+    lifetime: 0,
     colorSpace: 'srgb'
   },
   {
@@ -72,6 +79,7 @@ const CommonResources: IResource[] = [
     actorId: null,
     resourceType: 'diffuse',
     path: 'lensflare3.png',
+    lifetime: 0,
     colorSpace: 'srgb'
   },
   {
@@ -79,6 +87,7 @@ const CommonResources: IResource[] = [
     actorId: null,
     resourceType: 'diffuse',
     path: 'accretion_disk.png',
+    lifetime: 0,
     colorSpace: 'srgb'
   },
   {
@@ -86,6 +95,7 @@ const CommonResources: IResource[] = [
     actorId: null,
     resourceType: 'diffuse',
     path: 'star_noise.png',
+    lifetime: 0,
     colorSpace: 'srgb-linear'
   },
   {
@@ -93,6 +103,7 @@ const CommonResources: IResource[] = [
     actorId: null,
     resourceType: 'diffuse',
     path: 'default.png',
+    lifetime: 0,
     colorSpace: 'srgb-linear'
   }
 ]
@@ -102,73 +113,85 @@ const CommonCubemapResources: IResource[] = [
     id: 94,
     actorId: null,
     resourceType: 'cube',
-    path: 'cubemaps/scene/main/px.jpg'
+    path: 'cubemaps/scene/main/px.jpg',
+    lifetime: 0
   },
   {
     id: 95,
     actorId: null,
     resourceType: 'cube',
-    path: 'cubemaps/scene/main/nx.jpg'
+    path: 'cubemaps/scene/main/nx.jpg',
+    lifetime: 0
   },
   {
     id: 96,
     actorId: null,
     resourceType: 'cube',
-    path: 'cubemaps/scene/main/py.jpg'
+    path: 'cubemaps/scene/main/py.jpg',
+    lifetime: 0
   },
   {
     id: 97,
     actorId: null,
     resourceType: 'cube',
-    path: 'cubemaps/scene/main/ny.jpg'
+    path: 'cubemaps/scene/main/ny.jpg',
+    lifetime: 0
   },
   {
     id: 98,
     actorId: null,
     resourceType: 'cube',
-    path: 'cubemaps/scene/main/pz.jpg'
+    path: 'cubemaps/scene/main/pz.jpg',
+    lifetime: 0
   },
   {
     id: 99,
     actorId: null,
     resourceType: 'cube',
-    path: 'cubemaps/scene/main/nz.jpg'
+    path: 'cubemaps/scene/main/nz.jpg',
+    lifetime: 0
   },
   {
     id: 107,
     actorId: null,
     resourceType: 'cube',
-    path: 'cubemaps/scene/colored/px.png'
+    path: 'cubemaps/scene/colored/px.png',
+    lifetime: 0
   },
   {
     id: 108,
     actorId: null,
     resourceType: 'cube',
-    path: 'cubemaps/scene/colored/nx.png'
+    path: 'cubemaps/scene/colored/nx.png',
+    lifetime: 0
   },
   {
     id: 109,
     actorId: null,
     resourceType: 'cube',
-    path: 'cubemaps/scene/colored/py.png'
+    path: 'cubemaps/scene/colored/py.png',
+    lifetime: 0
   },
   {
     id: 110,
     actorId: null,
     resourceType: 'cube',
-    path: 'cubemaps/scene/colored/ny.png'
+    path: 'cubemaps/scene/colored/ny.png',
+    lifetime: 0
   },
   {
     id: 111,
     actorId: null,
     resourceType: 'cube',
-    path: 'cubemaps/scene/colored/pz.png'
+    path: 'cubemaps/scene/colored/pz.png',
+    lifetime: 0
   },
   {
     id: 112,
     actorId: null,
     resourceType: 'cube',
-    path: 'cubemaps/scene/colored/nz.png'
+    path: 'cubemaps/scene/colored/nz.png',
+    lifetime: 0
   }
 ]
 

@@ -1,4 +1,5 @@
 import { injectable, inject } from 'inversify'
+import dayjs from 'dayjs'
 import { ScenarioConfig } from '@/config/scenarios'
 import { IActor, IResource } from '@/core/models/types'
 import { Resource } from '@/core/models/Resource'
@@ -9,11 +10,14 @@ import { CubeMapTextureManager } from '@/core/services/CubeMapTextureManager'
 import { TextureManager } from '@/core/services/TextureManager'
 import { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
 import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
-import { DefaultLoadingManager } from 'three'
+import { DefaultLoadingManager, Texture } from 'three'
 import { engineStore } from '@/ui/mobX/EngineStore'
 import { notificationStore } from '@/ui/mobX/NotificationStore'
 import { Planet } from '@/core/renderables/Planet'
 import { Entity } from '@/core/framework/Entity'
+import { resourceStorage } from '@/core/services/ResourceStorage'
+import { ResourceItem } from '@/core/services/ResourceManager'
+import { Collection } from '@/core/framework/support/Collection'
 
 /**
  * Наблюдатель за ресурсами, отвечающий жизненный цикл ресурсов
@@ -46,34 +50,6 @@ class ResourceObserver {
    * Карта содержащая все сущности текущего сценария, где ключ - идентификатор актора
    */
   private readonly _map: Map<number, Actor>
-
-  /**
-   * Обработчик события изменения ближайшего объекта
-   * @param event Запись наблюдаемого объекта
-   */
-  private closestChange = async (event: ObservableRecord): Promise<void> => {
-    const actor: Actor | undefined = Actor.withRelations('resources').where({ name: event.name }).first()
-
-    if (actor && actor.resources.isNotEmpty()) {
-      const toLoad = actor.resources.map((resource: Resource) => resource.toJSON() as IResource)
-
-      const isNotLoaded = toLoad.filter(
-        (resource: IResource) => !this.deferred.some((r: IResource): boolean => r.id === resource.id)
-      )
-
-      if (isNotLoaded.isNotEmpty()) {
-        this.deferred.push(...isNotLoaded)
-        await this.loadDeferredTextures(isNotLoaded.toArray())
-
-        const target: Entity | undefined = this.engine.entities.find(
-          (entity: Entity): boolean => entity.id === actor.getAttribute('id')
-        )
-
-        const component: Planet | undefined = target?.getComponent(Planet)
-        component?.material.updateMaterial()
-      }
-    }
-  }
 
   /**
    * @param engine Экземпляр движка
@@ -139,6 +115,58 @@ class ResourceObserver {
   }
 
   /**
+   * Выгружает текстуры определенные как неиспользуемые в данный момент времени
+   */
+  private releaseUnusedTextures(): void {
+    // получает 3 наиболее отдаленных объекта, возвращая массив их имен
+    const farthestObjects: string[] = this.sceneObserver
+      .calculateFarthestObjects(3)
+      .map((object: ObservableRecord) => object.name)
+    // извлекает коллекцию ресурсов
+    const resources: IResource[] = Actor.all()
+      .where('categoryId', 7)
+      .whereIn('name', farthestObjects)
+      .flatMap((actor: Actor) => actor.resources.toJSON())
+      .toArray()
+    // с помощью коллекции ресурсов извлекает текстуры из хранилища по имени (относительный путь = имя)
+    const textures: Collection<Texture> = resourceStorage.textures.whereIn(
+      'name',
+      resources.map((resource: IResource) => resource.path)
+    )
+
+    textures.each((texture: Texture): void => {
+      // извлекает объект с мета-данными в поле userData текстуры
+      const resource: ResourceItem | undefined = texture.userData.resource as ResourceItem | undefined
+      // проверяет на наличие мета-данных, проверяет чтобы loadedAt и expiredAt отличались
+      // loadedAt и expiredAt равны если lifetime ресурса установлен как 0, это означает текстура имеет infinite lifetime
+      // основная проверка на истечение lifetime ресурса, если меньше текущего времени - нужно удалять
+      if (resource && resource.loadedAt !== resource.expiredAt && resource.expiredAt < dayjs()) {
+        const entities: Entity[] = this.engine.entities.filter((entity: Entity) =>
+          resources.map((resource: IResource) => resource.actorId).includes(entity.id)
+        )
+
+        // извлекает целевые сущности и сбрасывает материал на параметры по умолчанию
+        // позволяя WebGL корректно освободить ресурсы
+        entities.forEach((entity: Entity): void => {
+          const component: Planet = entity.getComponent(Planet)
+
+          component.material.resetMaterial()
+        })
+
+        // удаление как из хранилища так и с GPU
+        resourceStorage.deleteTexture(texture.name)
+
+        // после удаления нужно также удалить из массива отложенных ресурсов, чтобы можно было загрузить заново
+        const deferIndex: number = this.deferred.findIndex(
+          (resource: IResource): boolean => resource.path === texture.name
+        )
+
+        if (deferIndex !== -1) this.deferred.splice(deferIndex, 1)
+      }
+    })
+  }
+
+  /**
    * Устанавливает текстуры кубических карт для текущего сценария
    */
   private setCubeTextures(): void {
@@ -161,13 +189,11 @@ class ResourceObserver {
    */
   private setMisc(): void {
     if (this.scenario) {
-      const collection = ModelCollection.make(Array.from(this.map.values()))
+      const collection: Collection<Actor> = ModelCollection.make(Array.from(this.map.values()))
       const rings: IResource[] = collection
         .where({ categoryId: 10 })
         .flatMap((actor: Actor) => actor.resources.map((resource: Resource) => resource.toJSON() as IResource))
         .toArray()
-
-      console.log('=========', rings)
 
       this.misc.push(...rings)
     }
@@ -182,7 +208,7 @@ class ResourceObserver {
     const data: Partial<IActor> | undefined = Actor.find(this.scenario.galaxyId)?.toJSON()
 
     if (data && data.id) {
-      const root: Actor | undefined = Actor.find(data.id)?.with('children')
+      const root: Actor | null = Actor.find(data.id)
 
       if (!root) return
 
@@ -226,6 +252,36 @@ class ResourceObserver {
 
     DefaultLoadingManager.onError = (url: string): void => {
       notificationStore.openNotification({ type: 'error', message: `The error occurred while loading: ${url}` })
+    }
+  }
+
+  /**
+   * Обработчик события изменения ближайшего объекта
+   * @param event Запись наблюдаемого объекта
+   */
+  private closestChange = async (event: ObservableRecord): Promise<void> => {
+    this.releaseUnusedTextures()
+
+    const actor: Actor | undefined = Actor.where({ name: event.name }).first()
+
+    if (actor && actor.resources.isNotEmpty()) {
+      const toLoad = actor.resources.map((resource: Resource) => resource.toJSON() as IResource)
+
+      const isNotLoaded = toLoad.filter(
+        (resource: IResource) => !this.deferred.some((r: IResource): boolean => r.id === resource.id)
+      )
+
+      if (isNotLoaded.isNotEmpty()) {
+        this.deferred.push(...isNotLoaded)
+        await this.loadDeferredTextures(isNotLoaded.toArray())
+
+        const target: Entity | undefined = this.engine.entities.find(
+          (entity: Entity): boolean => entity.id === actor.getAttribute('id')
+        )
+
+        const component: Planet | undefined = target?.getComponent(Planet)
+        component?.material.updateMaterial()
+      }
     }
   }
 }

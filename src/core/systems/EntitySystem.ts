@@ -34,11 +34,11 @@ class EntitySystem extends System {
 
       entity.addComponents(actor, object, object.build())
 
-      if (PrimaryActors.includes(actor.category.getAttribute('alias'))) {
+      if (PrimaryActors.includes(actor.category?.getAttribute('alias'))) {
         entity.addComponents(new Placeable(), new Movable())
       }
 
-      if (actor.category.getAttribute('id') === 7 || actor.category.getAttribute('id') === 5) {
+      if (actor.category?.getAttribute('id') === 7 || actor.category?.getAttribute('id') === 5) {
         entity.addComponent(new UsesMark('circle'))
       }
 

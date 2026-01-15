@@ -1,7 +1,7 @@
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { Texture, Uniform } from 'three'
 import { GalaxyShaderTemplate as Shader } from '@/core/materials/shaders/lib/GalaxyShaderTemplate'
-import { getTextureByKey } from '@/config/textures'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 
 interface GalaxyUniforms {
   map: Texture | null
@@ -13,7 +13,7 @@ class GalaxyShader extends AbstractShader<keyof GalaxyUniforms> {
     super(Shader)
 
     this.uniforms = {
-      map: new Uniform(getTextureByKey('sun_glow.png')),
+      map: new Uniform(resourceStorage.getTexture('sun_glow.png')),
       size: new Uniform(0.1)
     }
     this.name = 'GalaxyShader'

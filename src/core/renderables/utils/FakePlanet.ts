@@ -1,6 +1,6 @@
 import { IRenderable } from '@/core/renderables/IRenderable'
 import { AdditiveBlending, Object3D, Sprite, SpriteMaterial, Texture } from 'three'
-import { getTextureByKey } from '@/config/textures'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 
 class FakePlanet implements IRenderable {
   private readonly scale: number
@@ -10,7 +10,7 @@ class FakePlanet implements IRenderable {
   public constructor(scale: number = 0.003) {
     this.scale = scale
 
-    const map: Texture = getTextureByKey('star.png')!
+    const map: Texture = resourceStorage.getTexture('star.png')!
 
     this.material = new SpriteMaterial({
       map,

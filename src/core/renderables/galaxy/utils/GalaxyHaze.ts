@@ -11,7 +11,7 @@ import {
   Vector3
 } from 'three'
 import { IRenderable } from '@/core/renderables/IRenderable'
-import { getTextureByKey } from '@/config/textures'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 import {
   generateArms,
   generateInnerCore,
@@ -41,7 +41,7 @@ class GalaxyHaze implements IRenderable {
 
   public constructor() {
     this.material = new SpriteMaterial({
-      map: getTextureByKey('sun_glow.png'),
+      map: resourceStorage.getTexture('sun_glow.png'),
       color: '#ffd192',
       opacity: HAZE_OPACITY,
       depthTest: false,
@@ -50,7 +50,7 @@ class GalaxyHaze implements IRenderable {
     this.object3D = new Group()
     this.discGeometry = new CircleGeometry(GALAXY_MEAN_RADIUS * 2)
     this.discMaterial = new MeshBasicMaterial({
-      map: getTextureByKey('galaxy.png'),
+      map: resourceStorage.getTexture('galaxy.png'),
       color: '#c4dbf1',
       transparent: true,
       opacity: 0.4,

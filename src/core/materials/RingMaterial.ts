@@ -22,6 +22,8 @@ class RingMaterial extends AbstractShaderMaterial {
   }
 
   public updateMaterial(): void {}
+
+  public resetMaterial(): void {}
 }
 
 export { RingMaterial }

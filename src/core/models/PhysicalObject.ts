@@ -1,16 +1,17 @@
 import { Model } from '../framework/Memoquent/Model'
 import { IPhysicalObject } from '@/core/models/types'
 import { Actor } from '@/core/models/Actor'
-import { belongsTo } from '@/core/framework/Memoquent/decorators'
 
 class PhysicalObject extends Model<IPhysicalObject> {
   protected table: string = 'physicalObjects'
 
-  @belongsTo(() => Actor, { foreignKey: 'actorId' })
-  declare public actor: Actor
+  public get actor(): Actor | null {
+    return this.belongsTo(Actor, { foreignKey: 'actorId' })
+  }
 
-  @belongsTo(() => PhysicalObject, { foreignKey: 'parentId' })
-  declare public parent: PhysicalObject
+  public get parent(): PhysicalObject | null {
+    return this.belongsTo(PhysicalObject, { foreignKey: 'parentId' })
+  }
 }
 
 export { PhysicalObject }

@@ -7,6 +7,7 @@ const TOI519Resources: IResource[] = [
     actorId: 22,
     resourceType: 'diffuse',
     path: 'planets/exoplanets/toi_519b/toi_519b.jpg',
+    lifetime: 60000,
     colorSpace: 'srgb'
   },
   {
@@ -14,6 +15,7 @@ const TOI519Resources: IResource[] = [
     actorId: 22,
     resourceType: 'night',
     path: 'planets/exoplanets/toi_519b/toi_519b_night.png',
+    lifetime: 60000,
     colorSpace: 'srgb'
   }
 ]

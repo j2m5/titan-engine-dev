@@ -1,21 +1,21 @@
 import { inject, injectable } from 'inversify'
 import { Engine } from '@/core/Engine'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
-import { ScenarioLoader } from '@/core/services/ScenarioLoader'
 import { SceneManager } from '@/core/services/SceneManager'
 import { RenderSystem } from '@/core/systems/RenderSystem'
 import { EntitySystem } from '@/core/systems/EntitySystem'
 import { ScenarioConfig } from '@/config/scenarios'
 import { SceneObserver } from '@/core/services/SceneObserver'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { getTextureByKey } from '@/config/textures'
+import { resourceStorage } from '@/core/services/ResourceStorage'
+import { Resource } from '@/core/models/Resource'
+import { Actor } from '@/core/models/Actor'
 
 @injectable()
 class Application {
   public constructor(
     @inject('Engine') private engine: Engine,
     @inject('ResourceObserver') private resourceObserver: ResourceObserver,
-    @inject('ScenarioLoader') private scenarioLoader: ScenarioLoader,
     @inject('SceneManager') private sceneManager: SceneManager,
     @inject('RenderSystem') private renderSystem: RenderSystem,
     @inject('EntitySystem') private entitySystem: EntitySystem,
@@ -28,7 +28,7 @@ class Application {
     this.resourceObserver.scenario = scenario
     await this.resourceObserver.loadPrimaryTextures()
 
-    threeJS.scene.background = getTextureByKey('cubemaps-scene-main')!
+    threeJS.scene.background = resourceStorage.getTexture('cubemaps-scene-main')!
 
     this.engine.addSystem(this.renderSystem)
     this.engine.addSystem(this.entitySystem)
@@ -39,12 +39,18 @@ class Application {
     this.sceneObserver.scene = threeJS.scene
 
     this.engine.start()
-    console.log(threeJS.scene)
+    console.log(threeJS.renderer.info)
+    console.log(Resource.all())
+    console.log(Resource.query().get())
+    console.log('all', Actor.all())
+    console.log('withGlobalScopes', Actor.query().get())
+    console.log('withoutGlobalScopes', Actor.query().withoutGlobalScopes().get())
+    console.log('withoutGlobalScope', Actor.query().withoutGlobalScope('scenario').get())
   }
 
   public dispose(): void {
     this.engine.dispose()
-    this.scenarioLoader.scenario = null
+    this.resourceObserver.scenario = null
   }
 }
 

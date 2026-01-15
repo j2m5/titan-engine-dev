@@ -7,38 +7,51 @@ import { PhysicalObject } from '@/core/models/PhysicalObject'
 import { RenderingObject } from '@/core/models/RenderingObject'
 import { Placement } from '@/core/models/Placement'
 import { Resource } from '@/core/models/Resource'
-import { belongsTo, hasMany, hasOne } from '@/core/framework/Memoquent/decorators'
 import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
+import { ScenarioScope } from '@/core/models/scopes/ScenarioScope'
 
 class Actor extends Model<IActor> {
   protected table: string = 'actors'
 
-  @belongsTo(() => Category, { foreignKey: 'categoryId' })
-  declare public category: Category
+  static {
+    this.addGlobalScope('scenario', new ScenarioScope())
+  }
 
-  @belongsTo(() => Actor, { foreignKey: 'parentId' })
-  declare public parent: Actor
+  public get category(): Category | null {
+    return this.belongsTo(Category, { foreignKey: 'categoryId' })
+  }
 
-  @hasOne(() => Orbit, { foreignKey: 'actorId' })
-  declare public orbit: Orbit
+  public get parent(): Actor | null {
+    return this.belongsTo(Actor, { foreignKey: 'parentId' })
+  }
 
-  @hasOne(() => RotationObject, { foreignKey: 'actorId' })
-  declare public rotation: RotationObject
+  public get orbit(): Orbit | null {
+    return this.hasOne(Orbit, { foreignKey: 'actorId' })
+  }
 
-  @hasOne(() => PhysicalObject, { foreignKey: 'actorId' })
-  declare public physicalObject: PhysicalObject
+  public get rotation(): RotationObject | null {
+    return this.hasOne(RotationObject, { foreignKey: 'actorId' })
+  }
 
-  @hasOne(() => RenderingObject, { foreignKey: 'actorId' })
-  declare public renderingObject: RenderingObject
+  public get physicalObject(): PhysicalObject | null {
+    return this.hasOne(PhysicalObject, { foreignKey: 'actorId' })
+  }
 
-  @hasOne(() => Placement, { foreignKey: 'actorId' })
-  declare public placement: Placement
+  public get renderingObject(): RenderingObject | null {
+    return this.hasOne(RenderingObject, { foreignKey: 'actorId' })
+  }
 
-  @hasMany(() => Resource, { foreignKey: 'actorId' })
-  declare public resources: ModelCollection<Resource>
+  public get placement(): Placement | null {
+    return this.hasOne(Placement, { foreignKey: 'actorId' })
+  }
 
-  @hasMany(() => Actor, { foreignKey: 'parentId' })
-  declare public children: ModelCollection<Actor>
+  public get resources(): ModelCollection<Resource> {
+    return this.hasMany(Resource, { foreignKey: 'actorId' })
+  }
+
+  public get children(): ModelCollection<Actor> {
+    return this.hasMany(Actor, { foreignKey: 'parentId' })
+  }
 }
 
 export { Actor }

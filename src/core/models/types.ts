@@ -115,6 +115,7 @@ export interface IResource extends ResourceParameters {
   readonly actorId: number | null
   readonly resourceType: ResourceType
   readonly path: string
+  readonly lifetime: number
 }
 
 export interface IPlanetRenderingObject {

@@ -175,6 +175,12 @@ class Collection<T> implements Iterable<T> {
     return this
   }
 
+  public splice(start: number, deleteCount: number = 0, ...items: T[]): this {
+    this.items.splice(start, deleteCount, ...items)
+
+    return this
+  }
+
   public pop(): T | undefined {
     return this.items.pop()
   }

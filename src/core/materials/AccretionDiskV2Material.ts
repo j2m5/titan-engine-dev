@@ -19,6 +19,8 @@ class AccretionDiskV2Material extends AbstractShaderMaterial {
   }
 
   public updateMaterial(): void {}
+
+  public resetMaterial(): void {}
 }
 
 export { AccretionDiskV2Material }

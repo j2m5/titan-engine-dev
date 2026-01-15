@@ -3,7 +3,7 @@ import { Texture, Uniform, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { RingShaderTemplate as Shader } from '@/core/materials/shaders/lib/RingShaderTemplate'
 import { IRingRenderingObject, ValueOf } from '@/core/models/types'
-import { getTextureByKeyWithDefault } from '@/config/textures'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 interface RingUniforms {
@@ -30,7 +30,7 @@ class RingShader extends AbstractShader<keyof RingUniforms> {
       keyof IRingRenderingObject,
       ValueOf<IRingRenderingObject>
     > = this.model.renderingObject.getAttribute('data')
-    const ringTexture: Texture = getTextureByKeyWithDefault(this.model.resources.first()?.getAttribute('path'))
+    const ringTexture: Texture = resourceStorage.getTextureOrMake(this.model.resources.first()?.getAttribute('path'))
 
     this.uniforms = {
       diffuseMap: new Uniform(ringTexture),

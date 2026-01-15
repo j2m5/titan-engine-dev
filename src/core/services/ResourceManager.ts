@@ -1,10 +1,21 @@
+import { injectable } from 'inversify'
+import dayjs from 'dayjs'
 import type { Loader } from 'three'
-import { deleteTextureByKey, getLoadedTextures, getTextureByKey } from '@/config/textures'
-import { Texture } from 'three'
 import { FileSystemDrivers } from '@/config/filesystem'
 import { config } from '@/core/framework/config'
 import { Storage } from '@/core/framework/file/Storage'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 
+export type ResourceDriverType = 'default' | 'cube' | 'bitmap' | 'compressed'
+
+export interface ResourceItem {
+  actorId: number | null
+  type: ResourceDriverType
+  loadedAt: dayjs.Dayjs
+  expiredAt: dayjs.Dayjs
+}
+
+@injectable()
 abstract class ResourceManager<TSource, TData = unknown, TUrl = string> {
   public driver: FileSystemDrivers
   protected abstract loader: Loader<TData, TUrl>
@@ -21,23 +32,15 @@ abstract class ResourceManager<TSource, TData = unknown, TUrl = string> {
   }
 
   public remove(key: string): void {
-    const texture: Texture | null = getTextureByKey(key)
-
-    if (texture) texture.dispose()
-
-    deleteTextureByKey(key)
+    resourceStorage.deleteTexture(key)
   }
 
   public removeAll(): void {
-    const textures: Map<string, Texture> = getLoadedTextures()
-
-    textures.forEach((texture: Texture, key: string): void => {
-      this.remove(key)
-    })
+    resourceStorage.deleteAllTextures()
   }
 
-  protected getFullURL(url: string): string {
-    return Storage.url(url)
+  protected getFullURL(relativePath: string): string {
+    return Storage.url(relativePath)
   }
 }
 

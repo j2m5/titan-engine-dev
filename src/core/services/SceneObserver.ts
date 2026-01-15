@@ -125,6 +125,23 @@ class SceneObserver extends EventEmitter {
     )
   }
 
+  public calculateFarthestObjects(count: number = 1, filtered?: ObservableRecord[]): ObservableRecord[] {
+    const data = filtered && filtered.length ? filtered : this.data.values()
+    const result: ObservableRecord[] = []
+
+    for (const record of data) {
+      result.push(record)
+
+      result.sort((a, b) => b.distance - a.distance)
+
+      if (result.length > count) {
+        result.pop()
+      }
+    }
+
+    return result
+  }
+
   private makeRecord(object: Object3D): SceneObserverRecord {
     return {
       name: object.userData.model,

@@ -1,26 +1,15 @@
-import 'reflect-metadata'
 import { database } from '@/config/database'
-import { LazyRelationProxy } from '@/core/framework/Memoquent/LazyRelationProxy'
 import { QueryBuilder } from '@/core/framework/Memoquent/QueryBuilder'
 import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
+import { Scope } from '@/core/framework/Memoquent/Scope'
 
 export type Identity = Record<string, number>
 export type DataSource = Record<string, any>
 
-export interface RelationConfig {
-  foreignKey: keyof Identity
-  ownerKey?: keyof Identity
-}
-
-export type RelationType = 'belongsTo' | 'hasOne' | 'hasMany'
-
-export const RELATIONS_KEY = Symbol('relations')
-
-export interface RelationMetadata {
-  type: RelationType
-  modelFactory: () => new (attributes?: any) => Model<any>
-  config: RelationConfig
-  propertyKey: string
+export interface RelationConfig<T = Identity> {
+  foreignKey: keyof T
+  ownerKey?: keyof T
+  relatedKey?: keyof T
 }
 
 export interface ModelConstructor<TData extends DataSource, TModel extends Model<TData>> {
@@ -29,95 +18,63 @@ export interface ModelConstructor<TData extends DataSource, TModel extends Model
 
 abstract class Model<TData extends DataSource = DataSource> {
   protected abstract table: string
-  public primaryKey: keyof Identity = 'id'
-  public attributes: Partial<TData>
+  protected primaryKey: keyof Identity = 'id'
+  public attributes: Partial<TData> = {}
 
-  private _relationCache: Map<string, any> = new Map<string, any>()
-  private _relationProxies: Map<string, LazyRelationProxy<any>> = new Map<string, LazyRelationProxy<any>>()
+  protected static globalScopes: Map<string, Scope<any, any>> = new Map()
 
   public constructor(attributes: Partial<TData> = {}) {
-    this.attributes = attributes
-    this.setupRelations()
+    this.fill(attributes)
   }
 
-  public get source(): TData[] {
+  public static addGlobalScope(name: string, scope: Scope<any, any>): void {
+    if (!Object.prototype.hasOwnProperty.call(this, 'globalScopes')) {
+      this.globalScopes = new Map()
+    }
+
+    this.globalScopes.set(name, scope)
+  }
+
+  public static getGlobalScopes(): Map<string, Scope<any, any>> {
+    return this.globalScopes
+  }
+
+  public source(): TData[] {
     return database.get(this.table) as TData[]
   }
 
-  private setupRelations(): void {
-    const relations: RelationMetadata[] = Reflect.getMetadata(RELATIONS_KEY, this.constructor) || []
-
-    relations.forEach((relation: RelationMetadata): void => {
-      const proxy: LazyRelationProxy<any> = new LazyRelationProxy(
-        () => this.loadRelationData(relation),
-        this._relationCache,
-        relation.propertyKey
-      )
-
-      this._relationProxies.set(relation.propertyKey, proxy)
-
-      if (relation.propertyKey in this) {
-        delete (this as any)[relation.propertyKey]
-      }
-
-      Object.defineProperty(this, relation.propertyKey, {
-        get: () => {
-          return proxy.load()
-        },
-        enumerable: true,
-        configurable: true
-      })
-    })
-  }
-
-  private loadRelationData(relation: RelationMetadata): any {
-    const ModelClass: { new (attributes?: any): Model<any> } = relation.modelFactory()
-
-    switch (relation.type) {
-      case 'belongsTo':
-        return this.belongsTo(ModelClass, relation.config)
-      case 'hasOne':
-        return this.hasOne(ModelClass, relation.config)
-      case 'hasMany':
-        return this.hasMany(ModelClass, relation.config)
-      default:
-        throw new Error(`Unknown relation type: ${relation.type}`)
-    }
-  }
-
-  protected hasMany<TRelated extends DataSource>(
-    modelClass: new (attributes?: Partial<TRelated>) => Model<TRelated>,
-    config: RelationConfig
-  ): ModelCollection<Model<TRelated>> {
-    const relatedInstance: Model<TRelated> = new modelClass()
+  protected hasMany<TRelatedData extends DataSource, TRelatedModel extends Model<TRelatedData>>(
+    modelClass: ModelConstructor<TRelatedData, TRelatedModel>,
+    config: Pick<RelationConfig, 'foreignKey' | 'ownerKey'>
+  ): ModelCollection<TRelatedModel> {
+    const relatedInstance: TRelatedModel = new modelClass()
     const ownerKey: string = config.ownerKey || this.primaryKey
     const ownerValue: TData[string] | undefined = this.attributes[ownerKey]
 
     if (ownerValue === undefined) {
-      return new ModelCollection([])
+      return new ModelCollection<TRelatedModel>([])
     }
 
-    const models: Model<TRelated>[] = relatedInstance.source
-      .filter((item: TRelated): boolean => item[config.foreignKey] === ownerValue)
-      .map((item: TRelated) => new modelClass(item))
+    const models: TRelatedModel[] = relatedInstance
+      .source()
+      .filter((item: TRelatedData): boolean => item[config.foreignKey] === ownerValue)
+      .map((item: TRelatedData) => new modelClass(item))
 
-    return new ModelCollection(models)
+    return new ModelCollection<TRelatedModel>(models)
   }
 
-  protected hasOne<TRelated extends DataSource>(
-    modelClass: new (attributes?: Partial<TRelated>) => Model<TRelated>,
-    config: RelationConfig
-  ): Model<TRelated> | null {
-    const results: ModelCollection<Model<TRelated>> = this.hasMany(modelClass, config)
-
-    return results.first() || null
+  protected hasOne<TRelatedData extends DataSource, TRelatedModel extends Model<TRelatedData>>(
+    modelClass: ModelConstructor<TRelatedData, TRelatedModel>,
+    config: Pick<RelationConfig, 'foreignKey' | 'ownerKey'>
+  ): TRelatedModel | null {
+    return this.hasMany(modelClass, config).first() || null
   }
 
-  protected belongsTo<TRelated extends DataSource>(
-    modelClass: new (attributes?: Partial<TRelated>) => Model<TRelated>,
-    config: RelationConfig
-  ): Model<TRelated> | null {
-    const relatedInstance: Model<TRelated> = new modelClass()
+  protected belongsTo<TRelatedData extends DataSource, TRelatedModel extends Model<TRelatedData>>(
+    modelClass: ModelConstructor<TRelatedData, TRelatedModel>,
+    config: Pick<RelationConfig, 'foreignKey' | 'ownerKey'>
+  ): TRelatedModel | null {
+    const relatedInstance: TRelatedModel = new modelClass()
     const ownerKey: string = config.ownerKey || relatedInstance.primaryKey
     const foreignValue: TData[string] | undefined = this.attributes[config.foreignKey]
 
@@ -125,11 +82,45 @@ abstract class Model<TData extends DataSource = DataSource> {
       return null
     }
 
-    const item: TRelated | undefined = relatedInstance.source.find(
-      (item: TRelated): boolean => item[ownerKey] === foreignValue
-    )
+    const item: TRelatedData | undefined = relatedInstance
+      .source()
+      .find((item: TRelatedData): boolean => item[ownerKey] === foreignValue)
 
     return item ? new modelClass(item) : null
+  }
+
+  protected belongsToMany<
+    TPivot extends DataSource,
+    TRelatedData extends DataSource,
+    TRelatedModel extends Model<TRelatedData>
+  >(
+    relatedModel: ModelConstructor<TRelatedData, TRelatedModel>,
+    pivot: TPivot[],
+    config: Pick<RelationConfig<TPivot>, 'foreignKey' | 'relatedKey'>
+  ): ModelCollection<TRelatedModel> {
+    const ownerKey: string = this.primaryKey
+    const ownerValue: TData[string] | undefined = this.attributes[ownerKey]
+
+    if (ownerValue === undefined) {
+      return new ModelCollection<TRelatedModel>([])
+    }
+
+    const relatedIds: TPivot[keyof TPivot][] = pivot
+      .filter((p: TPivot): boolean => p[config.foreignKey] === ownerValue)
+      .map((p: TPivot) => p[config.relatedKey!])
+
+    if (relatedIds.length === 0) {
+      return new ModelCollection<TRelatedModel>([])
+    }
+
+    const relatedInstance: TRelatedModel = new relatedModel()
+
+    const models: TRelatedModel[] = relatedInstance
+      .source()
+      .filter((item: TRelatedData) => relatedIds.includes(item[relatedInstance.primaryKey]))
+      .map((item: TRelatedData) => new relatedModel(item))
+
+    return new ModelCollection<TRelatedModel>(models)
   }
 
   public static query<TData extends DataSource, TModel extends Model<TData>>(
@@ -143,7 +134,7 @@ abstract class Model<TData extends DataSource = DataSource> {
     id: number | string
   ): TModel | null {
     const instance: TModel = new this()
-    const item: TData | undefined = instance.source.find((item: TData): boolean => item[instance.primaryKey] === id)
+    const item: TData | undefined = instance.source().find((item: TData): boolean => item[instance.primaryKey] === id)
 
     return item ? new this(item) : null
   }
@@ -153,9 +144,9 @@ abstract class Model<TData extends DataSource = DataSource> {
     conditions: Partial<TData>
   ): ModelCollection<TModel> {
     const instance: TModel = new this()
-    const items: TData[] = instance.source.filter((item: TData) =>
-      Object.entries(conditions).every(([key, value]): boolean => item[key] === value)
-    )
+    const items: TData[] = instance
+      .source()
+      .filter((item: TData) => Object.entries(conditions).every(([key, value]): boolean => item[key] === value))
 
     return new ModelCollection(items.map((item: TData) => new this(item)))
   }
@@ -165,7 +156,7 @@ abstract class Model<TData extends DataSource = DataSource> {
   ): ModelCollection<TModel> {
     const instance: TModel = new this()
 
-    return new ModelCollection(instance.source.map((item: TData) => new this(item)))
+    return new ModelCollection(instance.source().map((item: TData) => new this(item)))
   }
 
   public static first<TData extends DataSource, TModel extends Model<TData>>(
@@ -174,76 +165,41 @@ abstract class Model<TData extends DataSource = DataSource> {
   ): TModel | null {
     const instance: TModel = new this()
     const items: TData[] = conditions
-      ? instance.source.filter((item: TData) =>
-          Object.entries(conditions).every(([key, value]): boolean => item[key] === value)
-        )
-      : instance.source
+      ? instance
+          .source()
+          .filter((item: TData) => Object.entries(conditions).every(([key, value]): boolean => item[key] === value))
+      : instance.source()
 
     return items.length > 0 ? new this(items[0]) : null
-  }
-
-  public static withRelations<TData extends DataSource, TModel extends Model<TData>>(
-    this: ModelConstructor<TData, TModel>,
-    ...relations: string[]
-  ): ModelCollection<TModel> {
-    const instance: TModel = new this()
-
-    return new ModelCollection(instance.source.map((item: TData) => new this(item).with(...relations)))
-  }
-
-  public isRelationLoaded(relationName: string): boolean {
-    return this._relationCache.has(relationName)
-  }
-
-  public hasRelation(relation: string): boolean {
-    return this.getRelations().some((r: RelationMetadata): boolean => r.propertyKey === relation)
-  }
-
-  public getRelations(): RelationMetadata[] {
-    return Reflect.getMetadata(RELATIONS_KEY, this.constructor) || []
-  }
-
-  public getLoadedRelations(): string[] {
-    return Array.from(this._relationCache.keys())
-  }
-
-  public clearRelationCache(relation?: string): void {
-    if (relation) {
-      this._relationCache.delete(relation)
-    } else {
-      this._relationCache.clear()
-    }
-  }
-
-  public with(...relations: string[]): this {
-    relations.forEach((relation: string): void => {
-      const proxy: LazyRelationProxy<any> | undefined = this._relationProxies.get(relation)
-      if (proxy) {
-        proxy.load()
-      }
-    })
-
-    return this
-  }
-
-  public withAll(): this {
-    const relations: RelationMetadata[] = this.getRelations()
-    relations.forEach((relation: RelationMetadata): void => {
-      const proxy: LazyRelationProxy<any> | undefined = this._relationProxies.get(relation.propertyKey)
-      if (proxy) {
-        proxy.load()
-      }
-    })
-
-    return this
   }
 
   public fill(attributes: Partial<TData>): this {
     this.attributes = { ...this.attributes, ...attributes }
 
-    this.clearRelationCache()
-
     return this
+  }
+
+  public is(model: Model<any> | null | undefined): boolean {
+    if (!model) return false
+
+    return (
+      this.constructor === model.constructor && this.getKey() === model.getKey() && this.getTable() === model.getTable()
+    )
+  }
+
+  public isNot(model: Model<any> | null | undefined): boolean {
+    return !this.is(model)
+  }
+
+  public only<K extends keyof TData>(keys: K[]): Pick<TData, K> {
+    return Object.fromEntries(keys.map((k: K) => [k, this.attributes[k]])) as Pick<TData, K>
+  }
+
+  public except<K extends keyof TData>(keys: K[]): Partial<TData> {
+    const result: Partial<TData> = { ...this.attributes }
+    keys.forEach((k: K) => delete result[k])
+
+    return result
   }
 
   public getAttribute<TKey extends keyof TData>(key: TKey, defaultValue: any = '-'): TData[TKey] | any {
@@ -253,39 +209,29 @@ abstract class Model<TData extends DataSource = DataSource> {
   public setAttribute<TKey extends keyof TData>(key: TKey, value: TData[TKey]): this {
     this.attributes[key] = value
 
-    const relations: RelationMetadata[] = this.getRelations()
-
-    const affectedRelations: RelationMetadata[] = relations.filter(
-      (r: RelationMetadata) => r.config.foreignKey === key || r.config.ownerKey === key
-    )
-    affectedRelations.forEach((r: RelationMetadata) => this.clearRelationCache(r.propertyKey))
-
     return this
+  }
+
+  public getKeyName(): keyof Identity {
+    return this.primaryKey
+  }
+
+  public getKey(): number | undefined {
+    return this.attributes[this.primaryKey]
+  }
+
+  public getTable(): string {
+    return this.table
   }
 
   public clone(): this {
     const Constructor: ModelConstructor<TData, this> = this.constructor as ModelConstructor<TData, this>
-    const cloned = new Constructor({ ...this.attributes })
 
-    this._relationCache.forEach((value, key): void => {
-      cloned._relationCache.set(key, value)
-    })
-
-    return cloned
+    return new Constructor({ ...this.attributes })
   }
 
   public toJSON(): Record<string, any> {
-    return {
-      ...this.attributes,
-      ...Object.fromEntries(
-        Array.from(this._relationCache.entries()).map(([key, value]): [string, any] => {
-          if (Array.isArray(value)) {
-            return [key, value.map((v) => (v instanceof Model ? v.toJSON() : v))]
-          }
-          return [key, value instanceof Model ? value.toJSON() : value]
-        })
-      )
-    }
+    return { ...this.attributes }
   }
 }
 

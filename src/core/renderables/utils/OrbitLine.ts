@@ -27,7 +27,7 @@ class OrbitLine implements IRenderable {
 
   public update(delta?: number): void {}
 
-  private calculatePath(segments: number = 36000): Vector3[] {
+  private calculatePath(segments: number = 3600): Vector3[] {
     const points: Vector3[] = []
     const keplerianModel: KeplerianModel = new KeplerianModel(timeStore.epoch, this.model)
 

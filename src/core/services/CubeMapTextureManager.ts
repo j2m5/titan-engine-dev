@@ -1,10 +1,10 @@
+import { injectable } from 'inversify'
 import { ResourceManager } from '@/core/services/ResourceManager'
 import { CubeTexture, CubeTextureLoader } from 'three'
 import { IResource } from '@/core/models/types'
-import { addTexture } from '@/config/textures'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { injectable } from 'inversify'
 import { Storage } from '@/core/framework/file/Storage'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 
 @injectable()
 class CubeMapTextureManager extends ResourceManager<IResource[], CubeTexture, readonly string[]> {
@@ -30,7 +30,7 @@ class CubeMapTextureManager extends ResourceManager<IResource[], CubeTexture, re
       texture.name = name
       texture.anisotropy = 8
 
-      addTexture(name, texture)
+      resourceStorage.addTexture(texture)
 
       threeJS.renderer.initTexture(texture)
 
