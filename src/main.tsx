@@ -9,7 +9,6 @@ import { Application } from '@/Application'
 import { AppServiceProvider } from '@/core/providers/AppServiceProvider'
 import { Actor } from '@/core/models/Actor'
 import { Resource } from '@/core/models/Resource'
-import { test } from '@/core/framework/testground'
 
 const provider: AppServiceProvider = new AppServiceProvider()
 provider.register()
@@ -45,7 +44,5 @@ console.log(11111, actors)
 console.log('232323', Actor.query().get())
 
 console.log(Resource.first())
-
-test()
 
 console.log(Actor.query().get())
