@@ -43,8 +43,8 @@ export const AtmosphereShaderTemplate: ShaderProps = {
     ${ShaderChunk['common']}
     ${ShaderChunk['logdepthbuf_pars_fragment']}
 
-    #define SCATTER_POINT_COUNT 10
-    #define OPTICAL_DEPTH_POINT_COUNT 10
+    #define SCATTER_POINT_COUNT 15
+    #define OPTICAL_DEPTH_POINT_COUNT 15
 
     uniform float targetRadius;
     uniform float atmosphereRadius;
@@ -65,7 +65,7 @@ export const AtmosphereShaderTemplate: ShaderProps = {
 
       #include <atmosphereFragment>
 
-      gl_FragColor = atmosphereColor;
+      gl_FragColor = clamp(atmosphereColor, 0.0, 0.99);
 
       ${ShaderChunk['tonemapping_fragment']}
       ${ShaderChunk['colorspace_fragment']}

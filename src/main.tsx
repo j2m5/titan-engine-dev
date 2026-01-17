@@ -7,6 +7,11 @@ import { InversifyProvider } from '@/ui/inversify-react'
 import { engineStore } from '@/ui/mobX/EngineStore'
 import { Application } from '@/Application'
 import { AppServiceProvider } from '@/core/providers/AppServiceProvider'
+import { Actor } from '@/core/models/Actor'
+import { PhysicalObject } from '@/core/models/PhysicalObject'
+import { Orbit } from '@/core/models/Orbit'
+import { Resource } from '@/core/models/Resource'
+import { RenderingObject } from '@/core/models/RenderingObject'
 
 const provider: AppServiceProvider = new AppServiceProvider()
 provider.register()
@@ -28,3 +33,10 @@ async function bootstrap(): Promise<void> {
 }
 
 await bootstrap()
+
+console.log(Actor.query().get().last())
+console.log(Actor.query().orderBy('id').get().toArray())
+console.log(PhysicalObject.query().orderBy('id').get().toArray())
+console.log(Orbit.query().orderBy('id').get().toArray())
+console.log(Resource.query().orderBy('id').get().toArray())
+console.log(RenderingObject.query().orderBy('id').get().toArray())

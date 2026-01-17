@@ -122,4 +122,23 @@ const TatooResources: IResource[] = [
   }
 ]
 
-export const Resources: IResource[] = [...TatooResources]
+const YavinResources: IResource[] = [
+  {
+    id: 114,
+    actorId: 89,
+    resourceType: 'diffuse',
+    path: 'planets/StarWars/yavin/prime/yavin_prime.png',
+    lifetime: 60000,
+    colorSpace: 'srgb'
+  },
+  {
+    id: 115,
+    actorId: 91,
+    resourceType: 'diffuse',
+    path: 'planets/StarWars/yavin/iv/iv.png',
+    lifetime: 60000,
+    colorSpace: 'srgb'
+  }
+]
+
+export const Resources: IResource[] = [...TatooResources, ...YavinResources]

@@ -45,5 +45,16 @@ export const Scenarios: ScenarioConfig[] = [
     skybox: [94, 95, 96, 97, 98, 99],
     defaultCameraPosition: [0, fromAstronomicalUnits(1.2), fromAstronomicalUnits(1.2)],
     lightSources: [4, 5]
+  },
+  {
+    id: 4,
+    galaxyId: 1,
+    rootId: 87,
+    name: 'Yavin system',
+    description: 'Approximate Yavin system from Star Wars Universe',
+    preview: 'unknown.png',
+    skybox: [94, 95, 96, 97, 98, 99],
+    defaultCameraPosition: [0, fromAstronomicalUnits(1.2), fromAstronomicalUnits(1.2)],
+    lightSources: [88]
   }
 ]

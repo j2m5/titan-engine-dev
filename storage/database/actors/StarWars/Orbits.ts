@@ -153,4 +153,27 @@ const TatooOrbits: IOrbit[] = [
   }
 ]
 
-export const Orbits: IOrbit[] = [...TatooOrbits]
+const YavinOrbits: IOrbit[] = [
+  {
+    id: 59,
+    actorId: 89,
+    semiMajorAxis: 5.2,
+    eccentricity: 0.125,
+    inclination: 1.7,
+    argOfPeriapsis: 30.5,
+    ascendingNode: 240.3,
+    meanAnomalyAtEpoch: 70.8
+  },
+  {
+    id: 60,
+    actorId: 91,
+    semiMajorAxis: 0.003,
+    eccentricity: 0.07,
+    inclination: 3.142,
+    argOfPeriapsis: 45.769,
+    ascendingNode: 27.314,
+    meanAnomalyAtEpoch: 177.123
+  }
+]
+
+export const Orbits: IOrbit[] = [...TatooOrbits, ...YavinOrbits]

@@ -180,4 +180,40 @@ const TatooPhysicalObjects: IPhysicalObject[] = [
   }
 ]
 
-export const PhysicalObjects: IPhysicalObject[] = [...TatooPhysicalObjects]
+const YavinPhysicalObjects: IPhysicalObject[] = [
+  {
+    id: 61,
+    actorId: 88,
+    parentId: null,
+    mass: SolarMass * 0.85,
+    radius: SolarRadius * 0.89,
+    axialTilt: 0,
+    orbitalPeriod: 0,
+    rotationPeriod: 10,
+    temperature: 3955
+  },
+  {
+    id: 62,
+    actorId: 89,
+    parentId: 61,
+    mass: JupiterMass * 1.6,
+    radius: 195500,
+    axialTilt: 15.5,
+    orbitalPeriod: 10,
+    rotationPeriod: 15,
+    temperature: 0
+  },
+  {
+    id: 63,
+    actorId: 91,
+    parentId: 62,
+    mass: 4.868e24,
+    radius: 10200,
+    axialTilt: 25.2,
+    orbitalPeriod: 10,
+    rotationPeriod: 24.6,
+    temperature: 0
+  }
+]
+
+export const PhysicalObjects: IPhysicalObject[] = [...TatooPhysicalObjects, ...YavinPhysicalObjects]

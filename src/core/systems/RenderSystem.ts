@@ -31,15 +31,18 @@ class RenderSystem extends System {
     this.canvas.style.zIndex = '99'
 
     this.overlay.id = 'overlay'
+    threeJS.stats.dom.style.zIndex = '99999999999999'
 
     document.body.appendChild(this.canvas)
     document.body.appendChild(this.overlay)
+    document.body.appendChild(threeJS.stats.dom)
 
     this.renderManager.initialize()
     this.registerEvents()
   }
 
   public update(dt: number, engine: Engine): void {
+    threeJS.stats.update()
     timeStore.setEpoch(timeStore.epoch + (dt * timeStore.speedOfTime) / DAY)
     threeJS.astroControls.movementSpeed = toThreeJSUnits(cameraStore.speed)
     threeJS.astroControls.update(dt)

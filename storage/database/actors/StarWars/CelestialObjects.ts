@@ -123,4 +123,31 @@ const TatooCelestialObjects: IActor[] = [
   }
 ]
 
-export const CelestialObjects: IActor[] = [...TatooCelestialObjects]
+const YavinCelestialObjects: IActor[] = [
+  {
+    id: 88,
+    categoryId: 6,
+    parentId: 87,
+    name: 'Yavin',
+    description: '',
+    color: '#de8623'
+  },
+  {
+    id: 89,
+    categoryId: 7,
+    parentId: 88,
+    name: 'Yavin Prime',
+    description: '',
+    color: '#ea4123'
+  },
+  {
+    id: 91,
+    categoryId: 7,
+    parentId: 89,
+    name: 'Yavin IV',
+    description: '',
+    color: '#178f28'
+  }
+]
+
+export const CelestialObjects: IActor[] = [...TatooCelestialObjects, ...YavinCelestialObjects]

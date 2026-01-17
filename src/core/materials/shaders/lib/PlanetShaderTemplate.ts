@@ -152,11 +152,11 @@ export const PlanetShaderTemplate: ShaderProps = {
       #ifdef USE_ATMOSPHERE
         #include <atmosphereFragment>
 
-        // atmosphereColor *= 0.2; костыль чтобы убрать засвеченность, вылечится только переделкой процесса постобработки
+        atmosphereColor *= 0.3; // костыль чтобы убрать засвеченность
 
-        gl_FragColor = vec4(atmosphereColor.rgb + finalColor, 1.0);
+        gl_FragColor = clamp(vec4(atmosphereColor.rgb + finalColor, 1.0), 0.0, 0.99); // костыль чтобы не было белых пикселей, и блум с его порогом в 1.0 не здесь
       #else
-        gl_FragColor = vec4(finalColor, 1.0);
+        gl_FragColor = clamp(vec4(finalColor, 1.0), 0.0, 0.99); // ^_^
       #endif
 
       ${ShaderChunk['tonemapping_fragment']}

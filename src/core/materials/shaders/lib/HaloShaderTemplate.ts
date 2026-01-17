@@ -68,7 +68,7 @@ export const HaloShaderTemplate: ShaderProps = {
       float dayAlpha = smoothstep(-0.5, 0.0, lightIntensity);
       float alpha = edgeAlpha * dayAlpha;
 
-      gl_FragColor = vec4(color, alpha);
+      gl_FragColor = clamp(vec4(color, alpha), 0.0, 0.99);
 
       ${ShaderChunk['tonemapping_fragment']}
       ${ShaderChunk['colorspace_fragment']}

@@ -35,4 +35,23 @@ const TatooAtmospheres: IActor[] = [
   }
 ]
 
-export const Atmospheres: IActor[] = [...TatooAtmospheres]
+const YavinAtmospheres: IActor[] = [
+  {
+    id: 90,
+    categoryId: 8,
+    parentId: 89,
+    name: 'Yavin Prime',
+    description: '',
+    color: '#ffffff'
+  },
+  {
+    id: 92,
+    categoryId: 8,
+    parentId: 91,
+    name: 'Yavin IV',
+    description: '',
+    color: '#ffffff'
+  }
+]
+
+export const Atmospheres: IActor[] = [...TatooAtmospheres, ...YavinAtmospheres]

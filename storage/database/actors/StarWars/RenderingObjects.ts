@@ -57,4 +57,31 @@ const TatooRingsRenderingObjects: IRenderingObject[] = [
   }
 ]
 
-export const RenderingObjects: IRenderingObject[] = [...TatooAtmosphereRenderingObjects, ...TatooRingsRenderingObjects]
+const YavinAtmosphereRenderingObjects: IRenderingObject[] = [
+  {
+    id: 30,
+    actorId: 90,
+    data: {
+      radius: 198000,
+      scatter: { r: 450, g: 500, b: 500 },
+      scatteringStrength: 5,
+      densityFalloff: 10
+    }
+  },
+  {
+    id: 31,
+    actorId: 92,
+    data: {
+      radius: 10700,
+      scatter: { r: 650, g: 490, b: 380 },
+      scatteringStrength: 5,
+      densityFalloff: 10
+    }
+  }
+]
+
+export const RenderingObjects: IRenderingObject[] = [
+  ...TatooAtmosphereRenderingObjects,
+  ...TatooRingsRenderingObjects,
+  ...YavinAtmosphereRenderingObjects
+]

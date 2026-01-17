@@ -14,7 +14,7 @@ class FakePlanet implements IRenderable {
 
     this.material = new SpriteMaterial({
       map,
-      color: '#ffffff',
+      color: '#d5d5d5',
       sizeAttenuation: false,
       depthWrite: false,
       blending: AdditiveBlending

@@ -8,5 +8,13 @@ export const StarSystems: IActor[] = [
     name: 'Tatoo system',
     description: '',
     color: '#ffffff'
+  },
+  {
+    id: 87,
+    categoryId: 3,
+    parentId: 1,
+    name: 'Yavin system',
+    description: '',
+    color: '#ffffff'
   }
 ]
