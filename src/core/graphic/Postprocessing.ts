@@ -1,6 +1,7 @@
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { HalfFloatType } from 'three'
 import { BlendFunction, BloomEffect, EffectComposer, EffectPass, RenderPass } from 'postprocessing'
+import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 
 /**
  * Старая имплементация постобработки, не идеальная, но надежно фильтрует объекты на сцене которые не должны быть никак задеты постобработкой
@@ -13,13 +14,13 @@ class Postprocessing {
     this.composer = new EffectComposer(threeJS.renderer, {
       depthBuffer: true,
       frameBufferType: HalfFloatType,
-      multisampling: 4
+      multisampling: 8
     })
 
     const renderPass: RenderPass = new RenderPass(threeJS.scene, threeJS.camera)
 
     const bloomEffect: BloomEffect = new BloomEffect({
-      radius: 0.7,
+      radius: 0.8,
       blendFunction: BlendFunction.SCREEN,
       mipmapBlur: true,
       luminanceThreshold: 1,
@@ -27,7 +28,9 @@ class Postprocessing {
       intensity: 5
     })
 
-    const effectPass: EffectPass = new EffectPass(threeJS.camera, bloomEffect)
+    const lensFlareEffect: LensFlareEffect = new LensFlareEffect({ intensity: 0.02 })
+
+    const effectPass: EffectPass = new EffectPass(threeJS.camera, bloomEffect, lensFlareEffect)
 
     this.composer.addPass(renderPass)
     this.composer.addPass(effectPass)

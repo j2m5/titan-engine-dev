@@ -1,6 +1,10 @@
 import { BlendFunction, Effect } from 'postprocessing'
-import { ZoomBlurEffectOptions } from '@/core/graphic/postprocessing/types'
 import { Uniform } from 'three'
+
+export type ZoomBlurEffectOptions = {
+  blendFunction?: BlendFunction
+  strength?: number
+}
 
 const fragmentShader: string = `
   uniform float strength;

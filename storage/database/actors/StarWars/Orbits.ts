@@ -157,7 +157,7 @@ const YavinOrbits: IOrbit[] = [
   {
     id: 59,
     actorId: 89,
-    semiMajorAxis: 5.2,
+    semiMajorAxis: 2.2,
     eccentricity: 0.125,
     inclination: 1.7,
     argOfPeriapsis: 30.5,
