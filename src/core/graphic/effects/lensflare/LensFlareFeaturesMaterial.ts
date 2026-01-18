@@ -1,8 +1,5 @@
 import { NoBlending, ShaderMaterial, Uniform, Vector2, type ShaderMaterialParameters, type Texture } from 'three'
 
-//import fragmentShader from './shaders/lensFlareFeatures.frag?raw'
-//import vertexShader from './shaders/lensFlareFeatures.vert?raw'
-
 const vertexShader: string = `
   uniform vec2 texelSize;
 

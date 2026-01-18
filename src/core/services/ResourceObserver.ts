@@ -199,7 +199,7 @@ class ResourceObserver {
    * Устанавливает обязательные текстуры для загрузки
    */
   private setRequiredTextures(): void {
-    const list: string[] = ['sun_glow.png', 'star.png', 'asteroid.jpg', 'night.jpg', 'default.png']
+    const list: string[] = ['sun_glow.png', 'star.png', 'lensstar.png', 'asteroid.jpg', 'night.jpg', 'default.png']
 
     this.required = Resource.all().whereIn('path', list).toJSON()
   }

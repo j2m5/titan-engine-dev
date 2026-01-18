@@ -86,7 +86,7 @@ const CommonResources: IResource[] = [
     id: 104,
     actorId: null,
     resourceType: 'diffuse',
-    path: 'accretion_disk.png',
+    path: 'lensstar.png',
     lifetime: 0,
     colorSpace: 'srgb'
   },
