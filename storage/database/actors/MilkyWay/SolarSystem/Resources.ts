@@ -59,7 +59,7 @@ const Common: IResource[] = [
     resourceType: 'night',
     path: 'planets/earth/earth_night.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 26,
