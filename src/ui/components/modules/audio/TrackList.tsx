@@ -1,12 +1,12 @@
 import { FC } from 'react'
 import { TrackListProps } from '@/ui/components/modules/audio/interfaces/TrackListProps'
 import { ITrack } from '@/ui/components/modules/audio/interfaces/ITrack'
-import { PauseIcon, PlayIcon } from '@phosphor-icons/react'
 import TitanSimpleList from '@/ui/TitanUI/components/TitanSimpleList'
 import TitanListItem from '@/ui/TitanUI/components/TitanListItem'
 import TitanFlex from '@/ui/TitanUI/components/TitanFlex'
 import TitanIconButton from '@/ui/TitanUI/components/TitanIconButton'
 import TitanLabel from '@/ui/TitanUI/components/TitanLabel'
+import { PauseIcon, PlayIcon } from '@phosphor-icons/react'
 
 const TrackList: FC<TrackListProps> = (props: TrackListProps) => {
   const { data, isPlaying, currentTrackIndex, onPlay, onTogglePlaying } = props
