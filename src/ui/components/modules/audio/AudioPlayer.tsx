@@ -98,7 +98,6 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
   }
 
   const handleVolumeChange = (value: number): void => {
-    console.log(value)
     if (!audioRef.current) return
 
     audioRef.current.volume = value
