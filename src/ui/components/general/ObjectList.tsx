@@ -10,7 +10,7 @@ import TitanIconButton from '@/ui/TitanUI/components/TitanIconButton'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
 
 const ObjectList = observer(() => {
-  const filter = (actor: Actor): boolean => ['planet', 'star'].includes(actor.category.attributes.alias!)
+  const filter = (actor: Actor): boolean => ['planet', 'star'].includes(actor.category!.attributes.alias!)
 
   const actors: Actor[] = Actor.query()
     .where({ parentId: engineStore.scenario?.rootId })
@@ -21,7 +21,7 @@ const ObjectList = observer(() => {
     .toArray()
 
   const icon = (actor: Actor): JSX.Element =>
-    actor.category.attributes.alias === 'planet' ? <PlanetIcon size={24} /> : <SunIcon size={24} />
+    actor.category!.attributes.alias === 'planet' ? <PlanetIcon size={24} /> : <SunIcon size={24} />
 
   const handleMove = async (actor: Actor): Promise<void> => {
     if (!actor) return

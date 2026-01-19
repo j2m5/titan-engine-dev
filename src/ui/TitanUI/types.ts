@@ -62,7 +62,7 @@ export interface TitanDividerProps {
   offsetBottom?: number
 }
 
-export interface TitanListItemProps extends HasChildren {
+export interface TitanListItemProps extends HasChildren, Customizable {
   icon?: React.ReactNode
 }
 
@@ -76,7 +76,7 @@ export interface TitanGridProps extends HasChildren {
   gap?: number
 }
 
-export interface TitanSliderProps {
+export interface TitanSliderProps extends Customizable {
   value: number
   min?: number
   max?: number

@@ -1,6 +1,7 @@
-import { FC } from 'react'
+import { ChangeEvent, FC } from 'react'
 import { AudioProgressBarProps } from '@/ui/components/modules/audio/interfaces/AudioProgressBarProps'
-import { Stack, Slider, Typography } from '@mui/material'
+import TitanLabel from '@/ui/TitanUI/components/TitanLabel'
+import TitanSlider from '@/ui/TitanUI/components/TitanSlider'
 
 const formatDurationDisplay = (duration: number) => {
   const min: number = Math.floor(duration / 60)
@@ -20,36 +21,19 @@ const AudioProgressBar: FC<AudioProgressBarProps> = (props: AudioProgressBarProp
   }
 
   return (
-    <Stack spacing={2} direction="row" alignItems="center">
-      <Typography variant="caption">{elapsedDisplay}</Typography>
-      <Slider
-        sx={{
-          position: 'relative',
-          '& .MuiSlider-track': {
-            zIndex: 2
-          },
-          '& .MuiSlider-thumb': {
-            zIndex: 3
-          },
-          '&:before': {
-            content: '""',
-            borderRadius: 'inherit',
-            position: 'absolute',
-            height: 'inherit',
-            width: `${(buffered / duration) * 100}%`,
-            backgroundColor: '#78909c',
-            zIndex: 1
-          }
-        }}
-        size="medium"
+    <>
+      <TitanLabel>{elapsedDisplay}</TitanLabel>
+      <TitanSlider
         value={currentProgress}
+        buffer={buffered}
         step={1}
         min={0}
         max={duration}
-        onChange={(event, value) => handleCurrentProgress(Number(value))}
+        style={{ width: '70%' }}
+        onChange={(event: ChangeEvent<HTMLInputElement>) => handleCurrentProgress(event.target.valueAsNumber)}
       />
-      <Typography variant="caption">{durationDisplay}</Typography>
-    </Stack>
+      <TitanLabel>{durationDisplay}</TitanLabel>
+    </>
   )
 }
 

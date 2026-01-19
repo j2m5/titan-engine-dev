@@ -1,13 +1,9 @@
 import { useState } from 'react'
 import { observer } from 'mobx-react-lite'
-import type { Theme } from '@mui/material'
-import { ThemeProvider, createTheme } from '@mui/material/styles'
-import CssBaseline from '@mui/material/CssBaseline'
 import LoadingScreen from '@/ui/components/modules/LoadingScreen'
 import { engineStore } from '@/ui/mobX/EngineStore'
 import { audioPlayerStore } from '@/ui/mobX/AudioPlayerStore'
 import MainAppBar from '@/ui/components/modules/MainAppBar'
-import MainMenu from '@/ui/components/modules/MainMenu'
 import NotificationMessage from '@/ui/components/general/NotificationMessage'
 import ModalWindow from '@/ui/components/general/ModalWindow'
 import AudioPlayer from '@/ui/components/modules/audio/AudioPlayer'
@@ -19,19 +15,12 @@ import HomePage from '@/ui/components/modules/HomePage'
 import { notificationStore } from '@/ui/mobX/NotificationStore'
 import ObjectList from '@/ui/components/general/ObjectList'
 
-const darkTheme: Theme = createTheme({
-  palette: {
-    mode: 'dark'
-  }
-})
-
 const App = observer(() => {
   const [currentTrackIndex, setCurrentTrackIndex] = useState(-1)
   const currentTrack: ITrack = audioPlayerStore.tracks[currentTrackIndex]
 
   const whenAppIsLoaded = (
-    <ThemeProvider theme={darkTheme}>
-      <CssBaseline />
+    <>
       <MainAppBar />
       <ObjectList />
       {/*<MainMenu />*/}
@@ -68,7 +57,7 @@ const App = observer(() => {
       >
         <SettingsContent />
       </ModalWindow>
-    </ThemeProvider>
+    </>
   )
 
   const homePage = <HomePage />

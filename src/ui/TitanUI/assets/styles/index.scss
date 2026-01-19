@@ -9,6 +9,7 @@
   background: rgba(0, 0, 0, 0.2);
   backdrop-filter: blur(2px);
   border: 1px solid #444444;
+  color: #f0f0f0;
   display: inline-block;
   padding: 10px;
   position: relative;
@@ -53,17 +54,18 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #f0f0f0;
-  margin-bottom: 6px;
 }
 
 .titan-button {
+  align-items: center;
   background: rgba(0, 0, 0, 0.2);
   backdrop-filter: blur(2px);
   border: 1px solid #f0f0f0;
   color: #f0f0f0;
   cursor: pointer;
-  display: inline-block;
+  display: inline-flex;
   font-family: "Google Sans", sans-serif;
+  gap: 10px;
   padding: 10px;
   text-transform: uppercase;
 
@@ -75,7 +77,7 @@
 }
 
 .titan-icon-button {
-  background: rgba(0, 0, 0, 0.2);
+  background: none;
   outline: none;
   border: none;
   color: #f0f0f0;
@@ -85,6 +87,10 @@
 
   &:hover {
     color: #bbbbbb;
+  }
+
+  &:disabled {
+    color: #888888;
   }
 }
 
@@ -301,6 +307,46 @@
   .titan-card-footer {
     display: flex;
     justify-content: flex-end;
+  }
+}
+
+.titan-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  cursor: pointer;
+  outline: none;
+  height: 6px;
+  position: relative;
+  z-index: 2;
+
+  &::before {
+    content: "";
+    inset: 0;
+    position: absolute;
+    z-index: 1;
+  }
+
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 15px;
+    width: 5px;
+    background-color: #bbbbbb;
+    border: none;
+    transition: .2s ease-in-out;
+    position: relative;
+    z-index: 3;
+  }
+
+  &::-moz-range-thumb {
+    height: 15px;
+    width: 5px;
+    background-color: #bbbbbb;
+    border: none;
+    transition: .2s ease-in-out;
+    position: relative;
+    z-index: 3;
   }
 }
 

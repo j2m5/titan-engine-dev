@@ -1,9 +1,12 @@
 import { FC } from 'react'
-import { List, ListItem, ListItemButton, ListItemIcon, ListItemText } from '@mui/material'
-import PlayArrowIcon from '@mui/icons-material/PlayArrow'
-import PauseIcon from '@mui/icons-material/Pause'
 import { TrackListProps } from '@/ui/components/modules/audio/interfaces/TrackListProps'
 import { ITrack } from '@/ui/components/modules/audio/interfaces/ITrack'
+import { PauseIcon, PlayIcon } from '@phosphor-icons/react'
+import TitanSimpleList from '@/ui/TitanUI/components/TitanSimpleList'
+import TitanListItem from '@/ui/TitanUI/components/TitanListItem'
+import TitanFlex from '@/ui/TitanUI/components/TitanFlex'
+import TitanIconButton from '@/ui/TitanUI/components/TitanIconButton'
+import TitanLabel from '@/ui/TitanUI/components/TitanLabel'
 
 const TrackList: FC<TrackListProps> = (props: TrackListProps) => {
   const { data, isPlaying, currentTrackIndex, onPlay, onTogglePlaying } = props
@@ -25,16 +28,20 @@ const TrackList: FC<TrackListProps> = (props: TrackListProps) => {
   }
 
   return (
-    <List sx={{ width: 'inherit' }}>
+    <TitanSimpleList style={{ maxHeight: '485px' }}>
       {data.map((item: ITrack, index: number) => (
-        <ListItem key={index} disablePadding>
-          <ListItemButton disableGutters onClick={() => handleClick(index)}>
-            <ListItemIcon>{isPlaying && currentTrackIndex === index ? <PauseIcon /> : <PlayArrowIcon />}</ListItemIcon>
-            <ListItemText primary={`${item.metadata?.title ?? item.title} - ${item.metadata?.artist}`} />
-          </ListItemButton>
-        </ListItem>
+        <TitanListItem key={index} style={{ padding: '2px', background: 'none' }}>
+          <TitanFlex align="center" style={{ gap: '10px' }}>
+            <TitanIconButton onClick={() => handleClick(index)}>
+              {isPlaying && currentTrackIndex === index ? <PauseIcon size={20} /> : <PlayIcon size={20} />}
+            </TitanIconButton>
+            <div style={{ width: '100%' }}>
+              <TitanLabel>{`${item.metadata?.title ?? item.title} - ${item.metadata?.artist}`}</TitanLabel>
+            </div>
+          </TitanFlex>
+        </TitanListItem>
       ))}
-    </List>
+    </TitanSimpleList>
   )
 }
 

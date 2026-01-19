@@ -1,31 +1,27 @@
 import { ChangeEvent, ReactEventHandler, useEffect, useRef, useState } from 'react'
 import { observer } from 'mobx-react-lite'
+import { ITrack } from '@/ui/components/modules/audio/interfaces/ITrack'
 import { AudioPlayerProps } from '@/ui/components/modules/audio/interfaces/AudioPlayerProps'
-import { Box, Button, Divider, IconButton, Slider, Stack, Typography } from '@mui/material'
-import PlayArrowIcon from '@mui/icons-material/PlayArrow'
-import PauseIcon from '@mui/icons-material/Pause'
-import SkipPreviousIcon from '@mui/icons-material/SkipPrevious'
-import SkipNextIcon from '@mui/icons-material/SkipNext'
-import ReplayIcon from '@mui/icons-material/Replay'
-import AddIcon from '@mui/icons-material/Add'
-import { VolumeDownRounded, VolumeUpRounded } from '@mui/icons-material'
+import TitanFlex from '@/ui/TitanUI/components/TitanFlex'
+import TitanLabel from '@/ui/TitanUI/components/TitanLabel'
+import TitanSlider from '@/ui/TitanUI/components/TitanSlider'
+import TitanDivider from '@/ui/TitanUI/components/TitanDivider'
+import TitanButton from '@/ui/TitanUI/components/TitanButton'
+import TitanIconButton from '@/ui/TitanUI/components/TitanIconButton'
 import AudioProgressBar from '@/ui/components/modules/audio/AudioProgressBar'
 import TrackList from '@/ui/components/modules/audio/TrackList'
+import {
+  SkipBackIcon,
+  PauseIcon,
+  PlayIcon,
+  SkipForwardIcon,
+  ArrowsClockwiseIcon,
+  SpeakerSimpleLowIcon,
+  SpeakerSimpleHighIcon,
+  PlusIcon
+} from '@phosphor-icons/react'
 import { audioPlayerStore } from '@/ui/mobX/AudioPlayerStore'
-import { styled } from '@mui/material/styles'
-import { ITrack } from '@/ui/components/modules/audio/interfaces/ITrack'
-
-const VisuallyHiddenInput = styled('input')({
-  clip: 'rect(0 0 0 0)',
-  clipPath: 'inset(50%)',
-  height: 1,
-  overflow: 'hidden',
-  position: 'absolute',
-  bottom: 0,
-  left: 0,
-  whiteSpace: 'nowrap',
-  width: 1
-})
+import { notificationStore } from '@/ui/mobX/NotificationStore'
 
 const AudioPlayer = observer((props: AudioPlayerProps) => {
   const { currentTrack, trackIndex, trackCount, onPlay, onNext, onPrev } = props
@@ -35,6 +31,7 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
   const defaultVolume: number = cachedVolume || 0.1
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const [duration, setDuration] = useState(0)
   const [currentProgress, setCurrentProgress] = useState(0)
@@ -101,6 +98,7 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
   }
 
   const handleVolumeChange = (value: number): void => {
+    console.log(value)
     if (!audioRef.current) return
 
     audioRef.current.volume = value
@@ -110,8 +108,16 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
 
   const handleAddTrack = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
     const files: FileList | null = event.target.files
+    const allowedTypes: string[] = ['audio/mpeg', 'audio/wav', 'audio/ogg']
     if (files) {
       const file: File = files[0]
+
+      if (!allowedTypes.includes(file.type)) {
+        notificationStore.openNotification({ type: 'error', message: 'Unsupported file type (Supports MP3, WAV, OGG)' })
+
+        return
+      }
+
       const title: string = file.name
       const src: string = URL.createObjectURL(file)
 
@@ -121,89 +127,93 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
     }
   }
 
+  const handleClickAdd = () => {
+    if (fileRef.current) {
+      fileRef.current.click()
+    }
+  }
+
   return (
-    <Box display="flex" flexDirection="column" alignItems="center" sx={{ width: '500px' }}>
-      {currentTrack && (
-        <audio
-          ref={audioRef}
-          preload="metadata"
-          loop={loop}
-          onDurationChange={(event) => setDuration(event.currentTarget.duration)}
-          onPlaying={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
-          onEnded={handleNext}
-          onCanPlay={(event) => {
-            event.currentTarget.volume = volume
-            setIsReady(true)
-          }}
-          onTimeUpdate={(event) => {
-            setCurrentProgress(event.currentTarget.currentTime)
-            handleBufferProgress(event)
-          }}
-          onProgress={handleBufferProgress}
-          onVolumeChange={(event) => setVolume(event.currentTarget.volume)}
-        >
-          Your browser does not support the audio element
-          <source type="audio/mpeg" src={currentTrack.src} />
-        </audio>
-      )}
-      <Box textAlign="center" sx={{ height: '45px' }}>
-        <Typography variant="caption">
+    <div style={{ width: '500px' }}>
+      <TitanFlex justify="center" width="100%" style={{ margin: '10px 0' }}>
+        {currentTrack && (
+          <audio
+            ref={audioRef}
+            preload="metadata"
+            loop={loop}
+            onDurationChange={(event) => setDuration(event.currentTarget.duration)}
+            onPlaying={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onEnded={handleNext}
+            onCanPlay={(event) => {
+              event.currentTarget.volume = volume
+              setIsReady(true)
+            }}
+            onTimeUpdate={(event) => {
+              setCurrentProgress(event.currentTarget.currentTime)
+              handleBufferProgress(event)
+            }}
+            onProgress={handleBufferProgress}
+            onVolumeChange={(event) => setVolume(event.currentTarget.volume)}
+          >
+            Your browser does not support the audio element
+            <source type="audio/mpeg" src={currentTrack.src} />
+          </audio>
+        )}
+      </TitanFlex>
+      <TitanFlex justify="center" width="100%" style={{ margin: '0 0 30px', textAlign: 'center' }}>
+        <TitanLabel>
           {currentTrack?.metadata?.title ?? currentTrack?.title ?? 'Select a track'}
           {currentTrack && ` - ${currentTrack.metadata?.artist}`}
-        </Typography>
-        {currentTrack && <Typography variant="body2">{currentTrack?.metadata?.album}</Typography>}
-      </Box>
-      <Box sx={{ width: '100%' }}>
-        <Box>
-          <AudioProgressBar
-            duration={duration}
-            currentProgress={currentProgress}
-            buffered={buffered}
-            onProgressChanged={(event): void => {
-              if (!audioRef.current) return
+        </TitanLabel>
+        {currentTrack && <TitanLabel>{currentTrack?.metadata?.album}</TitanLabel>}
+      </TitanFlex>
+      <TitanFlex justify="center" align="center" width="100%" style={{ gap: '10px' }}>
+        <AudioProgressBar
+          duration={duration}
+          currentProgress={currentProgress}
+          buffered={buffered}
+          onProgressChanged={(event): void => {
+            if (!audioRef.current) return
 
-              audioRef.current.currentTime = event
+            audioRef.current.currentTime = event
 
-              setCurrentProgress(event)
-            }}
-          />
-        </Box>
-        <Box display="flex" justifyContent="center">
-          <IconButton disabled={!isReady || trackIndex === 0} onClick={handlePrev}>
-            <SkipPreviousIcon />
-          </IconButton>
-          <IconButton disabled={!isReady} onClick={togglePlayPause}>
-            {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
-          </IconButton>
-          <IconButton disabled={!isReady || trackIndex === trackCount - 1} onClick={handleNext}>
-            <SkipNextIcon />
-          </IconButton>
-          <IconButton disabled={!isReady || trackIndex === -1} onClick={handleLoop}>
-            <ReplayIcon color={loop ? 'action' : 'disabled'} />
-          </IconButton>
-        </Box>
-      </Box>
-      <Box sx={{ width: '50%' }}>
-        <Stack spacing={2} direction="row" alignItems="center">
-          <IconButton onClick={() => handleVolumeChange(0)}>
-            <VolumeDownRounded />
-          </IconButton>
-          <Slider
-            size="small"
-            value={volume}
-            step={0.01}
-            min={0}
-            max={1}
-            onChange={(event: Event, value: number | number[]) => handleVolumeChange(Number(value))}
-          />
-          <IconButton onClick={() => handleVolumeChange(1)}>
-            <VolumeUpRounded />
-          </IconButton>
-        </Stack>
-      </Box>
-      <Divider sx={{ width: '100%', padding: '5px 0' }} />
-      <Box display="flex" alignSelf="start" sx={{ width: '100%' }}>
+            setCurrentProgress(event)
+          }}
+        />
+      </TitanFlex>
+      <TitanFlex justify="center" width="100%" style={{ margin: '10px 0 0' }}>
+        <TitanIconButton disabled={!isReady || trackIndex === 0} onClick={handlePrev}>
+          <SkipBackIcon size={20} />
+        </TitanIconButton>
+        <TitanIconButton disabled={!isReady} onClick={togglePlayPause}>
+          {isPlaying ? <PauseIcon size={20} /> : <PlayIcon size={20} />}
+        </TitanIconButton>
+        <TitanIconButton disabled={!isReady || trackIndex === trackCount - 1} onClick={handleNext}>
+          <SkipForwardIcon size={20} />
+        </TitanIconButton>
+        <TitanIconButton disabled={!isReady || trackIndex === -1} onClick={handleLoop}>
+          <ArrowsClockwiseIcon color={loop ? '#f0f0f0' : '#888888'} size={20} />
+        </TitanIconButton>
+      </TitanFlex>
+      <TitanFlex justify="center" align="center" width="100%" style={{ margin: '0 0 10px' }}>
+        <TitanIconButton onClick={() => handleVolumeChange(0)}>
+          <SpeakerSimpleLowIcon size={20} />
+        </TitanIconButton>
+        <TitanSlider
+          value={volume}
+          step={0.01}
+          min={0}
+          max={1}
+          style={{ width: '150px' }}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => handleVolumeChange(event.target.valueAsNumber)}
+        />
+        <TitanIconButton onClick={() => handleVolumeChange(1)}>
+          <SpeakerSimpleHighIcon size={20} />
+        </TitanIconButton>
+      </TitanFlex>
+      <TitanDivider />
+      <TitanFlex>
         <TrackList
           data={tracks}
           isPlaying={isPlaying}
@@ -211,15 +221,21 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
           onPlay={handlePlay}
           onTogglePlaying={togglePlayPause}
         />
-      </Box>
-      <Divider sx={{ width: '100%', padding: '5px 0' }} />
-      <Box sx={{ padding: '10px 0 0' }}>
-        <Button component="label" role={undefined} tabIndex={-1} variant="outlined" startIcon={<AddIcon />}>
-          Add a track
-          <VisuallyHiddenInput type="file" onChange={(event) => handleAddTrack(event)} />
-        </Button>
-      </Box>
-    </Box>
+      </TitanFlex>
+      <TitanDivider />
+      <TitanFlex justify="center" width="100%">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="audio/mp3,audio/wav,audio/ogg"
+          style={{ display: 'none' }}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => handleAddTrack(event)}
+        />
+        <TitanButton onClick={handleClickAdd}>
+          <PlusIcon size={20} /> Add a track
+        </TitanButton>
+      </TitanFlex>
+    </div>
   )
 })
 

@@ -8,6 +8,7 @@ const TitanSlider: FC<TitanSliderProps> = ({
   step = 1,
   buffer = 0,
   disabled = false,
+  style = {},
   onChange
 }) => {
   const percent = ((value - min) / (max - min)) * 100
@@ -17,6 +18,7 @@ const TitanSlider: FC<TitanSliderProps> = ({
     <input
       className="titan-slider"
       style={{
+        ...style,
         background: `linear-gradient(
           to right,
           #222222 0%,
