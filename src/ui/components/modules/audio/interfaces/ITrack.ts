@@ -1,4 +1,4 @@
-import { TrackMetadata } from '@/ui/components/hooks'
+import { TrackMetadata } from 'src/ui/hooks'
 
 interface ITrack {
   title: string

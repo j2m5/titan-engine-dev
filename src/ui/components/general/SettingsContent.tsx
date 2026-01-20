@@ -1,7 +1,7 @@
 import { observer } from 'mobx-react-lite'
 import { Box, Typography, Divider, TextField, FormGroup, FormControlLabel, Checkbox } from '@mui/material'
 import { modalWindowStore } from '@/ui/mobX/ModalWindowStore'
-import { useDebounce } from '@/ui/components/hooks'
+import { useDebounce } from 'src/ui/hooks'
 import { objectStore } from '@/core/mobX/ObjectStore'
 
 const SettingsContent = observer(() => {
