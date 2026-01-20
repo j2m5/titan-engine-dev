@@ -165,7 +165,6 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
           {currentTrack?.metadata?.title ?? currentTrack?.title ?? 'Select a track'}
           {currentTrack && ` - ${currentTrack.metadata?.artist}`}
         </TitanLabel>
-        {currentTrack && <TitanLabel>{currentTrack?.metadata?.album}</TitanLabel>}
       </TitanFlex>
       <TitanFlex justify="center" align="center" width="100%" style={{ gap: '10px' }}>
         <AudioProgressBar
