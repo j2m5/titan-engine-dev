@@ -1,19 +1,31 @@
-import { FC } from 'react'
 import { observer } from 'mobx-react-lite'
 import TitanToast from '@/ui/TitanUI/components/TitanToast'
 import TitanAlert from '@/ui/TitanUI/components/TitanAlert'
-import { SystemNotification } from '@/ui/types'
 import { notificationStore } from '@/ui/mobx/NotificationStore'
 
-const NotificationMessage: FC<SystemNotification> = observer(({ type, message }) => {
+const calculateBottomOffset = (index: number, spacing: number) => {
+  if (index === 0) return spacing
+
+  return spacing + index * (spacing + 48)
+}
+
+const NotificationMessage = observer(() => {
+  const ntfStore = notificationStore
+
   return (
-    <TitanToast visible={notificationStore.notification.visible} onClose={() => notificationStore.closeNotification()}>
-      <TitanAlert
-        type={notificationStore.notification.type}
-        message={notificationStore.notification.message}
-        showIcon
-      />
-    </TitanToast>
+    <>
+      {ntfStore.notifications.map((notification, index) => (
+        <TitanToast
+          key={notification.id}
+          visible={true}
+          duration={ntfStore.delay}
+          style={{ bottom: `${calculateBottomOffset(index, 24)}px` }}
+          onClose={() => ntfStore.release(notification.id)}
+        >
+          <TitanAlert type={notification.type} message={notification.message} showIcon />
+        </TitanToast>
+      ))}
+    </>
   )
 })
 

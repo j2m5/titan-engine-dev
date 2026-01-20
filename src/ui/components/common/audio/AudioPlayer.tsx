@@ -112,7 +112,7 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
       const file: File = files[0]
 
       if (!allowedTypes.includes(file.type)) {
-        notificationStore.openNotification({ type: 'error', message: 'Unsupported file type (Supports MP3, WAV, OGG)' })
+        notificationStore.dispatch({ type: 'error', message: 'Unsupported file type (Supports MP3, WAV, OGG)' })
 
         return
       }

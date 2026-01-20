@@ -1,27 +1,27 @@
 import { makeAutoObservable } from 'mobx'
 import { SystemNotification } from '@/ui/types'
 
+type IdentifiedSystemNotification = SystemNotification & { id: number }
+
 class NotificationStore {
-  public notification: SystemNotification = {
-    visible: false,
-    type: 'info',
-    message: ''
-  }
+  public delay: number = 5000
+  public maxQueueSize: number = 10
+  public notifications: IdentifiedSystemNotification[] = []
 
   public constructor() {
     makeAutoObservable(this)
   }
 
-  public openNotification({ type, message }: Pick<SystemNotification, 'type' | 'message'>): void {
-    this.notification.visible = true
-    this.notification.type = type
-    this.notification.message = message
+  public dispatch(notification: SystemNotification): void {
+    if (this.notifications.length < this.maxQueueSize) {
+      this.notifications.push({ ...notification, id: Date.now() })
+    }
   }
 
-  public closeNotification(): void {
-    this.notification.visible = false
-    this.notification.type = 'info'
-    this.notification.message = ''
+  public release(id: number): void {
+    this.notifications = this.notifications.filter(
+      (notification: IdentifiedSystemNotification): boolean => notification.id !== id
+    )
   }
 }
 

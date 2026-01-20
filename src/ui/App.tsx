@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { observer } from 'mobx-react-lite'
-import { ITrack } from '@/ui/components/common/audio/interfaces/ITrack'
 import HomePage from '@/ui/components/layout/HomePage'
 import LoadingScreen from '@/ui/components/layout/LoadingScreen'
 import MainAppBar from '@/ui/components/layout/MainAppBar'
@@ -10,10 +9,10 @@ import SettingsContent from '@/ui/components/common/SettingsContent'
 import ObjectList from '@/ui/components/common/ObjectList'
 import NotificationMessage from '@/ui/components/common/NotificationMessage'
 import ModalWindow from '@/ui/components/common/ModalWindow'
+import { ITrack } from '@/ui/types'
 import { engineStore } from '@/ui/mobx/EngineStore'
 import { audioPlayerStore } from '@/ui/mobx/AudioPlayerStore'
 import { modalWindowStore } from '@/ui/mobx/ModalWindowStore'
-import { notificationStore } from '@/ui/mobx/NotificationStore'
 
 const App = observer(() => {
   const [currentTrackIndex, setCurrentTrackIndex] = useState(-1)
@@ -23,10 +22,7 @@ const App = observer(() => {
     <>
       <MainAppBar />
       <ObjectList />
-      <NotificationMessage
-        type={notificationStore.notification.type}
-        message={notificationStore.notification.message}
-      />
+      <NotificationMessage />
       <ModalWindow
         title="Tutorial"
         visible={modalWindowStore.tutorialWindowState}

@@ -1,21 +1,25 @@
-import { FC, useEffect } from 'react'
+import { FC, useState, useEffect } from 'react'
 import { TitanToastProps } from '@/ui/TitanUI/types'
 
-const TitanToast: FC<TitanToastProps> = ({ visible, duration = 3000, onClose, children }) => {
+const TitanToast: FC<TitanToastProps> = ({ visible, duration = 3000, style = {}, onClose, children }) => {
+  if (!visible) return null
+
+  const [hiding, setHiding] = useState(false)
+
   useEffect(() => {
-    if (!visible || !duration) return
+    if (!duration) return
 
     const timer = setTimeout(() => {
-      onClose()
+      setHiding(true)
+
+      setTimeout(onClose, 200)
     }, duration)
 
     return () => clearTimeout(timer)
-  }, [visible, duration, onClose])
-
-  if (!visible) return null
+  }, [])
 
   return (
-    <div className="titan-toast" onClick={onClose}>
+    <div className={`titan-toast ${hiding ? 'hiding' : ''}`} style={style} onClick={onClose}>
       {children}
     </div>
   )

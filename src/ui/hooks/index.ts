@@ -12,7 +12,7 @@ export function useDebounce(
   const debouncedSave = useCallback(
     debounce((newValue: string) => {
       saveFunction(newValue)
-      notificationStore.openNotification({ type: 'success', message: 'Changes saved' })
+      notificationStore.dispatch({ type: 'success', message: 'Changes saved' })
     }, delay),
     [saveFunction, delay]
   )

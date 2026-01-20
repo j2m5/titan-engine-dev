@@ -61,7 +61,7 @@ class CameraToObjectTransition extends Command<CameraToObjectTransitionArgs> {
       y: destination.y,
       z: destination.z,
       easing: 'easeOutQuint',
-      duration: 8000,
+      duration: 1000,
       direction: 'normal',
       begin: (): void => {
         threeJS.astroControls.enabled = false
@@ -82,7 +82,7 @@ class CameraToObjectTransition extends Command<CameraToObjectTransitionArgs> {
       },
       complete: (): void => {
         threeJS.astroControls.enabled = true
-        notificationStore.openNotification({ type: 'success', message: 'Completed' })
+        notificationStore.dispatch({ type: 'success', message: 'Completed' })
         cameraStore.setSpeed(currentSpeed)
       }
     }

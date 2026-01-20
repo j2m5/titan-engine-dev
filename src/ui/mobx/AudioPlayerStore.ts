@@ -1,7 +1,7 @@
-import StarMap from '@/ui/components/common/audio/tracks/StarMap.ogg'
-import { ITrack } from '@/ui/components/common/audio/interfaces/ITrack'
 import { makeAutoObservable, runInAction } from 'mobx'
 import { IAudioMetadata, parseBlob } from 'music-metadata'
+import StarMap from '@/ui/components/common/audio/tracks/StarMap.ogg'
+import { ITrack } from '@/ui/types'
 import { notificationStore } from '@/ui/mobx/NotificationStore'
 
 const defaultTracks: ITrack[] = [
@@ -53,7 +53,7 @@ class AudioPlayerStore {
         }
       }
     } catch (error) {
-      notificationStore.openNotification({ type: 'error', message: `Failed to load metadata: ${error}` })
+      notificationStore.dispatch({ type: 'error', message: `Failed to load metadata: ${error}` })
 
       return track
     }

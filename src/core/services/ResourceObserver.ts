@@ -270,7 +270,7 @@ class ResourceObserver {
     }
 
     DefaultLoadingManager.onError = (url: string): void => {
-      notificationStore.openNotification({ type: 'error', message: `The error occurred while loading: ${url}` })
+      notificationStore.dispatch({ type: 'error', message: `The error occurred while loading: ${url}` })
     }
   }
 

@@ -89,7 +89,7 @@ export interface TitanSliderProps extends Customizable {
   onChange(event: React.ChangeEvent): void
 }
 
-export interface TitanToastProps extends HasChildren {
+export interface TitanToastProps extends HasChildren, Customizable {
   visible: boolean
   duration?: number
   onClose(): void
