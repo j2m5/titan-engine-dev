@@ -19,7 +19,7 @@
     "inversify": "^7.0.0-alpha.5",
     "mobx": "^6.13.6",
     "mobx-react-lite": "^4.1.0",
-    "music-metadata-browser": "^2.5.11",
+    "music-metadata": "^11.10.6",
     "postprocessing": "^6.37.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

@@ -1,7 +1,7 @@
 import StarMap from '@/ui/components/modules/audio/tracks/StarMap.ogg'
 import { ITrack } from '@/ui/components/modules/audio/interfaces/ITrack'
 import { makeAutoObservable, runInAction } from 'mobx'
-import { IAudioMetadata, parseBlob } from 'music-metadata-browser'
+import { IAudioMetadata, parseBlob } from 'music-metadata'
 import { notificationStore } from '@/ui/mobX/NotificationStore'
 
 const defaultTracks: ITrack[] = [
