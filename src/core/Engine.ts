@@ -3,7 +3,7 @@ import { EventEmitter } from '@/core/framework/EventEmitter'
 import { Entity } from '@/core/framework/Entity'
 import { System } from '@/core/framework/System'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { timeStore } from '@/ui/mobX/TimeStore'
+import { timeStore } from '@/ui/mobx/TimeStore'
 import { DAY } from '@/core/constants'
 
 @injectable()

@@ -4,10 +4,10 @@ import { Quaternion, Vector3 } from 'three'
 import { inject, injectable } from 'inversify'
 import { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { menuStore } from '@/ui/mobX/MenuStore'
-import { cameraStore } from '@/ui/mobX/CameraStore'
+import { menuStore } from '@/ui/mobx/MenuStore'
+import { cameraStore } from '@/ui/mobx/CameraStore'
 import { fromKilometers, toThreeJSUnits } from '@/core/helpers/scaling'
-import { notificationStore } from '@/ui/mobX/NotificationStore'
+import { notificationStore } from '@/ui/mobx/NotificationStore'
 import anime from 'animejs'
 
 interface CameraToObjectTransitionArgs {
@@ -27,7 +27,7 @@ class CameraToObjectTransition extends Command<CameraToObjectTransitionArgs> {
 
     if (!data) return
 
-    const radius: number = toThreeJSUnits(this.model.physicalObject.getAttribute('radius'))
+    const radius: number = toThreeJSUnits(this.model.physicalObject!.getAttribute('radius'))
     const offset: number = radius * 3
     const alpha: number = (data.distance - offset) / data.distance
     const destination: Vector3 = new Vector3().lerpVectors(this.sceneObserver.cameraPosition, data.position, alpha)

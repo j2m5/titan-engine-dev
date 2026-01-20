@@ -1,19 +1,19 @@
 import { useState } from 'react'
 import { observer } from 'mobx-react-lite'
-import LoadingScreen from '@/ui/components/modules/LoadingScreen'
-import { engineStore } from '@/ui/mobX/EngineStore'
-import { audioPlayerStore } from '@/ui/mobX/AudioPlayerStore'
-import MainAppBar from '@/ui/components/modules/MainAppBar'
-import NotificationMessage from '@/ui/components/general/NotificationMessage'
-import ModalWindow from '@/ui/components/general/ModalWindow'
-import AudioPlayer from '@/ui/components/modules/audio/AudioPlayer'
-import TutorialContent from '@/ui/components/general/TutorialContent'
-import SettingsContent from '@/ui/components/general/SettingsContent'
-import { modalWindowStore } from '@/ui/mobX/ModalWindowStore'
-import { ITrack } from '@/ui/components/modules/audio/interfaces/ITrack'
-import HomePage from '@/ui/components/modules/HomePage'
-import { notificationStore } from '@/ui/mobX/NotificationStore'
-import ObjectList from '@/ui/components/general/ObjectList'
+import { ITrack } from '@/ui/components/common/audio/interfaces/ITrack'
+import HomePage from '@/ui/components/layout/HomePage'
+import LoadingScreen from '@/ui/components/layout/LoadingScreen'
+import MainAppBar from '@/ui/components/layout/MainAppBar'
+import AudioPlayer from '@/ui/components/common/audio/AudioPlayer'
+import TutorialContent from '@/ui/components/common/TutorialContent'
+import SettingsContent from '@/ui/components/common/SettingsContent'
+import ObjectList from '@/ui/components/common/ObjectList'
+import NotificationMessage from '@/ui/components/common/NotificationMessage'
+import ModalWindow from '@/ui/components/common/ModalWindow'
+import { engineStore } from '@/ui/mobx/EngineStore'
+import { audioPlayerStore } from '@/ui/mobx/AudioPlayerStore'
+import { modalWindowStore } from '@/ui/mobx/ModalWindowStore'
+import { notificationStore } from '@/ui/mobx/NotificationStore'
 
 const App = observer(() => {
   const [currentTrackIndex, setCurrentTrackIndex] = useState(-1)
@@ -23,7 +23,6 @@ const App = observer(() => {
     <>
       <MainAppBar />
       <ObjectList />
-      {/*<MainMenu />*/}
       <NotificationMessage
         type={notificationStore.notification.type}
         message={notificationStore.notification.message}
@@ -38,6 +37,7 @@ const App = observer(() => {
       <ModalWindow
         title="Audio player"
         visible={modalWindowStore.audioPlayerWindowState}
+        keepMounted={true}
         onClose={() => modalWindowStore.setAudioPlayerWindowState(false)}
       >
         <AudioPlayer
@@ -75,17 +75,3 @@ const App = observer(() => {
 })
 
 export default App
-
-/*
-
-<AudioPlayer
-            key={currentTrackIndex}
-            currentTrack={currentTrack}
-            trackIndex={currentTrackIndex}
-            trackCount={audioPlayerStore.tracks.length}
-            onPlay={setCurrentTrackIndex}
-            onNext={() => setCurrentTrackIndex((i: number) => i + 1)}
-            onPrev={() => setCurrentTrackIndex((i: number) => i - 1)}
-          />
-
- */

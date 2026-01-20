@@ -10,7 +10,7 @@ import { NullPhysicalObject } from '@/core/models/defaults/NullPhysicalObject'
 import { degToRad } from 'three/src/math/MathUtils'
 import { FakeStar } from '@/core/renderables/utils/FakeStar'
 import { KeplerianModel } from '@/core/libs/KeplerianModel'
-import { timeStore } from '@/ui/mobX/TimeStore'
+import { timeStore } from '@/ui/mobx/TimeStore'
 import { AU, SpaceScale } from '@/core/constants'
 import { config } from '@/core/framework/config'
 

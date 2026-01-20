@@ -4,6 +4,8 @@ export type FlexAlignValues = 'start' | 'end' | 'center' | 'stretch' | 'baseline
 
 export type FlexJustifyValues = 'start' | 'end' | 'center' | 'between' | 'around' | 'evenly'
 
+export type AlertType = 'info' | 'warning' | 'error' | 'success'
+
 export interface HasChildren<T = React.ReactNode> {
   children: T
 }
@@ -55,6 +57,7 @@ export interface TitanModalProps extends HasChildren, Resizable {
   visible: boolean
   title: string
   actions: React.ReactNode
+  keepMounted?: boolean
 }
 
 export interface TitanDividerProps {
@@ -84,4 +87,16 @@ export interface TitanSliderProps extends Customizable {
   buffer?: number
   disabled?: boolean
   onChange(event: React.ChangeEvent): void
+}
+
+export interface TitanToastProps extends HasChildren {
+  visible: boolean
+  duration?: number
+  onClose(): void
+}
+
+export interface TitanAlertProps {
+  type: AlertType
+  message: string
+  showIcon?: boolean
 }

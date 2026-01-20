@@ -1,7 +1,7 @@
 import { ChangeEvent, FC } from 'react'
-import { AudioProgressBarProps } from '@/ui/components/modules/audio/interfaces/AudioProgressBarProps'
 import TitanLabel from '@/ui/TitanUI/components/TitanLabel'
 import TitanSlider from '@/ui/TitanUI/components/TitanSlider'
+import { AudioProgressBarProps } from '@/ui/types'
 
 const formatDurationDisplay = (duration: number) => {
   const min: number = Math.floor(duration / 60)

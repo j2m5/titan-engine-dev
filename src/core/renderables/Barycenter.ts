@@ -3,7 +3,7 @@ import { IRenderable } from '@/core/renderables/IRenderable'
 import { Actor } from '@/core/models/Actor'
 import { Object3D } from 'three'
 import { KeplerianModel } from '@/core/libs/KeplerianModel'
-import { timeStore } from '@/ui/mobX/TimeStore'
+import { timeStore } from '@/ui/mobx/TimeStore'
 import { AU, SpaceScale } from '@/core/constants'
 
 class Barycenter extends RenderableObject implements IRenderable {

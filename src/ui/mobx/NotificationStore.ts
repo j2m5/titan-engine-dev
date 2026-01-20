@@ -1,10 +1,9 @@
 import { makeAutoObservable } from 'mobx'
-import { INotification } from '@/ui/interfaces/INotification'
-import { NotificationMessageProps } from '@/ui/interfaces/NotificationMessageProps'
+import { SystemNotification } from '@/ui/types'
 
 class NotificationStore {
-  public notification: INotification = {
-    isOpen: false,
+  public notification: SystemNotification = {
+    visible: false,
     type: 'info',
     message: ''
   }
@@ -13,14 +12,14 @@ class NotificationStore {
     makeAutoObservable(this)
   }
 
-  public openNotification({ type, message }: NotificationMessageProps): void {
-    this.notification.isOpen = true
+  public openNotification({ type, message }: Pick<SystemNotification, 'type' | 'message'>): void {
+    this.notification.visible = true
     this.notification.type = type
     this.notification.message = message
   }
 
   public closeNotification(): void {
-    this.notification.isOpen = false
+    this.notification.visible = false
     this.notification.type = 'info'
     this.notification.message = ''
   }

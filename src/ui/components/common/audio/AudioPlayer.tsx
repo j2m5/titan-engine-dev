@@ -1,15 +1,13 @@
 import { ChangeEvent, ReactEventHandler, useEffect, useRef, useState } from 'react'
 import { observer } from 'mobx-react-lite'
-import { ITrack } from '@/ui/components/modules/audio/interfaces/ITrack'
-import { AudioPlayerProps } from '@/ui/components/modules/audio/interfaces/AudioPlayerProps'
 import TitanFlex from '@/ui/TitanUI/components/TitanFlex'
 import TitanLabel from '@/ui/TitanUI/components/TitanLabel'
 import TitanSlider from '@/ui/TitanUI/components/TitanSlider'
 import TitanDivider from '@/ui/TitanUI/components/TitanDivider'
 import TitanButton from '@/ui/TitanUI/components/TitanButton'
 import TitanIconButton from '@/ui/TitanUI/components/TitanIconButton'
-import AudioProgressBar from '@/ui/components/modules/audio/AudioProgressBar'
-import TrackList from '@/ui/components/modules/audio/TrackList'
+import AudioProgressBar from '@/ui/components/common/audio/AudioProgressBar'
+import TrackList from '@/ui/components/common/audio/TrackList'
 import {
   SkipBackIcon,
   PauseIcon,
@@ -20,8 +18,10 @@ import {
   SpeakerSimpleHighIcon,
   PlusIcon
 } from '@phosphor-icons/react'
-import { audioPlayerStore } from '@/ui/mobX/AudioPlayerStore'
-import { notificationStore } from '@/ui/mobX/NotificationStore'
+import { ITrack } from '@/ui/types'
+import { AudioPlayerProps } from '@/ui/types'
+import { audioPlayerStore } from '@/ui/mobx/AudioPlayerStore'
+import { notificationStore } from '@/ui/mobx/NotificationStore'
 
 const AudioPlayer = observer((props: AudioPlayerProps) => {
   const { currentTrack, trackIndex, trackCount, onPlay, onNext, onPrev } = props
@@ -83,7 +83,7 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
     }
   }
 
-  const handleBufferProgress: ReactEventHandler<HTMLAudioElement> = (event) => {
+  const handleBufferProgress: ReactEventHandler<HTMLAudioElement> = (event): void => {
     const audio = event.currentTarget
     const dur: number = audio.duration
     if (dur > 0) {
@@ -126,7 +126,7 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
     }
   }
 
-  const handleClickAdd = () => {
+  const handleClickAdd = (): void => {
     if (fileRef.current) {
       fileRef.current.click()
     }
@@ -171,7 +171,7 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
           duration={duration}
           currentProgress={currentProgress}
           buffered={buffered}
-          onProgressChanged={(event): void => {
+          onProgressChanged={(event: number): void => {
             if (!audioRef.current) return
 
             audioRef.current.currentTime = event
@@ -225,7 +225,7 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
         <input
           ref={fileRef}
           type="file"
-          accept="audio/mp3,audio/wav,audio/ogg"
+          accept="audio/mpeg,audio/wav,audio/ogg"
           style={{ display: 'none' }}
           onChange={(event: ChangeEvent<HTMLInputElement>) => handleAddTrack(event)}
         />

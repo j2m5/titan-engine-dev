@@ -1,11 +1,11 @@
 import { observer } from 'mobx-react-lite'
-import { modalWindowStore } from '@/ui/mobX/ModalWindowStore'
-import { engineStore } from '@/ui/mobX/EngineStore'
-import { getFullURL } from '@/core/helpers/finder'
 import TitanTopbar from '@/ui/TitanUI/components/TitanTopbar'
-import TitanIconButton from '@/ui/TitanUI/components/TitanIconButton'
 import TitanFlex from '@/ui/TitanUI/components/TitanFlex'
+import TitanIconButton from '@/ui/TitanUI/components/TitanIconButton'
 import { GearIcon, ImageIcon, QuestionIcon, SignOutIcon, SpeakerSimpleHighIcon } from '@phosphor-icons/react'
+import { modalWindowStore } from '@/ui/mobx/ModalWindowStore'
+import { engineStore } from '@/ui/mobx/EngineStore'
+import { getFullURL } from '@/core/helpers/finder'
 
 const MainAppBar = observer(() => {
   return (
@@ -16,7 +16,7 @@ const MainAppBar = observer(() => {
         </TitanFlex>
         <TitanFlex>{engineStore.scenario?.name}</TitanFlex>
       </TitanFlex>
-      <TitanFlex align="center">
+      <TitanFlex align="center" style={{ marginRight: '15px' }}>
         <TitanFlex>
           <TitanIconButton onClick={() => modalWindowStore.setTutorialWindowState(true)}>
             <QuestionIcon size={24} />

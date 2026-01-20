@@ -1,7 +1,7 @@
 import { makeAutoObservable } from 'mobx'
 import { Application } from '@/Application'
 import { ScenarioConfig } from '@/config/scenarios'
-import { timeStore } from '@/ui/mobX/TimeStore'
+import { timeStore } from '@/ui/mobx/TimeStore'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { Vector3 } from 'three'
 

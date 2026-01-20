@@ -5,12 +5,13 @@ import TitanModal from '@/ui/TitanUI/components/TitanModal'
 import TitanButton from '@/ui/TitanUI/components/TitanButton'
 
 const ModalWindow: FC<Omit<TitanModalProps, 'actions'> & Closable> = observer(
-  ({ children, visible, title, height = 'auto', width = 'auto', onClose }) => {
+  ({ children, visible, title, keepMounted = false, height = 'auto', width = 'auto', onClose }) => {
     return (
       <TitanModal
         visible={visible}
         title={title}
         actions={<TitanButton onClick={onClose}>Close</TitanButton>}
+        keepMounted={keepMounted}
         height={height}
         width={width}
       >

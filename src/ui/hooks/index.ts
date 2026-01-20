@@ -1,13 +1,6 @@
 import { useCallback, useState } from 'react'
-import { notificationStore } from '@/ui/mobX/NotificationStore'
-
-export type SaveFunction = (value: string) => void
-
-export type TrackMetadata = {
-  title: string
-  artist: string
-  album: string
-}
+import { SaveFunction } from '@/ui/types'
+import { notificationStore } from '@/ui/mobx/NotificationStore'
 
 export function useDebounce(
   initialValue: string,
@@ -34,6 +27,7 @@ export function useDebounce(
 
 function debounce(fn: (...args: any[]) => void, delay: number): (...args: any[]) => void {
   let timer: NodeJS.Timeout | null = null
+
   return function (...args: any[]) {
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => fn(...args), delay)

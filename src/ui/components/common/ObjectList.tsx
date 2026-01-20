@@ -1,13 +1,13 @@
 import { JSX } from 'react'
 import { observer } from 'mobx-react-lite'
-import { engineStore } from '@/ui/mobX/EngineStore'
-import { Actor } from '@/core/models/Actor'
-import { PlanetIcon, RocketLaunchIcon, SunIcon } from '@phosphor-icons/react'
 import TitanList from '@/ui/TitanUI/components/TitanList'
 import TitanListItem from '@/ui/TitanUI/components/TitanListItem'
 import TitanFlex from '@/ui/TitanUI/components/TitanFlex'
 import TitanIconButton from '@/ui/TitanUI/components/TitanIconButton'
+import { PlanetIcon, RocketLaunchIcon, SunIcon } from '@phosphor-icons/react'
+import { Actor } from '@/core/models/Actor'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
+import { engineStore } from '@/ui/mobx/EngineStore'
 
 const ObjectList = observer(() => {
   const filter = (actor: Actor): boolean => ['planet', 'star'].includes(actor.category!.attributes.alias!)

@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite'
-import { engineStore } from '@/ui/mobX/EngineStore'
+import { engineStore } from '@/ui/mobx/EngineStore'
 
 const LoadingScreen = observer(() => {
   return (
