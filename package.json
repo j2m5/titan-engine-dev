@@ -27,8 +27,6 @@
     "three": "^0.182.0"
   },
   "devDependencies": {
-    "@emotion/react": "^11.11.4",
-    "@emotion/styled": "^11.11.0",
     "@eslint/js": "^9.21.0",
     "@types/animejs": "^3.1.13",
     "@types/node": "^22.13.10",
