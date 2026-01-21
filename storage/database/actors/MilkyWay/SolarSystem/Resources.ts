@@ -7,7 +7,7 @@ const Common: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/mercury/mercury.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 19,
@@ -82,7 +82,7 @@ const Common: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/ceres/ceres.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 29,
@@ -150,7 +150,7 @@ const Common: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/pluto/pluto.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 38,
@@ -165,7 +165,7 @@ const Common: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/haumea/haumea.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 40,
@@ -173,7 +173,7 @@ const Common: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/makemake/makemake.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 41,
@@ -188,7 +188,7 @@ const Common: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/eris/eris.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 43,
@@ -203,7 +203,7 @@ const Common: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/sedna/sedna.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 45,
@@ -220,7 +220,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/moon/moon.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 47,
@@ -235,7 +235,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/io/io.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 49,
@@ -250,7 +250,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/europa/europa.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 51,
@@ -265,7 +265,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/ganymede/ganymede.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 53,
@@ -280,7 +280,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/callisto/callisto.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 55,
@@ -295,7 +295,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/mimas/mimas.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 57,
@@ -310,7 +310,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/enceladus/enceladus.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 59,
@@ -325,7 +325,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/tethys/tethys.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 61,
@@ -340,7 +340,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/dione/dione.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 63,
@@ -355,7 +355,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/rhea/rhea.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 65,
@@ -393,7 +393,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/iapetus/iapetus.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 70,
@@ -408,7 +408,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/miranda/miranda.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 72,
@@ -423,7 +423,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/ariel/ariel.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 74,
@@ -438,7 +438,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/umbriel/umbriel.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 76,
@@ -453,7 +453,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/titania/titania.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 78,
@@ -468,7 +468,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/oberon/oberon.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 80,
@@ -483,7 +483,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/triton/triton.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 82,
@@ -498,7 +498,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/charon/charon.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 84,
@@ -513,7 +513,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/dysnomia/dysnomia.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 86,
@@ -528,7 +528,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/saturn/saturn_rings.png',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 88,
@@ -536,7 +536,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/uranus/uranus_rings.png',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 89,
@@ -544,7 +544,7 @@ const Satellites: IResource[] = [
     resourceType: 'diffuse',
     path: 'planets/neptune/neptune_rings.png',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   },
   {
     id: 113,
@@ -552,7 +552,7 @@ const Satellites: IResource[] = [
     resourceType: 'specular',
     path: 'planets/earth/earth_specular.jpg',
     lifetime: 60000,
-    colorSpace: 'srgb-linear'
+    colorSpace: 'srgb'
   }
 ]
 

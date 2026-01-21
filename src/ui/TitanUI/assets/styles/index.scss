@@ -360,7 +360,7 @@
 }
 
 .titan-toast {
-  animation: toast-in 0.4s ease-out;
+  animation: toast-in 220ms cubic-bezier(.2, 0, 0, 1) forwards;
   cursor: pointer;
   pointer-events: auto;
   position: fixed;
@@ -370,7 +370,7 @@
   z-index: 999999999999;
 
   &.hiding {
-    animation: toast-out 0.4s ease-in forwards;
+    animation: toast-out 160ms cubic-bezier(.4, 0, 1, 1) forwards;
   }
 }
 
@@ -462,21 +462,18 @@
 
 @keyframes toast-in {
   from {
-    //opacity: 0;
-    //transform: translateY(6px);
-    right: -1000px;
+    opacity: 0.8;
+    transform: translateX(120%);
   }
   to {
-    //opacity: 1;
-    //transform: translateY(0);
-    right: 24px;
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 
 @keyframes toast-out {
   to {
-    //opacity: 0;
-    //transform: translateY(6px);
-    right: -1000px;
+    opacity: 0;
+    transform: translateX(120%);
   }
 }
