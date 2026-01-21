@@ -1,4 +1,4 @@
-@use "../ui/TitanUI/assets/styles/index.scss";
+@use "@titanui/assets/styles/index.scss";
 
 body {
   color: #f0f0f0;
@@ -9,7 +9,7 @@ body {
 }
 
 .loading-screen {
-  background: url('/images/loading-screen.jpg') no-repeat;
+  background: url('@public/images/loading-screen.jpg') no-repeat;
   background-size: cover;
   color: #fff;
   position: absolute;

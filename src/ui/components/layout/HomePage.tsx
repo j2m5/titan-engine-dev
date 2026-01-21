@@ -7,6 +7,7 @@ import TitanGrid from '@/ui/TitanUI/components/TitanGrid'
 import TitanFlex from '@/ui/TitanUI/components/TitanFlex'
 import { ScenarioConfig, Scenarios } from '@/config/scenarios'
 import { engineStore } from '@/ui/mobx/EngineStore'
+import { config } from '@/core/framework/config'
 import { getFullURL } from '@/core/helpers/finder'
 
 const HomePage = observer(() => {
@@ -17,7 +18,7 @@ const HomePage = observer(() => {
           <TitanFlex>
             <img src={getFullURL('logo_white.png')} height="60" width="60" alt="" />
           </TitanFlex>
-          <TitanFlex>Titan Engine</TitanFlex>
+          <TitanFlex>{config('name')}</TitanFlex>
         </TitanFlex>
       </TitanTopbar>
       <TitanDivider offsetTop={0} />

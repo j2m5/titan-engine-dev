@@ -9,7 +9,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@storage': path.resolve(__dirname, './storage')
+      '@public': path.resolve(__dirname, './public'),
+      '@storage': path.resolve(__dirname, './storage'),
+      '@titanui': path.resolve(__dirname, './src/ui/TitanUI')
     }
   },
   test: {
