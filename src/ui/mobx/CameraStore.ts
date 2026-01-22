@@ -16,11 +16,13 @@ class CameraStore {
     makeAutoObservable(this)
   }
 
-  public get speedInLSAndAU(): number {
-    if (this.speed >= AU) {
-      return this.speed / AU
+  public get formatSpeed(): { speed: number; unit: string } {
+    if (this.speed < LightSpeed) {
+      return { speed: this.speed, unit: 'km/s' }
+    } else if (this.speed > LightSpeed && this.speed < AU) {
+      return { speed: this.speed / LightSpeed, unit: 'c' }
     } else {
-      return this.speed / LightSpeed
+      return { speed: this.speed / AU, unit: 'au/s' }
     }
   }
 

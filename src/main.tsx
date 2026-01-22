@@ -1,4 +1,5 @@
 import './styles/App.scss'
+import './core/framework/TitanThree'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Container } from 'inversify'

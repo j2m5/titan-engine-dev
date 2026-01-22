@@ -82,6 +82,22 @@ body {
   }
 }
 
+.camera-speed {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  width: 300px;
+  z-index: 9999;
+
+  &.hiding {
+    animation: speed-out 0.5s forwards;
+  }
+
+  &.hidden {
+    display: none;
+  }
+}
+
 .crosshair {
   z-index: 999 !important;
 
@@ -134,5 +150,20 @@ body {
   }
   100% {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes speed-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes speed-out {
+  to {
+    opacity: 0;
   }
 }

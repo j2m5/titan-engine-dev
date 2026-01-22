@@ -4,6 +4,7 @@ import dayjs from 'dayjs'
 
 class TimeStore {
   public epoch: number = getJD(new Date())
+  public timeSteps: number[] = [0, 1, 10, 25, 50, 100, 200, 500, 1000, 10000, 100000, 1000000, 10000000]
   public speedOfTime: number = 1
 
   public constructor() {
@@ -26,16 +27,24 @@ class TimeStore {
     this.epoch = payload
   }
 
-  public setSpeedOfTime(payload: number | number[]): void {
-    if (typeof payload === 'number') {
-      this.speedOfTime = payload
-    }
+  public setSpeedForward(): void {
+    const index = this.timeSteps.indexOf(this.speedOfTime)
+
+    if (index <= 0 || index + 1 >= this.timeSteps.length) return
+
+    this.setSpeedOfTime(this.timeSteps[index + 1])
   }
 
-  public setTimer(): void {
-    if (this.speedOfTime > 0) {
-      this.epoch += 1000
-    }
+  public setSpeedBackward(): void {
+    const index = this.timeSteps.indexOf(this.speedOfTime)
+
+    if (index <= 0) return
+
+    this.setSpeedOfTime(this.timeSteps[index - 1])
+  }
+
+  public setSpeedOfTime(payload: number): void {
+    this.speedOfTime = payload
   }
 }
 

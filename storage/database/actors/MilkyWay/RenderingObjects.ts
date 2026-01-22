@@ -7,7 +7,7 @@ const TOI519PlanetRenderingObjects: IRenderingObject[] = [
     id: 1,
     actorId: 22,
     data: {
-      emission: 15,
+      emission: 1,
       bumpScale: 0
     }
   }
@@ -20,7 +20,7 @@ const TOI519AtmosphereRenderingObjects: IRenderingObject[] = [
     data: {
       radius: JupiterRadius * 0.209 * 1.02,
       scatter: { r: 650, g: 530, b: 380 },
-      scatteringStrength: 20,
+      scatteringStrength: 10,
       densityFalloff: 10
     }
   }

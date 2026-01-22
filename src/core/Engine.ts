@@ -3,8 +3,6 @@ import { EventEmitter } from '@/core/framework/EventEmitter'
 import { Entity } from '@/core/framework/Entity'
 import { System } from '@/core/framework/System'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { timeStore } from '@/ui/mobx/TimeStore'
-import { DAY } from '@/core/constants'
 
 @injectable()
 class Engine extends EventEmitter {
@@ -113,12 +111,12 @@ class Engine extends EventEmitter {
 
   private onFrameRendered(): void {
     const delta: number = threeJS.clock.getDelta()
+
     for (const system of this._systems) {
       system.update(delta, this)
     }
 
     threeJS.renderer.setAnimationLoop(this.boundOnFrameRendered)
-    timeStore.setEpoch(timeStore.epoch + (delta * timeStore.speedOfTime) / DAY)
   }
 
   private onResize(): void {

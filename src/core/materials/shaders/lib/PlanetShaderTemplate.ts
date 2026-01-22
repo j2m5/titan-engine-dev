@@ -94,8 +94,8 @@ export const PlanetShaderTemplate: ShaderProps = {
     #endif
 
     #ifdef USE_ATMOSPHERE
-      #define SCATTER_POINT_COUNT 10
-      #define OPTICAL_DEPTH_POINT_COUNT 10
+      #define SCATTER_POINT_COUNT 15
+      #define OPTICAL_DEPTH_POINT_COUNT 15
 
       uniform float targetRadius;
       uniform float atmosphereRadius;

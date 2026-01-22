@@ -9,6 +9,7 @@ import { DAY } from '@/core/constants'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { Object3D } from 'three'
 import { inject, injectable } from 'inversify'
+import { config } from '@/core/framework/config'
 
 @injectable()
 class RenderSystem extends System {
@@ -35,7 +36,10 @@ class RenderSystem extends System {
 
     document.body.appendChild(this.canvas)
     document.body.appendChild(this.overlay)
-    document.body.appendChild(threeJS.stats.dom)
+
+    if (config('showStats')) {
+      document.body.appendChild(threeJS.stats.dom)
+    }
 
     this.renderManager.initialize()
     this.registerEvents()

@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_FS_DRIVER: 'local' | 's3'
   readonly VITE_FILE_BUCKET: string
   readonly VITE_S3_URL: string
+  readonly VITE_SHOW_STATS_PANEL: string
 }
 
 interface ImportMeta {

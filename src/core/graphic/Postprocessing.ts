@@ -1,6 +1,14 @@
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { HalfFloatType } from 'three'
-import { BlendFunction, BloomEffect, EffectComposer, EffectPass, RenderPass } from 'postprocessing'
+import {
+  BlendFunction,
+  BloomEffect,
+  EffectComposer,
+  EffectPass,
+  RenderPass,
+  ToneMappingEffect,
+  ToneMappingMode
+} from 'postprocessing'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 
 /**
@@ -30,7 +38,18 @@ class Postprocessing {
 
     const lensFlareEffect: LensFlareEffect = new LensFlareEffect({ intensity: 0.02 })
 
-    const effectPass: EffectPass = new EffectPass(threeJS.camera, bloomEffect, lensFlareEffect)
+    const toneMappingEffect: ToneMappingEffect = new ToneMappingEffect({
+      mode: ToneMappingMode.ACES_FILMIC,
+      blendFunction: BlendFunction.DST,
+      resolution: 256,
+      whitePoint: 16,
+      middleGrey: 0.6,
+      minLuminance: 0.01,
+      averageLuminance: 1,
+      adaptationRate: 1
+    })
+
+    const effectPass: EffectPass = new EffectPass(threeJS.camera, bloomEffect, lensFlareEffect, toneMappingEffect)
 
     this.composer.addPass(renderPass)
     this.composer.addPass(effectPass)

@@ -8,6 +8,7 @@ import TutorialContent from '@/ui/components/common/TutorialContent'
 import SettingsContent from '@/ui/components/common/SettingsContent'
 import ObjectList from '@/ui/components/common/ObjectList'
 import NotificationMessage from '@/ui/components/common/NotificationMessage'
+import CameraSpeed from '@/ui/components/common/CameraSpeed'
 import ModalWindow from '@/ui/components/common/ModalWindow'
 import { ITrack } from '@/ui/types'
 import { engineStore } from '@/ui/mobx/EngineStore'
@@ -23,6 +24,7 @@ const App = observer(() => {
       <MainAppBar />
       <ObjectList />
       <NotificationMessage />
+      <CameraSpeed />
       <ModalWindow
         title="Tutorial"
         visible={modalWindowStore.tutorialWindowState}
