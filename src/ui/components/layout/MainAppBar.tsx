@@ -15,7 +15,7 @@ const MainAppBar = observer(() => {
         <TitanFlex>
           <img src={getFullURL('logo_white.png')} height="60" width="60" alt="" />
         </TitanFlex>
-        <TitanFlex>{engineStore.scenario?.name}</TitanFlex>
+        <TitanFlex style={{ textTransform: 'uppercase' }}>{engineStore.scenario?.name}</TitanFlex>
       </TitanFlex>
       <TitanFlex>
         <TimeSpeed />

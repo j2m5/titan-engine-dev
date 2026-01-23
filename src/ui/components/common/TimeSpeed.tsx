@@ -21,7 +21,7 @@ const icon = (speed: number) => {
 }
 
 const TimeSpeed = observer(() => {
-  const previousSpeed = useRef<number>(timeStore.speedOfTime)
+  const previousSpeed = useRef<number>(0)
 
   const handleStopContinue = () => {
     if (timeStore.speedOfTime > 0) {

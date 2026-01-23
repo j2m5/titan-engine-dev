@@ -18,7 +18,7 @@ const HomePage = observer(() => {
           <TitanFlex>
             <img src={getFullURL('logo_white.png')} height="60" width="60" alt="" />
           </TitanFlex>
-          <TitanFlex>{config('name')}</TitanFlex>
+          <TitanFlex style={{ textTransform: 'uppercase' }}>{config('name')}</TitanFlex>
         </TitanFlex>
       </TitanTopbar>
       <TitanDivider offsetTop={0} />
