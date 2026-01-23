@@ -1,0 +1,3 @@
+class RenderableFactory {}
+
+export { RenderableFactory }
