@@ -120,12 +120,14 @@ class RenderableFactory {
 
   private static createRing(actor: Actor): Object3D {
     const lod = new LOD()
-    const lodl1 = new Ring(actor)
-    const lodl2 = new DetailedRing(actor)
+    const base = new Ring(actor)
+    const detailed = base.clone()
+    detailed.add(new DetailedRing(actor))
+
     const distanceLod = toThreeJSUnits(actor.renderingObject!.getAttribute('data').outerRadius * 2)
 
-    lod.addLevel(lodl1)
-    lod.addLevel(lodl2, distanceLod)
+    lod.addLevel(detailed)
+    lod.addLevel(base, distanceLod)
 
     return lod
   }
