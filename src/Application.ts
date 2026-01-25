@@ -37,8 +37,6 @@ class Application {
     this.sceneObserver.scene = threeJS.scene
 
     this.engine.start()
-
-    console.log(threeJS.scene)
   }
 
   public dispose(): void {

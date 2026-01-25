@@ -4,6 +4,7 @@ import { Galaxy } from '@/core/new-renderables/Galaxy'
 import { StarSystem } from '@/core/new-renderables/StarSystem'
 import { Barycenter } from '@/core/new-renderables/Barycenter'
 import { FakeStar } from '@/core/new-renderables/utils/FakeStar'
+import { StaticNode } from '@/core/new-renderables/utils/StaticNode'
 import { DynamicNode } from '@/core/new-renderables/utils/DynamicNode'
 import { Star } from '@/core/new-renderables/Star'
 import { Planet } from '@/core/new-renderables/Planet'
@@ -119,17 +120,23 @@ class RenderableFactory {
   }
 
   private static createRing(actor: Actor): Object3D {
+    const node = new StaticNode(actor)
     const lod = new LOD()
     const base = new Ring(actor)
-    const detailed = base.clone()
+    const detailed = new Ring(actor)
     detailed.add(new DetailedRing(actor))
 
     const distanceLod = toThreeJSUnits(actor.renderingObject!.getAttribute('data').outerRadius * 2)
 
+    node.name = actor.getAttribute('name') + 'Ring'
+    lod.name = actor.getAttribute('name') + 'Ring'
+
     lod.addLevel(detailed)
     lod.addLevel(base, distanceLod)
 
-    return lod
+    node.add(lod)
+
+    return node
   }
 }
 

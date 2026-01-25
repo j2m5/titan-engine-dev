@@ -3,8 +3,10 @@ import { Actor } from '@/core/models/Actor'
 import { KeplerianModel } from '@/core/libs/KeplerianModel'
 import { AU, SpaceScale } from '@/core/constants'
 import { timeStore } from '@/ui/mobx/TimeStore'
+import { Acceptable } from '@/core/services/visitors/Acceptable'
+import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
 
-class OrbitLine extends Line {
+class OrbitLine extends Line implements Acceptable<IObject3DVisitor> {
   public model: Actor
   declare public geometry: BufferGeometry
   declare public material: LineBasicMaterial
@@ -41,6 +43,10 @@ class OrbitLine extends Line {
     }
 
     return points
+  }
+
+  public accept(visitor: IObject3DVisitor): void {
+    visitor.visitRootNode(this)
   }
 }
 
