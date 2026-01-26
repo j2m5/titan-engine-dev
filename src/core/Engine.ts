@@ -1,22 +1,36 @@
-import { injectable } from 'inversify'
+import { inject, injectable } from 'inversify'
 import { EventEmitter } from '@/core/framework/EventEmitter'
-import { Entity } from '@/core/framework/Entity'
-import { System } from '@/core/framework/System'
+import { SceneManagerV2 } from '@/core/services/SceneManagerV2'
+import { SceneObserver } from '@/core/services/SceneObserver'
 import { threeJS } from '@/core/graphic/ThreeJS'
+import { postprocessing } from '@/core/graphic/Postprocessing'
+import { config } from '@/core/framework/config'
+import { DAY } from '@/core/constants'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { cameraStore } from '@/ui/mobx/CameraStore'
+import { timeStore } from '@/ui/mobx/TimeStore'
 
 @injectable()
 class Engine extends EventEmitter {
-  private _entities: Entity[] = []
-  private _systems: System[] = []
+  private readonly canvas: HTMLCanvasElement
+  private readonly overlay: HTMLElement
 
+  private initialized: boolean = false
   private running: boolean = false
 
+  private readonly boundOnStart: () => void
   private readonly boundOnResize: () => void
   private readonly boundOnVisibilityChange: () => void
   private readonly boundOnFrameRendered: () => void
 
-  public constructor() {
+  public constructor(
+    @inject('SceneManagerV2') private sceneManagerV2: SceneManagerV2,
+    @inject('SceneObserver') private sceneObserver: SceneObserver
+  ) {
     super()
+    this.canvas = threeJS.renderer.domElement
+    this.overlay = threeJS.labelRenderer.domElement
+    this.boundOnStart = this.onStart.bind(this)
     this.boundOnResize = this.onResize.bind(this)
     this.boundOnVisibilityChange = this.onVisibilityChange.bind(this)
     this.boundOnFrameRendered = this.onFrameRendered.bind(this)
@@ -25,61 +39,35 @@ class Engine extends EventEmitter {
     addEventListener('visibilitychange', this.boundOnVisibilityChange)
   }
 
-  public get entities(): Entity[] {
-    return this._entities
-  }
+  public initialize(): void {
+    this.initialized = true
+    this.canvas.id = 'canvas'
+    this.canvas.style.position = 'absolute'
+    this.canvas.style.zIndex = '99'
 
-  public get systems(): System[] {
-    return this._systems
-  }
+    this.overlay.id = 'overlay'
+    threeJS.stats.dom.style.zIndex = '99999'
 
-  public addSystem(system: System): void {
-    this._systems.push(system)
-    system.initialize(this)
-  }
+    document.body.appendChild(this.canvas)
+    document.body.appendChild(this.overlay)
 
-  public addEntity(entity: Entity): void {
-    this.emit('EntityAdded', entity)
-    this._entities.push(entity)
-  }
+    if (config('showStats')) {
+      document.body.appendChild(threeJS.stats.dom)
+    }
 
-  public removeEntity(entity: Entity): void {
-    const index: number = this._entities.indexOf(entity)
+    this.sceneManagerV2.initialize()
+    postprocessing.initialize()
 
-    if (index === -1) return
+    this.sceneObserver.observable = threeJS.astroControls
+    this.sceneObserver.scene = threeJS.scene
 
-    this.emit('EntityRemoved', entity)
-
-    this._entities.splice(index, 1)
+    this.onStart()
   }
 
   public start(): void {
     if (!this.running) {
       this.running = true
-
-      for (const system of this._systems) {
-        const filteredEntities: Entity[] = this._entities.filter(system.appliesTo)
-
-        for (const entity of filteredEntities) {
-          system.addEntity(entity)
-        }
-      }
-
-      this.subscribe('EntityAdded', (event: Entity): void => {
-        for (const system of this._systems) {
-          if (system.appliesTo(event)) {
-            system.addEntity(event)
-          }
-        }
-      })
-
-      this.subscribe('EntityRemoved', (event: Entity): void => {
-        for (const system of this._systems) {
-          if (system.appliesTo(event)) {
-            system.removeEntity(event)
-          }
-        }
-      })
+      if (!this.initialized) this.initialize()
 
       this.update()
     }
@@ -100,21 +88,31 @@ class Engine extends EventEmitter {
   public dispose(): void {
     if (!this.running) return
 
+    removeEventListener('wheel', this.boundOnStart)
     removeEventListener('resize', this.boundOnResize)
     removeEventListener('visibilitychange', this.boundOnVisibilityChange)
 
-    this._entities = []
-    this._systems = []
+    this.initialized = false
 
     this.stop()
+  }
+
+  private onStart(): void {
+    this.canvas.addEventListener('wheel', (event: WheelEvent): void => {
+      cameraStore.adjustSpeed(event.deltaY)
+    })
   }
 
   private onFrameRendered(): void {
     const delta: number = threeJS.clock.getDelta()
 
-    for (const system of this._systems) {
-      system.update(delta, this)
-    }
+    threeJS.stats.update()
+    timeStore.setEpoch(timeStore.epoch + (delta * timeStore.speedOfTime) / DAY)
+    threeJS.astroControls.movementSpeed = toThreeJSUnits(cameraStore.speed)
+    threeJS.astroControls.update(delta)
+    threeJS.labelRenderer.render(threeJS.scene, threeJS.camera)
+    postprocessing.render(delta)
+    this.sceneManagerV2.update(delta)
 
     threeJS.renderer.setAnimationLoop(this.boundOnFrameRendered)
   }

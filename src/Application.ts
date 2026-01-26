@@ -1,11 +1,7 @@
 import { inject, injectable } from 'inversify'
 import { Engine } from '@/core/Engine'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
-import { SceneManager } from '@/core/services/SceneManager'
-import { RenderSystem } from '@/core/systems/RenderSystem'
-import { EntitySystem } from '@/core/systems/EntitySystem'
 import { ScenarioConfig } from '@/config/scenarios'
-import { SceneObserver } from '@/core/services/SceneObserver'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
@@ -13,11 +9,7 @@ import { resourceStorage } from '@/core/services/ResourceStorage'
 class Application {
   public constructor(
     @inject('Engine') private engine: Engine,
-    @inject('ResourceObserver') private resourceObserver: ResourceObserver,
-    @inject('SceneManager') private sceneManager: SceneManager,
-    @inject('RenderSystem') private renderSystem: RenderSystem,
-    @inject('EntitySystem') private entitySystem: EntitySystem,
-    @inject('SceneObserver') private sceneObserver: SceneObserver
+    @inject('ResourceObserver') private resourceObserver: ResourceObserver
   ) {}
 
   public async run(scenario: ScenarioConfig): Promise<void> {
@@ -28,17 +20,7 @@ class Application {
 
     threeJS.scene.background = resourceStorage.getTexture('cubemaps-scene-main')!
 
-    this.engine.addSystem(this.renderSystem)
-    this.engine.addSystem(this.entitySystem)
-
-    this.sceneManager.build()
-
-    this.sceneObserver.observable = threeJS.astroControls
-    this.sceneObserver.scene = threeJS.scene
-
     this.engine.start()
-
-    console.log(threeJS.scene)
   }
 
   public dispose(): void {

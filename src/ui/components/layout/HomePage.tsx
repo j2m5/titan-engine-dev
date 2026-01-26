@@ -8,7 +8,7 @@ import TitanFlex from '@/ui/TitanUI/components/TitanFlex'
 import { ScenarioConfig, Scenarios } from '@/config/scenarios'
 import { engineStore } from '@/ui/mobx/EngineStore'
 import { config } from '@/core/framework/config'
-import { getFullURL } from '@/core/helpers/finder'
+import { getFullURL } from '@/core/helpers'
 
 const HomePage = observer(() => {
   return (

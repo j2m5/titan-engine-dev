@@ -6,7 +6,7 @@ import TimeSpeed from '@/ui/components/common/TimeSpeed'
 import { GearIcon, ImageIcon, QuestionIcon, SignOutIcon, SpeakerSimpleHighIcon } from '@phosphor-icons/react'
 import { modalWindowStore } from '@/ui/mobx/ModalWindowStore'
 import { engineStore } from '@/ui/mobx/EngineStore'
-import { getFullURL } from '@/core/helpers/finder'
+import { getFullURL } from '@/core/helpers'
 
 const MainAppBar = observer(() => {
   return (

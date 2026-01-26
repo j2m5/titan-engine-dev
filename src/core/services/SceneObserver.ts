@@ -2,7 +2,6 @@ import { injectable } from 'inversify'
 import { EventEmitter } from '@/core/framework/EventEmitter'
 import { AstroControls } from '@/core/libs/AstroControls'
 import { Object3D, Scene, Vector3 } from 'three'
-import { getObjectsByUserDataProperty } from '@/core/helpers/finder'
 
 export type ObservableRecord = {
   name: string
@@ -106,8 +105,8 @@ class SceneObserver extends EventEmitter {
 
     this.objects = []
 
-    this.categories.forEach((category: string): void => {
-      this.objects.push(...getObjectsByUserDataProperty(this._scene!, 'type', category))
+    this.categories.forEach((c) => {
+      this.objects.push(...this._scene!.getObjectsByUserDataProperty('type', c))
     })
   }
 
@@ -144,9 +143,9 @@ class SceneObserver extends EventEmitter {
 
   private makeRecord(object: Object3D): SceneObserverRecord {
     return {
-      name: object.userData.model,
+      name: object.model?.getAttribute('name', 'unknown'),
       data: {
-        name: object.userData.model,
+        name: object.model?.getAttribute('name', 'unknown'),
         distance: this._observable!.object.position.distanceTo(object.getWorldPosition(this.vector.clone())),
         position: object.getWorldPosition(this.vector.clone())
       }
