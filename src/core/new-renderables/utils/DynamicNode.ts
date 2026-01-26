@@ -1,7 +1,7 @@
 import { Group } from 'three'
 import { Acceptable } from '@/core/services/visitors/Acceptable'
 import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
-import { ShouldRenderOrbitLine } from '@/core/new-renderables/types'
+import { RenderableObject3D, ShouldRenderOrbitLine } from '@/core/new-renderables/types'
 import { Actor } from '@/core/models/Actor'
 import { OrbitLine } from '@/core/new-renderables/utils/OrbitLine'
 import { KeplerianModel } from '@/core/libs/KeplerianModel'
@@ -18,6 +18,7 @@ import { timeStore } from '@/ui/mobx/TimeStore'
 
 class DynamicNode extends Group implements Acceptable<IObject3DVisitor>, ShouldRenderOrbitLine {
   public model: Actor
+  public renderable: RenderableObject3D | null = null
   declare orbit: OrbitLine
 
   private keplerianModel: KeplerianModel

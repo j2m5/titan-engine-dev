@@ -24,6 +24,7 @@ class Planet extends Mesh {
     this.material = new PlanetMaterial(this.model)
 
     this.name = this.model.getAttribute('name') + 'Planet'
+    this.userData.type = 'planet'
     this.rotateX(degToRad(-90))
     this.rotateX(degToRad(-this.model.physicalObject!.getAttribute('axialTilt', 0)))
   }

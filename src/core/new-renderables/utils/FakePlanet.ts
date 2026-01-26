@@ -21,7 +21,7 @@ class FakePlanet extends Sprite {
 
     this.material = new SpriteMaterial({
       map,
-      color: '#d5d5d5',
+      color: '#b6b6b6',
       sizeAttenuation: false,
       depthWrite: false,
       blending: AdditiveBlending

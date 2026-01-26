@@ -25,7 +25,7 @@ class Ring extends Mesh {
     this.material = new RingMaterial(this.model)
 
     this.name = this.model.getAttribute('name') + 'Ring'
-    this.rotateX(degToRad(-this.model.parent!.physicalObject!.getAttribute('axialTilt', 0)))
+    this.rotateX(degToRad(90))
   }
 }
 

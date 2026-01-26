@@ -1,10 +1,12 @@
 import { Group } from 'three'
 import { Acceptable } from '@/core/services/visitors/Acceptable'
 import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
+import { RenderableObject3D } from '@/core/new-renderables/types'
 import { Actor } from '@/core/models/Actor'
 
 class StaticNode extends Group implements Acceptable<IObject3DVisitor> {
   public model: Actor | null
+  public renderable: RenderableObject3D | null = null
 
   public constructor(model: Actor | null = null) {
     super()

@@ -4,7 +4,6 @@ import { ScenarioConfig } from '@/config/scenarios'
 import { IActor, IResource } from '@/core/models/types'
 import { Resource } from '@/core/models/Resource'
 import { Actor } from '@/core/models/Actor'
-import { Engine } from '@/core/Engine'
 import { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
 import { CubeMapTextureManager } from '@/core/services/CubeMapTextureManager'
 import { TextureManager } from '@/core/services/TextureManager'
@@ -13,11 +12,12 @@ import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
 import { DefaultLoadingManager, Texture } from 'three'
 import { engineStore } from '@/ui/mobx/EngineStore'
 import { notificationStore } from '@/ui/mobx/NotificationStore'
-import { Planet } from '@/core/renderables/Planet'
-import { Entity } from '@/core/framework/Entity'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { ResourceItem } from '@/core/services/ResourceManager'
 import { Collection } from '@/core/framework/support/Collection'
+import { threeJS } from '@/core/graphic/ThreeJS'
+import { hasRenderable } from '@/core/services/SceneManagerV2'
+import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 
 /**
  * Наблюдатель за ресурсами, отвечающий жизненный цикл ресурсов
@@ -52,14 +52,12 @@ class ResourceObserver {
   private readonly _map: Map<number, Actor>
 
   /**
-   * @param engine Экземпляр движка
    * @param sceneObserver Наблюдатель за сценой
    * @param cubeMapTextureManager Менеджер текстур кубических карт
    * @param textureManager Стандартный менеджер текстур
    * @param imageBitmapManager Менеджер ImageBitmap
    */
   public constructor(
-    @inject('Engine') private engine: Engine,
     @inject('SceneObserver') private sceneObserver: SceneObserver,
     @inject('CubeMapTextureManager') private cubeMapTextureManager: CubeMapTextureManager,
     @inject('TextureManager') private textureManager: TextureManager,
@@ -161,17 +159,17 @@ class ResourceObserver {
       // loadedAt и expiredAt равны если lifetime ресурса установлен как 0, это означает текстура имеет infinite lifetime
       // основная проверка на истечение lifetime ресурса, если меньше текущего времени - нужно удалять
       if (resource && resource.loadedAt !== resource.expiredAt && resource.expiredAt < dayjs()) {
-        const entities: Entity[] = this.engine.entities.filter((entity: Entity) =>
+        /*const entities: Entity[] = this.engine.entities.filter((entity: Entity) =>
           resources.map((resource: IResource) => resource.actorId).includes(entity.id)
-        )
+        )*/
 
         // извлекает целевые сущности и сбрасывает материал на параметры по умолчанию
         // позволяя WebGL корректно освободить ресурсы
-        entities.forEach((entity: Entity): void => {
+        /*entities.forEach((entity: Entity): void => {
           const component: Planet = entity.getComponent(Planet)
 
           component.material.resetMaterial()
-        })
+        })*/
 
         // удаление как из хранилища так и с GPU
         resourceStorage.deleteTexture(texture.name)
@@ -294,12 +292,9 @@ class ResourceObserver {
         this.deferred.push(...isNotLoaded)
         await this.loadDeferredTextures(isNotLoaded.toArray())
 
-        const target: Entity | undefined = this.engine.entities.find(
-          (entity: Entity): boolean => entity.id === actor.getAttribute('id')
-        )
+        const node = threeJS.scene.getObjectByName(actor.getAttribute('name'))
 
-        const component: Planet | undefined = target?.getComponent(Planet)
-        component?.material.updateMaterial()
+        if (hasRenderable(node)) (node.renderable?.material as AbstractShaderMaterial).updateMaterial()
       }
     }
   }

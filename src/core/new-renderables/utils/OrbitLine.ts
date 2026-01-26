@@ -23,6 +23,7 @@ class OrbitLine extends Line implements Acceptable<IObject3DVisitor> {
     this.geometry = new BufferGeometry().setFromPoints(this.calculatePath())
     this.material = new LineBasicMaterial({ color: this.model.getAttribute('color') })
 
+    this.userData.type = 'orbit'
     this.scale.multiplyScalar(AU * SpaceScale)
   }
 

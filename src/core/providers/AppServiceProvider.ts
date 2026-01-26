@@ -6,6 +6,7 @@ import { CubeMapTextureManager } from '@/core/services/CubeMapTextureManager'
 import { TextureManager } from '@/core/services/TextureManager'
 import { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
 import { SceneManager } from '@/core/services/SceneManager'
+import { SceneManagerV2 } from '@/core/services/SceneManagerV2'
 import { MarkerManager } from '@/core/services/MarkerManager'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { RenderSystem } from '@/core/systems/RenderSystem'
@@ -22,6 +23,7 @@ class AppServiceProvider extends ServiceProvider {
     this.container.bind('TextureManager').to(TextureManager).inSingletonScope()
     this.container.bind('ImageBitmapManager').to(ImageBitmapManager).inSingletonScope()
     this.container.bind('SceneManager').to(SceneManager).inSingletonScope()
+    this.container.bind('SceneManagerV2').to(SceneManagerV2).inSingletonScope()
     this.container.bind('MarkerManager').to(MarkerManager).inSingletonScope()
     this.container.bind('ResourceObserver').to(ResourceObserver).inSingletonScope()
     this.container.bind('RenderSystem').to(RenderSystem).inSingletonScope()

@@ -26,7 +26,7 @@ class Atmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
     this.material = new AtmosphereMaterial(this.model)
 
     this.name = this.model.getAttribute('name') + 'Atmosphere'
-    this.rotateX(degToRad(-90))
+    this.rotateX(degToRad(this.model.parent!.physicalObject!.getAttribute('axialTilt', 0)))
   }
 
   public accept(visitor: IObject3DVisitor): void {

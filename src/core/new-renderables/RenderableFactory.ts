@@ -75,6 +75,7 @@ class RenderableFactory {
     }
 
     node.name = actor.getAttribute('name')
+    node.renderable = lodl1
 
     lod.name = actor.getAttribute('name') + 'LOD'
 
@@ -100,6 +101,7 @@ class RenderableFactory {
     }
 
     node.name = actor.getAttribute('name')
+    node.renderable = lodl1
 
     lod.name = actor.getAttribute('name') + 'LOD'
 
@@ -130,6 +132,7 @@ class RenderableFactory {
 
     node.name = actor.getAttribute('name') + 'Ring'
     lod.name = actor.getAttribute('name') + 'Ring'
+    node.renderable = base
 
     lod.addLevel(detailed)
     lod.addLevel(base, distanceLod)

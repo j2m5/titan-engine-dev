@@ -5,28 +5,35 @@ import { RenderableFactory } from '@/core/new-renderables/RenderableFactory'
 import { Acceptable } from '@/core/services/visitors/Acceptable'
 import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
 import { Object3DVisitor } from '@/core/services/visitors/Object3DVisitor'
-import { ShouldRenderOrbitLine } from '@/core/new-renderables/types'
+import { RenderableObject3D, ShouldRenderOrbitLine } from '@/core/new-renderables/types'
+import { injectable } from 'inversify'
+import { threeJS } from '@/core/graphic/ThreeJS'
 
 export function isAcceptable(object: unknown): object is Acceptable<IObject3DVisitor> {
   return (object as Acceptable<IObject3DVisitor>).accept !== undefined
+}
+
+export function hasRenderable(object: unknown): object is { renderable: RenderableObject3D | null } {
+  return (object as { renderable: RenderableObject3D | null }).renderable !== undefined
 }
 
 export function hasOrbit(object: unknown): object is ShouldRenderOrbitLine {
   return (object as ShouldRenderOrbitLine).orbit !== undefined
 }
 
+@injectable()
 class SceneManagerV2 {
-  private testScene: Scene = new Scene()
+  private scene: Scene = threeJS.scene
   private buffer: Map<number, Object3D> = new Map()
 
-  public make(): void {
+  public initialize(): void {
     if (!engineStore.scenario) return
 
     const root = Actor.find(engineStore.scenario.rootId)
 
     if (!root) return
 
-    const visitor = new Object3DVisitor(this.testScene)
+    const visitor = new Object3DVisitor(this.scene)
 
     const rootObject3D = RenderableFactory.make(root)
 
@@ -45,6 +52,10 @@ class SceneManagerV2 {
     })
 
     this.buffer.clear()
+  }
+
+  public update(delta?: number): void {
+    this.scene.traverse((object: Object3D): void => object.updateObject(delta))
   }
 }
 

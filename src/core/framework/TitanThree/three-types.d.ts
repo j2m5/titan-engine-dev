@@ -1,10 +1,10 @@
 import 'three'
-import { Model } from '@/core/framework/Memoquent/Model'
+import { Actor } from '@/core/models/Actor'
 
 declare module 'three' {
   interface Object3D {
-    model: Model | null
-    getObjectsByUserDataProperty(object: Object3D, key: string, value: any, result: Object3D[] = []): Object3D[]
+    model: Actor | null
+    getObjectsByUserDataProperty(key: string, value: any, result: Object3D[] = []): Object3D[]
     __setup(): void
     updateObject(delta?: number): void
   }
