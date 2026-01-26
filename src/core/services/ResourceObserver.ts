@@ -9,7 +9,7 @@ import { CubeMapTextureManager } from '@/core/services/CubeMapTextureManager'
 import { TextureManager } from '@/core/services/TextureManager'
 import { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
 import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
-import { DefaultLoadingManager, Texture } from 'three'
+import { DefaultLoadingManager, Object3D, Texture } from 'three'
 import { engineStore } from '@/ui/mobx/EngineStore'
 import { notificationStore } from '@/ui/mobx/NotificationStore'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -159,17 +159,15 @@ class ResourceObserver {
       // loadedAt и expiredAt равны если lifetime ресурса установлен как 0, это означает текстура имеет infinite lifetime
       // основная проверка на истечение lifetime ресурса, если меньше текущего времени - нужно удалять
       if (resource && resource.loadedAt !== resource.expiredAt && resource.expiredAt < dayjs()) {
-        /*const entities: Entity[] = this.engine.entities.filter((entity: Entity) =>
-          resources.map((resource: IResource) => resource.actorId).includes(entity.id)
-        )*/
+        const objects = threeJS.scene.getObjectsByUserDataProperty('type', 'planet')
 
         // извлекает целевые сущности и сбрасывает материал на параметры по умолчанию
         // позволяя WebGL корректно освободить ресурсы
-        /*entities.forEach((entity: Entity): void => {
-          const component: Planet = entity.getComponent(Planet)
-
-          component.material.resetMaterial()
-        })*/
+        objects.forEach((object: Object3D): void => {
+          if ('material' in object && object.material instanceof AbstractShaderMaterial) {
+            object.material.resetMaterial()
+          }
+        })
 
         // удаление как из хранилища так и с GPU
         resourceStorage.deleteTexture(texture.name)

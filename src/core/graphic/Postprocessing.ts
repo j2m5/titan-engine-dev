@@ -18,7 +18,7 @@ import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffec
 class Postprocessing {
   public composer: EffectComposer | null = null
 
-  public init(): void {
+  public initialize(): void {
     this.composer = new EffectComposer(threeJS.renderer, {
       depthBuffer: true,
       frameBufferType: HalfFloatType,

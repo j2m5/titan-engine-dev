@@ -1,13 +1,14 @@
 import { inject, injectable } from 'inversify'
 import { EventEmitter } from '@/core/framework/EventEmitter'
+import { SceneManagerV2 } from '@/core/services/SceneManagerV2'
+import { SceneObserver } from '@/core/services/SceneObserver'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { cameraStore } from '@/ui/mobx/CameraStore'
+import { postprocessing } from '@/core/graphic/Postprocessing'
 import { config } from '@/core/framework/config'
-import { RenderManager } from '@/core/services/RenderManager'
-import { timeStore } from '@/ui/mobx/TimeStore'
 import { DAY } from '@/core/constants'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
-import { SceneManagerV2 } from '@/core/services/SceneManagerV2'
+import { cameraStore } from '@/ui/mobx/CameraStore'
+import { timeStore } from '@/ui/mobx/TimeStore'
 
 @injectable()
 class Engine extends EventEmitter {
@@ -23,8 +24,8 @@ class Engine extends EventEmitter {
   private readonly boundOnFrameRendered: () => void
 
   public constructor(
-    @inject('RenderManager') private renderManager: RenderManager,
-    @inject('SceneManagerV2') private sceneManagerV2: SceneManagerV2
+    @inject('SceneManagerV2') private sceneManagerV2: SceneManagerV2,
+    @inject('SceneObserver') private sceneObserver: SceneObserver
   ) {
     super()
     this.canvas = threeJS.renderer.domElement
@@ -45,7 +46,7 @@ class Engine extends EventEmitter {
     this.canvas.style.zIndex = '99'
 
     this.overlay.id = 'overlay'
-    threeJS.stats.dom.style.zIndex = '99999999999999'
+    threeJS.stats.dom.style.zIndex = '99999'
 
     document.body.appendChild(this.canvas)
     document.body.appendChild(this.overlay)
@@ -54,8 +55,12 @@ class Engine extends EventEmitter {
       document.body.appendChild(threeJS.stats.dom)
     }
 
-    this.renderManager.initialize()
     this.sceneManagerV2.initialize()
+    postprocessing.initialize()
+
+    this.sceneObserver.observable = threeJS.astroControls
+    this.sceneObserver.scene = threeJS.scene
+
     this.onStart()
   }
 
@@ -87,6 +92,8 @@ class Engine extends EventEmitter {
     removeEventListener('resize', this.boundOnResize)
     removeEventListener('visibilitychange', this.boundOnVisibilityChange)
 
+    this.initialized = false
+
     this.stop()
   }
 
@@ -104,7 +111,7 @@ class Engine extends EventEmitter {
     threeJS.astroControls.movementSpeed = toThreeJSUnits(cameraStore.speed)
     threeJS.astroControls.update(delta)
     threeJS.labelRenderer.render(threeJS.scene, threeJS.camera)
-    this.renderManager.render(delta)
+    postprocessing.render(delta)
     this.sceneManagerV2.update(delta)
 
     threeJS.renderer.setAnimationLoop(this.boundOnFrameRendered)
