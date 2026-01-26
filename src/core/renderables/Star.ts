@@ -1,75 +1,32 @@
-import { RenderableObject } from '@/core/renderables/RenderableObject'
-import { IRenderable } from '@/core/renderables/IRenderable'
+import { BufferGeometry, Mesh, SphereGeometry } from 'three'
 import { Actor } from '@/core/models/Actor'
-import { PhysicalObject } from '@/core/models/PhysicalObject'
-import { BufferGeometry, Group, LOD, Mesh, Object3D, SphereGeometry } from 'three'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
-import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { StarMaterial } from '@/core/materials/StarMaterial'
-import { NullPhysicalObject } from '@/core/models/defaults/NullPhysicalObject'
 import { degToRad } from 'three/src/math/MathUtils'
-import { FakeStar } from '@/core/renderables/utils/FakeStar'
-import { KeplerianModel } from '@/core/libs/KeplerianModel'
-import { timeStore } from '@/ui/mobx/TimeStore'
-import { AU, SpaceScale } from '@/core/constants'
-import { config } from '@/core/framework/config'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 
-class Star extends RenderableObject implements IRenderable {
-  private readonly model: Actor
-  private readonly physicalObject: PhysicalObject
-
-  private keplerianModel: KeplerianModel
-
-  public geometry: BufferGeometry
-  public material: AbstractShaderMaterial
-  public object3D: Object3D
-  public group: Group
+class Star extends Mesh {
+  public model: Actor
+  declare public geometry: BufferGeometry
+  declare public material: AbstractShaderMaterial
 
   public constructor(model: Actor) {
     super()
     this.model = model
-    this.physicalObject = this.model.physicalObject || new NullPhysicalObject(this.model.getAttribute('id'))
 
-    this.keplerianModel = new KeplerianModel(timeStore.epoch, this.model)
+    this.__setup()
+  }
 
-    this.geometry = new SphereGeometry(toThreeJSUnits(this.physicalObject.getAttribute('radius')), 256, 256)
+  __setup(): void {
+    const radius: number = toThreeJSUnits(this.model.physicalObject!.getAttribute('radius'))
+
+    this.geometry = new SphereGeometry(radius, 256, 256)
     this.material = new StarMaterial(this.model)
-    this.object3D = new Mesh(this.geometry, this.material)
-    this.group = new Group()
-  }
 
-  public build(): Object3D {
-    this.object3D.name = this.model.getAttribute('name') + 'Base'
-    this.object3D.userData.hasBloom = true
-
-    const lod: LOD = new LOD()
-
-    lod.name = this.model.attributes.name + 'LOD'
-    lod.addLevel(this.object3D)
-    lod.addLevel(new FakeStar().build(), this.computeDistanceLOD(3))
-    lod.userData.type = this.model.category.getAttribute('alias')
-    lod.userData.model = this.model.getAttribute('name')
-
-    this.object3D.rotateX(degToRad(-90))
-    this.object3D.rotateX(degToRad(-this.model.physicalObject.getAttribute('axialTilt', 0)))
-
-    this.group.name = this.model.getAttribute('name')
-
-    this.group.add(lod)
-
-    return this.group
-  }
-
-  private computeDistanceLOD(pixels: number): number {
-    const radius: number = this.physicalObject.getAttribute('radius')
-    const fov: number = degToRad(config('camera.fov'))
-
-    return toThreeJSUnits((2 * radius * window.innerHeight) / (fov * pixels))
-  }
-
-  public update(delta?: number): void {
-    const { position } = this.keplerianModel.getStateByEpoch(timeStore.epoch)
-    this.group.position.copy(position).multiplyScalar(AU * SpaceScale)
+    this.name = this.model.getAttribute('name') + 'Star'
+    this.userData.type = 'star'
+    this.rotateX(degToRad(-90))
+    this.rotateX(degToRad(-this.model.physicalObject!.getAttribute('axialTilt', 0)))
   }
 }
 

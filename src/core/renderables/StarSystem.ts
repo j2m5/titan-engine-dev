@@ -1,26 +1,20 @@
-import { RenderableObject } from '@/core/renderables/RenderableObject'
-import { IRenderable } from '@/core/renderables/IRenderable'
 import { Object3D } from 'three'
+import { Acceptable } from '@/core/services/visitors/Acceptable'
+import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
 import { Actor } from '@/core/models/Actor'
 
-class StarSystem extends RenderableObject implements IRenderable {
-  private readonly actor: Actor
-  public object3D: Object3D
+class StarSystem extends Object3D implements Acceptable<IObject3DVisitor> {
+  public model: Actor
 
-  public constructor(actor: Actor) {
+  public constructor(model: Actor) {
     super()
-    this.actor = actor
-    this.object3D = new Object3D()
+    this.model = model
+    this.name = this.model.getAttribute('name')
   }
 
-  public build(): Object3D {
-    this.object3D.name = this.actor.getAttribute('name')
-    this.object3D.userData.type = this.actor.category.getAttribute('name')
-
-    return this.object3D
+  public accept(visitor: IObject3DVisitor): void {
+    visitor.visitRoot(this)
   }
-
-  public update(delta?: number): void {}
 }
 
 export { StarSystem }

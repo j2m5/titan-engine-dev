@@ -1,19 +1,24 @@
+import { LOD, Object3D } from 'three'
 import { Actor } from '@/core/models/Actor'
-import { IRenderable } from '@/core/renderables/IRenderable'
 import { Galaxy } from '@/core/renderables/Galaxy'
 import { StarSystem } from '@/core/renderables/StarSystem'
 import { Barycenter } from '@/core/renderables/Barycenter'
+import { FakeStar } from '@/core/renderables/utils/FakeStar'
+import { StaticNode } from '@/core/renderables/utils/StaticNode'
+import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import { Star } from '@/core/renderables/Star'
 import { Planet } from '@/core/renderables/Planet'
+import { FakePlanet } from '@/core/renderables/utils/FakePlanet'
 import { Atmosphere } from '@/core/renderables/Atmosphere'
 import { Halo } from '@/core/renderables/Halo'
 import { Ring } from '@/core/renderables/Ring'
-import { BlackHoleV2 } from '@/core/renderables/BlackHoleV2'
-import { GalaxyStateStrategy } from '@/core/renderables/galaxy/GalaxyStateStrategy'
-import { StarSystemStateStrategy } from '@/core/renderables/galaxy/StarSystemStateStrategy'
+import { DetailedRing } from '@/core/renderables/utils/DetailedRing'
+import { degToRad } from 'three/src/math/MathUtils'
+import { config } from '@/core/framework/config'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 class RenderableFactory {
-  public static resolveAndCreateActor(actor: Actor): IRenderable {
+  public static make(actor: Actor): Object3D {
     switch (actor.getAttribute('categoryId')) {
       case 2:
         return this.createFakeGalaxy(actor)
@@ -38,46 +43,103 @@ class RenderableFactory {
     }
   }
 
-  // пока пусть полежит метод
-  // @ts-ignore
-  private static createGalaxy(actor: Actor): IRenderable {
-    return new Galaxy(actor, new GalaxyStateStrategy())
+  private static createFakeGalaxy(actor: Actor): Object3D {
+    return new Galaxy(actor)
   }
 
-  private static createFakeGalaxy(actor: Actor): IRenderable {
-    return new Galaxy(actor, new StarSystemStateStrategy())
-  }
-
-  private static createStarSystem(actor: Actor): IRenderable {
+  private static createStarSystem(actor: Actor): Object3D {
     return new StarSystem(actor)
   }
 
-  private static createBarycenter(actor: Actor): IRenderable {
+  private static createBarycenter(actor: Actor): Object3D {
     return new Barycenter(actor)
   }
 
-  private static createBlackHole(actor: Actor): IRenderable {
-    return new BlackHoleV2(actor)
+  private static createBlackHole(actor: Actor): Object3D {
+    // в данный момент отсутствует стабильная реализация объекта BlackHole
+    // поэтому пока заглушка
+    return new DynamicNode(actor)
   }
 
-  private static createStar(actor: Actor): IRenderable {
-    return new Star(actor)
+  private static createStar(actor: Actor): Object3D {
+    const node = new DynamicNode(actor)
+    const lod = new LOD()
+    const lodl1 = new Star(actor)
+    const lodl2 = new FakeStar(actor)
+
+    const distanceLod = (pixels: number): number => {
+      const radius: number = actor.physicalObject!.getAttribute('radius')
+      const fov: number = degToRad(config('camera.fov'))
+
+      return toThreeJSUnits((2 * radius * window.innerHeight) / (fov * pixels))
+    }
+
+    node.name = actor.getAttribute('name')
+    node.renderable = lodl1
+
+    lod.name = actor.getAttribute('name') + 'LOD'
+
+    lod.addLevel(lodl1)
+    lod.addLevel(lodl2, distanceLod(3))
+
+    node.add(lod)
+
+    return node
   }
 
-  private static createPlanet(actor: Actor): IRenderable {
-    return new Planet(actor)
+  private static createPlanet(actor: Actor): Object3D {
+    const node = new DynamicNode(actor)
+    const lod = new LOD()
+    const lodl1 = new Planet(actor)
+    const lodl2 = new FakePlanet(actor)
+
+    const distanceLod = (pixels: number): number => {
+      const radius: number = actor.physicalObject!.getAttribute('radius')
+      const fov: number = degToRad(config('camera.fov'))
+
+      return toThreeJSUnits((2 * radius * window.innerHeight) / (fov * pixels))
+    }
+
+    node.name = actor.getAttribute('name')
+    node.renderable = lodl1
+
+    lod.name = actor.getAttribute('name') + 'LOD'
+
+    lod.addLevel(lodl1)
+    lod.addLevel(lodl2, distanceLod(3))
+
+    node.add(lod)
+
+    return node
   }
 
-  private static createAtmosphere(actor: Actor): IRenderable {
+  private static createAtmosphere(actor: Actor): Object3D {
     return new Atmosphere(actor)
   }
 
-  private static createHalo(actor: Actor): IRenderable {
+  private static createHalo(actor: Actor): Object3D {
     return new Halo(actor)
   }
 
-  private static createRing(actor: Actor): IRenderable {
-    return new Ring(actor)
+  private static createRing(actor: Actor): Object3D {
+    const node = new StaticNode(actor)
+    const lod = new LOD()
+    const base = new Ring(actor)
+    const detailed = new Ring(actor)
+    detailed.add(new DetailedRing(actor))
+
+    const distanceLod = toThreeJSUnits(actor.renderingObject!.getAttribute('data').outerRadius * 2)
+
+    node.name = actor.getAttribute('name') + 'Ring'
+    lod.name = actor.getAttribute('name') + 'Ring'
+    node.renderable = base
+
+    lod.addLevel(detailed)
+    lod.addLevel(base, distanceLod)
+
+    node.add(lod)
+
+    return node
   }
 }
 

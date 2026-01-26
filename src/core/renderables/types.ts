@@ -1,4 +1,4 @@
-import { OrbitLine } from '@/core/new-renderables/utils/OrbitLine'
+import { OrbitLine } from '@/core/renderables/utils/OrbitLine'
 import { BufferGeometry, Material, Object3D } from 'three'
 
 export interface ShouldRenderOrbitLine {

@@ -1,45 +1,33 @@
-import { IRenderable } from '@/core/renderables/IRenderable'
-import { Object3D } from 'three'
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer'
 
-class Crosshair implements IRenderable {
-  public object3D: Object3D
+const div = document.createElement('div')
+const wrapper = document.createElement('div')
+const top = document.createElement('div')
+const bottom = document.createElement('div')
+const left = document.createElement('div')
+const right = document.createElement('div')
 
+top.className = 'triangle-top'
+bottom.className = 'triangle-bottom'
+left.className = 'triangle-left'
+right.className = 'triangle-right'
+
+wrapper.className = 'crosshair-wrapper'
+
+div.appendChild(wrapper)
+wrapper.appendChild(top)
+wrapper.appendChild(bottom)
+wrapper.appendChild(left)
+wrapper.appendChild(right)
+
+div.className = 'crosshair'
+div.style.backgroundColor = 'transparent'
+
+class Crosshair extends CSS2DObject {
   public constructor() {
-    const div: HTMLDivElement = document.createElement('div')
-    const wrapper: HTMLDivElement = document.createElement('div')
-    const top: HTMLDivElement = document.createElement('div')
-    const bottom: HTMLDivElement = document.createElement('div')
-    const left: HTMLDivElement = document.createElement('div')
-    const right: HTMLDivElement = document.createElement('div')
-
-    top.className = 'triangle-top'
-    bottom.className = 'triangle-bottom'
-    left.className = 'triangle-left'
-    right.className = 'triangle-right'
-
-    wrapper.className = 'crosshair-wrapper'
-
-    div.appendChild(wrapper)
-    wrapper.appendChild(top)
-    wrapper.appendChild(bottom)
-    wrapper.appendChild(left)
-    wrapper.appendChild(right)
-
-    div.className = 'crosshair'
-    div.style.backgroundColor = 'transparent'
-
-    this.object3D = new CSS2DObject(div)
+    super(div)
+    this.name = 'crosshair'
   }
-
-  public build(): Object3D {
-    this.object3D.name = 'crosshair'
-    this.object3D.userData.type = 'crosshair'
-
-    return this.object3D
-  }
-
-  public update(delta?: number): void {}
 }
 
 export { Crosshair }

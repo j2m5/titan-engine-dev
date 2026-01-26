@@ -1,31 +1,31 @@
-import { IRenderable } from '@/core/renderables/IRenderable'
+import { BufferGeometry, Line, LineBasicMaterial, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
-import { BufferGeometry, Line, LineBasicMaterial, Object3D, Vector3 } from 'three'
 import { KeplerianModel } from '@/core/libs/KeplerianModel'
-import { timeStore } from '@/ui/mobx/TimeStore'
 import { AU, SpaceScale } from '@/core/constants'
+import { timeStore } from '@/ui/mobx/TimeStore'
+import { Acceptable } from '@/core/services/visitors/Acceptable'
+import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
 
-class OrbitLine implements IRenderable {
-  private readonly model: Actor
-  public geometry: BufferGeometry
-  public material: LineBasicMaterial
-  public object3D: Object3D
+class OrbitLine extends Line implements Acceptable<IObject3DVisitor> {
+  public model: Actor
+  declare public geometry: BufferGeometry
+  declare public material: LineBasicMaterial
 
   public constructor(model: Actor) {
+    super()
     this.model = model
+    this.name = this.model.getAttribute('name') + 'OrbitLine'
+
+    this.__setup()
+  }
+
+  __setup(): void {
     this.geometry = new BufferGeometry().setFromPoints(this.calculatePath())
-    this.material = new LineBasicMaterial({ color: this.model.getAttribute('color'), transparent: true })
-    this.object3D = new Line(this.geometry, this.material)
+    this.material = new LineBasicMaterial({ color: this.model.getAttribute('color') })
+
+    this.userData.type = 'orbit'
+    this.scale.multiplyScalar(AU * SpaceScale)
   }
-
-  public build(): Object3D {
-    this.object3D.name = this.model.getAttribute('name') + 'Orbit'
-    this.object3D.scale.multiplyScalar(AU * SpaceScale)
-
-    return this.object3D
-  }
-
-  public update(delta?: number): void {}
 
   private calculatePath(segments: number = 3600): Vector3[] {
     const points: Vector3[] = []
@@ -44,6 +44,10 @@ class OrbitLine implements IRenderable {
     }
 
     return points
+  }
+
+  public accept(visitor: IObject3DVisitor): void {
+    visitor.visitRootNode(this)
   }
 }
 

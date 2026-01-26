@@ -1,36 +1,13 @@
-import { RenderableObject } from '@/core/renderables/RenderableObject'
-import { IRenderable } from '@/core/renderables/IRenderable'
+import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import { Actor } from '@/core/models/Actor'
-import { Object3D } from 'three'
-import { KeplerianModel } from '@/core/libs/KeplerianModel'
-import { timeStore } from '@/ui/mobx/TimeStore'
-import { AU, SpaceScale } from '@/core/constants'
 
-class Barycenter extends RenderableObject implements IRenderable {
-  private readonly model: Actor
-
-  private keplerianModel: KeplerianModel
-
-  public object3D: Object3D
+class Barycenter extends DynamicNode {
+  public model: Actor
 
   public constructor(model: Actor) {
-    super()
+    super(model)
     this.model = model
-
-    this.keplerianModel = new KeplerianModel(timeStore.epoch, this.model)
-
-    this.object3D = new Object3D()
-  }
-
-  public build(): Object3D {
-    this.object3D.name = this.model.getAttribute('name')
-
-    return this.object3D
-  }
-
-  public update(delta?: number): void {
-    const { position } = this.keplerianModel.getStateByEpoch(timeStore.epoch)
-    this.object3D.position.copy(position).multiplyScalar(AU * SpaceScale)
+    this.name = this.model.getAttribute('name')
   }
 }
 

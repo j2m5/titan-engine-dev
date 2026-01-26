@@ -1,34 +1,34 @@
-import { IRenderable } from '@/core/renderables/IRenderable'
-import { AdditiveBlending, Object3D, Sprite, SpriteMaterial, Texture } from 'three'
+import { AdditiveBlending, Sprite, SpriteMaterial, Texture } from 'three'
+import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
-class FakePlanet implements IRenderable {
-  private readonly scale: number
-  public material: SpriteMaterial
-  public object3D: Object3D
+class FakePlanet extends Sprite {
+  public model: Actor
+  declare public material: SpriteMaterial
 
-  public constructor(scale: number = 0.003) {
-    this.scale = scale
+  private readonly scaleFactor: number
 
+  public constructor(model: Actor, scaleFactor: number = 0.003) {
+    super()
+    this.model = model
+    this.scaleFactor = scaleFactor
+
+    this.__setup()
+  }
+
+  __setup(): void {
     const map: Texture = resourceStorage.getTexture('star.png')!
 
     this.material = new SpriteMaterial({
       map,
-      color: '#d5d5d5',
+      color: '#b6b6b6',
       sizeAttenuation: false,
       depthWrite: false,
       blending: AdditiveBlending
     })
-    this.object3D = new Sprite(this.material)
+
+    this.scale.multiplyScalar(this.scaleFactor)
   }
-
-  public build(): Object3D {
-    this.object3D.scale.multiplyScalar(this.scale)
-
-    return this.object3D
-  }
-
-  public update(delta?: number): void {}
 }
 
 export { FakePlanet }

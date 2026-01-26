@@ -1,19 +1,27 @@
-import { IRenderable } from '@/core/renderables/IRenderable'
-import { AdditiveBlending, Object3D, Sprite, SpriteMaterial, Texture } from 'three'
+import { AdditiveBlending, Sprite, SpriteMaterial, Texture } from 'three'
+import { Actor } from '@/core/models/Actor'
 import { Colorable } from '@/core/models/types'
-import { colorTemperatureToRGB, rgbToHex } from '@/core/materials/shaders/lib/helpers'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+import { colorTemperatureToRGB, rgbToHex } from '@/core/materials/shaders/lib/helpers'
 
-class FakeStar implements IRenderable {
-  private readonly scale: number
-  public material: SpriteMaterial
-  public object3D: Object3D
+class FakeStar extends Sprite {
+  public model: Actor
+  declare public material: SpriteMaterial
 
-  public constructor(scale: number = 0.05) {
-    this.scale = scale
+  private readonly scaleFactor: number
 
+  public constructor(model: Actor, scaleFactor: number = 0.05) {
+    super()
+    this.model = model
+    this.scaleFactor = scaleFactor
+
+    this.__setup()
+  }
+
+  __setup(): void {
     const map: Texture = resourceStorage.getTexture('sun_glow.png')!
-    const rgb: Colorable = colorTemperatureToRGB(5700)
+    const temperature: number = this.model.physicalObject!.getAttribute('temperature') || 5700
+    const rgb: Colorable = colorTemperatureToRGB(temperature)
     const color: string = rgbToHex(rgb)
 
     this.material = new SpriteMaterial({
@@ -23,16 +31,9 @@ class FakeStar implements IRenderable {
       depthWrite: false,
       blending: AdditiveBlending
     })
-    this.object3D = new Sprite(this.material)
+
+    this.scale.multiplyScalar(this.scaleFactor)
   }
-
-  public build(): Object3D {
-    this.object3D.scale.multiplyScalar(this.scale)
-
-    return this.object3D
-  }
-
-  public update(delta?: number): void {}
 }
 
 export { FakeStar }

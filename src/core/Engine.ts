@@ -1,6 +1,6 @@
 import { inject, injectable } from 'inversify'
 import { EventEmitter } from '@/core/framework/EventEmitter'
-import { SceneManagerV2 } from '@/core/services/SceneManagerV2'
+import { SceneManager } from '@/core/services/SceneManager'
 import { SceneObserver } from '@/core/services/SceneObserver'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { postprocessing } from '@/core/graphic/Postprocessing'
@@ -24,7 +24,7 @@ class Engine extends EventEmitter {
   private readonly boundOnFrameRendered: () => void
 
   public constructor(
-    @inject('SceneManagerV2') private sceneManagerV2: SceneManagerV2,
+    @inject('SceneManager') private sceneManager: SceneManager,
     @inject('SceneObserver') private sceneObserver: SceneObserver
   ) {
     super()
@@ -55,7 +55,7 @@ class Engine extends EventEmitter {
       document.body.appendChild(threeJS.stats.dom)
     }
 
-    this.sceneManagerV2.initialize()
+    this.sceneManager.initialize()
     postprocessing.initialize()
 
     this.sceneObserver.observable = threeJS.astroControls
@@ -112,7 +112,7 @@ class Engine extends EventEmitter {
     threeJS.astroControls.update(delta)
     threeJS.labelRenderer.render(threeJS.scene, threeJS.camera)
     postprocessing.render(delta)
-    this.sceneManagerV2.update(delta)
+    this.sceneManager.update(delta)
 
     threeJS.renderer.setAnimationLoop(this.boundOnFrameRendered)
   }

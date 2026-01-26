@@ -16,7 +16,7 @@ import { resourceStorage } from '@/core/services/ResourceStorage'
 import { ResourceItem } from '@/core/services/ResourceManager'
 import { Collection } from '@/core/framework/support/Collection'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { hasRenderable } from '@/core/services/SceneManagerV2'
+import { hasRenderable } from '@/core/services/SceneManager'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 
 /**

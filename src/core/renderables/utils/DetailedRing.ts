@@ -1,15 +1,13 @@
-import { IRenderable } from '@/core/renderables/IRenderable'
-import { BufferGeometry, Group, IcosahedronGeometry, InstancedMesh, Matrix4, Object3D, Vector3 } from 'three'
-import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
-import { toThreeJSUnits } from '@/core/helpers/scaling'
-import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
-import { threeJS } from '@/core/graphic/ThreeJS'
+import { Group, Matrix4, Object3D, Vector3 } from 'three'
+import { Actor } from '@/core/models/Actor'
+import { InstancedAsteroid } from '@/core/renderables/InstancedAsteroid'
 import { degToRad, randFloat } from 'three/src/math/MathUtils'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { threeJS } from '@/core/graphic/ThreeJS'
 
-class InstancedAsteroid implements IRenderable {
-  public geometry: BufferGeometry
-  public material: AbstractShaderMaterial
-  public object3D: Object3D
+class DetailedRing extends Group {
+  public model: Actor
+
   private readonly innerRadius: number
   private readonly outerRadius: number
   private readonly countInstances: number
@@ -18,16 +16,28 @@ class InstancedAsteroid implements IRenderable {
   private angleStart: number = 0
   private angleEnd: number = 0
 
-  public constructor(innerRadius: number, outerRadius: number, countInstances: number) {
-    this.innerRadius = innerRadius
-    this.outerRadius = outerRadius
-    this.countInstances = countInstances
-    this.geometry = new IcosahedronGeometry(toThreeJSUnits(5))
-    this.material = new InstancedAsteroidMaterial()
-    this.object3D = new Group()
+  public constructor(model: Actor) {
+    super()
+    this.model = model
+
+    this.innerRadius = this.model.renderingObject!.getAttribute('data').innerRadius
+    this.outerRadius = this.model.renderingObject!.getAttribute('data').outerRadius
+    this.countInstances = this.model.renderingObject!.getAttribute('data').countInstances
+
+    this.__setup()
   }
 
-  public build(): Object3D {
+  public updateObject(delta?: number): void {
+    this.children.forEach((el: Object3D): void => {
+      const center: Vector3 = el.userData.center.clone()
+      const matrixWorld: Matrix4 = el.matrixWorld
+      const centerWorld: Vector3 = center.applyMatrix4(matrixWorld)
+      const distance: number = threeJS.camera.position.distanceTo(centerWorld)
+      el.visible = distance <= toThreeJSUnits(15000)
+    })
+  }
+
+  __setup(): void {
     const matrix: Matrix4 = new Matrix4()
     const instancesPerSector: number = Math.ceil(this.countInstances / this.countSectors)
 
@@ -35,7 +45,7 @@ class InstancedAsteroid implements IRenderable {
       this.angleStart = (360 / this.countSectors) * i
       this.angleEnd = (360 / this.countSectors) * (i + 1)
 
-      const mesh: InstancedMesh = new InstancedMesh(this.geometry, this.material, instancesPerSector)
+      const mesh: InstancedAsteroid = new InstancedAsteroid(instancesPerSector)
 
       mesh.name = 'AsteroidsSector' + (i + 1)
 
@@ -49,20 +59,8 @@ class InstancedAsteroid implements IRenderable {
       mesh.instanceMatrix.needsUpdate = true
       mesh.userData.center = this.getSectorCenter()
 
-      this.object3D.add(mesh)
+      this.add(mesh)
     }
-
-    return this.object3D
-  }
-
-  public update(delta?: number): void {
-    this.object3D.children.forEach((el: Object3D): void => {
-      const center: Vector3 = el.userData.center.clone()
-      const matrixWorld: Matrix4 = el.matrixWorld
-      const centerWorld: Vector3 = center.applyMatrix4(matrixWorld)
-      const distance: number = threeJS.camera.position.distanceTo(centerWorld)
-      el.visible = distance <= toThreeJSUnits(15000)
-    })
   }
 
   private generatePosition(): Vector3 {
@@ -91,4 +89,4 @@ class InstancedAsteroid implements IRenderable {
   }
 }
 
-export { InstancedAsteroid }
+export { DetailedRing }

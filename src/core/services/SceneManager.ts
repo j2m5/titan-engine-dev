@@ -1,11 +1,11 @@
 import { engineStore } from '@/ui/mobx/EngineStore'
 import { Actor } from '@/core/models/Actor'
 import { Object3D, Scene } from 'three'
-import { RenderableFactory } from '@/core/new-renderables/RenderableFactory'
+import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { Acceptable } from '@/core/services/visitors/Acceptable'
 import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
 import { Object3DVisitor } from '@/core/services/visitors/Object3DVisitor'
-import { RenderableObject3D, ShouldRenderOrbitLine } from '@/core/new-renderables/types'
+import { RenderableObject3D, ShouldRenderOrbitLine } from '@/core/renderables/types'
 import { injectable } from 'inversify'
 import { threeJS } from '@/core/graphic/ThreeJS'
 
@@ -22,7 +22,7 @@ export function hasOrbit(object: unknown): object is ShouldRenderOrbitLine {
 }
 
 @injectable()
-class SceneManagerV2 {
+class SceneManager {
   private scene: Scene = threeJS.scene
   private buffer: Map<number, Object3D> = new Map()
 
@@ -59,4 +59,4 @@ class SceneManagerV2 {
   }
 }
 
-export { SceneManagerV2 }
+export { SceneManager }
