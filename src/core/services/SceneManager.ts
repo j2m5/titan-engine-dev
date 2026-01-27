@@ -43,7 +43,7 @@ class SceneManager {
 
     if (isAcceptable(rootObject3D)) rootObject3D.accept(visitor)
 
-    root.children.eachRecursive((child: Actor): void => {
+    root.children.eachRecursive((child: Actor, depth: number): void => {
       const object3D = RenderableFactory.make(child)
 
       this.buffer.set(child.getAttribute('id'), object3D)
@@ -56,10 +56,10 @@ class SceneManager {
 
       if (object3D instanceof DynamicNode && hasRenderable(object3D) && object3D.renderable !== null) {
         this.markerManager.add({
+          model: child,
           object: object3D,
-          label: child.getAttribute('name', 'Unnamed'),
-          color: child.getAttribute('color', '#ffffff'),
-          shape: 'hex'
+          shape: 'hex',
+          depth
         })
       }
     })
@@ -69,6 +69,7 @@ class SceneManager {
 
   public update(delta?: number): void {
     this.scene.traverse((object: Object3D): void => object.updateObject(delta))
+    this.markerManager.update()
   }
 }
 

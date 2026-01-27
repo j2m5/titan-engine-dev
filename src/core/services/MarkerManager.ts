@@ -1,49 +1,79 @@
-import { injectable } from 'inversify'
+import { inject, injectable } from 'inversify'
 import { Object3D } from 'three'
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer'
+import { SceneObserver } from '@/core/services/SceneObserver'
+import { Model } from '@/core/framework/Memoquent/Model'
+import { Actor } from '@/core/models/Actor'
+import { ObjectLabel } from '@/core/renderables/utils/ObjectLabel'
+import { ObjectMarker } from '@/core/renderables/utils/ObjectMarker'
 
 export type MarkerShape = 'circle' | 'diamond' | 'hex'
 
-export type MarkerOptions = {
+export type MarkerOptions<TModel extends Model = Actor> = {
+  model: TModel
   object: Object3D
-  label: string
-  color: string
   shape: MarkerShape
+  depth: number
   onClick?: () => void
+}
+
+type MarkerEntry = {
+  marker: CSS2DObject
+  label: CSS2DObject
 }
 
 @injectable()
 class MarkerManager {
+  private markers: MarkerEntry[] = []
+
+  public constructor(@inject('SceneObserver') private sceneObserver: SceneObserver) {}
+
   public add(options: MarkerOptions): void {
-    const wrapper: HTMLElement = document.createElement('div')
-    const element: HTMLElement = document.createElement('div')
-    const text: HTMLElement = document.createElement('div')
-
-    wrapper.className = 'marker'
-    element.className = options.shape
-    options.shape === 'hex' ? (element.style.background = options.color) : (element.style.borderColor = options.color)
-    text.className = 'label'
-    text.innerText = options.label
-
-    wrapper.appendChild(element)
-
-    if (options.onClick) {
-      element.style.cursor = 'pointer'
-      element.onclick = options.onClick
-    }
-
-    const marker: CSS2DObject = new CSS2DObject(wrapper)
-    const label: CSS2DObject = new CSS2DObject(text)
+    const marker: CSS2DObject = new ObjectMarker(options, this.sceneObserver)
+    const label: CSS2DObject = new ObjectLabel(options, this.sceneObserver)
 
     options.object.add(marker, label)
+    this.markers.push({ marker, label })
   }
 
   public remove(name: string): void {
     //
   }
 
-  public clear(): void {
-    //
+  public dispose(): void {
+    this.markers = []
+  }
+
+  public update(): void {
+    const visibleRects: DOMRect[] = []
+
+    const sorted = [...this.markers].sort((a, b) => {
+      const pa = a.marker.userData.priority ?? 0
+      const pb = b.marker.userData.priority ?? 0
+      return pb - pa
+    })
+
+    for (const entry of sorted) {
+      const element = entry.marker.element as HTMLElement
+      if (!element) continue
+
+      const rect = element.getBoundingClientRect()
+
+      const hasIntersection = visibleRects.some((r) => this.intersects(rect, r))
+
+      if (hasIntersection) {
+        element.style.display = 'none'
+        entry.label.element.style.display = 'none'
+      } else {
+        element.style.display = ''
+        entry.label.element.style.display = ''
+        visibleRects.push(rect)
+      }
+    }
+  }
+
+  private intersects(a: DOMRect, b: DOMRect): boolean {
+    return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom)
   }
 }
 

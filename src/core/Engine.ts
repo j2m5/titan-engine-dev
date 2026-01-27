@@ -20,7 +20,6 @@ class Engine extends EventEmitter {
 
   private readonly boundOnStart: () => void
   private readonly boundOnResize: () => void
-  private readonly boundOnVisibilityChange: () => void
   private readonly boundOnFrameRendered: () => void
 
   public constructor(
@@ -32,11 +31,9 @@ class Engine extends EventEmitter {
     this.overlay = threeJS.labelRenderer.domElement
     this.boundOnStart = this.onStart.bind(this)
     this.boundOnResize = this.onResize.bind(this)
-    this.boundOnVisibilityChange = this.onVisibilityChange.bind(this)
     this.boundOnFrameRendered = this.onFrameRendered.bind(this)
 
     addEventListener('resize', this.boundOnResize)
-    addEventListener('visibilitychange', this.boundOnVisibilityChange)
   }
 
   public initialize(): void {
@@ -90,7 +87,6 @@ class Engine extends EventEmitter {
 
     removeEventListener('wheel', this.boundOnStart)
     removeEventListener('resize', this.boundOnResize)
-    removeEventListener('visibilitychange', this.boundOnVisibilityChange)
 
     this.initialized = false
 
@@ -123,16 +119,6 @@ class Engine extends EventEmitter {
     threeJS.renderer.setSize(innerWidth, innerHeight)
     threeJS.camera.aspect = innerWidth / innerHeight
     threeJS.camera.updateProjectionMatrix()
-  }
-
-  private onVisibilityChange(): void {
-    if (document.hidden) {
-      console.warn('Stopping app due to visibility change')
-      this.stop()
-    } else {
-      console.info('Starting app after visibility change')
-      this.start()
-    }
   }
 }
 

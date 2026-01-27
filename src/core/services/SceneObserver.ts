@@ -105,8 +105,8 @@ class SceneObserver extends EventEmitter {
 
     this.objects = []
 
-    this.categories.forEach((c) => {
-      this.objects.push(...this._scene!.getObjectsByUserDataProperty('type', c))
+    this.categories.forEach((category: string): void => {
+      this.objects.push(...this._scene!.getObjectsByUserDataProperty('type', category))
     })
   }
 
