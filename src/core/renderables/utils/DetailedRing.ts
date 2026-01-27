@@ -1,9 +1,8 @@
-import { Group, Matrix4, Object3D, Vector3 } from 'three'
+import { Group, Matrix4, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { InstancedAsteroid } from '@/core/renderables/InstancedAsteroid'
 import { degToRad, randFloat } from 'three/src/math/MathUtils'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
-import { threeJS } from '@/core/graphic/ThreeJS'
 
 class DetailedRing extends Group {
   public model: Actor
@@ -22,19 +21,9 @@ class DetailedRing extends Group {
 
     this.innerRadius = this.model.renderingObject!.getAttribute('data').innerRadius
     this.outerRadius = this.model.renderingObject!.getAttribute('data').outerRadius
-    this.countInstances = this.model.renderingObject!.getAttribute('data').countInstances
+    this.countInstances = this.model.renderingObject!.getAttribute('data').countParticles
 
     this.__setup()
-  }
-
-  public updateObject(delta?: number): void {
-    this.children.forEach((el: Object3D): void => {
-      const center: Vector3 = el.userData.center.clone()
-      const matrixWorld: Matrix4 = el.matrixWorld
-      const centerWorld: Vector3 = center.applyMatrix4(matrixWorld)
-      const distance: number = threeJS.camera.position.distanceTo(centerWorld)
-      el.visible = distance <= toThreeJSUnits(15000)
-    })
   }
 
   __setup(): void {

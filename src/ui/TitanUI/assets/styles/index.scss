@@ -442,21 +442,21 @@
       calc(var(--b) * sin(60deg)) calc(25% + var(--b) * cos(60deg)),
       50% var(--b)
   );
-  height: 55px;
+  height: 27px;
 }
 
 .diamond {
   border: 2px solid #f0f0f0;
-  height: 40px;
-  width: 40px;
+  height: 18px;
+  width: 18px;
   transform: rotate(45deg);
 }
 
 .circle {
   border: 2px solid #f0f0f0;
   border-radius: 50%;
-  height: 40px;
-  width: 40px;
+  height: 20px;
+  width: 20px;
 }
 
 @keyframes toast-in {

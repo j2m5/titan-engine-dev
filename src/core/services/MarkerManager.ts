@@ -1,45 +1,41 @@
 import { injectable } from 'inversify'
-import { Object3D, Vector3 } from 'three'
+import { Object3D } from 'three'
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer'
 
-export type MarkerShape = 'circle' | 'square' | 'diamond' | 'hex'
+export type MarkerShape = 'circle' | 'diamond' | 'hex'
 
 export type MarkerOptions = {
   object: Object3D
   label: string
+  color: string
   shape: MarkerShape
-  offset?: Vector3
   onClick?: () => void
 }
 
 @injectable()
 class MarkerManager {
   public add(options: MarkerOptions): void {
-    const element: HTMLElement = document.createElement('div')
     const wrapper: HTMLElement = document.createElement('div')
-    const shape: HTMLElement = document.createElement('div')
-    const label: HTMLElement = document.createElement('span')
+    const element: HTMLElement = document.createElement('div')
+    const text: HTMLElement = document.createElement('div')
 
-    element.className = 'marker'
-    wrapper.className = 'marker-wrapper'
-    shape.className = `marker-shape marker--${options.shape}`
-    label.className = 'label'
-    label.innerText = options.label
+    wrapper.className = 'marker'
+    element.className = options.shape
+    options.shape === 'hex' ? (element.style.background = options.color) : (element.style.borderColor = options.color)
+    text.className = 'label'
+    text.innerText = options.label
 
-    element.appendChild(wrapper)
-    wrapper.appendChild(shape)
-    wrapper.appendChild(label)
+    wrapper.appendChild(element)
 
     if (options.onClick) {
       element.style.cursor = 'pointer'
       element.onclick = options.onClick
     }
 
-    const labelObject: CSS2DObject = new CSS2DObject(element)
+    const marker: CSS2DObject = new CSS2DObject(wrapper)
+    const label: CSS2DObject = new CSS2DObject(text)
 
-    labelObject.position.copy(options.offset || new Vector3())
-
-    options.object.add(labelObject)
+    options.object.add(marker, label)
   }
 
   public remove(name: string): void {

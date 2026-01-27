@@ -1,13 +1,15 @@
-import { engineStore } from '@/ui/mobx/EngineStore'
-import { Actor } from '@/core/models/Actor'
+import { inject, injectable } from 'inversify'
 import { Object3D, Scene } from 'three'
-import { RenderableFactory } from '@/core/renderables/RenderableFactory'
+import { MarkerManager } from '@/core/services/MarkerManager'
 import { Acceptable } from '@/core/services/visitors/Acceptable'
 import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
 import { Object3DVisitor } from '@/core/services/visitors/Object3DVisitor'
+import { Actor } from '@/core/models/Actor'
+import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
+import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { RenderableObject3D, ShouldRenderOrbitLine } from '@/core/renderables/types'
-import { injectable } from 'inversify'
 import { threeJS } from '@/core/graphic/ThreeJS'
+import { engineStore } from '@/ui/mobx/EngineStore'
 
 export function isAcceptable(object: unknown): object is Acceptable<IObject3DVisitor> {
   return (object as Acceptable<IObject3DVisitor>).accept !== undefined
@@ -25,6 +27,8 @@ export function hasOrbit(object: unknown): object is ShouldRenderOrbitLine {
 class SceneManager {
   private scene: Scene = threeJS.scene
   private buffer: Map<number, Object3D> = new Map()
+
+  public constructor(@inject('MarkerManager') private markerManager: MarkerManager) {}
 
   public initialize(): void {
     if (!engineStore.scenario) return
@@ -49,6 +53,15 @@ class SceneManager {
       if (isAcceptable(object3D)) object3D.accept(visitor)
 
       if (hasOrbit(object3D)) object3D.orbit.accept(visitor)
+
+      if (object3D instanceof DynamicNode && hasRenderable(object3D) && object3D.renderable !== null) {
+        this.markerManager.add({
+          object: object3D,
+          label: child.getAttribute('name', 'Unnamed'),
+          color: child.getAttribute('color', '#ffffff'),
+          shape: 'hex'
+        })
+      }
     })
 
     this.buffer.clear()
