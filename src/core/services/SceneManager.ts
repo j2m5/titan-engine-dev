@@ -1,10 +1,12 @@
 import { inject, injectable } from 'inversify'
 import { Object3D, Scene } from 'three'
+import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { MarkerManager } from '@/core/services/MarkerManager'
 import { Acceptable } from '@/core/services/visitors/Acceptable'
 import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
 import { Object3DVisitor } from '@/core/services/visitors/Object3DVisitor'
 import { Actor } from '@/core/models/Actor'
+import { Crosshair } from '@/core/renderables/utils/Crosshair'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { RenderableObject3D, ShouldRenderOrbitLine } from '@/core/renderables/types'
@@ -25,6 +27,7 @@ export function hasOrbit(object: unknown): object is ShouldRenderOrbitLine {
 
 @injectable()
 class SceneManager {
+  public crosshair: CSS2DObject = new Crosshair()
   private scene: Scene = threeJS.scene
   private buffer: Map<number, Object3D> = new Map()
 
@@ -59,7 +62,10 @@ class SceneManager {
           model: child,
           object: object3D,
           shape: 'hex',
-          depth
+          depth,
+          onClick: (): void => {
+            object3D.renderable?.add(this.crosshair)
+          }
         })
       }
     })

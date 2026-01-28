@@ -1,5 +1,5 @@
 import { config } from '@/core/framework/config'
-import { Clock, NoToneMapping, PerspectiveCamera, Scene, Sphere, SRGBColorSpace, WebGLRenderer } from 'three'
+import { Clock, NoToneMapping, PerspectiveCamera, Raycaster, Scene, Sphere, SRGBColorSpace, WebGLRenderer } from 'three'
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { AstroControls } from '@/core/libs/AstroControls'
 import Stats from 'three/examples/jsm/libs/stats.module'
@@ -13,6 +13,7 @@ class ThreeJS {
   public readonly camera: PerspectiveCamera
   public readonly cameraSphere: Sphere
   public readonly astroControls: AstroControls
+  public readonly raycaster: Raycaster
   public readonly clock: Clock
   public readonly stats: Stats
 
@@ -24,6 +25,7 @@ class ThreeJS {
     this.camera = this.setCamera()
     this.cameraSphere = this.setCameraSphere()
     this.astroControls = this.setAstroControls()
+    this.raycaster = this.setRaycaster()
     this.clock = this.setClock()
     this.stats = this.setStats()
   }
@@ -79,6 +81,10 @@ class ThreeJS {
     controls.autoForward = false
 
     return controls
+  }
+
+  private setRaycaster(): Raycaster {
+    return new Raycaster()
   }
 
   private setClock(): Clock {

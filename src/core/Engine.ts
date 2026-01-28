@@ -9,6 +9,7 @@ import { DAY } from '@/core/constants'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { cameraStore } from '@/ui/mobx/CameraStore'
 import { timeStore } from '@/ui/mobx/TimeStore'
+import { Vector2 } from 'three'
 
 @injectable()
 class Engine extends EventEmitter {
@@ -21,6 +22,7 @@ class Engine extends EventEmitter {
   private readonly boundOnStart: () => void
   private readonly boundOnResize: () => void
   private readonly boundOnFrameRendered: () => void
+  private readonly boundOnNodeClick: (event: MouseEvent) => void
 
   public constructor(
     @inject('SceneManager') private sceneManager: SceneManager,
@@ -32,8 +34,10 @@ class Engine extends EventEmitter {
     this.boundOnStart = this.onStart.bind(this)
     this.boundOnResize = this.onResize.bind(this)
     this.boundOnFrameRendered = this.onFrameRendered.bind(this)
+    this.boundOnNodeClick = this.onNodeClick.bind(this)
 
     addEventListener('resize', this.boundOnResize)
+    this.canvas.addEventListener('click', this.boundOnNodeClick)
   }
 
   public initialize(): void {
@@ -87,6 +91,7 @@ class Engine extends EventEmitter {
 
     removeEventListener('wheel', this.boundOnStart)
     removeEventListener('resize', this.boundOnResize)
+    this.canvas.removeEventListener('click', this.boundOnNodeClick)
 
     this.initialized = false
 
@@ -119,6 +124,27 @@ class Engine extends EventEmitter {
     threeJS.renderer.setSize(innerWidth, innerHeight)
     threeJS.camera.aspect = innerWidth / innerHeight
     threeJS.camera.updateProjectionMatrix()
+  }
+
+  private onNodeClick(event: MouseEvent): void {
+    const mouse = new Vector2()
+
+    event.preventDefault()
+
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1
+
+    threeJS.raycaster.setFromCamera(mouse, threeJS.camera)
+
+    const intersects = threeJS.raycaster.intersectObjects(threeJS.scene.getObjectsByUserDataProperty('clickable', true))
+
+    if (intersects.length) {
+      const target = intersects.find((el) => el.object.userData.clickable !== undefined)
+
+      target?.object.parent?.add(this.sceneManager.crosshair)
+    } else {
+      if (this.sceneManager.crosshair.parent) this.sceneManager.crosshair.parent.remove(this.sceneManager.crosshair)
+    }
   }
 }
 
