@@ -10,7 +10,7 @@ abstract class DistanceBasedCSS2DObject extends CSS2DObject {
 
   private readonly MASS_WEIGHT = 1
   private readonly DEPTH_WEIGHT = 1
-  private readonly DISTANCE_WEIGHT = 2.5
+  private readonly DISTANCE_WEIGHT = 2
 
   protected constructor(model: Actor, observer: SceneObserver, element: HTMLElement = document.createElement('div')) {
     super(element)
@@ -32,11 +32,11 @@ abstract class DistanceBasedCSS2DObject extends CSS2DObject {
 
     if (this.userData.depth) {
       const mass = Math.log10(this.model.physicalObject?.getAttribute('mass'))
-      const distance = Math.log10(record.distance)
+      const distance = Math.log10(record.distance + 1)
 
       this.userData.priority = Math.max(
         0,
-        Math.floor(mass * this.MASS_WEIGHT - this.userData.depth * this.DEPTH_WEIGHT - distance * this.DISTANCE_WEIGHT)
+        mass * this.MASS_WEIGHT - this.userData.depth * this.DEPTH_WEIGHT - distance * this.DISTANCE_WEIGHT
       )
     }
   }

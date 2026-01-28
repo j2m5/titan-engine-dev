@@ -35,7 +35,6 @@ class ImageBitmapManager extends ResourceManager<IResource, ImageBitmap> {
       texture.needsUpdate = true
 
       resourceStorage.addTexture(texture)
-      console.log(resourceStorage.textures)
 
       return imageBitmap
     } catch (e) {

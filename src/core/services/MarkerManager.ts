@@ -55,18 +55,18 @@ class MarkerManager {
 
     for (const entry of sorted) {
       const element = entry.marker.element as HTMLElement
+
       if (!element) continue
 
       const rect = element.getBoundingClientRect()
-
       const hasIntersection = visibleRects.some((r) => this.intersects(rect, r))
 
       if (hasIntersection) {
         element.style.display = 'none'
         entry.label.element.style.display = 'none'
       } else {
-        element.style.display = ''
-        entry.label.element.style.display = ''
+        element.style.display = 'block'
+        entry.label.element.style.display = 'block'
         visibleRects.push(rect)
       }
     }
