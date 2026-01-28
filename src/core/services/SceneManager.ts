@@ -64,7 +64,7 @@ class SceneManager {
           shape: 'hex',
           depth,
           onClick: (): void => {
-            object3D.renderable?.add(this.crosshair)
+            object3D.renderable?.parent?.add(this.crosshair)
           }
         })
       }
