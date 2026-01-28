@@ -28,10 +28,7 @@ class ObjectMarker extends DistanceBasedCSS2DObject {
   }
 
   __setup(): void {
-    this.userData.priority = Math.max(
-      0,
-      Math.floor(Math.log10(this.options.model.physicalObject?.getAttribute('mass')) - this.options.depth)
-    )
+    this.userData.depth = this.options.depth
   }
 }
 

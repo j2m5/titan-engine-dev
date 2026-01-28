@@ -1,12 +1,16 @@
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { Actor } from '@/core/models/Actor'
-import { SceneObserver } from '@/core/services/SceneObserver'
+import { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
 import { smoothstep } from 'three/src/math/MathUtils'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 abstract class DistanceBasedCSS2DObject extends CSS2DObject {
   public model: Actor
   private observer: SceneObserver
+
+  private readonly MASS_WEIGHT = 1
+  private readonly DEPTH_WEIGHT = 1
+  private readonly DISTANCE_WEIGHT = 2.5
 
   protected constructor(model: Actor, observer: SceneObserver, element: HTMLElement = document.createElement('div')) {
     super(element)
@@ -15,7 +19,7 @@ abstract class DistanceBasedCSS2DObject extends CSS2DObject {
   }
 
   public updateObject(delta?: number): void {
-    const record = this.observer.data.get(this.model.getAttribute('name'))
+    const record: ObservableRecord | undefined = this.observer.data.get(this.model.getAttribute('name'))
 
     if (!record) return
 
@@ -25,6 +29,16 @@ abstract class DistanceBasedCSS2DObject extends CSS2DObject {
     const fade = smoothstep(record.distance, min, max)
 
     this.element.style.opacity = `${fade}`
+
+    if (this.userData.depth) {
+      const mass = Math.log10(this.model.physicalObject?.getAttribute('mass'))
+      const distance = Math.log10(record.distance)
+
+      this.userData.priority = Math.max(
+        0,
+        Math.floor(mass * this.MASS_WEIGHT - this.userData.depth * this.DEPTH_WEIGHT - distance * this.DISTANCE_WEIGHT)
+      )
+    }
   }
 }
 
