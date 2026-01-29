@@ -22,7 +22,7 @@ class Engine extends EventEmitter {
   private readonly boundOnStart: () => void
   private readonly boundOnResize: () => void
   private readonly boundOnFrameRendered: () => void
-  private readonly boundOnNodeClick: (event: MouseEvent) => void
+  private readonly boundOnClick: (event: MouseEvent) => void
 
   public constructor(
     @inject('SceneManager') private sceneManager: SceneManager,
@@ -34,10 +34,10 @@ class Engine extends EventEmitter {
     this.boundOnStart = this.onStart.bind(this)
     this.boundOnResize = this.onResize.bind(this)
     this.boundOnFrameRendered = this.onFrameRendered.bind(this)
-    this.boundOnNodeClick = this.onNodeClick.bind(this)
+    this.boundOnClick = this.onClick.bind(this)
 
     addEventListener('resize', this.boundOnResize)
-    this.canvas.addEventListener('click', this.boundOnNodeClick)
+    this.canvas.addEventListener('click', this.boundOnClick)
   }
 
   public initialize(): void {
@@ -52,9 +52,7 @@ class Engine extends EventEmitter {
     document.body.appendChild(this.canvas)
     document.body.appendChild(this.overlay)
 
-    if (config('showStats')) {
-      document.body.appendChild(threeJS.stats.dom)
-    }
+    if (config('showStats')) document.body.appendChild(threeJS.stats.dom)
 
     this.sceneManager.initialize()
     postprocessing.initialize()
@@ -91,7 +89,7 @@ class Engine extends EventEmitter {
 
     removeEventListener('wheel', this.boundOnStart)
     removeEventListener('resize', this.boundOnResize)
-    this.canvas.removeEventListener('click', this.boundOnNodeClick)
+    this.canvas.removeEventListener('click', this.boundOnClick)
 
     this.initialized = false
 
@@ -107,7 +105,7 @@ class Engine extends EventEmitter {
   private onFrameRendered(): void {
     const delta: number = threeJS.clock.getDelta()
 
-    threeJS.stats.update()
+    if (config('showStats')) threeJS.stats.update()
     timeStore.setEpoch(timeStore.epoch + (delta * timeStore.speedOfTime) / DAY)
     threeJS.astroControls.movementSpeed = toThreeJSUnits(cameraStore.speed)
     threeJS.astroControls.update(delta)
@@ -126,7 +124,7 @@ class Engine extends EventEmitter {
     threeJS.camera.updateProjectionMatrix()
   }
 
-  private onNodeClick(event: MouseEvent): void {
+  private onClick(event: MouseEvent): void {
     const mouse = new Vector2()
 
     event.preventDefault()
@@ -143,7 +141,7 @@ class Engine extends EventEmitter {
 
       target?.object.parent?.add(this.sceneManager.crosshair)
     } else {
-      if (this.sceneManager.crosshair.parent) this.sceneManager.crosshair.parent.remove(this.sceneManager.crosshair)
+      this.sceneManager.crosshair.parent?.remove(this.sceneManager.crosshair)
     }
   }
 }
