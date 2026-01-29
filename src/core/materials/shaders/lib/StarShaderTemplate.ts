@@ -75,13 +75,13 @@ export const StarShaderTemplate: ShaderProps = {
 
       vec3 lightenColor = lighten(spectralColor, 0.1);
       vec3 darkenColor = darken(spectralColor, 0.1);
+
       vec3 color = mix(darkenColor, lightenColor, noise);
       float distance = length(cameraPosition - vPositionW);
 
-      float noiseIntensity = distance * 0.0003;
-      color.r += noiseIntensity;
-      color.g += noiseIntensity;
-      color.b += noiseIntensity;
+      float noiseIntensity = distance * 0.003;
+      float intensity = 1.0 + noiseIntensity;
+      color *= intensity;
 
       gl_FragColor = vec4(color, 1.0);
 

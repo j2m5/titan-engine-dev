@@ -28,15 +28,15 @@ class Postprocessing {
     const renderPass: RenderPass = new RenderPass(threeJS.scene, threeJS.camera)
 
     const bloomEffect: BloomEffect = new BloomEffect({
-      radius: 0.8,
+      radius: 0.9,
       blendFunction: BlendFunction.SCREEN,
       mipmapBlur: true,
       luminanceThreshold: 1,
       luminanceSmoothing: 0.0025,
-      intensity: 5
+      intensity: 1
     })
 
-    const lensFlareEffect: LensFlareEffect = new LensFlareEffect({ intensity: 0.02 })
+    const lensFlareEffect: LensFlareEffect = new LensFlareEffect({ intensity: 0.01 })
 
     const toneMappingEffect: ToneMappingEffect = new ToneMappingEffect({
       mode: ToneMappingMode.ACES_FILMIC,
