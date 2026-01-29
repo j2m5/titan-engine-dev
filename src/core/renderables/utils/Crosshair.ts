@@ -6,6 +6,7 @@ class Crosshair extends CSS2DObject {
   private arrow: HTMLElement
   private pos: Vector3 = new Vector3()
   private dir: Vector2 = new Vector2()
+  private edge: Vector2 = new Vector2()
 
   public constructor() {
     const div = document.createElement('div')
@@ -108,9 +109,9 @@ class Crosshair extends CSS2DObject {
     const absY = Math.abs(dir.y)
 
     if (absX > absY) {
-      return new Vector2(Math.sign(dir.x) * margin, (dir.y / absX) * margin)
+      return this.edge.set(Math.sign(dir.x) * margin, (dir.y / absX) * margin)
     } else {
-      return new Vector2((dir.x / absY) * margin, Math.sign(dir.y) * margin)
+      return this.edge.set((dir.x / absY) * margin, Math.sign(dir.y) * margin)
     }
   }
 }
