@@ -24,12 +24,12 @@ class RingShader extends AbstractShader<keyof RingUniforms> {
     super(Shader)
     this.model = model
 
-    const parent: Actor = this.model.parent
+    const parent: Actor = this.model.parent!
 
     const ringData: Record<
       keyof IRingRenderingObject,
       ValueOf<IRingRenderingObject>
-    > = this.model.renderingObject.getAttribute('data')
+    > = this.model.renderingObject?.getAttribute('data')
     const ringTexture: Texture = resourceStorage.getTextureOrMake(this.model.resources.first()?.getAttribute('path'))
 
     this.uniforms = {
@@ -38,7 +38,7 @@ class RingShader extends AbstractShader<keyof RingUniforms> {
       outerRadius: new Uniform(toThreeJSUnits(ringData.outerRadius)),
       alphaTest: new Uniform(ringData.alphaTest),
       lightPosition: new Uniform(new Vector3()),
-      planetRadius: new Uniform(toThreeJSUnits(parent.physicalObject.getAttribute('radius', 1))),
+      planetRadius: new Uniform(toThreeJSUnits(parent.physicalObject?.getAttribute('radius', 1))),
       minDistance: new Uniform(toThreeJSUnits(1000)),
       maxDistance: new Uniform(toThreeJSUnits(5000))
     }

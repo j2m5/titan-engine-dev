@@ -21,7 +21,7 @@ class HaloShader extends AbstractShader<keyof HaloUniforms> {
     const haloData: Record<
       keyof IHaloRenderingObject,
       ValueOf<IHaloRenderingObject>
-    > = this.model.renderingObject.getAttribute('data')
+    > = this.model.renderingObject?.getAttribute('data')
 
     const day: Colorable = normalizeColor(haloData.day as Colorable)
     const night: Colorable = normalizeColor(haloData.night as Colorable)

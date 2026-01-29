@@ -39,7 +39,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
     const atmosphereData: Record<
       keyof IAtmosphereRenderingObject,
       ValueOf<IAtmosphereRenderingObject>
-    > = this.model.children.where('categoryId', 8).first()?.renderingObject.getAttribute('data') || {
+    > = this.model.children.where('categoryId', 8).first()?.renderingObject?.getAttribute('data') || {
       radius: 0,
       scatter: { r: 0, g: 0, b: 0 },
       scatteringStrength: 0,
@@ -51,7 +51,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
     const ringData: Record<keyof IRingRenderingObject, ValueOf<IRingRenderingObject>> = this.model.children
       .where('categoryId', 10)
       .first()
-      ?.renderingObject.getAttribute('data') || { innerRadius: 0, outerRadius: 0, alphaTest: 0, countParticles: 0 }
+      ?.renderingObject?.getAttribute('data') || { innerRadius: 0, outerRadius: 0, alphaTest: 0, countParticles: 0 }
     const ringMap: Texture = resourceStorage.getTextureOrMake(
       this.model.children.where('categoryId', 10).first()?.resources.first()?.getAttribute('path')
     )
@@ -67,7 +67,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       bumpMap: new Uniform(null),
       bumpScale: new Uniform(planetData.bumpScale),
       emission: new Uniform(planetData.emission),
-      targetRadius: new Uniform(toThreeJSUnits(this.model.physicalObject.getAttribute('radius', 1))),
+      targetRadius: new Uniform(toThreeJSUnits(this.model.physicalObject?.getAttribute('radius', 1))),
       atmosphereRadius: new Uniform(toThreeJSUnits(atmosphereData.radius as number)),
       scatterRGB: new Uniform(atmosphereData.scatter),
       densityFalloff: new Uniform(atmosphereData.densityFalloff),

@@ -16,7 +16,7 @@ class StarShader extends AbstractShader<keyof StarUniforms> {
     super(Shader)
     this.model = model
 
-    const temperature: number = this.model.physicalObject.getAttribute('temperature', 3000)
+    const temperature: number = this.model.physicalObject?.getAttribute('temperature', 3000)
     const { r, g, b } = colorTemperatureToRGB(temperature)
 
     this.uniforms = {

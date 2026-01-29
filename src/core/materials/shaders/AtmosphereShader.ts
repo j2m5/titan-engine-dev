@@ -21,12 +21,12 @@ class AtmosphereShader extends AbstractShader<keyof AtmosphereUniforms> {
     super(Shader)
     this.model = model
 
-    const parent: Actor = this.model.parent
+    const parent: Actor = this.model.parent!
 
     const atmosphereData: Record<
       keyof IAtmosphereRenderingObject,
       ValueOf<IAtmosphereRenderingObject>
-    > = this.model.renderingObject.getAttribute('data')
+    > = this.model.renderingObject?.getAttribute('data')
 
     const scatter: Colorable = calculateScatterRGB(
       atmosphereData.scatter as Colorable,
@@ -34,7 +34,7 @@ class AtmosphereShader extends AbstractShader<keyof AtmosphereUniforms> {
     )
 
     this.uniforms = {
-      targetRadius: new Uniform(toThreeJSUnits(parent.physicalObject.getAttribute('radius', 1))),
+      targetRadius: new Uniform(toThreeJSUnits(parent.physicalObject?.getAttribute('radius', 1))),
       atmosphereRadius: new Uniform(toThreeJSUnits(atmosphereData.radius as number)),
       lightPosition: new Uniform(new Vector3()),
       scatterRGB: new Uniform(scatter),
