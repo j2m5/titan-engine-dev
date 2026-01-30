@@ -25,7 +25,6 @@ export const AdditiveBlendingShaderTemplate: ShaderProps = {
       vec4 texelAdd = texture2D(tAdd, vUv);
 
       gl_FragColor = texelBase + texelAdd;
-      //gl_FragColor = mix(texelBase, texelAdd, texelAdd.a);
     }
   `
 }

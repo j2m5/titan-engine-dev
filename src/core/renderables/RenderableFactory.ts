@@ -16,6 +16,7 @@ import { DetailedRing } from '@/core/renderables/utils/DetailedRing'
 import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { StarOuterLayer } from '@/core/renderables/utils/StarOuterLayer'
 
 class RenderableFactory {
   public static make(actor: Actor): Object3D {
@@ -66,6 +67,7 @@ class RenderableFactory {
     const lod = new LOD()
     const lodl1 = new Star(actor)
     const lodl2 = new FakeStar(actor)
+    const starOuterLayer = new StarOuterLayer(actor)
 
     const distanceLod = (pixels: number): number => {
       const radius: number = actor.physicalObject!.getAttribute('radius')
@@ -73,6 +75,8 @@ class RenderableFactory {
 
       return toThreeJSUnits((2 * radius * window.innerHeight) / (fov * pixels))
     }
+
+    lodl1.add(starOuterLayer)
 
     node.name = actor.getAttribute('name')
     node.renderable = lodl1
