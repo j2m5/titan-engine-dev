@@ -202,7 +202,8 @@ class ResourceObserver {
       'asteroid.jpg',
       'night.jpg',
       'default.png',
-      'sun.png'
+      'sun.png',
+      'round.png'
     ]
 
     this.required = Resource.all().whereIn('path', list).toJSON()

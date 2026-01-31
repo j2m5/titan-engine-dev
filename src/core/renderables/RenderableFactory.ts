@@ -3,21 +3,22 @@ import { Actor } from '@/core/models/Actor'
 import { Galaxy } from '@/core/renderables/Galaxy'
 import { StarSystem } from '@/core/renderables/StarSystem'
 import { Barycenter } from '@/core/renderables/Barycenter'
-import { FakeStar } from '@/core/renderables/utils/FakeStar'
 import { StaticNode } from '@/core/renderables/utils/StaticNode'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import { Star } from '@/core/renderables/Star'
+import { StarInnerLayer } from '@/core/renderables/utils/StarInnerLayer'
+import { StarOuterLayer } from '@/core/renderables/utils/StarOuterLayer'
+import { FakeStar } from '@/core/renderables/utils/FakeStar'
 import { Planet } from '@/core/renderables/Planet'
 import { FakePlanet } from '@/core/renderables/utils/FakePlanet'
 import { Atmosphere } from '@/core/renderables/Atmosphere'
 import { Halo } from '@/core/renderables/Halo'
 import { Ring } from '@/core/renderables/Ring'
 import { DetailedRing } from '@/core/renderables/utils/DetailedRing'
+import { threeJS } from '@/core/graphic/ThreeJS'
 import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
-import { StarOuterLayer } from '@/core/renderables/utils/StarOuterLayer'
-import { StarInnerLayer } from '@/core/renderables/utils/StarInnerLayer'
 
 class RenderableFactory {
   public static make(actor: Actor): Object3D {
@@ -75,10 +76,10 @@ class RenderableFactory {
       const radius: number = actor.physicalObject!.getAttribute('radius')
       const fov: number = degToRad(config('camera.fov'))
 
-      return toThreeJSUnits((2 * radius * window.innerHeight) / (Math.tan(fov) * pixels))
+      return toThreeJSUnits((2 * radius * threeJS.renderer.domElement.height) / (Math.tan(fov) * pixels))
     }
 
-    lodl1.add(starInnerLayer)
+    lod.add(starInnerLayer)
     lodl1.add(starOuterLayer)
 
     node.name = actor.getAttribute('name')
@@ -104,7 +105,7 @@ class RenderableFactory {
       const radius: number = actor.physicalObject!.getAttribute('radius')
       const fov: number = degToRad(config('camera.fov'))
 
-      return toThreeJSUnits((2 * radius * window.innerHeight) / (Math.tan(fov) * pixels))
+      return toThreeJSUnits((2 * radius * threeJS.renderer.domElement.height) / (Math.tan(fov) * pixels))
     }
 
     node.name = actor.getAttribute('name')
