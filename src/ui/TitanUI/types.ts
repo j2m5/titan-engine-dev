@@ -65,7 +65,7 @@ export interface TitanDividerProps {
   offsetBottom?: number
 }
 
-export interface TitanListItemProps extends HasChildren, Customizable {
+export interface TitanListItemProps extends HasChildren, Customizable, Clickable<HTMLDivElement> {
   icon?: React.ReactNode
 }
 
