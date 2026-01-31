@@ -10,7 +10,7 @@ class FakeStar extends Sprite {
 
   private readonly scaleFactor: number
 
-  public constructor(model: Actor, scaleFactor: number = 0.05) {
+  public constructor(model: Actor, scaleFactor: number = 0.3) {
     super()
     this.model = model
     this.scaleFactor = scaleFactor
@@ -19,7 +19,7 @@ class FakeStar extends Sprite {
   }
 
   __setup(): void {
-    const map: Texture = resourceStorage.getTexture('sun_glow.png')!
+    const map: Texture = resourceStorage.getTexture('sun.png')!
     const temperature: number = this.model.physicalObject!.getAttribute('temperature') || 5700
     const rgb: Colorable = colorTemperatureToRGB(temperature)
     const color: string = rgbToHex(rgb)

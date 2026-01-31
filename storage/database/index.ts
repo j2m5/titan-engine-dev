@@ -62,49 +62,17 @@ const CommonResources: IResource[] = [
     id: 101,
     actorId: null,
     resourceType: 'diffuse',
-    path: 'lensflare1.png',
+    path: 'default.png',
     lifetime: 0,
-    colorSpace: 'srgb'
+    colorSpace: 'srgb-linear'
   },
   {
     id: 102,
     actorId: null,
     resourceType: 'diffuse',
-    path: 'lensflare2.png',
+    path: 'sun.png',
     lifetime: 0,
     colorSpace: 'srgb'
-  },
-  {
-    id: 103,
-    actorId: null,
-    resourceType: 'diffuse',
-    path: 'lensflare3.png',
-    lifetime: 0,
-    colorSpace: 'srgb'
-  },
-  {
-    id: 104,
-    actorId: null,
-    resourceType: 'diffuse',
-    path: 'lensstar.png',
-    lifetime: 0,
-    colorSpace: 'srgb'
-  },
-  {
-    id: 105,
-    actorId: null,
-    resourceType: 'diffuse',
-    path: 'star_noise.png',
-    lifetime: 0,
-    colorSpace: 'srgb-linear'
-  },
-  {
-    id: 106,
-    actorId: null,
-    resourceType: 'diffuse',
-    path: 'default.png',
-    lifetime: 0,
-    colorSpace: 'srgb-linear'
   }
 ]
 
