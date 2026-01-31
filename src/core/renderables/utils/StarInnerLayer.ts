@@ -4,13 +4,13 @@ import { Colorable } from '@/core/models/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { colorTemperatureToRGB, rgbToHex } from '@/core/materials/shaders/lib/helpers'
 
-class FakeStar extends Sprite {
+class StarInnerLayer extends Sprite {
   public model: Actor
   declare public material: SpriteMaterial
 
   private readonly scaleFactor: number
 
-  public constructor(model: Actor, scaleFactor: number = 0.03) {
+  public constructor(model: Actor, scaleFactor: number = 0.8) {
     super()
     this.model = model
     this.scaleFactor = scaleFactor
@@ -19,7 +19,7 @@ class FakeStar extends Sprite {
   }
 
   __setup(): void {
-    const map: Texture = resourceStorage.getTexture('sun_glow.png')!
+    const map: Texture = resourceStorage.getTexture('sun.png')!
     const temperature: number = this.model.physicalObject?.getAttribute('temperature', 5700)
     const rgb: Colorable = colorTemperatureToRGB(temperature)
     const color: string = rgbToHex(rgb)
@@ -27,8 +27,8 @@ class FakeStar extends Sprite {
     this.material = new SpriteMaterial({
       map,
       color,
+      opacity: 0.03,
       sizeAttenuation: false,
-      depthWrite: false,
       blending: AdditiveBlending
     })
 
@@ -36,4 +36,4 @@ class FakeStar extends Sprite {
   }
 }
 
-export { FakeStar }
+export { StarInnerLayer }

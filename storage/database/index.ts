@@ -73,6 +73,14 @@ const CommonResources: IResource[] = [
     path: 'sun.png',
     lifetime: 0,
     colorSpace: 'srgb'
+  },
+  {
+    id: 103,
+    actorId: null,
+    resourceType: 'diffuse',
+    path: 'round.png',
+    lifetime: 0,
+    colorSpace: 'srgb'
   }
 ]
 

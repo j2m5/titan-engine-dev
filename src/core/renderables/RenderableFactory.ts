@@ -17,6 +17,7 @@ import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { StarOuterLayer } from '@/core/renderables/utils/StarOuterLayer'
+import { StarInnerLayer } from '@/core/renderables/utils/StarInnerLayer'
 
 class RenderableFactory {
   public static make(actor: Actor): Object3D {
@@ -67,15 +68,17 @@ class RenderableFactory {
     const lod = new LOD()
     const lodl1 = new Star(actor)
     const lodl2 = new FakeStar(actor)
+    const starInnerLayer = new StarInnerLayer(actor)
     const starOuterLayer = new StarOuterLayer(actor)
 
     const distanceLod = (pixels: number): number => {
       const radius: number = actor.physicalObject!.getAttribute('radius')
       const fov: number = degToRad(config('camera.fov'))
 
-      return toThreeJSUnits((2 * radius * window.innerHeight) / (fov * pixels))
+      return toThreeJSUnits((2 * radius * window.innerHeight) / (Math.tan(fov) * pixels))
     }
 
+    lodl1.add(starInnerLayer)
     lodl1.add(starOuterLayer)
 
     node.name = actor.getAttribute('name')
@@ -101,7 +104,7 @@ class RenderableFactory {
       const radius: number = actor.physicalObject!.getAttribute('radius')
       const fov: number = degToRad(config('camera.fov'))
 
-      return toThreeJSUnits((2 * radius * window.innerHeight) / (fov * pixels))
+      return toThreeJSUnits((2 * radius * window.innerHeight) / (Math.tan(fov) * pixels))
     }
 
     node.name = actor.getAttribute('name')

@@ -10,24 +10,25 @@ class Star extends Mesh {
   declare public geometry: BufferGeometry
   declare public material: AbstractShaderMaterial
 
+  private readonly radius: number
+
   public constructor(model: Actor) {
     super()
     this.model = model
+    this.radius = toThreeJSUnits(this.model.physicalObject?.getAttribute('radius'))
 
     this.__setup()
   }
 
   __setup(): void {
-    const radius: number = toThreeJSUnits(this.model.physicalObject!.getAttribute('radius'))
-
-    this.geometry = new SphereGeometry(radius, 256, 256)
+    this.geometry = new SphereGeometry(this.radius, 256, 256)
     this.material = new StarMaterial(this.model)
 
     this.name = this.model.getAttribute('name') + 'Star'
     this.userData.type = 'star'
     this.userData.clickable = true
     this.rotateX(degToRad(-90))
-    this.rotateX(degToRad(-this.model.physicalObject!.getAttribute('axialTilt', 0)))
+    this.rotateX(degToRad(-this.model.physicalObject?.getAttribute('axialTilt', 0)))
   }
 }
 
