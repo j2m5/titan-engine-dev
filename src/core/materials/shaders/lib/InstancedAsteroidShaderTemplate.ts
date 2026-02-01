@@ -6,7 +6,9 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
   uniforms: {
     lightPosition: new Uniform(new Vector3()),
     diffuseMap: new Uniform(null),
+    bumpMap: new Uniform(null),
     nightMap: new Uniform(null),
+    bumpScale: new Uniform(0),
     minDistance: new Uniform(toThreeJSUnits(100)),
     maxDistance: new Uniform(toThreeJSUnits(5000))
   },
@@ -43,7 +45,9 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
     uniform vec3 lightPosition;
     uniform sampler2D diffuseMap;
+    uniform sampler2D bumpMap;
     uniform sampler2D nightMap;
+    uniform float bumpScale;
     uniform float minDistance;
     uniform float maxDistance;
 
@@ -52,9 +56,14 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
 
+    #include <bumpFunctions>
+
     void main() {
       ${ShaderChunk['logdepthbuf_fragment']}
       vec3 normal = normalize(vNormal);
+
+      float faceDirection = gl_FrontFacing ? 1.0 : -1.0;
+      normal = perturbNormalArb(-vViewPosition, normal, dHdxy_fwd(), faceDirection);
 
       vec3 lightDirection = normalize(vViewLightDirection);
       float lightIntensity = max(dot(normal, lightDirection), 0.0);

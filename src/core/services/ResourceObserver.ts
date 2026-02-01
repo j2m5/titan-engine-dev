@@ -200,6 +200,7 @@ class ResourceObserver {
       'star.png',
       'lensstar.png',
       'asteroid.jpg',
+      'asteroid_bump.jpg',
       'night.jpg',
       'default.png',
       'sun.png',
