@@ -19,6 +19,7 @@ class Application {
     await this.resourceObserver.loadPrimaryTextures()
 
     threeJS.scene.background = resourceStorage.getTexture('cubemaps-scene-main')!
+    console.log(threeJS.scene)
 
     this.engine.start()
   }

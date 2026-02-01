@@ -30,9 +30,11 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       gl_Position = projectionMatrix * mvPosition;
 
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
+      mat3 instanceNormalMatrix = mat3(instanceMatrix);
+      vec3 transformedNormal = normalize(instanceNormalMatrix * normal);
 
       vUv = uv;
-      vNormal = normalize(normalMatrix * normal);
+      vNormal = normalize(normalMatrix * transformedNormal);
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
 
