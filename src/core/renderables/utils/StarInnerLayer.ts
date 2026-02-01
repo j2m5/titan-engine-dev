@@ -27,8 +27,9 @@ class StarInnerLayer extends Sprite {
     this.material = new SpriteMaterial({
       map,
       color,
-      opacity: 0.03,
+      depthWrite: false,
       sizeAttenuation: false,
+      opacity: 0.03,
       blending: AdditiveBlending
     })
 
