@@ -31,7 +31,7 @@ export const AtmosphereShaderTemplate: ShaderProps = {
       vec3 worldLightDirection = normalize(worldPosition.xyz - lightPosition);
 
       vPosition = position;
-      vLocalLightDirection = mat3(modelMatrix) * worldLightDirection;
+      vLocalLightDirection = (inverse(modelMatrix) * vec4(worldLightDirection, 0.0)).xyz;
       vLocalCameraPosition = (inverse(modelMatrix) * vec4(cameraPosition, 1.0)).xyz;
       vViewPosition = -mvPosition.xyz;
       ${ShaderChunk['logdepthbuf_vertex']}
