@@ -56,11 +56,6 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       ${ShaderChunk['logdepthbuf_fragment']}
       vec3 normal = normalize(vNormal);
 
-      float dist = length(vViewPosition);
-      float fade = 1.0 - smoothstep(minDistance, maxDistance, dist);
-
-      if (fade <= 0.0) discard;
-
       vec3 lightDirection = normalize(vViewLightDirection);
       float lightIntensity = max(dot(normal, lightDirection), 0.0);
 
@@ -69,6 +64,11 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
       vec3 day = dayColor;
       vec3 night = nightColor * nightColor;
+
+      float dist = length(vViewPosition);
+      float fade = 1.0 - smoothstep(minDistance, maxDistance, dist);
+
+      if (fade <= 0.0) discard;
 
       vec3 finalColor = mix(night, day, lightIntensity);
 
