@@ -1,8 +1,9 @@
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { HalfFloatType } from 'three'
+import { HalfFloatType, Vector2 } from 'three'
 import {
   BlendFunction,
   BloomEffect,
+  ChromaticAberrationEffect,
   EffectComposer,
   EffectPass,
   RenderPass,
@@ -38,6 +39,13 @@ class Postprocessing {
 
     const lensFlareEffect: LensFlareEffect = new LensFlareEffect({ intensity: 0.01 })
 
+    const chromaticAberrationEffect: ChromaticAberrationEffect = new ChromaticAberrationEffect({
+      blendFunction: BlendFunction.SCREEN,
+      offset: new Vector2(0.0005, 0.0005),
+      radialModulation: true,
+      modulationOffset: 0.4
+    })
+
     const toneMappingEffect: ToneMappingEffect = new ToneMappingEffect({
       mode: ToneMappingMode.ACES_FILMIC,
       blendFunction: BlendFunction.DST,
@@ -51,8 +59,11 @@ class Postprocessing {
 
     const effectPass: EffectPass = new EffectPass(threeJS.camera, bloomEffect, lensFlareEffect, toneMappingEffect)
 
+    const effectPass2: EffectPass = new EffectPass(threeJS.camera, chromaticAberrationEffect)
+
     this.composer.addPass(renderPass)
     this.composer.addPass(effectPass)
+    this.composer.addPass(effectPass2)
   }
 
   public render(delta?: number): void {

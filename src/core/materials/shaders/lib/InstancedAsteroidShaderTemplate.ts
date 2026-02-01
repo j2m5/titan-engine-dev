@@ -18,9 +18,8 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
     varying vec2 vUv;
     varying vec3 vNormal;
-    varying vec3 vPosition;
-    varying vec3 vPositionW;
-    varying vec3 vLocalCameraPosition;
+    varying vec3 vViewLightDirection;
+    varying vec3 vViewPosition;
 
     void main() {
       vec4 worldPosition = instanceMatrix * vec4(position, 1.0);
@@ -28,11 +27,13 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
       gl_Position = projectionMatrix * mvPosition;
 
+      vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
+
       vUv = uv;
-      vNormal = (instanceMatrix * vec4(normal, 0.0)).xyz;
-      vPosition = position;
-      vPositionW = worldPosition.xyz;
-      vLocalCameraPosition = (inverse(modelMatrix * instanceMatrix) * vec4(cameraPosition, 1.0)).xyz;
+      vNormal = normalize(normalMatrix * normal);
+      vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
+      vViewPosition = -mvPosition.xyz;
+
       ${ShaderChunk['logdepthbuf_vertex']}
     }
   `,
@@ -48,20 +49,20 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
     varying vec2 vUv;
     varying vec3 vNormal;
-    varying vec3 vPosition;
-    varying vec3 vPositionW;
-    varying vec3 vLightPosition;
-    varying vec3 vLocalCameraPosition;
+    varying vec3 vViewLightDirection;
+    varying vec3 vViewPosition;
 
     void main() {
       ${ShaderChunk['logdepthbuf_fragment']}
       vec3 normal = normalize(vNormal);
 
-      vec3 lightDirection = normalize(vPositionW - lightPosition);
-      float lightIntensity = max(dot(normal, lightDirection), 0.0);
+      float dist = length(vViewPosition);
+      float fade = 1.0 - smoothstep(minDistance, maxDistance, dist);
 
-      float distance = length(vLocalCameraPosition - vPosition);
-      float transparencyFactor = 1.0 - smoothstep(minDistance, maxDistance, distance);
+      if (fade <= 0.0) discard;
+
+      vec3 lightDirection = normalize(vViewLightDirection);
+      float lightIntensity = max(dot(normal, lightDirection), 0.0);
 
       vec3 dayColor = texture2D(diffuseMap, vUv).rgb;
       vec3 nightColor = texture2D(nightMap, vUv).rgb;
@@ -70,8 +71,6 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       vec3 night = nightColor * nightColor;
 
       vec3 finalColor = mix(night, day, lightIntensity);
-
-      if (transparencyFactor == 0.0) discard;
 
       gl_FragColor = vec4(finalColor, 1.0);
 
