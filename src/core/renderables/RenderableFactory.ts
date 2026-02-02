@@ -20,6 +20,7 @@ import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { AsteroidCluster } from '@/core/renderables/utils/AsteroidCluster'
+import { DetailedRingV2 } from '@/core/renderables/utils/DetailedRingV2'
 
 class RenderableFactory {
   public static make(actor: Actor): Object3D {
@@ -72,7 +73,7 @@ class RenderableFactory {
     const lodl2 = new FakeStar(actor)
     const starInnerLayer = new StarInnerLayer(actor)
     const starOuterLayer = new StarOuterLayer(actor)
-    const test = new AsteroidCluster(1500)
+    const test = new AsteroidCluster(1500, toThreeJSUnits(500), 0.25)
     const box = new BoxHelper(test)
     lodl1.add(test)
     lodl1.add(box)
@@ -139,7 +140,8 @@ class RenderableFactory {
     const lod = new LOD()
     const base = new Ring(actor)
     const detailed = new Ring(actor)
-    detailed.add(new DetailedRing(actor))
+    //detailed.add(new DetailedRing(actor))
+    detailed.add(new DetailedRingV2(actor))
 
     const distanceLod = toThreeJSUnits(actor.renderingObject!.getAttribute('data').outerRadius * 2)
 

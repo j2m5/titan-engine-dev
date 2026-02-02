@@ -1,13 +1,18 @@
-import { Euler, IcosahedronGeometry, InstancedMesh, Matrix4, Quaternion, Vector3 } from 'three'
+import { AxesHelper, BoxHelper, Euler, IcosahedronGeometry, InstancedMesh, Matrix4, Quaternion, Vector3 } from 'three'
 import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { threeJS } from '@/core/graphic/ThreeJS'
 
 class AsteroidCluster extends InstancedMesh {
   public count: number
+  public radius: number
+  public thickness: number
 
-  public constructor(count: number) {
-    super(new IcosahedronGeometry(toThreeJSUnits(5)), new InstancedAsteroidMaterial(), count)
+  public constructor(count: number, radius: number, thickness: number) {
+    super(new IcosahedronGeometry(toThreeJSUnits(20)), new InstancedAsteroidMaterial(), count)
     this.count = count
+    this.radius = radius
+    this.thickness = thickness
 
     this.__setup()
   }
@@ -19,13 +24,10 @@ class AsteroidCluster extends InstancedMesh {
     const scale = new Vector3()
 
     for (let i = 0; i < this.count; i++) {
-      // позиция
-      position.copy(this.randomPointInCell(toThreeJSUnits(500), 0.25))
+      position.copy(this.randomPointInCell(this.radius, this.thickness))
 
-      // случайный поворот
       rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI)
 
-      // лёгкий разброс масштаба
       const s = 0.6 + Math.random() * 0.8
       scale.set(s, s, s)
 
@@ -34,11 +36,22 @@ class AsteroidCluster extends InstancedMesh {
     }
 
     this.instanceMatrix.needsUpdate = true
-    this.position.set(0, 0, toThreeJSUnits(700000))
+    //this.position.set(0, 0, toThreeJSUnits(700000))
+    console.log('created')
+    const box = new BoxHelper(this)
+    const axes = new AxesHelper(200)
+    //this.add(axes)
+    //this.add(box)
+    //console.log(this)
+  }
+
+  public updateObject(delta?: number): void {
+    const distance = this.position.distanceTo(threeJS.camera.position)
+
+    //this.visible = distance < toThreeJSUnits(5000)
   }
 
   private randomPointInSphere(radius: number): Vector3 {
-    // направление
     const u = Math.random()
     const v = Math.random()
 
@@ -49,7 +62,6 @@ class AsteroidCluster extends InstancedMesh {
 
     const dir = new Vector3(sinPhi * Math.cos(theta), sinPhi * Math.sin(theta), Math.cos(phi))
 
-    // равномерно по объёму
     const r = radius * Math.cbrt(Math.random())
 
     return dir.multiplyScalar(r)
@@ -58,7 +70,6 @@ class AsteroidCluster extends InstancedMesh {
   private randomPointInCell(radius: number, height: number): Vector3 {
     const p = this.randomPointInSphere(radius)
 
-    // сжимаем по Y → диск, а не шар
     p.y *= height
 
     return p
