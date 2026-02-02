@@ -1,7 +1,6 @@
-import { AxesHelper, BoxHelper, Euler, IcosahedronGeometry, InstancedMesh, Matrix4, Quaternion, Vector3 } from 'three'
+import { Euler, IcosahedronGeometry, InstancedMesh, Matrix4, Quaternion, Vector3 } from 'three'
 import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
-import { threeJS } from '@/core/graphic/ThreeJS'
 
 class AsteroidCluster extends InstancedMesh {
   public count: number
@@ -36,19 +35,6 @@ class AsteroidCluster extends InstancedMesh {
     }
 
     this.instanceMatrix.needsUpdate = true
-    //this.position.set(0, 0, toThreeJSUnits(700000))
-    console.log('created')
-    const box = new BoxHelper(this)
-    const axes = new AxesHelper(200)
-    //this.add(axes)
-    //this.add(box)
-    //console.log(this)
-  }
-
-  public updateObject(delta?: number): void {
-    const distance = this.position.distanceTo(threeJS.camera.position)
-
-    //this.visible = distance < toThreeJSUnits(5000)
   }
 
   private randomPointInSphere(radius: number): Vector3 {
