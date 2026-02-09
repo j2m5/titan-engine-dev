@@ -9,10 +9,8 @@ import { InstancePool, LODLevel, Allocation } from './InstancePool'
 interface LODThresholds {
   /** Максимальное расстояние для L0 (реальная геометрия) */
   l0MaxDistance: number
-  /** Максимальное расстояние для L1 (billboards) */
+  /** Максимальное расстояние для L1 (billboards) — дальше ничего не грузим */
   l1MaxDistance: number
-  /** Максимальное расстояние для L2 (points) — дальше ничего не грузим */
-  l2MaxDistance: number
 }
 
 /**
@@ -36,7 +34,7 @@ interface SectorState {
  *
  * Каждый кадр:
  * 1. Определяет какие секторы должны быть видны (на основе позиции камеры + frustum)
- * 2. Рассчитывает LOD-уровень для каждого
+ * 2. Рассчитывает LOD-уровень для каждого (L0 Geometry / L1 Billboard)
  * 3. Активирует новые секторы (с бюджетом — не более N за кадр)
  * 4. Деактивирует ушедшие за пределы видимости
  * 5. Обрабатывает fade-переходы
@@ -60,8 +58,7 @@ class SectorManager {
   /** Множитель плотности instances per sector для каждого LOD */
   private readonly lodDensityMultiplier = {
     [LODLevel.Geometry]: 1.0,
-    [LODLevel.Billboard]: 1.5,
-    [LODLevel.PointCloud]: 2.0
+    [LODLevel.Billboard]: 1.5
   }
 
   // Reusable objects
@@ -81,7 +78,6 @@ class SectorManager {
    *
    * @param cameraAngle — угол камеры в полярных координатах (radians) в local space кольца
    * @param cameraRadius — расстояние камеры от центра кольца в local space
-   * @param cameraWorldPos — мировая позиция камеры (для frustum)
    * @param viewProjectionMatrix — camera.projectionMatrix * camera.matrixWorldInverse
    * @param localToWorldMatrix — матрица трансформации системы (local → world)
    * @param delta — время с прошлого кадра (секунды)
@@ -89,7 +85,6 @@ class SectorManager {
   public update(
     cameraAngle: number,
     cameraRadius: number,
-    cameraWorldPos: Vector3,
     viewProjectionMatrix: Matrix4,
     localToWorldMatrix: Matrix4,
     delta: number
@@ -98,7 +93,7 @@ class SectorManager {
     this._frustum.setFromProjectionMatrix(viewProjectionMatrix)
 
     // 2. Получить кандидатов из сетки
-    const maxRange = this.thresholds.l2MaxDistance
+    const maxRange = this.thresholds.l1MaxDistance
     const candidates = this.grid.getSectorsInRange(cameraAngle, cameraRadius, maxRange)
 
     // 3. Определить LOD и отфильтровать по frustum
@@ -118,10 +113,8 @@ class SectorManager {
         lod = LODLevel.Geometry
       } else if (dist <= this.thresholds.l1MaxDistance) {
         lod = LODLevel.Billboard
-      } else if (dist <= this.thresholds.l2MaxDistance) {
-        lod = LODLevel.PointCloud
       } else {
-        continue // за пределами видимости
+        continue
       }
 
       // Frustum culling
@@ -130,7 +123,7 @@ class SectorManager {
       this._sphere.set(this._worldCenter, info.boundingRadius)
 
       if (!this._frustum.intersectsSphere(this._sphere)) {
-        continue // за пределами frustum
+        continue
       }
 
       desiredSectors.set(info.key, { info, lod })
@@ -147,7 +140,6 @@ class SectorManager {
       } else if (existing.lodLevel !== desired.lod && !existing.pendingRemoval) {
         toChangeLOD.push({ state: existing, newLOD: desired.lod, info: desired.info })
       } else if (existing.pendingRemoval) {
-        // Сектор был на удалении, но снова нужен — отменить
         existing.pendingRemoval = false
         existing.fadeTarget = 1.0
       }
@@ -162,7 +154,6 @@ class SectorManager {
     }
 
     // 5. Активация новых секторов (с бюджетом)
-    // Сортировать по расстоянию — ближние приоритетнее
     toActivate.sort((a, b) => {
       const distA = (a.info.centerX - camX) ** 2 + (a.info.centerZ - camZ) ** 2
       const distB = (b.info.centerX - camX) ** 2 + (b.info.centerZ - camZ) ** 2
@@ -192,23 +183,14 @@ class SectorManager {
   private activateSector(info: SectorInfo, lodLevel: LODLevel): boolean {
     const instanceCount = Math.max(1, Math.round(info.instanceCount * this.lodDensityMultiplier[lodLevel]))
 
-    // Попытка аллокации
     const allocation = this.pool.allocate(lodLevel, instanceCount)
     if (!allocation) {
-      // Нет места — пропускаем
       return false
     }
 
-    // Генерация данных
-    if (lodLevel === LODLevel.PointCloud) {
-      const data = this.generator.generatePositions(info.seed, instanceCount, info.bounds)
-      this.pool.writePoints(allocation.offset, data)
-    } else {
-      const data = this.generator.generateMatrices(info.seed, instanceCount, info.bounds)
-      this.pool.writeMatrices(lodLevel, allocation.offset, data)
-    }
+    const data = this.generator.generateMatrices(info.seed, instanceCount, info.bounds)
+    this.pool.writeMatrices(lodLevel, allocation.offset, data)
 
-    // Создать состояние
     const state: SectorState = {
       key: info.key,
       info,
@@ -225,34 +207,23 @@ class SectorManager {
 
   /**
    * Переключить сектор на другой LOD-уровень.
-   * Стратегия: деактивировать старый, активировать новый.
    */
   private changeSectorLOD(state: SectorState, newLOD: LODLevel, info: SectorInfo): void {
-    // Освободить старую аллокацию
     this.pool.release(state.allocation)
 
-    // Аллоцировать новую
     const instanceCount = Math.max(1, Math.round(info.instanceCount * this.lodDensityMultiplier[newLOD]))
     const allocation = this.pool.allocate(newLOD, instanceCount)
 
     if (!allocation) {
-      // Нет места в новом LOD — удалить сектор
       this.activeSectors.delete(state.key)
       return
     }
 
-    // Генерация данных для нового LOD
-    if (newLOD === LODLevel.PointCloud) {
-      const data = this.generator.generatePositions(info.seed, instanceCount, info.bounds)
-      this.pool.writePoints(allocation.offset, data)
-    } else {
-      const data = this.generator.generateMatrices(info.seed, instanceCount, info.bounds)
-      this.pool.writeMatrices(newLOD, allocation.offset, data)
-    }
+    const data = this.generator.generateMatrices(info.seed, instanceCount, info.bounds)
+    this.pool.writeMatrices(newLOD, allocation.offset, data)
 
     state.lodLevel = newLOD
     state.allocation = allocation
-    // При смене LOD — быстрый crossfade
     state.fade = 0.3
     state.fadeTarget = 1.0
   }
@@ -273,7 +244,6 @@ class SectorManager {
         }
       }
 
-      // Сектор полностью погас → удалить
       if (state.pendingRemoval && state.fade <= 0.001) {
         this.pool.release(state.allocation)
         toRemove.push(key)
@@ -286,7 +256,7 @@ class SectorManager {
   }
 
   /**
-   * Принудительно деактивировать все секторы (например, когда LOD переключается на базовое кольцо).
+   * Принудительно деактивировать все секторы.
    */
   public deactivateAll(): void {
     for (const [, state] of this.activeSectors) {
@@ -307,12 +277,11 @@ class SectorManager {
    */
   public getDebugInfo(): {
     activeSectors: number
-    byLod: { l0: number; l1: number; l2: number }
+    byLod: { l0: number; l1: number }
     pendingRemoval: number
   } {
     let l0 = 0,
       l1 = 0,
-      l2 = 0,
       pending = 0
     for (const [, state] of this.activeSectors) {
       switch (state.lodLevel) {
@@ -322,13 +291,10 @@ class SectorManager {
         case LODLevel.Billboard:
           l1++
           break
-        case LODLevel.PointCloud:
-          l2++
-          break
       }
       if (state.pendingRemoval) pending++
     }
-    return { activeSectors: this.activeSectors.size, byLod: { l0, l1, l2 }, pendingRemoval: pending }
+    return { activeSectors: this.activeSectors.size, byLod: { l0, l1 }, pendingRemoval: pending }
   }
 }
 

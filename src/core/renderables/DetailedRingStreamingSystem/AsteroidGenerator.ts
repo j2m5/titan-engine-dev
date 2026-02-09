@@ -60,8 +60,8 @@ class AsteroidGenerator {
       const ry = rng.next() * Math.PI * 2
       const rz = rng.next() * Math.PI * 2
 
-      // Масштаб: равномерный с небольшим bias к меньшим размерам
-      const t = rng.next() * rng.next() // квадратичное распределение — больше мелких
+      // Масштаб: квадратичное распределение — больше мелких
+      const t = rng.next() * rng.next()
       const s = minScale + t * (maxScale - minScale)
 
       // Compose матрицы inline (избегаем создание Three.js объектов для скорости)
@@ -72,37 +72,9 @@ class AsteroidGenerator {
   }
 
   /**
-   * Генерирует только позиции и размеры (для Points / L2).
-   * @returns Float32Array длиной count * 4 (x, y, z, size)
-   */
-  public generatePositions(seed: number, count: number, bounds: SectorBounds): Float32Array {
-    const rng = new SeededRandom(seed)
-    const data = new Float32Array(count * 4)
-    const { thickness, minScale, maxScale } = this.config
-
-    const r1Sq = bounds.minRadius * bounds.minRadius
-    const r2Sq = bounds.maxRadius * bounds.maxRadius
-    const halfThickness = thickness * 0.5
-
-    for (let i = 0; i < count; i++) {
-      const r = Math.sqrt(rng.range(r1Sq, r2Sq))
-      const theta = rng.range(bounds.minAngle, bounds.maxAngle)
-
-      const offset = i * 4
-      data[offset] = Math.cos(theta) * r
-      data[offset + 1] = rng.range(-halfThickness, halfThickness)
-      data[offset + 2] = Math.sin(theta) * r
-      // Для Points — размер пропорционален масштабу
-      const t = rng.next() * rng.next()
-      data[offset + 3] = minScale + t * (maxScale - minScale)
-    }
-
-    return data
-  }
-
-  /**
    * Записывает матрицу compose(position, eulerRotation, uniformScale) в Float32Array.
    * Вычисление rotation matrix из Euler angles (XYZ order) inline.
+   * Column-major order (как Three.js Matrix4).
    */
   private composeMatrix(
     out: Float32Array,
@@ -122,8 +94,6 @@ class AsteroidGenerator {
     const cz = Math.cos(rz),
       sz = Math.sin(rz)
 
-    // Rotation matrix (XYZ Euler) * uniform scale
-    // Column-major order (как Three.js Matrix4)
     out[offset] = cy * cz * scale
     out[offset + 1] = cy * sz * scale
     out[offset + 2] = -sy * scale

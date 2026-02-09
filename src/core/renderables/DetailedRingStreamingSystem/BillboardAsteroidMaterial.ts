@@ -1,35 +1,41 @@
-import { ShaderMaterial, Color, ShaderChunk } from 'three'
+import { ShaderMaterial, Color, ShaderChunk, Vector3, DoubleSide } from 'three'
 
 /**
  * BillboardAsteroidMaterial — шейдерный материал для L1 billboard-импосторов.
  *
  * Используется с InstancedMesh + PlaneGeometry. Каждый экземпляр автоматически
- * поворачивается к камере в vertex shader. Из instance matrix извлекаются
- * позиция и масштаб, ориентация игнорируется (billboard всегда лицом к камере).
+ * поворачивается к камере в vertex shader.
  *
- * Поддерживает:
- * - Логарифмический depth buffer
- * - Базовое освещение (dot(normal, lightDir))
- * - Fade-in/out через uniform для плавных LOD-переходов
- * - Distance-based alpha falloff
+ * Ключевые отличия от первой версии:
+ * 1. Sphere impostor: UV-координаты маппятся на сферическую нормаль,
+ *    что даёт правильное полусферическое освещение и круглую форму
+ * 2. Процедурные неровные края — billboard выглядит как камень, не круг
+ * 3. Освещение вычисляется от uLightPosition (позиция звезды), не хардкод
+ * 4. Правильная day/night сторона: тёмная сторона астероида = сторона от звезды
  */
 class BillboardAsteroidMaterial extends ShaderMaterial {
   public constructor() {
     super({
       uniforms: {
         uColor: { value: new Color(0.55, 0.5, 0.45) },
-        uLightDir: { value: [0.5, 1.0, 0.3] },
+        /** Позиция источника света в world space (по умолчанию — центр системы) */
+        uLightPosition: { value: new Vector3(0, 0, 0) },
         uFade: { value: 1.0 },
-        uMaxDistance: { value: 100.0 }
+        uMaxDistance: { value: 100.0 },
+        /** Ambient свет — минимальная освещённость тёмной стороны */
+        uAmbient: { value: 0.08 }
       },
       vertexShader: /* glsl */ `
         ${ShaderChunk.common}
         ${ShaderChunk.logdepthbuf_pars_vertex}
 
         uniform float uMaxDistance;
+        uniform vec3 uLightPosition;
 
-        varying float vLighting;
+        varying vec2 vUv;
         varying float vDistanceFade;
+        varying vec3 vLightDirView;
+        varying float vInstanceSeed;
 
         void main() {
           // Извлечь позицию и масштаб из instance matrix
@@ -55,10 +61,19 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
 
           gl_Position = projectionMatrix * mvPosition;
 
-          // Простое освещение по нормали billboard (приблизительно)
-          vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3));
-          vec3 worldNormal = normalize(-mvInstancePos.xyz); // нормаль к камере
-          vLighting = max(0.35, dot(worldNormal, lightDir));
+          // UV для sphere impostor (PlaneGeometry UV идёт от 0 до 1)
+          vUv = uv;
+
+          // Per-instance seed для уникальной формы каждого billboard
+          vInstanceSeed = fract(sin(dot(instancePos.xz, vec2(12.9898, 78.233))) * 43758.5453);
+
+          // Направление к свету: от world position экземпляра к источнику света
+          // Трансформируем в world space через modelMatrix, затем вычисляем направление
+          vec4 worldInstancePos = modelMatrix * vec4(instancePos, 1.0);
+          vec3 worldLightDir = normalize(uLightPosition - worldInstancePos.xyz);
+
+          // Переводим направление света в view space для согласования с impostor normal
+          vLightDirView = normalize((viewMatrix * vec4(worldLightDir, 0.0)).xyz);
 
           // Затухание по расстоянию
           float dist = length(mvInstancePos.xyz);
@@ -73,29 +88,67 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
 
         uniform vec3 uColor;
         uniform float uFade;
+        uniform float uAmbient;
 
-        varying float vLighting;
+        varying vec2 vUv;
         varying float vDistanceFade;
+        varying vec3 vLightDirView;
+        varying float vInstanceSeed;
+
+        // Простой хеш для процедурного шума
+        float hash(vec2 p) {
+          vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+          p3 += dot(p3, p3.yzx + 33.33);
+          return fract((p3.x + p3.y) * p3.z);
+        }
 
         void main() {
           ${ShaderChunk.logdepthbuf_fragment}
 
-          // Мягкая круглая форма (вместо квадратного quad)
-          vec2 uv = gl_PointCoord;
-          // Для InstancedMesh используем local UV через varying, не gl_PointCoord
-          // Но PlaneGeometry UV работает напрямую
-          // Если нужно — можно переключить на varying vUv
+          // Центрированные UV: (0,0) = центр, (-1,1) = края
+          vec2 centered = vUv * 2.0 - 1.0;
+          float distFromCenter = length(centered);
 
-          float alpha = uFade * vDistanceFade;
+          // --- Sphere impostor normal ---
+          // Трактуем billboard как полусферу: z = sqrt(1 - x² - y²)
+          float r2 = dot(centered, centered);
+          if (r2 > 1.0) discard; // За пределами сферы
+
+          // Нормаль полусферы в view space (billboard смотрит на камеру = +Z)
+          vec3 normal = vec3(centered, sqrt(1.0 - r2));
+
+          // --- Процедурные неровные края ---
+          // Шум по углу + per-instance seed для уникального силуэта каждого billboard
+          float angle = atan(centered.y, centered.x);
+          float seed = vInstanceSeed * 100.0;
+          float edgeNoise = hash(vec2(angle * 3.0 + seed, 0.5 + seed)) * 0.18 +
+                            hash(vec2(angle * 7.0 + seed, 1.3 + seed)) * 0.10;
+          float edgeThreshold = 0.82 - edgeNoise;
+
+          if (distFromCenter > edgeThreshold) discard;
+
+          // Мягкий край (antialiasing)
+          float edgeAlpha = 1.0 - smoothstep(edgeThreshold - 0.08, edgeThreshold, distFromCenter);
+
+          // --- Освещение (Lambertian diffuse) ---
+          float NdotL = dot(normal, vLightDirView);
+          // Wrap lighting: мягкий переход свет→тень
+          float diffuse = NdotL * 0.5 + 0.5;
+          diffuse = diffuse * diffuse; // Квадратичный falloff для более контрастных теней
+          float lighting = uAmbient + (0.3 - uAmbient) * diffuse;
+
+          // --- Итоговый цвет ---
+          float alpha = edgeAlpha * uFade * vDistanceFade;
           if (alpha < 0.01) discard;
 
-          vec3 color = uColor * vLighting;
+          vec3 color = uColor * lighting;
           gl_FragColor = vec4(color, alpha);
         }
       `,
       transparent: true,
       depthWrite: true,
-      depthTest: true
+      depthTest: true,
+      side: DoubleSide
     })
   }
 }

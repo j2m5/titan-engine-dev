@@ -50,8 +50,8 @@ const TatooRingsRenderingObjects: IRenderingObject[] = [
     actorId: 70,
     data: {
       innerRadius: 74500,
-      outerRadius: 140220,
-      alphaTest: 0.1,
+      outerRadius: 120220,
+      alphaTest: 0.01,
       countParticles: 250000
     }
   }

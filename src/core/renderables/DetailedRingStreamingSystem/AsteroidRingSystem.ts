@@ -34,34 +34,28 @@ interface AsteroidRingConfig {
   maxL0Instances: number
   /** Макс. экземпляров для L1 (billboard) буфера */
   maxL1Instances: number
-  /** Макс. экземпляров для L2 (points) буфера */
-  maxL2Instances: number
   /** LOD-пороги в реальных км */
   lodThresholdsKm: {
     l0: number
     l1: number
-    l2: number
   }
 }
 
 /**
  * Конфигурация по умолчанию (рассчитана на кольцо типа Сатурна).
- * Все размеры в реальных км — конвертируются внутри класса.
  */
 const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
-  thicknessKm: 0.5,
+  thicknessKm: 400,
   cellSizeKm: 2000,
   densityPerUnit: 500,
-  asteroidSizeKm: 15,
-  minScale: 0.4,
+  asteroidSizeKm: 10,
+  minScale: 0.3,
   maxScale: 1.6,
-  maxL0Instances: 30000,
-  maxL1Instances: 80000,
-  maxL2Instances: 120000,
+  maxL0Instances: 50000,
+  maxL1Instances: 100000,
   lodThresholdsKm: {
     l0: 3000,
-    l1: 12000,
-    l2: 40000
+    l1: 12000
   }
 }
 
@@ -70,17 +64,11 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
  *
  * Заменяет DetailedRingV2. Добавляется как child к Ring mesh (тот же паттерн).
  *
- * Принцип работы:
- * - Кольцо разбито на полярную сетку секторов (SectorGrid)
- * - Каждый кадр определяются видимые секторы на основе позиции камеры и frustum
- * - Для каждого сектора выбирается LOD-уровень (Geometry / Billboard / Points)
- * - Секторы динамически активируются/деактивируются (SectorManager)
- * - Все экземпляры рендерятся через 3 shared буфера (InstancePool) — минимум draw calls
- * - Генерация данных детерминирована через seeded PRNG (AsteroidGenerator)
- *
- * Иерархия трансформ:
- * Ring mesh (rotX +90°) → AsteroidRingSystem (rotX +90°)
- * Двойной поворот = 180° по X, в результате кольцо корректно лежит в XZ-плоскости родителя.
+ * Состоит из:
+ * - SectorGrid: полярная сетка секторов
+ * - SectorManager: lifecycle секторов, LOD-решения
+ * - InstancePool: GPU-буферы (L0 geometry + L1 billboard)
+ * - AsteroidGenerator: детерминированная процедурная генерация
  */
 class AsteroidRingSystem extends Group {
   public model: Actor
@@ -92,7 +80,7 @@ class AsteroidRingSystem extends Group {
 
   private readonly config: AsteroidRingConfig
 
-  // Reusable objects для update
+  // Reusable objects
   private readonly _localCamPos = new Vector3()
   private readonly _worldPos = new Vector3()
   private readonly _viewProjMatrix = new Matrix4()
@@ -100,14 +88,10 @@ class AsteroidRingSystem extends Group {
   /** Флаг: система была деактивирована (parent invisible) */
   private wasDeactivated = false
 
-  /** Счётчик кадров для throttling дальних обновлений */
-  private frameCount = 0
-
   public constructor(model: Actor, configOverrides: Partial<AsteroidRingConfig> = {}) {
     super()
     this.model = model
 
-    // Сформировать конфигурацию
     const renderData = model.renderingObject?.getAttribute('data')
     this.config = {
       ...DEFAULT_CONFIG,
@@ -132,7 +116,6 @@ class AsteroidRingSystem extends Group {
 
     const l0MaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l0)
     const l1MaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l1)
-    const l2MaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l2)
 
     // --- SectorGrid ---
     const gridConfig: SectorGridConfig = {
@@ -155,29 +138,24 @@ class AsteroidRingSystem extends Group {
     // --- InstancePool ---
     const l0PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0Instances }
     const l1PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL1Instances }
-    const l2PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL2Instances }
-    this.pool = new InstancePool(l0PoolConfig, l1PoolConfig, l2PoolConfig, asteroidSize)
+    this.pool = new InstancePool(l0PoolConfig, l1PoolConfig, asteroidSize)
 
-    // Добавить рендер-объекты как children
+    // Добавить рендер-объекты (L0 + L1)
     for (const obj of this.pool.getRenderObjects()) {
       this.add(obj)
     }
 
-    // Установить maxDistance для материалов
+    // Установить maxDistance для billboard материала
     this.pool.billboardMaterial.uniforms.uMaxDistance.value = l1MaxDist
-    this.pool.pointsMaterial.uniforms.uMaxDistance.value = l2MaxDist
-    this.pool.pointsMaterial.uniforms.uPixelRatio.value = threeJS.renderer?.getPixelRatio() ?? 1
 
     // --- SectorManager ---
     const thresholds: LODThresholds = {
       l0MaxDistance: l0MaxDist,
-      l1MaxDistance: l1MaxDist,
-      l2MaxDistance: l2MaxDist
+      l1MaxDistance: l1MaxDist
     }
     this.manager = new SectorManager(this.sectorGrid, this.generator, this.pool, thresholds)
 
     // --- Поворот ---
-    // Воспроизводим паттерн DetailedRingV2: rotateX(90°)
     this.rotateX(degToRad(90))
 
     this.name = 'AsteroidRingSystem'
@@ -189,9 +167,7 @@ class AsteroidRingSystem extends Group {
   public updateObject(delta?: number): void {
     const dt = delta ?? 0.016
 
-    this.frameCount++
-
-    // Проверить видимость parent'а (LOD может скрыть detailed ring)
+    // Проверить видимость parent'а
     if (!this.isEffectivelyVisible()) {
       if (!this.wasDeactivated) {
         this.manager.deactivateAll()
@@ -227,10 +203,19 @@ class AsteroidRingSystem extends Group {
     const localToWorld = this.matrixWorld
 
     // Обновить менеджер секторов
-    this.manager.update(cameraAngle, cameraRadius, this._worldPos, this._viewProjMatrix, localToWorld, dt)
+    this.manager.update(cameraAngle, cameraRadius, this._viewProjMatrix, localToWorld, dt)
 
     // Коммит изменений в GPU
     this.pool.commitUpdates()
+  }
+
+  /**
+   * Установить позицию источника света (звезды) в world space.
+   * Влияет на освещение billboard-импосторов (L1).
+   * По умолчанию [0, 0, 0] — центр системы.
+   */
+  public setLightPosition(x: number, y: number, z: number): void {
+    this.pool.billboardMaterial.uniforms.uLightPosition.value.set(x, y, z)
   }
 
   /**
@@ -251,12 +236,13 @@ class AsteroidRingSystem extends Group {
   public getDebugInfo(): {
     totalSectors: number
     activeSectors: number
-    sectorsByLod: { l0: number; l1: number; l2: number }
-    instances: { l0: number; l1: number; l2: number; total: number }
+    sectorsByLod: { l0: number; l1: number }
+    instances: { l0: number; l1: number; total: number }
     pendingRemoval: number
   } {
     const managerInfo = this.manager.getDebugInfo()
     const poolInfo = this.pool.getActiveCount()
+
     return {
       totalSectors: this.sectorGrid.totalSectorCount,
       activeSectors: managerInfo.activeSectors,

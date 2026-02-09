@@ -88,7 +88,7 @@ export const RingShaderTemplate: ShaderProps = {
 
       vec4 color = texture2D(diffuseMap, uv);
 
-      if (color.a <= 0.0) discard;
+      if (color.a <= 0.0 || color.a <= alphaTest) discard;
 
       float distance = length(vLocalCameraPosition - vPosition);
       float transparencyFactor = smoothstep(minDistance, maxDistance, distance);

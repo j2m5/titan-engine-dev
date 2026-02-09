@@ -116,7 +116,7 @@ const TatooResources: IResource[] = [
     id: 15,
     actorId: 70,
     resourceType: 'diffuse',
-    path: 'planets/StarWars/adriana/adriana_rings.png',
+    path: 'planets/StarWars/adriana/adriana_rings2.png',
     lifetime: 60000,
     colorSpace: 'srgb-linear'
   }
