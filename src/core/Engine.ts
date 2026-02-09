@@ -47,7 +47,7 @@ class Engine extends EventEmitter {
     this.canvas.style.zIndex = '99'
 
     this.overlay.id = 'overlay'
-    threeJS.stats.dom.style.zIndex = '99999'
+    threeJS.stats.dom.style.zIndex = '9999999999999'
 
     document.body.appendChild(this.canvas)
     document.body.appendChild(this.overlay)

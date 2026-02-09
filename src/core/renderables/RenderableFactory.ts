@@ -14,13 +14,12 @@ import { FakePlanet } from '@/core/renderables/utils/FakePlanet'
 import { Atmosphere } from '@/core/renderables/Atmosphere'
 import { Halo } from '@/core/renderables/Halo'
 import { Ring } from '@/core/renderables/Ring'
-import { DetailedRing } from '@/core/renderables/utils/DetailedRing'
+import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { AsteroidCluster } from '@/core/renderables/utils/AsteroidCluster'
-import { DetailedRingV2 } from '@/core/renderables/utils/DetailedRingV2'
 
 class RenderableFactory {
   public static make(actor: Actor): Object3D {
@@ -140,8 +139,7 @@ class RenderableFactory {
     const lod = new LOD()
     const base = new Ring(actor)
     const detailed = new Ring(actor)
-    //detailed.add(new DetailedRing(actor))
-    detailed.add(new DetailedRingV2(actor))
+    detailed.add(new AsteroidRingSystem(actor))
 
     const distanceLod = toThreeJSUnits(actor.renderingObject!.getAttribute('data').outerRadius * 2)
 

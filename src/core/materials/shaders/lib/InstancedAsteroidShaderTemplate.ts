@@ -79,7 +79,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       float dist = length(vViewPosition);
       float fade = 1.0 - smoothstep(minDistance, maxDistance, dist);
 
-      if (fade <= 0.0) discard;
+      //if (fade <= 0.0) discard;
 
       vec3 finalColor = mix(night, day, lightIntensity);
 

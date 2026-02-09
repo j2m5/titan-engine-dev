@@ -52,7 +52,7 @@ const TatooRingsRenderingObjects: IRenderingObject[] = [
       innerRadius: 74500,
       outerRadius: 140220,
       alphaTest: 0.1,
-      countParticles: 1000000
+      countParticles: 250000
     }
   }
 ]

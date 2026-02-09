@@ -36,9 +36,6 @@ class DetailedRingV2 extends Group {
     const radialLayers = Math.floor(ringWidth / cellDiameter)
     if (radialLayers <= 0 || this.countInstances <= 0) return
 
-    // --------------------------------------------------
-    // 1️⃣ Сначала описываем ВСЕ возможные ячейки кольца
-    // --------------------------------------------------
     type CellDesc = {
       radius: number
       theta: number
@@ -65,16 +62,10 @@ class DetailedRingV2 extends Group {
 
     if (cells.length === 0) return
 
-    // --------------------------------------------------
-    // 2️⃣ Определяем среднюю плотность (НЕ лимит!)
-    // --------------------------------------------------
     const avgInstancesPerCell = this.countInstances / cells.length
 
     let remainingInstances = this.countInstances
 
-    // --------------------------------------------------
-    // 3️⃣ Создаём только нужные RingCell
-    // --------------------------------------------------
     for (const cellDesc of cells) {
       if (remainingInstances <= 0) break
 
