@@ -1,4 +1,4 @@
-import { ShaderMaterial, Color, ShaderChunk, Vector3, DoubleSide } from 'three'
+import { ShaderMaterial, Color, ShaderChunk, Vector3 } from 'three'
 
 /**
  * BillboardAsteroidMaterial — шейдерный материал для L1 billboard-импосторов.
@@ -45,20 +45,27 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
             instanceMatrix[3][2]
           );
 
+          // Позиция инстанса в view space
+          vec4 mvInstancePos = modelViewMatrix * vec4(instancePos, 1.0);
+
+          // Размер инстанса
           float instanceScale = length(vec3(
             instanceMatrix[0][0],
             instanceMatrix[0][1],
             instanceMatrix[0][2]
           ));
 
-          // Billboard: повернуть quad к камере
-          vec4 mvInstancePos = modelViewMatrix * vec4(instancePos, 1.0);
-          vec3 right = vec3(modelViewMatrix[0][0], modelViewMatrix[1][0], modelViewMatrix[2][0]);
-          vec3 up = vec3(modelViewMatrix[0][1], modelViewMatrix[1][1], modelViewMatrix[2][1]);
+          // Камерные оси В VIEW SPACE
+          vec3 right = vec3(1.0, 0.0, 0.0);
+          vec3 up    = vec3(0.0, 1.0, 0.0);
 
-          vec3 vertexOffset = right * position.x * instanceScale + up * position.y * instanceScale;
+          // Смещение вершины плейна
+          vec3 vertexOffset =
+            right * position.x * instanceScale +
+            up    * position.y * instanceScale;
+
+          // Финальная позиция
           vec4 mvPosition = vec4(mvInstancePos.xyz + vertexOffset, 1.0);
-
           gl_Position = projectionMatrix * mvPosition;
 
           // UV для sphere impostor (PlaneGeometry UV идёт от 0 до 1)
@@ -147,8 +154,7 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
       `,
       transparent: true,
       depthWrite: true,
-      depthTest: true,
-      side: DoubleSide
+      depthTest: true
     })
   }
 }
