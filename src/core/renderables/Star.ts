@@ -27,7 +27,6 @@ class Star extends Mesh {
     this.name = this.model.getAttribute('name') + 'Star'
     this.userData.type = 'star'
     this.userData.clickable = true
-    this.rotateX(degToRad(-90))
     this.rotateX(degToRad(-this.model.physicalObject?.getAttribute('axialTilt', 0)))
   }
 }

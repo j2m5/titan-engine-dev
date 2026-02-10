@@ -9,6 +9,18 @@ export type OrbitalState = {
   velocity: Vector3
 }
 
+/**
+ * Кватернион конвертации из астрономической системы координат (Z-up)
+ * в систему координат Three.js (Y-up).
+ *
+ * Это поворот на -90° вокруг оси X:
+ * (x, y, z)_astro → (x, z, -y)_three
+ *
+ * Детерминант = +1 (собственное вращение), сохраняет правую систему координат.
+ * CCW орбиты в астрономическом XY → CCW в Three.js XZ (при взгляде с +Y).
+ */
+const ASTRO_TO_THREE = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -Math.PI / 2)
+
 class KeplerianModel implements TKeplerianModel {
   private readonly epoch: number
   private readonly model: Actor
@@ -186,6 +198,11 @@ class KeplerianModel implements TKeplerianModel {
     }
   }
 
+  /**
+   * Координаты в орбитальной плоскости по истинной аномалии.
+   * Возвращает вектор в координатах орбитальной плоскости (x = направление перицентра).
+   * Для получения Three.js координат примените getOrbitalFrameQuaternion().
+   */
   public getOwnCoordsByTrueAnomaly(ta: number): Vector3 {
     const r: number =
       (this.semiMajorAxis * (1.0 - this.eccentricity * this.eccentricity)) / (1 + this.eccentricity * Math.cos(ta))
@@ -226,6 +243,10 @@ class KeplerianModel implements TKeplerianModel {
     return this.epoch + diff / this.meanMotion
   }
 
+  /**
+   * Состояние (позиция, скорость) на заданную эпоху.
+   * Возвращает векторы в системе координат Three.js (Y-up).
+   */
   public getStateByEpoch(epoch: number): OrbitalState {
     if (!this.semiMajorAxis) {
       return {
@@ -270,6 +291,12 @@ class KeplerianModel implements TKeplerianModel {
     }
   }
 
+  /**
+   * Кватернион орбитальной рамки, включающий конвертацию в Three.js (Y-up).
+   *
+   * Применение этого кватерниона к вектору в орбитальной плоскости
+   * сразу даёт координаты в системе Three.js.
+   */
   public getOrbitalFrameQuaternion(): Quaternion {
     const quaternion: Quaternion = new Quaternion()
 
@@ -280,17 +307,27 @@ class KeplerianModel implements TKeplerianModel {
     const qInc: Quaternion = new Quaternion().setFromAxisAngle(xAxis, this.__inclination)
     const qAop: Quaternion = new Quaternion().setFromAxisAngle(zAxis, this.__argOfPeriapsis)
 
+    // Орбитальная рамка в астрономических координатах
     quaternion.copy(qRaan).multiply(qInc).multiply(qAop)
 
-    return quaternion
+    // Конвертация: astronomical Z-up → Three.js Y-up
+    // q_three = q_convert * q_astro
+    return ASTRO_TO_THREE.clone().multiply(quaternion)
   }
 
+  /**
+   * Нормаль к орбитальной плоскости в координатах Three.js (Y-up).
+   */
   public getNormalVector(): Vector3 {
     const nodeQuaternion: Quaternion = new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), this.__ascendingNode)
     const nodeVector: Vector3 = new Vector3(1, 0, 0).applyQuaternion(nodeQuaternion)
     const incQuaternion: Quaternion = new Quaternion().setFromAxisAngle(nodeVector, this.__inclination)
 
-    return new Vector3(0, 0, 1).applyQuaternion(nodeQuaternion).applyQuaternion(incQuaternion).normalize()
+    return new Vector3(0, 0, 1)
+      .applyQuaternion(nodeQuaternion)
+      .applyQuaternion(incQuaternion)
+      .normalize()
+      .applyQuaternion(ASTRO_TO_THREE)
   }
 }
 

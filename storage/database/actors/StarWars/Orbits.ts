@@ -49,7 +49,7 @@ const TatooOrbits: IOrbit[] = [
     inclination: 5.3,
     argOfPeriapsis: 140.6,
     ascendingNode: 58.2,
-    meanAnomalyAtEpoch: 30.4
+    meanAnomalyAtEpoch: 250.4
   },
   {
     id: 6,
