@@ -111,7 +111,8 @@ const SolarAtmosphereRenderingObjects: IRenderingObject[] = [
       radius: 6420,
       scatter: { r: 650, g: 490, b: 380 },
       scatteringStrength: 15,
-      densityFalloff: 10
+      densityFalloff: 10,
+      useNewShader: true
     }
   },
   {

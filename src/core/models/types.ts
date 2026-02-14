@@ -128,6 +128,7 @@ export interface IAtmosphereRenderingObject {
   scatter: Colorable
   scatteringStrength: number
   densityFalloff: number
+  useNewShader?: boolean
 }
 
 export interface IRingRenderingObject {

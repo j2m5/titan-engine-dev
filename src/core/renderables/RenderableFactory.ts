@@ -128,8 +128,13 @@ class RenderableFactory {
   }
 
   private static createAtmosphere(actor: Actor): Object3D {
-    //return new Atmosphere(actor)
-    return new TestAtmosphereV2(actor)
+    // переходный этап пока новый шейдер допиливается и стабилизируется
+    // в зависимости от флага использовать или старую или новую реализацию
+    if (actor.renderingObject?.getAttribute('data').useNewShader) {
+      return new TestAtmosphereV2(actor)
+    }
+
+    return new Atmosphere(actor)
   }
 
   private static createHalo(actor: Actor): Object3D {
