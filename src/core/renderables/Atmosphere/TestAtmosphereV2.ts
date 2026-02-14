@@ -6,7 +6,8 @@ import { BrunetonAtmosphereMaterial } from '@/core/renderables/Atmosphere/Brunet
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { degToRad } from 'three/src/math/MathUtils'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { dtLoader } from '@/core/renderables/Atmosphere/DTLoader'
+import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
+import { EARTH_ATMOSPHERE } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 
 class TestAtmosphereV2 extends Mesh implements Acceptable<IObject3DVisitor> {
   public model: Actor
@@ -25,10 +26,13 @@ class TestAtmosphereV2 extends Mesh implements Acceptable<IObject3DVisitor> {
   __setup(): void {
     const radius: number = toThreeJSUnits(this.model.renderingObject!.getAttribute('data').radius)
 
+    const lutGenerator = new AtmosphereLUTGenerator(threeJS.renderer)
+    const earthLUTs = lutGenerator.generate(EARTH_ATMOSPHERE)
+
     this.geometry = new SphereGeometry(radius, 128, 128)
 
     this.material = new BrunetonAtmosphereMaterial()
-    this.material.bindLUTTextures(dtLoader.textures)
+    this.material.bindLUTTextures(earthLUTs)
 
     this.name = this.model.getAttribute('name') + 'Atmosphere'
     this.rotateX(degToRad(this.model.parent!.physicalObject!.getAttribute('axialTilt', 0)))

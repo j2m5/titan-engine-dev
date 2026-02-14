@@ -7,7 +7,6 @@ import Stats from 'three/examples/jsm/libs/stats.module'
 class ThreeJS {
   public readonly renderer: WebGLRenderer
   public readonly labelRenderer: CSS2DRenderer
-  public readonly galaxyScene: Scene
   public readonly scene: Scene
   public readonly camera: PerspectiveCamera
   public readonly cameraSphere: Sphere
@@ -19,7 +18,6 @@ class ThreeJS {
   public constructor() {
     this.renderer = this.setRenderer()
     this.labelRenderer = this.setLabelRenderer()
-    this.galaxyScene = this.setGalaxyScene()
     this.scene = this.setScene()
     this.camera = this.setCamera()
     this.cameraSphere = this.setCameraSphere()
@@ -47,13 +45,6 @@ class ThreeJS {
     renderer.domElement.style.top = '0px'
 
     return renderer
-  }
-
-  private setGalaxyScene(): Scene {
-    const scene: Scene = new Scene()
-    scene.name = 'GalaxyScene'
-
-    return scene
   }
 
   private setScene(): Scene {

@@ -1,4 +1,4 @@
-import { BoxHelper, LOD, Object3D } from 'three'
+import { LOD, Object3D } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { Galaxy } from '@/core/renderables/Galaxy'
 import { StarSystem } from '@/core/renderables/StarSystem'
@@ -19,7 +19,6 @@ import { threeJS } from '@/core/graphic/ThreeJS'
 import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
-import { AsteroidCluster } from '@/core/renderables/utils/AsteroidCluster'
 import { TestAtmosphereV2 } from '@/core/renderables/Atmosphere/TestAtmosphereV2'
 
 class RenderableFactory {
@@ -73,10 +72,6 @@ class RenderableFactory {
     const lodl2 = new FakeStar(actor)
     const starInnerLayer = new StarInnerLayer(actor)
     const starOuterLayer = new StarOuterLayer(actor)
-    const test = new AsteroidCluster(1500, toThreeJSUnits(500), 0.25)
-    const box = new BoxHelper(test)
-    lodl1.add(test)
-    lodl1.add(box)
 
     const distanceLod = (pixels: number): number => {
       const radius: number = actor.physicalObject!.getAttribute('radius')

@@ -1,20 +1,25 @@
 /**
  * BrunetonAtmosphereMaterial.ts
  *
- * Material wrapper for the adapted Bruneton Precomputed Atmospheric Scattering shader.
- * Uses RawShaderMaterial with GLSL3 (WebGL2 / GLSL 300 es).
+ * Material wrapper for the parametric Bruneton atmospheric scattering shader.
+ * Accepts any AtmosphereConfig — not limited to Earth.
  *
  * === USAGE ===
  *
+ *   import { EARTH_ATMOSPHERE } from './AtmosphereConfig'
+ *   import { AtmosphereLUTGenerator } from './AtmosphereLUTGenerator'
+ *
+ *   // Generate LUTs for the planet
+ *   const lutGenerator = new AtmosphereLUTGenerator(renderer)
+ *   const luts = lutGenerator.generate(EARTH_ATMOSPHERE)
+ *
+ *   // Create material
  *   const material = new BrunetonAtmosphereMaterial()
- *   material.bindLUTTextures(dtLoader.textures)
+ *   material.setAtmosphereConfig(EARTH_ATMOSPHERE)
+ *   material.bindLUTTextures(luts)
  *
- *   // Configure for specific planet (radii in real km from model data)
- *   material.setPlanetRadii(6371, 6471)  // Earth: surface 6371 km, atmo top 6471 km
- *   material.setPlanetRadii(3390, 3450)  // Mars: surface 3390 km, atmo top 3450 km
- *
- *   // Create atmosphere mesh (topRadiusKm converted to Three.js units)
- *   const geometry = new SphereGeometry(toThreeJSUnits(6471), 64, 64)
+ *   // Create mesh (topRadius from config, converted to Three.js units)
+ *   const geometry = new SphereGeometry(toThreeJSUnits(EARTH_ATMOSPHERE.topRadius), 64, 64)
  *   const atmosphereMesh = new Mesh(geometry, material)
  *   planet.add(atmosphereMesh)
  *
@@ -22,19 +27,10 @@
  *   material.update(atmosphereMesh, camera, starWorldPosition)
  */
 
-import {
-  RawShaderMaterial,
-  DoubleSide,
-  NormalBlending,
-  GLSL3,
-  Mesh,
-  Camera,
-  Vector3,
-  Matrix4,
-  DataTexture,
-  Data3DTexture
-} from 'three'
+import { RawShaderMaterial, DoubleSide, NormalBlending, GLSL3, Mesh, Camera, Vector3, Vector2, Matrix4 } from 'three'
 import { BrunetonAtmosphereShaderTemplate } from './BrunetonAtmosphereShaderTemplate'
+import { AtmosphereConfig, updateAtmosphereUniforms } from './AtmosphereConfig'
+import { AtmosphereLUTs } from './AtmosphereLUTGenerator'
 
 export class BrunetonAtmosphereMaterial extends RawShaderMaterial {
   private _modelViewMatrix = new Matrix4()
@@ -54,56 +50,34 @@ export class BrunetonAtmosphereMaterial extends RawShaderMaterial {
   }
 
   /**
-   * Bind precomputed LUT textures from DTLoader.
-   * Call once after textures are loaded.
+   * Configure atmosphere parameters for a specific planet.
+   * This updates all atmosphere-related uniforms in the shader.
+   *
+   * IMPORTANT: The LUT textures must have been precomputed with
+   * the SAME config via AtmosphereLUTGenerator.generate(config).
+   * Parameters and LUTs must match — mismatches produce artifacts.
    */
-  bindLUTTextures(textures: Map<string, DataTexture | Data3DTexture>): void {
-    const transmittance = textures.get('transmittance')
-    const scattering = textures.get('scattering')
-    const irradiance = textures.get('irradiance')
+  setAtmosphereConfig(config: AtmosphereConfig): void {
+    updateAtmosphereUniforms(this.uniforms, config)
 
-    if (!transmittance || !scattering || !irradiance) {
-      console.error(
-        'BrunetonAtmosphereMaterial: Missing LUT textures.',
-        'Expected keys: transmittance, scattering, irradiance.',
-        'Available:',
-        [...textures.keys()]
-      )
-      return
-    }
-
-    this.uniforms.transmittance_texture.value = transmittance
-    this.uniforms.scattering_texture.value = scattering
-    this.uniforms.irradiance_texture.value = irradiance
-    this.uniforms.single_mie_scattering_texture.value = scattering
+    // Update sun_size based on config's angular radius
+    this.uniforms.sun_size.value = new Vector2(Math.tan(config.sunAngularRadius), Math.cos(config.sunAngularRadius))
   }
 
   /**
-   * Configure atmosphere dimensions for a specific planet.
-   *
-   * The shader scales all positions so that the planet surface maps to
-   * Bruneton's reference bottom_radius (6360 km). This keeps the
-   * precomputed Earth LUTs valid for any planet size.
-   *
-   * @param bottomRadiusKm - Planet surface radius in real kilometers
-   * @param topRadiusKm - Atmosphere outer boundary in real kilometers
-   *
-   * @example
-   *   // Earth
-   *   material.setPlanetRadii(6371, 6471)
-   *   // Mars
-   *   material.setPlanetRadii(3390, 3450)
-   *   // Jupiter (gas giant — thick atmosphere)
-   *   material.setPlanetRadii(69911, 70300)
+   * Bind precomputed LUT textures.
+   * Accepts either the result of AtmosphereLUTGenerator.generate()
+   * or a Map from the legacy DTLoader.
    */
-  setPlanetRadii(bottomRadiusKm: number, topRadiusKm: number): void {
-    this.uniforms.bottomRadiusKm.value = bottomRadiusKm
-    this.uniforms.topRadiusKm.value = topRadiusKm
+  bindLUTTextures(luts: AtmosphereLUTs): void {
+    this.uniforms.transmittance_texture.value = luts.transmittance
+    this.uniforms.scattering_texture.value = luts.scattering
+    this.uniforms.irradiance_texture.value = luts.irradiance
+    this.uniforms.single_mie_scattering_texture.value = luts.scattering
   }
 
   /**
    * Update per-frame uniforms.
-   * Call each frame before rendering.
    */
   update(mesh: Mesh, camera: Camera, lightPosition: Vector3): void {
     this.uniforms.modelMatrix.value.copy(mesh.matrixWorld)
@@ -116,12 +90,12 @@ export class BrunetonAtmosphereMaterial extends RawShaderMaterial {
 
     this.uniforms.lightPosition.value.copy(lightPosition)
 
-    // @ts-ignore - camera.far exists on PerspectiveCamera
+    // @ts-ignore
     const far = camera.far ?? 1e10
     this.uniforms.logDepthBufFC.value = 2.0 / (Math.log(far + 1.0) / Math.LN2)
   }
 
-  // ─── Convenience accessors ───────────────────────────────────────
+  // ─── Convenience accessors ───────────────────────────────────
 
   set exposure(value: number) {
     this.uniforms.exposure.value = value
