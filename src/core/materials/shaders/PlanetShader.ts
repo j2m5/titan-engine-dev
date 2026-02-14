@@ -76,7 +76,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       shadowRingsTexture: new Uniform(ringMap)
     }
     this.defines = {
-      ...(USE_ATMOSPHERE && { USE_ATMOSPHERE: '1' }),
+      //...(USE_ATMOSPHERE && { USE_ATMOSPHERE: '1' }),
       ...(USE_RING && { USE_RING: '1' })
     }
     this.name = 'PlanetShader'

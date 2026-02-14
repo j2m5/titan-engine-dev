@@ -4,6 +4,7 @@ import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { ScenarioConfig } from '@/config/scenarios'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+import { dtLoader } from '@/core/renderables/Atmosphere/DTLoader'
 
 @injectable()
 class Application {
@@ -17,6 +18,7 @@ class Application {
 
     this.resourceObserver.scenario = scenario
     await this.resourceObserver.loadPrimaryTextures()
+    await dtLoader.load()
 
     threeJS.scene.background = resourceStorage.getTexture('cubemaps-scene-main')!
     console.log(threeJS.scene)

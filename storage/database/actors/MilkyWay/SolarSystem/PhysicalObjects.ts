@@ -40,7 +40,7 @@ const Common: IPhysicalObject[] = [
     actorId: 34,
     parentId: 54,
     mass: 5.9736e24,
-    radius: 6378.1,
+    radius: 6360,
     axialTilt: 23.4392911,
     orbitalPeriod: 2.731247317860557e1,
     rotationPeriod: 23.93447117,

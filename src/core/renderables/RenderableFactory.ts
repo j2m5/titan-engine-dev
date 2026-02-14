@@ -20,6 +20,7 @@ import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { AsteroidCluster } from '@/core/renderables/utils/AsteroidCluster'
+import { TestAtmosphereV2 } from '@/core/renderables/Atmosphere/TestAtmosphereV2'
 
 class RenderableFactory {
   public static make(actor: Actor): Object3D {
@@ -127,7 +128,8 @@ class RenderableFactory {
   }
 
   private static createAtmosphere(actor: Actor): Object3D {
-    return new Atmosphere(actor)
+    //return new Atmosphere(actor)
+    return new TestAtmosphereV2(actor)
   }
 
   private static createHalo(actor: Actor): Object3D {

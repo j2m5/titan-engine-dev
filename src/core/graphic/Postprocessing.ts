@@ -12,10 +12,6 @@ import {
 } from 'postprocessing'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 
-/**
- * Старая имплементация постобработки, не идеальная, но надежно фильтрует объекты на сцене которые не должны быть никак задеты постобработкой
- * TODO нужна еще более продвинутая система лишенная недостатков обоих подходов
- */
 class Postprocessing {
   public composer: EffectComposer | null = null
 
