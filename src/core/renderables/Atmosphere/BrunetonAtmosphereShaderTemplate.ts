@@ -15,7 +15,7 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { Matrix4, Uniform, Vector2, Vector3 } from 'three'
 import { createParametricAtmosphereShader } from './atmosphereParametric'
-import { createAtmosphereUniforms, EARTH_ATMOSPHERE } from './AtmosphereConfig'
+import { createAtmosphereUniforms, EARTH_ATMOSPHERE, MARS_ATMOSPHERE, VENUS } from './AtmosphereConfig'
 
 const parametricAtmosphere = createParametricAtmosphereShader()
 const SUN_ANGULAR_RADIUS = 0.0004675
@@ -169,6 +169,7 @@ void main() {
 
   // No tone mapping — handled by post-processing
   vec3 color = radiance * exposure;
+  color = clamp(color, 0.0, 0.99);
 
   float alpha = 1.0 - dot(transmittance, vec3(1.0 / 3.0));
 

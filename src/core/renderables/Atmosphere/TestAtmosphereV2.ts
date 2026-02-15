@@ -7,7 +7,7 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { degToRad } from 'three/src/math/MathUtils'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
-import { EARTH_ATMOSPHERE } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+import { EARTH_ATMOSPHERE, MARS_ATMOSPHERE, VENUS } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 
 class TestAtmosphereV2 extends Mesh implements Acceptable<IObject3DVisitor> {
   public model: Actor

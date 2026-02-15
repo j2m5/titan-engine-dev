@@ -101,7 +101,8 @@ const SolarAtmosphereRenderingObjects: IRenderingObject[] = [
       radius: 6152,
       scatter: { r: 500, g: 530, b: 600 },
       scatteringStrength: 10,
-      densityFalloff: 10
+      densityFalloff: 10,
+      useNewShader: true
     }
   },
   {
@@ -119,10 +120,11 @@ const SolarAtmosphereRenderingObjects: IRenderingObject[] = [
     id: 13,
     actorId: 74,
     data: {
-      radius: 3440,
+      radius: 3450,
       scatter: { r: 450, g: 500, b: 500 },
       scatteringStrength: 10,
-      densityFalloff: 5
+      densityFalloff: 5,
+      useNewShader: true
     }
   },
   {
