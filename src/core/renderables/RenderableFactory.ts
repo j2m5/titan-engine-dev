@@ -11,7 +11,7 @@ import { StarOuterLayer } from '@/core/renderables/utils/StarOuterLayer'
 import { FakeStar } from '@/core/renderables/utils/FakeStar'
 import { Planet } from '@/core/renderables/Planet'
 import { FakePlanet } from '@/core/renderables/utils/FakePlanet'
-import { Atmosphere } from '@/core/renderables/Atmosphere'
+import { TestAtmosphereV2 } from '@/core/renderables/Atmosphere/TestAtmosphereV2'
 import { Halo } from '@/core/renderables/Halo'
 import { Ring } from '@/core/renderables/Ring'
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
@@ -19,7 +19,6 @@ import { threeJS } from '@/core/graphic/ThreeJS'
 import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
-import { TestAtmosphereV2 } from '@/core/renderables/Atmosphere/TestAtmosphereV2'
 
 class RenderableFactory {
   public static make(actor: Actor): Object3D {
@@ -123,13 +122,7 @@ class RenderableFactory {
   }
 
   private static createAtmosphere(actor: Actor): Object3D {
-    // переходный этап пока новый шейдер допиливается и стабилизируется
-    // в зависимости от флага использовать или старую или новую реализацию
-    if (actor.renderingObject?.getAttribute('data').useNewShader) {
-      return new TestAtmosphereV2(actor)
-    }
-
-    return new Atmosphere(actor)
+    return new TestAtmosphereV2(actor)
   }
 
   private static createHalo(actor: Actor): Object3D {

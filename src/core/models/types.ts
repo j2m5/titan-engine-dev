@@ -7,6 +7,7 @@ import type {
   TextureDataType,
   Wrapping
 } from 'three'
+import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 
 export type ValueOf<T> = T[keyof T]
 
@@ -123,13 +124,7 @@ export interface IPlanetRenderingObject {
   bumpScale: number
 }
 
-export interface IAtmosphereRenderingObject {
-  radius: number
-  scatter: Colorable
-  scatteringStrength: number
-  densityFalloff: number
-  useNewShader?: boolean
-}
+export interface IAtmosphereRenderingObject extends AtmosphereConfig {}
 
 export interface IRingRenderingObject {
   innerRadius: number

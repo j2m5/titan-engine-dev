@@ -11,10 +11,7 @@ const defaultUniforms = {
   bumpMap: new Uniform(null),
   bumpScale: new Uniform(0),
   emission: new Uniform(1),
-  targetRadius: new Uniform(0),
-  atmosphereRadius: new Uniform(0),
-  scatterRGB: new Uniform(new Vector3()),
-  densityFalloff: new Uniform(0)
+  targetRadius: new Uniform(0)
 }
 const ringShadowUniforms = AppUniformsChunk.ringShadowUniforms
 
@@ -94,22 +91,6 @@ export const PlanetShaderTemplate: ShaderProps = {
       #include <ringShadowFunctions>
     #endif
 
-    #ifdef USE_ATMOSPHERE
-      #define SCATTER_POINT_COUNT 15
-      #define OPTICAL_DEPTH_POINT_COUNT 15
-
-      uniform float targetRadius;
-      uniform float atmosphereRadius;
-      uniform vec3 scatterRGB;
-      uniform float densityFalloff;
-
-      varying vec3 vLocalCameraPosition;
-
-      vec3 origin = vec3(0.0);
-
-      #include <atmosphereFunctions>
-    #endif
-
     void main() {
       ${ShaderChunk['logdepthbuf_fragment']}
       vec3 normal = normalize(vNormal);
@@ -150,15 +131,7 @@ export const PlanetShaderTemplate: ShaderProps = {
         #include <ringShadowFragment>
       #endif
 
-      #ifdef USE_ATMOSPHERE
-        #include <atmosphereFragment>
-
-        atmosphereColor *= 0.3; // костыль чтобы убрать засвеченность
-
-        gl_FragColor = clamp(vec4(atmosphereColor.rgb + finalColor, 1.0), 0.0, 0.99); // костыль чтобы не было белых пикселей, и блум с его порогом в 1.0 не здесь
-      #else
-        gl_FragColor = clamp(vec4(finalColor, 1.0), 0.0, 0.99); // ^_^
-      #endif
+      gl_FragColor = clamp(vec4(finalColor, 1.0), 0.0, 0.99);
 
       ${ShaderChunk['tonemapping_fragment']}
       ${ShaderChunk['colorspace_fragment']}

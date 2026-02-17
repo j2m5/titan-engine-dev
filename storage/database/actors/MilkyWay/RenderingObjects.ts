@@ -1,6 +1,13 @@
 import { IRenderingObject } from '@/core/models/types'
 import { JupiterRadius } from '@/core/constants'
 import { hexToRGB } from '@/core/materials/shaders/lib/helpers'
+import {
+  EMPTY_LAYER,
+  expLayer,
+  scaleRayleigh,
+  solarIrradiance,
+  sunAngle
+} from '@/core/renderables/Atmosphere/AtmosphereConfig'
 
 const TOI519PlanetRenderingObjects: IRenderingObject[] = [
   {
@@ -18,10 +25,23 @@ const TOI519AtmosphereRenderingObjects: IRenderingObject[] = [
     id: 2,
     actorId: 71,
     data: {
-      radius: JupiterRadius * 0.209 * 1.02,
-      scatter: { r: 650, g: 530, b: 380 },
-      scatteringStrength: 10,
-      densityFalloff: 10
+      solarIrradiance: solarIrradiance(1.0),
+      sunAngularRadius: sunAngle(1.0),
+      bottomRadius: JupiterRadius * 0.209,
+      topRadius: JupiterRadius * 0.209 + 200,
+      rayleighDensity: [EMPTY_LAYER, expLayer(8.0)],
+      rayleighScattering: [0.005802, 0.013558, 0.0331],
+      mieDensity: [EMPTY_LAYER, expLayer(1.2)],
+      mieScattering: [0.003996, 0.003996, 0.003996],
+      mieExtinction: [0.00444, 0.00444, 0.00444],
+      miePhaseFunctionG: 0.8,
+      absorptionDensity: [
+        { width: 25, expTerm: 0, expScale: 0, linearTerm: 1.0 / 15.0, constantTerm: -2.0 / 3.0 },
+        { width: 0, expTerm: 0, expScale: 0, linearTerm: -1.0 / 15.0, constantTerm: 8.0 / 3.0 }
+      ],
+      absorptionExtinction: [0.00065, 0.001881, 0.000085],
+      groundAlbedo: [0.1, 0.1, 0.1],
+      muSMin: -0.207912
     }
   }
 ]
@@ -98,83 +118,165 @@ const SolarAtmosphereRenderingObjects: IRenderingObject[] = [
     id: 11,
     actorId: 72,
     data: {
-      radius: 6152,
-      scatter: { r: 500, g: 530, b: 600 },
-      scatteringStrength: 10,
-      densityFalloff: 10,
-      useNewShader: true
+      solarIrradiance: solarIrradiance(0.723),
+      sunAngularRadius: sunAngle(0.723),
+      bottomRadius: 6051.8,
+      topRadius: 6151.8,
+      rayleighDensity: [EMPTY_LAYER, expLayer(15.9)],
+      rayleighScattering: scaleRayleigh(0.27),
+      mieDensity: [EMPTY_LAYER, expLayer(4.0)],
+      mieScattering: [0.012, 0.012, 0.012],
+      mieExtinction: [0.015, 0.015, 0.015],
+      miePhaseFunctionG: 0.75,
+      absorptionDensity: [
+        { width: 10, expTerm: 0, expScale: 0, linearTerm: 0.1, constantTerm: 0 },
+        { width: 0, expTerm: 0, expScale: 0, linearTerm: -0.1, constantTerm: 1.0 }
+      ],
+      absorptionExtinction: [0.0015, 0.0003, 0.00005],
+      groundAlbedo: [0.7, 0.7, 0.6],
+      muSMin: -0.207912
     }
   },
   {
     id: 12,
     actorId: 73,
     data: {
-      radius: 6420,
-      scatter: { r: 650, g: 490, b: 380 },
-      scatteringStrength: 15,
-      densityFalloff: 10,
-      useNewShader: true
+      solarIrradiance: solarIrradiance(1.0),
+      sunAngularRadius: sunAngle(1.0),
+      bottomRadius: 6360,
+      topRadius: 6420,
+      rayleighDensity: [EMPTY_LAYER, expLayer(8.0)],
+      rayleighScattering: [0.005802, 0.013558, 0.0331],
+      mieDensity: [EMPTY_LAYER, expLayer(1.2)],
+      mieScattering: [0.003996, 0.003996, 0.003996],
+      mieExtinction: [0.00444, 0.00444, 0.00444],
+      miePhaseFunctionG: 0.8,
+      absorptionDensity: [
+        { width: 25, expTerm: 0, expScale: 0, linearTerm: 1.0 / 15.0, constantTerm: -2.0 / 3.0 },
+        { width: 0, expTerm: 0, expScale: 0, linearTerm: -1.0 / 15.0, constantTerm: 8.0 / 3.0 }
+      ],
+      absorptionExtinction: [0.00065, 0.001881, 0.000085],
+      groundAlbedo: [0.1, 0.1, 0.1],
+      muSMin: -0.207912
     }
   },
   {
     id: 13,
     actorId: 74,
     data: {
-      radius: 3450,
-      scatter: { r: 450, g: 500, b: 500 },
-      scatteringStrength: 10,
-      densityFalloff: 5,
-      useNewShader: true
+      solarIrradiance: solarIrradiance(1.524),
+      sunAngularRadius: sunAngle(1.524),
+      bottomRadius: 3390,
+      topRadius: 3450,
+      rayleighDensity: [EMPTY_LAYER, expLayer(11.1)],
+      rayleighScattering: scaleRayleigh(0.0195),
+      mieDensity: [EMPTY_LAYER, expLayer(11.0)],
+      mieScattering: [0.041, 0.04, 0.037],
+      mieExtinction: [0.045, 0.045, 0.045],
+      miePhaseFunctionG: 0.76,
+      absorptionDensity: [EMPTY_LAYER, EMPTY_LAYER],
+      absorptionExtinction: [0.0, 0.0, 0.0],
+      groundAlbedo: [0.25, 0.18, 0.12],
+      muSMin: -0.207912
     }
   },
   {
     id: 14,
     actorId: 75,
     data: {
-      radius: 70911,
-      scatter: { r: 650, g: 650, b: 600 },
-      scatteringStrength: 10,
-      densityFalloff: 10
+      solarIrradiance: solarIrradiance(5.2),
+      sunAngularRadius: sunAngle(5.2),
+      bottomRadius: JupiterRadius,
+      topRadius: JupiterRadius + 200,
+      rayleighDensity: [EMPTY_LAYER, expLayer(25.2)],
+      rayleighScattering: scaleRayleigh(0.35),
+      mieDensity: [EMPTY_LAYER, expLayer(15.0)],
+      mieScattering: [0.006, 0.006, 0.006],
+      mieExtinction: [0.008, 0.008, 0.008],
+      miePhaseFunctionG: 0.7,
+      absorptionDensity: [EMPTY_LAYER, EMPTY_LAYER],
+      absorptionExtinction: [0.0, 0.0, 0.0],
+      groundAlbedo: [0.4, 0.36, 0.3],
+      muSMin: -0.207912
     }
   },
   {
     id: 15,
     actorId: 76,
     data: {
-      radius: 59232,
-      scatter: { r: 600, g: 530, b: 440 },
-      scatteringStrength: 20,
-      densityFalloff: 10
+      solarIrradiance: solarIrradiance(9.54),
+      sunAngularRadius: sunAngle(9.54),
+      bottomRadius: 58232,
+      topRadius: 58532,
+      rayleighDensity: [EMPTY_LAYER, expLayer(51.5)],
+      rayleighScattering: scaleRayleigh(0.43),
+      mieDensity: [EMPTY_LAYER, expLayer(30.0)],
+      mieScattering: [0.01, 0.01, 0.01],
+      mieExtinction: [0.013, 0.013, 0.013],
+      miePhaseFunctionG: 0.7,
+      absorptionDensity: [EMPTY_LAYER, expLayer(40.0)],
+      absorptionExtinction: [0.0003, 0.0001, 0.0005],
+      groundAlbedo: [0.45, 0.42, 0.35],
+      muSMin: -0.207912
     }
   },
   {
     id: 16,
     actorId: 77,
     data: {
-      radius: 25662,
-      scatter: { r: 700, g: 530, b: 440 },
-      scatteringStrength: 10,
-      densityFalloff: 10
+      solarIrradiance: solarIrradiance(19.19),
+      sunAngularRadius: sunAngle(19.19),
+      bottomRadius: 25362,
+      topRadius: 25562,
+      rayleighDensity: [EMPTY_LAYER, expLayer(26.9)],
+      rayleighScattering: scaleRayleigh(0.78),
+      mieDensity: [EMPTY_LAYER, expLayer(20.0)],
+      mieScattering: [0.004, 0.004, 0.004],
+      mieExtinction: [0.005, 0.005, 0.005],
+      miePhaseFunctionG: 0.7,
+      absorptionDensity: [EMPTY_LAYER, expLayer(25.0)],
+      absorptionExtinction: [0.005, 0.0015, 0.0001],
+      groundAlbedo: [0.45, 0.55, 0.55],
+      muSMin: -0.207912
     }
   },
   {
     id: 17,
     actorId: 78,
     data: {
-      radius: 24922,
-      scatter: { r: 650, g: 530, b: 380 },
-      scatteringStrength: 10,
-      densityFalloff: 10
+      solarIrradiance: solarIrradiance(30.07),
+      sunAngularRadius: sunAngle(30.07),
+      bottomRadius: 24622,
+      topRadius: 24822,
+      rayleighDensity: [EMPTY_LAYER, expLayer(21.2)],
+      rayleighScattering: scaleRayleigh(0.77),
+      mieDensity: [EMPTY_LAYER, expLayer(18.0)],
+      mieScattering: [0.005, 0.005, 0.005],
+      mieExtinction: [0.006, 0.006, 0.006],
+      miePhaseFunctionG: 0.7,
+      absorptionDensity: [EMPTY_LAYER, expLayer(20.0)],
+      absorptionExtinction: [0.008, 0.0025, 0.0002],
+      groundAlbedo: [0.35, 0.45, 0.55],
+      muSMin: -0.207912
     }
   },
   {
     id: 18,
     actorId: 79,
     data: {
-      radius: 2700,
-      scatter: { r: 600, g: 500, b: 440 },
-      scatteringStrength: 15,
-      densityFalloff: 10
+      solarIrradiance: solarIrradiance(9.54),
+      sunAngularRadius: sunAngle(9.54),
+      bottomRadius: 2575,
+      topRadius: 2875,
+      rayleighDensity: [EMPTY_LAYER, expLayer(20.6)],
+      rayleighScattering: scaleRayleigh(4.0),
+      mieDensity: [EMPTY_LAYER, expLayer(65.0)],
+      mieScattering: [0.015, 0.015, 0.015],
+      mieExtinction: [0.03, 0.024, 0.018],
+      absorptionDensity: [EMPTY_LAYER, expLayer(80.0)],
+      absorptionExtinction: [0.012, 0.005, 0.001],
+      groundAlbedo: [0.15, 0.1, 0.07],
+      muSMin: -0.207912
     }
   }
 ]

@@ -284,27 +284,27 @@ function create3DRT(w: number, h: number, d: number): WebGL3DRenderTarget {
 // ════════════════════════════════════════════════════════════════════
 
 export class AtmosphereLUTGenerator {
-  private renderer: WebGLRenderer
+  private readonly renderer: WebGLRenderer
   private scene = new Scene()
   private camera = new Camera()
-  private mesh: Mesh
+  private readonly mesh: Mesh
 
   // Output render targets (persist across generate() calls for reuse)
-  private transmittanceRT: WebGLRenderTarget
-  private scatteringRT: WebGL3DRenderTarget
-  private irradianceRT: WebGLRenderTarget
+  private readonly transmittanceRT: WebGLRenderTarget
+  private readonly scatteringRT: WebGL3DRenderTarget
+  private readonly irradianceRT: WebGLRenderTarget
 
   // Materials (one per precomputation step × output variant)
-  private transmittanceMat: RawShaderMaterial
-  private directIrradianceMat: RawShaderMaterial
-  private singleScatteringRayleighMat: RawShaderMaterial
-  private singleScatteringMieMat: RawShaderMaterial
-  private singleScatteringCombinedMat: RawShaderMaterial
-  private scatteringDensityMat: RawShaderMaterial
-  private indirectIrradianceMat: RawShaderMaterial
-  private multipleScatteringMat: RawShaderMaterial
+  private readonly transmittanceMat: RawShaderMaterial
+  private readonly directIrradianceMat: RawShaderMaterial
+  private readonly singleScatteringRayleighMat: RawShaderMaterial
+  private readonly singleScatteringMieMat: RawShaderMaterial
+  private readonly singleScatteringCombinedMat: RawShaderMaterial
+  private readonly scatteringDensityMat: RawShaderMaterial
+  private readonly indirectIrradianceMat: RawShaderMaterial
+  private readonly multipleScatteringMat: RawShaderMaterial
 
-  private scatteringOrders: number
+  private readonly scatteringOrders: number
 
   constructor(renderer: WebGLRenderer, scatteringOrders = DEFAULT_SCATTERING_ORDERS) {
     this.renderer = renderer

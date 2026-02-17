@@ -29,16 +29,20 @@
 
 import { RawShaderMaterial, DoubleSide, NormalBlending, GLSL3, Mesh, Camera, Vector3, Vector2, Matrix4 } from 'three'
 import { BrunetonAtmosphereShaderTemplate } from './BrunetonAtmosphereShaderTemplate'
-import { AtmosphereConfig, updateAtmosphereUniforms } from './AtmosphereConfig'
+import { AtmosphereConfig, createAtmosphereUniforms, updateAtmosphereUniforms } from './AtmosphereConfig'
 import { AtmosphereLUTs } from './AtmosphereLUTGenerator'
+import { Actor } from '@/core/models/Actor'
 
 export class BrunetonAtmosphereMaterial extends RawShaderMaterial {
   private _modelViewMatrix = new Matrix4()
 
-  constructor() {
+  constructor(model: Actor) {
     super({
       glslVersion: GLSL3,
-      uniforms: { ...BrunetonAtmosphereShaderTemplate.uniforms },
+      uniforms: {
+        ...BrunetonAtmosphereShaderTemplate.uniforms,
+        ...createAtmosphereUniforms(model.renderingObject?.getAttribute('data'))
+      },
       vertexShader: BrunetonAtmosphereShaderTemplate.vertexShader,
       fragmentShader: BrunetonAtmosphereShaderTemplate.fragmentShader,
 
