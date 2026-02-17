@@ -27,11 +27,54 @@
  *   material.update(atmosphereMesh, camera, starWorldPosition)
  */
 
-import { RawShaderMaterial, DoubleSide, NormalBlending, GLSL3, Mesh, Camera, Vector3, Vector2, Matrix4 } from 'three'
+import {
+  RawShaderMaterial,
+  DoubleSide,
+  NormalBlending,
+  GLSL3,
+  Mesh,
+  Camera,
+  Vector3,
+  Vector2,
+  Matrix4,
+  Uniform,
+  DataTexture,
+  Data3DTexture
+} from 'three'
 import { BrunetonAtmosphereShaderTemplate } from './BrunetonAtmosphereShaderTemplate'
 import { AtmosphereConfig, createAtmosphereUniforms, updateAtmosphereUniforms } from './AtmosphereConfig'
 import { AtmosphereLUTs } from './AtmosphereLUTGenerator'
+import { IUniform } from 'three/src/renderers/shaders/UniformsLib'
 import { Actor } from '@/core/models/Actor'
+
+/**
+ * Deep-clone a uniforms object so each material instance owns independent
+ * Uniform objects. Without this, spread ({...uniforms}) creates a shallow
+ * copy where all instances share the same Uniform references — writing to
+ * one material's uniform silently overwrites every other material's value.
+ */
+function cloneUniforms(src: { [uniform: string]: IUniform }): { [uniform: string]: IUniform } {
+  const dst: { [uniform: string]: IUniform } = {}
+  for (const key in src) {
+    const v = src[key].value
+    if (v === null || v === undefined) {
+      dst[key] = new Uniform(v)
+    } else if (typeof v === 'number' || typeof v === 'boolean') {
+      dst[key] = new Uniform(v)
+    } else if (v.isVector2) {
+      dst[key] = new Uniform(v.clone())
+    } else if (v.isVector3) {
+      dst[key] = new Uniform(v.clone())
+    } else if (v.isMatrix4) {
+      dst[key] = new Uniform(v.clone())
+    } else if (v instanceof Float32Array) {
+      dst[key] = new Uniform(new Float32Array(v))
+    } else {
+      dst[key] = new Uniform(v)
+    }
+  }
+  return dst
+}
 
 export class BrunetonAtmosphereMaterial extends RawShaderMaterial {
   private _modelViewMatrix = new Matrix4()
@@ -39,10 +82,10 @@ export class BrunetonAtmosphereMaterial extends RawShaderMaterial {
   constructor(model: Actor) {
     super({
       glslVersion: GLSL3,
-      uniforms: {
+      uniforms: cloneUniforms({
         ...BrunetonAtmosphereShaderTemplate.uniforms,
         ...createAtmosphereUniforms(model.renderingObject?.getAttribute('data'))
-      },
+      }),
       vertexShader: BrunetonAtmosphereShaderTemplate.vertexShader,
       fragmentShader: BrunetonAtmosphereShaderTemplate.fragmentShader,
 
@@ -73,11 +116,29 @@ export class BrunetonAtmosphereMaterial extends RawShaderMaterial {
    * Accepts either the result of AtmosphereLUTGenerator.generate()
    * or a Map from the legacy DTLoader.
    */
-  bindLUTTextures(luts: AtmosphereLUTs): void {
-    this.uniforms.transmittance_texture.value = luts.transmittance
-    this.uniforms.scattering_texture.value = luts.scattering
-    this.uniforms.irradiance_texture.value = luts.irradiance
-    this.uniforms.single_mie_scattering_texture.value = luts.scattering
+  bindLUTTextures(luts: AtmosphereLUTs | Map<string, DataTexture | Data3DTexture>): void {
+    if (luts instanceof Map) {
+      // Legacy DTLoader format
+      const transmittance = luts.get('transmittance')
+      const scattering = luts.get('scattering')
+      const irradiance = luts.get('irradiance')
+
+      if (!transmittance || !scattering || !irradiance) {
+        console.error('BrunetonAtmosphereMaterial: Missing LUT textures in Map.')
+        return
+      }
+
+      this.uniforms.transmittance_texture.value = transmittance
+      this.uniforms.scattering_texture.value = scattering
+      this.uniforms.irradiance_texture.value = irradiance
+      this.uniforms.single_mie_scattering_texture.value = scattering
+    } else {
+      // AtmosphereLUTGenerator format
+      this.uniforms.transmittance_texture.value = luts.transmittance
+      this.uniforms.scattering_texture.value = luts.scattering
+      this.uniforms.irradiance_texture.value = luts.irradiance
+      this.uniforms.single_mie_scattering_texture.value = luts.scattering
+    }
   }
 
   /**
