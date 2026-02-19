@@ -20,7 +20,6 @@ export enum AllowedCategories {
   star,
   planet,
   atmosphere,
-  halo,
   ring
 }
 
@@ -131,12 +130,6 @@ export interface IRingRenderingObject {
   outerRadius: number
   alphaTest: number
   countParticles: number
-}
-
-export interface IHaloRenderingObject {
-  radius: number
-  day: Colorable
-  night: Colorable
 }
 
 export type Colorable = {

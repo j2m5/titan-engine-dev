@@ -11,8 +11,7 @@ import { StarOuterLayer } from '@/core/renderables/utils/StarOuterLayer'
 import { FakeStar } from '@/core/renderables/utils/FakeStar'
 import { Planet } from '@/core/renderables/Planet'
 import { FakePlanet } from '@/core/renderables/utils/FakePlanet'
-import { TestAtmosphereV2 } from '@/core/renderables/Atmosphere/TestAtmosphereV2'
-import { Halo } from '@/core/renderables/Halo'
+import { BrunetonAtmosphere } from '@/core/renderables/Atmosphere/BrunetonAtmosphere'
 import { Ring } from '@/core/renderables/Ring'
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
 import { threeJS } from '@/core/graphic/ThreeJS'
@@ -38,8 +37,6 @@ class RenderableFactory {
       case 8:
         return this.createAtmosphere(actor)
       case 9:
-        return this.createHalo(actor)
-      case 10:
         return this.createRing(actor)
       default:
         throw new Error("Couldn't resolve actor")
@@ -122,11 +119,7 @@ class RenderableFactory {
   }
 
   private static createAtmosphere(actor: Actor): Object3D {
-    return new TestAtmosphereV2(actor)
-  }
-
-  private static createHalo(actor: Actor): Object3D {
-    return new Halo(actor)
+    return new BrunetonAtmosphere(actor)
   }
 
   private static createRing(actor: Actor): Object3D {

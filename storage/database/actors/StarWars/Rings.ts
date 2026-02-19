@@ -3,7 +3,7 @@ import { IActor } from '@/core/models/types'
 const TatooRings: IActor[] = [
   {
     id: 70,
-    categoryId: 10,
+    categoryId: 9,
     parentId: 8,
     name: 'Adriana',
     description: '',

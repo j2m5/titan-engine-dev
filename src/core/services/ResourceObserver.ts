@@ -217,7 +217,7 @@ class ResourceObserver {
     if (this.scenario) {
       const collection: Collection<Actor> = ModelCollection.make(Array.from(this.map.values()))
       const rings: IResource[] = collection
-        .where({ categoryId: 10 })
+        .where({ categoryId: 9 })
         .flatMap((actor: Actor) => actor.resources.map((resource: Resource) => resource.toJSON() as IResource))
         .toArray()
 

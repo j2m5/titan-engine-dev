@@ -43,11 +43,6 @@ export const __Categories: ICategory[] = [
   },
   {
     id: 9,
-    alias: 'halo',
-    name: 'Halo'
-  },
-  {
-    id: 10,
     alias: 'ring',
     name: 'Ring'
   }

@@ -8,7 +8,7 @@ import { degToRad } from 'three/src/math/MathUtils'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
 
-class TestAtmosphereV2 extends Mesh implements Acceptable<IObject3DVisitor> {
+class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
   public model: Actor
   declare public geometry: BufferGeometry
   declare public material: BrunetonAtmosphereMaterial
@@ -46,4 +46,4 @@ class TestAtmosphereV2 extends Mesh implements Acceptable<IObject3DVisitor> {
   }
 }
 
-export { TestAtmosphereV2 }
+export { BrunetonAtmosphere }

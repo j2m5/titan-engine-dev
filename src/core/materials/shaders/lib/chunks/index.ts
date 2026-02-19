@@ -2,7 +2,6 @@ import { ringShadowFragment, ringShadowFunctions, ringShadowUniforms } from './R
 import { noiseFunctions } from './Noise'
 import { bumpFunctions } from '@/core/materials/shaders/lib/chunks/Bump'
 import { IUniform, Uniform } from 'three'
-import { atmosphereFunctions, atmosphereFragment } from '@/core/materials/shaders/lib/chunks/Atmosphere'
 
 export const AppUniformsChunk: Record<string, Record<string, IUniform>> = {
   ringShadowUniforms: {
@@ -17,7 +16,5 @@ export const AppShaderChunk: Record<string, any> = {
   ringShadowFunctions,
   ringShadowFragment,
   noiseFunctions,
-  bumpFunctions,
-  atmosphereFunctions,
-  atmosphereFragment
+  bumpFunctions
 }

@@ -3,7 +3,7 @@ import { IActor } from '@/core/models/types'
 const SolarRings: IActor[] = [
   {
     id: 80,
-    categoryId: 10,
+    categoryId: 9,
     parentId: 38,
     name: 'Saturn',
     description: '',
@@ -11,7 +11,7 @@ const SolarRings: IActor[] = [
   },
   {
     id: 81,
-    categoryId: 10,
+    categoryId: 9,
     parentId: 39,
     name: 'Uranus',
     description: '',
@@ -19,7 +19,7 @@ const SolarRings: IActor[] = [
   },
   {
     id: 82,
-    categoryId: 10,
+    categoryId: 9,
     parentId: 40,
     name: 'Neptune',
     description: '',
