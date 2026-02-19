@@ -38,10 +38,10 @@ const TatooAtmosphereRenderingObjects: IRenderingObject[] = [
     data: {
       solarIrradiance: solarIrradiance(1),
       sunAngularRadius: sunAngle(1),
-      bottomRadius: JupiterRadius + 1.2,
-      topRadius: JupiterRadius * 1.2 + 200,
+      bottomRadius: JupiterRadius * 1.3,
+      topRadius: JupiterRadius * 1.3 + 200,
       rayleighDensity: [EMPTY_LAYER, expLayer(25.2)],
-      rayleighScattering: scaleRayleigh(0.35),
+      rayleighScattering: scaleRayleigh(0.05),
       mieDensity: [EMPTY_LAYER, expLayer(15.0)],
       mieScattering: [0.006, 0.006, 0.006],
       mieExtinction: [0.008, 0.008, 0.008],
