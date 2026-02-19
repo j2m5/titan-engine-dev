@@ -33,13 +33,11 @@ import {
   NormalBlending,
   GLSL3,
   Mesh,
-  Camera,
+  PerspectiveCamera,
   Vector3,
   Vector2,
   Matrix4,
-  Uniform,
-  DataTexture,
-  Data3DTexture
+  Uniform
 } from 'three'
 import { BrunetonAtmosphereShaderTemplate } from './BrunetonAtmosphereShaderTemplate'
 import { AtmosphereConfig, createAtmosphereUniforms, updateAtmosphereUniforms } from './AtmosphereConfig'
@@ -116,35 +114,17 @@ export class BrunetonAtmosphereMaterial extends RawShaderMaterial {
    * Accepts either the result of AtmosphereLUTGenerator.generate()
    * or a Map from the legacy DTLoader.
    */
-  bindLUTTextures(luts: AtmosphereLUTs | Map<string, DataTexture | Data3DTexture>): void {
-    if (luts instanceof Map) {
-      // Legacy DTLoader format
-      const transmittance = luts.get('transmittance')
-      const scattering = luts.get('scattering')
-      const irradiance = luts.get('irradiance')
-
-      if (!transmittance || !scattering || !irradiance) {
-        console.error('BrunetonAtmosphereMaterial: Missing LUT textures in Map.')
-        return
-      }
-
-      this.uniforms.transmittance_texture.value = transmittance
-      this.uniforms.scattering_texture.value = scattering
-      this.uniforms.irradiance_texture.value = irradiance
-      this.uniforms.single_mie_scattering_texture.value = scattering
-    } else {
-      // AtmosphereLUTGenerator format
-      this.uniforms.transmittance_texture.value = luts.transmittance
-      this.uniforms.scattering_texture.value = luts.scattering
-      this.uniforms.irradiance_texture.value = luts.irradiance
-      this.uniforms.single_mie_scattering_texture.value = luts.scattering
-    }
+  bindLUTTextures(luts: AtmosphereLUTs): void {
+    this.uniforms.transmittance_texture.value = luts.transmittance
+    this.uniforms.scattering_texture.value = luts.scattering
+    this.uniforms.irradiance_texture.value = luts.irradiance
+    this.uniforms.single_mie_scattering_texture.value = luts.scattering
   }
 
   /**
    * Update per-frame uniforms.
    */
-  update(mesh: Mesh, camera: Camera, lightPosition: Vector3): void {
+  update(mesh: Mesh, camera: PerspectiveCamera, lightPosition: Vector3): void {
     this.uniforms.modelMatrix.value.copy(mesh.matrixWorld)
 
     this._modelViewMatrix.multiplyMatrices(camera.matrixWorldInverse, mesh.matrixWorld)
@@ -155,7 +135,6 @@ export class BrunetonAtmosphereMaterial extends RawShaderMaterial {
 
     this.uniforms.lightPosition.value.copy(lightPosition)
 
-    // @ts-ignore
     const far = camera.far ?? 1e10
     this.uniforms.logDepthBufFC.value = 2.0 / (Math.log(far + 1.0) / Math.LN2)
   }

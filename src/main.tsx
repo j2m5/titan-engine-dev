@@ -13,7 +13,7 @@ import { PhysicalObject } from '@/core/models/PhysicalObject'
 import { Orbit } from '@/core/models/Orbit'
 import { Resource } from '@/core/models/Resource'
 import { RenderingObject } from '@/core/models/RenderingObject'
-import { AtmosphereDebugScene } from '@/core/renderables/Atmosphere/AtmosphereDebugScene'
+//import { AtmosphereDebugScene } from '@/core/renderables/Atmosphere/AtmosphereDebugScene'
 
 const provider: AppServiceProvider = new AppServiceProvider()
 provider.register()
@@ -36,7 +36,7 @@ async function bootstrap(): Promise<void> {
 
 await bootstrap()
 
-//new AtmosphereDebugScene(document.body, 83)
+//new AtmosphereDebugScene(document.body, 84)
 
 console.log(Actor.query().get().last())
 console.log(Actor.query().orderBy('id').get().toArray())
