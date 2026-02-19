@@ -12,7 +12,6 @@ import { Barycenters } from './Barycenters'
 import { CelestialObjects } from './CelestialObjects'
 import { Atmospheres } from '@storage/database/actors/StarWars/Atmospheres'
 import { Rings } from '@storage/database/actors/StarWars/Rings'
-import { Halos } from '@storage/database/actors/StarWars/Halos'
 import { PhysicalObjects } from './PhysicalObjects'
 import { RenderingObjects } from './RenderingObjects'
 import { Orbits } from './Orbits'
@@ -35,8 +34,7 @@ export const StarWarsActors: IActor[] = [
   ...Barycenters,
   ...CelestialObjects,
   ...Atmospheres,
-  ...Rings,
-  ...Halos
+  ...Rings
 ]
 export const StarWarsPhysicalObjects: IPhysicalObject[] = PhysicalObjects
 export const StarWarsRenderingObjects: IRenderingObject[] = RenderingObjects

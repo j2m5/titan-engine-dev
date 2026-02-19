@@ -1,6 +1,5 @@
 import { IRenderingObject } from '@/core/models/types'
 import { JupiterRadius } from '@/core/constants'
-import { hexToRGB } from '@/core/materials/shaders/lib/helpers'
 import {
   EMPTY_LAYER,
   expLayer,
@@ -123,11 +122,11 @@ const SolarAtmosphereRenderingObjects: IRenderingObject[] = [
       bottomRadius: 6051.8,
       topRadius: 6151.8,
       rayleighDensity: [EMPTY_LAYER, expLayer(15.9)],
-      rayleighScattering: scaleRayleigh(0.27),
+      rayleighScattering: [0.0008, 0.0008, 0.0008],
       mieDensity: [EMPTY_LAYER, expLayer(4.0)],
       mieScattering: [0.012, 0.012, 0.012],
       mieExtinction: [0.015, 0.015, 0.015],
-      miePhaseFunctionG: 0.75,
+      miePhaseFunctionG: 0.153,
       absorptionDensity: [
         { width: 10, expTerm: 0, expScale: 0, linearTerm: 0.1, constantTerm: 0 },
         { width: 0, expTerm: 0, expScale: 0, linearTerm: -0.1, constantTerm: 1.0 }
@@ -171,8 +170,8 @@ const SolarAtmosphereRenderingObjects: IRenderingObject[] = [
       rayleighDensity: [EMPTY_LAYER, expLayer(11.1)],
       rayleighScattering: scaleRayleigh(0.0195),
       mieDensity: [EMPTY_LAYER, expLayer(11.0)],
-      mieScattering: [0.041, 0.04, 0.037],
-      mieExtinction: [0.045, 0.045, 0.045],
+      mieScattering: [0.05822, 0.04, 0.037],
+      mieExtinction: [0.0045, 0.0045, 0.0045],
       miePhaseFunctionG: 0.76,
       absorptionDensity: [EMPTY_LAYER, EMPTY_LAYER],
       absorptionExtinction: [0.0, 0.0, 0.0],
@@ -189,8 +188,8 @@ const SolarAtmosphereRenderingObjects: IRenderingObject[] = [
       bottomRadius: JupiterRadius,
       topRadius: JupiterRadius + 200,
       rayleighDensity: [EMPTY_LAYER, expLayer(25.2)],
-      rayleighScattering: scaleRayleigh(0.35),
-      mieDensity: [EMPTY_LAYER, expLayer(15.0)],
+      rayleighScattering: [0.0057, 0.0057, 0.0082],
+      mieDensity: [EMPTY_LAYER, expLayer(7)],
       mieScattering: [0.006, 0.006, 0.006],
       mieExtinction: [0.008, 0.008, 0.008],
       miePhaseFunctionG: 0.7,
@@ -208,11 +207,11 @@ const SolarAtmosphereRenderingObjects: IRenderingObject[] = [
       sunAngularRadius: sunAngle(1),
       bottomRadius: 58232,
       topRadius: 58532,
-      rayleighDensity: [EMPTY_LAYER, expLayer(51.5)],
-      rayleighScattering: scaleRayleigh(0.1),
-      mieDensity: [EMPTY_LAYER, expLayer(30.0)],
+      rayleighDensity: [EMPTY_LAYER, expLayer(7)],
+      rayleighScattering: [0.0119, 0.0094, 0.0131],
+      mieDensity: [EMPTY_LAYER, expLayer(1)],
       mieScattering: [0.0002, 0.0002, 0.0002],
-      mieExtinction: [0.00022, 0.00022, 0.00022],
+      mieExtinction: [0.06729, 0.06729, 0.06729],
       miePhaseFunctionG: 0.7,
       absorptionDensity: [EMPTY_LAYER, expLayer(40.0)],
       absorptionExtinction: [0.0003, 0.0001, 0.0005],
@@ -279,35 +278,65 @@ const SolarAtmosphereRenderingObjects: IRenderingObject[] = [
       groundAlbedo: [0.15, 0.1, 0.07],
       muSMin: -0.207912
     }
-  }
-]
-
-const SolarHaloRenderingObjects: IRenderingObject[] = [
+  },
   {
     id: 19,
     actorId: 83,
     data: {
-      radius: 1400,
-      day: hexToRGB('#699de1'),
-      night: hexToRGB('#699de1')
+      solarIrradiance: solarIrradiance(1),
+      sunAngularRadius: sunAngle(1),
+      bottomRadius: 1353.4,
+      topRadius: 1453.4,
+      rayleighDensity: [EMPTY_LAYER, expLayer(14.5)],
+      rayleighScattering: scaleRayleigh(0.00008),
+      mieDensity: [EMPTY_LAYER, expLayer(20.0)],
+      mieScattering: [0.0003, 0.0003, 0.0003],
+      mieExtinction: [0.0004, 0.0004, 0.0004],
+      miePhaseFunctionG: 0.5,
+      absorptionDensity: [EMPTY_LAYER, EMPTY_LAYER],
+      absorptionExtinction: [0.0, 0.0, 0.0],
+      groundAlbedo: [0.7, 0.7, 0.7],
+      muSMin: -0.207912
     }
   },
   {
     id: 20,
     actorId: 84,
     data: {
-      radius: 1250,
-      day: hexToRGB('#699de1'),
-      night: hexToRGB('#699de1')
+      solarIrradiance: solarIrradiance(1),
+      sunAngularRadius: sunAngle(1),
+      bottomRadius: 1188.3,
+      topRadius: 1388.3,
+      rayleighDensity: [EMPTY_LAYER, expLayer(21.1)],
+      rayleighScattering: scaleRayleigh(0.00006),
+      mieDensity: [EMPTY_LAYER, expLayer(20.0)],
+      mieScattering: [0.001, 0.0008, 0.0004],
+      mieExtinction: [0.00992, 0.00992, 0.00018],
+      miePhaseFunctionG: 0.5,
+      absorptionDensity: [EMPTY_LAYER, EMPTY_LAYER],
+      absorptionExtinction: [0.0, 0.0, 0.0],
+      groundAlbedo: [0.6, 0.55, 0.5],
+      muSMin: -0.207912
     }
   },
   {
     id: 21,
     actorId: 85,
     data: {
-      radius: 1200,
-      day: hexToRGB('#5897ea'),
-      night: hexToRGB('#5897ea')
+      solarIrradiance: solarIrradiance(1),
+      sunAngularRadius: sunAngle(1),
+      bottomRadius: 1163,
+      topRadius: 1263,
+      rayleighDensity: [EMPTY_LAYER, expLayer(14.5)],
+      rayleighScattering: scaleRayleigh(0.00008),
+      mieDensity: [EMPTY_LAYER, expLayer(20.0)],
+      mieScattering: [0.0003, 0.0003, 0.0003],
+      mieExtinction: [0.0004, 0.0004, 0.0004],
+      miePhaseFunctionG: 0.5,
+      absorptionDensity: [EMPTY_LAYER, EMPTY_LAYER],
+      absorptionExtinction: [0.0, 0.0, 0.0],
+      groundAlbedo: [0.7, 0.7, 0.7],
+      muSMin: -0.207912
     }
   }
 ]
@@ -350,6 +379,5 @@ export const RenderingObjects: IRenderingObject[] = [
   ...TOI519AtmosphereRenderingObjects,
   ...SolarPlanetRenderingObjects,
   ...SolarAtmosphereRenderingObjects,
-  ...SolarHaloRenderingObjects,
   ...SolarRingsRenderingObjects
 ]

@@ -12,7 +12,6 @@ import { Barycenters } from './Barycenters'
 import { CelestialObjects } from './CelestialObjects'
 import { Atmospheres } from '@storage/database/actors/MilkyWay/Atmospheres'
 import { Rings } from '@storage/database/actors/MilkyWay/Rings'
-import { Halos } from '@storage/database/actors/MilkyWay/Halos'
 import { PhysicalObjects } from './PhysicalObjects'
 import { RenderingObjects } from './RenderingObjects'
 import { Orbits } from './Orbits'
@@ -35,8 +34,7 @@ export const MilkyWayActors: IActor[] = [
   ...Barycenters,
   ...CelestialObjects,
   ...Atmospheres,
-  ...Rings,
-  ...Halos
+  ...Rings
 ]
 export const MilkyWayPhysicalObjects: IPhysicalObject[] = PhysicalObjects
 export const MilkyWayRenderingObjects: IRenderingObject[] = RenderingObjects

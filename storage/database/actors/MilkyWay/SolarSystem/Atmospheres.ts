@@ -64,5 +64,29 @@ export const SolarSystemAtmospheres: IActor[] = [
     name: 'Titan',
     description: '',
     color: '#ffffff'
+  },
+  {
+    id: 83,
+    categoryId: 8,
+    parentId: 63,
+    name: 'Triton',
+    description: '',
+    color: '#ffffff'
+  },
+  {
+    id: 84,
+    categoryId: 8,
+    parentId: 41,
+    name: 'Pluto',
+    description: '',
+    color: '#ffffff'
+  },
+  {
+    id: 85,
+    categoryId: 8,
+    parentId: 44,
+    name: 'Eris',
+    description: '',
+    color: '#ffffff'
   }
 ]
