@@ -24,12 +24,12 @@ const TatooOrbits: IOrbit[] = [
   {
     id: 3,
     actorId: 6,
-    semiMajorAxis: 1.6,
+    semiMajorAxis: 1.5,
     eccentricity: 0.05,
     inclination: 2.1,
     argOfPeriapsis: 259.1,
     ascendingNode: 27.4,
-    meanAnomalyAtEpoch: 17.3
+    meanAnomalyAtEpoch: 77.3
   },
   {
     id: 4,

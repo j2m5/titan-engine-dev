@@ -76,6 +76,10 @@ function cloneUniforms(src: { [uniform: string]: IUniform }): { [uniform: string
 
 export class BrunetonAtmosphereMaterial extends RawShaderMaterial {
   private _modelViewMatrix = new Matrix4()
+  private _rotationOnlyView = new Matrix4()
+  private _invModelMatrix = new Matrix4()
+  private _localCameraPos = new Vector3()
+  private _localSunDir = new Vector3()
 
   constructor(model: Actor) {
     super({
@@ -125,16 +129,46 @@ export class BrunetonAtmosphereMaterial extends RawShaderMaterial {
    * Update per-frame uniforms.
    */
   update(mesh: Mesh, camera: PerspectiveCamera, lightPosition: Vector3): void {
-    this.uniforms.modelMatrix.value.copy(mesh.matrixWorld)
+    const mw = mesh.matrixWorld.elements
+    const cw = camera.matrixWorld.elements
 
-    this._modelViewMatrix.multiplyMatrices(camera.matrixWorldInverse, mesh.matrixWorld)
+    // ── 1. Camera-relative model matrix (для gl_Position) ──
+    const crModelMatrix = this.uniforms.modelMatrix.value as Matrix4
+    crModelMatrix.copy(mesh.matrixWorld)
+    crModelMatrix.elements[12] = mw[12] - cw[12]
+    crModelMatrix.elements[13] = mw[13] - cw[13]
+    crModelMatrix.elements[14] = mw[14] - cw[14]
+
+    // ── 2. Camera-relative modelViewMatrix ──
+    const rotView = this._rotationOnlyView
+    rotView.copy(camera.matrixWorldInverse)
+    rotView.elements[12] = 0
+    rotView.elements[13] = 0
+    rotView.elements[14] = 0
+
+    this._modelViewMatrix.multiplyMatrices(rotView, crModelMatrix)
     this.uniforms.modelViewMatrix.value.copy(this._modelViewMatrix)
 
+    // ── 3. Projection (без изменений) ──
     this.uniforms.projectionMatrix.value.copy(camera.projectionMatrix)
-    this.uniforms.cameraPosition.value.copy(camera.position)
 
-    this.uniforms.lightPosition.value.copy(lightPosition)
+    // ── 4. Local camera position (float64 на CPU!) ──
+    // = inverse(originalModelMatrix) * cameraWorldPosition
+    // Используем ОРИГИНАЛЬНУЮ matrixWorld (не camera-relative)
+    this._invModelMatrix.copy(mesh.matrixWorld).invert()
 
+    this._localCameraPos.set(cw[12], cw[13], cw[14]) // camera world pos
+    this._localCameraPos.applyMatrix4(this._invModelMatrix)
+    this.uniforms.localCameraPos.value.copy(this._localCameraPos)
+
+    // ── 5. Local sun direction (float64 на CPU!) ──
+    // worldSunDir = normalize(lightPosition - meshWorldCenter)
+    this._localSunDir.set(lightPosition.x - mw[12], lightPosition.y - mw[13], lightPosition.z - mw[14]).normalize()
+    // Transform direction to local space (w=0 equivalent)
+    this._localSunDir.transformDirection(this._invModelMatrix)
+    this.uniforms.localSunDir.value.copy(this._localSunDir)
+
+    // ── 6. Log depth ──
     const far = camera.far ?? 1e10
     this.uniforms.logDepthBufFC.value = 2.0 / (Math.log(far + 1.0) / Math.LN2)
   }

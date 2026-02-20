@@ -24,8 +24,8 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
     modelMatrix: new Uniform(new Matrix4()),
     modelViewMatrix: new Uniform(new Matrix4()),
     projectionMatrix: new Uniform(new Matrix4()),
-    cameraPosition: new Uniform(new Vector3()),
-    lightPosition: new Uniform(new Vector3()),
+    localCameraPos: new Uniform(new Vector3()),
+    localSunDir: new Uniform(new Vector3()),
     inverseSpaceScale: new Uniform(1.0 / Math.pow(10, -3.3)),
     exposure: new Uniform(10.0),
     white_point: new Uniform(new Vector3(1.0, 1.0, 1.0)),
@@ -39,10 +39,11 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
   vertexShader: /* glsl */ `
     precision highp float;
 
-    uniform mat4 modelMatrix;
     uniform mat4 modelViewMatrix;
     uniform mat4 projectionMatrix;
-    uniform vec3 cameraPosition;
+
+    uniform vec3 localCameraPos;
+    uniform vec3 localSunDir;
 
     uniform vec3 lightPosition;
     uniform float inverseSpaceScale;
@@ -63,14 +64,7 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
       gl_Position = projectionMatrix * mvPosition;
 
-      mat4 invModelMatrix = inverse(modelMatrix);
-      vec3 localCameraPos = (invModelMatrix * vec4(cameraPosition, 1.0)).xyz;
-
-      vec3 meshWorldCenter = modelMatrix[3].xyz;
-      vec3 worldSunDir = normalize(lightPosition - meshWorldCenter);
-      vec3 localSunDir = normalize((invModelMatrix * vec4(worldSunDir, 0.0)).xyz);
-
-      // Local space → kilometers
+      // Everything precomputed on CPU — no inverse(), no large numbers
       vPositionKm = position * inverseSpaceScale;
       vCameraPositionKm = localCameraPos * inverseSpaceScale;
       vSunDirection = localSunDir;
