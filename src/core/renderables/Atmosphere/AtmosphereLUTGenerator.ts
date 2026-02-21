@@ -75,21 +75,21 @@ export interface AtmosphereLUTs {
 const parametricAtmosphere = createParametricAtmosphereShader()
 
 const FULLSCREEN_VERT = /* glsl */ `
-precision highp float;
-in vec2 position;
-void main() {
-  gl_Position = vec4(position, 1.0, 1.0);
-}
+  precision highp float;
+  in vec2 position;
+  void main() {
+    gl_Position = vec4(position, 1.0, 1.0);
+  }
 `
 
 function fragPreamble(additionalUniforms: string = ''): string {
   return /* glsl */ `
-${parametricAtmosphere}
-${additionalUniforms}
-uniform int u_layer;
-uniform int u_scattering_order;
-layout(location = 0) out vec4 fragColor;
-`
+    ${parametricAtmosphere}
+    ${additionalUniforms}
+    uniform int u_layer;
+    uniform int u_scattering_order;
+    layout(location = 0) out vec4 fragColor;
+  `
 }
 
 // ── Precomputation fragment shaders ──
@@ -97,100 +97,100 @@ layout(location = 0) out vec4 fragColor;
 const TRANSMITTANCE_FRAG =
   fragPreamble() +
   /* glsl */ `
-void main() {
-  AtmosphereParameters atmo = buildAtmosphere();
-  fragColor = vec4(ComputeTransmittanceToTopAtmosphereBoundaryTexture(
-    atmo, gl_FragCoord.xy), 1.0);
-}
+  void main() {
+    AtmosphereParameters atmo = buildAtmosphere();
+    fragColor = vec4(ComputeTransmittanceToTopAtmosphereBoundaryTexture(
+      atmo, gl_FragCoord.xy), 1.0);
+  }
 `
 
 const DIRECT_IRRADIANCE_FRAG =
   fragPreamble() +
   /* glsl */ `
-void main() {
-  AtmosphereParameters atmo = buildAtmosphere();
-  fragColor = vec4(ComputeDirectIrradianceTexture(
-    atmo, transmittance_texture, gl_FragCoord.xy), 1.0);
-}
+  void main() {
+    AtmosphereParameters atmo = buildAtmosphere();
+    fragColor = vec4(ComputeDirectIrradianceTexture(
+      atmo, transmittance_texture, gl_FragCoord.xy), 1.0);
+  }
 `
 
 const SINGLE_SCATTERING_FRAG =
   fragPreamble() +
   /* glsl */ `
-void main() {
-  AtmosphereParameters atmo = buildAtmosphere();
-  vec3 frag_coord = vec3(gl_FragCoord.xy, float(u_layer) + 0.5);
-  IrradianceSpectrum rayleigh;
-  IrradianceSpectrum mie;
-  ComputeSingleScatteringTexture(
-    atmo, transmittance_texture, frag_coord, rayleigh, mie);
+  void main() {
+    AtmosphereParameters atmo = buildAtmosphere();
+    vec3 frag_coord = vec3(gl_FragCoord.xy, float(u_layer) + 0.5);
+    IrradianceSpectrum rayleigh;
+    IrradianceSpectrum mie;
+    ComputeSingleScatteringTexture(
+      atmo, transmittance_texture, frag_coord, rayleigh, mie);
 
-  #if defined(OUTPUT_RAYLEIGH)
-    fragColor = vec4(rayleigh, 1.0);
-  #elif defined(OUTPUT_MIE)
-    fragColor = vec4(mie, 1.0);
-  #else
-    // COMBINED_SCATTERING_TEXTURES: rayleigh.rgb + mie.r in alpha
-    fragColor = vec4(rayleigh.rgb, mie.r);
-  #endif
-}
+    #if defined(OUTPUT_RAYLEIGH)
+      fragColor = vec4(rayleigh, 1.0);
+    #elif defined(OUTPUT_MIE)
+      fragColor = vec4(mie, 1.0);
+    #else
+      // COMBINED_SCATTERING_TEXTURES: rayleigh.rgb + mie.r in alpha
+      fragColor = vec4(rayleigh.rgb, mie.r);
+    #endif
+  }
 `
 
 const SCATTERING_DENSITY_FRAG =
   fragPreamble(/* glsl */ `
-uniform sampler3D single_rayleigh_scattering_texture;
-uniform sampler3D multiple_scattering_texture;
-`) +
+    uniform sampler3D single_rayleigh_scattering_texture;
+    uniform sampler3D multiple_scattering_texture;
+  `) +
   /* glsl */ `
-void main() {
-  AtmosphereParameters atmo = buildAtmosphere();
-  vec3 frag_coord = vec3(gl_FragCoord.xy, float(u_layer) + 0.5);
-  fragColor = vec4(ComputeScatteringDensityTexture(
-    atmo,
-    transmittance_texture,
-    single_rayleigh_scattering_texture,
-    single_mie_scattering_texture,
-    multiple_scattering_texture,
-    irradiance_texture,
-    frag_coord,
-    u_scattering_order), 1.0);
-}
+  void main() {
+    AtmosphereParameters atmo = buildAtmosphere();
+    vec3 frag_coord = vec3(gl_FragCoord.xy, float(u_layer) + 0.5);
+    fragColor = vec4(ComputeScatteringDensityTexture(
+      atmo,
+      transmittance_texture,
+      single_rayleigh_scattering_texture,
+      single_mie_scattering_texture,
+      multiple_scattering_texture,
+      irradiance_texture,
+      frag_coord,
+      u_scattering_order), 1.0);
+  }
 `
 
 const INDIRECT_IRRADIANCE_FRAG =
   fragPreamble(/* glsl */ `
-uniform sampler3D single_rayleigh_scattering_texture;
-uniform sampler3D multiple_scattering_texture;
-`) +
+    uniform sampler3D single_rayleigh_scattering_texture;
+    uniform sampler3D multiple_scattering_texture;
+  `) +
   /* glsl */ `
-void main() {
-  AtmosphereParameters atmo = buildAtmosphere();
-  fragColor = vec4(ComputeIndirectIrradianceTexture(
-    atmo,
-    single_rayleigh_scattering_texture,
-    single_mie_scattering_texture,
-    multiple_scattering_texture,
-    gl_FragCoord.xy,
-    u_scattering_order), 1.0);
-}
+  void main() {
+    AtmosphereParameters atmo = buildAtmosphere();
+    fragColor = vec4(ComputeIndirectIrradianceTexture(
+      atmo,
+      single_rayleigh_scattering_texture,
+      single_mie_scattering_texture,
+      multiple_scattering_texture,
+      gl_FragCoord.xy,
+      u_scattering_order), 1.0);
+  }
 `
 
 const MULTIPLE_SCATTERING_FRAG =
   fragPreamble(/* glsl */ `
-uniform sampler3D scattering_density_texture;
-`) +
+    uniform sampler3D scattering_density_texture;
+  `) +
   /* glsl */ `
-void main() {
-  AtmosphereParameters atmo = buildAtmosphere();
-  vec3 frag_coord = vec3(gl_FragCoord.xy, float(u_layer) + 0.5);
-  float nu;
-  fragColor = vec4(ComputeMultipleScatteringTexture(
-    atmo,
-    transmittance_texture,
-    scattering_density_texture,
-    frag_coord,
-    nu), 1.0);
-}
+  void main() {
+    AtmosphereParameters atmo = buildAtmosphere();
+    vec3 frag_coord = vec3(gl_FragCoord.xy, float(u_layer) + 0.5);
+    float nu;
+    fragColor = vec4(ComputeMultipleScatteringTexture(
+      atmo,
+      transmittance_texture,
+      scattering_density_texture,
+      frag_coord,
+      nu), 1.0);
+  }
 `
 
 // ════════════════════════════════════════════════════════════════════
@@ -283,7 +283,7 @@ function create3DRT(w: number, h: number, d: number): WebGL3DRenderTarget {
 // Generator
 // ════════════════════════════════════════════════════════════════════
 
-export class AtmosphereLUTGenerator {
+class AtmosphereLUTGenerator {
   private readonly renderer: WebGLRenderer
   private scene = new Scene()
   private camera = new Camera()
@@ -306,7 +306,7 @@ export class AtmosphereLUTGenerator {
 
   private readonly scatteringOrders: number
 
-  constructor(renderer: WebGLRenderer, scatteringOrders = DEFAULT_SCATTERING_ORDERS) {
+  public constructor(renderer: WebGLRenderer, scatteringOrders = DEFAULT_SCATTERING_ORDERS) {
     this.renderer = renderer
     this.scatteringOrders = scatteringOrders
     this.mesh = new Mesh(new PlaneGeometry(2, 2))
@@ -345,7 +345,7 @@ export class AtmosphereLUTGenerator {
 
   // ── Public API ──────────────────────────────────────────────────
 
-  generate(config: AtmosphereConfig): AtmosphereLUTs {
+  public generate(config: AtmosphereConfig): AtmosphereLUTs {
     const renderer = this.renderer
     const savedAutoClear = renderer.autoClear
     const savedRenderTarget = renderer.getRenderTarget()
@@ -481,7 +481,7 @@ export class AtmosphereLUTGenerator {
     }
   }
 
-  dispose(): void {
+  public dispose(): void {
     this.transmittanceRT.dispose()
     this.scatteringRT.dispose()
     this.irradianceRT.dispose()
@@ -581,3 +581,5 @@ export class AtmosphereLUTGenerator {
     u.u_mu_s_min.value = config.muSMin
   }
 }
+
+export { AtmosphereLUTGenerator }

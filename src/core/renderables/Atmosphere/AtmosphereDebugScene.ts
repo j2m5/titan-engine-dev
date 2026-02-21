@@ -20,22 +20,22 @@ const EMPTY = { width: 0, expTerm: 0, expScale: 0, linearTerm: 0, constantTerm: 
 const expL = (h: any) => ({ width: 0, expTerm: 1, expScale: -1 / h, linearTerm: 0, constantTerm: 0 })
 const getH = (layers: any) => (layers[1].expScale !== 0 ? -1 / layers[1].expScale : 8)
 
-export class AtmosphereDebugScene {
-  private renderer: WebGLRenderer
+class AtmosphereDebugScene {
+  private readonly renderer: WebGLRenderer
   private scene = new Scene()
-  private camera: PerspectiveCamera
+  private readonly camera: PerspectiveCamera
   private controls: OrbitControls
   private gui: GUI
-  private atmoMesh: Mesh
-  private mat: BrunetonAtmosphereMaterial
+  private readonly atmoMesh: Mesh
+  private readonly mat: BrunetonAtmosphereMaterial
   private gen: AtmosphereLUTGenerator
   private light = new Vector3()
-  private p: any
+  private readonly p: any
   private timer: any = null
   private raf = 0
-  private actor: Actor
+  private readonly actor: Actor
 
-  constructor(container: HTMLElement, actorId: number) {
+  public constructor(container: HTMLElement, actorId: number) {
     this.actor = Actor.find(actorId)!
     const data = this.actor.renderingObject?.getAttribute('data')
     this.scene.background = new Color(0, 0, 0)
@@ -56,8 +56,6 @@ export class AtmosphereDebugScene {
     this.controls.enableDamping = true
     this.controls.minDistance = 1.05
     this.controls.maxDistance = 150
-
-    console.log(this.actor.renderingObject?.getAttribute('data'))
 
     const plMat = new PlanetMaterial(this.actor.parent!)
     plMat.uniforms.diffuseMap.value = map
@@ -247,7 +245,7 @@ export class AtmosphereDebugScene {
     this.renderer.render(this.scene, this.camera)
   }
 
-  dispose() {
+  public dispose() {
     cancelAnimationFrame(this.raf)
     this.gui.destroy()
     this.controls.dispose()
@@ -256,3 +254,5 @@ export class AtmosphereDebugScene {
     this.renderer.domElement.remove()
   }
 }
+
+export { AtmosphereDebugScene }
