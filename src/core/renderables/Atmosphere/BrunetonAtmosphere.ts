@@ -28,7 +28,7 @@ class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
     const lutGenerator = new AtmosphereLUTGenerator(threeJS.renderer)
     const lut = lutGenerator.generate(this.model.renderingObject?.getAttribute('data'))
 
-    this.geometry = new SphereGeometry(radius, 128, 128)
+    this.geometry = new SphereGeometry(radius, 256, 256)
 
     this.material = new BrunetonAtmosphereMaterial(this.model)
     this.material.bindLUTTextures(lut)
