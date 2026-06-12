@@ -20,6 +20,17 @@ const TOI519Resources: IResource[] = [
   }
 ]
 
+const TestBlackHoleResources: IResource[] = [
+  {
+    id: 500,
+    actorId: 2001,
+    resourceType: 'diffuse',
+    path: 'planets/europa/europa.jpg',
+    lifetime: 60000,
+    colorSpace: 'srgb'
+  }
+]
+
 export const SolarResources: IResource[] = [...SolarSystemResources]
 
-export const Resources: IResource[] = [...TOI519Resources, ...SolarResources]
+export const Resources: IResource[] = [...TOI519Resources, ...SolarResources, ...TestBlackHoleResources]

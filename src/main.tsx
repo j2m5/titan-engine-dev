@@ -36,8 +36,6 @@ async function bootstrap(): Promise<void> {
 
 await bootstrap()
 
-//new AtmosphereDebugScene(document.body, 84)
-
 console.log(Actor.query().get().last())
 console.log(Actor.query().orderBy('id').get().toArray())
 console.log(PhysicalObject.query().orderBy('id').get().toArray())

@@ -3,6 +3,7 @@ import { Actor } from '@/core/models/Actor'
 import { Galaxy } from '@/core/renderables/Galaxy'
 import { StarSystem } from '@/core/renderables/StarSystem'
 import { Barycenter } from '@/core/renderables/Barycenter'
+import { BlackHole } from '@/core/renderables/BlackHole'
 import { StaticNode } from '@/core/renderables/utils/StaticNode'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import { Star } from '@/core/renderables/Star'
@@ -56,9 +57,19 @@ class RenderableFactory {
   }
 
   private static createBlackHole(actor: Actor): Object3D {
-    // в данный момент отсутствует стабильная реализация объекта BlackHole
-    // поэтому пока заглушка
-    return new DynamicNode(actor)
+    const node = new DynamicNode(actor)
+    const lod = new LOD()
+    const lodl1 = new BlackHole(actor)
+
+    node.name = actor.getAttribute('name')
+    node.renderable = lodl1
+
+    lod.name = actor.getAttribute('name') + 'LOD'
+    lod.addLevel(lodl1, 0)
+
+    node.add(lod)
+
+    return node
   }
 
   private static createStar(actor: Actor): Object3D {

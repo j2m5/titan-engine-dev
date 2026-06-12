@@ -13,7 +13,7 @@ import { engineStore } from '@/ui/mobx/EngineStore'
 import { threeJS } from '@/core/graphic/ThreeJS'
 
 const ObjectList = observer(() => {
-  const filter = (actor: Actor): boolean => ['planet', 'star'].includes(actor.category!.attributes.alias!)
+  const filter = (actor: Actor): boolean => ['planet', 'star', 'blackHole'].includes(actor.category!.attributes.alias!)
 
   const sceneManager = useInjection<SceneManager>('SceneManager')
 
