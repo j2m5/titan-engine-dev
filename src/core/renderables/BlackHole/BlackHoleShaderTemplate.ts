@@ -1,5 +1,6 @@
 import { IUniform, Matrix4, Texture, Uniform, Vector2, Vector3 } from 'three'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
+import { config } from '@/core/framework/config'
 
 /**
  * Шейдер чёрной дыры, этап 3: лензирование Шварцшильда + аккреционный диск
@@ -70,7 +71,7 @@ export function createBlackHoleUniforms(parameters: BlackHoleParameters): Record
     uRotationPeriod: new Uniform(Math.max(parameters.rotationPeriod, 1e-3)),
 
     /** Шаг интегрирования по углу, рад (конфиг качества) */
-    uDphi: new Uniform(0.05),
+    uDphi: new Uniform(config('blackHole.integrationDphi')),
     /** Дебаг: 0 — лензирование выключено (passthrough этапа 1), 1 — включено */
     uLensing: new Uniform(1),
     /** Дебаг: подкраска пикселей по числу пересечений плоскости диска */

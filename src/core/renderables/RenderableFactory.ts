@@ -4,6 +4,7 @@ import { Galaxy } from '@/core/renderables/Galaxy'
 import { StarSystem } from '@/core/renderables/StarSystem'
 import { Barycenter } from '@/core/renderables/Barycenter'
 import { BlackHole } from '@/core/renderables/BlackHole'
+import { BlackHoleImpostor } from '@/core/renderables/BlackHole/BlackHoleImpostor'
 import { StaticNode } from '@/core/renderables/utils/StaticNode'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import { Star } from '@/core/renderables/Star'
@@ -60,12 +61,22 @@ class RenderableFactory {
     const node = new DynamicNode(actor)
     const lod = new LOD()
     const lodl1 = new BlackHole(actor)
+    const lodl2 = new BlackHoleImpostor(actor, lodl1.parameters)
+
+    const distanceLod = (pixels: number): number => {
+      const radius: number = lodl1.parameters.simulationRadius
+      const fov: number = degToRad(config('camera.fov'))
+
+      return toThreeJSUnits((2 * radius * threeJS.renderer.domElement.height) / (Math.tan(fov) * pixels))
+    }
 
     node.name = actor.getAttribute('name')
     node.renderable = lodl1
 
     lod.name = actor.getAttribute('name') + 'LOD'
-    lod.addLevel(lodl1, 0)
+
+    lod.addLevel(lodl1)
+    lod.addLevel(lodl2, distanceLod(config('blackHole.lodPixels')), config('blackHole.lodHysteresis'))
 
     node.add(lod)
 
