@@ -3,7 +3,6 @@ import { Engine } from '@/core/Engine'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { ScenarioConfig } from '@/config/scenarios'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { resourceStorage } from '@/core/services/ResourceStorage'
 
 @injectable()
 class Application {
@@ -18,8 +17,11 @@ class Application {
     this.resourceObserver.scenario = scenario
     await this.resourceObserver.loadPrimaryTextures()
 
-    threeJS.scene.background = resourceStorage.getTexture('cubemaps-scene-main')!
-    console.log(threeJS.scene)
+    if (!this.resourceObserver.sceneBackground) {
+      console.warn('[Application] Кубическая карта фона сценария не загружена, сцена останется без фона')
+    }
+
+    threeJS.scene.background = this.resourceObserver.sceneBackground
 
     this.engine.start()
   }

@@ -9,7 +9,7 @@ import { CubeMapTextureManager } from '@/core/services/CubeMapTextureManager'
 import { TextureManager } from '@/core/services/TextureManager'
 import { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
 import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
-import { DefaultLoadingManager, Object3D, Texture } from 'three'
+import { CubeTexture, DefaultLoadingManager, Object3D, Texture } from 'three'
 import { engineStore } from '@/ui/mobx/EngineStore'
 import { notificationStore } from '@/ui/mobx/NotificationStore'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -47,6 +47,11 @@ class ResourceObserver {
   private _scenario: ScenarioConfig | null
 
   /**
+   * Загруженная кубическая карта фона текущего сценария
+   */
+  private _sceneBackground: CubeTexture | null
+
+  /**
    * Карта содержащая все сущности текущего сценария, где ключ - идентификатор актора
    */
   private readonly _map: Map<number, Actor>
@@ -64,6 +69,7 @@ class ResourceObserver {
     @inject('ImageBitmapManager') private imageBitmapManager: ImageBitmapManager
   ) {
     this._scenario = null
+    this._sceneBackground = null
     this._map = new Map()
     this.sceneObserver.subscribe('ClosestChange', this.closestChange)
     this.setRequiredTextures()
@@ -77,11 +83,19 @@ class ResourceObserver {
   }
 
   /**
+   * Геттер для кубической карты фона сцены
+   */
+  public get sceneBackground(): CubeTexture | null {
+    return this._sceneBackground
+  }
+
+  /**
    * Сеттер для текущего сценария
    * @param scenario Новый сценарий
    */
   public set scenario(scenario: ScenarioConfig | null) {
     this._scenario = scenario
+    this._sceneBackground = null
     this.setMap()
     this.setCubeTextures()
     this.setMisc()
@@ -99,7 +113,7 @@ class ResourceObserver {
    */
   public async loadPrimaryTextures(): Promise<void> {
     this.setLoadingProgress()
-    await this.cubeMapTextureManager.load(this.cube)
+    this._sceneBackground = (await this.cubeMapTextureManager.load(this.cube)) ?? null
     await this.textureManager.loadAll(this.required)
     await this.imageBitmapManager.loadAll(this.misc)
   }
