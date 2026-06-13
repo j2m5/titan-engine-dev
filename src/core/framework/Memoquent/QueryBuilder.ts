@@ -35,11 +35,15 @@ class QueryBuilder<TData extends DataSource, TModel extends Model<TData>> {
   private _offset?: number
   private _orderBy?: { field: keyof TData; direction: 'asc' | 'desc' }
 
+  private scopesApplied: boolean = false
   private removedScopes: Set<string> = new Set()
 
   public constructor(private modelClass: ModelConstructor<TData, TModel>) {}
 
   private applyGlobalScopes(): void {
+    if (this.scopesApplied) return
+    this.scopesApplied = true
+
     const scopes = (this.modelClass as any).getGlobalScopes()
 
     scopes.forEach((scope: Scope<TData, TModel>, name: string): void => {
@@ -220,11 +224,11 @@ class QueryBuilder<TData extends DataSource, TModel extends Model<TData>> {
       collection = collection.sortBy(this._orderBy.field as any, this._orderBy.direction)
     }
 
-    if (this._offset !== undefined && this._offset > 0) {
+    if (this._offset !== undefined) {
       collection = collection.skip(this._offset)
     }
 
-    if (this._limit !== undefined && this._limit > 0) {
+    if (this._limit !== undefined) {
       collection = collection.take(this._limit)
     }
 
@@ -269,10 +273,7 @@ class QueryBuilder<TData extends DataSource, TModel extends Model<TData>> {
   }
 
   public count(): number {
-    const ModelClass = this.modelClass as any
-    const collection: ModelCollection<TModel> = this._conditions ? ModelClass.where(this._conditions) : ModelClass.all()
-
-    return collection.count()
+    return this.get().count()
   }
 
   public pluck<TKey extends keyof TData>(field: TKey): TData[TKey][] {
