@@ -3,6 +3,7 @@ import { Actor } from '@/core/models/Actor'
 import { Quaternion, Vector3 } from 'three'
 import { inject, injectable } from 'inversify'
 import { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
+import { BlackHoleParameters } from '@/core/renderables/BlackHole'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { menuStore } from '@/ui/mobx/MenuStore'
 import { cameraStore } from '@/ui/mobx/CameraStore'
@@ -27,8 +28,18 @@ class CameraToObjectTransition extends Command<CameraToObjectTransitionArgs> {
 
     if (!data) return
 
-    const radius: number = toThreeJSUnits(this.model.physicalObject!.getAttribute('radius'))
-    const offset: number = radius * 3
+    const isBlackHole: boolean = this.model.category?.getAttribute('alias') === 'blackHole'
+
+    let offset: number
+
+    if (isBlackHole) {
+      const parameters: BlackHoleParameters = new BlackHoleParameters(this.model)
+      offset = parameters.simulationRadiusUnits * 1.3
+    } else {
+      const radius: number = toThreeJSUnits(this.model.physicalObject!.getAttribute('radius'))
+      offset = radius * 3
+    }
+
     const alpha: number = (data.distance - offset) / data.distance
     const destination: Vector3 = new Vector3().lerpVectors(this.sceneObserver.cameraPosition, data.position, alpha)
     const currentSpeed: number = cameraStore.speed
