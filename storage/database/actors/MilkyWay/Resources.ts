@@ -20,12 +20,12 @@ const TOI519Resources: IResource[] = [
   }
 ]
 
-const TestBlackHoleResources: IResource[] = [
+const SgrAResources: IResource[] = [
   {
-    id: 500,
-    actorId: 2001,
+    id: 116,
+    actorId: 95,
     resourceType: 'diffuse',
-    path: 'planets/europa/europa.jpg',
+    path: 'planets/StarWars/yavin/iv/iv.png',
     lifetime: 60000,
     colorSpace: 'srgb'
   }
@@ -33,4 +33,4 @@ const TestBlackHoleResources: IResource[] = [
 
 export const SolarResources: IResource[] = [...SolarSystemResources]
 
-export const Resources: IResource[] = [...TOI519Resources, ...SolarResources, ...TestBlackHoleResources]
+export const Resources: IResource[] = [...TOI519Resources, ...SolarResources, ...SgrAResources]

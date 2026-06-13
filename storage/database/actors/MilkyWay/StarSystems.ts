@@ -18,10 +18,10 @@ export const StarSystems: IActor[] = [
     color: '#ffffff'
   },
   {
-    id: 700,
+    id: 93,
     categoryId: 3,
     parentId: 19,
-    name: 'Test Black hole system',
+    name: 'Sgr A* system',
     description: '',
     color: '#ffffff'
   }

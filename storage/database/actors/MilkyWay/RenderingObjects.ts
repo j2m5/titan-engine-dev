@@ -352,6 +352,32 @@ const SolarAtmosphereRenderingObjects: IRenderingObject[] = [
   }
 ]
 
+const SgrAAtmosphereRenderingObjects: IRenderingObject[] = [
+  {
+    id: 32,
+    actorId: 96,
+    data: {
+      solarIrradiance: solarIrradiance(1),
+      sunAngularRadius: sunAngle(1),
+      bottomRadius: 6100,
+      topRadius: 6160,
+      rayleighDensity: [EMPTY_LAYER, expLayer(8.0)],
+      rayleighScattering: [0.005802, 0.013558, 0.0331],
+      mieDensity: [EMPTY_LAYER, expLayer(1.2)],
+      mieScattering: [0.003996, 0.003996, 0.003996],
+      mieExtinction: [0.00444, 0.00444, 0.00444],
+      miePhaseFunctionG: 0.8,
+      absorptionDensity: [
+        { width: 25, expTerm: 0, expScale: 0, linearTerm: 1.0 / 15.0, constantTerm: -2.0 / 3.0 },
+        { width: 0, expTerm: 0, expScale: 0, linearTerm: -1.0 / 15.0, constantTerm: 8.0 / 3.0 }
+      ],
+      absorptionExtinction: [0.00065, 0.001881, 0.000085],
+      groundAlbedo: [0.1, 0.1, 0.1],
+      muSMin: -0.207912
+    }
+  }
+]
+
 const SolarRingsRenderingObjects: IRenderingObject[] = [
   {
     id: 22,
@@ -391,5 +417,6 @@ export const RenderingObjects: IRenderingObject[] = [
   ...SolarPlanetRenderingObjects,
   ...SolarAtmosphereRenderingObjects,
   ...SolarRingsRenderingObjects,
-  ...TestBlackHoleRenderingObjects
+  ...TestBlackHoleRenderingObjects,
+  ...SgrAAtmosphereRenderingObjects
 ]

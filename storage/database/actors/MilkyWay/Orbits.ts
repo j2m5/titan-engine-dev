@@ -14,13 +14,13 @@ const TOI519Orbits: IOrbit[] = [
   }
 ]
 
-const TestBlackHoleOrbits: IOrbit[] = [
+const SgrAOrbits: IOrbit[] = [
   {
-    id: 3000,
-    actorId: 2001,
-    semiMajorAxis: 2.0159,
+    id: 61,
+    actorId: 95,
+    semiMajorAxis: 15.0159,
     eccentricity: 0.35,
-    inclination: 10.8,
+    inclination: 14.8,
     argOfPeriapsis: 41.168,
     ascendingNode: 125.452,
     meanAnomalyAtEpoch: 27.276
@@ -29,4 +29,4 @@ const TestBlackHoleOrbits: IOrbit[] = [
 
 const SolarOrbits: IOrbit[] = [...SolarSystemOrbits]
 
-export const Orbits: IOrbit[] = [...TOI519Orbits, ...SolarOrbits, ...TestBlackHoleOrbits]
+export const Orbits: IOrbit[] = [...TOI519Orbits, ...SolarOrbits, ...SgrAOrbits]

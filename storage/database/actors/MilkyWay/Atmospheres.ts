@@ -12,6 +12,17 @@ const TOI519Atmospheres: IActor[] = [
   }
 ]
 
+const SgrAAtmospheres: IActor[] = [
+  {
+    id: 96,
+    categoryId: 8,
+    parentId: 95,
+    name: 'Sgr A* I',
+    description: '',
+    color: '#ffffff'
+  }
+]
+
 const SolarAtmospheres: IActor[] = [...SolarSystemAtmospheres]
 
-export const Atmospheres: IActor[] = [...TOI519Atmospheres, ...SolarAtmospheres]
+export const Atmospheres: IActor[] = [...TOI519Atmospheres, ...SolarAtmospheres, ...SgrAAtmospheres]

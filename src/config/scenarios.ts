@@ -60,12 +60,12 @@ export const Scenarios: ScenarioConfig[] = [
   {
     id: 5,
     galaxyId: 19,
-    rootId: 700,
-    name: 'Test Black hole system',
-    description: 'Test black hole object',
-    preview: 'unknown.png',
+    rootId: 93,
+    name: 'Sagittarius A* system',
+    description: 'Test demo of Supermassive black hole with some nearest objects',
+    preview: 'SgrASystem.jpg',
     skybox: [94, 95, 96, 97, 98, 99],
     defaultCameraPosition: [0, fromAstronomicalUnits(1), fromAstronomicalUnits(1)],
-    lightSources: [2000]
+    lightSources: [93]
   }
 ]

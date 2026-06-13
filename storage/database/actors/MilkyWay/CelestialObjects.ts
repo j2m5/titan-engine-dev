@@ -20,20 +20,20 @@ const TOI519CelestialObjects: IActor[] = [
   }
 ]
 
-const TestBlackHoleObjects: IActor[] = [
+const SgrAObjects: IActor[] = [
   {
-    id: 2000,
+    id: 94,
     categoryId: 5,
-    parentId: 700,
-    name: 'Test Black Hole',
+    parentId: 93,
+    name: 'Sgr A*',
     description: '',
-    color: '#ef3535'
+    color: '#ffffff'
   },
   {
-    id: 2001,
+    id: 95,
     categoryId: 7,
-    parentId: 2000,
-    name: 'Test Planet',
+    parentId: 94,
+    name: 'Sgr A* I',
     description: '',
     color: '#2e78da'
   }
@@ -41,4 +41,4 @@ const TestBlackHoleObjects: IActor[] = [
 
 const SolarCelestialObjects: IActor[] = [...SolarSystemCelestialObjects]
 
-export const CelestialObjects: IActor[] = [...TOI519CelestialObjects, ...SolarCelestialObjects, ...TestBlackHoleObjects]
+export const CelestialObjects: IActor[] = [...TOI519CelestialObjects, ...SolarCelestialObjects, ...SgrAObjects]
