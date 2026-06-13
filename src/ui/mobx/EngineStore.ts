@@ -1,9 +1,10 @@
-import { makeAutoObservable } from 'mobx'
+import { makeAutoObservable, runInAction } from 'mobx'
 import { Application } from '@/Application'
 import { ScenarioConfig } from '@/config/scenarios'
 import { timeStore } from '@/ui/mobx/TimeStore'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { Vector3 } from 'three'
+import { scenarioContext } from '@/core/scenario/ScenarioContext'
 
 class EngineStore {
   private app: Application | null = null
@@ -15,6 +16,12 @@ class EngineStore {
 
   public constructor() {
     makeAutoObservable(this)
+
+    scenarioContext.subscribe('change', (scenario: ScenarioConfig | null): void => {
+      runInAction((): void => {
+        this.scenario = scenario
+      })
+    })
   }
 
   public async initialize(app: Application): Promise<void> {
@@ -22,18 +29,18 @@ class EngineStore {
   }
 
   public async setScenario(payload: ScenarioConfig | null): Promise<void> {
-    this.scenario = payload
+    scenarioContext.set(payload)
 
-    if (this.scenario && this.app) {
+    if (payload && this.app) {
       this.setAppLoadingStatus(true)
 
       timeStore.setSpeedOfTime(1)
 
-      await this.app.run(this.scenario)
+      await this.app.run(payload)
 
       this.setAppLoadingStatus(false)
 
-      threeJS.camera.position.set(...this.scenario.defaultCameraPosition)
+      threeJS.camera.position.set(...payload.defaultCameraPosition)
       threeJS.camera.lookAt(new Vector3())
     }
   }

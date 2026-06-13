@@ -9,8 +9,8 @@ import { Crosshair } from '@/core/renderables/utils/Crosshair'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { RenderableObject3D, ShouldRenderOrbitLine } from '@/core/renderables/types'
+import { scenarioContext } from '@/core/scenario/ScenarioContext'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { engineStore } from '@/ui/mobx/EngineStore'
 
 export function isAcceptable(object: unknown): object is Acceptable<IObject3DVisitor> {
   return (object as Acceptable<IObject3DVisitor>).accept !== undefined
@@ -32,9 +32,9 @@ class SceneManager {
   public constructor(private markerManager: MarkerManager) {}
 
   public initialize(): void {
-    if (!engineStore.scenario) return
+    if (!scenarioContext.current) return
 
-    const root = Actor.find(engineStore.scenario.rootId)
+    const root = Actor.find(scenarioContext.rootId!)
 
     if (!root) return
 
