@@ -1,4 +1,3 @@
-import { inject, injectable } from 'inversify'
 import { EventEmitter } from '@/core/framework/EventEmitter'
 import { SceneManager } from '@/core/services/SceneManager'
 import { SceneObserver } from '@/core/services/SceneObserver'
@@ -11,7 +10,6 @@ import { cameraStore } from '@/ui/mobx/CameraStore'
 import { timeStore } from '@/ui/mobx/TimeStore'
 import { Vector2 } from 'three'
 
-@injectable()
 class Engine extends EventEmitter {
   private readonly canvas: HTMLCanvasElement
   private readonly overlay: HTMLElement
@@ -25,8 +23,8 @@ class Engine extends EventEmitter {
   private readonly boundOnClick: (event: MouseEvent) => void
 
   public constructor(
-    @inject('SceneManager') private sceneManager: SceneManager,
-    @inject('SceneObserver') private sceneObserver: SceneObserver
+    private sceneManager: SceneManager,
+    private sceneObserver: SceneObserver
   ) {
     super()
     this.canvas = threeJS.renderer.domElement

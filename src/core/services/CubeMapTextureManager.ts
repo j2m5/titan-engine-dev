@@ -1,4 +1,3 @@
-import { injectable } from 'inversify'
 import { ResourceManager } from '@/core/services/ResourceManager'
 import { CubeTexture, CubeTextureLoader } from 'three'
 import { IResource } from '@/core/models/types'
@@ -6,7 +5,6 @@ import { threeJS } from '@/core/graphic/ThreeJS'
 import { Storage } from '@/core/framework/file/Storage'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
-@injectable()
 class CubeMapTextureManager extends ResourceManager<IResource[], CubeTexture, readonly string[]> {
   protected loader: CubeTextureLoader
 

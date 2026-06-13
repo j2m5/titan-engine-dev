@@ -1,4 +1,3 @@
-import { injectable, inject } from 'inversify'
 import dayjs from 'dayjs'
 import { ScenarioConfig } from '@/config/scenarios'
 import { IActor, IResource } from '@/core/models/types'
@@ -22,7 +21,6 @@ import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 /**
  * Наблюдатель за ресурсами, отвечающий жизненный цикл ресурсов
  */
-@injectable()
 class ResourceObserver {
   /**
    * Массив ресурсов кубических карт для фона сцены
@@ -63,10 +61,10 @@ class ResourceObserver {
    * @param imageBitmapManager Менеджер ImageBitmap
    */
   public constructor(
-    @inject('SceneObserver') private sceneObserver: SceneObserver,
-    @inject('CubeMapTextureManager') private cubeMapTextureManager: CubeMapTextureManager,
-    @inject('TextureManager') private textureManager: TextureManager,
-    @inject('ImageBitmapManager') private imageBitmapManager: ImageBitmapManager
+    private sceneObserver: SceneObserver,
+    private cubeMapTextureManager: CubeMapTextureManager,
+    private textureManager: TextureManager,
+    private imageBitmapManager: ImageBitmapManager
   ) {
     this._scenario = null
     this._sceneBackground = null

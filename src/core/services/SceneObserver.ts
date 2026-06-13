@@ -1,4 +1,3 @@
-import { injectable } from 'inversify'
 import { EventEmitter } from '@/core/framework/EventEmitter'
 import { AstroControls } from '@/core/libs/AstroControls'
 import { Object3D, Scene, Vector3 } from 'three'
@@ -14,7 +13,6 @@ export type SceneObserverRecord = {
   data: ObservableRecord
 }
 
-@injectable()
 class SceneObserver extends EventEmitter {
   private _observable: AstroControls | null = null
   private _scene: Scene | null = null

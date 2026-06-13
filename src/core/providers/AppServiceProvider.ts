@@ -1,4 +1,6 @@
-import { ServiceProvider } from '@/core/framework/services/ServiceProvider'
+import { ServiceProvider } from '@/core/framework/container/ServiceProvider'
+import { Container } from '@/core/framework/container/Container'
+import { Tokens } from '@/core/providers/tokens'
 import { Engine } from '@/core/Engine'
 import { Application } from '@/Application'
 import { CubeMapTextureManager } from '@/core/services/CubeMapTextureManager'
@@ -12,16 +14,40 @@ import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTrans
 
 class AppServiceProvider extends ServiceProvider {
   public register(): void {
-    this.container.bind('Engine').to(Engine).inSingletonScope()
-    this.container.bind('Application').to(Application).inSingletonScope()
-    this.container.bind('CubeMapTextureManager').to(CubeMapTextureManager).inSingletonScope()
-    this.container.bind('TextureManager').to(TextureManager).inSingletonScope()
-    this.container.bind('ImageBitmapManager').to(ImageBitmapManager).inSingletonScope()
-    this.container.bind('SceneManager').to(SceneManager).inSingletonScope()
-    this.container.bind('MarkerManager').to(MarkerManager).inSingletonScope()
-    this.container.bind('ResourceObserver').to(ResourceObserver).inSingletonScope()
-    this.container.bind('SceneObserver').to(SceneObserver).inSingletonScope()
-    this.container.bind(CameraToObjectTransition).toSelf().inTransientScope()
+    this.app.singleton(Tokens.SceneObserver, () => new SceneObserver())
+
+    this.app.singleton(Tokens.CubeMapTextureManager, () => new CubeMapTextureManager())
+    this.app.singleton(Tokens.TextureManager, () => new TextureManager())
+    this.app.singleton(Tokens.ImageBitmapManager, () => new ImageBitmapManager())
+
+    this.app.singleton(Tokens.MarkerManager, (c: Container) => new MarkerManager(c.get(Tokens.SceneObserver)))
+
+    this.app.singleton(Tokens.SceneManager, (c: Container) => new SceneManager(c.get(Tokens.MarkerManager)))
+
+    this.app.singleton(
+      Tokens.Engine,
+      (c: Container) => new Engine(c.get(Tokens.SceneManager), c.get(Tokens.SceneObserver))
+    )
+
+    this.app.singleton(
+      Tokens.ResourceObserver,
+      (c: Container) =>
+        new ResourceObserver(
+          c.get(Tokens.SceneObserver),
+          c.get(Tokens.CubeMapTextureManager),
+          c.get(Tokens.TextureManager),
+          c.get(Tokens.ImageBitmapManager)
+        )
+    )
+
+    this.app.singleton(
+      Tokens.Application,
+      (c: Container) => new Application(c.get(Tokens.Engine), c.get(Tokens.ResourceObserver))
+    )
+
+    // Команды — transient с конструктором класса в роли ключа:
+    // каждый Command.execute() получает свежий экземпляр.
+    this.app.bind(CameraToObjectTransition, (c: Container) => new CameraToObjectTransition(c.get(Tokens.SceneObserver)))
   }
 }
 

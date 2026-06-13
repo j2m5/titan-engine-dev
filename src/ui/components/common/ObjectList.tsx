@@ -1,7 +1,7 @@
 import { JSX } from 'react'
 import { observer } from 'mobx-react-lite'
-import { useInjection } from '@/ui/inversify-react'
-import { SceneManager } from '@/core/services/SceneManager'
+import { useInjection } from '@/ui/di-react'
+import { Tokens } from '@/core/providers/tokens'
 import TitanList from '@/ui/TitanUI/components/TitanList'
 import TitanListItem from '@/ui/TitanUI/components/TitanListItem'
 import TitanFlex from '@/ui/TitanUI/components/TitanFlex'
@@ -15,7 +15,7 @@ import { threeJS } from '@/core/graphic/ThreeJS'
 const ObjectList = observer(() => {
   const filter = (actor: Actor): boolean => ['planet', 'star', 'blackHole'].includes(actor.category!.attributes.alias!)
 
-  const sceneManager = useInjection<SceneManager>('SceneManager')
+  const sceneManager = useInjection(Tokens.SceneManager)
 
   const actors: Actor[] = Actor.query()
     .where({ parentId: engineStore.scenario?.rootId })

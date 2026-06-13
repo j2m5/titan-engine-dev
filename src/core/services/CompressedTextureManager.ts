@@ -1,4 +1,3 @@
-import { injectable } from 'inversify'
 import { ResourceManager } from '@/core/services/ResourceManager'
 import { IResource } from '@/core/models/types'
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader'
@@ -6,7 +5,6 @@ import { threeJS } from '@/core/graphic/ThreeJS'
 import { CompressedTexture } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
-@injectable()
 class CompressedTextureManager extends ResourceManager<IResource> {
   protected loader: KTX2Loader
 

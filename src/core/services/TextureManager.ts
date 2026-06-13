@@ -1,11 +1,9 @@
-import { injectable } from 'inversify'
 import { ResourceManager } from '@/core/services/ResourceManager'
 import { Texture, TextureLoader } from 'three'
 import { IResource } from '@/core/models/types'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
-@injectable()
 class TextureManager extends ResourceManager<IResource, Texture> {
   protected loader: TextureLoader
 

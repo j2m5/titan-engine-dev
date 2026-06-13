@@ -1,4 +1,3 @@
-import { inject, injectable } from 'inversify'
 import { Object3D, Scene } from 'three'
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { MarkerManager } from '@/core/services/MarkerManager'
@@ -25,13 +24,12 @@ export function hasOrbit(object: unknown): object is ShouldRenderOrbitLine {
   return (object as ShouldRenderOrbitLine).orbit !== undefined
 }
 
-@injectable()
 class SceneManager {
   public crosshair: CSS2DObject = new Crosshair()
   private scene: Scene = threeJS.scene
   private buffer: Map<number, Object3D> = new Map()
 
-  public constructor(@inject('MarkerManager') private markerManager: MarkerManager) {}
+  public constructor(private markerManager: MarkerManager) {}
 
   public initialize(): void {
     if (!engineStore.scenario) return

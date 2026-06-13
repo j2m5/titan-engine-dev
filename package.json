@@ -17,14 +17,12 @@
     "@three.ez/instanced-mesh": "^0.3.13",
     "animejs": "^3.2.2",
     "dayjs": "^1.11.13",
-    "inversify": "^7.0.0-alpha.5",
     "mobx": "^6.13.6",
     "mobx-react-lite": "^4.1.0",
-    "music-metadata": "^11.10.6",
+    "music-metadata": "^11.13.0",
     "postprocessing": "^6.37.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "reflect-metadata": "^0.2.2",
     "three": "^0.182.0"
   },
   "devDependencies": {

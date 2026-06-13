@@ -1,4 +1,3 @@
-import { injectable } from 'inversify'
 import dayjs from 'dayjs'
 import type { Loader } from 'three'
 import { FileSystemDrivers } from '@/config/filesystem'
@@ -15,7 +14,6 @@ export interface ResourceItem {
   expiredAt: dayjs.Dayjs
 }
 
-@injectable()
 abstract class ResourceManager<TSource, TData = unknown, TUrl = string> {
   public driver: FileSystemDrivers
   protected abstract loader: Loader<TData, TUrl>

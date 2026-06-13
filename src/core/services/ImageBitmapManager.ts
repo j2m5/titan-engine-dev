@@ -1,11 +1,9 @@
-import { injectable } from 'inversify'
 import dayjs from 'dayjs'
 import { ResourceManager, ResourceItem } from '@/core/services/ResourceManager'
 import { IResource } from '@/core/models/types'
 import { CanvasTexture, ImageBitmapLoader, Texture } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
-@injectable()
 class ImageBitmapManager extends ResourceManager<IResource, ImageBitmap> {
   protected loader: ImageBitmapLoader
 

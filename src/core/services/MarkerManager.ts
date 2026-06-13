@@ -1,4 +1,3 @@
-import { inject, injectable } from 'inversify'
 import { Object3D } from 'three'
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { SceneObserver } from '@/core/services/SceneObserver'
@@ -22,11 +21,10 @@ type MarkerEntry = {
   label: CSS2DObject
 }
 
-@injectable()
 class MarkerManager {
   private markers: MarkerEntry[] = []
 
-  public constructor(@inject('SceneObserver') private sceneObserver: SceneObserver) {}
+  public constructor(private sceneObserver: SceneObserver) {}
 
   public add(options: MarkerOptions): void {
     const marker: CSS2DObject = new ObjectMarker(options, this.sceneObserver)
