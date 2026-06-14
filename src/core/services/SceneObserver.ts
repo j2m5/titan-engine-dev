@@ -20,7 +20,7 @@ class SceneObserver extends EventEmitter {
   public data: Map<string, ObservableRecord> = new Map()
   public objects: Object3D[] = []
 
-  private readonly categories: string[] = ['planet', 'star']
+  private readonly categories: string[] = ['planet', 'star', 'blackHole']
   private vector: Vector3 = new Vector3()
 
   private readonly onObservableChange = (event: { data: Vector3 }): void => {
