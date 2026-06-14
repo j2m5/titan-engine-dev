@@ -19,10 +19,10 @@ const TOI519PlanetRenderingObjects: IRenderingObject[] = [
   }
 ]
 
-const TestBlackHoleRenderingObjects: IRenderingObject[] = [
+const SgrARenderingObjects: IRenderingObject[] = [
   {
-    id: 2,
-    actorId: 2001,
+    id: 33,
+    actorId: 95,
     data: {
       emission: 1,
       bumpScale: 0
@@ -417,6 +417,6 @@ export const RenderingObjects: IRenderingObject[] = [
   ...SolarPlanetRenderingObjects,
   ...SolarAtmosphereRenderingObjects,
   ...SolarRingsRenderingObjects,
-  ...TestBlackHoleRenderingObjects,
+  ...SgrARenderingObjects,
   ...SgrAAtmosphereRenderingObjects
 ]
