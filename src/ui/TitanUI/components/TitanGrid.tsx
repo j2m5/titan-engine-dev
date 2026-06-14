@@ -1,5 +1,5 @@
 import { FC } from 'react'
-import { TitanGridProps } from '@/ui/TitanUI/types'
+import { TitanGridProps } from '@titanui/types'
 
 const TitanGrid: FC<TitanGridProps> = ({ children, min = 200, gap = 12 }) => {
   return (

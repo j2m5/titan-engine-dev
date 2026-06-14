@@ -1,6 +1,6 @@
 import { FC } from 'react'
-import { TitanContainerProps } from '@/ui/TitanUI/types'
-import { formatCssValue as fcv } from '@/ui/TitanUI/utils/helpers'
+import { TitanContainerProps } from '@titanui/types'
+import { formatCssValue as fcv } from '@titanui/utils/helpers'
 
 const TitanContainer: FC<TitanContainerProps> = ({ children, height = 'auto', width = 'auto', style = {} }) => {
   return (

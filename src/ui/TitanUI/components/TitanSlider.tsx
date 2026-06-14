@@ -1,5 +1,5 @@
 import { FC } from 'react'
-import { TitanSliderProps } from '@/ui/TitanUI/types'
+import { TitanSliderProps } from '@titanui/types'
 
 const TitanSlider: FC<TitanSliderProps> = ({
   value = 0,

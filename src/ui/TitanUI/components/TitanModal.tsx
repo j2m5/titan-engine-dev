@@ -1,7 +1,7 @@
 import { FC } from 'react'
-import { TitanModalProps } from '@/ui/TitanUI/types'
-import TitanContainer from '@/ui/TitanUI/components/TitanContainer'
-import TitanDivider from '@/ui/TitanUI/components/TitanDivider'
+import { TitanModalProps } from '@titanui/types'
+import TitanContainer from '@titanui/components/TitanContainer'
+import TitanDivider from '@titanui/components/TitanDivider'
 
 const TitanModal: FC<TitanModalProps> = ({
   children,

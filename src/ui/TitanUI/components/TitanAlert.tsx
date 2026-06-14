@@ -1,5 +1,5 @@
 import { FC } from 'react'
-import { AlertType, TitanAlertProps } from '@/ui/TitanUI/types'
+import { AlertType, TitanAlertProps } from '@titanui/types'
 import { CheckCircleIcon, InfoIcon, WarningCircleIcon, XCircleIcon } from '@phosphor-icons/react'
 
 const icon = (type: AlertType) => {

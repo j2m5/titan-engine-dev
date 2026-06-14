@@ -1,5 +1,5 @@
 import { FC } from 'react'
-import { TitanLabelProps } from '@/ui/TitanUI/types'
+import { TitanLabelProps } from '@titanui/types'
 
 const TitanLabel: FC<TitanLabelProps> = ({ children, size = 12 }) => {
   return (

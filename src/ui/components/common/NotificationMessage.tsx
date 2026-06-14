@@ -1,6 +1,6 @@
 import { observer } from 'mobx-react-lite'
-import TitanToast from '@/ui/TitanUI/components/TitanToast'
-import TitanAlert from '@/ui/TitanUI/components/TitanAlert'
+import TitanToast from '@titanui/components/TitanToast'
+import TitanAlert from '@titanui/components/TitanAlert'
 import { notificationStore } from '@/ui/mobx/NotificationStore'
 
 const calculateBottomOffset = (index: number, spacing: number) => {

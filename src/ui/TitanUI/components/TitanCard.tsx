@@ -1,7 +1,7 @@
 import { FC } from 'react'
-import { TitanCardProps } from '@/ui/TitanUI/types'
-import TitanContainer from '@/ui/TitanUI/components/TitanContainer'
-import TitanDivider from '@/ui/TitanUI/components/TitanDivider'
+import { TitanCardProps } from '@titanui/types'
+import TitanContainer from '@titanui/components/TitanContainer'
+import TitanDivider from '@titanui/components/TitanDivider'
 
 const TitanCard: FC<TitanCardProps> = ({ header, content, footer, media = null }) => {
   return (

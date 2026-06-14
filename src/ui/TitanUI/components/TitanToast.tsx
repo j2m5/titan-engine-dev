@@ -1,5 +1,5 @@
 import { FC, useState, useEffect } from 'react'
-import { TitanToastProps } from '@/ui/TitanUI/types'
+import { TitanToastProps } from '@titanui/types'
 
 const TitanToast: FC<TitanToastProps> = ({ visible, duration = 3000, style = {}, onClose, children }) => {
   if (!visible) return null

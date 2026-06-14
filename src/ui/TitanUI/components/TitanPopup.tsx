@@ -1,5 +1,5 @@
 import { FC } from 'react'
-import { TitanPopupProps } from '@/ui/TitanUI/types'
+import { TitanPopupProps } from '@titanui/types'
 
 const TitanPopup: FC<TitanPopupProps> = ({
   visible = false,

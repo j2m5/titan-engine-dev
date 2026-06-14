@@ -1,6 +1,6 @@
 import { ChangeEvent, FC } from 'react'
-import TitanLabel from '@/ui/TitanUI/components/TitanLabel'
-import TitanSlider from '@/ui/TitanUI/components/TitanSlider'
+import TitanLabel from '@titanui/components/TitanLabel'
+import TitanSlider from '@titanui/components/TitanSlider'
 import { AudioProgressBarProps } from '@/ui/types'
 
 const formatDurationDisplay = (duration: number) => {

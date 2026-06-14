@@ -1,5 +1,5 @@
 import { FC } from 'react'
-import { TitanListItemProps } from '@/ui/TitanUI/types'
+import { TitanListItemProps } from '@titanui/types'
 
 const TitanListItem: FC<TitanListItemProps> = ({ children, icon, style = {}, onClick }) => {
   return (

@@ -1,6 +1,6 @@
 import { FC } from 'react'
-import { Customizable, HasChildren } from '@/ui/TitanUI/types'
-import TitanContainer from '@/ui/TitanUI/components/TitanContainer'
+import { Customizable, HasChildren } from '@titanui/types'
+import TitanContainer from '@titanui/components/TitanContainer'
 
 const TitanList: FC<HasChildren & Customizable> = ({ children, style = {} }) => {
   return (

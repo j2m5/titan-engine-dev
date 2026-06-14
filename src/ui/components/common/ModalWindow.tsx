@@ -1,8 +1,8 @@
 import { FC } from 'react'
 import { observer } from 'mobx-react-lite'
-import { Closable, TitanModalProps } from '@/ui/TitanUI/types'
-import TitanModal from '@/ui/TitanUI/components/TitanModal'
-import TitanButton from '@/ui/TitanUI/components/TitanButton'
+import { Closable, TitanModalProps } from '@titanui/types'
+import TitanModal from '@titanui/components/TitanModal'
+import TitanButton from '@titanui/components/TitanButton'
 
 const ModalWindow: FC<Omit<TitanModalProps, 'actions'> & Closable> = observer(
   ({ children, visible, title, keepMounted = false, height = 'auto', width = 'auto', onClose }) => {

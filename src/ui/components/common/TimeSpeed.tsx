@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import { observer } from 'mobx-react-lite'
-import TitanFlex from '@/ui/TitanUI/components/TitanFlex'
-import TitanIconButton from '@/ui/TitanUI/components/TitanIconButton'
+import TitanFlex from '@titanui/components/TitanFlex'
+import TitanIconButton from '@titanui/components/TitanIconButton'
 import {
   ArrowsClockwiseIcon,
   CaretDoubleUpIcon,

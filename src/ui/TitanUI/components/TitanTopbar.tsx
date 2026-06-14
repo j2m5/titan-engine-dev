@@ -1,5 +1,5 @@
 import { FC } from 'react'
-import { TitanTopbarProps } from '@/ui/TitanUI/types'
+import { TitanTopbarProps } from '@titanui/types'
 
 const TitanTopbar: FC<TitanTopbarProps> = ({ children, style = {} }) => {
   return (

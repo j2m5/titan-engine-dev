@@ -13,8 +13,14 @@
       "@/*": [
         "src/*"
       ],
+      "@public/*": [
+        "public/*"
+      ],
       "@storage/*": [
         "storage/*"
+      ],
+      "@titanui/*": [
+        "src/ui/TitanUI/*"
       ]
     },
 

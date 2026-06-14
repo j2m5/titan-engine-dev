@@ -1,5 +1,5 @@
 import { FC } from 'react'
-import { TitanButtonProps } from '@/ui/TitanUI/types'
+import { TitanButtonProps } from '@titanui/types'
 
 const TitanButton: FC<TitanButtonProps> = ({ children, onClick }) => {
   return (

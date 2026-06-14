@@ -1,6 +1,6 @@
 import { FC } from 'react'
-import { formatCssValue as fcv } from '@/ui/TitanUI/utils/helpers'
-import { TitanButtonProps } from '@/ui/TitanUI/types'
+import { formatCssValue as fcv } from '@titanui/utils/helpers'
+import { TitanButtonProps } from '@titanui/types'
 
 const TitanIconButton: FC<TitanButtonProps & { disabled?: boolean }> = ({
   children,
