@@ -60,6 +60,8 @@ export interface TitanModalProps extends HasChildren, Resizable {
   title: string
   actions: React.ReactNode
   keepMounted?: boolean
+  className?: string
+  dimScene?: boolean
 }
 
 export interface TitanDividerProps {

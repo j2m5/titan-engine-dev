@@ -167,6 +167,43 @@ body {
   }
 }
 
+.titan-scene-dim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+  z-index: 999998;
+}
+
+.titan-modal-solid {
+  .titan-container {
+    backdrop-filter: blur(12px);
+    border-color: #555555;
+  }
+
+  .titan-input {
+    background: rgba(0, 0, 0, 0.45);
+
+    &:focus {
+      background: rgba(0, 0, 0, 0.6);
+    }
+  }
+
+  .titan-list-item {
+    background: rgba(255, 255, 255, 0.04);
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
+    }
+  }
+
+  .titan-modal-header,
+  .titan-field-label {
+    color: #ffffff;
+  }
+}
+
 @keyframes crosshair {
   0% {
     transform: rotate(0deg);

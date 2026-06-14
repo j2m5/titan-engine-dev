@@ -163,7 +163,15 @@ const ModalWindowWide: FC<Closable & { visible: boolean; title: string; actions:
   actions,
   children
 }) => (
-  <TitanModal visible={visible} title={title} actions={actions} width={920} height="auto">
+  <TitanModal
+    visible={visible}
+    title={title}
+    actions={actions}
+    width={920}
+    height="auto"
+    className="titan-modal-solid"
+    dimScene
+  >
     {children}
   </TitanModal>
 )

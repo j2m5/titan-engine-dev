@@ -10,30 +10,35 @@ const TitanModal: FC<TitanModalProps> = ({
   actions,
   keepMounted = false,
   height = 'auto',
-  width = 'auto'
+  width = 'auto',
+  className = '',
+  dimScene = false
 }) => {
   if (!keepMounted && !visible) return null
 
   return (
-    <div className={`titan-modal ${visible ? 'open' : 'closed'}`}>
-      <TitanContainer width={width} height={height}>
-        {title && (
-          <>
-            <div className="titan-modal-header">{title}</div>
-            <TitanDivider />
-          </>
-        )}
+    <>
+      {dimScene && visible && <div className="titan-scene-dim" />}
+      <div className={`titan-modal ${visible ? 'open' : 'closed'} ${className}`}>
+        <TitanContainer width={width} height={height}>
+          {title && (
+            <>
+              <div className="titan-modal-header">{title}</div>
+              <TitanDivider />
+            </>
+          )}
 
-        <div className="titan-modal-content">{children}</div>
+          <div className="titan-modal-content">{children}</div>
 
-        {actions && (
-          <>
-            <TitanDivider />
-            <div className="titan-modal-actions">{actions}</div>
-          </>
-        )}
-      </TitanContainer>
-    </div>
+          {actions && (
+            <>
+              <TitanDivider />
+              <div className="titan-modal-actions">{actions}</div>
+            </>
+          )}
+        </TitanContainer>
+      </div>
+    </>
   )
 }
 
