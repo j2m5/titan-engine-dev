@@ -10,6 +10,7 @@ import { Kernel } from '@/core/framework/container/Kernel'
 import { Tokens } from '@/core/providers/tokens'
 import { AppServiceProvider } from '@/core/providers/AppServiceProvider'
 import { Command } from '@/core/framework/commands/Command'
+import { Actor } from '@/core/models/Actor'
 
 async function bootstrap(): Promise<void> {
   const container: Container = new Kernel([
@@ -31,3 +32,5 @@ async function bootstrap(): Promise<void> {
 }
 
 await bootstrap()
+
+console.log(Actor.find(11))
