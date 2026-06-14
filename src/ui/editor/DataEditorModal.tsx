@@ -38,7 +38,6 @@ const DataEditorModal: FC<Closable & { visible: boolean }> = ({ visible, onClose
       label: s.title,
       badge: (draft[s.table as keyof DatabaseSnapshot] as unknown[]).length
     })),
-    { key: 'renderingObjects', label: 'Rendering', badge: draft.renderingObjects.length },
     { key: 'resources', label: 'Resources', badge: draft.resources.length }
   ]
 

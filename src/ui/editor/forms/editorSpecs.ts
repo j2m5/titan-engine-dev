@@ -1,5 +1,5 @@
 import { orbitsSpec, physicalObjectsSpec, rotationObjectsSpec, placementsSpec } from '@/ui/editor/forms/tableSpecs'
-import { categoriesSpec, actorsSpec } from '@/ui/editor/forms/namedSpecs'
+import { categoriesSpec, actorsSpec, renderingObjectsSpec } from '@/ui/editor/forms/namedSpecs'
 import { TableSpec } from '@/ui/editor/forms/fieldSpec'
 
 export const editorSpecs: TableSpec[] = [
@@ -7,6 +7,7 @@ export const editorSpecs: TableSpec[] = [
   categoriesSpec,
   orbitsSpec,
   physicalObjectsSpec,
+  renderingObjectsSpec,
   rotationObjectsSpec,
   placementsSpec
 ]

@@ -7,6 +7,7 @@ import TitanFlex from '@titanui/components/TitanFlex'
 import { TitanSelectOption } from '@titanui/types'
 import { DatabaseSnapshot } from '@/core/framework/validation/validateDatabase'
 import { FieldSpec, TableSpec } from '@/ui/editor/forms/fieldSpec'
+import JsonField from '@/ui/editor/forms/JsonField'
 
 export interface GenericFormProps {
   spec: TableSpec
@@ -135,6 +136,30 @@ const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelet
             style={fullStyle}
           />
         )
+
+      case 'json': {
+        // @ts-ignore
+        const rowsOfTable = draft[spec.table] as Array<Record<string, unknown>>
+        const cloneOptions = rowsOfTable
+          .filter((r) => r.id !== row.id)
+          .map((r) => {
+            const actorId = r.actorId as number | null | undefined
+            const actor = actorId != null ? draft.actors.find((a) => a.id === actorId) : null
+            const suffix = actor ? ` → ${actor.name}` : ''
+            return { value: String(r.id), label: `#${r.id}${suffix}`, data: r[field.key] }
+          })
+
+        return (
+          <JsonField
+            key={field.key}
+            label={field.label}
+            value={value}
+            rows={field.rows}
+            cloneOptions={field.cloneFrom ? cloneOptions : undefined}
+            onChange={(v) => update(field.key, v)}
+          />
+        )
+      }
     }
   }
 

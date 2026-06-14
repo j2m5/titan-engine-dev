@@ -1,6 +1,6 @@
 import { DatabaseSnapshot } from '@/core/framework/validation/validateDatabase'
 
-export type FieldKind = 'number' | 'text' | 'color' | 'textarea' | 'select-fk' | 'select-enum'
+export type FieldKind = 'number' | 'text' | 'color' | 'textarea' | 'select-fk' | 'select-enum' | 'json'
 
 export interface FieldSpecBase {
   /** ключ поля в записи */
@@ -44,7 +44,17 @@ export interface EnumFieldSpec extends FieldSpecBase {
   nullable?: boolean
 }
 
-export type FieldSpec = NumberFieldSpec | TextFieldSpec | FkFieldSpec | EnumFieldSpec
+export interface JsonFieldSpec extends FieldSpecBase {
+  kind: 'json'
+  /** высота поля в строках */
+  rows?: number
+  /**
+   * включить «Clone from…» — селект других записей этой же таблицы
+   */
+  cloneFrom?: boolean
+}
+
+export type FieldSpec = NumberFieldSpec | TextFieldSpec | FkFieldSpec | EnumFieldSpec | JsonFieldSpec
 
 export interface TableSpec {
   /** имя таблицы в snapshot */

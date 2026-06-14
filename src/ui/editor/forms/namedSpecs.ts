@@ -58,3 +58,15 @@ export const actorsSpec: TableSpec = {
     color: '#ffffff'
   })
 }
+
+export const renderingObjectsSpec: TableSpec = {
+  table: 'renderingObjects',
+  title: 'Rendering',
+  fields: [
+    { key: 'id', label: 'ID', kind: 'number', readonly: true },
+    { key: 'actorId', label: 'Actor', kind: 'select-fk', references: 'actors', full: true },
+    { key: 'data', label: 'Data (JSON)', kind: 'json', rows: 14, cloneFrom: true }
+  ],
+  listLabel: (row, ctx) => `#${row.id} → ${ctx.actorName(row.actorId as number)}`,
+  defaults: () => ({ actorId: null, data: { emission: 1, bumpScale: 0 } })
+}
