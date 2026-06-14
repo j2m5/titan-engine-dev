@@ -125,6 +125,48 @@ body {
   }
 }
 
+.titan-editor-body {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.titan-editor-list {
+  border-right: 1px solid #444444;
+  padding-right: 14px;
+}
+
+.titan-editor-form {
+  min-height: 300px;
+}
+
+.titan-editor-issues {
+  max-height: 140px;
+  overflow-y: auto;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  .titan-issue {
+    padding: 4px 8px;
+    border-left: 2px solid;
+
+    &.error {
+      color: #e74c3c;
+      border-left-color: #c0392b;
+      background: rgba(192, 57, 43, 0.08);
+    }
+
+    &.warning {
+      color: #d4a017;
+      border-left-color: #b8860b;
+      background: rgba(184, 134, 11, 0.08);
+    }
+  }
+}
+
 @keyframes crosshair {
   0% {
     transform: rotate(0deg);

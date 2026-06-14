@@ -1,84 +1,171 @@
-import { FC, useState } from 'react'
+import { FC, useMemo, useState } from 'react'
 import { Closable } from '@titanui/types'
-import ModalWindow from '@/ui/components/common/ModalWindow'
-import TitanInput from '@titanui/components/TitanInput'
-import TitanTextarea from '@titanui/components/TitanTextarea'
-import TitanSelect from '@titanui/components/TitanSelect'
+import TitanTabs, { TitanTab } from '@titanui/components/TitanTabs'
+import TitanSimpleList from '@titanui/components/TitanSimpleList'
+import TitanListItem from '@titanui/components/TitanListItem'
 import TitanButton from '@titanui/components/TitanButton'
 import TitanFlex from '@titanui/components/TitanFlex'
-import { saveDatabaseFiles } from '@/ui/editor/saveDatabaseFiles'
+import TitanDivider from '@titanui/components/TitanDivider'
+import ActorForm from '@/ui/editor/forms/ActorForm'
+import { useEditorDraft } from '@/ui/editor/useEditorDraft'
+import { database } from '@/config/database'
+import { Scenarios } from '@/config/scenarios'
+import { ScenarioRefs } from '@/core/framework/validation/validateDatabase'
+import { IActor } from '@/core/models/types'
 
 const DataEditorModal: FC<Closable & { visible: boolean }> = ({ visible, onClose }) => {
-  const [name, setName] = useState('Sample Actor')
-  const [description, setDescription] = useState('')
-  const [color, setColor] = useState('#6495ed')
-  const [category, setCategory] = useState('7')
-  const [parent, setParent] = useState('')
-  const [mass, setMass] = useState<string>('5.9736e24')
+  const scenarioRefs: ScenarioRefs[] = useMemo(
+    () =>
+      Scenarios.map((s) => ({
+        id: s.id,
+        rootId: s.rootId,
+        galaxyId: s.galaxyId,
+        lightSources: s.lightSources,
+        skybox: s.skybox
+      })),
+    []
+  )
 
-  const [status, setStatus] = useState<string>('')
+  // @ts-ignore
+  const editor = useEditorDraft(database, scenarioRefs)
+  const { draft, validation, saving, saveStatus, upsert, remove, nextId, save } = editor
 
-  const handleTestTransport = async (): Promise<void> => {
-    setStatus('Writing…')
-    const result = await saveDatabaseFiles([
-      {
-        path: 'storage/database/generated/_smoke.ts',
-        content: `// transport smoke test\nexport const Smoke = ${Date.now()}\n`
-      }
-    ])
-    setStatus(result.ok ? `OK: wrote ${result.written?.join(', ')}` : `FAIL: ${result.error}`)
+  const [activeTable, setActiveTable] = useState('actors')
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+
+  const tabs: TitanTab[] = [
+    { key: 'actors', label: 'Actors', badge: draft.actors.length },
+    { key: 'orbits', label: 'Orbits', badge: draft.orbits.length },
+    { key: 'physicalObjects', label: 'Physical', badge: draft.physicalObjects.length },
+    { key: 'renderingObjects', label: 'Rendering', badge: draft.renderingObjects.length },
+    { key: 'rotationObjects', label: 'Rotation', badge: draft.rotationObjects.length },
+    { key: 'placements', label: 'Placements', badge: draft.placements.length },
+    { key: 'resources', label: 'Resources', badge: draft.resources.length },
+    { key: 'categories', label: 'Categories', badge: draft.categories.length }
+  ]
+
+  const selectedActor: IActor | null =
+    selectedId === null ? null : (draft.actors.find((a) => a.id === selectedId) ?? null)
+
+  const handleCreateActor = (): void => {
+    const id = nextId('actors')
+    const fresh: IActor = {
+      id,
+      categoryId: draft.categories[0]?.id ?? 0,
+      parentId: null,
+      name: `New Actor ${id}`,
+      description: '',
+      color: '#ffffff'
+    }
+    upsert('actors', fresh)
+    setSelectedId(id)
   }
 
+  const handleDeleteActor = (): void => {
+    if (selectedId === null) return
+    remove('actors', selectedId)
+    setSelectedId(null)
+  }
+
+  // ошибки/предупреждения, относящиеся к текущей таблице — для панели снизу
+  const tableIssues = validation.issues.filter((i) => i.collection === activeTable)
+
+  const actions = (
+    <TitanFlex align="center" style={{ gap: '10px' }}>
+      <span style={{ fontSize: '12px', color: validation.ok ? '#bbbbbb' : '#c0392b' }}>
+        {validation.ok
+          ? saveStatus || `${validation.warnings.length} warning(s)`
+          : `${validation.errors.length} error(s) — cannot save`}
+      </span>
+      <TitanButton onClick={save}>{saving ? 'Saving…' : 'Save to generated'}</TitanButton>
+      <TitanButton onClick={onClose}>Close</TitanButton>
+    </TitanFlex>
+  )
+
   return (
-    <ModalWindow visible={visible} title="Data Editor" width={560} onClose={onClose}>
-      <div className="titan-form-grid">
-        <TitanInput label="Name" value={name} onChange={setName} style={{ gridColumn: '1 / -1' }} />
+    <ModalWindowWide visible={visible} title="Data Editor" actions={actions} onClose={onClose}>
+      <TitanTabs
+        tabs={tabs}
+        active={activeTable}
+        onChange={(k) => {
+          setActiveTable(k)
+          setSelectedId(null)
+        }}
+      />
 
-        <TitanTextarea
-          label="Description"
-          value={description}
-          placeholder="Short info about the object"
-          onChange={setDescription}
-          style={{ gridColumn: '1 / -1' }}
-        />
+      <div style={{ height: '14px' }} />
 
-        <TitanSelect
-          label="Category"
-          value={category}
-          onChange={setCategory}
-          options={[
-            { value: '5', label: 'Black Hole' },
-            { value: '6', label: 'Star' },
-            { value: '7', label: 'Planet' }
-          ]}
-        />
+      {activeTable === 'actors' ? (
+        <div className="titan-editor-body">
+          {/* список слева */}
+          <div className="titan-editor-list">
+            <TitanFlex justify="between" align="center" style={{ marginBottom: '10px' }}>
+              <span className="titan-field-label">Actors</span>
+              <TitanButton onClick={handleCreateActor}>+ New</TitanButton>
+            </TitanFlex>
+            <TitanSimpleList style={{ maxHeight: '420px' }}>
+              {draft.actors.map((a) => (
+                <TitanListItem
+                  key={a.id}
+                  style={a.id === selectedId ? { background: 'rgba(255,255,255,0.12)' } : {}}
+                  onClick={() => setSelectedId(a.id)}
+                >
+                  <TitanFlex align="center" justify="between" width="100%">
+                    <span>{a.name}</span>
+                    <span style={{ color: '#888', fontSize: '12px' }}>{a.id}</span>
+                  </TitanFlex>
+                </TitanListItem>
+              ))}
+            </TitanSimpleList>
+          </div>
 
-        <TitanSelect
-          label="Parent"
-          value={parent}
-          placeholder="— none —"
-          onChange={setParent}
-          options={[
-            { value: '23', label: 'Solar System' },
-            { value: '94', label: 'Sgr A*' }
-          ]}
-        />
+          {/* форма справа */}
+          <div className="titan-editor-form">
+            <ActorForm
+              actor={selectedActor}
+              actors={draft.actors}
+              categories={draft.categories}
+              onChange={(updated) => upsert('actors', updated)}
+              onDelete={handleDeleteActor}
+            />
+          </div>
+        </div>
+      ) : (
+        <div style={{ color: '#888', padding: '30px', textAlign: 'center' }}>
+          “{activeTable}” editor — coming next. Каркас расширения готов: добавить форму по образцу ActorForm и ветку
+          рендера.
+        </div>
+      )}
 
-        <TitanInput label="Mass (kg)" type="number" value={mass} onChange={setMass} step={1} />
-
-        <TitanInput label="Color" type="color" value={color} onChange={setColor} />
-      </div>
-
-      <TitanDividerSpacer />
-
-      <TitanFlex align="center" style={{ gap: '10px', justifyContent: 'space-between' }}>
-        <span style={{ color: '#bbbbbb', fontSize: '12px' }}>{status}</span>
-        <TitanButton onClick={handleTestTransport}>Test transport</TitanButton>
-      </TitanFlex>
-    </ModalWindow>
+      {/* панель issues текущей таблицы */}
+      {tableIssues.length > 0 && (
+        <>
+          <TitanDivider offsetTop={14} offsetBottom={10} />
+          <div className="titan-editor-issues">
+            {tableIssues.map((issue, i) => (
+              <div key={i} className={`titan-issue ${issue.level}`}>
+                [{issue.level}] {issue.message}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </ModalWindowWide>
   )
 }
 
-const TitanDividerSpacer: FC = () => <div style={{ height: '14px' }} />
+import TitanModal from '@titanui/components/TitanModal'
+import { ReactNode } from 'react'
+
+const ModalWindowWide: FC<Closable & { visible: boolean; title: string; actions: ReactNode; children: ReactNode }> = ({
+  visible,
+  title,
+  actions,
+  children
+}) => (
+  <TitanModal visible={visible} title={title} actions={actions} width={920} height="auto">
+    {children}
+  </TitanModal>
+)
 
 export default DataEditorModal
