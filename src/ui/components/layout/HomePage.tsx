@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite'
+import { useState } from 'react'
 import TitanTopbar from '@titanui/components/TitanTopbar'
 import TitanDivider from '@titanui/components/TitanDivider'
 import TitanCard from '@titanui/components/TitanCard'
@@ -9,8 +10,11 @@ import { ScenarioConfig, Scenarios } from '@/config/scenarios'
 import { engineStore } from '@/ui/mobx/EngineStore'
 import { config } from '@/core/framework/config'
 import { getFullURL } from '@/core/helpers'
+import DataEditorModal from '@/ui/editor/DataEditorModal'
 
 const HomePage = observer(() => {
+  const [editorOpen, setEditorOpen] = useState(false)
+
   return (
     <div className="loading-screen">
       <TitanTopbar>
@@ -20,6 +24,12 @@ const HomePage = observer(() => {
           </TitanFlex>
           <TitanFlex style={{ textTransform: 'uppercase' }}>{config('name')}</TitanFlex>
         </TitanFlex>
+
+        {import.meta.env.DEV && (
+          <TitanFlex align="center">
+            <TitanButton onClick={() => setEditorOpen(true)}>Data Editor</TitanButton>
+          </TitanFlex>
+        )}
       </TitanTopbar>
       <TitanDivider offsetTop={0} />
       <TitanGrid min={272} gap={20}>
@@ -33,6 +43,8 @@ const HomePage = observer(() => {
           />
         ))}
       </TitanGrid>
+
+      {import.meta.env.DEV && <DataEditorModal visible={editorOpen} onClose={() => setEditorOpen(false)} />}
     </div>
   )
 })

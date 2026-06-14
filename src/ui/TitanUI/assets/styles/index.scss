@@ -424,6 +424,123 @@
   }
 }
 
+.titan-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+
+  .titan-field-label {
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #f0f0f0;
+    font-size: 12px;
+  }
+
+  &.invalid {
+    .titan-input {
+      border-color: #c0392b;
+    }
+    .titan-field-label {
+      color: #c0392b;
+    }
+  }
+}
+
+.titan-input {
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(2px);
+  border: 1px solid #f0f0f0;
+  color: #f0f0f0;
+  font-family: "Google Sans", sans-serif;
+  padding: 10px;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+
+  &::placeholder {
+    color: #888888;
+    text-transform: none;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: #bbbbbb;
+  }
+
+  &:focus {
+    border-color: #bbbbbb;
+    background: rgba(0, 0, 0, 0.35);
+  }
+
+  &:disabled {
+    color: #888888;
+    border-color: #444444;
+    cursor: not-allowed;
+  }
+
+  &[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+
+    &::-webkit-outer-spin-button,
+    &::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+  }
+}
+
+.titan-textarea {
+  resize: vertical;
+  min-height: 60px;
+  line-height: 1.4;
+}
+
+.titan-select {
+  cursor: pointer;
+  text-transform: uppercase;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, #f0f0f0 50%),
+  linear-gradient(135deg, #f0f0f0 50%, transparent 50%);
+  background-position: calc(100% - 16px) center, calc(100% - 11px) center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 30px;
+
+  option {
+    background: #1a1a1a;
+    color: #f0f0f0;
+    text-transform: uppercase;
+  }
+}
+
+.titan-input-color {
+  padding: 4px;
+  height: 40px;
+  cursor: pointer;
+
+  &::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+  &::-webkit-color-swatch {
+    border: none;
+  }
+  &::-moz-color-swatch {
+    border: none;
+  }
+}
+
+.titan-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+
+  .titan-form-full {
+    grid-column: 1 / -1;
+  }
+}
+
 .hex {
   --b: 2px;
   aspect-ratio: cos(30deg);

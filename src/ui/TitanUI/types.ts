@@ -6,6 +6,8 @@ export type FlexJustifyValues = 'start' | 'end' | 'center' | 'between' | 'around
 
 export type AlertType = 'info' | 'warning' | 'error' | 'success'
 
+export type TitanInputType = 'text' | 'number' | 'color'
+
 export interface HasChildren<T = React.ReactNode> {
   children: T
 }
@@ -99,4 +101,39 @@ export interface TitanAlertProps {
   type: AlertType
   message: string
   showIcon?: boolean
+}
+
+export interface TitanFieldProps extends Customizable {
+  label?: string
+  invalid?: boolean
+  disabled?: boolean
+}
+
+export interface TitanInputProps extends TitanFieldProps {
+  type?: TitanInputType
+  value: string | number
+  placeholder?: string
+  min?: number
+  max?: number
+  step?: number
+  onChange(value: string): void
+}
+
+export interface TitanTextareaProps extends TitanFieldProps {
+  value: string
+  placeholder?: string
+  rows?: number
+  onChange(value: string): void
+}
+
+export interface TitanSelectOption {
+  value: string
+  label: string
+}
+
+export interface TitanSelectProps extends TitanFieldProps {
+  value: string
+  options: TitanSelectOption[]
+  placeholder?: string
+  onChange(value: string): void
 }
