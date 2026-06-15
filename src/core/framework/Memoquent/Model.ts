@@ -91,11 +91,12 @@ abstract class Model<TData extends DataSource = DataSource> {
 
   protected belongsToMany<
     TPivot extends DataSource,
+    TPivotModel extends Model<TPivot>,
     TRelatedData extends DataSource,
     TRelatedModel extends Model<TRelatedData>
   >(
     relatedModel: ModelConstructor<TRelatedData, TRelatedModel>,
-    pivot: TPivot[],
+    pivotModel: ModelConstructor<TPivot, TPivotModel>,
     config: Pick<RelationConfig<TPivot>, 'foreignKey' | 'relatedKey'>
   ): ModelCollection<TRelatedModel> {
     const ownerKey: string = this.primaryKey
@@ -105,7 +106,10 @@ abstract class Model<TData extends DataSource = DataSource> {
       return new ModelCollection<TRelatedModel>([])
     }
 
-    const relatedIds: TPivot[keyof TPivot][] = pivot
+    const pivotInstance: TPivotModel = new pivotModel()
+
+    const relatedIds: TPivot[keyof TPivot][] = pivotInstance
+      .source()
       .filter((p: TPivot): boolean => p[config.foreignKey] === ownerValue)
       .map((p: TPivot) => p[config.relatedKey!])
 

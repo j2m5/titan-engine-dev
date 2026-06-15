@@ -25,6 +25,13 @@ export enum AllowedCategories {
 
 export type AllowedCategory = keyof typeof AllowedCategories
 
+export enum ResourceLifecycles {
+  resident,
+  streamable
+}
+
+export type ResourceLifecycle = keyof typeof ResourceLifecycles
+
 export enum ResourceTypes {
   diffuse,
   bump,
@@ -112,10 +119,18 @@ export interface IPlacement {
 
 export interface IResource extends ResourceParameters {
   readonly id: number
-  readonly actorId: number | null
   readonly resourceType: ResourceType
+  readonly lifecycle: ResourceLifecycle
   readonly path: string
   readonly lifetime: number
+  readonly width?: number
+  readonly height?: number
+}
+
+export interface IActorResource {
+  readonly id: number
+  readonly actorId: number
+  readonly resourceId: number
 }
 
 export interface IPlanetRenderingObject {

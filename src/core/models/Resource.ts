@@ -1,12 +1,14 @@
 import { Model } from '../framework/Memoquent/Model'
 import { IResource } from '@/core/models/types'
 import { Actor } from '@/core/models/Actor'
+import { ActorResource } from '@/core/models/ActorResource'
+import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
 
 class Resource extends Model<IResource> {
   protected table: string = 'resources'
 
-  public get actor(): Actor | null {
-    return this.belongsTo(Actor, { foreignKey: 'actorId' })
+  public get actors(): ModelCollection<Actor> {
+    return this.belongsToMany(Actor, ActorResource, { foreignKey: 'resourceId', relatedKey: 'actorId' })
   }
 }
 

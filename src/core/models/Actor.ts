@@ -9,6 +9,7 @@ import { Placement } from '@/core/models/Placement'
 import { Resource } from '@/core/models/Resource'
 import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
 import { ScenarioScope } from '@/core/models/scopes/ScenarioScope'
+import { ActorResource } from '@/core/models/ActorResource'
 
 class Actor extends Model<IActor> {
   protected table: string = 'actors'
@@ -46,7 +47,7 @@ class Actor extends Model<IActor> {
   }
 
   public get resources(): ModelCollection<Resource> {
-    return this.hasMany(Resource, { foreignKey: 'actorId' })
+    return this.belongsToMany(Resource, ActorResource, { foreignKey: 'actorId', relatedKey: 'resourceId' })
   }
 
   public get children(): ModelCollection<Actor> {

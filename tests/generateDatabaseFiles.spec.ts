@@ -66,17 +66,18 @@ function syntheticSnapshot(): DatabaseSnapshot {
     ],
     placements: [],
     resources: [
-      { id: 90, actorId: null, resourceType: 'diffuse', path: 'sun.png', lifetime: 0, colorSpace: 'srgb' },
-      { id: 16, actorId: 11, resourceType: 'night', path: 'planets/x/y.png', lifetime: 60000 }
-    ]
+      { id: 90, resourceType: 'diffuse', lifecycle: 'resident', path: 'sun.png', lifetime: 0, colorSpace: 'srgb' },
+      { id: 16, resourceType: 'night', lifecycle: 'streamable', path: 'planets/x/y.png', lifetime: 60000 }
+    ],
+    actorResource: [{ id: 1, actorId: 11, resourceId: 16 }]
   }
 }
 
 describe('generateDatabaseFiles — структура и контракт', () => {
-  it('создаёт 8 файлов таблиц + index', () => {
+  it('создаёт 9 файлов таблиц + index', () => {
     const files = generateDatabaseFiles(syntheticSnapshot())
 
-    expect(files).toHaveLength(9)
+    expect(files).toHaveLength(10)
     expect(files.some((f) => f.path.endsWith('/index.ts'))).toBe(true)
   })
 
@@ -101,7 +102,8 @@ describe('generateDatabaseFiles — структура и контракт', () 
       'PhysicalObjects',
       'RenderingObjects',
       'Placements',
-      'Resources'
+      'Resources',
+      'ActorResource'
     ]) {
       expect(index).toContain(`export { ${name} }`)
     }
@@ -115,6 +117,35 @@ describe('generateDatabaseFiles — структура и контракт', () 
   it('пустая таблица генерирует пустой массив', () => {
     const files = generateDatabaseFiles(syntheticSnapshot())
     expect(fileByName(files, 'placements')).toMatch(/export const Placements: IPlacement\[\] = \[\]/)
+  })
+
+  it('actorResource (pivot) round-trip', () => {
+    const snap = syntheticSnapshot()
+    const files = generateDatabaseFiles(snap)
+    const parsed = parseGeneratedArray(fileByName(files, 'actorResource'))
+    expect(parsed).toEqual(snap.actorResource)
+  })
+
+  it('большие числа сериализуются в экспоненту (TS80008)', () => {
+    const snap = syntheticSnapshot()
+    snap.physicalObjects.push({
+      id: 99,
+      actorId: 11,
+      parentId: null,
+      mass: 6.176e20,
+      radius: 536,
+      axialTilt: 0,
+      orbitalPeriod: 1,
+      rotationPeriod: 10,
+      temperature: 0
+    })
+    const files = generateDatabaseFiles(snap, [], { skipValidation: true })
+    const content = fileByName(files, 'physicalObjects')
+    // не должно быть простыни нулей; должна быть экспонента
+    expect(content).toMatch(/6\.176e20/)
+    // round-trip: значение сохранилось
+    const parsed = parseGeneratedArray(content) as Array<{ id: number; mass: number }>
+    expect(parsed.find((p) => p.id === 99)!.mass).toBe(6.176e20)
   })
 })
 
@@ -210,7 +241,8 @@ describe('generateDatabaseFiles — round-trip на реальном database', 
       physicalObjects: database.get('physicalObjects') as any,
       renderingObjects: database.get('renderingObjects') as any,
       placements: database.get('placements') as any,
-      resources: database.get('resources') as any
+      resources: database.get('resources') as any,
+      actorResource: database.get('actorResource') as any
     }
 
     const { Scenarios } = await import('@/config/scenarios')
@@ -233,7 +265,8 @@ describe('generateDatabaseFiles — round-trip на реальном database', 
       ['physicalObjects', snapshot.physicalObjects],
       ['renderingObjects', snapshot.renderingObjects],
       ['placements', snapshot.placements],
-      ['resources', snapshot.resources]
+      ['resources', snapshot.resources],
+      ['actorResource', snapshot.actorResource]
     ]
 
     for (const [name, original] of tables) {

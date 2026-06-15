@@ -6,8 +6,9 @@ import {
   Placements,
   RenderingObjects,
   Resources,
-  RotationObjects
-} from '@storage/database'
+  RotationObjects,
+  ActorResource
+} from '@storage/database/generated'
 
 const database: Map<string, unknown> = new Map()
 database.set('categories', Categories)
@@ -18,5 +19,6 @@ database.set('orbits', Orbits)
 database.set('rotationObjects', RotationObjects)
 database.set('placements', Placements)
 database.set('resources', Resources)
+database.set('actorResource', ActorResource)
 
 export { database }

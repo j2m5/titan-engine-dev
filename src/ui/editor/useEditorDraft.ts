@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   IActor,
+  IActorResource,
   ICategory,
   IOrbit,
   IPhysicalObject,
@@ -37,7 +38,8 @@ function snapshotFromDatabase(database: Map<string, unknown[]>): DatabaseSnapsho
     physicalObjects: clone<IPhysicalObject>(database.get('physicalObjects') ?? []),
     renderingObjects: clone<IRenderingObject>(database.get('renderingObjects') ?? []),
     placements: clone<IPlacement>(database.get('placements') ?? []),
-    resources: clone<IResource>(database.get('resources') ?? [])
+    resources: clone<IResource>(database.get('resources') ?? []),
+    actorResource: clone<IActorResource>(database.get('actorResource') ?? [])
   }
 }
 

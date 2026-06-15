@@ -6,7 +6,8 @@ import {
   IPhysicalObject,
   IResource,
   IRenderingObject,
-  IPlacement
+  IPlacement,
+  IActorResource
 } from '@/core/models/types'
 import { __Categories } from './categories'
 import {
@@ -187,3 +188,4 @@ export const Orbits: IOrbit[] = __Orbits
 export const RotationObjects: IRotationObject[] = __RotationObjects
 export const Placements: IPlacement[] = __Placements
 export const Resources: IResource[] = [...__Resources, ...CommonResources, ...CommonCubemapResources]
+export const ActorResource: IActorResource[] = []

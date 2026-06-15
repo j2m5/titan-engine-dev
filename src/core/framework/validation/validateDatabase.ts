@@ -6,7 +6,8 @@ import {
   IPlacement,
   IRenderingObject,
   IResource,
-  IRotationObject
+  IRotationObject,
+  IActorResource
 } from '@/core/models/types'
 
 /**
@@ -41,6 +42,7 @@ export interface DatabaseSnapshot {
   renderingObjects: IRenderingObject[]
   placements: IPlacement[]
   resources: IResource[]
+  actorResource: IActorResource[]
 }
 
 /** Ссылки сценариев на сущности БД — проверяются отдельно (живут в config) */
@@ -210,6 +212,7 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
   checkUniqueIds(db.renderingObjects, 'renderingObjects', issues)
   checkUniqueIds(db.placements, 'placements', issues)
   checkUniqueIds(db.resources, 'resources', issues)
+  checkUniqueIds(db.actorResource, 'actorResource', issues)
 
   // --- 2. Внешние ключи акторов ---
   for (const actor of db.actors) {
@@ -272,16 +275,21 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
     )
   }
 
-  // --- 5. resources.actorId (текущая hasMany-схема): nullable, иначе -> actors ---
-  for (const res of db.resources) {
-    if (res.actorId !== null) {
-      checkForeignKey(
-        res.actorId,
-        actorIds,
-        { collection: 'resources', entity: res.id, field: 'actorId', nullable: true },
-        issues
-      )
-    }
+  // --- 5. pivot actor_resource: уникальность id + оба FK валидны ---
+  checkUniqueIds(db.actorResource, 'actorResource', issues)
+  for (const link of db.actorResource) {
+    checkForeignKey(
+      link.actorId,
+      actorIds,
+      { collection: 'actorResource', entity: link.id, field: 'actorId', nullable: false },
+      issues
+    )
+    checkForeignKey(
+      link.resourceId,
+      resourceIds,
+      { collection: 'actorResource', entity: link.id, field: 'resourceId', nullable: false },
+      issues
+    )
   }
 
   // --- 6. Кардинальность hasOne: orbit / rotation / physical / rendering ---
@@ -290,6 +298,34 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
   checkHasOneCardinality(db.physicalObjects, 'physicalObjects', issues)
   checkHasOneCardinality(db.renderingObjects, 'renderingObjects', issues)
   checkHasOneCardinality(db.placements, 'placements', issues)
+
+  // --- 6b. Физически невозможные значения (warning) ---
+  for (const phys of db.physicalObjects) {
+    if (phys.mass <= 0) {
+      issues.push({
+        level: 'warning',
+        collection: 'physicalObjects',
+        entity: phys.id,
+        message: `physicalObjects#${phys.id} (actor ${phys.actorId}) has non-positive mass: ${phys.mass}`
+      })
+    }
+    if (phys.radius <= 0) {
+      issues.push({
+        level: 'warning',
+        collection: 'physicalObjects',
+        entity: phys.id,
+        message: `physicalObjects#${phys.id} (actor ${phys.actorId}) has non-positive radius: ${phys.radius}`
+      })
+    }
+    if (phys.orbitalPeriod < 0 || phys.rotationPeriod < 0) {
+      issues.push({
+        level: 'warning',
+        collection: 'physicalObjects',
+        entity: phys.id,
+        message: `physicalObjects#${phys.id} (actor ${phys.actorId}) has negative period`
+      })
+    }
+  }
 
   // --- 7. Предупреждения о полноте контента ---
   const actorsWithPhysical = new Set(db.physicalObjects.map((p) => p.actorId))

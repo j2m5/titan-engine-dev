@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  validateDatabase,
-  DatabaseSnapshot,
-  ScenarioRefs
-} from '@/core/framework/validation/validateDatabase'
+import { validateDatabase, DatabaseSnapshot, ScenarioRefs } from '@/core/framework/validation/validateDatabase'
 
 /**
  * Минимальный валидный снимок: один анкор-актор (galaxy) без обязательных связей.
@@ -22,7 +18,8 @@ function baseSnapshot(): DatabaseSnapshot {
     physicalObjects: [],
     renderingObjects: [],
     placements: [],
-    resources: []
+    resources: [],
+    actorResource: []
   }
 }
 
@@ -63,25 +60,31 @@ describe('validateDatabase — уникальность ID', () => {
     const db = baseSnapshot()
     db.actors.push(planet(11, 10), planet(12, 10))
     db.orbits.push(
-      { id: 1, actorId: 11, semiMajorAxis: 1, eccentricity: 0, inclination: 0, argOfPeriapsis: 0, ascendingNode: 0, meanAnomalyAtEpoch: 0 },
-      { id: 1, actorId: 12, semiMajorAxis: 1, eccentricity: 0, inclination: 0, argOfPeriapsis: 0, ascendingNode: 0, meanAnomalyAtEpoch: 0 }
+      {
+        id: 1,
+        actorId: 11,
+        semiMajorAxis: 1,
+        eccentricity: 0,
+        inclination: 0,
+        argOfPeriapsis: 0,
+        ascendingNode: 0,
+        meanAnomalyAtEpoch: 0
+      },
+      {
+        id: 1,
+        actorId: 12,
+        semiMajorAxis: 1,
+        eccentricity: 0,
+        inclination: 0,
+        argOfPeriapsis: 0,
+        ascendingNode: 0,
+        meanAnomalyAtEpoch: 0
+      }
     )
 
     const result = validateDatabase(db)
 
     expect(result.errors.some((e) => e.collection === 'orbits' && /Duplicate/.test(e.message))).toBe(true)
-  })
-
-  it('разрывы в нумерации ID — это НЕ ошибка', () => {
-    const db = baseSnapshot()
-    db.resources.push(
-      { id: 90, actorId: null, resourceType: 'diffuse', path: 'a.png', lifetime: 0 },
-      { id: 107, actorId: null, resourceType: 'cube', path: 'b.png', lifetime: 0 }
-    )
-
-    const result = validateDatabase(db)
-
-    expect(result.ok).toBe(true)
   })
 })
 
@@ -124,29 +127,66 @@ describe('validateDatabase — внешние ключи', () => {
 
   it('ловит висячий actorId в orbit', () => {
     const db = baseSnapshot()
-    db.orbits.push({ id: 1, actorId: 555, semiMajorAxis: 1, eccentricity: 0, inclination: 0, argOfPeriapsis: 0, ascendingNode: 0, meanAnomalyAtEpoch: 0 })
+    db.orbits.push({
+      id: 1,
+      actorId: 555,
+      semiMajorAxis: 1,
+      eccentricity: 0,
+      inclination: 0,
+      argOfPeriapsis: 0,
+      ascendingNode: 0,
+      meanAnomalyAtEpoch: 0
+    })
 
     const result = validateDatabase(db)
 
     expect(result.errors.some((e) => e.collection === 'orbits' && /actorId=555/.test(e.message))).toBe(true)
   })
+})
 
-  it('null actorId у ресурса допустим (общий ресурс)', () => {
+describe('validateDatabase — pivot actor_resource', () => {
+  it('ловит висячий actorId в пивоте', () => {
     const db = baseSnapshot()
-    db.resources.push({ id: 90, actorId: null, resourceType: 'diffuse', path: 'common.png', lifetime: 0 })
-
+    db.resources.push({ id: 90, resourceType: 'diffuse', lifecycle: 'resident', path: 'x.png', lifetime: 0 } as any)
+    db.actorResource.push({ id: 1, actorId: 999, resourceId: 90 })
     const result = validateDatabase(db)
-
-    expect(result.ok).toBe(true)
+    expect(result.errors.some((e) => e.collection === 'actorResource' && /actorId=999/.test(e.message))).toBe(true)
   })
 
-  it('ловит висячий actorId у ресурса (не-null, но несуществующий)', () => {
+  it('ловит висячий resourceId в пивоте', () => {
     const db = baseSnapshot()
-    db.resources.push({ id: 90, actorId: 404, resourceType: 'diffuse', path: 'x.png', lifetime: 0 })
-
+    db.actorResource.push({ id: 1, actorId: 10, resourceId: 888 })
     const result = validateDatabase(db)
+    expect(result.errors.some((e) => /resourceId=888/.test(e.message))).toBe(true)
+  })
 
-    expect(result.errors.some((e) => e.collection === 'resources' && /actorId=404/.test(e.message))).toBe(true)
+  it('валидная связь пивота не даёт ошибок', () => {
+    const db = baseSnapshot()
+    db.resources.push({ id: 90, resourceType: 'diffuse', lifecycle: 'resident', path: 'x.png', lifetime: 0 } as any)
+    db.actorResource.push({ id: 1, actorId: 10, resourceId: 90 })
+    const result = validateDatabase(db)
+    expect(result.errors.filter((e) => e.collection === 'actorResource')).toHaveLength(0)
+  })
+})
+
+describe('validateDatabase — физика', () => {
+  it('масса <= 0 даёт warning', () => {
+    const db = baseSnapshot()
+    db.actors.push(planet(11, 10))
+    db.physicalObjects.push({
+      id: 1,
+      actorId: 11,
+      parentId: null,
+      mass: 0,
+      radius: 1,
+      axialTilt: 0,
+      orbitalPeriod: 1,
+      rotationPeriod: 1,
+      temperature: 0
+    })
+    const result = validateDatabase(db)
+    expect(result.ok).toBe(true) // warning, не error
+    expect(result.warnings.some((w) => /non-positive mass/.test(w.message))).toBe(true)
   })
 })
 
@@ -178,8 +218,26 @@ describe('validateDatabase — кардинальность hasOne', () => {
     const db = baseSnapshot()
     db.actors.push(planet(11, 10))
     db.orbits.push(
-      { id: 1, actorId: 11, semiMajorAxis: 1, eccentricity: 0, inclination: 0, argOfPeriapsis: 0, ascendingNode: 0, meanAnomalyAtEpoch: 0 },
-      { id: 2, actorId: 11, semiMajorAxis: 2, eccentricity: 0, inclination: 0, argOfPeriapsis: 0, ascendingNode: 0, meanAnomalyAtEpoch: 0 }
+      {
+        id: 1,
+        actorId: 11,
+        semiMajorAxis: 1,
+        eccentricity: 0,
+        inclination: 0,
+        argOfPeriapsis: 0,
+        ascendingNode: 0,
+        meanAnomalyAtEpoch: 0
+      },
+      {
+        id: 2,
+        actorId: 11,
+        semiMajorAxis: 2,
+        eccentricity: 0,
+        inclination: 0,
+        argOfPeriapsis: 0,
+        ascendingNode: 0,
+        meanAnomalyAtEpoch: 0
+      }
     )
 
     const result = validateDatabase(db)
@@ -190,7 +248,16 @@ describe('validateDatabase — кардинальность hasOne', () => {
   it('один orbit на актора — норма', () => {
     const db = baseSnapshot()
     db.actors.push(planet(11, 10))
-    db.orbits.push({ id: 1, actorId: 11, semiMajorAxis: 1, eccentricity: 0, inclination: 0, argOfPeriapsis: 0, ascendingNode: 0, meanAnomalyAtEpoch: 0 })
+    db.orbits.push({
+      id: 1,
+      actorId: 11,
+      semiMajorAxis: 1,
+      eccentricity: 0,
+      inclination: 0,
+      argOfPeriapsis: 0,
+      ascendingNode: 0,
+      meanAnomalyAtEpoch: 0
+    })
 
     const result = validateDatabase(db)
 
@@ -221,7 +288,17 @@ describe('validateDatabase — предупреждения о полноте', 
     const db = baseSnapshot()
     db.actors.push({ id: 11, categoryId: 3, parentId: 10, name: 'Sun', description: '', color: '#ff0' })
     // дадим ему physical+rendering, чтобы остались только потенциальный orbit-warning
-    db.physicalObjects.push({ id: 1, actorId: 11, parentId: null, mass: 1, radius: 1, axialTilt: 0, orbitalPeriod: 0, rotationPeriod: 1, temperature: 5000 })
+    db.physicalObjects.push({
+      id: 1,
+      actorId: 11,
+      parentId: null,
+      mass: 1,
+      radius: 1,
+      axialTilt: 0,
+      orbitalPeriod: 0,
+      rotationPeriod: 1,
+      temperature: 5000
+    })
     db.renderingObjects.push({ id: 1, actorId: 11, data: {} })
 
     const result = validateDatabase(db)
@@ -232,9 +309,7 @@ describe('validateDatabase — предупреждения о полноте', 
 
 describe('validateDatabase — ссылки сценариев', () => {
   it('ловит rootId, указывающий на несуществующего актора', () => {
-    const scenarios: ScenarioRefs[] = [
-      { id: 1, rootId: 999, galaxyId: 10, lightSources: [], skybox: [] }
-    ]
+    const scenarios: ScenarioRefs[] = [{ id: 1, rootId: 999, galaxyId: 10, lightSources: [], skybox: [] }]
 
     const result = validateDatabase(baseSnapshot(), scenarios)
 
@@ -242,9 +317,7 @@ describe('validateDatabase — ссылки сценариев', () => {
   })
 
   it('ловит skybox, ссылающийся на несуществующий ресурс', () => {
-    const scenarios: ScenarioRefs[] = [
-      { id: 1, rootId: 10, galaxyId: 10, lightSources: [], skybox: [9999] }
-    ]
+    const scenarios: ScenarioRefs[] = [{ id: 1, rootId: 10, galaxyId: 10, lightSources: [], skybox: [9999] }]
 
     const result = validateDatabase(baseSnapshot(), scenarios)
 
@@ -273,7 +346,8 @@ describe('validateDatabase — реальный database (базлайн)', () =
       physicalObjects: database.get('physicalObjects') as any,
       renderingObjects: database.get('renderingObjects') as any,
       placements: database.get('placements') as any,
-      resources: database.get('resources') as any
+      resources: database.get('resources') as any,
+      actorResource: database.get('actorResource') as any
     }
 
     const scenarioRefs: ScenarioRefs[] = Scenarios.map((s) => ({

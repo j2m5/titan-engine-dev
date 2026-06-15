@@ -39,8 +39,9 @@ export interface GeneratedFile {
 function serializeValue(value: unknown): string {
   if (value === null) return 'null'
   if (typeof value === 'number') {
-    // сохраняем читаемость: целые как есть, дробные/экспоненту как даёт JS
-    return Number.isFinite(value) ? String(value) : 'null'
+    if (!Number.isFinite(value)) return 'null'
+
+    return serializeNumber(value)
   }
   if (typeof value === 'string') return JSON.stringify(value)
   if (typeof value === 'boolean') return String(value)
@@ -131,7 +132,13 @@ export function generateDatabaseFiles(
       rows: input.renderingObjects
     },
     { exportName: 'Placements', interfaceName: 'IPlacement', fileName: 'placements', rows: input.placements },
-    { exportName: 'Resources', interfaceName: 'IResource', fileName: 'resources', rows: input.resources }
+    { exportName: 'Resources', interfaceName: 'IResource', fileName: 'resources', rows: input.resources },
+    {
+      exportName: 'ActorResource',
+      interfaceName: 'IActorResource',
+      fileName: 'actorResource',
+      rows: input.actorResource
+    }
   ]
 
   const files: GeneratedFile[] = specs.map((spec) => ({
@@ -154,4 +161,21 @@ function renderIndex(specs: TableSpec<unknown>[]): string {
   const reexports = specs.map((spec) => `export { ${spec.exportName} } from './${spec.fileName}'`).join('\n')
 
   return header + reexports + '\n'
+}
+
+function serializeNumber(value: number): string {
+  const plain = String(value)
+
+  // целые за пределами безопасного диапазона — обязательно в экспоненту
+  if (Number.isInteger(value) && Math.abs(value) >= Number.MAX_SAFE_INTEGER) {
+    return normalizeExponent(value.toExponential())
+  }
+
+  // в остальных случаях берём более короткую из двух записей
+  const exp = normalizeExponent(value.toExponential())
+  return exp.length < plain.length ? exp : plain
+}
+
+function normalizeExponent(exp: string): string {
+  return exp.replace('e+', 'e')
 }
