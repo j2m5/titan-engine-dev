@@ -3,4 +3,6 @@
 
 import { IActor } from '@/core/models/types'
 
-export const Actors: IActor[] = []
+export const Actors: IActor[] = [
+  { id: 1, categoryId: 1, parentId: null, name: "Solar system barycenter", description: "", color: "#ffffff" }
+]
