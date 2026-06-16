@@ -34,14 +34,14 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
     > = this.model.renderingObject?.getAttribute('data') || { bumpScale: 0, emission: 1 }
 
     const ringData: Record<keyof IRingRenderingObject, ValueOf<IRingRenderingObject>> = this.model.children
-      .where('categoryId', 9)
+      .where('categoryId', 6)
       .first()
       ?.renderingObject?.getAttribute('data') || { innerRadius: 0, outerRadius: 0, alphaTest: 0, countParticles: 0 }
     const ringMap: Texture = resourceStorage.getTextureOrMake(
-      this.model.children.where('categoryId', 9).first()?.resources.first()?.getAttribute('path')
+      this.model.children.where('categoryId', 6).first()?.resources.first()?.getAttribute('path')
     )
 
-    const USE_RING: boolean = this.model.children.where('categoryId', 9).isNotEmpty()
+    const USE_RING: boolean = this.model.children.where('categoryId', 6).isNotEmpty()
 
     this.uniforms = {
       lightPosition: new Uniform(new Vector3()),

@@ -1,7 +1,5 @@
 import { LOD, Object3D } from 'three'
 import { Actor } from '@/core/models/Actor'
-import { Galaxy } from '@/core/renderables/Galaxy'
-import { StarSystem } from '@/core/renderables/StarSystem'
 import { Barycenter } from '@/core/renderables/Barycenter'
 import { BlackHole } from '@/core/renderables/BlackHole'
 import { BlackHoleImpostor } from '@/core/renderables/BlackHole/BlackHoleImpostor'
@@ -24,33 +22,21 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 class RenderableFactory {
   public static make(actor: Actor): Object3D {
     switch (actor.getAttribute('categoryId')) {
-      case 2:
-        return this.createFakeGalaxy(actor)
-      case 3:
-        return this.createStarSystem(actor)
-      case 4:
+      case 1:
         return this.createBarycenter(actor)
-      case 5:
+      case 2:
         return this.createBlackHole(actor)
-      case 6:
+      case 3:
         return this.createStar(actor)
-      case 7:
+      case 4:
         return this.createPlanet(actor)
-      case 8:
+      case 5:
         return this.createAtmosphere(actor)
-      case 9:
+      case 6:
         return this.createRing(actor)
       default:
         throw new Error("Couldn't resolve actor")
     }
-  }
-
-  private static createFakeGalaxy(actor: Actor): Object3D {
-    return new Galaxy(actor)
-  }
-
-  private static createStarSystem(actor: Actor): Object3D {
-    return new StarSystem(actor)
   }
 
   private static createBarycenter(actor: Actor): Object3D {

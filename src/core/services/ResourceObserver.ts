@@ -70,7 +70,7 @@ class ResourceObserver {
     this._sceneBackground = null
     this._map = new Map()
     this.sceneObserver.subscribe('ClosestChange', this.closestChange)
-    //this.setRequiredTextures()
+    this.setRequiredTextures()
   }
 
   /**
@@ -208,9 +208,7 @@ class ResourceObserver {
    */
   private setRequiredTextures(): void {
     const list: string[] = [
-      'sun_glow.png',
       'star.png',
-      'lensstar.png',
       'asteroid.jpg',
       'asteroid_bump.jpg',
       'night.jpg',
@@ -229,7 +227,7 @@ class ResourceObserver {
     if (this.scenario) {
       const collection: Collection<Actor> = ModelCollection.make(Array.from(this.map.values()))
       const rings: IResource[] = collection
-        .where({ categoryId: 9 })
+        .where({ categoryId: 6 })
         .flatMap((actor: Actor) => actor.resources.map((resource: Resource) => resource.toJSON() as IResource))
         .toArray()
 
@@ -243,27 +241,15 @@ class ResourceObserver {
   private setMap(): void {
     if (!this.scenario) return
 
-    const data: Partial<IActor> | undefined = Actor.find(this.scenario.galaxyId)?.toJSON()
+    const root: Actor | null = Actor.find(this.scenario.rootId)
 
-    if (data && data.id) {
-      const root: Actor | null = Actor.find(data.id)
+    if (!root) return
 
-      if (!root) return
+    this.map.set(root.getAttribute('id'), root)
 
-      const children: ModelCollection<Actor> = root.children
-
-      const starSystem: Actor | undefined = children.find(this.scenario.rootId)
-
-      this.map.set(root.getAttribute('id'), root)
-
-      if (starSystem) {
-        this.map.set(starSystem.getAttribute('id'), starSystem)
-
-        starSystem.children.eachRecursive((actor: Actor): void => {
-          this.map.set(actor.getAttribute('id'), actor)
-        })
-      }
-    }
+    root.children.eachRecursive((actor: Actor): void => {
+      this.map.set(actor.getAttribute('id'), actor)
+    })
   }
 
   /**

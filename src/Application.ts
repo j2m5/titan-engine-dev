@@ -20,6 +20,7 @@ class Application {
     }
 
     threeJS.scene.background = this.resourceObserver.sceneBackground
+    console.log(threeJS.scene)
 
     this.engine.start()
   }

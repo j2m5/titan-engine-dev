@@ -12,6 +12,16 @@ export type ScenarioConfig = {
 }
 
 export const Scenarios: ScenarioConfig[] = [
+  {
+    id: 1,
+    rootId: 1,
+    name: 'Solar system',
+    description: 'Solar system',
+    preview: 'SolarSystem.jpg',
+    skybox: [1, 2, 3, 4, 5, 6],
+    defaultCameraPosition: [0, fromAstronomicalUnits(2), fromAstronomicalUnits(2)],
+    lightSources: [4]
+  }
   /*{
     id: 1,
     rootId: 86,
