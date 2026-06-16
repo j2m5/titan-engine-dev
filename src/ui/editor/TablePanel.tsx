@@ -6,6 +6,7 @@ import TitanFlex from '@titanui/components/TitanFlex'
 import GenericForm from '@/ui/editor/forms/GenericForm'
 import { TableSpec, ListLabelContext } from '@/ui/editor/forms/fieldSpec'
 import { UseEditorDraft } from '@/ui/editor/useEditorDraft'
+import { shortenResourcePath } from '@/ui/editor/forms/shortenResourcePath'
 
 export function TablePanel({ spec, editor }: { spec: TableSpec; editor: UseEditorDraft }) {
   const { draft, upsert, remove, nextId } = editor
@@ -19,6 +20,11 @@ export function TablePanel({ spec, editor }: { spec: TableSpec; editor: UseEdito
       if (actorId == null) return '∅'
       const actor = draft.actors.find((a) => a.id === actorId)
       return actor ? actor.name : `?${actorId}`
+    },
+    resourcePath: (resourceId) => {
+      if (resourceId == null) return '∅'
+      const res = draft.resources.find((r) => r.id === resourceId)
+      return res ? shortenResourcePath(res.path) : `?${resourceId}`
     }
   }
 

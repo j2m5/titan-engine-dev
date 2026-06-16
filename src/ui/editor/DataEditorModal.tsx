@@ -37,8 +37,7 @@ const DataEditorModal: FC<Closable & { visible: boolean }> = ({ visible, onClose
       key: s.table as string,
       label: s.title,
       badge: (draft[s.table as keyof DatabaseSnapshot] as unknown[]).length
-    })),
-    { key: 'resources', label: 'Resources', badge: draft.resources.length }
+    }))
   ]
 
   const tableIssues = validation.issues.filter((i) => i.collection === activeTable)

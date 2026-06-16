@@ -8,6 +8,7 @@ import { TitanSelectOption } from '@titanui/types'
 import { DatabaseSnapshot } from '@/core/framework/validation/validateDatabase'
 import { FieldSpec, TableSpec } from '@/ui/editor/forms/fieldSpec'
 import JsonField from '@/ui/editor/forms/JsonField'
+import { shortenResourcePath } from '@/ui/editor/forms/shortenResourcePath'
 
 export interface GenericFormProps {
   spec: TableSpec
@@ -29,16 +30,29 @@ const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelet
   }
 
   // строит опции FK-селекта: записи целевой таблицы, подписанные через actor name
-  const fkOptions = (refTable: keyof DatabaseSnapshot, excludeId?: number): TitanSelectOption[] => {
+  const fkOptions = (
+    refTable: keyof DatabaseSnapshot,
+    optionLabel: 'actorName' | 'resourcePath' | 'name' | undefined,
+    excludeId?: number
+  ): TitanSelectOption[] => {
     // @ts-ignore
     const rows = draft[refTable] as Array<Record<string, unknown>>
     return rows
       .filter((r) => (excludeId === undefined ? true : r.id !== excludeId))
       .map((r) => {
-        // если у целевой записи есть actorId — резолвим имя актора для читаемости
-        const actorId = r.actorId as number | null | undefined
-        const actor = actorId != null ? draft.actors.find((a) => a.id === actorId) : null
-        const suffix = actor ? ` → ${actor.name}` : r.name ? ` ${r.name}` : ''
+        let suffix = ''
+
+        if (optionLabel === 'resourcePath') {
+          suffix = ` ${shortenResourcePath(String(r.path ?? ''))}`
+        } else if (optionLabel === 'name') {
+          suffix = r.name ? ` ${r.name}` : ''
+        } else {
+          // 'actorName' или undefined — прежнее поведение
+          const actorId = r.actorId as number | null | undefined
+          const actor = actorId != null ? draft.actors.find((a) => a.id === actorId) : null
+          suffix = actor ? ` → ${actor.name}` : r.name ? ` ${r.name}` : ''
+        }
+
         return { value: String(r.id), label: `#${r.id}${suffix}` }
       })
   }
@@ -111,7 +125,7 @@ const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelet
             label={field.label}
             value={value === null || value === undefined ? '' : String(value)}
             placeholder={field.nullable ? '— none —' : undefined}
-            options={fkOptions(field.references, excludeId)}
+            options={fkOptions(field.references, field.optionLabel, excludeId)}
             invalid={!field.nullable && (value === null || value === undefined)}
             onChange={(v) => update(field.key, v === '' ? null : Number(v))}
             style={fullStyle}

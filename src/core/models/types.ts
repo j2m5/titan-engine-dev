@@ -121,10 +121,8 @@ export interface IResource extends ResourceParameters {
   readonly id: number
   readonly resourceType: ResourceType
   readonly lifecycle: ResourceLifecycle
-  readonly path: string
   readonly lifetime: number
-  readonly width?: number
-  readonly height?: number
+  readonly path: string
 }
 
 export interface IActorResource {

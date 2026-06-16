@@ -35,6 +35,7 @@ export interface FkFieldSpec extends FieldSpecBase {
   nullable?: boolean
   /** исключить запись с этим id из вариантов (защита от самоссылки) */
   excludeSelf?: boolean
+  optionLabel?: 'actorName' | 'resourcePath' | 'name'
 }
 
 /** enum-поле: фиксированный набор значений (resourceType, direction, colorSpace) */
@@ -76,4 +77,5 @@ export interface TableSpec {
 export interface ListLabelContext {
   /** резолв actorId -> имя актора (для безымянных таблиц) */
   actorName: (actorId: number | null) => string
+  resourcePath: (resourceId: number | null) => string
 }
