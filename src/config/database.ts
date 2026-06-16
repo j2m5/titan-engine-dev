@@ -8,7 +8,7 @@ import {
   Resources,
   RotationObjects,
   ActorResource
-} from '@storage/database/generated'
+} from '@storage/database'
 
 const database: Map<string, unknown> = new Map()
 database.set('categories', Categories)

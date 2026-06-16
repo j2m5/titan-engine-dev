@@ -6,7 +6,7 @@ import { dbEditorPlugin } from './vite/dbEditorPlugin'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), dbEditorPlugin({ writableRoot: 'storage/database/generated' })],
+  plugins: [react(), dbEditorPlugin({ writableRoot: 'storage/database' })],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -22,6 +22,9 @@ export default defineConfig({
   },
   server: {
     port: 8080,
-    strictPort: true
+    strictPort: true,
+    watch: {
+      ignored: ['**/storage/database/**']
+    }
   }
 })

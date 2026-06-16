@@ -117,9 +117,7 @@ export function useEditorDraft(database: Map<string, unknown[]>, scenarios: Scen
     try {
       const files = generateDatabaseFiles(draft, scenarios)
       const result: SaveResult = await saveDatabaseFiles(files)
-      setSaveStatus(
-        result.ok ? `Saved ${result.written?.length ?? 0} file(s) to generated/` : `Failed: ${result.error}`
-      )
+      setSaveStatus(result.ok ? `Saved ${result.written?.length ?? 0} file(s) to database/` : `Failed: ${result.error}`)
     } catch (error) {
       setSaveStatus(`Failed: ${error instanceof Error ? error.message : String(error)}`)
     } finally {

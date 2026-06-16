@@ -70,7 +70,7 @@ class ResourceObserver {
     this._sceneBackground = null
     this._map = new Map()
     this.sceneObserver.subscribe('ClosestChange', this.closestChange)
-    this.setRequiredTextures()
+    //this.setRequiredTextures()
   }
 
   /**

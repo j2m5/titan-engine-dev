@@ -12,9 +12,6 @@ import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig
 export type ValueOf<T> = T[keyof T]
 
 export enum AllowedCategories {
-  universe,
-  galaxy,
-  starSystem,
   barycenter,
   blackHole,
   star,

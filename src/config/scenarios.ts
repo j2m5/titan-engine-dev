@@ -2,7 +2,6 @@ import { fromAstronomicalUnits } from '@/core/helpers/scaling'
 
 export type ScenarioConfig = {
   id: number
-  galaxyId: number
   rootId: number
   name: string
   description: string
@@ -13,9 +12,8 @@ export type ScenarioConfig = {
 }
 
 export const Scenarios: ScenarioConfig[] = [
-  {
+  /*{
     id: 1,
-    galaxyId: 19,
     rootId: 86,
     name: 'Solar system',
     description: 'Solar system',
@@ -26,7 +24,6 @@ export const Scenarios: ScenarioConfig[] = [
   },
   {
     id: 2,
-    galaxyId: 19,
     rootId: 20,
     name: 'TOI-519 system',
     description: 'System with distant red-dwarf star and its satellite as hot-neptune',
@@ -37,7 +34,6 @@ export const Scenarios: ScenarioConfig[] = [
   },
   {
     id: 3,
-    galaxyId: 1,
     rootId: 2,
     name: 'Tatoo system',
     description: 'Approximate Tatoo system from Star Wars Universe',
@@ -48,7 +44,6 @@ export const Scenarios: ScenarioConfig[] = [
   },
   {
     id: 4,
-    galaxyId: 1,
     rootId: 87,
     name: 'Yavin system',
     description: 'Approximate Yavin system from Star Wars Universe',
@@ -59,7 +54,6 @@ export const Scenarios: ScenarioConfig[] = [
   },
   {
     id: 5,
-    galaxyId: 19,
     rootId: 93,
     name: 'Sagittarius A* system',
     description: 'Test demo of Supermassive black hole with some nearest objects',
@@ -67,5 +61,5 @@ export const Scenarios: ScenarioConfig[] = [
     skybox: [94, 95, 96, 97, 98, 99],
     defaultCameraPosition: [0, fromAstronomicalUnits(1), fromAstronomicalUnits(1)],
     lightSources: [93]
-  }
+  }*/
 ]

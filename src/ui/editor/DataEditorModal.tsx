@@ -18,7 +18,6 @@ const DataEditorModal: FC<Closable & { visible: boolean }> = ({ visible, onClose
       Scenarios.map((s) => ({
         id: s.id,
         rootId: s.rootId,
-        galaxyId: s.galaxyId,
         lightSources: s.lightSources,
         skybox: s.skybox
       })),

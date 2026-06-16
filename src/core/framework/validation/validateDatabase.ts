@@ -49,7 +49,6 @@ export interface DatabaseSnapshot {
 export interface ScenarioRefs {
   id: number
   rootId: number
-  galaxyId: number
   lightSources: number[]
   skybox: number[]
 }
@@ -374,12 +373,6 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
       sc.rootId,
       actorIds,
       { collection: 'scenarios', entity: sc.id, field: 'rootId', nullable: false },
-      issues
-    )
-    checkForeignKey(
-      sc.galaxyId,
-      actorIds,
-      { collection: 'scenarios', entity: sc.id, field: 'galaxyId', nullable: false },
       issues
     )
     for (const lightId of sc.lightSources) {

@@ -98,7 +98,7 @@ export function generateDatabaseFiles(
   scenarios: ScenarioRefs[] = [],
   options: { baseDir?: string; skipValidation?: boolean } = {}
 ): GeneratedFile[] {
-  const baseDir = options.baseDir ?? 'storage/database/generated'
+  const baseDir = options.baseDir ?? 'storage/database'
 
   if (!options.skipValidation) {
     const validation = validateDatabase(input, scenarios)

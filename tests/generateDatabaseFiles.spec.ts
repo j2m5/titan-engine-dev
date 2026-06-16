@@ -25,7 +25,7 @@ function fileByName(files: { path: string; content: string }[], name: string): s
 function syntheticSnapshot(): DatabaseSnapshot {
   return {
     categories: [
-      { id: 1, alias: 'galaxy', name: 'Galaxy' },
+      { id: 1, alias: 'star', name: 'Star' },
       { id: 2, alias: 'planet', name: 'Planet' }
     ],
     actors: [
@@ -249,7 +249,6 @@ describe('generateDatabaseFiles — round-trip на реальном database', 
     const scenarioRefs: ScenarioRefs[] = Scenarios.map((s) => ({
       id: s.id,
       rootId: s.rootId,
-      galaxyId: s.galaxyId,
       lightSources: s.lightSources,
       skybox: s.skybox
     }))

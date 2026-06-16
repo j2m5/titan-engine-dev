@@ -21,7 +21,7 @@ interface PluginOptions {
 }
 
 export function dbEditorPlugin(options: PluginOptions = {}): Plugin {
-  const writableRoot = path.resolve(process.cwd(), options.writableRoot ?? 'storage/database/generated')
+  const writableRoot = path.resolve(process.cwd(), options.writableRoot ?? 'storage/database')
   const route = options.route ?? '/__db/save'
 
   return {
