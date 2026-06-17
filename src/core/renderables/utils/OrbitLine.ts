@@ -21,7 +21,7 @@ class OrbitLine extends Line implements Acceptable<IObject3DVisitor> {
 
   __setup(): void {
     this.geometry = new BufferGeometry().setFromPoints(this.calculatePath())
-    this.material = new LineBasicMaterial({ color: this.model.getAttribute('color') })
+    this.material = new LineBasicMaterial({ color: this.model.getAttribute('color'), depthTest: false })
 
     this.userData.type = 'orbit'
     this.scale.multiplyScalar(AU * SpaceScale)
