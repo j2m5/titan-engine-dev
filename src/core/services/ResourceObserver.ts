@@ -1,6 +1,6 @@
 import dayjs from 'dayjs'
 import { ScenarioConfig } from '@/config/scenarios'
-import { IActor, IResource } from '@/core/models/types'
+import { IResource } from '@/core/models/types'
 import { Resource } from '@/core/models/Resource'
 import { Actor } from '@/core/models/Actor'
 import { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
