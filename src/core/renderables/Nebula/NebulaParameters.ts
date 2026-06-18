@@ -31,6 +31,26 @@ export interface NebulaParametersInit {
    */
   absorptionPower?: number
 
+  // ── Вариативность формы ──
+  /**
+   * Сила domain warping: искажение координат перед сэмплом плотности.
+   * 0 — выкл (круглые комки одного FBM); 0.3–0.6 — филаменты и волокна;
+   * > 0.8 — сильно турбулентные, рваные структуры.
+   */
+  warpStrength?: number
+  /**
+   * Анизотропия формы: множители масштаба по осям X/Y/Z. Неравные значения
+   * растягивают туманность (например, (1, 0.5, 1) — приплюснутый диск,
+   * (2, 1, 1) — вытянутая). (1,1,1) — изотропная (шарообразная).
+   */
+  anisotropy?: Vector3
+  /**
+   * Жёсткость граничной маски (0..1). 0 — маска почти не режет (рваные края,
+   * газ доходит до граней куба); 1 — жёсткая сферическая обрезка (круглый
+   * силуэт). Низкие значения дают неправильную, природную форму.
+   */
+  edgeHardness?: number
+
   // ── Поле плотности (FBM) ──
   /** Базовая частота шума: больше → мельче структура */
   noiseFrequency?: number
@@ -57,6 +77,9 @@ class NebulaParameters {
   public readonly emissionStrength: number
   public readonly bloomThreshold: number
   public readonly absorptionPower: number
+  public readonly warpStrength: number
+  public readonly anisotropy: Vector3
+  public readonly edgeHardness: number
 
   public readonly noiseFrequency: number
   public readonly octaves: number
@@ -70,18 +93,21 @@ class NebulaParameters {
     this.seed = init.seed ?? 1337
     this.center = init.center?.clone() ?? new Vector3(0, 0, 0)
     this.radius = init.radius ?? 100
-    this.emissionColor = init.emissionColor?.clone() ?? new Color(0.75, 0.15, 0.15)
+    this.emissionColor = init.emissionColor?.clone() ?? new Color(0.35, 0.45, 0.85)
     this.intensity = init.intensity ?? 1.0
-    this.emissionStrength = init.emissionStrength ?? 1
+    this.emissionStrength = init.emissionStrength ?? 0.8
     this.bloomThreshold = init.bloomThreshold ?? 0.7
     this.absorptionPower = init.absorptionPower ?? 1
+    this.warpStrength = init.warpStrength ?? 0.5
+    this.anisotropy = init.anisotropy?.clone() ?? new Vector3(1, 1, 1)
+    this.edgeHardness = init.edgeHardness ?? 0.4
 
     this.noiseFrequency = init.noiseFrequency ?? 1.6
     this.octaves = init.octaves ?? 4
     this.densityThreshold = init.densityThreshold ?? 0.5
     this.densityScale = init.densityScale ?? 1.0
 
-    this.marchSteps = init.marchSteps ?? 15
+    this.marchSteps = init.marchSteps ?? 10
     this.sigma = init.sigma ?? 0.01
   }
 }

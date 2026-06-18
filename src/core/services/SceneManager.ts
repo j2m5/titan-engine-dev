@@ -39,7 +39,15 @@ class SceneManager {
 
     if (!root) return
 
-    this.scene.add(new Nebula({ center: new Vector3(0, 0, 1500), radius: 5500 }))
+    this.scene.add(
+      new Nebula({
+        center: new Vector3(0, 0, 1500),
+        radius: 5500,
+        warpStrength: 0.7,
+        anisotropy: new Vector3(2, 0.8, 1),
+        edgeHardness: 0.3
+      })
+    )
 
     const visitor = new Object3DVisitor(this.scene)
 

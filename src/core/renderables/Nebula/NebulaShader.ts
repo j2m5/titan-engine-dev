@@ -11,6 +11,9 @@ class NebulaShader extends AbstractShader {
       uEmissionStrength: new Uniform<number>(parameters.emissionStrength),
       uBloomThreshold: new Uniform<number>(parameters.bloomThreshold),
       uAbsorptionPower: new Uniform<number>(parameters.absorptionPower),
+      uWarpStrength: new Uniform<number>(parameters.warpStrength),
+      uAnisotropy: new Uniform<Vector3>(parameters.anisotropy.clone()),
+      uEdgeHardness: new Uniform<number>(parameters.edgeHardness),
 
       // FBM
       uSeed: new Uniform<number>(parameters.seed),
@@ -58,6 +61,9 @@ class NebulaShader extends AbstractShader {
       uniform float uEmissionStrength;
       uniform float uBloomThreshold;
       uniform float uAbsorptionPower;
+      uniform float uWarpStrength;
+      uniform vec3 uAnisotropy;
+      uniform float uEdgeHardness;
 
       uniform float uSeed;
       uniform float uNoiseFrequency;
@@ -90,22 +96,44 @@ class NebulaShader extends AbstractShader {
         return sum;
       }
 
+      // Дешёвый FBM для поля смещения warp: смещению хватает 2 октав
+      float fbmWarp(vec3 p) {
+        return snoise(vec4(p, uSeed)) * 0.6
+             + snoise(vec4(p * 2.0, uSeed)) * 0.3;
+      }
+
+      // Векторное поле смещения для domain warping: три независимых FBM
+      // (сдвинутые сидом) дают вектор искажения координат.
+      vec3 warpField(vec3 p) {
+        return vec3(
+          fbmWarp(p + vec3(0.0)),
+          fbmWarp(p + vec3(5.2, 1.3, 7.1)),
+          fbmWarp(p + vec3(9.7, 4.4, 2.8))
+        );
+      }
+
       // ── Плотность газа в локальной точке ──
       float sampleDensity(vec3 localPos) {
-        // нормируем в [-1,1] по радиусу. Туманности статичны в человеческих
-        // масштабах времени — анимация клубления намеренно отсутствует.
+        // нормируем по радиусу. Туманности статичны — анимация отсутствует.
         vec3 p = localPos / uRadius;
-        vec3 q = p * uNoiseFrequency;
 
-        float n = fbm(q);                 // примерно [-1, 1]
+        // анизотропия: растяжение/сжатие по осям меняет силуэт
+        // (диск, веретено, шар) ещё ДО шума
+        vec3 ps = p * uAnisotropy;
+        vec3 q = ps * uNoiseFrequency;
+
+        // DOMAIN WARPING: искажаем координаты полем смещения перед сэмплом.
+        vec3 warped = q + uWarpStrength * warpField(q);
+
+        float n = fbm(warped);            // примерно [-1, 1]
         float d = n * 0.5 + 0.5;          // в [0, 1]
 
         // порог вырезает полости, остаток масштабируем
         d = max(d - uDensityThreshold, 0.0) * uDensityScale;
 
-        // мягкое затухание плотности к сферической границе внутри куба,
-        // чтобы объём не обрывался на гранях
-        float edge = 1.0 - smoothstep(0.8, 1.0, length(p));
+        float rad = length(p);
+        float noisyEdge = rad - (1.0 - uEdgeHardness) * 0.3 * n;
+        float edge = 1.0 - smoothstep(0.55, 1.0, noisyEdge);
         return d * edge;
       }
 
@@ -125,9 +153,6 @@ class NebulaShader extends AbstractShader {
       void main() {
         #include <logdepthbuf_fragment>
 
-        // Луч в ЛОКАЛЬНОМ пространстве куба:
-        // начало — локальная позиция камеры; направление — от камеры к
-        // текущей точке поверхности (vLocalPos уже локальна).
         vec3 ro = uCameraLocal;
         vec3 dir = vLocalPos - uCameraLocal;
         // защита от вырожденного направления (камера почти на грани)
@@ -161,13 +186,9 @@ class NebulaShader extends AbstractShader {
 
           float density = sampleDensity(samplePos);
           if (density > 0.001) {
-            // Поглощение использует СЖАТУЮ плотность (density^uAbsorptionPower,
-            // power < 1), чтобы плотные ядра не уходили в насыщение альфы и
-            // оставались полупрозрачными — сквозь оптически тонкую туманность
             float densAbs = pow(density, uAbsorptionPower);
             float a = 1.0 - exp(-densAbs * stepSize * uSigma);
 
-            // плотные зоны остаются яркими/окрашенными, но прозрачными.
             float dl = stepSize / uRadius;
             vec3 emission = uEmissionColor * uIntensity * uEmissionStrength
                           * density * dl;
