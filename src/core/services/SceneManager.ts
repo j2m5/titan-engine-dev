@@ -1,4 +1,4 @@
-import { Object3D, Scene } from 'three'
+import { Object3D, Scene, Vector3 } from 'three'
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { MarkerManager } from '@/core/services/MarkerManager'
 import { Acceptable } from '@/core/services/visitors/Acceptable'
@@ -11,6 +11,7 @@ import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { RenderableObject3D, ShouldRenderOrbitLine } from '@/core/renderables/types'
 import { scenarioContext } from '@/core/scenario/ScenarioContext'
 import { threeJS } from '@/core/graphic/ThreeJS'
+import { Nebula } from '@/core/renderables/Nebula/Nebula'
 
 export function isAcceptable(object: unknown): object is Acceptable<IObject3DVisitor> {
   return (object as Acceptable<IObject3DVisitor>).accept !== undefined
@@ -37,6 +38,8 @@ class SceneManager {
     const root = Actor.find(scenarioContext.rootId!)
 
     if (!root) return
+
+    this.scene.add(new Nebula({ center: new Vector3(0, 0, 1500), radius: 5500 }))
 
     const visitor = new Object3DVisitor(this.scene)
 
