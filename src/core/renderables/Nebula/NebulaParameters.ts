@@ -107,7 +107,7 @@ class NebulaParameters {
     this.densityThreshold = init.densityThreshold ?? 0.5
     this.densityScale = init.densityScale ?? 1.0
 
-    this.marchSteps = init.marchSteps ?? 10
+    this.marchSteps = init.marchSteps ?? 30
     this.sigma = init.sigma ?? 0.01
   }
 }

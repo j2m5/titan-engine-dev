@@ -83,23 +83,23 @@ class NebulaShader extends AbstractShader {
         return fract((p3.x + p3.y) * p3.z);
       }
 
-      // ── FBM по 4D Simplex (4-я координата = seed) ──
+      // ── FBM по 3D Simplex (seed уходит в смещение координат) ──
       float fbm(vec3 p) {
+        vec3 sp = p + uSeed * 19.19;   // детерминированный сдвиг от seed
         float sum = 0.0;
         float amp = 0.5;
         float freq = 1.0;
         for (int i = 0; i < NEBULA_OCTAVES; i++) {
-          sum += amp * snoise(vec4(p * freq, uSeed));
+          sum += amp * snoise(sp * freq);
           freq *= 2.0;
           amp *= 0.5;
         }
         return sum;
       }
 
-      // Дешёвый FBM для поля смещения warp: смещению хватает 2 октав
+      // Поле смещения warp
       float fbmWarp(vec3 p) {
-        return snoise(vec4(p, uSeed)) * 0.6
-             + snoise(vec4(p * 2.0, uSeed)) * 0.3;
+        return snoise(p + uSeed * 19.19) * 0.7;
       }
 
       // Векторное поле смещения для domain warping: три независимых FBM
