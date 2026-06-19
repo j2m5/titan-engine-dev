@@ -108,8 +108,8 @@ class Engine extends EventEmitter {
     threeJS.astroControls.movementSpeed = toThreeJSUnits(cameraStore.speed)
     threeJS.astroControls.update(delta)
     threeJS.labelRenderer.render(threeJS.scene, threeJS.camera)
-    postprocessing.render(delta)
     this.sceneManager.update(delta)
+    postprocessing.render(delta)
 
     threeJS.renderer.setAnimationLoop(this.boundOnFrameRendered)
   }

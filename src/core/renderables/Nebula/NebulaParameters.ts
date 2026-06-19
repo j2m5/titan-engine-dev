@@ -66,6 +66,8 @@ export interface NebulaParametersInit {
   marchSteps?: number
   /** Коэффициент поглощения на единицу плотности·длины */
   sigma?: number
+  /** Доля разрешения half-res рендера (0.5 = ¼ фрагментов). Рендер-настройка, не физика газа. */
+  resolutionScale?: number
 }
 
 class NebulaParameters {
@@ -88,12 +90,13 @@ class NebulaParameters {
 
   public readonly marchSteps: number
   public readonly sigma: number
+  public readonly resolutionScale: number
 
   public constructor(init: NebulaParametersInit = {}) {
     this.seed = init.seed ?? 1337
     this.center = init.center?.clone() ?? new Vector3(0, 0, 0)
     this.radius = init.radius ?? 100
-    this.emissionColor = init.emissionColor?.clone() ?? new Color(0.35, 0.45, 0.85)
+    this.emissionColor = init.emissionColor?.clone() ?? new Color(0.3, 0.6, 0.55)
     this.intensity = init.intensity ?? 1.0
     this.emissionStrength = init.emissionStrength ?? 0.8
     this.bloomThreshold = init.bloomThreshold ?? 0.7
@@ -103,12 +106,13 @@ class NebulaParameters {
     this.edgeHardness = init.edgeHardness ?? 0.4
 
     this.noiseFrequency = init.noiseFrequency ?? 1.6
-    this.octaves = init.octaves ?? 4
+    this.octaves = init.octaves ?? 5
     this.densityThreshold = init.densityThreshold ?? 0.5
     this.densityScale = init.densityScale ?? 1.0
 
     this.marchSteps = init.marchSteps ?? 30
     this.sigma = init.sigma ?? 0.01
+    this.resolutionScale = init.resolutionScale ?? 0.4
   }
 }
 
