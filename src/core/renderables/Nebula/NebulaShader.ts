@@ -6,6 +6,10 @@ class NebulaShader extends AbstractShader {
   public constructor(parameters: NebulaParameters) {
     const uniforms: Record<string, IUniform> = {
       uEmissionColor: new Uniform<Color>(parameters.emissionColor.clone()),
+      uColorLow: new Uniform<Color>(parameters.colorLow.clone()),
+      uColorHigh: new Uniform<Color>(parameters.colorHigh.clone()),
+      uColorEdge: new Uniform<Color>(parameters.colorEdge.clone()),
+      uColorMixPower: new Uniform<number>(parameters.colorMixPower),
       uRadius: new Uniform<number>(parameters.radius),
       uIntensity: new Uniform<number>(parameters.intensity),
       uEmissionStrength: new Uniform<number>(parameters.emissionStrength),
@@ -56,6 +60,10 @@ class NebulaShader extends AbstractShader {
       #include <noiseFunctions>
 
       uniform vec3 uEmissionColor;
+      uniform vec3 uColorLow;
+      uniform vec3 uColorHigh;
+      uniform vec3 uColorEdge;
+      uniform float uColorMixPower;
       uniform float uRadius;
       uniform float uIntensity;
       uniform float uEmissionStrength;
@@ -190,7 +198,18 @@ class NebulaShader extends AbstractShader {
             float a = 1.0 - exp(-densAbs * stepSize * uSigma);
 
             float dl = stepSize / uRadius;
-            vec3 emission = uEmissionColor * uIntensity * uEmissionStrength
+
+            // нормированный радиус точки сэмпла (samplePos уже в локали куба)
+            float sampleRad = clamp(length(samplePos) / uRadius, 0.0, 1.0);
+
+            // цвет по плотности: тело (low) → ядра (high)
+            float densMix = pow(clamp(density, 0.0, 1.0), uColorMixPower);
+            vec3 gasColor = mix(uColorLow, uColorHigh, densMix);
+
+            // радиальная модуляция: к краям подмешиваем colorEdge
+            gasColor = mix(gasColor, uColorEdge, smoothstep(0.5, 1.0, sampleRad));
+
+            vec3 emission = gasColor * uIntensity * uEmissionStrength
                           * density * dl;
 
             accumColor += (1.0 - accumA) * emission;

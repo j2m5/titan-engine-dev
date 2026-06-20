@@ -9,6 +9,16 @@ export interface NebulaParametersInit {
   radius?: number
   /** Базовый цвет эмиссии газа */
   emissionColor?: Color
+  /**
+   * Цветовая палитра объёма. Если заданы, переопределяют одноцветный
+   * emissionColor: цвет интерполируется по плотности (тело → ядра) с
+   * радиальной модуляцией к краям. Газ перестаёт быть однотонным.
+   */
+  colorLow?: Color // разреженный газ (основное тело туманности)
+  colorHigh?: Color // плотные ядра (самые яркие сгустки)
+  colorEdge?: Color // внешние края (радиальная модуляция к границе)
+  /** Кривая перехода плотность→цвет: 1 — линейно, >1 — ядра выделены резче */
+  colorMixPower?: number
   /** HDR-усиление эмиссии (> 1 → bloom) */
   intensity?: number
   /**
@@ -75,6 +85,10 @@ class NebulaParameters {
   public readonly center: Vector3
   public readonly radius: number
   public readonly emissionColor: Color
+  public readonly colorLow: Color
+  public readonly colorHigh: Color
+  public readonly colorEdge: Color
+  public readonly colorMixPower: number
   public readonly intensity: number
   public readonly emissionStrength: number
   public readonly bloomThreshold: number
@@ -97,6 +111,10 @@ class NebulaParameters {
     this.center = init.center?.clone() ?? new Vector3(0, 0, 0)
     this.radius = init.radius ?? 100
     this.emissionColor = init.emissionColor?.clone() ?? new Color(0.3, 0.6, 0.55)
+    this.colorLow = init.colorLow?.clone() ?? this.emissionColor.clone()
+    this.colorHigh = init.colorHigh?.clone() ?? this.emissionColor.clone().multiplyScalar(1.3)
+    this.colorEdge = init.colorEdge?.clone() ?? this.colorLow.clone()
+    this.colorMixPower = init.colorMixPower ?? 1.0
     this.intensity = init.intensity ?? 1.0
     this.emissionStrength = init.emissionStrength ?? 0.8
     this.bloomThreshold = init.bloomThreshold ?? 0.7

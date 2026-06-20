@@ -1,4 +1,4 @@
-import { Object3D, Scene, Vector3 } from 'three'
+import { Color, Object3D, Scene, Vector3 } from 'three'
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { MarkerManager } from '@/core/services/MarkerManager'
 import { Acceptable } from '@/core/services/visitors/Acceptable'
@@ -45,7 +45,11 @@ class SceneManager {
       radius: 10000,
       warpStrength: 0.7,
       anisotropy: new Vector3(1, 0.4, 1),
-      edgeHardness: 0.3
+      edgeHardness: 0.3,
+      colorLow: new Color(0.3, 0.6, 0.55),
+      colorHigh: new Color(0.95, 0.45, 0.4),
+      colorEdge: new Color(0.85, 0.32, 0.45),
+      colorMixPower: 7.8
     })
 
     this.scene.add(n)
