@@ -1,4 +1,4 @@
-import { Color, IUniform, Uniform, Vector3 } from 'three'
+import { Color, IUniform, Texture, Uniform, Vector3 } from 'three'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { NebulaParameters } from '@/core/renderables/Nebula/NebulaParameters'
 
@@ -31,14 +31,21 @@ class NebulaShader extends AbstractShader {
       uSigma: new Uniform<number>(parameters.sigma),
 
       // Геометрия луча (заполняется в NebulaMaterial.update каждый кадр)
-      uCameraLocal: new Uniform<Vector3>(new Vector3())
+      uCameraLocal: new Uniform<Vector3>(new Vector3()),
+
+      // ── 3D-текстура облака (Путь 2) ──
+      uCloudTex: new Uniform<Texture | null>(null),
+      uDetailStrength: new Uniform<number>(parameters.detailStrength)
     }
 
     // Октавы и шаги марша — константы цикла GLSL, только через #define
     const defines: Record<string, any> = {
       NEBULA_OCTAVES: parameters.octaves,
       NEBULA_STEPS: parameters.marchSteps,
-      NEBULA_SHAPE: parameters.shapeType
+      NEBULA_SHAPE: parameters.shapeType,
+      USE_VOLUME_TEXTURE: parameters.useVolumeTexture ? 1 : 0,
+      DEBUG_RAW_TEXTURE: parameters.debugRawTexture ? 1 : 0,
+      NEBULA_DETAIL_OCTAVES: parameters.detailOctaves
     }
 
     const vertexShader = /* glsl */ `
@@ -86,6 +93,9 @@ class NebulaShader extends AbstractShader {
       uniform float uSigma;
 
       uniform vec3 uCameraLocal;
+
+      uniform sampler3D uCloudTex;
+      uniform float uDetailStrength;
 
       varying vec3 vLocalPos;
 
@@ -165,16 +175,55 @@ class NebulaShader extends AbstractShader {
         #endif
       }
 
+      // Высокочастотный детейл-FBM поверх текстуры. Частоты начинаются ВЫШЕ
+      // разрешения текстуры (~64 для 128³), поэтому продолжают спектр, а не
+      // дублируют крупную структуру из текстуры. Несколько октав дают
+      // богатую мелочь при влёте — то, что теряется при запекании.
+      float detailFbm(vec3 p) {
+        vec3 sp = p + fract(uSeed * 0.1731) * 10.0;
+        float sum = 0.0;
+        float amp = 0.5;
+        float freq = 2.0;                 // ближе к частоте текстуры — продолжает
+        for (int i = 0; i < NEBULA_DETAIL_OCTAVES; i++) {  // структуру, не сыпет пену
+          sum += amp * snoise(sp * uNoiseFrequency * freq);
+          freq *= 2.0;
+          amp *= 0.5;
+        }
+        return sum;
+      }
+
       // ── Плотность газа в локальной точке ──
       float sampleDensity(vec3 localPos) {
         vec3 p = localPos / uRadius;
 
-        vec3 q = p * uNoiseFrequency;
+        float n;   // облачное поле в [-1,1] (нужно для edge-искажения)
+        float d;   // плотность после порога
 
-        vec3 warped = q + uWarpStrength * warpField(q);
-        float n = fbm(warped);
-        float d = n * 0.5 + 0.5;
-        d = max(d - uDensityThreshold, 0.0) * uDensityScale;
+        #if USE_VOLUME_TEXTURE == 1
+          vec3 seedShift3 = vec3(
+            fract(uSeed * 0.1731),
+            fract(uSeed * 0.3119),
+            fract(uSeed * 0.7321)
+          );
+          vec3 uvw = fract((p * 0.5 + 0.5) + seedShift3);
+          float baseField = texture(uCloudTex, uvw).r;
+
+          // Детейл — ТОНКИЙ акцент поверх крупной формы текстуры, аддитивно
+          // и слабо, чтобы НЕ разрушать крупные warp-завитки (мультипликация
+          // их искажала). detailStrength держим малым (~0.1-0.2).
+          float detail = detailFbm(p);
+          baseField += uDetailStrength * detail * baseField;
+          baseField = max(baseField, 0.0);
+
+          n = baseField * 2.0 - 1.0;       // обратно в [-1,1] для edge
+          d = max(baseField - uDensityThreshold, 0.0) * uDensityScale;
+        #else
+          vec3 q = p * uNoiseFrequency;
+          vec3 warped = q + uWarpStrength * warpField(q);
+          n = fbm(warped);
+          d = n * 0.5 + 0.5;
+          d = max(d - uDensityThreshold, 0.0) * uDensityScale;
+        #endif
 
         float edgeNoise = snoise(p * 1.7 + fract(uSeed * 0.1731) * 10.0);
         float rad = length(p);
@@ -235,6 +284,19 @@ class NebulaShader extends AbstractShader {
         // полосатый бандинг, позволяя обойтись меньшим числом шагов.
         float jitter = hash12(gl_FragCoord.xy);
         tStart += jitter * stepSize;
+
+        #if DEBUG_RAW_TEXTURE == 1
+          // DEBUG: МАКСИМАЛЬНАЯ плотность вдоль луча (max, не среднее —
+          // среднее размывает по пустотам). Без усиления, под порогом bloom.
+          float dbg = 0.0;
+          for (int i = 0; i < NEBULA_STEPS; i++) {
+            float t = tStart + (float(i) + 0.5) * stepSize;
+            vec3 sp = (ro + rd * t) / uRadius * 0.5 + 0.5;
+            dbg = max(dbg, texture(uCloudTex, sp).r);
+          }
+          gl_FragColor = vec4(vec3(dbg) * 0.8, 1.0);
+          return;
+        #endif
 
         vec3 accumColor = vec3(0.0);
         float accumA = 0.0;

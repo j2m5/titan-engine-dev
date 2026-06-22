@@ -81,6 +81,16 @@ export interface NebulaParametersInit {
   sigma?: number
   /** Доля разрешения half-res рендера (0.5 = ¼ фрагментов). Рендер-настройка, не физика газа. */
   resolutionScale?: number
+  /** Разрешение 3D-текстуры облака (сторона куба). По умолчанию 128. */
+  texResolution?: number
+  /** Использовать запечённую текстуру вместо процедурного fbm в рантайме */
+  useVolumeTexture?: boolean
+  /** Сила процедурного детейла поверх текстуры (против воксельности). 0 = чистая текстура. */
+  detailStrength?: number
+  /** Число октав высокочастотного детейла поверх текстуры (1-4) */
+  detailOctaves?: number
+  /** DEBUG: вывести сырой fetch текстуры (проверка генерации, без архетипа/детейла) */
+  debugRawTexture?: boolean
 }
 
 class NebulaParameters {
@@ -112,6 +122,12 @@ class NebulaParameters {
   public readonly sigma: number
   public readonly resolutionScale: number
 
+  public readonly texResolution: number
+  public readonly useVolumeTexture: boolean
+  public readonly detailStrength: number
+  public readonly detailOctaves: number
+  public readonly debugRawTexture: boolean
+
   public constructor(init: NebulaParametersInit = {}) {
     this.seed = init.seed ?? 1337
     this.center = init.center?.clone() ?? new Vector3(0, 0, 0)
@@ -140,6 +156,12 @@ class NebulaParameters {
     this.marchSteps = init.marchSteps ?? 100
     this.sigma = init.sigma ?? 0.01
     this.resolutionScale = init.resolutionScale ?? 0.25
+
+    this.texResolution = init.texResolution ?? 128
+    this.useVolumeTexture = init.useVolumeTexture ?? false
+    this.detailStrength = init.detailStrength ?? 0.12
+    this.detailOctaves = init.detailOctaves ?? 2
+    this.debugRawTexture = init.debugRawTexture ?? false
   }
 }
 

@@ -1,4 +1,4 @@
-import { AdditiveBlending, BackSide, Camera, Matrix4, Object3D, Vector3 } from 'three'
+import { AdditiveBlending, BackSide, Camera, Matrix4, Object3D, Texture, Vector3 } from 'three'
 import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { NebulaShader } from '@/core/renderables/Nebula/NebulaShader'
@@ -22,6 +22,10 @@ class NebulaMaterial extends AbstractShaderMaterial {
     this.depthWrite = false
     this.blending = AdditiveBlending
     this.side = BackSide
+  }
+
+  public setCloudTexture(tex: Texture | null): void {
+    this.uniforms.uCloudTex.value = tex
   }
 
   public update(mesh: Object3D, camera: Camera): void {

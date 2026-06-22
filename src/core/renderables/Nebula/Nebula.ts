@@ -5,11 +5,13 @@ import {
   LinearFilter,
   Mesh,
   Scene,
+  Texture,
   Vector2,
   WebGLRenderTarget
 } from 'three'
 import { NebulaMaterial } from '@/core/renderables/Nebula/NebulaMaterial'
 import { NebulaUpscaleMaterial } from '@/core/renderables/Nebula/NebulaUpscaleMaterial'
+import { NebulaVolumeGenerator } from '@/core/renderables/Nebula/NebulaVolumeGenerator'
 import { NebulaParameters, NebulaParametersInit } from '@/core/renderables/Nebula/NebulaParameters'
 import { threeJS } from '@/core/graphic/ThreeJS'
 
@@ -30,6 +32,12 @@ class Nebula extends Mesh {
   /** Доля разрешения для half-RT (0.5 = половина по каждой оси = ¼ фрагментов) */
   private readonly _resolutionScale: number
 
+  // ── Общая 3D-текстура облака на все туманности (Путь 2) ──
+  // Одна текстура переиспользуется всеми кусками; разнообразие достигается
+  // трансформом/сдвигом texcoord, а не отдельными текстурами на кусок.
+  private static sharedGenerator: NebulaVolumeGenerator | null = null
+  private static sharedCloudTex: Texture | null = null
+
   public constructor(init: NebulaParametersInit = {}) {
     super()
     this.parameters = new NebulaParameters(init)
@@ -47,6 +55,19 @@ class Nebula extends Mesh {
     this._marchScene.add(this._marchMesh)
     this._marchMesh.position.copy(this.parameters.center)
 
+    // ── 3D-текстура облака (Путь 2): генерим один раз, переиспользуем ──
+    // Биндим именно на МАРШ-материал (_marchMaterial делает рейчмарч и
+    // сэмплит текстуру). this.material — это upscale, текстуру не использует.
+    if (this.parameters.useVolumeTexture) {
+      if (!Nebula.sharedCloudTex) {
+        if (!Nebula.sharedGenerator) {
+          Nebula.sharedGenerator = new NebulaVolumeGenerator(threeJS.renderer)
+        }
+        Nebula.sharedCloudTex = Nebula.sharedGenerator.generate(this.parameters, this.parameters.texResolution)
+      }
+      this._marchMaterial.setCloudTexture(Nebula.sharedCloudTex)
+    }
+
     // ── half-RT ──
     threeJS.renderer.getDrawingBufferSize(this._drawSize)
     this._rtSize.set(
@@ -62,7 +83,7 @@ class Nebula extends Mesh {
 
     this.name = 'Nebula'
     this.userData.type = 'nebula'
-    //this.frustumCulled = false
+    this.frustumCulled = false
   }
 
   private __createRT(w: number, h: number): WebGLRenderTarget {
