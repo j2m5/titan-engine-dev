@@ -110,12 +110,12 @@ class NebulaParameters {
     this.seed = init.seed ?? 1337
     this.center = init.center?.clone() ?? new Vector3(0, 0, 0)
     this.radius = init.radius ?? 100
-    this.emissionColor = init.emissionColor?.clone() ?? new Color(0.3, 0.6, 0.55)
+    this.emissionColor = init.emissionColor?.clone() ?? new Color(0.4, 0.6, 0.55)
     this.colorLow = init.colorLow?.clone() ?? this.emissionColor.clone()
     this.colorHigh = init.colorHigh?.clone() ?? this.emissionColor.clone().multiplyScalar(1.3)
     this.colorEdge = init.colorEdge?.clone() ?? this.colorLow.clone()
     this.colorMixPower = init.colorMixPower ?? 1.0
-    this.intensity = init.intensity ?? 1.0
+    this.intensity = init.intensity ?? 3.0
     this.emissionStrength = init.emissionStrength ?? 0.8
     this.bloomThreshold = init.bloomThreshold ?? 0.7
     this.absorptionPower = init.absorptionPower ?? 1
@@ -124,13 +124,13 @@ class NebulaParameters {
     this.edgeHardness = init.edgeHardness ?? 0.4
 
     this.noiseFrequency = init.noiseFrequency ?? 1.6
-    this.octaves = init.octaves ?? 5
+    this.octaves = init.octaves ?? 4
     this.densityThreshold = init.densityThreshold ?? 0.5
     this.densityScale = init.densityScale ?? 1.0
 
-    this.marchSteps = init.marchSteps ?? 30
+    this.marchSteps = init.marchSteps ?? 80
     this.sigma = init.sigma ?? 0.01
-    this.resolutionScale = init.resolutionScale ?? 0.4
+    this.resolutionScale = init.resolutionScale ?? 0.5
   }
 }
 

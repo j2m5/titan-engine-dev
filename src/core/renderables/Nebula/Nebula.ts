@@ -33,7 +33,7 @@ class Nebula extends Mesh {
   public constructor(init: NebulaParametersInit = {}) {
     super()
     this.parameters = new NebulaParameters(init)
-    this._resolutionScale = init.resolutionScale ?? 0.5
+    this._resolutionScale = init.resolutionScale ?? 0.25
 
     // геометрия куба — общая форма для видимого меша и для марш-меша
     const side = this.parameters.radius * 2
@@ -74,6 +74,7 @@ class Nebula extends Mesh {
       magFilter: LinearFilter
     })
     rt.texture.generateMipmaps = false
+
     return rt
   }
 
