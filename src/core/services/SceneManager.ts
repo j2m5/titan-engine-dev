@@ -42,13 +42,29 @@ class SceneManager {
     // todo test
     const n = new Nebula({
       center: new Vector3(160086.55871384568, 4303.140598442052, 11972.090991472533),
-      radius: 15000,
-      shapeType: 2,
-      shapeStrength: 0.85,
-      shapeThickness: 0.15,
-      warpStrength: 0,
-      anisotropy: new Vector3(1, 0.2, 1.3),
-      edgeHardness: 0,
+      radius: 7000,
+      shapeType: 3,
+      shapeStrength: 1,
+      shapeThickness: 0.25,
+      warpStrength: 0.6,
+      anisotropy: new Vector3(1, 1, 1),
+      edgeHardness: 0.2,
+      emissionColor: new Color(0.16, 0.32, 0.5),
+      colorLow: new Color(0.16, 0.32, 0.5),
+      colorHigh: new Color(0.45, 0.72, 0.95),
+      colorEdge: new Color(0.62, 0.4, 0.2),
+      colorMixPower: 2.0
+    })
+
+    const n2 = new Nebula({
+      center: new Vector3(160086.55871384568, 4303.140598442052, 11972.090991472533),
+      radius: 7000,
+      shapeType: 3,
+      shapeStrength: 1,
+      shapeThickness: 0.25,
+      warpStrength: 0.6,
+      anisotropy: new Vector3(1, 1, 1),
+      edgeHardness: 0.5,
       emissionColor: new Color(0.16, 0.32, 0.5),
       colorLow: new Color(0.16, 0.32, 0.5),
       colorHigh: new Color(0.45, 0.72, 0.95),

@@ -109,41 +109,47 @@ class NebulaShader extends AbstractShader {
         return sum;
       }
 
-      float fbmWarp(vec3 p) {
-        return snoise(p + fract(uSeed * 0.1731) * 10.0) * 0.7;
+      float fbmWarp(vec3 p, vec3 offset) {
+        float seedShift = fract(uSeed * 0.1731) * 10.0;
+        return snoise(p + offset + seedShift);
       }
 
-      // Векторное поле смещения для domain warping: три независимых FBM
-      // (сдвинутые сидом) дают вектор искажения координат.
       vec3 warpField(vec3 p) {
         return vec3(
-          fbmWarp(p + vec3(0.0)),
-          fbmWarp(p + vec3(5.2, 1.3, 7.1)),
-          fbmWarp(p + vec3(9.7, 4.4, 2.8))
+          fbmWarp(p, vec3( 0.0,   0.0,   0.0)),
+          fbmWarp(p, vec3(31.4,  17.7,  42.1)),
+          fbmWarp(p, vec3(73.2,  91.5,  12.8))
         );
       }
 
       float shapeShell(vec3 p) {
         float r = length(p);
-        float d = abs(r - 0.62);
-        return 1.0 - smoothstep(0.0, uShapeThickness, d);
+        vec3 dir = normalize(p + 1e-5);
+        float radVar = snoise(dir * 2.3 + fract(uSeed * 0.1731) * 10.0) * 0.18;
+        float shellR = 0.62 + radVar;
+        float d = abs(r - shellR);
+        float thick = uShapeThickness * (0.7 + 0.6 * snoise(dir * 4.1));
+        return 1.0 - smoothstep(0.0, thick, d);
       }
 
       float shapeBipolar(vec3 p) {
         float ax = abs(p.y);
         float radial = length(p.xz);
-        // плавный конус без сингулярности у центра: ширина растёт от перетяжки
-        float coneWidth = 0.15 + ax * 0.9;        // ширина лепестка на высоте ax
+        float coneWidth = 0.15 + ax * 0.9;
         float lobe = 1.0 - smoothstep(coneWidth * 0.5, coneWidth, radial);
         float lenFall = 1.0 - smoothstep(0.6, 1.0, ax);
-        float waist = smoothstep(0.05, 0.25, ax);  // мягкая перетяжка
+        float waist = smoothstep(0.05, 0.25, ax);
         return lobe * lenFall * waist;
       }
 
       float shapeDisk(vec3 p) {
-        float vert = 1.0 - smoothstep(0.0, uShapeThickness, abs(p.y));
         float radial = length(p.xz);
-        float rim = 1.0 - smoothstep(0.7, 1.0, radial);
+        float angle = atan(p.z, p.x);
+        float rimVar = snoise(vec3(cos(angle), sin(angle), 0.0) * 2.0
+                       + fract(uSeed * 0.1731) * 10.0) * 0.15;
+        float rim = 1.0 - smoothstep(0.6 + rimVar, 1.0 + rimVar, radial);
+        float thick = uShapeThickness * (0.6 + 0.8 * snoise(vec3(p.xz * 3.0, p.y * 3.0)));
+        float vert = 1.0 - smoothstep(0.0, thick, abs(p.y));
         return vert * rim;
       }
 
@@ -161,30 +167,29 @@ class NebulaShader extends AbstractShader {
 
       // ── Плотность газа в локальной точке ──
       float sampleDensity(vec3 localPos) {
-        // нормируем по радиусу. Туманности статичны — анимация отсутствует.
         vec3 p = localPos / uRadius;
 
-        // анизотропия: растяжение/сжатие по осям меняет силуэт
-        // (диск, веретено, шар) ещё ДО шума
-        vec3 ps = p * uAnisotropy;
-        vec3 q = ps * uNoiseFrequency;
+        vec3 q = p * uNoiseFrequency;
 
-        // DOMAIN WARPING: искажаем координаты полем смещения перед сэмплом.
         vec3 warped = q + uWarpStrength * warpField(q);
-
-        float n = fbm(warped);            // примерно [-1, 1]
-        float d = n * 0.5 + 0.5;          // в [0, 1]
-
-        // порог вырезает полости, остаток масштабируем
+        float n = fbm(warped);
+        float d = n * 0.5 + 0.5;
         d = max(d - uDensityThreshold, 0.0) * uDensityScale;
 
+        float edgeNoise = snoise(p * 1.7 + fract(uSeed * 0.1731) * 10.0);
         float rad = length(p);
-        float noisyEdge = rad - (1.0 - uEdgeHardness) * 0.3 * n;
-        float edge = 1.0 - smoothstep(0.55, 1.0, noisyEdge);
+        float distort = (1.0 - uEdgeHardness) * (0.45 * edgeNoise + 0.2 * n);
+        float noisyEdge = rad - distort;
+        float edge = 1.0 - smoothstep(0.45, 1.0, noisyEdge);
         d *= edge;
 
         #if NEBULA_SHAPE != 0
-          float shape = shapeMask(p);
+          vec3 shapeOffset = vec3(
+            snoise(p * 0.8 + 11.0),
+            snoise(p * 0.8 + 23.0),
+            snoise(p * 0.8 + 37.0)
+          ) * 0.12;
+          float shape = shapeMask(p + shapeOffset);
           d *= mix(1.0, shape, uShapeStrength);
         #endif
 

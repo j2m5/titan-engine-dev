@@ -113,7 +113,7 @@ class NebulaParameters {
   public readonly resolutionScale: number
 
   public constructor(init: NebulaParametersInit = {}) {
-    this.seed = init.seed ?? 0
+    this.seed = init.seed ?? 1337
     this.center = init.center?.clone() ?? new Vector3(0, 0, 0)
     this.radius = init.radius ?? 100
     this.shapeType = init.shapeType ?? 0
@@ -124,7 +124,7 @@ class NebulaParameters {
     this.colorHigh = init.colorHigh?.clone() ?? this.emissionColor.clone().multiplyScalar(1.3)
     this.colorEdge = init.colorEdge?.clone() ?? this.colorLow.clone()
     this.colorMixPower = init.colorMixPower ?? 1
-    this.intensity = init.intensity ?? 5
+    this.intensity = init.intensity ?? 1
     this.emissionStrength = init.emissionStrength ?? 1
     this.bloomThreshold = init.bloomThreshold ?? 0.7
     this.absorptionPower = init.absorptionPower ?? 1
@@ -135,7 +135,7 @@ class NebulaParameters {
     this.noiseFrequency = init.noiseFrequency ?? 3.6
     this.octaves = init.octaves ?? 5
     this.densityThreshold = init.densityThreshold ?? 0.5
-    this.densityScale = init.densityScale ?? 3
+    this.densityScale = init.densityScale ?? 5
 
     this.marchSteps = init.marchSteps ?? 100
     this.sigma = init.sigma ?? 0.01

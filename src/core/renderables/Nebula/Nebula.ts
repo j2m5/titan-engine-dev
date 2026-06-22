@@ -62,7 +62,7 @@ class Nebula extends Mesh {
 
     this.name = 'Nebula'
     this.userData.type = 'nebula'
-    this.frustumCulled = false
+    //this.frustumCulled = false
   }
 
   private __createRT(w: number, h: number): WebGLRenderTarget {
