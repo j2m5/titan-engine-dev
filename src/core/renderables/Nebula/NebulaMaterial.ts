@@ -1,4 +1,4 @@
-import { BackSide, Camera, Matrix4, NormalBlending, Object3D, Vector3 } from 'three'
+import { AdditiveBlending, BackSide, Camera, Matrix4, Object3D, Vector3 } from 'three'
 import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { NebulaShader } from '@/core/renderables/Nebula/NebulaShader'
@@ -20,7 +20,7 @@ class NebulaMaterial extends AbstractShaderMaterial {
 
     this.transparent = true
     this.depthWrite = false
-    this.blending = NormalBlending
+    this.blending = AdditiveBlending
     this.side = BackSide
   }
 

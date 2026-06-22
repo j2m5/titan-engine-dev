@@ -5,6 +5,8 @@ import { NebulaParameters } from '@/core/renderables/Nebula/NebulaParameters'
 class NebulaShader extends AbstractShader {
   public constructor(parameters: NebulaParameters) {
     const uniforms: Record<string, IUniform> = {
+      uShapeStrength: new Uniform<number>(parameters.shapeStrength),
+      uShapeThickness: new Uniform<number>(parameters.shapeThickness),
       uEmissionColor: new Uniform<Color>(parameters.emissionColor.clone()),
       uColorLow: new Uniform<Color>(parameters.colorLow.clone()),
       uColorHigh: new Uniform<Color>(parameters.colorHigh.clone()),
@@ -35,7 +37,8 @@ class NebulaShader extends AbstractShader {
     // Октавы и шаги марша — константы цикла GLSL, только через #define
     const defines: Record<string, any> = {
       NEBULA_OCTAVES: parameters.octaves,
-      NEBULA_STEPS: parameters.marchSteps
+      NEBULA_STEPS: parameters.marchSteps,
+      NEBULA_SHAPE: parameters.shapeType
     }
 
     const vertexShader = /* glsl */ `
@@ -59,6 +62,8 @@ class NebulaShader extends AbstractShader {
       #include <logdepthbuf_pars_fragment>
       #include <noiseFunctions>
 
+      uniform float uShapeStrength;
+      uniform float uShapeThickness;
       uniform vec3 uEmissionColor;
       uniform vec3 uColorLow;
       uniform vec3 uColorHigh;
@@ -91,9 +96,8 @@ class NebulaShader extends AbstractShader {
         return fract((p3.x + p3.y) * p3.z);
       }
 
-      // ── FBM по 3D Simplex (seed уходит в смещение координат) ──
       float fbm(vec3 p) {
-        vec3 sp = p + uSeed * 19.19;   // детерминированный сдвиг от seed
+        vec3 sp = p + fract(uSeed * 0.1731) * 10.0;  // сдвиг в [0..10]
         float sum = 0.0;
         float amp = 0.5;
         float freq = 1.0;
@@ -105,9 +109,8 @@ class NebulaShader extends AbstractShader {
         return sum;
       }
 
-      // Поле смещения warp
       float fbmWarp(vec3 p) {
-        return snoise(p + uSeed * 19.19) * 0.7;
+        return snoise(p + fract(uSeed * 0.1731) * 10.0) * 0.7;
       }
 
       // Векторное поле смещения для domain warping: три независимых FBM
@@ -118,6 +121,42 @@ class NebulaShader extends AbstractShader {
           fbmWarp(p + vec3(5.2, 1.3, 7.1)),
           fbmWarp(p + vec3(9.7, 4.4, 2.8))
         );
+      }
+
+      float shapeShell(vec3 p) {
+        float r = length(p);
+        float d = abs(r - 0.62);
+        return 1.0 - smoothstep(0.0, uShapeThickness, d);
+      }
+
+      float shapeBipolar(vec3 p) {
+        float ax = abs(p.y);
+        float radial = length(p.xz);
+        // плавный конус без сингулярности у центра: ширина растёт от перетяжки
+        float coneWidth = 0.15 + ax * 0.9;        // ширина лепестка на высоте ax
+        float lobe = 1.0 - smoothstep(coneWidth * 0.5, coneWidth, radial);
+        float lenFall = 1.0 - smoothstep(0.6, 1.0, ax);
+        float waist = smoothstep(0.05, 0.25, ax);  // мягкая перетяжка
+        return lobe * lenFall * waist;
+      }
+
+      float shapeDisk(vec3 p) {
+        float vert = 1.0 - smoothstep(0.0, uShapeThickness, abs(p.y));
+        float radial = length(p.xz);
+        float rim = 1.0 - smoothstep(0.7, 1.0, radial);
+        return vert * rim;
+      }
+
+      float shapeMask(vec3 p) {
+        #if NEBULA_SHAPE == 1
+          return shapeShell(p);
+        #elif NEBULA_SHAPE == 2
+          return shapeBipolar(p);
+        #elif NEBULA_SHAPE == 3
+          return shapeDisk(p);
+        #else
+          return 1.0;
+        #endif
       }
 
       // ── Плотность газа в локальной точке ──
@@ -142,7 +181,14 @@ class NebulaShader extends AbstractShader {
         float rad = length(p);
         float noisyEdge = rad - (1.0 - uEdgeHardness) * 0.3 * n;
         float edge = 1.0 - smoothstep(0.55, 1.0, noisyEdge);
-        return d * edge;
+        d *= edge;
+
+        #if NEBULA_SHAPE != 0
+          float shape = shapeMask(p);
+          d *= mix(1.0, shape, uShapeStrength);
+        #endif
+
+        return d;
       }
 
       // ── Slab-пересечение луча с AABB [-uRadius, +uRadius]³ ──

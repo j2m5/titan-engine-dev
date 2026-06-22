@@ -7,6 +7,9 @@ export interface NebulaParametersInit {
   center?: Vector3
   /** Радиус bounding-объёма в объектных единицах Three.js (полу-сторона куба) */
   radius?: number
+  shapeType?: number
+  shapeStrength?: number
+  shapeThickness?: number
   /** Базовый цвет эмиссии газа */
   emissionColor?: Color
   /**
@@ -84,6 +87,9 @@ class NebulaParameters {
   public readonly seed: number
   public readonly center: Vector3
   public readonly radius: number
+  public readonly shapeType: number
+  public readonly shapeStrength: number
+  public readonly shapeThickness: number
   public readonly emissionColor: Color
   public readonly colorLow: Color
   public readonly colorHigh: Color
@@ -107,30 +113,33 @@ class NebulaParameters {
   public readonly resolutionScale: number
 
   public constructor(init: NebulaParametersInit = {}) {
-    this.seed = init.seed ?? 1337
+    this.seed = init.seed ?? 0
     this.center = init.center?.clone() ?? new Vector3(0, 0, 0)
     this.radius = init.radius ?? 100
+    this.shapeType = init.shapeType ?? 0
+    this.shapeStrength = init.shapeStrength ?? 0.8
+    this.shapeThickness = init.shapeThickness ?? 0.25
     this.emissionColor = init.emissionColor?.clone() ?? new Color(0.4, 0.6, 0.55)
     this.colorLow = init.colorLow?.clone() ?? this.emissionColor.clone()
     this.colorHigh = init.colorHigh?.clone() ?? this.emissionColor.clone().multiplyScalar(1.3)
     this.colorEdge = init.colorEdge?.clone() ?? this.colorLow.clone()
-    this.colorMixPower = init.colorMixPower ?? 1.0
-    this.intensity = init.intensity ?? 3.0
-    this.emissionStrength = init.emissionStrength ?? 0.8
+    this.colorMixPower = init.colorMixPower ?? 1
+    this.intensity = init.intensity ?? 5
+    this.emissionStrength = init.emissionStrength ?? 1
     this.bloomThreshold = init.bloomThreshold ?? 0.7
     this.absorptionPower = init.absorptionPower ?? 1
     this.warpStrength = init.warpStrength ?? 0.5
     this.anisotropy = init.anisotropy?.clone() ?? new Vector3(1, 1, 1)
     this.edgeHardness = init.edgeHardness ?? 0.4
 
-    this.noiseFrequency = init.noiseFrequency ?? 1.6
-    this.octaves = init.octaves ?? 4
+    this.noiseFrequency = init.noiseFrequency ?? 3.6
+    this.octaves = init.octaves ?? 5
     this.densityThreshold = init.densityThreshold ?? 0.5
-    this.densityScale = init.densityScale ?? 1.0
+    this.densityScale = init.densityScale ?? 3
 
-    this.marchSteps = init.marchSteps ?? 80
+    this.marchSteps = init.marchSteps ?? 100
     this.sigma = init.sigma ?? 0.01
-    this.resolutionScale = init.resolutionScale ?? 0.5
+    this.resolutionScale = init.resolutionScale ?? 0.25
   }
 }
 
