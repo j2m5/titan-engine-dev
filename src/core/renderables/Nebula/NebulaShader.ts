@@ -132,17 +132,16 @@ class NebulaShader extends AbstractShader {
         );
       }
 
-      float shapeShell(vec3 p) {
+      float shapeShell(vec3 p, float fieldN) {
         float r = length(p);
-        vec3 dir = normalize(p + 1e-5);
-        float radVar = snoise(dir * 2.3 + fract(uSeed * 0.1731) * 10.0) * 0.18;
-        float shellR = 0.62 + radVar;
+        // вариацию радиуса/толщины даёт облачное поле fieldN, не snoise
+        float shellR = 0.62 + fieldN * 0.18;
         float d = abs(r - shellR);
-        float thick = uShapeThickness * (0.7 + 0.6 * snoise(dir * 4.1));
+        float thick = uShapeThickness * (0.7 + 0.6 * fieldN);
         return 1.0 - smoothstep(0.0, thick, d);
       }
 
-      float shapeBipolar(vec3 p) {
+      float shapeBipolar(vec3 p, float fieldN) {
         float ax = abs(p.y);
         float radial = length(p.xz);
         float coneWidth = 0.15 + ax * 0.9;
@@ -152,24 +151,23 @@ class NebulaShader extends AbstractShader {
         return lobe * lenFall * waist;
       }
 
-      float shapeDisk(vec3 p) {
+      float shapeDisk(vec3 p, float fieldN) {
         float radial = length(p.xz);
-        float angle = atan(p.z, p.x);
-        float rimVar = snoise(vec3(cos(angle), sin(angle), 0.0) * 2.0
-                       + fract(uSeed * 0.1731) * 10.0) * 0.08;
+        // рваность кромки/толщины — от облачного поля fieldN, не snoise
+        float rimVar = fieldN * 0.08;
         float rim = 1.0 - smoothstep(0.6 + rimVar, 1.0 + rimVar, radial);
-        float thick = uShapeThickness * (0.6 + 0.4 * snoise(vec3(p.xz * 3.0, p.y * 1.0)));
+        float thick = uShapeThickness * (0.6 + 0.4 * fieldN);
         float vert = 1.0 - smoothstep(0.0, thick, abs(p.y));
         return vert * rim;
       }
 
-      float shapeMask(vec3 p) {
+      float shapeMask(vec3 p, float fieldN) {
         #if NEBULA_SHAPE == 1
-          return shapeShell(p);
+          return shapeShell(p, fieldN);
         #elif NEBULA_SHAPE == 2
-          return shapeBipolar(p);
+          return shapeBipolar(p, fieldN);
         #elif NEBULA_SHAPE == 3
-          return shapeDisk(p);
+          return shapeDisk(p, fieldN);
         #else
           return 1.0;
         #endif
@@ -200,13 +198,9 @@ class NebulaShader extends AbstractShader {
         float d;   // плотность после порога
 
         #if USE_VOLUME_TEXTURE == 1
-          vec3 seedShift3 = vec3(
-            fract(uSeed * 0.1731),
-            fract(uSeed * 0.3119),
-            fract(uSeed * 0.7321)
-          );
-          vec3 uvw = fract((p * 0.5 + 0.5) + seedShift3);
-          float baseField = texture(uCloudTex, uvw).r;
+          // texcoord: локаль [-1,1] → [0,1]
+          vec3 uvw = p * 0.5 + 0.5;
+          float baseField = texture(uCloudTex, uvw).r;   // сырое [0,1]
 
           // Детейл — ТОНКИЙ акцент поверх крупной формы текстуры, аддитивно
           // и слабо, чтобы НЕ разрушать крупные warp-завитки (мультипликация
@@ -225,20 +219,27 @@ class NebulaShader extends AbstractShader {
           d = max(d - uDensityThreshold, 0.0) * uDensityScale;
         #endif
 
-        float edgeNoise = snoise(p * 1.7 + fract(uSeed * 0.1731) * 10.0);
         float rad = length(p);
-        float distort = (1.0 - uEdgeHardness) * (0.45 * edgeNoise + 0.2 * n);
+        #if USE_VOLUME_TEXTURE == 1
+          // текстурный путь: рваность края даёт само облако (n из текстуры),
+          // БЕЗ отдельного edgeNoise — экономим snoise на каждом шаге
+          float distort = (1.0 - uEdgeHardness) * 0.55 * n;
+        #else
+          // процедурный путь: текстуры нет, рвём отдельным шумом
+          float edgeNoise = snoise(p * 1.7 + fract(uSeed * 0.1731) * 10.0);
+          float distort = (1.0 - uEdgeHardness) * (0.45 * edgeNoise + 0.2 * n);
+        #endif
         float noisyEdge = rad - distort;
         float edge = 1.0 - smoothstep(0.45, 1.0, noisyEdge);
         d *= edge;
 
         #if NEBULA_SHAPE != 0
-          vec3 shapeOffset = vec3(
-            snoise(p * 0.8 + 11.0),
-            snoise(p * 0.8 + 23.0),
-            snoise(p * 0.8 + 37.0)
-          ) * 0.12;
-          float shape = shapeMask(p + shapeOffset);
+          // Асимметрию формы даёт само облако (n), а не отдельные 3 snoise:
+          // смещаем координату архетипа на дешёвый вектор из n. На текстурном
+          // пути это бесплатно (n уже есть из fetch), на процедурном — тоже
+          // (n уже посчитан). Убрали 3 snoise/шаг.
+          vec3 shapeOffset = vec3(n, n * 0.7, n * 1.3) * 0.12;
+          float shape = shapeMask(p + shapeOffset, n);
           d *= mix(1.0, shape, uShapeStrength);
         #endif
 

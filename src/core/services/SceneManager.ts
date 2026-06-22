@@ -62,7 +62,7 @@ class SceneManager {
 
     const n2 = new Nebula({
       center: new Vector3(160086.55871384568, 4303.140598442052, 11972.090991472533),
-      radius: 7000,
+      radius: 9000,
       shapeType: 2,
       shapeStrength: 1,
       shapeThickness: 0.25,
@@ -79,7 +79,7 @@ class SceneManager {
       texResolution: 128
     })
 
-    this.scene.add(n, n2)
+    this.scene.add(n)
 
     const visitor = new Object3DVisitor(this.scene)
 
