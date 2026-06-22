@@ -146,9 +146,9 @@ class NebulaShader extends AbstractShader {
         float radial = length(p.xz);
         float angle = atan(p.z, p.x);
         float rimVar = snoise(vec3(cos(angle), sin(angle), 0.0) * 2.0
-                       + fract(uSeed * 0.1731) * 10.0) * 0.15;
+                       + fract(uSeed * 0.1731) * 10.0) * 0.08;
         float rim = 1.0 - smoothstep(0.6 + rimVar, 1.0 + rimVar, radial);
-        float thick = uShapeThickness * (0.6 + 0.8 * snoise(vec3(p.xz * 3.0, p.y * 3.0)));
+        float thick = uShapeThickness * (0.6 + 0.4 * snoise(vec3(p.xz * 3.0, p.y * 1.0)));
         float vert = 1.0 - smoothstep(0.0, thick, abs(p.y));
         return vert * rim;
       }
