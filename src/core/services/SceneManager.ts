@@ -1,4 +1,4 @@
-import { Color, Object3D, Scene, Vector3 } from 'three'
+import { Object3D, Scene } from 'three'
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { MarkerManager } from '@/core/services/MarkerManager'
 import { Acceptable } from '@/core/services/visitors/Acceptable'
@@ -11,7 +11,6 @@ import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { RenderableObject3D, ShouldRenderOrbitLine } from '@/core/renderables/types'
 import { scenarioContext } from '@/core/scenario/ScenarioContext'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { Nebula } from '@/core/renderables/Nebula/Nebula'
 
 export function isAcceptable(object: unknown): object is Acceptable<IObject3DVisitor> {
   return (object as Acceptable<IObject3DVisitor>).accept !== undefined
@@ -38,48 +37,6 @@ class SceneManager {
     const root = Actor.find(scenarioContext.rootId!)
 
     if (!root) return
-
-    // todo test
-    const n = new Nebula({
-      center: new Vector3(160086.55871384568, 4303.140598442052, 11972.090991472533),
-      seed: 1337,
-      radius: 7000,
-      shapeType: 3,
-      shapeStrength: 1,
-      shapeThickness: 0.25,
-      warpStrength: 0.7,
-      anisotropy: new Vector3(1, 1, 1),
-      edgeHardness: 0.2,
-      emissionColor: new Color(0.16, 0.32, 0.5),
-      colorLow: new Color(0.16, 0.32, 0.5),
-      colorHigh: new Color(0.45, 0.72, 0.95),
-      colorEdge: new Color(0.62, 0.4, 0.2),
-      colorMixPower: 2.0,
-      useVolumeTexture: true,
-      debugRawTexture: false,
-      texResolution: 128
-    })
-
-    const n2 = new Nebula({
-      center: new Vector3(160086.55871384568, 4303.140598442052, 11972.090991472533),
-      radius: 9000,
-      shapeType: 2,
-      shapeStrength: 1,
-      shapeThickness: 0.25,
-      warpStrength: 0.6,
-      anisotropy: new Vector3(1, 1, 1),
-      edgeHardness: 0.5,
-      emissionColor: new Color(0.16, 0.32, 0.5),
-      colorLow: new Color(0.16, 0.32, 0.5),
-      colorHigh: new Color(0.45, 0.72, 0.95),
-      colorEdge: new Color(0.62, 0.4, 0.2),
-      colorMixPower: 2.0,
-      useVolumeTexture: true,
-      debugRawTexture: false,
-      texResolution: 128
-    })
-
-    this.scene.add(n)
 
     const visitor = new Object3DVisitor(this.scene)
 
