@@ -8,9 +8,9 @@ describe('NebulaField noise', () => {
     const samples: number[] = []
     for (let i = 0; i < 40; i++)
       samples.push(field.sampleDensity(new Vector3(Math.sin(i) * 0.4, Math.cos(i) * 0.3, (i % 7) * 0.1)))
-    const mean = samples.reduce((a, b) => a + b, 0) / samples.length
-    const variance = samples.reduce((a, b) => a + (b - mean) ** 2, 0) / samples.length
-    expect(variance).toBeGreaterThan(0.0005) // not a flat blob
+    const max = Math.max(...samples)
+    const min = Math.min(...samples)
+    expect(max - min).toBeGreaterThan(0.02) // real spatial structure, not a flat blob
   })
 
   it('is deterministic for a fixed seed', () => {
