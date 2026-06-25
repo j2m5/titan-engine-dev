@@ -34,4 +34,15 @@ describe('NebulaParams', () => {
     expect(b.palette.secondary.getHex()).not.toBe(a.palette.secondary.getHex())
     expect(a.axisRatios).not.toBe(b.axisRatios)
   })
+
+  it('does not mutate a base passed as the second argument', () => {
+    const base = mergeNebulaParams({ seed: 1, size: 100 })
+    const snapshotSeed = base.seed
+    const snapshotSize = base.size
+    const derived = mergeNebulaParams({ size: 200 }, base)
+    expect(derived.size).toBe(200)
+    expect(derived.seed).toBe(1)        // inherited from base
+    expect(base.size).toBe(snapshotSize) // base untouched
+    expect(base.seed).toBe(snapshotSeed)
+  })
 })

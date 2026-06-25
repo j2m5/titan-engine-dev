@@ -77,6 +77,32 @@ function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v))
 }
 
+function cloneNebulaParams(src: NebulaParams): NebulaParams {
+  return {
+    seed: src.seed,
+    size: src.size,
+    shape: src.shape,
+    axisRatios: src.axisRatios.clone(),
+    edgeFalloff: src.edgeFalloff,
+    lobes: src.lobes.map((l) => ({ center: l.center.clone(), radius: l.radius, weight: l.weight, seed: l.seed })),
+    cavities: src.cavities.map((c) => ({ center: c.center.clone(), radius: c.radius, strength: c.strength })),
+    noise: { ...src.noise },
+    palette: {
+      stops: src.palette.stops.map((s) => ({ t: s.t, color: s.color.clone() })),
+      secondary: src.palette.secondary.clone(),
+      secondaryThreshold: src.palette.secondaryThreshold,
+      emissiveIntensity: src.palette.emissiveIntensity
+    },
+    dust: { strength: src.dust.strength, threshold: src.dust.threshold, color: src.dust.color.clone() },
+    lighting: {
+      starPosition: src.lighting.starPosition ? src.lighting.starPosition.clone() : null,
+      scatterStrength: src.lighting.scatterStrength,
+      ambient: src.lighting.ambient
+    },
+    quality: { ...src.quality }
+  }
+}
+
 export function makeDefaultNebulaParams(): NebulaParams {
   return {
     seed: 1337,
@@ -132,44 +158,45 @@ export function mergeNebulaParams(
   overrides: DeepPartial<NebulaParams> = {},
   base: NebulaParams = makeDefaultNebulaParams()
 ): NebulaParams {
+  const result = cloneNebulaParams(base)
   const o = overrides as Partial<NebulaParams>
 
-  if (o.seed !== undefined) base.seed = o.seed
-  if (o.size !== undefined) base.size = o.size
-  if (o.shape !== undefined) base.shape = o.shape
-  if (o.axisRatios) base.axisRatios.copy(o.axisRatios as Vector3)
-  if (o.edgeFalloff !== undefined) base.edgeFalloff = o.edgeFalloff
-  if (o.lobes) base.lobes = o.lobes as NebulaLobe[]
-  if (o.cavities) base.cavities = o.cavities as NebulaCavity[]
+  if (o.seed !== undefined) result.seed = o.seed
+  if (o.size !== undefined) result.size = o.size
+  if (o.shape !== undefined) result.shape = o.shape
+  if (o.axisRatios) result.axisRatios.copy(o.axisRatios as Vector3)
+  if (o.edgeFalloff !== undefined) result.edgeFalloff = o.edgeFalloff
+  if (o.lobes) result.lobes = o.lobes as NebulaLobe[]
+  if (o.cavities) result.cavities = o.cavities as NebulaCavity[]
 
-  Object.assign(base.noise, overrides.noise)
+  Object.assign(result.noise, overrides.noise)
   if (overrides.palette) {
-    if (overrides.palette.stops) base.palette.stops = overrides.palette.stops as ColorStop[]
-    if (overrides.palette.secondary) base.palette.secondary.copy(overrides.palette.secondary as Color)
+    if (overrides.palette.stops) result.palette.stops = overrides.palette.stops as ColorStop[]
+    if (overrides.palette.secondary) result.palette.secondary.copy(overrides.palette.secondary as Color)
     if (overrides.palette.secondaryThreshold !== undefined)
-      base.palette.secondaryThreshold = overrides.palette.secondaryThreshold
+      result.palette.secondaryThreshold = overrides.palette.secondaryThreshold
     if (overrides.palette.emissiveIntensity !== undefined)
-      base.palette.emissiveIntensity = overrides.palette.emissiveIntensity
+      result.palette.emissiveIntensity = overrides.palette.emissiveIntensity
   }
   if (overrides.dust) {
-    if (overrides.dust.strength !== undefined) base.dust.strength = overrides.dust.strength
-    if (overrides.dust.threshold !== undefined) base.dust.threshold = overrides.dust.threshold
-    if (overrides.dust.color) base.dust.color.copy(overrides.dust.color as Color)
+    if (overrides.dust.strength !== undefined) result.dust.strength = overrides.dust.strength
+    if (overrides.dust.threshold !== undefined) result.dust.threshold = overrides.dust.threshold
+    if (overrides.dust.color) result.dust.color.copy(overrides.dust.color as Color)
   }
   if (overrides.lighting) {
     if (overrides.lighting.starPosition !== undefined)
-      base.lighting.starPosition = overrides.lighting.starPosition
+      result.lighting.starPosition = overrides.lighting.starPosition
         ? (overrides.lighting.starPosition as Vector3).clone()
         : null
     if (overrides.lighting.scatterStrength !== undefined)
-      base.lighting.scatterStrength = overrides.lighting.scatterStrength
-    if (overrides.lighting.ambient !== undefined) base.lighting.ambient = overrides.lighting.ambient
+      result.lighting.scatterStrength = overrides.lighting.scatterStrength
+    if (overrides.lighting.ambient !== undefined) result.lighting.ambient = overrides.lighting.ambient
   }
-  Object.assign(base.quality, overrides.quality)
+  Object.assign(result.quality, overrides.quality)
 
-  base.quality.resolutionScale = clamp(base.quality.resolutionScale, 0.25, 1)
-  base.quality.bakeResolution = clamp(base.quality.bakeResolution, 64, 256)
-  base.quality.maxSteps = clamp(Math.round(base.quality.maxSteps), 8, 256)
+  result.quality.resolutionScale = clamp(result.quality.resolutionScale, 0.25, 1)
+  result.quality.bakeResolution = clamp(result.quality.bakeResolution, 64, 256)
+  result.quality.maxSteps = clamp(Math.round(result.quality.maxSteps), 8, 256)
 
-  return base
+  return result
 }
