@@ -128,8 +128,10 @@ export function makeDefaultNebulaParams(): NebulaParams {
 
 export const DEFAULT_NEBULA_PARAMS: NebulaParams = makeDefaultNebulaParams()
 
-export function mergeNebulaParams(overrides: DeepPartial<NebulaParams> = {}): NebulaParams {
-  const base = makeDefaultNebulaParams()
+export function mergeNebulaParams(
+  overrides: DeepPartial<NebulaParams> = {},
+  base: NebulaParams = makeDefaultNebulaParams()
+): NebulaParams {
   const o = overrides as Partial<NebulaParams>
 
   if (o.seed !== undefined) base.seed = o.seed
