@@ -63,13 +63,47 @@ export class NebulaField {
     return Math.min(1, Math.max(0, base))
   }
 
+  private lobeContribution(p: Vector3): number {
+    let extra = 0
+    for (const lobe of this.p.lobes) {
+      const dx = p.x - lobe.center.x
+      const dy = p.y - lobe.center.y
+      const dz = p.z - lobe.center.z
+      const d2 = dx * dx + dy * dy + dz * dz
+      const r2 = Math.max(1e-4, lobe.radius * lobe.radius)
+      extra += lobe.weight * Math.exp(-d2 / r2)
+    }
+    return extra
+  }
+
+  private cavityCarve(p: Vector3): number {
+    let carve = 1
+    for (const cav of this.p.cavities) {
+      const dx = p.x - cav.center.x
+      const dy = p.y - cav.center.y
+      const dz = p.z - cav.center.z
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz)
+      const inside = 1 - Math.min(1, d / Math.max(1e-4, cav.radius))
+      carve *= 1 - cav.strength * inside
+    }
+    return Math.max(0, carve)
+  }
+
+  public dustMask(p: Vector3): number {
+    // low-frequency ridged channel, independent seed offset
+    const n = fbm3({ x: p.x * 0.9, y: p.y * 0.9, z: p.z * 0.9 }, this.p.seed + 555, 3, this.p.noise.lacunarity, this.p.noise.gain)
+    const ridged = 1 - Math.abs(n)
+    return Math.min(1, Math.max(0, ridged))
+  }
+
   /** Full density pipeline. Extended by later tasks. Returns [0,1]. */
   public sampleDensity(p: Vector3): number {
     const b = this.boundary(p)
     if (b <= 0) return 0
     const noise = this.noiseField(p)
-    let d = b * noise
-    d = Math.pow(d, this.p.noise.contrast)
+    let d = b * (noise + this.lobeContribution(p))
+    d *= this.cavityCarve(p)
+    d = Math.pow(Math.min(1, Math.max(0, d)), this.p.noise.contrast)
     return Math.min(1, Math.max(0, d))
   }
 }
