@@ -242,4 +242,40 @@ export const noiseFunctions = `
 
     return 2.2 * n_xyz;
   }
+
+  // Cellular / Worley noise (Stefan Gustavson style, 3x3x3 search).
+  // Returns vec2(F1, F2): nearest and second-nearest feature point distances.
+  vec3 cellular_mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+  vec3 cellular_permute(vec3 x) { return cellular_mod289((34.0 * x + 1.0) * x); }
+
+  vec2 cellular3d(vec3 P) {
+    #define K 0.142857142857   // 1/7
+    #define Ko 0.428571428571  // 3/7
+    #define jitter 1.0
+    vec3 Pi = cellular_mod289(floor(P));
+    vec3 Pf = fract(P);
+    vec3 oi = vec3(-1.0, 0.0, 1.0);
+    vec3 of = vec3(-0.5, 0.5, 1.5);
+    vec3 px = cellular_permute(Pi.x + oi);
+    float F1 = 1e6; float F2 = 1e6;
+    for (int i = 0; i < 3; i++) {
+      vec3 p = cellular_permute(px[i] + Pi.y + oi);
+      for (int j = 0; j < 3; j++) {
+        vec3 pp = cellular_permute(p[j] + Pi.z + oi);
+        vec3 ox = fract(pp * K) - Ko;
+        vec3 oy = mod(floor(pp * K), 7.0) * K - Ko;
+        vec3 pz = cellular_permute(pp);
+        vec3 oz = fract(pz * K) - Ko;
+        vec3 dx = Pf.x - of[i] + jitter * ox;
+        vec3 dy = Pf.y - of[j] + jitter * oy;
+        for (int k = 0; k < 3; k++) {
+          float dz = Pf.z - of[k] + jitter * oz[k];
+          float d = dx[k] * dx[k] + dy[k] * dy[k] + dz * dz;
+          if (d < F1) { F2 = F1; F1 = d; }
+          else if (d < F2) { F2 = d; }
+        }
+      }
+    }
+    return sqrt(vec2(F1, F2));
+  }
 `
