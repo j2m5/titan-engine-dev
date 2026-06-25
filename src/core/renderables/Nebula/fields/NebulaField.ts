@@ -1,8 +1,16 @@
 import { Vector3 } from 'three'
 import { NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 
+// Disk vertical falloff is steeper than radial so a disk reads as genuinely
+// flatter than an ellipsoid at equal axisRatios.
+const DISK_VERTICAL_STEEPNESS = 2
+
 function smoothstep(edge0: number, edge1: number, x: number): number {
-  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)))
+  const width = edge1 - edge0
+  if (width <= 1e-8) {
+    return x < edge0 ? 0 : 1
+  }
+  const t = Math.min(1, Math.max(0, (x - edge0) / width))
   return t * t * (3 - 2 * t)
 }
 
@@ -28,7 +36,7 @@ export class NebulaField {
     if (this.p.shape === 'disk') {
       const r = Math.sqrt(x * x + z * z)
       const radial = 1 - smoothstep(1 - this.p.edgeFalloff, 1, r)
-      const vertical = 1 - smoothstep(1 - this.p.edgeFalloff * 2, 1, Math.abs(y))
+      const vertical = 1 - smoothstep(1 - this.p.edgeFalloff * DISK_VERTICAL_STEEPNESS, 1, Math.abs(y))
       return Math.max(0, radial * vertical)
     }
 
