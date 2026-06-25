@@ -249,9 +249,9 @@ export const noiseFunctions = `
   vec3 cellular_permute(vec3 x) { return cellular_mod289((34.0 * x + 1.0) * x); }
 
   vec2 cellular3d(vec3 P) {
-    #define K 0.142857142857   // 1/7
-    #define Ko 0.428571428571  // 3/7
-    #define jitter 1.0
+    const float K = 0.142857142857;   // 1/7
+    const float Ko = 0.428571428571;  // 3/7
+    const float jitter = 1.0;
     vec3 Pi = cellular_mod289(floor(P));
     vec3 Pf = fract(P);
     vec3 oi = vec3(-1.0, 0.0, 1.0);
