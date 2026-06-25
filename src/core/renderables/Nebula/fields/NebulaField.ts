@@ -1,5 +1,6 @@
 import { Vector3 } from 'three'
 import { NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
+import { fbm3 } from '@/core/renderables/Nebula/fields/valueNoise'
 
 // Disk vertical falloff is steeper than radial so a disk reads as genuinely
 // flatter than an ellipsoid at equal axisRatios.
@@ -44,8 +45,31 @@ export class NebulaField {
     return 1 - smoothstep(1 - this.p.edgeFalloff, 1, r)
   }
 
+  private noiseField(p: Vector3): number {
+    const n = this.p.noise
+    // domain warp
+    const wx = fbm3({ x: p.x + 11.3, y: p.y, z: p.z }, this.p.seed + 101, 3, n.lacunarity, n.gain)
+    const wy = fbm3({ x: p.x, y: p.y + 7.7, z: p.z }, this.p.seed + 202, 3, n.lacunarity, n.gain)
+    const wz = fbm3({ x: p.x, y: p.y, z: p.z + 19.1 }, this.p.seed + 303, 3, n.lacunarity, n.gain)
+    const qx = p.x + n.warpStrength * wx
+    const qy = p.y + n.warpStrength * wy
+    const qz = p.z + n.warpStrength * wz
+
+    let base = fbm3({ x: qx * n.frequency, y: qy * n.frequency, z: qz * n.frequency }, this.p.seed, n.octaves, n.lacunarity, n.gain)
+    // billow <-> ridged mix
+    const billow = Math.abs(base)
+    const ridged = 1 - Math.abs(base)
+    base = (1 - n.ridged) * billow + n.ridged * ridged
+    return Math.min(1, Math.max(0, base))
+  }
+
   /** Full density pipeline. Extended by later tasks. Returns [0,1]. */
   public sampleDensity(p: Vector3): number {
-    return this.boundary(p)
+    const b = this.boundary(p)
+    if (b <= 0) return 0
+    const noise = this.noiseField(p)
+    let d = b * noise
+    d = Math.pow(d, this.p.noise.contrast)
+    return Math.min(1, Math.max(0, d))
   }
 }
