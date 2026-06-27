@@ -1,4 +1,4 @@
-import { Matrix4, NormalBlending, Uniform, Vector3 } from 'three'
+import { Color, Matrix4, NormalBlending, Uniform, Vector3 } from 'three'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { NebulaRaymarchShader } from './NebulaRaymarchShader'
@@ -46,6 +46,29 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
     u.uRidged.value = params.noise.ridged
     u.uContrast.value = params.noise.contrast
     u.uEmissiveIntensity.value = params.palette.emissiveIntensity
+
+    const pal = params.palette
+    const lastStop = pal.stops[pal.stops.length - 1]?.color ?? new Color(0xffffff)
+    u.uPalette0.value.copy(pal.stops[0]?.color ?? new Color(0x000000))
+    u.uPalette1.value.copy(pal.stops[1]?.color ?? lastStop)
+    u.uPalette2.value.copy(pal.stops[2]?.color ?? lastStop)
+    u.uPalette3.value.copy(pal.stops[3]?.color ?? lastStop)
+    u.uPaletteT.value.set(
+      pal.stops[0]?.t ?? 0,
+      pal.stops[1]?.t ?? 0.45,
+      pal.stops[2]?.t ?? 0.8,
+      pal.stops[3]?.t ?? 1
+    )
+    u.uSecondaryColor.value.copy(pal.secondary)
+    u.uSecondaryThreshold.value = pal.secondaryThreshold
+
+    u.uDustColor.value.copy(params.dust.color)
+    u.uDustStrength.value = params.dust.strength
+    u.uDustThreshold.value = params.dust.threshold
+
+    u.uScatterStrength.value = params.lighting.scatterStrength
+    u.uAmbient.value = params.lighting.ambient
+    u.uHasStar.value = params.lighting.starPosition ? 1 : 0
   }
 
   public updateMaterial(): void {

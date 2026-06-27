@@ -1,7 +1,8 @@
-import { IUniform, Uniform, Vector3 } from 'three'
+import { Color, IUniform, Uniform, Vector3, Vector4 } from 'three'
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { nebulaNoiseChunk } from './chunks/NebulaNoise'
 import { nebulaDensityChunk } from './chunks/NebulaDensity'
+import { nebulaColorChunk } from './chunks/NebulaColor'
 
 // Fresh uniform set per shader instance. Module-level Uniform singletons would be
 // shared by every NebulaRaymarchMaterial (toJSON spreads references), so two
@@ -21,7 +22,22 @@ export function createNebulaUniforms(): Record<string, IUniform> {
     uWarpStrength: new Uniform(0.35),
     uRidged: new Uniform(0.4),
     uContrast: new Uniform(1.6),
-    uEmissiveIntensity: new Uniform(1.6)
+    uEmissiveIntensity: new Uniform(1.6),
+    // palette + secondary + dust + cheap white light (Task 10)
+    uPalette0: new Uniform(new Color(0x14062b)),
+    uPalette1: new Uniform(new Color(0x6a1b9a)),
+    uPalette2: new Uniform(new Color(0xff5577)),
+    uPalette3: new Uniform(new Color(0xffd9a0)),
+    uPaletteT: new Uniform(new Vector4(0, 0.45, 0.8, 1)),
+    uSecondaryColor: new Uniform(new Color(0x35d0ff)),
+    uSecondaryThreshold: new Uniform(0.6),
+    uDustColor: new Uniform(new Color(0x0a0608)),
+    uDustStrength: new Uniform(0.6),
+    uDustThreshold: new Uniform(0.55),
+    uScatterStrength: new Uniform(0.8),
+    uAmbient: new Uniform(1.0),
+    uStarLocal: new Uniform(new Vector3()),
+    uHasStar: new Uniform(0)
   }
 }
 
@@ -42,6 +58,7 @@ export const nebulaRaymarchFragment = `
   #include <noiseFunctions>
   ${nebulaNoiseChunk}
   ${nebulaDensityChunk}
+  ${nebulaColorChunk}
 
   varying vec3 vLocalPos;
   varying vec3 vWorldPos;
@@ -87,8 +104,9 @@ export const nebulaRaymarchFragment = `
       vec3 p = roLocal + rdLocal * t;
       float d = nebulaDensity(p);
       if (d > 0.001) {
+        float dust = nebulaDust(p);
         float a = clamp(d * dt * 4.0, 0.0, 1.0);
-        vec3 c = vec3(d) * uEmissiveIntensity; // single-color placeholder; Task 10 adds palette
+        vec3 c = nebulaColor(d, dust, p, rdLocal) * uEmissiveIntensity;
         accum += transmittance * a * c;
         transmittance *= (1.0 - a);
         if (transmittance < 0.01) break;

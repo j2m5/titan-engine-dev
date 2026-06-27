@@ -29,6 +29,14 @@ export const nebulaDensityChunk = `
     return 1.0 - smoothstep(1.0 - uEdgeFalloff, 1.0, r);
   }
 
+  // Low-frequency dust channel, decorrelated from the main noise by a position
+  // offset (snoise has no seed). Single octave: dust lanes are broad and low-freq,
+  // so extra octaves would only add per-step cost. Mirror: NebulaField.dustMask.
+  float nebulaDust(vec3 p) {
+    float n = snoise(p * 0.9 + vec3(55.5));
+    return clamp(1.0 - abs(n), 0.0, 1.0);
+  }
+
   // Returns density in [0,1]. Worley cavities / lobes added in Task 11.
   float nebulaDensity(vec3 p) {
     float b = nebBoundary(p);

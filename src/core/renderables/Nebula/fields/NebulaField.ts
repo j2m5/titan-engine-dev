@@ -91,8 +91,10 @@ export class NebulaField {
   }
 
   public dustMask(p: Vector3): number {
-    // low-frequency ridged channel, independent seed offset
-    const n = fbm3({ x: p.x * 0.9, y: p.y * 0.9, z: p.z * 0.9 }, this.p.seed + 555, 3, this.p.noise.lacunarity, this.p.noise.gain)
+    // low-frequency ridged channel, decorrelated by seed offset. Single octave to
+    // mirror the GPU nebulaDust (dust lanes are broad/low-freq; extra octaves would
+    // only cost per-step on the GPU).
+    const n = fbm3({ x: p.x * 0.9, y: p.y * 0.9, z: p.z * 0.9 }, this.p.seed + 555, 1, this.p.noise.lacunarity, this.p.noise.gain)
     const ridged = 1 - Math.abs(n)
     return Math.min(1, Math.max(0, ridged))
   }

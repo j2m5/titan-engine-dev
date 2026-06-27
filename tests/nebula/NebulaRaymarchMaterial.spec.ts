@@ -1,3 +1,4 @@
+import { Vector3 } from 'three'
 import { NebulaRaymarchMaterial } from '@/core/renderables/Nebula/material/NebulaRaymarchMaterial'
 import { mergeNebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 
@@ -24,5 +25,23 @@ describe('NebulaRaymarchMaterial', () => {
     expect(a.uniforms.uMaxSteps).not.toBe(b.uniforms.uMaxSteps)
     expect(a.uniforms.uMaxSteps.value).toBe(32)
     expect(b.uniforms.uMaxSteps.value).toBe(128)
+  })
+
+  it('uploads palette + dust + light uniforms from params', () => {
+    const mat = new NebulaRaymarchMaterial(
+      mergeNebulaParams({ dust: { strength: 0.7 }, lighting: { scatterStrength: 0.9 } })
+    )
+    expect(mat.uniforms.uDustStrength.value).toBe(0.7)
+    expect(mat.uniforms.uScatterStrength.value).toBe(0.9)
+    expect(mat.uniforms.uPalette0).toBeDefined()
+    expect(mat.uniforms.uPaletteT.value.x).toBe(0)
+    expect(mat.uniforms.uHasStar.value).toBe(0)
+  })
+
+  it('flags uHasStar when a star position is supplied', () => {
+    const mat = new NebulaRaymarchMaterial(
+      mergeNebulaParams({ lighting: { starPosition: new Vector3(1, 2, 3) } })
+    )
+    expect(mat.uniforms.uHasStar.value).toBe(1)
   })
 })

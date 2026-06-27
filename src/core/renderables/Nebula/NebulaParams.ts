@@ -140,7 +140,10 @@ export function makeDefaultNebulaParams(): NebulaParams {
     lighting: {
       starPosition: null,
       scatterStrength: 0.8,
-      ambient: 0.25
+      // Self-emission baseline: 1.0 keeps the nebula fully visible WITHOUT a star
+      // (it is self-emissive). The star's scatter is additive on top. Reflection-type
+      // nebulae override this low so they read as star-lit rather than self-lit.
+      ambient: 1.0
     },
     quality: {
       // 64 keeps full-screen interior cost ~33% below 96; dithering hides the
