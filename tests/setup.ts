@@ -41,7 +41,7 @@ vi.mock('@/core/graphic/ThreeJS', () => {
     cameraSphere: {},
     astroControls: { update: noop, movementSpeed: 0, rollSpeed: 0, autoForward: false },
     raycaster: { setFromCamera: noop, intersectObjects: () => [] },
-    clock: { getDelta: () => 0, startTime: 0 },
+    clock: { getDelta: () => 0, getElapsedTime: () => 0, startTime: 0 },
     stats: { dom: { style: {} }, showPanel: noop, update: noop }
   }
 
