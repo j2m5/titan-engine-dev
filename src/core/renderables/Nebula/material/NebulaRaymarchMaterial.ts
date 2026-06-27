@@ -1,4 +1,14 @@
-import { Color, Matrix4, NormalBlending, Uniform, Vector3, Vector4 } from 'three'
+import {
+  AddEquation,
+  Color,
+  CustomBlending,
+  Matrix4,
+  OneFactor,
+  OneMinusSrcAlphaFactor,
+  Uniform,
+  Vector3,
+  Vector4
+} from 'three'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { NebulaRaymarchShader } from './NebulaRaymarchShader'
@@ -20,10 +30,15 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
     this.transparent = true
     this.depthWrite = false
     this.depthTest = true
-    // The shader outputs premultiplied (accum, alpha); over-compositing keeps the
-    // emission additive in dense regions while letting transmittance reveal what
-    // is behind. NormalBlending with premultiplied alpha = correct front-to-back.
-    this.blending = NormalBlending
+    // The shader outputs PREMULTIPLIED (accum, alpha), so composite premultiplied
+    // (One, OneMinusSrcAlpha) = correct front-to-back "over". This (a) avoids the
+    // alpha double-apply NormalBlending would cause (thin regions stay correct),
+    // and (b) makes uOpacityScale a LINEAR fade, so the raymarch<->impostor
+    // crossfade conserves energy (the impostor uses the same blend equation).
+    this.blending = CustomBlending
+    this.blendEquation = AddEquation
+    this.blendSrc = OneFactor
+    this.blendDst = OneMinusSrcAlphaFactor
 
     this.setUniformsFromParams(params)
   }
