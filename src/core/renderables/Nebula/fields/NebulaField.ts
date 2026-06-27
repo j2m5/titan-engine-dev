@@ -47,10 +47,11 @@ export class NebulaField {
 
   private noiseField(p: Vector3): number {
     const n = this.p.noise
-    // domain warp
-    const wx = fbm3({ x: p.x + 11.3, y: p.y, z: p.z }, this.p.seed + 101, 3, n.lacunarity, n.gain)
-    const wy = fbm3({ x: p.x, y: p.y + 7.7, z: p.z }, this.p.seed + 202, 3, n.lacunarity, n.gain)
-    const wz = fbm3({ x: p.x, y: p.y, z: p.z + 19.1 }, this.p.seed + 303, 3, n.lacunarity, n.gain)
+    // domain warp (2 octaves — low-frequency distortion; mirrors GPU nebDomainWarp,
+    // where the third octave is a visually-negligible per-step cost)
+    const wx = fbm3({ x: p.x + 11.3, y: p.y, z: p.z }, this.p.seed + 101, 2, n.lacunarity, n.gain)
+    const wy = fbm3({ x: p.x, y: p.y + 7.7, z: p.z }, this.p.seed + 202, 2, n.lacunarity, n.gain)
+    const wz = fbm3({ x: p.x, y: p.y, z: p.z + 19.1 }, this.p.seed + 303, 2, n.lacunarity, n.gain)
     const qx = p.x + n.warpStrength * wx
     const qy = p.y + n.warpStrength * wy
     const qz = p.z + n.warpStrength * wz

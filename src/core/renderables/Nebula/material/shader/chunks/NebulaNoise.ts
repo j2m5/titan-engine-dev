@@ -14,9 +14,12 @@ export const nebulaNoiseChunk = `
   }
 
   vec3 nebDomainWarp(vec3 p, float strength, float lacunarity, float gain) {
-    float wx = nebFbm(p + vec3(11.3, 0.0, 0.0), 3, lacunarity, gain);
-    float wy = nebFbm(p + vec3(0.0, 7.7, 0.0), 3, lacunarity, gain);
-    float wz = nebFbm(p + vec3(0.0, 0.0, 19.1), 3, lacunarity, gain);
+    // 2 octaves (not 3): the warp is a low-frequency positional distortion, so
+    // the third octave is visually negligible but costs 3 extra snoise/step.
+    // Mirror: NebulaField.noiseField warp uses 2 octaves too.
+    float wx = nebFbm(p + vec3(11.3, 0.0, 0.0), 2, lacunarity, gain);
+    float wy = nebFbm(p + vec3(0.0, 7.7, 0.0), 2, lacunarity, gain);
+    float wz = nebFbm(p + vec3(0.0, 0.0, 19.1), 2, lacunarity, gain);
     return p + strength * vec3(wx, wy, wz);
   }
 `

@@ -143,7 +143,9 @@ export function makeDefaultNebulaParams(): NebulaParams {
       ambient: 0.25
     },
     quality: {
-      maxSteps: 96,
+      // 64 keeps full-screen interior cost ~33% below 96; dithering hides the
+      // extra banding. Raise again once per-step cost drops (3D-texture bake).
+      maxSteps: 64,
       resolutionScale: 1,
       forceLOD: 'auto',
       bake3DTexture: false,
