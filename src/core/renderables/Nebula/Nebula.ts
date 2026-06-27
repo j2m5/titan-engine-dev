@@ -97,7 +97,11 @@ class Nebula extends Object3D {
     threeJS.renderer.getSize(this._viewSize)
     const dx = (this._ndcB.x - this._ndcA.x) * 0.5 * this._viewSize.x
     const dy = (this._ndcB.y - this._ndcA.y) * 0.5 * this._viewSize.y
-    return Math.hypot(dx, dy)
+    const px = Math.hypot(dx, dy)
+    // Guard: a non-finite radius would make selectLOD return blend=NaN, and the
+    // NaN-comparison visibility flags (blend>0, blend<1) would BOTH be false ->
+    // the nebula vanishes entirely. Fall back to full raymarch.
+    return Number.isFinite(px) ? px : Infinity
   }
 
   public dispose(): void {

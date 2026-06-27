@@ -1,4 +1,4 @@
-import { BackSide, BoxGeometry, Camera, Mesh, Scene, Vector3, WebGLRenderer } from 'three'
+import { BackSide, BoxGeometry, Camera, Mesh, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
 import { NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { NebulaRaymarchMaterial } from '@/core/renderables/Nebula/material/NebulaRaymarchMaterial'
 
@@ -36,6 +36,8 @@ class NebulaVolume extends Mesh {
         // world star position -> proxy-local space (same transform the marcher uses)
         u.uStarLocal.value.copy(NebulaVolume._starLocal.copy(this.starWorld).applyMatrix4(u.uInvModelMatrix.value))
       }
+      const far = (camera as PerspectiveCamera).far ?? 1e9
+      u.uLogDepthBufFC.value = 2.0 / Math.log2(far + 1.0)
       this.material.updateMaterial()
     }
   }

@@ -20,7 +20,8 @@ class NebulaImpostorMaterial extends ShaderMaterial {
     super({
       uniforms: {
         uMap: new Uniform(map),
-        uOpacity: new Uniform(1)
+        uOpacity: new Uniform(1),
+        uLogDepthBufFC: new Uniform(1)
       },
       transparent: true,
       depthWrite: false,
@@ -30,10 +31,12 @@ class NebulaImpostorMaterial extends ShaderMaterial {
       blendSrc: OneFactor,
       blendDst: OneMinusSrcAlphaFactor,
       vertexShader: `
+        uniform float uLogDepthBufFC; // logarithmic depth (matches scene + raymarch)
         varying vec2 vUv;
         void main() {
           vUv = uv;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          gl_Position.z = (log2(max(1e-6, 1.0 + gl_Position.w)) * uLogDepthBufFC - 1.0) * gl_Position.w;
         }
       `,
       fragmentShader: `

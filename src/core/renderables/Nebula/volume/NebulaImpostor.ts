@@ -1,4 +1,4 @@
-import { Camera, Mesh, PlaneGeometry, Texture } from 'three'
+import { Camera, Mesh, PerspectiveCamera, PlaneGeometry, Texture } from 'three'
 import { NebulaImpostorMaterial } from '@/core/renderables/Nebula/material/NebulaImpostorMaterial'
 
 /**
@@ -18,6 +18,8 @@ class NebulaImpostor extends Mesh {
     // rotated, so copying the camera's world quaternion orients the quad to face it.
     this.onBeforeRender = (_renderer, _scene, camera: Camera): void => {
       this.quaternion.copy(camera.quaternion)
+      const far = (camera as PerspectiveCamera).far ?? 1e9
+      this.material.uniforms.uLogDepthBufFC.value = 2.0 / Math.log2(far + 1.0)
     }
   }
 

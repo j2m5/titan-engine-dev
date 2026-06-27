@@ -25,6 +25,7 @@ export function createNebulaUniforms(): Record<string, IUniform> {
     uEmissiveIntensity: new Uniform(1.6),
     uDensityScale: new Uniform(4.0), // optical thickness / absorption per step
     uOpacityScale: new Uniform(1.0), // crossfade against the impostor (Task 12)
+    uLogDepthBufFC: new Uniform(1.0), // logarithmic depth factor (set per-frame)
     // lobes / cavities (field-level composition) + Worley filaments (Task 11)
     uLobeCount: new Uniform(0),
     uLobeData: new Uniform(Array.from({ length: 8 }, () => new Vector4())),
@@ -53,6 +54,7 @@ export function createNebulaUniforms(): Record<string, IUniform> {
 
 export const nebulaRaymarchVertex = `
   precision highp float;
+  uniform float uLogDepthBufFC; // logarithmic depth (renderer uses logarithmicDepthBuffer)
   varying vec3 vLocalPos;      // proxy-local position [-1,1]
   varying vec3 vWorldPos;
   void main() {
@@ -60,6 +62,9 @@ export const nebulaRaymarchVertex = `
     vec4 wp = modelMatrix * vec4(position, 1.0);
     vWorldPos = wp.xyz;
     gl_Position = projectionMatrix * viewMatrix * wp;
+    // Match the scene's logarithmic depth so the proxy isn't depth-rejected at
+    // large distances (near=1e-6/far=2000AU saturates linear depth to ~1.0).
+    gl_Position.z = (log2(max(1e-6, 1.0 + gl_Position.w)) * uLogDepthBufFC - 1.0) * gl_Position.w;
   }
 `
 
