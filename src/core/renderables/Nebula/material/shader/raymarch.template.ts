@@ -23,6 +23,14 @@ export function createNebulaUniforms(): Record<string, IUniform> {
     uRidged: new Uniform(0.4),
     uContrast: new Uniform(1.6),
     uEmissiveIntensity: new Uniform(1.6),
+    // lobes / cavities (field-level composition) + Worley filaments (Task 11)
+    uLobeCount: new Uniform(0),
+    uLobeData: new Uniform(Array.from({ length: 8 }, () => new Vector4())),
+    uLobeWeight: new Uniform(new Array<number>(8).fill(0)),
+    uCavityCount: new Uniform(0),
+    uCavityData: new Uniform(Array.from({ length: 8 }, () => new Vector4())),
+    uCavityStrength: new Uniform(new Array<number>(8).fill(0)),
+    uWorleyStrength: new Uniform(0.4),
     // palette + secondary + dust + cheap white light (Task 10)
     uPalette0: new Uniform(new Color(0x06141c)),
     uPalette1: new Uniform(new Color(0x1f6b66)),

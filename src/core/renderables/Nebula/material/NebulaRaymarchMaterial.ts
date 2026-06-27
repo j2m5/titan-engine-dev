@@ -1,4 +1,4 @@
-import { Color, Matrix4, NormalBlending, Uniform, Vector3 } from 'three'
+import { Color, Matrix4, NormalBlending, Uniform, Vector3, Vector4 } from 'three'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { NebulaRaymarchShader } from './NebulaRaymarchShader'
@@ -69,6 +69,43 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
     u.uScatterStrength.value = params.lighting.scatterStrength
     u.uAmbient.value = params.lighting.ambient
     u.uHasStar.value = params.lighting.starPosition ? 1 : 0
+
+    u.uWorleyStrength.value = params.noise.worleyStrength
+    this.packLobes(params)
+  }
+
+  /** Pack lobes/cavities into the fixed-size (8) uniform arrays; excess is dropped. */
+  private packLobes(params: NebulaParams): void {
+    const u = this.uniforms
+    const lobeData = u.uLobeData.value as Vector4[]
+    const lobeWeight = u.uLobeWeight.value as number[]
+    const cavData = u.uCavityData.value as Vector4[]
+    const cavStrength = u.uCavityStrength.value as number[]
+
+    const lobes = params.lobes.slice(0, 8)
+    const cavities = params.cavities.slice(0, 8)
+    u.uLobeCount.value = lobes.length
+    u.uCavityCount.value = cavities.length
+
+    for (let i = 0; i < 8; i++) {
+      const lobe = lobes[i]
+      if (lobe) {
+        lobeData[i].set(lobe.center.x, lobe.center.y, lobe.center.z, lobe.radius)
+        lobeWeight[i] = lobe.weight
+      } else {
+        lobeData[i].set(0, 0, 0, 1)
+        lobeWeight[i] = 0
+      }
+
+      const cav = cavities[i]
+      if (cav) {
+        cavData[i].set(cav.center.x, cav.center.y, cav.center.z, cav.radius)
+        cavStrength[i] = cav.strength
+      } else {
+        cavData[i].set(0, 0, 0, 1)
+        cavStrength[i] = 0
+      }
+    }
   }
 
   public updateMaterial(): void {

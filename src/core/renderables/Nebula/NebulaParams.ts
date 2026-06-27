@@ -43,6 +43,7 @@ export interface NebulaParams {
     warpStrength: number
     ridged: number // 0..1 billow<->ridged mix
     contrast: number
+    worleyStrength: number // 0..1 Worley cell-wall carving (GPU-only filaments)
   }
 
   palette: {
@@ -119,7 +120,8 @@ export function makeDefaultNebulaParams(): NebulaParams {
       gain: 0.5,
       warpStrength: 0.35,
       ridged: 0.4,
-      contrast: 1.6
+      contrast: 1.6,
+      worleyStrength: 0.4
     },
     palette: {
       // Soft, muted blue-green family (not neon): deep teal-blue core -> muted teal

@@ -44,4 +44,21 @@ describe('NebulaRaymarchMaterial', () => {
     )
     expect(mat.uniforms.uHasStar.value).toBe(1)
   })
+
+  it('packs lobes into the fixed-size uniform arrays', () => {
+    const mat = new NebulaRaymarchMaterial(
+      mergeNebulaParams({
+        lobes: [
+          { center: new Vector3(0.5, 0, 0), radius: 0.3, weight: 1.5, seed: 1 },
+          { center: new Vector3(-0.4, 0.2, 0), radius: 0.25, weight: 1, seed: 2 }
+        ],
+        noise: { worleyStrength: 0.7 }
+      })
+    )
+    expect(mat.uniforms.uLobeCount.value).toBe(2)
+    expect(mat.uniforms.uLobeData.value[0].w).toBe(0.3)
+    expect(mat.uniforms.uLobeWeight.value[0]).toBe(1.5)
+    expect(mat.uniforms.uLobeData.value).toHaveLength(8)
+    expect(mat.uniforms.uWorleyStrength.value).toBe(0.7)
+  })
 })
