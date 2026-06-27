@@ -1,4 +1,5 @@
 import { vi } from 'vitest'
+import { Matrix4 } from 'three'
 
 vi.mock('@/core/graphic/ThreeJS', () => {
   // Заглушка повторяет ПУБЛИЧНУЮ форму ThreeJS: все девять полей,
@@ -15,6 +16,9 @@ vi.mock('@/core/graphic/ThreeJS', () => {
 
   const camera = {
     position: { clone: () => ({ x: 0, y: 0, z: 0 }), set: noop },
+    matrixWorld: new Matrix4(),
+    matrixWorldInverse: new Matrix4(),
+    projectionMatrix: new Matrix4(),
     aspect: 1,
     updateProjectionMatrix: noop,
     lookAt: noop
@@ -33,7 +37,16 @@ vi.mock('@/core/graphic/ThreeJS', () => {
       setPixelRatio: noop,
       setSize: noop,
       setAnimationLoop: noop,
-      render: noop
+      render: noop,
+      getSize: (v: { set: (x: number, y: number) => void }) => {
+        v.set(1920, 1080)
+        return v
+      },
+      getRenderTarget: () => null,
+      setRenderTarget: noop,
+      getClearAlpha: () => 1,
+      setClearAlpha: noop,
+      clear: noop
     },
     labelRenderer: { domElement, setSize: noop, render: noop },
     scene,
@@ -41,7 +54,7 @@ vi.mock('@/core/graphic/ThreeJS', () => {
     cameraSphere: {},
     astroControls: { update: noop, movementSpeed: 0, rollSpeed: 0, autoForward: false },
     raycaster: { setFromCamera: noop, intersectObjects: () => [] },
-    clock: { getDelta: () => 0, startTime: 0 },
+    clock: { getDelta: () => 0, getElapsedTime: () => 0, startTime: 0 },
     stats: { dom: { style: {} }, showPanel: noop, update: noop }
   }
 
