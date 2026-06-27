@@ -1,5 +1,9 @@
 import { fbm3, hash3, valueNoise3 } from '@/core/renderables/Nebula/fields/valueNoise'
 
+// NB: this CPU noise is seeded value-noise; the GPU shader uses unseeded simplex
+// (snoise has no seed). These tests validate the algorithm's SHAPE/invariants
+// (determinism, bounds, continuity, octave behaviour) — they are NOT a pixel-exact
+// oracle for the GPU output. The CPU/GPU pipelines mirror structure, not values.
 describe('valueNoise', () => {
   it('hash3 is deterministic and within [0,1)', () => {
     const a = hash3(1, 2, 3, 99)

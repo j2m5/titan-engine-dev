@@ -35,6 +35,20 @@ describe('NebulaParams', () => {
     expect(a.axisRatios).not.toBe(b.axisRatios)
   })
 
+  it('clones override lobes/cavities (no aliasing) and defaults partial entries', () => {
+    const lobes = [{ center: new Vector3(0.5, 0, 0), radius: 0.3 }] // missing weight/seed
+    const merged = mergeNebulaParams({ lobes: lobes as never })
+    // partial fields are defaulted, not NaN
+    expect(merged.lobes[0].weight).toBe(1)
+    expect(merged.lobes[0].seed).toBe(0)
+    expect(Number.isNaN(merged.lobes[0].weight)).toBe(false)
+    // the stored lobe is a clone, not the caller's object
+    expect(merged.lobes[0]).not.toBe(lobes[0])
+    expect(merged.lobes[0].center).not.toBe(lobes[0].center)
+    merged.lobes[0].center.x = 99
+    expect(lobes[0].center.x).toBe(0.5) // caller's object untouched
+  })
+
   it('does not mutate a base passed as the second argument', () => {
     const base = mergeNebulaParams({ seed: 1, size: 100 })
     const snapshotSeed = base.seed

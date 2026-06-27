@@ -51,8 +51,7 @@ class Nebula extends Object3D {
 
   public updateObject(_delta?: number): void {
     const camera = threeJS.camera
-    const { mode, blend } = selectLOD(this.projectedScreenRadius(), this.params.quality.forceLOD)
-    void mode
+    const { blend } = selectLOD(this.projectedScreenRadius(), this.params.quality.forceLOD)
 
     const impostorVisible = blend < 1
 

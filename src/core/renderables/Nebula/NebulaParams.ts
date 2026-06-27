@@ -180,12 +180,32 @@ export function mergeNebulaParams(
   if (o.axisRatios) result.axisRatios.copy(o.axisRatios as Vector3)
   if (o.edgeFalloff !== undefined) result.edgeFalloff = o.edgeFalloff
   if (o.density !== undefined) result.density = Math.max(0, o.density)
-  if (o.lobes) result.lobes = o.lobes as NebulaLobe[]
-  if (o.cavities) result.cavities = o.cavities as NebulaCavity[]
+  // Clone + default-fill so callers can't (a) leave the override array aliased to
+  // params (mutation hazard) or (b) pass a partial lobe/cavity that writes NaN into
+  // a uniform (missing weight/seed/strength).
+  if (o.lobes) {
+    result.lobes = (o.lobes as Array<Partial<NebulaLobe>>).map((l) => ({
+      center: l.center ? (l.center as Vector3).clone() : new Vector3(),
+      radius: l.radius ?? 0.3,
+      weight: l.weight ?? 1,
+      seed: l.seed ?? 0
+    }))
+  }
+  if (o.cavities) {
+    result.cavities = (o.cavities as Array<Partial<NebulaCavity>>).map((c) => ({
+      center: c.center ? (c.center as Vector3).clone() : new Vector3(),
+      radius: c.radius ?? 0.3,
+      strength: c.strength ?? 1
+    }))
+  }
 
   Object.assign(result.noise, overrides.noise)
   if (overrides.palette) {
-    if (overrides.palette.stops) result.palette.stops = overrides.palette.stops as ColorStop[]
+    if (overrides.palette.stops)
+      result.palette.stops = (overrides.palette.stops as Array<Partial<ColorStop>>).map((s) => ({
+        t: s.t ?? 0,
+        color: s.color ? (s.color as Color).clone() : new Color(0xffffff)
+      }))
     if (overrides.palette.secondary) result.palette.secondary.copy(overrides.palette.secondary as Color)
     if (overrides.palette.secondaryThreshold !== undefined)
       result.palette.secondaryThreshold = overrides.palette.secondaryThreshold
