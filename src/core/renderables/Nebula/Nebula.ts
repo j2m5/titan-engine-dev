@@ -3,6 +3,7 @@ import { DeepPartial, NebulaParams, mergeNebulaParams } from '@/core/renderables
 import { NebulaVolume } from '@/core/renderables/Nebula/volume/NebulaVolume'
 import { NebulaImpostor } from '@/core/renderables/Nebula/volume/NebulaImpostor'
 import { ImpostorBaker } from '@/core/renderables/Nebula/volume/ImpostorBaker'
+import { NebulaDensityBaker } from '@/core/renderables/Nebula/volume/NebulaDensityBaker'
 import { IMPOSTOR_FRAME_FILL, selectLOD } from '@/core/renderables/Nebula/volume/lod'
 import { threeJS } from '@/core/graphic/ThreeJS'
 
@@ -21,6 +22,7 @@ class Nebula extends Object3D {
   private readonly volume: NebulaVolume
   private readonly impostor: NebulaImpostor
   private readonly baker: ImpostorBaker
+  private readonly densityBaker: NebulaDensityBaker | null
   private readonly boundingRadius: number
 
   private readonly _center = new Vector3()
@@ -47,6 +49,16 @@ class Nebula extends Object3D {
     this.impostor.scale.setScalar(this.params.size / IMPOSTOR_FRAME_FILL)
 
     this.baker = new ImpostorBaker(IMPOSTOR_RESOLUTION)
+
+    // Optional: bake the static density field into a 3D texture once, so the
+    // marcher samples 1 trilinear fetch/step instead of fbm+Worley. The material
+    // was already compiled with the NEB_BAKED branch (from the same flag).
+    this.densityBaker = this.params.quality.bake3DTexture
+      ? new NebulaDensityBaker(this.params.quality.bakeResolution)
+      : null
+    if (this.densityBaker) {
+      this.volume.material.setBakedDensityTexture(this.densityBaker.bake(this.params))
+    }
   }
 
   public updateObject(_delta?: number): void {
@@ -94,6 +106,7 @@ class Nebula extends Object3D {
     this.impostor.geometry.dispose()
     this.impostor.material.dispose()
     this.baker.dispose()
+    this.densityBaker?.dispose()
   }
 }
 

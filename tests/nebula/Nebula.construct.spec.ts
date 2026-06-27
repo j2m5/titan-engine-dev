@@ -35,4 +35,11 @@ describe('Nebula construction', () => {
     const nebula = new Nebula()
     expect(() => nebula.dispose()).not.toThrow()
   })
+
+  it('bakes a 3D density field when quality.bake3DTexture is set', () => {
+    const nebula = new Nebula({ quality: { bake3DTexture: true, bakeResolution: 64 } })
+    // construction triggers the bake (offscreen, mocked renderer) without throwing
+    expect(nebula.params.quality.bake3DTexture).toBe(true)
+    expect(() => nebula.dispose()).not.toThrow()
+  })
 })
