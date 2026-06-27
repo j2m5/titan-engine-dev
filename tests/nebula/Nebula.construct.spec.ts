@@ -17,8 +17,22 @@ describe('Nebula construction', () => {
     expect(mesh.scale.y).toBe(mesh.scale.z)
   })
 
+  it('adds a hidden impostor billboard alongside the volume', () => {
+    const nebula = new Nebula()
+    const meshes = nebula.children.filter((c) => c instanceof Mesh)
+    expect(meshes.length).toBe(2)
+    // impostor starts hidden; the LOD switch reveals it only when far/small
+    const hidden = meshes.filter((m) => m.visible === false)
+    expect(hidden.length).toBe(1)
+  })
+
   it('updateObject runs without throwing', () => {
     const nebula = new Nebula()
     expect(() => nebula.updateObject(0.016)).not.toThrow()
+  })
+
+  it('dispose runs without throwing', () => {
+    const nebula = new Nebula()
+    expect(() => nebula.dispose()).not.toThrow()
   })
 })

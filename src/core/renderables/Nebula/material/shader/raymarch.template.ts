@@ -23,6 +23,7 @@ export function createNebulaUniforms(): Record<string, IUniform> {
     uRidged: new Uniform(0.4),
     uContrast: new Uniform(1.6),
     uEmissiveIntensity: new Uniform(1.6),
+    uOpacityScale: new Uniform(1.0), // crossfade against the impostor (Task 12)
     // lobes / cavities (field-level composition) + Worley filaments (Task 11)
     uLobeCount: new Uniform(0),
     uLobeData: new Uniform(Array.from({ length: 8 }, () => new Vector4())),
@@ -72,6 +73,7 @@ export const nebulaRaymarchFragment = `
   varying vec3 vWorldPos;
   uniform float uMaxSteps;
   uniform float uEmissiveIntensity;
+  uniform float uOpacityScale;
 
   // Camera position in proxy-local space via the model matrix inverse.
   uniform mat4 uInvModelMatrix;
@@ -123,7 +125,7 @@ export const nebulaRaymarchFragment = `
     }
     float alpha = 1.0 - transmittance;
     if (alpha < 0.002) discard;
-    gl_FragColor = vec4(accum, alpha); // premultiplied
+    gl_FragColor = vec4(accum, alpha) * uOpacityScale; // premultiplied; scaled for crossfade
   }
 `
 
