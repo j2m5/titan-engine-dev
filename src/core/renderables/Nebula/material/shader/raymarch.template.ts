@@ -65,6 +65,10 @@ export const nebulaRaymarchVertex = `
 
 export const nebulaRaymarchFragment = `
   precision highp float;
+  precision highp sampler3D;
+  // GLSL3 ShaderMaterial: Three maps varying/texture2D but does NOT declare the
+  // fragment output, so we declare our own (needed to sample the baked sampler3D).
+  out vec4 fragColor;
   #include <noiseFunctions>
   ${nebulaNoiseChunk}
   ${nebulaDensityChunk}
@@ -127,7 +131,7 @@ export const nebulaRaymarchFragment = `
     }
     float alpha = 1.0 - transmittance;
     if (alpha < 0.002) discard;
-    gl_FragColor = vec4(accum, alpha) * uOpacityScale; // premultiplied; scaled for crossfade
+    fragColor = vec4(accum, alpha) * uOpacityScale; // premultiplied; scaled for crossfade
   }
 `
 

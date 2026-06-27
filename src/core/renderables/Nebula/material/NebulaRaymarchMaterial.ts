@@ -2,16 +2,18 @@ import {
   AddEquation,
   Color,
   CustomBlending,
+  GLSL3,
   Matrix4,
   OneFactor,
   OneMinusSrcAlphaFactor,
+  Texture,
   Uniform,
-  Vector3,
-  Vector4
+  Vector3
 } from 'three'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { NebulaRaymarchShader } from './NebulaRaymarchShader'
+import { applyDensityUniforms } from '@/core/renderables/Nebula/material/densityUniforms'
 import { threeJS } from '@/core/graphic/ThreeJS'
 
 class NebulaRaymarchMaterial extends AbstractShaderMaterial {
@@ -26,6 +28,16 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
     this.vertexShader = vertexShader
     this.fragmentShader = fragmentShader
     this.defines = defines ?? {}
+    // GLSL3 so the marcher can sample the baked sampler3D (matches the codebase's
+    // atmosphere/black-hole shaders). The non-baked path is identical math.
+    this.glslVersion = GLSL3
+
+    if (params.quality.bake3DTexture) {
+      // compile the texture-sampling branch; Nebula bakes the field and assigns
+      // the texture via setBakedDensityTexture before the first render.
+      this.defines = { ...this.defines, NEB_BAKED: '' }
+      this.uniforms.uDensityTex = new Uniform(null)
+    }
 
     this.transparent = true
     this.depthWrite = false
@@ -45,21 +57,10 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
 
   public setUniformsFromParams(params: NebulaParams): void {
     const u = this.uniforms
+    // density-field uniforms (shared with the 3D-bake material)
+    applyDensityUniforms(u, params)
+
     u.uMaxSteps.value = params.quality.maxSteps
-    u.uShape.value = params.shape === 'disk' ? 1 : 0
-    u.uInvAxis.value.set(
-      1 / Math.max(1e-4, params.axisRatios.x),
-      1 / Math.max(1e-4, params.axisRatios.y),
-      1 / Math.max(1e-4, params.axisRatios.z)
-    )
-    u.uEdgeFalloff.value = params.edgeFalloff
-    u.uOctaves.value = params.noise.octaves
-    u.uFrequency.value = params.noise.frequency
-    u.uLacunarity.value = params.noise.lacunarity
-    u.uGain.value = params.noise.gain
-    u.uWarpStrength.value = params.noise.warpStrength
-    u.uRidged.value = params.noise.ridged
-    u.uContrast.value = params.noise.contrast
     u.uEmissiveIntensity.value = params.palette.emissiveIntensity
     u.uDensityScale.value = params.density
 
@@ -85,43 +86,11 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
     u.uScatterStrength.value = params.lighting.scatterStrength
     u.uAmbient.value = params.lighting.ambient
     u.uHasStar.value = params.lighting.starPosition ? 1 : 0
-
-    u.uWorleyStrength.value = params.noise.worleyStrength
-    this.packLobes(params)
   }
 
-  /** Pack lobes/cavities into the fixed-size (8) uniform arrays; excess is dropped. */
-  private packLobes(params: NebulaParams): void {
-    const u = this.uniforms
-    const lobeData = u.uLobeData.value as Vector4[]
-    const lobeWeight = u.uLobeWeight.value as number[]
-    const cavData = u.uCavityData.value as Vector4[]
-    const cavStrength = u.uCavityStrength.value as number[]
-
-    const lobes = params.lobes.slice(0, 8)
-    const cavities = params.cavities.slice(0, 8)
-    u.uLobeCount.value = lobes.length
-    u.uCavityCount.value = cavities.length
-
-    for (let i = 0; i < 8; i++) {
-      const lobe = lobes[i]
-      if (lobe) {
-        lobeData[i].set(lobe.center.x, lobe.center.y, lobe.center.z, lobe.radius)
-        lobeWeight[i] = lobe.weight
-      } else {
-        lobeData[i].set(0, 0, 0, 1)
-        lobeWeight[i] = 0
-      }
-
-      const cav = cavities[i]
-      if (cav) {
-        cavData[i].set(cav.center.x, cav.center.y, cav.center.z, cav.radius)
-        cavStrength[i] = cav.strength
-      } else {
-        cavData[i].set(0, 0, 0, 1)
-        cavStrength[i] = 0
-      }
-    }
+  /** Bind the precomputed 3D density field (only meaningful when NEB_BAKED). */
+  public setBakedDensityTexture(texture: Texture): void {
+    if (this.uniforms.uDensityTex) this.uniforms.uDensityTex.value = texture
   }
 
   public updateMaterial(): void {

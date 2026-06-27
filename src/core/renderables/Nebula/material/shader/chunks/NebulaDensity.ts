@@ -24,6 +24,10 @@ export const nebulaDensityChunk = `
   uniform float uCavityStrength[NEB_MAX_LOBES];
   uniform float uWorleyStrength;            // 0..1 cell-wall filament carving
 
+  #ifdef NEB_BAKED
+    uniform highp sampler3D uDensityTex;    // precomputed static density field
+  #endif
+
   float nebBoundary(vec3 p) {
     // Mirror of NebulaField.boundary. The disk's vertical falloff is steeper
     // than radial (DISK_VERTICAL_STEEPNESS = 2) so a disk reads as genuinely
@@ -83,7 +87,13 @@ export const nebulaDensityChunk = `
 
   // Returns density in [0,1]. Mirrors NebulaField.sampleDensity:
   // pow(clamp(boundary * (noise + lobes)) * cavities, contrast), + GPU Worley.
+  // When NEB_BAKED, the (static) field is read from a precomputed 3D texture
+  // instead of evaluating fbm+Worley per step. The 3D-bake material runs the
+  // compute branch (no define) to fill that texture, so baked == live.
   float nebulaDensity(vec3 p) {
+  #ifdef NEB_BAKED
+    return texture(uDensityTex, p * 0.5 + 0.5).r;
+  #else
     float b = nebBoundary(p);
     if (b <= 0.0) return 0.0;
     vec3 q = nebDomainWarp(p, uWarpStrength, uLacunarity, uGain) * uFrequency;
@@ -95,5 +105,6 @@ export const nebulaDensityChunk = `
     d *= nebCavities(p);
     d = pow(clamp(d, 0.0, 1.0), uContrast);
     return clamp(d, 0.0, 1.0);
+  #endif
   }
 `
