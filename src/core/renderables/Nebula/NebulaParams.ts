@@ -122,20 +122,23 @@ export function makeDefaultNebulaParams(): NebulaParams {
       contrast: 1.6
     },
     palette: {
+      // Soft, muted blue-green family (not neon): deep teal-blue core -> muted teal
+      // -> soft aqua-green -> pale mint highlight. Reads natural rather than surreal.
       stops: [
-        { t: 0.0, color: new Color(0x14062b) },
-        { t: 0.45, color: new Color(0x6a1b9a) },
-        { t: 0.8, color: new Color(0xff5577) },
-        { t: 1.0, color: new Color(0xffd9a0) }
+        { t: 0.0, color: new Color(0x06141c) },
+        { t: 0.45, color: new Color(0x1f6b66) },
+        { t: 0.8, color: new Color(0x4cbfa6) },
+        { t: 1.0, color: new Color(0xbdeede) }
       ],
-      secondary: new Color(0x35d0ff),
+      // soft cool blue accent in dense regions -> gentle blue<->green multichromy
+      secondary: new Color(0x5aa0d8),
       secondaryThreshold: 0.6,
       emissiveIntensity: 1.6
     },
     dust: {
       strength: 0.6,
       threshold: 0.55,
-      color: new Color(0x0a0608)
+      color: new Color(0x05090c)
     },
     lighting: {
       starPosition: null,
