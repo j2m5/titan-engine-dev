@@ -72,6 +72,10 @@ export interface NebulaParams {
     forceLOD: NebulaLOD
     bake3DTexture: boolean
     bakeResolution: number
+    // depthTest=true: opaque geometry occludes the fog (but writes hard cutouts,
+    // e.g. against a black hole's bounding sphere). false: fog draws over
+    // everything. A binary "lesser evil" until per-fragment soft-intersect (11B).
+    depthTest: boolean
   }
 }
 
@@ -159,8 +163,11 @@ export function makeDefaultNebulaParams(): NebulaParams {
       maxSteps: 64,
       resolutionScale: 1,
       forceLOD: 'auto',
-      bake3DTexture: false,
-      bakeResolution: 128
+      // ON by default: the static form bakes to a 3D texture once -> ~12 snoise +
+      // Worley per step collapse to 1 trilinear fetch (stable 144 FPS interior).
+      bake3DTexture: true,
+      bakeResolution: 128,
+      depthTest: true
     }
   }
 }

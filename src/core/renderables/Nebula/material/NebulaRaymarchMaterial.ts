@@ -41,7 +41,7 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
 
     this.transparent = true
     this.depthWrite = false
-    this.depthTest = true
+    this.depthTest = params.quality.depthTest
     // The shader outputs PREMULTIPLIED (accum, alpha), so composite premultiplied
     // (One, OneMinusSrcAlpha) = correct front-to-back "over". This (a) avoids the
     // alpha double-apply NormalBlending would cause (thin regions stay correct),
