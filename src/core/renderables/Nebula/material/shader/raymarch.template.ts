@@ -23,6 +23,7 @@ export function createNebulaUniforms(): Record<string, IUniform> {
     uRidged: new Uniform(0.4),
     uContrast: new Uniform(1.6),
     uEmissiveIntensity: new Uniform(1.6),
+    uDensityScale: new Uniform(4.0), // optical thickness / absorption per step
     uOpacityScale: new Uniform(1.0), // crossfade against the impostor (Task 12)
     // lobes / cavities (field-level composition) + Worley filaments (Task 11)
     uLobeCount: new Uniform(0),
@@ -73,6 +74,7 @@ export const nebulaRaymarchFragment = `
   varying vec3 vWorldPos;
   uniform float uMaxSteps;
   uniform float uEmissiveIntensity;
+  uniform float uDensityScale;
   uniform float uOpacityScale;
 
   // Camera position in proxy-local space via the model matrix inverse.
@@ -115,7 +117,7 @@ export const nebulaRaymarchFragment = `
       float d = nebulaDensity(p);
       if (d > 0.001) {
         float dust = nebulaDust(p);
-        float a = clamp(d * dt * 4.0, 0.0, 1.0);
+        float a = clamp(d * dt * uDensityScale, 0.0, 1.0);
         vec3 c = nebulaColor(d, dust, p, rdLocal) * uEmissiveIntensity;
         accum += transmittance * a * c;
         transmittance *= (1.0 - a);

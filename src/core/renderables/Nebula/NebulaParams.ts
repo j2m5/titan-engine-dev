@@ -32,6 +32,7 @@ export interface NebulaParams {
   shape: NebulaShape
   axisRatios: Vector3 // anisotropy (x,y,z)
   edgeFalloff: number
+  density: number // optical thickness / absorption per step; lower = more transparent
 
   lobes: NebulaLobe[]
   cavities: NebulaCavity[]
@@ -85,6 +86,7 @@ function cloneNebulaParams(src: NebulaParams): NebulaParams {
     shape: src.shape,
     axisRatios: src.axisRatios.clone(),
     edgeFalloff: src.edgeFalloff,
+    density: src.density,
     lobes: src.lobes.map((l) => ({ center: l.center.clone(), radius: l.radius, weight: l.weight, seed: l.seed })),
     cavities: src.cavities.map((c) => ({ center: c.center.clone(), radius: c.radius, strength: c.strength })),
     noise: { ...src.noise },
@@ -111,6 +113,7 @@ export function makeDefaultNebulaParams(): NebulaParams {
     shape: 'ellipsoid',
     axisRatios: new Vector3(1, 0.8, 1),
     edgeFalloff: 0.35,
+    density: 4.0,
     lobes: [],
     cavities: [],
     noise: {
@@ -176,6 +179,7 @@ export function mergeNebulaParams(
   if (o.shape !== undefined) result.shape = o.shape
   if (o.axisRatios) result.axisRatios.copy(o.axisRatios as Vector3)
   if (o.edgeFalloff !== undefined) result.edgeFalloff = o.edgeFalloff
+  if (o.density !== undefined) result.density = Math.max(0, o.density)
   if (o.lobes) result.lobes = o.lobes as NebulaLobe[]
   if (o.cavities) result.cavities = o.cavities as NebulaCavity[]
 

@@ -46,6 +46,7 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
     u.uRidged.value = params.noise.ridged
     u.uContrast.value = params.noise.contrast
     u.uEmissiveIntensity.value = params.palette.emissiveIntensity
+    u.uDensityScale.value = params.density
 
     const pal = params.palette
     const lastStop = pal.stops[pal.stops.length - 1]?.color ?? new Color(0xffffff)

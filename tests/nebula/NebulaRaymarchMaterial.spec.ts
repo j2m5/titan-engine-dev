@@ -27,6 +27,11 @@ describe('NebulaRaymarchMaterial', () => {
     expect(b.uniforms.uMaxSteps.value).toBe(128)
   })
 
+  it('uploads the density (absorption) knob from params', () => {
+    const mat = new NebulaRaymarchMaterial(mergeNebulaParams({ density: 1.5 }))
+    expect(mat.uniforms.uDensityScale.value).toBe(1.5)
+  })
+
   it('uploads palette + dust + light uniforms from params', () => {
     const mat = new NebulaRaymarchMaterial(
       mergeNebulaParams({ dust: { strength: 0.7 }, lighting: { scatterStrength: 0.9 } })
