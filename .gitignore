@@ -10,9 +10,13 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+docs/superpowers
 **/textures/
 *.local
 .env
+.superpowers
+.claudeignore
+CLAUDE.md
 
 # Editor directories and files
 .vscode/*
