@@ -54,17 +54,21 @@ export function createNebulaUniforms(): Record<string, IUniform> {
 
 export const nebulaRaymarchVertex = `
   precision highp float;
-  uniform float uLogDepthBufFC; // logarithmic depth (renderer uses logarithmicDepthBuffer)
   varying vec3 vLocalPos;      // proxy-local position [-1,1]
   varying vec3 vWorldPos;
+  varying float vFragDepth;    // logarithmic depth, resolved per-fragment in the FS
   void main() {
     vLocalPos = position;       // unit-cube geometry in [-1,1]
     vec4 wp = modelMatrix * vec4(position, 1.0);
     vWorldPos = wp.xyz;
     gl_Position = projectionMatrix * viewMatrix * wp;
-    // Match the scene's logarithmic depth so the proxy isn't depth-rejected at
-    // large distances (near=1e-6/far=2000AU saturates linear depth to ~1.0).
-    gl_Position.z = (log2(max(1e-6, 1.0 + gl_Position.w)) * uLogDepthBufFC - 1.0) * gl_Position.w;
+    // Logarithmic depth, the Three.js way (logdepthbuf): leave gl_Position.z as the
+    // standard projective value so the near/far CLIPPING of this large proxy box stays
+    // correct, and resolve the actual log depth per-fragment via gl_FragDepth below.
+    // A per-vertex z-remap (the old approach) corrupts the near-plane clip of the box
+    // triangles that straddle the camera when it is INSIDE the box (huge proxies),
+    // punching a hard wedge of missing coverage. Mirrors BlackHole/atmosphere.
+    vFragDepth = 1.0 + gl_Position.w;
   }
 `
 
@@ -81,10 +85,12 @@ export const nebulaRaymarchFragment = `
 
   varying vec3 vLocalPos;
   varying vec3 vWorldPos;
+  varying float vFragDepth;
   uniform float uMaxSteps;
   uniform float uEmissiveIntensity;
   uniform float uDensityScale;
   uniform float uOpacityScale;
+  uniform float uLogDepthBufFC; // logarithmic depth factor (= 2 / log2(far + 1))
 
   // Camera position in proxy-local space via the model matrix inverse.
   uniform mat4 uInvModelMatrix;
@@ -136,6 +142,10 @@ export const nebulaRaymarchFragment = `
     }
     float alpha = 1.0 - transmittance;
     if (alpha < 0.002) discard;
+    // Per-fragment logarithmic depth (see vertex shader). depthWrite is off, so this
+    // only feeds the depth TEST: the proxy's back-wall depth lets opaque geometry in
+    // front of it occlude the fog (depthTest=true), now correct at 2000 AU scales.
+    gl_FragDepth = log2(vFragDepth) * uLogDepthBufFC * 0.5;
     fragColor = vec4(accum, alpha) * uOpacityScale; // premultiplied; scaled for crossfade
   }
 `
