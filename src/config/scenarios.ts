@@ -61,5 +61,15 @@ export const Scenarios: ScenarioConfig[] = [
     skybox: [1, 2, 3, 4, 5, 6],
     defaultCameraPosition: [0, fromAstronomicalUnits(1.2), fromAstronomicalUnits(1.2)],
     lightSources: [81]
+  },
+  {
+    id: 6,
+    rootId: 86,
+    name: 'Horuset system',
+    description: 'Approximate system with ancient Sith world of Korriban',
+    preview: 'unknown.png',
+    skybox: [1, 2, 3, 4, 5, 6],
+    defaultCameraPosition: [0, fromAstronomicalUnits(1.2), fromAstronomicalUnits(1.2)],
+    lightSources: [87]
   }
 ]

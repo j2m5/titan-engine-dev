@@ -67,5 +67,16 @@ export const PhysicalObjects: IPhysicalObject[] = [
   { id: 61, actorId: 80, parentId: null, mass: 1.6907349999999997e30, radius: 1, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 1, temperature: 0 },
   { id: 62, actorId: 81, parentId: 61, mass: 1.6907349999999997e30, radius: 619440, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 10, temperature: 3955 },
   { id: 63, actorId: 82, parentId: 62, mass: 3.03776e27, radius: 195500, axialTilt: 15.5, orbitalPeriod: 457, rotationPeriod: 16.9, temperature: 0 },
-  { id: 64, actorId: 83, parentId: 63, mass: 4.868e24, radius: 6100, axialTilt: 25.2, orbitalPeriod: 47, rotationPeriod: 24.6, temperature: 0 }
+  { id: 64, actorId: 83, parentId: 63, mass: 4.868e24, radius: 6100, axialTilt: 25.2, orbitalPeriod: 47, rotationPeriod: 24.6, temperature: 0 },
+  { id: 65, actorId: 86, parentId: null, mass: 2.148e30, radius: 1, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 1, temperature: 0 },
+  { id: 66, actorId: 87, parentId: 65, mass: 2.148e30, radius: 800055, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 1, temperature: 6050 },
+  { id: 67, actorId: 88, parentId: 66, mass: 4.45e24, radius: 5950, axialTilt: 27.5, orbitalPeriod: 680, rotationPeriod: 22.8, temperature: 0 },
+  { id: 68, actorId: 90, parentId: 65, mass: 8.681e25, radius: 25362, axialTilt: 78.7, orbitalPeriod: 5900, rotationPeriod: 17.2, temperature: 0 },
+  { id: 69, actorId: 93, parentId: 67, mass: 7.282e22, radius: 1740, axialTilt: 12.8, orbitalPeriod: 7, rotationPeriod: 27, temperature: 0 },
+  { id: 70, actorId: 94, parentId: 67, mass: 1.222e22, radius: 980, axialTilt: 14, orbitalPeriod: 13, rotationPeriod: 20, temperature: 0 },
+  { id: 71, actorId: 95, parentId: 67, mass: 2.338e22, radius: 1290, axialTilt: 6, orbitalPeriod: 23, rotationPeriod: 27, temperature: 0 },
+  { id: 72, actorId: 96, parentId: 67, mass: 2.416e21, radius: 640, axialTilt: 27, orbitalPeriod: 35, rotationPeriod: 34, temperature: 0 },
+  { id: 73, actorId: 97, parentId: 67, mass: 5.485e20, radius: 410, axialTilt: 15, orbitalPeriod: 47, rotationPeriod: 22, temperature: 0 },
+  { id: 74, actorId: 98, parentId: 67, mass: 9.265e19, radius: 240, axialTilt: 19, orbitalPeriod: 55, rotationPeriod: 25, temperature: 0 },
+  { id: 75, actorId: 99, parentId: null, mass: 3.143e19, radius: 175, axialTilt: 16, orbitalPeriod: 68, rotationPeriod: 32, temperature: 0 }
 ]

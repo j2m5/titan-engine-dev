@@ -113,5 +113,13 @@ export const Resources: IResource[] = [
   { id: 107, resourceType: "diffuse", lifecycle: "streamable", path: "planets/unnamed/unnamed_planet_5.png", lifetime: 6e4, colorSpace: "srgb" },
   { id: 108, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/adriana/adriana_rings.png", lifetime: 6e4 },
   { id: 109, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/yavin/prime/yavin_prime.png", lifetime: 6e4, colorSpace: "srgb" },
-  { id: 110, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/yavin/iv/iv.png", lifetime: 6e4, colorSpace: "srgb" }
+  { id: 110, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/yavin/iv/iv.png", lifetime: 6e4, colorSpace: "srgb" },
+  { id: 111, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/korriban/korriban.png", lifetime: 6e4, colorSpace: "srgb" },
+  { id: 112, resourceType: "bump", lifecycle: "streamable", path: "planets/StarWars/korriban/korriban_bump.png", lifetime: 6e4 },
+  { id: 113, resourceType: "specular", lifecycle: "streamable", path: "planets/StarWars/korriban/korriban_clouds.png", lifetime: 6e4 },
+  { id: 114, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/darkness/darkness.png", lifetime: 6e4, colorSpace: "srgb" },
+  { id: 115, resourceType: "night", lifecycle: "streamable", path: "planets/StarWars/darkness/darkness_night.png", lifetime: 6e4 },
+  { id: 116, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/darkness/darkness_rings.png", lifetime: 6e4, colorSpace: "" },
+  { id: 117, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/korriban/i/i.jpg", lifetime: 6e4, colorSpace: "srgb" },
+  { id: 118, resourceType: "bump", lifecycle: "streamable", path: "planets/StarWars/korriban/i/i_bump.jpg", lifetime: 6e4 }
 ]

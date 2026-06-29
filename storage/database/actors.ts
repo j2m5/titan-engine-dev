@@ -88,5 +88,19 @@ export const Actors: IActor[] = [
   { id: 82, categoryId: 4, parentId: 80, name: "Yavin Prime", description: "", color: "#ea4123" },
   { id: 83, categoryId: 4, parentId: 82, name: "Yavin IV", description: "", color: "#178f28" },
   { id: 84, categoryId: 5, parentId: 82, name: "Yavin Prime", description: "", color: "#ffffff" },
-  { id: 85, categoryId: 5, parentId: 83, name: "Yavin IV", description: "", color: "#ffffff" }
+  { id: 85, categoryId: 5, parentId: 83, name: "Yavin IV", description: "", color: "#ffffff" },
+  { id: 86, categoryId: 1, parentId: null, name: "Horuset system barycenter", description: "", color: "#ffffff" },
+  { id: 87, categoryId: 3, parentId: 86, name: "Horuset", description: "", color: "#e4d52f" },
+  { id: 88, categoryId: 4, parentId: 86, name: "Korriban", description: "", color: "#f3852b" },
+  { id: 89, categoryId: 5, parentId: 88, name: "Korriban", description: "", color: "#ffffff" },
+  { id: 90, categoryId: 4, parentId: 86, name: "Darkness", description: "", color: "#1994b3" },
+  { id: 91, categoryId: 5, parentId: 90, name: "Darkness", description: "", color: "#ffffff" },
+  { id: 92, categoryId: 6, parentId: 90, name: "Darkness", description: "", color: "#ffffff" },
+  { id: 93, categoryId: 4, parentId: 88, name: "Korriban I", description: "", color: "#969696" },
+  { id: 94, categoryId: 4, parentId: 88, name: "Korriban II", description: "", color: "#969696" },
+  { id: 95, categoryId: 4, parentId: 88, name: "Korriban III", description: "", color: "#969696" },
+  { id: 96, categoryId: 4, parentId: 88, name: "Korriban IV", description: "", color: "#969696" },
+  { id: 97, categoryId: 4, parentId: 88, name: "Korriban V", description: "", color: "#969696" },
+  { id: 98, categoryId: 4, parentId: 88, name: "Korriban VI", description: "", color: "#969696" },
+  { id: 99, categoryId: 4, parentId: 88, name: "Korriban VII", description: "", color: "#969696" }
 ]
