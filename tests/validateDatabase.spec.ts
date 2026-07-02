@@ -28,6 +28,73 @@ function planet(id: number, parentId: number) {
   return { id, categoryId: 2, parentId, name: `P${id}`, description: '', color: '#fff' }
 }
 
+describe('validateDatabase — форма данных атмосфер', () => {
+  /** Валидный слой плотности и валидная строка атмосферы для мутаций */
+  const layer = () => ({ width: 0, expTerm: 1, expScale: -0.125, linearTerm: 0, constantTerm: 0 })
+  const atmosphereRow = () => ({
+    id: 1,
+    actorId: 11,
+    data: {
+      solarIrradiance: [1.474, 1.8504, 1.91198],
+      sunAngularRadius: 0.004,
+      bottomRadius: 6360,
+      topRadius: 6420,
+      rayleighDensity: [layer(), layer()],
+      rayleighScattering: [0.005802, 0.013558, 0.0331],
+      mieDensity: [layer(), layer()],
+      mieScattering: [0.003996, 0.003996, 0.003996],
+      mieExtinction: [0.00444, 0.00444, 0.00444],
+      miePhaseFunctionG: 0.8,
+      absorptionDensity: [layer(), layer()],
+      absorptionExtinction: [0.00065, 0.001881, 0.000085],
+      groundAlbedo: [0.1, 0.1, 0.1],
+      muSMin: -0.207912
+    }
+  })
+
+  function snapshotWith(row: ReturnType<typeof atmosphereRow>): DatabaseSnapshot {
+    const db = baseSnapshot()
+    db.actors.push(planet(11, 10))
+    db.renderingObjects.push(row)
+    return db
+  }
+
+  it('валидная строка атмосферы проходит без ошибок формы', () => {
+    const result = validateDatabase(snapshotWith(atmosphereRow()))
+
+    expect(result.errors.some((e) => /atmosphere/i.test(e.message))).toBe(false)
+  })
+
+  it('ловит плотностный профиль-одиночку вместо пары слоёв', () => {
+    const row = atmosphereRow()
+    // классическая поломка контракта: объект вместо [layer, layer]
+    row.data.absorptionDensity = layer() as never
+
+    const result = validateDatabase(snapshotWith(row))
+
+    expect(result.errors.some((e) => /absorptionDensity/.test(e.message))).toBe(true)
+  })
+
+  it('ловит спектральную тройку неверной длины', () => {
+    const row = atmosphereRow()
+    row.data.mieScattering = [0.001, 0.001] as never
+
+    const result = validateDatabase(snapshotWith(row))
+
+    expect(result.errors.some((e) => /mieScattering/.test(e.message))).toBe(true)
+  })
+
+  it('ловит extinction меньше scattering (нефизично)', () => {
+    const row = atmosphereRow()
+    row.data.mieScattering = [0.01, 0.01, 0.01] as never
+    row.data.mieExtinction = [0.005, 0.005, 0.005] as never
+
+    const result = validateDatabase(snapshotWith(row))
+
+    expect(result.warnings.some((e) => /extinction/i.test(e.message))).toBe(true)
+  })
+})
+
 describe('validateDatabase — структура результата', () => {
   it('пустой валидный снимок проходит без ошибок', () => {
     const result = validateDatabase(baseSnapshot())

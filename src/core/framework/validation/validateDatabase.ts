@@ -66,6 +66,72 @@ const ANCHOR_CATEGORY_ALIASES = new Set(['universe', 'galaxy', 'starSystem', 'ba
 /** Категории центральных тел: отсутствие orbit допустимо (звезда/дыра в центре системы) */
 const CENTRAL_CATEGORY_ALIASES = new Set(['star', 'blackHole'])
 
+/** Спектральные тройки атмосферы: [R, G, B], конечные числа */
+const ATMOSPHERE_TRIPLES = [
+  'solarIrradiance',
+  'rayleighScattering',
+  'mieScattering',
+  'mieExtinction',
+  'absorptionExtinction',
+  'groundAlbedo'
+] as const
+
+/** Плотностные профили атмосферы: строго пара слоёв [layer0, layer1] */
+const ATMOSPHERE_DENSITY_PAIRS = ['rayleighDensity', 'mieDensity', 'absorptionDensity'] as const
+
+const DENSITY_LAYER_FIELDS = ['width', 'expTerm', 'expScale', 'linearTerm', 'constantTerm'] as const
+
+function isDensityLayer(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false
+  return DENSITY_LAYER_FIELDS.every((f) => Number.isFinite((value as Record<string, unknown>)[f]))
+}
+
+/**
+ * Форма данных атмосфер (duck-typing по solarIrradiance): битая структура
+ * не ловится типами (data — свободный JSON) и роняет LUT-генератор в рантайме.
+ */
+function checkAtmosphereShapes(rows: Array<{ id: number; actorId: number; data: any }>, issues: ValidationIssue[]): void {
+  for (const row of rows) {
+    if (!row.data || !('solarIrradiance' in row.data)) continue
+
+    const bad = (field: string, reason: string): void => {
+      issues.push({
+        level: 'error',
+        collection: 'renderingObjects',
+        entity: row.id,
+        message: `renderingObjects#${row.id} (actor ${row.actorId}) atmosphere data.${field} ${reason}`
+      })
+    }
+
+    for (const field of ATMOSPHERE_TRIPLES) {
+      const v = row.data[field]
+      if (!Array.isArray(v) || v.length !== 3 || !v.every((x: unknown) => Number.isFinite(x))) {
+        bad(field, 'must be a [R, G, B] triple of finite numbers')
+      }
+    }
+
+    for (const field of ATMOSPHERE_DENSITY_PAIRS) {
+      const v = row.data[field]
+      if (!Array.isArray(v) || v.length !== 2 || !v.every(isDensityLayer)) {
+        bad(field, 'must be a pair of density layers [layer0, layer1]')
+      }
+    }
+
+    const scat = row.data.mieScattering
+    const ext = row.data.mieExtinction
+    if (Array.isArray(scat) && Array.isArray(ext) && scat.length === 3 && ext.length === 3) {
+      if (scat.some((s: number, i: number) => Number.isFinite(s) && Number.isFinite(ext[i]) && s > ext[i] + 1e-12)) {
+        issues.push({
+          level: 'warning',
+          collection: 'renderingObjects',
+          entity: row.id,
+          message: `renderingObjects#${row.id} (actor ${row.actorId}) mie extinction is below scattering (unphysical: extinction = scattering + absorption)`
+        })
+      }
+    }
+  }
+}
+
 function buildIdSet<T extends { id: number }>(rows: T[]): Set<number> {
   const set = new Set<number>()
   for (const row of rows) set.add(row.id)
@@ -346,6 +412,9 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
       })
     }
   }
+
+  // --- 6c. Форма данных атмосфер (битая структура роняет LUT-генератор в рантайме) ---
+  checkAtmosphereShapes(db.renderingObjects, issues)
 
   // --- 7. Предупреждения о полноте контента ---
   const actorsWithPhysical = new Set(db.physicalObjects.map((p) => p.actorId))
