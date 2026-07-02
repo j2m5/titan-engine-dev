@@ -1,5 +1,9 @@
 import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
-import { LOD, Object3D, Scene } from 'three'
+import { Group, LOD, Object3D, Scene } from 'three'
+
+function hasEquatorialFrame(object: Object3D): object is Object3D & { equatorialFrame: Group } {
+  return (object as { equatorialFrame?: Group }).equatorialFrame !== undefined
+}
 
 class Object3DVisitor implements IObject3DVisitor {
   private scene: Scene
@@ -24,7 +28,11 @@ class Object3DVisitor implements IObject3DVisitor {
     const parent = object.parent
 
     if (parent) {
-      if (parent.type === 'Group') {
+      if (hasEquatorialFrame(parent)) {
+        // Кольца и атмосферы живут в экваториальной рамке тела:
+        // наклонены по полюсу, но не вращаются вместе с мешем
+        parent.equatorialFrame.add(object)
+      } else if (parent.type === 'Group') {
         const lod = parent.getObjectByProperty('type', 'LOD') as LOD
 
         if (lod) {

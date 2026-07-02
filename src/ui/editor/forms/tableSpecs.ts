@@ -20,7 +20,9 @@ export const orbitsSpec: TableSpec = {
     { key: 'inclination', label: 'Inclination', kind: 'number', step: 0.001 },
     { key: 'argOfPeriapsis', label: 'Arg of periapsis', kind: 'number', step: 0.001 },
     { key: 'ascendingNode', label: 'Ascending node', kind: 'number', step: 0.001 },
-    { key: 'meanAnomalyAtEpoch', label: 'Mean anomaly @epoch', kind: 'number', step: 0.001 }
+    { key: 'meanAnomalyAtEpoch', label: 'Mean anomaly @epoch', kind: 'number', step: 0.001 },
+    { key: 'epoch', label: 'Epoch (JD)', kind: 'number', step: 0.5 },
+    { key: 'period', label: 'Period (days, 0=auto)', kind: 'number', step: 0.0001, min: 0 }
   ],
   listLabel: (row, ctx) => `#${row.id} → ${ctx.actorName(row.actorId as number)}`,
   defaults: () => ({
@@ -30,7 +32,9 @@ export const orbitsSpec: TableSpec = {
     inclination: 0,
     argOfPeriapsis: 0,
     ascendingNode: 0,
-    meanAnomalyAtEpoch: 0
+    meanAnomalyAtEpoch: 0,
+    epoch: 2451545, // J2000
+    period: 0
   })
 }
 

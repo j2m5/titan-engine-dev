@@ -68,7 +68,9 @@ describe('validateDatabase — уникальность ID', () => {
         inclination: 0,
         argOfPeriapsis: 0,
         ascendingNode: 0,
-        meanAnomalyAtEpoch: 0
+        meanAnomalyAtEpoch: 0,
+        epoch: 2451545,
+        period: 0
       },
       {
         id: 1,
@@ -78,7 +80,9 @@ describe('validateDatabase — уникальность ID', () => {
         inclination: 0,
         argOfPeriapsis: 0,
         ascendingNode: 0,
-        meanAnomalyAtEpoch: 0
+        meanAnomalyAtEpoch: 0,
+        epoch: 2451545,
+        period: 0
       }
     )
 
@@ -135,7 +139,9 @@ describe('validateDatabase — внешние ключи', () => {
       inclination: 0,
       argOfPeriapsis: 0,
       ascendingNode: 0,
-      meanAnomalyAtEpoch: 0
+      meanAnomalyAtEpoch: 0,
+      epoch: 2451545,
+      period: 0
     })
 
     const result = validateDatabase(db)
@@ -226,7 +232,9 @@ describe('validateDatabase — кардинальность hasOne', () => {
         inclination: 0,
         argOfPeriapsis: 0,
         ascendingNode: 0,
-        meanAnomalyAtEpoch: 0
+        meanAnomalyAtEpoch: 0,
+        epoch: 2451545,
+        period: 0
       },
       {
         id: 2,
@@ -236,7 +244,9 @@ describe('validateDatabase — кардинальность hasOne', () => {
         inclination: 0,
         argOfPeriapsis: 0,
         ascendingNode: 0,
-        meanAnomalyAtEpoch: 0
+        meanAnomalyAtEpoch: 0,
+        epoch: 2451545,
+        period: 0
       }
     )
 
@@ -256,7 +266,9 @@ describe('validateDatabase — кардинальность hasOne', () => {
       inclination: 0,
       argOfPeriapsis: 0,
       ascendingNode: 0,
-      meanAnomalyAtEpoch: 0
+      meanAnomalyAtEpoch: 0,
+      epoch: 2451545,
+      period: 0
     })
 
     const result = validateDatabase(db)

@@ -42,7 +42,9 @@ function syntheticSnapshot(): DatabaseSnapshot {
         inclination: 28.05,
         argOfPeriapsis: 0,
         ascendingNode: 0,
-        meanAnomalyAtEpoch: 0
+        meanAnomalyAtEpoch: 0,
+        epoch: 2451545,
+        period: 0
       }
     ],
     rotationObjects: [],
@@ -206,7 +208,9 @@ describe('generateDatabaseFiles — защита валидатором', () => 
       inclination: 0,
       argOfPeriapsis: 0,
       ascendingNode: 0,
-      meanAnomalyAtEpoch: 0
+      meanAnomalyAtEpoch: 0,
+      epoch: 2451545,
+      period: 0
     }) // дубль id
 
     expect(() => generateDatabaseFiles(snap)).toThrow(/integrity error/)
@@ -222,7 +226,9 @@ describe('generateDatabaseFiles — защита валидатором', () => 
       inclination: 0,
       argOfPeriapsis: 0,
       ascendingNode: 0,
-      meanAnomalyAtEpoch: 0
+      meanAnomalyAtEpoch: 0,
+      epoch: 2451545,
+      period: 0
     })
 
     expect(() => generateDatabaseFiles(snap, [], { skipValidation: true })).not.toThrow()

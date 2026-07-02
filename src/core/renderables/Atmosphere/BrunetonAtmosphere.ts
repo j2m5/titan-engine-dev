@@ -4,7 +4,6 @@ import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
 import { Actor } from '@/core/models/Actor'
 import { BrunetonAtmosphereMaterial } from '@/core/renderables/Atmosphere/BrunetonAtmosphereMaterial'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
-import { degToRad } from 'three/src/math/MathUtils'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
 
@@ -34,7 +33,6 @@ class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
     this.material.bindLUTTextures(lut)
 
     this.name = this.model.getAttribute('name') + 'Atmosphere'
-    this.rotateX(degToRad(this.model.parent!.physicalObject!.getAttribute('axialTilt', 0)))
   }
 
   public updateObject(delta?: number): void {

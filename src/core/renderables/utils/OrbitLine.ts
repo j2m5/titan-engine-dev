@@ -2,7 +2,6 @@ import { BufferGeometry, Line, LineBasicMaterial, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { KeplerianModel } from '@/core/libs/KeplerianModel'
 import { AU, SpaceScale } from '@/core/constants'
-import { timeStore } from '@/ui/mobx/TimeStore'
 import { Acceptable } from '@/core/services/visitors/Acceptable'
 import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
 
@@ -29,7 +28,7 @@ class OrbitLine extends Line implements Acceptable<IObject3DVisitor> {
 
   private calculatePath(segments: number = 3600): Vector3[] {
     const points: Vector3[] = []
-    const keplerianModel: KeplerianModel = new KeplerianModel(timeStore.epoch, this.model)
+    const keplerianModel: KeplerianModel = new KeplerianModel(this.model)
 
     if (!keplerianModel.semiMajorAxis) {
       return points

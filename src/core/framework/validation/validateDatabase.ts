@@ -326,6 +326,27 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
     }
   }
 
+  for (const orbit of db.orbits) {
+    // JD 2000000–3000000 покрывает годы ~763–2739; значения вне — скорее всего
+    // в поле записан календарный год или секунды вместо юлианской даты
+    if (!Number.isFinite(orbit.epoch) || orbit.epoch < 2000000 || orbit.epoch > 3000000) {
+      issues.push({
+        level: 'warning',
+        collection: 'orbits',
+        entity: orbit.id,
+        message: `orbits#${orbit.id} (actor ${orbit.actorId}) has implausible elements epoch (expected Julian Date): ${orbit.epoch}`
+      })
+    }
+    if (!Number.isFinite(orbit.period) || orbit.period < 0) {
+      issues.push({
+        level: 'warning',
+        collection: 'orbits',
+        entity: orbit.id,
+        message: `orbits#${orbit.id} (actor ${orbit.actorId}) has invalid period (days, 0=auto): ${orbit.period}`
+      })
+    }
+  }
+
   // --- 7. Предупреждения о полноте контента ---
   const actorsWithPhysical = new Set(db.physicalObjects.map((p) => p.actorId))
   const actorsWithRendering = new Set(db.renderingObjects.map((r) => r.actorId))

@@ -76,6 +76,14 @@ export interface IOrbit {
   argOfPeriapsis: number
   ascendingNode: number
   meanAnomalyAtEpoch: number
+  /** Эпоха оскулирующих элементов — юлианская дата (сутки), на которую снята meanAnomalyAtEpoch */
+  epoch: number
+  /**
+   * Явный сидерический период обращения, сутки; 0 = вывести из гравитационного
+   * параметра. Обязателен для барицентрических подорбит (масса родителя-барицентра
+   * не даёт корректного среднего движения)
+   */
+  period: number
 }
 
 export interface IRotationObject {
@@ -151,5 +159,3 @@ export type Colorable = {
 export type TKeplerianModel = Omit<IOrbit, 'id' | 'actorId'>
 
 export type TOrientationModel = Omit<IRotationObject, 'id' | 'actorId'>
-
-export type TRotationModel = Omit<IRotationObject, 'id' | 'actorId'>

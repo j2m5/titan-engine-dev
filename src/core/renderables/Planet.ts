@@ -2,7 +2,6 @@ import { BufferGeometry, Mesh, SphereGeometry } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
-import { degToRad } from 'three/src/math/MathUtils'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 class Planet extends Mesh {
@@ -26,7 +25,6 @@ class Planet extends Mesh {
     this.name = this.model.getAttribute('name') + 'Planet'
     this.userData.type = 'planet'
     this.userData.clickable = true
-    this.rotateX(degToRad(-this.model.physicalObject!.getAttribute('axialTilt', 0)))
   }
 }
 

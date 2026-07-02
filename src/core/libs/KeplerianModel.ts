@@ -1,33 +1,29 @@
 import { TKeplerianModel } from '@/core/models/types'
 import { Actor } from '@/core/models/Actor'
-import { AUM, CIRCLE, G } from '@/core/constants'
+import { CIRCLE, G, J2000, SolarMass } from '@/core/constants'
 import { Quaternion, Vector3 } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
+import { ASTRO_TO_THREE } from '@/core/libs/frames'
 
 export type OrbitalState = {
   position: Vector3
   velocity: Vector3
 }
 
-/**
- * Кватернион конвертации из астрономической системы координат (Z-up)
- * в систему координат Three.js (Y-up).
- *
- * Это поворот на -90° вокруг оси X:
- * (x, y, z)_astro → (x, z, -y)_three
- *
- * Детерминант = +1 (собственное вращение), сохраняет правую систему координат.
- * CCW орбиты в астрономическом XY → CCW в Three.js XZ (при взгляде с +Y).
- */
-const ASTRO_TO_THREE = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -Math.PI / 2)
-
 class KeplerianModel implements TKeplerianModel {
-  private readonly epoch: number
   private readonly model: Actor
 
-  public constructor(epoch: number, model: Actor) {
-    this.epoch = epoch
+  public constructor(model: Actor) {
     this.model = model
+  }
+
+  /**
+   * Эпоха оскулирующих элементов (юлианская дата, сутки) —
+   * момент, на который снята meanAnomalyAtEpoch. Свойство данных орбиты,
+   * а не момента создания модели.
+   */
+  public get epoch(): number {
+    return this.model.orbit?.getAttribute('epoch', J2000)
   }
 
   public get semiMajorAxis(): number {
@@ -70,18 +66,41 @@ class KeplerianModel implements TKeplerianModel {
     return degToRad(this.meanAnomalyAtEpoch)
   }
 
+  /**
+   * Гравитационный параметр системы, AU³/сутки².
+   * G — гауссова GM Солнца (k²), поэтому массы нормируются на массу Солнца.
+   */
   public get mu(): number {
     if (this.model.parent && this.model.parent.physicalObject && this.model.physicalObject) {
       return (
-        G * (this.model.parent.physicalObject.getAttribute('mass') + this.model.physicalObject.getAttribute('mass'))
+        (G *
+          (this.model.parent.physicalObject.getAttribute('mass') +
+            this.model.physicalObject.getAttribute('mass'))) /
+        SolarMass
       )
     }
 
     return 0
   }
 
+  /**
+   * Явный сидерический период из данных орбиты, сутки; 0 = не задан.
+   * Нужен для барицентрических подорбит (Луна/Земля вокруг EMB, бинарные
+   * звёзды): там сумма масс родителя и тела не даёт корректного n.
+   */
+  private get dataPeriod(): number {
+    return this.model.orbit?.getAttribute('period', 0)
+  }
+
+  /** Среднее движение, рад/сутки (эпоха — юлианская дата в сутках) */
   public get meanMotion(): number {
-    return Math.sqrt(this.mu / Math.abs(this.semiMajorAxis * AUM)) / Math.abs(this.semiMajorAxis * AUM)
+    if (this.dataPeriod > 0) {
+      return CIRCLE / this.dataPeriod
+    }
+
+    const a: number = Math.abs(this.semiMajorAxis)
+
+    return Math.sqrt(this.mu / (a * a * a))
   }
 
   public get isHyperbolic(): boolean {
@@ -92,10 +111,11 @@ class KeplerianModel implements TKeplerianModel {
     return this.eccentricity < 1
   }
 
+  /** Орбитальный период, сутки */
   public get period(): number {
     if (!this.isElliptic) return 0
 
-    return CIRCLE * Math.sqrt((this.semiMajorAxis * this.semiMajorAxis * this.semiMajorAxis) / this.mu)
+    return CIRCLE / this.meanMotion
   }
 
   public getNodalPrecessionRate(r: number, j2: number): number {
