@@ -1,4 +1,4 @@
-import { LOD, Object3D } from 'three'
+import { LOD, Object3D, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { Barycenter } from '@/core/renderables/Barycenter'
 import { BlackHole } from '@/core/renderables/BlackHole'
@@ -18,6 +18,7 @@ import { threeJS } from '@/core/graphic/ThreeJS'
 import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { Nebula } from '@/core/renderables/Nebula'
 
 class RenderableFactory {
   public static make(actor: Actor): Object3D {
@@ -96,6 +97,21 @@ class RenderableFactory {
     lod.addLevel(lodl2, distanceLod(3))
 
     node.add(lod)
+
+    if (actor.attributes.id === 87) {
+      node.add(
+        new Nebula({
+          size: 27000000,
+          seed: 5120,
+          shape: 'disk',
+          axisRatios: new Vector3(1, 0.5, 1),
+          edgeFalloff: 0.6,
+          density: 0.5,
+          noise: { contrast: 2, worleyStrength: 0.35, ridged: 1 },
+          cavities: [{ center: new Vector3(0.1, 0, 0), radius: 0.4, strength: 0.3 }]
+        })
+      )
+    }
 
     return node
   }
