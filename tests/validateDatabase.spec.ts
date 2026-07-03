@@ -95,6 +95,78 @@ describe('validateDatabase — форма данных атмосфер', () => 
   })
 })
 
+describe('validateDatabase — якорь атмосферы к планете', () => {
+  const layer = () => ({ width: 0, expTerm: 1, expScale: -0.125, linearTerm: 0, constantTerm: 0 })
+
+  /**
+   * Реальная топология: планета (актор 11, physicalObject с radius)
+   * и её атмосфера — отдельный дочерний актор 12 с atmosphere-данными.
+   */
+  function snapshotWithAtmosphere(bottomRadius: number, topRadius: number, planetRadius: number): DatabaseSnapshot {
+    const db = baseSnapshot()
+    db.actors.push(planet(11, 10), planet(12, 11))
+    db.physicalObjects.push({
+      id: 1,
+      actorId: 11,
+      parentId: null,
+      mass: 1,
+      radius: planetRadius,
+      axialTilt: 0,
+      orbitalPeriod: 1,
+      rotationPeriod: 1,
+      temperature: 0
+    })
+    db.renderingObjects.push({
+      id: 1,
+      actorId: 12,
+      data: {
+        solarIrradiance: [1.474, 1.8504, 1.91198],
+        sunAngularRadius: 0.004,
+        bottomRadius,
+        topRadius,
+        rayleighDensity: [layer(), layer()],
+        rayleighScattering: [0.005802, 0.013558, 0.0331],
+        mieDensity: [layer(), layer()],
+        mieScattering: [0.003996, 0.003996, 0.003996],
+        mieExtinction: [0.00444, 0.00444, 0.00444],
+        miePhaseFunctionG: 0.8,
+        absorptionDensity: [layer(), layer()],
+        absorptionExtinction: [0.00065, 0.001881, 0.000085],
+        groundAlbedo: [0.1, 0.1, 0.1],
+        muSMin: -0.207912
+      }
+    })
+    return db
+  }
+
+  it('bottomRadius, совпадающий с радиусом родительской планеты, проходит', () => {
+    const result = validateDatabase(snapshotWithAtmosphere(6360, 6420, 6360))
+
+    expect(result.errors.some((e) => /bottomRadius/.test(e.message))).toBe(false)
+  })
+
+  it('ловит рассогласование bottomRadius с радиусом планеты (кейс Yavin Prime)', () => {
+    const result = validateDatabase(snapshotWithAtmosphere(195550, 196000, 195500))
+
+    expect(result.errors.some((e) => /bottomRadius/.test(e.message) && /195500/.test(e.message))).toBe(true)
+  })
+
+  it('ловит topRadius <= bottomRadius (NaN в LUT-генераторе)', () => {
+    const result = validateDatabase(snapshotWithAtmosphere(6420, 6360, 6420))
+
+    expect(result.errors.some((e) => /radii invalid/i.test(e.message))).toBe(true)
+  })
+
+  it('атмосфера без физобъекта у родителя не падает и не ругается на якорь', () => {
+    const db = snapshotWithAtmosphere(6360, 6420, 6360)
+    db.physicalObjects = []
+
+    const result = validateDatabase(db)
+
+    expect(result.errors.some((e) => /bottomRadius/.test(e.message))).toBe(false)
+  })
+})
+
 describe('validateDatabase — структура результата', () => {
   it('пустой валидный снимок проходит без ошибок', () => {
     const result = validateDatabase(baseSnapshot())

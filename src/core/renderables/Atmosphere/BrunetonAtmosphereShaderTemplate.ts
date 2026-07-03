@@ -90,6 +90,13 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
     layout(location = 0) out vec4 fragColor;
 
     void main() {
+      // DoubleSide: снаружи атмосферы обе полусферы дают одинаковый силуэт и цвет,
+      // поэтому задняя грань — лишний второй проход блендинга. Изнутри (r < topRadius)
+      // видимы только задние грани — их оставляем, иначе атмосфера пропадёт.
+      // Запас 2%: у самой границы передняя грань уходит под near-clip раньше,
+      // чем камера пересечёт topRadius — в этой полосе рендерим обе грани.
+      if (!gl_FrontFacing && length(vCameraPositionKm) > u_top_radius * 1.02) discard;
+
       vec3 camera = vCameraPositionKm;
       vec3 viewDirection = normalize(vPositionKm - camera);
       vec3 sunDir = normalize(vSunDirection);

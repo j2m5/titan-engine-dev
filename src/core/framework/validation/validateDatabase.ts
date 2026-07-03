@@ -132,6 +132,61 @@ function checkAtmosphereShapes(rows: Array<{ id: number; actorId: number; data: 
   }
 }
 
+/**
+ * Якорь атмосферы: bottomRadius обязан совпадать с радиусом родительской
+ * планеты. Аналитическая «земля» шейдера Брунетона и меш планеты — две
+ * независимые сферы; рассогласование даёт видимый шов на горизонте —
+ * атмосфера «отлипает» от поверхности (кейс Yavin Prime: 195550 vs 195500).
+ * Заодно: bottom < top, иначе LUT-генератор молча производит NaN
+ * (H = √(top² − bottom²)).
+ */
+function checkAtmosphereAnchoring(
+  renderingObjects: Array<{ id: number; actorId: number; data: any }>,
+  actors: IActor[],
+  physicalObjects: IPhysicalObject[],
+  issues: ValidationIssue[]
+): void {
+  const parentIdByActor = new Map<number, number | null>()
+  for (const a of actors) parentIdByActor.set(a.id, a.parentId)
+
+  const physByActor = new Map<number, IPhysicalObject>()
+  for (const p of physicalObjects) physByActor.set(p.actorId, p)
+
+  for (const row of renderingObjects) {
+    if (!row.data || !('solarIrradiance' in row.data)) continue
+
+    const bottom = row.data.bottomRadius
+    const top = row.data.topRadius
+
+    if (!Number.isFinite(bottom) || !Number.isFinite(top) || bottom <= 0 || top <= bottom) {
+      issues.push({
+        level: 'error',
+        collection: 'renderingObjects',
+        entity: row.id,
+        message:
+          `renderingObjects#${row.id} (actor ${row.actorId}) atmosphere radii invalid: ` +
+          `bottomRadius=${bottom}, topRadius=${top} (expected 0 < bottom < top)`
+      })
+      continue
+    }
+
+    const parentId = parentIdByActor.get(row.actorId)
+    const parentPhys = parentId !== null && parentId !== undefined ? physByActor.get(parentId) : undefined
+    if (!parentPhys || !Number.isFinite(parentPhys.radius)) continue
+
+    if (Math.abs(bottom - parentPhys.radius) > Math.abs(parentPhys.radius) * 1e-9) {
+      issues.push({
+        level: 'error',
+        collection: 'renderingObjects',
+        entity: row.id,
+        message:
+          `renderingObjects#${row.id} (actor ${row.actorId}) atmosphere bottomRadius=${bottom} ` +
+          `!= parent planet radius=${parentPhys.radius} — atmosphere will visually detach from the surface`
+      })
+    }
+  }
+}
+
 function buildIdSet<T extends { id: number }>(rows: T[]): Set<number> {
   const set = new Set<number>()
   for (const row of rows) set.add(row.id)
@@ -415,6 +470,9 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
 
   // --- 6c. Форма данных атмосфер (битая структура роняет LUT-генератор в рантайме) ---
   checkAtmosphereShapes(db.renderingObjects, issues)
+
+  // --- 6d. Якорь атмосферы: bottomRadius == радиус родительской планеты ---
+  checkAtmosphereAnchoring(db.renderingObjects, db.actors, db.physicalObjects, issues)
 
   // --- 7. Предупреждения о полноте контента ---
   const actorsWithPhysical = new Set(db.physicalObjects.map((p) => p.actorId))
