@@ -10,20 +10,27 @@
  *
  * No built-in tone mapping — assumed to be handled by post-processing.
  * No #version 300 es — Three.js injects it via glslVersion: GLSL3.
+ *
+ * МАТРИЦЫ: встроенные имена three.js (modelViewMatrix / projectionMatrix) —
+ * это осознанный контракт. Рендерер безусловно заливает их для каждого
+ * объекта в конце setProgram (даже для RawShaderMaterial), поэтому свои
+ * значения под этими именами до GPU не доходят. Точность здесь несут
+ * localCameraPos / localSunDir (float64 на CPU). Контрпример — BlackHole:
+ * там шейдер реконструирует лучи из матриц, поэтому используются
+ * собственные cr*-имена, которые рендерер не перезаписывает.
  */
 
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
-import { Matrix4, Uniform, Vector2, Vector3 } from 'three'
+import { Uniform, Vector2, Vector3 } from 'three'
 import { createParametricAtmosphereShader } from './atmosphereParametric'
 
 const parametricAtmosphere = createParametricAtmosphereShader()
-const SUN_ANGULAR_RADIUS = 0.0004675
+
+// Дефолт (земной, радианы) — перезаписывается из конфига в конструкторе материала
+const SUN_ANGULAR_RADIUS = 0.004675
 
 export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
   uniforms: {
-    modelMatrix: new Uniform(new Matrix4()),
-    modelViewMatrix: new Uniform(new Matrix4()),
-    projectionMatrix: new Uniform(new Matrix4()),
     localCameraPos: new Uniform(new Vector3()),
     localSunDir: new Uniform(new Vector3()),
     inverseSpaceScale: new Uniform(1.0 / Math.pow(10, -3.3)),
@@ -45,7 +52,6 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
     uniform vec3 localCameraPos;
     uniform vec3 localSunDir;
 
-    uniform vec3 lightPosition;
     uniform float inverseSpaceScale;
 
     in vec3 position;

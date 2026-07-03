@@ -1,10 +1,10 @@
 import dayjs from 'dayjs'
 import { ResourceManager, ResourceItem } from '@/core/services/ResourceManager'
-import { IResource } from '@/core/models/types'
+import { IActorBoundResource } from '@/core/models/types'
 import { CanvasTexture, ImageBitmapLoader, Texture } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
-class ImageBitmapManager extends ResourceManager<IResource, ImageBitmap> {
+class ImageBitmapManager extends ResourceManager<IActorBoundResource, ImageBitmap> {
   protected loader: ImageBitmapLoader
 
   public constructor() {
@@ -13,14 +13,14 @@ class ImageBitmapManager extends ResourceManager<IResource, ImageBitmap> {
     this.loader.setOptions({ imageOrientation: 'flipY' })
   }
 
-  public async load(source: IResource): Promise<ImageBitmap | undefined> {
+  public async load(source: IActorBoundResource): Promise<ImageBitmap | undefined> {
     try {
       const fullURL: string = this.getFullURL(source.path)
       const imageBitmap: ImageBitmap = await this.loader.loadAsync(fullURL)
       const texture: Texture = new CanvasTexture(imageBitmap)
 
       const resource: ResourceItem = {
-        actorId: source.actorId,
+        actorId: source.actorId ?? null,
         type: 'bitmap',
         loadedAt: dayjs(),
         expiredAt: dayjs().add(source.lifetime, 'millisecond')

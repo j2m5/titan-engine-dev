@@ -136,6 +136,16 @@ export interface IActorResource {
   readonly resourceId: number
 }
 
+/**
+ * Ресурс, обогащённый привязкой к актору в точке сбора (actor.resources).
+ * Сама таблица resources связана с акторами через пивот actorResource
+ * (many-to-many), поэтому actorId у ресурса появляется только в контексте
+ * конкретного актора — например, для группировки отложенных текстур.
+ */
+export interface IActorBoundResource extends IResource {
+  readonly actorId?: number | null
+}
+
 export interface IPlanetRenderingObject {
   emission: number
   bumpScale: number

@@ -75,8 +75,6 @@ function cloneUniforms(src: { [uniform: string]: IUniform }): { [uniform: string
 }
 
 class BrunetonAtmosphereMaterial extends RawShaderMaterial {
-  private _modelViewMatrix = new Matrix4()
-  private _rotationOnlyView = new Matrix4()
   private _invModelMatrix = new Matrix4()
   private _localCameraPos = new Vector3()
   private _localSunDir = new Vector3()
@@ -96,6 +94,13 @@ class BrunetonAtmosphereMaterial extends RawShaderMaterial {
       depthWrite: false,
       blending: NormalBlending
     })
+
+    // sun_size зависит от углового радиуса звезды конкретной планеты —
+    // дефолт шаблона земной, без этого диск солнца рисуется неверного размера
+    const config: AtmosphereConfig | undefined = model.renderingObject?.getAttribute('data')
+    if (config) {
+      this.uniforms.sun_size.value.set(Math.tan(config.sunAngularRadius), Math.cos(config.sunAngularRadius))
+    }
   }
 
   /**
@@ -132,27 +137,12 @@ class BrunetonAtmosphereMaterial extends RawShaderMaterial {
     const mw = mesh.matrixWorld.elements
     const cw = camera.matrixWorld.elements
 
-    // ── 1. Camera-relative model matrix (для gl_Position) ──
-    const crModelMatrix = this.uniforms.modelMatrix.value as Matrix4
-    crModelMatrix.copy(mesh.matrixWorld)
-    crModelMatrix.elements[12] = mw[12] - cw[12]
-    crModelMatrix.elements[13] = mw[13] - cw[13]
-    crModelMatrix.elements[14] = mw[14] - cw[14]
+    // Матрицы для gl_Position (modelViewMatrix/projectionMatrix) заливает сам
+    // рендерер — см. комментарий в BrunetonAtmosphereShaderTemplate.
+    // Здесь обновляется только то, что несёт точность: локальные позиция
+    // камеры и направление на солнце, посчитанные в float64 на CPU.
 
-    // ── 2. Camera-relative modelViewMatrix ──
-    const rotView = this._rotationOnlyView
-    rotView.copy(camera.matrixWorldInverse)
-    rotView.elements[12] = 0
-    rotView.elements[13] = 0
-    rotView.elements[14] = 0
-
-    this._modelViewMatrix.multiplyMatrices(rotView, crModelMatrix)
-    this.uniforms.modelViewMatrix.value.copy(this._modelViewMatrix)
-
-    // ── 3. Projection (без изменений) ──
-    this.uniforms.projectionMatrix.value.copy(camera.projectionMatrix)
-
-    // ── 4. Local camera position (float64 на CPU) ──
+    // ── 1. Local camera position ──
     // = inverse(originalModelMatrix) * cameraWorldPosition
     this._invModelMatrix.copy(mesh.matrixWorld).invert()
 
@@ -160,14 +150,15 @@ class BrunetonAtmosphereMaterial extends RawShaderMaterial {
     this._localCameraPos.applyMatrix4(this._invModelMatrix)
     this.uniforms.localCameraPos.value.copy(this._localCameraPos)
 
-    // ── 5. Local sun direction (float64 на CPU) ──
+    // ── 2. Local sun direction ──
     // worldSunDir = normalize(lightPosition - meshWorldCenter)
     this._localSunDir.set(lightPosition.x - mw[12], lightPosition.y - mw[13], lightPosition.z - mw[14]).normalize()
     // Transform direction to local space (w=0 equivalent)
     this._localSunDir.transformDirection(this._invModelMatrix)
     this.uniforms.localSunDir.value.copy(this._localSunDir)
 
-    // ── 6. Log depth ──
+    // ── 3. Log depth (рендерер заливает logDepthBufFC только при включённом
+    // logarithmicDepthBuffer — ручной сет нужен для сцен без этого флага) ──
     const far = camera.far ?? 1e10
     this.uniforms.logDepthBufFC.value = 2.0 / (Math.log(far + 1.0) / Math.LN2)
   }

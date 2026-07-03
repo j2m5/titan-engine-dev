@@ -1,6 +1,6 @@
 import dayjs from 'dayjs'
 import { ScenarioConfig } from '@/config/scenarios'
-import { IResource } from '@/core/models/types'
+import { IActorBoundResource, IResource } from '@/core/models/types'
 import { Resource } from '@/core/models/Resource'
 import { Actor } from '@/core/models/Actor'
 import { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
@@ -31,9 +31,10 @@ class ResourceObserver {
    */
   public required: IResource[] = []
   /**
-   * Массив отложенных ресурсов для загрузки
+   * Массив отложенных ресурсов для загрузки (с привязкой к актору,
+   * прикрепляемой в closestChange — нужна для группировки при выгрузке)
    */
-  public deferred: IResource[] = []
+  public deferred: IActorBoundResource[] = []
   /**
    * Массив различных дополнительных ресурсов
    */
@@ -133,10 +134,10 @@ class ResourceObserver {
 
     // определение для каких объектов текстуры уже были загружены
     // именно их и надо прослушивать на предмет необходимости удаления текстур
-    const uniqueDefers: Collection<IResource> = new Collection(this.deferred)
+    const uniqueDefers: Collection<IActorBoundResource> = new Collection(this.deferred)
       .whereNotNull('actorId')
       .where('resourceType', 'diffuse')
-    const actorIds: number[] = uniqueDefers.map((el: IResource) => el.actorId!).toArray()
+    const actorIds: number[] = uniqueDefers.map((el: IActorBoundResource) => el.actorId!).toArray()
     const preparedActors: string[] = Actor.query().whereIn('id', actorIds).pluck('name')
     const filterPreparedActors: ObservableRecord[] = Array.from(this.sceneObserver.data.values()).filter(
       (record: ObservableRecord) => preparedActors.includes(record.name)
@@ -288,10 +289,17 @@ class ResourceObserver {
     const actor: Actor | undefined = Actor.where({ name: event.name }).first()
 
     if (actor && actor.resources.isNotEmpty()) {
-      const toLoad = actor.resources.map((resource: Resource) => resource.toJSON() as IResource)
+      // связь актор-ресурс идёт через пивот, поэтому actorId прикрепляется здесь —
+      // в единственной точке, где контекст актора известен
+      const toLoad = actor.resources.map(
+        (resource: Resource): IActorBoundResource => ({
+          ...(resource.toJSON() as IResource),
+          actorId: actor.getAttribute('id')
+        })
+      )
 
       const isNotLoaded = toLoad.filter(
-        (resource: IResource) => !this.deferred.some((r: IResource): boolean => r.id === resource.id)
+        (resource: IActorBoundResource) => !this.deferred.some((r: IActorBoundResource): boolean => r.id === resource.id)
       )
 
       if (isNotLoaded.isNotEmpty()) {
