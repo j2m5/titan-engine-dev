@@ -109,6 +109,9 @@ class AtmosphereDebugScene {
       sunLat: 0,
       sunLon: 45,
 
+      msOrders: 4,
+      msFactor: 1,
+
       _: {
         solarIrradiance: [...data.solarIrradiance],
         sunAngularRadius: data.sunAngularRadius,
@@ -156,7 +159,12 @@ class AtmosphereDebugScene {
   private rebuild() {
     const c = this.cfg()
     this.mat.setAtmosphereConfig(c as any)
-    this.mat.bindLUTTextures(this.gen.generate(c as any))
+    this.mat.bindLUTTextures(
+      this.gen.generate(c as any, {
+        scatteringOrders: this.p.msOrders,
+        multiScatteringFactor: this.p.msFactor
+      })
+    )
     this.mat.exposure = this.p.exposure
     this.mat.setWhitePoint(this.p.wp_R, this.p.wp_G, this.p.wp_B)
     this.atmoMesh.geometry.dispose()
@@ -212,6 +220,10 @@ class AtmosphereDebugScene {
     sun.add(p, 'sunLon', -180, 180, 1).name('Lon')
     sun.close()
 
+    const ms = this.gui.addFolder('Multi-scatter')
+    ms.add(p, 'msOrders', 1, 4, 1).name('Orders').onChange(r)
+    ms.add(p, 'msFactor', 0, 1.5, 0.01).name('Factor').onChange(r)
+
     const ren = this.gui.addFolder('Render')
     ren.add(p, 'exposure', 0.1, 50, 0.1).name('Exposure').onChange(v)
     ren.add(p, 'wp_R', 0.5, 2, 0.01).name('WP R').onChange(v)
@@ -240,7 +252,16 @@ class AtmosphereDebugScene {
   private loop = () => {
     this.raf = requestAnimationFrame(this.loop)
     this.controls.update()
-    this.light.set(0, 0, 0)
+
+    // Позиция солнца из GUI-слайдеров Lat/Lon — вокруг центра планеты
+    const lat = (this.p.sunLat * Math.PI) / 180
+    const lon = (this.p.sunLon * Math.PI) / 180
+    const sunDistance = 1000
+    this.atmoMesh.getWorldPosition(this.light)
+    this.light.x += sunDistance * Math.cos(lat) * Math.sin(lon)
+    this.light.y += sunDistance * Math.sin(lat)
+    this.light.z += sunDistance * Math.cos(lat) * Math.cos(lon)
+
     this.mat.update(this.atmoMesh, this.camera, this.light)
     this.renderer.render(this.scene, this.camera)
   }

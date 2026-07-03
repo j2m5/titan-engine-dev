@@ -142,9 +142,10 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
         }
       }
 
-      // No tone mapping — handled by post-processing
-      vec3 color = radiance * exposure;
-      color = clamp(color, 0.0, 0.99);
+      // Мягкое плечо вместо жёсткого клэмпа (как в демо Брунетона):
+      // в тенях/полутонах 1-e^-x ≈ x (кривая не меняется), пересветы
+      // сжимаются плавно — терминатор без «обрыва» на границе сатурации
+      vec3 color = vec3(1.0) - exp(-radiance / white_point * exposure);
 
       float alpha = 1.0 - dot(transmittance, vec3(1.0 / 3.0));
 

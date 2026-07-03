@@ -17,6 +17,7 @@ import {
   AddEquation,
   Camera,
   ClampToEdgeWrapping,
+  Color,
   CustomBlending,
   FloatType,
   GLSL3,
@@ -51,12 +52,12 @@ const SCATTERING_D = 32
 const IRRADIANCE_W = 64
 const IRRADIANCE_H = 16
 
-// Default: 1 = single scattering only (visually sufficient from space).
-// Higher values (2-4) add multi-scattering but currently produce artifacts
-// due to suspected Three.js 3D render target state management issues.
-// The visual contribution of orders 2-4 is subtle: slightly brighter
-// shadow terminator and ambient illumination on the night side.
-const DEFAULT_SCATTERING_ORDERS = 1
+// Number of scattering orders (reference implementation uses 4).
+// Orders 2+ soften the shadow terminator and add subtle twilight ambient.
+// Историческая справка: артефакты, из-за которых порядки были отключены,
+// вызывались самим аккумулирующим проходом (alpha=1.0 портил mie.r
+// в объединённой текстуре + не было деления на фазу Рэлея), а не Three.js.
+const DEFAULT_SCATTERING_ORDERS = 4
 
 // ════════════════════════════════════════════════════════════════════
 // Return type
@@ -178,18 +179,49 @@ const INDIRECT_IRRADIANCE_FRAG =
 const MULTIPLE_SCATTERING_FRAG =
   fragPreamble(/* glsl */ `
     uniform sampler3D scattering_density_texture;
+    uniform float u_ms_factor;
+    uniform float u_ms_night_floor;
   `) +
   /* glsl */ `
   void main() {
     AtmosphereParameters atmo = buildAtmosphere();
     vec3 frag_coord = vec3(gl_FragCoord.xy, float(u_layer) + 0.5);
     float nu;
-    fragColor = vec4(ComputeMultipleScatteringTexture(
+    vec3 delta_multiple_scattering = ComputeMultipleScatteringTexture(
       atmo,
       transmittance_texture,
       scattering_density_texture,
       frag_coord,
-      nu), 1.0);
+      nu);
+
+    #if defined(OUTPUT_ACCUMULATE)
+      // Аккумулятор (model.cc): делим на фазу Рэлея — при чтении GetSkyRadiance
+      // умножает всю текстуру на RayleighPhaseFunction(nu) обратно.
+      // Alpha строго 0.0: в объединённой текстуре alpha хранит mie.r
+      // одиночного рассеяния, аддитивный блендинг не должен его трогать.
+      // u_ms_factor — художественная ручка вклада (1.0 = физика).
+
+      // Сумеречный спад: у протяжённых оболочек порядки 2+ физично светят
+      // далеко за терминатор (горизонтальный луч видит дневную сторону) —
+      // художественно глушим вклад в ночь, сохраняя его у терминатора.
+      // Ширина спада адаптивна к геометрии планеты (доля от mu_s_min);
+      // u_ms_night_floor = 1.0 отключает спад (чистая физика).
+      Length ms_r;
+      Number ms_mu;
+      Number ms_mu_s;
+      Number ms_nu;
+      bool ms_ground;
+      GetRMuMuSNuFromScatteringTextureFragCoord(
+        atmo, frag_coord, ms_r, ms_mu, ms_mu_s, ms_nu, ms_ground);
+      float twilight = smoothstep(u_mu_s_min * 0.6, 0.0, ms_mu_s);
+      float shaped = u_ms_factor * mix(u_ms_night_floor, 1.0, twilight);
+
+      fragColor = vec4(
+        delta_multiple_scattering * shaped / RayleighPhaseFunction(nu), 0.0);
+    #else
+      // Дельта следующего порядка — сырая радиометрия, alpha не читается
+      fragColor = vec4(delta_multiple_scattering, 1.0);
+    #endif
   }
 `
 
@@ -303,6 +335,7 @@ class AtmosphereLUTGenerator {
   private readonly scatteringDensityMat: RawShaderMaterial
   private readonly indirectIrradianceMat: RawShaderMaterial
   private readonly multipleScatteringMat: RawShaderMaterial
+  private readonly multipleScatteringAccumMat: RawShaderMaterial
 
   private readonly scatteringOrders: number
 
@@ -339,16 +372,39 @@ class AtmosphereLUTGenerator {
     })
 
     this.multipleScatteringMat = createMaterial(MULTIPLE_SCATTERING_FRAG, {
-      scattering_density_texture: new Uniform(null)
+      scattering_density_texture: new Uniform(null),
+      u_ms_factor: new Uniform(1)
     })
+
+    // Аккумулирующий вариант: делит на фазу Рэлея и пишет alpha 0.0,
+    // всегда работает аддитивным блендингом поверх scatteringRT
+    this.multipleScatteringAccumMat = createMaterial(
+      MULTIPLE_SCATTERING_FRAG,
+      {
+        scattering_density_texture: new Uniform(null),
+        u_ms_factor: new Uniform(1),
+        u_ms_night_floor: new Uniform(0)
+      },
+      { OUTPUT_ACCUMULATE: '1' }
+    )
+    setAdditiveBlending(this.multipleScatteringAccumMat, true)
   }
 
   // ── Public API ──────────────────────────────────────────────────
 
-  public generate(config: AtmosphereConfig): AtmosphereLUTs {
+  public generate(
+    config: AtmosphereConfig,
+    options: { scatteringOrders?: number; multiScatteringFactor?: number; multiScatteringNightFloor?: number } = {}
+  ): AtmosphereLUTs {
+    const scatteringOrders = options.scatteringOrders ?? this.scatteringOrders
+    const msFactor = options.multiScatteringFactor ?? 1
+    const msNightFloor = options.multiScatteringNightFloor ?? 0
+
     const renderer = this.renderer
     const savedAutoClear = renderer.autoClear
     const savedRenderTarget = renderer.getRenderTarget()
+    const savedClearColor = renderer.getClearColor(new Color())
+    const savedClearAlpha = renderer.getClearAlpha()
     renderer.autoClear = false
 
     // Set atmosphere parameters on all materials
@@ -380,6 +436,8 @@ class AtmosphereLUTGenerator {
       this.renderPass2D(this.directIrradianceMat, deltaIrradianceRT)
 
       // Clear irradiance accumulator to zero
+      // (текущий clear color рендерера может быть не чёрным — выставляем явно)
+      renderer.setClearColor(0x000000, 0)
       renderer.setRenderTarget(this.irradianceRT)
       renderer.clearColor()
 
@@ -410,7 +468,7 @@ class AtmosphereLUTGenerator {
       // Step 4: Higher-order scattering (orders 2 through N)
       // Only executes if scatteringOrders > 1
       // ═══════════════════════════════════════════════════════════
-      for (let order = 2; order <= this.scatteringOrders; order++) {
+      for (let order = 2; order <= scatteringOrders; order++) {
         // ─── 4a: Scattering density ─────────────────────────────
         {
           const u = this.scatteringDensityMat.uniforms
@@ -444,17 +502,21 @@ class AtmosphereLUTGenerator {
 
         // ─── 4c: Multiple scattering ────────────────────────────
         {
-          const u = this.multipleScatteringMat.uniforms
-          u.transmittance_texture.value = this.transmittanceRT.texture
-          u.scattering_density_texture.value = deltaScatteringDensityRT.texture
+          const uDelta = this.multipleScatteringMat.uniforms
+          uDelta.transmittance_texture.value = this.transmittanceRT.texture
+          uDelta.scattering_density_texture.value = deltaScatteringDensityRT.texture
 
-          // Overwrite deltaMultipleScattering
-          setAdditiveBlending(this.multipleScatteringMat, false)
+          // Overwrite deltaMultipleScattering (сырая радиометрия для следующего порядка)
           this.renderPass3D(this.multipleScatteringMat, deltaMultipleScatteringRT)
 
-          // Accumulate into scattering (additive)
-          setAdditiveBlending(this.multipleScatteringMat, true)
-          this.renderPass3D(this.multipleScatteringMat, this.scatteringRT)
+          // Accumulate into scattering (additive): вариант с делением на фазу
+          // Рэлея и alpha 0.0 — mie.r одиночного рассеяния в alpha не трогаем
+          const uAccum = this.multipleScatteringAccumMat.uniforms
+          uAccum.transmittance_texture.value = this.transmittanceRT.texture
+          uAccum.scattering_density_texture.value = deltaScatteringDensityRT.texture
+          uAccum.u_ms_factor.value = msFactor
+          uAccum.u_ms_night_floor.value = msNightFloor
+          this.renderPass3D(this.multipleScatteringAccumMat, this.scatteringRT)
         }
 
         // Flush between scattering orders
@@ -477,6 +539,7 @@ class AtmosphereLUTGenerator {
       deltaScatteringDensityRT.dispose()
 
       renderer.autoClear = savedAutoClear
+      renderer.setClearColor(savedClearColor, savedClearAlpha)
       renderer.setRenderTarget(savedRenderTarget)
     }
   }
@@ -494,6 +557,7 @@ class AtmosphereLUTGenerator {
     this.scatteringDensityMat.dispose()
     this.indirectIrradianceMat.dispose()
     this.multipleScatteringMat.dispose()
+    this.multipleScatteringAccumMat.dispose()
 
     this.mesh.geometry.dispose()
   }
@@ -526,7 +590,8 @@ class AtmosphereLUTGenerator {
       this.singleScatteringCombinedMat,
       this.scatteringDensityMat,
       this.indirectIrradianceMat,
-      this.multipleScatteringMat
+      this.multipleScatteringMat,
+      this.multipleScatteringAccumMat
     ]
     for (const mat of allMaterials) {
       this.setAtmosphereUniforms(mat, config)
