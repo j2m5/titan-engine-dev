@@ -618,6 +618,77 @@
   width: 20px;
 }
 
+.titan-toggle {
+  align-items: center;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 10px;
+  user-select: none;
+
+  .titan-toggle-input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .titan-toggle-track {
+    background: rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(2px);
+    border: 1px solid #f0f0f0;
+    box-sizing: border-box;
+    display: inline-block;
+    height: 18px;
+    width: 40px;
+    padding: 2px;
+    position: relative;
+  }
+
+  .titan-toggle-thumb {
+    background-color: #888888;
+    display: block;
+    height: 12px;
+    width: 12px;
+    transition: transform 0.2s ease-in-out, background-color 0.2s ease-in-out;
+  }
+
+  .titan-toggle-label {
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #f0f0f0;
+    font-size: 12px;
+  }
+
+  .titan-toggle-input:checked + .titan-toggle-track {
+    border-color: #bbbbbb;
+
+    .titan-toggle-thumb {
+      background-color: #bbbbbb;
+      transform: translateX(22px);
+    }
+  }
+
+  &:hover .titan-toggle-track {
+    border-color: #bbbbbb;
+  }
+
+  &.disabled {
+    cursor: not-allowed;
+
+    .titan-toggle-label {
+      color: #888888;
+    }
+
+    .titan-toggle-input:disabled + .titan-toggle-track {
+      border-color: #444444;
+
+      .titan-toggle-thumb {
+        background-color: #444444;
+      }
+    }
+  }
+}
+
 @keyframes toast-in {
   from {
     opacity: 0.8;

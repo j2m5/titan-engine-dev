@@ -139,3 +139,10 @@ export interface TitanSelectProps extends TitanFieldProps {
   placeholder?: string
   onChange(value: string): void
 }
+
+export interface TitanToggleProps {
+  checked: boolean
+  label?: string
+  disabled?: boolean
+  onChange(checked: boolean): void
+}
