@@ -35,6 +35,7 @@ class SceneManager {
   public constructor(private markerManager: MarkerManager) {}
 
   public initialize(): void {
+    this.orbitLines = []
     if (!scenarioContext.current) return
 
     const root = Actor.find(scenarioContext.rootId!)
