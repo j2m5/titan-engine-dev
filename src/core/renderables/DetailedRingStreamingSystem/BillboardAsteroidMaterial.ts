@@ -1,4 +1,5 @@
 import { ShaderMaterial, Color, ShaderChunk, Vector3 } from 'three'
+import { ringDustFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
 
 /**
  * BillboardAsteroidMaterial — шейдерный материал для L1 billboard-импосторов.
@@ -23,7 +24,17 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         uFade: { value: 1.0 },
         uMaxDistance: { value: 100.0 },
         /** Ambient свет — минимальная освещённость тёмной стороны */
-        uAmbient: { value: 0.08 }
+        uAmbient: { value: 0.08 },
+        // Пылевая дымка (см. чанк RingDust); uDustDensity = 0 — туман выключен
+        uDustColor: { value: new Color(0x9b968c) },
+        uDustDensity: { value: 0.0 },
+        uDustScaleHeight: { value: 1.0 },
+        uDustRingInner: { value: 0.0 },
+        uDustRingOuter: { value: 1e9 },
+        uDustCamRingPos: { value: new Vector3() },
+        uDustLightDirRing: { value: new Vector3(1, 0, 0) },
+        uDustAnglePower: { value: 2.0 },
+        uDustNearFade: { value: 1.0 }
       },
       vertexShader: /* glsl */ `
         ${ShaderChunk.common}
@@ -36,6 +47,7 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         varying float vDistanceFade;
         varying vec3 vLightDirView;
         varying float vInstanceSeed;
+        varying vec3 vRingPos;
 
         void main() {
           // Извлечь позицию и масштаб из instance matrix
@@ -44,6 +56,9 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
             instanceMatrix[3][1],
             instanceMatrix[3][2]
           );
+
+          // Ring-local позиция инстанса для модели пыли
+          vRingPos = instancePos;
 
           // Позиция инстанса в view space
           vec4 mvInstancePos = modelViewMatrix * vec4(instancePos, 1.0);
@@ -101,6 +116,10 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         varying float vDistanceFade;
         varying vec3 vLightDirView;
         varying float vInstanceSeed;
+        varying vec3 vRingPos;
+
+        ${ringDustUniforms}
+        ${ringDustFunctions}
 
         // Простой хеш для процедурного шума
         float hash(vec2 p) {
@@ -149,6 +168,8 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
           if (alpha < 0.01) discard;
 
           vec3 color = uColor * lighting;
+          // Аэроперспектива: дальние импосторы тонут в пылевой дымке
+          color = ringDustApplyFog(color, vRingPos);
           gl_FragColor = vec4(color, alpha);
         }
       `,
