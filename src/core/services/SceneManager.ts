@@ -7,10 +7,12 @@ import { Object3DVisitor } from '@/core/services/visitors/Object3DVisitor'
 import { Actor } from '@/core/models/Actor'
 import { Crosshair } from '@/core/renderables/utils/Crosshair'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
+import { OrbitLine } from '@/core/renderables/utils/OrbitLine'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { RenderableObject3D, ShouldRenderOrbitLine } from '@/core/renderables/types'
 import { scenarioContext } from '@/core/scenario/ScenarioContext'
 import { threeJS } from '@/core/graphic/ThreeJS'
+import { settingsStore } from '@/ui/mobx/SettingsStore'
 
 export function isAcceptable(object: unknown): object is Acceptable<IObject3DVisitor> {
   return (object as Acceptable<IObject3DVisitor>).accept !== undefined
@@ -28,6 +30,7 @@ class SceneManager {
   public crosshair: CSS2DObject = new Crosshair()
   private scene: Scene = threeJS.scene
   private buffer: Map<number, Object3D> = new Map()
+  private orbitLines: OrbitLine[] = []
 
   public constructor(private markerManager: MarkerManager) {}
 
@@ -53,7 +56,10 @@ class SceneManager {
 
       if (isAcceptable(object3D)) object3D.accept(visitor)
 
-      if (hasOrbit(object3D)) object3D.orbit.accept(visitor)
+      if (hasOrbit(object3D)) {
+        object3D.orbit.accept(visitor)
+        this.orbitLines.push(object3D.orbit)
+      }
 
       if (object3D instanceof DynamicNode && hasRenderable(object3D) && object3D.renderable !== null) {
         this.markerManager.add({
@@ -72,6 +78,10 @@ class SceneManager {
   }
 
   public update(delta?: number): void {
+    for (const line of this.orbitLines) {
+      line.visible = settingsStore.showOrbitLines
+    }
+
     this.scene.traverse((object: Object3D): void => object.updateObject(delta))
     this.markerManager.update()
   }
