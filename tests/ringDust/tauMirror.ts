@@ -17,7 +17,8 @@ import { Vector3 } from 'three'
  *   интервал внутреннего цилиндра (дыра кольца корректно вычитается);
  * - вертикальная экспонента интегрируется в замкнутой форме через нечётную
  *   первообразную F(u) = sign(u) * H * (1 - exp(-|u|/H));
- * - маска кромок — среднее из 2 тапов на интервал (0.3 / 0.7).
+ * - маска кромок сэмплируется в 4 тапах по квантилям экспоненциальной массы
+ *   [0.125, 0.375, 0.625, 0.875].
  */
 
 interface DustParams {
@@ -53,7 +54,7 @@ const radialMask = (r: number, p: DustParams): number => {
 
 /** Плотность пыли в точке (зеркало ringDustDensityAt) */
 const densityAt = (p: Vector3, params: DustParams): number =>
-  params.rho0 * radialMask(Math.hypot(p.x, p.z), params) * Math.exp(-Math.abs(p.y) / params.H)
+  params.rho0 * radialMask(Math.hypot(p.x, p.z), params) * Math.exp(-Math.abs(p.y) / Math.max(params.H, 1e-6))
 
 /** Гейт по углу луча к плоскости кольца (зеркало ringDustAngleGate) */
 const angleGate = (dir: Vector3, power: number): number =>

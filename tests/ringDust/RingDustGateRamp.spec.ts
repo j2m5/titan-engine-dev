@@ -1,5 +1,5 @@
 import { Vector3 } from 'three'
-import { angleGate, nearRamp, densityAt, tauMarch, tauRay } from './tauMirror'
+import { angleGate, nearRamp, densityAt, tauMarch } from './tauMirror'
 import type { DustParams } from './tauMirror'
 
 const params: DustParams = { rho0: 0.02, H: 0.5, rIn: 70, rOut: 140 }
