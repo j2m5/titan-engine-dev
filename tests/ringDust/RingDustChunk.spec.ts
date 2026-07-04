@@ -1,4 +1,4 @@
-import { ringDustFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
+import { ringDustFunctions, ringDustRaymarchFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
 import { AppShaderChunk } from '@/core/materials/shaders/lib/chunks'
 
 describe('RingDust GLSL chunk', () => {
@@ -43,6 +43,14 @@ describe('RingDust GLSL chunk', () => {
     // Маркер синхронизации живёт в докблоке модуля; сам GLSL обязан использовать
     // те же формулы, что tests/ringDust/tauMirror.ts (проверяется тестами точности)
     expect(chunkSource).toContain('ringDustTauRay')
+  })
+
+  it('composes the full set from the raymarch core (single definition per function)', () => {
+    // Полный набор обязан начинаться с ядра реймарша — защита от расхождения копий:
+    // каждая GLSL-функция определена ровно один раз, экспорты собираются композицией
+    expect(ringDustFunctions.startsWith(ringDustRaymarchFunctions)).toBe(true)
+    // Закрытая форма не утекает в подмножество для реймарша
+    expect(ringDustRaymarchFunctions).not.toContain('ringDustTauRay')
   })
 
   it('is registered in AppShaderChunk for #include resolution', () => {

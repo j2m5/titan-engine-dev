@@ -116,6 +116,9 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
 
           float tau = 0.0;
           float marched = 0.0;
+          // 64 — жёсткий потолок GLSL-цикла (граница обязана быть константой):
+          // uDustMaxSteps выше 64 молча обрезается. CPU-зеркало tauMarch потолка
+          // не имеет — при сверке держать steps <= 64.
           for (int i = 0; i < 64; i++) {
             if (float(i) >= steps) break;
             float s = (float(i) + jitter) * dt;
