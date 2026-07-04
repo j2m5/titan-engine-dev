@@ -23,11 +23,11 @@ describe('AsteroidRingSystem dust integration', () => {
     expect(dust).toBeDefined()
   })
 
-  it('калибрует плотность через целевой tau грейзинг-луча (спека: 1.5 / ширину кольца)', () => {
+  it('калибрует плотность через целевой tau грейзинг-луча (0.22 / ширину кольца)', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
     const u = (system as any).pool.billboardMaterial.uniforms
     const width = u.uDustRingOuter.value - u.uDustRingInner.value
-    expect(u.uDustDensity.value).toBeCloseTo(1.5 / width, 10)
+    expect(u.uDustDensity.value).toBeCloseTo(0.22 / width, 10)
   })
 
   it('передаёт гейт и рамп в материалы камней', () => {

@@ -14,16 +14,15 @@ const makeVolume = () =>
   })
 
 describe('RingDustVolume', () => {
-  it('bakes the proxy shell into ring-local space (XZ ring plane, Y normal)', () => {
+  it('прокси — охватывающая сфера радиуса outerRadius·padding (покрытие из любого ракурса)', () => {
     const volume = makeVolume()
     volume.geometry.computeBoundingBox()
     const box = volume.geometry.boundingBox!
-    // Полутолщина оболочки = DUST_SLAB_FACTOR(12) * H = 6.0 по Y
-    expect(box.max.y).toBeCloseTo(6.0, 1)
-    expect(box.min.y).toBeCloseTo(-6.0, 1)
-    // Радиальный запас: внешний радиус чуть больше кольца камней
-    expect(box.max.x).toBeGreaterThan(140)
-    expect(box.max.x).toBeLessThan(150)
+    // Сфера радиуса 140 * 1.05 = 147 по всем осям — охватывает кольцо целиком
+    for (const axis of ['x', 'y', 'z'] as const) {
+      expect(box.max[axis]).toBeCloseTo(147, 0)
+      expect(box.min[axis]).toBeCloseTo(-147, 0)
+    }
   })
 
   it('feeds config into material uniforms', () => {

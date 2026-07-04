@@ -1,15 +1,19 @@
-import { BackSide } from 'three'
+import { AdditiveBlending, BackSide } from 'three'
 import { RingDustRaymarchMaterial } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustRaymarchMaterial'
 
 describe('RingDustRaymarchMaterial', () => {
   const make = () => new RingDustRaymarchMaterial()
 
-  it('настроен как полупрозрачный backface-объём без записи глубины', () => {
+  it('настроен как аддитивное backface-гало: depthTest ON, depthWrite OFF', () => {
     const m = make()
     expect(m.side).toBe(BackSide)
     expect(m.transparent).toBe(true)
+    // depthWrite OFF — не блокирует другие прозрачные; depthTest ON (дефолт) —
+    // гало корректно перекрывается планетой (не просвечивает сквозь неё);
+    // аддитивный блендинг делает порядок прозрачных неважным
     expect(m.depthWrite).toBe(false)
     expect(m.depthTest).toBe(true)
+    expect(m.blending).toBe(AdditiveBlending)
   })
 
   it('несёт полный uniform-набор модели пыли + марш и диагностику', () => {

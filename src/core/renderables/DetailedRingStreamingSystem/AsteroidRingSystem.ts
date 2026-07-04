@@ -48,7 +48,11 @@ interface AsteroidRingConfig {
   dustColor: number
   /** Масштабная полутолщина пылевого слоя H в км */
   dustScaleHeightKm: number
-  /** Целевая оптическая толща грейзинг-луча через всё кольцо в средней плоскости */
+  /**
+   * Целевая оптическая толща грейзинг-луча через всё кольцо в средней плоскости.
+   * С аддитивным гало (см. RingDustRaymarchMaterial) задаёт пиковую интенсивность
+   * дымки; калибруется на ширину кольца → плотность масштабно-инвариантна.
+   */
   dustTauGrazing: number
   /** Дистанция полного проявления пыли в км (рамп ближней зоны) */
   dustNearFadeKm: number
@@ -77,7 +81,9 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   dustEnabled: true,
   dustColor: 0x9b968c,
   dustScaleHeightKm: 100,
-  dustTauGrazing: 1.5,
+  // Подобрано визуально владельцем на кольце Нептуна: плотность ≈ 0.02 three-units
+  // (0.22 / ширину кольца ~11) — едва заметное аддитивное гало
+  dustTauGrazing: 0.22,
   dustNearFadeKm: 2000,
   dustAnglePower: 2,
   dustMaxSteps: 16

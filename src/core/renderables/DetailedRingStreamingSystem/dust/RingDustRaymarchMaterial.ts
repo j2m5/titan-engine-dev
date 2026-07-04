@@ -1,21 +1,27 @@
-import { BackSide, Color, ShaderChunk, ShaderMaterial, Vector3 } from 'three'
+import { AdditiveBlending, BackSide, Color, ShaderChunk, ShaderMaterial, Vector3 } from 'three'
 import { ringDustRaymarchFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
 
 /**
- * RingDustRaymarchMaterial — полупрозрачная пылевая дымка кольца (реймарч).
+ * RingDustRaymarchMaterial — аддитивное пылевое гало кольца (реймарч).
  *
- * Рендерится на VolumetricRingGeometry (прокси-оболочка, BackSide): фрагмент
- * задаёт ТОЛЬКО направление луча, интервалы интегрирования находятся
+ * Рендерится на ОХВАТЫВАЮЩЕЙ прокси-сфере (BackSide, radius ≥ outerRadius):
+ * фрагмент задаёт ТОЛЬКО направление луча, интервалы интегрирования находятся
  * аналитически (внешний цилиндр минус дыра, обрезка по вертикальной оболочке
- * 12H) — невыпуклость прокси и лучи через дыру безопасны.
+ * 12H). Сфера гарантирует полное покрытие пикселей кольца из любого ракурса —
+ * тонкая шайба (v2.0) с ребра покрывала лишь узкую полосу и давала «брус» из
+ * собственных граней; сфера этого артефакта лишена.
+ *
+ * Блендинг АДДИТИВНЫЙ (порядок прозрачных не важен, гало не даёт «бруса»),
+ * depthWrite OFF (не блокирует другие прозрачные), depthTest ON: планета
+ * корректно перекрывает гало — дым не просвечивает сквозь неё. Гало над
+ * пустотой и 2D-текстурой кольца рисуется поверх (тест глубины проходит).
  *
  * Марш идёт только внутри пыльных интервалов (не жжём шаги на пустоте):
  * фиксированный бюджет шагов, IGN-джиттер против бандинга, early-exit по
  * насыщению. Плотность аналитическая (~5 ALU) — 3D-текстура не нужна; марш
  * выбран как точка расширения под будущие «клочья» (см. спеку v2).
  *
- * Модель плотности — общая с материалами камней (чанк RingDust): гарантирует
- * бесшовный стык тумана на камнях и дымки в пустом небе.
+ * Модель плотности — общая с материалами камней (чанк RingDust).
  *
  * CPU-зеркало цикла марша: tauMarch в tests/ringDust/tauMirror.ts —
  * менять строго синхронно.
@@ -144,16 +150,15 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
           }
 
           if (alpha < 0.003) discard;
+          // Аддитивный вклад: премультиплай альфой уже делает блендер
+          // (SrcAlpha, One), поэтому цвет отдаём как есть, интенсивность в alpha
           gl_FragColor = vec4(ringDustHaze(rayDir), alpha);
-
-          ${ShaderChunk.tonemapping_fragment}
-          ${ShaderChunk.colorspace_fragment}
         }
       `,
       side: BackSide,
       transparent: true,
       depthWrite: false,
-      depthTest: true
+      blending: AdditiveBlending
     })
   }
 }

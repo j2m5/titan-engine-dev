@@ -1,25 +1,19 @@
-import { Color, Mesh, Vector3 } from 'three'
-import { VolumetricRingGeometry } from '@/geometries/VolumetricRingGeometry'
+import { Color, Mesh, SphereGeometry, Vector3 } from 'three'
 import { RingDustRaymarchMaterial } from './RingDustRaymarchMaterial'
 
 /**
- * Полутолщина прокси-оболочки в единицах H.
- * Определяет только ПОКРЫТИЕ пикселей (какие фрагменты запускают шейдер):
- * интеграл в шейдере аналитический и от толщины оболочки не зависит.
- *
- * ВАЖНО: на грейзинг-лучах вдоль кольца хвост экспоненты усиливается длиной
- * пути (~120 юнитов), поэтому 6H мало: на кромке оболочки оставалось ~4%
- * альфы — видимый обрез ("грани коробки", скрины n1-n3). При 12H остаточная
- * альфа на кромке ~0.01% — невидима (регрессия покрытия в
- * RingDustTauAccuracy.spec.ts).
+ * Множитель вертикальной оболочки в единицах H — константа обрезки марша в
+ * шейдере (|y| <= 12H, за ней плотность пренебрежима). С прокси-сферой на
+ * геометрию больше не влияет, но остаётся единым источником этого числа для
+ * шейдера и тестов точности (RingDustTauAccuracy.spec.ts).
  */
 const DUST_SLAB_FACTOR = 12
 
-/** renderOrder объёма пыли: поверх 2D-текстуры кольца (0) и атмосферы */
+/** renderOrder гало пыли: поверх 2D-текстуры кольца (0) и атмосферы */
 const DUST_RENDER_ORDER = 2
 
-/** Радиальный запас прокси-оболочки относительно кольца камней */
-const RADIAL_PADDING = 1.03
+/** Радиальный запас охватывающей сферы относительно внешнего радиуса кольца */
+const RADIAL_PADDING = 1.05
 
 interface RingDustVolumeConfig {
   /** Внутренний радиус кольца камней, three-units */
@@ -41,24 +35,21 @@ interface RingDustVolumeConfig {
 }
 
 /**
- * RingDustVolume — прокси-объём пылевой дымки кольца.
+ * RingDustVolume — прокси-гало пылевой дымки кольца.
  *
- * Оболочка VolumetricRingGeometry чуть толще и шире слоя камней; материал
- * рендерит backface'ы, интегрируя дымку вдоль луча камера→фрагмент.
- * Поворот из плоскости XY (геометрия) в плоскость кольца XZ запечён в вершины,
- * поэтому mesh-local space совпадает с ring-local space родительской системы.
+ * Прокси — ОХВАТЫВАЮЩАЯ СФЕРА радиуса outerRadius·padding, центрированная в
+ * центре кольца; материал рендерит backface'ы, интегрируя дымку вдоль луча
+ * камера→направление. Сфера покрывает проекцию кольца из любого ракурса
+ * (снаружи — диск сферы, изнутри — весь экран), поэтому гало не ограничено
+ * силуэтом прокси, как было с тонкой шайбой. Сфера симметрична — поворот в
+ * ring-local не нужен, mesh-local (XZ-плоскость, нормаль Y) совпадает с
+ * ring-local space родительской системы.
  */
 class RingDustVolume extends Mesh {
   public readonly dustMaterial: RingDustRaymarchMaterial
 
   public constructor(config: RingDustVolumeConfig) {
-    const geometry = new VolumetricRingGeometry(
-      config.innerRadius / RADIAL_PADDING,
-      config.outerRadius * RADIAL_PADDING,
-      128,
-      config.dustScaleHeight * DUST_SLAB_FACTOR * 2
-    )
-    geometry.rotateX(Math.PI / 2)
+    const geometry = new SphereGeometry(config.outerRadius * RADIAL_PADDING, 32, 16)
 
     const material = new RingDustRaymarchMaterial()
     super(geometry, material)
@@ -78,7 +69,7 @@ class RingDustVolume extends Mesh {
     // у концентрических объектов, порядок фиксируется явно
     this.renderOrder = DUST_RENDER_ORDER
 
-    // Оболочка окружает камеру при полёте внутри кольца — сферой отсечения не отсечь
+    // Прокси окружает камеру при полёте внутри кольца — bounding-сферой не отсечь
     this.frustumCulled = false
     this.name = 'RingDustVolume'
   }
