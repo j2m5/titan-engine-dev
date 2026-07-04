@@ -1,12 +1,15 @@
-import { Group, Matrix4, PerspectiveCamera, Vector3 } from 'three'
+import { Color, Group, Matrix4, PerspectiveCamera, Vector3 } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { threeJS } from '@/core/graphic/ThreeJS'
+import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
 import { SectorGrid, SectorGridConfig } from './SectorGrid'
 import { AsteroidGenerator, GeneratorConfig } from './AsteroidGenerator'
 import { InstancePool, PoolLayerConfig } from './InstancePool'
 import { SectorManager, LODThresholds } from './SectorManager'
+import { RingDustVolume } from './dust/RingDustVolume'
+import { installRingDustDebug, type RockDustUniforms } from './dust/RingDustDebug'
 
 /**
  * Конфигурация системы астероидного кольца
@@ -39,6 +42,20 @@ interface AsteroidRingConfig {
     l0: number
     l1: number
   }
+  /** Включена ли пылевая дымка */
+  dustEnabled: boolean
+  /** Цвет дымки (hex) */
+  dustColor: number
+  /** Масштабная полутолщина пылевого слоя H в км */
+  dustScaleHeightKm: number
+  /** Целевая оптическая толща грейзинг-луча через всё кольцо в средней плоскости */
+  dustTauGrazing: number
+  /** Дистанция полного проявления пыли в км (рамп ближней зоны) */
+  dustNearFadeKm: number
+  /** Крутизна гейта по углу обзора */
+  dustAnglePower: number
+  /** Бюджет шагов марша объёма */
+  dustMaxSteps: number
 }
 
 /**
@@ -56,7 +73,14 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   lodThresholdsKm: {
     l0: 3000,
     l1: 12000
-  }
+  },
+  dustEnabled: true,
+  dustColor: 0x9b968c,
+  dustScaleHeightKm: 100,
+  dustTauGrazing: 1.5,
+  dustNearFadeKm: 2000,
+  dustAnglePower: 2,
+  dustMaxSteps: 16
 }
 
 /**
@@ -80,10 +104,14 @@ class AsteroidRingSystem extends Group {
 
   private readonly config: AsteroidRingConfig
 
+  private dustVolume: RingDustVolume | null = null
+
   // Reusable objects
   private readonly _localCamPos = new Vector3()
   private readonly _worldPos = new Vector3()
   private readonly _viewProjMatrix = new Matrix4()
+  private readonly _lightWorldPos = new Vector3()
+  private readonly _localLightDir = new Vector3()
 
   /** Флаг: система была деактивирована (parent invisible) */
   private wasDeactivated = false
@@ -155,6 +183,39 @@ class AsteroidRingSystem extends Group {
     }
     this.manager = new SectorManager(this.sectorGrid, this.generator, this.pool, thresholds)
 
+    // --- RingDustVolume (пылевая дымка) ---
+    if (cfg.dustEnabled) {
+      const dustScaleHeight = toThreeJSUnits(cfg.dustScaleHeightKm)
+      // Калибровка спеки: tau грейзинг-луча через всё кольцо в средней плоскости = dustTauGrazing
+      const dustDensity = cfg.dustTauGrazing / (outerRadius - innerRadius)
+      const dustNearFade = toThreeJSUnits(cfg.dustNearFadeKm)
+
+      this.dustVolume = new RingDustVolume({
+        innerRadius,
+        outerRadius,
+        dustScaleHeight,
+        dustDensity,
+        dustColor: new Color(cfg.dustColor),
+        anglePower: cfg.dustAnglePower,
+        nearFade: dustNearFade,
+        maxSteps: cfg.dustMaxSteps
+      })
+      this.add(this.dustVolume)
+
+      this.__applyDustStaticUniforms(dustScaleHeight, dustDensity, dustNearFade, innerRadius, outerRadius)
+
+      // Диагностический хендл (dev-only)
+      if (import.meta.env.DEV) {
+        const l0Material = this.pool.geometryMesh.material as InstancedAsteroidMaterial
+        installRingDustDebug({
+          volume: this.dustVolume,
+          // uniforms материалов типизированы как обобщённый bag three.js (IUniform<any>);
+          // структура полей гарантирована конструкторами материалов (см. __applyDustStaticUniforms)
+          rockUniforms: [l0Material.uniforms, this.pool.billboardMaterial.uniforms] as unknown as RockDustUniforms[]
+        })
+      }
+    }
+
     // --- Поворот ---
     this.rotateX(degToRad(90))
 
@@ -195,6 +256,21 @@ class AsteroidRingSystem extends Group {
       this._localCamPos.x * this._localCamPos.x + this._localCamPos.z * this._localCamPos.z
     )
 
+    // Пер-кадровые юниформы пыли: камера и направление на звезду в ring-local space
+    if (this.dustVolume) {
+      this._localLightDir.copy(this._lightWorldPos)
+      this.worldToLocal(this._localLightDir)
+      this._localLightDir.normalize()
+
+      this.dustVolume.updatePerFrame(this._localCamPos, this._localLightDir)
+
+      const l0Material = this.pool.geometryMesh.material as InstancedAsteroidMaterial
+      l0Material.uniforms.uDustCamRingPos.value.copy(this._localCamPos)
+      l0Material.uniforms.uDustLightDirRing.value.copy(this._localLightDir)
+      this.pool.billboardMaterial.uniforms.uDustCamRingPos.value.copy(this._localCamPos)
+      this.pool.billboardMaterial.uniforms.uDustLightDirRing.value.copy(this._localLightDir)
+    }
+
     // View-projection matrix для frustum culling
     this._viewProjMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
 
@@ -210,11 +286,35 @@ class AsteroidRingSystem extends Group {
   }
 
   /**
+   * Записать статические юниформы пыли в материалы камней (L0 + L1).
+   * Модель плотности едина для всех трёх материалов — см. GLSL-чанк RingDust.
+   */
+  private __applyDustStaticUniforms(
+    scaleHeight: number,
+    density: number,
+    nearFade: number,
+    inner: number,
+    outer: number
+  ): void {
+    const l0Material = this.pool.geometryMesh.material as InstancedAsteroidMaterial
+    for (const uniforms of [l0Material.uniforms, this.pool.billboardMaterial.uniforms]) {
+      uniforms.uDustColor.value.set(this.config.dustColor)
+      uniforms.uDustDensity.value = density
+      uniforms.uDustScaleHeight.value = scaleHeight
+      uniforms.uDustRingInner.value = inner
+      uniforms.uDustRingOuter.value = outer
+      uniforms.uDustAnglePower.value = this.config.dustAnglePower
+      uniforms.uDustNearFade.value = nearFade
+    }
+  }
+
+  /**
    * Установить позицию источника света (звезды) в world space.
-   * Влияет на освещение billboard-импосторов (L1).
+   * Влияет на освещение billboard-импосторов (L1) и на подсветку пылевой дымки.
    * По умолчанию [0, 0, 0] — центр системы.
    */
   public setLightPosition(x: number, y: number, z: number): void {
+    this._lightWorldPos.set(x, y, z)
     this.pool.billboardMaterial.uniforms.uLightPosition.value.set(x, y, z)
   }
 
