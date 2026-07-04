@@ -132,22 +132,15 @@ describe('RingDust analytic tau vs ground truth', () => {
   })
 })
 
-// Регрессия "Покрытие прокси-оболочки" (артефакт n1/n2/n3, грани коробки на
-// силуэте) отложена до SDD Task 3 (RingDustVolume + renderOrder): она
-// импортирует DUST_SLAB_FACTOR из RingDustVolume.ts, которого в задаче 1 ещё
-// не существует (Vite резолвит даже динамический import() на этапе
-// трансформации файла, поэтому просто it.skip не спасает — весь файл не
-// собирается). Восстановить тест в Task 3 сразу после создания файла:
-//
-// describe('Покрытие прокси-оболочки (регрессия "граней коробки")', () => {
-//   it('alpha на границе оболочки невидима для худшего грейзинг-луча', async () => {
-//     const { DUST_SLAB_FACTOR } = await import('@/core/renderables/DetailedRingStreamingSystem/RingDustVolume')
-//     const boundaryY = DUST_SLAB_FACTOR * params.H
-//     const half = Math.sqrt(params.rOut * params.rOut - params.rIn * params.rIn)
-//     const origin = new Vector3(params.rIn, boundaryY, -half)
-//     const dir = new Vector3(0, 0, 1)
-//     const { tau } = tauRay(origin, dir, 1e9, params)
-//     const alpha = 1 - Math.exp(-tau)
-//     expect(alpha).toBeLessThan(0.005)
-//   })
-// })
+describe('Покрытие прокси-оболочки (регрессия "граней коробки")', () => {
+  it('alpha на границе оболочки невидима для худшего грейзинг-луча', async () => {
+    const { DUST_SLAB_FACTOR } = await import('@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume')
+    const boundaryY = DUST_SLAB_FACTOR * params.H
+    const half = Math.sqrt(params.rOut * params.rOut - params.rIn * params.rIn)
+    const origin = new Vector3(params.rIn, boundaryY, -half)
+    const dir = new Vector3(0, 0, 1)
+    const { tau } = tauRay(origin, dir, 1e9, params)
+    const alpha = 1 - Math.exp(-tau)
+    expect(alpha).toBeLessThan(0.005)
+  })
+})
