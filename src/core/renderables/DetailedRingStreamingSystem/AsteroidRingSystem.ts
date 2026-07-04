@@ -193,6 +193,10 @@ class AsteroidRingSystem extends Group {
       // Калибровка спеки: tau грейзинг-луча через всё кольцо в средней плоскости = dustTauGrazing
       const dustDensity = cfg.dustTauGrazing / (outerRadius - innerRadius)
       const dustNearFade = toThreeJSUnits(cfg.dustNearFadeKm)
+      // Радиус планеты для тени: тот же источник, что у 2D-кольца (RingShader) —
+      // начало ring-local = центр планеты. 0 при отсутствии → тень выключена
+      const planetRadiusKm = this.model.parent?.physicalObject?.getAttribute('radius', 0) ?? 0
+      const dustPlanetRadius = toThreeJSUnits(planetRadiusKm)
 
       this.dustVolume = new RingDustVolume({
         innerRadius,
@@ -202,11 +206,12 @@ class AsteroidRingSystem extends Group {
         dustColor: new Color(cfg.dustColor),
         anglePower: cfg.dustAnglePower,
         nearFade: dustNearFade,
-        maxSteps: cfg.dustMaxSteps
+        maxSteps: cfg.dustMaxSteps,
+        planetRadius: dustPlanetRadius
       })
       this.add(this.dustVolume)
 
-      this.__applyDustStaticUniforms(dustScaleHeight, dustDensity, dustNearFade, innerRadius, outerRadius)
+      this.__applyDustStaticUniforms(dustScaleHeight, dustDensity, dustNearFade, innerRadius, outerRadius, dustPlanetRadius)
 
       // Диагностический хендл (dev-only)
       if (import.meta.env.DEV) {
@@ -298,7 +303,8 @@ class AsteroidRingSystem extends Group {
     density: number,
     nearFade: number,
     inner: number,
-    outer: number
+    outer: number,
+    planetRadius: number
   ): void {
     const l0Material = this.pool.geometryMesh.material as InstancedAsteroidMaterial
     for (const uniforms of [l0Material.uniforms, this.pool.billboardMaterial.uniforms]) {
@@ -309,6 +315,7 @@ class AsteroidRingSystem extends Group {
       uniforms.uDustRingOuter.value = outer
       uniforms.uDustAnglePower.value = this.config.dustAnglePower
       uniforms.uDustNearFade.value = nearFade
+      uniforms.uDustPlanetRadius.value = planetRadius
     }
   }
 

@@ -10,7 +10,8 @@ const makeVolume = () =>
     dustColor: new Color(0x9b968c),
     anglePower: 2,
     nearFade: 20,
-    maxSteps: 16
+    maxSteps: 16,
+    planetRadius: 12
   })
 
 describe('RingDustVolume', () => {
@@ -51,10 +52,11 @@ describe('RingDustVolume', () => {
     expect(makeVolume().renderOrder).toBe(2)
   })
 
-  it('передаёт гейт/рамп/бюджет шагов в uniforms материала', () => {
+  it('передаёт гейт/рамп/бюджет шагов/радиус планеты в uniforms материала', () => {
     const u = makeVolume().dustMaterial.uniforms
     expect(u.uDustAnglePower.value).toBe(2)
     expect(u.uDustNearFade.value).toBe(20)
     expect(u.uDustMaxSteps.value).toBe(16)
+    expect(u.uDustPlanetRadius.value).toBe(12)
   })
 })

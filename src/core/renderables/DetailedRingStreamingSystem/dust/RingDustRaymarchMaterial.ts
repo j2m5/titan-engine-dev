@@ -43,6 +43,8 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
         uDustNearFade: { value: 20.0 },
         /** Бюджет шагов марша */
         uDustMaxSteps: { value: 16 },
+        /** Радиус планеты в ring-local three-units (0 — тень выключена) */
+        uDustPlanetRadius: { value: 0.0 },
         /** Диагностика: 0 выкл, 1 τ, 2 alpha, 3 гейт, 4 теплокарта шагов */
         uDustDebugMode: { value: 0 }
       },
@@ -121,6 +123,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
           float jitter = fract(52.9829189 * fract(0.06711056 * gl_FragCoord.x + 0.00583715 * gl_FragCoord.y));
 
           float tau = 0.0;
+          float litTau = 0.0; // τ, взвешенный тенью планеты (для цвета, не для alpha)
           float marched = 0.0;
           // 64 — жёсткий потолок GLSL-цикла (граница обязана быть константой):
           // uDustMaxSteps выше 64 молча обрезается. CPU-зеркало tauMarch потолка
@@ -130,13 +133,17 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
             float s = (float(i) + jitter) * dt;
             float t = s < lenA ? segA.x + s : segB.x + (s - lenA);
             vec3 p = uDustCamRingPos + rayDir * t;
-            tau += ringDustDensityAt(p) * ringDustNearRamp(t) * dt;
+            float contrib = ringDustDensityAt(p) * ringDustNearRamp(t) * dt;
+            tau += contrib;
+            litTau += contrib * ringDustPlanetShadow(p);
             marched = float(i) + 1.0;
             // early-exit: насыщение непрозрачности
             if (1.0 - exp(-tau) > 0.995) break;
           }
 
           float alpha = (1.0 - exp(-tau)) * gate;
+          // Освещённая доля τ: средняя тень планеты, взвешенная плотностью вдоль луча
+          float litFrac = tau > 0.0 ? litTau / tau : 1.0;
 
           if (uDustDebugMode != 0) {
             // Диагностика рисуется непрозрачно, поверх всего содержимого объёма
@@ -151,8 +158,9 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
 
           if (alpha < 0.003) discard;
           // Аддитивный вклад: премультиплай альфой уже делает блендер
-          // (SrcAlpha, One), поэтому цвет отдаём как есть, интенсивность в alpha
-          gl_FragColor = vec4(ringDustHaze(rayDir), alpha);
+          // (SrcAlpha, One), поэтому цвет отдаём как есть, интенсивность в alpha.
+          // Тень планеты затемняет цвет (litFrac), но не непрозрачность (alpha)
+          gl_FragColor = vec4(ringDustHaze(rayDir) * litFrac, alpha);
         }
       `,
       side: BackSide,

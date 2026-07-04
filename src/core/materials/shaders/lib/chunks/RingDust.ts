@@ -37,6 +37,7 @@ export const ringDustUniforms = `
   uniform vec3 uDustLightDirRing;
   uniform float uDustAnglePower;
   uniform float uDustNearFade;
+  uniform float uDustPlanetRadius;
 `
 
 // Общее ядро модели: плотность, гейт, рамп, интервалы, цвет дымки.
@@ -86,6 +87,21 @@ const ringDustCoreGlsl = `
   vec3 ringDustHaze(vec3 rayDir) {
     float sun = pow(max(dot(rayDir, uDustLightDirRing), 0.0), 4.0);
     return uDustColor * (0.75 + 0.45 * sun);
+  }
+
+  // Тень планеты на пыль: аналитический теневой цилиндр вдоль направления на
+  // звезду. uDustLightDirRing — от центра планеты (= начало ring-local) к звезде,
+  // планета в начале координат. Зеркалит getShadowFromSphere из RingShaderTemplate,
+  // чтобы тень пыли совпадала с тенью 2D-кольца; мягкая кромка полутени вместо
+  // жёсткой. Возвращает множитель яркости: 0.04 в умбре → 1.0 вне тени.
+  float ringDustPlanetShadow(vec3 p) {
+    if (uDustPlanetRadius <= 0.0) return 1.0;
+    float pDotS = dot(p, uDustLightDirRing);
+    if (pDotS >= 0.0) return 1.0; // солнечная сторона — не в тени
+    float perp = sqrt(max(dot(p, p) - pDotS * pDotS, 0.0));
+    float penumbra = uDustPlanetRadius * 0.08;
+    float shade = smoothstep(uDustPlanetRadius, uDustPlanetRadius + penumbra, perp);
+    return mix(0.04, 1.0, shade);
   }
 `
 
@@ -191,7 +207,9 @@ const ringDustClosedFormGlsl = `
     float tau = ringDustTauRay(uDustCamRingPos, rayDir, dist, span);
     if (tau <= 0.0) return baseColor;
     float fogAmount = (1.0 - exp(-tau)) * ringDustAngleGate(rayDir) * ringDustNearRamp(dist);
-    return mix(baseColor, ringDustHaze(rayDir), fogAmount);
+    // Тень планеты затемняет дымку в позиции камня (совпадает с тенью 2D-кольца)
+    vec3 haze = ringDustHaze(rayDir) * ringDustPlanetShadow(fragRingPos);
+    return mix(baseColor, haze, fogAmount);
   }
 `
 

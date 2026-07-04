@@ -32,6 +32,8 @@ interface RingDustVolumeConfig {
   nearFade: number
   /** Бюджет шагов марша */
   maxSteps: number
+  /** Радиус планеты для тени, three-units (0 — тень выключена) */
+  planetRadius: number
 }
 
 /**
@@ -63,6 +65,7 @@ class RingDustVolume extends Mesh {
     this.dustMaterial.uniforms.uDustAnglePower.value = config.anglePower
     this.dustMaterial.uniforms.uDustNearFade.value = config.nearFade
     this.dustMaterial.uniforms.uDustMaxSteps.value = config.maxSteps
+    this.dustMaterial.uniforms.uDustPlanetRadius.value = config.planetRadius
 
     // Политика сортировки прозрачных (спека): объём рисуется поверх
     // 2D-текстуры кольца и атмосферы — дистанционная сортировка даёт tie

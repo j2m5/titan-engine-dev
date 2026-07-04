@@ -21,7 +21,7 @@ describe('RingDustRaymarchMaterial', () => {
     for (const name of [
       'uDustColor', 'uDustDensity', 'uDustScaleHeight', 'uDustRingInner', 'uDustRingOuter',
       'uDustCamRingPos', 'uDustLightDirRing', 'uDustAnglePower', 'uDustNearFade',
-      'uDustMaxSteps', 'uDustDebugMode'
+      'uDustPlanetRadius', 'uDustMaxSteps', 'uDustDebugMode'
     ]) {
       expect(u[name], name).toBeDefined()
     }
@@ -41,6 +41,9 @@ describe('RingDustRaymarchMaterial', () => {
     // гейт по углу и рамп
     expect(fs).toContain('ringDustAngleGate')
     expect(fs).toContain('ringDustNearRamp')
+    // тень планеты пошагово (затемняет цвет, не alpha)
+    expect(fs).toContain('ringDustPlanetShadow')
+    expect(fs).toContain('litTau')
     // диагностические режимы
     expect(fs).toContain('uDustDebugMode')
   })

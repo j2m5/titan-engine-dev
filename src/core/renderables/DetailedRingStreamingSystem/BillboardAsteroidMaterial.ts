@@ -34,7 +34,8 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         uDustCamRingPos: { value: new Vector3() },
         uDustLightDirRing: { value: new Vector3(1, 0, 0) },
         uDustAnglePower: { value: 2.0 },
-        uDustNearFade: { value: 1.0 }
+        uDustNearFade: { value: 1.0 },
+        uDustPlanetRadius: { value: 0.0 }
       },
       vertexShader: /* glsl */ `
         ${ShaderChunk.common}

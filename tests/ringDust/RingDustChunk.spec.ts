@@ -12,7 +12,8 @@ describe('RingDust GLSL chunk', () => {
       'uDustCamRingPos',
       'uDustLightDirRing',
       'uDustAnglePower',
-      'uDustNearFade'
+      'uDustNearFade',
+      'uDustPlanetRadius'
     ]
     for (const name of names) {
       expect(ringDustUniforms).toContain(name)
@@ -31,11 +32,17 @@ describe('RingDust GLSL chunk', () => {
       'ringDustApplyFog',
       'ringDustDensityAt',
       'ringDustAngleGate',
-      'ringDustNearRamp'
+      'ringDustNearRamp',
+      'ringDustPlanetShadow'
     ]
     for (const fn of fns) {
       expect(ringDustFunctions).toContain(fn)
     }
+  })
+
+  it('exposes ringDustPlanetShadow in the raymarch core (shared by volume and rocks)', () => {
+    // Тень планеты живёт в ядре → доступна и маршу объёма, и аэроперспективе камней
+    expect(ringDustRaymarchFunctions).toContain('ringDustPlanetShadow')
   })
 
   it('points to the CPU mirror the GLSL must stay in sync with', () => {

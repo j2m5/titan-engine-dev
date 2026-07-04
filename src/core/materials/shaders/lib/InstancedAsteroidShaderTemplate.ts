@@ -21,7 +21,8 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uDustCamRingPos: new Uniform(new Vector3()),
     uDustLightDirRing: new Uniform(new Vector3(1, 0, 0)),
     uDustAnglePower: new Uniform(2),
-    uDustNearFade: new Uniform(1)
+    uDustNearFade: new Uniform(1),
+    uDustPlanetRadius: new Uniform(0)
   },
   vertexShader: `
     ${ShaderChunk['common']}
