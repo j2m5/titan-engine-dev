@@ -80,11 +80,9 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   },
   dustEnabled: true,
   dustColor: 0x9b968c,
-  dustScaleHeightKm: 100,
-  // Подобрано визуально владельцем на кольце Нептуна: плотность ≈ 0.02 three-units
-  // (0.22 / ширину кольца ~11) — едва заметное аддитивное гало
-  dustTauGrazing: 0.22,
-  dustNearFadeKm: 2000,
+  dustScaleHeightKm: 200,
+  dustTauGrazing: 0.52,
+  dustNearFadeKm: 3000,
   dustAnglePower: 2,
   dustMaxSteps: 16
 }
