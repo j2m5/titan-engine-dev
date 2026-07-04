@@ -1,5 +1,5 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
-import { ShaderChunk, Uniform, Vector3 } from 'three'
+import { ShaderChunk, Uniform, Vector3, Color } from 'three'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 export const InstancedAsteroidShaderTemplate: ShaderProps = {
@@ -10,7 +10,18 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     nightMap: new Uniform(null),
     bumpScale: new Uniform(0),
     minDistance: new Uniform(toThreeJSUnits(100)),
-    maxDistance: new Uniform(toThreeJSUnits(5000))
+    maxDistance: new Uniform(toThreeJSUnits(5000)),
+    // Пылевая дымка (см. чанк RingDust). uDustDensity = 0 — туман выключен,
+    // пока AsteroidRingSystem явно не сконфигурирует пыль.
+    uDustColor: new Uniform(new Color(0x8fa4ba)),
+    uDustDensity: new Uniform(0),
+    uDustScaleHeight: new Uniform(1),
+    uDustRingInner: new Uniform(0),
+    uDustRingOuter: new Uniform(1e9),
+    uDustCamRingPos: new Uniform(new Vector3()),
+    uDustLightDirRing: new Uniform(new Vector3(1, 0, 0)),
+    uDustAnglePower: new Uniform(2),
+    uDustNearFade: new Uniform(1)
   },
   vertexShader: `
     ${ShaderChunk['common']}
@@ -22,12 +33,16 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     varying vec3 vNormal;
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
+    varying vec3 vRingPos;
 
     void main() {
       vec4 worldPosition = instanceMatrix * vec4(position, 1.0);
       vec4 mvPosition = modelViewMatrix * worldPosition;
 
       gl_Position = projectionMatrix * mvPosition;
+
+      // Ring-local позиция фрагмента для модели пыли
+      vRingPos = worldPosition.xyz;
 
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
       mat3 instanceNormalMatrix = mat3(instanceMatrix);
@@ -57,8 +72,11 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     varying vec3 vNormal;
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
+    varying vec3 vRingPos;
 
     #include <bumpFunctions>
+    #include <ringDustUniforms>
+    #include <ringDustFunctions>
 
     void main() {
       ${ShaderChunk['logdepthbuf_fragment']}
@@ -82,6 +100,9 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       //if (fade <= 0.0) discard;
 
       vec3 finalColor = mix(night, day, lightIntensity);
+
+      // Аэроперспектива: камни тонут в пылевой дымке с расстоянием
+      finalColor = ringDustApplyFog(finalColor, vRingPos);
 
       gl_FragColor = vec4(finalColor, 1.0);
 
