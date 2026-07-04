@@ -5,7 +5,7 @@
  * между туманом на камнях и объёмной дымкой):
  * - InstancedAsteroidShaderTemplate (L0) — через #include <ringDustUniforms/ringDustFunctions>
  * - BillboardAsteroidMaterial (L1) — интерполяцией строк
- * - RingDustMaterial (объём дымки) — интерполяцией строк
+ * - RingDustRaymarchMaterial (объём дымки) — интерполяцией строк
  *
  * Все координаты — в ring-local space системы кольца: плоскость кольца XZ, нормаль Y.
  *
@@ -185,5 +185,55 @@ export const ringDustFunctions = `
     if (tau <= 0.0) return baseColor;
     float fogAmount = (1.0 - exp(-tau)) * ringDustAngleGate(rayDir) * ringDustNearRamp(dist);
     return mix(baseColor, ringDustHaze(rayDir), fogAmount);
+  }
+`
+
+// Подмножество функций для реймарша объёма: плотность, гейт, рамп, цвет, интервалы.
+// Исключает закрытую форму (ringDustTauRay и зависимые).
+export const ringDustRaymarchFunctions = `
+  // Маска кромок кольца
+  float ringDustRadialMask(float r) {
+    float edge = (uDustRingOuter - uDustRingInner) * 0.12;
+    return smoothstep(uDustRingInner, uDustRingInner + edge, r)
+         * (1.0 - smoothstep(uDustRingOuter - edge, uDustRingOuter, r));
+  }
+
+  // Плотность пыли в точке ring-local space (сэмплируется маршем объёма)
+  float ringDustDensityAt(vec3 p) {
+    float safeH = max(uDustScaleHeight, 1e-6);
+    return uDustDensity * ringDustRadialMask(length(p.xz)) * exp(-abs(p.y) / safeH);
+  }
+
+  // Гейт по углу луча к плоскости кольца: 1 на скользящем, строго 0 при 90°.
+  // Нефизичный, осознанный: лечит «тусклую пелену сверху» (см. спеку v2)
+  float ringDustAngleGate(vec3 dir) {
+    return pow(max(1.0 - abs(dir.y), 0.0), uDustAnglePower);
+  }
+
+  // Рамп ближней дистанции: вблизи камеры пыль не проявляется
+  float ringDustNearRamp(float t) {
+    return smoothstep(0.0, max(uDustNearFade, 1e-6), t);
+  }
+
+  // Интервал t, где луч (в проекции XZ) внутри цилиндра радиуса R.
+  // Пустой интервал кодируется как vec2(1.0, 0.0)
+  vec2 ringDustCircleInterval(vec3 o, vec3 d, float R) {
+    float a = dot(d.xz, d.xz);
+    if (a < 1e-12) {
+      // Вертикальный луч: внутри цилиндра целиком либо никогда
+      return length(o.xz) <= R ? vec2(-1.0e9, 1.0e9) : vec2(1.0, 0.0);
+    }
+    float b = dot(o.xz, d.xz);
+    float c = dot(o.xz, o.xz) - R * R;
+    float disc = b * b - a * c;
+    if (disc <= 0.0) return vec2(1.0, 0.0);
+    float sq = sqrt(disc);
+    return vec2((-b - sq) / a, (-b + sq) / a);
+  }
+
+  // Цвет дымки: базовый + мягкий forward-scattering буст в сторону звезды
+  vec3 ringDustHaze(vec3 rayDir) {
+    float sun = pow(max(dot(rayDir, uDustLightDirRing), 0.0), 4.0);
+    return uDustColor * (0.75 + 0.45 * sun);
   }
 `
