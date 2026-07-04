@@ -13,7 +13,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     maxDistance: new Uniform(toThreeJSUnits(5000)),
     // Пылевая дымка (см. чанк RingDust). uDustDensity = 0 — туман выключен,
     // пока AsteroidRingSystem явно не сконфигурирует пыль.
-    uDustColor: new Uniform(new Color(0x8fa4ba)),
+    uDustColor: new Uniform(new Color(0x9b968c)),
     uDustDensity: new Uniform(0),
     uDustScaleHeight: new Uniform(1),
     uDustRingInner: new Uniform(0),

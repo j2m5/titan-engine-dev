@@ -35,7 +35,7 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       bumpScale: new Uniform(10),
       minDistance: new Uniform(toThreeJSUnits(100)),
       maxDistance: new Uniform(toThreeJSUnits(5000)),
-      uDustColor: new Uniform(new Color(0x8fa4ba)),
+      uDustColor: new Uniform(new Color(0x9b968c)),
       uDustDensity: new Uniform(0),
       uDustScaleHeight: new Uniform(1),
       uDustRingInner: new Uniform(0),

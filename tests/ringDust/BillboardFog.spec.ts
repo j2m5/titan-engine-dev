@@ -25,9 +25,9 @@ describe('BillboardAsteroidMaterial dust fog (L1)', () => {
     expect(material.vertexShader).toContain('vRingPos = instancePos')
   })
 
-  it('несёт v2-uniforms гейта и рампа', () => {
+  it('несёт v2-uniforms гейта и рампа с дефолтами спеки', () => {
     const u = new BillboardAsteroidMaterial().uniforms
-    expect(u.uDustAnglePower).toBeDefined()
-    expect(u.uDustNearFade).toBeDefined()
+    expect(u.uDustAnglePower.value).toBe(2)
+    expect(u.uDustNearFade.value).toBe(1)
   })
 })
