@@ -6,10 +6,25 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 interface InstancedAsteroidUniforms {
   lightPosition: Vector3
-  diffuseMap: Texture | null
   bumpMap: Texture | null
-  nightMap: Texture | null
   bumpScale: number
+  uRockColorC: Color
+  uRockColorS: Color
+  uRockColorM: Color
+  uRockTypeT1: number
+  uRockTypeT2: number
+  uTintStrength: number
+  uCraterFreq: number
+  uCraterDensity: number
+  uCraterRadius: number
+  uCraterDepth: number
+  uCraterOctaves: number
+  uCrackWidth: number
+  uCrackIntensity: number
+  uCrackPatchiness: number
+  uAoStrength: number
+  uCraterNormalScale: number
+  uSurfaceAmbient: number
   minDistance: number
   maxDistance: number
   uDustColor: Color
@@ -33,10 +48,25 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
 
     this.uniforms = {
       lightPosition: new Uniform(new Vector3()),
-      diffuseMap: new Uniform(resourceStorage.getTexture('asteroid.jpg')),
       bumpMap: new Uniform(resourceStorage.getTexture('asteroid_bump.jpg')),
-      nightMap: new Uniform(resourceStorage.getTexture('night.jpg')),
       bumpScale: new Uniform(10),
+      uRockColorC: new Uniform(new Color(0x2e2a26)),
+      uRockColorS: new Uniform(new Color(0x6b6157)),
+      uRockColorM: new Uniform(new Color(0x7a756e)),
+      uRockTypeT1: new Uniform(0.55),
+      uRockTypeT2: new Uniform(0.9),
+      uTintStrength: new Uniform(0.25),
+      uCraterFreq: new Uniform(4.0),
+      uCraterDensity: new Uniform(0.6),
+      uCraterRadius: new Uniform(0.5),
+      uCraterDepth: new Uniform(0.5),
+      uCraterOctaves: new Uniform(1),
+      uCrackWidth: new Uniform(0.05),
+      uCrackIntensity: new Uniform(0.5),
+      uCrackPatchiness: new Uniform(0.7),
+      uAoStrength: new Uniform(0.6),
+      uCraterNormalScale: new Uniform(1.0),
+      uSurfaceAmbient: new Uniform(0.03),
       minDistance: new Uniform(toThreeJSUnits(100)),
       maxDistance: new Uniform(toThreeJSUnits(5000)),
       uDustColor: new Uniform(new Color(0x9b968c)),

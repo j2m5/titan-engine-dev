@@ -5,10 +5,26 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 export const InstancedAsteroidShaderTemplate: ShaderProps = {
   uniforms: {
     lightPosition: new Uniform(new Vector3()),
-    diffuseMap: new Uniform(null),
     bumpMap: new Uniform(null),
-    nightMap: new Uniform(null),
     bumpScale: new Uniform(0),
+    // Процедурный облик (см. чанк AsteroidSurface)
+    uRockColorC: new Uniform(new Color(0x2e2a26)),
+    uRockColorS: new Uniform(new Color(0x6b6157)),
+    uRockColorM: new Uniform(new Color(0x7a756e)),
+    uRockTypeT1: new Uniform(0.55),
+    uRockTypeT2: new Uniform(0.9),
+    uTintStrength: new Uniform(0.25),
+    uCraterFreq: new Uniform(4.0),
+    uCraterDensity: new Uniform(0.6),
+    uCraterRadius: new Uniform(0.5),
+    uCraterDepth: new Uniform(0.5),
+    uCraterOctaves: new Uniform(1),
+    uCrackWidth: new Uniform(0.05),
+    uCrackIntensity: new Uniform(0.5),
+    uCrackPatchiness: new Uniform(0.7),
+    uAoStrength: new Uniform(0.6),
+    uCraterNormalScale: new Uniform(1.0),
+    uSurfaceAmbient: new Uniform(0.03),
     minDistance: new Uniform(toThreeJSUnits(100)),
     maxDistance: new Uniform(toThreeJSUnits(5000)),
     // Пылевая дымка (см. чанк RingDust). uDustDensity = 0 — туман выключен,
@@ -90,45 +106,71 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     ${ShaderChunk['logdepthbuf_pars_fragment']}
 
     uniform vec3 lightPosition;
-    uniform sampler2D diffuseMap;
     uniform sampler2D bumpMap;
-    uniform sampler2D nightMap;
     uniform float bumpScale;
     uniform float minDistance;
     uniform float maxDistance;
+
+    uniform vec3 uRockColorC;
+    uniform vec3 uRockColorS;
+    uniform vec3 uRockColorM;
+    uniform float uRockTypeT1;
+    uniform float uRockTypeT2;
+    uniform float uTintStrength;
+    uniform float uCraterFreq;
+    uniform float uCraterDensity;
+    uniform float uCraterRadius;
+    uniform float uCraterDepth;
+    uniform float uCraterOctaves;
+    uniform float uCrackWidth;
+    uniform float uCrackIntensity;
+    uniform float uCrackPatchiness;
+    uniform float uAoStrength;
+    uniform float uCraterNormalScale;
+    uniform float uSurfaceAmbient;
 
     varying vec2 vUv;
     varying vec3 vNormal;
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vRingPos;
+    varying vec3 vObjectPos;
+    varying float vInstanceSeed;
 
     #include <bumpFunctions>
+    #include <noiseFunctions>
+    #include <asteroidSurfaceFunctions>
     #include <ringDustUniforms>
     #include <ringDustFunctions>
 
     void main() {
       ${ShaderChunk['logdepthbuf_fragment']}
       vec3 normal = normalize(vNormal);
-
       float faceDirection = gl_FrontFacing ? 1.0 : -1.0;
+
+      // Микрозерно от bumpMap (высокая частота)
       normal = perturbNormalArb(-vViewPosition, normal, dHdxy_fwd(), faceDirection);
+
+      // Процедурный облик: альбедо + высота рельефа (для нормали) + каверн-AO
+      float surfH;
+      float surfAO;
+      vec3 albedo = applyAsteroidSurface(
+        normalize(vObjectPos), vInstanceSeed,
+        uRockColorC, uRockColorS, uRockColorM, uRockTypeT1, uRockTypeT2, uTintStrength,
+        uCraterFreq, uCraterDensity, uCraterRadius, uCraterDepth, uCraterOctaves,
+        uCrackWidth, uCrackIntensity, uCrackPatchiness,
+        uAoStrength,
+        surfH, surfAO
+      );
+
+      // Мезо/макро-рельеф (кратеры/трещины) → нормаль через экранные производные
+      vec2 dHdxyProc = vec2(dFdx(surfH), dFdy(surfH)) * uCraterNormalScale;
+      normal = perturbNormalArb(-vViewPosition, normal, dHdxyProc, faceDirection);
 
       vec3 lightDirection = normalize(vViewLightDirection);
       float lightIntensity = max(dot(normal, lightDirection), 0.0);
 
-      vec3 dayColor = texture2D(diffuseMap, vUv).rgb;
-      vec3 nightColor = texture2D(nightMap, vUv).rgb;
-
-      vec3 day = dayColor;
-      vec3 night = nightColor * nightColor;
-
-      float dist = length(vViewPosition);
-      float fade = 1.0 - smoothstep(minDistance, maxDistance, dist);
-
-      //if (fade <= 0.0) discard;
-
-      vec3 finalColor = mix(night, day, lightIntensity);
+      vec3 finalColor = albedo * (lightIntensity * surfAO + uSurfaceAmbient);
 
       // Аэроперспектива: камни тонут в пылевой дымке с расстоянием
       finalColor = ringDustApplyFog(finalColor, vRingPos);
