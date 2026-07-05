@@ -24,6 +24,10 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uSpecularStrength: new Uniform(0.05),
     uSpecularPower: new Uniform(8.0),
     uSpecularTint: new Uniform(0.0),
+    // Дистанционное гашение ВЧ-детали (анти-алиасинг). Дефолты «без фейда» —
+    // перекрываются разводкой из конфига (toThreeJSUnits).
+    uDetailFadeStart: new Uniform(1e8),
+    uDetailFadeEnd: new Uniform(2e8),
     // Пылевая дымка (см. чанк RingDust). uDustDensity = 0 — туман выключен,
     // пока AsteroidRingSystem явно не сконфигурирует пыль.
     uDustColor: new Uniform(new Color(0x9b968c)),
@@ -123,6 +127,8 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uniform float uSpecularStrength;
     uniform float uSpecularPower;
     uniform float uSpecularTint;
+    uniform float uDetailFadeStart;
+    uniform float uDetailFadeEnd;
 
     varying vec3 vNormal;
     varying vec3 vViewLightDirection;
@@ -154,8 +160,11 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
         surfH, surfAO
       );
 
-      // Рельеф (кратеры/трещины/зерно) → нормаль через экранные производные высоты
-      vec2 dHdxyProc = vec2(dFdx(surfH), dFdy(surfH)) * uCraterNormalScale;
+      // Рельеф (кратеры/трещины/зерно) → нормаль через экранные производные высоты.
+      // Гасим ВЧ-деталь с дистанцией: к LOD-переключению камень гладко затенён,
+      // без подпиксельной дрожи нормали/специляра (анти-алиасинг).
+      float detailFade = 1.0 - smoothstep(uDetailFadeStart, uDetailFadeEnd, length(vViewPosition));
+      vec2 dHdxyProc = vec2(dFdx(surfH), dFdy(surfH)) * uCraterNormalScale * detailFade;
       normal = perturbNormalFromHeight(-vViewPosition, normal, dHdxyProc, faceDirection);
 
       vec3 lightDirection = normalize(vViewLightDirection);

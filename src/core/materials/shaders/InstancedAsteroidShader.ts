@@ -11,6 +11,8 @@ interface InstancedAsteroidUniforms {
   uSpecularStrength: number
   uSpecularPower: number
   uSpecularTint: number
+  uDetailFadeStart: number
+  uDetailFadeEnd: number
   uTintStrength: number
   uCraterFreq: number
   uCraterDensity: number
@@ -51,6 +53,8 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       uSpecularStrength: new Uniform(0.05),
       uSpecularPower: new Uniform(8.0),
       uSpecularTint: new Uniform(0.0),
+      uDetailFadeStart: new Uniform(1e8),
+      uDetailFadeEnd: new Uniform(2e8),
       uTintStrength: new Uniform(0.25),
       uCraterFreq: new Uniform(4.0),
       uCraterDensity: new Uniform(0.6),

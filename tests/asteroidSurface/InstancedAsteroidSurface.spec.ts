@@ -29,4 +29,13 @@ describe('L0 фрагмент: профили (v2)', () => {
     expect(shader.fragmentShader).toContain('halfVec')
     expect(shader.fragmentShader).toContain('ringDustApplyFog(')
   })
+
+  it('гасит высокочастотную нормаль с дистанцией (анти-алиасинг к LOD)', () => {
+    const shader = new InstancedAsteroidShader()
+    expect(shader.fragmentShader).toContain('uDetailFadeStart')
+    expect(shader.fragmentShader).toContain('uDetailFadeEnd')
+    expect(shader.fragmentShader).toContain('detailFade')
+    expect(shader.uniforms.uDetailFadeStart).toBeDefined()
+    expect(shader.uniforms.uDetailFadeEnd).toBeDefined()
+  })
 })
