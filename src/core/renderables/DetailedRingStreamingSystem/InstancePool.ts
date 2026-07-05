@@ -84,7 +84,7 @@ class InstancePool {
 
     // --- L0: Geometry InstancedMesh ---
     // detail управляет неровностью силуэта после GPU-деформации (см. AsteroidShape).
-    const l0Geometry = new IcosahedronGeometry(asteroidGeometrySize, 2 * l0Detail - 1)
+    const l0Geometry = new IcosahedronGeometry(asteroidGeometrySize, l0Detail)
     this.geometryMesh = new InstancedMesh(l0Geometry, new InstancedAsteroidMaterial(), l0Config.maxInstances)
     this.geometryMesh.count = 0
     this.geometryMesh.frustumCulled = false

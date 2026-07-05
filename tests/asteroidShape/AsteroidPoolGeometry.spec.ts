@@ -9,13 +9,13 @@ import { InstancePool } from '@/core/renderables/DetailedRingStreamingSystem/Ins
 const cfg = { maxInstances: 10 }
 
 describe('InstancePool: detail геометрии L0', () => {
-  it('дефолт detail 1 → 240 позиций (20·4·3, non-indexed)', () => {
+  it('дефолт detail 1 → 240 позиций (60·(1+1)², non-indexed)', () => {
     const pool = new InstancePool(cfg, cfg, 1)
     expect(pool.geometryMesh.geometry.getAttribute('position').count).toBe(240)
   })
 
-  it('detail 2 → 960 позиций (20·16·3) для неровного силуэта', () => {
+  it('detail 2 → 540 позиций (60·(2+1)²) для неровного силуэта', () => {
     const pool = new InstancePool(cfg, cfg, 1, 2)
-    expect(pool.geometryMesh.geometry.getAttribute('position').count).toBe(960)
+    expect(pool.geometryMesh.geometry.getAttribute('position').count).toBe(540)
   })
 })
