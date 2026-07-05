@@ -1,6 +1,7 @@
 import { ringShadowFragment, ringShadowFunctions, ringShadowUniforms } from './RingShadow'
 import { noiseFunctions } from './Noise'
 import { asteroidShapeFunctions } from './AsteroidShape'
+import { asteroidSurfaceFunctions } from './AsteroidSurface'
 import { bumpFunctions } from '@/core/materials/shaders/lib/chunks/Bump'
 import { ringDustFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
 import { IUniform, Uniform } from 'three'
@@ -19,6 +20,7 @@ export const AppShaderChunk: Record<string, any> = {
   ringShadowFragment,
   noiseFunctions,
   asteroidShapeFunctions,
+  asteroidSurfaceFunctions,
   bumpFunctions,
   ringDustUniforms,
   ringDustFunctions
