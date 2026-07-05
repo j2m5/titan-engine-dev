@@ -77,8 +77,8 @@ export const asteroidSurfaceFunctions = `
     }
 
     crack = clamp(crack, 0.0, 1.0);
-    float patch = 0.5 + 0.5 * snoise(dir * 3.0 + domainOffset * 1.7);
-    crack *= mix(1.0, patch, crackPatchiness) * crackIntensity;
+    float patchMask = 0.5 + 0.5 * snoise(dir * 3.0 + domainOffset * 1.7);
+    crack *= mix(1.0, patchMask, crackPatchiness) * crackIntensity;
     h -= crack * 0.3;   // трещина — канавка
 
     float cavity = max(-h, 0.0);
