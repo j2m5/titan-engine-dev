@@ -311,7 +311,7 @@ export const noiseFunctions = `
           if (d < F1) {
             F2 = F1; F1 = d;
             bestD = vec3(dx[k], dy[k], dz);
-            bestHash = fract(pz[k] * (1.0 / 289.0));
+            bestHash = pz[k] * (1.0 / 289.0);
           } else if (d < F2) {
             F2 = d;
           }
