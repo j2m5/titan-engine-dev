@@ -55,7 +55,6 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uniform float uShapeAmpMax;
     uniform float uShapeFreq;
 
-    varying vec2 vUv;
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vRingPos;
@@ -89,7 +88,6 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
       mat3 instanceNormalMatrix = mat3(instanceMatrix);
 
-      vUv = uv;
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
 
@@ -108,8 +106,6 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
   fragmentShader: `
     ${ShaderChunk['common']}
     ${ShaderChunk['logdepthbuf_pars_fragment']}
-
-    uniform vec3 lightPosition;
 
     uniform vec3 uRockColor;
     uniform float uColorJitter;
