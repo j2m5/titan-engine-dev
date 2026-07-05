@@ -5,6 +5,7 @@ vi.mock('@/core/services/ResourceStorage', () => ({
 }))
 
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
+import { ASTEROID_PROFILES } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
 import { Actor } from '@/core/models/Actor'
 
 const makeFakeActor = (): Actor =>
@@ -15,19 +16,20 @@ const makeFakeActor = (): Actor =>
     }
   }) as unknown as Actor
 
-describe('AsteroidRingSystem: интеграция облика', () => {
-  it('дефолтом кладёт параметры облика в L0-материал', () => {
+describe('AsteroidRingSystem: профили облика', () => {
+  it('дефолтом применяет профиль stony к L0-материалу', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
     const u = (system as any).pool.geometryMesh.material.uniforms
-    expect(u.uCraterDepth.value).toBeGreaterThan(0)
-    expect(u.uCraterOctaves.value).toBe(1)
-    expect(u.uAoStrength.value).toBeGreaterThan(0)
+    expect(u.uRockColor.value.getHex()).toBe(ASTEROID_PROFILES.stony.baseColor)
+    expect(u.uCraterDepth.value).toBe(ASTEROID_PROFILES.stony.craterDepth)
+    expect(u.uSpecularStrength.value).toBe(ASTEROID_PROFILES.stony.specularStrength)
   })
 
-  it('уважает override параметров облика (ручки перфа/визуала)', () => {
-    const system = new AsteroidRingSystem(makeFakeActor(), { craterOctaves: 2, crackIntensity: 0 })
+  it('уважает override profile: icy', () => {
+    const system = new AsteroidRingSystem(makeFakeActor(), { profile: 'icy' })
     const u = (system as any).pool.geometryMesh.material.uniforms
-    expect(u.uCraterOctaves.value).toBe(2)
-    expect(u.uCrackIntensity.value).toBe(0)
+    expect(u.uRockColor.value.getHex()).toBe(ASTEROID_PROFILES.icy.baseColor)
+    expect(u.uSpecularPower.value).toBe(ASTEROID_PROFILES.icy.specularPower)
+    expect(u.uCrackIntensity.value).toBe(ASTEROID_PROFILES.icy.crackIntensity)
   })
 })

@@ -10,6 +10,7 @@ import { InstancePool, PoolLayerConfig } from './InstancePool'
 import { SectorManager, LODThresholds } from './SectorManager'
 import { RingDustVolume } from './dust/RingDustVolume'
 import { installRingDustDebug, type RockDustUniforms } from './dust/RingDustDebug'
+import { ASTEROID_PROFILES, type AsteroidProfileName } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
 
 /**
  * Конфигурация системы астероидного кольца
@@ -69,25 +70,8 @@ interface AsteroidRingConfig {
   shapeAmpMax: number
   /** Частота шума деформации силуэта */
   shapeFreq: number
-  /** Процедурный облик (см. чанк AsteroidSurface) */
-  rockColorC: number
-  rockColorS: number
-  rockColorM: number
-  rockTypeT1: number
-  rockTypeT2: number
-  tintStrength: number
-  craterFreq: number
-  craterDensity: number
-  craterRadius: number
-  craterDepth: number
-  /** Число октав Worley для кратеров (1–2) — ручка отката FPS */
-  craterOctaves: number
-  crackWidth: number
-  crackIntensity: number
-  crackPatchiness: number
-  aoStrength: number
-  craterNormalScale: number
-  surfaceAmbient: number
+  /** Профиль облика астероидов (см. AsteroidProfiles). Задаёт цвет/кратеры/блик/etc. */
+  profile: AsteroidProfileName
 }
 
 /**
@@ -117,23 +101,7 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   shapeAmpMin: 0.3,
   shapeAmpMax: 0.8,
   shapeFreq: 1.4,
-  rockColorC: 0x2e2a26,
-  rockColorS: 0x6b6157,
-  rockColorM: 0x7a756e,
-  rockTypeT1: 0.55,
-  rockTypeT2: 0.9,
-  tintStrength: 0.25,
-  craterFreq: 4.0,
-  craterDensity: 0.6,
-  craterRadius: 0.5,
-  craterDepth: 0.5,
-  craterOctaves: 1,
-  crackWidth: 0.05,
-  crackIntensity: 0.5,
-  crackPatchiness: 0.7,
-  aoStrength: 0.6,
-  craterNormalScale: 1.0,
-  surfaceAmbient: 0.03
+  profile: 'stony'
 }
 
 /**
@@ -232,23 +200,27 @@ class AsteroidRingSystem extends Group {
     l0ShapeMaterial.uniforms.uShapeAmpMax.value = cfg.shapeAmpMax
     l0ShapeMaterial.uniforms.uShapeFreq.value = cfg.shapeFreq
 
-    // Процедурный облик — тоже только L0.
-    // TODO(Task 4): rockColorC/S/M + rockTypeT1/T2 уходят из конфига — заменяются
-    // единым профилем (см. AsteroidProfiles), который раскладывается в
-    // uRockColor/uColorJitter/uGrainStrength/uGrainFreq/uSpecular*. Пока профиль
-    // не подключён, эти юниформы остаются на дефолтах шейдер-класса.
-    l0ShapeMaterial.uniforms.uTintStrength.value = cfg.tintStrength
-    l0ShapeMaterial.uniforms.uCraterFreq.value = cfg.craterFreq
-    l0ShapeMaterial.uniforms.uCraterDensity.value = cfg.craterDensity
-    l0ShapeMaterial.uniforms.uCraterRadius.value = cfg.craterRadius
-    l0ShapeMaterial.uniforms.uCraterDepth.value = cfg.craterDepth
-    l0ShapeMaterial.uniforms.uCraterOctaves.value = cfg.craterOctaves
-    l0ShapeMaterial.uniforms.uCrackWidth.value = cfg.crackWidth
-    l0ShapeMaterial.uniforms.uCrackIntensity.value = cfg.crackIntensity
-    l0ShapeMaterial.uniforms.uCrackPatchiness.value = cfg.crackPatchiness
-    l0ShapeMaterial.uniforms.uAoStrength.value = cfg.aoStrength
-    l0ShapeMaterial.uniforms.uCraterNormalScale.value = cfg.craterNormalScale
-    l0ShapeMaterial.uniforms.uSurfaceAmbient.value = cfg.surfaceAmbient
+    // Процедурный облик — профиль, тоже только L0
+    const profile = ASTEROID_PROFILES[cfg.profile]
+    l0ShapeMaterial.uniforms.uRockColor.value.set(profile.baseColor)
+    l0ShapeMaterial.uniforms.uColorJitter.value = profile.colorJitter
+    l0ShapeMaterial.uniforms.uTintStrength.value = profile.tintStrength
+    l0ShapeMaterial.uniforms.uGrainStrength.value = profile.grainStrength
+    l0ShapeMaterial.uniforms.uGrainFreq.value = profile.grainFreq
+    l0ShapeMaterial.uniforms.uCraterFreq.value = profile.craterFreq
+    l0ShapeMaterial.uniforms.uCraterDensity.value = profile.craterDensity
+    l0ShapeMaterial.uniforms.uCraterRadius.value = profile.craterRadius
+    l0ShapeMaterial.uniforms.uCraterDepth.value = profile.craterDepth
+    l0ShapeMaterial.uniforms.uCraterOctaves.value = profile.craterOctaves
+    l0ShapeMaterial.uniforms.uCrackWidth.value = profile.crackWidth
+    l0ShapeMaterial.uniforms.uCrackIntensity.value = profile.crackIntensity
+    l0ShapeMaterial.uniforms.uCrackPatchiness.value = profile.crackPatchiness
+    l0ShapeMaterial.uniforms.uAoStrength.value = profile.aoStrength
+    l0ShapeMaterial.uniforms.uCraterNormalScale.value = profile.craterNormalScale
+    l0ShapeMaterial.uniforms.uSurfaceAmbient.value = profile.surfaceAmbient
+    l0ShapeMaterial.uniforms.uSpecularStrength.value = profile.specularStrength
+    l0ShapeMaterial.uniforms.uSpecularPower.value = profile.specularPower
+    l0ShapeMaterial.uniforms.uSpecularTint.value = profile.specularTint
 
     // Установить maxDistance для billboard материала
     this.pool.billboardMaterial.uniforms.uMaxDistance.value = l1MaxDist
