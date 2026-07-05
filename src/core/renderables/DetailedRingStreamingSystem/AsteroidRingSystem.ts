@@ -69,6 +69,25 @@ interface AsteroidRingConfig {
   shapeAmpMax: number
   /** Частота шума деформации силуэта */
   shapeFreq: number
+  /** Процедурный облик (см. чанк AsteroidSurface) */
+  rockColorC: number
+  rockColorS: number
+  rockColorM: number
+  rockTypeT1: number
+  rockTypeT2: number
+  tintStrength: number
+  craterFreq: number
+  craterDensity: number
+  craterRadius: number
+  craterDepth: number
+  /** Число октав Worley для кратеров (1–2) — ручка отката FPS */
+  craterOctaves: number
+  crackWidth: number
+  crackIntensity: number
+  crackPatchiness: number
+  aoStrength: number
+  craterNormalScale: number
+  surfaceAmbient: number
 }
 
 /**
@@ -97,7 +116,24 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   asteroidShapeDetail: 2,
   shapeAmpMin: 0.3,
   shapeAmpMax: 0.8,
-  shapeFreq: 1.4
+  shapeFreq: 1.4,
+  rockColorC: 0x2e2a26,
+  rockColorS: 0x6b6157,
+  rockColorM: 0x7a756e,
+  rockTypeT1: 0.55,
+  rockTypeT2: 0.9,
+  tintStrength: 0.25,
+  craterFreq: 4.0,
+  craterDensity: 0.6,
+  craterRadius: 0.5,
+  craterDepth: 0.5,
+  craterOctaves: 1,
+  crackWidth: 0.05,
+  crackIntensity: 0.5,
+  crackPatchiness: 0.7,
+  aoStrength: 0.6,
+  craterNormalScale: 1.0,
+  surfaceAmbient: 0.03
 }
 
 /**
@@ -195,6 +231,25 @@ class AsteroidRingSystem extends Group {
     l0ShapeMaterial.uniforms.uShapeAmpMin.value = cfg.shapeAmpMin
     l0ShapeMaterial.uniforms.uShapeAmpMax.value = cfg.shapeAmpMax
     l0ShapeMaterial.uniforms.uShapeFreq.value = cfg.shapeFreq
+
+    // Процедурный облик — тоже только L0
+    l0ShapeMaterial.uniforms.uRockColorC.value.set(cfg.rockColorC)
+    l0ShapeMaterial.uniforms.uRockColorS.value.set(cfg.rockColorS)
+    l0ShapeMaterial.uniforms.uRockColorM.value.set(cfg.rockColorM)
+    l0ShapeMaterial.uniforms.uRockTypeT1.value = cfg.rockTypeT1
+    l0ShapeMaterial.uniforms.uRockTypeT2.value = cfg.rockTypeT2
+    l0ShapeMaterial.uniforms.uTintStrength.value = cfg.tintStrength
+    l0ShapeMaterial.uniforms.uCraterFreq.value = cfg.craterFreq
+    l0ShapeMaterial.uniforms.uCraterDensity.value = cfg.craterDensity
+    l0ShapeMaterial.uniforms.uCraterRadius.value = cfg.craterRadius
+    l0ShapeMaterial.uniforms.uCraterDepth.value = cfg.craterDepth
+    l0ShapeMaterial.uniforms.uCraterOctaves.value = cfg.craterOctaves
+    l0ShapeMaterial.uniforms.uCrackWidth.value = cfg.crackWidth
+    l0ShapeMaterial.uniforms.uCrackIntensity.value = cfg.crackIntensity
+    l0ShapeMaterial.uniforms.uCrackPatchiness.value = cfg.crackPatchiness
+    l0ShapeMaterial.uniforms.uAoStrength.value = cfg.aoStrength
+    l0ShapeMaterial.uniforms.uCraterNormalScale.value = cfg.craterNormalScale
+    l0ShapeMaterial.uniforms.uSurfaceAmbient.value = cfg.surfaceAmbient
 
     // Установить maxDistance для billboard материала
     this.pool.billboardMaterial.uniforms.uMaxDistance.value = l1MaxDist
