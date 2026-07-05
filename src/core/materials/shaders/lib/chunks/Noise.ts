@@ -279,6 +279,49 @@ export const noiseFunctions = `
     return sqrt(vec2(F1, F2));
   }
 
+  // Расширенный Worley: F1/F2 + направление от центра ближайшей ячейки к точке
+  // (для аналитической нормали кратера ∝ ∇F1) + псевдослучайный хеш ячейки
+  // (для per-crater разброса: наличие/радиус). cellular3d НЕ трогаем — от неё
+  // зависит NebulaDensity. Небольшое дублирование поиска оправдано (ср. snoiseGrad).
+  vec4 worleyCell(vec3 P, out vec3 toNearest) {
+    const float K = 0.142857142857;   // 1/7
+    const float Ko = 0.428571428571;  // 3/7
+    const float jitter = 1.0;
+    vec3 Pi = cellular_mod289(floor(P));
+    vec3 Pf = fract(P);
+    vec3 oi = vec3(-1.0, 0.0, 1.0);
+    vec3 of = vec3(-0.5, 0.5, 1.5);
+    vec3 px = cellular_permute(Pi.x + oi);
+    float F1 = 1e6; float F2 = 1e6;
+    vec3 bestD = vec3(0.0, 0.0, 1.0);
+    float bestHash = 0.0;
+    for (int i = 0; i < 3; i++) {
+      vec3 p = cellular_permute(px[i] + Pi.y + oi);
+      for (int j = 0; j < 3; j++) {
+        vec3 pp = cellular_permute(p[j] + Pi.z + oi);
+        vec3 ox = fract(pp * K) - Ko;
+        vec3 oy = mod(floor(pp * K), 7.0) * K - Ko;
+        vec3 pz = cellular_permute(pp);
+        vec3 oz = fract(pz * K) - Ko;
+        vec3 dx = Pf.x - of[i] + jitter * ox;
+        vec3 dy = Pf.y - of[j] + jitter * oy;
+        for (int k = 0; k < 3; k++) {
+          float dz = Pf.z - of[k] + jitter * oz[k];
+          float d = dx[k] * dx[k] + dy[k] * dy[k] + dz * dz;
+          if (d < F1) {
+            F2 = F1; F1 = d;
+            bestD = vec3(dx[k], dy[k], dz);
+            bestHash = fract(pz[k] * (1.0 / 289.0));
+          } else if (d < F2) {
+            F2 = d;
+          }
+        }
+      }
+    }
+    toNearest = normalize(bestD + vec3(1e-6, 0.0, 0.0));
+    return vec4(sqrt(F1), sqrt(F2), bestHash, 0.0);
+  }
+
   // Производный 3D симплекс-шум: возвращает vec4(value, gradient).
   // Значение в том же масштабе, что snoise(vec3); градиент — аналитическая
   // производная simplex-noise (Gustavson): d/dv 42·Σ m^4·(p·x).
