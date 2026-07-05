@@ -97,6 +97,16 @@ export const RingShaderTemplate: ShaderProps = {
 
       color.a *= transparencyFactor;
 
+      // Непрозрачность по углу взгляда: анфас (луч ⊥ плоскости кольца) — полная,
+      // на ребро — гаснет, чтобы 2D-текстура не конкурировала с объёмной пылью.
+      // faceCos = |cos| между лучом камера→фрагмент и нормалью кольца (лок. +Z).
+      vec3 viewDirLocal = normalize(vLocalCameraPosition - vPosition);
+      float faceCos = abs(viewDirLocal.z);
+      const float ringEdgeOpacity = 0.1; // непрозрачность на ребре (тюнить визуально)
+      const float ringAngleCurve = 1.5;  // круче → быстрее гаснет к ребру
+      float angleOpacity = mix(ringEdgeOpacity, 1.0, pow(faceCos, ringAngleCurve));
+      color.a *= angleOpacity;
+
       float shadow = getShadowFromSphere(vLightDirectionL, vPosition, planetRadius);
 
       vec3 corrNormal = gl_FrontFacing ? vNormal : -vNormal;
