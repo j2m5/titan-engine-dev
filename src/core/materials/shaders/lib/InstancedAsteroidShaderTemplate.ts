@@ -22,13 +22,18 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uDustLightDirRing: new Uniform(new Vector3(1, 0, 0)),
     uDustAnglePower: new Uniform(2),
     uDustNearFade: new Uniform(1),
-    uDustPlanetRadius: new Uniform(0)
+    uDustPlanetRadius: new Uniform(0),
+    // Деформация силуэта (см. чанк AsteroidShape). Амплитуда 0 → форма выключена.
+    uShapeAmp: new Uniform(0),
+    uShapeFreq: new Uniform(1)
   },
   vertexShader: `
     ${ShaderChunk['common']}
     ${ShaderChunk['logdepthbuf_pars_vertex']}
 
     uniform vec3 lightPosition;
+    uniform float uShapeAmp;
+    uniform float uShapeFreq;
 
     varying vec2 vUv;
     varying vec3 vNormal;
@@ -36,8 +41,17 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     varying vec3 vViewPosition;
     varying vec3 vRingPos;
 
+    #include <noiseFunctions>
+    #include <asteroidShapeFunctions>
+
     void main() {
-      vec4 worldPosition = instanceMatrix * vec4(position, 1.0);
+      // Деформация силуэта: сид формы — хеш от позиции инстанса (стабилен per-камень)
+      float shapeSeed = hash13(instanceMatrix[3].xyz);
+      vec3 shapedPos;
+      vec3 shapedNormal;
+      deformAsteroid(position, normal, shapeSeed, shapedPos, shapedNormal);
+
+      vec4 worldPosition = instanceMatrix * vec4(shapedPos, 1.0);
       vec4 mvPosition = modelViewMatrix * worldPosition;
 
       gl_Position = projectionMatrix * mvPosition;
@@ -47,7 +61,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
       mat3 instanceNormalMatrix = mat3(instanceMatrix);
-      vec3 transformedNormal = normalize(instanceNormalMatrix * normal);
+      vec3 transformedNormal = normalize(instanceNormalMatrix * shapedNormal);
 
       vUv = uv;
       vNormal = normalize(normalMatrix * transformedNormal);
