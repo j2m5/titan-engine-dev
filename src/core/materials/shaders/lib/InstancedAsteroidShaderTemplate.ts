@@ -43,6 +43,8 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vRingPos;
+    varying vec3 vObjectPos;
+    varying float vInstanceSeed;
 
     #include <noiseFunctions>
     #include <asteroidShapeFunctions>
@@ -74,6 +76,11 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       vNormal = normalize(normalMatrix * transformedNormal);
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
+
+      // Для процедурного облика (см. чанк AsteroidSurface): объектная позиция
+      // (домен) и per-instance сид (тип/тинт) — переиспользуем сид формы.
+      vObjectPos = shapedPos;
+      vInstanceSeed = shapeSeed;
 
       ${ShaderChunk['logdepthbuf_vertex']}
     }
