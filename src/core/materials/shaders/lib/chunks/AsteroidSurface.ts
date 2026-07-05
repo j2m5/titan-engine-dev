@@ -26,7 +26,7 @@ export const asteroidSurfaceFunctions = `
   }
 
   // Возмущение нормали из градиента высоты (экранные производные), без текстур.
-  // Копия three.js perturbNormalArb — чтобы не тянуть bumpFunctions/bumpMap.
+  // Копия three.js perturbNormalArb — чтобы не тянуть include bumpFunctions и bump-текстуру.
   vec3 perturbNormalFromHeight(vec3 surfPos, vec3 surfNorm, vec2 dHdxy, float faceDirection) {
     vec3 vSigmaX = dFdx(surfPos);
     vec3 vSigmaY = dFdy(surfPos);

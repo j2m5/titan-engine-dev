@@ -1,19 +1,15 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { ShaderChunk, Uniform, Vector3, Color } from 'three'
-import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 export const InstancedAsteroidShaderTemplate: ShaderProps = {
   uniforms: {
     lightPosition: new Uniform(new Vector3()),
-    bumpMap: new Uniform(null),
-    bumpScale: new Uniform(0),
-    // Процедурный облик (см. чанк AsteroidSurface)
-    uRockColorC: new Uniform(new Color(0x2e2a26)),
-    uRockColorS: new Uniform(new Color(0x6b6157)),
-    uRockColorM: new Uniform(new Color(0x7a756e)),
-    uRockTypeT1: new Uniform(0.55),
-    uRockTypeT2: new Uniform(0.9),
+    // Процедурный облик — профиль (см. чанк AsteroidSurface / AsteroidProfiles)
+    uRockColor: new Uniform(new Color(0x6b6157)),
+    uColorJitter: new Uniform(0.12),
     uTintStrength: new Uniform(0.25),
+    uGrainStrength: new Uniform(0.15),
+    uGrainFreq: new Uniform(22.0),
     uCraterFreq: new Uniform(4.0),
     uCraterDensity: new Uniform(0.6),
     uCraterRadius: new Uniform(0.5),
@@ -25,8 +21,9 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uAoStrength: new Uniform(0.6),
     uCraterNormalScale: new Uniform(1.0),
     uSurfaceAmbient: new Uniform(0.03),
-    minDistance: new Uniform(toThreeJSUnits(100)),
-    maxDistance: new Uniform(toThreeJSUnits(5000)),
+    uSpecularStrength: new Uniform(0.05),
+    uSpecularPower: new Uniform(8.0),
+    uSpecularTint: new Uniform(0.0),
     // Пылевая дымка (см. чанк RingDust). uDustDensity = 0 — туман выключен,
     // пока AsteroidRingSystem явно не сконфигурирует пыль.
     uDustColor: new Uniform(new Color(0x9b968c)),
@@ -106,17 +103,12 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     ${ShaderChunk['logdepthbuf_pars_fragment']}
 
     uniform vec3 lightPosition;
-    uniform sampler2D bumpMap;
-    uniform float bumpScale;
-    uniform float minDistance;
-    uniform float maxDistance;
 
-    uniform vec3 uRockColorC;
-    uniform vec3 uRockColorS;
-    uniform vec3 uRockColorM;
-    uniform float uRockTypeT1;
-    uniform float uRockTypeT2;
+    uniform vec3 uRockColor;
+    uniform float uColorJitter;
     uniform float uTintStrength;
+    uniform float uGrainStrength;
+    uniform float uGrainFreq;
     uniform float uCraterFreq;
     uniform float uCraterDensity;
     uniform float uCraterRadius;
@@ -128,8 +120,10 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uniform float uAoStrength;
     uniform float uCraterNormalScale;
     uniform float uSurfaceAmbient;
+    uniform float uSpecularStrength;
+    uniform float uSpecularPower;
+    uniform float uSpecularTint;
 
-    varying vec2 vUv;
     varying vec3 vNormal;
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
@@ -137,7 +131,6 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     varying vec3 vObjectPos;
     varying float vInstanceSeed;
 
-    #include <bumpFunctions>
     #include <noiseFunctions>
     #include <asteroidSurfaceFunctions>
     #include <ringDustUniforms>
@@ -148,29 +141,34 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       vec3 normal = normalize(vNormal);
       float faceDirection = gl_FrontFacing ? 1.0 : -1.0;
 
-      // Микрозерно от bumpMap (высокая частота)
-      normal = perturbNormalArb(-vViewPosition, normal, dHdxy_fwd(), faceDirection);
-
       // Процедурный облик: альбедо + высота рельефа (для нормали) + каверн-AO
       float surfH;
       float surfAO;
       vec3 albedo = applyAsteroidSurface(
         normalize(vObjectPos), vInstanceSeed,
-        uRockColorC, uRockColorS, uRockColorM, uRockTypeT1, uRockTypeT2, uTintStrength,
+        uRockColor, uColorJitter, uTintStrength,
+        uGrainStrength, uGrainFreq,
         uCraterFreq, uCraterDensity, uCraterRadius, uCraterDepth, uCraterOctaves,
         uCrackWidth, uCrackIntensity, uCrackPatchiness,
         uAoStrength,
         surfH, surfAO
       );
 
-      // Мезо/макро-рельеф (кратеры/трещины) → нормаль через экранные производные
+      // Рельеф (кратеры/трещины/зерно) → нормаль через экранные производные высоты
       vec2 dHdxyProc = vec2(dFdx(surfH), dFdy(surfH)) * uCraterNormalScale;
-      normal = perturbNormalArb(-vViewPosition, normal, dHdxyProc, faceDirection);
+      normal = perturbNormalFromHeight(-vViewPosition, normal, dHdxyProc, faceDirection);
 
       vec3 lightDirection = normalize(vViewLightDirection);
       float lightIntensity = max(dot(normal, lightDirection), 0.0);
 
       vec3 finalColor = albedo * (lightIntensity * surfAO + uSurfaceAmbient);
+
+      // Дешёвый Blinn-Phong блик (металл/лёд), только на освещённой стороне
+      vec3 viewDir = normalize(vViewPosition);
+      vec3 halfVec = normalize(lightDirection + viewDir);
+      float spec = pow(max(dot(normal, halfVec), 0.0), uSpecularPower) * uSpecularStrength;
+      vec3 specColor = mix(vec3(1.0), albedo, uSpecularTint);
+      finalColor += spec * specColor * lightIntensity;
 
       // Аэроперспектива: камни тонут в пылевой дымке с расстоянием
       finalColor = ringDustApplyFog(finalColor, vRingPos);

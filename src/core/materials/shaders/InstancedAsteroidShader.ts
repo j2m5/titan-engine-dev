@@ -1,18 +1,16 @@
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
-import { Color, Texture, Uniform, Vector3 } from 'three'
+import { Color, Uniform, Vector3 } from 'three'
 import { InstancedAsteroidShaderTemplate as Shader } from '@/core/materials/shaders/lib/InstancedAsteroidShaderTemplate'
-import { resourceStorage } from '@/core/services/ResourceStorage'
-import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 interface InstancedAsteroidUniforms {
   lightPosition: Vector3
-  bumpMap: Texture | null
-  bumpScale: number
-  uRockColorC: Color
-  uRockColorS: Color
-  uRockColorM: Color
-  uRockTypeT1: number
-  uRockTypeT2: number
+  uRockColor: Color
+  uColorJitter: number
+  uGrainStrength: number
+  uGrainFreq: number
+  uSpecularStrength: number
+  uSpecularPower: number
+  uSpecularTint: number
   uTintStrength: number
   uCraterFreq: number
   uCraterDensity: number
@@ -25,8 +23,6 @@ interface InstancedAsteroidUniforms {
   uAoStrength: number
   uCraterNormalScale: number
   uSurfaceAmbient: number
-  minDistance: number
-  maxDistance: number
   uDustColor: Color
   uDustDensity: number
   uDustScaleHeight: number
@@ -48,13 +44,13 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
 
     this.uniforms = {
       lightPosition: new Uniform(new Vector3()),
-      bumpMap: new Uniform(resourceStorage.getTexture('asteroid_bump.jpg')),
-      bumpScale: new Uniform(10),
-      uRockColorC: new Uniform(new Color(0x2e2a26)),
-      uRockColorS: new Uniform(new Color(0x6b6157)),
-      uRockColorM: new Uniform(new Color(0x7a756e)),
-      uRockTypeT1: new Uniform(0.55),
-      uRockTypeT2: new Uniform(0.9),
+      uRockColor: new Uniform(new Color(0x6b6157)),
+      uColorJitter: new Uniform(0.12),
+      uGrainStrength: new Uniform(0.15),
+      uGrainFreq: new Uniform(22.0),
+      uSpecularStrength: new Uniform(0.05),
+      uSpecularPower: new Uniform(8.0),
+      uSpecularTint: new Uniform(0.0),
       uTintStrength: new Uniform(0.25),
       uCraterFreq: new Uniform(4.0),
       uCraterDensity: new Uniform(0.6),
@@ -67,8 +63,6 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       uAoStrength: new Uniform(0.6),
       uCraterNormalScale: new Uniform(1.0),
       uSurfaceAmbient: new Uniform(0.03),
-      minDistance: new Uniform(toThreeJSUnits(100)),
-      maxDistance: new Uniform(toThreeJSUnits(5000)),
       uDustColor: new Uniform(new Color(0x9b968c)),
       uDustDensity: new Uniform(0),
       uDustScaleHeight: new Uniform(1),

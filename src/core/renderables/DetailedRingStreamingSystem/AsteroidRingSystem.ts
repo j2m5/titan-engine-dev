@@ -232,12 +232,11 @@ class AsteroidRingSystem extends Group {
     l0ShapeMaterial.uniforms.uShapeAmpMax.value = cfg.shapeAmpMax
     l0ShapeMaterial.uniforms.uShapeFreq.value = cfg.shapeFreq
 
-    // Процедурный облик — тоже только L0
-    l0ShapeMaterial.uniforms.uRockColorC.value.set(cfg.rockColorC)
-    l0ShapeMaterial.uniforms.uRockColorS.value.set(cfg.rockColorS)
-    l0ShapeMaterial.uniforms.uRockColorM.value.set(cfg.rockColorM)
-    l0ShapeMaterial.uniforms.uRockTypeT1.value = cfg.rockTypeT1
-    l0ShapeMaterial.uniforms.uRockTypeT2.value = cfg.rockTypeT2
+    // Процедурный облик — тоже только L0.
+    // TODO(Task 4): rockColorC/S/M + rockTypeT1/T2 уходят из конфига — заменяются
+    // единым профилем (см. AsteroidProfiles), который раскладывается в
+    // uRockColor/uColorJitter/uGrainStrength/uGrainFreq/uSpecular*. Пока профиль
+    // не подключён, эти юниформы остаются на дефолтах шейдер-класса.
     l0ShapeMaterial.uniforms.uTintStrength.value = cfg.tintStrength
     l0ShapeMaterial.uniforms.uCraterFreq.value = cfg.craterFreq
     l0ShapeMaterial.uniforms.uCraterDensity.value = cfg.craterDensity
