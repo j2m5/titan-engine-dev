@@ -7,7 +7,8 @@
  *
  * Зависит от snoiseGrad (chunk noiseFunctions) — вершинный шейдер обязан
  * включить <noiseFunctions> перед <asteroidShapeFunctions>.
- * Юниформы uShapeAmp/uShapeFreq объявляет включающий шейдер (см. L0-шаблон).
+ * Юниформ uShapeFreq объявляет включающий шейдер (см. L0-шаблон); амплитуда
+ * приходит аргументом amp — включающий шейдер задаёт её per-instance.
  */
 export const asteroidShapeFunctions = `
   #define ASTEROID_SHAPE_OCTAVES 3
@@ -36,8 +37,9 @@ export const asteroidShapeFunctions = `
   }
 
   // Деформация вершины икосаэдра в объектном пространстве.
-  // pos/normal — исходные; seed — стабильный сид камня.
-  void deformAsteroid(vec3 pos, vec3 normal, float seed, out vec3 displacedPos, out vec3 newNormal) {
+  // pos/normal — исходные; seed — стабильный сид камня; amp — амплитуда
+  // (per-instance, задаётся включающим шейдером из диапазона).
+  void deformAsteroid(vec3 pos, vec3 normal, float seed, float amp, out vec3 displacedPos, out vec3 newNormal) {
     float R = length(pos);
     vec3 dir = pos / max(R, 1e-6);
     vec3 domain = dir * uShapeFreq + vec3(seed * 17.13, seed * 5.71, seed * 9.37);
@@ -46,10 +48,10 @@ export const asteroidShapeFunctions = `
     float f = nv.x;
     vec3 grad = nv.yzw;
 
-    displacedPos = pos + normal * (f * uShapeAmp * R);
+    displacedPos = pos + normal * (f * amp * R);
 
     // Возмущение нормали: вычитаем тангенциальную составляющую градиента.
     vec3 gTangent = grad - dot(grad, normal) * normal;
-    newNormal = normalize(normal - uShapeAmp * gTangent);
+    newNormal = normalize(normal - amp * gTangent);
   }
 `

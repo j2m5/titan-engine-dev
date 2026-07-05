@@ -23,8 +23,10 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uDustAnglePower: new Uniform(2),
     uDustNearFade: new Uniform(1),
     uDustPlanetRadius: new Uniform(0),
-    // Деформация силуэта (см. чанк AsteroidShape). Амплитуда 0 → форма выключена.
-    uShapeAmp: new Uniform(0),
+    // Деформация силуэта (см. чанк AsteroidShape). Амплитуда — per-instance из
+    // диапазона [min,max]; min=max=0 → форма выключена.
+    uShapeAmpMin: new Uniform(0),
+    uShapeAmpMax: new Uniform(0),
     uShapeFreq: new Uniform(1)
   },
   vertexShader: `
@@ -32,7 +34,8 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     ${ShaderChunk['logdepthbuf_pars_vertex']}
 
     uniform vec3 lightPosition;
-    uniform float uShapeAmp;
+    uniform float uShapeAmpMin;
+    uniform float uShapeAmpMax;
     uniform float uShapeFreq;
 
     varying vec2 vUv;
@@ -45,11 +48,15 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     #include <asteroidShapeFunctions>
 
     void main() {
-      // Деформация силуэта: сид формы — хеш от позиции инстанса (стабилен per-камень)
+      // Деформация силуэта: сид рисунка контура — хеш от позиции инстанса.
+      // Амплитуда — второй, декоррелированный хеш той же позиции → каждый
+      // камень получает свою «изрезанность» из диапазона [min,max].
       float shapeSeed = hash13(instanceMatrix[3].xyz);
+      float ampSeed = hash13(instanceMatrix[3].xyz * 1.37 + 11.7);
+      float shapeAmp = mix(uShapeAmpMin, uShapeAmpMax, ampSeed);
       vec3 shapedPos;
       vec3 shapedNormal;
-      deformAsteroid(position, normal, shapeSeed, shapedPos, shapedNormal);
+      deformAsteroid(position, normal, shapeSeed, shapeAmp, shapedPos, shapedNormal);
 
       vec4 worldPosition = instanceMatrix * vec4(shapedPos, 1.0);
       vec4 mvPosition = modelViewMatrix * worldPosition;

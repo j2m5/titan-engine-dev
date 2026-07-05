@@ -10,8 +10,14 @@ describe('AsteroidShape GLSL chunk', () => {
 
   it('деформация опирается на производный шум и смещение вдоль нормали', () => {
     expect(asteroidShapeFunctions).toContain('snoiseGrad(')
-    expect(asteroidShapeFunctions).toContain('uShapeAmp')
     expect(asteroidShapeFunctions).toContain('uShapeFreq')
+  })
+
+  it('амплитуда — параметр функции (per-instance), а не глобальный юниформ', () => {
+    // deformAsteroid принимает amp аргументом → развязан от uShapeAmp*,
+    // амплитуда задаётся per-instance во включающем шейдере
+    expect(asteroidShapeFunctions).toContain('float amp')
+    expect(asteroidShapeFunctions).not.toContain('uShapeAmp')
   })
 
   it('зарегистрирован в AppShaderChunk для резолва #include', () => {

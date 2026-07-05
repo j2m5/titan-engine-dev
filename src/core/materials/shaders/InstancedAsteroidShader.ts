@@ -22,7 +22,8 @@ interface InstancedAsteroidUniforms {
   uDustAnglePower: number
   uDustNearFade: number
   uDustPlanetRadius: number
-  uShapeAmp: number
+  uShapeAmpMin: number
+  uShapeAmpMax: number
   uShapeFreq: number
 }
 
@@ -48,7 +49,8 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       uDustAnglePower: new Uniform(2),
       uDustNearFade: new Uniform(1),
       uDustPlanetRadius: new Uniform(0),
-      uShapeAmp: new Uniform(0),
+      uShapeAmpMin: new Uniform(0),
+      uShapeAmpMax: new Uniform(0),
       uShapeFreq: new Uniform(1)
     }
     this.name = 'InstancedAsteroidShader'

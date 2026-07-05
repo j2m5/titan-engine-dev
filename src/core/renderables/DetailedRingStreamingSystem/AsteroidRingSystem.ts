@@ -62,8 +62,11 @@ interface AsteroidRingConfig {
   dustMaxSteps: number
   /** Уровень сабдива геометрии L0 (1/2/3) — ручка отката FPS для формы */
   asteroidShapeDetail: number
-  /** Амплитуда деформации силуэта (доля радиуса; 0 → форма выключена) */
-  shapeAmp: number
+  /** Мин. амплитуда деформации силуэта (доля радиуса; min=max=0 → форма выключена) */
+  shapeAmpMin: number
+  /** Макс. амплитуда деформации силуэта (доля радиуса). Каждый инстанс берёт
+   *  своё значение из [min,max] по декоррелированному хешу позиции */
+  shapeAmpMax: number
   /** Частота шума деформации силуэта */
   shapeFreq: number
 }
@@ -92,7 +95,8 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   dustAnglePower: 2,
   dustMaxSteps: 16,
   asteroidShapeDetail: 2,
-  shapeAmp: 0.3,
+  shapeAmpMin: 0.3,
+  shapeAmpMax: 0.8,
   shapeFreq: 1.4
 }
 
@@ -188,7 +192,8 @@ class AsteroidRingSystem extends Group {
 
     // Деформация силуэта — только L0 (у billboard-материала этих юниформ нет)
     const l0ShapeMaterial = this.pool.geometryMesh.material as InstancedAsteroidMaterial
-    l0ShapeMaterial.uniforms.uShapeAmp.value = cfg.shapeAmp
+    l0ShapeMaterial.uniforms.uShapeAmpMin.value = cfg.shapeAmpMin
+    l0ShapeMaterial.uniforms.uShapeAmpMax.value = cfg.shapeAmpMax
     l0ShapeMaterial.uniforms.uShapeFreq.value = cfg.shapeFreq
 
     // Установить maxDistance для billboard материала
@@ -225,7 +230,14 @@ class AsteroidRingSystem extends Group {
       })
       this.add(this.dustVolume)
 
-      this.__applyDustStaticUniforms(dustScaleHeight, dustDensity, dustNearFade, innerRadius, outerRadius, dustPlanetRadius)
+      this.__applyDustStaticUniforms(
+        dustScaleHeight,
+        dustDensity,
+        dustNearFade,
+        innerRadius,
+        outerRadius,
+        dustPlanetRadius
+      )
 
       // Диагностический хендл (dev-only)
       if (import.meta.env.DEV) {
