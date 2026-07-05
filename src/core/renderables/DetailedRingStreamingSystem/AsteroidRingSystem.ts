@@ -72,10 +72,10 @@ interface AsteroidRingConfig {
   shapeFreq: number
   /** Профиль облика астероидов (см. AsteroidProfiles). Задаёт цвет/кратеры/блик/etc. */
   profile: AsteroidProfileName
-  /** Дистанция начала гашения ВЧ-детали облика, км (анти-алиасинг) */
-  detailFadeStartKm: number
-  /** Дистанция полного гашения детали (камень гладкий), км. Держать ≤ LOD l0 */
-  detailFadeEndKm: number
+  /** Дальность детализации: начало гашения детали (циклов зерна на пиксель) */
+  detailAaStart: number
+  /** Дальность детализации: полное гашение. Больше → деталь держится дальше */
+  detailAaEnd: number
 }
 
 /**
@@ -106,8 +106,8 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   shapeAmpMax: 0.8,
   shapeFreq: 1.4,
   profile: 'stony',
-  detailFadeStartKm: 800,
-  detailFadeEndKm: 2500
+  detailAaStart: 1.2,
+  detailAaEnd: 3.0
 }
 
 /**
@@ -227,9 +227,9 @@ class AsteroidRingSystem extends Group {
     l0ShapeMaterial.uniforms.uSpecularStrength.value = profile.specularStrength
     l0ShapeMaterial.uniforms.uSpecularPower.value = profile.specularPower
     l0ShapeMaterial.uniforms.uSpecularTint.value = profile.specularTint
-    // Дистанционное гашение ВЧ-детали (анти-алиасинг) — общее для всех профилей
-    l0ShapeMaterial.uniforms.uDetailFadeStart.value = toThreeJSUnits(cfg.detailFadeStartKm)
-    l0ShapeMaterial.uniforms.uDetailFadeEnd.value = toThreeJSUnits(cfg.detailFadeEndKm)
+    // Дальность детализации (fwidth-AA) — общая, не per-profile (про экран/LOD)
+    l0ShapeMaterial.uniforms.uAaStart.value = cfg.detailAaStart
+    l0ShapeMaterial.uniforms.uAaEnd.value = cfg.detailAaEnd
 
     // Установить maxDistance для billboard материала
     this.pool.billboardMaterial.uniforms.uMaxDistance.value = l1MaxDist

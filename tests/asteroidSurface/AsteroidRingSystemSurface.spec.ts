@@ -6,7 +6,6 @@ vi.mock('@/core/services/ResourceStorage', () => ({
 
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
 import { ASTEROID_PROFILES } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
-import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { Actor } from '@/core/models/Actor'
 
 const makeFakeActor = (): Actor =>
@@ -34,10 +33,10 @@ describe('AsteroidRingSystem: профили облика', () => {
     expect(u.uCrackIntensity.value).toBe(ASTEROID_PROFILES.icy.crackIntensity)
   })
 
-  it('разводит дистанционный фейд детали из конфига (в three-units)', () => {
-    const system = new AsteroidRingSystem(makeFakeActor(), { detailFadeStartKm: 800, detailFadeEndKm: 2500 })
+  it('разводит ручку дальности детализации из конфига', () => {
+    const system = new AsteroidRingSystem(makeFakeActor(), { detailAaStart: 2.0, detailAaEnd: 5.0 })
     const u = (system as any).pool.geometryMesh.material.uniforms
-    expect(u.uDetailFadeStart.value).toBeCloseTo(toThreeJSUnits(800), 6)
-    expect(u.uDetailFadeEnd.value).toBeCloseTo(toThreeJSUnits(2500), 6)
+    expect(u.uAaStart.value).toBe(2.0)
+    expect(u.uAaEnd.value).toBe(5.0)
   })
 })

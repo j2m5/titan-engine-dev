@@ -22,20 +22,23 @@ describe('L0 фрагмент: профили (v2)', () => {
     expect(shader.fragmentShader).toContain('uSpecularPower')
   })
 
-  it('один проход нормали через perturbNormalFromHeight + Blinn-Phong блик', () => {
+  it('аналитическая нормаль в объектном пространстве → переход во view + Blinn-Phong', () => {
     const shader = new InstancedAsteroidShader()
-    expect(shader.fragmentShader).toContain('perturbNormalFromHeight(')
-    expect(shader.fragmentShader).toContain('vec3 perturbNormalFromHeight(') // чанк вклеен
+    expect(shader.fragmentShader).toContain('applyAsteroidSurface(')
+    expect(shader.fragmentShader).toContain('vObjToView')     // объект→view переход
+    expect(shader.fragmentShader).toContain('vObjectNormal')
     expect(shader.fragmentShader).toContain('halfVec')
     expect(shader.fragmentShader).toContain('ringDustApplyFog(')
+    // Конечно-разностный путь нормали убран
+    expect(shader.fragmentShader).not.toContain('perturbNormalFromHeight')
   })
 
-  it('гасит высокочастотную нормаль с дистанцией (анти-алиасинг к LOD)', () => {
+  it('fwidth-AA добивает подпиксельный остаток; дальность детали — ручка uAaStart/uAaEnd', () => {
     const shader = new InstancedAsteroidShader()
-    expect(shader.fragmentShader).toContain('uDetailFadeStart')
-    expect(shader.fragmentShader).toContain('uDetailFadeEnd')
-    expect(shader.fragmentShader).toContain('detailFade')
-    expect(shader.uniforms.uDetailFadeStart).toBeDefined()
-    expect(shader.uniforms.uDetailFadeEnd).toBeDefined()
+    expect(shader.fragmentShader).toContain('fwidth(surfDir)')
+    expect(shader.fragmentShader).toContain('smoothstep(uAaStart, uAaEnd')
+    expect(shader.uniforms.uAaStart).toBeDefined()
+    expect(shader.uniforms.uAaEnd).toBeDefined()
+    expect(shader.fragmentShader).not.toContain('uDetailFade')
   })
 })

@@ -1,7 +1,7 @@
 import { asteroidSurfaceFunctions } from '@/core/materials/shaders/lib/chunks/AsteroidSurface'
 import { AppShaderChunk } from '@/core/materials/shaders/lib/chunks'
 
-describe('AsteroidSurface GLSL chunk (v2 профили)', () => {
+describe('AsteroidSurface GLSL chunk (аналитические нормали)', () => {
   it('единый базовый цвет: applyAsteroidSurface принимает baseColor, без 3-типового rockBaseColor', () => {
     expect(asteroidSurfaceFunctions).toContain('vec3 applyAsteroidSurface(')
     expect(asteroidSurfaceFunctions).toContain('vec3 baseColor')
@@ -9,9 +9,13 @@ describe('AsteroidSurface GLSL chunk (v2 профили)', () => {
     expect(asteroidSurfaceFunctions).not.toContain('sCol')
   })
 
-  it('добавлен слой микрозерна и texture-free возмущение нормали', () => {
-    expect(asteroidSurfaceFunctions).toContain('grainStrength')
-    expect(asteroidSurfaceFunctions).toContain('vec3 perturbNormalFromHeight(')
+  it('нормаль из АНАЛИТИЧЕСКИХ градиентов (snoiseGrad + craterProfileD), не из dFdx', () => {
+    expect(asteroidSurfaceFunctions).toContain('snoiseGrad(')           // зерно аналитически
+    expect(asteroidSurfaceFunctions).toContain('float craterProfileD(') // производная профиля кратера
+    expect(asteroidSurfaceFunctions).toContain('out vec3 perturbedNormal')
+    expect(asteroidSurfaceFunctions).toContain('gradH')                 // накопитель градиента нормали
+    // Конечно-разностный путь убран
+    expect(asteroidSurfaceFunctions).not.toContain('perturbNormalFromHeight')
   })
 
   it('кратеры/трещины по-прежнему из worleyCell', () => {

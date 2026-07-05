@@ -24,10 +24,10 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uSpecularStrength: new Uniform(0.05),
     uSpecularPower: new Uniform(8.0),
     uSpecularTint: new Uniform(0.0),
-    // Дистанционное гашение ВЧ-детали (анти-алиасинг). Дефолты «без фейда» —
-    // перекрываются разводкой из конфига (toThreeJSUnits).
-    uDetailFadeStart: new Uniform(1e8),
-    uDetailFadeEnd: new Uniform(2e8),
+    // Дальность детализации (fwidth-AA): деталь гаснет между Start и End
+    // (циклов зерна на пиксель). Больше → деталь держится дальше.
+    uAaStart: new Uniform(1.2),
+    uAaEnd: new Uniform(3.0),
     // Пылевая дымка (см. чанк RingDust). uDustDensity = 0 — туман выключен,
     // пока AsteroidRingSystem явно не сконфигурирует пыль.
     uDustColor: new Uniform(new Color(0x9b968c)),
@@ -56,12 +56,13 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uniform float uShapeFreq;
 
     varying vec2 vUv;
-    varying vec3 vNormal;
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vRingPos;
     varying vec3 vObjectPos;
     varying float vInstanceSeed;
+    varying vec3 vObjectNormal;
+    varying mat3 vObjToView;
 
     #include <noiseFunctions>
     #include <asteroidShapeFunctions>
@@ -87,17 +88,19 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
       mat3 instanceNormalMatrix = mat3(instanceMatrix);
-      vec3 transformedNormal = normalize(instanceNormalMatrix * shapedNormal);
 
       vUv = uv;
-      vNormal = normalize(normalMatrix * transformedNormal);
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
 
       // Для процедурного облика (см. чанк AsteroidSurface): объектная позиция
-      // (домен) и per-instance сид (тип/тинт) — переиспользуем сид формы.
+      // (домен) и per-instance сид (тип/тинт) — переиспользуем сид формы. Нормаль
+      // считается АНАЛИТИЧЕСКИ во фрагменте в объектном пространстве, поэтому
+      // прокидываем геом. нормаль объекта и матрицу объект→view.
       vObjectPos = shapedPos;
       vInstanceSeed = shapeSeed;
+      vObjectNormal = shapedNormal;
+      vObjToView = normalMatrix * instanceNormalMatrix;
 
       ${ShaderChunk['logdepthbuf_vertex']}
     }
@@ -127,15 +130,16 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uniform float uSpecularStrength;
     uniform float uSpecularPower;
     uniform float uSpecularTint;
-    uniform float uDetailFadeStart;
-    uniform float uDetailFadeEnd;
+    uniform float uAaStart;
+    uniform float uAaEnd;
 
-    varying vec3 vNormal;
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vRingPos;
     varying vec3 vObjectPos;
     varying float vInstanceSeed;
+    varying vec3 vObjectNormal;
+    varying mat3 vObjToView;
 
     #include <noiseFunctions>
     #include <asteroidSurfaceFunctions>
@@ -144,28 +148,31 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
     void main() {
       ${ShaderChunk['logdepthbuf_fragment']}
-      vec3 normal = normalize(vNormal);
-      float faceDirection = gl_FrontFacing ? 1.0 : -1.0;
+      vec3 surfDir = normalize(vObjectPos);
 
-      // Процедурный облик: альбедо + высота рельефа (для нормали) + каверн-AO
-      float surfH;
+      // Процедурный облик: альбедо + АНАЛИТИЧЕСКИ возмущённая объектная нормаль +
+      // каверн-AO. Нормаль из аналитических градиентов (без dFdx-статики).
+      vec3 perturbedObjNormal;
       float surfAO;
       vec3 albedo = applyAsteroidSurface(
-        normalize(vObjectPos), vInstanceSeed,
+        surfDir, normalize(vObjectNormal), vInstanceSeed,
         uRockColor, uColorJitter, uTintStrength,
-        uGrainStrength, uGrainFreq,
+        uGrainStrength, uGrainFreq, uCraterNormalScale,
         uCraterFreq, uCraterDensity, uCraterRadius, uCraterDepth, uCraterOctaves,
         uCrackWidth, uCrackIntensity, uCrackPatchiness,
         uAoStrength,
-        surfH, surfAO
+        perturbedObjNormal, surfAO
       );
 
-      // Рельеф (кратеры/трещины/зерно) → нормаль через экранные производные высоты.
-      // Гасим ВЧ-деталь с дистанцией: к LOD-переключению камень гладко затенён,
-      // без подпиксельной дрожи нормали/специляра (анти-алиасинг).
-      float detailFade = 1.0 - smoothstep(uDetailFadeStart, uDetailFadeEnd, length(vViewPosition));
-      vec2 dHdxyProc = vec2(dFdx(surfH), dFdy(surfH)) * uCraterNormalScale * detailFade;
-      normal = perturbNormalFromHeight(-vViewPosition, normal, dHdxyProc, faceDirection);
+      // fwidth-AA: где деталь подпиксельна (мелкие/далёкие камни) — сводим
+      // возмущение к геом. нормали, гася остаточный аляйсинг сигнала.
+      float cyclesPerPixel = length(fwidth(surfDir)) * uGrainFreq;
+      float aaFade = 1.0 - smoothstep(uAaStart, uAaEnd, cyclesPerPixel);
+      vec3 objN = normalize(mix(normalize(vObjectNormal), perturbedObjNormal, aaFade));
+
+      // Объектная нормаль → view; учёт ориентации грани
+      vec3 normal = normalize(vObjToView * objN);
+      if (!gl_FrontFacing) normal = -normal;
 
       vec3 lightDirection = normalize(vViewLightDirection);
       float lightIntensity = max(dot(normal, lightDirection), 0.0);
