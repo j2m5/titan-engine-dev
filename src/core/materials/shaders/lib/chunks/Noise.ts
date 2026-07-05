@@ -281,7 +281,7 @@ export const noiseFunctions = `
 
   // Производный 3D симплекс-шум: возвращает vec4(value, gradient).
   // Значение в том же масштабе, что snoise(vec3); градиент — аналитическая
-  // производочная simplex-noise (Gustavson): d/dv 42·Σ m^4·(p·x).
+  // производная simplex-noise (Gustavson): d/dv 42·Σ m^4·(p·x).
   vec4 snoiseGrad(vec3 v) {
     const vec2 C = vec2(1.0/6.0, 1.0/3.0);
     const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
