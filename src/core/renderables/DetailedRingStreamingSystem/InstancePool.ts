@@ -64,7 +64,12 @@ class InstancePool {
   /** Dirty-флаги для отложенного commit */
   private dirtyLevels: Set<LODLevel> = new Set()
 
-  public constructor(l0Config: PoolLayerConfig, l1Config: PoolLayerConfig, asteroidGeometrySize: number) {
+  public constructor(
+    l0Config: PoolLayerConfig,
+    l1Config: PoolLayerConfig,
+    asteroidGeometrySize: number,
+    l0Detail: number = 1
+  ) {
     this.layerConfigs = new Map([
       [LODLevel.Geometry, l0Config],
       [LODLevel.Billboard, l1Config]
@@ -78,7 +83,8 @@ class InstancePool {
     this.highWaterMark.set(LODLevel.Billboard, 0)
 
     // --- L0: Geometry InstancedMesh ---
-    const l0Geometry = new IcosahedronGeometry(asteroidGeometrySize, 1)
+    // detail управляет неровностью силуэта после GPU-деформации (см. AsteroidShape).
+    const l0Geometry = new IcosahedronGeometry(asteroidGeometrySize, 2 * l0Detail - 1)
     this.geometryMesh = new InstancedMesh(l0Geometry, new InstancedAsteroidMaterial(), l0Config.maxInstances)
     this.geometryMesh.count = 0
     this.geometryMesh.frustumCulled = false
