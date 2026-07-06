@@ -48,7 +48,7 @@ export const asteroidSurfaceFunctions = `
   // (фрагмент переводит во view), out ao — каверн-AO. Возвращает albedo.
   vec3 applyAsteroidSurface(
     vec3 dir, vec3 objNormal, float instanceSeed,
-    vec3 baseColor, float colorJitter, float tintStrength,
+    vec3 baseColor, float colorJitter, float tintStrength, float mariaStrength,
     float grainStrength, float grainFreq, float normalScale,
     float craterFreq, float craterDensity, float craterRadius, float craterDepth, float craterOctaves,
     float crackWidth, float crackIntensity, float crackPatchiness,
@@ -66,6 +66,16 @@ export const asteroidSurfaceFunctions = `
     vec3 base = baseColor * (1.0 + colorJitter * (tintSeed - 0.5) * 2.0);
     float mottle = snoise(dir * 2.0 + domainOffset);
     base *= 1.0 + tintStrength * mottle * 0.5;
+
+    // Крупномасштабное альбедо (maria/highlands): НЧ-маска делит поверхность на
+    // тёмные базальтовые равнины (maria) и светлые возвышенности → макро-
+    // композиция, поверхность перестаёт читаться как равномерный шум. Частоты
+    // низкие, поэтому маска стабильна на расстоянии (не мельтешит, в отличие от
+    // кратеров/трещин). Модулирует ТОЛЬКО базовый цвет — деталь ложится поверх.
+    float mariaField = 0.7 * snoise(dir * 1.2 + domainOffset * 0.7)
+                     + 0.3 * snoise(dir * 2.6 + domainOffset * 1.9);
+    float maria = smoothstep(-0.15, 0.35, mariaField);   // мягкие «берега» регионов
+    base *= 1.0 - mariaStrength * maria;                 // равнины темнее
 
     // Кратеры: высота craterH (cavity/AO/альбедо) + аналитический градиент gradH.
     // Трещины: только альбедо (crack) — в gradH НЕ входят.

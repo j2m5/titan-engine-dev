@@ -6,6 +6,7 @@ interface InstancedAsteroidUniforms {
   lightPosition: Vector3
   uRockColor: Color
   uColorJitter: number
+  uMariaStrength: number
   uGrainStrength: number
   uGrainFreq: number
   uSpecularStrength: number
@@ -48,6 +49,7 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       lightPosition: new Uniform(new Vector3()),
       uRockColor: new Uniform(new Color(0x6b6157)),
       uColorJitter: new Uniform(0.12),
+      uMariaStrength: new Uniform(0.3),
       uGrainStrength: new Uniform(0.15),
       uGrainFreq: new Uniform(22.0),
       uSpecularStrength: new Uniform(0.05),

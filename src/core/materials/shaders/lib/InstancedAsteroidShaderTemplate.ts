@@ -8,6 +8,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uRockColor: new Uniform(new Color(0x6b6157)),
     uColorJitter: new Uniform(0.12),
     uTintStrength: new Uniform(0.25),
+    uMariaStrength: new Uniform(0.3),
     uGrainStrength: new Uniform(0.15),
     uGrainFreq: new Uniform(22.0),
     uCraterFreq: new Uniform(4.0),
@@ -115,6 +116,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uniform vec3 uRockColor;
     uniform float uColorJitter;
     uniform float uTintStrength;
+    uniform float uMariaStrength;
     uniform float uGrainStrength;
     uniform float uGrainFreq;
     uniform float uCraterFreq;
@@ -168,7 +170,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       float surfAO;
       vec3 albedo = applyAsteroidSurface(
         surfDir, normalize(vObjectNormal), vInstanceSeed,
-        uRockColor, uColorJitter, uTintStrength,
+        uRockColor, uColorJitter, uTintStrength, uMariaStrength,
         uGrainStrength, uGrainFreq, uCraterNormalScale,
         uCraterFreq, uCraterDensity, uCraterRadius, uCraterDepth, uCraterOctaves,
         uCrackWidth, uCrackIntensity, uCrackPatchiness,

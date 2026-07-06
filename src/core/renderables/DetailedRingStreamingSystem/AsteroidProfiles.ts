@@ -12,6 +12,9 @@ export interface AsteroidProfile {
   colorJitter: number
   /** Сила внутриповерхностного оттеночного мотла */
   tintStrength: number
+  /** Сила крупномасштабного альбедо maria/highlands (0 → выкл): затемнение
+   *  базальтовых равнин относительно возвышенностей. Даёт макро-композицию. */
+  mariaStrength: number
   /** Сила микрозерна (высота ВЧ-рельефа) */
   grainStrength: number
   /** Частота микрозерна */
@@ -51,7 +54,7 @@ export type AsteroidProfileName = 'stony' | 'carbonaceous' | 'metallic' | 'icy'
 export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
   // Силикатный/каменный — матовый серо-коричневый, дефолт
   stony: {
-    baseColor: 0x6b6157, colorJitter: 0.12, tintStrength: 0.25,
+    baseColor: 0x6b6157, colorJitter: 0.12, tintStrength: 0.25, mariaStrength: 0.3,
     grainStrength: 0.15, grainFreq: 22.0,
     craterFreq: 4.0, craterDensity: 0.6, craterRadius: 0.5, craterDepth: 0.5, craterOctaves: 1,
     crackWidth: 0.05, crackIntensity: 0.5, crackPatchiness: 0.7,
@@ -60,7 +63,7 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
   },
   // Углистый — очень тёмный, сильно кратерированный, матовый
   carbonaceous: {
-    baseColor: 0x2b2824, colorJitter: 0.08, tintStrength: 0.2,
+    baseColor: 0x2b2824, colorJitter: 0.08, tintStrength: 0.2, mariaStrength: 0.22,
     grainStrength: 0.2, grainFreq: 26.0,
     craterFreq: 5.0, craterDensity: 0.75, craterRadius: 0.45, craterDepth: 0.7, craterOctaves: 2,
     crackWidth: 0.04, crackIntensity: 0.25, crackPatchiness: 0.8,
@@ -69,7 +72,7 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
   },
   // Железный — тёплый серый, мало кратеров, резкий окрашенный блик
   metallic: {
-    baseColor: 0x8a8079, colorJitter: 0.1, tintStrength: 0.15,
+    baseColor: 0x8a8079, colorJitter: 0.1, tintStrength: 0.15, mariaStrength: 0.14,
     grainStrength: 0.06, grainFreq: 18.0,
     craterFreq: 4.0, craterDensity: 0.35, craterRadius: 0.4, craterDepth: 0.3, craterOctaves: 1,
     crackWidth: 0.05, crackIntensity: 0.0, crackPatchiness: 0.7,
@@ -78,7 +81,7 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
   },
   // Ледяной — голубовато-белый, мягкие кратеры, ледяные сетки трещин, мягкий блик
   icy: {
-    baseColor: 0xc4d2dc, colorJitter: 0.06, tintStrength: 0.12,
+    baseColor: 0xc4d2dc, colorJitter: 0.06, tintStrength: 0.12, mariaStrength: 0.2,
     grainStrength: 0.05, grainFreq: 16.0,
     craterFreq: 3.5, craterDensity: 0.3, craterRadius: 0.55, craterDepth: 0.25, craterOctaves: 1,
     crackWidth: 0.06, crackIntensity: 0.7, crackPatchiness: 0.5,
