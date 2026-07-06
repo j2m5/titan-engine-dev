@@ -53,7 +53,7 @@ export const asteroidSurfaceFunctions = `
     float craterFreq, float craterDensity, float craterRadius, float craterDepth, float craterOctaves,
     float crackWidth, float crackIntensity, float crackPatchiness,
     float aoStrength,
-    out vec3 perturbedNormal, out float ao
+    out vec3 perturbedNormal, out float ao, out vec3 baseAlbedo
   ) {
     float tintSeed = hashSurface11(instanceSeed + 3.17);
     vec3 domainOffset = vec3(
@@ -121,6 +121,10 @@ export const asteroidSurfaceFunctions = `
     crack = clamp(crack, 0.0, 1.0);
     float patchMask = 0.5 + 0.5 * snoise(dir * 3.0 + domainOffset * 1.7);
     crack *= mix(1.0, patchMask, crackPatchiness) * crackIntensity;
+
+    // Базовое альбедо (maria/мотл/джиттер — НЧ, стабильно на расстоянии) отдаём
+    // наружу: фрагмент сводит к нему ВЧ-деталь кратеров/трещин с дистанцией (B0).
+    baseAlbedo = base;
 
     // Альбедо: затемнение дна кратеров + тёмные трещины
     float cavity = max(-craterH, 0.0);

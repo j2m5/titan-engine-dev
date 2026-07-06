@@ -168,6 +168,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       // каверн-AO. Нормаль из аналитических градиентов (без dFdx-статики).
       vec3 perturbedObjNormal;
       float surfAO;
+      vec3 baseSurfAlbedo;
       vec3 albedo = applyAsteroidSurface(
         surfDir, normalize(vObjectNormal), vInstanceSeed,
         uRockColor, uColorJitter, uTintStrength, uMariaStrength,
@@ -175,14 +176,23 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
         uCraterFreq, uCraterDensity, uCraterRadius, uCraterDepth, uCraterOctaves,
         uCrackWidth, uCrackIntensity, uCrackPatchiness,
         uAoStrength,
-        perturbedObjNormal, surfAO
+        perturbedObjNormal, surfAO, baseSurfAlbedo
       );
 
-      // fwidth-AA: где деталь подпиксельна (мелкие/далёкие камни) — сводим
-      // возмущение к геом. нормали, гася остаточный аляйсинг сигнала.
+      // fwidth-AA нормали: где зерно подпиксельно — сводим возмущение к геом.
+      // нормали, гася аляйсинг сигнала. Частота — зерна (самая ВЧ в нормали).
       float cyclesPerPixel = length(fwidth(surfDir)) * uGrainFreq;
       float aaFade = 1.0 - smoothstep(uAaStart, uAaEnd, cyclesPerPixel);
       vec3 objN = normalize(mix(normalize(vObjectNormal), perturbedObjNormal, aaFade));
+
+      // fwidth-AA альбедо (B0): тёмные линии трещин и пятна кратеров — это АЛЬБЕДО,
+      // у него нет сглаживания нормали → на среднем плане мельтешит. Гасим деталь
+      // альбедо и AO к базовому (НЧ maria/мотл) по частоте КРАТЕРНОГО узора: он
+      // грубее зерна, поэтому альбедо держится дольше и не смазывается раньше срока.
+      float albedoCyclesPerPixel = length(fwidth(surfDir)) * uCraterFreq;
+      float albedoFade = 1.0 - smoothstep(uAaStart, uAaEnd, albedoCyclesPerPixel);
+      albedo = mix(baseSurfAlbedo, albedo, albedoFade);
+      surfAO = mix(1.0, surfAO, albedoFade);
 
       // Объектная нормаль → view; учёт ориентации грани
       vec3 normal = normalize(vObjToView * objN);
