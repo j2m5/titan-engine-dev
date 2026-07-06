@@ -23,10 +23,12 @@ describe('AsteroidRingSystem: интеграция формы', () => {
   })
 
   it('дефолтом кладёт диапазон амплитуды и частоту в L0-материал', () => {
+    // Амплитуда шума снижена: силуэтное разнообразие несёт эллипсоид-база,
+    // шум даёт лишь мягкие лямпы (иначе высокий amp даёт «звезду» на coarse-меше).
     const system = new AsteroidRingSystem(makeFakeActor())
     const u = (system as any).pool.geometryMesh.material.uniforms
-    expect(u.uShapeAmpMin.value).toBeCloseTo(0.3, 10)
-    expect(u.uShapeAmpMax.value).toBeCloseTo(0.8, 10)
+    expect(u.uShapeAmpMin.value).toBeCloseTo(0.08, 10)
+    expect(u.uShapeAmpMax.value).toBeCloseTo(0.22, 10)
     expect(u.uShapeFreq.value).toBeCloseTo(1.4, 10)
   })
 

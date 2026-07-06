@@ -11,7 +11,7 @@
  * приходит аргументом amp — включающий шейдер задаёт её per-instance.
  */
 export const asteroidShapeFunctions = `
-  #define ASTEROID_SHAPE_OCTAVES 3
+  #define ASTEROID_SHAPE_OCTAVES 2
 
   // Хеш vec3 → float (Dave Hoskins). Стабильный сид формы из позиции инстанса.
   float hash13(vec3 p3) {
@@ -37,21 +37,44 @@ export const asteroidShapeFunctions = `
   }
 
   // Деформация вершины икосаэдра в объектном пространстве.
-  // pos/normal — исходные; seed — стабильный сид камня; amp — амплитуда
-  // (per-instance, задаётся включающим шейдером из диапазона).
+  //
+  // Форму несёт ТРЁХОСНЫЙ ЭЛЛИПСОИД (макро-силуэт: вытянутость/сплюснутость) —
+  // он гладкий по построению, не даёт торчащих вершин «звезды». Поверх —
+  // низкочастотный (2 октавы) шум как мягкие лямпы; вся ВЧ-деталь живёт во
+  // фрагментном возмущении нормали (см. AsteroidSurface), а НЕ в геометрии.
+  //
+  // pos/normal — исходные (normal сфероида ≈ dir, не используется); seed —
+  // стабильный сид камня; amp — амплитуда лямпов (per-instance из диапазона).
   void deformAsteroid(vec3 pos, vec3 normal, float seed, float amp, out vec3 displacedPos, out vec3 newNormal) {
     float R = length(pos);
     vec3 dir = pos / max(R, 1e-6);
-    vec3 domain = dir * uShapeFreq + vec3(seed * 17.13, seed * 5.71, seed * 9.37);
 
+    // Оси эллипсоида из декоррелированных хешей сида → диапазон [0.7, 1.4]
+    // (отношение осей до ~2:1, как у реальных тел). Нормировка на среднее
+    // геометрическое (∛(x·y·z) = 1) сохраняет объём → общий масштаб и
+    // распределение minScale/maxScale не смещаются.
+    vec3 axes = 0.7 + 0.7 * vec3(
+      hash13(vec3(seed, 1.0, 2.0)),
+      hash13(vec3(seed, 3.0, 4.0)),
+      hash13(vec3(seed, 5.0, 6.0))
+    );
+    axes /= pow(axes.x * axes.y * axes.z, 1.0 / 3.0);
+
+    // Точка на эллипсоиде и его АНАЛИТИЧЕСКАЯ нормаль (∝ dir / axes²).
+    vec3 ePos = dir * axes * R;
+    vec3 eNormal = normalize(dir / (axes * axes));
+
+    // НЧ-шум силуэта поверх эллипсоида (домен — исходное направление).
+    vec3 domain = dir * uShapeFreq + vec3(seed * 17.13, seed * 5.71, seed * 9.37);
     vec4 nv = fbmGrad(domain);
     float f = nv.x;
     vec3 grad = nv.yzw;
 
-    displacedPos = pos + normal * (f * amp * R);
+    displacedPos = ePos + eNormal * (f * amp * R);
 
-    // Возмущение нормали: вычитаем тангенциальную составляющую градиента.
-    vec3 gTangent = grad - dot(grad, normal) * normal;
-    newNormal = normalize(normal - amp * gTangent);
+    // Возмущение нормали относительно эллипсоида: вычитаем тангенциальную
+    // составляющую градиента шума.
+    vec3 gTangent = grad - dot(grad, eNormal) * eNormal;
+    newNormal = normalize(eNormal - amp * gTangent);
   }
 `
