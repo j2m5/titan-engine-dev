@@ -190,6 +190,8 @@ class SectorManager {
 
     const data = this.generator.generateMatrices(info.seed, instanceCount, info.bounds)
     this.pool.writeMatrices(lodLevel, allocation.offset, data)
+    // Стартуем невидимым — updateFades плавно поднимет fade к 1.
+    this.pool.writeFade(lodLevel, allocation.offset, allocation.count, 0.0)
 
     const state: SectorState = {
       key: info.key,
@@ -224,8 +226,11 @@ class SectorManager {
 
     state.lodLevel = newLOD
     state.allocation = allocation
+    // Новый LOD проявляется с 0.3 (не с нуля — переход между уровнями резче, чем
+    // появление сектора «из пустоты»), дальше updateFades доводит до 1.
     state.fade = 0.3
     state.fadeTarget = 1.0
+    this.pool.writeFade(newLOD, allocation.offset, allocation.count, state.fade)
   }
 
   /**
@@ -242,6 +247,9 @@ class SectorManager {
         } else {
           state.fade = Math.max(state.fade - step, state.fadeTarget)
         }
+        // fade изменился — залить новое значение в per-instance атрибут сектора.
+        // Осевшие секторы (fade == fadeTarget) не трогаем → нет покадровых записей.
+        this.pool.writeFade(state.lodLevel, state.allocation.offset, state.allocation.count, state.fade)
       }
 
       if (state.pendingRemoval && state.fade <= 0.001) {

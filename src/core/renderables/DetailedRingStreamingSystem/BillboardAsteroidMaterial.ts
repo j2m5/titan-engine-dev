@@ -44,11 +44,15 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         uniform float uMaxDistance;
         uniform vec3 uLightPosition;
 
+        // Per-instance fade [0..1] — плавные LOD/sector-переходы (см. InstancePool.writeFade)
+        attribute float instanceFade;
+
         varying vec2 vUv;
         varying float vDistanceFade;
         varying vec3 vLightDirView;
         varying float vInstanceSeed;
         varying vec3 vRingPos;
+        varying float vFade;
 
         void main() {
           // Извлечь позицию и масштаб из instance matrix
@@ -102,6 +106,8 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
           float dist = length(mvInstancePos.xyz);
           vDistanceFade = 1.0 - smoothstep(uMaxDistance * 0.6, uMaxDistance, dist);
 
+          vFade = instanceFade;
+
           ${ShaderChunk.logdepthbuf_vertex}
         }
       `,
@@ -118,6 +124,7 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         varying vec3 vLightDirView;
         varying float vInstanceSeed;
         varying vec3 vRingPos;
+        varying float vFade;
 
         ${ringDustUniforms}
         ${ringDustFunctions}
@@ -165,7 +172,8 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
           float lighting = uAmbient + (0.3 - uAmbient) * diffuse;
 
           // --- Итоговый цвет ---
-          float alpha = edgeAlpha * uFade * vDistanceFade;
+          // vFade — плавный fade-in/out сектора при стриминге и смене LOD
+          float alpha = edgeAlpha * uFade * vDistanceFade * vFade;
           if (alpha < 0.01) discard;
 
           vec3 color = uColor * lighting;

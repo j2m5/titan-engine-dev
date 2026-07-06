@@ -1,4 +1,4 @@
-import { IcosahedronGeometry, InstancedMesh, Object3D, PlaneGeometry } from 'three'
+import { IcosahedronGeometry, InstancedBufferAttribute, InstancedMesh, Object3D, PlaneGeometry } from 'three'
 import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
 import { BillboardAsteroidMaterial } from './BillboardAsteroidMaterial'
 
@@ -61,8 +61,11 @@ class InstancePool {
   /** Материал billboard (хранится для доступа к uniforms) */
   public billboardMaterial: BillboardAsteroidMaterial
 
-  /** Dirty-флаги для отложенного commit */
+  /** Dirty-флаги для отложенного commit матриц */
   private dirtyLevels: Set<LODLevel> = new Set()
+
+  /** Dirty-флаги для отложенного commit fade-атрибута (меняется каждый кадр перехода) */
+  private dirtyFadeLevels: Set<LODLevel> = new Set()
 
   public constructor(
     l0Config: PoolLayerConfig,
@@ -90,6 +93,10 @@ class InstancePool {
     this.geometryMesh.frustumCulled = false
     this.geometryMesh.name = 'AsteroidPool_L0'
 
+    // Per-instance fade [0..1] для плавных LOD/sector-переходов (см. writeFade).
+    // Инициализирован нулями: слот невидим, пока сектор не проявится.
+    l0Geometry.setAttribute('instanceFade', new InstancedBufferAttribute(new Float32Array(l0Config.maxInstances), 1))
+
     // --- L1: Billboard InstancedMesh ---
     const l1Geometry = new PlaneGeometry(asteroidGeometrySize * 2.5, asteroidGeometrySize * 2.5)
     this.billboardMaterial = new BillboardAsteroidMaterial()
@@ -97,6 +104,14 @@ class InstancePool {
     this.billboardMesh.count = 0
     this.billboardMesh.frustumCulled = false
     this.billboardMesh.name = 'AsteroidPool_L1'
+
+    l1Geometry.setAttribute('instanceFade', new InstancedBufferAttribute(new Float32Array(l1Config.maxInstances), 1))
+  }
+
+  /** InstancedBufferAttribute fade для заданного LOD. */
+  private fadeAttribute(lodLevel: LODLevel): InstancedBufferAttribute {
+    const mesh = lodLevel === LODLevel.Geometry ? this.geometryMesh : this.billboardMesh
+    return mesh.geometry.getAttribute('instanceFade') as InstancedBufferAttribute
   }
 
   /**
@@ -157,6 +172,17 @@ class InstancePool {
   }
 
   /**
+   * Записать per-instance fade [0..1] в диапазон [offset, offset+count).
+   * Значение общее для всего сектора; меняется покадрово во время перехода.
+   */
+  public writeFade(lodLevel: LODLevel, offset: number, count: number, fade: number): void {
+    const attr = this.fadeAttribute(lodLevel)
+    const dst = attr.array as Float32Array
+    dst.fill(fade, offset, offset + count)
+    this.dirtyFadeLevels.add(lodLevel)
+  }
+
+  /**
    * Применить все накопленные изменения к GPU-буферам.
    */
   public commitUpdates(): void {
@@ -170,7 +196,15 @@ class InstancePool {
       this.billboardMesh.count = this.highWaterMark.get(LODLevel.Billboard)!
     }
 
+    if (this.dirtyFadeLevels.has(LODLevel.Geometry)) {
+      this.fadeAttribute(LODLevel.Geometry).needsUpdate = true
+    }
+    if (this.dirtyFadeLevels.has(LODLevel.Billboard)) {
+      this.fadeAttribute(LODLevel.Billboard).needsUpdate = true
+    }
+
     this.dirtyLevels.clear()
+    this.dirtyFadeLevels.clear()
   }
 
   /**
@@ -197,6 +231,12 @@ class InstancePool {
     for (let i = 0; i < count; i++) {
       dst.set(InstancePool.ZERO_MATRIX, (offset + i) * 16)
     }
+
+    // Обнулить fade освобождённого диапазона — чтобы переиспользуемый слот не
+    // унаследовал остаточную видимость до первой записи менеджером.
+    const fade = this.fadeAttribute(lodLevel).array as Float32Array
+    fade.fill(0, offset, offset + count)
+    this.dirtyFadeLevels.add(lodLevel)
   }
 
   private defragFreeList(freeList: FreeRange[]): void {

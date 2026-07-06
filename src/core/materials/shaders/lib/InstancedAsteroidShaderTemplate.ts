@@ -55,6 +55,9 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uniform float uShapeAmpMax;
     uniform float uShapeFreq;
 
+    // Per-instance fade [0..1] — плавные LOD/sector-переходы (см. InstancePool.writeFade)
+    attribute float instanceFade;
+
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vRingPos;
@@ -62,6 +65,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     varying float vInstanceSeed;
     varying vec3 vObjectNormal;
     varying mat3 vObjToView;
+    varying float vFade;
 
     #include <noiseFunctions>
     #include <asteroidShapeFunctions>
@@ -99,6 +103,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       vInstanceSeed = shapeSeed;
       vObjectNormal = shapedNormal;
       vObjToView = normalMatrix * instanceNormalMatrix;
+      vFade = instanceFade;
 
       ${ShaderChunk['logdepthbuf_vertex']}
     }
@@ -136,14 +141,25 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     varying float vInstanceSeed;
     varying vec3 vObjectNormal;
     varying mat3 vObjToView;
+    varying float vFade;
 
     #include <noiseFunctions>
     #include <asteroidSurfaceFunctions>
     #include <ringDustUniforms>
     #include <ringDustFunctions>
 
+    // Interleaved gradient noise (Jimenez) — экранный дизер для fade-переходов.
+    float fadeDither(vec2 fragCoord) {
+      return fract(52.9829189 * fract(dot(fragCoord, vec2(0.06711056, 0.00583715))));
+    }
+
     void main() {
       ${ShaderChunk['logdepthbuf_fragment']}
+
+      // Screen-door fade: непрозрачная геометрия гаснет упорядоченным дизером —
+      // без сортировки, с сохранением depthWrite. При vFade>=1 порог не срабатывает.
+      if (vFade < fadeDither(gl_FragCoord.xy)) discard;
+
       vec3 surfDir = normalize(vObjectPos);
 
       // Процедурный облик: альбедо + АНАЛИТИЧЕСКИ возмущённая объектная нормаль +
