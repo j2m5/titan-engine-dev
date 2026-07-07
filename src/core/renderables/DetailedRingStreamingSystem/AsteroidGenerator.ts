@@ -1,5 +1,6 @@
 import { SeededRandom } from './SeededRandom'
 import type { SectorBounds } from './SectorGrid'
+import { RadialDensityProfile } from './RadialDensityProfile'
 
 /**
  * Конфигурация генератора
@@ -24,8 +25,19 @@ interface GeneratorConfig {
 class AsteroidGenerator {
   private readonly config: GeneratorConfig
 
+  /**
+   * Радиальный профиль плотности (A-full importance sampling). null → радиус
+   * равномерно по площади полосы. Ставится асинхронно (текстура кольца готова).
+   */
+  private densityProfile: RadialDensityProfile | null = null
+
   public constructor(config: GeneratorConfig) {
     this.config = config
+  }
+
+  /** Задать радиальный профиль: радиус камня семплится ∝ альфе (концентрация в колечках). */
+  public setDensityProfile(profile: RadialDensityProfile | null): void {
+    this.densityProfile = profile
   }
 
   /**
@@ -48,8 +60,12 @@ class AsteroidGenerator {
     const halfThickness = thickness * 0.5
 
     for (let i = 0; i < count; i++) {
-      // Позиция: равномерное распределение по площади кольцевого сектора
-      const r = Math.sqrt(rng.range(r1Sq, r2Sq))
+      // Позиция по радиусу: с профилем — importance sampling ∝ альфе (камни
+      // концентрируются в колечках), иначе — равномерно по площади полосы.
+      // Оба пути тратят ровно один rng.next() → детерминизм не сдвигается.
+      const r = this.densityProfile
+        ? this.densityProfile.sampleRadius(bounds.minRadius, bounds.maxRadius, rng.next())
+        : Math.sqrt(rng.range(r1Sq, r2Sq))
       const theta = rng.range(bounds.minAngle, bounds.maxAngle)
       const x = Math.cos(theta) * r
       const z = Math.sin(theta) * r

@@ -5,6 +5,7 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+import { readRingAlphaProfile } from './RingAlphaReadback'
 import { SectorGrid, SectorGridConfig } from './SectorGrid'
 import { AsteroidGenerator, GeneratorConfig } from './AsteroidGenerator'
 import { InstancePool, PoolLayerConfig } from './InstancePool'
@@ -160,6 +161,12 @@ class AsteroidRingSystem extends Group {
   /** Флаг: система была деактивирована (parent invisible) */
   private wasDeactivated = false
 
+  // A-lite: радиальный профиль плотности из текстуры кольца строится один раз,
+  // когда текстура догрузилась (async). До этого — равномерная плотность + B-гейт.
+  private densityProfileReady = false
+  private ringInnerTU = 0
+  private ringOuterTU = 0
+
   public constructor(model: Actor, configOverrides: Partial<AsteroidRingConfig> = {}) {
     super()
     this.model = model
@@ -192,6 +199,10 @@ class AsteroidRingSystem extends Group {
     const l0NearMaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l0Near)
     const l0MaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l0)
     const l1MaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l1)
+
+    // Радиусы кольца в three-units — для A-lite readback профиля (см. updateObject)
+    this.ringInnerTU = innerRadius
+    this.ringOuterTU = outerRadius
 
     // --- SectorGrid ---
     const gridConfig: SectorGridConfig = {
@@ -374,6 +385,10 @@ class AsteroidRingSystem extends Group {
       this.wasDeactivated = false
     }
 
+    // A-lite: попытаться построить радиальный профиль плотности (когда текстура
+    // кольца догрузилась). Дешёвая проверка флага, пока не построен.
+    this.__tryBuildDensityProfile()
+
     // Получить камеру
     const camera = threeJS.camera as PerspectiveCamera
     if (!camera) return
@@ -417,6 +432,35 @@ class AsteroidRingSystem extends Group {
 
     // Коммит изменений в GPU
     this.pool.commitUpdates()
+  }
+
+  /**
+   * A-lite: один раз построить радиальный профиль плотности из альфы текстуры
+   * кольца и отдать его в SectorGrid. Пустотные полосы перестанут генерироваться
+   * (нет waste на пустотах разреженных колец). До готовности текстуры — равномерная
+   * плотность + B-гейт (визуал корректен всегда), поэтому переход незаметен.
+   */
+  private __tryBuildDensityProfile(): void {
+    if (this.densityProfileReady || !this.config.ringGapsFromTexture) return
+
+    const path = this.model.resources?.first()?.getAttribute('path')
+    if (!path) {
+      this.densityProfileReady = true // нет ресурса → профиля не будет, не ретраим
+      return
+    }
+
+    // Реальная текстура (не fallback): getTexture вернёт её только после загрузки.
+    const texture = resourceStorage.getTexture(path)
+    if (!texture) return // ещё грузится (напр. s3) → повторим в следующем кадре
+
+    const profile = readRingAlphaProfile(texture, this.ringInnerTU, this.ringOuterTU)
+    if (profile) {
+      // SectorGrid — верное КОЛИЧЕСТВО (вес по средней альфе), генератор —
+      // КОНЦЕНТРАЦИЯ (радиус ∝ альфе). Вместе → плотность колечка = base.
+      this.sectorGrid.setDensityProfile(profile)
+      this.generator.setDensityProfile(profile)
+    }
+    this.densityProfileReady = true // строим один раз (успех или нечитаемо)
   }
 
   /**

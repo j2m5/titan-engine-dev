@@ -1,4 +1,5 @@
 import { hashSectorKey } from './SeededRandom'
+import { RadialDensityProfile } from './RadialDensityProfile'
 
 /**
  * Описание границ одного сектора в полярных координатах
@@ -67,10 +68,25 @@ class SectorGrid {
   public readonly layers: LayerInfo[]
   public readonly totalSectorCount: number
 
+  /**
+   * Радиальный профиль плотности из альфы текстуры кольца (A-lite). null →
+   * равномерная плотность. Устанавливается асинхронно, когда текстура готова
+   * (см. AsteroidRingSystem), поэтому мутабельный.
+   */
+  private densityProfile: RadialDensityProfile | null = null
+
   public constructor(config: SectorGridConfig) {
     this.config = config
     this.layers = this.buildLayers()
     this.totalSectorCount = this.layers.reduce((sum, l) => sum + l.angularSectorCount, 0)
+  }
+
+  /**
+   * Задать радиальный профиль плотности (взвешивает instanceCount секторов).
+   * Пустотные полосы получают вес ~0 → instanceCount 0 → сектор не генерится.
+   */
+  public setDensityProfile(profile: RadialDensityProfile | null): void {
+    this.densityProfile = profile
   }
 
   private buildLayers(): LayerInfo[] {
@@ -125,7 +141,13 @@ class SectorGrid {
     // Площадь сектора (annular sector area)
     const area =
       0.5 * (layer.outerRadius * layer.outerRadius - layer.innerRadius * layer.innerRadius) * layer.angularStep
-    const instanceCount = Math.max(1, Math.round(area * this.config.densityPerUnit))
+    // A-lite: взвешиваем по альфе профиля на радиальной полосе слоя. Пустотные
+    // слои (вес ~0) дают 0 → сектор не генерится вовсе (нет waste на пустотах).
+    const weight = this.densityProfile
+      ? this.densityProfile.weightForBand(layer.innerRadius, layer.outerRadius)
+      : 1
+    const weighted = area * this.config.densityPerUnit * weight
+    const instanceCount = weighted < 0.5 ? 0 : Math.max(1, Math.round(weighted))
 
     const key = `${layerIndex}_${normalizedAngleIndex}`
     const seed = hashSectorKey(this.config.ringId, layerIndex, normalizedAngleIndex)

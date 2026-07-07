@@ -118,6 +118,11 @@ class SectorManager {
     const camZ = Math.sin(cameraAngle) * cameraRadius
 
     for (const info of candidates) {
+      // A-lite: пустотные сектора (радиальный профиль дал вес ~0 → instanceCount 0)
+      // не генерируем вовсе. Уже активный сектор, ставший пустотным (профиль
+      // подгрузился), выпадет из desired → плавно погаснет.
+      if (info.instanceCount <= 0) continue
+
       const dx = info.centerX - camX
       const dz = info.centerZ - camZ
       const dist = Math.sqrt(dx * dx + dz * dz)

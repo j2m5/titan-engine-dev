@@ -74,6 +74,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     varying vec3 vObjectNormal;
     varying mat3 vObjToView;
     varying float vFade;
+    varying vec3 vRingCenter;
 
     #include <noiseFunctions>
     #include <asteroidShapeFunctions>
@@ -94,8 +95,11 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
       gl_Position = projectionMatrix * mvPosition;
 
-      // Ring-local позиция фрагмента для модели пыли
+      // Ring-local позиция фрагмента для модели пыли/тени (пофрагментная)
       vRingPos = worldPosition.xyz;
+      // Ring-local ЦЕНТР инстанса — для per-instance гейта щелей (без слайсинга).
+      // Константа по всем вершинам инстанса → varying интерполируется в неё же.
+      vRingCenter = instanceMatrix[3].xyz;
 
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
       mat3 instanceNormalMatrix = mat3(instanceMatrix);
@@ -156,6 +160,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     varying vec3 vObjectNormal;
     varying mat3 vObjToView;
     varying float vFade;
+    varying vec3 vRingCenter;
 
     #include <noiseFunctions>
     #include <asteroidSurfaceFunctions>
@@ -180,11 +185,12 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       if (vFade < 0.0) fadeThresh = 1.0 - fadeThresh;
       if (fadeMag < fadeThresh) discard;
 
-      // Спайк B: радиальные щели/полосы из альфы текстуры 2D-кольца. Тот же
-      // радиальный маппинг (uv.x = радиус в ring-local), поэтому 3D-щели ложатся
-      // ровно на 2D. Ранний выход до расчёта поверхности. За флагом (по умолч. off).
+      // Радиальные щели/полосы из альфы текстуры 2D-кольца. Гейт по радиусу ЦЕНТРА
+      // инстанса (vRingCenter), а НЕ пофрагментно — иначе кромка колечка разрезает
+      // отдельные астероиды пополам. Тот же радиальный маппинг, что у RingShader →
+      // 3D-щели ложатся на 2D. Ранний выход. За флагом (по умолч. off).
       if (uRingGapEnabled > 0.5) {
-        float gapU = (length(vRingPos.xz) - uRingGapInner) / (uRingGapOuter - uRingGapInner);
+        float gapU = (length(vRingCenter.xz) - uRingGapInner) / (uRingGapOuter - uRingGapInner);
         float gapA = texture2D(uRingGapMap, vec2(clamp(gapU, 0.0, 1.0), 0.0)).a;
         if (gapA <= uRingGapAlphaTest) discard;
       }
