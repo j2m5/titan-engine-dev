@@ -168,7 +168,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       // без «дыр» на середине перехода. |vFade|>=1 → порог не срабатывает.
       float fadeMag = abs(vFade);
       float fadeThresh = fadeDither(gl_FragCoord.xy);
-      if (vFade < 0.999) fadeThresh = 1.0 - fadeThresh;
+      if (vFade < 0.0) fadeThresh = 1.0 - fadeThresh;
       if (fadeMag < fadeThresh) discard;
 
       vec3 surfDir = normalize(vObjectPos);
