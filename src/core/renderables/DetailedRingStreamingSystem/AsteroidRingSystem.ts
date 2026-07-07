@@ -1,11 +1,12 @@
-import { Color, Group, Matrix4, Object3D, PerspectiveCamera, Vector3 } from 'three'
+import { Color, Group, Matrix4, Object3D, PerspectiveCamera, Vector3, type Texture } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
 import { resourceStorage } from '@/core/services/ResourceStorage'
-import { readRingAlphaProfile } from './RingAlphaReadback'
+import { readRingAlphaProfile, readRingAlphaBins } from './RingAlphaReadback'
+import { createDustRadialTexture } from './dust/DustRadialProfile'
 import { SectorGrid, SectorGridConfig } from './SectorGrid'
 import { AsteroidGenerator, GeneratorConfig } from './AsteroidGenerator'
 import { InstancePool, PoolLayerConfig } from './InstancePool'
@@ -90,6 +91,19 @@ interface AsteroidRingConfig {
    * 3D-щели совпадают с 2D. По умолчанию выключено.
    */
   ringGapsFromTexture: boolean
+  /**
+   * Мягкость кромок субколец: сигма размытия радиального профиля плотности в км.
+   * Камни немного выходят за текстурное субкольцо (~2σ), кромка — градиент, а не
+   * «астероидный забор». 0 — резкие кромки, как в текстуре.
+   */
+  ringGapBleedKm: number
+  /**
+   * Мягкость согласования ПЫЛИ с текстурой кольца: сигма размытия радиального
+   * профиля пыли в км. Пыль диффузнее камней → дефолт шире, чем ringGapBleedKm.
+   * Порог alphaTest к пыли не применяется: тусклые полосы текстуры — это и есть
+   * пыль, они получают пропорционально тусклую дымку.
+   */
+  dustBleedKm: number
 }
 
 /**
@@ -125,7 +139,9 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   profile: 'stony',
   detailAaStart: 1.2,
   detailAaEnd: 3.0,
-  ringGapsFromTexture: true
+  ringGapsFromTexture: true,
+  ringGapBleedKm: 300,
+  dustBleedKm: 600
 }
 
 /**
@@ -298,7 +314,9 @@ class AsteroidRingSystem extends Group {
     // --- Спайк B: радиальные щели из альфы текстуры кольца (за флагом) ---
     // Та же текстура/радиусы, что у RingShader → 3D-щели ложатся на 2D. Пока
     // текстура не пришла, getTextureOrMake отдаёт fallback (полная альфа) → щелей
-    // нет, ровно как у 2D-кольца до загрузки; при подмене текстуры щели проявятся.
+    // нет, ровно как у 2D-кольца до загрузки. Гейт — страховка для равномерного
+    // распределения; после построения радиального профиля плотности он
+    // выключается (см. __tryBuildDensityProfile).
     if (cfg.ringGapsFromTexture) {
       const ringData = this.model.renderingObject?.getAttribute('data')
       const gapAlphaTest = ringData?.alphaTest ?? 0
@@ -439,6 +457,10 @@ class AsteroidRingSystem extends Group {
    * кольца и отдать его в SectorGrid. Пустотные полосы перестанут генерироваться
    * (нет waste на пустотах разреженных колец). До готовности текстуры — равномерная
    * плотность + B-гейт (визуал корректен всегда), поэтому переход незаметен.
+   *
+   * Профиль вбирает семантику гейта (отсечка по alphaTest) и добавляет мягкие
+   * кромки (ringGapBleedKm), поэтому при успехе B-гейт ВЫКЛЮЧАЕТСЯ: жёсткий
+   * discard по сырой альфе срезал бы размытые хвосты обратно в «забор».
    */
   private __tryBuildDensityProfile(): void {
     if (this.densityProfileReady || !this.config.ringGapsFromTexture) return
@@ -453,14 +475,56 @@ class AsteroidRingSystem extends Group {
     const texture = resourceStorage.getTexture(path)
     if (!texture) return // ещё грузится (напр. s3) → повторим в следующем кадре
 
-    const profile = readRingAlphaProfile(texture, this.ringInnerTU, this.ringOuterTU)
+    const ringData = this.model.renderingObject?.getAttribute('data')
+    const profile = readRingAlphaProfile(texture, this.ringInnerTU, this.ringOuterTU, {
+      alphaTest: ringData?.alphaTest ?? 0,
+      blurRadius: toThreeJSUnits(this.config.ringGapBleedKm)
+    })
     if (profile) {
       // SectorGrid — верное КОЛИЧЕСТВО (вес по средней альфе), генератор —
       // КОНЦЕНТРАЦИЯ (радиус ∝ альфе). Вместе → плотность колечка = base.
       this.sectorGrid.setDensityProfile(profile)
       this.generator.setDensityProfile(profile)
+      // Размещение теперь само кодирует щели → гейт лишний и вредный (см. док выше).
+      // Остаётся включённым только как фоллбэк при нечитаемом профиле.
+      this.__setRingGapGateEnabled(false)
     }
+
+    this.__applyDustRadialProfile(texture)
     this.densityProfileReady = true // строим один раз (успех или нечитаемо)
+  }
+
+  /**
+   * Согласовать пыль с текстурой кольца: радиальный профиль альфы (свой,
+   * более широкий blur и БЕЗ порога — тусклые полосы дают тусклую дымку)
+   * уходит 1D-текстурой во все три материала модели RingDust. Модуляция
+   * нормирована на среднее 1 → калибровка dustTauGrazing сохраняется,
+   * пыль лишь перераспределяется в субкольца. Нечитаемо → равномерная пыль.
+   */
+  private __applyDustRadialProfile(texture: Texture): void {
+    const bins = readRingAlphaBins(texture, this.ringInnerTU, this.ringOuterTU, {
+      blurRadius: toThreeJSUnits(this.config.dustBleedKm)
+    })
+    if (!bins) return
+
+    const radial = createDustRadialTexture(bins)
+    if (!radial) return
+
+    const l0Material = this.pool.geometryMesh.material as InstancedAsteroidMaterial
+    const uniformSets = [l0Material.uniforms, this.pool.billboardMaterial.uniforms]
+    if (this.dustVolume) uniformSets.push(this.dustVolume.dustMaterial.uniforms)
+    for (const uniforms of uniformSets) {
+      uniforms.uDustRadialMap.value = radial.texture
+      uniforms.uDustRadialMapScale.value = radial.scale
+    }
+  }
+
+  /** Включить/выключить B-гейт (discard по альфе текстуры кольца) у обоих материалов камней */
+  private __setRingGapGateEnabled(enabled: boolean): void {
+    const l0Material = this.pool.geometryMesh.material as InstancedAsteroidMaterial
+    for (const uniforms of [l0Material.uniforms, this.pool.billboardMaterial.uniforms]) {
+      uniforms.uRingGapEnabled.value = enabled ? 1 : 0
+    }
   }
 
   /**

@@ -41,7 +41,10 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         uDustLightDirRing: { value: new Vector3(1, 0, 0) },
         uDustAnglePower: { value: 2.0 },
         uDustNearFade: { value: 1.0 },
-        uDustPlanetRadius: { value: 0.0 }
+        uDustPlanetRadius: { value: 0.0 },
+        // Радиальный профиль пыли из альфы текстуры кольца; scale 0 — выключен
+        uDustRadialMap: { value: null },
+        uDustRadialMapScale: { value: 0.0 }
       },
       vertexShader: /* glsl */ `
         ${ShaderChunk.common}

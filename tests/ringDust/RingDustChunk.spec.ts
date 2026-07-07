@@ -13,7 +13,9 @@ describe('RingDust GLSL chunk', () => {
       'uDustLightDirRing',
       'uDustAnglePower',
       'uDustNearFade',
-      'uDustPlanetRadius'
+      'uDustPlanetRadius',
+      'uDustRadialMap',
+      'uDustRadialMapScale'
     ]
     for (const name of names) {
       expect(ringDustUniforms).toContain(name)

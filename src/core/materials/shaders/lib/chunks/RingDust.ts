@@ -38,16 +38,28 @@ export const ringDustUniforms = `
   uniform float uDustAnglePower;
   uniform float uDustNearFade;
   uniform float uDustPlanetRadius;
+  uniform sampler2D uDustRadialMap;
+  uniform float uDustRadialMapScale;
 `
 
 // Общее ядро модели: плотность, гейт, рамп, интервалы, цвет дымки.
 // Достаточно для реймарша объёма; закрытая форма (ниже) строится поверх него.
 const ringDustCoreGlsl = `
-  // Маска кромок кольца
+  // Маска кромок кольца × радиальный профиль из альфы текстуры кольца.
+  // Профиль (uDustRadialMap, R-канал; тот же маппинг u, что у RingShader)
+  // согласует пыль с субкольцами; нормирован на среднее 1 через
+  // uDustRadialMapScale, чтобы калибровка tau грейзинг-луча не поплыла.
+  // Scale 0 → профиль выключен (равномерная пыль, поведение до A-lite).
+  // CPU-зеркало: radialMask в tests/ringDust/tauMirror.ts — менять синхронно.
   float ringDustRadialMask(float r) {
     float edge = (uDustRingOuter - uDustRingInner) * 0.12;
-    return smoothstep(uDustRingInner, uDustRingInner + edge, r)
-         * (1.0 - smoothstep(uDustRingOuter - edge, uDustRingOuter, r));
+    float mask = smoothstep(uDustRingInner, uDustRingInner + edge, r)
+               * (1.0 - smoothstep(uDustRingOuter - edge, uDustRingOuter, r));
+    if (uDustRadialMapScale > 0.0) {
+      float u = clamp((r - uDustRingInner) / (uDustRingOuter - uDustRingInner), 0.0, 1.0);
+      mask *= texture2D(uDustRadialMap, vec2(u, 0.5)).r * uDustRadialMapScale;
+    }
+    return mask;
   }
 
   // Плотность пыли в точке ring-local space (сэмплируется маршем объёма)

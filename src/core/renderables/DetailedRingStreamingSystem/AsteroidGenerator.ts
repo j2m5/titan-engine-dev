@@ -69,7 +69,10 @@ class AsteroidGenerator {
       const theta = rng.range(bounds.minAngle, bounds.maxAngle)
       const x = Math.cos(theta) * r
       const z = Math.sin(theta) * r
-      const y = rng.range(-halfThickness, halfThickness)
+      // Вертикаль: треугольное распределение (сумма двух uniform) — пик в средней
+      // плоскости, линейный спад к краям. Равномерный слэб на высокой плотности
+      // рисовал «стенку» с плоскими гранями сверху/снизу; мягкий спад её гасит.
+      const y = (rng.next() + rng.next() - 1) * halfThickness
 
       // Поворот: случайные углы Эйлера
       const rx = rng.next() * Math.PI * 2

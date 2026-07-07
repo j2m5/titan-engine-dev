@@ -45,6 +45,10 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
         uDustMaxSteps: { value: 16 },
         /** Радиус планеты в ring-local three-units (0 — тень выключена) */
         uDustPlanetRadius: { value: 0.0 },
+        /** Радиальный профиль пыли из альфы текстуры кольца (см. DustRadialProfile) */
+        uDustRadialMap: { value: null },
+        /** Множитель профиля (среднее модуляции ≈ 1); 0 — профиль выключен */
+        uDustRadialMapScale: { value: 0.0 },
         /** Диагностика: 0 выкл, 1 τ, 2 alpha, 3 гейт, 4 теплокарта шагов */
         uDustDebugMode: { value: 0 }
       },

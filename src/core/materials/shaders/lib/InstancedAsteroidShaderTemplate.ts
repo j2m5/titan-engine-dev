@@ -48,6 +48,9 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uDustAnglePower: new Uniform(2),
     uDustNearFade: new Uniform(1),
     uDustPlanetRadius: new Uniform(0),
+    // Радиальный профиль пыли из альфы текстуры кольца; scale 0 — выключен
+    uDustRadialMap: new Uniform(null),
+    uDustRadialMapScale: new Uniform(0),
     // Деформация силуэта (см. чанк AsteroidShape). Амплитуда — per-instance из
     // диапазона [min,max]; min=max=0 → форма выключена.
     uShapeAmpMin: new Uniform(0),

@@ -30,6 +30,12 @@ interface DustParams {
   rIn: number
   /** Внешний радиус кольца, юниты */
   rOut: number
+  /**
+   * Радиальный профиль пыли из альфы текстуры кольца (зеркало
+   * uDustRadialMap + uDustRadialMapScale). undefined → равномерная пыль.
+   * bins — значения текселей R-канала [0..1], scale — нормирующий множитель.
+   */
+  profile?: { bins: ArrayLike<number>; scale: number }
 }
 
 interface TauResult {
@@ -46,10 +52,28 @@ const smoothstep = (e0: number, e1: number, x: number): number => {
   return t * t * (3 - 2 * t)
 }
 
-/** Маска кромок кольца (зеркало ringDustRadialMask) */
+/**
+ * Линейная выборка 1D-текстуры профиля (зеркало texture2D с LinearFilter +
+ * ClampToEdgeWrapping): тексели центрированы в (i + 0.5) / n.
+ */
+const sampleProfile = (u: number, bins: ArrayLike<number>): number => {
+  const x = Math.min(Math.max(u, 0), 1) * bins.length - 0.5
+  const i0 = Math.floor(x)
+  const frac = x - i0
+  const a = bins[Math.min(Math.max(i0, 0), bins.length - 1)]
+  const b = bins[Math.min(Math.max(i0 + 1, 0), bins.length - 1)]
+  return a + (b - a) * frac
+}
+
+/** Маска кромок кольца × радиальный профиль пыли (зеркало ringDustRadialMask) */
 const radialMask = (r: number, p: DustParams): number => {
   const edge = (p.rOut - p.rIn) * 0.12
-  return smoothstep(p.rIn, p.rIn + edge, r) * (1 - smoothstep(p.rOut - edge, p.rOut, r))
+  let mask = smoothstep(p.rIn, p.rIn + edge, r) * (1 - smoothstep(p.rOut - edge, p.rOut, r))
+  if (p.profile) {
+    const u = (r - p.rIn) / (p.rOut - p.rIn)
+    mask *= sampleProfile(u, p.profile.bins) * p.profile.scale
+  }
+  return mask
 }
 
 /** Плотность пыли в точке (зеркало ringDustDensityAt) */
