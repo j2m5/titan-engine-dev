@@ -33,7 +33,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       ValueOf<IPlanetRenderingObject>
     > = this.model.renderingObject?.getAttribute('data') || { bumpScale: 0, emission: 1 }
 
-    const ringData: Record<keyof IRingRenderingObject, ValueOf<IRingRenderingObject>> = this.model.children
+    const ringData: IRingRenderingObject = this.model.children
       .where('categoryId', 6)
       .first()
       ?.renderingObject?.getAttribute('data') || { innerRadius: 0, outerRadius: 0, alphaTest: 0, asteroidDensityScale: 1 }

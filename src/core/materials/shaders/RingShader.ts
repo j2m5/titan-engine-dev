@@ -2,7 +2,7 @@ import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { Texture, Uniform, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { RingShaderTemplate as Shader } from '@/core/materials/shaders/lib/RingShaderTemplate'
-import { IRingRenderingObject, ValueOf } from '@/core/models/types'
+import { IRingRenderingObject } from '@/core/models/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 
@@ -26,10 +26,7 @@ class RingShader extends AbstractShader<keyof RingUniforms> {
 
     const parent: Actor = this.model.parent!
 
-    const ringData: Record<
-      keyof IRingRenderingObject,
-      ValueOf<IRingRenderingObject>
-    > = this.model.renderingObject?.getAttribute('data')
+    const ringData: IRingRenderingObject = this.model.renderingObject?.getAttribute('data')
     const ringTexture: Texture = resourceStorage.getTextureOrMake(this.model.resources.first()?.getAttribute('path'))
 
     this.uniforms = {

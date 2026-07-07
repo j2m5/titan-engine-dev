@@ -1,6 +1,7 @@
 import { Color, Group, Matrix4, Object3D, PerspectiveCamera, Vector3, type Texture } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
+import type { IRingRenderingObject } from '@/core/models/types'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
@@ -52,8 +53,8 @@ interface AsteroidRingConfig {
   }
   /** Включена ли пылевая дымка */
   dustEnabled: boolean
-  /** Цвет дымки (hex) */
-  dustColor: number
+  /** Цвет дымки: число 0xRRGGBB или строка '#rrggbb' */
+  dustColor: number | string
   /** Масштабная полутолщина пылевого слоя H в км */
   dustScaleHeightKm: number
   /**
@@ -196,10 +197,38 @@ class AsteroidRingSystem extends Group {
       // Пер-кольцевая плотность: базовая × множитель из модели (1 при отсутствии).
       // Явный override в configOverrides имеет приоритет (спред ниже).
       densityPerUnit: (DEFAULT_CONFIG.densityPerUnit ?? 500) * (renderData?.asteroidDensityScale ?? 1),
+      ...AsteroidRingSystem.__modelVisualOverrides(renderData),
       ...configOverrides
     } as AsteroidRingConfig
 
     this.__setup()
+  }
+
+  /**
+   * Визуальные ручки из модельного слоя (IRingRenderingObject.data) — только
+   * ЗАДАННЫЕ поля, отсутствующие не затирают дефолты. Приоритет:
+   * DEFAULT_CONFIG < данные модели < configOverrides (код). Машинерия
+   * (LOD/пулы/сетка) через модель не настраивается — тюнится в коде.
+   */
+  private static __modelVisualOverrides(data: Partial<IRingRenderingObject> | undefined): Partial<AsteroidRingConfig> {
+    if (!data) return {}
+
+    const overrides: Partial<AsteroidRingConfig> = {}
+    if (data.thicknessKm !== undefined) overrides.thicknessKm = data.thicknessKm
+    if (data.asteroidSizeKm !== undefined) overrides.asteroidSizeKm = data.asteroidSizeKm
+    if (data.ringGapBleedKm !== undefined) overrides.ringGapBleedKm = data.ringGapBleedKm
+    if (data.dustBleedKm !== undefined) overrides.dustBleedKm = data.dustBleedKm
+    if (data.dustEnabled !== undefined) overrides.dustEnabled = data.dustEnabled
+    if (data.dustColor !== undefined) overrides.dustColor = data.dustColor
+    if (data.dustTauGrazing !== undefined) overrides.dustTauGrazing = data.dustTauGrazing
+    if (data.dustScaleHeightKm !== undefined) overrides.dustScaleHeightKm = data.dustScaleHeightKm
+    // Имя профиля приходит строкой из JSON — неизвестное тихо игнорируем
+    // (останется дефолт), чтобы опечатка в редакторе данных не роняла рендер
+    if (data.profile !== undefined && data.profile in ASTEROID_PROFILES) {
+      overrides.profile = data.profile as AsteroidProfileName
+    }
+
+    return overrides
   }
 
   public __setup(): void {

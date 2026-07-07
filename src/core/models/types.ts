@@ -108,7 +108,7 @@ export interface IPhysicalObject {
   temperature: number
 }
 
-export interface IRenderingObject<T extends string = string, U = any> {
+export interface IRenderingObject<T extends string = string, U = unknown> {
   readonly id: number
   readonly actorId: number
   data: Record<T, U>
@@ -151,7 +151,7 @@ export interface IPlanetRenderingObject {
   bumpScale: number
 }
 
-export interface IAtmosphereRenderingObject extends AtmosphereConfig {}
+export type IAtmosphereRenderingObject = AtmosphereConfig
 
 export interface IRingRenderingObject {
   innerRadius: number
@@ -163,6 +163,30 @@ export interface IRingRenderingObject {
    * разреженных колец). Стример при отсутствии значения берёт 1.
    */
   asteroidDensityScale: number
+
+  // --- Визуальные ручки стримера AsteroidRingSystem (пер-кольцевой тюнинг). ---
+  // Все опциональны: отсутствие → дефолт движка (AsteroidRingSystem.DEFAULT_CONFIG).
+  // Машинерия (LOD-пороги, пулы, сетка, бюджеты) в модельный слой сознательно
+  // не выносится — см. __modelVisualOverrides.
+
+  /** Толщина кольца в км (вертикальный разброс камней) */
+  thicknessKm?: number
+  /** Размер геометрии отдельного астероида в км */
+  asteroidSizeKm?: number
+  /** Профиль облика камней: 'stony' | 'carbonaceous' | 'metallic' | 'icy' */
+  profile?: string
+  /** Мягкость кромок субколец для КАМНЕЙ: сигма размытия профиля плотности, км */
+  ringGapBleedKm?: number
+  /** Мягкость согласования ПЫЛИ с текстурой: сигма размытия профиля пыли, км */
+  dustBleedKm?: number
+  /** Включена ли пылевая дымка */
+  dustEnabled?: boolean
+  /** Цвет дымки: число 0xRRGGBB или строка '#rrggbb' */
+  dustColor?: number | string
+  /** Целевая оптическая толща грейзинг-луча (плотность дымки) */
+  dustTauGrazing?: number
+  /** Масштабная полутолщина пылевого слоя в км */
+  dustScaleHeightKm?: number
 }
 
 export type Colorable = {
