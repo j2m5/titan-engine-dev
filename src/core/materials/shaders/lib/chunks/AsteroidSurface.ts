@@ -82,21 +82,46 @@ export const asteroidSurfaceFunctions = `
     float craterH = 0.0;
     vec3 gradH = vec3(0.0);   // ∇h в dir-пространстве (для нормали)
     float crack = 0.0;
+    float ejecta = 0.0;       // светлое гало выброса (альбедо-only)
     float amp = 1.0;
     float freq = craterFreq;
     for (int o = 0; o < ASTEROID_CRATER_MAX_OCTAVES; o++) {
       if (float(o) >= craterOctaves) break;
       vec3 toNearest;
-      vec4 w = worleyCell(dir * freq + domainOffset, toNearest);
+      // Domain warp: искривляем входной домен Вороного НЧ-шумом → решётка «плывёт»,
+      // кратеры расположены неровно, а не сидят на регулярной сетке.
+      // ВАЖНО про частоту: смещение ячеек ∝ амплитуде, а искажение ФОРМЫ кратера
+      // ∝ амплитуде·частоте·радиусе (насколько warp меняется поперёк кратера).
+      // Поэтому частота НИЗКАЯ (×0.25, длина волны ~4 ед. ≫ радиуса кратера):
+      // warp почти постоянен в пределах кратера → круги остаются кругами, но
+      // расположение по поверхности нерегулярное. Амплитуда < размера ячейки (~1).
+      vec3 wp = dir * freq + domainOffset;
+      vec3 warp = vec3(
+        snoise(wp * 0.25 + 11.1),
+        snoise(wp * 0.25 + 27.3),
+        snoise(wp * 0.25 + 41.7)
+      );
+      vec4 w = worleyCell(wp + 0.35 * warp, toNearest);
       float F1 = w.x; float F2 = w.y; float cellHash = w.z;
-      float exists = step(1.0 - craterDensity, cellHash);
+      // Мягкое существование кратера: плавная полоса по хешу ячейки вместо
+      // бинарного step → нет резкого «пэтчворка» решётки Вороного, а ячейки у
+      // порога дают мелкие/неглубокие кратеры (естественный разброс размеров).
+      float exists = smoothstep(1.0 - craterDensity - 0.08, 1.0 - craterDensity + 0.08, cellHash);
+      // Возраст кратера (декоррелированный хеш ячейки): свежий (0) — глубокий, с
+      // ярким выбросом; старый (1) — мелкий, без гало. Дно свежих темнее (глубже
+      // → больше cavity), у старых сглажено.
+      float age = hashSurface11(cellHash * 7.3);
+      float depth = craterDepth * mix(1.0, 0.45, age);
       float rr = craterRadius * (0.5 + 0.5 * hashSurface11(cellHash * 13.1));
       float r = F1 / rr;
-      craterH += exists * amp * craterDepth * craterProfile(r);
+      craterH += exists * amp * depth * craterProfile(r);
       // Направление наклона кратера = toNearest (∇F1). Множитель частоты freq/rr
       // НЕ включаем: он даёт физически-верный, но чрезмерный наклон, «смывающий»
-      // общее затенение. Силу наклона задаёт craterDepth·craterProfileD + normalScale.
-      gradH += exists * amp * craterDepth * craterProfileD(r) * toNearest;
+      // общее затенение. Силу наклона задаёт depth·craterProfileD + normalScale.
+      gradH += exists * amp * depth * craterProfileD(r) * toNearest;
+      // Гало выброса свежих кратеров: яркое кольцо у обода (r≈1), только альбедо
+      // (в gradH/нормаль не входит, как трещины). Гаснет с возрастом.
+      ejecta += exists * (1.0 - age) * amp * exp(-10.0 * (r - 1.0) * (r - 1.0));
       float edge = F2 - F1;
       crack += (1.0 - smoothstep(0.0, crackWidth, edge));
       amp *= 0.5;
@@ -126,9 +151,10 @@ export const asteroidSurfaceFunctions = `
     // наружу: фрагмент сводит к нему ВЧ-деталь кратеров/трещин с дистанцией (B0).
     baseAlbedo = base;
 
-    // Альбедо: затемнение дна кратеров + тёмные трещины
+    // Альбедо: затемнение дна кратеров + светлый выброс свежих + тёмные трещины
     float cavity = max(-craterH, 0.0);
     vec3 albedo = base * (1.0 - 0.5 * cavity);
+    albedo *= 1.0 + 0.35 * clamp(ejecta, 0.0, 1.0);   // светлое гало выброса
     albedo = mix(albedo, albedo * 0.4, crack);
 
     ao = clamp(1.0 - aoStrength * cavity, 0.0, 1.0);

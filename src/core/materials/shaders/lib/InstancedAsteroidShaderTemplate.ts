@@ -203,10 +203,18 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
       vec3 finalColor = albedo * (lightIntensity * surfAO + uSurfaceAmbient);
 
-      // Дешёвый Blinn-Phong блик (металл/лёд), только на освещённой стороне
+      // Blinn-Phong блик (металл/лёд), только на освещённой стороне, со спекуляр-AA.
       vec3 viewDir = normalize(vViewPosition);
       vec3 halfVec = normalize(lightDirection + viewDir);
-      float spec = pow(max(dot(normal, halfVec), 0.0), uSpecularPower) * uSpecularStrength;
+      // Спекуляр-AA (B4): на дальних/мелких камнях нормаль сильно меняется в
+      // пределах пикселя → узкий блик «фейерит». Разброс нормали оцениваем
+      // экранными производными и по нему (Toksvig-подобно) расширяем блик:
+      // снижаем эффективную жёсткость И силу, гася подпиксельные вспышки.
+      // var→0 (близко/гладко): множитель 1, блик как есть.
+      float specNormalVar = dot(dFdx(normal), dFdx(normal)) + dot(dFdy(normal), dFdy(normal));
+      float specToksvig = 1.0 / (1.0 + uSpecularPower * specNormalVar);
+      float specPowerAA = uSpecularPower * specToksvig;
+      float spec = pow(max(dot(normal, halfVec), 0.0), specPowerAA) * uSpecularStrength * specToksvig;
       vec3 specColor = mix(vec3(1.0), albedo, uSpecularTint);
       finalColor += spec * specColor * lightIntensity;
 
