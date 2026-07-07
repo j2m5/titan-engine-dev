@@ -159,8 +159,14 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       ${ShaderChunk['logdepthbuf_fragment']}
 
       // Screen-door fade: непрозрачная геометрия гаснет упорядоченным дизером —
-      // без сортировки, с сохранением depthWrite. При vFade>=1 порог не срабатывает.
-      if (vFade < fadeDither(gl_FragCoord.xy)) discard;
+      // без сортировки, с сохранением depthWrite. Знак vFade кодирует направление
+      // кросс-фейда: уходящий тир (vFade<0) берёт ИНВЕРТИРОВАННЫЙ порог, поэтому
+      // его покрытие комплементарно входящему (vFade>0) — сумма ≈ полный камень
+      // без «дыр» на середине перехода. |vFade|>=1 → порог не срабатывает.
+      float fadeMag = abs(vFade);
+      float fadeThresh = fadeDither(gl_FragCoord.xy);
+      if (vFade < 0.0) fadeThresh = 1.0 - fadeThresh;
+      if (fadeMag < fadeThresh) discard;
 
       vec3 surfDir = normalize(vObjectPos);
 

@@ -172,8 +172,9 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
           float lighting = uAmbient + (0.3 - uAmbient) * diffuse;
 
           // --- Итоговый цвет ---
-          // vFade — плавный fade-in/out сектора при стриминге и смене LOD
-          float alpha = edgeAlpha * uFade * vDistanceFade * vFade;
+          // vFade — плавный fade-in/out сектора; abs, т.к. знак кодирует лишь
+          // направление кросс-фейда (для дизера L0), билборду важна величина.
+          float alpha = edgeAlpha * uFade * vDistanceFade * abs(vFade);
           if (alpha < 0.01) discard;
 
           vec3 color = uColor * lighting;

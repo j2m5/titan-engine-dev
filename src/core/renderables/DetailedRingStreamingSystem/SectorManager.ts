@@ -16,6 +16,16 @@ interface LODThresholds {
 }
 
 /**
+ * Уходящий LOD-тир во время кросс-фейда: гаснет к 0 параллельно с проявлением
+ * нового, затем его аллокация освобождается.
+ */
+interface OutgoingLOD {
+  lodLevel: LODLevel
+  allocation: Allocation
+  fade: number
+}
+
+/**
  * Состояние активного сектора
  */
 interface SectorState {
@@ -29,6 +39,8 @@ interface SectorState {
   fadeTarget: number
   /** Помечен для удаления после завершения fade-out */
   pendingRemoval: boolean
+  /** Уходящий тир во время кросс-фейда смены LOD (null вне перехода) */
+  outgoing: OutgoingLOD | null
 }
 
 /**
@@ -205,7 +217,8 @@ class SectorManager {
       allocation,
       fade: 0.0,
       fadeTarget: 1.0,
-      pendingRemoval: false
+      pendingRemoval: false,
+      outgoing: null
     }
 
     this.activeSectors.set(info.key, state)
@@ -213,17 +226,30 @@ class SectorManager {
   }
 
   /**
-   * Переключить сектор на другой LOD-уровень.
+   * Переключить сектор на другой LOD-уровень через кросс-фейд.
+   *
+   * Старый тир не освобождается сразу: он уходит в state.outgoing и гаснет к 0
+   * параллельно с проявлением нового (с нуля) — оба рендерятся через дизер
+   * одновременно, давая встречный кросс-фейд без резкого «щелчка».
    */
   private changeSectorLOD(state: SectorState, newLOD: LODLevel, info: SectorInfo): void {
-    this.pool.release(state.allocation)
-
     const instanceCount = Math.max(1, Math.round(info.instanceCount * this.lodDensityMultiplier[newLOD]))
     const allocation = this.pool.allocate(newLOD, instanceCount)
 
     if (!allocation) {
-      this.activeSectors.delete(state.key)
+      // Нет места под новый тир — оставляем текущий как есть (сектор не теряем).
       return
+    }
+
+    // Текущий тир уводим в кросс-фейд-аут. Если предыдущий outgoing ещё жив
+    // (быстрый повторный свитч) — освобождаем его: держим максимум 2 аллокации.
+    if (state.outgoing) {
+      this.pool.release(state.outgoing.allocation)
+    }
+    state.outgoing = {
+      lodLevel: state.lodLevel,
+      allocation: state.allocation,
+      fade: state.fade
     }
 
     const data = this.generator.generateMatrices(info.seed, instanceCount, info.bounds)
@@ -231,9 +257,8 @@ class SectorManager {
 
     state.lodLevel = newLOD
     state.allocation = allocation
-    // Новый LOD проявляется с 0.3 (не с нуля — переход между уровнями резче, чем
-    // появление сектора «из пустоты»), дальше updateFades доводит до 1.
-    state.fade = 0.3
+    // Новый тир проявляется с нуля — встречно уходящему (сумма покрытия ≈ 1).
+    state.fade = 0.0
     state.fadeTarget = 1.0
     this.pool.writeFade(newLOD, allocation.offset, allocation.count, state.fade)
   }
@@ -257,8 +282,22 @@ class SectorManager {
         this.pool.writeFade(state.lodLevel, state.allocation.offset, state.allocation.count, state.fade)
       }
 
+      // Кросс-фейд: уходящий тир гаснет к 0, затем освобождается. Пишем fade со
+      // ЗНАКОМ МИНУС → шейдер берёт инвертированный дизер, покрытие комплементарно
+      // входящему тиру (без «дыр» на середине перехода).
+      if (state.outgoing) {
+        const out = state.outgoing
+        out.fade = Math.max(out.fade - step, 0.0)
+        this.pool.writeFade(out.lodLevel, out.allocation.offset, out.allocation.count, -out.fade)
+        if (out.fade <= 0.001) {
+          this.pool.release(out.allocation)
+          state.outgoing = null
+        }
+      }
+
       if (state.pendingRemoval && state.fade <= 0.001) {
         this.pool.release(state.allocation)
+        if (state.outgoing) this.pool.release(state.outgoing.allocation)
         toRemove.push(key)
       }
     }
@@ -274,6 +313,7 @@ class SectorManager {
   public deactivateAll(): void {
     for (const [, state] of this.activeSectors) {
       this.pool.release(state.allocation)
+      if (state.outgoing) this.pool.release(state.outgoing.allocation)
     }
     this.activeSectors.clear()
   }
