@@ -7,7 +7,7 @@ class NullRingRenderingObject implements IRingRenderingObject {
   public innerRadius: number
   public outerRadius: number
   public alphaTest: number
-  public countParticles: number
+  public asteroidDensityScale: number
 
   public constructor(actorId: number) {
     this.id = randInt(10000, 100000)
@@ -15,7 +15,7 @@ class NullRingRenderingObject implements IRingRenderingObject {
     this.innerRadius = 0
     this.outerRadius = 0
     this.alphaTest = 0.02
-    this.countParticles = 1000
+    this.asteroidDensityScale = 1
   }
 }
 

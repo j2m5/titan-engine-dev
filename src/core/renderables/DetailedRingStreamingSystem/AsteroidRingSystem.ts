@@ -4,6 +4,7 @@ import { Actor } from '@/core/models/Actor'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 import { SectorGrid, SectorGridConfig } from './SectorGrid'
 import { AsteroidGenerator, GeneratorConfig } from './AsteroidGenerator'
 import { InstancePool, PoolLayerConfig } from './InstancePool'
@@ -82,6 +83,12 @@ interface AsteroidRingConfig {
   detailAaStart: number
   /** Дальность детализации: полное гашение. Больше → деталь держится дальше */
   detailAaEnd: number
+  /**
+   * Спайк B: гейтить рендер камней по альфе текстуры 2D-кольца (радиальные
+   * щели/полосы). Та же текстура и радиальный маппинг, что у RingShader →
+   * 3D-щели совпадают с 2D. По умолчанию выключено.
+   */
+  ringGapsFromTexture: boolean
 }
 
 /**
@@ -116,7 +123,8 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   shapeFreq: 1.4,
   profile: 'stony',
   detailAaStart: 1.2,
-  detailAaEnd: 3.0
+  detailAaEnd: 3.0,
+  ringGapsFromTexture: true
 }
 
 /**
@@ -162,6 +170,9 @@ class AsteroidRingSystem extends Group {
       innerRadiusKm: renderData?.innerRadius ?? 70000,
       outerRadiusKm: renderData?.outerRadius ?? 140000,
       ringId: model.getAttribute('id') ?? 1,
+      // Пер-кольцевая плотность: базовая × множитель из модели (1 при отсутствии).
+      // Явный override в configOverrides имеет приоритет (спред ниже).
+      densityPerUnit: (DEFAULT_CONFIG.densityPerUnit ?? 500) * (renderData?.asteroidDensityScale ?? 1),
       ...configOverrides
     } as AsteroidRingConfig
 
@@ -271,6 +282,28 @@ class AsteroidRingSystem extends Group {
     const l0Mat = this.pool.geometryMesh.material as InstancedAsteroidMaterial
     for (const uniforms of [l0Mat.uniforms, this.pool.billboardMaterial.uniforms]) {
       uniforms.uDustPlanetRadius.value = planetRadius
+    }
+
+    // --- Спайк B: радиальные щели из альфы текстуры кольца (за флагом) ---
+    // Та же текстура/радиусы, что у RingShader → 3D-щели ложатся на 2D. Пока
+    // текстура не пришла, getTextureOrMake отдаёт fallback (полная альфа) → щелей
+    // нет, ровно как у 2D-кольца до загрузки; при подмене текстуры щели проявятся.
+    if (cfg.ringGapsFromTexture) {
+      const ringData = this.model.renderingObject?.getAttribute('data')
+      const gapAlphaTest = ringData?.alphaTest ?? 0
+      // Путь текстуры кольца — тот же ресурс, что у RingShader. Гейт включаем
+      // только при наличии текстуры: нет ресурса → гейт тихо выключен (не краш).
+      const gapPath = this.model.resources?.first()?.getAttribute('path')
+      const gapTexture = gapPath ? resourceStorage.getTextureOrMake(gapPath) : null
+      if (gapTexture) {
+        for (const uniforms of [l0Mat.uniforms, this.pool.billboardMaterial.uniforms]) {
+          uniforms.uRingGapEnabled.value = 1
+          uniforms.uRingGapMap.value = gapTexture
+          uniforms.uRingGapInner.value = innerRadius
+          uniforms.uRingGapOuter.value = outerRadius
+          uniforms.uRingGapAlphaTest.value = gapAlphaTest
+        }
+      }
     }
 
     // --- RingDustVolume (пылевая дымка) ---

@@ -23,6 +23,12 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         uLightPosition: { value: new Vector3(0, 0, 0) },
         uFade: { value: 1.0 },
         uMaxDistance: { value: 100.0 },
+        // Радиальные щели из альфы текстуры 2D-кольца (спайк B); 0 → выключено
+        uRingGapEnabled: { value: 0.0 },
+        uRingGapMap: { value: null },
+        uRingGapInner: { value: 0.0 },
+        uRingGapOuter: { value: 1.0 },
+        uRingGapAlphaTest: { value: 0.0 },
         /** Ambient свет — минимальная освещённость тёмной стороны */
         uAmbient: { value: 0.08 },
         // Пылевая дымка (см. чанк RingDust); uDustDensity = 0 — туман выключен
@@ -118,6 +124,11 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         uniform vec3 uColor;
         uniform float uFade;
         uniform float uAmbient;
+        uniform float uRingGapEnabled;
+        uniform sampler2D uRingGapMap;
+        uniform float uRingGapInner;
+        uniform float uRingGapOuter;
+        uniform float uRingGapAlphaTest;
 
         varying vec2 vUv;
         varying float vDistanceFade;
@@ -160,6 +171,13 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
           float edgeThreshold = 0.82 - edgeNoise;
 
           if (distFromCenter > edgeThreshold) discard;
+
+          // Спайк B: радиальные щели из альфы текстуры 2D-кольца (тот же маппинг).
+          if (uRingGapEnabled > 0.5) {
+            float gapU = (length(vRingPos.xz) - uRingGapInner) / (uRingGapOuter - uRingGapInner);
+            float gapA = texture2D(uRingGapMap, vec2(clamp(gapU, 0.0, 1.0), 0.0)).a;
+            if (gapA <= uRingGapAlphaTest) discard;
+          }
 
           // Мягкий край (antialiasing)
           float edgeAlpha = 1.0 - smoothstep(edgeThreshold - 0.08, edgeThreshold, distFromCenter);

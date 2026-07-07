@@ -1,5 +1,5 @@
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
-import { Color, Uniform, Vector3 } from 'three'
+import { Color, Texture, Uniform, Vector3 } from 'three'
 import { InstancedAsteroidShaderTemplate as Shader } from '@/core/materials/shaders/lib/InstancedAsteroidShaderTemplate'
 
 interface InstancedAsteroidUniforms {
@@ -14,6 +14,11 @@ interface InstancedAsteroidUniforms {
   uSpecularTint: number
   uAaStart: number
   uAaEnd: number
+  uRingGapEnabled: number
+  uRingGapMap: Texture | null
+  uRingGapInner: number
+  uRingGapOuter: number
+  uRingGapAlphaTest: number
   uTintStrength: number
   uCraterFreq: number
   uCraterDensity: number
@@ -57,6 +62,11 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       uSpecularTint: new Uniform(0.0),
       uAaStart: new Uniform(1.2),
       uAaEnd: new Uniform(3.0),
+      uRingGapEnabled: new Uniform(0),
+      uRingGapMap: new Uniform(null),
+      uRingGapInner: new Uniform(0),
+      uRingGapOuter: new Uniform(1),
+      uRingGapAlphaTest: new Uniform(0),
       uTintStrength: new Uniform(0.25),
       uCraterFreq: new Uniform(4.0),
       uCraterDensity: new Uniform(0.6),

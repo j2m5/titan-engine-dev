@@ -157,7 +157,12 @@ export interface IRingRenderingObject {
   innerRadius: number
   outerRadius: number
   alphaTest: number
-  countParticles: number
+  /**
+   * Множитель базовой плотности астероидного поля (стример AsteroidRingSystem).
+   * 1 → базовая плотность; >1 плотнее (напр. чтобы уплотнить тонкие колечки
+   * разреженных колец). Стример при отсутствии значения берёт 1.
+   */
+  asteroidDensityScale: number
 }
 
 export type Colorable = {

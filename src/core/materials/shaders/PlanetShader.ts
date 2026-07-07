@@ -36,7 +36,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
     const ringData: Record<keyof IRingRenderingObject, ValueOf<IRingRenderingObject>> = this.model.children
       .where('categoryId', 6)
       .first()
-      ?.renderingObject?.getAttribute('data') || { innerRadius: 0, outerRadius: 0, alphaTest: 0, countParticles: 0 }
+      ?.renderingObject?.getAttribute('data') || { innerRadius: 0, outerRadius: 0, alphaTest: 0, asteroidDensityScale: 1 }
     const ringMap: Texture = resourceStorage.getTextureOrMake(
       this.model.children.where('categoryId', 6).first()?.resources.first()?.getAttribute('path')
     )
