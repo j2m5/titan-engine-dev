@@ -7,7 +7,9 @@ import { InstancePool, LODLevel, Allocation } from './InstancePool'
  * Конфигурация LOD-порогов
  */
 interface LODThresholds {
-  /** Максимальное расстояние для L0 (реальная геометрия) */
+  /** Максимальное расстояние для ближнего тира L0 (повышенный detail) */
+  l0NearMaxDistance: number
+  /** Максимальное расстояние для L0 (реальная геометрия, обычный detail) */
   l0MaxDistance: number
   /** Максимальное расстояние для L1 (billboards) — дальше ничего не грузим */
   l1MaxDistance: number
@@ -57,6 +59,7 @@ class SectorManager {
 
   /** Множитель плотности instances per sector для каждого LOD */
   private readonly lodDensityMultiplier = {
+    [LODLevel.GeometryNear]: 1.0,
     [LODLevel.Geometry]: 1.0,
     [LODLevel.Billboard]: 1.5
   }
@@ -107,9 +110,11 @@ class SectorManager {
       const dz = info.centerZ - camZ
       const dist = Math.sqrt(dx * dx + dz * dz)
 
-      // Определить LOD
+      // Определить LOD (по возрастанию расстояния: ближний detail → L0 → billboard)
       let lod: LODLevel
-      if (dist <= this.thresholds.l0MaxDistance) {
+      if (dist <= this.thresholds.l0NearMaxDistance) {
+        lod = LODLevel.GeometryNear
+      } else if (dist <= this.thresholds.l0MaxDistance) {
         lod = LODLevel.Geometry
       } else if (dist <= this.thresholds.l1MaxDistance) {
         lod = LODLevel.Billboard
@@ -293,6 +298,7 @@ class SectorManager {
       pending = 0
     for (const [, state] of this.activeSectors) {
       switch (state.lodLevel) {
+        case LODLevel.GeometryNear:
         case LODLevel.Geometry:
           l0++
           break

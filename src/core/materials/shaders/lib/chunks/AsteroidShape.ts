@@ -65,16 +65,44 @@ export const asteroidShapeFunctions = `
     vec3 eNormal = normalize(dir / (axes * axes));
 
     // НЧ-шум силуэта поверх эллипсоида (домен — исходное направление).
+    // Единое поле смещения disp (в долях R) + его градиент gdisp в dir-домене:
+    // шум масштабируем на amp, крупные бассейны (ниже) имеют собственную глубину.
     vec3 domain = dir * uShapeFreq + vec3(seed * 17.13, seed * 5.71, seed * 9.37);
     vec4 nv = fbmGrad(domain);
-    float f = nv.x;
-    vec3 grad = nv.yzw;
+    float disp = amp * nv.x;
+    vec3 gdisp = amp * nv.yzw;
 
-    displacedPos = ePos + eNormal * (f * amp * R);
+    // A3: 1–2 крупных ударных бассейна как ВОГНУТОСТИ геометрии. Гладкая чаша
+    // вокруг случайного направления c (глубина/радиус per-instance). Влияет и на
+    // позицию (вмятина), и на нормаль (аналитический градиент чаши) → стенки
+    // затеняются корректно, как настоящий рельеф, а не только текстурой.
+    float basinH = 0.0;
+    vec3 basinGrad = vec3(0.0);
+    for (int i = 0; i < 2; i++) {
+      float fi = float(i);
+      float present = step(0.4, hash13(vec3(seed, fi, 7.0)));
+      vec3 c = normalize(vec3(
+        hash13(vec3(seed, fi, 8.0)) - 0.5,
+        hash13(vec3(seed, fi, 9.0)) - 0.5,
+        hash13(vec3(seed, fi, 10.0)) - 0.5
+      ));
+      float rad = mix(0.15, 0.35, hash13(vec3(seed, fi, 11.0)));   // угловой радиус (через 1-cos)
+      float depth = mix(0.08, 0.18, hash13(vec3(seed, fi, 12.0))); // глубина в долях R
+      float u = clamp((1.0 - dot(dir, c)) / rad, 0.0, 1.0);        // 0 центр → 1 край
+      float w = 1.0 - u * u * (3.0 - 2.0 * u);                     // гладкое окно чаши
+      float dssdu = 6.0 * u * (1.0 - u);                          // d smoothstep(u)
+      basinH -= present * depth * w;                              // впадина
+      // d(basinH)/ddir = -present·depth · dw/ddir, dw/ddir = (dssdu/rad)·c
+      basinGrad -= (present * depth * dssdu / rad) * c;
+    }
+    disp += basinH;
+    gdisp += basinGrad;
+
+    displacedPos = ePos + eNormal * (disp * R);
 
     // Возмущение нормали относительно эллипсоида: вычитаем тангенциальную
-    // составляющую градиента шума.
-    vec3 gTangent = grad - dot(grad, eNormal) * eNormal;
-    newNormal = normalize(eNormal - amp * gTangent);
+    // составляющую суммарного градиента (шум + бассейны; amp уже внутри gdisp).
+    vec3 gTangent = gdisp - dot(gdisp, eNormal) * eNormal;
+    newNormal = normalize(eNormal - gTangent);
   }
 `

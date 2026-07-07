@@ -4,10 +4,12 @@ import { BillboardAsteroidMaterial } from './BillboardAsteroidMaterial'
 
 /** Уровень детализации */
 const enum LODLevel {
-  /** Реальная геометрия (IcosahedronGeometry) */
+  /** Реальная геометрия (IcosahedronGeometry), обычный detail */
   Geometry = 0,
   /** Billboard-импосторы (PlaneGeometry, camera-facing) */
-  Billboard = 1
+  Billboard = 1,
+  /** Реальная геометрия повышенного detail для самых близких камней */
+  GeometryNear = 2
 }
 
 /** Результат аллокации */
@@ -31,20 +33,30 @@ interface PoolLayerConfig {
 /**
  * InstancePool — управление GPU-ресурсами.
  *
- * Владеет двумя рендер-объектами (по одному на LOD):
- * - L0: InstancedMesh с реальной геометрией
+ * Владеет тремя рендер-объектами (по одному на LOD):
+ * - L0 Near: InstancedMesh с реальной геометрией повышенного detail (ближние камни)
+ * - L0: InstancedMesh с реальной геометрией обычного detail
  * - L1: InstancedMesh с PlaneGeometry (billboard)
+ *
+ * Оба геометрических тира разделяют один материал (различие — только detail
+ * геометрии), поэтому проводка юниформов идёт по geometryMesh.material и
+ * автоматически применяется к ближнему тиру.
  *
  * Каждый объект имеет pre-allocated буфер. Секторы аллоцируют диапазоны в буфере.
  * Свободное пространство управляется через free-list аллокатор.
  *
- * Итог: 2 draw calls на всю систему экземпляров.
+ * Итог: 3 draw calls на всю систему экземпляров.
  */
 class InstancePool {
-  /** Рендер-объект для L0 */
+  /** Рендер-объект для L0 (обычный detail) */
   public geometryMesh: InstancedMesh
+  /** Рендер-объект для ближнего L0 (повышенный detail) */
+  public geometryNearMesh: InstancedMesh
   /** Рендер-объект для L1 */
   public billboardMesh: InstancedMesh
+
+  /** LOD → InstancedMesh (единая точка выбора меша по уровню) */
+  private readonly meshes: Map<LODLevel, InstancedMesh> = new Map()
 
   /** Матрица нулевого масштаба для "скрытия" освобождённых экземпляров */
   private static readonly ZERO_MATRIX = new Float32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -99999, 1])
@@ -71,19 +83,21 @@ class InstancePool {
     l0Config: PoolLayerConfig,
     l1Config: PoolLayerConfig,
     asteroidGeometrySize: number,
-    l0Detail: number = 1
+    l0Detail: number = 1,
+    l0NearConfig: PoolLayerConfig = l0Config,
+    l0NearDetail: number = 3
   ) {
     this.layerConfigs = new Map([
       [LODLevel.Geometry, l0Config],
-      [LODLevel.Billboard, l1Config]
+      [LODLevel.Billboard, l1Config],
+      [LODLevel.GeometryNear, l0NearConfig]
     ])
 
-    // Инициализация free-lists
-    this.freeLists.set(LODLevel.Geometry, [{ offset: 0, count: l0Config.maxInstances }])
-    this.freeLists.set(LODLevel.Billboard, [{ offset: 0, count: l1Config.maxInstances }])
-
-    this.highWaterMark.set(LODLevel.Geometry, 0)
-    this.highWaterMark.set(LODLevel.Billboard, 0)
+    // Инициализация free-lists + highWaterMark для всех уровней
+    for (const [level, config] of this.layerConfigs) {
+      this.freeLists.set(level, [{ offset: 0, count: config.maxInstances }])
+      this.highWaterMark.set(level, 0)
+    }
 
     // --- L0: Geometry InstancedMesh ---
     // detail управляет неровностью силуэта после GPU-деформации (см. AsteroidShape).
@@ -97,6 +111,18 @@ class InstancePool {
     // Инициализирован нулями: слот невидим, пока сектор не проявится.
     l0Geometry.setAttribute('instanceFade', new InstancedBufferAttribute(new Float32Array(l0Config.maxInstances), 1))
 
+    // --- L0 Near: тот же материал, выше detail (гладкий силуэт/бассейны вблизи) ---
+    // Разделяем материал с обычным L0 → проводка юниформов остаётся единой.
+    const l0NearGeometry = new IcosahedronGeometry(asteroidGeometrySize, l0NearDetail)
+    this.geometryNearMesh = new InstancedMesh(l0NearGeometry, this.geometryMesh.material, l0NearConfig.maxInstances)
+    this.geometryNearMesh.count = 0
+    this.geometryNearMesh.frustumCulled = false
+    this.geometryNearMesh.name = 'AsteroidPool_L0Near'
+    l0NearGeometry.setAttribute(
+      'instanceFade',
+      new InstancedBufferAttribute(new Float32Array(l0NearConfig.maxInstances), 1)
+    )
+
     // --- L1: Billboard InstancedMesh ---
     const l1Geometry = new PlaneGeometry(asteroidGeometrySize * 2.5, asteroidGeometrySize * 2.5)
     this.billboardMaterial = new BillboardAsteroidMaterial()
@@ -106,12 +132,20 @@ class InstancePool {
     this.billboardMesh.name = 'AsteroidPool_L1'
 
     l1Geometry.setAttribute('instanceFade', new InstancedBufferAttribute(new Float32Array(l1Config.maxInstances), 1))
+
+    this.meshes.set(LODLevel.Geometry, this.geometryMesh)
+    this.meshes.set(LODLevel.GeometryNear, this.geometryNearMesh)
+    this.meshes.set(LODLevel.Billboard, this.billboardMesh)
+  }
+
+  /** InstancedMesh для заданного LOD. */
+  private meshFor(lodLevel: LODLevel): InstancedMesh {
+    return this.meshes.get(lodLevel)!
   }
 
   /** InstancedBufferAttribute fade для заданного LOD. */
   private fadeAttribute(lodLevel: LODLevel): InstancedBufferAttribute {
-    const mesh = lodLevel === LODLevel.Geometry ? this.geometryMesh : this.billboardMesh
-    return mesh.geometry.getAttribute('instanceFade') as InstancedBufferAttribute
+    return this.meshFor(lodLevel).geometry.getAttribute('instanceFade') as InstancedBufferAttribute
   }
 
   /**
@@ -165,8 +199,7 @@ class InstancePool {
    * Записать матрицы экземпляров в буфер.
    */
   public writeMatrices(lodLevel: LODLevel, offset: number, matrices: Float32Array): void {
-    const mesh = lodLevel === LODLevel.Geometry ? this.geometryMesh : this.billboardMesh
-    const dst = mesh.instanceMatrix.array as Float32Array
+    const dst = this.meshFor(lodLevel).instanceMatrix.array as Float32Array
     dst.set(matrices, offset * 16)
     this.dirtyLevels.add(lodLevel)
   }
@@ -186,21 +219,14 @@ class InstancePool {
    * Применить все накопленные изменения к GPU-буферам.
    */
   public commitUpdates(): void {
-    if (this.dirtyLevels.has(LODLevel.Geometry)) {
-      this.geometryMesh.instanceMatrix.needsUpdate = true
-      this.geometryMesh.count = this.highWaterMark.get(LODLevel.Geometry)!
+    for (const level of this.dirtyLevels) {
+      const mesh = this.meshFor(level)
+      mesh.instanceMatrix.needsUpdate = true
+      mesh.count = this.highWaterMark.get(level)!
     }
 
-    if (this.dirtyLevels.has(LODLevel.Billboard)) {
-      this.billboardMesh.instanceMatrix.needsUpdate = true
-      this.billboardMesh.count = this.highWaterMark.get(LODLevel.Billboard)!
-    }
-
-    if (this.dirtyFadeLevels.has(LODLevel.Geometry)) {
-      this.fadeAttribute(LODLevel.Geometry).needsUpdate = true
-    }
-    if (this.dirtyFadeLevels.has(LODLevel.Billboard)) {
-      this.fadeAttribute(LODLevel.Billboard).needsUpdate = true
+    for (const level of this.dirtyFadeLevels) {
+      this.fadeAttribute(level).needsUpdate = true
     }
 
     this.dirtyLevels.clear()
@@ -211,14 +237,15 @@ class InstancePool {
    * Получить все рендер-объекты для добавления в сцену.
    */
   public getRenderObjects(): Object3D[] {
-    return [this.geometryMesh, this.billboardMesh]
+    return [this.geometryMesh, this.geometryNearMesh, this.billboardMesh]
   }
 
   /**
    * Получить общее количество active instances по всем уровням.
+   * Ближний тир входит в счётчик L0 (это та же геометрия L0, выше detail).
    */
   public getActiveCount(): { l0: number; l1: number; total: number } {
-    const l0 = this.highWaterMark.get(LODLevel.Geometry)!
+    const l0 = this.highWaterMark.get(LODLevel.Geometry)! + this.highWaterMark.get(LODLevel.GeometryNear)!
     const l1 = this.highWaterMark.get(LODLevel.Billboard)!
     return { l0, l1, total: l0 + l1 }
   }
@@ -226,7 +253,7 @@ class InstancePool {
   // === Private ===
 
   private clearInstances(lodLevel: LODLevel, offset: number, count: number): void {
-    const mesh = lodLevel === LODLevel.Geometry ? this.geometryMesh : this.billboardMesh
+    const mesh = this.meshFor(lodLevel)
     const dst = mesh.instanceMatrix.array as Float32Array
     for (let i = 0; i < count; i++) {
       dst.set(InstancePool.ZERO_MATRIX, (offset + i) * 16)
@@ -282,8 +309,10 @@ class InstancePool {
     }
 
     this.geometryMesh.count = 0
+    this.geometryNearMesh.count = 0
     this.billboardMesh.count = 0
     this.dirtyLevels.clear()
+    this.dirtyFadeLevels.clear()
   }
 }
 
