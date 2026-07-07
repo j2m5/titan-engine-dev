@@ -1,4 +1,4 @@
-import { Color, Group, Matrix4, PerspectiveCamera, Vector3 } from 'three'
+import { Color, Group, Matrix4, Object3D, PerspectiveCamera, Vector3 } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -502,7 +502,7 @@ class AsteroidRingSystem extends Group {
    * Проверка, видна ли система (учитывает LOD-переключения родителя).
    */
   private isEffectivelyVisible(): boolean {
-    let obj: any = this.parent
+    let obj: Object3D | null = this.parent
     while (obj) {
       if (obj.visible === false) return false
       obj = obj.parent
