@@ -261,16 +261,25 @@ class AsteroidRingSystem extends Group {
     }
     this.manager = new SectorManager(this.sectorGrid, this.generator, this.pool, thresholds)
 
+    // --- Тень планеты (умбра) — общая для камней/пыли/2D-кольца ---
+    // Радиус планеты в ring-local (начало ring-local = центр планеты, тот же
+    // источник, что у RingShader). Прокидываем в материалы камней НЕЗАВИСИМО от
+    // пыли: тень камней (ringDustPlanetShadow) не должна отключаться вместе с
+    // дымкой. 0 при отсутствии планеты → тень выключена.
+    const planetRadiusKm = this.model.parent?.physicalObject?.getAttribute('radius', 0) ?? 0
+    const planetRadius = toThreeJSUnits(planetRadiusKm)
+    const l0Mat = this.pool.geometryMesh.material as InstancedAsteroidMaterial
+    for (const uniforms of [l0Mat.uniforms, this.pool.billboardMaterial.uniforms]) {
+      uniforms.uDustPlanetRadius.value = planetRadius
+    }
+
     // --- RingDustVolume (пылевая дымка) ---
     if (cfg.dustEnabled) {
       const dustScaleHeight = toThreeJSUnits(cfg.dustScaleHeightKm)
       // Калибровка спеки: tau грейзинг-луча через всё кольцо в средней плоскости = dustTauGrazing
       const dustDensity = cfg.dustTauGrazing / (outerRadius - innerRadius)
       const dustNearFade = toThreeJSUnits(cfg.dustNearFadeKm)
-      // Радиус планеты для тени: тот же источник, что у 2D-кольца (RingShader) —
-      // начало ring-local = центр планеты. 0 при отсутствии → тень выключена
-      const planetRadiusKm = this.model.parent?.physicalObject?.getAttribute('radius', 0) ?? 0
-      const dustPlanetRadius = toThreeJSUnits(planetRadiusKm)
+      const dustPlanetRadius = planetRadius
 
       this.dustVolume = new RingDustVolume({
         innerRadius,
@@ -346,19 +355,21 @@ class AsteroidRingSystem extends Group {
       this._localCamPos.x * this._localCamPos.x + this._localCamPos.z * this._localCamPos.z
     )
 
-    // Пер-кадровые юниформы пыли: камера и направление на звезду в ring-local space
+    // Направление на звезду в ring-local — нужно для тени планеты на камни
+    // (ringDustPlanetShadow), поэтому считаем и прокидываем НЕЗАВИСИМО от пыли.
+    this._localLightDir.copy(this._lightWorldPos)
+    this.worldToLocal(this._localLightDir)
+    this._localLightDir.normalize()
+
+    const l0Material = this.pool.geometryMesh.material as InstancedAsteroidMaterial
+    l0Material.uniforms.uDustLightDirRing.value.copy(this._localLightDir)
+    this.pool.billboardMaterial.uniforms.uDustLightDirRing.value.copy(this._localLightDir)
+
+    // Пер-кадровые юниформы дымки: позиция камеры в ring-local (для аэроперспективы)
     if (this.dustVolume) {
-      this._localLightDir.copy(this._lightWorldPos)
-      this.worldToLocal(this._localLightDir)
-      this._localLightDir.normalize()
-
       this.dustVolume.updatePerFrame(this._localCamPos, this._localLightDir)
-
-      const l0Material = this.pool.geometryMesh.material as InstancedAsteroidMaterial
       l0Material.uniforms.uDustCamRingPos.value.copy(this._localCamPos)
-      l0Material.uniforms.uDustLightDirRing.value.copy(this._localLightDir)
       this.pool.billboardMaterial.uniforms.uDustCamRingPos.value.copy(this._localCamPos)
-      this.pool.billboardMaterial.uniforms.uDustLightDirRing.value.copy(this._localLightDir)
     }
 
     // View-projection matrix для frustum culling

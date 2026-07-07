@@ -207,7 +207,13 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       vec3 lightDirection = normalize(vViewLightDirection);
       float lightIntensity = max(dot(normal, lightDirection), 0.0);
 
-      vec3 finalColor = albedo * (lightIntensity * surfAO + uSurfaceAmbient);
+      // Тень планеты (умбра): та же аналитическая модель, что у пыли и 2D-кольца
+      // (ringDustPlanetShadow), поэтому граница тени совпадает между слоями. Гасит
+      // ТОЛЬКО прямой свет звезды (диффуз + блик ниже); эмбиент остаётся → камень
+      // в тени не проваливается в глухой ноль (floor 0.04, как у прочих слоёв).
+      float planetShadow = ringDustPlanetShadow(vRingPos);
+
+      vec3 finalColor = albedo * (lightIntensity * surfAO * planetShadow + uSurfaceAmbient);
 
       // Blinn-Phong блик (металл/лёд), только на освещённой стороне, со спекуляр-AA.
       vec3 viewDir = normalize(vViewPosition);
@@ -222,7 +228,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       float specPowerAA = uSpecularPower * specToksvig;
       float spec = pow(max(dot(normal, halfVec), 0.0), specPowerAA) * uSpecularStrength * specToksvig;
       vec3 specColor = mix(vec3(1.0), albedo, uSpecularTint);
-      finalColor += spec * specColor * lightIntensity;
+      finalColor += spec * specColor * lightIntensity * planetShadow;
 
       // Аэроперспектива: камни тонут в пылевой дымке с расстоянием
       finalColor = ringDustApplyFog(finalColor, vRingPos);

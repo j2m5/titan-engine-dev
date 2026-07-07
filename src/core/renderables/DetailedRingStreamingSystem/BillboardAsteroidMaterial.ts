@@ -169,7 +169,10 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
           // Wrap lighting: мягкий переход свет→тень
           float diffuse = NdotL * 0.5 + 0.5;
           diffuse = diffuse * diffuse; // Квадратичный falloff для более контрастных теней
-          float lighting = uAmbient + (0.3 - uAmbient) * diffuse;
+          // Тень планеты (умбра) — та же модель, что у пыли/2D-кольца/L0. Гасит
+          // прямой свет; uAmbient остаётся (не в глухой ноль).
+          float planetShadow = ringDustPlanetShadow(vRingPos);
+          float lighting = uAmbient + (0.3 - uAmbient) * diffuse * planetShadow;
 
           // --- Итоговый цвет ---
           // vFade — плавный fade-in/out сектора; abs, т.к. знак кодирует лишь
