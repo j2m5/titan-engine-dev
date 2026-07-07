@@ -87,9 +87,9 @@ interface AsteroidRingConfig {
   /** Дальность детализации: полное гашение. Больше → деталь держится дальше */
   detailAaEnd: number
   /**
-   * Спайк B: гейтить рендер камней по альфе текстуры 2D-кольца (радиальные
-   * щели/полосы). Та же текстура и радиальный маппинг, что у RingShader →
-   * 3D-щели совпадают с 2D. По умолчанию выключено.
+   * Распределение камней и пыли следует альфе текстуры 2D-кольца (радиальный
+   * профиль плотности + профиль пыли). Тот же радиальный маппинг, что у
+   * RingShader → щели/субкольца 3D совпадают с 2D. false → равномерно.
    */
   ringGapsFromTexture: boolean
   /**
@@ -177,6 +177,10 @@ class AsteroidRingSystem extends Group {
 
   /** Флаг: система была деактивирована (parent invisible) */
   private wasDeactivated = false
+
+  // Троттлинг dev-предупреждения об исчерпании пула инстансов
+  private lastPoolWarnAt = 0
+  private lastPoolFailures = 0
 
   // A-lite: радиальный профиль плотности из текстуры кольца строится один раз,
   // когда текстура догрузилась (async). До этого — равномерная плотность + B-гейт.
@@ -340,30 +344,6 @@ class AsteroidRingSystem extends Group {
       uniforms.uDustPlanetRadius.value = planetRadius
     }
 
-    // --- Спайк B: радиальные щели из альфы текстуры кольца (за флагом) ---
-    // Та же текстура/радиусы, что у RingShader → 3D-щели ложатся на 2D. Пока
-    // текстура не пришла, getTextureOrMake отдаёт fallback (полная альфа) → щелей
-    // нет, ровно как у 2D-кольца до загрузки. Гейт — страховка для равномерного
-    // распределения; после построения радиального профиля плотности он
-    // выключается (см. __tryBuildDensityProfile).
-    if (cfg.ringGapsFromTexture) {
-      const ringData = this.model.renderingObject?.getAttribute('data')
-      const gapAlphaTest = ringData?.alphaTest ?? 0
-      // Путь текстуры кольца — тот же ресурс, что у RingShader. Гейт включаем
-      // только при наличии текстуры: нет ресурса → гейт тихо выключен (не краш).
-      const gapPath = this.model.resources?.first()?.getAttribute('path')
-      const gapTexture = gapPath ? resourceStorage.getTextureOrMake(gapPath) : null
-      if (gapTexture) {
-        for (const uniforms of [l0Mat.uniforms, this.pool.billboardMaterial.uniforms]) {
-          uniforms.uRingGapEnabled.value = 1
-          uniforms.uRingGapMap.value = gapTexture
-          uniforms.uRingGapInner.value = innerRadius
-          uniforms.uRingGapOuter.value = outerRadius
-          uniforms.uRingGapAlphaTest.value = gapAlphaTest
-        }
-      }
-    }
-
     // --- RingDustVolume (пылевая дымка) ---
     if (cfg.dustEnabled) {
       const dustScaleHeight = toThreeJSUnits(cfg.dustScaleHeightKm)
@@ -479,17 +459,38 @@ class AsteroidRingSystem extends Group {
 
     // Коммит изменений в GPU
     this.pool.commitUpdates()
+
+    // Диагностика: молчаливые отказы аллокации = сектора пропадают из рендера
+    // (дырки в L0 при заполненном пуле). Подсвечиваем в dev, не чаще раза в 5с.
+    if (import.meta.env.DEV) this.__warnOnPoolExhaustion()
+  }
+
+  private __warnOnPoolExhaustion(): void {
+    const pressure = this.pool.getPressureInfo()
+    if (pressure.totalFailures <= this.lastPoolFailures) return
+
+    const now = performance.now()
+    if (now - this.lastPoolWarnAt >= 5000) {
+      this.lastPoolWarnAt = now
+      console.warn(
+        `[AsteroidRingSystem ${this.config.ringId}] Пул инстансов исчерпан — сектора молча пропадают из рендера. ` +
+          `Отказов аллокации: ${pressure.totalFailures}. ` +
+          `Занятость: L0Near ${pressure.l0Near.used}/${pressure.l0Near.capacity}, ` +
+          `L0 ${pressure.l0.used}/${pressure.l0.capacity}, L1 ${pressure.l1.used}/${pressure.l1.capacity}. ` +
+          'Лечится ростом maxL*Instances или снижением asteroidDensityScale.'
+      )
+    }
+    this.lastPoolFailures = pressure.totalFailures
   }
 
   /**
-   * A-lite: один раз построить радиальный профиль плотности из альфы текстуры
-   * кольца и отдать его в SectorGrid. Пустотные полосы перестанут генерироваться
-   * (нет waste на пустотах разреженных колец). До готовности текстуры — равномерная
-   * плотность + B-гейт (визуал корректен всегда), поэтому переход незаметен.
-   *
-   * Профиль вбирает семантику гейта (отсечка по alphaTest) и добавляет мягкие
-   * кромки (ringGapBleedKm), поэтому при успехе B-гейт ВЫКЛЮЧАЕТСЯ: жёсткий
-   * discard по сырой альфе срезал бы размытые хвосты обратно в «забор».
+   * Один раз построить радиальный профиль плотности из альфы текстуры кольца
+   * и отдать его в SectorGrid/генератор (+ профиль пыли в материалы). Пустотные
+   * полосы не генерируются вовсе (нет waste на пустотах разреженных колец).
+   * До готовности текстуры — равномерная плотность (краткое окно первых кадров).
+   * Профиль вбирает семантику alphaTest 2D-кольца (отсечка) и даёт мягкие
+   * кромки субколец (ringGapBleedKm). Нечитаемая текстура → кольцо без щелей,
+   * но без краша.
    */
   private __tryBuildDensityProfile(): void {
     if (this.densityProfileReady || !this.config.ringGapsFromTexture) return
@@ -514,9 +515,6 @@ class AsteroidRingSystem extends Group {
       // КОНЦЕНТРАЦИЯ (радиус ∝ альфе). Вместе → плотность колечка = base.
       this.sectorGrid.setDensityProfile(profile)
       this.generator.setDensityProfile(profile)
-      // Размещение теперь само кодирует щели → гейт лишний и вредный (см. док выше).
-      // Остаётся включённым только как фоллбэк при нечитаемом профиле.
-      this.__setRingGapGateEnabled(false)
     }
 
     this.__applyDustRadialProfile(texture)
@@ -545,14 +543,6 @@ class AsteroidRingSystem extends Group {
     for (const uniforms of uniformSets) {
       uniforms.uDustRadialMap.value = radial.texture
       uniforms.uDustRadialMapScale.value = radial.scale
-    }
-  }
-
-  /** Включить/выключить B-гейт (discard по альфе текстуры кольца) у обоих материалов камней */
-  private __setRingGapGateEnabled(enabled: boolean): void {
-    const l0Material = this.pool.geometryMesh.material as InstancedAsteroidMaterial
-    for (const uniforms of [l0Material.uniforms, this.pool.billboardMaterial.uniforms]) {
-      uniforms.uRingGapEnabled.value = enabled ? 1 : 0
     }
   }
 
@@ -612,6 +602,7 @@ class AsteroidRingSystem extends Group {
     sectorsByLod: { l0: number; l1: number }
     instances: { l0: number; l1: number; total: number }
     pendingRemoval: number
+    poolPressure: ReturnType<InstancePool['getPressureInfo']>
   } {
     const managerInfo = this.manager.getDebugInfo()
     const poolInfo = this.pool.getActiveCount()
@@ -621,7 +612,8 @@ class AsteroidRingSystem extends Group {
       activeSectors: managerInfo.activeSectors,
       sectorsByLod: managerInfo.byLod,
       instances: poolInfo,
-      pendingRemoval: managerInfo.pendingRemoval
+      pendingRemoval: managerInfo.pendingRemoval,
+      poolPressure: this.pool.getPressureInfo()
     }
   }
 

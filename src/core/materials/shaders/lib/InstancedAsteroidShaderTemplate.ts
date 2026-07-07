@@ -29,13 +29,6 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     // (циклов зерна на пиксель). Больше → деталь держится дальше.
     uAaStart: new Uniform(1.2),
     uAaEnd: new Uniform(3.0),
-    // Радиальные щели/полосы из альфы текстуры 2D-кольца (спайк B). uRingGapEnabled
-    // = 0 → выключено. uv по радиусу (тот же маппинг, что у RingShader).
-    uRingGapEnabled: new Uniform(0),
-    uRingGapMap: new Uniform(null),
-    uRingGapInner: new Uniform(0),
-    uRingGapOuter: new Uniform(1),
-    uRingGapAlphaTest: new Uniform(0),
     // Пылевая дымка (см. чанк RingDust). uDustDensity = 0 — туман выключен,
     // пока AsteroidRingSystem явно не сконфигурирует пыль.
     uDustColor: new Uniform(new Color(0x9b968c)),
@@ -77,7 +70,6 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     varying vec3 vObjectNormal;
     varying mat3 vObjToView;
     varying float vFade;
-    varying vec3 vRingCenter;
 
     #include <noiseFunctions>
     #include <asteroidShapeFunctions>
@@ -100,9 +92,6 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
       // Ring-local позиция фрагмента для модели пыли/тени (пофрагментная)
       vRingPos = worldPosition.xyz;
-      // Ring-local ЦЕНТР инстанса — для per-instance гейта щелей (без слайсинга).
-      // Константа по всем вершинам инстанса → varying интерполируется в неё же.
-      vRingCenter = instanceMatrix[3].xyz;
 
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
       mat3 instanceNormalMatrix = mat3(instanceMatrix);
@@ -149,11 +138,6 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uniform float uSpecularTint;
     uniform float uAaStart;
     uniform float uAaEnd;
-    uniform float uRingGapEnabled;
-    uniform sampler2D uRingGapMap;
-    uniform float uRingGapInner;
-    uniform float uRingGapOuter;
-    uniform float uRingGapAlphaTest;
 
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
@@ -163,7 +147,6 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     varying vec3 vObjectNormal;
     varying mat3 vObjToView;
     varying float vFade;
-    varying vec3 vRingCenter;
 
     #include <noiseFunctions>
     #include <asteroidSurfaceFunctions>
@@ -185,18 +168,8 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       // без «дыр» на середине перехода. |vFade|>=1 → порог не срабатывает.
       float fadeMag = abs(vFade);
       float fadeThresh = fadeDither(gl_FragCoord.xy);
-      if (vFade < 0.0) fadeThresh = 1.0 - fadeThresh;
+      if (vFade < 0.999) fadeThresh = 1.0 - fadeThresh;
       if (fadeMag < fadeThresh) discard;
-
-      // Радиальные щели/полосы из альфы текстуры 2D-кольца. Гейт по радиусу ЦЕНТРА
-      // инстанса (vRingCenter), а НЕ пофрагментно — иначе кромка колечка разрезает
-      // отдельные астероиды пополам. Тот же радиальный маппинг, что у RingShader →
-      // 3D-щели ложатся на 2D. Ранний выход. За флагом (по умолч. off).
-      if (uRingGapEnabled > 0.5) {
-        float gapU = (length(vRingCenter.xz) - uRingGapInner) / (uRingGapOuter - uRingGapInner);
-        float gapA = texture2D(uRingGapMap, vec2(clamp(gapU, 0.0, 1.0), 0.0)).a;
-        if (gapA <= uRingGapAlphaTest) discard;
-      }
 
       vec3 surfDir = normalize(vObjectPos);
 

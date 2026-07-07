@@ -79,6 +79,13 @@ class InstancePool {
   /** Dirty-флаги для отложенного commit fade-атрибута (меняется каждый кадр перехода) */
   private dirtyFadeLevels: Set<LODLevel> = new Set()
 
+  /**
+   * Счётчики отказов allocate() по LOD — диагностика исчерпания пула.
+   * Отказ проглатывается менеджером молча (сектор просто не активируется /
+   * не меняет LOD), поэтому переполнение видно только по этим счётчикам.
+   */
+  private allocationFailures: Map<LODLevel, number> = new Map()
+
   public constructor(
     l0Config: PoolLayerConfig,
     l1Config: PoolLayerConfig,
@@ -97,6 +104,7 @@ class InstancePool {
     for (const [level, config] of this.layerConfigs) {
       this.freeLists.set(level, [{ offset: 0, count: config.maxInstances }])
       this.highWaterMark.set(level, 0)
+      this.allocationFailures.set(level, 0)
     }
 
     // --- L0: Geometry InstancedMesh ---
@@ -177,6 +185,7 @@ class InstancePool {
       }
     }
 
+    this.allocationFailures.set(lodLevel, this.allocationFailures.get(lodLevel)! + 1)
     return null
   }
 
@@ -250,6 +259,30 @@ class InstancePool {
     return { l0, l1, total: l0 + l1 }
   }
 
+  /** Занятость и отказы одного LOD-пула (диагностика переполнения) */
+  private levelPressure(level: LODLevel): { used: number; capacity: number; failures: number } {
+    const capacity = this.layerConfigs.get(level)!.maxInstances
+    const free = this.freeLists.get(level)!.reduce((sum, range) => sum + range.count, 0)
+    return { used: capacity - free, capacity, failures: this.allocationFailures.get(level)! }
+  }
+
+  /**
+   * Диагностика давления на пулы: фактическая занятость (не high-water mark)
+   * и накопленные отказы allocate(). Ненулевые failures = сектора молча
+   * пропадали из рендера — пора поднимать maxInstances или снижать density.
+   */
+  public getPressureInfo(): {
+    l0Near: { used: number; capacity: number; failures: number }
+    l0: { used: number; capacity: number; failures: number }
+    l1: { used: number; capacity: number; failures: number }
+    totalFailures: number
+  } {
+    const l0Near = this.levelPressure(LODLevel.GeometryNear)
+    const l0 = this.levelPressure(LODLevel.Geometry)
+    const l1 = this.levelPressure(LODLevel.Billboard)
+    return { l0Near, l0, l1, totalFailures: l0Near.failures + l0.failures + l1.failures }
+  }
+
   // === Private ===
 
   private clearInstances(lodLevel: LODLevel, offset: number, count: number): void {
@@ -306,6 +339,7 @@ class InstancePool {
     for (const [level, config] of this.layerConfigs) {
       this.freeLists.set(level, [{ offset: 0, count: config.maxInstances }])
       this.highWaterMark.set(level, 0)
+      this.allocationFailures.set(level, 0)
     }
 
     this.geometryMesh.count = 0
