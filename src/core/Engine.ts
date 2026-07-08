@@ -4,10 +4,10 @@ import { SceneObserver } from '@/core/services/SceneObserver'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { postprocessing } from '@/core/graphic/Postprocessing'
 import { config } from '@/core/framework/config'
-import { DAY } from '@/core/constants'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
-import { cameraStore } from '@/ui/mobx/CameraStore'
-import { timeStore } from '@/ui/mobx/TimeStore'
+import { SimulationClock } from '@/core/time/SimulationClock'
+import { CameraController } from '@/core/camera/CameraController'
+import { UpdateContext } from '@/core/UpdateContext'
 import { Vector2 } from 'three'
 
 class Engine extends EventEmitter {
@@ -17,22 +17,24 @@ class Engine extends EventEmitter {
   private initialized: boolean = false
   private running: boolean = false
 
-  private readonly boundOnStart: () => void
   private readonly boundOnResize: () => void
   private readonly boundOnFrameRendered: () => void
   private readonly boundOnClick: (event: MouseEvent) => void
+  private readonly boundOnWheel: (event: WheelEvent) => void
 
   public constructor(
     private sceneManager: SceneManager,
-    private sceneObserver: SceneObserver
+    private sceneObserver: SceneObserver,
+    private clock: SimulationClock,
+    private camera: CameraController
   ) {
     super()
     this.canvas = threeJS.renderer.domElement
     this.overlay = threeJS.labelRenderer.domElement
-    this.boundOnStart = this.onStart.bind(this)
     this.boundOnResize = this.onResize.bind(this)
     this.boundOnFrameRendered = this.onFrameRendered.bind(this)
     this.boundOnClick = this.onClick.bind(this)
+    this.boundOnWheel = this.onWheel.bind(this)
 
     addEventListener('resize', this.boundOnResize)
     this.canvas.addEventListener('click', this.boundOnClick)
@@ -85,7 +87,7 @@ class Engine extends EventEmitter {
   public dispose(): void {
     if (!this.running) return
 
-    removeEventListener('wheel', this.boundOnStart)
+    this.canvas.removeEventListener('wheel', this.boundOnWheel)
     removeEventListener('resize', this.boundOnResize)
     this.canvas.removeEventListener('click', this.boundOnClick)
 
@@ -95,20 +97,25 @@ class Engine extends EventEmitter {
   }
 
   private onStart(): void {
-    this.canvas.addEventListener('wheel', (event: WheelEvent): void => {
-      cameraStore.adjustSpeed(event.deltaY)
-    })
+    this.canvas.addEventListener('wheel', this.boundOnWheel)
+  }
+
+  private onWheel(event: WheelEvent): void {
+    this.camera.adjust(event.deltaY)
   }
 
   private onFrameRendered(): void {
     const delta: number = threeJS.clock.getDelta()
 
     if (config('showStats')) threeJS.stats.update()
-    timeStore.setEpoch(timeStore.epoch + (delta * timeStore.speedOfTime) / DAY)
-    threeJS.astroControls.movementSpeed = toThreeJSUnits(cameraStore.speed)
+    this.clock.advance(delta)
+    threeJS.astroControls.movementSpeed = toThreeJSUnits(this.camera.speed)
     threeJS.astroControls.update(delta)
     threeJS.labelRenderer.render(threeJS.scene, threeJS.camera)
-    this.sceneManager.update(delta)
+
+    const ctx: UpdateContext = { delta, epoch: this.clock.epoch }
+
+    this.sceneManager.update(ctx)
     postprocessing.render(delta)
 
     threeJS.renderer.setAnimationLoop(this.boundOnFrameRendered)

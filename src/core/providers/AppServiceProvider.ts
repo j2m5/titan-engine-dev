@@ -31,7 +31,13 @@ class AppServiceProvider extends ServiceProvider {
 
     this.app.singleton(
       Tokens.Engine,
-      (c: Container) => new Engine(c.get(Tokens.SceneManager), c.get(Tokens.SceneObserver))
+      (c: Container) =>
+        new Engine(
+          c.get(Tokens.SceneManager),
+          c.get(Tokens.SceneObserver),
+          c.get(Tokens.SimulationClock),
+          c.get(Tokens.CameraController)
+        )
     )
 
     this.app.singleton(

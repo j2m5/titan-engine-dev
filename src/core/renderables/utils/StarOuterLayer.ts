@@ -3,6 +3,7 @@ import { Actor } from '@/core/models/Actor'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { StarOuterLayerShaderTemplate } from '@/core/materials/shaders/lib/StarOuterLayerShaderTemplate'
 import { threeJS } from '@/core/graphic/ThreeJS'
+import { UpdateContext } from '@/core/UpdateContext'
 
 class StarOuterLayer extends Mesh {
   public model: Actor
@@ -121,7 +122,7 @@ class StarOuterLayer extends Mesh {
     this.scale.multiplyScalar(this.radius)
   }
 
-  public updateObject(delta?: number): void {
+  public updateObject(ctx: UpdateContext): void {
     this.material.uniforms.uTime.value = threeJS.clock.getElapsedTime() * 0.009
   }
 }

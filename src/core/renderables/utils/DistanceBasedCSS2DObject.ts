@@ -3,6 +3,7 @@ import { Actor } from '@/core/models/Actor'
 import { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
 import { smoothstep } from 'three/src/math/MathUtils'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { UpdateContext } from '@/core/UpdateContext'
 
 abstract class DistanceBasedCSS2DObject extends CSS2DObject {
   public model: Actor
@@ -18,7 +19,7 @@ abstract class DistanceBasedCSS2DObject extends CSS2DObject {
     this.observer = observer
   }
 
-  public updateObject(delta?: number): void {
+  public updateObject(ctx: UpdateContext): void {
     const record: ObservableRecord | undefined = this.observer.data.get(this.model.getAttribute('name'))
 
     if (!record) return

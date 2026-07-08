@@ -6,6 +6,7 @@ import { BrunetonAtmosphereMaterial } from '@/core/renderables/Atmosphere/Brunet
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
+import { UpdateContext } from '@/core/UpdateContext'
 
 class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
   public model: Actor
@@ -58,7 +59,7 @@ class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
     this.geometry.dispose()
   }
 
-  public updateObject(delta?: number): void {
+  public updateObject(ctx: UpdateContext): void {
     this.material.update(this, threeJS.camera, this.lightPosition)
   }
 

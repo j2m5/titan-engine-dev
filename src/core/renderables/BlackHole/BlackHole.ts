@@ -3,6 +3,7 @@ import { Actor } from '@/core/models/Actor'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
 import { BlackHoleMaterial } from '@/core/renderables/BlackHole/BlackHoleMaterial'
 import { threeJS } from '@/core/graphic/ThreeJS'
+import { UpdateContext } from '@/core/UpdateContext'
 
 /**
  * Чёрная дыра (уровень L0): bounding-сфера зоны симуляции лензирования
@@ -21,6 +22,8 @@ class BlackHole extends Mesh {
 
   private static readonly _clickSphere: Sphere = new Sphere()
   private static readonly _clickPoint: Vector3 = new Vector3()
+
+  private _epoch: number = 0
 
   public constructor(model: Actor) {
     super()
@@ -47,7 +50,7 @@ class BlackHole extends Mesh {
     // (после рендера) даёт покадровый рассинхрон, который проявляется
     // паразитным параллаксом фона при трансляции камеры
     this.onBeforeRender = (): void => {
-      this.material.update(this, threeJS.camera, threeJS.scene.background as CubeTexture | null)
+      this.material.update(this, threeJS.camera, threeJS.scene.background as CubeTexture | null, this._epoch)
     }
   }
 
@@ -71,8 +74,10 @@ class BlackHole extends Mesh {
     }
   }
 
-  public updateObject(delta?: number): void {
-    // намеренно пусто: per-frame обновление материала живёт в onBeforeRender (см. __setup)
+  public updateObject(ctx: UpdateContext): void {
+    // per-frame обновление материала живёт в onBeforeRender; сюда кэшируем
+    // актуальную эпоху кадра (updateObject вызывается до рендера)
+    this._epoch = ctx.epoch
   }
 }
 

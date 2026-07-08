@@ -1,6 +1,7 @@
 import { BackSide, BoxGeometry, Camera, Mesh, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
 import { NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { NebulaRaymarchMaterial } from '@/core/renderables/Nebula/material/NebulaRaymarchMaterial'
+import { UpdateContext } from '@/core/UpdateContext'
 
 /**
  * Bounding-proxy mesh for the volumetric raymarch. The geometry is a unit cube
@@ -42,7 +43,7 @@ class NebulaVolume extends Mesh {
     }
   }
 
-  public updateObject(_delta?: number): void {
+  public updateObject(ctx: UpdateContext): void {
     // Intentionally empty: per-frame uniform updates live in onBeforeRender.
   }
 }

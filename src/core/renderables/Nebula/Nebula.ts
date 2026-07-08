@@ -6,6 +6,7 @@ import { ImpostorBaker } from '@/core/renderables/Nebula/volume/ImpostorBaker'
 import { NebulaDensityBaker } from '@/core/renderables/Nebula/volume/NebulaDensityBaker'
 import { IMPOSTOR_FRAME_FILL, selectLOD } from '@/core/renderables/Nebula/volume/lod'
 import { threeJS } from '@/core/graphic/ThreeJS'
+import { UpdateContext } from '@/core/UpdateContext'
 
 const REBAKE_ANGLE = 0.15 // rad (~8.6°): rebake the impostor past this view-dir change
 const IMPOSTOR_RESOLUTION = 512
@@ -61,7 +62,7 @@ class Nebula extends Object3D {
     }
   }
 
-  public updateObject(_delta?: number): void {
+  public updateObject(ctx: UpdateContext): void {
     const camera = threeJS.camera
     const { blend } = selectLOD(this.projectedScreenRadius(), this.params.quality.forceLOD)
 

@@ -1,6 +1,7 @@
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { Vector2, Vector3 } from 'three'
 import { threeJS } from '@/core/graphic/ThreeJS'
+import { UpdateContext } from '@/core/UpdateContext'
 
 class Crosshair extends CSS2DObject {
   private arrow: HTMLElement
@@ -45,7 +46,7 @@ class Crosshair extends CSS2DObject {
     })
   }
 
-  public updateObject(delta?: number): void {
+  public updateObject(ctx: UpdateContext): void {
     const worldPosition = this.getWorldPosition(this.pos)
     worldPosition.project(threeJS.camera)
 

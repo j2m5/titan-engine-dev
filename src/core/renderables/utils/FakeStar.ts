@@ -4,6 +4,7 @@ import { resourceStorage } from '@/core/services/ResourceStorage'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { degToRad } from 'three/src/math/MathUtils'
 import { colorTemperatureToRGB, rgbToHex } from '@/core/materials/shaders/lib/helpers'
+import { UpdateContext } from '@/core/UpdateContext'
 
 /**
  * Объект созданный в качестве LOD-Level-2 для звездного меша
@@ -46,7 +47,7 @@ class FakeStar extends Mesh {
     this.scale.multiplyScalar(this.scaleFactor)
   }
 
-  public updateObject(delta?: number): void {
+  public updateObject(ctx: UpdateContext): void {
     this.lookAt(threeJS.camera.position)
 
     const distance = this.position.distanceTo(threeJS.camera.position)

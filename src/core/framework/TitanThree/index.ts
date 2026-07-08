@@ -22,5 +22,5 @@ THREE.Object3D.prototype.getObjectsByUserDataProperty = function (
   return result
 }
 THREE.Object3D.prototype.__setup = function (): void {}
-THREE.Object3D.prototype.updateObject = function (delta?: number): void {}
+THREE.Object3D.prototype.updateObject = function (): void {}
 THREE.Mesh.prototype.resetMaterial = function (): void {}

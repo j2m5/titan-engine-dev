@@ -13,6 +13,7 @@ import { RenderableObject3D, ShouldRenderOrbitLine } from '@/core/renderables/ty
 import { scenarioContext } from '@/core/scenario/ScenarioContext'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { settingsStore } from '@/ui/mobx/SettingsStore'
+import { UpdateContext } from '@/core/UpdateContext'
 
 export function isAcceptable(object: unknown): object is Acceptable<IObject3DVisitor> {
   return (object as Acceptable<IObject3DVisitor>).accept !== undefined
@@ -78,12 +79,12 @@ class SceneManager {
     this.buffer.clear()
   }
 
-  public update(delta?: number): void {
+  public update(ctx: UpdateContext): void {
     for (const line of this.orbitLines) {
       line.visible = settingsStore.showOrbitLines
     }
 
-    this.scene.traverse((object: Object3D): void => object.updateObject(delta))
+    this.scene.traverse((object: Object3D): void => object.updateObject(ctx))
     this.markerManager.update()
   }
 }

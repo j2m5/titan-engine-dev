@@ -1,6 +1,5 @@
 import { BackSide, CubeTexture, GLSL3, Matrix4, Mesh, PerspectiveCamera, RawShaderMaterial, Vector3 } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
-import { timeStore } from '@/ui/mobx/TimeStore'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
 import { BlackHoleNoiseTexture } from '@/core/renderables/BlackHole/BlackHoleNoiseTexture'
 import { BlackHoleShaderTemplate, createBlackHoleUniforms } from '@/core/renderables/BlackHole/BlackHoleShaderTemplate'
@@ -66,8 +65,9 @@ class BlackHoleMaterial extends RawShaderMaterial {
    * @param mesh Меш bounding-сферы зоны симуляции
    * @param camera Камера сцены
    * @param background Фоновая кубмапа сцены (threeJS.scene.background)
+   * @param epoch Эпоха симуляции (дни), кэшированная BlackHole.updateObject
    */
-  public update(mesh: Mesh, camera: PerspectiveCamera, background: CubeTexture | null): void {
+  public update(mesh: Mesh, camera: PerspectiveCamera, background: CubeTexture | null, epoch: number): void {
     const mw: number[] = mesh.matrixWorld.elements
     const cw: number[] = camera.matrixWorld.elements
 
@@ -106,7 +106,7 @@ class BlackHoleMaterial extends RawShaderMaterial {
     // по кратному периоду внутреннего края — фазы дифференциального вращения
     // не теряют точность в f32; диск ускоряется вместе со временем симуляции
     const wrap: number = this.parameters.rotationPeriod * 16384
-    this.uniforms.uTime.value = timeStore.epoch - Math.floor(timeStore.epoch / wrap) * wrap
+    this.uniforms.uTime.value = epoch - Math.floor(epoch / wrap) * wrap
   }
 }
 

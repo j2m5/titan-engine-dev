@@ -1,7 +1,7 @@
 import { DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry, ShaderMaterial, SphereGeometry } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
-import { timeStore } from '@/ui/mobx/TimeStore'
+import { UpdateContext } from '@/core/UpdateContext'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
 import { BlackHoleNoiseTexture } from '@/core/renderables/BlackHole/BlackHoleNoiseTexture'
 import {
@@ -92,13 +92,13 @@ class BlackHoleImpostor extends Group {
     }
   }
 
-  public updateObject(delta?: number): void {
+  public updateObject(ctx: UpdateContext): void {
     if (!this.ringMaterial) return
 
     // та же свёртка эпохи, что у L0 (см. BlackHoleMaterial.update, шаг 7) —
     // фаза вращения диска непрерывна при переключении LOD
     const wrap: number = this.parameters.rotationPeriod * 16384
-    this.ringMaterial.uniforms.uTime.value = timeStore.epoch - Math.floor(timeStore.epoch / wrap) * wrap
+    this.ringMaterial.uniforms.uTime.value = ctx.epoch - Math.floor(ctx.epoch / wrap) * wrap
   }
 }
 

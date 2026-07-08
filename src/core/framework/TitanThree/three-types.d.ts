@@ -6,7 +6,7 @@ declare module 'three' {
     model: Actor | null
     getObjectsByUserDataProperty(key: string, value: any, result: Object3D[] = []): Object3D[]
     __setup(): void
-    updateObject(delta?: number): void
+    updateObject(ctx: import('@/core/UpdateContext').UpdateContext): void
   }
 
   interface Group extends Object3D {}

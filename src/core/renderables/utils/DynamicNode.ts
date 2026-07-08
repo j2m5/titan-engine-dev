@@ -7,7 +7,7 @@ import { OrbitLine } from '@/core/renderables/utils/OrbitLine'
 import { KeplerianModel } from '@/core/libs/KeplerianModel'
 import { OrientationModel } from '@/core/libs/OrientationModel'
 import { AU, SpaceScale } from '@/core/constants'
-import { timeStore } from '@/ui/mobx/TimeStore'
+import { UpdateContext } from '@/core/UpdateContext'
 
 /**
  * Этот объект представляет собой контейнер динамического объекта, который обновляет свою позицию в пространстве
@@ -53,12 +53,12 @@ class DynamicNode extends Group implements Acceptable<IObject3DVisitor>, ShouldR
     return ORIENTED_CATEGORIES.has(this.model.getAttribute('categoryId'))
   }
 
-  public updateObject(delta?: number): void {
-    const { position } = this.keplerianModel.getStateByEpoch(timeStore.epoch)
+  public updateObject(ctx: UpdateContext): void {
+    const { position } = this.keplerianModel.getStateByEpoch(ctx.epoch)
     this.position.copy(position).multiplyScalar(AU * SpaceScale)
 
     if (this.renderable && this.isOriented) {
-      this.renderable.quaternion.copy(this.orientationModel.getQuaternion(timeStore.epoch))
+      this.renderable.quaternion.copy(this.orientationModel.getQuaternion(ctx.epoch))
     }
   }
 

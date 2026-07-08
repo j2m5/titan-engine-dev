@@ -32,14 +32,6 @@ class TimeStore {
     this._clock?.setEpoch(getJD(new Date()))
   }
 
-  /**
-   * Совместимость на время миграции: Engine пока пишет эпоху через стор.
-   * Делегируем в clock; удаляется в Task 7, когда Engine перейдёт на clock.advance.
-   */
-  public setEpoch(payload: number): void {
-    this._clock?.setEpoch(payload)
-  }
-
   public get currentDate(): string {
     return dayjs(getDateFromJD(this.epoch)).format('D MMM, YYYY')
   }

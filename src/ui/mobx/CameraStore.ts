@@ -49,14 +49,6 @@ class CameraStore {
     this._controller?.setSpeed(payload)
   }
 
-  /**
-   * Совместимость на время миграции: Engine пока крутит скорость через стор.
-   * Делегируем в controller; удаляется в Task 7 после миграции Engine.
-   */
-  public adjustSpeed(deltaY: number): void {
-    this._controller?.adjust(deltaY)
-  }
-
   public setDistanceTo(payload: number): void {
     this.distanceTo = payload
   }

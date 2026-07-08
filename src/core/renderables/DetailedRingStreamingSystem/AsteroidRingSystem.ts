@@ -15,6 +15,7 @@ import { SectorManager, LODThresholds } from './SectorManager'
 import { RingDustVolume } from './dust/RingDustVolume'
 import { installRingDustDebug, type RockDustUniforms } from './dust/RingDustDebug'
 import { ASTEROID_PROFILES, type AsteroidProfileName } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
+import { UpdateContext } from '@/core/UpdateContext'
 
 /**
  * Конфигурация системы астероидного кольца
@@ -395,8 +396,8 @@ class AsteroidRingSystem extends Group {
   /**
    * Вызывается каждый кадр из render loop.
    */
-  public updateObject(delta?: number): void {
-    const dt = delta ?? 0.016
+  public updateObject(ctx: UpdateContext): void {
+    const dt = ctx.delta
 
     // Проверить видимость parent'а
     if (!this.isEffectivelyVisible()) {
