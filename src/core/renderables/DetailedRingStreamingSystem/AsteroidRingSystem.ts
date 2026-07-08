@@ -1,4 +1,4 @@
-import { Color, Group, Matrix4, Object3D, PerspectiveCamera, Vector3, type Texture } from 'three'
+import { Color, Group, Matrix4, Object3D, PerspectiveCamera, RepeatWrapping, Vector3, type Texture } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
 import type { IRingRenderingObject } from '@/core/models/types'
@@ -106,6 +106,18 @@ interface AsteroidRingConfig {
    * пыль, они получают пропорционально тусклую дымку.
    */
   dustBleedKm: number
+  /** Повторов текстуры на радиус камня (в Three.js units) — тексель-плотность PBR-микрослоя */
+  detailRepeats: number
+  /** Доля цвета текстуры против грейда процедурного профиля (0 — только профиль, 1 — только текстура) */
+  detailSaturation: number
+  /** Компенсация средней яркости диффуза (фотограмметрия темнее процедурного альбедо) */
+  detailBrightness: number
+  /** Сила нормал-карты микрослоя */
+  detailNormalScale: number
+  /** Влияние AO-канала из ARM-текстуры */
+  detailAoInfluence: number
+  /** Влияние rough-канала из ARM-текстуры */
+  detailRoughInfluence: number
 }
 
 /**
@@ -143,7 +155,13 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   detailAaEnd: 3.0,
   ringGapsFromTexture: true,
   ringGapBleedKm: 300,
-  dustBleedKm: 600
+  dustBleedKm: 600,
+  detailRepeats: 2.0,
+  detailSaturation: 0.35,
+  detailBrightness: 1.6,
+  detailNormalScale: 1.0,
+  detailAoInfluence: 0.8,
+  detailRoughInfluence: 0.7
 }
 
 /**
@@ -322,6 +340,9 @@ class AsteroidRingSystem extends Group {
     l0ShapeMaterial.uniforms.uAaStart.value = cfg.detailAaStart
     l0ShapeMaterial.uniforms.uAaEnd.value = cfg.detailAaEnd
 
+    // PBR-микрослой (фотограмметрические текстуры) — поверх процедурного профиля
+    this.__applyDetailMaps(asteroidSize)
+
     // Установить maxDistance для billboard материала
     this.pool.billboardMaterial.uniforms.uMaxDistance.value = l1MaxDist
 
@@ -391,6 +412,35 @@ class AsteroidRingSystem extends Group {
     this.rotateX(degToRad(90))
 
     this.name = 'AsteroidRingSystem'
+  }
+
+  /**
+   * Привязать PBR-микрослой (см. чанк TriplanarDetail). Текстуры — required-
+   * ресурсы (загружены до engine.start); нет любой из трёх → слой тихо
+   * выключен (uDetailMapsEnabled 0), камни рендерятся прежним процедурным путём.
+   */
+  private __applyDetailMaps(asteroidSize: number): void {
+    const diff = resourceStorage.getTexture('asteroids/rock_boulder_dry_diff_2k.jpg')
+    const nor = resourceStorage.getTexture('asteroids/rock_boulder_dry_nor_gl_2k.jpg')
+    const arm = resourceStorage.getTexture('asteroids/rock_boulder_dry_arm_2k.jpg')
+    if (!diff || !nor || !arm) return
+
+    for (const map of [diff, nor, arm]) map.wrapS = map.wrapT = RepeatWrapping
+
+    const cfg = this.config
+    const l0Material = this.pool.geometryMesh.material as InstancedAsteroidMaterial
+    const u = l0Material.uniforms
+    u.uRockDiffMap.value = diff
+    u.uRockNorMap.value = nor
+    u.uRockArmMap.value = arm
+    u.uDetailMapsEnabled.value = 1
+    // Тексель-плотность: cfg.detailRepeats повторов тайла на радиус камня
+    u.uDetailScale.value = cfg.detailRepeats / asteroidSize
+    u.uDetailSaturation.value = cfg.detailSaturation
+    u.uDetailBrightness.value = cfg.detailBrightness
+    u.uDetailNormalScale.value = cfg.detailNormalScale
+    u.uDetailAoInfluence.value = cfg.detailAoInfluence
+    u.uDetailRoughInfluence.value = cfg.detailRoughInfluence
   }
 
   /**

@@ -29,6 +29,18 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     // (циклов зерна на пиксель). Больше → деталь держится дальше.
     uAaStart: new Uniform(1.2),
     uAaEnd: new Uniform(3.0),
+    // Фотограмметрический PBR-микрослой (см. чанк TriplanarDetail); enabled 0 —
+    // текстуры не загрузились, слой выключен
+    uRockDiffMap: new Uniform(null),
+    uRockNorMap: new Uniform(null),
+    uRockArmMap: new Uniform(null),
+    uDetailMapsEnabled: new Uniform(0),
+    uDetailScale: new Uniform(1),
+    uDetailSaturation: new Uniform(0.35),
+    uDetailBrightness: new Uniform(1.6),
+    uDetailNormalScale: new Uniform(1),
+    uDetailAoInfluence: new Uniform(0.8),
+    uDetailRoughInfluence: new Uniform(0.7),
     // Пылевая дымка (см. чанк RingDust). uDustDensity = 0 — туман выключен,
     // пока AsteroidRingSystem явно не сконфигурирует пыль.
     uDustColor: new Uniform(new Color(0x9b968c)),
