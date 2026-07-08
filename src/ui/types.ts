@@ -1,6 +1,4 @@
-import { TitanAlertProps } from '@/ui/TitanUI/types'
-
-export type SystemNotification = Pick<TitanAlertProps, 'type' | 'message'>
+export type { SystemNotification } from '@/core/ports/NotificationSink'
 
 export type SaveFunction = (value: string) => void
 
