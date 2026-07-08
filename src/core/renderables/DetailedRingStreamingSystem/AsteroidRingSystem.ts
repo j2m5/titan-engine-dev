@@ -420,7 +420,12 @@ class AsteroidRingSystem extends Group {
     const arm = resourceStorage.getTexture('asteroids/rock_boulder_dry_arm_2k.jpg')
     if (!diff || !nor || !arm) return
 
-    for (const map of [diff, nor, arm]) map.wrapS = map.wrapT = RepeatWrapping
+    // Текстуры уже загружены на GPU (initTexture при прелоаде) — смена wrap
+    // без needsUpdate не переустановит sampler, трипланар получит ClampToEdge
+    for (const map of [diff, nor, arm]) {
+      map.wrapS = map.wrapT = RepeatWrapping
+      map.needsUpdate = true
+    }
 
     const cfg = this.config
     const l0Material = this.pool.geometryMesh.material as InstancedAsteroidMaterial
