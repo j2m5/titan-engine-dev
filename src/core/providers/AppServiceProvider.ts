@@ -10,10 +10,15 @@ import { SceneManager } from '@/core/services/SceneManager'
 import { MarkerManager } from '@/core/services/MarkerManager'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { SceneObserver } from '@/core/services/SceneObserver'
+import { SimulationClock } from '@/core/time/SimulationClock'
+import { CameraController } from '@/core/camera/CameraController'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
 
 class AppServiceProvider extends ServiceProvider {
   public register(): void {
+    this.app.singleton(Tokens.SimulationClock, () => new SimulationClock())
+    this.app.singleton(Tokens.CameraController, () => new CameraController())
+
     this.app.singleton(Tokens.SceneObserver, () => new SceneObserver())
 
     this.app.singleton(Tokens.CubeMapTextureManager, () => new CubeMapTextureManager())
