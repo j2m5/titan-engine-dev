@@ -22,5 +22,21 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'error',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }]
     }
+  },
+  {
+    files: ['src/core/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@/ui', '@/ui/*', '@/ui/**'],
+              message: 'Ядро (src/core) не должно зависеть от UI-слоя. Используйте порт или сервис ядра.'
+            }
+          ]
+        }
+      ]
+    }
   }
 )
