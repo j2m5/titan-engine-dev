@@ -50,18 +50,6 @@ class EngineStore implements LoadingProgressReporter {
     this.appLoadingStatus = payload
   }
 
-  public setAppLoadingProgress(payload: number): void {
-    this.appLoadingProgress = payload
-  }
-
-  public setAppLoadingTotal(payload: number): void {
-    this.appLoadingTotal = payload
-  }
-
-  public setAppLoadingAsset(payload: string): void {
-    this.appLoadingAsset = payload
-  }
-
   public setAsset(payload: string): void {
     this.appLoadingAsset = payload
   }

@@ -53,7 +53,9 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.SceneObserver),
           c.get(Tokens.CubeMapTextureManager),
           c.get(Tokens.TextureManager),
-          c.get(Tokens.ImageBitmapManager)
+          c.get(Tokens.ImageBitmapManager),
+          c.get(Tokens.LoadingProgressReporter),
+          c.get(Tokens.NotificationSink)
         )
     )
 

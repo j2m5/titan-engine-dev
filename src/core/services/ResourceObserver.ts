@@ -9,8 +9,8 @@ import { TextureManager } from '@/core/services/TextureManager'
 import { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
 import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
 import { CubeTexture, DefaultLoadingManager, Object3D, Texture } from 'three'
-import { engineStore } from '@/ui/mobx/EngineStore'
-import { notificationStore } from '@/ui/mobx/NotificationStore'
+import { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
+import { NotificationSink } from '@/core/ports/NotificationSink'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { ResourceItem } from '@/core/services/ResourceManager'
 import { Collection } from '@/core/framework/support/Collection'
@@ -65,7 +65,9 @@ class ResourceObserver {
     private sceneObserver: SceneObserver,
     private cubeMapTextureManager: CubeMapTextureManager,
     private textureManager: TextureManager,
-    private imageBitmapManager: ImageBitmapManager
+    private imageBitmapManager: ImageBitmapManager,
+    private loadingProgress: LoadingProgressReporter,
+    private notifications: NotificationSink
   ) {
     this._scenario = null
     this._sceneBackground = null
@@ -258,24 +260,23 @@ class ResourceObserver {
    */
   private setLoadingProgress(): void {
     DefaultLoadingManager.onStart = (url: string, loaded: number, total: number): void => {
-      engineStore.setAppLoadingAsset(url)
-      engineStore.setAppLoadingProgress(loaded)
-      engineStore.setAppLoadingTotal(total)
+      this.loadingProgress.setAsset(url)
+      this.loadingProgress.setProgress(loaded)
+      this.loadingProgress.setTotal(total)
     }
 
     DefaultLoadingManager.onProgress = (url: string, loaded: number, total: number): void => {
-      engineStore.setAppLoadingAsset(url)
-      engineStore.setAppLoadingProgress(loaded)
-      engineStore.setAppLoadingTotal(total)
+      this.loadingProgress.setAsset(url)
+      this.loadingProgress.setProgress(loaded)
+      this.loadingProgress.setTotal(total)
     }
 
     DefaultLoadingManager.onLoad = (): void => {
-      engineStore.setAppLoadingAsset('Loading completed')
-      engineStore.setAppLoadingAsset('')
+      this.loadingProgress.setAsset('')
     }
 
     DefaultLoadingManager.onError = (url: string): void => {
-      notificationStore.dispatch({ type: 'error', message: `The error occurred while loading: ${url}` })
+      this.notifications.dispatch({ type: 'error', message: `The error occurred while loading: ${url}` })
     }
   }
 
