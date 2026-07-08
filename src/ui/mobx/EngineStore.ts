@@ -5,8 +5,9 @@ import { timeStore } from '@/ui/mobx/TimeStore'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { Vector3 } from 'three'
 import { scenarioContext } from '@/core/scenario/ScenarioContext'
+import { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
 
-class EngineStore {
+class EngineStore implements LoadingProgressReporter {
   private app: Application | null = null
   public scenario: ScenarioConfig | null = null
   public appLoadingStatus: boolean = true
@@ -59,6 +60,18 @@ class EngineStore {
 
   public setAppLoadingAsset(payload: string): void {
     this.appLoadingAsset = payload
+  }
+
+  public setAsset(payload: string): void {
+    this.appLoadingAsset = payload
+  }
+
+  public setProgress(payload: number): void {
+    this.appLoadingProgress = payload
+  }
+
+  public setTotal(payload: number): void {
+    this.appLoadingTotal = payload
   }
 
   public get loadingPercentage(): number {

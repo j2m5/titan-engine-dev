@@ -1,6 +1,7 @@
 import { makeAutoObservable } from 'mobx'
+import { Settings } from '@/core/ports/Settings'
 
-class SettingsStore {
+class SettingsStore implements Settings {
   public showOrbitLines: boolean = true
   public showMarkers: boolean = true
 
