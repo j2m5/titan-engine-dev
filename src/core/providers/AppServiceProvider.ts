@@ -25,9 +25,15 @@ class AppServiceProvider extends ServiceProvider {
     this.app.singleton(Tokens.TextureManager, () => new TextureManager())
     this.app.singleton(Tokens.ImageBitmapManager, () => new ImageBitmapManager())
 
-    this.app.singleton(Tokens.MarkerManager, (c: Container) => new MarkerManager(c.get(Tokens.SceneObserver)))
+    this.app.singleton(
+      Tokens.MarkerManager,
+      (c: Container) => new MarkerManager(c.get(Tokens.SceneObserver), c.get(Tokens.Settings))
+    )
 
-    this.app.singleton(Tokens.SceneManager, (c: Container) => new SceneManager(c.get(Tokens.MarkerManager)))
+    this.app.singleton(
+      Tokens.SceneManager,
+      (c: Container) => new SceneManager(c.get(Tokens.MarkerManager), c.get(Tokens.Settings))
+    )
 
     this.app.singleton(
       Tokens.Engine,

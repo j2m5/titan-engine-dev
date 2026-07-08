@@ -12,7 +12,7 @@ import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { RenderableObject3D, ShouldRenderOrbitLine } from '@/core/renderables/types'
 import { scenarioContext } from '@/core/scenario/ScenarioContext'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { settingsStore } from '@/ui/mobx/SettingsStore'
+import { Settings } from '@/core/ports/Settings'
 import { UpdateContext } from '@/core/UpdateContext'
 
 export function isAcceptable(object: unknown): object is Acceptable<IObject3DVisitor> {
@@ -33,7 +33,10 @@ class SceneManager {
   private buffer: Map<number, Object3D> = new Map()
   private orbitLines: OrbitLine[] = []
 
-  public constructor(private markerManager: MarkerManager) {}
+  public constructor(
+    private markerManager: MarkerManager,
+    private settings: Settings
+  ) {}
 
   public initialize(): void {
     this.orbitLines = []
@@ -81,7 +84,7 @@ class SceneManager {
 
   public update(ctx: UpdateContext): void {
     for (const line of this.orbitLines) {
-      line.visible = settingsStore.showOrbitLines
+      line.visible = this.settings.showOrbitLines
     }
 
     this.scene.traverse((object: Object3D): void => object.updateObject(ctx))

@@ -5,7 +5,7 @@ import { Model } from '@/core/framework/Memoquent/Model'
 import { Actor } from '@/core/models/Actor'
 import { ObjectLabel } from '@/core/renderables/utils/ObjectLabel'
 import { ObjectMarker } from '@/core/renderables/utils/ObjectMarker'
-import { settingsStore } from '@/ui/mobx/SettingsStore'
+import { Settings } from '@/core/ports/Settings'
 
 export type MarkerShape = 'circle' | 'diamond' | 'hex'
 
@@ -25,7 +25,10 @@ type MarkerEntry = {
 class MarkerManager {
   private markers: MarkerEntry[] = []
 
-  public constructor(private sceneObserver: SceneObserver) {}
+  public constructor(
+    private sceneObserver: SceneObserver,
+    private settings: Settings
+  ) {}
 
   public add(options: MarkerOptions): void {
     const marker: CSS2DObject = new ObjectMarker(options, this.sceneObserver)
@@ -44,7 +47,7 @@ class MarkerManager {
   }
 
   public update(): void {
-    if (!settingsStore.showMarkers) {
+    if (!this.settings.showMarkers) {
       for (const entry of this.markers) {
         const element = entry.marker.element as HTMLElement
         element.style.display = 'none'
