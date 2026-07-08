@@ -162,6 +162,8 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
     #include <noiseFunctions>
     #include <asteroidSurfaceFunctions>
+    #include <triplanarDetailUniforms>
+    #include <triplanarDetailFunctions>
     #include <ringDustUniforms>
     #include <ringDustFunctions>
 
@@ -215,6 +217,39 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       albedo = mix(baseSurfAlbedo, albedo, albedoFade);
       surfAO = mix(1.0, surfAO, albedoFade);
 
+      // --- Фотограмметрический PBR-микрослой (трипланар, см. чанк TriplanarDetail) ---
+      // Текстура = структура (яркость/нормаль/шероховатость), цвет = грейдинг
+      // профиля. Пер-инстансный сдвиг проекции — против повторов пятен на соседях.
+      float specStrength = uSpecularStrength;
+      float specPower = uSpecularPower;
+      if (uDetailMapsEnabled > 0.5) {
+        vec3 geomN = normalize(vObjectNormal);
+        vec3 triW = triplanarWeights(geomN);
+        vec2 triOffset = vec2(
+          hashSurface11(vInstanceSeed + 7.7),
+          hashSurface11(vInstanceSeed + 9.9)
+        ) * 8.0;
+
+        // Альбедо: десатурированная структура текстуры × грейд профиля.
+        // uDetailBrightness компенсирует среднюю яркость диффуза (< 1.0)
+        vec3 detail = triplanarAlbedo(vObjectPos, triW, triOffset);
+        float detailLum = dot(detail, vec3(0.299, 0.587, 0.114));
+        vec3 structureTint = mix(vec3(detailLum), detail, uDetailSaturation);
+        albedo *= structureTint * uDetailBrightness;
+
+        // Нормаль: тангенциальная дельта whiteout-нормали поверх процедурной
+        // (кратерной) нормали — микрорельеф не съедает крупный рельеф
+        vec3 nDetail = triplanarNormal(vObjectPos, geomN, triW, triOffset);
+        objN = normalize(objN + uDetailNormalScale * (nDetail - geomN));
+
+        // ARM: r=AO (умножается в каверн-AO), g=roughness (глушит блик)
+        vec3 arm = triplanarArm(vObjectPos, triW, triOffset);
+        surfAO *= mix(1.0, arm.r, uDetailAoInfluence);
+        float gloss = 1.0 - arm.g * uDetailRoughInfluence;
+        specStrength *= gloss;
+        specPower = max(specPower * gloss, 2.0);
+      }
+
       // Объектная нормаль → view; учёт ориентации грани
       vec3 normal = normalize(vObjToView * objN);
       if (!gl_FrontFacing) normal = -normal;
@@ -239,9 +274,9 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       // снижаем эффективную жёсткость И силу, гася подпиксельные вспышки.
       // var→0 (близко/гладко): множитель 1, блик как есть.
       float specNormalVar = dot(dFdx(normal), dFdx(normal)) + dot(dFdy(normal), dFdy(normal));
-      float specToksvig = 1.0 / (1.0 + uSpecularPower * specNormalVar);
-      float specPowerAA = uSpecularPower * specToksvig;
-      float spec = pow(max(dot(normal, halfVec), 0.0), specPowerAA) * uSpecularStrength * specToksvig;
+      float specToksvig = 1.0 / (1.0 + specPower * specNormalVar);
+      float specPowerAA = specPower * specToksvig;
+      float spec = pow(max(dot(normal, halfVec), 0.0), specPowerAA) * specStrength * specToksvig;
       vec3 specColor = mix(vec3(1.0), albedo, uSpecularTint);
       finalColor += spec * specColor * lightIntensity * planetShadow;
 
