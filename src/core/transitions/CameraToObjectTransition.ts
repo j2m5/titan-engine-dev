@@ -4,11 +4,11 @@ import { Quaternion, Vector3 } from 'three'
 import { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { menuStore } from '@/ui/mobx/MenuStore'
-import { cameraStore } from '@/ui/mobx/CameraStore'
 import { fromKilometers, toThreeJSUnits } from '@/core/helpers/scaling'
-import { notificationStore } from '@/ui/mobx/NotificationStore'
 import anime from 'animejs'
+import { CameraController } from '@/core/camera/CameraController'
+import { NotificationSink } from '@/core/ports/NotificationSink'
+import { MenuController } from '@/core/ports/MenuController'
 
 interface CameraToObjectTransitionArgs {
   model: Actor
@@ -17,7 +17,12 @@ interface CameraToObjectTransitionArgs {
 class CameraToObjectTransition extends Command<CameraToObjectTransitionArgs> {
   declare public model: Actor
 
-  public constructor(private sceneObserver: SceneObserver) {
+  public constructor(
+    private sceneObserver: SceneObserver,
+    private camera: CameraController,
+    private notifications: NotificationSink,
+    private menu: MenuController
+  ) {
     super()
   }
 
@@ -40,7 +45,7 @@ class CameraToObjectTransition extends Command<CameraToObjectTransitionArgs> {
 
     const alpha: number = (data.distance - offset) / data.distance
     const destination: Vector3 = new Vector3().lerpVectors(this.sceneObserver.cameraPosition, data.position, alpha)
-    const currentSpeed: number = cameraStore.speed
+    const currentSpeed: number = this.camera.speed
 
     let lastValue: number,
       lastTime: number,
@@ -74,7 +79,7 @@ class CameraToObjectTransition extends Command<CameraToObjectTransitionArgs> {
       direction: 'normal',
       begin: (): void => {
         threeJS.astroControls.enabled = false
-        menuStore.closeMenu()
+        this.menu.close()
       },
       update: (anim: anime.AnimeInstance): void => {
         const currentTime: number = +new Date()
@@ -87,12 +92,12 @@ class CameraToObjectTransition extends Command<CameraToObjectTransitionArgs> {
         lastValue = Number(currentValue)
         lastTime = currentTime
 
-        cameraStore.setSpeed(fromKilometers(Math.abs(speed)))
+        this.camera.setSpeed(fromKilometers(Math.abs(speed)))
       },
       complete: (): void => {
         threeJS.astroControls.enabled = true
-        notificationStore.dispatch({ type: 'success', message: `Target acquired: ${data.name}` })
-        cameraStore.setSpeed(currentSpeed)
+        this.notifications.dispatch({ type: 'success', message: `Target acquired: ${data.name}` })
+        this.camera.setSpeed(currentSpeed)
       }
     }
 

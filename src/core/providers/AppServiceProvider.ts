@@ -66,7 +66,16 @@ class AppServiceProvider extends ServiceProvider {
 
     // Команды — transient с конструктором класса в роли ключа:
     // каждый Command.execute() получает свежий экземпляр.
-    this.app.bind(CameraToObjectTransition, (c: Container) => new CameraToObjectTransition(c.get(Tokens.SceneObserver)))
+    this.app.bind(
+      CameraToObjectTransition,
+      (c: Container) =>
+        new CameraToObjectTransition(
+          c.get(Tokens.SceneObserver),
+          c.get(Tokens.CameraController),
+          c.get(Tokens.NotificationSink),
+          c.get(Tokens.MenuController)
+        )
+    )
   }
 }
 
