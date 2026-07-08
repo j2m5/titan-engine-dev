@@ -9,8 +9,7 @@ describe('AsteroidSurface GLSL chunk (аналитические нормали)
     expect(asteroidSurfaceFunctions).not.toContain('sCol')
   })
 
-  it('нормаль из АНАЛИТИЧЕСКИХ градиентов (snoiseGrad + craterProfileD), не из dFdx', () => {
-    expect(asteroidSurfaceFunctions).toContain('snoiseGrad(')           // зерно аналитически
+  it('нормаль из АНАЛИТИЧЕСКОГО градиента кратеров (craterProfileD), не из dFdx', () => {
     expect(asteroidSurfaceFunctions).toContain('float craterProfileD(') // производная профиля кратера
     expect(asteroidSurfaceFunctions).toContain('out vec3 perturbedNormal')
     expect(asteroidSurfaceFunctions).toContain('gradH')                 // накопитель градиента нормали
@@ -18,8 +17,11 @@ describe('AsteroidSurface GLSL chunk (аналитические нормали)
     expect(asteroidSurfaceFunctions).not.toContain('perturbNormalFromHeight')
   })
 
-  it('кратеры/трещины по-прежнему из worleyCell', () => {
+  it('кратеры по-прежнему из worleyCell; процедурное зерно/трещины убраны', () => {
     expect(asteroidSurfaceFunctions).toContain('worleyCell(')
+    expect(asteroidSurfaceFunctions).not.toContain('snoiseGrad(')
+    expect(asteroidSurfaceFunctions).not.toContain('crackWidth')
+    expect(asteroidSurfaceFunctions).not.toContain('grainStrength')
   })
 
   it('зарегистрирован в AppShaderChunk', () => {

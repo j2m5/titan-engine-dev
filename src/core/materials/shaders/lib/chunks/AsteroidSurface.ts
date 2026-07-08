@@ -1,16 +1,16 @@
 /**
- * GLSL-чанк процедурного облика астероида (L0, фрагмент).
+ * GLSL-чанк МАКРО-облика астероида (L0, фрагмент): единый цвет профиля +
+ * per-instance джиттер/мотл/maria + кратеры/каверн-AO из расширенного Worley
+ * (worleyCell). Домен — направление объектной позиции (сфера-домен, без
+ * UV-швов) со сдвигом per-instance. Микродеталь (высокочастотное зерно/
+ * трещины) теперь даёт фотограмметрический PBR-микрослой (см. чанк
+ * TriplanarDetail) — этот чанк отвечает только за крупную форму облика.
  *
- * Единый цвет профиля + per-instance джиттер + кратеры/трещины/каверн-AO из
- * расширенного Worley (worleyCell) + микрозерно. Домен — направление объектной
- * позиции (сфера-домен, без UV-швов) со сдвигом per-instance.
- *
- * Нормаль возмущается АНАЛИТИЧЕСКИМ градиентом (зерно через snoiseGrad, кратеры
- * через ∇F1=toNearest · производную профиля craterProfileD), а НЕ конечными
- * разностями dFdx/dFdy — иначе ВЧ-деталь даёт попиксельную статику. Трещины —
- * только в альбедо (в градиент нормали не входят). Зависит от worleyCell,
- * snoise, snoiseGrad (chunk noiseFunctions) — фрагмент обязан включить
- * <noiseFunctions> перед <asteroidSurfaceFunctions>.
+ * Нормаль возмущается АНАЛИТИЧЕСКИМ градиентом кратеров (∇F1=toNearest ·
+ * производную профиля craterProfileD), а НЕ конечными разностями dFdx/dFdy —
+ * иначе ВЧ-деталь даёт попиксельную статику. Зависит от worleyCell, snoise
+ * (chunk noiseFunctions) — фрагмент обязан включить <noiseFunctions> перед
+ * <asteroidSurfaceFunctions>.
  */
 export const asteroidSurfaceFunctions = `
   #define ASTEROID_CRATER_MAX_OCTAVES 2
@@ -43,15 +43,14 @@ export const asteroidSurfaceFunctions = `
 
   // Композит облика. dir — нормализованная объектная позиция; objNormal — геом.
   // нормаль в объектном пространстве; instanceSeed — per-instance константа.
-  // Нормаль возмущается АНАЛИТИЧЕСКИМ градиентом (зерно + кратеры) → без dFdx-
-  // статики; трещины — только альбедо. out perturbedNormal — объектная нормаль
-  // (фрагмент переводит во view), out ao — каверн-AO. Возвращает albedo.
+  // Нормаль возмущается АНАЛИТИЧЕСКИМ градиентом кратеров → без dFdx-статики.
+  // out perturbedNormal — объектная нормаль (фрагмент переводит во view),
+  // out ao — каверн-AO. Возвращает albedo.
   vec3 applyAsteroidSurface(
     vec3 dir, vec3 objNormal, float instanceSeed,
     vec3 baseColor, float colorJitter, float tintStrength, float mariaStrength,
-    float grainStrength, float grainFreq, float normalScale,
+    float normalScale,
     float craterFreq, float craterDensity, float craterRadius, float craterDepth, float craterOctaves,
-    float crackWidth, float crackIntensity, float crackPatchiness,
     float aoStrength,
     out vec3 perturbedNormal, out float ao, out vec3 baseAlbedo
   ) {
@@ -77,12 +76,9 @@ export const asteroidSurfaceFunctions = `
     float maria = smoothstep(-0.15, 0.35, mariaField);   // мягкие «берега» регионов
     base *= 1.0 - mariaStrength * maria;                 // равнины темнее
 
-    // Кратеры: высота craterH (cavity/AO/альбедо) + аналитический градиент gradH.
-    // Трещины: только альбедо (crack) — в gradH НЕ входят.
+    // Кратеры: высота craterH (cavity/AO) + аналитический градиент gradH (нормаль).
     float craterH = 0.0;
     vec3 gradH = vec3(0.0);   // ∇h в dir-пространстве (для нормали)
-    float crack = 0.0;
-    float ejecta = 0.0;       // светлое гало выброса (альбедо-only)
     float amp = 1.0;
     float freq = craterFreq;
     for (int o = 0; o < ASTEROID_CRATER_MAX_OCTAVES; o++) {
@@ -102,14 +98,14 @@ export const asteroidSurfaceFunctions = `
         snoise(wp * 0.25 + 41.7)
       );
       vec4 w = worleyCell(wp + 0.35 * warp, toNearest);
-      float F1 = w.x; float F2 = w.y; float cellHash = w.z;
+      float F1 = w.x; float cellHash = w.z;
       // Мягкое существование кратера: плавная полоса по хешу ячейки вместо
       // бинарного step → нет резкого «пэтчворка» решётки Вороного, а ячейки у
       // порога дают мелкие/неглубокие кратеры (естественный разброс размеров).
       float exists = smoothstep(1.0 - craterDensity - 0.08, 1.0 - craterDensity + 0.08, cellHash);
-      // Возраст кратера (декоррелированный хеш ячейки): свежий (0) — глубокий, с
-      // ярким выбросом; старый (1) — мелкий, без гало. Дно свежих темнее (глубже
-      // → больше cavity), у старых сглажено.
+      // Возраст кратера (декоррелированный хеш ячейки): свежий (0) — глубокий,
+      // старый (1) — мелкий. Дно свежих темнее (глубже → больше cavity), у
+      // старых сглажено.
       float age = hashSurface11(cellHash * 7.3);
       float depth = craterDepth * mix(1.0, 0.45, age);
       float rr = craterRadius * (0.5 + 0.5 * hashSurface11(cellHash * 13.1));
@@ -119,21 +115,9 @@ export const asteroidSurfaceFunctions = `
       // НЕ включаем: он даёт физически-верный, но чрезмерный наклон, «смывающий»
       // общее затенение. Силу наклона задаёт depth·craterProfileD + normalScale.
       gradH += exists * amp * depth * craterProfileD(r) * toNearest;
-      // Гало выброса свежих кратеров: яркое кольцо у обода (r≈1), только альбедо
-      // (в gradH/нормаль не входит, как трещины). Гаснет с возрастом.
-      ejecta += exists * (1.0 - age) * amp * exp(-10.0 * (r - 1.0) * (r - 1.0));
-      float edge = F2 - F1;
-      crack += (1.0 - smoothstep(0.0, crackWidth, edge));
       amp *= 0.5;
       freq *= 2.0;
     }
-
-    // Зерно: аналитический градиент (snoiseGrad → vec4(value, ∇)). Частоту
-    // держим ТОЛЬКО в домене (dir·grainFreq — задаёт мелкость рисунка), но НЕ в
-    // силе наклона (иначе зерно перекручивает нормаль). Сила = grainStrength.
-    vec4 g1 = snoiseGrad(dir * grainFreq + domainOffset);
-    vec4 g2 = snoiseGrad(dir * grainFreq * 2.3 + domainOffset * 1.3);
-    gradH += grainStrength * (0.6 * g1.yzw + 0.4 * g2.yzw);
 
     // Возмущение нормали: тангенциальная составляющая градиента (как в форме).
     vec3 gTangent = gradH - dot(gradH, objNormal) * objNormal;
@@ -142,21 +126,15 @@ export const asteroidSurfaceFunctions = `
     gTangent /= 1.0 + length(gTangent);
     perturbedNormal = normalize(objNormal - normalScale * gTangent);
 
-    // Трещины (только альбедо): тёмные линии вдоль рёбер Вороного, с патчевостью
-    crack = clamp(crack, 0.0, 1.0);
-    float patchMask = 0.5 + 0.5 * snoise(dir * 3.0 + domainOffset * 1.7);
-    crack *= mix(1.0, patchMask, crackPatchiness) * crackIntensity;
-
     // Базовое альбедо (maria/мотл/джиттер — НЧ, стабильно на расстоянии) отдаём
-    // наружу: фрагмент сводит к нему ВЧ-деталь кратеров/трещин с дистанцией (B0).
+    // наружу: фрагмент сводит к нему ВЧ-деталь кратеров с дистанцией (B0).
     baseAlbedo = base;
 
-    // Альбедо: затемнение дна кратеров + светлый выброс свежих + тёмные трещины
-    float cavity = max(-craterH, 0.0);
-    vec3 albedo = base * (1.0 - 0.5 * cavity);
-    albedo *= 1.0 + 0.35 * clamp(ejecta, 0.0, 1.0);   // светлое гало выброса
-    albedo = mix(albedo, albedo * 0.4, crack);
+    // Кратерное альбедо-затемнение убрано (задача 5): дно кратеров теперь
+    // читается только через AO + PBR-микрослой (см. чанк TriplanarDetail).
+    vec3 albedo = base;
 
+    float cavity = max(-craterH, 0.0);
     ao = clamp(1.0 - aoStrength * cavity, 0.0, 1.0);
     return albedo;
   }

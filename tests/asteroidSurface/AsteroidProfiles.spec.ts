@@ -1,9 +1,9 @@
 import { ASTEROID_PROFILES, type AsteroidProfileName, type AsteroidProfile } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
 
 const REQUIRED_KEYS: (keyof AsteroidProfile)[] = [
-  'baseColor', 'colorJitter', 'tintStrength', 'mariaStrength', 'grainStrength', 'grainFreq',
+  'baseColor', 'colorJitter', 'tintStrength', 'mariaStrength',
   'craterFreq', 'craterDensity', 'craterRadius', 'craterDepth', 'craterOctaves',
-  'crackWidth', 'crackIntensity', 'crackPatchiness', 'aoStrength', 'craterNormalScale',
+  'aoStrength', 'craterNormalScale',
   'surfaceAmbient', 'specularStrength', 'specularPower', 'specularTint'
 ]
 

@@ -320,16 +320,11 @@ class AsteroidRingSystem extends Group {
     l0ShapeMaterial.uniforms.uColorJitter.value = profile.colorJitter
     l0ShapeMaterial.uniforms.uTintStrength.value = profile.tintStrength
     l0ShapeMaterial.uniforms.uMariaStrength.value = profile.mariaStrength
-    l0ShapeMaterial.uniforms.uGrainStrength.value = profile.grainStrength
-    l0ShapeMaterial.uniforms.uGrainFreq.value = profile.grainFreq
     l0ShapeMaterial.uniforms.uCraterFreq.value = profile.craterFreq
     l0ShapeMaterial.uniforms.uCraterDensity.value = profile.craterDensity
     l0ShapeMaterial.uniforms.uCraterRadius.value = profile.craterRadius
     l0ShapeMaterial.uniforms.uCraterDepth.value = profile.craterDepth
     l0ShapeMaterial.uniforms.uCraterOctaves.value = profile.craterOctaves
-    l0ShapeMaterial.uniforms.uCrackWidth.value = profile.crackWidth
-    l0ShapeMaterial.uniforms.uCrackIntensity.value = profile.crackIntensity
-    l0ShapeMaterial.uniforms.uCrackPatchiness.value = profile.crackPatchiness
     l0ShapeMaterial.uniforms.uAoStrength.value = profile.aoStrength
     l0ShapeMaterial.uniforms.uCraterNormalScale.value = profile.craterNormalScale
     l0ShapeMaterial.uniforms.uSurfaceAmbient.value = profile.surfaceAmbient

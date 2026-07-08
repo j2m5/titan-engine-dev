@@ -14,10 +14,11 @@ describe('L0 фрагмент: профили (v2)', () => {
     expect(shader.uniforms).not.toHaveProperty('uRockColorC')
   })
 
-  it('единый цвет + зерно + specular юниформы', () => {
+  it('единый цвет + specular юниформы, процедурное зерно/трещины убраны', () => {
     const shader = new InstancedAsteroidShader()
     expect(shader.uniforms.uRockColor).toBeDefined()
-    expect(shader.uniforms.uGrainStrength).toBeDefined()
+    expect(shader.uniforms.uGrainStrength).toBeUndefined()
+    expect(shader.uniforms.uCrackIntensity).toBeUndefined()
     expect(shader.uniforms.uSpecularStrength).toBeDefined()
     expect(shader.fragmentShader).toContain('uSpecularPower')
   })

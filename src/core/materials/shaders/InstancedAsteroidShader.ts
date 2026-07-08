@@ -7,8 +7,6 @@ interface InstancedAsteroidUniforms {
   uRockColor: Color
   uColorJitter: number
   uMariaStrength: number
-  uGrainStrength: number
-  uGrainFreq: number
   uSpecularStrength: number
   uSpecularPower: number
   uSpecularTint: number
@@ -30,9 +28,6 @@ interface InstancedAsteroidUniforms {
   uCraterRadius: number
   uCraterDepth: number
   uCraterOctaves: number
-  uCrackWidth: number
-  uCrackIntensity: number
-  uCrackPatchiness: number
   uAoStrength: number
   uCraterNormalScale: number
   uSurfaceAmbient: number
@@ -62,8 +57,6 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       uRockColor: new Uniform(new Color(0x6b6157)),
       uColorJitter: new Uniform(0.12),
       uMariaStrength: new Uniform(0.3),
-      uGrainStrength: new Uniform(0.15),
-      uGrainFreq: new Uniform(22.0),
       uSpecularStrength: new Uniform(0.05),
       uSpecularPower: new Uniform(8.0),
       uSpecularTint: new Uniform(0.0),
@@ -87,9 +80,6 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       uCraterRadius: new Uniform(0.5),
       uCraterDepth: new Uniform(0.5),
       uCraterOctaves: new Uniform(1),
-      uCrackWidth: new Uniform(0.05),
-      uCrackIntensity: new Uniform(0.5),
-      uCrackPatchiness: new Uniform(0.7),
       uAoStrength: new Uniform(0.6),
       uCraterNormalScale: new Uniform(1.0),
       uSurfaceAmbient: new Uniform(0.03),

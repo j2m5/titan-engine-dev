@@ -30,7 +30,7 @@ describe('AsteroidRingSystem: профили облика', () => {
     const u = (system as any).pool.geometryMesh.material.uniforms
     expect(u.uRockColor.value.getHex()).toBe(ASTEROID_PROFILES.icy.baseColor)
     expect(u.uSpecularPower.value).toBe(ASTEROID_PROFILES.icy.specularPower)
-    expect(u.uCrackIntensity.value).toBe(ASTEROID_PROFILES.icy.crackIntensity)
+    expect(u.uAoStrength.value).toBe(ASTEROID_PROFILES.icy.aoStrength)
   })
 
   it('разводит ручку дальности детализации из конфига', () => {

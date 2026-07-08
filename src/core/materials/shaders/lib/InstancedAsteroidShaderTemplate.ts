@@ -9,16 +9,11 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uColorJitter: new Uniform(0.12),
     uTintStrength: new Uniform(0.25),
     uMariaStrength: new Uniform(0.3),
-    uGrainStrength: new Uniform(0.15),
-    uGrainFreq: new Uniform(22.0),
     uCraterFreq: new Uniform(4.0),
     uCraterDensity: new Uniform(0.6),
     uCraterRadius: new Uniform(0.5),
     uCraterDepth: new Uniform(0.5),
     uCraterOctaves: new Uniform(1),
-    uCrackWidth: new Uniform(0.05),
-    uCrackIntensity: new Uniform(0.5),
-    uCrackPatchiness: new Uniform(0.7),
     uAoStrength: new Uniform(0.6),
     uCraterNormalScale: new Uniform(1.0),
     uSurfaceAmbient: new Uniform(0.03),
@@ -132,16 +127,11 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uniform float uColorJitter;
     uniform float uTintStrength;
     uniform float uMariaStrength;
-    uniform float uGrainStrength;
-    uniform float uGrainFreq;
     uniform float uCraterFreq;
     uniform float uCraterDensity;
     uniform float uCraterRadius;
     uniform float uCraterDepth;
     uniform float uCraterOctaves;
-    uniform float uCrackWidth;
-    uniform float uCrackIntensity;
-    uniform float uCrackPatchiness;
     uniform float uAoStrength;
     uniform float uCraterNormalScale;
     uniform float uSurfaceAmbient;
@@ -195,16 +185,16 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       vec3 albedo = applyAsteroidSurface(
         surfDir, normalize(vObjectNormal), vInstanceSeed,
         uRockColor, uColorJitter, uTintStrength, uMariaStrength,
-        uGrainStrength, uGrainFreq, uCraterNormalScale,
+        uCraterNormalScale,
         uCraterFreq, uCraterDensity, uCraterRadius, uCraterDepth, uCraterOctaves,
-        uCrackWidth, uCrackIntensity, uCrackPatchiness,
         uAoStrength,
         perturbedObjNormal, surfAO, baseSurfAlbedo
       );
 
-      // fwidth-AA нормали: где зерно подпиксельно — сводим возмущение к геом.
-      // нормали, гася аляйсинг сигнала. Частота — зерна (самая ВЧ в нормали).
-      float cyclesPerPixel = length(fwidth(surfDir)) * uGrainFreq;
+      // fwidth-AA нормали: где деталь подпиксельна — сводим возмущение к геом.
+      // нормали, гася аляйсинг сигнала. Частота — кратеров (самая ВЧ процедурная
+      // деталь в нормали теперь; текстурную деталь микрослоя глушат аппаратные мипы).
+      float cyclesPerPixel = length(fwidth(surfDir)) * uCraterFreq;
       float aaFade = 1.0 - smoothstep(uAaStart, uAaEnd, cyclesPerPixel);
       vec3 objN = normalize(mix(normalize(vObjectNormal), perturbedObjNormal, aaFade));
 
