@@ -10,8 +10,6 @@ interface InstancedAsteroidUniforms {
   uSpecularStrength: number
   uSpecularPower: number
   uSpecularTint: number
-  uAaStart: number
-  uAaEnd: number
   uRockDiffMap: Texture | null
   uRockNorMap: Texture | null
   uRockArmMap: Texture | null
@@ -23,13 +21,6 @@ interface InstancedAsteroidUniforms {
   uDetailAoInfluence: number
   uDetailRoughInfluence: number
   uTintStrength: number
-  uCraterFreq: number
-  uCraterDensity: number
-  uCraterRadius: number
-  uCraterDepth: number
-  uCraterOctaves: number
-  uAoStrength: number
-  uCraterNormalScale: number
   uSurfaceAmbient: number
   uDustColor: Color
   uDustDensity: number
@@ -60,8 +51,6 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       uSpecularStrength: new Uniform(0.05),
       uSpecularPower: new Uniform(8.0),
       uSpecularTint: new Uniform(0.0),
-      uAaStart: new Uniform(1.2),
-      uAaEnd: new Uniform(3.0),
       // Фотограмметрический PBR-микрослой (см. чанк TriplanarDetail); enabled 0 —
       // текстуры не загрузились, слой выключен
       uRockDiffMap: new Uniform(null),
@@ -75,13 +64,6 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       uDetailAoInfluence: new Uniform(0.8),
       uDetailRoughInfluence: new Uniform(0.7),
       uTintStrength: new Uniform(0.25),
-      uCraterFreq: new Uniform(4.0),
-      uCraterDensity: new Uniform(0.6),
-      uCraterRadius: new Uniform(0.5),
-      uCraterDepth: new Uniform(0.5),
-      uCraterOctaves: new Uniform(1),
-      uAoStrength: new Uniform(0.6),
-      uCraterNormalScale: new Uniform(1.0),
       uSurfaceAmbient: new Uniform(0.03),
       uDustColor: new Uniform(new Color(0x9b968c)),
       uDustDensity: new Uniform(0),

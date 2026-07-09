@@ -2,8 +2,6 @@ import { ASTEROID_PROFILES, type AsteroidProfileName, type AsteroidProfile } fro
 
 const REQUIRED_KEYS: (keyof AsteroidProfile)[] = [
   'baseColor', 'colorJitter', 'tintStrength', 'mariaStrength',
-  'craterFreq', 'craterDensity', 'craterRadius', 'craterDepth', 'craterOctaves',
-  'aoStrength', 'craterNormalScale',
   'surfaceAmbient', 'specularStrength', 'specularPower', 'specularTint'
 ]
 

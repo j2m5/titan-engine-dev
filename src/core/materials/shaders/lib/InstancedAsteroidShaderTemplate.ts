@@ -4,26 +4,15 @@ import { ShaderChunk, Uniform, Vector3, Color } from 'three'
 export const InstancedAsteroidShaderTemplate: ShaderProps = {
   uniforms: {
     lightPosition: new Uniform(new Vector3()),
-    // Процедурный облик — профиль (см. чанк AsteroidSurface / AsteroidProfiles)
+    // Макро-облик — профиль (см. чанк AsteroidSurface / AsteroidProfiles)
     uRockColor: new Uniform(new Color(0x6b6157)),
     uColorJitter: new Uniform(0.12),
     uTintStrength: new Uniform(0.25),
     uMariaStrength: new Uniform(0.3),
-    uCraterFreq: new Uniform(4.0),
-    uCraterDensity: new Uniform(0.6),
-    uCraterRadius: new Uniform(0.5),
-    uCraterDepth: new Uniform(0.5),
-    uCraterOctaves: new Uniform(1),
-    uAoStrength: new Uniform(0.6),
-    uCraterNormalScale: new Uniform(1.0),
     uSurfaceAmbient: new Uniform(0.03),
     uSpecularStrength: new Uniform(0.05),
     uSpecularPower: new Uniform(8.0),
     uSpecularTint: new Uniform(0.0),
-    // Дальность детализации (fwidth-AA): деталь гаснет между Start и End
-    // (циклов зерна на пиксель). Больше → деталь держится дальше.
-    uAaStart: new Uniform(1.2),
-    uAaEnd: new Uniform(3.0),
     // Фотограмметрический PBR-микрослой (см. чанк TriplanarDetail); enabled 0 —
     // текстуры не загрузились, слой выключен
     uRockDiffMap: new Uniform(null),
@@ -106,10 +95,11 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
 
-      // Для процедурного облика (см. чанк AsteroidSurface): объектная позиция
-      // (домен) и per-instance сид (тип/тинт) — переиспользуем сид формы. Нормаль
-      // считается АНАЛИТИЧЕСКИ во фрагменте в объектном пространстве, поэтому
-      // прокидываем геом. нормаль объекта и матрицу объект→view.
+      // Для макро-облика (см. чанк AsteroidSurface): объектная позиция (домен) и
+      // per-instance сид (тип/тинт) — переиспользуем сид формы. Прокидываем геом.
+      // нормаль объекта (нормаль больше не возмущается процедурно) и матрицу
+      // объект→view — трипланарная деталь (см. чанк TriplanarDetail) применяется
+      // к геометрической нормали во фрагменте.
       vObjectPos = shapedPos;
       vInstanceSeed = shapeSeed;
       vObjectNormal = shapedNormal;
@@ -127,19 +117,10 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uniform float uColorJitter;
     uniform float uTintStrength;
     uniform float uMariaStrength;
-    uniform float uCraterFreq;
-    uniform float uCraterDensity;
-    uniform float uCraterRadius;
-    uniform float uCraterDepth;
-    uniform float uCraterOctaves;
-    uniform float uAoStrength;
-    uniform float uCraterNormalScale;
     uniform float uSurfaceAmbient;
     uniform float uSpecularStrength;
     uniform float uSpecularPower;
     uniform float uSpecularTint;
-    uniform float uAaStart;
-    uniform float uAaEnd;
 
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
@@ -177,30 +158,14 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
       vec3 surfDir = normalize(vObjectPos);
 
-      // Процедурный облик: альбедо + АНАЛИТИЧЕСКИ возмущённая объектная нормаль +
-      // каверн-AO. Нормаль из аналитических градиентов (без dFdx-статики).
-      vec3 perturbedObjNormal;
-      float surfAO;
-      vec3 baseSurfAlbedo; // резерв под будущий макро-фейд
-      vec3 albedo = applyAsteroidSurface(
-        surfDir, normalize(vObjectNormal), vInstanceSeed,
-        uRockColor, uColorJitter, uTintStrength, uMariaStrength,
-        uCraterNormalScale,
-        uCraterFreq, uCraterDensity, uCraterRadius, uCraterDepth, uCraterOctaves,
-        uAoStrength,
-        perturbedObjNormal, surfAO, baseSurfAlbedo
-      );
+      // Макро-облик: альбедо (джиттер/мотл/maria), рельеф больше не возмущает
+      // нормаль процедурно — нормаль геометрическая, деталь несёт PBR-микрослой.
+      vec3 albedo = applyAsteroidSurface(surfDir, vInstanceSeed, uRockColor, uColorJitter, uTintStrength, uMariaStrength);
 
-      // fwidth-AA нормали: где деталь подпиксельна — сводим возмущение к геом.
-      // нормали, гася аляйсинг сигнала. Частота — кратеров (самая ВЧ процедурная
-      // деталь в нормали теперь; текстурную деталь микрослоя глушат аппаратные мипы).
-      float cyclesPerPixel = length(fwidth(surfDir)) * uCraterFreq;
-      float aaFade = 1.0 - smoothstep(uAaStart, uAaEnd, cyclesPerPixel);
-      vec3 objN = normalize(mix(normalize(vObjectNormal), perturbedObjNormal, aaFade));
-
-      // AO кратеров — ВЧ-деталь без сглаживания нормали, на среднем плане
-      // мельтешит → гасим к 1 той же дистанционной шкалой aaFade, что и нормаль.
-      surfAO = mix(1.0, surfAO, aaFade);
+      // Геометрическая объектная нормаль; трипланарная дельта нормали (ниже)
+      // применяется к ней. AO — единственный источник теперь ARM-карта микрослоя.
+      vec3 objN = normalize(vObjectNormal);
+      float surfAO = 1.0;
 
       // --- Фотограмметрический PBR-микрослой (трипланар, см. чанк TriplanarDetail) ---
       // Текстура = структура (яркость/нормаль/шероховатость), цвет = грейдинг
@@ -222,8 +187,8 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
         vec3 structureTint = mix(vec3(detailLum), detail, uDetailSaturation);
         albedo *= structureTint * uDetailBrightness;
 
-        // Нормаль: тангенциальная дельта whiteout-нормали поверх процедурной
-        // (кратерной) нормали — микрорельеф не съедает крупный рельеф
+        // Нормаль: тангенциальная дельта whiteout-нормали поверх геометрической —
+        // микрорельеф ложится на форму, не искажая крупный силуэт
         vec3 nDetail = triplanarNormal(vObjectPos, geomN, triW, triOffset);
         objN = normalize(objN + uDetailNormalScale * (nDetail - geomN));
 

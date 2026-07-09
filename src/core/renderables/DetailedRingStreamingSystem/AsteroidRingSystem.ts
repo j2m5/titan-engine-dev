@@ -81,12 +81,8 @@ interface AsteroidRingConfig {
   shapeAmpMax: number
   /** Частота шума деформации силуэта */
   shapeFreq: number
-  /** Профиль облика астероидов (см. AsteroidProfiles). Задаёт цвет/кратеры/блик/etc. */
+  /** Профиль облика астероидов (см. AsteroidProfiles). Задаёт цвет/блик/etc. */
   profile: AsteroidProfileName
-  /** Дальность детализации: начало гашения детали (циклов зерна на пиксель) */
-  detailAaStart: number
-  /** Дальность детализации: полное гашение. Больше → деталь держится дальше */
-  detailAaEnd: number
   /**
    * Распределение камней и пыли следует альфе текстуры 2D-кольца (радиальный
    * профиль плотности + профиль пыли). Тот же радиальный маппинг, что у
@@ -151,8 +147,6 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   shapeAmpMax: 0.22,
   shapeFreq: 1.4,
   profile: 'stony',
-  detailAaStart: 1.2,
-  detailAaEnd: 3.0,
   ringGapsFromTexture: true,
   ringGapBleedKm: 300,
   dustBleedKm: 600,
@@ -314,28 +308,18 @@ class AsteroidRingSystem extends Group {
     l0ShapeMaterial.uniforms.uShapeAmpMax.value = cfg.shapeAmpMax
     l0ShapeMaterial.uniforms.uShapeFreq.value = cfg.shapeFreq
 
-    // Процедурный облик — профиль, тоже только L0
+    // Макро-облик — профиль, тоже только L0
     const profile = ASTEROID_PROFILES[cfg.profile]
     l0ShapeMaterial.uniforms.uRockColor.value.set(profile.baseColor)
     l0ShapeMaterial.uniforms.uColorJitter.value = profile.colorJitter
     l0ShapeMaterial.uniforms.uTintStrength.value = profile.tintStrength
     l0ShapeMaterial.uniforms.uMariaStrength.value = profile.mariaStrength
-    l0ShapeMaterial.uniforms.uCraterFreq.value = profile.craterFreq
-    l0ShapeMaterial.uniforms.uCraterDensity.value = profile.craterDensity
-    l0ShapeMaterial.uniforms.uCraterRadius.value = profile.craterRadius
-    l0ShapeMaterial.uniforms.uCraterDepth.value = profile.craterDepth
-    l0ShapeMaterial.uniforms.uCraterOctaves.value = profile.craterOctaves
-    l0ShapeMaterial.uniforms.uAoStrength.value = profile.aoStrength
-    l0ShapeMaterial.uniforms.uCraterNormalScale.value = profile.craterNormalScale
     l0ShapeMaterial.uniforms.uSurfaceAmbient.value = profile.surfaceAmbient
     l0ShapeMaterial.uniforms.uSpecularStrength.value = profile.specularStrength
     l0ShapeMaterial.uniforms.uSpecularPower.value = profile.specularPower
     l0ShapeMaterial.uniforms.uSpecularTint.value = profile.specularTint
-    // Дальность детализации (fwidth-AA) — общая, не per-profile (про экран/LOD)
-    l0ShapeMaterial.uniforms.uAaStart.value = cfg.detailAaStart
-    l0ShapeMaterial.uniforms.uAaEnd.value = cfg.detailAaEnd
 
-    // PBR-микрослой (фотограмметрические текстуры) — поверх процедурного профиля
+    // PBR-микрослой (фотограмметрические текстуры) — поверх макро-профиля
     this.__applyDetailMaps(asteroidSize)
 
     // Установить maxDistance для billboard материала
