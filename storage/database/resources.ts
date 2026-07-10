@@ -121,5 +121,8 @@ export const Resources: IResource[] = [
   { id: 115, resourceType: "night", lifecycle: "streamable", path: "planets/StarWars/darkness/darkness_night.png", lifetime: 6e4 },
   { id: 116, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/darkness/darkness_rings.png", lifetime: 6e4, colorSpace: "" },
   { id: 117, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/korriban/i/i.jpg", lifetime: 6e4, colorSpace: "srgb" },
-  { id: 118, resourceType: "bump", lifecycle: "streamable", path: "planets/StarWars/korriban/i/i_bump.jpg", lifetime: 6e4 }
+  { id: 118, resourceType: "bump", lifecycle: "streamable", path: "planets/StarWars/korriban/i/i_bump.jpg", lifetime: 6e4 },
+  { id: 119, resourceType: "diffuse", lifecycle: "resident", path: "asteroids/rock_boulder_dry_diff_2k.jpg", lifetime: 6e4, colorSpace: "srgb" },
+  { id: 120, resourceType: "bump", lifecycle: "resident", path: "asteroids/rock_boulder_dry_nor_gl_2k.jpg", lifetime: 6e4 },
+  { id: 121, resourceType: "bump", lifecycle: "resident", path: "asteroids/rock_boulder_dry_arm_2k.jpg", lifetime: 6e4 }
 ]

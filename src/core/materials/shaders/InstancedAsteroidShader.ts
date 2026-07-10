@@ -7,24 +7,20 @@ interface InstancedAsteroidUniforms {
   uRockColor: Color
   uColorJitter: number
   uMariaStrength: number
-  uGrainStrength: number
-  uGrainFreq: number
   uSpecularStrength: number
   uSpecularPower: number
   uSpecularTint: number
-  uAaStart: number
-  uAaEnd: number
+  uRockDiffMap: Texture | null
+  uRockNorMap: Texture | null
+  uRockArmMap: Texture | null
+  uDetailMapsEnabled: number
+  uDetailScale: number
+  uDetailSaturation: number
+  uDetailBrightness: number
+  uDetailNormalScale: number
+  uDetailAoInfluence: number
+  uDetailRoughInfluence: number
   uTintStrength: number
-  uCraterFreq: number
-  uCraterDensity: number
-  uCraterRadius: number
-  uCraterDepth: number
-  uCraterOctaves: number
-  uCrackWidth: number
-  uCrackIntensity: number
-  uCrackPatchiness: number
-  uAoStrength: number
-  uCraterNormalScale: number
   uSurfaceAmbient: number
   uDustColor: Color
   uDustDensity: number
@@ -52,24 +48,22 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       uRockColor: new Uniform(new Color(0x6b6157)),
       uColorJitter: new Uniform(0.12),
       uMariaStrength: new Uniform(0.3),
-      uGrainStrength: new Uniform(0.15),
-      uGrainFreq: new Uniform(22.0),
       uSpecularStrength: new Uniform(0.05),
       uSpecularPower: new Uniform(8.0),
       uSpecularTint: new Uniform(0.0),
-      uAaStart: new Uniform(1.2),
-      uAaEnd: new Uniform(3.0),
+      // Фотограмметрический PBR-микрослой (см. чанк TriplanarDetail); enabled 0 —
+      // текстуры не загрузились, слой выключен
+      uRockDiffMap: new Uniform(null),
+      uRockNorMap: new Uniform(null),
+      uRockArmMap: new Uniform(null),
+      uDetailMapsEnabled: new Uniform(0),
+      uDetailScale: new Uniform(1),
+      uDetailSaturation: new Uniform(0.35),
+      uDetailBrightness: new Uniform(1.6),
+      uDetailNormalScale: new Uniform(1),
+      uDetailAoInfluence: new Uniform(0.8),
+      uDetailRoughInfluence: new Uniform(0.7),
       uTintStrength: new Uniform(0.25),
-      uCraterFreq: new Uniform(4.0),
-      uCraterDensity: new Uniform(0.6),
-      uCraterRadius: new Uniform(0.5),
-      uCraterDepth: new Uniform(0.5),
-      uCraterOctaves: new Uniform(1),
-      uCrackWidth: new Uniform(0.05),
-      uCrackIntensity: new Uniform(0.5),
-      uCrackPatchiness: new Uniform(0.7),
-      uAoStrength: new Uniform(0.6),
-      uCraterNormalScale: new Uniform(1.0),
       uSurfaceAmbient: new Uniform(0.03),
       uDustColor: new Uniform(new Color(0x9b968c)),
       uDustDensity: new Uniform(0),

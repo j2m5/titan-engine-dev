@@ -14,10 +14,11 @@ describe('L0 фрагмент: профили (v2)', () => {
     expect(shader.uniforms).not.toHaveProperty('uRockColorC')
   })
 
-  it('единый цвет + зерно + specular юниформы', () => {
+  it('единый цвет + specular юниформы, процедурное зерно/трещины убраны', () => {
     const shader = new InstancedAsteroidShader()
     expect(shader.uniforms.uRockColor).toBeDefined()
-    expect(shader.uniforms.uGrainStrength).toBeDefined()
+    expect(shader.uniforms.uGrainStrength).toBeUndefined()
+    expect(shader.uniforms.uCrackIntensity).toBeUndefined()
     expect(shader.uniforms.uSpecularStrength).toBeDefined()
     expect(shader.fragmentShader).toContain('uSpecularPower')
   })
@@ -33,12 +34,18 @@ describe('L0 фрагмент: профили (v2)', () => {
     expect(shader.fragmentShader).not.toContain('perturbNormalFromHeight')
   })
 
-  it('fwidth-AA добивает подпиксельный остаток; дальность детали — ручка uAaStart/uAaEnd', () => {
+  it('процедурные кратеры и fwidth-AA убраны — юниформы отсутствуют', () => {
     const shader = new InstancedAsteroidShader()
-    expect(shader.fragmentShader).toContain('fwidth(surfDir)')
-    expect(shader.fragmentShader).toContain('smoothstep(uAaStart, uAaEnd')
-    expect(shader.uniforms.uAaStart).toBeDefined()
-    expect(shader.uniforms.uAaEnd).toBeDefined()
+    expect(shader.uniforms.uCraterFreq).toBeUndefined()
+    expect(shader.uniforms.uCraterDensity).toBeUndefined()
+    expect(shader.uniforms.uCraterRadius).toBeUndefined()
+    expect(shader.uniforms.uCraterDepth).toBeUndefined()
+    expect(shader.uniforms.uCraterOctaves).toBeUndefined()
+    expect(shader.uniforms.uAoStrength).toBeUndefined()
+    expect(shader.uniforms.uCraterNormalScale).toBeUndefined()
+    expect(shader.uniforms.uAaStart).toBeUndefined()
+    expect(shader.uniforms.uAaEnd).toBeUndefined()
+    expect(shader.fragmentShader).not.toContain('fwidth(surfDir)')
     expect(shader.fragmentShader).not.toContain('uDetailFade')
   })
 })

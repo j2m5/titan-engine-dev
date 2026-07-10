@@ -4,31 +4,27 @@ import { ShaderChunk, Uniform, Vector3, Color } from 'three'
 export const InstancedAsteroidShaderTemplate: ShaderProps = {
   uniforms: {
     lightPosition: new Uniform(new Vector3()),
-    // Процедурный облик — профиль (см. чанк AsteroidSurface / AsteroidProfiles)
+    // Макро-облик — профиль (см. чанк AsteroidSurface / AsteroidProfiles)
     uRockColor: new Uniform(new Color(0x6b6157)),
     uColorJitter: new Uniform(0.12),
     uTintStrength: new Uniform(0.25),
     uMariaStrength: new Uniform(0.3),
-    uGrainStrength: new Uniform(0.15),
-    uGrainFreq: new Uniform(22.0),
-    uCraterFreq: new Uniform(4.0),
-    uCraterDensity: new Uniform(0.6),
-    uCraterRadius: new Uniform(0.5),
-    uCraterDepth: new Uniform(0.5),
-    uCraterOctaves: new Uniform(1),
-    uCrackWidth: new Uniform(0.05),
-    uCrackIntensity: new Uniform(0.5),
-    uCrackPatchiness: new Uniform(0.7),
-    uAoStrength: new Uniform(0.6),
-    uCraterNormalScale: new Uniform(1.0),
     uSurfaceAmbient: new Uniform(0.03),
     uSpecularStrength: new Uniform(0.05),
     uSpecularPower: new Uniform(8.0),
     uSpecularTint: new Uniform(0.0),
-    // Дальность детализации (fwidth-AA): деталь гаснет между Start и End
-    // (циклов зерна на пиксель). Больше → деталь держится дальше.
-    uAaStart: new Uniform(1.2),
-    uAaEnd: new Uniform(3.0),
+    // Фотограмметрический PBR-микрослой (см. чанк TriplanarDetail); enabled 0 —
+    // текстуры не загрузились, слой выключен
+    uRockDiffMap: new Uniform(null),
+    uRockNorMap: new Uniform(null),
+    uRockArmMap: new Uniform(null),
+    uDetailMapsEnabled: new Uniform(0),
+    uDetailScale: new Uniform(1),
+    uDetailSaturation: new Uniform(0.35),
+    uDetailBrightness: new Uniform(1.6),
+    uDetailNormalScale: new Uniform(1),
+    uDetailAoInfluence: new Uniform(0.8),
+    uDetailRoughInfluence: new Uniform(0.7),
     // Пылевая дымка (см. чанк RingDust). uDustDensity = 0 — туман выключен,
     // пока AsteroidRingSystem явно не сконфигурирует пыль.
     uDustColor: new Uniform(new Color(0x9b968c)),
@@ -66,10 +62,16 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     varying vec3 vViewPosition;
     varying vec3 vRingPos;
     varying vec3 vObjectPos;
-    varying float vInstanceSeed;
     varying vec3 vObjectNormal;
     varying mat3 vObjToView;
     varying float vFade;
+    // Пер-инстансные хеши сида считаются ЗДЕСЬ и едут во фрагмент готовыми:
+    // сырой сид через хеш во фрагментнике превращает ULP-джиттер интерполяции
+    // в пиксельный шум («сетка» по фасетам). Джиттер самих значений (≤1e-6 без
+    // хеш-усиления) визуально нулевой.
+    varying float vTintSeed;
+    varying vec3 vDomainOffset;
+    varying vec2 vTriOffset;
 
     #include <noiseFunctions>
     #include <asteroidShapeFunctions>
@@ -99,15 +101,27 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
 
-      // Для процедурного облика (см. чанк AsteroidSurface): объектная позиция
-      // (домен) и per-instance сид (тип/тинт) — переиспользуем сид формы. Нормаль
-      // считается АНАЛИТИЧЕСКИ во фрагменте в объектном пространстве, поэтому
-      // прокидываем геом. нормаль объекта и матрицу объект→view.
+      // Для макро-облика (см. чанк AsteroidSurface): объектная позиция (домен),
+      // геом. нормаль объекта (нормаль больше не возмущается процедурно) и
+      // матрица объект→view — трипланарная деталь (см. чанк TriplanarDetail)
+      // применяется к геометрической нормали во фрагменте.
       vObjectPos = shapedPos;
-      vInstanceSeed = shapeSeed;
       vObjectNormal = shapedNormal;
       vObjToView = normalMatrix * instanceNormalMatrix;
       vFade = instanceFade;
+
+      // Пер-инстансные хеши (см. комментарий у varyings): тинт, сдвиг домена
+      // макро-шумов, сдвиг трипланарной проекции — из сида формы
+      vTintSeed = hashSurface11(shapeSeed + 3.17);
+      vDomainOffset = vec3(
+        hashSurface11(shapeSeed + 1.1),
+        hashSurface11(shapeSeed + 2.2),
+        hashSurface11(shapeSeed + 3.3)
+      ) * 40.0;
+      vTriOffset = vec2(
+        hashSurface11(shapeSeed + 7.7),
+        hashSurface11(shapeSeed + 9.9)
+      ) * 8.0;
 
       ${ShaderChunk['logdepthbuf_vertex']}
     }
@@ -120,36 +134,27 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uniform float uColorJitter;
     uniform float uTintStrength;
     uniform float uMariaStrength;
-    uniform float uGrainStrength;
-    uniform float uGrainFreq;
-    uniform float uCraterFreq;
-    uniform float uCraterDensity;
-    uniform float uCraterRadius;
-    uniform float uCraterDepth;
-    uniform float uCraterOctaves;
-    uniform float uCrackWidth;
-    uniform float uCrackIntensity;
-    uniform float uCrackPatchiness;
-    uniform float uAoStrength;
-    uniform float uCraterNormalScale;
     uniform float uSurfaceAmbient;
     uniform float uSpecularStrength;
     uniform float uSpecularPower;
     uniform float uSpecularTint;
-    uniform float uAaStart;
-    uniform float uAaEnd;
 
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vRingPos;
     varying vec3 vObjectPos;
-    varying float vInstanceSeed;
     varying vec3 vObjectNormal;
     varying mat3 vObjToView;
     varying float vFade;
+    // Готовые пер-инстансные хеши из вершинника (анти-ULP-джиттер, см. вершинник)
+    varying float vTintSeed;
+    varying vec3 vDomainOffset;
+    varying vec2 vTriOffset;
 
     #include <noiseFunctions>
     #include <asteroidSurfaceFunctions>
+    #include <triplanarDetailUniforms>
+    #include <triplanarDetailFunctions>
     #include <ringDustUniforms>
     #include <ringDustFunctions>
 
@@ -173,35 +178,45 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
       vec3 surfDir = normalize(vObjectPos);
 
-      // Процедурный облик: альбедо + АНАЛИТИЧЕСКИ возмущённая объектная нормаль +
-      // каверн-AO. Нормаль из аналитических градиентов (без dFdx-статики).
-      vec3 perturbedObjNormal;
-      float surfAO;
-      vec3 baseSurfAlbedo;
-      vec3 albedo = applyAsteroidSurface(
-        surfDir, normalize(vObjectNormal), vInstanceSeed,
-        uRockColor, uColorJitter, uTintStrength, uMariaStrength,
-        uGrainStrength, uGrainFreq, uCraterNormalScale,
-        uCraterFreq, uCraterDensity, uCraterRadius, uCraterDepth, uCraterOctaves,
-        uCrackWidth, uCrackIntensity, uCrackPatchiness,
-        uAoStrength,
-        perturbedObjNormal, surfAO, baseSurfAlbedo
-      );
+      // Макро-облик: альбедо (джиттер/мотл/maria), рельеф больше не возмущает
+      // нормаль процедурно — нормаль геометрическая, деталь несёт PBR-микрослой.
+      vec3 albedo = applyAsteroidSurface(surfDir, vTintSeed, vDomainOffset, uRockColor, uColorJitter, uTintStrength, uMariaStrength);
 
-      // fwidth-AA нормали: где зерно подпиксельно — сводим возмущение к геом.
-      // нормали, гася аляйсинг сигнала. Частота — зерна (самая ВЧ в нормали).
-      float cyclesPerPixel = length(fwidth(surfDir)) * uGrainFreq;
-      float aaFade = 1.0 - smoothstep(uAaStart, uAaEnd, cyclesPerPixel);
-      vec3 objN = normalize(mix(normalize(vObjectNormal), perturbedObjNormal, aaFade));
+      // Геометрическая объектная нормаль; трипланарная дельта нормали (ниже)
+      // применяется к ней. AO — единственный источник теперь ARM-карта микрослоя.
+      vec3 objN = normalize(vObjectNormal);
+      float surfAO = 1.0;
 
-      // fwidth-AA альбедо (B0): тёмные линии трещин и пятна кратеров — это АЛЬБЕДО,
-      // у него нет сглаживания нормали → на среднем плане мельтешит. Гасим деталь
-      // альбедо и AO к базовому (НЧ maria/мотл) по частоте КРАТЕРНОГО узора: он
-      // грубее зерна, поэтому альбедо держится дольше и не смазывается раньше срока.
-      float albedoCyclesPerPixel = length(fwidth(surfDir)) * uCraterFreq;
-      float albedoFade = 1.0 - smoothstep(uAaStart, uAaEnd, albedoCyclesPerPixel);
-      albedo = mix(baseSurfAlbedo, albedo, albedoFade);
-      surfAO = mix(1.0, surfAO, albedoFade);
+      // --- Фотограмметрический PBR-микрослой (трипланар, см. чанк TriplanarDetail) ---
+      // Текстура = структура (яркость/нормаль/шероховатость), цвет = грейдинг
+      // профиля. Пер-инстансный сдвиг проекции — против повторов пятен на соседях.
+      float specStrength = uSpecularStrength;
+      float specPower = uSpecularPower;
+      if (uDetailMapsEnabled > 0.5) {
+        vec3 geomN = normalize(vObjectNormal);
+        vec3 triW = triplanarWeights(geomN);
+        // Сдвиг проекции — готовый хеш из вершинника (анти-ULP-джиттер)
+        vec2 triOffset = vTriOffset;
+
+        // Альбедо: десатурированная структура текстуры × грейд профиля.
+        // uDetailBrightness компенсирует среднюю яркость диффуза (< 1.0)
+        vec3 detail = triplanarAlbedo(vObjectPos, triW, triOffset);
+        float detailLum = dot(detail, vec3(0.299, 0.587, 0.114));
+        vec3 structureTint = mix(vec3(detailLum), detail, uDetailSaturation);
+        albedo *= structureTint * uDetailBrightness;
+
+        // Нормаль: тангенциальная дельта whiteout-нормали поверх геометрической —
+        // микрорельеф ложится на форму, не искажая крупный силуэт
+        vec3 nDetail = triplanarNormal(vObjectPos, geomN, triW, triOffset);
+        objN = normalize(objN + uDetailNormalScale * (nDetail - geomN));
+
+        // ARM: r=AO (умножается в каверн-AO), g=roughness (глушит блик)
+        vec3 arm = triplanarArm(vObjectPos, triW, triOffset);
+        surfAO *= mix(1.0, arm.r, uDetailAoInfluence);
+        float gloss = 1.0 - arm.g * uDetailRoughInfluence;
+        specStrength *= gloss;
+        specPower = max(specPower * gloss, 2.0);
+      }
 
       // Объектная нормаль → view; учёт ориентации грани
       vec3 normal = normalize(vObjToView * objN);
@@ -227,9 +242,9 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       // снижаем эффективную жёсткость И силу, гася подпиксельные вспышки.
       // var→0 (близко/гладко): множитель 1, блик как есть.
       float specNormalVar = dot(dFdx(normal), dFdx(normal)) + dot(dFdy(normal), dFdy(normal));
-      float specToksvig = 1.0 / (1.0 + uSpecularPower * specNormalVar);
-      float specPowerAA = uSpecularPower * specToksvig;
-      float spec = pow(max(dot(normal, halfVec), 0.0), specPowerAA) * uSpecularStrength * specToksvig;
+      float specToksvig = 1.0 / (1.0 + specPower * specNormalVar);
+      float specPowerAA = specPower * specToksvig;
+      float spec = pow(max(dot(normal, halfVec), 0.0), specPowerAA) * specStrength * specToksvig;
       vec3 specColor = mix(vec3(1.0), albedo, uSpecularTint);
       finalColor += spec * specColor * lightIntensity * planetShadow;
 

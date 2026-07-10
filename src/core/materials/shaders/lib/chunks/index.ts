@@ -4,6 +4,7 @@ import { asteroidShapeFunctions } from './AsteroidShape'
 import { asteroidSurfaceFunctions } from './AsteroidSurface'
 import { bumpFunctions } from '@/core/materials/shaders/lib/chunks/Bump'
 import { ringDustFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
+import { triplanarDetailFunctions, triplanarDetailUniforms } from '@/core/materials/shaders/lib/chunks/TriplanarDetail'
 import { IUniform, Uniform } from 'three'
 
 export const AppUniformsChunk: Record<string, Record<string, IUniform>> = {
@@ -14,6 +15,7 @@ export const AppUniformsChunk: Record<string, Record<string, IUniform>> = {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const AppShaderChunk: Record<string, any> = {
   ringShadowUniforms,
   ringShadowFunctions,
@@ -23,5 +25,7 @@ export const AppShaderChunk: Record<string, any> = {
   asteroidSurfaceFunctions,
   bumpFunctions,
   ringDustUniforms,
-  ringDustFunctions
+  ringDustFunctions,
+  triplanarDetailUniforms,
+  triplanarDetailFunctions
 }

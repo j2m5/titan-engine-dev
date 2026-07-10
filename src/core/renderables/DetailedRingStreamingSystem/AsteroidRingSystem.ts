@@ -1,4 +1,4 @@
-import { Color, Group, Matrix4, Object3D, PerspectiveCamera, Vector3, type Texture } from 'three'
+import { Color, Group, Matrix4, Object3D, PerspectiveCamera, RepeatWrapping, Vector3, type Texture } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
 import type { IRingRenderingObject } from '@/core/models/types'
@@ -41,14 +41,10 @@ interface AsteroidRingConfig {
   maxScale: number
   /** Макс. экземпляров для L0 (geometry) буфера */
   maxL0Instances: number
-  /** Макс. экземпляров для ближнего L0 (повышенный detail) буфера */
-  maxL0NearInstances: number
   /** Макс. экземпляров для L1 (billboard) буфера */
   maxL1Instances: number
   /** LOD-пороги в реальных км */
   lodThresholdsKm: {
-    /** Ближний тир L0 (повышенный detail) — для самых близких камней */
-    l0Near: number
     l0: number
     l1: number
   }
@@ -72,8 +68,6 @@ interface AsteroidRingConfig {
   dustMaxSteps: number
   /** Уровень сабдива геометрии L0 (1/2/3) — ручка отката FPS для формы */
   asteroidShapeDetail: number
-  /** Уровень сабдива ближнего тира L0 (обычно на 1 выше asteroidShapeDetail) */
-  asteroidShapeNearDetail: number
   /** Мин. амплитуда деформации силуэта (доля радиуса; min=max=0 → форма выключена) */
   shapeAmpMin: number
   /** Макс. амплитуда деформации силуэта (доля радиуса). Каждый инстанс берёт
@@ -81,12 +75,8 @@ interface AsteroidRingConfig {
   shapeAmpMax: number
   /** Частота шума деформации силуэта */
   shapeFreq: number
-  /** Профиль облика астероидов (см. AsteroidProfiles). Задаёт цвет/кратеры/блик/etc. */
+  /** Профиль облика астероидов (см. AsteroidProfiles). Задаёт цвет/блик/etc. */
   profile: AsteroidProfileName
-  /** Дальность детализации: начало гашения детали (циклов зерна на пиксель) */
-  detailAaStart: number
-  /** Дальность детализации: полное гашение. Больше → деталь держится дальше */
-  detailAaEnd: number
   /**
    * Распределение камней и пыли следует альфе текстуры 2D-кольца (радиальный
    * профиль плотности + профиль пыли). Тот же радиальный маппинг, что у
@@ -106,6 +96,18 @@ interface AsteroidRingConfig {
    * пыль, они получают пропорционально тусклую дымку.
    */
   dustBleedKm: number
+  /** Повторов текстуры на радиус камня (в Three.js units) — тексель-плотность PBR-микрослоя */
+  detailRepeats: number
+  /** Доля цвета текстуры против грейда процедурного профиля (0 — только профиль, 1 — только текстура) */
+  detailSaturation: number
+  /** Компенсация средней яркости диффуза (фотограмметрия темнее процедурного альбедо) */
+  detailBrightness: number
+  /** Сила нормал-карты микрослоя */
+  detailNormalScale: number
+  /** Влияние AO-канала из ARM-текстуры */
+  detailAoInfluence: number
+  /** Влияние rough-канала из ARM-текстуры */
+  detailRoughInfluence: number
 }
 
 /**
@@ -119,10 +121,8 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   minScale: 0.3,
   maxScale: 1.6,
   maxL0Instances: 50000,
-  maxL0NearInstances: 20000,
   maxL1Instances: 100000,
   lodThresholdsKm: {
-    l0Near: 1000,
     l0: 3000,
     l1: 12000
   },
@@ -134,16 +134,19 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   dustAnglePower: 2,
   dustMaxSteps: 16,
   asteroidShapeDetail: 2,
-  asteroidShapeNearDetail: 3,
   shapeAmpMin: 0.08,
   shapeAmpMax: 0.22,
   shapeFreq: 1.4,
   profile: 'stony',
-  detailAaStart: 1.2,
-  detailAaEnd: 3.0,
   ringGapsFromTexture: true,
   ringGapBleedKm: 300,
-  dustBleedKm: 600
+  dustBleedKm: 600,
+  detailRepeats: 2.0,
+  detailSaturation: 0.35,
+  detailBrightness: 1.6,
+  detailNormalScale: 1.0,
+  detailAoInfluence: 0.8,
+  detailRoughInfluence: 0.7
 }
 
 /**
@@ -246,7 +249,6 @@ class AsteroidRingSystem extends Group {
     const cellSize = toThreeJSUnits(cfg.cellSizeKm)
     const asteroidSize = toThreeJSUnits(cfg.asteroidSizeKm)
 
-    const l0NearMaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l0Near)
     const l0MaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l0)
     const l1MaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l1)
 
@@ -275,15 +277,7 @@ class AsteroidRingSystem extends Group {
     // --- InstancePool ---
     const l0PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0Instances }
     const l1PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL1Instances }
-    const l0NearPoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0NearInstances }
-    this.pool = new InstancePool(
-      l0PoolConfig,
-      l1PoolConfig,
-      asteroidSize,
-      cfg.asteroidShapeDetail,
-      l0NearPoolConfig,
-      cfg.asteroidShapeNearDetail
-    )
+    this.pool = new InstancePool(l0PoolConfig, l1PoolConfig, asteroidSize, cfg.asteroidShapeDetail)
 
     // Добавить рендер-объекты (L0 + L1)
     for (const obj of this.pool.getRenderObjects()) {
@@ -296,38 +290,25 @@ class AsteroidRingSystem extends Group {
     l0ShapeMaterial.uniforms.uShapeAmpMax.value = cfg.shapeAmpMax
     l0ShapeMaterial.uniforms.uShapeFreq.value = cfg.shapeFreq
 
-    // Процедурный облик — профиль, тоже только L0
+    // Макро-облик — профиль, тоже только L0
     const profile = ASTEROID_PROFILES[cfg.profile]
     l0ShapeMaterial.uniforms.uRockColor.value.set(profile.baseColor)
     l0ShapeMaterial.uniforms.uColorJitter.value = profile.colorJitter
     l0ShapeMaterial.uniforms.uTintStrength.value = profile.tintStrength
     l0ShapeMaterial.uniforms.uMariaStrength.value = profile.mariaStrength
-    l0ShapeMaterial.uniforms.uGrainStrength.value = profile.grainStrength
-    l0ShapeMaterial.uniforms.uGrainFreq.value = profile.grainFreq
-    l0ShapeMaterial.uniforms.uCraterFreq.value = profile.craterFreq
-    l0ShapeMaterial.uniforms.uCraterDensity.value = profile.craterDensity
-    l0ShapeMaterial.uniforms.uCraterRadius.value = profile.craterRadius
-    l0ShapeMaterial.uniforms.uCraterDepth.value = profile.craterDepth
-    l0ShapeMaterial.uniforms.uCraterOctaves.value = profile.craterOctaves
-    l0ShapeMaterial.uniforms.uCrackWidth.value = profile.crackWidth
-    l0ShapeMaterial.uniforms.uCrackIntensity.value = profile.crackIntensity
-    l0ShapeMaterial.uniforms.uCrackPatchiness.value = profile.crackPatchiness
-    l0ShapeMaterial.uniforms.uAoStrength.value = profile.aoStrength
-    l0ShapeMaterial.uniforms.uCraterNormalScale.value = profile.craterNormalScale
     l0ShapeMaterial.uniforms.uSurfaceAmbient.value = profile.surfaceAmbient
     l0ShapeMaterial.uniforms.uSpecularStrength.value = profile.specularStrength
     l0ShapeMaterial.uniforms.uSpecularPower.value = profile.specularPower
     l0ShapeMaterial.uniforms.uSpecularTint.value = profile.specularTint
-    // Дальность детализации (fwidth-AA) — общая, не per-profile (про экран/LOD)
-    l0ShapeMaterial.uniforms.uAaStart.value = cfg.detailAaStart
-    l0ShapeMaterial.uniforms.uAaEnd.value = cfg.detailAaEnd
+
+    // PBR-микрослой (фотограмметрические текстуры) — поверх макро-профиля
+    this.__applyDetailMaps(asteroidSize)
 
     // Установить maxDistance для billboard материала
     this.pool.billboardMaterial.uniforms.uMaxDistance.value = l1MaxDist
 
     // --- SectorManager ---
     const thresholds: LODThresholds = {
-      l0NearMaxDistance: l0NearMaxDist,
       l0MaxDistance: l0MaxDist,
       l1MaxDistance: l1MaxDist
     }
@@ -391,6 +372,40 @@ class AsteroidRingSystem extends Group {
     this.rotateX(degToRad(90))
 
     this.name = 'AsteroidRingSystem'
+  }
+
+  /**
+   * Привязать PBR-микрослой (см. чанк TriplanarDetail). Текстуры — required-
+   * ресурсы (загружены до engine.start); нет любой из трёх → слой тихо
+   * выключен (uDetailMapsEnabled 0), камни рендерятся прежним процедурным путём.
+   */
+  private __applyDetailMaps(asteroidSize: number): void {
+    const diff = resourceStorage.getTexture('asteroids/rock_boulder_dry_diff_2k.jpg')
+    const nor = resourceStorage.getTexture('asteroids/rock_boulder_dry_nor_gl_2k.jpg')
+    const arm = resourceStorage.getTexture('asteroids/rock_boulder_dry_arm_2k.jpg')
+    if (!diff || !nor || !arm) return
+
+    // Текстуры уже загружены на GPU (initTexture при прелоаде) — смена wrap
+    // без needsUpdate не переустановит sampler, трипланар получит ClampToEdge
+    for (const map of [diff, nor, arm]) {
+      map.wrapS = map.wrapT = RepeatWrapping
+      map.needsUpdate = true
+    }
+
+    const cfg = this.config
+    const l0Material = this.pool.geometryMesh.material as InstancedAsteroidMaterial
+    const u = l0Material.uniforms
+    u.uRockDiffMap.value = diff
+    u.uRockNorMap.value = nor
+    u.uRockArmMap.value = arm
+    u.uDetailMapsEnabled.value = 1
+    // Тексель-плотность: cfg.detailRepeats повторов тайла на радиус камня
+    u.uDetailScale.value = cfg.detailRepeats / asteroidSize
+    u.uDetailSaturation.value = cfg.detailSaturation
+    u.uDetailBrightness.value = cfg.detailBrightness
+    u.uDetailNormalScale.value = cfg.detailNormalScale
+    u.uDetailAoInfluence.value = cfg.detailAoInfluence
+    u.uDetailRoughInfluence.value = cfg.detailRoughInfluence
   }
 
   /**
@@ -476,8 +491,7 @@ class AsteroidRingSystem extends Group {
       console.warn(
         `[AsteroidRingSystem ${this.config.ringId}] Пул инстансов исчерпан — сектора молча пропадают из рендера. ` +
           `Отказов аллокации: ${pressure.totalFailures}. ` +
-          `Занятость: L0Near ${pressure.l0Near.used}/${pressure.l0Near.capacity}, ` +
-          `L0 ${pressure.l0.used}/${pressure.l0.capacity}, L1 ${pressure.l1.used}/${pressure.l1.capacity}. ` +
+          `Занятость: L0 ${pressure.l0.used}/${pressure.l0.capacity}, L1 ${pressure.l1.used}/${pressure.l1.capacity}. ` +
           'Лечится ростом maxL*Instances или снижением asteroidDensityScale.'
       )
     }

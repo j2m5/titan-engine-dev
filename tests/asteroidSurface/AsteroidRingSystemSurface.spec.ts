@@ -21,7 +21,7 @@ describe('AsteroidRingSystem: профили облика', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
     const u = (system as any).pool.geometryMesh.material.uniforms
     expect(u.uRockColor.value.getHex()).toBe(ASTEROID_PROFILES.stony.baseColor)
-    expect(u.uCraterDepth.value).toBe(ASTEROID_PROFILES.stony.craterDepth)
+    expect(u.uMariaStrength.value).toBe(ASTEROID_PROFILES.stony.mariaStrength)
     expect(u.uSpecularStrength.value).toBe(ASTEROID_PROFILES.stony.specularStrength)
   })
 
@@ -30,13 +30,6 @@ describe('AsteroidRingSystem: профили облика', () => {
     const u = (system as any).pool.geometryMesh.material.uniforms
     expect(u.uRockColor.value.getHex()).toBe(ASTEROID_PROFILES.icy.baseColor)
     expect(u.uSpecularPower.value).toBe(ASTEROID_PROFILES.icy.specularPower)
-    expect(u.uCrackIntensity.value).toBe(ASTEROID_PROFILES.icy.crackIntensity)
-  })
-
-  it('разводит ручку дальности детализации из конфига', () => {
-    const system = new AsteroidRingSystem(makeFakeActor(), { detailAaStart: 2.0, detailAaEnd: 5.0 })
-    const u = (system as any).pool.geometryMesh.material.uniforms
-    expect(u.uAaStart.value).toBe(2.0)
-    expect(u.uAaEnd.value).toBe(5.0)
+    expect(u.uMariaStrength.value).toBe(ASTEROID_PROFILES.icy.mariaStrength)
   })
 })
