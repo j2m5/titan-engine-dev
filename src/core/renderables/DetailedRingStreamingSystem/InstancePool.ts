@@ -7,9 +7,7 @@ const enum LODLevel {
   /** Реальная геометрия (IcosahedronGeometry), обычный detail */
   Geometry = 0,
   /** Billboard-импосторы (PlaneGeometry, camera-facing) */
-  Billboard = 1,
-  /** Реальная геометрия повышенного detail для самых близких камней */
-  GeometryNear = 2
+  Billboard = 1
 }
 
 /** Результат аллокации */
@@ -33,25 +31,18 @@ interface PoolLayerConfig {
 /**
  * InstancePool — управление GPU-ресурсами.
  *
- * Владеет тремя рендер-объектами (по одному на LOD):
- * - L0 Near: InstancedMesh с реальной геометрией повышенного detail (ближние камни)
- * - L0: InstancedMesh с реальной геометрией обычного detail
+ * Владеет двумя рендер-объектами (по одному на LOD):
+ * - L0: InstancedMesh с реальной геометрией
  * - L1: InstancedMesh с PlaneGeometry (billboard)
- *
- * Оба геометрических тира разделяют один материал (различие — только detail
- * геометрии), поэтому проводка юниформов идёт по geometryMesh.material и
- * автоматически применяется к ближнему тиру.
  *
  * Каждый объект имеет pre-allocated буфер. Секторы аллоцируют диапазоны в буфере.
  * Свободное пространство управляется через free-list аллокатор.
  *
- * Итог: 3 draw calls на всю систему экземпляров.
+ * Итог: 2 draw calls на всю систему экземпляров.
  */
 class InstancePool {
   /** Рендер-объект для L0 (обычный detail) */
   public geometryMesh: InstancedMesh
-  /** Рендер-объект для ближнего L0 (повышенный detail) */
-  public geometryNearMesh: InstancedMesh
   /** Рендер-объект для L1 */
   public billboardMesh: InstancedMesh
 
@@ -90,14 +81,11 @@ class InstancePool {
     l0Config: PoolLayerConfig,
     l1Config: PoolLayerConfig,
     asteroidGeometrySize: number,
-    l0Detail: number = 1,
-    l0NearConfig: PoolLayerConfig = l0Config,
-    l0NearDetail: number = 3
+    l0Detail: number = 1
   ) {
     this.layerConfigs = new Map([
       [LODLevel.Geometry, l0Config],
-      [LODLevel.Billboard, l1Config],
-      [LODLevel.GeometryNear, l0NearConfig]
+      [LODLevel.Billboard, l1Config]
     ])
 
     // Инициализация free-lists + highWaterMark для всех уровней
@@ -119,18 +107,6 @@ class InstancePool {
     // Инициализирован нулями: слот невидим, пока сектор не проявится.
     l0Geometry.setAttribute('instanceFade', new InstancedBufferAttribute(new Float32Array(l0Config.maxInstances), 1))
 
-    // --- L0 Near: тот же материал, выше detail (гладкий силуэт/бассейны вблизи) ---
-    // Разделяем материал с обычным L0 → проводка юниформов остаётся единой.
-    const l0NearGeometry = new IcosahedronGeometry(asteroidGeometrySize, l0NearDetail)
-    this.geometryNearMesh = new InstancedMesh(l0NearGeometry, this.geometryMesh.material, l0NearConfig.maxInstances)
-    this.geometryNearMesh.count = 0
-    this.geometryNearMesh.frustumCulled = false
-    this.geometryNearMesh.name = 'AsteroidPool_L0Near'
-    l0NearGeometry.setAttribute(
-      'instanceFade',
-      new InstancedBufferAttribute(new Float32Array(l0NearConfig.maxInstances), 1)
-    )
-
     // --- L1: Billboard InstancedMesh ---
     const l1Geometry = new PlaneGeometry(asteroidGeometrySize * 2.5, asteroidGeometrySize * 2.5)
     this.billboardMaterial = new BillboardAsteroidMaterial()
@@ -142,7 +118,6 @@ class InstancePool {
     l1Geometry.setAttribute('instanceFade', new InstancedBufferAttribute(new Float32Array(l1Config.maxInstances), 1))
 
     this.meshes.set(LODLevel.Geometry, this.geometryMesh)
-    this.meshes.set(LODLevel.GeometryNear, this.geometryNearMesh)
     this.meshes.set(LODLevel.Billboard, this.billboardMesh)
   }
 
@@ -246,15 +221,14 @@ class InstancePool {
    * Получить все рендер-объекты для добавления в сцену.
    */
   public getRenderObjects(): Object3D[] {
-    return [this.geometryMesh, this.geometryNearMesh, this.billboardMesh]
+    return [this.geometryMesh, this.billboardMesh]
   }
 
   /**
    * Получить общее количество active instances по всем уровням.
-   * Ближний тир входит в счётчик L0 (это та же геометрия L0, выше detail).
    */
   public getActiveCount(): { l0: number; l1: number; total: number } {
-    const l0 = this.highWaterMark.get(LODLevel.Geometry)! + this.highWaterMark.get(LODLevel.GeometryNear)!
+    const l0 = this.highWaterMark.get(LODLevel.Geometry)!
     const l1 = this.highWaterMark.get(LODLevel.Billboard)!
     return { l0, l1, total: l0 + l1 }
   }
@@ -272,15 +246,13 @@ class InstancePool {
    * пропадали из рендера — пора поднимать maxInstances или снижать density.
    */
   public getPressureInfo(): {
-    l0Near: { used: number; capacity: number; failures: number }
     l0: { used: number; capacity: number; failures: number }
     l1: { used: number; capacity: number; failures: number }
     totalFailures: number
   } {
-    const l0Near = this.levelPressure(LODLevel.GeometryNear)
     const l0 = this.levelPressure(LODLevel.Geometry)
     const l1 = this.levelPressure(LODLevel.Billboard)
-    return { l0Near, l0, l1, totalFailures: l0Near.failures + l0.failures + l1.failures }
+    return { l0, l1, totalFailures: l0.failures + l1.failures }
   }
 
   // === Private ===
@@ -343,7 +315,6 @@ class InstancePool {
     }
 
     this.geometryMesh.count = 0
-    this.geometryNearMesh.count = 0
     this.billboardMesh.count = 0
     this.dirtyLevels.clear()
     this.dirtyFadeLevels.clear()

@@ -41,14 +41,10 @@ interface AsteroidRingConfig {
   maxScale: number
   /** Макс. экземпляров для L0 (geometry) буфера */
   maxL0Instances: number
-  /** Макс. экземпляров для ближнего L0 (повышенный detail) буфера */
-  maxL0NearInstances: number
   /** Макс. экземпляров для L1 (billboard) буфера */
   maxL1Instances: number
   /** LOD-пороги в реальных км */
   lodThresholdsKm: {
-    /** Ближний тир L0 (повышенный detail) — для самых близких камней */
-    l0Near: number
     l0: number
     l1: number
   }
@@ -72,8 +68,6 @@ interface AsteroidRingConfig {
   dustMaxSteps: number
   /** Уровень сабдива геометрии L0 (1/2/3) — ручка отката FPS для формы */
   asteroidShapeDetail: number
-  /** Уровень сабдива ближнего тира L0 (обычно на 1 выше asteroidShapeDetail) */
-  asteroidShapeNearDetail: number
   /** Мин. амплитуда деформации силуэта (доля радиуса; min=max=0 → форма выключена) */
   shapeAmpMin: number
   /** Макс. амплитуда деформации силуэта (доля радиуса). Каждый инстанс берёт
@@ -127,10 +121,8 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   minScale: 0.3,
   maxScale: 1.6,
   maxL0Instances: 50000,
-  maxL0NearInstances: 20000,
   maxL1Instances: 100000,
   lodThresholdsKm: {
-    l0Near: 1000,
     l0: 3000,
     l1: 12000
   },
@@ -142,7 +134,6 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   dustAnglePower: 2,
   dustMaxSteps: 16,
   asteroidShapeDetail: 2,
-  asteroidShapeNearDetail: 3,
   shapeAmpMin: 0.08,
   shapeAmpMax: 0.22,
   shapeFreq: 1.4,
@@ -258,7 +249,6 @@ class AsteroidRingSystem extends Group {
     const cellSize = toThreeJSUnits(cfg.cellSizeKm)
     const asteroidSize = toThreeJSUnits(cfg.asteroidSizeKm)
 
-    const l0NearMaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l0Near)
     const l0MaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l0)
     const l1MaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l1)
 
@@ -287,15 +277,7 @@ class AsteroidRingSystem extends Group {
     // --- InstancePool ---
     const l0PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0Instances }
     const l1PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL1Instances }
-    const l0NearPoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0NearInstances }
-    this.pool = new InstancePool(
-      l0PoolConfig,
-      l1PoolConfig,
-      asteroidSize,
-      cfg.asteroidShapeDetail,
-      l0NearPoolConfig,
-      cfg.asteroidShapeNearDetail
-    )
+    this.pool = new InstancePool(l0PoolConfig, l1PoolConfig, asteroidSize, cfg.asteroidShapeDetail)
 
     // Добавить рендер-объекты (L0 + L1)
     for (const obj of this.pool.getRenderObjects()) {
@@ -327,7 +309,6 @@ class AsteroidRingSystem extends Group {
 
     // --- SectorManager ---
     const thresholds: LODThresholds = {
-      l0NearMaxDistance: l0NearMaxDist,
       l0MaxDistance: l0MaxDist,
       l1MaxDistance: l1MaxDist
     }
@@ -510,8 +491,7 @@ class AsteroidRingSystem extends Group {
       console.warn(
         `[AsteroidRingSystem ${this.config.ringId}] Пул инстансов исчерпан — сектора молча пропадают из рендера. ` +
           `Отказов аллокации: ${pressure.totalFailures}. ` +
-          `Занятость: L0Near ${pressure.l0Near.used}/${pressure.l0Near.capacity}, ` +
-          `L0 ${pressure.l0.used}/${pressure.l0.capacity}, L1 ${pressure.l1.used}/${pressure.l1.capacity}. ` +
+          `Занятость: L0 ${pressure.l0.used}/${pressure.l0.capacity}, L1 ${pressure.l1.used}/${pressure.l1.capacity}. ` +
           'Лечится ростом maxL*Instances или снижением asteroidDensityScale.'
       )
     }

@@ -1,7 +1,6 @@
 import { InstancePool, LODLevel } from '@/core/renderables/DetailedRingStreamingSystem/InstancePool'
 
-const makePool = (): InstancePool =>
-  new InstancePool({ maxInstances: 100 }, { maxInstances: 200 }, 1, 1, { maxInstances: 50 }, 1)
+const makePool = (): InstancePool => new InstancePool({ maxInstances: 100 }, { maxInstances: 200 }, 1, 1)
 
 describe('InstancePool: диагностика давления на пулы', () => {
   it('считает занятость по факту (не по high-water mark)', () => {
@@ -26,19 +25,18 @@ describe('InstancePool: диагностика давления на пулы', 
     const info = pool.getPressureInfo()
     expect(info.l0.failures).toBe(2)
     expect(info.l1.failures).toBe(0)
-    expect(info.l0Near.failures).toBe(0)
     expect(info.totalFailures).toBe(2)
   })
 
   it('reset() обнуляет счётчики отказов вместе с пулами', () => {
     const pool = makePool()
-    pool.allocate(LODLevel.GeometryNear, 50)
-    pool.allocate(LODLevel.GeometryNear, 1)
-    expect(pool.getPressureInfo().l0Near.failures).toBe(1)
+    pool.allocate(LODLevel.Geometry, 100)
+    pool.allocate(LODLevel.Geometry, 1)
+    expect(pool.getPressureInfo().l0.failures).toBe(1)
 
     pool.reset()
     const info = pool.getPressureInfo()
-    expect(info.l0Near.failures).toBe(0)
-    expect(info.l0Near.used).toBe(0)
+    expect(info.l0.failures).toBe(0)
+    expect(info.l0.used).toBe(0)
   })
 })
