@@ -62,10 +62,16 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     varying vec3 vViewPosition;
     varying vec3 vRingPos;
     varying vec3 vObjectPos;
-    varying float vInstanceSeed;
     varying vec3 vObjectNormal;
     varying mat3 vObjToView;
     varying float vFade;
+    // Пер-инстансные хеши сида считаются ЗДЕСЬ и едут во фрагмент готовыми:
+    // сырой сид через хеш во фрагментнике превращает ULP-джиттер интерполяции
+    // в пиксельный шум («сетка» по фасетам). Джиттер самих значений (≤1e-6 без
+    // хеш-усиления) визуально нулевой.
+    varying float vTintSeed;
+    varying vec3 vDomainOffset;
+    varying vec2 vTriOffset;
 
     #include <noiseFunctions>
     #include <asteroidShapeFunctions>
@@ -95,16 +101,27 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
 
-      // Для макро-облика (см. чанк AsteroidSurface): объектная позиция (домен) и
-      // per-instance сид (тип/тинт) — переиспользуем сид формы. Прокидываем геом.
-      // нормаль объекта (нормаль больше не возмущается процедурно) и матрицу
-      // объект→view — трипланарная деталь (см. чанк TriplanarDetail) применяется
-      // к геометрической нормали во фрагменте.
+      // Для макро-облика (см. чанк AsteroidSurface): объектная позиция (домен),
+      // геом. нормаль объекта (нормаль больше не возмущается процедурно) и
+      // матрица объект→view — трипланарная деталь (см. чанк TriplanarDetail)
+      // применяется к геометрической нормали во фрагменте.
       vObjectPos = shapedPos;
-      vInstanceSeed = shapeSeed;
       vObjectNormal = shapedNormal;
       vObjToView = normalMatrix * instanceNormalMatrix;
       vFade = instanceFade;
+
+      // Пер-инстансные хеши (см. комментарий у varyings): тинт, сдвиг домена
+      // макро-шумов, сдвиг трипланарной проекции — из сида формы
+      vTintSeed = hashSurface11(shapeSeed + 3.17);
+      vDomainOffset = vec3(
+        hashSurface11(shapeSeed + 1.1),
+        hashSurface11(shapeSeed + 2.2),
+        hashSurface11(shapeSeed + 3.3)
+      ) * 40.0;
+      vTriOffset = vec2(
+        hashSurface11(shapeSeed + 7.7),
+        hashSurface11(shapeSeed + 9.9)
+      ) * 8.0;
 
       ${ShaderChunk['logdepthbuf_vertex']}
     }
@@ -126,10 +143,13 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     varying vec3 vViewPosition;
     varying vec3 vRingPos;
     varying vec3 vObjectPos;
-    varying float vInstanceSeed;
     varying vec3 vObjectNormal;
     varying mat3 vObjToView;
     varying float vFade;
+    // Готовые пер-инстансные хеши из вершинника (анти-ULP-джиттер, см. вершинник)
+    varying float vTintSeed;
+    varying vec3 vDomainOffset;
+    varying vec2 vTriOffset;
 
     #include <noiseFunctions>
     #include <asteroidSurfaceFunctions>
@@ -160,7 +180,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
       // Макро-облик: альбедо (джиттер/мотл/maria), рельеф больше не возмущает
       // нормаль процедурно — нормаль геометрическая, деталь несёт PBR-микрослой.
-      vec3 albedo = applyAsteroidSurface(surfDir, vInstanceSeed, uRockColor, uColorJitter, uTintStrength, uMariaStrength);
+      vec3 albedo = applyAsteroidSurface(surfDir, vTintSeed, vDomainOffset, uRockColor, uColorJitter, uTintStrength, uMariaStrength);
 
       // Геометрическая объектная нормаль; трипланарная дельта нормали (ниже)
       // применяется к ней. AO — единственный источник теперь ARM-карта микрослоя.
@@ -175,10 +195,8 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       if (uDetailMapsEnabled > 0.5) {
         vec3 geomN = normalize(vObjectNormal);
         vec3 triW = triplanarWeights(geomN);
-        vec2 triOffset = vec2(
-          hashSurface11(vInstanceSeed + 7.7),
-          hashSurface11(vInstanceSeed + 9.9)
-        ) * 8.0;
+        // Сдвиг проекции — готовый хеш из вершинника (анти-ULP-джиттер)
+        vec2 triOffset = vTriOffset;
 
         // Альбедо: десатурированная структура текстуры × грейд профиля.
         // uDetailBrightness компенсирует среднюю яркость диффуза (< 1.0)

@@ -6,33 +6,23 @@
  * фотограмметрический PBR-микрослой (см. чанк TriplanarDetail) — этот чанк
  * отвечает только за крупную композицию альбедо, нормаль не трогает.
  *
+ * tintSeed/domainOffset приходят АРГУМЕНТАМИ из вершинника, а не выводятся из
+ * сида здесь: хеш-каскад от интерполированного varying'а усиливает ULP-джиттер
+ * интерполяции до пиксельного шума («сетка» по фасетам — найдено дебагом
+ * 07.2026). hashSurface11 живёт в noiseFunctions и вызывается в вершиннике.
+ *
  * Процедурные кратеры и fwidth-AA убраны решением владельца после визуальной
  * приёмки (задача 7): рядом с PBR-микрослоем «кривоватые» кратеры ухудшали
  * картинку. Кратеры вернутся врезанными в силуэт в генераторе архетипов
- * (этап 2–3 спеки docs/superpowers/specs) — там же их каверны дадут честный
- * рельеф вместо процедурного возмущения нормали.
- *
- * hashSurface11 остаётся: его использует трипланарный блок шаблона (сдвиг
- * проекции triOffset) — НЕ орфан несмотря на то, что этот чанк его почти не
- * использует сам. Зависит от snoise (chunk noiseFunctions) — фрагмент обязан
- * включить <noiseFunctions> перед <asteroidSurfaceFunctions>.
+ * (этап 2–3 спеки docs/superpowers/specs). Зависит от snoise (chunk
+ * noiseFunctions) — фрагмент обязан включить <noiseFunctions> перед
+ * <asteroidSurfaceFunctions>.
  */
 export const asteroidSurfaceFunctions = `
-  // float→float хеш для декоррелированных сидов из per-instance сида
-  float hashSurface11(float x) {
-    return fract(sin(x * 91.3458) * 47453.5453);
-  }
-
   // Композит облика: макро-альбедо (джиттер + мотл + maria). dir — нормали-
-  // зованная объектная позиция (домен); instanceSeed — per-instance константа.
-  vec3 applyAsteroidSurface(vec3 dir, float instanceSeed, vec3 baseColor, float colorJitter, float tintStrength, float mariaStrength) {
-    float tintSeed = hashSurface11(instanceSeed + 3.17);
-    vec3 domainOffset = vec3(
-      hashSurface11(instanceSeed + 1.1),
-      hashSurface11(instanceSeed + 2.2),
-      hashSurface11(instanceSeed + 3.3)
-    ) * 40.0;
-
+  // зованная объектная позиция (домен); tintSeed/domainOffset — пер-инстансные
+  // хеши, вычисленные в ВЕРШИННИКЕ (см. докблок модуля про ULP-джиттер).
+  vec3 applyAsteroidSurface(vec3 dir, float tintSeed, vec3 domainOffset, vec3 baseColor, float colorJitter, float tintStrength, float mariaStrength) {
     // База профиля + тонкий per-instance джиттер яркости + внутриповерхностный мотл
     vec3 base = baseColor * (1.0 + colorJitter * (tintSeed - 0.5) * 2.0);
     float mottle = snoise(dir * 2.0 + domainOffset);
