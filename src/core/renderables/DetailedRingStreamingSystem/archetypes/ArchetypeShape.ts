@@ -13,6 +13,20 @@ interface ArchetypePlane {
 }
 
 /**
+ * Лоб rubble-pile (морфология B): эллипсоид со своим центром и полуосями,
+ * слипающийся с другими лобами через smooth-max. Инвариант генерации:
+ * |center| < min(axes) — начало координат строго внутри каждого лоба
+ * (гарантия звёздности, см. lobeRadius).
+ */
+interface ArchetypeLobe {
+  center: [number, number, number]
+  axes: [number, number, number]
+}
+
+/** Морфология архетипа: A — осколок (fragment), B — слипшиеся лобы (rubble), C — кратеры (Task 2) */
+type ArchetypeMorphology = 'fragment' | 'rubble' | 'cratered'
+
+/**
  * Параметры архетипа-осколка (морфология A спеки): тело = эллипсоид ∩
  * пересечение полупространств (ячейка Вороного) со скруглением кромок
  * smooth-min + среднечастотный fBm. Все параметры детерминированы сидом.
@@ -21,15 +35,20 @@ interface ArchetypePlane {
  * 0 = AUTO, конструктор посчитает множитель по сетке сэмплов (Фибоначчи 512);
  * другие значения = явный множитель, используется как есть (для отключения
  * нормализации в тестах геометрии, например в тесте «чистый срез»).
+ *
+ * Для morphology: 'rubble' поля planes/axes морфологии A не используются
+ * (planes всегда [], axes — заглушка [1,1,1]); тело строится из lobes.
  */
 interface ArchetypeParams {
-  /** Полуоси эллипсоида, нормированы на единичный объём (∛(x·y·z)=1) */
+  /** Полуоси эллипсоида, нормированы на единичный объём (∛(x·y·z)=1); морфология A */
   axes: [number, number, number]
-  /** 6–12 плоскостей разлома */
+  /** 6–12 плоскостей разлома; морфология A (для rubble — []) */
   planes: ArchetypePlane[]
-  /** Радиус скругления кромок (smooth-min k): «свежесть» скола */
+  /** Лобы rubble-pile; морфология B (для fragment — []) */
+  lobes: ArchetypeLobe[]
+  /** Радиус скругления (морфология A: smooth-min кромок; морфология B: smooth-max слипания) */
   edgeRadius: number
-  /** Амплитуда среднечастотного fBm (щадящая — не съедает фасеты) */
+  /** Амплитуда среднечастотного fBm (щадящая — не съедает фасеты/лобы) */
   noiseAmp: number
   /** Частота fBm в dir-домене */
   noiseFreq: number
@@ -37,6 +56,8 @@ interface ArchetypeParams {
   seed: number
   /** Множитель нормализации (max r = 1); 0 = AUTO, другие значения = явный множитель */
   normalization: number
+  /** Морфология тела (см. ArchetypeMorphology) */
+  morphology: ArchetypeMorphology
 }
 
 /** Полиномиальный smooth-min (Quilez): физически — скол кромки радиусом k */
@@ -45,6 +66,9 @@ const smin = (a: number, b: number, k: number): number => {
   const h = Math.min(Math.max(0.5 + (0.5 * (b - a)) / k, 0), 1)
   return b * (1 - h) + a * h - k * h * (1 - h)
 }
+
+/** Полиномиальный smooth-max: «слипание» лобов rubble-pile (дуальность к smooth-min) */
+const smax = (a: number, b: number, k: number): number => -smin(-a, -b, k)
 
 /** Случайное направление, равномерное по сфере */
 const randomUnit = (rng: SeededRandom): [number, number, number] => {
@@ -59,7 +83,7 @@ const randomUnit = (rng: SeededRandom): [number, number, number] => {
  * тратит фиксированное число вызовов rng только через собственный экземпляр
  * SeededRandom → детерминизм не зависит от порядка вызовов извне.
  */
-function generateArchetypeParams(rng: SeededRandom): ArchetypeParams {
+function generateFragmentParams(rng: SeededRandom): ArchetypeParams {
   // Оси: [0.7, 1.4] с нормировкой объёма — «поза» камня (как в бывшем GPU-чанке)
   const raw: [number, number, number] = [
     0.7 + 0.7 * rng.next(),
@@ -84,12 +108,76 @@ function generateArchetypeParams(rng: SeededRandom): ArchetypeParams {
   return {
     axes,
     planes,
+    lobes: [],
     edgeRadius: rng.range(0.02, 0.08),
     noiseAmp: rng.range(0.03, 0.06),
     noiseFreq: rng.range(2.5, 4),
     seed: rng.int(1, 0x7fffffff),
-    normalization: 0
+    normalization: 0,
+    morphology: 'fragment'
   }
+}
+
+/**
+ * Сгенерировать параметры rubble-pile (морфология B): 3–7 слипшихся лобов.
+ * Полуоси каждого лоба независимы (без нормировки объёма — форма определяется
+ * их взаимным перекрытием, не единичным телом). Центр лоба — случайное
+ * направление на дальность < 0.45·min(полуось лоба): это строго меньше
+ * min(axes), поэтому начало координат гарантированно внутри лоба (см.
+ * lobeRadius — необходимо для C < 0 и, значит, звёздности каждого лоба).
+ */
+function generateRubbleParams(rng: SeededRandom): ArchetypeParams {
+  const lobeCount = rng.int(3, 7)
+  const lobes: ArchetypeLobe[] = []
+  for (let i = 0; i < lobeCount; i++) {
+    const axes: [number, number, number] = [
+      rng.range(0.45, 0.75),
+      rng.range(0.45, 0.75),
+      rng.range(0.45, 0.75)
+    ]
+    const minAxis = Math.min(axes[0], axes[1], axes[2])
+    const maxCenterMag = 0.45 * minAxis
+    const dir = randomUnit(rng)
+    // rng.next() ∈ [0, 1) → магнитуда строго < maxCenterMag ≤ 0.45·min(axes)
+    const mag = maxCenterMag * rng.next()
+    lobes.push({
+      center: [dir[0] * mag, dir[1] * mag, dir[2] * mag],
+      axes
+    })
+  }
+
+  return {
+    // Верхнеуровневый эллипсоид морфологии A не используется телом rubble
+    axes: [1, 1, 1],
+    planes: [],
+    lobes,
+    // Радиус smooth-max «слипания» лобов (переиспользует поле edgeRadius)
+    edgeRadius: rng.range(0.12, 0.2),
+    // Бугристость: заметнее, чем щадящий fBm морфологии A
+    noiseAmp: rng.range(0.06, 0.1),
+    noiseFreq: rng.range(2.5, 4),
+    seed: rng.int(1, 0x7fffffff),
+    normalization: 0,
+    morphology: 'rubble'
+  }
+}
+
+/**
+ * Сгенерировать параметры архетипа для заданной морфологии (по умолчанию —
+ * 'fragment', обратная совместимость со старыми вызовами без второго
+ * аргумента). 'cratered' — заглушка Task 2 (силуэт-кратеры ещё не реализован).
+ */
+function generateArchetypeParams(
+  rng: SeededRandom,
+  morphology: ArchetypeMorphology = 'fragment'
+): ArchetypeParams {
+  if (morphology === 'cratered') {
+    throw new Error('морфология cratered — Task 2')
+  }
+  if (morphology === 'rubble') {
+    return generateRubbleParams(rng)
+  }
+  return generateFragmentParams(rng)
 }
 
 /**
@@ -121,8 +209,22 @@ class ArchetypeShape {
     }
   }
 
-  /** Радиус до нормализации */
+  /** Радиус до нормализации: ветвление по морфологии */
   private rawRadius(dx: number, dy: number, dz: number): number {
+    switch (this.params.morphology) {
+      case 'rubble':
+        return this.rubbleRadius(dx, dy, dz)
+      case 'cratered':
+        // Task 2: силуэт-кратеры пока не реализованы
+        throw new Error('морфология cratered — Task 2')
+      case 'fragment':
+      default:
+        return this.fragmentRadius(dx, dy, dz)
+    }
+  }
+
+  /** Радиус осколка (морфология A) до нормализации */
+  private fragmentRadius(dx: number, dy: number, dz: number): number {
     const { axes, planes, edgeRadius, noiseAmp, noiseFreq, seed } = this.params
 
     // Эллипсоид в радиальной форме: r = 1 / |dir / axes|
@@ -151,6 +253,39 @@ class ArchetypeShape {
     return r
   }
 
+  /**
+   * Дальний корень |(t·d − c)/a|² = 1; начало гарантированно внутри (C < 0)
+   */
+  private lobeRadius(dx: number, dy: number, dz: number, lobe: ArchetypeLobe): number {
+    const ex = dx / lobe.axes[0], ey = dy / lobe.axes[1], ez = dz / lobe.axes[2]
+    const cx = lobe.center[0] / lobe.axes[0], cy = lobe.center[1] / lobe.axes[1], cz = lobe.center[2] / lobe.axes[2]
+    const A = ex * ex + ey * ey + ez * ez
+    const B = -2 * (ex * cx + ey * cy + ez * cz)
+    const C = cx * cx + cy * cy + cz * cz - 1
+    // C < 0 по построению параметров → дискриминант > 0, дальний корень > 0
+    return (-B + Math.sqrt(B * B - 4 * A * C)) / (2 * A)
+  }
+
+  /** Радиус rubble-pile (морфология B) до нормализации: smooth-max по лобам + fBm бугристость */
+  private rubbleRadius(dx: number, dy: number, dz: number): number {
+    const { lobes, edgeRadius, noiseAmp, noiseFreq, seed } = this.params
+
+    // Слипание лобов: smooth-max — тело растёт «наружу» по каждому лобу,
+    // а не пересекается (в отличие от smooth-min кромок морфологии A).
+    let r = this.lobeRadius(dx, dy, dz, lobes[0])
+    for (let i = 1; i < lobes.length; i++) {
+      r = smax(r, this.lobeRadius(dx, dy, dz, lobes[i]), edgeRadius)
+    }
+
+    // Бугристость поверх слипшихся лобов (тот же fBm-домен, что у морфологии A)
+    if (noiseAmp > 0) {
+      const f = fbm3({ x: dx * noiseFreq, y: dy * noiseFreq, z: dz * noiseFreq }, seed, 2, 2, 0.5)
+      r *= 1 + noiseAmp * f
+    }
+
+    return r
+  }
+
   /** Радиус по нормированному направлению; максимум по сфере ≈ 1 */
   public radiusAt(dx: number, dy: number, dz: number): number {
     return this.rawRadius(dx, dy, dz) * this.params.normalization
@@ -158,4 +293,4 @@ class ArchetypeShape {
 }
 
 export { ArchetypeShape, generateArchetypeParams }
-export type { ArchetypeParams, ArchetypePlane }
+export type { ArchetypeParams, ArchetypePlane, ArchetypeLobe, ArchetypeMorphology }

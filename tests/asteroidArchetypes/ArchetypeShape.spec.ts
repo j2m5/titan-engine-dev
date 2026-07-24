@@ -81,7 +81,9 @@ describe('ArchetypeShape.radiusAt: свойства радиальной фун�
       noiseAmp: 0,
       noiseFreq: 3,
       seed: 1,
-      normalization: 1 // без нормализации: проверяем геометрию среза как есть
+      normalization: 1, // без нормализации: проверяем геометрию среза как есть
+      morphology: 'fragment',
+      lobes: []
     })
     // Направления «в фасету»: dot(dir, n) достаточно велик → побеждает плоскость
     for (const [x, y, z] of sphereDirs(2)) {
@@ -109,9 +111,105 @@ describe('ArchetypeShape.radiusAt: свойства радиальной фун�
       noiseAmp: 0,
       noiseFreq: 3,
       seed: 1,
-      normalization: 1
+      normalization: 1,
+      morphology: 'fragment',
+      lobes: []
     })
     expect(shape.radiusAt(1, 0, 0)).toBeCloseTo(1.2, 6)
     expect(shape.radiusAt(0, 1, 0)).toBeCloseTo(0.9, 6)
+  })
+})
+
+describe('generateArchetypeParams: морфология B — rubble pile (слипшиеся эллипсоиды)', () => {
+  it('3–7 лобов, пустые planes, инвариант |center| < min(axes) для каждого лоба', () => {
+    for (let seed = 0; seed < 20; seed++) {
+      const p = generateArchetypeParams(new SeededRandom(seed), 'rubble')
+      expect(p.morphology).toBe('rubble')
+      expect(p.planes).toEqual([])
+      expect(p.lobes.length).toBeGreaterThanOrEqual(3)
+      expect(p.lobes.length).toBeLessThanOrEqual(7)
+      for (const lobe of p.lobes) {
+        const centerMag = Math.hypot(...lobe.center)
+        const minAxis = Math.min(...lobe.axes)
+        expect(centerMag).toBeLessThan(minAxis)
+      }
+    }
+  })
+
+  it('дефолт без второго аргумента — морфология fragment (обратная совместимость)', () => {
+    const p = generateArchetypeParams(new SeededRandom(5))
+    expect(p.morphology).toBe('fragment')
+    expect(p.lobes).toEqual([])
+  })
+
+  it("морфология 'cratered' пока не реализована — честная заглушка (Task 2)", () => {
+    expect(() => generateArchetypeParams(new SeededRandom(5), 'cratered')).toThrow()
+  })
+
+  it('одинаковый сид → побитово одинаковые параметры (детерминизм)', () => {
+    const a = generateArchetypeParams(new SeededRandom(42), 'rubble')
+    const b = generateArchetypeParams(new SeededRandom(42), 'rubble')
+    expect(a).toEqual(b)
+  })
+})
+
+describe('ArchetypeShape.radiusAt: морфология B — rubble pile', () => {
+  it('звёздность и нормализация генерализуются на чужую сетку (икосфера)', () => {
+    for (let seed = 0; seed < 10; seed++) {
+      const shape = new ArchetypeShape(generateArchetypeParams(new SeededRandom(seed), 'rubble'))
+      let max = 0
+      for (const [x, y, z] of sphereDirs(3)) {
+        const r = shape.radiusAt(x, y, z)
+        expect(r).toBeGreaterThan(0.15)
+        expect(r).toBeLessThanOrEqual(1.03)
+        if (r > max) max = r
+      }
+      expect(max).toBeGreaterThan(0.93)
+    }
+  })
+
+  it('детерминизм: одинаковый сид → одинаковые радиусы', () => {
+    const a = new ArchetypeShape(generateArchetypeParams(new SeededRandom(7), 'rubble'))
+    const b = new ArchetypeShape(generateArchetypeParams(new SeededRandom(7), 'rubble'))
+    for (const [x, y, z] of sphereDirs(1)) {
+      expect(a.radiusAt(x, y, z)).toBe(b.radiusAt(x, y, z))
+    }
+  })
+
+  it('один лоб без шума с центром в нуле → чистый эллипсоид (радиусы по осям = полуоси лоба)', () => {
+    const shape = new ArchetypeShape({
+      axes: [1, 1, 1],
+      planes: [],
+      lobes: [{ center: [0, 0, 0], axes: [1.2, 0.9, 0.7] }],
+      edgeRadius: 0.15,
+      noiseAmp: 0,
+      noiseFreq: 3,
+      seed: 1,
+      normalization: 1,
+      morphology: 'rubble'
+    })
+    expect(shape.radiusAt(1, 0, 0)).toBeCloseTo(1.2, 6)
+    expect(shape.radiusAt(0, 1, 0)).toBeCloseTo(0.9, 6)
+    expect(shape.radiusAt(0, 0, 1)).toBeCloseTo(0.7, 6)
+  })
+
+  it('два разнесённых лоба дают «талию»: перпендикуляр к линии центров даёт меньший радиус, чем вдоль неё', () => {
+    const shape = new ArchetypeShape({
+      axes: [1, 1, 1],
+      planes: [],
+      lobes: [
+        { center: [0.2, 0, 0], axes: [0.6, 0.6, 0.6] },
+        { center: [-0.2, 0, 0], axes: [0.6, 0.6, 0.6] }
+      ],
+      edgeRadius: 0, // жёсткий max — сравнение геометрии без сглаживания
+      noiseAmp: 0,
+      noiseFreq: 3,
+      seed: 1,
+      normalization: 1,
+      morphology: 'rubble'
+    })
+    const along = shape.radiusAt(1, 0, 0) // вдоль линии центров лобов
+    const across = shape.radiusAt(0, 1, 0) // перпендикуляр — «талия»
+    expect(across).toBeLessThan(along)
   })
 })
