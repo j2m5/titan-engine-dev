@@ -41,6 +41,13 @@ interface AsteroidRingConfig {
   maxScale: number
   /** Макс. экземпляров для L0 (geometry) буфера */
   maxL0Instances: number
+  /**
+   * Макс. экземпляров для Near (ближний тир, повышенный detail) буфера.
+   * Своя, независимая от maxL0Instances конфигурация — Near-стримы держат
+   * меньшую совокупную ёмкость: ближний тир населяет только окрестность
+   * камеры (см. план «2c — ближний тир», выбор адресуется в Task 2).
+   */
+  maxL0NearInstances: number
   /** Макс. экземпляров для L1 (billboard) буфера */
   maxL1Instances: number
   /** LOD-пороги в реальных км */
@@ -68,6 +75,13 @@ interface AsteroidRingConfig {
   dustMaxSteps: number
   /** Детализация икосферы запекания архетипа; 3 ≈ 1280 треугольников */
   asteroidShapeDetail: number
+  /**
+   * Детализация икосферы запекания архетипа для ближнего тира (Near) —
+   * отдельная, более высокая ступень detail той же библиотеки архетипов
+   * (тот же профиль/сид, см. getArchetypeGeometries). Выбор Near ещё не
+   * реализован (Task 2 плана «2c — ближний тир»), геометрии уже запекаются.
+   */
+  asteroidShapeNearDetail: number
   /**
    * Размер библиотеки запечённых архетипов (K); драуколлов K+1 (K Geometry-стримов
    * + 1 billboard). Машинерия рендера — в модельный слой (IRingRenderingObject)
@@ -130,6 +144,7 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   minScale: 0.3,
   maxScale: 1.6,
   maxL0Instances: 50000,
+  maxL0NearInstances: 20000,
   maxL1Instances: 100000,
   lodThresholdsKm: {
     l0: 3000,
@@ -143,6 +158,7 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   dustAnglePower: 2,
   dustMaxSteps: 16,
   asteroidShapeDetail: 3,
+  asteroidShapeNearDetail: 4,
   archetypeCount: 14,
   shapeAmpMin: 0.03,
   shapeAmpMax: 0.06,
@@ -286,13 +302,29 @@ class AsteroidRingSystem extends Group {
 
     // --- InstancePool ---
     const l0PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0Instances }
+    const nearPoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0NearInstances }
     const l1PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL1Instances }
     // Библиотека запечённых архетипов-осколков (план 2b, K=archetypeCount).
     // Сид каждого архетипа детерминирован профилем и его индексом → форма
     // стабильна между сессиями и кольцами (k=0 воспроизводит архетип 2a).
     const l0Geometries = getArchetypeGeometries(cfg.profile, cfg.archetypeCount, cfg.asteroidShapeDetail, asteroidSize)
+    // Та же библиотека (профиль/сид), повышенный detail — ближний тир (план 2c,
+    // выбор Near менеджером ещё не реализован, см. Task 2).
+    const nearGeometries = getArchetypeGeometries(
+      cfg.profile,
+      cfg.archetypeCount,
+      cfg.asteroidShapeNearDetail,
+      asteroidSize
+    )
 
-    this.pool = new InstancePool(l0PoolConfig, l1PoolConfig, l0Geometries, asteroidSize * 2.5)
+    this.pool = new InstancePool(
+      l0PoolConfig,
+      nearPoolConfig,
+      l1PoolConfig,
+      l0Geometries,
+      nearGeometries,
+      asteroidSize * 2.5
+    )
 
     // Добавить рендер-объекты (L0 + L1)
     for (const obj of this.pool.getRenderObjects()) {
@@ -508,7 +540,8 @@ class AsteroidRingSystem extends Group {
       console.warn(
         `[AsteroidRingSystem ${this.config.ringId}] Пул инстансов исчерпан — сектора молча пропадают из рендера. ` +
           `Отказов аллокации: ${pressure.totalFailures}. ` +
-          `Занятость: L0 ${pressure.l0.used}/${pressure.l0.capacity}, L1 ${pressure.l1.used}/${pressure.l1.capacity}. ` +
+          `Занятость: L0 ${pressure.l0.used}/${pressure.l0.capacity}, Near ${pressure.near.used}/${pressure.near.capacity}, ` +
+          `L1 ${pressure.l1.used}/${pressure.l1.capacity}. ` +
           'Лечится ростом maxL*Instances или снижением asteroidDensityScale.'
       )
     }

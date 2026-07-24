@@ -14,12 +14,17 @@ const makeGeometries = (): BoxGeometry[] =>
 
 describe('InstancePool: K инстанс-стримов (архетипы)', () => {
   it('K геометрий → K+1 рендер-объектов; все Geometry-меши делят ОДИН InstancedAsteroidMaterial', () => {
-    const pool = new InstancePool({ maxInstances: 400 }, { maxInstances: 800 }, makeGeometries(), 2.5)
+    const pool = new InstancePool(
+      { maxInstances: 400 },
+      { maxInstances: 300 },
+      { maxInstances: 800 },
+      makeGeometries(),
+      makeGeometries(),
+      2.5
+    )
 
-    expect(pool.getRenderObjects().length).toBe(K + 1)
     expect(pool.geometryMeshes.length).toBe(K)
     expect(pool.geometryStreamCount).toBe(K)
-    expect(pool.billboardStream).toBe(K)
 
     for (const mesh of pool.geometryMeshes) {
       expect(mesh.material).toBe(pool.geometryMaterial)
@@ -30,7 +35,14 @@ describe('InstancePool: K инстанс-стримов (архетипы)', () 
 
   it('ёмкость каждого Geometry-стрима = ceil((maxInstances/K)·1.5) — страховка от локальной фрагментации', () => {
     const maxInstances = 401 // не делится на K нацело — проверяет именно ceil
-    const pool = new InstancePool({ maxInstances }, { maxInstances: 100 }, makeGeometries(), 2.5)
+    const pool = new InstancePool(
+      { maxInstances },
+      { maxInstances: 300 },
+      { maxInstances: 100 },
+      makeGeometries(),
+      makeGeometries(),
+      2.5
+    )
     const expectedCapacity = Math.ceil((maxInstances / K) * 1.5)
 
     for (const mesh of pool.geometryMeshes) {
@@ -45,7 +57,14 @@ describe('InstancePool: K инстанс-стримов (архетипы)', () 
   })
 
   it('allocate/release/writeMatrices/writeFade независимы по стримам', () => {
-    const pool = new InstancePool({ maxInstances: 400 }, { maxInstances: 800 }, makeGeometries(), 2.5)
+    const pool = new InstancePool(
+      { maxInstances: 400 },
+      { maxInstances: 300 },
+      { maxInstances: 800 },
+      makeGeometries(),
+      makeGeometries(),
+      2.5
+    )
 
     const a0 = pool.allocate(0, 10)!
     const a1 = pool.allocate(1, 20)!
@@ -66,32 +85,31 @@ describe('InstancePool: K инстанс-стримов (архетипы)', () 
     expect(attr1[a1.offset]).toBeCloseTo(0.5)
   })
 
-  it('getPressureInfo суммирует по Geometry-стримам, внешняя форма ответа прежняя ({l0,l1,totalFailures})', () => {
-    const pool = new InstancePool({ maxInstances: 40 }, { maxInstances: 80 }, makeGeometries(), 2.5)
-    const perStreamCapacity = Math.ceil((40 / K) * 1.5)
-
-    pool.allocate(0, perStreamCapacity)
-    pool.allocate(1, 3)
-
-    const info = pool.getPressureInfo()
-    expect(info).toEqual({
-      l0: { used: perStreamCapacity + 3, capacity: perStreamCapacity * K, failures: 0 },
-      l1: { used: 0, capacity: 80, failures: 0 },
-      totalFailures: 0
-    })
-  })
-
   it('репро ревью: разделяемые геометрии архетипов не текут между пулами — instanceFade изолирован', () => {
     // Один и тот же массив геометрий имитирует кэш ArchetypeLibrary, который
     // отдаёт ОДНИ И ТЕ ЖЕ BufferGeometry всем системам одного профиля колец.
     const sharedGeometries = makeGeometries()
 
-    const poolA = new InstancePool({ maxInstances: 400 }, { maxInstances: 800 }, sharedGeometries, 2.5)
+    const poolA = new InstancePool(
+      { maxInstances: 400 },
+      { maxInstances: 300 },
+      { maxInstances: 800 },
+      sharedGeometries,
+      makeGeometries(),
+      2.5
+    )
     const allocA = poolA.allocate(0, 10)!
     poolA.writeFade(0, allocA.offset, allocA.count, 1.0)
     poolA.commitUpdates()
 
-    const poolB = new InstancePool({ maxInstances: 400 }, { maxInstances: 800 }, sharedGeometries, 2.5)
+    const poolB = new InstancePool(
+      { maxInstances: 400 },
+      { maxInstances: 300 },
+      { maxInstances: 800 },
+      sharedGeometries,
+      makeGeometries(),
+      2.5
+    )
 
     // Создание poolB (второго пула поверх ТЕХ ЖЕ геометрий) не стёрло fade poolA
     const fadeA = poolA.geometryMeshes[0].geometry.getAttribute('instanceFade').array as Float32Array
@@ -109,7 +127,14 @@ describe('InstancePool: K инстанс-стримов (архетипы)', () 
 
   it('копирует ВСЕ атрибуты источника по ссылке (position/normal/surfaceData), не только position/normal', () => {
     const sources = makeGeometries()
-    const pool = new InstancePool({ maxInstances: 400 }, { maxInstances: 800 }, sources, 2.5)
+    const pool = new InstancePool(
+      { maxInstances: 400 },
+      { maxInstances: 300 },
+      { maxInstances: 800 },
+      sources,
+      makeGeometries(),
+      2.5
+    )
 
     for (let k = 0; k < K; k++) {
       const meshGeometry = pool.geometryMeshes[k].geometry
@@ -123,7 +148,14 @@ describe('InstancePool: K инстанс-стримов (архетипы)', () 
   })
 
   it('отказ аллокации в одном стриме не портит остальные', () => {
-    const pool = new InstancePool({ maxInstances: 40 }, { maxInstances: 80 }, makeGeometries(), 2.5)
+    const pool = new InstancePool(
+      { maxInstances: 40 },
+      { maxInstances: 30 },
+      { maxInstances: 80 },
+      makeGeometries(),
+      makeGeometries(),
+      2.5
+    )
     const perStreamCapacity = Math.ceil((40 / K) * 1.5)
 
     pool.allocate(0, perStreamCapacity)
@@ -137,5 +169,207 @@ describe('InstancePool: K инстанс-стримов (архетипы)', () 
     const info = pool.getPressureInfo()
     expect(info.l0.failures).toBe(1)
     expect(info.l1.failures).toBe(0)
+  })
+
+  describe('Near-тир (2K+1 стримов)', () => {
+    it('конструктор бросает Error, если длины l0Geometries и nearGeometries не совпадают (обе обязаны быть K)', () => {
+      const shortNear = Array.from({ length: K - 1 }, () => new BoxGeometry(1, 1, 1))
+      expect(
+        () =>
+          new InstancePool(
+            { maxInstances: 400 },
+            { maxInstances: 300 },
+            { maxInstances: 800 },
+            makeGeometries(),
+            shortNear,
+            2.5
+          )
+      ).toThrow()
+    })
+
+    it('K геометрий l0+near → 2K+1 рендер-объектов; Near-меши делят ОДИН материал с Geometry', () => {
+      const pool = new InstancePool(
+        { maxInstances: 400 },
+        { maxInstances: 300 },
+        { maxInstances: 800 },
+        makeGeometries(),
+        makeGeometries(),
+        2.5
+      )
+
+      expect(pool.getRenderObjects().length).toBe(2 * K + 1)
+      expect(pool.nearMeshes.length).toBe(K)
+
+      for (const mesh of pool.nearMeshes) {
+        expect(mesh.material).toBe(pool.geometryMaterial)
+      }
+      const allMaterials = new Set([...pool.geometryMeshes, ...pool.nearMeshes, pool.billboardMesh].map((m) => m.material))
+      // Geometry+Near делят один материал, billboard — свой → 2 уникальных материала на 2K+1 мешей
+      expect(allMaterials.size).toBe(2)
+
+      for (let k = 0; k < K; k++) {
+        expect(pool.nearMeshes[k].name).toBe(`AsteroidPool_Near_${k}`)
+      }
+    })
+
+    it('раскладка стримов: 0..K-1 = Geometry, K..2K-1 = Near (nearStreamBase), 2K = billboard', () => {
+      const pool = new InstancePool(
+        { maxInstances: 400 },
+        { maxInstances: 300 },
+        { maxInstances: 800 },
+        makeGeometries(),
+        makeGeometries(),
+        2.5
+      )
+
+      expect(pool.nearStreamBase).toBe(K)
+      expect(pool.billboardStream).toBe(2 * K)
+
+      const nearAlloc = pool.allocate(pool.nearStreamBase, 5)!
+      expect(nearAlloc.stream).toBe(pool.nearStreamBase)
+
+      const lastNearAlloc = pool.allocate(pool.nearStreamBase + K - 1, 3)!
+      expect(lastNearAlloc.stream).toBe(2 * K - 1)
+
+      const billboardAlloc = pool.allocate(pool.billboardStream, 3)!
+      expect(billboardAlloc.stream).toBe(2 * K)
+    })
+
+    it('ёмкость каждого Near-стрима = ceil((nearConfig.maxInstances/K)·1.5) — своя формула, своя конфигурация', () => {
+      const nearMax = 301 // не делится на K нацело — проверяет именно ceil
+      const pool = new InstancePool(
+        { maxInstances: 999 }, // l0Config заведомо другой — near не должен зависеть от него
+        { maxInstances: nearMax },
+        { maxInstances: 100 },
+        makeGeometries(),
+        makeGeometries(),
+        2.5
+      )
+      const expectedCapacity = Math.ceil((nearMax / K) * 1.5)
+
+      for (const mesh of pool.nearMeshes) {
+        const attr = mesh.geometry.getAttribute('instanceFade')
+        expect(attr.count).toBe(expectedCapacity)
+      }
+
+      for (let k = 0; k < K; k++) {
+        const stream = pool.nearStreamBase + k
+        expect(pool.allocate(stream, expectedCapacity)).not.toBeNull()
+        expect(pool.allocate(stream, 1)).toBeNull() // near-стрим k заполнен под завязку
+      }
+    })
+
+    it('Near-обёртки копируют ВСЕ атрибуты источника по ссылке и получают собственный instanceFade', () => {
+      const nearSources = makeGeometries()
+      const pool = new InstancePool(
+        { maxInstances: 400 },
+        { maxInstances: 300 },
+        { maxInstances: 800 },
+        makeGeometries(),
+        nearSources,
+        2.5
+      )
+
+      for (let k = 0; k < K; k++) {
+        const meshGeometry = pool.nearMeshes[k].geometry
+        for (const name of Object.keys(nearSources[k].attributes)) {
+          expect(meshGeometry.getAttribute(name)).toBe(nearSources[k].getAttribute(name))
+        }
+        expect(nearSources[k].getAttribute('instanceFade')).toBeUndefined()
+        expect(meshGeometry.getAttribute('instanceFade')).toBeDefined()
+      }
+    })
+
+    it('изоляция fade Near-обёрток: разделяемые near-геометрии не текут между пулами (тот же паттерн, что у Geometry)', () => {
+      const sharedNear = makeGeometries()
+
+      const poolA = new InstancePool(
+        { maxInstances: 400 },
+        { maxInstances: 400 },
+        { maxInstances: 800 },
+        makeGeometries(),
+        sharedNear,
+        2.5
+      )
+      const allocA = poolA.allocate(poolA.nearStreamBase, 10)!
+      poolA.writeFade(poolA.nearStreamBase, allocA.offset, allocA.count, 1.0)
+      poolA.commitUpdates()
+
+      const poolB = new InstancePool(
+        { maxInstances: 400 },
+        { maxInstances: 400 },
+        { maxInstances: 800 },
+        makeGeometries(),
+        sharedNear,
+        2.5
+      )
+
+      // Создание poolB поверх ТЕХ ЖЕ near-геометрий не стёрло fade poolA
+      const fadeA = poolA.nearMeshes[0].geometry.getAttribute('instanceFade').array as Float32Array
+      expect(fadeA[allocA.offset]).toBeCloseTo(1.0)
+
+      const fadeAttrA = poolA.nearMeshes[0].geometry.getAttribute('instanceFade')
+      const fadeAttrB = poolB.nearMeshes[0].geometry.getAttribute('instanceFade')
+      expect(fadeAttrA).not.toBe(fadeAttrB)
+
+      const fadeB = fadeAttrB.array as Float32Array
+      expect(fadeB[allocA.offset]).toBe(0)
+    })
+
+    it('getActiveCount/getPressureInfo дают три корзины l0/near/l1, near независим от l0', () => {
+      const pool = new InstancePool(
+        { maxInstances: 40 },
+        { maxInstances: 40 },
+        { maxInstances: 80 },
+        makeGeometries(),
+        makeGeometries(),
+        2.5
+      )
+      const perStreamCapacity = Math.ceil((40 / K) * 1.5)
+
+      pool.allocate(0, perStreamCapacity)
+      pool.allocate(1, 3)
+      pool.allocate(pool.nearStreamBase, 5)
+      pool.commitUpdates()
+
+      const active = pool.getActiveCount()
+      expect(active.l0).toBe(perStreamCapacity + 3)
+      expect(active.near).toBe(5)
+      expect(active.l1).toBe(0)
+      expect(active.total).toBe(active.l0 + active.near + active.l1)
+
+      const info = pool.getPressureInfo()
+      expect(info).toEqual({
+        l0: { used: perStreamCapacity + 3, capacity: perStreamCapacity * K, failures: 0 },
+        near: { used: 5, capacity: perStreamCapacity * K, failures: 0 },
+        l1: { used: 0, capacity: 80, failures: 0 },
+        totalFailures: 0
+      })
+    })
+
+    it('отказ аллокации в Near-стриме не портит соседние Near/Geometry/billboard стримы', () => {
+      const pool = new InstancePool(
+        { maxInstances: 40 },
+        { maxInstances: 40 },
+        { maxInstances: 80 },
+        makeGeometries(),
+        makeGeometries(),
+        2.5
+      )
+      const perStreamCapacity = Math.ceil((40 / K) * 1.5)
+      const nearStream0 = pool.nearStreamBase
+
+      pool.allocate(nearStream0, perStreamCapacity)
+      expect(pool.allocate(nearStream0, 1)).toBeNull() // near-стрим 0 переполнен
+
+      expect(pool.allocate(nearStream0 + 1, perStreamCapacity)).not.toBeNull()
+      expect(pool.allocate(0, 5)).not.toBeNull()
+      expect(pool.allocate(pool.billboardStream, 10)).not.toBeNull()
+
+      const info = pool.getPressureInfo()
+      expect(info.near.failures).toBe(1)
+      expect(info.l0.failures).toBe(0)
+      expect(info.l1.failures).toBe(0)
+    })
   })
 })

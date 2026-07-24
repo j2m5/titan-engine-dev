@@ -69,9 +69,15 @@ class SectorManager {
   /** Скорость fade (доля за секунду, 1.0 = полный fade за 1 секунду) */
   private readonly fadeSpeed: number = 4.0
 
-  /** Множитель плотности instances per sector для каждого LOD */
+  /**
+   * Множитель плотности instances per sector для каждого LOD. GeometryNear
+   * пока не выбирается менеджером (Task 2 плана «2c — ближний тир») —
+   * запись нужна только для исчерпывающего индексирования по LODLevel,
+   * значение зеркалит Geometry (тот же реальный меш, другой detail).
+   */
   private readonly lodDensityMultiplier = {
     [LODLevel.Geometry]: 1.0,
+    [LODLevel.GeometryNear]: 1.0,
     [LODLevel.Billboard]: 1.5
   }
 
