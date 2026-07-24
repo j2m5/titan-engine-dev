@@ -1,4 +1,4 @@
-import { type BufferGeometry, InstancedBufferAttribute, InstancedMesh, Object3D, PlaneGeometry } from 'three'
+import { BufferGeometry, InstancedBufferAttribute, InstancedMesh, Object3D, PlaneGeometry } from 'three'
 import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
 import { BillboardAsteroidMaterial } from './BillboardAsteroidMaterial'
 
@@ -107,15 +107,27 @@ class InstancePool {
     this.streams = []
 
     for (let k = 0; k < streamCount; k++) {
-      const geometry = l0Geometries[k]
-      const mesh = new InstancedMesh(geometry, this.geometryMaterial, streamCapacity)
+      const source = l0Geometries[k]
+
+      // Обёртка над разделяемой геометрией архетипа: кэш ArchetypeLibrary отдаёт
+      // ОДНИ И ТЕ ЖЕ BufferGeometry всем системам одного профиля, а instanceFade —
+      // пер-инстансное состояние ЭТОГО пула. Тяжёлые атрибуты (position/normal)
+      // разделяются по ссылке (GPU-буфер один), fade — собственный у стрима.
+      const streamGeometry = new BufferGeometry()
+      streamGeometry.setAttribute('position', source.getAttribute('position'))
+      streamGeometry.setAttribute('normal', source.getAttribute('normal'))
+      if (source.getIndex() !== null) {
+        streamGeometry.setIndex(source.getIndex())
+      }
+      streamGeometry.setAttribute(
+        'instanceFade',
+        new InstancedBufferAttribute(new Float32Array(streamCapacity), 1)
+      )
+
+      const mesh = new InstancedMesh(streamGeometry, this.geometryMaterial, streamCapacity)
       mesh.count = 0
       mesh.frustumCulled = false
       mesh.name = `AsteroidPool_L0_${k}`
-
-      // Per-instance fade [0..1] для плавных LOD/sector-переходов (см. writeFade).
-      // Каждая геометрия — отдельный объект → атрибут вешается на СВОЮ геометрию.
-      geometry.setAttribute('instanceFade', new InstancedBufferAttribute(new Float32Array(streamCapacity), 1))
 
       this.geometryMeshes.push(mesh)
       this.streams.push({

@@ -73,6 +73,32 @@ describe('InstancePool: K инстанс-стримов (архетипы)', () 
     })
   })
 
+  it('репро ревью: разделяемые геометрии архетипов не текут между пулами — instanceFade изолирован', () => {
+    // Один и тот же массив геометрий имитирует кэш ArchetypeLibrary, который
+    // отдаёт ОДНИ И ТЕ ЖЕ BufferGeometry всем системам одного профиля колец.
+    const sharedGeometries = makeGeometries()
+
+    const poolA = new InstancePool({ maxInstances: 400 }, { maxInstances: 800 }, sharedGeometries, 2.5)
+    const allocA = poolA.allocate(0, 10)!
+    poolA.writeFade(0, allocA.offset, allocA.count, 1.0)
+    poolA.commitUpdates()
+
+    const poolB = new InstancePool({ maxInstances: 400 }, { maxInstances: 800 }, sharedGeometries, 2.5)
+
+    // Создание poolB (второго пула поверх ТЕХ ЖЕ геометрий) не стёрло fade poolA
+    const fadeA = poolA.geometryMeshes[0].geometry.getAttribute('instanceFade').array as Float32Array
+    expect(fadeA[allocA.offset]).toBeCloseTo(1.0)
+
+    // Атрибуты fade у poolA и poolB — разные объекты (собственные буферы стрима)
+    const fadeAttrA = poolA.geometryMeshes[0].geometry.getAttribute('instanceFade')
+    const fadeAttrB = poolB.geometryMeshes[0].geometry.getAttribute('instanceFade')
+    expect(fadeAttrA).not.toBe(fadeAttrB)
+
+    // poolB стартует с чистым fade — не унаследовал состояние poolA
+    const fadeB = fadeAttrB.array as Float32Array
+    expect(fadeB[allocA.offset]).toBe(0)
+  })
+
   it('отказ аллокации в одном стриме не портит остальные', () => {
     const pool = new InstancePool({ maxInstances: 40 }, { maxInstances: 80 }, makeGeometries(), 2.5)
     const perStreamCapacity = Math.ceil((40 / K) * 1.5)
