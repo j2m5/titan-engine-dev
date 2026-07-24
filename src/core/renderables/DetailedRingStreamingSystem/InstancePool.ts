@@ -1,18 +1,22 @@
-import { type BufferGeometry, InstancedBufferAttribute, InstancedMesh, Object3D, PlaneGeometry } from 'three'
+import { BufferGeometry, InstancedBufferAttribute, InstancedMesh, Object3D, PlaneGeometry } from 'three'
 import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
 import { BillboardAsteroidMaterial } from './BillboardAsteroidMaterial'
 
-/** Уровень детализации */
+/**
+ * Уровень детализации — используется МЕНЕДЖЕРОМ для решений (какой стрим
+ * Geometry/Billboard адресовать), пул больше не хранит состояние по LOD:
+ * адресация внутри пула — стримами (см. Allocation.stream).
+ */
 const enum LODLevel {
-  /** Реальная геометрия (запечённый L0-архетип), обычный detail */
+  /** Реальная геометрия (запечённый архетип), обычный detail */
   Geometry = 0,
   /** Billboard-импосторы (PlaneGeometry, camera-facing) */
   Billboard = 1
 }
 
-/** Результат аллокации */
+/** Результат аллокации. stream: 0..K-1 = архетипы Geometry, K = billboard. */
 interface Allocation {
-  lodLevel: LODLevel
+  stream: number
   offset: number
   count: number
 }
@@ -28,91 +32,114 @@ interface PoolLayerConfig {
   maxInstances: number
 }
 
+/** Внутреннее состояние одного инстанс-стрима (Geometry-архетип или billboard) */
+interface Stream {
+  mesh: InstancedMesh
+  freeList: FreeRange[]
+  /** Текущий максимальный занятый индекс (определяет .count меша) */
+  hwm: number
+  /** Счётчик отказов allocate() — диагностика исчерпания стрима */
+  failures: number
+  capacity: number
+}
+
 /**
  * InstancePool — управление GPU-ресурсами.
  *
- * Владеет двумя рендер-объектами (по одному на LOD):
- * - L0: InstancedMesh с реальной геометрией
- * - L1: InstancedMesh с PlaneGeometry (billboard)
+ * Владеет K+1 рендер-объектами:
+ * - K стримов Geometry (0..K-1): по одному InstancedMesh на архетип, ВСЕ делят
+ *   один InstancedAsteroidMaterial (K архетипов = K геометрий, но не K
+ *   материалов — иначе драуколлов было бы 2K вместо K+1).
+ * - 1 стрим Billboard (индекс K): InstancedMesh с PlaneGeometry (camera-facing).
  *
- * Каждый объект имеет pre-allocated буфер. Секторы аллоцируют диапазоны в буфере.
- * Свободное пространство управляется через free-list аллокатор.
+ * Каждый стрим имеет pre-allocated буфер. Секторы аллоцируют диапазоны в
+ * буфере нужного стрима. Свободное пространство управляется через free-list
+ * аллокатор — независимо по каждому стриму.
  *
- * Итог: 2 draw calls на всю систему экземпляров.
+ * Итог: K+1 draw calls на всю систему экземпляров.
  */
 class InstancePool {
-  /** Рендер-объект для L0 (обычный detail) */
-  public geometryMesh: InstancedMesh
-  /** Рендер-объект для L1 */
+  /** Geometry-меши, по одному на архетип (стримы 0..K-1) */
+  public readonly geometryMeshes: InstancedMesh[]
+  /** Материал, общий для ВСЕХ Geometry-мешей (один инстанс на K архетипов) */
+  public readonly geometryMaterial: InstancedAsteroidMaterial
+  /** Рендер-объект для billboard-стрима (индекс K) */
   public billboardMesh: InstancedMesh
-
-  /** LOD → InstancedMesh (единая точка выбора меша по уровню) */
-  private readonly meshes: Map<LODLevel, InstancedMesh> = new Map()
+  /** Материал billboard (хранится для доступа к uniforms) */
+  public billboardMaterial: BillboardAsteroidMaterial
 
   /** Матрица нулевого масштаба для "скрытия" освобождённых экземпляров */
   private static readonly ZERO_MATRIX = new Float32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -99999, 1])
 
-  /** Free-list для каждого LOD */
-  private freeLists: Map<LODLevel, FreeRange[]> = new Map()
-
-  /** Текущий максимальный занятый индекс для каждого LOD (определяет .count) */
-  private highWaterMark: Map<LODLevel, number> = new Map()
-
-  /** Конфиги уровней */
-  private readonly layerConfigs: Map<LODLevel, PoolLayerConfig>
-
-  /** Материал billboard (хранится для доступа к uniforms) */
-  public billboardMaterial: BillboardAsteroidMaterial
-
-  /** Dirty-флаги для отложенного commit матриц */
-  private dirtyLevels: Set<LODLevel> = new Set()
-
-  /** Dirty-флаги для отложенного commit fade-атрибута (меняется каждый кадр перехода) */
-  private dirtyFadeLevels: Set<LODLevel> = new Set()
-
   /**
-   * Счётчики отказов allocate() по LOD — диагностика исчерпания пула.
-   * Отказ проглатывается менеджером молча (сектор просто не активируется /
-   * не меняет LOD), поэтому переполнение видно только по этим счётчикам.
+   * Стримы: индексы 0..K-1 — Geometry-архетипы, индекс K (== billboardStream)
+   * — billboard. Единая адресация вместо Map<LODLevel,...>.
    */
-  private allocationFailures: Map<LODLevel, number> = new Map()
+  private readonly streams: Stream[]
+
+  /** Dirty-флаги для отложенного commit матриц, по стримам */
+  private dirtyStreams: Set<number> = new Set()
+
+  /** Dirty-флаги для отложенного commit fade-атрибута, по стримам */
+  private dirtyFadeStreams: Set<number> = new Set()
 
   /**
-   * @param l0Geometry Готовая геометрия L0 (запечённый архетип или, временно,
-   *   IcosahedronGeometry — см. вызывающий код). Пул больше не строит
-   *   геометрию сам: он отвечает только за инстансинг и аллокации, форму
-   *   астероида несёт вызывающая сторона.
-   * @param billboardSize Сторона PlaneGeometry для L1 (billboard-импостор).
+   * @param l0Geometries K готовых геометрий Geometry-архетипов (запечённые
+   *   архетипы или, временно, IcosahedronGeometry — см. вызывающий код). Пул
+   *   не строит геометрию сам: он отвечает только за инстансинг и аллокации,
+   *   форму астероидов несёт вызывающая сторона. K = l0Geometries.length.
+   * @param billboardSize Сторона PlaneGeometry для billboard-стрима.
    */
   public constructor(
     l0Config: PoolLayerConfig,
     l1Config: PoolLayerConfig,
-    l0Geometry: BufferGeometry,
+    l0Geometries: BufferGeometry[],
     billboardSize: number
   ) {
-    this.layerConfigs = new Map([
-      [LODLevel.Geometry, l0Config],
-      [LODLevel.Billboard, l1Config]
-    ])
+    const streamCount = l0Geometries.length
+    // Ёмкость КАЖДОГО Geometry-стрима больше "справедливой" доли maxInstances/K:
+    // страховка от локальной фрагментации (сектор с архетипом-меньшинством не
+    // должен упираться в потолок раньше, чем исчерпан суммарный бюджет).
+    const streamCapacity = Math.ceil((l0Config.maxInstances / streamCount) * 1.5)
 
-    // Инициализация free-lists + highWaterMark для всех уровней
-    for (const [level, config] of this.layerConfigs) {
-      this.freeLists.set(level, [{ offset: 0, count: config.maxInstances }])
-      this.highWaterMark.set(level, 0)
-      this.allocationFailures.set(level, 0)
+    this.geometryMaterial = new InstancedAsteroidMaterial()
+    this.geometryMeshes = []
+    this.streams = []
+
+    for (let k = 0; k < streamCount; k++) {
+      const source = l0Geometries[k]
+
+      // Обёртка над разделяемой геометрией архетипа: кэш ArchetypeLibrary отдаёт
+      // ОДНИ И ТЕ ЖЕ BufferGeometry всем системам одного профиля, а instanceFade —
+      // пер-инстансное состояние ЭТОГО пула. Тяжёлые атрибуты (position/normal)
+      // разделяются по ссылке (GPU-буфер один), fade — собственный у стрима.
+      const streamGeometry = new BufferGeometry()
+      streamGeometry.setAttribute('position', source.getAttribute('position'))
+      streamGeometry.setAttribute('normal', source.getAttribute('normal'))
+      if (source.getIndex() !== null) {
+        streamGeometry.setIndex(source.getIndex())
+      }
+      streamGeometry.setAttribute(
+        'instanceFade',
+        new InstancedBufferAttribute(new Float32Array(streamCapacity), 1)
+      )
+
+      const mesh = new InstancedMesh(streamGeometry, this.geometryMaterial, streamCapacity)
+      mesh.count = 0
+      mesh.frustumCulled = false
+      mesh.name = `AsteroidPool_L0_${k}`
+
+      this.geometryMeshes.push(mesh)
+      this.streams.push({
+        mesh,
+        freeList: [{ offset: 0, count: streamCapacity }],
+        hwm: 0,
+        failures: 0,
+        capacity: streamCapacity
+      })
     }
 
-    // --- L0: Geometry InstancedMesh ---
-    this.geometryMesh = new InstancedMesh(l0Geometry, new InstancedAsteroidMaterial(), l0Config.maxInstances)
-    this.geometryMesh.count = 0
-    this.geometryMesh.frustumCulled = false
-    this.geometryMesh.name = 'AsteroidPool_L0'
-
-    // Per-instance fade [0..1] для плавных LOD/sector-переходов (см. writeFade).
-    // Инициализирован нулями: слот невидим, пока сектор не проявится.
-    l0Geometry.setAttribute('instanceFade', new InstancedBufferAttribute(new Float32Array(l0Config.maxInstances), 1))
-
-    // --- L1: Billboard InstancedMesh ---
+    // --- Billboard-стрим (индекс streamCount) ---
     const l1Geometry = new PlaneGeometry(billboardSize, billboardSize)
     this.billboardMaterial = new BillboardAsteroidMaterial()
     this.billboardMesh = new InstancedMesh(l1Geometry, this.billboardMaterial, l1Config.maxInstances)
@@ -122,26 +149,37 @@ class InstancePool {
 
     l1Geometry.setAttribute('instanceFade', new InstancedBufferAttribute(new Float32Array(l1Config.maxInstances), 1))
 
-    this.meshes.set(LODLevel.Geometry, this.geometryMesh)
-    this.meshes.set(LODLevel.Billboard, this.billboardMesh)
+    this.streams.push({
+      mesh: this.billboardMesh,
+      freeList: [{ offset: 0, count: l1Config.maxInstances }],
+      hwm: 0,
+      failures: 0,
+      capacity: l1Config.maxInstances
+    })
   }
 
-  /** InstancedMesh для заданного LOD. */
-  private meshFor(lodLevel: LODLevel): InstancedMesh {
-    return this.meshes.get(lodLevel)!
+  /** Количество Geometry-стримов (K архетипов). */
+  public get geometryStreamCount(): number {
+    return this.geometryMeshes.length
   }
 
-  /** InstancedBufferAttribute fade для заданного LOD. */
-  private fadeAttribute(lodLevel: LODLevel): InstancedBufferAttribute {
-    return this.meshFor(lodLevel).geometry.getAttribute('instanceFade') as InstancedBufferAttribute
+  /** Индекс billboard-стрима (== K). */
+  public get billboardStream(): number {
+    return this.geometryMeshes.length
+  }
+
+  /** InstancedBufferAttribute fade для заданного стрима. */
+  private fadeAttribute(stream: number): InstancedBufferAttribute {
+    return this.streams[stream].mesh.geometry.getAttribute('instanceFade') as InstancedBufferAttribute
   }
 
   /**
-   * Аллоцировать диапазон в буфере для сектора.
+   * Аллоцировать диапазон в буфере стрима для сектора.
    * @returns Allocation или null если нет свободного места.
    */
-  public allocate(lodLevel: LODLevel, count: number): Allocation | null {
-    const freeList = this.freeLists.get(lodLevel)!
+  public allocate(stream: number, count: number): Allocation | null {
+    const s = this.streams[stream]
+    const freeList = s.freeList
 
     for (let i = 0; i < freeList.length; i++) {
       const range = freeList[i]
@@ -155,17 +193,16 @@ class InstancePool {
           range.count -= count
         }
 
-        const hwm = this.highWaterMark.get(lodLevel)!
         const newEnd = offset + count
-        if (newEnd > hwm) {
-          this.highWaterMark.set(lodLevel, newEnd)
+        if (newEnd > s.hwm) {
+          s.hwm = newEnd
         }
 
-        return { lodLevel, offset, count }
+        return { stream, offset, count }
       }
     }
 
-    this.allocationFailures.set(lodLevel, this.allocationFailures.get(lodLevel)! + 1)
+    s.failures++
     return null
   }
 
@@ -173,97 +210,114 @@ class InstancePool {
    * Освободить ранее аллоцированный диапазон.
    */
   public release(allocation: Allocation): void {
-    const { lodLevel, offset, count } = allocation
+    const { stream, offset, count } = allocation
 
-    this.clearInstances(lodLevel, offset, count)
+    this.clearInstances(stream, offset, count)
 
-    const freeList = this.freeLists.get(lodLevel)!
-    freeList.push({ offset, count })
-    this.defragFreeList(freeList)
-    this.recalcHighWaterMark(lodLevel)
-    this.dirtyLevels.add(lodLevel)
+    const s = this.streams[stream]
+    s.freeList.push({ offset, count })
+    this.defragFreeList(s.freeList)
+    this.recalcHighWaterMark(stream)
+    this.dirtyStreams.add(stream)
   }
 
   /**
-   * Записать матрицы экземпляров в буфер.
+   * Записать матрицы экземпляров в буфер стрима.
    */
-  public writeMatrices(lodLevel: LODLevel, offset: number, matrices: Float32Array): void {
-    const dst = this.meshFor(lodLevel).instanceMatrix.array as Float32Array
+  public writeMatrices(stream: number, offset: number, matrices: Float32Array): void {
+    const dst = this.streams[stream].mesh.instanceMatrix.array as Float32Array
     dst.set(matrices, offset * 16)
-    this.dirtyLevels.add(lodLevel)
+    this.dirtyStreams.add(stream)
   }
 
   /**
-   * Записать per-instance fade [0..1] в диапазон [offset, offset+count).
+   * Записать per-instance fade [0..1] в диапазон [offset, offset+count) стрима.
    * Значение общее для всего сектора; меняется покадрово во время перехода.
    */
-  public writeFade(lodLevel: LODLevel, offset: number, count: number, fade: number): void {
-    const attr = this.fadeAttribute(lodLevel)
+  public writeFade(stream: number, offset: number, count: number, fade: number): void {
+    const attr = this.fadeAttribute(stream)
     const dst = attr.array as Float32Array
     dst.fill(fade, offset, offset + count)
-    this.dirtyFadeLevels.add(lodLevel)
+    this.dirtyFadeStreams.add(stream)
   }
 
   /**
    * Применить все накопленные изменения к GPU-буферам.
    */
   public commitUpdates(): void {
-    for (const level of this.dirtyLevels) {
-      const mesh = this.meshFor(level)
-      mesh.instanceMatrix.needsUpdate = true
-      mesh.count = this.highWaterMark.get(level)!
+    for (const stream of this.dirtyStreams) {
+      const s = this.streams[stream]
+      s.mesh.instanceMatrix.needsUpdate = true
+      s.mesh.count = s.hwm
     }
 
-    for (const level of this.dirtyFadeLevels) {
-      this.fadeAttribute(level).needsUpdate = true
+    for (const stream of this.dirtyFadeStreams) {
+      this.fadeAttribute(stream).needsUpdate = true
     }
 
-    this.dirtyLevels.clear()
-    this.dirtyFadeLevels.clear()
+    this.dirtyStreams.clear()
+    this.dirtyFadeStreams.clear()
   }
 
   /**
-   * Получить все рендер-объекты для добавления в сцену.
+   * Получить все рендер-объекты для добавления в сцену (K+1: K Geometry + 1 billboard).
    */
   public getRenderObjects(): Object3D[] {
-    return [this.geometryMesh, this.billboardMesh]
+    return [...this.geometryMeshes, this.billboardMesh]
   }
 
   /**
    * Получить общее количество active instances по всем уровням.
+   * l0 — сумма high-water mark всех Geometry-стримов (внешняя форма не меняется).
    */
   public getActiveCount(): { l0: number; l1: number; total: number } {
-    const l0 = this.highWaterMark.get(LODLevel.Geometry)!
-    const l1 = this.highWaterMark.get(LODLevel.Billboard)!
+    let l0 = 0
+    for (let i = 0; i < this.geometryStreamCount; i++) {
+      l0 += this.streams[i].hwm
+    }
+    const l1 = this.streams[this.billboardStream].hwm
     return { l0, l1, total: l0 + l1 }
   }
 
-  /** Занятость и отказы одного LOD-пула (диагностика переполнения) */
-  private levelPressure(level: LODLevel): { used: number; capacity: number; failures: number } {
-    const capacity = this.layerConfigs.get(level)!.maxInstances
-    const free = this.freeLists.get(level)!.reduce((sum, range) => sum + range.count, 0)
-    return { used: capacity - free, capacity, failures: this.allocationFailures.get(level)! }
+  /** Занятость и отказы одного стрима (диагностика переполнения) */
+  private streamPressure(stream: number): { used: number; capacity: number; failures: number } {
+    const s = this.streams[stream]
+    const free = s.freeList.reduce((sum, range) => sum + range.count, 0)
+    return { used: s.capacity - free, capacity: s.capacity, failures: s.failures }
   }
 
   /**
    * Диагностика давления на пулы: фактическая занятость (не high-water mark)
    * и накопленные отказы allocate(). Ненулевые failures = сектора молча
    * пропадали из рендера — пора поднимать maxInstances или снижать density.
+   *
+   * ВНЕШНЯЯ ФОРМА НЕ МЕНЯЕТСЯ: l0 — СУММА used/capacity/failures по всем K
+   * Geometry-стримам (потребители — getDebugInfo/__warnOnPoolExhaustion —
+   * остаются без правок).
    */
   public getPressureInfo(): {
     l0: { used: number; capacity: number; failures: number }
     l1: { used: number; capacity: number; failures: number }
     totalFailures: number
   } {
-    const l0 = this.levelPressure(LODLevel.Geometry)
-    const l1 = this.levelPressure(LODLevel.Billboard)
+    let used = 0
+    let capacity = 0
+    let failures = 0
+    for (let i = 0; i < this.geometryStreamCount; i++) {
+      const p = this.streamPressure(i)
+      used += p.used
+      capacity += p.capacity
+      failures += p.failures
+    }
+    const l0 = { used, capacity, failures }
+    const l1 = this.streamPressure(this.billboardStream)
     return { l0, l1, totalFailures: l0.failures + l1.failures }
   }
 
   // === Private ===
 
-  private clearInstances(lodLevel: LODLevel, offset: number, count: number): void {
-    const mesh = this.meshFor(lodLevel)
+  private clearInstances(stream: number, offset: number, count: number): void {
+    const mesh = this.streams[stream].mesh
     const dst = mesh.instanceMatrix.array as Float32Array
     for (let i = 0; i < count; i++) {
       dst.set(InstancePool.ZERO_MATRIX, (offset + i) * 16)
@@ -271,9 +325,9 @@ class InstancePool {
 
     // Обнулить fade освобождённого диапазона — чтобы переиспользуемый слот не
     // унаследовал остаточную видимость до первой записи менеджером.
-    const fade = this.fadeAttribute(lodLevel).array as Float32Array
+    const fade = this.fadeAttribute(stream).array as Float32Array
     fade.fill(0, offset, offset + count)
-    this.dirtyFadeLevels.add(lodLevel)
+    this.dirtyFadeStreams.add(stream)
   }
 
   private defragFreeList(freeList: FreeRange[]): void {
@@ -292,37 +346,36 @@ class InstancePool {
     }
   }
 
-  private recalcHighWaterMark(lodLevel: LODLevel): void {
-    const maxInstances = this.layerConfigs.get(lodLevel)!.maxInstances
-    const freeList = this.freeLists.get(lodLevel)!
+  private recalcHighWaterMark(stream: number): void {
+    const s = this.streams[stream]
+    const freeList = s.freeList
 
     if (freeList.length === 0) {
-      this.highWaterMark.set(lodLevel, maxInstances)
+      s.hwm = s.capacity
       return
     }
 
     const lastFree = freeList[freeList.length - 1]
-    if (lastFree.offset + lastFree.count === maxInstances) {
-      this.highWaterMark.set(lodLevel, lastFree.offset)
+    if (lastFree.offset + lastFree.count === s.capacity) {
+      s.hwm = lastFree.offset
     } else {
-      this.highWaterMark.set(lodLevel, maxInstances)
+      s.hwm = s.capacity
     }
   }
 
   /**
-   * Полный сброс всех буферов и free-lists.
+   * Полный сброс всех буферов и free-lists (всех стримов, включая billboard).
    */
   public reset(): void {
-    for (const [level, config] of this.layerConfigs) {
-      this.freeLists.set(level, [{ offset: 0, count: config.maxInstances }])
-      this.highWaterMark.set(level, 0)
-      this.allocationFailures.set(level, 0)
+    for (const s of this.streams) {
+      s.freeList = [{ offset: 0, count: s.capacity }]
+      s.hwm = 0
+      s.failures = 0
+      s.mesh.count = 0
     }
 
-    this.geometryMesh.count = 0
-    this.billboardMesh.count = 0
-    this.dirtyLevels.clear()
-    this.dirtyFadeLevels.clear()
+    this.dirtyStreams.clear()
+    this.dirtyFadeStreams.clear()
   }
 }
 
