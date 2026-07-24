@@ -52,8 +52,36 @@ interface AsteroidRingConfig {
   maxL1Instances: number
   /** LOD-пороги в реальных км */
   lodThresholdsKm: {
+    /** Порог L0 geometry (до центра сектора) в км */
     l0: number
+    /** Порог L1 billboard (до центра сектора) в км */
     l1: number
+    /**
+     * Порог входа в ближний тир (Near, повышенная детализация) — расстояние ДО
+     * БЛИЖАЙШЕЙ ТОЧКИ сектора в км. Отличается от l0/l1 (которые считают до центра)
+     * потому что порог неполных 2500 км до центра оказался МЕНЬШЕ полудиагонали
+     * сектора (~1400 км), и тир Near никогда бы не активировался (старая история L0Near).
+     * Ближайшая точка = центр - boundingRadius (плюс полудиагональ ячейки).
+     * Дистанция в км, конвертируется в TU (Three.js Units) при setup.
+     *
+     * Гистерезис: nearExitDistance > l0Near — против осцилляций на границе.
+     */
+    l0Near: number
+    /**
+     * Порог выхода из ближнего тира (Near) — расстояние до ближайшей точки сектора
+     * в км. Используется только когда сектор уже находится в Near: если
+     * distClosest (до ближайшей точки) > nearExitDistance, начинается кросс-фейд
+     * в нижестоящий LOD (Geometry или Billboard).
+     *
+     * Гистерезис: nearExitDistance > l0Near. Например, l0Near=2500, l0NearExit=3200.
+     * Для сопоставления с l0: exit 3200 по ближайшей точке соответствует примерно
+     * 4600 км до центра (плюс полудиагональ ~1400 км). Это осознанная "липкость"
+     * Near-тира, которая регулируется визуально и может быть переопределена
+     * в конфиге конкретного кольца.
+     *
+     * Дистанция в км, конвертируется в TU при setup.
+     */
+    l0NearExit: number
   }
   /** Включена ли пылевая дымка */
   dustEnabled: boolean
@@ -148,7 +176,9 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   maxL1Instances: 100000,
   lodThresholdsKm: {
     l0: 3000,
-    l1: 12000
+    l1: 12000,
+    l0Near: 2500,
+    l0NearExit: 3200
   },
   dustEnabled: true,
   dustColor: 0x9b968c,
@@ -277,6 +307,8 @@ class AsteroidRingSystem extends Group {
 
     const l0MaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l0)
     const l1MaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l1)
+    const l0NearEnter = toThreeJSUnits(cfg.lodThresholdsKm.l0Near)
+    const l0NearExit = toThreeJSUnits(cfg.lodThresholdsKm.l0NearExit)
 
     // Радиусы кольца в three-units — для A-lite readback профиля (см. updateObject)
     this.ringInnerTU = innerRadius
@@ -360,9 +392,8 @@ class AsteroidRingSystem extends Group {
     const thresholds: LODThresholds = {
       l0MaxDistance: l0MaxDist,
       l1MaxDistance: l1MaxDist,
-      // Task 3 плана 2c выносит в конфиг
-      nearEnterDistance: toThreeJSUnits(2500),
-      nearExitDistance: toThreeJSUnits(3200)
+      nearEnterDistance: l0NearEnter,
+      nearExitDistance: l0NearExit
     }
     this.manager = new SectorManager(this.sectorGrid, this.generator, this.pool, thresholds)
 

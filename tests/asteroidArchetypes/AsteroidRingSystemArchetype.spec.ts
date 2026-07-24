@@ -8,6 +8,7 @@ vi.mock('@/core/services/ResourceStorage', () => ({
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
 import { Actor } from '@/core/models/Actor'
 import { IcosahedronGeometry } from 'three'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 const makeFakeActor = (): Actor =>
   ({
@@ -44,5 +45,37 @@ describe('AsteroidRingSystem: запечённый архетип в L0', () => 
     const u = (system as any).pool.geometryMaterial.uniforms
     expect(u.uShapeAmpMin.value).toBeCloseTo(0.03, 10)
     expect(u.uShapeAmpMax.value).toBeCloseTo(0.06, 10)
+  })
+
+  it('LOD-пороги Near-тира из конфига доходят в SectorManager', () => {
+    const system = new AsteroidRingSystem(makeFakeActor())
+    // Приватный доступ к менеджеру и его thresholds (паттерн соседних спек)
+    const manager = (system as any).manager
+    const thresholds = (manager as any).thresholds
+
+    // Дефолты: l0Near=2500, l0NearExit=3200 км
+    // Пороги конвертируются в TU при setup
+    const expectedNearEnter = toThreeJSUnits(2500)
+    const expectedNearExit = toThreeJSUnits(3200)
+
+    expect(thresholds.nearEnterDistance).toBeCloseTo(expectedNearEnter, 5)
+    expect(thresholds.nearExitDistance).toBeCloseTo(expectedNearExit, 5)
+  })
+
+  it('конфиг-override для LOD-порогов Near-тира: l0Near=100, l0NearExit=200', () => {
+    const system = new AsteroidRingSystem(makeFakeActor(), {
+      lodThresholdsKm: {
+        l0: 3000,
+        l1: 12000,
+        l0Near: 100,
+        l0NearExit: 200
+      }
+    })
+
+    const manager = (system as any).manager
+    const thresholds = (manager as any).thresholds
+
+    expect(thresholds.nearEnterDistance).toBeCloseTo(toThreeJSUnits(100), 5)
+    expect(thresholds.nearExitDistance).toBeCloseTo(toThreeJSUnits(200), 5)
   })
 })
