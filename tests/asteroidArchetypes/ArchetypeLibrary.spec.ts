@@ -1,4 +1,4 @@
-import { getArchetypeGeometries } from '@/core/renderables/DetailedRingStreamingSystem/archetypes/ArchetypeLibrary'
+import { getArchetypeGeometries, morphologyForIndex } from '@/core/renderables/DetailedRingStreamingSystem/archetypes/ArchetypeLibrary'
 import {
   ArchetypeShape,
   generateArchetypeParams
@@ -109,8 +109,13 @@ describe('getArchetypeGeometries: библиотека K архетипов с �
     expect(libNorArray).toEqual(expNorArray)
   })
 
-  // (5) Детерминизм между вызовами с разными count
-  it('первые K геометрий из count=16 и count=12 идентичны для k<12', () => {
+  // (5) Детерминизм между вызовами с разными count: сид k-го архетипа не
+  // зависит от count (проверяем воспроизведение по seed), НО с задачи 3
+  // морфология k-го архетипа определяется через morphologyForIndex(profile, k, count)
+  // — она зависит от count, поэтому геометрия одного k при разных count
+  // совпадает только там, где выбранная морфология совпадает (см. также
+  // блок describe('morphologyForIndex') ниже).
+  it('первые K геометрий из count=16 и count=12 воспроизводимы по сиду+морфологии своего count', () => {
     const profile: AsteroidProfileName = 'stony'
     const detail = 2
     const radius = 0.1
@@ -118,26 +123,89 @@ describe('getArchetypeGeometries: библиотека K архетипов с �
     const lib16 = getArchetypeGeometries(profile, 16, detail, radius)
     const lib12 = getArchetypeGeometries(profile, 12, detail, radius)
 
-    // Первые 12 элементов должны быть идентичны по сидам и геометрии
     const profileIndex = Object.keys(ASTEROID_PROFILES).indexOf(profile)
 
     for (let k = 0; k < 12; k++) {
-      // Проверяем по сидам: оба должны быть созданы с одинаковым сидом
       const seed = hashSectorKey(0xa57, k, profileIndex)
-      const rng = new SeededRandom(seed)
-      const shape = new ArchetypeShape(generateArchetypeParams(rng))
-      const expected = buildArchetypeGeometry(shape, detail, radius)
 
-      const geom16 = lib16[k]
-      const geom12 = lib12[k]
+      const rng16 = new SeededRandom(seed)
+      const shape16 = new ArchetypeShape(generateArchetypeParams(rng16, morphologyForIndex(profile, k, 16)))
+      const expected16 = buildArchetypeGeometry(shape16, detail, radius)
 
-      // Обе должны совпадать с ожидаемой
-      const geom16Pos = Array.from(geom16.getAttribute('position').array as Float32Array)
-      const geom12Pos = Array.from(geom12.getAttribute('position').array as Float32Array)
-      const expectedPos = Array.from(expected.getAttribute('position').array as Float32Array)
+      const rng12 = new SeededRandom(seed)
+      const shape12 = new ArchetypeShape(generateArchetypeParams(rng12, morphologyForIndex(profile, k, 12)))
+      const expected12 = buildArchetypeGeometry(shape12, detail, radius)
 
-      expect(geom16Pos).toEqual(expectedPos)
-      expect(geom12Pos).toEqual(expectedPos)
+      const geom16Pos = Array.from(lib16[k].getAttribute('position').array as Float32Array)
+      const geom12Pos = Array.from(lib12[k].getAttribute('position').array as Float32Array)
+
+      expect(geom16Pos).toEqual(Array.from(expected16.getAttribute('position').array as Float32Array))
+      expect(geom12Pos).toEqual(Array.from(expected12.getAttribute('position').array as Float32Array))
+
+      // Там, где морфология для этого k совпадает между count=16 и count=12
+      // (обе библиотеки согласны, какая это порода камня), геометрии
+      // по-прежнему идентичны — усечение библиотеки не «пере жёвывает» форму.
+      if (morphologyForIndex(profile, k, 16) === morphologyForIndex(profile, k, 12)) {
+        expect(geom16Pos).toEqual(geom12Pos)
+      }
+    }
+  })
+})
+
+describe('morphologyForIndex: пороговое разбиение архетипов по весам профиля', () => {
+  // (1) K=14, stony: округление даёт 8 fragment / 4 rubble / 2 cratered
+  // (round(14·0.6)=8, round(14·0.85)=12 ⇒ rubble=12-8=4, cratered=14-12=2)
+  it('stony K=14: 8 fragment, 4 rubble, 2 cratered', () => {
+    const counts = { fragment: 0, rubble: 0, cratered: 0 }
+    for (let k = 0; k < 14; k++) {
+      counts[morphologyForIndex('stony', k, 14)]++
+    }
+    expect(counts).toEqual({ fragment: 8, rubble: 4, cratered: 2 })
+  })
+
+  // (2) k=0 — всегда fragment для любого профиля (преемственность 2a/2b)
+  it('k=0 всегда fragment для всех профилей', () => {
+    const profiles: AsteroidProfileName[] = ['stony', 'carbonaceous', 'metallic', 'icy']
+    for (const profile of profiles) {
+      for (const count of [1, 2, 3, 5, 14, 16]) {
+        expect(morphologyForIndex(profile, 0, count)).toBe('fragment')
+      }
+    }
+  })
+
+  // (3) K=3: каждая морфология (вес > 0 у всех 4 профилей) представлена хотя бы раз
+  it('K=3: каждая морфология представлена хотя бы одним k для всех профилей', () => {
+    const profiles: AsteroidProfileName[] = ['stony', 'carbonaceous', 'metallic', 'icy']
+    for (const profile of profiles) {
+      const seen = new Set<string>()
+      for (let k = 0; k < 3; k++) {
+        seen.add(morphologyForIndex(profile, k, 3))
+      }
+      expect(seen).toEqual(new Set(['fragment', 'rubble', 'cratered']))
+    }
+  })
+})
+
+describe('getArchetypeGeometries: геометрии разных морфологий различаются', () => {
+  it('fragment/rubble/cratered архетипы одного профиля попарно различны', () => {
+    const detail = 2
+    const radius = 0.1
+    // K=3 у stony гарантированно даёт по одному архетипу каждой морфологии
+    // (см. morphologyForIndex K=3), поэтому k=0,1,2 — fragment, rubble, cratered.
+    const geoms = getArchetypeGeometries('stony', 3, detail, radius)
+    expect(morphologyForIndex('stony', 0, 3)).toBe('fragment')
+    expect(morphologyForIndex('stony', 1, 3)).toBe('rubble')
+    expect(morphologyForIndex('stony', 2, 3)).toBe('cratered')
+
+    const checkCount = Math.min(30, geoms[0].getAttribute('position').count)
+    const posArrays = geoms.map((g) =>
+      Array.from(g.getAttribute('position').array as Float32Array).slice(0, checkCount * 3)
+    )
+
+    for (let i = 0; i < posArrays.length; i++) {
+      for (let j = i + 1; j < posArrays.length; j++) {
+        expect(posArrays[i]).not.toEqual(posArrays[j])
+      }
     }
   })
 })

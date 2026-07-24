@@ -23,6 +23,20 @@ export interface AsteroidProfile {
   specularPower: number
   /** Тинт блика: 0 белый диэлектрик → 1 под цвет металла */
   specularTint: number
+  /**
+   * Пропорции морфологий в библиотеке архетипов породы (сумма ≈ 1):
+   * fragment — осколок Вороного (свежий скол/удар), rubble — слипшиеся
+   * лобы (гравитационная переупаковка), cratered — монолит с чашами (старая
+   * поверхность). Каменные/углистые тела чаще дробятся при столкновениях
+   * (выше fragment/rubble); металл держит форму монолита лучше камня —
+   * cratered/fragment сопоставимы с камнем, rubble ниже; лёд колется свежими
+   * расколами чаще, чем накапливает rubble-переупаковку.
+   */
+  morphologyWeights: {
+    fragment: number
+    rubble: number
+    cratered: number
+  }
 }
 
 export type AsteroidProfileName = 'stony' | 'carbonaceous' | 'metallic' | 'icy'
@@ -32,24 +46,28 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
   stony: {
     baseColor: 0x6b6157, colorJitter: 0.12, tintStrength: 0.25, mariaStrength: 0.3,
     surfaceAmbient: 0.03,
-    specularStrength: 0.05, specularPower: 8.0, specularTint: 0.0
+    specularStrength: 0.05, specularPower: 8.0, specularTint: 0.0,
+    morphologyWeights: { fragment: 0.6, rubble: 0.25, cratered: 0.15 }
   },
   // Углистый — очень тёмный, матовый
   carbonaceous: {
     baseColor: 0x2b2824, colorJitter: 0.08, tintStrength: 0.2, mariaStrength: 0.22,
     surfaceAmbient: 0.02,
-    specularStrength: 0.0, specularPower: 8.0, specularTint: 0.0
+    specularStrength: 0.0, specularPower: 8.0, specularTint: 0.0,
+    morphologyWeights: { fragment: 0.5, rubble: 0.35, cratered: 0.15 }
   },
   // Железный — тёплый серый, резкий окрашенный блик
   metallic: {
     baseColor: 0x8a8079, colorJitter: 0.1, tintStrength: 0.15, mariaStrength: 0.14,
     surfaceAmbient: 0.04,
-    specularStrength: 0.6, specularPower: 48.0, specularTint: 0.8
+    specularStrength: 0.6, specularPower: 48.0, specularTint: 0.8,
+    morphologyWeights: { fragment: 0.7, rubble: 0.15, cratered: 0.15 }
   },
   // Ледяной — голубовато-белый, мягкий блик
   icy: {
     baseColor: 0xc4d2dc, colorJitter: 0.06, tintStrength: 0.12, mariaStrength: 0.2,
     surfaceAmbient: 0.06,
-    specularStrength: 0.5, specularPower: 12.0, specularTint: 0.0
+    specularStrength: 0.5, specularPower: 12.0, specularTint: 0.0,
+    morphologyWeights: { fragment: 0.7, rubble: 0.2, cratered: 0.1 }
   }
 }
