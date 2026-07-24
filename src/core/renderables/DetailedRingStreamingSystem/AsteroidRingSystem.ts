@@ -16,6 +16,9 @@ import { RingDustVolume } from './dust/RingDustVolume'
 import { installRingDustDebug, type RockDustUniforms } from './dust/RingDustDebug'
 import { ASTEROID_PROFILES, type AsteroidProfileName } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
 import { UpdateContext } from '@/core/UpdateContext'
+import { SeededRandom, hashSectorKey } from './SeededRandom'
+import { ArchetypeShape, generateArchetypeParams } from './archetypes/ArchetypeShape'
+import { buildArchetypeGeometry } from './archetypes/ArchetypeGeometry'
 
 /**
  * Конфигурация системы астероидного кольца
@@ -33,7 +36,7 @@ interface AsteroidRingConfig {
   densityPerUnit: number
   /** ID кольца для генерации seed'ов (должен быть уникальным для каждого кольца) */
   ringId: number
-  /** Размер геометрии отдельного астероида (радиус IcosahedronGeometry в реальных км) */
+  /** Габарит отдельного астероида в реальных км (масштаб запечённого архетипа) */
   asteroidSizeKm: number
   /** Минимальный масштаб экземпляра */
   minScale: number
@@ -66,14 +69,17 @@ interface AsteroidRingConfig {
   dustAnglePower: number
   /** Бюджет шагов марша объёма */
   dustMaxSteps: number
-  /** Уровень сабдива геометрии L0 (1/2/3) — ручка отката FPS для формы */
+  /** Детализация икосферы запекания архетипа; 3 ≈ 1280 треугольников */
   asteroidShapeDetail: number
-  /** Мин. амплитуда деформации силуэта (доля радиуса; min=max=0 → форма выключена) */
+  /** Мин. амплитуда ОСТАТОЧНОЙ деформации (доля радиуса; декорреляция повторов
+   *  архетипов, НЕ формообразование — силуэт несёт запечённый меш архетипа;
+   *  min=max=0 → рябь выключена) */
   shapeAmpMin: number
-  /** Макс. амплитуда деформации силуэта (доля радиуса). Каждый инстанс берёт
-   *  своё значение из [min,max] по декоррелированному хешу позиции */
+  /** Макс. амплитуда остаточной деформации (доля радиуса). Каждый инстанс
+   *  берёт своё значение из [min,max] по декоррелированному хешу позиции —
+   *  декоррелирует визуальные повторы K одинаковых запечённых мешей */
   shapeAmpMax: number
-  /** Частота шума деформации силуэта */
+  /** Частота шума остаточной ряби (декорреляция повторов архетипов) */
   shapeFreq: number
   /** Профиль облика астероидов (см. AsteroidProfiles). Задаёт цвет/блик/etc. */
   profile: AsteroidProfileName
@@ -133,9 +139,9 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   dustNearFadeKm: 3000,
   dustAnglePower: 2,
   dustMaxSteps: 16,
-  asteroidShapeDetail: 2,
-  shapeAmpMin: 0.08,
-  shapeAmpMax: 0.22,
+  asteroidShapeDetail: 3,
+  shapeAmpMin: 0.03,
+  shapeAmpMax: 0.06,
   shapeFreq: 1.4,
   profile: 'stony',
   ringGapsFromTexture: true,
@@ -277,7 +283,14 @@ class AsteroidRingSystem extends Group {
     // --- InstancePool ---
     const l0PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0Instances }
     const l1PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL1Instances }
-    this.pool = new InstancePool(l0PoolConfig, l1PoolConfig, asteroidSize, cfg.asteroidShapeDetail)
+    // Запечённый архетип-осколок (план 2a: K=1; библиотека K=12–16 — план 2b).
+    // Сид детерминирован профилем → форма стабильна между сессиями и кольцами.
+    const profileIndex = Object.keys(ASTEROID_PROFILES).indexOf(cfg.profile)
+    const archetypeRng = new SeededRandom(hashSectorKey(0xa57, 0, profileIndex))
+    const shape = new ArchetypeShape(generateArchetypeParams(archetypeRng))
+    const l0Geometry = buildArchetypeGeometry(shape, cfg.asteroidShapeDetail, asteroidSize)
+
+    this.pool = new InstancePool(l0PoolConfig, l1PoolConfig, l0Geometry, asteroidSize * 2.5)
 
     // Добавить рендер-объекты (L0 + L1)
     for (const obj of this.pool.getRenderObjects()) {

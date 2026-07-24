@@ -20,6 +20,17 @@ describe('AsteroidShape GLSL chunk', () => {
     expect(asteroidShapeFunctions).not.toContain('uShapeAmp')
   })
 
+  it('форму больше не несёт эллипсоид/ударные бассейны — это задача запечённого архетипа', () => {
+    // Task 4 плана 2a: деформация стала остаточной (декоррелятор повторов
+    // архетипов), эллипсоид и ударные бассейны удалены целиком
+    for (const token of ['axes', 'basin', 'eNormal', 'ePos']) {
+      expect(asteroidShapeFunctions).not.toContain(token)
+    }
+    // fbm-градиент и мягкий кламп тангенциального возмущения нормали остаются
+    expect(asteroidShapeFunctions).toContain('fbmGrad(')
+    expect(asteroidShapeFunctions).toContain('gTangent')
+  })
+
   it('зарегистрирован в AppShaderChunk для резолва #include', () => {
     expect(AppShaderChunk.asteroidShapeFunctions).toBe(asteroidShapeFunctions)
   })
