@@ -44,6 +44,15 @@ export interface AsteroidProfile {
     rubble: number
     cratered: number
   }
+  /**
+   * Базовое имя PBR-сета трипланарных детальных карт (файлы вида
+   * `asteroids/<detailSet>_{diff,nor_gl,arm}_2k.jpg`). Сет пер-профильный,
+   * потому что задаёт ФАКТУРУ породы (трещины/крошка/плиты) — независимо
+   * от него цвет всё равно грейдится через uRockColor (baseColor выше).
+   * Ледяные тела получают собственную структуру поверхности (глыбы льда
+   * с трещинами) вместо общей каменной.
+   */
+  detailSet: string
 }
 
 export type AsteroidProfileName = 'stony' | 'carbonaceous' | 'metallic' | 'icy'
@@ -55,7 +64,8 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
     surfaceAmbient: 0.03,
     specularStrength: 0.05, specularPower: 8.0, specularTint: 0.0,
     freshnessBrighten: 0.15, cavityShade: 0.5,
-    morphologyWeights: { fragment: 0.6, rubble: 0.25, cratered: 0.15 }
+    morphologyWeights: { fragment: 0.6, rubble: 0.25, cratered: 0.15 },
+    detailSet: 'rock_boulder_dry'
   },
   // Углистый — очень тёмный, матовый
   carbonaceous: {
@@ -63,7 +73,8 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
     surfaceAmbient: 0.02,
     specularStrength: 0.0, specularPower: 8.0, specularTint: 0.0,
     freshnessBrighten: 0.1, cavityShade: 0.5,
-    morphologyWeights: { fragment: 0.5, rubble: 0.35, cratered: 0.15 }
+    morphologyWeights: { fragment: 0.5, rubble: 0.35, cratered: 0.15 },
+    detailSet: 'rock_boulder_dry'
   },
   // Железный — тёплый серый, резкий окрашенный блик
   metallic: {
@@ -71,7 +82,8 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
     surfaceAmbient: 0.04,
     specularStrength: 0.6, specularPower: 48.0, specularTint: 0.8,
     freshnessBrighten: 0.2, cavityShade: 0.5,
-    morphologyWeights: { fragment: 0.7, rubble: 0.15, cratered: 0.15 }
+    morphologyWeights: { fragment: 0.7, rubble: 0.15, cratered: 0.15 },
+    detailSet: 'rock_boulder_dry'
   },
   // Ледяной — голубовато-белый, мягкий блик
   icy: {
@@ -79,6 +91,7 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
     surfaceAmbient: 0.06,
     specularStrength: 0.5, specularPower: 12.0, specularTint: 0.0,
     freshnessBrighten: 0.3, cavityShade: 0.35,
-    morphologyWeights: { fragment: 0.7, rubble: 0.2, cratered: 0.1 }
+    morphologyWeights: { fragment: 0.7, rubble: 0.2, cratered: 0.1 },
+    detailSet: 'rocks_ground_04'
   }
 }

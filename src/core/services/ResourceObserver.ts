@@ -220,7 +220,10 @@ class ResourceObserver {
       'round.png',
       'asteroids/rock_boulder_dry_diff_2k.jpg',
       'asteroids/rock_boulder_dry_nor_gl_2k.jpg',
-      'asteroids/rock_boulder_dry_arm_2k.jpg'
+      'asteroids/rock_boulder_dry_arm_2k.jpg',
+      'asteroids/rocks_ground_04_diff_2k.jpg',
+      'asteroids/rocks_ground_04_nor_gl_2k.jpg',
+      'asteroids/rocks_ground_04_arm_2k.jpg'
     ]
 
     this.required = Resource.all().whereIn('path', list).toJSON()

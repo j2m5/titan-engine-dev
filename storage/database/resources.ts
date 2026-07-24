@@ -124,5 +124,8 @@ export const Resources: IResource[] = [
   { id: 118, resourceType: "bump", lifecycle: "streamable", path: "planets/StarWars/korriban/i/i_bump.jpg", lifetime: 6e4 },
   { id: 119, resourceType: "diffuse", lifecycle: "resident", path: "asteroids/rock_boulder_dry_diff_2k.jpg", lifetime: 6e4, colorSpace: "srgb" },
   { id: 120, resourceType: "bump", lifecycle: "resident", path: "asteroids/rock_boulder_dry_nor_gl_2k.jpg", lifetime: 6e4 },
-  { id: 121, resourceType: "bump", lifecycle: "resident", path: "asteroids/rock_boulder_dry_arm_2k.jpg", lifetime: 6e4 }
+  { id: 121, resourceType: "bump", lifecycle: "resident", path: "asteroids/rock_boulder_dry_arm_2k.jpg", lifetime: 6e4 },
+  { id: 122, resourceType: "diffuse", lifecycle: "resident", path: "asteroids/rocks_ground_04_diff_2k.jpg", lifetime: 6e4, colorSpace: "srgb" },
+  { id: 123, resourceType: "bump", lifecycle: "resident", path: "asteroids/rocks_ground_04_nor_gl_2k.jpg", lifetime: 6e4 },
+  { id: 124, resourceType: "bump", lifecycle: "resident", path: "asteroids/rocks_ground_04_arm_2k.jpg", lifetime: 6e4 }
 ]

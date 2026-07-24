@@ -56,4 +56,11 @@ describe('ASTEROID_PROFILES', () => {
     expect(ASTEROID_PROFILES.metallic.cavityShade).toBe(0.5)
     expect(ASTEROID_PROFILES.icy.cavityShade).toBe(0.35)
   })
+
+  it('detailSet: пер-профильный PBR-сет (фактура породы), icy — ледяной', () => {
+    expect(ASTEROID_PROFILES.stony.detailSet).toBe('rock_boulder_dry')
+    expect(ASTEROID_PROFILES.carbonaceous.detailSet).toBe('rock_boulder_dry')
+    expect(ASTEROID_PROFILES.metallic.detailSet).toBe('rock_boulder_dry')
+    expect(ASTEROID_PROFILES.icy.detailSet).toBe('rocks_ground_04')
+  })
 })
