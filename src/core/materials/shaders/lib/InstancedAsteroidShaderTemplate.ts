@@ -44,7 +44,11 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     // диапазона [min,max]; min=max=0 → форма выключена.
     uShapeAmpMin: new Uniform(0),
     uShapeAmpMax: new Uniform(0),
-    uShapeFreq: new Uniform(1)
+    uShapeFreq: new Uniform(1),
+    // Запечённые атрибуты породы (см. чанк AsteroidShape / ArchetypeShape.surfaceAt):
+    // свежий скол разлома светлее/глаже, днища кратерных чаш затенены
+    uFreshnessBrighten: new Uniform(0.15),
+    uCavityShade: new Uniform(0.5)
   },
   vertexShader: `
     ${ShaderChunk['common']}
@@ -57,6 +61,11 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
     // Per-instance fade [0..1] — плавные LOD/sector-переходы (см. InstancePool.writeFade)
     attribute float instanceFade;
+    // Запечённые атрибуты породы из библиотеки архетипов (см. ArchetypeGeometry,
+    // ArchetypeShape.surfaceAt): xy = freshness (скол разлома), cavity (кратерная
+    // чаша); zw — резервные каналы, не прокидываются во фрагмент. Геометрии без
+    // этого атрибута (WebGL default) дают (0,0,0,0) → модуляция ниже тихо нейтральна.
+    attribute vec4 surfaceData;
 
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
@@ -65,6 +74,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     varying vec3 vObjectNormal;
     varying mat3 vObjToView;
     varying float vFade;
+    varying vec2 vSurfaceData;
     // Пер-инстансные хеши сида считаются ЗДЕСЬ и едут во фрагмент готовыми:
     // сырой сид через хеш во фрагментнике превращает ULP-джиттер интерполяции
     // в пиксельный шум («сетка» по фасетам). Джиттер самих значений (≤1e-6 без
@@ -109,6 +119,9 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       vObjectNormal = shapedNormal;
       vObjToView = normalMatrix * instanceNormalMatrix;
       vFade = instanceFade;
+      // Freshness фасет разлома + cavity кратерных чаш из запекания (см. attribute
+      // выше); резервные каналы zw не прокидываем
+      vSurfaceData = surfaceData.xy;
 
       // Пер-инстансные хеши (см. комментарий у varyings): тинт, сдвиг домена
       // макро-шумов, сдвиг трипланарной проекции — из сида формы
@@ -138,6 +151,8 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uniform float uSpecularStrength;
     uniform float uSpecularPower;
     uniform float uSpecularTint;
+    uniform float uFreshnessBrighten;
+    uniform float uCavityShade;
 
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
@@ -146,6 +161,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     varying vec3 vObjectNormal;
     varying mat3 vObjToView;
     varying float vFade;
+    varying vec2 vSurfaceData;
     // Готовые пер-инстансные хеши из вершинника (анти-ULP-джиттер, см. вершинник)
     varying float vTintSeed;
     varying vec3 vDomainOffset;
@@ -217,6 +233,12 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
         specStrength *= gloss;
         specPower = max(specPower * gloss, 2.0);
       }
+
+      // Запечённые атрибуты породы: свежий скол разлома светлее и глаже
+      // (меньше реголита), днища кратеров затенены (см. ArchetypeShape.surfaceAt)
+      albedo *= 1.0 + uFreshnessBrighten * vSurfaceData.x;
+      specStrength *= 1.0 + 0.5 * vSurfaceData.x;
+      surfAO *= 1.0 - uCavityShade * vSurfaceData.y;
 
       // Объектная нормаль → view; учёт ориентации грани
       vec3 normal = normalize(vObjToView * objN);

@@ -37,6 +37,8 @@ interface InstancedAsteroidUniforms {
   uShapeAmpMin: number
   uShapeAmpMax: number
   uShapeFreq: number
+  uFreshnessBrighten: number
+  uCavityShade: number
 }
 
 class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUniforms> {
@@ -80,7 +82,11 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       uDustRadialMapScale: new Uniform(0),
       uShapeAmpMin: new Uniform(0),
       uShapeAmpMax: new Uniform(0),
-      uShapeFreq: new Uniform(1)
+      uShapeFreq: new Uniform(1),
+      // Запечённые атрибуты породы (см. чанк AsteroidShape / ArchetypeShape.surfaceAt):
+      // свежий скол разлома светлее/глаже, днища кратерных чаш затенены
+      uFreshnessBrighten: new Uniform(0.15),
+      uCavityShade: new Uniform(0.5)
     }
     this.name = 'InstancedAsteroidShader'
   }

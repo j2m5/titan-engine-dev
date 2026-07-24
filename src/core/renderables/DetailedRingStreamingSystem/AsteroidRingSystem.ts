@@ -315,6 +315,8 @@ class AsteroidRingSystem extends Group {
     l0ShapeMaterial.uniforms.uSpecularStrength.value = profile.specularStrength
     l0ShapeMaterial.uniforms.uSpecularPower.value = profile.specularPower
     l0ShapeMaterial.uniforms.uSpecularTint.value = profile.specularTint
+    l0ShapeMaterial.uniforms.uFreshnessBrighten.value = profile.freshnessBrighten
+    l0ShapeMaterial.uniforms.uCavityShade.value = profile.cavityShade
 
     // PBR-микрослой (фотограмметрические текстуры) — поверх макро-профиля
     this.__applyDetailMaps(asteroidSize)
