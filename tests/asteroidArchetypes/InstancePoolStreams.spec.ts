@@ -1,8 +1,16 @@
-import { BoxGeometry } from 'three'
+import { BoxGeometry, Float32BufferAttribute } from 'three'
 import { InstancePool } from '@/core/renderables/DetailedRingStreamingSystem/InstancePool'
 
 const K = 4
-const makeGeometries = (): BoxGeometry[] => Array.from({ length: K }, () => new BoxGeometry(1, 1, 1))
+const makeGeometries = (): BoxGeometry[] =>
+  Array.from({ length: K }, () => {
+    const g = new BoxGeometry(1, 1, 1)
+    // Атрибут-«запекание» произвольного имени (аналог surfaceData) — проверка,
+    // что пул копирует ВСЕ атрибуты источника, а не только position/normal.
+    const count = g.getAttribute('position').count
+    g.setAttribute('surfaceData', new Float32BufferAttribute(new Float32Array(count * 4), 4))
+    return g
+  })
 
 describe('InstancePool: K инстанс-стримов (архетипы)', () => {
   it('K геометрий → K+1 рендер-объектов; все Geometry-меши делят ОДИН InstancedAsteroidMaterial', () => {
@@ -97,6 +105,21 @@ describe('InstancePool: K инстанс-стримов (архетипы)', () 
     // poolB стартует с чистым fade — не унаследовал состояние poolA
     const fadeB = fadeAttrB.array as Float32Array
     expect(fadeB[allocA.offset]).toBe(0)
+  })
+
+  it('копирует ВСЕ атрибуты источника по ссылке (position/normal/surfaceData), не только position/normal', () => {
+    const sources = makeGeometries()
+    const pool = new InstancePool({ maxInstances: 400 }, { maxInstances: 800 }, sources, 2.5)
+
+    for (let k = 0; k < K; k++) {
+      const meshGeometry = pool.geometryMeshes[k].geometry
+      for (const name of Object.keys(sources[k].attributes)) {
+        expect(meshGeometry.getAttribute(name)).toBe(sources[k].getAttribute(name))
+      }
+      // instanceFade — собственный атрибут пула, не унаследован от источника
+      expect(sources[k].getAttribute('instanceFade')).toBeUndefined()
+      expect(meshGeometry.getAttribute('instanceFade')).toBeDefined()
+    }
   })
 
   it('отказ аллокации в одном стриме не портит остальные', () => {

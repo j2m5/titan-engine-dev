@@ -75,4 +75,35 @@ describe('buildArchetypeGeometry: запекание осколка', () => {
     const b = buildArchetypeGeometry(makeShape(3), 2, 1).getAttribute('position')
     expect(Array.from(a.array as Float32Array)).toEqual(Array.from(b.array as Float32Array))
   })
+
+  it('несёт атрибут surfaceData: itemSize 4, count = число вершин, freshness/cavity в [0,1], резервы 0', () => {
+    const geometry = buildArchetypeGeometry(makeShape(5), 3, 1)
+    const pos = geometry.getAttribute('position')
+    const surfaceData = geometry.getAttribute('surfaceData')
+    expect(surfaceData.itemSize).toBe(4)
+    expect(surfaceData.count).toBe(pos.count)
+    for (let i = 0; i < surfaceData.count; i++) {
+      const freshness = surfaceData.getX(i)
+      const cavity = surfaceData.getY(i)
+      expect(freshness).toBeGreaterThanOrEqual(0)
+      expect(freshness).toBeLessThanOrEqual(1)
+      expect(cavity).toBeGreaterThanOrEqual(0)
+      expect(cavity).toBeLessThanOrEqual(1)
+      expect(surfaceData.getZ(i)).toBe(0)
+      expect(surfaceData.getW(i)).toBe(0)
+    }
+  })
+
+  it('surfaceData вершины совпадает с shape.surfaceAt(направление) — не дублирующий, а тот же расчёт', () => {
+    const shape = makeShape(5)
+    const geometry = buildArchetypeGeometry(shape, 2, 1)
+    const pos = geometry.getAttribute('position')
+    const surfaceData = geometry.getAttribute('surfaceData')
+    for (let i = 0; i < pos.count; i += 3) {
+      const d = new Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)).normalize()
+      const expected = shape.surfaceAt(d.x, d.y, d.z)
+      expect(surfaceData.getX(i)).toBeCloseTo(expected.freshness, 5)
+      expect(surfaceData.getY(i)).toBeCloseTo(expected.cavity, 5)
+    }
+  })
 })

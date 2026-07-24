@@ -111,11 +111,14 @@ class InstancePool {
 
       // Обёртка над разделяемой геометрией архетипа: кэш ArchetypeLibrary отдаёт
       // ОДНИ И ТЕ ЖЕ BufferGeometry всем системам одного профиля, а instanceFade —
-      // пер-инстансное состояние ЭТОГО пула. Тяжёлые атрибуты (position/normal)
-      // разделяются по ссылке (GPU-буфер один), fade — собственный у стрима.
+      // пер-инстансное состояние ЭТОГО пула. ВСЕ read-only атрибуты источника
+      // (position/normal/surfaceData/…) разделяются по ссылке безопасно — GPU-буфер
+      // один и они не мутируются; instanceFade — единственный МУТИРУЕМЫЙ, пер-пульный
+      // атрибут, поэтому создаётся отдельно, ПОСЛЕ копирования (имена не пересекаются).
       const streamGeometry = new BufferGeometry()
-      streamGeometry.setAttribute('position', source.getAttribute('position'))
-      streamGeometry.setAttribute('normal', source.getAttribute('normal'))
+      for (const name of Object.keys(source.attributes)) {
+        streamGeometry.setAttribute(name, source.getAttribute(name))
+      }
       if (source.getIndex() !== null) {
         streamGeometry.setIndex(source.getIndex())
       }
