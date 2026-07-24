@@ -359,7 +359,10 @@ class AsteroidRingSystem extends Group {
     // --- SectorManager ---
     const thresholds: LODThresholds = {
       l0MaxDistance: l0MaxDist,
-      l1MaxDistance: l1MaxDist
+      l1MaxDistance: l1MaxDist,
+      // Task 3 плана 2c выносит в конфиг
+      nearEnterDistance: toThreeJSUnits(2500),
+      nearExitDistance: toThreeJSUnits(3200)
     }
     this.manager = new SectorManager(this.sectorGrid, this.generator, this.pool, thresholds)
 
@@ -665,7 +668,7 @@ class AsteroidRingSystem extends Group {
     totalSectors: number
     activeSectors: number
     sectorsByLod: { l0: number; l1: number }
-    instances: { l0: number; l1: number; total: number }
+    instances: ReturnType<InstancePool['getActiveCount']>
     pendingRemoval: number
     poolPressure: ReturnType<InstancePool['getPressureInfo']>
   } {
