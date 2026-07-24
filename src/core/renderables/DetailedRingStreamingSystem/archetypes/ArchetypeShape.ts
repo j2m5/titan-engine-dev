@@ -23,7 +23,19 @@ interface ArchetypeLobe {
   axes: [number, number, number]
 }
 
-/** Морфология архетипа: A — осколок (fragment), B — слипшиеся лобы (rubble), C — кратеры (Task 2) */
+/**
+ * Кратер морфологии C: центр — единичное направление на эллипсоиде;
+ * angularRadius — угловой радиус кратера в единицах (1 − cos) (см. craterProfile,
+ * u = (1 − dot(dir, center)) / angularRadius); depth — глубина чаши в долях
+ * локального радиуса эллипсоида (мультипликативная врезка в rawRadius).
+ */
+interface ArchetypeCrater {
+  center: [number, number, number]
+  angularRadius: number
+  depth: number
+}
+
+/** Морфология архетипа: A — осколок (fragment), B — слипшиеся лобы (rubble), C — кратерный монолит (cratered) */
 type ArchetypeMorphology = 'fragment' | 'rubble' | 'cratered'
 
 /**
@@ -38,15 +50,19 @@ type ArchetypeMorphology = 'fragment' | 'rubble' | 'cratered'
  *
  * Для morphology: 'rubble' поля planes/axes морфологии A не используются
  * (planes всегда [], axes — заглушка [1,1,1]); тело строится из lobes.
+ * Для 'cratered': planes и lobes всегда []; тело — эллипсоид (axes), в силуэт
+ * которого мультипликативно врезаны craters.
  */
 interface ArchetypeParams {
-  /** Полуоси эллипсоида, нормированы на единичный объём (∛(x·y·z)=1); морфология A */
+  /** Полуоси эллипсоида, нормированы на единичный объём (∛(x·y·z)=1); морфология A и C */
   axes: [number, number, number]
-  /** 6–12 плоскостей разлома; морфология A (для rubble — []) */
+  /** 6–12 плоскостей разлома; морфология A (для rubble/cratered — []) */
   planes: ArchetypePlane[]
-  /** Лобы rubble-pile; морфология B (для fragment — []) */
+  /** Лобы rubble-pile; морфология B (для fragment/cratered — []) */
   lobes: ArchetypeLobe[]
-  /** Радиус скругления (морфология A: smooth-min кромок; морфология B: smooth-max слипания) */
+  /** Кратеры, врезанные в силуэт; морфология C (для fragment/rubble — []) */
+  craters: ArchetypeCrater[]
+  /** Радиус скругления (морфология A: smooth-min кромок; морфология B: smooth-max слипания; не используется в C) */
   edgeRadius: number
   /** Амплитуда среднечастотного fBm (щадящая — не съедает фасеты/лобы) */
   noiseAmp: number
@@ -109,6 +125,7 @@ function generateFragmentParams(rng: SeededRandom): ArchetypeParams {
     axes,
     planes,
     lobes: [],
+    craters: [],
     edgeRadius: rng.range(0.02, 0.08),
     noiseAmp: rng.range(0.03, 0.06),
     noiseFreq: rng.range(2.5, 4),
@@ -151,6 +168,7 @@ function generateRubbleParams(rng: SeededRandom): ArchetypeParams {
     axes: [1, 1, 1],
     planes: [],
     lobes,
+    craters: [],
     // Радиус smooth-max «слипания» лобов (переиспользует поле edgeRadius)
     edgeRadius: rng.range(0.12, 0.2),
     // Бугристость: заметнее, чем щадящий fBm морфологии A
@@ -163,16 +181,59 @@ function generateRubbleParams(rng: SeededRandom): ArchetypeParams {
 }
 
 /**
+ * Сгенерировать параметры кратерного монолита (морфология C): эллипсоид
+ * (та же нормировка объёма, что у fragment — «поза» камня) с 2–5 кратерами,
+ * врезанными в силуэт. Центр кратера — случайное единичное направление
+ * (randomUnit), angularRadius и depth — диапазоны спеки §Task 2. planes и
+ * lobes морфологий A/B не используются (тело монолита не фасетировано и не
+ * слипается из лобов) — edgeRadius по той же причине не используется телом,
+ * храним 0 (skip smooth-min/max в rawRadius для этой морфологии).
+ */
+function generateCrateredParams(rng: SeededRandom): ArchetypeParams {
+  const raw: [number, number, number] = [
+    0.7 + 0.7 * rng.next(),
+    0.7 + 0.7 * rng.next(),
+    0.7 + 0.7 * rng.next()
+  ]
+  const norm = Math.cbrt(raw[0] * raw[1] * raw[2])
+  const axes: [number, number, number] = [raw[0] / norm, raw[1] / norm, raw[2] / norm]
+
+  const craterCount = rng.int(2, 5)
+  const craters: ArchetypeCrater[] = []
+  for (let i = 0; i < craterCount; i++) {
+    craters.push({
+      center: randomUnit(rng),
+      angularRadius: rng.range(0.25, 0.5),
+      depth: rng.range(0.08, 0.18)
+    })
+  }
+
+  return {
+    axes,
+    planes: [],
+    lobes: [],
+    craters,
+    edgeRadius: 0,
+    // Щадящий fBm, как у морфологии A — не забивает форму кратеров
+    noiseAmp: rng.range(0.05, 0.08),
+    noiseFreq: rng.range(2.5, 4),
+    seed: rng.int(1, 0x7fffffff),
+    normalization: 0,
+    morphology: 'cratered'
+  }
+}
+
+/**
  * Сгенерировать параметры архетипа для заданной морфологии (по умолчанию —
  * 'fragment', обратная совместимость со старыми вызовами без второго
- * аргумента). 'cratered' — заглушка Task 2 (силуэт-кратеры ещё не реализован).
+ * аргумента).
  */
 function generateArchetypeParams(
   rng: SeededRandom,
   morphology: ArchetypeMorphology = 'fragment'
 ): ArchetypeParams {
   if (morphology === 'cratered') {
-    throw new Error('морфология cratered — Task 2')
+    return generateCrateredParams(rng)
   }
   if (morphology === 'rubble') {
     return generateRubbleParams(rng)
@@ -215,8 +276,7 @@ class ArchetypeShape {
       case 'rubble':
         return this.rubbleRadius(dx, dy, dz)
       case 'cratered':
-        // Task 2: силуэт-кратеры пока не реализованы
-        throw new Error('морфология cratered — Task 2')
+        return this.crateredRadius(dx, dy, dz)
       case 'fragment':
       default:
         return this.fragmentRadius(dx, dy, dz)
@@ -286,6 +346,55 @@ class ArchetypeShape {
     return r
   }
 
+  /**
+   * Профиль кратера по нормированному угловому расстоянию u ∈ [0, 1] от центра
+   * (формула отработана в surface-v1 — процедурный облик L0 астероидов):
+   * bowl — параболическая чаша (отрицательна, максимум просадки в центре u=0);
+   * rim — гауссов вал вокруг u=0.9 (положителен — приподнятая кромка кратера);
+   * window — smoothstep-окно, гладко гасящее профиль к краю u∈[0.9, 1], чтобы
+   * не было разрыва производной на границе кратера.
+   */
+  private craterProfile(u: number): number {
+    if (u >= 1) return 0
+    const bowl = (u * u - 1) * 0.6
+    const rim = Math.exp(-40 * (u - 0.9) * (u - 0.9)) * 0.5
+    const t = Math.min(Math.max((u - 0.9) / 0.1, 0), 1)
+    const window = 1 - t * t * (3 - 2 * t)
+    return (bowl + rim) * window
+  }
+
+  /**
+   * Радиус кратерного монолита (морфология C) до нормализации: эллипсоид
+   * (rEll) с мультипликативной врезкой кратеров r = rEll · (1 + Σ depth·profile(u)),
+   * где u — угловое расстояние до центра кратера в долях его angularRadius.
+   * Мультипликативно к rEll — глубина в долях локального радиуса, вал не
+   * ломает нормализацию (в отличие от аддитивной врезки константной глубины).
+   */
+  private crateredRadius(dx: number, dy: number, dz: number): number {
+    const { axes, craters, noiseAmp, noiseFreq, seed } = this.params
+
+    const ex = dx / axes[0]
+    const ey = dy / axes[1]
+    const ez = dz / axes[2]
+    let r = 1 / Math.sqrt(ex * ex + ey * ey + ez * ez)
+
+    let dent = 0
+    for (const crater of craters) {
+      const dot = dx * crater.center[0] + dy * crater.center[1] + dz * crater.center[2]
+      const u = (1 - dot) / crater.angularRadius
+      dent += crater.depth * this.craterProfile(u)
+    }
+    r *= 1 + dent
+
+    // Щадящий fBm поверх врезанных кратеров (тот же домен, что у морфологий A/B)
+    if (noiseAmp > 0) {
+      const f = fbm3({ x: dx * noiseFreq, y: dy * noiseFreq, z: dz * noiseFreq }, seed, 2, 2, 0.5)
+      r *= 1 + noiseAmp * f
+    }
+
+    return r
+  }
+
   /** Радиус по нормированному направлению; максимум по сфере ≈ 1 */
   public radiusAt(dx: number, dy: number, dz: number): number {
     return this.rawRadius(dx, dy, dz) * this.params.normalization
@@ -293,4 +402,4 @@ class ArchetypeShape {
 }
 
 export { ArchetypeShape, generateArchetypeParams }
-export type { ArchetypeParams, ArchetypePlane, ArchetypeLobe, ArchetypeMorphology }
+export type { ArchetypeParams, ArchetypePlane, ArchetypeLobe, ArchetypeCrater, ArchetypeMorphology }

@@ -83,7 +83,8 @@ describe('ArchetypeShape.radiusAt: свойства радиальной фун�
       seed: 1,
       normalization: 1, // без нормализации: проверяем геометрию среза как есть
       morphology: 'fragment',
-      lobes: []
+      lobes: [],
+      craters: []
     })
     // Направления «в фасету»: dot(dir, n) достаточно велик → побеждает плоскость
     for (const [x, y, z] of sphereDirs(2)) {
@@ -113,7 +114,8 @@ describe('ArchetypeShape.radiusAt: свойства радиальной фун�
       seed: 1,
       normalization: 1,
       morphology: 'fragment',
-      lobes: []
+      lobes: [],
+      craters: []
     })
     expect(shape.radiusAt(1, 0, 0)).toBeCloseTo(1.2, 6)
     expect(shape.radiusAt(0, 1, 0)).toBeCloseTo(0.9, 6)
@@ -140,10 +142,6 @@ describe('generateArchetypeParams: морфология B — rubble pile (сл�
     const p = generateArchetypeParams(new SeededRandom(5))
     expect(p.morphology).toBe('fragment')
     expect(p.lobes).toEqual([])
-  })
-
-  it("морфология 'cratered' пока не реализована — честная заглушка (Task 2)", () => {
-    expect(() => generateArchetypeParams(new SeededRandom(5), 'cratered')).toThrow()
   })
 
   it('одинаковый сид → побитово одинаковые параметры (детерминизм)', () => {
@@ -181,6 +179,7 @@ describe('ArchetypeShape.radiusAt: морфология B — rubble pile', () =
       axes: [1, 1, 1],
       planes: [],
       lobes: [{ center: [0, 0, 0], axes: [1.2, 0.9, 0.7] }],
+      craters: [],
       edgeRadius: 0.15,
       noiseAmp: 0,
       noiseFreq: 3,
@@ -201,6 +200,7 @@ describe('ArchetypeShape.radiusAt: морфология B — rubble pile', () =
         { center: [0.2, 0, 0], axes: [0.6, 0.6, 0.6] },
         { center: [-0.2, 0, 0], axes: [0.6, 0.6, 0.6] }
       ],
+      craters: [],
       edgeRadius: 0, // жёсткий max — сравнение геометрии без сглаживания
       noiseAmp: 0,
       noiseFreq: 3,
@@ -211,5 +211,138 @@ describe('ArchetypeShape.radiusAt: морфология B — rubble pile', () =
     const along = shape.radiusAt(1, 0, 0) // вдоль линии центров лобов
     const across = shape.radiusAt(0, 1, 0) // перпендикуляр — «талия»
     expect(across).toBeLessThan(along)
+  })
+})
+
+describe('generateArchetypeParams: морфология C — кратерный монолит (силуэт-кратеры)', () => {
+  it('2–5 кратеров, единичные центры, диапазоны angularRadius/depth, planes/lobes пустые, noiseAmp в диапазоне', () => {
+    for (let seed = 0; seed < 20; seed++) {
+      const p = generateArchetypeParams(new SeededRandom(seed), 'cratered')
+      expect(p.morphology).toBe('cratered')
+      expect(p.planes).toEqual([])
+      expect(p.lobes).toEqual([])
+      expect(p.craters.length).toBeGreaterThanOrEqual(2)
+      expect(p.craters.length).toBeLessThanOrEqual(5)
+      for (const crater of p.craters) {
+        expect(Math.hypot(...crater.center)).toBeCloseTo(1, 6)
+        expect(crater.angularRadius).toBeGreaterThanOrEqual(0.25)
+        expect(crater.angularRadius).toBeLessThanOrEqual(0.5)
+        expect(crater.depth).toBeGreaterThanOrEqual(0.08)
+        expect(crater.depth).toBeLessThanOrEqual(0.18)
+      }
+      expect(p.noiseAmp).toBeGreaterThanOrEqual(0.05)
+      expect(p.noiseAmp).toBeLessThanOrEqual(0.08)
+    }
+  })
+
+  it('одинаковый сид → побитово одинаковые параметры (детерминизм)', () => {
+    const a = generateArchetypeParams(new SeededRandom(42), 'cratered')
+    const b = generateArchetypeParams(new SeededRandom(42), 'cratered')
+    expect(a).toEqual(b)
+  })
+})
+
+describe('ArchetypeShape.radiusAt: морфология C — кратерный монолит', () => {
+  it('звёздность и нормализация генерализуются на чужую сетку (икосфера)', () => {
+    for (let seed = 0; seed < 10; seed++) {
+      const shape = new ArchetypeShape(generateArchetypeParams(new SeededRandom(seed), 'cratered'))
+      let max = 0
+      for (const [x, y, z] of sphereDirs(3)) {
+        const r = shape.radiusAt(x, y, z)
+        expect(r).toBeGreaterThan(0.15)
+        expect(r).toBeLessThanOrEqual(1.03)
+        if (r > max) max = r
+      }
+      expect(max).toBeGreaterThan(0.93)
+    }
+  })
+
+  it('детерминизм: одинаковый сид → одинаковые радиусы', () => {
+    const a = new ArchetypeShape(generateArchetypeParams(new SeededRandom(7), 'cratered'))
+    const b = new ArchetypeShape(generateArchetypeParams(new SeededRandom(7), 'cratered'))
+    for (const [x, y, z] of sphereDirs(1)) {
+      expect(a.radiusAt(x, y, z)).toBe(b.radiusAt(x, y, z))
+    }
+  })
+
+  it('кратер реально врезан: в ε-окрестности центра депрессия ≥ 0.6·depth относительно формы без кратеров', () => {
+    const depth = 0.15
+    const shape = new ArchetypeShape({
+      axes: [1, 1, 1],
+      planes: [],
+      lobes: [],
+      craters: [{ center: [0, 0, 1], angularRadius: 0.3, depth }],
+      edgeRadius: 0,
+      noiseAmp: 0,
+      noiseFreq: 3,
+      seed: 1,
+      normalization: 1,
+      morphology: 'cratered'
+    })
+    // База без кратеров: единичный эллипсоид, r(0,0,1) = 1 (та же ось axes=[1,1,1])
+    const rBase = 1
+    const rCenter = shape.radiusAt(0, 0, 1) // ровно в центре кратера, u = 0
+    expect(rBase - rCenter).toBeGreaterThanOrEqual(0.6 * depth - 1e-9)
+  })
+
+  it('вал: на u ≈ 0.9 радиус чуть больше базового (rim positive)', () => {
+    const depth = 0.15
+    const angularRadius = 0.3
+    const shape = new ArchetypeShape({
+      axes: [1, 1, 1],
+      planes: [],
+      lobes: [],
+      craters: [{ center: [0, 0, 1], angularRadius, depth }],
+      edgeRadius: 0,
+      noiseAmp: 0,
+      noiseFreq: 3,
+      seed: 1,
+      normalization: 1,
+      morphology: 'cratered'
+    })
+    // Направление на угловом расстоянии u=0.9·angularRadius от центра [0,0,1]:
+    // dot(dir, center) = cos(theta) = 1 - u·angularRadius (см. rawRadius: u = (1-dot)/angularRadius)
+    const u = 0.9
+    const cosTheta = 1 - u * angularRadius
+    const sinTheta = Math.sqrt(1 - cosTheta * cosTheta)
+    const rRim = shape.radiusAt(sinTheta, 0, cosTheta)
+    const rBase = 1
+    expect(rRim).toBeGreaterThan(rBase)
+  })
+
+  it('за краем кратера (u > 1) база не тронута — радиус равен эллипсоиду без кратеров', () => {
+    const angularRadius = 0.3
+    const shapeWithCrater = new ArchetypeShape({
+      axes: [1.2, 0.9, 0.925925925925926],
+      planes: [],
+      lobes: [],
+      craters: [{ center: [0, 0, 1], angularRadius, depth: 0.15 }],
+      edgeRadius: 0,
+      noiseAmp: 0,
+      noiseFreq: 3,
+      seed: 1,
+      normalization: 1,
+      morphology: 'cratered'
+    })
+    const shapeNoCrater = new ArchetypeShape({
+      axes: [1.2, 0.9, 0.925925925925926],
+      planes: [],
+      lobes: [],
+      craters: [],
+      edgeRadius: 0,
+      noiseAmp: 0,
+      noiseFreq: 3,
+      seed: 1,
+      normalization: 1,
+      morphology: 'cratered'
+    })
+    // u = 1.1 > 1 → направление строго за краем кратера
+    const u = 1.1
+    const cosTheta = 1 - u * angularRadius
+    const sinTheta = Math.sqrt(1 - cosTheta * cosTheta)
+    expect(shapeWithCrater.radiusAt(sinTheta, 0, cosTheta)).toBeCloseTo(
+      shapeNoCrater.radiusAt(sinTheta, 0, cosTheta),
+      9
+    )
   })
 })
