@@ -1,10 +1,10 @@
-import { IcosahedronGeometry, InstancedBufferAttribute, InstancedMesh, Object3D, PlaneGeometry } from 'three'
+import { type BufferGeometry, InstancedBufferAttribute, InstancedMesh, Object3D, PlaneGeometry } from 'three'
 import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
 import { BillboardAsteroidMaterial } from './BillboardAsteroidMaterial'
 
 /** Уровень детализации */
 const enum LODLevel {
-  /** Реальная геометрия (IcosahedronGeometry), обычный detail */
+  /** Реальная геометрия (запечённый L0-архетип), обычный detail */
   Geometry = 0,
   /** Billboard-импосторы (PlaneGeometry, camera-facing) */
   Billboard = 1
@@ -77,11 +77,18 @@ class InstancePool {
    */
   private allocationFailures: Map<LODLevel, number> = new Map()
 
+  /**
+   * @param l0Geometry Готовая геометрия L0 (запечённый архетип или, временно,
+   *   IcosahedronGeometry — см. вызывающий код). Пул больше не строит
+   *   геометрию сам: он отвечает только за инстансинг и аллокации, форму
+   *   астероида несёт вызывающая сторона.
+   * @param billboardSize Сторона PlaneGeometry для L1 (billboard-импостор).
+   */
   public constructor(
     l0Config: PoolLayerConfig,
     l1Config: PoolLayerConfig,
-    asteroidGeometrySize: number,
-    l0Detail: number = 1
+    l0Geometry: BufferGeometry,
+    billboardSize: number
   ) {
     this.layerConfigs = new Map([
       [LODLevel.Geometry, l0Config],
@@ -96,8 +103,6 @@ class InstancePool {
     }
 
     // --- L0: Geometry InstancedMesh ---
-    // detail управляет неровностью силуэта после GPU-деформации (см. AsteroidShape).
-    const l0Geometry = new IcosahedronGeometry(asteroidGeometrySize, l0Detail)
     this.geometryMesh = new InstancedMesh(l0Geometry, new InstancedAsteroidMaterial(), l0Config.maxInstances)
     this.geometryMesh.count = 0
     this.geometryMesh.frustumCulled = false
@@ -108,7 +113,7 @@ class InstancePool {
     l0Geometry.setAttribute('instanceFade', new InstancedBufferAttribute(new Float32Array(l0Config.maxInstances), 1))
 
     // --- L1: Billboard InstancedMesh ---
-    const l1Geometry = new PlaneGeometry(asteroidGeometrySize * 2.5, asteroidGeometrySize * 2.5)
+    const l1Geometry = new PlaneGeometry(billboardSize, billboardSize)
     this.billboardMaterial = new BillboardAsteroidMaterial()
     this.billboardMesh = new InstancedMesh(l1Geometry, this.billboardMaterial, l1Config.maxInstances)
     this.billboardMesh.count = 0

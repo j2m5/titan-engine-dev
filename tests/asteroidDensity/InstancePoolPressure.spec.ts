@@ -1,6 +1,8 @@
+import { IcosahedronGeometry } from 'three'
 import { InstancePool, LODLevel } from '@/core/renderables/DetailedRingStreamingSystem/InstancePool'
 
-const makePool = (): InstancePool => new InstancePool({ maxInstances: 100 }, { maxInstances: 200 }, 1, 1)
+const makePool = (): InstancePool =>
+  new InstancePool({ maxInstances: 100 }, { maxInstances: 200 }, new IcosahedronGeometry(1, 1), 2.5)
 
 describe('InstancePool: диагностика давления на пулы', () => {
   it('считает занятость по факту (не по high-water mark)', () => {

@@ -1,4 +1,4 @@
-import { Color, Group, Matrix4, Object3D, PerspectiveCamera, RepeatWrapping, Vector3, type Texture } from 'three'
+import { Color, Group, IcosahedronGeometry, Matrix4, Object3D, PerspectiveCamera, RepeatWrapping, Vector3, type Texture } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
 import type { IRingRenderingObject } from '@/core/models/types'
@@ -277,7 +277,13 @@ class AsteroidRingSystem extends Group {
     // --- InstancePool ---
     const l0PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0Instances }
     const l1PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL1Instances }
-    this.pool = new InstancePool(l0PoolConfig, l1PoolConfig, asteroidSize, cfg.asteroidShapeDetail)
+    // ВРЕМЕННО (Task 5 плана 2a): здесь встанет запечённый архетип
+    this.pool = new InstancePool(
+      l0PoolConfig,
+      l1PoolConfig,
+      new IcosahedronGeometry(asteroidSize, cfg.asteroidShapeDetail),
+      asteroidSize * 2.5
+    )
 
     // Добавить рендер-объекты (L0 + L1)
     for (const obj of this.pool.getRenderObjects()) {
