@@ -16,10 +16,10 @@ const makeFakeActor = (): Actor =>
   }) as unknown as Actor
 
 describe('AsteroidRingSystem: интеграция формы', () => {
-  it('дефолтом ставит detail 2 на L0-геометрию (540 позиций)', () => {
+  it('дефолтом ставит detail 3 на L0-геометрию (960 позиций)', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
     const geom = (system as any).pool.geometryMesh.geometry
-    expect(geom.getAttribute('position').count).toBe(540)
+    expect(geom.getAttribute('position').count).toBe(960)
   })
 
   it('дефолтом кладёт диапазон амплитуды и частоту в L0-материал', () => {

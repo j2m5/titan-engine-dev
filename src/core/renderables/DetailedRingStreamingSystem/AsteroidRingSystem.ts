@@ -1,4 +1,4 @@
-import { Color, Group, IcosahedronGeometry, Matrix4, Object3D, PerspectiveCamera, RepeatWrapping, Vector3, type Texture } from 'three'
+import { Color, Group, Matrix4, Object3D, PerspectiveCamera, RepeatWrapping, Vector3, type Texture } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
 import type { IRingRenderingObject } from '@/core/models/types'
@@ -16,6 +16,9 @@ import { RingDustVolume } from './dust/RingDustVolume'
 import { installRingDustDebug, type RockDustUniforms } from './dust/RingDustDebug'
 import { ASTEROID_PROFILES, type AsteroidProfileName } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
 import { UpdateContext } from '@/core/UpdateContext'
+import { SeededRandom, hashSectorKey } from './SeededRandom'
+import { ArchetypeShape, generateArchetypeParams } from './archetypes/ArchetypeShape'
+import { buildArchetypeGeometry } from './archetypes/ArchetypeGeometry'
 
 /**
  * Конфигурация системы астероидного кольца
@@ -66,7 +69,7 @@ interface AsteroidRingConfig {
   dustAnglePower: number
   /** Бюджет шагов марша объёма */
   dustMaxSteps: number
-  /** Уровень сабдива геометрии L0 (1/2/3) — ручка отката FPS для формы */
+  /** Детализация икосферы запекания архетипа; 3 ≈ 1280 треугольников */
   asteroidShapeDetail: number
   /** Мин. амплитуда ОСТАТОЧНОЙ деформации (доля радиуса; декорреляция повторов
    *  архетипов, НЕ формообразование — силуэт несёт запечённый меш архетипа;
@@ -136,7 +139,7 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   dustNearFadeKm: 3000,
   dustAnglePower: 2,
   dustMaxSteps: 16,
-  asteroidShapeDetail: 2,
+  asteroidShapeDetail: 3,
   shapeAmpMin: 0.03,
   shapeAmpMax: 0.06,
   shapeFreq: 1.4,
@@ -280,13 +283,14 @@ class AsteroidRingSystem extends Group {
     // --- InstancePool ---
     const l0PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0Instances }
     const l1PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL1Instances }
-    // ВРЕМЕННО (Task 5 плана 2a): здесь встанет запечённый архетип
-    this.pool = new InstancePool(
-      l0PoolConfig,
-      l1PoolConfig,
-      new IcosahedronGeometry(asteroidSize, cfg.asteroidShapeDetail),
-      asteroidSize * 2.5
-    )
+    // Запечённый архетип-осколок (план 2a: K=1; библиотека K=12–16 — план 2b).
+    // Сид детерминирован профилем → форма стабильна между сессиями и кольцами.
+    const profileIndex = Object.keys(ASTEROID_PROFILES).indexOf(cfg.profile)
+    const archetypeRng = new SeededRandom(hashSectorKey(0xa57, 0, profileIndex))
+    const shape = new ArchetypeShape(generateArchetypeParams(archetypeRng))
+    const l0Geometry = buildArchetypeGeometry(shape, cfg.asteroidShapeDetail, asteroidSize)
+
+    this.pool = new InstancePool(l0PoolConfig, l1PoolConfig, l0Geometry, asteroidSize * 2.5)
 
     // Добавить рендер-объекты (L0 + L1)
     for (const obj of this.pool.getRenderObjects()) {

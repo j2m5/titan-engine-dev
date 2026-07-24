@@ -78,7 +78,22 @@ describe('AsteroidRingSystem: визуальные ручки из модель�
   it('thicknessKm и asteroidSizeKm из data влияют на генератор и геометрию', () => {
     const system = new AsteroidRingSystem(makeFakeActor({ thicknessKm: 800, asteroidSizeKm: 25 }))
     expect((system as any).generator.config.thickness).toBeCloseTo(toThreeJSUnits(800), 10)
-    expect((system as any).pool.geometryMesh.geometry.parameters.radius).toBeCloseTo(toThreeJSUnits(25), 10)
+
+    // L0-геометрия теперь запечённый архетип-осколок (BufferGeometry без .parameters) —
+    // форма зависит только от профиля, а asteroidSizeKm — чистый множитель масштаба.
+    // Проверяем пропорциональность масштаба радиусу, не завязываясь на конкретные
+    // числа вершин архетипа.
+    const baseline = new AsteroidRingSystem(makeFakeActor())
+    const maxRadius = (sys: AsteroidRingSystem): number => {
+      const pos = (sys as any).pool.geometryMesh.geometry.getAttribute('position')
+      let max = 0
+      for (let i = 0; i < pos.count; i++) {
+        const r = Math.hypot(pos.getX(i), pos.getY(i), pos.getZ(i))
+        if (r > max) max = r
+      }
+      return max
+    }
+    expect(maxRadius(system) / maxRadius(baseline)).toBeCloseTo(25 / 10, 6)
   })
 
   it('dustEnabled: false из data выключает объём дымки', () => {
