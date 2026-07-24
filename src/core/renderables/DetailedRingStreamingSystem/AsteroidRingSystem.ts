@@ -15,9 +15,7 @@ import { RingDustVolume } from './dust/RingDustVolume'
 import { installRingDustDebug, type RockDustUniforms } from './dust/RingDustDebug'
 import { ASTEROID_PROFILES, type AsteroidProfileName } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
 import { UpdateContext } from '@/core/UpdateContext'
-import { SeededRandom, hashSectorKey } from './SeededRandom'
-import { ArchetypeShape, generateArchetypeParams } from './archetypes/ArchetypeShape'
-import { buildArchetypeGeometry } from './archetypes/ArchetypeGeometry'
+import { getArchetypeGeometries } from './archetypes/ArchetypeLibrary'
 
 /**
  * Конфигурация системы астероидного кольца
@@ -70,6 +68,12 @@ interface AsteroidRingConfig {
   dustMaxSteps: number
   /** Детализация икосферы запекания архетипа; 3 ≈ 1280 треугольников */
   asteroidShapeDetail: number
+  /**
+   * Размер библиотеки запечённых архетипов (K); драуколлов K+1 (K Geometry-стримов
+   * + 1 billboard). Машинерия рендера — в модельный слой (IRingRenderingObject)
+   * не выносится, тюнится только в коде.
+   */
+  archetypeCount: number
   /** Мин. амплитуда ОСТАТОЧНОЙ деформации (доля радиуса; декорреляция повторов
    *  архетипов, НЕ формообразование — силуэт несёт запечённый меш архетипа;
    *  min=max=0 → рябь выключена) */
@@ -139,6 +143,7 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   dustAnglePower: 2,
   dustMaxSteps: 16,
   asteroidShapeDetail: 3,
+  archetypeCount: 14,
   shapeAmpMin: 0.03,
   shapeAmpMax: 0.06,
   shapeFreq: 1.4,
@@ -282,15 +287,12 @@ class AsteroidRingSystem extends Group {
     // --- InstancePool ---
     const l0PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0Instances }
     const l1PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL1Instances }
-    // Запечённый архетип-осколок (план 2a: K=1; библиотека K=12–16 — план 2b,
-    // подключается менеджером в Task 5/6). Сид детерминирован профилем → форма
-    // стабильна между сессиями и кольцами.
-    const profileIndex = Object.keys(ASTEROID_PROFILES).indexOf(cfg.profile)
-    const archetypeRng = new SeededRandom(hashSectorKey(0xa57, 0, profileIndex))
-    const shape = new ArchetypeShape(generateArchetypeParams(archetypeRng))
-    const l0Geometry = buildArchetypeGeometry(shape, cfg.asteroidShapeDetail, asteroidSize)
+    // Библиотека запечённых архетипов-осколков (план 2b, K=archetypeCount).
+    // Сид каждого архетипа детерминирован профилем и его индексом → форма
+    // стабильна между сессиями и кольцами (k=0 воспроизводит архетип 2a).
+    const l0Geometries = getArchetypeGeometries(cfg.profile, cfg.archetypeCount, cfg.asteroidShapeDetail, asteroidSize)
 
-    this.pool = new InstancePool(l0PoolConfig, l1PoolConfig, [l0Geometry], asteroidSize * 2.5)
+    this.pool = new InstancePool(l0PoolConfig, l1PoolConfig, l0Geometries, asteroidSize * 2.5)
 
     // Добавить рендер-объекты (L0 + L1)
     for (const obj of this.pool.getRenderObjects()) {
