@@ -78,4 +78,15 @@ describe('AsteroidRingSystem: запечённый архетип в L0', () => 
     expect(thresholds.nearEnterDistance).toBeCloseTo(toThreeJSUnits(100), 5)
     expect(thresholds.nearExitDistance).toBeCloseTo(toThreeJSUnits(200), 5)
   })
+
+  it('инвариант дефолтных порогов: тир Geometry достижим (l0 > l0NearExit + полудиагональ ячейки)', () => {
+    // Метрики порогов РАЗНЫЕ: Near — до ближайшей точки сектора, l0 — до центра.
+    // Если l0 ≤ l0NearExit + полудиагональ (~cellSize·0.71), окно Near полностью
+    // накрывает окно Geometry → сектора ходят Billboard↔Near, Geometry-стримы
+    // вечно пусты (находка финального ревью 2c). Дефолты обязаны держать зазор.
+    const system = new AsteroidRingSystem(makeFakeActor())
+    const cfg = (system as any).config
+    const halfDiagonalKm = cfg.cellSizeKm * Math.SQRT2 * 0.5
+    expect(cfg.lodThresholdsKm.l0).toBeGreaterThan(cfg.lodThresholdsKm.l0NearExit + halfDiagonalKm)
+  })
 })

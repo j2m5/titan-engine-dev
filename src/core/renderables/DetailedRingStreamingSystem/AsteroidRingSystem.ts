@@ -52,7 +52,13 @@ interface AsteroidRingConfig {
   maxL1Instances: number
   /** LOD-пороги в реальных км */
   lodThresholdsKm: {
-    /** Порог L0 geometry (до центра сектора) в км */
+    /**
+     * Порог L0 geometry (до ЦЕНТРА сектора) в км. ИНВАРИАНТ: l0 должен превышать
+     * l0NearExit + полудиагональ ячейки (~cellSize·0.71 ≈ 1414 км при дефолте),
+     * иначе окно Near (метрика — ближайшая точка!) полностью накрывает окно
+     * Geometry, и тир становится недостижим: сектора ходят Billboard↔Near,
+     * а Geometry-стримы вечно пусты (находка финального ревью 2c).
+     */
     l0: number
     /** Порог L1 billboard (до центра сектора) в км */
     l1: number
@@ -175,7 +181,9 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   maxL0NearInstances: 20000,
   maxL1Instances: 100000,
   lodThresholdsKm: {
-    l0: 3000,
+    // l0 > l0NearExit + полудиагональ ячейки (3200 + ~1414) — см. инвариант
+    // в докблоке типа: иначе тир Geometry недостижим
+    l0: 6000,
     l1: 12000,
     l0Near: 2500,
     l0NearExit: 3200
