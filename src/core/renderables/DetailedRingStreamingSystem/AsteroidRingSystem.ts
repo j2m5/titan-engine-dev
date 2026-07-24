@@ -471,9 +471,10 @@ class AsteroidRingSystem extends Group {
    * выключен (uDetailMapsEnabled 0), камни рендерятся прежним процедурным путём.
    */
   private __applyDetailMaps(asteroidSize: number): void {
-    const diff = resourceStorage.getTexture('asteroids/rock_boulder_dry_diff_2k.jpg')
-    const nor = resourceStorage.getTexture('asteroids/rock_boulder_dry_nor_gl_2k.jpg')
-    const arm = resourceStorage.getTexture('asteroids/rock_boulder_dry_arm_2k.jpg')
+    const set = ASTEROID_PROFILES[this.config.profile].detailSet
+    const diff = resourceStorage.getTexture(`asteroids/${set}_diff_2k.jpg`)
+    const nor = resourceStorage.getTexture(`asteroids/${set}_nor_gl_2k.jpg`)
+    const arm = resourceStorage.getTexture(`asteroids/${set}_arm_2k.jpg`)
     if (!diff || !nor || !arm) return
 
     // Текстуры уже загружены на GPU (initTexture при прелоаде) — смена wrap

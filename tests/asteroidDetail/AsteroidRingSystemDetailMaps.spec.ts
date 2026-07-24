@@ -44,6 +44,38 @@ describe('AsteroidRingSystem: PBR-микрослой (детальные тек�
   })
 })
 
+describe('AsteroidRingSystem: пер-профильный PBR-сет', () => {
+  it('профиль icy запрашивает у resourceStorage пути rocks_ground_04', async () => {
+    vi.resetModules()
+    const getTexture = vi.fn(() => fakeTexture)
+    vi.doMock('@/core/services/ResourceStorage', () => ({
+      resourceStorage: { getTexture, getTextureOrMake: () => fakeTexture }
+    }))
+    const { AsteroidRingSystem: Sys } = await import('@/core/renderables/DetailedRingStreamingSystem')
+    new Sys(makeFakeActor(), { profile: 'icy' })
+
+    const calledPaths = getTexture.mock.calls.map((args) => args[0])
+    expect(calledPaths).toContain('asteroids/rocks_ground_04_diff_2k.jpg')
+    expect(calledPaths).toContain('asteroids/rocks_ground_04_nor_gl_2k.jpg')
+    expect(calledPaths).toContain('asteroids/rocks_ground_04_arm_2k.jpg')
+  })
+
+  it('дефолтный профиль (stony) продолжает запрашивать rock_boulder_dry', async () => {
+    vi.resetModules()
+    const getTexture = vi.fn(() => fakeTexture)
+    vi.doMock('@/core/services/ResourceStorage', () => ({
+      resourceStorage: { getTexture, getTextureOrMake: () => fakeTexture }
+    }))
+    const { AsteroidRingSystem: Sys } = await import('@/core/renderables/DetailedRingStreamingSystem')
+    new Sys(makeFakeActor())
+
+    const calledPaths = getTexture.mock.calls.map((args) => args[0])
+    expect(calledPaths).toContain('asteroids/rock_boulder_dry_diff_2k.jpg')
+    expect(calledPaths).toContain('asteroids/rock_boulder_dry_nor_gl_2k.jpg')
+    expect(calledPaths).toContain('asteroids/rock_boulder_dry_arm_2k.jpg')
+  })
+})
+
 describe('AsteroidRingSystem: PBR-микрослой недоступен', () => {
   it('нет текстур → слой выключен (uDetailMapsEnabled 0)', async () => {
     vi.resetModules()
