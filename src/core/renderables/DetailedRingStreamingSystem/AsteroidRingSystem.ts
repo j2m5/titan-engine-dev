@@ -36,7 +36,7 @@ interface AsteroidRingConfig {
   densityPerUnit: number
   /** ID кольца для генерации seed'ов (должен быть уникальным для каждого кольца) */
   ringId: number
-  /** Размер геометрии отдельного астероида (радиус IcosahedronGeometry в реальных км) */
+  /** Габарит отдельного астероида в реальных км (масштаб запечённого архетипа) */
   asteroidSizeKm: number
   /** Минимальный масштаб экземпляра */
   minScale: number
