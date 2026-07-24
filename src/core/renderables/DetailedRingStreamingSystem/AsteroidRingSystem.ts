@@ -68,12 +68,15 @@ interface AsteroidRingConfig {
   dustMaxSteps: number
   /** Уровень сабдива геометрии L0 (1/2/3) — ручка отката FPS для формы */
   asteroidShapeDetail: number
-  /** Мин. амплитуда деформации силуэта (доля радиуса; min=max=0 → форма выключена) */
+  /** Мин. амплитуда ОСТАТОЧНОЙ деформации (доля радиуса; декорреляция повторов
+   *  архетипов, НЕ формообразование — силуэт несёт запечённый меш архетипа;
+   *  min=max=0 → рябь выключена) */
   shapeAmpMin: number
-  /** Макс. амплитуда деформации силуэта (доля радиуса). Каждый инстанс берёт
-   *  своё значение из [min,max] по декоррелированному хешу позиции */
+  /** Макс. амплитуда остаточной деформации (доля радиуса). Каждый инстанс
+   *  берёт своё значение из [min,max] по декоррелированному хешу позиции —
+   *  декоррелирует визуальные повторы K одинаковых запечённых мешей */
   shapeAmpMax: number
-  /** Частота шума деформации силуэта */
+  /** Частота шума остаточной ряби (декорреляция повторов архетипов) */
   shapeFreq: number
   /** Профиль облика астероидов (см. AsteroidProfiles). Задаёт цвет/блик/etc. */
   profile: AsteroidProfileName
@@ -134,8 +137,8 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   dustAnglePower: 2,
   dustMaxSteps: 16,
   asteroidShapeDetail: 2,
-  shapeAmpMin: 0.08,
-  shapeAmpMax: 0.22,
+  shapeAmpMin: 0.03,
+  shapeAmpMax: 0.06,
   shapeFreq: 1.4,
   profile: 'stony',
   ringGapsFromTexture: true,
