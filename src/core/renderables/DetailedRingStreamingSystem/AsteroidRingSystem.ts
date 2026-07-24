@@ -41,12 +41,53 @@ interface AsteroidRingConfig {
   maxScale: number
   /** Макс. экземпляров для L0 (geometry) буфера */
   maxL0Instances: number
+  /**
+   * Макс. экземпляров для Near (ближний тир, повышенный detail) буфера.
+   * Своя, независимая от maxL0Instances конфигурация — Near-стримы держат
+   * меньшую совокупную ёмкость: ближний тир населяет только окрестность
+   * камеры (см. план «2c — ближний тир», выбор адресуется в Task 2).
+   */
+  maxL0NearInstances: number
   /** Макс. экземпляров для L1 (billboard) буфера */
   maxL1Instances: number
   /** LOD-пороги в реальных км */
   lodThresholdsKm: {
+    /**
+     * Порог L0 geometry (до ЦЕНТРА сектора) в км. ИНВАРИАНТ: l0 должен превышать
+     * l0NearExit + полудиагональ ячейки (~cellSize·0.71 ≈ 1414 км при дефолте),
+     * иначе окно Near (метрика — ближайшая точка!) полностью накрывает окно
+     * Geometry, и тир становится недостижим: сектора ходят Billboard↔Near,
+     * а Geometry-стримы вечно пусты (находка финального ревью 2c).
+     */
     l0: number
+    /** Порог L1 billboard (до центра сектора) в км */
     l1: number
+    /**
+     * Порог входа в ближний тир (Near, повышенная детализация) — расстояние ДО
+     * БЛИЖАЙШЕЙ ТОЧКИ сектора в км. Отличается от l0/l1 (которые считают до центра)
+     * потому что порог неполных 2500 км до центра оказался МЕНЬШЕ полудиагонали
+     * сектора (~1400 км), и тир Near никогда бы не активировался (старая история L0Near).
+     * Ближайшая точка = центр - boundingRadius (плюс полудиагональ ячейки).
+     * Дистанция в км, конвертируется в TU (Three.js Units) при setup.
+     *
+     * Гистерезис: nearExitDistance > l0Near — против осцилляций на границе.
+     */
+    l0Near: number
+    /**
+     * Порог выхода из ближнего тира (Near) — расстояние до ближайшей точки сектора
+     * в км. Используется только когда сектор уже находится в Near: если
+     * distClosest (до ближайшей точки) > nearExitDistance, начинается кросс-фейд
+     * в нижестоящий LOD (Geometry или Billboard).
+     *
+     * Гистерезис: nearExitDistance > l0Near. Например, l0Near=2500, l0NearExit=3200.
+     * Для сопоставления с l0: exit 3200 по ближайшей точке соответствует примерно
+     * 4600 км до центра (плюс полудиагональ ~1400 км). Это осознанная "липкость"
+     * Near-тира, которая регулируется визуально и может быть переопределена
+     * в конфиге конкретного кольца.
+     *
+     * Дистанция в км, конвертируется в TU при setup.
+     */
+    l0NearExit: number
   }
   /** Включена ли пылевая дымка */
   dustEnabled: boolean
@@ -68,6 +109,13 @@ interface AsteroidRingConfig {
   dustMaxSteps: number
   /** Детализация икосферы запекания архетипа; 3 ≈ 1280 треугольников */
   asteroidShapeDetail: number
+  /**
+   * Детализация икосферы запекания архетипа для ближнего тира (Near) —
+   * отдельная, более высокая ступень detail той же библиотеки архетипов
+   * (тот же профиль/сид, см. getArchetypeGeometries). Выбор Near ещё не
+   * реализован (Task 2 плана «2c — ближний тир»), геометрии уже запекаются.
+   */
+  asteroidShapeNearDetail: number
   /**
    * Размер библиотеки запечённых архетипов (K); драуколлов K+1 (K Geometry-стримов
    * + 1 billboard). Машинерия рендера — в модельный слой (IRingRenderingObject)
@@ -130,10 +178,15 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   minScale: 0.3,
   maxScale: 1.6,
   maxL0Instances: 50000,
+  maxL0NearInstances: 20000,
   maxL1Instances: 100000,
   lodThresholdsKm: {
-    l0: 3000,
-    l1: 12000
+    // l0 > l0NearExit + полудиагональ ячейки (3200 + ~1414) — см. инвариант
+    // в докблоке типа: иначе тир Geometry недостижим
+    l0: 6000,
+    l1: 12000,
+    l0Near: 2500,
+    l0NearExit: 3200
   },
   dustEnabled: true,
   dustColor: 0x9b968c,
@@ -143,6 +196,7 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   dustAnglePower: 2,
   dustMaxSteps: 16,
   asteroidShapeDetail: 3,
+  asteroidShapeNearDetail: 4,
   archetypeCount: 14,
   shapeAmpMin: 0.03,
   shapeAmpMax: 0.06,
@@ -261,6 +315,8 @@ class AsteroidRingSystem extends Group {
 
     const l0MaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l0)
     const l1MaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l1)
+    const l0NearEnter = toThreeJSUnits(cfg.lodThresholdsKm.l0Near)
+    const l0NearExit = toThreeJSUnits(cfg.lodThresholdsKm.l0NearExit)
 
     // Радиусы кольца в three-units — для A-lite readback профиля (см. updateObject)
     this.ringInnerTU = innerRadius
@@ -286,13 +342,29 @@ class AsteroidRingSystem extends Group {
 
     // --- InstancePool ---
     const l0PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0Instances }
+    const nearPoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0NearInstances }
     const l1PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL1Instances }
     // Библиотека запечённых архетипов-осколков (план 2b, K=archetypeCount).
     // Сид каждого архетипа детерминирован профилем и его индексом → форма
     // стабильна между сессиями и кольцами (k=0 воспроизводит архетип 2a).
     const l0Geometries = getArchetypeGeometries(cfg.profile, cfg.archetypeCount, cfg.asteroidShapeDetail, asteroidSize)
+    // Та же библиотека (профиль/сид), повышенный detail — ближний тир (план 2c,
+    // выбор Near менеджером ещё не реализован, см. Task 2).
+    const nearGeometries = getArchetypeGeometries(
+      cfg.profile,
+      cfg.archetypeCount,
+      cfg.asteroidShapeNearDetail,
+      asteroidSize
+    )
 
-    this.pool = new InstancePool(l0PoolConfig, l1PoolConfig, l0Geometries, asteroidSize * 2.5)
+    this.pool = new InstancePool(
+      l0PoolConfig,
+      nearPoolConfig,
+      l1PoolConfig,
+      l0Geometries,
+      nearGeometries,
+      asteroidSize * 2.5
+    )
 
     // Добавить рендер-объекты (L0 + L1)
     for (const obj of this.pool.getRenderObjects()) {
@@ -327,7 +399,9 @@ class AsteroidRingSystem extends Group {
     // --- SectorManager ---
     const thresholds: LODThresholds = {
       l0MaxDistance: l0MaxDist,
-      l1MaxDistance: l1MaxDist
+      l1MaxDistance: l1MaxDist,
+      nearEnterDistance: l0NearEnter,
+      nearExitDistance: l0NearExit
     }
     this.manager = new SectorManager(this.sectorGrid, this.generator, this.pool, thresholds)
 
@@ -508,7 +582,8 @@ class AsteroidRingSystem extends Group {
       console.warn(
         `[AsteroidRingSystem ${this.config.ringId}] Пул инстансов исчерпан — сектора молча пропадают из рендера. ` +
           `Отказов аллокации: ${pressure.totalFailures}. ` +
-          `Занятость: L0 ${pressure.l0.used}/${pressure.l0.capacity}, L1 ${pressure.l1.used}/${pressure.l1.capacity}. ` +
+          `Занятость: L0 ${pressure.l0.used}/${pressure.l0.capacity}, Near ${pressure.near.used}/${pressure.near.capacity}, ` +
+          `L1 ${pressure.l1.used}/${pressure.l1.capacity}. ` +
           'Лечится ростом maxL*Instances или снижением asteroidDensityScale.'
       )
     }
@@ -631,8 +706,8 @@ class AsteroidRingSystem extends Group {
   public getDebugInfo(): {
     totalSectors: number
     activeSectors: number
-    sectorsByLod: { l0: number; l1: number }
-    instances: { l0: number; l1: number; total: number }
+    sectorsByLod: { l0: number; near: number; l1: number }
+    instances: ReturnType<InstancePool['getActiveCount']>
     pendingRemoval: number
     poolPressure: ReturnType<InstancePool['getPressureInfo']>
   } {

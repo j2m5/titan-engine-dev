@@ -5,7 +5,14 @@ const GEOMETRY_STREAM = 0
 const L0_MAX = 100
 
 const makePool = (): InstancePool =>
-  new InstancePool({ maxInstances: L0_MAX }, { maxInstances: 200 }, [new IcosahedronGeometry(1, 1)], 2.5)
+  new InstancePool(
+    { maxInstances: L0_MAX },
+    { maxInstances: 150 },
+    { maxInstances: 200 },
+    [new IcosahedronGeometry(1, 1)],
+    [new IcosahedronGeometry(1, 1)],
+    2.5
+  )
 
 // K=1 → ёмкость единственного Geometry-стрима = ceil((L0_MAX/1)·1.5)
 const streamCapacity = Math.ceil(L0_MAX * 1.5)

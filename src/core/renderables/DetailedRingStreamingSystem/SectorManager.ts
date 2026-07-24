@@ -11,6 +11,19 @@ interface LODThresholds {
   l0MaxDistance: number
   /** Максимальное расстояние для L1 (billboards) — дальше ничего не грузим */
   l1MaxDistance: number
+  /**
+   * Порог ВХОДА в Near (ближний тир повышенной детализации), по distClosest
+   * (расстояние до БЛИЖАЙШЕЙ точки сектора, см. update()). Сектор входит в
+   * Near, когда ещё не был в нём и distClosest опустился до этого порога.
+   */
+  nearEnterDistance: number
+  /**
+   * Порог ВЫХОДА из Near, по distClosest. ОБЯЗАН быть > nearEnterDistance —
+   * гистерезис (зазор между порогами) не даёт сектору, чья дистанция
+   * колеблется у границы, флипать LOD каждый кадр (стейтлес-порог осциллирует
+   * → вечные кросс-фейды, см. update()).
+   */
+  nearExitDistance: number
 }
 
 /**
@@ -69,9 +82,14 @@ class SectorManager {
   /** Скорость fade (доля за секунду, 1.0 = полный fade за 1 секунду) */
   private readonly fadeSpeed: number = 4.0
 
-  /** Множитель плотности instances per sector для каждого LOD */
+  /**
+   * Множитель плотности instances per sector для каждого LOD. GeometryNear
+   * зеркалит Geometry (тот же реальный меш, другой detail, без изменения
+   * количества камней сектора — только detail апгрейдится).
+   */
   private readonly lodDensityMultiplier = {
     [LODLevel.Geometry]: 1.0,
+    [LODLevel.GeometryNear]: 1.0,
     [LODLevel.Billboard]: 1.5
   }
 
@@ -81,6 +99,13 @@ class SectorManager {
   private readonly _worldCenter = new Vector3()
 
   public constructor(grid: SectorGrid, generator: AsteroidGenerator, pool: InstancePool, thresholds: LODThresholds) {
+    if (thresholds.nearEnterDistance >= thresholds.nearExitDistance) {
+      throw new Error(
+        `SectorManager: nearEnterDistance (${thresholds.nearEnterDistance}) обязан быть < nearExitDistance ` +
+          `(${thresholds.nearExitDistance}) — без зазора между порогами вход/выход осциллировали бы на границе.`
+      )
+    }
+
     this.grid = grid
     this.generator = generator
     this.pool = pool
@@ -88,19 +113,29 @@ class SectorManager {
   }
 
   /**
-   * Аллоцировать и заполнить суб-аллокации Geometry-пути.
+   * Аллоцировать и заполнить суб-аллокации Geometry-пути (обычный detail ИЛИ
+   * Near, повышенный detail — обе раскладки по K архетипам идентичны,
+   * различается только базовый индекс стрима).
    *
    * Счётчики групп по архетипам считаются через archetypeForInstance ДО каких-
    * либо аллокаций (независимо от rng-потока генератора — см. комментарий над
    * archetypeForInstance) — иначе смена K сдвигала бы позиции камней. Затем по
-   * каждому НЕПУСТОМУ стриму k вызывается pool.allocate(k, groupCount[k]).
+   * каждому НЕПУСТОМУ стриму k вызывается pool.allocate(streamBase + k,
+   * groupCount[k]) — streamBase = 0 для Geometry, pool.nearStreamBase для
+   * Near: камень СОХРАНЯЕТ архетип (тот же k) при смене detail-тира, меняется
+   * только то, в какую половину стримов (Geometry/Near) он попадает.
    *
    * ЛЮБОЙ отказ (нехватка места в одном из стримов) → откатываем (release) уже
    * выделенные суб-аллокации этой попытки и возвращаем null — сектор/переход
    * целиком не активируется (прежняя семантика молчаливого отказа, видимая
    * через getPressureInfo().failures).
    */
-  private allocateGeometryGroups(seed: number, count: number, bounds: SectorBounds): Allocation[] | null {
+  private allocateGeometryGroups(
+    streamBase: number,
+    seed: number,
+    count: number,
+    bounds: SectorBounds
+  ): Allocation[] | null {
     const archetypeCount = this.pool.geometryStreamCount
     const groupCounts = new Array<number>(archetypeCount).fill(0)
     for (let i = 0; i < count; i++) {
@@ -111,7 +146,7 @@ class SectorManager {
     for (let k = 0; k < archetypeCount; k++) {
       if (groupCounts[k] === 0) continue
 
-      const allocation = this.pool.allocate(k, groupCounts[k])
+      const allocation = this.pool.allocate(streamBase + k, groupCounts[k])
       if (!allocation) {
         for (const a of allocations) this.pool.release(a)
         return null
@@ -121,7 +156,8 @@ class SectorManager {
 
     const groups = this.generator.generateMatricesGrouped(seed, count, bounds, archetypeCount)
     for (const allocation of allocations) {
-      this.pool.writeMatrices(allocation.stream, allocation.offset, groups[allocation.stream])
+      const k = allocation.stream - streamBase
+      this.pool.writeMatrices(allocation.stream, allocation.offset, groups[k])
       // Стартуем невидимым — updateFades плавно поднимет fade к 1.
       this.pool.writeFade(allocation.stream, allocation.offset, allocation.count, 0.0)
     }
@@ -132,12 +168,15 @@ class SectorManager {
   /**
    * Аллоцировать суб-аллокации для заданного LOD-уровня. Billboard — как
    * раньше, один стрим (pool.billboardStream), generateMatrices (не
-   * группированный); Geometry — раскладка по K архетипам (см.
-   * allocateGeometryGroups).
+   * группированный); Geometry/GeometryNear — раскладка по K архетипам (см.
+   * allocateGeometryGroups), различается только базовый индекс стрима.
    */
   private allocateForLOD(lodLevel: LODLevel, seed: number, count: number, bounds: SectorBounds): Allocation[] | null {
     if (lodLevel === LODLevel.Geometry) {
-      return this.allocateGeometryGroups(seed, count, bounds)
+      return this.allocateGeometryGroups(0, seed, count, bounds)
+    }
+    if (lodLevel === LODLevel.GeometryNear) {
+      return this.allocateGeometryGroups(this.pool.nearStreamBase, seed, count, bounds)
     }
 
     const stream = this.pool.billboardStream
@@ -189,10 +228,28 @@ class SectorManager {
       const dx = info.centerX - camX
       const dz = info.centerZ - camZ
       const dist = Math.sqrt(dx * dx + dz * dz)
+      // Расстояние до БЛИЖАЙШЕЙ точки сектора, не до центра: info.boundingRadius
+      // (полудиагональ ячейки) обычно уже сравним с разумным порогом входа в
+      // Near — порог по dist-до-центра в такой геометрии никогда бы не
+      // сработал (подтверждено подкраской в дебаге). distClosest — грубая, но
+      // достаточная оценка (сектор не сфера, но boundingRadius её описывает).
+      const distClosest = Math.max(0, dist - info.boundingRadius)
 
-      // Определить LOD (по возрастанию расстояния: L0 → billboard)
+      // Гистерезис входа/выхода в Near: сектор, УЖЕ находящийся в Near, остаётся
+      // в нём пока distClosest <= nearExitDistance; иначе входит в Near только
+      // при distClosest <= nearEnterDistance (порог входа < порог выхода —
+      // проверено в конструкторе). Без зазора между порогами стейтлес-порог у
+      // границы осциллировал бы каждый кадр → вечные кросс-фейды Near↔Geometry.
+      const existingForLod = this.activeSectors.get(info.key)
+      const alreadyNear = existingForLod?.lodLevel === LODLevel.GeometryNear && !existingForLod.pendingRemoval
+
+      // Определить LOD (по возрастанию расстояния: Near → L0 → billboard)
       let lod: LODLevel
-      if (dist <= this.thresholds.l0MaxDistance) {
+      if (alreadyNear && distClosest <= this.thresholds.nearExitDistance) {
+        lod = LODLevel.GeometryNear
+      } else if (!alreadyNear && distClosest <= this.thresholds.nearEnterDistance) {
+        lod = LODLevel.GeometryNear
+      } else if (dist <= this.thresholds.l0MaxDistance) {
         lod = LODLevel.Geometry
       } else if (dist <= this.thresholds.l1MaxDistance) {
         lod = LODLevel.Billboard
@@ -396,10 +453,11 @@ class SectorManager {
    */
   public getDebugInfo(): {
     activeSectors: number
-    byLod: { l0: number; l1: number }
+    byLod: { l0: number; near: number; l1: number }
     pendingRemoval: number
   } {
     let l0 = 0,
+      near = 0,
       l1 = 0,
       pending = 0
     for (const [, state] of this.activeSectors) {
@@ -407,13 +465,16 @@ class SectorManager {
         case LODLevel.Geometry:
           l0++
           break
+        case LODLevel.GeometryNear:
+          near++
+          break
         case LODLevel.Billboard:
           l1++
           break
       }
       if (state.pendingRemoval) pending++
     }
-    return { activeSectors: this.activeSectors.size, byLod: { l0, l1 }, pendingRemoval: pending }
+    return { activeSectors: this.activeSectors.size, byLod: { l0, near, l1 }, pendingRemoval: pending }
   }
 }
 

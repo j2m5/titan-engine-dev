@@ -54,7 +54,14 @@ describe('SectorManager: раскладка активных секторов п
   it('активация Geometry-сектора создаёт ≤K суб-аллокаций, сумма их count = instanceCount', () => {
     const grid = new SectorGrid(gridConfig)
     const generator = new AsteroidGenerator({ thickness: 1, minScale: 0.5, maxScale: 1.0 })
-    const pool = new InstancePool({ maxInstances: 300 }, { maxInstances: 100 }, makeGeometries(), 2.5)
+    const pool = new InstancePool(
+      { maxInstances: 300 },
+      { maxInstances: 300 },
+      { maxInstances: 100 },
+      makeGeometries(),
+      makeGeometries(),
+      2.5
+    )
     const manager = new SectorManager(grid, generator, pool, thresholds)
 
     const info0 = grid.getSectorInfo(0, 0)
@@ -82,7 +89,14 @@ describe('SectorManager: раскладка активных секторов п
     const generator = new AsteroidGenerator({ thickness: 1, minScale: 0.5, maxScale: 1.0 })
     const l0Cap = 300
     const perStreamCapacity = Math.ceil((l0Cap / K) * 1.5)
-    const pool = new InstancePool({ maxInstances: l0Cap }, { maxInstances: 100 }, makeGeometries(), 2.5)
+    const pool = new InstancePool(
+      { maxInstances: l0Cap },
+      { maxInstances: 300 },
+      { maxInstances: 100 },
+      makeGeometries(),
+      makeGeometries(),
+      2.5
+    )
     const manager = new SectorManager(grid, generator, pool, thresholds)
 
     const info0 = grid.getSectorInfo(0, 0)
@@ -115,7 +129,14 @@ describe('SectorManager: раскладка активных секторов п
   it('кросс-фейд Geometry → Billboard: outgoing-массив суб-аллокаций полностью освобождается по завершении перехода', () => {
     const grid = new SectorGrid(gridConfig)
     const generator = new AsteroidGenerator({ thickness: 1, minScale: 0.5, maxScale: 1.0 })
-    const pool = new InstancePool({ maxInstances: 300 }, { maxInstances: 100 }, makeGeometries(), 2.5)
+    const pool = new InstancePool(
+      { maxInstances: 300 },
+      { maxInstances: 300 },
+      { maxInstances: 100 },
+      makeGeometries(),
+      makeGeometries(),
+      2.5
+    )
     const manager = new SectorManager(grid, generator, pool, thresholds)
 
     const info0 = grid.getSectorInfo(0, 0)
@@ -139,7 +160,14 @@ describe('SectorManager: раскладка активных секторов п
   it('deactivateAll освобождает всё, включая недоигравший outgoing переход (used = 0 везде)', () => {
     const grid = new SectorGrid(gridConfig)
     const generator = new AsteroidGenerator({ thickness: 1, minScale: 0.5, maxScale: 1.0 })
-    const pool = new InstancePool({ maxInstances: 300 }, { maxInstances: 100 }, makeGeometries(), 2.5)
+    const pool = new InstancePool(
+      { maxInstances: 300 },
+      { maxInstances: 300 },
+      { maxInstances: 100 },
+      makeGeometries(),
+      makeGeometries(),
+      2.5
+    )
     const manager = new SectorManager(grid, generator, pool, thresholds)
 
     const info0 = grid.getSectorInfo(0, 0)
