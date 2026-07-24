@@ -166,21 +166,42 @@ class AsteroidGenerator {
       const t = rng.next() * rng.next()
       const s = minScale + t * (maxScale - minScale)
 
+      // Пер-осевая анизотропия поверх базового скаляра s: ФИКСИРОВАННО ровно
+      // три вызова rng.next() — по одному на ось, строго в порядке x, y, z,
+      // сразу после базового скаляра. Число вызовов не зависит ни от чего
+      // (архетипа, толщины и т.п.) — этим сохраняется детерминизм всего
+      // rng-потока (см. докблок над generateMatricesGrouped). Диапазон
+      // капнут mix(0.8, 1.25, u) = 0.8 + 0.45·u: шейдер восстанавливает
+      // нормали через mat3(instanceMatrix) БЕЗ inverse-transpose, и заметно
+      // большая анизотропия начала бы искажать освещение (Global Constraint
+      // спеки архетипов).
+      const sx = s * (0.8 + 0.45 * rng.next())
+      const sy = s * (0.8 + 0.45 * rng.next())
+      const sz = s * (0.8 + 0.45 * rng.next())
+
       // Compose матрицы inline (избегаем создание Three.js объектов для скорости),
       // запись в буфер своей группы по бегущему офсету.
       const k = archetypeOf[i]
       const offset = runningOffsets[k]
       runningOffsets[k] = offset + 16
-      this.composeMatrix(groups[k], offset, x, y, z, rx, ry, rz, s)
+      this.composeMatrix(groups[k], offset, x, y, z, rx, ry, rz, sx, sy, sz)
     }
 
     return groups
   }
 
   /**
-   * Записывает матрицу compose(position, eulerRotation, uniformScale) в Float32Array.
+   * Записывает матрицу compose(position, eulerRotation, perAxisScale) в Float32Array.
    * Вычисление rotation matrix из Euler angles (XYZ order) inline.
    * Column-major order (как Three.js Matrix4).
+   *
+   * Масштаб — пер-осевой (sx, sy, sz), а не единый скаляр: первая колонка
+   * (базисный вектор X, элементы offset+0..2) умножается на sx, вторая
+   * (базисный вектор Y, offset+4..6) — на sy, третья (базисный вектор Z,
+   * offset+8..10) — на sz. Трансляция (offset+12..14) масштабу не подлежит.
+   * Диапазон sx/sy/sz капнут вызывающим кодом в [0.8·s, 1.25·s]: шейдер
+   * восстанавливает нормали через mat3(instanceMatrix) БЕЗ inverse-transpose,
+   * поэтому более широкая анизотропия начала бы заметно искажать освещение.
    */
   private composeMatrix(
     out: Float32Array,
@@ -191,28 +212,30 @@ class AsteroidGenerator {
     rx: number,
     ry: number,
     rz: number,
-    scale: number
+    sx: number,
+    sy: number,
+    sz: number
   ): void {
-    const cx = Math.cos(rx),
-      sx = Math.sin(rx)
-    const cy = Math.cos(ry),
-      sy = Math.sin(ry)
-    const cz = Math.cos(rz),
-      sz = Math.sin(rz)
+    const cosX = Math.cos(rx),
+      sinX = Math.sin(rx)
+    const cosY = Math.cos(ry),
+      sinY = Math.sin(ry)
+    const cosZ = Math.cos(rz),
+      sinZ = Math.sin(rz)
 
-    out[offset] = cy * cz * scale
-    out[offset + 1] = cy * sz * scale
-    out[offset + 2] = -sy * scale
+    out[offset] = cosY * cosZ * sx
+    out[offset + 1] = cosY * sinZ * sx
+    out[offset + 2] = -sinY * sx
     out[offset + 3] = 0
 
-    out[offset + 4] = (sx * sy * cz - cx * sz) * scale
-    out[offset + 5] = (sx * sy * sz + cx * cz) * scale
-    out[offset + 6] = sx * cy * scale
+    out[offset + 4] = (sinX * sinY * cosZ - cosX * sinZ) * sy
+    out[offset + 5] = (sinX * sinY * sinZ + cosX * cosZ) * sy
+    out[offset + 6] = sinX * cosY * sy
     out[offset + 7] = 0
 
-    out[offset + 8] = (cx * sy * cz + sx * sz) * scale
-    out[offset + 9] = (cx * sy * sz - sx * cz) * scale
-    out[offset + 10] = cx * cy * scale
+    out[offset + 8] = (cosX * sinY * cosZ + sinX * sinZ) * sz
+    out[offset + 9] = (cosX * sinY * sinZ - sinX * cosZ) * sz
+    out[offset + 10] = cosX * cosY * sz
     out[offset + 11] = 0
 
     out[offset + 12] = px

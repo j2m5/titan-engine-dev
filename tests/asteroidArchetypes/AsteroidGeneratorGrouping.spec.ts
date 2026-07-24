@@ -97,3 +97,96 @@ describe('AsteroidGenerator: раскладка по архетипам и гр�
     expect(Array.from(viaGrouped)).toEqual(Array.from(direct))
   })
 })
+
+describe('AsteroidGenerator: неравномерный (пер-осевой) масштаб инстансов', () => {
+  const minScale = 0.5
+  const maxScale = 1.5
+  const generator = new AsteroidGenerator({ thickness: 10, minScale, maxScale })
+
+  /**
+   * Норма колонки column-major 4×4 матрицы (0-based индекс колонки: 0,1,2 —
+   * X/Y/Z оси ротационной части). Поскольку сама ротация ортонормирована,
+   * норма колонки после composeMatrix равна фактору масштаба этой оси
+   * (sx, sy или sz) — ровно то, что нужно проверить.
+   */
+  const columnNorm = (data: Float32Array, matrixOffset: number, column: 0 | 1 | 2): number => {
+    const base = matrixOffset + column * 4
+    const x = data[base]
+    const y = data[base + 1]
+    const z = data[base + 2]
+    return Math.sqrt(x * x + y * y + z * z)
+  }
+
+  it('анизотропия реально есть: нормы трёх колонок у большинства матриц попарно различаются', () => {
+    const seed = 2024
+    const count = 2000
+    const flat = generator.generateMatrices(seed, count, bounds)
+
+    // Порог 0.05% относительной разницы — на четыре порядка выше float32-шума
+    // ортонормированной ротации (~1e-7, замерено на uniform-scale случае), но
+    // достаточно мал, чтобы редкие статистические почти-совпадения трёх
+    // независимых draw'ов sx,sy,sz из [0.8, 1.25] (ожидаемо у <1% инстансов)
+    // не портили тест.
+    const relDiffThreshold = 0.0005
+    let anisotropicCount = 0
+    for (let i = 0; i < count; i++) {
+      const offset = i * 16
+      const nx = columnNorm(flat, offset, 0)
+      const ny = columnNorm(flat, offset, 1)
+      const nz = columnNorm(flat, offset, 2)
+      const mean = (nx + ny + nz) / 3
+      const pairwiseDistinct =
+        Math.abs(nx - ny) / mean > relDiffThreshold &&
+        Math.abs(ny - nz) / mean > relDiffThreshold &&
+        Math.abs(nx - nz) / mean > relDiffThreshold
+      if (pairwiseDistinct) anisotropicCount++
+    }
+
+    // Подавляющее большинство инстансов должно иметь три различные оси масштаба.
+    expect(anisotropicCount).toBeGreaterThan(count * 0.95)
+  })
+
+  it('все нормы колонок лежат в [minScale·0.8, maxScale·1.25]', () => {
+    const seed = 2025
+    const count = 2000
+    const flat = generator.generateMatrices(seed, count, bounds)
+
+    const lowerBound = minScale * 0.8
+    const upperBound = maxScale * 1.25
+
+    for (let i = 0; i < count; i++) {
+      const offset = i * 16
+      for (const column of [0, 1, 2] as const) {
+        const norm = columnNorm(flat, offset, column)
+        expect(norm).toBeGreaterThanOrEqual(lowerBound - 1e-9)
+        expect(norm).toBeLessThanOrEqual(upperBound + 1e-9)
+      }
+    }
+  })
+
+  it('КОНТРАКТ ДИАПАЗОНА: анизотропия одной матрицы капнута — max/min норм колонок ≤ 1.25/0.8 (шейдер берёт нормали через mat3(instanceMatrix) без inverse-transpose, большой перекос исказит освещение)', () => {
+    const seed = 2026
+    const count = 2000
+    const flat = generator.generateMatrices(seed, count, bounds)
+
+    const eps = 1e-6
+    const cap = 1.25 / 0.8
+
+    for (let i = 0; i < count; i++) {
+      const offset = i * 16
+      const norms = [columnNorm(flat, offset, 0), columnNorm(flat, offset, 1), columnNorm(flat, offset, 2)]
+      const ratio = Math.max(...norms) / Math.min(...norms)
+      expect(ratio).toBeLessThanOrEqual(cap + eps)
+    }
+  })
+
+  it('детерминизм: тот же seed → та же анизотропия (побитовое совпадение матриц)', () => {
+    const seed = 2027
+    const count = 1000
+
+    const a = generator.generateMatrices(seed, count, bounds)
+    const b = generator.generateMatrices(seed, count, bounds)
+
+    expect(Array.from(a)).toEqual(Array.from(b))
+  })
+})
