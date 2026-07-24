@@ -97,6 +97,11 @@ describe('SectorManager: Near-LOD по ближайшей точке секто�
     expect(geometryCounts).toEqual(new Array<number>(K).fill(0))
     expect(pool.getPressureInfo().near.used).toBe(info0.instanceCount)
     expect(pool.getPressureInfo().l0.used).toBe(0)
+
+    // Near-сектор должен быть учтён в диагностике byLod
+    const debugInfo = manager.getDebugInfo()
+    expect(debugInfo.byLod.near).toBe(1)
+    expect(debugInfo.byLod.l0 + debugInfo.byLod.near + debugInfo.byLod.l1).toBe(debugInfo.activeSectors)
   })
 
   it('гистерезис: distClosest осциллирует между enter и exit → сектор не флипает (остаётся Near, outgoing не возникает)', () => {

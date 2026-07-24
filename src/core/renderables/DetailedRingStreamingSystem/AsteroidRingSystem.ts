@@ -667,7 +667,7 @@ class AsteroidRingSystem extends Group {
   public getDebugInfo(): {
     totalSectors: number
     activeSectors: number
-    sectorsByLod: { l0: number; l1: number }
+    sectorsByLod: { l0: number; near: number; l1: number }
     instances: ReturnType<InstancePool['getActiveCount']>
     pendingRemoval: number
     poolPressure: ReturnType<InstancePool['getPressureInfo']>

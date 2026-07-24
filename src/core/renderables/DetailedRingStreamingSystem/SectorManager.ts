@@ -453,10 +453,11 @@ class SectorManager {
    */
   public getDebugInfo(): {
     activeSectors: number
-    byLod: { l0: number; l1: number }
+    byLod: { l0: number; near: number; l1: number }
     pendingRemoval: number
   } {
     let l0 = 0,
+      near = 0,
       l1 = 0,
       pending = 0
     for (const [, state] of this.activeSectors) {
@@ -464,13 +465,16 @@ class SectorManager {
         case LODLevel.Geometry:
           l0++
           break
+        case LODLevel.GeometryNear:
+          near++
+          break
         case LODLevel.Billboard:
           l1++
           break
       }
       if (state.pendingRemoval) pending++
     }
-    return { activeSectors: this.activeSectors.size, byLod: { l0, l1 }, pendingRemoval: pending }
+    return { activeSectors: this.activeSectors.size, byLod: { l0, near, l1 }, pendingRemoval: pending }
   }
 }
 
