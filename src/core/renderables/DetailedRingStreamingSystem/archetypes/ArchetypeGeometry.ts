@@ -19,6 +19,9 @@ function buildArchetypeGeometry(
 
   const positions = new Float32Array(count * 3)
   const normals = new Float32Array(count * 3)
+  // surfaceData: [freshness, cavity, 0, 0] на вершину (itemSize 4, резервы нулями
+  // — Float32Array уже инициализирован нулями, третий/четвёртый компонент не трогаем)
+  const surfaceData = new Float32Array(count * 4)
   const EPS = 1e-3
 
   for (let i = 0; i < count; i++) {
@@ -30,10 +33,15 @@ function buildArchetypeGeometry(
     dy *= invLen
     dz *= invLen
 
-    const r = shape.radiusAt(dx, dy, dz)
+    // surfaceAt зовётся один раз на вершину — r переиспользуется для позиции,
+    // freshness/cavity идут прямиком в surfaceData (без дублирующего radiusAt)
+    const surface = shape.surfaceAt(dx, dy, dz)
+    const r = surface.r
     positions[i * 3] = dx * r * radius
     positions[i * 3 + 1] = dy * r * radius
     positions[i * 3 + 2] = dz * r * radius
+    surfaceData[i * 4] = surface.freshness
+    surfaceData[i * 4 + 1] = surface.cavity
 
     // Касательный базис к сфере в dir (устойчивый выбор опорной оси)
     const useY = Math.abs(dy) < 0.9
@@ -92,6 +100,7 @@ function buildArchetypeGeometry(
   const geometry = new BufferGeometry()
   geometry.setAttribute('position', new BufferAttribute(positions, 3))
   geometry.setAttribute('normal', new BufferAttribute(normals, 3))
+  geometry.setAttribute('surfaceData', new BufferAttribute(surfaceData, 4))
   source.dispose()
   return geometry
 }

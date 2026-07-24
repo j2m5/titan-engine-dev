@@ -27,7 +27,7 @@ interface ArchetypeLobe {
  * Кратер морфологии C: центр — единичное направление на эллипсоиде;
  * angularRadius — угловой радиус кратера в единицах (1 − cos) (см. craterProfile,
  * u = (1 − dot(dir, center)) / angularRadius); depth — глубина чаши в долях
- * локального радиуса эллипсоида (мультипликативная врезка в rawRadius).
+ * локального радиуса эллипсоида (мультипликативная врезка в crateredRadius).
  */
 interface ArchetypeCrater {
   center: [number, number, number]
@@ -187,7 +187,7 @@ function generateRubbleParams(rng: SeededRandom): ArchetypeParams {
  * (randomUnit), angularRadius и depth — диапазоны спеки §Task 2. planes и
  * lobes морфологий A/B не используются (тело монолита не фасетировано и не
  * слипается из лобов) — edgeRadius по той же причине не используется телом,
- * храним 0 (skip smooth-min/max в rawRadius для этой морфологии).
+ * храним 0 (skip smooth-min/max в crateredRadius для этой морфологии).
  */
 function generateCrateredParams(rng: SeededRandom): ArchetypeParams {
   const raw: [number, number, number] = [
@@ -263,45 +263,76 @@ class ArchetypeShape {
         const y = 1 - (2 * (i + 0.5)) / n
         const s = Math.sqrt(Math.max(1 - y * y, 0))
         const a = golden * i
-        const r = this.rawRadius(s * Math.cos(a), y, s * Math.sin(a))
+        const r = this.rawSurface(s * Math.cos(a), y, s * Math.sin(a)).r
         if (r > max) max = r
       }
       this.params.normalization = max > 0 ? 1 / max : 1
     }
   }
 
-  /** Радиус до нормализации: ветвление по морфологии */
-  private rawRadius(dx: number, dy: number, dz: number): number {
+  /**
+   * Радиус + сигналы поверхности до нормализации: ветвление по морфологии.
+   * freshness несёт только fragment, cavity — только cratered (rubble → оба 0).
+   */
+  private rawSurface(dx: number, dy: number, dz: number): { r: number; freshness: number; cavity: number } {
     switch (this.params.morphology) {
       case 'rubble':
-        return this.rubbleRadius(dx, dy, dz)
-      case 'cratered':
-        return this.crateredRadius(dx, dy, dz)
+        return { r: this.rubbleRadius(dx, dy, dz), freshness: 0, cavity: 0 }
+      case 'cratered': {
+        const { r, cavity } = this.crateredRadius(dx, dy, dz)
+        return { r, freshness: 0, cavity }
+      }
       case 'fragment':
-      default:
-        return this.fragmentRadius(dx, dy, dz)
+      default: {
+        const { r, freshness } = this.fragmentRadius(dx, dy, dz)
+        return { r, freshness, cavity: 0 }
+      }
     }
   }
 
-  /** Радиус осколка (морфология A) до нормализации */
-  private fragmentRadius(dx: number, dy: number, dz: number): number {
+  /**
+   * Радиус осколка (морфология A) до нормализации + freshness — доля "победы"
+   * плоскости разлома над эллипсоидом в smooth-min (см. surfaceAt в публичном
+   * API). rEll и минимальный rPlane сравниваются ДО smin-сглаживания —
+   * freshness читает геометрический запас победы, а не сглаженное значение r.
+   */
+  private fragmentRadius(dx: number, dy: number, dz: number): { r: number; freshness: number } {
     const { axes, planes, edgeRadius, noiseAmp, noiseFreq, seed } = this.params
 
     // Эллипсоид в радиальной форме: r = 1 / |dir / axes|
     const ex = dx / axes[0]
     const ey = dy / axes[1]
     const ez = dz / axes[2]
-    let r = 1 / Math.sqrt(ex * ex + ey * ey + ez * ez)
+    const rEll = 1 / Math.sqrt(ex * ex + ey * ey + ez * ez)
+    let r = rEll
 
     // Ячейка Вороного: smooth-min по плоскостям, смотрящим в сторону dir.
     // Раковистый излом: купол w = dot² максимален напротив центра фасеты —
     // вогнутость/выпуклость ±dish, чтобы грань не была идеально плоской.
+    let rPlaneMin = Infinity
+    let anyPlane = false
     for (const plane of planes) {
       const dot = dx * plane.normal[0] + dy * plane.normal[1] + dz * plane.normal[2]
       if (dot <= 1e-6) continue
       const w = dot * dot
       const rPlane = (plane.distance * (1 - plane.dish * w)) / dot
       r = smin(r, rPlane, edgeRadius)
+      if (rPlane < rPlaneMin) rPlaneMin = rPlane
+      anyPlane = true
+    }
+
+    // freshness: 1, когда плоскость выигрывает smooth-min с запасом ≥ edgeRadius
+    // (margin = rEll - rPlaneMin), 0 — когда побеждает эллипсоид (нет плоскости
+    // в этом направлении или она проигрывает), линейный переход в полосе
+    // ±edgeRadius вокруг margin=0 (та же геометрия перехода, что у smin/h).
+    let freshness = 0
+    if (anyPlane) {
+      const margin = rEll - rPlaneMin
+      if (edgeRadius <= 0) {
+        freshness = margin >= 0 ? 1 : 0
+      } else {
+        freshness = Math.min(Math.max(0.5 + (0.5 * margin) / edgeRadius, 0), 1)
+      }
     }
 
     // Среднечастотный fBm: мягкие лямпы поверх (амплитуда щадящая — фасеты живы)
@@ -310,7 +341,7 @@ class ArchetypeShape {
       r *= 1 + noiseAmp * f
     }
 
-    return r
+    return { r, freshness }
   }
 
   /**
@@ -369,8 +400,12 @@ class ArchetypeShape {
    * где u — угловое расстояние до центра кратера в долях его angularRadius.
    * Мультипликативно к rEll — глубина в долях локального радиуса, вал не
    * ломает нормализацию (в отличие от аддитивной врезки константной глубины).
+   *
+   * cavity — нормированная глубина ЧАШИ (только отрицательная часть dent —
+   * вал/rim в cavity не входит, см. max(0, −dent) в surfaceAt): та же сумма
+   * dent, что уже посчитана для r, без повторного вычисления craterProfile.
    */
-  private crateredRadius(dx: number, dy: number, dz: number): number {
+  private crateredRadius(dx: number, dy: number, dz: number): { r: number; cavity: number } {
     const { axes, craters, noiseAmp, noiseFreq, seed } = this.params
 
     const ex = dx / axes[0]
@@ -386,18 +421,31 @@ class ArchetypeShape {
     }
     r *= 1 + dent
 
+    const cavity = Math.min(1, Math.max(0, -dent) / 0.12)
+
     // Щадящий fBm поверх врезанных кратеров (тот же домен, что у морфологий A/B)
     if (noiseAmp > 0) {
       const f = fbm3({ x: dx * noiseFreq, y: dy * noiseFreq, z: dz * noiseFreq }, seed, 2, 2, 0.5)
       r *= 1 + noiseAmp * f
     }
 
-    return r
+    return { r, cavity }
+  }
+
+  /**
+   * Радиус + сигналы поверхности по нормированному направлению (максимум r по
+   * сфере ≈ 1): freshness — только fragment, cavity — только cratered (см.
+   * rawSurface); нормализация применяется только к r, freshness/cavity — уже
+   * нормированные к [0,1] величины и масштабом тела не затрагиваются.
+   */
+  public surfaceAt(dx: number, dy: number, dz: number): { r: number; freshness: number; cavity: number } {
+    const raw = this.rawSurface(dx, dy, dz)
+    return { r: raw.r * this.params.normalization, freshness: raw.freshness, cavity: raw.cavity }
   }
 
   /** Радиус по нормированному направлению; максимум по сфере ≈ 1 */
   public radiusAt(dx: number, dy: number, dz: number): number {
-    return this.rawRadius(dx, dy, dz) * this.params.normalization
+    return this.surfaceAt(dx, dy, dz).r
   }
 }
 

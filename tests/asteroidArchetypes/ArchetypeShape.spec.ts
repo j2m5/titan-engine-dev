@@ -242,6 +242,142 @@ describe('generateArchetypeParams: морфология C — кратерный
   })
 })
 
+describe('ArchetypeShape.surfaceAt: freshness (только морфология A)', () => {
+  it('freshness ≈ 1 в центре фасеты (плоскость победила с запасом), 0 там, где плоскость не режет (эллипсоид)', () => {
+    const shape = new ArchetypeShape({
+      axes: [1, 1, 1],
+      planes: [{ normal: [0, 1, 0], distance: 0.6, dish: 0 }],
+      edgeRadius: 0.05,
+      noiseAmp: 0,
+      noiseFreq: 3,
+      seed: 1,
+      normalization: 1,
+      morphology: 'fragment',
+      lobes: [],
+      craters: []
+    })
+    // dot(dir, normal) = 1, rPlane = 0.6, rEll = 1 → margin 0.4 >> edgeRadius
+    expect(shape.surfaceAt(0, 1, 0).freshness).toBeCloseTo(1, 6)
+    // dot(dir, normal) = -1 <= 1e-6 → плоскость не рассматривается, побеждает эллипсоид
+    expect(shape.surfaceAt(0, -1, 0).freshness).toBe(0)
+  })
+
+  it('линейный переход в полосе ±edgeRadius вокруг равенства rEll и rPlane', () => {
+    // Подбираем direction так, чтобы margin был примерно на полпути в полосе:
+    // rEll=1 (axes единичные), нужен rPlane = rEll - edgeRadius/2 → margin=edgeRadius/2
+    const edgeRadius = 0.1
+    const distance = 1 - edgeRadius / 2 // на dir=(0,1,0): rPlane = distance
+    const shape = new ArchetypeShape({
+      axes: [1, 1, 1],
+      planes: [{ normal: [0, 1, 0], distance, dish: 0 }],
+      edgeRadius,
+      noiseAmp: 0,
+      noiseFreq: 3,
+      seed: 1,
+      normalization: 1,
+      morphology: 'fragment',
+      lobes: [],
+      craters: []
+    })
+    const f = shape.surfaceAt(0, 1, 0).freshness
+    expect(f).toBeGreaterThan(0)
+    expect(f).toBeLessThan(1)
+    expect(f).toBeCloseTo(0.75, 6) // clamp(0.5 + 0.5*margin/edgeRadius, 0, 1) = 0.5+0.5*0.5 = 0.75
+  })
+
+  it('cavity всегда 0 у морфологии A (freshness — не cavity)', () => {
+    for (let seed = 0; seed < 10; seed++) {
+      const shape = new ArchetypeShape(generateArchetypeParams(new SeededRandom(seed)))
+      for (const [x, y, z] of sphereDirs(2)) {
+        expect(shape.surfaceAt(x, y, z).cavity).toBe(0)
+      }
+    }
+  })
+
+  it('freshness всегда в [0,1] на случайных архетипах и направлениях', () => {
+    for (let seed = 0; seed < 10; seed++) {
+      const shape = new ArchetypeShape(generateArchetypeParams(new SeededRandom(seed)))
+      for (const [x, y, z] of sphereDirs(2)) {
+        const f = shape.surfaceAt(x, y, z).freshness
+        expect(f).toBeGreaterThanOrEqual(0)
+        expect(f).toBeLessThanOrEqual(1)
+      }
+    }
+  })
+})
+
+describe('ArchetypeShape.surfaceAt: rubble — оба сигнала нулевые', () => {
+  it('freshness и cavity равны 0 всюду (морфология B)', () => {
+    for (let seed = 0; seed < 5; seed++) {
+      const shape = new ArchetypeShape(generateArchetypeParams(new SeededRandom(seed), 'rubble'))
+      for (const [x, y, z] of sphereDirs(1)) {
+        const s = shape.surfaceAt(x, y, z)
+        expect(s.freshness).toBe(0)
+        expect(s.cavity).toBe(0)
+      }
+    }
+  })
+})
+
+describe('ArchetypeShape.surfaceAt: cavity (только морфология C)', () => {
+  it('cavity > 0.3 в центре кратера, 0 вдали и на валу (u ≈ 0.9)', () => {
+    const depth = 0.15
+    const angularRadius = 0.3
+    const shape = new ArchetypeShape({
+      axes: [1, 1, 1],
+      planes: [],
+      lobes: [],
+      craters: [{ center: [0, 0, 1], angularRadius, depth }],
+      edgeRadius: 0,
+      noiseAmp: 0,
+      noiseFreq: 3,
+      seed: 1,
+      normalization: 1,
+      morphology: 'cratered'
+    })
+    expect(shape.surfaceAt(0, 0, 1).cavity).toBeGreaterThan(0.3)
+    // Противоположный полюс: вне углового радиуса кратера (u > 1) — далеко
+    expect(shape.surfaceAt(0, 0, -1).cavity).toBe(0)
+    // На валу: u ≈ 0.9 — craterProfile положителен (rim), вклад в chasm = 0
+    const u = 0.9
+    const cosTheta = 1 - u * angularRadius
+    const sinTheta = Math.sqrt(1 - cosTheta * cosTheta)
+    expect(shape.surfaceAt(sinTheta, 0, cosTheta).cavity).toBe(0)
+  })
+
+  it('freshness всегда 0 у морфологии C', () => {
+    for (let seed = 0; seed < 10; seed++) {
+      const shape = new ArchetypeShape(generateArchetypeParams(new SeededRandom(seed), 'cratered'))
+      for (const [x, y, z] of sphereDirs(2)) {
+        expect(shape.surfaceAt(x, y, z).freshness).toBe(0)
+      }
+    }
+  })
+
+  it('cavity всегда в [0,1] на случайных архетипах и направлениях', () => {
+    for (let seed = 0; seed < 10; seed++) {
+      const shape = new ArchetypeShape(generateArchetypeParams(new SeededRandom(seed), 'cratered'))
+      for (const [x, y, z] of sphereDirs(2)) {
+        const c = shape.surfaceAt(x, y, z).cavity
+        expect(c).toBeGreaterThanOrEqual(0)
+        expect(c).toBeLessThanOrEqual(1)
+      }
+    }
+  })
+})
+
+describe('ArchetypeShape.radiusAt === surfaceAt(...).r для всех морфологий', () => {
+  it('обратная совместимость radiusAt: одно и то же значение r', () => {
+    const morphologies: Array<'fragment' | 'rubble' | 'cratered'> = ['fragment', 'rubble', 'cratered']
+    for (const morphology of morphologies) {
+      const shape = new ArchetypeShape(generateArchetypeParams(new SeededRandom(3), morphology))
+      for (const [x, y, z] of sphereDirs(1)) {
+        expect(shape.radiusAt(x, y, z)).toBe(shape.surfaceAt(x, y, z).r)
+      }
+    }
+  })
+})
+
 describe('ArchetypeShape.radiusAt: морфология C — кратерный монолит', () => {
   it('звёздность и нормализация генерализуются на чужую сетку (икосфера)', () => {
     for (let seed = 0; seed < 10; seed++) {
