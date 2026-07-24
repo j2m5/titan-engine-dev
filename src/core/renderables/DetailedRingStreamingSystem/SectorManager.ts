@@ -1,6 +1,6 @@
 import { Frustum, Matrix4, Sphere, Vector3 } from 'three'
-import { SectorGrid, SectorInfo } from './SectorGrid'
-import { AsteroidGenerator } from './AsteroidGenerator'
+import { SectorGrid, SectorInfo, SectorBounds } from './SectorGrid'
+import { AsteroidGenerator, archetypeForInstance } from './AsteroidGenerator'
 import { InstancePool, LODLevel, Allocation } from './InstancePool'
 
 /**
@@ -19,7 +19,8 @@ interface LODThresholds {
  */
 interface OutgoingLOD {
   lodLevel: LODLevel
-  allocation: Allocation
+  /** Geometry: до K суб-аллокаций (по одной на непустой архетип-стрим); Billboard: одна. */
+  allocations: Allocation[]
   fade: number
 }
 
@@ -30,7 +31,8 @@ interface SectorState {
   key: string
   info: SectorInfo
   lodLevel: LODLevel
-  allocation: Allocation
+  /** Geometry: до K суб-аллокаций (по одной на непустой архетип-стрим); Billboard: одна. */
+  allocations: Allocation[]
   /** Текущее значение fade (0 = невидим, 1 = полностью виден) */
   fade: number
   /** Целевое значение fade */
@@ -86,12 +88,67 @@ class SectorManager {
   }
 
   /**
-   * LOD-решение менеджера → адресуемый стрим пула. Geometry всегда стрим 0
-   * (K=1 совместимость этой задачи — раскладка по K архетипам приходит в
-   * Task 5); Billboard — выделенный стрим пула (индекс K).
+   * Аллоцировать и заполнить суб-аллокации Geometry-пути.
+   *
+   * Счётчики групп по архетипам считаются через archetypeForInstance ДО каких-
+   * либо аллокаций (независимо от rng-потока генератора — см. комментарий над
+   * archetypeForInstance) — иначе смена K сдвигала бы позиции камней. Затем по
+   * каждому НЕПУСТОМУ стриму k вызывается pool.allocate(k, groupCount[k]).
+   *
+   * ЛЮБОЙ отказ (нехватка места в одном из стримов) → откатываем (release) уже
+   * выделенные суб-аллокации этой попытки и возвращаем null — сектор/переход
+   * целиком не активируется (прежняя семантика молчаливого отказа, видимая
+   * через getPressureInfo().failures).
    */
-  private streamFor(lodLevel: LODLevel): number {
-    return lodLevel === LODLevel.Geometry ? 0 : this.pool.billboardStream
+  private allocateGeometryGroups(seed: number, count: number, bounds: SectorBounds): Allocation[] | null {
+    const archetypeCount = this.pool.geometryStreamCount
+    const groupCounts = new Array<number>(archetypeCount).fill(0)
+    for (let i = 0; i < count; i++) {
+      groupCounts[archetypeForInstance(seed, i, archetypeCount)]++
+    }
+
+    const allocations: Allocation[] = []
+    for (let k = 0; k < archetypeCount; k++) {
+      if (groupCounts[k] === 0) continue
+
+      const allocation = this.pool.allocate(k, groupCounts[k])
+      if (!allocation) {
+        for (const a of allocations) this.pool.release(a)
+        return null
+      }
+      allocations.push(allocation)
+    }
+
+    const groups = this.generator.generateMatricesGrouped(seed, count, bounds, archetypeCount)
+    for (const allocation of allocations) {
+      this.pool.writeMatrices(allocation.stream, allocation.offset, groups[allocation.stream])
+      // Стартуем невидимым — updateFades плавно поднимет fade к 1.
+      this.pool.writeFade(allocation.stream, allocation.offset, allocation.count, 0.0)
+    }
+
+    return allocations
+  }
+
+  /**
+   * Аллоцировать суб-аллокации для заданного LOD-уровня. Billboard — как
+   * раньше, один стрим (pool.billboardStream), generateMatrices (не
+   * группированный); Geometry — раскладка по K архетипам (см.
+   * allocateGeometryGroups).
+   */
+  private allocateForLOD(lodLevel: LODLevel, seed: number, count: number, bounds: SectorBounds): Allocation[] | null {
+    if (lodLevel === LODLevel.Geometry) {
+      return this.allocateGeometryGroups(seed, count, bounds)
+    }
+
+    const stream = this.pool.billboardStream
+    const allocation = this.pool.allocate(stream, count)
+    if (!allocation) return null
+
+    const data = this.generator.generateMatrices(seed, count, bounds)
+    this.pool.writeMatrices(stream, allocation.offset, data)
+    this.pool.writeFade(stream, allocation.offset, allocation.count, 0.0)
+
+    return [allocation]
   }
 
   /**
@@ -209,22 +266,16 @@ class SectorManager {
   private activateSector(info: SectorInfo, lodLevel: LODLevel): boolean {
     const instanceCount = Math.max(1, Math.round(info.instanceCount * this.lodDensityMultiplier[lodLevel]))
 
-    const stream = this.streamFor(lodLevel)
-    const allocation = this.pool.allocate(stream, instanceCount)
-    if (!allocation) {
+    const allocations = this.allocateForLOD(lodLevel, info.seed, instanceCount, info.bounds)
+    if (!allocations) {
       return false
     }
-
-    const data = this.generator.generateMatrices(info.seed, instanceCount, info.bounds)
-    this.pool.writeMatrices(stream, allocation.offset, data)
-    // Стартуем невидимым — updateFades плавно поднимет fade к 1.
-    this.pool.writeFade(stream, allocation.offset, allocation.count, 0.0)
 
     const state: SectorState = {
       key: info.key,
       info,
       lodLevel,
-      allocation,
+      allocations,
       fade: 0.0,
       fadeTarget: 1.0,
       pendingRemoval: false,
@@ -244,34 +295,30 @@ class SectorManager {
    */
   private changeSectorLOD(state: SectorState, newLOD: LODLevel, info: SectorInfo): void {
     const instanceCount = Math.max(1, Math.round(info.instanceCount * this.lodDensityMultiplier[newLOD]))
-    const newStream = this.streamFor(newLOD)
-    const allocation = this.pool.allocate(newStream, instanceCount)
+    const allocations = this.allocateForLOD(newLOD, info.seed, instanceCount, info.bounds)
 
-    if (!allocation) {
+    if (!allocations) {
       // Нет места под новый тир — оставляем текущий как есть (сектор не теряем).
       return
     }
 
     // Текущий тир уводим в кросс-фейд-аут. Если предыдущий outgoing ещё жив
-    // (быстрый повторный свитч) — освобождаем его: держим максимум 2 аллокации.
+    // (быстрый повторный свитч) — освобождаем его целиком: держим максимум 2 тира.
     if (state.outgoing) {
-      this.pool.release(state.outgoing.allocation)
+      for (const a of state.outgoing.allocations) this.pool.release(a)
     }
     state.outgoing = {
       lodLevel: state.lodLevel,
-      allocation: state.allocation,
+      allocations: state.allocations,
       fade: state.fade
     }
 
-    const data = this.generator.generateMatrices(info.seed, instanceCount, info.bounds)
-    this.pool.writeMatrices(newStream, allocation.offset, data)
-
     state.lodLevel = newLOD
-    state.allocation = allocation
+    state.allocations = allocations
     // Новый тир проявляется с нуля — встречно уходящему (сумма покрытия ≈ 1).
+    // fade=0 уже записан в буфер внутри allocateForLOD — повторной записи не требуется.
     state.fade = 0.0
     state.fadeTarget = 1.0
-    this.pool.writeFade(newStream, allocation.offset, allocation.count, state.fade)
   }
 
   /**
@@ -288,9 +335,11 @@ class SectorManager {
         } else {
           state.fade = Math.max(state.fade - step, state.fadeTarget)
         }
-        // fade изменился — залить новое значение в per-instance атрибут сектора.
-        // Осевшие секторы (fade == fadeTarget) не трогаем → нет покадровых записей.
-        this.pool.writeFade(this.streamFor(state.lodLevel), state.allocation.offset, state.allocation.count, state.fade)
+        // fade изменился — залить новое значение в per-instance атрибут КАЖДОЙ
+        // суб-аллокации сектора. Осевшие секторы (fade == fadeTarget) не трогаем.
+        for (const a of state.allocations) {
+          this.pool.writeFade(a.stream, a.offset, a.count, state.fade)
+        }
       }
 
       // Кросс-фейд: уходящий тир гаснет к 0, затем освобождается. Пишем fade со
@@ -299,16 +348,20 @@ class SectorManager {
       if (state.outgoing) {
         const out = state.outgoing
         out.fade = Math.max(out.fade - step, 0.0)
-        this.pool.writeFade(this.streamFor(out.lodLevel), out.allocation.offset, out.allocation.count, -out.fade)
+        for (const a of out.allocations) {
+          this.pool.writeFade(a.stream, a.offset, a.count, -out.fade)
+        }
         if (out.fade <= 0.001) {
-          this.pool.release(out.allocation)
+          for (const a of out.allocations) this.pool.release(a)
           state.outgoing = null
         }
       }
 
       if (state.pendingRemoval && state.fade <= 0.001) {
-        this.pool.release(state.allocation)
-        if (state.outgoing) this.pool.release(state.outgoing.allocation)
+        for (const a of state.allocations) this.pool.release(a)
+        if (state.outgoing) {
+          for (const a of state.outgoing.allocations) this.pool.release(a)
+        }
         toRemove.push(key)
       }
     }
@@ -323,8 +376,10 @@ class SectorManager {
    */
   public deactivateAll(): void {
     for (const [, state] of this.activeSectors) {
-      this.pool.release(state.allocation)
-      if (state.outgoing) this.pool.release(state.outgoing.allocation)
+      for (const a of state.allocations) this.pool.release(a)
+      if (state.outgoing) {
+        for (const a of state.outgoing.allocations) this.pool.release(a)
+      }
     }
     this.activeSectors.clear()
   }
