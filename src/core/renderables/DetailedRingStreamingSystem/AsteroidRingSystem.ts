@@ -4,7 +4,6 @@ import { Actor } from '@/core/models/Actor'
 import type { IRingRenderingObject } from '@/core/models/types'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { threeJS } from '@/core/graphic/ThreeJS'
-import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { readRingAlphaProfile, readRingAlphaBins } from './RingAlphaReadback'
 import { createDustRadialTexture } from './dust/DustRadialProfile'
@@ -283,14 +282,15 @@ class AsteroidRingSystem extends Group {
     // --- InstancePool ---
     const l0PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0Instances }
     const l1PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL1Instances }
-    // Запечённый архетип-осколок (план 2a: K=1; библиотека K=12–16 — план 2b).
-    // Сид детерминирован профилем → форма стабильна между сессиями и кольцами.
+    // Запечённый архетип-осколок (план 2a: K=1; библиотека K=12–16 — план 2b,
+    // подключается менеджером в Task 5/6). Сид детерминирован профилем → форма
+    // стабильна между сессиями и кольцами.
     const profileIndex = Object.keys(ASTEROID_PROFILES).indexOf(cfg.profile)
     const archetypeRng = new SeededRandom(hashSectorKey(0xa57, 0, profileIndex))
     const shape = new ArchetypeShape(generateArchetypeParams(archetypeRng))
     const l0Geometry = buildArchetypeGeometry(shape, cfg.asteroidShapeDetail, asteroidSize)
 
-    this.pool = new InstancePool(l0PoolConfig, l1PoolConfig, l0Geometry, asteroidSize * 2.5)
+    this.pool = new InstancePool(l0PoolConfig, l1PoolConfig, [l0Geometry], asteroidSize * 2.5)
 
     // Добавить рендер-объекты (L0 + L1)
     for (const obj of this.pool.getRenderObjects()) {
@@ -298,7 +298,7 @@ class AsteroidRingSystem extends Group {
     }
 
     // Деформация силуэта — только L0 (у billboard-материала этих юниформ нет)
-    const l0ShapeMaterial = this.pool.geometryMesh.material as InstancedAsteroidMaterial
+    const l0ShapeMaterial = this.pool.geometryMaterial
     l0ShapeMaterial.uniforms.uShapeAmpMin.value = cfg.shapeAmpMin
     l0ShapeMaterial.uniforms.uShapeAmpMax.value = cfg.shapeAmpMax
     l0ShapeMaterial.uniforms.uShapeFreq.value = cfg.shapeFreq
@@ -334,7 +334,7 @@ class AsteroidRingSystem extends Group {
     // дымкой. 0 при отсутствии планеты → тень выключена.
     const planetRadiusKm = this.model.parent?.physicalObject?.getAttribute('radius', 0) ?? 0
     const planetRadius = toThreeJSUnits(planetRadiusKm)
-    const l0Mat = this.pool.geometryMesh.material as InstancedAsteroidMaterial
+    const l0Mat = this.pool.geometryMaterial
     for (const uniforms of [l0Mat.uniforms, this.pool.billboardMaterial.uniforms]) {
       uniforms.uDustPlanetRadius.value = planetRadius
     }
@@ -371,7 +371,7 @@ class AsteroidRingSystem extends Group {
 
       // Диагностический хендл (dev-only)
       if (import.meta.env.DEV) {
-        const l0Material = this.pool.geometryMesh.material as InstancedAsteroidMaterial
+        const l0Material = this.pool.geometryMaterial
         installRingDustDebug({
           volume: this.dustVolume,
           // uniforms материалов типизированы как обобщённый bag three.js (IUniform<any>);
@@ -406,7 +406,7 @@ class AsteroidRingSystem extends Group {
     }
 
     const cfg = this.config
-    const l0Material = this.pool.geometryMesh.material as InstancedAsteroidMaterial
+    const l0Material = this.pool.geometryMaterial
     const u = l0Material.uniforms
     u.uRockDiffMap.value = diff
     u.uRockNorMap.value = nor
@@ -465,7 +465,7 @@ class AsteroidRingSystem extends Group {
     this.worldToLocal(this._localLightDir)
     this._localLightDir.normalize()
 
-    const l0Material = this.pool.geometryMesh.material as InstancedAsteroidMaterial
+    const l0Material = this.pool.geometryMaterial
     l0Material.uniforms.uDustLightDirRing.value.copy(this._localLightDir)
     this.pool.billboardMaterial.uniforms.uDustLightDirRing.value.copy(this._localLightDir)
 
@@ -565,7 +565,7 @@ class AsteroidRingSystem extends Group {
     const radial = createDustRadialTexture(bins)
     if (!radial) return
 
-    const l0Material = this.pool.geometryMesh.material as InstancedAsteroidMaterial
+    const l0Material = this.pool.geometryMaterial
     const uniformSets = [l0Material.uniforms, this.pool.billboardMaterial.uniforms]
     if (this.dustVolume) uniformSets.push(this.dustVolume.dustMaterial.uniforms)
     for (const uniforms of uniformSets) {
@@ -586,7 +586,7 @@ class AsteroidRingSystem extends Group {
     outer: number,
     planetRadius: number
   ): void {
-    const l0Material = this.pool.geometryMesh.material as InstancedAsteroidMaterial
+    const l0Material = this.pool.geometryMaterial
     for (const uniforms of [l0Material.uniforms, this.pool.billboardMaterial.uniforms]) {
       uniforms.uDustColor.value.set(this.config.dustColor)
       uniforms.uDustDensity.value = density

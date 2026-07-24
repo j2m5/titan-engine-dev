@@ -56,11 +56,11 @@ describe('AsteroidRingSystem: визуальные ручки из модель�
 
   it('profile из data задаёт облик камней; неизвестное имя тихо падает в дефолт', () => {
     const icy = new AsteroidRingSystem(makeFakeActor({ profile: 'icy' }))
-    const icyColor = (icy as any).pool.geometryMesh.material.uniforms.uRockColor.value
+    const icyColor = (icy as any).pool.geometryMaterial.uniforms.uRockColor.value
     expect(icyColor.getHex()).toBe(new Color(ASTEROID_PROFILES.icy.baseColor).getHex())
 
     const typo = new AsteroidRingSystem(makeFakeActor({ profile: 'plasma' }))
-    const typoColor = (typo as any).pool.geometryMesh.material.uniforms.uRockColor.value
+    const typoColor = (typo as any).pool.geometryMaterial.uniforms.uRockColor.value
     expect(typoColor.getHex()).toBe(new Color(ASTEROID_PROFILES.stony.baseColor).getHex())
   })
 
@@ -85,7 +85,7 @@ describe('AsteroidRingSystem: визуальные ручки из модель�
     // числа вершин архетипа.
     const baseline = new AsteroidRingSystem(makeFakeActor())
     const maxRadius = (sys: AsteroidRingSystem): number => {
-      const pos = (sys as any).pool.geometryMesh.geometry.getAttribute('position')
+      const pos = (sys as any).pool.geometryMeshes[0].geometry.getAttribute('position')
       let max = 0
       for (let i = 0; i < pos.count; i++) {
         const r = Math.hypot(pos.getX(i), pos.getY(i), pos.getZ(i))

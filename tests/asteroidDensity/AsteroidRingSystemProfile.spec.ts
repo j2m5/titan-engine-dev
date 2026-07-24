@@ -78,7 +78,7 @@ describe('AsteroidRingSystem: применение радиального про
     const system = new AsteroidRingSystem(makeFakeActor())
     ;(system as any).__tryBuildDensityProfile()
 
-    const l0Uniforms = (system as any).pool.geometryMesh.material.uniforms
+    const l0Uniforms = (system as any).pool.geometryMaterial.uniforms
     const l1Uniforms = (system as any).pool.billboardMaterial.uniforms
     const dustUniforms = (system as any).dustVolume.dustMaterial.uniforms
     for (const uniforms of [l0Uniforms, l1Uniforms, dustUniforms]) {

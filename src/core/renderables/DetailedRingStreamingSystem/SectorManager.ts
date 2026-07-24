@@ -86,6 +86,15 @@ class SectorManager {
   }
 
   /**
+   * LOD-решение менеджера → адресуемый стрим пула. Geometry всегда стрим 0
+   * (K=1 совместимость этой задачи — раскладка по K архетипам приходит в
+   * Task 5); Billboard — выделенный стрим пула (индекс K).
+   */
+  private streamFor(lodLevel: LODLevel): number {
+    return lodLevel === LODLevel.Geometry ? 0 : this.pool.billboardStream
+  }
+
+  /**
    * Основной метод обновления. Вызывается каждый кадр.
    *
    * @param cameraAngle — угол камеры в полярных координатах (radians) в local space кольца
@@ -200,15 +209,16 @@ class SectorManager {
   private activateSector(info: SectorInfo, lodLevel: LODLevel): boolean {
     const instanceCount = Math.max(1, Math.round(info.instanceCount * this.lodDensityMultiplier[lodLevel]))
 
-    const allocation = this.pool.allocate(lodLevel, instanceCount)
+    const stream = this.streamFor(lodLevel)
+    const allocation = this.pool.allocate(stream, instanceCount)
     if (!allocation) {
       return false
     }
 
     const data = this.generator.generateMatrices(info.seed, instanceCount, info.bounds)
-    this.pool.writeMatrices(lodLevel, allocation.offset, data)
+    this.pool.writeMatrices(stream, allocation.offset, data)
     // Стартуем невидимым — updateFades плавно поднимет fade к 1.
-    this.pool.writeFade(lodLevel, allocation.offset, allocation.count, 0.0)
+    this.pool.writeFade(stream, allocation.offset, allocation.count, 0.0)
 
     const state: SectorState = {
       key: info.key,
@@ -234,7 +244,8 @@ class SectorManager {
    */
   private changeSectorLOD(state: SectorState, newLOD: LODLevel, info: SectorInfo): void {
     const instanceCount = Math.max(1, Math.round(info.instanceCount * this.lodDensityMultiplier[newLOD]))
-    const allocation = this.pool.allocate(newLOD, instanceCount)
+    const newStream = this.streamFor(newLOD)
+    const allocation = this.pool.allocate(newStream, instanceCount)
 
     if (!allocation) {
       // Нет места под новый тир — оставляем текущий как есть (сектор не теряем).
@@ -253,14 +264,14 @@ class SectorManager {
     }
 
     const data = this.generator.generateMatrices(info.seed, instanceCount, info.bounds)
-    this.pool.writeMatrices(newLOD, allocation.offset, data)
+    this.pool.writeMatrices(newStream, allocation.offset, data)
 
     state.lodLevel = newLOD
     state.allocation = allocation
     // Новый тир проявляется с нуля — встречно уходящему (сумма покрытия ≈ 1).
     state.fade = 0.0
     state.fadeTarget = 1.0
-    this.pool.writeFade(newLOD, allocation.offset, allocation.count, state.fade)
+    this.pool.writeFade(newStream, allocation.offset, allocation.count, state.fade)
   }
 
   /**
@@ -279,7 +290,7 @@ class SectorManager {
         }
         // fade изменился — залить новое значение в per-instance атрибут сектора.
         // Осевшие секторы (fade == fadeTarget) не трогаем → нет покадровых записей.
-        this.pool.writeFade(state.lodLevel, state.allocation.offset, state.allocation.count, state.fade)
+        this.pool.writeFade(this.streamFor(state.lodLevel), state.allocation.offset, state.allocation.count, state.fade)
       }
 
       // Кросс-фейд: уходящий тир гаснет к 0, затем освобождается. Пишем fade со
@@ -288,7 +299,7 @@ class SectorManager {
       if (state.outgoing) {
         const out = state.outgoing
         out.fade = Math.max(out.fade - step, 0.0)
-        this.pool.writeFade(out.lodLevel, out.allocation.offset, out.allocation.count, -out.fade)
+        this.pool.writeFade(this.streamFor(out.lodLevel), out.allocation.offset, out.allocation.count, -out.fade)
         if (out.fade <= 0.001) {
           this.pool.release(out.allocation)
           state.outgoing = null

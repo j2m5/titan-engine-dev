@@ -18,7 +18,7 @@ const makeFakeActor = (): Actor =>
 describe('AsteroidRingSystem: интеграция формы', () => {
   it('дефолтом ставит detail 3 на L0-геометрию (960 позиций)', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
-    const geom = (system as any).pool.geometryMesh.geometry
+    const geom = (system as any).pool.geometryMeshes[0].geometry
     expect(geom.getAttribute('position').count).toBe(960)
   })
 
@@ -26,7 +26,7 @@ describe('AsteroidRingSystem: интеграция формы', () => {
     // Амплитуда снижена: силуэт несёт запечённый архетип (Task 1–2 плана 2a),
     // деформация лишь остаточная рябь — декоррелятор повторов K мешей.
     const system = new AsteroidRingSystem(makeFakeActor())
-    const u = (system as any).pool.geometryMesh.material.uniforms
+    const u = (system as any).pool.geometryMaterial.uniforms
     expect(u.uShapeAmpMin.value).toBeCloseTo(0.03, 10)
     expect(u.uShapeAmpMax.value).toBeCloseTo(0.06, 10)
     expect(u.uShapeFreq.value).toBeCloseTo(1.4, 10)
@@ -38,8 +38,8 @@ describe('AsteroidRingSystem: интеграция формы', () => {
       shapeAmpMin: 0,
       shapeAmpMax: 0
     })
-    const geom = (system as any).pool.geometryMesh.geometry
-    const u = (system as any).pool.geometryMesh.material.uniforms
+    const geom = (system as any).pool.geometryMeshes[0].geometry
+    const u = (system as any).pool.geometryMaterial.uniforms
     expect(geom.getAttribute('position').count).toBe(240)
     expect(u.uShapeAmpMin.value).toBe(0)
     expect(u.uShapeAmpMax.value).toBe(0)
