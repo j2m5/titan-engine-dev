@@ -2,15 +2,30 @@ import { Model, ModelConstructor } from '@/core/framework/Memoquent/Model'
 import { AttributesOf, ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
 import { Scope } from '@/core/framework/Memoquent/Scope'
 
-type WhereHas = {
-  relation: string
-  callback?: (collection: ModelCollection<any>) => ModelCollection<any>
+/**
+ * Ключи связей модели. Связи объявлены геттерами на классе, поэтому
+ * выводятся по типу значения.
+ *
+ * ВАЖНО: нижняя граница коллекционной связи — ModelCollection<Model<object>>,
+ * а НЕ ModelCollection<never>. С never проверка
+ * `ModelCollection<Actor> extends ModelCollection<never>` не проходит
+ * (never требует items: never[]), и все связи-коллекции, включая
+ * Actor.children, молча выпадают из типа — код компилируется, просто
+ * whereHas('children') перестает быть валидным.
+ */
+export type RelationKeys<TM> = {
+  [K in keyof TM]: TM[K] extends ModelCollection<Model<object>> | Model<object> | null ? K : never
+}[keyof TM]
+
+type WhereHas<TModel> = {
+  relation: RelationKeys<TModel>
+  callback?: (collection: ModelCollection<Model<object>>) => ModelCollection<Model<object>>
   negate?: boolean
 }
 
-type WhereIn<TData> = {
-  field: keyof TData
-  values: any[]
+type WhereIn<TData, K extends keyof TData = keyof TData> = {
+  field: K
+  values: TData[K][]
   negate?: boolean
 }
 
@@ -19,15 +34,15 @@ type WhereNull<TData> = {
   negate?: boolean
 }
 
-type WhereBetween<TData> = {
-  field: keyof TData
-  range: [any, any]
+type WhereBetween<TData, K extends keyof TData = keyof TData> = {
+  field: K
+  range: [TData[K], TData[K]]
   negate?: boolean
 }
 
 class QueryBuilder<TData extends object, TModel extends Model<TData>> {
   private _conditions?: Partial<TData>
-  private _whereHas: WhereHas[] = []
+  private _whereHas: WhereHas<TModel>[] = []
   private _whereIn: WhereIn<TData>[] = []
   private _whereNull: WhereNull<TData>[] = []
   private _whereBetween: WhereBetween<TData>[] = []
@@ -44,11 +59,17 @@ class QueryBuilder<TData extends object, TModel extends Model<TData>> {
     if (this.scopesApplied) return
     this.scopesApplied = true
 
-    const scopes = (this.modelClass as any).getGlobalScopes()
+    const scopes = this.modelClass.getGlobalScopes()
 
-    scopes.forEach((scope: Scope<TData, TModel>, name: string): void => {
+    scopes.forEach((scope: Scope<object, Model<object>>, name: string): void => {
       if (!this.removedScopes.has(name)) {
-        scope.apply(this)
+        // Карта скоупов типизована по нижней границе (статика не видит параметры
+        // типа класса), поэтому сужение до конкретного билдера локально.
+        // Переход через unknown обязателен: RelationKeys<Model<object>> = never,
+        // поэтому QueryBuilder<TData, TModel> и QueryBuilder<object, Model<object>>
+        // не сравнимы напрямую (приватное поле _whereHas делает параметр TModel
+        // инвариантным). Скоуп получает ровно тот билдер, к которому применяется.
+        ;(scope as unknown as Scope<TData, TModel>).apply(this)
       }
     })
   }
@@ -61,7 +82,7 @@ class QueryBuilder<TData extends object, TModel extends Model<TData>> {
 
   public withoutGlobalScopes(scopes: string[] = []): this {
     if (!scopes.length) {
-      scopes = Array.from((this.modelClass as any).getGlobalScopes().keys())
+      scopes = Array.from(this.modelClass.getGlobalScopes().keys())
     }
 
     scopes.forEach((scope: string) => this.withoutGlobalScope(scope))
@@ -75,15 +96,18 @@ class QueryBuilder<TData extends object, TModel extends Model<TData>> {
     return this
   }
 
-  public whereHas(relation: string, callback?: (collection: ModelCollection<any>) => ModelCollection<any>): this {
+  public whereHas(
+    relation: RelationKeys<TModel>,
+    callback?: (collection: ModelCollection<Model<object>>) => ModelCollection<Model<object>>
+  ): this {
     this._whereHas.push({ relation, callback })
 
     return this
   }
 
   public whereDoesntHave(
-    relation: string,
-    callback?: (collection: ModelCollection<any>) => ModelCollection<any>
+    relation: RelationKeys<TModel>,
+    callback?: (collection: ModelCollection<Model<object>>) => ModelCollection<Model<object>>
   ): this {
     this._whereHas.push({ relation, callback, negate: true })
 
@@ -159,22 +183,26 @@ class QueryBuilder<TData extends object, TModel extends Model<TData>> {
   public get(): ModelCollection<TModel> {
     this.applyGlobalScopes()
 
-    const ModelClass = this.modelClass as any
-    let collection: ModelCollection<TModel> = this._conditions ? ModelClass.where(this._conditions) : ModelClass.all()
+    const instance: TModel = new this.modelClass()
+    const rows: TData[] = instance.source()
+    const conditions = this._conditions
+
+    const matched: TData[] = conditions
+      ? rows.filter((row: TData) =>
+          (Object.entries(conditions) as [keyof TData, TData[keyof TData]][]).every(
+            ([key, value]) => row[key] === value
+          )
+        )
+      : rows
+
+    let collection: ModelCollection<TModel> = new ModelCollection(matched.map((row: TData) => new this.modelClass(row)))
 
     if (this._whereHas.length > 0) {
       collection = collection.filter((model: TModel) => {
-        return this._whereHas!.every(({ relation, callback, negate }) => {
-          const rawRelated = (model as any)[relation]
-          const related: ModelCollection<any> = this.normalizeRelation(rawRelated)
+        return this._whereHas.every(({ relation, callback, negate }) => {
+          const related: ModelCollection<Model<object>> = this.normalizeRelation(model[relation])
 
-          let exists: boolean
-
-          if (!callback) {
-            exists = related.isNotEmpty()
-          } else {
-            exists = callback(related).isNotEmpty()
-          }
+          const exists: boolean = callback ? callback(related).isNotEmpty() : related.isNotEmpty()
 
           return negate ? !exists : exists
         })
@@ -184,8 +212,8 @@ class QueryBuilder<TData extends object, TModel extends Model<TData>> {
     if (this._whereIn.length > 0) {
       collection = collection.filter((model: TModel) => {
         return this._whereIn.every(({ field, values, negate }) => {
-          const value = model.getAttribute(field as any, null)
-          const exists = values.includes(value)
+          const value = this.fieldValue(model, field)
+          const exists = (values as unknown[]).includes(value)
 
           return negate ? !exists : exists
         })
@@ -195,8 +223,7 @@ class QueryBuilder<TData extends object, TModel extends Model<TData>> {
     if (this._whereNull.length > 0) {
       collection = collection.filter((model: TModel) => {
         return this._whereNull.every(({ field, negate }) => {
-          const value = model.getAttribute(field as any, null)
-          const isNull = value === null
+          const isNull = this.fieldValue(model, field) === null
 
           return negate ? !isNull : isNull
         })
@@ -206,7 +233,7 @@ class QueryBuilder<TData extends object, TModel extends Model<TData>> {
     if (this._whereBetween.length > 0) {
       collection = collection.filter((model: TModel) => {
         return this._whereBetween.every(({ field, range, negate }) => {
-          const value = model.getAttribute(field as any, null)
+          const value = this.fieldValue(model, field)
 
           if (value === null) {
             return false
@@ -221,7 +248,7 @@ class QueryBuilder<TData extends object, TModel extends Model<TData>> {
     }
 
     if (this._orderBy) {
-      collection = collection.sortBy(this._orderBy.field as any, this._orderBy.direction)
+      collection = collection.sortBy(this._orderBy.field as keyof AttributesOf<TModel>, this._orderBy.direction)
     }
 
     if (this._offset !== undefined) {
@@ -286,13 +313,25 @@ class QueryBuilder<TData extends object, TModel extends Model<TData>> {
     return this.get().toArray()
   }
 
-  private normalizeRelation(value: any): ModelCollection<any> {
+  /**
+   * Значение поля для предикатов where*: отсутствующее читается как null.
+   *
+   * Читаем attributes напрямую, а не через getAttribute: тот подменяет
+   * defaultValue по falsy (attributes[key] || defaultValue), из-за чего
+   * хранимые 0 и '' считались null (whereNull находил их), а вызов без
+   * defaultValue вообще вернул бы '-' вместо null.
+   */
+  private fieldValue(model: TModel, field: keyof TData): NonNullable<TData[keyof TData]> | null {
+    return model.attributes[field] ?? null
+  }
+
+  private normalizeRelation(value: unknown): ModelCollection<Model<object>> {
     if (value instanceof ModelCollection) {
-      return value
+      return value as ModelCollection<Model<object>>
     }
 
     if (value instanceof Model) {
-      return new ModelCollection([value])
+      return new ModelCollection([value as Model<object>])
     }
 
     return new ModelCollection([])

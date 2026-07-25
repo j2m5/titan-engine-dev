@@ -14,6 +14,13 @@ export interface RelationConfig<T = Identity> {
 
 export interface ModelConstructor<TData extends object, TModel extends Model<TData>> {
   new (attributes?: Partial<TData>): TModel
+  /**
+   * Статические члены в TS не могут ссылаться на параметры типа класса,
+   * поэтому карта скоупов типизируется по нижней границе
+   * Scope<object, Model<object>>. Конкретный Scope<IActor, Actor> ей
+   * удовлетворяет за счет бивариантности параметра метода apply.
+   */
+  getGlobalScopes(): Map<string, Scope<object, Model<object>>>
 }
 
 abstract class Model<TData extends object = DataSource> {

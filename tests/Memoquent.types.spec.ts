@@ -60,6 +60,28 @@ describe('ModelCollection — типизация ключей', () => {
   })
 })
 
+describe('QueryBuilder — типизация связей и полей', () => {
+  it('whereHas принимает только реальные связи', () => {
+    // @ts-expect-error — 'label' это атрибут, а не связь
+    Thing.query().whereHas('label')
+    // @ts-expect-error — 'nope' не существует
+    Thing.query().whereHas('nope')
+
+    expect(Thing.query().count()).toBe(2)
+  })
+
+  it('whereIn проверяет тип значений по полю', () => {
+    // @ts-expect-error — id это number, строки недопустимы
+    Thing.query().whereIn('id', ['1'])
+
+    expect(Thing.query().whereIn('id', [1]).count()).toBe(1)
+  })
+
+  it('pluck на билдере выводит тип поля', () => {
+    expectTypeOf(Thing.query().pluck('weight')).toEqualTypeOf<(number | undefined)[]>()
+  })
+})
+
 describe('Collection — типизация над плоским объектом', () => {
   it('ключи выводятся из T, когда TShape не задан', () => {
     const collection = new Collection<IThing>(THINGS)
