@@ -13,7 +13,7 @@ class ScenarioScope implements Scope<IActor, Actor> {
     const scenarioIds: number[] = Actor.where({ id: rootId })
       .expand()
       .pluck('id')
-      .filter((id): id is number => id !== undefined)
+      .filter((id): id is number => typeof id === 'number')
 
     builder.whereIn('id', scenarioIds)
   }

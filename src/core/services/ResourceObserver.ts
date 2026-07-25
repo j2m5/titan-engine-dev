@@ -143,7 +143,7 @@ class ResourceObserver {
     const preparedActors: string[] = Actor.query()
       .whereIn('id', actorIds)
       .pluck('name')
-      .filter((name): name is string => name !== undefined)
+      .filter((name): name is string => typeof name === 'string')
     const filterPreparedActors: ObservableRecord[] = Array.from(this.sceneObserver.data.values()).filter(
       (record: ObservableRecord) => preparedActors.includes(record.name)
     )

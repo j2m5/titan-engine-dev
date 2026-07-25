@@ -1,12 +1,12 @@
-﻿import { describe, it, expect, afterAll } from 'vitest'
+import { describe, it, expect, afterAll } from 'vitest'
 import { Model } from '@/core/framework/Memoquent/Model'
 import { Scope } from '@/core/framework/Memoquent/Scope'
 import { QueryBuilder } from '@/core/framework/Memoquent/QueryBuilder'
 
 /**
- * РўРµСЃС‚РѕРІР°СЏ РјРѕРґРµР»СЊ-С„РёРєСЃС‚СѓСЂР°. Memoquent С‡РёС‚Р°РµС‚ РґР°РЅРЅС‹Рµ С‡РµСЂРµР· source(),
- * РїРѕСЌС‚РѕРјСѓ РґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїРµСЂРµРѕРїСЂРµРґРµР»РёС‚СЊ РµРіРѕ СЃС‚Р°С‚РёС‡РЅС‹Рј РјР°СЃСЃРёРІРѕРј вЂ”
- * РЅРёРєР°РєРѕР№ СЂРµР°Р»СЊРЅРѕР№ Р‘Р” РґР»СЏ С‚РµСЃС‚РѕРІ QueryBuilder РЅРµ РЅСѓР¶РЅРѕ.
+ * Тестовая модель-фикстура. Memoquent читает данные через source(),
+ * поэтому достаточно переопределить его статичным массивом —
+ * никакой реальной БД для тестов QueryBuilder не нужно.
  */
 interface UserData {
   id: number
@@ -33,126 +33,102 @@ class User extends Model<UserData> {
   }
 }
 
-/** Р“Р»РѕР±Р°Р»СЊРЅС‹Р№ СЃРєРѕСѓРї: СЃРєСЂС‹РІР°РµС‚ "СѓРґР°Р»РµРЅРЅС‹Рµ" Р·Р°РїРёСЃРё (deletedAt !== null) */
+/** Глобальный скоуп: скрывает "удаленные" записи (deletedAt !== null) */
 class NotDeletedScope implements Scope<UserData, User> {
   public apply(builder: QueryBuilder<UserData, User>): void {
     builder.whereNull('deletedAt')
   }
 }
 
-describe('QueryBuilder вЂ” С„РёР»СЊС‚СЂР°С†РёСЏ', () => {
-  it('where СЃСѓР¶Р°РµС‚ РїРѕ С‚РѕС‡РЅРѕРјСѓ СЃРѕРІРїР°РґРµРЅРёСЋ', () => {
+describe('QueryBuilder — фильтрация', () => {
+  it('where сужает по точному совпадению', () => {
     const result = User.query().where({ role: 'editor' }).get()
 
     expect(result.pluck('id')).toEqual([2, 3])
   })
 
-  it('whereIn РІРєР»СЋС‡Р°РµС‚ С‚РѕР»СЊРєРѕ РїРµСЂРµС‡РёСЃР»РµРЅРЅС‹Рµ Р·РЅР°С‡РµРЅРёСЏ', () => {
+  it('whereIn включает только перечисленные значения', () => {
     const result = User.query().whereIn('role', ['admin', 'viewer']).get()
 
     expect(result.pluck('id').sort()).toEqual([1, 4, 5])
   })
 
-  it('whereNotIn РёСЃРєР»СЋС‡Р°РµС‚ РїРµСЂРµС‡РёСЃР»РµРЅРЅС‹Рµ Р·РЅР°С‡РµРЅРёСЏ', () => {
+  it('whereNotIn исключает перечисленные значения', () => {
     const result = User.query().whereNotIn('role', ['viewer']).get()
 
     expect(result.pluck('id').sort()).toEqual([1, 2, 3])
   })
 
-  it('whereBetween РІРєР»СЋС‡Р°РµС‚ РіСЂР°РЅРёС†С‹ РґРёР°РїР°Р·РѕРЅР°', () => {
+  it('whereBetween включает границы диапазона', () => {
     const result = User.query().whereBetween('age', [25, 41]).get()
 
     expect(result.pluck('id').sort()).toEqual([1, 2, 3])
   })
 
-  it('whereNull / whereNotNull РїРѕ nullable-РїРѕР»СЋ', () => {
-    expect(
-      User.query()
-        .whereNotNull('deletedAt')
-        .get()
-        .pluck('id')
-    ).toEqual([3])
-    expect(
-      User.query()
-        .whereNull('deletedAt')
-        .get()
-        .pluck('id')
-        .sort()
-    ).toEqual([1, 2, 4, 5])
+  it('whereNull / whereNotNull по nullable-полю', () => {
+    expect(User.query().whereNotNull('deletedAt').get().pluck('id')).toEqual([3])
+    expect(User.query().whereNull('deletedAt').get().pluck('id').sort()).toEqual([1, 2, 4, 5])
   })
 
-  it('РєРѕРјР±РёРЅРёСЂСѓРµС‚ РЅРµСЃРєРѕР»СЊРєРѕ СѓСЃР»РѕРІРёР№ С‡РµСЂРµР· AND', () => {
+  it('комбинирует несколько условий через AND', () => {
     const result = User.query().whereIn('role', ['editor', 'viewer']).whereBetween('age', [20, 50]).get()
 
-    // editor/viewer Р РІРѕР·СЂР°СЃС‚ 20..50 => Bob(25), Carol(41)
+    // editor/viewer И возраст 20..50 => Bob(25), Carol(41)
     expect(result.pluck('id').sort()).toEqual([2, 3])
   })
 })
 
-describe('QueryBuilder вЂ” Р±Р°Рі #1: count() СѓС‡РёС‚С‹РІР°РµС‚ Р’РЎР• С„РёР»СЊС‚СЂС‹', () => {
-  it('count() СЃ whereIn СЃРѕРІРїР°РґР°РµС‚ СЃ РґР»РёРЅРѕР№ get()', () => {
+describe('QueryBuilder — баг #1: count() учитывает ВСЕ фильтры', () => {
+  it('count() с whereIn совпадает с длиной get()', () => {
     const query = () => User.query().whereIn('role', ['admin'])
 
     expect(query().count()).toBe(1)
     expect(query().count()).toBe(query().get().count())
   })
 
-  it('count() СЃ whereBetween РЅРµ СЂР°РІРµРЅ РѕР±С‰РµРјСѓ С‡РёСЃР»Сѓ Р·Р°РїРёСЃРµР№', () => {
+  it('count() с whereBetween не равен общему числу записей', () => {
     const query = () => User.query().whereBetween('age', [18, 26])
 
-    // Bob(25), Dave(19) => 2, Р° РќР• 5
+    // Bob(25), Dave(19) => 2, а НЕ 5
     expect(query().count()).toBe(2)
   })
 
-  it('count() СЃ РЅРµСЃРєРѕР»СЊРєРёРјРё С„РёР»СЊС‚СЂР°РјРё СЃРѕРіР»Р°СЃРѕРІР°РЅ СЃ get()', () => {
+  it('count() с несколькими фильтрами согласован с get()', () => {
     const query = () => User.query().whereNotIn('role', ['admin']).whereBetween('age', [20, 60])
 
     expect(query().count()).toBe(query().get().count())
   })
 })
 
-describe('QueryBuilder вЂ” Р±Р°Рі #2: limit(0) РІРѕР·РІСЂР°С‰Р°РµС‚ РїСѓСЃС‚СѓСЋ РєРѕР»Р»РµРєС†РёСЋ', () => {
-  it('limit(0) => 0 Р·Р°РїРёСЃРµР№ (Р° РЅРµ РІСЃРµ)', () => {
+describe('QueryBuilder — баг #2: limit(0) возвращает пустую коллекцию', () => {
+  it('limit(0) => 0 записей (а не все)', () => {
     expect(User.query().limit(0).get().count()).toBe(0)
   })
 
-  it('limit(2) РѕРіСЂР°РЅРёС‡РёРІР°РµС‚ РІС‹Р±РѕСЂРєСѓ', () => {
-    expect(
-      User.query()
-        .orderBy('id')
-        .limit(2)
-        .get()
-        .pluck('id')
-    ).toEqual([1, 2])
+  it('limit(2) ограничивает выборку', () => {
+    expect(User.query().orderBy('id').limit(2).get().pluck('id')).toEqual([1, 2])
   })
 
-  it('offset(0) РЅРµ С‚РµСЂСЏРµС‚ Р·Р°РїРёСЃРё', () => {
+  it('offset(0) не теряет записи', () => {
     expect(User.query().orderBy('id').offset(0).get().count()).toBe(5)
   })
 
-  it('offset + limit РґР°СЋС‚ РѕРєРЅРѕ', () => {
-    expect(
-      User.query()
-        .orderBy('id')
-        .offset(1)
-        .limit(2)
-        .get()
-        .pluck('id')
-    ).toEqual([2, 3])
+  it('offset + limit дают окно', () => {
+    expect(User.query().orderBy('id').offset(1).limit(2).get().pluck('id')).toEqual([2, 3])
   })
 })
 
-describe('QueryBuilder вЂ” paginate СЃРѕРіР»Р°СЃРѕРІР°РЅ СЃ С„РёР»СЊС‚СЂР°РјРё', () => {
-  it('total Рё lastPage СЃС‡РёС‚Р°СЋС‚СЃСЏ РїРѕ РѕС‚С„РёР»СЊС‚СЂРѕРІР°РЅРЅРѕРјСѓ РЅР°Р±РѕСЂСѓ', () => {
+describe('QueryBuilder — paginate согласован с фильтрами', () => {
+  it('total и lastPage считаются по отфильтрованному набору', () => {
     const result = User.query().whereIn('role', ['editor', 'viewer']).paginate(1, 2)
 
-    // editor/viewer => 4 Р·Р°РїРёСЃРё, РїРѕ 2 РЅР° СЃС‚СЂР°РЅРёС†Сѓ => 2 СЃС‚СЂР°РЅРёС†С‹
+    // editor/viewer => 4 записи, по 2 на страницу => 2 страницы
     expect(result.total).toBe(4)
     expect(result.lastPage).toBe(2)
     expect(result.data.count()).toBe(2)
   })
 
-  it('РІС‚РѕСЂР°СЏ СЃС‚СЂР°РЅРёС†Р° СЃРѕРґРµСЂР¶РёС‚ РѕСЃС‚Р°С‚РѕРє', () => {
+  it('вторая страница содержит остаток', () => {
     const result = User.query().orderBy('id').paginate(2, 2)
 
     expect(result.currentPage).toBe(2)
@@ -160,51 +136,37 @@ describe('QueryBuilder вЂ” paginate СЃРѕРіР»Р°СЃРѕРІР°РЅ
   })
 })
 
-describe('QueryBuilder вЂ” РіР»РѕР±Р°Р»СЊРЅС‹Рµ СЃРєРѕСѓРїС‹', () => {
-  // globalScopes СЃС‚Р°С‚РёС‡РЅР° Рё РїРµСЂРµР¶РёРІР°РµС‚ РјРµР¶РґСѓ С‚РµСЃС‚Р°РјРё вЂ” СЃРЅРёРјР°РµРј РїРѕСЃР»Рµ Р±Р»РѕРєР°,
-  // С‡С‚РѕР±С‹ СЃРєРѕСѓРї РЅРµ РїСЂРѕС‚РµРє РІ РґСЂСѓРіРёРµ describe СЌС‚РѕРіРѕ С„Р°Р№Р»Р°.
+describe('QueryBuilder — глобальные скоупы', () => {
+  // globalScopes статична и переживает между тестами — снимаем после блока,
+  // чтобы скоуп не протек в другие describe этого файла.
   afterAll(() => {
     User.getGlobalScopes().delete('not_deleted')
   })
 
-  it('get() СѓРІР°Р¶Р°РµС‚ РіР»РѕР±Р°Р»СЊРЅС‹Р№ СЃРєРѕСѓРї', () => {
+  it('get() уважает глобальный скоуп', () => {
     User.addGlobalScope('not_deleted', new NotDeletedScope())
 
-    // Carol (id:3) "СѓРґР°Р»РµРЅР°" (deletedAt !== null) вЂ” СЃРєРѕСѓРї РґРѕР»Р¶РµРЅ РµРµ СЃРєСЂС‹С‚СЊ
-    expect(
-      User.query()
-        .get()
-        .pluck('id')
-    ).not.toContain(3)
+    // Carol (id:3) "удалена" (deletedAt !== null) — скоуп должен ее скрыть
+    expect(User.query().get().pluck('id')).not.toContain(3)
   })
 
-  it('count() СѓРІР°Р¶Р°РµС‚ С‚РѕС‚ Р¶Рµ РіР»РѕР±Р°Р»СЊРЅС‹Р№ СЃРєРѕСѓРї (Р±Р°Рі #1 + СЃРєРѕСѓРїС‹)', () => {
+  it('count() уважает тот же глобальный скоуп (баг #1 + скоупы)', () => {
     User.addGlobalScope('not_deleted', new NotDeletedScope())
 
     expect(User.query().count()).toBe(4)
   })
 
-  it('withoutGlobalScope РѕС‚РєР»СЋС‡Р°РµС‚ СЃРєРѕСѓРї РґР»СЏ РєРѕРЅРєСЂРµС‚РЅРѕРіРѕ Р·Р°РїСЂРѕСЃР°', () => {
+  it('withoutGlobalScope отключает скоуп для конкретного запроса', () => {
     User.addGlobalScope('not_deleted', new NotDeletedScope())
 
     expect(User.query().withoutGlobalScope('not_deleted').count()).toBe(5)
-    expect(
-      User.query()
-        .withoutGlobalScope('not_deleted')
-        .get()
-        .pluck('id')
-    ).toContain(3)
+    expect(User.query().withoutGlobalScope('not_deleted').get().pluck('id')).toContain(3)
   })
 
-  it('СЃРєРѕСѓРї РєРѕРјР±РёРЅРёСЂСѓРµС‚СЃСЏ СЃ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёРјРё С„РёР»СЊС‚СЂР°РјРё С‡РµСЂРµР· AND', () => {
+  it('скоуп комбинируется с пользовательскими фильтрами через AND', () => {
     User.addGlobalScope('not_deleted', new NotDeletedScope())
 
-    // РЅРµ СѓРґР°Р»РµРЅС‹ Р editor => С‚РѕР»СЊРєРѕ Bob(2); Carol(3) РѕС‚СЃРµСЏРЅР° СЃРєРѕСѓРїРѕРј
-    expect(
-      User.query()
-        .where({ role: 'editor' })
-        .get()
-        .pluck('id')
-    ).toEqual([2])
+    // не удалены И editor => только Bob(2); Carol(3) отсеяна скоупом
+    expect(User.query().where({ role: 'editor' }).get().pluck('id')).toEqual([2])
   })
 })

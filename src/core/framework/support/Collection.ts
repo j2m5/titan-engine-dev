@@ -394,7 +394,7 @@ class Collection<T, TShape = T> implements Iterable<T> {
       return this.items.some(key)
     }
 
-    return this.items.some((item) => this.compare(this.value(item, key), operator || '===', value))
+    return this.items.some((item) => this.compare(this.value(item, key), operator ?? '===', value))
   }
 
   public every<K extends keyof TShape>(
@@ -406,7 +406,7 @@ class Collection<T, TShape = T> implements Iterable<T> {
       return this.items.every(key)
     }
 
-    return this.items.every((item) => this.compare(this.value(item, key), operator || '===', value))
+    return this.items.every((item) => this.compare(this.value(item, key), operator ?? '===', value))
   }
 
   public contains<K extends keyof TShape>(
