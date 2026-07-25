@@ -5,6 +5,7 @@ import { RingShaderTemplate as Shader } from '@/core/materials/shaders/lib/RingS
 import { IRingRenderingObject } from '@/core/models/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { requireRenderingData } from '@/core/helpers/renderingData'
 
 interface RingUniforms {
   diffuseMap: Texture | null
@@ -26,14 +27,8 @@ class RingShader extends AbstractShader<keyof RingUniforms> {
 
     const parent: Actor = this.model.parent!
 
-    // `IRenderingObject.data` — `Record<string, unknown>`, форма утверждается локально
-    const ringData = this.model.renderingObject?.getAttribute('data') as IRingRenderingObject | undefined
-
-    if (!ringData) {
-      throw new Error(
-        `[RingShader] У актора "${this.model.getAttribute('name', '?')}" отсутствует renderingObject.data`
-      )
-    }
+    // Форма `renderingObject.data` утверждается локально, где категория известна
+    const ringData: IRingRenderingObject = requireRenderingData<IRingRenderingObject>(this.model, 'RingShader')
 
     const ringTexture: Texture = resourceStorage.getTextureOrMake(
       this.model.resources.first()?.getAttribute('path') ?? ''

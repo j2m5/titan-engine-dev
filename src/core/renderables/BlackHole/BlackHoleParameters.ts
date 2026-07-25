@@ -1,5 +1,6 @@
 import { Actor } from '@/core/models/Actor'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { readRenderingData } from '@/core/helpers/renderingData'
 
 /**
  * Параметры рендеринга чёрной дыры (слой renderingObject.data)
@@ -102,7 +103,11 @@ class BlackHoleParameters {
       throw new Error(`[BlackHoleParameters] У актора "${model.getAttribute('name', '?')}" отсутствует physicalObject`)
     }
 
-    const data: IBlackHoleRenderingObject = model.renderingObject?.getAttribute('data') ?? {}
+    // `IRenderingObject.data` — это `Record<string, unknown>`: схема БД не различает конфиги
+    // по категориям, поэтому форма утверждается локально, где категория известна.
+    // В отличие от кольца и атмосферы, отсутствие строки здесь — не баг данных: минимальная
+    // дыра (Sgr A*) описана одним physicalObject, и `{}` — живая ветвь, а не заглушка
+    const data: IBlackHoleRenderingObject = readRenderingData<IBlackHoleRenderingObject>(model) ?? {}
 
     const mass: number = physical.getAttribute('mass')!
     this.schwarzschildRadius = BlackHoleParameters.schwarzschildRadiusKm(mass)

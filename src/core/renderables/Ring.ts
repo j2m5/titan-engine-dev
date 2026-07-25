@@ -4,6 +4,7 @@ import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { RingMaterial } from '@/core/materials/RingMaterial'
 import { degToRad } from 'three/src/math/MathUtils'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { requireRenderingData } from '@/core/helpers/renderingData'
 import { IRingRenderingObject } from '@/core/models/types'
 
 class Ring extends Mesh {
@@ -19,13 +20,8 @@ class Ring extends Mesh {
   }
 
   __setup(): void {
-    // `IRenderingObject.data` — это `Record<string, unknown>`: схема БД не различает
-    // конфиги по категориям. Кольцо знает свою категорию, поэтому форма утверждается локально.
-    const ringData = this.model.renderingObject?.getAttribute('data') as IRingRenderingObject | undefined
-
-    if (!ringData) {
-      throw new Error(`[Ring] У актора "${this.model.getAttribute('name', '?')}" отсутствует renderingObject.data`)
-    }
+    // Кольцо знает свою категорию, поэтому форма `renderingObject.data` утверждается локально
+    const ringData: IRingRenderingObject = requireRenderingData<IRingRenderingObject>(this.model, 'Ring')
 
     const innerRadius: number = toThreeJSUnits(ringData.innerRadius)
     const outerRadius: number = toThreeJSUnits(ringData.outerRadius)

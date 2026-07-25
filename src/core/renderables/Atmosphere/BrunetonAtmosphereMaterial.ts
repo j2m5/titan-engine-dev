@@ -44,6 +44,7 @@ import { AtmosphereConfig, createAtmosphereUniforms, updateAtmosphereUniforms } 
 import { AtmosphereLUTs } from './AtmosphereLUTGenerator'
 import { IUniform } from 'three/src/renderers/shaders/UniformsLib'
 import { Actor } from '@/core/models/Actor'
+import { requireRenderingData } from '@/core/helpers/renderingData'
 
 /**
  * Deep-clone a uniforms object so each material instance owns independent
@@ -80,21 +81,12 @@ class BrunetonAtmosphereMaterial extends RawShaderMaterial {
   private _localSunDir = new Vector3()
 
   /**
-   * Конфиг атмосферы актора. `IRenderingObject.data` — это `Record<string, unknown>`
-   * (схема БД не различает конфиги по категориям), поэтому форма утверждается здесь,
+   * Конфиг атмосферы актора: форма `renderingObject.data` утверждается здесь,
    * в одном месте на весь класс. Отсутствие конфига — баг данных: атмосферу без
    * параметров не построить, а `createAtmosphereUniforms` разыменовывает поля сразу.
    */
   private static __config(model: Actor): AtmosphereConfig {
-    const config = model.renderingObject?.getAttribute('data') as AtmosphereConfig | undefined
-
-    if (!config) {
-      throw new Error(
-        `[BrunetonAtmosphereMaterial] У актора "${model.getAttribute('name', '?')}" отсутствует renderingObject.data`
-      )
-    }
-
-    return config
+    return requireRenderingData<AtmosphereConfig>(model, 'BrunetonAtmosphereMaterial')
   }
 
   public constructor(model: Actor) {

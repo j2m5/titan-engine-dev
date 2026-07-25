@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { validateDatabase, DatabaseSnapshot, ScenarioRefs } from '@/core/framework/validation/validateDatabase'
 
 /**
- * Минимальный валидный снимок: один анкор-актор (galaxy) без обязательных связей.
+ * Минимальный валидный снимок: один анкор-актор (barycenter) без обязательных связей.
  * Каждый тест мутирует копию под конкретный нарушаемый инвариант.
  */
 function baseSnapshot(): DatabaseSnapshot {
@@ -429,7 +429,7 @@ describe('validateDatabase — предупреждения о полноте', 
     expect(result.warnings.some((w) => /no orbit/.test(w.message))).toBe(true)
   })
 
-  it('анкор (galaxy) без связей не даёт warnings', () => {
+  it('анкор (barycenter) без связей не даёт warnings', () => {
     const result = validateDatabase(baseSnapshot())
 
     expect(result.warnings).toHaveLength(0)

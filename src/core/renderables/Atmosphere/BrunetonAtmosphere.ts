@@ -4,6 +4,7 @@ import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
 import { Actor } from '@/core/models/Actor'
 import { BrunetonAtmosphereMaterial } from '@/core/renderables/Atmosphere/BrunetonAtmosphereMaterial'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { requireRenderingData } from '@/core/helpers/renderingData'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
 import { UpdateContext } from '@/core/UpdateContext'
@@ -37,14 +38,8 @@ class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
   }
 
   __setup(): void {
-    // `IRenderingObject.data` — `Record<string, unknown>`, форма утверждается локально
-    const config = this.model.renderingObject?.getAttribute('data') as AtmosphereConfig | undefined
-
-    if (!config) {
-      throw new Error(
-        `[BrunetonAtmosphere] У актора "${this.model.getAttribute('name', '?')}" отсутствует renderingObject.data`
-      )
-    }
+    // Форма `renderingObject.data` утверждается локально, где категория известна
+    const config: AtmosphereConfig = requireRenderingData<AtmosphereConfig>(this.model, 'BrunetonAtmosphere')
 
     const radius: number = toThreeJSUnits(config.topRadius)
 

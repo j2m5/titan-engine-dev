@@ -18,6 +18,7 @@ import { threeJS } from '@/core/graphic/ThreeJS'
 import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { requireRenderingData } from '@/core/helpers/renderingData'
 import { Nebula } from '@/core/renderables/Nebula'
 import { IRingRenderingObject } from '@/core/models/types'
 
@@ -148,17 +149,13 @@ class RenderableFactory {
   }
 
   private static createRing(actor: Actor): Object3D {
-    // `IRenderingObject.data` — `Record<string, unknown>`: схема БД не различает конфиги по
-    // категориям, поэтому форма утверждается локально, где категория известна.
     // Проверка стоит до конструирования: кольцо без конфига не построить, и отказ здесь
-    // ничего не аллоцирует, а сужение дальше доказывает сам tsc.
-    const ringData = actor.renderingObject?.getAttribute('data') as IRingRenderingObject | undefined
-
-    if (!ringData) {
-      throw new Error(
-        `[RenderableFactory] У кольца "${actor.getAttribute('name', '?')}" отсутствует renderingObject.data`
-      )
-    }
+    // ничего не аллоцирует, а сужение дальше доказывает сам tsc
+    const ringData: IRingRenderingObject = requireRenderingData<IRingRenderingObject>(
+      actor,
+      'RenderableFactory',
+      'кольца'
+    )
 
     const node = new StaticNode(actor)
     const lod = new LOD()

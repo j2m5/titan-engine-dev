@@ -14,6 +14,7 @@ import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/Atmosphere
 import { BrunetonAtmosphereMaterial } from '@/core/renderables/Atmosphere/BrunetonAtmosphereMaterial'
 import { Storage } from '@/core/framework/file/Storage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { requireRenderingData } from '@/core/helpers/renderingData'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 
@@ -38,14 +39,8 @@ class AtmosphereDebugScene {
 
   public constructor(container: HTMLElement, actorId: number) {
     this.actor = Actor.find(actorId)!
-    // `IRenderingObject.data` — `Record<string, unknown>`, форма утверждается локально
-    const data = this.actor.renderingObject?.getAttribute('data') as AtmosphereConfig | undefined
-
-    if (!data) {
-      throw new Error(
-        `[AtmosphereDebugScene] У актора "${this.actor.getAttribute('name', '?')}" отсутствует renderingObject.data`
-      )
-    }
+    // Форма `renderingObject.data` утверждается локально, где категория известна
+    const data: AtmosphereConfig = requireRenderingData<AtmosphereConfig>(this.actor, 'AtmosphereDebugScene')
 
     this.scene.background = new Color(0, 0, 0)
 
