@@ -20,7 +20,7 @@ class StarInnerLayer extends Sprite {
 
   __setup(): void {
     const map: Texture = resourceStorage.getTexture('sun.png')!
-    const temperature: number = this.model.physicalObject?.getAttribute('temperature', 5700)
+    const temperature: number = this.model.physicalObject?.getAttribute('temperature', 5700) ?? 5700
     const rgb: Colorable = colorTemperatureToRGB(temperature)
     const color: string = rgbToHex(rgb)
 

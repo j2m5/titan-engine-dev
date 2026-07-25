@@ -55,9 +55,9 @@ class SceneManager {
     root.children.eachRecursive((child: Actor, depth: number): void => {
       const object3D = RenderableFactory.make(child)
 
-      this.buffer.set(child.getAttribute('id'), object3D)
+      this.buffer.set(child.getAttribute('id')!, object3D)
 
-      if (child.parent) object3D.parent = this.buffer.get(child.parent.getAttribute('id')) || rootObject3D
+      if (child.parent) object3D.parent = this.buffer.get(child.parent.getAttribute('id')!) ?? rootObject3D
 
       if (isAcceptable(object3D)) object3D.accept(visitor)
 

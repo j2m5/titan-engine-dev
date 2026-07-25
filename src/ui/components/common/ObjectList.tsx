@@ -35,7 +35,7 @@ const ObjectList = observer(() => {
   }
 
   const handleSelect = (actor: Actor): void => {
-    const target = threeJS.scene.getObjectByName(actor.getAttribute('name'))
+    const target = threeJS.scene.getObjectByName(actor.getAttribute('name', ''))
 
     target?.add(sceneManager.crosshair)
   }

@@ -28,17 +28,27 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
     super(Shader)
     this.model = model
 
+    // `IRenderingObject.data` — `Record<string, unknown>`: схема БД не различает конфиги
+    // по категориям, поэтому форма утверждается локально там, где категория известна
     const planetData: Record<
       keyof IPlanetRenderingObject,
       ValueOf<IPlanetRenderingObject>
-    > = this.model.renderingObject?.getAttribute('data') || { bumpScale: 0, emission: 1 }
+    > = (this.model.renderingObject?.getAttribute('data') as IPlanetRenderingObject | undefined) ?? {
+      bumpScale: 0,
+      emission: 1
+    }
 
-    const ringData: IRingRenderingObject = this.model.children
+    const ringData: IRingRenderingObject = (this.model.children
       .where('categoryId', 6)
       .first()
-      ?.renderingObject?.getAttribute('data') || { innerRadius: 0, outerRadius: 0, alphaTest: 0, asteroidDensityScale: 1 }
+      ?.renderingObject?.getAttribute('data') as IRingRenderingObject | undefined) ?? {
+      innerRadius: 0,
+      outerRadius: 0,
+      alphaTest: 0,
+      asteroidDensityScale: 1
+    }
     const ringMap: Texture = resourceStorage.getTextureOrMake(
-      this.model.children.where('categoryId', 6).first()?.resources.first()?.getAttribute('path')
+      this.model.children.where('categoryId', 6).first()?.resources.first()?.getAttribute('path') ?? ''
     )
 
     const USE_RING: boolean = this.model.children.where('categoryId', 6).isNotEmpty()
@@ -52,7 +62,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       bumpMap: new Uniform(null),
       bumpScale: new Uniform(planetData.bumpScale),
       emission: new Uniform(planetData.emission),
-      targetRadius: new Uniform(toThreeJSUnits(this.model.physicalObject?.getAttribute('radius', 1))),
+      targetRadius: new Uniform(toThreeJSUnits(this.model.physicalObject?.getAttribute('radius', 1) ?? 1)),
       shadowRingsInnerRadius: new Uniform(toThreeJSUnits(ringData.innerRadius)),
       shadowRingsOuterRadius: new Uniform(toThreeJSUnits(ringData.outerRadius)),
       shadowRingsTexture: new Uniform(ringMap)

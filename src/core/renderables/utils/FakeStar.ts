@@ -31,7 +31,7 @@ class FakeStar extends Mesh {
 
   __setup(): void {
     const map: Texture = resourceStorage.getTexture('round.png')!
-    const temperature = this.model.physicalObject?.getAttribute('temperature', 5700)
+    const temperature = this.model.physicalObject?.getAttribute('temperature', 5700) ?? 5700
     const correctedTemperature = temperature + 1300
     const rgb = colorTemperatureToRGB(correctedTemperature)
     const color = rgbToHex(rgb)

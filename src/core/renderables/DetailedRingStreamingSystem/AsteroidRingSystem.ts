@@ -260,7 +260,8 @@ class AsteroidRingSystem extends Group {
     super()
     this.model = model
 
-    const renderData = model.renderingObject?.getAttribute('data')
+    // `IRenderingObject.data` — это `Record<string, unknown>`, форма утверждается локально
+    const renderData = model.renderingObject?.getAttribute('data') as IRingRenderingObject | undefined
     this.config = {
       ...DEFAULT_CONFIG,
       innerRadiusKm: renderData?.innerRadius ?? 70000,
@@ -613,7 +614,7 @@ class AsteroidRingSystem extends Group {
     const texture = resourceStorage.getTexture(path)
     if (!texture) return // ещё грузится (напр. s3) → повторим в следующем кадре
 
-    const ringData = this.model.renderingObject?.getAttribute('data')
+    const ringData = this.model.renderingObject?.getAttribute('data') as IRingRenderingObject | undefined
     const profile = readRingAlphaProfile(texture, this.ringInnerTU, this.ringOuterTU, {
       alphaTest: ringData?.alphaTest ?? 0,
       blurRadius: toThreeJSUnits(this.config.ringGapBleedKm)

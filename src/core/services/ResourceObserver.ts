@@ -263,10 +263,10 @@ class ResourceObserver {
 
     if (!root) return
 
-    this.map.set(root.getAttribute('id'), root)
+    this.map.set(root.getAttribute('id')!, root)
 
     root.children.eachRecursive((actor: Actor): void => {
-      this.map.set(actor.getAttribute('id'), actor)
+      this.map.set(actor.getAttribute('id')!, actor)
     })
   }
 
@@ -322,7 +322,7 @@ class ResourceObserver {
         this.deferred.push(...isNotLoaded)
         await this.loadDeferredTextures(isNotLoaded.toArray())
 
-        const node = threeJS.scene.getObjectByName(actor.getAttribute('name'))
+        const node = threeJS.scene.getObjectByName(actor.getAttribute('name', ''))
 
         if (hasRenderable(node)) (node.renderable?.material as AbstractShaderMaterial).updateMaterial()
       }

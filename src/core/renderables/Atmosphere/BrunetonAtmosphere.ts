@@ -7,6 +7,7 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { threeJS } from '@/core/graphic/ThreeJS'
 import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
 import { UpdateContext } from '@/core/UpdateContext'
+import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 
 class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
   public model: Actor
@@ -36,17 +37,26 @@ class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
   }
 
   __setup(): void {
-    const radius: number = toThreeJSUnits(this.model.renderingObject?.getAttribute('data').topRadius)
+    // `IRenderingObject.data` — `Record<string, unknown>`, форма утверждается локально
+    const config = this.model.renderingObject?.getAttribute('data') as AtmosphereConfig | undefined
+
+    if (!config) {
+      throw new Error(
+        `[BrunetonAtmosphere] У актора "${this.model.getAttribute('name', '?')}" отсутствует renderingObject.data`
+      )
+    }
+
+    const radius: number = toThreeJSUnits(config.topRadius)
 
     this.lutGenerator = new AtmosphereLUTGenerator(threeJS.renderer)
-    const lut = this.lutGenerator.generate(this.model.renderingObject?.getAttribute('data'))
+    const lut = this.lutGenerator.generate(config)
 
     this.geometry = new SphereGeometry(radius, 256, 256)
 
     this.material = new BrunetonAtmosphereMaterial(this.model)
     this.material.bindLUTTextures(lut)
 
-    this.name = this.model.getAttribute('name') + 'Atmosphere'
+    this.name = this.model.getAttribute('name', '') + 'Atmosphere'
   }
 
   /**

@@ -23,19 +23,19 @@ class KeplerianModel implements TKeplerianModel {
    * а не момента создания модели.
    */
   public get epoch(): number {
-    return this.model.orbit?.getAttribute('epoch', J2000)
+    return this.model.orbit?.getAttribute('epoch', J2000) ?? J2000
   }
 
   public get semiMajorAxis(): number {
-    return this.model.orbit?.getAttribute('semiMajorAxis', 0)
+    return this.model.orbit?.getAttribute('semiMajorAxis', 0) ?? 0
   }
 
   public get eccentricity(): number {
-    return this.model.orbit?.getAttribute('eccentricity', 0)
+    return this.model.orbit?.getAttribute('eccentricity', 0) ?? 0
   }
 
   public get inclination(): number {
-    return this.model.orbit?.getAttribute('inclination', 0)
+    return this.model.orbit?.getAttribute('inclination', 0) ?? 0
   }
 
   public get __inclination(): number {
@@ -43,7 +43,7 @@ class KeplerianModel implements TKeplerianModel {
   }
 
   public get argOfPeriapsis(): number {
-    return this.model.orbit?.getAttribute('argOfPeriapsis', 0)
+    return this.model.orbit?.getAttribute('argOfPeriapsis', 0) ?? 0
   }
 
   public get __argOfPeriapsis(): number {
@@ -51,7 +51,7 @@ class KeplerianModel implements TKeplerianModel {
   }
 
   public get ascendingNode(): number {
-    return this.model.orbit?.getAttribute('ascendingNode', 0)
+    return this.model.orbit?.getAttribute('ascendingNode', 0) ?? 0
   }
 
   public get __ascendingNode(): number {
@@ -59,7 +59,7 @@ class KeplerianModel implements TKeplerianModel {
   }
 
   public get meanAnomalyAtEpoch(): number {
-    return this.model.orbit?.getAttribute('meanAnomalyAtEpoch', 0)
+    return this.model.orbit?.getAttribute('meanAnomalyAtEpoch', 0) ?? 0
   }
 
   public get __meanAnomalyAtEpoch(): number {
@@ -72,12 +72,18 @@ class KeplerianModel implements TKeplerianModel {
    */
   public get mu(): number {
     if (this.model.parent && this.model.parent.physicalObject && this.model.physicalObject) {
-      return (
-        (G *
-          (this.model.parent.physicalObject.getAttribute('mass') +
-            this.model.physicalObject.getAttribute('mass'))) /
-        SolarMass
-      )
+      const parentMass: number | undefined = this.model.parent.physicalObject.getAttribute('mass')
+      const selfMass: number | undefined = this.model.physicalObject.getAttribute('mass')
+
+      // Отсутствие массы при наличии physicalObject — баг данных, а не значение
+      // по умолчанию: молчаливый дефолт дал бы NaN в среднем движении (политика §6.3)
+      if (parentMass === undefined || selfMass === undefined) {
+        throw new Error(
+          `[KeplerianModel] У актора "${this.model.getAttribute('name', '?')}" или его родителя отсутствует масса — период не вычислить`
+        )
+      }
+
+      return (G * (parentMass + selfMass)) / SolarMass
     }
 
     return 0
@@ -89,7 +95,7 @@ class KeplerianModel implements TKeplerianModel {
    * звёзды): там сумма масс родителя и тела не даёт корректного n.
    */
   private get dataPeriod(): number {
-    return this.model.orbit?.getAttribute('period', 0)
+    return this.model.orbit?.getAttribute('period', 0) ?? 0
   }
 
   /** Среднее движение, рад/сутки (эпоха — юлианская дата в сутках) */

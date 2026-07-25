@@ -18,7 +18,7 @@ class StarOuterLayer extends Mesh {
     super()
     this.model = model
 
-    this.radius = toThreeJSUnits(this.model.physicalObject?.getAttribute('radius'))
+    this.radius = toThreeJSUnits(this.model.physicalObject?.getAttribute('radius') ?? 0)
 
     this.__setup()
   }

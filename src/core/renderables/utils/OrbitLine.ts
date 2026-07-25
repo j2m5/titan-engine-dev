@@ -13,14 +13,14 @@ class OrbitLine extends Line implements Acceptable<IObject3DVisitor> {
   public constructor(model: Actor) {
     super()
     this.model = model
-    this.name = this.model.getAttribute('name') + 'OrbitLine'
+    this.name = this.model.getAttribute('name', '') + 'OrbitLine'
 
     this.__setup()
   }
 
   __setup(): void {
     this.geometry = new BufferGeometry().setFromPoints(this.calculatePath())
-    this.material = new LineBasicMaterial({ color: this.model.getAttribute('color'), depthTest: false })
+    this.material = new LineBasicMaterial({ color: this.model.getAttribute('color', '#ffffff'), depthTest: false })
 
     this.userData.type = 'orbit'
     this.scale.multiplyScalar(AU * SpaceScale)

@@ -104,7 +104,7 @@ class BlackHoleParameters {
 
     const data: IBlackHoleRenderingObject = model.renderingObject?.getAttribute('data') ?? {}
 
-    const mass: number = physical.getAttribute('mass')
+    const mass: number = physical.getAttribute('mass')!
     this.schwarzschildRadius = BlackHoleParameters.schwarzschildRadiusKm(mass)
     this.visualScale = data.visualScale ?? 1
     this.rsVisual = this.schwarzschildRadius * this.visualScale

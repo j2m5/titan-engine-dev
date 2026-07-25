@@ -26,8 +26,18 @@ class RingShader extends AbstractShader<keyof RingUniforms> {
 
     const parent: Actor = this.model.parent!
 
-    const ringData: IRingRenderingObject = this.model.renderingObject?.getAttribute('data')
-    const ringTexture: Texture = resourceStorage.getTextureOrMake(this.model.resources.first()?.getAttribute('path'))
+    // `IRenderingObject.data` — `Record<string, unknown>`, форма утверждается локально
+    const ringData = this.model.renderingObject?.getAttribute('data') as IRingRenderingObject | undefined
+
+    if (!ringData) {
+      throw new Error(
+        `[RingShader] У актора "${this.model.getAttribute('name', '?')}" отсутствует renderingObject.data`
+      )
+    }
+
+    const ringTexture: Texture = resourceStorage.getTextureOrMake(
+      this.model.resources.first()?.getAttribute('path') ?? ''
+    )
 
     this.uniforms = {
       diffuseMap: new Uniform(ringTexture),
@@ -35,7 +45,7 @@ class RingShader extends AbstractShader<keyof RingUniforms> {
       outerRadius: new Uniform(toThreeJSUnits(ringData.outerRadius)),
       alphaTest: new Uniform(ringData.alphaTest),
       lightPosition: new Uniform(new Vector3()),
-      planetRadius: new Uniform(toThreeJSUnits(parent.physicalObject?.getAttribute('radius', 1))),
+      planetRadius: new Uniform(toThreeJSUnits(parent.physicalObject?.getAttribute('radius', 1) ?? 1)),
       minDistance: new Uniform(toThreeJSUnits(1000)),
       maxDistance: new Uniform(toThreeJSUnits(5000))
     }

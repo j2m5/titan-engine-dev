@@ -22,19 +22,19 @@ class PlanetMaterial extends AbstractShaderMaterial {
 
   public updateMaterial(): void {
     const diffuseMap: Texture = resourceStorage.getTextureOrMake(
-      this.model.resources.where('resourceType', 'diffuse').first()?.getAttribute('path')
+      this.model.resources.where('resourceType', 'diffuse').first()?.getAttribute('path') ?? ''
     )
     const nightMap: Texture | undefined = resourceStorage.getTexture(
-      this.model.resources.where('resourceType', 'night').first()?.getAttribute('path')
+      this.model.resources.where('resourceType', 'night').first()?.getAttribute('path') ?? ''
     )
     const cloudMap: Texture | undefined = resourceStorage.getTexture(
-      this.model.resources.where('resourceType', 'cloud').first()?.getAttribute('path')
+      this.model.resources.where('resourceType', 'cloud').first()?.getAttribute('path') ?? ''
     )
     const specularMap: Texture | undefined = resourceStorage.getTexture(
-      this.model.resources.where('resourceType', 'specular').first()?.getAttribute('path')
+      this.model.resources.where('resourceType', 'specular').first()?.getAttribute('path') ?? ''
     )
     const bumpMap: Texture | undefined = resourceStorage.getTexture(
-      this.model.resources.where('resourceType', 'bump').first()?.getAttribute('path')
+      this.model.resources.where('resourceType', 'bump').first()?.getAttribute('path') ?? ''
     )
 
     this.uniforms.diffuseMap.value = diffuseMap

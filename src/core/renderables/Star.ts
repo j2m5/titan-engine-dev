@@ -14,7 +14,7 @@ class Star extends Mesh {
   public constructor(model: Actor) {
     super()
     this.model = model
-    this.radius = toThreeJSUnits(this.model.physicalObject?.getAttribute('radius'))
+    this.radius = toThreeJSUnits(this.model.physicalObject?.getAttribute('radius') ?? 0)
 
     this.__setup()
   }
@@ -23,7 +23,7 @@ class Star extends Mesh {
     this.geometry = new SphereGeometry(this.radius, 256, 256)
     this.material = new StarMaterial(this.model)
 
-    this.name = this.model.getAttribute('name') + 'Star'
+    this.name = this.model.getAttribute('name', '') + 'Star'
     this.userData.type = 'star'
     this.userData.clickable = true
   }

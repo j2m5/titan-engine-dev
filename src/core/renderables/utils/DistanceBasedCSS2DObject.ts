@@ -20,19 +20,21 @@ abstract class DistanceBasedCSS2DObject extends CSS2DObject {
   }
 
   public updateObject(ctx: UpdateContext): void {
-    const record: ObservableRecord | undefined = this.observer.data.get(this.model.getAttribute('name'))
+    const record: ObservableRecord | undefined = this.observer.data.get(this.model.getAttribute('name', ''))
 
     if (!record) return
 
-    const min = toThreeJSUnits(this.model.physicalObject?.getAttribute('radius') * 4)
-    const max = toThreeJSUnits(this.model.physicalObject?.getAttribute('radius') * 8)
+    const radius: number = this.model.physicalObject?.getAttribute('radius') ?? 0
+    const min = toThreeJSUnits(radius * 4)
+    const max = toThreeJSUnits(radius * 8)
 
     const fade = smoothstep(record.distance, min, max)
 
     this.element.style.opacity = `${fade}`
 
     if (this.userData.depth) {
-      const mass = Math.log10(this.model.physicalObject?.getAttribute('mass'))
+      // дефолт 1, а не 0: Math.log10(0) = -Infinity утянул бы priority в NaN-арифметику
+      const mass = Math.log10(this.model.physicalObject?.getAttribute('mass') ?? 1)
       const distance = Math.log10(record.distance + 1)
 
       this.userData.priority = Math.max(

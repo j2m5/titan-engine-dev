@@ -141,9 +141,9 @@ class SceneObserver extends EventEmitter {
 
   private makeRecord(object: Object3D): SceneObserverRecord {
     return {
-      name: object.model?.getAttribute('name', 'unknown'),
+      name: object.model?.getAttribute('name', 'unknown') ?? 'unknown',
       data: {
-        name: object.model?.getAttribute('name', 'unknown'),
+        name: object.model?.getAttribute('name', 'unknown') ?? 'unknown',
         distance: this._observable!.object.position.distanceTo(object.getWorldPosition(this.vector.clone())),
         position: object.getWorldPosition(this.vector.clone())
       }

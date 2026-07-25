@@ -8,7 +8,7 @@ class Barycenter extends DynamicNode {
   public constructor(model: Actor) {
     super(model)
     this.model = model
-    this.name = this.model.getAttribute('name')
+    this.name = this.model.getAttribute('name', '')
   }
 
   public override accept(visitor: IObject3DVisitor): void {

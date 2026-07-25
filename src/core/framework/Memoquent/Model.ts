@@ -244,8 +244,10 @@ abstract class Model<TData extends object = DataSource> {
     return result
   }
 
-  public getAttribute<TKey extends keyof TData>(key: TKey, defaultValue: any = '-'): TData[TKey] | any {
-    return this.attributes[key] || defaultValue
+  public getAttribute<TKey extends keyof TData>(key: TKey): TData[TKey] | undefined
+  public getAttribute<TKey extends keyof TData>(key: TKey, fallback: TData[TKey]): TData[TKey]
+  public getAttribute<TKey extends keyof TData>(key: TKey, fallback?: TData[TKey]): TData[TKey] | undefined {
+    return this.attributes[key] ?? fallback
   }
 
   public setAttribute<TKey extends keyof TData>(key: TKey, value: TData[TKey]): this {

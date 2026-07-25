@@ -79,12 +79,30 @@ class BrunetonAtmosphereMaterial extends RawShaderMaterial {
   private _localCameraPos = new Vector3()
   private _localSunDir = new Vector3()
 
+  /**
+   * Конфиг атмосферы актора. `IRenderingObject.data` — это `Record<string, unknown>`
+   * (схема БД не различает конфиги по категориям), поэтому форма утверждается здесь,
+   * в одном месте на весь класс. Отсутствие конфига — баг данных: атмосферу без
+   * параметров не построить, а `createAtmosphereUniforms` разыменовывает поля сразу.
+   */
+  private static __config(model: Actor): AtmosphereConfig {
+    const config = model.renderingObject?.getAttribute('data') as AtmosphereConfig | undefined
+
+    if (!config) {
+      throw new Error(
+        `[BrunetonAtmosphereMaterial] У актора "${model.getAttribute('name', '?')}" отсутствует renderingObject.data`
+      )
+    }
+
+    return config
+  }
+
   public constructor(model: Actor) {
     super({
       glslVersion: GLSL3,
       uniforms: cloneUniforms({
         ...BrunetonAtmosphereShaderTemplate.uniforms,
-        ...createAtmosphereUniforms(model.renderingObject?.getAttribute('data'))
+        ...createAtmosphereUniforms(BrunetonAtmosphereMaterial.__config(model))
       }),
       vertexShader: BrunetonAtmosphereShaderTemplate.vertexShader,
       fragmentShader: BrunetonAtmosphereShaderTemplate.fragmentShader,
@@ -97,10 +115,8 @@ class BrunetonAtmosphereMaterial extends RawShaderMaterial {
 
     // sun_size зависит от углового радиуса звезды конкретной планеты —
     // дефолт шаблона земной, без этого диск солнца рисуется неверного размера
-    const config: AtmosphereConfig | undefined = model.renderingObject?.getAttribute('data')
-    if (config) {
-      this.uniforms.sun_size.value.set(Math.tan(config.sunAngularRadius), Math.cos(config.sunAngularRadius))
-    }
+    const config: AtmosphereConfig = BrunetonAtmosphereMaterial.__config(model)
+    this.uniforms.sun_size.value.set(Math.tan(config.sunAngularRadius), Math.cos(config.sunAngularRadius))
   }
 
   /**

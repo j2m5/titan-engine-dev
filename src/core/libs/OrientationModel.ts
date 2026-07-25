@@ -44,18 +44,20 @@ class OrientationModel implements TOrientationModel {
   public get inclination(): number {
     return this.hasRotationData
       ? this.model.rotation!.getAttribute('inclination', 0)
-      : this.model.physicalObject?.getAttribute('axialTilt', 0)
+      : (this.model.physicalObject?.getAttribute('axialTilt', 0) ?? 0)
   }
 
   /** Сидерический период вращения, часы */
   public get period(): number {
     return this.hasRotationData
       ? this.model.rotation!.getAttribute('period', 0)
-      : this.model.physicalObject?.getAttribute('rotationPeriod', 0)
+      : (this.model.physicalObject?.getAttribute('rotationPeriod', 0) ?? 0)
   }
 
   public get direction(): 1 | -1 {
-    return this.hasRotationData ? this.model.rotation!.getAttribute('direction', 1) : 1
+    // `direction` объявлен опциональным в IRotationObject, поэтому TData[K] сам несёт
+    // undefined и перегрузка с дефолтом его не снимает — отсюда внешний `?? 1`
+    return this.hasRotationData ? (this.model.rotation!.getAttribute('direction', 1) ?? 1) : 1
   }
 
   /** Угол нулевого меридиана W на заданную эпоху (JD, сутки), градусы */

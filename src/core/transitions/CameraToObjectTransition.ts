@@ -39,7 +39,7 @@ class CameraToObjectTransition extends Command<CameraToObjectTransitionArgs> {
       const parameters: BlackHoleParameters = new BlackHoleParameters(this.model)
       offset = parameters.simulationRadiusUnits * 1.3
     } else {
-      const radius: number = toThreeJSUnits(this.model.physicalObject!.getAttribute('radius'))
+      const radius: number = toThreeJSUnits(this.model.physicalObject!.getAttribute('radius')!)
       offset = radius * 3
     }
 

@@ -15,6 +15,7 @@ import { BrunetonAtmosphereMaterial } from '@/core/renderables/Atmosphere/Brunet
 import { Storage } from '@/core/framework/file/Storage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 
 const EMPTY = { width: 0, expTerm: 0, expScale: 0, linearTerm: 0, constantTerm: 0 }
 const expL = (h: any) => ({ width: 0, expTerm: 1, expScale: -1 / h, linearTerm: 0, constantTerm: 0 })
@@ -37,10 +38,18 @@ class AtmosphereDebugScene {
 
   public constructor(container: HTMLElement, actorId: number) {
     this.actor = Actor.find(actorId)!
-    const data = this.actor.renderingObject?.getAttribute('data')
+    // `IRenderingObject.data` — `Record<string, unknown>`, форма утверждается локально
+    const data = this.actor.renderingObject?.getAttribute('data') as AtmosphereConfig | undefined
+
+    if (!data) {
+      throw new Error(
+        `[AtmosphereDebugScene] У актора "${this.actor.getAttribute('name', '?')}" отсутствует renderingObject.data`
+      )
+    }
+
     this.scene.background = new Color(0, 0, 0)
 
-    const map = new TextureLoader().load(Storage.url(this.actor.parent!.resources!.first()!.getAttribute('path') || ''))
+    const map = new TextureLoader().load(Storage.url(this.actor.parent!.resources!.first()!.getAttribute('path') ?? ''))
     const night = new TextureLoader().load(Storage.url('night.jpg'))
 
     this.renderer = new WebGLRenderer({ antialias: true })
@@ -60,20 +69,14 @@ class AtmosphereDebugScene {
     const plMat = new PlanetMaterial(this.actor.parent!)
     plMat.uniforms.diffuseMap.value = map
     plMat.uniforms.nightMap.value = night
-    const planet = new Mesh(
-      new SphereGeometry(toThreeJSUnits(this.actor.renderingObject?.getAttribute('data').bottomRadius), 256, 256),
-      plMat
-    )
+    const planet = new Mesh(new SphereGeometry(toThreeJSUnits(data.bottomRadius), 256, 256), plMat)
     planet.position.set(0, 0, 10)
 
     this.scene.add(planet)
 
     this.gen = new AtmosphereLUTGenerator(this.renderer)
     this.mat = new BrunetonAtmosphereMaterial(this.actor)
-    this.atmoMesh = new Mesh(
-      new SphereGeometry(toThreeJSUnits(this.actor.renderingObject?.getAttribute('data').topRadius), 128, 128),
-      this.mat
-    )
+    this.atmoMesh = new Mesh(new SphereGeometry(toThreeJSUnits(data.topRadius), 128, 128), this.mat)
     planet.add(this.atmoMesh)
 
     this.controls.target = planet.position.clone()
@@ -122,7 +125,7 @@ class AtmosphereDebugScene {
     }
 
     this.rebuild()
-    this.gui = new GUI({ title: this.actor.getAttribute('name'), width: 320 })
+    this.gui = new GUI({ title: this.actor.getAttribute('name', ''), width: 320 })
     this.buildGUI()
 
     window.addEventListener('resize', () => {

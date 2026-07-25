@@ -9,7 +9,7 @@ class Galaxy extends Object3D implements Acceptable<IObject3DVisitor> {
   public constructor(model: Actor) {
     super()
     this.model = model
-    this.name = this.model.getAttribute('name')
+    this.name = this.model.getAttribute('name', '')
   }
 
   public accept(visitor: IObject3DVisitor): void {

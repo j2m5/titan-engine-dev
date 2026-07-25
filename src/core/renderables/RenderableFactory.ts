@@ -19,10 +19,11 @@ import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { Nebula } from '@/core/renderables/Nebula'
+import { IRingRenderingObject } from '@/core/models/types'
 
 class RenderableFactory {
   public static make(actor: Actor): Object3D {
-    switch (actor.getAttribute('categoryId')) {
+    switch (actor.getAttribute('categoryId', -1)) {
       case 1:
         return this.createBarycenter(actor)
       case 2:
@@ -57,10 +58,10 @@ class RenderableFactory {
       return toThreeJSUnits((2 * radius * threeJS.renderer.domElement.height) / (Math.tan(fov) * pixels))
     }
 
-    node.name = actor.getAttribute('name')
+    node.name = actor.getAttribute('name', '')
     node.renderable = lodl1
 
-    lod.name = actor.getAttribute('name') + 'LOD'
+    lod.name = actor.getAttribute('name', '') + 'LOD'
 
     lod.addLevel(lodl1)
     lod.addLevel(lodl2, distanceLod(config('blackHole.lodPixels')), config('blackHole.lodHysteresis'))
@@ -79,7 +80,7 @@ class RenderableFactory {
     const starOuterLayer = new StarOuterLayer(actor)
 
     const distanceLod = (pixels: number): number => {
-      const radius: number = actor.physicalObject!.getAttribute('radius')
+      const radius: number = actor.physicalObject!.getAttribute('radius')!
       const fov: number = degToRad(config('camera.fov'))
 
       return toThreeJSUnits((2 * radius * threeJS.renderer.domElement.height) / (Math.tan(fov) * pixels))
@@ -88,10 +89,10 @@ class RenderableFactory {
     lod.add(starInnerLayer)
     lodl1.add(starOuterLayer)
 
-    node.name = actor.getAttribute('name')
+    node.name = actor.getAttribute('name', '')
     node.renderable = lodl1
 
-    lod.name = actor.getAttribute('name') + 'LOD'
+    lod.name = actor.getAttribute('name', '') + 'LOD'
 
     lod.addLevel(lodl1)
     lod.addLevel(lodl2, distanceLod(3))
@@ -123,16 +124,16 @@ class RenderableFactory {
     const lodl2 = new FakePlanet(actor)
 
     const distanceLod = (pixels: number): number => {
-      const radius: number = actor.physicalObject!.getAttribute('radius')
+      const radius: number = actor.physicalObject!.getAttribute('radius')!
       const fov: number = degToRad(config('camera.fov'))
 
       return toThreeJSUnits((2 * radius * threeJS.renderer.domElement.height) / (Math.tan(fov) * pixels))
     }
 
-    node.name = actor.getAttribute('name')
+    node.name = actor.getAttribute('name', '')
     node.renderable = lodl1
 
-    lod.name = actor.getAttribute('name') + 'LOD'
+    lod.name = actor.getAttribute('name', '') + 'LOD'
 
     lod.addLevel(lodl1)
     lod.addLevel(lodl2, distanceLod(3))
@@ -153,10 +154,18 @@ class RenderableFactory {
     const detailed = new Ring(actor)
     detailed.add(new AsteroidRingSystem(actor))
 
-    const distanceLod = toThreeJSUnits(actor.renderingObject!.getAttribute('data').outerRadius * 2)
+    const ringData = actor.renderingObject?.getAttribute('data') as IRingRenderingObject | undefined
 
-    node.name = actor.getAttribute('name') + 'Ring'
-    lod.name = actor.getAttribute('name') + 'Ring'
+    if (!ringData) {
+      throw new Error(
+        `[RenderableFactory] У кольца "${actor.getAttribute('name', '?')}" отсутствует renderingObject.data`
+      )
+    }
+
+    const distanceLod = toThreeJSUnits(ringData.outerRadius * 2)
+
+    node.name = actor.getAttribute('name', '') + 'Ring'
+    lod.name = actor.getAttribute('name', '') + 'Ring'
     node.renderable = base
 
     lod.addLevel(detailed)

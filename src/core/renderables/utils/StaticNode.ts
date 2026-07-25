@@ -11,7 +11,7 @@ class StaticNode extends Group implements Acceptable<IObject3DVisitor> {
   public constructor(model: Actor | null = null) {
     super()
     this.model = model
-    this.name = this.model?.getAttribute('name')
+    this.name = this.model?.getAttribute('name', '') ?? ''
   }
 
   public accept(visitor: IObject3DVisitor): void {

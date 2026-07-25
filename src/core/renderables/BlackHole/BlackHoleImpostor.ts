@@ -35,7 +35,7 @@ class BlackHoleImpostor extends Group {
   }
 
   __setup(): void {
-    this.name = this.model.getAttribute('name') + 'BlackHoleImpostor'
+    this.name = this.model.getAttribute('name', '') + 'BlackHoleImpostor'
 
     // ── Тень: чёрная сфера читается как чёрный круг с любого ракурса,
     // без билбординга; перекрывает фон и пишет глубину штатным пайплайном ──

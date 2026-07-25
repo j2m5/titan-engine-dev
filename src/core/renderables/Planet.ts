@@ -17,13 +17,13 @@ class Planet extends Mesh {
   }
 
   __setup(): void {
-    const radius: number = toThreeJSUnits(this.model.physicalObject!.getAttribute('radius'))
+    const radius: number = toThreeJSUnits(this.model.physicalObject!.getAttribute('radius')!)
 
     const circumscribe: number = 1 / (Math.cos(Math.PI / 256) * Math.cos(Math.PI / 512))
     this.geometry = new SphereGeometry(radius * circumscribe, 256, 256)
     this.material = new PlanetMaterial(this.model)
 
-    this.name = this.model.getAttribute('name') + 'Planet'
+    this.name = this.model.getAttribute('name', '') + 'Planet'
     this.userData.type = 'planet'
     this.userData.clickable = true
   }

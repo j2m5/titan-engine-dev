@@ -39,7 +39,7 @@ class BlackHole extends Mesh {
     this.geometry = new SphereGeometry(this.parameters.simulationRadiusUnits, 64, 32)
     this.material = new BlackHoleMaterial(this.parameters)
 
-    this.name = this.model.getAttribute('name') + 'BlackHole'
+    this.name = this.model.getAttribute('name', '') + 'BlackHole'
     this.userData.type = 'blackHole'
     // клик-таргет — сфера зоны симуляции, не горизонт (спецификация §9)
     this.userData.clickable = true

@@ -316,20 +316,15 @@ class QueryBuilder<TData extends object, TModel extends Model<TData>> {
   /**
    * Значение поля для предикатов where*: отсутствующее читается как null.
    *
-   * Читаем attributes напрямую, а не через getAttribute: тот подменяет
-   * defaultValue по falsy (attributes[key] || defaultValue), из-за чего
-   * хранимые 0 и '' считались null (whereNull находил их), а вызов без
-   * defaultValue вообще вернул бы '-' вместо null.
-   *
-   * Расхождение временное: когда Task 5 уберет из getAttribute дефолт '-',
-   * этот хелпер можно свернуть обратно в getAttribute(field) ?? null — но
-   * только через перегрузку, возвращающую TData[K] | undefined, и никогда
-   * через версию с falsy-дефолтом, иначе вернется исходный баг.
+   * Обязательно перегрузка БЕЗ дефолта: она даёт TData[K] | undefined, и `??`
+   * приводит к null только реальные null/undefined. Версия с дефолтом вернула бы
+   * подстановку и снова считала бы хранимые 0 и '' пустыми (whereNull находил бы
+   * их) — именно этот баг жил здесь, пока getAttribute нёс дефолт '-' и `||`.
    * Семантику фиксирует блок «falsy-значения не считаются null» в
    * tests/QueryBuilder.spec.ts.
    */
   private fieldValue(model: TModel, field: keyof TData): NonNullable<TData[keyof TData]> | null {
-    return model.attributes[field] ?? null
+    return model.getAttribute(field) ?? null
   }
 
   private normalizeRelation(value: unknown): ModelCollection<Model<object>> {
