@@ -37,8 +37,9 @@
     "noUnusedLocals": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "types": ["vitest/globals"]
   },
-  "include": ["src/**/*", "storage/database/**/*", "types/*"],
+  "include": ["src/**/*", "storage/database/**/*", "types/*", "tests/**/*"],
   "exclude": ["node_modules"]
 }

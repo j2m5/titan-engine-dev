@@ -1,4 +1,4 @@
-import { Color, Vector3 } from 'three'
+import { Vector3 } from 'three'
 import { DEFAULT_NEBULA_PARAMS, mergeNebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 
 describe('NebulaParams', () => {

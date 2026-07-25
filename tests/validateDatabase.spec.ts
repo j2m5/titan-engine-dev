@@ -8,7 +8,7 @@ import { validateDatabase, DatabaseSnapshot, ScenarioRefs } from '@/core/framewo
 function baseSnapshot(): DatabaseSnapshot {
   return {
     categories: [
-      { id: 1, alias: 'galaxy', name: 'Galaxy' },
+      { id: 1, alias: 'barycenter', name: 'Barycenter' },
       { id: 2, alias: 'planet', name: 'Planet' },
       { id: 3, alias: 'star', name: 'Star' }
     ],
@@ -460,7 +460,7 @@ describe('validateDatabase — предупреждения о полноте', 
 
 describe('validateDatabase — ссылки сценариев', () => {
   it('ловит rootId, указывающий на несуществующего актора', () => {
-    const scenarios: ScenarioRefs[] = [{ id: 1, rootId: 999, galaxyId: 10, lightSources: [], skybox: [] }]
+    const scenarios: ScenarioRefs[] = [{ id: 1, rootId: 999, lightSources: [], skybox: [] }]
 
     const result = validateDatabase(baseSnapshot(), scenarios)
 
@@ -468,7 +468,7 @@ describe('validateDatabase — ссылки сценариев', () => {
   })
 
   it('ловит skybox, ссылающийся на несуществующий ресурс', () => {
-    const scenarios: ScenarioRefs[] = [{ id: 1, rootId: 10, galaxyId: 10, lightSources: [], skybox: [9999] }]
+    const scenarios: ScenarioRefs[] = [{ id: 1, rootId: 10, lightSources: [], skybox: [9999] }]
 
     const result = validateDatabase(baseSnapshot(), scenarios)
 
@@ -504,7 +504,6 @@ describe('validateDatabase — реальный database (базлайн)', () =
     const scenarioRefs: ScenarioRefs[] = Scenarios.map((s) => ({
       id: s.id,
       rootId: s.rootId,
-      galaxyId: s.galaxyId,
       lightSources: s.lightSources,
       skybox: s.skybox
     }))

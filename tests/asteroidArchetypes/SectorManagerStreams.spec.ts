@@ -45,7 +45,18 @@ const gridConfig: SectorGridConfig = {
 
 // Пороги подобраны так, чтобы: сосед по сетке (~50 units) не проходил ни в
 // Geometry, ни в Billboard диапазон — desiredSectors содержит РОВНО сектор (0,0).
-const thresholds: LODThresholds = { l0MaxDistance: 5, l1MaxDistance: 10 }
+// nearEnter/nearExitDistance намеренно отрицательные: эти тесты проверяют
+// исключительно Geometry/Billboard-раскладку (K-стримы, кросс-фейд), Near-тир
+// вне их скоупа. distClosest всегда >= 0 (см. SectorManager.update), поэтому
+// отрицательный порог входа гарантирует, что Near никогда не активируется —
+// то же поведение, что было при отсутствующих полях (сравнение с undefined
+// всегда false) до появления Near-тира в LODThresholds.
+const thresholds: LODThresholds = {
+  l0MaxDistance: 5,
+  l1MaxDistance: 10,
+  nearEnterDistance: -1,
+  nearExitDistance: -0.5
+}
 
 const identity = new Matrix4()
 const vpMatrix = buildAllVisibleViewProjection(1000)

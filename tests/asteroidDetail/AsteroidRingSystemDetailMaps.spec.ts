@@ -47,7 +47,7 @@ describe('AsteroidRingSystem: PBR-микрослой (детальные тек�
 describe('AsteroidRingSystem: пер-профильный PBR-сет', () => {
   it('профиль icy запрашивает у resourceStorage пути rocks_ground_04', async () => {
     vi.resetModules()
-    const getTexture = vi.fn(() => fakeTexture)
+    const getTexture = vi.fn((_key: string) => fakeTexture)
     vi.doMock('@/core/services/ResourceStorage', () => ({
       resourceStorage: { getTexture, getTextureOrMake: () => fakeTexture }
     }))
@@ -62,7 +62,7 @@ describe('AsteroidRingSystem: пер-профильный PBR-сет', () => {
 
   it('дефолтный профиль (stony) продолжает запрашивать rock_boulder_dry', async () => {
     vi.resetModules()
-    const getTexture = vi.fn(() => fakeTexture)
+    const getTexture = vi.fn((_key: string) => fakeTexture)
     vi.doMock('@/core/services/ResourceStorage', () => ({
       resourceStorage: { getTexture, getTextureOrMake: () => fakeTexture }
     }))

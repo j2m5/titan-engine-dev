@@ -28,7 +28,7 @@ describe('Nebula construction', () => {
 
   it('updateObject runs without throwing', () => {
     const nebula = new Nebula()
-    expect(() => nebula.updateObject(0.016)).not.toThrow()
+    expect(() => nebula.updateObject({ delta: 0, epoch: 0 })).not.toThrow()
   })
 
   it('dispose runs without throwing', () => {

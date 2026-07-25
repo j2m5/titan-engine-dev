@@ -1,4 +1,4 @@
-import { Color, Vector3 } from 'three'
+import { Color } from 'three'
 import { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
 import { installRingDustDebug } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustDebug'
 
@@ -11,7 +11,8 @@ const makeVolume = () =>
     dustColor: new Color(0x9b968c),
     anglePower: 2,
     nearFade: 20,
-    maxSteps: 16
+    maxSteps: 16,
+    planetRadius: 0
   })
 
 // Минимальный стаб uniforms материала камней
