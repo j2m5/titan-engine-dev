@@ -3,13 +3,27 @@ import { QueryBuilder } from '@/core/framework/Memoquent/QueryBuilder'
 import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
 import { Scope } from '@/core/framework/Memoquent/Scope'
 
-export type Identity = Record<string, number>
 export type DataSource = Record<string, unknown>
 
-export interface RelationConfig<T = Identity> {
-  foreignKey: keyof T
-  ownerKey?: keyof T
-  relatedKey?: keyof T
+/**
+ * Домены ключей у разных видов связей РАЗЛИЧАЮТСЯ, поэтому конфиги раздельные.
+ * У belongsTo foreignKey живёт на ЭТОЙ модели, а ownerKey — на связанной,
+ * то есть наоборот к hasMany. Попытка описать оба одним типом и вынуждала
+ * типизировать ключ как string.
+ */
+export interface HasManyConfig<TData extends object, TRelatedData extends object> {
+  foreignKey: keyof TRelatedData
+  ownerKey?: keyof TData
+}
+
+export interface BelongsToConfig<TData extends object, TRelatedData extends object> {
+  foreignKey: keyof TData
+  ownerKey?: keyof TRelatedData
+}
+
+export interface BelongsToManyConfig<TPivot extends object> {
+  foreignKey: keyof TPivot
+  relatedKey: keyof TPivot
 }
 
 export interface ModelConstructor<TData extends object, TModel extends Model<TData>> {
@@ -17,32 +31,43 @@ export interface ModelConstructor<TData extends object, TModel extends Model<TDa
   /**
    * Статические члены в TS не могут ссылаться на параметры типа класса,
    * поэтому карта скоупов типизируется по нижней границе
-   * Scope<object, Model<object>>. Конкретный Scope<IActor, Actor> ей
-   * удовлетворяет за счет бивариантности параметра метода apply.
+   * Scope<object, Model<object>>. Тип совпадает с типом поля globalScopes
+   * буквально — на присваиваемость конкретных Scope<IActor, Actor> к границе
+   * здесь рассчитывать нельзя, её нет (см. комментарий к addGlobalScope).
    */
   getGlobalScopes(): Map<string, Scope<object, Model<object>>>
 }
 
 abstract class Model<TData extends object = DataSource> {
   protected abstract table: string
-  protected primaryKey: keyof Identity = 'id'
+  protected primaryKey: string = 'id'
   public attributes: Partial<TData> = {}
 
-  protected static globalScopes: Map<string, Scope<any, any>> = new Map()
+  protected static globalScopes: Map<string, Scope<object, Model<object>>> = new Map()
 
   public constructor(attributes: Partial<TData> = {}) {
     this.fill(attributes)
   }
 
-  public static addGlobalScope(name: string, scope: Scope<any, any>): void {
+  /**
+   * Параметр обобщённый, а не Scope<object, Model<object>>: Scope на практике
+   * инвариантен по TModel (RelationKeys<Model<object>> вырождается в never,
+   * поэтому бивариантность apply не спасает), и конкретный Scope<IActor, Actor>
+   * нижней границе не удовлетворяет. Переход через unknown при записи в карту —
+   * та же вынужденная мера, что и в QueryBuilder.applyGlobalScopes.
+   */
+  public static addGlobalScope<TData extends object, TModel extends Model<TData>>(
+    name: string,
+    scope: Scope<TData, TModel>
+  ): void {
     if (!Object.prototype.hasOwnProperty.call(this, 'globalScopes')) {
       this.globalScopes = new Map()
     }
 
-    this.globalScopes.set(name, scope)
+    this.globalScopes.set(name, scope as unknown as Scope<object, Model<object>>)
   }
 
-  public static getGlobalScopes(): Map<string, Scope<any, any>> {
+  public static getGlobalScopes(): Map<string, Scope<object, Model<object>>> {
     return this.globalScopes
   }
 
@@ -52,10 +77,10 @@ abstract class Model<TData extends object = DataSource> {
 
   protected hasMany<TRelatedData extends object, TRelatedModel extends Model<TRelatedData>>(
     modelClass: ModelConstructor<TRelatedData, TRelatedModel>,
-    config: Pick<RelationConfig, 'foreignKey' | 'ownerKey'>
+    config: HasManyConfig<TData, TRelatedData>
   ): ModelCollection<TRelatedModel> {
     const relatedInstance: TRelatedModel = new modelClass()
-    const ownerKey = (config.ownerKey || this.primaryKey) as keyof TData
+    const ownerKey = (config.ownerKey ?? this.primaryKey) as keyof TData
     const ownerValue: TData[keyof TData] | undefined = this.attributes[ownerKey]
 
     if (ownerValue === undefined) {
@@ -64,7 +89,7 @@ abstract class Model<TData extends object = DataSource> {
 
     const models: TRelatedModel[] = relatedInstance
       .source()
-      .filter((item: TRelatedData): boolean => item[config.foreignKey as keyof TRelatedData] === ownerValue)
+      .filter((item: TRelatedData): boolean => (item[config.foreignKey] as unknown) === (ownerValue as unknown))
       .map((item: TRelatedData) => new modelClass(item))
 
     return new ModelCollection<TRelatedModel>(models)
@@ -72,26 +97,26 @@ abstract class Model<TData extends object = DataSource> {
 
   protected hasOne<TRelatedData extends object, TRelatedModel extends Model<TRelatedData>>(
     modelClass: ModelConstructor<TRelatedData, TRelatedModel>,
-    config: Pick<RelationConfig, 'foreignKey' | 'ownerKey'>
+    config: HasManyConfig<TData, TRelatedData>
   ): TRelatedModel | null {
-    return this.hasMany(modelClass, config).first() || null
+    return this.hasMany(modelClass, config).first() ?? null
   }
 
   protected belongsTo<TRelatedData extends object, TRelatedModel extends Model<TRelatedData>>(
     modelClass: ModelConstructor<TRelatedData, TRelatedModel>,
-    config: Pick<RelationConfig, 'foreignKey' | 'ownerKey'>
+    config: BelongsToConfig<TData, TRelatedData>
   ): TRelatedModel | null {
     const relatedInstance: TRelatedModel = new modelClass()
-    const ownerKey = (config.ownerKey || relatedInstance.primaryKey) as keyof TRelatedData
-    const foreignValue: TData[keyof TData] | undefined = this.attributes[config.foreignKey as keyof TData]
+    const ownerKey = (config.ownerKey ?? relatedInstance.primaryKey) as keyof TRelatedData
+    const foreignValue: TData[keyof TData] | undefined = this.attributes[config.foreignKey]
 
-    if (foreignValue === undefined) {
+    if (foreignValue === undefined || foreignValue === null) {
       return null
     }
 
     const item: TRelatedData | undefined = relatedInstance
       .source()
-      .find((item: TRelatedData): boolean => item[ownerKey] === foreignValue)
+      .find((row: TRelatedData): boolean => (row[ownerKey] as unknown) === (foreignValue as unknown))
 
     return item ? new modelClass(item) : null
   }
@@ -104,10 +129,9 @@ abstract class Model<TData extends object = DataSource> {
   >(
     relatedModel: ModelConstructor<TRelatedData, TRelatedModel>,
     pivotModel: ModelConstructor<TPivot, TPivotModel>,
-    config: Pick<RelationConfig<TPivot>, 'foreignKey' | 'relatedKey'>
+    config: BelongsToManyConfig<TPivot>
   ): ModelCollection<TRelatedModel> {
-    const ownerKey = this.primaryKey as keyof TData
-    const ownerValue: TData[keyof TData] | undefined = this.attributes[ownerKey]
+    const ownerValue: TData[keyof TData] | undefined = this.attributes[this.primaryKey as keyof TData]
 
     if (ownerValue === undefined) {
       return new ModelCollection<TRelatedModel>([])
@@ -117,18 +141,19 @@ abstract class Model<TData extends object = DataSource> {
 
     const relatedIds: unknown[] = pivotInstance
       .source()
-      .filter((p: TPivot): boolean => p[config.foreignKey] === ownerValue)
-      .map((p: TPivot) => p[config.relatedKey!])
+      .filter((p: TPivot): boolean => (p[config.foreignKey] as unknown) === (ownerValue as unknown))
+      .map((p: TPivot) => p[config.relatedKey] as unknown)
 
     if (relatedIds.length === 0) {
       return new ModelCollection<TRelatedModel>([])
     }
 
     const relatedInstance: TRelatedModel = new relatedModel()
+    const relatedPrimaryKey = relatedInstance.primaryKey as keyof TRelatedData
 
     const models: TRelatedModel[] = relatedInstance
       .source()
-      .filter((item: TRelatedData) => relatedIds.includes(item[relatedInstance.primaryKey as keyof TRelatedData]))
+      .filter((item: TRelatedData) => relatedIds.includes(item[relatedPrimaryKey] as unknown))
       .map((item: TRelatedData) => new relatedModel(item))
 
     return new ModelCollection<TRelatedModel>(models)
@@ -196,7 +221,7 @@ abstract class Model<TData extends object = DataSource> {
     return this
   }
 
-  public is(model: Model<any> | null | undefined): boolean {
+  public is(model: Model<object> | null | undefined): boolean {
     if (!model) return false
 
     return (
@@ -204,7 +229,7 @@ abstract class Model<TData extends object = DataSource> {
     )
   }
 
-  public isNot(model: Model<any> | null | undefined): boolean {
+  public isNot(model: Model<object> | null | undefined): boolean {
     return !this.is(model)
   }
 
@@ -229,12 +254,12 @@ abstract class Model<TData extends object = DataSource> {
     return this
   }
 
-  public getKeyName(): keyof Identity {
+  public getKeyName(): string {
     return this.primaryKey
   }
 
-  public getKey(): number | undefined {
-    return this.attributes[this.primaryKey as keyof TData] as number | undefined
+  public getKey(): unknown {
+    return this.attributes[this.primaryKey as keyof TData]
   }
 
   public getTable(): string {
@@ -247,7 +272,7 @@ abstract class Model<TData extends object = DataSource> {
     return new Constructor({ ...this.attributes })
   }
 
-  public toJSON(): Record<string, any> {
+  public toJSON(): Partial<TData> {
     return { ...this.attributes }
   }
 }

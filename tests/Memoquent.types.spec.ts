@@ -53,6 +53,28 @@ class Thing extends Model<IThing> {
   }
 }
 
+/**
+ * Отдельная фикстура под негативную проверку внешнего ключа. Добавить
+ * typoParts в Thing нельзя: RelationKeys<Thing> перестал бы равняться
+ * 'parts', и проверка нижней границы в whereHas потеряла бы смысл.
+ */
+class ThingWithRelations extends Model<IThing> {
+  protected table: string = 'things'
+
+  public override source(): IThing[] {
+    return THINGS
+  }
+
+  public get parts(): ModelCollection<Part> {
+    return this.hasMany(Part, { foreignKey: 'thingId' })
+  }
+
+  public get typoParts(): ModelCollection<Part> {
+    // @ts-expect-error — 'thingID' отсутствует в IPart
+    return this.hasMany(Part, { foreignKey: 'thingID' })
+  }
+}
+
 describe('ModelCollection — типизация ключей', () => {
   it('pluck выводит тип значения атрибута', () => {
     const collection = new ModelCollection(THINGS.map((t) => new Thing(t)))
@@ -119,6 +141,21 @@ describe('QueryBuilder — типизация связей и полей', () =>
 
   it('pluck на билдере выводит тип поля', () => {
     expectTypeOf(Thing.query().pluck('weight')).toEqualTypeOf<(number | undefined)[]>()
+  })
+})
+
+describe('Model — типизация внешних ключей и аксессоров', () => {
+  it('hasMany требует ключ связанной модели', () => {
+    // детали в PARTS привязаны к thingId: 2, поэтому фикстура берет Thing #2
+    const thing = new ThingWithRelations({ id: 2, label: 'b', weight: 20 })
+
+    expect(thing.parts.count()).toBe(2)
+  })
+
+  it('toJSON возвращает частичную форму данных', () => {
+    const thing = new ThingWithRelations({ id: 1, label: 'a', weight: 10 })
+
+    expectTypeOf(thing.toJSON()).toEqualTypeOf<Partial<IThing>>()
   })
 })
 
