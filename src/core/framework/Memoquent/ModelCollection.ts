@@ -1,13 +1,25 @@
 import { Collection } from '@/core/framework/support/Collection'
-import { DataSource, Model } from '@/core/framework/Memoquent/Model'
+import { Model } from '@/core/framework/Memoquent/Model'
 
-class ModelCollection<TModel extends Model<any>> extends Collection<TModel> {
+/**
+ * Извлекает форму данных модели. Позволяет ModelCollection остаться
+ * одноместным (ModelCollection<Actor>), но индексировать ключи IActor,
+ * а не ключи самого класса Actor.
+ */
+export type AttributesOf<TModel> = TModel extends Model<infer TData> ? TData : never
+
+class ModelCollection<TModel extends Model<object>> extends Collection<TModel, AttributesOf<TModel>> {
   public constructor(items: TModel[] = []) {
     super(items)
   }
 
   public find(id: number | string): TModel | undefined {
-    return this.where('id', '===', id).first()
+    // 'id' — жестко зашитое имя первичного ключа: из TModel оно не выводится,
+    // поэтому оба каста локальны и неизбежны
+    return this.where(
+      'id' as keyof AttributesOf<TModel>,
+      id as AttributesOf<TModel>[keyof AttributesOf<TModel>]
+    ).first()
   }
 
   public eachRecursive<TRelation extends keyof TModel>(
@@ -21,10 +33,10 @@ class ModelCollection<TModel extends Model<any>> extends Collection<TModel> {
         return false
       }
 
-      const children = (item as any)[childrenRelation]
+      const children = item[childrenRelation]
 
       if (children instanceof ModelCollection) {
-        children.each((child): void | false => {
+        children.each((child: TModel): void | false => {
           const childResult: void | false = traverse(child, depth + 1, item)
 
           return childResult === false ? false : undefined
@@ -47,15 +59,20 @@ class ModelCollection<TModel extends Model<any>> extends Collection<TModel> {
     return this.instance(flattened)
   }
 
-  protected override value(item: TModel, key: keyof TModel['attributes']): any {
-    return item.getAttribute(key)
+  protected override value<K extends keyof AttributesOf<TModel>>(
+    item: TModel,
+    key: K
+  ): AttributesOf<TModel>[K] | undefined {
+    // TModel сужен до Model<object>, поэтому связь TModel <-> AttributesOf<TModel>
+    // компилятору недоступна: переход через unknown локален и безопасен по построению
+    return (item as unknown as Model<AttributesOf<TModel>>).getAttribute(key)
   }
 
-  public toJSON(): any[] {
-    return this.items.map((item: TModel) => item.toJSON())
+  public toJSON(): Partial<AttributesOf<TModel>>[] {
+    return this.items.map((item: TModel) => item.toJSON() as Partial<AttributesOf<TModel>>)
   }
 
-  public static fromData<TData extends DataSource, TModel extends Model<TData>>(
+  public static fromData<TData extends object, TModel extends Model<TData>>(
     data: TData[],
     modelClass: new (attributes?: Partial<TData>) => TModel
   ): ModelCollection<TModel> {

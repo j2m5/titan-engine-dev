@@ -4,7 +4,7 @@ import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
 import { Scope } from '@/core/framework/Memoquent/Scope'
 
 export type Identity = Record<string, number>
-export type DataSource = Record<string, any>
+export type DataSource = Record<string, unknown>
 
 export interface RelationConfig<T = Identity> {
   foreignKey: keyof T
@@ -12,11 +12,11 @@ export interface RelationConfig<T = Identity> {
   relatedKey?: keyof T
 }
 
-export interface ModelConstructor<TData extends DataSource, TModel extends Model<TData>> {
+export interface ModelConstructor<TData extends object, TModel extends Model<TData>> {
   new (attributes?: Partial<TData>): TModel
 }
 
-abstract class Model<TData extends DataSource = DataSource> {
+abstract class Model<TData extends object = DataSource> {
   protected abstract table: string
   protected primaryKey: keyof Identity = 'id'
   public attributes: Partial<TData> = {}
@@ -43,13 +43,13 @@ abstract class Model<TData extends DataSource = DataSource> {
     return database.get(this.table) as TData[]
   }
 
-  protected hasMany<TRelatedData extends DataSource, TRelatedModel extends Model<TRelatedData>>(
+  protected hasMany<TRelatedData extends object, TRelatedModel extends Model<TRelatedData>>(
     modelClass: ModelConstructor<TRelatedData, TRelatedModel>,
     config: Pick<RelationConfig, 'foreignKey' | 'ownerKey'>
   ): ModelCollection<TRelatedModel> {
     const relatedInstance: TRelatedModel = new modelClass()
-    const ownerKey: string = config.ownerKey || this.primaryKey
-    const ownerValue: TData[string] | undefined = this.attributes[ownerKey]
+    const ownerKey = (config.ownerKey || this.primaryKey) as keyof TData
+    const ownerValue: TData[keyof TData] | undefined = this.attributes[ownerKey]
 
     if (ownerValue === undefined) {
       return new ModelCollection<TRelatedModel>([])
@@ -57,26 +57,26 @@ abstract class Model<TData extends DataSource = DataSource> {
 
     const models: TRelatedModel[] = relatedInstance
       .source()
-      .filter((item: TRelatedData): boolean => item[config.foreignKey] === ownerValue)
+      .filter((item: TRelatedData): boolean => item[config.foreignKey as keyof TRelatedData] === ownerValue)
       .map((item: TRelatedData) => new modelClass(item))
 
     return new ModelCollection<TRelatedModel>(models)
   }
 
-  protected hasOne<TRelatedData extends DataSource, TRelatedModel extends Model<TRelatedData>>(
+  protected hasOne<TRelatedData extends object, TRelatedModel extends Model<TRelatedData>>(
     modelClass: ModelConstructor<TRelatedData, TRelatedModel>,
     config: Pick<RelationConfig, 'foreignKey' | 'ownerKey'>
   ): TRelatedModel | null {
     return this.hasMany(modelClass, config).first() || null
   }
 
-  protected belongsTo<TRelatedData extends DataSource, TRelatedModel extends Model<TRelatedData>>(
+  protected belongsTo<TRelatedData extends object, TRelatedModel extends Model<TRelatedData>>(
     modelClass: ModelConstructor<TRelatedData, TRelatedModel>,
     config: Pick<RelationConfig, 'foreignKey' | 'ownerKey'>
   ): TRelatedModel | null {
     const relatedInstance: TRelatedModel = new modelClass()
-    const ownerKey: string = config.ownerKey || relatedInstance.primaryKey
-    const foreignValue: TData[string] | undefined = this.attributes[config.foreignKey]
+    const ownerKey = (config.ownerKey || relatedInstance.primaryKey) as keyof TRelatedData
+    const foreignValue: TData[keyof TData] | undefined = this.attributes[config.foreignKey as keyof TData]
 
     if (foreignValue === undefined) {
       return null
@@ -90,17 +90,17 @@ abstract class Model<TData extends DataSource = DataSource> {
   }
 
   protected belongsToMany<
-    TPivot extends DataSource,
+    TPivot extends object,
     TPivotModel extends Model<TPivot>,
-    TRelatedData extends DataSource,
+    TRelatedData extends object,
     TRelatedModel extends Model<TRelatedData>
   >(
     relatedModel: ModelConstructor<TRelatedData, TRelatedModel>,
     pivotModel: ModelConstructor<TPivot, TPivotModel>,
     config: Pick<RelationConfig<TPivot>, 'foreignKey' | 'relatedKey'>
   ): ModelCollection<TRelatedModel> {
-    const ownerKey: string = this.primaryKey
-    const ownerValue: TData[string] | undefined = this.attributes[ownerKey]
+    const ownerKey = this.primaryKey as keyof TData
+    const ownerValue: TData[keyof TData] | undefined = this.attributes[ownerKey]
 
     if (ownerValue === undefined) {
       return new ModelCollection<TRelatedModel>([])
@@ -108,7 +108,7 @@ abstract class Model<TData extends DataSource = DataSource> {
 
     const pivotInstance: TPivotModel = new pivotModel()
 
-    const relatedIds: TPivot[keyof TPivot][] = pivotInstance
+    const relatedIds: unknown[] = pivotInstance
       .source()
       .filter((p: TPivot): boolean => p[config.foreignKey] === ownerValue)
       .map((p: TPivot) => p[config.relatedKey!])
@@ -121,41 +121,45 @@ abstract class Model<TData extends DataSource = DataSource> {
 
     const models: TRelatedModel[] = relatedInstance
       .source()
-      .filter((item: TRelatedData) => relatedIds.includes(item[relatedInstance.primaryKey]))
+      .filter((item: TRelatedData) => relatedIds.includes(item[relatedInstance.primaryKey as keyof TRelatedData]))
       .map((item: TRelatedData) => new relatedModel(item))
 
     return new ModelCollection<TRelatedModel>(models)
   }
 
-  public static query<TData extends DataSource, TModel extends Model<TData>>(
+  public static query<TData extends object, TModel extends Model<TData>>(
     this: ModelConstructor<TData, TModel>
   ): QueryBuilder<TData, TModel> {
     return new QueryBuilder(this)
   }
 
-  public static find<TData extends DataSource, TModel extends Model<TData>>(
+  public static find<TData extends object, TModel extends Model<TData>>(
     this: ModelConstructor<TData, TModel>,
     id: number | string
   ): TModel | null {
     const instance: TModel = new this()
-    const item: TData | undefined = instance.source().find((item: TData): boolean => item[instance.primaryKey] === id)
+    const item: TData | undefined = instance
+      .source()
+      .find((item: TData): boolean => item[instance.primaryKey as keyof TData] === id)
 
     return item ? new this(item) : null
   }
 
-  public static where<TData extends DataSource, TModel extends Model<TData>>(
+  public static where<TData extends object, TModel extends Model<TData>>(
     this: ModelConstructor<TData, TModel>,
     conditions: Partial<TData>
   ): ModelCollection<TModel> {
     const instance: TModel = new this()
     const items: TData[] = instance
       .source()
-      .filter((item: TData) => Object.entries(conditions).every(([key, value]): boolean => item[key] === value))
+      .filter((item: TData) =>
+        Object.entries(conditions).every(([key, value]): boolean => item[key as keyof TData] === value)
+      )
 
     return new ModelCollection(items.map((item: TData) => new this(item)))
   }
 
-  public static all<TData extends DataSource, TModel extends Model<TData>>(
+  public static all<TData extends object, TModel extends Model<TData>>(
     this: ModelConstructor<TData, TModel>
   ): ModelCollection<TModel> {
     const instance: TModel = new this()
@@ -163,7 +167,7 @@ abstract class Model<TData extends DataSource = DataSource> {
     return new ModelCollection(instance.source().map((item: TData) => new this(item)))
   }
 
-  public static first<TData extends DataSource, TModel extends Model<TData>>(
+  public static first<TData extends object, TModel extends Model<TData>>(
     this: ModelConstructor<TData, TModel>,
     conditions?: Partial<TData>
   ): TModel | null {
@@ -171,7 +175,9 @@ abstract class Model<TData extends DataSource = DataSource> {
     const items: TData[] = conditions
       ? instance
           .source()
-          .filter((item: TData) => Object.entries(conditions).every(([key, value]): boolean => item[key] === value))
+          .filter((item: TData) =>
+            Object.entries(conditions).every(([key, value]): boolean => item[key as keyof TData] === value)
+          )
       : instance.source()
 
     return items.length > 0 ? new this(items[0]) : null
@@ -221,7 +227,7 @@ abstract class Model<TData extends DataSource = DataSource> {
   }
 
   public getKey(): number | undefined {
-    return this.attributes[this.primaryKey]
+    return this.attributes[this.primaryKey as keyof TData] as number | undefined
   }
 
   public getTable(): string {

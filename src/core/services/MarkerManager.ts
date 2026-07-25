@@ -9,7 +9,7 @@ import { Settings } from '@/core/ports/Settings'
 
 export type MarkerShape = 'circle' | 'diamond' | 'hex'
 
-export type MarkerOptions<TModel extends Model = Actor> = {
+export type MarkerOptions<TModel extends Model<object> = Actor> = {
   model: TModel
   object: Object3D
   shape: MarkerShape

@@ -140,7 +140,10 @@ class ResourceObserver {
       .whereNotNull('actorId')
       .where('resourceType', 'diffuse')
     const actorIds: number[] = uniqueDefers.map((el: IActorBoundResource) => el.actorId!).toArray()
-    const preparedActors: string[] = Actor.query().whereIn('id', actorIds).pluck('name')
+    const preparedActors: string[] = Actor.query()
+      .whereIn('id', actorIds)
+      .pluck('name')
+      .filter((name): name is string => name !== undefined)
     const filterPreparedActors: ObservableRecord[] = Array.from(this.sceneObserver.data.values()).filter(
       (record: ObservableRecord) => preparedActors.includes(record.name)
     )
@@ -159,7 +162,7 @@ class ResourceObserver {
     const resources: IResource[] = Actor.all()
       .where('categoryId', 7)
       .whereIn('name', farthestObjects)
-      .flatMap((actor: Actor) => actor.resources.toJSON())
+      .flatMap((actor: Actor) => actor.resources.toJSON() as IResource[])
       .toArray()
     // с помощью коллекции ресурсов извлекает текстуры из хранилища по имени (относительный путь = имя)
     const textures: Collection<Texture> = resourceStorage.textures.whereIn(
@@ -202,7 +205,11 @@ class ResourceObserver {
    */
   private setCubeTextures(): void {
     if (this.scenario) {
-      this.cube = Resource.query().where({ resourceType: 'cube' }).get().whereIn('id', this.scenario.skybox).toJSON()
+      this.cube = Resource.query()
+        .where({ resourceType: 'cube' })
+        .get()
+        .whereIn('id', this.scenario.skybox)
+        .toJSON() as IResource[]
     }
   }
 
@@ -226,7 +233,7 @@ class ResourceObserver {
       'asteroids/rocks_ground_04_arm_2k.jpg'
     ]
 
-    this.required = Resource.all().whereIn('path', list).toJSON()
+    this.required = Resource.all().whereIn('path', list).toJSON() as IResource[]
   }
 
   /**
@@ -234,7 +241,9 @@ class ResourceObserver {
    */
   private setMisc(): void {
     if (this.scenario) {
-      const collection: Collection<Actor> = ModelCollection.make(Array.from(this.map.values()))
+      const collection: ModelCollection<Actor> = ModelCollection.make<Actor, ModelCollection<Actor>>(
+        Array.from(this.map.values())
+      )
       const rings: IResource[] = collection
         .where({ categoryId: 6 })
         .flatMap((actor: Actor) => actor.resources.map((resource: Resource) => resource.toJSON() as IResource))

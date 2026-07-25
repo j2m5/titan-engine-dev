@@ -1,6 +1,19 @@
 type ComparisonOperator = '>' | '>=' | '<' | '<=' | '!==' | '==='
 
-class Collection<T> implements Iterable<T> {
+/**
+ * Ключи формы, значения которых числовые. Нужен, чтобы sum/avg принимали
+ * только те поля, которые действительно можно складывать.
+ */
+export type NumericKeys<TShape> = {
+  [K in keyof TShape]: TShape[K] extends number ? K : never
+}[keyof TShape]
+
+/**
+ * @typeParam T - тип элемента коллекции
+ * @typeParam TShape - форма, из которой берутся строковые ключи для sortBy/pluck/where.
+ *   Для плоской коллекции это сам элемент, для ModelCollection — атрибуты модели.
+ */
+class Collection<T, TShape = T> implements Iterable<T> {
   protected items: T[]
 
   public constructor(items: T[] = []) {
@@ -90,10 +103,10 @@ class Collection<T> implements Iterable<T> {
     return this.instance(this.items.filter((item, index) => !callback(item, index)))
   }
 
-  public sortBy(key: string, direction: 'asc' | 'desc' = 'asc'): this {
+  public sortBy<K extends keyof TShape>(key: K, direction: 'asc' | 'desc' = 'asc'): this {
     const sorted = [...this.items].sort((a, b) => {
-      const aVal = this.value(a, key)
-      const bVal = this.value(b, key)
+      const aVal: TShape[K] | undefined = this.value(a, key)
+      const bVal: TShape[K] | undefined = this.value(b, key)
 
       if (aVal == null && bVal == null) return 0
       if (aVal == null) return 1
@@ -103,8 +116,8 @@ class Collection<T> implements Iterable<T> {
         return direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
       }
 
-      if (aVal > bVal) return direction === 'asc' ? 1 : -1
-      if (aVal < bVal) return direction === 'asc' ? -1 : 1
+      if (this.greaterThan(aVal, bVal)) return direction === 'asc' ? 1 : -1
+      if (this.greaterThan(bVal, aVal)) return direction === 'asc' ? -1 : 1
 
       return 0
     })
@@ -112,19 +125,19 @@ class Collection<T> implements Iterable<T> {
     return this.instance(sorted)
   }
 
-  public sortByDesc(key: string): this {
+  public sortByDesc<K extends keyof TShape>(key: K): this {
     return this.sortBy(key, 'desc')
   }
 
-  public unique(key?: string): this {
-    if (!key) {
+  public unique<K extends keyof TShape>(key?: K): this {
+    if (key === undefined) {
       return this.instance(Array.from(new Set(this.items)))
     }
 
-    const seen = new Set()
+    const seen = new Set<TShape[K] | undefined>()
 
     return this.filter((item) => {
-      const value = this.value(item, key)
+      const value: TShape[K] | undefined = this.value(item, key)
 
       if (seen.has(value)) return false
 
@@ -203,35 +216,41 @@ class Collection<T> implements Iterable<T> {
     return this
   }
 
-  public eachSpread(callback: (...args: any[]) => void): this {
+  public eachSpread(
+    callback: T extends readonly unknown[] ? (...args: [...T, number]) => void : (item: T, index: number) => void
+  ): this {
+    // условный тип не вызываем напрямую: внутри реализации ветка неизвестна,
+    // а рантайм-разбор ниже как раз и выбирает форму вызова
+    const invoke = callback as (...args: unknown[]) => void
+
     this.items.forEach((item, key) => {
       if (Array.isArray(item)) {
-        callback(...item, key)
+        invoke(...item, key)
       } else {
-        callback(item, key)
+        invoke(item, key)
       }
     })
 
     return this
   }
 
-  public tap(callback: (collection: Collection<T>) => void): this {
+  public tap(callback: (collection: Collection<T, TShape>) => void): this {
     callback(this)
 
     return this
   }
 
-  public pipe<U>(callback: (collection: Collection<T>) => U): U {
+  public pipe<U>(callback: (collection: Collection<T, TShape>) => U): U {
     return callback(this)
   }
 
-  public intersect(other: Collection<T>): this {
+  public intersect(other: Collection<T, TShape>): this {
     const set = new Set(other.all())
 
     return this.filter((item) => set.has(item))
   }
 
-  public diff(other: Collection<T>): this {
+  public diff(other: Collection<T, TShape>): this {
     const set = new Set(other.all())
 
     return this.filter((item) => !set.has(item))
@@ -253,12 +272,13 @@ class Collection<T> implements Iterable<T> {
     const flattenRecursive = (arr: T[], currentDepth: number): T[] => {
       if (currentDepth === 0) return arr.slice()
 
-      return arr.reduce<any[]>((acc, item) => {
+      return arr.reduce<T[]>((acc, item) => {
         if (Array.isArray(item)) {
-          acc.push(...flattenRecursive(item, currentDepth - 1))
+          acc.push(...flattenRecursive(item as T[], currentDepth - 1))
         } else {
           acc.push(item)
         }
+
         return acc
       }, [])
     }
@@ -266,28 +286,28 @@ class Collection<T> implements Iterable<T> {
     return this.instance(flattenRecursive(this.items, depth))
   }
 
-  public pluck(key: string): any[] {
+  public pluck<K extends keyof TShape>(key: K): (TShape[K] | undefined)[] {
     return this.items.map((item) => this.value(item, key))
   }
 
-  public sum(key?: string): number {
-    if (!key) {
-      return this.items.reduce((sum, item) => sum + (typeof item === 'number' ? item : 0), 0)
+  public sum(key?: NumericKeys<TShape>): number {
+    if (key === undefined) {
+      return this.items.reduce((sum: number, item) => sum + (typeof item === 'number' ? item : 0), 0)
     }
 
-    return this.items.reduce((sum, item) => {
-      const value = this.value(item, key)
+    return this.items.reduce((sum: number, item) => {
+      const value = this.value(item, key as keyof TShape)
 
       return sum + (typeof value === 'number' ? value : 0)
     }, 0)
   }
 
-  public avg(key?: string): number {
+  public avg(key?: NumericKeys<TShape>): number {
     if (this.isEmpty()) return 0
 
     let count = 0
-    const total = this.items.reduce((sum, item) => {
-      const value = key ? this.value(item, key) : item
+    const total = this.items.reduce((sum: number, item) => {
+      const value = key !== undefined ? this.value(item, key as keyof TShape) : item
       if (typeof value === 'number') {
         count++
 
@@ -300,14 +320,16 @@ class Collection<T> implements Iterable<T> {
     return count === 0 ? 0 : total / count
   }
 
-  public min(key?: string): any {
-    let result: any = undefined
+  public min(): T | undefined
+  public min<K extends keyof TShape>(key: K): TShape[K] | undefined
+  public min<K extends keyof TShape>(key?: K): T | TShape[K] | undefined {
+    let result: T | TShape[K] | undefined = undefined
 
     for (const item of this.items) {
-      const value = key ? this.value(item, key) : item
+      const value: T | TShape[K] | undefined = key !== undefined ? this.value(item, key) : item
       if (value == null) continue
 
-      if (result === undefined || value < result) {
+      if (result === undefined || this.greaterThan(result, value)) {
         result = value
       }
     }
@@ -315,14 +337,16 @@ class Collection<T> implements Iterable<T> {
     return result
   }
 
-  public max(key?: string): any {
-    let result: any = undefined
+  public max(): T | undefined
+  public max<K extends keyof TShape>(key: K): TShape[K] | undefined
+  public max<K extends keyof TShape>(key?: K): T | TShape[K] | undefined {
+    let result: T | TShape[K] | undefined = undefined
 
     for (const item of this.items) {
-      const value = key ? this.value(item, key) : item
+      const value: T | TShape[K] | undefined = key !== undefined ? this.value(item, key) : item
       if (value == null) continue
 
-      if (result === undefined || value > result) {
+      if (result === undefined || this.greaterThan(value, result)) {
         result = value
       }
     }
@@ -330,11 +354,11 @@ class Collection<T> implements Iterable<T> {
     return result
   }
 
-  public groupBy<K extends PropertyKey>(key: string | ((item: T) => K)): Map<K, this> {
-    const result = new Map<K, T[]>()
+  public groupBy<K extends keyof TShape>(key: K | ((item: T) => PropertyKey)): Map<PropertyKey, this> {
+    const result = new Map<PropertyKey, T[]>()
 
     for (const item of this.items) {
-      const groupKey = typeof key === 'function' ? key(item) : this.value(item, key)
+      const groupKey: PropertyKey = this.propertyKeyOf(item, key)
 
       if (!result.has(groupKey)) {
         result.set(groupKey, [])
@@ -343,7 +367,7 @@ class Collection<T> implements Iterable<T> {
       result.get(groupKey)!.push(item)
     }
 
-    const groups = new Map<K, this>()
+    const groups = new Map<PropertyKey, this>()
     for (const [groupKey, items] of result.entries()) {
       groups.set(groupKey, this.instance(items))
     }
@@ -351,19 +375,21 @@ class Collection<T> implements Iterable<T> {
     return groups
   }
 
-  public keyBy<K extends PropertyKey>(key: string | ((item: T) => K)): Map<K, T> {
-    const map = new Map<K, T>()
+  public keyBy<K extends keyof TShape>(key: K | ((item: T) => PropertyKey)): Map<PropertyKey, T> {
+    const map = new Map<PropertyKey, T>()
 
     for (const item of this.items) {
-      const mapKey = typeof key === 'function' ? key(item) : this.value(item, key)
-
-      map.set(mapKey, item)
+      map.set(this.propertyKeyOf(item, key), item)
     }
 
     return map
   }
 
-  public some(key: ((item: T) => boolean) | string, operator?: ComparisonOperator, value?: any): boolean {
+  public some<K extends keyof TShape>(
+    key: ((item: T) => boolean) | K,
+    operator?: ComparisonOperator,
+    value?: TShape[K]
+  ): boolean {
     if (typeof key === 'function') {
       return this.items.some(key)
     }
@@ -371,7 +397,11 @@ class Collection<T> implements Iterable<T> {
     return this.items.some((item) => this.compare(this.value(item, key), operator || '===', value))
   }
 
-  public every(key: ((item: T) => boolean) | string, operator?: ComparisonOperator, value?: any): boolean {
+  public every<K extends keyof TShape>(
+    key: ((item: T) => boolean) | K,
+    operator?: ComparisonOperator,
+    value?: TShape[K]
+  ): boolean {
     if (typeof key === 'function') {
       return this.items.every(key)
     }
@@ -379,21 +409,25 @@ class Collection<T> implements Iterable<T> {
     return this.items.every((item) => this.compare(this.value(item, key), operator || '===', value))
   }
 
-  public contains(key: ((item: T) => boolean) | string, operator?: ComparisonOperator, value?: any): boolean {
-    return this.some(key as any, operator, value)
+  public contains<K extends keyof TShape>(
+    key: ((item: T) => boolean) | K,
+    operator?: ComparisonOperator,
+    value?: TShape[K]
+  ): boolean {
+    return this.some(key, operator, value)
   }
 
-  public where(key: string, value: any): this
-  public where(key: string, operator: ComparisonOperator, value: any): this
-  public where(conditions: Record<string, any>): this
-  public where(...args: any[]): this {
+  public where<K extends keyof TShape>(key: K, value: TShape[K]): this
+  public where<K extends keyof TShape>(key: K, operator: ComparisonOperator, value: TShape[K]): this
+  public where(conditions: Partial<TShape>): this
+  public where(...args: unknown[]): this {
     let filtered: T[]
 
     // where({ a: 1, b: 2 })
     if (typeof args[0] === 'object' && args.length === 1) {
-      const conditions = args[0]
+      const conditions = args[0] as Partial<TShape>
       filtered = this.items.filter((item) =>
-        Object.entries(conditions).every(([key, value]) => this.value(item, key) === value)
+        Object.entries(conditions).every(([key, value]) => this.value(item, key as keyof TShape) === value)
       )
     } else {
       const { key, operator, value } = this.operatorForWhere(args)
@@ -403,68 +437,70 @@ class Collection<T> implements Iterable<T> {
     return this.instance(filtered)
   }
 
-  public whereIn(key: string, values: any[]): this {
-    return this.filter((item) => values.includes(this.value(item, key)))
+  public whereIn<K extends keyof TShape>(key: K, values: TShape[K][]): this {
+    return this.filter((item) => values.includes(this.value(item, key) as TShape[K]))
   }
 
-  public whereNotIn(key: string, values: any[]): this {
-    return this.filter((item) => !values.includes(this.value(item, key)))
+  public whereNotIn<K extends keyof TShape>(key: K, values: TShape[K][]): this {
+    return this.filter((item) => !values.includes(this.value(item, key) as TShape[K]))
   }
 
-  public whereNull(key: string): this {
-    return this.where(key, '===', null)
+  public whereNull<K extends keyof TShape>(key: K): this {
+    return this.where(key, '===', null as TShape[K])
   }
 
-  public whereNotNull(key: string): this {
-    return this.where(key, '!==', null)
+  public whereNotNull<K extends keyof TShape>(key: K): this {
+    return this.where(key, '!==', null as TShape[K])
   }
 
-  public whereBetween(key: string, range: [any, any]): this {
+  public whereBetween<K extends keyof TShape>(key: K, range: [TShape[K], TShape[K]]): this {
     const [min, max] = range
 
     return this.where(key, '>=', min).where(key, '<=', max)
   }
 
-  public whereNotBetween(key: string, range: [any, any]): this {
+  public whereNotBetween<K extends keyof TShape>(key: K, range: [TShape[K], TShape[K]]): this {
     const [min, max] = range
 
-    return this.filter((item) => this.value(item, key) < min || this.value(item, key) > max)
+    return this.filter(
+      (item) => this.compare(this.value(item, key), '<', min) || this.compare(this.value(item, key), '>', max)
+    )
   }
 
   public toArray(): T[] {
     return this.items
   }
 
-  protected value(item: T, key: keyof any): any {
-    return (item as any)?.[key]
+  protected value<K extends keyof TShape>(item: T, key: K): TShape[K] | undefined {
+    return (item as unknown as TShape | undefined)?.[key]
   }
 
   protected instance(items: T[]): this {
     return new (this.constructor as new (items: T[]) => this)(items)
   }
 
-  protected operatorForWhere(args: any[]): { key: any; operator: ComparisonOperator; value: any } {
+  protected operatorForWhere(args: unknown[]): { key: keyof TShape; operator: ComparisonOperator; value: unknown } {
     if (args.length === 2) {
-      return { key: args[0], operator: '===', value: args[1] }
+      return { key: args[0] as keyof TShape, operator: '===', value: args[1] }
     }
 
     if (args.length === 3) {
-      return { key: args[0], operator: args[1], value: args[2] }
+      return { key: args[0] as keyof TShape, operator: args[1] as ComparisonOperator, value: args[2] }
     }
 
     throw new Error('Invalid where arguments')
   }
 
-  protected compare(a: any, operator: ComparisonOperator, b: any): boolean {
+  protected compare(a: unknown, operator: ComparisonOperator, b: unknown): boolean {
     switch (operator) {
       case '>':
-        return a > b
+        return (a as number) > (b as number)
       case '>=':
-        return a >= b
+        return (a as number) >= (b as number)
       case '<':
-        return a < b
+        return (a as number) < (b as number)
       case '<=':
-        return a <= b
+        return (a as number) <= (b as number)
       case '!==':
         return a !== b
       default:
@@ -472,7 +508,36 @@ class Collection<T> implements Iterable<T> {
     }
   }
 
-  public static make<T, C extends Collection<T>>(this: new (items?: T[]) => C, items: T[] = []): C {
+  /**
+   * Порядковое сравнение значений неизвестного типа: TShape[K] не сужается до
+   * number/string, поэтому оператор `>` применяется к приведенным операндам —
+   * ровно так же, как это делает compare().
+   */
+  private greaterThan(a: unknown, b: unknown): boolean {
+    return (a as number) > (b as number)
+  }
+
+  /**
+   * Вычисляет ключ группировки: либо результат колбэка, либо значение поля.
+   */
+  private propertyKeyOf<K extends keyof TShape>(item: T, key: K | ((item: T) => PropertyKey)): PropertyKey {
+    if (typeof key === 'function') {
+      return key(item)
+    }
+
+    return this.value(item, key) as PropertyKey
+  }
+
+  /**
+   * C намеренно без констрейнта: с границей `Collection<T, TShape>` вывод C
+   * падает на саму границу, потому что ModelCollection<Actor> не assignable
+   * к Collection<Actor, unknown>. Конструируемость гарантирует параметр this.
+   *
+   * Вывод C через this-параметр неточен для generic-классов (TS инстанцирует
+   * конструктор границей его параметра), поэтому для ModelCollection аргументы
+   * типов указываются явно на вызове.
+   */
+  public static make<T, C>(this: new (items?: T[]) => C, items: T[] = []): C {
     return new this(items)
   }
 }

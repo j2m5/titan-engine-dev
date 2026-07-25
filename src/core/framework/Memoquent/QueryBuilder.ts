@@ -1,5 +1,5 @@
-import { DataSource, Model, ModelConstructor } from '@/core/framework/Memoquent/Model'
-import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
+import { Model, ModelConstructor } from '@/core/framework/Memoquent/Model'
+import { AttributesOf, ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
 import { Scope } from '@/core/framework/Memoquent/Scope'
 
 type WhereHas = {
@@ -25,7 +25,7 @@ type WhereBetween<TData> = {
   negate?: boolean
 }
 
-class QueryBuilder<TData extends DataSource, TModel extends Model<TData>> {
+class QueryBuilder<TData extends object, TModel extends Model<TData>> {
   private _conditions?: Partial<TData>
   private _whereHas: WhereHas[] = []
   private _whereIn: WhereIn<TData>[] = []
@@ -276,8 +276,10 @@ class QueryBuilder<TData extends DataSource, TModel extends Model<TData>> {
     return this.get().count()
   }
 
-  public pluck<TKey extends keyof TData>(field: TKey): TData[TKey][] {
-    return this.get().pluck(field as any)
+  public pluck<TKey extends keyof TData>(field: TKey): (TData[TKey] | undefined)[] {
+    // связь TData <-> AttributesOf<TModel> компилятору недоступна, пока TModel
+    // остается свободным параметром — касты локальны и не вводят any
+    return this.get().pluck(field as keyof AttributesOf<TModel>) as (TData[TKey] | undefined)[]
   }
 
   public toArray(): TModel[] {
