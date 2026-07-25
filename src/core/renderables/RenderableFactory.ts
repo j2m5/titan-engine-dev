@@ -154,15 +154,14 @@ class RenderableFactory {
     const detailed = new Ring(actor)
     detailed.add(new AsteroidRingSystem(actor))
 
+    // `IRenderingObject.data` — `Record<string, unknown>`, форма утверждается локально.
+    // Присутствие data здесь уже гарантировано: `new Ring(actor)` выше бросает на том же
+    // самом условии (Ring.__setup, тот же актор, тот же предикат `!ringData`), а __setup
+    // вызывается синхронно из конструктора. Поэтому `!`, а не повторная проверка — она была
+    // бы недостижимой ветвью.
     const ringData = actor.renderingObject?.getAttribute('data') as IRingRenderingObject | undefined
 
-    if (!ringData) {
-      throw new Error(
-        `[RenderableFactory] У кольца "${actor.getAttribute('name', '?')}" отсутствует renderingObject.data`
-      )
-    }
-
-    const distanceLod = toThreeJSUnits(ringData.outerRadius * 2)
+    const distanceLod = toThreeJSUnits(ringData!.outerRadius * 2)
 
     node.name = actor.getAttribute('name', '') + 'Ring'
     lod.name = actor.getAttribute('name', '') + 'Ring'

@@ -99,7 +99,7 @@ class BlackHoleParameters {
 
     const physical = model.physicalObject
     if (!physical) {
-      throw new Error(`[BlackHoleParameters] У актора "${model.getAttribute('name')}" отсутствует physicalObject`)
+      throw new Error(`[BlackHoleParameters] У актора "${model.getAttribute('name', '?')}" отсутствует physicalObject`)
     }
 
     const data: IBlackHoleRenderingObject = model.renderingObject?.getAttribute('data') ?? {}
@@ -204,7 +204,7 @@ class BlackHoleParameters {
   }
 
   private warn(message: string): void {
-    console.warn(`[BlackHoleParameters] "${this.model.getAttribute('name')}": ${message}`)
+    console.warn(`[BlackHoleParameters] "${this.model.getAttribute('name', '?')}": ${message}`)
   }
 }
 
