@@ -292,7 +292,7 @@ class QueryBuilder<TData extends object, TModel extends Model<TData>> {
   public first(): TModel | null {
     const collection: ModelCollection<TModel> = this.limit(1).get()
 
-    return collection.first() || null
+    return collection.first() ?? null
   }
 
   public exists(): boolean {
@@ -320,6 +320,13 @@ class QueryBuilder<TData extends object, TModel extends Model<TData>> {
    * defaultValue по falsy (attributes[key] || defaultValue), из-за чего
    * хранимые 0 и '' считались null (whereNull находил их), а вызов без
    * defaultValue вообще вернул бы '-' вместо null.
+   *
+   * Расхождение временное: когда Task 5 уберет из getAttribute дефолт '-',
+   * этот хелпер можно свернуть обратно в getAttribute(field) ?? null — но
+   * только через перегрузку, возвращающую TData[K] | undefined, и никогда
+   * через версию с falsy-дефолтом, иначе вернется исходный баг.
+   * Семантику фиксирует блок «falsy-значения не считаются null» в
+   * tests/QueryBuilder.spec.ts.
    */
   private fieldValue(model: TModel, field: keyof TData): NonNullable<TData[keyof TData]> | null {
     return model.attributes[field] ?? null

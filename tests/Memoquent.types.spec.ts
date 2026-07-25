@@ -2,6 +2,7 @@ import { describe, it, expect, expectTypeOf } from 'vitest'
 import { Model } from '@/core/framework/Memoquent/Model'
 import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
 import { Collection } from '@/core/framework/support/Collection'
+import { RelationKeys } from '@/core/framework/Memoquent/QueryBuilder'
 
 interface IThing {
   id: number
@@ -14,11 +15,41 @@ const THINGS: IThing[] = [
   { id: 1, label: 'a', weight: 10 }
 ]
 
+interface IPart {
+  id: number
+  thingId: number
+  name: string
+}
+
+const PARTS: IPart[] = [
+  { id: 1, thingId: 2, name: 'bolt' },
+  { id: 2, thingId: 2, name: 'nut' }
+]
+
+class Part extends Model<IPart> {
+  protected table: string = 'parts'
+
+  public override source(): IPart[] {
+    return PARTS
+  }
+}
+
 class Thing extends Model<IThing> {
   protected table: string = 'things'
 
   public override source(): IThing[] {
     return THINGS
+  }
+
+  /**
+   * Связь-коллекция нужна фикстуре не для красоты: без нее
+   * RelationKeys<Thing> вырождается в never, и негативные проверки
+   * whereHas проходили бы просто потому, что параметр никакой строки не
+   * принимает — регресс нижней границы (ModelCollection<never>) остался бы
+   * незамеченным.
+   */
+  public get parts(): ModelCollection<Part> {
+    return this.hasMany(Part, { foreignKey: 'thingId' })
   }
 }
 
@@ -62,11 +93,20 @@ describe('ModelCollection — типизация ключей', () => {
 
 describe('QueryBuilder — типизация связей и полей', () => {
   it('whereHas принимает только реальные связи', () => {
+    // Позитивная проверка обязательна: она ловит регресс нижней границы в
+    // RelationKeys. С ModelCollection<never> вместо ModelCollection<Model<object>>
+    // ключ 'parts' выпадает из типа, RelationKeys<Thing> становится never, и
+    // одни только @ts-expect-error ниже остались бы зелеными.
+    expectTypeOf<RelationKeys<Thing>>().toEqualTypeOf<'parts'>()
+
     // @ts-expect-error — 'label' это атрибут, а не связь
     Thing.query().whereHas('label')
     // @ts-expect-error — 'nope' не существует
     Thing.query().whereHas('nope')
 
+    // связь резолвится и в рантайме: детали есть только у Thing #2
+    expect(Thing.query().whereHas('parts').get().pluck('id')).toEqual([2])
+    expect(Thing.query().whereDoesntHave('parts').get().pluck('id')).toEqual([1])
     expect(Thing.query().count()).toBe(2)
   })
 

@@ -33,6 +33,30 @@ class User extends Model<UserData> {
   }
 }
 
+/**
+ * Отдельная фикстура под falsy-значения. В USERS их добавить нельзя:
+ * шестая запись сдвинула бы ожидания уже существующих тестов.
+ */
+interface MetricData {
+  id: number
+  value: number | null
+  note: string
+}
+
+const METRICS: MetricData[] = [
+  { id: 1, value: 0, note: '' },
+  { id: 2, value: 7, note: 'seven' },
+  { id: 3, value: null, note: 'none' }
+]
+
+class Metric extends Model<MetricData> {
+  protected table: string = 'metrics'
+
+  public source(): MetricData[] {
+    return METRICS
+  }
+}
+
 /** Глобальный скоуп: скрывает "удаленные" записи (deletedAt !== null) */
 class NotDeletedScope implements Scope<UserData, User> {
   public apply(builder: QueryBuilder<UserData, User>): void {
@@ -75,6 +99,22 @@ describe('QueryBuilder — фильтрация', () => {
 
     // editor/viewer И возраст 20..50 => Bob(25), Carol(41)
     expect(result.pluck('id').sort()).toEqual([2, 3])
+  })
+})
+
+describe('QueryBuilder — falsy-значения не считаются null', () => {
+  // Пин семантики fieldValue: раньше предикаты читали атрибут через
+  // getAttribute(field, null) с подменой по falsy (attributes[key] || null),
+  // поэтому хранимые 0 и '' попадали в whereNull. Task 5 перепишет
+  // getAttribute — этот блок не даст молча вернуть старое поведение.
+  it('whereNull не находит хранимый 0 и пустую строку', () => {
+    expect(Metric.query().whereNull('value').get().pluck('id')).toEqual([3])
+    expect(Metric.query().whereNull('note').get().pluck('id')).toEqual([])
+  })
+
+  it('whereNotNull находит хранимый 0 и пустую строку', () => {
+    expect(Metric.query().whereNotNull('value').get().pluck('id')).toEqual([1, 2])
+    expect(Metric.query().whereNotNull('note').get().pluck('id')).toEqual([1, 2, 3])
   })
 })
 
