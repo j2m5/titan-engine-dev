@@ -1,14 +1,16 @@
 import { EventEmitter } from '@/core/framework/EventEmitter'
 import { SceneManager } from '@/core/services/SceneManager'
 import { SceneObserver } from '@/core/services/SceneObserver'
-import { threeJS } from '@/core/graphic/ThreeJS'
 import { postprocessing } from '@/core/graphic/Postprocessing'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { SimulationClock } from '@/core/time/SimulationClock'
 import { CameraController } from '@/core/camera/CameraController'
 import { UpdateContext } from '@/core/UpdateContext'
-import { Vector2 } from 'three'
+import { Clock, PerspectiveCamera, Raycaster, Scene, Vector2, WebGLRenderer } from 'three'
+import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer'
+import { AstroControls } from '@/core/libs/AstroControls'
+import Stats from 'three/examples/jsm/libs/stats.module'
 
 class Engine extends EventEmitter {
   private readonly canvas: HTMLCanvasElement
@@ -22,15 +24,29 @@ class Engine extends EventEmitter {
   private readonly boundOnClick: (event: MouseEvent) => void
   private readonly boundOnWheel: (event: WheelEvent) => void
 
+  private readonly raycaster: Raycaster = new Raycaster()
+  private readonly stats: Stats = new Stats()
+
   public constructor(
     private sceneManager: SceneManager,
     private sceneObserver: SceneObserver,
     private clock: SimulationClock,
-    private camera: CameraController
+    private camera: CameraController,
+    private renderer: WebGLRenderer,
+    private labelRenderer: CSS2DRenderer,
+    private scene: Scene,
+    private renderCamera: PerspectiveCamera,
+    private astroControls: AstroControls,
+    private renderClock: Clock
   ) {
     super()
-    this.canvas = threeJS.renderer.domElement
-    this.overlay = threeJS.labelRenderer.domElement
+    this.canvas = this.renderer.domElement
+    this.overlay = this.labelRenderer.domElement
+
+    this.stats.showPanel(0)
+    this.stats.showPanel(1)
+    this.stats.showPanel(2)
+
     this.boundOnResize = this.onResize.bind(this)
     this.boundOnFrameRendered = this.onFrameRendered.bind(this)
     this.boundOnClick = this.onClick.bind(this)
@@ -47,18 +63,18 @@ class Engine extends EventEmitter {
     this.canvas.style.zIndex = '99'
 
     this.overlay.id = 'overlay'
-    threeJS.stats.dom.style.zIndex = '9999999999999'
+    this.stats.dom.style.zIndex = '9999999999999'
 
     document.body.appendChild(this.canvas)
     document.body.appendChild(this.overlay)
 
-    if (config('showStats')) document.body.appendChild(threeJS.stats.dom)
+    if (config('showStats')) document.body.appendChild(this.stats.dom)
 
     this.sceneManager.initialize()
     postprocessing.initialize()
 
-    this.sceneObserver.observable = threeJS.astroControls
-    this.sceneObserver.scene = threeJS.scene
+    this.sceneObserver.observable = this.astroControls
+    this.sceneObserver.scene = this.scene
 
     this.onStart()
   }
@@ -73,7 +89,7 @@ class Engine extends EventEmitter {
   }
 
   public stop(): void {
-    threeJS.renderer.setAnimationLoop(null)
+    this.renderer.setAnimationLoop(null)
 
     this.running = false
   }
@@ -105,28 +121,28 @@ class Engine extends EventEmitter {
   }
 
   private onFrameRendered(): void {
-    const delta: number = threeJS.clock.getDelta()
+    const delta: number = this.renderClock.getDelta()
 
-    if (config('showStats')) threeJS.stats.update()
+    if (config('showStats')) this.stats.update()
     this.clock.advance(delta)
-    threeJS.astroControls.movementSpeed = toThreeJSUnits(this.camera.speed)
-    threeJS.astroControls.update(delta)
-    threeJS.labelRenderer.render(threeJS.scene, threeJS.camera)
+    this.astroControls.movementSpeed = toThreeJSUnits(this.camera.speed)
+    this.astroControls.update(delta)
+    this.labelRenderer.render(this.scene, this.renderCamera)
 
     const ctx: UpdateContext = { delta, epoch: this.clock.epoch }
 
     this.sceneManager.update(ctx)
     postprocessing.render(delta)
 
-    threeJS.renderer.setAnimationLoop(this.boundOnFrameRendered)
+    this.renderer.setAnimationLoop(this.boundOnFrameRendered)
   }
 
   private onResize(): void {
     const { innerHeight, innerWidth } = window
 
-    threeJS.renderer.setSize(innerWidth, innerHeight)
-    threeJS.camera.aspect = innerWidth / innerHeight
-    threeJS.camera.updateProjectionMatrix()
+    this.renderer.setSize(innerWidth, innerHeight)
+    this.renderCamera.aspect = innerWidth / innerHeight
+    this.renderCamera.updateProjectionMatrix()
   }
 
   private onClick(event: MouseEvent): void {
@@ -137,9 +153,9 @@ class Engine extends EventEmitter {
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1
 
-    threeJS.raycaster.setFromCamera(mouse, threeJS.camera)
+    this.raycaster.setFromCamera(mouse, this.renderCamera)
 
-    const intersects = threeJS.raycaster.intersectObjects(threeJS.scene.getObjectsByUserDataProperty('clickable', true))
+    const intersects = this.raycaster.intersectObjects(this.scene.getObjectsByUserDataProperty('clickable', true))
 
     if (intersects.length) {
       const target = intersects.find((el) => el.object.userData.clickable !== undefined)

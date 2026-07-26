@@ -42,7 +42,13 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.SceneManager),
           c.get(Tokens.SceneObserver),
           c.get(Tokens.SimulationClock),
-          c.get(Tokens.CameraController)
+          c.get(Tokens.CameraController),
+          c.get(Tokens.Renderer),
+          c.get(Tokens.LabelRenderer),
+          c.get(Tokens.Scene),
+          c.get(Tokens.Camera),
+          c.get(Tokens.AstroControls),
+          c.get(Tokens.Clock)
         )
     )
 
