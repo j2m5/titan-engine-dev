@@ -18,7 +18,13 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: ['./tests/setup.ts']
+    setupFiles: ['./tests/setup.ts'],
+    // .env не отслеживается git, поэтому флаги оттуда у каждого свои.
+    // Панель статистики в тестах должна быть выключена детерминированно:
+    // её конструктор берёт 2D-контекст канваса, которого в jsdom нет.
+    env: {
+      VITE_SHOW_STATS_PANEL: 'false'
+    }
   },
   server: {
     port: 8080,

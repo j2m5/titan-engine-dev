@@ -94,7 +94,8 @@ class Container {
 
   /**
    * Привязка уже готового значения (аналог $app->instance() в Laravel).
-   * Полезно для объектов, создаваемых вне контейнера: threeJS, конфиги и т.п.
+   * Полезно для объектов, создаваемых вне контейнера: конфиги, стороны портов,
+   * тестовые заглушки.
    */
   public instance<T>(key: ServiceKey<T>, value: T): this {
     this.bindings.set(key, { factory: () => value, shared: true, resolved: true, value })

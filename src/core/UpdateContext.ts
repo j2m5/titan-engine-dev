@@ -2,14 +2,14 @@ import type { PerspectiveCamera } from 'three'
 
 /**
  * Пер-кадровый контекст обновления сцены. Формируется Engine один раз за
- * кадр и прокидывается в updateObject каждого объекта — заменяет прямой
- * доступ renderables к глобальному timeStore и к глобальному threeJS.
+ * кадр и прокидывается в updateObject каждого объекта — избавляет renderables
+ * от прямого доступа к глобальному состоянию времени и рендер-слоя.
  */
 export interface UpdateContext {
   delta: number
   epoch: number
-  /** Секунд с запуска часов рендера; было threeJS.clock.getElapsedTime() */
+  /** Секунд с запуска часов рендера */
   elapsed: number
-  /** Активная камера кадра; было threeJS.camera */
+  /** Активная камера кадра */
   camera: PerspectiveCamera
 }

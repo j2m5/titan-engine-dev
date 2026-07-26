@@ -1,24 +1,34 @@
 import { ServiceProvider } from '@/core/framework/container/ServiceProvider'
+import { Container } from '@/core/framework/container/Container'
 import { Tokens } from '@/core/providers/tokens'
-import { threeJS } from '@/core/graphic/ThreeJS'
+import { config } from '@/core/framework/config'
+import {
+  createAstroControls,
+  createCamera,
+  createClock,
+  createLabelRenderer,
+  createRenderer,
+  createScene
+} from '@/core/graphic/renderingFactories'
 
 /**
  * Проводка рендер-слоя.
  *
- * ВРЕМЕННОЕ СОСТОЯНИЕ: токены указывают на поля существующего глобального
- * `threeJS`, поэтому глобал и контейнер дают один и тот же объект и
- * потребителей можно переводить группами, не ломая сборку.
- * Задача 8 заменит `instance(...)` на ленивые `singleton(() => create...)`
- * и удалит глобал.
+ * Все привязки ленивые: объекты Three создаются при первом резолве, а не на
+ * импорте модуля. Поэтому bootstrap() безопасен там, где WebGL нет вовсе
+ * (jsdom), а тесты могут перекрыть любой из токенов заглушкой до того,
+ * как настоящая фабрика будет вызвана.
  */
 class RenderingServiceProvider extends ServiceProvider {
   public register(): void {
-    this.app.instance(Tokens.Renderer, threeJS.renderer)
-    this.app.instance(Tokens.LabelRenderer, threeJS.labelRenderer)
-    this.app.instance(Tokens.Scene, threeJS.scene)
-    this.app.instance(Tokens.Camera, threeJS.camera)
-    this.app.instance(Tokens.AstroControls, threeJS.astroControls)
-    this.app.instance(Tokens.Clock, threeJS.clock)
+    this.app.singleton(Tokens.Renderer, () => createRenderer(config('renderer')))
+    this.app.singleton(Tokens.LabelRenderer, () => createLabelRenderer())
+    this.app.singleton(Tokens.Scene, () => createScene())
+    this.app.singleton(Tokens.Camera, () => createCamera(config('camera')))
+    this.app.singleton(Tokens.AstroControls, (c: Container) =>
+      createAstroControls(c.get(Tokens.Camera), c.get(Tokens.Renderer))
+    )
+    this.app.singleton(Tokens.Clock, () => createClock())
   }
 }
 

@@ -25,7 +25,11 @@ class Engine extends EventEmitter {
   private readonly boundOnWheel: (event: WheelEvent) => void
 
   private readonly raycaster: Raycaster = new Raycaster()
-  private readonly stats: Stats = new Stats()
+  /**
+   * Панель статистики создаётся только когда её показывают: её конструктор
+   * строит канвас и берёт 2D-контекст, чего в среде без канваса нет.
+   */
+  private readonly stats: Stats | null = config('showStats') ? new Stats() : null
 
   public constructor(
     private sceneManager: SceneManager,
@@ -44,9 +48,11 @@ class Engine extends EventEmitter {
     this.canvas = this.renderer.domElement
     this.overlay = this.labelRenderer.domElement
 
-    this.stats.showPanel(0)
-    this.stats.showPanel(1)
-    this.stats.showPanel(2)
+    if (this.stats) {
+      this.stats.showPanel(0)
+      this.stats.showPanel(1)
+      this.stats.showPanel(2)
+    }
 
     this.boundOnResize = this.onResize.bind(this)
     this.boundOnFrameRendered = this.onFrameRendered.bind(this)
@@ -64,12 +70,14 @@ class Engine extends EventEmitter {
     this.canvas.style.zIndex = '99'
 
     this.overlay.id = 'overlay'
-    this.stats.dom.style.zIndex = '9999999999999'
 
     document.body.appendChild(this.canvas)
     document.body.appendChild(this.overlay)
 
-    if (config('showStats')) document.body.appendChild(this.stats.dom)
+    if (this.stats) {
+      this.stats.dom.style.zIndex = '9999999999999'
+      document.body.appendChild(this.stats.dom)
+    }
 
     this.sceneManager.initialize()
     this.postprocessing.initialize()
@@ -124,7 +132,7 @@ class Engine extends EventEmitter {
   private onFrameRendered(): void {
     const delta: number = this.renderClock.getDelta()
 
-    if (config('showStats')) this.stats.update()
+    this.stats?.update()
     this.clock.advance(delta)
     this.astroControls.movementSpeed = toThreeJSUnits(this.camera.speed)
     this.astroControls.update(delta)
