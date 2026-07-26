@@ -60,15 +60,3 @@ vi.mock('@/core/graphic/ThreeJS', () => {
 
   return { threeJS }
 })
-
-vi.mock('@/core/graphic/Postprocessing', () => {
-  const noop = () => {}
-
-  return {
-    postprocessing: {
-      initialize: noop,
-      render: noop,
-      dispose: noop
-    }
-  }
-})
