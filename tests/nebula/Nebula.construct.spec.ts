@@ -8,7 +8,6 @@ const fakeRenderer = {
   },
   getRenderTarget: () => null,
   setRenderTarget: () => {},
-  clear: () => {},
   render: () => {}
 } as unknown as WebGLRenderer
 

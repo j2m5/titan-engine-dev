@@ -1,6 +1,6 @@
 # Nebula — процедурная объёмная туманность
 
-Самостоятельный `Object3D`: `new Nebula(params)` → `scene.add(...)`. Объёмный
+Самостоятельный `Object3D`: `new Nebula(renderer, params)` → `scene.add(...)`. Объёмный
 raymarch вблизи, дешёвый запечённый импостер-билборд вдали (адаптивный LOD).
 Форма **статична** — это позволяет запекать поле плотности в 3D-текстуру.
 
@@ -8,14 +8,15 @@ raymarch вблизи, дешёвый запечённый импостер-би
 import { Nebula } from '@/core/renderables/Nebula'
 import { Vector3 } from 'three'
 
-const nebula = new Nebula({ size: 2000 })
+// renderer: WebGLRenderer — в приложении берётся из контейнера (Tokens.Renderer)
+const nebula = new Nebula(renderer, { size: 2000 })
 scene.add(nebula)
 // при удалении:
 nebula.dispose()
 ```
 
 > **Важно про lifecycle:** параметры применяются **в конструкторе**. Рантайм-сеттера
-> пока нет — чтобы изменить параметры, пересоздай `new Nebula({...})`. Привязывай
+> пока нет — чтобы изменить параметры, пересоздай `new Nebula(renderer, {...})`. Привязывай
 > туманность к стабильному узлу (группе), а **не** к мешу, который может подменяться
 > родительским `THREE.LOD`, иначе она исчезнет вместе с мешем.
 
@@ -26,10 +27,10 @@ nebula.dispose()
 ```ts
 import { makeNebulaParams } from '@/core/renderables/Nebula/presets'
 
-new Nebula(makeNebulaParams('emission'))            // самосветящаяся, ярче
-new Nebula(makeNebulaParams('reflection'))          // тусклее, лит звездой (низкий ambient)
-new Nebula(makeNebulaParams('dark'))                // плотная пыль, контраст
-new Nebula(makeNebulaParams('emission', { size: 5000, seed: 7 })) // пресет + оверрайды
+new Nebula(renderer, makeNebulaParams('emission'))            // самосветящаяся, ярче
+new Nebula(renderer, makeNebulaParams('reflection'))          // тусклее, лит звездой (низкий ambient)
+new Nebula(renderer, makeNebulaParams('dark'))                // плотная пыль, контраст
+new Nebula(renderer, makeNebulaParams('emission', { size: 5000, seed: 7 })) // пресет + оверрайды
 ```
 
 ---
@@ -66,7 +67,7 @@ new Nebula(makeNebulaParams('emission', { size: 5000, seed: 7 })) // пресе�
 ### Лобы и каверны (композиция под-облаков в одном проходе)
 
 ```ts
-new Nebula({
+new Nebula(renderer, {
   lobes: [
     { center: new Vector3(0.4, 0.1, 0.2), radius: 0.5, weight: 1.2, seed: 1 },
     { center: new Vector3(-0.5, -0.2, 0.3), radius: 0.4, weight: 1.0, seed: 2 }

@@ -11,7 +11,7 @@ const REBAKE_ANGLE = 0.15 // rad (~8.6°): rebake the impostor past this view-di
 const IMPOSTOR_RESOLUTION = 512
 
 /**
- * Standalone volumetric nebula: `new Nebula(params)` -> `scene.add(...)`.
+ * Standalone volumetric nebula: `new Nebula(renderer, params)` -> `scene.add(...)`.
  * Adaptive LOD: a raymarch proxy (NebulaVolume) near/large-on-screen, a cheap baked
  * billboard (NebulaImpostor) far/small-on-screen, crossfaded in a transition band.
  * The proxy is a unit cube scaled UNIFORMLY by `size`; anisotropy (axisRatios) is
