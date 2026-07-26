@@ -95,7 +95,10 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.SceneObserver),
           c.get(Tokens.CameraController),
           c.get(Tokens.NotificationSink),
-          c.get(Tokens.MenuController)
+          c.get(Tokens.MenuController),
+          c.get(Tokens.Camera),
+          c.get(Tokens.AstroControls),
+          c.get(Tokens.Clock)
         )
     )
   }

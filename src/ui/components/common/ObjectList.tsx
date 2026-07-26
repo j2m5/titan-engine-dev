@@ -10,12 +10,12 @@ import { PlanetIcon, RocketLaunchIcon, SunIcon } from '@phosphor-icons/react'
 import { Actor } from '@/core/models/Actor'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
 import { engineStore } from '@/ui/mobx/EngineStore'
-import { threeJS } from '@/core/graphic/ThreeJS'
 
 const ObjectList = observer(() => {
   const filter = (actor: Actor): boolean => ['planet', 'star', 'blackHole'].includes(actor.category!.attributes.alias!)
 
   const sceneManager = useInjection(Tokens.SceneManager)
+  const scene = useInjection(Tokens.Scene)
 
   const actors: Actor[] = Actor.query()
     .where({ parentId: engineStore.scenario?.rootId })
@@ -35,7 +35,7 @@ const ObjectList = observer(() => {
   }
 
   const handleSelect = (actor: Actor): void => {
-    const target = threeJS.scene.getObjectByName(actor.getAttribute('name', ''))
+    const target = scene.getObjectByName(actor.getAttribute('name', ''))
 
     target?.add(sceneManager.crosshair)
   }

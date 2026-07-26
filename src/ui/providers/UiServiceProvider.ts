@@ -23,6 +23,7 @@ class UiServiceProvider extends ServiceProvider {
   public boot(): void {
     timeStore.connect(this.app.get(Tokens.SimulationClock))
     cameraStore.connect(this.app.get(Tokens.CameraController))
+    engineStore.connect(this.app.get(Tokens.Camera))
   }
 }
 

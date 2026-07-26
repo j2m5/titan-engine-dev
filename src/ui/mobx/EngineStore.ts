@@ -2,13 +2,13 @@ import { makeAutoObservable, runInAction } from 'mobx'
 import { Application } from '@/Application'
 import { ScenarioConfig } from '@/config/scenarios'
 import { timeStore } from '@/ui/mobx/TimeStore'
-import { threeJS } from '@/core/graphic/ThreeJS'
-import { Vector3 } from 'three'
+import { PerspectiveCamera, Vector3 } from 'three'
 import { scenarioContext } from '@/core/scenario/ScenarioContext'
 import { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
 
 class EngineStore implements LoadingProgressReporter {
   private app: Application | null = null
+  private renderCamera: PerspectiveCamera | null = null
   public scenario: ScenarioConfig | null = null
   public appLoadingStatus: boolean = true
   public appLoadingProgress: number = 0
@@ -29,6 +29,10 @@ class EngineStore implements LoadingProgressReporter {
     this.app = app
   }
 
+  public connect(camera: PerspectiveCamera): void {
+    this.renderCamera = camera
+  }
+
   public async setScenario(payload: ScenarioConfig | null): Promise<void> {
     scenarioContext.set(payload)
 
@@ -41,8 +45,8 @@ class EngineStore implements LoadingProgressReporter {
 
       this.setAppLoadingStatus(false)
 
-      threeJS.camera.position.set(...payload.defaultCameraPosition)
-      threeJS.camera.lookAt(new Vector3())
+      this.renderCamera?.position.set(...payload.defaultCameraPosition)
+      this.renderCamera?.lookAt(new Vector3())
     }
   }
 

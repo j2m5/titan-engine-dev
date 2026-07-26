@@ -3,7 +3,8 @@ import { observer } from 'mobx-react-lite'
 import TitanFlex from '@titanui/components/TitanFlex'
 import TitanIconButton from '@titanui/components/TitanIconButton'
 import { SkipBackIcon, SkipForwardIcon } from '@phosphor-icons/react'
-import { threeJS } from '@/core/graphic/ThreeJS'
+import { useInjection } from '@/ui/di-react'
+import { Tokens } from '@/core/providers/tokens'
 import { cameraStore } from '@/ui/mobx/CameraStore'
 import { formatter } from '@/ui/helpers'
 
@@ -17,8 +18,10 @@ const CameraSpeed = observer(() => {
   const hideTimer = useRef<number | null>(null)
   const hideAnimationTimer = useRef<number | null>(null)
 
+  const renderer = useInjection(Tokens.Renderer)
+
   useEffect(() => {
-    const canvas = threeJS.renderer.domElement
+    const canvas = renderer.domElement
 
     const handleWheel = () => {
       setVisible(true)
