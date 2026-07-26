@@ -18,6 +18,9 @@ import type { Settings } from '@/core/ports/Settings'
 import type { NotificationSink } from '@/core/ports/NotificationSink'
 import type { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
 import type { MenuController } from '@/core/ports/MenuController'
+import type { Clock, PerspectiveCamera, Scene, WebGLRenderer } from 'three'
+import type { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer'
+import type { AstroControls } from '@/core/libs/AstroControls'
 
 export const Tokens = {
   Engine: token<Engine>('Engine'),
@@ -34,5 +37,11 @@ export const Tokens = {
   Settings: token<Settings>('Settings'),
   NotificationSink: token<NotificationSink>('NotificationSink'),
   LoadingProgressReporter: token<LoadingProgressReporter>('LoadingProgressReporter'),
-  MenuController: token<MenuController>('MenuController')
+  MenuController: token<MenuController>('MenuController'),
+  Renderer: token<WebGLRenderer>('Renderer'),
+  LabelRenderer: token<CSS2DRenderer>('LabelRenderer'),
+  Scene: token<Scene>('Scene'),
+  Camera: token<PerspectiveCamera>('Camera'),
+  AstroControls: token<AstroControls>('AstroControls'),
+  Clock: token<Clock>('Clock')
 } as const

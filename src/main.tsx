@@ -8,12 +8,14 @@ import { engineStore } from '@/ui/mobx/EngineStore'
 import { Container } from '@/core/framework/container/Container'
 import { Kernel } from '@/core/framework/container/Kernel'
 import { Tokens } from '@/core/providers/tokens'
+import { RenderingServiceProvider } from '@/core/providers/RenderingServiceProvider'
 import { AppServiceProvider } from '@/core/providers/AppServiceProvider'
 import { UiServiceProvider } from '@/ui/providers/UiServiceProvider'
 import { Command } from '@/core/framework/commands/Command'
 
 async function bootstrap(): Promise<void> {
   const container: Container = new Kernel([
+    RenderingServiceProvider,
     AppServiceProvider,
     UiServiceProvider
   ]).bootstrap()
