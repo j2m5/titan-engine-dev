@@ -1,13 +1,16 @@
 import {
   BufferGeometry,
+  Camera,
   CubeTexture,
   Intersection,
   Mesh,
   PerspectiveCamera,
   Raycaster,
+  Scene,
   Sphere,
   SphereGeometry,
-  Vector3
+  Vector3,
+  WebGLRenderer
 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
@@ -34,8 +37,6 @@ class BlackHole extends Mesh {
   private static readonly _clickPoint: Vector3 = new Vector3()
 
   private _epoch: number = 0
-  /** Кэш камеры кадра для onBeforeRender (см. комментарий в __setup) */
-  private _camera!: PerspectiveCamera
 
   public constructor(model: Actor) {
     super()
@@ -61,8 +62,13 @@ class BlackHole extends Mesh {
     // актуальны для ТЕКУЩЕГО кадра. Обновление через sceneManager.update
     // (после рендера) даёт покадровый рассинхрон, который проявляется
     // паразитным параллаксом фона при трансляции камеры
-    this.onBeforeRender = (): void => {
-      this.material.update(this, this._camera, threeJS.scene.background as CubeTexture | null, this._epoch)
+    this.onBeforeRender = (_renderer: WebGLRenderer, _scene: Scene, camera: Camera): void => {
+      this.material.update(
+        this,
+        camera as PerspectiveCamera,
+        threeJS.scene.background as CubeTexture | null,
+        this._epoch
+      )
     }
   }
 
@@ -88,11 +94,11 @@ class BlackHole extends Mesh {
 
   public updateObject(ctx: UpdateContext): void {
     // per-frame обновление материала живёт в onBeforeRender; сюда кэшируем
-    // актуальную эпоху кадра и камеру (updateObject вызывается до рендера,
-    // а camera — та же самая ссылка, что и в onBeforeRender, поэтому её
-    // матрицы к моменту рендера всё равно свежие)
+    // только эпоху кадра (updateObject вызывается до рендера). Камера — не
+    // ctx.camera, а аргумент самого onBeforeRender: three передаёт туда
+    // камеру АКТУАЛЬНОГО render-прохода, что важно и для сценариев вне
+    // главного цикла (напр. Postprocessing.renderToScreenshot со своей камерой)
     this._epoch = ctx.epoch
-    this._camera = ctx.camera
   }
 }
 

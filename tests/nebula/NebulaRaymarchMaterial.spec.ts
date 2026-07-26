@@ -12,11 +12,10 @@ describe('NebulaRaymarchMaterial', () => {
     expect(mat.fragmentShader.length).toBeGreaterThan(0)
   })
 
-  it('updateMaterial advances uTime without throwing', () => {
+  it('updateMaterial writes the given elapsed time into uTime', () => {
     const mat = new NebulaRaymarchMaterial(mergeNebulaParams())
-    const before = mat.uniforms.uTime.value
-    mat.updateMaterial()
-    expect(mat.uniforms.uTime.value).toBeGreaterThanOrEqual(before)
+    mat.updateMaterial(5)
+    expect(mat.uniforms.uTime.value).toBe(5)
   })
 
   it('builds independent uniform instances per material (no shared state)', () => {

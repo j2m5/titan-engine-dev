@@ -526,7 +526,6 @@ class AsteroidRingSystem extends Group {
 
     // Получить камеру
     const camera = ctx.camera
-    if (!camera) return
 
     // Позиция камеры в local space системы
     this._localCamPos.copy(camera.getWorldPosition(this._worldPos))
