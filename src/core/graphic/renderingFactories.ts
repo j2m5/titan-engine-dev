@@ -22,9 +22,9 @@ export function createLabelRenderer(): CSS2DRenderer {
   return renderer
 }
 
-export function createScene(): Scene {
+export function createScene(cfg: { name: string }): Scene {
   const scene: Scene = new Scene()
-  scene.name = 'MainScene'
+  scene.name = cfg.name
 
   return scene
 }
@@ -37,18 +37,22 @@ export function createCamera(cfg: { fov: number; aspect: number; near: number; f
  * `cameraSphere` больше не самостоятельная сущность: он нужен исключительно
  * для конструирования контролов, поэтому живёт здесь.
  */
-export function createAstroControls(camera: PerspectiveCamera, renderer: WebGLRenderer): AstroControls {
+export function createAstroControls(
+  camera: PerspectiveCamera,
+  renderer: WebGLRenderer,
+  cfg: { rollSpeed: number; autoForward: boolean }
+): AstroControls {
   const sphere: Sphere = new Sphere(camera.position.clone(), 0.000001)
   const controls: AstroControls = new AstroControls(camera, sphere, renderer.domElement)
-  controls.rollSpeed = 0.1
-  controls.autoForward = false
+  controls.rollSpeed = cfg.rollSpeed
+  controls.autoForward = cfg.autoForward
 
   return controls
 }
 
-export function createClock(): Clock {
+export function createClock(cfg: { startTime: number }): Clock {
   const clock: Clock = new Clock()
-  clock.startTime = 0
+  clock.startTime = cfg.startTime
 
   return clock
 }

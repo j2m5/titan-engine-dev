@@ -1,4 +1,15 @@
-import { BackSide, CubeTexture, GLSL3, Matrix4, Mesh, PerspectiveCamera, RawShaderMaterial, Vector3 } from 'three'
+import {
+  BackSide,
+  Camera,
+  CubeTexture,
+  GLSL3,
+  Matrix4,
+  Mesh,
+  OrthographicCamera,
+  PerspectiveCamera,
+  RawShaderMaterial,
+  Vector3
+} from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
 import { BlackHoleNoiseTexture } from '@/core/renderables/BlackHole/BlackHoleNoiseTexture'
@@ -63,11 +74,14 @@ class BlackHoleMaterial extends RawShaderMaterial {
    * Покадровое обновление uniforms (вызывается из onBeforeRender —
    * матрицы камеры и меша гарантированно актуальны для текущего кадра)
    * @param mesh Меш bounding-сферы зоны симуляции
-   * @param camera Камера сцены
+   * @param camera Камера текущего рендер-прохода. Тип — базовый `Camera`:
+   *   используются только `matrixWorld`, `matrixWorldInverse`, `projectionMatrix`
+   *   и (там, где он есть) `far`, поэтому сужать до `PerspectiveCamera` нечем —
+   *   а `onBeforeRender` отдаёт именно `Camera`
    * @param background Фоновая кубмапа сцены (scene.background, передаёт BlackHole.onBeforeRender)
    * @param epoch Эпоха симуляции (дни), кэшированная BlackHole.updateObject
    */
-  public update(mesh: Mesh, camera: PerspectiveCamera, background: CubeTexture | null, epoch: number): void {
+  public update(mesh: Mesh, camera: Camera, background: CubeTexture | null, epoch: number): void {
     const mw: number[] = mesh.matrixWorld.elements
     const cw: number[] = camera.matrixWorld.elements
 
@@ -95,7 +109,11 @@ class BlackHoleMaterial extends RawShaderMaterial {
     this.uniforms.localCameraPos.value.copy(this._localCameraPos)
 
     // ── 5. Логарифмическая глубина ──
-    const far: number = camera.far ?? 1e10
+    // `far` объявлен не в базовой Camera, а в Perspective/Orthographic; для
+    // проекции без него берётся заведомо больший предел — ровно то, что раньше
+    // давала ветка `?? 1e10` под кастом к PerspectiveCamera
+    const far: number =
+      camera instanceof PerspectiveCamera || camera instanceof OrthographicCamera ? camera.far : 1e10
     this.uniforms.logDepthBufFC.value = 2.0 / (Math.log(far + 1.0) / Math.LN2)
 
     // ── 6. Фоновая кубмапа — физически тот же объект, что и scene.background ──

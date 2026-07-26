@@ -4,7 +4,6 @@ import {
   CubeTexture,
   Intersection,
   Mesh,
-  PerspectiveCamera,
   Raycaster,
   Scene,
   Sphere,
@@ -65,12 +64,7 @@ class BlackHole extends Mesh {
     // (после рендера) даёт покадровый рассинхрон, который проявляется
     // паразитным параллаксом фона при трансляции камеры
     this.onBeforeRender = (_renderer: WebGLRenderer, _scene: Scene, camera: Camera): void => {
-      this.material.update(
-        this,
-        camera as PerspectiveCamera,
-        this.scene.background as CubeTexture | null,
-        this._epoch
-      )
+      this.material.update(this, camera, this.scene.background as CubeTexture | null, this._epoch)
     }
   }
 

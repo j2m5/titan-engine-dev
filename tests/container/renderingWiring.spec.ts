@@ -3,6 +3,7 @@ import { Kernel } from '@/core/framework/container/Kernel'
 import { Container } from '@/core/framework/container/Container'
 import { RenderingServiceProvider } from '@/core/providers/RenderingServiceProvider'
 import { Tokens } from '@/core/providers/tokens'
+import { config } from '@/core/framework/config'
 import { createTestContainer } from '../helpers/createTestContainer'
 
 /**
@@ -50,17 +51,6 @@ describe('RenderingServiceProvider — проводка рендер-токен�
     vi.clearAllMocks()
   })
 
-  it('регистрирует все шесть токенов рендер-слоя', () => {
-    const container: Container = new Kernel([RenderingServiceProvider]).bootstrap()
-
-    expect(container.has(Tokens.Renderer)).toBe(true)
-    expect(container.has(Tokens.LabelRenderer)).toBe(true)
-    expect(container.has(Tokens.Scene)).toBe(true)
-    expect(container.has(Tokens.Camera)).toBe(true)
-    expect(container.has(Tokens.AstroControls)).toBe(true)
-    expect(container.has(Tokens.Clock)).toBe(true)
-  })
-
   it('регистрация не создаёт объекты — bootstrap не зовёт ни одной фабрики', () => {
     new Kernel([RenderingServiceProvider]).bootstrap()
 
@@ -72,6 +62,9 @@ describe('RenderingServiceProvider — проводка рендер-токен�
     expect(mocks.createClock).not.toHaveBeenCalled()
   })
 
+  // Отдельной has()-проверки регистраций нет намеренно: она целиком покрыта
+  // этим тестом — has() доказывает лишь то, что какой-то вызов привязки был,
+  // а идентичность доказывает и факт регистрации, и правильный объект за токеном
   it('каждый токен указывает на результат своей фабрики', () => {
     const container: Container = new Kernel([RenderingServiceProvider]).bootstrap()
 
@@ -83,12 +76,16 @@ describe('RenderingServiceProvider — проводка рендер-токен�
     expect(container.get(Tokens.Clock)).toBe(mocks.fakes.clock)
   })
 
-  it('AstroControls получает камеру и рендерер из контейнера', () => {
+  it('AstroControls получает камеру, рендерер и свой конфиг', () => {
     const container: Container = new Kernel([RenderingServiceProvider]).bootstrap()
 
     container.get(Tokens.AstroControls)
 
-    expect(mocks.createAstroControls).toHaveBeenCalledWith(mocks.fakes.camera, mocks.fakes.renderer)
+    expect(mocks.createAstroControls).toHaveBeenCalledWith(
+      mocks.fakes.camera,
+      mocks.fakes.renderer,
+      config('astroControls')
+    )
   })
 
   it('полный контейнер с заглушками резолвит Application без исключений', () => {

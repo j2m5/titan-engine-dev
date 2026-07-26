@@ -18,17 +18,21 @@ import {
  * импорте модуля. Поэтому bootstrap() безопасен там, где WebGL нет вовсе
  * (jsdom), а тесты могут перекрыть любой из токенов заглушкой до того,
  * как настоящая фабрика будет вызвана.
+ *
+ * Параметры фабрик приходят только из `config`: раньше часть значений
+ * (`scene.name`, `clock.startTime`, `astroControls.*`) была зашита в код,
+ * а одноимённые ключи конфига не читал никто.
  */
 class RenderingServiceProvider extends ServiceProvider {
   public register(): void {
     this.app.singleton(Tokens.Renderer, () => createRenderer(config('renderer')))
     this.app.singleton(Tokens.LabelRenderer, () => createLabelRenderer())
-    this.app.singleton(Tokens.Scene, () => createScene())
+    this.app.singleton(Tokens.Scene, () => createScene(config('scene')))
     this.app.singleton(Tokens.Camera, () => createCamera(config('camera')))
     this.app.singleton(Tokens.AstroControls, (c: Container) =>
-      createAstroControls(c.get(Tokens.Camera), c.get(Tokens.Renderer))
+      createAstroControls(c.get(Tokens.Camera), c.get(Tokens.Renderer), config('astroControls'))
     )
-    this.app.singleton(Tokens.Clock, () => createClock())
+    this.app.singleton(Tokens.Clock, () => createClock(config('clock')))
   }
 }
 

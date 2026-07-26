@@ -1,5 +1,6 @@
 import { Mesh, PerspectiveCamera, Vector2, Vector3, WebGLRenderer } from 'three'
 import { Nebula } from '@/core/renderables/Nebula'
+import type { NebulaVolume } from '@/core/renderables/Nebula/volume/NebulaVolume'
 
 const fakeRenderer = {
   getSize: (v: Vector2) => {
@@ -49,9 +50,29 @@ describe('Nebula construction', () => {
   })
 
   it('bakes a 3D density field when quality.bake3DTexture is set', () => {
-    const nebula = new Nebula(fakeRenderer, { quality: { bake3DTexture: true, bakeResolution: 64 } })
-    // construction triggers the bake (offscreen, mocked renderer) without throwing
-    expect(nebula.params.quality.bake3DTexture).toBe(true)
+    // The renderer is spied per test, not shared: the assertions below count
+    // calls, and on the shared fake a previous test could satisfy them.
+    const render = vi.fn()
+    const bakingRenderer = {
+      getSize: (v: Vector2) => {
+        v.set(1920, 1080)
+        return v
+      },
+      getRenderTarget: () => null,
+      setRenderTarget: () => {},
+      render
+    } as unknown as WebGLRenderer
+
+    const bakeResolution = 64
+    const nebula = new Nebula(bakingRenderer, { quality: { bake3DTexture: true, bakeResolution } })
+
+    // Load-bearing: the params flag alone proves nothing (that assertion passed
+    // with the baker forced to null). One render per Z slice is the bake running,
+    expect(render).toHaveBeenCalledTimes(bakeResolution)
+    // and the marcher's uDensityTex stays null until the baked field reaches it.
+    const volume = nebula.children[0] as NebulaVolume
+    expect(volume.material.uniforms.uDensityTex.value).not.toBeNull()
+
     expect(() => nebula.dispose()).not.toThrow()
   })
 })
