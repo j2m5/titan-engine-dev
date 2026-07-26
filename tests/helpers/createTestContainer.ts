@@ -6,6 +6,7 @@ import { Tokens } from '@/core/providers/tokens'
 import { Scene, Vector2 } from 'three'
 import type { Clock, PerspectiveCamera, WebGLRenderer } from 'three'
 import type { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer'
+import type { AstroControls } from '@/core/libs/AstroControls'
 import type { Settings } from '@/core/ports/Settings'
 import type { NotificationSink } from '@/core/ports/NotificationSink'
 import type { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
@@ -32,16 +33,22 @@ import type { MenuController } from '@/core/ports/MenuController'
 export function createTestContainer(): Container {
   const container: Container = new Kernel([RenderingServiceProvider, AppServiceProvider]).bootstrap()
 
-  const domElement = {
+  /**
+   * У каждого рендерера свой литерал: `Engine` берёт `renderer.domElement` как
+   * canvas, а `labelRenderer.domElement` как overlay, и на общем объекте эти два
+   * поля оказались бы одним и тем же — тест `initialize()` или `onResize()`
+   * молча принимал бы один элемент за два.
+   */
+  const createDomElement = () => ({
     height: 1080,
     width: 1920,
     style: {},
     addEventListener: () => {},
     removeEventListener: () => {}
-  }
+  })
 
   container.instance(Tokens.Renderer, {
-    domElement,
+    domElement: createDomElement(),
     setSize: () => {},
     setPixelRatio: () => {},
     setAnimationLoop: () => {},
@@ -58,7 +65,7 @@ export function createTestContainer(): Container {
   } as unknown as WebGLRenderer)
 
   container.instance(Tokens.LabelRenderer, {
-    domElement,
+    domElement: createDomElement(),
     setSize: () => {},
     render: () => {}
   } as unknown as CSS2DRenderer)
@@ -69,7 +76,11 @@ export function createTestContainer(): Container {
     lookAt: () => {}
   } as unknown as PerspectiveCamera)
   container.instance(Tokens.Clock, { getDelta: () => 0, getElapsedTime: () => 0 } as unknown as Clock)
-  container.instance(Tokens.AstroControls, { update: () => {}, enabled: true, movementSpeed: 0 } as unknown as never)
+  container.instance(Tokens.AstroControls, {
+    update: () => {},
+    enabled: true,
+    movementSpeed: 0
+  } as unknown as AstroControls)
 
   const settings: Settings = { showMarkers: false, showOrbitLines: false }
   const notificationSink: NotificationSink = { dispatch: () => {} }

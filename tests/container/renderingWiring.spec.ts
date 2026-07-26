@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Kernel } from '@/core/framework/container/Kernel'
 import { Container } from '@/core/framework/container/Container'
 import { RenderingServiceProvider } from '@/core/providers/RenderingServiceProvider'
@@ -43,6 +43,13 @@ vi.mock('@/core/graphic/renderingFactories', () => ({
 }))
 
 describe('RenderingServiceProvider — проводка рендер-токенов', () => {
+  // Счётчики вызовов — часть утверждений («фабрика не звалась», «звалась с тем-то»),
+  // поэтому их обязательно сбрасывать: иначе тест проходил бы за счёт вызова,
+  // сделанного предыдущим тестом. Глобального clearMocks в конфиге нет.
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('регистрирует все шесть токенов рендер-слоя', () => {
     const container: Container = new Kernel([RenderingServiceProvider]).bootstrap()
 
@@ -55,8 +62,6 @@ describe('RenderingServiceProvider — проводка рендер-токен�
   })
 
   it('регистрация не создаёт объекты — bootstrap не зовёт ни одной фабрики', () => {
-    vi.clearAllMocks()
-
     new Kernel([RenderingServiceProvider]).bootstrap()
 
     expect(mocks.createRenderer).not.toHaveBeenCalled()

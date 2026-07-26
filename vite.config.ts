@@ -19,11 +19,24 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./tests/setup.ts'],
-    // .env не отслеживается git, поэтому флаги оттуда у каждого свои.
-    // Панель статистики в тестах должна быть выключена детерминированно:
-    // её конструктор берёт 2D-контекст канваса, которого в jsdom нет.
+    /**
+     * `.env` не отслеживается git, поэтому значения оттуда у каждого свои, и
+     * прогон, зависящий от них, воспроизводится по-разному на разных машинах.
+     * Здесь закреплены все пять переменных, которые читает `src/config`:
+     * `VITE_SHOW_STATS_PANEL` (панель статистики берёт 2D-контекст канваса,
+     * которого в jsdom нет) и четыре остальных — `VITE_APP_NAME`,
+     * `VITE_FS_DRIVER`, `VITE_FILE_BUCKET`, `VITE_S3_URL`. Последние сейчас ни
+     * в одном тесте не проверяются, но `VITE_FS_DRIVER` читается в
+     * `ResourceManager` при конструировании, то есть уже лежит на пути резолва.
+     * Значения намеренно нерабочие: если тест начнёт зависеть от реального
+     * хранилища, это станет видно сразу, а не превратится в тихий сетевой вызов.
+     */
     env: {
-      VITE_SHOW_STATS_PANEL: 'false'
+      VITE_SHOW_STATS_PANEL: 'false',
+      VITE_APP_NAME: 'Titan Engine (test)',
+      VITE_FS_DRIVER: 'local',
+      VITE_FILE_BUCKET: 'test-bucket',
+      VITE_S3_URL: 'https://s3.invalid'
     }
   },
   server: {
