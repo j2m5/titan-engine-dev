@@ -11,7 +11,6 @@ import { OrbitLine } from '@/core/renderables/utils/OrbitLine'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { RenderableObject3D, ShouldRenderOrbitLine } from '@/core/renderables/types'
 import { scenarioContext } from '@/core/scenario/ScenarioContext'
-import { threeJS } from '@/core/graphic/ThreeJS'
 import { Settings } from '@/core/ports/Settings'
 import { UpdateContext } from '@/core/UpdateContext'
 
@@ -29,13 +28,13 @@ export function hasOrbit(object: unknown): object is ShouldRenderOrbitLine {
 
 class SceneManager {
   public crosshair: CSS2DObject = new Crosshair()
-  private scene: Scene = threeJS.scene
   private buffer: Map<number, Object3D> = new Map()
   private orbitLines: OrbitLine[] = []
 
   public constructor(
     private markerManager: MarkerManager,
-    private settings: Settings
+    private settings: Settings,
+    private scene: Scene
   ) {}
 
   public initialize(): void {

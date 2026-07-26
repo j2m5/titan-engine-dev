@@ -1,13 +1,12 @@
 import { ResourceManager } from '@/core/services/ResourceManager'
-import { Texture, TextureLoader } from 'three'
+import { Texture, TextureLoader, WebGLRenderer } from 'three'
 import { IResource } from '@/core/models/types'
-import { threeJS } from '@/core/graphic/ThreeJS'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
 class TextureManager extends ResourceManager<IResource, Texture> {
   protected loader: TextureLoader
 
-  public constructor() {
+  public constructor(private readonly renderer: WebGLRenderer) {
     super()
     this.loader = new TextureLoader()
   }
@@ -23,7 +22,7 @@ class TextureManager extends ResourceManager<IResource, Texture> {
 
       resourceStorage.addTexture(texture)
 
-      threeJS.renderer.initTexture(texture)
+      this.renderer.initTexture(texture)
 
       return texture
     } catch (e) {

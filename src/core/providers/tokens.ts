@@ -7,6 +7,7 @@ import type { Engine } from '@/core/Engine'
 import type { Application } from '@/Application'
 import type { CubeMapTextureManager } from '@/core/services/CubeMapTextureManager'
 import type { TextureManager } from '@/core/services/TextureManager'
+import type { CompressedTextureManager } from '@/core/services/CompressedTextureManager'
 import type { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
 import type { SceneManager } from '@/core/services/SceneManager'
 import type { MarkerManager } from '@/core/services/MarkerManager'
@@ -28,6 +29,7 @@ export const Tokens = {
   Application: token<Application>('Application'),
   CubeMapTextureManager: token<CubeMapTextureManager>('CubeMapTextureManager'),
   TextureManager: token<TextureManager>('TextureManager'),
+  CompressedTextureManager: token<CompressedTextureManager>('CompressedTextureManager'),
   ImageBitmapManager: token<ImageBitmapManager>('ImageBitmapManager'),
   SceneManager: token<SceneManager>('SceneManager'),
   MarkerManager: token<MarkerManager>('MarkerManager'),

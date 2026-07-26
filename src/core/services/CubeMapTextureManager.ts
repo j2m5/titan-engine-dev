@@ -1,14 +1,13 @@
 import { ResourceManager } from '@/core/services/ResourceManager'
-import { CubeTexture, CubeTextureLoader } from 'three'
+import { CubeTexture, CubeTextureLoader, WebGLRenderer } from 'three'
 import { IResource } from '@/core/models/types'
-import { threeJS } from '@/core/graphic/ThreeJS'
 import { Storage } from '@/core/framework/file/Storage'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
 class CubeMapTextureManager extends ResourceManager<IResource[], CubeTexture, readonly string[]> {
   protected loader: CubeTextureLoader
 
-  public constructor() {
+  public constructor(private readonly renderer: WebGLRenderer) {
     super()
     this.loader = new CubeTextureLoader()
   }
@@ -30,7 +29,7 @@ class CubeMapTextureManager extends ResourceManager<IResource[], CubeTexture, re
 
       resourceStorage.addTexture(texture)
 
-      threeJS.renderer.initTexture(texture)
+      this.renderer.initTexture(texture)
 
       return texture
     } catch (e) {

@@ -8,13 +8,12 @@ import { CubeMapTextureManager } from '@/core/services/CubeMapTextureManager'
 import { TextureManager } from '@/core/services/TextureManager'
 import { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
 import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
-import { CubeTexture, DefaultLoadingManager, Object3D, Texture } from 'three'
+import { CubeTexture, DefaultLoadingManager, Object3D, Scene, Texture } from 'three'
 import { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
 import { NotificationSink } from '@/core/ports/NotificationSink'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { ResourceItem } from '@/core/services/ResourceManager'
 import { Collection } from '@/core/framework/support/Collection'
-import { threeJS } from '@/core/graphic/ThreeJS'
 import { hasRenderable } from '@/core/services/SceneManager'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 
@@ -60,6 +59,7 @@ class ResourceObserver {
    * @param cubeMapTextureManager Менеджер текстур кубических карт
    * @param textureManager Стандартный менеджер текстур
    * @param imageBitmapManager Менеджер ImageBitmap
+   * @param scene Сцена, из которой извлекаются объекты для сброса материалов
    */
   public constructor(
     private sceneObserver: SceneObserver,
@@ -67,7 +67,8 @@ class ResourceObserver {
     private textureManager: TextureManager,
     private imageBitmapManager: ImageBitmapManager,
     private loadingProgress: LoadingProgressReporter,
-    private notifications: NotificationSink
+    private notifications: NotificationSink,
+    private scene: Scene
   ) {
     this._scenario = null
     this._sceneBackground = null
@@ -177,7 +178,7 @@ class ResourceObserver {
       // loadedAt и expiredAt равны если lifetime ресурса установлен как 0, это означает текстура имеет infinite lifetime
       // основная проверка на истечение lifetime ресурса, если меньше текущего времени - нужно удалять
       if (resource && resource.loadedAt !== resource.expiredAt && resource.expiredAt < dayjs()) {
-        const objects = threeJS.scene.getObjectsByUserDataProperty('type', 'planet')
+        const objects = this.scene.getObjectsByUserDataProperty('type', 'planet')
 
         // извлекает целевые сущности и сбрасывает материал на параметры по умолчанию
         // позволяя WebGL корректно освободить ресурсы
@@ -322,7 +323,7 @@ class ResourceObserver {
         this.deferred.push(...isNotLoaded)
         await this.loadDeferredTextures(isNotLoaded.toArray())
 
-        const node = threeJS.scene.getObjectByName(actor.getAttribute('name', ''))
+        const node = this.scene.getObjectByName(actor.getAttribute('name', ''))
 
         if (hasRenderable(node)) (node.renderable?.material as AbstractShaderMaterial).updateMaterial()
       }

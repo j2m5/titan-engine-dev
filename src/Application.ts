@@ -1,12 +1,13 @@
 import { Engine } from '@/core/Engine'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { ScenarioConfig } from '@/config/scenarios'
-import { threeJS } from '@/core/graphic/ThreeJS'
+import { Scene } from 'three'
 
 class Application {
   public constructor(
     private engine: Engine,
-    private resourceObserver: ResourceObserver
+    private resourceObserver: ResourceObserver,
+    private scene: Scene
   ) {}
 
   public async run(scenario: ScenarioConfig): Promise<void> {
@@ -19,7 +20,7 @@ class Application {
       console.warn('[Application] Кубическая карта фона сценария не загружена, сцена останется без фона')
     }
 
-    threeJS.scene.background = this.resourceObserver.sceneBackground
+    this.scene.background = this.resourceObserver.sceneBackground
 
     this.engine.start()
   }

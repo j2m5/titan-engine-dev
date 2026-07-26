@@ -5,6 +5,7 @@ import { Engine } from '@/core/Engine'
 import { Application } from '@/Application'
 import { CubeMapTextureManager } from '@/core/services/CubeMapTextureManager'
 import { TextureManager } from '@/core/services/TextureManager'
+import { CompressedTextureManager } from '@/core/services/CompressedTextureManager'
 import { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
 import { SceneManager } from '@/core/services/SceneManager'
 import { MarkerManager } from '@/core/services/MarkerManager'
@@ -22,8 +23,15 @@ class AppServiceProvider extends ServiceProvider {
 
     this.app.singleton(Tokens.SceneObserver, () => new SceneObserver())
 
-    this.app.singleton(Tokens.CubeMapTextureManager, () => new CubeMapTextureManager())
-    this.app.singleton(Tokens.TextureManager, () => new TextureManager())
+    this.app.singleton(Tokens.TextureManager, (c: Container) => new TextureManager(c.get(Tokens.Renderer)))
+    this.app.singleton(
+      Tokens.CubeMapTextureManager,
+      (c: Container) => new CubeMapTextureManager(c.get(Tokens.Renderer))
+    )
+    this.app.singleton(
+      Tokens.CompressedTextureManager,
+      (c: Container) => new CompressedTextureManager(c.get(Tokens.Renderer))
+    )
     this.app.singleton(Tokens.ImageBitmapManager, () => new ImageBitmapManager())
 
     this.app.singleton(
@@ -33,7 +41,7 @@ class AppServiceProvider extends ServiceProvider {
 
     this.app.singleton(
       Tokens.SceneManager,
-      (c: Container) => new SceneManager(c.get(Tokens.MarkerManager), c.get(Tokens.Settings))
+      (c: Container) => new SceneManager(c.get(Tokens.MarkerManager), c.get(Tokens.Settings), c.get(Tokens.Scene))
     )
 
     this.app.singleton(
@@ -68,13 +76,14 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.TextureManager),
           c.get(Tokens.ImageBitmapManager),
           c.get(Tokens.LoadingProgressReporter),
-          c.get(Tokens.NotificationSink)
+          c.get(Tokens.NotificationSink),
+          c.get(Tokens.Scene)
         )
     )
 
     this.app.singleton(
       Tokens.Application,
-      (c: Container) => new Application(c.get(Tokens.Engine), c.get(Tokens.ResourceObserver))
+      (c: Container) => new Application(c.get(Tokens.Engine), c.get(Tokens.ResourceObserver), c.get(Tokens.Scene))
     )
 
     // Команды — transient с конструктором класса в роли ключа:

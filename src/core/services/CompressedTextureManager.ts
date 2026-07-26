@@ -1,17 +1,16 @@
 import { ResourceManager } from '@/core/services/ResourceManager'
 import { IResource } from '@/core/models/types'
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader'
-import { threeJS } from '@/core/graphic/ThreeJS'
-import { CompressedTexture } from 'three'
+import { CompressedTexture, WebGLRenderer } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
 class CompressedTextureManager extends ResourceManager<IResource> {
   protected loader: KTX2Loader
 
-  public constructor() {
+  public constructor(private readonly renderer: WebGLRenderer) {
     super()
     this.loader = new KTX2Loader()
-    this.loader.detectSupport(threeJS.renderer)
+    this.loader.detectSupport(this.renderer)
     this.loader.setTranscoderPath('examples/jsm/libs/basis/')
   }
 
@@ -22,7 +21,7 @@ class CompressedTextureManager extends ResourceManager<IResource> {
 
       texture.name = source.path
       texture.colorSpace = source.colorSpace ? source.colorSpace : ''
-      texture.anisotropy = Math.min(8, threeJS.renderer.capabilities.getMaxAnisotropy())
+      texture.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy())
 
       resourceStorage.addTexture(texture)
 
