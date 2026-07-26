@@ -1,4 +1,4 @@
-import { LOD, Object3D, Vector3 } from 'three'
+import { LOD, Object3D, Scene, Vector3, WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { Barycenter } from '@/core/renderables/Barycenter'
 import { BlackHole } from '@/core/renderables/BlackHole'
@@ -14,7 +14,6 @@ import { FakePlanet } from '@/core/renderables/utils/FakePlanet'
 import { BrunetonAtmosphere } from '@/core/renderables/Atmosphere/BrunetonAtmosphere'
 import { Ring } from '@/core/renderables/Ring'
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
-import { threeJS } from '@/core/graphic/ThreeJS'
 import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -23,7 +22,12 @@ import { Nebula } from '@/core/renderables/Nebula'
 import { IRingRenderingObject } from '@/core/models/types'
 
 class RenderableFactory {
-  public static make(actor: Actor): Object3D {
+  public constructor(
+    private readonly renderer: WebGLRenderer,
+    private readonly scene: Scene
+  ) {}
+
+  public make(actor: Actor): Object3D {
     switch (actor.getAttribute('categoryId', -1)) {
       case 1:
         return this.createBarycenter(actor)
@@ -42,21 +46,21 @@ class RenderableFactory {
     }
   }
 
-  private static createBarycenter(actor: Actor): Object3D {
+  private createBarycenter(actor: Actor): Object3D {
     return new Barycenter(actor)
   }
 
-  private static createBlackHole(actor: Actor): Object3D {
+  private createBlackHole(actor: Actor): Object3D {
     const node = new DynamicNode(actor)
     const lod = new LOD()
-    const lodl1 = new BlackHole(actor)
+    const lodl1 = new BlackHole(actor, this.scene)
     const lodl2 = new BlackHoleImpostor(actor, lodl1.parameters)
 
     const distanceLod = (pixels: number): number => {
       const radius: number = lodl1.parameters.simulationRadius
       const fov: number = degToRad(config('camera.fov'))
 
-      return toThreeJSUnits((2 * radius * threeJS.renderer.domElement.height) / (Math.tan(fov) * pixels))
+      return toThreeJSUnits((2 * radius * this.renderer.domElement.height) / (Math.tan(fov) * pixels))
     }
 
     node.name = actor.getAttribute('name', '')
@@ -72,11 +76,11 @@ class RenderableFactory {
     return node
   }
 
-  private static createStar(actor: Actor): Object3D {
+  private createStar(actor: Actor): Object3D {
     const node = new DynamicNode(actor)
     const lod = new LOD()
     const lodl1 = new Star(actor)
-    const lodl2 = new FakeStar(actor)
+    const lodl2 = new FakeStar(actor, this.renderer)
     const starInnerLayer = new StarInnerLayer(actor)
     const starOuterLayer = new StarOuterLayer(actor)
 
@@ -84,7 +88,7 @@ class RenderableFactory {
       const radius: number = actor.physicalObject!.getAttribute('radius')!
       const fov: number = degToRad(config('camera.fov'))
 
-      return toThreeJSUnits((2 * radius * threeJS.renderer.domElement.height) / (Math.tan(fov) * pixels))
+      return toThreeJSUnits((2 * radius * this.renderer.domElement.height) / (Math.tan(fov) * pixels))
     }
 
     lod.add(starInnerLayer)
@@ -102,7 +106,7 @@ class RenderableFactory {
 
     if (actor.attributes.id === 87) {
       node.add(
-        new Nebula({
+        new Nebula(this.renderer, {
           size: 27000000,
           seed: 5120,
           shape: 'disk',
@@ -118,7 +122,7 @@ class RenderableFactory {
     return node
   }
 
-  private static createPlanet(actor: Actor): Object3D {
+  private createPlanet(actor: Actor): Object3D {
     const node = new DynamicNode(actor)
     const lod = new LOD()
     const lodl1 = new Planet(actor)
@@ -128,7 +132,7 @@ class RenderableFactory {
       const radius: number = actor.physicalObject!.getAttribute('radius')!
       const fov: number = degToRad(config('camera.fov'))
 
-      return toThreeJSUnits((2 * radius * threeJS.renderer.domElement.height) / (Math.tan(fov) * pixels))
+      return toThreeJSUnits((2 * radius * this.renderer.domElement.height) / (Math.tan(fov) * pixels))
     }
 
     node.name = actor.getAttribute('name', '')
@@ -144,11 +148,11 @@ class RenderableFactory {
     return node
   }
 
-  private static createAtmosphere(actor: Actor): Object3D {
-    return new BrunetonAtmosphere(actor)
+  private createAtmosphere(actor: Actor): Object3D {
+    return new BrunetonAtmosphere(actor, this.renderer)
   }
 
-  private static createRing(actor: Actor): Object3D {
+  private createRing(actor: Actor): Object3D {
     // Проверка стоит до конструирования: кольцо без конфига не построить, и отказ здесь
     // ничего не аллоцирует, а сужение дальше доказывает сам tsc
     const ringData: IRingRenderingObject = requireRenderingData<IRingRenderingObject>(

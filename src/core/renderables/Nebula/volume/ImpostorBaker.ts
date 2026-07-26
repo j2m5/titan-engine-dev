@@ -7,9 +7,9 @@ import {
   PerspectiveCamera,
   Texture,
   Vector3,
+  WebGLRenderer,
   WebGLRenderTarget
 } from 'three'
-import { threeJS } from '@/core/graphic/ThreeJS'
 import { IMPOSTOR_FRAME_FILL } from '@/core/renderables/Nebula/volume/lod'
 
 /**
@@ -27,7 +27,10 @@ class ImpostorBaker {
 
   private static readonly BAKE_FOV = 45
 
-  public constructor(resolution: number) {
+  public constructor(
+    private readonly renderer: WebGLRenderer,
+    resolution: number
+  ) {
     // HalfFloat so the volume's HDR (>1) survives into the billboard and blooms
     // consistently with the live raymarch.
     this.target = new WebGLRenderTarget(resolution, resolution, {
@@ -72,7 +75,7 @@ class ImpostorBaker {
     this.bakeCamera.far = camDist + radius * 2
     this.bakeCamera.updateProjectionMatrix()
 
-    const renderer = threeJS.renderer
+    const renderer = this.renderer
     const prevTarget = renderer.getRenderTarget()
     const prevAlpha = renderer.getClearAlpha()
     renderer.setRenderTarget(this.target)

@@ -1,11 +1,10 @@
-import { Vector2, Vector3, Object3D, PerspectiveCamera } from 'three'
+import { Vector2, Vector3, Object3D, PerspectiveCamera, WebGLRenderer } from 'three'
 import { DeepPartial, NebulaParams, mergeNebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { NebulaVolume } from '@/core/renderables/Nebula/volume/NebulaVolume'
 import { NebulaImpostor } from '@/core/renderables/Nebula/volume/NebulaImpostor'
 import { ImpostorBaker } from '@/core/renderables/Nebula/volume/ImpostorBaker'
 import { NebulaDensityBaker } from '@/core/renderables/Nebula/volume/NebulaDensityBaker'
 import { IMPOSTOR_FRAME_FILL, selectLOD } from '@/core/renderables/Nebula/volume/lod'
-import { threeJS } from '@/core/graphic/ThreeJS'
 import { UpdateContext } from '@/core/UpdateContext'
 
 const REBAKE_ANGLE = 0.15 // rad (~8.6°): rebake the impostor past this view-dir change
@@ -33,7 +32,10 @@ class Nebula extends Object3D {
   private readonly _ndcB = new Vector3()
   private readonly _viewSize = new Vector2()
 
-  public constructor(params: DeepPartial<NebulaParams> = {}) {
+  public constructor(
+    private readonly renderer: WebGLRenderer,
+    params: DeepPartial<NebulaParams> = {}
+  ) {
     super()
     this.params = mergeNebulaParams(params)
     this.name = 'Nebula'
@@ -49,13 +51,13 @@ class Nebula extends Object3D {
     // billboard quad spans the bake frame so the baked sphere maps 1:1 onto it.
     this.impostor.scale.setScalar(this.params.size / IMPOSTOR_FRAME_FILL)
 
-    this.baker = new ImpostorBaker(IMPOSTOR_RESOLUTION)
+    this.baker = new ImpostorBaker(this.renderer, IMPOSTOR_RESOLUTION)
 
     // Optional: bake the static density field into a 3D texture once, so the
     // marcher samples 1 trilinear fetch/step instead of fbm+Worley. The material
     // was already compiled with the NEB_BAKED branch (from the same flag).
     this.densityBaker = this.params.quality.bake3DTexture
-      ? new NebulaDensityBaker(this.params.quality.bakeResolution)
+      ? new NebulaDensityBaker(this.renderer, this.params.quality.bakeResolution)
       : null
     if (this.densityBaker) {
       this.volume.material.setBakedDensityTexture(this.densityBaker.bake(this.params))
@@ -94,7 +96,7 @@ class Nebula extends Object3D {
     this._ndcA.copy(this._center).project(camera)
     this._ndcB.copy(this._edge).project(camera)
 
-    threeJS.renderer.getSize(this._viewSize)
+    this.renderer.getSize(this._viewSize)
     const dx = (this._ndcB.x - this._ndcA.x) * 0.5 * this._viewSize.x
     const dy = (this._ndcB.y - this._ndcA.y) * 0.5 * this._viewSize.y
     const px = Math.hypot(dx, dy)

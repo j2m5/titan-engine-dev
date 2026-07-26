@@ -64,7 +64,7 @@ class BlackHoleMaterial extends RawShaderMaterial {
    * матрицы камеры и меша гарантированно актуальны для текущего кадра)
    * @param mesh Меш bounding-сферы зоны симуляции
    * @param camera Камера сцены
-   * @param background Фоновая кубмапа сцены (threeJS.scene.background)
+   * @param background Фоновая кубмапа сцены (scene.background, передаёт BlackHole.onBeforeRender)
    * @param epoch Эпоха симуляции (дни), кэшированная BlackHole.updateObject
    */
   public update(mesh: Mesh, camera: PerspectiveCamera, background: CubeTexture | null, epoch: number): void {

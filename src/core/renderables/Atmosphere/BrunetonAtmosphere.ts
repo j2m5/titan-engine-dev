@@ -1,11 +1,10 @@
-import { BufferGeometry, Mesh, SphereGeometry, Vector3 } from 'three'
+import { BufferGeometry, Mesh, SphereGeometry, Vector3, WebGLRenderer } from 'three'
 import { Acceptable } from '@/core/services/visitors/Acceptable'
 import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
 import { Actor } from '@/core/models/Actor'
 import { BrunetonAtmosphereMaterial } from '@/core/renderables/Atmosphere/BrunetonAtmosphereMaterial'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { requireRenderingData } from '@/core/helpers/renderingData'
-import { threeJS } from '@/core/graphic/ThreeJS'
 import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
 import { UpdateContext } from '@/core/UpdateContext'
 import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
@@ -30,7 +29,10 @@ class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
    */
   private lutGenerator!: AtmosphereLUTGenerator
 
-  public constructor(model: Actor) {
+  public constructor(
+    model: Actor,
+    private readonly renderer: WebGLRenderer
+  ) {
     super()
     this.model = model
 
@@ -43,7 +45,7 @@ class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
 
     const radius: number = toThreeJSUnits(config.topRadius)
 
-    this.lutGenerator = new AtmosphereLUTGenerator(threeJS.renderer)
+    this.lutGenerator = new AtmosphereLUTGenerator(this.renderer)
     const lut = this.lutGenerator.generate(config)
 
     this.geometry = new SphereGeometry(radius, 256, 256)

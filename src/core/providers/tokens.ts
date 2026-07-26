@@ -23,6 +23,7 @@ import type { Clock, PerspectiveCamera, Scene, WebGLRenderer } from 'three'
 import type { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import type { AstroControls } from '@/core/libs/AstroControls'
 import type { Postprocessing } from '@/core/graphic/Postprocessing'
+import type { RenderableFactory } from '@/core/renderables/RenderableFactory'
 
 export const Tokens = {
   Engine: token<Engine>('Engine'),
@@ -47,5 +48,6 @@ export const Tokens = {
   Camera: token<PerspectiveCamera>('Camera'),
   AstroControls: token<AstroControls>('AstroControls'),
   Clock: token<Clock>('Clock'),
-  Postprocessing: token<Postprocessing>('Postprocessing')
+  Postprocessing: token<Postprocessing>('Postprocessing'),
+  RenderableFactory: token<RenderableFactory>('RenderableFactory')
 } as const

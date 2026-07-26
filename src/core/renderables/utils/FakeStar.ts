@@ -1,7 +1,14 @@
-import { AdditiveBlending, BufferGeometry, Mesh, MeshStandardMaterial, PlaneGeometry, Texture } from 'three'
+import {
+  AdditiveBlending,
+  BufferGeometry,
+  Mesh,
+  MeshStandardMaterial,
+  PlaneGeometry,
+  Texture,
+  WebGLRenderer
+} from 'three'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
-import { threeJS } from '@/core/graphic/ThreeJS'
 import { degToRad } from 'three/src/math/MathUtils'
 import { colorTemperatureToRGB, rgbToHex } from '@/core/materials/shaders/lib/helpers'
 import { UpdateContext } from '@/core/UpdateContext'
@@ -21,7 +28,11 @@ class FakeStar extends Mesh {
 
   private readonly scaleFactor: number
 
-  public constructor(model: Actor, scaleFactor: number = 1) {
+  public constructor(
+    model: Actor,
+    private readonly renderer: WebGLRenderer,
+    scaleFactor: number = 1
+  ) {
     super()
     this.model = model
     this.scaleFactor = scaleFactor
@@ -53,7 +64,7 @@ class FakeStar extends Mesh {
     const distance = this.position.distanceTo(ctx.camera.position)
     const fov = degToRad(ctx.camera.fov)
     const height = 2 * Math.tan(fov / 2) * distance
-    const pixels = height / threeJS.renderer.domElement.height
+    const pixels = height / this.renderer.domElement.height
 
     const countPixels = 12
     const size = countPixels * pixels

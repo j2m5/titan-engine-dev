@@ -77,7 +77,7 @@ export function createBlackHoleUniforms(parameters: BlackHoleParameters): Record
     /** Дебаг: подкраска пикселей по числу пересечений плоскости диска */
     uDebugCrossings: new Uniform(0),
 
-    /** Фоновая кубмапа сцены (threeJS.scene.background), обновляется каждый кадр */
+    /** Фоновая кубмапа сцены (scene.background), обновляется каждый кадр */
     skybox: new Uniform(null),
     /**
      * Ориентация кубмапы по X: Three.js рендерит фоновые CubeTexture

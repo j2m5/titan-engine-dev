@@ -15,6 +15,7 @@ import { SimulationClock } from '@/core/time/SimulationClock'
 import { CameraController } from '@/core/camera/CameraController'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
 import { Postprocessing } from '@/core/graphic/Postprocessing'
+import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 
 class AppServiceProvider extends ServiceProvider {
   public register(): void {
@@ -40,8 +41,19 @@ class AppServiceProvider extends ServiceProvider {
     )
 
     this.app.singleton(
+      Tokens.RenderableFactory,
+      (c: Container) => new RenderableFactory(c.get(Tokens.Renderer), c.get(Tokens.Scene))
+    )
+
+    this.app.singleton(
       Tokens.SceneManager,
-      (c: Container) => new SceneManager(c.get(Tokens.MarkerManager), c.get(Tokens.Settings), c.get(Tokens.Scene))
+      (c: Container) =>
+        new SceneManager(
+          c.get(Tokens.MarkerManager),
+          c.get(Tokens.Settings),
+          c.get(Tokens.Scene),
+          c.get(Tokens.RenderableFactory)
+        )
     )
 
     this.app.singleton(

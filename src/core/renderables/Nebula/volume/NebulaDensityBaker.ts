@@ -12,7 +12,8 @@ import {
   Texture,
   UnsignedByteType,
   Uniform,
-  WebGL3DRenderTarget
+  WebGL3DRenderTarget,
+  WebGLRenderer
 } from 'three'
 import { NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { createNebulaUniforms } from '@/core/renderables/Nebula/material/shader/raymarch.template'
@@ -20,7 +21,6 @@ import { applyDensityUniforms } from '@/core/renderables/Nebula/material/density
 import { nebulaNoiseChunk } from '@/core/renderables/Nebula/material/shader/chunks/NebulaNoise'
 import { nebulaDensityChunk } from '@/core/renderables/Nebula/material/shader/chunks/NebulaDensity'
 import { noiseFunctions } from '@/core/materials/shaders/lib/chunks/Noise'
-import { threeJS } from '@/core/graphic/ThreeJS'
 
 const bakeVertex = `
   void main() { gl_Position = vec4(position, 1.0); }
@@ -61,7 +61,10 @@ class NebulaDensityBaker {
   private readonly mesh: Mesh
   public readonly resolution: number
 
-  public constructor(resolution: number) {
+  public constructor(
+    private readonly renderer: WebGLRenderer,
+    resolution: number
+  ) {
     this.resolution = resolution
     this.target = new WebGL3DRenderTarget(resolution, resolution, resolution, {
       type: UnsignedByteType,
@@ -99,7 +102,7 @@ class NebulaDensityBaker {
   public bake(params: NebulaParams): Texture {
     applyDensityUniforms(this.material.uniforms, params)
 
-    const renderer = threeJS.renderer
+    const renderer = this.renderer
     const prevTarget = renderer.getRenderTarget()
     for (let layer = 0; layer < this.resolution; layer++) {
       this.material.uniforms.u_layer.value = layer

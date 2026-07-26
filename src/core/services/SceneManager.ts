@@ -34,7 +34,8 @@ class SceneManager {
   public constructor(
     private markerManager: MarkerManager,
     private settings: Settings,
-    private scene: Scene
+    private scene: Scene,
+    private factory: RenderableFactory
   ) {}
 
   public initialize(): void {
@@ -47,12 +48,12 @@ class SceneManager {
 
     const visitor = new Object3DVisitor(this.scene)
 
-    const rootObject3D = RenderableFactory.make(root)
+    const rootObject3D = this.factory.make(root)
 
     if (isAcceptable(rootObject3D)) rootObject3D.accept(visitor)
 
     root.children.eachRecursive((child: Actor, depth: number): void => {
-      const object3D = RenderableFactory.make(child)
+      const object3D = this.factory.make(child)
 
       this.buffer.set(child.getAttribute('id')!, object3D)
 

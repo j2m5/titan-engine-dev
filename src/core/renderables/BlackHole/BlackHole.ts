@@ -15,7 +15,6 @@ import {
 import { Actor } from '@/core/models/Actor'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
 import { BlackHoleMaterial } from '@/core/renderables/BlackHole/BlackHoleMaterial'
-import { threeJS } from '@/core/graphic/ThreeJS'
 import { UpdateContext } from '@/core/UpdateContext'
 
 /**
@@ -38,7 +37,10 @@ class BlackHole extends Mesh {
 
   private _epoch: number = 0
 
-  public constructor(model: Actor) {
+  public constructor(
+    model: Actor,
+    private readonly scene: Scene
+  ) {
     super()
     this.model = model
     this.parameters = new BlackHoleParameters(model)
@@ -66,7 +68,7 @@ class BlackHole extends Mesh {
       this.material.update(
         this,
         camera as PerspectiveCamera,
-        threeJS.scene.background as CubeTexture | null,
+        this.scene.background as CubeTexture | null,
         this._epoch
       )
     }
