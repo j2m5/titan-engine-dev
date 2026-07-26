@@ -17,6 +17,9 @@ class NebulaVolume extends Mesh {
   /** Star world position (lighting), or null. Transformed to local space per frame. */
   private readonly starWorld: Vector3 | null
 
+  /** Cached from updateObject; consumed in onBeforeRender (see comment below). */
+  private _elapsed: number = 0
+
   public constructor(params: NebulaParams) {
     super(new BoxGeometry(2, 2, 2), new NebulaRaymarchMaterial(params))
     this.material.side = BackSide
@@ -39,12 +42,14 @@ class NebulaVolume extends Mesh {
       }
       const far = (camera as PerspectiveCamera).far ?? 1e9
       u.uLogDepthBufFC.value = 2.0 / Math.log2(far + 1.0)
-      this.material.updateMaterial()
+      this.material.updateMaterial(this._elapsed)
     }
   }
 
   public updateObject(ctx: UpdateContext): void {
-    // Intentionally empty: per-frame uniform updates live in onBeforeRender.
+    // Per-frame uniform updates live in onBeforeRender (see constructor comment);
+    // here we only cache elapsed time, since onBeforeRender has no UpdateContext.
+    this._elapsed = ctx.elapsed
   }
 }
 

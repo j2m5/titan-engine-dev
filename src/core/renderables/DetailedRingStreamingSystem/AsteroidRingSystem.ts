@@ -1,9 +1,8 @@
-import { Color, Group, Matrix4, Object3D, PerspectiveCamera, RepeatWrapping, Vector3, type Texture } from 'three'
+import { Color, Group, Matrix4, Object3D, RepeatWrapping, Vector3, type Texture } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
 import type { IRingRenderingObject } from '@/core/models/types'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
-import { threeJS } from '@/core/graphic/ThreeJS'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { readRingAlphaProfile, readRingAlphaBins } from './RingAlphaReadback'
 import { createDustRadialTexture } from './dust/DustRadialProfile'
@@ -526,7 +525,7 @@ class AsteroidRingSystem extends Group {
     this.__tryBuildDensityProfile()
 
     // Получить камеру
-    const camera = threeJS.camera as PerspectiveCamera
+    const camera = ctx.camera
     if (!camera) return
 
     // Позиция камеры в local space системы

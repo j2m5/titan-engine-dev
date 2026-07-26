@@ -130,7 +130,12 @@ class Engine extends EventEmitter {
     this.astroControls.update(delta)
     this.labelRenderer.render(this.scene, this.renderCamera)
 
-    const ctx: UpdateContext = { delta, epoch: this.clock.epoch }
+    const ctx: UpdateContext = {
+      delta,
+      epoch: this.clock.epoch,
+      elapsed: this.renderClock.getElapsedTime(),
+      camera: this.renderCamera
+    }
 
     this.sceneManager.update(ctx)
     this.postprocessing.render(delta)

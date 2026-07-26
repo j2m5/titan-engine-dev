@@ -1,4 +1,4 @@
-import { Vector2, Vector3, Object3D } from 'three'
+import { Vector2, Vector3, Object3D, PerspectiveCamera } from 'three'
 import { DeepPartial, NebulaParams, mergeNebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { NebulaVolume } from '@/core/renderables/Nebula/volume/NebulaVolume'
 import { NebulaImpostor } from '@/core/renderables/Nebula/volume/NebulaImpostor'
@@ -63,8 +63,8 @@ class Nebula extends Object3D {
   }
 
   public updateObject(ctx: UpdateContext): void {
-    const camera = threeJS.camera
-    const { blend } = selectLOD(this.projectedScreenRadius(), this.params.quality.forceLOD)
+    const camera = ctx.camera
+    const { blend } = selectLOD(this.projectedScreenRadius(camera), this.params.quality.forceLOD)
 
     const impostorVisible = blend < 1
 
@@ -86,8 +86,7 @@ class Nebula extends Object3D {
   }
 
   /** Projected pixel radius of the nebula's bounding sphere at the current camera. */
-  private projectedScreenRadius(): number {
-    const camera = threeJS.camera
+  private projectedScreenRadius(camera: PerspectiveCamera): number {
     this.getWorldPosition(this._center)
     this._right.setFromMatrixColumn(camera.matrixWorld, 0) // camera world X axis
     this._edge.copy(this._center).addScaledVector(this._right, this.boundingRadius)

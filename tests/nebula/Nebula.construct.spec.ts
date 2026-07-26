@@ -1,4 +1,4 @@
-import { Mesh, Vector3 } from 'three'
+import { Mesh, PerspectiveCamera, Vector3 } from 'three'
 import { Nebula } from '@/core/renderables/Nebula'
 
 describe('Nebula construction', () => {
@@ -28,7 +28,9 @@ describe('Nebula construction', () => {
 
   it('updateObject runs without throwing', () => {
     const nebula = new Nebula()
-    expect(() => nebula.updateObject({ delta: 0, epoch: 0 })).not.toThrow()
+    expect(() =>
+      nebula.updateObject({ delta: 0, epoch: 0, elapsed: 0, camera: new PerspectiveCamera() })
+    ).not.toThrow()
   })
 
   it('dispose runs without throwing', () => {

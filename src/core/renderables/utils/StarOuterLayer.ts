@@ -2,7 +2,6 @@ import { BufferAttribute, BufferGeometry, DoubleSide, Mesh, NormalBlending, Shad
 import { Actor } from '@/core/models/Actor'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { StarOuterLayerShaderTemplate } from '@/core/materials/shaders/lib/StarOuterLayerShaderTemplate'
-import { threeJS } from '@/core/graphic/ThreeJS'
 import { UpdateContext } from '@/core/UpdateContext'
 
 class StarOuterLayer extends Mesh {
@@ -123,7 +122,7 @@ class StarOuterLayer extends Mesh {
   }
 
   public updateObject(ctx: UpdateContext): void {
-    this.material.uniforms.uTime.value = threeJS.clock.getElapsedTime() * 0.009
+    this.material.uniforms.uTime.value = ctx.elapsed * 0.009
   }
 }
 

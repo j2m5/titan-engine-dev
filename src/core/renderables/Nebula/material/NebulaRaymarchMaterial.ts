@@ -14,7 +14,6 @@ import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { NebulaRaymarchShader } from './NebulaRaymarchShader'
 import { applyDensityUniforms } from '@/core/renderables/Nebula/material/densityUniforms'
-import { threeJS } from '@/core/graphic/ThreeJS'
 
 class NebulaRaymarchMaterial extends AbstractShaderMaterial {
   public constructor(params: NebulaParams) {
@@ -93,8 +92,11 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
     if (this.uniforms.uDensityTex) this.uniforms.uDensityTex.value = texture
   }
 
-  public updateMaterial(): void {
-    this.uniforms.uTime.value = threeJS.clock.getElapsedTime()
+  // Параметр опционален, чтобы сохранить совместимость с сигнатурой базового
+  // AbstractShaderMaterial.updateMaterial(): void, которую разделяют остальные
+  // материалы (вызывается и без аргументов, напр. ResourceObserver)
+  public updateMaterial(elapsed: number = 0): void {
+    this.uniforms.uTime.value = elapsed
   }
 
   public resetMaterial(): void {

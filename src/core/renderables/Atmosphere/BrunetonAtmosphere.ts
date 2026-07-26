@@ -65,7 +65,7 @@ class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
   }
 
   public updateObject(ctx: UpdateContext): void {
-    this.material.update(this, threeJS.camera, this.lightPosition)
+    this.material.update(this, ctx.camera, this.lightPosition)
   }
 
   public accept(visitor: IObject3DVisitor): void {

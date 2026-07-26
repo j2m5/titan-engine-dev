@@ -1,4 +1,14 @@
-import { BufferGeometry, CubeTexture, Intersection, Mesh, Raycaster, Sphere, SphereGeometry, Vector3 } from 'three'
+import {
+  BufferGeometry,
+  CubeTexture,
+  Intersection,
+  Mesh,
+  PerspectiveCamera,
+  Raycaster,
+  Sphere,
+  SphereGeometry,
+  Vector3
+} from 'three'
 import { Actor } from '@/core/models/Actor'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
 import { BlackHoleMaterial } from '@/core/renderables/BlackHole/BlackHoleMaterial'
@@ -24,6 +34,8 @@ class BlackHole extends Mesh {
   private static readonly _clickPoint: Vector3 = new Vector3()
 
   private _epoch: number = 0
+  /** Кэш камеры кадра для onBeforeRender (см. комментарий в __setup) */
+  private _camera!: PerspectiveCamera
 
   public constructor(model: Actor) {
     super()
@@ -50,7 +62,7 @@ class BlackHole extends Mesh {
     // (после рендера) даёт покадровый рассинхрон, который проявляется
     // паразитным параллаксом фона при трансляции камеры
     this.onBeforeRender = (): void => {
-      this.material.update(this, threeJS.camera, threeJS.scene.background as CubeTexture | null, this._epoch)
+      this.material.update(this, this._camera, threeJS.scene.background as CubeTexture | null, this._epoch)
     }
   }
 
@@ -76,8 +88,11 @@ class BlackHole extends Mesh {
 
   public updateObject(ctx: UpdateContext): void {
     // per-frame обновление материала живёт в onBeforeRender; сюда кэшируем
-    // актуальную эпоху кадра (updateObject вызывается до рендера)
+    // актуальную эпоху кадра и камеру (updateObject вызывается до рендера,
+    // а camera — та же самая ссылка, что и в onBeforeRender, поэтому её
+    // матрицы к моменту рендера всё равно свежие)
     this._epoch = ctx.epoch
+    this._camera = ctx.camera
   }
 }
 

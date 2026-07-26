@@ -48,10 +48,10 @@ class FakeStar extends Mesh {
   }
 
   public updateObject(ctx: UpdateContext): void {
-    this.lookAt(threeJS.camera.position)
+    this.lookAt(ctx.camera.position)
 
-    const distance = this.position.distanceTo(threeJS.camera.position)
-    const fov = degToRad(threeJS.camera.fov)
+    const distance = this.position.distanceTo(ctx.camera.position)
+    const fov = degToRad(ctx.camera.fov)
     const height = 2 * Math.tan(fov / 2) * distance
     const pixels = height / threeJS.renderer.domElement.height
 
