@@ -1,7 +1,7 @@
 import { EventEmitter } from '@/core/framework/EventEmitter'
 import { SceneManager } from '@/core/services/SceneManager'
 import { SceneObserver } from '@/core/services/SceneObserver'
-import { postprocessing } from '@/core/graphic/Postprocessing'
+import { Postprocessing } from '@/core/graphic/Postprocessing'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { SimulationClock } from '@/core/time/SimulationClock'
@@ -37,7 +37,8 @@ class Engine extends EventEmitter {
     private scene: Scene,
     private renderCamera: PerspectiveCamera,
     private astroControls: AstroControls,
-    private renderClock: Clock
+    private renderClock: Clock,
+    private postprocessing: Postprocessing
   ) {
     super()
     this.canvas = this.renderer.domElement
@@ -71,7 +72,7 @@ class Engine extends EventEmitter {
     if (config('showStats')) document.body.appendChild(this.stats.dom)
 
     this.sceneManager.initialize()
-    postprocessing.initialize()
+    this.postprocessing.initialize()
 
     this.sceneObserver.observable = this.astroControls
     this.sceneObserver.scene = this.scene
@@ -132,7 +133,7 @@ class Engine extends EventEmitter {
     const ctx: UpdateContext = { delta, epoch: this.clock.epoch }
 
     this.sceneManager.update(ctx)
-    postprocessing.render(delta)
+    this.postprocessing.render(delta)
 
     this.renderer.setAnimationLoop(this.boundOnFrameRendered)
   }

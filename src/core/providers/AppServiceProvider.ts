@@ -13,6 +13,7 @@ import { SceneObserver } from '@/core/services/SceneObserver'
 import { SimulationClock } from '@/core/time/SimulationClock'
 import { CameraController } from '@/core/camera/CameraController'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
+import { Postprocessing } from '@/core/graphic/Postprocessing'
 
 class AppServiceProvider extends ServiceProvider {
   public register(): void {
@@ -36,6 +37,11 @@ class AppServiceProvider extends ServiceProvider {
     )
 
     this.app.singleton(
+      Tokens.Postprocessing,
+      (c: Container) => new Postprocessing(c.get(Tokens.Renderer), c.get(Tokens.Scene), c.get(Tokens.Camera))
+    )
+
+    this.app.singleton(
       Tokens.Engine,
       (c: Container) =>
         new Engine(
@@ -48,7 +54,8 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.Scene),
           c.get(Tokens.Camera),
           c.get(Tokens.AstroControls),
-          c.get(Tokens.Clock)
+          c.get(Tokens.Clock),
+          c.get(Tokens.Postprocessing)
         )
     )
 

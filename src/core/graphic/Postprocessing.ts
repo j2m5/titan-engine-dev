@@ -1,5 +1,4 @@
-import { threeJS } from '@/core/graphic/ThreeJS'
-import { HalfFloatType, Vector2 } from 'three'
+import { HalfFloatType, PerspectiveCamera, Scene, Vector2, WebGLRenderer } from 'three'
 import {
   BlendFunction,
   BloomEffect,
@@ -15,14 +14,20 @@ import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffec
 class Postprocessing {
   public composer: EffectComposer | null = null
 
+  public constructor(
+    private readonly renderer: WebGLRenderer,
+    private readonly scene: Scene,
+    private readonly camera: PerspectiveCamera
+  ) {}
+
   public initialize(): void {
-    this.composer = new EffectComposer(threeJS.renderer, {
+    this.composer = new EffectComposer(this.renderer, {
       depthBuffer: true,
       frameBufferType: HalfFloatType,
       multisampling: 8
     })
 
-    const renderPass: RenderPass = new RenderPass(threeJS.scene, threeJS.camera)
+    const renderPass: RenderPass = new RenderPass(this.scene, this.camera)
 
     const bloomEffect: BloomEffect = new BloomEffect({
       radius: 0.9,
@@ -53,9 +58,9 @@ class Postprocessing {
       adaptationRate: 1
     })
 
-    const effectPass: EffectPass = new EffectPass(threeJS.camera, bloomEffect, lensFlareEffect, toneMappingEffect)
+    const effectPass: EffectPass = new EffectPass(this.camera, bloomEffect, lensFlareEffect, toneMappingEffect)
 
-    const effectPass2: EffectPass = new EffectPass(threeJS.camera, chromaticAberrationEffect)
+    const effectPass2: EffectPass = new EffectPass(this.camera, chromaticAberrationEffect)
 
     this.composer.addPass(renderPass)
     this.composer.addPass(effectPass)
@@ -69,9 +74,9 @@ class Postprocessing {
   public renderToScreenshot(): void {
     const [screenshotWidth, screenshotHeight] = [4096, 2048]
 
-    threeJS.renderer.setSize(screenshotWidth, screenshotHeight)
+    this.renderer.setSize(screenshotWidth, screenshotHeight)
 
-    const canvas: HTMLCanvasElement = threeJS.renderer.domElement
+    const canvas: HTMLCanvasElement = this.renderer.domElement
 
     this.render()
 
@@ -87,7 +92,7 @@ class Postprocessing {
       }
     })
 
-    threeJS.renderer.setSize(window.innerWidth, window.innerHeight)
+    this.renderer.setSize(window.innerWidth, window.innerHeight)
   }
 
   public dispose(): void {
@@ -95,4 +100,4 @@ class Postprocessing {
   }
 }
 
-export const postprocessing: Postprocessing = new Postprocessing()
+export { Postprocessing }
