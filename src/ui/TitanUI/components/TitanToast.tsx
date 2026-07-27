@@ -33,13 +33,20 @@ const TitanToast: FC<TitanToastProps> = ({ visible, duration = 3000, style = {},
   useEffect(() => {
     if (!visible || !duration) return
 
+    let hideTimer: ReturnType<typeof setTimeout> | undefined
+
     const timer = setTimeout(() => {
       setHiding(true)
 
-      setTimeout(() => onCloseRef.current(), 200)
+      hideTimer = setTimeout(() => onCloseRef.current(), 200)
     }, duration)
 
-    return () => clearTimeout(timer)
+    // Снимаем оба таймера: вложенный переживал размонтирование и звал onClose
+    // у уже удалённого тоста.
+    return () => {
+      clearTimeout(timer)
+      clearTimeout(hideTimer)
+    }
   }, [visible, duration])
 
   if (!visible) return null

@@ -15,18 +15,25 @@ declare global {
 
 let container: HTMLDivElement
 let root: Root
+let unmounted: boolean
 
 beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
+  unmounted = false
 })
 
 afterEach(() => {
-  act(() => root.unmount())
+  if (!unmounted) act(() => root.unmount())
   container.remove()
 })
+
+function unmount(): void {
+  act(() => root.unmount())
+  unmounted = true
+}
 
 function render(node: ReactNode): void {
   act(() => {
@@ -151,6 +158,37 @@ describe('TitanToast — автозакрытие', () => {
     }
 
     expect(container.querySelector('.titan-toast')?.className).not.toContain('hiding')
+  })
+
+  it('размонтирование во время скрывающей анимации отменяет onClose', () => {
+    vi.useFakeTimers()
+    const onClose = vi.fn()
+
+    try {
+      render(
+        <TitanToast visible={true} duration={3000} onClose={onClose}>
+          привет
+        </TitanToast>
+      )
+
+      // Сработал внешний таймер: выставлен класс скрытия и запланирован
+      // вложенный вызов onClose через 200 мс.
+      act(() => {
+        vi.advanceTimersByTime(3000)
+      })
+      expect(onClose).not.toHaveBeenCalled()
+
+      // Уходим со сцены, не дождавшись конца анимации.
+      unmount()
+
+      act(() => {
+        vi.advanceTimersByTime(500)
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('видимый тост вызывает onClose после duration', () => {
