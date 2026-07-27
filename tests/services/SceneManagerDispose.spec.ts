@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { Group, Scene } from 'three'
+import { BoxGeometry, Group, Mesh, MeshBasicMaterial, Scene } from 'three'
 import { SceneManager } from '@/core/services/SceneManager'
 import type { MarkerManager } from '@/core/services/MarkerManager'
 import type { RenderableFactory } from '@/core/renderables/RenderableFactory'
@@ -49,6 +49,24 @@ describe('SceneManager.dispose', () => {
     manager.dispose()
 
     expect(markerDispose).toHaveBeenCalledTimes(1)
+  })
+
+  it('освобождает GPU-ресурсы содержимого: геометрию и материал, а не просто снимает узлы со сцены', () => {
+    const scene = new Scene()
+    const manager = makeManager(scene)
+    const geometry = new BoxGeometry(1, 1, 1)
+    const material = new MeshBasicMaterial()
+    const mesh = new Mesh(geometry, material)
+    mesh.name = 'scenario-mesh'
+    scene.add(mesh)
+
+    const geometryDispose = vi.spyOn(geometry, 'dispose')
+    const materialDispose = vi.spyOn(material, 'dispose')
+
+    manager.dispose()
+
+    expect(geometryDispose).toHaveBeenCalledTimes(1)
+    expect(materialDispose).toHaveBeenCalledTimes(1)
   })
 
   it('повторный вызов безвреден', () => {
