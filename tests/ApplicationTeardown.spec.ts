@@ -87,4 +87,41 @@ describe('Application.teardown', () => {
 
     expect(recordSpy).toHaveBeenCalledTimes(1)
   })
+
+  it('повторная разборка свежего приложения тоже не вызывает record(), пока ничего не загружено', () => {
+    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    const observer = {} as unknown as ResourceObserver
+    const recordSpy = vi.fn(() => null)
+    const detector = { record: recordSpy } as unknown as LeakDetector
+    vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
+
+    const application = new Application(engine, observer, new Scene(), detector)
+
+    application.teardown()
+    application.teardown()
+
+    expect(recordSpy).not.toHaveBeenCalled()
+  })
+
+  it('после dispose() флаг загрузки не сбрасывается — следующая разборка снова вызывает record()', async () => {
+    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    const observer = {
+      scenario: null,
+      loadPrimaryTextures: vi.fn(() => Promise.resolve()),
+      sceneBackground: new CubeTexture()
+    } as unknown as ResourceObserver
+    const recordSpy = vi.fn(() => null)
+    const detector = { record: recordSpy } as unknown as LeakDetector
+    vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
+
+    const application = new Application(engine, observer, new Scene(), detector)
+    await application.run(Scenarios[0])
+
+    application.dispose()
+    recordSpy.mockClear()
+
+    application.teardown()
+
+    expect(recordSpy).toHaveBeenCalledTimes(1)
+  })
 })
