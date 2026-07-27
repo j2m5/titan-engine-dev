@@ -4,6 +4,9 @@ import { Application } from '@/Application'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import type { Engine } from '@/core/Engine'
 import type { ResourceObserver } from '@/core/services/ResourceObserver'
+import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
+
+const leakDetector = { record: () => null } as unknown as LeakDetector
 
 describe('Application.teardown', () => {
   beforeEach(() => {
@@ -18,7 +21,7 @@ describe('Application.teardown', () => {
       order.push('textures')
     })
 
-    new Application(engine, observer, new Scene()).teardown()
+    new Application(engine, observer, new Scene(), leakDetector).teardown()
 
     expect(order).toEqual(['engine', 'textures'])
   })
@@ -28,7 +31,7 @@ describe('Application.teardown', () => {
     const observer = { scenario: null } as unknown as ResourceObserver
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
 
-    new Application(engine, observer, new Scene()).dispose()
+    new Application(engine, observer, new Scene(), leakDetector).dispose()
 
     expect(engine.dispose).toHaveBeenCalledTimes(1)
     expect(resourceStorage.deleteAllTextures).toHaveBeenCalledTimes(1)
@@ -46,7 +49,7 @@ describe('Application.teardown', () => {
       backgroundWhenTexturesReleased = scene.background
     })
 
-    new Application(engine, observer, scene).teardown()
+    new Application(engine, observer, scene, leakDetector).teardown()
 
     expect(backgroundWhenTexturesReleased).toBeNull()
     expect(scene.background).toBeNull()

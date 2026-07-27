@@ -3,12 +3,14 @@ import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { ScenarioConfig } from '@/config/scenarios'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { Scene } from 'three'
+import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
 
 class Application {
   public constructor(
     private engine: Engine,
     private resourceObserver: ResourceObserver,
-    private scene: Scene
+    private scene: Scene,
+    private leakDetector: LeakDetector
   ) {}
 
   /**
@@ -25,6 +27,16 @@ class Application {
     this.engine.dispose()
     this.scene.background = null
     resourceStorage.deleteAllTextures()
+
+    if (import.meta.env.DEV) {
+      const leak = this.leakDetector.record()
+
+      if (leak) {
+        console.warn(
+          `[LeakDetector] после разборки не освобождено: геометрий +${leak.geometries}, текстур +${leak.textures}`
+        )
+      }
+    }
   }
 
   public async run(scenario: ScenarioConfig): Promise<void> {
