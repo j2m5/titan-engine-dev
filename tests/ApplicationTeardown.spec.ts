@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { CubeTexture, Scene } from 'three'
 import { Application } from '@/Application'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+import { Scenarios } from '@/config/scenarios'
 import type { Engine } from '@/core/Engine'
 import type { ResourceObserver } from '@/core/services/ResourceObserver'
 import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
@@ -53,5 +54,37 @@ describe('Application.teardown', () => {
 
     expect(backgroundWhenTexturesReleased).toBeNull()
     expect(scene.background).toBeNull()
+  })
+
+  it('свежее приложение не вызывает record() при первой разборке сессии', () => {
+    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    const observer = {} as unknown as ResourceObserver
+    const recordSpy = vi.fn(() => null)
+    const detector = { record: recordSpy } as unknown as LeakDetector
+    vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
+
+    new Application(engine, observer, new Scene(), detector).teardown()
+
+    expect(recordSpy).not.toHaveBeenCalled()
+  })
+
+  it('вызывает record() при разборке после того как сценарий уже был загружен', async () => {
+    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    const observer = {
+      scenario: null,
+      loadPrimaryTextures: vi.fn(() => Promise.resolve()),
+      sceneBackground: new CubeTexture()
+    } as unknown as ResourceObserver
+    const recordSpy = vi.fn(() => null)
+    const detector = { record: recordSpy } as unknown as LeakDetector
+    vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
+
+    const application = new Application(engine, observer, new Scene(), detector)
+    await application.run(Scenarios[0])
+    recordSpy.mockClear()
+
+    application.teardown()
+
+    expect(recordSpy).toHaveBeenCalledTimes(1)
   })
 })
