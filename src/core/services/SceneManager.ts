@@ -1,5 +1,6 @@
 import { Object3D, Scene } from 'three'
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer'
+import { disposeSceneTree } from '@/core/lifecycle/disposeSceneTree'
 import { MarkerManager } from '@/core/services/MarkerManager'
 import { Acceptable } from '@/core/services/visitors/Acceptable'
 import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
@@ -80,6 +81,27 @@ class SceneManager {
     })
 
     this.buffer.clear()
+  }
+
+  /**
+   * Зеркало initialize(). Снимает со сцены всё, что построено под сценарий,
+   * и освобождает ресурсы через обход дерева владения.
+   *
+   * Прицел — исключение: он создан инициализатором поля, то есть принадлежит
+   * этому менеджеру (синглтону контейнера), а не сценарию. Его надо отцепить,
+   * но не освобождать — иначе клики по объектам сломаются после первого
+   * переключения сценария.
+   */
+  public dispose(): void {
+    this.crosshair.removeFromParent()
+
+    for (const child of [...this.scene.children]) {
+      disposeSceneTree(child)
+    }
+
+    this.orbitLines = []
+    this.buffer.clear()
+    this.markerManager.dispose()
   }
 
   public update(ctx: UpdateContext): void {
