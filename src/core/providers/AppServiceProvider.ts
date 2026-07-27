@@ -16,6 +16,7 @@ import { CameraController } from '@/core/camera/CameraController'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
 import { Postprocessing } from '@/core/graphic/Postprocessing'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
+import { LeakDetector } from '@/core/lifecycle/LeakDetector'
 
 class AppServiceProvider extends ServiceProvider {
   public register(): void {
@@ -93,9 +94,17 @@ class AppServiceProvider extends ServiceProvider {
         )
     )
 
+    this.app.singleton(Tokens.LeakDetector, (c: Container) => new LeakDetector(c.get(Tokens.Renderer)))
+
     this.app.singleton(
       Tokens.Application,
-      (c: Container) => new Application(c.get(Tokens.Engine), c.get(Tokens.ResourceObserver), c.get(Tokens.Scene))
+      (c: Container) =>
+        new Application(
+          c.get(Tokens.Engine),
+          c.get(Tokens.ResourceObserver),
+          c.get(Tokens.Scene),
+          c.get(Tokens.LeakDetector)
+        )
     )
 
     // Команды — transient с конструктором класса в роли ключа:

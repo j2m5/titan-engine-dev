@@ -24,6 +24,7 @@ import type { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import type { AstroControls } from '@/core/libs/AstroControls'
 import type { Postprocessing } from '@/core/graphic/Postprocessing'
 import type { RenderableFactory } from '@/core/renderables/RenderableFactory'
+import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
 
 export const Tokens = {
   Engine: token<Engine>('Engine'),
@@ -49,5 +50,6 @@ export const Tokens = {
   AstroControls: token<AstroControls>('AstroControls'),
   Clock: token<Clock>('Clock'),
   Postprocessing: token<Postprocessing>('Postprocessing'),
-  RenderableFactory: token<RenderableFactory>('RenderableFactory')
+  RenderableFactory: token<RenderableFactory>('RenderableFactory'),
+  LeakDetector: token<LeakDetector>('LeakDetector')
 } as const
