@@ -1,4 +1,4 @@
-import type { Material, Object3D } from 'three'
+import type { Material, Object3D, Sprite } from 'three'
 import { isDisposable } from '@/core/lifecycle/Disposable'
 
 /** Узел, у которого могут быть геометрия и материал (Mesh, Line, Points, Sprite). */
@@ -38,7 +38,17 @@ export function disposeSceneTree(root: Object3D): void {
 function releaseRenderResources(node: Object3D): void {
   const renderNode: RenderNode = node as RenderNode
 
-  renderNode.geometry?.dispose?.()
+  /**
+   * Геометрия спрайта — не пропускаем только для Sprite: three.js 0.182
+   * хранит её в модульной переменной `_geometry`, разделяемой ВСЕМИ
+   * инстансами `Sprite` в процессе (`three/src/objects/Sprite.js`). Обход
+   * дерева освобождает то, чем узел владеет единолично; этой геометрией
+   * спрайт не владеет — она принадлежит библиотеке. Материал спрайта, в
+   * отличие от геометрии, создаётся per-instance и освобождается как обычно.
+   */
+  if (!(node as Sprite).isSprite) {
+    renderNode.geometry?.dispose?.()
+  }
 
   const material: Material | Material[] | undefined = renderNode.material
 

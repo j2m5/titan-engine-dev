@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { Group, Mesh, Object3D } from 'three'
+import { Group, Mesh, Object3D, Sprite } from 'three'
 import { disposeSceneTree } from '@/core/lifecycle/disposeSceneTree'
 
 /** Меш с подменёнными геометрией и материалом: настоящие GPU-ресурсы не нужны. */
@@ -95,6 +95,26 @@ describe('disposeSceneTree', () => {
     disposeSceneTree(root)
 
     expect(scene.children).toHaveLength(0)
+  })
+
+  it('не освобождает геометрию спрайта: она общая на весь three.js модуль, но освобождает его материал', () => {
+    // Sprite в three.js 0.182 хранит геометрию в модульной переменной
+    // `_geometry`, разделяемой всеми инстансами процесса. Освобождение по
+    // обходу дерева — не её владелец.
+    const sprite = new Sprite()
+    sprite.geometry = { dispose: vi.fn() } as unknown as Sprite['geometry']
+    sprite.material = { dispose: vi.fn() } as unknown as Sprite['material']
+
+    const mesh = fakeMesh('sibling-mesh', { dispose: vi.fn() })
+
+    const root = new Group()
+    root.add(sprite, mesh)
+
+    disposeSceneTree(root)
+
+    expect(sprite.geometry.dispose).not.toHaveBeenCalled()
+    expect(sprite.material.dispose).toHaveBeenCalledTimes(1)
+    expect(mesh.geometry.dispose).toHaveBeenCalledTimes(1)
   })
 
   it('поддерживает массив материалов', () => {
