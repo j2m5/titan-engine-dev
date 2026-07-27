@@ -38,11 +38,20 @@ class MarkerManager {
     this.markers.push({ marker, label })
   }
 
-  public remove(name: string): void {
-    //
-  }
-
+  /**
+   * Снимает маркеры и подписи с их узлов. Одной очистки массива недостаточно:
+   * CSS2DObject-ы остаются детьми узлов, то есть в графе сцены. Снятие с родителя
+   * по отдельности критично и для DOM: CSS2DObject удаляет свой <div> из контейнера
+   * CSS2DRenderer по событию 'removed', которое Three возбуждает только на самом
+   * снимаемом объекте, а не на потомках при обходе поддерева — общий sweep дерева
+   * это событие не вызовет, и DOM-элементы маркеров и подписей накопятся.
+   */
   public dispose(): void {
+    for (const entry of this.markers) {
+      entry.marker.removeFromParent()
+      entry.label.removeFromParent()
+    }
+
     this.markers = []
   }
 
