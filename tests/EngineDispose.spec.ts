@@ -45,7 +45,7 @@ function makeEngine() {
     postprocessing
   )
 
-  return { engine, order, sceneManager, sceneObserver, postprocessing }
+  return { engine, order, sceneManager, sceneObserver, postprocessing, domElement }
 }
 
 describe('Engine.dispose', () => {
@@ -65,6 +65,19 @@ describe('Engine.dispose', () => {
     engine.dispose()
 
     expect(order.indexOf('loop')).toBe(order.length - 1)
+  })
+
+  it('снимает только слушатель wheel сценария, но не click конструктора-синглтона', () => {
+    // Владелец постановил: resize и click живут весь срок жизни Engine
+    // (регистрируются в конструкторе), их снятие здесь навсегда сломало бы
+    // клик-по-объекту-в-прицел после первого teardown. Снимается только
+    // wheel — он регистрируется в onStart() и принадлежит сценарию.
+    const { engine, domElement } = makeEngine()
+
+    engine.dispose()
+
+    expect(domElement.removeEventListener).toHaveBeenCalledWith('wheel', expect.any(Function))
+    expect(domElement.removeEventListener).not.toHaveBeenCalledWith('click', expect.any(Function))
   })
 
   it('работает на остановленном движке', () => {
