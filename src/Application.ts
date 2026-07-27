@@ -1,6 +1,7 @@
 import { Engine } from '@/core/Engine'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { ScenarioConfig } from '@/config/scenarios'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 import { Scene } from 'three'
 
 class Application {
@@ -10,8 +11,18 @@ class Application {
     private scene: Scene
   ) {}
 
-  public async run(scenario: ScenarioConfig): Promise<void> {
+  /**
+   * Разборка сценария. Граф разбирается до текстур: обратный порядок оставляет
+   * окно, в котором материал ссылается на освобождённую текстуру, и отрисовка
+   * в этом окне даёт предупреждения WebGL.
+   */
+  public teardown(): void {
     this.engine.dispose()
+    resourceStorage.deleteAllTextures()
+  }
+
+  public async run(scenario: ScenarioConfig): Promise<void> {
+    this.teardown()
 
     this.resourceObserver.scenario = scenario
     await this.resourceObserver.loadPrimaryTextures()
@@ -26,7 +37,7 @@ class Application {
   }
 
   public dispose(): void {
-    this.engine.dispose()
+    this.teardown()
     this.resourceObserver.scenario = null
   }
 }

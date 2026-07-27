@@ -36,7 +36,15 @@ class EngineStore implements LoadingProgressReporter {
   public async setScenario(payload: ScenarioConfig | null): Promise<void> {
     scenarioContext.set(payload)
 
-    if (payload && this.app) {
+    if (!payload) {
+      // Выход в меню — та же разборка, что и перед сменой сценария: иначе
+      // предыдущая сцена продолжает жить и рендериться за главным экраном.
+      this.app?.dispose()
+
+      return
+    }
+
+    if (this.app) {
       this.setAppLoadingStatus(true)
 
       timeStore.setSpeedOfTime(1)
