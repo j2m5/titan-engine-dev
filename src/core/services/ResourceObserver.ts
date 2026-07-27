@@ -94,10 +94,28 @@ class ResourceObserver {
   /**
    * Сеттер для текущего сценария
    * @param scenario Новый сценарий
+   *
+   * Накопленное за прошлый сценарий сбрасывается здесь, а не в помощниках:
+   * `setMap` и `setMisc` при `scenario === null` выходят сразу, то есть
+   * выход в меню не очистил бы ничего.
+   *
+   * `deferred` обязан обнуляться, потому что разборка сценария освобождает
+   * все текстуры разом (`Application.teardown`). Оставшиеся записи выглядели
+   * бы для `closestChange` уже загруженными, повторной загрузки не случилось
+   * бы, и материалы при возврате на посещённый сценарий остались бы на
+   * заглушке из `getTextureOrMake`.
+   *
+   * `misc` и `_map` обнуляются, потому что помощники в них дописывают:
+   * `setMisc` делает `push`, `setMap` — `set` без очистки. Без сброса карта
+   * сценария копит чужих акторов, а те через `setMisc` дают кольца соседних
+   * сценариев в список загрузки.
    */
   public set scenario(scenario: ScenarioConfig | null) {
     this._scenario = scenario
     this._sceneBackground = null
+    this.deferred = []
+    this.misc = []
+    this._map.clear()
     this.setMap()
     this.setCubeTextures()
     this.setMisc()
