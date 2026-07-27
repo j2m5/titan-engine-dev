@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { Scene } from 'three'
+import { CubeTexture, Scene } from 'three'
 import { Application } from '@/Application'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import type { Engine } from '@/core/Engine'
@@ -32,5 +32,23 @@ describe('Application.teardown', () => {
 
     expect(engine.dispose).toHaveBeenCalledTimes(1)
     expect(resourceStorage.deleteAllTextures).toHaveBeenCalledTimes(1)
+  })
+
+  it('очищает фон сцены не позже освобождения текстур', () => {
+    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    const observer = {} as unknown as ResourceObserver
+    const scene = new Scene()
+
+    scene.background = new CubeTexture()
+
+    let backgroundWhenTexturesReleased: unknown = 'deleteAllTextures не вызван'
+    vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {
+      backgroundWhenTexturesReleased = scene.background
+    })
+
+    new Application(engine, observer, scene).teardown()
+
+    expect(backgroundWhenTexturesReleased).toBeNull()
+    expect(scene.background).toBeNull()
   })
 })
