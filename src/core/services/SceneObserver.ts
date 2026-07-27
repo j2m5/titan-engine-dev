@@ -85,13 +85,21 @@ class SceneObserver extends EventEmitter {
     this.data.delete(name)
   }
 
+  /**
+   * Разборка сценария, а не самого объекта: `SceneObserver` — синглтон
+   * контейнера, конструируется один раз за сессию, и `Engine.initialize()`
+   * при входе в новый сценарий переустанавливает только `observable` и
+   * `scene` — своих сеттеров. Подписка `this.subscribe('change', this.onChange)`
+   * из конструктора (строка 42) — это самоподписка синглтона на собственное
+   * событие, её никто и никогда не восстанавливает повторно, поэтому здесь
+   * её снимать нельзя: ровно как `resize`/`click` в `Engine`, снятые в
+   * конструкторе слушатели этого метода не трогает.
+   */
   public dispose(): void {
     if (this._observable) {
       this._observable.removeEventListener('change', this.onObservableChange)
       this._observable = null
     }
-
-    this.unsubscribe('change', this.onChange)
 
     this.data.clear()
     this.objects = []
