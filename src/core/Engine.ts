@@ -109,12 +109,26 @@ class Engine extends EventEmitter {
     }
   }
 
+  /**
+   * Разборка сценария. Гарда на `running` здесь нет намеренно: метод должен
+   * работать и на остановленном движке, иначе выход в меню с последующим
+   * входом оставляет предыдущую сцену в графе.
+   *
+   * Порядок важен: луп останавливается последним — сначала перестаём быть
+   * в сцене, потом перестаём её рисовать.
+   *
+   * Снимается только слушатель `wheel`: он регистрируется в `onStart()` и
+   * принадлежит сценарию. Слушатели `resize` и `click` регистрируются в
+   * конструкторе и живут всё время жизни движка-контейнера — их снятие здесь
+   * означало бы, что после разборки сценария навсегда пропадают обработка
+   * ресайза окна и клик-по-объекту-в-прицел.
+   */
   public dispose(): void {
-    if (!this.running) return
+    this.sceneManager.dispose()
+    this.postprocessing.dispose()
+    this.sceneObserver.dispose()
 
     this.canvas.removeEventListener('wheel', this.boundOnWheel)
-    removeEventListener('resize', this.boundOnResize)
-    this.canvas.removeEventListener('click', this.boundOnClick)
 
     this.initialized = false
 
