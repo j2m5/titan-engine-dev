@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeAll, afterAll, type MockInstance } from 'vitest'
-import { CubeTexture, CubeTextureLoader, ImageBitmapLoader, Texture } from 'three'
+import { CubeTexture, CubeTextureLoader, ImageBitmapLoader, SRGBColorSpace, Texture } from 'three'
 import type { WebGLRenderer } from 'three'
 import { TextureProvider } from '@/core/textures/TextureProvider'
 import { PlaceholderTexture } from '@/core/textures/PlaceholderTexture'
@@ -125,6 +125,41 @@ describe('TextureProvider', () => {
     expect(initTexture).not.toHaveBeenCalled()
   })
 
+  it('провал не применяет параметры запроса к разделяемой заглушке', async () => {
+    // Предыдущий тест проверяет только .name — applyTextureParameters тоже
+    // переписывает .name, так что мутацию заглушки в других полях он не
+    // заметил бы. Здесь проверяются два независимых поля (colorSpace и
+    // anisotropy), которые применились бы, если бы провал по ошибке дёрнул
+    // applyTextureParameters(placeholder, request, this.renderer) — иначе
+    // разделяемая заглушка переняла бы настройки последнего провалившегося
+    // запроса, и следующий материал, который на неё смотрит, увидел бы чужой
+    // colorSpace/anisotropy.
+    const placeholder = PlaceholderTexture.get()
+    const ownColorSpace = placeholder.colorSpace
+    const ownAnisotropy = placeholder.anisotropy
+
+    const request: TextureRequest = {
+      paths: ['planets/venus.jpg'],
+      name: 'planets/venus.jpg',
+      params: { colorSpace: SRGBColorSpace, anisotropy: 4 },
+      resourceType: 'diffuse'
+    }
+
+    // Параметры запроса обязаны реально отличаться от собственных значений
+    // заглушки — иначе тест ничего бы не различал.
+    expect(request.params.colorSpace).not.toBe(ownColorSpace)
+    expect(request.params.anisotropy).not.toBe(ownAnisotropy)
+
+    const { renderer } = rendererSpy()
+    const provider = new TextureProvider(renderer, [failingStrategy(new Error('404'))])
+
+    const result = await provider.load(request)
+
+    expect(result.texture).toBe(placeholder)
+    expect(placeholder.colorSpace).toBe(ownColorSpace)
+    expect(placeholder.anisotropy).toBe(ownAnisotropy)
+  })
+
   it('сбой кубмапы: ok=false БЕЗ текстуры', async () => {
     // Подменить CubeTexture обычной нечем, а путь и так терпит отсутствие:
     // sceneBackground объявлен CubeTexture | null.
@@ -146,12 +181,20 @@ describe('TextureProvider', () => {
   })
 
   it('без явного списка стратегий шестигранный запрос не достаётся растровой стратегии', async () => {
-    // Регрессия на порядок стратегий: если бы ImageBitmapStrategy шла первой
-    // (или CubeStrategy отсутствовала бы в дефолтном списке до CubeStrategy),
-    // шестигранный запрос из .jpg-путей рисковал бы уйти растровому
-    // загрузчику вместо кубического. loadAsync подменён на этапе сети —
-    // jsdom не умеет ни живой fetch картинок, ни настоящую декодировку
-    // битмапа, — но supports()/выбор стратегии остаются настоящими.
+    // Закрепляет дефолтную проводку целиком: провайдер, построенный без
+    // явного списка стратегий, отдаёт шестигранный запрос настоящему
+    // CubeTextureLoader и не долетает до ImageBitmapLoader. loadAsync
+    // подменён на этапе сети — jsdom не умеет ни живой fetch картинок, ни
+    // настоящую декодировку битмапа, — но supports()/выбор стратегии
+    // остаются настоящими.
+    //
+    // Это НЕ проверка порядка двух стратегий в списке: порядок тут ни при
+    // чём и не может ни при чём быть. ImageBitmapStrategy.supports()
+    // отбрасывает любой запрос с paths.length !== 1, а CubeStrategy.supports()
+    // берёт только paths.length === 6 — предикаты дизъюнктны по форме запроса.
+    // От шестигранного запроса кубовую стратегию защищает эта взаимная
+    // исключаемость предикатов, а не то, в каком порядке они стоят в
+    // дефолтном массиве.
     const cubeLoadAsync = vi.spyOn(CubeTextureLoader.prototype, 'loadAsync').mockResolvedValue(new CubeTexture())
     const imageLoadAsync = vi
       .spyOn(ImageBitmapLoader.prototype, 'loadAsync')
