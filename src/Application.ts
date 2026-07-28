@@ -42,7 +42,7 @@ class Application {
 
       if (leak) {
         console.warn(
-          `[LeakDetector] после разборки не освобождено: геометрий +${leak.geometries}, текстур +${leak.textures}`
+          `[LeakDetector] прирост с прошлой разборки: геометрий +${leak.geometries}, текстур +${leak.textures}`
         )
       }
     }
