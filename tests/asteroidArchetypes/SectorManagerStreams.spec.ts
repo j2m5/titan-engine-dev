@@ -164,8 +164,9 @@ describe('SectorManager: раскладка активных секторов п
     expect(manager.activeCount).toBe(1)
     const pressure = pool.getPressureInfo()
     expect(pressure.l0.used).toBe(0) // ВСЕ суб-аллокации старого Geometry-тира освобождены
-    const expectedBillboardCount = Math.max(1, Math.round(info0.instanceCount * 1.5))
-    expect(pressure.l1.used).toBe(expectedBillboardCount)
+    // Тиры держат ОДИНАКОВОЕ число камней — см. lodDensityMultiplier: расхождение
+    // означало бы импосторы без геометрического двойника (тесты паритета тиров).
+    expect(pressure.l1.used).toBe(info0.instanceCount)
   })
 
   it('deactivateAll освобождает всё, включая недоигравший outgoing переход (used = 0 везде)', () => {
