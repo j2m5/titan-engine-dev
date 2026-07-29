@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ClampToEdgeWrapping, NearestFilter, Texture, RepeatWrapping } from 'three'
+import { ClampToEdgeWrapping, NearestFilter, Texture, RepeatWrapping, SRGBColorSpace, NoColorSpace } from 'three'
 import type { WebGLRenderer } from 'three'
 import { applyTextureParameters } from '@/core/textures/applyTextureParameters'
 import type { TextureRequest } from '@/core/textures/types'
@@ -53,5 +53,29 @@ describe('applyTextureParameters', () => {
     applyTextureParameters(texture, request(), rendererWithMaxAnisotropy(2))
 
     expect(texture.anisotropy).toBe(2)
+  })
+
+  it('не затирает colorSpace, выставленный загрузчиком, когда в запросе его нет', () => {
+    // Регрессия: CubeTextureLoader сам ставит SRGBColorSpace сразу после
+    // создания CubeTexture. Строки кубических карт в данных не задают
+    // colorSpace вовсе, и раньше `params.colorSpace ?? ''` затирало это
+    // значение на NoColorSpace, посеризуя млечный путь на скайбоксе.
+    const texture = new Texture()
+    texture.colorSpace = SRGBColorSpace
+
+    applyTextureParameters(texture, request(), rendererWithMaxAnisotropy(16))
+
+    expect(texture.colorSpace).toBe(SRGBColorSpace)
+  })
+
+  it('явный пустой colorSpace в запросе всё равно перекрывает colorSpace загрузчика', () => {
+    // Намеренный случай: colorSpace: '' в данных — это явное NoColorSpace,
+    // а не «поле отсутствует», и должно побеждать то, что выставил загрузчик.
+    const texture = new Texture()
+    texture.colorSpace = SRGBColorSpace
+
+    applyTextureParameters(texture, request({ colorSpace: '' }), rendererWithMaxAnisotropy(16))
+
+    expect(texture.colorSpace).toBe(NoColorSpace)
   })
 })

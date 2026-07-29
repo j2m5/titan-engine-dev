@@ -13,6 +13,19 @@ const DEFAULT_ANISOTROPY: number = 8
  *
  * Анизотропия зажимается по возможностям устройства: запросить больше, чем
  * умеет GPU, — тихая потеря качества там, где ждёшь обратного.
+ *
+ * `colorSpace` — единственное поле, которое нельзя присваивать безусловно.
+ * Часть загрузчиков three выставляет его сама: `CubeTextureLoader` сразу
+ * после создания `CubeTexture` ставит `SRGBColorSpace` (так и задокументировано
+ * в классе). Если строка ресурса не задаёт `colorSpace` явно, безусловное
+ * `params.colorSpace ?? ''` затирало это значение на `NoColorSpace` — sRGB-байты
+ * переставали декодироваться при семплинге, а `WebGLBackground` заодно включал
+ * тоунмаппинг фона, которого раньше не было (см. `getTransfer(colorSpace) !== SRGBTransfer`
+ * в `WebGLBackground.js`). Отсюда посеризация млечного пути на скайбоксе.
+ * Поэтому поле трогается, только когда данные ресурса действительно его
+ * задают, — и это намеренно проверяется через `!== undefined`, а не через
+ * truthy-проверку: пустая строка `colorSpace: ''` в данных — валидное явное
+ * значение `NoColorSpace`, а не «поле отсутствует».
  */
 export function applyTextureParameters(
   texture: Texture,
@@ -22,7 +35,7 @@ export function applyTextureParameters(
   const { params } = request
 
   texture.name = request.name
-  texture.colorSpace = params.colorSpace ?? ''
+  if (params.colorSpace !== undefined) texture.colorSpace = params.colorSpace
 
   if (params.mapping !== undefined) texture.mapping = params.mapping
   if (params.wrapS !== undefined) texture.wrapS = params.wrapS
