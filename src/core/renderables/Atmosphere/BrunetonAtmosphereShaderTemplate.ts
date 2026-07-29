@@ -148,10 +148,13 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
         }
       }
 
-      // Мягкое плечо вместо жёсткого клэмпа (как в демо Брунетона):
-      // в тенях/полутонах 1-e^-x ≈ x (кривая не меняется), пересветы
-      // сжимаются плавно — терминатор без «обрыва» на границе сатурации
-      vec3 color = vec3(1.0) - exp(-radiance / white_point * exposure);
+      // Линейный HDR-выход: плечо делает ОБЩИЙ тонмап постобработки (AgX,
+      // Postprocessing.ts) — одна кривая на всю сцену, без двойного сжатия.
+      // Для полутонов совпадает со старой кривой (1-e^-x ≈ x), поэтому
+      // exposure сохраняет смысл линейного калибровочного множителя,
+      // white_point — покомпонентного баланса белого. Пересветы (>1, диск
+      // солнца через GetSolarRadiance) уходят в bloom и AgX-плечо.
+      vec3 color = radiance / white_point * exposure;
 
       float alpha = 1.0 - dot(transmittance, vec3(1.0 / 3.0));
 
