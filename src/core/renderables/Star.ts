@@ -3,6 +3,7 @@ import { Actor } from '@/core/models/Actor'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { StarMaterial } from '@/core/materials/StarMaterial'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { UpdateContext } from '@/core/UpdateContext'
 
 class Star extends Mesh {
   public model: Actor
@@ -26,6 +27,12 @@ class Star extends Mesh {
     this.name = this.model.getAttribute('name', '') + 'Star'
     this.userData.type = 'star'
     this.userData.clickable = true
+  }
+
+  public updateObject(ctx: UpdateContext): void {
+    // Медленная эволюция грануляции; юниформ раньше не обновлялся вовсе —
+    // поверхность была заморожена (см. спеку этапа 2)
+    this.material.uniforms.time.value = ctx.elapsed * 0.01
   }
 }
 
