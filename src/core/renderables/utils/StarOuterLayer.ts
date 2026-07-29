@@ -1,8 +1,9 @@
-import { BufferAttribute, BufferGeometry, DoubleSide, Mesh, NormalBlending, ShaderMaterial, Vector3 } from 'three'
+import { BufferAttribute, BufferGeometry, DoubleSide, Mesh, NormalBlending, ShaderMaterial, UniformsUtils, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { StarOuterLayerShaderTemplate } from '@/core/materials/shaders/lib/StarOuterLayerShaderTemplate'
 import { UpdateContext } from '@/core/UpdateContext'
+import { buildStarPalette, StarPalette } from '@/core/materials/shaders/lib/helpers'
 
 class StarOuterLayer extends Mesh {
   public model: Actor
@@ -107,8 +108,12 @@ class StarOuterLayer extends Mesh {
     this.geometry.setAttribute('aWireRandom', new BufferAttribute(aWireRand, 4))
     this.geometry.setIndex(new BufferAttribute(indices, 1))
 
+    // Юниформы клонируются: шаблонные объекты общие на модуль, а палитра
+    // пер-звёздная (двойная система с разными температурами)
     this.material = new ShaderMaterial({
-      ...StarOuterLayerShaderTemplate,
+      vertexShader: StarOuterLayerShaderTemplate.vertexShader,
+      fragmentShader: StarOuterLayerShaderTemplate.fragmentShader,
+      uniforms: UniformsUtils.clone(StarOuterLayerShaderTemplate.uniforms),
       transparent: true,
       premultipliedAlpha: true,
       depthTest: true,
@@ -116,6 +121,11 @@ class StarOuterLayer extends Mesh {
       side: DoubleSide,
       blending: NormalBlending
     })
+
+    const temperature: number = this.model.physicalObject?.getAttribute('temperature', 3000) ?? 3000
+    const palette: StarPalette = buildStarPalette(temperature, 1500)
+    this.material.uniforms.uColorCool.value.setRGB(palette.cool.r, palette.cool.g, palette.cool.b)
+    this.material.uniforms.uColorBase.value.setRGB(palette.base.r, palette.base.g, palette.base.b)
 
     this.frustumCulled = false
     this.scale.multiplyScalar(this.radius)

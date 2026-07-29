@@ -1,5 +1,5 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
-import { Uniform } from 'three'
+import { Uniform, Color } from 'three'
 
 export const StarOuterLayerShaderTemplate: ShaderProps = {
   uniforms: {
@@ -7,8 +7,9 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
     uWidth: new Uniform(0.3),
     uAmp: new Uniform(0.5),
     uOpacity: new Uniform(0.2),
-    uHueSpread: new Uniform(0.16),
-    uHue: new Uniform(0),
+    uColorCool: new Uniform(new Color(1.0, 0.45, 0.25)),
+    uColorBase: new Uniform(new Color(1.0, 0.8, 0.6)),
+    uProtuberanceIntensity: new Uniform(2.5),
     uAlphaBlended: new Uniform(0.65),
     uNoiseFrequency: new Uniform(4),
     uNoiseAmplitude: new Uniform(0.2)
@@ -32,8 +33,9 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
     uniform float uNoiseFrequency;
     uniform float uNoiseAmplitude;
     uniform float uOpacity;
-    uniform float uHueSpread;
-    uniform float uHue;
+    uniform vec3 uColorCool;
+    uniform vec3 uColorBase;
+    uniform float uProtuberanceIntensity;
 
     #define m4 mat4(0.00, 0.80, 0.60, -0.4, -0.80, 0.36, -0.48, -0.5, -0.60, -0.48, 0.64, 0.2, 0.40, 0.30, 0.20, 0.4)
 
@@ -68,8 +70,6 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
       return p;
     }
 
-    #define hue(v) ( .6 + .6 * cos( 6.3*(v) + vec3(0.0,23.0,21.0) ) )
-
     void main() {
       vUVY = aPos.z;
 
@@ -99,7 +99,9 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
       vOpacity *= (1.0 - animPhase);
       vOpacity *= uOpacity;
 
-      vColor = hue(aWireRandom.w * uHueSpread + uHue);
+      // Палитра ленты — чёрнотельная от температуры звезды (спред 1500K:
+      // протуберанцы холоднее и краснее поверхности); лёгкий HDR — ленты блумят
+      vColor = mix(uColorCool, uColorBase, aWireRandom.w) * uProtuberanceIntensity;
 
       gl_Position = projectionMatrix * viewMatrix * vec4(pW, 1.0);
     }
