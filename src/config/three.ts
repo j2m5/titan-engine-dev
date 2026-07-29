@@ -25,6 +25,7 @@ export interface ThreeConfig {
   scene: SceneParameters
   camera: CameraParameters
   renderer: WebGLRendererParameters
+  maxPixelRatio: number
   clock: ClockParameters
   astroControls: AstroControlsParameters
   cameraPosition: [number, number, number]
@@ -46,6 +47,7 @@ export const three: ThreeConfig = {
     alpha: true,
     depth: true
   },
+  maxPixelRatio: 2,
   clock: {
     startTime: 0
   },

@@ -25,7 +25,7 @@ import {
  */
 class RenderingServiceProvider extends ServiceProvider {
   public register(): void {
-    this.app.singleton(Tokens.Renderer, () => createRenderer(config('renderer')))
+    this.app.singleton(Tokens.Renderer, () => createRenderer(config('renderer'), config('maxPixelRatio')))
     this.app.singleton(Tokens.LabelRenderer, () => createLabelRenderer())
     this.app.singleton(Tokens.Scene, () => createScene(config('scene')))
     this.app.singleton(Tokens.Camera, () => createCamera(config('camera')))

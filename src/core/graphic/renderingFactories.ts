@@ -3,9 +3,17 @@ import type { WebGLRendererParameters } from 'three'
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { AstroControls } from '@/core/libs/AstroControls'
 
-export function createRenderer(options: WebGLRendererParameters): WebGLRenderer {
+/**
+ * Кламп devicePixelRatio: на 4K/Retina честные 2-3x пикселей поверх MSAA 8x
+ * композера — неоправданная цена. 2.0 достаточно для резкости UI-масштабов.
+ */
+export function clampPixelRatio(devicePixelRatio: number, maxPixelRatio: number): number {
+  return Math.min(devicePixelRatio, maxPixelRatio)
+}
+
+export function createRenderer(options: WebGLRendererParameters, maxPixelRatio: number = 2): WebGLRenderer {
   const renderer: WebGLRenderer = new WebGLRenderer(options)
-  renderer.setPixelRatio(window.devicePixelRatio)
+  renderer.setPixelRatio(clampPixelRatio(window.devicePixelRatio, maxPixelRatio))
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.outputColorSpace = SRGBColorSpace
   renderer.toneMapping = NoToneMapping
