@@ -17,7 +17,7 @@ describe('StarOuterLayerShaderTemplate: палитра протуберанце�
   it('юниформы палитры объявлены, hue-юниформы удалены', () => {
     expect(uniforms.uColorCool).toBeDefined()
     expect(uniforms.uColorBase).toBeDefined()
-    expect(uniforms.uProtuberanceIntensity.value).toBe(2.5)
+    expect(uniforms.uProtuberanceIntensity.value).toBe(6.0)
     expect(uniforms.uHue).toBeUndefined()
     expect(uniforms.uHueSpread).toBeUndefined()
   })

@@ -9,7 +9,7 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
     uOpacity: new Uniform(0.2),
     uColorCool: new Uniform(new Color(1.0, 0.45, 0.25)),
     uColorBase: new Uniform(new Color(1.0, 0.8, 0.6)),
-    uProtuberanceIntensity: new Uniform(2.5),
+    uProtuberanceIntensity: new Uniform(6.0),
     uAlphaBlended: new Uniform(0.65),
     uNoiseFrequency: new Uniform(4),
     uNoiseAmplitude: new Uniform(0.2)
@@ -99,8 +99,9 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
       vOpacity *= (1.0 - animPhase);
       vOpacity *= uOpacity;
 
-      // Палитра ленты — чёрнотельная от температуры звезды (спред 1500K:
-      // протуберанцы холоднее и краснее поверхности); лёгкий HDR — ленты блумят
+      // Палитра ленты — чёрнотельная от температуры звезды (спред задаёт вызывающий
+      // код, см. StarOuterLayer); ribbon premultiplied альфой ≤ uOpacity, поэтому
+      // пик ~ uProtuberanceIntensity * uOpacity — ленты лишь слегка переходят порог блума
       vColor = mix(uColorCool, uColorBase, aWireRandom.w) * uProtuberanceIntensity;
 
       gl_Position = projectionMatrix * viewMatrix * vec4(pW, 1.0);
