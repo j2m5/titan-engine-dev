@@ -62,6 +62,9 @@ class Postprocessing {
 
     const toneMappingEffect: ToneMappingEffect = new ToneMappingEffect({ ...TONE_MAPPING_OPTIONS })
 
+    // Порядок аргументов — несущий: bloom и lens flare должны считаться ДО
+    // тонмаппинга (по HDR-значениям, ещё не сжатым в LDR); менять порядок
+    // нельзя, иначе AgX сожмёт диапазон раньше, чем эффекты увидят пересветы.
     const effectPass: EffectPass = new EffectPass(this.camera, bloomEffect, lensFlareEffect, toneMappingEffect)
 
     const effectPass2: EffectPass = new EffectPass(this.camera, chromaticAberrationEffect)

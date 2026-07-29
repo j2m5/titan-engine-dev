@@ -88,6 +88,15 @@ describe('RenderingServiceProvider — проводка рендер-токен�
     )
   })
 
+  it('Renderer создаётся с maxPixelRatio из конфига', () => {
+    const container: Container = new Kernel([RenderingServiceProvider]).bootstrap()
+
+    container.get(Tokens.Renderer)
+
+    expect(mocks.createRenderer).toHaveBeenCalledWith(config('renderer'), config('maxPixelRatio'))
+    expect(mocks.createRenderer).toHaveBeenCalledWith(expect.anything(), 2)
+  })
+
   it('полный контейнер с заглушками резолвит Application без исключений', () => {
     const container: Container = createTestContainer()
 
