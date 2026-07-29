@@ -11,6 +11,26 @@ import {
 } from 'postprocessing'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 
+// Опции эффектов вынесены в константы под контракт-тесты
+// (tests/graphic/PostprocessingContract.spec.ts).
+// Инвариант bloom-guard: luminanceThreshold (1.0) обязан оставаться ВЫШЕ
+// LDR-клампа планеты (0.99, PlanetShaderTemplate) — планеты не блумят,
+// свечение получают только честные HDR-источники (звёзды, диск ЧД, туманности).
+export const BLOOM_OPTIONS = {
+  radius: 0.9,
+  blendFunction: BlendFunction.SCREEN,
+  mipmapBlur: true,
+  luminanceThreshold: 1,
+  luminanceSmoothing: 0.0025,
+  intensity: 1
+} as const
+
+// A/B-сравнение кривой: заменить mode на ToneMappingMode.ACES_FILMIC
+export const TONE_MAPPING_OPTIONS = {
+  mode: ToneMappingMode.AGX,
+  blendFunction: BlendFunction.NORMAL
+} as const
+
 class Postprocessing {
   public composer: EffectComposer | null = null
 
@@ -29,14 +49,7 @@ class Postprocessing {
 
     const renderPass: RenderPass = new RenderPass(this.scene, this.camera)
 
-    const bloomEffect: BloomEffect = new BloomEffect({
-      radius: 0.9,
-      blendFunction: BlendFunction.SCREEN,
-      mipmapBlur: true,
-      luminanceThreshold: 1,
-      luminanceSmoothing: 0.0025,
-      intensity: 1
-    })
+    const bloomEffect: BloomEffect = new BloomEffect({ ...BLOOM_OPTIONS })
 
     const lensFlareEffect: LensFlareEffect = new LensFlareEffect({ intensity: 0.01 })
 
@@ -47,16 +60,7 @@ class Postprocessing {
       modulationOffset: 0.4
     })
 
-    const toneMappingEffect: ToneMappingEffect = new ToneMappingEffect({
-      mode: ToneMappingMode.ACES_FILMIC,
-      blendFunction: BlendFunction.DST,
-      resolution: 256,
-      whitePoint: 16,
-      middleGrey: 0.6,
-      minLuminance: 0.01,
-      averageLuminance: 1,
-      adaptationRate: 1
-    })
+    const toneMappingEffect: ToneMappingEffect = new ToneMappingEffect({ ...TONE_MAPPING_OPTIONS })
 
     const effectPass: EffectPass = new EffectPass(this.camera, bloomEffect, lensFlareEffect, toneMappingEffect)
 
