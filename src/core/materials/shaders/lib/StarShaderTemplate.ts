@@ -70,7 +70,9 @@ export const StarShaderTemplate: ShaderProps = {
 
       // Грануляция: t в [0..1] — «температура ячейки» (0 холодная, 1 горячая)
       vec4 noisePos = vec4(vPosition * 0.05, time);
-      float t = clamp(0.5 + (fbm(noisePos, 6, 0.9) - 0.5) * 2.0, 0.0, 1.0);
+      // fbm знаковый (среднее 0, σ~0.1): центрируем на 0 и усиливаем ×4 —
+      // t покрывает [0..1], грануляция видима; 4.0 — ручка контраста ячеек
+      float t = clamp(0.5 + fbm(noisePos, 6, 0.9) * 4.0, 0.0, 1.0);
 
       // Чёрнотельная палитра: cool (T-400K) -> spectralColor (T) -> hot (T+400K)
       vec3 granule = t < 0.5
@@ -87,7 +89,8 @@ export const StarShaderTemplate: ShaderProps = {
       float mu = clamp(dot(normalW, viewW), 0.0, 1.0);
       vec3 limb = clamp(vec3(1.0) - uLimbCoeff * (1.0 - mu), 0.0, 1.0);
 
-      // Потолок HDR — тот же, что у атмосферы (half-float буфер, AgX-плечо)
+      // Потолок HDR — тот же, что у атмосферы (half-float буфер, AgX-плечо);
+      // при текущих дефолтах пик ~12 — потолок срабатывает только при uCoreIntensity ≈ 21+ (защитный предел)
       vec3 color = min(granule * energy * limb, vec3(64.0));
 
       gl_FragColor = vec4(color, 1.0);

@@ -10,7 +10,7 @@ describe('StarShaderTemplate: HDR-поверхность с чёрнотельн
   })
 
   it('хак «яркость от дистанции» удалён', () => {
-    expect(frag).not.toContain('0.003')
+    expect(frag).not.toContain('noiseIntensity')
   })
 
   it('чёрнотельная палитра и HDR-ядро', () => {
@@ -32,5 +32,9 @@ describe('StarShaderTemplate: HDR-поверхность с чёрнотельн
     expect(frag).toContain('fbm(')
     expect(frag).toContain('vPosition * 0.05')
     expect(frag).toContain('6, 0.9')
+  })
+
+  it('ремап грануляции центрирован на 0 (знаковый fbm), не на 0.5', () => {
+    expect(frag).toContain('0.5 + fbm(noisePos, 6, 0.9) * 4.0')
   })
 })
