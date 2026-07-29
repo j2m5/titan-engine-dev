@@ -10,7 +10,7 @@ import type { TextureRequest } from '@/core/textures/types'
  */
 export interface ResourceItem {
   actorId: number | null
-  type: 'default' | 'cube' | 'bitmap' | 'compressed'
+  type: 'default' | 'bitmap'
   loadedAt: dayjs.Dayjs
   expiredAt: dayjs.Dayjs
 }
