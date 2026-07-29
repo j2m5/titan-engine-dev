@@ -4,15 +4,13 @@ import { IActorBoundResource, IResource } from '@/core/models/types'
 import { Resource } from '@/core/models/Resource'
 import { Actor } from '@/core/models/Actor'
 import { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
-import { CubeMapTextureManager } from '@/core/services/CubeMapTextureManager'
-import { TextureManager } from '@/core/services/TextureManager'
-import { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
+import { TextureProvider } from '@/core/textures/TextureProvider'
+import { cubeTextureRequest, textureRequestFrom, ResourceItem } from '@/core/textures/textureRequest'
 import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
 import { CubeTexture, DefaultLoadingManager, Object3D, Scene, Texture } from 'three'
 import { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
 import { NotificationSink } from '@/core/ports/NotificationSink'
 import { resourceStorage } from '@/core/services/ResourceStorage'
-import { ResourceItem } from '@/core/services/ResourceManager'
 import { Collection } from '@/core/framework/support/Collection'
 import { hasRenderable } from '@/core/services/SceneManager'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
@@ -56,16 +54,12 @@ class ResourceObserver {
 
   /**
    * @param sceneObserver Наблюдатель за сценой
-   * @param cubeMapTextureManager Менеджер текстур кубических карт
-   * @param textureManager Стандартный менеджер текстур
-   * @param imageBitmapManager Менеджер ImageBitmap
+   * @param textures Единая точка загрузки текстур
    * @param scene Сцена, из которой извлекаются объекты для сброса материалов
    */
   public constructor(
     private sceneObserver: SceneObserver,
-    private cubeMapTextureManager: CubeMapTextureManager,
-    private textureManager: TextureManager,
-    private imageBitmapManager: ImageBitmapManager,
+    private textures: TextureProvider,
     private loadingProgress: LoadingProgressReporter,
     private notifications: NotificationSink,
     private scene: Scene
@@ -129,21 +123,57 @@ class ResourceObserver {
   }
 
   /**
-   * Загружает основные текстуры, необходимые для работы сценария
+   * Загружает основные текстуры, необходимые для работы сценария.
+   *
+   * Регистрацию в реестре делает наблюдатель, а не загрузчик: провайдер только
+   * отдаёт текстуру, размещение — здесь.
    */
   public async loadPrimaryTextures(): Promise<void> {
     this.setLoadingProgress()
-    this._sceneBackground = (await this.cubeMapTextureManager.load(this.cube)) ?? null
-    await this.textureManager.loadAll(this.required)
-    await this.imageBitmapManager.loadAll(this.misc)
+
+    const background = this.cube.length ? await this.textures.load(cubeTextureRequest(this.cube)) : null
+
+    if (background?.ok) {
+      this._sceneBackground = background.texture as CubeTexture
+      resourceStorage.addTexture(background.texture)
+    } else {
+      this._sceneBackground = null
+    }
+
+    await this.loadInto(this.required, 'default')
+    await this.loadInto(this.misc, 'bitmap')
   }
 
   /**
-   * Загружает отложенные текстуры
+   * Загружает отложенные текстуры.
    * @param resources Массив ресурсов для загрузки
    */
-  public async loadDeferredTextures(resources: IResource[]): Promise<void> {
-    await this.imageBitmapManager.loadAll(resources)
+  public async loadDeferredTextures(resources: IActorBoundResource[]): Promise<void> {
+    await this.loadInto(resources, 'bitmap')
+  }
+
+  /**
+   * Загружает пачку ресурсов и размещает удавшиеся в реестре, проставляя
+   * мета-данные срока жизни. Провалившиеся молча пропускаются: провайдер уже
+   * вернул заглушку, а сообщение пользователю шлёт DefaultLoadingManager.onError.
+   */
+  private async loadInto(resources: IActorBoundResource[], type: ResourceItem['type']): Promise<void> {
+    await Promise.all(
+      resources.map(async (resource: IActorBoundResource): Promise<void> => {
+        const result = await this.textures.load(textureRequestFrom(resource))
+
+        if (!result.ok || !result.texture) return
+
+        result.texture.userData.resource = {
+          actorId: resource.actorId ?? null,
+          type,
+          loadedAt: dayjs(),
+          expiredAt: dayjs().add(resource.lifetime, 'millisecond')
+        } satisfies ResourceItem
+
+        resourceStorage.addTexture(result.texture)
+      })
+    )
   }
 
   /**
