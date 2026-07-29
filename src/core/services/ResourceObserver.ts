@@ -5,6 +5,7 @@ import { Resource } from '@/core/models/Resource'
 import { Actor } from '@/core/models/Actor'
 import { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
 import { TextureProvider } from '@/core/textures/TextureProvider'
+import type { LoadResult, TextureRequest } from '@/core/textures/types'
 import { cubeTextureRequest, textureRequestFrom, ResourceItem } from '@/core/textures/textureRequest'
 import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
 import { CubeTexture, DefaultLoadingManager, Object3D, Scene, Texture } from 'three'
@@ -131,7 +132,7 @@ class ResourceObserver {
   public async loadPrimaryTextures(): Promise<void> {
     this.setLoadingProgress()
 
-    const background = this.cube.length ? await this.textures.load(cubeTextureRequest(this.cube)) : null
+    const background = this.cube.length ? await this.tryLoad(cubeTextureRequest(this.cube)) : null
 
     if (background?.ok) {
       this._sceneBackground = background.texture as CubeTexture
@@ -170,9 +171,9 @@ class ResourceObserver {
   private async loadInto(resources: IActorBoundResource[], type: ResourceItem['type']): Promise<void> {
     await Promise.all(
       resources.map(async (resource: IActorBoundResource): Promise<void> => {
-        const result = await this.textures.load(textureRequestFrom(resource))
+        const result = await this.tryLoad(textureRequestFrom(resource))
 
-        if (!result.ok || !result.texture) return
+        if (!result || !result.ok || !result.texture) return
 
         if (type === 'bitmap') {
           result.texture.userData.resource = {
@@ -186,6 +187,34 @@ class ResourceObserver {
         resourceStorage.addTexture(result.texture)
       })
     )
+  }
+
+  /**
+   * Оборачивает `TextureProvider.load`, превращая брошенную ошибку конфигурации
+   * в уведомление и пропуск ресурса вместо необработанного отказа промиса.
+   *
+   * `TextureProvider` бросает нарочно, когда ни одна стратегия не подходит
+   * форме запроса (опечатка в расширении, кубмапа не из шести граней) — это
+   * ошибка данных, а не сбой сети, который сам провайдер уже маскирует
+   * заглушкой. Но выше по цепочке нет обработчика: `loadInto` вызывает
+   * `load` внутри `Promise.all`, `Application.run` ждёт `loadPrimaryTextures`
+   * без try, `EngineStore.setScenario` ждёт `app.run` без try. Без перехвата
+   * здесь отказ означал бы, что `setAppLoadingStatus(false)` никогда не
+   * выполнится — приложение зависает на экране загрузки без сообщения.
+   */
+  private async tryLoad(request: TextureRequest): Promise<LoadResult | null> {
+    try {
+      return await this.textures.load(request)
+    } catch (cause) {
+      const error: Error = cause instanceof Error ? cause : new Error(String(cause))
+
+      this.notifications.dispatch({
+        type: 'error',
+        message: `The error occurred while loading: ${request.name} (${error.message})`
+      })
+
+      return null
+    }
   }
 
   /**
