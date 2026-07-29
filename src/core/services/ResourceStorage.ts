@@ -1,24 +1,9 @@
 import type { Texture } from 'three'
 import { Collection } from '@/core/framework/support/Collection'
-import { CanvasTexture } from 'three'
+import { PlaceholderTexture } from '@/core/textures/PlaceholderTexture'
 
 class ResourceStorage {
   private _textures: Collection<Texture> = new Collection()
-
-  public static generateTexture(color: string = '#cccccc'): Texture {
-    const size: number = 64
-    const canvas: HTMLCanvasElement = document.createElement('canvas')
-    canvas.width = canvas.height = size
-
-    const context: CanvasRenderingContext2D = canvas.getContext('2d')!
-    context.fillStyle = color
-    context.fillRect(0, 0, size, size)
-
-    const texture: CanvasTexture = new CanvasTexture(canvas)
-    texture.needsUpdate = true
-
-    return texture
-  }
 
   public get textures(): Collection<Texture> {
     return this._textures
@@ -28,10 +13,18 @@ class ResourceStorage {
     return this._textures.where('name', key).first()
   }
 
-  public getTextureOrMake(key: string, fallback?: (color?: string) => Texture): Texture {
-    fallback = fallback ?? ResourceStorage.generateTexture
-
-    return this.getTexture(key) ?? fallback()
+  /**
+   * Возвращает зарегистрированную текстуру по ключу, либо разделяемую
+   * заглушку приложения (`PlaceholderTexture`), если ключ не найден.
+   *
+   * Раньше промах порождал НОВУЮ 64x64 CanvasTexture на каждый вызов
+   * (`ResourceStorage.generateTexture`) — она не кешировалась и никогда не
+   * освобождалась. Теперь на любое число промахов приходится один и тот же
+   * объект уровня приложения; он никогда не регистрируется в этом хранилище
+   * и потому не участвует в `deleteAllTextures()`.
+   */
+  public getTextureOrMake(key: string): Texture {
+    return this.getTexture(key) ?? PlaceholderTexture.get()
   }
 
   public getCountTextures(): number {
