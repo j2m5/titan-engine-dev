@@ -153,9 +153,19 @@ class ResourceObserver {
   }
 
   /**
-   * Загружает пачку ресурсов и размещает удавшиеся в реестре, проставляя
-   * мета-данные срока жизни. Провалившиеся молча пропускаются: провайдер уже
-   * вернул заглушку, а сообщение пользователю шлёт DefaultLoadingManager.onError.
+   * Загружает пачку ресурсов и размещает удавшиеся в реестре. Провалившиеся
+   * молча пропускаются: провайдер уже вернул заглушку, а сообщение
+   * пользователю шлёт DefaultLoadingManager.onError.
+   *
+   * Мета-данные срока жизни (`userData.resource`) проставляются ТОЛЬКО для
+   * `type === 'bitmap'` — это в точности старое поведение: удалённый
+   * `TextureManager` (путь `required`) их никогда не писал, штамповал
+   * только `ImageBitmapManager` (пути `misc` и отложенные). `required` —
+   * `default.png`, `night.jpg`, `star.png`, PBR-наборы астероидов и прочее,
+   * общее для всех `PlanetMaterial`, — обязан оставаться вне механизма
+   * `releaseUnusedTextures`: тот читает именно этот штамп, чтобы решить, что
+   * выгружать, и попадание туда общих текстур освободило бы их у всех
+   * материалов разом.
    */
   private async loadInto(resources: IActorBoundResource[], type: ResourceItem['type']): Promise<void> {
     await Promise.all(
@@ -164,12 +174,14 @@ class ResourceObserver {
 
         if (!result.ok || !result.texture) return
 
-        result.texture.userData.resource = {
-          actorId: resource.actorId ?? null,
-          type,
-          loadedAt: dayjs(),
-          expiredAt: dayjs().add(resource.lifetime, 'millisecond')
-        } satisfies ResourceItem
+        if (type === 'bitmap') {
+          result.texture.userData.resource = {
+            actorId: resource.actorId ?? null,
+            type,
+            loadedAt: dayjs(),
+            expiredAt: dayjs().add(resource.lifetime, 'millisecond')
+          } satisfies ResourceItem
+        }
 
         resourceStorage.addTexture(result.texture)
       })
