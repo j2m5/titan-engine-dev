@@ -215,17 +215,26 @@ describe('TextureProvider', () => {
     }
   })
 
-  it('ImageBitmapStrategy.create() включает переворот на этапе декода', () => {
+  it('ImageBitmapStrategy.create() включает переворот на этапе декода и сохраняет premultiplyAlpha', () => {
     // three хранит опции загрузчика как есть — см. ImageBitmapLoader.js:
     // setOptions(options) { this.options = options }. Для источника ImageBitmap
     // рендерер three игнорирует texture.flipY, поэтому переворот обязан быть
     // выставлен именно тут, на loader.options, а не понадеявшись на дефолт.
+    //
+    // premultiplyAlpha: 'none' обязан быть повторён явно по той же причине:
+    // setOptions заменяет объект опций целиком, а ImageBitmapLoader.js по
+    // умолчанию ставит { premultiplyAlpha: 'none' }, чтобы совпасть с
+    // Texture.premultiplyAlpha === false. Пропусти его здесь — и
+    // createImageBitmap откатится к спековому 'default' (в Chrome обычно
+    // предумноженный), а three для ImageBitmap-источника это уже не поправит.
     const setOptionsSpy = vi.spyOn(ImageBitmapLoader.prototype, 'setOptions')
 
     try {
       withCreateImageBitmapStub(() => ImageBitmapStrategy.create())
 
-      expect(setOptionsSpy).toHaveBeenCalledWith(expect.objectContaining({ imageOrientation: 'flipY' }))
+      expect(setOptionsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ imageOrientation: 'flipY', premultiplyAlpha: 'none' })
+      )
     } finally {
       setOptionsSpy.mockRestore()
     }

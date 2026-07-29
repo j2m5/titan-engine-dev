@@ -19,7 +19,13 @@ class ImageBitmapStrategy implements TextureLoadStrategy {
 
   public static create(): ImageBitmapStrategy {
     const loader = new ImageBitmapLoader()
-    loader.setOptions({ imageOrientation: 'flipY' })
+    // `setOptions` заменяет объект опций целиком, а не мержит его: дефолт
+    // `premultiplyAlpha: 'none'` из ImageBitmapLoader.js без явного повтора
+    // здесь терялся бы, и createImageBitmap откатывался бы к спековому
+    // 'default' (в Chrome — обычно предумноженный). Для источника ImageBitmap
+    // three это состояние декодера уже не поправит: texture.premultiplyAlpha
+    // игнорируется.
+    loader.setOptions({ imageOrientation: 'flipY', premultiplyAlpha: 'none' })
 
     return new ImageBitmapStrategy(loader)
   }
