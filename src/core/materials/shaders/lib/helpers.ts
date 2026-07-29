@@ -63,3 +63,22 @@ export function hexToRGB(hex: string): Colorable {
     b: result & 255
   }
 }
+
+export interface StarPalette {
+  cool: Colorable
+  base: Colorable
+  hot: Colorable
+}
+
+/**
+ * Чёрнотельная палитра звезды: цвета для T−spread / T / T+spread.
+ * Грануляция интерполирует между ними в шейдере (см. StarShaderTemplate);
+ * протуберанцы берут широкий спред 1500K (холодная плазма — краснее).
+ */
+export function buildStarPalette(temperatureK: number, spreadK: number = 400): StarPalette {
+  return {
+    cool: normalizeColor(colorTemperatureToRGB(temperatureK - spreadK)),
+    base: normalizeColor(colorTemperatureToRGB(temperatureK)),
+    hot: normalizeColor(colorTemperatureToRGB(temperatureK + spreadK))
+  }
+}
