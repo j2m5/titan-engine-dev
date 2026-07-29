@@ -8,8 +8,8 @@ describe('BrunetonAtmosphere: линейный HDR-выход (тонмап — 
     expect(frag).not.toContain('exp(-radiance')
   })
 
-  it('radiance отдаётся линейно через прежние калибровочные юниформы', () => {
-    expect(frag).toContain('radiance / white_point * exposure')
+  it('radiance отдаётся линейно (с HDR-потолком) через прежние калибровочные юниформы', () => {
+    expect(frag).toContain('vec3 color = min(radiance / white_point * exposure, vec3(64.0));')
     expect(frag).toContain('uniform float exposure;')
     expect(frag).toContain('uniform vec3 white_point;')
   })

@@ -154,7 +154,11 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
       // exposure сохраняет смысл линейного калибровочного множителя,
       // white_point — покомпонентного баланса белого. Пересветы (>1, диск
       // солнца через GetSolarRadiance) уходят в bloom и AgX-плечо.
-      vec3 color = radiance / white_point * exposure;
+      // Потолок HDR: AgX уходит в белое уже на ~16 линейных единицах, а
+      // half-float буфер композера переполняется на 65504. Диск солнца через
+      // GetSolarRadiance даёт 1e4..1e8 (тем больше, чем дальше планета) —
+      // без потолка это +Inf в буфере и NaN в блендинге (alpha→0 на диске).
+      vec3 color = min(radiance / white_point * exposure, vec3(64.0));
 
       float alpha = 1.0 - dot(transmittance, vec3(1.0 / 3.0));
 
