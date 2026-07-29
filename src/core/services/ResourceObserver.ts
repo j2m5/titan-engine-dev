@@ -4,15 +4,14 @@ import { IActorBoundResource, IResource } from '@/core/models/types'
 import { Resource } from '@/core/models/Resource'
 import { Actor } from '@/core/models/Actor'
 import { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
-import { CubeMapTextureManager } from '@/core/services/CubeMapTextureManager'
-import { TextureManager } from '@/core/services/TextureManager'
-import { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
+import { TextureProvider } from '@/core/textures/TextureProvider'
+import type { LoadResult, TextureRequest } from '@/core/textures/types'
+import { cubeTextureRequest, textureRequestFrom, ResourceItem } from '@/core/textures/textureRequest'
 import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
 import { CubeTexture, DefaultLoadingManager, Object3D, Scene, Texture } from 'three'
 import { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
 import { NotificationSink } from '@/core/ports/NotificationSink'
 import { resourceStorage } from '@/core/services/ResourceStorage'
-import { ResourceItem } from '@/core/services/ResourceManager'
 import { Collection } from '@/core/framework/support/Collection'
 import { hasRenderable } from '@/core/services/SceneManager'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
@@ -56,16 +55,12 @@ class ResourceObserver {
 
   /**
    * @param sceneObserver Наблюдатель за сценой
-   * @param cubeMapTextureManager Менеджер текстур кубических карт
-   * @param textureManager Стандартный менеджер текстур
-   * @param imageBitmapManager Менеджер ImageBitmap
+   * @param textures Единая точка загрузки текстур
    * @param scene Сцена, из которой извлекаются объекты для сброса материалов
    */
   public constructor(
     private sceneObserver: SceneObserver,
-    private cubeMapTextureManager: CubeMapTextureManager,
-    private textureManager: TextureManager,
-    private imageBitmapManager: ImageBitmapManager,
+    private textures: TextureProvider,
     private loadingProgress: LoadingProgressReporter,
     private notifications: NotificationSink,
     private scene: Scene
@@ -129,21 +124,97 @@ class ResourceObserver {
   }
 
   /**
-   * Загружает основные текстуры, необходимые для работы сценария
+   * Загружает основные текстуры, необходимые для работы сценария.
+   *
+   * Регистрацию в реестре делает наблюдатель, а не загрузчик: провайдер только
+   * отдаёт текстуру, размещение — здесь.
    */
   public async loadPrimaryTextures(): Promise<void> {
     this.setLoadingProgress()
-    this._sceneBackground = (await this.cubeMapTextureManager.load(this.cube)) ?? null
-    await this.textureManager.loadAll(this.required)
-    await this.imageBitmapManager.loadAll(this.misc)
+
+    const background = this.cube.length ? await this.tryLoad(cubeTextureRequest(this.cube)) : null
+
+    if (background?.ok) {
+      this._sceneBackground = background.texture as CubeTexture
+      resourceStorage.addTexture(background.texture)
+    } else {
+      this._sceneBackground = null
+    }
+
+    await this.loadInto(this.required, 'default')
+    await this.loadInto(this.misc, 'bitmap')
   }
 
   /**
-   * Загружает отложенные текстуры
+   * Загружает отложенные текстуры.
    * @param resources Массив ресурсов для загрузки
    */
-  public async loadDeferredTextures(resources: IResource[]): Promise<void> {
-    await this.imageBitmapManager.loadAll(resources)
+  public async loadDeferredTextures(resources: IActorBoundResource[]): Promise<void> {
+    await this.loadInto(resources, 'bitmap')
+  }
+
+  /**
+   * Загружает пачку ресурсов и размещает удавшиеся в реестре. Провалившиеся
+   * молча пропускаются: провайдер уже вернул заглушку, а сообщение
+   * пользователю шлёт DefaultLoadingManager.onError.
+   *
+   * Мета-данные срока жизни (`userData.resource`) проставляются ТОЛЬКО для
+   * `type === 'bitmap'` — это в точности старое поведение: удалённый
+   * `TextureManager` (путь `required`) их никогда не писал, штамповал
+   * только `ImageBitmapManager` (пути `misc` и отложенные). `required` —
+   * `default.png`, `night.jpg`, `star.png`, PBR-наборы астероидов и прочее,
+   * общее для всех `PlanetMaterial`, — обязан оставаться вне механизма
+   * `releaseUnusedTextures`: тот читает именно этот штамп, чтобы решить, что
+   * выгружать, и попадание туда общих текстур освободило бы их у всех
+   * материалов разом.
+   */
+  private async loadInto(resources: IActorBoundResource[], type: ResourceItem['type']): Promise<void> {
+    await Promise.all(
+      resources.map(async (resource: IActorBoundResource): Promise<void> => {
+        const result = await this.tryLoad(textureRequestFrom(resource))
+
+        if (!result || !result.ok || !result.texture) return
+
+        if (type === 'bitmap') {
+          result.texture.userData.resource = {
+            actorId: resource.actorId ?? null,
+            type,
+            loadedAt: dayjs(),
+            expiredAt: dayjs().add(resource.lifetime, 'millisecond')
+          } satisfies ResourceItem
+        }
+
+        resourceStorage.addTexture(result.texture)
+      })
+    )
+  }
+
+  /**
+   * Оборачивает `TextureProvider.load`, превращая брошенную ошибку конфигурации
+   * в уведомление и пропуск ресурса вместо необработанного отказа промиса.
+   *
+   * `TextureProvider` бросает нарочно, когда ни одна стратегия не подходит
+   * форме запроса (опечатка в расширении, кубмапа не из шести граней) — это
+   * ошибка данных, а не сбой сети, который сам провайдер уже маскирует
+   * заглушкой. Но выше по цепочке нет обработчика: `loadInto` вызывает
+   * `load` внутри `Promise.all`, `Application.run` ждёт `loadPrimaryTextures`
+   * без try, `EngineStore.setScenario` ждёт `app.run` без try. Без перехвата
+   * здесь отказ означал бы, что `setAppLoadingStatus(false)` никогда не
+   * выполнится — приложение зависает на экране загрузки без сообщения.
+   */
+  private async tryLoad(request: TextureRequest): Promise<LoadResult | null> {
+    try {
+      return await this.textures.load(request)
+    } catch (cause) {
+      const error: Error = cause instanceof Error ? cause : new Error(String(cause))
+
+      this.notifications.dispatch({
+        type: 'error',
+        message: `The error occurred while loading: ${request.name} (${error.message})`
+      })
+
+      return null
+    }
   }
 
   /**

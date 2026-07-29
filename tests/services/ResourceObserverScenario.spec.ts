@@ -3,9 +3,7 @@ import { Scene } from 'three'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { Scenarios } from '@/config/scenarios'
 import type { SceneObserver } from '@/core/services/SceneObserver'
-import type { CubeMapTextureManager } from '@/core/services/CubeMapTextureManager'
-import type { TextureManager } from '@/core/services/TextureManager'
-import type { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
+import type { TextureProvider } from '@/core/textures/TextureProvider'
 import type { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
 import type { NotificationSink } from '@/core/ports/NotificationSink'
 import type { IActorBoundResource } from '@/core/models/types'
@@ -15,9 +13,7 @@ function makeObserver(): ResourceObserver {
 
   return new ResourceObserver(
     sceneObserver,
-    { load: vi.fn() } as unknown as CubeMapTextureManager,
-    { loadAll: vi.fn() } as unknown as TextureManager,
-    { loadAll: vi.fn() } as unknown as ImageBitmapManager,
+    { load: vi.fn(() => Promise.resolve({ ok: false, texture: null, error: new Error('stub') })) } as unknown as TextureProvider,
     { setAsset: vi.fn(), setProgress: vi.fn(), setTotal: vi.fn() } as unknown as LoadingProgressReporter,
     { dispatch: vi.fn() } as unknown as NotificationSink,
     new Scene()

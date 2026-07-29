@@ -3,10 +3,7 @@ import { Container } from '@/core/framework/container/Container'
 import { Tokens } from '@/core/providers/tokens'
 import { Engine } from '@/core/Engine'
 import { Application } from '@/Application'
-import { CubeMapTextureManager } from '@/core/services/CubeMapTextureManager'
-import { TextureManager } from '@/core/services/TextureManager'
-import { CompressedTextureManager } from '@/core/services/CompressedTextureManager'
-import { ImageBitmapManager } from '@/core/services/ImageBitmapManager'
+import { TextureProvider } from '@/core/textures/TextureProvider'
 import { SceneManager } from '@/core/services/SceneManager'
 import { MarkerManager } from '@/core/services/MarkerManager'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
@@ -25,16 +22,7 @@ class AppServiceProvider extends ServiceProvider {
 
     this.app.singleton(Tokens.SceneObserver, () => new SceneObserver())
 
-    this.app.singleton(Tokens.TextureManager, (c: Container) => new TextureManager(c.get(Tokens.Renderer)))
-    this.app.singleton(
-      Tokens.CubeMapTextureManager,
-      (c: Container) => new CubeMapTextureManager(c.get(Tokens.Renderer))
-    )
-    this.app.singleton(
-      Tokens.CompressedTextureManager,
-      (c: Container) => new CompressedTextureManager(c.get(Tokens.Renderer))
-    )
-    this.app.singleton(Tokens.ImageBitmapManager, () => new ImageBitmapManager())
+    this.app.singleton(Tokens.TextureProvider, (c: Container) => new TextureProvider(c.get(Tokens.Renderer)))
 
     this.app.singleton(
       Tokens.MarkerManager,
@@ -85,9 +73,7 @@ class AppServiceProvider extends ServiceProvider {
       (c: Container) =>
         new ResourceObserver(
           c.get(Tokens.SceneObserver),
-          c.get(Tokens.CubeMapTextureManager),
-          c.get(Tokens.TextureManager),
-          c.get(Tokens.ImageBitmapManager),
+          c.get(Tokens.TextureProvider),
           c.get(Tokens.LoadingProgressReporter),
           c.get(Tokens.NotificationSink),
           c.get(Tokens.Scene)

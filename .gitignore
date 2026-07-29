@@ -13,6 +13,8 @@ dist-ssr
 docs/superpowers
 docs/BACKLOG.md
 **/textures/
+!src/core/textures/
+!tests/textures/
 *.local
 .env
 .superpowers
