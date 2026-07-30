@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeAll, afterAll, type MockInstance } from 'vitest'
+import { Texture } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { PlaceholderTexture } from '@/core/textures/PlaceholderTexture'
 
@@ -53,5 +54,36 @@ describe('ResourceStorage.getTextureOrMake', () => {
     } finally {
       resourceStorage.deleteTexture('registered-key.png')
     }
+  })
+})
+
+describe('ResourceStorage.deleteTexture', () => {
+  // round 2 ревью, Important: раньше dispose() вызывался только у ПЕРВОЙ
+  // найденной текстуры с этим именем (getTexture().first()), а reject()
+  // убирал из коллекции ВСЕ совпадения разом — вторая текстура выпадала из
+  // реестра недиспоузнутой и недостижимой. Такой дубль в принципе может
+  // возникнуть при конкурентной загрузке одного пути двумя акторами одного
+  // цикла (ResourceObserver.loadActor, pathLoads) — реестр сам по себе
+  // уникальность имени не гарантирует.
+  it('диспоузит КАЖДУЮ текстуру с этим именем, если их несколько', () => {
+    const first = new Texture()
+    const second = new Texture()
+
+    first.name = 'duplicate-key.jpg'
+    second.name = 'duplicate-key.jpg'
+
+    resourceStorage.addTexture(first)
+    resourceStorage.addTexture(second)
+
+    const disposeFirst = vi.spyOn(first, 'dispose')
+    const disposeSecond = vi.spyOn(second, 'dispose')
+
+    resourceStorage.deleteTexture('duplicate-key.jpg')
+
+    expect(disposeFirst).toHaveBeenCalledTimes(1)
+    expect(disposeSecond).toHaveBeenCalledTimes(1)
+    expect(resourceStorage.textures.contains((texture: Texture): boolean => texture.name === 'duplicate-key.jpg')).toBe(
+      false
+    )
   })
 })

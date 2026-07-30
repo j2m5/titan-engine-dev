@@ -84,8 +84,30 @@ class ResourceObserver {
    * `await`; если оно изменилось к моменту, когда путь догрузился, — сценарий
    * сменился посреди загрузки, и результат отбрасывается вместо регистрации
    * в уже разобранном реестре.
+   *
+   * Устаревший вызов НЕ имеет права трогать `loaded`/`actorPaths`/`inFlight`
+   * по одному только `actorId`, когда обнаруживает несовпадение эпохи: та же
+   * запись под тем же ключом может уже принадлежать свежей (живой) загрузке
+   * того же актора, начатой уже в новой эпохе (раунд ревью 2, Critical —
+   * найдено на реальном сценарии: устаревший резолв Korriban II снимал
+   * пометки живой загрузки того же актора, и последующее вытеснение
+   * освобождало разделяемый диффуз, который Korriban I ещё показывал).
+   * Поэтому во всех местах, где обнаружено расхождение эпох, состояние
+   * просто НЕ трогается: либо сеттер `scenario` уже очистил его (наш случай),
+   * либо в нём живая запись, которую трогать нельзя.
    */
   private epoch: number = 0
+  /**
+   * Путь → промис загрузки, ещё не завершившейся В ЭТОМ ЦИКЛЕ. Нужен, чтобы
+   * два актора одного сценария, разделяющие путь (Korriban I–VII) и
+   * загружаемые ОДНОВРЕМЕННО (`Promise.all` по `decision.load` одного
+   * пересчёта), не задваивали сетевой запрос: проверка реестра
+   * (`resourceStorage.getTexture`) не спасает — в момент проверки путь ещё
+   * не зарегистрирован НИКЕМ, потому что первый заявитель тоже ещё грузит
+   * его (round 2 Important — иначе второй Texture-объект остаётся в реестре
+   * недостижимым и никогда не диспоузится).
+   */
+  private readonly pathLoads: Map<string, Promise<LoadResult | null>> = new Map()
 
   /**
    * @param sceneObserver Наблюдатель за сценой
@@ -141,6 +163,15 @@ class ResourceObserver {
    * не завершившаяся (await не успел резолвиться), опознала смену по выходу
    * из `await` и не записала результат в уже разобранное состояние.
    *
+   * `pathLoads` тоже обязан очищаться. Без очистки свежая (уже в новой
+   * эпохе) загрузка того же пути нашла бы там промис устаревшего вызова и
+   * стала бы его "соседом" по общей загрузке — а когда устаревший вызов
+   * позже обнаружит несовпадение эпохи и диспоузит СВОЙ результат (см.
+   * `loadActor`), свежий вызов зарегистрировал бы уже диспоузнутую текстуру,
+   * ничего об этом не зная. Очистка не отменяет уже идущий реальный сетевой
+   * запрос — просто гарантирует, что НИКТО новый к нему больше не
+   * присоединится.
+   *
    * `_map` обнуляется, потому что `setMap` дописывает в него через `set` без
    * очистки. Без сброса карта сценария копит чужих акторов из предыдущего
    * сценария.
@@ -153,6 +184,7 @@ class ResourceObserver {
     this.loadedAt.clear()
     this.inFlight.clear()
     this.attempted.clear()
+    this.pathLoads.clear()
     this.actorPaths.clear()
     this._map.clear()
     this.setMap()
@@ -315,6 +347,16 @@ class ResourceObserver {
     const decision = decideStreaming(
       candidates,
       this.loaded,
+      // Два разных условия защищают ДВА разных момента жизни актора, а не
+      // дублируют друг друга: `inFlight` пинит актора, который грузится
+      // ВПЕРВЫЕ и ещё ни разу не завершался успешно — до первого успеха
+      // `loadedAt` для него не выставлен ни разу, так что второе условие тут
+      // всегда ложно. `loadedAt`-порог пинит УЖЕ загруженного актора на
+      // MIN_RESIDENCY_MS после успеха — к этому моменту `inFlight` для него
+      // уже снят. Без `inFlight` актор, чей приоритет упал, пока он ещё
+      // грузится в первый раз, вошёл бы в `decision.evict`: `evictActor`
+      // разобрал бы его учёт, а сама загрузка, уже идущая, дозаписала бы
+      // результат в снесённое состояние.
       (actorId: number): boolean =>
         this.inFlight.has(actorId) || Date.now() - (this.loadedAt.get(actorId) ?? 0) < MIN_RESIDENCY_MS,
       this.attempted,
@@ -427,6 +469,17 @@ class ResourceObserver {
    * записывается его владельцем в `actorPaths` — иначе позже некому будет
    * защитить путь при вытеснении первого владельца.
    *
+   * Реестра недостаточно, если оба разделяющих путь актора попали в ОДИН
+   * `decision.load` одного и того же пересчёта: `Promise.all` запускает их
+   * `loadActor` конкурентно, и оба успевают проверить реестр ДО того, как
+   * первый из них там что-либо зарегистрирует (round 2 Important). Поэтому
+   * путь дополнительно бронируется в `pathLoads` — карте путь → промис ещё
+   * не завершившейся загрузки; второй заявитель находит там промис первого
+   * и ждёт тот же результат вместо повторного сетевого запроса. После общего
+   * ожидания РЕЕСТР перепроверяется ещё раз — тот, кто получил управление
+   * первым (обычно владелец промиса), уже мог зарегистрировать текстуру,
+   * пока второй ждал ту же самую загрузку.
+   *
    * Частичный провал (один путь не загрузился, остальные — да) откатывает
    * актора целиком: уже зарегистрированные пути ЭТОГО вызова освобождаются
    * (если на них не ссылается кто-то ещё из `loaded`, см.
@@ -440,12 +493,15 @@ class ResourceObserver {
    *
    * Сценарий может смениться, пока путь ещё грузится: `epoch` захватывается
    * до первого `await`, и если он изменился к моменту, когда путь догрузился,
-   * результат отбрасывается (текстура диспоузится, если успела прийти) вместо
-   * записи в уже разобранный реестр — иначе учёт нового сценария заражается
-   * акторами старого.
+   * результат отбрасывается (текстура диспоузится, если успела прийти и мы
+   * ей владеем). `loaded`/`actorPaths` при этом НЕ трогаются вовсе — см.
+   * докблок поля `epoch`: устаревший вызов не вправе решать, что там сейчас
+   * лежит, — оно уже принадлежит либо очищенному сценарию, либо чужой живой
+   * загрузке того же актора.
    *
-   * Бухгалтерия `inFlight` обёрнута в `try/finally`: она не должна утечь
-   * навсегда, даже если что-то внутри цикла бросит неожиданно.
+   * Бухгалтерия `inFlight` обёрнута в `try/finally` и тоже огорожена сверкой
+   * эпохи: снимать пометку можно только если мы всё ещё в своей эпохе —
+   * иначе можно снять пометку у чужой, живой загрузки того же актора.
    */
   private async loadActor(candidate: StreamCandidate): Promise<void> {
     const epoch: number = this.epoch
@@ -460,17 +516,29 @@ class ResourceObserver {
       for (const path of candidate.paths) {
         if (resourceStorage.getTexture(path)) continue
 
-        const resource: Resource | undefined = Resource.where({ path }).first()
+        let pending: Promise<LoadResult | null> | undefined = this.pathLoads.get(path)
+        let owner: boolean = false
 
-        if (!resource) continue
+        if (!pending) {
+          const resource: Resource | undefined = Resource.where({ path }).first()
 
-        const result = await this.tryLoad(textureRequestFrom(resource.toJSON() as IResource))
+          if (!resource) continue
+
+          pending = this.tryLoad(textureRequestFrom(resource.toJSON() as IResource))
+          this.pathLoads.set(path, pending)
+          owner = true
+        }
+
+        const result = await pending
+
+        // Только владелец убирает бронь, и только СВОЮ: сценарий мог
+        // смениться, пока мы ждали, `scenario` уже очистил `pathLoads`
+        // целиком, а по этому же пути мог появиться НОВЫЙ (уже живой)
+        // претендент — сверка на равенство промиса не даёт снять чужую бронь.
+        if (owner && this.pathLoads.get(path) === pending) this.pathLoads.delete(path)
 
         if (this.epoch !== epoch) {
-          if (result?.ok && result.texture) result.texture.dispose()
-
-          this.loaded.delete(candidate.actorId)
-          this.actorPaths.delete(candidate.actorId)
+          if (owner && result?.ok && result.texture) result.texture.dispose()
 
           return
         }
@@ -480,19 +548,18 @@ class ResourceObserver {
           continue
         }
 
+        // Сосед по той же брони мог зарегистрировать текстуру, пока мы ждали
+        // тот же промис — реестр проверяется заново, а не вслепую.
+        if (resourceStorage.getTexture(path)) continue
+
         this.budget.measure(path, result.texture)
         resourceStorage.addTexture(result.texture)
       }
     } finally {
-      this.inFlight.delete(candidate.actorId)
+      if (this.epoch === epoch) this.inFlight.delete(candidate.actorId)
     }
 
-    if (this.epoch !== epoch) {
-      this.loaded.delete(candidate.actorId)
-      this.actorPaths.delete(candidate.actorId)
-
-      return
-    }
+    if (this.epoch !== epoch) return
 
     if (!ok) {
       this.attempted.add(candidate.actorId)

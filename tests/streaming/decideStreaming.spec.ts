@@ -194,6 +194,60 @@ describe('decideStreaming', () => {
     expect(decision.load).toEqual([])
   })
 
+  it('load всегда подмножество wanted — даже когда исключение освобождает бюджет менее приоритетным', () => {
+    // Пробник round 2 ревью: бюджет на два слота, кандидаты 0.9 (исключён),
+    // 0.5, 0.1. Раньше wanted и load считались ДВУМЯ раздельными проходами —
+    // wanted заряжал бюджет исключённому кандидату целиком (усекая место для
+    // менее приоритетных), а проход для load пропускал резервирование
+    // исключённому вовсе (тест выше). Из-за этого load мог получить актора
+    // 3 (0.1), а wanted — нет: load=[2,3], wanted={1,2}. Если бы актор 3
+    // потом провалился, attempted снялся бы на первом же цикле — тот самый
+    // бесконечный ретрай, который Critical 2 должен был убрать.
+    const decision = decideStreaming(
+      [candidate(1, 0.9), candidate(2, 0.5), candidate(3, 0.1)],
+      new Set(),
+      nothingPinned,
+      new Set([1]),
+      all8K,
+      SIZE_8K * 2
+    )
+
+    for (const candidate of decision.load) {
+      expect(decision.wanted.has(candidate.actorId)).toBe(true)
+    }
+
+    // Явная фиксация формы: если это когда-нибудь перестанет быть [2, 3],
+    // сам факт "подмножество" мог бы устоять случайно (пустой load тоже
+    // подмножество). Проверяем, что тест действительно нагружает механизм.
+    expect(decision.load.map((c: StreamCandidate): number => c.actorId)).toEqual([2, 3])
+  })
+
+  it('wanted и evict не пересекаются, пока loaded и excluded не пересекаются', () => {
+    // Реальный вызывающий код (ResourceObserver) поддерживает
+    // attempted ∩ loaded = ∅ как инвариант: провал синхронно убирает актора
+    // из loaded в момент, когда добавляет его в attempted (=excluded здесь).
+    // При этом условии ни один актор не может одновременно "заслуживать
+    // резидентности" (wanted) и "подлежать вытеснению" (evict) — иначе это
+    // было бы логическим противоречием в самих именах множеств.
+    const loaded = new Set([2, 3])
+    const excluded = new Set([4]) // не пересекается с loaded
+
+    const decision = decideStreaming(
+      [candidate(1, 0.9), candidate(2, 0.6), candidate(3, 0.3), candidate(4, 0.1)],
+      loaded,
+      nothingPinned,
+      excluded,
+      all8K,
+      SIZE_8K * 2 // впритык на двоих — кто-то из loaded окажется вытеснен
+    )
+
+    const overlap = [...decision.wanted].filter((actorId: number): boolean =>
+      decision.evict.some((c: StreamCandidate): boolean => c.actorId === actorId)
+    )
+
+    expect(overlap).toEqual([])
+  })
+
   it('текстуры разного веса делят бюджет по-разному', () => {
     const sizeOf = (path: string): number => (path === 'p1.jpg' ? SIZE_2K : SIZE_8K)
 
