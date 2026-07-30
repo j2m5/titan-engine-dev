@@ -63,6 +63,7 @@ function makeBigTexture(): Texture {
 type StreamingInternals = {
   loaded: Set<number>
   inFlight: Set<number>
+  attempted: Set<number>
   actorPaths: Map<number, string[]>
   pathLoads: Map<string, Promise<LoadResult | null>>
 }
@@ -604,5 +605,40 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     data.set('Mercury', record('Mercury', 300))
 
     await expect(handlers['ClosestChange'](record('Mercury', 300))).resolves.toBeUndefined()
+  })
+
+  it('бросок из updateMaterial не улетает необработанным — актор откатывается в attempted (Fix 5)', async () => {
+    // tryLoad гасит ошибки ПРОВАЙДЕРА, но loadActor вокруг него — нет: бросок
+    // из ORM, из сборки запроса или (как здесь) из updateMaterial() после
+    // успешной загрузки раньше улетал из Promise.all необработанным отказом,
+    // а актор оставался в loaded без текстур — decideStreaming никогда больше
+    // его не запросит, поскольку не грузит уже loaded.
+    const load = vi.fn((): Promise<LoadResult> => Promise.resolve({ ok: true as const, texture: makeTexture() }))
+
+    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = SOLAR_SYSTEM
+    const MERCURY_ACTOR_ID = 5
+
+    const mesh = new Mesh()
+    mesh.name = 'Mercury'
+    const material = {
+      resetMaterial: vi.fn(),
+      updateMaterial: (): void => {
+        throw new Error('шейдер материала не скомпилировался')
+      }
+    }
+    Object.defineProperty(mesh, 'renderable', { value: { material }, writable: true })
+    scene.add(mesh)
+
+    data.set('Mercury', record('Mercury', 300))
+
+    await expect(handlers['ClosestChange'](record('Mercury', 300))).resolves.toBeUndefined()
+
+    const state = streamingState(observer)
+
+    // Откат идентичен обычному провалу: актор уходит в attempted и покидает
+    // loaded — а не остаётся в loaded без единого шанса на повторный запрос.
+    expect(state.attempted.has(MERCURY_ACTOR_ID)).toBe(true)
+    expect(state.loaded.has(MERCURY_ACTOR_ID)).toBe(false)
   })
 })

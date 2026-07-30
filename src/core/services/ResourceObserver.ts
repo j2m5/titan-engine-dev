@@ -547,6 +547,18 @@ class ResourceObserver {
    * Бухгалтерия `inFlight` обёрнута в `try/finally` и тоже огорожена сверкой
    * эпохи: снимать пометку можно только если мы всё ещё в своей эпохе —
    * иначе можно снять пометку у чужой, живой загрузки того же актора.
+   *
+   * Внешний `try/catch` — граница ошибки на весь метод, не только на цикл
+   * загрузки: `tryLoad` гасит ошибки ПРОВАЙДЕРА (сеть, форма запроса), но
+   * не всё тело `loadActor` обёрнуто им. Бросок из ORM (`Resource.where`),
+   * из сборки запроса (`textureRequestFrom`) или из `updateMaterial()` после
+   * успешной загрузки раньше улетал необработанным отказом из `Promise.all`
+   * в `closestChange`, а актор оставался в `loaded` без единой текстуры —
+   * `decideStreaming` не грузит уже `loaded`, значит повторного запроса
+   * никогда бы не случилось. Катч переводит такой бросок в тот же откат,
+   * что и обычный провал (`rollbackFailedLoad`) — актор возвращается в
+   * `attempted` и получит второй шанс, как только перестанет заслуживать
+   * резидентности и снова войдёт в неё (см. `closestChange`).
    */
   private async loadActor(candidate: StreamCandidate): Promise<void> {
     const epoch: number = this.epoch
@@ -555,77 +567,97 @@ class ResourceObserver {
     this.loaded.add(candidate.actorId)
     this.actorPaths.set(candidate.actorId, candidate.paths)
 
-    let ok: boolean = true
-
     try {
-      for (const path of candidate.paths) {
-        if (resourceStorage.getTexture(path)) continue
+      let ok: boolean = true
 
-        let pending: Promise<LoadResult | null> | undefined = this.pathLoads.get(path)
-        let owner: boolean = false
+      try {
+        for (const path of candidate.paths) {
+          if (resourceStorage.getTexture(path)) continue
 
-        if (!pending) {
-          const resource: Resource | undefined = Resource.where({ path }).first()
+          let pending: Promise<LoadResult | null> | undefined = this.pathLoads.get(path)
+          let owner: boolean = false
 
-          if (!resource) continue
+          if (!pending) {
+            const resource: Resource | undefined = Resource.where({ path }).first()
 
-          pending = this.tryLoad(textureRequestFrom(resource.toJSON() as IResource))
-          this.pathLoads.set(path, pending)
-          owner = true
+            if (!resource) continue
+
+            pending = this.tryLoad(textureRequestFrom(resource.toJSON() as IResource))
+            this.pathLoads.set(path, pending)
+            owner = true
+          }
+
+          const result = await pending
+
+          // Только владелец убирает бронь, и только СВОЮ: сценарий мог
+          // смениться, пока мы ждали, `scenario` уже очистил `pathLoads`
+          // целиком, а по этому же пути мог появиться НОВЫЙ (уже живой)
+          // претендент — сверка на равенство промиса не даёт снять чужую бронь.
+          if (owner && this.pathLoads.get(path) === pending) this.pathLoads.delete(path)
+
+          if (this.epoch !== epoch) {
+            if (owner && result?.ok && result.texture) result.texture.dispose()
+
+            return
+          }
+
+          if (!result || !result.ok || !result.texture) {
+            ok = false
+            continue
+          }
+
+          // Сосед по той же брони мог зарегистрировать текстуру, пока мы ждали
+          // тот же промис — реестр проверяется заново, а не вслепую.
+          if (resourceStorage.getTexture(path)) continue
+
+          this.budget.measure(path, result.texture)
+          resourceStorage.addTexture(result.texture)
         }
-
-        const result = await pending
-
-        // Только владелец убирает бронь, и только СВОЮ: сценарий мог
-        // смениться, пока мы ждали, `scenario` уже очистил `pathLoads`
-        // целиком, а по этому же пути мог появиться НОВЫЙ (уже живой)
-        // претендент — сверка на равенство промиса не даёт снять чужую бронь.
-        if (owner && this.pathLoads.get(path) === pending) this.pathLoads.delete(path)
-
-        if (this.epoch !== epoch) {
-          if (owner && result?.ok && result.texture) result.texture.dispose()
-
-          return
-        }
-
-        if (!result || !result.ok || !result.texture) {
-          ok = false
-          continue
-        }
-
-        // Сосед по той же брони мог зарегистрировать текстуру, пока мы ждали
-        // тот же промис — реестр проверяется заново, а не вслепую.
-        if (resourceStorage.getTexture(path)) continue
-
-        this.budget.measure(path, result.texture)
-        resourceStorage.addTexture(result.texture)
-      }
-    } finally {
-      if (this.epoch === epoch) this.inFlight.delete(candidate.actorId)
-    }
-
-    if (this.epoch !== epoch) return
-
-    if (!ok) {
-      this.attempted.add(candidate.actorId)
-      this.loaded.delete(candidate.actorId)
-      this.actorPaths.delete(candidate.actorId)
-
-      for (const path of candidate.paths) {
-        if (this.pathStillReferenced(path)) continue
-
-        resourceStorage.deleteTexture(path)
+      } finally {
+        if (this.epoch === epoch) this.inFlight.delete(candidate.actorId)
       }
 
-      return
+      if (this.epoch !== epoch) return
+
+      if (!ok) {
+        this.rollbackFailedLoad(candidate)
+        return
+      }
+
+      this.loadedAt.set(candidate.actorId, Date.now())
+
+      const node = this.scene.getObjectByName(candidate.name)
+
+      if (node && hasRenderable(node) && node.renderable !== null) {
+        (node.renderable.material as AbstractShaderMaterial).updateMaterial()
+      }
+    } catch {
+      // Сценарий мог смениться, пока мы были внутри — устаревший бросок не
+      // вправе трогать состояние, которое уже либо очищено сеттером
+      // `scenario`, либо принадлежит чужой живой загрузке того же актора
+      // (тот же инвариант, что и у обычного провала, см. докблок `epoch`).
+      if (this.epoch !== epoch) return
+
+      this.rollbackFailedLoad(candidate)
     }
+  }
 
-    this.loadedAt.set(candidate.actorId, Date.now())
+  /**
+   * Откатывает актора после провала загрузки — полного (провайдер вернул
+   * `!ok`) или брошенного (см. `loadActor`): актор уходит в `attempted` и
+   * покидает `loaded`, а его пути освобождаются из реестра, если на них не
+   * ссылается кто-то ещё из `loaded` (`pathStillReferenced` — Critical 1,
+   * несколько акторов сценария могут делить один файл текстуры).
+   */
+  private rollbackFailedLoad(candidate: StreamCandidate): void {
+    this.attempted.add(candidate.actorId)
+    this.loaded.delete(candidate.actorId)
+    this.actorPaths.delete(candidate.actorId)
 
-    const node = this.scene.getObjectByName(candidate.name)
+    for (const path of candidate.paths) {
+      if (this.pathStillReferenced(path)) continue
 
-    if (node && hasRenderable(node) && node.renderable !== null) {
-      (node.renderable.material as AbstractShaderMaterial).updateMaterial()
+      resourceStorage.deleteTexture(path)
     }
   }
 }
