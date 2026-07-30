@@ -67,6 +67,7 @@ export const PlanetShaderTemplate: ShaderProps = {
     uniform sampler2D bumpMap;
     uniform float bumpScale;
     uniform float emission;
+    uniform float uSpecularStrength;
 
     varying vec2 vUv;
     varying vec3 vNormal;
