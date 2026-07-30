@@ -3,6 +3,8 @@ import { Scene, Texture, Vector3 } from 'three'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { TextureBudget, textureBytes } from '@/core/streaming/TextureBudget'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+import { Actor } from '@/core/models/Actor'
+import { Scenarios } from '@/config/scenarios'
 import type { SceneObserver, ObservableRecord } from '@/core/services/SceneObserver'
 import type { TextureProvider } from '@/core/textures/TextureProvider'
 import type { TextureRequest, LoadResult } from '@/core/textures/types'
@@ -19,7 +21,17 @@ import type { NotificationSink } from '@/core/ports/NotificationSink'
  * фикстуры: `collectCandidates` ходит в реальный `Actor`/`Resource` через ORM,
  * подменить эти вызовы нечем без искажения самого проверяемого механизма.
  * `distance`/`position` в `SceneObserver.data` подконтрольны тесту напрямую.
+ *
+ * Fix 3 (финальное ревью): `collectCandidates` резолвит имя через `this._map`
+ * (наполняется `setMap`), а не запросом `Actor.where({ name })` — значит
+ * КАЖДЫЙ тест обязан выставить `observer.scenario` ДО первого `ClosestChange`,
+ * иначе `_map` пуст и ни один кандидат не резолвится. Mercury/Ceres/Moon —
+ * дети root'а Солнечной системы (id 1), Korriban I/II — дети root'а системы
+ * Хорусет (id 86, отдельный сценарий) — потому им нужны РАЗНЫЕ конфиги.
  */
+
+const SOLAR_SYSTEM = Scenarios.find((s) => s.rootId === 1)!
+const HORUSET_SYSTEM = Scenarios.find((s) => s.rootId === 86)!
 
 const SIZE_8K: number = textureBytes(8192, 4096)
 
@@ -98,7 +110,8 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       (): Promise<LoadResult> => Promise.resolve({ ok: false as const, texture: null, error: new Error('сеть недоступна') })
     )
 
-    const { handlers, data } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = SOLAR_SYSTEM
 
     data.set('Mercury', record('Mercury', 300))
 
@@ -128,7 +141,8 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       return Promise.resolve({ ok: true as const, texture: makeTexture() })
     })
 
-    const { handlers, data } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = SOLAR_SYSTEM
 
     // Меркурий (радиус 2440 км) втрое дальше Цереры (469.7 км), но угловой
     // размер всё равно больше: 2440/300 ≈ 8.13 против 469.7/100 ≈ 4.70.
@@ -149,7 +163,8 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // Оба тела ещё ни разу не грузились — decideStreaming использует
     // завышенную оценку ~8K на путь, а не реальный вес мок-текстуры. Бюджет
     // ровно на два пути (диффуз+bump) одного актора.
-    const { handlers, data } = makeObserver(SIZE_8K * 2, load)
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 2, load)
+    observer.scenario = SOLAR_SYSTEM
 
     data.set('Mercury', record('Mercury', 300))
     data.set('Ceres', record('Ceres', 100))
@@ -184,6 +199,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     })
 
     const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = SOLAR_SYSTEM
     const evictSpy = vi.spyOn(observer, 'evictActor')
 
     data.set('Mercury', record('Mercury', 300))
@@ -215,6 +231,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     })
 
     const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = HORUSET_SYSTEM
 
     // Korriban I и II (реальные акторы 93 и 94) делят ОБА streamable-пути —
     // диффуз и bump — один и тот же файл на семь планет Korriban I–VII.
@@ -258,7 +275,8 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       return Promise.resolve({ ok: true as const, texture })
     })
 
-    const { handlers, data } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = HORUSET_SYSTEM
 
     // Оба актора — candidates уже в ПЕРВОМ пересчёте, ни один ещё не
     // загружен: decision.load отдаёт их ОБОИХ разом.
@@ -302,6 +320,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     })
 
     const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = HORUSET_SYSTEM
     const pathLoads = streamingState(observer).pathLoads
     const SHARED_DIFFUSE = 'planets/StarWars/korriban/i/i.jpg'
 
@@ -315,11 +334,16 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     const staleReservation = pathLoads.get(SHARED_DIFFUSE)
 
-    // Сценарий сменился, пока путь ещё грузился — pathLoads очищен целиком,
-    // Korriban I больше не кандидат (покинул зону/данные наблюдателя), чтобы
-    // не смешивать эту гонку с actor-уровневой (она уже покрыта отдельным
-    // тестом выше).
-    observer.scenario = null
+    // Сценарий "сменился" — сеттер безусловно бампает epoch и полностью
+    // сбрасывает pathLoads/loaded/actorPaths независимо от того, каким
+    // значением его перезаписали (см. докблок сеттера `scenario`). Тот же
+    // сценарий переприсваивается заново (а не `null`), потому что Fix 3
+    // резолвит кандидатов через `this._map`, а `null` очистил бы её без
+    // восстановления — Korriban II не нашёлся бы кандидатом вообще, и гонка,
+    // которую проверяет этот тест, до него бы не дошла. Korriban I по-прежнему
+    // больше не кандидат (покинул зону/данные наблюдателя) — это делает
+    // `data.delete`, а не сброс сценария.
+    observer.scenario = HORUSET_SYSTEM
     data.delete('Korriban I')
 
     // Korriban II заявляет ТОТ ЖЕ путь уже в новой эпохе — свежая, живая
@@ -385,6 +409,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     })
 
     const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = SOLAR_SYSTEM
     const state = streamingState(observer)
     const MERCURY_ACTOR_ID = 5
 
@@ -395,9 +420,13 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const stale: Promise<void> = handlers['ClosestChange'](record('Mercury', 300))
     expect(resolvers).toHaveLength(1)
 
-    // Сценарий сменился, пока путь ещё грузился — epoch увеличился, весь
-    // учёт стриминга (loaded/loadedAt/inFlight/attempted/actorPaths) сброшен.
-    observer.scenario = null
+    // Сценарий "сменился" — тот же сценарий переприсваивается заново, а не
+    // `null`: сеттер безусловно бампает epoch и сбрасывает весь учёт
+    // стриминга независимо от значения (см. комментарий выше, тест "устаревший
+    // владелец брони"), а Fix 3 резолвит кандидатов через `this._map`,
+    // которую `null` очистил бы без восстановления — цикл 2 не нашёл бы
+    // Меркурия кандидатом вообще.
+    observer.scenario = SOLAR_SYSTEM
 
     // Цикл 2 (эпоха E2): Меркурий снова кандидат (тот же actorId) — живая,
     // свежая загрузка. Её первый путь тоже держится открытым.
@@ -456,6 +485,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     // Бюджет ровно на одного актора (два пути по 8K-оценке).
     const { observer, handlers, data } = makeObserver(SIZE_8K * 2, load)
+    observer.scenario = SOLAR_SYSTEM
     const evictSpy = vi.spyOn(observer, 'evictActor')
 
     data.set('Mercury', record('Mercury', 300))
@@ -492,6 +522,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // Бюджет впритык ОДНОМУ 8K-пути — у Меркурия их два (диффуз+bump), то
     // есть реальный вес после замера (2×SIZE_8K) вдвое больше всего бюджета.
     const { observer, handlers, data } = makeObserver(SIZE_8K, load)
+    observer.scenario = SOLAR_SYSTEM
     const evictSpy = vi.spyOn(observer, 'evictActor')
 
     data.set('Mercury', record('Mercury', 300))
@@ -510,5 +541,42 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     expect(evictSpy).not.toHaveBeenCalled()
     expect(load).toHaveBeenCalledTimes(2)
+  })
+
+  it('имя, разделяемое с кольцом/атмосферой, резолвится в планету, а не в актора без стримируемых путей (Fix 3)', async () => {
+    // Saturn — три реальных актора с ОДНИМ именем: планета (id 11, диффуз+
+    // bump), кольцо (id 39, единственный ресурс — resident PNG колец, не
+    // streamable) и атмосфера (id 50, вообще без ресурсов). Раньше
+    // `collectCandidates` резолвил имя через `Actor.where({ name }).first()`
+    // по ВСЕЙ таблице акторов без учёта сценария/дерева — совпадало с
+    // планетой только потому, что у неё меньший id, чем у кольца и атмосферы.
+    // Резолв через `this._map` (обход дерева сценария, родитель раньше детей)
+    // корректен структурно, а не по счастливой нумерации: ring/atmosphere —
+    // всегда дети своей планеты, не её соседи с тем же именем.
+    const whereSpy = vi.spyOn(Actor, 'where')
+
+    const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
+      const texture = makeTexture()
+      texture.name = request.name
+      return Promise.resolve({ ok: true as const, texture })
+    })
+
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = SOLAR_SYSTEM
+
+    data.set('Saturn', record('Saturn', 300))
+    await handlers['ClosestChange'](record('Saturn', 300))
+
+    // Реальные пути ПЛАНЕТЫ — не resident-текстура кольца (её вообще не
+    // просят: `lifecycle !== 'streamable'`) и не пустой список атмосферы.
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/saturn/saturn.jpg' }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/saturn/saturn_bump.jpg' }))
+    expect(load).toHaveBeenCalledTimes(2)
+
+    // collectCandidates больше не бьёт по ORM за каждое наблюдаемое тело —
+    // резолв идёт через уже построенный this._map, а не через Actor.where.
+    expect(whereSpy).not.toHaveBeenCalled()
+
+    whereSpy.mockRestore()
   })
 })
