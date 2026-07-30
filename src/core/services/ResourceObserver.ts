@@ -442,7 +442,6 @@ class ResourceObserver {
       if (this.pathStillReferenced(path)) continue
 
       resourceStorage.deleteTexture(path)
-      this.budget.forget(path)
     }
   }
 
@@ -570,7 +569,6 @@ class ResourceObserver {
         if (this.pathStillReferenced(path)) continue
 
         resourceStorage.deleteTexture(path)
-        this.budget.forget(path)
       }
 
       return

@@ -31,16 +31,17 @@ function makeObserver(budgetBytes: number = textureBytes(8192, 4096) * 8) {
   } as unknown as TextureProvider
 
   const scene = new Scene()
+  const budget = new TextureBudget(budgetBytes)
   const observer = new ResourceObserver(
     sceneObserver,
     textures,
     { setAsset: vi.fn(), setProgress: vi.fn(), setTotal: vi.fn() } as unknown as LoadingProgressReporter,
     { dispatch: vi.fn() } as unknown as NotificationSink,
     scene,
-    new TextureBudget(budgetBytes)
+    budget
   )
 
-  return { observer, handlers, data, scene, textures, loaded }
+  return { observer, handlers, data, scene, textures, loaded, budget }
 }
 
 describe('ResourceObserver: стриминг', () => {
@@ -90,5 +91,26 @@ describe('ResourceObserver: стриминг', () => {
     observer.evictActor({ actorId: 1, name: 'Earth', priority: 0, paths: [] })
 
     expect(resets).toEqual(['Earth'])
+  })
+
+  it('вытеснение не стирает закешированный вес текстуры из бюджета (Fix 2)', () => {
+    // Разрешение текстуры — свойство ФАЙЛА, а не резидентности: вытеснение
+    // освобождает видеопамять, но не делает файл другого размера. Забывать
+    // замер на вытеснении означало бы, что возврат тела снова оценивается
+    // вслепую (ASSUMED_TEXTURE_BYTES) — переоценивая типичный 2K-файл
+    // вшестнадцатеро и, для тела крупнее бюджета целиком, воссоздавая
+    // бесконечный цикл перезагрузки, который должен был закрыть Fix 1.
+    const { observer, budget } = makeObserver()
+    const PATH = 'planets/earth.jpg'
+
+    const texture = new Texture()
+    texture.image = { width: 2048, height: 1024 }
+    budget.measure(PATH, texture)
+
+    expect(budget.sizeOf(PATH)).toBe(textureBytes(2048, 1024))
+
+    observer.evictActor({ actorId: 1, name: 'Earth', priority: 0, paths: [PATH] })
+
+    expect(budget.sizeOf(PATH)).toBe(textureBytes(2048, 1024))
   })
 })

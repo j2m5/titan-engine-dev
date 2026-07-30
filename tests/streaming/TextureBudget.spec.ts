@@ -69,15 +69,6 @@ describe('TextureBudget', () => {
     expect(budget.sizeOf('planets/skybox.jpg')).toBeUndefined()
   })
 
-  it('forget убирает путь из кеша', () => {
-    const budget = new TextureBudget(1024)
-
-    budget.measure('planets/earth.jpg', textureSized(2048, 1024))
-    budget.forget('planets/earth.jpg')
-
-    expect(budget.sizeOf('planets/earth.jpg')).toBeUndefined()
-  })
-
   it('лимит отдаётся как есть', () => {
     expect(new TextureBudget(4096).limit()).toBe(4096)
   })
