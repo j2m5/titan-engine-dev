@@ -1,19 +1,33 @@
-import dayjs from 'dayjs'
 import { ScenarioConfig } from '@/config/scenarios'
-import { IActorBoundResource, IResource } from '@/core/models/types'
+import { IResource } from '@/core/models/types'
 import { Resource } from '@/core/models/Resource'
 import { Actor } from '@/core/models/Actor'
-import { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
+import { SceneObserver } from '@/core/services/SceneObserver'
 import { TextureProvider } from '@/core/textures/TextureProvider'
 import type { LoadResult, TextureRequest } from '@/core/textures/types'
-import { cubeTextureRequest, textureRequestFrom, ResourceItem } from '@/core/textures/textureRequest'
-import { CubeTexture, DefaultLoadingManager, Object3D, Scene, Texture } from 'three'
+import { cubeTextureRequest, textureRequestFrom } from '@/core/textures/textureRequest'
+import { CubeTexture, DefaultLoadingManager, Scene } from 'three'
 import { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
 import { NotificationSink } from '@/core/ports/NotificationSink'
 import { resourceStorage } from '@/core/services/ResourceStorage'
-import { Collection } from '@/core/framework/support/Collection'
 import { hasRenderable } from '@/core/services/SceneManager'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { TextureBudget } from '@/core/streaming/TextureBudget'
+import { decideStreaming } from '@/core/streaming/decideStreaming'
+import type { StreamCandidate } from '@/core/streaming/types'
+
+/**
+ * Сколько миллисекунд актор защищён от вытеснения после загрузки.
+ *
+ * При рабочем наборе в единицы слотов объект у границы бюджета иначе будет
+ * грузиться и вытесняться по кругу. Одна ручка вместо двух порогов, и она не
+ * зависит от того, как именно дрожит дистанция.
+ */
+const MIN_RESIDENCY_MS: number = 10_000
+
+/** Защита от деления на ноль, когда камера внутри тела. */
+const MIN_DISTANCE: number = 1e-9
 
 /**
  * Наблюдатель за ресурсами, отвечающий жизненный цикл ресурсов
@@ -23,11 +37,6 @@ class ResourceObserver {
    * Массив ресурсов кубических карт для фона сцены
    */
   public cube: IResource[] = []
-  /**
-   * Массив отложенных ресурсов для загрузки (с привязкой к актору,
-   * прикрепляемой в closestChange — нужна для группировки при выгрузке)
-   */
-  public deferred: IActorBoundResource[] = []
   /**
    * Одиночные резидентные текстуры сценария: вспомогательные карты, кольца,
    * заглушки. Загружаются при старте и не вытесняются никогда — их отбирает
@@ -53,17 +62,28 @@ class ResourceObserver {
    */
   private readonly _map: Map<number, Actor>
 
+  /** Акторы, чьи текстуры в видеопамяти либо в процессе загрузки. */
+  private readonly loaded: Set<number> = new Set()
+  /** actorId → момент загрузки, для минимальной резидентности. */
+  private readonly loadedAt: Map<number, number> = new Map()
+  /** Акторы с загрузкой в полёте: их нельзя ни запрашивать, ни вытеснять. */
+  private readonly inFlight: Set<number> = new Set()
+  /** Акторы, чья загрузка провалилась; сбрасывается при выходе из набора. */
+  private readonly attempted: Set<number> = new Set()
+
   /**
    * @param sceneObserver Наблюдатель за сценой
    * @param textures Единая точка загрузки текстур
    * @param scene Сцена, из которой извлекаются объекты для сброса материалов
+   * @param budget Бюджет видеопамяти под стримируемые текстуры
    */
   public constructor(
     private sceneObserver: SceneObserver,
     private textures: TextureProvider,
     private loadingProgress: LoadingProgressReporter,
     private notifications: NotificationSink,
-    private scene: Scene
+    private scene: Scene,
+    private budget: TextureBudget
   ) {
     this._scenario = null
     this._sceneBackground = null
@@ -94,11 +114,12 @@ class ResourceObserver {
    * `setMap` при `scenario === null` выходит сразу, то есть выход в меню не
    * очистил бы ничего.
    *
-   * `deferred` обязан обнуляться, потому что разборка сценария освобождает
-   * все текстуры разом (`Application.teardown`). Оставшиеся записи выглядели
-   * бы для `closestChange` уже загруженными, повторной загрузки не случилось
-   * бы, и материалы при возврате на посещённый сценарий остались бы на
-   * заглушке из `getTextureOrMake`.
+   * Состояние стриминга (`loaded`, `loadedAt`, `inFlight`, `attempted`) обязано
+   * обнуляться, потому что разборка сценария освобождает все текстуры разом
+   * (`Application.teardown`). Оставшиеся записи выглядели бы для
+   * `closestChange` уже загруженными, повторной загрузки не случилось бы, и
+   * материалы при возврате на посещённый сценарий остались бы на заглушке из
+   * `getTextureOrMake`.
    *
    * `_map` обнуляется, потому что `setMap` дописывает в него через `set` без
    * очистки. Без сброса карта сценария копит чужих акторов из предыдущего
@@ -107,7 +128,10 @@ class ResourceObserver {
   public set scenario(scenario: ScenarioConfig | null) {
     this._scenario = scenario
     this._sceneBackground = null
-    this.deferred = []
+    this.loaded.clear()
+    this.loadedAt.clear()
+    this.inFlight.clear()
+    this.attempted.clear()
     this._map.clear()
     this.setMap()
     this.setCubeTextures()
@@ -138,47 +162,20 @@ class ResourceObserver {
       this._sceneBackground = null
     }
 
-    await this.loadInto(this.resident, 'default')
-  }
-
-  /**
-   * Загружает отложенные текстуры.
-   * @param resources Массив ресурсов для загрузки
-   */
-  public async loadDeferredTextures(resources: IActorBoundResource[]): Promise<void> {
-    await this.loadInto(resources, 'bitmap')
+    await this.loadInto(this.resident)
   }
 
   /**
    * Загружает пачку ресурсов и размещает удавшиеся в реестре. Провалившиеся
    * молча пропускаются: провайдер уже вернул заглушку, а сообщение
    * пользователю шлёт DefaultLoadingManager.onError.
-   *
-   * Мета-данные срока жизни (`userData.resource`) проставляются ТОЛЬКО для
-   * `type === 'bitmap'` — это в точности старое поведение: удалённый
-   * `TextureManager` (путь `required`, ныне `resident`) их никогда не писал,
-   * штамповал только `ImageBitmapManager` (отложенные). `resident` —
-   * `default.png`, `night.jpg`, `star.png`, PBR-наборы астероидов, кольца и
-   * прочее, общее для всех `PlanetMaterial`, — обязан оставаться вне
-   * механизма `releaseUnusedTextures`: тот читает именно этот штамп, чтобы
-   * решить, что выгружать, и попадание туда резидентных текстур освободило
-   * бы их у всех материалов разом.
    */
-  private async loadInto(resources: IActorBoundResource[], type: ResourceItem['type']): Promise<void> {
+  private async loadInto(resources: IResource[]): Promise<void> {
     await Promise.all(
-      resources.map(async (resource: IActorBoundResource): Promise<void> => {
+      resources.map(async (resource: IResource): Promise<void> => {
         const result = await this.tryLoad(textureRequestFrom(resource))
 
         if (!result || !result.ok || !result.texture) return
-
-        if (type === 'bitmap') {
-          result.texture.userData.resource = {
-            actorId: resource.actorId ?? null,
-            type,
-            loadedAt: dayjs(),
-            expiredAt: dayjs().add(resource.lifetime, 'millisecond')
-          } satisfies ResourceItem
-        }
 
         resourceStorage.addTexture(result.texture)
       })
@@ -211,79 +208,6 @@ class ResourceObserver {
 
       return null
     }
-  }
-
-  /**
-   * Выгружает текстуры определенные как неиспользуемые в данный момент времени
-   */
-  private releaseUnusedTextures(): void {
-    // сколько отдаленных объектов нужно получить для удаления их текстур
-    const minCountFarthest: number = 3
-
-    // определение для каких объектов текстуры уже были загружены
-    // именно их и надо прослушивать на предмет необходимости удаления текстур
-    const uniqueDefers: Collection<IActorBoundResource> = new Collection(this.deferred)
-      .whereNotNull('actorId')
-      .where('resourceType', 'diffuse')
-    const actorIds: number[] = uniqueDefers.map((el: IActorBoundResource) => el.actorId!).toArray()
-    const preparedActors: string[] = Actor.query()
-      .whereIn('id', actorIds)
-      .pluck('name')
-      .filter((name): name is string => typeof name === 'string')
-    const filterPreparedActors: ObservableRecord[] = Array.from(this.sceneObserver.data.values()).filter(
-      (record: ObservableRecord) => preparedActors.includes(record.name)
-    )
-    // получает minCountFarthest (по умолчанию 3) наиболее отдаленных объекта, возвращая массив их имен
-    // вторым параметром принимает фильтрованный массив ObservableRecord
-    // в котором остаются только те элементы для которых текстуры уже были загружены
-    const farthestObjects: string[] = this.sceneObserver
-      .calculateFarthestObjects(minCountFarthest, filterPreparedActors)
-      .map((object: ObservableRecord) => object.name)
-
-    // если фактическое количество объектов с загруженными текстурами меньше minCountFarthest
-    // завершается выполнение метода, поскольку нет необходимости удалять текстуры в данный момент
-    if (filterPreparedActors.length <= minCountFarthest) return
-
-    // извлекает коллекцию ресурсов
-    const resources: IResource[] = Actor.all()
-      .where('categoryId', 7)
-      .whereIn('name', farthestObjects)
-      .flatMap((actor: Actor) => actor.resources.toJSON() as IResource[])
-      .toArray()
-    // с помощью коллекции ресурсов извлекает текстуры из хранилища по имени (относительный путь = имя)
-    const textures: Collection<Texture> = resourceStorage.textures.whereIn(
-      'name',
-      resources.map((resource: IResource) => resource.path)
-    )
-
-    textures.each((texture: Texture): void => {
-      // извлекает объект с мета-данными в поле userData текстуры
-      const resource: ResourceItem | undefined = texture.userData.resource as ResourceItem | undefined
-      // проверяет на наличие мета-данных, проверяет чтобы loadedAt и expiredAt отличались
-      // loadedAt и expiredAt равны если lifetime ресурса установлен как 0, это означает текстура имеет infinite lifetime
-      // основная проверка на истечение lifetime ресурса, если меньше текущего времени - нужно удалять
-      if (resource && resource.loadedAt !== resource.expiredAt && resource.expiredAt < dayjs()) {
-        const objects = this.scene.getObjectsByUserDataProperty('type', 'planet')
-
-        // извлекает целевые сущности и сбрасывает материал на параметры по умолчанию
-        // позволяя WebGL корректно освободить ресурсы
-        objects.forEach((object: Object3D): void => {
-          if ('material' in object && object.material instanceof AbstractShaderMaterial) {
-            object.material.resetMaterial()
-          }
-        })
-
-        // удаление как из хранилища так и с GPU
-        resourceStorage.deleteTexture(texture.name)
-
-        // после удаления нужно также удалить из массива отложенных ресурсов, чтобы можно было загрузить заново
-        const deferIndex: number = this.deferred.findIndex(
-          (resource: IResource): boolean => resource.path === texture.name
-        )
-
-        if (deferIndex !== -1) this.deferred.splice(deferIndex, 1)
-      }
-    })
   }
 
   /**
@@ -361,37 +285,126 @@ class ResourceObserver {
   }
 
   /**
-   * Обработчик события изменения ближайшего объекта
-   * @param event Запись наблюдаемого объекта
+   * Пересчитывает состав видеопамяти. Вызывается на каждом ClosestChange —
+   * то есть при изменении камеры, когда дистанции уже пересчитаны.
    */
-  private closestChange = async (event: ObservableRecord): Promise<void> => {
-    this.releaseUnusedTextures()
+  private closestChange = async (): Promise<void> => {
+    const candidates: StreamCandidate[] = this.collectCandidates()
+    const decision = decideStreaming(
+      candidates,
+      this.loaded,
+      (actorId: number): boolean =>
+        this.inFlight.has(actorId) || Date.now() - (this.loadedAt.get(actorId) ?? 0) < MIN_RESIDENCY_MS,
+      this.attempted,
+      (path: string): number | undefined => this.budget.sizeOf(path),
+      this.budget.limit()
+    )
 
-    const actor: Actor | undefined = Actor.where({ name: event.name }).first()
-
-    if (actor && actor.resources.isNotEmpty()) {
-      // связь актор-ресурс идёт через пивот, поэтому actorId прикрепляется здесь —
-      // в единственной точке, где контекст актора известен
-      const toLoad = actor.resources.map(
-        (resource: Resource): IActorBoundResource => ({
-          ...(resource.toJSON() as IResource),
-          actorId: actor.getAttribute('id')
-        })
-      )
-
-      const isNotLoaded = toLoad.filter(
-        (resource: IActorBoundResource) => !this.deferred.some((r: IActorBoundResource): boolean => r.id === resource.id)
-      )
-
-      if (isNotLoaded.isNotEmpty()) {
-        this.deferred.push(...isNotLoaded)
-        await this.loadDeferredTextures(isNotLoaded.toArray())
-
-        const node = this.scene.getObjectByName(actor.getAttribute('name', ''))
-
-        if (hasRenderable(node)) (node.renderable?.material as AbstractShaderMaterial).updateMaterial()
-      }
+    // Провал сбрасывается, когда актор покидает набор: сетевой сбой повторится
+    // при следующем подлёте, битый путь не даст бесконечного цикла.
+    const wanted: Set<number> = new Set(decision.load.map((c: StreamCandidate): number => c.actorId))
+    for (const actorId of this.attempted) {
+      if (!wanted.has(actorId) && !this.loaded.has(actorId)) this.attempted.delete(actorId)
     }
+
+    for (const candidate of decision.evict) this.evictActor(candidate)
+    await Promise.all(decision.load.map((candidate: StreamCandidate): Promise<void> => this.loadActor(candidate)))
+  }
+
+  /**
+   * Собирает кандидатов: тела из SceneObserver.data, у которых есть
+   * стримируемые ресурсы. Приоритет — радиус, делённый на расстояние.
+   *
+   * Радиус в данных в километрах, дистанция в ObservableRecord уже в
+   * three-единицах, поэтому радиус переводится — иначе отношение бессмысленно.
+   */
+  private collectCandidates(): StreamCandidate[] {
+    const candidates: StreamCandidate[] = []
+
+    for (const record of this.sceneObserver.data.values()) {
+      const actor: Actor | undefined = Actor.where({ name: record.name }).first()
+
+      if (!actor) continue
+
+      const paths: string[] = actor.resources
+        .filter((resource: Resource): boolean => resource.getAttribute('lifecycle') === 'streamable')
+        .map((resource: Resource): string => resource.getAttribute('path', ''))
+        .toArray()
+
+      if (!paths.length) continue
+
+      const radiusKm: number = actor.physicalObject?.getAttribute('radius', 0) ?? 0
+
+      candidates.push({
+        actorId: actor.getAttribute('id')!,
+        name: record.name,
+        priority: toThreeJSUnits(radiusKm) / Math.max(record.distance, MIN_DISTANCE),
+        paths
+      })
+    }
+
+    return candidates
+  }
+
+  /**
+   * Освобождает текстуры актора.
+   *
+   * Порядок обязателен: сначала материал переключается на резидентную
+   * заглушку, и только потом текстуры освобождаются. Иначе кадр между шагами
+   * рисуется освобождённой текстурой. Трогается ТОЛЬКО выселяемый актор —
+   * прежний код сбрасывал материалы всех планет сцены разом.
+   */
+  public evictActor(candidate: StreamCandidate): void {
+    const node = this.scene.getObjectByName(candidate.name)
+
+    if (hasRenderable(node)) (node.renderable?.material as AbstractShaderMaterial).resetMaterial()
+
+    for (const path of candidate.paths) {
+      resourceStorage.deleteTexture(path)
+      this.budget.forget(path)
+    }
+
+    this.loaded.delete(candidate.actorId)
+    this.loadedAt.delete(candidate.actorId)
+  }
+
+  /** Грузит текстуры актора и обновляет его материал. */
+  private async loadActor(candidate: StreamCandidate): Promise<void> {
+    this.inFlight.add(candidate.actorId)
+    this.loaded.add(candidate.actorId)
+
+    let ok: boolean = true
+
+    for (const path of candidate.paths) {
+      const resource: Resource | undefined = Resource.where({ path }).first()
+
+      if (!resource) continue
+
+      const result = await this.tryLoad(textureRequestFrom(resource.toJSON() as IResource))
+
+      if (!result || !result.ok || !result.texture) {
+        ok = false
+        continue
+      }
+
+      this.budget.measure(path, result.texture)
+      resourceStorage.addTexture(result.texture)
+    }
+
+    this.inFlight.delete(candidate.actorId)
+
+    if (!ok) {
+      this.attempted.add(candidate.actorId)
+      this.loaded.delete(candidate.actorId)
+
+      return
+    }
+
+    this.loadedAt.set(candidate.actorId, Date.now())
+
+    const node = this.scene.getObjectByName(candidate.name)
+
+    if (hasRenderable(node)) (node.renderable?.material as AbstractShaderMaterial).updateMaterial()
   }
 }
 

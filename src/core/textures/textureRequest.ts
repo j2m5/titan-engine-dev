@@ -1,19 +1,5 @@
-import type dayjs from 'dayjs'
 import type { IResource } from '@/core/models/types'
 import type { TextureRequest } from '@/core/textures/types'
-
-/**
- * Мета-данные загруженной текстуры, живущие в `texture.userData.resource`.
- * Их читает `ResourceObserver.releaseUnusedTextures` при выгрузке по истечении
- * срока. Штампует их сам `ResourceObserver`: срок жизни — вопрос политики
- * стриминга, а не загрузки.
- */
-export interface ResourceItem {
-  actorId: number | null
-  type: 'default' | 'bitmap'
-  loadedAt: dayjs.Dayjs
-  expiredAt: dayjs.Dayjs
-}
 
 /** Запрос на одиночную текстуру: имя совпадает с путём ресурса. */
 export function textureRequestFrom(resource: IResource): TextureRequest {

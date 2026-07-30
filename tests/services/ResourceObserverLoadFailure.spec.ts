@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Scene } from 'three'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
+import { TextureBudget } from '@/core/streaming/TextureBudget'
 import type { SceneObserver } from '@/core/services/SceneObserver'
 import type { TextureProvider } from '@/core/textures/TextureProvider'
 import type { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
@@ -21,7 +22,8 @@ function makeObserver(
     textures,
     { setAsset: vi.fn(), setProgress: vi.fn(), setTotal: vi.fn() } as unknown as LoadingProgressReporter,
     { dispatch } as unknown as NotificationSink,
-    new Scene()
+    new Scene(),
+    new TextureBudget(1024 ** 3)
   )
 }
 

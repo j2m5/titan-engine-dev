@@ -14,6 +14,7 @@ import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTrans
 import { Postprocessing } from '@/core/graphic/Postprocessing'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { LeakDetector } from '@/core/lifecycle/LeakDetector'
+import { TextureBudget } from '@/core/streaming/TextureBudget'
 
 class AppServiceProvider extends ServiceProvider {
   public register(): void {
@@ -68,6 +69,11 @@ class AppServiceProvider extends ServiceProvider {
         )
     )
 
+    // Бюджет самоназначенный: WebGL не умеет спрашивать, сколько видеопамяти
+    // занято. Гигабайт — примерно шесть текстур 8K, то есть три планеты с
+    // диффузом и bump; запас до лимитов браузера при этом остаётся большим.
+    this.app.singleton(Tokens.TextureBudget, () => new TextureBudget(1024 ** 3))
+
     this.app.singleton(
       Tokens.ResourceObserver,
       (c: Container) =>
@@ -76,7 +82,8 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.TextureProvider),
           c.get(Tokens.LoadingProgressReporter),
           c.get(Tokens.NotificationSink),
-          c.get(Tokens.Scene)
+          c.get(Tokens.Scene),
+          c.get(Tokens.TextureBudget)
         )
     )
 

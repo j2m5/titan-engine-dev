@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Scene, Texture } from 'three'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
+import { TextureBudget } from '@/core/streaming/TextureBudget'
 import { Resource } from '@/core/models/Resource'
 import { Scenarios } from '@/config/scenarios'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -26,7 +27,8 @@ describe('ResourceObserver: резидентные берутся из lifecycle
       textures,
       { setAsset: vi.fn(), setProgress: vi.fn(), setTotal: vi.fn() } as unknown as LoadingProgressReporter,
       { dispatch: vi.fn() } as unknown as NotificationSink,
-      new Scene()
+      new Scene(),
+      new TextureBudget(1024 ** 3)
     )
 
     observer.scenario = Scenarios[0]
