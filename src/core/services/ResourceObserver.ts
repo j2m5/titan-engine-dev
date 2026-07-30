@@ -7,7 +7,6 @@ import { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
 import { TextureProvider } from '@/core/textures/TextureProvider'
 import type { LoadResult, TextureRequest } from '@/core/textures/types'
 import { cubeTextureRequest, textureRequestFrom, ResourceItem } from '@/core/textures/textureRequest'
-import { ModelCollection } from '@/core/framework/Memoquent/ModelCollection'
 import { CubeTexture, DefaultLoadingManager, Object3D, Scene, Texture } from 'three'
 import { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
 import { NotificationSink } from '@/core/ports/NotificationSink'
@@ -25,18 +24,19 @@ class ResourceObserver {
    */
   public cube: IResource[] = []
   /**
-   * Массив обязательных ресурсов для загрузки
-   */
-  public required: IResource[] = []
-  /**
    * Массив отложенных ресурсов для загрузки (с привязкой к актору,
    * прикрепляемой в closestChange — нужна для группировки при выгрузке)
    */
   public deferred: IActorBoundResource[] = []
   /**
-   * Массив различных дополнительных ресурсов
+   * Одиночные резидентные текстуры сценария: вспомогательные карты, кольца,
+   * заглушки. Загружаются при старте и не вытесняются никогда — их отбирает
+   * флаг `lifecycle` в данных, а не список в коде.
+   *
+   * Кубические карты сюда не входят: им нужен запрос формы из шести граней,
+   * он собирается отдельно в `setCubeTextures`.
    */
-  public misc: IResource[] = []
+  public resident: IResource[] = []
 
   /**
    * Текущий сценарий
@@ -69,7 +69,7 @@ class ResourceObserver {
     this._sceneBackground = null
     this._map = new Map()
     this.sceneObserver.subscribe('ClosestChange', this.closestChange)
-    this.setRequiredTextures()
+    this.setResidentTextures()
   }
 
   /**
@@ -90,9 +90,9 @@ class ResourceObserver {
    * Сеттер для текущего сценария
    * @param scenario Новый сценарий
    *
-   * Накопленное за прошлый сценарий сбрасывается здесь, а не в помощниках:
-   * `setMap` и `setMisc` при `scenario === null` выходят сразу, то есть
-   * выход в меню не очистил бы ничего.
+   * Накопленное за прошлый сценарий сбрасывается здесь, а не в помощнике:
+   * `setMap` при `scenario === null` выходит сразу, то есть выход в меню не
+   * очистил бы ничего.
    *
    * `deferred` обязан обнуляться, потому что разборка сценария освобождает
    * все текстуры разом (`Application.teardown`). Оставшиеся записи выглядели
@@ -100,20 +100,17 @@ class ResourceObserver {
    * бы, и материалы при возврате на посещённый сценарий остались бы на
    * заглушке из `getTextureOrMake`.
    *
-   * `misc` и `_map` обнуляются, потому что помощники в них дописывают:
-   * `setMisc` делает `push`, `setMap` — `set` без очистки. Без сброса карта
-   * сценария копит чужих акторов, а те через `setMisc` дают кольца соседних
-   * сценариев в список загрузки.
+   * `_map` обнуляется, потому что `setMap` дописывает в него через `set` без
+   * очистки. Без сброса карта сценария копит чужих акторов из предыдущего
+   * сценария.
    */
   public set scenario(scenario: ScenarioConfig | null) {
     this._scenario = scenario
     this._sceneBackground = null
     this.deferred = []
-    this.misc = []
     this._map.clear()
     this.setMap()
     this.setCubeTextures()
-    this.setMisc()
   }
 
   /**
@@ -141,8 +138,7 @@ class ResourceObserver {
       this._sceneBackground = null
     }
 
-    await this.loadInto(this.required, 'default')
-    await this.loadInto(this.misc, 'bitmap')
+    await this.loadInto(this.resident, 'default')
   }
 
   /**
@@ -160,13 +156,13 @@ class ResourceObserver {
    *
    * Мета-данные срока жизни (`userData.resource`) проставляются ТОЛЬКО для
    * `type === 'bitmap'` — это в точности старое поведение: удалённый
-   * `TextureManager` (путь `required`) их никогда не писал, штамповал
-   * только `ImageBitmapManager` (пути `misc` и отложенные). `required` —
-   * `default.png`, `night.jpg`, `star.png`, PBR-наборы астероидов и прочее,
-   * общее для всех `PlanetMaterial`, — обязан оставаться вне механизма
-   * `releaseUnusedTextures`: тот читает именно этот штамп, чтобы решить, что
-   * выгружать, и попадание туда общих текстур освободило бы их у всех
-   * материалов разом.
+   * `TextureManager` (путь `required`, ныне `resident`) их никогда не писал,
+   * штамповал только `ImageBitmapManager` (отложенные). `resident` —
+   * `default.png`, `night.jpg`, `star.png`, PBR-наборы астероидов, кольца и
+   * прочее, общее для всех `PlanetMaterial`, — обязан оставаться вне
+   * механизма `releaseUnusedTextures`: тот читает именно этот штамп, чтобы
+   * решить, что выгружать, и попадание туда резидентных текстур освободило
+   * бы их у всех материалов разом.
    */
   private async loadInto(resources: IActorBoundResource[], type: ResourceItem['type']): Promise<void> {
     await Promise.all(
@@ -304,43 +300,22 @@ class ResourceObserver {
   }
 
   /**
-   * Устанавливает обязательные текстуры для загрузки
+   * Отбирает резидентные ресурсы по флагу в данных.
+   *
+   * Раньше тот же набор задавался тремя путями сразу: захардкоженным списком в
+   * `setRequiredTextures`, выборкой колец по `categoryId: 6` в `setMisc` и
+   * запросом кубмап. Код и данные дублировали друг друга и разъехались —
+   * кольца Adriana и Darkness оказались помечены `streamable` и грузились лишь
+   * потому, что `setMisc` брал ресурсы колец скопом, не глядя на флаг.
    */
-  private setRequiredTextures(): void {
-    const list: string[] = [
-      'star.png',
-      'asteroid.jpg',
-      'asteroid_bump.jpg',
-      'night.jpg',
-      'default.png',
-      'sun.png',
-      'round.png',
-      'asteroids/rock_boulder_dry_diff_2k.jpg',
-      'asteroids/rock_boulder_dry_nor_gl_2k.jpg',
-      'asteroids/rock_boulder_dry_arm_2k.jpg',
-      'asteroids/rocks_ground_04_diff_2k.jpg',
-      'asteroids/rocks_ground_04_nor_gl_2k.jpg',
-      'asteroids/rocks_ground_04_arm_2k.jpg'
-    ]
-
-    this.required = Resource.all().whereIn('path', list).toJSON() as IResource[]
-  }
-
-  /**
-   * Устанавливает дополнительные текстуры для текущего сценария
-   */
-  private setMisc(): void {
-    if (this.scenario) {
-      const collection: ModelCollection<Actor> = ModelCollection.make<Actor, ModelCollection<Actor>>(
-        Array.from(this.map.values())
+  private setResidentTextures(): void {
+    this.resident = Resource.all()
+      .filter(
+        (resource: Resource): boolean =>
+          resource.getAttribute('lifecycle') === 'resident' && resource.getAttribute('resourceType') !== 'cube'
       )
-      const rings: IResource[] = collection
-        .where({ categoryId: 6 })
-        .flatMap((actor: Actor) => actor.resources.map((resource: Resource) => resource.toJSON() as IResource))
-        .toArray()
-
-      this.misc.push(...rings)
-    }
+      .map((resource: Resource): IResource => resource.toJSON() as IResource)
+      .toArray()
   }
 
   /**

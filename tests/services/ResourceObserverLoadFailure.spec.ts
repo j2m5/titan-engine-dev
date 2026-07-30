@@ -36,14 +36,13 @@ describe('ResourceObserver — опечатка в расширении не в�
   // цепочке (loadInto → Promise.all → Application.run → EngineStore.setScenario)
   // ни один уровень не оборачивал вызов в try, поэтому отказ раньше улетал бы
   // наружу необработанным и приложение зависало бы на экране загрузки.
-  it('required: бросок TextureProvider не долетает наружу loadPrimaryTextures, дispatch получает уведомление', async () => {
+  it('resident: бросок TextureProvider не долетает наружу loadPrimaryTextures, дispatch получает уведомление', async () => {
     const dispatch = vi.fn()
     const load = vi.fn().mockRejectedValue(new Error('TextureProvider: нет стратегии для planets/typo.tga'))
 
     const observer = makeObserver(load, dispatch)
 
-    observer.required = [resource(TYPO_PATH)]
-    observer.misc = []
+    observer.resident = [resource(TYPO_PATH)]
 
     await expect(observer.loadPrimaryTextures()).resolves.toBeUndefined()
 
@@ -67,8 +66,7 @@ describe('ResourceObserver — опечатка в расширении не в�
       // седьмой грани нет намеренно — ровно тот скукоженный список, который
       // по описанию бага молча топит фон.
     ]
-    observer.required = []
-    observer.misc = []
+    observer.resident = []
 
     await expect(observer.loadPrimaryTextures()).resolves.toBeUndefined()
 

@@ -32,18 +32,6 @@ describe('ResourceObserver — смена сценария сбрасывает 
     expect(observer.deferred).toHaveLength(0)
   })
 
-  it('не копит дополнительные ресурсы от сценария к сценарию', () => {
-    const observer = makeObserver()
-
-    observer.scenario = Scenarios[0]
-    const first: number = observer.misc.length
-
-    observer.scenario = Scenarios[1]
-    observer.scenario = Scenarios[0]
-
-    expect(observer.misc).toHaveLength(first)
-  })
-
   it('не копит акторов в карте сценария', () => {
     const observer = makeObserver()
 
@@ -65,7 +53,6 @@ describe('ResourceObserver — смена сценария сбрасывает 
     observer.scenario = null
 
     expect(observer.deferred).toHaveLength(0)
-    expect(observer.misc).toHaveLength(0)
     expect(observer.map.size).toBe(0)
   })
 })

@@ -5,13 +5,13 @@ import type { SceneObserver } from '@/core/services/SceneObserver'
 import type { TextureProvider } from '@/core/textures/TextureProvider'
 import type { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
 import type { NotificationSink } from '@/core/ports/NotificationSink'
-import type { IResource } from '@/core/models/types'
+import type { IActorBoundResource, IResource } from '@/core/models/types'
 import type { LoadResult, TextureRequest } from '@/core/textures/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { PlaceholderTexture } from '@/core/textures/PlaceholderTexture'
 
-const REQUIRED_PATH = 'stamp-parity/required.jpg'
-const MISC_PATH = 'stamp-parity/misc.jpg'
+const RESIDENT_PATH = 'stamp-parity/resident.jpg'
+const DEFERRED_PATH = 'stamp-parity/deferred.jpg'
 const FAILING_PATH = 'stamp-parity/failing.jpg'
 
 /**
@@ -61,28 +61,31 @@ describe('ResourceObserver — штамп userData.resource: паритет со
     resourceStorage.deleteAllTextures()
   })
 
-  // Старый TextureManager (путь required) штамп никогда не писал — только
-  // ImageBitmapManager (misc и отложенные). Правило перенесено в loadInto:
-  // стамп условен на type === 'bitmap', регистрация в реестре — нет.
-  it('required (type: default) не получает штамп, misc (type: bitmap) получает', async () => {
-    const requiredTexture = new Texture()
-    const miscTexture = new Texture()
+  // Старый TextureManager (путь required, ныне resident) штамп никогда не
+  // писал — только ImageBitmapManager (отложенные). Правило перенесено в
+  // loadInto: стамп условен на type === 'bitmap', регистрация в реестре — нет.
+  // resident грузится через loadPrimaryTextures (type: default), отложенные —
+  // через loadDeferredTextures (type: bitmap): это два разных публичных входа,
+  // поэтому проверяются двумя вызовами, а не одним.
+  it('resident (type: default) не получает штамп, отложенные (type: bitmap) получают', async () => {
+    const residentTexture = new Texture()
+    const deferredTexture = new Texture()
 
     // Разная текстура на каждый путь — иначе не различить, какой вызов какой.
     const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
-      const texture = request.name === REQUIRED_PATH ? requiredTexture : miscTexture
+      const texture = request.name === RESIDENT_PATH ? residentTexture : deferredTexture
       return Promise.resolve({ ok: true, texture })
     })
 
     const observer = makeObserver(load)
 
-    observer.required = [resource(REQUIRED_PATH)]
-    observer.misc = [resource(MISC_PATH)]
+    observer.resident = [resource(RESIDENT_PATH)]
 
     await observer.loadPrimaryTextures()
+    await observer.loadDeferredTextures([{ ...resource(DEFERRED_PATH), actorId: 1 } as IActorBoundResource])
 
-    expect(requiredTexture.userData.resource).toBeUndefined()
-    expect(miscTexture.userData.resource).toBeDefined()
+    expect(residentTexture.userData.resource).toBeUndefined()
+    expect(deferredTexture.userData.resource).toBeDefined()
   })
 
   // Закрепляет `if (!result.ok || !result.texture) return` в loadInto: провал
@@ -100,8 +103,7 @@ describe('ResourceObserver — штамп userData.resource: паритет со
 
     const observer = makeObserver(load)
 
-    observer.required = [resource(FAILING_PATH)]
-    observer.misc = []
+    observer.resident = [resource(FAILING_PATH)]
 
     await observer.loadPrimaryTextures()
 
