@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { Scene, Texture, Vector3 } from 'three'
+import { Mesh, Scene, Texture, Vector3 } from 'three'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { TextureBudget, textureBytes } from '@/core/streaming/TextureBudget'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -74,7 +74,12 @@ function streamingState(observer: ResourceObserver): StreamingInternals {
 function makeObserver(
   budgetBytes: number,
   load: TextureProvider['load']
-): { observer: ResourceObserver; handlers: Record<string, (event: ObservableRecord) => Promise<void>>; data: Map<string, ObservableRecord> } {
+): {
+  observer: ResourceObserver
+  handlers: Record<string, (event: ObservableRecord) => Promise<void>>
+  data: Map<string, ObservableRecord>
+  scene: Scene
+} {
   const handlers: Record<string, (event: ObservableRecord) => Promise<void>> = {}
   const data: Map<string, ObservableRecord> = new Map()
 
@@ -86,17 +91,18 @@ function makeObserver(
   } as unknown as SceneObserver
 
   const textures = { load } as unknown as TextureProvider
+  const scene = new Scene()
 
   const observer = new ResourceObserver(
     sceneObserver,
     textures,
     { setAsset: vi.fn(), setProgress: vi.fn(), setTotal: vi.fn() } as unknown as LoadingProgressReporter,
     { dispatch: vi.fn() } as unknown as NotificationSink,
-    new Scene(),
+    scene,
     new TextureBudget(budgetBytes)
   )
 
-  return { observer, handlers, data }
+  return { observer, handlers, data, scene }
 }
 
 describe('ResourceObserver: closestChange end-to-end', () => {
@@ -578,5 +584,25 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     expect(whereSpy).not.toHaveBeenCalled()
 
     whereSpy.mockRestore()
+  })
+
+  it('успешная загрузка не бросает, когда renderable === null (Fix 4)', async () => {
+    // Тот же провал, что и в evictActor (см. ResourceObserverStreaming.spec.ts),
+    // но на пути успеха loadActor: hasRenderable({ renderable: null }) вернёт
+    // true, node.renderable?.material — undefined, и .updateMaterial() на
+    // undefined бросает необработанным исключением из closestChange.
+    const load = vi.fn((): Promise<LoadResult> => Promise.resolve({ ok: true as const, texture: makeTexture() }))
+
+    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = SOLAR_SYSTEM
+
+    const mesh = new Mesh()
+    mesh.name = 'Mercury'
+    Object.defineProperty(mesh, 'renderable', { value: null, writable: true })
+    scene.add(mesh)
+
+    data.set('Mercury', record('Mercury', 300))
+
+    await expect(handlers['ClosestChange'](record('Mercury', 300))).resolves.toBeUndefined()
   })
 })

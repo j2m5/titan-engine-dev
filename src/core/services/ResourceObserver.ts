@@ -459,6 +459,15 @@ class ResourceObserver {
    * быть в графе сцены (снят, ещё не создан), и `hasRenderable(undefined)`
    * разыменовывает аргумент и бросает. Проверка `node &&` обязательна.
    *
+   * `hasRenderable` проверяет только, что свойство `renderable` СУЩЕСТВУЕТ
+   * (`!== undefined`) — оно возвращает true и для `{ renderable: null }`.
+   * Без явного `node.renderable !== null` `node.renderable?.material`
+   * окажется `undefined`, и `.resetMaterial()` на нём бросит — бросок внутри
+   * `evictActor` прерывает цикл `for (const candidate of decision.evict)` в
+   * `closestChange`, отменяя вытеснение ВСЕХ оставшихся кандидатов этого
+   * пересчёта. `SceneManager.ts:70` уже страхуется тем же двойным условием —
+   * здесь оно обязано быть идентичным.
+   *
    * Пути не удаляются безусловно: `pathStillReferenced` проверяет, ссылается
    * ли на этот же путь другой ЗАГРУЖЕННЫЙ актор (Critical 1 раунда ревью —
    * несколько акторов сценария могут делить один файл текстуры), и если да,
@@ -467,7 +476,9 @@ class ResourceObserver {
   public evictActor(candidate: StreamCandidate): void {
     const node = this.scene.getObjectByName(candidate.name)
 
-    if (node && hasRenderable(node)) (node.renderable?.material as AbstractShaderMaterial).resetMaterial()
+    if (node && hasRenderable(node) && node.renderable !== null) {
+      (node.renderable.material as AbstractShaderMaterial).resetMaterial()
+    }
 
     this.loaded.delete(candidate.actorId)
     this.loadedAt.delete(candidate.actorId)
@@ -613,7 +624,9 @@ class ResourceObserver {
 
     const node = this.scene.getObjectByName(candidate.name)
 
-    if (node && hasRenderable(node)) (node.renderable?.material as AbstractShaderMaterial).updateMaterial()
+    if (node && hasRenderable(node) && node.renderable !== null) {
+      (node.renderable.material as AbstractShaderMaterial).updateMaterial()
+    }
   }
 }
 

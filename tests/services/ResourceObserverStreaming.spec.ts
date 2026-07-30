@@ -113,4 +113,20 @@ describe('ResourceObserver: стриминг', () => {
 
     expect(budget.sizeOf(PATH)).toBe(textureBytes(2048, 1024))
   })
+
+  it('вытеснение не бросает, когда renderable === null (Fix 4)', () => {
+    // hasRenderable вернёт true для { renderable: null } — проверяет только
+    // "свойство существует", не "оно не null". node.renderable?.material
+    // тогда undefined, и .resetMaterial() на undefined бросает. SceneManager
+    // (SceneManager.ts:70) уже страхует именно так: hasRenderable(x) &&
+    // x.renderable !== null — ResourceObserver обязан делать то же самое.
+    const { observer, scene } = makeObserver()
+
+    const mesh = new Mesh()
+    mesh.name = 'Earth'
+    Object.defineProperty(mesh, 'renderable', { value: null, writable: true })
+    scene.add(mesh)
+
+    expect(() => observer.evictActor({ actorId: 1, name: 'Earth', priority: 0, paths: [] })).not.toThrow()
+  })
 })
