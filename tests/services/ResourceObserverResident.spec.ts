@@ -11,7 +11,7 @@ import type { NotificationSink } from '@/core/ports/NotificationSink'
 import type { TextureRequest } from '@/core/textures/types'
 
 describe('ResourceObserver: резидентные берутся из lifecycle', () => {
-  it('грузит все резидентные ресурсы и ни одного стримируемого', async () => {
+  it('запрашивает ровно те одиночные ресурсы, у которых lifecycle === resident — не больше и не меньше', async () => {
     const requested: string[] = []
     const textures = {
       load: vi.fn((request: TextureRequest) => {
@@ -32,19 +32,30 @@ describe('ResourceObserver: резидентные берутся из lifecycle
     observer.scenario = Scenarios[0]
     await observer.loadPrimaryTextures()
 
-    const streamablePaths: string[] = Resource.all()
-      .filter((resource: Resource): boolean => resource.getAttribute('lifecycle') === 'streamable')
+    // Эталон читается из данных В МОМЕНТ ПРОВЕРКИ, а не захардкожен списком —
+    // тест обязан следить за флагом lifecycle, а не фиксировать текущий снимок
+    // путей. Кубмапа исключена намеренно: ей нужен отдельный запрос формы из
+    // шести граней (см. ниже), поэтому в поэлементное сравнение она не входит.
+    const residentSinglePaths: string[] = Resource.all()
+      .filter(
+        (resource: Resource): boolean =>
+          resource.getAttribute('lifecycle') === 'resident' && resource.getAttribute('resourceType') !== 'cube'
+      )
       .map((resource: Resource): string => resource.getAttribute('path', ''))
       .toArray()
 
-    // Ни один стримируемый путь не запрошен при старте сценария.
-    expect(requested.filter((name: string): boolean => streamablePaths.includes(name))).toEqual([])
+    const cubeName = 'cubemaps-scene-main'
+    const requestedSingles: string[] = requested.filter((name: string): boolean => name !== cubeName)
 
-    // Одиночные резидентные запрошены поимённо; кубмапа идёт одним запросом
-    // из шести граней под собственным именем, поэтому считается отдельно.
-    expect(requested).toContain('default.png')
-    expect(requested).toContain('planets/saturn/saturn_rings.png')
-    expect(requested).toContain('cubemaps-scene-main')
+    // Точное соответствие в обе стороны, отсортированное (а не Set): ничего
+    // резидентного не потеряно, ничего лишнего (стримируемого, дублирующего)
+    // не запрошено. Sort ловит и повторный запрос одного и того же пути, где
+    // сравнение множеств смолчало бы.
+    expect(requestedSingles.slice().sort()).toEqual(residentSinglePaths.slice().sort())
+
+    // Кубмапа собирается отдельным путём — шесть граней одним запросом под
+    // собственным именем, проверяется по факту обращения, а не поэлементно.
+    expect(requested).toContain(cubeName)
 
     resourceStorage.deleteAllTextures()
   })
