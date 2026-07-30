@@ -10,6 +10,14 @@ function textureSized(width: number, height: number): Texture {
   return texture
 }
 
+/** Кубическая текстура — `image` это массив шести граней, у массива нет `.width`. */
+function textureCube(): Texture {
+  const texture = new Texture()
+  texture.image = [{}, {}, {}, {}, {}, {}]
+
+  return texture
+}
+
 describe('textureBytes', () => {
   it('считает RGBA8 плюс мипы', () => {
     // 2048 × 1024 × 4 = 8 МиБ; с мипами примерно на треть больше.
@@ -48,6 +56,17 @@ describe('TextureBudget', () => {
     budget.measure('planets/mars.jpg', new Texture())
 
     expect(budget.sizeOf('planets/mars.jpg')).toBeUndefined()
+  })
+
+  it('кубическая текстура (массив граней) не запоминается', () => {
+    // В этом проекте все кубические ресурсы объявлены resident и не участвуют
+    // в бюджете стриминга — measure должен узнать массив граней и пропустить
+    // его осознанно, а не случайно из-за отсутствующего .width у массива.
+    const budget = new TextureBudget(1024)
+
+    budget.measure('planets/skybox.jpg', textureCube())
+
+    expect(budget.sizeOf('planets/skybox.jpg')).toBeUndefined()
   })
 
   it('forget убирает путь из кеша', () => {
