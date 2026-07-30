@@ -116,7 +116,7 @@ export const Resources: IResource[] = [
   { id: 110, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/yavin/iv/iv.png", lifetime: 6e4, colorSpace: "srgb" },
   { id: 111, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/korriban/korriban.png", lifetime: 6e4, colorSpace: "srgb" },
   { id: 112, resourceType: "bump", lifecycle: "streamable", path: "planets/StarWars/korriban/korriban_bump.png", lifetime: 6e4 },
-  { id: 113, resourceType: "cloud", lifecycle: "streamable", path: "planets/StarWars/korriban/korriban_clouds.png", lifetime: 6e4 },
+  { id: 113, resourceType: "cloud", lifecycle: "streamable", path: "planets/StarWars/korriban/korriban_clouds.png", lifetime: 6e4, colorSpace: "srgb" },
   { id: 114, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/darkness/darkness.png", lifetime: 6e4, colorSpace: "srgb" },
   { id: 115, resourceType: "night", lifecycle: "streamable", path: "planets/StarWars/darkness/darkness_night.png", lifetime: 6e4 },
   { id: 116, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/darkness/darkness_rings.png", lifetime: 6e4, colorSpace: "" },
