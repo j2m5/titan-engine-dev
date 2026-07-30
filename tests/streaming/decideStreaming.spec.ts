@@ -129,22 +129,56 @@ describe('decideStreaming', () => {
     expect(decision.evict).toEqual([])
   })
 
-  it('слишком дорогой не влезает — цикл продолжает, а не останавливается', () => {
-    // Актор 1 приоритетнее, но стоит два 8K и не влезает в бюджет на один.
-    // Актор 2 дешевле и влезает — цикл обязан пропустить первого и дойти
-    // до второго (continue), а не остановиться на первом же промахе (break).
-    const sizeOf = (path: string): number => (path === 'p2.jpg' ? SIZE_2K : SIZE_8K)
-
+  it('дорогой, но не топ приоритета — пропускается (continue), а не останавливает цикл', () => {
+    // Пол защищает только САМОГО приоритетного кандидата (см. тесты floor
+    // ниже) — для всех остальных рангов действует обычная проверка. Актор 2
+    // стоит два 8K (вдвое дороже всего бюджета) и стоит НЕ на первом месте
+    // по приоритету — цикл обязан пропустить его (continue) и дойти до
+    // актора 3, а не остановиться на первом же промахе (break) и не
+    // применить к нему пол, как к топу.
     const decision = decideStreaming(
-      [candidate(1, 0.9, 'a.jpg', 'b.jpg'), candidate(2, 0.5)],
+      [candidate(1, 0.9), candidate(2, 0.6, 'a.jpg', 'b.jpg'), candidate(3, 0.3)],
       new Set(),
       nothingPinned,
       noneExcluded,
-      sizeOf,
+      all8K,
+      SIZE_8K * 2
+    )
+
+    expect(decision.load.map((c: StreamCandidate): number => c.actorId)).toEqual([1, 3])
+  })
+
+  it('пол: топ-кандидат дороже всего бюджета всё равно допускается', () => {
+    // Харон (диффуз+bump 16K, 1366 МиБ) дороже всего бюджета (1 ГиБ) целиком —
+    // без пола он не попал бы НИКУДА, и тело, на которое смотрит пользователь,
+    // осталось бы с вечной заглушкой. Пол гарантирует резидентность самому
+    // приоритетному кандидату независимо от его стоимости.
+    const decision = decideStreaming(
+      [candidate(1, 0.9, 'a.jpg', 'b.jpg', 'c.jpg')], // 3 × 8K > бюджет в 1 × 8K
+      new Set(),
+      nothingPinned,
+      noneExcluded,
+      all8K,
       SIZE_8K
     )
 
-    expect(decision.load.map((c: StreamCandidate): number => c.actorId)).toEqual([2])
+    expect(decision.load.map((c: StreamCandidate): number => c.actorId)).toEqual([1])
+  })
+
+  it('пол не распространяется на кандидата после дорогого топа', () => {
+    // Топ уже перебрал весь бюджет (и сверх того) — следующий по приоритету
+    // по-прежнему проверяется по ОСТАВШЕМУСЯ бюджету, который топ исчерпал:
+    // перерасход ограничен одним телом, а не превращается в цепочку допусков.
+    const decision = decideStreaming(
+      [candidate(1, 0.9, 'a.jpg', 'b.jpg', 'c.jpg'), candidate(2, 0.5)],
+      new Set(),
+      nothingPinned,
+      noneExcluded,
+      all8K,
+      SIZE_8K
+    )
+
+    expect(decision.load.map((c: StreamCandidate): number => c.actorId)).toEqual([1])
   })
 
   it('вытесняет несколько тел в порядке убывания приоритета', () => {

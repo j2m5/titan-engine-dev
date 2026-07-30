@@ -33,6 +33,13 @@ function makeTexture(): Texture {
   return texture
 }
 
+/** Текстура, чей ЗАМЕРЕННЫЙ вес — как у 8K, а не как у стандартной мок-2K. */
+function makeBigTexture(): Texture {
+  const texture: Texture = new Texture()
+  texture.image = { width: 8192, height: 4096 }
+  return texture
+}
+
 /**
  * Приватная бухгалтерия наблюдателя, доступная снаружи только приведением
  * типа — тот же приём, что и в `ResourceObserverScenario.spec.ts`. Нужен,
@@ -467,5 +474,41 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     hold.resolve?.({ ok: true, texture: makeTexture() })
     await first
+  })
+
+  it('тело, чей замеренный вес превышает весь бюджет, не вытесняется и не грузится заново (пол Fix 1)', async () => {
+    // Меркурий — единственный кандидат, значит всегда топ по приоритету: пол
+    // decideStreaming обязан удержать его в reserved на КАЖДОМ цикле, даже
+    // когда честный замер (не слепая оценка) показывает вес больше всего
+    // бюджета. Без пола актор сначала грузится вслепую (первый цикл), замер
+    // на цикле 2 вскрывает перерасход, и БЕЗ пола актор ушёл бы в evict —
+    // ровно тот бесконечный цикл перезагрузки, который Fix 1 обязан убрать.
+    const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
+      const texture = makeBigTexture() // замер даст SIZE_8K на каждый путь
+      texture.name = request.name
+      return Promise.resolve({ ok: true as const, texture })
+    })
+
+    // Бюджет впритык ОДНОМУ 8K-пути — у Меркурия их два (диффуз+bump), то
+    // есть реальный вес после замера (2×SIZE_8K) вдвое больше всего бюджета.
+    const { observer, handlers, data } = makeObserver(SIZE_8K, load)
+    const evictSpy = vi.spyOn(observer, 'evictActor')
+
+    data.set('Mercury', record('Mercury', 300))
+
+    // Цикл 1: оценка ещё слепая (ASSUMED_TEXTURE_BYTES = SIZE_8K на путь) —
+    // пол по-любому применился бы, но здесь актор проходит и без него, потому
+    // что слепая оценка для одного пути ровно на бюджет. Оба пути грузятся,
+    // budget.measure фиксирует их РЕАЛЬНЫЙ вес — SIZE_8K каждый.
+    await handlers['ClosestChange'](record('Mercury', 300))
+    expect(load).toHaveBeenCalledTimes(2)
+
+    // Цикл 2: sizeOf теперь отдаёт честные SIZE_8K на путь, суммарно 2×SIZE_8K
+    // — больше всего бюджета. Меркурий по-прежнему единственный (топ)
+    // кандидат — пол обязан удержать его резидентным.
+    await handlers['ClosestChange'](record('Mercury', 300))
+
+    expect(evictSpy).not.toHaveBeenCalled()
+    expect(load).toHaveBeenCalledTimes(2)
   })
 })
