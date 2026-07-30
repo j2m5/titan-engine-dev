@@ -41,7 +41,7 @@ function makeObserver(load: TextureProvider['load']): ResourceObserver {
 }
 
 function resource(path: string, extra: Partial<IResource> = {}): IResource {
-  return { id: 1, resourceType: 'diffuse', lifecycle: 'streamable', lifetime: 5000, path, ...extra } as IResource
+  return { id: 1, resourceType: 'diffuse', lifecycle: 'streamable', path, ...extra } as IResource
 }
 
 /**

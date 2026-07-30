@@ -126,7 +126,6 @@ export interface IResource extends ResourceParameters {
   readonly id: number
   readonly resourceType: ResourceType
   readonly lifecycle: ResourceLifecycle
-  readonly lifetime: number
   readonly path: string
 }
 

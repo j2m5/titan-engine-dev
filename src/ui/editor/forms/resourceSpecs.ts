@@ -18,7 +18,6 @@ export const resourcesSpec: TableSpec = {
     { key: 'resourceType', label: 'Type', kind: 'select-enum', options: resourceTypeOptions },
     { key: 'lifecycle', label: 'Lifecycle', kind: 'select-enum', options: lifecycleOptions },
     { key: 'path', label: 'Path', kind: 'text', full: true },
-    { key: 'lifetime', label: 'Lifetime (ms, 0 = infinite)', kind: 'number', step: 1000 },
     { key: 'colorSpace', label: 'Color space', kind: 'text' }
   ],
   // в списке показываем тип + усечённый путь
@@ -26,8 +25,7 @@ export const resourcesSpec: TableSpec = {
   defaults: () => ({
     resourceType: 'diffuse',
     lifecycle: 'streamable',
-    path: '',
-    lifetime: 60000
+    path: ''
   })
 }
 
