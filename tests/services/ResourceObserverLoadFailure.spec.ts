@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Scene } from 'three'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
+import { TextureBudget } from '@/core/streaming/TextureBudget'
 import type { SceneObserver } from '@/core/services/SceneObserver'
 import type { TextureProvider } from '@/core/textures/TextureProvider'
 import type { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
@@ -21,12 +22,13 @@ function makeObserver(
     textures,
     { setAsset: vi.fn(), setProgress: vi.fn(), setTotal: vi.fn() } as unknown as LoadingProgressReporter,
     { dispatch } as unknown as NotificationSink,
-    new Scene()
+    new Scene(),
+    new TextureBudget(1024 ** 3)
   )
 }
 
 function resource(path: string, extra: Partial<IResource> = {}): IResource {
-  return { id: 1, resourceType: 'diffuse', lifecycle: 'streamable', lifetime: 5000, path, ...extra } as IResource
+  return { id: 1, resourceType: 'diffuse', lifecycle: 'streamable', path, ...extra } as IResource
 }
 
 describe('ResourceObserver — опечатка в расширении не вешает загрузку сценария', () => {
@@ -36,14 +38,13 @@ describe('ResourceObserver — опечатка в расширении не в�
   // цепочке (loadInto → Promise.all → Application.run → EngineStore.setScenario)
   // ни один уровень не оборачивал вызов в try, поэтому отказ раньше улетал бы
   // наружу необработанным и приложение зависало бы на экране загрузки.
-  it('required: бросок TextureProvider не долетает наружу loadPrimaryTextures, дispatch получает уведомление', async () => {
+  it('resident: бросок TextureProvider не долетает наружу loadPrimaryTextures, дispatch получает уведомление', async () => {
     const dispatch = vi.fn()
     const load = vi.fn().mockRejectedValue(new Error('TextureProvider: нет стратегии для planets/typo.tga'))
 
     const observer = makeObserver(load, dispatch)
 
-    observer.required = [resource(TYPO_PATH)]
-    observer.misc = []
+    observer.resident = [resource(TYPO_PATH)]
 
     await expect(observer.loadPrimaryTextures()).resolves.toBeUndefined()
 
@@ -67,8 +68,7 @@ describe('ResourceObserver — опечатка в расширении не в�
       // седьмой грани нет намеренно — ровно тот скукоженный список, который
       // по описанию бага молча топит фон.
     ]
-    observer.required = []
-    observer.misc = []
+    observer.resident = []
 
     await expect(observer.loadPrimaryTextures()).resolves.toBeUndefined()
 

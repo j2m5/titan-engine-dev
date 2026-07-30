@@ -14,6 +14,7 @@ import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTrans
 import { Postprocessing } from '@/core/graphic/Postprocessing'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { LeakDetector } from '@/core/lifecycle/LeakDetector'
+import { TextureBudget } from '@/core/streaming/TextureBudget'
 
 class AppServiceProvider extends ServiceProvider {
   public register(): void {
@@ -68,6 +69,23 @@ class AppServiceProvider extends ServiceProvider {
         )
     )
 
+    // Бюджет самоназначенный: WebGL не умеет спрашивать, сколько видеопамяти
+    // занято. Гигабайт — нижний грейд видеопамяти современных карт, и вкладке
+    // кроме текстур нужны ещё таргеты постобработки и LUT атмосферы.
+    //
+    // Проверка порога идёт по худшим соседям, а не по одиночному телу: соседи —
+    // это тела под общим родителем (Земля и Луна лежат под барицентром системы
+    // Земля—Луна, не друг под другом), они бывают крупными в кадре разом и
+    // делят бюджет. Худшая пара сцены — Земля (597 МиБ) и Луна (341 МиБ),
+    // вместе 939 МиБ; следующая, Титан с Энцеладом, уже 725 МиБ.
+    //
+    // Запас невелик — 85 МиБ, — поэтому новая карта 8K у Земли выведет пару за
+    // бюджет и Луна снова начнёт терять текстуру. Настоящее лекарство не в
+    // подъёме порога, а в приоритете карт внутри тела (диффуз обязателен,
+    // второстепенные — по остатку); пока единица стриминга — актор целиком,
+    // порог обязан покрывать самое жадное тело сцены вместе с его соседом.
+    this.app.singleton(Tokens.TextureBudget, () => new TextureBudget(1024 ** 3))
+
     this.app.singleton(
       Tokens.ResourceObserver,
       (c: Container) =>
@@ -76,7 +94,8 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.TextureProvider),
           c.get(Tokens.LoadingProgressReporter),
           c.get(Tokens.NotificationSink),
-          c.get(Tokens.Scene)
+          c.get(Tokens.Scene),
+          c.get(Tokens.TextureBudget)
         )
     )
 

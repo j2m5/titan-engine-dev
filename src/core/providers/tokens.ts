@@ -22,6 +22,7 @@ import type { AstroControls } from '@/core/libs/AstroControls'
 import type { Postprocessing } from '@/core/graphic/Postprocessing'
 import type { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
+import type { TextureBudget } from '@/core/streaming/TextureBudget'
 
 export const Tokens = {
   Engine: token<Engine>('Engine'),
@@ -45,5 +46,6 @@ export const Tokens = {
   Clock: token<Clock>('Clock'),
   Postprocessing: token<Postprocessing>('Postprocessing'),
   RenderableFactory: token<RenderableFactory>('RenderableFactory'),
-  LeakDetector: token<LeakDetector>('LeakDetector')
+  LeakDetector: token<LeakDetector>('LeakDetector'),
+  TextureBudget: token<TextureBudget>('TextureBudget')
 } as const

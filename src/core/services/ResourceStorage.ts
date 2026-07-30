@@ -35,12 +35,23 @@ class ResourceStorage {
     this._textures.push(texture)
   }
 
+  /**
+   * Диспоузит КАЖДУЮ текстуру с этим именем, а не только первую найденную.
+   *
+   * Реестр не гарантирует уникальность имени сам по себе — конкурентная
+   * загрузка одного пути двумя акторами одного цикла (см. `ResourceObserver.
+   * loadActor`, `pathLoads`) в принципе может оставить два объекта `Texture`
+   * под одним именем, если что-то в цепочке дедупликации однажды не
+   * сработает. Раньше `dispose()` вызывался только у первого совпадения по
+   * `getTexture`, а `reject` убирал из коллекции ВСЕ совпадения разом — вторая
+   * текстура выпадала из реестра недиспоузнутой и недостижимой: `deleteAllTextures()`
+   * при разборке сценария больше не мог её найти. Утечка ровно того ресурса,
+   * ради учёта которого существует эта арка.
+   */
   public deleteTexture(key: string): void {
-    const texture: Texture | undefined = this.getTexture(key)
-
-    if (texture) {
+    this._textures.where('name', key).each((texture: Texture): void => {
       texture.dispose()
-    }
+    })
 
     this._textures = this._textures.reject((texture: Texture): boolean => texture.name === key)
   }

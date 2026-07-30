@@ -68,8 +68,8 @@ function syntheticSnapshot(): DatabaseSnapshot {
     ],
     placements: [],
     resources: [
-      { id: 90, resourceType: 'diffuse', lifecycle: 'resident', path: 'sun.png', lifetime: 0, colorSpace: 'srgb' },
-      { id: 16, resourceType: 'night', lifecycle: 'streamable', path: 'planets/x/y.png', lifetime: 60000 }
+      { id: 90, resourceType: 'diffuse', lifecycle: 'resident', path: 'sun.png', colorSpace: 'srgb' },
+      { id: 16, resourceType: 'night', lifecycle: 'streamable', path: 'planets/x/y.png' }
     ],
     actorResource: [{ id: 1, actorId: 11, resourceId: 16 }]
   }

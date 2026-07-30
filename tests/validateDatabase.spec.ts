@@ -292,7 +292,7 @@ describe('validateDatabase — внешние ключи', () => {
 describe('validateDatabase — pivot actor_resource', () => {
   it('ловит висячий actorId в пивоте', () => {
     const db = baseSnapshot()
-    db.resources.push({ id: 90, resourceType: 'diffuse', lifecycle: 'resident', path: 'x.png', lifetime: 0 } as any)
+    db.resources.push({ id: 90, resourceType: 'diffuse', lifecycle: 'resident', path: 'x.png' })
     db.actorResource.push({ id: 1, actorId: 999, resourceId: 90 })
     const result = validateDatabase(db)
     expect(result.errors.some((e) => e.collection === 'actorResource' && /actorId=999/.test(e.message))).toBe(true)
@@ -307,7 +307,7 @@ describe('validateDatabase — pivot actor_resource', () => {
 
   it('валидная связь пивота не даёт ошибок', () => {
     const db = baseSnapshot()
-    db.resources.push({ id: 90, resourceType: 'diffuse', lifecycle: 'resident', path: 'x.png', lifetime: 0 } as any)
+    db.resources.push({ id: 90, resourceType: 'diffuse', lifecycle: 'resident', path: 'x.png' })
     db.actorResource.push({ id: 1, actorId: 10, resourceId: 90 })
     const result = validateDatabase(db)
     expect(result.errors.filter((e) => e.collection === 'actorResource')).toHaveLength(0)

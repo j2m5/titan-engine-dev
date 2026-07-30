@@ -3,7 +3,7 @@ import { cubeTextureName, cubeTextureRequest, textureRequestFrom } from '@/core/
 import type { IResource } from '@/core/models/types'
 
 function resource(path: string, extra: Partial<IResource> = {}): IResource {
-  return { id: 1, resourceType: 'diffuse', lifecycle: 'streamable', lifetime: 0, path, ...extra } as IResource
+  return { id: 1, resourceType: 'diffuse', lifecycle: 'streamable', path, ...extra }
 }
 
 const FACES: string[] = ['px', 'nx', 'py', 'ny', 'pz', 'nz'].map((f) => `cubemaps/scene/main/${f}.jpg`)
