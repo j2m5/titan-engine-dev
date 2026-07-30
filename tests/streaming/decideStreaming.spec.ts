@@ -162,6 +162,38 @@ describe('decideStreaming', () => {
     expect(decision.evict.map((c: StreamCandidate): number => c.actorId)).toEqual([2, 1])
   })
 
+  it('wanted включает исключённого кандидата, если тот сам по себе влезает в бюджет', () => {
+    // Тот же сетап, что и «исключённый актор не грузится, но и не мешает
+    // остальным»: актор 1 приоритетнее и по бюджету заслуживает резидентности
+    // сам по себе — исключение блокирует только ЗАГРУЗКУ (load), а не то,
+    // что актор всё ещё «в зоне». Раньше единственная wanted строилась ИЗ
+    // decision.load и потому НИКОГДА не содержала исключённых — отсюда и
+    // Critical 2: вызывающий код не мог отличить «ещё приоритетен, просто
+    // заблокирован» от «покинул зону», и снимал блокировку повтора на первом
+    // же цикле после провала.
+    const decision = decideStreaming(
+      [candidate(1, 0.9), candidate(2, 0.5)],
+      new Set(),
+      nothingPinned,
+      new Set([1]),
+      all8K,
+      SIZE_8K
+    )
+
+    expect(decision.wanted.has(1)).toBe(true)
+    expect(decision.load.map((c: StreamCandidate): number => c.actorId)).toEqual([2])
+  })
+
+  it('wanted включает уже загруженного кандидата, даже если его нет в load', () => {
+    // Актор уже резидентен и по-прежнему влезает в бюджет — decideStreaming
+    // не отдаёт его в load (незачем перезапрашивать то, что уже загружено),
+    // но по приоритету/бюджету он всё ещё «wanted».
+    const decision = decideStreaming([candidate(1, 0.9)], new Set([1]), nothingPinned, noneExcluded, all8K, SIZE_8K)
+
+    expect(decision.wanted.has(1)).toBe(true)
+    expect(decision.load).toEqual([])
+  })
+
   it('текстуры разного веса делят бюджет по-разному', () => {
     const sizeOf = (path: string): number => (path === 'p1.jpg' ? SIZE_2K : SIZE_8K)
 

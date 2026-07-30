@@ -68,8 +68,24 @@ class ResourceObserver {
   private readonly loadedAt: Map<number, number> = new Map()
   /** Акторы с загрузкой в полёте: их нельзя ни запрашивать, ни вытеснять. */
   private readonly inFlight: Set<number> = new Set()
-  /** Акторы, чья загрузка провалилась; сбрасывается при выходе из набора. */
+  /** Акторы, чья загрузка провалилась; сбрасывается, когда актор выходит из `wanted`. */
   private readonly attempted: Set<number> = new Set()
+  /**
+   * actorId → пути, за которые актор отвечает — для проверки совместного
+   * владения путём. Путь реестра текстур ключуется по пути ресурса, а не по
+   * актору: несколько акторов одного сценария могут разделять один и тот же
+   * файл (например, Korriban I–VII делят и диффуз, и bump). Без этой карты
+   * вытеснение одного из них освобождало бы текстуру, которую показывает
+   * другой, а загрузка второго задваивала бы уже резидентный путь.
+   */
+  private readonly actorPaths: Map<number, string[]> = new Map()
+  /**
+   * Счётчик сбросов сценария. `loadActor` захватывает значение до первого
+   * `await`; если оно изменилось к моменту, когда путь догрузился, — сценарий
+   * сменился посреди загрузки, и результат отбрасывается вместо регистрации
+   * в уже разобранном реестре.
+   */
+  private epoch: number = 0
 
   /**
    * @param sceneObserver Наблюдатель за сценой
@@ -114,12 +130,16 @@ class ResourceObserver {
    * `setMap` при `scenario === null` выходит сразу, то есть выход в меню не
    * очистил бы ничего.
    *
-   * Состояние стриминга (`loaded`, `loadedAt`, `inFlight`, `attempted`) обязано
-   * обнуляться, потому что разборка сценария освобождает все текстуры разом
-   * (`Application.teardown`). Оставшиеся записи выглядели бы для
-   * `closestChange` уже загруженными, повторной загрузки не случилось бы, и
-   * материалы при возврате на посещённый сценарий остались бы на заглушке из
-   * `getTextureOrMake`.
+   * Состояние стриминга (`loaded`, `loadedAt`, `inFlight`, `attempted`,
+   * `actorPaths`) обязано обнуляться, потому что разборка сценария освобождает
+   * все текстуры разом (`Application.teardown`). Оставшиеся записи выглядели
+   * бы для `closestChange` уже загруженными, повторной загрузки не случилось
+   * бы, и материалы при возврате на посещённый сценарий остались бы на
+   * заглушке из `getTextureOrMake`.
+   *
+   * `epoch` увеличивается, чтобы загрузка, начатая в прошлом сценарии, но ещё
+   * не завершившаяся (await не успел резолвиться), опознала смену по выходу
+   * из `await` и не записала результат в уже разобранное состояние.
    *
    * `_map` обнуляется, потому что `setMap` дописывает в него через `set` без
    * очистки. Без сброса карта сценария копит чужих акторов из предыдущего
@@ -128,10 +148,12 @@ class ResourceObserver {
   public set scenario(scenario: ScenarioConfig | null) {
     this._scenario = scenario
     this._sceneBackground = null
+    this.epoch += 1
     this.loaded.clear()
     this.loadedAt.clear()
     this.inFlight.clear()
     this.attempted.clear()
+    this.actorPaths.clear()
     this._map.clear()
     this.setMap()
     this.setCubeTextures()
@@ -300,11 +322,13 @@ class ResourceObserver {
       this.budget.limit()
     )
 
-    // Провал сбрасывается, когда актор покидает набор: сетевой сбой повторится
-    // при следующем подлёте, битый путь не даст бесконечного цикла.
-    const wanted: Set<number> = new Set(decision.load.map((c: StreamCandidate): number => c.actorId))
+    // Провал снимается только когда актор перестаёт ЗАСЛУЖИВАТЬ резидентность
+    // по приоритету и бюджету (decision.wanted) — а не когда его не видно в
+    // decision.load, где исключённый (=attempted) и так никогда не появится:
+    // то прежнее условие снимало блокировку на первом же цикле после провала,
+    // и битый путь ретраился бы бесконечно (Critical 2 раунда ревью).
     for (const actorId of this.attempted) {
-      if (!wanted.has(actorId) && !this.loaded.has(actorId)) this.attempted.delete(actorId)
+      if (!decision.wanted.has(actorId)) this.attempted.delete(actorId)
     }
 
     for (const candidate of decision.evict) this.evictActor(candidate)
@@ -353,49 +377,134 @@ class ResourceObserver {
    * заглушку, и только потом текстуры освобождаются. Иначе кадр между шагами
    * рисуется освобождённой текстурой. Трогается ТОЛЬКО выселяемый актор —
    * прежний код сбрасывал материалы всех планет сцены разом.
+   *
+   * `getObjectByName` возвращает `Object3D | undefined` — актора может не
+   * быть в графе сцены (снят, ещё не создан), и `hasRenderable(undefined)`
+   * разыменовывает аргумент и бросает. Проверка `node &&` обязательна.
+   *
+   * Пути не удаляются безусловно: `pathStillReferenced` проверяет, ссылается
+   * ли на этот же путь другой ЗАГРУЖЕННЫЙ актор (Critical 1 раунда ревью —
+   * несколько акторов сценария могут делить один файл текстуры), и если да,
+   * путь остаётся резидентным — вытесняется только собственный учёт актора.
    */
   public evictActor(candidate: StreamCandidate): void {
     const node = this.scene.getObjectByName(candidate.name)
 
-    if (hasRenderable(node)) (node.renderable?.material as AbstractShaderMaterial).resetMaterial()
-
-    for (const path of candidate.paths) {
-      resourceStorage.deleteTexture(path)
-      this.budget.forget(path)
-    }
+    if (node && hasRenderable(node)) (node.renderable?.material as AbstractShaderMaterial).resetMaterial()
 
     this.loaded.delete(candidate.actorId)
     this.loadedAt.delete(candidate.actorId)
+    this.actorPaths.delete(candidate.actorId)
+
+    for (const path of candidate.paths) {
+      if (this.pathStillReferenced(path)) continue
+
+      resourceStorage.deleteTexture(path)
+      this.budget.forget(path)
+    }
   }
 
-  /** Грузит текстуры актора и обновляет его материал. */
+  /**
+   * Путь всё ещё нужен, если на него ссылается какой-то ДРУГОЙ актор,
+   * который сейчас в `loaded`. Вызывать ПОСЛЕ того, как выселяемый/
+   * откатываемый актор убран из `loaded`/`actorPaths` — иначе он сам себя
+   * посчитает «другим» владельцем.
+   */
+  private pathStillReferenced(path: string): boolean {
+    for (const actorId of this.loaded) {
+      if (this.actorPaths.get(actorId)?.includes(path)) return true
+    }
+
+    return false
+  }
+
+  /**
+   * Грузит текстуры актора и обновляет его материал.
+   *
+   * Путь, уже присутствующий в реестре (Critical 1 — путь могут разделять
+   * несколько акторов сценария, например диффуз и bump Korriban I–VII),
+   * повторно не запрашивается: сеть не дёргается дважды, а актор всё равно
+   * записывается его владельцем в `actorPaths` — иначе позже некому будет
+   * защитить путь при вытеснении первого владельца.
+   *
+   * Частичный провал (один путь не загрузился, остальные — да) откатывает
+   * актора целиком: уже зарегистрированные пути ЭТОГО вызова освобождаются
+   * (если на них не ссылается кто-то ещё из `loaded`, см.
+   * `pathStillReferenced`), актор целиком уходит в `attempted`. Альтернатива
+   * — оставить актора в `loaded` «деградировавшим» — отклонена: `loaded`
+   * тогда перестаёт означать «показывает то, что должен», а деградировавший
+   * актор либо никогда не получит второй попытки, пока остаётся в зоне
+   * приоритета (`decideStreaming` не грузит уже `loaded`), либо потребовался
+   * бы отдельный механизм ретрая частичных провалов. Откат проще и
+   * переиспользует уже существующий retry-путь полного провала.
+   *
+   * Сценарий может смениться, пока путь ещё грузится: `epoch` захватывается
+   * до первого `await`, и если он изменился к моменту, когда путь догрузился,
+   * результат отбрасывается (текстура диспоузится, если успела прийти) вместо
+   * записи в уже разобранный реестр — иначе учёт нового сценария заражается
+   * акторами старого.
+   *
+   * Бухгалтерия `inFlight` обёрнута в `try/finally`: она не должна утечь
+   * навсегда, даже если что-то внутри цикла бросит неожиданно.
+   */
   private async loadActor(candidate: StreamCandidate): Promise<void> {
+    const epoch: number = this.epoch
+
     this.inFlight.add(candidate.actorId)
     this.loaded.add(candidate.actorId)
+    this.actorPaths.set(candidate.actorId, candidate.paths)
 
     let ok: boolean = true
 
-    for (const path of candidate.paths) {
-      const resource: Resource | undefined = Resource.where({ path }).first()
+    try {
+      for (const path of candidate.paths) {
+        if (resourceStorage.getTexture(path)) continue
 
-      if (!resource) continue
+        const resource: Resource | undefined = Resource.where({ path }).first()
 
-      const result = await this.tryLoad(textureRequestFrom(resource.toJSON() as IResource))
+        if (!resource) continue
 
-      if (!result || !result.ok || !result.texture) {
-        ok = false
-        continue
+        const result = await this.tryLoad(textureRequestFrom(resource.toJSON() as IResource))
+
+        if (this.epoch !== epoch) {
+          if (result?.ok && result.texture) result.texture.dispose()
+
+          this.loaded.delete(candidate.actorId)
+          this.actorPaths.delete(candidate.actorId)
+
+          return
+        }
+
+        if (!result || !result.ok || !result.texture) {
+          ok = false
+          continue
+        }
+
+        this.budget.measure(path, result.texture)
+        resourceStorage.addTexture(result.texture)
       }
-
-      this.budget.measure(path, result.texture)
-      resourceStorage.addTexture(result.texture)
+    } finally {
+      this.inFlight.delete(candidate.actorId)
     }
 
-    this.inFlight.delete(candidate.actorId)
+    if (this.epoch !== epoch) {
+      this.loaded.delete(candidate.actorId)
+      this.actorPaths.delete(candidate.actorId)
+
+      return
+    }
 
     if (!ok) {
       this.attempted.add(candidate.actorId)
       this.loaded.delete(candidate.actorId)
+      this.actorPaths.delete(candidate.actorId)
+
+      for (const path of candidate.paths) {
+        if (this.pathStillReferenced(path)) continue
+
+        resourceStorage.deleteTexture(path)
+        this.budget.forget(path)
+      }
 
       return
     }
@@ -404,7 +513,7 @@ class ResourceObserver {
 
     const node = this.scene.getObjectByName(candidate.name)
 
-    if (hasRenderable(node)) (node.renderable?.material as AbstractShaderMaterial).updateMaterial()
+    if (node && hasRenderable(node)) (node.renderable?.material as AbstractShaderMaterial).updateMaterial()
   }
 }
 
