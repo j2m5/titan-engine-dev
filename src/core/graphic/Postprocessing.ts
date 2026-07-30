@@ -14,8 +14,10 @@ import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffec
 // Опции эффектов вынесены в константы под контракт-тесты
 // (tests/graphic/PostprocessingContract.spec.ts).
 // Инвариант bloom-guard: luminanceThreshold (1.0) обязан оставаться ВЫШЕ
-// LDR-клампа планеты (0.99, PlanetShaderTemplate) — планеты не блумят,
-// свечение получают только честные HDR-источники (звёзды, диск ЧД, туманности).
+// LDR-клампа планеты (0.99, PlanetShaderTemplate) — диффуз-композит планеты
+// остаётся ниже порога и не блумит. Но HDR-глинт океана добавляется ПОСЛЕ
+// клампа (см. PlanetShaderTemplate) и блумит намеренно. Честные HDR-источники:
+// звёзды, диск ЧД, туманности, глинт.
 export const BLOOM_OPTIONS = {
   radius: 0.9,
   blendFunction: BlendFunction.SCREEN,

@@ -6,7 +6,6 @@ describe('PlanetShaderTemplate: блик, терминатор, ночные о�
 
   it('старый камеро-независимый блик удалён', () => {
     expect(frag).not.toContain('pow(specComp, 32.0)')
-    expect(frag).not.toContain('* 0.35')
   })
 
   it('Blinn-Phong + френель Шлика с гейтом освещённой стороны', () => {

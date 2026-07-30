@@ -11,7 +11,6 @@ const defaultUniforms = {
   bumpMap: new Uniform(null),
   bumpScale: new Uniform(0),
   emission: new Uniform(1),
-  targetRadius: new Uniform(0),
   uSpecularStrength: new Uniform(2.0)
 }
 const ringShadowUniforms = AppUniformsChunk.ringShadowUniforms
@@ -148,7 +147,8 @@ export const PlanetShaderTemplate: ShaderProps = {
                     * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor;
       #endif
 
-      // Потолок глинта: планета целиком остаётся далеко под half-float/AgX
+      // Потолок глинта: планета целиком остаётся далеко под half-float/AgX.
+      // При текущих дефолтах пик ~3.0 — потолок рассчитан на подъём uSpecularStrength.
       gl_FragColor = vec4(min(finalColor, vec3(4.0)), 1.0);
 
       ${ShaderChunk['tonemapping_fragment']}
