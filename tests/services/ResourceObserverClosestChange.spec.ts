@@ -33,6 +33,25 @@ function makeTexture(): Texture {
   return texture
 }
 
+/**
+ * Приватная бухгалтерия наблюдателя, доступная снаружи только приведением
+ * типа — тот же приём, что и в `ResourceObserverScenario.spec.ts`. Нужен,
+ * когда поведенческие побочные эффекты (счётчик сетевых вызовов, вызов
+ * `evictActor`) не отличают "гварда сработала" от "гварда сломана, но
+ * дедупликация путей молча замаскировала последствия" — ровно то, что
+ * произошло с прежней версией эпохального теста (round 3 ревью).
+ */
+type StreamingInternals = {
+  loaded: Set<number>
+  inFlight: Set<number>
+  actorPaths: Map<number, string[]>
+  pathLoads: Map<string, Promise<LoadResult | null>>
+}
+
+function streamingState(observer: ResourceObserver): StreamingInternals {
+  return observer as unknown as StreamingInternals
+}
+
 function makeObserver(
   budgetBytes: number,
   load: TextureProvider['load']
@@ -251,6 +270,78 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     expect(resourceStorage.textures.where('name', 'planets/StarWars/korriban/i/i_bump.jpg').count()).toBe(1)
   })
 
+  it('устаревший владелец брони не снимает чужую (живую) бронь по тому же пути после смены сценария', async () => {
+    // round 3 ревью: удаление записи pathLoads по завершении сверяется не
+    // только по ключу пути, но и по РАВЕНСТВУ ПРОМИСА
+    // (`this.pathLoads.get(path) === pending`) — это единственное, что
+    // мешает устаревшему владельцу снести чужую, более свежую бронь по тому
+    // же пути. Без этой сверки (`if (owner)` без сверки промиса) второй
+    // актор, претендующий на тот же путь уже в новой эпохе, потерял бы свою
+    // бронь при резолве устаревшего владельца — и третий заявитель по тому
+    // же пути запустил бы дублирующую сетевую загрузку через границу смены
+    // сценария, воссоздавая утечку Important-находки round 2.
+    const resolvers: Array<(result: LoadResult) => void> = []
+    let callIndex: number = 0
+    const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
+      callIndex += 1
+
+      if (callIndex <= 2) {
+        return new Promise<LoadResult>((resolve) => resolvers.push(resolve))
+      }
+
+      const texture = makeTexture()
+      texture.name = request.name
+      return Promise.resolve({ ok: true as const, texture })
+    })
+
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    const pathLoads = streamingState(observer).pathLoads
+    const SHARED_DIFFUSE = 'planets/StarWars/korriban/i/i.jpg'
+
+    // Korriban I заявляет общий путь первым — становится владельцем брони.
+    // Это и есть будущий "устаревший владелец".
+    data.set('Korriban I', record('Korriban I', 100))
+    const stale: Promise<void> = handlers['ClosestChange'](record('Korriban I', 100))
+
+    expect(resolvers).toHaveLength(1)
+    expect(pathLoads.has(SHARED_DIFFUSE)).toBe(true)
+
+    const staleReservation = pathLoads.get(SHARED_DIFFUSE)
+
+    // Сценарий сменился, пока путь ещё грузился — pathLoads очищен целиком,
+    // Korriban I больше не кандидат (покинул зону/данные наблюдателя), чтобы
+    // не смешивать эту гонку с actor-уровневой (она уже покрыта отдельным
+    // тестом выше).
+    observer.scenario = null
+    data.delete('Korriban I')
+
+    // Korriban II заявляет ТОТ ЖЕ путь уже в новой эпохе — свежая, живая
+    // бронь (pathLoads был очищен, так что это НОВЫЙ владелец, не сосед по
+    // старому промису).
+    data.set('Korriban II', record('Korriban II', 120))
+    const live: Promise<void> = handlers['ClosestChange'](record('Korriban II', 120))
+
+    expect(resolvers).toHaveLength(2)
+    expect(pathLoads.has(SHARED_DIFFUSE)).toBe(true)
+
+    const liveReservation = pathLoads.get(SHARED_DIFFUSE)
+
+    expect(liveReservation).not.toBe(staleReservation)
+
+    // Резолвим УСТАРЕВШИЙ (первый) вызов. Его собственный continuation
+    // владеет своей записью (owner=true) — но по факту в pathLoads под этим
+    // же ключом уже лежит ЧУЖАЯ (живая) бронь. Сверка на равенство промиса
+    // обязана предотвратить удаление.
+    resolvers[0]({ ok: true, texture: makeTexture() })
+    await stale
+
+    expect(pathLoads.get(SHARED_DIFFUSE)).toBe(liveReservation)
+
+    // Достраиваем живую загрузку, чтобы не оставить висящий промис.
+    resolvers[1]({ ok: true, texture: makeTexture() })
+    await live
+  })
+
   it('устаревший резолв после смены сценария не трогает живую загрузку того же актора (Critical, round 2)', async () => {
     // round 2 ревью, Critical: удаления loaded/actorPaths и снятие inFlight,
     // ключуемые только по actorId, без сверки эпохи, разбирали учёт СВЕЖЕЙ
@@ -259,11 +350,21 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // снимал пометки живой загрузки того же актора, и последующее
     // вытеснение освобождало разделяемый диффуз, который Korriban I ещё
     // показывал (Critical 1 назад).
+    //
+    // round 3 ревью: прежняя версия проверяла ПОБОЧНЫЕ эффекты (счётчик
+    // сетевых вызовов, вызов evictActor через третий пересчёт) — при снятых
+    // гвардах третий пересчёт ошибочно считал актора незагруженным, но
+    // повторный loadActor молча присоединялся (через pathLoads) к чужому
+    // незавершённому промису вместо нового сетевого запроса. Оба прежних
+    // assert'а проходили "случайно", хотя re-run произошёл, а третий
+    // пересчёт вдобавок зависал в реальном прогоне (join на промис, который
+    // тест ещё не отпустил). Теперь бухгалтерия живой загрузки проверяется
+    // НАПРЯМУЮ, без третьего пересчёта вовсе.
+    //
     // Держим открытыми только первые два вызова (диффуз "устаревшего" и
-    // диффуз "живого" актора) — Меркурий это единственное, что нужно
-    // проверить; остальные (bump с обеих сторон) резолвятся сразу, чтобы обе
-    // загрузки могли нормально завершиться после того, как держащиеся пути
-    // будут отпущены явно.
+    // диффуз "живого" актора) — остальные (bump с обеих сторон) резолвятся
+    // сразу, чтобы обе загрузки могли нормально завершиться после того, как
+    // держащиеся пути будут отпущены явно.
     const resolvers: Array<(result: LoadResult) => void> = []
     let callIndex: number = 0
     const load = vi.fn((): Promise<LoadResult> => {
@@ -277,7 +378,8 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     })
 
     const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
-    const evictSpy = vi.spyOn(observer, 'evictActor')
+    const state = streamingState(observer)
+    const MERCURY_ACTOR_ID = 5
 
     data.set('Mercury', record('Mercury', 300))
 
@@ -294,23 +396,31 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // свежая загрузка. Её первый путь тоже держится открытым.
     const live: Promise<void> = handlers['ClosestChange'](record('Mercury', 300))
     expect(resolvers).toHaveLength(2)
+    expect(state.loaded.has(MERCURY_ACTOR_ID)).toBe(true)
+    expect(state.inFlight.has(MERCURY_ACTOR_ID)).toBe(true)
 
     // Резолвим УСТАРЕВШИЙ (первый) вызов — именно та гонка, которую нашёл
     // ре-ревьюер.
     resolvers[0]({ ok: true, texture: makeTexture() })
     await stale
 
-    // Третий пересчёт, пока живая загрузка (цикл 2) всё ещё висит на своём
-    // await: если её пометки не снесены устаревшим резолвом, актор всё ещё
-    // inFlight/loaded — не должно быть ни повторного запроса, ни вытеснения.
-    await handlers['ClosestChange'](record('Mercury', 300))
-
-    expect(resolvers).toHaveLength(2) // не выросло — переспроса не было
-    expect(evictSpy).not.toHaveBeenCalled()
+    // Прямая проверка: бухгалтерия ЖИВОЙ загрузки (цикл 2) должна пережить
+    // резолв устаревшего вызова в точности — не побочные эффекты, а сами
+    // записи, которые устаревшая чистка не имеет права трогать.
+    expect(state.loaded.has(MERCURY_ACTOR_ID)).toBe(true)
+    expect(state.inFlight.has(MERCURY_ACTOR_ID)).toBe(true)
+    expect(state.actorPaths.get(MERCURY_ACTOR_ID)).toEqual([
+      'planets/mercury/mercury.jpg',
+      'planets/mercury/mercury_bump.jpg'
+    ])
 
     // Достраиваем живую загрузку, чтобы не оставить висящий промис.
     resolvers[1]({ ok: true, texture: makeTexture() })
     await live
+
+    // После завершения живой загрузки inFlight снят, актор остаётся loaded.
+    expect(state.loaded.has(MERCURY_ACTOR_ID)).toBe(true)
+    expect(state.inFlight.has(MERCURY_ACTOR_ID)).toBe(false)
   })
 
   it('inFlight защищает актор от вытеснения, пока он грузится впервые, даже если приоритет упал', async () => {
