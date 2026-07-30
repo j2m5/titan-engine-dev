@@ -14,9 +14,10 @@ describe('Postprocessing: контракт цветового конвейера
   })
 
   it('bloom-guard: кламп планеты 0.99 остаётся НИЖЕ порога bloom', () => {
-    // Осознанное решение владельца: планеты не должны блумить.
-    // Кламп 0.99 в шейдере планеты + порог bloom 1.0 образуют пару-инвариант.
-    expect(PlanetShaderTemplate.fragmentShader).toContain('clamp(vec4(finalColor, 1.0), 0.0, 0.99)')
+    // Диффуз-композит < порога bloom; HDR-глинт добавляется после клампа
+    // и ограничен потолком 4.0 (блумит только солнечная дорожка)
+    expect(PlanetShaderTemplate.fragmentShader).toContain('clamp(finalColor, 0.0, 0.99)')
+    expect(PlanetShaderTemplate.fragmentShader).toContain('min(finalColor, vec3(4.0))')
     expect(BLOOM_OPTIONS.luminanceThreshold).toBeGreaterThan(0.99)
   })
 

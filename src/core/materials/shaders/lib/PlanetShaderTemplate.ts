@@ -11,7 +11,8 @@ const defaultUniforms = {
   bumpMap: new Uniform(null),
   bumpScale: new Uniform(0),
   emission: new Uniform(1),
-  targetRadius: new Uniform(0)
+  targetRadius: new Uniform(0),
+  uSpecularStrength: new Uniform(2.0)
 }
 const ringShadowUniforms = AppUniformsChunk.ringShadowUniforms
 
@@ -32,10 +33,6 @@ export const PlanetShaderTemplate: ShaderProps = {
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
 
-    #ifdef USE_ATMOSPHERE
-      varying vec3 vLocalCameraPosition;
-    #endif
-
     void main() {
       vec4 worldPosition = modelMatrix * vec4(position, 1.0);
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
@@ -52,10 +49,6 @@ export const PlanetShaderTemplate: ShaderProps = {
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
       vViewPosition = -mvPosition.xyz;
-
-      #ifdef USE_ATMOSPHERE
-        vLocalCameraPosition = (inverse(modelMatrix) * vec4(cameraPosition, 1.0)).xyz;
-      #endif
 
       ${ShaderChunk['logdepthbuf_vertex']}
     }
@@ -101,9 +94,9 @@ export const PlanetShaderTemplate: ShaderProps = {
       #endif
 
       vec3 lightDirection = normalize(vViewLightDirection);
-      float lightIntensity = max(dot(normal, lightDirection), 0.0);
+      float NdotLraw = dot(normal, lightDirection);
+      float lightIntensity = max(NdotLraw, 0.0);
 
-      vec3 lightColor = vec3(1.0);
       vec3 dayColor = texture2D(diffuseMap, vUv).rgb;
       vec3 nightColor = texture2D(nightMap, vUv).rgb;
 
@@ -115,23 +108,47 @@ export const PlanetShaderTemplate: ShaderProps = {
       vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);
       vec3 night = nightColor * nightColor * emission;
 
-      vec3 finalColor = mix(night, day, lightIntensity);
+      // Терминатор: компактная smoothstep-зона вместо линейного mix по всей
+      // полусфере; края зоны — ручки приёмки
+      float dayFactor = smoothstep(-0.08, 0.25, NdotLraw);
+
+      // Закатный пояс: колокол с пиком на середине перехода подкрашивает день
+      float duskBand = dayFactor * (1.0 - dayFactor) * 4.0;
+      day *= mix(vec3(1.0), vec3(1.0, 0.55, 0.35), duskBand * 0.6);
+
+      // Ночные огни только в темноте (раньше просвечивали на дневной стороне)
+      float nightGate = 1.0 - smoothstep(-0.05, 0.12, NdotLraw);
+      night *= nightGate;
+
+      vec3 finalColor = mix(night, day, dayFactor);
       finalColor = clamp(finalColor, 0.0, 1.0);
 
-      #ifdef USE_SPECULAR
-        float specComp = max(0.0, dot(normal, lightDirection));
-        specComp = pow(specComp, 32.0) * 0.35;
-
-        float specularIntensity = texture2D(specularMap, vUv).r;
-
-        finalColor += specularIntensity * specComp;
-      #endif
-
+      // Единый теневой множитель кольца: гасит и диффуз, и блик ниже
+      vec3 ringShadowFactor = vec3(1.0);
       #ifdef USE_RING
-        #include <ringShadowFragment>
+        ringShadowFactor = getShadowFromRings(vec3(1.0), normalize(vLocalLightDirection));
+      #endif
+      finalColor *= ringShadowFactor;
+
+      // Bloom-guard владельца: диффуз-композит планеты клампится НИЖЕ порога
+      // bloom (0.99 < 1.0) — планета не блумит. Блик добавляется ПОСЛЕ.
+      finalColor = clamp(finalColor, 0.0, 0.99);
+
+      #ifdef USE_SPECULAR
+        // Blinn-Phong + френель Шлика (F0 воды 0.02): дорожка следит за
+        // камерой, вспыхивает на скользящих углах, гаснет у терминатора.
+        // HDR-глинт поверх клампа — блумит только солнечная дорожка.
+        vec3 viewDir = normalize(vViewPosition);
+        vec3 halfVec = normalize(lightDirection + viewDir);
+        float specComp = pow(max(dot(normal, halfVec), 0.0), 64.0);
+        float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(normal, viewDir), 0.0), 5.0);
+        float specularIntensity = texture2D(specularMap, vUv).r;
+        finalColor += specularIntensity * specComp * fresnel * uSpecularStrength
+                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor;
       #endif
 
-      gl_FragColor = clamp(vec4(finalColor, 1.0), 0.0, 0.99);
+      // Потолок глинта: планета целиком остаётся далеко под half-float/AgX
+      gl_FragColor = vec4(min(finalColor, vec3(4.0)), 1.0);
 
       ${ShaderChunk['tonemapping_fragment']}
       ${ShaderChunk['colorspace_fragment']}

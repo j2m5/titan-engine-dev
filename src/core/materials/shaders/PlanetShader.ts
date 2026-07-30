@@ -15,6 +15,7 @@ interface PlanetUniforms {
   bumpMap: Texture | null
   bumpScale: number
   emission: number
+  uSpecularStrength: number
   targetRadius: number
   shadowRingsInnerRadius: number
   shadowRingsOuterRadius: number
@@ -62,6 +63,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       bumpMap: new Uniform(null),
       bumpScale: new Uniform(planetData.bumpScale),
       emission: new Uniform(planetData.emission),
+      uSpecularStrength: new Uniform(2.0),
       targetRadius: new Uniform(toThreeJSUnits(this.model.physicalObject?.getAttribute('radius', 1) ?? 1)),
       shadowRingsInnerRadius: new Uniform(toThreeJSUnits(ringData.innerRadius)),
       shadowRingsOuterRadius: new Uniform(toThreeJSUnits(ringData.outerRadius)),
