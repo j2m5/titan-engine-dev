@@ -100,13 +100,16 @@ describe('decideStreaming', () => {
   })
 
   it('исключённый актор не грузится, но и не мешает остальным', () => {
+    // Бюджет ровно на одного. Исключённый актор 1 приоритетнее — если бы он
+    // резервировал бюджет перед тем, как его отфильтруют, актору 2 места
+    // бы не хватило. Ключевая проверка не "не загрузился", а "не заблокировал".
     const decision = decideStreaming(
       [candidate(1, 0.9), candidate(2, 0.5)],
       new Set(),
       nothingPinned,
       new Set([1]),
       all8K,
-      SIZE_8K * 2
+      SIZE_8K
     )
 
     expect(decision.load.map((c: StreamCandidate): number => c.actorId)).toEqual([2])
@@ -124,6 +127,39 @@ describe('decideStreaming', () => {
 
     expect(decision.load).toEqual([])
     expect(decision.evict).toEqual([])
+  })
+
+  it('слишком дорогой не влезает — цикл продолжает, а не останавливается', () => {
+    // Актор 1 приоритетнее, но стоит два 8K и не влезает в бюджет на один.
+    // Актор 2 дешевле и влезает — цикл обязан пропустить первого и дойти
+    // до второго (continue), а не остановиться на первом же промахе (break).
+    const sizeOf = (path: string): number => (path === 'p2.jpg' ? SIZE_2K : SIZE_8K)
+
+    const decision = decideStreaming(
+      [candidate(1, 0.9, 'a.jpg', 'b.jpg'), candidate(2, 0.5)],
+      new Set(),
+      nothingPinned,
+      noneExcluded,
+      sizeOf,
+      SIZE_8K
+    )
+
+    expect(decision.load.map((c: StreamCandidate): number => c.actorId)).toEqual([2])
+  })
+
+  it('вытесняет несколько тел в порядке убывания приоритета', () => {
+    const decision = decideStreaming(
+      [candidate(1, 0.2), candidate(2, 0.6), candidate(3, 0.9)],
+      new Set([1, 2, 3]),
+      nothingPinned,
+      noneExcluded,
+      all8K,
+      SIZE_8K
+    )
+
+    // Влезает только актор 3. Вытесняются 2 и 1 — в порядке убывания
+    // приоритета, том же, в котором отдаётся load.
+    expect(decision.evict.map((c: StreamCandidate): number => c.actorId)).toEqual([2, 1])
   })
 
   it('текстуры разного веса делят бюджет по-разному', () => {

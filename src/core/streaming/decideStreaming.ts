@@ -23,6 +23,11 @@ const ASSUMED_TEXTURE_BYTES: number = textureBytes(8192, 4096)
  * `excluded` — стоит ли просить. Актор с загрузкой в полёте передаётся и в
  * `loaded`, и в `isPinned`: байты уже обещаны, и отнимать их посреди загрузки
  * нельзя.
+ *
+ * И `load`, и `evict` сохраняют порядок `ranked` — по убыванию приоритета:
+ * оба получены фильтрацией одного и того же отсортированного массива.
+ * Гарантия, а не случайность побочного эффекта: вызывающий код может, скажем,
+ * вытеснять по одному, начиная с наименее приоритетного, не пересортировывая.
  */
 export function decideStreaming(
   candidates: StreamCandidate[],
@@ -40,6 +45,10 @@ export function decideStreaming(
   let used: number = 0
 
   for (const candidate of ranked) {
+    // Исключённый не резервирует бюджет: он не будет загружен, значит не
+    // должен занимать место, которое мог бы взять следующий по приоритету.
+    if (excluded.has(candidate.actorId)) continue
+
     const cost: number = candidate.paths.reduce(
       (sum: number, path: string): number => sum + (sizeOf(path) ?? ASSUMED_TEXTURE_BYTES),
       0
