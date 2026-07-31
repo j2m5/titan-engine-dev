@@ -10,6 +10,7 @@ import {
   ToneMappingMode
 } from 'postprocessing'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
+import { DitheringEffect } from '@/core/graphic/effects/dithering/DitheringEffect'
 
 // Опции эффектов вынесены в константы под контракт-тесты
 // (tests/graphic/PostprocessingContract.spec.ts).
@@ -69,7 +70,8 @@ class Postprocessing {
     // нельзя, иначе AgX сожмёт диапазон раньше, чем эффекты увидят пересветы.
     const effectPass: EffectPass = new EffectPass(this.camera, bloomEffect, lensFlareEffect, toneMappingEffect)
 
-    const effectPass2: EffectPass = new EffectPass(this.camera, chromaticAberrationEffect)
+    // Дизеринг строго последним: после него только квантование в канвас
+    const effectPass2: EffectPass = new EffectPass(this.camera, chromaticAberrationEffect, new DitheringEffect())
 
     this.composer.addPass(renderPass)
     this.composer.addPass(effectPass)
