@@ -20,5 +20,7 @@ describe('BrunetonAtmosphere: линейный HDR-выход (тонмап — 
   it('uHdrKnee объявлен юниформом с нейтральным дефолтом 1.0', () => {
     expect(frag).toContain('uniform float uHdrKnee;')
     expect(BrunetonAtmosphereShaderTemplate.uniforms.uHdrKnee.value).toBe(1.0)
+    expect(frag).toContain('uniform float exposure;')
+    expect(frag).toContain('uniform vec3 white_point;')
   })
 })

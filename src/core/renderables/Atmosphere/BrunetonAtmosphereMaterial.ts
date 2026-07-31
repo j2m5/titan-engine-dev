@@ -25,6 +25,9 @@
  *
  *   // Each frame:
  *   material.update(atmosphereMesh, camera, starWorldPosition)
+ *
+ * ВАЖНО: setAtmosphereConfig сбрасывает exposure/hdrKnee к дефолтам, если
+ * переданный конфиг их не содержит — передавайте поля явно.
  */
 
 import {
@@ -113,7 +116,7 @@ class BrunetonAtmosphereMaterial extends RawShaderMaterial {
     // Пер-планетные ручки пересвета (спека 2026-07-31): нейтральные дефолты —
     // атмосфера без полей (Земля) рендерится бит-в-бит как раньше
     this.uniforms.exposure.value = config.exposure ?? 10.0
-    this.uniforms.uHdrKnee.value = config.hdrKnee ?? 1.0
+    this.uniforms.uHdrKnee.value = Math.max(0, config.hdrKnee ?? 1.0)
   }
 
   /**
@@ -131,7 +134,7 @@ class BrunetonAtmosphereMaterial extends RawShaderMaterial {
     this.uniforms.sun_size.value = new Vector2(Math.tan(config.sunAngularRadius), Math.cos(config.sunAngularRadius))
 
     this.uniforms.exposure.value = config.exposure ?? 10.0
-    this.uniforms.uHdrKnee.value = config.hdrKnee ?? 1.0
+    this.uniforms.uHdrKnee.value = Math.max(0, config.hdrKnee ?? 1.0)
   }
 
   /**

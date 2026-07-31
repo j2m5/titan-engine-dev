@@ -1,6 +1,7 @@
 import { BLOOM_OPTIONS, TONE_MAPPING_OPTIONS } from '@/core/graphic/Postprocessing'
 import { BlendFunction, ToneMappingMode } from 'postprocessing'
 import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { BrunetonAtmosphereShaderTemplate } from '@/core/renderables/Atmosphere/BrunetonAtmosphereShaderTemplate'
 
 describe('Postprocessing: контракт цветового конвейера', () => {
   it('тонмаппинг реально применяется: NORMAL-бленд, не DST-заглушка', () => {
@@ -25,5 +26,10 @@ describe('Postprocessing: контракт цветового конвейера
   it('bloom считается в SCREEN-бленде до тонмапа (HDR-источники)', () => {
     expect(BLOOM_OPTIONS.blendFunction).toBe(BlendFunction.SCREEN)
     expect(BLOOM_OPTIONS.luminanceThreshold).toBe(1)
+  })
+
+  it('колено атмосферы калибровано на порог bloom 1.0 — при смене порога пересмотреть колено', () => {
+    expect(BLOOM_OPTIONS.luminanceThreshold).toBe(1)
+    expect(BrunetonAtmosphereShaderTemplate.fragmentShader).toContain('min(color, vec3(1.0)) + excess * uHdrKnee')
   })
 })
