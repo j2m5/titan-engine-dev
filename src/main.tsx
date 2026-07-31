@@ -22,6 +22,15 @@ async function bootstrap(): Promise<void> {
 
   Command.useContainer(container)
 
+  // Дебаг-сцена атмосферы: ?atmoDebug=<actorId> вместо приложения.
+  // Модели ORM живут со статических импортов — контейнера достаточно.
+  const atmoDebugId = new URLSearchParams(location.search).get('atmoDebug')
+  if (atmoDebugId) {
+    const { AtmosphereDebugScene } = await import('@/core/renderables/Atmosphere/AtmosphereDebugScene')
+    new AtmosphereDebugScene(document.body, Number(atmoDebugId))
+    return
+  }
+
   await engineStore.initialize(container.get(Tokens.Application))
 
   createRoot(document.getElementById('root')!).render(

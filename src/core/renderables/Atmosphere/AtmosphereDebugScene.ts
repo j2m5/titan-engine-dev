@@ -5,7 +5,18 @@
  *   new AtmosphereDebugScene(document.getElementById('app')!, 79)
  */
 
-import { WebGLRenderer, Scene, PerspectiveCamera, Mesh, SphereGeometry, Vector3, Color, TextureLoader } from 'three'
+import {
+  WebGLRenderer,
+  Scene,
+  PerspectiveCamera,
+  Mesh,
+  SphereGeometry,
+  Vector3,
+  Color,
+  TextureLoader,
+  WebGLRenderTarget,
+  FloatType
+} from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min'
 
@@ -102,6 +113,7 @@ class AtmosphereDebugScene {
 
       exposure: data.exposure ?? 10,
       hdrKnee: data.hdrKnee ?? 1,
+      debugView: 0,
       wp_R: 1,
       wp_G: 1,
       wp_B: 1,
@@ -179,6 +191,7 @@ class AtmosphereDebugScene {
   private vis = () => {
     this.mat.exposure = this.p.exposure
     this.mat.uniforms.uHdrKnee.value = this.p.hdrKnee
+    this.mat.uniforms.uDebugView.value = this.p.debugView
     this.mat.setWhitePoint(this.p.wp_R, this.p.wp_G, this.p.wp_B)
   }
 
@@ -232,6 +245,10 @@ class AtmosphereDebugScene {
     ren.add(p, 'wp_R', 0.5, 2, 0.01).name('WP R').onChange(v)
     ren.add(p, 'wp_G', 0.5, 2, 0.01).name('WP G').onChange(v)
     ren.add(p, 'wp_B', 0.5, 2, 0.01).name('WP B').onChange(v)
+    ren
+      .add(p, 'debugView', { off: 0, 'in-scatter': 1, transmittance: 2, alpha: 3 })
+      .name('Debug view')
+      .onChange(v)
 
     this.gui
       .add(
@@ -250,6 +267,38 @@ class AtmosphereDebugScene {
         'copy'
       )
       .name('📋 Copy')
+
+    this.gui
+      .add(
+        {
+          probe: () => {
+            const { width, height } = this.renderer.domElement
+            const rt = new WebGLRenderTarget(width, height, { type: FloatType })
+            this.renderer.setRenderTarget(rt)
+            this.renderer.render(this.scene, this.camera)
+            this.renderer.setRenderTarget(null)
+
+            const y = Math.floor(height / 2)
+            const row = new Float32Array(width * 4)
+            this.renderer.readRenderTargetPixels(rt, 0, y, width, 1, row)
+            rt.dispose()
+
+            const samples = Array.from({ length: 9 }, (_, i) => {
+              const x = Math.floor(((i + 1) / 10) * width)
+              return {
+                x,
+                r: row[x * 4].toFixed(4),
+                g: row[x * 4 + 1].toFixed(4),
+                b: row[x * 4 + 2].toFixed(4),
+                a: row[x * 4 + 3].toFixed(4)
+              }
+            })
+            console.table(samples)
+          }
+        },
+        'probe'
+      )
+      .name('🔬 Probe scanline')
   }
 
   private loop = () => {

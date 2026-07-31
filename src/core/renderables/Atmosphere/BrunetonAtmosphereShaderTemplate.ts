@@ -37,6 +37,7 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
     exposure: new Uniform(10.0),
     white_point: new Uniform(new Vector3(1.0, 1.0, 1.0)),
     uHdrKnee: new Uniform(1.0),
+    uDebugView: new Uniform(0),
     sun_size: new Uniform(new Vector2(Math.tan(SUN_ANGULAR_RADIUS), Math.cos(SUN_ANGULAR_RADIUS))),
     transmittance_texture: new Uniform(null),
     scattering_texture: new Uniform(null),
@@ -86,6 +87,7 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
     uniform float exposure;
     uniform vec3 white_point;
     uniform float uHdrKnee;
+    uniform float uDebugView; // 0 off, 1 in-scatter, 2 transmittance, 3 alpha
     uniform vec2 sun_size;
     uniform float logDepthBufFC;
 
@@ -148,6 +150,20 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
         if (dot(viewDirection, sunDir) > sun_size.y) {
           radiance += transmittance * GetSolarRadiance();
         }
+      }
+
+      // Дебаг-виды слагаемых (спека 2026-07-31): сырые значения до колена
+      // и потолка — диагностика вуали без искажений. Непрозрачный вывод,
+      // чтобы поверхность под атмосферой не подмешивалась.
+      if (uDebugView > 0.5) {
+        vec3 dbg = uDebugView < 1.5 ? radiance / white_point * exposure
+                 : uDebugView < 2.5 ? transmittance
+                 : vec3(1.0 - dot(transmittance, vec3(1.0 / 3.0)));
+        fragColor = vec4(dbg, 1.0);
+        gl_FragDepth = vIsPerspective == 0.0
+          ? gl_FragCoord.z
+          : log2(vFragDepth) * logDepthBufFC * 0.5;
+        return;
       }
 
       // Линейный HDR-выход: плечо делает ОБЩИЙ тонмап постобработки (AgX,
