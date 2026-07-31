@@ -80,10 +80,23 @@ class Postprocessing {
     this.composer?.render(delta)
   }
 
+  /**
+   * Ресайз композера. Без него таргеты пассов остаются размера на момент
+   * initialize(), и после ресайза окна кадр — апскейл устаревшего буфера.
+   * composer.setSize ресайзит и рендерер, и все пассы.
+   */
+  public setSize(width: number, height: number): void {
+    this.composer?.setSize(width, height)
+  }
+
   public renderToScreenshot(): void {
     const [screenshotWidth, screenshotHeight] = [4096, 2048]
 
-    this.renderer.setSize(screenshotWidth, screenshotHeight)
+    // pixelRatio=1: композер меряет таргеты в drawing-buffer-пикселях,
+    // иначе на Retina получится 8192×4096
+    const prevPixelRatio = this.renderer.getPixelRatio()
+    this.renderer.setPixelRatio(1)
+    this.setSize(screenshotWidth, screenshotHeight)
 
     const canvas: HTMLCanvasElement = this.renderer.domElement
 
@@ -101,7 +114,8 @@ class Postprocessing {
       }
     })
 
-    this.renderer.setSize(window.innerWidth, window.innerHeight)
+    this.renderer.setPixelRatio(prevPixelRatio)
+    this.setSize(window.innerWidth, window.innerHeight)
   }
 
   public dispose(): void {
