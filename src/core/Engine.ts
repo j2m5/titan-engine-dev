@@ -11,6 +11,7 @@ import { Clock, PerspectiveCamera, Raycaster, Scene, Vector2, WebGLRenderer } fr
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { AstroControls } from '@/core/libs/AstroControls'
 import Stats from 'three/examples/jsm/libs/stats.module'
+import { clampPixelRatio } from '@/core/graphic/renderingFactories'
 
 class Engine extends EventEmitter {
   private readonly canvas: HTMLCanvasElement
@@ -168,7 +169,13 @@ class Engine extends EventEmitter {
   private onResize(): void {
     const { innerHeight, innerWidth } = window
 
+    // Порядок несущий: pixelRatio ДО setSize композера — composer.setSize
+    // меряет таргеты в drawing-buffer-пикселях (size × ratio).
+    // Кламп 2 — тот же, что в createRenderer (см. renderingFactories).
+    this.renderer.setPixelRatio(clampPixelRatio(window.devicePixelRatio, 2))
     this.renderer.setSize(innerWidth, innerHeight)
+    this.labelRenderer.setSize(innerWidth, innerHeight)
+    this.postprocessing.setSize(innerWidth, innerHeight)
     this.renderCamera.aspect = innerWidth / innerHeight
     this.renderCamera.updateProjectionMatrix()
   }
