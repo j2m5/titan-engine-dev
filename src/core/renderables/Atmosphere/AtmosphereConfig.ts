@@ -60,6 +60,10 @@ export interface AtmosphereConfig {
   absorptionExtinction: [number, number, number] // 1/km
   groundAlbedo: [number, number, number]
   muSMin: number
+  /** Линейный множитель яркости атмосферы (display-side, LUT не трогает). Дефолт 10. */
+  exposure?: number
+  /** Колено HDR-избытка над порогом bloom: 1.0 = нейтрально. Дефолт 1.0. */
+  hdrKnee?: number
 }
 
 /**

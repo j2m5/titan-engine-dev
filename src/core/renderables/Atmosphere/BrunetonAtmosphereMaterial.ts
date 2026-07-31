@@ -109,6 +109,11 @@ class BrunetonAtmosphereMaterial extends RawShaderMaterial {
     // дефолт шаблона земной, без этого диск солнца рисуется неверного размера
     const config: AtmosphereConfig = BrunetonAtmosphereMaterial.__config(model)
     this.uniforms.sun_size.value.set(Math.tan(config.sunAngularRadius), Math.cos(config.sunAngularRadius))
+
+    // Пер-планетные ручки пересвета (спека 2026-07-31): нейтральные дефолты —
+    // атмосфера без полей (Земля) рендерится бит-в-бит как раньше
+    this.uniforms.exposure.value = config.exposure ?? 10.0
+    this.uniforms.uHdrKnee.value = config.hdrKnee ?? 1.0
   }
 
   /**
@@ -124,6 +129,9 @@ class BrunetonAtmosphereMaterial extends RawShaderMaterial {
 
     // Update sun_size based on config's angular radius
     this.uniforms.sun_size.value = new Vector2(Math.tan(config.sunAngularRadius), Math.cos(config.sunAngularRadius))
+
+    this.uniforms.exposure.value = config.exposure ?? 10.0
+    this.uniforms.uHdrKnee.value = config.hdrKnee ?? 1.0
   }
 
   /**

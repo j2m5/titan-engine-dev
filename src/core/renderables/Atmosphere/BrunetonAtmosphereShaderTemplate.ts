@@ -36,6 +36,7 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
     inverseSpaceScale: new Uniform(1.0 / Math.pow(10, -3.3)),
     exposure: new Uniform(10.0),
     white_point: new Uniform(new Vector3(1.0, 1.0, 1.0)),
+    uHdrKnee: new Uniform(1.0),
     sun_size: new Uniform(new Vector2(Math.tan(SUN_ANGULAR_RADIUS), Math.cos(SUN_ANGULAR_RADIUS))),
     transmittance_texture: new Uniform(null),
     scattering_texture: new Uniform(null),
@@ -84,6 +85,7 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
 
     uniform float exposure;
     uniform vec3 white_point;
+    uniform float uHdrKnee;
     uniform vec2 sun_size;
     uniform float logDepthBufFC;
 
@@ -151,14 +153,18 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
       // Линейный HDR-выход: плечо делает ОБЩИЙ тонмап постобработки (AgX,
       // Postprocessing.ts) — одна кривая на всю сцену, без двойного сжатия.
       // Для полутонов совпадает со старой кривой (1-e^-x ≈ x), поэтому
-      // exposure сохраняет смысл линейного калибровочного множителя,
-      // white_point — покомпонентного баланса белого. Пересветы (>1, диск
-      // солнца через GetSolarRadiance) уходят в bloom и AgX-плечо.
-      // Потолок HDR: AgX уходит в белое уже на ~16 линейных единицах, а
-      // half-float буфер композера переполняется на 65504. Диск солнца через
-      // GetSolarRadiance даёт 1e4..1e8 (тем больше, чем дальше планета) —
-      // без потолка это +Inf в буфере и NaN в блендинге (alpha→0 на диске).
-      vec3 color = min(radiance / white_point * exposure, vec3(64.0));
+      // exposure сохраняет смысл линейного калибровочного множителя.
+      vec3 color = radiance / white_point * exposure;
+
+      // Колено HDR-избытка: ниже порога bloom (1.0) картинка не меняется,
+      // сжимается только то, что уходит в свечение. 1.0 = нейтрально;
+      // пер-планетная ручка hdrKnee в data (Венера гасится сильнее всех).
+      vec3 excess = max(color - vec3(1.0), vec3(0.0));
+      color = min(color, vec3(1.0)) + excess * uHdrKnee;
+
+      // Потолок HDR: half-float буфер переполняется на 65504, диск солнца
+      // через GetSolarRadiance даёт 1e4..1e8 — без потолка Inf/NaN в бленде.
+      color = min(color, vec3(64.0));
 
       float alpha = 1.0 - dot(transmittance, vec3(1.0 / 3.0));
 
