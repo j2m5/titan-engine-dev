@@ -206,6 +206,11 @@ const MULTIPLE_SCATTERING_FRAG =
       // художественно глушим вклад в ночь, сохраняя его у терминатора.
       // Ширина спада адаптивна к геометрии планеты (доля от mu_s_min);
       // u_ms_night_floor = 1.0 отключает спад (чистая физика).
+      // Куб smoothstep прижимает хвост вуали к терминатору: без него вуаль
+      // тянулась серо-зелёной полосой далеко за гашение поверхности
+      // (smoothstep(-0.08, 0.25, NdotL) в PlanetShaderTemplate) — та самая
+      // «полоса рассогласования терминаторов». День (mu_s >= 0, twilight = 1)
+      // куб математически не меняет. Закреплено tests/atmosphere/MultiScatterTwilight.
       Length ms_r;
       Number ms_mu;
       Number ms_mu_s;
@@ -213,7 +218,7 @@ const MULTIPLE_SCATTERING_FRAG =
       bool ms_ground;
       GetRMuMuSNuFromScatteringTextureFragCoord(
         atmo, frag_coord, ms_r, ms_mu, ms_mu_s, ms_nu, ms_ground);
-      float twilight = smoothstep(u_mu_s_min * 0.6, 0.0, ms_mu_s);
+      float twilight = pow(smoothstep(u_mu_s_min * 0.6, 0.0, ms_mu_s), 3.0);
       float shaped = u_ms_factor * mix(u_ms_night_floor, 1.0, twilight);
 
       fragColor = vec4(
@@ -647,4 +652,6 @@ class AtmosphereLUTGenerator {
   }
 }
 
-export { AtmosphereLUTGenerator }
+// MULTIPLE_SCATTERING_FRAG экспортируется как контрактная поверхность:
+// формула сумеречного спада закреплена tests/atmosphere/MultiScatterTwilight.spec.ts
+export { AtmosphereLUTGenerator, MULTIPLE_SCATTERING_FRAG }
