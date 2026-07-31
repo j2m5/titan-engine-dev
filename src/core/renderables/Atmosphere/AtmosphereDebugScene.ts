@@ -100,7 +100,8 @@ class AtmosphereDebugScene {
       albedo_G: data.groundAlbedo[1],
       albedo_B: data.groundAlbedo[2],
 
-      exposure: 10,
+      exposure: data.exposure ?? 10,
+      hdrKnee: data.hdrKnee ?? 1,
       wp_R: 1,
       wp_G: 1,
       wp_B: 1,
@@ -150,7 +151,9 @@ class AtmosphereDebugScene {
       absorptionDensity: [EMPTY, expL(p.absH)],
       absorptionExtinction: [p.abs_R, p.abs_G, p.abs_B],
       groundAlbedo: [p.albedo_R, p.albedo_G, p.albedo_B],
-      muSMin: b.muSMin
+      muSMin: b.muSMin,
+      exposure: p.exposure,
+      hdrKnee: p.hdrKnee
     }
   }
 
@@ -175,6 +178,7 @@ class AtmosphereDebugScene {
 
   private vis = () => {
     this.mat.exposure = this.p.exposure
+    this.mat.uniforms.uHdrKnee.value = this.p.hdrKnee
     this.mat.setWhitePoint(this.p.wp_R, this.p.wp_G, this.p.wp_B)
   }
 
@@ -224,6 +228,7 @@ class AtmosphereDebugScene {
 
     const ren = this.gui.addFolder('Render')
     ren.add(p, 'exposure', 0.1, 50, 0.1).name('Exposure').onChange(v)
+    ren.add(p, 'hdrKnee', 0, 1, 0.01).name('HDR Knee').onChange(v)
     ren.add(p, 'wp_R', 0.5, 2, 0.01).name('WP R').onChange(v)
     ren.add(p, 'wp_G', 0.5, 2, 0.01).name('WP G').onChange(v)
     ren.add(p, 'wp_B', 0.5, 2, 0.01).name('WP B').onChange(v)
