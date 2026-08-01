@@ -37,6 +37,7 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
     exposure: new Uniform(10.0),
     white_point: new Uniform(new Vector3(1.0, 1.0, 1.0)),
     uHdrKnee: new Uniform(1.0),
+    uLegacyComposition: new Uniform(0),
     uDebugView: new Uniform(0),
     sun_size: new Uniform(new Vector2(Math.tan(SUN_ANGULAR_RADIUS), Math.cos(SUN_ANGULAR_RADIUS))),
     transmittance_texture: new Uniform(null),
@@ -87,6 +88,7 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
     uniform float exposure;
     uniform vec3 white_point;
     uniform float uHdrKnee;
+    uniform float uLegacyComposition; // 0 — покомпонентная композиция, 1 — старая скалярная
     uniform float uDebugView; // 0 off, 1 in-scatter, 2 transmittance, 3 alpha
     uniform vec2 sun_size;
     uniform float logDepthBufFC;
@@ -183,9 +185,24 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
       // через GetSolarRadiance даёт 1e4..1e8 — без потолка Inf/NaN в бленде.
       color = min(color, vec3(64.0));
 
-      float alpha = 1.0 - dot(transmittance, vec3(1.0 / 3.0));
+      // Композиция вынесена в два прохода блендинга (спека 2026-08-01):
+      // проход A множит кадр на пропускание (Zero/SrcColor), проход B
+      // добавляет in-scatter (One/One). Пер-канальное пропускание в одном
+      // RGBA-выходе не помещается: RGB заняты in-scatter, а альфа — скаляр,
+      // отсюда и было схлопывание цвета в серое.
+      //
+      // uLegacyComposition = 1 воспроизводит прежний NormalBlending
+      // (dst·meanT + color·alpha) для живого сравнения при приёмке.
+      float meanT = dot(transmittance, vec3(1.0 / 3.0));
+      float alpha = clamp(1.0 - meanT, 0.0, 1.0);
 
-      fragColor = vec4(color, clamp(alpha, 0.0, 1.0));
+      #ifdef ATMOSPHERE_PASS_TRANSMITTANCE
+        vec3 outTransmittance = mix(transmittance, vec3(meanT), uLegacyComposition);
+        fragColor = vec4(outTransmittance, 1.0);
+      #else
+        vec3 outScatter = color * mix(1.0, alpha, uLegacyComposition);
+        fragColor = vec4(outScatter, 1.0);
+      #endif
 
       gl_FragDepth = vIsPerspective == 0.0
         ? gl_FragCoord.z
