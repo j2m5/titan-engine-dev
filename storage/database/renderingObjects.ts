@@ -45,5 +45,5 @@ export const RenderingObjects: IRenderingObject[] = [
   { id: 39, actorId: 97, data: { emission: 1, bumpScale: 2 } },
   { id: 40, actorId: 98, data: { emission: 1, bumpScale: 2 } },
   { id: 41, actorId: 99, data: { emission: 1, bumpScale: 2 } },
-  { id: 42, actorId: 28, data: { emission: 1, bumpScale: 0.2 } }
+  { id: 42, actorId: 28, data: { emission: 1, bumpScale: 2 } }
 ]
