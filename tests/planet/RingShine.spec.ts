@@ -67,6 +67,6 @@ describe('RingShine: отсвет колец на ночную сторону', 
   })
 
   it('сила отсвета объявлена в шаблоне и в рантайм-юниформах одинаково', () => {
-    expect(PlanetShaderTemplate.uniforms.uRingShineStrength.value).toBe(1.0)
+    expect(PlanetShaderTemplate.uniforms.uRingShineStrength.value).toBe(2.0)
   })
 })

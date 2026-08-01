@@ -13,7 +13,7 @@ const defaultUniforms = {
   uBumpTexelSize: new Uniform(new Vector2()),
   emission: new Uniform(1),
   uSpecularStrength: new Uniform(2.0),
-  uRingShineStrength: new Uniform(1.0),
+  uRingShineStrength: new Uniform(2.0),
   uNightThreshold: new Uniform(0.06),
   uNightSoftness: new Uniform(0.18)
 }
