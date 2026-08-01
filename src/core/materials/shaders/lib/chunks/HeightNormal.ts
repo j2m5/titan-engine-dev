@@ -26,7 +26,11 @@ export const heightNormalFunctions = `
     vec3 B = cross(surfNormal, T);
 
     // Шов по нулевому меридиану заворачиваем сами: wrapS в строках ресурсов
-    // не задан, действует ClampToEdge — иначе на шве встаёт плоская полоса
+    // не задан, действует ClampToEdge — иначе на шве встаёт плоская полоса.
+    // Оговорка: у самого шва (u=0/1) fract() рвёт неявную производную,
+    // и квад, накрывающий разрыв, читает наименьший мип — на 8K картах при
+    // реальных дистанциях это суб-пиксельно; чистого фикса в GLSL ES 1.00 нет
+    // (нужен texture2DLodEXT).
     float uL = fract(uv.x - uBumpTexelSize.x);
     float uR = fract(uv.x + uBumpTexelSize.x);
     float vD = clamp(uv.y - uBumpTexelSize.y, 0.0, 1.0);

@@ -43,11 +43,9 @@ export function ringShineSum(
   ringTexel: (t: number) => number,
   strength: number
 ): number {
-  const axisDot = posLocal.y
   const azimuth: Vec3 = { x: posLocal.x, y: 0, z: posLocal.z }
   const azimuthLen = len(azimuth)
   if (azimuthLen < 1e-6) return 0
-  void axisDot
 
   const dir = scale(azimuth, 1 / azimuthLen)
   let sum = 0

@@ -1,4 +1,5 @@
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
 import { Actor } from '@/core/models/Actor'
 import { ResourceType } from '@/core/models/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -98,13 +99,40 @@ describe('PlanetMaterial: гейты ночной и облачной карт',
 
   it('resetMaterial снимает оба дефайна', () => {
     const nightPath = earth().resources.where('resourceType', 'night').first()!.getAttribute('path') as string
+    const cloudPath = earth().resources.where('resourceType', 'cloud').first()!.getAttribute('path') as string
     seedTexture(nightPath, 4096, 2048)
+    seedTexture(cloudPath, 8192, 4096)
 
     const material = new PlanetMaterial(earth())
     material.updateMaterial()
+    expect(material.defines.USE_NIGHT).toBe('1')
+    expect(material.defines.USE_CLOUD).toBe('1')
+
     material.resetMaterial()
 
     expect(material.defines.USE_NIGHT).toBeUndefined()
     expect(material.defines.USE_CLOUD).toBeUndefined()
+  })
+})
+
+describe('PlanetMaterial: паритет юниформов шаблон↔рантайм', () => {
+  beforeEach(() => seedPlaceholderKeys())
+  afterEach(() => resourceStorage.deleteAllTextures())
+
+  /**
+   * `PlanetShader.ts` дублирует дефолты юниформов из `PlanetShaderTemplate.ts`
+   * (см. PlanetShader.ts) вместо того, чтобы читать их оттуда. Ничто раньше не
+   * сверяло рантайм с шаблоном — оба места молча могли разойтись. Этот тест
+   * ловит именно расхождение: конструирует материал и сравнивает фактические
+   * значения юниформов с дефолтами шаблона.
+   */
+  it('рантайм-дефолты юниформов совпадают с шаблоном', () => {
+    const material = new PlanetMaterial(earth())
+
+    const keys = ['uRingShineStrength', 'uNightThreshold', 'uNightSoftness', 'uSpecularStrength'] as const
+
+    for (const key of keys) {
+      expect(material.uniforms[key].value).toBe(PlanetShaderTemplate.uniforms[key].value)
+    }
   })
 })
