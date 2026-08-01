@@ -33,7 +33,10 @@
 import {
   RawShaderMaterial,
   DoubleSide,
-  NormalBlending,
+  CustomBlending,
+  OneFactor,
+  SrcColorFactor,
+  ZeroFactor,
   GLSL3,
   Mesh,
   PerspectiveCamera,
@@ -48,6 +51,16 @@ import { AtmosphereLUTs } from './AtmosphereLUTGenerator'
 import { IUniform } from 'three/src/renderers/shaders/UniformsLib'
 import { Actor } from '@/core/models/Actor'
 import { requireRenderingData } from '@/core/helpers/renderingData'
+
+/**
+ * Проход композиции атмосферы. Формула `dst × transmittance + inScatter`
+ * не влезает в один RGBA-выход (RGB заняты in-scatter, альфа — скаляр),
+ * поэтому раскладывается на два прохода блендинга одного меша.
+ */
+enum AtmospherePass {
+  InScatter,
+  Transmittance
+}
 
 /**
  * Deep-clone a uniforms object so each material instance owns independent
@@ -92,7 +105,7 @@ class BrunetonAtmosphereMaterial extends RawShaderMaterial {
     return requireRenderingData<AtmosphereConfig>(model, 'BrunetonAtmosphereMaterial')
   }
 
-  public constructor(model: Actor) {
+  public constructor(model: Actor, pass: AtmospherePass = AtmospherePass.InScatter) {
     super({
       glslVersion: GLSL3,
       uniforms: cloneUniforms({
@@ -101,11 +114,20 @@ class BrunetonAtmosphereMaterial extends RawShaderMaterial {
       }),
       vertexShader: BrunetonAtmosphereShaderTemplate.vertexShader,
       fragmentShader: BrunetonAtmosphereShaderTemplate.fragmentShader,
+      defines: pass === AtmospherePass.Transmittance ? { ATMOSPHERE_PASS_TRANSMITTANCE: '1' } : {},
 
       side: DoubleSide,
       transparent: true,
       depthWrite: false,
-      blending: NormalBlending
+
+      // Проход A множит кадр на пропускание (Zero/SrcColor), проход B
+      // добавляет in-scatter (One/One). Альфа-факторы Zero/One у обоих:
+      // альфа целевого буфера композицию больше не несёт и не трогается.
+      blending: CustomBlending,
+      blendSrc: pass === AtmospherePass.Transmittance ? ZeroFactor : OneFactor,
+      blendDst: pass === AtmospherePass.Transmittance ? SrcColorFactor : OneFactor,
+      blendSrcAlpha: ZeroFactor,
+      blendDstAlpha: OneFactor
     })
 
     // sun_size зависит от углового радиуса звезды конкретной планеты —
@@ -147,6 +169,20 @@ class BrunetonAtmosphereMaterial extends RawShaderMaterial {
     this.uniforms.scattering_texture.value = luts.scattering
     this.uniforms.irradiance_texture.value = luts.irradiance
     this.uniforms.single_mie_scattering_texture.value = luts.scattering
+  }
+
+  /**
+   * Связать проходы одной атмосферы общим объектом uniforms.
+   *
+   * Намеренное нарушение принципа `cloneUniforms`: тот защищает от случайного
+   * шаринга между РАЗНЫМИ планетами, здесь же оба прохода описывают ОДНУ
+   * атмосферу и обязаны видеть одинаковые пер-кадровые величины
+   * (localCameraPos, localSunDir, logDepthBufFC) и одинаковые LUT — иначе
+   * между проходами появится видимая кромка. Побочный эффект приятный:
+   * `update()` достаточно звать на одном материале.
+   */
+  public shareUniformsWith(other: BrunetonAtmosphereMaterial): void {
+    this.uniforms = other.uniforms
   }
 
   /**
@@ -205,4 +241,4 @@ class BrunetonAtmosphereMaterial extends RawShaderMaterial {
   }
 }
 
-export { BrunetonAtmosphereMaterial }
+export { AtmospherePass, BrunetonAtmosphereMaterial }
