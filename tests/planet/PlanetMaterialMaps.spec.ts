@@ -70,3 +70,41 @@ describe('PlanetMaterial: привязка карт к юниформам', () =
     expect(material.uniforms.uBumpTexelSize.value.y).toBe(0)
   })
 })
+
+describe('PlanetMaterial: гейты ночной и облачной карт', () => {
+  beforeEach(() => seedPlaceholderKeys())
+  afterEach(() => resourceStorage.deleteAllTextures())
+
+  it('без ночной и облачной карт дефайны не ставятся', () => {
+    const material = new PlanetMaterial(earth())
+    material.updateMaterial()
+
+    expect(material.defines.USE_NIGHT).toBeUndefined()
+    expect(material.defines.USE_CLOUD).toBeUndefined()
+  })
+
+  it('с загруженными картами дефайны появляются', () => {
+    const nightPath = earth().resources.where('resourceType', 'night').first()!.getAttribute('path') as string
+    const cloudPath = earth().resources.where('resourceType', 'cloud').first()!.getAttribute('path') as string
+    seedTexture(nightPath, 4096, 2048)
+    seedTexture(cloudPath, 8192, 4096)
+
+    const material = new PlanetMaterial(earth())
+    material.updateMaterial()
+
+    expect(material.defines.USE_NIGHT).toBe('1')
+    expect(material.defines.USE_CLOUD).toBe('1')
+  })
+
+  it('resetMaterial снимает оба дефайна', () => {
+    const nightPath = earth().resources.where('resourceType', 'night').first()!.getAttribute('path') as string
+    seedTexture(nightPath, 4096, 2048)
+
+    const material = new PlanetMaterial(earth())
+    material.updateMaterial()
+    material.resetMaterial()
+
+    expect(material.defines.USE_NIGHT).toBeUndefined()
+    expect(material.defines.USE_CLOUD).toBeUndefined()
+  })
+})

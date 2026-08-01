@@ -55,7 +55,9 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.defines = {
       ...this.defines,
       ...(bumpMap && { USE_BUMP: '1' }),
-      ...(specularMap && { USE_SPECULAR: '1' })
+      ...(specularMap && { USE_SPECULAR: '1' }),
+      ...(nightMap && { USE_NIGHT: '1' }),
+      ...(cloudMap && { USE_CLOUD: '1' })
     }
 
     this.needsUpdate = true
@@ -71,6 +73,8 @@ class PlanetMaterial extends AbstractShaderMaterial {
 
     delete this.defines.USE_BUMP
     delete this.defines.USE_SPECULAR
+    delete this.defines.USE_NIGHT
+    delete this.defines.USE_CLOUD
 
     this.needsUpdate = true
   }

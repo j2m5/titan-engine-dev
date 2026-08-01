@@ -105,12 +105,23 @@ export const PlanetShaderTemplate: ShaderProps = {
       float lightIntensity = max(NdotLraw, 0.0);
 
       vec3 dayColor = texture2D(diffuseMap, vUv).rgb;
-      vec3 nightColor = texture2D(nightMap, vUv).rgb;
 
-      vec3 cloudColor = texture2D(cloudMap, vUv).rgb;
-      cloudColor *= pow(max(0.5 * lightIntensity + 0.1, 0.0), 0.5);
-      float cloudAlpha = dot(cloudColor, vec3(1.0)) / 3.0;
-      cloudAlpha = pow(cloudAlpha, 0.5);
+      // Ночная и облачная карты есть не у всех тел. Раньше сэмплеры читались
+      // безусловно, и корректность держалась на правиле GL «непривязанная
+      // текстура читается чёрной». Гейты делают это явным.
+      vec3 nightColor = vec3(0.0);
+      #ifdef USE_NIGHT
+        nightColor = texture2D(nightMap, vUv).rgb;
+      #endif
+
+      vec3 cloudColor = vec3(0.0);
+      float cloudAlpha = 0.0;
+      #ifdef USE_CLOUD
+        cloudColor = texture2D(cloudMap, vUv).rgb;
+        cloudColor *= pow(max(0.5 * lightIntensity + 0.1, 0.0), 0.5);
+        cloudAlpha = dot(cloudColor, vec3(1.0)) / 3.0;
+        cloudAlpha = pow(cloudAlpha, 0.5);
+      #endif
 
       vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);
       vec3 night = nightColor * nightColor * emission;
