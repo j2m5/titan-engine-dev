@@ -2,7 +2,7 @@ import { ringShadowFragment, ringShadowFunctions, ringShadowUniforms } from './R
 import { noiseFunctions } from './Noise'
 import { asteroidShapeFunctions } from './AsteroidShape'
 import { asteroidSurfaceFunctions } from './AsteroidSurface'
-import { bumpFunctions } from '@/core/materials/shaders/lib/chunks/Bump'
+import { heightNormalFunctions, heightNormalUniforms } from '@/core/materials/shaders/lib/chunks/HeightNormal'
 import { ringDustFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
 import { triplanarDetailFunctions, triplanarDetailUniforms } from '@/core/materials/shaders/lib/chunks/TriplanarDetail'
 import { sphereShadowFunctions } from '@/core/materials/shaders/lib/chunks/SphereShadow'
@@ -24,7 +24,8 @@ export const AppShaderChunk: Record<string, any> = {
   noiseFunctions,
   asteroidShapeFunctions,
   asteroidSurfaceFunctions,
-  bumpFunctions,
+  heightNormalUniforms,
+  heightNormalFunctions,
   ringDustUniforms,
   ringDustFunctions,
   triplanarDetailUniforms,

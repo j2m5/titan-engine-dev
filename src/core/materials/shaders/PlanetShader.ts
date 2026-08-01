@@ -1,6 +1,6 @@
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { PlanetShaderTemplate as Shader } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
-import { Texture, Uniform, Vector3 } from 'three'
+import { Texture, Uniform, Vector2, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { IPlanetRenderingObject, IRingRenderingObject, ValueOf } from '@/core/models/types'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -14,6 +14,7 @@ interface PlanetUniforms {
   specularMap: Texture | null
   bumpMap: Texture | null
   bumpScale: number
+  uBumpTexelSize: Vector2
   emission: number
   uSpecularStrength: number
   shadowRingsInnerRadius: number
@@ -61,6 +62,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       specularMap: new Uniform(null),
       bumpMap: new Uniform(null),
       bumpScale: new Uniform(planetData.bumpScale),
+      uBumpTexelSize: new Uniform(new Vector2()),
       emission: new Uniform(planetData.emission),
       uSpecularStrength: new Uniform(2.0),
       shadowRingsInnerRadius: new Uniform(toThreeJSUnits(ringData.innerRadius)),

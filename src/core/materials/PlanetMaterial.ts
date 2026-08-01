@@ -43,6 +43,15 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.specularMap.value = specularMap
     this.uniforms.bumpMap.value = bumpMap
 
+    // Шаг выборки соседних текселей для аналитического градиента нормали.
+    // Нули = рельеф выключен: все четыре выборки совпадают, градиент нулевой —
+    // безопасное поведение, пока карта не загружена.
+    const bumpImage = bumpMap?.image as { width?: number; height?: number } | undefined
+    this.uniforms.uBumpTexelSize.value.set(
+      bumpImage?.width ? 1 / bumpImage.width : 0,
+      bumpImage?.height ? 1 / bumpImage.height : 0
+    )
+
     this.defines = {
       ...this.defines,
       ...(bumpMap && { USE_BUMP: '1' }),
@@ -58,6 +67,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.cloudMap.value = null
     this.uniforms.specularMap.value = null
     this.uniforms.bumpMap.value = null
+    this.uniforms.uBumpTexelSize.value.set(0, 0)
 
     delete this.defines.USE_BUMP
     delete this.defines.USE_SPECULAR

@@ -1,5 +1,5 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
-import { ShaderChunk, Uniform, UniformsUtils, Vector3 } from 'three'
+import { ShaderChunk, Uniform, UniformsUtils, Vector2, Vector3 } from 'three'
 import { AppUniformsChunk } from './chunks'
 
 const defaultUniforms = {
@@ -10,6 +10,7 @@ const defaultUniforms = {
   specularMap: new Uniform(null),
   bumpMap: new Uniform(null),
   bumpScale: new Uniform(0),
+  uBumpTexelSize: new Uniform(new Vector2()),
   emission: new Uniform(1),
   uSpecularStrength: new Uniform(2.0)
 }
@@ -31,6 +32,7 @@ export const PlanetShaderTemplate: ShaderProps = {
     varying vec3 vViewLightDirection;
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
+    varying vec3 vEast;
 
     void main() {
       vec4 worldPosition = modelMatrix * vec4(position, 1.0);
@@ -45,6 +47,10 @@ export const PlanetShaderTemplate: ShaderProps = {
       vUv = uv;
       vNormal = normalize(normalMatrix * normal);
       vPosition = position;
+      // Восток (касательная вдоль долготы) для TBN нормали из карты высот.
+      // Не нормализуем: длина ∝ cos(широты) и служит детектором полюса,
+      // где касательная вырождается.
+      vEast = normalMatrix * cross(vec3(0.0, 1.0, 0.0), position);
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
       vViewPosition = -mvPosition.xyz;
@@ -74,9 +80,11 @@ export const PlanetShaderTemplate: ShaderProps = {
     varying vec3 vViewLightDirection;
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
+    varying vec3 vEast;
 
     #ifdef USE_BUMP
-      #include <bumpFunctions>
+      #include <heightNormalUniforms>
+      #include <heightNormalFunctions>
     #endif
 
     #ifdef USE_RING
@@ -89,8 +97,7 @@ export const PlanetShaderTemplate: ShaderProps = {
       vec3 normal = normalize(vNormal);
 
       #ifdef USE_BUMP
-        float faceDirection = gl_FrontFacing ? 1.0 : -1.0;
-        normal = perturbNormalArb(-vViewPosition, normal, dHdxy_fwd(), faceDirection);
+        normal = perturbNormalFromHeight(normal, vEast, vUv);
       #endif
 
       vec3 lightDirection = normalize(vViewLightDirection);
