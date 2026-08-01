@@ -180,6 +180,10 @@ class BrunetonAtmosphereMaterial extends RawShaderMaterial {
    * (localCameraPos, localSunDir, logDepthBufFC) и одинаковые LUT — иначе
    * между проходами появится видимая кромка. Побочный эффект приятный:
    * `update()` достаточно звать на одном материале.
+   *
+   * ПОРЯДОК ВАЖЕН: three.js снимает снимок `material.uniforms` при первой
+   * компиляции программы (первый рендер). Звать этот метод нужно ДО первого
+   * рендера материала — переприсвоение `uniforms` после уже не подхватится.
    */
   public shareUniformsWith(other: BrunetonAtmosphereMaterial): void {
     this.uniforms = other.uniforms

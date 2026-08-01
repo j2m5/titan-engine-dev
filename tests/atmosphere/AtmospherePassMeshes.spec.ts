@@ -1,6 +1,6 @@
 import { BrunetonAtmosphere } from '@/core/renderables/Atmosphere/BrunetonAtmosphere'
-import { BrunetonAtmosphereMaterial } from '@/core/renderables/Atmosphere/BrunetonAtmosphereMaterial'
 import { AtmosphereConfig, EMPTY_LAYER, expLayer } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+import { DUST_RENDER_ORDER } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
 import { Actor } from '@/core/models/Actor'
 import { Mesh, WebGLRenderer } from 'three'
 
@@ -47,8 +47,7 @@ describe('BrunetonAtmosphere: меши двух проходов', () => {
 
     expect(atmosphere.material.defines.ATMOSPHERE_PASS_TRANSMITTANCE).toBe('1')
     expect(atmosphere.scatterPass).toBeInstanceOf(Mesh)
-    expect((atmosphere.scatterPass.material as BrunetonAtmosphereMaterial).defines.ATMOSPHERE_PASS_TRANSMITTANCE)
-      .toBeUndefined()
+    expect(atmosphere.scatterPass.material.defines.ATMOSPHERE_PASS_TRANSMITTANCE).toBeUndefined()
   })
 
   it('проход in-scatter — единственный потомок и рисуется после умножения', () => {
@@ -66,14 +65,14 @@ describe('BrunetonAtmosphere: меши двух проходов', () => {
 
   it('юниформы общие — update одного прохода кормит оба', () => {
     const atmosphere = new BrunetonAtmosphere(stubActor(), {} as WebGLRenderer)
-    const scatter = atmosphere.scatterPass.material as BrunetonAtmosphereMaterial
+    const scatter = atmosphere.scatterPass.material
 
     expect(scatter.uniforms).toBe(atmosphere.material.uniforms)
   })
 
   it('dispose освобождает оба материала и геометрию один раз', () => {
     const atmosphere = new BrunetonAtmosphere(stubActor(), {} as WebGLRenderer)
-    const scatter = atmosphere.scatterPass.material as BrunetonAtmosphereMaterial
+    const scatter = atmosphere.scatterPass.material
     const geometryDispose = vi.spyOn(atmosphere.geometry, 'dispose')
     const scatterDispose = vi.spyOn(scatter, 'dispose')
 
@@ -81,5 +80,11 @@ describe('BrunetonAtmosphere: меши двух проходов', () => {
 
     expect(scatterDispose).toHaveBeenCalledTimes(1)
     expect(geometryDispose).toHaveBeenCalledTimes(1)
+  })
+
+  it('пыль кольца рисуется строго после in-scatter атмосферы — иначе гало ляжет на недостроенную атмосферу', () => {
+    const atmosphere = new BrunetonAtmosphere(stubActor(), {} as WebGLRenderer)
+
+    expect(DUST_RENDER_ORDER).toBeGreaterThan(atmosphere.scatterPass.renderOrder)
   })
 })

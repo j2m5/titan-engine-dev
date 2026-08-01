@@ -29,7 +29,10 @@ describe('Атмосфера: два выхода вместо скалярно�
   it('колено и потолок остались на in-scatter и не попали в пропускание', () => {
     const knee = src.indexOf('min(color, vec3(1.0)) + excess * uHdrKnee')
     const ceiling = src.indexOf('min(color, vec3(64.0))')
-    const branch = src.indexOf('#ifdef ATMOSPHERE_PASS_TRANSMITTANCE')
+    // lastIndexOf: дебаг-ветка (спека 2026-08-01, «дебаг-виды pass-aware»)
+    // завела собственный #ifdef ATMOSPHERE_PASS_TRANSMITTANCE раньше по файлу —
+    // нужен именно #ifdef композиционной ветки, а не первый попавшийся.
+    const branch = src.lastIndexOf('#ifdef ATMOSPHERE_PASS_TRANSMITTANCE')
 
     expect(knee).toBeGreaterThan(-1)
     expect(ceiling).toBeGreaterThan(-1)
@@ -43,6 +46,33 @@ describe('Атмосфера: два выхода вместо скалярно�
 
     expect(endif).toBeGreaterThan(-1)
     expect(depthWrite).toBeGreaterThan(endif)
+  })
+})
+
+describe('Дебаг-виды: блендинг остаётся активным, ветка обязана быть pass-aware', () => {
+  const src = BrunetonAtmosphereShaderTemplate.fragmentShader
+
+  it('дебаг-ветка содержит собственный #ifdef ATMOSPHERE_PASS_TRANSMITTANCE', () => {
+    const debugBranch = src.indexOf('if (uDebugView > 0.5)')
+    const debugIfdef = src.indexOf('#ifdef ATMOSPHERE_PASS_TRANSMITTANCE', debugBranch)
+    const debugReturn = src.indexOf('return;', debugBranch)
+
+    expect(debugBranch).toBeGreaterThan(-1)
+    expect(debugIfdef).toBeGreaterThan(debugBranch)
+    expect(debugIfdef).toBeLessThan(debugReturn)
+  })
+
+  it('проход пропускания зануляет дебаг-выход — гасит кадр в чёрное вместо dbg·(dst+1)', () => {
+    expect(src).toContain('fragColor = vec4(0.0, 0.0, 0.0, 1.0);')
+  })
+
+  it('проход in-scatter в дебаге по-прежнему несёт dbg', () => {
+    const debugBranch = src.indexOf('if (uDebugView > 0.5)')
+    const debugReturn = src.indexOf('return;', debugBranch)
+    const dbgOutput = src.indexOf('fragColor = vec4(dbg, 1.0);', debugBranch)
+
+    expect(dbgOutput).toBeGreaterThan(debugBranch)
+    expect(dbgOutput).toBeLessThan(debugReturn)
   })
 })
 

@@ -161,7 +161,17 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
         vec3 dbg = uDebugView < 1.5 ? radiance / white_point * exposure
                  : uDebugView < 2.5 ? transmittance
                  : vec3(1.0 - dot(transmittance, vec3(1.0 / 3.0)));
-        fragColor = vec4(dbg, 1.0);
+
+        // Блендинг остаётся активным и в дебаге: проход пропускания гасит
+        // кадр в чёрное (Zero/SrcColor · 0 = 0), проход in-scatter добавляет
+        // dbg (One/One). Итог 0 + dbg = dbg — непрозрачный вывод, как и
+        // задумано (см. комментарий выше).
+        #ifdef ATMOSPHERE_PASS_TRANSMITTANCE
+          fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+        #else
+          fragColor = vec4(dbg, 1.0);
+        #endif
+
         gl_FragDepth = vIsPerspective == 0.0
           ? gl_FragCoord.z
           : log2(vFragDepth) * logDepthBufFC * 0.5;

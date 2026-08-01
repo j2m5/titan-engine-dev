@@ -34,7 +34,7 @@ class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
    * прохода блендинга: сам объект множит кадр на пропускание, этот меш
    * добавляет свечение. Геометрия общая с родителем — освобождает её родитель.
    */
-  public scatterPass!: Mesh
+  public scatterPass!: Mesh<BufferGeometry, BrunetonAtmosphereMaterial>
 
   public constructor(
     model: Actor,
@@ -86,7 +86,7 @@ class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
   public dispose(): void {
     this.lutGenerator.dispose()
     this.material.dispose()
-    ;(this.scatterPass.material as BrunetonAtmosphereMaterial).dispose()
+    this.scatterPass.material.dispose()
     this.geometry.dispose()
   }
 
