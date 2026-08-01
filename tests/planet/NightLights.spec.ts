@@ -21,15 +21,6 @@ describe('Огни городов: порог и тинт вместо квад�
     expect(src).not.toContain('night * 4.0')
   })
 
-  it('ring-shine по-прежнему добавляется к ночному слагаемому', () => {
-    expect(PlanetShaderTemplate.fragmentShader).toContain('night += getRingShine(')
-  })
-
-  it('ring-shine добавляется ДО ночного гейта — иначе отсвет колец протечёт на день', () => {
-    const src = PlanetShaderTemplate.fragmentShader
-    expect(src.indexOf('night += getRingShine(')).toBeLessThan(src.indexOf('night *= nightGate;'))
-  })
-
   it('ручки порога объявлены в шаблоне', () => {
     expect(PlanetShaderTemplate.uniforms.uNightThreshold.value).toBe(0.06)
     expect(PlanetShaderTemplate.uniforms.uNightSoftness.value).toBe(0.18)

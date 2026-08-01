@@ -13,7 +13,6 @@ const defaultUniforms = {
   uBumpTexelSize: new Uniform(new Vector2()),
   emission: new Uniform(1),
   uSpecularStrength: new Uniform(2.0),
-  uRingShineStrength: new Uniform(2.0),
   uNightThreshold: new Uniform(0.06),
   uNightSoftness: new Uniform(0.18)
 }
@@ -95,9 +94,6 @@ export const PlanetShaderTemplate: ShaderProps = {
     #ifdef USE_RING
       #include <ringShadowUniforms>
       #include <ringShadowFunctions>
-      #include <sphereShadowFunctions>
-      #include <ringShineUniforms>
-      #include <ringShineFunctions>
     #endif
 
     void main() {
@@ -141,13 +137,6 @@ export const PlanetShaderTemplate: ShaderProps = {
       float nightMask = smoothstep(uNightThreshold, uNightThreshold + uNightSoftness, nightLum);
       vec3 nightTint = mix(vec3(1.0, 0.78, 0.45), vec3(1.0, 0.97, 0.92), smoothstep(0.15, 0.6, nightLum));
       vec3 night = nightColor * nightTint * nightMask * emission;
-
-      // Отсвет колец: единственный источник света на ночной стороне газовых
-      // гигантов. Добавляется до ночного гейта (на дневной стороне тонет
-      // в солнце) и до клампа 0.99 — не блумит, инвариант bloom-guard цел.
-      #ifdef USE_RING
-        night += getRingShine(normalize(vPosition), vPosition, normalize(vLocalLightDirection), length(vPosition));
-      #endif
 
       // Терминатор: компактная smoothstep-зона вместо линейного mix по всей
       // полусфере; края зоны — ручки приёмки. Цвет НЕ подкрашивается:

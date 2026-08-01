@@ -129,7 +129,7 @@ describe('PlanetMaterial: паритет юниформов шаблон↔ра�
   it('рантайм-дефолты юниформов совпадают с шаблоном', () => {
     const material = new PlanetMaterial(earth())
 
-    const keys = ['uRingShineStrength', 'uNightThreshold', 'uNightSoftness', 'uSpecularStrength'] as const
+    const keys = ['uNightThreshold', 'uNightSoftness', 'uSpecularStrength'] as const
 
     for (const key of keys) {
       expect(material.uniforms[key].value).toBe(PlanetShaderTemplate.uniforms[key].value)

@@ -17,7 +17,6 @@ interface PlanetUniforms {
   uBumpTexelSize: Vector2
   emission: number
   uSpecularStrength: number
-  uRingShineStrength: number
   uNightThreshold: number
   uNightSoftness: number
   shadowRingsInnerRadius: number
@@ -68,7 +67,6 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uBumpTexelSize: new Uniform(new Vector2()),
       emission: new Uniform(planetData.emission),
       uSpecularStrength: new Uniform(2.0),
-      uRingShineStrength: new Uniform(2.0),
       uNightThreshold: new Uniform(0.06),
       uNightSoftness: new Uniform(0.18),
       shadowRingsInnerRadius: new Uniform(toThreeJSUnits(ringData.innerRadius)),
