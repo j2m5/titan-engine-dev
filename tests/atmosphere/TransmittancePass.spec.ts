@@ -45,3 +45,16 @@ describe('Атмосфера: два выхода вместо скалярно�
     expect(depthWrite).toBeGreaterThan(endif)
   })
 })
+
+describe('Дебаг-сцена: переключатель старой композиции', () => {
+  it('сцена заводит меш второго прохода и ручку legacy', async () => {
+    const source = await import('fs').then((fs) =>
+      fs.readFileSync('src/core/renderables/Atmosphere/AtmosphereDebugScene.ts', 'utf8')
+    )
+
+    expect(source).toContain('AtmospherePass.InScatter')
+    expect(source).toContain('shareUniformsWith')
+    expect(source).toContain("name('Legacy composition')")
+    expect(source).toContain('uLegacyComposition')
+  })
+})

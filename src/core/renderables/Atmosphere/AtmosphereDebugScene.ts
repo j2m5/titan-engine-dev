@@ -22,7 +22,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min'
 
 import { Actor } from '@/core/models/Actor'
 import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
-import { BrunetonAtmosphereMaterial } from '@/core/renderables/Atmosphere/BrunetonAtmosphereMaterial'
+import { BrunetonAtmosphereMaterial, AtmospherePass } from '@/core/renderables/Atmosphere/BrunetonAtmosphereMaterial'
 import { Storage } from '@/core/framework/file/Storage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { requireRenderingData } from '@/core/helpers/renderingData'
@@ -81,8 +81,17 @@ class AtmosphereDebugScene {
     this.scene.add(planet)
 
     this.gen = new AtmosphereLUTGenerator(this.renderer)
-    this.mat = new BrunetonAtmosphereMaterial(this.actor)
+    this.mat = new BrunetonAtmosphereMaterial(this.actor, AtmospherePass.Transmittance)
     this.atmoMesh = new Mesh(new SphereGeometry(toThreeJSUnits(data.topRadius), 128, 128), this.mat)
+    this.atmoMesh.renderOrder = 0
+
+    const scatterMaterial = new BrunetonAtmosphereMaterial(this.actor, AtmospherePass.InScatter)
+    scatterMaterial.shareUniformsWith(this.mat)
+
+    const scatterMesh = new Mesh(this.atmoMesh.geometry, scatterMaterial)
+    scatterMesh.renderOrder = 1
+    this.atmoMesh.add(scatterMesh)
+
     planet.add(this.atmoMesh)
 
     this.controls.target = planet.position.clone()
@@ -114,6 +123,7 @@ class AtmosphereDebugScene {
       exposure: data.exposure ?? 10,
       hdrKnee: data.hdrKnee ?? 1,
       debugView: 0,
+      legacyComposition: false,
       wp_R: 1,
       wp_G: 1,
       wp_B: 1,
@@ -192,6 +202,7 @@ class AtmosphereDebugScene {
     this.mat.exposure = this.p.exposure
     this.mat.uniforms.uHdrKnee.value = this.p.hdrKnee
     this.mat.uniforms.uDebugView.value = this.p.debugView
+    this.mat.uniforms.uLegacyComposition.value = this.p.legacyComposition ? 1 : 0
     this.mat.setWhitePoint(this.p.wp_R, this.p.wp_G, this.p.wp_B)
   }
 
@@ -249,6 +260,7 @@ class AtmosphereDebugScene {
       .add(p, 'debugView', { off: 0, 'in-scatter': 1, transmittance: 2, alpha: 3 })
       .name('Debug view')
       .onChange(v)
+    ren.add(p, 'legacyComposition').name('Legacy composition').onChange(v)
 
     this.gui
       .add(
