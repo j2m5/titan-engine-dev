@@ -65,17 +65,7 @@ export const RingShaderTemplate: ShaderProps = {
     varying vec3 vLightDirectionL;
     varying vec3 vLocalCameraPosition;
 
-    float getShadowFromSphere(vec3 lightDirLocal, vec3 ringPosLocal, float planetRadius) {
-      vec3 sunDir = normalize(lightDirLocal);
-      float pDotL = dot(ringPosLocal, sunDir);
-      if (pDotL <= 0.0) return 1.0; // солнечная сторона — не в тени
-      // Мягкая кромка полутени (~8% радиуса планеты) вместо жёсткого перехода:
-      // perp — расстояние от точки до оси теневого цилиндра вдоль направления на солнце
-      float perp = sqrt(max(dot(ringPosLocal, ringPosLocal) - pDotL * pDotL, 0.0));
-      float penumbra = planetRadius * 0.08;
-      float shade = smoothstep(planetRadius, planetRadius + penumbra, perp);
-      return mix(0.04, 1.0, shade); // 0.04 в умбре → 1.0 вне тени
-    }
+    #include <sphereShadowFunctions>
 
     void main() {
       ${ShaderChunk['logdepthbuf_fragment']}

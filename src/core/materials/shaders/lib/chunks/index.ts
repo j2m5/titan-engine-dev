@@ -5,6 +5,7 @@ import { asteroidSurfaceFunctions } from './AsteroidSurface'
 import { bumpFunctions } from '@/core/materials/shaders/lib/chunks/Bump'
 import { ringDustFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
 import { triplanarDetailFunctions, triplanarDetailUniforms } from '@/core/materials/shaders/lib/chunks/TriplanarDetail'
+import { sphereShadowFunctions } from '@/core/materials/shaders/lib/chunks/SphereShadow'
 import { IUniform, Uniform } from 'three'
 
 export const AppUniformsChunk: Record<string, Record<string, IUniform>> = {
@@ -27,5 +28,6 @@ export const AppShaderChunk: Record<string, any> = {
   ringDustUniforms,
   ringDustFunctions,
   triplanarDetailUniforms,
-  triplanarDetailFunctions
+  triplanarDetailFunctions,
+  sphereShadowFunctions
 }
