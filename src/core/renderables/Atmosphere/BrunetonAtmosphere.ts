@@ -2,7 +2,7 @@ import { BufferGeometry, Mesh, SphereGeometry, Vector3, WebGLRenderer } from 'th
 import { Acceptable } from '@/core/services/visitors/Acceptable'
 import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
 import { Actor } from '@/core/models/Actor'
-import { BrunetonAtmosphereMaterial } from '@/core/renderables/Atmosphere/BrunetonAtmosphereMaterial'
+import { AtmospherePass, BrunetonAtmosphereMaterial } from '@/core/renderables/Atmosphere/BrunetonAtmosphereMaterial'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { requireRenderingData } from '@/core/helpers/renderingData'
 import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
@@ -29,6 +29,13 @@ class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
    */
   private lutGenerator!: AtmosphereLUTGenerator
 
+  /**
+   * Проход сложения (in-scatter). Композиция атмосферы раскладывается на два
+   * прохода блендинга: сам объект множит кадр на пропускание, этот меш
+   * добавляет свечение. Геометрия общая с родителем — освобождает её родитель.
+   */
+  public scatterPass!: Mesh
+
   public constructor(
     model: Actor,
     private readonly renderer: WebGLRenderer
@@ -50,10 +57,26 @@ class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
 
     this.geometry = new SphereGeometry(radius, 256, 256)
 
-    this.material = new BrunetonAtmosphereMaterial(this.model)
+    this.material = new BrunetonAtmosphereMaterial(this.model, AtmospherePass.Transmittance)
     this.material.bindLUTTextures(lut)
 
     this.name = this.model.getAttribute('name', '') + 'Atmosphere'
+
+    // Порядок несущий: умножение на пропускание должно лечь ДО сложения,
+    // иначе in-scatter окажется домножен на пропускание.
+    this.renderOrder = 0
+
+    const scatterMaterial: BrunetonAtmosphereMaterial = new BrunetonAtmosphereMaterial(
+      this.model,
+      AtmospherePass.InScatter
+    )
+    scatterMaterial.shareUniformsWith(this.material)
+
+    this.scatterPass = new Mesh(this.geometry, scatterMaterial)
+    this.scatterPass.renderOrder = 1
+    this.scatterPass.name = this.name + 'InScatter'
+
+    this.add(this.scatterPass)
   }
 
   /**
@@ -63,6 +86,7 @@ class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
   public dispose(): void {
     this.lutGenerator.dispose()
     this.material.dispose()
+    ;(this.scatterPass.material as BrunetonAtmosphereMaterial).dispose()
     this.geometry.dispose()
   }
 
