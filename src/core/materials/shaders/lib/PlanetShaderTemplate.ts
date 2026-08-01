@@ -13,7 +13,9 @@ const defaultUniforms = {
   uBumpTexelSize: new Uniform(new Vector2()),
   emission: new Uniform(1),
   uSpecularStrength: new Uniform(2.0),
-  uRingShineStrength: new Uniform(1.0)
+  uRingShineStrength: new Uniform(1.0),
+  uNightThreshold: new Uniform(0.06),
+  uNightSoftness: new Uniform(0.18)
 }
 const ringShadowUniforms = AppUniformsChunk.ringShadowUniforms
 
@@ -74,6 +76,8 @@ export const PlanetShaderTemplate: ShaderProps = {
     uniform float bumpScale;
     uniform float emission;
     uniform float uSpecularStrength;
+    uniform float uNightThreshold;
+    uniform float uNightSoftness;
 
     varying vec2 vUv;
     varying vec3 vNormal;
@@ -128,7 +132,15 @@ export const PlanetShaderTemplate: ShaderProps = {
       #endif
 
       vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);
-      vec3 night = nightColor * nightColor * emission;
+      // Огни городов: порог с мягкостью вместо квадрата. Квадрат душил
+      // середину и оставлял размытый ореол вокруг агломераций; порог гасит
+      // слабую засветку и сохраняет яркие ядра. Тинт по яркости: тусклые
+      // окраины натриево-оранжевые, яркие центры белее. Всё под клампом 0.99 —
+      // огни не блумят.
+      float nightLum = dot(nightColor, vec3(0.2126, 0.7152, 0.0722));
+      float nightMask = smoothstep(uNightThreshold, uNightThreshold + uNightSoftness, nightLum);
+      vec3 nightTint = mix(vec3(1.0, 0.78, 0.45), vec3(1.0, 0.97, 0.92), smoothstep(0.15, 0.6, nightLum));
+      vec3 night = nightColor * nightTint * nightMask * emission;
 
       // Отсвет колец: единственный источник света на ночной стороне газовых
       // гигантов. Добавляется до ночного гейта (на дневной стороне тонет
