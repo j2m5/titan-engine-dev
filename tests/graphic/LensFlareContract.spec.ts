@@ -1,4 +1,4 @@
-import { TextureLoader } from 'three'
+import { TextureLoader, type WebGLRenderer, type WebGLRenderTarget } from 'three'
 import { BLOOM_OPTIONS } from '@/core/graphic/Postprocessing'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { lensFlare } from '@/config/lensFlare'
@@ -151,18 +151,44 @@ describe('LensFlareEffect: анаморфный штрих', () => {
     expect(effect.streakMaterial.fragmentShader).toContain('vec2(texelSize.x * spread * float(i), 0.0)')
   })
 
-  it('spread штриха меряется в текселях реально сэмплируемого буфера (renderTarget2), а не собственного четвертного таргета', () => {
+  it('spread штриха меряется в текселях реально сэмплируемого буфера (renderTarget1), а не собственного четвертного таргета', () => {
     const effect = new LensFlareEffect()
 
     effect.setSize(1024, 512)
 
-    // streakPass.render(renderer, renderTarget2, streakTarget) — inputBuffer
-    // прохода это renderTarget2 (половина базового, 512×256), а не streakTarget
-    // (256×128). texelSize материала обязан отражать реальный вход
+    // streakPass.render(renderer, renderTarget1, streakTarget) — inputBuffer
+    // прохода это renderTarget1 (половина базового, 512×256), а не streakTarget
+    // (256×128). texelSize материала обязан отражать реальный вход.
+    // renderTarget1 и renderTarget2 всегда одного размера, поэтому числа
+    // совпали бы и до правки источника — сам источник закрыт отдельным тестом
+    // ниже
     expect(effect.streakTarget.width).toBe(256)
     expect(effect.streakTarget.height).toBe(128)
     expect(effect.streakMaterial.uniforms.texelSize.value.x).toBe(1 / 512)
     expect(effect.streakMaterial.uniforms.texelSize.value.y).toBe(1 / 256)
+  })
+
+  it('штрих сэмплирует резкий пороговый буфер (renderTarget1), а не уже размытый Kawase (renderTarget2): предразмытие раздувает штрих по вертикали, а размывает штрих только по X', () => {
+    const effect = new LensFlareEffect()
+    effect.setSize(64, 64)
+
+    const mockRenderer = {
+      setRenderTarget: vi.fn(),
+      render: vi.fn(),
+      clear: vi.fn()
+    } as unknown as WebGLRenderer
+    const mockInputBuffer = { texture: {} } as unknown as WebGLRenderTarget
+
+    effect.update(mockRenderer, mockInputBuffer)
+
+    // ShaderPass.render перед рендером кладёт inputBuffer.texture в
+    // material.uniforms.inputBuffer.value — сверяем, чей именно текстурный
+    // объект туда попал у прохода штриха. Ссылка на .texture у render target
+    // не меняется от последующих рендеров в него (featuresPass пишет в
+    // renderTarget1 позже в том же update()), поэтому проверка валидна и
+    // после завершения кадра
+    expect(effect.streakMaterial.uniforms.inputBuffer.value).toBe(effect.renderTarget1.texture)
+    expect(effect.streakMaterial.uniforms.inputBuffer.value).not.toBe(effect.renderTarget2.texture)
   })
 
   it('streakTint из опций эффекта доезжает до юниформа материала артефактов — тем же путём, что streakAmount', () => {

@@ -224,7 +224,14 @@ export class LensFlareEffect extends Effect {
 
     this.thresholdPass.render(renderer, inputBuffer, this.renderTarget1)
     this.preBlurPass.render(renderer, this.renderTarget1, this.renderTarget2)
-    this.streakPass.render(renderer, this.renderTarget2, this.streakTarget)
+    // Штрих читает renderTarget1 — резкий пороговый буфер, ДО Kawase, а не
+    // renderTarget2 после него: проход размывает только по X (см.
+    // AnamorphicStreakMaterial), поэтому вертикальную толщину черты он
+    // целиком наследует от источника. Предразмытый источник раздувает черту
+    // по вертикали ещё до анаморфной растяжки. Порядок безопасен: featuresPass
+    // перезапишет renderTarget1 только строкой ниже, уже ПОСЛЕ того, как
+    // streakPass его прочитал
+    this.streakPass.render(renderer, this.renderTarget1, this.streakTarget)
     this.featuresPass.render(renderer, this.renderTarget2, this.renderTarget1)
   }
 
@@ -240,10 +247,13 @@ export class LensFlareEffect extends Effect {
     this.featuresMaterial.setSize(width, height)
 
     // streakTarget — четверть базового разрешения (вчетверо дешевле прохода
-    // артефактов), но проход реально сэмплит renderTarget2 (половинное
-    // разрешение) как inputBuffer — поэтому texelSize материала считается от
-    // width/height, а не от размеров собственного таргета, иначе spread
-    // измерялся бы не в тех текселях
+    // артефактов), но проход реально сэмплит renderTarget1 (половинное
+    // разрешение, резкий пороговый буфер до Kawase — см. update()) как
+    // inputBuffer — поэтому texelSize материала считается от width/height, а
+    // не от размеров собственного таргета, иначе spread измерялся бы не в тех
+    // текселях. renderTarget1 и renderTarget2 всегда одного размера
+    // (обе строки setSize выше), так что численно width/height подходят и
+    // для той, и для другой
     const streakWidth = Math.max(1, Math.round(width * 0.5))
     const streakHeight = Math.max(1, Math.round(height * 0.5))
     this.streakTarget.setSize(streakWidth, streakHeight)
