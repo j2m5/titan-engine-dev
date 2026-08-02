@@ -14,7 +14,6 @@ import {
 } from 'three'
 
 import { Storage } from '@/core/framework/file/Storage'
-import { AnamorphicStreakMaterial } from './AnamorphicStreakMaterial'
 import { DownsampleThresholdMaterial } from './DownsampleThresholdMaterial'
 import { LensFlareFeaturesMaterial } from './LensFlareFeaturesMaterial'
 import { computeStarburstRotation } from './starburstRotation'
@@ -48,8 +47,6 @@ export interface LensFlareEffectOptions {
   thresholdLevel?: number
   camera?: Camera
   starburstAmount?: number
-  streakAmount?: number
-  streakTint?: readonly [number, number, number]
 }
 
 export interface LensFlareEffectUniforms {
@@ -79,10 +76,6 @@ export class LensFlareEffect extends Effect {
   readonly featuresMaterial: LensFlareFeaturesMaterial
   readonly featuresPass: ShaderPass
 
-  readonly streakTarget: WebGLRenderTarget
-  readonly streakMaterial: AnamorphicStreakMaterial
-  readonly streakPass: ShaderPass
-
   // Собственное поле, а не только значение uniform'а материала: штатный
   // Effect.dispose() из postprocessing обходит Object.keys(this) верхнего
   // уровня эффекта и разбирает всё, что instanceof Texture/Material/
@@ -111,9 +104,7 @@ export class LensFlareEffect extends Effect {
       chromaticAberration,
       thresholdLevel,
       camera,
-      starburstAmount,
-      streakAmount,
-      streakTint
+      starburstAmount
     } = {
       ...lensFlareEffectOptionsDefaults,
       ...options
@@ -150,16 +141,6 @@ export class LensFlareEffect extends Effect {
 
     this.featuresMaterial = new LensFlareFeaturesMaterial()
     this.featuresPass = new ShaderPass(this.featuresMaterial)
-
-    this.streakTarget = new WebGLRenderTarget(1, 1, {
-      depthBuffer: false,
-      type: HalfFloatType
-    })
-    this.streakTarget.texture.name = 'LensFlare.Streak'
-
-    this.streakMaterial = new AnamorphicStreakMaterial()
-    this.streakPass = new ShaderPass(this.streakMaterial)
-    this.featuresMaterial.streakBuffer = this.streakTarget.texture
 
     // Ассеты объектива — движковые, а не сценарные: объектив у всех сценариев
     // один, поэтому их нет в таблице ресурсов. URL через Storage: иначе режим
@@ -202,8 +183,6 @@ export class LensFlareEffect extends Effect {
     if (chromaticAberration !== undefined) this.featuresMaterial.chromaticAberration = chromaticAberration
     if (thresholdLevel !== undefined) this.thresholdLevel = thresholdLevel
     if (starburstAmount !== undefined) this.featuresMaterial.starburstAmount = starburstAmount
-    if (streakAmount !== undefined) this.featuresMaterial.streakAmount = streakAmount
-    if (streakTint !== undefined) this.featuresMaterial.streakTint = streakTint
   }
 
   private readonly onResolutionChange = (): void => {
@@ -213,7 +192,6 @@ export class LensFlareEffect extends Effect {
   override initialize(renderer: WebGLRenderer, alpha: boolean, frameBufferType: TextureDataType): void {
     this.thresholdPass.initialize(renderer, alpha, frameBufferType)
     this.preBlurPass.initialize(renderer, alpha, frameBufferType)
-    this.streakPass.initialize(renderer, alpha, frameBufferType)
     this.featuresPass.initialize(renderer, alpha, frameBufferType)
   }
 
@@ -224,14 +202,6 @@ export class LensFlareEffect extends Effect {
 
     this.thresholdPass.render(renderer, inputBuffer, this.renderTarget1)
     this.preBlurPass.render(renderer, this.renderTarget1, this.renderTarget2)
-    // Штрих читает renderTarget1 — резкий пороговый буфер, ДО Kawase, а не
-    // renderTarget2 после него: проход размывает только по X (см.
-    // AnamorphicStreakMaterial), поэтому вертикальную толщину черты он
-    // целиком наследует от источника. Предразмытый источник раздувает черту
-    // по вертикали ещё до анаморфной растяжки. Порядок безопасен: featuresPass
-    // перезапишет renderTarget1 только строкой ниже, уже ПОСЛЕ того, как
-    // streakPass его прочитал
-    this.streakPass.render(renderer, this.renderTarget1, this.streakTarget)
     this.featuresPass.render(renderer, this.renderTarget2, this.renderTarget1)
   }
 
@@ -245,19 +215,6 @@ export class LensFlareEffect extends Effect {
     this.thresholdMaterial.setSize(width, height)
     this.preBlurPass.setSize(width, height)
     this.featuresMaterial.setSize(width, height)
-
-    // streakTarget — четверть базового разрешения (вчетверо дешевле прохода
-    // артефактов), но проход реально сэмплит renderTarget1 (половинное
-    // разрешение, резкий пороговый буфер до Kawase — см. update()) как
-    // inputBuffer — поэтому texelSize материала считается от width/height, а
-    // не от размеров собственного таргета, иначе spread измерялся бы не в тех
-    // текселях. renderTarget1 и renderTarget2 всегда одного размера
-    // (обе строки setSize выше), так что численно width/height подходят и
-    // для той, и для другой
-    const streakWidth = Math.max(1, Math.round(width * 0.5))
-    const streakHeight = Math.max(1, Math.round(height * 0.5))
-    this.streakTarget.setSize(streakWidth, streakHeight)
-    this.streakMaterial.setSize(width, height)
   }
 
   get intensity(): number {

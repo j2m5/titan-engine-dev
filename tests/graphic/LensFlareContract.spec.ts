@@ -1,4 +1,4 @@
-import { TextureLoader, type WebGLRenderer, type WebGLRenderTarget } from 'three'
+import { TextureLoader } from 'three'
 import { BLOOM_OPTIONS } from '@/core/graphic/Postprocessing'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { lensFlare } from '@/config/lensFlare'
@@ -126,94 +126,6 @@ describe('LensFlareEffect: старберст', () => {
   })
 })
 
-describe('LensFlareEffect: анаморфный штрих', () => {
-  it('штрих подключён и по умолчанию нейтрален', () => {
-    const effect = new LensFlareEffect()
-
-    expect(effect.featuresMaterial.fragmentShader).toContain('uniform sampler2D streakBuffer;')
-    expect(effect.featuresMaterial.streakAmount).toBe(0)
-  })
-
-  it('таргет штриха — четверть базового разрешения и следует за ресайзом', () => {
-    const effect = new LensFlareEffect()
-
-    effect.setSize(1024, 512)
-
-    // resolutionScale 0.5 у общих таргетов, штрих ещё вдвое меньше
-    expect(effect.renderTarget1.width).toBe(512)
-    expect(effect.streakTarget.width).toBe(256)
-    expect(effect.streakTarget.height).toBe(128)
-  })
-
-  it('штрих горизонтальный: смещение выборок идёт по X', () => {
-    const effect = new LensFlareEffect()
-
-    expect(effect.streakMaterial.fragmentShader).toContain('vec2(texelSize.x * spread * float(i), 0.0)')
-  })
-
-  it('spread штриха меряется в текселях реально сэмплируемого буфера (renderTarget1), а не собственного четвертного таргета', () => {
-    const effect = new LensFlareEffect()
-
-    effect.setSize(1024, 512)
-
-    // streakPass.render(renderer, renderTarget1, streakTarget) — inputBuffer
-    // прохода это renderTarget1 (половина базового, 512×256), а не streakTarget
-    // (256×128). texelSize материала обязан отражать реальный вход.
-    // renderTarget1 и renderTarget2 всегда одного размера, поэтому числа
-    // совпали бы и до правки источника — сам источник закрыт отдельным тестом
-    // ниже
-    expect(effect.streakTarget.width).toBe(256)
-    expect(effect.streakTarget.height).toBe(128)
-    expect(effect.streakMaterial.uniforms.texelSize.value.x).toBe(1 / 512)
-    expect(effect.streakMaterial.uniforms.texelSize.value.y).toBe(1 / 256)
-  })
-
-  it('штрих сэмплирует резкий пороговый буфер (renderTarget1), а не уже размытый Kawase (renderTarget2): предразмытие раздувает штрих по вертикали, а размывает штрих только по X', () => {
-    const effect = new LensFlareEffect()
-    effect.setSize(64, 64)
-
-    const mockRenderer = {
-      setRenderTarget: vi.fn(),
-      render: vi.fn(),
-      clear: vi.fn()
-    } as unknown as WebGLRenderer
-    const mockInputBuffer = { texture: {} } as unknown as WebGLRenderTarget
-
-    effect.update(mockRenderer, mockInputBuffer)
-
-    // ShaderPass.render перед рендером кладёт inputBuffer.texture в
-    // material.uniforms.inputBuffer.value — сверяем, чей именно текстурный
-    // объект туда попал у прохода штриха. Ссылка на .texture у render target
-    // не меняется от последующих рендеров в него (featuresPass пишет в
-    // renderTarget1 позже в том же update()), поэтому проверка валидна и
-    // после завершения кадра
-    expect(effect.streakMaterial.uniforms.inputBuffer.value).toBe(effect.renderTarget1.texture)
-    expect(effect.streakMaterial.uniforms.inputBuffer.value).not.toBe(effect.renderTarget2.texture)
-  })
-
-  it('вклад штриха идёт через яркость буфера, а не через его RGB-цвет — иначе тёплый источник съедает холодный streakTint', () => {
-    // Оттенок штриха принадлежит объективу (просветление анаморфной
-    // оптики), а не источнику света. Если оттенок умножать на RGB-цвет
-    // источника, а не на его яркость, тёплое Солнце сведёт синий streakTint
-    // к грязно-серому — синева физически недостижима
-    const effect = new LensFlareEffect()
-    const source = effect.featuresMaterial.fragmentShader
-
-    expect(source).toContain('vec3(luminance(texture(streakBuffer, vUv).rgb)) * streakTint * streakAmount')
-    expect(source).not.toContain('texture(streakBuffer, vUv).rgb * streakTint * streakAmount')
-  })
-
-  it('streakTint из опций эффекта доезжает до юниформа материала артефактов — тем же путём, что streakAmount', () => {
-    const effect = new LensFlareEffect({
-      streakAmount: lensFlare.lensFlare.streakAmount,
-      streakTint: lensFlare.lensFlare.streakTint
-    })
-
-    expect(effect.featuresMaterial.streakAmount).toBe(lensFlare.lensFlare.streakAmount)
-    expect(effect.featuresMaterial.streakTint.toArray()).toEqual([...lensFlare.lensFlare.streakTint])
-  })
-})
-
 describe('LensFlareEffect: ошибки загрузки текстур объектива', () => {
   // lenscolor.png и lensstar.png лежат вне git (**/textures/ в .gitignore) и в
   // проде берутся из S3. Если файла там нет, TextureLoader молча биндит
@@ -266,16 +178,13 @@ describe('LensFlareEffect: ошибки загрузки текстур объе
 
 describe('LensFlareEffect: значения приёмки', () => {
   it('интенсивность не выше потолка, заданного сценой чёрной дыры', () => {
-    // При 3 тень дыры заливается молочной пеленой с цветными разводами,
-    // при streakAmount 8 — синим налётом от штриха. Владелец правил в сторону
-    // ненавязчивости: общий уровень низкий, вперёд выходит только штрих
+    // При 3 тень дыры заливается молочной пеленой с цветными разводами.
+    // Владелец правил в сторону ненавязчивости: общий уровень низкий
     expect(lensFlare.lensFlare.intensity).toBe(0.15)
-    expect(lensFlare.lensFlare.streakAmount).toBe(3)
   })
 
   it('артефакты объектива включены — иначе арка тихо откатится к невидимому эффекту', () => {
     expect(lensFlare.lensFlare.starburstAmount).toBeGreaterThan(0)
-    expect(lensFlare.lensFlare.streakAmount).toBeGreaterThan(0)
     expect(lensFlare.lensFlare.ghostAmount).toBeGreaterThan(0)
   })
 })

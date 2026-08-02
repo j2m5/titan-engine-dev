@@ -62,8 +62,6 @@ class Postprocessing {
       haloAmount: config('lensFlare.haloAmount'),
       chromaticAberration: config('lensFlare.chromaticAberration'),
       starburstAmount: config('lensFlare.starburstAmount'),
-      streakAmount: config('lensFlare.streakAmount'),
-      streakTint: config('lensFlare.streakTint'),
       // порог — общий с bloom: два разных числа разъехались бы при первой правке
       thresholdLevel: BLOOM_OPTIONS.luminanceThreshold
     })
