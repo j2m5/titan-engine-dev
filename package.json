@@ -10,6 +10,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "typecheck": "tsc -b",
+    "downscale:cubemap": "vite-node scripts/downscale-cubemap.ts --",
     "preview": "vite preview",
     "test": "npm run typecheck && vitest"
   },
@@ -42,6 +43,7 @@
     "path": "^0.12.7",
     "prettier": "^3.5.3",
     "sass": "^1.85.1",
+    "sharp": "^0.35.3",
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.24.1",
     "vite": "7.1.11",
