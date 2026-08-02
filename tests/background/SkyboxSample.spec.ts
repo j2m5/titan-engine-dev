@@ -20,8 +20,8 @@ describe('SkyboxSample: общая выборка фона с расширени
     expect(skyboxSampleFunctions).toContain('raw + excess * (uSkyHighlightBoost - 1.0)')
   })
 
-  it('дефолт конфига нейтрален: boost 1 не меняет картинку', () => {
-    expect(background.background.highlightBoost).toBe(1)
+  it('расширение включено: подобранная на приёмке сила', () => {
+    expect(background.background.highlightBoost).toBe(9)
   })
 
   it('порог конфига в допустимом диапазоне', () => {
