@@ -1,6 +1,7 @@
 import { IUniform, Matrix4, Texture, Uniform, Vector2, Vector3 } from 'three'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
 import { config } from '@/core/framework/config'
+import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
 
 /**
  * Шейдер чёрной дыры, этап 3: лензирование Шварцшильда + аккреционный диск
@@ -83,15 +84,14 @@ export function createBlackHoleUniforms(parameters: BlackHoleParameters): Record
      * ResourceObserver.sceneBackground, обновляется каждый кадр
      */
     skybox: new Uniform(null),
-    /**
-     * Ориентация кубмапы по X: Three.js рендерит фоновые CubeTexture
-     * с инверсией X («вид изнутри»)
-     */
-    envMapFlipX: new Uniform(-1),
 
-    /** Расширение хайлайтов фона — общий чанк sampleSkyboxHdr, см. SkyboxSample */
-    uSkyHighlightThreshold: new Uniform(config('background.highlightThreshold')),
-    uSkyHighlightBoost: new Uniform(config('background.highlightBoost'))
+    /**
+     * Порог/сила расширения хайлайтов и флип ориентации кубмапы по X — общий
+     * набор, что и у собственного фонового прохода (см. `createSkyboxSampleUniforms`
+     * в SkyboxSample): оба потребителя обязаны сэмплировать одну кубмапу
+     * одинаково, иначе на границе сферы симуляции возникает ступенька яркости.
+     */
+    ...createSkyboxSampleUniforms()
   }
 }
 
@@ -151,7 +151,6 @@ export const BlackHoleShaderTemplate = {
     uniform float uDebugCrossings;
 
     uniform samplerCube skybox;
-    uniform float envMapFlipX;
 
     #include <skyboxSampleUniforms>
     #include <skyboxSampleFunctions>
@@ -195,9 +194,11 @@ export const BlackHoleShaderTemplate = {
       // Выборка вынесена в общий чанк: её же зовёт собственный фоновый проход.
       // Прежде здесь стояла копия, и любое расхождение с рендером фона давало
       // ступеньку яркости на границе сферы симуляции — теперь расхождение
-      // невозможно по построению. envMapFlipX остаётся: ориентация
-      // линзированного пути своя и не обязана совпадать с прямым фоном.
-      return sampleSkyboxHdr(skybox, direction, envMapFlipX);
+      // невозможно по построению. uSkyFlipX — тот же юниформ (тот же знак),
+      // что и у прямого фона: оба потребителя подают в кубмапу мировые
+      // направления (меш ЧД никогда не вращается), поэтому ориентация ОБЯЗАНА
+      // совпадать, а не может отличаться.
+      return sampleSkyboxHdr(skybox, direction, uSkyFlipX);
     }
 
     // Аналитический планковский blackbody: CIE-аппроксимация локуса → XYZ → linear sRGB,

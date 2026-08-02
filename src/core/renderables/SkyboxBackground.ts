@@ -1,6 +1,6 @@
 import { BufferAttribute, BufferGeometry, CubeTexture, GLSL3, Mesh, RawShaderMaterial, Uniform } from 'three'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
-import { config } from '@/core/framework/config'
+import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
 
 /**
  * Собственный проход фона вместо `scene.background`.
@@ -20,17 +20,12 @@ import { config } from '@/core/framework/config'
  */
 class SkyboxBackground extends Mesh {
   public constructor(texture: CubeTexture) {
-    super()
-
     // Треугольник, накрывающий клип-пространство: две вершины уходят за
     // пределы экрана, растр отсекает лишнее сам
-    this.geometry = new BufferGeometry()
-    this.geometry.setAttribute(
-      'position',
-      new BufferAttribute(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), 3)
-    )
+    const geometry = new BufferGeometry()
+    geometry.setAttribute('position', new BufferAttribute(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), 3))
 
-    this.material = new RawShaderMaterial({
+    const material = new RawShaderMaterial({
       glslVersion: GLSL3,
       uniforms: {
         skybox: new Uniform(texture),
@@ -38,13 +33,17 @@ class SkyboxBackground extends Mesh {
         // three рисует фоновую кубмапу «изнутри», с инверсией X, а свой проход
         // этой инверсии не наследует — без компенсации Млечный Путь выходит
         // зеркальным (проверено сравнением кадров «до»/«после» по положению
-        // пылевой прожилки относительно маркера Земли). У линзированного пути
-        // ЧД своя ручка envMapFlipX — значения не обязаны совпадать.
-        uFlipX: new Uniform(-1),
-        uSkyHighlightThreshold: new Uniform(config('background.highlightThreshold')),
-        uSkyHighlightBoost: new Uniform(config('background.highlightBoost'))
+        // пылевой прожилки относительно маркера Земли). Юниформ `uSkyFlipX`
+        // общий с линзированным путём ЧД (см. `createSkyboxSampleUniforms`) —
+        // оба потребителя смотрят на одну кубмапу из мировых направлений, и
+        // расхождение флипа зеркалит одно изображение относительно другого.
+        ...createSkyboxSampleUniforms()
       },
-      vertexShader: /* glsl */ `
+      // Вершинник без #include, но прогоняется через prepareSource тем же
+      // способом, что и фрагментник: собирается напрямую, минуя конструктор
+      // AbstractShader, и застраховаться от будущего немого include дешевле,
+      // чем полагаться на то, что он не понадобится
+      vertexShader: AbstractShader.prepareSource(/* glsl */ `
         precision highp float;
 
         uniform mat4 projectionMatrix;
@@ -64,12 +63,11 @@ class SkyboxBackground extends Mesh {
 
           gl_Position = clip;
         }
-      `,
+      `),
       fragmentShader: AbstractShader.prepareSource(/* glsl */ `
         precision highp float;
 
         uniform samplerCube skybox;
-        uniform float uFlipX;
 
         #include <skyboxSampleUniforms>
         #include <skyboxSampleFunctions>
@@ -79,13 +77,15 @@ class SkyboxBackground extends Mesh {
         layout(location = 0) out vec4 fragColor;
 
         void main() {
-          fragColor = vec4(sampleSkyboxHdr(skybox, normalize(vRay), uFlipX), 1.0);
+          fragColor = vec4(sampleSkyboxHdr(skybox, normalize(vRay), uSkyFlipX), 1.0);
         }
       `),
 
       depthTest: false,
       depthWrite: false
     })
+
+    super(geometry, material)
 
     // Вырожденный bounding-объём треугольника иначе периодически отсекается
     // фрустумом, и фон мигает
