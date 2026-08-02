@@ -16,6 +16,8 @@ export interface LensFlareConfig {
     haloAmount: number
     /** Разведение каналов в гало, в текселях половинного разрешения */
     chromaticAberration: number
+    /** Сила лучей объектива; 0 — маска тождественна и лучей нет */
+    starburstAmount: number
   }
 }
 
@@ -24,6 +26,7 @@ export const lensFlare: LensFlareConfig = {
     intensity: 0.01,
     ghostAmount: 0.1,
     haloAmount: 0.1,
-    chromaticAberration: 10
+    chromaticAberration: 10,
+    starburstAmount: 0
   }
 }

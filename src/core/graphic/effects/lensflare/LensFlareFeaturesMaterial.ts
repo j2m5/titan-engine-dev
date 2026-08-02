@@ -20,11 +20,14 @@ const fragmentShader: string = `
 
   uniform sampler2D inputBuffer;
   uniform sampler2D lensColor;
+  uniform sampler2D starburst;
 
   uniform vec2 texelSize;
   uniform float ghostAmount;
   uniform float haloAmount;
   uniform float chromaticAberration;
+  uniform float starburstRotation;
+  uniform float starburstAmount;
 
   in vec2 vUv;
   in vec2 vAspectRatio;
@@ -91,25 +94,41 @@ const fragmentShader: string = `
     return vec4(color, 1.0) * amount;
   }
 
+  // Лучи объектива. Маска повёрнута по ориентации камеры и НЕ привязана к
+  // источнику света: она модулирует уже посчитанные артефакты
+  float sampleStarburst() {
+    vec2 centered = vUv - 0.5;
+    float c = cos(starburstRotation);
+    float s = sin(starburstRotation);
+    vec2 rotated = vec2(centered.x * c - centered.y * s, centered.x * s + centered.y * c);
+    return texture(starburst, rotated + 0.5).r;
+  }
+
   void main() {
-    gl_FragColor = vec4(0.0);
-    gl_FragColor += sampleGhosts(ghostAmount);
-    gl_FragColor += sampleHalos(haloAmount);
+    vec4 features = vec4(0.0);
+    features += sampleGhosts(ghostAmount);
+    features += sampleHalos(haloAmount);
+
+    // при starburstAmount = 0 множитель равен 1.0 — маска тождественна
+    gl_FragColor = features * (1.0 + starburstAmount * sampleStarburst());
   }
 `
 
 export interface LensFlareFeaturesMaterialParameters extends ShaderMaterialParameters {
   inputBuffer?: Texture | null
   lensColorTexture?: Texture | null
+  starburstTexture?: Texture | null
   ghostAmount?: number
   haloAmount?: number
   chromaticAberration?: number
+  starburstAmount?: number
 }
 
 export const lensFlareFeaturesMaterialParametersDefaults = {
   ghostAmount: 0.1,
   haloAmount: 0.1,
-  chromaticAberration: 10
+  chromaticAberration: 10,
+  starburstAmount: 0
 } satisfies LensFlareFeaturesMaterialParameters
 
 export class LensFlareFeaturesMaterial extends ShaderMaterial {
@@ -117,9 +136,11 @@ export class LensFlareFeaturesMaterial extends ShaderMaterial {
     const {
       inputBuffer = null,
       lensColorTexture = null,
+      starburstTexture = null,
       ghostAmount,
       haloAmount,
       chromaticAberration,
+      starburstAmount,
       ...others
     } = {
       ...lensFlareFeaturesMaterialParametersDefaults,
@@ -136,10 +157,13 @@ export class LensFlareFeaturesMaterial extends ShaderMaterial {
       uniforms: {
         inputBuffer: new Uniform(inputBuffer),
         lensColor: new Uniform(lensColorTexture),
+        starburst: new Uniform(starburstTexture),
         texelSize: new Uniform(new Vector2()),
         ghostAmount: new Uniform(ghostAmount),
         haloAmount: new Uniform(haloAmount),
         chromaticAberration: new Uniform(chromaticAberration),
+        starburstRotation: new Uniform(0),
+        starburstAmount: new Uniform(starburstAmount),
         ...others.uniforms
       }
     })
@@ -187,5 +211,29 @@ export class LensFlareFeaturesMaterial extends ShaderMaterial {
 
   set chromaticAberration(value: number) {
     this.uniforms.chromaticAberration.value = value
+  }
+
+  get starburstTexture(): Texture | null {
+    return this.uniforms.starburst.value
+  }
+
+  set starburstTexture(value: Texture | null) {
+    this.uniforms.starburst.value = value
+  }
+
+  get starburstRotation(): number {
+    return this.uniforms.starburstRotation.value
+  }
+
+  set starburstRotation(value: number) {
+    this.uniforms.starburstRotation.value = value
+  }
+
+  get starburstAmount(): number {
+    return this.uniforms.starburstAmount.value
+  }
+
+  set starburstAmount(value: number) {
+    this.uniforms.starburstAmount.value = value
   }
 }

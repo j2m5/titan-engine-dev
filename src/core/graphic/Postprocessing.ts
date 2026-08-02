@@ -56,10 +56,12 @@ class Postprocessing {
     const bloomEffect: BloomEffect = new BloomEffect({ ...BLOOM_OPTIONS })
 
     const lensFlareEffect: LensFlareEffect = new LensFlareEffect({
+      camera: this.camera,
       intensity: config('lensFlare.intensity'),
       ghostAmount: config('lensFlare.ghostAmount'),
       haloAmount: config('lensFlare.haloAmount'),
       chromaticAberration: config('lensFlare.chromaticAberration'),
+      starburstAmount: config('lensFlare.starburstAmount'),
       // порог — общий с bloom: два разных числа разъехались бы при первой правке
       thresholdLevel: BLOOM_OPTIONS.luminanceThreshold
     })

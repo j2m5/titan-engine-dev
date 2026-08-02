@@ -2,10 +2,12 @@ import { BlendFunction, Effect, EffectAttribute, KawaseBlurPass, KernelSize, Res
 import {
   ClampToEdgeWrapping,
   HalfFloatType,
+  LinearSRGBColorSpace,
   SRGBColorSpace,
   TextureLoader,
   Uniform,
   WebGLRenderTarget,
+  type Camera,
   type Texture,
   type TextureDataType,
   type WebGLRenderer
@@ -14,6 +16,7 @@ import {
 import { Storage } from '@/core/framework/file/Storage'
 import { DownsampleThresholdMaterial } from './DownsampleThresholdMaterial'
 import { LensFlareFeaturesMaterial } from './LensFlareFeaturesMaterial'
+import { computeStarburstRotation } from './starburstRotation'
 
 const fragmentShader: string = `
   uniform sampler2D featuresBuffer;
@@ -42,6 +45,8 @@ export interface LensFlareEffectOptions {
   haloAmount?: number
   chromaticAberration?: number
   thresholdLevel?: number
+  camera?: Camera
+  starburstAmount?: number
 }
 
 export interface LensFlareEffectUniforms {
@@ -79,6 +84,11 @@ export class LensFlareEffect extends Effect {
   // молча течёт на каждой пересборке эффекта. Тот же паттерн — поле эффекта
   // + присвоение в материал — использовать и для будущей текстуры старберста.
   readonly lensColorTexture: Texture
+  readonly starburstTexture: Texture
+
+  // Ориентация — свойство объектива, а не сцены: направление на звезду сюда
+  // не входит, эффекту оно неизвестно (см. computeStarburstRotation)
+  private readonly camera: Camera | null
 
   constructor(options?: LensFlareEffectOptions) {
     const {
@@ -92,7 +102,9 @@ export class LensFlareEffect extends Effect {
       ghostAmount,
       haloAmount,
       chromaticAberration,
-      thresholdLevel
+      thresholdLevel,
+      camera,
+      starburstAmount
     } = {
       ...lensFlareEffectOptionsDefaults,
       ...options
@@ -140,16 +152,27 @@ export class LensFlareEffect extends Effect {
     this.lensColorTexture.wrapT = ClampToEdgeWrapping
     this.featuresMaterial.lensColorTexture = this.lensColorTexture
 
+    this.starburstTexture = new TextureLoader().load(Storage.url('lensstar.png'))
+    this.starburstTexture.name = 'LensFlare.Starburst'
+    // маска, а не цвет: sRGB-декод к ней неприменим
+    this.starburstTexture.colorSpace = LinearSRGBColorSpace
+    this.starburstTexture.wrapS = ClampToEdgeWrapping
+    this.starburstTexture.wrapT = ClampToEdgeWrapping
+    this.featuresMaterial.starburstTexture = this.starburstTexture
+
     this.uniforms.get('featuresBuffer').value = this.renderTarget1.texture
 
     this.resolution = new Resolution(this, resolutionX, resolutionY, resolutionScale)
     this.resolution.addEventListener('change', this.onResolutionChange)
+
+    this.camera = camera ?? null
 
     this.intensity = intensity
     if (ghostAmount !== undefined) this.featuresMaterial.ghostAmount = ghostAmount
     if (haloAmount !== undefined) this.featuresMaterial.haloAmount = haloAmount
     if (chromaticAberration !== undefined) this.featuresMaterial.chromaticAberration = chromaticAberration
     if (thresholdLevel !== undefined) this.thresholdLevel = thresholdLevel
+    if (starburstAmount !== undefined) this.featuresMaterial.starburstAmount = starburstAmount
   }
 
   private readonly onResolutionChange = (): void => {
@@ -163,6 +186,10 @@ export class LensFlareEffect extends Effect {
   }
 
   override update(renderer: WebGLRenderer, inputBuffer: WebGLRenderTarget, deltaTime?: number): void {
+    if (this.camera !== null) {
+      this.featuresMaterial.starburstRotation = computeStarburstRotation(this.camera.matrixWorld)
+    }
+
     this.thresholdPass.render(renderer, inputBuffer, this.renderTarget1)
     this.preBlurPass.render(renderer, this.renderTarget1, this.renderTarget2)
     this.featuresPass.render(renderer, this.renderTarget2, this.renderTarget1)

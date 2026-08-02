@@ -65,3 +65,33 @@ describe('LensFlareEffect: палитра призраков', () => {
     expect(onDispose).toHaveBeenCalledOnce()
   })
 })
+
+describe('LensFlareEffect: старберст', () => {
+  it('маска подключена и по умолчанию нейтральна', () => {
+    const effect = new LensFlareEffect()
+    const source = effect.featuresMaterial.fragmentShader
+
+    expect(source).toContain('uniform sampler2D starburst;')
+    expect(source).toContain('1.0 + starburstAmount')
+    expect(effect.featuresMaterial.starburstAmount).toBe(0)
+  })
+
+  it('текстура лучей грузится', () => {
+    const effect = new LensFlareEffect()
+
+    expect(effect.featuresMaterial.starburstTexture?.name).toBe('LensFlare.Starburst')
+  })
+
+  it('текстура лучей освобождается штатной разборкой эффекта', () => {
+    // Тот же паттерн, что и у градиента призраков: собственное поле эффекта,
+    // а не только значение uniform'а материала — иначе Effect.dispose() из
+    // postprocessing её не найдёт и текстура утечёт при пересборке эффекта.
+    const effect = new LensFlareEffect()
+    const onDispose = vi.fn()
+    effect.starburstTexture.addEventListener('dispose', onDispose)
+
+    effect.dispose()
+
+    expect(onDispose).toHaveBeenCalledOnce()
+  })
+})
