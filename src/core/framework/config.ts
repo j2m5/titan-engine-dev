@@ -4,6 +4,7 @@ import { three } from '@/config/three'
 import { blackHole } from '@/config/blackHole'
 import { database } from '@/config/database'
 import { background } from '@/config/background'
+import { lensFlare } from '@/config/lensFlare'
 
 type PrevDepth = [never, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
@@ -35,5 +36,6 @@ export const config = createConfig({
   ...three,
   ...blackHole,
   ...background,
+  ...lensFlare,
   database
 })

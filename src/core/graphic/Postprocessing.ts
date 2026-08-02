@@ -11,6 +11,7 @@ import {
 } from 'postprocessing'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { DitheringEffect } from '@/core/graphic/effects/dithering/DitheringEffect'
+import { config } from '@/core/framework/config'
 
 // Опции эффектов вынесены в константы под контракт-тесты
 // (tests/graphic/PostprocessingContract.spec.ts).
@@ -54,7 +55,14 @@ class Postprocessing {
 
     const bloomEffect: BloomEffect = new BloomEffect({ ...BLOOM_OPTIONS })
 
-    const lensFlareEffect: LensFlareEffect = new LensFlareEffect({ intensity: 0.01 })
+    const lensFlareEffect: LensFlareEffect = new LensFlareEffect({
+      intensity: config('lensFlare.intensity'),
+      ghostAmount: config('lensFlare.ghostAmount'),
+      haloAmount: config('lensFlare.haloAmount'),
+      chromaticAberration: config('lensFlare.chromaticAberration'),
+      // порог — общий с bloom: два разных числа разъехались бы при первой правке
+      thresholdLevel: BLOOM_OPTIONS.luminanceThreshold
+    })
 
     const chromaticAberrationEffect: ChromaticAberrationEffect = new ChromaticAberrationEffect({
       blendFunction: BlendFunction.SCREEN,

@@ -1,13 +1,4 @@
-import {
-  BlendFunction,
-  Effect,
-  EffectAttribute,
-  KawaseBlurPass,
-  KernelSize,
-  MipmapBlurPass,
-  Resolution,
-  ShaderPass
-} from 'postprocessing'
+import { BlendFunction, Effect, EffectAttribute, KawaseBlurPass, KernelSize, Resolution, ShaderPass } from 'postprocessing'
 import {
   HalfFloatType,
   Uniform,
@@ -21,14 +12,12 @@ import { DownsampleThresholdMaterial } from './DownsampleThresholdMaterial'
 import { LensFlareFeaturesMaterial } from './LensFlareFeaturesMaterial'
 
 const fragmentShader: string = `
-  uniform sampler2D bloomBuffer;
   uniform sampler2D featuresBuffer;
   uniform float intensity;
 
   void mainImage(const vec4 inputColor, const vec2 uv, out vec4 outputColor) {
-    vec3 bloom = texture(bloomBuffer, uv).rgb;
     vec3 features = texture(featuresBuffer, uv).rgb;
-    outputColor = vec4(inputColor.rgb + (bloom + features) * intensity, inputColor.a);
+    outputColor = vec4(inputColor.rgb + features * intensity, inputColor.a);
   }
 `
 
@@ -45,10 +34,13 @@ export interface LensFlareEffectOptions {
   resolutionX?: number
   resolutionY?: number
   intensity?: number
+  ghostAmount?: number
+  haloAmount?: number
+  chromaticAberration?: number
+  thresholdLevel?: number
 }
 
 export interface LensFlareEffectUniforms {
-  bloomBuffer: Uniform<Texture | null>
   featuresBuffer: Uniform<Texture | null>
   intensity: Uniform<number>
 }
@@ -71,7 +63,6 @@ export class LensFlareEffect extends Effect {
 
   readonly thresholdMaterial: DownsampleThresholdMaterial
   readonly thresholdPass: ShaderPass
-  readonly blurPass: MipmapBlurPass
   readonly preBlurPass: KawaseBlurPass
   readonly featuresMaterial: LensFlareFeaturesMaterial
   readonly featuresPass: ShaderPass
@@ -84,7 +75,11 @@ export class LensFlareEffect extends Effect {
       height,
       resolutionX = width,
       resolutionY = height,
-      intensity
+      intensity,
+      ghostAmount,
+      haloAmount,
+      chromaticAberration,
+      thresholdLevel
     } = {
       ...lensFlareEffectOptionsDefaults,
       ...options
@@ -94,7 +89,6 @@ export class LensFlareEffect extends Effect {
       attributes: EffectAttribute.CONVOLUTION,
       uniforms: new Map<string, Uniform>(
         Object.entries({
-          bloomBuffer: new Uniform(null),
           featuresBuffer: new Uniform(null),
           intensity: new Uniform(1)
         } satisfies LensFlareEffectUniforms)
@@ -116,9 +110,6 @@ export class LensFlareEffect extends Effect {
     this.thresholdMaterial = new DownsampleThresholdMaterial()
     this.thresholdPass = new ShaderPass(this.thresholdMaterial)
 
-    this.blurPass = new MipmapBlurPass()
-    this.blurPass.levels = 8
-
     this.preBlurPass = new KawaseBlurPass({
       kernelSize: KernelSize.SMALL
     })
@@ -126,13 +117,16 @@ export class LensFlareEffect extends Effect {
     this.featuresMaterial = new LensFlareFeaturesMaterial()
     this.featuresPass = new ShaderPass(this.featuresMaterial)
 
-    this.uniforms.get('bloomBuffer').value = this.blurPass.texture
     this.uniforms.get('featuresBuffer').value = this.renderTarget1.texture
 
     this.resolution = new Resolution(this, resolutionX, resolutionY, resolutionScale)
     this.resolution.addEventListener('change', this.onResolutionChange)
 
     this.intensity = intensity
+    if (ghostAmount !== undefined) this.featuresMaterial.ghostAmount = ghostAmount
+    if (haloAmount !== undefined) this.featuresMaterial.haloAmount = haloAmount
+    if (chromaticAberration !== undefined) this.featuresMaterial.chromaticAberration = chromaticAberration
+    if (thresholdLevel !== undefined) this.thresholdLevel = thresholdLevel
   }
 
   private readonly onResolutionChange = (): void => {
@@ -141,14 +135,12 @@ export class LensFlareEffect extends Effect {
 
   override initialize(renderer: WebGLRenderer, alpha: boolean, frameBufferType: TextureDataType): void {
     this.thresholdPass.initialize(renderer, alpha, frameBufferType)
-    this.blurPass.initialize(renderer, alpha, frameBufferType)
     this.preBlurPass.initialize(renderer, alpha, frameBufferType)
     this.featuresPass.initialize(renderer, alpha, frameBufferType)
   }
 
   override update(renderer: WebGLRenderer, inputBuffer: WebGLRenderTarget, deltaTime?: number): void {
     this.thresholdPass.render(renderer, inputBuffer, this.renderTarget1)
-    this.blurPass.render(renderer, this.renderTarget1, null)
     this.preBlurPass.render(renderer, this.renderTarget1, this.renderTarget2)
     this.featuresPass.render(renderer, this.renderTarget2, this.renderTarget1)
   }
@@ -161,7 +153,6 @@ export class LensFlareEffect extends Effect {
     this.renderTarget1.setSize(width, height)
     this.renderTarget2.setSize(width, height)
     this.thresholdMaterial.setSize(width, height)
-    this.blurPass.setSize(width, height)
     this.preBlurPass.setSize(width, height)
     this.featuresMaterial.setSize(width, height)
   }
