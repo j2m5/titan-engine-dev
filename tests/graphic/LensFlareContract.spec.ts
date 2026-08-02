@@ -129,4 +129,28 @@ describe('LensFlareEffect: анаморфный штрих', () => {
 
     expect(effect.streakMaterial.fragmentShader).toContain('vec2(texelSize.x * spread * float(i), 0.0)')
   })
+
+  it('spread штриха меряется в текселях реально сэмплируемого буфера (renderTarget2), а не собственного четвертного таргета', () => {
+    const effect = new LensFlareEffect()
+
+    effect.setSize(1024, 512)
+
+    // streakPass.render(renderer, renderTarget2, streakTarget) — inputBuffer
+    // прохода это renderTarget2 (половина базового, 512×256), а не streakTarget
+    // (256×128). texelSize материала обязан отражать реальный вход
+    expect(effect.streakTarget.width).toBe(256)
+    expect(effect.streakTarget.height).toBe(128)
+    expect(effect.streakMaterial.uniforms.texelSize.value.x).toBe(1 / 512)
+    expect(effect.streakMaterial.uniforms.texelSize.value.y).toBe(1 / 256)
+  })
+
+  it('streakTint из опций эффекта доезжает до юниформа материала артефактов — тем же путём, что streakAmount', () => {
+    const effect = new LensFlareEffect({
+      streakAmount: lensFlare.lensFlare.streakAmount,
+      streakTint: lensFlare.lensFlare.streakTint
+    })
+
+    expect(effect.featuresMaterial.streakAmount).toBe(lensFlare.lensFlare.streakAmount)
+    expect(effect.featuresMaterial.streakTint.toArray()).toEqual([...lensFlare.lensFlare.streakTint])
+  })
 })

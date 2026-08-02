@@ -49,6 +49,7 @@ export interface LensFlareEffectOptions {
   camera?: Camera
   starburstAmount?: number
   streakAmount?: number
+  streakTint?: readonly [number, number, number]
 }
 
 export interface LensFlareEffectUniforms {
@@ -111,7 +112,8 @@ export class LensFlareEffect extends Effect {
       thresholdLevel,
       camera,
       starburstAmount,
-      streakAmount
+      streakAmount,
+      streakTint
     } = {
       ...lensFlareEffectOptionsDefaults,
       ...options
@@ -191,6 +193,7 @@ export class LensFlareEffect extends Effect {
     if (thresholdLevel !== undefined) this.thresholdLevel = thresholdLevel
     if (starburstAmount !== undefined) this.featuresMaterial.starburstAmount = starburstAmount
     if (streakAmount !== undefined) this.featuresMaterial.streakAmount = streakAmount
+    if (streakTint !== undefined) this.featuresMaterial.streakTint = streakTint
   }
 
   private readonly onResolutionChange = (): void => {
@@ -226,10 +229,15 @@ export class LensFlareEffect extends Effect {
     this.preBlurPass.setSize(width, height)
     this.featuresMaterial.setSize(width, height)
 
+    // streakTarget — четверть базового разрешения (вчетверо дешевле прохода
+    // артефактов), но проход реально сэмплит renderTarget2 (половинное
+    // разрешение) как inputBuffer — поэтому texelSize материала считается от
+    // width/height, а не от размеров собственного таргета, иначе spread
+    // измерялся бы не в тех текселях
     const streakWidth = Math.max(1, Math.round(width * 0.5))
     const streakHeight = Math.max(1, Math.round(height * 0.5))
     this.streakTarget.setSize(streakWidth, streakHeight)
-    this.streakMaterial.setSize(streakWidth, streakHeight)
+    this.streakMaterial.setSize(width, height)
   }
 
   get intensity(): number {

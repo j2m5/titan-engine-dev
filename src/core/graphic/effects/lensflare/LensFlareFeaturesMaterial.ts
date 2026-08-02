@@ -274,4 +274,12 @@ export class LensFlareFeaturesMaterial extends ShaderMaterial {
   set streakAmount(value: number) {
     this.uniforms.streakAmount.value = value
   }
+
+  get streakTint(): Vector3 {
+    return this.uniforms.streakTint.value
+  }
+
+  set streakTint(value: readonly [number, number, number]) {
+    this.uniforms.streakTint.value.set(value[0], value[1], value[2])
+  }
 }
