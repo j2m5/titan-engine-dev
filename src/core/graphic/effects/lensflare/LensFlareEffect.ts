@@ -14,6 +14,7 @@ import {
 } from 'three'
 
 import { Storage } from '@/core/framework/file/Storage'
+import { AnamorphicStreakMaterial } from './AnamorphicStreakMaterial'
 import { DownsampleThresholdMaterial } from './DownsampleThresholdMaterial'
 import { LensFlareFeaturesMaterial } from './LensFlareFeaturesMaterial'
 import { computeStarburstRotation } from './starburstRotation'
@@ -47,6 +48,7 @@ export interface LensFlareEffectOptions {
   thresholdLevel?: number
   camera?: Camera
   starburstAmount?: number
+  streakAmount?: number
 }
 
 export interface LensFlareEffectUniforms {
@@ -76,6 +78,10 @@ export class LensFlareEffect extends Effect {
   readonly featuresMaterial: LensFlareFeaturesMaterial
   readonly featuresPass: ShaderPass
 
+  readonly streakTarget: WebGLRenderTarget
+  readonly streakMaterial: AnamorphicStreakMaterial
+  readonly streakPass: ShaderPass
+
   // Собственное поле, а не только значение uniform'а материала: штатный
   // Effect.dispose() из postprocessing обходит Object.keys(this) верхнего
   // уровня эффекта и разбирает всё, что instanceof Texture/Material/
@@ -104,7 +110,8 @@ export class LensFlareEffect extends Effect {
       chromaticAberration,
       thresholdLevel,
       camera,
-      starburstAmount
+      starburstAmount,
+      streakAmount
     } = {
       ...lensFlareEffectOptionsDefaults,
       ...options
@@ -142,6 +149,16 @@ export class LensFlareEffect extends Effect {
     this.featuresMaterial = new LensFlareFeaturesMaterial()
     this.featuresPass = new ShaderPass(this.featuresMaterial)
 
+    this.streakTarget = new WebGLRenderTarget(1, 1, {
+      depthBuffer: false,
+      type: HalfFloatType
+    })
+    this.streakTarget.texture.name = 'LensFlare.Streak'
+
+    this.streakMaterial = new AnamorphicStreakMaterial()
+    this.streakPass = new ShaderPass(this.streakMaterial)
+    this.featuresMaterial.streakBuffer = this.streakTarget.texture
+
     // Ассеты объектива — движковые, а не сценарные: объектив у всех сценариев
     // один, поэтому их нет в таблице ресурсов. URL через Storage: иначе режим
     // s3 не заработает
@@ -173,6 +190,7 @@ export class LensFlareEffect extends Effect {
     if (chromaticAberration !== undefined) this.featuresMaterial.chromaticAberration = chromaticAberration
     if (thresholdLevel !== undefined) this.thresholdLevel = thresholdLevel
     if (starburstAmount !== undefined) this.featuresMaterial.starburstAmount = starburstAmount
+    if (streakAmount !== undefined) this.featuresMaterial.streakAmount = streakAmount
   }
 
   private readonly onResolutionChange = (): void => {
@@ -182,6 +200,7 @@ export class LensFlareEffect extends Effect {
   override initialize(renderer: WebGLRenderer, alpha: boolean, frameBufferType: TextureDataType): void {
     this.thresholdPass.initialize(renderer, alpha, frameBufferType)
     this.preBlurPass.initialize(renderer, alpha, frameBufferType)
+    this.streakPass.initialize(renderer, alpha, frameBufferType)
     this.featuresPass.initialize(renderer, alpha, frameBufferType)
   }
 
@@ -192,6 +211,7 @@ export class LensFlareEffect extends Effect {
 
     this.thresholdPass.render(renderer, inputBuffer, this.renderTarget1)
     this.preBlurPass.render(renderer, this.renderTarget1, this.renderTarget2)
+    this.streakPass.render(renderer, this.renderTarget2, this.streakTarget)
     this.featuresPass.render(renderer, this.renderTarget2, this.renderTarget1)
   }
 
@@ -205,6 +225,11 @@ export class LensFlareEffect extends Effect {
     this.thresholdMaterial.setSize(width, height)
     this.preBlurPass.setSize(width, height)
     this.featuresMaterial.setSize(width, height)
+
+    const streakWidth = Math.max(1, Math.round(width * 0.5))
+    const streakHeight = Math.max(1, Math.round(height * 0.5))
+    this.streakTarget.setSize(streakWidth, streakHeight)
+    this.streakMaterial.setSize(streakWidth, streakHeight)
   }
 
   get intensity(): number {

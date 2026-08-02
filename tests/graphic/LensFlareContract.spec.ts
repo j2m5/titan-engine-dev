@@ -104,3 +104,29 @@ describe('LensFlareEffect: старберст', () => {
     expect(sampleStarburst?.[0]).toContain('vAspectRatio')
   })
 })
+
+describe('LensFlareEffect: анаморфный штрих', () => {
+  it('штрих подключён и по умолчанию нейтрален', () => {
+    const effect = new LensFlareEffect()
+
+    expect(effect.featuresMaterial.fragmentShader).toContain('uniform sampler2D streakBuffer;')
+    expect(effect.featuresMaterial.streakAmount).toBe(0)
+  })
+
+  it('таргет штриха — четверть базового разрешения и следует за ресайзом', () => {
+    const effect = new LensFlareEffect()
+
+    effect.setSize(1024, 512)
+
+    // resolutionScale 0.5 у общих таргетов, штрих ещё вдвое меньше
+    expect(effect.renderTarget1.width).toBe(512)
+    expect(effect.streakTarget.width).toBe(256)
+    expect(effect.streakTarget.height).toBe(128)
+  })
+
+  it('штрих горизонтальный: смещение выборок идёт по X', () => {
+    const effect = new LensFlareEffect()
+
+    expect(effect.streakMaterial.fragmentShader).toContain('vec2(texelSize.x * spread * float(i), 0.0)')
+  })
+})

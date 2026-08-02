@@ -18,6 +18,10 @@ export interface LensFlareConfig {
     chromaticAberration: number
     /** Сила лучей объектива; 0 — маска тождественна и лучей нет */
     starburstAmount: number
+    /** Сила анаморфного штриха; 0 — штриха нет */
+    streakAmount: number
+    /** Оттенок штриха; классический анаморфный блик холодный */
+    streakTint: readonly [number, number, number]
   }
 }
 
@@ -27,6 +31,8 @@ export const lensFlare: LensFlareConfig = {
     ghostAmount: 0.1,
     haloAmount: 0.1,
     chromaticAberration: 10,
-    starburstAmount: 0
+    starburstAmount: 0,
+    streakAmount: 0,
+    streakTint: [0.6, 0.8, 1.0]
   }
 }

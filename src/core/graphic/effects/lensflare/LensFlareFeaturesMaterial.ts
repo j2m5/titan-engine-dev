@@ -1,4 +1,4 @@
-import { NoBlending, ShaderMaterial, Uniform, Vector2, type ShaderMaterialParameters, type Texture } from 'three'
+import { NoBlending, ShaderMaterial, Uniform, Vector2, Vector3, type ShaderMaterialParameters, type Texture } from 'three'
 
 const vertexShader: string = `
   uniform vec2 texelSize;
@@ -21,6 +21,7 @@ const fragmentShader: string = `
   uniform sampler2D inputBuffer;
   uniform sampler2D lensColor;
   uniform sampler2D starburst;
+  uniform sampler2D streakBuffer;
 
   uniform vec2 texelSize;
   uniform float ghostAmount;
@@ -28,6 +29,8 @@ const fragmentShader: string = `
   uniform float chromaticAberration;
   uniform float starburstRotation;
   uniform float starburstAmount;
+  uniform vec3 streakTint;
+  uniform float streakAmount;
 
   in vec2 vUv;
   in vec2 vAspectRatio;
@@ -113,6 +116,10 @@ const fragmentShader: string = `
     features += sampleGhosts(ghostAmount);
     features += sampleHalos(haloAmount);
 
+    // Штрих идёт ЧЕРЕЗ яркий пиксель, а не зеркалится через центр, поэтому
+    // выборка по тому же uv
+    features.rgb += texture(streakBuffer, vUv).rgb * streakTint * streakAmount;
+
     // при starburstAmount = 0 множитель равен 1.0 — маска тождественна
     gl_FragColor = features * (1.0 + starburstAmount * sampleStarburst());
   }
@@ -122,17 +129,22 @@ export interface LensFlareFeaturesMaterialParameters extends ShaderMaterialParam
   inputBuffer?: Texture | null
   lensColorTexture?: Texture | null
   starburstTexture?: Texture | null
+  streakBuffer?: Texture | null
   ghostAmount?: number
   haloAmount?: number
   chromaticAberration?: number
   starburstAmount?: number
+  streakTint?: readonly [number, number, number]
+  streakAmount?: number
 }
 
 export const lensFlareFeaturesMaterialParametersDefaults = {
   ghostAmount: 0.1,
   haloAmount: 0.1,
   chromaticAberration: 10,
-  starburstAmount: 0
+  starburstAmount: 0,
+  streakTint: [0.6, 0.8, 1.0] as const,
+  streakAmount: 0
 } satisfies LensFlareFeaturesMaterialParameters
 
 export class LensFlareFeaturesMaterial extends ShaderMaterial {
@@ -141,10 +153,13 @@ export class LensFlareFeaturesMaterial extends ShaderMaterial {
       inputBuffer = null,
       lensColorTexture = null,
       starburstTexture = null,
+      streakBuffer = null,
       ghostAmount,
       haloAmount,
       chromaticAberration,
       starburstAmount,
+      streakTint,
+      streakAmount,
       ...others
     } = {
       ...lensFlareFeaturesMaterialParametersDefaults,
@@ -162,12 +177,15 @@ export class LensFlareFeaturesMaterial extends ShaderMaterial {
         inputBuffer: new Uniform(inputBuffer),
         lensColor: new Uniform(lensColorTexture),
         starburst: new Uniform(starburstTexture),
+        streakBuffer: new Uniform(streakBuffer),
         texelSize: new Uniform(new Vector2()),
         ghostAmount: new Uniform(ghostAmount),
         haloAmount: new Uniform(haloAmount),
         chromaticAberration: new Uniform(chromaticAberration),
         starburstRotation: new Uniform(0),
         starburstAmount: new Uniform(starburstAmount),
+        streakTint: new Uniform(new Vector3(streakTint[0], streakTint[1], streakTint[2])),
+        streakAmount: new Uniform(streakAmount),
         ...others.uniforms
       }
     })
@@ -239,5 +257,21 @@ export class LensFlareFeaturesMaterial extends ShaderMaterial {
 
   set starburstAmount(value: number) {
     this.uniforms.starburstAmount.value = value
+  }
+
+  get streakBuffer(): Texture | null {
+    return this.uniforms.streakBuffer.value
+  }
+
+  set streakBuffer(value: Texture | null) {
+    this.uniforms.streakBuffer.value = value
+  }
+
+  get streakAmount(): number {
+    return this.uniforms.streakAmount.value
+  }
+
+  set streakAmount(value: number) {
+    this.uniforms.streakAmount.value = value
   }
 }
