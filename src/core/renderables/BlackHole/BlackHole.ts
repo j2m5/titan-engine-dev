@@ -1,7 +1,6 @@
 import {
   BufferGeometry,
   Camera,
-  CubeTexture,
   Intersection,
   Mesh,
   Raycaster,
@@ -15,6 +14,7 @@ import { Actor } from '@/core/models/Actor'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
 import { BlackHoleMaterial } from '@/core/renderables/BlackHole/BlackHoleMaterial'
 import { UpdateContext } from '@/core/UpdateContext'
+import { ResourceObserver } from '@/core/services/ResourceObserver'
 
 /**
  * Чёрная дыра (уровень L0): bounding-сфера зоны симуляции лензирования
@@ -23,6 +23,10 @@ import { UpdateContext } from '@/core/UpdateContext'
  * на покрытых ею пикселях. Меш НИКОГДА не вращается (в отличие от Planet/Star):
  * объектные направления должны совпадать с мировыми для прямого сэмплирования
  * фоновой кубмапы; наклон диска (axialTilt) уйдёт в uniform на этапе 3
+ *
+ * Фоновую кубмапу берёт из ResourceObserver.sceneBackground, а не из
+ * scene.background: собственный фоновый проход (SkyboxBackground) снял
+ * присвоение scene.background, и оно теперь всегда null
  */
 class BlackHole extends Mesh {
   public model: Actor
@@ -38,7 +42,7 @@ class BlackHole extends Mesh {
 
   public constructor(
     model: Actor,
-    private readonly scene: Scene
+    private readonly resourceObserver: ResourceObserver
   ) {
     super()
     this.model = model
@@ -63,8 +67,12 @@ class BlackHole extends Mesh {
     // актуальны для ТЕКУЩЕГО кадра. Обновление через sceneManager.update
     // (после рендера) даёт покадровый рассинхрон, который проявляется
     // паразитным параллаксом фона при трансляции камеры
+    //
+    // Кубмапа читается из resourceObserver.sceneBackground ПОКАДРОВО, а не
+    // кэшируется в конструкторе: сценарий (и вместе с ним фон) может
+    // смениться, пока дыра уже существует
     this.onBeforeRender = (_renderer: WebGLRenderer, _scene: Scene, camera: Camera): void => {
-      this.material.update(this, camera, this.scene.background as CubeTexture | null, this._epoch)
+      this.material.update(this, camera, this.resourceObserver.sceneBackground, this._epoch)
     }
   }
 

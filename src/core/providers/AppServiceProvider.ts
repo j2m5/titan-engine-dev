@@ -32,7 +32,7 @@ class AppServiceProvider extends ServiceProvider {
 
     this.app.singleton(
       Tokens.RenderableFactory,
-      (c: Container) => new RenderableFactory(c.get(Tokens.Renderer), c.get(Tokens.Scene))
+      (c: Container) => new RenderableFactory(c.get(Tokens.Renderer), c.get(Tokens.ResourceObserver))
     )
 
     this.app.singleton(

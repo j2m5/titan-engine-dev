@@ -1,4 +1,4 @@
-import { LOD, Object3D, Scene, Vector3, WebGLRenderer } from 'three'
+import { LOD, Object3D, Vector3, WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { Barycenter } from '@/core/renderables/Barycenter'
 import { BlackHole } from '@/core/renderables/BlackHole'
@@ -20,11 +20,12 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { requireRenderingData } from '@/core/helpers/renderingData'
 import { Nebula } from '@/core/renderables/Nebula'
 import { IRingRenderingObject } from '@/core/models/types'
+import { ResourceObserver } from '@/core/services/ResourceObserver'
 
 class RenderableFactory {
   public constructor(
     private readonly renderer: WebGLRenderer,
-    private readonly scene: Scene
+    private readonly resourceObserver: ResourceObserver
   ) {}
 
   public make(actor: Actor): Object3D {
@@ -53,7 +54,7 @@ class RenderableFactory {
   private createBlackHole(actor: Actor): Object3D {
     const node = new DynamicNode(actor)
     const lod = new LOD()
-    const lodl1 = new BlackHole(actor, this.scene)
+    const lodl1 = new BlackHole(actor, this.resourceObserver)
     const lodl2 = new BlackHoleImpostor(actor, lodl1.parameters)
 
     const distanceLod = (pixels: number): number => {
