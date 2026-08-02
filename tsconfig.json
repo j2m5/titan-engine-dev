@@ -40,6 +40,6 @@
     "allowSyntheticDefaultImports": true,
     "types": ["vitest/globals"]
   },
-  "include": ["src/**/*", "storage/database/**/*", "types/*", "tests/**/*"],
+  "include": ["src/**/*", "storage/database/**/*", "types/*", "tests/**/*", "scripts/**/*"],
   "exclude": ["node_modules"]
 }
