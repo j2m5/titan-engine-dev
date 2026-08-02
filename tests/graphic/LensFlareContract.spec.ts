@@ -1,3 +1,4 @@
+import { TextureLoader } from 'three'
 import { BLOOM_OPTIONS } from '@/core/graphic/Postprocessing'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { lensFlare } from '@/config/lensFlare'
@@ -172,6 +173,56 @@ describe('LensFlareEffect: анаморфный штрих', () => {
 
     expect(effect.featuresMaterial.streakAmount).toBe(lensFlare.lensFlare.streakAmount)
     expect(effect.featuresMaterial.streakTint.toArray()).toEqual([...lensFlare.lensFlare.streakTint])
+  })
+})
+
+describe('LensFlareEffect: ошибки загрузки текстур объектива', () => {
+  // lenscolor.png и lensstar.png лежат вне git (**/textures/ в .gitignore) и в
+  // проде берутся из S3. Если файла там нет, TextureLoader молча биндит
+  // нулевую текстуру, тонировка призраков возвращает чёрный, а в логе — только
+  // сетевая 404. Обработчик onError обязан явно предупредить в консоль.
+  it('при ошибке загрузки градиента палитры пишет предупреждение с URL и последствием', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const loadSpy = vi.spyOn(TextureLoader.prototype, 'load')
+
+    const effect = new LensFlareEffect()
+
+    const call = loadSpy.mock.calls.find(([url]) => typeof url === 'string' && url.includes('lenscolor.png'))
+    expect(call).toBeDefined()
+    const onError = call?.[3]
+    expect(onError).toBeTypeOf('function')
+
+    onError?.(new ErrorEvent('error'))
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/^\[LensFlareEffect\]/))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('lenscolor.png'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('призраки'))
+
+    warnSpy.mockRestore()
+    loadSpy.mockRestore()
+    effect.dispose()
+  })
+
+  it('при ошибке загрузки маски лучей пишет предупреждение с URL и последствием', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const loadSpy = vi.spyOn(TextureLoader.prototype, 'load')
+
+    const effect = new LensFlareEffect()
+
+    const call = loadSpy.mock.calls.find(([url]) => typeof url === 'string' && url.includes('lensstar.png'))
+    expect(call).toBeDefined()
+    const onError = call?.[3]
+    expect(onError).toBeTypeOf('function')
+
+    onError?.(new ErrorEvent('error'))
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/^\[LensFlareEffect\]/))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('lensstar.png'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('лучи'))
+
+    warnSpy.mockRestore()
+    loadSpy.mockRestore()
+    effect.dispose()
   })
 })
 

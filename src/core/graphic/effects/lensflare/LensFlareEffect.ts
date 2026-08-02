@@ -164,14 +164,24 @@ export class LensFlareEffect extends Effect {
     // Ассеты объектива — движковые, а не сценарные: объектив у всех сценариев
     // один, поэтому их нет в таблице ресурсов. URL через Storage: иначе режим
     // s3 не заработает
-    this.lensColorTexture = new TextureLoader().load(Storage.url('lenscolor.png'))
+    const lensColorUrl = Storage.url('lenscolor.png')
+    this.lensColorTexture = new TextureLoader().load(lensColorUrl, undefined, undefined, () => {
+      console.warn(
+        `[LensFlareEffect] Не удалось загрузить градиент палитры призраков "${lensColorUrl}" — призраки объектива не будут нарисованы`
+      )
+    })
     this.lensColorTexture.name = 'LensFlare.LensColor'
     this.lensColorTexture.colorSpace = SRGBColorSpace
     this.lensColorTexture.wrapS = ClampToEdgeWrapping
     this.lensColorTexture.wrapT = ClampToEdgeWrapping
     this.featuresMaterial.lensColorTexture = this.lensColorTexture
 
-    this.starburstTexture = new TextureLoader().load(Storage.url('lensstar.png'))
+    const starburstUrl = Storage.url('lensstar.png')
+    this.starburstTexture = new TextureLoader().load(starburstUrl, undefined, undefined, () => {
+      console.warn(
+        `[LensFlareEffect] Не удалось загрузить маску лучей объектива "${starburstUrl}" — лучи объектива не будут нарисованы`
+      )
+    })
     this.starburstTexture.name = 'LensFlare.Starburst'
     // маска, а не цвет: sRGB-декод к ней неприменим
     this.starburstTexture.colorSpace = LinearSRGBColorSpace
