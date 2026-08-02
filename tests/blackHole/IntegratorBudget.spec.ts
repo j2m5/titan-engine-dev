@@ -26,10 +26,16 @@ describe('Интегратор ЧД: бюджет шагов — предохр�
     expect(stepsNeeded).toBeLessThanOrEqual(shaderConstant('MAX_STEPS'))
   })
 
-  it('остаётся запас на уточнение шага и подъём навивки', () => {
-    // 6π при dphi 0.05 = 377 шагов: диапазон, который арка собирается пробовать
-    const worstCase = 6 * Math.PI / blackHole.blackHole.integrationDphi
+  it('над шиппинговой потребностью остаётся запас, а не только впритык', () => {
+    // Подъём навивки до 6π пробовали и откатили — беды с намоткой не было,
+    // дело было в грубости углового шага у фотонной сферы. Значит потолок
+    // не обязан переживать 6π: он обязан переживать шиппинговую конфигурацию
+    // (PHI_MAX = 3π, dphi = 0.05 → ~189 шагов) с запасом на будущее уточнение
+    // dphi. Запас 30% — не впритык (тест не станет тавтологией assertion'а
+    // выше), но и не резервирует несуществующее намерение подъёма навивки.
+    const MARGIN_FACTOR = 1.3
+    const stepsNeeded = shaderConstant('PHI_MAX') / blackHole.blackHole.integrationDphi
 
-    expect(shaderConstant('MAX_STEPS')).toBeGreaterThanOrEqual(worstCase)
+    expect(shaderConstant('MAX_STEPS')).toBeGreaterThanOrEqual(stepsNeeded * MARGIN_FACTOR)
   })
 })
