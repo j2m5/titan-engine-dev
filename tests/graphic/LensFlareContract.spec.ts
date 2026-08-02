@@ -154,3 +154,17 @@ describe('LensFlareEffect: анаморфный штрих', () => {
     expect(effect.featuresMaterial.streakTint.toArray()).toEqual([...lensFlare.lensFlare.streakTint])
   })
 })
+
+describe('LensFlareEffect: значения приёмки', () => {
+  it('интенсивность не выше потолка, заданного сценой чёрной дыры', () => {
+    // При 3 тень дыры заливается молочной пеленой с цветными разводами:
+    // призраки зеркалят диск сам в себя. Подобрано на приёмке 02.08.2026
+    expect(lensFlare.lensFlare.intensity).toBe(0.5)
+  })
+
+  it('артефакты объектива включены — иначе арка тихо откатится к невидимому эффекту', () => {
+    expect(lensFlare.lensFlare.starburstAmount).toBeGreaterThan(0)
+    expect(lensFlare.lensFlare.streakAmount).toBeGreaterThan(0)
+    expect(lensFlare.lensFlare.ghostAmount).toBeGreaterThan(0)
+  })
+})
