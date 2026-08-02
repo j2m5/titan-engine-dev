@@ -1,6 +1,9 @@
 import { BlendFunction, Effect, EffectAttribute, KawaseBlurPass, KernelSize, Resolution, ShaderPass } from 'postprocessing'
 import {
+  ClampToEdgeWrapping,
   HalfFloatType,
+  SRGBColorSpace,
+  TextureLoader,
   Uniform,
   WebGLRenderTarget,
   type Texture,
@@ -8,6 +11,7 @@ import {
   type WebGLRenderer
 } from 'three'
 
+import { Storage } from '@/core/framework/file/Storage'
 import { DownsampleThresholdMaterial } from './DownsampleThresholdMaterial'
 import { LensFlareFeaturesMaterial } from './LensFlareFeaturesMaterial'
 
@@ -116,6 +120,16 @@ export class LensFlareEffect extends Effect {
 
     this.featuresMaterial = new LensFlareFeaturesMaterial()
     this.featuresPass = new ShaderPass(this.featuresMaterial)
+
+    // Ассеты объектива — движковые, а не сценарные: объектив у всех сценариев
+    // один, поэтому их нет в таблице ресурсов. URL через Storage: иначе режим
+    // s3 не заработает
+    const lensColorTexture = new TextureLoader().load(Storage.url('lenscolor.png'))
+    lensColorTexture.name = 'LensFlare.LensColor'
+    lensColorTexture.colorSpace = SRGBColorSpace
+    lensColorTexture.wrapS = ClampToEdgeWrapping
+    lensColorTexture.wrapT = ClampToEdgeWrapping
+    this.featuresMaterial.lensColorTexture = lensColorTexture
 
     this.uniforms.get('featuresBuffer').value = this.renderTarget1.texture
 

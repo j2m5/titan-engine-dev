@@ -32,3 +32,22 @@ describe('LensFlareEffect: контракт блика объектива', () =
     expect(effect.featuresMaterial.chromaticAberration).toBe(lensFlare.lensFlare.chromaticAberration)
   })
 })
+
+describe('LensFlareEffect: палитра призраков', () => {
+  it('цвет призраков берётся из градиента, а не из захардкоженных vec3', () => {
+    const effect = new LensFlareEffect()
+    const source = effect.featuresMaterial.fragmentShader
+
+    expect(source).toContain('uniform sampler2D lensColor;')
+    expect(source).toContain('texture(lensColor,')
+    // прежние девять цветов ушли в скалярные веса
+    expect(source).not.toContain('vec3(0.5, 1.0, 0.4)')
+  })
+
+  it('градиент грузится с пути, который знает про режим s3', () => {
+    const effect = new LensFlareEffect()
+
+    expect(effect.featuresMaterial.lensColorTexture).not.toBeNull()
+    expect(effect.featuresMaterial.lensColorTexture?.name).toBe('LensFlare.LensColor')
+  })
+})

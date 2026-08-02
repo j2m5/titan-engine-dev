@@ -19,6 +19,7 @@ const fragmentShader: string = `
   #define SQRT_2 0.7071067811865476
 
   uniform sampler2D inputBuffer;
+  uniform sampler2D lensColor;
 
   uniform vec2 texelSize;
   uniform float ghostAmount;
@@ -28,9 +29,17 @@ const fragmentShader: string = `
   in vec2 vUv;
   in vec2 vAspectRatio;
 
-  vec3 sampleGhost(const vec2 direction, const vec3 color, const float offset) {
+  // Цвет призрака — из одномерного градиента по радиусу от центра кадра.
+  // Так палитра всех девяти отражений принадлежит «объективу», а не набору
+  // чисел, подобранных по одному
+  vec3 ghostTint(const vec2 suv) {
+    float d = length(vec2(0.5) - suv) / length(vec2(0.5));
+    return texture(lensColor, vec2(d, 0.5)).rgb;
+  }
+
+  vec3 sampleGhost(const vec2 direction, const float weight, const float offset) {
     vec2 suv = clamp(1.0 - vUv + direction * offset, 0.0, 1.0);
-    vec3 result = texture(inputBuffer, suv).rgb * color;
+    vec3 result = texture(inputBuffer, suv).rgb * ghostTint(suv) * weight;
 
     // Falloff at the perimeter.
     float d = clamp(length(0.5 - suv) / (0.5 * SQRT_2), 0.0, 1.0);
@@ -41,15 +50,15 @@ const fragmentShader: string = `
   vec4 sampleGhosts(float amount) {
     vec3 color = vec3(0.0);
     vec2 direction = vUv - 0.5;
-    color += sampleGhost(direction, vec3(0.8, 0.8, 1.0), -5.0);
-    color += sampleGhost(direction, vec3(1.0, 0.8, 0.4), -1.5);
-    color += sampleGhost(direction, vec3(0.9, 1.0, 0.8), -0.4);
-    color += sampleGhost(direction, vec3(1.0, 0.8, 0.4), -0.2);
-    color += sampleGhost(direction, vec3(0.9, 0.7, 0.7), -0.1);
-    color += sampleGhost(direction, vec3(0.5, 1.0, 0.4), 0.7);
-    color += sampleGhost(direction, vec3(0.5, 0.5, 0.5), 1.0);
-    color += sampleGhost(direction, vec3(1.0, 1.0, 0.6), 2.5);
-    color += sampleGhost(direction, vec3(0.5, 0.8, 1.0), 10.0);
+    color += sampleGhost(direction, 0.9, -5.0);
+    color += sampleGhost(direction, 0.8, -1.5);
+    color += sampleGhost(direction, 0.9, -0.4);
+    color += sampleGhost(direction, 0.8, -0.2);
+    color += sampleGhost(direction, 0.75, -0.1);
+    color += sampleGhost(direction, 0.65, 0.7);
+    color += sampleGhost(direction, 0.5, 1.0);
+    color += sampleGhost(direction, 0.85, 2.5);
+    color += sampleGhost(direction, 0.8, 10.0);
     return vec4(color * amount, 1.0);
   }
 
@@ -107,6 +116,7 @@ export class LensFlareFeaturesMaterial extends ShaderMaterial {
   constructor(params?: LensFlareFeaturesMaterialParameters) {
     const {
       inputBuffer = null,
+      lensColorTexture = null,
       ghostAmount,
       haloAmount,
       chromaticAberration,
@@ -125,6 +135,7 @@ export class LensFlareFeaturesMaterial extends ShaderMaterial {
       depthTest: false,
       uniforms: {
         inputBuffer: new Uniform(inputBuffer),
+        lensColor: new Uniform(lensColorTexture),
         texelSize: new Uniform(new Vector2()),
         ghostAmount: new Uniform(ghostAmount),
         haloAmount: new Uniform(haloAmount),
@@ -144,6 +155,14 @@ export class LensFlareFeaturesMaterial extends ShaderMaterial {
 
   set inputBuffer(value: Texture | null) {
     this.uniforms.inputBuffer.value = value
+  }
+
+  get lensColorTexture(): Texture | null {
+    return this.uniforms.lensColor.value
+  }
+
+  set lensColorTexture(value: Texture | null) {
+    this.uniforms.lensColor.value = value
   }
 
   get ghostAmount(): number {
