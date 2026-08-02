@@ -95,7 +95,7 @@ abstract class AbstractShader<TUniformKey extends string = string, TDefineKey ex
    * пройти ту же подстановку — например, собственный фоновый проход.
    */
   public static prepareSource(source: string): string {
-    return source.replace(/#include <(\w+)>/g, (match: string, chunkName: any) => {
+    return source.replace(/#include <(\w+)>/g, (_match: string, chunkName: string) => {
       return AppShaderChunk[chunkName] || ''
     })
   }

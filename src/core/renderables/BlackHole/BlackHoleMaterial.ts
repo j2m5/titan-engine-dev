@@ -41,10 +41,12 @@ class BlackHoleMaterial extends RawShaderMaterial {
     super({
       glslVersion: GLSL3,
       uniforms: createBlackHoleUniforms(parameters),
-      vertexShader: BlackHoleShaderTemplate.vertexShader,
       // RawShaderMaterial собирается напрямую, минуя конструктор AbstractShader —
       // #include резолвится вручную тем же статическим методом, что и у
-      // собственного фонового прохода (SkyboxBackground)
+      // собственного фонового прохода (SkyboxBackground). Оба шейдера прогоняются
+      // через prepareSource: непрогнанный вершинник с любым будущим #include
+      // молча раскрылся бы в пустоту вместо кода
+      vertexShader: AbstractShader.prepareSource(BlackHoleShaderTemplate.vertexShader),
       fragmentShader: AbstractShader.prepareSource(BlackHoleShaderTemplate.fragmentShader),
 
       side: BackSide,

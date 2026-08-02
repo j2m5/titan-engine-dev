@@ -1,4 +1,4 @@
-import { BufferGeometry, Camera, CubeTexture, Material, PerspectiveCamera, Scene, WebGLRenderer } from 'three'
+import { BufferGeometry, Camera, CubeTexture, Group, Material, PerspectiveCamera, Scene, WebGLRenderer } from 'three'
 import { BlackHole } from '@/core/renderables/BlackHole'
 import { Actor } from '@/core/models/Actor'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
@@ -45,8 +45,7 @@ function fireOnBeforeRender(blackHole: BlackHole, camera: Camera): void {
     camera,
     {} as BufferGeometry,
     {} as Material,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    {} as any
+    {} as Group
   )
 }
 

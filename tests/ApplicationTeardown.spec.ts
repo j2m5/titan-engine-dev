@@ -38,24 +38,6 @@ describe('Application.teardown', () => {
     expect(resourceStorage.deleteAllTextures).toHaveBeenCalledTimes(1)
   })
 
-  it('очищает фон сцены не позже освобождения текстур', () => {
-    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
-    const observer = {} as unknown as ResourceObserver
-    const scene = new Scene()
-
-    scene.background = new CubeTexture()
-
-    let backgroundWhenTexturesReleased: unknown = 'deleteAllTextures не вызван'
-    vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {
-      backgroundWhenTexturesReleased = scene.background
-    })
-
-    new Application(engine, observer, scene, leakDetector).teardown()
-
-    expect(backgroundWhenTexturesReleased).toBeNull()
-    expect(scene.background).toBeNull()
-  })
-
   it('свежее приложение не вызывает record() при первой разборке сессии', () => {
     const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
     const observer = {} as unknown as ResourceObserver

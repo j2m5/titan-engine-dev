@@ -69,8 +69,12 @@ class BlackHole extends Mesh {
     // паразитным параллаксом фона при трансляции камеры
     //
     // Кубмапа читается из resourceObserver.sceneBackground ПОКАДРОВО, а не
-    // кэшируется в конструкторе: сценарий (и вместе с ним фон) может
-    // смениться, пока дыра уже существует
+    // кэшируется в отдельное поле — НЕ из-за смены сценария посреди жизни
+    // этого меша (её не бывает: смена сценария разбирает граф целиком и
+    // строит его заново, см. SceneManager.dispose/initialize, так что новый
+    // BlackHole получает уже свежий фон при конструировании). Причина проще:
+    // остальные uniforms и так обновляются каждый кадр здесь же, заводить
+    // отдельный кэш под одну ссылку было бы лишней сущностью без выигрыша
     this.onBeforeRender = (_renderer: WebGLRenderer, _scene: Scene, camera: Camera): void => {
       this.material.update(this, camera, this.resourceObserver.sceneBackground, this._epoch)
     }
