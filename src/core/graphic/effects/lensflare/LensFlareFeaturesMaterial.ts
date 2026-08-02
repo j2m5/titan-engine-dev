@@ -95,13 +95,17 @@ const fragmentShader: string = `
   }
 
   // Лучи объектива. Маска повёрнута по ориентации камеры и НЕ привязана к
-  // источнику света: она модулирует уже посчитанные артефакты
+  // источнику света: она модулирует уже посчитанные артефакты.
+  // Коррекция по vAspectRatio (тот же приём, что и в sampleHalo выше) переводит
+  // координаты в квадратное пространство перед поворотом и возвращает обратно
+  // после — без неё на не квадратном экране поворот превращается в сдвиговое
+  // искажение, которое "гуляет" при крене камеры вместо чистого вращения
   float sampleStarburst() {
-    vec2 centered = vUv - 0.5;
+    vec2 centered = (vUv - 0.5) / vAspectRatio;
     float c = cos(starburstRotation);
     float s = sin(starburstRotation);
     vec2 rotated = vec2(centered.x * c - centered.y * s, centered.x * s + centered.y * c);
-    return texture(starburst, rotated + 0.5).r;
+    return texture(starburst, rotated * vAspectRatio + 0.5).r;
   }
 
   void main() {

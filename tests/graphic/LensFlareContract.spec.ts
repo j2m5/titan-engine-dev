@@ -94,4 +94,13 @@ describe('LensFlareEffect: старберст', () => {
 
     expect(onDispose).toHaveBeenCalledOnce()
   })
+
+  it('поворот маски корректируется по аспекту вьюпорта — как и у гало, иначе на не квадратном экране поворот превращается в сдвиг', () => {
+    const effect = new LensFlareEffect()
+    const source = effect.featuresMaterial.fragmentShader
+    const sampleStarburst = source.match(/float sampleStarburst\(\)[\s\S]*?\n {2}\}/)
+
+    expect(sampleStarburst).not.toBeNull()
+    expect(sampleStarburst?.[0]).toContain('vAspectRatio')
+  })
 })
