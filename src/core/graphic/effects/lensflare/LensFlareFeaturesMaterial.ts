@@ -124,7 +124,12 @@ const fragmentShader: string = `
 
     // Штрих идёт ЧЕРЕЗ яркий пиксель, а не зеркалится через центр, поэтому
     // выборка по тому же uv
-    features.rgb += texture(streakBuffer, vUv).rgb * streakTint * streakAmount;
+    // Оттенок штриха (streakTint) принадлежит ОБЪЕКТИВУ (просветление
+    // анаморфной оптики), а не источнику света. У источника отсюда берётся
+    // только яркость — если брать цвет пикселя как есть, тёплый источник
+    // (Солнце) умножается на холодный streakTint и даёт грязно-серый вместо
+    // чистой синевы: RGB-цвет источника «съедает» оттенок объектива
+    features.rgb += vec3(luminance(texture(streakBuffer, vUv).rgb)) * streakTint * streakAmount;
 
     // при starburstAmount = 0 множитель равен 1.0 — маска тождественна
     gl_FragColor = features * (1.0 + starburstAmount * sampleStarburst());

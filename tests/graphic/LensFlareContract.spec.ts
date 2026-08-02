@@ -191,6 +191,18 @@ describe('LensFlareEffect: анаморфный штрих', () => {
     expect(effect.streakMaterial.uniforms.inputBuffer.value).not.toBe(effect.renderTarget2.texture)
   })
 
+  it('вклад штриха идёт через яркость буфера, а не через его RGB-цвет — иначе тёплый источник съедает холодный streakTint', () => {
+    // Оттенок штриха принадлежит объективу (просветление анаморфной
+    // оптики), а не источнику света. Если оттенок умножать на RGB-цвет
+    // источника, а не на его яркость, тёплое Солнце сведёт синий streakTint
+    // к грязно-серому — синева физически недостижима
+    const effect = new LensFlareEffect()
+    const source = effect.featuresMaterial.fragmentShader
+
+    expect(source).toContain('vec3(luminance(texture(streakBuffer, vUv).rgb)) * streakTint * streakAmount')
+    expect(source).not.toContain('texture(streakBuffer, vUv).rgb * streakTint * streakAmount')
+  })
+
   it('streakTint из опций эффекта доезжает до юниформа материала артефактов — тем же путём, что streakAmount', () => {
     const effect = new LensFlareEffect({
       streakAmount: lensFlare.lensFlare.streakAmount,
