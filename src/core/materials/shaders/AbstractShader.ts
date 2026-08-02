@@ -81,14 +81,23 @@ abstract class AbstractShader<TUniformKey extends string = string, TDefineKey ex
   }
 
   protected prepareForCompilation(): void {
-    const replaceIncludes = (shader: string): string => {
-      return shader.replace(/#include <(\w+)>/g, (match: string, chunkName: any) => {
-        return AppShaderChunk[chunkName] || ''
-      })
-    }
+    this.vertexShader = AbstractShader.prepareSource(this.vertexShader)
+    this.fragmentShader = AbstractShader.prepareSource(this.fragmentShader)
+  }
 
-    this.vertexShader = replaceIncludes(this.vertexShader)
-    this.fragmentShader = replaceIncludes(this.fragmentShader)
+  /**
+   * Резолвит директивы `#include <name>` через реестр `AppShaderChunk`.
+   * Незарегистрированное имя молча раскрывается в пустую строку — это
+   * поведение самого реестра, а не этого метода.
+   *
+   * Публичный статический метод нужен материалам, которые собираются напрямую
+   * (`RawShaderMaterial`), минуя конструктор `AbstractShader`, но обязаны
+   * пройти ту же подстановку — например, собственный фоновый проход.
+   */
+  public static prepareSource(source: string): string {
+    return source.replace(/#include <(\w+)>/g, (match: string, chunkName: any) => {
+      return AppShaderChunk[chunkName] || ''
+    })
   }
 
   public static clone<T extends AbstractShader>(this: ShaderConstructor<T>, shader: ShaderProps): T {

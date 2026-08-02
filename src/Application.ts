@@ -4,6 +4,7 @@ import { ScenarioConfig } from '@/config/scenarios'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { Scene } from 'three'
 import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
+import { SkyboxBackground } from '@/core/renderables/SkyboxBackground'
 
 class Application {
   private everLoaded: boolean = false
@@ -56,9 +57,11 @@ class Application {
 
     if (!this.resourceObserver.sceneBackground) {
       console.warn('[Application] Кубическая карта фона сценария не загружена, сцена останется без фона')
+    } else {
+      // Собственный проход вместо scene.background: только так расширение
+      // хайлайтов применяется и к прямому фону (см. SkyboxBackground)
+      this.scene.add(new SkyboxBackground(this.resourceObserver.sceneBackground))
     }
-
-    this.scene.background = this.resourceObserver.sceneBackground
 
     this.everLoaded = true
     this.engine.start()
