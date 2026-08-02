@@ -51,6 +51,26 @@ describe('LensFlareEffect: палитра призраков', () => {
     expect(effect.featuresMaterial.lensColorTexture?.name).toBe('LensFlare.LensColor')
   })
 
+  it('ghostTint и falloff в sampleGhost нормируют длину одним и тем же делителем — иначе правая половина градиента недостижима', () => {
+    // SQRT_2 в этом файле хранит 1/√2, а не √2. length(vec2(0.5)) — это
+    // 0.5 * √2, вдвое больше, чем 0.5 * SQRT_2 (= 0.5 * 1/√2). Если ghostTint
+    // и falloff в sampleGhost нормируют одну и ту же length(...) разными
+    // делителями, d в ghostTint доходит только до половины [0, 1] — вторая
+    // половина текстуры lensColor никогда не сэмплируется
+    const effect = new LensFlareEffect()
+    const source = effect.featuresMaterial.fragmentShader
+
+    const ghostTintBody = source.match(/vec3 ghostTint\(const vec2 suv\)\s*\{([\s\S]*?)\n {2}\}/)?.[1]
+    const sampleGhostBody = source.match(/vec3 sampleGhost\([^)]*\)\s*\{([\s\S]*?)\n {2}\}/)?.[1]
+
+    expect(ghostTintBody).toBeDefined()
+    expect(sampleGhostBody).toBeDefined()
+
+    const divisor = /\/\s*\(0\.5 \* SQRT_2\)/
+    expect(ghostTintBody).toMatch(divisor)
+    expect(sampleGhostBody).toMatch(divisor)
+  })
+
   it('текстура градиента освобождается штатной разборкой эффекта', () => {
     // Effect.dispose() из postprocessing обходит Object.keys(this) верхнего
     // уровня и разбирает всё, что instanceof Texture. Текстура, лежащая

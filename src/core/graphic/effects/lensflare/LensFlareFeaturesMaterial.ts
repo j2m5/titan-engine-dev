@@ -16,6 +16,9 @@ const vertexShader: string = `
 const fragmentShader: string = `
   #include <common>
 
+  // ВНИМАНИЕ: несмотря на имя, здесь хранится 1/√2 (≈0.7071), а не √2
+  // (≈1.4142). Переименовывать нельзя — константа пришла из внешнего кода
+  // и используется в другой формуле (см. sampleGhost ниже)
   #define SQRT_2 0.7071067811865476
 
   uniform sampler2D inputBuffer;
@@ -38,8 +41,11 @@ const fragmentShader: string = `
   // Цвет призрака — из одномерного градиента по радиусу от центра кадра.
   // Так палитра всех девяти отражений принадлежит «объективу», а не набору
   // чисел, подобранных по одному
+  // Нормировка обязана совпадать с той, что в sampleGhost ниже (0.5 * SQRT_2,
+  // то есть 1/√2 половины диагонали) — иначе d здесь и d в спаде расходятся
+  // вдвое, и правая половина градиента lensColor никогда не читается
   vec3 ghostTint(const vec2 suv) {
-    float d = length(vec2(0.5) - suv) / length(vec2(0.5));
+    float d = clamp(length(vec2(0.5) - suv) / (0.5 * SQRT_2), 0.0, 1.0);
     return texture(lensColor, vec2(d, 0.5)).rgb;
   }
 
