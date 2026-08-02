@@ -7,6 +7,8 @@ export interface BlackHoleQualityConfig {
   /**
    * Шаг интегрирования уравнения Бине по углу, рад.
    * 0.05 — качество (потолок ~188 шагов до 3π), 0.08 — экономия (~118 шагов)
+   * Значение связано с MAX_STEPS в BlackHoleShaderTemplate — связку стережёт
+   * tests/blackHole/IntegratorBudget.spec.ts
    */
   integrationDphi: number
   /**

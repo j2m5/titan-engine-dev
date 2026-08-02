@@ -21,6 +21,10 @@ describe('Интегратор ЧД: бюджет шагов — предохр�
   })
 
   it('шага хватает, чтобы дойти до предела навивки при шиппинговом dphi', () => {
+    // stepsNeeded — непрерывное частное, а цикл в шейдере дискретный:
+    // фактически до break по phi > PHI_MAX доходят за ~ceil(PHI_MAX/dphi) + 1
+    // итераций. При текущем запасе разница не играет роли — не стоит на неё
+    // полагаться, если margin когда-нибудь захотят ужать до точного равенства
     const stepsNeeded = shaderConstant('PHI_MAX') / blackHole.blackHole.integrationDphi
 
     expect(stepsNeeded).toBeLessThanOrEqual(shaderConstant('MAX_STEPS'))
