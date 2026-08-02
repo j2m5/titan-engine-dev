@@ -14,6 +14,7 @@ import { degToRad } from 'three/src/math/MathUtils'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
 import { BlackHoleNoiseTexture } from '@/core/renderables/BlackHole/BlackHoleNoiseTexture'
 import { BlackHoleShaderTemplate, createBlackHoleUniforms } from '@/core/renderables/BlackHole/BlackHoleShaderTemplate'
+import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 
 /**
  * Материал чёрной дыры (этапы 1–3)
@@ -41,7 +42,10 @@ class BlackHoleMaterial extends RawShaderMaterial {
       glslVersion: GLSL3,
       uniforms: createBlackHoleUniforms(parameters),
       vertexShader: BlackHoleShaderTemplate.vertexShader,
-      fragmentShader: BlackHoleShaderTemplate.fragmentShader,
+      // RawShaderMaterial собирается напрямую, минуя конструктор AbstractShader —
+      // #include резолвится вручную тем же статическим методом, что и у
+      // собственного фонового прохода (SkyboxBackground)
+      fragmentShader: AbstractShader.prepareSource(BlackHoleShaderTemplate.fragmentShader),
 
       side: BackSide,
       transparent: false,
@@ -78,7 +82,9 @@ class BlackHoleMaterial extends RawShaderMaterial {
    *   используются только `matrixWorld`, `matrixWorldInverse`, `projectionMatrix`
    *   и (там, где он есть) `far`, поэтому сужать до `PerspectiveCamera` нечем —
    *   а `onBeforeRender` отдаёт именно `Camera`
-   * @param background Фоновая кубмапа сцены (scene.background, передаёт BlackHole.onBeforeRender)
+   * @param background Фоновая кубмапа сцены: приходит не из scene.background
+   *   (его больше не назначают — фон рисует собственный проход), а из
+   *   ResourceObserver.sceneBackground, передаёт BlackHole.onBeforeRender
    * @param epoch Эпоха симуляции (дни), кэшированная BlackHole.updateObject
    */
   public update(mesh: Mesh, camera: Camera, background: CubeTexture | null, epoch: number): void {
@@ -116,7 +122,7 @@ class BlackHoleMaterial extends RawShaderMaterial {
       camera instanceof PerspectiveCamera || camera instanceof OrthographicCamera ? camera.far : 1e10
     this.uniforms.logDepthBufFC.value = 2.0 / (Math.log(far + 1.0) / Math.LN2)
 
-    // ── 6. Фоновая кубмапа — физически тот же объект, что и scene.background ──
+    // ── 6. Фоновая кубмапа — та же текстура, что рисует собственный фоновый проход ──
     // присваивание ссылки бесплатно; автоматически подхватит будущий процедурный фон
     this.uniforms.skybox.value = background
 

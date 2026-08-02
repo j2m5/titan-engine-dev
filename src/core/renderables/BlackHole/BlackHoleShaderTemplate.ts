@@ -77,13 +77,21 @@ export function createBlackHoleUniforms(parameters: BlackHoleParameters): Record
     /** Дебаг: подкраска пикселей по числу пересечений плоскости диска */
     uDebugCrossings: new Uniform(0),
 
-    /** Фоновая кубмапа сцены (scene.background), обновляется каждый кадр */
+    /**
+     * Фоновая кубмапа: приходит не из scene.background (его больше не
+     * назначают — фон рисует собственный полноэкранный проход), а из
+     * ResourceObserver.sceneBackground, обновляется каждый кадр
+     */
     skybox: new Uniform(null),
     /**
      * Ориентация кубмапы по X: Three.js рендерит фоновые CubeTexture
      * с инверсией X («вид изнутри»)
      */
-    envMapFlipX: new Uniform(-1)
+    envMapFlipX: new Uniform(-1),
+
+    /** Расширение хайлайтов фона — общий чанк sampleSkyboxHdr, см. SkyboxSample */
+    uSkyHighlightThreshold: new Uniform(config('background.highlightThreshold')),
+    uSkyHighlightBoost: new Uniform(config('background.highlightBoost'))
   }
 }
 
@@ -145,6 +153,9 @@ export const BlackHoleShaderTemplate = {
     uniform samplerCube skybox;
     uniform float envMapFlipX;
 
+    #include <skyboxSampleUniforms>
+    #include <skyboxSampleFunctions>
+
     in vec3 vPositionRs;
     in vec3 vCameraRs;
     in float vFragDepth;
@@ -181,9 +192,12 @@ export const BlackHoleShaderTemplate = {
     const float BLEND_BAND = 3.5;
 
     vec3 sampleSkybox(vec3 direction) {
-      // фон воспроизводится ПОБИТОВО, без клампа и преобразований:
-      // любое расхождение с рендером scene.background — гарантированный шов
-      return texture(skybox, vec3(envMapFlipX * direction.x, direction.yz)).rgb;
+      // Выборка вынесена в общий чанк: её же зовёт собственный фоновый проход.
+      // Прежде здесь стояла копия, и любое расхождение с рендером фона давало
+      // ступеньку яркости на границе сферы симуляции — теперь расхождение
+      // невозможно по построению. envMapFlipX остаётся: ориентация
+      // линзированного пути своя и не обязана совпадать с прямым фоном.
+      return sampleSkyboxHdr(skybox, direction, envMapFlipX);
     }
 
     // Аналитический планковский blackbody: CIE-аппроксимация локуса → XYZ → linear sRGB,
