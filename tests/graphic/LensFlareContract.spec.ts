@@ -50,4 +50,18 @@ describe('LensFlareEffect: палитра призраков', () => {
     expect(effect.featuresMaterial.lensColorTexture).not.toBeNull()
     expect(effect.featuresMaterial.lensColorTexture?.name).toBe('LensFlare.LensColor')
   })
+
+  it('текстура градиента освобождается штатной разборкой эффекта', () => {
+    // Effect.dispose() из postprocessing обходит Object.keys(this) верхнего
+    // уровня и разбирает всё, что instanceof Texture. Текстура, лежащая
+    // только внутри uniform'а материала, под этот обход не попадает — её
+    // обязано подобрать собственное поле эффекта.
+    const effect = new LensFlareEffect()
+    const onDispose = vi.fn()
+    effect.lensColorTexture.addEventListener('dispose', onDispose)
+
+    effect.dispose()
+
+    expect(onDispose).toHaveBeenCalledOnce()
+  })
 })

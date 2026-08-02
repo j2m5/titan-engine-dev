@@ -71,6 +71,15 @@ export class LensFlareEffect extends Effect {
   readonly featuresMaterial: LensFlareFeaturesMaterial
   readonly featuresPass: ShaderPass
 
+  // Собственное поле, а не только значение uniform'а материала: штатный
+  // Effect.dispose() из postprocessing обходит Object.keys(this) верхнего
+  // уровня эффекта и разбирает всё, что instanceof Texture/Material/
+  // WebGLRenderTarget/Pass. Текстура, спрятанная только внутри
+  // featuresMaterial.uniforms.lensColor.value, под этот обход не попадает и
+  // молча течёт на каждой пересборке эффекта. Тот же паттерн — поле эффекта
+  // + присвоение в материал — использовать и для будущей текстуры старберста.
+  readonly lensColorTexture: Texture
+
   constructor(options?: LensFlareEffectOptions) {
     const {
       blendFunction,
@@ -124,12 +133,12 @@ export class LensFlareEffect extends Effect {
     // Ассеты объектива — движковые, а не сценарные: объектив у всех сценариев
     // один, поэтому их нет в таблице ресурсов. URL через Storage: иначе режим
     // s3 не заработает
-    const lensColorTexture = new TextureLoader().load(Storage.url('lenscolor.png'))
-    lensColorTexture.name = 'LensFlare.LensColor'
-    lensColorTexture.colorSpace = SRGBColorSpace
-    lensColorTexture.wrapS = ClampToEdgeWrapping
-    lensColorTexture.wrapT = ClampToEdgeWrapping
-    this.featuresMaterial.lensColorTexture = lensColorTexture
+    this.lensColorTexture = new TextureLoader().load(Storage.url('lenscolor.png'))
+    this.lensColorTexture.name = 'LensFlare.LensColor'
+    this.lensColorTexture.colorSpace = SRGBColorSpace
+    this.lensColorTexture.wrapS = ClampToEdgeWrapping
+    this.lensColorTexture.wrapT = ClampToEdgeWrapping
+    this.featuresMaterial.lensColorTexture = this.lensColorTexture
 
     this.uniforms.get('featuresBuffer').value = this.renderTarget1.texture
 
