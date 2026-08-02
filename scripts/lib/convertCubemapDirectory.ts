@@ -12,7 +12,14 @@ import { downscaleHalfLinear } from './downscaleHalfLinear'
  * единственную копию.
  *
  * Имена файлов сохраняются, расширение выходных — `.jpg`: грани скайбокса и так
- * хранятся в JPEG, а PNG на 3000² весил бы десятки мегабайт.
+ * хранятся в JPEG, а PNG на 3000² весил бы десятки мегабайт. Поэтому базовые
+ * имена входных файлов (без расширения) обязаны быть уникальны — иначе, скажем,
+ * `px.png` и `px.jpg` дадут один и тот же выходной файл и одна грань молча
+ * перезапишет другую; это проверяется до начала конвертации.
+ *
+ * Наличие альфы для каждого файла берётся из `sharp(...).metadata().hasAlpha`,
+ * а не угадывается по числу каналов: угадывание по `channels === 4` ломается на
+ * CMYK-JPEG (четыре канала без альфы) и gray+alpha (два канала, альфа есть).
  */
 export async function convertCubemapDirectory(
   inputDir: string,
@@ -37,19 +44,35 @@ export async function convertCubemapDirectory(
     throw new Error(`Выходная папка непуста, отказываюсь затирать: ${outputDir}`)
   }
 
+  const baseNames: Set<string> = new Set()
+
+  for (const entry of entries) {
+    const base: string = path.parse(entry).name
+
+    if (baseNames.has(base)) {
+      throw new Error(
+        `Коллизия имён на выходе: несколько входных файлов дают "${base}.jpg" (например, "${base}.png" и "${base}.jpg" одновременно)`
+      )
+    }
+
+    baseNames.add(base)
+  }
+
   await mkdir(outputDir, { recursive: true })
 
   const written: string[] = []
 
   for (const entry of entries) {
     const source = sharp(path.join(inputDir, entry))
+    const metadata = await source.metadata()
     const { data, info } = await source.raw().toBuffer({ resolveWithObject: true })
 
     const halved: Uint8Array = downscaleHalfLinear(
       new Uint8Array(data.buffer, data.byteOffset, data.byteLength),
       info.width,
       info.height,
-      info.channels
+      info.channels,
+      metadata.hasAlpha ?? false
     )
 
     const target: string = path.join(outputDir, `${path.parse(entry).name}.jpg`)

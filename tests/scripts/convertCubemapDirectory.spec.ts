@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer'
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import sharp from 'sharp'
@@ -19,8 +19,22 @@ async function writeSyntheticFace(file: string): Promise<void> {
 }
 
 describe('convertCubemapDirectory: конвертация папки граней', () => {
-  it('уменьшает грань вдвое и не теряет яркость ядра', async () => {
+  const roots: string[] = []
+
+  async function makeRoot(): Promise<string> {
     const root = await mkdtemp(path.join(tmpdir(), 'cubemap-'))
+
+    roots.push(root)
+
+    return root
+  }
+
+  afterEach(async () => {
+    await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+  })
+
+  it('уменьшает грань вдвое и не теряет яркость ядра', async () => {
+    const root = await makeRoot()
     const input = path.join(root, 'in')
     const output = path.join(root, 'out')
 
@@ -35,6 +49,9 @@ describe('convertCubemapDirectory: конвертация папки гране�
 
     expect(meta.width).toBe(4)
     expect(meta.height).toBe(4)
+    // 4:4:4 обязателен: при 4:2:0 цвет усредняется блоками 2×2 поверх нашего
+    // усреднения, и однопиксельные звёзды теряют оттенок
+    expect(meta.chromaSubsampling).toBe('4:4:4')
 
     const { data } = await sharp(written[0]).raw().toBuffer({ resolveWithObject: true })
 
@@ -44,7 +61,7 @@ describe('convertCubemapDirectory: конвертация папки гране�
   })
 
   it('отказывается писать в непустую папку — иначе повторный запуск затрёт оригиналы', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'cubemap-'))
+    const root = await makeRoot()
     const input = path.join(root, 'in')
     const output = path.join(root, 'out')
 
@@ -57,7 +74,7 @@ describe('convertCubemapDirectory: конвертация папки гране�
   })
 
   it('пустая входная папка — ошибка, а не тихий успех', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'cubemap-'))
+    const root = await makeRoot()
     const input = path.join(root, 'in')
 
     await mkdir(input)
@@ -65,5 +82,17 @@ describe('convertCubemapDirectory: конвертация папки гране�
     await expect(convertCubemapDirectory(input, path.join(root, 'out'), 92)).rejects.toThrow(
       /ни одного файла/
     )
+  })
+
+  it('коллизия базовых имён (px.png и px.jpg) — ошибка до начала конвертации', async () => {
+    const root = await makeRoot()
+    const input = path.join(root, 'in')
+    const output = path.join(root, 'out')
+
+    await mkdir(input)
+    await writeSyntheticFace(path.join(input, 'px.png'))
+    await writeSyntheticFace(path.join(input, 'px.jpg'))
+
+    await expect(convertCubemapDirectory(input, output, 92)).rejects.toThrow(/[Кк]оллизия/)
   })
 })

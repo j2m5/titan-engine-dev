@@ -13,6 +13,11 @@
  * путь ещё и совпадает с тем, как выглядит нынешняя минификация на экране.
  *
  * Альфа (четвёртый канал) усредняется без гаммы: она хранит непрозрачность.
+ *
+ * Наличие альфы обязан передавать вызывающий явно, из `sharp(...).metadata()`.
+ * Угадывание по числу каналов (4 → есть альфа) ломается на CMYK (четыре канала
+ * без альфы — K усреднился бы как альфа) и на gray+alpha (два канала — альфа
+ * ушла бы по гамма-ветке).
  */
 
 /** sRGB-байт → линейное значение; 256 записей вместо pow на каждый пиксель */
@@ -33,7 +38,8 @@ export function downscaleHalfLinear(
   source: Uint8Array,
   width: number,
   height: number,
-  channels: number
+  channels: number,
+  hasAlpha: boolean
 ): Uint8Array {
   if (width % 2 !== 0 || height % 2 !== 0) {
     throw new Error(`Сторона обязана быть чётной, получено ${width}×${height}`)
@@ -48,7 +54,6 @@ export function downscaleHalfLinear(
   const outWidth: number = width / 2
   const outHeight: number = height / 2
   const out: Uint8Array = new Uint8Array(outWidth * outHeight * channels)
-  const hasAlpha: boolean = channels === 4
 
   for (let y = 0; y < outHeight; y++) {
     const rowTop: number = 2 * y * width * channels
@@ -61,11 +66,16 @@ export function downscaleHalfLinear(
       const c: number = rowBottom + left
       const d: number = c + channels
       const dst: number = (y * outWidth + x) * channels
+      const alphaChannel: number = channels - 1
 
       for (let channel = 0; channel < channels; channel++) {
-        if (hasAlpha && channel === 3) {
+        if (hasAlpha && channel === alphaChannel) {
           out[dst + channel] = Math.round(
-            (source[a + 3] + source[b + 3] + source[c + 3] + source[d + 3]) / 4
+            (source[a + alphaChannel] +
+              source[b + alphaChannel] +
+              source[c + alphaChannel] +
+              source[d + alphaChannel]) /
+              4
           )
           continue
         }
