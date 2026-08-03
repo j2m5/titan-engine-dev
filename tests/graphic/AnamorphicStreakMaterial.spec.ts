@@ -24,7 +24,32 @@ describe('AnamorphicStreakMaterial: анаморфный штрих', () => {
     const material = new AnamorphicStreakMaterial()
 
     expect(material.fragmentShader).toContain('#define HALF_SAMPLES 64')
-    expect(material.fragmentShader).not.toContain('uniform int')
+    // граница цикла — сама константа, а не подставленное число и не юниформ
+    expect(material.fragmentShader).toContain('i = -HALF_SAMPLES; i <= HALF_SAMPLES')
+    // и ни один юниформ шейдера не объявляет число отсчётов: прежняя проверка
+    // ловила любое `uniform int ...`, включая юниформы, к отсчётам отношения
+    // не имеющие
+    expect(material.fragmentShader).not.toMatch(/uniform\s+\w+\s+\w*(?:SAMPLES|Samples|samples)\w*\s*;/)
+    // и набор юниформов закрыт: новый юниформ под число отсчётов сюда не
+    // пролезет под каким угодно именем
+    expect(Object.keys(material.uniforms).sort()).toEqual([
+      'inputBuffer',
+      'streakScale',
+      'streakThreshold',
+      'streakTint',
+      'texelSize'
+    ])
+  })
+
+  it('шейдер не тянет чанк <common>: luminance приходит из пролога three', () => {
+    // luminance() вставляет WebGLProgram (getLuminanceFunction), а не чанк
+    // common; в самом common лежат PI, saturate, pow2 и прочее, чего этот
+    // шейдер не использует
+    const material = new AnamorphicStreakMaterial()
+
+    expect(material.fragmentShader).toContain('luminance(color)')
+    expect(material.fragmentShader).not.toContain('#include <common>')
+    expect(material.fragmentShader).not.toContain('saturate(')
   })
 
   it('цикл включает оба края — треугольный вес гасится в ноль симметрично', () => {

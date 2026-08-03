@@ -29,7 +29,10 @@ describe('LocalContrastMaterial: локальный контраст', () => {
     const material = new LocalContrastMaterial()
 
     expect(material.fragmentShader).toContain('#define LOCAL_CONTRAST_RADIUS 8.0')
-    expect(material.uniforms.radius).toBeUndefined()
+    // Набор юниформов закрыт целиком, а не проверкой одного УГАДАННОГО имени:
+    // прежнее `material.uniforms.radius` проходило бы и при юниформе с любым
+    // другим названием
+    expect(Object.keys(material.uniforms).sort()).toEqual(['inputBuffer', 'texelSize'])
   })
 
   it('texelSize берётся у сэмплируемого буфера', () => {

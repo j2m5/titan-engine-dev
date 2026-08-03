@@ -167,9 +167,17 @@ export class LensFlareEffect extends Effect {
     this.localContrastMaterial = new LocalContrastMaterial()
     this.localContrastPass = new ShaderPass(this.localContrastMaterial)
 
-    // Собственный источник штриха: понижение предразмытого буфера до четверти
-    // разрешения. Ядро MEDIUM, а не SMALL, сглаживает зернистость поверхности
-    // звезды — на половинном буфере она давала продольные волны вдоль полосы
+    // Собственный источник штриха: понижение предразмытого буфера. Ядро
+    // MEDIUM, а не SMALL, сглаживает зернистость поверхности звезды — на
+    // половинном буфере она давала продольные волны вдоль полосы.
+    //
+    // Понижение ДВОЙНОЕ. Сам streakSourceTarget — четверть кадра, но у
+    // KawaseBlurPass есть собственный resolutionScale = 0.5 (см. его
+    // конструктор в postprocessing): setSize(четверть) задаёт проходу базовый
+    // размер в четверть, а его внутренние renderTargetA/B получают половину от
+    // этого — одну ВОСЬМУЮ кадра. Завершающий копирующий проход растягивает
+    // восьмушку обратно в четверть, так что источник штриха вдвое грубее, чем
+    // следует из размера таргета
     this.streakSourceTarget = new WebGLRenderTarget(1, 1, {
       depthBuffer: false,
       type: HalfFloatType
@@ -263,8 +271,24 @@ export class LensFlareEffect extends Effect {
     // разрешения по-прежнему два
     this.thresholdPass.render(renderer, inputBuffer, this.renderTarget1)
     this.preBlurPass.render(renderer, this.renderTarget1, this.renderTarget2)
-    this.streakSourcePass.render(renderer, this.renderTarget2, this.streakSourceTarget)
-    this.streakPass.render(renderer, this.streakSourceTarget, this.streakTarget)
+
+    // Штрих стоит денег безусловно — Kawase-источник плюс 129 выборок на
+    // пиксель, — а вклад его в кадр равен нулю ровно при streakAmount = 0:
+    // композит материала артефактов умножает выборку streakBuffer на эту
+    // величину. Ноль — и дефолт материала, и очевидная реакция владельца на
+    // «слишком заметный штрих», так что оба прохода пропускаются целиком.
+    //
+    // В streakTarget при пропуске остаётся содержимое прошлого кадра. На
+    // картинку это не влияет: единственный его читатель — та самая выборка,
+    // умноженная на streakAmount, то есть на ноль. Как только величина снова
+    // станет ненулевой, проходы возобновятся и перезапишут таргет в том же
+    // кадре, ДО того как композит его прочитает, — устаревшее содержимое на
+    // экран попасть не успевает
+    if (this.featuresMaterial.streakAmount !== 0) {
+      this.streakSourcePass.render(renderer, this.renderTarget2, this.streakSourceTarget)
+      this.streakPass.render(renderer, this.streakSourceTarget, this.streakTarget)
+    }
+
     this.localContrastPass.render(renderer, this.renderTarget2, this.renderTarget1)
     this.featuresPass.render(renderer, this.renderTarget1, this.renderTarget2)
   }
@@ -283,7 +307,12 @@ export class LensFlareEffect extends Effect {
 
     // Четверть базового разрешения: полоса штриха широкая и мягкая, мелких
     // деталей в ней нет, а 129 выборок на пиксель половинного разрешения
-    // стоили бы вчетверо дороже
+    // стоили бы вчетверо дороже.
+    //
+    // Для streakSourcePass это БАЗОВЫЙ размер, а не размер его внутренних
+    // таргетов: KawaseBlurPass делит его на свой resolutionScale = 0.5 и
+    // размывает в одну восьмую кадра, копируя результат в четвертной
+    // streakSourceTarget (см. комментарий у создания прохода)
     const streakWidth = Math.max(1, width >> 1)
     const streakHeight = Math.max(1, height >> 1)
     this.streakSourceTarget.setSize(streakWidth, streakHeight)
