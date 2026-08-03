@@ -59,6 +59,8 @@ class Postprocessing {
       camera: this.camera,
       intensity: config('lensFlare.intensity'),
       ghostAmount: config('lensFlare.ghostAmount'),
+      ghostThreshold: config('lensFlare.ghostThreshold'),
+      ghostAttenuation: config('lensFlare.ghostAttenuation'),
       haloAmount: config('lensFlare.haloAmount'),
       chromaticAberration: config('lensFlare.chromaticAberration'),
       starburstAmount: config('lensFlare.starburstAmount'),

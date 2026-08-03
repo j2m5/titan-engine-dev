@@ -27,6 +27,8 @@ const fragmentShader: string = `
 
   uniform vec2 texelSize;
   uniform float ghostAmount;
+  uniform float ghostThreshold;
+  uniform float ghostAttenuation;
   uniform float haloAmount;
   uniform float chromaticAberration;
   uniform float starburstRotation;
@@ -46,13 +48,27 @@ const fragmentShader: string = `
     return texture(lensColor, vec2(d, 0.5)).rgb;
   }
 
+  // Порог ВЫЧИТАЕТСЯ из выборки с отсечкой в ноль, а не гасит её гладким
+  // множителем: вычитание убивает постоянную составляющую, поэтому широкая
+  // тусклая площадь (диск чёрной дыры целиком) уходит в ноль, а компактный
+  // пик теряет лишь константу и выживает. Множитель сохранял бы форму — и
+  // площадь, размноженная девятью призраками, давала бы пелену.
+  //
+  // Вычитание идёт ДО тонировки: порог по уже затонированному цвету резал бы
+  // палитру градиента, а не яркость.
+  //
+  // Приём взят из узла блика WebGPU-порта three (LensflareNode, TSL):
+  // max(sample - threshold, 0) внутри цикла призраков
   vec3 sampleGhost(const vec2 direction, const float weight, const float offset) {
     vec2 suv = clamp(1.0 - vUv + direction * offset, 0.0, 1.0);
-    vec3 result = texture(inputBuffer, suv).rgb * ghostTint(suv) * weight;
+    vec3 sampled = max(texture(inputBuffer, suv).rgb - ghostThreshold, vec3(0.0));
+    vec3 result = sampled * ghostTint(suv) * weight;
 
-    // Falloff at the perimeter.
+    // Затухание к периметру кадра. Показатель — ручка: чем он больше, тем
+    // плотнее призраки жмутся к центру. У узла three значение по умолчанию 25,
+    // у нас исторически было 3, что размазывало вклад по всему кадру
     float d = clamp(length(0.5 - suv) / (0.5 * SQRT_2), 0.0, 1.0);
-    result *= pow(1.0 - d, 3.0);
+    result *= pow(1.0 - d, ghostAttenuation);
     return result;
   }
 
@@ -129,6 +145,8 @@ export interface LensFlareFeaturesMaterialParameters extends ShaderMaterialParam
   lensColorTexture?: Texture | null
   starburstTexture?: Texture | null
   ghostAmount?: number
+  ghostThreshold?: number
+  ghostAttenuation?: number
   haloAmount?: number
   chromaticAberration?: number
   starburstAmount?: number
@@ -136,6 +154,8 @@ export interface LensFlareFeaturesMaterialParameters extends ShaderMaterialParam
 
 export const lensFlareFeaturesMaterialParametersDefaults = {
   ghostAmount: 0.1,
+  ghostThreshold: 0,
+  ghostAttenuation: 3,
   haloAmount: 0.1,
   chromaticAberration: 10,
   starburstAmount: 0
@@ -148,6 +168,8 @@ export class LensFlareFeaturesMaterial extends ShaderMaterial {
       lensColorTexture = null,
       starburstTexture = null,
       ghostAmount,
+      ghostThreshold,
+      ghostAttenuation,
       haloAmount,
       chromaticAberration,
       starburstAmount,
@@ -170,6 +192,8 @@ export class LensFlareFeaturesMaterial extends ShaderMaterial {
         starburst: new Uniform(starburstTexture),
         texelSize: new Uniform(new Vector2()),
         ghostAmount: new Uniform(ghostAmount),
+        ghostThreshold: new Uniform(ghostThreshold),
+        ghostAttenuation: new Uniform(ghostAttenuation),
         haloAmount: new Uniform(haloAmount),
         chromaticAberration: new Uniform(chromaticAberration),
         starburstRotation: new Uniform(0),
@@ -205,6 +229,22 @@ export class LensFlareFeaturesMaterial extends ShaderMaterial {
 
   set ghostAmount(value: number) {
     this.uniforms.ghostAmount.value = value
+  }
+
+  get ghostThreshold(): number {
+    return this.uniforms.ghostThreshold.value
+  }
+
+  set ghostThreshold(value: number) {
+    this.uniforms.ghostThreshold.value = value
+  }
+
+  get ghostAttenuation(): number {
+    return this.uniforms.ghostAttenuation.value
+  }
+
+  set ghostAttenuation(value: number) {
+    this.uniforms.ghostAttenuation.value = value
   }
 
   get haloAmount(): number {

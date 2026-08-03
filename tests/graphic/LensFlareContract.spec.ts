@@ -188,3 +188,48 @@ describe('LensFlareEffect: значения приёмки', () => {
     expect(lensFlare.lensFlare.ghostAmount).toBeGreaterThan(0)
   })
 })
+
+describe('LensFlareEffect: вычитающий порог призраков', () => {
+  it('порог вычитается из выборки ДО тонировки и до веса, а не гасит её множителем', () => {
+    // Вычитание убивает постоянную составляющую: широкая тусклая площадь
+    // (диск чёрной дыры целиком) уходит в ноль, а компактный пик теряет лишь
+    // константу и выживает. Множитель сохранял бы форму, и площадь,
+    // размноженная девятью призраками, давала бы пелену.
+    // Порядок важен: порог по уже затонированному цвету резал бы палитру
+    // градиента, а не яркость
+    const effect = new LensFlareEffect()
+    const source = effect.featuresMaterial.fragmentShader
+
+    expect(source).toContain('uniform float ghostThreshold;')
+    expect(source).toContain('max(texture(inputBuffer, suv).rgb - ghostThreshold, vec3(0.0))')
+    expect(source).toContain('sampled * ghostTint(suv) * weight')
+    // прежняя форма без порога
+    expect(source).not.toContain('texture(inputBuffer, suv).rgb * ghostTint(suv) * weight')
+  })
+
+  it('показатель затухания — ручка, а не зашитая тройка', () => {
+    const effect = new LensFlareEffect()
+    const source = effect.featuresMaterial.fragmentShader
+
+    expect(source).toContain('uniform float ghostAttenuation;')
+    expect(source).toContain('pow(1.0 - d, ghostAttenuation)')
+    expect(source).not.toContain('pow(1.0 - d, 3.0)')
+  })
+
+  it('дефолты тождественны прежнему коду: вычитать нечего, показатель прежний', () => {
+    const effect = new LensFlareEffect()
+
+    expect(effect.featuresMaterial.ghostThreshold).toBe(0)
+    expect(effect.featuresMaterial.ghostAttenuation).toBe(3)
+  })
+
+  it('обе ручки доезжают из конфига до юниформов материала', () => {
+    const effect = new LensFlareEffect({
+      ghostThreshold: lensFlare.lensFlare.ghostThreshold,
+      ghostAttenuation: lensFlare.lensFlare.ghostAttenuation
+    })
+
+    expect(effect.featuresMaterial.ghostThreshold).toBe(lensFlare.lensFlare.ghostThreshold)
+    expect(effect.featuresMaterial.ghostAttenuation).toBe(lensFlare.lensFlare.ghostAttenuation)
+  })
+})

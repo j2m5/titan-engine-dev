@@ -18,6 +18,18 @@ export interface LensFlareConfig {
     chromaticAberration: number
     /** Сила лучей объектива; 0 — маска тождественна и лучей нет */
     starburstAmount: number
+    /**
+     * Порог, вычитаемый из каждой выборки призрака.
+     *
+     * ЕДИНИЦЫ НЕ ЯРКОСТЬ ЭКРАНА. Вычитание идёт по значениям буфера, который
+     * уже прошёл порог блума и даунсэмпл, то есть по HDR-величинам,
+     * помноженным на smoothstep-множитель порога. Число не сопоставимо ни с
+     * `BLOOM_OPTIONS.luminanceThreshold`, ни с яркостью пикселя на экране;
+     * осмысленный диапазон определяется только замером
+     */
+    ghostThreshold: number
+    /** Показатель затухания призраков к краю кадра: больше — плотнее к центру */
+    ghostAttenuation: number
   }
 }
 
@@ -42,6 +54,8 @@ export const lensFlare: LensFlareConfig = {
     ghostAmount: 0.2,
     haloAmount: 0.04,
     chromaticAberration: 10,
-    starburstAmount: 1.0
+    starburstAmount: 1.0,
+    ghostThreshold: 0,
+    ghostAttenuation: 3
   }
 }

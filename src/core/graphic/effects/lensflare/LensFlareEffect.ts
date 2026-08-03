@@ -42,6 +42,8 @@ export interface LensFlareEffectOptions {
   resolutionY?: number
   intensity?: number
   ghostAmount?: number
+  ghostThreshold?: number
+  ghostAttenuation?: number
   haloAmount?: number
   chromaticAberration?: number
   thresholdLevel?: number
@@ -100,6 +102,8 @@ export class LensFlareEffect extends Effect {
       resolutionY = height,
       intensity,
       ghostAmount,
+      ghostThreshold,
+      ghostAttenuation,
       haloAmount,
       chromaticAberration,
       thresholdLevel,
@@ -179,6 +183,8 @@ export class LensFlareEffect extends Effect {
 
     this.intensity = intensity
     if (ghostAmount !== undefined) this.featuresMaterial.ghostAmount = ghostAmount
+    if (ghostThreshold !== undefined) this.featuresMaterial.ghostThreshold = ghostThreshold
+    if (ghostAttenuation !== undefined) this.featuresMaterial.ghostAttenuation = ghostAttenuation
     if (haloAmount !== undefined) this.featuresMaterial.haloAmount = haloAmount
     if (chromaticAberration !== undefined) this.featuresMaterial.chromaticAberration = chromaticAberration
     if (thresholdLevel !== undefined) this.thresholdLevel = thresholdLevel
