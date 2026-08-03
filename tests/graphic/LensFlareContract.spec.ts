@@ -195,6 +195,15 @@ describe('LensFlareEffect: значения приёмки', () => {
     expect(lensFlare.lensFlare.ghostThreshold).toBe(0.5)
     expect(lensFlare.lensFlare.ghostAttenuation).toBe(12)
   })
+
+  it('дефолты штриха соответствуют замеренной пробе', () => {
+    // Значения получены пробой на TOI-519 03.08.2026: форма совпала с
+    // референсом владельца. Приёмка по картинке остаётся за ним
+    expect(lensFlare.lensFlare.streakAmount).toBe(0.03)
+    expect(lensFlare.lensFlare.streakThreshold).toBe(0.3)
+    expect(lensFlare.lensFlare.streakScale).toBe(5)
+    expect(lensFlare.lensFlare.streakTint).toEqual([0.45, 0.6, 1.0])
+  })
 })
 
 describe('LensFlareEffect: вычитающий порог призраков', () => {
