@@ -187,6 +187,13 @@ describe('LensFlareEffect: значения приёмки', () => {
     expect(lensFlare.lensFlare.starburstAmount).toBeGreaterThan(0)
     expect(lensFlare.lensFlare.ghostAmount).toBeGreaterThan(0)
   })
+
+  it('вычитающий порог и затухание подобраны — иначе потолок вернётся к 0.15', () => {
+    // Замер 03.08.2026: пара 0.5 / 12 держит тень чёрной дыры чистой до
+    // intensity 5, тогда как при пороге 0 пелена появлялась уже на 3
+    expect(lensFlare.lensFlare.ghostThreshold).toBe(0.5)
+    expect(lensFlare.lensFlare.ghostAttenuation).toBe(12)
+  })
 })
 
 describe('LensFlareEffect: вычитающий порог призраков', () => {
