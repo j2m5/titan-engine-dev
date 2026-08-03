@@ -14,6 +14,7 @@ import {
 } from 'three'
 
 import { Storage } from '@/core/framework/file/Storage'
+import { AnamorphicStreakMaterial } from './AnamorphicStreakMaterial'
 import { DownsampleThresholdMaterial } from './DownsampleThresholdMaterial'
 import { LensFlareFeaturesMaterial } from './LensFlareFeaturesMaterial'
 import { computeStarburstRotation } from './starburstRotation'
@@ -49,6 +50,10 @@ export interface LensFlareEffectOptions {
   thresholdLevel?: number
   camera?: Camera
   starburstAmount?: number
+  streakAmount?: number
+  streakThreshold?: number
+  streakScale?: number
+  streakTint?: readonly [number, number, number]
 }
 
 export interface LensFlareEffectUniforms {
@@ -77,6 +82,10 @@ export class LensFlareEffect extends Effect {
   readonly preBlurPass: KawaseBlurPass
   readonly featuresMaterial: LensFlareFeaturesMaterial
   readonly featuresPass: ShaderPass
+
+  readonly streakTarget: WebGLRenderTarget
+  readonly streakMaterial: AnamorphicStreakMaterial
+  readonly streakPass: ShaderPass
 
   // Собственное поле, а не только значение uniform'а материала: штатный
   // Effect.dispose() из postprocessing обходит Object.keys(this) верхнего
@@ -108,7 +117,11 @@ export class LensFlareEffect extends Effect {
       chromaticAberration,
       thresholdLevel,
       camera,
-      starburstAmount
+      starburstAmount,
+      streakAmount,
+      streakThreshold,
+      streakScale,
+      streakTint
     } = {
       ...lensFlareEffectOptionsDefaults,
       ...options
@@ -145,6 +158,16 @@ export class LensFlareEffect extends Effect {
 
     this.featuresMaterial = new LensFlareFeaturesMaterial()
     this.featuresPass = new ShaderPass(this.featuresMaterial)
+
+    this.streakTarget = new WebGLRenderTarget(1, 1, {
+      depthBuffer: false,
+      type: HalfFloatType
+    })
+    this.streakTarget.texture.name = 'LensFlare.Streak'
+
+    this.streakMaterial = new AnamorphicStreakMaterial()
+    this.streakPass = new ShaderPass(this.streakMaterial)
+    this.featuresMaterial.streakBuffer = this.streakTarget.texture
 
     // Ассеты объектива — движковые, а не сценарные: объектив у всех сценариев
     // один, поэтому их нет в таблице ресурсов. URL через Storage: иначе режим
@@ -189,6 +212,10 @@ export class LensFlareEffect extends Effect {
     if (chromaticAberration !== undefined) this.featuresMaterial.chromaticAberration = chromaticAberration
     if (thresholdLevel !== undefined) this.thresholdLevel = thresholdLevel
     if (starburstAmount !== undefined) this.featuresMaterial.starburstAmount = starburstAmount
+    if (streakAmount !== undefined) this.featuresMaterial.streakAmount = streakAmount
+    if (streakThreshold !== undefined) this.streakMaterial.streakThreshold = streakThreshold
+    if (streakScale !== undefined) this.streakMaterial.streakScale = streakScale
+    if (streakTint !== undefined) this.streakMaterial.streakTint.set(streakTint[0], streakTint[1], streakTint[2])
   }
 
   private readonly onResolutionChange = (): void => {
@@ -199,6 +226,7 @@ export class LensFlareEffect extends Effect {
     this.thresholdPass.initialize(renderer, alpha, frameBufferType)
     this.preBlurPass.initialize(renderer, alpha, frameBufferType)
     this.featuresPass.initialize(renderer, alpha, frameBufferType)
+    this.streakPass.initialize(renderer, alpha, frameBufferType)
   }
 
   override update(renderer: WebGLRenderer, inputBuffer: WebGLRenderTarget, deltaTime?: number): void {
@@ -208,6 +236,7 @@ export class LensFlareEffect extends Effect {
 
     this.thresholdPass.render(renderer, inputBuffer, this.renderTarget1)
     this.preBlurPass.render(renderer, this.renderTarget1, this.renderTarget2)
+    this.streakPass.render(renderer, inputBuffer, this.streakTarget)
     this.featuresPass.render(renderer, this.renderTarget2, this.renderTarget1)
   }
 
@@ -221,6 +250,12 @@ export class LensFlareEffect extends Effect {
     this.thresholdMaterial.setSize(width, height)
     this.preBlurPass.setSize(width, height)
     this.featuresMaterial.setSize(width, height)
+
+    this.streakTarget.setSize(width, height)
+    // texelSize — по сэмплируемому буферу, то есть по полному кадру, а не по
+    // половинному таргету, в который проход пишет: от этого зависит смысл
+    // streakScale
+    this.streakMaterial.setSize(baseWidth, baseHeight)
   }
 
   get intensity(): number {

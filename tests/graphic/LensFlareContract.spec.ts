@@ -1,4 +1,4 @@
-import { TextureLoader } from 'three'
+import { TextureLoader, WebGLRenderTarget, type WebGLRenderer } from 'three'
 import { BLOOM_OPTIONS } from '@/core/graphic/Postprocessing'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { lensFlare } from '@/config/lensFlare'
@@ -239,5 +239,70 @@ describe('LensFlareEffect: вычитающий порог призраков', 
 
     expect(effect.featuresMaterial.ghostThreshold).toBe(lensFlare.lensFlare.ghostThreshold)
     expect(effect.featuresMaterial.ghostAttenuation).toBe(lensFlare.lensFlare.ghostAttenuation)
+  })
+})
+
+describe('LensFlareEffect: анаморфный штрих', () => {
+  it('проход читает исходный кадр, а не пороговый буфер', () => {
+    // Порог 0.9 рассчитан на HDR-яркость кадра; по уже пороговому буферу
+    // порог сработал бы дважды и смысл числа потерялся бы
+    const effect = new LensFlareEffect()
+    const inputBuffer = new WebGLRenderTarget(8, 8)
+    const renderer = {
+      setRenderTarget: vi.fn(),
+      render: vi.fn(),
+      getRenderTarget: vi.fn(() => null),
+      getContext: vi.fn(() => ({}))
+    } as unknown as WebGLRenderer
+
+    effect.update(renderer, inputBuffer)
+
+    expect(effect.streakMaterial.inputBuffer).toBe(inputBuffer.texture)
+    expect(effect.streakMaterial.inputBuffer).not.toBe(effect.renderTarget1.texture)
+    expect(effect.streakMaterial.inputBuffer).not.toBe(effect.renderTarget2.texture)
+  })
+
+  it('таргет штриха — половина базового разрешения, а texelSize — от полного кадра', () => {
+    const effect = new LensFlareEffect()
+
+    effect.setSize(1024, 512)
+
+    expect(effect.streakTarget.width).toBe(512)
+    expect(effect.streakTarget.height).toBe(256)
+    // шаг отсчётов меряется в текселях источника, то есть полного кадра
+    expect(effect.streakMaterial.uniforms.texelSize.value.x).toBeCloseTo(1 / 1024, 10)
+  })
+
+  it('ручки штриха доезжают из конфига до юниформов', () => {
+    const effect = new LensFlareEffect({
+      streakAmount: lensFlare.lensFlare.streakAmount,
+      streakThreshold: lensFlare.lensFlare.streakThreshold,
+      streakScale: lensFlare.lensFlare.streakScale,
+      streakTint: lensFlare.lensFlare.streakTint
+    })
+
+    expect(effect.featuresMaterial.streakAmount).toBe(lensFlare.lensFlare.streakAmount)
+    expect(effect.streakMaterial.streakThreshold).toBe(lensFlare.lensFlare.streakThreshold)
+    expect(effect.streakMaterial.streakScale).toBe(lensFlare.lensFlare.streakScale)
+    expect(effect.streakMaterial.streakTint.toArray()).toEqual([...lensFlare.lensFlare.streakTint])
+  })
+
+  it('тинт применяется один раз — в проходе, а не повторно в композите', () => {
+    const effect = new LensFlareEffect()
+
+    expect(effect.featuresMaterial.fragmentShader).toContain('texture(streakBuffer, vUv).rgb * streakAmount')
+    expect(effect.featuresMaterial.fragmentShader).not.toContain('streakTint')
+  })
+
+  it('таргет штриха освобождается штатной разборкой эффекта', () => {
+    // Effect.dispose() из postprocessing обходит Object.keys(this) верхнего
+    // уровня; ресурс, живущий только в юниформе материала, туда не попадает
+    const effect = new LensFlareEffect()
+    const onDispose = vi.fn()
+    effect.streakTarget.addEventListener('dispose', onDispose)
+
+    effect.dispose()
+
+    expect(onDispose).toHaveBeenCalledOnce()
   })
 })

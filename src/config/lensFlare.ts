@@ -38,6 +38,20 @@ export interface LensFlareConfig {
      * неопределённое поведение в GLSL
      */
     ghostAttenuation: number
+    /**
+     * Сила анаморфного штриха; 0 — штриха нет.
+     *
+     * НЕ ЗАМЕР: подобрано арифметически так, чтобы при `intensity = 0.15`
+     * эффективный множитель был около 0.75. Стартовая точка для подбора на
+     * глаз, а не откалиброванное значение
+     */
+    streakAmount: number
+    /** Порог гейта по яркости кадра; перенос из AnamorphicNode (three) */
+    streakThreshold: number
+    /** Шаг отсчётов в текселях кадра; перенос из AnamorphicNode (three) */
+    streakScale: number
+    /** Оттенок штриха; перенос из AnamorphicNode (three) — почти чистый синий */
+    streakTint: readonly [number, number, number]
   }
 }
 
@@ -76,6 +90,10 @@ export const lensFlare: LensFlareConfig = {
     chromaticAberration: 10,
     starburstAmount: 1.0,
     ghostThreshold: 0.5,
-    ghostAttenuation: 12
+    ghostAttenuation: 12,
+    streakAmount: 5,
+    streakThreshold: 0.9,
+    streakScale: 3,
+    streakTint: [0.1, 0.0, 1.0]
   }
 }
