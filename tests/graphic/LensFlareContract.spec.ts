@@ -305,4 +305,23 @@ describe('LensFlareEffect: анаморфный штрих', () => {
 
     expect(onDispose).toHaveBeenCalledOnce()
   })
+
+  it('таргет штриха подключён к материалу артефактов', () => {
+    // Без этого присвоения композит читает пустой семплер streakBuffer —
+    // штрих молча исчезает с экрана, при этом ни один другой тест этого
+    // не заметит: юниформы штриха и связь featuresMaterial с рендер-таргетом
+    // проверяются раздельно
+    const effect = new LensFlareEffect()
+
+    expect(effect.featuresMaterial.streakBuffer).toBe(effect.streakTarget.texture)
+  })
+
+  it('шейдер штриха зажимает яркость перед записью в half-float таргет', () => {
+    // Гейт квадратичен по яркости (сумма весов кернела 16, нормировки нет),
+    // поэтому без потолка серый пиксель с яркостью около 64 уже даёт total
+    // за пределом HalfFloatType (65504) — Inf и мусор на экране
+    const effect = new LensFlareEffect()
+
+    expect(effect.streakMaterial.fragmentShader).toContain('min(total * streakTint, vec3(60000.0))')
+  })
 })

@@ -46,7 +46,18 @@ export interface LensFlareConfig {
      * глаз, а не откалиброванное значение
      */
     streakAmount: number
-    /** Порог гейта по яркости кадра; перенос из AnamorphicNode (three) */
+    /**
+     * Порог гейта по яркости кадра; перенос из AnamorphicNode (three).
+     *
+     * Сознательно НЕ общий с `thresholdLevel` (порог bloom/призраков,
+     * см. принцип «порог — общий с bloom» в `Postprocessing.ts`): штрих
+     * читает исходный HDR-кадр в `AnamorphicStreakMaterial.inputBuffer` и
+     * меряет яркость самого кадра, а призраки — уже пороговый буфер
+     * `DownsampleThresholdMaterial`, прошедший smoothstep-порог и
+     * предразмытие `KawaseBlurPass`. Одно и то же число значило бы в этих
+     * двух точках разное: общий порог был бы совпадением значений, а не
+     * инвариантом, и разъехался бы при первой раздельной правке
+     */
     streakThreshold: number
     /** Шаг отсчётов в текселях кадра; перенос из AnamorphicNode (three) */
     streakScale: number
