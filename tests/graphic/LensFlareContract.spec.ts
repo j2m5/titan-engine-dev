@@ -325,3 +325,54 @@ describe('LensFlareEffect: анаморфный штрих', () => {
     expect(effect.streakMaterial.fragmentShader).toContain('min(total * streakTint, vec3(60000.0))')
   })
 })
+
+describe('LensFlareEffect: проход локального контраста', () => {
+  it('материал артефактов читает буфер локального контраста, а не предразмытый', () => {
+    // Призраки обязаны отбирать пиксели по локальному контрасту: плато диска
+    // звезды ярче порога во всех своих пикселях и, размноженное девятью
+    // призраками, заливало кадр пеленой
+    const effect = new LensFlareEffect()
+    const inputBuffer = new WebGLRenderTarget(8, 8)
+    const renderer = {
+      setRenderTarget: vi.fn(),
+      render: vi.fn(),
+      getRenderTarget: vi.fn(() => null),
+      getContext: vi.fn(() => ({}))
+    } as unknown as WebGLRenderer
+
+    effect.update(renderer, inputBuffer)
+
+    expect(effect.featuresMaterial.inputBuffer).toBe(effect.renderTarget1.texture)
+    expect(effect.localContrastMaterial.inputBuffer).toBe(effect.renderTarget2.texture)
+  })
+
+  it('готовые артефакты лежат в renderTarget2', () => {
+    // Проход локального контраста занял renderTarget1 (его прежнее содержимое
+    // к этому моменту уже прочитано предразмытием), поэтому артефакты
+    // пишутся в renderTarget2 — новых таргетов половинного разрешения нет
+    const effect = new LensFlareEffect()
+
+    expect(effect.uniforms.get('featuresBuffer').value).toBe(effect.renderTarget2.texture)
+  })
+
+  it('материал локального контраста следует за ресайзом', () => {
+    const effect = new LensFlareEffect()
+
+    effect.setSize(1024, 512)
+
+    expect(effect.localContrastMaterial.uniforms.texelSize.value.x).toBeCloseTo(1 / 512, 10)
+    expect(effect.localContrastMaterial.uniforms.texelSize.value.y).toBeCloseTo(1 / 256, 10)
+  })
+
+  it('проход локального контраста разбирается штатным dispose', () => {
+    // Effect.dispose() обходит Object.keys(this): ресурс, живущий только
+    // внутри другого объекта, под обход не попадает и течёт
+    const effect = new LensFlareEffect()
+    const onDispose = vi.fn()
+    effect.localContrastMaterial.addEventListener('dispose', onDispose)
+
+    effect.dispose()
+
+    expect(onDispose).toHaveBeenCalled()
+  })
+})

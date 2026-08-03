@@ -17,6 +17,7 @@ import { Storage } from '@/core/framework/file/Storage'
 import { AnamorphicStreakMaterial } from './AnamorphicStreakMaterial'
 import { DownsampleThresholdMaterial } from './DownsampleThresholdMaterial'
 import { LensFlareFeaturesMaterial } from './LensFlareFeaturesMaterial'
+import { LocalContrastMaterial } from './LocalContrastMaterial'
 import { computeStarburstRotation } from './starburstRotation'
 
 const fragmentShader: string = `
@@ -82,6 +83,8 @@ export class LensFlareEffect extends Effect {
   readonly preBlurPass: KawaseBlurPass
   readonly featuresMaterial: LensFlareFeaturesMaterial
   readonly featuresPass: ShaderPass
+  readonly localContrastMaterial: LocalContrastMaterial
+  readonly localContrastPass: ShaderPass
 
   readonly streakTarget: WebGLRenderTarget
   readonly streakMaterial: AnamorphicStreakMaterial
@@ -159,6 +162,9 @@ export class LensFlareEffect extends Effect {
     this.featuresMaterial = new LensFlareFeaturesMaterial()
     this.featuresPass = new ShaderPass(this.featuresMaterial)
 
+    this.localContrastMaterial = new LocalContrastMaterial()
+    this.localContrastPass = new ShaderPass(this.localContrastMaterial)
+
     this.streakTarget = new WebGLRenderTarget(1, 1, {
       depthBuffer: false,
       type: HalfFloatType
@@ -197,7 +203,7 @@ export class LensFlareEffect extends Effect {
     this.starburstTexture.wrapT = ClampToEdgeWrapping
     this.featuresMaterial.starburstTexture = this.starburstTexture
 
-    this.uniforms.get('featuresBuffer').value = this.renderTarget1.texture
+    this.uniforms.get('featuresBuffer').value = this.renderTarget2.texture
 
     this.resolution = new Resolution(this, resolutionX, resolutionY, resolutionScale)
     this.resolution.addEventListener('change', this.onResolutionChange)
@@ -225,6 +231,7 @@ export class LensFlareEffect extends Effect {
   override initialize(renderer: WebGLRenderer, alpha: boolean, frameBufferType: TextureDataType): void {
     this.thresholdPass.initialize(renderer, alpha, frameBufferType)
     this.preBlurPass.initialize(renderer, alpha, frameBufferType)
+    this.localContrastPass.initialize(renderer, alpha, frameBufferType)
     this.featuresPass.initialize(renderer, alpha, frameBufferType)
     this.streakPass.initialize(renderer, alpha, frameBufferType)
   }
@@ -234,10 +241,15 @@ export class LensFlareEffect extends Effect {
       this.featuresMaterial.starburstRotation = computeStarburstRotation(this.camera.matrixWorld)
     }
 
+    // Порядок буферов: к пятому шагу содержимое renderTarget1 уже прочитано
+    // предразмытием, к шестому — содержимое renderTarget2 прочитано локальным
+    // контрастом. Поэтому оба переиспользуются, и таргетов половинного
+    // разрешения по-прежнему два
     this.thresholdPass.render(renderer, inputBuffer, this.renderTarget1)
     this.preBlurPass.render(renderer, this.renderTarget1, this.renderTarget2)
     this.streakPass.render(renderer, inputBuffer, this.streakTarget)
-    this.featuresPass.render(renderer, this.renderTarget2, this.renderTarget1)
+    this.localContrastPass.render(renderer, this.renderTarget2, this.renderTarget1)
+    this.featuresPass.render(renderer, this.renderTarget1, this.renderTarget2)
   }
 
   override setSize(baseWidth: number, baseHeight: number): void {
@@ -250,6 +262,7 @@ export class LensFlareEffect extends Effect {
     this.thresholdMaterial.setSize(width, height)
     this.preBlurPass.setSize(width, height)
     this.featuresMaterial.setSize(width, height)
+    this.localContrastMaterial.setSize(width, height)
 
     this.streakTarget.setSize(width, height)
     // texelSize — по сэмплируемому буферу, то есть по полному кадру, а не по
