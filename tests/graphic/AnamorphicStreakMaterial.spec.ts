@@ -19,9 +19,11 @@ describe('AnamorphicStreakMaterial: анаморфный штрих', () => {
   })
 
   it('число отсчётов — константа шейдера, а не юниформ', () => {
+    // 129 отсчётов вместо прежних 33: при большом вылете редкие отсчёты дают
+    // видимые копии диска источника вдоль полосы и рубленый край
     const material = new AnamorphicStreakMaterial()
 
-    expect(material.fragmentShader).toContain('#define HALF_SAMPLES 16')
+    expect(material.fragmentShader).toContain('#define HALF_SAMPLES 64')
     expect(material.fragmentShader).not.toContain('uniform int')
   })
 
@@ -36,15 +38,15 @@ describe('AnamorphicStreakMaterial: анаморфный штрих', () => {
   it('ручки читаются и пишутся через свойства', () => {
     const material = new AnamorphicStreakMaterial()
 
-    expect(material.streakThreshold).toBe(0.9)
-    expect(material.streakScale).toBe(3)
-    expect(material.streakTint).toEqual(new Vector3(0.1, 0.0, 1.0))
+    expect(material.streakThreshold).toBe(0.3)
+    expect(material.streakScale).toBe(5)
+    expect(material.streakTint).toEqual(new Vector3(0.45, 0.6, 1.0))
 
     material.streakThreshold = 1.2
-    material.streakScale = 5
+    material.streakScale = 7
 
     expect(material.uniforms.streakThreshold.value).toBe(1.2)
-    expect(material.uniforms.streakScale.value).toBe(5)
+    expect(material.uniforms.streakScale.value).toBe(7)
   })
 
   it('texelSize берётся у сэмплируемого буфера', () => {

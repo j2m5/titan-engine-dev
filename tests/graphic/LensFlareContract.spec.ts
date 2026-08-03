@@ -243,9 +243,11 @@ describe('LensFlareEffect: вычитающий порог призраков', 
 })
 
 describe('LensFlareEffect: анаморфный штрих', () => {
-  it('проход читает исходный кадр, а не пороговый буфер', () => {
-    // Порог 0.9 рассчитан на HDR-яркость кадра; по уже пороговому буферу
-    // порог сработал бы дважды и смысл числа потерялся бы
+  it('штрих читает собственный источник — понижение предразмытого буфера', () => {
+    // Абсолютная яркость не отличает главную звезду от фоновой: они в одном
+    // диапазоне HDR, и порог, убирающий чёрточки на фоне, убирает штрих и на
+    // звезде. Отличает их РАЗМЕР, а размер меряет размытие: точка в нём тонет,
+    // диск сохраняет яркость
     const effect = new LensFlareEffect()
     const inputBuffer = new WebGLRenderTarget(8, 8)
     const renderer = {
@@ -257,20 +259,31 @@ describe('LensFlareEffect: анаморфный штрих', () => {
 
     effect.update(renderer, inputBuffer)
 
-    expect(effect.streakMaterial.inputBuffer).toBe(inputBuffer.texture)
-    expect(effect.streakMaterial.inputBuffer).not.toBe(effect.renderTarget1.texture)
+    expect(effect.streakMaterial.inputBuffer).toBe(effect.streakSourceTarget.texture)
+    expect(effect.streakMaterial.inputBuffer).not.toBe(inputBuffer.texture)
     expect(effect.streakMaterial.inputBuffer).not.toBe(effect.renderTarget2.texture)
   })
 
-  it('таргет штриха — половина базового разрешения, а texelSize — от полного кадра', () => {
+  it('таргеты штриха — четверть базового разрешения', () => {
     const effect = new LensFlareEffect()
 
     effect.setSize(1024, 512)
 
-    expect(effect.streakTarget.width).toBe(512)
-    expect(effect.streakTarget.height).toBe(256)
-    // шаг отсчётов меряется в текселях источника, то есть полного кадра
-    expect(effect.streakMaterial.uniforms.texelSize.value.x).toBeCloseTo(1 / 1024, 10)
+    expect(effect.streakTarget.width).toBe(256)
+    expect(effect.streakTarget.height).toBe(128)
+    expect(effect.streakSourceTarget.width).toBe(256)
+    expect(effect.streakSourceTarget.height).toBe(128)
+    expect(effect.streakMaterial.uniforms.texelSize.value.x).toBeCloseTo(1 / 256, 10)
+  })
+
+  it('источник штриха разбирается штатным dispose', () => {
+    const effect = new LensFlareEffect()
+    const onDispose = vi.fn()
+    effect.streakSourceTarget.addEventListener('dispose', onDispose)
+
+    effect.dispose()
+
+    expect(onDispose).toHaveBeenCalled()
   })
 
   it('ручки штриха доезжают из конфига до юниформов', () => {

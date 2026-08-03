@@ -86,6 +86,8 @@ export class LensFlareEffect extends Effect {
   readonly localContrastMaterial: LocalContrastMaterial
   readonly localContrastPass: ShaderPass
 
+  readonly streakSourceTarget: WebGLRenderTarget
+  readonly streakSourcePass: KawaseBlurPass
   readonly streakTarget: WebGLRenderTarget
   readonly streakMaterial: AnamorphicStreakMaterial
   readonly streakPass: ShaderPass
@@ -165,6 +167,19 @@ export class LensFlareEffect extends Effect {
     this.localContrastMaterial = new LocalContrastMaterial()
     this.localContrastPass = new ShaderPass(this.localContrastMaterial)
 
+    // Собственный источник штриха: понижение предразмытого буфера до четверти
+    // разрешения. Ядро MEDIUM, а не SMALL, сглаживает зернистость поверхности
+    // звезды — на половинном буфере она давала продольные волны вдоль полосы
+    this.streakSourceTarget = new WebGLRenderTarget(1, 1, {
+      depthBuffer: false,
+      type: HalfFloatType
+    })
+    this.streakSourceTarget.texture.name = 'LensFlare.StreakSource'
+
+    this.streakSourcePass = new KawaseBlurPass({
+      kernelSize: KernelSize.MEDIUM
+    })
+
     this.streakTarget = new WebGLRenderTarget(1, 1, {
       depthBuffer: false,
       type: HalfFloatType
@@ -233,6 +248,7 @@ export class LensFlareEffect extends Effect {
     this.preBlurPass.initialize(renderer, alpha, frameBufferType)
     this.localContrastPass.initialize(renderer, alpha, frameBufferType)
     this.featuresPass.initialize(renderer, alpha, frameBufferType)
+    this.streakSourcePass.initialize(renderer, alpha, frameBufferType)
     this.streakPass.initialize(renderer, alpha, frameBufferType)
   }
 
@@ -247,7 +263,8 @@ export class LensFlareEffect extends Effect {
     // разрешения по-прежнему два
     this.thresholdPass.render(renderer, inputBuffer, this.renderTarget1)
     this.preBlurPass.render(renderer, this.renderTarget1, this.renderTarget2)
-    this.streakPass.render(renderer, inputBuffer, this.streakTarget)
+    this.streakSourcePass.render(renderer, this.renderTarget2, this.streakSourceTarget)
+    this.streakPass.render(renderer, this.streakSourceTarget, this.streakTarget)
     this.localContrastPass.render(renderer, this.renderTarget2, this.renderTarget1)
     this.featuresPass.render(renderer, this.renderTarget1, this.renderTarget2)
   }
@@ -264,11 +281,17 @@ export class LensFlareEffect extends Effect {
     this.featuresMaterial.setSize(width, height)
     this.localContrastMaterial.setSize(width, height)
 
-    this.streakTarget.setSize(width, height)
-    // texelSize — по сэмплируемому буферу, то есть по полному кадру, а не по
-    // половинному таргету, в который проход пишет: от этого зависит смысл
-    // streakScale
-    this.streakMaterial.setSize(baseWidth, baseHeight)
+    // Четверть базового разрешения: полоса штриха широкая и мягкая, мелких
+    // деталей в ней нет, а 129 выборок на пиксель половинного разрешения
+    // стоили бы вчетверо дороже
+    const streakWidth = Math.max(1, width >> 1)
+    const streakHeight = Math.max(1, height >> 1)
+    this.streakSourceTarget.setSize(streakWidth, streakHeight)
+    this.streakSourcePass.setSize(streakWidth, streakHeight)
+    this.streakTarget.setSize(streakWidth, streakHeight)
+    // texelSize — по сэмплируемому буферу, то есть по источнику штриха:
+    // streakScale меряет шаг в его текселях
+    this.streakMaterial.setSize(streakWidth, streakHeight)
   }
 
   get intensity(): number {
