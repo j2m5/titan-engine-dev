@@ -330,9 +330,10 @@ describe('LensFlareEffect: анаморфный штрих', () => {
   })
 
   it('шейдер штриха зажимает яркость перед записью в half-float таргет', () => {
-    // Гейт квадратичен по яркости (сумма весов кернела 16, нормировки нет),
-    // поэтому без потолка серый пиксель с яркостью около 64 уже даёт total
-    // за пределом HalfFloatType (65504) — Inf и мусор на экране
+    // Гейт квадратичен по яркости (сумма весов кернела равна HALF_SAMPLES,
+    // нормировки нет), поэтому без потолка серый пиксель с яркостью около
+    // sqrt(65504 / HALF_SAMPLES) (~32 при текущем HALF_SAMPLES = 64) уже даёт
+    // total за пределом HalfFloatType (65504) — Inf и мусор на экране
     const effect = new LensFlareEffect()
 
     expect(effect.streakMaterial.fragmentShader).toContain('min(total * streakTint, vec3(60000.0))')
