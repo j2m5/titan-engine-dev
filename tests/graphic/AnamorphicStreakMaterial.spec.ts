@@ -25,6 +25,14 @@ describe('AnamorphicStreakMaterial: анаморфный штрих', () => {
     expect(material.fragmentShader).not.toContain('uniform int')
   })
 
+  it('цикл включает оба края — треугольный вес гасится в ноль симметрично', () => {
+    // i < HALF_SAMPLES давал асимметрию: левый хвост гаснет в ноль на -16,
+    // правый обрывается на 15 с весом 0.0625. i <= HALF_SAMPLES гасит оба края.
+    const material = new AnamorphicStreakMaterial()
+
+    expect(material.fragmentShader).toContain('for (int i = -HALF_SAMPLES; i <= HALF_SAMPLES; i++)')
+  })
+
   it('ручки читаются и пишутся через свойства', () => {
     const material = new AnamorphicStreakMaterial()
 

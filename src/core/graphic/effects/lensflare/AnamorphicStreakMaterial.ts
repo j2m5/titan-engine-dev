@@ -40,7 +40,9 @@ const fragmentShader: string = `
 
   // Число отсчётов — константа шейдера, а не юниформ: цикл с переменной
   // границей GLSL разворачивает хуже, а менять его на лету незачем. Смена
-  // требует пересборки шейдера. 32 отсчёта — как в узле three
+  // требует пересборки шейдера. Границы включают оба края (i <= HALF_SAMPLES):
+  // 33 отсчёта, крайние два — с нулевым весом, цена за симметричный треугольник.
+  // У узла three кернел асимметричен (i < HALF_SAMPLES) — здесь это выправлено
   #define HALF_SAMPLES 16
 
   uniform sampler2D inputBuffer;
@@ -54,7 +56,7 @@ const fragmentShader: string = `
   void main() {
     vec3 total = vec3(0.0);
 
-    for (int i = -HALF_SAMPLES; i < HALF_SAMPLES; i++) {
+    for (int i = -HALF_SAMPLES; i <= HALF_SAMPLES; i++) {
       float softness = 1.0 - abs(float(i)) / float(HALF_SAMPLES);
       vec2 uv = clamp(vUv + vec2(texelSize.x * float(i) * streakScale, 0.0), 0.0, 1.0);
       vec3 color = texture(inputBuffer, uv).rgb;
