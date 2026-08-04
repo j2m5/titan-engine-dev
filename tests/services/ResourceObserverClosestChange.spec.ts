@@ -12,17 +12,16 @@ import type { LoadingProgressReporter } from '@/core/ports/LoadingProgressReport
 import type { NotificationSink } from '@/core/ports/NotificationSink'
 
 /**
- * Закрывает структурный пробел раунда ревью: у Task 5 не было ни одного
- * теста, гоняющего `closestChange`/`collectCandidates`/бюджетное ранжирование
- * end-to-end — только `evictActor` напрямую (`ResourceObserverStreaming.spec.ts`).
- * Пробник ревьюера нашёл три дефекта именно здесь за минуты.
+ * Гоняет `closestChange`/`collectCandidates`/бюджетное ранжирование
+ * end-to-end. Соседний `ResourceObserverStreaming.spec.ts` проверяет только
+ * `evictActor` напрямую и эту связку не покрывает.
  *
  * Тела — настоящие акторы движка (Mercury/Ceres/Korriban I/Korriban II), а не
  * фикстуры: `collectCandidates` ходит в реальный `Actor`/`Resource` через ORM,
  * подменить эти вызовы нечем без искажения самого проверяемого механизма.
  * `distance`/`position` в `SceneObserver.data` подконтрольны тесту напрямую.
  *
- * Fix 3 (финальное ревью): `collectCandidates` резолвит имя через `this._map`
+ * `collectCandidates` резолвит имя через `this._map`
  * (наполняется `setMap`), а не запросом `Actor.where({ name })` — значит
  * КАЖДЫЙ тест обязан выставить `observer.scenario` ДО первого `ClosestChange`,
  * иначе `_map` пуст и ни один кандидат не резолвится. Mercury/Ceres/Moon —
@@ -56,9 +55,8 @@ function makeBigTexture(): Texture {
  * Приватная бухгалтерия наблюдателя, доступная снаружи только приведением
  * типа — тот же приём, что и в `ResourceObserverScenario.spec.ts`. Нужен,
  * когда поведенческие побочные эффекты (счётчик сетевых вызовов, вызов
- * `evictActor`) не отличают "гварда сработала" от "гварда сломана, но
- * дедупликация путей молча замаскировала последствия" — ровно то, что
- * произошло с прежней версией эпохального теста (round 3 ревью).
+ * `evictActor`) не отличают «гварда сработала» от «гварда сломана, но
+ * дедупликация путей замаскировала последствия».
  */
 type StreamingInternals = {
   loaded: Set<number>
@@ -111,7 +109,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     resourceStorage.deleteAllTextures()
   })
 
-  it('провалившийся актор не ретраится немедленно, пока остаётся приоритетным (Critical 2)', async () => {
+  it('провалившийся актор не ретраится немедленно, пока остаётся приоритетным', async () => {
     // Все пути Меркурия проваливаются — актор целиком уходит в attempted.
     const load = vi.fn(
       (): Promise<LoadResult> => Promise.resolve({ ok: false as const, texture: null, error: new Error('сеть недоступна') })
@@ -272,7 +270,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
   })
 
   it('два актора, разделяющие путь, В ОДНОМ цикле грузят его один раз — не задваивают ни сеть, ни реестр', async () => {
-    // round 2 ревью, Important: если оба candidate попадают в decision.load
+    // Если оба candidate попадают в decision.load
     // ОДНОГО пересчёта, Promise.all запускает их loadActor конкурентно, и
     // оба успевают проверить реестр ДО того, как первый там что-то
     // зарегистрирует — реестр сам по себе от этой гонки не спасает.
@@ -303,7 +301,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
   })
 
   it('устаревший владелец брони не снимает чужую (живую) бронь по тому же пути после смены сценария', async () => {
-    // round 3 ревью: удаление записи pathLoads по завершении сверяется не
+    // Удаление записи pathLoads по завершении сверяется не
     // только по ключу пути, но и по РАВЕНСТВУ ПРОМИСА
     // (`this.pathLoads.get(path) === pending`) — это единственное, что
     // мешает устаревшему владельцу снести чужую, более свежую бронь по тому
@@ -311,7 +309,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // актор, претендующий на тот же путь уже в новой эпохе, потерял бы свою
     // бронь при резолве устаревшего владельца — и третий заявитель по тому
     // же пути запустил бы дублирующую сетевую загрузку через границу смены
-    // сценария, воссоздавая утечку Important-находки round 2.
+    // сценария, воссоздавая утечку.
     const resolvers: Array<(result: LoadResult) => void> = []
     let callIndex: number = 0
     const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
@@ -344,7 +342,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // Сценарий "сменился" — сеттер безусловно бампает epoch и полностью
     // сбрасывает pathLoads/loaded/actorPaths независимо от того, каким
     // значением его перезаписали (см. докблок сеттера `scenario`). Тот же
-    // сценарий переприсваивается заново (а не `null`), потому что Fix 3
+    // сценарий переприсваивается заново (а не `null`), потому что код
     // резолвит кандидатов через `this._map`, а `null` очистил бы её без
     // восстановления — Korriban II не нашёлся бы кандидатом вообще, и гонка,
     // которую проверяет этот тест, до него бы не дошла. Korriban I по-прежнему
@@ -380,16 +378,16 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     await live
   })
 
-  it('устаревший резолв после смены сценария не трогает живую загрузку того же актора (Critical, round 2)', async () => {
-    // round 2 ревью, Critical: удаления loaded/actorPaths и снятие inFlight,
+  it('устаревший резолв после смены сценария не трогает живую загрузку того же актора', async () => {
+    // Удаления loaded/actorPaths и снятие inFlight,
     // ключуемые только по actorId, без сверки эпохи, разбирали учёт СВЕЖЕЙ
-    // загрузки того же актора, начатой уже после смены сценария. Ре-ревьюер
-    // воспроизвёл это на реальном сценарии: устаревший резолв Korriban II
+    // загрузки того же актора, начатой уже после смены сценария. Наблюдалось
+    // на реальном сценарии: устаревший резолв Korriban II
     // снимал пометки живой загрузки того же актора, и последующее
     // вытеснение освобождало разделяемый диффуз, который Korriban I ещё
-    // показывал (Critical 1 назад).
+    // показывал.
     //
-    // round 3 ревью: прежняя версия проверяла ПОБОЧНЫЕ эффекты (счётчик
+    // Побочных эффектов тут недостаточно (счётчик
     // сетевых вызовов, вызов evictActor через третий пересчёт) — при снятых
     // гвардах третий пересчёт ошибочно считал актора незагруженным, но
     // повторный loadActor молча присоединялся (через pathLoads) к чужому
@@ -430,7 +428,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // Сценарий "сменился" — тот же сценарий переприсваивается заново, а не
     // `null`: сеттер безусловно бампает epoch и сбрасывает весь учёт
     // стриминга независимо от значения (см. комментарий выше, тест "устаревший
-    // владелец брони"), а Fix 3 резолвит кандидатов через `this._map`,
+    // владелец брони"), а кандидаты резолвятся через `this._map`,
     // которую `null` очистил бы без восстановления — цикл 2 не нашёл бы
     // Меркурия кандидатом вообще.
     observer.scenario = SOLAR_SYSTEM
@@ -442,8 +440,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     expect(state.loaded.has(MERCURY_ACTOR_ID)).toBe(true)
     expect(state.inFlight.has(MERCURY_ACTOR_ID)).toBe(true)
 
-    // Резолвим УСТАРЕВШИЙ (первый) вызов — именно та гонка, которую нашёл
-    // ре-ревьюер.
+    // Резолвим УСТАРЕВШИЙ (первый) вызов — именно та гонка.
     resolvers[0]({ ok: true, texture: makeTexture() })
     await stale
 
@@ -467,7 +464,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
   })
 
   it('inFlight защищает актор от вытеснения, пока он грузится впервые, даже если приоритет упал', async () => {
-    // Решение по находке «vacuous test» round 2: inFlight — НЕ избыточный
+    // inFlight — НЕ избыточный
     // термин. Пока актор грузится ВПЕРВЫЕ, loadedAt для него ещё не
     // выставлен (выставляется только по успеху) — второе условие isPinned
     // тогда всегда ложно, и защищать актора может только inFlight. Проверка:
@@ -513,13 +510,13 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     await first
   })
 
-  it('тело, чей замеренный вес превышает весь бюджет, не вытесняется и не грузится заново (пол Fix 1)', async () => {
+  it('тело, чей замеренный вес превышает весь бюджет, не вытесняется и не грузится заново', async () => {
     // Меркурий — единственный кандидат, значит всегда топ по приоритету: пол
     // decideStreaming обязан удержать его в reserved на КАЖДОМ цикле, даже
     // когда честный замер (не слепая оценка) показывает вес больше всего
     // бюджета. Без пола актор сначала грузится вслепую (первый цикл), замер
     // на цикле 2 вскрывает перерасход, и БЕЗ пола актор ушёл бы в evict —
-    // ровно тот бесконечный цикл перезагрузки, который Fix 1 обязан убрать.
+    // ровно тот бесконечный цикл перезагрузки, который убирает пол.
     const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
       const texture = makeBigTexture() // замер даст SIZE_8K на каждый путь
       texture.name = request.name
@@ -550,7 +547,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     expect(load).toHaveBeenCalledTimes(2)
   })
 
-  it('имя, разделяемое с кольцом/атмосферой, резолвится в планету, а не в актора без стримируемых путей (Fix 3)', async () => {
+  it('имя, разделяемое с кольцом/атмосферой, резолвится в планету, а не в актора без стримируемых путей', async () => {
     // Saturn — три реальных актора с ОДНИМ именем: планета (id 11, диффуз+
     // bump), кольцо (id 39, единственный ресурс — resident PNG колец, не
     // streamable) и атмосфера (id 50, вообще без ресурсов). Раньше
@@ -587,7 +584,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     whereSpy.mockRestore()
   })
 
-  it('успешная загрузка не бросает, когда renderable === null (Fix 4)', async () => {
+  it('успешная загрузка не бросает, когда renderable === null', async () => {
     // Тот же провал, что и в evictActor (см. ResourceObserverStreaming.spec.ts),
     // но на пути успеха loadActor: hasRenderable({ renderable: null }) вернёт
     // true, node.renderable?.material — undefined, и .updateMaterial() на
@@ -607,7 +604,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     await expect(handlers['ClosestChange'](record('Mercury', 300))).resolves.toBeUndefined()
   })
 
-  it('бросок из updateMaterial не улетает необработанным — актор откатывается в attempted (Fix 5)', async () => {
+  it('бросок из updateMaterial не улетает необработанным — актор откатывается в attempted', async () => {
     // tryLoad гасит ошибки ПРОВАЙДЕРА, но loadActor вокруг него — нет: бросок
     // из ORM, из сборки запроса или (как здесь) из updateMaterial() после
     // успешной загрузки раньше улетал из Promise.all необработанным отказом,

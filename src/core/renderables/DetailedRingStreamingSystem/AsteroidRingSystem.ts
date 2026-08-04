@@ -44,7 +44,7 @@ interface AsteroidRingConfig {
    * Макс. экземпляров для Near (ближний тир, повышенный detail) буфера.
    * Своя, независимая от maxL0Instances конфигурация — Near-стримы держат
    * меньшую совокупную ёмкость: ближний тир населяет только окрестность
-   * камеры (см. план «2c — ближний тир», выбор адресуется в Task 2).
+   * камеры.
    */
   maxL0NearInstances: number
   /** Макс. экземпляров для L1 (billboard) буфера */
@@ -112,7 +112,7 @@ interface AsteroidRingConfig {
    * Детализация икосферы запекания архетипа для ближнего тира (Near) —
    * отдельная, более высокая ступень detail той же библиотеки архетипов
    * (тот же профиль/сид, см. getArchetypeGeometries). Выбор Near ещё не
-   * реализован (Task 2 плана «2c — ближний тир»), геометрии уже запекаются.
+   * реализован, геометрии уже запекаются.
    */
   asteroidShapeNearDetail: number
   /**
@@ -348,8 +348,8 @@ class AsteroidRingSystem extends Group {
     // Сид каждого архетипа детерминирован профилем и его индексом → форма
     // стабильна между сессиями и кольцами (k=0 воспроизводит архетип 2a).
     const l0Geometries = getArchetypeGeometries(cfg.profile, cfg.archetypeCount, cfg.asteroidShapeDetail, asteroidSize)
-    // Та же библиотека (профиль/сид), повышенный detail — ближний тир (план 2c,
-    // выбор Near менеджером ещё не реализован, см. Task 2).
+    // Та же библиотека (профиль/сид), повышенный detail — ближний тир
+    // (выбор Near менеджером ещё не реализован).
     const nearGeometries = getArchetypeGeometries(
       cfg.profile,
       cfg.archetypeCount,

@@ -23,7 +23,7 @@ describe('AsteroidRingSystem: интеграция формы', () => {
   })
 
   it('дефолтом кладёт диапазон амплитуды и частоту в L0-материал', () => {
-    // Амплитуда снижена: силуэт несёт запечённый архетип (Task 1–2 плана 2a),
+    // Амплитуда снижена: силуэт несёт запечённый архетип,
     // деформация лишь остаточная рябь — декоррелятор повторов K мешей.
     const system = new AsteroidRingSystem(makeFakeActor())
     const u = (system as any).pool.geometryMaterial.uniforms

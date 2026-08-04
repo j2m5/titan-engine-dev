@@ -184,7 +184,7 @@ function generateRubbleParams(rng: SeededRandom): ArchetypeParams {
  * Сгенерировать параметры кратерного монолита (морфология C): эллипсоид
  * (та же нормировка объёма, что у fragment — «поза» камня) с 2–5 кратерами,
  * врезанными в силуэт. Центр кратера — случайное единичное направление
- * (randomUnit), angularRadius и depth — диапазоны спеки §Task 2. planes и
+ * (randomUnit). planes и
  * lobes морфологий A/B не используются (тело монолита не фасетировано и не
  * слипается из лобов) — edgeRadius по той же причине не используется телом,
  * храним 0 (skip smooth-min/max в crateredRadius для этой морфологии).

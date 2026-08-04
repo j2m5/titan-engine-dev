@@ -24,9 +24,9 @@ export function createNebulaUniforms(): Record<string, IUniform> {
     uContrast: new Uniform(1.6),
     uEmissiveIntensity: new Uniform(1.6),
     uDensityScale: new Uniform(4.0), // optical thickness / absorption per step
-    uOpacityScale: new Uniform(1.0), // crossfade against the impostor (Task 12)
+    uOpacityScale: new Uniform(1.0), // crossfade against the impostor
     uLogDepthBufFC: new Uniform(1.0), // logarithmic depth factor (set per-frame)
-    // lobes / cavities (field-level composition) + Worley filaments (Task 11)
+    // lobes / cavities (field-level composition) + Worley filaments
     uLobeCount: new Uniform(0),
     uLobeData: new Uniform(Array.from({ length: 8 }, () => new Vector4())),
     uLobeWeight: new Uniform(new Array<number>(8).fill(0)),
@@ -34,7 +34,7 @@ export function createNebulaUniforms(): Record<string, IUniform> {
     uCavityData: new Uniform(Array.from({ length: 8 }, () => new Vector4())),
     uCavityStrength: new Uniform(new Array<number>(8).fill(0)),
     uWorleyStrength: new Uniform(0.4),
-    // palette + secondary + dust + cheap white light (Task 10)
+    // palette + secondary + dust + cheap white light
     uPalette0: new Uniform(new Color(0x06141c)),
     uPalette1: new Uniform(new Color(0x1f6b66)),
     uPalette2: new Uniform(new Color(0x4cbfa6)),

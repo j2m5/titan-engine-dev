@@ -105,8 +105,8 @@ describe('QueryBuilder — фильтрация', () => {
 describe('QueryBuilder — falsy-значения не считаются null', () => {
   // Пин семантики fieldValue: раньше предикаты читали атрибут через
   // getAttribute(field, null) с подменой по falsy (attributes[key] || null),
-  // поэтому хранимые 0 и '' попадали в whereNull. Task 5 перепишет
-  // getAttribute — этот блок не даст молча вернуть старое поведение.
+  // поэтому хранимые 0 и '' попадали в whereNull. Блок не даёт
+  // молча вернуть старое поведение.
   it('whereNull не находит хранимый 0 и пустую строку', () => {
     expect(Metric.query().whereNull('value').get().pluck('id')).toEqual([3])
     expect(Metric.query().whereNull('note').get().pluck('id')).toEqual([])
