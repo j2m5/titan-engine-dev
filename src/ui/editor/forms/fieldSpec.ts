@@ -1,4 +1,5 @@
 import { DatabaseSnapshot } from '@/core/framework/validation/validateDatabase'
+import { DataTemplate } from '@/ui/editor/forms/dataTemplates'
 
 export type FieldKind = 'number' | 'text' | 'color' | 'textarea' | 'select-fk' | 'select-enum' | 'json'
 
@@ -53,6 +54,8 @@ export interface JsonFieldSpec extends FieldSpecBase {
    * включить «Clone from…» — селект других записей этой же таблицы
    */
   cloneFrom?: boolean
+  /** заготовки data по категориям — селект «template…» */
+  templates?: DataTemplate[]
 }
 
 export type FieldSpec = NumberFieldSpec | TextFieldSpec | FkFieldSpec | EnumFieldSpec | JsonFieldSpec

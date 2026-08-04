@@ -113,9 +113,9 @@ export const placementsSpec: TableSpec = {
   fields: [
     idField,
     actorFk,
-    { key: 'x', label: 'X', kind: 'number', step: 0.001 },
-    { key: 'y', label: 'Y', kind: 'number', step: 0.001 },
-    { key: 'z', label: 'Z', kind: 'number', step: 0.001 }
+    { key: 'x', label: 'X (AU)', kind: 'number', step: 0.001 },
+    { key: 'y', label: 'Y (AU)', kind: 'number', step: 0.001 },
+    { key: 'z', label: 'Z (AU)', kind: 'number', step: 0.001 }
   ],
   listLabel: (row, ctx) => `#${row.id} → ${ctx.actorName(row.actorId as number)}`,
   defaults: () => ({ actorId: null, x: 0, y: 0, z: 0 })
