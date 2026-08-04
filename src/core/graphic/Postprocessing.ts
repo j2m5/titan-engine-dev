@@ -59,9 +59,15 @@ class Postprocessing {
       camera: this.camera,
       intensity: config('lensFlare.intensity'),
       ghostAmount: config('lensFlare.ghostAmount'),
+      ghostThreshold: config('lensFlare.ghostThreshold'),
+      ghostAttenuation: config('lensFlare.ghostAttenuation'),
       haloAmount: config('lensFlare.haloAmount'),
       chromaticAberration: config('lensFlare.chromaticAberration'),
       starburstAmount: config('lensFlare.starburstAmount'),
+      streakAmount: config('lensFlare.streakAmount'),
+      streakThreshold: config('lensFlare.streakThreshold'),
+      streakScale: config('lensFlare.streakScale'),
+      streakTint: config('lensFlare.streakTint'),
       // порог — общий с bloom: два разных числа разъехались бы при первой правке
       thresholdLevel: BLOOM_OPTIONS.luminanceThreshold
     })

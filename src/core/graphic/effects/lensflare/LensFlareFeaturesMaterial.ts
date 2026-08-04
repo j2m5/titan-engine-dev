@@ -27,10 +27,14 @@ const fragmentShader: string = `
 
   uniform vec2 texelSize;
   uniform float ghostAmount;
+  uniform float ghostThreshold;
+  uniform float ghostAttenuation;
   uniform float haloAmount;
   uniform float chromaticAberration;
   uniform float starburstRotation;
   uniform float starburstAmount;
+  uniform sampler2D streakBuffer;
+  uniform float streakAmount;
 
   in vec2 vUv;
   in vec2 vAspectRatio;
@@ -46,13 +50,32 @@ const fragmentShader: string = `
     return texture(lensColor, vec2(d, 0.5)).rgb;
   }
 
+  // Порог ВЫЧИТАЕТСЯ из выборки с отсечкой в ноль, а не гасит её гладким
+  // множителем. Вычитание убирает постоянную составляющую; форму сохранял бы
+  // множитель.
+  //
+  // ВАЖНО: широкую яркую площадь этот порог НЕ убирает — против величин
+  // порядка десятков вычитание половины ничего не меняет, и диск звезды,
+  // размноженный девятью призраками, заливал кадр пеленой. Отсекает площадь
+  // проход локального контраста (см. LocalContrastMaterial), через который
+  // буфер проходит ДО этой выборки. Порог здесь работает уже по разностям и
+  // подчищает остатки.
+  //
+  // Вычитание идёт ДО тонировки: порог по уже затонированному цвету резал бы
+  // палитру градиента, а не значения буфера поканально
+  //
+  // Приём взят из узла блика WebGPU-порта three (LensflareNode, TSL):
+  // max(sample - threshold, 0) внутри цикла призраков
   vec3 sampleGhost(const vec2 direction, const float weight, const float offset) {
     vec2 suv = clamp(1.0 - vUv + direction * offset, 0.0, 1.0);
-    vec3 result = texture(inputBuffer, suv).rgb * ghostTint(suv) * weight;
+    vec3 sampled = max(texture(inputBuffer, suv).rgb - ghostThreshold, vec3(0.0));
+    vec3 result = sampled * ghostTint(suv) * weight;
 
-    // Falloff at the perimeter.
+    // Затухание к периметру кадра. Показатель — ручка: чем он больше, тем
+    // плотнее призраки жмутся к центру. У узла three значение по умолчанию 25,
+    // у нас исторически было 3, что размазывало вклад по всему кадру
     float d = clamp(length(0.5 - suv) / (0.5 * SQRT_2), 0.0, 1.0);
-    result *= pow(1.0 - d, 3.0);
+    result *= pow(1.0 - d, ghostAttenuation);
     return result;
   }
 
@@ -120,7 +143,21 @@ const fragmentShader: string = `
     features += sampleHalos(haloAmount);
 
     // при starburstAmount = 0 множитель равен 1.0 — маска тождественна
-    gl_FragColor = features * (1.0 + starburstAmount * sampleStarburst());
+    features *= 1.0 + starburstAmount * sampleStarburst();
+
+    // Штрих идёт ЧЕРЕЗ яркий пиксель, а не зеркалится через центр, поэтому
+    // выборка по тому же uv. Оттенок уже применён в проходе штриха —
+    // умножать на него второй раз нельзя.
+    //
+    // ПОРЯДОК ЗНАЧИМ: штрих прибавляется ПОСЛЕ множителя маски лучей и ею не
+    // модулируется. Маска повёрнута по крену камеры, а её множитель гуляет от
+    // 1.0 до 2.0 вдоль кадра — внутри маски по горизонтальной полосе поехали
+    // бы яркие и тусклые секторы при каждом крене. Анаморфный штрих —
+    // свойство горизонтальной оптики: он не вращается вместе с лучами.
+    // Маска остаётся только на призраках и гало
+    features.rgb += texture(streakBuffer, vUv).rgb * streakAmount;
+
+    gl_FragColor = features;
   }
 `
 
@@ -129,16 +166,23 @@ export interface LensFlareFeaturesMaterialParameters extends ShaderMaterialParam
   lensColorTexture?: Texture | null
   starburstTexture?: Texture | null
   ghostAmount?: number
+  ghostThreshold?: number
+  ghostAttenuation?: number
   haloAmount?: number
   chromaticAberration?: number
   starburstAmount?: number
+  streakBuffer?: Texture | null
+  streakAmount?: number
 }
 
 export const lensFlareFeaturesMaterialParametersDefaults = {
   ghostAmount: 0.1,
+  ghostThreshold: 0,
+  ghostAttenuation: 3,
   haloAmount: 0.1,
   chromaticAberration: 10,
-  starburstAmount: 0
+  starburstAmount: 0,
+  streakAmount: 0
 } satisfies LensFlareFeaturesMaterialParameters
 
 export class LensFlareFeaturesMaterial extends ShaderMaterial {
@@ -148,9 +192,13 @@ export class LensFlareFeaturesMaterial extends ShaderMaterial {
       lensColorTexture = null,
       starburstTexture = null,
       ghostAmount,
+      ghostThreshold,
+      ghostAttenuation,
       haloAmount,
       chromaticAberration,
       starburstAmount,
+      streakBuffer = null,
+      streakAmount,
       ...others
     } = {
       ...lensFlareFeaturesMaterialParametersDefaults,
@@ -170,10 +218,14 @@ export class LensFlareFeaturesMaterial extends ShaderMaterial {
         starburst: new Uniform(starburstTexture),
         texelSize: new Uniform(new Vector2()),
         ghostAmount: new Uniform(ghostAmount),
+        ghostThreshold: new Uniform(ghostThreshold),
+        ghostAttenuation: new Uniform(ghostAttenuation),
         haloAmount: new Uniform(haloAmount),
         chromaticAberration: new Uniform(chromaticAberration),
         starburstRotation: new Uniform(0),
         starburstAmount: new Uniform(starburstAmount),
+        streakBuffer: new Uniform(streakBuffer),
+        streakAmount: new Uniform(streakAmount),
         ...others.uniforms
       }
     })
@@ -205,6 +257,22 @@ export class LensFlareFeaturesMaterial extends ShaderMaterial {
 
   set ghostAmount(value: number) {
     this.uniforms.ghostAmount.value = value
+  }
+
+  get ghostThreshold(): number {
+    return this.uniforms.ghostThreshold.value
+  }
+
+  set ghostThreshold(value: number) {
+    this.uniforms.ghostThreshold.value = value
+  }
+
+  get ghostAttenuation(): number {
+    return this.uniforms.ghostAttenuation.value
+  }
+
+  set ghostAttenuation(value: number) {
+    this.uniforms.ghostAttenuation.value = value
   }
 
   get haloAmount(): number {
@@ -245,5 +313,21 @@ export class LensFlareFeaturesMaterial extends ShaderMaterial {
 
   set starburstAmount(value: number) {
     this.uniforms.starburstAmount.value = value
+  }
+
+  get streakBuffer(): Texture | null {
+    return this.uniforms.streakBuffer.value
+  }
+
+  set streakBuffer(value: Texture | null) {
+    this.uniforms.streakBuffer.value = value
+  }
+
+  get streakAmount(): number {
+    return this.uniforms.streakAmount.value
+  }
+
+  set streakAmount(value: number) {
+    this.uniforms.streakAmount.value = value
   }
 }
