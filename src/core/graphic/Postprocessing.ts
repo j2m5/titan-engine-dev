@@ -11,6 +11,7 @@ import {
 } from 'postprocessing'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { ExposureEffect } from '@/core/graphic/effects/grading/ExposureEffect'
+import { ColorGradeEffect } from '@/core/graphic/effects/grading/ColorGradeEffect'
 import { DitheringEffect } from '@/core/graphic/effects/dithering/DitheringEffect'
 import { config } from '@/core/framework/config'
 
@@ -97,6 +98,15 @@ class Postprocessing {
 
     const toneMappingEffect: ToneMappingEffect = new ToneMappingEffect({ ...TONE_MAPPING_OPTIONS })
 
+    const colorGradeEffect: ColorGradeEffect = new ColorGradeEffect({
+      contrast: config('grading.contrast'),
+      saturation: config('grading.saturation'),
+      shadowTint: config('grading.shadowTint'),
+      shadowLift: config('grading.shadowLift'),
+      highlightTint: config('grading.highlightTint'),
+      highlightGain: config('grading.highlightGain')
+    })
+
     const hdrEffects = {
       bloom: bloomEffect,
       lensFlare: lensFlareEffect,
@@ -107,8 +117,14 @@ class Postprocessing {
     // Порядок задаётся HDR_EFFECT_ORDER — см. докблок константы
     const effectPass: EffectPass = new EffectPass(this.camera, ...HDR_EFFECT_ORDER.map((key) => hdrEffects[key]))
 
-    // Дизеринг строго последним: после него только квантование в канвас
-    const effectPass2: EffectPass = new EffectPass(this.camera, chromaticAberrationEffect, new DitheringEffect())
+    const ldrEffects = {
+      chromaticAberration: chromaticAberrationEffect,
+      colorGrade: colorGradeEffect,
+      dithering: new DitheringEffect()
+    } as const
+
+    // Порядок задаётся LDR_EFFECT_ORDER — см. докблок константы
+    const effectPass2: EffectPass = new EffectPass(this.camera, ...LDR_EFFECT_ORDER.map((key) => ldrEffects[key]))
 
     this.composer.addPass(renderPass)
     this.composer.addPass(effectPass)
