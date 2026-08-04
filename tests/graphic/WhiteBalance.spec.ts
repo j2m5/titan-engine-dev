@@ -53,12 +53,21 @@ describe('whiteBalance: экспозиция и баланс белого', () =
     }
   })
 
-  it('крайние температуры не дают ни NaN, ни отрицательных множителей', () => {
-    for (const temperature of [500, 1000, 40000, 100000]) {
+  it('множитель остаётся в разумной полосе по всему документированному диапазону', () => {
+    // Регрессия: ниже точки, где локус Планка выходит за гамму sRGB, целевой
+    // цвет получал отрицательный канал; Math.max(..., eps) превращал его в
+    // почти-ноль, и деление давало взрывной множитель (порядка 1e6 до
+    // нормировки по яркости). NaN/знак не ловят такой дефект — нужна полоса
+    for (const temperature of [500, 1000, 1667, 2000, 3000, 6500, 9000, 20000, 40000, 100000]) {
       const gain: Vector3 = whiteBalanceGain(temperature, 0)
 
       expect(Number.isFinite(gain.x + gain.y + gain.z)).toBe(true)
-      expect(Math.min(gain.x, gain.y, gain.z)).toBeGreaterThan(0)
+      expect(gain.x).toBeGreaterThan(0.05)
+      expect(gain.y).toBeGreaterThan(0.05)
+      expect(gain.z).toBeGreaterThan(0.05)
+      expect(gain.x).toBeLessThan(11)
+      expect(gain.y).toBeLessThan(11)
+      expect(gain.z).toBeLessThan(11)
     }
   })
 })

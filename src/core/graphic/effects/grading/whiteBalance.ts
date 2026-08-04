@@ -6,9 +6,13 @@ export const REFERENCE_TEMPERATURE_K: number = 6500
 // Яркостные веса Rec.709 — те же, что у luminance в прологе three
 const LUMINANCE_WEIGHTS: Vector3 = new Vector3(0.2126, 0.7152, 0.0722)
 
-// Диапазон, на котором приближение локуса осмысленно; за его пределами
-// значение зажимается, а не экстраполируется
-const MIN_TEMPERATURE_K: number = 1000
+// Kim et al. заявляют формулу валидной для 1667–25000 K. Верхнюю границу
+// расширили до 40000 K — проверено численно, множитель там остаётся в
+// разумной полосе. Нижнюю пришлось поднять до 2000 K (совпадает с минимумом
+// слайдера температуры в Lightroom/Camera Raw): ниже точка локуса выходит за
+// гамму sRGB, целевой канал уходит в 0 даже после приведения в гамму, и
+// множитель бы неограниченно рос вплоть до 1667 K включительно — см. gamutClip
+const MIN_TEMPERATURE_K: number = 2000
 const MAX_TEMPERATURE_K: number = 40000
 
 // Сила ручки тинта: во сколько раз меняется зелёный канал на краю диапазона
@@ -29,7 +33,7 @@ function planckianChromaticity(temperatureK: number): { x: number; y: number } {
   // формулы (T в кельвинах) уже поглощены переходом T = kilo·1000
   const x: number =
     t < 4000
-      ? -0.2661239 / kilo3 - 0.234358 / kilo2 + 0.8776956 / kilo + 0.17991
+      ? -0.2661239 / kilo3 - 0.2343589 / kilo2 + 0.8776956 / kilo + 0.17991
       : -3.0258469 / kilo3 + 2.1070379 / kilo2 + 0.2226347 / kilo + 0.24039
 
   const x2: number = x * x
@@ -59,6 +63,18 @@ function linearSrgbFromChromaticity(x: number, y: number): Vector3 {
   )
 }
 
+/**
+ * Приведение цвета в гамму sRGB десатурацией к белому: если минимальный канал
+ * отрицателен, его модуль добавляется ко всем трём — цвет становится
+ * представимым, оттенок сохраняется. Не зажатие отрицательного канала в ноль:
+ * то теряет цвет, это — сдвигает координату
+ */
+function gamutClip(rgb: Vector3): Vector3 {
+  const minChannel: number = Math.min(rgb.x, rgb.y, rgb.z)
+
+  return minChannel < 0 ? new Vector3(rgb.x, rgb.y, rgb.z).addScalar(-minChannel) : rgb
+}
+
 /** Множитель экспозиции: ручка в стопах, один стоп — вдвое */
 export function exposureGain(stops: number): number {
   return Math.pow(2, stops)
@@ -77,8 +93,8 @@ export function whiteBalanceGain(temperatureK: number, tint: number): Vector3 {
   const target: { x: number; y: number } = planckianChromaticity(temperatureK)
   const reference: { x: number; y: number } = planckianChromaticity(REFERENCE_TEMPERATURE_K)
 
-  const targetRgb: Vector3 = linearSrgbFromChromaticity(target.x, target.y)
-  const referenceRgb: Vector3 = linearSrgbFromChromaticity(reference.x, reference.y)
+  const targetRgb: Vector3 = gamutClip(linearSrgbFromChromaticity(target.x, target.y))
+  const referenceRgb: Vector3 = gamutClip(linearSrgbFromChromaticity(reference.x, reference.y))
 
   const gain: Vector3 = new Vector3(
     referenceRgb.x / Math.max(targetRgb.x, 1e-6),
