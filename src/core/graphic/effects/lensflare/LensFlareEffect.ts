@@ -92,13 +92,9 @@ export class LensFlareEffect extends Effect {
   readonly streakMaterial: AnamorphicStreakMaterial
   readonly streakPass: ShaderPass
 
-  // Собственное поле, а не только значение uniform'а материала: штатный
-  // Effect.dispose() из postprocessing обходит Object.keys(this) верхнего
-  // уровня эффекта и разбирает всё, что instanceof Texture/Material/
-  // WebGLRenderTarget/Pass. Текстура, спрятанная только внутри
-  // featuresMaterial.uniforms.lensColor.value, под этот обход не попадает и
-  // молча течёт на каждой пересборке эффекта. Тот же паттерн — поле эффекта
-  // + присвоение в материал — использовать и для будущей текстуры старберста.
+  // Поля верхнего уровня, а не только значения юниформов: Effect.dispose()
+  // обходит Object.keys(this), и ресурс, живущий лишь внутри материала, под
+  // обход не попадёт и утечёт при пересборке эффекта
   readonly lensColorTexture: Texture
   readonly starburstTexture: Texture
 
@@ -167,17 +163,12 @@ export class LensFlareEffect extends Effect {
     this.localContrastMaterial = new LocalContrastMaterial()
     this.localContrastPass = new ShaderPass(this.localContrastMaterial)
 
-    // Собственный источник штриха: понижение предразмытого буфера. Ядро
-    // MEDIUM, а не SMALL, сглаживает зернистость поверхности звезды — на
-    // половинном буфере она давала продольные волны вдоль полосы.
+    // Источник штриха: понижение предразмытого буфера. Ядро MEDIUM сглаживает
+    // зернистость поверхности звезды, дававшую продольные волны вдоль полосы.
     //
-    // Понижение ДВОЙНОЕ. Сам streakSourceTarget — четверть кадра, но у
-    // KawaseBlurPass есть собственный resolutionScale = 0.5 (см. его
-    // конструктор в postprocessing): setSize(четверть) задаёт проходу базовый
-    // размер в четверть, а его внутренние renderTargetA/B получают половину от
-    // этого — одну ВОСЬМУЮ кадра. Завершающий копирующий проход растягивает
-    // восьмушку обратно в четверть, так что источник штриха вдвое грубее, чем
-    // следует из размера таргета
+    // Понижение двойное: у KawaseBlurPass есть свой resolutionScale = 0.5,
+    // поэтому размытие идёт в одной восьмой кадра, а в четвертной таргет
+    // кладётся растянутая копия — источник вдвое грубее размера таргета
     this.streakSourceTarget = new WebGLRenderTarget(1, 1, {
       depthBuffer: false,
       type: HalfFloatType
@@ -198,9 +189,8 @@ export class LensFlareEffect extends Effect {
     this.streakPass = new ShaderPass(this.streakMaterial)
     this.featuresMaterial.streakBuffer = this.streakTarget.texture
 
-    // Ассеты объектива — движковые, а не сценарные: объектив у всех сценариев
-    // один, поэтому их нет в таблице ресурсов. URL через Storage: иначе режим
-    // s3 не заработает
+    // Ассеты объектива движковые, а не сценарные, поэтому их нет в таблице
+    // ресурсов. URL через Storage — иначе не заработает режим s3
     const lensColorUrl = Storage.url('lenscolor.png')
     this.lensColorTexture = new TextureLoader().load(lensColorUrl, undefined, undefined, () => {
       console.warn(
@@ -265,25 +255,17 @@ export class LensFlareEffect extends Effect {
       this.featuresMaterial.starburstRotation = computeStarburstRotation(this.camera.matrixWorld)
     }
 
-    // Порядок буферов: к пятому шагу содержимое renderTarget1 уже прочитано
-    // предразмытием, к шестому — содержимое renderTarget2 прочитано локальным
-    // контрастом. Поэтому оба переиспользуются, и таргетов половинного
-    // разрешения по-прежнему два
+    // Оба половинных таргета переиспользуются: к локальному контрасту
+    // renderTarget1 уже прочитан предразмытием, к артефактам renderTarget2
+    // прочитан локальным контрастом
     this.thresholdPass.render(renderer, inputBuffer, this.renderTarget1)
     this.preBlurPass.render(renderer, this.renderTarget1, this.renderTarget2)
 
-    // Штрих стоит денег безусловно — Kawase-источник плюс 129 выборок на
-    // пиксель, — а вклад его в кадр равен нулю ровно при streakAmount = 0:
-    // композит материала артефактов умножает выборку streakBuffer на эту
-    // величину. Ноль — и дефолт материала, и очевидная реакция владельца на
-    // «слишком заметный штрих», так что оба прохода пропускаются целиком.
-    //
-    // В streakTarget при пропуске остаётся содержимое прошлого кадра. На
-    // картинку это не влияет: единственный его читатель — та самая выборка,
-    // умноженная на streakAmount, то есть на ноль. Как только величина снова
-    // станет ненулевой, проходы возобновятся и перезапишут таргет в том же
-    // кадре, ДО того как композит его прочитает, — устаревшее содержимое на
-    // экран попасть не успевает
+    // При streakAmount = 0 вклад штриха нулевой по построению, а стоит он
+    // Kawase-источника плюс 129 выборок на пиксель — пропускаем оба прохода.
+    // Устаревшее содержимое streakTarget безвредно: единственный его читатель
+    // умножает выборку на ту же величину, а при возврате к ненулевой проходы
+    // перезапишут таргет в том же кадре, до чтения композитом
     if (this.featuresMaterial.streakAmount !== 0) {
       this.streakSourcePass.render(renderer, this.renderTarget2, this.streakSourceTarget)
       this.streakPass.render(renderer, this.streakSourceTarget, this.streakTarget)
@@ -305,14 +287,9 @@ export class LensFlareEffect extends Effect {
     this.featuresMaterial.setSize(width, height)
     this.localContrastMaterial.setSize(width, height)
 
-    // Четверть базового разрешения: полоса штриха широкая и мягкая, мелких
-    // деталей в ней нет, а 129 выборок на пиксель половинного разрешения
-    // стоили бы вчетверо дороже.
-    //
-    // Для streakSourcePass это БАЗОВЫЙ размер, а не размер его внутренних
-    // таргетов: KawaseBlurPass делит его на свой resolutionScale = 0.5 и
-    // размывает в одну восьмую кадра, копируя результат в четвертной
-    // streakSourceTarget (см. комментарий у создания прохода)
+    // Четверть базового разрешения: полоса широкая и мягкая, мелких деталей в
+    // ней нет. Для streakSourcePass это базовый размер — свои внутренние таргеты
+    // он делает вдвое меньше (см. комментарий у создания прохода)
     const streakWidth = Math.max(1, width >> 1)
     const streakHeight = Math.max(1, height >> 1)
     this.streakSourceTarget.setSize(streakWidth, streakHeight)

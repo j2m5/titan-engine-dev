@@ -58,7 +58,7 @@ describe('ResourceStorage.getTextureOrMake', () => {
 })
 
 describe('ResourceStorage.deleteTexture', () => {
-  // round 2 ревью, Important: раньше dispose() вызывался только у ПЕРВОЙ
+  // Раньше dispose() вызывался только у ПЕРВОЙ
   // найденной текстуры с этим именем (getTexture().first()), а reject()
   // убирал из коллекции ВСЕ совпадения разом — вторая текстура выпадала из
   // реестра недиспоузнутой и недостижимой. Такой дубль в принципе может
