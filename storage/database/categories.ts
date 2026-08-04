@@ -9,5 +9,6 @@ export const Categories: ICategory[] = [
   { id: 3, alias: "star", name: "Star" },
   { id: 4, alias: "planet", name: "Planet" },
   { id: 5, alias: "atmosphere", name: "Atmosphere" },
-  { id: 6, alias: "ring", name: "Ring" }
+  { id: 6, alias: "ring", name: "Ring" },
+  { id: 7, alias: "nebula", name: "Nebula" }
 ]

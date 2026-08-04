@@ -170,6 +170,7 @@ const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelet
             value={value}
             rows={field.rows}
             cloneOptions={field.cloneFrom ? cloneOptions : undefined}
+            templates={field.templates}
             onChange={(v) => update(field.key, v)}
           />
         )

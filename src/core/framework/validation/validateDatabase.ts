@@ -60,11 +60,110 @@ export interface ValidationResult {
   ok: boolean
 }
 
-/** Категории-«анкоры»: для них отсутствие physical/rendering/orbit — норма */
-const ANCHOR_CATEGORY_ALIASES = new Set(['universe', 'galaxy', 'starSystem', 'barycenter'])
+/**
+ * Как категория получает свою позицию в мире.
+ *
+ *  - keplerian: DynamicNode пересчитывает position каждый кадр из орбиты;
+ *  - attached:  своей позиции нет вообще — узел монтируется в equatorialFrame
+ *               родителя и движется вместе с ним (кольца, атмосферы);
+ *  - placed:    собственный статический трансформ из placements (туманности).
+ */
+type Positioning = 'keplerian' | 'attached' | 'placed'
 
-/** Категории центральных тел: отсутствие orbit допустимо (звезда/дыра в центре системы) */
-const CENTRAL_CATEGORY_ALIASES = new Set(['star', 'blackHole'])
+interface CategoryRules {
+  positioning: Positioning
+  /** какие связи ожидаются: отсутствие даёт warning о неполноте контента */
+  expects: { physical: boolean; rendering: boolean; orbit: boolean }
+}
+
+const ANCHOR: CategoryRules = {
+  positioning: 'keplerian',
+  expects: { physical: false, rendering: false, orbit: false }
+}
+
+/** Центральное тело системы: орбиты нет, остальное обязательно */
+const CENTRAL: CategoryRules = {
+  positioning: 'keplerian',
+  expects: { physical: true, rendering: true, orbit: false }
+}
+
+/**
+ * Несамостоятельная сущность: ни своего движения, ни своих массы и радиуса.
+ * Её радиусы живут в собственной data, а позицию целиком задаёт родитель.
+ */
+const ATTACHED: CategoryRules = {
+  positioning: 'attached',
+  expects: { physical: false, rendering: true, orbit: false }
+}
+
+const CATEGORY_RULES: Record<string, CategoryRules> = {
+  // алиасы-задел: в AllowedCategories их пока нет, поведение сохранено прежним
+  universe: ANCHOR,
+  galaxy: ANCHOR,
+  starSystem: ANCHOR,
+  barycenter: ANCHOR,
+
+  star: CENTRAL,
+  blackHole: CENTRAL,
+  planet: { positioning: 'keplerian', expects: { physical: true, rendering: true, orbit: true } },
+
+  atmosphere: ATTACHED,
+  ring: ATTACHED,
+
+  nebula: { positioning: 'placed', expects: { physical: false, rendering: true, orbit: false } }
+}
+
+/** Неизвестная категория трактуется строго: кеплерова и обязана иметь всё */
+const DEFAULT_RULES: CategoryRules = {
+  positioning: 'keplerian',
+  expects: { physical: true, rendering: true, orbit: true }
+}
+
+function rulesFor(alias: string): CategoryRules {
+  return CATEGORY_RULES[alias] ?? DEFAULT_RULES
+}
+
+/**
+ * Строка позиционирования, несовместимая с режимом категории, — ошибка, а не
+ * предупреждение: в рантайме она молча проигрывает (DynamicNode перетирает
+ * position, equatorialFrame игнорирует смещение), то есть данные врут о том,
+ * где объект находится.
+ */
+function checkPositioning(db: DatabaseSnapshot, aliasByActor: Map<number, string>, issues: ValidationIssue[]): void {
+  for (const placement of db.placements) {
+    const alias = aliasByActor.get(placement.actorId)
+    if (alias === undefined) continue
+
+    const { positioning } = rulesFor(alias)
+    if (positioning !== 'placed') {
+      issues.push({
+        level: 'error',
+        collection: 'placements',
+        entity: placement.id,
+        message:
+          `placements#${placement.id} (actor ${placement.actorId}, ${alias}) will never be applied: ` +
+          `the category is positioned as "${positioning}", not "placed"`
+      })
+    }
+  }
+
+  for (const orbit of db.orbits) {
+    const alias = aliasByActor.get(orbit.actorId)
+    if (alias === undefined) continue
+
+    const { positioning } = rulesFor(alias)
+    if (positioning !== 'keplerian') {
+      issues.push({
+        level: 'error',
+        collection: 'orbits',
+        entity: orbit.id,
+        message:
+          `orbits#${orbit.id} (actor ${orbit.actorId}, ${alias}) will never be applied: ` +
+          `the category is positioned as "${positioning}", not "keplerian"`
+      })
+    }
+  }
+}
 
 /** Спектральные тройки атмосферы: [R, G, B], конечные числа */
 const ATMOSPHERE_TRIPLES = [
@@ -183,6 +282,98 @@ function checkAtmosphereAnchoring(
           `renderingObjects#${row.id} (actor ${row.actorId}) atmosphere bottomRadius=${bottom} ` +
           `!= parent planet radius=${parentPhys.radius} — atmosphere will visually detach from the surface`
       })
+    }
+  }
+}
+
+const NEBULA_SHAPES = new Set(['ellipsoid', 'disk'])
+const NEBULA_PRESET_NAMES = new Set(['emission', 'reflection', 'dark'])
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+
+function isPositiveTriple(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length === 3 &&
+    value.every((n: unknown) => typeof n === 'number' && Number.isFinite(n) && n > 0)
+  )
+}
+
+/** Сужение свободного JSON до объекта: null и примитивы дают undefined */
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined
+}
+
+/**
+ * Форма конфига туманности. Диспетчеризация по алиасу категории, а не по
+ * утиной типизации: в снимке есть и акторы, и категории, гадать по полям
+ * незачем (в отличие от атмосфер, чья проверка появилась раньше).
+ *
+ * size обязателен: без него движок подставит дефолт ~0.013 а.е., то есть
+ * туманность будет невидима — пропуск поля почти наверняка баг данных.
+ */
+function checkNebulaShapes(
+  rows: IRenderingObject[],
+  aliasByActor: Map<number, string>,
+  issues: ValidationIssue[]
+): void {
+  for (const row of rows) {
+    if (aliasByActor.get(row.actorId) !== 'nebula') continue
+
+    const data: Record<string, unknown> = asRecord(row.data) ?? {}
+
+    const bad = (field: string, reason: string): void => {
+      issues.push({
+        level: 'error',
+        collection: 'renderingObjects',
+        entity: row.id,
+        message: `renderingObjects#${row.id} (actor ${row.actorId}) nebula data.${field} ${reason}`
+      })
+    }
+
+    const size = data.size
+    if (typeof size !== 'number' || !Number.isFinite(size) || size <= 0) {
+      bad('size', 'must be a positive number (astronomical units)')
+    }
+
+    const shape = data.shape
+    if (shape !== undefined && (typeof shape !== 'string' || !NEBULA_SHAPES.has(shape))) {
+      bad('shape', `must be one of: ${[...NEBULA_SHAPES].join(', ')}`)
+    }
+
+    const preset = data.preset
+    if (preset !== undefined && (typeof preset !== 'string' || !NEBULA_PRESET_NAMES.has(preset))) {
+      bad('preset', `must be one of: ${[...NEBULA_PRESET_NAMES].join(', ')}`)
+    }
+
+    if (data.axisRatios !== undefined && !isPositiveTriple(data.axisRatios)) {
+      bad('axisRatios', 'must be a triple of positive finite numbers')
+    }
+
+    const palette = asRecord(data.palette)
+    const dust = asRecord(data.dust)
+
+    const colors: Array<[string, unknown]> = [
+      ['palette.secondary', palette?.secondary],
+      ['dust.color', dust?.color]
+    ]
+
+    const stops = palette?.stops
+    if (Array.isArray(stops)) {
+      stops.forEach((entry: unknown, index: number) => {
+        const stop = asRecord(entry)
+        colors.push([`palette.stops[${index}].color`, stop?.color])
+
+        const t = stop?.t
+        if (typeof t !== 'number' || !Number.isFinite(t) || t < 0 || t > 1) {
+          bad(`palette.stops[${index}].t`, 'must be a number within [0, 1]')
+        }
+      })
+    }
+
+    for (const [field, value] of colors) {
+      if (value !== undefined && (typeof value !== 'string' || !HEX_COLOR.test(value))) {
+        bad(field, 'must be a "#rrggbb" hex color string')
+      }
     }
   }
 }
@@ -322,6 +513,13 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
   // алиас категории по id — для семантических предупреждений
   const categoryAliasById = new Map<number, string>()
   for (const c of db.categories) categoryAliasById.set(c.id, c.alias)
+
+  // алиас категории по актору — для правил позиционирования и проверок формы
+  const aliasByActor = new Map<number, string>()
+  for (const actor of db.actors) {
+    const alias = typeof actor.categoryId === 'number' ? categoryAliasById.get(actor.categoryId) : actor.categoryId
+    if (alias !== undefined) aliasByActor.set(actor.id, alias)
+  }
 
   // --- 1. Уникальность ID во всех коллекциях ---
   checkUniqueIds(db.categories, 'categories', issues)
@@ -474,44 +672,47 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
   // --- 6d. Якорь атмосферы: bottomRadius == радиус родительской планеты ---
   checkAtmosphereAnchoring(db.renderingObjects, db.actors, db.physicalObjects, issues)
 
+  // --- 6f. Форма конфига туманностей ---
+  checkNebulaShapes(db.renderingObjects, aliasByActor, issues)
+
+  // --- 6e. Режимы позиционирования: несочетаемые строки placements/orbits ---
+  checkPositioning(db, aliasByActor, issues)
+
   // --- 7. Предупреждения о полноте контента ---
   const actorsWithPhysical = new Set(db.physicalObjects.map((p) => p.actorId))
   const actorsWithRendering = new Set(db.renderingObjects.map((r) => r.actorId))
   const actorsWithOrbit = new Set(db.orbits.map((o) => o.actorId))
 
   for (const actor of db.actors) {
-    const alias = typeof actor.categoryId === 'number' ? categoryAliasById.get(actor.categoryId) : actor.categoryId
+    const alias = aliasByActor.get(actor.id)
 
     if (alias === undefined) continue // битый categoryId уже как error выше
 
-    const isAnchor = ANCHOR_CATEGORY_ALIASES.has(alias)
-    const isCentral = CENTRAL_CATEGORY_ALIASES.has(alias)
+    const { expects } = rulesFor(alias)
 
-    if (!isAnchor) {
-      if (!actorsWithPhysical.has(actor.id)) {
-        issues.push({
-          level: 'warning',
-          collection: 'actors',
-          entity: actor.id,
-          message: `Actor ${actor.id} (${alias}) "${actor.name}" has no physicalObject`
-        })
-      }
-      if (!actorsWithRendering.has(actor.id)) {
-        issues.push({
-          level: 'warning',
-          collection: 'actors',
-          entity: actor.id,
-          message: `Actor ${actor.id} (${alias}) "${actor.name}" has no renderingObject`
-        })
-      }
-      if (!isCentral && !actorsWithOrbit.has(actor.id)) {
-        issues.push({
-          level: 'warning',
-          collection: 'actors',
-          entity: actor.id,
-          message: `Actor ${actor.id} (${alias}) "${actor.name}" has no orbit`
-        })
-      }
+    if (expects.physical && !actorsWithPhysical.has(actor.id)) {
+      issues.push({
+        level: 'warning',
+        collection: 'actors',
+        entity: actor.id,
+        message: `Actor ${actor.id} (${alias}) "${actor.name}" has no physicalObject`
+      })
+    }
+    if (expects.rendering && !actorsWithRendering.has(actor.id)) {
+      issues.push({
+        level: 'warning',
+        collection: 'actors',
+        entity: actor.id,
+        message: `Actor ${actor.id} (${alias}) "${actor.name}" has no renderingObject`
+      })
+    }
+    if (expects.orbit && !actorsWithOrbit.has(actor.id)) {
+      issues.push({
+        level: 'warning',
+        collection: 'actors',
+        entity: actor.id,
+        message: `Actor ${actor.id} (${alias}) "${actor.name}" has no orbit`
+      })
     }
   }
 
