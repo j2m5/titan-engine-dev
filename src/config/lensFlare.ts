@@ -190,15 +190,15 @@ export interface LensFlareConfig {
 export const lensFlare: LensFlareConfig = {
   lensFlare: {
     intensity: 0.15,
-    ghostAmount: 0.2,
+    ghostAmount: 0.4,
     haloAmount: 0.04,
     chromaticAberration: 10,
-    starburstAmount: 1.0,
+    starburstAmount: 2.0,
     ghostThreshold: 0.5,
     ghostAttenuation: 12,
-    streakAmount: 0.01,
+    streakAmount: 0.005,
     streakThreshold: 0.3,
     streakScale: 5,
-    streakTint: [0.45, 0.6, 1.0]
+    streakTint: [0.15, 0.1, 1.0]
   }
 }
