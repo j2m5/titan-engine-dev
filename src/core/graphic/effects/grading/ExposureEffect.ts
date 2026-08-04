@@ -26,7 +26,7 @@ export interface ExposureEffectOptions {
   tint?: number
 }
 
-export const exposureEffectOptionsDefaults = {
+const exposureEffectOptionsDefaults = {
   exposure: 0,
   temperature: REFERENCE_TEMPERATURE_K,
   tint: 0

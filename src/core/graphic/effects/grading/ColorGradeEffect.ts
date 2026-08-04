@@ -1,9 +1,15 @@
 import { BlendFunction, Effect } from 'postprocessing'
-import { Uniform, Vector3 } from 'three'
+import { SRGBColorSpace, Uniform, Vector3 } from 'three'
 
 /**
- * Грейдинг после кривой тонмаппинга: работа поверх уже сжатых значений, как у
- * колориста. Экспозиция и баланс белого сюда не входят — они свойства съёмки и
+ * Грейдинг после кривой тонмаппинга. Выход AgX — линейный display-referred
+ * [0,1]: динамика сжата, но перцептивного кодирования нет. Все константы здесь
+ * (опора 0.5, границы окон) заданы в ЭКРАННЫХ, sRGB-кодированных величинах,
+ * поэтому эффект объявляет `inputColorSpace = SRGBColorSpace` — фреймворк сам
+ * кодирует вход и раскодирует выход. Без объявления опора 0.5 попадала бы на
+ * 188/255 экрана, а всё ниже 32/255 срезалось клампом в ноль.
+ *
+ * Экспозиция и баланс белого сюда не входят — они свойства съёмки и
  * применяются до кривой (см. `ExposureEffect`).
  *
  * Собственная `gradeLuminance` вместо функции из пролога: веса должны быть
@@ -28,12 +34,15 @@ const fragmentShader = /* glsl */ `
     color = mix(vec3(gradeLuminance(color)), color, saturation);
 
     // Подъём теней аддитивный: умножением тень к оттенку не увести — ноль
-    // остаётся нулём независимо от множителя
+    // остаётся нулём независимо от множителя.
+    // Окно 0…0.5 — нижняя половина ЭКРАННОЙ шкалы, 0…128/255
     float shadowWeight = 1.0 - smoothstep(0.0, 0.5, gradeLuminance(color));
     color += shadowTint * (shadowLift * shadowWeight);
 
-    // Тонировка светов множительная: света уже яркие, добавлять им нечего
-    float highlightWeight = smoothstep(0.4, 1.0, gradeLuminance(color));
+    // Тонировка светов множительная: света уже яркие, добавлять им нечего.
+    // Окно 0.5…1.0 стыкуется с окном теней, не перекрывая его: на 0.5 оба веса
+    // нулевые. Перекрытие тянуло бы средние тона в два противоположных оттенка
+    float highlightWeight = smoothstep(0.5, 1.0, gradeLuminance(color));
     color = mix(color, color * highlightTint, highlightGain * highlightWeight);
 
     outputColor = vec4(max(color, vec3(0.0)), inputColor.a);
@@ -49,7 +58,7 @@ export interface ColorGradeEffectOptions {
   highlightGain?: number
 }
 
-export const colorGradeEffectOptionsDefaults = {
+const colorGradeEffectOptionsDefaults = {
   contrast: 1,
   saturation: 1,
   shadowTint: [0, 0, 0] as const,
@@ -76,6 +85,9 @@ export class ColorGradeEffect extends Effect {
         ['highlightGain', new Uniform(highlightGain)]
       ])
     })
+
+    // Константы шейдера — в экранных величинах; см. докблок
+    this.inputColorSpace = SRGBColorSpace
   }
 
   public get contrast(): number {
@@ -98,6 +110,12 @@ export class ColorGradeEffect extends Effect {
     return this.uniforms.get('shadowTint')!.value
   }
 
+  public set shadowTint(value: Vector3 | readonly [number, number, number]) {
+    const [x, y, z] = value instanceof Vector3 ? [value.x, value.y, value.z] : value
+
+    this.shadowTint.set(x, y, z)
+  }
+
   public get shadowLift(): number {
     return this.uniforms.get('shadowLift')!.value
   }
@@ -108,6 +126,12 @@ export class ColorGradeEffect extends Effect {
 
   public get highlightTint(): Vector3 {
     return this.uniforms.get('highlightTint')!.value
+  }
+
+  public set highlightTint(value: Vector3 | readonly [number, number, number]) {
+    const [x, y, z] = value instanceof Vector3 ? [value.x, value.y, value.z] : value
+
+    this.highlightTint.set(x, y, z)
   }
 
   public get highlightGain(): number {
