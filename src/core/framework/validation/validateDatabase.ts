@@ -286,6 +286,98 @@ function checkAtmosphereAnchoring(
   }
 }
 
+const NEBULA_SHAPES = new Set(['ellipsoid', 'disk'])
+const NEBULA_PRESET_NAMES = new Set(['emission', 'reflection', 'dark'])
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+
+function isPositiveTriple(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length === 3 &&
+    value.every((n: unknown) => typeof n === 'number' && Number.isFinite(n) && n > 0)
+  )
+}
+
+/** Сужение свободного JSON до объекта: null и примитивы дают undefined */
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined
+}
+
+/**
+ * Форма конфига туманности. Диспетчеризация по алиасу категории, а не по
+ * утиной типизации: в снимке есть и акторы, и категории, гадать по полям
+ * незачем (в отличие от атмосфер, чья проверка появилась раньше).
+ *
+ * size обязателен: без него движок подставит дефолт ~0.013 а.е., то есть
+ * туманность будет невидима — пропуск поля почти наверняка баг данных.
+ */
+function checkNebulaShapes(
+  rows: IRenderingObject[],
+  aliasByActor: Map<number, string>,
+  issues: ValidationIssue[]
+): void {
+  for (const row of rows) {
+    if (aliasByActor.get(row.actorId) !== 'nebula') continue
+
+    const data: Record<string, unknown> = asRecord(row.data) ?? {}
+
+    const bad = (field: string, reason: string): void => {
+      issues.push({
+        level: 'error',
+        collection: 'renderingObjects',
+        entity: row.id,
+        message: `renderingObjects#${row.id} (actor ${row.actorId}) nebula data.${field} ${reason}`
+      })
+    }
+
+    const size = data.size
+    if (typeof size !== 'number' || !Number.isFinite(size) || size <= 0) {
+      bad('size', 'must be a positive number (astronomical units)')
+    }
+
+    const shape = data.shape
+    if (shape !== undefined && (typeof shape !== 'string' || !NEBULA_SHAPES.has(shape))) {
+      bad('shape', `must be one of: ${[...NEBULA_SHAPES].join(', ')}`)
+    }
+
+    const preset = data.preset
+    if (preset !== undefined && (typeof preset !== 'string' || !NEBULA_PRESET_NAMES.has(preset))) {
+      bad('preset', `must be one of: ${[...NEBULA_PRESET_NAMES].join(', ')}`)
+    }
+
+    if (data.axisRatios !== undefined && !isPositiveTriple(data.axisRatios)) {
+      bad('axisRatios', 'must be a triple of positive finite numbers')
+    }
+
+    const palette = asRecord(data.palette)
+    const dust = asRecord(data.dust)
+
+    const colors: Array<[string, unknown]> = [
+      ['palette.secondary', palette?.secondary],
+      ['dust.color', dust?.color]
+    ]
+
+    const stops = palette?.stops
+    if (Array.isArray(stops)) {
+      stops.forEach((entry: unknown, index: number) => {
+        const stop = asRecord(entry)
+        colors.push([`palette.stops[${index}].color`, stop?.color])
+
+        const t = stop?.t
+        if (typeof t !== 'number' || !Number.isFinite(t) || t < 0 || t > 1) {
+          bad(`palette.stops[${index}].t`, 'must be a number within [0, 1]')
+        }
+      })
+    }
+
+    for (const [field, value] of colors) {
+      if (value !== undefined && (typeof value !== 'string' || !HEX_COLOR.test(value))) {
+        bad(field, 'must be a "#rrggbb" hex color string')
+      }
+    }
+  }
+}
+
 function buildIdSet<T extends { id: number }>(rows: T[]): Set<number> {
   const set = new Set<number>()
   for (const row of rows) set.add(row.id)
@@ -579,6 +671,9 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
 
   // --- 6d. Якорь атмосферы: bottomRadius == радиус родительской планеты ---
   checkAtmosphereAnchoring(db.renderingObjects, db.actors, db.physicalObjects, issues)
+
+  // --- 6f. Форма конфига туманностей ---
+  checkNebulaShapes(db.renderingObjects, aliasByActor, issues)
 
   // --- 6e. Режимы позиционирования: несочетаемые строки placements/orbits ---
   checkPositioning(db, aliasByActor, issues)

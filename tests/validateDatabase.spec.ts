@@ -614,6 +614,97 @@ describe('validateDatabase — ожидания по категориям', () =
   })
 })
 
+describe('validateDatabase — форма конфига туманности', () => {
+  /** Валидная строка туманности для мутаций */
+  const nebulaRow = () => ({
+    id: 1,
+    actorId: 12,
+    data: {
+      preset: 'emission',
+      seed: 5120,
+      size: 360.11263,
+      shape: 'disk',
+      axisRatios: [1, 0.5, 1],
+      edgeFalloff: 0.6,
+      density: 0.5,
+      palette: { stops: [{ t: 0, color: '#06141c' }], secondary: '#5aa0d8' },
+      dust: { color: '#05090c' }
+    } as Record<string, unknown>
+  })
+
+  function snapshotWith(row: ReturnType<typeof nebulaRow>): DatabaseSnapshot {
+    const db = baseSnapshot()
+    db.categories.push({ id: 5, alias: 'nebula', name: 'Nebula' })
+    db.actors.push({ id: 12, categoryId: 5, parentId: 10, name: 'Neb', description: '', color: '#fff' })
+    db.renderingObjects.push(row)
+    return db
+  }
+
+  it('валидная строка проходит без ошибок формы', () => {
+    const result = validateDatabase(snapshotWith(nebulaRow()))
+
+    expect(result.errors.filter((e) => /nebula/i.test(e.message))).toEqual([])
+  })
+
+  it('ловит отсутствующий size', () => {
+    const row = nebulaRow()
+    delete row.data.size
+
+    expect(validateDatabase(snapshotWith(row)).errors.some((e) => /data\.size/.test(e.message))).toBe(true)
+  })
+
+  it('ловит неположительный size', () => {
+    const row = nebulaRow()
+    row.data.size = 0
+
+    expect(validateDatabase(snapshotWith(row)).errors.some((e) => /data\.size/.test(e.message))).toBe(true)
+  })
+
+  it('ловит неизвестную форму', () => {
+    const row = nebulaRow()
+    row.data.shape = 'banana'
+
+    expect(validateDatabase(snapshotWith(row)).errors.some((e) => /data\.shape/.test(e.message))).toBe(true)
+  })
+
+  it('ловит неизвестный preset', () => {
+    const row = nebulaRow()
+    row.data.preset = 'neon'
+
+    expect(validateDatabase(snapshotWith(row)).errors.some((e) => /data\.preset/.test(e.message))).toBe(true)
+  })
+
+  it('ловит axisRatios не из трёх положительных чисел', () => {
+    const row = nebulaRow()
+    row.data.axisRatios = [1, 0, 1]
+
+    expect(validateDatabase(snapshotWith(row)).errors.some((e) => /data\.axisRatios/.test(e.message))).toBe(true)
+  })
+
+  it('ловит цвет не в формате #rrggbb', () => {
+    const row = nebulaRow()
+    row.data.dust = { color: 'teal' }
+
+    expect(validateDatabase(snapshotWith(row)).errors.some((e) => /dust\.color/.test(e.message))).toBe(true)
+  })
+
+  it('ловит позицию стопа палитры вне [0, 1]', () => {
+    const row = nebulaRow()
+    row.data.palette = { stops: [{ t: 1.5, color: '#06141c' }] }
+
+    expect(validateDatabase(snapshotWith(row)).errors.some((e) => /palette\.stops/.test(e.message))).toBe(true)
+  })
+
+  it('строки других категорий этой проверкой не трогаются', () => {
+    const db = baseSnapshot()
+    db.actors.push(planet(11, 10))
+    // у планеты нет ни size, ни shape — это не повод ругаться
+    db.renderingObjects.push({ id: 1, actorId: 11, data: { emission: 1, bumpScale: 0 } })
+
+    expect(validateDatabase(db).errors.filter((e) => /nebula/i.test(e.message))).toEqual([])
+  })
+})
+
 /**
  * Базлайн: реальные данные приложения ДОЛЖНЫ проходить без ошибок.
  * Этот тест фиксирует текущее состояние как валидное и будет красным,
