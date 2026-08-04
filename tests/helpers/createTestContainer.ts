@@ -21,14 +21,11 @@ import type { MenuController } from '@/core/ports/MenuController'
  * настоящий объект Three в тестах не конструируется, и контейнер не зависит от
  * того, подменён ли модуль фабрик в вызывающем файле.
  *
- * Четыре порта (`Settings`, `NotificationSink`, `LoadingProgressReporter`,
- * `MenuController`) в проде регистрирует `UiServiceProvider` MobX-сторами.
- * Здесь они закрыты плоскими объектами: `AppServiceProvider` без них не
- * резолвится, а тащить UI-слой в контейнер ядра означало бы вернуть ту самую
- * зависимость, ради устранения которой порты и появились.
- *
- * Заглушки минимальны намеренно: если тест дёрнет неописанный метод, он упадёт
- * с внятным `is not a function`, и заглушка дополнится по факту.
+ * Четыре порта, которые в проде регистрирует `UiServiceProvider`, закрыты
+ * плоскими объектами: без них не резолвится `AppServiceProvider`, а тащить
+ * UI-слой в контейнер ядра — вернуть зависимость, ради которой порты и
+ * появились. Заглушки минимальны намеренно: неописанный метод упадёт с
+ * внятным `is not a function`.
  */
 export function createTestContainer(): Container {
   const container: Container = new Kernel([RenderingServiceProvider, AppServiceProvider]).bootstrap()
