@@ -1,28 +1,69 @@
-import { Vector3 } from 'three'
+import { PerspectiveCamera, Vector3 } from 'three'
+import type { Effect, EffectPass } from 'postprocessing'
 import { ExposureEffect } from '@/core/graphic/effects/grading/ExposureEffect'
 import { ColorGradeEffect } from '@/core/graphic/effects/grading/ColorGradeEffect'
-import { HDR_EFFECT_ORDER, LDR_EFFECT_ORDER } from '@/core/graphic/Postprocessing'
+import { HDR_EFFECT_ORDER, LDR_EFFECT_ORDER, createEffectPasses } from '@/core/graphic/Postprocessing'
 import { REFERENCE_TEMPERATURE_K, whiteBalanceGain } from '@/core/graphic/effects/grading/whiteBalance'
 import { grading } from '@/config/grading'
 
-describe('Грейдинг: порядок в конвейере', () => {
-  it('экспозиция считается ПОСЛЕ блума — иначе её стопы меняли бы состав светящегося', () => {
-    // Порог блума 1.0 и кламп планет 0.99 видят кадр до экспозиции, поэтому
-    // инвариант bloom-guard не зависит от её значения
-    expect(HDR_EFFECT_ORDER.indexOf('exposure')).toBeGreaterThan(HDR_EFFECT_ORDER.indexOf('bloom'))
+// `effects` помечен private в d.ts, но в рантайме это обычное поле пасса —
+// единственный способ увидеть порядок ПОСЛЕ пересортировки по attributes
+function passEffects(pass: EffectPass): readonly Effect[] {
+  return (pass as unknown as { effects: Effect[] }).effects
+}
+
+function assembledNames(pass: EffectPass): string[] {
+  return passEffects(pass).map((effect: Effect): string => effect.name)
+}
+
+// Ключ константы порядка → имя эффекта в собранном пассе
+const EFFECT_NAMES = {
+  lensFlare: 'LensFlareEffect',
+  bloom: 'BloomEffect',
+  exposure: 'ExposureEffect',
+  toneMapping: 'ToneMappingEffect',
+  chromaticAberration: 'ChromaticAberrationEffect',
+  colorGrade: 'ColorGradeEffect',
+  dithering: 'DitheringEffect'
+} as const
+
+describe('Грейдинг: порядок в собранном проходе', () => {
+  // Читаем СОБРАННЫЙ пасс, а не константы: EffectPass.setEffects сортирует
+  // эффекты по убыванию attributes, и порядок аргументов конструктора не
+  // сохраняется. Тест по константам был бы зелёным при любом расхождении
+  let hdr: string[]
+  let ldr: string[]
+
+  beforeAll(() => {
+    const [hdrPass, ldrPass] = createEffectPasses(new PerspectiveCamera())
+
+    hdr = assembledNames(hdrPass)
+    ldr = assembledNames(ldrPass)
+  })
+
+  it('константы порядка совпадают с фактической сборкой пассов', () => {
+    expect(hdr).toEqual(HDR_EFFECT_ORDER.map((key: string): string => EFFECT_NAMES[key as keyof typeof EFFECT_NAMES]))
+    expect(ldr).toEqual(LDR_EFFECT_ORDER.map((key: string): string => EFFECT_NAMES[key as keyof typeof EFFECT_NAMES]))
+  })
+
+  it('экспозиция считается ПОСЛЕ блума — иначе база кадра и наложение блума разъедутся по яркости', () => {
+    // Порог блума экспозиция не двигает ни при каком порядке: EffectPass.render
+    // зовёт update каждого эффекта по входному таргету всего пасса. Причина
+    // именно в рассогласовании: текстура блума снята с неэкспонированного входа
+    expect(hdr.indexOf('ExposureEffect')).toBeGreaterThan(hdr.indexOf('BloomEffect'))
   })
 
   it('экспозиция стоит непосредственно перед тонмаппингом', () => {
     // Экспозиция и баланс белого — свойства съёмки, они обязаны применяться в
     // линейном свете до сжатия кривой
-    expect(HDR_EFFECT_ORDER.indexOf('exposure')).toBe(HDR_EFFECT_ORDER.indexOf('toneMapping') - 1)
+    expect(hdr.indexOf('ExposureEffect')).toBe(hdr.indexOf('ToneMappingEffect') - 1)
   })
 
   it('грейдинг стоит после аберрации, дизеринг остаётся последним', () => {
-    expect(LDR_EFFECT_ORDER.indexOf('colorGrade')).toBeGreaterThan(
-      LDR_EFFECT_ORDER.indexOf('chromaticAberration')
-    )
-    expect(LDR_EFFECT_ORDER[LDR_EFFECT_ORDER.length - 1]).toBe('dithering')
+    // Дизеринг последний по факту сборки, а не по порядку аргументов: появись
+    // у него атрибут — сортировка увезла бы его вперёд, и тест покраснеет
+    expect(ldr.indexOf('ColorGradeEffect')).toBeGreaterThan(ldr.indexOf('ChromaticAberrationEffect'))
+    expect(ldr[ldr.length - 1]).toBe('DitheringEffect')
   })
 })
 
@@ -57,6 +98,14 @@ describe('ExposureEffect', () => {
     effect.temperature = 3000
 
     expect(effect.uniforms.get('gain')!.value.x).not.toBeCloseTo(before * 4, 6)
+
+    // tint — единственная ручка с отдельной веткой математики (gain.y до
+    // нормировки), поэтому её сеттер проверяем по зелёному каналу
+    const green: number = effect.uniforms.get('gain')!.value.y
+
+    effect.tint = 1
+
+    expect(effect.uniforms.get('gain')!.value.y).toBeGreaterThan(green)
   })
 
   it('шейдер только умножает — никакой цветовой математики в GLSL', () => {
@@ -96,6 +145,21 @@ describe('ColorGradeEffect', () => {
     expect(Math.min(...positions)).toBeGreaterThan(-1)
   })
 
+  it('константы шейдера объявлены экранными: эффект требует sRGB на входе', () => {
+    // Выход AgX — линейный display-referred. Без этого объявления опора 0.5
+    // попадала бы на 188/255 экрана, а всё ниже 32/255 срезалось клампом
+    expect(new ColorGradeEffect().inputColorSpace).toBe('srgb')
+  })
+
+  it('окна теней и светов не перекрываются', () => {
+    // Пиксель в перекрытии тянули бы в разные оттенки аддитивный подъём теней
+    // и множительная тонировка светов одновременно
+    const shader: string = new ColorGradeEffect().getFragmentShader()
+
+    expect(shader).toContain('1.0 - smoothstep(0.0, 0.5, gradeLuminance(color))')
+    expect(shader).toContain('smoothstep(0.5, 1.0, gradeLuminance(color))')
+  })
+
   it('контраст считается вокруг опорной точки 0.5', () => {
     expect(new ColorGradeEffect().getFragmentShader()).toContain('(color - 0.5) * contrast + 0.5')
   })
@@ -119,33 +183,58 @@ describe('ColorGradeEffect', () => {
     expect(effect.saturation).toBe(0.8)
 
     effect.contrast = 1.5
+    effect.shadowTint = [0.1, 0.2, 0.3]
+    effect.highlightTint = [0.4, 0.5, 0.6]
 
     expect(effect.uniforms.get('contrast')!.value).toBe(1.5)
+    expect(effect.shadowTint.toArray()).toEqual([0.1, 0.2, 0.3])
+    expect(effect.highlightTint.toArray()).toEqual([0.4, 0.5, 0.6])
   })
+})
 
-  it('все девять ручек конфига доезжают до эффектов', () => {
-    const exposure = new ExposureEffect({
-      exposure: grading.grading.exposure,
-      temperature: grading.grading.temperature,
-      tint: grading.grading.tint
-    })
-    const grade = new ColorGradeEffect({
-      contrast: grading.grading.contrast,
-      saturation: grading.grading.saturation,
-      shadowTint: grading.grading.shadowTint,
-      shadowLift: grading.grading.shadowLift,
-      highlightTint: grading.grading.highlightTint,
-      highlightGain: grading.grading.highlightGain
-    })
+describe('Проводка конфига в конвейер', () => {
+  it('все девять ручек доезжают до эффектов внутри собранных пассов', async () => {
+    // Конфиг подменяется зондом: все девять значений отличаются от дефолтов
+    // конструкторов, поэтому удаление ЛЮБОЙ строки config('grading.*') в
+    // Postprocessing.ts роняет эффект на дефолт и красит тест
+    const probe = {
+      grading: {
+        exposure: 0.37,
+        temperature: 4123,
+        tint: 0.29,
+        contrast: 1.23,
+        saturation: 0.77,
+        shadowTint: [0.11, 0.22, 0.33] as const,
+        shadowLift: 0.044,
+        highlightTint: [0.55, 0.66, 0.77] as const,
+        highlightGain: 0.31
+      }
+    }
 
-    expect(exposure.exposure).toBe(grading.grading.exposure)
-    expect(exposure.temperature).toBe(grading.grading.temperature)
-    expect(exposure.tint).toBe(grading.grading.tint)
-    expect(grade.contrast).toBe(grading.grading.contrast)
-    expect(grade.saturation).toBe(grading.grading.saturation)
-    expect(grade.shadowLift).toBe(grading.grading.shadowLift)
-    expect(grade.highlightGain).toBe(grading.grading.highlightGain)
-    expect(grade.shadowTint.toArray()).toEqual([...grading.grading.shadowTint])
-    expect(grade.highlightTint.toArray()).toEqual([...grading.grading.highlightTint])
+    vi.resetModules()
+    vi.doMock('@/config/grading', () => ({ grading: probe }))
+
+    try {
+      const { createEffectPasses: build } = await import('@/core/graphic/Postprocessing')
+      const [hdrPass, ldrPass] = build(new PerspectiveCamera())
+
+      // instanceof здесь нельзя: динамический импорт после resetModules даёт
+      // ДРУГИЕ экземпляры классов эффектов
+      const exposure = passEffects(hdrPass).find((e: Effect): boolean => e.name === 'ExposureEffect') as ExposureEffect
+      const grade = passEffects(ldrPass).find((e: Effect): boolean => e.name === 'ColorGradeEffect') as ColorGradeEffect
+
+      expect(exposure.exposure).toBe(probe.grading.exposure)
+      expect(exposure.temperature).toBe(probe.grading.temperature)
+      expect(exposure.tint).toBe(probe.grading.tint)
+      expect(grade.contrast).toBe(probe.grading.contrast)
+      expect(grade.saturation).toBe(probe.grading.saturation)
+      expect(grade.shadowLift).toBe(probe.grading.shadowLift)
+      expect(grade.highlightGain).toBe(probe.grading.highlightGain)
+      expect(grade.shadowTint.toArray()).toEqual([...probe.grading.shadowTint])
+      expect(grade.highlightTint.toArray()).toEqual([...probe.grading.highlightTint])
+    } finally {
+      vi.doUnmock('@/config/grading')
+      vi.resetModules()
+    }
   })
 })
