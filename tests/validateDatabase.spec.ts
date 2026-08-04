@@ -476,6 +476,144 @@ describe('validateDatabase — ссылки сценариев', () => {
   })
 })
 
+describe('validateDatabase — режимы позиционирования', () => {
+  /** Снимок с полным набором категорий, включая статическую туманность */
+  function positioningSnapshot(): DatabaseSnapshot {
+    const db = baseSnapshot()
+    db.categories.push(
+      { id: 4, alias: 'atmosphere', name: 'Atmosphere' },
+      { id: 5, alias: 'nebula', name: 'Nebula' }
+    )
+    // планета (кеплерова), туманность (статическая), атмосфера (примонтированная)
+    db.actors.push(
+      planet(11, 10),
+      { id: 12, categoryId: 5, parentId: 10, name: 'Neb', description: '', color: '#fff' },
+      { id: 13, categoryId: 4, parentId: 11, name: 'Atm', description: '', color: '#fff' }
+    )
+    db.renderingObjects.push({ id: 1, actorId: 12, data: { size: 100 } })
+    return db
+  }
+
+  it('placements у туманности — легальны', () => {
+    const db = positioningSnapshot()
+    db.placements.push({ id: 1, actorId: 12, x: 0, y: 0, z: 0 })
+
+    const result = validateDatabase(db)
+
+    expect(result.errors.filter((e) => e.collection === 'placements')).toEqual([])
+  })
+
+  it('placements у планеты — ошибка: позиция будет перетёрта кеплеровой моделью', () => {
+    const db = positioningSnapshot()
+    db.placements.push({ id: 1, actorId: 11, x: 1, y: 0, z: 0 })
+
+    const result = validateDatabase(db)
+
+    expect(result.errors.some((e) => e.collection === 'placements' && /keplerian/.test(e.message))).toBe(true)
+  })
+
+  it('placements у атмосферы — ошибка: своей позиции у неё нет', () => {
+    const db = positioningSnapshot()
+    db.placements.push({ id: 1, actorId: 13, x: 1, y: 0, z: 0 })
+
+    const result = validateDatabase(db)
+
+    expect(result.errors.some((e) => e.collection === 'placements' && /attached/.test(e.message))).toBe(true)
+  })
+
+  it('orbits у туманности — ошибка: статический актор не ходит по орбите', () => {
+    const db = positioningSnapshot()
+    db.orbits.push({
+      id: 1,
+      actorId: 12,
+      semiMajorAxis: 1,
+      eccentricity: 0,
+      inclination: 0,
+      argOfPeriapsis: 0,
+      ascendingNode: 0,
+      meanAnomalyAtEpoch: 0,
+      epoch: 2451545,
+      period: 0
+    })
+
+    const result = validateDatabase(db)
+
+    expect(result.errors.some((e) => e.collection === 'orbits' && /placed/.test(e.message))).toBe(true)
+  })
+
+  it('orbits у планеты — легальны', () => {
+    const db = positioningSnapshot()
+    db.orbits.push({
+      id: 1,
+      actorId: 11,
+      semiMajorAxis: 1,
+      eccentricity: 0,
+      inclination: 0,
+      argOfPeriapsis: 0,
+      ascendingNode: 0,
+      meanAnomalyAtEpoch: 0,
+      epoch: 2451545,
+      period: 0
+    })
+
+    const result = validateDatabase(db)
+
+    expect(result.errors.filter((e) => e.collection === 'orbits')).toEqual([])
+  })
+})
+
+describe('validateDatabase — ожидания по категориям', () => {
+  function snapshotWithCategory(alias: string, categoryId: number): DatabaseSnapshot {
+    const db = baseSnapshot()
+    db.categories.push({ id: categoryId, alias: alias as never, name: alias })
+    db.actors.push({ id: 20, categoryId, parentId: 10, name: 'X', description: '', color: '#fff' })
+    return db
+  }
+
+  it('туманности не нужны ни physicalObject, ни orbit', () => {
+    const db = snapshotWithCategory('nebula', 7)
+    db.renderingObjects.push({ id: 1, actorId: 20, data: { size: 100 } })
+
+    const warnings = validateDatabase(db).warnings.filter((w) => w.entity === 20)
+
+    expect(warnings).toEqual([])
+  })
+
+  it('туманности нужен renderingObject', () => {
+    const warnings = validateDatabase(snapshotWithCategory('nebula', 7)).warnings
+
+    expect(warnings.some((w) => w.entity === 20 && /renderingObject/.test(w.message))).toBe(true)
+  })
+
+  it('атмосфере не нужны ни physicalObject, ни orbit — своей позиции и массы у неё нет', () => {
+    const db = snapshotWithCategory('atmosphere', 8)
+    db.renderingObjects.push({ id: 1, actorId: 20, data: {} })
+
+    const warnings = validateDatabase(db).warnings.filter((w) => w.entity === 20)
+
+    expect(warnings).toEqual([])
+  })
+
+  it('планете по-прежнему нужны все три связи', () => {
+    const warnings = validateDatabase(snapshotWithCategory('planet', 2)).warnings.filter((w) => w.entity === 20)
+
+    expect(warnings).toHaveLength(3)
+  })
+
+  it('барицентр по-прежнему не требует ничего', () => {
+    const warnings = validateDatabase(snapshotWithCategory('barycenter', 9)).warnings.filter((w) => w.entity === 20)
+
+    expect(warnings).toEqual([])
+  })
+
+  it('звезде не нужна orbit, но нужны physical и rendering', () => {
+    const warnings = validateDatabase(snapshotWithCategory('star', 3)).warnings.filter((w) => w.entity === 20)
+
+    expect(warnings).toHaveLength(2)
+    expect(warnings.some((w) => /orbit/.test(w.message))).toBe(false)
+  })
+})
+
 /**
  * Базлайн: реальные данные приложения ДОЛЖНЫ проходить без ошибок.
  * Этот тест фиксирует текущее состояние как валидное и будет красным,
