@@ -80,13 +80,16 @@ describe('Конфиг грейдинга', () => {
 describe('ColorGradeEffect', () => {
   it('операции идут в порядке: контраст, насыщенность, тени, света', () => {
     // Порядок не косметика: насыщенность после контраста работает по уже
-    // разведённым значениям, а тонировка последней ложится на итог
+    // разведённым значениям, а тонировка последней ложится на итог.
+    // Ищем сами выражения операций, а не голые имена юниформов: те совпадают
+    // ещё и с блоком `uniform`-объявлений перед mainImage и не ловят
+    // перестановку внутри тела функции
     const shader: string = new ColorGradeEffect().getFragmentShader()
     const positions: number[] = [
-      shader.indexOf('contrast'),
-      shader.indexOf('saturation'),
-      shader.indexOf('shadowLift'),
-      shader.indexOf('highlightGain')
+      shader.indexOf('(color - 0.5) * contrast + 0.5'),
+      shader.indexOf('mix(vec3(gradeLuminance(color)), color, saturation)'),
+      shader.indexOf('shadowTint * (shadowLift * shadowWeight)'),
+      shader.indexOf('highlightGain * highlightWeight')
     ]
 
     expect(positions).toEqual([...positions].sort((a: number, b: number): number => a - b))
