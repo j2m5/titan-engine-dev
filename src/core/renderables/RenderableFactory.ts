@@ -1,4 +1,4 @@
-import { LOD, Object3D, Vector3, WebGLRenderer } from 'three'
+import { LOD, Object3D, WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { Barycenter } from '@/core/renderables/Barycenter'
 import { BlackHole } from '@/core/renderables/BlackHole'
@@ -19,7 +19,9 @@ import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { requireRenderingData } from '@/core/helpers/renderingData'
 import { Nebula } from '@/core/renderables/Nebula'
-import { IRingRenderingObject } from '@/core/models/types'
+import { nebulaParamsFromData } from '@/core/renderables/Nebula/NebulaRenderingData'
+import { PlacedNode } from '@/core/renderables/utils/PlacedNode'
+import { INebulaRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 
 class RenderableFactory {
@@ -42,6 +44,8 @@ class RenderableFactory {
         return this.createAtmosphere(actor)
       case 6:
         return this.createRing(actor)
+      case 7:
+        return this.createNebula(actor)
       default:
         throw new Error("Couldn't resolve actor")
     }
@@ -105,21 +109,6 @@ class RenderableFactory {
 
     node.add(lod)
 
-    if (actor.attributes.id === 87) {
-      node.add(
-        new Nebula(this.renderer, {
-          size: 27000000,
-          seed: 5120,
-          shape: 'disk',
-          axisRatios: new Vector3(1, 0.5, 1),
-          edgeFalloff: 0.6,
-          density: 0.5,
-          noise: { contrast: 2, worleyStrength: 0.35, ridged: 1 },
-          cavities: [{ center: new Vector3(0.1, 0, 0), radius: 0.4, strength: 0.3 }]
-        })
-      )
-    }
-
     return node
   }
 
@@ -178,6 +167,26 @@ class RenderableFactory {
     lod.addLevel(base, distanceLod)
 
     node.add(lod)
+
+    return node
+  }
+
+  private createNebula(actor: Actor): Object3D {
+    // Как и у кольца: проверка до конструирования — туманность без конфига
+    // не построить, отказ здесь ничего не аллоцирует
+    const data: INebulaRenderingObject = requireRenderingData<INebulaRenderingObject>(
+      actor,
+      'RenderableFactory',
+      'туманности'
+    )
+
+    const node = new PlacedNode(actor)
+
+    node.name = actor.getAttribute('name', '')
+    // renderable намеренно остаётся null: Nebula — контейнер без собственных
+    // geometry/material, а RenderableObject3D требует оба. Следствие —
+    // у туманности нет маркера и прицела, она не навигационное тело.
+    node.add(new Nebula(this.renderer, nebulaParamsFromData(data)))
 
     return node
   }
