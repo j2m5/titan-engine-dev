@@ -8,6 +8,7 @@ import type {
   Wrapping
 } from 'three'
 import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+import { NebulaRenderingData } from '@/core/renderables/Nebula/NebulaRenderingData'
 
 export type ValueOf<T> = T[keyof T]
 
@@ -17,7 +18,8 @@ export enum AllowedCategories {
   star,
   planet,
   atmosphere,
-  ring
+  ring,
+  nebula
 }
 
 export type AllowedCategory = keyof typeof AllowedCategories
@@ -114,6 +116,14 @@ export interface IRenderingObject<T extends string = string, U = unknown> {
   data: Record<T, U>
 }
 
+/**
+ * Статическая позиция актора — смещение от родителя в АСТРОНОМИЧЕСКИХ ЕДИНИЦАХ.
+ *
+ * Применима только к категориям с режимом позиционирования `placed`
+ * (см. CATEGORY_RULES в validateDatabase). У акторов, чья позиция считается
+ * по кеплеровой модели, строка здесь была бы ложью: DynamicNode перетирает
+ * position на первом же кадре. Валидатор такую пару считает ошибкой.
+ */
 export interface IPlacement {
   readonly id: number
   readonly actorId: number
@@ -151,6 +161,8 @@ export interface IPlanetRenderingObject {
 }
 
 export type IAtmosphereRenderingObject = AtmosphereConfig
+
+export type INebulaRenderingObject = NebulaRenderingData
 
 export interface IRingRenderingObject {
   innerRadius: number
