@@ -24,8 +24,7 @@ describe('AsteroidRingSystem dust integration', () => {
   })
 
   it('калибрует плотность через целевой tau грейзинг-луча (dustTauGrazing / ширину кольца)', () => {
-    // Явный override, чтобы тест проверял формулу калибровки, а не дефолт,
-    // который владелец визуально тюнит (см. DEFAULT_CONFIG.dustTauGrazing)
+    // Явный override: тест проверяет формулу калибровки, а не дефолт
     const system = new AsteroidRingSystem(makeFakeActor(), { dustTauGrazing: 0.3 })
     const u = (system as any).pool.billboardMaterial.uniforms
     const width = u.uDustRingOuter.value - u.uDustRingInner.value

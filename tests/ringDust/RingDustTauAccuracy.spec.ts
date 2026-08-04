@@ -8,7 +8,7 @@ import { DustParams, radialMask, tauRay } from './tauMirror'
  * Здесь оно сверяется с ground truth — плотным численным интегралом
  * rho0 * radialMask(r) * exp(-|y|/H) вдоль луча.
  *
- * Сценарий = кольцо со скриншота владельца: inner 74500 км, outer 140220 км,
+ * Сценарий — кольцо типа Сатурна: inner 74500 км, outer 140220 км,
  * SpaceScale 10^-3.3, dustScaleHeightKm 150, dustHorizonKm 15000.
  */
 

@@ -52,39 +52,24 @@ interface AsteroidRingConfig {
   /** LOD-пороги в реальных км */
   lodThresholdsKm: {
     /**
-     * Порог L0 geometry (до ЦЕНТРА сектора) в км. ИНВАРИАНТ: l0 должен превышать
-     * l0NearExit + полудиагональ ячейки (~cellSize·0.71 ≈ 1414 км при дефолте),
-     * иначе окно Near (метрика — ближайшая точка!) полностью накрывает окно
-     * Geometry, и тир становится недостижим: сектора ходят Billboard↔Near,
-     * а Geometry-стримы вечно пусты (находка финального ревью 2c).
+     * Порог L0 geometry (до ЦЕНТРА сектора) в км. ИНВАРИАНТ: l0 больше, чем
+     * l0NearExit плюс полудиагональ ячейки, иначе окно Near накрывает окно
+     * Geometry целиком и тир недостижим — сектора ходят Billboard↔Near.
      */
     l0: number
     /** Порог L1 billboard (до центра сектора) в км */
     l1: number
     /**
-     * Порог входа в ближний тир (Near, повышенная детализация) — расстояние ДО
-     * БЛИЖАЙШЕЙ ТОЧКИ сектора в км. Отличается от l0/l1 (которые считают до центра)
-     * потому что порог неполных 2500 км до центра оказался МЕНЬШЕ полудиагонали
-     * сектора (~1400 км), и тир Near никогда бы не активировался (старая история L0Near).
-     * Ближайшая точка = центр - boundingRadius (плюс полудиагональ ячейки).
-     * Дистанция в км, конвертируется в TU (Three.js Units) при setup.
-     *
-     * Гистерезис: nearExitDistance > l0Near — против осцилляций на границе.
+     * Порог входа в ближний тир (Near) — расстояние до БЛИЖАЙШЕЙ ТОЧКИ сектора
+     * в км, в отличие от l0/l1, которые считают до центра: порог такого порядка
+     * меньше полудиагонали сектора, и по центру тир не активировался бы никогда.
+     * Ближайшая точка = центр − boundingRadius. В TU конвертируется при setup.
      */
     l0Near: number
     /**
-     * Порог выхода из ближнего тира (Near) — расстояние до ближайшей точки сектора
-     * в км. Используется только когда сектор уже находится в Near: если
-     * distClosest (до ближайшей точки) > nearExitDistance, начинается кросс-фейд
-     * в нижестоящий LOD (Geometry или Billboard).
-     *
-     * Гистерезис: nearExitDistance > l0Near. Например, l0Near=2500, l0NearExit=3200.
-     * Для сопоставления с l0: exit 3200 по ближайшей точке соответствует примерно
-     * 4600 км до центра (плюс полудиагональ ~1400 км). Это осознанная "липкость"
-     * Near-тира, которая регулируется визуально и может быть переопределена
-     * в конфиге конкретного кольца.
-     *
-     * Дистанция в км, конвертируется в TU при setup.
+     * Порог выхода из ближнего тира, по той же метрике. Обязан быть больше
+     * l0Near: зазор между порогами — гистерезис против осцилляций на границе,
+     * заодно даёт Near осознанную «липкость». В TU конвертируется при setup.
      */
     l0NearExit: number
   }
@@ -215,7 +200,7 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
 /**
  * AsteroidRingSystem — основной оркестратор системы визуализации астероидов в кольце.
  *
- * Заменяет DetailedRingV2. Добавляется как child к Ring mesh (тот же паттерн).
+ * Добавляется как child к Ring mesh.
  *
  * Состоит из:
  * - SectorGrid: полярная сетка секторов
@@ -249,8 +234,8 @@ class AsteroidRingSystem extends Group {
   private lastPoolWarnAt = 0
   private lastPoolFailures = 0
 
-  // A-lite: радиальный профиль плотности из текстуры кольца строится один раз,
-  // когда текстура догрузилась (async). До этого — равномерная плотность + B-гейт.
+  // Радиальный профиль плотности строится один раз, когда текстура кольца
+  // догрузилась; до этого плотность равномерная
   private densityProfileReady = false
   private ringInnerTU = 0
   private ringOuterTU = 0
@@ -318,7 +303,7 @@ class AsteroidRingSystem extends Group {
     const l0NearEnter = toThreeJSUnits(cfg.lodThresholdsKm.l0Near)
     const l0NearExit = toThreeJSUnits(cfg.lodThresholdsKm.l0NearExit)
 
-    // Радиусы кольца в three-units — для A-lite readback профиля (см. updateObject)
+    // Радиусы кольца в three-units — для readback профиля (см. updateObject)
     this.ringInnerTU = innerRadius
     this.ringOuterTU = outerRadius
 
@@ -344,9 +329,8 @@ class AsteroidRingSystem extends Group {
     const l0PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0Instances }
     const nearPoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0NearInstances }
     const l1PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL1Instances }
-    // Библиотека запечённых архетипов-осколков (план 2b, K=archetypeCount).
-    // Сид каждого архетипа детерминирован профилем и его индексом → форма
-    // стабильна между сессиями и кольцами (k=0 воспроизводит архетип 2a).
+    // Библиотека запечённых архетипов-осколков. Сид каждого детерминирован
+    // профилем и индексом → форма стабильна между сессиями и кольцами
     const l0Geometries = getArchetypeGeometries(cfg.profile, cfg.archetypeCount, cfg.asteroidShapeDetail, asteroidSize)
     // Та же библиотека (профиль/сид), повышенный detail — ближний тир
     // (выбор Near менеджером ещё не реализован).
@@ -520,8 +504,8 @@ class AsteroidRingSystem extends Group {
       this.wasDeactivated = false
     }
 
-    // A-lite: попытаться построить радиальный профиль плотности (когда текстура
-    // кольца догрузилась). Дешёвая проверка флага, пока не построен.
+    // Профиль плотности строится, когда текстура кольца догрузилась;
+    // до того — дешёвая проверка флага
     this.__tryBuildDensityProfile()
 
     // Получить камеру

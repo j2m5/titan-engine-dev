@@ -83,7 +83,7 @@ describe('AsteroidRingSystem: запечённый архетип в L0', () => 
     // Метрики порогов РАЗНЫЕ: Near — до ближайшей точки сектора, l0 — до центра.
     // Если l0 ≤ l0NearExit + полудиагональ (~cellSize·0.71), окно Near полностью
     // накрывает окно Geometry → сектора ходят Billboard↔Near, Geometry-стримы
-    // вечно пусты (находка финального ревью 2c). Дефолты обязаны держать зазор.
+    // вечно пусты. Дефолты обязаны держать зазор.
     const system = new AsteroidRingSystem(makeFakeActor())
     const cfg = (system as any).config
     const halfDiagonalKm = cfg.cellSizeKm * Math.SQRT2 * 0.5
