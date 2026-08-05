@@ -17,7 +17,7 @@ import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSyst
 import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
-import { STAR_IMPOSTOR_PIXELS, distanceForApparentSize } from '@/core/helpers/apparentSize'
+import { starLodSwitchDistance } from '@/core/helpers/apparentSize'
 import { requireRenderingData } from '@/core/helpers/renderingData'
 import { Nebula } from '@/core/renderables/Nebula'
 import { nebulaParamsFromData } from '@/core/renderables/Nebula/NebulaRenderingData'
@@ -100,9 +100,8 @@ class RenderableFactory {
 
     // Переключение ровно там, где диск звезды занимает столько же пикселей,
     // сколько рисует билборд: иначе размер скачком меняется в момент свитча
-    const switchDistance: number = distanceForApparentSize(
-      toThreeJSUnits(2 * actor.physicalObject!.getAttribute('radius')!),
-      STAR_IMPOSTOR_PIXELS,
+    const switchDistance: number = starLodSwitchDistance(
+      actor.physicalObject!.getAttribute('radius')!,
       config('camera.fov'),
       this.renderer.domElement.height
     )

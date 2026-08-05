@@ -1,4 +1,5 @@
 import { degToRad } from 'three/src/math/MathUtils'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 /**
  * Видимый размер импостора звезды в пикселях. Общая константа: по ней и
@@ -29,5 +30,18 @@ export function distanceForApparentSize(
   fovDegrees: number,
   viewportHeight: number
 ): number {
-  return (worldSize * viewportHeight) / (pixels * 2 * Math.tan(degToRad(fovDegrees) / 2))
+  // Высота кадра на расстоянии 1 — то же frameHeightAt, что и выше; раньше
+  // тут была независимая копия 2*tan(fov/2), и мутация в одной из двух копий
+  // расходилась с другой незамеченной
+  return (worldSize * viewportHeight) / (pixels * frameHeightAt(1, fovDegrees))
+}
+
+/**
+ * Расстояние переключения LOD звезды: настоящий диск и билборд-импостор
+ * занимают на нём одинаковое число пикселей (STAR_IMPOSTOR_PIXELS).
+ * Константа зашита внутри намеренно — вызывающей стороне нечем её подменить.
+ * radiusKm — физический радиус звезды в километрах.
+ */
+export function starLodSwitchDistance(radiusKm: number, fovDegrees: number, viewportHeight: number): number {
+  return distanceForApparentSize(toThreeJSUnits(2 * radiusKm), STAR_IMPOSTOR_PIXELS, fovDegrees, viewportHeight)
 }
