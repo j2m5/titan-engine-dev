@@ -32,4 +32,30 @@ describe('Postprocessing: контракт цветового конвейера
     expect(BLOOM_OPTIONS.luminanceThreshold).toBe(1)
     expect(BrunetonAtmosphereShaderTemplate.fragmentShader).toContain('min(color, vec3(1.0)) + excess * uHdrKnee')
   })
+
+  it('охват гало задан явно, а не унаследован от дефолта библиотеки', () => {
+    // levels задаёт, докуда дотягивается гало: каждый уровень удваивает охват.
+    // Дефолт библиотеки — 8, и РАВЕНСТВО ему неотличимо от молчаливой
+    // зависимости: смена версии postprocessing поменяет вид картинки
+    expect(BLOOM_OPTIONS.levels).toBeGreaterThan(8)
+  })
+
+  it('сила гало задана явно и положительна', () => {
+    // Потеря intensity вернёт дефолт библиотеки 1.0 при зелёном прогоне
+    expect(BLOOM_OPTIONS.intensity).toBeGreaterThan(0)
+  })
+
+  it('radius не выходит за 1: выше единицы блум ЗАТЕМНЯЕТ', () => {
+    // radius — вес mix(резкий уровень, размытый нижний) в UpsamplingMaterial,
+    // а не ширина фильтра. При radius > 1 это экстраполяция, и там, где резкий
+    // уровень ярче размытого, SCREEN получает отрицательный вклад
+    expect(BLOOM_OPTIONS.radius).toBeGreaterThan(0)
+    expect(BLOOM_OPTIONS.radius).toBeLessThanOrEqual(1)
+  })
+
+  it('порог блума не тронут настройкой гало', () => {
+    // Ширина и сила гало меняются, а порог остаётся частью bloom-guard:
+    // он связан с клампом планет 0.99 и с порогом блика объектива
+    expect(BLOOM_OPTIONS.luminanceThreshold).toBe(1)
+  })
 })

@@ -9,6 +9,7 @@ import { Star } from '@/core/renderables/Star'
 import { StarInnerLayer } from '@/core/renderables/utils/StarInnerLayer'
 import { StarOuterLayer } from '@/core/renderables/utils/StarOuterLayer'
 import { FakeStar } from '@/core/renderables/utils/FakeStar'
+import { StarLod } from '@/core/renderables/utils/StarLod'
 import { Planet } from '@/core/renderables/Planet'
 import { FakePlanet } from '@/core/renderables/utils/FakePlanet'
 import { BrunetonAtmosphere } from '@/core/renderables/Atmosphere/BrunetonAtmosphere'
@@ -61,6 +62,10 @@ class RenderableFactory {
     const lodl1 = new BlackHole(actor, this.resourceObserver)
     const lodl2 = new BlackHoleImpostor(actor, lodl1.parameters)
 
+    // Высота кадра — 2*tan(fov/2), а не tan(fov): формула известно-неверна,
+    // при fov 50° даёт 0.783 от верной дистанции, то есть переключение
+    // на 44.7 px вместо заявленных 35. Не тронута намеренно — правка отодвинет
+    // тяжёлый реймарчер L0 на 28% дальше и требует замера времени кадра
     const distanceLod = (pixels: number): number => {
       const radius: number = lodl1.parameters.simulationRadius
       const fov: number = degToRad(config('camera.fov'))
@@ -83,18 +88,11 @@ class RenderableFactory {
 
   private createStar(actor: Actor): Object3D {
     const node = new DynamicNode(actor)
-    const lod = new LOD()
+    const lod = new StarLod(actor.physicalObject!.getAttribute('radius')!, this.renderer)
     const lodl1 = new Star(actor)
     const lodl2 = new FakeStar(actor, this.renderer)
     const starInnerLayer = new StarInnerLayer(actor)
     const starOuterLayer = new StarOuterLayer(actor)
-
-    const distanceLod = (pixels: number): number => {
-      const radius: number = actor.physicalObject!.getAttribute('radius')!
-      const fov: number = degToRad(config('camera.fov'))
-
-      return toThreeJSUnits((2 * radius * this.renderer.domElement.height) / (Math.tan(fov) * pixels))
-    }
 
     lod.add(starInnerLayer)
     lodl1.add(starOuterLayer)
@@ -104,8 +102,10 @@ class RenderableFactory {
 
     lod.name = actor.getAttribute('name', '') + 'LOD'
 
+    // Стартовое значение: дальше StarLod пересчитывает дистанцию каждый кадр,
+    // потому что билборд меряет свой размер живой высотой вьюпорта
     lod.addLevel(lodl1)
-    lod.addLevel(lodl2, distanceLod(3))
+    lod.addLevel(lodl2, lod.switchDistance(config('camera.fov')))
 
     node.add(lod)
 
@@ -118,6 +118,9 @@ class RenderableFactory {
     const lodl1 = new Planet(actor)
     const lodl2 = new FakePlanet(actor)
 
+    // Та же известно-неверная высота кадра, что у чёрной дыры (см. createBlackHole):
+    // tan(fov) вместо 2*tan(fov/2), переключение на 3.8 px вместо 3.
+    // Не тронута по той же причине — сдвиг на 28% дальше требует замера кадра
     const distanceLod = (pixels: number): number => {
       const radius: number = actor.physicalObject!.getAttribute('radius')!
       const fov: number = degToRad(config('camera.fov'))

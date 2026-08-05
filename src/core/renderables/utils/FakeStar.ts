@@ -5,11 +5,12 @@ import {
   MeshStandardMaterial,
   PlaneGeometry,
   Texture,
+  Vector3,
   WebGLRenderer
 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
-import { degToRad } from 'three/src/math/MathUtils'
+import { STAR_IMPOSTOR_PIXELS, frameHeightAt } from '@/core/helpers/apparentSize'
 import { colorTemperatureToRGB, rgbToHex } from '@/core/materials/shaders/lib/helpers'
 import { UpdateContext } from '@/core/UpdateContext'
 
@@ -26,16 +27,15 @@ class FakeStar extends Mesh {
   declare public geometry: BufferGeometry
   declare public material: MeshStandardMaterial
 
-  private readonly scaleFactor: number
+  private readonly worldPosition: Vector3 = new Vector3()
+  private readonly cameraPosition: Vector3 = new Vector3()
 
   public constructor(
     model: Actor,
-    private readonly renderer: WebGLRenderer,
-    scaleFactor: number = 1
+    private readonly renderer: WebGLRenderer
   ) {
     super()
     this.model = model
-    this.scaleFactor = scaleFactor
 
     this.__setup()
   }
@@ -54,22 +54,23 @@ class FakeStar extends Mesh {
       emissive: color,
       emissiveIntensity: 40
     })
-
-    this.scale.multiplyScalar(this.scaleFactor)
   }
 
   public updateObject(ctx: UpdateContext): void {
-    this.lookAt(ctx.camera.position)
+    const cameraPosition: Vector3 = ctx.camera.getWorldPosition(this.cameraPosition)
 
-    const distance = this.position.distanceTo(ctx.camera.position)
-    const fov = degToRad(ctx.camera.fov)
-    const height = 2 * Math.tan(fov / 2) * distance
-    const pixels = height / this.renderer.domElement.height
+    this.lookAt(cameraPosition)
 
-    const countPixels = 12
-    const size = countPixels * pixels
+    // Позиция мировая, а не локальная: билборд висит в нуле родительского узла,
+    // и по локальной мерилось бы расстояние до начала сцены. Ту же величину
+    // меряет LOD.update, выбирая между диском и билбордом
+    const distance: number = this.getWorldPosition(this.worldPosition).distanceTo(cameraPosition)
+    const viewportHeight: number = this.renderer.domElement.height
+    // Мировой размер, дающий STAR_IMPOSTOR_PIXELS пикселей на этом расстоянии:
+    // доля кадра по высоте, пропорциональная доле пикселей по высоте
+    const worldSize: number = (STAR_IMPOSTOR_PIXELS / viewportHeight) * frameHeightAt(distance, ctx.camera.fov)
 
-    this.scale.setScalar(size * this.scaleFactor)
+    this.scale.setScalar(worldSize)
   }
 }
 

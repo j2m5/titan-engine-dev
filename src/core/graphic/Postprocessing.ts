@@ -16,19 +16,28 @@ import { DitheringEffect } from '@/core/graphic/effects/dithering/DitheringEffec
 import { config } from '@/core/framework/config'
 
 // Опции эффектов вынесены в константы под контракт-тесты
-// (tests/graphic/PostprocessingContract.spec.ts).
+// (tests/graphic/PostprocessingContract.spec.ts)
+
 // Инвариант bloom-guard: luminanceThreshold (1.0) обязан оставаться ВЫШЕ
-// LDR-клампа планеты (0.99, PlanetShaderTemplate) — диффуз-композит планеты
-// остаётся ниже порога и не блумит. Но HDR-глинт океана добавляется ПОСЛЕ
-// клампа (см. PlanetShaderTemplate) и блумит намеренно. Честные HDR-источники:
-// звёзды, диск ЧД, туманности, глинт.
+// LDR-клампа планеты (0.99, PlanetShaderTemplate) — её диффуз не блумит.
+// HDR-глинт океана добавляется ПОСЛЕ клампа и блумит намеренно. Честные
+// HDR-источники: звёзды, диск ЧД, туманности, глинт
+
+/**
+ * Форма гало. levels — докуда оно дотягивается: уровень удваивает охват.
+ * radius — вес mix(резкий уровень, размытый нижний), 0..1; выше 1 это
+ * экстраполяция, и SCREEN с отрицательным блумом ЗАТЕМНЯЕТ. intensity — сила.
+ * Ручки связаны: вклад самого широкого мипа равен radius^(levels − 1).
+ * Значения СТАРТОВЫЕ, не замер — приёмку по картинке делает владелец.
+ */
 export const BLOOM_OPTIONS = {
-  radius: 0.9,
+  radius: 0.95,
+  levels: 9,
   blendFunction: BlendFunction.SCREEN,
   mipmapBlur: true,
   luminanceThreshold: 1,
   luminanceSmoothing: 0.0025,
-  intensity: 1
+  intensity: 1.4
 } as const
 
 // A/B-сравнение кривой: заменить mode на ToneMappingMode.ACES_FILMIC
