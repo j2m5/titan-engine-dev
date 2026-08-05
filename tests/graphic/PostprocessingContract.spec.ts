@@ -32,4 +32,18 @@ describe('Postprocessing: контракт цветового конвейера
     expect(BLOOM_OPTIONS.luminanceThreshold).toBe(1)
     expect(BrunetonAtmosphereShaderTemplate.fragmentShader).toContain('min(color, vec3(1.0)) + excess * uHdrKnee')
   })
+
+  it('охват гало задан явно, а не унаследован от дефолта библиотеки', () => {
+    // levels задаёт, докуда дотягивается гало: каждый уровень удваивает охват.
+    // Дефолт библиотеки — 8; молчаливая зависимость от него означает, что смена
+    // версии postprocessing поменяет вид картинки
+    expect(BLOOM_OPTIONS.levels).toBeDefined()
+    expect(BLOOM_OPTIONS.levels).toBeGreaterThanOrEqual(8)
+  })
+
+  it('порог блума не тронут настройкой гало', () => {
+    // Ширина и сила гало меняются, а порог остаётся частью bloom-guard:
+    // он связан с клампом планет 0.99 и с порогом блика объектива
+    expect(BLOOM_OPTIONS.luminanceThreshold).toBe(1)
+  })
 })

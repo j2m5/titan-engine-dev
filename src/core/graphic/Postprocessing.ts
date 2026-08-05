@@ -22,13 +22,22 @@ import { config } from '@/core/framework/config'
 // остаётся ниже порога и не блумит. Но HDR-глинт океана добавляется ПОСЛЕ
 // клампа (см. PlanetShaderTemplate) и блумит намеренно. Честные HDR-источники:
 // звёзды, диск ЧД, туманности, глинт.
+//
+// Три ручки формы гало. levels — докуда оно дотягивается: каждый уровень
+// удваивает охват. radius — ширина тент-фильтра при подъёме по мипам, то есть
+// плавность спада. intensity — общая сила.
+//
+// Значения СТАРТОВЫЕ, не замер: подобраны так, чтобы гало стало шире и медленнее
+// прежнего, а приёмку по картинке делает владелец. Порог трогать нельзя — он
+// часть bloom-guard.
 export const BLOOM_OPTIONS = {
-  radius: 0.9,
+  radius: 0.95,
+  levels: 9,
   blendFunction: BlendFunction.SCREEN,
   mipmapBlur: true,
   luminanceThreshold: 1,
   luminanceSmoothing: 0.0025,
-  intensity: 1
+  intensity: 1.4
 } as const
 
 // A/B-сравнение кривой: заменить mode на ToneMappingMode.ACES_FILMIC
