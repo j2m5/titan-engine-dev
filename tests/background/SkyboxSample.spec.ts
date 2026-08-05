@@ -36,7 +36,7 @@ describe('SkyboxSample: общая выборка фона с расширени
 
   it('ниже порога расширение тождественно — небо целиком не светлеет', () => {
     expect(skyboxSampleFunctions).toContain('max(raw - uSkyHighlightThreshold, vec3(0.0))')
-    expect(skyboxSampleFunctions).toContain('raw + excess * (uSkyHighlightBoost - 1.0)')
+    expect(skyboxSampleFunctions).toContain('excess * (uSkyHighlightBoost - 1.0)')
   })
 
   it('расширение включено: подобранная на приёмке сила', () => {
@@ -46,6 +46,35 @@ describe('SkyboxSample: общая выборка фона с расширени
   it('порог конфига в допустимом диапазоне', () => {
     expect(background.background.highlightThreshold).toBeGreaterThan(0)
     expect(background.background.highlightThreshold).toBeLessThanOrEqual(1)
+  })
+
+  it('подъём вычитает пьедестал с отсечкой в ноль и умножает остаток', () => {
+    // Вычитание, а не гладкий множитель: пустое небо стоит на уровнях 0–1, и
+    // только отсечка в ноль оставляет космос чёрным при подъёме полосы
+    expect(skyboxSampleFunctions).toContain('max(raw - uSkyFloor, vec3(0.0)) * uSkyGain')
+  })
+
+  it('порог хайлайтов меряется по ИСХОДНОЙ выборке, а не по поднятой', () => {
+    // Иначе множитель сдвигает смысл порога: под расширение попадает втрое
+    // больше пикселей, звёзды блумят там, где раньше не блумили, а замеренное
+    // значение порога приходится искать заново
+    expect(skyboxSampleFunctions).toContain('max(raw - uSkyHighlightThreshold, vec3(0.0))')
+    expect(skyboxSampleFunctions).not.toContain('lifted - uSkyHighlightThreshold')
+  })
+
+  it('в кадр уходит поднятая выборка, а не исходная', () => {
+    expect(skyboxSampleFunctions).toContain('lifted + excess * (uSkyHighlightBoost - 1.0)')
+  })
+
+  it('подъём включён: множитель больше единицы', () => {
+    // 1 означает выключенный подъём — отгружать так нельзя, иначе арка
+    // не делает ничего
+    expect(background.background.gain).toBeGreaterThan(1)
+  })
+
+  it('пьедестал мал и положителен — это уровень 1 из 255, а не элемент вида', () => {
+    expect(background.background.floor).toBeGreaterThan(0)
+    expect(background.background.floor).toBeLessThan(0.01)
   })
 })
 
@@ -89,7 +118,7 @@ describe('Контракт юниформов общий у обоих потр�
     const bgUniforms = (skyboxBackground.material as RawShaderMaterial).uniforms
     const bhUniforms = blackHoleMaterial.uniforms
 
-    for (const key of ['uSkyHighlightThreshold', 'uSkyHighlightBoost', 'uSkyFlipX']) {
+    for (const key of ['uSkyHighlightThreshold', 'uSkyHighlightBoost', 'uSkyFloor', 'uSkyGain', 'uSkyFlipX']) {
       expect(bgUniforms[key]).toBeDefined()
       expect(bhUniforms[key]).toBeDefined()
       expect(bgUniforms[key].value).toBe(bhUniforms[key].value)
@@ -102,5 +131,7 @@ describe('Контракт юниформов общий у обоих потр�
 
     expect(uniforms.uSkyHighlightThreshold.value).toBe(background.background.highlightThreshold)
     expect(uniforms.uSkyHighlightBoost.value).toBe(background.background.highlightBoost)
+    expect(uniforms.uSkyFloor.value).toBe(background.background.floor)
+    expect(uniforms.uSkyGain.value).toBe(background.background.gain)
   })
 })

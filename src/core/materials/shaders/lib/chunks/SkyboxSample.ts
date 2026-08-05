@@ -4,6 +4,8 @@ import { config } from '@/core/framework/config'
 export const skyboxSampleUniforms = `
   uniform float uSkyHighlightThreshold;
   uniform float uSkyHighlightBoost;
+  uniform float uSkyFloor;
+  uniform float uSkyGain;
   uniform float uSkyFlipX;
 `
 
@@ -23,20 +25,27 @@ export const skyboxSampleUniforms = `
  *
  * Расширение тождественно ниже порога: подтягивается только превышение, иначе
  * посветлело бы всё небо разом вместо ярчайших точек.
+ *
+ * Порог хайлайтов меряется по ИСХОДНОЙ выборке, а не по поднятой: иначе
+ * множитель сдвигает его смысл, под расширение попадает втрое больше пикселей
+ * и замеренное значение приходится искать заново. Яркая звезда от подъёма
+ * становится ярче примерно в полтора раза, а не втрое, — её основной вклад
+ * даёт слагаемое расширения, и оно не тронуто.
  */
 export const skyboxSampleFunctions = `
   vec3 sampleSkyboxHdr(samplerCube tex, vec3 direction, float flipX) {
     vec3 raw = texture(tex, vec3(flipX * direction.x, direction.yz)).rgb;
+    vec3 lifted = max(raw - uSkyFloor, vec3(0.0)) * uSkyGain;
     vec3 excess = max(raw - uSkyHighlightThreshold, vec3(0.0));
 
-    return raw + excess * (uSkyHighlightBoost - 1.0);
+    return lifted + excess * (uSkyHighlightBoost - 1.0);
   }
 `
 
 /**
  * Фабрика uniforms общей выборки фона. Оба потребителя (собственный фоновый
- * проход и линзирование чёрной дыры) берут отсюда весь набор из трёх ручек
- * вместо независимых ручных объявлений — так расхождение порога, силы или
+ * проход и линзирование чёрной дыры) берут отсюда весь набор ручек вместо
+ * независимых ручных объявлений — так расхождение порога, силы, подъёма или
  * флипа между ними становится невозможным по построению, а не по соглашению.
  *
  * Каждый вызов возвращает свежие экземпляры `Uniform` (как и
@@ -52,6 +61,8 @@ export function createSkyboxSampleUniforms(): Record<string, IUniform> {
   return {
     uSkyHighlightThreshold: new Uniform(config('background.highlightThreshold')),
     uSkyHighlightBoost: new Uniform(config('background.highlightBoost')),
+    uSkyFloor: new Uniform(config('background.floor')),
+    uSkyGain: new Uniform(config('background.gain')),
     uSkyFlipX: new Uniform(-1)
   }
 }
