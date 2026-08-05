@@ -10,6 +10,8 @@ import {
   ToneMappingMode
 } from 'postprocessing'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
+import { ExposureEffect } from '@/core/graphic/effects/grading/ExposureEffect'
+import { ColorGradeEffect } from '@/core/graphic/effects/grading/ColorGradeEffect'
 import { DitheringEffect } from '@/core/graphic/effects/dithering/DitheringEffect'
 import { config } from '@/core/framework/config'
 
@@ -35,6 +37,95 @@ export const TONE_MAPPING_OPTIONS = {
   blendFunction: BlendFunction.NORMAL
 } as const
 
+/**
+ * Порядок эффектов в проходах — несущий, поэтому вынесен в константы.
+ *
+ * Константы совпадают с ФАКТИЧЕСКОЙ сборкой пасса, но не задают её:
+ * `EffectPass.setEffects` пересортировывает эффекты по убыванию `attributes`,
+ * и `LensFlareEffect` (CONVOLUTION) уезжает в начало независимо от аргументов.
+ * Проверять порядок можно только на собранном пассе — см. тесты
+ * tests/graphic/GradingContract.spec.ts.
+ *
+ * Экспозиция стоит ПОСЛЕ блума не ради порога: `EffectPass.render` зовёт
+ * `update` каждого эффекта по входному таргету всего пасса, поэтому
+ * `BloomEffect` считает свой luminancePass по кадру ДО пасса при любом порядке.
+ * Причина в другом: текстура блума сгенерирована из неэкспонированного входа,
+ * и экспозиция перед блумом отмасштабировала бы базу, но не наложение — база
+ * и свечение разъехались бы по яркости.
+ *
+ * Дизеринг всегда последний: после него только квантование в канвас.
+ */
+export const HDR_EFFECT_ORDER = ['lensFlare', 'bloom', 'exposure', 'toneMapping'] as const
+export const LDR_EFFECT_ORDER = ['chromaticAberration', 'colorGrade', 'dithering'] as const
+
+/**
+ * Сборка эффектных проходов. Вынесена из `initialize()` намеренно: конструктор
+ * `EffectPass` не требует WebGLRenderer, поэтому тесты порядка и проводки
+ * ручек читают СОБРАННЫЙ пасс, а не константы и не свои копии эффектов.
+ */
+export function createEffectPasses(camera: PerspectiveCamera): readonly [EffectPass, EffectPass] {
+  const bloomEffect: BloomEffect = new BloomEffect({ ...BLOOM_OPTIONS })
+
+  const lensFlareEffect: LensFlareEffect = new LensFlareEffect({
+    camera,
+    intensity: config('lensFlare.intensity'),
+    ghostAmount: config('lensFlare.ghostAmount'),
+    ghostThreshold: config('lensFlare.ghostThreshold'),
+    ghostAttenuation: config('lensFlare.ghostAttenuation'),
+    haloAmount: config('lensFlare.haloAmount'),
+    chromaticAberration: config('lensFlare.chromaticAberration'),
+    starburstAmount: config('lensFlare.starburstAmount'),
+    streakAmount: config('lensFlare.streakAmount'),
+    streakThreshold: config('lensFlare.streakThreshold'),
+    streakScale: config('lensFlare.streakScale'),
+    streakTint: config('lensFlare.streakTint'),
+    // порог — общий с bloom: два разных числа разъехались бы при первой правке
+    thresholdLevel: BLOOM_OPTIONS.luminanceThreshold
+  })
+
+  const exposureEffect: ExposureEffect = new ExposureEffect({
+    exposure: config('grading.exposure'),
+    temperature: config('grading.temperature'),
+    tint: config('grading.tint')
+  })
+
+  const chromaticAberrationEffect: ChromaticAberrationEffect = new ChromaticAberrationEffect({
+    blendFunction: BlendFunction.SCREEN,
+    offset: new Vector2(0.0005, 0.0005),
+    radialModulation: true,
+    modulationOffset: 0.4
+  })
+
+  const toneMappingEffect: ToneMappingEffect = new ToneMappingEffect({ ...TONE_MAPPING_OPTIONS })
+
+  const colorGradeEffect: ColorGradeEffect = new ColorGradeEffect({
+    contrast: config('grading.contrast'),
+    saturation: config('grading.saturation'),
+    shadowTint: config('grading.shadowTint'),
+    shadowLift: config('grading.shadowLift'),
+    highlightTint: config('grading.highlightTint'),
+    highlightGain: config('grading.highlightGain')
+  })
+
+  const hdrEffects = {
+    bloom: bloomEffect,
+    lensFlare: lensFlareEffect,
+    exposure: exposureEffect,
+    toneMapping: toneMappingEffect
+  } as const
+
+  const ldrEffects = {
+    chromaticAberration: chromaticAberrationEffect,
+    colorGrade: colorGradeEffect,
+    dithering: new DitheringEffect()
+  } as const
+
+  return [
+    new EffectPass(camera, ...HDR_EFFECT_ORDER.map((key) => hdrEffects[key])),
+    new EffectPass(camera, ...LDR_EFFECT_ORDER.map((key) => ldrEffects[key]))
+  ] as const
+}
+
 class Postprocessing {
   public composer: EffectComposer | null = null
 
@@ -52,46 +143,11 @@ class Postprocessing {
     })
 
     const renderPass: RenderPass = new RenderPass(this.scene, this.camera)
-
-    const bloomEffect: BloomEffect = new BloomEffect({ ...BLOOM_OPTIONS })
-
-    const lensFlareEffect: LensFlareEffect = new LensFlareEffect({
-      camera: this.camera,
-      intensity: config('lensFlare.intensity'),
-      ghostAmount: config('lensFlare.ghostAmount'),
-      ghostThreshold: config('lensFlare.ghostThreshold'),
-      ghostAttenuation: config('lensFlare.ghostAttenuation'),
-      haloAmount: config('lensFlare.haloAmount'),
-      chromaticAberration: config('lensFlare.chromaticAberration'),
-      starburstAmount: config('lensFlare.starburstAmount'),
-      streakAmount: config('lensFlare.streakAmount'),
-      streakThreshold: config('lensFlare.streakThreshold'),
-      streakScale: config('lensFlare.streakScale'),
-      streakTint: config('lensFlare.streakTint'),
-      // порог — общий с bloom: два разных числа разъехались бы при первой правке
-      thresholdLevel: BLOOM_OPTIONS.luminanceThreshold
-    })
-
-    const chromaticAberrationEffect: ChromaticAberrationEffect = new ChromaticAberrationEffect({
-      blendFunction: BlendFunction.SCREEN,
-      offset: new Vector2(0.0005, 0.0005),
-      radialModulation: true,
-      modulationOffset: 0.4
-    })
-
-    const toneMappingEffect: ToneMappingEffect = new ToneMappingEffect({ ...TONE_MAPPING_OPTIONS })
-
-    // Порядок аргументов — несущий: bloom и lens flare должны считаться ДО
-    // тонмаппинга (по HDR-значениям, ещё не сжатым в LDR); менять порядок
-    // нельзя, иначе AgX сожмёт диапазон раньше, чем эффекты увидят пересветы.
-    const effectPass: EffectPass = new EffectPass(this.camera, bloomEffect, lensFlareEffect, toneMappingEffect)
-
-    // Дизеринг строго последним: после него только квантование в канвас
-    const effectPass2: EffectPass = new EffectPass(this.camera, chromaticAberrationEffect, new DitheringEffect())
+    const [hdrPass, ldrPass] = createEffectPasses(this.camera)
 
     this.composer.addPass(renderPass)
-    this.composer.addPass(effectPass)
-    this.composer.addPass(effectPass2)
+    this.composer.addPass(hdrPass)
+    this.composer.addPass(ldrPass)
   }
 
   public render(delta?: number): void {
