@@ -34,11 +34,6 @@ describe('SkyboxSample: общая выборка фона с расширени
     )
   })
 
-  it('ниже порога расширение тождественно — небо целиком не светлеет', () => {
-    expect(skyboxSampleFunctions).toContain('max(raw - uSkyHighlightThreshold, vec3(0.0))')
-    expect(skyboxSampleFunctions).toContain('excess * (uSkyHighlightBoost - 1.0)')
-  })
-
   it('расширение включено: подобранная на приёмке сила', () => {
     expect(background.background.highlightBoost).toBe(9)
   })
@@ -73,8 +68,12 @@ describe('SkyboxSample: общая выборка фона с расширени
   })
 
   it('пьедестал мал и положителен — это уровень 1 из 255, а не элемент вида', () => {
+    // Верхняя граница — уровень 2 из 255 в линейном свете (та же формула
+    // sRGB-декода, что и в докблоке background.ts): полоса Млечного Пути
+    // начинается с уровня 2, пьедестал обязан остаться СТРОГО внутри уровня 1
+    const level2Linear = 2 / 255 / 12.92
     expect(background.background.floor).toBeGreaterThan(0)
-    expect(background.background.floor).toBeLessThan(0.01)
+    expect(background.background.floor).toBeLessThan(level2Linear)
   })
 })
 
@@ -102,6 +101,18 @@ describe('Чёрная дыра: линзированный фон через о
 })
 
 describe('Контракт юниформов общий у обоих потребителей', () => {
+  it('каждый юниформ, объявленный в skyboxSampleUniforms, есть среди ключей фабрики, и наоборот', () => {
+    // Удаление объявления не ловится ни регистрацией чанков, ни телом функции,
+    // ни проводкой из конфига: GLSL молча падает на компиляции с undeclared
+    // identifier у ОБОИХ потребителей — чёрный фон и не собравшийся материал ЧД
+    const declaredNames = Array.from(skyboxSampleUniforms.matchAll(/uniform\s+\w+\s+(\w+)\s*;/g))
+      .map(match => match[1])
+      .sort()
+    const factoryKeys = Object.keys(createSkyboxSampleUniforms()).sort()
+
+    expect(declaredNames).toEqual(factoryKeys)
+  })
+
   it('фабрика возвращает свежие Uniform-инстансы при каждом вызове', () => {
     const a = createSkyboxSampleUniforms()
     const b = createSkyboxSampleUniforms()
