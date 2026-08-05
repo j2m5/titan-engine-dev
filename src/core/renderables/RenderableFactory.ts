@@ -17,6 +17,7 @@ import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSyst
 import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { STAR_IMPOSTOR_PIXELS, distanceForApparentSize } from '@/core/helpers/apparentSize'
 import { requireRenderingData } from '@/core/helpers/renderingData'
 import { Nebula } from '@/core/renderables/Nebula'
 import { nebulaParamsFromData } from '@/core/renderables/Nebula/NebulaRenderingData'
@@ -89,13 +90,6 @@ class RenderableFactory {
     const starInnerLayer = new StarInnerLayer(actor)
     const starOuterLayer = new StarOuterLayer(actor)
 
-    const distanceLod = (pixels: number): number => {
-      const radius: number = actor.physicalObject!.getAttribute('radius')!
-      const fov: number = degToRad(config('camera.fov'))
-
-      return toThreeJSUnits((2 * radius * this.renderer.domElement.height) / (Math.tan(fov) * pixels))
-    }
-
     lod.add(starInnerLayer)
     lodl1.add(starOuterLayer)
 
@@ -104,8 +98,17 @@ class RenderableFactory {
 
     lod.name = actor.getAttribute('name', '') + 'LOD'
 
+    // Переключение ровно там, где диск звезды занимает столько же пикселей,
+    // сколько рисует билборд: иначе размер скачком меняется в момент свитча
+    const switchDistance: number = distanceForApparentSize(
+      toThreeJSUnits(2 * actor.physicalObject!.getAttribute('radius')!),
+      STAR_IMPOSTOR_PIXELS,
+      config('camera.fov'),
+      this.renderer.domElement.height
+    )
+
     lod.addLevel(lodl1)
-    lod.addLevel(lodl2, distanceLod(3))
+    lod.addLevel(lodl2, switchDistance)
 
     node.add(lod)
 

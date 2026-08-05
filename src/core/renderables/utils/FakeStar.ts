@@ -9,7 +9,7 @@ import {
 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
-import { degToRad } from 'three/src/math/MathUtils'
+import { STAR_IMPOSTOR_PIXELS, frameHeightAt } from '@/core/helpers/apparentSize'
 import { colorTemperatureToRGB, rgbToHex } from '@/core/materials/shaders/lib/helpers'
 import { UpdateContext } from '@/core/UpdateContext'
 
@@ -62,14 +62,12 @@ class FakeStar extends Mesh {
     this.lookAt(ctx.camera.position)
 
     const distance = this.position.distanceTo(ctx.camera.position)
-    const fov = degToRad(ctx.camera.fov)
-    const height = 2 * Math.tan(fov / 2) * distance
-    const pixels = height / this.renderer.domElement.height
+    const viewportHeight = this.renderer.domElement.height
+    // Мировой размер, дающий STAR_IMPOSTOR_PIXELS пикселей на этом расстоянии:
+    // доля кадра по высоте, пропорциональная доле пикселей по высоте
+    const worldSize = (STAR_IMPOSTOR_PIXELS / viewportHeight) * frameHeightAt(distance, ctx.camera.fov)
 
-    const countPixels = 12
-    const size = countPixels * pixels
-
-    this.scale.setScalar(size * this.scaleFactor)
+    this.scale.setScalar(worldSize * this.scaleFactor)
   }
 }
 
