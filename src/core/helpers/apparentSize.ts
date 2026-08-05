@@ -30,9 +30,8 @@ export function distanceForApparentSize(
   fovDegrees: number,
   viewportHeight: number
 ): number {
-  // Высота кадра на расстоянии 1 — то же frameHeightAt, что и выше; раньше
-  // тут была независимая копия 2*tan(fov/2), и мутация в одной из двух копий
-  // расходилась с другой незамеченной
+  // Обратная apparentSizeAtDistance, и высота кадра обязана считаться тем же
+  // frameHeightAt: своя копия формулы — расхождение при первой же правке
   return (worldSize * viewportHeight) / (pixels * frameHeightAt(1, fovDegrees))
 }
 
