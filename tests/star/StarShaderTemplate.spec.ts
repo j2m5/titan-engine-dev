@@ -28,13 +28,16 @@ describe('StarShaderTemplate: HDR-поверхность с чёрнотельн
     expect(vert).toContain('vCenterW')
   })
 
-  it('fbm грануляции сохранён (6 октав, persistence 0.9, домен 0.05)', () => {
-    expect(frag).toContain('fbm(')
+  it('грануляция через общий чанк: include на месте, домен 0.05 в шаблоне', () => {
+    // Октавы/persistence/ремап пинует tests/star/StarSurfaceChunk.spec.ts —
+    // формулы теперь живут в чанке, общем с импостором
+    expect(frag).toContain('#include <starSurface>')
+    expect(frag).toContain('starGranulationT(')
     expect(frag).toContain('vPosition * 0.05')
-    expect(frag).toContain('6, 0.9')
   })
 
-  it('ремап грануляции центрирован на 0 (знаковый fbm), не на 0.5', () => {
-    expect(frag).toContain('0.5 + fbm(noisePos, 6, 0.9) * 4.0')
+  it('собственного дубля формул нет — fbm и ремап живут только в чанке', () => {
+    expect(frag).not.toContain('float fbm(')
+    expect(frag).not.toContain('0.5 + fbm(')
   })
 })

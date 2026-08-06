@@ -47,48 +47,24 @@ export const StarShaderTemplate: ShaderProps = {
     varying vec3 vCenterW;
 
     #include <noiseFunctions>
-
-    float fbm(vec4 pos, int octaves, float persistence) {
-      float total = 0.0;
-      float frequency = 1.0;
-      float amplitude = 1.0;
-      float maxValue = 0.0;
-
-      for(int i = 0; i < octaves; i++) {
-        total += snoise(pos * frequency) * amplitude;
-
-        maxValue += amplitude;
-
-        amplitude *= persistence;
-        frequency *= 2.0;
-      }
-
-      return total / maxValue;
-    }
+    #include <starSurface>
 
     void main() {
       ${ShaderChunk['logdepthbuf_fragment']}
 
-      // Грануляция: t в [0..1] — «температура ячейки» (0 холодная, 1 горячая)
+      // Домен шума: |vPosition| = R, множитель 0.05 — масштаб ячеек;
+      // тот же домен воспроизводит импостор (uRadius * 0.05)
       vec4 noisePos = vec4(vPosition * 0.05, time);
-      // fbm знаковый (среднее 0, σ~0.1): центрируем на 0 и усиливаем ×4 —
-      // t покрывает [0..1], грануляция видима; 4.0 — ручка контраста ячеек
-      float t = clamp(0.5 + fbm(noisePos, 6, 0.9) * 4.0, 0.0, 1.0);
+      float t = starGranulationT(noisePos);
 
-      // Чёрнотельная палитра: cool (T-400K) -> spectralColor (T) -> hot (T+400K)
-      vec3 granule = t < 0.5
-        ? mix(uColorCool, spectralColor, t * 2.0)
-        : mix(spectralColor, uColorHot, t * 2.0 - 1.0);
+      vec3 granule = starGranuleColor(t, uColorCool, spectralColor, uColorHot);
+      float energy = starEnergy(t, uCoreIntensity);
 
-      // Горячие ячейки ярче холодных; uCoreIntensity — базовая HDR-яркость диска
-      float energy = mix(0.55, 3.0, t) * uCoreIntensity;
-
-      // Лимбовое потемнение: mu — косинус (нормаль сферы, луч на камеру);
-      // коэффициент в синем выше -> кромка диска теплеет, как у Солнца
+      // Лимбовое потемнение: mu — косинус (нормаль сферы, луч на камеру)
       vec3 normalW = normalize(vPositionW - vCenterW);
       vec3 viewW = normalize(cameraPosition - vPositionW);
       float mu = clamp(dot(normalW, viewW), 0.0, 1.0);
-      vec3 limb = clamp(vec3(1.0) - uLimbCoeff * (1.0 - mu), 0.0, 1.0);
+      vec3 limb = starLimb(mu, uLimbCoeff);
 
       // Потолок HDR — тот же, что у атмосферы (half-float буфер, AgX-плечо);
       // при текущих дефолтах пик ~12 — потолок срабатывает только при uCoreIntensity ≈ 21+ (защитный предел)
