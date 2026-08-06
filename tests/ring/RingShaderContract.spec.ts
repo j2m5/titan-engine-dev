@@ -34,6 +34,24 @@ describe('RingShaderTemplate: рассеяние', () => {
     // Зеркало и GLSL обязаны считать одно и то же
     expect(RingShaderTemplate.fragmentShader).toContain(`#define RING_OPPOSITION_G ${RING_OPPOSITION_G}`)
   })
+
+  it('знак cosTheta не перевёрнут', () => {
+    // dot(lightDir, viewDirLocal) без минуса поменяет освещённую сторону местами
+    expect(RingShaderTemplate.fragmentShader).toContain('float cosTheta = dot(-lightDir, viewDirLocal)')
+  })
+
+  it('минус у показателя лепестка вперёд не потерян', () => {
+    // Без минуса пик уйдёт со стороны звезды на просвет, и наоборот
+    expect(RingShaderTemplate.fragmentShader).toContain('float forward = ringPhase(cosTheta, -uRingForwardScattering)')
+    expect(RingShaderTemplate.fragmentShader).toContain('float back = ringPhase(cosTheta, RING_OPPOSITION_G)')
+  })
+
+  it('transmit и reflectance не переставлены местами в композиции', () => {
+    // Перестановка отдаёт лепесток вперёд отражённому свету, а обратный — прошедшему
+    expect(RingShaderTemplate.fragmentShader).toContain(
+      'vec3 finalColor = color.rgb * (transmit * forward + reflectance * uRingOppositionSurge * back)'
+    )
+  })
 })
 
 describe('Конфиг кольца', () => {

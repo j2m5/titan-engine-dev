@@ -120,8 +120,7 @@ export const RingShaderTemplate: ShaderProps = {
       // Одна формула на обе стороны: ветвление по стороне давало скачок
       // яркости при переходе камеры через плоскость кольца
       vec3 lightDir = normalize(vLightDirectionL);
-      vec3 cameraDir = normalize(vLocalCameraPosition - vPosition);
-      float cosTheta = dot(-lightDir, cameraDir);
+      float cosTheta = dot(-lightDir, viewDirLocal);
 
       // Прошедший свет гаснет с оптической толщей, отражённый насыщается.
       // Вместе с покрытием (альфа-блендинг) это даёт максимум на средней
