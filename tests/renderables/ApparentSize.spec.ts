@@ -11,6 +11,7 @@ import { Star } from '@/core/renderables/Star'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { Actor } from '@/core/models/Actor'
 import { UpdateContext } from '@/core/UpdateContext'
+import { config } from '@/core/framework/config'
 
 describe('apparentSize: видимый размер и расстояние', () => {
   it('перевод туда и обратно тождественен', () => {
@@ -80,7 +81,7 @@ function makeJunction(renderer: WebGLRenderer): Junction {
   const camera = new PerspectiveCamera(FOV)
 
   lod.addLevel(disk)
-  lod.addLevel(star, lod.switchDistance(FOV))
+  lod.addLevel(star, lod.switchDistance(FOV), config('star.lodHysteresis'))
 
   return { lod, disk, star, camera, ctx: { camera, delta: 0, epoch: 0, elapsed: 0 } }
 }
@@ -165,5 +166,19 @@ describe('стык LOD звезды', () => {
     star.updateObject(ctx)
 
     expect(apparentSizeAtDistance(star.scale.x, switchDistance, FOV, 1080)).toBeCloseTo(STAR_IMPOSTOR_PIXELS, 6)
+  })
+
+  it('гистерезис доезжает до уровня билборда и переживает пересчёт дистанции', () => {
+    // Прямое переключение (диск → билборд) происходит на нетронутой дистанции
+    // стыка — гистерезис по контракту three ужимает порог только при уже
+    // видимом билборде. StarLod.updateObject пишет только levels[1].distance
+    // и хранимый addLevel'ом hysteresis затирать не должен
+    const renderer: WebGLRenderer = stubRenderer(1080)
+    const { lod, ctx } = makeJunction(renderer)
+
+    lod.updateObject(ctx)
+
+    expect(lod.levels[1].hysteresis).toBe(config('star.lodHysteresis'))
+    expect(config('star.lodHysteresis')).toBeGreaterThan(0)
   })
 })

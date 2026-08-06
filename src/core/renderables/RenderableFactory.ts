@@ -105,7 +105,9 @@ class RenderableFactory {
     // Стартовое значение: дальше StarLod пересчитывает дистанцию каждый кадр,
     // потому что билборд меряет свой размер живой высотой вьюпорта
     lod.addLevel(lodl1)
-    lod.addLevel(lodl2, lod.switchDistance(config('camera.fov')))
+    // Гистерезис против мигания на границе: обратное переключение на
+    // d·(1−h), диск возвращается на ~12.6px вместо 12 (см. config/star.ts)
+    lod.addLevel(lodl2, lod.switchDistance(config('camera.fov')), config('star.lodHysteresis'))
 
     node.add(lod)
 
