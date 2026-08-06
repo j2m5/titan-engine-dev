@@ -77,6 +77,14 @@ export function hexToRGB(hex: string): Colorable {
   }
 }
 
+/**
+ * Дефолт температуры звезды без атрибута в данных. Общий для диска
+ * (StarShader) и билборда (FakeStar): разные дефолты давали цветовой шов
+ * на стыке LOD — красный диск (3000K) против солнечного билборда (5700K).
+ * StarInnerLayer/StarOuterLayer пока со своими дефолтами — бэклог.
+ */
+export const DEFAULT_STAR_TEMPERATURE_K: number = 5700
+
 export interface StarPalette {
   cool: Colorable
   base: Colorable

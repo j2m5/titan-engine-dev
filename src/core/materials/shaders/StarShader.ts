@@ -2,7 +2,7 @@ import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { Uniform, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { StarShaderTemplate as Shader } from '@/core/materials/shaders/lib/StarShaderTemplate'
-import { buildStarPalette, StarPalette } from '@/core/materials/shaders/lib/helpers'
+import { buildStarPalette, DEFAULT_STAR_TEMPERATURE_K, StarPalette } from '@/core/materials/shaders/lib/helpers'
 import { Colorable } from '@/core/models/types'
 
 interface StarUniforms {
@@ -21,7 +21,8 @@ class StarShader extends AbstractShader<keyof StarUniforms> {
     super(Shader)
     this.model = model
 
-    const temperature: number = this.model.physicalObject?.getAttribute('temperature', 3000) ?? 3000
+    const temperature: number =
+      this.model.physicalObject?.getAttribute('temperature', DEFAULT_STAR_TEMPERATURE_K) ?? DEFAULT_STAR_TEMPERATURE_K
     const palette: StarPalette = buildStarPalette(temperature)
 
     this.uniforms = {
