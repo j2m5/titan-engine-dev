@@ -68,6 +68,7 @@ describe('FakeStar: контракт материала', () => {
 
     expect(star.material.fragmentShader).toContain(starSurface)
     expect(star.material.fragmentShader).not.toContain('sampler2D')
+    expect(star.material.fragmentShader.match(/float fbm\(/g)).toHaveLength(1)
   })
 
   it('палитра-триада — та же buildStarPalette, что у диска', () => {

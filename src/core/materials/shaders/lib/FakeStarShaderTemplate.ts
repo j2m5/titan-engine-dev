@@ -21,6 +21,11 @@ import { STAR_CORE_INTENSITY, STAR_LIMB_COEFF } from '@/core/materials/shaders/l
  * глубиной (three.renderer.logarithmicDepthBuffer), без них depthTest
  * билборда разъезжается с глубиной остальной сцены (прецедент —
  * BlackHoleImpostorShaderTemplate).
+ *
+ * tonemapping_fragment/colorspace_fragment отсутствуют НАМЕРЕННО: рендер
+ * идёт в линейный таргет композера, и тонмапом/кодированием владеет
+ * пост-пайплайн (AgX-эффект) — прецедент BlackHoleImpostorShaderTemplate.
+ * У диска (StarShaderTemplate) эти чанки — no-op при NoToneMapping.
  */
 export const FakeStarShaderTemplate: ShaderProps = {
   uniforms: {
