@@ -4,6 +4,7 @@ import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { StarMaterial } from '@/core/materials/StarMaterial'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { UpdateContext } from '@/core/UpdateContext'
+import { STAR_GRANULATION_TIME_SCALE } from '@/core/materials/shaders/lib/helpers'
 
 class Star extends Mesh {
   public model: Actor
@@ -30,9 +31,9 @@ class Star extends Mesh {
   }
 
   public updateObject(ctx: UpdateContext): void {
-    // Медленная эволюция грануляции; юниформ раньше не обновлялся вовсе —
-    // поверхность была заморожена (см. спеку этапа 2)
-    this.material.uniforms.time.value = ctx.elapsed * 0.01
+    // Медленная эволюция грануляции; множитель общий с импостором
+    // (FakeStar.updateObject) — скорость «жизни» поверхности одна на оба LOD
+    this.material.uniforms.time.value = ctx.elapsed * STAR_GRANULATION_TIME_SCALE
   }
 }
 

@@ -1,13 +1,14 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { Color, ShaderChunk, Uniform, Vector3 } from 'three'
+import { STAR_CORE_INTENSITY, STAR_LIMB_COEFF } from '@/core/materials/shaders/lib/helpers'
 
 export const StarShaderTemplate: ShaderProps = {
   uniforms: {
     spectralColor: new Uniform(new Color()),
     uColorCool: new Uniform(new Color()),
     uColorHot: new Uniform(new Color()),
-    uCoreIntensity: new Uniform(4.0),
-    uLimbCoeff: new Uniform(new Vector3(0.5, 0.65, 0.8)),
+    uCoreIntensity: new Uniform(STAR_CORE_INTENSITY),
+    uLimbCoeff: new Uniform(new Vector3(...STAR_LIMB_COEFF)),
     time: new Uniform(0)
   },
   vertexShader: `

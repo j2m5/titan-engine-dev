@@ -85,6 +85,16 @@ export function hexToRGB(hex: string): Colorable {
  */
 export const DEFAULT_STAR_TEMPERATURE_K: number = 5700
 
+/**
+ * Константы поверхности звезды, общие для диска (StarShader/StarShaderTemplate)
+ * и билборда-импостора (FakeStar). Пер-LOD копии этих чисел — это
+ * рассинхронизация яркости, лимба и скорости эволюции грануляции, то есть
+ * видимый шов на переключении LOD.
+ */
+export const STAR_CORE_INTENSITY: number = 4.0
+export const STAR_LIMB_COEFF: readonly [number, number, number] = [0.5, 0.65, 0.8]
+export const STAR_GRANULATION_TIME_SCALE: number = 0.01
+
 export interface StarPalette {
   cool: Colorable
   base: Colorable
