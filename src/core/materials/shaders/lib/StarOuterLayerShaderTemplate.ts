@@ -4,7 +4,7 @@ import { Uniform, Color } from 'three'
 export const StarOuterLayerShaderTemplate: ShaderProps = {
   uniforms: {
     uTime: new Uniform(0),
-    uWidth: new Uniform(0.3),
+    uWidthFraction: new Uniform(0.00086),
     uAmp: new Uniform(0.5),
     uOpacity: new Uniform(0.2),
     uColorCool: new Uniform(new Color(1.0, 0.45, 0.25)),
@@ -28,7 +28,7 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
     varying float vOpacity;
     varying vec3  vColor;
 
-    uniform float uWidth;
+    uniform float uWidthFraction;
     uniform float uAmp;
     uniform float uTime;
     uniform float uNoiseFrequency;
@@ -91,26 +91,21 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
       vec3 viewW       = normalize(pW - cameraPosition);
       vec3 ribbonSideW = normalize(cross(viewW, tangentW));
 
-      // Единица ПО ПОСТРОЕНИЮ: основания — нормализованные направления в
-      // объектном пространстве. Отсюда оба известных квирка ниже
-      float R = length(aFootA);
+      // Мировой радиус звезды: aFootA — единичное направление, w = 0 отбрасывает
+      // перенос, а масштаб меша равен радиусу (StarOuterLayer масштабирует себя
+      // им же). Отдельный юниформ не нужен; масштаб обязан оставаться
+      // равномерным, иначе длина зависела бы от направления основания
+      float starRadiusW = length((modelMatrix * vec4(aFootA, 0.0)).xyz);
 
-      // КВИРК 1: полутолщина выходит в абсолютных мировых единицах (~0.3..0.6),
-      // а не долей радиуса — у Солнца это около 0.15% диска, у карлика та же
-      // лента относительно толще. Оставлено как есть: текущий вид принят с этим
-      float width = uWidth * aRibbon.y * (1.0 + animPhase) * R;
+      // Полутолщина — ДОЛЯ радиуса, а не абсолютные мировые единицы: иначе у
+      // мелкой звезды нити втрое толще относительно диска, чем у крупной.
+      // 0.00086 подобрано так, что у Солнца толщина осталась прежней
+      float width = uWidthFraction * aRibbon.y * (1.0 + animPhase) * starRadiusW;
 
       pW += ribbonSideW * width;
 
-      vec3 centerW = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-
-      float lenW = length(pW - centerW);
-      // КВИРК 2: гашение у поверхности неактивно — lenW мировая (у Солнца ~349
-      // единиц), R объектная единица, так что smoothstep(1, 1.03, lenW) == 1.0
-      // всегда. Починка меняет картинку, поэтому отложена
-      vOpacity  = smoothstep(R, R * 1.03, lenW);
-      vOpacity *= (1.0 - animPhase);
-      vOpacity *= uOpacity;
+      // Гашение по ходу вспышки: чем выше поднялась лента, тем она прозрачнее
+      vOpacity = (1.0 - animPhase) * uOpacity;
 
       // Палитра ленты — чёрнотельная от температуры звезды (спред задаёт вызывающий
       // код, см. StarOuterLayer); ribbon premultiplied альфой ≤ uOpacity, поэтому
