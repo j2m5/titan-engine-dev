@@ -1,32 +1,34 @@
 import {
-  AdditiveBlending,
   BufferGeometry,
-  Color,
   Mesh,
+  NormalBlending,
   PlaneGeometry,
   ShaderMaterial,
-  Texture,
   UniformsUtils,
   Vector3,
   WebGLRenderer
 } from 'three'
 import { Actor } from '@/core/models/Actor'
-import { resourceStorage } from '@/core/services/ResourceStorage'
 import { STAR_IMPOSTOR_PIXELS, frameHeightAt } from '@/core/helpers/apparentSize'
-import { buildStarPalette, DEFAULT_STAR_TEMPERATURE_K, StarPalette } from '@/core/materials/shaders/lib/helpers'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
+import {
+  buildStarPalette,
+  DEFAULT_STAR_TEMPERATURE_K,
+  STAR_GRANULATION_TIME_SCALE,
+  StarPalette
+} from '@/core/materials/shaders/lib/helpers'
 import { FakeStarShaderTemplate } from '@/core/materials/shaders/lib/FakeStarShaderTemplate'
-import { config } from '@/core/framework/config'
 import { UpdateContext } from '@/core/UpdateContext'
 
 /**
- * Билборд-импостор звезды: LOD-уровень 2 звёздного меша. Цвет — палитра
- * диска (buildStarPalette) × config('star.impostorIntensity'): диск и билборд
- * считают цвет от одной температуры одной функцией, и стык LOD сведён по
- * цвету по построению. Форма — альфа-канал round.png
- * (см. FakeStarShaderTemplate).
+ * Билборд-импостор звезды: LOD-уровень 2 звёздного меша. Поверхность —
+ * формулы диска (общий чанк starSurface + общие константы helpers), палитра —
+ * та же buildStarPalette: на дистанции переключения уровни совпадают по
+ * яркости, цвету, bloom и бликам по построению, ручек подстройки нет
+ * намеренно.
  *
  * Не использовать ни для чего, кроме LOD-утилиты сверх-ярких источников
- * света: размер меряется под STAR_IMPOSTOR_PIXELS, яркость — под bloom.
+ * света: размер меряется под STAR_IMPOSTOR_PIXELS.
  */
 class FakeStar extends Mesh {
   public model: Actor
@@ -47,25 +49,16 @@ class FakeStar extends Mesh {
   }
 
   __setup(): void {
-    // Ресурс движковый и обязан быть в сторадже; прежний getTexture(...)!
-    // молча отдавал undefined и билборд ломался без следа в консоли
-    const map: Texture | undefined = resourceStorage.getTexture('round.png')
-    if (map === undefined) {
-      console.warn(
-        '[FakeStar] Текстура формы "round.png" не найдена — билборд дальней звезды будет рисоваться квадратом'
-      )
-    }
-
     const temperature: number =
       this.model.physicalObject?.getAttribute('temperature', DEFAULT_STAR_TEMPERATURE_K) ?? DEFAULT_STAR_TEMPERATURE_K
     const palette: StarPalette = buildStarPalette(temperature)
+    const radius: number = toThreeJSUnits(this.model.physicalObject?.getAttribute('radius') ?? 0)
 
     this.geometry = new PlaneGeometry(1, 1)
 
-    // transparent + depthWrite: false — иначе квад пишет глубину всей
-    // площадью, включая прозрачные углы, и объекты позади билборда
-    // получают квадратную дырку. depthTest остаётся: билборд перекрывается
-    // телами на переднем плане честно
+    // NormalBlending: билборд перекрывает фон, как непрозрачный диск L1 —
+    // аддитив складывался бы с туманностью и вспыхивал на стыке.
+    // depthWrite: false — квад не режет объекты позади своей площадью
     this.material = new ShaderMaterial({
       vertexShader: FakeStarShaderTemplate.vertexShader,
       fragmentShader: FakeStarShaderTemplate.fragmentShader,
@@ -73,20 +66,22 @@ class FakeStar extends Mesh {
       transparent: true,
       depthTest: true,
       depthWrite: false,
-      blending: AdditiveBlending
+      blending: NormalBlending
     })
-    this.material.uniforms.map.value = map ?? null
-    // Палитра linear-sRGB, setRGB без конверсии; multiplyScalar даёт HDR —
-    // порог bloom перекрыт, дальняя звезда светится
-    ;(this.material.uniforms.uColor.value as Color)
-      .setRGB(palette.base.r, palette.base.g, palette.base.b)
-      .multiplyScalar(config('star.impostorIntensity'))
+    this.material.uniforms.uColorCool.value.setRGB(palette.cool.r, palette.cool.g, palette.cool.b)
+    this.material.uniforms.uColorBase.value.setRGB(palette.base.r, palette.base.g, palette.base.b)
+    this.material.uniforms.uColorHot.value.setRGB(palette.hot.r, palette.hot.g, palette.hot.b)
+    this.material.uniforms.uRadius.value = radius
   }
 
   public updateObject(ctx: UpdateContext): void {
     const cameraPosition: Vector3 = ctx.camera.getWorldPosition(this.cameraPosition)
 
     this.lookAt(cameraPosition)
+
+    // Живая грануляция — общий множитель с диском (Star.updateObject):
+    // скорость эволюции поверхности одна на оба LOD
+    this.material.uniforms.uTime.value = ctx.elapsed * STAR_GRANULATION_TIME_SCALE
 
     // Позиция мировая, а не локальная: билборд висит в нуле родительского узла,
     // и по локальной мерилось бы расстояние до начала сцены. Ту же величину

@@ -1,19 +1,14 @@
 /**
- * Звезда: билборд-импостор (LOD-уровень 2) и переключение LOD.
+ * Звезда: переключение LOD диск ↔ билборд-импостор.
  *
- * Видимый размер импостора в пикселях (STAR_IMPOSTOR_PIXELS = 12) живёт в
- * core/helpers/apparentSize.ts и в конфиг не выносится намеренно: по нему
- * сведён стык LOD, вызывающей стороне нечем его подменить.
+ * Яркость импостора ручки не имеет НАМЕРЕННО: билборд считает поверхность
+ * формулами диска (общий чанк starSurface, общие константы в helpers), и
+ * любой множитель поверх воссоздал бы шов на переключении. Видимый размер
+ * импостора (STAR_IMPOSTOR_PIXELS = 12) живёт в core/helpers/apparentSize.ts
+ * и в конфиг не выносится по той же причине: по нему сведён стык LOD.
  */
 export interface StarConfig {
   star: {
-    /**
-     * HDR-множитель яркости билборда — прежний emissiveIntensity
-     * MeshStandardMaterial, перенесён как есть. Цвет билборда =
-     * buildStarPalette(T).base × этот множитель; порог bloom (1.0)
-     * перекрывается с запасом — дальняя звезда продолжает светиться.
-     */
-    impostorIntensity: number
     /**
      * Гистерезис LOD — доля дистанции переключения (LOD.addLevel, third arg).
      * Диск → билборд на дистанции d, обратно — на d·(1−h): при возврате диск
@@ -27,7 +22,6 @@ export interface StarConfig {
 
 export const star: StarConfig = {
   star: {
-    impostorIntensity: 40,
     lodHysteresis: 0.05
   }
 }

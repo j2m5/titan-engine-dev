@@ -1,4 +1,4 @@
-import { Object3D, PerspectiveCamera, SphereGeometry, Texture } from 'three'
+import { Object3D, PerspectiveCamera, SphereGeometry } from 'three'
 import type { WebGLRenderer } from 'three'
 import {
   STAR_IMPOSTOR_PIXELS,
@@ -8,7 +8,6 @@ import {
 import { FakeStar } from '@/core/renderables/utils/FakeStar'
 import { StarLod } from '@/core/renderables/utils/StarLod'
 import { Star } from '@/core/renderables/Star'
-import { resourceStorage } from '@/core/services/ResourceStorage'
 import { Actor } from '@/core/models/Actor'
 import { UpdateContext } from '@/core/UpdateContext'
 import { config } from '@/core/framework/config'
@@ -92,18 +91,6 @@ function diskWorldSize(disk: Star): number {
 }
 
 describe('стык LOD звезды', () => {
-  // FakeStar.__setup достаёт map по имени напрямую (getTexture, не
-  // getTextureOrMake) — без регистрации словит console.warn на undefined
-  beforeEach(() => {
-    const map = new Texture()
-    map.name = 'round.png'
-    resourceStorage.addTexture(map)
-  })
-
-  afterEach(() => {
-    resourceStorage.deleteTexture('round.png')
-  })
-
   it('на расстоянии переключения диск звезды и билборд одного размера', () => {
     // Тест держит СОГЛАСОВАННОСТЬ двух сторон, а не формулу: обе считают
     // видимый размер одной парой взаимно обратных функций, так что подмена

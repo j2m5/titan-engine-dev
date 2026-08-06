@@ -1,12 +1,20 @@
-import { AdditiveBlending, Color, ShaderChunk, Texture } from 'three'
+import { Color, NormalBlending, PerspectiveCamera, ShaderChunk, Vector3 } from 'three'
 import type { WebGLRenderer } from 'three'
 import { FakeStar } from '@/core/renderables/utils/FakeStar'
-import { buildStarPalette, DEFAULT_STAR_TEMPERATURE_K } from '@/core/materials/shaders/lib/helpers'
-import { config } from '@/core/framework/config'
-import { resourceStorage } from '@/core/services/ResourceStorage'
+import {
+  buildStarPalette,
+  DEFAULT_STAR_TEMPERATURE_K,
+  STAR_CORE_INTENSITY,
+  STAR_GRANULATION_TIME_SCALE,
+  STAR_LIMB_COEFF
+} from '@/core/materials/shaders/lib/helpers'
+import { starSurface } from '@/core/materials/shaders/lib/chunks/StarSurface'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { Actor } from '@/core/models/Actor'
+import { UpdateContext } from '@/core/UpdateContext'
 
 const TEMPERATURE_K = 9500
+const RADIUS_KM = 695700
 
 // getAttribute — единственное, что FakeStar читает у Actor; тот же приём,
 // что в tests/renderables/ApparentSize.spec.ts
@@ -14,8 +22,11 @@ function stubActor(temperature?: number): Actor {
   return {
     getAttribute: (key: string, def?: unknown): unknown => def,
     physicalObject: {
-      getAttribute: (key: string, def?: unknown): unknown =>
-        key === 'temperature' && temperature !== undefined ? temperature : def
+      getAttribute: (key: string, def?: unknown): unknown => {
+        if (key === 'radius') return RADIUS_KM
+        if (key === 'temperature' && temperature !== undefined) return temperature
+        return def
+      }
     }
   } as unknown as Actor
 }
@@ -25,34 +36,23 @@ function stubRenderer(): WebGLRenderer {
   return { domElement: { height: 1080 } } as unknown as WebGLRenderer
 }
 
+function colorFrom(c: { r: number; g: number; b: number }): Color {
+  return new Color().setRGB(c.r, c.g, c.b)
+}
+
 describe('FakeStar: контракт материала', () => {
-  let map: Texture
-
-  beforeEach(() => {
-    map = new Texture()
-    map.name = 'round.png'
-    resourceStorage.addTexture(map)
-  })
-
-  afterEach(() => {
-    resourceStorage.deleteTexture('round.png')
-  })
-
-  it('билборд не пишет глубину и уходит в transparent-проход', () => {
-    // Прежний MeshStandardMaterial писал глубину всем квадом, включая
-    // прозрачные углы: объекты позади билборда получали квадратную дырку
+  it('перекрывает фон, как диск: NormalBlending, прозрачность, без записи глубины', () => {
+    // Аддитив складывался бы с туманностью/скайбоксом и вспыхивал на стыке;
+    // depthWrite: true резал бы объекты позади всей площадью квада
     const star = new FakeStar(stubActor(TEMPERATURE_K), stubRenderer())
 
+    expect(star.material.blending).toBe(NormalBlending)
     expect(star.material.transparent).toBe(true)
     expect(star.material.depthWrite).toBe(false)
     expect(star.material.depthTest).toBe(true)
-    expect(star.material.blending).toBe(AdditiveBlending)
   })
 
   it('шейдер несёт logdepthbuf-чанки: рендерер живёт с логарифмической глубиной', () => {
-    // three.renderer.logarithmicDepthBuffer = true (src/config/three.ts):
-    // без чанков depthTest билборда разъезжается с глубиной сцены.
-    // Standard-материал нёс чанки сам — их потеря при замене была бы регрессом
     const star = new FakeStar(stubActor(TEMPERATURE_K), stubRenderer())
 
     expect(star.material.vertexShader).toContain(ShaderChunk['logdepthbuf_pars_vertex'])
@@ -61,47 +61,52 @@ describe('FakeStar: контракт материала', () => {
     expect(star.material.fragmentShader).toContain(ShaderChunk['logdepthbuf_fragment'])
   })
 
-  it('цвет — палитра диска × impostorIntensity, поправки +1300 больше нет', () => {
+  it('поверхность — общий с диском чанк, текстур нет', () => {
+    // Тот же starSurface, что резолвится в фрагмент диска: формулы яркости
+    // не могут разъехаться между LOD. Семплеров нет — round.png ушёл
     const star = new FakeStar(stubActor(TEMPERATURE_K), stubRenderer())
 
-    const base = buildStarPalette(TEMPERATURE_K).base
-    const expected = new Color().setRGB(base.r, base.g, base.b).multiplyScalar(config('star.impostorIntensity'))
-
-    expect(star.material.uniforms.uColor.value).toEqual(expected)
+    expect(star.material.fragmentShader).toContain(starSurface)
+    expect(star.material.fragmentShader).not.toContain('sampler2D')
   })
 
-  it('без атрибута температуры палитра строится от общего с диском дефолта', () => {
+  it('палитра-триада — та же buildStarPalette, что у диска', () => {
+    const star = new FakeStar(stubActor(TEMPERATURE_K), stubRenderer())
+    const palette = buildStarPalette(TEMPERATURE_K)
+
+    expect(star.material.uniforms.uColorCool.value).toEqual(colorFrom(palette.cool))
+    expect(star.material.uniforms.uColorBase.value).toEqual(colorFrom(palette.base))
+    expect(star.material.uniforms.uColorHot.value).toEqual(colorFrom(palette.hot))
+  })
+
+  it('без атрибута температуры — общий с диском дефолт', () => {
     const star = new FakeStar(stubActor(), stubRenderer())
+    const palette = buildStarPalette(DEFAULT_STAR_TEMPERATURE_K)
 
-    const base = buildStarPalette(DEFAULT_STAR_TEMPERATURE_K).base
-    const expected = new Color().setRGB(base.r, base.g, base.b).multiplyScalar(config('star.impostorIntensity'))
-
-    expect(star.material.uniforms.uColor.value).toEqual(expected)
+    expect(star.material.uniforms.uColorBase.value).toEqual(colorFrom(palette.base))
   })
 
-  it('форму даёт альфа-канал текстуры, тинта по RGB текстуры нет', () => {
-    // Ровно так вёл себя и MeshStandardMaterial без источников света: диффуз
-    // чёрный, map в emissive не входит — работала одна альфа через блендинг
+  it('яркость и лимб — общие константы диска, крутить нечего', () => {
     const star = new FakeStar(stubActor(TEMPERATURE_K), stubRenderer())
 
-    expect(star.material.fragmentShader).toContain('texture2D(map, vUv).a')
-    expect(star.material.fragmentShader).not.toContain('texture2D(map, vUv).rgb')
-    expect(star.material.uniforms.map.value).toBe(map)
+    expect(star.material.uniforms.uCoreIntensity.value).toBe(STAR_CORE_INTENSITY)
+    expect(star.material.uniforms.uLimbCoeff.value).toEqual(new Vector3(...STAR_LIMB_COEFF))
   })
-})
 
-describe('FakeStar: отсутствие текстуры формы', () => {
-  // Текстура не регистрируется намеренно: ресурс может не доехать, и прежний
-  // getTexture(...)! молча отдавал undefined в map
-  it('предупреждает с именем ресурса и последствием, но не падает', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-
+  it('масштаб ячеек грануляции — от радиуса звезды, как у диска', () => {
+    // Диск сэмплит vPosition * 0.05 при |vPosition| = R: импостору нужен
+    // тот же R, иначе размер ячеек скакнёт на переключении
     const star = new FakeStar(stubActor(TEMPERATURE_K), stubRenderer())
 
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/^\[FakeStar\]/))
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('round.png'))
-    expect(star.material.uniforms.map.value).toBeNull()
+    expect(star.material.uniforms.uRadius.value).toBe(toThreeJSUnits(RADIUS_KM))
+  })
 
-    warnSpy.mockRestore()
+  it('время грануляции живое и идёт с общим множителем', () => {
+    const star = new FakeStar(stubActor(TEMPERATURE_K), stubRenderer())
+    const ctx: UpdateContext = { camera: new PerspectiveCamera(50), delta: 0, epoch: 0, elapsed: 321 }
+
+    star.updateObject(ctx)
+
+    expect(star.material.uniforms.uTime.value).toBe(321 * STAR_GRANULATION_TIME_SCALE)
   })
 })
