@@ -17,15 +17,16 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
   vertexShader: `
     precision highp float;
 
-    attribute vec3 aPos;
-    attribute vec3 aPos0;
-    attribute vec3 aPos1;
-    attribute vec4 aWireRandom;
+    // Атрибуты строит buildProminenceGeometry (renderables/utils/prominenceGeometry.ts).
+    // Лента — дуга между двумя основаниями петли на единичной сфере
+    attribute vec2 aRibbon;       // .x — фаза вдоль дуги (0..1), .y — сторона полосы (-1 / +1)
+    attribute vec3 aFootA;        // направление первого основания петли
+    attribute vec3 aFootB;        // направление второго основания
+    attribute vec3 aRibbonRandom; // .x/.y — сдвиг и скорость вспышки (общие на группу лент), .z — микс цвета
 
-    varying float vUVY;
+    varying float vSide;
     varying float vOpacity;
     varying vec3  vColor;
-    varying vec3  vNormal;
 
     uniform float uWidth;
     uniform float uAmp;
@@ -37,14 +38,15 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
     uniform vec3 uColorBase;
     uniform float uProtuberanceIntensity;
 
-    #define m4 mat4(0.00, 0.80, 0.60, -0.4, -0.80, 0.36, -0.48, -0.5, -0.60, -0.48, 0.64, 0.2, 0.40, 0.30, 0.20, 0.4)
+    // Фиксированная матрица перемешивания октав искривлённого синус-шума
+    #define TWISTED_NOISE_MIX mat4(0.00, 0.80, 0.60, -0.4, -0.80, 0.36, -0.48, -0.5, -0.60, -0.48, 0.64, 0.2, 0.40, 0.30, 0.20, 0.4)
 
     vec4 twistedSineNoise(vec4 q, float falloff) {
       float a = 1.0;
       float f = 1.0;
       vec4 sum = vec4(0.0);
       for (int i = 0; i < 4; i++) {
-        q = m4 * q;
+        q = TWISTED_NOISE_MIX * q;
         vec4 s = sin(q.ywxz * f) * a;
         q += s;
         sum += s;
@@ -54,11 +56,13 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
       return sum;
     }
 
-    vec3 getPosOBJ(float phase, float animPhase){
-      float size = distance(aPos0, aPos1);
-      vec3  n    = normalize((aPos0 + aPos1) * 0.5);
+    // Точка дуги петли: основания соединяются напрямую, середина выгибается
+    // наружу тем сильнее, чем дальше зашла вспышка
+    vec3 arcPoint(float phase, float animPhase){
+      float size = distance(aFootA, aFootB);
+      vec3  n    = normalize((aFootA + aFootB) * 0.5);
 
-      vec3 p = mix(aPos0, aPos1, phase);
+      vec3 p = mix(aFootA, aFootB, phase);
 
       float amp = sin(phase * 3.14159265) * size * uAmp;
       amp *= animPhase;
@@ -71,30 +75,39 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
     }
 
     void main() {
-      vUVY = aPos.z;
+      vSide = aRibbon.y;
 
-      float animPhase = fract(uTime * 0.3 * (aWireRandom.y * 0.5) + aWireRandom.x);
+      // Пила 0 -> 1 на группу лент: вспышка растёт и одновременно гаснет
+      float animPhase = fract(uTime * 0.3 * (aRibbonRandom.y * 0.5) + aRibbonRandom.x);
 
-      vec3 pOBJ  = getPosOBJ(aPos.x,        animPhase);
-      vec3 p1OBJ = getPosOBJ(aPos.x + 0.01, animPhase);
+      vec3 arc      = arcPoint(aRibbon.x,        animPhase);
+      vec3 arcAhead = arcPoint(aRibbon.x + 0.01, animPhase);
 
-      vec3 pW  = (modelMatrix * vec4(pOBJ , 1.0)).xyz;
-      vec3 p1W = (modelMatrix * vec4(p1OBJ, 1.0)).xyz;
+      vec3 pW  = (modelMatrix * vec4(arc     , 1.0)).xyz;
+      vec3 p1W = (modelMatrix * vec4(arcAhead, 1.0)).xyz;
 
-      vec3 dirW  = normalize(p1W - pW);
-      vec3 vW    = normalize(pW - cameraPosition);
-      vec3 sideW = normalize(cross(vW, dirW));
+      // Полоса развёрнута к камере: ширина откладывается поперёк дуги и взгляда
+      vec3 tangentW    = normalize(p1W - pW);
+      vec3 viewW       = normalize(pW - cameraPosition);
+      vec3 ribbonSideW = normalize(cross(viewW, tangentW));
 
-      float R = length(aPos0);
+      // Единица ПО ПОСТРОЕНИЮ: основания — нормализованные направления в
+      // объектном пространстве. Отсюда оба известных квирка ниже
+      float R = length(aFootA);
 
-      float width = uWidth * aPos.z * (1.0 + animPhase) * R;
+      // КВИРК 1: полутолщина выходит в абсолютных мировых единицах (~0.3..0.6),
+      // а не долей радиуса — у Солнца это около 0.15% диска, у карлика та же
+      // лента относительно толще. Оставлено как есть: текущий вид принят с этим
+      float width = uWidth * aRibbon.y * (1.0 + animPhase) * R;
 
-      pW += sideW * width;
+      pW += ribbonSideW * width;
 
       vec3 centerW = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-      vNormal = normalize(pW - centerW);
 
       float lenW = length(pW - centerW);
+      // КВИРК 2: гашение у поверхности неактивно — lenW мировая (у Солнца ~349
+      // единиц), R объектная единица, так что smoothstep(1, 1.03, lenW) == 1.0
+      // всегда. Починка меняет картинку, поэтому отложена
       vOpacity  = smoothstep(R, R * 1.03, lenW);
       vOpacity *= (1.0 - animPhase);
       vOpacity *= uOpacity;
@@ -102,7 +115,7 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
       // Палитра ленты — чёрнотельная от температуры звезды (спред задаёт вызывающий
       // код, см. StarOuterLayer); ribbon premultiplied альфой ≤ uOpacity, поэтому
       // пик ~ uProtuberanceIntensity * uOpacity — ленты лишь слегка переходят порог блума
-      vColor = mix(uColorCool, uColorBase, aWireRandom.w) * uProtuberanceIntensity;
+      vColor = mix(uColorCool, uColorBase, aRibbonRandom.z) * uProtuberanceIntensity;
 
       gl_Position = projectionMatrix * viewMatrix * vec4(pW, 1.0);
     }
@@ -110,15 +123,15 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
   fragmentShader: `
     precision highp float;
 
-    varying float vUVY;
+    varying float vSide;
     varying float vOpacity;
     varying vec3  vColor;
-    varying vec3  vNormal;
 
     uniform float uAlphaBlended;
 
     void main() {
-      float alpha = smoothstep(1.0, 0.0, abs(vUVY));
+      // Мягкий поперечный край полосы: квадрат делает спад к краям круче
+      float alpha = smoothstep(1.0, 0.0, abs(vSide));
       alpha *= alpha;
       alpha *= vOpacity;
 

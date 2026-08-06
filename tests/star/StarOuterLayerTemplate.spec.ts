@@ -10,7 +10,7 @@ describe('StarOuterLayerShaderTemplate: палитра протуберанце�
   })
 
   it('цвет — интерполяция чёрнотельной палитры с HDR-интенсивностью', () => {
-    expect(vert).toContain('mix(uColorCool, uColorBase, aWireRandom.w)')
+    expect(vert).toContain('mix(uColorCool, uColorBase, aRibbonRandom.z)')
     expect(vert).toContain('uProtuberanceIntensity')
   })
 
