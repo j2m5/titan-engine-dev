@@ -6,6 +6,7 @@ import { IRingRenderingObject } from '@/core/models/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { requireRenderingData } from '@/core/helpers/renderingData'
+import { config } from '@/core/framework/config'
 
 interface RingUniforms {
   diffuseMap: Texture | null
@@ -16,6 +17,9 @@ interface RingUniforms {
   planetRadius: number
   minDistance: number
   maxDistance: number
+  uRingForwardScattering: number
+  uRingOppositionSurge: number
+  uRingDensityExtinction: number
 }
 
 class RingShader extends AbstractShader<keyof RingUniforms> {
@@ -42,7 +46,10 @@ class RingShader extends AbstractShader<keyof RingUniforms> {
       lightPosition: new Uniform(new Vector3()),
       planetRadius: new Uniform(toThreeJSUnits(parent.physicalObject?.getAttribute('radius', 1) ?? 1)),
       minDistance: new Uniform(toThreeJSUnits(1000)),
-      maxDistance: new Uniform(toThreeJSUnits(5000))
+      maxDistance: new Uniform(toThreeJSUnits(5000)),
+      uRingForwardScattering: new Uniform(config('ring.forwardScattering')),
+      uRingOppositionSurge: new Uniform(config('ring.oppositionSurge')),
+      uRingDensityExtinction: new Uniform(config('ring.densityExtinction'))
     }
     this.name = 'RingShader'
   }

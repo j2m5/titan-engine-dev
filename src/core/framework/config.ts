@@ -4,6 +4,7 @@ import { three } from '@/config/three'
 import { blackHole } from '@/config/blackHole'
 import { database } from '@/config/database'
 import { background } from '@/config/background'
+import { ring } from '@/config/ring'
 import { lensFlare } from '@/config/lensFlare'
 import { star } from '@/config/star'
 import { grading } from '@/config/grading'
@@ -38,6 +39,7 @@ export const config = createConfig({
   ...three,
   ...blackHole,
   ...background,
+  ...ring,
   ...lensFlare,
   ...star,
   ...grading,

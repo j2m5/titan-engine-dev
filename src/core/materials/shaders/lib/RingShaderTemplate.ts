@@ -11,7 +11,10 @@ export const RingShaderTemplate: ShaderProps = {
     lightPosition: new Uniform(new Vector3()),
     planetRadius: new Uniform(0),
     minDistance: new Uniform(toThreeJSUnits(1000)),
-    maxDistance: new Uniform(toThreeJSUnits(5000))
+    maxDistance: new Uniform(toThreeJSUnits(5000)),
+    uRingForwardScattering: new Uniform(0),
+    uRingOppositionSurge: new Uniform(0),
+    uRingDensityExtinction: new Uniform(0)
   },
   vertexShader: `
     precision highp float;
@@ -21,9 +24,7 @@ export const RingShaderTemplate: ShaderProps = {
 
     uniform vec3 lightPosition;
 
-    varying vec3 vNormal;
     varying vec3 vPosition;
-    varying vec3 vWorldPosition;
     varying vec3 vLightDirectionL;
     varying vec3 vLocalCameraPosition;
 
@@ -36,9 +37,7 @@ export const RingShaderTemplate: ShaderProps = {
       vec3 lightDirWorld = normalize(worldPosition.xyz - lightPosition);
       vec3 lightDirLocal = (inverse(modelMatrix) * vec4(lightDirWorld, 0.0)).xyz;
 
-      vNormal = (modelMatrix * vec4(normal, 0.0)).xyz;
       vPosition = position;
-      vWorldPosition = worldPosition.xyz;
       vLightDirectionL = lightDirLocal;
       vLocalCameraPosition = (inverse(modelMatrix) * vec4(cameraPosition, 1.0)).xyz;
       ${ShaderChunk['logdepthbuf_vertex']}
@@ -50,7 +49,6 @@ export const RingShaderTemplate: ShaderProps = {
     ${ShaderChunk['common']}
     ${ShaderChunk['logdepthbuf_pars_fragment']}
 
-    uniform vec3 lightPosition;
     uniform sampler2D diffuseMap;
     uniform float innerRadius;
     uniform float outerRadius;
@@ -58,12 +56,22 @@ export const RingShaderTemplate: ShaderProps = {
     uniform float planetRadius;
     uniform float minDistance;
     uniform float maxDistance;
+    uniform float uRingForwardScattering;
+    uniform float uRingOppositionSurge;
+    uniform float uRingDensityExtinction;
 
-    varying vec3 vNormal;
+    #define RING_OPPOSITION_G 0.3
+
     varying vec3 vPosition;
-    varying vec3 vWorldPosition;
     varying vec3 vLightDirectionL;
     varying vec3 vLocalCameraPosition;
+
+    // Хеньи–Гринштейн в нормировке «изотропное рассеяние равно единице».
+    // g < 0 даёт пик на просвет, g > 0 — со стороны звезды
+    float ringPhase(float cosTheta, float g) {
+      float g2 = g * g;
+      return (1.0 - g2) / pow(1.0 + g2 - 2.0 * g * cosTheta, 1.5);
+    }
 
     float getShadowFromSphere(vec3 lightDirLocal, vec3 ringPosLocal, float planetRadius) {
       vec3 sunDir = normalize(lightDirLocal);
@@ -92,6 +100,10 @@ export const RingShaderTemplate: ShaderProps = {
 
       if (color.a <= 0.0 || color.a <= alphaTest) discard;
 
+      // Плотность кольца из текстуры, до затуханий по дистанции и углу:
+      // оптическая толща обязана зависеть только от неё
+      float density = color.a;
+
       float distance = length(vLocalCameraPosition - vPosition);
       float transparencyFactor = smoothstep(minDistance, maxDistance, distance);
 
@@ -109,28 +121,22 @@ export const RingShaderTemplate: ShaderProps = {
 
       float shadow = getShadowFromSphere(vLightDirectionL, vPosition, planetRadius);
 
-      vec3 corrNormal = gl_FrontFacing ? vNormal : -vNormal;
+      // Одна формула на обе стороны: ветвление по стороне давало скачок
+      // яркости при переходе камеры через плоскость кольца
+      vec3 lightDir = normalize(vLightDirectionL);
+      float cosTheta = dot(-lightDir, viewDirLocal);
 
-      float lightIntensity = dot(corrNormal, normalize(lightPosition - vWorldPosition));
-      vec3 finalColor = color.rgb;
+      // Прошедший свет гаснет с оптической толщей, отражённый насыщается.
+      // Вместе с покрытием (альфа-блендинг) это даёт максимум на средней
+      // плотности: пустого места не видно, плотное не пропускает свет
+      float tau = uRingDensityExtinction * density;
+      float transmit = exp(-tau);
+      float reflectance = 1.0 - transmit;
 
-      if (lightIntensity < 0.0) {
-        vec3 lightDir = normalize(vLightDirectionL);
-        vec3 cameraDir = normalize(vLocalCameraPosition - vPosition);
-        float cosTheta = dot(-lightDir, cameraDir);
+      float forward = ringPhase(cosTheta, -uRingForwardScattering);
+      float back = ringPhase(cosTheta, RING_OPPOSITION_G);
 
-        const float g = -0.9;
-        const float g2 = g * g;
-        const float k = 1.5 / 806.202 * ((1.0 - g2) / (2.0 + g2));
-        float backscatter = 3.0 * k * (1.0 + cosTheta * cosTheta) * pow(1.0 + g2 - 2.0 * g * cosTheta, -1.5);
-
-        vec3 scatterColor = mix(vec3(1.0, 0.95, 0.85), vec3(1.0, 1.0, 0.9), abs(cosTheta));
-
-        finalColor *= 0.2;
-        finalColor += backscatter * scatterColor;
-      }
-
-      finalColor += 0.05;
+      vec3 finalColor = color.rgb * (transmit * forward + reflectance * uRingOppositionSurge * back);
 
       gl_FragColor = vec4(finalColor * shadow, color.a);
 
