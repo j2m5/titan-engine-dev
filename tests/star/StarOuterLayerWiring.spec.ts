@@ -6,7 +6,7 @@ import { buildProminenceGeometry } from '@/core/renderables/utils/prominenceGeom
 function stubStar(temperature: number): Actor {
   return {
     physicalObject: {
-      getAttribute: (key: string, def?: unknown) => (key === 'temperature' ? temperature : 100)
+      getAttribute: (key: string) => (key === 'temperature' ? temperature : 100)
     }
   } as unknown as Actor
 }

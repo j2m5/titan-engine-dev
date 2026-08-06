@@ -95,17 +95,29 @@ describe('buildProminenceGeometry: содержимое атрибутов', () 
     }
   })
 
-  it('две стороны сегмента делят основания и случайные ленты', () => {
-    // Иначе полоса расслаивается: у её краёв разные дуга и цвет
+  it('две стороны сегмента противоположны и делят основания и случайные ленты', () => {
+    // Иначе полоса расслаивается: у её краёв разные дуга и цвет. Стороны
+    // проверяются поимённо — окажись обе +1, лента схлопнулась бы в нулевую
+    // ширину, а прежняя проверка |side| == 1 этого не заметила бы
+    const ribbon = attribute(geometry, 'aRibbon')
     const footA = attribute(geometry, 'aFootA')
+    const footB = attribute(geometry, 'aFootB')
     const random = attribute(geometry, 'aRibbonRandom')
 
-    for (let pair = 0; pair < footA.count / 2; pair++) {
+    for (let pair = 0; pair < ribbon.count / 2; pair++) {
       const left = pair * 2
       const right = left + 1
 
-      expect(footA.getX(left)).toBe(footA.getX(right))
-      expect(random.getZ(left)).toBe(random.getZ(right))
+      expect(ribbon.getY(left)).toBe(-1)
+      expect(ribbon.getY(right)).toBe(1)
+
+      // Все три компонента, а не один: рассинхрон курсора записи кратно трём
+      // проскочил бы мимо проверки по одной координате
+      for (const buffer of [footA, footB, random]) {
+        expect(buffer.getX(left)).toBe(buffer.getX(right))
+        expect(buffer.getY(left)).toBe(buffer.getY(right))
+        expect(buffer.getZ(left)).toBe(buffer.getZ(right))
+      }
     }
   })
 })
