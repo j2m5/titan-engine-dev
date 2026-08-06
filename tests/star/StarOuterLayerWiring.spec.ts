@@ -2,6 +2,7 @@ import { StarOuterLayer } from '@/core/renderables/utils/StarOuterLayer'
 import { Actor } from '@/core/models/Actor'
 import { StarOuterLayerShaderTemplate } from '@/core/materials/shaders/lib/StarOuterLayerShaderTemplate'
 import { buildProminenceGeometry } from '@/core/renderables/utils/prominenceGeometry'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 function stubStar(temperature: number): Actor {
   return {
@@ -33,5 +34,21 @@ describe('StarOuterLayer: имена атрибутов геометрии и ш
 
     expect(declared.length).toBeGreaterThan(0)
     expect(new Set(declared)).toEqual(new Set(Object.keys(geometry.attributes)))
+  })
+})
+
+describe('StarOuterLayer: масштаб меша — мировой радиус звезды', () => {
+  it('масштаб равномерен и равен радиусу: на этом держится толщина лент', () => {
+    // Шейдер берёт мировой радиус как length((modelMatrix * vec4(aFootA, 0.0)).xyz),
+    // и это верно, только пока масштаб меша равен радиусу и равномерен. Рядом в
+    // репо живёт встречная конвенция: Star печёт радиус в SphereGeometry и
+    // оставляет scale = 1. Приведи StarOuterLayer к ней — и ленты схлопнутся в
+    // полоски шириной 0.00086 мировых единиц, а поймать это будет нечем
+    const layer = new StarOuterLayer(stubStar(5700))
+
+    // stubStar отдаёт 100 на любой атрибут кроме temperature, в том числе radius
+    expect(layer.scale.x).toBeCloseTo(toThreeJSUnits(100), 10)
+    expect(layer.scale.y).toBe(layer.scale.x)
+    expect(layer.scale.z).toBe(layer.scale.x)
   })
 })
