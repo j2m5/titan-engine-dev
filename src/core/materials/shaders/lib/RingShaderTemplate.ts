@@ -62,16 +62,16 @@ export const RingShaderTemplate: ShaderProps = {
 
     #define RING_OPPOSITION_G 0.3
 
+    varying vec3 vPosition;
+    varying vec3 vLightDirectionL;
+    varying vec3 vLocalCameraPosition;
+
     // Хеньи–Гринштейн в нормировке «изотропное рассеяние равно единице».
     // g < 0 даёт пик на просвет, g > 0 — со стороны звезды
     float ringPhase(float cosTheta, float g) {
       float g2 = g * g;
       return (1.0 - g2) / pow(1.0 + g2 - 2.0 * g * cosTheta, 1.5);
     }
-
-    varying vec3 vPosition;
-    varying vec3 vLightDirectionL;
-    varying vec3 vLocalCameraPosition;
 
     float getShadowFromSphere(vec3 lightDirLocal, vec3 ringPosLocal, float planetRadius) {
       vec3 sunDir = normalize(lightDirLocal);
@@ -100,6 +100,10 @@ export const RingShaderTemplate: ShaderProps = {
 
       if (color.a <= 0.0 || color.a <= alphaTest) discard;
 
+      // Плотность кольца из текстуры, до затуханий по дистанции и углу:
+      // оптическая толща обязана зависеть только от неё
+      float density = color.a;
+
       float distance = length(vLocalCameraPosition - vPosition);
       float transparencyFactor = smoothstep(minDistance, maxDistance, distance);
 
@@ -125,7 +129,7 @@ export const RingShaderTemplate: ShaderProps = {
       // Прошедший свет гаснет с оптической толщей, отражённый насыщается.
       // Вместе с покрытием (альфа-блендинг) это даёт максимум на средней
       // плотности: пустого места не видно, плотное не пропускает свет
-      float tau = uRingDensityExtinction * color.a;
+      float tau = uRingDensityExtinction * density;
       float transmit = exp(-tau);
       float reflectance = 1.0 - transmit;
 

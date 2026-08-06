@@ -26,8 +26,19 @@ describe('RingShaderTemplate: рассеяние', () => {
     expect(RingShaderTemplate.fragmentShader).toContain('float reflectance = 1.0 - transmit')
   })
 
-  it('оптическая толща берётся из альфы текстуры — плотность уже там', () => {
-    expect(RingShaderTemplate.fragmentShader).toContain('uRingDensityExtinction * color.a')
+  it('оптическая толща берётся из плотности текстуры до затуханий по дистанции и углу', () => {
+    // density снимается сразу после texture2D, раньше умножений color.a на
+    // transparencyFactor/angleOpacity — иначе tau зависит от ракурса
+    const fragmentShader: string = RingShaderTemplate.fragmentShader
+
+    expect(fragmentShader).toContain('uRingDensityExtinction * density')
+
+    const densityIndex: number = fragmentShader.indexOf('float density = color.a;')
+    const transparencyIndex: number = fragmentShader.indexOf('color.a *= transparencyFactor')
+
+    expect(densityIndex).toBeGreaterThan(-1)
+    expect(transparencyIndex).toBeGreaterThan(-1)
+    expect(densityIndex).toBeLessThan(transparencyIndex)
   })
 
   it('показатель обратного лепестка совпадает с числом в CPU-зеркале', () => {
