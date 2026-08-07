@@ -3,6 +3,7 @@ import { Actor } from '@/core/models/Actor'
 import { Barycenter } from '@/core/renderables/Barycenter'
 import { BlackHole } from '@/core/renderables/BlackHole'
 import { BlackHoleImpostor } from '@/core/renderables/BlackHole/BlackHoleImpostor'
+import { BlackHoleLod } from '@/core/renderables/utils/BlackHoleLod'
 import { StaticNode } from '@/core/renderables/utils/StaticNode'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import { Star } from '@/core/renderables/Star'
@@ -58,28 +59,19 @@ class RenderableFactory {
 
   private createBlackHole(actor: Actor): Object3D {
     const node = new DynamicNode(actor)
-    const lod = new LOD()
     const lodl1 = new BlackHole(actor, this.resourceObserver)
     const lodl2 = new BlackHoleImpostor(actor, lodl1.parameters)
-
-    // Высота кадра — 2*tan(fov/2), а не tan(fov): формула известно-неверна,
-    // при fov 50° даёт 0.783 от верной дистанции, то есть переключение
-    // на 44.7 px вместо заявленных 35. Не тронута намеренно — правка отодвинет
-    // тяжёлый реймарчер L0 на 28% дальше и требует замера времени кадра
-    const distanceLod = (pixels: number): number => {
-      const radius: number = lodl1.parameters.simulationRadius
-      const fov: number = degToRad(config('camera.fov'))
-
-      return toThreeJSUnits((2 * radius * this.renderer.domElement.height) / (Math.tan(fov) * pixels))
-    }
+    const lod = new BlackHoleLod(lodl1.parameters.simulationRadius, this.renderer)
 
     node.name = actor.getAttribute('name', '')
     node.renderable = lodl1
 
     lod.name = actor.getAttribute('name', '') + 'LOD'
 
+    // Стартовое значение: дальше BlackHoleLod пересчитывает дистанцию каждый
+    // кадр — порог задан в пикселях и обязан переживать ресайз и смену fov
     lod.addLevel(lodl1)
-    lod.addLevel(lodl2, distanceLod(config('blackHole.lodPixels')), config('blackHole.lodHysteresis'))
+    lod.addLevel(lodl2, lod.switchDistance(config('camera.fov')), config('blackHole.lodHysteresis'))
 
     node.add(lod)
 
@@ -120,9 +112,11 @@ class RenderableFactory {
     const lodl1 = new Planet(actor)
     const lodl2 = new FakePlanet(actor)
 
-    // Та же известно-неверная высота кадра, что у чёрной дыры (см. createBlackHole):
-    // tan(fov) вместо 2*tan(fov/2), переключение на 3.8 px вместо 3.
-    // Не тронута по той же причине — сдвиг на 28% дальше требует замера кадра
+    // Известно-неверная высота кадра: tan(fov) вместо 2*tan(fov/2), поэтому
+    // переключение происходит на 3.8 px вместо номинальных 3. Не тронута
+    // намеренно — честная правка отодвинула бы переключение на 28% дальше и
+    // требует замера кадра. У ЧД это уже вылечено (BlackHoleLod + пересчёт
+    // lodPixels под фактический порог) — тот же приём применим и здесь
     const distanceLod = (pixels: number): number => {
       const radius: number = actor.physicalObject!.getAttribute('radius')!
       const fov: number = degToRad(config('camera.fov'))

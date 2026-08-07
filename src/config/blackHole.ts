@@ -14,9 +14,10 @@ export interface BlackHoleQualityConfig {
   /**
    * Порог переключения L0 → L1 (импостор): экранный диаметр зоны
    * симуляции в пикселях, при котором лензирование уже неразличимо.
-   * Величина номинальная: дистанцию считают известно-неверной формулой
-   * (см. RenderableFactory.createBlackHole), и при fov 50° переключение
-   * приходится на lodPixels / 0.783 — для 35 это 44.7 фактических пикселя
+   * Считается честной формулой (distanceForApparentSize, BlackHoleLod) по
+   * живым fov и высоте вьюпорта. 45 ≈ прежний фактический порог: старая
+   * известно-неверная формула при номинальных 35 переключала на 44.7
+   * фактических пикселях — точка переключения НЕ сместилась
    */
   lodPixels: number
   /**
@@ -33,7 +34,7 @@ export interface BlackHoleConfig {
 export const blackHole: BlackHoleConfig = {
   blackHole: {
     integrationDphi: 0.05,
-    lodPixels: 35,
+    lodPixels: 45,
     lodHysteresis: 0.3
   }
 }
