@@ -11,9 +11,11 @@ import {
   Vector3
 } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
+import { config } from '@/core/framework/config'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
 import { BlackHoleNoiseTexture } from '@/core/renderables/BlackHole/BlackHoleNoiseTexture'
 import { BlackHoleShaderTemplate, createBlackHoleUniforms } from '@/core/renderables/BlackHole/BlackHoleShaderTemplate'
+import { createDeflectionLutTexture } from '@/core/renderables/BlackHole/deflectionLut'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 
 /**
@@ -74,6 +76,14 @@ class BlackHoleMaterial extends RawShaderMaterial {
       seed * 0.7548776662 - Math.floor(seed * 0.7548776662),
       seed * 0.5698402909 - Math.floor(seed * 0.5698402909)
     )
+
+    // LUT угла отклонения (этап 4): своя на материал — у каждой дыры свой
+    // simulationRs. Печётся тем же dphi, что живой интегратор: это несущий
+    // инвариант стыка ветвей (см. deflectionLut.ts)
+    this.uniforms.deflectionLut.value = createDeflectionLutTexture(
+      parameters.simulationRs,
+      config('blackHole.integrationDphi')
+    )
   }
 
   /**
@@ -133,6 +143,16 @@ class BlackHoleMaterial extends RawShaderMaterial {
     // не теряют точность в f32; диск ускоряется вместе со временем симуляции
     const wrap: number = this.parameters.rotationPeriod * 16384
     this.uniforms.uTime.value = epoch - Math.floor(epoch / wrap) * wrap
+  }
+
+  /**
+   * LUT живёт только в юниформе этого материала: штатный dispose
+   * RawShaderMaterial текстуры юниформов не разбирает, без override она
+   * утекала бы на каждой пересборке сцены
+   */
+  public override dispose(): void {
+    this.uniforms.deflectionLut.value?.dispose()
+    super.dispose()
   }
 }
 
