@@ -4,7 +4,7 @@ import { Color, ShaderChunk, Uniform } from 'three'
 /**
  * Дымка над лимбом: оболочка чуть больше тела, светящаяся кольцом по кромке.
  *
- * Формула хорды — зеркало hazeChord из BrownDwarfHaze.ts, менять строго
+ * Формула профиля — зеркало hazeLimbProfile из BrownDwarfHaze.ts, менять строго
  * синхронно: числовой тест проверяет TS-сторону, GLSL обязан повторять её
  * один в один.
  */
@@ -49,7 +49,7 @@ export const BrownDwarfHazeShaderTemplate: ShaderProps = {
       vec3 viewW = normalize(cameraPosition - vPositionW);
       float mu = clamp(dot(normalW, viewW), 0.0, 1.0);
 
-      // Длина хорды луча внутри оболочки, в радиусах тела: у кромки луч идёт
+      // Профиль яркости по углу обзора, в радиусах тела: у кромки луч идёт
       // по касательной и набирает больше вещества — отсюда кольцо по лимбу
       float sin2 = max(0.0, 1.0 - mu * mu);
       float outer = sqrt(max(0.0, uShellScale * uShellScale - sin2));

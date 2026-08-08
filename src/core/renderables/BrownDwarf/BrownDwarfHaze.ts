@@ -9,12 +9,22 @@ import { buildStarPalette, StarPalette } from '@/core/materials/shaders/lib/help
 export const HAZE_RADIUS_SCALE: number = 1.03
 
 /**
- * Длина хорды луча внутри оболочки, в радиусах тела. mu — косинус (нормаль, луч на камеру)
+ * Профиль яркости дымки по углу обзора, в радиусах тела.
+ * mu — косинус (нормаль оболочки, луч на камеру).
+ *
+ * Это НЕ точная длина хорды, и называть её так нельзя: прицельный параметр
+ * луча, вошедшего в оболочку радиуса S, равен S·sin θ, а формула ниже берёт
+ * sin θ, то есть считает по единичной сфере. Приближение выбрано осознанно.
+ * Точная геометрия даёт РАЗРЫВ на лимбе тела: при b < 1 луч упирается в
+ * поверхность и проходит S·mu − sqrt(1 − b²), при b ≥ 1 проходит оболочку
+ * насквозь, 2·S·mu, — путь скачком удваивается, и на кромке диска была бы
+ * видна жёсткая ступенька. Приближение монотонно и даёт мягкое кольцо:
+ * 0.247 у силуэта против 0.03 в центре при S = 1.03.
  *
  * CPU-зеркало формулы из BrownDwarfHazeShaderTemplate — менять строго
  * синхронно, числовой тест проверяет только эту сторону.
  */
-export function hazeChord(mu: number): number {
+export function hazeLimbProfile(mu: number): number {
   const sin2: number = Math.max(0, 1 - mu * mu)
   const outer: number = Math.sqrt(Math.max(0, HAZE_RADIUS_SCALE * HAZE_RADIUS_SCALE - sin2))
   const inner: number = Math.sqrt(Math.max(0, 1 - sin2))

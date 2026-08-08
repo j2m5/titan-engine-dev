@@ -1,6 +1,6 @@
 import { AdditiveBlending } from 'three'
 import { Actor } from '@/core/models/Actor'
-import { BrownDwarfHaze, HAZE_RADIUS_SCALE, hazeChord } from '@/core/renderables/BrownDwarf/BrownDwarfHaze'
+import { BrownDwarfHaze, HAZE_RADIUS_SCALE, hazeLimbProfile } from '@/core/renderables/BrownDwarf/BrownDwarfHaze'
 
 function stubActor(): Actor {
   return {
@@ -21,13 +21,17 @@ describe('дымка над лимбом', () => {
     expect(haze.material.blending).toBe(AdditiveBlending)
   })
 
-  it('хорда максимальна у кромки и мала в центре диска', () => {
-    // Тонкий слой на просвет: у лимба луч идёт по касательной и набирает
-    // больше вещества — отсюда свечение кольцом
-    const edge = hazeChord(0.02)
-    const center = hazeChord(0.99)
+  it('профиль монотонно спадает от кромки к центру диска', () => {
+    // Тонкий слой на просвет: у лимба луч набирает больше вещества — отсюда
+    // свечение кольцом. Проверяется монотонность, а не одна пара точек:
+    // немонотонный профиль дал бы кольцо не там, где кромка
+    const samples = [0.02, 0.2, 0.4, 0.6, 0.8, 0.99].map((mu) => hazeLimbProfile(mu))
 
-    expect(edge).toBeGreaterThan(center * 3)
+    for (let i = 1; i < samples.length; i++) {
+      expect(samples[i]).toBeLessThan(samples[i - 1])
+    }
+
+    expect(samples[0]).toBeGreaterThan(samples[samples.length - 1] * 3)
   })
 
   it('нулевая сила дымки гасит слой целиком', () => {
