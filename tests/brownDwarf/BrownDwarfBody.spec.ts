@@ -1,4 +1,4 @@
-import { PerspectiveCamera, WebGLRenderer } from 'three'
+import { PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { BrownDwarf } from '@/core/renderables/BrownDwarf/BrownDwarf'
 import { BrownDwarfShaderTemplate } from '@/core/renderables/BrownDwarf/BrownDwarfShaderTemplate'
@@ -26,6 +26,32 @@ describe('тело коричневого карлика', () => {
     expect(body.material.uniforms.uClouds.value).toBeTruthy()
     expect(body.userData.type).toBe('brownDwarf')
     expect(body.userData.clickable).toBe(true)
+
+    body.dispose()
+  })
+
+  it('камера переводится в объектные координаты в onBeforeRender', () => {
+    // updateObject идёт до scene.updateMatrixWorld(), поэтому matrixWorld там
+    // отстаёт на кадр; three зовёт onBeforeRender уже с актуальными матрицами
+    const body = new BrownDwarf(stubActor(), fakeRenderer)
+
+    body.position.set(10, 0, 0)
+    body.rotation.set(0, Math.PI / 2, 0)
+    body.updateMatrixWorld(true)
+
+    const camera = new PerspectiveCamera()
+    camera.position.set(10, 0, 5)
+    camera.updateMatrixWorld(true)
+
+    body.onBeforeRender(fakeRenderer, new Scene(), camera, body.geometry, body.material, null as never)
+
+    // Камера смещена на +5 по мировому Z от центра тела; тело повёрнуто на +90°
+    // вокруг Y, значит обратный поворот кладёт камеру в -5 по объектному X
+    const value = body.material.uniforms.uCameraObject.value as Vector3
+
+    expect(value.x).toBeCloseTo(-5, 5)
+    expect(value.y).toBeCloseTo(0, 5)
+    expect(value.z).toBeCloseTo(0, 5)
 
     body.dispose()
   })

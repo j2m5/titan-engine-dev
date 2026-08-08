@@ -1,4 +1,4 @@
-import { BufferGeometry, CubeTexture, Matrix4, Mesh, SphereGeometry, Vector3, type WebGLRenderer } from 'three'
+import { BufferGeometry, Camera, CubeTexture, Matrix4, Mesh, Scene, SphereGeometry, Vector3, type WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { UpdateContext } from '@/core/UpdateContext'
@@ -51,6 +51,24 @@ class BrownDwarf extends Mesh {
     this.name = this.model.getAttribute('name', '') + 'BrownDwarf'
     this.userData.type = 'brownDwarf'
     this.userData.clickable = true
+
+    // Камера в объектных координатах обновляется строго в onBeforeRender, а не
+    // в updateObject: SceneManager.update отрабатывает ДО того, как
+    // WebGLRenderer.render вызовет scene.updateMatrixWorld(), поэтому там
+    // matrixWorld тела отстаёт на кадр, и рисунок запаздывал бы за вращением.
+    // three же зовёт onBeforeRender в момент рендера, когда матрицы актуальны.
+    //
+    // Камера берётся из аргумента, а НЕ из ctx.camera: three передаёт сюда
+    // камеру текущего прохода, что важно для проходов вне главного цикла
+    // (Postprocessing.renderToScreenshot со своей камерой). Прецедент —
+    // BlackHole.onBeforeRender.
+    this.onBeforeRender = (_renderer: WebGLRenderer, _scene: Scene, camera: Camera): void => {
+      camera.getWorldPosition(this.cameraWorld)
+
+      this.material.uniforms.uCameraObject.value
+        .copy(this.cameraWorld)
+        .applyMatrix4(this.inverseModel.copy(this.matrixWorld).invert())
+    }
   }
 
   /** Запекатель для теста освобождения ресурсов */
@@ -59,16 +77,9 @@ class BrownDwarf extends Mesh {
   }
 
   public updateObject(ctx: UpdateContext): void {
-    // Время идёт в дыхание яркости и НИКУДА больше: форма от него не зависит
+    // Время идёт в дыхание яркости и НИКУДА больше: форма от него не зависит.
+    // Позиция камеры живёт в onBeforeRender — см. причину в конструкторе
     this.material.uniforms.time.value = ctx.elapsed
-
-    // Камера переводится в объектные координаты здесь, потому что во
-    // фрагментном шейдере three нет modelMatrix, а GLSL ES 1.00 не умеет
-    // inverse(). Шейдер за счёт этого целиком живёт в одной системе координат
-    ctx.camera.getWorldPosition(this.cameraWorld)
-    this.material.uniforms.uCameraObject.value
-      .copy(this.cameraWorld)
-      .applyMatrix4(this.inverseModel.copy(this.matrixWorld).invert())
   }
 
   public dispose(): void {
