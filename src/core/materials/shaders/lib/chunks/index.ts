@@ -1,6 +1,7 @@
 import { ringShadowFragment, ringShadowFunctions, ringShadowUniforms } from './RingShadow'
 import { noiseFunctions } from './Noise'
 import { starSurface } from './StarSurface'
+import { brownDwarfSurface } from './BrownDwarfSurface'
 import { asteroidShapeFunctions } from './AsteroidShape'
 import { asteroidSurfaceFunctions } from './AsteroidSurface'
 import { heightNormalFunctions, heightNormalUniforms } from '@/core/materials/shaders/lib/chunks/HeightNormal'
@@ -24,6 +25,7 @@ export const AppShaderChunk: Record<string, any> = {
   ringShadowFragment,
   noiseFunctions,
   starSurface,
+  brownDwarfSurface,
   asteroidShapeFunctions,
   asteroidSurfaceFunctions,
   heightNormalUniforms,
