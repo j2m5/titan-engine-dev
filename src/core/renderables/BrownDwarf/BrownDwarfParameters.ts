@@ -24,6 +24,9 @@ export interface BrownDwarfParameters {
   gapThreshold: number
   parallax: number
   breathAmplitude: number
+  bandWarp: number
+  zonalShear: number
+  fineDetail: number
   temperature: number
 }
 
@@ -35,7 +38,10 @@ const DEFAULTS: Omit<BrownDwarfParameters, 'temperature'> = {
   gapGlow: 3,
   gapThreshold: 0.42,
   parallax: 0.02,
-  breathAmplitude: 0.08
+  breathAmplitude: 0.08,
+  bandWarp: 0.08,
+  zonalShear: 0.5,
+  fineDetail: 0.25
 }
 
 /**
@@ -61,6 +67,9 @@ export function brownDwarfParameters(actor: Actor): BrownDwarfParameters {
     // Кламп, а не просто чтение: bdBreath даёт [1-a, 1+a], и при a > 1
     // яркость нутра уходит в минус — отрицательная светимость
     breathAmplitude: clamp(data.breathAmplitude ?? DEFAULTS.breathAmplitude, 0, 1),
+    bandWarp: data.bandWarp ?? DEFAULTS.bandWarp,
+    zonalShear: data.zonalShear ?? DEFAULTS.zonalShear,
+    fineDetail: data.fineDetail ?? DEFAULTS.fineDetail,
     temperature:
       actor.physicalObject?.getAttribute('temperature', BROWN_DWARF_DEFAULT_TEMPERATURE_K) ??
       BROWN_DWARF_DEFAULT_TEMPERATURE_K

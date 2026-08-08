@@ -1,13 +1,16 @@
 import { AppShaderChunk } from '@/core/materials/shaders/lib/chunks'
 import { brownDwarfSurface } from '@/core/materials/shaders/lib/chunks/BrownDwarfSurface'
 import {
+  bdBandChaos,
   bdBands,
   bdBreath,
   bdCompose,
   bdGap,
   bdShade,
+  bdShearAngle,
   bdTauEff,
   bdTransmit,
+  bdWarpLatitude,
   BREATH_AXES,
   CLOUD_TONE_BASE,
   CLOUD_TONE_RANGE,
@@ -230,5 +233,69 @@ describe('структурный контракт поля', () => {
   it('поле не держит собственной копии fbm', () => {
     // fbm живёт в чанке звезды; дубль — второй источник правды
     expect(brownDwarfSurface).not.toContain('float fbm(')
+  })
+})
+
+describe('турбулентность газового гиганта', () => {
+  it('коробление сдвигает широту, а нулевая ручка его выключает', () => {
+    expect(bdWarpLatitude(0.3, 0.8, 0)).toBe(0.3)
+    expect(bdWarpLatitude(0.3, 0.8, 0.1)).toBeCloseTo(0.38, 10)
+  })
+
+  it('пояса перестают быть равной ширины: расстояния между нулями расходятся', () => {
+    // Нули sin(широта·PI·bandCount) — границы поясов. При короблении
+    // расстояния между ними обязаны различаться, иначе это та же линейка
+    const bandCount = 9
+    const noise = (y: number): number => Math.sin(y * 17.3) * Math.cos(y * 7.1)
+    const edges: number[] = []
+
+    for (let y = -0.9; y < 0.9; y += 0.0005) {
+      const a = Math.sin(bdWarpLatitude(y, noise(y), 0.08) * Math.PI * bandCount)
+      const b = Math.sin(bdWarpLatitude(y + 0.0005, noise(y + 0.0005), 0.08) * Math.PI * bandCount)
+
+      if (a * b < 0) edges.push(y)
+    }
+
+    const widths = edges.slice(1).map((e, i) => e - edges[i])
+    const spread = Math.max(...widths) / Math.min(...widths)
+
+    expect(edges.length).toBeGreaterThan(8)
+    expect(spread).toBeGreaterThan(1.3)
+  })
+
+  it('сдвиг меняет знак от пояса к поясу', () => {
+    const bandCount = 9
+    const center = (band: number): number => (band + 0.5) / bandCount
+
+    expect(bdShearAngle(center(1), bandCount, 0.5)).toBeCloseTo(-0.5, 10)
+    expect(bdShearAngle(center(2), bandCount, 0.5)).toBeCloseTo(0.5, 10)
+  })
+
+  it('нулевой сдвиг — точка отката', () => {
+    // toBeCloseTo, а не toBe: sin(...) может быть отрицательным, и
+    // IEEE754 отрицательное×0 даёт -0 — Object.is(-0, 0) внутри toBe ложно,
+    // хотя по величине это тот же ноль
+    expect(bdShearAngle(0.37, 9, 0)).toBeCloseTo(0, 10)
+  })
+
+  it('пер-поясная сила турбулентности лежит в [0.4, 1] и не обнуляется', () => {
+    // Ноль означал бы пояс без всякой турбулентности — гладкую полосу
+    for (const n of [-1, -0.5, 0, 0.5, 1]) {
+      expect(bdBandChaos(n)).toBeGreaterThanOrEqual(0.4)
+      expect(bdBandChaos(n)).toBeLessThanOrEqual(1)
+    }
+  })
+})
+
+describe('структурный контракт турбулентности', () => {
+  it('поле берёт деталь двух масштабов', () => {
+    const start = brownDwarfSurface.indexOf('vec2 bdField(')
+    const end = brownDwarfSurface.indexOf('float bdTauEff(')
+    const field = brownDwarfSurface.slice(start, end)
+
+    expect(start).toBeGreaterThanOrEqual(0)
+    expect(end).toBeGreaterThan(start)
+    expect((field.match(/fbm\(/g) ?? []).length).toBeGreaterThanOrEqual(4)
+    expect(field).not.toContain('time')
   })
 })

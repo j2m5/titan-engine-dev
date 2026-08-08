@@ -210,6 +210,9 @@ export interface IBrownDwarfRenderingObject {
   gapThreshold?: number
   parallax?: number
   breathAmplitude?: number
+  bandWarp?: number
+  zonalShear?: number
+  fineDetail?: number
 }
 
 export type Colorable = {

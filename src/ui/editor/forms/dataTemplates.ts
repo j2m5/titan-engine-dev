@@ -104,7 +104,10 @@ export const renderingDataTemplates: DataTemplate[] = [
       gapGlow: 3,
       gapThreshold: 0.42,
       parallax: 0.02,
-      breathAmplitude: 0.08
+      breathAmplitude: 0.08,
+      bandWarp: 0.08,
+      zonalShear: 0.5,
+      fineDetail: 0.25
     }
   }
 ]

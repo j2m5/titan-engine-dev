@@ -36,6 +36,9 @@ class BrownDwarfMaterial extends ShaderMaterial {
     this.uniforms.uSeed.value = params.seed
     this.uniforms.uBandCount.value = params.bandCount
     this.uniforms.uTurbulence.value = params.turbulence
+    this.uniforms.uBandWarp.value = params.bandWarp
+    this.uniforms.uZonalShear.value = params.zonalShear
+    this.uniforms.uFineDetail.value = params.fineDetail
   }
 }
 

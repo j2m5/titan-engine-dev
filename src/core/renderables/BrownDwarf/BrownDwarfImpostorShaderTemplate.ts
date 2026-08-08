@@ -23,6 +23,9 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
     uSeed: new Uniform(4096),
     uBandCount: new Uniform(9),
     uTurbulence: new Uniform(1.6),
+    uBandWarp: new Uniform(0.08),
+    uZonalShear: new Uniform(0.5),
+    uFineDetail: new Uniform(0.25),
     time: new Uniform(0),
     uBodyRotation: new Uniform(new Matrix3())
   },
@@ -51,6 +54,9 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
     uniform float uSeed;
     uniform float uBandCount;
     uniform float uTurbulence;
+    uniform float uBandWarp;
+    uniform float uZonalShear;
+    uniform float uFineDetail;
     uniform float time;
     uniform mat3 uBodyRotation;
 
@@ -85,7 +91,7 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
 
       // Без параллакса: при видимом размере 12px сдвиг верхушки суб-пиксельный,
       // второй вызов поля добавил бы только стоимость без видимого эффекта
-      vec2 field = bdField(dir, uSeed, uBandCount, uTurbulence, uGapThreshold);
+      vec2 field = bdField(dir, uSeed, uBandCount, uTurbulence, uGapThreshold, uBandWarp, uZonalShear, uFineDetail);
 
       // Та же точка входа и тот же список аргументов, что у диска —
       // закреплено тестом посимвольного сравнения вызова

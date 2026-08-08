@@ -23,17 +23,43 @@ export const brownDwarfSurface = `
   // полуширина растёт с экранным футпринтом: фиксированная ширина под
   // HDR-контрастом усиливает субпиксельный шум. На импосторе футпринт
   // огромен, и порог вырождается в усреднение сам.
-  vec2 bdField(vec3 dir, float seed, float bandCount, float turbulence, float gapThreshold) {
-    vec4 p = vec4(dir.x * 1.2, dir.y * 4.5, dir.z * 1.2, seed);
-    float noise = fbm(p, 6, 0.85);
+  #define BD_FINE_SCALE 4.0
+  #define BD_FINE_OCTAVES 4
 
-    float bands = 0.5 + 0.5 * sin(dir.y * PI * bandCount + noise * turbulence);
+  vec2 bdField(vec3 dir, float seed, float bandCount, float turbulence,
+               float gapThreshold, float bandWarp, float zonalShear, float fineDetail) {
+    // Коробление широты: строго периодический синус давал пояса-линейку
+    float warpNoise = fbm(vec4(0.0, dir.y * 2.0, 0.0, seed + 37.0), 3, 0.6);
+    float lat = dir.y + warpNoise * bandWarp;
+
+    // Зональный сдвиг: домен проворачивается вокруг оси тем сильнее, чем ближе
+    // к струе, и знак чередуется с поясами. Отсюда сметённые вдоль пояса
+    // складки — подпись газового гиганта. Коробится ДОМЕН, поэтому, в отличие
+    // от адвекции запекания, ничего не размывается
+    float shear = sin(lat * PI * bandCount) * zonalShear;
+    float ca = cos(shear);
+    float sa = sin(shear);
+    vec3 swept = vec3(dir.x * ca - dir.z * sa, dir.y, dir.x * sa + dir.z * ca);
+
+    vec4 p = vec4(swept.x * 1.2, swept.y * 4.5, swept.z * 1.2, seed);
+
+    // Два масштаба: крупный рвёт пояса, мелкий даёт структуру на кромках
+    float coarse = fbm(p, 6, 0.85);
+    float fine = fbm(p * BD_FINE_SCALE + 23.0, BD_FINE_OCTAVES, 0.7);
+    float noise = coarse + fine * fineDetail;
+
+    // Сила турбулентности своя у каждого пояса: одни спокойные, другие бурлят
+    float chaos = 0.4 + 0.6 * (0.5 + 0.5 * fbm(vec4(0.0, lat * 3.0, 0.0, seed + 71.0), 2, 0.5));
+
+    float bands = 0.5 + 0.5 * sin(lat * PI * bandCount + noise * turbulence * chaos);
     float density = mix(bands, 0.5 + 0.5 * noise, BD_BAND_NOISE_MIX);
 
     float w = max(fwidth(density) * 1.5, BD_GAP_MIN_WIDTH);
     float tau = smoothstep(gapThreshold - w, gapThreshold + w, density);
 
-    float height = 0.5 + 0.5 * fbm(p * 2.3 + 11.0, 4, 0.7);
+    // Высота несёт мелкую деталь: она модулирует тон облачной палубы в bdShade,
+    // иначе тёмные участки остаются плоскими
+    float height = 0.5 + 0.5 * (fbm(p * 2.3 + 11.0, 4, 0.7) * 0.6 + fine * 0.4);
 
     return vec2(tau, height);
   }

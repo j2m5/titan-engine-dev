@@ -14,6 +14,9 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
     uSeed: new Uniform(4096),
     uBandCount: new Uniform(9),
     uTurbulence: new Uniform(1.6),
+    uBandWarp: new Uniform(0.08),
+    uZonalShear: new Uniform(0.5),
+    uFineDetail: new Uniform(0.25),
     time: new Uniform(0)
   },
   vertexShader: `
@@ -58,6 +61,9 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
     uniform float uSeed;
     uniform float uBandCount;
     uniform float uTurbulence;
+    uniform float uBandWarp;
+    uniform float uZonalShear;
+    uniform float uFineDetail;
     uniform float time;
 
     varying vec3 vPosition;
@@ -82,7 +88,7 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
       // движении камеры. Первый вызов поля читает высоту, второй считает поле
       // в направлении со сдвигом вдоль касательной проекции взгляда — это два
       // вычисления шума вместо двух выборок текстуры, заметно дороже
-      float height = bdField(dir, uSeed, uBandCount, uTurbulence, uGapThreshold).g;
+      float height = bdField(dir, uSeed, uBandCount, uTurbulence, uGapThreshold, uBandWarp, uZonalShear, uFineDetail).g;
 
       // В центре диска взгляд совпадает с нормалью, касательная вырождается
       // в ноль и normalize дал бы NaN. Параллакса там и нет — сдвигать нечего
@@ -91,7 +97,7 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
         ? dir
         : normalize(dir - normalize(tangent) * (height * uParallax));
 
-      vec2 field = bdField(shifted, uSeed, uBandCount, uTurbulence, uGapThreshold);
+      vec2 field = bdField(shifted, uSeed, uBandCount, uTurbulence, uGapThreshold, uBandWarp, uZonalShear, uFineDetail);
 
       // Вся композиция — одной точкой входа чанка. Импостор зовёт ту же
       // функцию теми же аргументами: разойтись двум LOD нечем

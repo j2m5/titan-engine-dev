@@ -102,3 +102,26 @@ export function bdGap(density: number, threshold: number, footprint: number): nu
 
   return smoothstep(threshold - w, threshold + w, density)
 }
+
+/** Коробление широты: пояса перестают быть равной ширины */
+export function bdWarpLatitude(latitude: number, warpNoise: number, bandWarp: number): number {
+  return latitude + warpNoise * bandWarp
+}
+
+/**
+ * Угол зонального сдвига по широте. Соседние струи едут в разные стороны,
+ * поэтому знак чередуется с тем же периодом, что и пояса: попавшее между
+ * ними вытягивается вдоль пояса. Домен коробится, а не поле, — размытия нет.
+ */
+export function bdShearAngle(latitude: number, bandCount: number, zonalShear: number): number {
+  return Math.sin(latitude * Math.PI * bandCount) * zonalShear
+}
+
+/**
+ * Пер-поясная сила турбулентности: одни пояса спокойные зоны, другие бурлят.
+ * Гладкая функция широты, а не ступенька по номеру пояса — ступенька дала бы
+ * шов на границе.
+ */
+export function bdBandChaos(chaosNoise: number): number {
+  return 0.4 + 0.6 * (0.5 + 0.5 * chaosNoise)
+}
