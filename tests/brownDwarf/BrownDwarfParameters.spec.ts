@@ -16,7 +16,7 @@ describe('параметры коричневого карлика', () => {
   it('без renderingObject берёт дефолты, а не падает', () => {
     const params = brownDwarfParameters(stubActor())
 
-    expect(params.bandCount).toBe(9)
+    expect(params.bandCount).toBe(4.5)
     expect(params.opticalDepth).toBeCloseTo(3)
     expect(params.breathAmplitude).toBeCloseTo(0.08)
     expect(params.temperature).toBe(1600)

@@ -12,9 +12,9 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
     uParallax: new Uniform(0.02),
     uBreathAmplitude: new Uniform(0.08),
     uSeed: new Uniform(4096),
-    uBandCount: new Uniform(9),
+    uBandCount: new Uniform(4.5),
     uTurbulence: new Uniform(1.6),
-    uBandWarp: new Uniform(0.08),
+    uBandWarp: new Uniform(0.16),
     uZonalShear: new Uniform(0.5),
     uFineDetail: new Uniform(0.25),
     time: new Uniform(0)

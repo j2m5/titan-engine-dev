@@ -30,16 +30,23 @@ export interface BrownDwarfParameters {
   temperature: number
 }
 
+/**
+ * Ловушка связанных ручек: `bandWarp` — смещение широты в абсолютных единицах,
+ * а ширина пояса равна 1/`bandCount`. Значит при правке числа поясов warp надо
+ * масштабировать обратно пропорционально, иначе разброс ширин меняется вместе
+ * с ними: половинное число поясов при прежнем warp даёт вдвое более ровные
+ * пояса. Пара 4.5 / 0.16 держит ту же относительную неровность, что 9 / 0.08.
+ */
 const DEFAULTS: Omit<BrownDwarfParameters, 'temperature'> = {
   seed: 4096,
-  bandCount: 9,
+  bandCount: 4.5,
   turbulence: 1.6,
   opticalDepth: 3,
   gapGlow: 3,
   gapThreshold: 0.42,
   parallax: 0.02,
   breathAmplitude: 0.08,
-  bandWarp: 0.08,
+  bandWarp: 0.16,
   zonalShear: 0.5,
   fineDetail: 0.25
 }

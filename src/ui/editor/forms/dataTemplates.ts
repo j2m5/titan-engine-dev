@@ -98,14 +98,14 @@ export const renderingDataTemplates: DataTemplate[] = [
     label: 'brownDwarf',
     data: {
       seed: 4096,
-      bandCount: 9,
+      bandCount: 4.5,
       turbulence: 1.6,
       opticalDepth: 3,
       gapGlow: 3,
       gapThreshold: 0.42,
       parallax: 0.02,
       breathAmplitude: 0.08,
-      bandWarp: 0.08,
+      bandWarp: 0.16,
       zonalShear: 0.5,
       fineDetail: 0.25
     }
