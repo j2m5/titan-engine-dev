@@ -48,6 +48,23 @@ describe('тело коричневого карлика', () => {
     expect(BrownDwarfShaderTemplate.fragmentShader).not.toContain('float bdTransmit(')
   })
 
+  it('фрагментный шейдер живёт только в объектных координатах', () => {
+    // Смешение мирового вектора с объектным даёт сдвиг выборки, зависящий от
+    // поворота тела, то есть «поехавший» рисунок. Здесь смешать нечего:
+    // мировых величин в теле шейдера нет вовсе
+    const fragment = BrownDwarfShaderTemplate.fragmentShader
+    const start = fragment.indexOf('void main()')
+
+    expect(start).toBeGreaterThanOrEqual(0)
+    expect(fragment).toContain('uniform vec3 uCameraObject;')
+
+    const main = fragment.slice(start)
+
+    expect(main).not.toContain('cameraPosition')
+    expect(main).not.toContain('modelMatrix')
+    expect(main).not.toContain('vPositionW')
+  })
+
   it('вся композиция идёт одной точкой входа чанка', () => {
     // Собственных вызовов примитивов в шаблоне нет — иначе диск и импостор
     // могут разойтись порядком операций или забытым дыханием
@@ -57,14 +74,22 @@ describe('тело коричневого карлика', () => {
     expect(BrownDwarfShaderTemplate.fragmentShader).not.toContain('smoothstep')
   })
 
-  it('dispose освобождает запекатель', () => {
+  it('dispose освобождает запекатель, а не только свои ресурсы', () => {
+    // Ловушка: проверять длину массива целей бессмысленно — dispose его не
+    // укорачивает, и тест прошёл бы даже без вызова baker.dispose() вовсе
     const body = new BrownDwarf(stubActor(), fakeRenderer)
-    const targets = body.bakerForTest.targetsForTest
+    const baker = body.bakerForTest
+
+    let bakerDisposed = 0
+    const original = baker.dispose.bind(baker)
+    baker.dispose = (): void => {
+      bakerDisposed++
+      original()
+    }
 
     body.dispose()
 
-    // цели освобождены: повторный dispose не должен падать
+    expect(bakerDisposed).toBe(1)
     expect(() => body.dispose()).not.toThrow()
-    expect(targets).toHaveLength(2)
   })
 })

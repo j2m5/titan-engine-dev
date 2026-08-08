@@ -1,4 +1,4 @@
-import { BufferGeometry, CubeTexture, Mesh, SphereGeometry, type WebGLRenderer } from 'three'
+import { BufferGeometry, CubeTexture, Matrix4, Mesh, SphereGeometry, Vector3, type WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { UpdateContext } from '@/core/UpdateContext'
@@ -22,6 +22,9 @@ class BrownDwarf extends Mesh {
 
   private readonly radius: number
   private readonly baker: BrownDwarfCloudBaker
+  /** Переиспользуемые буферы перевода камеры в объектные координаты */
+  private readonly cameraWorld: Vector3 = new Vector3()
+  private readonly inverseModel: Matrix4 = new Matrix4()
 
   public constructor(model: Actor, renderer: WebGLRenderer) {
     super()
@@ -58,6 +61,14 @@ class BrownDwarf extends Mesh {
   public updateObject(ctx: UpdateContext): void {
     // Время идёт в дыхание яркости и НИКУДА больше: форма от него не зависит
     this.material.uniforms.time.value = ctx.elapsed
+
+    // Камера переводится в объектные координаты здесь, потому что во
+    // фрагментном шейдере three нет modelMatrix, а GLSL ES 1.00 не умеет
+    // inverse(). Шейдер за счёт этого целиком живёт в одной системе координат
+    ctx.camera.getWorldPosition(this.cameraWorld)
+    this.material.uniforms.uCameraObject.value
+      .copy(this.cameraWorld)
+      .applyMatrix4(this.inverseModel.copy(this.matrixWorld).invert())
   }
 
   public dispose(): void {
