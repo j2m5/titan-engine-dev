@@ -201,6 +201,18 @@ export interface IRingRenderingObject {
   dustScaleHeightKm?: number
 }
 
+export interface IBrownDwarfRenderingObject {
+  seed?: number
+  bandCount?: number
+  jetStrength?: number
+  turbulence?: number
+  opticalDepth?: number
+  gapGlow?: number
+  parallax?: number
+  hazeStrength?: number
+  breathAmplitude?: number
+}
+
 export type Colorable = {
   r: number
   g: number

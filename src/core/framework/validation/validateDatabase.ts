@@ -105,6 +105,7 @@ const CATEGORY_RULES: Record<string, CategoryRules> = {
 
   star: CENTRAL,
   blackHole: CENTRAL,
+  brownDwarf: CENTRAL,
   planet: { positioning: 'keplerian', expects: { physical: true, rendering: true, orbit: true } },
 
   atmosphere: ATTACHED,

@@ -53,7 +53,7 @@ function snapshotWithTemplate(alias: string, categoryId: number, data: unknown):
 describe('шаблоны data редактора', () => {
   it('покрывают все категории с конфигом рендеринга', () => {
     expect(renderingDataTemplates.map((t) => t.value).sort()).toEqual(
-      ['atmosphere', 'nebula', 'planet', 'ring'].sort()
+      ['atmosphere', 'brownDwarf', 'nebula', 'planet', 'ring'].sort()
     )
   })
 

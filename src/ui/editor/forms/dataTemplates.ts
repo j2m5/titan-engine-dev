@@ -92,5 +92,20 @@ export const renderingDataTemplates: DataTemplate[] = [
       },
       dust: { strength: 0.6, threshold: 0.55, color: '#05090c' }
     }
+  },
+  {
+    value: 'brownDwarf',
+    label: 'brownDwarf',
+    data: {
+      seed: 4096,
+      bandCount: 9,
+      jetStrength: 0.6,
+      turbulence: 1.6,
+      opticalDepth: 3,
+      gapGlow: 3,
+      parallax: 0.02,
+      hazeStrength: 1,
+      breathAmplitude: 0.08
+    }
   }
 ]

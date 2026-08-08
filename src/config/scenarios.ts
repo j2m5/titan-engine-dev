@@ -71,5 +71,15 @@ export const Scenarios: ScenarioConfig[] = [
     skybox: [1, 2, 3, 4, 5, 6],
     defaultCameraPosition: [0, fromAstronomicalUnits(1.2), fromAstronomicalUnits(1.2)],
     lightSources: [87]
+  },
+  {
+    id: 7,
+    rootId: 101,
+    name: 'Luhman 16 system',
+    description: 'Solitary brown dwarf with a banded cloud deck',
+    preview: 'unknown.png',
+    skybox: [1, 2, 3, 4, 5, 6],
+    defaultCameraPosition: [0, fromAstronomicalUnits(0.002), fromAstronomicalUnits(0.002)],
+    lightSources: [102]
   }
 ]
