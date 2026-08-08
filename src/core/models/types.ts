@@ -19,7 +19,8 @@ export enum AllowedCategories {
   planet,
   atmosphere,
   ring,
-  nebula
+  nebula,
+  brownDwarf
 }
 
 export type AllowedCategory = keyof typeof AllowedCategories
