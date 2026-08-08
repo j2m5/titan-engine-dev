@@ -79,5 +79,7 @@ export const PhysicalObjects: IPhysicalObject[] = [
   { id: 73, actorId: 97, parentId: 67, mass: 5.485e20, radius: 410, axialTilt: 15, orbitalPeriod: 47, rotationPeriod: 22, temperature: 0 },
   { id: 74, actorId: 98, parentId: 67, mass: 9.265e19, radius: 240, axialTilt: 19, orbitalPeriod: 55, rotationPeriod: 25, temperature: 0 },
   { id: 75, actorId: 99, parentId: null, mass: 3.143e19, radius: 175, axialTilt: 16, orbitalPeriod: 68, rotationPeriod: 32, temperature: 0 },
-  { id: 76, actorId: 102, parentId: null, mass: 6.36031e28, radius: 69900, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 5.05, temperature: 1210 }
+  { id: 76, actorId: 102, parentId: 77, mass: 5.31476e28, radius: 69900, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 5.05, temperature: 1210 },
+  { id: 77, actorId: 101, parentId: null, mass: 1.17684e29, radius: 1, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 1, temperature: 0 },
+  { id: 78, actorId: 103, parentId: 77, mass: 6.45364e28, radius: 69300, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 6.9, temperature: 1350 }
 ]
