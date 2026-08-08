@@ -54,6 +54,8 @@ const DENSITY_CONTRAST = 1.8
  */
 class BrownDwarfCloudBaker {
   private readonly targets: [WebGLCubeRenderTarget, WebGLCubeRenderTarget]
+  /** Индексы уже освобождённых целей: черновая уходит раньше dispose */
+  private readonly released: Set<number> = new Set()
   private readonly scene: Scene = new Scene()
   private readonly camera: OrthographicCamera = new OrthographicCamera(-1, 1, 1, -1, 0, 1)
   private readonly quad: Mesh
@@ -81,33 +83,54 @@ class BrownDwarfCloudBaker {
     const advect: RawShaderMaterial = this.advectMaterial()
     const finalize: RawShaderMaterial = this.finalizeMaterial()
 
-    this.runPass(seed, this.targets[0], null)
+    try {
+      this.runPass(seed, this.targets[0], null)
 
-    let source = 0
-    for (let step = 0; step < steps; step++) {
-      const destination: number = 1 - source
-      this.runPass(advect, this.targets[destination], this.targets[source])
-      source = destination
+      let source = 0
+      for (let step = 0; step < steps; step++) {
+        const destination: number = 1 - source
+
+        // Номер итерации декоррелирует впрыск: без него один и тот же шум
+        // вливается на каждом шаге и складывается когерентно
+        advect.uniforms.uInjectSeed.value = step * 13
+        this.runPass(advect, this.targets[destination], this.targets[source])
+
+        source = destination
+      }
+
+      // Финализация пишет в цель, которую НЕ читает: чтение и запись одной
+      // текстуры в одном проходе — гонка
+      const final: number = 1 - source
+      this.runPass(finalize, this.targets[final], this.targets[source])
+
+      // Черновая цель больше не нужна. Держать её до dispose означало бы
+      // 67 МБ впустую на всё время жизни объекта
+      this.targets[source].dispose()
+      this.released.add(source)
+
+      return this.targets[final].texture
+    } finally {
+      // finally, а не хвост try: падение прохода не должно течь материалами
+      for (const material of [seed, advect, finalize]) material.dispose()
     }
-
-    // Финализация пишет в цель, которую НЕ читает: чтение и запись одной
-    // текстуры в одном проходе — гонка
-    const final: number = 1 - source
-    this.runPass(finalize, this.targets[final], this.targets[source])
-
-    for (const material of [seed, advect, finalize]) material.dispose()
-
-    return this.targets[final].texture
   }
 
   public dispose(): void {
-    for (const target of this.targets) target.dispose()
+    this.targets.forEach((target, index) => {
+      if (!this.released.has(index)) target.dispose()
+    })
+    this.released.clear()
 
     this.quad.geometry.dispose()
     this.scene.clear()
   }
 
   private createTarget(): WebGLCubeRenderTarget {
+    // depthBuffer: false обязателен. По умолчанию three заводит буфер глубины
+    // НА КАЖДУЮ ГРАНЬ: при грани 2048 это 6 × 2048² × 4 Б = 100 МБ на цель и
+    // 201 МБ на пару — под конвейер полноэкранных квадов, которому глубина не
+    // нужна вообще. Прецедент в самой библиотеке: PMREMGenerator заводит свои
+    // цели без глубины и включает её только когда реально рисует сцену.
     const target = new WebGLCubeRenderTarget(this.params.size, {
       format: RGFormat,
       type: UnsignedByteType,
@@ -115,7 +138,9 @@ class BrownDwarfCloudBaker {
       magFilter: LinearFilter,
       wrapS: ClampToEdgeWrapping,
       wrapT: ClampToEdgeWrapping,
-      generateMipmaps: true
+      generateMipmaps: true,
+      depthBuffer: false,
+      stencilBuffer: false
     })
 
     target.texture.name = 'BrownDwarfClouds'
@@ -153,6 +178,10 @@ class BrownDwarfCloudBaker {
 
   private seedMaterial(): RawShaderMaterial {
     return new RawShaderMaterial({
+      // Глубины у целей нет (depthBuffer: false) — тест и запись обязаны
+      // быть выключены явно, иначе намерение читается только из конструктора цели
+      depthTest: false,
+      depthWrite: false,
       vertexShader: bakeVertexShader,
       fragmentShader: `#define PI 3.141592653589793\n${seedFragmentShader}`,
       uniforms: {
@@ -172,6 +201,10 @@ class BrownDwarfCloudBaker {
     )
 
     return new RawShaderMaterial({
+      // Глубины у целей нет (depthBuffer: false) — тест и запись обязаны
+      // быть выключены явно, иначе намерение читается только из конструктора цели
+      depthTest: false,
+      depthWrite: false,
       vertexShader: bakeVertexShader,
       fragmentShader: `#define PI 3.141592653589793\n${advectFragmentShader.replace(
         'void main()',
@@ -184,14 +217,20 @@ class BrownDwarfCloudBaker {
         uBandCount: new Uniform(this.params.bandCount),
         uJetStrength: new Uniform(this.params.jetStrength),
         uTurbulence: new Uniform(this.params.turbulence),
-        uStep: new Uniform(ADVECTION_STEP),
-        uInjection: new Uniform(this.params.injection)
+        uStepSize: new Uniform(ADVECTION_STEP),
+        uInjection: new Uniform(this.params.injection),
+        // Переписывается перед каждым проходом номером итерации
+        uInjectSeed: new Uniform(0)
       }
     })
   }
 
   private finalizeMaterial(): RawShaderMaterial {
     return new RawShaderMaterial({
+      // Глубины у целей нет (depthBuffer: false) — тест и запись обязаны
+      // быть выключены явно, иначе намерение читается только из конструктора цели
+      depthTest: false,
+      depthWrite: false,
       vertexShader: bakeVertexShader,
       fragmentShader: finalizeFragmentShader,
       uniforms: {

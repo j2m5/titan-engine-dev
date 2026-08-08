@@ -148,25 +148,31 @@ export const advectFragmentShader = `
   uniform float uBandCount;
   uniform float uJetStrength;
   uniform float uTurbulence;
-  uniform float uStep;
+  uniform float uStepSize;
   uniform float uInjection;
+  uniform float uInjectSeed;
 
   void main() {
     vec3 dir = bdFaceDir();
     vec3 flow = bdFlow(dir, uBandCount, uJetStrength, uTurbulence, uSeed);
-    vec3 back = normalize(dir - flow * uStep);
+    vec3 back = normalize(dir - flow * uStepSize);
 
     vec2 advected = textureCube(uPrev, back).rg;
+
+    // Впрыск обязан быть РАЗНЫМ на каждом шаге: одно и то же поле, влитое
+    // 24 раза, складывается когерентно в призрак фиксированного fbm вместо
+    // широкополосной детали. uInjectSeed несёт номер итерации — это счётчик
+    // цикла запекания, а не время: тот же seed даёт ту же кубмапу.
     vec2 fresh = vec2(
-      bdFbm(dir * 7.0, uSeed + 31.0),
-      bdFbm(dir * 9.0 + 5.0, uSeed + 137.0)
+      bdFbm(dir * 7.0, uSeed + 31.0 + uInjectSeed),
+      bdFbm(dir * 9.0 + 5.0, uSeed + 137.0 + uInjectSeed)
     );
 
     gl_FragColor = vec4(mix(advected, fresh, uInjection), 0.0, 1.0);
   }
 `
 
-/** Финализация: контраст толщи и нормировка высоты */
+/** Финализация: контраст толщи; высота проходит насквозь, она уже в 0..1 */
 export const finalizeFragmentShader = `
   precision highp float;
 
