@@ -12,12 +12,12 @@ describe('SceneObserver: состав отслеживаемых типов', ()
     const controls = makeAstroControlsStub()
 
     observer.observable = controls
-    observer.scene = makeSceneWithBody('brownDwarf', 'Luhman 16A')
+    observer.scene = makeSceneWithBody('brownDwarf', 'Luhman 16B')
 
     controls.dispatch(new Vector3(1, 2, 3))
 
     expect(observer.data.size).toBe(1)
-    expect(observer.calculateClosestObject()?.name).toBe('Luhman 16A')
+    expect(observer.calculateClosestObject()?.name).toBe('Luhman 16B')
   })
 
   it('покрывает все навигационные категории списка объектов', () => {

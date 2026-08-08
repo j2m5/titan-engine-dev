@@ -105,5 +105,5 @@ export const Actors: IActor[] = [
   { id: 99, categoryId: 4, parentId: 88, name: "Korriban VII", description: "", color: "#969696" },
   { id: 100, categoryId: 7, parentId: 86, name: "Horuset Nebula", description: "", color: "#4cbfa6" },
   { id: 101, categoryId: 1, parentId: null, name: "Luhman 16 system", description: "", color: "#ffffff" },
-  { id: 102, categoryId: 8, parentId: 101, name: "Luhman 16A", description: "", color: "#8b2500" }
+  { id: 102, categoryId: 8, parentId: 101, name: "Luhman 16B", description: "", color: "#8b2500" }
 ]
