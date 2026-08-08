@@ -39,6 +39,8 @@ class BrownDwarfMaterial extends ShaderMaterial {
     this.uniforms.uBandWarp.value = params.bandWarp
     this.uniforms.uZonalShear.value = params.zonalShear
     this.uniforms.uFineDetail.value = params.fineDetail
+    this.uniforms.uPolarChaos.value = params.polarChaos
+    this.uniforms.uVortexStrength.value = params.vortexStrength
   }
 }
 

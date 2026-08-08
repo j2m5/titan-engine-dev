@@ -34,8 +34,47 @@ export const brownDwarfSurface = `
     return 0.5 + 0.5 * fbm(vec4(dir * 2.76, seed + 11.0), 4, 0.7);
   }
 
+  #define BD_VORTEX_COUNT 5
+
+  /**
+   * Овальные штормы на границах струй — там, где встречные потоки сдвигаются
+   * друг о друга. Каждый вихрь проворачивает домен вокруг оси, проходящей
+   * через его центр, на угол, гаснущий с угловым расстоянием (формула
+   * Родрига). Тот же приём, что зональный сдвиг, но локальный: коробится
+   * домен, поэтому размытия нет и времени тоже нет.
+   *
+   * Центры садятся на границы поясов: там sin(широта·PI·bandCount) равен нулю.
+   */
+  vec3 bdVortices(vec3 dir, float seed, float bandCount, float strength) {
+    vec3 warped = dir;
+
+    for (int i = 0; i < BD_VORTEX_COUNT; i++) {
+      float fi = float(i);
+      float h1 = fract(sin(fi * 12.9898 + seed) * 43758.5453);
+      float h2 = fract(sin(fi * 78.2330 + seed * 1.7) * 43758.5453);
+      float h3 = fract(sin(fi * 39.4250 + seed * 2.3) * 43758.5453);
+
+      float band = floor(h1 * bandCount * 2.0 - bandCount) + 1.0;
+      float cy = clamp(band / bandCount, -0.95, 0.95);
+      float cr = sqrt(max(1.0 - cy * cy, 0.0));
+      float clon = h2 * 6.2831853;
+      vec3 centre = vec3(cr * cos(clon), cy, cr * sin(clon));
+
+      float radius = 0.10 + 0.12 * h3;
+      float fall = 1.0 - smoothstep(0.0, radius, distance(warped, centre));
+      float angle = fall * fall * strength * (h3 > 0.5 ? 1.0 : -1.0);
+
+      float ca = cos(angle);
+      float sa = sin(angle);
+      warped = warped * ca + cross(centre, warped) * sa + centre * dot(centre, warped) * (1.0 - ca);
+    }
+
+    return normalize(warped);
+  }
+
   vec2 bdField(vec3 dir, float seed, float bandCount, float turbulence,
-               float gapThreshold, float bandWarp, float zonalShear, float fineDetail) {
+               float gapThreshold, float bandWarp, float zonalShear, float fineDetail,
+               float polarChaos, float vortexStrength) {
     // Коробление широты: строго периодический синус давал пояса-линейку
     float warpNoise = fbm(vec4(0.0, dir.y * 2.0, 0.0, seed + 37.0), 3, 0.6);
     float lat = dir.y + warpNoise * bandWarp;
@@ -49,7 +88,8 @@ export const brownDwarfSurface = `
     float sa = sin(shear);
     vec3 swept = vec3(dir.x * ca - dir.z * sa, dir.y, dir.x * sa + dir.z * ca);
 
-    vec4 p = vec4(swept.x * 1.2, swept.y * 4.5, swept.z * 1.2, seed);
+    vec3 swirled = bdVortices(swept, seed, bandCount, vortexStrength);
+    vec4 p = vec4(swirled.x * 1.2, swirled.y * 4.5, swirled.z * 1.2, seed);
 
     // Два масштаба: крупный рвёт пояса, мелкий даёт структуру на кромках
     float coarse = fbm(p, 6, 0.85);
@@ -60,7 +100,11 @@ export const brownDwarfSurface = `
     float chaos = 0.4 + 0.6 * (0.5 + 0.5 * fbm(vec4(0.0, lat * 3.0, 0.0, seed + 71.0), 2, 0.5));
 
     float bands = 0.5 + 0.5 * sin(lat * PI * bandCount + noise * turbulence * chaos);
-    float density = mix(bands, 0.5 + 0.5 * noise, BD_BAND_NOISE_MIX);
+    float banded = mix(bands, 0.5 + 0.5 * noise, BD_BAND_NOISE_MIX);
+
+    // К полюсам полосы распадаются в изотропную турбулентность — см. bdPolarWeight
+    float polar = 1.0 - smoothstep(0.75, 0.95, abs(lat)) * polarChaos;
+    float density = mix(0.5 + 0.5 * noise, banded, polar);
 
     float w = max(fwidth(density) * 1.5, BD_GAP_MIN_WIDTH);
     float tau = smoothstep(gapThreshold - w, gapThreshold + w, density);

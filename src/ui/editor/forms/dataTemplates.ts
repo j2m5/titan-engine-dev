@@ -107,7 +107,9 @@ export const renderingDataTemplates: DataTemplate[] = [
       breathAmplitude: 0.08,
       bandWarp: 0.16,
       zonalShear: 0.5,
-      fineDetail: 0.25
+      fineDetail: 0.25,
+      polarChaos: 0.8,
+      vortexStrength: 0.35
     }
   }
 ]

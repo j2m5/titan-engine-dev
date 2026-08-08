@@ -20,9 +20,10 @@ import { BrownDwarfImpostorShaderTemplate } from '@/core/renderables/BrownDwarf/
  *
  * Поверхность считается теми же функциями чанка brownDwarfSurface с ТЕМИ ЖЕ
  * параметрами поля (seed, bandCount, turbulence, gapThreshold, bandWarp,
- * zonalShear, fineDetail), что и диск, а палитра и ручки копируются из
- * материала тела — на дистанции переключения уровни совпадают по построению,
- * ручек подстройки нет намеренно (тот же контракт, что у FakeStar).
+ * zonalShear, fineDetail, polarChaos, vortexStrength), что и диск, а палитра
+ * и ручки копируются из материала тела — на дистанции переключения уровни
+ * совпадают по построению, ручек подстройки нет намеренно (тот же контракт,
+ * что у FakeStar).
  *
  * Размер меряется под BROWN_DWARF_IMPOSTOR_PIXELS.
  */
@@ -71,7 +72,9 @@ class BrownDwarfImpostor extends Mesh {
       'uBreathAmplitude',
       'uBandWarp',
       'uZonalShear',
-      'uFineDetail'
+      'uFineDetail',
+      'uPolarChaos',
+      'uVortexStrength'
     ]) {
       this.material.uniforms[key].value = this.body.material.uniforms[key].value
     }

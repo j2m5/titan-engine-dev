@@ -27,6 +27,8 @@ export interface BrownDwarfParameters {
   bandWarp: number
   zonalShear: number
   fineDetail: number
+  polarChaos: number
+  vortexStrength: number
   temperature: number
 }
 
@@ -48,7 +50,9 @@ const DEFAULTS: Omit<BrownDwarfParameters, 'temperature'> = {
   breathAmplitude: 0.08,
   bandWarp: 0.16,
   zonalShear: 0.5,
-  fineDetail: 0.25
+  fineDetail: 0.25,
+  polarChaos: 0.8,
+  vortexStrength: 0.35
 }
 
 /**
@@ -77,6 +81,8 @@ export function brownDwarfParameters(actor: Actor): BrownDwarfParameters {
     bandWarp: data.bandWarp ?? DEFAULTS.bandWarp,
     zonalShear: data.zonalShear ?? DEFAULTS.zonalShear,
     fineDetail: data.fineDetail ?? DEFAULTS.fineDetail,
+    polarChaos: data.polarChaos ?? DEFAULTS.polarChaos,
+    vortexStrength: data.vortexStrength ?? DEFAULTS.vortexStrength,
     temperature:
       actor.physicalObject?.getAttribute('temperature', BROWN_DWARF_DEFAULT_TEMPERATURE_K) ??
       BROWN_DWARF_DEFAULT_TEMPERATURE_K

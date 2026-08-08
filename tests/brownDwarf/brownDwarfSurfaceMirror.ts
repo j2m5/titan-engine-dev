@@ -125,3 +125,14 @@ export function bdShearAngle(latitude: number, bandCount: number, zonalShear: nu
 export function bdBandChaos(chaosNoise: number): number {
   return 0.4 + 0.6 * (0.5 + 0.5 * chaosNoise)
 }
+
+/**
+ * Вес полосности по широте: к полюсам полосы гаснут. У Юпитера полярнее
+ * примерно 60° ленты распадаются на скопления вихрей; у быстрых вращателей
+ * это выражено сильнее. 1 — чистые пояса, 0 — изотропная турбулентность.
+ */
+export function bdPolarWeight(latitude: number, polarChaos: number): number {
+  const t: number = smoothstep(0.75, 0.95, Math.abs(latitude))
+
+  return 1 - t * polarChaos
+}

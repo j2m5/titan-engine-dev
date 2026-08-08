@@ -6,6 +6,7 @@ import {
   bdBreath,
   bdCompose,
   bdGap,
+  bdPolarWeight,
   bdShade,
   bdShearAngle,
   bdTauEff,
@@ -297,5 +298,42 @@ describe('структурный контракт турбулентности',
     expect(end).toBeGreaterThan(start)
     expect((field.match(/fbm\(/g) ?? []).length).toBeGreaterThanOrEqual(4)
     expect(field).not.toContain('time')
+  })
+})
+
+describe('полярный развал поясов', () => {
+  it('на экваторе полосы целы, у полюса гаснут', () => {
+    expect(bdPolarWeight(0, 1)).toBe(1)
+    expect(bdPolarWeight(0.5, 1)).toBe(1)
+    expect(bdPolarWeight(0.99, 1)).toBe(0)
+  })
+
+  it('переход монотонный и симметричный по знаку широты', () => {
+    const samples = [0.75, 0.8, 0.85, 0.9, 0.95].map((y) => bdPolarWeight(y, 1))
+
+    for (let i = 1; i < samples.length; i++) expect(samples[i]).toBeLessThan(samples[i - 1])
+    expect(bdPolarWeight(-0.88, 1)).toBeCloseTo(bdPolarWeight(0.88, 1), 12)
+  })
+
+  it('нулевая ручка — точка отката: пояса доходят до полюсов', () => {
+    expect(bdPolarWeight(0.99, 0)).toBe(1)
+  })
+})
+
+describe('структурный контракт вихрей', () => {
+  it('вихри объявлены, крутят домен вокруг своей оси и имеют ноль', () => {
+    expect(brownDwarfSurface).toContain('vec3 bdVortices(')
+    // Формула Родрига: поворот вокруг оси, проходящей через центр вихря
+    expect(brownDwarfSurface).toContain('cross(centre, warped)')
+    expect(brownDwarfSurface).toContain('BD_VORTEX_COUNT')
+  })
+
+  it('вихри стоят до вычисления домена шума, иначе они его не коробят', () => {
+    const field = brownDwarfSurface.slice(brownDwarfSurface.indexOf('vec2 bdField('))
+    const vort = field.indexOf('bdVortices(')
+    const domain = field.indexOf('vec4 p =')
+
+    expect(vort).toBeGreaterThanOrEqual(0)
+    expect(domain).toBeGreaterThan(vort)
   })
 })
