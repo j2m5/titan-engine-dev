@@ -32,7 +32,7 @@ class BrownDwarfImpostor extends Mesh {
   private readonly worldPosition: Vector3 = new Vector3()
   private readonly cameraPosition: Vector3 = new Vector3()
   private readonly bodyRotation: Matrix4 = new Matrix4()
-  private readonly viewRotation: Matrix4 = new Matrix4()
+  private readonly billboardRotation: Matrix4 = new Matrix4()
 
   public constructor(
     private readonly body: BrownDwarf,
@@ -44,6 +44,9 @@ class BrownDwarfImpostor extends Mesh {
 
     // NormalBlending и depthWrite: false — как у импостора звезды: квад
     // перекрывает фон непрозрачным диском, но не режет объекты позади
+    // prepareSource обязателен: без него `#include <brownDwarfSurface>` уедет
+    // в компилятор как есть, и шейдер не соберётся. Диск делает то же в
+    // BrownDwarfMaterial
     this.material = new ShaderMaterial({
       vertexShader: AbstractShader.prepareSource(BrownDwarfImpostorShaderTemplate.vertexShader),
       fragmentShader: AbstractShader.prepareSource(BrownDwarfImpostorShaderTemplate.fragmentShader),
@@ -58,6 +61,23 @@ class BrownDwarfImpostor extends Mesh {
     for (const key of ['uClouds', 'uColorCloud', 'uColorHot', 'uOpticalDepth', 'uGapGlow', 'uBreathAmplitude']) {
       this.material.uniforms[key].value = this.body.material.uniforms[key].value
     }
+
+    // Поворот считается в onBeforeRender по той же причине, что у диска:
+    // lookAt в updateObject меняет НАШУ матрицу, а пересчитывает её
+    // scene.updateMatrixWorld() уже внутри рендера.
+    //
+    // Ключевое: нормаль псевдосферы живёт в системе САМОГО БИЛБОРДА (её задают
+    // координаты внутри квада), а не камеры. Ориентация билборда идёт от
+    // lookAt — то есть от направления НА камеру, — и совпадает с ориентацией
+    // камеры только когда тело точно на оси взгляда. Взять матрицу камеры
+    // значило бы крутить узор при панорамировании: диск такого не делает,
+    // и на переключении LOD это был бы видимый скачок.
+    this.onBeforeRender = (): void => {
+      this.bodyRotation.extractRotation(this.body.matrixWorld).invert()
+      this.billboardRotation.extractRotation(this.matrixWorld)
+
+      this.material.uniforms.uBodyRotation.value.setFromMatrix4(this.bodyRotation.multiply(this.billboardRotation))
+    }
   }
 
   public updateObject(ctx: UpdateContext): void {
@@ -66,14 +86,6 @@ class BrownDwarfImpostor extends Mesh {
     this.lookAt(cameraPosition)
 
     this.material.uniforms.time.value = ctx.elapsed
-
-    // Нормаль псевдосферы живёт в системе камеры; чтобы рисунок остался
-    // прибитым к телу, её надо перевести в систему тела:
-    // body^-1 * view. Матрица тела берётся живой, а не замороженной при
-    // создании: карлик вращается.
-    this.viewRotation.extractRotation(ctx.camera.matrixWorld)
-    this.bodyRotation.extractRotation(this.body.matrixWorld).invert()
-    this.material.uniforms.uBodyRotation.value.setFromMatrix4(this.bodyRotation.multiply(this.viewRotation))
 
     // Позиция мировая, а не локальная: билборд висит в нуле родительского узла.
     // Ту же величину меряет LOD.update, выбирая между диском и билбордом
