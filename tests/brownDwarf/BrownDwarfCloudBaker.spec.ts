@@ -178,9 +178,16 @@ describe('запекатель облачного поля', () => {
 
     baker.bake()
 
-    for (const call of calls) {
-      if (!call.source) continue
+    // Ловушка: `if (!call.source) continue` пропустил бы и null, а null —
+    // это «юниформ есть, но его никто не заполнил», то есть ровно тот дефект,
+    // который тест обязан ловить. Различать надо undefined (у посева юниформа
+    // нет вовсе) и null (есть, но пустой).
+    const reading = calls.filter((c) => c.source !== undefined)
 
+    expect(reading).toHaveLength(calls.length - 6)
+
+    for (const call of reading) {
+      expect(call.source).not.toBeNull()
       expect(call.source).not.toBe((call.target as WebGLCubeRenderTarget).texture)
     }
 
