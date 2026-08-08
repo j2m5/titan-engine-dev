@@ -19,7 +19,6 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
     uColorHot: new Uniform(new Color()),
     uOpticalDepth: new Uniform(3),
     uGapGlow: new Uniform(3),
-    uParallax: new Uniform(0.02),
     uBreathAmplitude: new Uniform(0.08),
     time: new Uniform(0),
     uBodyRotation: new Uniform(new Matrix3())
@@ -45,7 +44,6 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
     uniform vec3 uColorHot;
     uniform float uOpticalDepth;
     uniform float uGapGlow;
-    uniform float uParallax;
     uniform float uBreathAmplitude;
     uniform float time;
     uniform mat3 uBodyRotation;

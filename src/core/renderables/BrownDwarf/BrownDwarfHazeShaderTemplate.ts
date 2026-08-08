@@ -54,9 +54,9 @@ export const BrownDwarfHazeShaderTemplate: ShaderProps = {
       float sin2 = max(0.0, 1.0 - mu * mu);
       float outer = sqrt(max(0.0, uShellScale * uShellScale - sin2));
       float inner = sqrt(max(0.0, 1.0 - sin2));
-      float chord = outer - inner;
+      float profile = outer - inner;
 
-      gl_FragColor = vec4(uColor * chord * uStrength, 1.0);
+      gl_FragColor = vec4(uColor * profile * uStrength, 1.0);
 
       ${ShaderChunk['tonemapping_fragment']}
       ${ShaderChunk['colorspace_fragment']}

@@ -122,10 +122,11 @@ describe('импостор коричневого карлика', () => {
   it('сэмплит ту же кубмапу и несёт те же ручки вида, что и диск', () => {
     // Общий источник данных и общие ручки — то, чем сведён шов на переключении.
     // Сравнивается именно ОБЩИЙ набор, а не надмножество: у диска есть
-    // uCameraObject (он живёт в объектных координатах), у импостора —
-    // uBodyRotation (он восстанавливает псевдосферу). Требовать друг от друга
-    // чужие юниформы значило бы навязывать им одну реализацию
-    const shared = ['uClouds', 'uColorCloud', 'uColorHot', 'uOpticalDepth', 'uGapGlow', 'uParallax', 'uBreathAmplitude', 'time']
+    // uCameraObject (он живёт в объектных координатах) и uParallax (сдвиг
+    // верхушек облаков — на 12px он суб-текселен и импостору не нужен), у
+    // импостора — uBodyRotation (он восстанавливает псевдосферу). Требовать
+    // друг от друга чужие юниформы значило бы навязывать им одну реализацию
+    const shared = ['uClouds', 'uColorCloud', 'uColorHot', 'uOpticalDepth', 'uGapGlow', 'uBreathAmplitude', 'time']
 
     for (const key of shared) {
       expect(BrownDwarfShaderTemplate.uniforms).toHaveProperty(key)

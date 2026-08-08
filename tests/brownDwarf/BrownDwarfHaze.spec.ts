@@ -1,4 +1,4 @@
-import { AdditiveBlending } from 'three'
+import { AdditiveBlending, Color } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { BrownDwarfHaze, HAZE_RADIUS_SCALE, hazeLimbProfile } from '@/core/renderables/BrownDwarf/BrownDwarfHaze'
 
@@ -35,9 +35,24 @@ describe('дымка над лимбом', () => {
   })
 
   it('нулевая сила дымки гасит слой целиком', () => {
+    // Присвоение полю ничего не доказывает (0 === 0 всегда) — гасить обязан
+    // именно продукт формулы фрагмента: gl_FragColor = uColor * profile * uStrength
     const haze = new BrownDwarfHaze(stubActor())
     haze.material.uniforms.uStrength.value = 0
 
-    expect(haze.material.uniforms.uStrength.value).toBe(0)
+    const strength: number = haze.material.uniforms.uStrength.value
+    const color: Color = haze.material.uniforms.uColor.value as Color
+
+    for (const mu of [0.02, 0.2, 0.4, 0.6, 0.8, 0.99]) {
+      // Профиль ненулевой (см. тест монотонности выше) — гасит именно сила,
+      // а не вырожденный профиль
+      expect(hazeLimbProfile(mu)).toBeGreaterThan(0)
+
+      const shaded: Color = color.clone().multiplyScalar(hazeLimbProfile(mu) * strength)
+
+      expect(shaded.r).toBe(0)
+      expect(shaded.g).toBe(0)
+      expect(shaded.b).toBe(0)
+    }
   })
 })

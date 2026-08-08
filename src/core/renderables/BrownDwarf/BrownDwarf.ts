@@ -71,7 +71,7 @@ class BrownDwarf extends Mesh {
     }
   }
 
-  /** Запекатель для теста освобождения ресурсов */
+  /** Запекатель для теста освобождения ресурсов; не публичный API */
   public get bakerForTest(): BrownDwarfCloudBaker {
     return this.baker
   }

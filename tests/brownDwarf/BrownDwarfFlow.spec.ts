@@ -16,6 +16,9 @@ describe('поле потока запекания', () => {
       const flow = bdFlow(dir, 9, 0.6, 1.6, 4096)
 
       expect(Math.abs(flow.dot(dir))).toBeLessThan(1e-6)
+      // Нулевой вектор тоже ортогонален чему угодно — проверка выше одна его
+      // не ловит, длина обязана быть заметно ненулевой
+      expect(flow.length()).toBeGreaterThan(1e-3)
     }
   })
 

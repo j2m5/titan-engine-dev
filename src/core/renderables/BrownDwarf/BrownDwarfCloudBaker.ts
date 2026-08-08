@@ -4,6 +4,7 @@ import {
   LinearFilter,
   LinearMipmapLinearFilter,
   Mesh,
+  MeshBasicMaterial,
   OrthographicCamera,
   PlaneGeometry,
   RawShaderMaterial,
@@ -18,7 +19,6 @@ import { CUBE_FACE_BASIS } from '@/core/renderables/BrownDwarf/cubeFaceBasis'
 import {
   advectFragmentShader,
   bakeVertexShader,
-  bdFlowChunk,
   finalizeFragmentShader,
   seedFragmentShader
 } from '@/core/renderables/BrownDwarf/BrownDwarfBakeShaders'
@@ -60,17 +60,21 @@ class BrownDwarfCloudBaker {
   private readonly scene: Scene = new Scene()
   private readonly camera: OrthographicCamera = new OrthographicCamera(-1, 1, 1, -1, 0, 1)
   private readonly quad: Mesh
+  // Квад стартует с этим материалом, дальше runPass переставляет на
+  // seed/advect/finalize (их освобождает bake()) — этот, стартовый, остаётся
+  // ничьим и его обязан закрыть dispose() этого класса
+  private readonly quadMaterial: MeshBasicMaterial = new MeshBasicMaterial()
 
   public constructor(
     private readonly renderer: WebGLRenderer,
     private readonly params: BakeParams
   ) {
     this.targets = [this.createTarget(), this.createTarget()]
-    this.quad = new Mesh(new PlaneGeometry(2, 2))
+    this.quad = new Mesh(new PlaneGeometry(2, 2), this.quadMaterial)
     this.scene.add(this.quad)
   }
 
-  /** Цели для теста освобождения ресурсов */
+  /** Цели для теста освобождения ресурсов; не публичный API */
   public get targetsForTest(): readonly WebGLCubeRenderTarget[] {
     return this.targets
   }
@@ -123,6 +127,7 @@ class BrownDwarfCloudBaker {
     this.released.clear()
 
     this.quad.geometry.dispose()
+    this.quadMaterial.dispose()
     this.scene.clear()
   }
 
@@ -194,23 +199,13 @@ class BrownDwarfCloudBaker {
   }
 
   private advectMaterial(): RawShaderMaterial {
-    // Функции шума живут в посеве; адвекция подмешивает свежий шум теми же
-    // формулами, поэтому исходник склеивается из обоих
-    const noise: string = seedFragmentShader.slice(
-      seedFragmentShader.indexOf('float bdHash'),
-      seedFragmentShader.indexOf('void main')
-    )
-
     return new RawShaderMaterial({
       // Глубины у целей нет (depthBuffer: false) — тест и запись обязаны
       // быть выключены явно, иначе намерение читается только из конструктора цели
       depthTest: false,
       depthWrite: false,
       vertexShader: bakeVertexShader,
-      fragmentShader: `#define PI 3.141592653589793\n${advectFragmentShader.replace(
-        'void main()',
-        `${noise}\n${bdFlowChunk}\nvoid main()`
-      )}`,
+      fragmentShader: `#define PI 3.141592653589793\n${advectFragmentShader}`,
       uniforms: {
         ...this.faceUniforms(),
         uPrev: new Uniform(null),

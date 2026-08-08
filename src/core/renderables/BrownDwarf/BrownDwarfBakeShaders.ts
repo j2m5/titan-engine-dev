@@ -3,6 +3,11 @@
  *
  * Числовое зеркало потока: tests/brownDwarf/brownDwarfFlowMirror.ts —
  * менять строго синхронно.
+ *
+ * PI используется ниже (bdFlow, seedFragmentShader), но не объявлена здесь:
+ * это RawShaderMaterial без автоподключения ShaderChunk — её прописывает
+ * `#define PI ...`, который BrownDwarfCloudBaker добавляет перед исходником
+ * в seedMaterial()/advectMaterial().
  */
 
 /**
@@ -46,6 +51,47 @@ export const bdFlowChunk = `
   }
 `
 
+/**
+ * Хеш-шум значений (value noise) и fbm поверх него. Общий для посева (базовое
+ * поле) и адвекции (впрыск свежего шума теми же формулами) — интерполируется
+ * в оба шейдера ниже, отдельной копии быть не должно.
+ */
+export const bdNoiseChunk = `
+  float bdHash(vec3 p, float seed) {
+    return fract(sin(dot(p, vec3(127.1, 311.7, 74.7)) + seed) * 43758.5453);
+  }
+
+  float bdValueNoise(vec3 p, float seed) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+
+    float n = mix(
+      mix(mix(bdHash(i + vec3(0.0, 0.0, 0.0), seed), bdHash(i + vec3(1.0, 0.0, 0.0), seed), f.x),
+          mix(bdHash(i + vec3(0.0, 1.0, 0.0), seed), bdHash(i + vec3(1.0, 1.0, 0.0), seed), f.x), f.y),
+      mix(mix(bdHash(i + vec3(0.0, 0.0, 1.0), seed), bdHash(i + vec3(1.0, 0.0, 1.0), seed), f.x),
+          mix(bdHash(i + vec3(0.0, 1.0, 1.0), seed), bdHash(i + vec3(1.0, 1.0, 1.0), seed), f.x), f.y),
+      f.z);
+
+    return n;
+  }
+
+  float bdFbm(vec3 p, float seed) {
+    float total = 0.0;
+    float amplitude = 1.0;
+    float maxValue = 0.0;
+
+    for (int i = 0; i < 5; i++) {
+      total += bdValueNoise(p, seed) * amplitude;
+      maxValue += amplitude;
+      amplitude *= 0.55;
+      p *= 2.0;
+    }
+
+    return total / maxValue;
+  }
+`
+
 /** Общий вершинник проходов: полноэкранный квад, без матриц */
 export const bakeVertexShader = `
   attribute vec3 position;
@@ -83,43 +129,10 @@ export const seedFragmentShader = `
   precision highp float;
 
   ${faceDirChunk}
+  ${bdNoiseChunk}
 
   uniform float uSeed;
   uniform float uBandCount;
-
-  float bdHash(vec3 p, float seed) {
-    return fract(sin(dot(p, vec3(127.1, 311.7, 74.7)) + seed) * 43758.5453);
-  }
-
-  float bdValueNoise(vec3 p, float seed) {
-    vec3 i = floor(p);
-    vec3 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-
-    float n = mix(
-      mix(mix(bdHash(i + vec3(0.0, 0.0, 0.0), seed), bdHash(i + vec3(1.0, 0.0, 0.0), seed), f.x),
-          mix(bdHash(i + vec3(0.0, 1.0, 0.0), seed), bdHash(i + vec3(1.0, 1.0, 0.0), seed), f.x), f.y),
-      mix(mix(bdHash(i + vec3(0.0, 0.0, 1.0), seed), bdHash(i + vec3(1.0, 0.0, 1.0), seed), f.x),
-          mix(bdHash(i + vec3(0.0, 1.0, 1.0), seed), bdHash(i + vec3(1.0, 1.0, 1.0), seed), f.x), f.y),
-      f.z);
-
-    return n;
-  }
-
-  float bdFbm(vec3 p, float seed) {
-    float total = 0.0;
-    float amplitude = 1.0;
-    float maxValue = 0.0;
-
-    for (int i = 0; i < 5; i++) {
-      total += bdValueNoise(p, seed) * amplitude;
-      maxValue += amplitude;
-      amplitude *= 0.55;
-      p *= 2.0;
-    }
-
-    return total / maxValue;
-  }
 
   void main() {
     vec3 dir = bdFaceDir();
@@ -142,6 +155,8 @@ export const advectFragmentShader = `
   precision highp float;
 
   ${faceDirChunk}
+  ${bdNoiseChunk}
+  ${bdFlowChunk}
 
   uniform samplerCube uPrev;
   uniform float uSeed;
