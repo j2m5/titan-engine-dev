@@ -50,9 +50,15 @@ export function bdBreath(dir: readonly number[], t: number, amplitude: number): 
  */
 export const GAP_GLOW_FLOOR = 0.45
 
-/** Тональная вариация палубы по высоте верхушки: база и размах */
-export const CLOUD_TONE_BASE = 0.6
-export const CLOUD_TONE_RANGE = 0.4
+/** Растяжка высоты: сырой fbm держится в ±0.4, и палуба не доходила до краёв */
+export const HEIGHT_CONTRAST = 1.25
+
+/**
+ * Разброс толщи палубы ВЫШЕ порога: возвращает в тёмные пояса форму вихрей,
+ * которую порог обрезал в единицу. Равенство единице — откат.
+ */
+export const DECK_RELIEF_LOW = 0.85
+export const DECK_RELIEF_HIGH = 1.25
 
 /** Потолок HDR — общий со звездой и атмосферой (half-float буфер, AgX-плечо) */
 export const HDR_CEILING = 64
@@ -83,7 +89,9 @@ export function bdShade(
   const transmit: number = bdTransmit(bdTauEff(field[0], mu, opticalDepth))
   const glow: number = gapGlow * mix(GAP_GLOW_FLOOR, 1, field[2])
   const hotLit: number = mix(hot, hotDeep, field[2]) * glow * bdBreath(dir, t, breathAmplitude)
-  const cloudLit: number = mix(cloud, cloudHigh, field[1]) * (CLOUD_TONE_BASE + CLOUD_TONE_RANGE * field[1])
+  // Отдельного тонового множителя нет: он рос с высотой, а цвет падал, и они
+  // гасили друг друга — перепад по палубе выходил 1.11 раза
+  const cloudLit: number = mix(cloud, cloudHigh, field[1])
 
   return Math.min(bdCompose(cloudLit, hotLit, transmit), HDR_CEILING)
 }

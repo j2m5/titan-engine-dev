@@ -12,6 +12,19 @@ export const brownDwarfSurface = `
   #define BD_BAND_NOISE_MIX 0.35
   #define BD_GAP_MIN_WIDTH 0.004
 
+  /** Растяжка высоты: сырой fbm держится в ±0.4, и палуба не доходила до краёв */
+  #define BD_HEIGHT_CONTRAST 1.25
+
+  /**
+   * Разброс толщи палубы ВЫШЕ порога. Порог обрезает всё плотнее себя в
+   * единицу, и палуба выходит ровной — хотя вихри и турбулентность в
+   * плотности там ровно те же, что в светлых прогалинах. Множитель
+   * возвращает их форму: плотные места непрозрачнее, разрежённые
+   * пропускают чуть больше свечения снизу. Равенство единице — откат.
+   */
+  #define BD_DECK_RELIEF_LOW 0.85
+  #define BD_DECK_RELIEF_HIGH 1.25
+
   #define BD_FINE_SCALE 4.0
   #define BD_FINE_OCTAVES 4
 
@@ -116,14 +129,15 @@ export const brownDwarfSurface = `
     float density = mix(0.5 + 0.5 * noise, banded, polar);
 
     float w = max(fwidth(density) * 1.5, BD_GAP_MIN_WIDTH);
-    float tau = smoothstep(gapThreshold - w, gapThreshold + w, density);
+    float relief = mix(BD_DECK_RELIEF_LOW, BD_DECK_RELIEF_HIGH, density);
+    float tau = smoothstep(gapThreshold - w, gapThreshold + w, density) * relief;
 
     // От той же плотности, что и tau, но ДО порога — иначе градиента бы не было
     float depth = bdDepth(density, gapThreshold);
 
-    // Высота несёт мелкую деталь: она модулирует тон облачной палубы в bdShade,
-    // иначе тёмные участки остаются плоскими
-    float height = 0.5 + 0.5 * (fbm(p * 2.3 + 11.0, 4, 0.7) * 0.6 + fine * 0.4);
+    // Высота несёт мелкую деталь и растянута на весь диапазон: по ней
+    // bdShade выбирает цвет палубы, и без растяжки тёмные пояса плоские
+    float height = clamp(0.5 + BD_HEIGHT_CONTRAST * (fbm(p * 2.3 + 11.0, 4, 0.7) * 0.6 + fine * 0.4), 0.0, 1.0);
 
     return vec3(tau, height, depth);
   }
@@ -166,8 +180,6 @@ export const brownDwarfSurface = `
   /** Яркость мелкой прорехи как доля от глубокой: ноль сделал бы её чёрной дырой */
   #define BD_GAP_GLOW_FLOOR 0.45
 
-  #define BD_CLOUD_TONE_BASE 0.6
-  #define BD_CLOUD_TONE_RANGE 0.4
   #define BD_HDR_CEILING 64.0
 
   // Полная раскраска фрагмента — ЕДИНСТВЕННАЯ точка композиции на оба LOD.
@@ -194,8 +206,12 @@ export const brownDwarfSurface = `
     float glow = gapGlow * mix(BD_GAP_GLOW_FLOOR, 1.0, field.z);
     vec3 hotLit = mix(hot, hotDeep, field.z) * glow * bdBreath(dir, t, breathAmplitude);
 
-    // Верхушки облаков холоднее и тусклее нижних: мы видим их сверху
-    vec3 cloudLit = mix(cloud, cloudHigh, field.g) * (BD_CLOUD_TONE_BASE + BD_CLOUD_TONE_RANGE * field.g);
+    // Палуба темнеет с высотой верхушки: выше — холоднее и тусклее.
+    //
+    // Отдельного тонового множителя здесь НЕТ намеренно. Он рос с высотой,
+    // тогда как цвет с высотой падал, и они гасили друг друга: перепад по
+    // палубе выходил 1.11 раза, то есть тёмные пояса читались ровными.
+    vec3 cloudLit = mix(cloud, cloudHigh, field.g);
 
     return min(bdCompose(cloudLit, hotLit, transmit), vec3(BD_HDR_CEILING));
   }

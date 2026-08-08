@@ -14,8 +14,8 @@ import {
   bdTransmit,
   bdWarpLatitude,
   BREATH_AXES,
-  CLOUD_TONE_BASE,
-  CLOUD_TONE_RANGE,
+  DECK_RELIEF_HIGH,
+  DECK_RELIEF_LOW,
   GAP_GLOW_FLOOR,
   GAP_MIN_WIDTH,
   HDR_CEILING
@@ -99,7 +99,8 @@ describe('bdShade: единственная точка композиции на
     // поймали бы забытый mix (композиция прошла бы тест и без него)
     const field: [number, number, number] = [0.4, 0.7, 0.3]
     const manual = bdCompose(
-      (0.2 * (1 - field[1]) + 0.05 * field[1]) * (CLOUD_TONE_BASE + CLOUD_TONE_RANGE * field[1]),
+      // Тонового множителя нет: цвет палубы несёт всю её яркость сам
+      0.2 * (1 - field[1]) + 0.05 * field[1],
       // Множитель яркости растёт с глубиной: без него красный канал был бы
       // равен gapGlow по всей прогалине разом
       (9 * (1 - field[2]) + 20 * field[2]) *
@@ -174,6 +175,31 @@ describe('яркость прогалины растёт с глубиной, а
   })
 })
 
+describe('тёмная палуба не ровная', () => {
+  // Жалоба владельца: светлые полосы детализированы, тёмные однородны.
+  // Причина была в том, что два механизма гасили друг друга — цвет палубы
+  // темнел с высотой верхушки, а тоновый множитель с высотой светлел.
+  // Перепад выходил 1.11 раза, то есть палуба читалась плоской.
+  const deck = (h: number, hot: number): number =>
+    bdShade([1, h, 0], 1, [1, 0, 0], 0.25, 0.1125, hot, hot, 3, 3.3, 0, 0)
+
+  it('сама палуба даёт перепад больше двух раз', () => {
+    expect(deck(0, 0) / deck(1, 0)).toBeGreaterThan(2)
+  })
+
+  it('с протечкой свечения снизу перепад остаётся заметным', () => {
+    // Протечка постоянна по палубе и слегка сглаживает перепад
+    expect(deck(0, 1) / deck(1, 1)).toBeGreaterThan(1.6)
+  })
+
+  it('толща палубы следует плотности и выше порога', () => {
+    // Порог обрезал всё плотнее себя в единицу, и форма вихрей в тёмных
+    // областях терялась — хотя в плотности она ровно та же, что в светлых
+    expect(brownDwarfSurface).toContain('BD_DECK_RELIEF_LOW, BD_DECK_RELIEF_HIGH, density')
+    expect(brownDwarfSurface).toContain('density) * relief')
+  })
+})
+
 describe('структурный контракт: время отрезано от формы', () => {
   it('в толщу время не входит', () => {
     // Единственная функция чанка, принимающая время, — bdBreath. Если время
@@ -208,8 +234,8 @@ describe('структурный контракт: время отрезано �
     // можно поменять прямо в GLSL, оставив зеркало (и остальные тесты файла,
     // которые гоняют только TS-сторону) прежними.
     expect(brownDwarfSurface).toContain(`#define BD_HDR_CEILING ${HDR_CEILING.toFixed(1)}`)
-    expect(brownDwarfSurface).toContain(`#define BD_CLOUD_TONE_BASE ${CLOUD_TONE_BASE}`)
-    expect(brownDwarfSurface).toContain(`#define BD_CLOUD_TONE_RANGE ${CLOUD_TONE_RANGE}`)
+    expect(brownDwarfSurface).toContain(`#define BD_DECK_RELIEF_LOW ${DECK_RELIEF_LOW}`)
+    expect(brownDwarfSurface).toContain(`#define BD_DECK_RELIEF_HIGH ${DECK_RELIEF_HIGH}`)
 
     for (const [x, y, z] of BREATH_AXES) {
       expect(brownDwarfSurface).toContain(`vec3(${x}, ${y}, ${z})`)
