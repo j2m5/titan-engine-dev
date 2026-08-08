@@ -6,6 +6,7 @@ import {
   bdShade,
   bdTauEff,
   bdTransmit,
+  BREATH_AXES,
   CLOUD_TONE_BASE,
   CLOUD_TONE_RANGE,
   HDR_CEILING
@@ -74,6 +75,13 @@ describe('дыхание яркости: пересев формы невозм�
   it('нулевая амплитуда делает объект полностью статичным по яркости', () => {
     expect(bdBreath([1, 0, 0], 12345, 0)).toBe(1)
   })
+
+  it('положительная амплитуда действительно меняет яркость со временем', () => {
+    // Дополняет проверку границ: константная функция тоже уложилась бы в
+    // [1-a, 1+a], но не дышала бы. Без этой проверки обнулённая сумма
+    // синусов прошла бы все тесты файла.
+    expect(bdBreath(dirs[0], 0, amplitude)).not.toBeCloseTo(bdBreath(dirs[0], 10, amplitude), 6)
+  })
 })
 
 describe('bdShade: единственная точка композиции на оба LOD', () => {
@@ -101,11 +109,18 @@ describe('bdShade: единственная точка композиции на
 describe('структурный контракт: время отрезано от формы', () => {
   it('в толщу время не входит', () => {
     // Единственная функция чанка, принимающая время, — bdBreath. Если время
-    // появится в bdTauEff или bdTransmit, вернётся механизм прошлого дефекта.
-    const tauEff = brownDwarfSurface.slice(
-      brownDwarfSurface.indexOf('float bdTauEff'),
-      brownDwarfSurface.indexOf('float bdTransmit')
-    )
+    // появится в bdTauEff, bdTransmit или bdCompose, вернётся механизм
+    // прошлого дефекта.
+    // Индексы проверяются явно: если сигнатура переименована и indexOf
+    // вернёт -1, slice тихо схлопнется в '' и обе проверки ниже пройдут на
+    // пустой строке — такой снос защиты обязан падать, а не молчать.
+    const start = brownDwarfSurface.indexOf('float bdTauEff(')
+    const end = brownDwarfSurface.indexOf('vec3 bdCompose(')
+
+    expect(start).toBeGreaterThanOrEqual(0)
+    expect(end).toBeGreaterThan(start)
+
+    const tauEff = brownDwarfSurface.slice(start, end)
 
     expect(tauEff).not.toContain('time')
     // Граница слова обязательна: `float tau` содержит `float t` подстрокой
@@ -118,5 +133,27 @@ describe('структурный контракт: время отрезано �
     expect(breath).toContain('sin(')
     expect(breath).not.toContain('snoise')
     expect(breath).not.toContain('fbm')
+  })
+
+  it('числовые константы GLSL синхронизированы с зеркалом', () => {
+    // Без этой проверки оси дыхания, коэффициенты тона палубы и потолок HDR
+    // можно поменять прямо в GLSL, оставив зеркало (и остальные тесты файла,
+    // которые гоняют только TS-сторону) прежними.
+    expect(brownDwarfSurface).toContain(`#define BD_HDR_CEILING ${HDR_CEILING.toFixed(1)}`)
+    expect(brownDwarfSurface).toContain(`#define BD_CLOUD_TONE_BASE ${CLOUD_TONE_BASE}`)
+    expect(brownDwarfSurface).toContain(`#define BD_CLOUD_TONE_RANGE ${CLOUD_TONE_RANGE}`)
+
+    for (const [x, y, z] of BREATH_AXES) {
+      expect(brownDwarfSurface).toContain(`vec3(${x}, ${y}, ${z})`)
+    }
+  })
+
+  it('частоты и фазовые коэффициенты дыхания зафиксированы', () => {
+    // В зеркале не вынесены в отдельные константы (зашиты в bdBreath),
+    // поэтому фиксируются термом целиком — правка множителя или
+    // коэффициента при t в GLSL уронит эту строку.
+    expect(brownDwarfSurface).toContain('vec3(0.71, 0.43, 0.55)) * 3.0 + t * 0.11')
+    expect(brownDwarfSurface).toContain('vec3(-0.36, 0.82, 0.44)) * 5.0 - t * 0.07')
+    expect(brownDwarfSurface).toContain('vec3(0.52, -0.29, 0.8)) * 8.0 + t * 0.19')
   })
 })

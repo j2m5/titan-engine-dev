@@ -39,7 +39,7 @@ export const brownDwarfSurface = `
   float bdBreath(vec3 dir, float t, float amplitude) {
     float s = sin(dot(dir, vec3(0.71, 0.43, 0.55)) * 3.0 + t * 0.11)
             + sin(dot(dir, vec3(-0.36, 0.82, 0.44)) * 5.0 - t * 0.07)
-            + sin(dot(dir, vec3(0.52, -0.29, 0.80)) * 8.0 + t * 0.19);
+            + sin(dot(dir, vec3(0.52, -0.29, 0.8)) * 8.0 + t * 0.19);
 
     return 1.0 + amplitude * s / 3.0;
   }
