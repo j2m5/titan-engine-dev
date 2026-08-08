@@ -22,6 +22,7 @@ import { requireRenderingData } from '@/core/helpers/renderingData'
 import { Nebula } from '@/core/renderables/Nebula'
 import { nebulaParamsFromData } from '@/core/renderables/Nebula/NebulaRenderingData'
 import { PlacedNode } from '@/core/renderables/utils/PlacedNode'
+import { BrownDwarf } from '@/core/renderables/BrownDwarf'
 import { INebulaRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 
@@ -47,6 +48,8 @@ class RenderableFactory {
         return this.createRing(actor)
       case 7:
         return this.createNebula(actor)
+      case 8:
+        return this.createBrownDwarf(actor)
       default:
         throw new Error("Couldn't resolve actor")
     }
@@ -110,6 +113,18 @@ class RenderableFactory {
     lod.addLevel(lodl2, lod.switchDistance(config('camera.fov')), config('star.lodHysteresis'))
 
     node.add(lod)
+
+    return node
+  }
+
+  private createBrownDwarf(actor: Actor): Object3D {
+    const node = new DynamicNode(actor)
+    const body = new BrownDwarf(actor, this.renderer)
+
+    node.name = actor.getAttribute('name', '')
+    node.renderable = body
+
+    node.add(body)
 
     return node
   }

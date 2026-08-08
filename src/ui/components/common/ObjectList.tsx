@@ -12,7 +12,8 @@ import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTrans
 import { engineStore } from '@/ui/mobx/EngineStore'
 
 const ObjectList = observer(() => {
-  const filter = (actor: Actor): boolean => ['planet', 'star', 'blackHole'].includes(actor.category!.attributes.alias!)
+  const filter = (actor: Actor): boolean =>
+    ['planet', 'star', 'blackHole', 'brownDwarf'].includes(actor.category!.attributes.alias!)
 
   const sceneManager = useInjection(Tokens.SceneManager)
   const scene = useInjection(Tokens.Scene)
