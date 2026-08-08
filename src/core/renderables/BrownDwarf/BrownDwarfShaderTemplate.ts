@@ -4,13 +4,16 @@ import { Color, ShaderChunk, Uniform, Vector3 } from 'three'
 export const BrownDwarfShaderTemplate: ShaderProps = {
   uniforms: {
     uCameraObject: new Uniform(new Vector3()),
-    uClouds: new Uniform(null),
     uColorCloud: new Uniform(new Color()),
     uColorHot: new Uniform(new Color()),
     uOpticalDepth: new Uniform(3),
     uGapGlow: new Uniform(3),
+    uGapThreshold: new Uniform(0.42),
     uParallax: new Uniform(0.02),
     uBreathAmplitude: new Uniform(0.08),
+    uSeed: new Uniform(4096),
+    uBandCount: new Uniform(9),
+    uTurbulence: new Uniform(1.6),
     time: new Uniform(0)
   },
   vertexShader: `
@@ -45,17 +48,22 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
      */
     uniform vec3 uCameraObject;
 
-    uniform samplerCube uClouds;
     uniform vec3 uColorCloud;
     uniform vec3 uColorHot;
     uniform float uOpticalDepth;
     uniform float uGapGlow;
+    uniform float uGapThreshold;
     uniform float uParallax;
     uniform float uBreathAmplitude;
+    uniform float uSeed;
+    uniform float uBandCount;
+    uniform float uTurbulence;
     uniform float time;
 
     varying vec3 vPosition;
 
+    #include <noiseFunctions>
+    #include <starSurface>
     #include <brownDwarfSurface>
 
     void main() {
@@ -71,9 +79,10 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
       float mu = clamp(dot(dir, viewO), 0.0, 1.0);
 
       // Параллакс: верхушки облаков смещаются относительно провалов при
-      // движении камеры. Первая выборка читает высоту, вторая берёт поле
-      // со сдвигом вдоль касательной проекции взгляда.
-      float height = textureCube(uClouds, dir).g;
+      // движении камеры. Первый вызов поля читает высоту, второй считает поле
+      // в направлении со сдвигом вдоль касательной проекции взгляда — это два
+      // вычисления шума вместо двух выборок текстуры, заметно дороже
+      float height = bdField(dir, uSeed, uBandCount, uTurbulence, uGapThreshold).g;
 
       // В центре диска взгляд совпадает с нормалью, касательная вырождается
       // в ноль и normalize дал бы NaN. Параллакса там и нет — сдвигать нечего
@@ -82,7 +91,7 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
         ? dir
         : normalize(dir - normalize(tangent) * (height * uParallax));
 
-      vec2 field = textureCube(uClouds, shifted).rg;
+      vec2 field = bdField(shifted, uSeed, uBandCount, uTurbulence, uGapThreshold);
 
       // Вся композиция — одной точкой входа чанка. Импостор зовёт ту же
       // функцию теми же аргументами: разойтись двум LOD нечем

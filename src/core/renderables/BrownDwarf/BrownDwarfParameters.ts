@@ -21,6 +21,7 @@ export interface BrownDwarfParameters {
   turbulence: number
   opticalDepth: number
   gapGlow: number
+  gapThreshold: number
   parallax: number
   breathAmplitude: number
   temperature: number
@@ -32,6 +33,7 @@ const DEFAULTS: Omit<BrownDwarfParameters, 'temperature'> = {
   turbulence: 1.6,
   opticalDepth: 3,
   gapGlow: 3,
+  gapThreshold: 0.42,
   parallax: 0.02,
   breathAmplitude: 0.08
 }
@@ -54,6 +56,7 @@ export function brownDwarfParameters(actor: Actor): BrownDwarfParameters {
     turbulence: data.turbulence ?? DEFAULTS.turbulence,
     opticalDepth: data.opticalDepth ?? DEFAULTS.opticalDepth,
     gapGlow: data.gapGlow ?? DEFAULTS.gapGlow,
+    gapThreshold: data.gapThreshold ?? DEFAULTS.gapThreshold,
     parallax: data.parallax ?? DEFAULTS.parallax,
     // Кламп, а не просто чтение: bdBreath даёт [1-a, 1+a], и при a > 1
     // яркость нутра уходит в минус — отрицательная светимость

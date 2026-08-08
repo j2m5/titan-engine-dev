@@ -3,9 +3,9 @@ import { Color, Matrix3, ShaderChunk, Uniform } from 'three'
 
 /**
  * Импостор карлика. Юниформы — надмножество юниформов диска: собственного
- * множителя яркости нет НАМЕРЕННО, поверхность считается теми же функциями
- * чанка brownDwarfSurface по той же кубмапе. Любая своя ручка воссоздала бы
- * шов на переключении LOD.
+ * множителя яркости нет НАМЕРЕННО, поверхность считается тем же полем bdField
+ * с теми же параметрами, что и у диска (без параллакса — см. ниже). Любая
+ * своя ручка воссоздала бы шов на переключении LOD.
  *
  * uBodyRotation переводит нормаль псевдосферы из системы билборда в систему
  * тела: рисунок обязан оставаться прибитым к карлику и на импосторе тоже.
@@ -14,12 +14,15 @@ import { Color, Matrix3, ShaderChunk, Uniform } from 'three'
  */
 export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
   uniforms: {
-    uClouds: new Uniform(null),
     uColorCloud: new Uniform(new Color()),
     uColorHot: new Uniform(new Color()),
     uOpticalDepth: new Uniform(3),
     uGapGlow: new Uniform(3),
+    uGapThreshold: new Uniform(0.42),
     uBreathAmplitude: new Uniform(0.08),
+    uSeed: new Uniform(4096),
+    uBandCount: new Uniform(9),
+    uTurbulence: new Uniform(1.6),
     time: new Uniform(0),
     uBodyRotation: new Uniform(new Matrix3())
   },
@@ -39,17 +42,22 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
     ${ShaderChunk['common']}
     ${ShaderChunk['logdepthbuf_pars_fragment']}
 
-    uniform samplerCube uClouds;
     uniform vec3 uColorCloud;
     uniform vec3 uColorHot;
     uniform float uOpticalDepth;
     uniform float uGapGlow;
+    uniform float uGapThreshold;
     uniform float uBreathAmplitude;
+    uniform float uSeed;
+    uniform float uBandCount;
+    uniform float uTurbulence;
     uniform float time;
     uniform mat3 uBodyRotation;
 
     varying vec2 vQuadUv;
 
+    #include <noiseFunctions>
+    #include <starSurface>
     #include <brownDwarfSurface>
 
     void main() {
@@ -75,7 +83,9 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
       // Перевод в систему тела: рисунок остаётся прибитым к карлику
       vec3 dir = normalize(uBodyRotation * normalView);
 
-      vec2 field = textureCube(uClouds, dir).rg;
+      // Без параллакса: при видимом размере 12px сдвиг верхушки суб-пиксельный,
+      // второй вызов поля добавил бы только стоимость без видимого эффекта
+      vec2 field = bdField(dir, uSeed, uBandCount, uTurbulence, uGapThreshold);
 
       // Та же точка входа и тот же список аргументов, что у диска —
       // закреплено тестом посимвольного сравнения вызова

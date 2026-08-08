@@ -18,10 +18,11 @@ import { BrownDwarfImpostorShaderTemplate } from '@/core/renderables/BrownDwarf/
 /**
  * Билборд-импостор карлика: дальний уровень LOD.
  *
- * Поверхность считается теми же функциями чанка brownDwarfSurface по ТОЙ ЖЕ
- * кубмапе, что и диск, а палитра и ручки копируются из материала тела —
- * на дистанции переключения уровни совпадают по построению, ручек подстройки
- * нет намеренно (тот же контракт, что у FakeStar).
+ * Поверхность считается теми же функциями чанка brownDwarfSurface с ТЕМИ ЖЕ
+ * параметрами поля (seed, bandCount, turbulence, gapThreshold), что и диск,
+ * а палитра и ручки копируются из материала тела — на дистанции переключения
+ * уровни совпадают по построению, ручек подстройки нет намеренно (тот же
+ * контракт, что у FakeStar).
  *
  * Размер меряется под BROWN_DWARF_IMPOSTOR_PIXELS.
  */
@@ -57,8 +58,18 @@ class BrownDwarfImpostor extends Mesh {
       blending: NormalBlending
     })
 
-    // Юниформы копируются из тела: единый источник палитры и ручек
-    for (const key of ['uClouds', 'uColorCloud', 'uColorHot', 'uOpticalDepth', 'uGapGlow', 'uBreathAmplitude']) {
+    // Юниформы копируются из тела: единый источник палитры, параметров поля и ручек
+    for (const key of [
+      'uSeed',
+      'uBandCount',
+      'uTurbulence',
+      'uGapThreshold',
+      'uColorCloud',
+      'uColorHot',
+      'uOpticalDepth',
+      'uGapGlow',
+      'uBreathAmplitude'
+    ]) {
       this.material.uniforms[key].value = this.body.material.uniforms[key].value
     }
 

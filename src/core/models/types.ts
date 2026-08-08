@@ -207,6 +207,7 @@ export interface IBrownDwarfRenderingObject {
   turbulence?: number
   opticalDepth?: number
   gapGlow?: number
+  gapThreshold?: number
   parallax?: number
   breathAmplitude?: number
 }

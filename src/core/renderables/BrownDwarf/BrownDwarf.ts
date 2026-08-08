@@ -8,8 +8,9 @@ import { brownDwarfParameters, BrownDwarfParameters } from '@/core/renderables/B
 /**
  * Диск коричневого карлика.
  *
- * uClouds временно пуст: запекатель убран, аналитическое поле облаков ещё не
- * подключено. Время идёт только в дыхание яркости.
+ * Поле облаков считается аналитически в шейдере (bdField, чанк
+ * brownDwarfSurface): CPU передаёт только числовые параметры через материал,
+ * запекания и текстуры больше нет. Время идёт только в дыхание яркости.
  */
 class BrownDwarf extends Mesh {
   public model: Actor

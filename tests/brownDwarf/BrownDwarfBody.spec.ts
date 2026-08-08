@@ -2,6 +2,7 @@ import { PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { BrownDwarf } from '@/core/renderables/BrownDwarf/BrownDwarf'
 import { BrownDwarfShaderTemplate } from '@/core/renderables/BrownDwarf/BrownDwarfShaderTemplate'
+import { BrownDwarfImpostorShaderTemplate } from '@/core/renderables/BrownDwarf/BrownDwarfImpostorShaderTemplate'
 
 const fakeRenderer = {
   getRenderTarget: () => null,
@@ -20,14 +21,32 @@ function stubActor(): Actor {
 }
 
 describe('тело коричневого карлика', () => {
-  it('строится и держит юниформ uClouds пустым до аналитического поля', () => {
+  it('поле считается аналитически, кубмапы больше нет', () => {
     const body = new BrownDwarf(stubActor())
 
-    expect(body.material.uniforms.uClouds.value).toBeNull()
+    expect(BrownDwarfShaderTemplate.fragmentShader).toContain('bdField(')
+    expect(BrownDwarfShaderTemplate.fragmentShader).not.toContain('textureCube')
+    expect(body.material.uniforms).not.toHaveProperty('uClouds')
+    expect(body.material.uniforms.uBandCount.value).toBe(9)
+    // Сохранённое покрытие прежнего теста: сборка узла не завязана на uClouds
     expect(body.userData.type).toBe('brownDwarf')
     expect(body.userData.clickable).toBe(true)
 
     body.dispose()
+  })
+
+  it.each([
+    ['диск', BrownDwarfShaderTemplate.fragmentShader],
+    ['импостор', BrownDwarfImpostorShaderTemplate.fragmentShader]
+  ])('%s включает зависимости поля до чанка композиции', (_name, source: string) => {
+    // bdField зовёт fbm, fbm зовёт snoise; включение после — undeclared identifier
+    const noise = source.indexOf('#include <noiseFunctions>')
+    const star = source.indexOf('#include <starSurface>')
+    const dwarf = source.indexOf('#include <brownDwarfSurface>')
+
+    expect(noise).toBeGreaterThanOrEqual(0)
+    expect(star).toBeGreaterThan(noise)
+    expect(dwarf).toBeGreaterThan(star)
   })
 
   it('камера переводится в объектные координаты в onBeforeRender', () => {

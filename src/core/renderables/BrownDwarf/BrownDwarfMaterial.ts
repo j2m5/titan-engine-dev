@@ -9,8 +9,8 @@ import { buildStarPalette, StarPalette } from '@/core/materials/shaders/lib/help
  *
  * Юниформы клонируются: шаблонные объекты общие на модуль, а палитра
  * пер-объектная (в одной сцене могут стоять карлики разной температуры).
- * uClouds остаётся на дефолтном null из шаблона: аналитическое поле облаков
- * ещё не подключено.
+ * Поле облаков считается в шейдере аналитически (bdField) — сюда идут только
+ * его числовые параметры.
  */
 class BrownDwarfMaterial extends ShaderMaterial {
   public constructor(params: BrownDwarfParameters) {
@@ -30,8 +30,12 @@ class BrownDwarfMaterial extends ShaderMaterial {
     )
     this.uniforms.uOpticalDepth.value = params.opticalDepth
     this.uniforms.uGapGlow.value = params.gapGlow
+    this.uniforms.uGapThreshold.value = params.gapThreshold
     this.uniforms.uParallax.value = params.parallax
     this.uniforms.uBreathAmplitude.value = params.breathAmplitude
+    this.uniforms.uSeed.value = params.seed
+    this.uniforms.uBandCount.value = params.bandCount
+    this.uniforms.uTurbulence.value = params.turbulence
   }
 }
 
