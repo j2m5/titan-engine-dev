@@ -23,21 +23,31 @@ describe('базис граней кубмапы', () => {
     for (const basis of CUBE_FACE_BASIS) {
       expect(basis.right.length()).toBeCloseTo(1)
       expect(basis.up.length()).toBeCloseTo(1)
+      // Все три пары, а не две: без up·forward тест не держит собственное имя
       expect(basis.right.dot(basis.up)).toBeCloseTo(0)
       expect(basis.right.dot(basis.forward)).toBeCloseTo(0)
+      expect(basis.up.dot(basis.forward)).toBeCloseTo(0)
     }
   })
 
   it('round-trip: направление -> (грань, u, v) -> направление', () => {
     // Независимая проверка таблицы: прямой поиск грани по главной оси
     // (правило OpenGL) и обратная реконструкция обязаны сойтись.
+    // Направления обязаны покрыть все шесть веток выбора грани: баг в одной
+    // ветке иначе проходит весь набор незамеченным
     const dirs = [
       new Vector3(0.3, 0.9, -0.2),
       new Vector3(-0.7, 0.1, 0.4),
       new Vector3(0.2, -0.3, 0.95),
+      new Vector3(0.2, 0.3, -0.95),
+      new Vector3(0.1, -0.92, 0.2),
       new Vector3(-0.5, -0.5, -0.5),
       new Vector3(1, 0.001, 0.001)
     ]
+
+    // Тройная ничья (-0.5,-0.5,-0.5) уходит в -X по порядку сравнений —
+    // это не покрытие грани, а проверка тайбрейка, поэтому граней в списке семь
+    expect(new Set(dirs.map((d) => directionToFaceUV(d.clone().normalize()).face)).size).toBe(6)
 
     for (const dir of dirs) {
       const d = dir.clone().normalize()
@@ -66,7 +76,7 @@ describe('базис граней кубмапы', () => {
     }
   })
 
-  it('грани покрывают сферу без нахлёста: |u|,|v| не выходят за единицу', () => {
+  it('проекция не выходит за границы грани: |u| и |v| в пределах единицы', () => {
     const dirs = [
       new Vector3(0.3, 0.9, -0.2),
       new Vector3(-0.7, 0.1, 0.4),
