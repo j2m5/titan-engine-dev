@@ -13,6 +13,17 @@ export type SceneObserverRecord = {
   data: ObservableRecord
 }
 
+/**
+ * Типы тел, за которыми наблюдатель следит по `userData.type`.
+ *
+ * Тот же список фильтрует навигационный список объектов в UI, и это не
+ * дублирование ради удобства: `CameraToObjectTransition.handle()` начинается
+ * с `getData(name)` и молча выходит, если записи нет. Категория, показанная в
+ * списке, но неизвестная здесь, даёт мёртвую кнопку «лететь к» — поэтому
+ * список один на обоих потребителей, и новый тип дописывается сюда однажды.
+ */
+export const OBSERVED_TYPES: readonly string[] = ['planet', 'star', 'blackHole', 'brownDwarf']
+
 class SceneObserver extends EventEmitter {
   private _observable: AstroControls | null = null
   private _scene: Scene | null = null
@@ -20,7 +31,6 @@ class SceneObserver extends EventEmitter {
   public data: Map<string, ObservableRecord> = new Map()
   public objects: Object3D[] = []
 
-  private readonly categories: string[] = ['planet', 'star', 'blackHole']
   private vector: Vector3 = new Vector3()
 
   private readonly onObservableChange = (event: { data: Vector3 }): void => {
@@ -30,11 +40,14 @@ class SceneObserver extends EventEmitter {
   private readonly onChange = (): void => {
     this.defineDataRecords()
 
-    if (this.observable) {
-      const closest = this.calculateClosestObject()
-      this.observable.setTarget(closest.position)
-      this.emit('ClosestChange', closest)
-    }
+    if (!this.observable) return
+
+    const closest: ObservableRecord | null = this.calculateClosestObject()
+
+    if (!closest) return
+
+    this.observable.setTarget(closest.position)
+    this.emit('ClosestChange', closest)
   }
 
   public constructor() {
@@ -111,8 +124,8 @@ class SceneObserver extends EventEmitter {
 
     this.objects = []
 
-    this.categories.forEach((category: string): void => {
-      this.objects.push(...this._scene!.getObjectsByUserDataProperty('type', category))
+    OBSERVED_TYPES.forEach((type: string): void => {
+      this.objects.push(...this._scene!.getObjectsByUserDataProperty('type', type))
     })
   }
 
@@ -122,12 +135,22 @@ class SceneObserver extends EventEmitter {
     })
   }
 
-  public calculateClosestObject(): ObservableRecord {
-    return Array.from(this.data.values()).reduce(
-      (closest: ObservableRecord, current: ObservableRecord): ObservableRecord => {
-        return current.distance < closest.distance ? current : closest
-      }
-    )
+  /**
+   * Ближайшее тело либо null, если отслеживать нечего.
+   *
+   * Именно null, а не исключение: reduce без начального значения на пустом
+   * массиве бросает, а зовётся это каждый кадр из onChange по событию
+   * контролов — сценарий, ни одно тело которого не попало в OBSERVED_TYPES,
+   * падал бы непрерывно, а не единожды.
+   */
+  public calculateClosestObject(): ObservableRecord | null {
+    const records: ObservableRecord[] = Array.from(this.data.values())
+
+    if (!records.length) return null
+
+    return records.reduce((closest: ObservableRecord, current: ObservableRecord): ObservableRecord => {
+      return current.distance < closest.distance ? current : closest
+    })
   }
 
   public calculateFarthestObjects(count: number = 1, filtered?: ObservableRecord[]): ObservableRecord[] {

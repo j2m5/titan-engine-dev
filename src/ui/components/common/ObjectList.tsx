@@ -9,11 +9,12 @@ import TitanIconButton from '@titanui/components/TitanIconButton'
 import { PlanetIcon, RocketLaunchIcon, SunIcon } from '@phosphor-icons/react'
 import { Actor } from '@/core/models/Actor'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
+import { OBSERVED_TYPES } from '@/core/services/SceneObserver'
 import { engineStore } from '@/ui/mobx/EngineStore'
 
 const ObjectList = observer(() => {
   const filter = (actor: Actor): boolean =>
-    ['planet', 'star', 'blackHole', 'brownDwarf'].includes(actor.category!.attributes.alias!)
+    OBSERVED_TYPES.includes(actor.category!.attributes.alias!)
 
   const sceneManager = useInjection(Tokens.SceneManager)
   const scene = useInjection(Tokens.Scene)
