@@ -26,6 +26,7 @@ import { nebulaParamsFromData } from '@/core/renderables/Nebula/NebulaRenderingD
 import { PlacedNode } from '@/core/renderables/utils/PlacedNode'
 import { BrownDwarf } from '@/core/renderables/BrownDwarf'
 import { BrownDwarfImpostor } from '@/core/renderables/BrownDwarf/BrownDwarfImpostor'
+import { BrownDwarfHaze } from '@/core/renderables/BrownDwarf/BrownDwarfHaze'
 import { INebulaRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 
@@ -129,6 +130,9 @@ class RenderableFactory {
     )
     const body = new BrownDwarf(actor, this.renderer)
     const impostor = new BrownDwarfImpostor(body, this.renderer)
+
+    // Дымка живёт на теле, а не на узле: только ближний LOD несёт оболочку
+    body.add(new BrownDwarfHaze(actor))
 
     node.name = actor.getAttribute('name', '')
     node.renderable = body
