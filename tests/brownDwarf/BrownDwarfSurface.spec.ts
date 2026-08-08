@@ -16,6 +16,7 @@ import {
   BREATH_AXES,
   CLOUD_TONE_BASE,
   CLOUD_TONE_RANGE,
+  GAP_GLOW_FLOOR,
   GAP_MIN_WIDTH,
   HDR_CEILING
 } from './brownDwarfSurfaceMirror'
@@ -99,7 +100,11 @@ describe('bdShade: единственная точка композиции на
     const field: [number, number, number] = [0.4, 0.7, 0.3]
     const manual = bdCompose(
       (0.2 * (1 - field[1]) + 0.05 * field[1]) * (CLOUD_TONE_BASE + CLOUD_TONE_RANGE * field[1]),
-      (9 * (1 - field[2]) + 20 * field[2]) * 2 * bdBreath([1, 0, 0], 5, 0.08),
+      // Множитель яркости растёт с глубиной: без него красный канал был бы
+      // равен gapGlow по всей прогалине разом
+      (9 * (1 - field[2]) + 20 * field[2]) *
+        (2 * (GAP_GLOW_FLOOR * (1 - field[2]) + 1 * field[2])) *
+        bdBreath([1, 0, 0], 5, 0.08),
       bdTransmit(bdTauEff(field[0], 0.8, 3))
     )
 
@@ -137,6 +142,34 @@ describe('глубина прогалин', () => {
     // bdField обязан звать её от density (плотности), а не от tau
     // (уже пороговой толщи) — иначе градиент выродится в ступеньку
     expect(brownDwarfSurface).toContain('bdDepth(density, gapThreshold)')
+  })
+})
+
+describe('яркость прогалины растёт с глубиной, а не только оттенок', () => {
+  // Зеркало поканальное; у чёрнотельных цветов красный канал нормирован
+  // единицей, поэтому здесь он и проверяется. Блум срабатывает по яркости
+  // выше единицы, а для этого оттенка яркость составляет 0.45 от красного —
+  // значит порогу соответствует канал около 2.22
+  const gap = (depth: number): number => bdShade([0, 0.5, depth], 1, [1, 0, 0], 0, 0, 1, 1, 3, 2.6, 0, 0)
+
+  it('кромка прогалины много тусклее её ядра', () => {
+    // Без множителя по глубине красный канал равен gapGlow по всей прогалине
+    // разом: вся она уходит в плечо кривой и выцветает в белый
+    expect(gap(0.1)).toBeLessThan(gap(1) * 0.45)
+  })
+
+  it('ядро проходит порог блума, а половина глубины уже нет', () => {
+    expect(gap(1)).toBeGreaterThan(2.22)
+    expect(gap(0.5)).toBeLessThan(2.22)
+  })
+
+  it('мелкая прореха не гаснет в чёрную дыру', () => {
+    expect(gap(0)).toBeCloseTo(2.6 * GAP_GLOW_FLOOR, 10)
+  })
+
+  it('яркость монотонна по глубине', () => {
+    const s = [0, 0.25, 0.5, 0.75, 1].map(gap)
+    for (let i = 1; i < s.length; i++) expect(s[i]).toBeGreaterThan(s[i - 1])
   })
 })
 

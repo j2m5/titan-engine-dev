@@ -163,6 +163,9 @@ export const brownDwarfSurface = `
     return 1.0 + amplitude * s / 3.0;
   }
 
+  /** Яркость мелкой прорехи как доля от глубокой: ноль сделал бы её чёрной дырой */
+  #define BD_GAP_GLOW_FLOOR 0.25
+
   #define BD_CLOUD_TONE_BASE 0.6
   #define BD_CLOUD_TONE_RANGE 0.4
   #define BD_HDR_CEILING 64.0
@@ -180,8 +183,16 @@ export const brownDwarfSurface = `
     float transmit = bdTransmit(bdTauEff(field.r, mu, opticalDepth));
 
     // Чем глубже видно, тем горячее вещество: у открытой прогалины яркое
-    // ядро, гаснущее к краям. Плоский hot давал ровное пятно
-    vec3 hotLit = mix(hot, hotDeep, field.z) * gapGlow * bdBreath(dir, t, breathAmplitude);
+    // ядро, гаснущее к краям. Плоский hot давал ровное пятно.
+    //
+    // Ловушка: с глубиной обязана расти и ЯРКОСТЬ, а не только оттенок. У
+    // чёрнотельных цветов красный канал нормирован единицей, поэтому без
+    // множителя R равен gapGlow по всей прогалине разом — вся она уходит в
+    // плечо кривой тонмаппинга и выцветает в белый, читаясь как шесть тысяч
+    // кельвинов вместо двух. С множителем блум ловит только глубокие ядра,
+    // а кромки остаются тёмными и насыщенными.
+    float glow = gapGlow * mix(BD_GAP_GLOW_FLOOR, 1.0, field.z);
+    vec3 hotLit = mix(hot, hotDeep, field.z) * glow * bdBreath(dir, t, breathAmplitude);
 
     // Верхушки облаков холоднее и тусклее нижних: мы видим их сверху
     vec3 cloudLit = mix(cloud, cloudHigh, field.g) * (BD_CLOUD_TONE_BASE + BD_CLOUD_TONE_RANGE * field.g);

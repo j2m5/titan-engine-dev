@@ -29,7 +29,7 @@ describe('параметры коричневого карлика', () => {
     expect(params.opticalDepth).toBeCloseTo(5)
     expect(params.temperature).toBe(1200)
     // не заданное в данных остаётся дефолтным
-    expect(params.gapGlow).toBeCloseTo(3)
+    expect(params.gapGlow).toBeCloseTo(2.6)
   })
 
   it('нулевая амплитуда дыхания сохраняется как ноль, а не подменяется дефолтом', () => {

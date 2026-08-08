@@ -42,6 +42,9 @@ export function bdBreath(dir: readonly number[], t: number, amplitude: number): 
 }
 
 /** Тональная вариация палубы по высоте верхушки: база и размах */
+/** Яркость мелкой прорехи как доля от глубокой: ноль сделал бы её чёрной дырой */
+export const GAP_GLOW_FLOOR = 0.25
+
 export const CLOUD_TONE_BASE = 0.6
 export const CLOUD_TONE_RANGE = 0.4
 
@@ -72,7 +75,8 @@ export function bdShade(
   breathAmplitude: number
 ): number {
   const transmit: number = bdTransmit(bdTauEff(field[0], mu, opticalDepth))
-  const hotLit: number = mix(hot, hotDeep, field[2]) * gapGlow * bdBreath(dir, t, breathAmplitude)
+  const glow: number = gapGlow * mix(GAP_GLOW_FLOOR, 1, field[2])
+  const hotLit: number = mix(hot, hotDeep, field[2]) * glow * bdBreath(dir, t, breathAmplitude)
   const cloudLit: number = mix(cloud, cloudHigh, field[1]) * (CLOUD_TONE_BASE + CLOUD_TONE_RANGE * field[1])
 
   return Math.min(bdCompose(cloudLit, hotLit, transmit), HDR_CEILING)
