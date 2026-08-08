@@ -5,6 +5,7 @@ import {
   bdBands,
   bdBreath,
   bdCompose,
+  bdDepth,
   bdGap,
   bdPolarWeight,
   bdShade,
@@ -93,23 +94,49 @@ describe('дыхание яркости: пересев формы невозм�
 
 describe('bdShade: единственная точка композиции на оба LOD', () => {
   it('совпадает с ручной сборкой из примитивов', () => {
-    const field: [number, number] = [0.4, 0.7]
+    // cloud/cloudHigh и hot/hotDeep нарочно разные: одинаковые значения не
+    // поймали бы забытый mix (композиция прошла бы тест и без него)
+    const field: [number, number, number] = [0.4, 0.7, 0.3]
     const manual = bdCompose(
-      0.2 * (CLOUD_TONE_BASE + CLOUD_TONE_RANGE * field[1]),
-      9 * 2 * bdBreath([1, 0, 0], 5, 0.08),
+      (0.2 * (1 - field[1]) + 0.05 * field[1]) * (CLOUD_TONE_BASE + CLOUD_TONE_RANGE * field[1]),
+      (9 * (1 - field[2]) + 20 * field[2]) * 2 * bdBreath([1, 0, 0], 5, 0.08),
       bdTransmit(bdTauEff(field[0], 0.8, 3))
     )
 
-    expect(bdShade(field, 0.8, [1, 0, 0], 0.2, 9, 3, 2, 5, 0.08)).toBeCloseTo(Math.min(manual, HDR_CEILING), 10)
+    expect(bdShade(field, 0.8, [1, 0, 0], 0.2, 0.05, 9, 20, 3, 2, 5, 0.08)).toBeCloseTo(Math.min(manual, HDR_CEILING), 10)
   })
 
   it('держит потолок HDR', () => {
     // Открытая прогалина с абсурдной яркостью нутра упирается в потолок
-    expect(bdShade([0, 1], 1, [1, 0, 0], 0, 1e6, 3, 1, 0, 0)).toBe(HDR_CEILING)
+    expect(bdShade([0, 1, 1], 1, [1, 0, 0], 0, 0, 1e6, 1e6, 3, 1, 0, 0)).toBe(HDR_CEILING)
   })
 
   it('объявлена в чанке', () => {
     expect(brownDwarfSurface).toContain('vec3 bdShade(')
+  })
+})
+
+describe('глубина прогалин', () => {
+  it('открытая прогалина глубокая, сомкнутая палуба — нулевая', () => {
+    expect(bdDepth(0, 0.42)).toBe(1)
+    expect(bdDepth(0.42, 0.42)).toBe(0)
+    expect(bdDepth(0.8, 0.42)).toBe(0)
+  })
+
+  it('внутри прогалины есть градиент, а не ступенька', () => {
+    // Ради этого глубина и берётся до порога: после него значение двоичное
+    const samples = [0.05, 0.15, 0.25, 0.35].map((d) => bdDepth(d, 0.42))
+
+    for (let i = 1; i < samples.length; i++) expect(samples[i]).toBeLessThan(samples[i - 1])
+    expect(samples[0]).toBeGreaterThan(0.8)
+    expect(samples[3]).toBeLessThan(0.2)
+  })
+
+  it('объявлена в чанке и посчитана до порога', () => {
+    expect(brownDwarfSurface).toContain('float bdDepth(')
+    // bdField обязан звать её от density (плотности), а не от tau
+    // (уже пороговой толщи) — иначе градиент выродится в ступеньку
+    expect(brownDwarfSurface).toContain('bdDepth(density, gapThreshold)')
   })
 })
 
@@ -209,7 +236,7 @@ describe('аналитическое поле: полосы и порог', () =
 
 describe('структурный контракт поля', () => {
   it('bdField объявлен и берёт fwidth от плотности', () => {
-    expect(brownDwarfSurface).toContain('vec2 bdField(')
+    expect(brownDwarfSurface).toContain('vec3 bdField(')
     expect(brownDwarfSurface).toContain('fwidth(')
   })
 
@@ -219,7 +246,7 @@ describe('структурный контракт поля', () => {
     // до конца строки срез поймал бы его как ложное срабатывание.
     // Индексы проверяются явно по тому же образцу, что и в
     // «в толщу время не входит»: тихий откат к пустой строке обязан падать.
-    const start = brownDwarfSurface.indexOf('vec2 bdField(')
+    const start = brownDwarfSurface.indexOf('vec3 bdField(')
     const end = brownDwarfSurface.indexOf('float bdTauEff(')
 
     expect(start).toBeGreaterThanOrEqual(0)
@@ -290,7 +317,7 @@ describe('турбулентность газового гиганта', () => {
 
 describe('структурный контракт турбулентности', () => {
   it('поле берёт деталь двух масштабов', () => {
-    const start = brownDwarfSurface.indexOf('vec2 bdField(')
+    const start = brownDwarfSurface.indexOf('vec3 bdField(')
     const end = brownDwarfSurface.indexOf('float bdTauEff(')
     const field = brownDwarfSurface.slice(start, end)
 
@@ -329,7 +356,7 @@ describe('структурный контракт вихрей', () => {
   })
 
   it('вихри стоят до вычисления домена шума, иначе они его не коробят', () => {
-    const field = brownDwarfSurface.slice(brownDwarfSurface.indexOf('vec2 bdField('))
+    const field = brownDwarfSurface.slice(brownDwarfSurface.indexOf('vec3 bdField('))
     const vort = field.indexOf('bdVortices(')
     const domain = field.indexOf('vec4 p =')
 

@@ -15,7 +15,9 @@ import { Color, Matrix3, ShaderChunk, Uniform } from 'three'
 export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
   uniforms: {
     uColorCloud: new Uniform(new Color()),
+    uColorCloudHigh: new Uniform(new Color()),
     uColorHot: new Uniform(new Color()),
+    uColorHotDeep: new Uniform(new Color()),
     uOpticalDepth: new Uniform(3),
     uGapGlow: new Uniform(3),
     uGapThreshold: new Uniform(0.42),
@@ -48,7 +50,9 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
     ${ShaderChunk['logdepthbuf_pars_fragment']}
 
     uniform vec3 uColorCloud;
+    uniform vec3 uColorCloudHigh;
     uniform vec3 uColorHot;
+    uniform vec3 uColorHotDeep;
     uniform float uOpticalDepth;
     uniform float uGapGlow;
     uniform float uGapThreshold;
@@ -95,11 +99,11 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
 
       // Без параллакса: при видимом размере 12px сдвиг верхушки суб-пиксельный,
       // второй вызов поля добавил бы только стоимость без видимого эффекта
-      vec2 field = bdField(dir, uSeed, uBandCount, uTurbulence, uGapThreshold, uBandWarp, uZonalShear, uFineDetail, uPolarChaos, uVortexStrength);
+      vec3 field = bdField(dir, uSeed, uBandCount, uTurbulence, uGapThreshold, uBandWarp, uZonalShear, uFineDetail, uPolarChaos, uVortexStrength);
 
       // Та же точка входа и тот же список аргументов, что у диска —
       // закреплено тестом посимвольного сравнения вызова
-      vec3 color = bdShade(field, mu, dir, uColorCloud, uColorHot,
+      vec3 color = bdShade(field, mu, dir, uColorCloud, uColorCloudHigh, uColorHot, uColorHotDeep,
                            uOpticalDepth, uGapGlow, time, uBreathAmplitude);
 
       gl_FragColor = vec4(color, alpha);

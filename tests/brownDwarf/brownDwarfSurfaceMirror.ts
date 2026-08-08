@@ -48,25 +48,32 @@ export const CLOUD_TONE_RANGE = 0.4
 /** Потолок HDR — общий со звездой и атмосферой (half-float буфер, AgX-плечо) */
 export const HDR_CEILING = 64
 
+const mix = (a: number, b: number, t: number): number => a * (1 - t) + b * t
+
 /**
  * Полная раскраска фрагмента: единственная точка композиции на оба LOD.
  * Зеркало односкалярное — цвет в GLSL векторный, но композиция покомпонентна,
  * поэтому свойства проверяются на одном канале.
+ *
+ * field: [0] — толща палубы, [1] — высота верхушки, [2] — глубина видимости
+ * в прогалине (bdDepth, до порога).
  */
 export function bdShade(
-  field: readonly [number, number],
+  field: readonly [number, number, number],
   mu: number,
   dir: readonly number[],
   cloud: number,
+  cloudHigh: number,
   hot: number,
+  hotDeep: number,
   opticalDepth: number,
   gapGlow: number,
   t: number,
   breathAmplitude: number
 ): number {
   const transmit: number = bdTransmit(bdTauEff(field[0], mu, opticalDepth))
-  const hotLit: number = hot * gapGlow * bdBreath(dir, t, breathAmplitude)
-  const cloudLit: number = cloud * (CLOUD_TONE_BASE + CLOUD_TONE_RANGE * field[1])
+  const hotLit: number = mix(hot, hotDeep, field[2]) * gapGlow * bdBreath(dir, t, breathAmplitude)
+  const cloudLit: number = mix(cloud, cloudHigh, field[1]) * (CLOUD_TONE_BASE + CLOUD_TONE_RANGE * field[1])
 
   return Math.min(bdCompose(cloudLit, hotLit, transmit), HDR_CEILING)
 }
@@ -101,6 +108,15 @@ export function bdGap(density: number, threshold: number, footprint: number): nu
   const w: number = Math.max(footprint * 1.5, GAP_MIN_WIDTH)
 
   return smoothstep(threshold - w, threshold + w, density)
+}
+
+/**
+ * Насколько глубоко видно сквозь прогалину: 1 — палуба разошлась полностью,
+ * 0 — сомкнута. Считается от плотности ДО порога: после порога значение
+ * почти двоичное, и градиента в нём уже нет.
+ */
+export function bdDepth(density: number, threshold: number): number {
+  return 1 - smoothstep(0, threshold, density)
 }
 
 /** Коробление широты: пояса перестают быть равной ширины */

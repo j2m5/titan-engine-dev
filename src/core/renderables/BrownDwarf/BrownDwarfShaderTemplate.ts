@@ -5,7 +5,9 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
   uniforms: {
     uCameraObject: new Uniform(new Vector3()),
     uColorCloud: new Uniform(new Color()),
+    uColorCloudHigh: new Uniform(new Color()),
     uColorHot: new Uniform(new Color()),
+    uColorHotDeep: new Uniform(new Color()),
     uOpticalDepth: new Uniform(3),
     uGapGlow: new Uniform(3),
     uGapThreshold: new Uniform(0.42),
@@ -54,7 +56,9 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
     uniform vec3 uCameraObject;
 
     uniform vec3 uColorCloud;
+    uniform vec3 uColorCloudHigh;
     uniform vec3 uColorHot;
+    uniform vec3 uColorHotDeep;
     uniform float uOpticalDepth;
     uniform float uGapGlow;
     uniform float uGapThreshold;
@@ -102,11 +106,11 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
         ? dir
         : normalize(dir - normalize(tangent) * (height * uParallax));
 
-      vec2 field = bdField(shifted, uSeed, uBandCount, uTurbulence, uGapThreshold, uBandWarp, uZonalShear, uFineDetail, uPolarChaos, uVortexStrength);
+      vec3 field = bdField(shifted, uSeed, uBandCount, uTurbulence, uGapThreshold, uBandWarp, uZonalShear, uFineDetail, uPolarChaos, uVortexStrength);
 
       // Вся композиция — одной точкой входа чанка. Импостор зовёт ту же
       // функцию теми же аргументами: разойтись двум LOD нечем
-      vec3 color = bdShade(field, mu, dir, uColorCloud, uColorHot,
+      vec3 color = bdShade(field, mu, dir, uColorCloud, uColorCloudHigh, uColorHot, uColorHotDeep,
                            uOpticalDepth, uGapGlow, time, uBreathAmplitude);
 
       gl_FragColor = vec4(color, 1.0);

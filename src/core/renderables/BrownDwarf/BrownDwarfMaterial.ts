@@ -21,12 +21,22 @@ class BrownDwarfMaterial extends ShaderMaterial {
     })
 
     const palette: StarPalette = buildStarPalette(params.temperature, BROWN_DWARF_PALETTE_SPREAD_K)
+    // Ядро глубокой прогалины вдвое дальше по шкале, чем обычный hot —
+    // отсюда градиент к центру открытого разрыва палубы
+    const paletteDeep: StarPalette = buildStarPalette(params.temperature, BROWN_DWARF_PALETTE_SPREAD_K * 2)
 
     this.uniforms.uColorHot.value.setRGB(palette.hot.r, palette.hot.g, palette.hot.b)
+    this.uniforms.uColorHotDeep.value.setRGB(paletteDeep.hot.r, paletteDeep.hot.g, paletteDeep.hot.b)
     this.uniforms.uColorCloud.value.setRGB(
       palette.cool.r * BROWN_DWARF_CLOUD_DIM,
       palette.cool.g * BROWN_DWARF_CLOUD_DIM,
       palette.cool.b * BROWN_DWARF_CLOUD_DIM
+    )
+    // Верхушки холоднее и темнее нижней палубы: тот же cool, затемнён вдвое сильнее
+    this.uniforms.uColorCloudHigh.value.setRGB(
+      palette.cool.r * BROWN_DWARF_CLOUD_DIM * 0.45,
+      palette.cool.g * BROWN_DWARF_CLOUD_DIM * 0.45,
+      palette.cool.b * BROWN_DWARF_CLOUD_DIM * 0.45
     )
     this.uniforms.uOpticalDepth.value = params.opticalDepth
     this.uniforms.uGapGlow.value = params.gapGlow

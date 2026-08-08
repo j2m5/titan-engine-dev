@@ -132,7 +132,9 @@ describe('импостор коричневого карлика', () => {
       'uTurbulence',
       'uGapThreshold',
       'uColorCloud',
+      'uColorCloudHigh',
       'uColorHot',
+      'uColorHotDeep',
       'uOpticalDepth',
       'uGapGlow',
       'uBreathAmplitude',
@@ -143,6 +145,19 @@ describe('импостор коричневого карлика', () => {
       expect(BrownDwarfShaderTemplate.uniforms).toHaveProperty(key)
       expect(BrownDwarfImpostorShaderTemplate.uniforms).toHaveProperty(key)
     }
+  })
+
+  it('копирует палитру глубины прогалин и верхушек палубы с тела', () => {
+    // Прямой тест риска задачи: забытый ключ в списке копирования оставляет
+    // юниформ дефолтным вместо температурного цвета — импостор ломает цвет
+    // при переключении LOD
+    const body = new BrownDwarf(stubActor())
+    const impostor = new BrownDwarfImpostor(body, fakeRenderer)
+
+    expect(impostor.material.uniforms.uColorHotDeep.value).toBe(body.material.uniforms.uColorHotDeep.value)
+    expect(impostor.material.uniforms.uColorCloudHigh.value).toBe(body.material.uniforms.uColorCloudHigh.value)
+
+    body.dispose()
   })
 
   it('поворот берётся от самого билборда, а не от камеры', () => {

@@ -72,7 +72,16 @@ export const brownDwarfSurface = `
     return normalize(warped);
   }
 
-  vec2 bdField(vec3 dir, float seed, float bandCount, float turbulence,
+  /**
+   * Насколько глубоко видно сквозь прогалину: 1 — палуба разошлась полностью,
+   * 0 — сомкнута. Берёт плотность ДО порога: после порога значение почти
+   * двоичное, и градиента в нём уже нет.
+   */
+  float bdDepth(float density, float threshold) {
+    return 1.0 - smoothstep(0.0, threshold, density);
+  }
+
+  vec3 bdField(vec3 dir, float seed, float bandCount, float turbulence,
                float gapThreshold, float bandWarp, float zonalShear, float fineDetail,
                float polarChaos, float vortexStrength) {
     // Коробление широты: строго периодический синус давал пояса-линейку
@@ -109,11 +118,14 @@ export const brownDwarfSurface = `
     float w = max(fwidth(density) * 1.5, BD_GAP_MIN_WIDTH);
     float tau = smoothstep(gapThreshold - w, gapThreshold + w, density);
 
+    // От той же плотности, что и tau, но ДО порога — иначе градиента бы не было
+    float depth = bdDepth(density, gapThreshold);
+
     // Высота несёт мелкую деталь: она модулирует тон облачной палубы в bdShade,
     // иначе тёмные участки остаются плоскими
     float height = 0.5 + 0.5 * (fbm(p * 2.3 + 11.0, 4, 0.7) * 0.6 + fine * 0.4);
 
-    return vec2(tau, height);
+    return vec3(tau, height, depth);
   }
 
   // Эффективная оптическая толща палубы. mu — косинус (нормаль сферы, луч на
@@ -160,14 +172,19 @@ export const brownDwarfSurface = `
   // порядком операций, ни забытым дыханием, ни потолком HDR. Собственных
   // bdTransmit/bdCompose в шаблонах быть не должно.
   //
-  // field: R — нормированная толща палубы, G — высота верхушки облака.
+  // field: R — нормированная толща палубы, G — высота верхушки облака,
+  // B — глубина видимости в прогалине (bdDepth, считана до порога).
   // Потолок HDR общий со звездой и атмосферой (half-float буфер, AgX-плечо).
-  vec3 bdShade(vec2 field, float mu, vec3 dir, vec3 cloud, vec3 hot,
+  vec3 bdShade(vec3 field, float mu, vec3 dir, vec3 cloud, vec3 cloudHigh, vec3 hot, vec3 hotDeep,
                float opticalDepth, float gapGlow, float t, float breathAmplitude) {
     float transmit = bdTransmit(bdTauEff(field.r, mu, opticalDepth));
 
-    vec3 hotLit = hot * gapGlow * bdBreath(dir, t, breathAmplitude);
-    vec3 cloudLit = cloud * (BD_CLOUD_TONE_BASE + BD_CLOUD_TONE_RANGE * field.g);
+    // Чем глубже видно, тем горячее вещество: у открытой прогалины яркое
+    // ядро, гаснущее к краям. Плоский hot давал ровное пятно
+    vec3 hotLit = mix(hot, hotDeep, field.z) * gapGlow * bdBreath(dir, t, breathAmplitude);
+
+    // Верхушки облаков холоднее и тусклее нижних: мы видим их сверху
+    vec3 cloudLit = mix(cloud, cloudHigh, field.g) * (BD_CLOUD_TONE_BASE + BD_CLOUD_TONE_RANGE * field.g);
 
     return min(bdCompose(cloudLit, hotLit, transmit), vec3(BD_HDR_CEILING));
   }
