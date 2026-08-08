@@ -45,3 +45,143 @@ export const bdFlowChunk = `
     return zonal + curl;
   }
 `
+
+/** Общий вершинник проходов: полноэкранный квад, без матриц */
+export const bakeVertexShader = `
+  attribute vec3 position;
+  attribute vec2 uv;
+
+  varying vec2 vUv;
+
+  void main() {
+    vUv = uv;
+    gl_Position = vec4(position.xy, 0.0, 1.0);
+  }
+`
+
+/** Восстановление направления тексела по базису грани — общее для всех проходов */
+const faceDirChunk = `
+  uniform vec3 uFaceForward;
+  uniform vec3 uFaceRight;
+  uniform vec3 uFaceUp;
+
+  varying vec2 vUv;
+
+  vec3 bdFaceDir() {
+    vec2 st = vUv * 2.0 - 1.0;
+
+    return normalize(uFaceForward + st.x * uFaceRight + st.y * uFaceUp);
+  }
+`
+
+/**
+ * Посев: базовое поле плюс широтная организация в пояса.
+ * R — толща палубы, G — высота верхушки: независимые поля с разными зёрнами,
+ * которые дальше несёт ОДИН поток, поэтому они остаются согласованными.
+ */
+export const seedFragmentShader = `
+  precision highp float;
+
+  ${faceDirChunk}
+
+  uniform float uSeed;
+  uniform float uBandCount;
+
+  float bdHash(vec3 p, float seed) {
+    return fract(sin(dot(p, vec3(127.1, 311.7, 74.7)) + seed) * 43758.5453);
+  }
+
+  float bdValueNoise(vec3 p, float seed) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+
+    float n = mix(
+      mix(mix(bdHash(i + vec3(0.0, 0.0, 0.0), seed), bdHash(i + vec3(1.0, 0.0, 0.0), seed), f.x),
+          mix(bdHash(i + vec3(0.0, 1.0, 0.0), seed), bdHash(i + vec3(1.0, 1.0, 0.0), seed), f.x), f.y),
+      mix(mix(bdHash(i + vec3(0.0, 0.0, 1.0), seed), bdHash(i + vec3(1.0, 0.0, 1.0), seed), f.x),
+          mix(bdHash(i + vec3(0.0, 1.0, 1.0), seed), bdHash(i + vec3(1.0, 1.0, 1.0), seed), f.x), f.y),
+      f.z);
+
+    return n;
+  }
+
+  float bdFbm(vec3 p, float seed) {
+    float total = 0.0;
+    float amplitude = 1.0;
+    float maxValue = 0.0;
+
+    for (int i = 0; i < 5; i++) {
+      total += bdValueNoise(p, seed) * amplitude;
+      maxValue += amplitude;
+      amplitude *= 0.55;
+      p *= 2.0;
+    }
+
+    return total / maxValue;
+  }
+
+  void main() {
+    vec3 dir = bdFaceDir();
+
+    // Пояса задают крупную структуру, шум её ломает — дальше адвекция рвёт
+    float bands = 0.5 + 0.5 * sin(dir.y * PI * uBandCount);
+    float density = mix(bands, bdFbm(dir * 4.0, uSeed), 0.45);
+    float height = bdFbm(dir * 6.0 + 17.0, uSeed + 91.0);
+
+    gl_FragColor = vec4(density, height, 0.0, 1.0);
+  }
+`
+
+/**
+ * Адвекция: полулагранжев снос — выборка берётся НАЗАД по потоку.
+ * Подмешивание свежего шума компенсирует численную диффузию билинейной
+ * выборки: без него поле за два десятка шагов замыливается.
+ */
+export const advectFragmentShader = `
+  precision highp float;
+
+  ${faceDirChunk}
+
+  uniform samplerCube uPrev;
+  uniform float uSeed;
+  uniform float uBandCount;
+  uniform float uJetStrength;
+  uniform float uTurbulence;
+  uniform float uStep;
+  uniform float uInjection;
+
+  void main() {
+    vec3 dir = bdFaceDir();
+    vec3 flow = bdFlow(dir, uBandCount, uJetStrength, uTurbulence, uSeed);
+    vec3 back = normalize(dir - flow * uStep);
+
+    vec2 advected = textureCube(uPrev, back).rg;
+    vec2 fresh = vec2(
+      bdFbm(dir * 7.0, uSeed + 31.0),
+      bdFbm(dir * 9.0 + 5.0, uSeed + 137.0)
+    );
+
+    gl_FragColor = vec4(mix(advected, fresh, uInjection), 0.0, 1.0);
+  }
+`
+
+/** Финализация: контраст толщи и нормировка высоты */
+export const finalizeFragmentShader = `
+  precision highp float;
+
+  ${faceDirChunk}
+
+  uniform samplerCube uPrev;
+  uniform float uContrast;
+
+  void main() {
+    vec2 f = textureCube(uPrev, bdFaceDir()).rg;
+
+    // Толща остаётся нормированной 0..1: множитель opticalDepth живёт
+    // юниформом тела, чтобы ручка не требовала перепекания
+    float density = clamp(0.5 + (f.r - 0.5) * uContrast, 0.0, 1.0);
+
+    gl_FragColor = vec4(density, f.g, 0.0, 1.0);
+  }
+`
