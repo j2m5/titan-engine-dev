@@ -57,12 +57,21 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
     void main() {
       ${ShaderChunk['logdepthbuf_fragment']}
 
-      float r2 = dot(vQuadUv, vQuadUv);
-      if (r2 > 1.0) discard;
+      float r = length(vQuadUv);
+
+      // AA-кромка по экранной производной — тот же приём, что у FakeStar:
+      // discard режет по пиксельной сетке и MSAA композера её не сглаживает,
+      // а силуэт LOD-0 (геометрия сферы) сглаживается — без этого на стыке
+      // LOD менялось бы качество кромки. fwidth — ДО ветвления
+      float alpha = 1.0 - smoothstep(1.0 - fwidth(r) * 1.5, 1.0, r);
+      if (alpha <= 0.0) {
+        gl_FragColor = vec4(0.0);
+        return;
+      }
 
       // Псевдосфера: нормаль восстанавливается из позиции внутри квада,
       // mu — она же по построению (взгляд вдоль -Z экрана)
-      vec3 normalView = vec3(vQuadUv, sqrt(1.0 - r2));
+      vec3 normalView = vec3(vQuadUv, sqrt(max(1.0 - r * r, 0.0)));
       float mu = normalView.z;
 
       // Перевод в систему тела: рисунок остаётся прибитым к карлику
@@ -75,7 +84,7 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
       vec3 color = bdShade(field, mu, dir, uColorCloud, uColorHot,
                            uOpticalDepth, uGapGlow, time, uBreathAmplitude);
 
-      gl_FragColor = vec4(color, 1.0);
+      gl_FragColor = vec4(color, alpha);
 
       ${ShaderChunk['tonemapping_fragment']}
       ${ShaderChunk['colorspace_fragment']}

@@ -1,9 +1,10 @@
-import { PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
+import { PerspectiveCamera, Quaternion, Scene, Vector3, WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { BrownDwarfImpostor } from '@/core/renderables/BrownDwarf/BrownDwarfImpostor'
 import { ApparentSizeLod } from '@/core/renderables/utils/ApparentSizeLod'
 import { StarLod } from '@/core/renderables/utils/StarLod'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
+import { OrientationModel } from '@/core/libs/OrientationModel'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { BrownDwarf } from '@/core/renderables/BrownDwarf'
 import { BrownDwarfImpostorShaderTemplate } from '@/core/renderables/BrownDwarf/BrownDwarfImpostorShaderTemplate'
@@ -88,7 +89,29 @@ describe('импостор коричневого карлика', () => {
     // разъедутся, на переключении появится шов
     const call = (source: string): string => {
       const start: number = source.indexOf('bdShade(')
-      const end: number = source.indexOf(')', start)
+
+      expect(start).toBeGreaterThanOrEqual(0)
+
+      // Закрывающая скобка ищется по глубине, а не первой встречной: иначе
+      // при -1 от переименования indexOf(')', -1) стартует с 0 и находит
+      // случайную ")" раньше настоящего вызова — обе стороны схлопнутся в ''
+      // и '' === '' пройдёт. Глубина же вдобавок переживёт вложенный вызов
+      // в аргументах, который иначе обрезал бы совпадение раньше времени
+      let depth = 0
+      let end = -1
+
+      for (let i = start; i < source.length; i++) {
+        if (source[i] === '(') depth++
+        else if (source[i] === ')') {
+          depth--
+          if (depth === 0) {
+            end = i
+            break
+          }
+        }
+      }
+
+      expect(end).toBeGreaterThan(start)
 
       return source.slice(start, end + 1).replace(/\s+/g, ' ')
     }
@@ -141,5 +164,92 @@ describe('импостор коричневого карлика', () => {
   it('не имеет собственного множителя яркости', () => {
     // Любой множитель поверх воссоздал бы шов на переключении
     expect(BrownDwarfImpostorShaderTemplate.uniforms).not.toHaveProperty('uImpostorBrightness')
+  })
+})
+
+describe('вращение тела карлика (категория 8 в ORIENTED_CATEGORIES)', () => {
+  it('DynamicNode копирует ориентацию на renderable — без записи в Set кватернион остался бы тождественным', () => {
+    // period: 0 замыкает getMeridianAngleByEpoch на голый meridianAngle
+    // (см. OrientationModel.getMeridianAngleByEpoch): эпоха теста не влияет
+    // на результат, и незачем тащить сюда J2000
+    const rotation = {
+      getAttribute: (key: string, def?: unknown): unknown => (key === 'meridianAngle' ? 90 : (def ?? 0))
+    }
+    const actor = {
+      getAttribute: (key: string, def?: unknown): unknown =>
+        key === 'categoryId' ? 8 : key === 'name' ? 'Dwarf' : def,
+      rotation,
+      renderingObject: { getAttribute: () => ({}) },
+      physicalObject: {
+        getAttribute: (key: string, def?: unknown): unknown =>
+          key === 'radius' ? 69900 : key === 'temperature' ? 1600 : def
+      }
+    } as unknown as Actor
+
+    const node = new DynamicNode(actor)
+    const body = new BrownDwarf(actor, fakeRenderer)
+    node.renderable = body
+
+    node.updateObject({ epoch: 0, delta: 0, elapsed: 0, camera: new PerspectiveCamera() })
+
+    // Не жёсткое число: OrientationModel — отдельно проверенный источник
+    // истины (tests/OrientationModel.spec.ts), здесь проверяется только то,
+    // что DynamicNode его действительно зовёт и копирует результат
+    const expected = new OrientationModel(actor).getQuaternion(0)
+
+    // Сама заглушка обязана давать НЕтождественный поворот — иначе тест
+    // прошёл бы и без записи 8 в ORIENTED_CATEGORIES
+    expect(expected.equals(new Quaternion())).toBe(false)
+    expect(body.quaternion.equals(expected)).toBe(true)
+
+    body.dispose()
+  })
+
+  it('uCameraObject и uBodyRotation компенсируют поворот тела на 90° вокруг Y одинаково для обоих LOD', () => {
+    // Тело построено напрямую (не через DynamicNode) — та же ось и угол,
+    // что в BrownDwarfBody.spec.ts, число -5 по X сверяется между файлами.
+    // Матрица R(+90° вокруг Y): (x,y,z) -> (z,y,-x); обратная R⁻¹ — её
+    // транспонирование: (x,y,z) -> (-z,y,x) (стандартная формула, руками).
+    const body = new BrownDwarf(stubActor(), fakeRenderer)
+    body.position.set(10, 0, 0)
+    body.rotation.set(0, Math.PI / 2, 0)
+    body.updateMatrixWorld(true)
+
+    const camera = new PerspectiveCamera()
+    camera.position.set(10, 0, 5)
+    camera.updateMatrixWorld(true)
+
+    // --- Тело: uCameraObject = R⁻¹ · (cameraWorld - bodyPosition) ---
+    body.onBeforeRender(fakeRenderer, new Scene(), camera, body.geometry, body.material, null as never)
+
+    const cameraObject = body.material.uniforms.uCameraObject.value as Vector3
+
+    expect(cameraObject.x).toBeCloseTo(-5, 5)
+    expect(cameraObject.y).toBeCloseTo(0, 5)
+    expect(cameraObject.z).toBeCloseTo(0, 5)
+
+    // --- Импостор: билборд в начале координат, смотрит на ту же камеру ---
+    const impostor = new BrownDwarfImpostor(body, fakeRenderer)
+
+    impostor.updateObject({ delta: 0, epoch: 0, elapsed: 0, camera })
+    impostor.updateMatrixWorld(true)
+    impostor.onBeforeRender(fakeRenderer, new Scene(), camera, impostor.geometry, impostor.material, null as never)
+
+    // lookAt обычного Object3D (не камеры) ставит локальный +Z вдоль
+    // направления НА цель: билборд в (0,0,0), камера в (10,0,5) ->
+    // R_billboard · (0,0,1) = normalize(10,0,5)
+    const billboardZ = new Vector3(10, 0, 5).normalize()
+    // Перевод в систему тела: R_body⁻¹ · billboardZ по формуле (x,y,z) -> (-z,y,x)
+    const expected = new Vector3(-billboardZ.z, billboardZ.y, billboardZ.x)
+
+    const forward = new Vector3(0, 0, 1).applyMatrix3(impostor.material.uniforms.uBodyRotation.value)
+
+    // Без bodyRotation.invert() вышло бы R_body · billboardZ = (billboardZ.z, billboardZ.y, -billboardZ.x) —
+    // отличается от expected знаком у X и Z, тест это различает
+    expect(forward.x).toBeCloseTo(expected.x, 5)
+    expect(forward.y).toBeCloseTo(expected.y, 5)
+    expect(forward.z).toBeCloseTo(expected.z, 5)
+
+    body.dispose()
   })
 })
