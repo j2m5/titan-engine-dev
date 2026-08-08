@@ -1,14 +1,17 @@
 import { AppShaderChunk } from '@/core/materials/shaders/lib/chunks'
 import { brownDwarfSurface } from '@/core/materials/shaders/lib/chunks/BrownDwarfSurface'
 import {
+  bdBands,
   bdBreath,
   bdCompose,
+  bdGap,
   bdShade,
   bdTauEff,
   bdTransmit,
   BREATH_AXES,
   CLOUD_TONE_BASE,
   CLOUD_TONE_RANGE,
+  GAP_MIN_WIDTH,
   HDR_CEILING
 } from './brownDwarfSurfaceMirror'
 
@@ -155,5 +158,77 @@ describe('структурный контракт: время отрезано �
     expect(brownDwarfSurface).toContain('vec3(0.71, 0.43, 0.55)) * 3.0 + t * 0.11')
     expect(brownDwarfSurface).toContain('vec3(-0.36, 0.82, 0.44)) * 5.0 - t * 0.07')
     expect(brownDwarfSurface).toContain('vec3(0.52, -0.29, 0.8)) * 8.0 + t * 0.19')
+  })
+})
+
+describe('аналитическое поле: полосы и порог', () => {
+  it('полосы меняют фазу от пояса к поясу', () => {
+    // Центры соседних поясов: sin там равен ровно ∓1, знаки максимально
+    // разнесены. Широты выводятся из bandCount, а не подобраны
+    const bandCount = 9
+    const center = (band: number): number => (band + 0.5) / bandCount
+
+    expect(bdBands(center(1), 0, bandCount, 0)).toBeCloseTo(0, 6)
+    expect(bdBands(center(2), 0, bandCount, 0)).toBeCloseTo(1, 6)
+  })
+
+  it('шум гнёт полосы, а не сдвигает их целиком', () => {
+    // При turbulence = 0 шум на полосы не влияет вовсе
+    const flat = bdBands(0.2, 0.9, 9, 0)
+    const bent = bdBands(0.2, 0.9, 9, 1.6)
+
+    expect(flat).toBeCloseTo(bdBands(0.2, -0.9, 9, 0), 10)
+    expect(bent).not.toBeCloseTo(flat, 3)
+  })
+
+  it('порог даёт полный размах: по обе стороны — чистые ноль и единица', () => {
+    // Ровно то, чего не было у запекания: провалы и гребни, а не средний тон
+    expect(bdGap(0.1, 0.5, 0.01)).toBe(0)
+    expect(bdGap(0.9, 0.5, 0.01)).toBe(1)
+  })
+
+  it('полуширина порога растёт с футпринтом, а на импосторе съедает край', () => {
+    // Огромный футпринт (билборд в 12 px) обязан вырождать порог в усреднение
+    const sharp = bdGap(0.52, 0.5, 0.001)
+    const blurred = bdGap(0.52, 0.5, 0.5)
+
+    expect(sharp).toBeGreaterThan(0.9)
+    expect(blurred).toBeGreaterThan(0.4)
+    expect(blurred).toBeLessThan(0.6)
+  })
+
+  it('нижний предел полуширины не даёт краю выродиться в ступеньку', () => {
+    expect(bdGap(0.5 + GAP_MIN_WIDTH * 0.5, 0.5, 0)).toBeGreaterThan(0)
+    expect(bdGap(0.5 + GAP_MIN_WIDTH * 0.5, 0.5, 0)).toBeLessThan(1)
+  })
+})
+
+describe('структурный контракт поля', () => {
+  it('bdField объявлен и берёт fwidth от плотности', () => {
+    expect(brownDwarfSurface).toContain('vec2 bdField(')
+    expect(brownDwarfSurface).toContain('fwidth(')
+  })
+
+  it('времени в поле нет', () => {
+    // Слайс обязан быть ОГРАНИЧЕН телом bdField: bdShade ниже по чанку
+    // законно принимает свой параметр `float t` (время дыхания) — открытый
+    // до конца строки срез поймал бы его как ложное срабатывание.
+    // Индексы проверяются явно по тому же образцу, что и в
+    // «в толщу время не входит»: тихий откат к пустой строке обязан падать.
+    const start = brownDwarfSurface.indexOf('vec2 bdField(')
+    const end = brownDwarfSurface.indexOf('float bdTauEff(')
+
+    expect(start).toBeGreaterThanOrEqual(0)
+    expect(end).toBeGreaterThan(start)
+
+    const field = brownDwarfSurface.slice(start, end)
+
+    expect(field).not.toContain('time')
+    expect(field).not.toMatch(/\bfloat t\b/)
+  })
+
+  it('поле не держит собственной копии fbm', () => {
+    // fbm живёт в чанке звезды; дубль — второй источник правды
+    expect(brownDwarfSurface).not.toContain('float fbm(')
   })
 })

@@ -9,6 +9,35 @@
  * строго синхронно.
  */
 export const brownDwarfSurface = `
+  #define BD_BAND_NOISE_MIX 0.35
+  #define BD_GAP_MIN_WIDTH 0.004
+
+  // Полосы прибиты к широте, шум гнёт их и рвёт.
+  //
+  // Домен анизотропный: вдоль широты частота выше, поэтому шум меняется
+  // поперёк поясов и тянется вдоль них. Четвёртая координата — СИД, а не
+  // время: анимация срезом сквозь 4D-шум и была механизмом дефекта,
+  // из-за которого первую версию объекта удалили.
+  //
+  // Порог возвращает провалы и гребни, которых не давало запекание, а его
+  // полуширина растёт с экранным футпринтом: фиксированная ширина под
+  // HDR-контрастом усиливает субпиксельный шум. На импосторе футпринт
+  // огромен, и порог вырождается в усреднение сам.
+  vec2 bdField(vec3 dir, float seed, float bandCount, float turbulence, float gapThreshold) {
+    vec4 p = vec4(dir.x * 1.2, dir.y * 4.5, dir.z * 1.2, seed);
+    float noise = fbm(p, 6, 0.85);
+
+    float bands = 0.5 + 0.5 * sin(dir.y * PI * bandCount + noise * turbulence);
+    float density = mix(bands, 0.5 + 0.5 * noise, BD_BAND_NOISE_MIX);
+
+    float w = max(fwidth(density) * 1.5, BD_GAP_MIN_WIDTH);
+    float tau = smoothstep(gapThreshold - w, gapThreshold + w, density);
+
+    float height = 0.5 + 0.5 * fbm(p * 2.3 + 11.0, 4, 0.7);
+
+    return vec2(tau, height);
+  }
+
   // Эффективная оптическая толща палубы. mu — косинус (нормаль сферы, луч на
   // камеру): у кромки луч идёт по касательной и набирает больше вещества,
   // поэтому прогалины у лимба закрываются сами. Отдельного лимбового

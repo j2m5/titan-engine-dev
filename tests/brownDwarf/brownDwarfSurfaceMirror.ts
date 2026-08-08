@@ -70,3 +70,35 @@ export function bdShade(
 
   return Math.min(bdCompose(cloudLit, hotLit, transmit), HDR_CEILING)
 }
+
+/** Полосы прибиты к широте, шум их гнёт: latitude — y единичной сферы */
+export function bdBands(latitude: number, noise: number, bandCount: number, turbulence: number): number {
+  return 0.5 + 0.5 * Math.sin(latitude * Math.PI * bandCount + noise * turbulence)
+}
+
+/** Смешение полос с локальным шумом: полосы рвутся, а не остаются зеброй */
+export const BAND_NOISE_MIX = 0.35
+
+export function bdDensity(bands: number, noise: number): number {
+  return bands * (1 - BAND_NOISE_MIX) + (0.5 + 0.5 * noise) * BAND_NOISE_MIX
+}
+
+/** Минимальная полуширина порога: ниже неё край становится ступенькой */
+export const GAP_MIN_WIDTH = 0.004
+
+const smoothstep = (e0: number, e1: number, x: number): number => {
+  const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)))
+  return t * t * (3 - 2 * t)
+}
+
+/**
+ * Порог, открывающий прогалины. Полуширина растёт с экранным футпринтом:
+ * порог с фиксированной шириной под HDR-контрастом работает усилителем
+ * субпиксельного шума — именно поэтому его убирали в первой реализации.
+ * `footprint` — это `fwidth(density)` со стороны GLSL.
+ */
+export function bdGap(density: number, threshold: number, footprint: number): number {
+  const w: number = Math.max(footprint * 1.5, GAP_MIN_WIDTH)
+
+  return smoothstep(threshold - w, threshold + w, density)
+}
