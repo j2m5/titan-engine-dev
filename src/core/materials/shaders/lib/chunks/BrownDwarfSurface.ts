@@ -26,6 +26,14 @@ export const brownDwarfSurface = `
   #define BD_FINE_SCALE 4.0
   #define BD_FINE_OCTAVES 4
 
+  // Высота верхушки для параллакса, отдельно и дёшево.
+  // Домен НЕ коробленный: параллакс — художественный сдвиг на пару текселей,
+  // и разница между точной и приближённой высотой в нём неразличима, а полный
+  // bdField ради одного канала стоил бы восемнадцати лишних октав.
+  float bdHeight(vec3 dir, float seed) {
+    return 0.5 + 0.5 * fbm(vec4(dir * 2.76, seed + 11.0), 4, 0.7);
+  }
+
   vec2 bdField(vec3 dir, float seed, float bandCount, float turbulence,
                float gapThreshold, float bandWarp, float zonalShear, float fineDetail) {
     // Коробление широты: строго периодический синус давал пояса-линейку

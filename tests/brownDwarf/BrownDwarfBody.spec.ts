@@ -35,6 +35,15 @@ describe('тело коричневого карлика', () => {
     body.dispose()
   })
 
+  it('поле считается один раз на фрагмент: параллакс берёт отдельную дешёвую высоту', () => {
+    // Полный bdField — девятнадцать октав; звать его ради одного канала
+    // высоты значит выбрасывать восемнадцать
+    const source = BrownDwarfShaderTemplate.fragmentShader
+
+    expect((source.match(/bdField\(/g) ?? []).length).toBe(1)
+    expect(source).toContain('bdHeight(')
+  })
+
   it.each([
     ['диск', BrownDwarfShaderTemplate.fragmentShader],
     ['импостор', BrownDwarfImpostorShaderTemplate.fragmentShader]
