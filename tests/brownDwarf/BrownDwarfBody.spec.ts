@@ -20,10 +20,10 @@ function stubActor(): Actor {
 }
 
 describe('тело коричневого карлика', () => {
-  it('строится и несёт запечённую кубмапу в юниформе', () => {
-    const body = new BrownDwarf(stubActor(), fakeRenderer)
+  it('строится и держит юниформ uClouds пустым до аналитического поля', () => {
+    const body = new BrownDwarf(stubActor())
 
-    expect(body.material.uniforms.uClouds.value).toBeTruthy()
+    expect(body.material.uniforms.uClouds.value).toBeNull()
     expect(body.userData.type).toBe('brownDwarf')
     expect(body.userData.clickable).toBe(true)
 
@@ -33,7 +33,7 @@ describe('тело коричневого карлика', () => {
   it('камера переводится в объектные координаты в onBeforeRender', () => {
     // updateObject идёт до scene.updateMatrixWorld(), поэтому matrixWorld там
     // отстаёт на кадр; three зовёт onBeforeRender уже с актуальными матрицами
-    const body = new BrownDwarf(stubActor(), fakeRenderer)
+    const body = new BrownDwarf(stubActor())
 
     body.position.set(10, 0, 0)
     body.rotation.set(0, Math.PI / 2, 0)
@@ -57,7 +57,7 @@ describe('тело коричневого карлика', () => {
   })
 
   it('время доезжает в юниформ и не трогает толщу', () => {
-    const body = new BrownDwarf(stubActor(), fakeRenderer)
+    const body = new BrownDwarf(stubActor())
     const before = body.material.uniforms.uOpticalDepth.value
 
     body.updateObject({ delta: 0.016, epoch: 0, elapsed: 9999, camera: new PerspectiveCamera() })
@@ -100,22 +100,16 @@ describe('тело коричневого карлика', () => {
     expect(BrownDwarfShaderTemplate.fragmentShader).not.toContain('smoothstep')
   })
 
-  it('dispose освобождает запекатель, а не только свои ресурсы', () => {
-    // Ловушка: проверять длину массива целей бессмысленно — dispose его не
-    // укорачивает, и тест прошёл бы даже без вызова baker.dispose() вовсе
-    const body = new BrownDwarf(stubActor(), fakeRenderer)
-    const baker = body.bakerForTest
+  it('dispose освобождает геометрию и материал', () => {
+    const body = new BrownDwarf(stubActor())
 
-    let bakerDisposed = 0
-    const original = baker.dispose.bind(baker)
-    baker.dispose = (): void => {
-      bakerDisposed++
-      original()
-    }
+    const geometryDispose = vi.spyOn(body.geometry, 'dispose')
+    const materialDispose = vi.spyOn(body.material, 'dispose')
 
     body.dispose()
 
-    expect(bakerDisposed).toBe(1)
+    expect(geometryDispose).toHaveBeenCalledTimes(1)
+    expect(materialDispose).toHaveBeenCalledTimes(1)
     expect(() => body.dispose()).not.toThrow()
   })
 })

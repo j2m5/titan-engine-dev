@@ -18,12 +18,10 @@ export const BROWN_DWARF_CLOUD_DIM: number = 0.25
 export interface BrownDwarfParameters {
   seed: number
   bandCount: number
-  jetStrength: number
   turbulence: number
   opticalDepth: number
   gapGlow: number
   parallax: number
-  hazeStrength: number
   breathAmplitude: number
   temperature: number
 }
@@ -31,12 +29,10 @@ export interface BrownDwarfParameters {
 const DEFAULTS: Omit<BrownDwarfParameters, 'temperature'> = {
   seed: 4096,
   bandCount: 9,
-  jetStrength: 0.6,
   turbulence: 1.6,
   opticalDepth: 3,
   gapGlow: 3,
   parallax: 0.02,
-  hazeStrength: 1,
   breathAmplitude: 0.08
 }
 
@@ -55,12 +51,10 @@ export function brownDwarfParameters(actor: Actor): BrownDwarfParameters {
   return {
     seed: data.seed ?? DEFAULTS.seed,
     bandCount: data.bandCount ?? DEFAULTS.bandCount,
-    jetStrength: data.jetStrength ?? DEFAULTS.jetStrength,
     turbulence: data.turbulence ?? DEFAULTS.turbulence,
     opticalDepth: data.opticalDepth ?? DEFAULTS.opticalDepth,
     gapGlow: data.gapGlow ?? DEFAULTS.gapGlow,
     parallax: data.parallax ?? DEFAULTS.parallax,
-    hazeStrength: data.hazeStrength ?? DEFAULTS.hazeStrength,
     // Кламп, а не просто чтение: bdBreath даёт [1-a, 1+a], и при a > 1
     // яркость нутра уходит в минус — отрицательная светимость
     breathAmplitude: clamp(data.breathAmplitude ?? DEFAULTS.breathAmplitude, 0, 1),

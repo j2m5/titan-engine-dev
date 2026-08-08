@@ -204,12 +204,10 @@ export interface IRingRenderingObject {
 export interface IBrownDwarfRenderingObject {
   seed?: number
   bandCount?: number
-  jetStrength?: number
   turbulence?: number
   opticalDepth?: number
   gapGlow?: number
   parallax?: number
-  hazeStrength?: number
   breathAmplitude?: number
 }
 

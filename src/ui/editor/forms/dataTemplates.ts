@@ -99,12 +99,10 @@ export const renderingDataTemplates: DataTemplate[] = [
     data: {
       seed: 4096,
       bandCount: 9,
-      jetStrength: 0.6,
       turbulence: 1.6,
       opticalDepth: 3,
       gapGlow: 3,
       parallax: 0.02,
-      hazeStrength: 1,
       breathAmplitude: 0.08
     }
   }

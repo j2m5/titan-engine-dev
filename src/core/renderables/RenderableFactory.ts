@@ -24,9 +24,8 @@ import { BROWN_DWARF_IMPOSTOR_PIXELS } from '@/core/helpers/apparentSize'
 import { Nebula } from '@/core/renderables/Nebula'
 import { nebulaParamsFromData } from '@/core/renderables/Nebula/NebulaRenderingData'
 import { PlacedNode } from '@/core/renderables/utils/PlacedNode'
-import { BrownDwarf, brownDwarfParameters } from '@/core/renderables/BrownDwarf'
+import { BrownDwarf } from '@/core/renderables/BrownDwarf'
 import { BrownDwarfImpostor } from '@/core/renderables/BrownDwarf/BrownDwarfImpostor'
-import { BrownDwarfHaze } from '@/core/renderables/BrownDwarf/BrownDwarfHaze'
 import { INebulaRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 
@@ -128,15 +127,8 @@ class RenderableFactory {
       this.renderer,
       BROWN_DWARF_IMPOSTOR_PIXELS
     )
-    const body = new BrownDwarf(actor, this.renderer)
+    const body = new BrownDwarf(actor)
     const impostor = new BrownDwarfImpostor(body, this.renderer)
-
-    // Дымка живёт на теле, а не на узле: только ближний LOD несёт оболочку.
-    // hazeStrength <= 0 — рубильник слоя целиком: не строить и не вешать,
-    // иначе «выключенный» слой всё равно платит прозрачным draw call'ом
-    if (brownDwarfParameters(actor).hazeStrength > 0) {
-      body.add(new BrownDwarfHaze(actor))
-    }
 
     node.name = actor.getAttribute('name', '')
     node.renderable = body

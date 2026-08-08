@@ -139,7 +139,7 @@ describe('импостор коричневого карлика', () => {
     // системе билборда. Ориентация билборда идёт от lookAt на камеру и
     // совпадает с ориентацией камеры только когда тело на оси взгляда —
     // иначе панорамирование крутило бы узор, чего диск не делает
-    const body = new BrownDwarf(stubActor(), fakeRenderer)
+    const body = new BrownDwarf(stubActor())
     const impostor = new BrownDwarfImpostor(body, fakeRenderer)
 
     // Камера сбоку, но смотрит по умолчанию вдоль -Z: её собственная
@@ -188,7 +188,7 @@ describe('вращение тела карлика (категория 8 в ORIE
     } as unknown as Actor
 
     const node = new DynamicNode(actor)
-    const body = new BrownDwarf(actor, fakeRenderer)
+    const body = new BrownDwarf(actor)
     node.renderable = body
 
     node.updateObject({ epoch: 0, delta: 0, elapsed: 0, camera: new PerspectiveCamera() })
@@ -211,7 +211,7 @@ describe('вращение тела карлика (категория 8 в ORIE
     // что в BrownDwarfBody.spec.ts, число -5 по X сверяется между файлами.
     // Матрица R(+90° вокруг Y): (x,y,z) -> (z,y,-x); обратная R⁻¹ — её
     // транспонирование: (x,y,z) -> (-z,y,x) (стандартная формула, руками).
-    const body = new BrownDwarf(stubActor(), fakeRenderer)
+    const body = new BrownDwarf(stubActor())
     body.position.set(10, 0, 0)
     body.rotation.set(0, Math.PI / 2, 0)
     body.updateMatrixWorld(true)
