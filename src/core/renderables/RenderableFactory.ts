@@ -10,6 +10,7 @@ import { StarInnerLayer } from '@/core/renderables/utils/StarInnerLayer'
 import { StarOuterLayer } from '@/core/renderables/utils/StarOuterLayer'
 import { FakeStar } from '@/core/renderables/utils/FakeStar'
 import { StarLod } from '@/core/renderables/utils/StarLod'
+import { ApparentSizeLod } from '@/core/renderables/utils/ApparentSizeLod'
 import { Planet } from '@/core/renderables/Planet'
 import { FakePlanet } from '@/core/renderables/utils/FakePlanet'
 import { BrunetonAtmosphere } from '@/core/renderables/Atmosphere/BrunetonAtmosphere'
@@ -19,10 +20,12 @@ import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { requireRenderingData } from '@/core/helpers/renderingData'
+import { BROWN_DWARF_IMPOSTOR_PIXELS } from '@/core/helpers/apparentSize'
 import { Nebula } from '@/core/renderables/Nebula'
 import { nebulaParamsFromData } from '@/core/renderables/Nebula/NebulaRenderingData'
 import { PlacedNode } from '@/core/renderables/utils/PlacedNode'
 import { BrownDwarf } from '@/core/renderables/BrownDwarf'
+import { BrownDwarfImpostor } from '@/core/renderables/BrownDwarf/BrownDwarfImpostor'
 import { INebulaRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 
@@ -119,12 +122,22 @@ class RenderableFactory {
 
   private createBrownDwarf(actor: Actor): Object3D {
     const node = new DynamicNode(actor)
+    const lod = new ApparentSizeLod(
+      actor.physicalObject!.getAttribute('radius')!,
+      this.renderer,
+      BROWN_DWARF_IMPOSTOR_PIXELS
+    )
     const body = new BrownDwarf(actor, this.renderer)
+    const impostor = new BrownDwarfImpostor(body, this.renderer)
 
     node.name = actor.getAttribute('name', '')
     node.renderable = body
 
-    node.add(body)
+    lod.name = actor.getAttribute('name', '') + 'LOD'
+    lod.addLevel(body)
+    lod.addLevel(impostor, lod.switchDistance(config('camera.fov')), config('brownDwarf.lodHysteresis'))
+
+    node.add(lod)
 
     return node
   }

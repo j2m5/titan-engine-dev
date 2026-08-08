@@ -1,36 +1,18 @@
-import { LOD, WebGLRenderer } from 'three'
-import { starLodSwitchDistance } from '@/core/helpers/apparentSize'
-import { UpdateContext } from '@/core/UpdateContext'
+import { WebGLRenderer } from 'three'
+import { ApparentSizeLod } from '@/core/renderables/utils/ApparentSizeLod'
+import { STAR_IMPOSTOR_PIXELS } from '@/core/helpers/apparentSize'
 
 /**
- * LOD звезды: диск вблизи, билборд-импостор вдали. Дистанцию переключения
- * держит у себя, потому что она НЕ константа — билборд (FakeStar) меряет свой
- * размер живой высотой вьюпорта, и замороженное при создании число расходится
- * с ним после первого же ресайза окна.
- * radiusKm — физический радиус звезды в километрах.
+ * LOD звезды: ApparentSizeLod с зашитым размером импостора.
+ *
+ * Отдельный класс, а не прямой вызов ApparentSizeLod на стороне фабрики:
+ * STAR_IMPOSTOR_PIXELS — не параметр вызова, а часть контракта звезды, по
+ * которому сведён стык LOD, и вызывающей стороне нечем его подменить. Тот же
+ * приём, что у starLodSwitchDistance.
  */
-class StarLod extends LOD {
-  public constructor(
-    private readonly radiusKm: number,
-    private readonly renderer: WebGLRenderer
-  ) {
-    super()
-  }
-
-  /**
-   * Расстояние, на котором диск звезды занимает столько же пикселей, сколько
-   * рисует билборд. Высота вьюпорта берётся ЖИВАЯ — та же, по которой считает
-   * себя FakeStar.updateObject.
-   */
-  public switchDistance(fovDegrees: number): number {
-    return starLodSwitchDistance(this.radiusKm, fovDegrees, this.renderer.domElement.height)
-  }
-
-  public updateObject(ctx: UpdateContext): void {
-    // Уровень 1 — билборд: addLevel сортирует по дистанции, диск стоит на нуле
-    if (this.levels.length < 2) return
-
-    this.levels[1].distance = this.switchDistance(ctx.camera.fov)
+class StarLod extends ApparentSizeLod {
+  public constructor(radiusKm: number, renderer: WebGLRenderer) {
+    super(radiusKm, renderer, STAR_IMPOSTOR_PIXELS)
   }
 }
 

@@ -8,6 +8,13 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
  */
 export const STAR_IMPOSTOR_PIXELS: number = 12
 
+/**
+ * Видимый размер импостора коричневого карлика в пикселях. Общая константа:
+ * по ней и рисуется билборд, и выбирается расстояние переключения LOD.
+ * Разъехавшись, эти два числа дают скачок размера диска в момент переключения.
+ */
+export const BROWN_DWARF_IMPOSTOR_PIXELS: number = 12
+
 /** Высота кадра в мировых единицах на заданном расстоянии */
 export function frameHeightAt(distance: number, fovDegrees: number): number {
   return 2 * Math.tan(degToRad(fovDegrees) / 2) * distance
