@@ -23,6 +23,6 @@ export interface BrownDwarfConfig {
 export const brownDwarf: BrownDwarfConfig = {
   brownDwarf: {
     lodHysteresis: 0.05,
-    haloOpacity: 0.012
+    haloOpacity: 0.015
   }
 }
