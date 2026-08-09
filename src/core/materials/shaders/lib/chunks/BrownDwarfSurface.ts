@@ -38,6 +38,77 @@ export const brownDwarfSurface = `
 
   #define BD_VORTEX_COUNT 5
 
+  /** Полуось главного шторма по широте, в единицах длины дуги */
+  #define BD_STORM_MAIN_RADIUS 0.07
+  /** Полуось мелких штормов; разброс даёт хеш */
+  #define BD_STORM_SMALL_RADIUS 0.035
+  /** Вытянутость вдоль пояса: у Большого Красного Пятна примерно столько же */
+  #define BD_STORM_ELONGATION 2.2
+  /** Доля полуоси, на которой ядро ещё плоское: у шторма есть тело, а не только спад */
+  #define BD_STORM_CORE 0.55
+  /** Полярнее этой широты пояса распадаются сами — штормам там делать нечего */
+  #define BD_STORM_BELT_LIMIT 0.85
+
+  /**
+   * Центр i-го шторма: x — широта в КОРОБЛЕНЫХ координатах, y — долгота.
+   *
+   * Широта садится в середину ТЁМНОГО пояса — там sin(lat·PI·bandCount) равен
+   * единице, то есть lat = (0.5 + 2k)/bandCount. Светлому овалу нужна тёмная
+   * подложка, поэтому не на границе.
+   *
+   * Диапазон k подбирается под bandCount, чтобы центр не уехал в полярную
+   * шапку. max(..., 1.0) — защита от bandCount меньше единицы, при котором
+   * допустимых k не остаётся; там центр зажимается краем пояса.
+   */
+  vec2 bdStormCentre(float i, float seed, float bandCount) {
+    float h1 = fract(sin(i * 12.9898 + seed) * 43758.5453);
+    float h2 = fract(sin(i * 78.2330 + seed * 1.7) * 43758.5453);
+
+    float kMax = floor((BD_STORM_BELT_LIMIT * bandCount - 0.5) * 0.5);
+    float kMin = ceil((-BD_STORM_BELT_LIMIT * bandCount - 0.5) * 0.5);
+    float k = kMin + floor(h1 * max(kMax - kMin + 1.0, 1.0));
+
+    float lat = clamp((0.5 + 2.0 * k) / bandCount, -BD_STORM_BELT_LIMIT, BD_STORM_BELT_LIMIT);
+
+    return vec2(lat, h2 * 6.2831853);
+  }
+
+  /**
+   * Эллиптическая маска шторма, 0..1.
+   *
+   * Обе полуоси приведены к длине дуги одним множителем cos(широты центра):
+   * широтная делится на него, долготная умножается. Без этого овал раздувало
+   * бы по долготе тем сильнее, чем ближе к полюсу.
+   */
+  float bdStormMask(float i, float lat, float lon, float seed, float bandCount) {
+    vec2 c = bdStormCentre(i, seed, bandCount);
+    float h3 = fract(sin(i * 39.4250 + seed * 2.3) * 43758.5453);
+
+    float rLat = i < 0.5 ? BD_STORM_MAIN_RADIUS : BD_STORM_SMALL_RADIUS * (0.6 + 0.8 * h3);
+    float cosC = sqrt(max(1.0 - c.x * c.x, 1e-4));
+
+    float raw = lon - c.y;
+    float dLon = raw - 6.2831853 * floor(raw / 6.2831853 + 0.5);
+
+    vec2 e = vec2((lat - c.x) / (rLat * cosC), (dLon * cosC) / (rLat * BD_STORM_ELONGATION));
+
+    return 1.0 - smoothstep(BD_STORM_CORE, 1.0, length(e));
+  }
+
+  /**
+   * Насколько шторма прорежают палубу. max, а не сумма: наложение двух
+   * штормов не должно углублять дыру вдвое — дыра есть дыра.
+   */
+  float bdStormDensity(float lat, float lon, float seed, float bandCount, float depth) {
+    float m = 0.0;
+
+    for (int i = 0; i < BD_VORTEX_COUNT; i++) {
+      m = max(m, bdStormMask(float(i), lat, lon, seed, bandCount));
+    }
+
+    return m * depth;
+  }
+
   /**
    * Овальные штормы на границах струй — там, где встречные потоки сдвигаются
    * друг о друга. Каждый вихрь проворачивает домен вокруг оси, проходящей

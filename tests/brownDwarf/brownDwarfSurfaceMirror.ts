@@ -184,3 +184,101 @@ export function bdPolarWeight(latitude: number, polarChaos: number): number {
 
   return 1 - t * polarChaos
 }
+
+/** Полуось главного шторма по широте, в единицах длины дуги */
+export const STORM_MAIN_RADIUS = 0.07
+/** Полуось мелких штормов; разброс даёт хеш */
+export const STORM_SMALL_RADIUS = 0.035
+/** Вытянутость вдоль пояса: у Большого Красного Пятна примерно столько же */
+export const STORM_ELONGATION = 2.2
+/** Доля полуоси, на которой ядро ещё плоское: у шторма есть тело, а не только спад */
+export const STORM_CORE = 0.55
+/** Полярнее этой широты пояса распадаются сами — штормам там делать нечего */
+export const STORM_BELT_LIMIT = 0.85
+/** Число штормов. Дубль BD_VORTEX_COUNT из GLSL — менять синхронно */
+export const VORTEX_COUNT = 5
+
+/**
+ * Зеркало GLSL-овского fract(sin(x) * 43758.5453).
+ *
+ * Ловушка: `v % 1` не годится — у отрицательных значений остаток в JS
+ * отрицателен, а fract всегда в [0, 1). И побитово с GLSL это всё равно не
+ * сойдётся: там float, здесь double. Тесты обязаны быть независимы от
+ * конкретного выпавшего значения.
+ */
+const hash = (x: number): number => {
+  const v = Math.sin(x) * 43758.5453
+
+  return v - Math.floor(v)
+}
+
+/**
+ * Центр i-го шторма: широта в КОРОБЛЕНЫХ координатах и долгота в радианах.
+ *
+ * Широта садится в середину ТЁМНОГО пояса — там sin(lat·PI·bandCount) равен
+ * единице, то есть lat = (0.5 + 2k)/bandCount. Светлому овалу нужна тёмная
+ * подложка, поэтому не на границе.
+ *
+ * Диапазон k подбирается под bandCount, чтобы центр не уехал в полярную
+ * шапку. max(..., 1) — защита от bandCount меньше единицы, при котором
+ * допустимых k не остаётся; там центр зажимается краем пояса.
+ */
+export function bdStormCentre(i: number, seed: number, bandCount: number): [number, number] {
+  const h1: number = hash(i * 12.9898 + seed)
+  const h2: number = hash(i * 78.233 + seed * 1.7)
+
+  const kMax: number = Math.floor((STORM_BELT_LIMIT * bandCount - 0.5) * 0.5)
+  const kMin: number = Math.ceil((-STORM_BELT_LIMIT * bandCount - 0.5) * 0.5)
+  const k: number = kMin + Math.floor(h1 * Math.max(kMax - kMin + 1, 1))
+
+  const latitude: number = Math.min(Math.max((0.5 + 2 * k) / bandCount, -STORM_BELT_LIMIT), STORM_BELT_LIMIT)
+
+  return [latitude, h2 * 2 * Math.PI]
+}
+
+/**
+ * Эллиптическая маска шторма, 0..1.
+ *
+ * Обе полуоси приведены к длине дуги одним множителем cos(широты центра):
+ * широтная делится на него, долготная умножается. Без этого овал раздувало бы
+ * по долготе тем сильнее, чем ближе к полюсу.
+ */
+export function bdStormMask(
+  i: number,
+  latitude: number,
+  longitude: number,
+  seed: number,
+  bandCount: number
+): number {
+  const [latC, lonC] = bdStormCentre(i, seed, bandCount)
+  const h3: number = hash(i * 39.425 + seed * 2.3)
+
+  const rLat: number = i < 0.5 ? STORM_MAIN_RADIUS : STORM_SMALL_RADIUS * (0.6 + 0.8 * h3)
+  const cosC: number = Math.sqrt(Math.max(1 - latC * latC, 1e-4))
+
+  const raw: number = longitude - lonC
+  const dLon: number = raw - 2 * Math.PI * Math.floor(raw / (2 * Math.PI) + 0.5)
+
+  const eLat: number = (latitude - latC) / (rLat * cosC)
+  const eLon: number = (dLon * cosC) / (rLat * STORM_ELONGATION)
+
+  return 1 - smoothstep(STORM_CORE, 1, Math.hypot(eLat, eLon))
+}
+
+/**
+ * Насколько шторма прорежают палубу. max, а не сумма: наложение двух штормов
+ * не должно углублять дыру вдвое — дыра есть дыра.
+ */
+export function bdStormDensity(
+  latitude: number,
+  longitude: number,
+  seed: number,
+  bandCount: number,
+  depth: number
+): number {
+  let m = 0
+
+  for (let i = 0; i < VORTEX_COUNT; i++) m = Math.max(m, bdStormMask(i, latitude, longitude, seed, bandCount))
+
+  return m * depth
+}
