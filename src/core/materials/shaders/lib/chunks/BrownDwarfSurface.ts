@@ -28,6 +28,57 @@ export const brownDwarfSurface = `
   #define BD_FINE_SCALE 4.0
   #define BD_FINE_OCTAVES 4
 
+  /**
+   * Порог Найквиста для октавы и точка полного гашения. Октава несёт
+   * информацию, пока на её период приходится хотя бы два пикселя; дальше
+   * остаётся один алиасинг.
+   *
+   * Это критерий выборки, а не вкус, поэтому константы, а не ручки. Откат —
+   * поднять CUTOFF выше любого достижимого футпринта.
+   */
+  #define BD_OCTAVE_NYQUIST 0.5
+  #define BD_OCTAVE_CUTOFF 1.0
+
+  /**
+   * Вес октавы по экранному следу. Ниже порога — РОВНО единица, поэтому
+   * вблизи ограничение полосы тождественно и крупный план не меняется.
+   * Гашение плавное: жёсткая отсечка щёлкала бы при движении камеры.
+   */
+  float bdOctaveWeight(float footprint, float frequency) {
+    return 1.0 - smoothstep(BD_OCTAVE_NYQUIST, BD_OCTAVE_CUTOFF, footprint * frequency);
+  }
+
+  /**
+   * fbm с ограничением полосы по экрану. Своя, а не общая из чанка звезды:
+   * ту делят starGranulationT и генератор текстуры чёрной дыры.
+   *
+   * Делится на сумму ВЫЖИВШИХ амплитуд — размах держится, и на дистанции
+   * пояса гнутся так же сильно, просто плавнее. Деление на полную сумму
+   * уплощало бы поле. Отсечка знаменателя срабатывает только когда погашены
+   * все октавы разом: тогда и числитель ноль, и поле вырождается в среднее.
+   *
+   * Ловушка: footprint обязан быть в единицах домена ВЫЗОВА. Кто сэмплит
+   * pos * k, тот передаёт footprint * k, иначе полоса сядет мимо частоты.
+   */
+  float bdFbm(vec4 pos, int octaves, float persistence, float footprint) {
+    float total = 0.0;
+    float frequency = 1.0;
+    float amplitude = 1.0;
+    float maxValue = 0.0;
+
+    for (int i = 0; i < octaves; i++) {
+      float w = bdOctaveWeight(footprint, frequency);
+
+      total += snoise(pos * frequency) * amplitude * w;
+      maxValue += amplitude * w;
+
+      amplitude *= persistence;
+      frequency *= 2.0;
+    }
+
+    return total / max(maxValue, 1e-4);
+  }
+
   // Высота верхушки для параллакса, отдельно и дёшево.
   // Домен НЕ коробленный: параллакс — художественный сдвиг на пару текселей,
   // и разница между точной и приближённой высотой в нём неразличима, а полный
@@ -166,8 +217,10 @@ export const brownDwarfSurface = `
   //
   // Порог возвращает провалы и гребни, которых не давало запекание, а его
   // полуширина растёт с экранным футпринтом: фиксированная ширина под
-  // HDR-контрастом усиливает субпиксельный шум. На импосторе футпринт
-  // огромен, и порог вырождается в усреднение сам.
+  // HDR-контрастом усиливает субпиксельный шум. Дальнее усреднение — забота
+  // ограничения полосы у bdFbm: на импосторе оно гасит верхние октавы,
+  // density становится глаже, и fwidth(density) от этого МЕНЬШЕ, а не
+  // больше — порог на той же дистанции острее, а не мягче.
   vec3 bdField(vec3 dir, float seed, float bandCount, float turbulence,
                float gapThreshold, float deckSoftness, float bandWarp, float zonalShear, float fineDetail,
                float polarChaos, float vortexStrength, float stormDepth) {
@@ -191,9 +244,17 @@ export const brownDwarfSurface = `
     vec3 swirled = bdVortices(swept, lat, lon, seed, bandCount, vortexStrength);
     vec4 p = vec4(swirled.x * 1.2, swirled.y * 4.5, swirled.z * 1.2, seed);
 
-    // Два масштаба: крупный рвёт пояса, мелкий даёт структуру на кромках
-    float coarse = fbm(p, 6, 0.85);
-    float fine = fbm(p * BD_FINE_SCALE + 23.0, BD_FINE_OCTAVES, 0.7);
+    // Экранный след домена, один на все вызовы. Берётся от p, а не от
+    // плотности: производная гладкой функции гладкая, тогда как
+    // fwidth(density) сам высокочастотен — он скачет вместе с шумом,
+    // который призван измерять
+    float footprint = length(fwidth(p.xyz));
+
+    // Два масштаба: крупный рвёт пояса, мелкий даёт структуру на кромках.
+    // След у каждого свой: домен fine умножен на BD_FINE_SCALE, значит и
+    // след умножен на него же
+    float coarse = bdFbm(p, 6, 0.85, footprint);
+    float fine = bdFbm(p * BD_FINE_SCALE + 23.0, BD_FINE_OCTAVES, 0.7, footprint * BD_FINE_SCALE);
     float noise = coarse + fine * fineDetail;
 
     // Сила турбулентности своя у каждого пояса: одни спокойные, другие бурлят
@@ -226,7 +287,7 @@ export const brownDwarfSurface = `
 
     // Высота несёт мелкую деталь и растянута на весь диапазон: по ней
     // bdShade выбирает цвет палубы, и без растяжки тёмные пояса плоские
-    float height = clamp(0.5 + BD_HEIGHT_CONTRAST * (fbm(p * 2.3 + 11.0, 4, 0.7) * 0.6 + fine * 0.4), 0.0, 1.0);
+    float height = clamp(0.5 + BD_HEIGHT_CONTRAST * (bdFbm(p * 2.3 + 11.0, 4, 0.7, footprint * 2.3) * 0.6 + fine * 0.4), 0.0, 1.0);
 
     return vec3(tau, height, depth);
   }
