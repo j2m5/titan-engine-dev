@@ -46,6 +46,22 @@ describe('параметры коричневого карлика', () => {
     expect(brownDwarfParameters(stubActor({ breathAmplitude: -0.5 })).breathAmplitude).toBe(0)
   })
 
+  it('лимбовое потемнение по умолчанию 0.6', () => {
+    expect(brownDwarfParameters(stubActor()).limbDarkening).toBeCloseTo(0.6)
+  })
+
+  it('нулевое лимбовое потемнение сохраняется как ноль, а не подменяется дефолтом', () => {
+    // Точка отката: 0 обязан пережить ??, иначе вернуть прежний вид нечем
+    expect(brownDwarfParameters(stubActor({ limbDarkening: 0 })).limbDarkening).toBe(0)
+  })
+
+  it('лимбовое потемнение зажато в [0, 1]: за единицей кромка уходит в минус', () => {
+    // Множитель 1 − u·(1 − mu) при u > 1 отрицателен на малых mu, то есть
+    // прогалина у лимба получает отрицательную светимость
+    expect(brownDwarfParameters(stubActor({ limbDarkening: 2.5 })).limbDarkening).toBe(1)
+    expect(brownDwarfParameters(stubActor({ limbDarkening: -1 })).limbDarkening).toBe(0)
+  })
+
   it('шаблон редактора заведён и проходит через те же параметры', () => {
     const template = renderingDataTemplates.find((t) => t.value === 'brownDwarf')
 

@@ -10,6 +10,7 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
     uColorHotDeep: new Uniform(new Color()),
     uOpticalDepth: new Uniform(3),
     uGapGlow: new Uniform(3.3),
+    uLimbDarkening: new Uniform(0.6),
     uGapThreshold: new Uniform(0.42),
     uParallax: new Uniform(0.02),
     uBreathAmplitude: new Uniform(0.08),
@@ -61,6 +62,7 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
     uniform vec3 uColorHotDeep;
     uniform float uOpticalDepth;
     uniform float uGapGlow;
+    uniform float uLimbDarkening;
     uniform float uGapThreshold;
     uniform float uParallax;
     uniform float uBreathAmplitude;
@@ -111,7 +113,7 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
       // Вся композиция — одной точкой входа чанка. Импостор зовёт ту же
       // функцию теми же аргументами: разойтись двум LOD нечем
       vec3 color = bdShade(field, mu, dir, uColorCloud, uColorCloudHigh, uColorHot, uColorHotDeep,
-                           uOpticalDepth, uGapGlow, time, uBreathAmplitude);
+                           uOpticalDepth, uGapGlow, uLimbDarkening, time, uBreathAmplitude);
 
       gl_FragColor = vec4(color, 1.0);
 

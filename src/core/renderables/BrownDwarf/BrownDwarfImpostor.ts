@@ -71,6 +71,7 @@ class BrownDwarfImpostor extends Mesh {
       'uColorHotDeep',
       'uOpticalDepth',
       'uGapGlow',
+      'uLimbDarkening',
       'uBreathAmplitude',
       'uBandWarp',
       'uZonalShear',

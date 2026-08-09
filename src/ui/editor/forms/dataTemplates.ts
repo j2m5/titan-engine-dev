@@ -102,6 +102,7 @@ export const renderingDataTemplates: DataTemplate[] = [
       turbulence: 1.6,
       opticalDepth: 3,
       gapGlow: 3.3,
+      limbDarkening: 0.6,
       gapThreshold: 0.42,
       parallax: 0.02,
       breathAmplitude: 0.08,

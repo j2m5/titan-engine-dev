@@ -21,6 +21,7 @@ export interface BrownDwarfParameters {
   turbulence: number
   opticalDepth: number
   gapGlow: number
+  limbDarkening: number
   gapThreshold: number
   parallax: number
   breathAmplitude: number
@@ -45,6 +46,12 @@ const DEFAULTS: Omit<BrownDwarfParameters, 'temperature'> = {
   turbulence: 1.6,
   opticalDepth: 3,
   gapGlow: 3.3,
+  /**
+   * Сила лимбового потемнения прогалин, линейный закон I = 1 − u·(1 − mu).
+   * У прогалины tau равен нулю, и деление на mu в bdTauEff ей потемнения не
+   * даёт — этот член единственный. Ноль — точка отката.
+   */
+  limbDarkening: 0.6,
   gapThreshold: 0.42,
   parallax: 0.02,
   breathAmplitude: 0.08,
@@ -73,6 +80,10 @@ export function brownDwarfParameters(actor: Actor): BrownDwarfParameters {
     turbulence: data.turbulence ?? DEFAULTS.turbulence,
     opticalDepth: data.opticalDepth ?? DEFAULTS.opticalDepth,
     gapGlow: data.gapGlow ?? DEFAULTS.gapGlow,
+    // Кламп по той же причине, что у breathAmplitude: при u > 1 множитель
+    // 1 − u·(1 − mu) на малых mu отрицателен, то есть кромка получает
+    // отрицательную светимость
+    limbDarkening: clamp(data.limbDarkening ?? DEFAULTS.limbDarkening, 0, 1),
     gapThreshold: data.gapThreshold ?? DEFAULTS.gapThreshold,
     parallax: data.parallax ?? DEFAULTS.parallax,
     // Кламп, а не просто чтение: bdBreath даёт [1-a, 1+a], и при a > 1

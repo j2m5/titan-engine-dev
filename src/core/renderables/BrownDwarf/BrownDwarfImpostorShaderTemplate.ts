@@ -20,6 +20,7 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
     uColorHotDeep: new Uniform(new Color()),
     uOpticalDepth: new Uniform(3),
     uGapGlow: new Uniform(3.3),
+    uLimbDarkening: new Uniform(0.6),
     uGapThreshold: new Uniform(0.42),
     uBreathAmplitude: new Uniform(0.08),
     uSeed: new Uniform(4096),
@@ -55,6 +56,7 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
     uniform vec3 uColorHotDeep;
     uniform float uOpticalDepth;
     uniform float uGapGlow;
+    uniform float uLimbDarkening;
     uniform float uGapThreshold;
     uniform float uBreathAmplitude;
     uniform float uSeed;
@@ -104,7 +106,7 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
       // Та же точка входа и тот же список аргументов, что у диска —
       // закреплено тестом посимвольного сравнения вызова
       vec3 color = bdShade(field, mu, dir, uColorCloud, uColorCloudHigh, uColorHot, uColorHotDeep,
-                           uOpticalDepth, uGapGlow, time, uBreathAmplitude);
+                           uOpticalDepth, uGapGlow, uLimbDarkening, time, uBreathAmplitude);
 
       gl_FragColor = vec4(color, alpha);
 

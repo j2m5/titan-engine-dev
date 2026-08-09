@@ -144,8 +144,10 @@ export const brownDwarfSurface = `
 
   // Эффективная оптическая толща палубы. mu — косинус (нормаль сферы, луч на
   // камеру): у кромки луч идёт по касательной и набирает больше вещества,
-  // поэтому прогалины у лимба закрываются сами. Отдельного лимбового
-  // потемнения нет — оно выпадает отсюда.
+  // поэтому палуба к лимбу темнеет сама.
+  //
+  // Ловушка: у прогалины tau равен НУЛЮ, и ноль, делённый на mu, остаётся
+  // нулём при любом угле — ей потемнение даёт отдельный член в bdShade.
   // Отсечка mu снизу даёт на самом лимбе чистый цвет палубы, а не NaN.
   float bdTauEff(float tau, float mu, float opticalDepth) {
     return tau * opticalDepth / max(mu, 1e-3);
@@ -191,8 +193,12 @@ export const brownDwarfSurface = `
   // B — глубина видимости в прогалине (bdDepth, считана до порога).
   // Потолок HDR общий со звездой и атмосферой (half-float буфер, AgX-плечо).
   vec3 bdShade(vec3 field, float mu, vec3 dir, vec3 cloud, vec3 cloudHigh, vec3 hot, vec3 hotDeep,
-               float opticalDepth, float gapGlow, float t, float breathAmplitude) {
+               float opticalDepth, float gapGlow, float limbDarkening, float t, float breathAmplitude) {
     float transmit = bdTransmit(bdTauEff(field.r, mu, opticalDepth));
+
+    // Линейный закон потемнения к краю. Пол 1 − u на самом силуэте: степенной
+    // закон обратился бы там в ноль, то есть дал бы чёрную кромку.
+    float limb = 1.0 - limbDarkening * (1.0 - mu);
 
     // Чем глубже видно, тем горячее вещество: у открытой прогалины яркое
     // ядро, гаснущее к краям. Плоский hot давал ровное пятно.
@@ -203,7 +209,7 @@ export const brownDwarfSurface = `
     // плечо кривой тонмаппинга и выцветает в белый, читаясь как шесть тысяч
     // кельвинов вместо двух. С множителем блум ловит только глубокие ядра,
     // а кромки остаются тёмными и насыщенными.
-    float glow = gapGlow * mix(BD_GAP_GLOW_FLOOR, 1.0, field.z);
+    float glow = gapGlow * mix(BD_GAP_GLOW_FLOOR, 1.0, field.z) * limb;
     vec3 hotLit = mix(hot, hotDeep, field.z) * glow * bdBreath(dir, t, breathAmplitude);
 
     // Палуба темнеет с высотой верхушки: выше — холоднее и тусклее.
