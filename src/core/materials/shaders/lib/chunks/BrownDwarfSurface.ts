@@ -217,8 +217,10 @@ export const brownDwarfSurface = `
   //
   // Порог возвращает провалы и гребни, которых не давало запекание, а его
   // полуширина растёт с экранным футпринтом: фиксированная ширина под
-  // HDR-контрастом усиливает субпиксельный шум. На импосторе футпринт
-  // огромен, и порог вырождается в усреднение сам.
+  // HDR-контрастом усиливает субпиксельный шум. Дальнее усреднение — забота
+  // ограничения полосы у bdFbm: на импосторе оно гасит верхние октавы,
+  // density становится глаже, и fwidth(density) от этого МЕНЬШЕ, а не
+  // больше — порог на той же дистанции острее, а не мягче.
   vec3 bdField(vec3 dir, float seed, float bandCount, float turbulence,
                float gapThreshold, float deckSoftness, float bandWarp, float zonalShear, float fineDetail,
                float polarChaos, float vortexStrength, float stormDepth) {

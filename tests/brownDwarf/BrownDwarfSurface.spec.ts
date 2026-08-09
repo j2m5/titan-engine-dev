@@ -492,7 +492,11 @@ describe('структурный контракт турбулентности',
 
     expect(start).toBeGreaterThanOrEqual(0)
     expect(end).toBeGreaterThan(start)
-    expect((field.match(/fbm\(/gi) ?? []).length).toBeGreaterThanOrEqual(4)
+    // Считает оба имени намеренно: bdFbm( — ограниченная по полосе, fbm( —
+    // общая (warpNoise, chaos). Без флага i, чтобы не подхватить чужую *Fbm(.
+    // Порог — точный счёт (5), а не запас: с меньшим порогом потеря одного
+    // вызова прошла бы незамеченной
+    expect((field.match(/\bbdFbm\(|(?<![A-Za-z])fbm\(/g) ?? []).length).toBeGreaterThanOrEqual(5)
     expect(field).not.toContain('time')
   })
 })
@@ -686,9 +690,15 @@ describe('ограничение октав по экрану', () => {
     expect(weights[weights.length - 1]).toBe(0)
   })
 
-  it('вес зависит от произведения следа на частоту, а не от них по отдельности', () => {
-    // Именно поэтому вызову с доменом p * 4 нужен footprint * 4
-    expect(bdOctaveWeight(0.2, 4)).toBeCloseTo(bdOctaveWeight(0.8, 1), 12)
+  it('вес зависит от произведения следа на частоту, а не от их суммы', () => {
+    // Одинаковое произведение (0.7) при разной сумме (2.35 против 1.7) —
+    // вес обязан совпасть. Именно поэтому вызову с доменом p * 4 нужен
+    // footprint * 4, а не footprint как есть
+    expect(bdOctaveWeight(0.35, 2)).toBeCloseTo(bdOctaveWeight(0.7, 1), 12)
+
+    // Другое произведение — вес обязан отличаться, иначе проверка выше
+    // прошла бы и при полностью постоянной функции
+    expect(bdOctaveWeight(0.9, 1)).toBeLessThan(bdOctaveWeight(0.7, 1))
   })
 
   it('в чанке своя fbm, и делит она на сумму ВЫЖИВШИХ амплитуд', () => {
@@ -706,8 +716,10 @@ describe('ограничение октав по экрану', () => {
 
   it('каждый вызов получает след в единицах СВОЕГО домена', () => {
     expect(brownDwarfSurface).toContain('bdFbm(p, 6, 0.85, footprint)')
-    expect(brownDwarfSurface).toContain('footprint * BD_FINE_SCALE)')
-    expect(brownDwarfSurface).toContain('footprint * 2.3)')
+    expect(brownDwarfSurface).toContain(
+      'bdFbm(p * BD_FINE_SCALE + 23.0, BD_FINE_OCTAVES, 0.7, footprint * BD_FINE_SCALE)'
+    )
+    expect(brownDwarfSurface).toContain('bdFbm(p * 2.3 + 11.0, 4, 0.7, footprint * 2.3)')
   })
 
   it('одномерные модуляторы остаются на общей fbm', () => {
