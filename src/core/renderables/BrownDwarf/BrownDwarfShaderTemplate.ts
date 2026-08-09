@@ -99,18 +99,20 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
       float mu = clamp(dot(dir, viewO), 0.0, 1.0);
 
       // Параллакс: верхушки облаков смещаются относительно провалов при
-      // движении камеры. Высота берётся дешёвым bdHeight (домен не
-      // коробленный) — на сдвиге в пару текселей разница с точной высотой
-      // из bdField неразличима, а полный вызов стоил бы восемнадцати
-      // лишних октав ради одного канала
+      // движении камеры. Высота берётся дешёвым bdHeight — не потому, что он
+      // близок к точной высоте из bdField (домены у них разные, это два
+      // независимых поля), а потому что для художественного сдвига на пару
+      // текселей годится любая, а полный вызов стоил бы восемнадцати лишних
+      // октав ради одного канала
       float height = bdHeight(dir, uSeed);
 
-      // В центре диска взгляд совпадает с нормалью, касательная вырождается
-      // в ноль и normalize дал бы NaN. Параллакса там и нет — сдвигать нечего
+      // Параллакс гаснет к центру диска сам: |tangent| равен синусу угла
+      // взгляда, то есть нулю там, где взгляд совпадает с нормалью.
+      // Нормировать его — значит сделать сдвиг постоянным и получить в
+      // подсолнечной точке разрыв: направление там неустойчиво, а величина
+      // полная. Отдельная отсечка не нужна — нулевой сдвиг оставляет dir
       vec3 tangent = viewO - dir * dot(viewO, dir);
-      vec3 shifted = dot(tangent, tangent) < 1e-8
-        ? dir
-        : normalize(dir - normalize(tangent) * (height * uParallax));
+      vec3 shifted = normalize(dir - tangent * (height * uParallax));
 
       vec3 field = bdField(shifted, uSeed, uBandCount, uTurbulence, uGapThreshold, uDeckSoftness, uBandWarp, uZonalShear, uFineDetail, uPolarChaos, uVortexStrength, uStormDepth);
 
