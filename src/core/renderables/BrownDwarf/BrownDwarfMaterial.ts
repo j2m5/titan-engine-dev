@@ -1,8 +1,14 @@
 import { ShaderMaterial, UniformsUtils } from 'three'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { BrownDwarfShaderTemplate } from '@/core/renderables/BrownDwarf/BrownDwarfShaderTemplate'
-import { BrownDwarfParameters, BROWN_DWARF_CLOUD_DIM, BROWN_DWARF_PALETTE_SPREAD_K } from '@/core/renderables/BrownDwarf/BrownDwarfParameters'
-import { buildStarPalette, StarPalette } from '@/core/materials/shaders/lib/helpers'
+import {
+  BrownDwarfParameters,
+  BROWN_DWARF_CLOUD_DIM,
+  BROWN_DWARF_DECK_PLUM,
+  BROWN_DWARF_PALETTE_SPREAD_K
+} from '@/core/renderables/BrownDwarf/BrownDwarfParameters'
+import { buildStarPalette, mixColor, StarPalette } from '@/core/materials/shaders/lib/helpers'
+import { Colorable } from '@/core/models/types'
 
 /**
  * Материал тела карлика.
@@ -27,16 +33,23 @@ class BrownDwarfMaterial extends ShaderMaterial {
 
     this.uniforms.uColorHot.value.setRGB(palette.hot.r, palette.hot.g, palette.hot.b)
     this.uniforms.uColorHotDeep.value.setRGB(paletteDeep.hot.r, paletteDeep.hot.g, paletteDeep.hot.b)
+
+    // Тонировка ложится на хроматичность ДО затемнения, поэтому обе записи
+    // палубы получают один цвет при разной яркости. Только палуба: прогалины
+    // остаются планковскими, и тон разводит их с палубой сильнее, чем
+    // разводила одна светлота
+    const deck: Colorable = mixColor(palette.cool, BROWN_DWARF_DECK_PLUM, params.deckTint)
+
     this.uniforms.uColorCloud.value.setRGB(
-      palette.cool.r * BROWN_DWARF_CLOUD_DIM,
-      palette.cool.g * BROWN_DWARF_CLOUD_DIM,
-      palette.cool.b * BROWN_DWARF_CLOUD_DIM
+      deck.r * BROWN_DWARF_CLOUD_DIM,
+      deck.g * BROWN_DWARF_CLOUD_DIM,
+      deck.b * BROWN_DWARF_CLOUD_DIM
     )
-    // Верхушки холоднее и темнее нижней палубы: тот же cool, затемнён вдвое сильнее
+    // Верхушки холоднее и темнее нижней палубы: тот же цвет, затемнён вдвое сильнее
     this.uniforms.uColorCloudHigh.value.setRGB(
-      palette.cool.r * BROWN_DWARF_CLOUD_DIM * 0.45,
-      palette.cool.g * BROWN_DWARF_CLOUD_DIM * 0.45,
-      palette.cool.b * BROWN_DWARF_CLOUD_DIM * 0.45
+      deck.r * BROWN_DWARF_CLOUD_DIM * 0.45,
+      deck.g * BROWN_DWARF_CLOUD_DIM * 0.45,
+      deck.b * BROWN_DWARF_CLOUD_DIM * 0.45
     )
     this.uniforms.uOpticalDepth.value = params.opticalDepth
     this.uniforms.uGapGlow.value = params.gapGlow

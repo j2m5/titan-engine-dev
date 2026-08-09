@@ -1,5 +1,5 @@
 import { Actor } from '@/core/models/Actor'
-import { brownDwarfParameters } from '@/core/renderables/BrownDwarf/BrownDwarfParameters'
+import { BROWN_DWARF_DECK_PLUM, brownDwarfParameters } from '@/core/renderables/BrownDwarf/BrownDwarfParameters'
 import { renderingDataTemplates } from '@/ui/editor/forms/dataTemplates'
 
 function stubActor(data?: unknown, temperature?: number): Actor {
@@ -77,6 +77,27 @@ describe('параметры коричневого карлика', () => {
     // e0 > e1, что в GLSL не определено
     expect(brownDwarfParameters(stubActor({ deckSoftness: 4 })).deckSoftness).toBe(1)
     expect(brownDwarfParameters(stubActor({ deckSoftness: -0.2 })).deckSoftness).toBe(0)
+  })
+
+  it('сила тонировки палубы по умолчанию 0.5', () => {
+    expect(brownDwarfParameters(stubActor()).deckTint).toBeCloseTo(0.5)
+  })
+
+  it('нулевая тонировка сохраняется как ноль, а не подменяется дефолтом', () => {
+    // Точка отката: 0 обязан пережить ??, иначе вернуть планковский цвет нечем
+    expect(brownDwarfParameters(stubActor({ deckTint: 0 })).deckTint).toBe(0)
+  })
+
+  it('сила тонировки зажата в [0, 1]', () => {
+    expect(brownDwarfParameters(stubActor({ deckTint: 3 })).deckTint).toBe(1)
+    expect(brownDwarfParameters(stubActor({ deckTint: -1 })).deckTint).toBe(0)
+  })
+
+  it('опорный сливовый цвет: синий выше зелёного', () => {
+    // Это и отличает сливовый от просто тёмно-красного; при B <= G оттенок
+    // уходит обратно в кирпич, и вся арка теряет смысл
+    expect(BROWN_DWARF_DECK_PLUM.b).toBeGreaterThan(BROWN_DWARF_DECK_PLUM.g)
+    expect(BROWN_DWARF_DECK_PLUM.r).toBeGreaterThan(BROWN_DWARF_DECK_PLUM.b)
   })
 
   it('шаблон редактора заведён и проходит через те же параметры', () => {

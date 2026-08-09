@@ -1,19 +1,33 @@
 import { clamp } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
 import { readRenderingData } from '@/core/helpers/renderingData'
-import { IBrownDwarfRenderingObject } from '@/core/models/types'
+import { Colorable, IBrownDwarfRenderingObject } from '@/core/models/types'
 
 /** Поздний L / переход L-T: на этой температуре палитра чисто красно-оранжевая */
 export const BROWN_DWARF_DEFAULT_TEMPERATURE_K: number = 1600
 
 /**
- * Спред палитры шире звёздного (400K): cool уходит в тёмно-вишнёвый тон
- * палубы, hot — в оранжевое нутро прогалин
+ * Спред палитры шире звёздного (400K): hot уходит в оранжевое нутро прогалин.
+ * Холодный конец у обоих карликов (1210 K, 1350 K) при спреде 600 упирается
+ * в COLOR_TEMPERATURE_FLOOR_K (1000 K) — cool у них равен цвету на 1000 K
+ * независимо от величины спреда, и ручка двигает только горячую половину
+ * палитры. Чтобы cool оторвался от пола, спред должен упасть ниже 210/350 K.
  */
 export const BROWN_DWARF_PALETTE_SPREAD_K: number = 600
 
-/** Затемнение облачной палубы относительно cool-цвета палитры */
+/** Затемнение облачной палубы относительно цвета палубы после подмешивания deckTint */
 export const BROWN_DWARF_CLOUD_DIM: number = 0.25
+
+/**
+ * Опорный цвет тонировки палубы, линейный sRGB. Синий ВЫШЕ зелёного — это и
+ * отличает сливовый от тёмно-красного; при B <= G оттенок уходит обратно в
+ * кирпич.
+ *
+ * Умножением палубу к этому цвету не привести: у чёрнотельного цвета синий
+ * равен ровно нулю ниже 1900 K, а ноль умножением не поднимается. Отсюда
+ * подмешивание, а не множитель.
+ */
+export const BROWN_DWARF_DECK_PLUM: Readonly<Colorable> = { r: 1.0, g: 0.05, b: 0.22 }
 
 export interface BrownDwarfParameters {
   seed: number
@@ -24,6 +38,7 @@ export interface BrownDwarfParameters {
   limbDarkening: number
   gapThreshold: number
   deckSoftness: number
+  deckTint: number
   parallax: number
   breathAmplitude: number
   bandWarp: number
@@ -68,6 +83,12 @@ const DEFAULTS: Omit<BrownDwarfParameters, 'temperature'> = {
    * вместе с дистанцией до тела. Кламп [0, 1] этого не ловит.
    */
   deckSoftness: 0.20,
+  /**
+   * Сила подмешивания палубы к BROWN_DWARF_DECK_PLUM. Трогает только палубу:
+   * прогалины остаются планковскими, и палуба с прогалинами расходятся по
+   * тону, а не только по светлоте. Ноль — точка отката.
+   */
+  deckTint: 0.5,
   parallax: 0.02,
   breathAmplitude: 0.08,
   bandWarp: 0.16,
@@ -104,6 +125,10 @@ export function brownDwarfParameters(actor: Actor): BrownDwarfParameters {
     // сглаживания, а перевесив его — даёт smoothstep с e0 > e1, что в GLSL
     // не определено
     deckSoftness: clamp(data.deckSoftness ?? DEFAULTS.deckSoftness, 0, 1),
+    // Кламп по той же причине, что у соседей: mixColor экстраполирует за
+    // пределы [0, 1] — при t < 0 синий уходит в минус сразу (b = 0.22·t),
+    // при больших t в минус уходит зелёный
+    deckTint: clamp(data.deckTint ?? DEFAULTS.deckTint, 0, 1),
     parallax: data.parallax ?? DEFAULTS.parallax,
     // Кламп, а не просто чтение: bdBreath даёт [1-a, 1+a], и при a > 1
     // яркость нутра уходит в минус — отрицательная светимость

@@ -9,8 +9,15 @@ export function normalizeColor(color: Colorable): Colorable {
   }
 }
 
+/**
+ * Нижняя граница области определения аппроксимации в colorTemperatureToRGB.
+ * Ниже неё формула возвращает не физику, а продолжение подгонки за пределы
+ * её диапазона.
+ */
+export const COLOR_TEMPERATURE_FLOOR_K: number = 1000
+
 export function colorTemperatureToRGB(kelvin: number): Colorable {
-  const temp: number = kelvin / 100
+  const temp: number = Math.max(kelvin, COLOR_TEMPERATURE_FLOOR_K) / 100
 
   let red, green, blue
 
@@ -53,6 +60,19 @@ export function srgbColorToLinear(color: Colorable): Colorable {
     r: srgbChannelToLinear(color.r),
     g: srgbChannelToLinear(color.g),
     b: srgbChannelToLinear(color.b)
+  }
+}
+
+/**
+ * Поканальная линейная интерполяция. Форма a*(1-t) + b*t, а не a + (b-a)*t:
+ * первая точна на обоих концах, вторая при t = 1 даёт 0.09999999999999998
+ * вместо 0.1. Семантика совпадает с mix в GLSL.
+ */
+export function mixColor(a: Colorable, b: Colorable, t: number): Colorable {
+  return {
+    r: a.r * (1 - t) + b.r * t,
+    g: a.g * (1 - t) + b.g * t,
+    b: a.b * (1 - t) + b.b * t
   }
 }
 
@@ -103,15 +123,19 @@ export interface StarPalette {
 
 /**
  * Чёрнотельная палитра звезды: цвета для T−spread / T / T+spread.
- * Палитра в linear-sRGB (шейдер потребляет юниформы как radiance, AgX-пайплайн),
- * температуры защищены от ≤0 (Math.log(negative) в colorTemperatureToRGB даёт NaN).
+ * Палитра в linear-sRGB (шейдер потребляет юниформы как radiance, AgX-пайплайн).
  * Грануляция интерполирует между ними в шейдере (см. StarShaderTemplate);
  * протуберанцы берут широкий спред 1500K (холодная плазма — краснее).
+ *
+ * Сырые T−spread/T/T+spread идут в colorTemperatureToRGB как есть: пол
+ * COLOR_TEMPERATURE_FLOOR_K держит сама функция. Ловушка: у звезды холоднее
+ * ~2500 K спред 1500 упрётся в пол, и внешний слой сменит цвет молча.
+ * Нынешние звёзды все горячее.
  */
 export function buildStarPalette(temperatureK: number, spreadK: number = 400): StarPalette {
   return {
-    cool: srgbColorToLinear(normalizeColor(colorTemperatureToRGB(Math.max(temperatureK - spreadK, 1)))),
-    base: srgbColorToLinear(normalizeColor(colorTemperatureToRGB(Math.max(temperatureK, 1)))),
-    hot: srgbColorToLinear(normalizeColor(colorTemperatureToRGB(Math.max(temperatureK + spreadK, 1))))
+    cool: srgbColorToLinear(normalizeColor(colorTemperatureToRGB(temperatureK - spreadK))),
+    base: srgbColorToLinear(normalizeColor(colorTemperatureToRGB(temperatureK))),
+    hot: srgbColorToLinear(normalizeColor(colorTemperatureToRGB(temperatureK + spreadK)))
   }
 }
