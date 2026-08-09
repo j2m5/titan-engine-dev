@@ -209,6 +209,7 @@ export interface IBrownDwarfRenderingObject {
   gapGlow?: number
   limbDarkening?: number
   gapThreshold?: number
+  deckSoftness?: number
   parallax?: number
   breathAmplitude?: number
   bandWarp?: number
