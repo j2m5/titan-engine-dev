@@ -10,6 +10,9 @@ import {
   bdPolarWeight,
   bdShade,
   bdShearAngle,
+  bdStormCentre,
+  bdStormDensity,
+  bdStormMask,
   bdTauEff,
   bdTransmit,
   bdWarpLatitude,
@@ -18,7 +21,13 @@ import {
   DECK_RELIEF_LOW,
   GAP_GLOW_FLOOR,
   GAP_MIN_WIDTH,
-  HDR_CEILING
+  HDR_CEILING,
+  STORM_BELT_LIMIT,
+  STORM_CORE,
+  STORM_ELONGATION,
+  STORM_MAIN_RADIUS,
+  STORM_SMALL_RADIUS,
+  VORTEX_COUNT
 } from './brownDwarfSurfaceMirror'
 
 describe('чанк brownDwarfSurface: композиция через пропускание', () => {
@@ -282,6 +291,12 @@ describe('структурный контракт: время отрезано �
     expect(brownDwarfSurface).toContain(`#define BD_HDR_CEILING ${HDR_CEILING.toFixed(1)}`)
     expect(brownDwarfSurface).toContain(`#define BD_DECK_RELIEF_LOW ${DECK_RELIEF_LOW}`)
     expect(brownDwarfSurface).toContain(`#define BD_DECK_RELIEF_HIGH ${DECK_RELIEF_HIGH}`)
+    expect(brownDwarfSurface).toContain(`#define BD_VORTEX_COUNT ${VORTEX_COUNT}`)
+    expect(brownDwarfSurface).toContain(`#define BD_STORM_MAIN_RADIUS ${STORM_MAIN_RADIUS}`)
+    expect(brownDwarfSurface).toContain(`#define BD_STORM_SMALL_RADIUS ${STORM_SMALL_RADIUS}`)
+    expect(brownDwarfSurface).toContain(`#define BD_STORM_ELONGATION ${STORM_ELONGATION}`)
+    expect(brownDwarfSurface).toContain(`#define BD_STORM_CORE ${STORM_CORE}`)
+    expect(brownDwarfSurface).toContain(`#define BD_STORM_BELT_LIMIT ${STORM_BELT_LIMIT}`)
 
     for (const [x, y, z] of BREATH_AXES) {
       expect(brownDwarfSurface).toContain(`vec3(${x}, ${y}, ${z})`)
@@ -511,5 +526,130 @@ describe('структурный контракт вихрей', () => {
 
     expect(vort).toBeGreaterThanOrEqual(0)
     expect(domain).toBeGreaterThan(vort)
+  })
+
+  it('завих берёт ту же маску, что и овал, — значит крутит там, где пятно', () => {
+    expect(brownDwarfSurface).toContain('float mask = bdStormMask(fi, lat, lon, seed, bandCount)')
+  })
+
+  it('знак вращения берёт свой хеш, а не хеш размера', () => {
+    // Общий хеш давал бы всем крупным штормам одно направление, всем мелким —
+    // противоположное. Проверяется по КОНСТАНТЕ хеша, а не по имени
+    // переменной: переименование не должно ронять тест, а переиспользование
+    // хеша размера — должно
+    const start = brownDwarfSurface.indexOf('vec3 bdVortices(')
+    const end = brownDwarfSurface.indexOf('}', brownDwarfSurface.indexOf('return normalize(warped)', start))
+    const body = brownDwarfSurface.slice(start, end)
+
+    expect(start).toBeGreaterThanOrEqual(0)
+    expect(end).toBeGreaterThan(start)
+    // 39.4250 — множитель хеша РАЗМЕРА, он живёт в bdStormMask и в завихе
+    // появляться не должен
+    expect(body).not.toContain('39.4250')
+    expect(body).toContain('21.7351')
+  })
+
+  it('овал вычитается из плотности до порога, иначе мягкой кромки у него не будет', () => {
+    const field = brownDwarfSurface.slice(brownDwarfSurface.indexOf('vec3 bdField('))
+    const storm = field.indexOf('bdStormDensity(')
+    const threshold = field.indexOf('float w = max(fwidth(density)')
+
+    expect(storm).toBeGreaterThanOrEqual(0)
+    expect(threshold).toBeGreaterThan(storm)
+  })
+
+  it('маска шторма берёт долготу от тела, а не от сдвинутого домена', () => {
+    // Шторм прибит к телу; долгота от swept уезжала бы вместе с зональным сдвигом
+    expect(brownDwarfSurface).toContain('float lon = atan(dir.z, dir.x + 1e-9)')
+  })
+})
+
+describe('штормы', () => {
+  // Хеш в зеркале не воспроизводит GLSL побитово (double против float),
+  // поэтому все проверки ниже верны при ЛЮБОМ выборе хеша: они про инварианты
+  // размещения и формы, а не про конкретные широту с долготой
+  const SEED = 4096
+
+  it('каждый шторм садится в середину тёмного пояса, а не на границу', () => {
+    // В середине тёмного пояса bdBands равна единице по построению; на
+    // границе, куда центры садились раньше, она равна половине
+    for (const bandCount of [3.5, 4.5, 9]) {
+      for (let i = 0; i < VORTEX_COUNT; i++) {
+        const [latitude] = bdStormCentre(i, SEED, bandCount)
+
+        expect(bdBands(latitude, 0, bandCount, 1.6)).toBeCloseTo(1, 6)
+      }
+    }
+  })
+
+  it('вырожденный bandCount не отправляет шторм в полярную шапку', () => {
+    // Ниже единицы допустимых k не остаётся вовсе — центр обязан удержаться
+    for (let i = 0; i < VORTEX_COUNT; i++) {
+      const [latitude] = bdStormCentre(i, SEED, 0.5)
+
+      expect(Math.abs(latitude)).toBeLessThanOrEqual(STORM_BELT_LIMIT)
+    }
+  })
+
+  it('маска равна единице в центре и нулю на другой стороне тела', () => {
+    const [latitude, longitude] = bdStormCentre(0, SEED, 4.5)
+
+    expect(bdStormMask(0, latitude, longitude, SEED, 4.5)).toBeCloseTo(1, 10)
+    expect(bdStormMask(0, latitude, longitude + Math.PI, SEED, 4.5)).toBe(0)
+  })
+
+  it('овал вытянут вдоль пояса, а не поперёк', () => {
+    const [latitude, longitude] = bdStormCentre(0, SEED, 4.5)
+    const cosC = Math.sqrt(1 - latitude * latitude)
+    // Один и тот же сдвиг по ДЛИНЕ ДУГИ в двух направлениях
+    const arc = STORM_MAIN_RADIUS * 0.9
+
+    const meridional = bdStormMask(0, latitude + arc * cosC, longitude, SEED, 4.5)
+    const zonal = bdStormMask(0, latitude, longitude + arc / cosC, SEED, 4.5)
+
+    expect(zonal).toBeGreaterThan(meridional)
+  })
+
+  it('главный шторм крупнее любого мелкого', () => {
+    // Сдвиг по дуге, на котором главный ещё внутри овала, а мелкий уже
+    // снаружи при ЛЮБОМ разбросе хеша: у мелкого полуось максимум
+    // STORM_SMALL_RADIUS * 1.4, то есть меньше этого сдвига
+    const arc = STORM_SMALL_RADIUS * 1.5
+
+    const [lat0, lon0] = bdStormCentre(0, SEED, 4.5)
+    const cos0 = Math.sqrt(1 - lat0 * lat0)
+
+    expect(bdStormMask(0, lat0 + arc * cos0, lon0, SEED, 4.5)).toBeGreaterThan(0)
+
+    for (let i = 1; i < VORTEX_COUNT; i++) {
+      const [latitude, longitude] = bdStormCentre(i, SEED, 4.5)
+      const cosC = Math.sqrt(1 - latitude * latitude)
+
+      expect(bdStormMask(i, latitude + arc * cosC, longitude, SEED, 4.5)).toBe(0)
+    }
+  })
+
+  it('нулевая глубина — точный откат', () => {
+    const [latitude, longitude] = bdStormCentre(0, SEED, 4.5)
+
+    expect(bdStormDensity(latitude, longitude, SEED, 4.5, 0)).toBe(0)
+  })
+
+  it('глубина дыры нигде не превышает ручку', () => {
+    // Сумма пяти масок дала бы на наложении до пяти глубин; max держит
+    // потолок. Пробегом по сетке проверяется сам инвариант; выбор max против
+    // суммы дополнительно приколочен строковым тестом ниже
+    for (let a = -0.9; a <= 0.9; a += 0.05) {
+      for (let b = -Math.PI; b <= Math.PI; b += 0.1) {
+        expect(bdStormDensity(a, b, SEED, 4.5, 0.5)).toBeLessThanOrEqual(0.5)
+      }
+    }
+  })
+
+  it('в чанке объявлены все три и глубина берётся по max', () => {
+    expect(brownDwarfSurface).toContain('vec2 bdStormCentre(')
+    expect(brownDwarfSurface).toContain('float bdStormMask(')
+    expect(brownDwarfSurface).toContain('float bdStormDensity(')
+    expect(brownDwarfSurface).toContain('m = max(m, bdStormMask(')
   })
 })

@@ -46,6 +46,7 @@ export interface BrownDwarfParameters {
   fineDetail: number
   polarChaos: number
   vortexStrength: number
+  stormDepth: number
   temperature: number
 }
 
@@ -95,7 +96,13 @@ const DEFAULTS: Omit<BrownDwarfParameters, 'temperature'> = {
   zonalShear: 0.5,
   fineDetail: 0.25,
   polarChaos: 0.8,
-  vortexStrength: 0.35
+  vortexStrength: 0.35,
+  /**
+   * Насколько шторм прорежает палубу. Овал вычитается из плотности до порога,
+   * поэтому мягкую кромку и горячее ядро он получает от deckSoftness и
+   * bdDepth сам. Ноль — точка отката, овалов нет.
+   */
+  stormDepth: 0.5
 }
 
 /**
@@ -138,6 +145,9 @@ export function brownDwarfParameters(actor: Actor): BrownDwarfParameters {
     fineDetail: data.fineDetail ?? DEFAULTS.fineDetail,
     polarChaos: data.polarChaos ?? DEFAULTS.polarChaos,
     vortexStrength: data.vortexStrength ?? DEFAULTS.vortexStrength,
+    // Кламп несущий: при отрицательной глубине шторм не прорежает палубу, а
+    // сгущает её, и овал становится тёмным пятном в тёмном поясе
+    stormDepth: clamp(data.stormDepth ?? DEFAULTS.stormDepth, 0, 1),
     temperature:
       actor.physicalObject?.getAttribute('temperature', BROWN_DWARF_DEFAULT_TEMPERATURE_K) ??
       BROWN_DWARF_DEFAULT_TEMPERATURE_K

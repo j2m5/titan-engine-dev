@@ -140,6 +140,7 @@ describe('импостор коричневого карлика', () => {
       'uGapGlow',
       'uLimbDarkening',
       'uBreathAmplitude',
+      'uStormDepth',
       'time'
     ]
 
@@ -182,7 +183,8 @@ describe('импостор коричневого карлика', () => {
           zonalShear: 0.2,
           fineDetail: 0.45,
           polarChaos: 0.55,
-          vortexStrength: 0.6
+          vortexStrength: 0.6,
+          stormDepth: 0.22
         })
       },
       physicalObject: {
@@ -209,7 +211,8 @@ describe('импостор коричневого карлика', () => {
       'uZonalShear',
       'uFineDetail',
       'uPolarChaos',
-      'uVortexStrength'
+      'uVortexStrength',
+      'uStormDepth'
     ]
 
     const body = new BrownDwarf(actor)

@@ -93,6 +93,20 @@ describe('параметры коричневого карлика', () => {
     expect(brownDwarfParameters(stubActor({ deckTint: -1 })).deckTint).toBe(0)
   })
 
+  it('глубина шторма по умолчанию 0.5', () => {
+    expect(brownDwarfParameters(stubActor()).stormDepth).toBeCloseTo(0.5)
+  })
+
+  it('нулевая глубина шторма сохраняется как ноль, а не подменяется дефолтом', () => {
+    // Точка отката: 0 обязан пережить ??, иначе выключить овалы нечем
+    expect(brownDwarfParameters(stubActor({ stormDepth: 0 })).stormDepth).toBe(0)
+  })
+
+  it('глубина шторма зажата в [0, 1]', () => {
+    expect(brownDwarfParameters(stubActor({ stormDepth: 5 })).stormDepth).toBe(1)
+    expect(brownDwarfParameters(stubActor({ stormDepth: -2 })).stormDepth).toBe(0)
+  })
+
   it('опорный сливовый цвет: синий выше зелёного', () => {
     // Это и отличает сливовый от просто тёмно-красного; при B <= G оттенок
     // уходит обратно в кирпич, и вся арка теряет смысл

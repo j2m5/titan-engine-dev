@@ -112,7 +112,8 @@ export const renderingDataTemplates: DataTemplate[] = [
       zonalShear: 0.5,
       fineDetail: 0.25,
       polarChaos: 0.8,
-      vortexStrength: 0.35
+      vortexStrength: 0.35,
+      stormDepth: 0.5
     }
   }
 ]

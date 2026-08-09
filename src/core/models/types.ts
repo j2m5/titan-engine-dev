@@ -218,6 +218,7 @@ export interface IBrownDwarfRenderingObject {
   fineDetail?: number
   polarChaos?: number
   vortexStrength?: number
+  stormDepth?: number
 }
 
 export type Colorable = {

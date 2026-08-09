@@ -23,6 +23,7 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
     uFineDetail: new Uniform(0.25),
     uPolarChaos: new Uniform(0.8),
     uVortexStrength: new Uniform(0.35),
+    uStormDepth: new Uniform(0.5),
     time: new Uniform(0)
   },
   vertexShader: `
@@ -76,6 +77,7 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
     uniform float uFineDetail;
     uniform float uPolarChaos;
     uniform float uVortexStrength;
+    uniform float uStormDepth;
     uniform float time;
 
     varying vec3 vPosition;
@@ -110,7 +112,7 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
         ? dir
         : normalize(dir - normalize(tangent) * (height * uParallax));
 
-      vec3 field = bdField(shifted, uSeed, uBandCount, uTurbulence, uGapThreshold, uDeckSoftness, uBandWarp, uZonalShear, uFineDetail, uPolarChaos, uVortexStrength);
+      vec3 field = bdField(shifted, uSeed, uBandCount, uTurbulence, uGapThreshold, uDeckSoftness, uBandWarp, uZonalShear, uFineDetail, uPolarChaos, uVortexStrength, uStormDepth);
 
       // Вся композиция — одной точкой входа чанка. Импостор зовёт ту же
       // функцию теми же аргументами: разойтись двум LOD нечем
