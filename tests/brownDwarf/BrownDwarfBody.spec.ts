@@ -50,6 +50,25 @@ describe('тело коричневого карлика', () => {
     expect(source).toContain('bdHeight(')
   })
 
+  it('параллакс гаснет к центру диска, а не держится постоянным', () => {
+    // |tangent| равен синусу угла взгляда и уже несёт нужный множитель.
+    // Нормировка выбрасывала спад: в подсолнечной точке сдвиг оставался
+    // полным, а направление там неустойчиво — отсюда разрыв рисунка.
+    //
+    // Три проверки работают ТОЛЬКО вместе: обе на отсутствие пройдут и если
+    // параллакс выкинуть целиком, держит их третья
+    const source = BrownDwarfShaderTemplate.fragmentShader
+
+    expect(source).not.toContain('normalize(tangent)')
+    expect(source).not.toContain('dot(tangent, tangent)')
+    expect(source).toContain('tangent * (height * uParallax)')
+  })
+
+  it('импостор параллакса не знает', () => {
+    // На двенадцати пикселях сдвиг субтекселен; ручки у импостора нет
+    expect(BrownDwarfImpostorShaderTemplate.fragmentShader).not.toContain('uParallax')
+  })
+
   it.each([
     ['диск', BrownDwarfShaderTemplate.fragmentShader],
     ['импостор', BrownDwarfImpostorShaderTemplate.fragmentShader]
