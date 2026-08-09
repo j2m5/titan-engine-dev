@@ -519,6 +519,41 @@ describe('структурный контракт вихрей', () => {
     expect(vort).toBeGreaterThanOrEqual(0)
     expect(domain).toBeGreaterThan(vort)
   })
+
+  it('завих берёт ту же маску, что и овал, — значит крутит там, где пятно', () => {
+    expect(brownDwarfSurface).toContain('float mask = bdStormMask(fi, lat, lon, seed, bandCount)')
+  })
+
+  it('знак вращения берёт свой хеш, а не хеш размера', () => {
+    // Общий хеш давал бы всем крупным штормам одно направление, всем мелким —
+    // противоположное. Проверяется по КОНСТАНТЕ хеша, а не по имени
+    // переменной: переименование не должно ронять тест, а переиспользование
+    // хеша размера — должно
+    const start = brownDwarfSurface.indexOf('vec3 bdVortices(')
+    const end = brownDwarfSurface.indexOf('}', brownDwarfSurface.indexOf('return normalize(warped)', start))
+    const body = brownDwarfSurface.slice(start, end)
+
+    expect(start).toBeGreaterThanOrEqual(0)
+    expect(end).toBeGreaterThan(start)
+    // 39.4250 — множитель хеша РАЗМЕРА, он живёт в bdStormMask и в завихе
+    // появляться не должен
+    expect(body).not.toContain('39.4250')
+    expect(body).toContain('21.7351')
+  })
+
+  it('овал вычитается из плотности до порога, иначе мягкой кромки у него не будет', () => {
+    const field = brownDwarfSurface.slice(brownDwarfSurface.indexOf('vec3 bdField('))
+    const storm = field.indexOf('bdStormDensity(')
+    const threshold = field.indexOf('float w = max(fwidth(density)')
+
+    expect(storm).toBeGreaterThanOrEqual(0)
+    expect(threshold).toBeGreaterThan(storm)
+  })
+
+  it('маска шторма берёт долготу от тела, а не от сдвинутого домена', () => {
+    // Шторм прибит к телу; долгота от swept уезжала бы вместе с зональным сдвигом
+    expect(brownDwarfSurface).toContain('float lon = atan(dir.z, dir.x)')
+  })
 })
 
 describe('штормы', () => {

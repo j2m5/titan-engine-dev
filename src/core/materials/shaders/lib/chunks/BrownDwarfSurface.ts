@@ -110,32 +110,35 @@ export const brownDwarfSurface = `
   }
 
   /**
-   * Овальные штормы на границах струй — там, где встречные потоки сдвигаются
-   * друг о друга. Каждый вихрь проворачивает домен вокруг оси, проходящей
-   * через его центр, на угол, гаснущий с угловым расстоянием (формула
-   * Родрига). Тот же приём, что зональный сдвиг, но локальный: коробится
-   * домен, поэтому размытия нет и времени тоже нет.
+   * Завих вокруг штормов: домен проворачивается вокруг оси через центр, угол
+   * гаснет по ТОЙ ЖЕ маске, что у овала, — значит текстура обтекает пятно
+   * ровно там, где оно есть. Коробится домен, поэтому размытия нет и времени
+   * тоже нет.
    *
-   * Центры садятся на границы поясов: там sin(широта·PI·bandCount) равен нулю.
+   * Сам по себе поворот домена овала не создаёт: он переставляет значения уже
+   * существующего поля. Замкнутое пятно делает bdStormDensity, а это его
+   * поддержка.
+   *
+   * Ловушка: ось строится из широты центра как из dir.y напрямую. Коробление
+   * широты в замкнутом виде не обращается, а обратная итерация стоила бы трёх
+   * октав шума на шторм. Поэтому глаз завиха может быть смещён относительно
+   * центра овала до bandWarp.
    */
-  vec3 bdVortices(vec3 dir, float seed, float bandCount, float strength) {
+  vec3 bdVortices(vec3 dir, float lat, float lon, float seed, float bandCount, float strength) {
     vec3 warped = dir;
 
     for (int i = 0; i < BD_VORTEX_COUNT; i++) {
       float fi = float(i);
-      float h1 = fract(sin(fi * 12.9898 + seed) * 43758.5453);
-      float h2 = fract(sin(fi * 78.2330 + seed * 1.7) * 43758.5453);
-      float h3 = fract(sin(fi * 39.4250 + seed * 2.3) * 43758.5453);
+      vec2 c = bdStormCentre(fi, seed, bandCount);
+      // Свой хеш на знак: общий с размером давал бы всем крупным штормам одно
+      // направление вращения, а всем мелким — противоположное
+      float h4 = fract(sin(fi * 21.7351 + seed * 3.1) * 43758.5453);
 
-      float band = floor(h1 * bandCount * 2.0 - bandCount) + 1.0;
-      float cy = clamp(band / bandCount, -0.95, 0.95);
-      float cr = sqrt(max(1.0 - cy * cy, 0.0));
-      float clon = h2 * 6.2831853;
-      vec3 centre = vec3(cr * cos(clon), cy, cr * sin(clon));
+      float cr = sqrt(max(1.0 - c.x * c.x, 0.0));
+      vec3 centre = vec3(cr * cos(c.y), c.x, cr * sin(c.y));
 
-      float radius = 0.10 + 0.12 * h3;
-      float fall = 1.0 - smoothstep(0.0, radius, distance(warped, centre));
-      float angle = fall * fall * strength * (h3 > 0.5 ? 1.0 : -1.0);
+      float mask = bdStormMask(fi, lat, lon, seed, bandCount);
+      float angle = mask * mask * strength * (h4 > 0.5 ? 1.0 : -1.0);
 
       float ca = cos(angle);
       float sa = sin(angle);
@@ -167,10 +170,13 @@ export const brownDwarfSurface = `
   // огромен, и порог вырождается в усреднение сам.
   vec3 bdField(vec3 dir, float seed, float bandCount, float turbulence,
                float gapThreshold, float deckSoftness, float bandWarp, float zonalShear, float fineDetail,
-               float polarChaos, float vortexStrength) {
+               float polarChaos, float vortexStrength, float stormDepth) {
     // Коробление широты: строго периодический синус давал пояса-линейку
     float warpNoise = fbm(vec4(0.0, dir.y * 2.0, 0.0, seed + 37.0), 3, 0.6);
     float lat = dir.y + warpNoise * bandWarp;
+
+    // Долгота от ТЕЛА, а не от сдвинутого домена: шторм прибит к карлику
+    float lon = atan(dir.z, dir.x);
 
     // Зональный сдвиг: домен проворачивается вокруг оси тем сильнее, чем ближе
     // к струе, и знак чередуется с поясами. Отсюда сметённые вдоль пояса
@@ -181,7 +187,7 @@ export const brownDwarfSurface = `
     float sa = sin(shear);
     vec3 swept = vec3(dir.x * ca - dir.z * sa, dir.y, dir.x * sa + dir.z * ca);
 
-    vec3 swirled = bdVortices(swept, seed, bandCount, vortexStrength);
+    vec3 swirled = bdVortices(swept, lat, lon, seed, bandCount, vortexStrength);
     vec4 p = vec4(swirled.x * 1.2, swirled.y * 4.5, swirled.z * 1.2, seed);
 
     // Два масштаба: крупный рвёт пояса, мелкий даёт структуру на кромках
@@ -198,6 +204,12 @@ export const brownDwarfSurface = `
     // К полюсам полосы распадаются в изотропную турбулентность — см. bdPolarWeight
     float polar = 1.0 - smoothstep(0.75, 0.95, abs(lat)) * polarChaos;
     float density = mix(0.5 + 0.5 * noise, banded, polar);
+
+    // Светлая прореха: овал вычитается ДО порога, поэтому мягкую кромку он
+    // получает от deckSoftness, а горячее ядро — от bdDepth, без своего кода.
+    // Кламп при нулевой глубине тождествен, а при ненулевой не даёт relief
+    // экстраполировать ниже BD_DECK_RELIEF_LOW
+    density = clamp(density - bdStormDensity(lat, lon, seed, bandCount, stormDepth), 0.0, 1.0);
 
     // Полуширина порога из двух слагаемых с разными ролями: fwidth — это
     // сглаживание и обязано быть в пару пикселей, deckSoftness — мягкость
