@@ -148,15 +148,73 @@ describe('импостор коричневого карлика', () => {
     }
   })
 
-  it('копирует палитру глубины прогалин и верхушек палубы с тела', () => {
-    // Прямой тест риска задачи: забытый ключ в списке копирования оставляет
-    // юниформ дефолтным вместо температурного цвета — импостор ломает цвет
-    // при переключении LOD
-    const body = new BrownDwarf(stubActor())
+  it('копирует с тела весь список юниформов, а не только часть ключей', () => {
+    // Список продублирован из конструктора BrownDwarfImpostor: забытый там
+    // ключ оставляет юниформ дефолтным вместо значения тела, и тест обязан
+    // упасть именно на этом ключе. toBe проверяет «то же значение» по-разному
+    // для двух видов юниформов: у цветов — тождество объекта Color (копия по
+    // ссылке, дальше живёт синхронно с телом), у скаляров — равенство числа
+    // (копия по значению один раз здесь, в конструкторе; дальше не следит)
+    //
+    // Данные актора ниже намеренно расходятся с DEFAULTS из
+    // BrownDwarfParameters по каждому скаляру: те дефолты совпадают с
+    // дефолтами обоих шаблонов юниформов один в один, и на пустых данных
+    // (как у stubActor()) пропуск копирования скаляра был бы не виден —
+    // импостор молча остался бы на СВОЁМ дефолте, который случайно равен
+    // значению тела
+    const actor = {
+      getAttribute: (key: string, def?: unknown): unknown =>
+        key === 'categoryId' ? 8 : key === 'name' ? 'Dwarf' : def,
+      rotation: null,
+      renderingObject: {
+        getAttribute: (): unknown => ({
+          seed: 777,
+          bandCount: 6,
+          turbulence: 2.4,
+          opticalDepth: 1.5,
+          gapGlow: 2.2,
+          limbDarkening: 0.35,
+          gapThreshold: 0.55,
+          breathAmplitude: 0.3,
+          bandWarp: 0.28,
+          zonalShear: 0.2,
+          fineDetail: 0.45,
+          polarChaos: 0.55,
+          vortexStrength: 0.6
+        })
+      },
+      physicalObject: {
+        getAttribute: (key: string, def?: unknown): unknown =>
+          key === 'radius' ? 69900 : key === 'temperature' ? 1600 : def
+      }
+    } as unknown as Actor
+
+    const copiedKeys = [
+      'uSeed',
+      'uBandCount',
+      'uTurbulence',
+      'uGapThreshold',
+      'uColorCloud',
+      'uColorCloudHigh',
+      'uColorHot',
+      'uColorHotDeep',
+      'uOpticalDepth',
+      'uGapGlow',
+      'uLimbDarkening',
+      'uBreathAmplitude',
+      'uBandWarp',
+      'uZonalShear',
+      'uFineDetail',
+      'uPolarChaos',
+      'uVortexStrength'
+    ]
+
+    const body = new BrownDwarf(actor)
     const impostor = new BrownDwarfImpostor(body, fakeRenderer)
 
-    expect(impostor.material.uniforms.uColorHotDeep.value).toBe(body.material.uniforms.uColorHotDeep.value)
-    expect(impostor.material.uniforms.uColorCloudHigh.value).toBe(body.material.uniforms.uColorCloudHigh.value)
+    for (const key of copiedKeys) {
+      expect(impostor.material.uniforms[key].value).toBe(body.material.uniforms[key].value)
+    }
 
     body.dispose()
   })
