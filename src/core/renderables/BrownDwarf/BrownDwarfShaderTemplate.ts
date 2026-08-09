@@ -12,7 +12,7 @@ export const BrownDwarfShaderTemplate: ShaderProps = {
     uGapGlow: new Uniform(3.3),
     uLimbDarkening: new Uniform(0.6),
     uGapThreshold: new Uniform(0.42),
-    uDeckSoftness: new Uniform(0.04),
+    uDeckSoftness: new Uniform(0.20),
     uParallax: new Uniform(0.02),
     uBreathAmplitude: new Uniform(0.08),
     uSeed: new Uniform(4096),

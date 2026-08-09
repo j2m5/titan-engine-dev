@@ -22,7 +22,7 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
     uGapGlow: new Uniform(3.3),
     uLimbDarkening: new Uniform(0.6),
     uGapThreshold: new Uniform(0.42),
-    uDeckSoftness: new Uniform(0.04),
+    uDeckSoftness: new Uniform(0.20),
     uBreathAmplitude: new Uniform(0.08),
     uSeed: new Uniform(4096),
     uBandCount: new Uniform(4.5),

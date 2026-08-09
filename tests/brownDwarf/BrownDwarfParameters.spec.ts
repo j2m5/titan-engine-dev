@@ -62,8 +62,8 @@ describe('параметры коричневого карлика', () => {
     expect(brownDwarfParameters(stubActor({ limbDarkening: -1 })).limbDarkening).toBe(0)
   })
 
-  it('мягкость кромки по умолчанию 0.04', () => {
-    expect(brownDwarfParameters(stubActor()).deckSoftness).toBeCloseTo(0.04)
+  it('мягкость кромки по умолчанию 0.20', () => {
+    expect(brownDwarfParameters(stubActor()).deckSoftness).toBeCloseTo(0.20)
   })
 
   it('нулевая мягкость сохраняется как ноль, а не подменяется дефолтом', () => {
