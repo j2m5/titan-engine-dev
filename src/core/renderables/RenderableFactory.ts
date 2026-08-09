@@ -130,6 +130,11 @@ class RenderableFactory {
     const body = new BrownDwarf(actor)
     const impostor = new BrownDwarfImpostor(body, this.renderer)
 
+    // Ореол висит на LOD, а не на теле: он нужен на обоих уровнях, и
+    // сильнее всего именно на дальнем, где тело меньше пикселя.
+    // Приглушён против звёздного — карлик тлеет, а не сияет
+    lod.add(new StarInnerLayer(actor, 0.8, config('brownDwarf.haloOpacity')))
+
     node.name = actor.getAttribute('name', '')
     node.renderable = body
 

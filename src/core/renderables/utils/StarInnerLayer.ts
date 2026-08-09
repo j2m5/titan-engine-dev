@@ -10,7 +10,15 @@ class StarInnerLayer extends Sprite {
 
   private readonly scaleFactor: number
 
-  public constructor(model: Actor, scaleFactor: number = 0.8) {
+  /**
+   * @param opacity прозрачность спрайта. Дефолт звёздный; коричневый карлик
+   *   переиспользует этот же слой с меньшим значением — он тлеет, а не сияет
+   */
+  public constructor(
+    model: Actor,
+    scaleFactor: number = 0.8,
+    private readonly opacity: number = 0.03
+  ) {
     super()
     this.model = model
     this.scaleFactor = scaleFactor
@@ -29,7 +37,7 @@ class StarInnerLayer extends Sprite {
       color,
       depthWrite: false,
       sizeAttenuation: false,
-      opacity: 0.03,
+      opacity: this.opacity,
       blending: AdditiveBlending
     })
 
