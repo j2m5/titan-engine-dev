@@ -23,6 +23,8 @@ import {
   GAP_MIN_WIDTH,
   HDR_CEILING,
   STORM_BELT_LIMIT,
+  STORM_CORE,
+  STORM_ELONGATION,
   STORM_MAIN_RADIUS,
   STORM_SMALL_RADIUS,
   VORTEX_COUNT
@@ -289,6 +291,12 @@ describe('структурный контракт: время отрезано �
     expect(brownDwarfSurface).toContain(`#define BD_HDR_CEILING ${HDR_CEILING.toFixed(1)}`)
     expect(brownDwarfSurface).toContain(`#define BD_DECK_RELIEF_LOW ${DECK_RELIEF_LOW}`)
     expect(brownDwarfSurface).toContain(`#define BD_DECK_RELIEF_HIGH ${DECK_RELIEF_HIGH}`)
+    expect(brownDwarfSurface).toContain(`#define BD_VORTEX_COUNT ${VORTEX_COUNT}`)
+    expect(brownDwarfSurface).toContain(`#define BD_STORM_MAIN_RADIUS ${STORM_MAIN_RADIUS}`)
+    expect(brownDwarfSurface).toContain(`#define BD_STORM_SMALL_RADIUS ${STORM_SMALL_RADIUS}`)
+    expect(brownDwarfSurface).toContain(`#define BD_STORM_ELONGATION ${STORM_ELONGATION}`)
+    expect(brownDwarfSurface).toContain(`#define BD_STORM_CORE ${STORM_CORE}`)
+    expect(brownDwarfSurface).toContain(`#define BD_STORM_BELT_LIMIT ${STORM_BELT_LIMIT}`)
 
     for (const [x, y, z] of BREATH_AXES) {
       expect(brownDwarfSurface).toContain(`vec3(${x}, ${y}, ${z})`)
@@ -552,7 +560,7 @@ describe('структурный контракт вихрей', () => {
 
   it('маска шторма берёт долготу от тела, а не от сдвинутого домена', () => {
     // Шторм прибит к телу; долгота от swept уезжала бы вместе с зональным сдвигом
-    expect(brownDwarfSurface).toContain('float lon = atan(dir.z, dir.x)')
+    expect(brownDwarfSurface).toContain('float lon = atan(dir.z, dir.x + 1e-9)')
   })
 })
 

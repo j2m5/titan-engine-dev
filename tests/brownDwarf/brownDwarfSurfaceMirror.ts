@@ -220,7 +220,7 @@ const hash = (x: number): number => {
  * подложка, поэтому не на границе.
  *
  * Диапазон k подбирается под bandCount, чтобы центр не уехал в полярную
- * шапку. max(..., 1) — защита от bandCount меньше единицы, при котором
+ * шапку. max(..., 1) — защита от bandCount ниже примерно 0.59, при котором
  * допустимых k не остаётся; там центр зажимается краем пояса.
  */
 export function bdStormCentre(i: number, seed: number, bandCount: number): [number, number] {
