@@ -16,7 +16,13 @@ export const BREATH_AXES: readonly [number, number, number][] = [
 
 const dot3 = (a: readonly number[], b: readonly number[]): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 
-/** Эффективная толща: у кромки луч идёт по касательной и набирает больше вещества */
+/**
+ * Эффективная толща палубы: у кромки луч идёт по касательной и набирает больше
+ * вещества, поэтому палуба к лимбу темнеет сама.
+ *
+ * Ловушка: у прогалины tau равен НУЛЮ, и ноль, делённый на mu, остаётся нулём
+ * при любом угле — ей потемнение даёт отдельный член в bdShade.
+ */
 export function bdTauEff(tau: number, mu: number, opticalDepth: number): number {
   return (tau * opticalDepth) / Math.max(mu, 1e-3)
 }
@@ -83,11 +89,15 @@ export function bdShade(
   hotDeep: number,
   opticalDepth: number,
   gapGlow: number,
+  limbDarkening: number,
   t: number,
   breathAmplitude: number
 ): number {
   const transmit: number = bdTransmit(bdTauEff(field[0], mu, opticalDepth))
-  const glow: number = gapGlow * mix(GAP_GLOW_FLOOR, 1, field[2])
+  // Линейный закон потемнения к краю. Пол 1 − u на силуэте: степенной закон
+  // обратился бы там в ноль, то есть в чёрную кромку
+  const limb: number = 1 - limbDarkening * (1 - mu)
+  const glow: number = gapGlow * mix(GAP_GLOW_FLOOR, 1, field[2]) * limb
   const hotLit: number = mix(hot, hotDeep, field[2]) * glow * bdBreath(dir, t, breathAmplitude)
   // Отдельного тонового множителя нет: он рос с высотой, а цвет падал, и они
   // гасили друг друга — перепад по палубе выходил 1.11 раза

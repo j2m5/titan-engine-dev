@@ -137,6 +137,7 @@ describe('импостор коричневого карлика', () => {
       'uColorHotDeep',
       'uOpticalDepth',
       'uGapGlow',
+      'uLimbDarkening',
       'uBreathAmplitude',
       'time'
     ]
