@@ -23,6 +23,7 @@ export interface BrownDwarfParameters {
   gapGlow: number
   limbDarkening: number
   gapThreshold: number
+  deckSoftness: number
   parallax: number
   breathAmplitude: number
   bandWarp: number
@@ -53,6 +54,20 @@ const DEFAULTS: Omit<BrownDwarfParameters, 'temperature'> = {
    */
   limbDarkening: 0.6,
   gapThreshold: 0.42,
+  /**
+   * Мягкость кромки палубы в единицах ПЛОТНОСТИ — складывается с полушириной
+   * от экранного футпринта. Футпринт отвечает за сглаживание и обязан быть в
+   * пару пикселей; мягкость живёт в плотности и потому раскрывается при
+   * приближении. Ноль — точка отката.
+   *
+   * Полностью открытая прогалина требует, чтобы gapThreshold − w опустился
+   * ниже достижимого минимума плотности — он около 0.09, потому что поле
+   * строится как 0.65·полосы + 0.35·шум и слагаемое шума не даёт плотности
+   * упасть в ноль. Поэтому безопасный потолок мягкости НЕ равен gapThreshold:
+   * он ниже на этот минимум и ещё на слагаемое от футпринта, то есть плывёт
+   * вместе с дистанцией до тела. Кламп [0, 1] этого не ловит.
+   */
+  deckSoftness: 0.20,
   parallax: 0.02,
   breathAmplitude: 0.08,
   bandWarp: 0.16,
@@ -85,6 +100,10 @@ export function brownDwarfParameters(actor: Actor): BrownDwarfParameters {
     // отрицательную светимость
     limbDarkening: clamp(data.limbDarkening ?? DEFAULTS.limbDarkening, 0, 1),
     gapThreshold: data.gapThreshold ?? DEFAULTS.gapThreshold,
+    // Кламп несущий: отрицательная мягкость сужает полуширину ниже порога
+    // сглаживания, а перевесив его — даёт smoothstep с e0 > e1, что в GLSL
+    // не определено
+    deckSoftness: clamp(data.deckSoftness ?? DEFAULTS.deckSoftness, 0, 1),
     parallax: data.parallax ?? DEFAULTS.parallax,
     // Кламп, а не просто чтение: bdBreath даёт [1-a, 1+a], и при a > 1
     // яркость нутра уходит в минус — отрицательная светимость

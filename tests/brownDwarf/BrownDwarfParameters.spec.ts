@@ -62,6 +62,23 @@ describe('параметры коричневого карлика', () => {
     expect(brownDwarfParameters(stubActor({ limbDarkening: -1 })).limbDarkening).toBe(0)
   })
 
+  it('мягкость кромки по умолчанию 0.20', () => {
+    expect(brownDwarfParameters(stubActor()).deckSoftness).toBeCloseTo(0.20)
+  })
+
+  it('нулевая мягкость сохраняется как ноль, а не подменяется дефолтом', () => {
+    // Точка отката: 0 обязан пережить ??, иначе вернуть прежнюю кромку нечем
+    expect(brownDwarfParameters(stubActor({ deckSoftness: 0 })).deckSoftness).toBe(0)
+  })
+
+  it('мягкость зажата в [0, 1]: отрицательная переворачивает пороги smoothstep', () => {
+    // Полуширина складывается из футпринта и мягкости; отрицательная мягкость
+    // сужает её ниже порога сглаживания, а перевесив его — даёт smoothstep с
+    // e0 > e1, что в GLSL не определено
+    expect(brownDwarfParameters(stubActor({ deckSoftness: 4 })).deckSoftness).toBe(1)
+    expect(brownDwarfParameters(stubActor({ deckSoftness: -0.2 })).deckSoftness).toBe(0)
+  })
+
   it('шаблон редактора заведён и проходит через те же параметры', () => {
     const template = renderingDataTemplates.find((t) => t.value === 'brownDwarf')
 

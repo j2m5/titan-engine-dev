@@ -65,6 +65,7 @@ class BrownDwarfImpostor extends Mesh {
       'uBandCount',
       'uTurbulence',
       'uGapThreshold',
+      'uDeckSoftness',
       'uColorCloud',
       'uColorCloudHigh',
       'uColorHot',
