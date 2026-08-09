@@ -7,6 +7,7 @@ import {
   bdCompose,
   bdDepth,
   bdGap,
+  bdOctaveWeight,
   bdPolarWeight,
   bdShade,
   bdShearAngle,
@@ -22,6 +23,8 @@ import {
   GAP_GLOW_FLOOR,
   GAP_MIN_WIDTH,
   HDR_CEILING,
+  OCTAVE_CUTOFF,
+  OCTAVE_NYQUIST,
   STORM_BELT_LIMIT,
   STORM_CORE,
   STORM_ELONGATION,
@@ -297,6 +300,8 @@ describe('структурный контракт: время отрезано �
     expect(brownDwarfSurface).toContain(`#define BD_STORM_ELONGATION ${STORM_ELONGATION}`)
     expect(brownDwarfSurface).toContain(`#define BD_STORM_CORE ${STORM_CORE}`)
     expect(brownDwarfSurface).toContain(`#define BD_STORM_BELT_LIMIT ${STORM_BELT_LIMIT}`)
+    expect(brownDwarfSurface).toContain(`#define BD_OCTAVE_NYQUIST ${OCTAVE_NYQUIST}`)
+    expect(brownDwarfSurface).toContain(`#define BD_OCTAVE_CUTOFF ${OCTAVE_CUTOFF.toFixed(1)}`)
 
     for (const [x, y, z] of BREATH_AXES) {
       expect(brownDwarfSurface).toContain(`vec3(${x}, ${y}, ${z})`)
@@ -487,7 +492,7 @@ describe('структурный контракт турбулентности',
 
     expect(start).toBeGreaterThanOrEqual(0)
     expect(end).toBeGreaterThan(start)
-    expect((field.match(/fbm\(/g) ?? []).length).toBeGreaterThanOrEqual(4)
+    expect((field.match(/fbm\(/gi) ?? []).length).toBeGreaterThanOrEqual(4)
     expect(field).not.toContain('time')
   })
 })
@@ -651,5 +656,66 @@ describe('штормы', () => {
     expect(brownDwarfSurface).toContain('float bdStormMask(')
     expect(brownDwarfSurface).toContain('float bdStormDensity(')
     expect(brownDwarfSurface).toContain('m = max(m, bdStormMask(')
+  })
+})
+
+describe('ограничение октав по экрану', () => {
+  it('вблизи вес ровно единица: правка тождественна', () => {
+    // Главное свойство безопасности арки. smoothstep возвращает ноль ниже
+    // edge0, значит ниже порога Найквиста гашения нет вовсе, и крупный план
+    // не меняется
+    for (const frequency of [1, 2, 4, 8, 16, 32]) {
+      expect(bdOctaveWeight(0.001, frequency)).toBe(1)
+    }
+
+    // Ровно на пороге — ещё единица
+    expect(bdOctaveWeight(OCTAVE_NYQUIST / 32, 32)).toBe(1)
+  })
+
+  it('за отсечкой вес ровно ноль', () => {
+    expect(bdOctaveWeight(OCTAVE_CUTOFF, 1)).toBe(0)
+    expect(bdOctaveWeight(1, 32)).toBe(0)
+  })
+
+  it('вес не растёт с частотой и проходит весь диапазон', () => {
+    const weights = [1, 2, 4, 8, 16, 32].map((frequency) => bdOctaveWeight(0.05, frequency))
+
+    for (let i = 1; i < weights.length; i++) expect(weights[i]).toBeLessThanOrEqual(weights[i - 1])
+
+    expect(weights[0]).toBe(1)
+    expect(weights[weights.length - 1]).toBe(0)
+  })
+
+  it('вес зависит от произведения следа на частоту, а не от них по отдельности', () => {
+    // Именно поэтому вызову с доменом p * 4 нужен footprint * 4
+    expect(bdOctaveWeight(0.2, 4)).toBeCloseTo(bdOctaveWeight(0.8, 1), 12)
+  })
+
+  it('в чанке своя fbm, и делит она на сумму ВЫЖИВШИХ амплитуд', () => {
+    expect(brownDwarfSurface).toContain('float bdOctaveWeight(')
+    expect(brownDwarfSurface).toContain('float bdFbm(')
+    // Деление на полную сумму уплощало бы поле с дистанцией
+    expect(brownDwarfSurface).toContain('maxValue += amplitude * w')
+  })
+
+  it('след берётся от домена, а не от плотности', () => {
+    // fwidth(density) сам высокочастотен: он скачет вместе с шумом, который
+    // призван измерять
+    expect(brownDwarfSurface).toContain('float footprint = length(fwidth(p.xyz))')
+  })
+
+  it('каждый вызов получает след в единицах СВОЕГО домена', () => {
+    expect(brownDwarfSurface).toContain('bdFbm(p, 6, 0.85, footprint)')
+    expect(brownDwarfSurface).toContain('footprint * BD_FINE_SCALE)')
+    expect(brownDwarfSurface).toContain('footprint * 2.3)')
+  })
+
+  it('одномерные модуляторы остаются на общей fbm', () => {
+    // warpNoise и chaos низкочастотны и служат модуляторами — полосу им
+    // ограничивать нечего
+    const field = brownDwarfSurface.slice(brownDwarfSurface.indexOf('vec3 bdField('))
+
+    expect(field).toContain('fbm(vec4(0.0, dir.y * 2.0')
+    expect(field).toContain('fbm(vec4(0.0, lat * 3.0')
   })
 })

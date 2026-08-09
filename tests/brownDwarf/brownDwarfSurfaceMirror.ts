@@ -185,6 +185,24 @@ export function bdPolarWeight(latitude: number, polarChaos: number): number {
   return 1 - t * polarChaos
 }
 
+/** Порог Найквиста для октавы: она несёт информацию, пока на её период приходится два пикселя */
+export const OCTAVE_NYQUIST = 0.5
+/** Выше этого следа октава погашена полностью */
+export const OCTAVE_CUTOFF = 1.0
+
+/**
+ * Вес октавы по экранному следу. Ниже порога Найквиста — РОВНО единица,
+ * поэтому вблизи ограничение полосы тождественно и крупный план не меняется.
+ *
+ * Гашение плавное: жёсткая отсечка щёлкала бы при движении камеры.
+ *
+ * Ловушка: `footprint` обязан быть в единицах домена ВЫЗОВА. Кто сэмплит
+ * `p * k`, тот передаёт `footprint * k`.
+ */
+export function bdOctaveWeight(footprint: number, frequency: number): number {
+  return 1 - smoothstep(OCTAVE_NYQUIST, OCTAVE_CUTOFF, footprint * frequency)
+}
+
 /** Полуось главного шторма по широте, в единицах длины дуги */
 export const STORM_MAIN_RADIUS = 0.07
 /** Полуось мелких штормов; разброс даёт хеш */
