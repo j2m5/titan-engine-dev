@@ -3,6 +3,12 @@ import { Actor } from '@/core/models/Actor'
 import { BrownDwarf } from '@/core/renderables/BrownDwarf/BrownDwarf'
 import { BrownDwarfShaderTemplate } from '@/core/renderables/BrownDwarf/BrownDwarfShaderTemplate'
 import { BrownDwarfImpostorShaderTemplate } from '@/core/renderables/BrownDwarf/BrownDwarfImpostorShaderTemplate'
+import { buildStarPalette, mixColor } from '@/core/materials/shaders/lib/helpers'
+import {
+  BROWN_DWARF_CLOUD_DIM,
+  BROWN_DWARF_DECK_PLUM,
+  BROWN_DWARF_PALETTE_SPREAD_K
+} from '@/core/renderables/BrownDwarf/BrownDwarfParameters'
 
 const fakeRenderer = {
   getRenderTarget: () => null,
@@ -139,5 +145,79 @@ describe('тело коричневого карлика', () => {
     expect(geometryDispose).toHaveBeenCalledTimes(1)
     expect(materialDispose).toHaveBeenCalledTimes(1)
     expect(() => body.dispose()).not.toThrow()
+  })
+})
+
+describe('тонировка палубы карлика', () => {
+  const tinted = (temperature: number, deckTint: number): Actor =>
+    ({
+      getAttribute: (_key: string, def?: unknown): unknown => def ?? 'Dwarf',
+      renderingObject: { getAttribute: () => ({ deckTint }) },
+      physicalObject: {
+        getAttribute: (key: string, def?: unknown): unknown =>
+          key === 'radius' ? 69900 : key === 'temperature' ? temperature : def
+      }
+    }) as unknown as Actor
+
+  it('синий палубы перестал быть нулём', () => {
+    // Главный дефект арки: у чёрнотельного цвета синий равен ровно нулю ниже
+    // 1900 K, и третий канал объекта производил только пост
+    const body = new BrownDwarf(tinted(1210, 0.5))
+
+    expect(body.material.uniforms.uColorCloud.value.b).toBeGreaterThan(0)
+    expect(body.material.uniforms.uColorCloudHigh.value.b).toBeGreaterThan(0)
+
+    body.dispose()
+  })
+
+  it('нулевая тонировка даёт чистый планковский цвет', () => {
+    const body = new BrownDwarf(tinted(1210, 0))
+    const cool = buildStarPalette(1210, BROWN_DWARF_PALETTE_SPREAD_K).cool
+
+    expect(body.material.uniforms.uColorCloud.value.r).toBeCloseTo(cool.r * BROWN_DWARF_CLOUD_DIM, 12)
+    expect(body.material.uniforms.uColorCloud.value.b).toBe(0)
+
+    body.dispose()
+  })
+
+  it('совпадает с ручной сборкой из примитивов', () => {
+    const body = new BrownDwarf(tinted(1210, 0.5))
+    const cool = buildStarPalette(1210, BROWN_DWARF_PALETTE_SPREAD_K).cool
+    const manual = mixColor(cool, BROWN_DWARF_DECK_PLUM, 0.5)
+    const cloud = body.material.uniforms.uColorCloud.value
+
+    expect(cloud.r).toBeCloseTo(manual.r * BROWN_DWARF_CLOUD_DIM, 12)
+    expect(cloud.g).toBeCloseTo(manual.g * BROWN_DWARF_CLOUD_DIM, 12)
+    expect(cloud.b).toBeCloseTo(manual.b * BROWN_DWARF_CLOUD_DIM, 12)
+
+    body.dispose()
+  })
+
+  it('верхушки палубы — тот же цвет, вдвое темнее', () => {
+    // Тонировка ложится на хроматичность ДО затемнения, поэтому обе записи
+    // палубы обязаны отличаться ровно множителем
+    const body = new BrownDwarf(tinted(1210, 0.5))
+    const cloud = body.material.uniforms.uColorCloud.value
+    const high = body.material.uniforms.uColorCloudHigh.value
+
+    expect(high.r).toBeCloseTo(cloud.r * 0.45, 12)
+    expect(high.g).toBeCloseTo(cloud.g * 0.45, 12)
+    expect(high.b).toBeCloseTo(cloud.b * 0.45, 12)
+
+    body.dispose()
+  })
+
+  it('прогалины тонировка не трогает: синий нутра остаётся планковским', () => {
+    const plain = new BrownDwarf(tinted(1210, 0))
+    const full = new BrownDwarf(tinted(1210, 1))
+
+    expect(full.material.uniforms.uColorHot.value.g).toBeCloseTo(plain.material.uniforms.uColorHot.value.g, 12)
+    expect(full.material.uniforms.uColorHotDeep.value.b).toBeCloseTo(
+      plain.material.uniforms.uColorHotDeep.value.b,
+      12
+    )
+
+    plain.dispose()
+    full.dispose()
   })
 })

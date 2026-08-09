@@ -56,6 +56,19 @@ export function srgbColorToLinear(color: Colorable): Colorable {
   }
 }
 
+/**
+ * Поканальная линейная интерполяция. Форма a*(1-t) + b*t, а не a + (b-a)*t:
+ * первая точна на обоих концах, вторая при t = 1 даёт 0.09999999999999998
+ * вместо 0.1. Семантика совпадает с mix в GLSL.
+ */
+export function mixColor(a: Colorable, b: Colorable, t: number): Colorable {
+  return {
+    r: a.r * (1 - t) + b.r * t,
+    g: a.g * (1 - t) + b.g * t,
+    b: a.b * (1 - t) + b.b * t
+  }
+}
+
 export function rgbToHex(color: Colorable): string {
   const { r, g, b } = color
   return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)
@@ -95,6 +108,13 @@ export const STAR_CORE_INTENSITY: number = 4.0
 export const STAR_LIMB_COEFF: readonly [number, number, number] = [0.5, 0.65, 0.8]
 export const STAR_GRANULATION_TIME_SCALE: number = 0.01
 
+/**
+ * Нижняя граница области определения аппроксимации в colorTemperatureToRGB.
+ * Ниже неё формула возвращает не физику, а продолжение подгонки за пределы
+ * её диапазона.
+ */
+export const COLOR_TEMPERATURE_FLOOR_K: number = 1000
+
 export interface StarPalette {
   cool: Colorable
   base: Colorable
@@ -103,15 +123,19 @@ export interface StarPalette {
 
 /**
  * Чёрнотельная палитра звезды: цвета для T−spread / T / T+spread.
- * Палитра в linear-sRGB (шейдер потребляет юниформы как radiance, AgX-пайплайн),
- * температуры защищены от ≤0 (Math.log(negative) в colorTemperatureToRGB даёт NaN).
+ * Палитра в linear-sRGB (шейдер потребляет юниформы как radiance, AgX-пайплайн).
  * Грануляция интерполирует между ними в шейдере (см. StarShaderTemplate);
  * протуберанцы берут широкий спред 1500K (холодная плазма — краснее).
+ *
+ * Температуры зажаты снизу полом области определения аппроксимации, а не
+ * единицей: ниже 1000 K формула отдаёт продолжение подгонки за её диапазон.
+ * Ловушка: у звезды холоднее ~2500 K спред 1500 упрётся в пол, и внешний слой
+ * сменит цвет молча. Нынешние звёзды все горячее.
  */
 export function buildStarPalette(temperatureK: number, spreadK: number = 400): StarPalette {
   return {
-    cool: srgbColorToLinear(normalizeColor(colorTemperatureToRGB(Math.max(temperatureK - spreadK, 1)))),
-    base: srgbColorToLinear(normalizeColor(colorTemperatureToRGB(Math.max(temperatureK, 1)))),
-    hot: srgbColorToLinear(normalizeColor(colorTemperatureToRGB(Math.max(temperatureK + spreadK, 1))))
+    cool: srgbColorToLinear(normalizeColor(colorTemperatureToRGB(Math.max(temperatureK - spreadK, COLOR_TEMPERATURE_FLOOR_K)))),
+    base: srgbColorToLinear(normalizeColor(colorTemperatureToRGB(Math.max(temperatureK, COLOR_TEMPERATURE_FLOOR_K)))),
+    hot: srgbColorToLinear(normalizeColor(colorTemperatureToRGB(Math.max(temperatureK + spreadK, COLOR_TEMPERATURE_FLOOR_K))))
   }
 }
