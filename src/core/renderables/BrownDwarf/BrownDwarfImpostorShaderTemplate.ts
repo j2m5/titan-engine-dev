@@ -22,6 +22,7 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
     uGapGlow: new Uniform(3.3),
     uLimbDarkening: new Uniform(0.6),
     uGapThreshold: new Uniform(0.42),
+    uDeckSoftness: new Uniform(0.04),
     uBreathAmplitude: new Uniform(0.08),
     uSeed: new Uniform(4096),
     uBandCount: new Uniform(4.5),
@@ -58,6 +59,7 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
     uniform float uGapGlow;
     uniform float uLimbDarkening;
     uniform float uGapThreshold;
+    uniform float uDeckSoftness;
     uniform float uBreathAmplitude;
     uniform float uSeed;
     uniform float uBandCount;
@@ -101,7 +103,7 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
 
       // Без параллакса: при видимом размере 12px сдвиг верхушки суб-пиксельный,
       // второй вызов поля добавил бы только стоимость без видимого эффекта
-      vec3 field = bdField(dir, uSeed, uBandCount, uTurbulence, uGapThreshold, uBandWarp, uZonalShear, uFineDetail, uPolarChaos, uVortexStrength);
+      vec3 field = bdField(dir, uSeed, uBandCount, uTurbulence, uGapThreshold, uDeckSoftness, uBandWarp, uZonalShear, uFineDetail, uPolarChaos, uVortexStrength);
 
       // Та же точка входа и тот же список аргументов, что у диска —
       // закреплено тестом посимвольного сравнения вызова

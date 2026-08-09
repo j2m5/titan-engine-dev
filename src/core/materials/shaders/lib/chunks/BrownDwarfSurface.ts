@@ -95,7 +95,7 @@ export const brownDwarfSurface = `
   // HDR-контрастом усиливает субпиксельный шум. На импосторе футпринт
   // огромен, и порог вырождается в усреднение сам.
   vec3 bdField(vec3 dir, float seed, float bandCount, float turbulence,
-               float gapThreshold, float bandWarp, float zonalShear, float fineDetail,
+               float gapThreshold, float deckSoftness, float bandWarp, float zonalShear, float fineDetail,
                float polarChaos, float vortexStrength) {
     // Коробление широты: строго периодический синус давал пояса-линейку
     float warpNoise = fbm(vec4(0.0, dir.y * 2.0, 0.0, seed + 37.0), 3, 0.6);
@@ -128,7 +128,12 @@ export const brownDwarfSurface = `
     float polar = 1.0 - smoothstep(0.75, 0.95, abs(lat)) * polarChaos;
     float density = mix(0.5 + 0.5 * noise, banded, polar);
 
-    float w = max(fwidth(density) * 1.5, BD_GAP_MIN_WIDTH);
+    // Полуширина порога из двух слагаемых с разными ролями: fwidth — это
+    // сглаживание и обязано быть в пару пикселей, deckSoftness — мягкость
+    // кромки в единицах ПЛОТНОСТИ, поэтому она раскрывается при приближении.
+    // Слагаемое, а не max: оно только расширяет, то есть алиасинг усилить
+    // не может.
+    float w = max(fwidth(density) * 1.5, BD_GAP_MIN_WIDTH) + deckSoftness;
     float relief = mix(BD_DECK_RELIEF_LOW, BD_DECK_RELIEF_HIGH, density);
     float tau = smoothstep(gapThreshold - w, gapThreshold + w, density) * relief;
 

@@ -320,14 +320,14 @@ describe('аналитическое поле: полосы и порог', () =
 
   it('порог даёт полный размах: по обе стороны — чистые ноль и единица', () => {
     // Ровно то, чего не было у запекания: провалы и гребни, а не средний тон
-    expect(bdGap(0.1, 0.5, 0.01)).toBe(0)
-    expect(bdGap(0.9, 0.5, 0.01)).toBe(1)
+    expect(bdGap(0.1, 0.5, 0.01, 0)).toBe(0)
+    expect(bdGap(0.9, 0.5, 0.01, 0)).toBe(1)
   })
 
   it('полуширина порога растёт с футпринтом, а на импосторе съедает край', () => {
     // Огромный футпринт (билборд в 12 px) обязан вырождать порог в усреднение
-    const sharp = bdGap(0.52, 0.5, 0.001)
-    const blurred = bdGap(0.52, 0.5, 0.5)
+    const sharp = bdGap(0.52, 0.5, 0.001, 0)
+    const blurred = bdGap(0.52, 0.5, 0.5, 0)
 
     expect(sharp).toBeGreaterThan(0.9)
     expect(blurred).toBeGreaterThan(0.4)
@@ -335,8 +335,51 @@ describe('аналитическое поле: полосы и порог', () =
   })
 
   it('нижний предел полуширины не даёт краю выродиться в ступеньку', () => {
-    expect(bdGap(0.5 + GAP_MIN_WIDTH * 0.5, 0.5, 0)).toBeGreaterThan(0)
-    expect(bdGap(0.5 + GAP_MIN_WIDTH * 0.5, 0.5, 0)).toBeLessThan(1)
+    expect(bdGap(0.5 + GAP_MIN_WIDTH * 0.5, 0.5, 0, 0)).toBeGreaterThan(0)
+    expect(bdGap(0.5 + GAP_MIN_WIDTH * 0.5, 0.5, 0, 0)).toBeLessThan(1)
+  })
+})
+
+describe('мягкость кромки палубы', () => {
+  it('мягкость расширяет переход', () => {
+    // Плотность 0.40 при пороге 0.42 сегодня лежит ВНЕ полосы перехода
+    // (полуширина 0.004), то есть читается чистой прогалиной
+    expect(bdGap(0.4, 0.42, 0, 0)).toBe(0)
+    expect(bdGap(0.4, 0.42, 0, 0.04)).toBeGreaterThan(0.1)
+  })
+
+  it('мягкость складывается с футпринтом, а не заменяет его', () => {
+    // При огромном футпринте порог и так размыт — мягкость обязана размыть ещё
+    const wide = bdGap(0.3, 0.42, 0.2, 0)
+    const wider = bdGap(0.3, 0.42, 0.2, 0.04)
+
+    expect(wide).toBeGreaterThan(0)
+    expect(wider).toBeGreaterThan(wide)
+  })
+
+  it('нулевая мягкость не меняет прежнюю формулу', () => {
+    // Ручная сборка прежнего порога: полуширина только от футпринта
+    const manual = (density: number, threshold: number, footprint: number): number => {
+      const w = Math.max(footprint * 1.5, GAP_MIN_WIDTH)
+      const t = Math.min(1, Math.max(0, (density - (threshold - w)) / (2 * w)))
+
+      return t * t * (3 - 2 * t)
+    }
+
+    for (const footprint of [0, 0.001, 0.01, 0.5]) {
+      expect(bdGap(0.43, 0.42, footprint, 0)).toBeCloseTo(manual(0.43, 0.42, footprint), 12)
+    }
+  })
+
+  it('нутро палубы остаётся непрозрачным: смягчается кромка, а не пояс', () => {
+    const relief = DECK_RELIEF_LOW + (DECK_RELIEF_HIGH - DECK_RELIEF_LOW) * 0.6
+    const tau = bdGap(0.6, 0.42, 0, 0.04) * relief
+
+    expect(bdTransmit(bdTauEff(tau, 1, 3))).toBeLessThan(0.1)
+  })
+
+  it('в чанке мягкость складывается с футпринтом', () => {
+    expect(brownDwarfSurface).toContain('max(fwidth(density) * 1.5, BD_GAP_MIN_WIDTH) + deckSoftness')
   })
 })
 

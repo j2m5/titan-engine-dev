@@ -127,13 +127,17 @@ const smoothstep = (e0: number, e1: number, x: number): number => {
 }
 
 /**
- * Порог, открывающий прогалины. Полуширина растёт с экранным футпринтом:
- * порог с фиксированной шириной под HDR-контрастом работает усилителем
+ * Порог, открывающий прогалины. Полуширина складывается из двух слагаемых с
+ * разными ролями: `footprint` (это `fwidth(density)` со стороны GLSL) отвечает
+ * за сглаживание и обязан быть в пару пикселей, `softness` — за мягкость
+ * кромки и живёт в единицах плотности, поэтому раскрывается при приближении.
+ *
+ * Порог с фиксированной шириной под HDR-контрастом работает усилителем
  * субпиксельного шума — именно поэтому его убирали в первой реализации.
- * `footprint` — это `fwidth(density)` со стороны GLSL.
+ * Слагаемое, а не max: оно только расширяет, то есть алиасинг усилить не может.
  */
-export function bdGap(density: number, threshold: number, footprint: number): number {
-  const w: number = Math.max(footprint * 1.5, GAP_MIN_WIDTH)
+export function bdGap(density: number, threshold: number, footprint: number, softness: number): number {
+  const w: number = Math.max(footprint * 1.5, GAP_MIN_WIDTH) + softness
 
   return smoothstep(threshold - w, threshold + w, density)
 }

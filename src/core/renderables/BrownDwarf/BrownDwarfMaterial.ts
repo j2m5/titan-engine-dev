@@ -42,6 +42,7 @@ class BrownDwarfMaterial extends ShaderMaterial {
     this.uniforms.uGapGlow.value = params.gapGlow
     this.uniforms.uLimbDarkening.value = params.limbDarkening
     this.uniforms.uGapThreshold.value = params.gapThreshold
+    this.uniforms.uDeckSoftness.value = params.deckSoftness
     this.uniforms.uParallax.value = params.parallax
     this.uniforms.uBreathAmplitude.value = params.breathAmplitude
     this.uniforms.uSeed.value = params.seed
