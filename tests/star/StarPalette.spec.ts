@@ -35,16 +35,23 @@ describe('buildStarPalette: чёрнотельная палитра звезды
     expect(palette.cool).toEqual(palette.base)
     expect(palette.hot).toEqual(palette.base)
   })
+})
 
-  it('низкие температуры (около 0) не дают NaN', () => {
-    // Конечность держит пол COLOR_TEMPERATURE_FLOOR_K: прежний Math.max(..., 1)
-    // спасал только от log неположительного
-    const palette = buildStarPalette(100, 400)
-    for (const c of [palette.cool, palette.base, palette.hot]) {
-      for (const v of [c.r, c.g, c.b]) {
+describe('colorTemperatureToRGB: пол держит саму функцию, а не только вызовы buildStarPalette', () => {
+  it('ноль и отрицательный кельвин не дают NaN', () => {
+    // Без пола log(kelvin/100) от неположительного аргумента даёт NaN/-Infinity
+    for (const kelvin of [0, -1, -5000]) {
+      const rgb = colorTemperatureToRGB(kelvin)
+      for (const v of [rgb.r, rgb.g, rgb.b]) {
         expect(Number.isFinite(v)).toBe(true)
       }
     }
+  })
+
+  it('ноль и отрицательный кельвин считаются ровно по полу', () => {
+    const floor = colorTemperatureToRGB(COLOR_TEMPERATURE_FLOOR_K)
+    expect(colorTemperatureToRGB(0)).toEqual(floor)
+    expect(colorTemperatureToRGB(-1)).toEqual(floor)
   })
 })
 
