@@ -62,6 +62,8 @@ const DEFAULTS: Omit<BrownDwarfParameters, 'temperature'> = {
    *
    * Выше gapThreshold нижний край перехода уходит за нулевую плотность, и
    * полностью открытых прогалин не остаётся вовсе: кламп этого не ловит.
+   * У обоих карликов запас есть, но разный: gapThreshold 0.42 у Luhman 16B
+   * и 0.3 у Luhman 16A против дефолта 0.04.
    */
   deckSoftness: 0.04,
   parallax: 0.02,
