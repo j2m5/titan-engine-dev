@@ -69,6 +69,6 @@ export const RenderingObjects: IRenderingObject[] = [
   { id: 63, actorId: 38, data: { emission: 1, bumpScale: 2 } },
   { id: 64, actorId: 73, data: { emission: 1, bumpScale: 2 } },
   { id: 65, actorId: 100, data: { seed: 5120, size: 360.11263, shape: "disk", axisRatios: [1, 0.5, 1], edgeFalloff: 0.6, density: 0.5, noise: { contrast: 2, worleyStrength: 0.35, ridged: 1 }, cavities: [{ center: [0.1, 0, 0], radius: 0.4, strength: 0.3 }] } },
-  { id: 66, actorId: 102, data: { seed: 4096, bandCount: 4.5, turbulence: 1.6, opticalDepth: 3, gapGlow: 3.3, limbDarkening: 0.6, gapThreshold: 0.42, deckSoftness: 0.20, parallax: 0.02, breathAmplitude: 0.08, bandWarp: 0.16, zonalShear: 0.5, fineDetail: 0.25, polarChaos: 0.8, vortexStrength: 0.35 } },
-  { id: 67, actorId: 103, data: { seed: 8192, bandCount: 3.5, turbulence: 1.4, opticalDepth: 4, gapGlow: 3.8, limbDarkening: 0.6, gapThreshold: 0.3, deckSoftness: 0.13, parallax: 0.02, breathAmplitude: 0.05, bandWarp: 0.21, zonalShear: 0.4, fineDetail: 0.25, polarChaos: 0.5, vortexStrength: 0.25 } }
+  { id: 66, actorId: 102, data: { seed: 4096, bandCount: 4.5, turbulence: 1.6, opticalDepth: 3, gapGlow: 3.3, limbDarkening: 0.6, gapThreshold: 0.42, deckSoftness: 0.20, deckTint: 0.5, parallax: 0.02, breathAmplitude: 0.08, bandWarp: 0.16, zonalShear: 0.5, fineDetail: 0.25, polarChaos: 0.8, vortexStrength: 0.35 } },
+  { id: 67, actorId: 103, data: { seed: 8192, bandCount: 3.5, turbulence: 1.4, opticalDepth: 4, gapGlow: 3.8, limbDarkening: 0.6, gapThreshold: 0.3, deckSoftness: 0.13, deckTint: 0.5, parallax: 0.02, breathAmplitude: 0.05, bandWarp: 0.21, zonalShear: 0.4, fineDetail: 0.25, polarChaos: 0.5, vortexStrength: 0.25 } }
 ]

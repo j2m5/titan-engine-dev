@@ -210,6 +210,7 @@ export interface IBrownDwarfRenderingObject {
   limbDarkening?: number
   gapThreshold?: number
   deckSoftness?: number
+  deckTint?: number
   parallax?: number
   breathAmplitude?: number
   bandWarp?: number
