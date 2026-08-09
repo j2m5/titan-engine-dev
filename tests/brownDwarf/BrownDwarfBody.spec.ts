@@ -61,7 +61,7 @@ describe('тело коричневого карлика', () => {
 
     expect(source).not.toContain('normalize(tangent)')
     expect(source).not.toContain('dot(tangent, tangent)')
-    expect(source).toContain('tangent * (height * uParallax)')
+    expect(source).toContain('dir - tangent * (height * uParallax)')
   })
 
   it('импостор параллакса не знает', () => {
