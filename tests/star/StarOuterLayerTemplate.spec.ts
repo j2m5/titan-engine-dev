@@ -1,5 +1,6 @@
 import { StarOuterLayerShaderTemplate } from '@/core/materials/shaders/lib/StarOuterLayerShaderTemplate'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { withoutComments } from '../helpers/glsl'
 
 describe('StarOuterLayerShaderTemplate: палитра протуберанцев от спектра звезды', () => {
   const vert: string = StarOuterLayerShaderTemplate.vertexShader
@@ -45,12 +46,27 @@ describe('StarOuterLayerShaderTemplate: толщина ленты — доля �
     expect(uniforms.uWidthFraction.value * sunRadiusWorld).toBeCloseTo(0.3, 3)
   })
 
-  it('радиус берётся из modelMatrix, а не как длина нормализованного атрибута', () => {
+  it('радиус берётся из матрицы, а не как длина нормализованного атрибута', () => {
     // length(aFootA) — единица объектного пространства: толщина выходила
-    // абсолютной, и у мелкой звезды нити были втрое толще относительно диска
-    expect(vert).toContain('float starRadiusW = length((modelMatrix * vec4(aFootA, 0.0)).xyz)')
+    // абсолютной, и у мелкой звезды нити были втрое толще относительно диска.
+    //
+    // Матрица теперь modelView, а не model: шейдер переведён в видовое
+    // пространство ради точности вершин (см. VertexPrecision.spec). На саму
+    // длину это не влияет — viewMatrix жёсткое движение и длин не меняет,
+    // поэтому обоснование 0.00086 из соседнего теста остаётся в силе
+    expect(vert).toContain('float starRadiusV = length((modelViewMatrix * vec4(aFootA, 0.0)).xyz)')
     expect(vert).not.toContain('length(aFootA)')
-    expect(vert).toContain('uWidthFraction * aRibbon.y * (1.0 + animPhase) * starRadiusW')
+    expect(vert).toContain('uWidthFraction * aRibbon.y * (1.0 + animPhase) * starRadiusV')
+  })
+
+  it('ширина откладывается от позиции в видовом пространстве', () => {
+    // Мировая пара pW/cameraPosition вычитала две большие величины, и у звезды
+    // далеко от начала системы полутолщина ленты (0.51 юнита у Сириуса A) имела
+    // всего полтора десятка ступеней квантования. В видовом пространстве камера
+    // в начале координат, и вычитать нечего
+    expect(vert).toContain('vec3 viewV       = normalize(pV);')
+    expect(withoutComments(vert)).not.toContain('cameraPosition')
+    expect(vert).toContain('pV += ribbonSideV * width;')
   })
 
   it('мёртвое затухание у поверхности удалено вместе со своими переменными', () => {
