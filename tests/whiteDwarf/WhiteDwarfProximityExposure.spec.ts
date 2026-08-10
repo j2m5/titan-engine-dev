@@ -1,11 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { PerspectiveCamera, Scene, WebGLRenderer } from 'three'
+import { PerspectiveCamera, Scene, WebGLRenderer, Group } from 'three'
 import { frameCoverage, proximityExposure } from '@/core/renderables/WhiteDwarf/proximityExposure'
 import { wdShade, WD_HDR_CEILING } from './whiteDwarfSurfaceMirror'
 import { planckX } from '@/core/materials/shaders/lib/helpers'
 import { WhiteDwarfShaderTemplate } from '@/core/renderables/WhiteDwarf/WhiteDwarfShaderTemplate'
 import { WhiteDwarfImpostorShaderTemplate } from '@/core/renderables/WhiteDwarf/WhiteDwarfImpostorShaderTemplate'
-import { Group } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { WhiteDwarf } from '@/core/renderables/WhiteDwarf/WhiteDwarf'
 import { config } from '@/core/framework/config'
@@ -54,7 +53,7 @@ describe('proximityExposure — кривая адаптации', () => {
 })
 
 describe('frameCoverage — доля кадра', () => {
-  it('точка прилёта radius*3 при fov 50 даёт около 0.77', () => {
+  it('точка прилёта radius*3 при fov 50 даёт около 0.71', () => {
     // Ориентир из спеки: дистанция до центра 3R, высота кадра 2*tan(25°)*3R
     const radius = 2.93
     expect(frameCoverage(radius, radius * 3, 50)).toBeCloseTo(0.7147, 3)
@@ -75,8 +74,9 @@ describe('wdShade — экспозиция после потолка', () => {
   })
 
   it('exposure = 1 воспроизводит прежний выход — точка отката', () => {
-    const before = wdShade(1, [1, 1, 1], planckX(11820), 40, 1)
-    before.forEach((value: number) => expect(value).toBeLessThanOrEqual(WD_HDR_CEILING))
+    // mu = 1: лимб ровно единица, остаётся min(intensity, потолок)
+    const result = wdShade(1, [1, 1, 1], planckX(11820), 40, 1)
+    expect(result).toEqual([32, 32, 32])
   })
 })
 

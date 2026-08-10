@@ -19,6 +19,7 @@ export function frameCoverage(radiusUnits: number, distanceUnits: number, fovDeg
  * Ниже start возвращается РОВНО 1: дальний вид и вся калибровка яркости
  * карлика (WHITE_DWARF_DISPLAY_SCALE, потолок HDR) не тронуты ни битом.
  * floor = 1 — точка отката: кривая тождественно единица.
+ * Явные гарды на краях обязательны: 1 - (1 - floor) * 1 во float не равен floor (0.09999999999999998), а стражи требуют точного попадания.
  */
 export function proximityExposure(coverage: number, floor: number, start: number, end: number): number {
   if (coverage <= start) return 1
