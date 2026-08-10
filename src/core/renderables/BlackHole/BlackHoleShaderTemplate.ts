@@ -6,9 +6,9 @@ import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/
 /**
  * Шейдер чёрной дыры, этап 3: лензирование Шварцшильда + аккреционный диск
  *
- * Лензирование (этап 2): уравнение Бине u''(φ) = −u + (3/2)·u² (rs = 1),
- * velocity Verlet по углу φ; аналитическое слабое поле для далёких лучей
- * с ренормализацией на зону симуляции (обе ветки сходят в ноль на границе)
+ * Лензирование (этапы 2 и 4): уравнение Бине u''(φ) = −u + (3/2)·u² (rs = 1),
+ * velocity Verlet по углу φ; для далёких лучей — LUT отклонения, запечённый
+ * тем же интегратором и тем же dphi (обе ветки сходят в ноль на границе зоны)
  *
  * Диск (этап 3) — ТОНКИЙ: математическая плоскость, сэмплируемая в точках
  * пересечения геодезической с экваториальной плоскостью, front-to-back
@@ -66,6 +66,9 @@ export function createBlackHoleUniforms(parameters: BlackHoleParameters): Record
     uNoiseScale: new Uniform(parameters.diskNoiseScale),
     uNoiseOffset: new Uniform(new Vector2()),
     noiseMap: new Uniform<Texture | null>(null),
+
+    /** LUT угла отклонения для дальних лучей (этап 4, см. deflectionLut.ts) */
+    deflectionLut: new Uniform<Texture | null>(null),
 
     /** Время симуляции в днях (свёрнутое на CPU, см. BlackHoleMaterial.update) */
     uTime: new Uniform(0),
@@ -143,6 +146,7 @@ export const BlackHoleShaderTemplate = {
     uniform float uNoiseScale;
     uniform vec2 uNoiseOffset;
     uniform sampler2D noiseMap;
+    uniform highp sampler2D deflectionLut;
 
     uniform float uTime;
     uniform float uRotationPeriod;
@@ -184,12 +188,12 @@ export const BlackHoleShaderTemplate = {
     // пробовали — картинка не изменилась (дело было не в намотке, а в
     // грубости углового шага у фотонной сферы, см. MAX_STEPS выше)
     const float PHI_MAX = 9.42477796;
-    // граница аналитической ветки для голой дыры (и будущая граница LUT этапа 4)
+    // Граница LUT-ветки (этап 4 выполнен): дальше отклонение берётся из
+    // deflectionLut — таблицы, запечённой ТЕМ ЖЕ интегратором и тем же dphi
+    // (см. deflectionLut.ts). Обе ветки считает одна схема, поэтому стык
+    // жёсткий, без кроссфейда и окон: прежний полином слабого поля
+    // занижал отклонение на ~0.5° у стыка
     const float WEAK_FIELD_B = 8.0;
-    // полоса кроссфейда интегратор → аналитика: жёсткий стык веток заменяется
-    // плавным морфом (прямохордовое окно аналитики занижает отклонение
-    // изогнутого пути на ~0.5° у стыка — до LUT этапа 4 мостим кроссфейдом)
-    const float BLEND_BAND = 3.5;
 
     vec3 sampleSkybox(vec3 direction) {
       // Выборка вынесена в общий чанк: её же зовёт собственный фоновый проход.
@@ -391,29 +395,25 @@ export const BlackHoleShaderTemplate = {
       if (uLensing < 0.5) {
         // дебаг-режим этапа 1: неизогнутый passthrough (эталон бесшовности)
         color = sampleSkybox(rayDir);
+      } else if (!cameraInside && b > weakFieldB) {
+        // LUT-ветка: угол отклонения, накопленный внутри зоны, из таблицы,
+        // запечённой тем же интегратором (deflectionLut.ts). На краю зоны
+        // хорда нулевая и α = 0 — бесшовность с нелензированным фоном вне
+        // меша автоматическая, окно края больше не нужно.
+        // Домен таблицы [WEAK_FIELD_B, simulationRs]; при диске ветка
+        // включается позже (weakFieldB отодвинут за диск) — просто читаем
+        // таблицу с большего t
+        float t = (b - WEAK_FIELD_B) / (simulationRs - WEAK_FIELD_B);
+        // Сетка LUT лежит на краях домена: узел i стоит в t = i/255, а тексель
+        // i центрирован в (i + 0.5)/256 — коррекция ниже совмещает их, чтобы
+        // t = 0 читал ровно узел b = WEAK_FIELD_B (стык с живым интегратором),
+        // а t = 1 — ровно нулевой узел на краю зоны (стык с нелензированным
+        // фоном вне меша). 255.0/256.0 — это (SIZE-1)/SIZE при SIZE = 256
+        float alphaIn = texture(deflectionLut, vec2((0.5 + t * 255.0) / 256.0, 0.5)).r;
+        vec3 inward = -normalize(cameraRs + tMid * rayDir);
+        color = sampleSkybox(cos(alphaIn) * rayDir + sin(alphaIn) * inward);
       } else {
-        // вес аналитики: 0 — чистый интегратор, 1 — чистая аналитика,
-        // между ними полоса плавного кроссфейда шириной BLEND_BAND
-        float analyticBlend = cameraInside
-          ? 0.0
-          : smoothstep(weakFieldB, weakFieldB + BLEND_BAND, b);
-
-        if (analyticBlend < 1.0) {
-          color = traceGeodesic(cameraRs, rayDir, tEnter, crossings);
-        }
-
-        if (analyticBlend > 0.0) {
-          float x = min(b / simulationRs, 1.0);
-          float edgeWindow = 1.0 - smoothstep(0.85, 1.0, x);
-          float alphaIn = (2.0 / b + 2.945243 / (b * b))
-                        * sqrt(1.0 - x * x)
-                        * edgeWindow;
-          vec3 inward = -normalize(cameraRs + tMid * rayDir);
-          vec3 bentDir = cos(alphaIn) * rayDir + sin(alphaIn) * inward;
-          vec3 analyticColor = sampleSkybox(bentDir);
-
-          color = analyticBlend < 1.0 ? mix(color, analyticColor, analyticBlend) : analyticColor;
-        }
+        color = traceGeodesic(cameraRs, rayDir, tEnter, crossings);
       }
 
       // дебаг-визуализация пересечений кольца диска: 1 — красный, 2 — зелёный, 3+ — синий
