@@ -14,7 +14,12 @@ import { UpdateContext } from '@/core/UpdateContext'
 import { WhiteDwarf } from '@/core/renderables/WhiteDwarf/WhiteDwarf'
 import { WhiteDwarfImpostorShaderTemplate } from '@/core/renderables/WhiteDwarf/WhiteDwarfImpostorShaderTemplate'
 
-/** Юниформы, копируемые с тела: единый источник цвета, лимба и яркости */
+/** Юниформы, шарящиеся с телом ЦЕЛИКОМ (объект Uniform, не значение): единый
+ * источник цвета, лимба, яркости и прокси-экспозиции. Ссылка на Uniform
+ * покрывает и скаляры — снапшот числа разъезжался бы с телом молча.
+ * Экспозицию считает тело в onBeforeRender; когда активен импостор, тело не
+ * рендерится и последнее записанное значение замерзает — это корректно:
+ * переключение LOD происходит при доле кадра ~0.01, где кривая ещё честная 1 */
 const SHARED_UNIFORMS: readonly string[] = ['uColorBase', 'uPlanckX', 'uCoreIntensity', 'uProximityExposure']
 
 /**
@@ -59,7 +64,7 @@ class WhiteDwarfImpostor extends Mesh {
     })
 
     for (const key of SHARED_UNIFORMS) {
-      this.material.uniforms[key].value = this.body.material.uniforms[key].value
+      this.material.uniforms[key] = this.body.material.uniforms[key]
     }
   }
 
