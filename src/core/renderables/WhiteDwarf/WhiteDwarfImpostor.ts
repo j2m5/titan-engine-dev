@@ -15,7 +15,7 @@ import { WhiteDwarf } from '@/core/renderables/WhiteDwarf/WhiteDwarf'
 import { WhiteDwarfImpostorShaderTemplate } from '@/core/renderables/WhiteDwarf/WhiteDwarfImpostorShaderTemplate'
 
 /** Юниформы, копируемые с тела: единый источник цвета, лимба и яркости */
-const SHARED_UNIFORMS: readonly string[] = ['uColorBase', 'uPlanckX', 'uCoreIntensity']
+const SHARED_UNIFORMS: readonly string[] = ['uColorBase', 'uPlanckX', 'uCoreIntensity', 'uProximityExposure']
 
 /**
  * Билборд-импостор карлика: дальний уровень LOD, и на практике — то, чем
