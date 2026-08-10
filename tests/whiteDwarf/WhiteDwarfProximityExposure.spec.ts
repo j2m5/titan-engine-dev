@@ -1,9 +1,15 @@
 import { describe, it, expect } from 'vitest'
+import { PerspectiveCamera, Scene, WebGLRenderer } from 'three'
 import { frameCoverage, proximityExposure } from '@/core/renderables/WhiteDwarf/proximityExposure'
 import { wdShade, WD_HDR_CEILING } from './whiteDwarfSurfaceMirror'
 import { planckX } from '@/core/materials/shaders/lib/helpers'
 import { WhiteDwarfShaderTemplate } from '@/core/renderables/WhiteDwarf/WhiteDwarfShaderTemplate'
 import { WhiteDwarfImpostorShaderTemplate } from '@/core/renderables/WhiteDwarf/WhiteDwarfImpostorShaderTemplate'
+import { Group } from 'three'
+import { Actor } from '@/core/models/Actor'
+import { WhiteDwarf } from '@/core/renderables/WhiteDwarf/WhiteDwarf'
+import { config } from '@/core/framework/config'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 const FLOOR = 0.45
 const START = 0.1
@@ -78,5 +84,72 @@ describe('юниформ uProximityExposure', () => {
   it('есть в обоих шаблонах с нейтральной единицей', () => {
     expect(WhiteDwarfShaderTemplate.uniforms.uProximityExposure.value).toBe(1)
     expect(WhiteDwarfImpostorShaderTemplate.uniforms.uProximityExposure.value).toBe(1)
+  })
+})
+
+function exposureStubActor(): Actor {
+  return {
+    getAttribute: (key: string, def?: unknown): unknown => (key === 'name' ? 'G29-38' : def),
+    renderingObject: { getAttribute: () => ({}) },
+    physicalObject: {
+      getAttribute: (key: string, def?: unknown): unknown =>
+        key === 'radius' ? 8840 : key === 'temperature' ? 11820 : def
+    }
+  } as unknown as Actor
+}
+
+/** Прогон onBeforeRender с камерой на заданной дистанции (в радиусах тела) */
+function exposureAt(body: WhiteDwarf, distanceRadii: number): number {
+  const camera = new PerspectiveCamera(50, 1, 0.1, 1e9)
+  camera.position.set(0, 0, toThreeJSUnits(8840) * distanceRadii)
+  camera.updateMatrixWorld()
+  body.updateMatrixWorld()
+  body.onBeforeRender(
+    {} as WebGLRenderer,
+    {} as Scene,
+    camera,
+    body.geometry,
+    body.material,
+    null as unknown as Group
+  )
+
+  return body.material.uniforms.uProximityExposure.value as number
+}
+
+describe('onBeforeRender тела — прокси-экспозиция', () => {
+  it('вдали единица ровно', () => {
+    // coverage на 100R = 2/(100*2*tan(25)) ~ 0.021 — глубоко ниже start
+    expect(exposureAt(new WhiteDwarf(exposureStubActor()), 100)).toBe(1)
+  })
+
+  it('в середине кривой экспозиция строго между полом и единицей', () => {
+    // 5R -> coverage = 1/(5*tan(25 гр.)) ~ 0.43 — между start 0.1 и end 0.65.
+    // Точка прилёта (3R, coverage ~0.71) при стартовом end уже лежит на полу,
+    // поэтому середина кривой проверяется здесь, а пол — тестом ниже
+    const value = exposureAt(new WhiteDwarf(exposureStubActor()), 5)
+    expect(value).toBeLessThan(1)
+    expect(value).toBeGreaterThan(config('whiteDwarf.proximityExposureFloor'))
+  })
+
+  it('вплотную держит пол из конфига', () => {
+    expect(exposureAt(new WhiteDwarf(exposureStubActor()), 1.05)).toBe(
+      config('whiteDwarf.proximityExposureFloor')
+    )
+  })
+
+  it('ортографическая камера прохода не трогает юниформ', () => {
+    // Проходы вне главного цикла (пост-эффекты) не должны сбивать экспозицию
+    const body = new WhiteDwarf(exposureStubActor())
+    exposureAt(body, 1.05)
+    const before = body.material.uniforms.uProximityExposure.value
+    body.onBeforeRender(
+      {} as WebGLRenderer,
+      {} as Scene,
+      new (class { isPerspectiveCamera = false })() as unknown as PerspectiveCamera,
+      body.geometry,
+      body.material,
+      null as unknown as Group
+    )
+    expect(body.material.uniforms.uProximityExposure.value).toBe(before)
   })
 })
