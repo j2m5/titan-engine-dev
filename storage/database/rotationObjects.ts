@@ -21,5 +21,8 @@ export const RotationObjects: IRotationObject[] = [
   { id: 15, actorId: 23, meridianAngle: 275.858329268797, ascendingNode: 342.48497597484555, inclination: 1.809023245612404, period: 400.5364313960946, direction: 1 },
   { id: 16, actorId: 29, meridianAngle: 145.83293673182158, ascendingNode: 169.17383044954624, inclination: 28.053987199180888, period: 382.69074183572707, direction: 1 },
   { id: 17, actorId: 102, meridianAngle: 0, ascendingNode: 0, inclination: 0, period: 5.05, direction: 1 },
-  { id: 18, actorId: 103, meridianAngle: 140, ascendingNode: 0, inclination: 0, period: 6.9, direction: 1 }
+  { id: 18, actorId: 103, meridianAngle: 140, ascendingNode: 0, inclination: 0, period: 6.9, direction: 1 },
+  { id: 19, actorId: 105, meridianAngle: 0, ascendingNode: 0, inclination: 0, period: 132, direction: 1 },
+  { id: 20, actorId: 106, meridianAngle: 0, ascendingNode: 0, inclination: 0, period: 24, direction: 1 },
+  { id: 21, actorId: 108, meridianAngle: 0, ascendingNode: 45, inclination: 30, period: 32, direction: 1 }
 ]

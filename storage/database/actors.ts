@@ -106,5 +106,11 @@ export const Actors: IActor[] = [
   { id: 100, categoryId: 7, parentId: 86, name: "Horuset Nebula", description: "", color: "#4cbfa6" },
   { id: 101, categoryId: 1, parentId: null, name: "Luhman 16 system", description: "", color: "#ffffff" },
   { id: 102, categoryId: 8, parentId: 101, name: "Luhman 16B", description: "", color: "#8b2500" },
-  { id: 103, categoryId: 8, parentId: 101, name: "Luhman 16A", description: "", color: "#a33a08" }
+  { id: 103, categoryId: 8, parentId: 101, name: "Luhman 16A", description: "", color: "#a33a08" },
+  { id: 104, categoryId: 1, parentId: null, name: "Sirius system", description: "", color: "#ffffff" },
+  { id: 105, categoryId: 3, parentId: 104, name: "Sirius A", description: "", color: "#cadfff" },
+  { id: 106, categoryId: 9, parentId: 104, name: "Sirius B", description: "", color: "#a4c2ff" },
+  { id: 107, categoryId: 1, parentId: null, name: "Helix Nebula system", description: "", color: "#ffffff" },
+  { id: 108, categoryId: 9, parentId: 107, name: "WD 2226-210", description: "", color: "#82aaff" },
+  { id: 109, categoryId: 7, parentId: 107, name: "Helix Nebula", description: "", color: "#3fd0c0" }
 ]

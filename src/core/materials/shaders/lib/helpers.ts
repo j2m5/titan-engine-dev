@@ -115,6 +115,64 @@ export const STAR_CORE_INTENSITY: number = 4.0
 export const STAR_LIMB_COEFF: readonly [number, number, number] = [0.5, 0.65, 0.8]
 export const STAR_GRANULATION_TIME_SCALE: number = 0.01
 
+/**
+ * Вторая радиационная постоянная c2 = hc/k, выраженная в нм·K. Через неё
+ * безразмерный планковский аргумент считается как x = c2 / (lambda * T).
+ */
+export const PLANCK_C2_NM_K: number = 1.438777e7
+
+/**
+ * Опорные длины волн каналов R/G/B в нанометрах. Не спектральный рендеринг, а
+ * три точки на планковской кривой: их хватает, чтобы поймать главное — синий
+ * темнеет к лимбу сильнее красного, и тем сильнее, чем холоднее тело.
+ */
+export const PLANCK_REFERENCE_WAVELENGTHS_NM: readonly [number, number, number] = [600, 550, 450]
+
+/** Зелёный — опорный канал для скалярных величин (яркость): середина видимого диапазона */
+const PLANCK_LUMA_WAVELENGTH_NM: number = PLANCK_REFERENCE_WAVELENGTHS_NM[1]
+
+/**
+ * Безразмерный планковский аргумент x = hc/(lambda * k * T) по каналам R/G/B.
+ *
+ * Это единственный вход лимбового потемнения в шейдере (wdLimb, чанк
+ * whiteDwarfSurface): он несёт сразу и температуру, и длину волны. Большой x —
+ * режим Вина, планковская функция круто зависит от T, потемнение сильное;
+ * малый x — режим Рэлея-Джинса, B почти линейна по T, диск выходит плоским.
+ */
+export function planckX(temperatureK: number): [number, number, number] {
+  const safeT: number = Math.max(temperatureK, 1)
+
+  return [
+    PLANCK_C2_NM_K / (PLANCK_REFERENCE_WAVELENGTHS_NM[0] * safeT),
+    PLANCK_C2_NM_K / (PLANCK_REFERENCE_WAVELENGTHS_NM[1] * safeT),
+    PLANCK_C2_NM_K / (PLANCK_REFERENCE_WAVELENGTHS_NM[2] * safeT)
+  ]
+}
+
+/**
+ * Во сколько раз поверхность температуры T ярче поверхности referenceK В
+ * ВИДИМОЙ ПОЛОСЕ: отношение планковских функций на опорной длине волны.
+ *
+ * Именно эта величина, а НЕ закон Стефана-Больцмана, задаёт яркость горячего
+ * тела на экране. T^4 — величина болометрическая, и у белого карлика при
+ * 25 kK она почти вся приходится на EUV, которого камера не видит: честное
+ * отношение в видимом получается около 53, а T^4 дало бы 363 — завышение на
+ * порядок, вплотную упирающееся в потолок HDR.
+ *
+ * Ловушка: при T заметно выше referenceK рост замедляется (x -> 0 даёт предел
+ * referenceX/x, то есть линейный по T), поэтому очень горячие тела НЕ уходят в
+ * бесконечность и остаются в рабочем диапазоне.
+ */
+export function visibleBandRadianceRatio(
+  temperatureK: number,
+  referenceK: number = DEFAULT_STAR_TEMPERATURE_K
+): number {
+  const x: number = PLANCK_C2_NM_K / (PLANCK_LUMA_WAVELENGTH_NM * Math.max(temperatureK, 1))
+  const xReference: number = PLANCK_C2_NM_K / (PLANCK_LUMA_WAVELENGTH_NM * Math.max(referenceK, 1))
+
+  return Math.expm1(xReference) / Math.expm1(x)
+}
+
 export interface StarPalette {
   cool: Colorable
   base: Colorable

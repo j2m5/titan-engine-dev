@@ -20,7 +20,8 @@ export enum AllowedCategories {
   atmosphere,
   ring,
   nebula,
-  brownDwarf
+  brownDwarf,
+  whiteDwarf
 }
 
 export type AllowedCategory = keyof typeof AllowedCategories
@@ -219,6 +220,20 @@ export interface IBrownDwarfRenderingObject {
   polarChaos?: number
   vortexStrength?: number
   stormDepth?: number
+}
+
+/**
+ * Белый карлик. Ручек мало намеренно: поверхность безлика по физике (радиативная
+ * атмосфера у горячих, гранула в 1/6000 радиуса у холодных), и рисовать на ней
+ * нечего. Яркость и лимбовое потемнение выводятся из температуры физического
+ * объекта, а не задаются здесь — см. WhiteDwarfParameters.
+ */
+export interface IWhiteDwarfRenderingObject {
+  /**
+   * Множитель поверх откалиброванного уровня яркости
+   * (WHITE_DWARF_DISPLAY_SCALE). Единица — нейтральное значение.
+   */
+  exposureBias?: number
 }
 
 export type Colorable = {
