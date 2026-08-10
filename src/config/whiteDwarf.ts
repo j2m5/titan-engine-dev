@@ -45,8 +45,8 @@ export const whiteDwarf: WhiteDwarfConfig = {
     lodHysteresis: 0.05,
     haloOpacity: 0.05,
     haloScale: 0.45,
-    // Стартовые значения, НЕ подобраны по виду — приёмка за владельцем
-    proximityExposureFloor: 0.45,
+    // floor подобран живым A/B у прилёта к Sirius B (0.45/0.2/0.1): только на 0.1 звёзды фона и орбиты различимы при слепящем диске. start/end стартовые; финальная приёмка по виду — за владельцем
+    proximityExposureFloor: 0.1,
     proximityExposureStart: 0.1,
     proximityExposureEnd: 0.65
   }
