@@ -41,7 +41,7 @@ function coreIntensity(temperatureK: number): number {
 
 /** Каналы в центре диска (mu = 1, потемнения нет) уже после потолка HDR */
 function displayedCentre(temperatureK: number): Vec3 {
-  return wdShade(1, baseColor(temperatureK), planckX(temperatureK), coreIntensity(temperatureK))
+  return wdShade(1, baseColor(temperatureK), planckX(temperatureK), coreIntensity(temperatureK), 1)
 }
 
 /** Яркость Rec. 709 центра диска после потолка */
@@ -130,13 +130,13 @@ describe('wdShade — композиция тела', () => {
     const white: Vec3 = [1, 1, 1]
     const intensity: number = STAR_CORE_INTENSITY * visibleBandRadianceRatio(SIRIUS_B_K)
 
-    wdShade(1, white, planckX(SIRIUS_B_K), intensity).forEach((value: number) => {
+    wdShade(1, white, planckX(SIRIUS_B_K), intensity, 1).forEach((value: number) => {
       expect(value).toBe(WD_HDR_CEILING)
     })
   })
 
   it('нулевая интенсивность гасит тело — точка отката', () => {
-    expect(wdShade(1, [1, 1, 1], planckX(G29_38_K), 0)).toEqual([0, 0, 0])
+    expect(wdShade(1, [1, 1, 1], planckX(G29_38_K), 0, 1)).toEqual([0, 0, 0])
   })
 })
 

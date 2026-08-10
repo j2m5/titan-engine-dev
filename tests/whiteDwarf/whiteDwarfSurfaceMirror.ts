@@ -29,10 +29,10 @@ export function wdLimb(mu: number, planckX: Vec3): Vec3 {
 }
 
 /** Зеркало wdShade */
-export function wdShade(mu: number, baseColor: Vec3, planckX: Vec3, intensity: number): Vec3 {
+export function wdShade(mu: number, baseColor: Vec3, planckX: Vec3, intensity: number, exposure: number): Vec3 {
   const limb: Vec3 = wdLimb(mu, planckX)
 
-  return baseColor.map((c: number, i: number) => Math.min(c * intensity * limb[i], WD_HDR_CEILING)) as Vec3
+  return baseColor.map((c: number, i: number) => Math.min(c * intensity * limb[i], WD_HDR_CEILING) * exposure) as Vec3
 }
 
 /**

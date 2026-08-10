@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { frameCoverage, proximityExposure } from '@/core/renderables/WhiteDwarf/proximityExposure'
+import { wdShade, WD_HDR_CEILING } from './whiteDwarfSurfaceMirror'
+import { planckX } from '@/core/materials/shaders/lib/helpers'
+import { WhiteDwarfShaderTemplate } from '@/core/renderables/WhiteDwarf/WhiteDwarfShaderTemplate'
+import { WhiteDwarfImpostorShaderTemplate } from '@/core/renderables/WhiteDwarf/WhiteDwarfImpostorShaderTemplate'
 
 const FLOOR = 0.45
 const START = 0.1
@@ -52,5 +56,27 @@ describe('frameCoverage — доля кадра', () => {
 
   it('нулевая дистанция не делит на ноль', () => {
     expect(Number.isFinite(frameCoverage(1, 0, 50))).toBe(true)
+  })
+})
+
+describe('wdShade — экспозиция после потолка', () => {
+  it('умножает КЛИПОВАННОЕ значение, а не вход клипа', () => {
+    // Sirius B прибит к потолку всей поверхностью: с exposure 0.5 обязан выйти
+    // ровно в полпотолка. Умножь exposure до min — вышло бы min(вход/2, 32),
+    // то есть для пробившего потолок тела те же 32, и спад не работал бы
+    const clipped = wdShade(1, [1, 1, 1], planckX(25200), 1000, 0.5)
+    clipped.forEach((value: number) => expect(value).toBe(WD_HDR_CEILING * 0.5))
+  })
+
+  it('exposure = 1 воспроизводит прежний выход — точка отката', () => {
+    const before = wdShade(1, [1, 1, 1], planckX(11820), 40, 1)
+    before.forEach((value: number) => expect(value).toBeLessThanOrEqual(WD_HDR_CEILING))
+  })
+})
+
+describe('юниформ uProximityExposure', () => {
+  it('есть в обоих шаблонах с нейтральной единицей', () => {
+    expect(WhiteDwarfShaderTemplate.uniforms.uProximityExposure.value).toBe(1)
+    expect(WhiteDwarfImpostorShaderTemplate.uniforms.uProximityExposure.value).toBe(1)
   })
 })

@@ -22,7 +22,8 @@ export const WhiteDwarfImpostorShaderTemplate: ShaderProps = {
   uniforms: {
     uColorBase: new Uniform(new Color()),
     uPlanckX: new Uniform(new Vector3()),
-    uCoreIntensity: new Uniform(STAR_CORE_INTENSITY)
+    uCoreIntensity: new Uniform(STAR_CORE_INTENSITY),
+    uProximityExposure: new Uniform(1)
   },
   vertexShader: `
     varying vec2 vUv;
@@ -43,6 +44,7 @@ export const WhiteDwarfImpostorShaderTemplate: ShaderProps = {
     uniform vec3 uColorBase;
     uniform vec3 uPlanckX;
     uniform float uCoreIntensity;
+    uniform float uProximityExposure;
 
     varying vec2 vUv;
 
@@ -67,7 +69,7 @@ export const WhiteDwarfImpostorShaderTemplate: ShaderProps = {
       // Псевдосфера: mu — косинус к взгляду, точный, а не приближённый
       float mu = sqrt(max(1.0 - r * r, 0.0));
 
-      vec3 color = wdShade(mu, uColorBase, uPlanckX, uCoreIntensity);
+      vec3 color = wdShade(mu, uColorBase, uPlanckX, uCoreIntensity, uProximityExposure);
 
       gl_FragColor = vec4(color, alpha);
     }

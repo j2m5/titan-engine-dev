@@ -15,7 +15,8 @@ export const WhiteDwarfShaderTemplate: ShaderProps = {
     uColorBase: new Uniform(new Color()),
     /** hc/(lambda*k*Teff) по каналам R/G/B — единственный вход лимба, см. planckX */
     uPlanckX: new Uniform(new Vector3()),
-    uCoreIntensity: new Uniform(STAR_CORE_INTENSITY)
+    uCoreIntensity: new Uniform(STAR_CORE_INTENSITY),
+    uProximityExposure: new Uniform(1)
   },
   vertexShader: `
     varying vec3 vViewPosition;
@@ -53,6 +54,7 @@ export const WhiteDwarfShaderTemplate: ShaderProps = {
     uniform vec3 uColorBase;
     uniform vec3 uPlanckX;
     uniform float uCoreIntensity;
+    uniform float uProximityExposure;
 
     varying vec3 vViewPosition;
     varying vec3 vViewNormal;
@@ -72,7 +74,7 @@ export const WhiteDwarfShaderTemplate: ShaderProps = {
 
       // Вся композиция — одной точкой входа чанка. Импостор зовёт ту же функцию
       // тем же списком аргументов: разойтись двум LOD нечем
-      vec3 color = wdShade(mu, uColorBase, uPlanckX, uCoreIntensity);
+      vec3 color = wdShade(mu, uColorBase, uPlanckX, uCoreIntensity, uProximityExposure);
 
       gl_FragColor = vec4(color, 1.0);
 
