@@ -14,10 +14,10 @@ import { Actor } from '@/core/models/Actor'
 const SIMULATION_RS = 27
 const DPHI = blackHole.blackHole.integrationDphi
 
-/** Центр текселя i в единицах прицельного параметра — та же формула, что в печке */
+/** Узел i в единицах прицельного параметра — та же краевая формула, что в печке */
 function lutB(index: number): number {
   return (
-    DEFLECTION_LUT_B_MIN + ((index + 0.5) / DEFLECTION_LUT_SIZE) * (SIMULATION_RS - DEFLECTION_LUT_B_MIN)
+    DEFLECTION_LUT_B_MIN + (index / (DEFLECTION_LUT_SIZE - 1)) * (SIMULATION_RS - DEFLECTION_LUT_B_MIN)
   )
 }
 
@@ -52,7 +52,8 @@ describe('bakeDeflectionAngles: печка угла отклонения', () =>
   })
 
   it('на краю зоны отклонение сходит в ноль — бесшовность с фоном вне меша', () => {
-    expect(angles[DEFLECTION_LUT_SIZE - 1]).toBeLessThan(0.01)
+    // Последний узел принудительно 0 — предел нулевой хорды, шов силуэта
+    expect(angles[DEFLECTION_LUT_SIZE - 1]).toBe(0)
   })
 
   it('санити против прежней аналитики: тот же порядок величины при b ≈ 12', () => {
@@ -68,6 +69,11 @@ describe('bakeDeflectionAngles: печка угла отклонения', () =>
     const legacy = (2 / b + 2.945243 / (b * b)) * Math.sqrt(1 - x * x)
 
     expect(Math.abs(angles[index] - legacy) / legacy).toBeLessThan(0.15)
+  })
+
+  it('вырожденная зона (simulationRs ≤ B_MIN): нули, а не мусор', () => {
+    // LUT-ветка в шейдере при таком радиусе недостижима (b ≤ simulationRs < B_MIN)
+    expect(bakeDeflectionAngles(DEFLECTION_LUT_B_MIN, DPHI)).toEqual(new Float32Array(DEFLECTION_LUT_SIZE))
   })
 })
 
@@ -97,9 +103,22 @@ describe('шейдер ЧД: аналитика слабого поля заме
   })
 
   it('LUT объявлен и сэмплируется по домену [WEAK_FIELD_B, simulationRs]', () => {
-    expect(frag).toContain('uniform sampler2D deflectionLut;')
+    expect(frag).toContain('uniform highp sampler2D deflectionLut;')
     expect(frag).toContain('texture(deflectionLut,')
     expect(frag).toContain('(b - WEAK_FIELD_B) / (simulationRs - WEAK_FIELD_B)')
+  })
+
+  it('выборка совмещает сетку по краям с центрами текселей', () => {
+    expect(frag).toContain('(0.5 + t * 255.0) / 256.0')
+    // 255/256 в шейдере обязаны быть (SIZE-1)/SIZE — литералы, но с поводком
+    expect(DEFLECTION_LUT_SIZE).toBe(256)
+  })
+
+  it('нижняя граница домена LUT равна WEAK_FIELD_B шейдера — несущий инвариант шва', () => {
+    const match = frag.match(/const\s+float\s+WEAK_FIELD_B\s*=\s*([0-9.]+)/)
+
+    expect(match).not.toBeNull()
+    expect(Number(match![1])).toBe(DEFLECTION_LUT_B_MIN)
   })
 })
 

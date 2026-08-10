@@ -85,4 +85,17 @@ describe('BlackHoleLod: живой порог переключения', () => {
   it('пин конфига: lodPixels закреплён на пересчитанном фактическом пороге', () => {
     expect(blackHole.blackHole.lodPixels).toBe(45)
   })
+
+  it('смена fov камеры пересчитывает дистанцию через updateObject', () => {
+    // Порог задан в пикселях: узкий fov растягивает пиксели по углу, дистанция
+    // растёт. updateObject читает живой ctx.camera.fov — не замороженный
+    const renderer = stubRenderer(1080)
+    const lod = makeLod(renderer)
+    const ctx: UpdateContext = { camera: new PerspectiveCamera(25), delta: 0, epoch: 0, elapsed: 0 }
+
+    lod.updateObject(ctx)
+
+    expect(lod.levels[1].distance).toBe(lod.switchDistance(25))
+    expect(lod.switchDistance(25)).toBeGreaterThan(lod.switchDistance(FOV))
+  })
 })

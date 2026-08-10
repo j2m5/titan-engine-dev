@@ -146,7 +146,7 @@ export const BlackHoleShaderTemplate = {
     uniform float uNoiseScale;
     uniform vec2 uNoiseOffset;
     uniform sampler2D noiseMap;
-    uniform sampler2D deflectionLut;
+    uniform highp sampler2D deflectionLut;
 
     uniform float uTime;
     uniform float uRotationPeriod;
@@ -404,7 +404,12 @@ export const BlackHoleShaderTemplate = {
         // включается позже (weakFieldB отодвинут за диск) — просто читаем
         // таблицу с большего t
         float t = (b - WEAK_FIELD_B) / (simulationRs - WEAK_FIELD_B);
-        float alphaIn = texture(deflectionLut, vec2(t, 0.5)).r;
+        // Сетка LUT лежит на краях домена: узел i стоит в t = i/255, а тексель
+        // i центрирован в (i + 0.5)/256 — коррекция ниже совмещает их, чтобы
+        // t = 0 читал ровно узел b = WEAK_FIELD_B (стык с живым интегратором),
+        // а t = 1 — ровно нулевой узел на краю зоны (стык с нелензированным
+        // фоном вне меша). 255.0/256.0 — это (SIZE-1)/SIZE при SIZE = 256
+        float alphaIn = texture(deflectionLut, vec2((0.5 + t * 255.0) / 256.0, 0.5)).r;
         vec3 inward = -normalize(cameraRs + tMid * rayDir);
         color = sampleSkybox(cos(alphaIn) * rayDir + sin(alphaIn) * inward);
       } else {
