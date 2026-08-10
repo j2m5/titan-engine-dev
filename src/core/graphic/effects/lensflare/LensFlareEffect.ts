@@ -55,6 +55,7 @@ export interface LensFlareEffectOptions {
   streakThreshold?: number
   streakScale?: number
   streakTint?: readonly [number, number, number]
+  streakSourceCeiling?: number
 }
 
 export interface LensFlareEffectUniforms {
@@ -122,7 +123,8 @@ export class LensFlareEffect extends Effect {
       streakAmount,
       streakThreshold,
       streakScale,
-      streakTint
+      streakTint,
+      streakSourceCeiling
     } = {
       ...lensFlareEffectOptionsDefaults,
       ...options
@@ -235,6 +237,7 @@ export class LensFlareEffect extends Effect {
     if (streakThreshold !== undefined) this.streakMaterial.streakThreshold = streakThreshold
     if (streakScale !== undefined) this.streakMaterial.streakScale = streakScale
     if (streakTint !== undefined) this.streakMaterial.streakTint.set(streakTint[0], streakTint[1], streakTint[2])
+    if (streakSourceCeiling !== undefined) this.streakMaterial.streakSourceCeiling = streakSourceCeiling
   }
 
   private readonly onResolutionChange = (): void => {

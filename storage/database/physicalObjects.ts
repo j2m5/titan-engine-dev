@@ -81,5 +81,10 @@ export const PhysicalObjects: IPhysicalObject[] = [
   { id: 75, actorId: 99, parentId: null, mass: 3.143e19, radius: 175, axialTilt: 16, orbitalPeriod: 68, rotationPeriod: 32, temperature: 0 },
   { id: 76, actorId: 102, parentId: 77, mass: 5.31476e28, radius: 69900, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 5.05, temperature: 1210 },
   { id: 77, actorId: 101, parentId: null, mass: 1.17684e29, radius: 1, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 1, temperature: 0 },
-  { id: 78, actorId: 103, parentId: 77, mass: 6.45364e28, radius: 69300, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 6.9, temperature: 1350 }
+  { id: 78, actorId: 103, parentId: 77, mass: 6.45364e28, radius: 69300, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 6.9, temperature: 1350 },
+  { id: 79, actorId: 104, parentId: null, mass: 6.1281e30, radius: 1, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 1, temperature: 0 },
+  { id: 80, actorId: 105, parentId: 79, mass: 4.1033e30, radius: 1192248, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 132, temperature: 9940 },
+  { id: 81, actorId: 106, parentId: 79, mass: 2.0248e30, radius: 5850, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 24, temperature: 25200 },
+  { id: 82, actorId: 107, parentId: null, mass: 1.15362e30, radius: 1, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 1, temperature: 0 },
+  { id: 83, actorId: 108, parentId: 82, mass: 1.15362e30, radius: 15100, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 32, temperature: 110000 }
 ]

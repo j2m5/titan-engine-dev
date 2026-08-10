@@ -55,13 +55,22 @@ export function createNebulaUniforms(): Record<string, IUniform> {
 export const nebulaRaymarchVertex = `
   precision highp float;
   varying vec3 vLocalPos;      // proxy-local position [-1,1]
-  varying vec3 vWorldPos;
   varying float vFragDepth;    // logarithmic depth, resolved per-fragment in the FS
   void main() {
     vLocalPos = position;       // unit-cube geometry in [-1,1]
-    vec4 wp = modelMatrix * vec4(position, 1.0);
-    vWorldPos = wp.xyz;
-    gl_Position = projectionMatrix * viewMatrix * wp;
+    // modelViewMatrix, NOT modelMatrix followed by viewMatrix. Three builds it on
+    // the CPU in double precision, so a proxy standing far from the world origin
+    // has its offset cancelled against the camera BEFORE the values drop to
+    // float32; multiplying the two in-shader quantises the vertices by the ULP of
+    // the world position instead. Harmless today (Placements is empty, so every
+    // nebula sits at the origin) and latent the moment one is placed elsewhere.
+    // The white dwarf hit exactly this: 49 steps across its radius, see
+    // WhiteDwarfShaderTemplate.
+    //
+    // The world-space varying that used to live here was dead — declared in both
+    // stages, assigned, never read: the raymarch works off vLocalPos.
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
     // Logarithmic depth, the Three.js way (logdepthbuf): leave gl_Position.z as the
     // standard projective value so the near/far CLIPPING of this large proxy box stays
     // correct, and resolve the actual log depth per-fragment via gl_FragDepth below.
@@ -84,7 +93,6 @@ export const nebulaRaymarchFragment = `
   ${nebulaColorChunk}
 
   varying vec3 vLocalPos;
-  varying vec3 vWorldPos;
   varying float vFragDepth;
   uniform float uMaxSteps;
   uniform float uEmissiveIntensity;

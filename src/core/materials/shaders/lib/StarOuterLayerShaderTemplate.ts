@@ -83,26 +83,37 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
       vec3 arc      = arcPoint(aRibbon.x,        animPhase);
       vec3 arcAhead = arcPoint(aRibbon.x + 0.01, animPhase);
 
-      vec3 pW  = (modelMatrix * vec4(arc     , 1.0)).xyz;
-      vec3 p1W = (modelMatrix * vec4(arcAhead, 1.0)).xyz;
+      // ВИДОВОЕ пространство, а не мировое. modelViewMatrix три считает на CPU в
+      // double, и абсолютный мировой сдвиг звезды сокращается с позицией камеры
+      // ДО спуска во float32. Прежняя пара modelMatrix + viewMatrix перемножалась
+      // уже в шейдере: у звезды, стоящей далеко от начала своей системы, вершины
+      // квантовались шагом ULP мировой позиции. У Сириуса A это 0.029 юнита при
+      // полутолщине ленты около 0.51 — то есть на толщину приходилось всего
+      // полтора десятка ступеней, и ленты рябили. Солнце дефекта не показывает:
+      // оно стоит в нуле своей системы, сдвиг нулевой
+      vec3 pV  = (modelViewMatrix * vec4(arc     , 1.0)).xyz;
+      vec3 p1V = (modelViewMatrix * vec4(arcAhead, 1.0)).xyz;
 
-      // Полоса развёрнута к камере: ширина откладывается поперёк дуги и взгляда
-      vec3 tangentW    = normalize(p1W - pW);
-      vec3 viewW       = normalize(pW - cameraPosition);
-      vec3 ribbonSideW = normalize(cross(viewW, tangentW));
+      // Полоса развёрнута к камере: ширина откладывается поперёк дуги и взгляда.
+      // В видовом пространстве камера в начале координат, поэтому направление
+      // взгляда — сама позиция точки, и cameraPosition больше не нужен
+      vec3 tangentV    = normalize(p1V - pV);
+      vec3 viewV       = normalize(pV);
+      vec3 ribbonSideV = normalize(cross(viewV, tangentV));
 
-      // Мировой радиус звезды: aFootA — единичное направление, w = 0 отбрасывает
-      // перенос, а масштаб меша равен радиусу (StarOuterLayer масштабирует себя
-      // им же). Отдельный юниформ не нужен; масштаб обязан оставаться
+      // Радиус звезды: aFootA — единичное направление, w = 0 отбрасывает перенос,
+      // а масштаб меша равен радиусу (StarOuterLayer масштабирует себя им же).
+      // Значение то же, что давала modelMatrix: viewMatrix — жёсткое движение и
+      // длину не меняет. Отдельный юниформ не нужен; масштаб обязан оставаться
       // равномерным, иначе длина зависела бы от направления основания
-      float starRadiusW = length((modelMatrix * vec4(aFootA, 0.0)).xyz);
+      float starRadiusV = length((modelViewMatrix * vec4(aFootA, 0.0)).xyz);
 
-      // Полутолщина — ДОЛЯ радиуса, а не абсолютные мировые единицы: иначе у
-      // мелкой звезды нити втрое толще относительно диска, чем у крупной.
+      // Полутолщина — ДОЛЯ радиуса, а не абсолютные единицы: иначе у мелкой
+      // звезды нити втрое толще относительно диска, чем у крупной.
       // 0.00086 подобрано так, что у Солнца толщина осталась прежней
-      float width = uWidthFraction * aRibbon.y * (1.0 + animPhase) * starRadiusW;
+      float width = uWidthFraction * aRibbon.y * (1.0 + animPhase) * starRadiusV;
 
-      pW += ribbonSideW * width;
+      pV += ribbonSideV * width;
 
       // Гашение по ходу вспышки: чем выше поднялась лента, тем она прозрачнее
       vOpacity = (1.0 - animPhase) * uOpacity;
@@ -112,7 +123,7 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
       // пик ~ uProtuberanceIntensity * uOpacity — ленты лишь слегка переходят порог блума
       vColor = mix(uColorCool, uColorBase, aRibbonRandom.z) * uProtuberanceIntensity;
 
-      gl_Position = projectionMatrix * viewMatrix * vec4(pW, 1.0);
+      gl_Position = projectionMatrix * vec4(pV, 1.0);
     }
   `,
   fragmentShader: `

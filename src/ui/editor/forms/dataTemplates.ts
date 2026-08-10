@@ -115,5 +115,12 @@ export const renderingDataTemplates: DataTemplate[] = [
       vortexStrength: 0.35,
       stormDepth: 0.5
     }
+  },
+  {
+    value: 'whiteDwarf',
+    label: 'whiteDwarf',
+    data: {
+      exposureBias: 1
+    }
   }
 ]

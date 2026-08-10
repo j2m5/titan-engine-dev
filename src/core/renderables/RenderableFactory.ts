@@ -21,12 +21,14 @@ import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { requireRenderingData } from '@/core/helpers/renderingData'
-import { BROWN_DWARF_IMPOSTOR_PIXELS } from '@/core/helpers/apparentSize'
+import { BROWN_DWARF_IMPOSTOR_PIXELS, WHITE_DWARF_IMPOSTOR_PIXELS } from '@/core/helpers/apparentSize'
 import { Nebula } from '@/core/renderables/Nebula'
 import { nebulaParamsFromData } from '@/core/renderables/Nebula/NebulaRenderingData'
 import { PlacedNode } from '@/core/renderables/utils/PlacedNode'
 import { BrownDwarf } from '@/core/renderables/BrownDwarf'
 import { BrownDwarfImpostor } from '@/core/renderables/BrownDwarf/BrownDwarfImpostor'
+import { WhiteDwarf } from '@/core/renderables/WhiteDwarf/WhiteDwarf'
+import { WhiteDwarfImpostor } from '@/core/renderables/WhiteDwarf/WhiteDwarfImpostor'
 import { INebulaRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 
@@ -54,6 +56,8 @@ class RenderableFactory {
         return this.createNebula(actor)
       case 8:
         return this.createBrownDwarf(actor)
+      case 9:
+        return this.createWhiteDwarf(actor)
       default:
         throw new Error("Couldn't resolve actor")
     }
@@ -133,6 +137,35 @@ class RenderableFactory {
     lod.name = actor.getAttribute('name', '') + 'LOD'
     lod.addLevel(body)
     lod.addLevel(impostor, lod.switchDistance(config('camera.fov')), config('brownDwarf.lodHysteresis'))
+
+    node.add(lod)
+
+    return node
+  }
+
+  private createWhiteDwarf(actor: Actor): Object3D {
+    const node = new DynamicNode(actor)
+    const lod = new ApparentSizeLod(
+      actor.physicalObject!.getAttribute('radius')!,
+      this.renderer,
+      WHITE_DWARF_IMPOSTOR_PIXELS
+    )
+    const body = new WhiteDwarf(actor)
+    const impostor = new WhiteDwarfImpostor(body, this.renderer)
+
+    // Ореол висит на LOD, а не на теле: он нужен на обоих уровнях, и сильнее
+    // всего на дальнем. У карлика это не украшение — при угловом размере в
+    // сотню раз меньше солнечного тело почти всегда мельче пикселя, и весь
+    // его вид несёт ореол. Отсюда opacity выше звёздной при меньшем масштабе:
+    // жёсткая искра, а не раздутая корона, которой у карлика нет физически
+    lod.add(new StarInnerLayer(actor, config('whiteDwarf.haloScale'), config('whiteDwarf.haloOpacity')))
+
+    node.name = actor.getAttribute('name', '')
+    node.renderable = body
+
+    lod.name = actor.getAttribute('name', '') + 'LOD'
+    lod.addLevel(body)
+    lod.addLevel(impostor, lod.switchDistance(config('camera.fov')), config('whiteDwarf.lodHysteresis'))
 
     node.add(lod)
 

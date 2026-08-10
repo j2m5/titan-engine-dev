@@ -353,6 +353,110 @@ describe('LensFlareEffect: анаморфный штрих', () => {
   })
 })
 
+describe('LensFlareEffect: потолок яркости источника штриха', () => {
+  const HALF_SAMPLES = 64
+  const TARGET_CLAMP = 60000
+  /** Rec. 709 — те же коэффициенты, что вставляет пролог three в luminance() */
+  const luminance = (c: readonly [number, number, number]): number => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+  /**
+   * CPU-зеркало накопления штриха для РОВНОЙ области яркости.
+   *
+   * Сумма softness по i из [-64, 64] равна ровно HALF_SAMPLES, поэтому для
+   * однородного поля цикл сворачивается в одно произведение — этого достаточно,
+   * чтобы поймать и насыщение, и действие потолка.
+   */
+  const streakForFlatField = (
+    color: readonly [number, number, number],
+    threshold: number,
+    tint: readonly [number, number, number],
+    sourceCeiling: number
+  ): number[] => {
+    const raw = luminance(color)
+    const limited = Math.min(raw, sourceCeiling)
+    const scaled = color.map((c) => (c * limited) / Math.max(raw, 1e-6))
+
+    return scaled.map((c, i) => Math.min(c * Math.max(limited - threshold, 0) * HALF_SAMPLES * tint[i], TARGET_CLAMP))
+  }
+
+  const WHITE_TINT = [1, 1, 1] as const
+  /** Sirius B: wdShade упирается в потолок HDR 64 во всех трёх каналах */
+  const SIRIUS_B = [64, 64, 64] as const
+  /** Обычная звезда: starEnergy максимум 3.0 * STAR_CORE_INTENSITY 4.0 */
+  const STAR = [12, 11, 10] as const
+
+  it('без потолка яркость белого карлика насыщает таргет штриха', () => {
+    // Пин самой болезни: полоса упирается в клэмп по всей длине, затухание
+    // вдоль неё пропадает, и она замазывает сам источник. Потолок в
+    // бесконечность — это поведение до правки
+    const saturated = streakForFlatField(SIRIUS_B, 0.3, WHITE_TINT, Infinity)
+
+    expect(saturated.every((c) => c === TARGET_CLAMP)).toBe(true)
+  })
+
+  it('потолок 16 уводит карлика из насыщения и возвращает затухание', () => {
+    const limited = streakForFlatField(SIRIUS_B, 0.3, WHITE_TINT, 16)
+
+    expect(limited.every((c) => c < TARGET_CLAMP)).toBe(true)
+  })
+
+  it('источник выше потолка даёт ровно то же, что источник НА потолке', () => {
+    // Смысл потолка: выше него яркость перестаёт влиять на штрих вовсе.
+    // Иначе Sirius B и G29-38 давали бы разный по силе штрих там, где оба
+    // уже за пределом линейного режима
+    const atCeiling = streakForFlatField([16, 16, 16], 0.3, WHITE_TINT, 16)
+    const wayAbove = streakForFlatField(SIRIUS_B, 0.3, WHITE_TINT, 16)
+
+    wayAbove.forEach((value, i) => expect(value).toBeCloseTo(atCeiling[i], 6))
+  })
+
+  it('ниже потолка не меняется ничего — звезда и диск ЧД остаются как были', () => {
+    // Потолок обязан быть невидим для всего, что уже работало: иначе это не
+    // починка карлика, а перенастройка всех сцен разом
+    const before = streakForFlatField(STAR, 0.3, WHITE_TINT, Infinity)
+    const after = streakForFlatField(STAR, 0.3, WHITE_TINT, 16)
+
+    after.forEach((value, i) => expect(value).toBeCloseTo(before[i], 6))
+  })
+
+  it('оттенок источника сохраняется: делится общий множитель, а не каналы порознь', () => {
+    // Поканальный кламп у Sirius B (64,64,64) прошёл бы незаметно, а у
+    // G29-38 (25.3, 31.5, 47.9) сплющил бы синеву в белое
+    const g2938 = [25.3, 31.5, 47.9] as const
+    const limited = streakForFlatField(g2938, 0.3, WHITE_TINT, 16)
+
+    expect(limited[2] / limited[0]).toBeCloseTo(g2938[2] / g2938[0], 6)
+  })
+
+  it('нулевой потолок гасит штрих — точка отката', () => {
+    expect(streakForFlatField(SIRIUS_B, 0.3, WHITE_TINT, 0)).toEqual([0, 0, 0])
+  })
+
+  it('шейдер ограничивает ЯРКОСТЬ источника до гейта, а не результат после него', () => {
+    const effect = new LensFlareEffect()
+    const source = effect.streakMaterial.fragmentShader
+
+    expect(source).toContain('uniform float streakSourceCeiling;')
+    expect(source).toContain('float limited = min(rawLuma, streakSourceCeiling);')
+    // гейт обязан считаться по ОГРАНИЧЕННОЙ яркости, иначе потолок ничего не даёт
+    expect(source).toContain('max(limited - streakThreshold, 0.0)')
+    expect(source).not.toContain('max(luminance(color) - streakThreshold, 0.0)')
+  })
+
+  it('ручка доезжает из конфига до юниформа', () => {
+    const effect = new LensFlareEffect({ streakSourceCeiling: lensFlare.lensFlare.streakSourceCeiling })
+
+    expect(effect.streakMaterial.streakSourceCeiling).toBe(lensFlare.lensFlare.streakSourceCeiling)
+  })
+
+  it('потолок закреплён ниже точки насыщения и выше рабочих сцен', () => {
+    // 31 — измеренная по формуле точка, где таргет клипается; звезда даёт ~10,
+    // номинальный диск ЧД ~16. Потолок обязан лежать между ними
+    expect(lensFlare.lensFlare.streakSourceCeiling).toBeLessThan(31)
+    expect(lensFlare.lensFlare.streakSourceCeiling).toBeGreaterThanOrEqual(16)
+  })
+})
+
 describe('LensFlareEffect: проход локального контраста', () => {
   it('материал артефактов читает буфер локального контраста, а не предразмытый', () => {
     // Призраки обязаны отбирать по локальному контрасту: плато диска звезды

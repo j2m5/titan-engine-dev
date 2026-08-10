@@ -88,6 +88,7 @@ export function createEffectPasses(camera: PerspectiveCamera): readonly [EffectP
     streakThreshold: config('lensFlare.streakThreshold'),
     streakScale: config('lensFlare.streakScale'),
     streakTint: config('lensFlare.streakTint'),
+    streakSourceCeiling: config('lensFlare.streakSourceCeiling'),
     // порог — общий с bloom: два разных числа разъехались бы при первой правке
     thresholdLevel: BLOOM_OPTIONS.luminanceThreshold
   })

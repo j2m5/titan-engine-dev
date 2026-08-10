@@ -70,5 +70,7 @@ export const Orbits: IOrbit[] = [
   { id: 64, actorId: 98, semiMajorAxis: 0.00227276, eccentricity: 0.142, inclination: 38.6, argOfPeriapsis: 250, ascendingNode: 320, meanAnomalyAtEpoch: 5, epoch: 2451545, period: 0 },
   { id: 65, actorId: 99, semiMajorAxis: 0.00454552, eccentricity: 0.211, inclination: 162.4, argOfPeriapsis: 70, ascendingNode: 80, meanAnomalyAtEpoch: 190, epoch: 2451545, period: 0 },
   { id: 66, actorId: 102, semiMajorAxis: 1.9194, eccentricity: 0.35, inclination: 100, argOfPeriapsis: 130, ascendingNode: 130, meanAnomalyAtEpoch: 0, epoch: 2461222.5, period: 10007.85 },
-  { id: 67, actorId: 103, semiMajorAxis: 1.5806, eccentricity: 0.35, inclination: 100, argOfPeriapsis: 310, ascendingNode: 130, meanAnomalyAtEpoch: 0, epoch: 2461222.5, period: 10007.85 }
+  { id: 67, actorId: 103, semiMajorAxis: 1.5806, eccentricity: 0.35, inclination: 100, argOfPeriapsis: 310, ascendingNode: 130, meanAnomalyAtEpoch: 0, epoch: 2461222.5, period: 10007.85 },
+  { id: 68, actorId: 105, semiMajorAxis: 6.542, eccentricity: 0.5923, inclination: 136.34, argOfPeriapsis: 329.16, ascendingNode: 45.4, meanAnomalyAtEpoch: 40.25, epoch: 2451545, period: 18309.4 },
+  { id: 69, actorId: 106, semiMajorAxis: 13.258, eccentricity: 0.5923, inclination: 136.34, argOfPeriapsis: 149.16, ascendingNode: 45.4, meanAnomalyAtEpoch: 40.25, epoch: 2451545, period: 18309.4 }
 ]
