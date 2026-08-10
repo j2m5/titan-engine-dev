@@ -5,17 +5,23 @@ import { STAR_CORE_INTENSITY } from '@/core/materials/shaders/lib/helpers'
 /**
  * Диск белого карлика (ближний LOD).
  *
- * Юниформов три, и это не заготовка под расширение: поверхность безлика по
- * физике, а цвет, яркость и лимбовое потемнение выводятся из одной величины —
- * температуры. Всё остальное, что есть у звезды (грануляция, шум, время,
- * протуберанцы), здесь отсутствовало бы даже при бесконечном бюджете.
+ * Юниформов поверхности три — цвет, интенсивность, planckX, — и это не
+ * заготовка под расширение: поверхность безлика по физике, а цвет, яркость и
+ * лимбовое потемнение выводятся из одной величины — температуры — и между
+ * собой не разводятся. Всё остальное, что есть у звезды (грануляция, шум,
+ * время, протуберанцы), здесь отсутствовало бы даже при бесконечном бюджете.
+ *
+ * Четвёртый юниформ, uProximityExposure, не свойство поверхности: это
+ * прокси-экспозиция камеры вблизи (см. proximityExposure.ts), пер-кадровая
+ * величина, которую пишет тело.
  */
 export const WhiteDwarfShaderTemplate: ShaderProps = {
   uniforms: {
     uColorBase: new Uniform(new Color()),
     /** hc/(lambda*k*Teff) по каналам R/G/B — единственный вход лимба, см. planckX */
     uPlanckX: new Uniform(new Vector3()),
-    uCoreIntensity: new Uniform(STAR_CORE_INTENSITY)
+    uCoreIntensity: new Uniform(STAR_CORE_INTENSITY),
+    uProximityExposure: new Uniform(1)
   },
   vertexShader: `
     varying vec3 vViewPosition;
@@ -53,6 +59,7 @@ export const WhiteDwarfShaderTemplate: ShaderProps = {
     uniform vec3 uColorBase;
     uniform vec3 uPlanckX;
     uniform float uCoreIntensity;
+    uniform float uProximityExposure;
 
     varying vec3 vViewPosition;
     varying vec3 vViewNormal;
@@ -72,7 +79,7 @@ export const WhiteDwarfShaderTemplate: ShaderProps = {
 
       // Вся композиция — одной точкой входа чанка. Импостор зовёт ту же функцию
       // тем же списком аргументов: разойтись двум LOD нечем
-      vec3 color = wdShade(mu, uColorBase, uPlanckX, uCoreIntensity);
+      vec3 color = wdShade(mu, uColorBase, uPlanckX, uCoreIntensity, uProximityExposure);
 
       gl_FragColor = vec4(color, 1.0);
 

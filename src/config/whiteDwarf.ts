@@ -22,6 +22,21 @@ export interface WhiteDwarfConfig {
      * короны у карлика нет физически (H/R ~ 3e-5).
      */
     haloScale: number
+    /**
+     * Пол прокси-экспозиции вплотную к телу: доля от откалиброванной яркости,
+     * когда диск занимает весь кадр. Физика поверхности не меняется — меняется
+     * адаптация камеры к слепящему источнику во всё поле зрения. Точка отката:
+     * 1 — спада нет, поведение до фичи (кадр у прилёта заливает белым).
+     */
+    proximityExposureFloor: number
+    /**
+     * Доля высоты кадра, с которой начинается спад. Ниже неё экспозиция
+     * РОВНО 1 — дальний вид не тронут ни битом. Для ориентира: точка прилёта
+     * навигации (3 радиуса) даёт долю около 0.71.
+     */
+    proximityExposureStart: number
+    /** Доля высоты кадра, где спад выходит на пол */
+    proximityExposureEnd: number
   }
 }
 
@@ -29,6 +44,10 @@ export const whiteDwarf: WhiteDwarfConfig = {
   whiteDwarf: {
     lodHysteresis: 0.05,
     haloOpacity: 0.05,
-    haloScale: 0.45
+    haloScale: 0.45,
+    // floor подобран по виду у прилёта (фон обязан остаться живым); start/end стартовые — приёмка за владельцем
+    proximityExposureFloor: 0.1,
+    proximityExposureStart: 0.1,
+    proximityExposureEnd: 0.65
   }
 }

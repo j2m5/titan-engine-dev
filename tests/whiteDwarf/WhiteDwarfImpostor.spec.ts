@@ -102,17 +102,16 @@ describe('импостор белого карлика', () => {
     expect(Object.keys(WhiteDwarfImpostorShaderTemplate.uniforms)).not.toContain('uTime')
   })
 
-  it('копирует значения юниформов с тела, а не заводит свои', () => {
+  it('шарит с телом САМИ объекты Uniform — скаляры включительно', () => {
     const body = new WhiteDwarf(stubActor())
     const impostor = new WhiteDwarfImpostor(body, fakeRenderer)
 
+    // Ссылка на Uniform, а не на value: снапшот скаляра (uCoreIntensity,
+    // uProximityExposure) молча разъехался бы с телом при первой live-правке —
+    // яркостный шов ровно на переключении LOD
     for (const key of SHARED_UNIFORMS) {
-      expect(impostor.material.uniforms[key].value).toEqual(body.material.uniforms[key].value)
+      expect(impostor.material.uniforms[key]).toBe(body.material.uniforms[key])
     }
-
-    // Цвет и planckX копируются по ССЫЛКЕ — правка на теле обязана доезжать
-    expect(impostor.material.uniforms.uColorBase.value).toBe(body.material.uniforms.uColorBase.value)
-    expect(impostor.material.uniforms.uPlanckX.value).toBe(body.material.uniforms.uPlanckX.value)
   })
 })
 

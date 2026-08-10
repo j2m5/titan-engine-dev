@@ -70,8 +70,12 @@ export const whiteDwarfSurface = `
    * планковских функций в видимой полосе, а НЕ как T^4: болометрическая
    * четвёртая степень у карлика почти вся уходит в EUV, которого камера не
    * видит, и дала бы завышение на порядок.
+   *
+   * exposure — прокси-экспозиция камеры вблизи (см. proximityExposure.ts):
+   * умножается ПОСЛЕ потолка, иначе у тела, пробившего потолок, спад яркости
+   * не работал бы вовсе — min съедал бы множитель.
    */
-  vec3 wdShade(float mu, vec3 baseColor, vec3 planckX, float intensity) {
-    return min(baseColor * intensity * wdLimb(mu, planckX), vec3(WD_HDR_CEILING));
+  vec3 wdShade(float mu, vec3 baseColor, vec3 planckX, float intensity, float exposure) {
+    return min(baseColor * intensity * wdLimb(mu, planckX), vec3(WD_HDR_CEILING)) * exposure;
   }
 `
