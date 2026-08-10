@@ -21,8 +21,11 @@ const vertexShader: string = `
  * Анаморфный штрих: горизонтальная растяжка ярких пикселей. Идеи перенесены из
  * `AnamorphicNode` (three, TSL) — сам узел под WebGPU и не переносим.
  *
- * Гейт множительный и не ограничен сверху: `max(luminance - threshold, 0)`
- * гасит тусклое в ноль, а яркое ядро вытягивает сильнее линейного.
+ * Гейт множительный: `max(luminance - threshold, 0)` гасит тусклое в ноль, а
+ * яркое ядро вытягивает сильнее линейного. Сверху его ограничивает
+ * `streakSourceCeiling` — без потолка квадратичный рост уводил сумму за предел
+ * half-float уже при яркости источника около 31 (см. комментарий у записи во
+ * фрагмент), и белый карлик с его 64 давал ровную полосу во весь кадр.
  *
  * В `inputBuffer` ждёт СОБСТВЕННЫЙ источник — понижение предразмытого буфера
  * (см. `LensFlareEffect`), а не исходный кадр: главную звезду от фоновых
@@ -45,6 +48,7 @@ const fragmentShader: string = `
   uniform float streakThreshold;
   uniform float streakScale;
   uniform vec3 streakTint;
+  uniform float streakSourceCeiling;
 
   in vec2 vUv;
 
@@ -54,9 +58,23 @@ const fragmentShader: string = `
     for (int i = -HALF_SAMPLES; i <= HALF_SAMPLES; i++) {
       float softness = 1.0 - abs(float(i)) / float(HALF_SAMPLES);
       vec2 uv = clamp(vUv + vec2(texelSize.x * float(i) * streakScale, 0.0), 0.0, 1.0);
-      vec3 color = texture(inputBuffer, uv).rgb;
+      vec3 raw = texture(inputBuffer, uv).rgb;
+      float rawLuma = luminance(raw);
 
-      total += color * max(luminance(color) - streakThreshold, 0.0) * softness;
+      // Потолок ЯРКОСТИ источника — та самая «лечить входом» из комментария к
+      // gl_FragColor ниже. Гейт квадратичен, поэтому источник вдвое ярче даёт
+      // штрих вчетверо сильнее, и белый карлик (яркость 64 против ~10 у звезды)
+      // уводил сумму далеко за клэмп таргета: полоса теряла затухание, шла во
+      // весь кадр ровной яркостью и замазывала сам источник.
+      //
+      // Делится ОБЩИЙ множитель, а не каналы порознь: поканальный кламп сплющил
+      // бы синеву карлика в белое, а тут оттенок источника доживает до тинта.
+      float limited = min(rawLuma, streakSourceCeiling);
+      vec3 color = raw * (limited / max(rawLuma, 1e-6));
+
+      // Гейт считается по ОГРАНИЧЕННОЙ яркости: возьми он сырую, потолок
+      // ослабил бы только цвет, а квадратичный рост остался бы на месте
+      total += color * max(limited - streakThreshold, 0.0) * softness;
     }
 
     // Потолок против Inf: гейт квадратичен по яркости, а нормировки нет, так что
@@ -77,12 +95,18 @@ export interface AnamorphicStreakMaterialParameters extends ShaderMaterialParame
   streakThreshold?: number
   streakScale?: number
   streakTint?: readonly [number, number, number]
+  streakSourceCeiling?: number
 }
 
 export const anamorphicStreakMaterialParametersDefaults = {
   streakThreshold: 0.3,
   streakScale: 5,
-  streakTint: [0.45, 0.6, 1.0] as const
+  streakTint: [0.45, 0.6, 1.0] as const,
+  /**
+   * Дефолт заведомо выше всего, что рисует движок: материал сам по себе ведёт
+   * себя как до появления потолка, а рабочее значение приходит из конфига.
+   */
+  streakSourceCeiling: 1e6
 } satisfies AnamorphicStreakMaterialParameters
 
 export class AnamorphicStreakMaterial extends ShaderMaterial {
@@ -92,6 +116,7 @@ export class AnamorphicStreakMaterial extends ShaderMaterial {
       streakThreshold,
       streakScale,
       streakTint,
+      streakSourceCeiling,
       ...others
     } = {
       ...anamorphicStreakMaterialParametersDefaults,
@@ -112,6 +137,7 @@ export class AnamorphicStreakMaterial extends ShaderMaterial {
         streakThreshold: new Uniform(streakThreshold),
         streakScale: new Uniform(streakScale),
         streakTint: new Uniform(new Vector3(streakTint[0], streakTint[1], streakTint[2])),
+        streakSourceCeiling: new Uniform(streakSourceCeiling),
         ...others.uniforms
       }
     })
@@ -155,5 +181,13 @@ export class AnamorphicStreakMaterial extends ShaderMaterial {
 
   set streakTint(value: Vector3) {
     this.uniforms.streakTint.value.copy(value)
+  }
+
+  get streakSourceCeiling(): number {
+    return this.uniforms.streakSourceCeiling.value
+  }
+
+  set streakSourceCeiling(value: number) {
+    this.uniforms.streakSourceCeiling.value = value
   }
 }

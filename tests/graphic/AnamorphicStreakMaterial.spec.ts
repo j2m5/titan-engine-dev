@@ -3,12 +3,16 @@ import { AnamorphicStreakMaterial } from '@/core/graphic/effects/lensflare/Anamo
 
 describe('AnamorphicStreakMaterial: анаморфный штрих', () => {
   it('гейт множительный и стоит внутри цикла отсчётов', () => {
-    // Множитель max(lum - threshold, 0) не ограничен сверху: тусклое гасится
-    // в ноль, яркое ядро вытягивается сильнее линейного — отсюда тонкая черта.
-    // Вычитающая форма — это призраки, у них другая механика
+    // Множитель max(lum - threshold, 0): тусклое гасится в ноль, яркое ядро
+    // вытягивается сильнее линейного — отсюда тонкая черта. Вычитающая форма —
+    // это призраки, у них другая механика.
+    //
+    // Аргументом идёт limited, а не сырая яркость: сверху гейт ограничен
+    // streakSourceCeiling (см. LensFlareContract). Возьми он luminance(raw) —
+    // потолок ослаблял бы только цвет, а квадратичный рост остался бы
     const material = new AnamorphicStreakMaterial()
 
-    expect(material.fragmentShader).toContain('max(luminance(color) - streakThreshold, 0.0)')
+    expect(material.fragmentShader).toContain('max(limited - streakThreshold, 0.0)')
     expect(material.fragmentShader).not.toContain('- streakThreshold, vec3(0.0))')
   })
 
@@ -35,6 +39,7 @@ describe('AnamorphicStreakMaterial: анаморфный штрих', () => {
     expect(Object.keys(material.uniforms).sort()).toEqual([
       'inputBuffer',
       'streakScale',
+      'streakSourceCeiling',
       'streakThreshold',
       'streakTint',
       'texelSize'
@@ -47,7 +52,7 @@ describe('AnamorphicStreakMaterial: анаморфный штрих', () => {
     // шейдер не использует
     const material = new AnamorphicStreakMaterial()
 
-    expect(material.fragmentShader).toContain('luminance(color)')
+    expect(material.fragmentShader).toContain('luminance(raw)')
     expect(material.fragmentShader).not.toContain('#include <common>')
     expect(material.fragmentShader).not.toContain('saturate(')
   })
