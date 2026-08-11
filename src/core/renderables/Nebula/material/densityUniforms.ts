@@ -1,5 +1,6 @@
-import { IUniform, Vector4 } from 'three'
-import { NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
+import { IUniform, Matrix3, Vector4 } from 'three'
+import { NEBULA_SHAPE_IDS, NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
+import { shapeRotationMatrix } from '@/core/renderables/Nebula/fields/NebulaField'
 
 /**
  * Set the density-FIELD uniforms (boundary / noise / lobes / cavities / Worley) on a
@@ -8,7 +9,12 @@ import { NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
  * march-only uniforms (steps, palette/dust/light, density absorption, opacity, time).
  */
 export function applyDensityUniforms(u: Record<string, IUniform>, params: NebulaParams): void {
-  u.uShape.value = params.shape === 'disk' ? 1 : 0
+  // Код берётся из единой таблицы, а не из цепочки тернарников: с пятью формами
+  // забытая ветка молча означала бы «эллипсоид»
+  u.uShape.value = NEBULA_SHAPE_IDS[params.shape] ?? NEBULA_SHAPE_IDS.ellipsoid
+  u.uShapeThickness.value = params.shapeThickness
+  // Строится тем же выражением, что и в CPU-зеркале: одна функция на обоих
+  ;(u.uShapeRotation.value as Matrix3).copy(shapeRotationMatrix(params.shapeRotation))
   u.uInvAxis.value.set(
     1 / Math.max(1e-4, params.axisRatios.x),
     1 / Math.max(1e-4, params.axisRatios.y),

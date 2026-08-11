@@ -1,6 +1,7 @@
 import { Color, Vector3 } from 'three'
+import { degToRad } from 'three/src/math/MathUtils'
 import { fromAstronomicalUnits } from '@/core/helpers/scaling'
-import { DeepPartial, NebulaParams, mergeNebulaParams } from '@/core/renderables/Nebula/NebulaParams'
+import { DeepPartial, NebulaParams, NebulaShape, mergeNebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { makeNebulaParams } from '@/core/renderables/Nebula/presets'
 
 /**
@@ -24,7 +25,11 @@ export interface NebulaRenderingData {
   seed?: number
   /** Полуразмер облака в АСТРОНОМИЧЕСКИХ ЕДИНИЦАХ (в NebulaParams — уже Three-юниты) */
   size?: number
-  shape?: 'ellipsoid' | 'disk'
+  shape?: NebulaShape
+  /** Толщина формы; смысл зависит от формы — см. NebulaParams.shapeThickness */
+  shapeThickness?: number
+  /** Поворот формы, эйлеровы углы XYZ в ГРАДУСАХ (в NebulaParams — уже радианы) */
+  shapeRotation?: NebulaTriple
   axisRatios?: NebulaTriple
   edgeFalloff?: number
   density?: number
@@ -69,6 +74,14 @@ export function nebulaParamsFromData(data: NebulaRenderingData): NebulaParams {
   if (data.seed !== undefined) overrides.seed = data.seed
   if (data.size !== undefined) overrides.size = fromAstronomicalUnits(data.size)
   if (data.shape !== undefined) overrides.shape = data.shape
+  if (data.shapeThickness !== undefined) overrides.shapeThickness = data.shapeThickness
+  // Градусы в данных, радианы в параметрах — как у всех углов в базе
+  if (data.shapeRotation)
+    overrides.shapeRotation = new Vector3(
+      degToRad(data.shapeRotation[0]),
+      degToRad(data.shapeRotation[1]),
+      degToRad(data.shapeRotation[2])
+    )
   if (data.axisRatios) overrides.axisRatios = toVector(data.axisRatios)
   if (data.edgeFalloff !== undefined) overrides.edgeFalloff = data.edgeFalloff
   if (data.density !== undefined) overrides.density = data.density

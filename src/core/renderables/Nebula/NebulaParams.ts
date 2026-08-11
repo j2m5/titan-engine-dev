@@ -4,7 +4,21 @@ export type DeepPartial<T> = {
   [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K]
 }
 
-export type NebulaShape = 'ellipsoid' | 'disk'
+/**
+ * Порядок значений несущий: он же кодирует uShape для шейдера (см.
+ * NEBULA_SHAPE_IDS). Вставлять новую форму в СЕРЕДИНУ нельзя — сдвинет коды у
+ * всех последующих.
+ */
+export type NebulaShape = 'ellipsoid' | 'disk' | 'shell' | 'torus' | 'hourglass'
+
+/** Код формы для uShape. Единственное место соответствия имени и числа */
+export const NEBULA_SHAPE_IDS: Readonly<Record<NebulaShape, number>> = {
+  ellipsoid: 0,
+  disk: 1,
+  shell: 2,
+  torus: 3,
+  hourglass: 4
+}
 export type NebulaLOD = 'raymarch' | 'impostor' | 'auto'
 
 export interface ColorStop {
@@ -30,6 +44,22 @@ export interface NebulaParams {
 
   size: number // proxy half-extent, Three.js units
   shape: NebulaShape
+  /**
+   * Толщина формы в локальных единицах. Смысл РАЗНЫЙ у разных форм, и это не
+   * экономия, а следствие того, что формы взаимоисключающие — живёт всегда
+   * ровно одно значение:
+   *  - shell: доля радиуса, занятая стенкой (внутренняя кромка на 1 - t);
+   *  - torus: радиус трубы, кольцо тогда радиуса 1 - t (труба касается границы);
+   *  - hourglass: радиус талии в самом узком месте;
+   *  - ellipsoid, disk: не используется вовсе.
+   */
+  shapeThickness: number
+  /**
+   * Поворот ФОРМЫ, эйлеровы углы XYZ в радианах. Применяется ДО axisRatios,
+   * поэтому сплющивание идёт по собственным осям формы, а не по осям прокси.
+   * Нули — тождественность, поведение до появления ручки.
+   */
+  shapeRotation: Vector3
   axisRatios: Vector3 // anisotropy (x,y,z)
   edgeFalloff: number
   density: number // optical thickness / absorption per step; lower = more transparent
@@ -103,6 +133,8 @@ function cloneNebulaParams(src: NebulaParams): NebulaParams {
     seed: src.seed,
     size: src.size,
     shape: src.shape,
+    shapeThickness: src.shapeThickness,
+    shapeRotation: src.shapeRotation.clone(),
     axisRatios: src.axisRatios.clone(),
     edgeFalloff: src.edgeFalloff,
     density: src.density,
@@ -133,6 +165,8 @@ export function makeDefaultNebulaParams(): NebulaParams {
     seed: 1337,
     size: 1000,
     shape: 'ellipsoid',
+    shapeThickness: 0.35,
+    shapeRotation: new Vector3(0, 0, 0),
     axisRatios: new Vector3(1, 0.8, 1),
     edgeFalloff: 0.35,
     density: 4.0,
@@ -207,6 +241,10 @@ export function mergeNebulaParams(
   if (o.seed !== undefined) result.seed = o.seed
   if (o.size !== undefined) result.size = o.size
   if (o.shape !== undefined) result.shape = o.shape
+  // Кламп несущий: нулевая толщина делит на ноль в торе, единичная схлопывает
+  // оболочку в точку, а отрицательная выворачивает талию песочных часов
+  if (o.shapeThickness !== undefined) result.shapeThickness = clamp(o.shapeThickness, 0.02, 0.98)
+  if (o.shapeRotation) result.shapeRotation.copy(o.shapeRotation as Vector3)
   if (o.axisRatios) result.axisRatios.copy(o.axisRatios as Vector3)
   if (o.edgeFalloff !== undefined) result.edgeFalloff = o.edgeFalloff
   if (o.density !== undefined) result.density = Math.max(0, o.density)

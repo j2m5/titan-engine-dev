@@ -1,10 +1,25 @@
-import { Vector3 } from 'three'
+import { Euler, Matrix3, Matrix4, Vector3 } from 'three'
 import { NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { fbm3 } from '@/core/renderables/Nebula/fields/valueNoise'
 
 // Disk vertical falloff is steeper than radial so a disk reads as genuinely
 // flatter than an ellipsoid at equal axisRatios.
 const DISK_VERTICAL_STEEPNESS = 2
+
+// Hourglass lobe bulge exponent. 1 would give cones; 2 gives the bulbs typical
+// of bipolar nebulae. Mirrors NEB_HOURGLASS_POWER in the GLSL chunk.
+const HOURGLASS_POWER = 2
+
+/**
+ * Матрица «пространство прокси -> пространство формы»: транспонированный
+ * поворот формы. Та же величина уезжает в uShapeRotation, и строится она здесь
+ * ровно тем же выражением — см. shapeRotationMatrix в densityUniforms.ts.
+ */
+export function shapeRotationMatrix(rotation: Vector3): Matrix3 {
+  const basis = new Matrix4().makeRotationFromEuler(new Euler(rotation.x, rotation.y, rotation.z, 'XYZ'))
+
+  return new Matrix3().setFromMatrix4(basis).transpose()
+}
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const width = edge1 - edge0
@@ -18,6 +33,8 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
 export class NebulaField {
   private readonly p: NebulaParams
   private readonly invAxis: Vector3
+  private readonly toShape: Matrix3
+  private readonly rotated: Vector3 = new Vector3()
 
   public constructor(params: NebulaParams) {
     this.p = params
@@ -26,23 +43,55 @@ export class NebulaField {
       1 / Math.max(1e-4, params.axisRatios.y),
       1 / Math.max(1e-4, params.axisRatios.z)
     )
+    this.toShape = shapeRotationMatrix(params.shapeRotation)
   }
 
-  /** Analytic shape falloff in local space [-1,1]; no noise. Returns [0,1]. */
+  /**
+   * Analytic shape falloff in local space [-1,1]; no noise. Returns [0,1].
+   * Mirror of nebBoundary in the GLSL chunk — MUST stay in sync line for line.
+   */
   public boundary(p: Vector3): number {
-    const x = p.x * this.invAxis.x
-    const y = p.y * this.invAxis.y
-    const z = p.z * this.invAxis.z
+    // Rotation BEFORE invAxis: axisRatios squash the shape along its OWN axes,
+    // not the proxy's. Identity rotation leaves this byte-identical to before.
+    const a = this.rotated.copy(p).applyMatrix3(this.toShape)
+    const x = a.x * this.invAxis.x
+    const y = a.y * this.invAxis.y
+    const z = a.z * this.invAxis.z
+    const t = this.p.shapeThickness
+    const edge = this.p.edgeFalloff
 
     if (this.p.shape === 'disk') {
       const r = Math.sqrt(x * x + z * z)
-      const radial = 1 - smoothstep(1 - this.p.edgeFalloff, 1, r)
-      const vertical = 1 - smoothstep(1 - this.p.edgeFalloff * DISK_VERTICAL_STEEPNESS, 1, Math.abs(y))
+      const radial = 1 - smoothstep(1 - edge, 1, r)
+      const vertical = 1 - smoothstep(1 - edge * DISK_VERTICAL_STEEPNESS, 1, Math.abs(y))
+      return Math.max(0, radial * vertical)
+    }
+
+    if (this.p.shape === 'shell') {
+      const r = Math.sqrt(x * x + y * y + z * z)
+      const inner = 1 - t
+      const outer = 1 - smoothstep(1 - edge, 1, r)
+      const hole = smoothstep(inner - edge * t, inner, r)
+      return Math.max(0, outer * hole)
+    }
+
+    if (this.p.shape === 'torus') {
+      const ring = 1 - t
+      const qx = Math.sqrt(x * x + z * z) - ring
+      const d = Math.sqrt(qx * qx + y * y) / Math.max(t, 1e-4)
+      return 1 - smoothstep(1 - edge, 1, d)
+    }
+
+    if (this.p.shape === 'hourglass') {
+      const bulge = Math.pow(Math.abs(y), HOURGLASS_POWER)
+      const waist = t * (1 - bulge) + 1 * bulge
+      const radial = 1 - smoothstep(waist * (1 - edge), waist, Math.sqrt(x * x + z * z))
+      const vertical = 1 - smoothstep(1 - edge, 1, Math.abs(y))
       return Math.max(0, radial * vertical)
     }
 
     const r = Math.sqrt(x * x + y * y + z * z)
-    return 1 - smoothstep(1 - this.p.edgeFalloff, 1, r)
+    return 1 - smoothstep(1 - edge, 1, r)
   }
 
   private noiseField(p: Vector3): number {

@@ -1,4 +1,4 @@
-import { Color, IUniform, Uniform, Vector3, Vector4 } from 'three'
+import { Color, IUniform, Matrix3, Uniform, Vector3, Vector4 } from 'three'
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { nebulaNoiseChunk } from './chunks/NebulaNoise'
 import { nebulaDensityChunk } from './chunks/NebulaDensity'
@@ -14,6 +14,8 @@ export function createNebulaUniforms(): Record<string, IUniform> {
     uTime: new Uniform(0),
     uShape: new Uniform(0),
     uInvAxis: new Uniform(new Vector3(1, 1, 1)),
+    uShapeThickness: new Uniform(0.35),
+    uShapeRotation: new Uniform(new Matrix3()),
     uEdgeFalloff: new Uniform(0.35),
     uOctaves: new Uniform(5),
     uFrequency: new Uniform(1.6),
