@@ -9,6 +9,7 @@ import {
   IRotationObject,
   IActorResource
 } from '@/core/models/types'
+import { NEBULA_SHAPE_IDS } from '@/core/renderables/Nebula/NebulaParams'
 
 /**
  * Валидатор целостности данных приложения.
@@ -288,7 +289,12 @@ function checkAtmosphereAnchoring(
   }
 }
 
-const NEBULA_SHAPES = new Set(['ellipsoid', 'disk'])
+/**
+ * Формы берутся из ЕДИНОГО источника, а не из копии списка. Копия уже разошлась
+ * однажды: shell, torus и hourglass завелись в NebulaShape и в шейдере, а
+ * валидатор продолжал знать только два имени и забраковал всю поставляемую базу.
+ */
+const NEBULA_SHAPES = new Set<string>(Object.keys(NEBULA_SHAPE_IDS))
 const NEBULA_PRESET_NAMES = new Set(['emission', 'reflection', 'dark'])
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
 
