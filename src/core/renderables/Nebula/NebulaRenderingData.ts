@@ -36,6 +36,10 @@ export interface NebulaRenderingData {
     secondary?: string
     secondaryThreshold?: number
     emissiveIntensity?: number
+    /** Доля радиального тона; 0 — цвет ведёт одна плотность (см. NebulaParams) */
+    radialMix?: number
+    innerColor?: string
+    outerColor?: string
   }
   dust?: { strength?: number; threshold?: number; color?: string }
   lighting?: {
@@ -94,7 +98,10 @@ export function nebulaParamsFromData(data: NebulaRenderingData): NebulaParams {
       stops: data.palette.stops?.map((stop) => ({ t: stop.t, color: new Color(stop.color) })),
       secondary: data.palette.secondary ? new Color(data.palette.secondary) : undefined,
       secondaryThreshold: data.palette.secondaryThreshold,
-      emissiveIntensity: data.palette.emissiveIntensity
+      emissiveIntensity: data.palette.emissiveIntensity,
+      radialMix: data.palette.radialMix,
+      innerColor: data.palette.innerColor ? new Color(data.palette.innerColor) : undefined,
+      outerColor: data.palette.outerColor ? new Color(data.palette.outerColor) : undefined
     }
   }
 

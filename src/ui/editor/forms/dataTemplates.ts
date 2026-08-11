@@ -88,7 +88,10 @@ export const renderingDataTemplates: DataTemplate[] = [
         ],
         secondary: '#5aa0d8',
         secondaryThreshold: 0.6,
-        emissiveIntensity: 1.6
+        emissiveIntensity: 1.6,
+        radialMix: 0,
+        innerColor: '#8fd8ff',
+        outerColor: '#b85a3a'
       },
       dust: { strength: 0.6, threshold: 0.55, color: '#05090c' }
     }
