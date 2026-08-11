@@ -112,5 +112,11 @@ export const Actors: IActor[] = [
   { id: 106, categoryId: 9, parentId: 104, name: "Sirius B", description: "", color: "#a4c2ff" },
   { id: 107, categoryId: 1, parentId: null, name: "Helix Nebula system", description: "", color: "#ffffff" },
   { id: 108, categoryId: 9, parentId: 107, name: "WD 2226-210", description: "", color: "#82aaff" },
-  { id: 109, categoryId: 7, parentId: 107, name: "Helix Nebula", description: "", color: "#3fd0c0" }
+  { id: 109, categoryId: 7, parentId: 107, name: "Helix Nebula", description: "", color: "#3fd0c0" },
+  { id: 110, categoryId: 1, parentId: null, name: "Ring Nebula system", description: "", color: "#ffffff" },
+  { id: 111, categoryId: 9, parentId: 110, name: "WD 1851+329", description: "", color: "#80a9ff" },
+  { id: 112, categoryId: 7, parentId: 110, name: "Ring Nebula", description: "", color: "#3fe0c8" },
+  { id: 113, categoryId: 1, parentId: null, name: "MyCn 18 system", description: "", color: "#ffffff" },
+  { id: 114, categoryId: 9, parentId: 113, name: "MyCn 18 nucleus", description: "", color: "#97b9ff" },
+  { id: 115, categoryId: 7, parentId: 113, name: "MyCn 18", description: "", color: "#d05a24" }
 ]

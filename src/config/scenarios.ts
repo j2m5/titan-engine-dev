@@ -108,5 +108,28 @@ export const Scenarios: ScenarioConfig[] = [
     // Этот разрыв масштабов и есть сцена — к звезде летят навигацией
     defaultCameraPosition: [0, fromAstronomicalUnits(90000), fromAstronomicalUnits(90000)],
     lightSources: [108]
+  },
+  {
+    id: 10,
+    rootId: 110,
+    name: 'Ring Nebula system',
+    description: 'M57: a genuine torus seen almost down its axis, lit by one of the hottest known stellar cores',
+    preview: 'unknown.png',
+    skybox: [1, 2, 3, 4, 5, 6],
+    // Полуразмер кольца — 19 000 а.е.; с 45 000 тор помещается в кадр целиком
+    defaultCameraPosition: [0, fromAstronomicalUnits(32000), fromAstronomicalUnits(32000)],
+    lightSources: [111]
+  },
+  {
+    id: 11,
+    rootId: 113,
+    name: 'MyCn 18 system',
+    description: 'The Engraved Hourglass Nebula: two lobes pinched to a narrow waist, named for the very shape',
+    preview: 'unknown.png',
+    skybox: [1, 2, 3, 4, 5, 6],
+    // Талия узкая (0.18 полуразмера), поэтому камера ставится дальше — иначе
+    // лепестки уходят за кадр раньше, чем читается сама форма
+    defaultCameraPosition: [0, fromAstronomicalUnits(36000), fromAstronomicalUnits(36000)],
+    lightSources: [114]
   }
 ]
