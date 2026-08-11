@@ -5,8 +5,10 @@
 export const nebulaDensityChunk = `
   #define NEB_MAX_LOBES 8  // nebula-program-local define; not the shared Noise.ts
 
-  uniform int   uShape;        // 0 ellipsoid, 1 disk
+  uniform int   uShape;        // 0 ellipsoid, 1 disk, 2 shell, 3 torus, 4 hourglass
   uniform vec3  uInvAxis;
+  uniform float uShapeThickness;
+  uniform mat3  uShapeRotation; // proxy space -> shape space (транспонированный поворот формы)
   uniform float uEdgeFalloff;
   uniform int   uOctaves;
   uniform float uFrequency;
@@ -28,18 +30,56 @@ export const nebulaDensityChunk = `
     uniform highp sampler3D uDensityTex;    // precomputed static density field
   #endif
 
+  // Показатель раздувания лепестков песочных часов. Единица дала бы конусы,
+  // двойка — характерные пузыри биполярных туманностей
+  #define NEB_HOURGLASS_POWER 2.0
+
   float nebBoundary(vec3 p) {
     // Mirror of NebulaField.boundary. The disk's vertical falloff is steeper
     // than radial (DISK_VERTICAL_STEEPNESS = 2) so a disk reads as genuinely
     // flatter than an ellipsoid at equal axisRatios. MUST stay in sync with CPU.
     const float diskVerticalSteepness = 2.0;
-    vec3 a = p * uInvAxis;
+
+    // Поворот идёт ДО uInvAxis: сплющивание задаётся по СОБСТВЕННЫМ осям формы,
+    // а не по осям прокси, иначе наклонённый тор сплющивался бы не по своей
+    // нормали. При единичной матрице выражение тождественно прежнему.
+    vec3 a = (uShapeRotation * p) * uInvAxis;
+
     if (uShape == 1) {
       float r = length(a.xz);
       float radial = 1.0 - smoothstep(1.0 - uEdgeFalloff, 1.0, r);
       float vertical = 1.0 - smoothstep(1.0 - uEdgeFalloff * diskVerticalSteepness, 1.0, abs(a.y));
       return max(0.0, radial * vertical);
     }
+
+    if (uShape == 2) {
+      // Полая сфера: внешняя кромка на 1, внутренняя на 1 - толщина
+      float r = length(a);
+      float inner = 1.0 - uShapeThickness;
+      float outer = 1.0 - smoothstep(1.0 - uEdgeFalloff, 1.0, r);
+      float hole = smoothstep(inner - uEdgeFalloff * uShapeThickness, inner, r);
+      return max(0.0, outer * hole);
+    }
+
+    if (uShape == 3) {
+      // Тор: расстояние до окружности радиуса 1 - толщина в плоскости XZ формы.
+      // Радиус кольца выводится из толщины, а не задаётся вторым числом, — так
+      // труба всегда касается границы прокси и не может из неё вылезти
+      float ring = 1.0 - uShapeThickness;
+      vec2 q = vec2(length(a.xz) - ring, a.y);
+      float d = length(q) / max(uShapeThickness, 1e-4);
+      return 1.0 - smoothstep(1.0 - uEdgeFalloff, 1.0, d);
+    }
+
+    if (uShape == 4) {
+      // Песочные часы: допустимый радиус в XZ растёт от талии на экваторе до
+      // единицы на полюсах
+      float waist = mix(uShapeThickness, 1.0, pow(abs(a.y), NEB_HOURGLASS_POWER));
+      float radial = 1.0 - smoothstep(waist * (1.0 - uEdgeFalloff), waist, length(a.xz));
+      float vertical = 1.0 - smoothstep(1.0 - uEdgeFalloff, 1.0, abs(a.y));
+      return max(0.0, radial * vertical);
+    }
+
     float r = length(a);
     return 1.0 - smoothstep(1.0 - uEdgeFalloff, 1.0, r);
   }
