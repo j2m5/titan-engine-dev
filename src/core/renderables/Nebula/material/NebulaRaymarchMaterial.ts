@@ -77,6 +77,9 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
     )
     u.uSecondaryColor.value.copy(pal.secondary)
     u.uSecondaryThreshold.value = pal.secondaryThreshold
+    u.uRadialMix.value = pal.radialMix
+    u.uInnerColor.value.copy(pal.innerColor)
+    u.uOuterColor.value.copy(pal.outerColor)
 
     u.uDustColor.value.copy(params.dust.color)
     u.uDustStrength.value = params.dust.strength

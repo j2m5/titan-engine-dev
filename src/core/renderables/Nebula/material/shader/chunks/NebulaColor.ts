@@ -15,6 +15,9 @@ export const nebulaColorChunk = `
   uniform float uAmbient;
   uniform vec3  uStarLocal;
   uniform float uHasStar;
+  uniform float uRadialMix;
+  uniform vec3  uInnerColor;
+  uniform vec3  uOuterColor;
 
   vec3 paletteLookup(float t) {
     vec3 c = uPalette0;
@@ -29,6 +32,24 @@ export const nebulaColorChunk = `
     // secondary ionization channel: tint dense regions toward the accent color
     float sec = smoothstep(uSecondaryThreshold, 1.0, density);
     base = mix(base, uSecondaryColor, sec * 0.6);
+
+    // Radial ionisation tint. Density answers "how thick"; in a planetary nebula
+    // the colour answers a different question — "how ionised" — and that one is
+    // radial: O III near the star, H-alpha further out, [N II] at the very rim.
+    // Standing in for it with density only holds while the two are correlated,
+    // which a knotted shell breaks.
+    //
+    // Gated on uRadialMix so the default (0) leaves every existing nebula byte
+    // for byte as it was — this chunk is shared by all of them.
+    //
+    // p is proxy-local in [-1,1]^3, so length(p) reaches 1 on an axis and sqrt(3)
+    // in a corner; the clamp flattens the corners. Good enough for a hue ramp —
+    // it would NOT be for a hard boundary, which is why nebBoundary scales by
+    // uInvAxis instead.
+    if (uRadialMix > 0.001) {
+      float radial = clamp(length(p), 0.0, 1.0);
+      base = mix(base, mix(uInnerColor, uOuterColor, radial), uRadialMix);
+    }
     // self-emission baseline (uAmbient) + optional white directional forward scatter
     float light = uAmbient;
     if (uHasStar > 0.5) {

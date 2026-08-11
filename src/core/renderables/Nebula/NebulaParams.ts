@@ -52,6 +52,21 @@ export interface NebulaParams {
     secondary: Color
     secondaryThreshold: number
     emissiveIntensity: number
+    /**
+     * Доля радиального тона в итоговом цвете. 0 — цвет ведёт ОДНА плотность,
+     * ровно как до появления этой ручки.
+     *
+     * Плотность отвечает на вопрос «насколько густо», а у планетарной
+     * туманности цвет отвечает на другой — «насколько ионизовано», и это
+     * величина радиальная: O III рядом со звездой, H-alpha дальше, [N II] на
+     * самой кромке. Подменять одно другим можно только пока плотность и радиус
+     * скоррелированы; у оболочки с узлами по всему объёму эта подмена течёт.
+     */
+    radialMix: number
+    /** Тон у центра (сильная ионизация). Не используется при radialMix = 0 */
+    innerColor: Color
+    /** Тон у внешней кромки (слабая ионизация). Не используется при radialMix = 0 */
+    outerColor: Color
   }
 
   dust: {
@@ -98,7 +113,10 @@ function cloneNebulaParams(src: NebulaParams): NebulaParams {
       stops: src.palette.stops.map((s) => ({ t: s.t, color: s.color.clone() })),
       secondary: src.palette.secondary.clone(),
       secondaryThreshold: src.palette.secondaryThreshold,
-      emissiveIntensity: src.palette.emissiveIntensity
+      emissiveIntensity: src.palette.emissiveIntensity,
+      radialMix: src.palette.radialMix,
+      innerColor: src.palette.innerColor.clone(),
+      outerColor: src.palette.outerColor.clone()
     },
     dust: { strength: src.dust.strength, threshold: src.dust.threshold, color: src.dust.color.clone() },
     lighting: {
@@ -142,7 +160,12 @@ export function makeDefaultNebulaParams(): NebulaParams {
       // soft cool blue accent in dense regions -> gentle blue<->green multichromy
       secondary: new Color(0x5aa0d8),
       secondaryThreshold: 0.6,
-      emissiveIntensity: 1.6
+      emissiveIntensity: 1.6,
+      // Ноль — несущий дефолт: чанк цвета общий на все туманности, и любое
+      // другое значение сдвинуло бы уже принятые сцены
+      radialMix: 0,
+      innerColor: new Color(0x8fd8ff),
+      outerColor: new Color(0xb85a3a)
     },
     dust: {
       strength: 0.6,
@@ -218,6 +241,12 @@ export function mergeNebulaParams(
       result.palette.secondaryThreshold = overrides.palette.secondaryThreshold
     if (overrides.palette.emissiveIntensity !== undefined)
       result.palette.emissiveIntensity = overrides.palette.emissiveIntensity
+    // Кламп несущий: смешивание вне [0, 1] экстраполирует за оба тона и уводит
+    // каналы в отрицательные значения
+    if (overrides.palette.radialMix !== undefined)
+      result.palette.radialMix = clamp(overrides.palette.radialMix, 0, 1)
+    if (overrides.palette.innerColor) result.palette.innerColor.copy(overrides.palette.innerColor as Color)
+    if (overrides.palette.outerColor) result.palette.outerColor.copy(overrides.palette.outerColor as Color)
   }
   if (overrides.dust) {
     if (overrides.dust.strength !== undefined) result.dust.strength = overrides.dust.strength
