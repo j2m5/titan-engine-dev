@@ -31,7 +31,8 @@ type DotValue<T, Path extends string> = Path extends `${infer Key}.${infer Rest}
 
 function createConfig<T>(data: Readonly<T>) {
   return function <P extends DotPaths<T>, F = undefined>(path: P, fallback?: F): DotValue<T, P> {
-    return path.split('.').reduce<any>((acc, key) => acc?.[key], data) ?? fallback
+    return (path.split('.').reduce<unknown>((acc, key) => (acc as Record<string, unknown> | undefined)?.[key], data) ??
+      fallback) as DotValue<T, P>
   }
 }
 

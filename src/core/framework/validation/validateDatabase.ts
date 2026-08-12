@@ -191,7 +191,10 @@ function isDensityLayer(value: unknown): boolean {
  * Форма данных атмосфер (duck-typing по solarIrradiance): битая структура
  * не ловится типами (data — свободный JSON) и роняет LUT-генератор в рантайме.
  */
-function checkAtmosphereShapes(rows: Array<{ id: number; actorId: number; data: any }>, issues: ValidationIssue[]): void {
+function checkAtmosphereShapes(
+  rows: Array<{ id: number; actorId: number; data: Record<string, unknown> | null }>,
+  issues: ValidationIssue[]
+): void {
   for (const row of rows) {
     if (!row.data || !('solarIrradiance' in row.data)) continue
 
@@ -242,7 +245,7 @@ function checkAtmosphereShapes(rows: Array<{ id: number; actorId: number; data: 
  * (H = √(top² − bottom²)).
  */
 function checkAtmosphereAnchoring(
-  renderingObjects: Array<{ id: number; actorId: number; data: any }>,
+  renderingObjects: Array<{ id: number; actorId: number; data: Record<string, unknown> | null }>,
   actors: IActor[],
   physicalObjects: IPhysicalObject[],
   issues: ValidationIssue[]
@@ -256,10 +259,17 @@ function checkAtmosphereAnchoring(
   for (const row of renderingObjects) {
     if (!row.data || !('solarIrradiance' in row.data)) continue
 
-    const bottom = row.data.bottomRadius
-    const top = row.data.topRadius
+    const bottom: unknown = row.data.bottomRadius
+    const top: unknown = row.data.topRadius
 
-    if (!Number.isFinite(bottom) || !Number.isFinite(top) || bottom <= 0 || top <= bottom) {
+    if (
+      typeof bottom !== 'number' ||
+      typeof top !== 'number' ||
+      !Number.isFinite(bottom) ||
+      !Number.isFinite(top) ||
+      bottom <= 0 ||
+      top <= bottom
+    ) {
       issues.push({
         level: 'error',
         collection: 'renderingObjects',
