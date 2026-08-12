@@ -253,7 +253,7 @@ export class LensFlareEffect extends Effect {
     this.streakPass.initialize(renderer, alpha, frameBufferType)
   }
 
-  override update(renderer: WebGLRenderer, inputBuffer: WebGLRenderTarget, deltaTime?: number): void {
+  override update(renderer: WebGLRenderer, inputBuffer: WebGLRenderTarget, _deltaTime?: number): void {
     if (this.camera !== null) {
       this.featuresMaterial.starburstRotation = computeStarburstRotation(this.camera.matrixWorld)
     }

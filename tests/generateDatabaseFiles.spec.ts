@@ -12,7 +12,6 @@ function parseGeneratedArray(content: string): unknown[] {
   const lastBracket = arrayLiteral.lastIndexOf(']')
   const expr = arrayLiteral.slice(0, lastBracket + 1)
 
-  // eslint-disable-next-line no-new-func
   return Function(`return (${expr})`)() as unknown[]
 }
 
