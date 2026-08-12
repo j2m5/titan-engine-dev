@@ -13,6 +13,7 @@ vi.mock('@/core/renderables/DetailedRingStreamingSystem/RingAlphaReadback', () =
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { Actor } from '@/core/models/Actor'
+import { poolOf } from '../helpers/ringSystemInternals'
 
 const makeFakeActor = (): Actor =>
   ({
@@ -21,12 +22,10 @@ const makeFakeActor = (): Actor =>
     resources: { first: () => ({ getAttribute: () => 'ring.png' }) }
   }) as unknown as Actor
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- приватные поля в тестах, как в соседних спеках */
-
 describe('AsteroidRingSystem: PBR-микрослой (детальные текстуры)', () => {
   it('текстуры доступны → слой включён, юниформы заполнены', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
-    const u = (system as any).pool.geometryMaterial.uniforms
+    const u = poolOf(system).geometryMaterial.uniforms
     expect(u.uDetailMapsEnabled.value).toBe(1)
     expect(u.uRockDiffMap.value).toBe(fakeTexture)
     expect(u.uRockNorMap.value).toBe(fakeTexture)
@@ -38,7 +37,7 @@ describe('AsteroidRingSystem: PBR-микрослой (детальные тек�
 
   it('ручки конфига переопределяют дефолты', () => {
     const system = new AsteroidRingSystem(makeFakeActor(), { detailRepeats: 4, detailSaturation: 0.1 })
-    const u = (system as any).pool.geometryMaterial.uniforms
+    const u = poolOf(system).geometryMaterial.uniforms
     expect(u.uDetailScale.value).toBeCloseTo(4 / toThreeJSUnits(10), 6)
     expect(u.uDetailSaturation.value).toBeCloseTo(0.1, 10)
   })
@@ -84,7 +83,7 @@ describe('AsteroidRingSystem: PBR-микрослой недоступен', () =
     }))
     const { AsteroidRingSystem: Sys } = await import('@/core/renderables/DetailedRingStreamingSystem')
     const system = new Sys(makeFakeActor())
-    const u = (system as any).pool.geometryMaterial.uniforms
+    const u = poolOf(system).geometryMaterial.uniforms
     expect(u.uDetailMapsEnabled.value).toBe(0)
   })
 })

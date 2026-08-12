@@ -8,6 +8,7 @@ vi.mock('@/core/services/ResourceStorage', () => ({
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
 import { Actor } from '@/core/models/Actor'
 import type { InstancedMesh } from 'three'
+import { poolOf } from '../helpers/ringSystemInternals'
 
 const makeFakeActor = (): Actor =>
   ({
@@ -15,8 +16,6 @@ const makeFakeActor = (): Actor =>
     renderingObject: { getAttribute: () => ({ innerRadius: 70000, outerRadius: 140000 }) },
     resources: { first: () => ({ getAttribute: () => 'ring.png' }) }
   }) as unknown as Actor
-
-/* eslint-disable @typescript-eslint/no-explicit-any -- приватные поля в тестах, как в соседних спеках */
 
 describe('AsteroidRingSystem: библиотека архетипов в рендере (K из конфига)', () => {
   it('при дефолте — 2K+1=29 рендер-объектов пула (14 Geometry + 14 Near + 1 billboard)', () => {
@@ -35,12 +34,12 @@ describe('AsteroidRingSystem: библиотека архетипов в рен�
 
   it('все Geometry-меши делят один материал, юниформы профиля живут в нём', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
-    const geometryMeshes = (system as any).pool.geometryMeshes as InstancedMesh[]
+    const geometryMeshes = poolOf(system).geometryMeshes as InstancedMesh[]
 
     const materials = new Set(geometryMeshes.map((m) => m.material))
     expect(materials.size).toBe(1)
 
-    const sharedMaterial = (system as any).pool.geometryMaterial
+    const sharedMaterial = poolOf(system).geometryMaterial
     expect(geometryMeshes[0].material).toBe(sharedMaterial)
     expect(sharedMaterial.uniforms.uRockColor).toBeDefined()
   })
@@ -50,13 +49,13 @@ describe('AsteroidRingSystem: библиотека архетипов в рен�
     const renderObjects = system.children.filter((c) => c.name.startsWith('AsteroidPool_'))
 
     expect(renderObjects.length).toBe(7)
-    expect((system as any).pool.geometryMeshes.length).toBe(3)
-    expect((system as any).pool.nearMeshes.length).toBe(3)
+    expect(poolOf(system).geometryMeshes.length).toBe(3)
+    expect(poolOf(system).nearMeshes.length).toBe(3)
   })
 
   it('геометрии Geometry-мешей попарно различны (первые вершины позиций не совпадают)', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
-    const geometryMeshes = (system as any).pool.geometryMeshes as InstancedMesh[]
+    const geometryMeshes = poolOf(system).geometryMeshes as InstancedMesh[]
 
     const firstVertices = geometryMeshes.map((m) => {
       const pos = m.geometry.getAttribute('position')

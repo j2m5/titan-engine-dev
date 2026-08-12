@@ -9,6 +9,7 @@ import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSyst
 import { Actor } from '@/core/models/Actor'
 import { IcosahedronGeometry } from 'three'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { internalsOf, poolOf, thresholdsOf } from '../helpers/ringSystemInternals'
 
 const makeFakeActor = (): Actor =>
   ({
@@ -17,12 +18,10 @@ const makeFakeActor = (): Actor =>
     resources: { first: () => ({ getAttribute: () => 'ring.png' }) }
   }) as unknown as Actor
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- приватные поля в тестах, как в соседних спеках */
-
 describe('AsteroidRingSystem: запечённый архетип в L0', () => {
   it('L0-геометрия — запечённый осколок: тесселяция detail 3, радиусы вершин НЕ равны константе', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
-    const pos = (system as any).pool.geometryMeshes[0].geometry.getAttribute('position')
+    const pos = poolOf(system).geometryMeshes[0].geometry.getAttribute('position')
     expect(pos.count).toBe(new IcosahedronGeometry(1, 3).getAttribute('position').count)
     // Икосаэдр имел бы все |v| = asteroidSize; у осколка радиусы разные
     const radii = new Set<number>()
@@ -35,14 +34,14 @@ describe('AsteroidRingSystem: запечённый архетип в L0', () => 
   it('детерминизм: две системы одного профиля делят форму (побитово равные позиции)', () => {
     const a = new AsteroidRingSystem(makeFakeActor())
     const b = new AsteroidRingSystem(makeFakeActor())
-    const pa = (a as any).pool.geometryMeshes[0].geometry.getAttribute('position').array as Float32Array
-    const pb = (b as any).pool.geometryMeshes[0].geometry.getAttribute('position').array as Float32Array
+    const pa = poolOf(a).geometryMeshes[0].geometry.getAttribute('position').array as Float32Array
+    const pb = poolOf(b).geometryMeshes[0].geometry.getAttribute('position').array as Float32Array
     expect(Array.from(pa.slice(0, 300))).toEqual(Array.from(pb.slice(0, 300)))
   })
 
   it('остаточные амплитуды по умолчанию: 0.03–0.06', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
-    const u = (system as any).pool.geometryMaterial.uniforms
+    const u = poolOf(system).geometryMaterial.uniforms
     expect(u.uShapeAmpMin.value).toBeCloseTo(0.03, 10)
     expect(u.uShapeAmpMax.value).toBeCloseTo(0.06, 10)
   })
@@ -50,8 +49,8 @@ describe('AsteroidRingSystem: запечённый архетип в L0', () => 
   it('LOD-пороги Near-тира из конфига доходят в SectorManager', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
     // Приватный доступ к менеджеру и его thresholds (паттерн соседних спек)
-    const manager = (system as any).manager
-    const thresholds = (manager as any).thresholds
+    const manager = internalsOf(system).manager
+    const thresholds = thresholdsOf(manager)
 
     // Дефолты: l0Near=2500, l0NearExit=3200 км
     // Пороги конвертируются в TU при setup
@@ -72,8 +71,8 @@ describe('AsteroidRingSystem: запечённый архетип в L0', () => 
       }
     })
 
-    const manager = (system as any).manager
-    const thresholds = (manager as any).thresholds
+    const manager = internalsOf(system).manager
+    const thresholds = thresholdsOf(manager)
 
     expect(thresholds.nearEnterDistance).toBeCloseTo(toThreeJSUnits(100), 5)
     expect(thresholds.nearExitDistance).toBeCloseTo(toThreeJSUnits(200), 5)
@@ -85,7 +84,7 @@ describe('AsteroidRingSystem: запечённый архетип в L0', () => 
     // накрывает окно Geometry → сектора ходят Billboard↔Near, Geometry-стримы
     // вечно пусты. Дефолты обязаны держать зазор.
     const system = new AsteroidRingSystem(makeFakeActor())
-    const cfg = (system as any).config
+    const cfg = internalsOf(system).config
     const halfDiagonalKm = cfg.cellSizeKm * Math.SQRT2 * 0.5
     expect(cfg.lodThresholdsKm.l0).toBeGreaterThan(cfg.lodThresholdsKm.l0NearExit + halfDiagonalKm)
   })
