@@ -7,6 +7,7 @@ vi.mock('@/core/services/ResourceStorage', () => ({
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
 import { ASTEROID_PROFILES } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
 import { Actor } from '@/core/models/Actor'
+import { poolOf } from '../helpers/ringSystemInternals'
 
 const makeFakeActor = (): Actor =>
   ({
@@ -19,7 +20,7 @@ const makeFakeActor = (): Actor =>
 describe('AsteroidRingSystem: профили облика', () => {
   it('дефолтом применяет профиль stony к L0-материалу', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
-    const u = (system as any).pool.geometryMaterial.uniforms
+    const u = poolOf(system).geometryMaterial.uniforms
     expect(u.uRockColor.value.getHex()).toBe(ASTEROID_PROFILES.stony.baseColor)
     expect(u.uMariaStrength.value).toBe(ASTEROID_PROFILES.stony.mariaStrength)
     expect(u.uSpecularStrength.value).toBe(ASTEROID_PROFILES.stony.specularStrength)
@@ -27,7 +28,7 @@ describe('AsteroidRingSystem: профили облика', () => {
 
   it('уважает override profile: icy', () => {
     const system = new AsteroidRingSystem(makeFakeActor(), { profile: 'icy' })
-    const u = (system as any).pool.geometryMaterial.uniforms
+    const u = poolOf(system).geometryMaterial.uniforms
     expect(u.uRockColor.value.getHex()).toBe(ASTEROID_PROFILES.icy.baseColor)
     expect(u.uSpecularPower.value).toBe(ASTEROID_PROFILES.icy.specularPower)
     expect(u.uMariaStrength.value).toBe(ASTEROID_PROFILES.icy.mariaStrength)

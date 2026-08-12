@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateDatabaseFiles, GeneratorInput } from '@/core/framework/generation/generateDatabaseFiles'
 import { DatabaseSnapshot, ScenarioRefs } from '@/core/framework/validation/validateDatabase'
+import { shippedSnapshot } from './helpers/shippedSnapshot'
 
 function parseGeneratedArray(content: string): unknown[] {
   const start = content.indexOf('= [')
@@ -236,19 +237,7 @@ describe('generateDatabaseFiles — защита валидатором', () => 
 
 describe('generateDatabaseFiles — round-trip на реальном database', () => {
   it('реальные данные переживают генерацию без потерь', async () => {
-    const { database } = await import('@/config/database')
-
-    const snapshot: GeneratorInput = {
-      categories: database.get('categories') as any,
-      actors: database.get('actors') as any,
-      orbits: database.get('orbits') as any,
-      rotationObjects: database.get('rotationObjects') as any,
-      physicalObjects: database.get('physicalObjects') as any,
-      renderingObjects: database.get('renderingObjects') as any,
-      placements: database.get('placements') as any,
-      resources: database.get('resources') as any,
-      actorResource: database.get('actorResource') as any
-    }
+    const snapshot: GeneratorInput = await shippedSnapshot()
 
     const { Scenarios } = await import('@/config/scenarios')
     const scenarioRefs: ScenarioRefs[] = Scenarios.map((s) => ({

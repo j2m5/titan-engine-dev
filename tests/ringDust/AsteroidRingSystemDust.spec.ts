@@ -7,6 +7,7 @@ vi.mock('@/core/services/ResourceStorage', () => ({
 
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
 import { Actor } from '@/core/models/Actor'
+import { poolOf } from '../helpers/ringSystemInternals'
 
 const makeFakeActor = (): Actor =>
   ({
@@ -26,14 +27,14 @@ describe('AsteroidRingSystem dust integration', () => {
   it('калибрует плотность через целевой tau грейзинг-луча (dustTauGrazing / ширину кольца)', () => {
     // Явный override: тест проверяет формулу калибровки, а не дефолт
     const system = new AsteroidRingSystem(makeFakeActor(), { dustTauGrazing: 0.3 })
-    const u = (system as any).pool.billboardMaterial.uniforms
+    const u = poolOf(system).billboardMaterial.uniforms
     const width = u.uDustRingOuter.value - u.uDustRingInner.value
     expect(u.uDustDensity.value).toBeCloseTo(0.3 / width, 10)
   })
 
   it('передаёт гейт и рамп в материалы камней', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
-    const u = (system as any).pool.billboardMaterial.uniforms
+    const u = poolOf(system).billboardMaterial.uniforms
     expect(u.uDustAnglePower.value).toBe(2)
     expect(u.uDustNearFade.value).toBeGreaterThan(0)
   })
@@ -42,7 +43,7 @@ describe('AsteroidRingSystem dust integration', () => {
     const system = new AsteroidRingSystem(makeFakeActor(), { dustEnabled: false })
     const dust = system.children.find((c) => c.name === 'RingDustVolume')
     expect(dust).toBeUndefined()
-    const uniforms = (system as any).pool.billboardMaterial.uniforms
+    const uniforms = poolOf(system).billboardMaterial.uniforms
     expect(uniforms.uDustDensity.value).toBe(0)
   })
 })

@@ -20,7 +20,7 @@ const makeRockUniforms = () => ({ uDustDensity: { value: 0.02 } })
 
 describe('installRingDustDebug', () => {
   afterEach(() => {
-    delete (window as any).__titanRingDust
+    delete (window as unknown as { __titanRingDust?: unknown }).__titanRingDust
   })
 
   it('вешает хендл на window и переключает debug-режим объёма', () => {
