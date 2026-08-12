@@ -23,7 +23,7 @@ interface TableSpec<T> {
   rows: T[]
 }
 
-export interface GeneratorInput extends DatabaseSnapshot {}
+export type GeneratorInput = DatabaseSnapshot
 
 export interface GeneratedFile {
   path: string
