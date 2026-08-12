@@ -20,7 +20,7 @@ async function bootstrap(): Promise<void> {
     UiServiceProvider
   ]).bootstrap()
 
-  Command.useContainer(container)
+  Command.bindContainer(container)
 
   // Дебаг-сцена атмосферы: ?atmoDebug=<actorId> вместо приложения.
   // Модели ORM живут со статических импортов — контейнера достаточно.
