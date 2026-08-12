@@ -35,7 +35,7 @@ const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelet
     optionLabel: 'actorName' | 'resourcePath' | 'name' | undefined,
     excludeId?: number
   ): TitanSelectOption[] => {
-    // @ts-ignore
+    // @ts-expect-error draft[refTable] access lacks type narrowing
     const rows = draft[refTable] as Array<Record<string, unknown>>
     return rows
       .filter((r) => (excludeId === undefined ? true : r.id !== excludeId))
@@ -152,7 +152,7 @@ const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelet
         )
 
       case 'json': {
-        // @ts-ignore
+        // @ts-expect-error draft[spec.table] access lacks type narrowing
         const rowsOfTable = draft[spec.table] as Array<Record<string, unknown>>
         const cloneOptions = rowsOfTable
           .filter((r) => r.id !== row.id)
