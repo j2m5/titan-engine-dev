@@ -27,10 +27,10 @@ export function useDebounce(
 }
 
 function debounce<TArgs extends unknown[]>(fn: (...args: TArgs) => void, delay: number): (...args: TArgs) => void {
-  let timer: ReturnType<typeof setTimeout> | null = null
+  let timer: number | null = null
 
   return function (...args: TArgs) {
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(() => fn(...args), delay)
+    if (timer) window.clearTimeout(timer)
+    timer = window.setTimeout(() => fn(...args), delay)
   }
 }
