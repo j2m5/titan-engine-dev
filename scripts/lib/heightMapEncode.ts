@@ -15,6 +15,14 @@ export function resolveHeightRange(
   minMeters?: number,
   maxMeters?: number
 ): { minMeters: number; maxMeters: number } {
+  // Валидация явных границ: NaN не допускается.
+  if (minMeters !== undefined && !Number.isFinite(minMeters)) {
+    throw new Error(`Граница диапазона minMeters невалидна: ${minMeters}`)
+  }
+  if (maxMeters !== undefined && !Number.isFinite(maxMeters)) {
+    throw new Error(`Граница диапазона maxMeters невалидна: ${maxMeters}`)
+  }
+
   // Если обе границы явно заданы, возвращаем как есть (данные не сканируются).
   if (minMeters !== undefined && maxMeters !== undefined) {
     return { minMeters, maxMeters }
@@ -40,8 +48,9 @@ export function resolveHeightRange(
 export function normalizeToUint16(data: Float32Array, minMeters: number, maxMeters: number): Uint16Array {
   const span = maxMeters - minMeters
 
-  if (span <= 0) {
-    throw new Error(`Диапазон высот пуст: min=${minMeters}, max=${maxMeters}`)
+  // Форма `!(span > 0)` ловит и NaN: `!(NaN > 0)` === true, в отличие от `NaN <= 0` === false.
+  if (!(span > 0)) {
+    throw new Error(`Диапазон высот пуст или невалиден: min=${minMeters}, max=${maxMeters}`)
   }
 
   const out = new Uint16Array(data.length)

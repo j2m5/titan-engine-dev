@@ -35,10 +35,31 @@ if (!input || !output) {
   process.exit(1)
 }
 
-const dem = await resampleDem(input, width, height)
+// Валидация числовых флагов: если флаг задан, Number(...) должен быть конечным числом.
+// Это ловит случай «флаг без значения» (argument() возвращает следующий флаг → NaN).
+if (!Number.isFinite(width)) {
+  console.error('Флаг --width должен быть конечным числом, получено:', argument('width'))
+  process.exit(1)
+}
+if (!Number.isFinite(height)) {
+  console.error('Флаг --height должен быть конечным числом, получено:', argument('height'))
+  process.exit(1)
+}
 
 const minArg = argument('min-meters')
 const maxArg = argument('max-meters')
+
+// Валидация флагов диапазона до загрузки файла — экономит время на битых аргументах.
+if (minArg !== undefined && !Number.isFinite(Number(minArg))) {
+  console.error('Флаг --min-meters должен быть конечным числом, получено:', minArg)
+  process.exit(1)
+}
+if (maxArg !== undefined && !Number.isFinite(Number(maxArg))) {
+  console.error('Флаг --max-meters должен быть конечным числом, получено:', maxArg)
+  process.exit(1)
+}
+
+const dem = await resampleDem(input, width, height)
 
 // Разрешение диапазона высот: явные аргументы приоритизируются, отсутствующие берутся из данных.
 // Отслеживаем явность каждой границы отдельно — скан не трогает явно заданные значения.

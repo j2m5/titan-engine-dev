@@ -86,4 +86,38 @@ describe('resolveHeightRange: явные границы не затираютс�
     expect(range.minMeters).toBe(-5000)
     expect(range.maxMeters).toBe(500)
   })
+
+  it('NaN-граница minMeters — ошибка, а не молчаливое распространение', () => {
+    expect(() => resolveHeightRange(new Float32Array([1, 2]), NaN, 500)).toThrow()
+  })
+
+  it('NaN-граница maxMeters — ошибка, а не молчаливое распространение', () => {
+    expect(() => resolveHeightRange(new Float32Array([1, 2]), -500, NaN)).toThrow()
+  })
+})
+
+describe('normalizeToUint16: NaN-диапазон', () => {
+  it('NaN-диапазон минимума — ошибка, а не деление на NaN', () => {
+    expect(() => normalizeToUint16(new Float32Array([1]), NaN, 500)).toThrow()
+  })
+
+  it('NaN-диапазон максимума — ошибка, а не деление на NaN', () => {
+    expect(() => normalizeToUint16(new Float32Array([1]), 0, NaN)).toThrow()
+  })
+})
+
+describe('parseHeightMap: NaN в заголовке', () => {
+  it('NaN в заголовке minMeters — ошибка парсера, а не NaN-вершины', () => {
+    const encoded = encodeHeightMap({ width: 1, height: 1, minMeters: 0, maxMeters: 1, data: new Uint16Array([1]) })
+    encoded.writeFloatLE(NaN, 16)
+
+    expect(() => parseHeightMap(toArrayBuffer(encoded))).toThrow()
+  })
+
+  it('NaN в заголовке maxMeters — ошибка парсера, а не NaN-вершины', () => {
+    const encoded = encodeHeightMap({ width: 1, height: 1, minMeters: 0, maxMeters: 1, data: new Uint16Array([1]) })
+    encoded.writeFloatLE(NaN, 20)
+
+    expect(() => parseHeightMap(toArrayBuffer(encoded))).toThrow()
+  })
 })

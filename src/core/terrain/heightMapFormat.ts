@@ -40,6 +40,12 @@ export function parseHeightMap(buffer: ArrayBuffer): HeightMapData {
   const height = view.getUint32(12, true)
   const minMeters = view.getFloat32(16, true)
   const maxMeters = view.getFloat32(20, true)
+
+  // Валидация диапазона высот: битый заголовок не должен доехать до вычислений с NaN.
+  if (!Number.isFinite(minMeters) || !Number.isFinite(maxMeters)) {
+    throw new Error(`Карта высот: невалидные границы диапазона minMeters=${minMeters}, maxMeters=${maxMeters}`)
+  }
+
   const expectedBytes = HEIGHT_MAP_HEADER_BYTES + width * height * 2
 
   if (buffer.byteLength !== expectedBytes) {
