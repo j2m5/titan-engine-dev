@@ -1,4 +1,6 @@
-import { Object3D, Vector3 } from 'three'
+import { Object3D, PerspectiveCamera, Vector3 } from 'three'
+import type { SceneObserver } from '@/core/services/SceneObserver'
+import { CameraCollision } from '@/core/services/CameraCollision'
 
 export type ModelStub = {
   physicalObject: { getAttribute: (key: string) => unknown } | null
@@ -35,4 +37,20 @@ export function makeBody(
   body.model = (model ?? makeModel(radiusKm)) as never
 
   return body
+}
+
+/**
+ * Сервис с камерой и наблюдателем-заглушкой: CameraCollision читает у
+ * SceneObserver только `objects`.
+ */
+export function makeCollision(
+  objects: Object3D[],
+  cameraPosition: Vector3
+): { collision: CameraCollision; camera: PerspectiveCamera } {
+  const camera = new PerspectiveCamera()
+  camera.position.copy(cameraPosition)
+
+  const collision = new CameraCollision(camera, { objects } as unknown as SceneObserver)
+
+  return { collision, camera }
 }
