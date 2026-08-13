@@ -99,3 +99,71 @@ describe('CameraCollision: пуш-аут', () => {
     expect(camera.position.toArray()).toEqual([1, 2, 3])
   })
 })
+
+describe('CameraCollision: свип и скольжение', () => {
+  it('пролёт насквозь за один кадр пойман на входе (туннелирование)', () => {
+    const body = makeBody('planet', EARTH_RADIUS_KM)
+    const { collision, camera } = makeCollision([body], new Vector3(-R * 1000, 0, 0))
+
+    collision.resolve()
+    camera.position.set(R * 1000, 0, 0)
+    collision.resolve()
+
+    // Лобовое движение: касательной составляющей нет, камера у точки входа
+    expect(camera.position.x).toBeCloseTo(-R, 3)
+    expect(camera.position.length()).toBeGreaterThanOrEqual(R - 1e-9)
+  })
+
+  it('движение под углом скользит по поверхности: нормаль погашена, касательная жива', () => {
+    const body = makeBody('planet', EARTH_RADIUS_KM)
+    const { collision, camera } = makeCollision([body], new Vector3(-R * 2, R * 0.5, 0))
+
+    collision.resolve()
+    camera.position.set(0, R * 0.5, 0)
+    collision.resolve()
+
+    // Не внутри сферы, но и не прилипла к точке контакта: уехала по касательной
+    expect(camera.position.length()).toBeGreaterThanOrEqual(R - 1e-9)
+    expect(camera.position.y).toBeGreaterThan(R * 0.5)
+    expect(camera.position.x).toBeGreaterThan(-R)
+  })
+
+  it('серия шагов к центру не пробивает поверхность (инвариант зазора)', () => {
+    const body = makeBody('planet', EARTH_RADIUS_KM)
+    const { collision, camera } = makeCollision([body], new Vector3(R * 2, R * 2, R * 2))
+
+    collision.resolve()
+
+    for (let step = 0; step < 5; step++) {
+      camera.position.multiplyScalar(0.4)
+      collision.resolve()
+
+      expect(camera.position.length()).toBeGreaterThanOrEqual(R - 1e-9)
+    }
+  })
+
+  it('reset() после телепорта не даёт ложного клампа', () => {
+    // Смена сценария: EngineStore ставит defaultCameraPosition, тело осталось
+    // между старой и новой позициями
+    const body = makeBody('planet', EARTH_RADIUS_KM)
+    const { collision, camera } = makeCollision([body], new Vector3(-R * 5, 0, 0))
+
+    collision.resolve()
+    camera.position.set(R * 5, 0, 0)
+    collision.reset()
+    collision.resolve()
+
+    expect(camera.position.toArray()).toEqual([R * 5, 0, 0])
+  })
+
+  it('телепорт без reset() ловится свипом — контраст к предыдущему тесту', () => {
+    const body = makeBody('planet', EARTH_RADIUS_KM)
+    const { collision, camera } = makeCollision([body], new Vector3(-R * 5, 0, 0))
+
+    collision.resolve()
+    camera.position.set(R * 5, 0, 0)
+    collision.resolve()
+
+    expect(camera.position.x).toBeCloseTo(-R, 3)
+  })
+})

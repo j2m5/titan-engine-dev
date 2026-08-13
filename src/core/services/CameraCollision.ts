@@ -1,4 +1,4 @@
-import { Object3D, PerspectiveCamera, Vector3 } from 'three'
+import { Object3D, PerspectiveCamera, Ray, Sphere, Vector3 } from 'three'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { SceneObserver } from '@/core/services/SceneObserver'
 
@@ -43,6 +43,12 @@ export function collectColliders(objects: Object3D[]): Collider[] {
 /** Итераций пуш-аута: выталкивание из луны могло затолкнуть в планету. */
 const PUSHOUT_ITERATIONS = 2
 
+/** Итераций свип+скольжение: скольжение могло врезать камеру в кривизну той же сферы или в соседнее тело. */
+const SWEEP_ITERATIONS = 3
+
+/** Микроотступ от точки контакта вдоль нормали — защита от повторного захвата той же сферы float-погрешностью. */
+const CONTACT_EPSILON = 1e-6
+
 /**
  * Коллизии камеры со сферическими телами.
  *
@@ -57,6 +63,13 @@ class CameraCollision {
 
   private readonly center: Vector3 = new Vector3()
   private readonly normal: Vector3 = new Vector3()
+
+  private readonly ray: Ray = new Ray()
+  private readonly sphere: Sphere = new Sphere()
+  private readonly origin: Vector3 = new Vector3()
+  private readonly contact: Vector3 = new Vector3()
+  private readonly point: Vector3 = new Vector3()
+  private readonly remainder: Vector3 = new Vector3()
 
   public constructor(
     private camera: PerspectiveCamera,
@@ -79,6 +92,8 @@ class CameraCollision {
 
     if (this.lastPosition === null) {
       this.lastPosition = position.clone()
+    } else {
+      this.sweep(this.lastPosition, position)
     }
 
     this.pushOut(position)
@@ -94,6 +109,62 @@ class CameraCollision {
 
     this.snapshot = this.sceneObserver.objects
     this.colliders = collectColliders(this.snapshot)
+  }
+
+  /**
+   * Свип отрезка «где камера была → где оказалась» против сфер тел: точечная
+   * проверка туннелирует — на максимальной скорости камера проходит за кадр
+   * на порядки больше диаметра Земли. При пересечении камера ставится в точку
+   * контакта, нормальная составляющая остатка гасится, касательная
+   * сохраняется — скольжение, а не прилипание.
+   */
+  private sweep(from: Vector3, position: Vector3): void {
+    this.origin.copy(from)
+
+    for (let iteration = 0; iteration < SWEEP_ITERATIONS; iteration++) {
+      const length = this.origin.distanceTo(position)
+      if (length === 0) return
+
+      this.ray.origin.copy(this.origin)
+      this.ray.direction.copy(position).sub(this.origin).divideScalar(length)
+
+      const hit = this.findNearestHit(length)
+      if (!hit) return
+
+      hit.object.getWorldPosition(this.center)
+      this.normal.copy(this.contact).sub(this.center).normalize()
+
+      this.origin.copy(this.contact).addScaledVector(this.normal, CONTACT_EPSILON)
+      this.remainder.copy(position).sub(this.contact).projectOnPlane(this.normal)
+      position.copy(this.origin).add(this.remainder)
+    }
+  }
+
+  /**
+   * Ближайшее по ходу луча пересечение в пределах отрезка. Тело, внутри
+   * которого отрезок начинается, пропускается — его разрулит пуш-аут, иначе
+   * скольжение размазало бы камеру по внутренней стороне сферы.
+   */
+  private findNearestHit(maxDistance: number): Collider | null {
+    let nearest: Collider | null = null
+    let nearestDistance = maxDistance
+
+    for (const collider of this.colliders) {
+      collider.object.getWorldPosition(this.sphere.center)
+      this.sphere.radius = collider.radius
+
+      if (this.sphere.containsPoint(this.ray.origin)) continue
+      if (!this.ray.intersectSphere(this.sphere, this.point)) continue
+
+      const distance = this.ray.origin.distanceTo(this.point)
+      if (distance > nearestDistance) continue
+
+      nearestDistance = distance
+      nearest = collider
+      this.contact.copy(this.point)
+    }
+
+    return nearest
   }
 
   /**
