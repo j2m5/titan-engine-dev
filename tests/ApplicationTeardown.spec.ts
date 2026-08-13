@@ -8,6 +8,7 @@ import type { ResourceObserver } from '@/core/services/ResourceObserver'
 import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
 
 const leakDetector = { record: () => null } as unknown as LeakDetector
+const loadingReporter = { setAsset: vi.fn(), setProgress: vi.fn(), setTotal: vi.fn() }
 
 describe('Application.teardown', () => {
   beforeEach(() => {
@@ -22,7 +23,7 @@ describe('Application.teardown', () => {
       order.push('textures')
     })
 
-    new Application(engine, observer, new Scene(), leakDetector).teardown()
+    new Application(engine, observer, new Scene(), leakDetector, loadingReporter).teardown()
 
     expect(order).toEqual(['engine', 'textures'])
   })
@@ -32,7 +33,7 @@ describe('Application.teardown', () => {
     const observer = { scenario: null } as unknown as ResourceObserver
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
 
-    new Application(engine, observer, new Scene(), leakDetector).dispose()
+    new Application(engine, observer, new Scene(), leakDetector, loadingReporter).dispose()
 
     expect(engine.dispose).toHaveBeenCalledTimes(1)
     expect(resourceStorage.deleteAllTextures).toHaveBeenCalledTimes(1)
@@ -45,7 +46,7 @@ describe('Application.teardown', () => {
     const detector = { record: recordSpy } as unknown as LeakDetector
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
 
-    new Application(engine, observer, new Scene(), detector).teardown()
+    new Application(engine, observer, new Scene(), detector, loadingReporter).teardown()
 
     expect(recordSpy).not.toHaveBeenCalled()
   })
@@ -61,7 +62,7 @@ describe('Application.teardown', () => {
     const detector = { record: recordSpy } as unknown as LeakDetector
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
 
-    const application = new Application(engine, observer, new Scene(), detector)
+    const application = new Application(engine, observer, new Scene(), detector, loadingReporter)
     await application.run(Scenarios[0])
     recordSpy.mockClear()
 
@@ -77,7 +78,7 @@ describe('Application.teardown', () => {
     const detector = { record: recordSpy } as unknown as LeakDetector
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
 
-    const application = new Application(engine, observer, new Scene(), detector)
+    const application = new Application(engine, observer, new Scene(), detector, loadingReporter)
 
     application.teardown()
     application.teardown()
@@ -96,7 +97,7 @@ describe('Application.teardown', () => {
     const detector = { record: recordSpy } as unknown as LeakDetector
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
 
-    const application = new Application(engine, observer, new Scene(), detector)
+    const application = new Application(engine, observer, new Scene(), detector, loadingReporter)
     await application.run(Scenarios[0])
 
     application.dispose()

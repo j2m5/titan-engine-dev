@@ -2,8 +2,10 @@ import { Engine } from '@/core/Engine'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { ScenarioConfig } from '@/config/scenarios'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { Scene } from 'three'
 import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
+import type { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
 import { SkyboxBackground } from '@/core/renderables/SkyboxBackground'
 
 class Application {
@@ -13,7 +15,8 @@ class Application {
     private engine: Engine,
     private resourceObserver: ResourceObserver,
     private scene: Scene,
-    private leakDetector: LeakDetector
+    private leakDetector: LeakDetector,
+    private loadingReporter: LoadingProgressReporter
   ) {}
 
   /**
@@ -32,6 +35,7 @@ class Application {
   public teardown(): void {
     this.engine.dispose()
     resourceStorage.deleteAllTextures()
+    heightFieldStorage.clear()
 
     if (import.meta.env.DEV && this.everLoaded) {
       const leak = this.leakDetector.record()
@@ -49,6 +53,9 @@ class Application {
 
     this.resourceObserver.scenario = scenario
     await this.resourceObserver.loadPrimaryTextures()
+
+    // До построения сцены: конструктор Planet читает карты синхронно
+    await heightFieldStorage.loadForScenario(scenario, this.loadingReporter)
 
     if (!this.resourceObserver.sceneBackground) {
       console.warn('[Application] Кубическая карта фона сценария не загружена, сцена останется без фона')
