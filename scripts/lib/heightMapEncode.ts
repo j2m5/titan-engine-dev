@@ -6,6 +6,36 @@ import {
   type HeightMapData
 } from '@/core/terrain/heightMapFormat'
 
+/**
+ * Разрешение диапазона высот: явные аргументы приоритизируются, отсутствующие берутся из данных.
+ * Отслеживает явность каждой границы отдельно — скан данных заполняет ТОЛЬКО отсутствующую границу.
+ */
+export function resolveHeightRange(
+  data: Float32Array,
+  minMeters?: number,
+  maxMeters?: number
+): { minMeters: number; maxMeters: number } {
+  // Если обе границы явно заданы, возвращаем как есть (данные не сканируются).
+  if (minMeters !== undefined && maxMeters !== undefined) {
+    return { minMeters, maxMeters }
+  }
+
+  // Сканируем данные, но только если нужна хотя бы одна граница.
+  let dataMin = Infinity
+  let dataMax = -Infinity
+
+  for (const value of data) {
+    if (value < dataMin) dataMin = value
+    if (value > dataMax) dataMax = value
+  }
+
+  // Явно заданную границу НЕ трогаем; заполняем ТОЛЬКО отсутствующую.
+  return {
+    minMeters: minMeters ?? dataMin,
+    maxMeters: maxMeters ?? dataMax
+  }
+}
+
 /** Нормировка высот в Uint16: min→0, max→65535, значения вне диапазона клампятся. */
 export function normalizeToUint16(data: Float32Array, minMeters: number, maxMeters: number): Uint16Array {
   const span = maxMeters - minMeters

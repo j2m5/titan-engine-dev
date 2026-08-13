@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { HEIGHT_MAP_HEADER_BYTES, parseHeightMap } from '@/core/terrain/heightMapFormat'
-import { encodeHeightMap, normalizeToUint16 } from '../../scripts/lib/heightMapEncode'
+import { encodeHeightMap, normalizeToUint16, resolveHeightRange } from '../../scripts/lib/heightMapEncode'
 
 function toArrayBuffer(buffer: Buffer): ArrayBuffer {
   return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer
@@ -49,5 +49,41 @@ describe('Формат карты высот: round-trip энкодер ↔ па
 
   it('обрезанный заголовок — ошибка', () => {
     expect(() => parseHeightMap(new ArrayBuffer(10))).toThrow()
+  })
+})
+
+describe('resolveHeightRange: явные границы не затираются сканом данных', () => {
+  it('явная одиночная граница не затирается сканом данных', () => {
+    const data = new Float32Array([-9137, -500, 0, 4000, 10786])
+
+    const range = resolveHeightRange(data, -500, undefined)
+
+    expect(range.minMeters).toBe(-500)
+    expect(range.maxMeters).toBe(10786)
+  })
+
+  it('без явных границ обе берутся из данных', () => {
+    const data = new Float32Array([-10, 5, 20])
+
+    const range = resolveHeightRange(data, undefined, undefined)
+
+    expect(range.minMeters).toBe(-10)
+    expect(range.maxMeters).toBe(20)
+  })
+
+  it('обе явные границы — данные не сканируются и не влияют', () => {
+    const range = resolveHeightRange(new Float32Array([-99999, 99999]), -500, 500)
+
+    expect(range.minMeters).toBe(-500)
+    expect(range.maxMeters).toBe(500)
+  })
+
+  it('явная граница maxMeters не затирается минимумом данных', () => {
+    const data = new Float32Array([-5000, -2000, 0, 500])
+
+    const range = resolveHeightRange(data, undefined, 500)
+
+    expect(range.minMeters).toBe(-5000)
+    expect(range.maxMeters).toBe(500)
   })
 })

@@ -1,7 +1,7 @@
 import process from 'node:process'
 import { writeFile } from 'node:fs/promises'
 import { resampleDem } from './lib/resampleDem'
-import { encodeHeightMap, normalizeToUint16 } from './lib/heightMapEncode'
+import { encodeHeightMap, normalizeToUint16, resolveHeightRange } from './lib/heightMapEncode'
 
 /**
  * Подготовка карты высот тела: DEM (GeoTIFF/PNG) → raw Uint16 + заголовок TEHM.
@@ -37,15 +37,16 @@ if (!input || !output) {
 
 const dem = await resampleDem(input, width, height)
 
-let minMeters: number = argument('min-meters') !== undefined ? Number(argument('min-meters')) : Infinity
-let maxMeters: number = argument('max-meters') !== undefined ? Number(argument('max-meters')) : -Infinity
+const minArg = argument('min-meters')
+const maxArg = argument('max-meters')
 
-if (!Number.isFinite(minMeters) || !Number.isFinite(maxMeters)) {
-  for (const value of dem.data) {
-    if (value < minMeters) minMeters = value
-    if (value > maxMeters) maxMeters = value
-  }
-}
+// Разрешение диапазона высот: явные аргументы приоритизируются, отсутствующие берутся из данных.
+// Отслеживаем явность каждой границы отдельно — скан не трогает явно заданные значения.
+const { minMeters, maxMeters } = resolveHeightRange(
+  dem.data,
+  minArg !== undefined ? Number(minArg) : undefined,
+  maxArg !== undefined ? Number(maxArg) : undefined
+)
 
 const data = normalizeToUint16(dem.data, minMeters, maxMeters)
 
