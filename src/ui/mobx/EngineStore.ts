@@ -5,10 +5,12 @@ import { timeStore } from '@/ui/mobx/TimeStore'
 import { PerspectiveCamera, Vector3 } from 'three'
 import { scenarioContext } from '@/core/scenario/ScenarioContext'
 import { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
+import type { CameraCollision } from '@/core/services/CameraCollision'
 
 class EngineStore implements LoadingProgressReporter {
   private app: Application | null = null
   private renderCamera: PerspectiveCamera | null = null
+  private cameraCollision: CameraCollision | null = null
   public scenario: ScenarioConfig | null = null
   public appLoadingStatus: boolean = true
   public appLoadingProgress: number = 0
@@ -29,8 +31,9 @@ class EngineStore implements LoadingProgressReporter {
     this.app = app
   }
 
-  public connect(camera: PerspectiveCamera): void {
+  public connect(camera: PerspectiveCamera, cameraCollision: CameraCollision): void {
     this.renderCamera = camera
+    this.cameraCollision = cameraCollision
   }
 
   public async setScenario(payload: ScenarioConfig | null): Promise<void> {
@@ -55,6 +58,8 @@ class EngineStore implements LoadingProgressReporter {
 
       this.renderCamera?.position.set(...payload.defaultCameraPosition)
       this.renderCamera?.lookAt(new Vector3())
+      // Телепорт: без сброса свип коллизий протянет отрезок от старой позиции
+      this.cameraCollision?.reset()
     }
   }
 
