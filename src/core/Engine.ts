@@ -1,6 +1,7 @@
 import { EventEmitter } from '@/core/framework/EventEmitter'
 import { SceneManager } from '@/core/services/SceneManager'
 import { SceneObserver } from '@/core/services/SceneObserver'
+import { CameraCollision } from '@/core/services/CameraCollision'
 import { Postprocessing } from '@/core/graphic/Postprocessing'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -43,7 +44,8 @@ class Engine extends EventEmitter {
     private renderCamera: PerspectiveCamera,
     private astroControls: AstroControls,
     private renderClock: Clock,
-    private postprocessing: Postprocessing
+    private postprocessing: Postprocessing,
+    private cameraCollision: CameraCollision
   ) {
     super()
     this.canvas = this.renderer.domElement
@@ -161,6 +163,7 @@ class Engine extends EventEmitter {
     }
 
     this.sceneManager.update(ctx)
+    this.cameraCollision.resolve()
     this.postprocessing.render(delta)
 
     this.renderer.setAnimationLoop(this.boundOnFrameRendered)

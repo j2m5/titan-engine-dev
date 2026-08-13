@@ -23,6 +23,7 @@ import type { Postprocessing } from '@/core/graphic/Postprocessing'
 import type { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
 import type { TextureBudget } from '@/core/streaming/TextureBudget'
+import type { CameraCollision } from '@/core/services/CameraCollision'
 
 export const Tokens = {
   Engine: token<Engine>('Engine'),
@@ -32,6 +33,7 @@ export const Tokens = {
   MarkerManager: token<MarkerManager>('MarkerManager'),
   ResourceObserver: token<ResourceObserver>('ResourceObserver'),
   SceneObserver: token<SceneObserver>('SceneObserver'),
+  CameraCollision: token<CameraCollision>('CameraCollision'),
   SimulationClock: token<SimulationClock>('SimulationClock'),
   CameraController: token<CameraController>('CameraController'),
   Settings: token<Settings>('Settings'),

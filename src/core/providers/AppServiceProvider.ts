@@ -8,6 +8,7 @@ import { SceneManager } from '@/core/services/SceneManager'
 import { MarkerManager } from '@/core/services/MarkerManager'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { SceneObserver } from '@/core/services/SceneObserver'
+import { CameraCollision } from '@/core/services/CameraCollision'
 import { SimulationClock } from '@/core/time/SimulationClock'
 import { CameraController } from '@/core/camera/CameraController'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
@@ -22,6 +23,11 @@ class AppServiceProvider extends ServiceProvider {
     this.app.singleton(Tokens.CameraController, () => new CameraController())
 
     this.app.singleton(Tokens.SceneObserver, () => new SceneObserver())
+
+    this.app.singleton(
+      Tokens.CameraCollision,
+      (c: Container) => new CameraCollision(c.get(Tokens.Camera), c.get(Tokens.SceneObserver))
+    )
 
     this.app.singleton(Tokens.TextureProvider, (c: Container) => new TextureProvider(c.get(Tokens.Renderer)))
 
@@ -65,7 +71,8 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.Camera),
           c.get(Tokens.AstroControls),
           c.get(Tokens.Clock),
-          c.get(Tokens.Postprocessing)
+          c.get(Tokens.Postprocessing),
+          c.get(Tokens.CameraCollision)
         )
     )
 

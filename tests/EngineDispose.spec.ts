@@ -8,6 +8,7 @@ import type { SimulationClock } from '@/core/time/SimulationClock'
 import type { CameraController } from '@/core/camera/CameraController'
 import type { AstroControls } from '@/core/libs/AstroControls'
 import type { Postprocessing } from '@/core/graphic/Postprocessing'
+import type { CameraCollision } from '@/core/services/CameraCollision'
 
 function makeEngine() {
   const order: string[] = []
@@ -42,7 +43,8 @@ function makeEngine() {
     new PerspectiveCamera(),
     { update: vi.fn(), enabled: true } as unknown as AstroControls,
     new Clock(),
-    postprocessing
+    postprocessing,
+    { resolve: vi.fn(), reset: vi.fn() } as unknown as CameraCollision
   )
 
   return { engine, order, sceneManager, sceneObserver, postprocessing, domElement }

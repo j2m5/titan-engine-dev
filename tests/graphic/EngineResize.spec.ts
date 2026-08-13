@@ -22,7 +22,8 @@ function createEngineWithMocks() {
     renderCamera as never,
     null as never, // astroControls
     null as never, // renderClock
-    postprocessing as never
+    postprocessing as never,
+    null as never // cameraCollision — в onResize не участвует
   )
 
   return { engine, renderer, labelRenderer, renderCamera, postprocessing }
