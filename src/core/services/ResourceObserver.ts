@@ -246,7 +246,11 @@ class ResourceObserver {
     this.resident = Resource.all()
       .filter(
         (resource: Resource): boolean =>
-          resource.getAttribute('lifecycle') === 'resident' && resource.getAttribute('resourceType') !== 'cube'
+          resource.getAttribute('lifecycle') === 'resident' &&
+          resource.getAttribute('resourceType') !== 'cube' &&
+          // Карты высот — CPU-данные, их грузит HeightFieldStorage: текстурный
+          // путь бросил бы на неизвестном расширении .raw
+          resource.getAttribute('resourceType') !== 'height'
       )
       .map((resource: Resource): IResource => resource.toJSON() as IResource)
       .toArray()

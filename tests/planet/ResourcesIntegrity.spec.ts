@@ -25,7 +25,8 @@ describe('Целостность ресурсов планет', () => {
       _clouds: 'cloud',
       _night: 'night',
       _specular: 'specular',
-      _bump: 'bump'
+      _bump: 'bump',
+      _height: 'height'
     }
     const mislabeled: Array<{ id: number; path: string; resourceType: string; expected: string }> = []
     for (const resource of Resources) {
@@ -45,5 +46,11 @@ describe('Целостность ресурсов планет', () => {
     )
     expect(rheaRenderingObject).toBeDefined()
     expect((rheaRenderingObject?.data as { bumpScale?: number })?.bumpScale).toBeGreaterThan(0)
+  })
+
+  it('height-ресурсы всегда resident: streamable-провал на неизвестном расширении откатывает все ресурсы актора', () => {
+    const wrong = Resources.filter((r: IResource) => r.resourceType === 'height' && r.lifecycle !== 'resident')
+
+    expect(wrong).toEqual([])
   })
 })

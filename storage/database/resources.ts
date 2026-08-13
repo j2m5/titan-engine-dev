@@ -127,5 +127,6 @@ export const Resources: IResource[] = [
   { id: 121, resourceType: "bump", lifecycle: "resident", path: "asteroids/rock_boulder_dry_arm_2k.jpg" },
   { id: 122, resourceType: "diffuse", lifecycle: "resident", path: "asteroids/rocks_ground_04_diff_2k.jpg", colorSpace: "srgb" },
   { id: 123, resourceType: "bump", lifecycle: "resident", path: "asteroids/rocks_ground_04_nor_gl_2k.jpg" },
-  { id: 124, resourceType: "bump", lifecycle: "resident", path: "asteroids/rocks_ground_04_arm_2k.jpg" }
+  { id: 124, resourceType: "bump", lifecycle: "resident", path: "asteroids/rocks_ground_04_arm_2k.jpg" },
+  { id: 125, resourceType: "height", lifecycle: "resident", path: "planets/moon/moon_height.raw" }
 ]
