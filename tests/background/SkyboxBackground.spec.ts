@@ -5,6 +5,7 @@ import { Application } from '@/Application'
 import { disposeSceneTree } from '@/core/lifecycle/disposeSceneTree'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { Scenarios } from '@/config/scenarios'
+import { vi } from 'vitest'
 import type { Engine } from '@/core/Engine'
 import type { ResourceObserver } from '@/core/services/ResourceObserver'
 import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
@@ -56,9 +57,10 @@ describe('SkyboxBackground: собственный фоновый проход',
       sceneBackground: new CubeTexture()
     } as unknown as ResourceObserver
     const leakDetector = { record: () => null } as unknown as LeakDetector
+    const loadingReporter = { setAsset: vi.fn(), setProgress: vi.fn(), setTotal: vi.fn() }
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
 
-    const application = new Application(engine, observer, scene, leakDetector)
+    const application = new Application(engine, observer, scene, leakDetector, loadingReporter)
 
     await application.run(Scenarios[0])
     await application.run(Scenarios[0])

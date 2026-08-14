@@ -115,7 +115,8 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.Engine),
           c.get(Tokens.ResourceObserver),
           c.get(Tokens.Scene),
-          c.get(Tokens.LeakDetector)
+          c.get(Tokens.LeakDetector),
+          c.get(Tokens.LoadingProgressReporter)
         )
     )
 

@@ -38,10 +38,13 @@ describe('ResourceObserver: резидентные берутся из lifecycle
     // тест обязан следить за флагом lifecycle, а не фиксировать текущий снимок
     // путей. Кубмапа исключена намеренно: ей нужен отдельный запрос формы из
     // шести граней (см. ниже), поэтому в поэлементное сравнение она не входит.
+    // Карты высот также исключены: текстурный путь не может загрузить .raw
     const residentSinglePaths: string[] = Resource.all()
       .filter(
         (resource: Resource): boolean =>
-          resource.getAttribute('lifecycle') === 'resident' && resource.getAttribute('resourceType') !== 'cube'
+          resource.getAttribute('lifecycle') === 'resident' &&
+          resource.getAttribute('resourceType') !== 'cube' &&
+          resource.getAttribute('resourceType') !== 'height'
       )
       .map((resource: Resource): string => resource.getAttribute('path', ''))
       .toArray()
@@ -60,5 +63,21 @@ describe('ResourceObserver: резидентные берутся из lifecycle
     expect(requested).toContain(cubeName)
 
     resourceStorage.deleteAllTextures()
+  })
+
+  it('height-ресурсы не попадают в резидентный текстурный список', () => {
+    const observer = new ResourceObserver(
+      { subscribe: vi.fn() } as unknown as SceneObserver,
+      { load: vi.fn() } as unknown as TextureProvider,
+      { setAsset: vi.fn(), setProgress: vi.fn(), setTotal: vi.fn() } as unknown as LoadingProgressReporter,
+      { dispatch: vi.fn() } as unknown as NotificationSink,
+      new Scene(),
+      new TextureBudget(1024 ** 3)
+    )
+
+    const resident = (observer as unknown as { resident: Array<{ resourceType: string }> }).resident
+
+    expect(resident.length).toBeGreaterThan(0)
+    expect(resident.every((resource) => resource.resourceType !== 'height')).toBe(true)
   })
 })

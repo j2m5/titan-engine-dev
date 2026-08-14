@@ -39,7 +39,8 @@ export enum ResourceTypes {
   cloud,
   night,
   specular,
-  cube
+  cube,
+  height
 }
 
 export type ResourceType = keyof typeof ResourceTypes

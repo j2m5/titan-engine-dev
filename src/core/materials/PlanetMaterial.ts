@@ -33,9 +33,14 @@ class PlanetMaterial extends AbstractShaderMaterial {
     const specularMap: Texture | undefined = resourceStorage.getTexture(
       this.model.resources.where('resourceType', 'specular').first()?.getAttribute('path') ?? ''
     )
-    const bumpMap: Texture | undefined = resourceStorage.getTexture(
-      this.model.resources.where('resourceType', 'bump').first()?.getAttribute('path') ?? ''
-    )
+    // Рельеф у тел с картой высот уже в геометрии: bump с той же информацией
+    // считал бы его дважды
+    const hasHeightField = Boolean(this.model.resources.where('resourceType', 'height').first())
+    const bumpMap: Texture | undefined = hasHeightField
+      ? undefined
+      : resourceStorage.getTexture(
+          this.model.resources.where('resourceType', 'bump').first()?.getAttribute('path') ?? ''
+        )
 
     this.uniforms.diffuseMap.value = diffuseMap
     this.uniforms.nightMap.value = nightMap
