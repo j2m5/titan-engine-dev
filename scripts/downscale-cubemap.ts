@@ -1,5 +1,6 @@
 import process from 'node:process'
 import { convertCubemapDirectory } from './lib/convertCubemapDirectory'
+import { argument } from './lib/cliArguments'
 
 /**
  * Уменьшение граней кубмапы вдвое.
@@ -11,12 +12,6 @@ import { convertCubemapDirectory } from './lib/convertCubemapDirectory'
  * (звёздах) он даёт либо звон, либо замыливание. Нужна четверть — запустить
  * дважды.
  */
-function argument(name: string): string | undefined {
-  const index: number = process.argv.indexOf(`--${name}`)
-
-  return index === -1 ? undefined : process.argv[index + 1]
-}
-
 const input: string | undefined = argument('in')
 const output: string | undefined = argument('out')
 const quality: number = Number(argument('quality') ?? 92)

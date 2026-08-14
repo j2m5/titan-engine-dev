@@ -70,8 +70,10 @@ describe('buildDisplacedSphere: честное смещение', () => {
     }
   })
 
-  it('на склоне, растущем к северу, нормаль экваториальной вершины наклонена к югу', () => {
-    // строка 0 (север) выше строки 1 (юг): градиент к северу положителен
+  it('нормали радиальны и на склоне: низкие частоты рельефа шейдит slope-карта', () => {
+    // строка 0 (север) выше строки 1 (юг) — но наклонять вершинную нормаль
+    // нельзя: попиксельный perturb по slope-карте учёл бы этот же градиент
+    // второй раз
     const map = makeMap(8, 4, [
       ...new Array(8).fill(60000),
       ...new Array(8).fill(40000),
@@ -83,22 +85,11 @@ describe('buildDisplacedSphere: честное смещение', () => {
     const positions = geometry.getAttribute('position')
     const normals = geometry.getAttribute('normal')
 
-    // ищем вершину у экватора (|y| мал относительно радиуса)
-    let checked = 0
     for (let i = 0; i < positions.count; i++) {
-      const position = new Vector3(positions.getX(i), positions.getY(i), positions.getZ(i))
-      if (Math.abs(position.y) > R * 0.2) continue
-
-      const dir = position.clone().normalize()
-      const east = new Vector3(0, 1, 0).cross(dir).normalize()
-      const north = dir.clone().cross(east)
+      const dir = new Vector3(positions.getX(i), positions.getY(i), positions.getZ(i)).normalize()
       const normal = new Vector3(normals.getX(i), normals.getY(i), normals.getZ(i))
-
-      // нормаль отклоняется прочь от подъёма — к югу
-      expect(normal.dot(north)).toBeLessThan(0)
-      checked++
+      expect(normal.dot(dir)).toBeCloseTo(1, 5)
     }
-    expect(checked).toBeGreaterThan(0)
   })
 
   it('полярные вершины не дают NaN', () => {

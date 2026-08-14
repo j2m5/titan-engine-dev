@@ -4,6 +4,7 @@ import { Actor } from '@/core/models/Actor'
 import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
 import { Texture } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 
 class PlanetMaterial extends AbstractShaderMaterial {
   public model: Actor
@@ -33,14 +34,29 @@ class PlanetMaterial extends AbstractShaderMaterial {
     const specularMap: Texture | undefined = resourceStorage.getTexture(
       this.model.resources.where('resourceType', 'specular').first()?.getAttribute('path') ?? ''
     )
-    // Рельеф у тел с картой высот уже в геометрии: bump с той же информацией
-    // считал бы его дважды
-    const hasHeightField = Boolean(this.model.resources.where('resourceType', 'height').first())
-    const bumpMap: Texture | undefined = hasHeightField
-      ? undefined
-      : resourceStorage.getTexture(
-          this.model.resources.where('resourceType', 'bump').first()?.getAttribute('path') ?? ''
-        )
+    // Рельефный шейдинг сверяется с фактически загруженной картой высот — тем
+    // же реестром, по которому Planet строил геометрию. Строка БД тут не
+    // авторитет: если карта не доехала (HeightFieldStorage предупредил и
+    // пропустил), сфера гладкая, и кратерный slope-шейдинг на ней был бы
+    // враньём — тогда рельефные дефайны молчат целиком.
+    const heightPath = this.model.resources.where('resourceType', 'height').first()?.getAttribute('path')
+    const hasHeightField = typeof heightPath === 'string' && Boolean(heightFieldStorage.get(heightPath))
+
+    // slope-карта — уклоны из той же карты высот (см. slopeMapFormat): шейдит
+    // попиксельно то, что не влезло в вершинную сетку, мипы фильтруют издалека.
+    // Классический bump живёт только у тел без честного рельефа.
+    //
+    // Отсутствие строки ресурса — undefined, а не запрос по '': в хранилище
+    // живёт плейсхолдер с пустым именем (getTextureOrMake('') у колец), и
+    // фолбэк на '' находил бы его как фантомную карту рельефа.
+    const textureOf = (type: 'slope' | 'bump'): Texture | undefined => {
+      const path = this.model.resources.where('resourceType', type).first()?.getAttribute('path')
+
+      return typeof path === 'string' ? resourceStorage.getTexture(path) : undefined
+    }
+    const slopeMap = textureOf('slope')
+    const legacyBumpMap = textureOf('bump')
+    const bumpMap: Texture | undefined = hasHeightField ? slopeMap : legacyBumpMap
 
     this.uniforms.diffuseMap.value = diffuseMap
     this.uniforms.nightMap.value = nightMap
@@ -48,18 +64,21 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.specularMap.value = specularMap
     this.uniforms.bumpMap.value = bumpMap
 
-    // Шаг выборки соседних текселей для аналитического градиента нормали.
+    // Шаг выборки соседних текселей для аналитического градиента нормали —
+    // атрибут четырёхвыборочного bump-пути; slope-путь читает одну выборку.
     // Нули = рельеф выключен: все четыре выборки совпадают, градиент нулевой —
     // безопасное поведение, пока карта не загружена.
     const bumpImage = bumpMap?.image as { width?: number; height?: number } | undefined
+    const useClassicBump = !hasHeightField && Boolean(legacyBumpMap)
     this.uniforms.uBumpTexelSize.value.set(
-      bumpImage?.width ? 1 / bumpImage.width : 0,
-      bumpImage?.height ? 1 / bumpImage.height : 0
+      useClassicBump && bumpImage?.width ? 1 / bumpImage.width : 0,
+      useClassicBump && bumpImage?.height ? 1 / bumpImage.height : 0
     )
 
     this.defines = {
       ...this.defines,
-      ...(bumpMap && { USE_BUMP: '1' }),
+      ...(useClassicBump && { USE_BUMP: '1' }),
+      ...(hasHeightField && slopeMap && { USE_SLOPE: '1' }),
       ...(specularMap && { USE_SPECULAR: '1' }),
       ...(nightMap && { USE_NIGHT: '1' }),
       ...(cloudMap && { USE_CLOUD: '1' })
@@ -77,6 +96,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uBumpTexelSize.value.set(0, 0)
 
     delete this.defines.USE_BUMP
+    delete this.defines.USE_SLOPE
     delete this.defines.USE_SPECULAR
     delete this.defines.USE_NIGHT
     delete this.defines.USE_CLOUD

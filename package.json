@@ -12,6 +12,7 @@
     "typecheck": "tsc -b",
     "downscale:cubemap": "vite-node scripts/downscale-cubemap.ts --",
     "build:heightmap": "vite-node scripts/build-heightmap.ts --",
+    "build:slopemap": "vite-node scripts/build-slopemap.ts --",
     "preview": "vite preview",
     "test": "npm run typecheck && vitest"
   },

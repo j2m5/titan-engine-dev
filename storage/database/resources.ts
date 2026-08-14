@@ -51,7 +51,7 @@ export const Resources: IResource[] = [
   { id: 45, resourceType: "diffuse", lifecycle: "streamable", path: "planets/sedna/sedna.jpg", colorSpace: "srgb" },
   { id: 46, resourceType: "bump", lifecycle: "streamable", path: "planets/sedna/sedna_bump.jpg" },
   { id: 47, resourceType: "diffuse", lifecycle: "streamable", path: "planets/moon/moon.jpg", colorSpace: "srgb" },
-  { id: 48, resourceType: "bump", lifecycle: "streamable", path: "planets/moon/moon_bump.jpg" },
+  { id: 48, resourceType: "slope", lifecycle: "streamable", path: "planets/moon/moon_slope.webp" },
   { id: 49, resourceType: "diffuse", lifecycle: "streamable", path: "planets/io/io.jpg", colorSpace: "srgb" },
   { id: 50, resourceType: "bump", lifecycle: "streamable", path: "planets/io/io_bump.jpg" },
   { id: 51, resourceType: "diffuse", lifecycle: "streamable", path: "planets/europa/europa.jpg", colorSpace: "srgb" },

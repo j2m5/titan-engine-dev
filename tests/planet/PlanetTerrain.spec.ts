@@ -83,9 +83,10 @@ describe('Planet: ветка рельефа', () => {
   })
 })
 
-describe('PlanetMaterial: подавление bump при height-ресурсе', () => {
-  it('у Луны USE_BUMP не включается даже с посеянной bump-текстурой', () => {
-    seedTexture(moon().resources.where('resourceType', 'bump').first()!.getAttribute('path') as string, 8192, 4096)
+describe('PlanetMaterial: классический bump у тел с честным рельефом отсутствует', () => {
+  it('у Луны нет bump-ресурса — USE_BUMP невозможен структурно', () => {
+    // рельефный шейдинг Луны идёт через slope-ресурс; bump-строки в БД нет
+    expect(moon().resources.where('resourceType', 'bump').first()).toBeUndefined()
 
     const material = new PlanetMaterial(moon())
     material.updateMaterial()
