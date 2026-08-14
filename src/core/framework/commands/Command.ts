@@ -6,11 +6,7 @@ import { Container, Newable } from '@/core/framework/container/Container'
  * на контейнер, и это осознанный компромисс: статический Command.execute()
  * по определению не может получить зависимости через конструктор.
  */
-// Статик не видит параметр типа класса — execute затеняет его своим TArgs.
-// Параметр класса держит сигнатуру наследников: CameraToObjectTransition
-// extends Command<CameraToObjectTransitionArgs>, по ней резолвит ObjectList.tsx
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-abstract class Command<TArgs extends object = object, TResult = void> {
+abstract class Command<TResult = void> {
   private static container: Container | null = null
 
   protected constructor() {}
@@ -23,14 +19,14 @@ abstract class Command<TArgs extends object = object, TResult = void> {
   }
 
   public static async execute<TArgs extends object = object, TResult = void>(
-    this: Newable<Command<TArgs, TResult>>,
+    this: Newable<Command<TResult>>,
     args: TArgs
   ): Promise<TResult> {
     if (!Command.container) {
       throw new Error('Command container is not set. Call Command.bindContainer() during bootstrap.')
     }
 
-    const instance: Command<TArgs, TResult> = Command.container.get(this)
+    const instance: Command<TResult> = Command.container.get(this)
 
     Object.assign(instance, args)
 

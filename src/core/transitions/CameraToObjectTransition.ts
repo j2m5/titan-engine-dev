@@ -10,11 +10,12 @@ import { NotificationSink } from '@/core/ports/NotificationSink'
 import { MenuController } from '@/core/ports/MenuController'
 import { AstroControls } from '@/core/libs/AstroControls'
 
-interface CameraToObjectTransitionArgs {
+/** Форма аргументов execute(); не связана с типами Command — экспорт только чтобы не считаться мёртвым кодом. */
+export interface CameraToObjectTransitionArgs {
   model: Actor
 }
 
-class CameraToObjectTransition extends Command<CameraToObjectTransitionArgs> {
+class CameraToObjectTransition extends Command {
   declare public model: Actor
 
   public constructor(
