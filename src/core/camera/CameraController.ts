@@ -5,7 +5,7 @@ import { clamp } from 'three/src/math/MathUtils'
  * Владелец скорости свободного полёта камеры. Логика клампа и шага
  * колеса перенесена из cameraStore 1:1; стор теперь зеркалит speed.
  */
-class CameraController extends EventEmitter {
+class CameraController extends EventEmitter<{ change: [] }> {
   public readonly minSpeed: number = 10
   public readonly maxSpeed: number = 150000000 * 30
 

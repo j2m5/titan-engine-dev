@@ -12,7 +12,7 @@ export function TablePanel({ spec, editor }: { spec: TableSpec; editor: UseEdito
   const { draft, upsert, remove, nextId } = editor
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
-  // @ts-ignore
+  // @ts-expect-error draft[spec.table] access lacks type narrowing
   const rows = draft[spec.table] as Array<Record<string, unknown>>
 
   const ctx: ListLabelContext = {

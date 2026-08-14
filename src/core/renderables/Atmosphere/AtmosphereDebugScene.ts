@@ -27,11 +27,74 @@ import { Storage } from '@/core/framework/file/Storage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { requireRenderingData } from '@/core/helpers/renderingData'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
-import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+import {
+  AtmosphereConfig,
+  DensityProfileLayer,
+  EMPTY_LAYER,
+  expLayer
+} from '@/core/renderables/Atmosphere/AtmosphereConfig'
 
-const EMPTY = { width: 0, expTerm: 0, expScale: 0, linearTerm: 0, constantTerm: 0 }
-const expL = (h: any) => ({ width: 0, expTerm: 1, expScale: -1 / h, linearTerm: 0, constantTerm: 0 })
-const getH = (layers: any) => (layers[1].expScale !== 0 ? -1 / layers[1].expScale : 8)
+const getH = (layers: [DensityProfileLayer, DensityProfileLayer]): number =>
+  layers[1].expScale !== 0 ? -1 / layers[1].expScale : 8
+
+/**
+ * Плоский набор ручек GUI. Форма выводится из литерала — руками её не пишем,
+ * иначе она разъедется с `buildGUI()` при первой правке.
+ */
+function makeDebugParams(data: AtmosphereConfig) {
+  // Неизменяемая часть конфига: GUI её не правит, но cfg() собирает из неё
+  // результат, поэтому кортежи обязаны пережить копирование
+  const base: Pick<AtmosphereConfig, 'solarIrradiance' | 'sunAngularRadius' | 'bottomRadius' | 'topRadius' | 'muSMin'> =
+    {
+      solarIrradiance: [...data.solarIrradiance],
+      sunAngularRadius: data.sunAngularRadius,
+      bottomRadius: data.bottomRadius,
+      topRadius: data.topRadius,
+      muSMin: data.muSMin
+    }
+
+  return {
+    rayleigh_R: data.rayleighScattering[0],
+    rayleigh_G: data.rayleighScattering[1],
+    rayleigh_B: data.rayleighScattering[2],
+    rayleighH: getH(data.rayleighDensity),
+
+    mie_R: data.mieScattering[0],
+    mie_G: data.mieScattering[1],
+    mie_B: data.mieScattering[2],
+    mieExt_R: data.mieExtinction[0],
+    mieExt_G: data.mieExtinction[1],
+    mieExt_B: data.mieExtinction[2],
+    mieG: data.miePhaseFunctionG,
+    mieH: getH(data.mieDensity),
+
+    abs_R: data.absorptionExtinction[0],
+    abs_G: data.absorptionExtinction[1],
+    abs_B: data.absorptionExtinction[2],
+    absH: getH(data.absorptionDensity),
+
+    albedo_R: data.groundAlbedo[0],
+    albedo_G: data.groundAlbedo[1],
+    albedo_B: data.groundAlbedo[2],
+
+    exposure: data.exposure ?? 10,
+    hdrKnee: data.hdrKnee ?? 1,
+    debugView: 0,
+    legacyComposition: false,
+    wp_R: 1,
+    wp_G: 1,
+    wp_B: 1,
+    sunLat: 0,
+    sunLon: 45,
+
+    msOrders: 4,
+    msFactor: 1,
+
+    _: base
+  }
+}
+
+type DebugParams = ReturnType<typeof makeDebugParams>
 
 class AtmosphereDebugScene {
   private readonly renderer: WebGLRenderer
@@ -43,8 +106,8 @@ class AtmosphereDebugScene {
   private readonly mat: BrunetonAtmosphereMaterial
   private gen: AtmosphereLUTGenerator
   private light = new Vector3()
-  private readonly p: any
-  private timer: any = null
+  private readonly p: DebugParams
+  private timer: number | null = null
   private raf = 0
   private readonly actor: Actor
 
@@ -96,51 +159,7 @@ class AtmosphereDebugScene {
 
     this.controls.target = planet.position.clone()
 
-    this.p = {
-      rayleigh_R: data.rayleighScattering[0],
-      rayleigh_G: data.rayleighScattering[1],
-      rayleigh_B: data.rayleighScattering[2],
-      rayleighH: getH(data.rayleighDensity),
-
-      mie_R: data.mieScattering[0],
-      mie_G: data.mieScattering[1],
-      mie_B: data.mieScattering[2],
-      mieExt_R: data.mieExtinction[0],
-      mieExt_G: data.mieExtinction[1],
-      mieExt_B: data.mieExtinction[2],
-      mieG: data.miePhaseFunctionG,
-      mieH: getH(data.mieDensity),
-
-      abs_R: data.absorptionExtinction[0],
-      abs_G: data.absorptionExtinction[1],
-      abs_B: data.absorptionExtinction[2],
-      absH: getH(data.absorptionDensity),
-
-      albedo_R: data.groundAlbedo[0],
-      albedo_G: data.groundAlbedo[1],
-      albedo_B: data.groundAlbedo[2],
-
-      exposure: data.exposure ?? 10,
-      hdrKnee: data.hdrKnee ?? 1,
-      debugView: 0,
-      legacyComposition: false,
-      wp_R: 1,
-      wp_G: 1,
-      wp_B: 1,
-      sunLat: 0,
-      sunLon: 45,
-
-      msOrders: 4,
-      msFactor: 1,
-
-      _: {
-        solarIrradiance: [...data.solarIrradiance],
-        sunAngularRadius: data.sunAngularRadius,
-        bottomRadius: data.bottomRadius,
-        topRadius: data.topRadius,
-        muSMin: data.muSMin
-      }
-    }
+    this.p = makeDebugParams(data)
 
     this.rebuild()
     this.gui = new GUI({ title: this.actor.getAttribute('name', ''), width: 320 })
@@ -156,7 +175,7 @@ class AtmosphereDebugScene {
     console.log(this.scene)
   }
 
-  private cfg() {
+  private cfg(): AtmosphereConfig {
     const p = this.p,
       b = p._
     return {
@@ -164,13 +183,13 @@ class AtmosphereDebugScene {
       sunAngularRadius: b.sunAngularRadius,
       bottomRadius: b.bottomRadius,
       topRadius: b.topRadius,
-      rayleighDensity: [EMPTY, expL(p.rayleighH)],
+      rayleighDensity: [EMPTY_LAYER, expLayer(p.rayleighH)],
       rayleighScattering: [p.rayleigh_R, p.rayleigh_G, p.rayleigh_B],
-      mieDensity: [EMPTY, expL(p.mieH)],
+      mieDensity: [EMPTY_LAYER, expLayer(p.mieH)],
       mieScattering: [p.mie_R, p.mie_G, p.mie_B],
       mieExtinction: [p.mieExt_R, p.mieExt_G, p.mieExt_B],
       miePhaseFunctionG: p.mieG,
-      absorptionDensity: [EMPTY, expL(p.absH)],
+      absorptionDensity: [EMPTY_LAYER, expLayer(p.absH)],
       absorptionExtinction: [p.abs_R, p.abs_G, p.abs_B],
       groundAlbedo: [p.albedo_R, p.albedo_G, p.albedo_B],
       muSMin: b.muSMin,
@@ -181,9 +200,9 @@ class AtmosphereDebugScene {
 
   private rebuild() {
     const c = this.cfg()
-    this.mat.setAtmosphereConfig(c as any)
+    this.mat.setAtmosphereConfig(c)
     this.mat.bindLUTTextures(
-      this.gen.generate(c as any, {
+      this.gen.generate(c, {
         scatteringOrders: this.p.msOrders,
         multiScatteringFactor: this.p.msFactor
       })
@@ -194,8 +213,8 @@ class AtmosphereDebugScene {
   }
 
   private regen = () => {
-    clearTimeout(this.timer)
-    this.timer = setTimeout(() => this.rebuild(), 120)
+    if (this.timer !== null) window.clearTimeout(this.timer)
+    this.timer = window.setTimeout(() => this.rebuild(), 120)
   }
 
   private vis = () => {

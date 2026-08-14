@@ -19,6 +19,7 @@ import { RadialDensityProfile } from '@/core/renderables/DetailedRingStreamingSy
 import { readRingAlphaProfile, readRingAlphaBins } from '@/core/renderables/DetailedRingStreamingSystem/RingAlphaReadback'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { Actor } from '@/core/models/Actor'
+import { internalsOf, poolOf, densityProfileOf } from '../helpers/ringSystemInternals'
 
 const makeFakeActor = (): Actor =>
   ({
@@ -30,8 +31,6 @@ const makeFakeActor = (): Actor =>
       first: () => ({ getAttribute: () => 'ring.png' })
     }
   }) as unknown as Actor
-
-/* eslint-disable @typescript-eslint/no-explicit-any -- доступ к приватным полям в тестах, как в соседних спеках */
 
 describe('AsteroidRingSystem: применение радиального профиля', () => {
   beforeEach(() => {
@@ -45,10 +44,10 @@ describe('AsteroidRingSystem: применение радиального про
     ;(readRingAlphaProfile as Mock).mockReturnValue(profile)
 
     const system = new AsteroidRingSystem(makeFakeActor())
-    ;(system as any).__tryBuildDensityProfile()
+    internalsOf(system).__tryBuildDensityProfile()
 
-    expect((system as any).sectorGrid.densityProfile).toBe(profile)
-    expect((system as any).generator.densityProfile).toBe(profile)
+    expect(densityProfileOf(internalsOf(system).sectorGrid)).toBe(profile)
+    expect(densityProfileOf(internalsOf(system).generator)).toBe(profile)
 
     // Опции readback: alphaTest кольца и размытие кромок из конфига (в TU)
     expect(readRingAlphaProfile).toHaveBeenCalledWith(fakeTexture, expect.any(Number), expect.any(Number), {
@@ -61,13 +60,13 @@ describe('AsteroidRingSystem: применение радиального про
     ;(readRingAlphaProfile as Mock).mockReturnValue(null)
 
     const system = new AsteroidRingSystem(makeFakeActor())
-    ;(system as any).__tryBuildDensityProfile()
+    internalsOf(system).__tryBuildDensityProfile()
 
-    expect((system as any).sectorGrid.densityProfile).toBeNull()
-    expect((system as any).densityProfileReady).toBe(true)
+    expect(densityProfileOf(internalsOf(system).sectorGrid)).toBeNull()
+    expect(internalsOf(system).densityProfileReady).toBe(true)
 
     // Повторный вызов не перечитывает текстуру
-    ;(system as any).__tryBuildDensityProfile()
+    internalsOf(system).__tryBuildDensityProfile()
     expect(readRingAlphaProfile).toHaveBeenCalledTimes(1)
   })
 
@@ -76,11 +75,12 @@ describe('AsteroidRingSystem: применение радиального про
     ;(readRingAlphaBins as Mock).mockReturnValue(new Float32Array([1, 0, 0.5, 0.5]))
 
     const system = new AsteroidRingSystem(makeFakeActor())
-    ;(system as any).__tryBuildDensityProfile()
+    internalsOf(system).__tryBuildDensityProfile()
 
-    const l0Uniforms = (system as any).pool.geometryMaterial.uniforms
-    const l1Uniforms = (system as any).pool.billboardMaterial.uniforms
-    const dustUniforms = (system as any).dustVolume.dustMaterial.uniforms
+    const l0Uniforms = poolOf(system).geometryMaterial.uniforms
+    const l1Uniforms = poolOf(system).billboardMaterial.uniforms
+    // dustEnabled по умолчанию true → dustVolume создан в конструкторе
+    const dustUniforms = internalsOf(system).dustVolume!.dustMaterial.uniforms
     for (const uniforms of [l0Uniforms, l1Uniforms, dustUniforms]) {
       expect(uniforms.uDustRadialMapScale.value).toBeGreaterThan(0)
       expect(uniforms.uDustRadialMap.value).not.toBeNull()
@@ -99,9 +99,9 @@ describe('AsteroidRingSystem: применение радиального про
     ;(readRingAlphaBins as Mock).mockReturnValue(null)
 
     const system = new AsteroidRingSystem(makeFakeActor())
-    ;(system as any).__tryBuildDensityProfile()
+    internalsOf(system).__tryBuildDensityProfile()
 
-    const l1Uniforms = (system as any).pool.billboardMaterial.uniforms
+    const l1Uniforms = poolOf(system).billboardMaterial.uniforms
     expect(l1Uniforms.uDustRadialMapScale.value).toBe(0)
     expect(l1Uniforms.uDustRadialMap.value).toBeNull()
   })
@@ -110,7 +110,7 @@ describe('AsteroidRingSystem: применение радиального про
     ;(readRingAlphaProfile as Mock).mockReturnValue(null)
 
     const system = new AsteroidRingSystem(makeFakeActor(), { ringGapBleedKm: 1000 })
-    ;(system as any).__tryBuildDensityProfile()
+    internalsOf(system).__tryBuildDensityProfile()
 
     expect(readRingAlphaProfile).toHaveBeenCalledWith(fakeTexture, expect.any(Number), expect.any(Number), {
       alphaTest: 0.2,

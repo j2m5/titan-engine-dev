@@ -75,7 +75,6 @@ class NebulaDensityBaker {
     this.target.texture.magFilter = LinearFilter
     this.target.texture.wrapS = ClampToEdgeWrapping
     this.target.texture.wrapT = ClampToEdgeWrapping
-    // @ts-ignore — wrapR exists on 3D textures
     this.target.texture.wrapR = ClampToEdgeWrapping
     this.target.texture.colorSpace = NoColorSpace
 

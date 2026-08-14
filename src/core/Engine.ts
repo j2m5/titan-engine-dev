@@ -1,4 +1,3 @@
-import { EventEmitter } from '@/core/framework/EventEmitter'
 import { SceneManager } from '@/core/services/SceneManager'
 import { SceneObserver } from '@/core/services/SceneObserver'
 import { CameraCollision } from '@/core/services/CameraCollision'
@@ -14,7 +13,7 @@ import { AstroControls } from '@/core/libs/AstroControls'
 import Stats from 'three/examples/jsm/libs/stats.module'
 import { clampPixelRatio } from '@/core/graphic/renderingFactories'
 
-class Engine extends EventEmitter {
+class Engine {
   private readonly canvas: HTMLCanvasElement
   private readonly overlay: HTMLElement
 
@@ -47,7 +46,6 @@ class Engine extends EventEmitter {
     private postprocessing: Postprocessing,
     private cameraCollision: CameraCollision
   ) {
-    super()
     this.canvas = this.renderer.domElement
     this.overlay = this.labelRenderer.domElement
 

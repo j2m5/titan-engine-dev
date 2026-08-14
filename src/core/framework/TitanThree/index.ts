@@ -10,7 +10,7 @@ import * as THREE from 'three'
 THREE.Object3D.prototype.model = null
 THREE.Object3D.prototype.getObjectsByUserDataProperty = function (
   key: string,
-  value: any,
+  value: unknown,
   result: THREE.Object3D[] = []
 ): THREE.Object3D[] {
   if (this.userData[key] === value) result.push(this)

@@ -38,6 +38,11 @@ export function token<T>(name: string): Token<T> {
  * Удобно для transient-классов вроде команд: get(CameraToObjectTransition).
  */
 export interface Newable<T> {
+  // Параметры конструктора контравариантны: с `unknown[]` класс с реальными
+  // зависимостями перестаёт быть присваиваемым `Newable` (TS2684 на
+  // ObjectList.tsx:36, `this` контекст `CameraToObjectTransition` не подходит
+  // под `Newable<Command<...>>`)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   new (...args: any[]): T
 }
 
@@ -64,13 +69,13 @@ class ContainerError extends Error {
 }
 
 class Container {
-  private readonly bindings: Map<ServiceKey<any>, Binding<any>> = new Map()
+  private readonly bindings: Map<ServiceKey<unknown>, Binding<unknown>> = new Map()
 
   /**
    * Стек текущего резолва — для детекции циклических зависимостей
    * и информативных сообщений об ошибках (цепочка "кто кого тянул").
    */
-  private readonly stack: ServiceKey<any>[] = []
+  private readonly stack: ServiceKey<unknown>[] = []
 
   /**
    * Transient-привязка: фабрика вызывается при каждом get().
@@ -108,12 +113,13 @@ class Container {
   }
 
   /**
-   * Резолв сервиса. Тип результата выводится из токена — кастов не требуется.
+   * Резолв сервиса. Для вызывающих тип результата выводится из токена — кастов не требуется,
+   * хотя чтение из Map внутри метода кастуется вручную.
    *
    * @throws ContainerError если привязка не найдена или обнаружен цикл
    */
   public get<T>(key: ServiceKey<T>): T {
-    const binding: Binding<T> | undefined = this.bindings.get(key)
+    const binding: Binding<T> | undefined = this.bindings.get(key) as Binding<T> | undefined
 
     if (!binding) {
       throw new ContainerError(`Binding "${this.keyName(key)}" is not registered${this.chain()}`)

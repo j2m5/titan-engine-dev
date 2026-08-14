@@ -21,6 +21,7 @@ import { ASTEROID_PROFILES } from '@/core/renderables/DetailedRingStreamingSyste
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { Actor } from '@/core/models/Actor'
 import type { IRingRenderingObject } from '@/core/models/types'
+import { internalsOf, poolOf, generatorConfigOf } from '../helpers/ringSystemInternals'
 
 const makeFakeActor = (data: Partial<IRingRenderingObject> = {}): Actor =>
   ({
@@ -33,8 +34,6 @@ const makeFakeActor = (data: Partial<IRingRenderingObject> = {}): Actor =>
     }
   }) as unknown as Actor
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- доступ к приватным полям в тестах, как в соседних спеках */
-
 describe('AsteroidRingSystem: визуальные ручки из модельного слоя (IRingRenderingObject.data)', () => {
   beforeEach(() => {
     ;(readRingAlphaProfile as Mock).mockClear()
@@ -43,7 +42,7 @@ describe('AsteroidRingSystem: визуальные ручки из модель�
 
   it('ringGapBleedKm и dustBleedKm из data пробрасываются в размытие профилей', () => {
     const system = new AsteroidRingSystem(makeFakeActor({ ringGapBleedKm: 777, dustBleedKm: 1234 }))
-    ;(system as any).__tryBuildDensityProfile()
+    internalsOf(system).__tryBuildDensityProfile()
 
     expect(readRingAlphaProfile).toHaveBeenCalledWith(fakeTexture, expect.any(Number), expect.any(Number), {
       alphaTest: 0.1,
@@ -56,11 +55,11 @@ describe('AsteroidRingSystem: визуальные ручки из модель�
 
   it('profile из data задаёт облик камней; неизвестное имя тихо падает в дефолт', () => {
     const icy = new AsteroidRingSystem(makeFakeActor({ profile: 'icy' }))
-    const icyColor = (icy as any).pool.geometryMaterial.uniforms.uRockColor.value
+    const icyColor = poolOf(icy).geometryMaterial.uniforms.uRockColor.value
     expect(icyColor.getHex()).toBe(new Color(ASTEROID_PROFILES.icy.baseColor).getHex())
 
     const typo = new AsteroidRingSystem(makeFakeActor({ profile: 'plasma' }))
-    const typoColor = (typo as any).pool.geometryMaterial.uniforms.uRockColor.value
+    const typoColor = poolOf(typo).geometryMaterial.uniforms.uRockColor.value
     expect(typoColor.getHex()).toBe(new Color(ASTEROID_PROFILES.stony.baseColor).getHex())
   })
 
@@ -68,7 +67,7 @@ describe('AsteroidRingSystem: визуальные ручки из модель�
     const system = new AsteroidRingSystem(
       makeFakeActor({ dustColor: '#ff0000', dustTauGrazing: 0.9, dustScaleHeightKm: 500 })
     )
-    const u = (system as any).pool.billboardMaterial.uniforms
+    const u = poolOf(system).billboardMaterial.uniforms
     expect(u.uDustColor.value.getHex()).toBe(0xff0000)
     const width = u.uDustRingOuter.value - u.uDustRingInner.value
     expect(u.uDustDensity.value).toBeCloseTo(0.9 / width, 10)
@@ -77,7 +76,7 @@ describe('AsteroidRingSystem: визуальные ручки из модель�
 
   it('thicknessKm и asteroidSizeKm из data влияют на генератор и геометрию', () => {
     const system = new AsteroidRingSystem(makeFakeActor({ thicknessKm: 800, asteroidSizeKm: 25 }))
-    expect((system as any).generator.config.thickness).toBeCloseTo(toThreeJSUnits(800), 10)
+    expect(generatorConfigOf(internalsOf(system).generator).thickness).toBeCloseTo(toThreeJSUnits(800), 10)
 
     // L0-геометрия теперь запечённый архетип-осколок (BufferGeometry без .parameters) —
     // форма зависит только от профиля, а asteroidSizeKm — чистый множитель масштаба.
@@ -85,7 +84,7 @@ describe('AsteroidRingSystem: визуальные ручки из модель�
     // числа вершин архетипа.
     const baseline = new AsteroidRingSystem(makeFakeActor())
     const maxRadius = (sys: AsteroidRingSystem): number => {
-      const pos = (sys as any).pool.geometryMeshes[0].geometry.getAttribute('position')
+      const pos = poolOf(sys).geometryMeshes[0].geometry.getAttribute('position')
       let max = 0
       for (let i = 0; i < pos.count; i++) {
         const r = Math.hypot(pos.getX(i), pos.getY(i), pos.getZ(i))
@@ -103,11 +102,11 @@ describe('AsteroidRingSystem: визуальные ручки из модель�
 
   it('приоритет: configOverrides (код) > данные модели > дефолты', () => {
     const system = new AsteroidRingSystem(makeFakeActor({ ringGapBleedKm: 777 }), { ringGapBleedKm: 50 })
-    expect((system as any).config.ringGapBleedKm).toBe(50)
+    expect(internalsOf(system).config.ringGapBleedKm).toBe(50)
 
     // Незаданные в data поля не затирают дефолты
     const plain = new AsteroidRingSystem(makeFakeActor())
-    expect((plain as any).config.ringGapBleedKm).toBe(300)
-    expect((plain as any).config.dustBleedKm).toBe(600)
+    expect(internalsOf(plain).config.ringGapBleedKm).toBe(300)
+    expect(internalsOf(plain).config.dustBleedKm).toBe(600)
   })
 })

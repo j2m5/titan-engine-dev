@@ -6,7 +6,7 @@ import { Container, Newable } from '@/core/framework/container/Container'
  * на контейнер, и это осознанный компромисс: статический Command.execute()
  * по определению не может получить зависимости через конструктор.
  */
-abstract class Command<TArgs extends Record<string, any> = any, TResult = void> {
+abstract class Command<TResult = void> {
   private static container: Container | null = null
 
   protected constructor() {}
@@ -14,19 +14,19 @@ abstract class Command<TArgs extends Record<string, any> = any, TResult = void> 
   public abstract handle(): Promise<TResult> | TResult
 
   /** Вызывается один раз при бутстрапе приложения */
-  public static useContainer(container: Container): void {
+  public static bindContainer(container: Container): void {
     Command.container = container
   }
 
-  public static async execute<TArgs extends Record<string, any> = any, TResult = void>(
-    this: Newable<Command<TArgs, TResult>>,
+  public static async execute<TArgs extends object = object, TResult = void>(
+    this: Newable<Command<TResult>>,
     args: TArgs
   ): Promise<TResult> {
     if (!Command.container) {
-      throw new Error('Command container is not set. Call Command.useContainer() during bootstrap.')
+      throw new Error('Command container is not set. Call Command.bindContainer() during bootstrap.')
     }
 
-    const instance: Command<TArgs, TResult> = Command.container.get(this)
+    const instance: Command<TResult> = Command.container.get(this)
 
     Object.assign(instance, args)
 

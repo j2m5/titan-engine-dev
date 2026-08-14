@@ -32,7 +32,7 @@ class NebulaImpostor extends Mesh {
     this.material.uniforms.uOpacity.value = opacity
   }
 
-  public updateObject(ctx: UpdateContext): void {
+  public updateObject(_ctx: UpdateContext): void {
     // Billboarding happens in onBeforeRender; nothing per-tick here.
   }
 }

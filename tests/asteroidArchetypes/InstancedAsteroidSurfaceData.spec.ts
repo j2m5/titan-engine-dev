@@ -9,6 +9,7 @@ import { InstancedAsteroidShader } from '@/core/materials/shaders/InstancedAster
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
 import { ASTEROID_PROFILES } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
 import { Actor } from '@/core/models/Actor'
+import { poolOf } from '../helpers/ringSystemInternals'
 
 const makeFakeActor = (): Actor =>
   ({
@@ -65,7 +66,7 @@ describe('InstancedAsteroidShader: surfaceData юниформы', () => {
 describe('AsteroidRingSystem: проводка freshness/cavity из профиля', () => {
   it('профиль icy проводит uFreshnessBrighten=0.3, uCavityShade=0.35', () => {
     const system = new AsteroidRingSystem(makeFakeActor(), { profile: 'icy' })
-    const u = (system as any).pool.geometryMaterial.uniforms
+    const u = poolOf(system).geometryMaterial.uniforms
     expect(u.uFreshnessBrighten.value).toBe(ASTEROID_PROFILES.icy.freshnessBrighten)
     expect(u.uCavityShade.value).toBe(ASTEROID_PROFILES.icy.cavityShade)
     expect(u.uFreshnessBrighten.value).toBe(0.3)
@@ -74,7 +75,7 @@ describe('AsteroidRingSystem: проводка freshness/cavity из профи�
 
   it('дефолтный профиль stony проводит uFreshnessBrighten=0.15, uCavityShade=0.5', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
-    const u = (system as any).pool.geometryMaterial.uniforms
+    const u = poolOf(system).geometryMaterial.uniforms
     expect(u.uFreshnessBrighten.value).toBe(ASTEROID_PROFILES.stony.freshnessBrighten)
     expect(u.uCavityShade.value).toBe(ASTEROID_PROFILES.stony.cavityShade)
   })

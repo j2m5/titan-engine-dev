@@ -19,8 +19,7 @@ export const AppUniformsChunk: Record<string, Record<string, IUniform>> = {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const AppShaderChunk: Record<string, any> = {
+export const AppShaderChunk: Record<string, string> = {
   ringShadowUniforms,
   ringShadowFunctions,
   ringShadowFragment,

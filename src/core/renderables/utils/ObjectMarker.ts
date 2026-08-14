@@ -12,7 +12,11 @@ class ObjectMarker extends DistanceBasedCSS2DObject {
 
     wrapper.className = 'marker'
     element.className = options.shape
-    options.shape === 'hex' ? (element.style.background = color) : (element.style.borderColor = color)
+    if (options.shape === 'hex') {
+      element.style.background = color
+    } else {
+      element.style.borderColor = color
+    }
 
     if (options.onClick) {
       element.style.cursor = 'pointer'

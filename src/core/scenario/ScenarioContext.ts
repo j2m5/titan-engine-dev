@@ -1,7 +1,7 @@
 import { EventEmitter } from '@/core/framework/EventEmitter'
 import { ScenarioConfig } from '@/config/scenarios'
 
-class ScenarioContext extends EventEmitter {
+class ScenarioContext extends EventEmitter<{ change: [ScenarioConfig | null] }> {
   private _current: ScenarioConfig | null = null
 
   /** Текущий сценарий (null — ни один не выбран) */

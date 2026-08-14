@@ -1,9 +1,12 @@
 import { IUniform } from 'three'
 import { AppShaderChunk } from '@/core/materials/shaders/lib/chunks'
 
+/** Значение препроцессорного `#define`: число, строка-литерал или флаг */
+export type ShaderDefineValue = number | string | boolean
+
 export type ShaderProps = {
   name?: string
-  defines?: Record<string, any>
+  defines?: Record<string, ShaderDefineValue>
   uniforms: Record<string, IUniform>
   vertexShader: string
   fragmentShader: string
@@ -15,7 +18,7 @@ export interface ShaderConstructor<T extends AbstractShader> {
 
 abstract class AbstractShader<TUniformKey extends string = string, TDefineKey extends string = string> {
   private _uniforms: Record<TUniformKey, IUniform>
-  private _defines: Record<TDefineKey, any>
+  private _defines: Record<TDefineKey, ShaderDefineValue>
   private _vertexShader: string
   private _fragmentShader: string
   private _name: string
@@ -38,11 +41,11 @@ abstract class AbstractShader<TUniformKey extends string = string, TDefineKey ex
     this._uniforms = uniforms
   }
 
-  public get defines(): Record<TDefineKey, any> {
+  public get defines(): Record<TDefineKey, ShaderDefineValue> {
     return this._defines
   }
 
-  public set defines(defines: Record<TDefineKey, any>) {
+  public set defines(defines: Record<TDefineKey, ShaderDefineValue>) {
     this._defines = defines
   }
 

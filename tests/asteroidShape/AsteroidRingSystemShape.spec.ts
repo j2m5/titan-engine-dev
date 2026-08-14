@@ -6,6 +6,7 @@ vi.mock('@/core/services/ResourceStorage', () => ({
 
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
 import { Actor } from '@/core/models/Actor'
+import { poolOf } from '../helpers/ringSystemInternals'
 
 const makeFakeActor = (): Actor =>
   ({
@@ -18,7 +19,7 @@ const makeFakeActor = (): Actor =>
 describe('AsteroidRingSystem: интеграция формы', () => {
   it('дефолтом ставит detail 3 на L0-геометрию (960 позиций)', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
-    const geom = (system as any).pool.geometryMeshes[0].geometry
+    const geom = poolOf(system).geometryMeshes[0].geometry
     expect(geom.getAttribute('position').count).toBe(960)
   })
 
@@ -26,7 +27,7 @@ describe('AsteroidRingSystem: интеграция формы', () => {
     // Амплитуда снижена: силуэт несёт запечённый архетип,
     // деформация лишь остаточная рябь — декоррелятор повторов K мешей.
     const system = new AsteroidRingSystem(makeFakeActor())
-    const u = (system as any).pool.geometryMaterial.uniforms
+    const u = poolOf(system).geometryMaterial.uniforms
     expect(u.uShapeAmpMin.value).toBeCloseTo(0.03, 10)
     expect(u.uShapeAmpMax.value).toBeCloseTo(0.06, 10)
     expect(u.uShapeFreq.value).toBeCloseTo(1.4, 10)
@@ -38,8 +39,8 @@ describe('AsteroidRingSystem: интеграция формы', () => {
       shapeAmpMin: 0,
       shapeAmpMax: 0
     })
-    const geom = (system as any).pool.geometryMeshes[0].geometry
-    const u = (system as any).pool.geometryMaterial.uniforms
+    const geom = poolOf(system).geometryMeshes[0].geometry
+    const u = poolOf(system).geometryMaterial.uniforms
     expect(geom.getAttribute('position').count).toBe(240)
     expect(u.uShapeAmpMin.value).toBe(0)
     expect(u.uShapeAmpMax.value).toBe(0)

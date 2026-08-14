@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { validateDatabase, DatabaseSnapshot, ScenarioRefs } from '@/core/framework/validation/validateDatabase'
+import { shippedSnapshot } from './helpers/shippedSnapshot'
 
 /**
  * Минимальный валидный снимок: один анкор-актор (barycenter) без обязательных связей.
@@ -157,6 +158,12 @@ describe('validateDatabase — якорь атмосферы к планете',
     expect(result.errors.some((e) => /radii invalid/i.test(e.message))).toBe(true)
   })
 
+  it('ловит bottomRadius строкой вместо числа', () => {
+    const result = validateDatabase(snapshotWithAtmosphere('100' as unknown as number, 6420, 6360))
+
+    expect(result.errors.some((e) => /radii invalid/i.test(e.message))).toBe(true)
+  })
+
   it('атмосфера без физобъекта у родителя не падает и не ругается на якорь', () => {
     const db = snapshotWithAtmosphere(6360, 6420, 6360)
     db.physicalObjects = []
@@ -252,7 +259,15 @@ describe('validateDatabase — внешние ключи', () => {
 
   it('ловит неизвестный строковый алиас категории', () => {
     const db = baseSnapshot()
-    db.actors.push({ id: 11, categoryId: 'wormhole' as any, parentId: 10, name: 'X', description: '', color: '#fff' })
+    db.actors.push({
+      id: 11,
+      // намеренно битое значение: валидатор обязан поймать несуществующую категорию
+      categoryId: 'wormhole' as unknown as number,
+      parentId: 10,
+      name: 'X',
+      description: '',
+      color: '#fff'
+    })
 
     const result = validateDatabase(db)
 
@@ -715,20 +730,9 @@ describe('validateDatabase — форма конфига туманности', 
  */
 describe('validateDatabase — реальный database (базлайн)', () => {
   it('текущие данные приложения валидны (0 errors)', async () => {
-    const { database } = await import('@/config/database')
     const { Scenarios } = await import('@/config/scenarios')
 
-    const snapshot: DatabaseSnapshot = {
-      categories: database.get('categories') as any,
-      actors: database.get('actors') as any,
-      orbits: database.get('orbits') as any,
-      rotationObjects: database.get('rotationObjects') as any,
-      physicalObjects: database.get('physicalObjects') as any,
-      renderingObjects: database.get('renderingObjects') as any,
-      placements: database.get('placements') as any,
-      resources: database.get('resources') as any,
-      actorResource: database.get('actorResource') as any
-    }
+    const snapshot: DatabaseSnapshot = await shippedSnapshot()
 
     const scenarioRefs: ScenarioRefs[] = Scenarios.map((s) => ({
       id: s.id,

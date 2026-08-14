@@ -20,6 +20,9 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       '@typescript-eslint/no-explicit-any': 'error',
+      // Параметр с префиксом `_` — намеренно неиспользуемый: сигнатура диктуется
+      // контрактом базового класса, выкинуть его нельзя
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }]
     }
   },

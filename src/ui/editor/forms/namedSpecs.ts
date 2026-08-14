@@ -52,7 +52,7 @@ export const actorsSpec: TableSpec = {
   ],
   listLabel: (row) => `#${row.id} ${row.name ?? ''}`,
   defaults: () => ({
-    categoryId: 1 || null,
+    categoryId: 1,
     parentId: null,
     name: 'New Actor',
     description: '',

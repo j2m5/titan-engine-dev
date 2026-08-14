@@ -24,7 +24,7 @@ const DataEditorModal: FC<Closable & { visible: boolean }> = ({ visible, onClose
     []
   )
 
-  // @ts-ignore
+  // @ts-expect-error useEditorDraft type mismatch
   const editor = useEditorDraft(database, scenarioRefs)
   const { draft, validation, saving, saveStatus, save } = editor
 

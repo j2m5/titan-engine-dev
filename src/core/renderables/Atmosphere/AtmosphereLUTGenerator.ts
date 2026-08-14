@@ -310,7 +310,6 @@ function create3DRT(w: number, h: number, d: number): WebGL3DRenderTarget {
   rt.texture.magFilter = LinearFilter
   rt.texture.wrapS = ClampToEdgeWrapping
   rt.texture.wrapT = ClampToEdgeWrapping
-  // @ts-ignore
   rt.texture.wrapR = ClampToEdgeWrapping
   rt.texture.colorSpace = NoColorSpace
   return rt
@@ -606,7 +605,7 @@ class AtmosphereLUTGenerator {
   private setAtmosphereUniforms(material: RawShaderMaterial, config: AtmosphereConfig): void {
     const u = material.uniforms
 
-    const ensure = (name: string, defaultValue: any = null) => {
+    const ensure = (name: string, defaultValue: unknown = null) => {
       if (!u[name]) u[name] = new Uniform(defaultValue)
     }
 
