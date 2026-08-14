@@ -3,6 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { resampleDem } from './lib/resampleDem'
 import { readRawInt16Dem, resampleDemGrid } from './lib/rawDem'
 import { encodeHeightMap, normalizeToUint16, resolveHeightRange } from './lib/heightMapEncode'
+import { argument } from './lib/cliArguments'
 
 /**
  * Подготовка карты высот тела: DEM (GeoTIFF/PNG или сырой PDS IMG) →
@@ -29,12 +30,6 @@ import { encodeHeightMap, normalizeToUint16, resolveHeightRange } from './lib/he
  *        --in-width 23040 --in-height 11520 --scale-meters 0.5
  *   3. Залить в бакет: s3://textures/planets/moon/moon_height.raw
  */
-function argument(name: string): string | undefined {
-  const index: number = process.argv.indexOf(`--${name}`)
-
-  return index === -1 ? undefined : process.argv[index + 1]
-}
-
 const input: string | undefined = argument('in')
 const output: string | undefined = argument('out')
 const width: number = Number(argument('width') ?? 8192)
