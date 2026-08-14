@@ -33,14 +33,13 @@ class PlanetMaterial extends AbstractShaderMaterial {
     const specularMap: Texture | undefined = resourceStorage.getTexture(
       this.model.resources.where('resourceType', 'specular').first()?.getAttribute('path') ?? ''
     )
-    // Рельеф у тел с картой высот уже в геометрии: bump с той же информацией
-    // считал бы его дважды
+    // У тел с картой высот рельеф в геометрии, а bump-ресурс — slope-карта
+    // (уклоны, запечённые из той же карты высот): она шейдит попиксельно то,
+    // что не влезло в вершинную сетку, и мипы фильтруют её издалека.
     const hasHeightField = Boolean(this.model.resources.where('resourceType', 'height').first())
-    const bumpMap: Texture | undefined = hasHeightField
-      ? undefined
-      : resourceStorage.getTexture(
-          this.model.resources.where('resourceType', 'bump').first()?.getAttribute('path') ?? ''
-        )
+    const bumpMap: Texture | undefined = resourceStorage.getTexture(
+      this.model.resources.where('resourceType', 'bump').first()?.getAttribute('path') ?? ''
+    )
 
     this.uniforms.diffuseMap.value = diffuseMap
     this.uniforms.nightMap.value = nightMap
@@ -48,18 +47,21 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.specularMap.value = specularMap
     this.uniforms.bumpMap.value = bumpMap
 
-    // Шаг выборки соседних текселей для аналитического градиента нормали.
+    // Шаг выборки соседних текселей для аналитического градиента нормали —
+    // атрибут четырёхвыборочного bump-пути; slope-путь читает одну выборку.
     // Нули = рельеф выключен: все четыре выборки совпадают, градиент нулевой —
     // безопасное поведение, пока карта не загружена.
     const bumpImage = bumpMap?.image as { width?: number; height?: number } | undefined
+    const useClassicBump = !hasHeightField && Boolean(bumpMap)
     this.uniforms.uBumpTexelSize.value.set(
-      bumpImage?.width ? 1 / bumpImage.width : 0,
-      bumpImage?.height ? 1 / bumpImage.height : 0
+      useClassicBump && bumpImage?.width ? 1 / bumpImage.width : 0,
+      useClassicBump && bumpImage?.height ? 1 / bumpImage.height : 0
     )
 
     this.defines = {
       ...this.defines,
-      ...(bumpMap && { USE_BUMP: '1' }),
+      ...(useClassicBump && { USE_BUMP: '1' }),
+      ...(hasHeightField && bumpMap && { USE_SLOPE: '1' }),
       ...(specularMap && { USE_SPECULAR: '1' }),
       ...(nightMap && { USE_NIGHT: '1' }),
       ...(cloudMap && { USE_CLOUD: '1' })
@@ -77,6 +79,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uBumpTexelSize.value.set(0, 0)
 
     delete this.defines.USE_BUMP
+    delete this.defines.USE_SLOPE
     delete this.defines.USE_SPECULAR
     delete this.defines.USE_NIGHT
     delete this.defines.USE_CLOUD

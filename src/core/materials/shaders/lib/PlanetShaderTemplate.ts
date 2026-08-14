@@ -91,6 +91,10 @@ export const PlanetShaderTemplate: ShaderProps = {
       #include <heightNormalFunctions>
     #endif
 
+    #ifdef USE_SLOPE
+      #include <slopeNormalFunctions>
+    #endif
+
     #ifdef USE_RING
       #include <ringShadowUniforms>
       #include <ringShadowFunctions>
@@ -102,6 +106,10 @@ export const PlanetShaderTemplate: ShaderProps = {
 
       #ifdef USE_BUMP
         normal = perturbNormalFromHeight(normal, vEast, vUv);
+      #endif
+
+      #ifdef USE_SLOPE
+        normal = perturbNormalFromSlope(normal, vEast, vUv);
       #endif
 
       vec3 lightDirection = normalize(vViewLightDirection);

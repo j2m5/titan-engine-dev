@@ -72,6 +72,57 @@ describe('PlanetMaterial: привязка карт к юниформам', () =
   })
 })
 
+// Луна (actorId 19) — тело с height-ресурсом: рельеф в геометрии, шейдинг из slope-карты
+function moon(): Actor {
+  return Actor.find(19)!
+}
+
+function moonPathOf(kind: ResourceType): string {
+  return moon().resources.where('resourceType', kind).first()!.getAttribute('path') as string
+}
+
+describe('PlanetMaterial: slope-карта у тел с честным рельефом', () => {
+  beforeEach(() => {
+    seedPlaceholderKeys()
+    seedTexture(moonPathOf('diffuse'))
+  })
+  afterEach(() => resourceStorage.deleteAllTextures())
+
+  it('bump-текстура тела с height-ресурсом трактуется как slope-карта', () => {
+    seedTexture(moonPathOf('bump'), 8192, 4096)
+
+    const material = new PlanetMaterial(moon())
+    material.updateMaterial()
+
+    expect(material.defines.USE_SLOPE).toBe('1')
+    expect(material.defines.USE_BUMP).toBeUndefined()
+    expect(material.uniforms.bumpMap.value).not.toBeNull()
+    // шаг текселя — атрибут четырёхвыборочного bump-пути, slope-пути не нужен
+    expect(material.uniforms.uBumpTexelSize.value.x).toBe(0)
+    expect(material.uniforms.uBumpTexelSize.value.y).toBe(0)
+  })
+
+  it('пока slope-карта не пришла из стримера, оба дефайна рельефа молчат', () => {
+    const material = new PlanetMaterial(moon())
+    material.updateMaterial()
+
+    expect(material.defines.USE_SLOPE).toBeUndefined()
+    expect(material.defines.USE_BUMP).toBeUndefined()
+  })
+
+  it('resetMaterial снимает USE_SLOPE', () => {
+    seedTexture(moonPathOf('bump'), 8192, 4096)
+
+    const material = new PlanetMaterial(moon())
+    material.updateMaterial()
+    expect(material.defines.USE_SLOPE).toBe('1')
+
+    material.resetMaterial()
+
+    expect(material.defines.USE_SLOPE).toBeUndefined()
+  })
+})
+
 describe('PlanetMaterial: гейты ночной и облачной карт', () => {
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
