@@ -1,30 +1,31 @@
-export type EventCallback = (...args: any[]) => void
+/** Карта событий: имя события → кортеж типов его аргументов */
+export type EventMap = Record<string, unknown[]>
 
-class EventEmitter {
-  private readonly events: Record<string, EventCallback[]>
+class EventEmitter<TEvents extends EventMap = EventMap> {
+  private readonly events: { [K in keyof TEvents]?: Array<(...args: TEvents[K]) => void> }
 
   public constructor() {
     this.events = {}
   }
 
-  public subscribe(event: string, callback: EventCallback): void {
+  public subscribe<K extends keyof TEvents>(event: K, callback: (...args: TEvents[K]) => void): void {
     if (!this.events[event]) {
       this.events[event] = []
     }
-    this.events[event].push(callback)
+    this.events[event]!.push(callback)
   }
 
-  public unsubscribe(event: string, callback: EventCallback): void {
-    const callbacks: EventCallback[] = this.events[event]
+  public unsubscribe<K extends keyof TEvents>(event: K, callback: (...args: TEvents[K]) => void): void {
+    const callbacks = this.events[event]
     if (callbacks) {
-      this.events[event] = callbacks.filter((fn: EventCallback): boolean => fn !== callback)
+      this.events[event] = callbacks.filter((fn): boolean => fn !== callback)
     }
   }
 
-  public emit(event: string, ...args: any[]): void {
-    const callbacks: EventCallback[] = this.events[event]
+  public emit<K extends keyof TEvents>(event: K, ...args: TEvents[K]): void {
+    const callbacks = this.events[event]
     if (callbacks) {
-      callbacks.forEach((callback: EventCallback): void => {
+      callbacks.forEach((callback): void => {
         callback(...args)
       })
     }

@@ -24,7 +24,11 @@ export type SceneObserverRecord = {
  */
 export const OBSERVED_TYPES: readonly string[] = ['planet', 'star', 'blackHole', 'brownDwarf', 'whiteDwarf']
 
-class SceneObserver extends EventEmitter {
+class SceneObserver extends EventEmitter<{
+  change: [Vector3]
+  ClosestChange: [ObservableRecord]
+  distanceChange: [SceneObserverRecord]
+}> {
   private _observable: AstroControls | null = null
   private _scene: Scene | null = null
 

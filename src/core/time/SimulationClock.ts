@@ -7,7 +7,7 @@ import { getJD } from '@/core/helpers/jd'
  * а Engine мутировал его каждый кадр — теперь тактом владеет ядро,
  * а стор лишь зеркалит значение для отображения.
  */
-class SimulationClock extends EventEmitter {
+class SimulationClock extends EventEmitter<{ change: [] }> {
   private _epoch: number
   private _speedOfTime: number = 1
 
