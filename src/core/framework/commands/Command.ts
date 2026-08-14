@@ -6,7 +6,11 @@ import { Container, Newable } from '@/core/framework/container/Container'
  * на контейнер, и это осознанный компромисс: статический Command.execute()
  * по определению не может получить зависимости через конструктор.
  */
-abstract class Command<TArgs extends Record<string, any> = any, TResult = void> {
+// Статик не видит параметр типа класса — execute затеняет его своим TArgs.
+// Параметр класса держит сигнатуру наследников: CameraToObjectTransition
+// extends Command<CameraToObjectTransitionArgs>, по ней резолвит ObjectList.tsx
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+abstract class Command<TArgs extends object = object, TResult = void> {
   private static container: Container | null = null
 
   protected constructor() {}
@@ -18,7 +22,7 @@ abstract class Command<TArgs extends Record<string, any> = any, TResult = void> 
     Command.container = container
   }
 
-  public static async execute<TArgs extends Record<string, any> = any, TResult = void>(
+  public static async execute<TArgs extends object = object, TResult = void>(
     this: Newable<Command<TArgs, TResult>>,
     args: TArgs
   ): Promise<TResult> {
