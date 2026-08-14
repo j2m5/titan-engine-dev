@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite'
 import TitanFlex from '@titanui/components/TitanFlex'
 import TitanIconButton from '@titanui/components/TitanIconButton'
 import { SkipBackIcon, SkipForwardIcon } from '@phosphor-icons/react'
-import { useInjection } from '@/ui/di-react'
+import { useInjection } from '@/ui/hooks/useInjection'
 import { Tokens } from '@/core/providers/tokens'
 import { cameraStore } from '@/ui/mobx/CameraStore'
 import { formatter } from '@/ui/helpers'
@@ -51,7 +51,7 @@ const CameraSpeed = observer(() => {
       if (hideTimer.current) clearTimeout(hideTimer.current)
       if (hideAnimationTimer.current) clearTimeout(hideAnimationTimer.current)
     }
-  }, [])
+  }, [renderer.domElement])
 
   const formattedSpeed: string = `${formatter().format(cameraStore.formatSpeed.speed)} ${cameraStore.formatSpeed.unit}`
 

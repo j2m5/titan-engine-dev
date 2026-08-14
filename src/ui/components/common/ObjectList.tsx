@@ -1,6 +1,6 @@
 import { JSX } from 'react'
 import { observer } from 'mobx-react-lite'
-import { useInjection } from '@/ui/di-react'
+import { useInjection } from '@/ui/hooks/useInjection'
 import { Tokens } from '@/core/providers/tokens'
 import TitanList from '@titanui/components/TitanList'
 import TitanListItem from '@titanui/components/TitanListItem'
