@@ -64,6 +64,10 @@ describe('EventEmitter: карта событий', () => {
     ticker.emit('done', 1)
     // @ts-expect-error события missing нет в карте
     ticker.emit('missing')
+    // @ts-expect-error события missing нет в карте — subscribe обязан его отвергнуть
+    ticker.subscribe('missing', () => {})
+    // @ts-expect-error tick объявлен как [number] — подписчик со строкой не подходит
+    ticker.unsubscribe('tick', (value: string) => value)
 
     expect(true).toBe(true)
   })
