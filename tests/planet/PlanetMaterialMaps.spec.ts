@@ -3,6 +3,7 @@ import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderT
 import { Actor } from '@/core/models/Actor'
 import { ResourceType } from '@/core/models/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { Texture } from 'three'
 
 // Земля (actorId 7) — единственное тело с полным набором карт
@@ -81,15 +82,30 @@ function moonPathOf(kind: ResourceType): string {
   return moon().resources.where('resourceType', kind).first()!.getAttribute('path') as string
 }
 
+// содержимое не важно: материал спрашивает только факт наличия карты в реестре
+function seedMoonHeightMap(): void {
+  ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(moonPathOf('height'), {
+    width: 4,
+    height: 2,
+    minMeters: 0,
+    maxMeters: 1000,
+    data: new Uint16Array(8)
+  })
+}
+
 describe('PlanetMaterial: slope-карта у тел с честным рельефом', () => {
   beforeEach(() => {
     seedPlaceholderKeys()
     seedTexture(moonPathOf('diffuse'))
   })
-  afterEach(() => resourceStorage.deleteAllTextures())
+  afterEach(() => {
+    resourceStorage.deleteAllTextures()
+    heightFieldStorage.clear()
+  })
 
-  it('bump-текстура тела с height-ресурсом трактуется как slope-карта', () => {
-    seedTexture(moonPathOf('bump'), 8192, 4096)
+  it('slope-ресурс тела с загруженной картой высот включает USE_SLOPE', () => {
+    seedMoonHeightMap()
+    seedTexture(moonPathOf('slope'), 8192, 4096)
 
     const material = new PlanetMaterial(moon())
     material.updateMaterial()
@@ -102,7 +118,21 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     expect(material.uniforms.uBumpTexelSize.value.y).toBe(0)
   })
 
-  it('пока slope-карта не пришла из стримера, оба дефайна рельефа молчат', () => {
+  it('пока slope-текстура не пришла из стримера, дефайны рельефа молчат', () => {
+    seedMoonHeightMap()
+
+    const material = new PlanetMaterial(moon())
+    material.updateMaterial()
+
+    expect(material.defines.USE_SLOPE).toBeUndefined()
+    expect(material.defines.USE_BUMP).toBeUndefined()
+  })
+
+  it('карта высот не загрузилась — кратерный шейдинг на гладкой сфере не включается', () => {
+    // геометрия в этом случае легаси-гладкая (Planet сверяется с тем же
+    // реестром): USE_SLOPE рисовал бы рельеф, которого нет в силуэте
+    seedTexture(moonPathOf('slope'), 8192, 4096)
+
     const material = new PlanetMaterial(moon())
     material.updateMaterial()
 
@@ -111,7 +141,8 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
   })
 
   it('resetMaterial снимает USE_SLOPE', () => {
-    seedTexture(moonPathOf('bump'), 8192, 4096)
+    seedMoonHeightMap()
+    seedTexture(moonPathOf('slope'), 8192, 4096)
 
     const material = new PlanetMaterial(moon())
     material.updateMaterial()
