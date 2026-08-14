@@ -87,17 +87,39 @@ describe('buildSlopeMap: честные уклоны из карты высот'
     expect(decode(rgb[(1 * width + 0) * 3 + 1])).toBeCloseTo(expected, 2)
   })
 
-  it('полярные строки клампят соседа по широте и не падают', () => {
+  it('полярные строки: односторонняя разность делится на фактический пролёт, а не на 2 строки', () => {
     const width = 2
     const height = 4
     const values = [400, 400, 100, 100, 0, 0, 0, 0]
 
     const rgb = buildSlopeMap(makeMap(width, height, values), R)
 
-    // строка 0: северный сосед клампится в саму строку 0 → (h0 − h1) / (2·arc)
+    // строка 0: северный сосед клампится в саму строку 0, пролёт — одна строка
     const northArc = (Math.PI * R) / height
-    const expected = (400 - 100) / (2 * northArc)
+    const expected = (400 - 100) / (1 * northArc)
     expect(decode(rgb[1])).toBeCloseTo(expected, 2)
+  })
+
+  it('у полюсов базис восточной разности расширяется до метрической длины экватора', () => {
+    // строка 0 (широта 78.75°): 1/cos ≈ 5.1 → пролёт ±4 текселя (кламп width/4).
+    // Без расширения одиночный пик в 1000 м на дуге 77 м сатурировал бы кламп —
+    // ровно тот полярный шум, который увидел бы игрок над полюсом.
+    const width = 16
+    const height = 8
+    const values = new Array(width * height).fill(0)
+    values[8] = 1000
+
+    const rgb = buildSlopeMap(makeMap(width, height, values), R)
+
+    const eastArc = (2 * Math.PI * R * Math.cos(rowLatitude(0, height))) / width
+    const span = 4
+    const expected = 1000 / (2 * span * eastArc)
+    expect(decode(rgb[4 * 3])).toBeCloseTo(expected, 1)
+
+    for (let x = 0; x < width; x++) {
+      expect(rgb[x * 3]).not.toBe(255)
+      expect(rgb[x * 3]).not.toBe(1)
+    }
   })
 
   it('уклон круче диапазона клампится в крайние байты, без переполнения', () => {

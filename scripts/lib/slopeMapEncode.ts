@@ -1,10 +1,7 @@
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
+import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 
-/**
- * Предел кодируемого уклона (tan угла): ±2 ≈ 63°. Реальные склоны Луны и
- * скалистых тел положе; всё круче — артефакт данных, клампится.
- */
-export const SLOPE_RANGE = 2
+export { SLOPE_RANGE }
 
 /**
  * Slope-карта из карты высот: на каждый тексель — безразмерный уклон
@@ -36,16 +33,27 @@ export function buildSlopeMap(map: HeightMapData, radiusMeters: number): Uint8Ar
   for (let y = 0; y < height; y++) {
     const latitude = Math.PI / 2 - ((y + 0.5) / height) * Math.PI
     const eastArc = (2 * Math.PI * radiusMeters * Math.cos(latitude)) / width
-    const rowNorth = Math.max(y - 1, 0) * width
-    const rowSouth = Math.min(y + 1, height - 1) * width
+    const yNorth = Math.max(y - 1, 0)
+    const ySouth = Math.min(y + 1, height - 1)
+    // полярные строки клампят соседа: разность односторонняя, пролёт короче
+    const northSpanArc = (ySouth - yNorth) * northArc
     const row = y * width
 
-    for (let x = 0; x < width; x++) {
-      const west = row + ((x - 1 + width) % width)
-      const east = row + ((x + 1) % width)
+    // База восточной разности расширяется до метрической длины пары
+    // экваториальных текселей: сжатые cos-широтой дуги у полюсов иначе
+    // усиливают 16-битное квантование высот в сатурированный шум уклона
+    // (0.3 м шага квантования на дугу 0.5 м — уже уклон 0.6). Кламп width/4 —
+    // защита от вырождения разности на всю окружность у самого полюса.
+    const eastSpan = Math.max(1, Math.min(Math.floor(width / 4), Math.round(1 / Math.cos(latitude))))
 
-      const slopeEast = ((data[east] - data[west]) * metersPerRaw) / (2 * eastArc)
-      const slopeNorth = ((data[rowNorth + x] - data[rowSouth + x]) * metersPerRaw) / (2 * northArc)
+    for (let x = 0; x < width; x++) {
+      const west = row + ((x - eastSpan + width) % width)
+      const east = row + ((x + eastSpan) % width)
+
+      const slopeEast = ((data[east] - data[west]) * metersPerRaw) / (2 * eastSpan * eastArc)
+      // карта в одну строку вырождает пролёт в ноль — уклона к северу нет
+      const slopeNorth =
+        northSpanArc === 0 ? 0 : ((data[yNorth * width + x] - data[ySouth * width + x]) * metersPerRaw) / northSpanArc
 
       const i = (row + x) * 3
       out[i] = encode(slopeEast)

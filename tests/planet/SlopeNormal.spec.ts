@@ -1,6 +1,7 @@
 import { AppShaderChunk } from '@/core/materials/shaders/lib/chunks'
 import { slopeNormalFunctions } from '@/core/materials/shaders/lib/chunks/SlopeNormal'
 import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 
 describe('SlopeNormal: попиксельная нормаль из slope-карты', () => {
   it('чанк зарегистрирован — иначе include молча раскроется в пустоту', () => {
@@ -12,9 +13,11 @@ describe('SlopeNormal: попиксельная нормаль из slope-кар
     expect(slopeNormalFunctions).not.toContain('uBumpTexelSize')
   })
 
-  it('декод знаковой кодировки: байт 128 — нулевой уклон, диапазон ±2', () => {
+  it('декод знаковой кодировки зеркалит SLOPE_RANGE энкодера, а не свою копию константы', () => {
     expect(slopeNormalFunctions).toContain('* 255.0 - 128.0')
-    expect(slopeNormalFunctions).toContain('(2.0 / 127.0)')
+    // GLSL интерполирует общий SLOPE_RANGE: перекалибровка диапазона в одном
+    // месте меняет и энкодер, и декод — рассинхрон невозможен
+    expect(slopeNormalFunctions).toContain(`(${SLOPE_RANGE.toFixed(1)} / 127.0)`)
   })
 
   it('у полюса тангенс вырожден — возвращается геометрическая нормаль', () => {
