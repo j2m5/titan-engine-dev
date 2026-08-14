@@ -52,4 +52,19 @@ describe('EventEmitter: карта событий', () => {
 
     expect(calls).toBe(0)
   })
+
+  it('не пропускает эмит с чужой формой аргументов', () => {
+    const ticker = new Ticker()
+
+    // @ts-expect-error tick объявлен как [number] — строка не подходит
+    ticker.emit('tick', 'нет')
+    // @ts-expect-error tick требует аргумент
+    ticker.emit('tick')
+    // @ts-expect-error done объявлен как [] — аргументов не принимает
+    ticker.emit('done', 1)
+    // @ts-expect-error события missing нет в карте
+    ticker.emit('missing')
+
+    expect(true).toBe(true)
+  })
 })
