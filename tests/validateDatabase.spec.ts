@@ -158,6 +158,12 @@ describe('validateDatabase — якорь атмосферы к планете',
     expect(result.errors.some((e) => /radii invalid/i.test(e.message))).toBe(true)
   })
 
+  it('ловит bottomRadius строкой вместо числа', () => {
+    const result = validateDatabase(snapshotWithAtmosphere('100' as unknown as number, 6420, 6360))
+
+    expect(result.errors.some((e) => /radii invalid/i.test(e.message))).toBe(true)
+  })
+
   it('атмосфера без физобъекта у родителя не падает и не ругается на якорь', () => {
     const db = snapshotWithAtmosphere(6360, 6420, 6360)
     db.physicalObjects = []
