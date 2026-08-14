@@ -21,8 +21,7 @@ type RingSystemInternals = {
   __tryBuildDensityProfile(): void
 }
 
-export const internalsOf = (system: AsteroidRingSystem): RingSystemInternals =>
-  system as unknown as RingSystemInternals
+export const internalsOf = (system: AsteroidRingSystem): RingSystemInternals => system as unknown as RingSystemInternals
 
 /** Поле `pool` приватно, а всё внутри него — публично. Тонкая обёртка над internalsOf,
  *  форма уже разошлась по сайтам вызова. */
