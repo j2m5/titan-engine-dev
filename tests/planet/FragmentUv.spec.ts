@@ -33,4 +33,15 @@ describe('FragmentUv: попиксельные UV терраформных те�
     // легаси-ветка (#else) — единственное оставшееся использование vUv
     expect(frag).toContain('vec2 uv = vUv;')
   })
+
+  it('двухдоменный выбор u вместо fract-скачка на шве меридиана', () => {
+    // if (u < 0.0) u += 1.0 держал значение непрерывным, но экранная
+    // производная u прыгала на ~1 на этой колонке пикселей — GPU брал
+    // грубейший мип (полоса мыла). fract даёт разрыв производной каждый
+    // на своём меридиане; берём домен с меньшей fwidth в этой точке.
+    expect(frag).not.toContain('if (u < 0.0) u += 1.0;')
+    expect(frag).toContain('float u1 = fract(uRaw);')
+    expect(frag).toContain('float u2 = fract(uRaw + 0.5) - 0.5;')
+    expect(frag).toContain('float u = fwidth(u1) <= fwidth(u2) ? u1 : u2;')
+  })
 })
