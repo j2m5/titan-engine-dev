@@ -100,6 +100,13 @@ describe('terrainHeightFieldFor: кэш', () => {
 })
 
 describe('TerrainHeightField: карта провиса', () => {
+  // обратная формула dirToUv (задача 1): theta = v·π, север v=0 → +Y
+  const uvToDir = (u: number, v: number): Vector3 => {
+    const theta = v * Math.PI
+    const phi = u * 2 * Math.PI
+    return new Vector3(-Math.cos(phi) * Math.sin(theta), Math.cos(theta), Math.sin(phi) * Math.sin(theta))
+  }
+
   it('плоская карта даёт ровный минимальный клиренс', () => {
     const field = new TerrainHeightField(makeMap(64, 32, new Array(64 * 32).fill(30000), 0, 20000), R_KM)
 
@@ -117,12 +124,6 @@ describe('TerrainHeightField: карта провиса', () => {
     const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
 
     // направление в яму: столбец 8 → u = 8.5/64, строка 16 → v = 16.5/32
-    const uvToDir = (u: number, v: number): Vector3 => {
-      const theta = v * Math.PI
-      const phi = u * 2 * Math.PI
-      return new Vector3(-Math.cos(phi) * Math.sin(theta), Math.cos(theta), Math.sin(phi) * Math.sin(theta))
-    }
-
     expect(field.clearanceMeters(uvToDir(8.5 / 64, 16.5 / 32))).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
     // противоположная сторона планеты — только базовый запас
     expect(field.clearanceMeters(uvToDir(40.5 / 64, 16.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
@@ -137,5 +138,50 @@ describe('TerrainHeightField: карта провиса', () => {
       field.surfaceRadiusUnits(dir) + toThreeJSUnits(CLEARANCE_MARGIN_METERS / 1000),
       12
     )
+  })
+
+  it('крупная карта (block > 1) сводит яму через блочную редукцию', () => {
+    // 2048×1024 → block = round(2048/1024) = 2, блоки объединяют по 2 текселя:
+    // проверяем, что редукция по блокам, а не только по-текселная, находит яму
+    const width = 2048
+    const height = 1024
+    const values = new Array(width * height).fill(20000)
+    const col = 512
+    const row = 256
+    values[row * width + col] = 10000
+    const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
+
+    const pitDir = uvToDir((col + 0.5) / width, (row + 0.5) / height)
+    expect(field.clearanceMeters(pitDir)).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
+
+    // противоположная долгота на том же широтном поясе — вне окрестности ямы
+    const farCol = (col + width / 2) % width
+    const farDir = uvToDir((farCol + 0.5) / width, (row + 0.5) / height)
+    expect(field.clearanceMeters(farDir)).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
+  })
+
+  it('яма у шва долготы (столбец 0) поднимает клиренс у правого края карты', () => {
+    // 64×32, block=1: яма в столбце 0 — группа 2×2 и дилатация заворачивают
+    // индекс через шов (bx=63 → (63+1)%64=0), клиренс должен вырасти и справа
+    const values = new Array(64 * 32).fill(20000)
+    values[16 * 64 + 0] = 10000 // строка 16, столбец 0 — у самого шва
+    const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
+
+    // правый край карты, u чуть меньше 1 — последний столбец, ячейка 7 из 8
+    expect(field.clearanceMeters(uvToDir(63.5 / 64, 16.5 / 32))).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
+    // середина карты — вне окрестности шва и ямы
+    expect(field.clearanceMeters(uvToDir(32.5 / 64, 16.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
+  })
+
+  it('полярная яма (строка 0) считается без падения и не течёт на другой полюс', () => {
+    // 64×32, block=1: яма в строке 0 (у полюса) — широта должна клемпиться,
+    // а не заворачиваться на противоположный полюс
+    const values = new Array(64 * 32).fill(20000)
+    values[0 * 64 + 32] = 10000 // строка 0, столбец 32
+    const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
+
+    expect(field.clearanceMeters(uvToDir(32.5 / 64, 0.5 / 32))).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
+    // противоположный полюс — только базовый запас, клампа не должно перетекать
+    expect(field.clearanceMeters(uvToDir(32.5 / 64, 31.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
   })
 })
