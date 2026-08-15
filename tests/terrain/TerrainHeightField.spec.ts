@@ -315,3 +315,107 @@ describe('TerrainHeightField: билинейная выборка клиренс
     expect(quarter).toBeLessThan(mid)
   })
 })
+
+describe('TerrainHeightField: геометрическая ошибка уровня', () => {
+  it('монотонно не возрастает с уровнем и положительна', () => {
+    const values = Array.from({ length: 64 * 32 }, (_, k) => (k * 4001) % 65535)
+    const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
+
+    let prev = Infinity
+    for (let level = 1; level <= 6; level++) {
+      const e = field.geometricErrorMeters(level)
+      expect(e).toBeGreaterThan(0)
+      expect(e).toBeLessThanOrEqual(prev)
+      prev = e
+    }
+  })
+
+  it('консервативность: ε уровня ≥ p50 фактического размаха на шаге сетки (синтетика)', () => {
+    // шахматка амплитудой 1000 м на масштабе блока: размах любого окна = 1000
+    const width = 64
+    const height = 32
+    const values = new Array(width * height)
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++) values[y * width + x] = ((x + y) % 2) * 1000
+    const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
+
+    // блок=1 тексель: окно 1×1 не видит соседа — консервативность держит окно 2×2 у ℓ1
+    expect(field.geometricErrorMeters(1)).toBeCloseTo(1000, 0)
+  })
+
+  it('одиночный обрыв не задирает p99', () => {
+    const width = 64
+    const height = 32
+    const values = new Array(width * height).fill(20000)
+    values[16 * width + 8] = 0 // одна яма 20 км
+    const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
+
+    // p99: 99% окон плоские → ε мала против глубины ямы
+    expect(field.geometricErrorMeters(2)).toBeLessThan(2000)
+  })
+
+  it('level клампится в [1..6]', () => {
+    const field = new TerrainHeightField(makeMap(4, 2, new Array(8).fill(0)), R_KM)
+    expect(field.geometricErrorMeters(0)).toBe(field.geometricErrorMeters(1))
+    expect(field.geometricErrorMeters(9)).toBe(field.geometricErrorMeters(6))
+  })
+
+  it('block > 1: фолбэк на p99(2×2) не срабатывает — ℓ2 равен именно p99(1×1)', () => {
+    // width=2048 → block=round(2048/1024)=2, blocksX=1024, blocksY=512 (как в
+    // clearance-тесте «крупная карта»). Внутриблочный размах = R1 у КАЖДОГО
+    // блока (не зависит от bx/by) — p99(1×1)=R1 точно. Базовая высота блока
+    // растёт с bx на шаг S — окно 2×2 захватывает соседний блок выше на S,
+    // p99(2×2)=S+R1 строго больше p99(1×1): различие само по себе доказывает,
+    // что ℓ2 не подменился фолбэком на p99(2×2).
+    const width = 2048
+    const height = 1024
+    const block = 2
+    const blocksX = width / block
+    const blocksY = height / block
+    const S = 50
+    const R1 = 200
+
+    const values = new Array(width * height)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const bx = Math.floor(x / block)
+        const lx = x % block
+        const ly = y % block
+        const intra = lx === 1 || ly === 1 ? R1 : 0
+        values[y * width + x] = bx * S + intra
+      }
+    }
+    const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
+
+    // p99(1×1) той же формулой, что и в реализации: по-блочные min/max → размах → p99
+    const blockMin = new Array<number>(blocksX * blocksY).fill(65535)
+    const blockMax = new Array<number>(blocksX * blocksY).fill(0)
+    for (let y = 0; y < height; y++) {
+      const by = Math.floor(y / block)
+      for (let x = 0; x < width; x++) {
+        const bx = Math.floor(x / block)
+        const b = by * blocksX + bx
+        const raw = values[y * width + x]
+        if (raw < blockMin[b]) blockMin[b] = raw
+        if (raw > blockMax[b]) blockMax[b] = raw
+      }
+    }
+    const ranges1x1 = blockMin.map((lo, i) => blockMax[i] - lo)
+    const sorted = [...ranges1x1].sort((a, b) => a - b)
+    const p99_1x1 = sorted[Math.floor(0.99 * (sorted.length - 1))]
+
+    expect(p99_1x1).toBe(R1) // сконструировано так, что размах любого блока = R1
+    expect(field.geometricErrorMeters(2)).toBeCloseTo(p99_1x1, 6)
+    // p99(2×2) = S+R1 строго больше p99(1×1) — не тот же режим, что у ℓ2
+    expect(field.geometricErrorMeters(1)).toBeGreaterThan(field.geometricErrorMeters(2))
+
+    // монотонность по всем уровням на карте, где фолбэк не участвует
+    let prev = Infinity
+    for (let level = 1; level <= 6; level++) {
+      const e = field.geometricErrorMeters(level)
+      expect(e).toBeGreaterThan(0)
+      expect(e).toBeLessThanOrEqual(prev)
+      prev = e
+    }
+  })
+})

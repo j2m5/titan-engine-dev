@@ -1,15 +1,64 @@
-import { BufferAttribute, BufferGeometry, Vector2, Vector3 } from 'three'
+import { BufferAttribute, BufferGeometry, Mesh, Vector2, Vector3 } from 'three'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { cubeFaceDirection } from './cubeSphere'
 import type { TerrainHeightField } from './TerrainHeightField'
 
+/** Вершин в регулярной сетке патча segments×segments (без юбки). */
+const gridVertexCount = (segments: number): number => (segments + 1) * (segments + 1)
+
+/** Юбочных вершин — по одной на сегмент периметра, 4 стороны. */
+const ringVertexCount = (segments: number): number => 4 * segments
+
 /**
- * Общий индекс сетки патча: у всех патчей одинаковая топология, поэтому один
- * BufferAttribute шарится по ссылке. Обмотка CCW при взгляде снаружи —
- * базисы граней правые (u×v = n).
+ * Полный вершинный счёт патча (регулярная сетка + юбочное кольцо) — общий
+ * источник правды для аллокации буферов (пул, fresh-билдер) и тестов;
+ * дублирование этой суммы разошлось бы независимо при правке сетки/юбки.
+ */
+export function terrainPatchVertexCount(segments: number): number {
+  return gridVertexCount(segments) + ringVertexCount(segments)
+}
+
+/**
+ * Индекс сеточной вершины на периметре патча по ходу обхода кольца k
+ * (0..4·segments−1): CCW от угла (a=0,b=0) — низ слева направо, право
+ * снизу вверх, верх справа налево, лево сверху вниз. Каждая точка периметра
+ * встречается ровно один раз (углы не дублируются между сторонами).
+ */
+function ringGridIndex(k: number, segments: number): number {
+  let a: number
+  let b: number
+
+  if (k < segments) {
+    a = k
+    b = 0
+  } else if (k < 2 * segments) {
+    a = segments
+    b = k - segments
+  } else if (k < 3 * segments) {
+    a = segments - (k - 2 * segments)
+    b = segments
+  } else {
+    a = 0
+    b = segments - (k - 3 * segments)
+  }
+
+  return b * (segments + 1) + a
+}
+
+/**
+ * Общий индекс патча: у всех патчей одинаковая топология, поэтому один
+ * BufferAttribute шарится по ссылке. Обмотка сетки CCW при взгляде снаружи —
+ * базисы граней правые (u×v = n). За сеткой следует юбочная полоса —
+ * 4·segments квадов между периметром сетки и юбочными вершинами (последние
+ * (segments+1)² их не занимают в сетке — юбка добавляется билдером
+ * геометрии после сеточного цикла). Юбка держит стык уровней LOD без щелей:
+ * вертикальная стенка вниз по периметру патча перекрывает шов с соседом
+ * другой глубины.
  */
 export function buildPatchIndex(segments: number): BufferAttribute {
-  const indices = new Uint16Array(segments * segments * 6)
+  const ringCount = ringVertexCount(segments)
+  const gridCount = gridVertexCount(segments)
+  const indices = new Uint16Array(segments * segments * 6 + ringCount * 6)
   let offset = 0
 
   for (let b = 0; b < segments; b++) {
@@ -28,35 +77,65 @@ export function buildPatchIndex(segments: number): BufferAttribute {
     }
   }
 
+  for (let k = 0; k < ringCount; k++) {
+    const kNext = (k + 1) % ringCount
+    const edgeA = ringGridIndex(k, segments)
+    const edgeB = ringGridIndex(kNext, segments)
+    const skirtA = gridCount + k
+    const skirtB = gridCount + kNext
+
+    // обмотка наружу: стенка юбки — зеркало паттерна сеточного квада (там
+    // «вверх» по b — обычная соседняя строка сетки, здесь «вниз» — юбка,
+    // поэтому диагональный сплит зеркалится, иначе нормаль стенки смотрит
+    // внутрь патча, а не наружу по касательной
+    indices[offset++] = edgeA
+    indices[offset++] = skirtB
+    indices[offset++] = edgeB
+    indices[offset++] = edgeA
+    indices[offset++] = skirtA
+    indices[offset++] = skirtB
+  }
+
   return new BufferAttribute(indices, 1)
 }
 
 const POLE_EPSILON = 1e-9
 
 /**
- * RTC-геометрия патча (face, i, j) глубины depth: позиции хранятся
- * ОТНОСИТЕЛЬНО центра патча (центр — в position меша), больших чисел во
- * float32 нет, катастрофическое сокращение происходит в f64 на CPU при
- * сборке modelViewMatrix. Высота — те же канонические dirToUv/sampleMeters,
- * что использует surfaceRadiusUnits (мешер и коллизия читают одни данные
- * одной формулой; мешер зовёт dirToUv один раз на вершину, не через
- * surfaceRadiusUnits повторно — см. перф-заметку в цикле ниже). Нормали
- * радиальные — наклон шейдит slope-карта. UV разворачивается вокруг u
- * центра патча (|u−uc| ≤ 0.5, допускается выход за [0,1] — текстуры
+ * Ядро сборки RTC-патча (face, i, j) глубины depth: пишет position/normal/uv
+ * в переданные массивы (уже нужного размера — вызывающий считает
+ * vertexCount) и возвращает RTC-центр. Общее для fresh-варианта (аллоцирует
+ * массивы сам) и into-варианта пула (переиспользует буферы существующей
+ * геометрии без аллокаций).
+ *
+ * Позиции хранятся ОТНОСИТЕЛЬНО центра патча (центр — в position меша),
+ * больших чисел во float32 нет, катастрофическое сокращение происходит в f64
+ * на CPU при сборке modelViewMatrix. Высота — те же канонические
+ * dirToUv/sampleMeters, что использует surfaceRadiusUnits (мешер и коллизия
+ * читают одни данные одной формулой; мешер зовёт dirToUv один раз на
+ * вершину, не через surfaceRadiusUnits повторно — см. перф-заметку в цикле
+ * ниже). Нормали радиальные — наклон шейдит slope-карта. UV разворачивается
+ * вокруг u центра патча (|u−uc| ≤ 0.5, допускается выход за [0,1] — текстуры
  * терраформных тел в RepeatWrapping); вершина ровно в полюсе берёт u центра
  * (там phi не определён). Развёртка шва корректна при азимутальном спане
  * патча < 180°: глубина ≥ 1; корень глубины 0 (этап 3б) потребует другой
- * развёртки.
+ * развёртки. Юбка (skirtDepthUnits > 0) добавляет по периметру патча
+ * вертикальную стенку — копию кромочных dir/normal/uv с радиусом, уменьшенным
+ * на skirtDepthUnits: скрывает щель на стыке с соседним патчем другой
+ * глубины квадродерева без необходимости совпадения тесселяций.
  */
-export function buildTerrainPatchGeometry(
+function writeTerrainPatchAttributes(
   field: TerrainHeightField,
   face: number,
   i: number,
   j: number,
   depth: number,
   segments: number,
-  index: BufferAttribute
-): { geometry: BufferGeometry; center: Vector3 } {
+  skirtDepthUnits: number,
+  positions: Float32Array,
+  normals: Float32Array,
+  uvs: Float32Array
+): Vector3 {
   const patches = 1 << depth
   const span = 2 / patches
   const s0 = -1 + i * span
@@ -69,10 +148,8 @@ export function buildTerrainPatchGeometry(
   const center = centerDir.clone().multiplyScalar(field.surfaceRadiusUnits(centerDir))
   const centerU = field.dirToUv(centerDir, new Vector2()).x
 
-  const vertexCount = (segments + 1) * (segments + 1)
-  const positions = new Float32Array(vertexCount * 3)
-  const normals = new Float32Array(vertexCount * 3)
-  const uvs = new Float32Array(vertexCount * 2)
+  const gridCount = gridVertexCount(segments)
+  const ringCount = ringVertexCount(segments)
 
   let k = 0
   for (let b = 0; b <= segments; b++) {
@@ -105,6 +182,58 @@ export function buildTerrainPatchGeometry(
     }
   }
 
+  // юбка: копия кромочной вершины (dir/normal/uv), радиус кромки минус
+  // skirtDepthUnits. Вычитание нормали (=dir) из УЖЕ квантованной позиции
+  // кромки, а не пересборка dir·(r−skirtDepthUnits) заново, — общая ошибка
+  // округления кромочной позиции входит в обе вершины одинаково и почти
+  // полностью сокращается в разности длин edge/skirt (см. тест «юбочная
+  // вершина ниже своей кромочной ровно на skirtDepthUnits»); независимый
+  // пересчёт этого сокращения не даёт.
+  for (let ring = 0; ring < ringCount; ring++) {
+    const edgeIndex = ringGridIndex(ring, segments)
+    const skirtIndex = gridCount + ring
+
+    const nx = normals[edgeIndex * 3]
+    const ny = normals[edgeIndex * 3 + 1]
+    const nz = normals[edgeIndex * 3 + 2]
+
+    positions[skirtIndex * 3] = positions[edgeIndex * 3] - nx * skirtDepthUnits
+    positions[skirtIndex * 3 + 1] = positions[edgeIndex * 3 + 1] - ny * skirtDepthUnits
+    positions[skirtIndex * 3 + 2] = positions[edgeIndex * 3 + 2] - nz * skirtDepthUnits
+
+    normals[skirtIndex * 3] = nx
+    normals[skirtIndex * 3 + 1] = ny
+    normals[skirtIndex * 3 + 2] = nz
+
+    uvs[skirtIndex * 2] = uvs[edgeIndex * 2]
+    uvs[skirtIndex * 2 + 1] = uvs[edgeIndex * 2 + 1]
+  }
+
+  return center
+}
+
+/**
+ * Fresh-вариант: аллоцирует новые типизированные массивы и геометрию —
+ * эталон паритета для into-варианта (buildTerrainPatchInto) и его тестов;
+ * продакшн-вызовов нет — TerrainSphere зовёт только into-вариант через пул.
+ */
+export function buildTerrainPatchGeometry(
+  field: TerrainHeightField,
+  face: number,
+  i: number,
+  j: number,
+  depth: number,
+  segments: number,
+  index: BufferAttribute,
+  skirtDepthUnits: number
+): { geometry: BufferGeometry; center: Vector3 } {
+  const vertexCount = terrainPatchVertexCount(segments)
+  const positions = new Float32Array(vertexCount * 3)
+  const normals = new Float32Array(vertexCount * 3)
+  const uvs = new Float32Array(vertexCount * 2)
+
+  const center = writeTerrainPatchAttributes(field, face, i, j, depth, segments, skirtDepthUnits, positions, normals, uvs)
+
   const geometry = new BufferGeometry()
   geometry.setAttribute('position', new BufferAttribute(positions, 3))
   geometry.setAttribute('normal', new BufferAttribute(normals, 3))
@@ -113,4 +242,45 @@ export function buildTerrainPatchGeometry(
   geometry.computeBoundingSphere()
 
   return { geometry, center }
+}
+
+/**
+ * into-вариант для TerrainPatchPool: перезаписывает атрибуты уже
+ * существующей геометрии handle на месте (split/merge квадродерева без
+ * аллокаций типизированных массивов и BufferGeometry). Атрибуты и их размер
+ * заведены пулом при acquire под тот же segments — здесь только запись.
+ */
+export function buildTerrainPatchInto(
+  field: TerrainHeightField,
+  face: number,
+  i: number,
+  j: number,
+  depth: number,
+  segments: number,
+  skirtDepthUnits: number,
+  handle: { mesh: Mesh; geometry: BufferGeometry }
+): void {
+  const { geometry, mesh } = handle
+  const positions = geometry.getAttribute('position') as BufferAttribute
+  const normals = geometry.getAttribute('normal') as BufferAttribute
+  const uvs = geometry.getAttribute('uv') as BufferAttribute
+
+  const center = writeTerrainPatchAttributes(
+    field,
+    face,
+    i,
+    j,
+    depth,
+    segments,
+    skirtDepthUnits,
+    positions.array as Float32Array,
+    normals.array as Float32Array,
+    uvs.array as Float32Array
+  )
+
+  positions.needsUpdate = true
+  normals.needsUpdate = true
+  uvs.needsUpdate = true
+  geometry.computeBoundingSphere()
+  mesh.position.copy(center)
 }

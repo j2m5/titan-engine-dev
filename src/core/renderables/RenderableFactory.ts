@@ -183,7 +183,11 @@ class RenderableFactory {
     const heightPath = actor.resources.where('resourceType', 'height').first()?.getAttribute('path')
     const heightMap = typeof heightPath === 'string' ? heightFieldStorage.get(heightPath) : undefined
     const lodl1 = heightMap
-      ? new TerrainSphere(actor, terrainHeightFieldFor(heightMap, actor.physicalObject!.getAttribute('radius')!))
+      ? new TerrainSphere(
+          actor,
+          terrainHeightFieldFor(heightMap, actor.physicalObject!.getAttribute('radius')!),
+          this.renderer
+        )
       : new Planet(actor)
     const lodl2 = new FakePlanet(actor)
 
