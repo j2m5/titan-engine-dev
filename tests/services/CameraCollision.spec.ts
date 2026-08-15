@@ -1,12 +1,25 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { Object3D, Vector3 } from 'three'
 import '@/core/framework/TitanThree'
 import { COLLISION_GAP, collectColliders } from '@/core/services/CameraCollision'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { makeBody, makeModel, makeCollision } from './cameraCollisionStubs'
 
 const EARTH_RADIUS_KM = 6360
 const R = toThreeJSUnits(EARTH_RADIUS_KM) * COLLISION_GAP
+
+const MOON_HEIGHT_PATH = 'planets/moon/moon_height.raw'
+
+function seedHeightMap(values: number[], width: number, height: number, minMeters: number, maxMeters: number): void {
+  ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(MOON_HEIGHT_PATH, {
+    width,
+    height,
+    minMeters,
+    maxMeters,
+    data: new Uint16Array(values)
+  })
+}
 
 describe('collectColliders: состав кэша', () => {
   it('строит сферу по физическому радиусу с зазором', () => {
@@ -40,6 +53,32 @@ describe('collectColliders: состав кэша', () => {
     ]
 
     expect(collectColliders(objects)).toHaveLength(1)
+  })
+})
+
+describe('collectColliders: терраформные тела', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  it('тело с картой в реестре получает heightField и радиус R+maxH+maxClearance без GAP', () => {
+    seedHeightMap(new Array(8).fill(65535), 4, 2, 0, 10000)
+    const body = makeBody('planet', 1736, new Vector3(), undefined, MOON_HEIGHT_PATH)
+
+    const colliders = collectColliders([body])
+
+    expect(colliders[0].heightField).toBeDefined()
+    expect(colliders[0].radius).toBeCloseTo(
+      toThreeJSUnits(1736 + 10000 / 1000 + colliders[0].heightField!.maxClearanceMeters / 1000),
+      10
+    )
+  })
+
+  it('height-строка есть, но карта не загрузилась — тело остаётся сферой R×GAP', () => {
+    const body = makeBody('planet', 1736, new Vector3(), undefined, MOON_HEIGHT_PATH)
+
+    const colliders = collectColliders([body])
+
+    expect(colliders[0].heightField).toBeUndefined()
+    expect(colliders[0].radius).toBeCloseTo(toThreeJSUnits(1736) * COLLISION_GAP, 10)
   })
 })
 

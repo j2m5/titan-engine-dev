@@ -4,37 +4,48 @@ import { CameraCollision } from '@/core/services/CameraCollision'
 
 export type ModelStub = {
   physicalObject: { getAttribute: (key: string) => unknown } | null
+  resources: { where: (field: string, value: string) => { first: () => { getAttribute: (key: string) => unknown } | undefined } }
 }
 
 /**
- * Заглушка модели ORM: `collectColliders` читает только
- * `model.physicalObject.getAttribute('radius')` (км).
+ * Заглушка модели ORM: `collectColliders` читает
+ * `model.physicalObject.getAttribute('radius')` (км) и, для терраформных тел,
+ * `model.resources.where('resourceType', 'height').first().getAttribute('path')`.
  */
-export function makeModel(radiusKm: number | null): ModelStub {
+export function makeModel(radiusKm: number | null, heightPath?: string): ModelStub {
   return {
     physicalObject:
       radiusKm === null
         ? null
-        : { getAttribute: (key: string): unknown => (key === 'radius' ? radiusKm : undefined) }
+        : { getAttribute: (key: string): unknown => (key === 'radius' ? radiusKm : undefined) },
+    resources: {
+      where: (_field: string, value: string) => ({
+        first: () =>
+          value === 'height' && heightPath !== undefined
+            ? { getAttribute: (key: string): unknown => (key === 'path' ? heightPath : undefined) }
+            : undefined
+      })
+    }
   }
 }
 
 /**
  * Тело с `userData.type` — полем, по которому SceneObserver собирает снапшот.
  * Явно переданная `model` нужна тестам на дедупликацию: две ноды одного актора
- * делят один экземпляр модели.
+ * делят один экземпляр модели (при явной `model` `heightPath` игнорируется).
  */
 export function makeBody(
   type: string,
   radiusKm: number | null,
   position: Vector3 = new Vector3(),
-  model?: ModelStub
+  model?: ModelStub,
+  heightPath?: string
 ): Object3D {
   const body = new Object3D()
 
   body.userData.type = type
   body.position.copy(position)
-  body.model = (model ?? makeModel(radiusKm)) as never
+  body.model = (model ?? makeModel(radiusKm, heightPath)) as never
 
   return body
 }

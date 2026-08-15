@@ -1,10 +1,13 @@
 import { Object3D, PerspectiveCamera, Ray, Sphere, Vector3 } from 'three'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { SceneObserver } from '@/core/services/SceneObserver'
+import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
+import { terrainHeightFieldFor, type TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 
 export type Collider = {
   object: Object3D
   radius: number
+  heightField?: TerrainHeightField
 }
 
 /** Минимальная дистанция камеры до центра тела = R × COLLISION_GAP: зазор — задел под будущий рельеф поверхностей. */
@@ -33,8 +36,23 @@ export function collectColliders(objects: Object3D[]): Collider[] {
     const radius = model.physicalObject?.getAttribute('radius')
     if (typeof radius !== 'number' || radius <= 0) continue
 
+    // Рельеф — по фактически загруженной карте (реестр Planet'а): провал загрузки
+    // деградирует к сфере согласованно с геометрией и материалом
+    const heightPath = model.resources?.where('resourceType', 'height').first()?.getAttribute('path')
+    const map = typeof heightPath === 'string' ? heightFieldStorage.get(heightPath) : undefined
+    const heightField = map ? terrainHeightFieldFor(map, radius) : undefined
+
     seen.add(model)
-    colliders.push({ object, radius: toThreeJSUnits(radius) * COLLISION_GAP })
+    colliders.push(
+      heightField
+        ? {
+            object,
+            // широкая фаза: поверхность+клиренс нигде не выше maxH+maxClearance
+            radius: toThreeJSUnits(radius + heightField.maxMeters / 1000 + heightField.maxClearanceMeters / 1000),
+            heightField
+          }
+        : { object, radius: toThreeJSUnits(radius) * COLLISION_GAP }
+    )
   }
 
   return colliders
