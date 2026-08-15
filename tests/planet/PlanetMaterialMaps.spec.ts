@@ -4,7 +4,7 @@ import { Actor } from '@/core/models/Actor'
 import { ResourceType } from '@/core/models/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
-import { Texture } from 'three'
+import { ClampToEdgeWrapping, RepeatWrapping, Texture } from 'three'
 
 // Земля (actorId 7) — единственное тело с полным набором карт
 function earth(): Actor {
@@ -151,6 +151,27 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     material.resetMaterial()
 
     expect(material.defines.USE_SLOPE).toBeUndefined()
+  })
+
+  it('диффуз и slope-карта терраформного тела получают RepeatWrapping (шов кубосферы)', () => {
+    seedMoonHeightMap()
+    seedTexture(moonPathOf('slope'), 8192, 4096)
+
+    const material = new PlanetMaterial(moon())
+    material.updateMaterial()
+
+    expect((material.uniforms.diffuseMap.value as Texture).wrapS).toBe(RepeatWrapping)
+    expect((material.uniforms.bumpMap.value as Texture).wrapS).toBe(RepeatWrapping)
+  })
+
+  it('у тела без карты высот wrap текстур не меняется', () => {
+    seedTexture(pathOf('bump'), 8192, 4096)
+
+    const material = new PlanetMaterial(earth())
+    material.updateMaterial()
+
+    expect((material.uniforms.diffuseMap.value as Texture).wrapS).toBe(ClampToEdgeWrapping)
+    expect((material.uniforms.bumpMap.value as Texture).wrapS).toBe(ClampToEdgeWrapping)
   })
 })
 
