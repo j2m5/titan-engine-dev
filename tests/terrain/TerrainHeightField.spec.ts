@@ -1,0 +1,100 @@
+import { describe, expect, it } from 'vitest'
+import { SphereGeometry, Vector2, Vector3 } from 'three'
+import { TerrainHeightField, terrainHeightFieldFor } from '@/core/terrain/TerrainHeightField'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
+import type { HeightMapData } from '@/core/terrain/heightMapFormat'
+
+// min 0, max 65535 → метры численно равны raw-значению
+function makeMap(width: number, height: number, values: number[], minMeters = 0, maxMeters = 65535): HeightMapData {
+  return { width, height, minMeters, maxMeters, data: new Uint16Array(values) }
+}
+
+const R_KM = 1736
+
+describe('TerrainHeightField: полутексельная билинейка', () => {
+  it('центр текселя возвращает его высоту точно', () => {
+    // 2×2, тексель (1,0)=65535 при 0..100 м; его центр — u=0.75, v=0.25
+    const field = new TerrainHeightField(makeMap(2, 2, [0, 65535, 0, 0], 0, 100), R_KM)
+
+    expect(field.sampleMeters(0.75, 0.25)).toBeCloseTo(100, 5)
+    expect(field.sampleMeters(0.25, 0.25)).toBeCloseTo(0, 5)
+  })
+
+  it('между центрами интерполирует линейно', () => {
+    const field = new TerrainHeightField(makeMap(2, 1, [0, 65535], 0, 100), R_KM)
+
+    // середина между центрами текселей 0 (u=0.25) и 1 (u=0.75)
+    expect(field.sampleMeters(0.5, 0.5)).toBeCloseTo(50, 2)
+  })
+
+  it('долгота заворачивается: u=0 интерполирует последний и нулевой тексели', () => {
+    const field = new TerrainHeightField(makeMap(4, 1, [1000, 2000, 3000, 4000]), R_KM)
+
+    expect(field.sampleMeters(0, 0.5)).toBeCloseTo(field.sampleMeters(1, 0.5), 5)
+    // u=0 лежит между центрами текселей 3 (u=0.875) и 0 (u=0.125) ровно посередине
+    expect(field.sampleMeters(0, 0.5)).toBeCloseTo((4000 + 1000) / 2, 2)
+  })
+
+  it('широта клампится: v за пределами [0,1] читает полярные строки', () => {
+    const field = new TerrainHeightField(makeMap(1, 2, [5000, 9000]), R_KM)
+
+    expect(field.sampleMeters(0, -1)).toBeCloseTo(5000, 2)
+    expect(field.sampleMeters(0, 2)).toBeCloseTo(9000, 2)
+  })
+
+  it('границы min/max отдаются из заголовка', () => {
+    const field = new TerrainHeightField(makeMap(2, 2, [0, 0, 0, 0], -9096.7, 10740.6), R_KM)
+
+    expect(field.minMeters).toBeCloseTo(-9096.7, 3)
+    expect(field.maxMeters).toBeCloseTo(10740.6, 3)
+  })
+})
+
+describe('TerrainHeightField: паритет dirToUv с UV-развёрткой SphereGeometry', () => {
+  it('для каждой вершины сферы dirToUv(позиция) совпадает с родным UV', () => {
+    // Развёртка коллизии обязана совпадать с развёрткой рендера — иначе рельеф
+    // коллизии разъедется с картинкой по долготе. Полюса пропускаются: там
+    // three раскладывает дубли вершин по u, а направление одно.
+    const geometry = new SphereGeometry(1, 16, 16)
+    const positions = geometry.getAttribute('position')
+    const uvs = geometry.getAttribute('uv')
+    const field = new TerrainHeightField(makeMap(4, 2, [0, 0, 0, 0, 0, 0, 0, 0]), R_KM)
+
+    const dir = new Vector3()
+    const uv = new Vector2()
+    let checked = 0
+
+    for (let i = 0; i < positions.count; i++) {
+      dir.set(positions.getX(i), positions.getY(i), positions.getZ(i)).normalize()
+      if (Math.abs(dir.y) > 0.999) continue
+
+      field.dirToUv(dir, uv)
+
+      // u на шве: 0 и 1 эквивалентны
+      const du = Math.abs(uv.x - uvs.getX(i))
+      expect(Math.min(du, 1 - du)).toBeLessThan(1e-6)
+      // v карты: 0 = север = uv.y 1 у SphereGeometry
+      expect(uv.y).toBeCloseTo(1 - uvs.getY(i), 6)
+      checked++
+    }
+    expect(checked).toBeGreaterThan(100)
+  })
+})
+
+describe('TerrainHeightField: высоты по направлению', () => {
+  it('surfaceRadiusUnits = юниты(R + h)', () => {
+    // константная карта: raw 65535 при 0..1000 м → h = 1 км всюду
+    const field = new TerrainHeightField(makeMap(4, 2, new Array(8).fill(65535), 0, 1000), R_KM)
+
+    const dir = new Vector3(1, 1, 1).normalize()
+    expect(field.surfaceRadiusUnits(dir)).toBeCloseTo(toThreeJSUnits(R_KM + 1), 10)
+  })
+})
+
+describe('terrainHeightFieldFor: кэш', () => {
+  it('одна карта — один экземпляр', () => {
+    const map = makeMap(2, 2, [0, 0, 0, 0])
+
+    expect(terrainHeightFieldFor(map, R_KM)).toBe(terrainHeightFieldFor(map, R_KM))
+  })
+})
