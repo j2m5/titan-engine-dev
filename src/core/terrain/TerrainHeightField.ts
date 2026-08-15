@@ -10,6 +10,12 @@ import type { HeightMapData } from './heightMapFormat'
  */
 export const TERRAIN_SPHERE_SEGMENTS = 1024
 
+/** Базовый запас клиренса поверх провиса — амортизатор под шум карты и погрешность сетки. */
+export const CLEARANCE_MARGIN_METERS = 5
+
+/** Сторона группы блоков, формирующей одну ячейку сетки провиса. */
+const CLEARANCE_CELL_BLOCKS = 8
+
 const TWO_PI = 2 * Math.PI
 
 /**
@@ -22,14 +28,31 @@ const TWO_PI = 2 * Math.PI
  * Конвенции канонические: тексель i центрован на (i+0.5)/N (как texture2D и
  * slope-энкодер), dirToUv побайтно совпадает с развёрткой SphereGeometry —
  * закреплено паритетным тестом, не выводом.
+ *
+ * Карта провиса (clearance): треугольник визуальной сетки натянут над честной
+ * высотой не выше локального размаха высот в своём пролёте — окно вершинной
+ * сетки (width/TERRAIN_SPHERE_SEGMENTS текселей, для Луны 8). Ячейка сетки
+ * провиса — 8×8 таких блоков; группы 2×2 соседних блоков накрывают любое
+ * положение скользящего окна вершинной сетки. Финальная дилатация 3×3
+ * страхует границы ячеек, чтобы клиренс не обрывался скачком на стыке.
  */
 class TerrainHeightField {
   private readonly uvScratch = new Vector2()
+  private readonly clearanceGrid: Float32Array
+  private readonly clearanceGridWidth: number
+  private readonly clearanceGridHeight: number
+  public readonly maxClearanceMeters: number
 
   public constructor(
     private readonly map: HeightMapData,
     public readonly radiusKm: number
-  ) {}
+  ) {
+    const built = this.buildClearanceGrid()
+    this.clearanceGrid = built.grid
+    this.clearanceGridWidth = built.width
+    this.clearanceGridHeight = built.height
+    this.maxClearanceMeters = built.maxClearance
+  }
 
   public get minMeters(): number {
     return this.map.minMeters
@@ -87,6 +110,97 @@ class TerrainHeightField {
 
   public surfaceRadiusUnits(dir: Vector3): number {
     return toThreeJSUnits(this.radiusKm + this.heightMeters(dir) / 1000)
+  }
+
+  /** Локальный запас на провис визуальной сетки в направлении dir̂, всегда ≥ CLEARANCE_MARGIN_METERS. */
+  public clearanceMeters(dir: Vector3): number {
+    const uv = this.dirToUv(dir, this.uvScratch)
+    const cx = Math.min(Math.floor(uv.x * this.clearanceGridWidth), this.clearanceGridWidth - 1)
+    const cy = Math.min(Math.floor(uv.y * this.clearanceGridHeight), this.clearanceGridHeight - 1)
+
+    return this.clearanceGrid[cy * this.clearanceGridWidth + cx]
+  }
+
+  /** Радиус коллизии: поверхность плюс клиренс, оба в юнитах three.js. */
+  public collisionRadiusUnits(dir: Vector3): number {
+    return this.surfaceRadiusUnits(dir) + toThreeJSUnits(this.clearanceMeters(dir) / 1000)
+  }
+
+  /**
+   * Строит сетку провиса за два прохода (по-блочные min/max → провис ячейки
+   * из групп 2×2 блоков) и дилатацию 3×3 с запасом. Долгота заворачивается,
+   * широта клампится — как всюду в этом классе.
+   */
+  private buildClearanceGrid(): {
+    grid: Float32Array
+    width: number
+    height: number
+    maxClearance: number
+  } {
+    const { width, height, data } = this.map
+    const metersPerRaw = (this.map.maxMeters - this.map.minMeters) / 65535
+    const block = Math.max(1, Math.round(width / TERRAIN_SPHERE_SEGMENTS))
+    const blocksX = Math.ceil(width / block)
+    const blocksY = Math.ceil(height / block)
+
+    // проход 1: по-блочные min/max (raw)
+    const blockMin = new Uint16Array(blocksX * blocksY).fill(65535)
+    const blockMax = new Uint16Array(blocksX * blocksY)
+    for (let y = 0; y < height; y++) {
+      const by = Math.min(Math.floor(y / block), blocksY - 1)
+      for (let x = 0; x < width; x++) {
+        const b = by * blocksX + Math.min(Math.floor(x / block), blocksX - 1)
+        const raw = data[y * width + x]
+        if (raw < blockMin[b]) blockMin[b] = raw
+        if (raw > blockMax[b]) blockMax[b] = raw
+      }
+    }
+
+    // проход 2: провис ячейки (8×8 блоков) = max по группам 2×2 блоков
+    const gridW = Math.ceil(blocksX / CLEARANCE_CELL_BLOCKS)
+    const gridH = Math.ceil(blocksY / CLEARANCE_CELL_BLOCKS)
+    const sag = new Float32Array(gridW * gridH)
+    for (let by = 0; by < blocksY; by++) {
+      const cy = Math.min(Math.floor(by / CLEARANCE_CELL_BLOCKS), gridH - 1)
+      for (let bx = 0; bx < blocksX; bx++) {
+        const cx = Math.min(Math.floor(bx / CLEARANCE_CELL_BLOCKS), gridW - 1)
+        // группа 2×2 с началом в (bx, by): долгота wrap, широта кламп
+        let lo = 65535
+        let hi = 0
+        for (let dy = 0; dy <= 1; dy++) {
+          const ny = Math.min(by + dy, blocksY - 1)
+          for (let dx = 0; dx <= 1; dx++) {
+            const b = ny * blocksX + ((bx + dx) % blocksX)
+            if (blockMin[b] < lo) lo = blockMin[b]
+            if (blockMax[b] > hi) hi = blockMax[b]
+          }
+        }
+        const range = (hi - lo) * metersPerRaw
+        const c = cy * gridW + cx
+        if (range > sag[c]) sag[c] = range
+      }
+    }
+
+    // дилатация 3×3 + запас: у границ ячеек нет обрывов клиренса
+    const grid = new Float32Array(gridW * gridH)
+    let maxClearance = 0
+    for (let cy = 0; cy < gridH; cy++) {
+      for (let cx = 0; cx < gridW; cx++) {
+        let value = 0
+        for (let dy = -1; dy <= 1; dy++) {
+          const ny = Math.min(Math.max(cy + dy, 0), gridH - 1)
+          for (let dx = -1; dx <= 1; dx++) {
+            const s = sag[ny * gridW + ((cx + dx + gridW) % gridW)]
+            if (s > value) value = s
+          }
+        }
+        const c = cy * gridW + cx
+        grid[c] = value + CLEARANCE_MARGIN_METERS
+        if (grid[c] > maxClearance) maxClearance = grid[c]
+      }
+    }
+
+    return { grid, width: gridW, height: gridH, maxClearance }
   }
 }
 

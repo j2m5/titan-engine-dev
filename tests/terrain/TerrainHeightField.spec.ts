@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SphereGeometry, Vector2, Vector3 } from 'three'
-import { TerrainHeightField, terrainHeightFieldFor } from '@/core/terrain/TerrainHeightField'
+import { CLEARANCE_MARGIN_METERS, TerrainHeightField, terrainHeightFieldFor } from '@/core/terrain/TerrainHeightField'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 
@@ -96,5 +96,46 @@ describe('terrainHeightFieldFor: кэш', () => {
     const map = makeMap(2, 2, [0, 0, 0, 0])
 
     expect(terrainHeightFieldFor(map, R_KM)).toBe(terrainHeightFieldFor(map, R_KM))
+  })
+})
+
+describe('TerrainHeightField: карта провиса', () => {
+  it('плоская карта даёт ровный минимальный клиренс', () => {
+    const field = new TerrainHeightField(makeMap(64, 32, new Array(64 * 32).fill(30000), 0, 20000), R_KM)
+
+    const dirs = [new Vector3(1, 0, 0), new Vector3(0, 0, 1), new Vector3(1, 1, 1).normalize()]
+    for (const dir of dirs) {
+      expect(field.clearanceMeters(dir)).toBeCloseTo(CLEARANCE_MARGIN_METERS, 5)
+    }
+    expect(field.maxClearanceMeters).toBeCloseTo(CLEARANCE_MARGIN_METERS, 5)
+  })
+
+  it('одиночная яма поднимает клиренс в своей ячейке и соседних, дальние не трогает', () => {
+    // 64×32, min 0 max 65535 (метры = raw): яма глубиной 10000 в одном текселе
+    const values = new Array(64 * 32).fill(20000)
+    values[16 * 64 + 8] = 10000 // строка 16, столбец 8
+    const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
+
+    // направление в яму: столбец 8 → u = 8.5/64, строка 16 → v = 16.5/32
+    const uvToDir = (u: number, v: number): Vector3 => {
+      const theta = v * Math.PI
+      const phi = u * 2 * Math.PI
+      return new Vector3(-Math.cos(phi) * Math.sin(theta), Math.cos(theta), Math.sin(phi) * Math.sin(theta))
+    }
+
+    expect(field.clearanceMeters(uvToDir(8.5 / 64, 16.5 / 32))).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
+    // противоположная сторона планеты — только базовый запас
+    expect(field.clearanceMeters(uvToDir(40.5 / 64, 16.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
+    expect(field.maxClearanceMeters).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
+  })
+
+  it('collisionRadiusUnits = поверхность + клиренс в юнитах', () => {
+    const field = new TerrainHeightField(makeMap(4, 2, new Array(8).fill(65535), 0, 1000), R_KM)
+
+    const dir = new Vector3(1, 0, 0)
+    expect(field.collisionRadiusUnits(dir)).toBeCloseTo(
+      field.surfaceRadiusUnits(dir) + toThreeJSUnits(CLEARANCE_MARGIN_METERS / 1000),
+      12
+    )
   })
 })
