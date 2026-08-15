@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, Vector2, Vector3 } from 'three'
+import { BufferAttribute, BufferGeometry, Mesh, Vector2, Vector3 } from 'three'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { cubeFaceDirection } from './cubeSphere'
 import type { TerrainHeightField } from './TerrainHeightField'
@@ -87,15 +87,20 @@ export function buildPatchIndex(segments: number): BufferAttribute {
 const POLE_EPSILON = 1e-9
 
 /**
- * RTC-геометрия патча (face, i, j) глубины depth: позиции хранятся
- * ОТНОСИТЕЛЬНО центра патча (центр — в position меша), больших чисел во
- * float32 нет, катастрофическое сокращение происходит в f64 на CPU при
- * сборке modelViewMatrix. Высота — те же канонические dirToUv/sampleMeters,
- * что использует surfaceRadiusUnits (мешер и коллизия читают одни данные
- * одной формулой; мешер зовёт dirToUv один раз на вершину, не через
- * surfaceRadiusUnits повторно — см. перф-заметку в цикле ниже). Нормали
- * радиальные — наклон шейдит slope-карта. UV разворачивается вокруг u
- * центра патча (|u−uc| ≤ 0.5, допускается выход за [0,1] — текстуры
+ * Ядро сборки RTC-патча (face, i, j) глубины depth: пишет position/normal/uv
+ * в переданные массивы (уже нужного размера — вызывающий считает
+ * vertexCount) и возвращает RTC-центр. Общее для fresh-варианта (аллоцирует
+ * массивы сам) и into-варианта пула (переиспользует буферы существующей
+ * геометрии без аллокаций).
+ *
+ * Позиции хранятся ОТНОСИТЕЛЬНО центра патча (центр — в position меша),
+ * больших чисел во float32 нет, катастрофическое сокращение происходит в f64
+ * на CPU при сборке modelViewMatrix. Высота — те же канонические
+ * dirToUv/sampleMeters, что использует surfaceRadiusUnits (мешер и коллизия
+ * читают одни данные одной формулой; мешер зовёт dirToUv один раз на
+ * вершину, не через surfaceRadiusUnits повторно — см. перф-заметку в цикле
+ * ниже). Нормали радиальные — наклон шейдит slope-карта. UV разворачивается
+ * вокруг u центра патча (|u−uc| ≤ 0.5, допускается выход за [0,1] — текстуры
  * терраформных тел в RepeatWrapping); вершина ровно в полюсе берёт u центра
  * (там phi не определён). Развёртка шва корректна при азимутальном спане
  * патча < 180°: глубина ≥ 1; корень глубины 0 (этап 3б) потребует другой
@@ -104,16 +109,18 @@ const POLE_EPSILON = 1e-9
  * на skirtDepthUnits: скрывает щель на стыке с соседним патчем другой
  * глубины квадродерева без необходимости совпадения тесселяций.
  */
-export function buildTerrainPatchGeometry(
+function writeTerrainPatchAttributes(
   field: TerrainHeightField,
   face: number,
   i: number,
   j: number,
   depth: number,
   segments: number,
-  index: BufferAttribute,
-  skirtDepthUnits: number
-): { geometry: BufferGeometry; center: Vector3 } {
+  skirtDepthUnits: number,
+  positions: Float32Array,
+  normals: Float32Array,
+  uvs: Float32Array
+): Vector3 {
   const patches = 1 << depth
   const span = 2 / patches
   const s0 = -1 + i * span
@@ -128,10 +135,6 @@ export function buildTerrainPatchGeometry(
 
   const gridVertexCount = (segments + 1) * (segments + 1)
   const ringCount = 4 * segments
-  const vertexCount = gridVertexCount + ringCount
-  const positions = new Float32Array(vertexCount * 3)
-  const normals = new Float32Array(vertexCount * 3)
-  const uvs = new Float32Array(vertexCount * 2)
 
   let k = 0
   for (let b = 0; b <= segments; b++) {
@@ -191,6 +194,33 @@ export function buildTerrainPatchGeometry(
     uvs[skirtIndex * 2 + 1] = uvs[edgeIndex * 2 + 1]
   }
 
+  return center
+}
+
+/**
+ * Fresh-вариант: аллоцирует новые типизированные массивы и геометрию — путь
+ * начальной сборки кубосферы (TerrainSphere) и эталон для тестов паритета
+ * с into-вариантом пула.
+ */
+export function buildTerrainPatchGeometry(
+  field: TerrainHeightField,
+  face: number,
+  i: number,
+  j: number,
+  depth: number,
+  segments: number,
+  index: BufferAttribute,
+  skirtDepthUnits: number
+): { geometry: BufferGeometry; center: Vector3 } {
+  const gridVertexCount = (segments + 1) * (segments + 1)
+  const ringCount = 4 * segments
+  const vertexCount = gridVertexCount + ringCount
+  const positions = new Float32Array(vertexCount * 3)
+  const normals = new Float32Array(vertexCount * 3)
+  const uvs = new Float32Array(vertexCount * 2)
+
+  const center = writeTerrainPatchAttributes(field, face, i, j, depth, segments, skirtDepthUnits, positions, normals, uvs)
+
   const geometry = new BufferGeometry()
   geometry.setAttribute('position', new BufferAttribute(positions, 3))
   geometry.setAttribute('normal', new BufferAttribute(normals, 3))
@@ -199,4 +229,45 @@ export function buildTerrainPatchGeometry(
   geometry.computeBoundingSphere()
 
   return { geometry, center }
+}
+
+/**
+ * into-вариант для TerrainPatchPool: перезаписывает атрибуты уже
+ * существующей геометрии handle на месте (split/merge квадродерева без
+ * аллокаций типизированных массивов и BufferGeometry). Атрибуты и их размер
+ * заведены пулом при acquire под тот же segments — здесь только запись.
+ */
+export function buildTerrainPatchInto(
+  field: TerrainHeightField,
+  face: number,
+  i: number,
+  j: number,
+  depth: number,
+  segments: number,
+  skirtDepthUnits: number,
+  handle: { mesh: Mesh; geometry: BufferGeometry }
+): void {
+  const { geometry, mesh } = handle
+  const positions = geometry.getAttribute('position') as BufferAttribute
+  const normals = geometry.getAttribute('normal') as BufferAttribute
+  const uvs = geometry.getAttribute('uv') as BufferAttribute
+
+  const center = writeTerrainPatchAttributes(
+    field,
+    face,
+    i,
+    j,
+    depth,
+    segments,
+    skirtDepthUnits,
+    positions.array as Float32Array,
+    normals.array as Float32Array,
+    uvs.array as Float32Array
+  )
+
+  positions.needsUpdate = true
+  normals.needsUpdate = true
+  uvs.needsUpdate = true
+  geometry.computeBoundingSphere()
+  mesh.position.copy(center)
 }
