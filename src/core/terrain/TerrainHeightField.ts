@@ -13,8 +13,14 @@ export const TERRAIN_SPHERE_SEGMENTS = 1024
 /** Базовый запас клиренса поверх провиса — амортизатор под шум карты и погрешность сетки. */
 export const CLEARANCE_MARGIN_METERS = 5
 
-/** Сторона группы блоков, формирующей одну ячейку сетки провиса. */
-const CLEARANCE_CELL_BLOCKS = 8
+/**
+ * Сторона группы блоков, формирующей одну ячейку сетки провиса. 1 = ячейка
+ * совпадает с блоком (для Луны блок = 1 тексель ⇒ сетка 1024×512, ~2 МБ):
+ * замер финального ревью на реальной карте показал, что бывшие 8×8 (окно
+ * ~256 км) давали клиренс на порядки больше провиса сетки и лестницу
+ * `floor`-выборки со скачками до 3.5 км между соседними ячейками.
+ */
+const CLEARANCE_CELL_BLOCKS = 1
 
 const TWO_PI = 2 * Math.PI
 
@@ -32,9 +38,11 @@ const TWO_PI = 2 * Math.PI
  * Карта провиса (clearance): треугольник визуальной сетки натянут над честной
  * высотой не выше локального размаха высот в своём пролёте — окно вершинной
  * сетки (width/TERRAIN_SPHERE_SEGMENTS текселей, для Луны 8). Ячейка сетки
- * провиса — 8×8 таких блоков; группы 2×2 соседних блоков накрывают любое
- * положение скользящего окна вершинной сетки. Финальная дилатация 3×3
- * страхует границы ячеек, чтобы клиренс не обрывался скачком на стыке.
+ * провиса = один блок; группы 2×2 соседних блоков накрывают любое положение
+ * скользящего окна вершинной сетки. Финальная дилатация 3×3 страхует границы
+ * ячеек, чтобы клиренс не обрывался скачком на стыке. Выборка клиренса —
+ * билинейная по этой же сетке (см. `clearanceMeters`), а не ближайшая ячейка:
+ * иначе пол камеры ступенчатый на границах ячеек.
  */
 class TerrainHeightField {
   private readonly uvScratch = new Vector2()
@@ -118,10 +126,39 @@ class TerrainHeightField {
   /** Локальный запас на провис визуальной сетки в направлении dir̂, всегда ≥ CLEARANCE_MARGIN_METERS. */
   public clearanceMeters(dir: Vector3): number {
     const uv = this.dirToUv(dir, this.uvScratch)
-    const cx = Math.min(Math.floor(uv.x * this.clearanceGridWidth), this.clearanceGridWidth - 1)
-    const cy = Math.min(Math.floor(uv.y * this.clearanceGridHeight), this.clearanceGridHeight - 1)
 
-    return this.clearanceGrid[cy * this.clearanceGridWidth + cx]
+    return this.sampleClearance(uv.x, uv.y)
+  }
+
+  /**
+   * Билинейка по сетке провиса — те же полутекселные конвенции, что и
+   * `sampleMeters` (wrap по u, кламп по v). Индексы gridW/gridH выводятся из
+   * блочного счёта (`buildClearanceGrid`) и равномерны только при ширине
+   * карты, кратной CLEARANCE_CELL_BLOCKS × block — иначе последняя ячейка
+   * по каждой оси у́же остальных (Math.ceil), сама интерполяция это не ломает.
+   */
+  private sampleClearance(u: number, v: number): number {
+    const w = this.clearanceGridWidth
+    const h = this.clearanceGridHeight
+    const grid = this.clearanceGrid
+
+    let x = (u - Math.floor(u)) * w - 0.5
+    if (x < 0) x += w
+    const x0 = Math.floor(x)
+    const x1 = (x0 + 1) % w
+    const fx = x - x0
+
+    const y = Math.min(Math.max(Math.min(Math.max(v, 0), 1) * h - 0.5, 0), h - 1)
+    const y0 = Math.floor(y)
+    const y1 = Math.min(y0 + 1, h - 1)
+    const fy = y - y0
+
+    const c00 = grid[y0 * w + x0]
+    const c10 = grid[y0 * w + x1]
+    const c01 = grid[y1 * w + x0]
+    const c11 = grid[y1 * w + x1]
+
+    return (c00 * (1 - fx) + c10 * fx) * (1 - fy) + (c01 * (1 - fx) + c11 * fx) * fy
   }
 
   /** Радиус коллизии: поверхность плюс клиренс, оба в юнитах three.js. */

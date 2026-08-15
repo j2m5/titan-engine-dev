@@ -147,13 +147,21 @@ describe('TerrainHeightField: карта провиса', () => {
   })
 
   it('одиночная яма поднимает клиренс в своей ячейке и соседних, дальние не трогает', () => {
-    // 64×32, min 0 max 65535 (метры = raw): яма глубиной 10000 в одном текселе
+    // 64×32, min 0 max 65535 (метры = raw): яма глубиной 10000 в одном текселе.
+    // block=1 (64 < TERRAIN_SPHERE_SEGMENTS), CLEARANCE_CELL_BLOCKS=1 ⇒ ячейка
+    // = 1 блок = 1 тексель. Яма в (col8,row16) поднимает sag только у групп
+    // 2×2 с началом bx∈{7,8}, by∈{15,16}; финальная дилатация 3×3 растягивает
+    // это ещё на ±1 ячейку — весь поднятый остров укладывается в x∈[6,9], y∈[14,17]
     const values = new Array(64 * 32).fill(20000)
     values[16 * 64 + 8] = 10000 // строка 16, столбец 8
     const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
 
     // направление в яму: столбец 8 → u = 8.5/64, строка 16 → v = 16.5/32
     expect(field.clearanceMeters(uvToDir(8.5 / 64, 16.5 / 32))).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
+    // столбец 10 лежал в СТАРОЙ 8-блочной ячейке ямы (колонки 8..15) — при
+    // сузившейся до 1 блока сетке он вне поднятого острова (x∈[6,9]):
+    // демонстрация того, что клиренс перестал завышаться на весь бывший блок
+    expect(field.clearanceMeters(uvToDir(10.5 / 64, 16.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
     // противоположная сторона планеты — только базовый запас
     expect(field.clearanceMeters(uvToDir(40.5 / 64, 16.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
     expect(field.maxClearanceMeters).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
@@ -190,27 +198,72 @@ describe('TerrainHeightField: карта провиса', () => {
   })
 
   it('яма у шва долготы (столбец 0) поднимает клиренс у правого края карты', () => {
-    // 64×32, block=1: яма в столбце 0 — группа 2×2 и дилатация заворачивают
-    // индекс через шов (bx=63 → (63+1)%64=0), клиренс должен вырасти и справа
+    // 64×32, block=1, CLEARANCE_CELL_BLOCKS=1 (ячейка = блок = тексель): яма
+    // в столбце 0 — группа 2×2 с началом bx=63 заворачивает индекс через шов
+    // ((63+1)%64=0) и включает яму напрямую, дилатация 3×3 растягивает
+    // поднятый остров до x∈{62,63,0,1}
     const values = new Array(64 * 32).fill(20000)
     values[16 * 64 + 0] = 10000 // строка 16, столбец 0 — у самого шва
     const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
 
-    // правый край карты, u чуть меньше 1 — последний столбец, ячейка 7 из 8
+    // последний блок сетки (столбец 63) заворачивает через шов вместе с ямой
     expect(field.clearanceMeters(uvToDir(63.5 / 64, 16.5 / 32))).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
+    // столбец 61 лежал в СТАРОЙ 8-блочной ячейке шва (56..63), но новый
+    // остров у шва (x∈{62,63,0,1}) его не накрывает — только базовый запас
+    expect(field.clearanceMeters(uvToDir(61.5 / 64, 16.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
     // середина карты — вне окрестности шва и ямы
     expect(field.clearanceMeters(uvToDir(32.5 / 64, 16.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
   })
 
   it('полярная яма (строка 0) считается без падения и не течёт на другой полюс', () => {
     // 64×32, block=1: яма в строке 0 (у полюса) — широта должна клемпиться,
-    // а не заворачиваться на противоположный полюс
+    // а не заворачиваться на противоположный полюс. Клампованные группы
+    // 2×2 включают яму только при by=0 (нет группы «by=-1»), дилатация 3×3
+    // растягивает поднятый остров до y∈{0,1}
     const values = new Array(64 * 32).fill(20000)
     values[0 * 64 + 32] = 10000 // строка 0, столбец 32
     const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
 
     expect(field.clearanceMeters(uvToDir(32.5 / 64, 0.5 / 32))).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
+    // строка 2 лежала в СТАРОЙ 8-блочной полярной ячейке (0..7) — новая
+    // сетка её не накрывает (остров лишь y∈{0,1}): только базовый запас
+    expect(field.clearanceMeters(uvToDir(32.5 / 64, 2.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
     // противоположный полюс — только базовый запас, клампа не должно перетекать
     expect(field.clearanceMeters(uvToDir(32.5 / 64, 31.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
+  })
+})
+
+describe('TerrainHeightField: билинейная выборка клиренса', () => {
+  const uvToDir = (u: number, v: number): Vector3 => {
+    const theta = v * Math.PI
+    const phi = u * 2 * Math.PI
+    return new Vector3(-Math.cos(phi) * Math.sin(theta), Math.cos(theta), Math.sin(phi) * Math.sin(theta))
+  }
+
+  it('на центре ячейки — точное значение, между центрами — монотонная интерполяция', () => {
+    // 8×2 (обе строки одинаковы — широта не участвует), h(x) = x²·1000:
+    // own-sag группы 2×2 с началом bx = h(bx+1)−h(bx) растёт с bx, финальная
+    // дилатация 3×3 берёт максимум окна ⇒ у ячеек 1..5 (вдали от шва, где
+    // дилатация не подмешивает большой скачок обёртки h(7)→h(0)) сетка
+    // получает чистый монотонно растущий ряд: cell(cx) = h(cx+2) − h(cx+1)
+    const h = [0, 1000, 4000, 9000, 16000, 25000, 36000, 49000] // x²·1000
+    const values = [...h, ...h]
+    const field = new TerrainHeightField(makeMap(8, 2, values, 0, 65535), R_KM)
+
+    const gridAt = (cx: number): number => field.clearanceMeters(uvToDir((cx + 0.5) / 8, 0.5))
+
+    const c2 = gridAt(2) // h(4)-h(3) = 16000-9000 = 7000 (+margin)
+    const c3 = gridAt(3) // h(5)-h(4) = 25000-16000 = 9000 (+margin)
+    expect(c2).toBeCloseTo(7000 + CLEARANCE_MARGIN_METERS, 6)
+    expect(c3).toBeCloseTo(9000 + CLEARANCE_MARGIN_METERS, 6)
+
+    // ровно между центрами ячеек 2 и 3 — точное среднее (fx=0.5)
+    const mid = field.clearanceMeters(uvToDir((2.5 + 3.5) / 2 / 8, 0.5))
+    expect(mid).toBeCloseTo((c2 + c3) / 2, 6)
+
+    // монотонность: четверть пути от c2 к c3 лежит строго между ними
+    const quarter = field.clearanceMeters(uvToDir((2.5 + (3.5 - 2.5) * 0.25) / 8, 0.5))
+    expect(quarter).toBeGreaterThan(c2)
+    expect(quarter).toBeLessThan(mid)
   })
 })
