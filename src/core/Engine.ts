@@ -12,6 +12,7 @@ import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { AstroControls } from '@/core/libs/AstroControls'
 import Stats from 'three/examples/jsm/libs/stats.module'
 import { clampPixelRatio } from '@/core/graphic/renderingFactories'
+import { resolveCrosshairAnchor } from '@/core/helpers/resolveCrosshairAnchor'
 
 class Engine {
   private readonly canvas: HTMLCanvasElement
@@ -191,12 +192,18 @@ class Engine {
 
     this.raycaster.setFromCamera(mouse, this.renderCamera)
 
-    const intersects = this.raycaster.intersectObjects(this.scene.getObjectsByUserDataProperty('clickable', true))
+    // Список от getObjectsByUserDataProperty уже плоский — рекурсивный
+    // пересечь задвоил бы каждый патч кубосферы (сам патч + повторно через
+    // траверс его группы, тоже входящей в список)
+    const intersects = this.raycaster.intersectObjects(
+      this.scene.getObjectsByUserDataProperty('clickable', true),
+      false
+    )
 
     if (intersects.length) {
       const target = intersects.find((el) => el.object.userData.clickable !== undefined)
 
-      target?.object.parent?.add(this.sceneManager.crosshair)
+      if (target) resolveCrosshairAnchor(target.object).parent?.add(this.sceneManager.crosshair)
     } else {
       this.sceneManager.crosshair.parent?.remove(this.sceneManager.crosshair)
     }

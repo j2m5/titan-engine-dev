@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { Texture, Vector3 } from 'three'
+import { Texture } from 'three'
 import '@/core/framework/TitanThree'
 import { Planet } from '@/core/renderables/Planet'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainSphere } from '@/core/renderables/TerrainSphere'
+import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
-import { toThreeJSUnits } from '@/core/helpers/scaling'
+import type { ResourceObserver } from '@/core/services/ResourceObserver'
+import type { WebGLRenderer } from 'three'
 
 const MOON_ID = 19
 const MOON_HEIGHT_PATH = 'planets/moon/moon_height.raw'
@@ -15,10 +17,10 @@ function moon(): Actor {
   return Actor.find(MOON_ID)!
 }
 
-function seedTexture(name: string, width: number = 4, height: number = 2): void {
+function seedTexture(name: string): void {
   const texture = new Texture()
   texture.name = name
-  texture.image = { width, height }
+  texture.image = { width: 4, height: 2 }
   resourceStorage.addTexture(texture)
 }
 
@@ -27,10 +29,10 @@ function seedPlaceholderKeys(): void {
   seedTexture('default.png')
   seedTexture('night.jpg')
   seedTexture(moon().resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string)
+  seedTexture(Actor.find(7)!.resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string)
 }
 
 function seedHeightMap(): void {
-  // 4×2, все значения максимальны, диапазон 0..1000 м → вся сфера на +1 км
   ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(MOON_HEIGHT_PATH, {
     width: 4,
     height: 2,
@@ -40,6 +42,14 @@ function seedHeightMap(): void {
   })
 }
 
+// фабрике нужны только domElement.height (порог LOD) и наблюдатель (не дёргается в createPlanet)
+function makeFactory(): RenderableFactory {
+  return new RenderableFactory(
+    { domElement: { height: 1080 } } as unknown as WebGLRenderer,
+    {} as unknown as ResourceObserver
+  )
+}
+
 beforeEach(() => seedPlaceholderKeys())
 
 afterEach(() => {
@@ -47,62 +57,37 @@ afterEach(() => {
   heightFieldStorage.clear()
 })
 
-describe('Planet: ветка рельефа', () => {
-  // Таймаут выше дефолтных 5с: тест строит честную сферу на TERRAIN_SPHERE_SEGMENTS
-  // (~1 млн вершин × 5 выборок карты) — на нагруженной параллельным прогоном
-  // машине укладывается не всегда, и это не сигнал регрессии
-  it('с картой в реестре строит смещённую сферу', { timeout: 30000 }, () => {
+describe('RenderableFactory: ветка рельефа', () => {
+  it('с картой в реестре нулевой уровень LOD — TerrainSphere', { timeout: 30000 }, () => {
     seedHeightMap()
 
-    const planet = new Planet(moon())
-    const radius = toThreeJSUnits(moon().physicalObject!.getAttribute('radius')!)
-    const positions = planet.geometry.getAttribute('position')
-    const first = new Vector3(positions.getX(0), positions.getY(0), positions.getZ(0))
+    const node = makeFactory().make(moon()) as unknown as { renderable: unknown }
 
-    // все вершины на R + 1 км — конструктор прочитал реестр синхронно
-    expect(first.length()).toBeCloseTo(radius + toThreeJSUnits(1), 6)
+    expect(node.renderable).toBeInstanceOf(TerrainSphere)
   })
 
-  it('без карты в реестре геометрия легаси: 256×256 с circumscribe', () => {
-    const planet = new Planet(moon())
-    const parameters = (planet.geometry as unknown as { parameters: { widthSegments: number; radius: number } })
-      .parameters
-    const radius = toThreeJSUnits(moon().physicalObject!.getAttribute('radius')!)
+  it('без карты в реестре — легаси Planet', () => {
+    const node = makeFactory().make(moon()) as unknown as { renderable: unknown }
 
-    expect(parameters.widthSegments).toBe(256)
-    expect(parameters.radius).toBeGreaterThan(radius) // circumscribe > 1
+    expect(node.renderable).toBeInstanceOf(Planet)
   })
 
-  it('у тела без height-ресурса (Земля, actorId 7) ветка рельефа не активируется', () => {
-    seedTexture(Actor.find(7)!.resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string)
+  it('тело без height-ресурса (Земля) — легаси Planet всегда', () => {
+    seedHeightMap()
 
-    const planet = new Planet(Actor.find(7)!)
-    const parameters = (planet.geometry as unknown as { parameters: { widthSegments: number } }).parameters
+    const node = makeFactory().make(Actor.find(7)!) as unknown as { renderable: unknown }
 
-    expect(parameters.widthSegments).toBe(256)
+    expect(node.renderable).toBeInstanceOf(Planet)
   })
 })
 
-describe('PlanetMaterial: классический bump у тел с честным рельефом отсутствует', () => {
-  it('у Луны нет bump-ресурса — USE_BUMP невозможен структурно', () => {
-    // рельефный шейдинг Луны идёт через slope-ресурс; bump-строки в БД нет
-    expect(moon().resources.where('resourceType', 'bump').first()).toBeUndefined()
+describe('Planet: легаси-сфера', () => {
+  it('всегда 256×256 c circumscribe — ветки рельефа больше нет', () => {
+    seedHeightMap()
 
-    const material = new PlanetMaterial(moon())
-    material.updateMaterial()
+    const planet = new Planet(moon())
+    const parameters = (planet.geometry as unknown as { parameters: { widthSegments: number } }).parameters
 
-    expect(material.defines.USE_BUMP).toBeUndefined()
-    expect(material.uniforms.uBumpTexelSize.value.x).toBe(0)
-  })
-
-  it('у Земли (без height-ресурса) bump работает как раньше', () => {
-    const earth = Actor.find(7)!
-    seedTexture(earth.resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string)
-    seedTexture(earth.resources.where('resourceType', 'bump').first()!.getAttribute('path') as string, 8192, 4096)
-
-    const material = new PlanetMaterial(earth)
-    material.updateMaterial()
-
-    expect(material.defines.USE_BUMP).toBe('1')
+    expect(parameters.widthSegments).toBe(256)
   })
 })

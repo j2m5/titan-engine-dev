@@ -26,7 +26,10 @@ describe('SlopeNormal: попиксельная нормаль из slope-кар
 
   it('шаблон ветвится: USE_SLOPE зовёт perturbNormalFromSlope, USE_BUMP не тронут', () => {
     expect(PlanetShaderTemplate.fragmentShader).toContain('#ifdef USE_SLOPE')
-    expect(PlanetShaderTemplate.fragmentShader).toContain('perturbNormalFromSlope(normal, vEast, vUv)')
-    expect(PlanetShaderTemplate.fragmentShader).toContain('perturbNormalFromHeight(normal, vEast, vUv)')
+    // аргументы — попиксельные uv/east (см. FragmentUv.spec), не вершинные
+    // vUv/vEast: полюсная сингулярность развёртки И вертушка интерполяции
+    // vEast у полюса решены на фрагментнике
+    expect(PlanetShaderTemplate.fragmentShader).toContain('perturbNormalFromSlope(normal, east, uv)')
+    expect(PlanetShaderTemplate.fragmentShader).toContain('perturbNormalFromHeight(normal, east, uv)')
   })
 })

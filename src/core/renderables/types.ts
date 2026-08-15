@@ -8,4 +8,6 @@ export interface ShouldRenderOrbitLine {
 export type RenderableObject3D<
   TGeometry extends BufferGeometry = BufferGeometry,
   TMaterial extends Material | Material[] = Material | Material[]
-> = Object3D & { geometry: TGeometry; material: TMaterial }
+  // geometry опциональна: у группового renderable (TerrainSphere) геометрий
+  // много; из потребителей контракта читается только material и quaternion
+> = Object3D & { geometry?: TGeometry; material: TMaterial }

@@ -35,6 +35,7 @@ export const PlanetShaderTemplate: ShaderProps = {
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vEast;
+    varying vec3 vLocalDir;
 
     void main() {
       vec4 worldPosition = modelMatrix * vec4(position, 1.0);
@@ -48,11 +49,24 @@ export const PlanetShaderTemplate: ShaderProps = {
 
       vUv = uv;
       vNormal = normalize(normalMatrix * normal);
+      // У патчей кубосферы position — смещение от ЦЕНТРА ПАТЧА (RTC), не от
+      // центра тела; USE_RING (RingShadow) сегодня безвредно её использует
+      // только для тел без колец-детей — терраформное тело с кольцом даст
+      // неверную тень (чинить при первом таком теле).
       vPosition = position;
       // Восток (касательная вдоль долготы) для TBN нормали из карты высот.
-      // Не нормализуем: длина ∝ cos(широты) и служит детектором полюса,
-      // где касательная вырождается.
-      vEast = normalMatrix * cross(vec3(0.0, 1.0, 0.0), position);
+      // Строим из НОРМАЛИ, не из position: normal радиальна на обоих путях
+      // (SphereGeometry и RTC-патчи кубосферы), а position патча — нет, и
+      // cross(up, position) вращался бы вокруг центра патча, а не тела.
+      // Не нормализуем: длина ∝ cos(широты) и служит детектором полюса, где
+      // касательная вырождается — |vEast| = cos(lat) вместо R·cos(lat)
+      // старого пути, гард len < 1e-4 срабатывает у полюса на ~0.006°
+      // вместо ~0.002° (пренебрежимо у обоих).
+      vEast = normalMatrix * cross(vec3(0.0, 1.0, 0.0), normal);
+      // Body-локальное радиальное направление для попиксельного UV терраформных
+      // тел (USE_TERRAIN_UV) — без матриц: normal уже радиальна и body-локальна
+      // на обоих путях (SphereGeometry и RTC-патчи кубосферы, см. vEast выше).
+      vLocalDir = normal;
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
       vViewPosition = -mvPosition.xyz;
@@ -77,6 +91,10 @@ export const PlanetShaderTemplate: ShaderProps = {
     uniform float uSpecularStrength;
     uniform float uNightThreshold;
     uniform float uNightSoftness;
+    // three не биндит normalMatrix во фрагментник автоматически (только в
+    // вершинный пролог) — юниформ общий на программу, объявление здесь просто
+    // делает его видимым этому шейдеру.
+    uniform mat3 normalMatrix;
 
     varying vec2 vUv;
     varying vec3 vNormal;
@@ -85,6 +103,7 @@ export const PlanetShaderTemplate: ShaderProps = {
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vEast;
+    varying vec3 vLocalDir;
 
     #ifdef USE_BUMP
       #include <heightNormalUniforms>
@@ -104,32 +123,68 @@ export const PlanetShaderTemplate: ShaderProps = {
       ${ShaderChunk['logdepthbuf_fragment']}
       vec3 normal = normalize(vNormal);
 
+      #ifdef USE_TERRAIN_UV
+        // UV из направления, попиксельно: вершинная развёртка равнопрямоугольной
+        // текстуры на кубосфере вырождается у полюсов (один квад тянул 2048
+        // текселей). Конвенция — та же, что dirToUv (CPU-канон): phi = atan(z, −x),
+        // u = phi/2π (+1 при отрицательном — скачок производной совпадает со швом
+        // текстуры: мип-линия там же и так же субпиксельна, как у старого
+        // bump-пути), v = acos(y)/π.
+        // Двухдоменный выбор u (seamless equirect): fract(uRaw) рвёт
+        // производную на шве текстуры (u=0/1), сдвинутый вариант — на
+        // противоположном меридиане; берём в каждом пикселе домен с меньшей
+        // fwidth. Без этого один непрерывный по значению u (простой +1 при
+        // отрицательном) даёт скачок ЭКРАННОЙ ПРОИЗВОДНОЙ ~1 на шве — GPU
+        // берёт грубейший мип и на этой колонке пикселей рисует полосу мыла.
+        // RepeatWrapping корректно оборачивает и отрицательный u2 ∈ [-0.5, 0.5).
+        vec3 dirLocal = normalize(vLocalDir);
+        float phi = atan(dirLocal.z, -dirLocal.x);
+        float uRaw = phi / 6.28318530717958647692;
+        float u1 = fract(uRaw);
+        float u2 = fract(uRaw + 0.5) - 0.5;
+        float u = fwidth(u1) <= fwidth(u2) ? u1 : u2;
+        // Текстурное v = 1 − v карты: dirToUv (CPU-канон, sampleMeters) отдаёт
+        // v в координатах КАРТЫ (строка 0 = север), но загрузчик текстур
+        // флипует изображение при загрузке (север = v 1, как у нативных uv
+        // старой SphereGeometry) — без флипа диффуз и slope зеркалились по
+        // С-Ю (A/B владельца: рельеф в точке смотрел зеркальной широтой).
+        vec2 uv = vec2(u, 1.0 - acos(clamp(dirLocal.y, -1.0, 1.0)) / 3.14159265358979323846);
+        // Восток попиксельно: интерполяция varying vEast врёт у полюса — азимут
+        // между соседними вершинами полярного квада ~десятки градусов, и TBN
+        // закручивался вертушкой. cross с точным dirLocal свободен от этого;
+        // длина по-прежнему ∝ cos(широты) — полюсный гард чанков работает как есть.
+        vec3 east = normalMatrix * cross(vec3(0.0, 1.0, 0.0), dirLocal);
+      #else
+        vec2 uv = vUv;
+        vec3 east = vEast;
+      #endif
+
       #ifdef USE_BUMP
-        normal = perturbNormalFromHeight(normal, vEast, vUv);
+        normal = perturbNormalFromHeight(normal, east, uv);
       #endif
 
       #ifdef USE_SLOPE
-        normal = perturbNormalFromSlope(normal, vEast, vUv);
+        normal = perturbNormalFromSlope(normal, east, uv);
       #endif
 
       vec3 lightDirection = normalize(vViewLightDirection);
       float NdotLraw = dot(normal, lightDirection);
       float lightIntensity = max(NdotLraw, 0.0);
 
-      vec3 dayColor = texture2D(diffuseMap, vUv).rgb;
+      vec3 dayColor = texture2D(diffuseMap, uv).rgb;
 
       // Ночная и облачная карты есть не у всех тел. Раньше сэмплеры читались
       // безусловно, и корректность держалась на правиле GL «непривязанная
       // текстура читается чёрной». Гейты делают это явным.
       vec3 nightColor = vec3(0.0);
       #ifdef USE_NIGHT
-        nightColor = texture2D(nightMap, vUv).rgb;
+        nightColor = texture2D(nightMap, uv).rgb;
       #endif
 
       vec3 cloudColor = vec3(0.0);
       float cloudAlpha = 0.0;
       #ifdef USE_CLOUD
-        cloudColor = texture2D(cloudMap, vUv).rgb;
+        cloudColor = texture2D(cloudMap, uv).rgb;
         cloudColor *= pow(max(0.5 * lightIntensity + 0.1, 0.0), 0.5);
         cloudAlpha = dot(cloudColor, vec3(1.0)) / 3.0;
         cloudAlpha = pow(cloudAlpha, 0.5);
@@ -178,7 +233,7 @@ export const PlanetShaderTemplate: ShaderProps = {
         vec3 halfVec = normalize(lightDirection + viewDir);
         float specComp = pow(max(dot(normal, halfVec), 0.0), 64.0);
         float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(normal, viewDir), 0.0), 5.0);
-        float specularIntensity = texture2D(specularMap, vUv).r;
+        float specularIntensity = texture2D(specularMap, uv).r;
         finalColor += specularIntensity * specComp * fresnel * uSpecularStrength
                     * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor;
       #endif

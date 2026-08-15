@@ -2,7 +2,7 @@ import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
 import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
-import { Texture } from 'three'
+import { RepeatWrapping, Texture } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 
@@ -64,6 +64,18 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.specularMap.value = specularMap
     this.uniforms.bumpMap.value = bumpMap
 
+    // UV кубосферы разворачивает шов за пределы [0,1] — аппаратный wrap вместо
+    // fract() в шейдере (и заодно уходит мип-полоса на шве). Только терраформным
+    // телам: у прочих развёртка сферы в [0,1] и ClampToEdge остаётся.
+    if (hasHeightField) {
+      for (const texture of [diffuseMap, slopeMap]) {
+        if (texture && texture.wrapS !== RepeatWrapping) {
+          texture.wrapS = RepeatWrapping
+          texture.needsUpdate = true
+        }
+      }
+    }
+
     // Шаг выборки соседних текселей для аналитического градиента нормали —
     // атрибут четырёхвыборочного bump-пути; slope-путь читает одну выборку.
     // Нули = рельеф выключен: все четыре выборки совпадают, градиент нулевой —
@@ -79,6 +91,10 @@ class PlanetMaterial extends AbstractShaderMaterial {
       ...this.defines,
       ...(useClassicBump && { USE_BUMP: '1' }),
       ...(hasHeightField && slopeMap && { USE_SLOPE: '1' }),
+      // Попиксельный UV из направления вместо вершинного vUv — вершинная
+      // развёртка кубосферы вырождается у полюсов (см. PlanetShaderTemplate).
+      // Тот же реестр карт высот, что решает геометрию TerrainSphere.
+      ...(hasHeightField && { USE_TERRAIN_UV: '1' }),
       ...(specularMap && { USE_SPECULAR: '1' }),
       ...(nightMap && { USE_NIGHT: '1' }),
       ...(cloudMap && { USE_CLOUD: '1' })
@@ -97,6 +113,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
 
     delete this.defines.USE_BUMP
     delete this.defines.USE_SLOPE
+    delete this.defines.USE_TERRAIN_UV
     delete this.defines.USE_SPECULAR
     delete this.defines.USE_NIGHT
     delete this.defines.USE_CLOUD

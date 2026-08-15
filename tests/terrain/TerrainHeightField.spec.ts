@@ -50,6 +50,20 @@ describe('TerrainHeightField: полутексельная билинейка', 
   })
 })
 
+describe('TerrainHeightField: шов x=width при f64-округлении', () => {
+  it('u на 1 ULP левее центра текселя 0 не даёт NaN и совпадает с sampleMeters(0.125, 0.5)', () => {
+    // width=4: x = frac(u)·4 − 0.5 даёт крошечный минус, x += width округляется
+    // в f64 РОВНО до 4.0 (не 4−ε) — floor(4.0)=4, вне [0, width−1]. 0.125 — центр
+    // текселя 0; u ниже на 1 ULP double — тот же тексель по смыслу.
+    const buggyU = 0.12499999999999999
+    expect(buggyU).not.toBe(0.125) // соседний, но различимый double
+    const field = new TerrainHeightField(makeMap(4, 1, [100, 200, 300, 400]), R_KM)
+
+    expect(Number.isNaN(field.sampleMeters(buggyU, 0.5))).toBe(false)
+    expect(field.sampleMeters(buggyU, 0.5)).toBeCloseTo(field.sampleMeters(0.125, 0.5), 5)
+  })
+})
+
 describe('TerrainHeightField: паритет dirToUv с UV-развёрткой SphereGeometry', () => {
   it('для каждой вершины сферы dirToUv(позиция) совпадает с родным UV', () => {
     // Развёртка коллизии обязана совпадать с развёрткой рендера — иначе рельеф
@@ -230,6 +244,40 @@ describe('TerrainHeightField: карта провиса', () => {
     expect(field.clearanceMeters(uvToDir(32.5 / 64, 2.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
     // противоположный полюс — только базовый запас, клампа не должно перетекать
     expect(field.clearanceMeters(uvToDir(32.5 / 64, 31.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
+  })
+})
+
+describe('TerrainHeightField: окно провиса расширяется к полюсу как 1/cos', () => {
+  const uvToDir = (u: number, v: number): Vector3 => {
+    const theta = v * Math.PI
+    const phi = u * 2 * Math.PI
+    return new Vector3(-Math.cos(phi) * Math.sin(theta), Math.cos(theta), Math.sin(phi) * Math.sin(theta))
+  }
+
+  it('провал в высокоширотной строке (строка 0, |lat|≈87°) ловится клиренсом за пределами старого фиксированного окна', () => {
+    // 64×32: центр строки 0 — theta = π·0.5/32 ≈ 2.81°, cosLat = sin(theta) ≈
+    // 0.0491, round(1/cosLat) = 20, капается до floor(blocksX/4) = 16 — окно
+    // группировки растёт с фиксированных 2 колонок до 17 (0..16). Патч
+    // кубосферы у этой широты накрывает по долготе кратно больше колонок,
+    // чем у экватора (см. surfaceNormalLocal) — окно провиса обязано расти синхронно.
+    const values = new Array(64 * 32).fill(20000)
+    values[0 * 64 + 25] = 10000 // строка 0, столбец 25 — яма в 15 колонках от зонда
+    const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
+
+    // зонд в столбце 10: разнесение 15 колонок — старое фиксированное окно (2
+    // соседние колонки) яму не видит, новое 1/cos-окно (до 16 колонок на этой
+    // широте) её накрывает
+    expect(field.clearanceMeters(uvToDir(10.5 / 64, 0.5 / 32))).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
+  })
+
+  it('регрессия: экваториальный провис не меняется расширением окна у полюса', () => {
+    // тот же сдвиг 15 колонок, но строка 16 = экватор (cosLat≈1, span=1 как и
+    // до фикса) — окно НЕ расширяется, яма вне зоны видимости зонда
+    const values = new Array(64 * 32).fill(20000)
+    values[16 * 64 + 25] = 10000
+    const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
+
+    expect(field.clearanceMeters(uvToDir(10.5 / 64, 16.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
   })
 })
 
