@@ -206,6 +206,20 @@ describe('PlanetMaterial: терраформный детальный слой',
     expect(material.uniforms.uDetailAoInfluence.value).toBeCloseTo(0.5, 10)
   })
 
+  it('без detail-полей в data юниформы получают дефолты (Земля, actorId 7 — bumpScale задан, детали нет)', () => {
+    const material = new PlanetMaterial(Actor.find(7)!)
+
+    // Дефолты PlanetShader.ts (DEFAULT_DETAIL_*) — совпадают с ручками Луны по значению,
+    // но здесь их источник другой: у Земли detail*-полей в data нет вовсе (id 43 в
+    // storage/database/renderingObjects.ts), значения приходят только из фолбэка `?? DEFAULT_DETAIL_*`.
+    expect(material.uniforms.uDetailScale.value).toBeCloseTo(1 / toThreeJSUnits(40 / 1000), 10)
+    expect(material.uniforms.uDetailScale2.value).toBeCloseTo(1 / toThreeJSUnits(7 / 1000), 10)
+    expect(material.uniforms.uDetailNormalScale.value).toBe(1)
+    expect(material.uniforms.uDetailSaturation.value).toBeCloseTo(0.15, 10)
+    expect(material.uniforms.uDetailBrightness.value).toBe(1)
+    expect(material.uniforms.uDetailAoInfluence.value).toBeCloseTo(0.5, 10)
+  })
+
   it('resetMaterial снимает дефайн и обнуляет гейты и текстуры', () => {
     seedMoonHeightMap()
     seedTexture(moonPathOf('detailNormal'), 8, 4)

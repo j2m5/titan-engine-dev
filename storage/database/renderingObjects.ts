@@ -8,6 +8,8 @@ export const RenderingObjects: IRenderingObject[] = [
   { id: 2, actorId: 8, data: { emission: 1, bumpScale: 3 } },
   { id: 3, actorId: 9, data: { emission: 1, bumpScale: 10 } },
   { id: 4, actorId: 13, data: { emission: 1, bumpScale: 0.3 } },
+  // Луна: bumpScale 1 — slope-путь физически честный, множитель не нужен;
+  // detail* — периоды шкал в метрах и грейдинг детального слоя (см. IPlanetRenderingObject).
   { id: 5, actorId: 19, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5 } },
   { id: 6, actorId: 24, data: { emission: 1, bumpScale: 2 } },
   { id: 7, actorId: 29, data: { emission: 1, bumpScale: 0.2 } },

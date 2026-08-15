@@ -130,7 +130,7 @@ export const Resources: IResource[] = [
   { id: 123, resourceType: "bump", lifecycle: "resident", path: "asteroids/rocks_ground_04_nor_gl_2k.jpg" },
   { id: 124, resourceType: "bump", lifecycle: "resident", path: "asteroids/rocks_ground_04_arm_2k.jpg" },
   { id: 125, resourceType: "height", lifecycle: "resident", path: "planets/moon/moon_height.raw" },
-  { id: 126, resourceType: "detailDiffuse", lifecycle: "streamable", path: "terrain/rocky_trail_diff.webp", wrapS: RepeatWrapping, wrapT: RepeatWrapping },
+  { id: 126, resourceType: "detailDiffuse", lifecycle: "streamable", path: "terrain/rocky_trail_diff.webp", wrapS: RepeatWrapping, wrapT: RepeatWrapping, colorSpace: "srgb" },
   { id: 127, resourceType: "detailNormal", lifecycle: "streamable", path: "terrain/rocky_trail_nor.webp", wrapS: RepeatWrapping, wrapT: RepeatWrapping },
   { id: 128, resourceType: "detailArm", lifecycle: "streamable", path: "terrain/rocky_trail_arm.webp", wrapS: RepeatWrapping, wrapT: RepeatWrapping },
   { id: 129, resourceType: "detailNormal2", lifecycle: "streamable", path: "terrain/moon_01_nor.webp", wrapS: RepeatWrapping, wrapT: RepeatWrapping }
