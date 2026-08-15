@@ -94,7 +94,12 @@ export function buildTerrainPatchGeometry(
 
       const u = Math.abs(dir.y) >= 1 - POLE_EPSILON ? centerU : uv.x - Math.round(uv.x - centerU)
       uvs[k * 2] = u
-      uvs[k * 2 + 1] = uv.y
+      // Текстурное v = 1 − v карты: dirToUv отдаёт v в координатах карты
+      // (строка 0 = север), а загрузчик текстур флипует изображение (север =
+      // v 1). Этот атрибут сейчас мёртв для рендера (фрагментник считает uv
+      // сам, см. USE_TERRAIN_UV в PlanetShaderTemplate) — но незеркальный он
+      // был бы миной для будущего потребителя вершинных uv.
+      uvs[k * 2 + 1] = 1 - uv.y
 
       k++
     }

@@ -61,4 +61,14 @@ describe('FragmentUv: попиксельные UV терраформных те�
     expect(frag).toContain('perturbNormalFromHeight(normal, east, uv)')
     expect(frag).toContain('perturbNormalFromSlope(normal, east, uv)')
   })
+
+  it('текстурное v — флип картного: dirToUv отдаёт v карты (строка 0 = север), загрузчик флипует изображение (север = v 1)', () => {
+    // A/B владельца: старая SphereGeometry сэмплировала нативными uv (v=1
+    // на севере, корректно), кубосфера сэмплирует v КАРТЫ напрямую — весь
+    // диффуз и slope зеркалились по С-Ю (в точке — рельеф зеркальной
+    // широты). CPU-канон dirToUv остаётся в координатах карты (sampleMeters
+    // его не трогаем) — флип только на текстурном v фрагментника.
+    expect(frag).toContain('1.0 - acos(clamp(dirLocal.y')
+    expect(frag).not.toContain('vec2(u, acos(clamp(')
+  })
 })

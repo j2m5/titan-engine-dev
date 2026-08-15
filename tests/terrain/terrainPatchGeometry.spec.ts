@@ -154,7 +154,11 @@ describe('buildTerrainPatchGeometry: UV', () => {
       field.dirToUv(dir, scratch)
       // dir восстановлен из float32-позиции — тот же квантовый шум, что и выше, сверка до 1e-6 вместо побитовой
       expect(uv.getX(k)).toBeCloseTo(scratch.x, 6)
-      expect(uv.getY(k)).toBeCloseTo(scratch.y, 6)
+      // v атрибута — флип v карты: dirToUv.y=0 на севере (строка 0 карты),
+      // загрузчик текстур флипует изображение (север = v 1, как у нативной
+      // SphereGeometry) — атрибут сейчас мёртв для рендера (фрагмент считает
+      // uv сам), но зеркальный атрибут был бы миной для будущего потребителя
+      expect(uv.getY(k)).toBeCloseTo(1 - scratch.y, 6)
       expect(uv.getX(k)).toBeGreaterThanOrEqual(0)
       expect(uv.getX(k)).toBeLessThanOrEqual(1)
     }
@@ -198,12 +202,29 @@ describe('buildTerrainPatchGeometry: UV', () => {
       const dir = new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).add(center).normalize()
       if (Math.abs(dir.y) < 1 - 1e-9) continue
       found++
-      expect(uv.getY(k)).toBe(0) // север
+      // dirToUv.y = 0 на севере (картная конвенция), атрибут — флип
+      // картного (см. тест выше) → север ровно 1, как у нативной SphereGeometry
+      expect(uv.getY(k)).toBe(1) // север
       // u полюса = u параметрического центра патча
       const centerDir = center.clone().normalize()
       const centerUv = field.dirToUv(centerDir, new Vector2())
       expect(Math.abs(uv.getX(k) - centerUv.x)).toBeLessThan(0.51)
     }
     expect(found).toBe(1)
+  })
+
+  it('страж конвенции: северное полушарие (dir.y > 0) — вершинный uv.y > 0.5 (север — верх текстуры)', () => {
+    // однострочный тест, который поймал бы зеркало С-Ю с самого начала:
+    // текстурное v растёт от юга (0) к северу (1), как у нативных uv старой сферы
+    const field = bumpyField()
+    const { geometry, center } = build(field, 2, 0, 0) // +Y-грань — вся в северном полушарии
+    const pos = geometry.getAttribute('position')
+    const uv = geometry.getAttribute('uv')
+
+    for (let k = 0; k < pos.count; k++) {
+      const dir = new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).add(center).normalize()
+      if (dir.y <= 0) continue
+      expect(uv.getY(k)).toBeGreaterThan(0.5)
+    }
   })
 })
