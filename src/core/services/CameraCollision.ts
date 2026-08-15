@@ -3,6 +3,7 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { SceneObserver } from '@/core/services/SceneObserver'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { terrainHeightFieldFor, type TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 
 export type Collider = {
   object: Object3D
@@ -64,8 +65,23 @@ const PUSHOUT_ITERATIONS = 2
 /** Итераций свип+скольжение: скольжение могло врезать камеру в кривизну той же сферы или в соседнее тело. */
 const SWEEP_ITERATIONS = 3
 
-/** Микроотступ от точки контакта вдоль нормали — защита от повторного захвата той же сферы float-погрешностью. */
-const CONTACT_EPSILON = 1e-6
+/**
+ * Доля радиуса широкой фазы тела — микроотступ от контакта вдоль нормали,
+ * защита от повторного захвата той же поверхности float-погрешностью.
+ * Абсолютные юниты на масштабе системы (парсеки) упирались во float32.
+ */
+const RELATIVE_CONTACT_EPSILON = 1e-6
+
+/** Бюджет консервативного марча по рельефу; исчерпание — контакт, не туннель. */
+const SWEEP_MARCH_BUDGET = 64
+
+/** Единый формат хита свипа: сфера и терраформный марч отдают одно и то же. */
+type SweepHit = {
+  collider: Collider
+  t: number // доля пройденного отрезка (0..1] — сравнима между телами
+  contact: Vector3 // мировой контакт (собственный скретч хита не нужен — один активный)
+  normal: Vector3 // мировая нормаль контакта
+}
 
 /**
  * Коллизии камеры со сферическими телами.
@@ -85,13 +101,26 @@ class CameraCollision {
   private readonly ray: Ray = new Ray()
   private readonly sphere: Sphere = new Sphere()
   private readonly origin: Vector3 = new Vector3()
-  private readonly contact: Vector3 = new Vector3()
   private readonly point: Vector3 = new Vector3()
   private readonly remainder: Vector3 = new Vector3()
 
   private readonly inverseMatrix = new Matrix4()
   private readonly localPoint = new Vector3()
   private readonly localDir = new Vector3()
+
+  // терраформный марч свипа: единый локальный отрезок для каждого кандидата-тела
+  private readonly marchFrom = new Vector3()
+  private readonly marchTo = new Vector3()
+  private readonly marchStep = new Vector3()
+  private readonly marchPoint = new Vector3()
+
+  // скретчи текущего кандидата хита findNearestHit (перезаписываются на каждой
+  // проверяемой сфере/теле) и best-скретчи лучшего кандидата — раздельные,
+  // иначе второй терраформный кандидат затирает контакт первого до сравнения
+  private readonly hitContact = new Vector3()
+  private readonly hitNormal = new Vector3()
+  private readonly bestContact = new Vector3()
+  private readonly bestNormal = new Vector3()
 
   public constructor(
     private camera: PerspectiveCamera,
@@ -153,40 +182,120 @@ class CameraCollision {
       const hit = this.findNearestHit(length)
       if (!hit) return
 
-      hit.object.getWorldPosition(this.center)
-      this.normal.copy(this.contact).sub(this.center).normalize()
-
-      this.origin.copy(this.contact).addScaledVector(this.normal, CONTACT_EPSILON)
-      this.remainder.copy(position).sub(this.contact).projectOnPlane(this.normal)
+      const epsilon = hit.collider.radius * RELATIVE_CONTACT_EPSILON
+      this.origin.copy(hit.contact).addScaledVector(hit.normal, epsilon)
+      this.remainder.copy(position).sub(hit.contact).projectOnPlane(hit.normal)
       position.copy(this.origin).add(this.remainder)
     }
   }
 
   /**
-   * Ближайшее по ходу луча пересечение в пределах отрезка. Тело, внутри
-   * которого отрезок начинается, пропускается — его разрулит пуш-аут, иначе
-   * скольжение размазало бы камеру по внутренней стороне сферы.
+   * Ближайшее по ходу луча пересечение в пределах отрезка — по всем телам
+   * разом, сферическим и терраформным (сравнение по общей доле t отрезка).
+   * Тело, внутри которого отрезок начинается, пропускается — его разрулит
+   * пуш-аут, иначе скольжение размазало бы камеру по внутренней стороне
+   * сферы. Терраформный кандидат — свой гейт внутри marchTerrain, здесь не
+   * дублируется.
    */
-  private findNearestHit(maxDistance: number): Collider | null {
-    let nearest: Collider | null = null
-    let nearestDistance = maxDistance
+  private findNearestHit(maxDistance: number): SweepHit | null {
+    let nearest: SweepHit | null = null
 
     for (const collider of this.colliders) {
-      collider.object.getWorldPosition(this.sphere.center)
-      this.sphere.radius = collider.radius
+      let t: number
 
-      if (this.sphere.containsPoint(this.ray.origin)) continue
-      if (!this.ray.intersectSphere(this.sphere, this.point)) continue
+      if (collider.heightField) {
+        const hit = this.marchTerrain(collider, collider.heightField, maxDistance)
+        if (!hit) continue
+        t = hit.t
+      } else {
+        collider.object.getWorldPosition(this.sphere.center)
+        this.sphere.radius = collider.radius
 
-      const distance = this.ray.origin.distanceTo(this.point)
-      if (distance > nearestDistance) continue
+        if (this.sphere.containsPoint(this.ray.origin)) continue
+        if (!this.ray.intersectSphere(this.sphere, this.point)) continue
 
-      nearestDistance = distance
-      nearest = collider
-      this.contact.copy(this.point)
+        const distance = this.ray.origin.distanceTo(this.point)
+        if (distance > maxDistance) continue
+
+        t = distance / maxDistance
+        this.hitContact.copy(this.point)
+        this.hitNormal.copy(this.point).sub(this.sphere.center).normalize()
+      }
+
+      if (nearest && t >= nearest.t) continue
+
+      nearest = {
+        collider,
+        t,
+        contact: this.bestContact.copy(this.hitContact),
+        normal: this.bestNormal.copy(this.hitNormal)
+      }
     }
 
     return nearest
+  }
+
+  /**
+   * Консервативный сферический марч в теле-фиксированном фрейме:
+   * f(p) = |p| − (R + h(p̂) + clearance(p̂)); липшицева константа уклона —
+   * SLOPE_RANGE (энкодер клампит данные), шаг f/(1+L) не перепрыгивает
+   * поверхность. Бюджет исчерпан — контакт в текущей точке: перестраховка
+   * вместо туннеля.
+   */
+  private marchTerrain(collider: Collider, field: TerrainHeightField, maxDistance: number): SweepHit | null {
+    collider.object.updateWorldMatrix(true, false)
+    this.inverseMatrix.copy(collider.object.matrixWorld).invert()
+    // локальный отрезок: lastPosition и цель в СЕГОДНЯШНЕМ фрейме тела —
+    // вращение тела за кадр становится относительным движением камеры
+    const from = this.marchFrom.copy(this.ray.origin).applyMatrix4(this.inverseMatrix)
+    const to = this.marchTo
+      .copy(this.ray.origin)
+      .addScaledVector(this.ray.direction, maxDistance)
+      .applyMatrix4(this.inverseMatrix)
+
+    const length = from.distanceTo(to)
+    if (length === 0) return null
+    const step = this.marchStep.copy(to).sub(from).divideScalar(length)
+
+    const epsilon = collider.radius * RELATIVE_CONTACT_EPSILON
+    const distance = (p: Vector3): number => {
+      const r = p.length()
+      if (r === 0) return -field.collisionRadiusUnits(this.localDir.set(0, 0, 1))
+      return r - field.collisionRadiusUnits(this.localDir.copy(p).divideScalar(r))
+    }
+
+    if (distance(from) <= 0) return null // старт под поверхностью — зона пуш-аута
+
+    let s = 0
+    const p = this.marchPoint.copy(from)
+    for (let i = 0; i < SWEEP_MARCH_BUDGET; i++) {
+      const d = distance(p)
+      if (d <= epsilon) {
+        const normal = this.hitNormal
+        field.surfaceNormalLocal(this.localDir.copy(p).normalize(), normal)
+        normal.transformDirection(collider.object.matrixWorld)
+        return {
+          collider,
+          t: s / length,
+          contact: this.hitContact.copy(p).applyMatrix4(collider.object.matrixWorld),
+          normal
+        }
+      }
+      s += d / (1 + SLOPE_RANGE)
+      if (s >= length) return null
+      p.copy(from).addScaledVector(step, s)
+    }
+
+    // бюджет исчерпан — консервативный контакт в текущей точке
+    const normal = this.hitNormal
+    field.surfaceNormalLocal(this.localDir.copy(p).normalize(), normal)
+    normal.transformDirection(collider.object.matrixWorld)
+    return {
+      collider,
+      t: s / length,
+      contact: this.hitContact.copy(p).applyMatrix4(collider.object.matrixWorld),
+      normal
+    }
   }
 
   /**

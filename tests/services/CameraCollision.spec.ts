@@ -209,23 +209,23 @@ describe('CameraCollision: свип и скольжение', () => {
   })
 })
 
+// карта 4×2: западное полушарие высокое, восточное низкое (метры = raw)
+function terrainBody(): { body: Object3D; field: TerrainHeightField } {
+  seedHeightMap([20000, 0, 20000, 0, 20000, 0, 20000, 0], 4, 2, 0, 65535)
+  const body = makeBody('planet', 1736, new Vector3(), undefined, MOON_HEIGHT_PATH)
+  const field = terrainHeightFieldFor(
+    (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(MOON_HEIGHT_PATH)!,
+    1736
+  )
+  return { body, field }
+}
+
+// центр низкого столбца (u=0.375): без блендинга бортов текселя, чтобы
+// высота под направлением была однозначной (см. терраформный дефолт-фикс)
+const LOW_COLUMN_DIR = new Vector3(1, 0, 1).normalize()
+
 describe('CameraCollision: пуш-аут по рельефу', () => {
   afterEach(() => heightFieldStorage.clear())
-
-  // карта 4×2: западное полушарие высокое, восточное низкое (метры = raw)
-  function terrainBody(): { body: Object3D; field: TerrainHeightField } {
-    seedHeightMap([20000, 0, 20000, 0, 20000, 0, 20000, 0], 4, 2, 0, 65535)
-    const body = makeBody('planet', 1736, new Vector3(), undefined, MOON_HEIGHT_PATH)
-    const field = terrainHeightFieldFor(
-      (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(MOON_HEIGHT_PATH)!,
-      1736
-    )
-    return { body, field }
-  }
-
-  // центр низкого столбца (u=0.375): без блендинга бортов текселя, чтобы
-  // высота под направлением была однозначной (см. терраформный дефолт-фикс)
-  const LOW_COLUMN_DIR = new Vector3(1, 0, 1).normalize()
 
   it('камера ниже поверхности выносится на R+h+clearance по своему направлению', () => {
     const { body, field } = terrainBody()
@@ -268,5 +268,40 @@ describe('CameraCollision: пуш-аут по рельефу', () => {
     const localDir = camera.position.clone().applyQuaternion(body.quaternion.clone().invert()).normalize()
     expect(camera.position.length()).toBeCloseTo(field.collisionRadiusUnits(localDir), 6)
     expect(camera.position.length()).toBeGreaterThan(altitude)
+  })
+})
+
+describe('CameraCollision: свип по рельефу', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  it('пролёт сквозь гору за один кадр останавливается на горе, не туннелирует', () => {
+    const { body, field } = terrainBody() // из задачи 5: запад высокий, восток низкий
+    // старт далеко над низким сектором, финиш — диаметрально сквозь тело
+    const start = new Vector3(1, 0, 0).multiplyScalar(toThreeJSUnits(1736) * 3)
+    const { collision, camera } = makeCollision([body], start)
+
+    collision.resolve() // фиксирует lastPosition
+    camera.position.set(-1, 0, 0).multiplyScalar(toThreeJSUnits(1736) * 3)
+    collision.resolve()
+
+    // камера не на дальней стороне: свип поймал поверхность по пути
+    expect(camera.position.x).toBeGreaterThan(0)
+    const localDir = camera.position.clone().normalize()
+    expect(camera.position.length()).toBeGreaterThanOrEqual(field.collisionRadiusUnits(localDir) * 0.999)
+  })
+
+  it('касательное движение вдоль поверхности не съедается свипом', () => {
+    const { body, field } = terrainBody()
+    const dir = new Vector3(1, 0, 0)
+    const altitude = field.collisionRadiusUnits(dir) * 1.01
+    const { collision, camera } = makeCollision([body], dir.clone().multiplyScalar(altitude))
+
+    collision.resolve()
+    // шаг по касательной (по y — вдоль меридиана) без снижения
+    const step = altitude * 0.001
+    camera.position.add(new Vector3(0, step, 0))
+    collision.resolve()
+
+    expect(camera.position.y).toBeGreaterThan(step * 0.5) // касательная составляющая жива
   })
 })
