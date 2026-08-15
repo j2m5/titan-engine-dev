@@ -91,6 +91,35 @@ describe('TerrainHeightField: высоты по направлению', () => {
   })
 })
 
+describe('TerrainHeightField: нормаль поверхности', () => {
+  it('на склоне, растущем к северу, нормаль отклонена к югу', () => {
+    // строки: север выше юга (метры = raw)
+    const values = [
+      ...new Array(8).fill(60000),
+      ...new Array(8).fill(40000),
+      ...new Array(8).fill(20000),
+      ...new Array(8).fill(0)
+    ]
+    const field = new TerrainHeightField(makeMap(8, 4, values), R_KM)
+
+    const dir = new Vector3(1, 0, 0)
+    const normal = field.surfaceNormalLocal(dir, new Vector3())
+
+    const east = new Vector3(0, 1, 0).cross(dir).normalize()
+    const north = dir.clone().cross(east)
+    expect(normal.dot(north)).toBeLessThan(0)
+    expect(normal.dot(dir)).toBeGreaterThan(0.5)
+    expect(normal.length()).toBeCloseTo(1, 6)
+  })
+
+  it('у полюса нормаль радиальная (базис вырожден)', () => {
+    const field = new TerrainHeightField(makeMap(8, 4, new Array(32).fill(1000)), R_KM)
+    const normal = field.surfaceNormalLocal(new Vector3(0, 1, 0), new Vector3())
+
+    expect(normal.y).toBeCloseTo(1, 6)
+  })
+})
+
 describe('terrainHeightFieldFor: кэш', () => {
   it('одна карта — один экземпляр', () => {
     const map = makeMap(2, 2, [0, 0, 0, 0])

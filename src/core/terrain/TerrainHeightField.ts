@@ -38,6 +38,9 @@ const TWO_PI = 2 * Math.PI
  */
 class TerrainHeightField {
   private readonly uvScratch = new Vector2()
+  private readonly eastScratch = new Vector3()
+  private readonly northScratch = new Vector3()
+  private static readonly UP = new Vector3(0, 1, 0)
   private readonly clearanceGrid: Float32Array
   private readonly clearanceGridWidth: number
   private readonly clearanceGridHeight: number
@@ -124,6 +127,37 @@ class TerrainHeightField {
   /** Радиус коллизии: поверхность плюс клиренс, оба в юнитах three.js. */
   public collisionRadiusUnits(dir: Vector3): number {
     return this.surfaceRadiusUnits(dir) + toThreeJSUnits(this.clearanceMeters(dir) / 1000)
+  }
+
+  /**
+   * Нормаль поверхности из градиента карты — для скольжения камеры. Метрический
+   * базис по-восточному расширяется как в slope-энкодере: у полюсов ±1 тексель
+   * усиливал бы квантование высот в 1/cos раз.
+   */
+  public surfaceNormalLocal(dir: Vector3, out: Vector3): Vector3 {
+    const east = this.eastScratch.copy(TerrainHeightField.UP).cross(dir)
+    const cosLat = east.length()
+
+    if (cosLat < 1e-4) return out.copy(dir) // полюс: тангенс вырожден
+
+    east.divideScalar(cosLat)
+    const north = this.northScratch.copy(dir).cross(east)
+
+    const { width, height } = this.map
+    const uv = this.dirToUv(dir, this.uvScratch)
+    const radiusMeters = this.radiusKm * 1000
+
+    const span = Math.max(1, Math.min(Math.floor(width / 4), Math.round(1 / cosLat)))
+    const texelArc = (2 * Math.PI * radiusMeters * cosLat) / width
+    const northArc = (Math.PI * radiusMeters) / height
+
+    const gradEast =
+      (this.sampleMeters(uv.x + span / width, uv.y) - this.sampleMeters(uv.x - span / width, uv.y)) /
+      (2 * span * texelArc)
+    const gradNorth =
+      (this.sampleMeters(uv.x, uv.y - 1 / height) - this.sampleMeters(uv.x, uv.y + 1 / height)) / (2 * northArc)
+
+    return out.copy(dir).addScaledVector(east, -gradEast).addScaledVector(north, -gradNorth).normalize()
   }
 
   /**
