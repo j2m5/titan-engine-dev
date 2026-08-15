@@ -3,12 +3,16 @@ import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { buildPatchIndex } from './terrainPatchGeometry'
 
 /**
- * Потолок одновременно живых патчей квадродерева. Задача 5 держит рабочий
- * набор узлов SSE-отбора заметно ниже этого числа на разумных экранах —
- * потолок страхует от неограниченного роста при патологическом отборе
- * (камера в стене, дребезг), а не отражает штатный размер набора.
+ * Потолок одновременно живых патчей квадродерева. Замер: на HiDPI (H=2160)
+ * при τ≈2 желаемый набор SSE-отбора уже 552+ листьев, а живых на переходах
+ * split/merge больше (старый и новый узел видны одновременно, см. инвариант
+ * «без дыр» в TerrainSphere) — 640 пробивается. 1024 слота = ~147 МБ
+ * атрибутов при ленивой аллокации (createHandle зовётся по факту, не заранее)
+ * — платит только дошедший до этой глубины набор. Потолок страхует от
+ * неограниченного роста при патологическом отборе (камера в стене, дребезг),
+ * не отражает штатный размер набора.
  */
-export const MAX_LIVE_PATCHES = 640
+export const MAX_LIVE_PATCHES = 1024
 
 export type PatchHandle = { mesh: Mesh; geometry: BufferGeometry }
 
@@ -28,7 +32,7 @@ class TerrainPatchPool {
   private readonly segments: number
   private readonly index: BufferAttribute
   private readonly free: PatchHandle[] = []
-  private live = 0
+  private readonly occupied = new Set<PatchHandle>()
 
   public constructor(material: PlanetMaterial, segments: number) {
     this.material = material
@@ -37,21 +41,28 @@ class TerrainPatchPool {
   }
 
   public get liveCount(): number {
-    return this.live
+    return this.occupied.size
   }
 
   public acquire(): PatchHandle | null {
-    if (this.live >= MAX_LIVE_PATCHES) return null
+    if (this.occupied.size >= MAX_LIVE_PATCHES) return null
 
     const handle = this.free.pop() ?? this.createHandle()
-    this.live++
+    this.occupied.add(handle)
 
     return handle
   }
 
+  /**
+   * Guard двойного release: handle не в occupied (уже освобождён либо чужой)
+   * — тихий return. Инвариант дешёвый, но без него повторный release кладёт
+   * один и тот же handle в free дважды, и следующие два acquire раздают его
+   * двум живым мешам одновременно.
+   */
   public release(handle: PatchHandle): void {
+    if (!this.occupied.delete(handle)) return
+
     this.free.push(handle)
-    this.live--
   }
 
   /**

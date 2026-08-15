@@ -93,4 +93,21 @@ describe('TerrainPatchPool', () => {
     const b = pool.acquire()!
     expect(a.geometry.getIndex()).toBe(b.geometry.getIndex())
   })
+
+  // guard дешёвого инварианта: повторный release того же handle — тихий
+  // return, не портит liveCount и не кладёт handle в free дважды (иначе
+  // следующие два acquire отдали бы один и тот же handle двум живым мешам)
+  it('повторный release одного handle — тихий return, не дублирует слот в free', () => {
+    const pool = makePool()
+    const a = pool.acquire()!
+    pool.release(a)
+    expect(pool.liveCount).toBe(0)
+
+    pool.release(a) // двойной release
+    expect(pool.liveCount).toBe(0)
+
+    const b = pool.acquire()!
+    const c = pool.acquire()!
+    expect(b).not.toBe(c)
+  })
 })
