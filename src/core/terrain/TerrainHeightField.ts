@@ -15,12 +15,13 @@ const CUBE_EQUATOR_FACES = 4
  * Вершинный шаг ФАКТИЧЕСКИ рендерящейся сетки на экваторе, в текселях карты
  * высот: у поверхности квадродерево (этап 3б) всегда на максимальном уровне
  * `TERRAIN_QUADTREE_MAX_LEVEL`, там `2^level` патчей на ребро грани, каждый —
- * `TERRAIN_PATCH_SEGMENTS` сегментов. Раньше здесь была `TERRAIN_SPHERE_SEGMENTS`
- * (разрешение снесённой в 3б монолитной сферы этапа 2, 1024) — окно провиса
- * мерялось под мертвую геометрию и завышало клиренс на порядки (для Луны —
- * километры вместо метров, камера не могла сесть). Для Луны (карта 8192
- * текселя) это даёт 16384 — сетка гуще карты вдвое, окно проседает ниже
- * одного текселя и клампится в конструкторе.
+ * `TERRAIN_PATCH_SEGMENTS` сегментов. Калибрует ДВЕ вещи в `buildClearanceGrid`:
+ * (а) поточечную модель провиса — вторые разности СОСЕДНИХ текселей корректно
+ * ограничивают хорду между соседними вершинами, только пока их шаг ≈ 1
+ * тексель (для Луны, карта 8192 текселя, шаг = 8192/16384 = 0.5 текселя —
+ * вторые разности соседних текселей чуть шире факта, консервативно); (б)
+ * порог перехода на широкое окно у полюсов, где вершинный шаг по долготе
+ * растёт как 1/cos(широты) и перестаёт умещаться в соседних текселях.
  */
 export const TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS =
   CUBE_EQUATOR_FACES * 2 ** TERRAIN_QUADTREE_MAX_LEVEL * TERRAIN_PATCH_SEGMENTS
@@ -29,16 +30,18 @@ export const TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS =
 export const CLEARANCE_MARGIN_METERS = 5
 
 /**
- * Сторона группы блоков, формирующей одну ячейку сетки провиса. 1 = ячейка
- * совпадает с блоком (для Луны при окне максимального уровня квадродерева
- * блок = 1 тексель ⇒ сетка 8192×4096, ~134 МБ). Крупнее нельзя: широкая
- * ячейка с дилатацией распространяет худший кратер на сотни километров
- * вокруг — клиренс завышается на порядки против фактического провиса сетки
- * (это и была суть бага, чинившегося сужением окна — раздувать ячейку назад
- * ради памяти воскресило бы тот же баг на масштабе ячейки). Память — прямая
- * цена честного окна, не оптимизирована этим фиксом.
+ * Блок сетки провиса, texels: чисто плотность/память вывода и калибровка
+ * ℓ1/ℓ2 ε-пирамиды (`buildGeometricErrors`) — НЕ окно, по которому меряется
+ * провис (это поточечная оценка вторых разностей, см. `buildClearanceGrid`),
+ * а размер ячейки, в которую поточечные оценки сворачиваются через MAX.
+ * Крупная ячейка здесь безопасна (в отличие от бывшей range-агрегации по
+ * группе блоков, чинившейся сужением окна в прошлом раунде): чем больше
+ * ячейка, тем дальше локальный максимум размазывается дилатацией на
+ * соседей — консервативно вверх, никогда не занижает провис внутри ячейки.
+ * Для Луны даёт блок = 8 текселей, сетка 1024×512 ≈ 2 МБ — та же плотность
+ * (и то же число), что было исторически до этапа квадродерева.
  */
-const CLEARANCE_CELL_BLOCKS = 1
+export const CLEARANCE_GRID_BASE_SEGMENTS = 1024
 
 const TWO_PI = 2 * Math.PI
 
@@ -53,17 +56,25 @@ const TWO_PI = 2 * Math.PI
  * slope-энкодер), dirToUv побайтно совпадает с развёрткой SphereGeometry —
  * закреплено паритетным тестом, не выводом.
  *
- * Карта провиса (clearance): треугольник визуальной сетки натянут над честной
- * высотой не выше локального размаха высот в своём пролёте — окно вершинной
- * сетки максимального уровня квадродерева (width/TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS
- * текселей, для Луны < 1, клампится до 1). Ячейка сетки провиса = один блок;
- * группы (1+span)×2 соседних блоков накрывают любое положение скользящего
- * окна вершинной сетки, где span растёт к полюсу как 1/cos(широты) — окно
- * расширяется к полюсам паритетно фактическому пролёту патча кубосферы (см.
- * `buildClearanceGrid`), не «консервативным» запасом. Финальная дилатация 3×3
- * страхует границы ячеек, чтобы клиренс не обрывался скачком на стыке.
- * Выборка клиренса — билинейная по этой же сетке (см. `clearanceMeters`), а
- * не ближайшая ячейка: иначе пол камеры ступенчатый на границах ячеек.
+ * Карта провиса (clearance): треугольник визуальной сетки — линейная хорда
+ * между соседними ВЕРШИНАМИ максимального уровня квадродерева — отклоняется
+ * от честной (билинейной) поверхности только там, где хорда пересекает излом
+ * билинейки (границу текселя, где вторая разность высот ненулевая): на
+ * гладком (линейном) участке карты провис ≈ 0, растёт только на изломах
+ * рельефа (кромки кратеров). Поточечная оценка на тексель — половина
+ * максимума |второй разности| по обеим осям карты и перекрёстного члена
+ * билинейной ячейки (h00−h10−h01+h11, ограничивает провис внутри треугольника
+ * квада) — см. `buildClearanceGrid`. У полюсов, где вершинный шаг по долготе
+ * растёт как 1/cos(широты) и перестаёт умещаться в соседних текселях (порог —
+ * `TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS`), восток-западная компонента
+ * переключается на размах по скользящему окну текселей ширины вершинного
+ * шага (прежняя, до этого раунда, модель — для этих широт всё ещё верна);
+ * север-южная остаётся на второй разности. Поточечные оценки сворачиваются
+ * через MAX в ячейки `CLEARANCE_GRID_BASE_SEGMENTS` (плотность/память, не
+ * окно — см. докблок константы), затем дилатация 3×3 страхует границы ячеек,
+ * чтобы клиренс не обрывался скачком на стыке. Выборка клиренса — билинейная
+ * по этой же сетке (см. `clearanceMeters`), а не ближайшая ячейка: иначе пол
+ * камеры ступенчатый на границах ячеек.
  *
  * Оговорка, принятая владельцем: при быстром снижении локальная сетка
  * TerrainSphere может на секунды остаться грубее максимального уровня
@@ -91,7 +102,7 @@ class TerrainHeightField {
   ) {
     // block/metersPerRaw — общий по-блочный базис клиренса и ε-пирамиды,
     // считается один раз здесь, а не дублируется в обоих билдерах
-    const block = Math.max(1, Math.round(map.width / TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS))
+    const block = Math.max(1, Math.round(map.width / CLEARANCE_GRID_BASE_SEGMENTS))
     const metersPerRaw = (map.maxMeters - map.minMeters) / 65535
 
     const built = this.buildClearanceGrid(block, metersPerRaw)
@@ -179,10 +190,10 @@ class TerrainHeightField {
 
   /**
    * Билинейка по сетке провиса — те же полутекселные конвенции, что и
-   * `sampleMeters` (wrap по u, кламп по v). Индексы gridW/gridH выводятся из
-   * блочного счёта (`buildClearanceGrid`) и равномерны только при ширине
-   * карты, кратной CLEARANCE_CELL_BLOCKS × block — иначе последняя ячейка
-   * по каждой оси у́же остальных (Math.ceil), сама интерполяция это не ломает.
+   * `sampleMeters` (wrap по u, кламп по v). Индексы gridW/gridH — это
+   * blocksX/blocksY (`buildClearanceGrid`), равномерны только при ширине
+   * карты, кратной block — иначе последняя ячейка по каждой оси у́же
+   * остальных (Math.ceil), сама интерполяция это не ломает.
    */
   private sampleClearance(u: number, v: number): number {
     const w = this.clearanceGridWidth
@@ -245,10 +256,17 @@ class TerrainHeightField {
   }
 
   /**
-   * Строит сетку провиса за два прохода (по-блочные min/max → провис ячейки
-   * из групп (1+span)×2 блоков, span растёт к полюсу как 1/cos широты
-   * строки) и дилатацию 3×3 с запасом. Долгота заворачивается, широта
-   * клампится — как всюду в этом классе.
+   * Строит сетку провиса за один текселный проход: на каждый тексель —
+   * поточечная оценка провиса хорды между соседними вершинами максимального
+   * уровня (половина максимума |вторых разностей| по x/y и перекрёстного
+   * члена билинейной ячейки — см. докблок класса), на приполярных строках
+   * восток-западная компонента вместо этого — размах по скользящему
+   * кольцевому окну текселей ширины вершинного шага (`slidingRangeWrap`,
+   * O(width) через монотонные деки, а не O(width·span) — у самого полюса
+   * окно растёт до четверти ширины карты). Оценки MAX-сворачиваются в ячейки
+   * block, затем дилатация 3×3 с запасом. Долгота заворачивается, широта
+   * клампится — как всюду в этом классе. Заодно строит blockMin/blockMax
+   * (для ε-пирамиды) — тот же по-текселный проход, без лишнего обхода карты.
    */
   private buildClearanceGrid(
     block: number,
@@ -267,80 +285,90 @@ class TerrainHeightField {
     const blocksX = Math.ceil(width / block)
     const blocksY = Math.ceil(height / block)
 
-    // проход 1: по-блочные min/max (raw)
     const blockMin = new Uint16Array(blocksX * blocksY).fill(65535)
     const blockMax = new Uint16Array(blocksX * blocksY)
+    const pointSag = new Float32Array(blocksX * blocksY) // raw-единицы, MAX по текселям блока
+
+    // экваториальный вершинный шаг максимального уровня в текселях (обычно
+    // <1 — вторые разности соседних текселей тогда консервативны, см.
+    // докблок TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS)
+    const equatorStepTexels = width / TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS
+    const spanCap = Math.max(1, Math.floor(width / 4))
+
+    // буферы скользящего окна восток-запад для приполярных строк —
+    // переиспользуются между строками, без аллокаций в горячем цикле
+    const bufLen = width + 2 * spanCap
+    const padded = new Uint16Array(bufLen)
+    const maxDequeIdx = new Int32Array(bufLen)
+    const minDequeIdx = new Int32Array(bufLen)
+    const ewRange = new Float32Array(width)
+
     for (let y = 0; y < height; y++) {
       const by = Math.min(Math.floor(y / block), blocksY - 1)
+      const yLo = y === 0 ? 0 : y - 1
+      const yHi = y === height - 1 ? height - 1 : y + 1
+      const rowLo = yLo * width
+      const row = y * width
+      const rowHi = yHi * width
+
+      const v = (y + 0.5) / height
+      const cosLat = Math.sin(Math.PI * v)
+      const spanTexels = Math.max(1, Math.min(spanCap, Math.round(equatorStepTexels / cosLat)))
+      // порог из брифа: пролёт вершины шире ~1.5 текселя — хорда перескакивает
+      // изломы целиком, вторая разность соседних текселей их больше не видит
+      const highLat = spanTexels >= 2
+
+      if (highLat) {
+        slidingRangeWrap(data, row, width, spanTexels, padded, maxDequeIdx, minDequeIdx, ewRange)
+      }
+
       for (let x = 0; x < width; x++) {
+        const xLo = x === 0 ? width - 1 : x - 1
+        const xHi = x === width - 1 ? 0 : x + 1
+
+        const raw = data[row + x]
         const b = by * blocksX + Math.min(Math.floor(x / block), blocksX - 1)
-        const raw = data[y * width + x]
         if (raw < blockMin[b]) blockMin[b] = raw
         if (raw > blockMax[b]) blockMax[b] = raw
-      }
-    }
 
-    // проход 2: провис ячейки = max по группам (1+span)×2 блоков. Колоночный
-    // span растёт к полюсу как 1/cos(lat) — идиома surfaceNormalLocal: патч
-    // кубосферы у полюса накрывает по долготе кратно больше колонок текселей,
-    // чем у экватора (равноугольная развёртка сужается к полюсу), окно
-    // группировки обязано расти синхронно, иначе провис там недооценивается.
-    // Кап floor(blocksX/4) — та же защита от вырождения у самого полюса, что
-    // и в surfaceNormalLocal, но в единицах блоков (домен здесь — blocksX, не
-    // тексели карты).
-    const gridW = Math.ceil(blocksX / CLEARANCE_CELL_BLOCKS)
-    const gridH = Math.ceil(blocksY / CLEARANCE_CELL_BLOCKS)
-    const spanCap = Math.floor(blocksX / 4)
-    const sag = new Float32Array(gridW * gridH)
-    for (let by = 0; by < blocksY; by++) {
-      const cy = Math.min(Math.floor(by / CLEARANCE_CELL_BLOCKS), gridH - 1)
+        const d2y = data[rowLo + x] - 2 * raw + data[rowHi + x]
+        const cross = raw - data[row + xHi] - data[rowHi + x] + data[rowHi + xHi]
+        const nsComponent = 0.5 * Math.abs(d2y)
+        const crossComponent = 0.5 * Math.abs(cross)
 
-      // широта центра строки блоков — половина-блочная конвенция, как везде в классе
-      const rowStart = by * block
-      const rowEnd = Math.min(rowStart + block, height)
-      const rowCenterV = (rowStart + rowEnd) / (2 * height)
-      const cosLat = Math.sin(Math.PI * rowCenterV)
-      const span = Math.max(1, Math.min(spanCap, Math.round(1 / cosLat)))
-
-      for (let bx = 0; bx < blocksX; bx++) {
-        const cx = Math.min(Math.floor(bx / CLEARANCE_CELL_BLOCKS), gridW - 1)
-        // группа с началом в (bx, by): долгота wrap на span колонок вперёд, широта кламп
-        let lo = 65535
-        let hi = 0
-        for (let dy = 0; dy <= 1; dy++) {
-          const ny = Math.min(by + dy, blocksY - 1)
-          for (let dx = 0; dx <= span; dx++) {
-            const b = ny * blocksX + ((bx + dx) % blocksX)
-            if (blockMin[b] < lo) lo = blockMin[b]
-            if (blockMax[b] > hi) hi = blockMax[b]
-          }
+        let ewComponent: number
+        if (highLat) {
+          ewComponent = ewRange[x]
+        } else {
+          const d2x = data[row + xLo] - 2 * raw + data[row + xHi]
+          ewComponent = 0.5 * Math.abs(d2x)
         }
-        const range = (hi - lo) * metersPerRaw
-        const c = cy * gridW + cx
-        if (range > sag[c]) sag[c] = range
+
+        const sag = Math.max(ewComponent, nsComponent, crossComponent)
+        if (sag > pointSag[b]) pointSag[b] = sag
       }
     }
 
     // дилатация 3×3 + запас: у границ ячеек нет обрывов клиренса
-    const grid = new Float32Array(gridW * gridH)
+    const grid = new Float32Array(blocksX * blocksY)
     let maxClearance = 0
-    for (let cy = 0; cy < gridH; cy++) {
-      for (let cx = 0; cx < gridW; cx++) {
+    for (let cy = 0; cy < blocksY; cy++) {
+      for (let cx = 0; cx < blocksX; cx++) {
         let value = 0
         for (let dy = -1; dy <= 1; dy++) {
-          const ny = Math.min(Math.max(cy + dy, 0), gridH - 1)
+          const ny = Math.min(Math.max(cy + dy, 0), blocksY - 1)
           for (let dx = -1; dx <= 1; dx++) {
-            const s = sag[ny * gridW + ((cx + dx + gridW) % gridW)]
+            const s = pointSag[ny * blocksX + ((cx + dx + blocksX) % blocksX)]
             if (s > value) value = s
           }
         }
-        const c = cy * gridW + cx
-        grid[c] = value + CLEARANCE_MARGIN_METERS
+        const c = cy * blocksX + cx
+        grid[c] = value * metersPerRaw + CLEARANCE_MARGIN_METERS
         if (grid[c] > maxClearance) maxClearance = grid[c]
       }
     }
 
-    return { grid, width: gridW, height: gridH, maxClearance, blockMin, blockMax, blocksX, blocksY }
+    return { grid, width: blocksX, height: blocksY, maxClearance, blockMin, blockMax, blocksX, blocksY }
   }
 
   /**
@@ -415,6 +443,55 @@ function percentile99(values: Float64Array): number {
   const idx = Math.floor(0.99 * (sorted.length - 1))
 
   return sorted[idx]
+}
+
+/**
+ * Диапазон (max−min) по скользящему кольцевому окну ±span текселей вокруг
+ * каждого x в строке row — восток-западная оценка провиса на широтах, где
+ * вершинный шаг шире ~1.5 текселя (см. buildClearanceGrid). O(width) через
+ * монотонные деки, а не O(width·span): у самого полюса span растёт до
+ * четверти ширины карты, наивный проход был бы на порядки дороже. Буферы —
+ * аргументы, переиспользуются вызывающим между строками без аллокаций;
+ * должны быть длиной ≥ width+2·span (гарантируется вызывающим через spanCap).
+ */
+function slidingRangeWrap(
+  data: Uint16Array,
+  row: number,
+  width: number,
+  span: number,
+  padded: Uint16Array,
+  maxDequeIdx: Int32Array,
+  minDequeIdx: Int32Array,
+  out: Float32Array
+): void {
+  const len = width + 2 * span
+  for (let j = 0; j < len; j++) {
+    const wrapped = (((j - span) % width) + width) % width
+    padded[j] = data[row + wrapped]
+  }
+
+  const windowSize = 2 * span + 1
+  let maxHead = 0
+  let maxTail = 0
+  let minHead = 0
+  let minTail = 0
+
+  for (let j = 0; j < len; j++) {
+    const value = padded[j]
+
+    while (maxTail > maxHead && padded[maxDequeIdx[maxTail - 1]] <= value) maxTail--
+    maxDequeIdx[maxTail++] = j
+    while (maxDequeIdx[maxHead] <= j - windowSize) maxHead++
+
+    while (minTail > minHead && padded[minDequeIdx[minTail - 1]] >= value) minTail--
+    minDequeIdx[minTail++] = j
+    while (minDequeIdx[minHead] <= j - windowSize) minHead++
+
+    if (j >= windowSize - 1) {
+      const outX = j - windowSize + 1
+      out[outX] = padded[maxDequeIdx[maxHead]] - padded[minDequeIdx[minHead]]
+    }
+  }
 }
 
 /** Один экземпляр на карту: мешер и коллизия делят его, пересборка сцены не пересканирует данные. */
