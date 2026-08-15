@@ -50,6 +50,20 @@ describe('TerrainHeightField: полутексельная билинейка', 
   })
 })
 
+describe('TerrainHeightField: шов x=width при f64-округлении', () => {
+  it('u на 1 ULP левее центра текселя 0 не даёт NaN и совпадает с sampleMeters(0.125, 0.5)', () => {
+    // width=4: x = frac(u)·4 − 0.5 даёт крошечный минус, x += width округляется
+    // в f64 РОВНО до 4.0 (не 4−ε) — floor(4.0)=4, вне [0, width−1]. 0.125 — центр
+    // текселя 0; u ниже на 1 ULP double — тот же тексель по смыслу.
+    const buggyU = 0.12499999999999999
+    expect(buggyU).not.toBe(0.125) // соседний, но различимый double
+    const field = new TerrainHeightField(makeMap(4, 1, [100, 200, 300, 400]), R_KM)
+
+    expect(Number.isNaN(field.sampleMeters(buggyU, 0.5))).toBe(false)
+    expect(field.sampleMeters(buggyU, 0.5)).toBeCloseTo(field.sampleMeters(0.125, 0.5), 5)
+  })
+})
+
 describe('TerrainHeightField: паритет dirToUv с UV-развёрткой SphereGeometry', () => {
   it('для каждой вершины сферы dirToUv(позиция) совпадает с родным UV', () => {
     // Развёртка коллизии обязана совпадать с развёрткой рендера — иначе рельеф

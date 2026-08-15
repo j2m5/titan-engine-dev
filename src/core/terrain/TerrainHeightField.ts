@@ -94,7 +94,8 @@ class TerrainHeightField {
 
     let x = (u - Math.floor(u)) * width - 0.5
     if (x < 0) x += width
-    const x0 = Math.floor(x)
+    // f64-округление x+width может дать ровно width — кламп в последний тексель, fx=1 доносит вес до текселя 0
+    const x0 = Math.min(Math.floor(x), width - 1)
     const x1 = (x0 + 1) % width
     const fx = x - x0
 
