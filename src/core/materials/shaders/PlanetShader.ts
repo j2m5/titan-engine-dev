@@ -1,6 +1,6 @@
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { PlanetShaderTemplate as Shader } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
-import { Texture, Uniform, Vector2, Vector3 } from 'three'
+import { Texture, Uniform, Vector2, Vector3, Vector4 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { IPlanetRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -15,6 +15,16 @@ const DEFAULT_DETAIL_NORMAL_SCALE = 1
 const DEFAULT_DETAIL_SATURATION = 0.15
 const DEFAULT_DETAIL_BRIGHTNESS = 1
 const DEFAULT_DETAIL_AO_INFLUENCE = 0.5
+
+// Дальность fade (метры дистанции камеры до конца fade шкалы) — тоже ручка
+// пер-тела, дефолт нейтрален. 30000 м — дистанция, на которой период крупной
+// шкалы (40 м, DEFAULT_DETAIL_SCALE_METERS) опускается ниже ~1 экранного
+// пикселя (1080p, fov ~50°); 5000 м для мелкой шкалы (7 м) — та же логика.
+const DEFAULT_DETAIL_FADE_METERS = 30000
+const DEFAULT_DETAIL_FADE2_METERS = 5000
+
+// Начало fade относительно конца: не отдельная ручка (см. IPlanetRenderingObject).
+const DETAIL_FADE_START_RATIO = 0.4
 
 // Период (метры → юниты) в масштаб трипланарной проекции: чанк TerrainDetail
 // умножает домен на 1/период напрямую (см. докстрока чанка) — нулевой период
@@ -49,6 +59,7 @@ interface PlanetUniforms {
   uDetailBrightness: number
   uDetailAoInfluence: number
   uDetailLayerGates: Vector3
+  uDetailFadeRange: Vector4
   shadowRingsInnerRadius: number
   shadowRingsOuterRadius: number
   shadowRingsTexture: Texture | null
@@ -87,6 +98,13 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
 
     const USE_RING: boolean = this.model.children.where('categoryId', 6).isNotEmpty()
 
+    const detailFadeEndUnits = toThreeJSUnits(
+      (planetData.detailFadeMeters ?? DEFAULT_DETAIL_FADE_METERS) / 1000
+    )
+    const detailFade2EndUnits = toThreeJSUnits(
+      (planetData.detailFade2Meters ?? DEFAULT_DETAIL_FADE2_METERS) / 1000
+    )
+
     this.uniforms = {
       lightPosition: new Uniform(new Vector3()),
       diffuseMap: new Uniform(resourceStorage.getTextureOrMake('default.png')),
@@ -111,6 +129,14 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uDetailBrightness: new Uniform(planetData.detailBrightness ?? DEFAULT_DETAIL_BRIGHTNESS),
       uDetailAoInfluence: new Uniform(planetData.detailAoInfluence ?? DEFAULT_DETAIL_AO_INFLUENCE),
       uDetailLayerGates: new Uniform(new Vector3(0, 0, 0)),
+      uDetailFadeRange: new Uniform(
+        new Vector4(
+          detailFadeEndUnits * DETAIL_FADE_START_RATIO,
+          detailFadeEndUnits,
+          detailFade2EndUnits * DETAIL_FADE_START_RATIO,
+          detailFade2EndUnits
+        )
+      ),
       shadowRingsInnerRadius: new Uniform(toThreeJSUnits(ringData.innerRadius)),
       shadowRingsOuterRadius: new Uniform(toThreeJSUnits(ringData.outerRadius)),
       shadowRingsTexture: new Uniform(ringMap)

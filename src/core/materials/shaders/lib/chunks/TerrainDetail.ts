@@ -33,8 +33,12 @@
  *
  * Fade по дистанции — не только косметика: без него трипланар (3 выборки на
  * каждую из четырёх карт) считался бы на каждом пикселе планеты независимо
- * от удаления камеры. Пороги — кратные периоду тайла: чем крупнее период,
- * тем на большей дистанции деталь остаётся различимой. uDetailLayerGates —
+ * от удаления камеры. Пороги — ручки пер-тела в метрах дистанции камеры
+ * (detailFadeMeters/detailFade2Meters, конец fade каждой шкалы; начало —
+ * 0.4 × конца, зашито в PlanetShader), CPU переводит их в юниты и кладёт
+ * в uDetailFadeRange (vec4: start1, end1, start2, end2). Дефолты 30000/5000 м
+ * — дистанция, на которой период соответствующей шкалы (40 м / 7 м) опускается
+ * ниже ~1 экранного пикселя (1080p, fov ~50°). uDetailLayerGates —
  * по-слойные uniform-гейты (одинаковы для всех пикселей драв-колла). Ветка
  * `if (max(fade1, fade2) > 0.0)` — другое: viewDistance попиксельна, поэтому
  * дивергентна и она. texture()-выборки внутри дивергентного потока формально
@@ -54,17 +58,15 @@ export const terrainDetailUniforms = `
   uniform float uDetailBrightness;
   uniform float uDetailAoInfluence;
   uniform vec3 uDetailLayerGates;
+  uniform vec4 uDetailFadeRange;
 `
 
 export const terrainDetailFunctions = `
   void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, float viewDistance) {
-    // Пороги фейда — кратные периоду тайла: 60 периодов деталь ещё честно
-    // различима, к 160 периодам трипланар давно алиасит в мипах — выключаем
-    // раньше, чем текстура превращается в шум.
-    float detailPeriod = 1.0 / max(uDetailScale, 1e-6);
-    float detailPeriod2 = 1.0 / max(uDetailScale2, 1e-6);
-    float fade1 = 1.0 - smoothstep(60.0 * detailPeriod, 160.0 * detailPeriod, viewDistance);
-    float fade2 = uDetailLayerGates.z * (1.0 - smoothstep(60.0 * detailPeriod2, 160.0 * detailPeriod2, viewDistance));
+    // Пороги фейда — ручки пер-тела в метрах дистанции, сконвертированные
+    // в юниты на CPU (см. докстрока чанка и PlanetShader.uDetailFadeRange).
+    float fade1 = 1.0 - smoothstep(uDetailFadeRange.x, uDetailFadeRange.y, viewDistance);
+    float fade2 = uDetailLayerGates.z * (1.0 - smoothstep(uDetailFadeRange.z, uDetailFadeRange.w, viewDistance));
 
     if (max(fade1, fade2) > 0.0) {
       vec2 offset = vec2(0.0);

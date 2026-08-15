@@ -176,6 +176,11 @@ export interface IPlanetRenderingObject {
   detailSaturation?: number
   detailBrightness?: number
   detailAoInfluence?: number
+
+  // Дальность fade — метры дистанции камеры до конца fade каждой шкалы.
+  // Начало fade = 0.4 × конца, зашито в PlanetShader (не отдельная ручка).
+  detailFadeMeters?: number
+  detailFade2Meters?: number
 }
 
 export type IAtmosphereRenderingObject = AtmosphereConfig

@@ -7,7 +7,7 @@ import { Actor } from '@/core/models/Actor'
 import { ResourceType } from '@/core/models/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
-import { Texture } from 'three'
+import { Texture, Vector4 } from 'three'
 
 // Луна (actorId 19) — единственное тело с полным набором terrain-детали
 function moon(): Actor {
@@ -56,6 +56,14 @@ describe('TerrainDetail: чанк — регистрация и структур
     expect(terrainDetailUniforms).toContain('uniform float uDetailScale;')
     expect(terrainDetailUniforms).toContain('uniform float uDetailScale2;')
     expect(terrainDetailUniforms).toContain('uniform vec3 uDetailLayerGates;')
+    expect(terrainDetailUniforms).toContain('uniform vec4 uDetailFadeRange;')
+  })
+
+  it('фейд читается из uDetailFadeRange (start1, end1, start2, end2) — не из периода шкалы на GLSL', () => {
+    expect(terrainDetailFunctions).toContain('uDetailFadeRange.x, uDetailFadeRange.y')
+    expect(terrainDetailFunctions).toContain('uDetailFadeRange.z, uDetailFadeRange.w')
+    expect(terrainDetailFunctions).not.toContain('60.0 *')
+    expect(terrainDetailFunctions).not.toContain('160.0 *')
   })
 
   it('применяет крупную шкалу через triplanar*-функции с uDetail-самплерами — бленд не копируется', () => {
@@ -206,6 +214,22 @@ describe('PlanetMaterial: терраформный детальный слой',
     expect(material.uniforms.uDetailAoInfluence.value).toBeCloseTo(0.5, 10)
   })
 
+  it('fade доезжает в юниформ vec4 (start = 0.4×end, конец из detailFadeMeters/detailFade2Meters) — ручки Луны 30000/5000 м', () => {
+    seedMoonHeightMap()
+    seedTexture(moonPathOf('detailNormal'), 8, 4)
+
+    const material = new PlanetMaterial(moon())
+    material.updateMaterial()
+
+    const end1 = toThreeJSUnits(30000 / 1000)
+    const end2 = toThreeJSUnits(5000 / 1000)
+    const range = material.uniforms.uDetailFadeRange.value as Vector4
+    expect(range.x).toBeCloseTo(end1 * 0.4, 10)
+    expect(range.y).toBeCloseTo(end1, 10)
+    expect(range.z).toBeCloseTo(end2 * 0.4, 10)
+    expect(range.w).toBeCloseTo(end2, 10)
+  })
+
   it('без detail-полей в data юниформы получают дефолты (Земля, actorId 7 — bumpScale задан, детали нет)', () => {
     const material = new PlanetMaterial(Actor.find(7)!)
 
@@ -218,6 +242,16 @@ describe('PlanetMaterial: терраформный детальный слой',
     expect(material.uniforms.uDetailSaturation.value).toBeCloseTo(0.15, 10)
     expect(material.uniforms.uDetailBrightness.value).toBe(1)
     expect(material.uniforms.uDetailAoInfluence.value).toBeCloseTo(0.5, 10)
+
+    // detailFadeMeters/detailFade2Meters тоже отсутствуют — фолбэк на DEFAULT_DETAIL_FADE_METERS
+    // (30000) и DEFAULT_DETAIL_FADE2_METERS (5000), численно те же, что явные ручки Луны выше.
+    const end1 = toThreeJSUnits(30000 / 1000)
+    const end2 = toThreeJSUnits(5000 / 1000)
+    const range = material.uniforms.uDetailFadeRange.value as Vector4
+    expect(range.x).toBeCloseTo(end1 * 0.4, 10)
+    expect(range.y).toBeCloseTo(end1, 10)
+    expect(range.z).toBeCloseTo(end2 * 0.4, 10)
+    expect(range.w).toBeCloseTo(end2, 10)
   })
 
   it('resetMaterial снимает дефайн и обнуляет гейты и текстуры', () => {
