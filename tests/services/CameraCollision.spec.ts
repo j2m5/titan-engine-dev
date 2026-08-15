@@ -13,8 +13,15 @@ const R = toThreeJSUnits(EARTH_RADIUS_KM) * COLLISION_GAP
 
 const MOON_HEIGHT_PATH = 'planets/moon/moon_height.raw'
 
-function seedHeightMap(values: number[], width: number, height: number, minMeters: number, maxMeters: number): void {
-  ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(MOON_HEIGHT_PATH, {
+function seedHeightMap(
+  values: number[],
+  width: number,
+  height: number,
+  minMeters: number,
+  maxMeters: number,
+  path: string = MOON_HEIGHT_PATH
+): void {
+  ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(path, {
     width,
     height,
     minMeters,
@@ -400,5 +407,55 @@ describe('CameraCollision: жёсткий стоп при исчерпании �
     // до конца отрезка (старый код: скольжение почти не гасит касательное
     // движение при радиальной нормали — камера уезжала бы к z≈segmentLength)
     expect(camera.position.z).toBeLessThan(segmentLength * 0.5)
+  })
+})
+
+describe('CameraCollision: свип — два терраформных тела в кадре', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  it('ближнее тело выигрывает: best-скретчи контакта/нормали не затёрты дальним кандидатом', () => {
+    const NEAR_PATH = 'planets/near/near_height.raw'
+    const FAR_PATH = 'planets/far/far_height.raw'
+    // оба тела плоские (флэт), но разного физического радиуса — контакт по
+    // ближнему телу численно отличим от контакта по дальнему
+    seedHeightMap(new Array(8).fill(65535), 4, 2, 0, 0, NEAR_PATH)
+    seedHeightMap(new Array(8).fill(65535), 4, 2, 0, 0, FAR_PATH)
+
+    const nearRadiusKm = 1000
+    const farRadiusKm = 2000
+    const near = makeBody('planet', nearRadiusKm, new Vector3(0, 0, 0), undefined, NEAR_PATH)
+    const nearField = terrainHeightFieldFor(
+      (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(NEAR_PATH)!,
+      nearRadiusKm
+    )
+    const nearTarget = nearField.collisionRadiusUnits(new Vector3(1, 0, 0))
+
+    // дальнее тело — далеко за ближним по той же оси: тоже валидный
+    // кандидат марча (свой настоящий контакт), но camera должна остановиться
+    // на ближнем
+    const farCenterX = nearTarget * 5
+    const far = makeBody('planet', farRadiusKm, new Vector3(farCenterX, 0, 0), undefined, FAR_PATH)
+    const farField = terrainHeightFieldFor(
+      (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(FAR_PATH)!,
+      farRadiusKm
+    )
+    const farTarget = farField.collisionRadiusUnits(new Vector3(-1, 0, 0))
+
+    // порядок массива важен: ближнее тело оценивается ПЕРВЫМ и становится
+    // best-кандидатом, дальнее — ВТОРЫМ и перезаписывает скретч текущего
+    // хита уже после того, как ближнее сохранилось в best — регрессия на
+    // затирание скретчей второй проверкой
+    const { collision, camera } = makeCollision([near, far], new Vector3(-nearTarget * 2, 0, 0))
+
+    collision.resolve() // фиксирует lastPosition
+    camera.position.set(farCenterX + farTarget * 2, 0, 0) // отрезок насквозь через оба тела
+    collision.resolve()
+
+    // контакт принадлежит БЛИЖНЕМУ телу: камера остановилась у его
+    // поверхности со стороны подлёта (не проехала сквозь него к дальнему,
+    // не получила контакт/нормаль дальнего тела)
+    expect(camera.position.distanceTo(near.position)).toBeCloseTo(nearTarget, 3)
+    expect(camera.position.distanceTo(far.position)).toBeGreaterThan(farTarget)
+    expect(camera.position.clone().normalize().dot(new Vector3(-1, 0, 0))).toBeGreaterThan(0.99)
   })
 })
