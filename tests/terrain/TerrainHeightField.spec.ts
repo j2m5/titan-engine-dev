@@ -315,3 +315,48 @@ describe('TerrainHeightField: билинейная выборка клиренс
     expect(quarter).toBeLessThan(mid)
   })
 })
+
+describe('TerrainHeightField: геометрическая ошибка уровня', () => {
+  it('монотонно не возрастает с уровнем и положительна', () => {
+    const values = Array.from({ length: 64 * 32 }, (_, k) => (k * 4001) % 65535)
+    const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
+
+    let prev = Infinity
+    for (let level = 1; level <= 6; level++) {
+      const e = field.geometricErrorMeters(level)
+      expect(e).toBeGreaterThan(0)
+      expect(e).toBeLessThanOrEqual(prev)
+      prev = e
+    }
+  })
+
+  it('консервативность: ε уровня ≥ p50 фактического размаха на шаге сетки (синтетика)', () => {
+    // шахматка амплитудой 1000 м на масштабе блока: размах любого окна = 1000
+    const width = 64
+    const height = 32
+    const values = new Array(width * height)
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++) values[y * width + x] = ((x + y) % 2) * 1000
+    const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
+
+    // блок=1 тексель: окно 1×1 не видит соседа — консервативность держит окно 2×2 у ℓ1
+    expect(field.geometricErrorMeters(1)).toBeCloseTo(1000, 0)
+  })
+
+  it('одиночный обрыв не задирает p99', () => {
+    const width = 64
+    const height = 32
+    const values = new Array(width * height).fill(20000)
+    values[16 * width + 8] = 0 // одна яма 20 км
+    const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
+
+    // p99: 99% окон плоские → ε мала против глубины ямы
+    expect(field.geometricErrorMeters(2)).toBeLessThan(2000)
+  })
+
+  it('level клампится в [1..6]', () => {
+    const field = new TerrainHeightField(makeMap(4, 2, new Array(8).fill(0)), R_KM)
+    expect(field.geometricErrorMeters(0)).toBe(field.geometricErrorMeters(1))
+    expect(field.geometricErrorMeters(9)).toBe(field.geometricErrorMeters(6))
+  })
+})

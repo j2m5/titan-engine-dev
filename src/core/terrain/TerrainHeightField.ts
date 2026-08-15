@@ -63,6 +63,11 @@ class TerrainHeightField {
   private readonly clearanceGridWidth: number
   private readonly clearanceGridHeight: number
   public readonly maxClearanceMeters: number
+  private readonly blockMin: Uint16Array
+  private readonly blockMax: Uint16Array
+  private readonly blocksX: number
+  private readonly blocksY: number
+  private readonly levelErrorMeters: Float64Array
 
   public constructor(
     private readonly map: HeightMapData,
@@ -73,6 +78,11 @@ class TerrainHeightField {
     this.clearanceGridWidth = built.width
     this.clearanceGridHeight = built.height
     this.maxClearanceMeters = built.maxClearance
+    this.blockMin = built.blockMin
+    this.blockMax = built.blockMax
+    this.blocksX = built.blocksX
+    this.blocksY = built.blocksY
+    this.levelErrorMeters = this.buildGeometricErrors()
   }
 
   public get minMeters(): number {
@@ -219,6 +229,10 @@ class TerrainHeightField {
     width: number
     height: number
     maxClearance: number
+    blockMin: Uint16Array
+    blockMax: Uint16Array
+    blocksX: number
+    blocksY: number
   } {
     const { width, height, data } = this.map
     const metersPerRaw = (this.map.maxMeters - this.map.minMeters) / 65535
@@ -299,8 +313,80 @@ class TerrainHeightField {
       }
     }
 
-    return { grid, width: gridW, height: gridH, maxClearance }
+    return { grid, width: gridW, height: gridH, maxClearance, blockMin, blockMax, blocksX, blocksY }
   }
+
+  /**
+   * ε-пирамида уровней (числитель SSE, глубина юбки): p99 размаха высот в
+   * окне шага вершинной сетки уровня. ℓ1 — окно 2×2 блока (грубее блочного
+   * разрешения), ℓ2 — окно 1×1 блок (совпадает с разрешением карты провиса),
+   * ℓ≥3 — тот же p99(1×1), линейно смасштабированный вниз отношением
+   * шаг_ℓ/блок (шаг мельче блока — самоподобие как консервативная гипотеза).
+   * Вычисляется один раз в конструкторе.
+   */
+  private buildGeometricErrors(): Float64Array {
+    const { width } = this.map
+    const metersPerRaw = (this.map.maxMeters - this.map.minMeters) / 65535
+    const block = Math.max(1, Math.round(width / TERRAIN_SPHERE_SEGMENTS))
+    const blocksX = this.blocksX
+    const blocksY = this.blocksY
+    const blockMin = this.blockMin
+    const blockMax = this.blockMax
+
+    // окно 1×1 блок: размах внутри блока (та же по-блочная сетка, что и провис)
+    const ranges1x1 = new Float64Array(blocksX * blocksY)
+    for (let i = 0; i < ranges1x1.length; i++) {
+      ranges1x1[i] = (blockMax[i] - blockMin[i]) * metersPerRaw
+    }
+    const p99_1x1 = percentile99(ranges1x1)
+
+    // окно 2×2 блока: скользящее по всем позициям, долгота wrap, широта кламп
+    const ranges2x2 = new Float64Array(blocksX * blocksY)
+    for (let by = 0; by < blocksY; by++) {
+      for (let bx = 0; bx < blocksX; bx++) {
+        let lo = 65535
+        let hi = 0
+        for (let dy = 0; dy <= 1; dy++) {
+          const ny = Math.min(by + dy, blocksY - 1)
+          for (let dx = 0; dx <= 1; dx++) {
+            const b = ny * blocksX + ((bx + dx) % blocksX)
+            if (blockMin[b] < lo) lo = blockMin[b]
+            if (blockMax[b] > hi) hi = blockMax[b]
+          }
+        }
+        ranges2x2[by * blocksX + bx] = (hi - lo) * metersPerRaw
+      }
+    }
+    const p99_2x2 = percentile99(ranges2x2)
+
+    // окно 1×1 при block=1 тексель вырождено (размах одиночного отсчёта
+    // всегда 0) — тогда p99(2×2) как консервативная база, юбка не проседает
+    const p99_1x1_eff = p99_1x1 > 0 ? p99_1x1 : p99_2x2
+
+    const levelErrorMeters = new Float64Array(7)
+    levelErrorMeters[1] = p99_2x2
+    levelErrorMeters[2] = p99_1x1_eff
+    for (let level = 3; level <= 6; level++) {
+      const stepTexels = width / (4 * Math.pow(2, level) * 64)
+      const scale = Math.min(1, stepTexels / block)
+      levelErrorMeters[level] = p99_1x1_eff * scale
+    }
+
+    return levelErrorMeters
+  }
+
+  /** ε уровня дерева, метры: p99 размаха высот в окне шага вершинной сетки уровня; ниже блочного разрешения — линейное масштабирование шага. Числитель SSE и глубина юбки. */
+  public geometricErrorMeters(level: number): number {
+    return this.levelErrorMeters[Math.min(Math.max(level, 1), 6)]
+  }
+}
+
+/** 99-й процентиль по копии массива (не мутирует вход): сортировка, индекс floor(0.99·(n−1)). */
+function percentile99(values: Float64Array): number {
+  const sorted = Float64Array.from(values).sort()
+  const idx = Math.floor(0.99 * (sorted.length - 1))
+
+  return sorted[idx]
 }
 
 /** Один экземпляр на карту: мешер и коллизия делят его, пересборка сцены не пересканирует данные. */
