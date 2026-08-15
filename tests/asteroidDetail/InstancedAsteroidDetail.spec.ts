@@ -17,6 +17,13 @@ describe('InstancedAsteroidShaderTemplate: трипланарный PBR-микр
     expect(f).toContain('triplanarArm')
   })
 
+  it('передаёт uRock*-самплеры аргументами — вызовы параметризованы', () => {
+    const f = InstancedAsteroidShaderTemplate.fragmentShader
+    expect(f).toContain('triplanarAlbedo(uRockDiffMap, vObjectPos, triW, triOffset)')
+    expect(f).toContain('triplanarNormal(uRockNorMap, vObjectPos, geomN, triW, triOffset)')
+    expect(f).toContain('triplanarArm(uRockArmMap, vObjectPos, triW, triOffset)')
+  })
+
   it('включает чанк и резолвит его через AbstractShader', () => {
     expect(InstancedAsteroidShaderTemplate.fragmentShader).toContain('#include <triplanarDetailFunctions>')
     const shader = new TestShader(InstancedAsteroidShaderTemplate)

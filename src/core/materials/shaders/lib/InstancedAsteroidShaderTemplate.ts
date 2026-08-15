@@ -216,18 +216,18 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
         // Альбедо: десатурированная структура текстуры × грейд профиля.
         // uDetailBrightness компенсирует среднюю яркость диффуза (< 1.0)
-        vec3 detail = triplanarAlbedo(vObjectPos, triW, triOffset);
+        vec3 detail = triplanarAlbedo(uRockDiffMap, vObjectPos, triW, triOffset);
         float detailLum = dot(detail, vec3(0.299, 0.587, 0.114));
         vec3 structureTint = mix(vec3(detailLum), detail, uDetailSaturation);
         albedo *= structureTint * uDetailBrightness;
 
         // Нормаль: тангенциальная дельта whiteout-нормали поверх геометрической —
         // микрорельеф ложится на форму, не искажая крупный силуэт
-        vec3 nDetail = triplanarNormal(vObjectPos, geomN, triW, triOffset);
+        vec3 nDetail = triplanarNormal(uRockNorMap, vObjectPos, geomN, triW, triOffset);
         objN = normalize(objN + uDetailNormalScale * (nDetail - geomN));
 
         // ARM: r=AO (умножается в каверн-AO), g=roughness (глушит блик)
-        vec3 arm = triplanarArm(vObjectPos, triW, triOffset);
+        vec3 arm = triplanarArm(uRockArmMap, vObjectPos, triW, triOffset);
         surfAO *= mix(1.0, arm.r, uDetailAoInfluence);
         float gloss = 1.0 - arm.g * uDetailRoughInfluence;
         specStrength *= gloss;

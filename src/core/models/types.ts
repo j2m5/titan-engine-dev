@@ -41,7 +41,11 @@ export enum ResourceTypes {
   specular,
   cube,
   height,
-  slope
+  slope,
+  detailDiffuse,
+  detailNormal,
+  detailArm,
+  detailNormal2
 }
 
 export type ResourceType = keyof typeof ResourceTypes
@@ -162,6 +166,21 @@ export interface IActorBoundResource extends IResource {
 export interface IPlanetRenderingObject {
   emission: number
   bumpScale: number
+
+  // --- Ручки терраформного детального слоя (задача 4, TerrainDetail). ---
+  // Все опциональны: отсутствие → нейтральные дефолты движка (PlanetShader).
+  // Периоды — в МЕТРАХ, пересчёт в юниты (1/период) — на CPU в PlanetShader.
+  detailScaleMeters?: number
+  detailScale2Meters?: number
+  detailNormalScale?: number
+  detailSaturation?: number
+  detailBrightness?: number
+  detailAoInfluence?: number
+
+  // Дальность fade — метры дистанции камеры до конца fade каждой шкалы.
+  // Начало fade = 0.4 × конца, зашито в PlanetShader (не отдельная ручка).
+  detailFadeMeters?: number
+  detailFade2Meters?: number
 }
 
 export type IAtmosphereRenderingObject = AtmosphereConfig

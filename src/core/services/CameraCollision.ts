@@ -2,7 +2,7 @@ import { Matrix4, Object3D, PerspectiveCamera, Ray, Sphere, Vector3 } from 'thre
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { SceneObserver } from '@/core/services/SceneObserver'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
-import { terrainHeightFieldFor, type TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { CLEARANCE_MARGIN_METERS, terrainHeightFieldFor, type TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 
 export type Collider = {
@@ -85,6 +85,21 @@ const RELATIVE_CONTACT_EPSILON = 1e-6
 const SWEEP_MARCH_BUDGET = 64
 
 /**
+ * Бюджет доуточнения контакта по поточечной поверхности (см. докблок
+ * `marchPointwise`) — заметно меньше внешнего: искомый зазор ограничен
+ * клиренсом сетки В ЭТОЙ ТОЧКЕ (сотни метров, не половина системы —
+ * быстрые перелёты уже отработаны внешней консервативной фазой).
+ */
+const REFINE_MARCH_BUDGET = 24
+
+/**
+ * Кламп cos(широты) снизу в локальном бонде уклона sag-поля (marchPointwise):
+ * у самого полюса cosLat→0, без клампа бонд ушёл бы в бесконечность и шаг
+ * марча схлопнулся бы в ноль.
+ */
+const MIN_MARCH_COS_LAT = 1e-3
+
+/**
  * Единый формат хита свипа: сфера и терраформный марч отдают одно и то же.
  * `exhausted` ставит только терраформный марч (сферы контакт находят точно,
  * бюджета у них нет) — сигнал sweep() применить жёсткий стоп без скольжения.
@@ -103,6 +118,21 @@ type SweepHit = {
  * Работает одной точкой кадра — после обновления позиций тел, до рендера:
  * сервису безразлично, кто сдвинул камеру (полёт, орбитальный телепорт,
  * твин перелёта) или тело (эпоха при варпе) — он видит итог и правит его.
+ *
+ * Терраформный контакт двухфазный по РАССТОЯНИЮ, не по этапу обработки (см.
+ * докблок `TerrainHeightField`): широкая фаза (`collectColliders`) — всегда
+ * консервативная сфера (R+maxH+maxClearance). Внутри неё `marchTerrain`
+ * дальше выбирает поверхность ПО МЕСТУ вдоль свипа: снаружи консервативной
+ * оболочки сетки провиса — марч против неё (гарантия отсутствия туннеля на
+ * быстром пролёте, сетка размазывает пиковый провис по ячейке+дилатации и
+ * потому дороже честной, но дёшева и безопасна для больших скачков); как
+ * только отрезок ВОШЁЛ в эту оболочку (стартовал внутри или пересёк её по
+ * пути) — марч продолжает против честной поточечной поверхности
+ * (`TerrainHeightField.sagMeters`, `marchPointwise`), потому что оболочка —
+ * штатная рабочая высота камеры (медиана на Луне ~236 м после сетки против
+ * ~40 м честно поточечно), а не редкий крайний случай: пропускать её маршем
+ * целиком открывает туннель на низких быстрых пролётах. `pushOutTerrain` —
+ * та же поточечная цель (см. `pointwiseFloorRadiusUnits`).
  */
 class CameraCollision {
   private lastPosition: Vector3 | null = null
@@ -127,6 +157,9 @@ class CameraCollision {
   private readonly marchTo = new Vector3()
   private readonly marchStep = new Vector3()
   private readonly marchPoint = new Vector3()
+  // доуточнение контакта по поточечной поверхности (см. marchPointwise) — свой
+  // скретч точки, marchPoint уже занят консервативной точкой на момент вызова
+  private readonly refinePoint = new Vector3()
 
   // скретчи текущего кандидата хита findNearestHit (перезаписываются на каждой
   // проверяемой сфере/теле) и best-скретчи лучшего кандидата — раздельные,
@@ -271,7 +304,18 @@ class CameraCollision {
    * в ~3-км шапке, страхует пуш-аут), шаг f/(1+L) не перепрыгивает
    * поверхность. Бюджет исчерпан — контакт в текущей точке помечается
    * `exhausted`: sweep() ставит камеру туда без скольжения (перестраховка
-   * вместо туннеля через то, что марч не успел домаршировать).
+   * вместо туннеля через то, что марч не успел домаршировать). Истинный
+   * контакт (не exhausted) доуточняется `marchPointwise` против честной
+   * поточечной поверхности — см. её докблок и класса.
+   *
+   * Старт УЖЕ внутри консервативной оболочки (`distance(from) <= 0`) — эта
+   * оболочка штатная рабочая высота камеры (честный пол по sagMeters ~40 м
+   * медианно при оболочке сетки ~236 м), не редкий крайний случай: пропуск
+   * марча целиком (отдать одному пуш-ауту) ОТКРЫВАЕТ ТУННЕЛЬ на быстром
+   * тангенциальном пролёте низко над рельефом (пуш-аут ловит только
+   * СТАРТОВУЮ точку, не путь между from и to). Поэтому вместо пропуска —
+   * марч сразу в поточечном режиме на полный внешний бюджет, см.
+   * `marchPointwise`.
    */
   private marchTerrain(collider: Collider, field: TerrainHeightField, maxDistance: number): SweepHit | null {
     collider.object.updateWorldMatrix(true, false)
@@ -296,21 +340,99 @@ class CameraCollision {
       return r - field.collisionRadiusUnits(this.localDir.copy(p).divideScalar(r))
     }
 
-    if (distance(from) <= 0) return null // старт под поверхностью — зона пуш-аута
+    if (distance(from) <= 0) {
+      // старт внутри оболочки: марч ОБЯЗАН идти против честной поточечной
+      // поверхности с самого начала (полный бюджет — сегмент может быть
+      // длинным). Бюджет исчерпан здесь помечается exhausted:true — риск тот
+      // же, что и у внешнего марча (потенциально длинный/быстрый отрезок,
+      // не короткий гарантированный довесок, как во второй ветке ниже)
+      return this.marchPointwise(collider, field, from, 0, step, length, epsilon, SWEEP_MARCH_BUDGET, true)
+    }
 
     let s = 0
     const p = this.marchPoint.copy(from)
     for (let i = 0; i < SWEEP_MARCH_BUDGET; i++) {
       const d = distance(p)
-      if (d <= epsilon) return this.buildHit(collider, field, p, s, length, false)
+      if (d <= epsilon) {
+        // консервативный контакт найден извне — довесок короткий (зазор ≤
+        // клиренс сетки в этой точке), exhausted:false безопасен
+        return this.marchPointwise(collider, field, p, s, step, length, epsilon, REFINE_MARCH_BUDGET, false)
+      }
 
       s += d / (1 + SLOPE_RANGE)
       if (s >= length) return null
       p.copy(from).addScaledVector(step, s)
     }
 
-    // бюджет исчерпан — консервативный контакт в текущей точке
+    // бюджет исчерпан — консервативный контакт в текущей точке, без доуточнения:
+    // перестраховка march'а важнее точности пола в этом редком случае
     return this.buildHit(collider, field, p, s, length, true)
+  }
+
+  /**
+   * Марч против ЧЕСТНОЙ поточечной поверхности R+h+sag+margin — общий для
+   * двух вызовов из `marchTerrain`: (а) короткое доуточнение после
+   * консервативного контакта (сетка провиса систематически завышает клиренс
+   * — MAX-агрегация по ячейке + дилатация, медиана по Луне ~236 м после
+   * сетки против ~40 м честно поточечно, см. докблок TerrainHeightField), (б)
+   * полный марч, когда старт уже внутри консервативной оболочки (см. докблок
+   * `marchTerrain`).
+   *
+   * Липшицева константа шага: SLOPE_RANGE (уклон DEM, как и у внешнего
+   * марча) ПЛЮС ЛОКАЛЬНЫЙ бонд уклона sag-поля, пересчитываемый на каждом
+   * шаге из текущего направления p̂ (НЕ глобальная константа): sag-поле
+   * масштабирует восток-западный градиент как 1/cos(широты) —
+   * `field.maxSagMeters/field.equatorTexelMeters` откалиброван по
+   * ЭКВАТОРИАЛЬНОМУ текселю, и без локальной поправки на 70° широты недооценил
+   * бы уклон втрое (шаг марча мог бы перепрыгнуть честный пол — туннель у
+   * полюса). cosLat берётся из p̂.y тем же способом, что и в TerrainHeightField
+   * (sqrt(1−y²)), и клампится снизу — иначе у самого полюса бонд ушёл бы в
+   * бесконечность. Шаг d/(1+L) соответственно короче, чем у внешнего марча —
+   * при том же бюджете (SWEEP_MARCH_BUDGET=64 в режиме (б)) это означает
+   * МЕНЬШИЙ гарантированный радиус сходимости за проход, но зазор здесь тоже
+   * меньше на тот же множитель (искомая поверхность — честный пол, а не
+   * консервативная оболочка): для типичных скоростей камеры у поверхности
+   * (низкий пилотируемый пролёт, не варп) 64 шагов с запасом хватает —
+   * подтверждено замером на реальной карте (см. хендофф). У самого полюса
+   * локальный бонд растёт, шаг сжимается, и бюджет может исчерпаться раньше —
+   * штатный жёсткий стоп (`exhausted`), не туннель. `hardStopOnExhaustion` —
+   * true для режима (б) (потенциально длинный/быстрый отрезок, риск как у
+   * внешнего марча), false для режима (а) (короткий гарантированный довесок,
+   * сходимость должна была хватить).
+   */
+  private marchPointwise(
+    collider: Collider,
+    field: TerrainHeightField,
+    startP: Vector3,
+    startS: number,
+    step: Vector3,
+    length: number,
+    epsilon: number,
+    budget: number,
+    hardStopOnExhaustion: boolean
+  ): SweepHit | null {
+    // экваториальный коэффициент бонда sag-поля — per-body константа, локальная
+    // поправка на 1/cosLat считается ниже на каждом шаге из текущего p̂
+    const equatorSagBond = field.equatorTexelMeters > 0 ? field.maxSagMeters / field.equatorTexelMeters : 0
+
+    let s = startS
+    const p = this.refinePoint.copy(startP)
+    for (let i = 0; i < budget; i++) {
+      const r = p.length()
+      const dir = r === 0 ? this.localDir.set(0, 0, 1) : this.localDir.copy(p).divideScalar(r)
+      const d = r - pointwiseFloorRadiusUnits(field, dir)
+      if (d <= epsilon) return this.buildHit(collider, field, p, s, length, false)
+
+      const cosLat = Math.sqrt(Math.max(0, 1 - dir.y * dir.y))
+      const localSlopeBond = SLOPE_RANGE + equatorSagBond / Math.max(cosLat, MIN_MARCH_COS_LAT)
+
+      s += d / (1 + localSlopeBond)
+      if (s >= length) return null // честный пол не встречен в пределах отрезка
+
+      p.copy(startP).addScaledVector(step, s - startS)
+    }
+
+    return this.buildHit(collider, field, p, s, length, hardStopOnExhaustion)
   }
 
   /**
@@ -373,8 +495,12 @@ class CameraCollision {
 
   /**
    * Вынос из рельефа — в теле-фиксированном фрейме: тела вращаются, и высота
-   * зависит от направления в локальных осях меша. Вынос радиальный на
-   * R+h(dir̂)+clearance(dir̂).
+   * зависит от направления в локальных осях меша. Отсев «внутри ли вообще» —
+   * по широкой фазе (сфера R+maxH+maxClearance, консервативная, дёшева).
+   * Сама цель выноса — честная поточечная поверхность (`pointwiseFloorRadiusUnits`),
+   * не сеточная: иначе пуш-аут держит камеру заметно выше настоящего пола
+   * (см. докблок класса и `marchPointwise`) буквально каждый кадр рядом с
+   * телом, а не только в момент касания.
    */
   private pushOutTerrain(collider: Collider, field: TerrainHeightField, position: Vector3): boolean {
     collider.object.updateWorldMatrix(true, false)
@@ -391,7 +517,7 @@ class CameraCollision {
       this.localDir.copy(this.localPoint).divideScalar(r)
     }
 
-    const target = field.collisionRadiusUnits(this.localDir)
+    const target = pointwiseFloorRadiusUnits(field, this.localDir)
     if (r >= target) return false
 
     this.localPoint.copy(this.localDir).multiplyScalar(target).applyMatrix4(collider.object.matrixWorld)
@@ -399,6 +525,15 @@ class CameraCollision {
 
     return true
   }
+}
+
+/**
+ * Честная поточечная поверхность контакта, юниты three.js: R+h(dir̂)+sag(dir̂)+margin.
+ * Общая для `marchPointwise` (доуточнение свипа) и `pushOutTerrain` — единственное
+ * место, где формула контакта у поверхности собрана, не дублируется.
+ */
+function pointwiseFloorRadiusUnits(field: TerrainHeightField, dir: Vector3): number {
+  return field.surfaceRadiusUnits(dir) + toThreeJSUnits((field.sagMeters(dir) + CLEARANCE_MARGIN_METERS) / 1000)
 }
 
 export { CameraCollision }

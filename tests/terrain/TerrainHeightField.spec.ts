@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { SphereGeometry, Vector2, Vector3 } from 'three'
-import { CLEARANCE_MARGIN_METERS, TerrainHeightField, terrainHeightFieldFor } from '@/core/terrain/TerrainHeightField'
+import { BufferAttribute, SphereGeometry, Vector2, Vector3 } from 'three'
+import {
+  CLEARANCE_GRID_BASE_SEGMENTS,
+  CLEARANCE_MARGIN_METERS,
+  TerrainHeightField,
+  terrainHeightFieldFor
+} from '@/core/terrain/TerrainHeightField'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { SpaceScale } from '@/core/constants'
+import { TERRAIN_PATCH_SEGMENTS, cubeFaceDirection } from '@/core/terrain/cubeSphere'
+import { TERRAIN_QUADTREE_MAX_LEVEL } from '@/core/terrain/terrainQuadtreeSelect'
+import { buildPatchIndex, buildTerrainPatchGeometry } from '@/core/terrain/terrainPatchGeometry'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 
 // min 0, max 65535 → метры численно равны raw-значению
@@ -160,22 +169,26 @@ describe('TerrainHeightField: карта провиса', () => {
     expect(field.maxClearanceMeters).toBeCloseTo(CLEARANCE_MARGIN_METERS, 5)
   })
 
-  it('одиночная яма поднимает клиренс в своей ячейке и соседних, дальние не трогает', () => {
-    // 64×32, min 0 max 65535 (метры = raw): яма глубиной 10000 в одном текселе.
-    // block=1 (64 < TERRAIN_SPHERE_SEGMENTS), CLEARANCE_CELL_BLOCKS=1 ⇒ ячейка
-    // = 1 блок = 1 тексель. Яма в (col8,row16) поднимает sag только у групп
-    // 2×2 с началом bx∈{7,8}, by∈{15,16}; финальная дилатация 3×3 растягивает
-    // это ещё на ±1 ячейку — весь поднятый остров укладывается в x∈[6,9], y∈[14,17]
+  it('одиночная яма поднимает клиренс на вторых разностях вокруг себя, дальние не трогает', () => {
+    // 64×32, min 0 max 65535 (метры = raw): яма глубиной D=10000 в одном
+    // текселе (col8, row16). block=1 (64 < CLEARANCE_GRID_BASE_SEGMENTS),
+    // ячейка = тексель. Поточечная модель (вторые разности): у самой ямы
+    // sag=D (½·|Δ²|=½·2D), у соседей col7/col9 — D/2 (½·|Δ²|=½·D). Дилатация
+    // 3×3 растягивает МАКСИМУМ окна на соседей: col9 (сосед ямы) наследует
+    // sag ямы (D) через дилатацию, col10 — только sag col9 (D/2), col11 —
+    // уже вне дилатационной досягаемости (только базовый запас).
     const values = new Array(64 * 32).fill(20000)
-    values[16 * 64 + 8] = 10000 // строка 16, столбец 8
+    values[16 * 64 + 8] = 10000 // строка 16, столбец 8, D=10000
     const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
 
     // направление в яму: столбец 8 → u = 8.5/64, строка 16 → v = 16.5/32
     expect(field.clearanceMeters(uvToDir(8.5 / 64, 16.5 / 32))).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
-    // столбец 10 лежал в СТАРОЙ 8-блочной ячейке ямы (колонки 8..15) — при
-    // сузившейся до 1 блока сетке он вне поднятого острова (x∈[6,9]):
-    // демонстрация того, что клиренс перестал завышаться на весь бывший блок
-    expect(field.clearanceMeters(uvToDir(10.5 / 64, 16.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
+    // столбец 9 — сосед ямы, дилатация подтягивает полный sag ямы (D)
+    expect(field.clearanceMeters(uvToDir(9.5 / 64, 16.5 / 32))).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
+    // столбец 10 — дилатация видит только sag столбца 9 (D/2)
+    expect(field.clearanceMeters(uvToDir(10.5 / 64, 16.5 / 32))).toBeCloseTo(5000 + CLEARANCE_MARGIN_METERS, 3)
+    // столбец 11 — вне досягаемости, только базовый запас
+    expect(field.clearanceMeters(uvToDir(11.5 / 64, 16.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
     // противоположная сторона планеты — только базовый запас
     expect(field.clearanceMeters(uvToDir(40.5 / 64, 16.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
     expect(field.maxClearanceMeters).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
@@ -191,10 +204,15 @@ describe('TerrainHeightField: карта провиса', () => {
     )
   })
 
-  it('крупная карта (block > 1) сводит яму через блочную редукцию', () => {
-    // 2048×1024 → block = round(2048/1024) = 2, блоки объединяют по 2 текселя:
-    // проверяем, что редукция по блокам, а не только по-текселная, находит яму
-    const width = 2048
+  it('крупная карта (block > 1): поточечная модель находит одиночную яму внутри блока', () => {
+    // width = 2×CLEARANCE_GRID_BASE_SEGMENTS → block=round(2)=2 — ячейка сетки
+    // провиса вдвое шире текселя. Поточечная модель (вторые разности)
+    // считается ПО ТЕКСЕЛЯМ независимо от block — блок здесь влияет только на
+    // то, в какую ячейку сворачивается MAX; крупная ячейка не размазывает
+    // яму на весь блок (в отличие от бывшей range-агрегации по блокам,
+    // чинившейся сужением окна в прошлом раунде) — единственный поднятый
+    // тексель просто max-пулится в СВОЮ ячейку, дальние ячейки не задеты.
+    const width = CLEARANCE_GRID_BASE_SEGMENTS * 2
     const height = 1024
     const values = new Array(width * height).fill(20000)
     const col = 512
@@ -211,73 +229,288 @@ describe('TerrainHeightField: карта провиса', () => {
     expect(field.clearanceMeters(farDir)).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
   })
 
-  it('яма у шва долготы (столбец 0) поднимает клиренс у правого края карты', () => {
-    // 64×32, block=1, CLEARANCE_CELL_BLOCKS=1 (ячейка = блок = тексель): яма
-    // в столбце 0 — группа 2×2 с началом bx=63 заворачивает индекс через шов
-    // ((63+1)%64=0) и включает яму напрямую, дилатация 3×3 растягивает
-    // поднятый остров до x∈{62,63,0,1}
+  it('яма у шва долготы (столбец 0) поднимает клиренс по обе стороны шва', () => {
+    // 64×32, block=1: яма в столбце 0 — вторые разности заворачивают долготу
+    // (xLo/xHi по модулю width), симметрично «одиночной яме» из теста выше,
+    // только зеркально через шов: столбец 63 (сосед ямы через шов) получает
+    // дилатацией полный sag ямы (D=10000), столбец 62 — только sag столбца
+    // 63 (D/2), столбец 1 (сосед с другой стороны) — тоже полный sag ямы.
     const values = new Array(64 * 32).fill(20000)
     values[16 * 64 + 0] = 10000 // строка 16, столбец 0 — у самого шва
     const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
 
-    // последний блок сетки (столбец 63) заворачивает через шов вместе с ямой
+    // сама яма
+    expect(field.clearanceMeters(uvToDir(0.5 / 64, 16.5 / 32))).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
+    // столбец 63 — сосед ямы через шов, дилатация подтягивает полный sag ямы
     expect(field.clearanceMeters(uvToDir(63.5 / 64, 16.5 / 32))).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
-    // столбец 61 лежал в СТАРОЙ 8-блочной ячейке шва (56..63), но новый
-    // остров у шва (x∈{62,63,0,1}) его не накрывает — только базовый запас
+    // столбец 62 — дилатация видит только sag столбца 63 (D/2)
+    expect(field.clearanceMeters(uvToDir(62.5 / 64, 16.5 / 32))).toBeCloseTo(5000 + CLEARANCE_MARGIN_METERS, 3)
+    // столбец 61 — вне досягаемости, только базовый запас
     expect(field.clearanceMeters(uvToDir(61.5 / 64, 16.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
+    // столбец 1 — сосед ямы с другой стороны, тоже полный sag
+    expect(field.clearanceMeters(uvToDir(1.5 / 64, 16.5 / 32))).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
     // середина карты — вне окрестности шва и ямы
     expect(field.clearanceMeters(uvToDir(32.5 / 64, 16.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
   })
 
   it('полярная яма (строка 0) считается без падения и не течёт на другой полюс', () => {
-    // 64×32, block=1: яма в строке 0 (у полюса) — широта должна клемпиться,
-    // а не заворачиваться на противоположный полюс. Клампованные группы
-    // 2×2 включают яму только при by=0 (нет группы «by=-1»), дилатация 3×3
-    // растягивает поднятый остров до y∈{0,1}
+    // 64×32, block=1: яма в строке 0 (у полюса) — широта должна клемпиться
+    // (yLo=0=y при y=0 в вычислении второй разности по широте), а не
+    // заворачиваться на противоположный полюс. Строка 0 здесь НЕ высокоширотная
+    // по порогу span (карта 64 текселя, ratio до 1.5 не дотягивает — см.
+    // отдельный полярный тест ниже с картой лунного масштаба) — работает
+    // обычная поточечная модель, тот же паттерн «сосед — полный sag, через
+    // один — половина, дальше — только запас», что и у экваториальной ямы.
     const values = new Array(64 * 32).fill(20000)
     values[0 * 64 + 32] = 10000 // строка 0, столбец 32
     const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
 
     expect(field.clearanceMeters(uvToDir(32.5 / 64, 0.5 / 32))).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
-    // строка 2 лежала в СТАРОЙ 8-блочной полярной ячейке (0..7) — новая
-    // сетка её не накрывает (остров лишь y∈{0,1}): только базовый запас
-    expect(field.clearanceMeters(uvToDir(32.5 / 64, 2.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
+    // строка 1 — сосед ямы, дилатация подтягивает полный sag ямы
+    expect(field.clearanceMeters(uvToDir(32.5 / 64, 1.5 / 32))).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
+    // строка 2 — дилатация видит только sag строки 1
+    expect(field.clearanceMeters(uvToDir(32.5 / 64, 2.5 / 32))).toBeCloseTo(5000 + CLEARANCE_MARGIN_METERS, 3)
+    // строка 3 — вне досягаемости, только базовый запас
+    expect(field.clearanceMeters(uvToDir(32.5 / 64, 3.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
     // противоположный полюс — только базовый запас, клампа не должно перетекать
     expect(field.clearanceMeters(uvToDir(32.5 / 64, 31.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
   })
 })
 
-describe('TerrainHeightField: окно провиса расширяется к полюсу как 1/cos', () => {
+describe('TerrainHeightField: восток-запад окно расширяется к полюсу, когда вторая разность соседних текселей перестаёт ограничивать хорду', () => {
   const uvToDir = (u: number, v: number): Vector3 => {
     const theta = v * Math.PI
     const phi = u * 2 * Math.PI
     return new Vector3(-Math.cos(phi) * Math.sin(theta), Math.cos(theta), Math.sin(phi) * Math.sin(theta))
   }
 
-  it('провал в высокоширотной строке (строка 0, |lat|≈87°) ловится клиренсом за пределами старого фиксированного окна', () => {
-    // 64×32: центр строки 0 — theta = π·0.5/32 ≈ 2.81°, cosLat = sin(theta) ≈
-    // 0.0491, round(1/cosLat) = 20, капается до floor(blocksX/4) = 16 — окно
-    // группировки растёт с фиксированных 2 колонок до 17 (0..16). Патч
-    // кубосферы у этой широты накрывает по долготе кратно больше колонок,
-    // чем у экватора (см. surfaceNormalLocal) — окно провиса обязано расти синхронно.
-    const values = new Array(64 * 32).fill(20000)
-    values[0 * 64 + 25] = 10000 // строка 0, столбец 25 — яма в 15 колонках от зонда
-    const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
+  // width = CLEARANCE_GRID_BASE_SEGMENTS, block=1 (ячейка = тексель —
+  // изолирует эффект от дилатации по крупным ячейкам). equatorStepTexels =
+  // 1024/TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS(16384) = 0.0625. Строка 0: theta =
+  // π·0.5/64 ≈ 1.406°, cosLat = sin(theta) ≈ 0.02454, span = round(0.0625 /
+  // cosLat) ≈ round(2.55) = 3 ≥ 2 — высокоширотная, восток-запад переходит на
+  // размах по скользящему окну ±3 текселя (`slidingRangeWrap`), а не вторую
+  // разность соседних текселей.
+  const width = CLEARANCE_GRID_BASE_SEGMENTS
+  const height = 64
+  const pitCol = 200
 
-    // зонд в столбце 10: разнесение 15 колонок — старое фиксированное окно (2
-    // соседние колонки) яму не видит, новое 1/cos-окно (до 16 колонок на этой
-    // широте) её накрывает
-    expect(field.clearanceMeters(uvToDir(10.5 / 64, 0.5 / 32))).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
+  it('на высокоширотной строке (row 0) клиренс дотягивается на несколько текселей дальше экватора', () => {
+    const values = new Array(width * height).fill(20000)
+    values[0 * width + pitCol] = 10000
+    const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
+
+    // офсет 4: вне досягаемости обычной (не полярной) поточечной модели —
+    // ловится только скользящим окном ±3 (плюс 1 ячейка дилатации)
+    expect(field.clearanceMeters(uvToDir((pitCol - 4 + 0.5) / width, 0.5 / height))).toBeCloseTo(
+      10000 + CLEARANCE_MARGIN_METERS,
+      3
+    )
+    // офсет 8: уже вне скользящего окна — только базовый запас
+    expect(field.clearanceMeters(uvToDir((pitCol - 8 + 0.5) / width, 0.5 / height))).toBeCloseTo(
+      CLEARANCE_MARGIN_METERS,
+      3
+    )
+
+    // sagMeters (раунд 3, тот же гибрид, БЕЗ дилатации и без margin — честная
+    // поточечная граница окна ±3, а не размазанная ещё на ±1 ячейку дилатацией):
+    // офсет 3 (внутри окна) — полный провис ямы, офсет 4 (сразу за окном) — 0
+    expect(field.sagMeters(uvToDir((pitCol - 3 + 0.5) / width, 0.5 / height))).toBeCloseTo(10000, 3)
+    expect(field.sagMeters(uvToDir((pitCol - 4 + 0.5) / width, 0.5 / height))).toBeCloseTo(0, 3)
   })
 
-  it('регрессия: экваториальный провис не меняется расширением окна у полюса', () => {
-    // тот же сдвиг 15 колонок, но строка 16 = экватор (cosLat≈1, span=1 как и
-    // до фикса) — окно НЕ расширяется, яма вне зоны видимости зонда
-    const values = new Array(64 * 32).fill(20000)
-    values[16 * 64 + 25] = 10000
-    const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
+  it('регрессия: на экваторе (row 32) та же яма даёт узкую (не полярную) досягаемость', () => {
+    const values = new Array(width * height).fill(20000)
+    values[32 * width + pitCol] = 10000
+    const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
 
-    expect(field.clearanceMeters(uvToDir(10.5 / 64, 16.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
+    // офсет 4 на экваторе вне досягаемости обычной поточечной модели (не
+    // высокоширотная строка — офсет 4 уже накрыт только у полюса, см. тест выше)
+    expect(field.clearanceMeters(uvToDir((pitCol - 4 + 0.5) / width, 32.5 / height))).toBeCloseTo(
+      CLEARANCE_MARGIN_METERS,
+      3
+    )
+  })
+})
+
+describe('TerrainHeightField: полоса вершинного пролёта (1, 1.5] текселя — ceil, не round, переключает EW-гибрид на широкое окно', () => {
+  const uvToDir = (u: number, v: number): Vector3 => {
+    const theta = v * Math.PI
+    const phi = u * 2 * Math.PI
+    return new Vector3(-Math.cos(phi) * Math.sin(theta), Math.cos(theta), Math.sin(phi) * Math.sin(theta))
+  }
+
+  // width = CLEARANCE_GRID_BASE_SEGMENTS, block=1 (та же изоляция от
+  // дилатации, что и в тесте выше). equatorStepTexels = 1024/16384 = 0.0625.
+  // Строка 8: theta = π·8.5/512 ≈ 2.988°, cosLat ≈ 0.05213, span_raw =
+  // 0.0625/0.05213 ≈ 1.199 — строго в полосе (1, 1.5]: пролёт вершины шире
+  // одного текселя (вторые разности соседних текселей его уже не ограничивают),
+  // но round(1.199)=1 держит EW на узкой (диффной) модели; ceil(1.199)=2
+  // обязан переключить на широкое окно ±2 (в отличие от строки 0 теста выше,
+  // где ratio≈2.55 и round/ceil совпадают — эта строка изолирует именно
+  // разницу между округлением и потолком).
+  const width = CLEARANCE_GRID_BASE_SEGMENTS
+  const height = 512
+  const row = 8
+  const pitCol = 200
+
+  it('яма в 2 текселях от точки запроса: честная поточечная модель обязана её видеть — узкая (round) модель не видит, широкая (ceil) видит', () => {
+    const values = new Array(width * height).fill(20000)
+    const D = 10000
+    values[row * width + pitCol] = 20000 - D
+    const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
+
+    // офсет 0 — прямое попадание в яму, справедливо для узкой и широкой
+    // модели одинаково (контроль, что фикстура и запрос вообще совпадают)
+    expect(field.sagMeters(uvToDir((pitCol + 0.5) / width, (row + 0.5) / height))).toBeCloseTo(D, 3)
+
+    // офсет 2 — РЕШАЮЩАЯ проверка: пролёт вершины максимального уровня здесь
+    // ~1.2 текселя, поэтому честная поверхность между соседними вершинами
+    // квадродерева может опираться на тексель в 2 позициях от точки запроса.
+    // До Fix 1 (round) окно здесь узкое (±1, ямы не видно, sag=0) — то самое
+    // занижение из разбора ревью; после (ceil) окно ±2 её видит целиком
+    expect(field.sagMeters(uvToDir((pitCol + 2 + 0.5) / width, (row + 0.5) / height))).toBeCloseTo(D, 3)
+
+    // офсет 3 — контроль: даже широкое окно ±2 сюда не дотягивается, рост
+    // окна не безграничен
+    expect(field.sagMeters(uvToDir((pitCol + 3 + 0.5) / width, (row + 0.5) / height))).toBeCloseTo(0, 3)
+  })
+})
+
+/**
+ * Общая проверка property-теста «sagMeters ≥ фактический провис хорды» для
+ * одного адреса патча максимального уровня квадродерева (buildTerrainPatchGeometry,
+ * TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_PATCH_SEGMENTS — продакшн-параметры, не
+ * урезанные для теста) — это и есть та сетка, под которую должен быть
+ * посчитан клиренс. Возвращает сводку (checked/maxProvisMeters) для проверки
+ * нетривиальности фикстуры вызывающим.
+ */
+function assertSagCoversPatchChord(
+  field: TerrainHeightField,
+  face: number,
+  i: number,
+  j: number
+): { checked: number; maxProvisMeters: number } {
+  const level = TERRAIN_QUADTREE_MAX_LEVEL
+  const segments = TERRAIN_PATCH_SEGMENTS
+  const index = buildPatchIndex(segments)
+  const { geometry, center } = buildTerrainPatchGeometry(field, face, i, j, level, segments, index, 0)
+  const positions = geometry.getAttribute('position') as BufferAttribute
+
+  const gridVertex = (a: number, b: number): Vector3 => {
+    const k = b * (segments + 1) + a
+    return new Vector3(positions.getX(k) + center.x, positions.getY(k) + center.y, positions.getZ(k) + center.z)
+  }
+
+  // диагональный сплит квада — тот же, что в buildPatchIndex: v00-v10-v11 / v00-v11-v01
+  const chordPoint = (v00: Vector3, v10: Vector3, v01: Vector3, v11: Vector3, fa: number, fb: number): Vector3 => {
+    const point = new Vector3()
+    if (fb <= fa) {
+      return point.addScaledVector(v00, 1 - fa).addScaledVector(v10, fa - fb).addScaledVector(v11, fb)
+    }
+    return point.addScaledVector(v00, 1 - fb).addScaledVector(v11, fa).addScaledVector(v01, fb - fa)
+  }
+
+  const SAMPLES_PER_CELL = 2
+  let checked = 0
+  let maxProvisMeters = -Infinity
+
+  for (let b = 0; b < segments; b++) {
+    for (let a = 0; a < segments; a++) {
+      const v00 = gridVertex(a, b)
+      const v10 = gridVertex(a + 1, b)
+      const v01 = gridVertex(a, b + 1)
+      const v11 = gridVertex(a + 1, b + 1)
+
+      for (let sy = 0; sy <= SAMPLES_PER_CELL; sy++) {
+        for (let sx = 0; sx <= SAMPLES_PER_CELL; sx++) {
+          const point = chordPoint(v00, v10, v01, v11, sx / SAMPLES_PER_CELL, sy / SAMPLES_PER_CELL)
+
+          const meshRadiusUnits = point.length()
+          const dir = point.clone().normalize()
+          const meshHeightMeters = (meshRadiusUnits / SpaceScale - field.radiusKm) * 1000
+          const trueHeightMeters = field.heightMeters(dir)
+          const provisMeters = meshHeightMeters - trueHeightMeters // >0: хорда бугрит НАД честной поверхностью
+
+          // sagMeters — поточечный, без запаса; margin — та же подушка, что и
+          // в продакшн-потребителе (CameraCollision.pointwiseFloorRadiusUnits),
+          // страхует билинейный бленд sagMeters между текселями (см. докблок)
+          expect(field.sagMeters(dir) + CLEARANCE_MARGIN_METERS).toBeGreaterThanOrEqual(provisMeters - 1e-6)
+
+          if (provisMeters > maxProvisMeters) maxProvisMeters = provisMeters
+          checked++
+        }
+      }
+    }
+  }
+
+  return { checked, maxProvisMeters }
+}
+
+describe('TerrainHeightField: sagMeters ≥ фактический провис хорды максимального уровня (property-тест)', () => {
+  // 8192×2048: непрерывная, но некусочно-линейная высота — дискретизация в
+  // текселях даёт реальный излом (вторую разность ≠ 0) почти в каждом
+  // текселе, ФАКТИЧЕСКИЙ рельеф, не единичная яма. Общая фикстура для обеих
+  // проверок ниже (экватор и средние широты).
+  const buildSyntheticField = (): TerrainHeightField => {
+    const width = 8192
+    const height = 2048
+    const minMeters = -2000
+    const maxMeters = 2000
+    const values = new Array(width * height)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const hMeters = 900 * Math.sin((2 * Math.PI * x) / 7) + 900 * Math.sin((2 * Math.PI * y) / 5)
+        const raw = Math.round(((hMeters - minMeters) / (maxMeters - minMeters)) * 65535)
+        values[y * width + x] = Math.min(65535, Math.max(0, raw))
+      }
+    }
+    return new TerrainHeightField(makeMap(width, height, values, minMeters, maxMeters), R_KM)
+  }
+
+  it('на нетривиальном рельефе (двумерная синусоида, кинки на каждом текселе), патч в центре грани (экватор): sagMeters(dir̂)+margin не меньше провиса мешерной хорды по плотной выборке точек патча', () => {
+    const field = buildSyntheticField()
+
+    const { checked, maxProvisMeters } = assertSagCoversPatchChord(field, 0, 32, 32)
+
+    expect(checked).toBeGreaterThan(30000)
+    // фикстура нетривиальна: реальный бугор хорды над поверхностью есть (не
+    // вырожденный тест на плоском рельефе)
+    expect(maxProvisMeters).toBeGreaterThan(0.01)
+  })
+
+  // Дополняет проверку выше на реальном патче средних широт (~60–70°, где
+  // вершинный пролёт максимального уровня ~1.2 экваториального текселя —
+  // ceil-порог из Fix 1 актуален для строк этой карты). Сам по себе провал
+  // ceil→round здесь НЕ ловит: маржи сетки/margin и max(ew,ns,cross) на этой
+  // синтетике перекрывают узкую (round) модель с запасом даже без широкого
+  // окна — точечное занижение из Fix 1 закрыто прицельным тестом досягаемости
+  // выше («полоса вершинного пролёта (1, 1.5] текселя»), который сравнивает round
+  // и ceil впритык на изолированной яме. Здесь регрессия иного класса: что
+  // sag вообще не занижен НИЖЕ фактического провиса реального квадродерева
+  // на этой широте (общая защита, не специфичная для одного порога).
+  it('та же проверка на средних широтах ~60–70° (face 2, i=32 j=49): реальный патч максимального уровня квадродерева, не единичная яма', () => {
+    const field = buildSyntheticField()
+    const face = 2
+    const i = 32
+    const j = 49
+
+    // адрес патча действительно лежит в заявленной полосе широт — не завязано
+    // на удачу, а посчитано той же равноугольной проекцией, что и билдер патча
+    const level = TERRAIN_QUADTREE_MAX_LEVEL
+    const patches = 1 << level
+    const span = 2 / patches
+    const s0 = -1 + i * span
+    const t0 = -1 + j * span
+    const centerDir = cubeFaceDirection(face, s0 + span / 2, t0 + span / 2, new Vector3())
+    const latitudeDeg = (Math.asin(centerDir.y) * 180) / Math.PI
+    expect(latitudeDeg).toBeGreaterThan(60)
+    expect(latitudeDeg).toBeLessThan(70)
+
+    const { checked, maxProvisMeters } = assertSagCoversPatchChord(field, face, i, j)
+
+    expect(checked).toBeGreaterThan(30000)
+    expect(maxProvisMeters).toBeGreaterThan(0.01)
   })
 })
 
@@ -289,30 +522,35 @@ describe('TerrainHeightField: билинейная выборка клиренс
   }
 
   it('на центре ячейки — точное значение, между центрами — монотонная интерполяция', () => {
-    // 8×2 (обе строки одинаковы — широта не участвует), h(x) = x²·1000:
-    // own-sag группы 2×2 с началом bx = h(bx+1)−h(bx) растёт с bx, финальная
-    // дилатация 3×3 берёт максимум окна ⇒ у ячеек 1..5 (вдали от шва, где
-    // дилатация не подмешивает большой скачок обёртки h(7)→h(0)) сетка
-    // получает чистый монотонно растущий ряд: cell(cx) = h(cx+2) − h(cx+1)
-    const h = [0, 1000, 4000, 9000, 16000, 25000, 36000, 49000] // x²·1000
-    const values = [...h, ...h]
-    const field = new TerrainHeightField(makeMap(8, 2, values, 0, 65535), R_KM)
+    // 16×2 (обе строки одинаковы — north-south и перекрёстный член
+    // тождественно 0, чистая проверка east-west и билинейки сетки провиса).
+    // Изолированная яма глубиной D=8000 на индексе 8, фон 20000. Поточечно:
+    // idx7=D/2=4000, idx8=D=8000, idx9=D/2=4000, остальные 0. Дилатация 3×3
+    // (MAX по соседям): idx6=4000, idx7=8000, idx8=8000, idx9=8000, idx10=4000,
+    // idx11=0 — по обе стороны от пика два РАЗНЫХ соседних значения (8000 и
+    // 4000), удобная пара для проверки билинейной интерполяции между ячейками.
+    const width = 16
+    const D = 8000
+    const row = new Array(width).fill(20000)
+    row[8] = 20000 - D
+    const values = [...row, ...row]
+    const field = new TerrainHeightField(makeMap(width, 2, values, 0, 65535), R_KM)
 
-    const gridAt = (cx: number): number => field.clearanceMeters(uvToDir((cx + 0.5) / 8, 0.5))
+    const gridAt = (cx: number): number => field.clearanceMeters(uvToDir((cx + 0.5) / width, 0.5))
 
-    const c2 = gridAt(2) // h(4)-h(3) = 16000-9000 = 7000 (+margin)
-    const c3 = gridAt(3) // h(5)-h(4) = 25000-16000 = 9000 (+margin)
-    expect(c2).toBeCloseTo(7000 + CLEARANCE_MARGIN_METERS, 6)
-    expect(c3).toBeCloseTo(9000 + CLEARANCE_MARGIN_METERS, 6)
+    const c9 = gridAt(9) // дилатация: max(idx8=8000, idx9=4000, idx10=0) = 8000 (+margin)
+    const c10 = gridAt(10) // дилатация: max(idx9=4000, idx10=0, idx11=0) = 4000 (+margin)
+    expect(c9).toBeCloseTo(D + CLEARANCE_MARGIN_METERS, 6)
+    expect(c10).toBeCloseTo(D / 2 + CLEARANCE_MARGIN_METERS, 6)
 
-    // ровно между центрами ячеек 2 и 3 — точное среднее (fx=0.5)
-    const mid = field.clearanceMeters(uvToDir((2.5 + 3.5) / 2 / 8, 0.5))
-    expect(mid).toBeCloseTo((c2 + c3) / 2, 6)
+    // ровно между центрами ячеек 9 и 10 — точное среднее (fx=0.5)
+    const mid = field.clearanceMeters(uvToDir((9.5 + 10.5) / 2 / width, 0.5))
+    expect(mid).toBeCloseTo((c9 + c10) / 2, 6)
 
-    // монотонность: четверть пути от c2 к c3 лежит строго между ними
-    const quarter = field.clearanceMeters(uvToDir((2.5 + (3.5 - 2.5) * 0.25) / 8, 0.5))
-    expect(quarter).toBeGreaterThan(c2)
-    expect(quarter).toBeLessThan(mid)
+    // монотонность: четверть пути от c9 к c10 лежит строго между ними
+    const quarter = field.clearanceMeters(uvToDir((9.5 + (10.5 - 9.5) * 0.25) / width, 0.5))
+    expect(quarter).toBeLessThan(c9)
+    expect(quarter).toBeGreaterThan(mid)
   })
 })
 
@@ -361,13 +599,15 @@ describe('TerrainHeightField: геометрическая ошибка уров
   })
 
   it('block > 1: фолбэк на p99(2×2) не срабатывает — ℓ2 равен именно p99(1×1)', () => {
-    // width=2048 → block=round(2048/1024)=2, blocksX=1024, blocksY=512 (как в
-    // clearance-тесте «крупная карта»). Внутриблочный размах = R1 у КАЖДОГО
-    // блока (не зависит от bx/by) — p99(1×1)=R1 точно. Базовая высота блока
-    // растёт с bx на шаг S — окно 2×2 захватывает соседний блок выше на S,
-    // p99(2×2)=S+R1 строго больше p99(1×1): различие само по себе доказывает,
-    // что ℓ2 не подменился фолбэком на p99(2×2).
-    const width = 2048
+    // width = 2×CLEARANCE_GRID_BASE_SEGMENTS → block=round(2)=2, blocksX=1024,
+    // blocksY=512 (как в clearance-тесте «крупная карта»). ε-пирамида не
+    // тронута этим раундом — блочный базис (block) снова тот же самый по
+    // формуле/числу, что был исторически до этапа квадродерева. Внутриблочный
+    // размах = R1 у КАЖДОГО блока (не зависит от bx/by) — p99(1×1)=R1 точно.
+    // Базовая высота блока растёт с bx на шаг S — окно 2×2 захватывает
+    // соседний блок выше на S, p99(2×2)=S+R1 строго больше p99(1×1): различие
+    // само по себе доказывает, что ℓ2 не подменился фолбэком на p99(2×2).
+    const width = CLEARANCE_GRID_BASE_SEGMENTS * 2
     const height = 1024
     const block = 2
     const blocksX = width / block

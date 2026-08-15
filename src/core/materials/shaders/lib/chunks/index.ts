@@ -9,6 +9,7 @@ import { heightNormalFunctions, heightNormalUniforms } from '@/core/materials/sh
 import { slopeNormalFunctions } from '@/core/materials/shaders/lib/chunks/SlopeNormal'
 import { ringDustFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
 import { triplanarDetailFunctions, triplanarDetailUniforms } from '@/core/materials/shaders/lib/chunks/TriplanarDetail'
+import { terrainDetailFunctions, terrainDetailUniforms } from '@/core/materials/shaders/lib/chunks/TerrainDetail'
 import { skyboxSampleFunctions, skyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
 import { IUniform, Uniform } from 'three'
 
@@ -37,6 +38,8 @@ export const AppShaderChunk: Record<string, string> = {
   ringDustFunctions,
   triplanarDetailUniforms,
   triplanarDetailFunctions,
+  terrainDetailUniforms,
+  terrainDetailFunctions,
   skyboxSampleUniforms,
   skyboxSampleFunctions
 }

@@ -3,8 +3,9 @@ import { Object3D, Vector3 } from 'three'
 import '@/core/framework/TitanThree'
 import { COLLISION_GAP, collectColliders } from '@/core/services/CameraCollision'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { SpaceScale } from '@/core/constants'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
-import { terrainHeightFieldFor, type TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { CLEARANCE_MARGIN_METERS, terrainHeightFieldFor, type TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { makeBody, makeModel, makeCollision } from './cameraCollisionStubs'
 
@@ -457,5 +458,189 @@ describe('CameraCollision: свип — два терраформных тела
     expect(camera.position.distanceTo(near.position)).toBeCloseTo(nearTarget, 3)
     expect(camera.position.distanceTo(far.position)).toBeGreaterThan(farTarget)
     expect(camera.position.clone().normalize().dot(new Vector3(-1, 0, 0))).toBeGreaterThan(0.99)
+  })
+})
+
+describe('CameraCollision: двухфазный контакт — поточечное доуточнение после консервативного марча', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  // 2048×128 (block=2 от CLEARANCE_GRID_BASE_SEGMENTS=1024): яма глубиной
+  // 10000 м в одном текселе (col100) на фоне 20000 м, все строки одинаковы
+  // (north-south/cross обнуляются, чистая east-west проверка). Сетка провиса
+  // (MAX-агрегация по ячейке + дилатация 3×3) размазывает провис ямы на
+  // соседние ячейки: у col102 (2 текселя от ямы — вне прямой досягаемости
+  // второй разности) clearanceMeters ≈ 10005 м, хотя ЛОКАЛЬНО рельеф там
+  // абсолютно гладкий — sagMeters(col102) = 0 (замерено эмпирически,
+  // vite-node). Дискриминатор старого (пуш-аут на сетку) и нового
+  // (доуточнение по sagMeters) поведения.
+  const DISTANT_KINK_PATH = 'planets/distant-kink/height.raw'
+  const KINK_WIDTH = 2048
+  const KINK_QUERY_COL = 102
+
+  function distantKinkBody(): { body: Object3D; field: TerrainHeightField } {
+    const height = 128
+    const values = new Array(KINK_WIDTH * height).fill(20000)
+    const pitCol = 100
+    for (let y = 0; y < height; y++) values[y * KINK_WIDTH + pitCol] = 10000
+
+    ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(DISTANT_KINK_PATH, {
+      width: KINK_WIDTH,
+      height,
+      minMeters: 0,
+      maxMeters: 65535,
+      data: new Uint16Array(values)
+    })
+    const body = makeBody('planet', 1736, new Vector3(), undefined, DISTANT_KINK_PATH)
+    const field = terrainHeightFieldFor(
+      (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(DISTANT_KINK_PATH)!,
+      1736
+    )
+    return { body, field }
+  }
+
+  // направление по долготе (v=0.5, экватор) — та же обратная формула, что и
+  // в блоке «свип по рельефу» выше
+  const dirAtCol = (col: number): Vector3 => {
+    const phi = ((col + 0.5) / KINK_WIDTH) * 2 * Math.PI
+    return new Vector3(-Math.cos(phi), 0, Math.sin(phi))
+  }
+
+  it('фикстура честно дискриминирует: клиренс сетки завышен, поточечный провис — нет', () => {
+    const { field } = distantKinkBody()
+    const dir = dirAtCol(KINK_QUERY_COL)
+
+    expect(field.sagMeters(dir)).toBeCloseTo(0, 6)
+    expect(field.clearanceMeters(dir)).toBeGreaterThan(1000)
+  })
+
+  it('пуш-аут садит камеру на честный поточечный пол (margin), не на завышенный клиренс сетки', () => {
+    const { body, field } = distantKinkBody()
+    const dir = dirAtCol(KINK_QUERY_COL)
+
+    // камера чуть ниже рельефа — глубоко под ОБЕИМИ поверхностями (сеточной
+    // и поточечной), пуш-аут обязан сработать вне зависимости от исхода теста
+    const start = dir.clone().multiplyScalar(field.surfaceRadiusUnits(dir) * 0.9999)
+    const { collision, camera } = makeCollision([body], start)
+
+    collision.resolve()
+
+    const landedAltitudeMeters = ((camera.position.length() - field.surfaceRadiusUnits(dir)) / SpaceScale) * 1000
+
+    // честный пол: h + margin (запас на билинейный бленд sagMeters между
+    // текселями) — старое поведение (пуш-аут на сеточный collisionRadiusUnits)
+    // посадило бы камеру на ~10005 м, что этот тест ловит как RED
+    expect(landedAltitudeMeters).toBeGreaterThanOrEqual(CLEARANCE_MARGIN_METERS - 1)
+    expect(landedAltitudeMeters).toBeLessThan(50)
+  })
+
+  it('свип сквозь ту же зону доуточняет контакт до поточечного пола, а не консервативной сетки', () => {
+    const { body, field } = distantKinkBody()
+    const dir = dirAtCol(KINK_QUERY_COL)
+
+    // старт высоко (вне обеих поверхностей), финиш — глубоко под рельефом на
+    // том же направлении: свип обязан поймать контакт по пути и остановить
+    // камеру у честного пола, не у сеточного клиренса
+    const highAltitude = field.surfaceRadiusUnits(dir) * 1.5
+    const belowGround = field.surfaceRadiusUnits(dir) * 0.5
+    const { collision, camera } = makeCollision([body], dir.clone().multiplyScalar(highAltitude))
+
+    collision.resolve() // фиксирует lastPosition
+    camera.position.copy(dir).multiplyScalar(belowGround)
+    collision.resolve()
+
+    const localDir = camera.position.clone().normalize()
+    const landedAltitudeMeters = ((camera.position.length() - field.surfaceRadiusUnits(localDir)) / SpaceScale) * 1000
+
+    expect(landedAltitudeMeters).toBeGreaterThanOrEqual(CLEARANCE_MARGIN_METERS - 1)
+    expect(landedAltitudeMeters).toBeLessThan(50)
+  })
+
+  // «крутая стена по-прежнему тормозит свип, доуточнение не открывает
+  // туннель» (design п.4в раунда 3) — уже покрыто существующим блоком
+  // «CameraCollision: свип по рельефу» выше (checkerboard-фикстура 20000/0 м,
+  // реальный крутой склон): все три его теста прошли без изменений после
+  // раунда 3 — сама геометрическая инвариантность march'а (`marchTerrain`) не
+  // тронута, доуточнение (`marchPointwise`, короткий довесок после
+  // консервативного контакта) включается ТОЛЬКО постфактум и никогда не
+  // расширяет область поиска НАЗАД за пройденный маршем путь. Отдельная
+  // стена-фикстура здесь избыточна — на карте 2048 текселей/экватор (эта,
+  // «дальний излом») одна текселевая яма даёт слишком пологий угловой профиль
+  // для самостоятельной проверки того же инварианта, повторять его с той же
+  // фикстурой смысла не имеет.
+})
+
+describe('CameraCollision: марч не пропускается, когда старт уже внутри консервативной оболочки', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  // 2048×128: фон 20000 м, широкий хребет (не единичная яма — реальная
+  // стена) на колонках 60..80 поднят до 60000 м (на 40000 м выше фона).
+  // col40 — плоский участок вдали от хребта: clearanceMeters(col40) = margin
+  // (5 м, замерено эмпирически) — «оболочка» там означает буквально «в
+  // считаных метрах от земли», не какой-то особый крайний случай. Именно
+  // такая узкая оболочка и есть штатная посадочная высота после раунда 3
+  // (честный пол ~margin на гладких участках) — старт внутри неё теперь
+  // обычное дело, не редкость.
+  const RIDGE_PATH = 'planets/ridge/height.raw'
+  const WIDTH = 2048
+
+  function ridgeBody(): { body: Object3D; field: TerrainHeightField } {
+    const height = 128
+    const values = new Array(WIDTH * height).fill(20000)
+    for (let y = 0; y < height; y++) {
+      for (let x = 60; x <= 80; x++) values[y * WIDTH + x] = 60000
+    }
+
+    ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(RIDGE_PATH, {
+      width: WIDTH,
+      height,
+      minMeters: 0,
+      maxMeters: 65535,
+      data: new Uint16Array(values)
+    })
+    const body = makeBody('planet', 1736, new Vector3(), undefined, RIDGE_PATH)
+    const field = terrainHeightFieldFor(
+      (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(RIDGE_PATH)!,
+      1736
+    )
+    return { body, field }
+  }
+
+  const dirAtCol = (col: number): Vector3 => {
+    const phi = ((col + 0.5) / WIDTH) * 2 * Math.PI
+    return new Vector3(-Math.cos(phi), 0, Math.sin(phi))
+  }
+
+  it('быстрый тангенциальный пролёт из оболочки сквозь реальный хребет ловится маршем, а не проезжает насквозь', () => {
+    const { body, field } = ridgeBody()
+    const startDir = dirAtCol(40) // плоско, вдали от хребта
+    const endDir = dirAtCol(70) // вершина хребта (h=60000)
+
+    // старт — на 2.5 м над честным полом col40 (внутри margin-оболочки:
+    // clearanceMeters(col40)=5 м ⇒ collisionRadiusUnits = surfaceRadiusUnits+5м,
+    // старт заведомо НИЖЕ этой границы — distance(from) ≤ 0 в marchTerrain)
+    const startAltitudeUnits = toThreeJSUnits(0.0025) // 2.5 м в юнитах three.js (км/1000... toThreeJSUnits ждёт км)
+    const start = startDir.clone().multiplyScalar(field.surfaceRadiusUnits(startDir) + startAltitudeUnits)
+    // финиш — та же (низкая, ~col40-уровня) высота, но направление col70:
+    // если сегмент не поймать, камера окажется на ~40 км НИЖЕ реальной
+    // поверхности хребта в этой точке (60000 м рельефа против ~20000 м
+    // высоты полёта) — грубый, недвусмысленный туннель
+    const end = endDir.clone().multiplyScalar(field.surfaceRadiusUnits(startDir) + startAltitudeUnits)
+
+    const { collision, camera } = makeCollision([body], start)
+    collision.resolve() // фиксирует lastPosition
+    camera.position.copy(end)
+    collision.resolve()
+
+    const localDir = camera.position.clone().normalize()
+    // старый код (RED, подтверждено через git stash): march пропускается
+    // целиком (старт внутри консервативной оболочки col40), позиция долетает
+    // ровно до endDir, push-out лишь поднимает радиус локально в НАПРАВЛЕНИИ
+    // endDir (=dirAtCol(70)) — dot(endDir) ≈ 1, ничем не выдавая, что путь
+    // прошёл сквозь хребет. Новый код обязан затормозить НА хребте по пути —
+    // итоговое направление заметно отличается от endDir
+    expect(localDir.dot(endDir)).toBeLessThan(0.999)
+    // и не встроена глубже своего честного пола в итоговом направлении
+    const target = field.surfaceRadiusUnits(localDir) + toThreeJSUnits((field.sagMeters(localDir) + CLEARANCE_MARGIN_METERS) / 1000)
+    expect(camera.position.length()).toBeGreaterThanOrEqual(target * 0.999)
   })
 })
