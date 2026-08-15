@@ -153,15 +153,35 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     expect(material.defines.USE_SLOPE).toBeUndefined()
   })
 
-  it('диффуз и slope-карта терраформного тела получают RepeatWrapping (шов кубосферы)', () => {
+  // Миграция: wrap больше не ставит updateMaterial мутацией — он приходит из
+  // данных строки ресурса (загрузчик применяет их через applyTextureParameters).
+  it('wrap задаётся данными ресурса, updateMaterial текстуры не мутирует', () => {
     seedMoonHeightMap()
+    // сеем текстуру с дефолтным ClampToEdge — как её отдал бы загрузчик БЕЗ параметров строки
     seedTexture(moonPathOf('slope'), 8192, 4096)
 
     const material = new PlanetMaterial(moon())
     material.updateMaterial()
 
-    expect((material.uniforms.diffuseMap.value as Texture).wrapS).toBe(RepeatWrapping)
-    expect((material.uniforms.bumpMap.value as Texture).wrapS).toBe(RepeatWrapping)
+    // материал больше НЕ переписывает wrap (раньше ставил RepeatWrapping принудительно)
+    expect((material.uniforms.bumpMap.value as Texture).wrapS).toBe(ClampToEdgeWrapping)
+  })
+
+  it('строки диффуза и slope Луны несут wrapS: RepeatWrapping в данных', () => {
+    const diffuse = moon().resources.where('resourceType', 'diffuse').first()!
+    const slope = moon().resources.where('resourceType', 'slope').first()!
+    expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
+    expect(slope.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('detail-строки Луны: четыре типа, streamable, repeat по обеим осям', () => {
+    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
+      const row = moon().resources.where('resourceType', type).first()
+      expect(row, type).toBeDefined()
+      expect(row!.getAttribute('lifecycle')).toBe('streamable')
+      expect(row!.getAttribute('wrapS')).toBe(RepeatWrapping)
+      expect(row!.getAttribute('wrapT')).toBe(RepeatWrapping)
+    }
   })
 
   it('у тела без карты высот wrap текстур не меняется', () => {

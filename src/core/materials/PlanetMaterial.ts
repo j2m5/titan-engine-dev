@@ -2,7 +2,7 @@ import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
 import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
-import { RepeatWrapping, Texture } from 'three'
+import { Texture } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 
@@ -63,18 +63,6 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.cloudMap.value = cloudMap
     this.uniforms.specularMap.value = specularMap
     this.uniforms.bumpMap.value = bumpMap
-
-    // UV кубосферы разворачивает шов за пределы [0,1] — аппаратный wrap вместо
-    // fract() в шейдере (и заодно уходит мип-полоса на шве). Только терраформным
-    // телам: у прочих развёртка сферы в [0,1] и ClampToEdge остаётся.
-    if (hasHeightField) {
-      for (const texture of [diffuseMap, slopeMap]) {
-        if (texture && texture.wrapS !== RepeatWrapping) {
-          texture.wrapS = RepeatWrapping
-          texture.needsUpdate = true
-        }
-      }
-    }
 
     // Шаг выборки соседних текселей для аналитического градиента нормали —
     // атрибут четырёхвыборочного bump-пути; slope-путь читает одну выборку.

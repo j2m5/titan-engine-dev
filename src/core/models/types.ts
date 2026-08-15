@@ -41,7 +41,11 @@ export enum ResourceTypes {
   specular,
   cube,
   height,
-  slope
+  slope,
+  detailDiffuse,
+  detailNormal,
+  detailArm,
+  detailNormal2
 }
 
 export type ResourceType = keyof typeof ResourceTypes

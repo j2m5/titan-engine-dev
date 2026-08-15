@@ -1,6 +1,7 @@
 // ⚠️ AUTO-GENERATED FILE — DO NOT EDIT BY HAND.
 // Generated from the database editor. Edit data via the editor UI, then regenerate.
 
+import { RepeatWrapping } from 'three'
 import { IResource } from '@/core/models/types'
 
 export const Resources: IResource[] = [
@@ -50,8 +51,8 @@ export const Resources: IResource[] = [
   { id: 44, resourceType: "bump", lifecycle: "streamable", path: "planets/eris/eris_bump.jpg" },
   { id: 45, resourceType: "diffuse", lifecycle: "streamable", path: "planets/sedna/sedna.jpg", colorSpace: "srgb" },
   { id: 46, resourceType: "bump", lifecycle: "streamable", path: "planets/sedna/sedna_bump.jpg" },
-  { id: 47, resourceType: "diffuse", lifecycle: "streamable", path: "planets/moon/moon.jpg", colorSpace: "srgb" },
-  { id: 48, resourceType: "slope", lifecycle: "streamable", path: "planets/moon/moon_slope.webp" },
+  { id: 47, resourceType: "diffuse", lifecycle: "streamable", path: "planets/moon/moon.jpg", colorSpace: "srgb", wrapS: RepeatWrapping },
+  { id: 48, resourceType: "slope", lifecycle: "streamable", path: "planets/moon/moon_slope.webp", wrapS: RepeatWrapping },
   { id: 49, resourceType: "diffuse", lifecycle: "streamable", path: "planets/io/io.jpg", colorSpace: "srgb" },
   { id: 50, resourceType: "bump", lifecycle: "streamable", path: "planets/io/io_bump.jpg" },
   { id: 51, resourceType: "diffuse", lifecycle: "streamable", path: "planets/europa/europa.jpg", colorSpace: "srgb" },
@@ -128,5 +129,9 @@ export const Resources: IResource[] = [
   { id: 122, resourceType: "diffuse", lifecycle: "resident", path: "asteroids/rocks_ground_04_diff_2k.jpg", colorSpace: "srgb" },
   { id: 123, resourceType: "bump", lifecycle: "resident", path: "asteroids/rocks_ground_04_nor_gl_2k.jpg" },
   { id: 124, resourceType: "bump", lifecycle: "resident", path: "asteroids/rocks_ground_04_arm_2k.jpg" },
-  { id: 125, resourceType: "height", lifecycle: "resident", path: "planets/moon/moon_height.raw" }
+  { id: 125, resourceType: "height", lifecycle: "resident", path: "planets/moon/moon_height.raw" },
+  { id: 126, resourceType: "detailDiffuse", lifecycle: "streamable", path: "terrain/rocky_trail_diff.webp", wrapS: RepeatWrapping, wrapT: RepeatWrapping },
+  { id: 127, resourceType: "detailNormal", lifecycle: "streamable", path: "terrain/rocky_trail_nor.webp", wrapS: RepeatWrapping, wrapT: RepeatWrapping },
+  { id: 128, resourceType: "detailArm", lifecycle: "streamable", path: "terrain/rocky_trail_arm.webp", wrapS: RepeatWrapping, wrapT: RepeatWrapping },
+  { id: 129, resourceType: "detailNormal2", lifecycle: "streamable", path: "terrain/moon_01_nor.webp", wrapS: RepeatWrapping, wrapT: RepeatWrapping }
 ]
