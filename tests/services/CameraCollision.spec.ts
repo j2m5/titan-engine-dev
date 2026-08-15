@@ -4,6 +4,8 @@ import '@/core/framework/TitanThree'
 import { COLLISION_GAP, collectColliders } from '@/core/services/CameraCollision'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
+import { terrainHeightFieldFor, type TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { makeBody, makeModel, makeCollision } from './cameraCollisionStubs'
 
 const EARTH_RADIUS_KM = 6360
@@ -204,5 +206,67 @@ describe('CameraCollision: свип и скольжение', () => {
     collision.resolve()
 
     expect(camera.position.x).toBeCloseTo(-R, 3)
+  })
+})
+
+describe('CameraCollision: пуш-аут по рельефу', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  // карта 4×2: западное полушарие высокое, восточное низкое (метры = raw)
+  function terrainBody(): { body: Object3D; field: TerrainHeightField } {
+    seedHeightMap([20000, 0, 20000, 0, 20000, 0, 20000, 0], 4, 2, 0, 65535)
+    const body = makeBody('planet', 1736, new Vector3(), undefined, MOON_HEIGHT_PATH)
+    const field = terrainHeightFieldFor(
+      (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(MOON_HEIGHT_PATH)!,
+      1736
+    )
+    return { body, field }
+  }
+
+  // центр низкого столбца (u=0.375): без блендинга бортов текселя, чтобы
+  // высота под направлением была однозначной (см. терраформный дефолт-фикс)
+  const LOW_COLUMN_DIR = new Vector3(1, 0, 1).normalize()
+
+  it('камера ниже поверхности выносится на R+h+clearance по своему направлению', () => {
+    const { body, field } = terrainBody()
+    const dir = LOW_COLUMN_DIR
+    const target = field.collisionRadiusUnits(dir)
+    const { collision, camera } = makeCollision([body], dir.clone().multiplyScalar(target * 0.9))
+
+    collision.resolve()
+
+    expect(camera.position.length()).toBeCloseTo(target, 8)
+    expect(camera.position.clone().normalize().dot(dir)).toBeCloseTo(1, 6)
+  })
+
+  it('камера над поверхностью, но внутри старой сферы R×GAP — НЕ трогается', () => {
+    // над низким полушарием рельефная коллизия пускает камеру ниже сферы
+    const { body, field } = terrainBody()
+    const dir = LOW_COLUMN_DIR
+    const altitude = field.collisionRadiusUnits(dir) * 1.0001
+    expect(altitude).toBeLessThan(toThreeJSUnits(1736) * COLLISION_GAP + toThreeJSUnits(20))
+    const { collision, camera } = makeCollision([body], dir.clone().multiplyScalar(altitude))
+
+    collision.resolve()
+
+    expect(camera.position.length()).toBeCloseTo(altitude, 10)
+  })
+
+  it('вращение тела подставляет под камеру другой рельеф — камеру выталкивает', () => {
+    const { body, field } = terrainBody()
+    const dir = LOW_COLUMN_DIR
+    // высота над низким рельефом, ниже высокого
+    const altitude = field.collisionRadiusUnits(dir) * 1.0001
+    const { collision, camera } = makeCollision([body], dir.clone().multiplyScalar(altitude))
+
+    collision.resolve() // безобидный кадр
+    body.quaternion.setFromAxisAngle(new Vector3(0, 1, 0), Math.PI / 2) // высокое полушарие — под камеру
+    body.updateMatrixWorld(true)
+    collision.resolve()
+
+    // локальное направление камеры после поворота
+    const localDir = camera.position.clone().applyQuaternion(body.quaternion.clone().invert()).normalize()
+    expect(camera.position.length()).toBeCloseTo(field.collisionRadiusUnits(localDir), 6)
+    expect(camera.position.length()).toBeGreaterThan(altitude)
   })
 })

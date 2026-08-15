@@ -1,4 +1,4 @@
-import { Object3D, PerspectiveCamera, Ray, Sphere, Vector3 } from 'three'
+import { Matrix4, Object3D, PerspectiveCamera, Ray, Sphere, Vector3 } from 'three'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { SceneObserver } from '@/core/services/SceneObserver'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
@@ -88,6 +88,10 @@ class CameraCollision {
   private readonly contact: Vector3 = new Vector3()
   private readonly point: Vector3 = new Vector3()
   private readonly remainder: Vector3 = new Vector3()
+
+  private readonly inverseMatrix = new Matrix4()
+  private readonly localPoint = new Vector3()
+  private readonly localDir = new Vector3()
 
   public constructor(
     private camera: PerspectiveCamera,
@@ -195,6 +199,11 @@ class CameraCollision {
       let moved = false
 
       for (const collider of this.colliders) {
+        if (collider.heightField) {
+          if (this.pushOutTerrain(collider, collider.heightField, position)) moved = true
+          continue
+        }
+
         collider.object.getWorldPosition(this.center)
 
         if (position.distanceTo(this.center) >= collider.radius) continue
@@ -210,6 +219,35 @@ class CameraCollision {
 
       if (!moved) return
     }
+  }
+
+  /**
+   * Вынос из рельефа — в теле-фиксированном фрейме: тела вращаются, и высота
+   * зависит от направления в локальных осях меша. Вынос радиальный на
+   * R+h(dir̂)+clearance(dir̂).
+   */
+  private pushOutTerrain(collider: Collider, field: TerrainHeightField, position: Vector3): boolean {
+    collider.object.updateWorldMatrix(true, false)
+    this.inverseMatrix.copy(collider.object.matrixWorld).invert()
+    this.localPoint.copy(position).applyMatrix4(this.inverseMatrix)
+
+    // быстрый отсев по широкой фазе в локальном фрейме
+    const r = this.localPoint.length()
+    if (r >= collider.radius) return false
+
+    if (r === 0) {
+      this.localDir.set(0, 0, 1) // центр тела: наружу в произвольную сторону
+    } else {
+      this.localDir.copy(this.localPoint).divideScalar(r)
+    }
+
+    const target = field.collisionRadiusUnits(this.localDir)
+    if (r >= target) return false
+
+    this.localPoint.copy(this.localDir).multiplyScalar(target).applyMatrix4(collider.object.matrixWorld)
+    position.copy(this.localPoint)
+
+    return true
   }
 }
 
