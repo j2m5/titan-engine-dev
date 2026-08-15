@@ -13,7 +13,10 @@ import { FakeStar } from '@/core/renderables/utils/FakeStar'
 import { StarLod } from '@/core/renderables/utils/StarLod'
 import { ApparentSizeLod } from '@/core/renderables/utils/ApparentSizeLod'
 import { Planet } from '@/core/renderables/Planet'
+import { TerrainSphere } from '@/core/renderables/TerrainSphere'
 import { FakePlanet } from '@/core/renderables/utils/FakePlanet'
+import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
+import { terrainHeightFieldFor } from '@/core/terrain/TerrainHeightField'
 import { BrunetonAtmosphere } from '@/core/renderables/Atmosphere/BrunetonAtmosphere'
 import { Ring } from '@/core/renderables/Ring'
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
@@ -175,7 +178,13 @@ class RenderableFactory {
   private createPlanet(actor: Actor): Object3D {
     const node = new DynamicNode(actor)
     const lod = new LOD()
-    const lodl1 = new Planet(actor)
+    // Рельеф — по фактически загруженной карте: провал загрузки деградирует
+    // к легаси-сфере согласованно с материалом и коллизией
+    const heightPath = actor.resources.where('resourceType', 'height').first()?.getAttribute('path')
+    const heightMap = typeof heightPath === 'string' ? heightFieldStorage.get(heightPath) : undefined
+    const lodl1 = heightMap
+      ? new TerrainSphere(actor, terrainHeightFieldFor(heightMap, actor.physicalObject!.getAttribute('radius')!))
+      : new Planet(actor)
     const lodl2 = new FakePlanet(actor)
 
     // Известно-неверная высота кадра: tan(fov) вместо 2*tan(fov/2), поэтому
