@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { SphereGeometry, Vector2, Vector3 } from 'three'
-import { CLEARANCE_MARGIN_METERS, TerrainHeightField, terrainHeightFieldFor } from '@/core/terrain/TerrainHeightField'
+import {
+  CLEARANCE_MARGIN_METERS,
+  TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS,
+  TerrainHeightField,
+  terrainHeightFieldFor
+} from '@/core/terrain/TerrainHeightField'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 
@@ -162,7 +167,7 @@ describe('TerrainHeightField: карта провиса', () => {
 
   it('одиночная яма поднимает клиренс в своей ячейке и соседних, дальние не трогает', () => {
     // 64×32, min 0 max 65535 (метры = raw): яма глубиной 10000 в одном текселе.
-    // block=1 (64 < TERRAIN_SPHERE_SEGMENTS), CLEARANCE_CELL_BLOCKS=1 ⇒ ячейка
+    // block=1 (64 < TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS), CLEARANCE_CELL_BLOCKS=1 ⇒ ячейка
     // = 1 блок = 1 тексель. Яма в (col8,row16) поднимает sag только у групп
     // 2×2 с началом bx∈{7,8}, by∈{15,16}; финальная дилатация 3×3 растягивает
     // это ещё на ±1 ячейку — весь поднятый остров укладывается в x∈[6,9], y∈[14,17]
@@ -192,13 +197,16 @@ describe('TerrainHeightField: карта провиса', () => {
   })
 
   it('крупная карта (block > 1) сводит яму через блочную редукцию', () => {
-    // 2048×1024 → block = round(2048/1024) = 2, блоки объединяют по 2 текселя:
-    // проверяем, что редукция по блокам, а не только по-текселная, находит яму
-    const width = 2048
-    const height = 1024
+    // width = 1.5×TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS → block = round(1.5) = 2,
+    // блоки объединяют по 2 текселя: проверяем, что редукция по блокам, а не
+    // только по-текселная, находит яму. Высота карты урезана против реальной
+    // (не 1:2 к ширине) — тестам провиса высота не важна, важен только счёт
+    // блоков по X, а полный 1:2 сделал бы фикстуру неоправданно тяжёлой.
+    const width = TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS * 1.5
+    const height = 128
     const values = new Array(width * height).fill(20000)
-    const col = 512
-    const row = 256
+    const col = width / 4
+    const row = height / 4
     values[row * width + col] = 10000
     const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
 
@@ -244,6 +252,48 @@ describe('TerrainHeightField: карта провиса', () => {
     expect(field.clearanceMeters(uvToDir(32.5 / 64, 2.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
     // противоположный полюс — только базовый запас, клампа не должно перетекать
     expect(field.clearanceMeters(uvToDir(32.5 / 64, 31.5 / 32))).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
+  })
+})
+
+describe('TerrainHeightField: окно провиса меряет фактическую сетку квадродерева, не удалённую монолитную сферу этапа 2', () => {
+  const uvToDir = (u: number, v: number): Vector3 => {
+    const theta = v * Math.PI
+    const phi = u * 2 * Math.PI
+    return new Vector3(-Math.cos(phi) * Math.sin(theta), Math.cos(theta), Math.sin(phi) * Math.sin(theta))
+  }
+
+  it('на карте лунного разрешения клиренс в 12 текселях от ямы — только базовый запас (окно узкое, не старое 8-блочное)', () => {
+    // 8192×64, block=1 под новым окном (max-level квадродерева), а под ДАВНО
+    // СНЕСЁННОЙ монолитной сеткой этапа 2 (TERRAIN_SPHERE_SEGMENTS=1024) был бы
+    // block=round(8192/1024)=8 — группа (1+span)×2 блоков плюс дилатация 3×3
+    // дотягивались на ±15/+... текселей от ямы (в блоках по 8 текселей) и
+    // завышали клиренс на десятки текселей вокруг. Новое окно (block=1) держит
+    // зону влияния в ±2 текселя (группа) + дилатация 1 ячейка = офсет 12 текселей
+    // уже вне неё — только базовый запас. Строка 28 — около экватора (cosLat≈0.98,
+    // span=1), без полярного раздутия окна, чистая проверка долготного радиуса.
+    const width = 8192
+    const height = 64
+    const values = new Array(width * height).fill(20000)
+    const pitCol = 4096
+    const pitRow = 28
+    values[pitRow * width + pitCol] = 10000 // яма 10000 м глубиной
+    const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
+
+    const probeClearance = field.clearanceMeters(
+      uvToDir((pitCol + 12.5) / width, (pitRow + 0.5) / height)
+    )
+
+    expect(probeClearance).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
+  })
+
+  it('maxClearanceMeters на той же карте — метры, а не километры (яма целиком в её собственной узкой ячейке)', () => {
+    const width = 8192
+    const height = 64
+    const values = new Array(width * height).fill(20000)
+    values[28 * width + 4096] = 10000
+    const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
+
+    expect(field.maxClearanceMeters).toBeCloseTo(10000 + CLEARANCE_MARGIN_METERS, 3)
   })
 })
 
@@ -361,19 +411,23 @@ describe('TerrainHeightField: геометрическая ошибка уров
   })
 
   it('block > 1: фолбэк на p99(2×2) не срабатывает — ℓ2 равен именно p99(1×1)', () => {
-    // width=2048 → block=round(2048/1024)=2, blocksX=1024, blocksY=512 (как в
-    // clearance-тесте «крупная карта»). Внутриблочный размах = R1 у КАЖДОГО
+    // width = 1.5×TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS → block=round(1.5)=2 (как
+    // в clearance-тесте «крупная карта»). Внутриблочный размах = R1 у КАЖДОГО
     // блока (не зависит от bx/by) — p99(1×1)=R1 точно. Базовая высота блока
     // растёт с bx на шаг S — окно 2×2 захватывает соседний блок выше на S,
     // p99(2×2)=S+R1 строго больше p99(1×1): различие само по себе доказывает,
-    // что ℓ2 не подменился фолбэком на p99(2×2).
-    const width = 2048
-    const height = 1024
+    // что ℓ2 не подменился фолбэком на p99(2×2). Высота урезана против
+    // реальной 1:2 к ширине — тестам ε-пирамиды высота не важна, важен только
+    // счёт блоков по X, полный 1:2 сделал бы фикстуру неоправданно тяжёлой.
+    const width = TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS * 1.5
+    const height = 128
     const block = 2
     const blocksX = width / block
     const blocksY = height / block
-    const S = 50
-    const R1 = 200
+    // S мал: значения — raw Uint16, а blocksX теперь 12288 (вместо 1024 у
+    // старой карты 2048px) — (blocksX-1)*S+R1 обязано остаться < 65536
+    const S = 5
+    const R1 = 1000
 
     const values = new Array(width * height)
     for (let y = 0; y < height; y++) {
