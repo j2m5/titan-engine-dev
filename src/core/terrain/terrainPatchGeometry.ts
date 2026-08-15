@@ -1,4 +1,5 @@
 import { BufferAttribute, BufferGeometry, Vector2, Vector3 } from 'three'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { cubeFaceDirection } from './cubeSphere'
 import type { TerrainHeightField } from './TerrainHeightField'
 
@@ -36,11 +37,16 @@ const POLE_EPSILON = 1e-9
  * RTC-геометрия патча (face, i, j) глубины depth: позиции хранятся
  * ОТНОСИТЕЛЬНО центра патча (центр — в position меша), больших чисел во
  * float32 нет, катастрофическое сокращение происходит в f64 на CPU при
- * сборке modelViewMatrix. Высота — канонический surfaceRadiusUnits: мешер
- * и коллизия зовут одну функцию. Нормали радиальные — наклон шейдит
- * slope-карта. UV разворачивается вокруг u центра патча (|u−uc| ≤ 0.5,
- * допускается выход за [0,1] — текстуры терраформных тел в RepeatWrapping);
- * вершина ровно в полюсе берёт u центра (там phi не определён).
+ * сборке modelViewMatrix. Высота — те же канонические dirToUv/sampleMeters,
+ * что использует surfaceRadiusUnits (мешер и коллизия читают одни данные
+ * одной формулой; мешер зовёт dirToUv один раз на вершину, не через
+ * surfaceRadiusUnits повторно — см. перф-заметку в цикле ниже). Нормали
+ * радиальные — наклон шейдит slope-карта. UV разворачивается вокруг u
+ * центра патча (|u−uc| ≤ 0.5, допускается выход за [0,1] — текстуры
+ * терраформных тел в RepeatWrapping); вершина ровно в полюсе берёт u центра
+ * (там phi не определён). Развёртка шва корректна при азимутальном спане
+ * патча < 180°: глубина ≥ 1; корень глубины 0 (этап 3б) потребует другой
+ * развёртки.
  */
 export function buildTerrainPatchGeometry(
   field: TerrainHeightField,
@@ -73,7 +79,11 @@ export function buildTerrainPatchGeometry(
     for (let a = 0; a <= segments; a++) {
       cubeFaceDirection(face, s0 + (span * a) / segments, t0 + (span * b) / segments, dir)
 
-      const r = field.surfaceRadiusUnits(dir)
+      // dirToUv один раз на вершину: surfaceRadiusUnits(dir) внутри тоже звал бы
+      // его повторно (heightMeters → dirToUv) — 1.62М лишних atan2+acos на сборке
+      field.dirToUv(dir, uv)
+      const heightMeters = field.sampleMeters(uv.x, uv.y)
+      const r = toThreeJSUnits(field.radiusKm + heightMeters / 1000)
       positions[k * 3] = dir.x * r - center.x
       positions[k * 3 + 1] = dir.y * r - center.y
       positions[k * 3 + 2] = dir.z * r - center.z
@@ -82,7 +92,6 @@ export function buildTerrainPatchGeometry(
       normals[k * 3 + 1] = dir.y
       normals[k * 3 + 2] = dir.z
 
-      field.dirToUv(dir, uv)
       const u = Math.abs(dir.y) >= 1 - POLE_EPSILON ? centerU : uv.x - Math.round(uv.x - centerU)
       uvs[k * 2] = u
       uvs[k * 2 + 1] = uv.y
