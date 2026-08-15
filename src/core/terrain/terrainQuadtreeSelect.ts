@@ -36,16 +36,6 @@ const centerDirScratch = new Vector3()
 const sphereCenterScratch = new Vector3()
 const sphereScratch = new Sphere()
 
-/** Центр параметрического патча (s,t) на грани кубосферы для узла (level,i,j), как в билдере RTC-геометрии. */
-function patchCenterParam(level: number, i: number, j: number): { sc: number; tc: number; span: number } {
-  const patches = 2 ** level
-  const span = 2 / patches
-  const sc = -1 + i * span + span / 2
-  const tc = -1 + j * span + span / 2
-
-  return { sc, tc, span }
-}
-
 function visitNode(
   face: number,
   level: number,
@@ -61,7 +51,11 @@ function visitNode(
   }
 
   const { field } = params
-  const { sc, tc } = patchCenterParam(level, i, j)
+  // центр параметрического патча (s,t) на грани кубосферы, как в билдере RTC-геометрии
+  const patches = 2 ** level
+  const span = 2 / patches
+  const sc = -1 + i * span + span / 2
+  const tc = -1 + j * span + span / 2
   cubeFaceDirection(face, sc, tc, centerDirScratch)
   sphereCenterScratch.copy(centerDirScratch).multiplyScalar(field.surfaceRadiusUnits(centerDirScratch))
 
@@ -78,7 +72,9 @@ function visitNode(
     (field.geometricErrorMeters(level) * params.screenHeight) /
     (2 * Math.tan(params.fovYRadians / 2) * distanceMeters)
 
-  const key = terrainNodeKey({ face, level, i, j })
+  // формат совпадает с terrainNodeKey — вызывается без промежуточного
+  // TerrainNodeAddress, чтобы не аллоцировать объект на каждый посещённый узел
+  const key = `${face}/${level}/${i}/${j}`
   const threshold = params.currentlySplit.has(key) ? params.splitPixels * params.mergeFactor : params.splitPixels
 
   let visible = true

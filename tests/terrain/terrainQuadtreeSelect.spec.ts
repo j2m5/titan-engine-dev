@@ -69,12 +69,34 @@ describe('selectTerrainNodes: SSE-отбор узлов квадродерева
     expect(Math.max(...leaves.map((a) => a.level))).toBe(6)
   })
 
-  it('гистерезис: между τ_merge и τ_split разбитый узел не схлопывается, неразбитый не делится', () => {
-    const base = makeParams(50000)
-    const first = selectTerrainNodes(base)
-    // подобрать высоту, где часть узлов на грани: сравниваем два прогона с одним и тем же состоянием
-    const again = selectTerrainNodes({ ...base, currentlySplit: first.split })
-    expect(new Set(again.leaves.map(terrainNodeKey))).toEqual(new Set(first.leaves.map(terrainNodeKey)))
+  it('гистерезис: между τ_merge и τ_split разбитый узел не схлопывается, kMerge реально применяется', () => {
+    // Высоты подобраны эмпирически под HEIGHT_AMPLITUDE_METERS=20000 и splitPixels=6:
+    // на ALT_SPLIT четыре пограничных узла face=0 уровня 1 имеют sse≈6.10-6.12 (>
+    // splitPixels=6) — реально разбиваются с пустой историей. На ALT_MERGE_ZONE
+    // (дальше — камера отодвинута) те же четыре узла имеют sse≈5.40-5.42: НИЖЕ
+    // splitPixels=6 (без истории схлопнулись бы), но ВЫШЕ splitPixels·mergeFactor=
+    // 6·0.7=4.2 (с историей остаются разбитыми) — ровно зона гистерезиса.
+    const ALT_SPLIT = 4500
+    const ALT_MERGE_ZONE = 5000
+
+    const runA = selectTerrainNodes(makeParams(ALT_SPLIT))
+    expect(runA.split.size).toBeGreaterThan(0) // непустой сплит — тест не вырожден
+
+    // (б) та же карта, дальше камера, история из A, порог по умолчанию (kMerge=0.7):
+    // пограничные узлы обязаны остаться разбитыми — набор идентичен A
+    const withHysteresis = selectTerrainNodes(makeParams(ALT_MERGE_ZONE, { currentlySplit: runA.split }))
+    expect(new Set(withHysteresis.leaves.map(terrainNodeKey))).toEqual(new Set(runA.leaves.map(terrainNodeKey)))
+
+    // (в) та же высота и та же история, но kMerge=1 (порог схлопывания = порог
+    // разбиения — гистерезис нейтрализован): пограничные узлы схлопываются,
+    // результат совпадает с чистым пересчётом без всякой истории
+    const withoutHysteresis = selectTerrainNodes(makeParams(ALT_MERGE_ZONE, { currentlySplit: runA.split, mergeFactor: 1 }))
+    const fresh = selectTerrainNodes(makeParams(ALT_MERGE_ZONE))
+    expect(new Set(withoutHysteresis.leaves.map(terrainNodeKey))).toEqual(new Set(fresh.leaves.map(terrainNodeKey)))
+
+    // (б) ↔ (в): разница доказывает, что kMerge действительно применяется, а не
+    // просто демонстрирует детерминизм чистой функции
+    expect(withHysteresis.leaves.length).toBeGreaterThan(withoutHysteresis.leaves.length)
   })
 
   it('вне фрустума не сплитится', () => {
