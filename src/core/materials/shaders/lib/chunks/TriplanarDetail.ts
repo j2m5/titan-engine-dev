@@ -30,27 +30,27 @@ export const triplanarDetailFunctions = `
     return w / (w.x + w.y + w.z);
   }
 
-  vec3 triplanarAlbedo(vec3 p, vec3 w, vec2 offset) {
-    vec3 cx = texture2D(uRockDiffMap, p.zy * uDetailScale + offset).rgb;
-    vec3 cy = texture2D(uRockDiffMap, p.xz * uDetailScale + offset).rgb;
-    vec3 cz = texture2D(uRockDiffMap, p.xy * uDetailScale + offset).rgb;
+  vec3 triplanarAlbedo(sampler2D map, vec3 p, vec3 w, vec2 offset) {
+    vec3 cx = texture2D(map, p.zy * uDetailScale + offset).rgb;
+    vec3 cy = texture2D(map, p.xz * uDetailScale + offset).rgb;
+    vec3 cz = texture2D(map, p.xy * uDetailScale + offset).rgb;
     return cx * w.x + cy * w.y + cz * w.z;
   }
 
-  vec3 triplanarArm(vec3 p, vec3 w, vec2 offset) {
-    vec3 ax = texture2D(uRockArmMap, p.zy * uDetailScale + offset).rgb;
-    vec3 ay = texture2D(uRockArmMap, p.xz * uDetailScale + offset).rgb;
-    vec3 az = texture2D(uRockArmMap, p.xy * uDetailScale + offset).rgb;
+  vec3 triplanarArm(sampler2D map, vec3 p, vec3 w, vec2 offset) {
+    vec3 ax = texture2D(map, p.zy * uDetailScale + offset).rgb;
+    vec3 ay = texture2D(map, p.xz * uDetailScale + offset).rgb;
+    vec3 az = texture2D(map, p.xy * uDetailScale + offset).rgb;
     return ax * w.x + ay * w.y + az * w.z;
   }
 
   // Whiteout-бленд нормалей: тангенциальные компоненты суммируются с геом.
   // нормалью по осям проекции, z-компоненты перемножаются — швов между
   // проекциями нет, «плоского» усреднения тоже
-  vec3 triplanarNormal(vec3 p, vec3 n, vec3 w, vec2 offset) {
-    vec3 tx = texture2D(uRockNorMap, p.zy * uDetailScale + offset).xyz * 2.0 - 1.0;
-    vec3 ty = texture2D(uRockNorMap, p.xz * uDetailScale + offset).xyz * 2.0 - 1.0;
-    vec3 tz = texture2D(uRockNorMap, p.xy * uDetailScale + offset).xyz * 2.0 - 1.0;
+  vec3 triplanarNormal(sampler2D map, vec3 p, vec3 n, vec3 w, vec2 offset) {
+    vec3 tx = texture2D(map, p.zy * uDetailScale + offset).xyz * 2.0 - 1.0;
+    vec3 ty = texture2D(map, p.xz * uDetailScale + offset).xyz * 2.0 - 1.0;
+    vec3 tz = texture2D(map, p.xy * uDetailScale + offset).xyz * 2.0 - 1.0;
     tx = vec3(tx.xy + n.zy, abs(tx.z) * n.x);
     ty = vec3(ty.xy + n.xz, abs(ty.z) * n.y);
     tz = vec3(tz.xy + n.xy, abs(tz.z) * n.z);
