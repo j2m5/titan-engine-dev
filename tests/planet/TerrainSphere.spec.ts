@@ -36,7 +36,10 @@ function seedPlaceholderKeys(): void {
   seedTexture(moon().resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string)
 }
 
-describe('TerrainSphere: кубосфера из патчей', () => {
+// 384 патча × полный мешинг честной карты — на медленном CI трёх прогонов
+// хватает вылезти за дефолтный таймаут vitest (5 с); 384-патчевый билд не
+// ускорить без переписывания теста, поднимаем потолок на весь describe
+describe('TerrainSphere: кубосфера из патчей', { timeout: 30000 }, () => {
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
 

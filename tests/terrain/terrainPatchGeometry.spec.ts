@@ -112,6 +112,32 @@ describe('buildTerrainPatchGeometry: RTC и паритет с коллизией
       expect(absL.distanceTo(absR)).toBeLessThan(2e-7)
     }
   })
+
+  it('вершины общего ребра куба (+Y/−Z) совпадают в абсолютных координатах при развороте параметра', () => {
+    const field = bumpyField()
+    const index = buildPatchIndex(SEGMENTS)
+    // depth=0: один патч на грань — общее ребро граней целиком в одном патче с каждой стороны
+    const topY = buildTerrainPatchGeometry(field, 2, 0, 0, 0, SEGMENTS, index) // +Y, t=+1 — общее ребро с −Z
+    const backZ = buildTerrainPatchGeometry(field, 5, 0, 0, 0, SEGMENTS, index) // −Z, t=+1 — общее ребро с +Y
+    const topPos = topY.geometry.getAttribute('position')
+    const backPos = backZ.geometry.getAttribute('position')
+
+    // строка b=SEGMENTS (t=+1) у обеих граней. su=tan(π/4·s) — нечётная функция,
+    // поэтому su=-su' точно при s=-s': параметризация общего ребра развёрнута
+    // (правые базисы граней), индекс столбца зеркалится a' = SEGMENTS-a
+    for (let a = 0; a <= SEGMENTS; a++) {
+      const aMirror = SEGMENTS - a
+      const kTop = SEGMENTS * (SEGMENTS + 1) + a
+      const kBack = SEGMENTS * (SEGMENTS + 1) + aMirror
+
+      const absTop = new Vector3(topPos.getX(kTop), topPos.getY(kTop), topPos.getZ(kTop)).add(topY.center)
+      const absBack = new Vector3(backPos.getX(kBack), backPos.getY(kBack), backPos.getZ(kBack)).add(backZ.center)
+
+      // тот же допуск, что у побайтного внутригранного теста, с запасом на
+      // асимметрию вычислений equal-angle проекции по разным базисам граней
+      expect(absTop.distanceTo(absBack)).toBeLessThan(2e-7)
+    }
+  })
 })
 
 describe('buildTerrainPatchGeometry: UV', () => {
@@ -134,17 +160,28 @@ describe('buildTerrainPatchGeometry: UV', () => {
     }
   })
 
-  it('шовный патч: u непрерывен внутри патча (разброс < 0.5), может выйти за [0,1]', () => {
+  it('шовный патч: u непрерывен внутри патча (разброс < 0.5), может выйти за [0,1], и по модулю 1 совпадает с dirToUv', () => {
     const field = bumpyField()
     // −X-грань содержит меридиан u=0/1 (dir=(−1,0,0) → phi=0)
-    const { geometry } = build(field, 1, 0, 0)
+    const { geometry, center } = build(field, 1, 0, 0)
+    const pos = geometry.getAttribute('position')
     const uv = geometry.getAttribute('uv')
+    const scratch = new Vector2()
 
     let min = Infinity
     let max = -Infinity
     for (let k = 0; k < uv.count; k++) {
       min = Math.min(min, uv.getX(k))
       max = Math.max(max, uv.getX(k))
+
+      // развёртка допускает выход за [0,1] (шов раскрыт непрерывно), но не
+      // меняет физический меридиан — остаток по модулю 1 обязан совпасть с
+      // dirToUv с f32-точностью, а не просто "разброс небольшой"
+      const dir = new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).add(center).normalize()
+      field.dirToUv(dir, scratch)
+      const wrapped = uv.getX(k) - Math.floor(uv.getX(k))
+      const delta = Math.abs(wrapped - scratch.x)
+      expect(Math.min(delta, 1 - delta)).toBeLessThan(1e-6)
     }
     expect(max - min).toBeLessThan(0.5)
   })
