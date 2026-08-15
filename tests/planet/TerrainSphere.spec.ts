@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { Mesh, PerspectiveCamera, Texture } from 'three'
+import { Mesh, PerspectiveCamera, Texture, type WebGLRenderer } from 'three'
 import { PATCH_BUILDS_PER_FRAME, TerrainSphere } from '@/core/renderables/TerrainSphere'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { Actor } from '@/core/models/Actor'
@@ -42,6 +42,12 @@ function seedPlaceholderKeys(): void {
   seedTexture(moon().resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string)
 }
 
+// заглушка рендерера: TerrainSphere читает только domElement.height (device-пиксели
+// канваса — паттерн PlanetTerrain.spec/RenderableFactory.distanceLod)
+function makeRenderer(height: number): WebGLRenderer {
+  return { domElement: { height } } as unknown as WebGLRenderer
+}
+
 // камера над (1,0,0) на заданной высоте (км)
 function makeCtx(altKm: number): UpdateContext {
   const camera = new PerspectiveCamera(50, 1, 1e-6, 1e9)
@@ -68,13 +74,13 @@ describe('TerrainSphere: динамическое квадродерево па�
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('конструктор строит минимальный набор уровня 1 (24 меша)', () => {
-    const sphere = new TerrainSphere(moon(), makeField())
+    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
     expect(sphere.children.filter((c) => c instanceof Mesh)).toHaveLength(24)
   })
 
   it('контракты снапшота и стриминга: model/type/clickable на группе, .material — PlanetMaterial', () => {
     const actor = moon()
-    const sphere = new TerrainSphere(actor, makeField())
+    const sphere = new TerrainSphere(actor, makeField(), makeRenderer(1080))
 
     expect(sphere.model).toBe(actor)
     expect(sphere.userData.type).toBe('planet')
@@ -87,7 +93,7 @@ describe('TerrainSphere: динамическое квадродерево па�
   })
 
   it('за серию кадров у поверхности набор растёт и сходится; покрытие без дыр на каждом кадре', () => {
-    const sphere = new TerrainSphere(moon(), makeField())
+    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
     const ctx = makeCtx(2)
     const counts: number[] = []
     for (let f = 0; f < 120; f++) {
@@ -101,14 +107,14 @@ describe('TerrainSphere: динамическое квадродерево па�
   })
 
   it('удаление камеры мержит обратно к 24', () => {
-    const sphere = new TerrainSphere(moon(), makeField())
+    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
     for (let f = 0; f < 120; f++) sphere.updateObject(makeCtx(2))
     for (let f = 0; f < 200; f++) sphere.updateObject(makeCtx(500000))
     expect(sphere.children.filter((c) => c instanceof Mesh).length).toBe(24)
   })
 
   it('невидимый (LOD → FakePlanet) — заморожен', () => {
-    const sphere = new TerrainSphere(moon(), makeField())
+    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
     const before = sphere.children.length
     sphere.visible = false
     sphere.updateObject(makeCtx(2))
@@ -116,9 +122,34 @@ describe('TerrainSphere: динамическое квадродерево па�
   })
 
   it('бюджет построек соблюдается: за один кадр добавляется ≤ PATCH_BUILDS_PER_FRAME мешей', () => {
-    const sphere = new TerrainSphere(moon(), makeField())
+    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
     const before = sphere.children.length
     sphere.updateObject(makeCtx(2))
     expect(sphere.children.length - before).toBeLessThanOrEqual(PATCH_BUILDS_PER_FRAME)
+  })
+
+  // screenHeight обязан быть device-пикселями канваса (renderer.domElement.height),
+  // не CSS-пикселями окна: sse = geometricError·screenHeight/(2·tan(fovY/2)·dist) —
+  // при вдвое большем screenHeight тот же узел пересекает splitPixels раньше,
+  // набор глубже/крупнее. HiDPI (dpr=2) даёт domElement.height = innerHeight·dpr —
+  // подмена на window.innerHeight занижала бы SSE вдвое на таких экранах.
+  // 30 км, не 2 — на 2 км SSE обеих высот пробивает потолок TERRAIN_QUADTREE_MAX_LEVEL
+  // одинаково (набор совпал бы, разница SSE замаскирована потолком); 30 км —
+  // зона, где 1080 и 2160 расходятся, ниже потолка (проверено selectTerrainNodes
+  // напрямую: leaves 60@1080 против 72@2160)
+  it('screenHeight — device-пиксели канваса: больший domElement.height даёт более глубокий набор при той же камере', () => {
+    const field = makeField()
+    const sphereLow = new TerrainSphere(moon(), field, makeRenderer(1080))
+    const sphereHigh = new TerrainSphere(moon(), field, makeRenderer(2160))
+
+    const FRAMES = 60
+    for (let f = 0; f < FRAMES; f++) {
+      sphereLow.updateObject(makeCtx(30))
+      sphereHigh.updateObject(makeCtx(30))
+    }
+
+    const countLow = sphereLow.children.filter((c) => c instanceof Mesh).length
+    const countHigh = sphereHigh.children.filter((c) => c instanceof Mesh).length
+    expect(countHigh).toBeGreaterThan(countLow)
   })
 })

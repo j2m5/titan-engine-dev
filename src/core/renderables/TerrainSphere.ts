@@ -1,4 +1,4 @@
-import { Frustum, Group, Matrix4, Vector3 } from 'three'
+import { Frustum, Group, Matrix4, Vector3, type WebGLRenderer } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
@@ -57,7 +57,11 @@ class TerrainSphere extends Group {
   private readonly viewProjScratch = new Matrix4()
   private readonly frustumScratch = new Frustum()
 
-  public constructor(model: Actor, field: TerrainHeightField) {
+  public constructor(
+    model: Actor,
+    field: TerrainHeightField,
+    private readonly renderer: WebGLRenderer
+  ) {
     super()
     this.model = model
     this.field = field
@@ -101,7 +105,7 @@ class TerrainSphere extends Group {
       field: this.field,
       cameraLocal,
       frustumLocal: this.frustumScratch,
-      screenHeight: window.innerHeight,
+      screenHeight: this.renderer.domElement.height,
       fovYRadians: degToRad(ctx.camera.fov),
       splitPixels: config('terrain.sseSplitPixels'),
       mergeFactor: config('terrain.sseMergeFactor'),
