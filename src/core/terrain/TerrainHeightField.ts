@@ -34,12 +34,12 @@ export const CLEARANCE_MARGIN_METERS = 5
  * ℓ1/ℓ2 ε-пирамиды (`buildGeometricErrors`) — НЕ окно, по которому меряется
  * провис (это поточечная оценка вторых разностей, см. `buildClearanceGrid`),
  * а размер ячейки, в которую поточечные оценки сворачиваются через MAX.
- * Крупная ячейка здесь безопасна (в отличие от бывшей range-агрегации по
- * группе блоков, чинившейся сужением окна в прошлом раунде): чем больше
- * ячейка, тем дальше локальный максимум размазывается дилатацией на
- * соседей — консервативно вверх, никогда не занижает провис внутри ячейки.
- * Для Луны даёт блок = 8 текселей, сетка 1024×512 ≈ 2 МБ — та же плотность
- * (и то же число), что было исторически до этапа квадродерева.
+ * Крупная ячейка здесь безопасна (в отличие от range-агрегации по группе
+ * блоков, которая берёт max−min всего окна и может потерять локальный пик
+ * провиса при усреднении): чем больше ячейка, тем дальше локальный максимум
+ * размазывается дилатацией на соседей — консервативно вверх, никогда не
+ * занижает провис внутри ячейки. Для Луны даёт блок = 8 текселей, сетка
+ * 1024×512 ≈ 2 МБ.
  */
 export const CLEARANCE_GRID_BASE_SEGMENTS = 1024
 
@@ -68,8 +68,7 @@ const TWO_PI = 2 * Math.PI
  * растёт как 1/cos(широты) и перестаёт умещаться в соседних текселях (порог —
  * `TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS`), восток-западная компонента
  * переключается на размах по скользящему окну текселей ширины вершинного
- * шага (прежняя, до этого раунда, модель — для этих широт всё ещё верна);
- * север-южная остаётся на второй разности. Поточечные оценки сворачиваются
+ * шага; север-южная остаётся на второй разности. Поточечные оценки сворачиваются
  * через MAX в ячейки `CLEARANCE_GRID_BASE_SEGMENTS` (плотность/память, не
  * окно — см. докблок константы), затем дилатация 3×3 страхует границы ячеек,
  * чтобы клиренс не обрывался скачком на стыке. Выборка клиренса — билинейная
@@ -85,7 +84,7 @@ const TWO_PI = 2 * Math.PI
  * Не лечится здесь: SSE у самой поверхности требует немедленного дробления,
  * окно грубости — доли секунды на PATCH_BUILDS_PER_FRAME построек.
  *
- * Двухслойная модель клиренса (раунд 2 фикса): `clearanceMeters`/`maxClearanceMeters`
+ * Двухслойная модель клиренса: `clearanceMeters`/`maxClearanceMeters`
  * (сетка выше) — СТРАЖ широкой фазы и внешнего марча коллизии: намеренно
  * консервативен (MAX-агрегация поточечных оценок по ячейке
  * `CLEARANCE_GRID_BASE_SEGMENTS` + дилатация 3×3 размазывают пиковый провис
@@ -108,14 +107,21 @@ class TerrainHeightField {
   private readonly metersPerRaw: number
   private readonly equatorStepTexels: number
   private readonly spanCap: number
-  /** Максимум поточечного sag по всей карте, метры — калибрует sagSlopeBond ниже. */
+  /**
+   * Максимум поточечного sag по всей карте, метры — числитель липшицева
+   * бонда уклона sag-поля в CameraCollision.marchPointwise (знаменатель —
+   * `equatorTexelMeters` ниже, локальный по широте марч сам делит на
+   * cos(широты) текущего направления, см. её докблок).
+   */
   public readonly maxSagMeters: number
   /**
-   * Консервативный бонд уклона ПОТОЧЕЧНОГО поля провиса: maxSagMeters / (экваториальный
-   * тексель в метрах). Складывается с SLOPE_RANGE в CameraCollision для марча против
-   * sagMeters — см. её докблок (`marchPointwise`) для полного разбора формулы шага.
+   * Экваториальный тексель, метры — знаменатель бонда уклона sag-поля выше.
+   * Sag-поле масштабирует восток-западный градиент как 1/cos(широты)
+   * (сходно с texelArc в surfaceNormalLocal), поэтому потребитель делит это
+   * значение на cos(широты) СВОЕГО текущего направления, а не здесь — единая
+   * per-body константа, локальная поправка считается на каждом шаге марча.
    */
-  public readonly sagSlopeBond: number
+  public readonly equatorTexelMeters: number
 
   public constructor(
     private readonly map: HeightMapData,
@@ -136,11 +142,7 @@ class TerrainHeightField {
     this.clearanceGridHeight = built.height
     this.maxClearanceMeters = built.maxClearance
     this.maxSagMeters = built.maxSag
-    // экваториальный тексель, метры: та же идиома, что texelArc в
-    // surfaceNormalLocal, но без cosLat — здесь нужен per-body масштаб, а не
-    // локальный градиент по направлению
-    const texelMeters = (TWO_PI * radiusKm * 1000) / map.width
-    this.sagSlopeBond = texelMeters > 0 ? this.maxSagMeters / texelMeters : 0
+    this.equatorTexelMeters = (TWO_PI * radiusKm * 1000) / map.width
     // blockMin/blockMax/blocksX/blocksY служат только ε-пирамиде ниже —
     // не хранятся полями тела (2 МБ на карту Луны), передаются аргументами
     this.levelErrorMeters = this.buildGeometricErrors(
@@ -233,7 +235,8 @@ class TerrainHeightField {
 
     let x = (u - Math.floor(u)) * w - 0.5
     if (x < 0) x += w
-    const x0 = Math.floor(x)
+    // f64-округление x+w может дать ровно w — тот же кламп, что в sampleMeters/sampleSag
+    const x0 = Math.min(Math.floor(x), w - 1)
     const x1 = (x0 + 1) % w
     const fx = x - x0
 
@@ -328,7 +331,12 @@ class TerrainHeightField {
 
     const v = (y + 0.5) / height
     const cosLat = Math.sin(Math.PI * v)
-    const spanTexels = Math.max(1, Math.min(this.spanCap, Math.round(this.equatorStepTexels / cosLat)))
+    // ceil, не round: модель вторых разностей честна только при пролёте ≤1
+    // текселя — ЛЮБОЕ превышение обязано переключать на широкое окно, round
+    // до этого спал бы до порога ~1.5 (round(1.4999…)=1) и держал бы узкую
+    // модель в полосе (1, 1.5], где хорда уже перешагивает изломы, которых
+    // соседний тексель не видит
+    const spanTexels = Math.max(1, Math.min(this.spanCap, Math.ceil(this.equatorStepTexels / cosLat)))
 
     let ewComponent: number
     if (spanTexels >= 2) {
@@ -436,9 +444,11 @@ class TerrainHeightField {
 
       const v = (y + 0.5) / height
       const cosLat = Math.sin(Math.PI * v)
-      const spanTexels = Math.max(1, Math.min(spanCap, Math.round(equatorStepTexels / cosLat)))
-      // порог из брифа: пролёт вершины шире ~1.5 текселя — хорда перескакивает
-      // изломы целиком, вторая разность соседних текселей их больше не видит
+      // ceil (не round — см. texelSagRaw): честна вторая разность только при
+      // пролёте ≤1 текселя, порог переключения не должен ждать 1.5
+      const spanTexels = Math.max(1, Math.min(spanCap, Math.ceil(equatorStepTexels / cosLat)))
+      // пролёт вершины шире 1 текселя — хорда перескакивает изломы, которых
+      // вторая разность соседних текселей уже не видит
       const highLat = spanTexels >= 2
 
       if (highLat) {
@@ -474,7 +484,7 @@ class TerrainHeightField {
 
     // максимум ПОТОЧЕЧНОГО (недилатированного) sag по всей карте — max по
     // ячейкам here уже равен max по текселям (каждая ячейка сама max по
-    // своим текселям, ассоциативность max) — калибрует sagSlopeBond, лишнего
+    // своим текселям, ассоциативность max) — калибрует maxSagMeters, лишнего
     // прохода по карте не требует
     let maxPointSagRaw = 0
     for (let i = 0; i < pointSag.length; i++) {
