@@ -19,34 +19,48 @@
  * же поправку, либо домножать домен на радиус.
  *
  * СТОХАСТИЧЕСКИЙ АНТИ-ТАЙЛИНГ (владелец на приёмке увидел повтор 40-метрового
- * тайла на холмах — классическая трипланарная выборка одного периода видна
- * невооружённым глазом). Обе шкалы (крупная и мелкая нормаль) читаются через
+ * тайла на холмах). Обе шкалы (крупная и мелкая нормаль) читаются через
  * стохастические обёртки triplanarNormalDetiled/ArmDetiled/AlbedoDetiled
- * (ниже) вместо классических triplanarNormal/Arm/Albedo — техника IQ
- * «texture repetition» (2-тап вариант): на каждую из трёх планарных проекций
- * uv квантуется в целочисленную ячейку (floor), хеш ячейки даёт псевдослучайный
- * сдвиг + знаковый флип одной оси (дешёвая доп. развязка), результат —
- * бленд ДВУХ ближайших ячеек (текущей и диагонального соседа со стороны,
- * куда указывает дробная часть uv) по smoothstep от близости к диагональной
- * границе. Бленд трёх ПРОЕКЦИЙ (triplanarBlendRgb/Normal) не копируется —
- * тот же вызов, что и у классического (недетайленного) астероидного пути,
- * см. TriplanarDetail; отличие только в том, ЧТО подставляется в cx/cy/cz —
- * одна прямая выборка (астероиды) или уже дестохастизированный sampleDetiled
- * (террейн). Хеш — от КВАНТОВАННОЙ (floor) величины uv, не от сырого varying:
- * dirLocal интерполируется по треугольнику, но floor() схлопывает интерполяцию
- * внутри ячейки до целого числа ДО хеша — ULP-джиттер варьинга не усиливается
- * градиентом хеша (см. Noise.ts, hashSurface11 — тот же урок для другого пути).
- * sampleDetiled использует textureGrad-эквивалент (макрос three
- * texture2DGradEXT → textureGrad в GLSL ES 300, см. WebGLProgram) с
- * производными ИСХОДНОГО (нестохастического) uv: обе ячейки сэмплируются с
- * одним и тем же dFdx/dFdy — иначе выбор мипа скачет вместе со стохастическим
- * сдвигом и на границах ячеек виден шов.
+ * (ниже) вместо классических triplanarNormal/Arm/Albedo.
+ *
+ * Раунд 1 фикса: первая версия (текущая ячейка uv + диагональный сосед по
+ * floor(uv)) была РАЗРЫВНА на каждой границе ячейки — при переходе floor(uv)
+ * обе выборки скачком меняют UV, а blend-вес это не компенсирует (переход
+ * ячейки не совпадает с переходом веса). Заменено непрерывной схемой IQ
+ * technique 3 / Suslik: индекс варианта — не floor(uv) самой текстуры, а
+ * floor(l), где l = 8·vnoise(0.3·uv) — НЕПРЕРЫВНАЯ скалярная функция позиции
+ * (value noise, без текстур). floor(l) меняется РОВНО там, где fract(l)
+ * проходит через 0 — а в этой точке smoothstep-вес уже полностью на стороне
+ * входящего варианта (b→1 перед переходом при fract→1, b→0 сразу после при
+ * fract→0 для НОВОГО floor(l), но это тот же вариант: offB старого интервала
+ * hash(ia+1) численно равен offA нового интервала hash(ia_new) = hash(ia+1)).
+ * Результат непрерывен по построению, свободен от сеточных швов.
+ *
+ * Экономика: l — не текстурная выборка, а ALU (vnoise — 4 хеша + билинейный
+ * mix), и он НЕ зависит от конкретной карты — один l на ПРОЕКЦИОННУЮ ОСЬ
+ * (zy/xz/xy), общий для всех 4 карт (крупная нормаль, ARM, diffuse, мелкая
+ * нормаль): 3 вызова vnoise на пиксель суммарно, не 4×3. Единый l на карту
+ * важен и содержательно — все слои переключают вариант синхронно в одном
+ * месте, а не вразнобой.
+ *
+ * Знаковый флип оси (был в раунде 0) убран целиком: он зеркалил тангенциальную
+ * нормаль без компенсации соответствующей компоненты (ложные «вдавленные»
+ * ячейки на ~половине выборок) и был избыточен — стохастический uv-сдвиг
+ * (hash22) уже даёт полную развязку соседних вариантов без флипа. С флипом
+ * ушёл и риск зеркалированного анизотропного футпринта: ddx/ddy остаются
+ * честными производными при чистом сдвиге uv.
+ *
+ * Хеш — по-прежнему от КВАНТОВАННОЙ величины на каждом вызове: floor(p) в
+ * vnoise (углы ячейки value noise), floor(l)/floor(l)+1 в sampleDetiled
+ * (индекс варианта) — не от сырого варьинга (см. Noise.ts, hashSurface11:
+ * ULP-джиттер интерполяции усиливается градиентом хеша до пиксельного шума).
  *
  * БЮДЖЕТ (худший случай, обе шкалы + все три канала крупной): было 12 выборок
  * (3 проекции × 4 карты, по одной выборке каждая); стохастика удваивает
- * каждую планарную выборку (2 ближайшие ячейки вместо одной) — 3 проекции ×
- * 2 ячейки × 4 карты (норм. крупная, ARM, diffuse, норм. мелкая) = 24 выборки
- * текстур на пиксель. Fade по дистанции (ниже) — единственная защита от
+ * каждую планарную выборку (2 варианта вместо одного) — 3 проекции × 2
+ * варианта × 4 карты (норм. крупная, ARM, diffuse, норм. мелкая) = 24
+ * выборки текстур на пиксель. Плюс 3 вызова vnoise (ALU, не выборки текстур,
+ * см. «Экономика» выше). Fade по дистанции (ниже) — единственная защита от
  * оплаты этого бюджета там, где деталь всё равно не читается.
  *
  * triplanarNormalDetiled/ArmDetiled/AlbedoDetiled читают масштаб из
@@ -55,7 +69,9 @@
  * домножается на uDetailScale2/uDetailScale, так что внутреннее p*uDetailScale
  * даёт тот же результат, что и p*uDetailScale2 напрямую — функции
  * переиспользуются без копирования бленда под вторую шкалу (задача 3:
- * чужой бленд не копируем, зовём чужую функцию).
+ * чужой бленд не копируем, зовём чужую функцию). Общий l (см. выше) вычислен
+ * из домена КРУПНОЙ шкалы и переиспользуется мелкой — вариант мелкой карты
+ * переключается на частоте крупной оси, это осознанное упрощение ради ALU.
  *
  * uDetailLayerGates (x=AO, y=diffuse, z=мелкая нормаль) — рантайм-множители
  * по факту наличия текстуры (материал), не #ifdef: опциональные слои можно
@@ -76,8 +92,8 @@
  * дивергентна и она. texture()-выборки внутри дивергентного потока формально
  * UB по производным (dFdx/dFdy), практически безвредно: helper-инвокации на
  * границе всё равно исполняются и дают корректные производные, а вклад на
- * самой кромке умножается на fade → 0. sampleDetiled сам берёт производные
- * ДО стохастического сдвига (см. выше) — этот аргумент их не портит.
+ * самой кромке умножается на fade → 0. Производные для sampleDetiled берутся
+ * ДО стохастического сдвига (см. её докстроку) — этот аргумент их не портит.
  */
 export const terrainDetailUniforms = `
   uniform sampler2D uDetailDiffMap;
@@ -95,75 +111,89 @@ export const terrainDetailUniforms = `
 `
 
 export const terrainDetailFunctions = `
-  // Хеш целочисленной ячейки → vec2 в [0,1). Две независимые проекции dot
-  // (классика IQ) — от КВАНТОВАННОЙ (floor) величины, см. докстрока чанка.
-  vec2 hashCell2(vec2 cell) {
+  // Скалярный/векторный хеш — от КВАНТОВАННОЙ величины на вызове (floor(p)
+  // передаёт вызывающая сторона), не от сырого варьинга.
+  float hash21(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+  }
+
+  vec2 hash22(vec2 p) {
     vec2 h = vec2(
-      dot(cell, vec2(127.1, 311.7)),
-      dot(cell, vec2(269.5, 183.3))
+      dot(p, vec2(127.1, 311.7)),
+      dot(p, vec2(269.5, 183.3))
     );
     return fract(sin(h) * 43758.5453);
   }
 
-  // Стохастическая детайлизация одной карты (IQ «texture repetition», 2-тап
-  // вариант): бленд текущей ячейки и диагонального соседа со стороны, куда
-  // указывает дробная часть uv, весом smoothstep от близости к диагональной
-  // границе. Производные — от ИСХОДНОГО uv, общие для обеих выборок
-  // (texture2DGradEXT → textureGrad, см. докстрока чанка).
-  vec4 sampleDetiled(sampler2D map, vec2 uv) {
-    vec2 ddx = dFdx(uv);
-    vec2 ddy = dFdy(uv);
+  // Value noise — непрерывная скалярная функция без текстур: билинейный mix
+  // хешей четырёх углов ячейки floor(p) по Hermite-сглаженной дробной части.
+  // Нужна как НЕПРЕРЫВНЫЙ индекс варианта для sampleDetiled — см. её докстроку.
+  float vnoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    float a = hash21(i);
+    float b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0));
+    float d = hash21(i + vec2(1.0, 1.0));
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+  }
 
-    vec2 cell = floor(uv);
-    vec2 f = uv - cell;
-
-    vec2 dir = sign(f - 0.5);
-    vec2 neighborCell = cell + dir;
-
-    vec2 randA = hashCell2(cell);
-    vec2 randB = hashCell2(neighborCell);
-
-    // Знаковый флип одной оси на ячейку — дешёвая доп. развязка соседних
-    // вариантов (задание владельца). LOD от textureGrad не зависит от знака
-    // производной (использует её длину), флип на выбор мипа не влияет.
-    vec2 flipA = vec2(randA.x > 0.5 ? -1.0 : 1.0, 1.0);
-    vec2 flipB = vec2(randB.x > 0.5 ? -1.0 : 1.0, 1.0);
-
-    vec2 uvA = uv * flipA + randA * 37.0;
-    vec2 uvB = uv * flipB + randB * 37.0;
-
-    // 0 в центре ячейки, 1 на диагональной границе — произведение по двум
-    // осям даёт ноль всюду, кроме окрестности диагонального угла
-    vec2 edge = abs(f - 0.5) * 2.0;
-    float blend = smoothstep(0.2, 0.8, edge.x * edge.y);
-
-    vec4 colA = texture2DGradEXT(map, uvA, ddx, ddy);
-    vec4 colB = texture2DGradEXT(map, uvB, ddx, ddy);
-    return mix(colA, colB, blend);
+  // Стохастическая детайлизация одной карты — непрерывный 2-тап (IQ «texture
+  // repetition» technique 3 / Suslik): вариант выбирается НЕ ячейкой самого
+  // uv (та схема разрывна на каждой границе ячейки текстуры — раунд 0), а
+  // floor(l)/fract(l) НЕПРЕРЫВНОГО индекса l (см. вызывающую сторону —
+  // applyTerrainDetail считает l = 8·vnoise(0.3·uv) один раз на ось). floor(l)
+  // меняется РОВНО там, где fract(l) проходит через 0 — в этой точке вес b
+  // уже полностью переключён на входящий вариант (offB текущего интервала ==
+  // offA следующего, оба — hash22 одного и того же floor(l)+1), поэтому
+  // результат непрерывен по построению. Производные (ddx/ddy) — от ИСХОДНОГО
+  // uv, посчитаны вызывающей стороной ДО стохастического сдвига offA/offB —
+  // иначе выбор мипа скачет вместе со сдвигом и на переходах виден шов.
+  vec4 sampleDetiled(sampler2D map, vec2 uv, vec2 ddx, vec2 ddy, float l) {
+    float ia = floor(l);
+    float f = fract(l);
+    vec2 offA = hash22(vec2(ia, 3.0));
+    vec2 offB = hash22(vec2(ia + 1.0, 3.0));
+    float b = smoothstep(0.2, 0.8, f);
+    vec4 colA = texture2DGradEXT(map, uv + offA, ddx, ddy);
+    vec4 colB = texture2DGradEXT(map, uv + offB, ddx, ddy);
+    return mix(colA, colB, b);
   }
 
   // Стохастические обёртки террейна: те же 3 планарные проекции, что и
   // классические triplanarAlbedo/Arm/Normal, но каждая читается через
-  // sampleDetiled вместо прямой выборки. Бленд трёх проекций — ОБЩЕЕ ядро
-  // из чанка TriplanarDetail (triplanarBlendRgb/Normal), не копия.
-  vec3 triplanarAlbedoDetiled(sampler2D map, vec3 p, vec3 w, vec2 offset) {
-    vec3 cx = sampleDetiled(map, p.zy * uDetailScale + offset).rgb;
-    vec3 cy = sampleDetiled(map, p.xz * uDetailScale + offset).rgb;
-    vec3 cz = sampleDetiled(map, p.xy * uDetailScale + offset).rgb;
+  // sampleDetiled вместо прямой выборки. l — общий индекс на ось (см.
+  // докстроку чанка), делится всеми четырьмя картами и обеими шкалами.
+  // Бленд трёх проекций — ОБЩЕЕ ядро из чанка TriplanarDetail
+  // (triplanarBlendRgb/Normal), не копия.
+  vec3 triplanarAlbedoDetiled(sampler2D map, vec3 p, vec3 w, vec2 offset, vec3 l) {
+    vec2 uvZY = p.zy * uDetailScale + offset;
+    vec2 uvXZ = p.xz * uDetailScale + offset;
+    vec2 uvXY = p.xy * uDetailScale + offset;
+    vec3 cx = sampleDetiled(map, uvZY, dFdx(uvZY), dFdy(uvZY), l.x).rgb;
+    vec3 cy = sampleDetiled(map, uvXZ, dFdx(uvXZ), dFdy(uvXZ), l.y).rgb;
+    vec3 cz = sampleDetiled(map, uvXY, dFdx(uvXY), dFdy(uvXY), l.z).rgb;
     return triplanarBlendRgb(cx, cy, cz, w);
   }
 
-  vec3 triplanarArmDetiled(sampler2D map, vec3 p, vec3 w, vec2 offset) {
-    vec3 ax = sampleDetiled(map, p.zy * uDetailScale + offset).rgb;
-    vec3 ay = sampleDetiled(map, p.xz * uDetailScale + offset).rgb;
-    vec3 az = sampleDetiled(map, p.xy * uDetailScale + offset).rgb;
+  vec3 triplanarArmDetiled(sampler2D map, vec3 p, vec3 w, vec2 offset, vec3 l) {
+    vec2 uvZY = p.zy * uDetailScale + offset;
+    vec2 uvXZ = p.xz * uDetailScale + offset;
+    vec2 uvXY = p.xy * uDetailScale + offset;
+    vec3 ax = sampleDetiled(map, uvZY, dFdx(uvZY), dFdy(uvZY), l.x).rgb;
+    vec3 ay = sampleDetiled(map, uvXZ, dFdx(uvXZ), dFdy(uvXZ), l.y).rgb;
+    vec3 az = sampleDetiled(map, uvXY, dFdx(uvXY), dFdy(uvXY), l.z).rgb;
     return triplanarBlendRgb(ax, ay, az, w);
   }
 
-  vec3 triplanarNormalDetiled(sampler2D map, vec3 p, vec3 n, vec3 w, vec2 offset) {
-    vec3 tx = sampleDetiled(map, p.zy * uDetailScale + offset).xyz * 2.0 - 1.0;
-    vec3 ty = sampleDetiled(map, p.xz * uDetailScale + offset).xyz * 2.0 - 1.0;
-    vec3 tz = sampleDetiled(map, p.xy * uDetailScale + offset).xyz * 2.0 - 1.0;
+  vec3 triplanarNormalDetiled(sampler2D map, vec3 p, vec3 n, vec3 w, vec2 offset, vec3 l) {
+    vec2 uvZY = p.zy * uDetailScale + offset;
+    vec2 uvXZ = p.xz * uDetailScale + offset;
+    vec2 uvXY = p.xy * uDetailScale + offset;
+    vec3 tx = sampleDetiled(map, uvZY, dFdx(uvZY), dFdy(uvZY), l.x).xyz * 2.0 - 1.0;
+    vec3 ty = sampleDetiled(map, uvXZ, dFdx(uvXZ), dFdy(uvXZ), l.y).xyz * 2.0 - 1.0;
+    vec3 tz = sampleDetiled(map, uvXY, dFdx(uvXY), dFdy(uvXY), l.z).xyz * 2.0 - 1.0;
     return triplanarBlendNormal(tx, ty, tz, n, w);
   }
 
@@ -177,17 +207,29 @@ export const terrainDetailFunctions = `
       vec2 offset = vec2(0.0);
       vec3 w = triplanarWeights(dirLocal);
 
+      // Непрерывный индекс варианта — один раз на проекционную ось, делится
+      // всеми четырьмя картами обеих шкал (см. «Экономика» в докстроке чанка).
+      vec3 l = vec3(
+        8.0 * vnoise(0.3 * (dirLocal.zy * uDetailScale + offset)),
+        8.0 * vnoise(0.3 * (dirLocal.xz * uDetailScale + offset)),
+        8.0 * vnoise(0.3 * (dirLocal.xy * uDetailScale + offset))
+      );
+
       if (fade1 > 0.0) {
-        vec3 nDetail = triplanarNormalDetiled(uDetailNorMap, dirLocal, nLocal, w, offset);
+        vec3 nDetail = triplanarNormalDetiled(uDetailNorMap, dirLocal, nLocal, w, offset, l);
         nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (nDetail - nLocal));
 
         if (uDetailLayerGates.x > 0.0) {
-          float aoDetail = mix(1.0, triplanarArmDetiled(uDetailArmMap, dirLocal, w, offset).r, uDetailAoInfluence);
+          float aoDetail = mix(
+            1.0,
+            triplanarArmDetiled(uDetailArmMap, dirLocal, w, offset, l).r,
+            uDetailAoInfluence
+          );
           albedoMul *= mix(1.0, aoDetail, fade1);
         }
 
         if (uDetailLayerGates.y > 0.0) {
-          vec3 diffuseDetail = triplanarAlbedoDetiled(uDetailDiffMap, dirLocal, w, offset);
+          vec3 diffuseDetail = triplanarAlbedoDetiled(uDetailDiffMap, dirLocal, w, offset, l);
           float lum = dot(diffuseDetail, vec3(0.299, 0.587, 0.114));
           vec3 tint = mix(vec3(lum), diffuseDetail, uDetailSaturation) * uDetailBrightness;
           albedoMul *= mix(vec3(1.0), tint, fade1);
@@ -198,9 +240,10 @@ export const terrainDetailFunctions = `
         // Ратио масштабов вместо своего texture2D: triplanarNormalDetiled
         // сам умножит p на uDetailScale — предварительное домножение на
         // uDetailScale2/uDetailScale компенсирует разницу и даёт эффективный
-        // масштаб uDetailScale2.
+        // масштаб uDetailScale2. l переиспользован из крупной шкалы (см.
+        // докстроку чанка) — своего vnoise для мелкой шкалы нет.
         vec3 pSmall = dirLocal * (uDetailScale2 / max(uDetailScale, 1e-6));
-        vec3 nDetail2 = triplanarNormalDetiled(uDetailNor2Map, pSmall, nLocal, w, offset);
+        vec3 nDetail2 = triplanarNormalDetiled(uDetailNor2Map, pSmall, nLocal, w, offset, l);
         nLocal = normalize(nLocal + uDetailNormalScale * fade2 * (nDetail2 - nLocal));
       }
     }

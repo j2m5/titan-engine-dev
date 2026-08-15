@@ -84,43 +84,69 @@ describe('TerrainDetail: чанк — регистрация и структур
     expect(albedoCalls).toBe(2)
   })
 
-  it('стохастические обёртки существуют и зовут общее triplanar-ядро бленда, не копируют его', () => {
+  it('стохастические обёртки существуют, разделяют общий l и зовут triplanar-ядро бленда, не копируют его', () => {
     expect(terrainDetailFunctions).toContain(
-      'vec3 triplanarNormalDetiled(sampler2D map, vec3 p, vec3 n, vec3 w, vec2 offset)'
+      'vec3 triplanarNormalDetiled(sampler2D map, vec3 p, vec3 n, vec3 w, vec2 offset, vec3 l)'
     )
-    expect(terrainDetailFunctions).toContain('vec3 triplanarArmDetiled(sampler2D map, vec3 p, vec3 w, vec2 offset)')
     expect(terrainDetailFunctions).toContain(
-      'vec3 triplanarAlbedoDetiled(sampler2D map, vec3 p, vec3 w, vec2 offset)'
+      'vec3 triplanarArmDetiled(sampler2D map, vec3 p, vec3 w, vec2 offset, vec3 l)'
+    )
+    expect(terrainDetailFunctions).toContain(
+      'vec3 triplanarAlbedoDetiled(sampler2D map, vec3 p, vec3 w, vec2 offset, vec3 l)'
     )
     expect(terrainDetailFunctions).toContain('triplanarBlendNormal(')
     expect(terrainDetailFunctions).toContain('triplanarBlendRgb(')
   })
 
-  it('sampleDetiled: хеш ячейки от квантованной (floor) величины, не от сырого uv', () => {
-    expect(terrainDetailFunctions).toContain('vec4 sampleDetiled(sampler2D map, vec2 uv)')
-    expect(terrainDetailFunctions).toContain('floor(uv)')
-    expect(terrainDetailFunctions).toContain('hashCell2(cell)')
+  it('vnoise и хеши — квантованные (floor), никакой ячейки от сырого текстурного uv', () => {
+    expect(terrainDetailFunctions).toContain('float hash21(vec2 p)')
+    expect(terrainDetailFunctions).toContain('vec2 hash22(vec2 p)')
+    expect(terrainDetailFunctions).toContain('float vnoise(vec2 p)')
+    // критическая находка ревью: 2-тап «текущая ячейка uv + диагональный сосед» по
+    // floor(uv) даёт разрыв на КАЖДОЙ границе ячейки — заменено непрерывным индексом l
+    expect(terrainDetailFunctions).not.toContain('floor(uv)')
+    expect(terrainDetailFunctions).not.toContain('hashCell2')
   })
 
-  it('sampleDetiled использует textureGrad-эквивалент с производными исходного uv — без мип-швов на границе ячеек', () => {
+  it('sampleDetiled: непрерывный 2-тап по floor(l)/fract(l), без знакового флипа оси', () => {
+    expect(terrainDetailFunctions).toContain(
+      'vec4 sampleDetiled(sampler2D map, vec2 uv, vec2 ddx, vec2 ddy, float l)'
+    )
     const bodyStart = terrainDetailFunctions.indexOf('vec4 sampleDetiled(')
     const bodyEnd = terrainDetailFunctions.indexOf('\n  }', bodyStart)
     const body = terrainDetailFunctions.slice(bodyStart, bodyEnd)
 
-    expect(body).toContain('dFdx(uv)')
-    expect(body).toContain('dFdy(uv)')
-    expect(body).toContain('texture2DGradEXT(map,')
-    // никакого texture2D(map, ...) внутри — иначе прежний мип-шов на границе ячейки не лечится
-    expect(body).not.toMatch(/texture2D\(map,/)
-  })
-
-  it('бленд двух ближайших ячеек — по smoothstep, не по бинарному выбору', () => {
-    const bodyStart = terrainDetailFunctions.indexOf('vec4 sampleDetiled(')
-    const bodyEnd = terrainDetailFunctions.indexOf('\n  }', bodyStart)
-    const body = terrainDetailFunctions.slice(bodyStart, bodyEnd)
-
+    expect(body).toContain('floor(l)')
+    expect(body).toContain('fract(l)')
     expect(body).toContain('smoothstep(')
-    expect(body).toContain('mix(colA, colB, blend)')
+    expect(body).toContain('texture2DGradEXT(map,')
+    // никакого texture2D(map, ...) внутри — иначе прежний мип-шов не лечится
+    expect(body).not.toMatch(/texture2D\(map,/)
+    // Important ревью: знаковый флип оси убран целиком — сдвиг уже даёт декорреляцию,
+    // а флип зеркалил тангенс-нормаль без компенсации (ложные «вдавленные» ячейки)
+    expect(body).not.toContain('flip')
+    expect(body).not.toMatch(/-1\.0\s*:\s*1\.0/)
+  })
+
+  it('l — непрерывный индекс, считается ОДИН раз на проекционную ось в applyTerrainDetail и делится всеми 4 картами', () => {
+    const applyStart = terrainDetailFunctions.indexOf('void applyTerrainDetail(')
+    const applyBody = terrainDetailFunctions.slice(applyStart)
+
+    // ровно 3 вызова vnoise в applyTerrainDetail — по одному на проекционную ось
+    // (zy/xz/xy), НЕ на карту (карт четыре — они делят эти три значения)
+    const vnoiseCalls = (applyBody.match(/vnoise\(/g) ?? []).length
+    expect(vnoiseCalls).toBe(3)
+
+    // l вычислен раньше первого вызова *Detiled-обёртки
+    const lIdx = applyBody.indexOf('vnoise(')
+    const firstDetiledCallIdx = applyBody.indexOf('Detiled(uDetail')
+    expect(lIdx).toBeGreaterThan(-1)
+    expect(firstDetiledCallIdx).toBeGreaterThan(-1)
+    expect(lIdx).toBeLessThan(firstDetiledCallIdx)
+
+    // общий l передаётся во все четыре вызова (три на крупной шкале + один на мелкой)
+    const lPassedCount = (applyBody.match(/Detiled\([^)]*\bl\)/g) ?? []).length
+    expect(lPassedCount).toBe(4)
   })
 
   it('всё тело — за общей веткой fade: гейт стоит текстуально раньше первой выборки', () => {
