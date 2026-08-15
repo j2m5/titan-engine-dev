@@ -48,11 +48,20 @@ export const PlanetShaderTemplate: ShaderProps = {
 
       vUv = uv;
       vNormal = normalize(normalMatrix * normal);
+      // У патчей кубосферы position — смещение от ЦЕНТРА ПАТЧА (RTC), не от
+      // центра тела; USE_RING (RingShadow) сегодня безвредно её использует
+      // только для тел без колец-детей — терраформное тело с кольцом даст
+      // неверную тень (чинить при первом таком теле).
       vPosition = position;
       // Восток (касательная вдоль долготы) для TBN нормали из карты высот.
-      // Не нормализуем: длина ∝ cos(широты) и служит детектором полюса,
-      // где касательная вырождается.
-      vEast = normalMatrix * cross(vec3(0.0, 1.0, 0.0), position);
+      // Строим из НОРМАЛИ, не из position: normal радиальна на обоих путях
+      // (SphereGeometry и RTC-патчи кубосферы), а position патча — нет, и
+      // cross(up, position) вращался бы вокруг центра патча, а не тела.
+      // Не нормализуем: длина ∝ cos(широты) и служит детектором полюса, где
+      // касательная вырождается — |vEast| = cos(lat) вместо R·cos(lat)
+      // старого пути, гард len < 1e-4 срабатывает у полюса на ~0.006°
+      // вместо ~0.002° (пренебрежимо у обоих).
+      vEast = normalMatrix * cross(vec3(0.0, 1.0, 0.0), normal);
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
       vViewPosition = -mvPosition.xyz;

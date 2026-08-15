@@ -32,7 +32,14 @@ describe('HeightNormal: нормаль из карты высот аналити
 
   it('vEast приходит из вершинника и не нормализован там (длина — детектор полюса)', () => {
     expect(PlanetShaderTemplate.vertexShader).toContain('varying vec3 vEast;')
-    expect(PlanetShaderTemplate.vertexShader).toContain('vEast = normalMatrix * cross(vec3(0.0, 1.0, 0.0), position);')
+    expect(PlanetShaderTemplate.vertexShader).toContain('vEast = normalMatrix * cross(vec3(0.0, 1.0, 0.0), normal);')
+  })
+
+  it('vEast строится из радиальной нормали, а не из RTC-position патчей кубосферы (закрытый баг: вертушка TBN на патчах)', () => {
+    // position у патчей кубосферы — смещение от центра ПАТЧА (RTC), не тела;
+    // cross(up, position) вращался бы вокруг центра патча — normal радиальна
+    // на обоих путях (SphereGeometry и патчи) и не имеет этой проблемы
+    expect(PlanetShaderTemplate.vertexShader).not.toContain('cross(vec3(0.0, 1.0, 0.0), position)')
   })
 
   it('юниформ шага текселя объявлен в шаблоне с нейтральным дефолтом', () => {

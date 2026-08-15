@@ -60,6 +60,26 @@ describe('buildTerrainPatchGeometry: RTC и паритет с коллизией
     }
   })
 
+  it('нормаль каждой вершины — радиальное направление тела (инвариант vEast шейдера)', () => {
+    // Потребитель: PlanetShaderTemplate.vEast = normalMatrix * cross(up, normal).
+    // vEast опирается на радиальность normal — если бы normal вдруг перестала
+    // совпадать с normalize(center + position_rel), TBN slope-шейдинга снова
+    // сломался бы так же, как ломался на RTC-position (см. HeightNormal.spec)
+    const field = bumpyField()
+    const { geometry, center } = build(field, 3, 1, 0)
+    const pos = geometry.getAttribute('position')
+    const normals = geometry.getAttribute('normal')
+
+    for (let k = 0; k < pos.count; k++) {
+      const absolute = new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).add(center)
+      const expectedNormal = absolute.clone().normalize()
+      const actualNormal = new Vector3(normals.getX(k), normals.getY(k), normals.getZ(k))
+      expect(actualNormal.x).toBeCloseTo(expectedNormal.x, 6)
+      expect(actualNormal.y).toBeCloseTo(expectedNormal.y, 6)
+      expect(actualNormal.z).toBeCloseTo(expectedNormal.z, 6)
+    }
+  })
+
   it('RTC: относительные позиции малы против радиуса, bounding-сфера конечна', () => {
     const field = bumpyField()
     const { geometry } = build(field, 2, 0, 1)
