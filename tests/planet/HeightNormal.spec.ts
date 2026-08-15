@@ -27,7 +27,9 @@ describe('HeightNormal: нормаль из карты высот аналити
   it('экранная производная из шейдера планеты убрана', () => {
     expect(PlanetShaderTemplate.fragmentShader).not.toContain('dHdxy_fwd')
     expect(PlanetShaderTemplate.fragmentShader).not.toContain('perturbNormalArb')
-    expect(PlanetShaderTemplate.fragmentShader).toContain('perturbNormalFromHeight(normal, vEast, vUv)')
+    // аргумент — попиксельный uv (см. FragmentUv.spec), не вершинный vUv:
+    // полюсная сингулярность развёртки кубосферы решена на фрагментнике
+    expect(PlanetShaderTemplate.fragmentShader).toContain('perturbNormalFromHeight(normal, vEast, uv)')
   })
 
   it('vEast приходит из вершинника и не нормализован там (длина — детектор полюса)', () => {

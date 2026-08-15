@@ -91,6 +91,10 @@ class PlanetMaterial extends AbstractShaderMaterial {
       ...this.defines,
       ...(useClassicBump && { USE_BUMP: '1' }),
       ...(hasHeightField && slopeMap && { USE_SLOPE: '1' }),
+      // Попиксельный UV из направления вместо вершинного vUv — вершинная
+      // развёртка кубосферы вырождается у полюсов (см. PlanetShaderTemplate).
+      // Тот же реестр карт высот, что решает геометрию TerrainSphere.
+      ...(hasHeightField && { USE_TERRAIN_UV: '1' }),
       ...(specularMap && { USE_SPECULAR: '1' }),
       ...(nightMap && { USE_NIGHT: '1' }),
       ...(cloudMap && { USE_CLOUD: '1' })
@@ -109,6 +113,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
 
     delete this.defines.USE_BUMP
     delete this.defines.USE_SLOPE
+    delete this.defines.USE_TERRAIN_UV
     delete this.defines.USE_SPECULAR
     delete this.defines.USE_NIGHT
     delete this.defines.USE_CLOUD

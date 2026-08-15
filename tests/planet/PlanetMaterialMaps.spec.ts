@@ -173,6 +173,34 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     expect((material.uniforms.diffuseMap.value as Texture).wrapS).toBe(ClampToEdgeWrapping)
     expect((material.uniforms.bumpMap.value as Texture).wrapS).toBe(ClampToEdgeWrapping)
   })
+
+  it('USE_TERRAIN_UV ставится по факту загруженной карты высот — независимо от slope-текстуры', () => {
+    seedMoonHeightMap()
+
+    const material = new PlanetMaterial(moon())
+    material.updateMaterial()
+
+    expect(material.defines.USE_TERRAIN_UV).toBe('1')
+  })
+
+  it('у тела без карты высот USE_TERRAIN_UV не ставится', () => {
+    const material = new PlanetMaterial(earth())
+    material.updateMaterial()
+
+    expect(material.defines.USE_TERRAIN_UV).toBeUndefined()
+  })
+
+  it('resetMaterial снимает USE_TERRAIN_UV', () => {
+    seedMoonHeightMap()
+
+    const material = new PlanetMaterial(moon())
+    material.updateMaterial()
+    expect(material.defines.USE_TERRAIN_UV).toBe('1')
+
+    material.resetMaterial()
+
+    expect(material.defines.USE_TERRAIN_UV).toBeUndefined()
+  })
 })
 
 describe('PlanetMaterial: гейты ночной и облачной карт', () => {
