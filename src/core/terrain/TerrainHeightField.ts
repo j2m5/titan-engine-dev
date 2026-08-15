@@ -9,8 +9,11 @@ import type { HeightMapData } from './heightMapFormat'
  * квадродерево.
  *
  * Фактическая сетка патчей TerrainSphere на экваторе вдвое плотнее этого окна
- * (4 грани × 8 патчей × 64 = 2048 против 1024) — карта провиса оценивает
- * клиренс консервативно, в безопасную сторону.
+ * (4 грани × 8 патчей × 64 = 2048 против 1024). У полюса колоночное окно
+ * карты провиса (`buildClearanceGrid`) расширяется как 1/cos(широты) —
+ * паритет с фактическим долготным пролётом патча кубосферы, который у
+ * полюса растёт по той же идиоме (равноугольная развёртка сужается к
+ * полюсу), а не запас «на глаз».
  */
 export const TERRAIN_SPHERE_SEGMENTS = 1024
 
@@ -42,11 +45,14 @@ const TWO_PI = 2 * Math.PI
  * Карта провиса (clearance): треугольник визуальной сетки натянут над честной
  * высотой не выше локального размаха высот в своём пролёте — окно вершинной
  * сетки (width/TERRAIN_SPHERE_SEGMENTS текселей, для Луны 8). Ячейка сетки
- * провиса = один блок; группы 2×2 соседних блоков накрывают любое положение
- * скользящего окна вершинной сетки. Финальная дилатация 3×3 страхует границы
- * ячеек, чтобы клиренс не обрывался скачком на стыке. Выборка клиренса —
- * билинейная по этой же сетке (см. `clearanceMeters`), а не ближайшая ячейка:
- * иначе пол камеры ступенчатый на границах ячеек.
+ * провиса = один блок; группы (1+span)×2 соседних блоков накрывают любое
+ * положение скользящего окна вершинной сетки, где span растёт к полюсу как
+ * 1/cos(широты) — окно расширяется к полюсам паритетно фактическому пролёту
+ * патча кубосферы (см. `buildClearanceGrid`), не «консервативным» запасом.
+ * Финальная дилатация 3×3 страхует границы ячеек, чтобы клиренс не обрывался
+ * скачком на стыке. Выборка клиренса — билинейная по этой же сетке (см.
+ * `clearanceMeters`), а не ближайшая ячейка: иначе пол камеры ступенчатый на
+ * границах ячеек.
  */
 class TerrainHeightField {
   private readonly uvScratch = new Vector2()
@@ -204,8 +210,9 @@ class TerrainHeightField {
 
   /**
    * Строит сетку провиса за два прохода (по-блочные min/max → провис ячейки
-   * из групп 2×2 блоков) и дилатацию 3×3 с запасом. Долгота заворачивается,
-   * широта клампится — как всюду в этом классе.
+   * из групп (1+span)×2 блоков, span растёт к полюсу как 1/cos широты
+   * строки) и дилатацию 3×3 с запасом. Долгота заворачивается, широта
+   * клампится — как всюду в этом классе.
    */
   private buildClearanceGrid(): {
     grid: Float32Array
@@ -232,20 +239,36 @@ class TerrainHeightField {
       }
     }
 
-    // проход 2: провис ячейки (8×8 блоков) = max по группам 2×2 блоков
+    // проход 2: провис ячейки = max по группам (1+span)×2 блоков. Колоночный
+    // span растёт к полюсу как 1/cos(lat) — идиома surfaceNormalLocal: патч
+    // кубосферы у полюса накрывает по долготе кратно больше колонок текселей,
+    // чем у экватора (равноугольная развёртка сужается к полюсу), окно
+    // группировки обязано расти синхронно, иначе провис там недооценивается.
+    // Кап floor(blocksX/4) — та же защита от вырождения у самого полюса, что
+    // и в surfaceNormalLocal, но в единицах блоков (домен здесь — blocksX, не
+    // тексели карты).
     const gridW = Math.ceil(blocksX / CLEARANCE_CELL_BLOCKS)
     const gridH = Math.ceil(blocksY / CLEARANCE_CELL_BLOCKS)
+    const spanCap = Math.floor(blocksX / 4)
     const sag = new Float32Array(gridW * gridH)
     for (let by = 0; by < blocksY; by++) {
       const cy = Math.min(Math.floor(by / CLEARANCE_CELL_BLOCKS), gridH - 1)
+
+      // широта центра строки блоков — половина-блочная конвенция, как везде в классе
+      const rowStart = by * block
+      const rowEnd = Math.min(rowStart + block, height)
+      const rowCenterV = (rowStart + rowEnd) / (2 * height)
+      const cosLat = Math.sin(Math.PI * rowCenterV)
+      const span = Math.max(1, Math.min(spanCap, Math.round(1 / cosLat)))
+
       for (let bx = 0; bx < blocksX; bx++) {
         const cx = Math.min(Math.floor(bx / CLEARANCE_CELL_BLOCKS), gridW - 1)
-        // группа 2×2 с началом в (bx, by): долгота wrap, широта кламп
+        // группа с началом в (bx, by): долгота wrap на span колонок вперёд, широта кламп
         let lo = 65535
         let hi = 0
         for (let dy = 0; dy <= 1; dy++) {
           const ny = Math.min(by + dy, blocksY - 1)
-          for (let dx = 0; dx <= 1; dx++) {
+          for (let dx = 0; dx <= span; dx++) {
             const b = ny * blocksX + ((bx + dx) % blocksX)
             if (blockMin[b] < lo) lo = blockMin[b]
             if (blockMax[b] > hi) hi = blockMax[b]
