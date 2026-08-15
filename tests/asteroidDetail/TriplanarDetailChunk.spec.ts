@@ -34,4 +34,32 @@ describe('TriplanarDetail GLSL chunk', () => {
     expect(AppShaderChunk.triplanarDetailUniforms).toBe(triplanarDetailUniforms)
     expect(AppShaderChunk.triplanarDetailFunctions).toBe(triplanarDetailFunctions)
   })
+
+  it('бленд вынесен в переиспользуемое ядро — принимает уже выбранные значения проекций', () => {
+    expect(triplanarDetailFunctions).toContain('vec3 triplanarBlendRgb(vec3 cx, vec3 cy, vec3 cz, vec3 w)')
+    expect(triplanarDetailFunctions).toContain(
+      'vec3 triplanarBlendNormal(vec3 tx, vec3 ty, vec3 tz, vec3 n, vec3 w)'
+    )
+  })
+
+  it('классические triplanarAlbedo/Arm/Normal — тонкие обёртки: 3 выборки + вызов общего ядра', () => {
+    const albedoBody = triplanarDetailFunctions.slice(
+      triplanarDetailFunctions.indexOf('vec3 triplanarAlbedo('),
+      triplanarDetailFunctions.indexOf('vec3 triplanarArm(')
+    )
+    const armBody = triplanarDetailFunctions.slice(
+      triplanarDetailFunctions.indexOf('vec3 triplanarArm('),
+      triplanarDetailFunctions.indexOf('vec3 triplanarNormal(')
+    )
+    const normalBody = triplanarDetailFunctions.slice(triplanarDetailFunctions.indexOf('vec3 triplanarNormal('))
+
+    expect(albedoBody).toContain('triplanarBlendRgb(cx, cy, cz, w)')
+    expect(armBody).toContain('triplanarBlendRgb(ax, ay, az, w)')
+    expect(normalBody).toContain('triplanarBlendNormal(tx, ty, tz, n, w)')
+  })
+
+  it('классические обёртки остаются детерминированными — никакой стохастики в астероидном пути', () => {
+    expect(triplanarDetailFunctions).not.toContain('sampleDetiled')
+    expect(triplanarDetailFunctions).not.toContain('hashCell2')
+  })
 })

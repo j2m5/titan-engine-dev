@@ -66,25 +66,72 @@ describe('TerrainDetail: чанк — регистрация и структур
     expect(terrainDetailFunctions).not.toContain('160.0 *')
   })
 
-  it('применяет крупную шкалу через triplanar*-функции с uDetail-самплерами — бленд не копируется', () => {
+  it('применяет крупную шкалу через стохастические обёртки с uDetail-самплерами — бленд не копируется', () => {
     expect(terrainDetailFunctions).toContain('triplanarWeights(dirLocal)')
-    expect(terrainDetailFunctions).toContain('triplanarNormal(uDetailNorMap')
-    expect(terrainDetailFunctions).toContain('triplanarArm(uDetailArmMap')
-    expect(terrainDetailFunctions).toContain('triplanarAlbedo(uDetailDiffMap')
+    expect(terrainDetailFunctions).toContain('triplanarNormalDetiled(uDetailNorMap')
+    expect(terrainDetailFunctions).toContain('triplanarArmDetiled(uDetailArmMap')
+    expect(terrainDetailFunctions).toContain('triplanarAlbedoDetiled(uDetailDiffMap')
   })
 
   it('мелкая шкала несёт только нормаль — на uDetailNor2Map', () => {
-    expect(terrainDetailFunctions).toContain('triplanarNormal(uDetailNor2Map')
-    // мелкая шкала не модулирует AO/diffuse — второго triplanarArm/Albedo нет
-    const armCalls = terrainDetailFunctions.split('triplanarArm(').length - 1
-    const albedoCalls = terrainDetailFunctions.split('triplanarAlbedo(').length - 1
-    expect(armCalls).toBe(1)
-    expect(albedoCalls).toBe(1)
+    expect(terrainDetailFunctions).toContain('triplanarNormalDetiled(uDetailNor2Map')
+    // мелкая шкала не модулирует AO/diffuse — второго вызова triplanarArmDetiled/
+    // AlbedoDetiled нет. Обёртки объявлены тут же (1 вхождение — определение),
+    // так что второе вхождение подстроки — единственный вызов (крупная шкала).
+    const armCalls = terrainDetailFunctions.split('triplanarArmDetiled(').length - 1
+    const albedoCalls = terrainDetailFunctions.split('triplanarAlbedoDetiled(').length - 1
+    expect(armCalls).toBe(2)
+    expect(albedoCalls).toBe(2)
+  })
+
+  it('стохастические обёртки существуют и зовут общее triplanar-ядро бленда, не копируют его', () => {
+    expect(terrainDetailFunctions).toContain(
+      'vec3 triplanarNormalDetiled(sampler2D map, vec3 p, vec3 n, vec3 w, vec2 offset)'
+    )
+    expect(terrainDetailFunctions).toContain('vec3 triplanarArmDetiled(sampler2D map, vec3 p, vec3 w, vec2 offset)')
+    expect(terrainDetailFunctions).toContain(
+      'vec3 triplanarAlbedoDetiled(sampler2D map, vec3 p, vec3 w, vec2 offset)'
+    )
+    expect(terrainDetailFunctions).toContain('triplanarBlendNormal(')
+    expect(terrainDetailFunctions).toContain('triplanarBlendRgb(')
+  })
+
+  it('sampleDetiled: хеш ячейки от квантованной (floor) величины, не от сырого uv', () => {
+    expect(terrainDetailFunctions).toContain('vec4 sampleDetiled(sampler2D map, vec2 uv)')
+    expect(terrainDetailFunctions).toContain('floor(uv)')
+    expect(terrainDetailFunctions).toContain('hashCell2(cell)')
+  })
+
+  it('sampleDetiled использует textureGrad-эквивалент с производными исходного uv — без мип-швов на границе ячеек', () => {
+    const bodyStart = terrainDetailFunctions.indexOf('vec4 sampleDetiled(')
+    const bodyEnd = terrainDetailFunctions.indexOf('\n  }', bodyStart)
+    const body = terrainDetailFunctions.slice(bodyStart, bodyEnd)
+
+    expect(body).toContain('dFdx(uv)')
+    expect(body).toContain('dFdy(uv)')
+    expect(body).toContain('texture2DGradEXT(map,')
+    // никакого texture2D(map, ...) внутри — иначе прежний мип-шов на границе ячейки не лечится
+    expect(body).not.toMatch(/texture2D\(map,/)
+  })
+
+  it('бленд двух ближайших ячеек — по smoothstep, не по бинарному выбору', () => {
+    const bodyStart = terrainDetailFunctions.indexOf('vec4 sampleDetiled(')
+    const bodyEnd = terrainDetailFunctions.indexOf('\n  }', bodyStart)
+    const body = terrainDetailFunctions.slice(bodyStart, bodyEnd)
+
+    expect(body).toContain('smoothstep(')
+    expect(body).toContain('mix(colA, colB, blend)')
   })
 
   it('всё тело — за общей веткой fade: гейт стоит текстуально раньше первой выборки', () => {
-    const gateIdx = terrainDetailFunctions.indexOf('if (')
-    const firstSampleIdx = terrainDetailFunctions.indexOf('triplanar')
+    // Область поиска — тело applyTerrainDetail, а не весь чанк: стохастические
+    // обёртки (triplanarNormalDetiled и т.п.) объявлены как отдельные функции
+    // раньше applyTerrainDetail по тексту чанка, но САМИ они не выборка (тело
+    // sampleDetiled не за fade-гейтом — гейт только вокруг ВЫЗОВОВ в applyTerrainDetail).
+    const applyStart = terrainDetailFunctions.indexOf('void applyTerrainDetail(')
+    const body = terrainDetailFunctions.slice(applyStart)
+    const gateIdx = body.indexOf('if (')
+    const firstSampleIdx = body.indexOf('triplanar')
     expect(gateIdx).toBeGreaterThan(-1)
     expect(firstSampleIdx).toBeGreaterThan(-1)
     expect(gateIdx).toBeLessThan(firstSampleIdx)
