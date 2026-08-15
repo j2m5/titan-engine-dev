@@ -91,6 +91,10 @@ export const PlanetShaderTemplate: ShaderProps = {
     uniform float uSpecularStrength;
     uniform float uNightThreshold;
     uniform float uNightSoftness;
+    // three не биндит normalMatrix во фрагментник автоматически (только в
+    // вершинный пролог) — юниформ общий на программу, объявление здесь просто
+    // делает его видимым этому шейдеру.
+    uniform mat3 normalMatrix;
 
     varying vec2 vUv;
     varying vec3 vNormal;
@@ -140,16 +144,22 @@ export const PlanetShaderTemplate: ShaderProps = {
         float u2 = fract(uRaw + 0.5) - 0.5;
         float u = fwidth(u1) <= fwidth(u2) ? u1 : u2;
         vec2 uv = vec2(u, acos(clamp(dirLocal.y, -1.0, 1.0)) / 3.14159265358979323846);
+        // Восток попиксельно: интерполяция varying vEast врёт у полюса — азимут
+        // между соседними вершинами полярного квада ~десятки градусов, и TBN
+        // закручивался вертушкой. cross с точным dirLocal свободен от этого;
+        // длина по-прежнему ∝ cos(широты) — полюсный гард чанков работает как есть.
+        vec3 east = normalMatrix * cross(vec3(0.0, 1.0, 0.0), dirLocal);
       #else
         vec2 uv = vUv;
+        vec3 east = vEast;
       #endif
 
       #ifdef USE_BUMP
-        normal = perturbNormalFromHeight(normal, vEast, uv);
+        normal = perturbNormalFromHeight(normal, east, uv);
       #endif
 
       #ifdef USE_SLOPE
-        normal = perturbNormalFromSlope(normal, vEast, uv);
+        normal = perturbNormalFromSlope(normal, east, uv);
       #endif
 
       vec3 lightDirection = normalize(vViewLightDirection);

@@ -44,4 +44,21 @@ describe('FragmentUv: попиксельные UV терраформных те�
     expect(frag).toContain('float u2 = fract(uRaw + 0.5) - 0.5;')
     expect(frag).toContain('float u = fwidth(u1) <= fwidth(u2) ? u1 : u2;')
   })
+
+  it('восток терраформного пути попиксельный из dirLocal — интерполированный varying vEast врал у полюса (вертушка TBN)', () => {
+    // между соседними вершинами полярного квада азимут vEast прыгал на
+    // десятки градусов — интерполяция varying этого не сглаживала.
+    // cross с точным попиксельным dirLocal свободен от проблемы; длина
+    // по-прежнему ∝ cos(широты) — полюсный гард чанков (len < 1e-4) цел.
+    expect(frag).toContain('cross(vec3(0.0, 1.0, 0.0), dirLocal)')
+    // normalMatrix не биндится во фрагментник three.js автоматически
+    expect(frag).toContain('uniform mat3 normalMatrix;')
+    // легаси-путь — прежний интерполированный varying
+    expect(frag).toContain('vec3 east = vEast;')
+    // perturb-вызовы переведены на единый идентификатор east
+    expect(frag).not.toContain('perturbNormalFromHeight(normal, vEast')
+    expect(frag).not.toContain('perturbNormalFromSlope(normal, vEast')
+    expect(frag).toContain('perturbNormalFromHeight(normal, east, uv)')
+    expect(frag).toContain('perturbNormalFromSlope(normal, east, uv)')
+  })
 })
