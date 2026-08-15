@@ -88,9 +88,7 @@ describe('buildTerrainPatchGeometry: RTC и паритет с коллизией
       const kR = b * (SEGMENTS + 1)
       const absL = new Vector3(lp.getX(kL), lp.getY(kL), lp.getZ(kL)).add(left.center)
       const absR = new Vector3(rp.getX(kR), rp.getY(kR), rp.getZ(kR)).add(right.center)
-      // независимое квантование в float32 относительно РАЗНЫХ центров патчей —
-      // не побайтно, а до соседнего float32-ULP (~1e-8 при |offset| ~0.3 юнита,
-      // измерено 7.8e-9); допуск на порядок выше шума, что на юниты Луны — доли мм
+      // f32-квантование RTC-центров: eps32·|rel| ≈ 1e-8 юнита (~сантиметры на Луне); допуск 2e-7 (~0.4 м) — на порядки меньше текселя карты
       expect(absL.distanceTo(absR)).toBeLessThan(2e-7)
     }
   })
@@ -108,8 +106,7 @@ describe('buildTerrainPatchGeometry: UV', () => {
     for (let k = 0; k < pos.count; k++) {
       const dir = new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).add(center).normalize()
       field.dirToUv(dir, scratch)
-      // dir здесь восстановлен из float32-позиции — тот же квантовый шум, что и
-      // выше (измерено до 3e-8 по v), поэтому сверка не побитовая, а до 1e-6
+      // dir восстановлен из float32-позиции — тот же квантовый шум, что и выше, сверка до 1e-6 вместо побитовой
       expect(uv.getX(k)).toBeCloseTo(scratch.x, 6)
       expect(uv.getY(k)).toBeCloseTo(scratch.y, 6)
       expect(uv.getX(k)).toBeGreaterThanOrEqual(0)
