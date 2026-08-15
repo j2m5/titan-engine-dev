@@ -59,7 +59,20 @@ describe('FragmentUv: попиксельные UV терраформных те�
     expect(frag).not.toContain('perturbNormalFromHeight(normal, vEast')
     expect(frag).not.toContain('perturbNormalFromSlope(normal, vEast')
     expect(frag).toContain('perturbNormalFromHeight(normal, east, uv)')
-    expect(frag).toContain('perturbNormalFromSlope(normal, east, uv)')
+    // терраформная ветка перешла на локальные аргументы (см. тест ниже)
+    expect(frag).toContain('perturbNormalFromSlope(nLocal, eastLocal, uv)')
+  })
+
+  it('терраформная цепочка нормалей локальна: один normalMatrix в конце', () => {
+    // локальная база и восток без матриц
+    expect(frag).toContain('vec3 nLocal = dirLocal;')
+    expect(frag).toContain('vec3 eastLocal = cross(vec3(0.0, 1.0, 0.0), dirLocal);')
+    // перturb-слои зовутся с локальными аргументами
+    expect(frag).toContain('perturbNormalFromSlope(nLocal, eastLocal, uv)')
+    // финальный переход — один
+    expect(frag).toContain('normal = normalize(normalMatrix * nLocal);')
+    // старой view-space связки в терраформной ветке нет
+    expect(frag).not.toContain('vec3 east = normalMatrix * cross(vec3(0.0, 1.0, 0.0), dirLocal);')
   })
 
   it('текстурное v — флип картного: dirToUv отдаёт v карты (строка 0 = север), загрузчик флипует изображение (север = v 1)', () => {

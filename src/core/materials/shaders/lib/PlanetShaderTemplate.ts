@@ -149,22 +149,37 @@ export const PlanetShaderTemplate: ShaderProps = {
         // старой SphereGeometry) — без флипа диффуз и slope зеркалились по
         // С-Ю (A/B владельца: рельеф в точке смотрел зеркальной широтой).
         vec2 uv = vec2(u, 1.0 - acos(clamp(dirLocal.y, -1.0, 1.0)) / 3.14159265358979323846);
-        // Восток попиксельно: интерполяция varying vEast врёт у полюса — азимут
-        // между соседними вершинами полярного квада ~десятки градусов, и TBN
-        // закручивался вертушкой. cross с точным dirLocal свободен от этого;
-        // длина по-прежнему ∝ cos(широты) — полюсный гард чанков работает как есть.
-        vec3 east = normalMatrix * cross(vec3(0.0, 1.0, 0.0), dirLocal);
+        // Тело-локальный конвейер нормалей: вся пертурбация (slope, следом
+        // детальный слой задачи 4) работает в системе координат ТЕЛА, а не
+        // вида — normalMatrix применяется РОВНО ОДИН раз, после всех слоёв.
+        // Порядок «пертурбация → поворот» даёт тот же вектор, что старый
+        // «поворот → пертурбация повёрнутыми базисами»: normalMatrix
+        // ортонормальна с точностью до масштаба, а normalize после неё этот
+        // масштаб убирает — коммутирует с cross/вычитанием базисов.
+        vec3 nLocal = dirLocal;
+        // Восток попиксельно, без матриц: интерполяция varying vEast врёт у
+        // полюса — азимут между соседними вершинами полярного квада ~десятки
+        // градусов, и TBN закручивался вертушкой. cross с точным dirLocal
+        // свободен от этого; длина по-прежнему ∝ cos(широты) — полюсный гард
+        // чанков (len < 1e-4) работает от той же длины, только без масштаба
+        // normalMatrix.
+        vec3 eastLocal = cross(vec3(0.0, 1.0, 0.0), dirLocal);
+
+        #ifdef USE_SLOPE
+          nLocal = perturbNormalFromSlope(nLocal, eastLocal, uv);
+        #endif
+
+        // Единственный переход тело-локальной нормали в view-пространство —
+        // хук-точка для applyTerrainDetail (задача 4) встанет строго перед
+        // этой строкой.
+        normal = normalize(normalMatrix * nLocal);
       #else
         vec2 uv = vUv;
         vec3 east = vEast;
-      #endif
 
-      #ifdef USE_BUMP
-        normal = perturbNormalFromHeight(normal, east, uv);
-      #endif
-
-      #ifdef USE_SLOPE
-        normal = perturbNormalFromSlope(normal, east, uv);
+        #ifdef USE_BUMP
+          normal = perturbNormalFromHeight(normal, east, uv);
+        #endif
       #endif
 
       vec3 lightDirection = normalize(vViewLightDirection);
