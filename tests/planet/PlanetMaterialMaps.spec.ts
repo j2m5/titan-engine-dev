@@ -184,6 +184,16 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     }
   })
 
+  it('detail-текстуры Луны: updateMaterial не переписывает wrap (та же миграция, что у slope)', () => {
+    seedMoonHeightMap()
+    seedTexture(moonPathOf('detailNormal'), 8, 4)
+
+    const material = new PlanetMaterial(moon())
+    material.updateMaterial()
+
+    expect((material.uniforms.uDetailNorMap.value as Texture).wrapS).toBe(ClampToEdgeWrapping)
+  })
+
   it('у тела без карты высот wrap текстур не меняется', () => {
     seedTexture(pathOf('bump'), 8192, 4096)
 

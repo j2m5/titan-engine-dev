@@ -49,7 +49,9 @@ class PlanetMaterial extends AbstractShaderMaterial {
     // Отсутствие строки ресурса — undefined, а не запрос по '': в хранилище
     // живёт плейсхолдер с пустым именем (getTextureOrMake('') у колец), и
     // фолбэк на '' находил бы его как фантомную карту рельефа.
-    const textureOf = (type: 'slope' | 'bump'): Texture | undefined => {
+    const textureOf = (
+      type: 'slope' | 'bump' | 'detailDiffuse' | 'detailNormal' | 'detailArm' | 'detailNormal2'
+    ): Texture | undefined => {
       const path = this.model.resources.where('resourceType', type).first()?.getAttribute('path')
 
       return typeof path === 'string' ? resourceStorage.getTexture(path) : undefined
@@ -58,11 +60,28 @@ class PlanetMaterial extends AbstractShaderMaterial {
     const legacyBumpMap = textureOf('bump')
     const bumpMap: Texture | undefined = hasHeightField ? slopeMap : legacyBumpMap
 
+    // Терраформный детальный слой (задача 4, чанк TerrainDetail): крупная
+    // нормаль — база слоя, её наличие и есть условие USE_TERRAIN_DETAIL.
+    // AO/diffuse/мелкая нормаль опциональны — гейтятся рантайм-юниформом
+    // uDetailLayerGates, а не #ifdef, чтобы не требовать перекомпиляции
+    // программы при догрузке отдельной карты.
+    const detailNorMap = textureOf('detailNormal')
+    const detailDiffMap = textureOf('detailDiffuse')
+    const detailArmMap = textureOf('detailArm')
+    const detailNor2Map = textureOf('detailNormal2')
+    const USE_TERRAIN_DETAIL = hasHeightField && Boolean(detailNorMap)
+
     this.uniforms.diffuseMap.value = diffuseMap
     this.uniforms.nightMap.value = nightMap
     this.uniforms.cloudMap.value = cloudMap
     this.uniforms.specularMap.value = specularMap
     this.uniforms.bumpMap.value = bumpMap
+
+    this.uniforms.uDetailNorMap.value = detailNorMap ?? null
+    this.uniforms.uDetailDiffMap.value = detailDiffMap ?? null
+    this.uniforms.uDetailArmMap.value = detailArmMap ?? null
+    this.uniforms.uDetailNor2Map.value = detailNor2Map ?? null
+    this.uniforms.uDetailLayerGates.value.set(detailArmMap ? 1 : 0, detailDiffMap ? 1 : 0, detailNor2Map ? 1 : 0)
 
     // Шаг выборки соседних текселей для аналитического градиента нормали —
     // атрибут четырёхвыборочного bump-пути; slope-путь читает одну выборку.
@@ -83,6 +102,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
       // развёртка кубосферы вырождается у полюсов (см. PlanetShaderTemplate).
       // Тот же реестр карт высот, что решает геометрию TerrainSphere.
       ...(hasHeightField && { USE_TERRAIN_UV: '1' }),
+      ...(USE_TERRAIN_DETAIL && { USE_TERRAIN_DETAIL: '1' }),
       ...(specularMap && { USE_SPECULAR: '1' }),
       ...(nightMap && { USE_NIGHT: '1' }),
       ...(cloudMap && { USE_CLOUD: '1' })
@@ -99,9 +119,16 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.bumpMap.value = null
     this.uniforms.uBumpTexelSize.value.set(0, 0)
 
+    this.uniforms.uDetailNorMap.value = null
+    this.uniforms.uDetailDiffMap.value = null
+    this.uniforms.uDetailArmMap.value = null
+    this.uniforms.uDetailNor2Map.value = null
+    this.uniforms.uDetailLayerGates.value.set(0, 0, 0)
+
     delete this.defines.USE_BUMP
     delete this.defines.USE_SLOPE
     delete this.defines.USE_TERRAIN_UV
+    delete this.defines.USE_TERRAIN_DETAIL
     delete this.defines.USE_SPECULAR
     delete this.defines.USE_NIGHT
     delete this.defines.USE_CLOUD

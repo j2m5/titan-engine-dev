@@ -166,6 +166,16 @@ export interface IActorBoundResource extends IResource {
 export interface IPlanetRenderingObject {
   emission: number
   bumpScale: number
+
+  // --- Ручки терраформного детального слоя (задача 4, TerrainDetail). ---
+  // Все опциональны: отсутствие → нейтральные дефолты движка (PlanetShader).
+  // Периоды — в МЕТРАХ, пересчёт в юниты (1/период) — на CPU в PlanetShader.
+  detailScaleMeters?: number
+  detailScale2Meters?: number
+  detailNormalScale?: number
+  detailSaturation?: number
+  detailBrightness?: number
+  detailAoInfluence?: number
 }
 
 export type IAtmosphereRenderingObject = AtmosphereConfig

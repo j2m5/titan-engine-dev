@@ -14,7 +14,18 @@ const defaultUniforms = {
   emission: new Uniform(1),
   uSpecularStrength: new Uniform(2.0),
   uNightThreshold: new Uniform(0.06),
-  uNightSoftness: new Uniform(0.18)
+  uNightSoftness: new Uniform(0.18),
+  uDetailDiffMap: new Uniform(null),
+  uDetailNorMap: new Uniform(null),
+  uDetailArmMap: new Uniform(null),
+  uDetailNor2Map: new Uniform(null),
+  uDetailScale: new Uniform(0),
+  uDetailScale2: new Uniform(0),
+  uDetailNormalScale: new Uniform(1),
+  uDetailSaturation: new Uniform(0.15),
+  uDetailBrightness: new Uniform(1),
+  uDetailAoInfluence: new Uniform(0.5),
+  uDetailLayerGates: new Uniform(new Vector3(0, 0, 0))
 }
 const ringShadowUniforms = AppUniformsChunk.ringShadowUniforms
 
@@ -114,6 +125,12 @@ export const PlanetShaderTemplate: ShaderProps = {
       #include <slopeNormalFunctions>
     #endif
 
+    #ifdef USE_TERRAIN_DETAIL
+      #include <terrainDetailUniforms>
+      #include <triplanarDetailFunctions>
+      #include <terrainDetailFunctions>
+    #endif
+
     #ifdef USE_RING
       #include <ringShadowUniforms>
       #include <ringShadowFunctions>
@@ -122,6 +139,9 @@ export const PlanetShaderTemplate: ShaderProps = {
     void main() {
       ${ShaderChunk['logdepthbuf_fragment']}
       vec3 normal = normalize(vNormal);
+      // Множитель альбедо от терраформного детального слоя (задача 4) —
+      // применяется на месте выборки dayColor ниже, дальше самого UV-ветвления
+      vec3 albedoMul = vec3(1.0);
 
       #ifdef USE_TERRAIN_UV
         // UV из направления, попиксельно: вершинная развёртка равнопрямоугольной
@@ -169,9 +189,12 @@ export const PlanetShaderTemplate: ShaderProps = {
           nLocal = perturbNormalFromSlope(nLocal, eastLocal, uv);
         #endif
 
+        #ifdef USE_TERRAIN_DETAIL
+          applyTerrainDetail(nLocal, albedoMul, dirLocal, length(vViewPosition));
+        #endif
+
         // Единственный переход тело-локальной нормали в view-пространство —
-        // хук-точка для applyTerrainDetail (задача 4) встанет строго перед
-        // этой строкой.
+        // применяется уже ПОСЛЕ детального слоя (нормаль слоя тоже body-локальна)
         normal = normalize(normalMatrix * nLocal);
       #else
         vec2 uv = vUv;
@@ -187,6 +210,7 @@ export const PlanetShaderTemplate: ShaderProps = {
       float lightIntensity = max(NdotLraw, 0.0);
 
       vec3 dayColor = texture2D(diffuseMap, uv).rgb;
+      dayColor *= albedoMul;
 
       // Ночная и облачная карты есть не у всех тел. Раньше сэмплеры читались
       // безусловно, и корректность держалась на правиле GL «непривязанная
