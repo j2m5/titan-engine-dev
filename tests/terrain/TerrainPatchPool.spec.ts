@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Texture } from 'three'
 import {
   MAX_LIVE_PATCHES,
@@ -109,5 +109,28 @@ describe('TerrainPatchPool', () => {
     const b = pool.acquire()!
     const c = pool.acquire()!
     expect(b).not.toBe(c)
+  })
+
+  // владение вне графа сцены: свободные слоты держат геометрию живой между
+  // acquire (см. докблок класса), pool.dispose() освобождает их и общий
+  // индекс, но НЕ трогает слоты, которые вызывающий не release'нул —
+  // это его ответственность (см. TerrainSphere.dispose)
+  it('dispose освобождает геометрии свободных слотов и общий индекс; живые слоты не трогает', () => {
+    const pool = makePool()
+    const a = pool.acquire()!
+    const b = pool.acquire()!
+    const c = pool.acquire()! // остаётся живым
+    pool.release(a)
+    pool.release(b)
+
+    const disposeA = vi.spyOn(a.geometry, 'dispose')
+    const disposeB = vi.spyOn(b.geometry, 'dispose')
+    const disposeC = vi.spyOn(c.geometry, 'dispose')
+
+    pool.dispose()
+
+    expect(disposeA).toHaveBeenCalledTimes(1)
+    expect(disposeB).toHaveBeenCalledTimes(1)
+    expect(disposeC).not.toHaveBeenCalled() // живой слот — на совести вызывающего
   })
 })
