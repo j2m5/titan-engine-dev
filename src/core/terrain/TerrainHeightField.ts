@@ -108,6 +108,14 @@ class TerrainHeightField {
   private readonly metersPerRaw: number
   private readonly equatorStepTexels: number
   private readonly spanCap: number
+  /** Максимум поточечного sag по всей карте, метры — калибрует sagSlopeBond ниже. */
+  public readonly maxSagMeters: number
+  /**
+   * Консервативный бонд уклона ПОТОЧЕЧНОГО поля провиса: maxSagMeters / (экваториальный
+   * тексель в метрах). Складывается с SLOPE_RANGE в CameraCollision для марча против
+   * sagMeters — см. её докблок (`marchPointwise`) для полного разбора формулы шага.
+   */
+  public readonly sagSlopeBond: number
 
   public constructor(
     private readonly map: HeightMapData,
@@ -127,6 +135,12 @@ class TerrainHeightField {
     this.clearanceGridWidth = built.width
     this.clearanceGridHeight = built.height
     this.maxClearanceMeters = built.maxClearance
+    this.maxSagMeters = built.maxSag
+    // экваториальный тексель, метры: та же идиома, что texelArc в
+    // surfaceNormalLocal, но без cosLat — здесь нужен per-body масштаб, а не
+    // локальный градиент по направлению
+    const texelMeters = (TWO_PI * radiusKm * 1000) / map.width
+    this.sagSlopeBond = texelMeters > 0 ? this.maxSagMeters / texelMeters : 0
     // blockMin/blockMax/blocksX/blocksY служат только ε-пирамиде ниже —
     // не хранятся полями тела (2 МБ на карту Луны), передаются аргументами
     this.levelErrorMeters = this.buildGeometricErrors(
@@ -387,6 +401,7 @@ class TerrainHeightField {
     width: number
     height: number
     maxClearance: number
+    maxSag: number
     blockMin: Uint16Array
     blockMax: Uint16Array
     blocksX: number
@@ -457,6 +472,16 @@ class TerrainHeightField {
       }
     }
 
+    // максимум ПОТОЧЕЧНОГО (недилатированного) sag по всей карте — max по
+    // ячейкам here уже равен max по текселям (каждая ячейка сама max по
+    // своим текселям, ассоциативность max) — калибрует sagSlopeBond, лишнего
+    // прохода по карте не требует
+    let maxPointSagRaw = 0
+    for (let i = 0; i < pointSag.length; i++) {
+      if (pointSag[i] > maxPointSagRaw) maxPointSagRaw = pointSag[i]
+    }
+    const maxSag = maxPointSagRaw * metersPerRaw
+
     // дилатация 3×3 + запас: у границ ячеек нет обрывов клиренса
     const grid = new Float32Array(blocksX * blocksY)
     let maxClearance = 0
@@ -476,7 +501,7 @@ class TerrainHeightField {
       }
     }
 
-    return { grid, width: blocksX, height: blocksY, maxClearance, blockMin, blockMax, blocksX, blocksY }
+    return { grid, width: blocksX, height: blocksY, maxClearance, maxSag, blockMin, blockMax, blocksX, blocksY }
   }
 
   /**

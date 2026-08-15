@@ -556,15 +556,91 @@ describe('CameraCollision: двухфазный контакт — поточе�
   })
 
   // «крутая стена по-прежнему тормозит свип, доуточнение не открывает
-  // туннель» (design п.4в) — уже покрыто существующим блоком «CameraCollision:
-  // свип по рельефу» выше (checkerboard-фикстура 20000/0 м, реальный крутой
-  // склон): все три его теста прошли без изменений после этого раунда — сама
-  // геометрическая инвариантность march'а (`marchTerrain`) не тронута,
-  // доуточнение (`refineContact`) включается ТОЛЬКО постфактум, уже после
-  // того, как march нашёл консервативный контакт, и никогда не расширяет
-  // область поиска НАЗАД за пройденный маршем путь. Отдельная стена-фикстура
-  // здесь избыточна — на карте 2048 текселей/экватор (эта, «дальний излом»)
-  // одна текселевая яма даёт слишком пологий угловой профиль для
-  // самостоятельной проверки того же инварианта, повторять его с той же
+  // туннель» (design п.4в раунда 3) — уже покрыто существующим блоком
+  // «CameraCollision: свип по рельефу» выше (checkerboard-фикстура 20000/0 м,
+  // реальный крутой склон): все три его теста прошли без изменений после
+  // раунда 3 — сама геометрическая инвариантность march'а (`marchTerrain`) не
+  // тронута, доуточнение (`marchPointwise`, короткий довесок после
+  // консервативного контакта) включается ТОЛЬКО постфактум и никогда не
+  // расширяет область поиска НАЗАД за пройденный маршем путь. Отдельная
+  // стена-фикстура здесь избыточна — на карте 2048 текселей/экватор (эта,
+  // «дальний излом») одна текселевая яма даёт слишком пологий угловой профиль
+  // для самостоятельной проверки того же инварианта, повторять его с той же
   // фикстурой смысла не имеет.
+})
+
+describe('CameraCollision: марч не пропускается, когда старт уже внутри консервативной оболочки', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  // 2048×128: фон 20000 м, широкий хребет (не единичная яма — реальная
+  // стена) на колонках 60..80 поднят до 60000 м (на 40000 м выше фона).
+  // col40 — плоский участок вдали от хребта: clearanceMeters(col40) = margin
+  // (5 м, замерено эмпирически) — «оболочка» там означает буквально «в
+  // считаных метрах от земли», не какой-то особый крайний случай. Именно
+  // такая узкая оболочка и есть штатная посадочная высота после раунда 3
+  // (честный пол ~margin на гладких участках) — старт внутри неё теперь
+  // обычное дело, не редкость.
+  const RIDGE_PATH = 'planets/ridge/height.raw'
+  const WIDTH = 2048
+
+  function ridgeBody(): { body: Object3D; field: TerrainHeightField } {
+    const height = 128
+    const values = new Array(WIDTH * height).fill(20000)
+    for (let y = 0; y < height; y++) {
+      for (let x = 60; x <= 80; x++) values[y * WIDTH + x] = 60000
+    }
+
+    ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(RIDGE_PATH, {
+      width: WIDTH,
+      height,
+      minMeters: 0,
+      maxMeters: 65535,
+      data: new Uint16Array(values)
+    })
+    const body = makeBody('planet', 1736, new Vector3(), undefined, RIDGE_PATH)
+    const field = terrainHeightFieldFor(
+      (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(RIDGE_PATH)!,
+      1736
+    )
+    return { body, field }
+  }
+
+  const dirAtCol = (col: number): Vector3 => {
+    const phi = ((col + 0.5) / WIDTH) * 2 * Math.PI
+    return new Vector3(-Math.cos(phi), 0, Math.sin(phi))
+  }
+
+  it('быстрый тангенциальный пролёт из оболочки сквозь реальный хребет ловится маршем, а не проезжает насквозь', () => {
+    const { body, field } = ridgeBody()
+    const startDir = dirAtCol(40) // плоско, вдали от хребта
+    const endDir = dirAtCol(70) // вершина хребта (h=60000)
+
+    // старт — на 2.5 м над честным полом col40 (внутри margin-оболочки:
+    // clearanceMeters(col40)=5 м ⇒ collisionRadiusUnits = surfaceRadiusUnits+5м,
+    // старт заведомо НИЖЕ этой границы — distance(from) ≤ 0 в marchTerrain)
+    const startAltitudeUnits = toThreeJSUnits(0.0025) // 2.5 м в юнитах three.js (км/1000... toThreeJSUnits ждёт км)
+    const start = startDir.clone().multiplyScalar(field.surfaceRadiusUnits(startDir) + startAltitudeUnits)
+    // финиш — та же (низкая, ~col40-уровня) высота, но направление col70:
+    // если сегмент не поймать, камера окажется на ~40 км НИЖЕ реальной
+    // поверхности хребта в этой точке (60000 м рельефа против ~20000 м
+    // высоты полёта) — грубый, недвусмысленный туннель
+    const end = endDir.clone().multiplyScalar(field.surfaceRadiusUnits(startDir) + startAltitudeUnits)
+
+    const { collision, camera } = makeCollision([body], start)
+    collision.resolve() // фиксирует lastPosition
+    camera.position.copy(end)
+    collision.resolve()
+
+    const localDir = camera.position.clone().normalize()
+    // старый код (RED, подтверждено через git stash): march пропускается
+    // целиком (старт внутри консервативной оболочки col40), позиция долетает
+    // ровно до endDir, push-out лишь поднимает радиус локально в НАПРАВЛЕНИИ
+    // endDir (=dirAtCol(70)) — dot(endDir) ≈ 1, ничем не выдавая, что путь
+    // прошёл сквозь хребет. Новый код обязан затормозить НА хребте по пути —
+    // итоговое направление заметно отличается от endDir
+    expect(localDir.dot(endDir)).toBeLessThan(0.999)
+    // и не встроена глубже своего честного пола в итоговом направлении
+    const target = field.surfaceRadiusUnits(localDir) + toThreeJSUnits((field.sagMeters(localDir) + CLEARANCE_MARGIN_METERS) / 1000)
+    expect(camera.position.length()).toBeGreaterThanOrEqual(target * 0.999)
+  })
 })
