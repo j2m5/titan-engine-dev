@@ -1,7 +1,9 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { Mesh, PerspectiveCamera, Texture, type WebGLRenderer } from 'three'
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
+import { Mesh, PerspectiveCamera, Texture, Vector3, type WebGLRenderer } from 'three'
 import { PATCH_BUILDS_PER_FRAME, TerrainSphere } from '@/core/renderables/TerrainSphere'
-import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { CLEARANCE_MARGIN_METERS, TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { TERRAIN_PATCH_SEGMENTS } from '@/core/terrain/cubeSphere'
+import { TerrainPatchPool } from '@/core/terrain/TerrainPatchPool'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -151,5 +153,43 @@ describe('TerrainSphere: динамическое квадродерево па�
     const countLow = sphereLow.children.filter((c) => c instanceof Mesh).length
     const countHigh = sphereHigh.children.filter((c) => c instanceof Mesh).length
     expect(countHigh).toBeGreaterThan(countLow)
+  })
+
+  // юбка закрывает недобор ГРУБОГО соседа: фрустум-гейт допускает перепад до
+  // двух уровней (сосед вне фрустума не сплитится), поэтому глубина юбки
+  // патча уровня L берётся по ε(max(MIN_LEVEL, L−2)), а не по ε своего же
+  // уровня — своя ε на порядок мельче недобора соседа и щели на Δ2-стыках
+  // не закрывает (см. геометрию замера в брифе ревью)
+  it('юбка патча уровня L глубиной ε(L−2) — по недобору грубого соседа, не своей ε', () => {
+    const field = makeField()
+    const sphere = new TerrainSphere(moon(), field, makeRenderer(1080))
+    for (let f = 0; f < 200; f++) sphere.updateObject(makeCtx(2))
+
+    const patch = sphere.children.find(
+      (c) => c instanceof Mesh && (c.userData.terrainAddress as TerrainNodeAddress | undefined)?.level === 4
+    ) as Mesh | undefined
+    expect(patch).toBeDefined()
+
+    const gridVertexCount = (TERRAIN_PATCH_SEGMENTS + 1) ** 2
+    const pos = patch!.geometry.getAttribute('position')
+    const edge = new Vector3(pos.getX(0), pos.getY(0), pos.getZ(0)).add(patch!.position)
+    const skirt = new Vector3(pos.getX(gridVertexCount), pos.getY(gridVertexCount), pos.getZ(gridVertexCount)).add(
+      patch!.position
+    )
+    const actualDepthUnits = edge.length() - skirt.length()
+
+    // ожидание — ε(4−2)=ε(2), НЕ ε(4) (своя ε мельче на два порядка в этом поле)
+    const expectedDepthUnits = toThreeJSUnits((field.geometricErrorMeters(2) + CLEARANCE_MARGIN_METERS) / 1000)
+    expect(actualDepthUnits).toBeCloseTo(expectedDepthUnits, 6)
+  })
+
+  it('dispose зовёт pool.dispose — освобождение владения пула не пропущено', () => {
+    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
+    const disposeSpy = vi.spyOn(TerrainPatchPool.prototype, 'dispose')
+
+    sphere.dispose()
+
+    expect(disposeSpy).toHaveBeenCalledTimes(1)
+    disposeSpy.mockRestore()
   })
 })
