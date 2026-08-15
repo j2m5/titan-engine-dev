@@ -361,3 +361,44 @@ describe('CameraCollision: свип по рельефу', () => {
     expect(camera.position.length()).toBeLessThan(target * 1.01)
   })
 })
+
+describe('CameraCollision: жёсткий стоп при исчерпании бюджета марча', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  it('бюджет исчерпан на касательном отрезке — камера не докатывается скольжением до конца', () => {
+    // плоская карта: collisionRadiusUnits константа по любому направлению —
+    // изотропная сфера-цель, поведение марча предсказуемо аналитически
+    seedHeightMap(new Array(8).fill(65535), 4, 2, 0, 1000)
+    const body = makeBody('planet', 1736, new Vector3(), undefined, MOON_HEIGHT_PATH)
+    const field = terrainHeightFieldFor(
+      (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(MOON_HEIGHT_PATH)!,
+      1736
+    )
+
+    const target = field.collisionRadiusUnits(new Vector3(1, 0, 0))
+    // высота над поверхностью: на 2 порядка больше epsilon контакта
+    // (radius·1e-6), на 4 порядка меньше R — вдоль касательной d(p) почти не
+    // меняется на масштабе шага
+    const h = target * 1e-4
+    const from = new Vector3(target + h, 0, 0)
+    // отрезок вдоль Z — строго касательный к сфере-цели в точке старта
+    // (перпендикулярен радиусу x̂). Длина 100h: шаг марча ~ d/(1+L) ≈ h/3
+    // (L=SLOPE_RANGE=2), 64 шага покрывают ~21h — бюджет гарантированно
+    // исчерпывается, не дойдя до конца отрезка (100h)
+    const segmentLength = h * 100
+    const position = from.clone().setZ(segmentLength)
+
+    const { collision, camera } = makeCollision([body], from)
+
+    collision.resolve() // фиксирует lastPosition = from
+    camera.position.copy(position)
+    collision.resolve()
+
+    // прогресс есть (не no-op)…
+    expect(camera.position.z).toBeGreaterThan(h * 5)
+    // …но камера остановлена у точки исчерпания, а не докатилась скольжением
+    // до конца отрезка (старый код: скольжение почти не гасит касательное
+    // движение при радиальной нормали — камера уезжала бы к z≈segmentLength)
+    expect(camera.position.z).toBeLessThan(segmentLength * 0.5)
+  })
+})

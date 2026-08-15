@@ -11,11 +11,17 @@ export type Collider = {
   heightField?: TerrainHeightField
 }
 
-/** Минимальная дистанция камеры до центра тела = R × COLLISION_GAP: зазор — задел под будущий рельеф поверхностей. */
+/**
+ * Минимальная дистанция камеры до центра тела = R × COLLISION_GAP. Зазор для
+ * тел БЕЗ карты высот (сфера — вся коллизия, какая для них есть); терраформные
+ * тела зовут свой локальный `clearance(dir̂)` из TerrainHeightField, GAP их не касается.
+ */
 export const COLLISION_GAP = 1.001
 
 /**
- * Сферы-коллайдеры из снапшота наблюдаемых тел.
+ * Коллайдеры из снапшота наблюдаемых тел: сферы (`R × GAP`) или, если у тела
+ * есть карта высот, терраформный `heightField` (широкая фаза — сфера
+ * `R + maxH + maxClearance`, узкая — рельеф, см. `marchTerrain`/`pushOutTerrain`).
  *
  * Чёрная дыра пропускается намеренно (решение владельца — объект уникальный,
  * коллизии для него отложены). Тело без модели или радиуса — молча: в кэш не
@@ -69,22 +75,30 @@ const SWEEP_ITERATIONS = 3
  * Доля радиуса широкой фазы тела — микроотступ от контакта вдоль нормали,
  * защита от повторного захвата той же поверхности float-погрешностью.
  * Абсолютные юниты на масштабе системы (парсеки) упирались во float32.
+ * Радиус локальный (в вершинах меша), сдвиг применяется вдоль мировой
+ * нормали — для терраформных тел это эквивалентно только при scale=1 (радиус
+ * запечён в вершины, глобального множителя меша нет).
  */
 const RELATIVE_CONTACT_EPSILON = 1e-6
 
 /** Бюджет консервативного марча по рельефу; исчерпание — контакт, не туннель. */
 const SWEEP_MARCH_BUDGET = 64
 
-/** Единый формат хита свипа: сфера и терраформный марч отдают одно и то же. */
+/**
+ * Единый формат хита свипа: сфера и терраформный марч отдают одно и то же.
+ * `exhausted` ставит только терраформный марч (сферы контакт находят точно,
+ * бюджета у них нет) — сигнал sweep() применить жёсткий стоп без скольжения.
+ */
 type SweepHit = {
   collider: Collider
   t: number // доля пройденного отрезка (0..1] — сравнима между телами
   contact: Vector3 // мировой контакт (собственный скретч хита не нужен — один активный)
   normal: Vector3 // мировая нормаль контакта
+  exhausted: boolean // бюджет марча исчерпан до истинного контакта — перестраховка, не скольжение
 }
 
 /**
- * Коллизии камеры со сферическими телами.
+ * Коллизии камеры со сферическими и терраформными (рельефными) телами.
  *
  * Работает одной точкой кадра — после обновления позиций тел, до рендера:
  * сервису безразлично, кто сдвинул камеру (полёт, орбитальный телепорт,
@@ -163,11 +177,17 @@ class CameraCollision {
   }
 
   /**
-   * Свип отрезка «где камера была → где оказалась» против сфер тел: точечная
-   * проверка туннелирует — на максимальной скорости камера проходит за кадр
-   * на порядки больше диаметра Земли. При пересечении камера ставится в точку
-   * контакта, нормальная составляющая остатка гасится, касательная
-   * сохраняется — скольжение, а не прилипание.
+   * Свип отрезка «где камера была → где оказалась» против тел (сфер и
+   * рельефа): точечная проверка туннелирует — на максимальной скорости
+   * камера проходит за кадр на порядки больше диаметра Земли. При
+   * пересечении камера ставится в точку контакта, нормальная составляющая
+   * остатка гасится, касательная сохраняется — скольжение, а не прилипание.
+   *
+   * Исключение — исчерпание бюджета марча (`exhausted`): последняя безопасная
+   * точка march'а не гарантированно на самой поверхности (перестраховка), а
+   * скольжение по её нормали протянуло бы остаток отрезка ДАЛЬШЕ и рисковало
+   * бы туннелем сквозь то, что марч не успел домаршировать. Камера ставится
+   * в эту точку без сдвига по нормали и без остатка, итерации не продолжаются.
    */
   private sweep(from: Vector3, position: Vector3): void {
     this.origin.copy(from)
@@ -181,6 +201,11 @@ class CameraCollision {
 
       const hit = this.findNearestHit(length)
       if (!hit) return
+
+      if (hit.exhausted) {
+        position.copy(hit.contact)
+        return
+      }
 
       const epsilon = hit.collider.radius * RELATIVE_CONTACT_EPSILON
       this.origin.copy(hit.contact).addScaledVector(hit.normal, epsilon)
@@ -202,11 +227,13 @@ class CameraCollision {
 
     for (const collider of this.colliders) {
       let t: number
+      let exhausted = false
 
       if (collider.heightField) {
         const hit = this.marchTerrain(collider, collider.heightField, maxDistance)
         if (!hit) continue
         t = hit.t
+        exhausted = hit.exhausted
       } else {
         collider.object.getWorldPosition(this.sphere.center)
         this.sphere.radius = collider.radius
@@ -228,7 +255,8 @@ class CameraCollision {
         collider,
         t,
         contact: this.bestContact.copy(this.hitContact),
-        normal: this.bestNormal.copy(this.hitNormal)
+        normal: this.bestNormal.copy(this.hitNormal),
+        exhausted
       }
     }
 
@@ -238,15 +266,19 @@ class CameraCollision {
   /**
    * Консервативный сферический марч в теле-фиксированном фрейме:
    * f(p) = |p| − (R + h(p̂) + clearance(p̂)); липшицева константа уклона —
-   * SLOPE_RANGE (энкодер клампит данные), шаг f/(1+L) не перепрыгивает
-   * поверхность. Бюджет исчерпан — контакт в текущей точке: перестраховка
-   * вместо туннеля.
+   * SLOPE_RANGE — допущение о крутизне DEM (слоуп-карта клампится энкодером,
+   * сама карта высот — нет; у полюсов равнопрямоугольная сетка нарушает его
+   * в ~3-км шапке, страхует пуш-аут), шаг f/(1+L) не перепрыгивает
+   * поверхность. Бюджет исчерпан — контакт в текущей точке помечается
+   * `exhausted`: sweep() ставит камеру туда без скольжения (перестраховка
+   * вместо туннеля через то, что марч не успел домаршировать).
    */
   private marchTerrain(collider: Collider, field: TerrainHeightField, maxDistance: number): SweepHit | null {
     collider.object.updateWorldMatrix(true, false)
     this.inverseMatrix.copy(collider.object.matrixWorld).invert()
-    // локальный отрезок: lastPosition и цель в СЕГОДНЯШНЕМ фрейме тела —
-    // вращение тела за кадр становится относительным движением камеры
+    // отрезок в текущем фрейме тела: свип видит только собственное движение
+    // камеры за кадр; вращение тела за кадр ловит пуш-аут (страховка) —
+    // неподвижная камера над вращающимся телом даёт здесь нулевой отрезок
     const from = this.marchFrom.copy(this.ray.origin).applyMatrix4(this.inverseMatrix)
     const to = this.marchTo
       .copy(this.ray.origin)
@@ -270,31 +302,40 @@ class CameraCollision {
     const p = this.marchPoint.copy(from)
     for (let i = 0; i < SWEEP_MARCH_BUDGET; i++) {
       const d = distance(p)
-      if (d <= epsilon) {
-        const normal = this.hitNormal
-        field.surfaceNormalLocal(this.localDir.copy(p).normalize(), normal)
-        normal.transformDirection(collider.object.matrixWorld)
-        return {
-          collider,
-          t: s / length,
-          contact: this.hitContact.copy(p).applyMatrix4(collider.object.matrixWorld),
-          normal
-        }
-      }
+      if (d <= epsilon) return this.buildHit(collider, field, p, s, length, false)
+
       s += d / (1 + SLOPE_RANGE)
       if (s >= length) return null
       p.copy(from).addScaledVector(step, s)
     }
 
     // бюджет исчерпан — консервативный контакт в текущей точке
+    return this.buildHit(collider, field, p, s, length, true)
+  }
+
+  /**
+   * Хит марча: нормаль из градиента карты, контакт и доля отрезка — общие
+   * для обеих развязок marchTerrain (истинный контакт и исчерпание бюджета),
+   * отличается только `exhausted`.
+   */
+  private buildHit(
+    collider: Collider,
+    field: TerrainHeightField,
+    p: Vector3,
+    s: number,
+    length: number,
+    exhausted: boolean
+  ): SweepHit {
     const normal = this.hitNormal
     field.surfaceNormalLocal(this.localDir.copy(p).normalize(), normal)
     normal.transformDirection(collider.object.matrixWorld)
+
     return {
       collider,
       t: s / length,
       contact: this.hitContact.copy(p).applyMatrix4(collider.object.matrixWorld),
-      normal
+      normal,
+      exhausted
     }
   }
 
