@@ -50,10 +50,11 @@ function makeRenderer(height: number): WebGLRenderer {
   return { domElement: { height } } as unknown as WebGLRenderer
 }
 
-// камера над (1,0,0) на заданной высоте (км)
+// камера над (1,0,0) на altKm — высоте НАД ПОВЕРХНОСТЬЮ (радиус поля 1737.4,
+// см. makeField — не средний радиус Луны 1736, который тут не поле мерит)
 function makeCtx(altKm: number): UpdateContext {
   const camera = new PerspectiveCamera(50, 1, 1e-6, 1e9)
-  camera.position.set(toThreeJSUnits(1736 + altKm), 0, 0)
+  camera.position.set(toThreeJSUnits(1737.4 + altKm), 0, 0)
   camera.updateMatrixWorld(true)
   return { delta: 0.016, epoch: 0, elapsed: 0, camera } as UpdateContext
 }

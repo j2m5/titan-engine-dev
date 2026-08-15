@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Vector2, Vector3 } from 'three'
-import { buildPatchIndex, buildTerrainPatchGeometry } from '@/core/terrain/terrainPatchGeometry'
+import { buildPatchIndex, buildTerrainPatchGeometry, terrainPatchVertexCount } from '@/core/terrain/terrainPatchGeometry'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 
@@ -259,7 +259,7 @@ describe('юбка патча', () => {
     const ringCount = 4 * SEGMENTS
     expect(index.count).toBe(SEGMENTS * SEGMENTS * 6 + ringCount * 6)
     const { geometry } = buildFieldPatch() // хелпер: build(field, 4, 0, 0) с skirtDepthUnits=SKIRT
-    expect(geometry.getAttribute('position').count).toBe((SEGMENTS + 1) ** 2 + ringCount)
+    expect(geometry.getAttribute('position').count).toBe(terrainPatchVertexCount(SEGMENTS))
   })
 
   it('юбочная вершина ниже своей кромочной ровно на skirtDepthUnits, нормаль и uv скопированы', () => {

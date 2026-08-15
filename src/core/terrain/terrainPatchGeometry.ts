@@ -3,6 +3,21 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { cubeFaceDirection } from './cubeSphere'
 import type { TerrainHeightField } from './TerrainHeightField'
 
+/** Вершин в регулярной сетке патча segments×segments (без юбки). */
+const gridVertexCount = (segments: number): number => (segments + 1) * (segments + 1)
+
+/** Юбочных вершин — по одной на сегмент периметра, 4 стороны. */
+const ringVertexCount = (segments: number): number => 4 * segments
+
+/**
+ * Полный вершинный счёт патча (регулярная сетка + юбочное кольцо) — общий
+ * источник правды для аллокации буферов (пул, fresh-билдер) и тестов;
+ * дублирование этой суммы разошлось бы независимо при правке сетки/юбки.
+ */
+export function terrainPatchVertexCount(segments: number): number {
+  return gridVertexCount(segments) + ringVertexCount(segments)
+}
+
 /**
  * Индекс сеточной вершины на периметре патча по ходу обхода кольца k
  * (0..4·segments−1): CCW от угла (a=0,b=0) — низ слева направо, право
@@ -41,8 +56,8 @@ function ringGridIndex(k: number, segments: number): number {
  * другой глубины.
  */
 export function buildPatchIndex(segments: number): BufferAttribute {
-  const ringCount = 4 * segments
-  const gridVertexCount = (segments + 1) * (segments + 1)
+  const ringCount = ringVertexCount(segments)
+  const gridCount = gridVertexCount(segments)
   const indices = new Uint16Array(segments * segments * 6 + ringCount * 6)
   let offset = 0
 
@@ -66,8 +81,8 @@ export function buildPatchIndex(segments: number): BufferAttribute {
     const kNext = (k + 1) % ringCount
     const edgeA = ringGridIndex(k, segments)
     const edgeB = ringGridIndex(kNext, segments)
-    const skirtA = gridVertexCount + k
-    const skirtB = gridVertexCount + kNext
+    const skirtA = gridCount + k
+    const skirtB = gridCount + kNext
 
     // обмотка наружу: стенка юбки — зеркало паттерна сеточного квада (там
     // «вверх» по b — обычная соседняя строка сетки, здесь «вниз» — юбка,
@@ -133,8 +148,8 @@ function writeTerrainPatchAttributes(
   const center = centerDir.clone().multiplyScalar(field.surfaceRadiusUnits(centerDir))
   const centerU = field.dirToUv(centerDir, new Vector2()).x
 
-  const gridVertexCount = (segments + 1) * (segments + 1)
-  const ringCount = 4 * segments
+  const gridCount = gridVertexCount(segments)
+  const ringCount = ringVertexCount(segments)
 
   let k = 0
   for (let b = 0; b <= segments; b++) {
@@ -176,7 +191,7 @@ function writeTerrainPatchAttributes(
   // пересчёт этого сокращения не даёт.
   for (let ring = 0; ring < ringCount; ring++) {
     const edgeIndex = ringGridIndex(ring, segments)
-    const skirtIndex = gridVertexCount + ring
+    const skirtIndex = gridCount + ring
 
     const nx = normals[edgeIndex * 3]
     const ny = normals[edgeIndex * 3 + 1]
@@ -198,9 +213,9 @@ function writeTerrainPatchAttributes(
 }
 
 /**
- * Fresh-вариант: аллоцирует новые типизированные массивы и геометрию — путь
- * начальной сборки кубосферы (TerrainSphere) и эталон для тестов паритета
- * с into-вариантом пула.
+ * Fresh-вариант: аллоцирует новые типизированные массивы и геометрию —
+ * эталон паритета для into-варианта (buildTerrainPatchInto) и его тестов;
+ * продакшн-вызовов нет — TerrainSphere зовёт только into-вариант через пул.
  */
 export function buildTerrainPatchGeometry(
   field: TerrainHeightField,
@@ -212,9 +227,7 @@ export function buildTerrainPatchGeometry(
   index: BufferAttribute,
   skirtDepthUnits: number
 ): { geometry: BufferGeometry; center: Vector3 } {
-  const gridVertexCount = (segments + 1) * (segments + 1)
-  const ringCount = 4 * segments
-  const vertexCount = gridVertexCount + ringCount
+  const vertexCount = terrainPatchVertexCount(segments)
   const positions = new Float32Array(vertexCount * 3)
   const normals = new Float32Array(vertexCount * 3)
   const uvs = new Float32Array(vertexCount * 2)

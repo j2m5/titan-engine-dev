@@ -63,26 +63,32 @@ class TerrainHeightField {
   private readonly clearanceGridWidth: number
   private readonly clearanceGridHeight: number
   public readonly maxClearanceMeters: number
-  private readonly blockMin: Uint16Array
-  private readonly blockMax: Uint16Array
-  private readonly blocksX: number
-  private readonly blocksY: number
   private readonly levelErrorMeters: Float64Array
 
   public constructor(
     private readonly map: HeightMapData,
     public readonly radiusKm: number
   ) {
-    const built = this.buildClearanceGrid()
+    // block/metersPerRaw — общий по-блочный базис клиренса и ε-пирамиды,
+    // считается один раз здесь, а не дублируется в обоих билдерах
+    const block = Math.max(1, Math.round(map.width / TERRAIN_SPHERE_SEGMENTS))
+    const metersPerRaw = (map.maxMeters - map.minMeters) / 65535
+
+    const built = this.buildClearanceGrid(block, metersPerRaw)
     this.clearanceGrid = built.grid
     this.clearanceGridWidth = built.width
     this.clearanceGridHeight = built.height
     this.maxClearanceMeters = built.maxClearance
-    this.blockMin = built.blockMin
-    this.blockMax = built.blockMax
-    this.blocksX = built.blocksX
-    this.blocksY = built.blocksY
-    this.levelErrorMeters = this.buildGeometricErrors()
+    // blockMin/blockMax/blocksX/blocksY служат только ε-пирамиде ниже —
+    // не хранятся полями тела (2 МБ на карту Луны), передаются аргументами
+    this.levelErrorMeters = this.buildGeometricErrors(
+      block,
+      metersPerRaw,
+      built.blockMin,
+      built.blockMax,
+      built.blocksX,
+      built.blocksY
+    )
   }
 
   public get minMeters(): number {
@@ -224,7 +230,10 @@ class TerrainHeightField {
    * строки) и дилатацию 3×3 с запасом. Долгота заворачивается, широта
    * клампится — как всюду в этом классе.
    */
-  private buildClearanceGrid(): {
+  private buildClearanceGrid(
+    block: number,
+    metersPerRaw: number
+  ): {
     grid: Float32Array
     width: number
     height: number
@@ -235,8 +244,6 @@ class TerrainHeightField {
     blocksY: number
   } {
     const { width, height, data } = this.map
-    const metersPerRaw = (this.map.maxMeters - this.map.minMeters) / 65535
-    const block = Math.max(1, Math.round(width / TERRAIN_SPHERE_SEGMENTS))
     const blocksX = Math.ceil(width / block)
     const blocksY = Math.ceil(height / block)
 
@@ -324,14 +331,15 @@ class TerrainHeightField {
    * шаг_ℓ/блок (шаг мельче блока — самоподобие как консервативная гипотеза).
    * Вычисляется один раз в конструкторе.
    */
-  private buildGeometricErrors(): Float64Array {
+  private buildGeometricErrors(
+    block: number,
+    metersPerRaw: number,
+    blockMin: Uint16Array,
+    blockMax: Uint16Array,
+    blocksX: number,
+    blocksY: number
+  ): Float64Array {
     const { width } = this.map
-    const metersPerRaw = (this.map.maxMeters - this.map.minMeters) / 65535
-    const block = Math.max(1, Math.round(width / TERRAIN_SPHERE_SEGMENTS))
-    const blocksX = this.blocksX
-    const blocksY = this.blocksY
-    const blockMin = this.blockMin
-    const blockMax = this.blockMax
 
     // окно 1×1 блок: размах внутри блока (та же по-блочная сетка, что и провис)
     const ranges1x1 = new Float64Array(blocksX * blocksY)

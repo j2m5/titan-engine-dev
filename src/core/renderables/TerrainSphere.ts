@@ -116,10 +116,16 @@ class TerrainSphere extends Group {
     const wanted = new Map<string, TerrainNodeAddress>()
     for (const address of leaves) wanted.set(terrainNodeKey(address), address)
 
-    // очередь построек пересобирается из свежего дифа каждый кадр — порядок
-    // листьев уже от грубого к мелкому (порядок спуска отбора)
+    // очередь построек пересобирается из свежего дифа каждый кадр. leaves —
+    // DFS-обход пространства квадродерева (спуск по face/i/j), НЕ порядок
+    // грубое→мелкое, вопреки прежней формулировке здесь. Спека просила
+    // приоритет по SSE; сортировка по level по возрастанию — дешёвый прокси
+    // (сотни элементов раз в кадр, полноценная сортировка по SSE того не
+    // стоит): coarse-first ближе всего заполняет крупные дыры первым.
+    const buildQueue = [...leaves].sort((a, b) => a.level - b.level)
+
     let built = 0
-    for (const address of leaves) {
+    for (const address of buildQueue) {
       if (built >= PATCH_BUILDS_PER_FRAME) break
 
       const key = terrainNodeKey(address)

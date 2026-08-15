@@ -1,6 +1,6 @@
-import { BufferAttribute, BufferGeometry, Mesh } from 'three'
+import { BufferAttribute, BufferGeometry, DynamicDrawUsage, Mesh } from 'three'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
-import { buildPatchIndex } from './terrainPatchGeometry'
+import { buildPatchIndex, terrainPatchVertexCount } from './terrainPatchGeometry'
 
 /**
  * Потолок одновременно живых патчей квадродерева. Замер: на HiDPI (H=2160)
@@ -15,9 +15,6 @@ import { buildPatchIndex } from './terrainPatchGeometry'
 export const MAX_LIVE_PATCHES = 1024
 
 export type PatchHandle = { mesh: Mesh; geometry: BufferGeometry }
-
-const GRID_VERTEX_COUNT = (segments: number): number => (segments + 1) * (segments + 1)
-const RING_COUNT = (segments: number): number => 4 * segments
 
 /**
  * Пул патчей квадродерева: split/merge переиспользует геометрии слотов без
@@ -78,11 +75,20 @@ class TerrainPatchPool {
   }
 
   private createHandle(): PatchHandle {
-    const vertexCount = GRID_VERTEX_COUNT(this.segments) + RING_COUNT(this.segments)
+    const vertexCount = terrainPatchVertexCount(this.segments)
     const geometry = new BufferGeometry()
-    geometry.setAttribute('position', new BufferAttribute(new Float32Array(vertexCount * 3), 3))
-    geometry.setAttribute('normal', new BufferAttribute(new Float32Array(vertexCount * 3), 3))
-    geometry.setAttribute('uv', new BufferAttribute(new Float32Array(vertexCount * 2), 2))
+    const position = new BufferAttribute(new Float32Array(vertexCount * 3), 3)
+    const normal = new BufferAttribute(new Float32Array(vertexCount * 3), 3)
+    const uv = new BufferAttribute(new Float32Array(vertexCount * 2), 2)
+    // DynamicDrawUsage: split/merge перезаписывает эти атрибуты на месте
+    // каждый раз, когда слот переиспользуется (buildTerrainPatchInto) — не
+    // однократная запись, которую предполагает дефолтный StaticDrawUsage.
+    position.setUsage(DynamicDrawUsage)
+    normal.setUsage(DynamicDrawUsage)
+    uv.setUsage(DynamicDrawUsage)
+    geometry.setAttribute('position', position)
+    geometry.setAttribute('normal', normal)
+    geometry.setAttribute('uv', uv)
     geometry.setIndex(this.index)
 
     const mesh = new Mesh(geometry, this.material)
