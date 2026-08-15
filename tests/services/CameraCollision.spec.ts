@@ -209,9 +209,12 @@ describe('CameraCollision: свип и скольжение', () => {
   })
 })
 
-// карта 4×2: западное полушарие высокое, восточное низкое (метры = raw)
+// карта 4×2: западное полушарие высокое (20000 м), восточное низкое (0 м).
+// maxMeters=20000 — фактический диапазон данных (raw 65535 = максимум
+// столбца), а не пассивный 65535: иначе широкая фаза (R+maxH+maxClearance)
+// на порядок рыхлее настоящего рельефа и глотает свип-тесты без разбора.
 function terrainBody(): { body: Object3D; field: TerrainHeightField } {
-  seedHeightMap([20000, 0, 20000, 0, 20000, 0, 20000, 0], 4, 2, 0, 65535)
+  seedHeightMap([65535, 0, 65535, 0, 65535, 0, 65535, 0], 4, 2, 0, 20000)
   const body = makeBody('planet', 1736, new Vector3(), undefined, MOON_HEIGHT_PATH)
   const field = terrainHeightFieldFor(
     (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(MOON_HEIGHT_PATH)!,
@@ -274,34 +277,87 @@ describe('CameraCollision: пуш-аут по рельефу', () => {
 describe('CameraCollision: свип по рельефу', () => {
   afterEach(() => heightFieldStorage.clear())
 
-  it('пролёт сквозь гору за один кадр останавливается на горе, не туннелирует', () => {
-    const { body, field } = terrainBody() // из задачи 5: запад высокий, восток низкий
-    // старт далеко над низким сектором, финиш — диаметрально сквозь тело
-    const start = new Vector3(1, 0, 0).multiplyScalar(toThreeJSUnits(1736) * 3)
-    const { collision, camera } = makeCollision([body], start)
+  // направление по долготе u на экваторе (v=0.5, y=0) — обратная формула
+  // dirToUv: phi=u·2π, x=−cos(phi), z=sin(phi); x²+z²=1, нормализация не нужна
+  const dirAtU = (u: number): Vector3 => {
+    const phi = u * 2 * Math.PI
+    return new Vector3(-Math.cos(phi), 0, Math.sin(phi))
+  }
+
+  // соседний высокий столбец (u=0.125, 20000 м) — по другую сторону от
+  // границы u=0.25, где низкий (LOW_COLUMN_DIR, u=0.375) сходится с высоким
+  const HIGH_COLUMN_DIR = dirAtU(0.125)
+
+  it('низкий пролёт над подножием горы не туннелирует сквозь склон', () => {
+    const { body, field } = terrainBody()
+    // старт и финиш — на ОДНОЙ и той же малой высоте над низким столбцом:
+    // обе точки глубоко внутри старой широкой сферы (R+maxH+maxClearance,
+    // ужесточённой п.3 до реального максимума карты) — контейнер для
+    // старого бага. Магнитуда тут НЕ дискриминатор: push-out в конце resolve()
+    // всегда доводит итоговый радиус до локальной цели В ТОЙ ТОЧКЕ, где
+    // осталась камера, независимо от того, сработал ли свип по пути — старый
+    // код (containsPoint пропускает терраформное тело целиком) долетает
+    // РОВНО до HIGH_COLUMN_DIR и push-out лишь поднимает его на локальную
+    // цель В ЭТОМ направлении, ничем не выдавая, что он проехал сквозь гору.
+    // Дискриминатор — направление: старый код долетает точно до
+    // HIGH_COLUMN_DIR (dot=1), новый марч обязан затормозить на склоне
+    // заметно раньше (эмпирически dot≈0.7–0.76 для этой геометрии)
+    const altitude = field.collisionRadiusUnits(LOW_COLUMN_DIR) * 1.01
+    const { collision, camera } = makeCollision([body], LOW_COLUMN_DIR.clone().multiplyScalar(altitude))
 
     collision.resolve() // фиксирует lastPosition
-    camera.position.set(-1, 0, 0).multiplyScalar(toThreeJSUnits(1736) * 3)
+    camera.position.copy(HIGH_COLUMN_DIR).multiplyScalar(altitude)
     collision.resolve()
 
-    // камера не на дальней стороне: свип поймал поверхность по пути
-    expect(camera.position.x).toBeGreaterThan(0)
+    // базовый инвариант: камера никогда не встроена глубже своей локальной поверхности
     const localDir = camera.position.clone().normalize()
     expect(camera.position.length()).toBeGreaterThanOrEqual(field.collisionRadiusUnits(localDir) * 0.999)
+    // не долетела по направлению до полного бокового разворота на высокий
+    // столбец — задержана склоном по пути, а не проехала весь отрезок насквозь
+    expect(localDir.dot(HIGH_COLUMN_DIR)).toBeLessThan(0.9)
   })
 
-  it('касательное движение вдоль поверхности не съедается свипом', () => {
+  it('касательное движение над ровным участком не съедается свипом', () => {
     const { body, field } = terrainBody()
     const dir = new Vector3(1, 0, 0)
     const altitude = field.collisionRadiusUnits(dir) * 1.01
     const { collision, camera } = makeCollision([body], dir.clone().multiplyScalar(altitude))
 
     collision.resolve()
-    // шаг по касательной (по y — вдоль меридиана) без снижения
+    // шаг по касательной (по y — вдоль меридиана): карта не варьируется по
+    // широте, так что высота под направлением не меняется вообще — заведомо
+    // безопасный шаг, контраст к следующему тесту, где шаг задевает склон
     const step = altitude * 0.001
     camera.position.add(new Vector3(0, step, 0))
     collision.resolve()
 
     expect(camera.position.y).toBeGreaterThan(step * 0.5) // касательная составляющая жива
+  })
+
+  it('касательный шаг, задевающий гору, клампится — в отличие от чистого шага рядом', () => {
+    const { body, field } = terrainBody()
+    // тот же старт, что и в «низком пролёте», но шаг короткий — небольшой
+    // сдвиг по долготе к границе с высоким столбцом (u=0.375→0.345, 30
+    // тысячных вместо полных 0.25 до HIGH_COLUMN_DIR). Остаток после
+    // клампа мал — итоговая позиция обязана лечь у своей локальной цели
+    // с запасом, тесно (в отличие от «низкого пролёта», где большой остаток
+    // скольжения намеренно не проверяется по магнитуде — см. комментарий там)
+    const altitude = field.collisionRadiusUnits(LOW_COLUMN_DIR) * 1.01
+    const grazeDir = dirAtU(0.345)
+    const { collision, camera } = makeCollision([body], LOW_COLUMN_DIR.clone().multiplyScalar(altitude))
+
+    collision.resolve()
+    camera.position.copy(grazeDir).multiplyScalar(altitude)
+    collision.resolve()
+
+    // клампнута заметно ниже наивной (непроверенной) длины — контраст к
+    // предыдущему тесту, где касательный шаг проходит НЕ тронутым
+    expect(camera.position.length()).toBeLessThan(altitude * 0.999)
+    // и клампнута тесно у своей локальной поверхности — не улетела далеко
+    // (маленький боковой шаг — маленький остаток скольжения)
+    const localDir = camera.position.clone().normalize()
+    const target = field.collisionRadiusUnits(localDir)
+    expect(camera.position.length()).toBeGreaterThanOrEqual(target * 0.999)
+    expect(camera.position.length()).toBeLessThan(target * 1.01)
   })
 })
