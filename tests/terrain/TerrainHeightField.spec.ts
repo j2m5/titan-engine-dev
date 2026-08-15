@@ -311,6 +311,12 @@ describe('TerrainHeightField: восток-запад окно расширяе�
       CLEARANCE_MARGIN_METERS,
       3
     )
+
+    // sagMeters (раунд 3, тот же гибрид, БЕЗ дилатации и без margin — честная
+    // поточечная граница окна ±3, а не размазанная ещё на ±1 ячейку дилатацией):
+    // офсет 3 (внутри окна) — полный провис ямы, офсет 4 (сразу за окном) — 0
+    expect(field.sagMeters(uvToDir((pitCol - 3 + 0.5) / width, 0.5 / height))).toBeCloseTo(10000, 3)
+    expect(field.sagMeters(uvToDir((pitCol - 4 + 0.5) / width, 0.5 / height))).toBeCloseTo(0, 3)
   })
 
   it('регрессия: на экваторе (row 32) та же яма даёт узкую (не полярную) досягаемость', () => {
@@ -327,8 +333,8 @@ describe('TerrainHeightField: восток-запад окно расширяе�
   })
 })
 
-describe('TerrainHeightField: клиренс ≥ фактический провис хорды максимального уровня (property-тест)', () => {
-  it('на нетривиальном рельефе (двумерная синусоида, кинки на каждом текселе) clearance(dir̂) не меньше провиса мешерной хорды по плотной выборке точек патча', () => {
+describe('TerrainHeightField: sagMeters ≥ фактический провис хорды максимального уровня (property-тест)', () => {
+  it('на нетривиальном рельефе (двумерная синусоида, кинки на каждом текселе) sagMeters(dir̂)+margin не меньше провиса мешерной хорды по плотной выборке точек патча', () => {
     // 8192×2048: непрерывная, но некусочно-линейная высота — дискретизация в
     // текселях даёт реальный излом (вторую разность ≠ 0) почти в каждом
     // текселе, ФАКТИЧЕСКИЙ рельеф, не единичная яма. Строится РЕАЛЬНЫЙ патч
@@ -393,7 +399,10 @@ describe('TerrainHeightField: клиренс ≥ фактический пров
             const trueHeightMeters = field.heightMeters(dir)
             const provisMeters = meshHeightMeters - trueHeightMeters // >0: хорда бугрит НАД честной поверхностью
 
-            expect(field.clearanceMeters(dir)).toBeGreaterThanOrEqual(provisMeters - 1e-6)
+            // sagMeters — поточечный, без запаса; margin — та же подушка, что и
+            // в продакшн-потребителе (CameraCollision.pointwiseFloorRadiusUnits),
+            // страхует билинейный бленд sagMeters между текселями (см. докблок)
+            expect(field.sagMeters(dir) + CLEARANCE_MARGIN_METERS).toBeGreaterThanOrEqual(provisMeters - 1e-6)
 
             if (provisMeters > maxProvisMeters) maxProvisMeters = provisMeters
             checked++

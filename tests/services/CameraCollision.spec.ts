@@ -3,8 +3,9 @@ import { Object3D, Vector3 } from 'three'
 import '@/core/framework/TitanThree'
 import { COLLISION_GAP, collectColliders } from '@/core/services/CameraCollision'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { SpaceScale } from '@/core/constants'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
-import { terrainHeightFieldFor, type TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { CLEARANCE_MARGIN_METERS, terrainHeightFieldFor, type TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { makeBody, makeModel, makeCollision } from './cameraCollisionStubs'
 
@@ -458,4 +459,112 @@ describe('CameraCollision: свип — два терраформных тела
     expect(camera.position.distanceTo(far.position)).toBeGreaterThan(farTarget)
     expect(camera.position.clone().normalize().dot(new Vector3(-1, 0, 0))).toBeGreaterThan(0.99)
   })
+})
+
+describe('CameraCollision: двухфазный контакт — поточечное доуточнение после консервативного марча', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  // 2048×128 (block=2 от CLEARANCE_GRID_BASE_SEGMENTS=1024): яма глубиной
+  // 10000 м в одном текселе (col100) на фоне 20000 м, все строки одинаковы
+  // (north-south/cross обнуляются, чистая east-west проверка). Сетка провиса
+  // (MAX-агрегация по ячейке + дилатация 3×3) размазывает провис ямы на
+  // соседние ячейки: у col102 (2 текселя от ямы — вне прямой досягаемости
+  // второй разности) clearanceMeters ≈ 10005 м, хотя ЛОКАЛЬНО рельеф там
+  // абсолютно гладкий — sagMeters(col102) = 0 (замерено эмпирически,
+  // vite-node). Дискриминатор старого (пуш-аут на сетку) и нового
+  // (доуточнение по sagMeters) поведения.
+  const DISTANT_KINK_PATH = 'planets/distant-kink/height.raw'
+  const KINK_WIDTH = 2048
+  const KINK_QUERY_COL = 102
+
+  function distantKinkBody(): { body: Object3D; field: TerrainHeightField } {
+    const height = 128
+    const values = new Array(KINK_WIDTH * height).fill(20000)
+    const pitCol = 100
+    for (let y = 0; y < height; y++) values[y * KINK_WIDTH + pitCol] = 10000
+
+    ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(DISTANT_KINK_PATH, {
+      width: KINK_WIDTH,
+      height,
+      minMeters: 0,
+      maxMeters: 65535,
+      data: new Uint16Array(values)
+    })
+    const body = makeBody('planet', 1736, new Vector3(), undefined, DISTANT_KINK_PATH)
+    const field = terrainHeightFieldFor(
+      (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(DISTANT_KINK_PATH)!,
+      1736
+    )
+    return { body, field }
+  }
+
+  // направление по долготе (v=0.5, экватор) — та же обратная формула, что и
+  // в блоке «свип по рельефу» выше
+  const dirAtCol = (col: number): Vector3 => {
+    const phi = ((col + 0.5) / KINK_WIDTH) * 2 * Math.PI
+    return new Vector3(-Math.cos(phi), 0, Math.sin(phi))
+  }
+
+  it('фикстура честно дискриминирует: клиренс сетки завышен, поточечный провис — нет', () => {
+    const { field } = distantKinkBody()
+    const dir = dirAtCol(KINK_QUERY_COL)
+
+    expect(field.sagMeters(dir)).toBeCloseTo(0, 6)
+    expect(field.clearanceMeters(dir)).toBeGreaterThan(1000)
+  })
+
+  it('пуш-аут садит камеру на честный поточечный пол (margin), не на завышенный клиренс сетки', () => {
+    const { body, field } = distantKinkBody()
+    const dir = dirAtCol(KINK_QUERY_COL)
+
+    // камера чуть ниже рельефа — глубоко под ОБЕИМИ поверхностями (сеточной
+    // и поточечной), пуш-аут обязан сработать вне зависимости от исхода теста
+    const start = dir.clone().multiplyScalar(field.surfaceRadiusUnits(dir) * 0.9999)
+    const { collision, camera } = makeCollision([body], start)
+
+    collision.resolve()
+
+    const landedAltitudeMeters = ((camera.position.length() - field.surfaceRadiusUnits(dir)) / SpaceScale) * 1000
+
+    // честный пол: h + margin (запас на билинейный бленд sagMeters между
+    // текселями) — старое поведение (пуш-аут на сеточный collisionRadiusUnits)
+    // посадило бы камеру на ~10005 м, что этот тест ловит как RED
+    expect(landedAltitudeMeters).toBeGreaterThanOrEqual(CLEARANCE_MARGIN_METERS - 1)
+    expect(landedAltitudeMeters).toBeLessThan(50)
+  })
+
+  it('свип сквозь ту же зону доуточняет контакт до поточечного пола, а не консервативной сетки', () => {
+    const { body, field } = distantKinkBody()
+    const dir = dirAtCol(KINK_QUERY_COL)
+
+    // старт высоко (вне обеих поверхностей), финиш — глубоко под рельефом на
+    // том же направлении: свип обязан поймать контакт по пути и остановить
+    // камеру у честного пола, не у сеточного клиренса
+    const highAltitude = field.surfaceRadiusUnits(dir) * 1.5
+    const belowGround = field.surfaceRadiusUnits(dir) * 0.5
+    const { collision, camera } = makeCollision([body], dir.clone().multiplyScalar(highAltitude))
+
+    collision.resolve() // фиксирует lastPosition
+    camera.position.copy(dir).multiplyScalar(belowGround)
+    collision.resolve()
+
+    const localDir = camera.position.clone().normalize()
+    const landedAltitudeMeters = ((camera.position.length() - field.surfaceRadiusUnits(localDir)) / SpaceScale) * 1000
+
+    expect(landedAltitudeMeters).toBeGreaterThanOrEqual(CLEARANCE_MARGIN_METERS - 1)
+    expect(landedAltitudeMeters).toBeLessThan(50)
+  })
+
+  // «крутая стена по-прежнему тормозит свип, доуточнение не открывает
+  // туннель» (design п.4в) — уже покрыто существующим блоком «CameraCollision:
+  // свип по рельефу» выше (checkerboard-фикстура 20000/0 м, реальный крутой
+  // склон): все три его теста прошли без изменений после этого раунда — сама
+  // геометрическая инвариантность march'а (`marchTerrain`) не тронута,
+  // доуточнение (`refineContact`) включается ТОЛЬКО постфактум, уже после
+  // того, как march нашёл консервативный контакт, и никогда не расширяет
+  // область поиска НАЗАД за пройденный маршем путь. Отдельная стена-фикстура
+  // здесь избыточна — на карте 2048 текселей/экватор (эта, «дальний излом»)
+  // одна текселевая яма даёт слишком пологий угловой профиль для
+  // самостоятельной проверки того же инварианта, повторять его с той же
+  // фикстурой смысла не имеет.
 })

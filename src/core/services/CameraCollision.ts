@@ -2,7 +2,7 @@ import { Matrix4, Object3D, PerspectiveCamera, Ray, Sphere, Vector3 } from 'thre
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { SceneObserver } from '@/core/services/SceneObserver'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
-import { terrainHeightFieldFor, type TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { CLEARANCE_MARGIN_METERS, terrainHeightFieldFor, type TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 
 export type Collider = {
@@ -85,6 +85,14 @@ const RELATIVE_CONTACT_EPSILON = 1e-6
 const SWEEP_MARCH_BUDGET = 64
 
 /**
+ * Бюджет доуточнения контакта по поточечной поверхности (см. докблок
+ * `refineContact`) — заметно меньше внешнего: искомый зазор ограничен
+ * клиренсом сетки В ЭТОЙ ТОЧКЕ (сотни метров, не половина системы —
+ * быстрые перелёты уже отработаны внешней консервативной фазой).
+ */
+const REFINE_MARCH_BUDGET = 24
+
+/**
  * Единый формат хита свипа: сфера и терраформный марч отдают одно и то же.
  * `exhausted` ставит только терраформный марч (сферы контакт находят точно,
  * бюджета у них нет) — сигнал sweep() применить жёсткий стоп без скольжения.
@@ -103,6 +111,16 @@ type SweepHit = {
  * Работает одной точкой кадра — после обновления позиций тел, до рендера:
  * сервису безразлично, кто сдвинул камеру (полёт, орбитальный телепорт,
  * твин перелёта) или тело (эпоха при варпе) — он видит итог и правит его.
+ *
+ * Терраформный контакт двухфазный (раунд 2 фикса карты провиса,
+ * `TerrainHeightField`): широкая фаза (`collectColliders`) и внешний марч
+ * (`marchTerrain`) работают против намеренно консервативной сетки провиса
+ * — гарантия отсутствия туннеля на быстром свипе. Найденный ей контакт
+ * систематически ВЫШЕ честного пола (сетка размазывает пиковый провис по
+ * ячейке+дилатации, медиана на Луне ~236 м после сетки против ~28–40 м
+ * поточечно) — `refineContact` доуточняет его коротким довеском марча по
+ * честной поточечной поверхности (`TerrainHeightField.sagMeters`), а
+ * `pushOutTerrain` целится сразу в неё же (см. `pointwiseFloorRadiusUnits`).
  */
 class CameraCollision {
   private lastPosition: Vector3 | null = null
@@ -127,6 +145,9 @@ class CameraCollision {
   private readonly marchTo = new Vector3()
   private readonly marchStep = new Vector3()
   private readonly marchPoint = new Vector3()
+  // доуточнение контакта по поточечной поверхности (см. refineContact) — свой
+  // скретч точки, marchPoint уже занят консервативной точкой на момент вызова
+  private readonly refinePoint = new Vector3()
 
   // скретчи текущего кандидата хита findNearestHit (перезаписываются на каждой
   // проверяемой сфере/теле) и best-скретчи лучшего кандидата — раздельные,
@@ -271,7 +292,9 @@ class CameraCollision {
    * в ~3-км шапке, страхует пуш-аут), шаг f/(1+L) не перепрыгивает
    * поверхность. Бюджет исчерпан — контакт в текущей точке помечается
    * `exhausted`: sweep() ставит камеру туда без скольжения (перестраховка
-   * вместо туннеля через то, что марч не успел домаршировать).
+   * вместо туннеля через то, что марч не успел домаршировать). Истинный
+   * контакт (не exhausted) доуточняется `refineContact` против честной
+   * поточечной поверхности — см. её докблок и класса.
    */
   private marchTerrain(collider: Collider, field: TerrainHeightField, maxDistance: number): SweepHit | null {
     collider.object.updateWorldMatrix(true, false)
@@ -302,15 +325,67 @@ class CameraCollision {
     const p = this.marchPoint.copy(from)
     for (let i = 0; i < SWEEP_MARCH_BUDGET; i++) {
       const d = distance(p)
-      if (d <= epsilon) return this.buildHit(collider, field, p, s, length, false)
+      if (d <= epsilon) return this.refineContact(collider, field, p, s, step, length, epsilon)
 
       s += d / (1 + SLOPE_RANGE)
       if (s >= length) return null
       p.copy(from).addScaledVector(step, s)
     }
 
-    // бюджет исчерпан — консервативный контакт в текущей точке
+    // бюджет исчерпан — консервативный контакт в текущей точке, без доуточнения:
+    // перестраховка march'а важнее точности пола в этом редком случае
     return this.buildHit(collider, field, p, s, length, true)
+  }
+
+  /**
+   * Двухфазный контакт (раунд 2 фикса карты провиса): сетка провиса —
+   * намеренно консервативный СТРАЖ (см. докблок TerrainHeightField), её
+   * MAX-агрегация по ячейке + дилатация систематически завышают клиренс
+   * относительно честного поточечного провиса (медиана по Луне ~28 м
+   * поточечно против ~236 м после сетки) — останавливать камеру ровно на
+   * консервативной поверхности значит держать её в воздухе намного выше
+   * настоящего пола. Здесь — ограниченный марч ТЕМ ЖЕ шагом Липшица, но по
+   * поточечной поверхности R+h+sag+margin, от точки консервативного контакта
+   * до конца ОСТАВШЕГОСЯ отрезка свипа. Не туннелирует: искомый зазор ≤
+   * клиренс сетки в этой точке (сотни метров максимум, не половина
+   * системы — быстрые перелёты уже погашены внешней консервативной фазой
+   * выше), бюджет REFINE_MARCH_BUDGET мал и рассчитан именно на такой
+   * короткий довесок. Если поточечный пол не встречен до конца отрезка —
+   * сетка была неверно консервативна именно здесь: возвращает null, sweep()
+   * не тормозит камеру вовсе (остаток свипа продолжится в следующей
+   * итерации/кадре как обычное движение).
+   */
+  private refineContact(
+    collider: Collider,
+    field: TerrainHeightField,
+    conservativeP: Vector3,
+    conservativeS: number,
+    step: Vector3,
+    length: number,
+    epsilon: number
+  ): SweepHit | null {
+    const pointDistance = (p: Vector3): number => {
+      const r = p.length()
+      const dir = r === 0 ? this.localDir.set(0, 0, 1) : this.localDir.copy(p).divideScalar(r)
+      return r - pointwiseFloorRadiusUnits(field, dir)
+    }
+
+    let s = conservativeS
+    const p = this.refinePoint.copy(conservativeP)
+    for (let i = 0; i < REFINE_MARCH_BUDGET; i++) {
+      const d = pointDistance(p)
+      if (d <= epsilon) return this.buildHit(collider, field, p, s, length, false)
+
+      s += d / (1 + SLOPE_RANGE)
+      if (s >= length) return null // честный пол не встречен в пределах отрезка
+
+      p.copy(conservativeP).addScaledVector(step, s - conservativeS)
+    }
+
+    // бюджет доуточнения исчерпан (сходимость Липшица должна была хватить на
+    // малый зазор) — лучшая найденная точка, без хард-стопа: она уже ближе к
+    // честному полу, чем консервативная, скольжение по ней безопасно
+    return this.buildHit(collider, field, p, s, length, false)
   }
 
   /**
@@ -373,8 +448,12 @@ class CameraCollision {
 
   /**
    * Вынос из рельефа — в теле-фиксированном фрейме: тела вращаются, и высота
-   * зависит от направления в локальных осях меша. Вынос радиальный на
-   * R+h(dir̂)+clearance(dir̂).
+   * зависит от направления в локальных осях меша. Отсев «внутри ли вообще» —
+   * по широкой фазе (сфера R+maxH+maxClearance, консервативная, дёшева).
+   * Сама цель выноса — честная поточечная поверхность (`pointwiseFloorRadiusUnits`),
+   * не сеточная: иначе пуш-аут держит камеру заметно выше настоящего пола
+   * (см. докблок класса и `refineContact`) буквально каждый кадр рядом с
+   * телом, а не только в момент касания.
    */
   private pushOutTerrain(collider: Collider, field: TerrainHeightField, position: Vector3): boolean {
     collider.object.updateWorldMatrix(true, false)
@@ -391,7 +470,7 @@ class CameraCollision {
       this.localDir.copy(this.localPoint).divideScalar(r)
     }
 
-    const target = field.collisionRadiusUnits(this.localDir)
+    const target = pointwiseFloorRadiusUnits(field, this.localDir)
     if (r >= target) return false
 
     this.localPoint.copy(this.localDir).multiplyScalar(target).applyMatrix4(collider.object.matrixWorld)
@@ -399,6 +478,15 @@ class CameraCollision {
 
     return true
   }
+}
+
+/**
+ * Честная поточечная поверхность контакта, юниты three.js: R+h(dir̂)+sag(dir̂)+margin.
+ * Общая для `refineContact` (доуточнение свипа) и `pushOutTerrain` — единственное
+ * место, где формула контакта у поверхности собрана, не дублируется.
+ */
+function pointwiseFloorRadiusUnits(field: TerrainHeightField, dir: Vector3): number {
+  return field.surfaceRadiusUnits(dir) + toThreeJSUnits((field.sagMeters(dir) + CLEARANCE_MARGIN_METERS) / 1000)
 }
 
 export { CameraCollision }

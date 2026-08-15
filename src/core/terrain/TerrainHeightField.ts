@@ -84,6 +84,16 @@ const TWO_PI = 2 * Math.PI
  * него, и холм теоретически может на глаз транзиентно пройти сквозь камеру.
  * Не лечится здесь: SSE у самой поверхности требует немедленного дробления,
  * окно грубости — доли секунды на PATCH_BUILDS_PER_FRAME построек.
+ *
+ * Двухслойная модель клиренса (раунд 2 фикса): `clearanceMeters`/`maxClearanceMeters`
+ * (сетка выше) — СТРАЖ широкой фазы и внешнего марча коллизии: намеренно
+ * консервативен (MAX-агрегация поточечных оценок по ячейке
+ * `CLEARANCE_GRID_BASE_SEGMENTS` + дилатация 3×3 размазывают пиковый провис
+ * на площадь ~блока — честная медиана по Луне ~28 м, после сетки ~236 м,
+ * см. хендофф) — гарантирует отсутствие туннеля на свипе, но НЕ годится для
+ * итоговой позиции камеры «на полу». `sagMeters` ниже — честный поточечный
+ * пол в конкретном направлении, без сеточного размазывания: коллизия
+ * (`CameraCollision`) доуточняет им контакт, найденный маршем по сетке.
  */
 class TerrainHeightField {
   private readonly uvScratch = new Vector2()
@@ -95,17 +105,24 @@ class TerrainHeightField {
   private readonly clearanceGridHeight: number
   public readonly maxClearanceMeters: number
   private readonly levelErrorMeters: Float64Array
+  private readonly metersPerRaw: number
+  private readonly equatorStepTexels: number
+  private readonly spanCap: number
 
   public constructor(
     private readonly map: HeightMapData,
     public readonly radiusKm: number
   ) {
     // block/metersPerRaw — общий по-блочный базис клиренса и ε-пирамиды,
-    // считается один раз здесь, а не дублируется в обоих билдерах
+    // считается один раз здесь, а не дублируется в обоих билдерах.
+    // equatorStepTexels/spanCap — общая калибровка поточечной формулы,
+    // делится сеткой (buildClearanceGrid) и поточечным sagMeters ниже
     const block = Math.max(1, Math.round(map.width / CLEARANCE_GRID_BASE_SEGMENTS))
-    const metersPerRaw = (map.maxMeters - map.minMeters) / 65535
+    this.metersPerRaw = (map.maxMeters - map.minMeters) / 65535
+    this.equatorStepTexels = map.width / TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS
+    this.spanCap = Math.max(1, Math.floor(map.width / 4))
 
-    const built = this.buildClearanceGrid(block, metersPerRaw)
+    const built = this.buildClearanceGrid(block, this.metersPerRaw)
     this.clearanceGrid = built.grid
     this.clearanceGridWidth = built.width
     this.clearanceGridHeight = built.height
@@ -114,7 +131,7 @@ class TerrainHeightField {
     // не хранятся полями тела (2 МБ на карту Луны), передаются аргументами
     this.levelErrorMeters = this.buildGeometricErrors(
       block,
-      metersPerRaw,
+      this.metersPerRaw,
       built.blockMin,
       built.blockMax,
       built.blocksX,
@@ -225,6 +242,100 @@ class TerrainHeightField {
   }
 
   /**
+   * Честный ПОТОЧЕЧНЫЙ провис в направлении dir̂, метры — без сеточного
+   * MAX-размазывания (см. докблок класса, двухслойная модель). Формула та
+   * же, что и в `buildClearanceGrid` (половина максимума |вторых разностей|
+   * по x/y + перекрёстный член билинейной ячейки, полярный гибрид
+   * range-по-скользящему-окну при вершинном шаге шире ~1.5 текселя) —
+   * вычисляется на лету для четырёх текселей вокруг dir̂ и билинейно
+   * блендится теми же полутекселными конвенциями, что `sampleMeters`.
+   * Блендинг НАМЕРЕННО кусочно-непрерывный, а не кусочно-константный по
+   * текселям — иначе пол камеры ступенчатый на границах текселей (тот же
+   * урок этапа 2, что и у сетки клиренса). Побочный эффект: бленд формально
+   * может НЕДООЦЕНИТЬ пиковый провис где-то между четырьмя текселями (сама
+   * функция провиса не билинейна) — осознанно принято: это честный ПОЛ под
+   * камеру (визуальный стражи от протыкания рельефа), не физика, а margin в
+   * CameraCollision остаётся сверху; последствие недооценки — не туннель, а
+   * не более чем транзиентный клип кромки у самой границы текселя.
+   */
+  public sagMeters(dir: Vector3): number {
+    const uv = this.dirToUv(dir, this.uvScratch)
+
+    return this.sampleSag(uv.x, uv.y)
+  }
+
+  private sampleSag(u: number, v: number): number {
+    const { width, height } = this.map
+
+    let x = (u - Math.floor(u)) * width - 0.5
+    if (x < 0) x += width
+    const x0 = Math.min(Math.floor(x), width - 1)
+    const x1 = (x0 + 1) % width
+    const fx = x - x0
+
+    const y = Math.min(Math.max(Math.min(Math.max(v, 0), 1) * height - 0.5, 0), height - 1)
+    const y0 = Math.floor(y)
+    const y1 = Math.min(y0 + 1, height - 1)
+    const fy = y - y0
+
+    const s00 = this.texelSagRaw(x0, y0)
+    const s10 = this.texelSagRaw(x1, y0)
+    const s01 = this.texelSagRaw(x0, y1)
+    const s11 = this.texelSagRaw(x1, y1)
+
+    const raw = (s00 * (1 - fx) + s10 * fx) * (1 - fy) + (s01 * (1 - fx) + s11 * fx) * fy
+
+    return raw * this.metersPerRaw
+  }
+
+  /**
+   * Поточечная оценка провиса на целочисленном текселе (x,y), raw-единицы —
+   * та же формула, что в `buildClearanceGrid`, но БЕЗ пакетной оптимизации
+   * (`slidingRangeWrap` строит окно для целой строки разом; здесь — разовый
+   * запрос, честный O(span) проход по нужному окну). У экватора span=1 —
+   * O(1); у самого полюса span капается на `spanCap` (четверть ширины карты)
+   * — дорогой, но редкий случай (камера у полюса), см. замер в хендоффе.
+   */
+  private texelSagRaw(x: number, y: number): number {
+    const { width, height, data } = this.map
+    const xLo = x === 0 ? width - 1 : x - 1
+    const xHi = x === width - 1 ? 0 : x + 1
+    const yLo = y === 0 ? 0 : y - 1
+    const yHi = y === height - 1 ? height - 1 : y + 1
+    const row = y * width
+    const rowLo = yLo * width
+    const rowHi = yHi * width
+    const raw = data[row + x]
+
+    const d2y = data[rowLo + x] - 2 * raw + data[rowHi + x]
+    const cross = raw - data[row + xHi] - data[rowHi + x] + data[rowHi + xHi]
+    const nsComponent = 0.5 * Math.abs(d2y)
+    const crossComponent = 0.5 * Math.abs(cross)
+
+    const v = (y + 0.5) / height
+    const cosLat = Math.sin(Math.PI * v)
+    const spanTexels = Math.max(1, Math.min(this.spanCap, Math.round(this.equatorStepTexels / cosLat)))
+
+    let ewComponent: number
+    if (spanTexels >= 2) {
+      let lo = 65535
+      let hi = 0
+      for (let dx = -spanTexels; dx <= spanTexels; dx++) {
+        const xi = ((x + dx) % width + width) % width
+        const value = data[row + xi]
+        if (value < lo) lo = value
+        if (value > hi) hi = value
+      }
+      ewComponent = hi - lo
+    } else {
+      const d2x = data[row + xLo] - 2 * raw + data[row + xHi]
+      ewComponent = 0.5 * Math.abs(d2x)
+    }
+
+    return Math.max(ewComponent, nsComponent, crossComponent)
+  }
+
+  /**
    * Нормаль поверхности из градиента карты — для скольжения камеры. Метрический
    * базис по-восточному расширяется как в slope-энкодере: у полюсов ±1 тексель
    * усиливал бы квантование высот в 1/cos раз.
@@ -289,11 +400,8 @@ class TerrainHeightField {
     const blockMax = new Uint16Array(blocksX * blocksY)
     const pointSag = new Float32Array(blocksX * blocksY) // raw-единицы, MAX по текселям блока
 
-    // экваториальный вершинный шаг максимального уровня в текселях (обычно
-    // <1 — вторые разности соседних текселей тогда консервативны, см.
-    // докблок TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS)
-    const equatorStepTexels = width / TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS
-    const spanCap = Math.max(1, Math.floor(width / 4))
+    const equatorStepTexels = this.equatorStepTexels
+    const spanCap = this.spanCap
 
     // буферы скользящего окна восток-запад для приполярных строк —
     // переиспользуются между строками, без аллокаций в горячем цикле
