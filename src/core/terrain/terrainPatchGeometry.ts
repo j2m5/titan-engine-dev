@@ -4,12 +4,46 @@ import { cubeFaceDirection } from './cubeSphere'
 import type { TerrainHeightField } from './TerrainHeightField'
 
 /**
- * Общий индекс сетки патча: у всех патчей одинаковая топология, поэтому один
- * BufferAttribute шарится по ссылке. Обмотка CCW при взгляде снаружи —
- * базисы граней правые (u×v = n).
+ * Индекс сеточной вершины на периметре патча по ходу обхода кольца k
+ * (0..4·segments−1): CCW от угла (a=0,b=0) — низ слева направо, право
+ * снизу вверх, верх справа налево, лево сверху вниз. Каждая точка периметра
+ * встречается ровно один раз (углы не дублируются между сторонами).
+ */
+function ringGridIndex(k: number, segments: number): number {
+  let a: number
+  let b: number
+
+  if (k < segments) {
+    a = k
+    b = 0
+  } else if (k < 2 * segments) {
+    a = segments
+    b = k - segments
+  } else if (k < 3 * segments) {
+    a = segments - (k - 2 * segments)
+    b = segments
+  } else {
+    a = 0
+    b = segments - (k - 3 * segments)
+  }
+
+  return b * (segments + 1) + a
+}
+
+/**
+ * Общий индекс патча: у всех патчей одинаковая топология, поэтому один
+ * BufferAttribute шарится по ссылке. Обмотка сетки CCW при взгляде снаружи —
+ * базисы граней правые (u×v = n). За сеткой следует юбочная полоса —
+ * 4·segments квадов между периметром сетки и юбочными вершинами (последние
+ * (segments+1)² их не занимают в сетке — юбка добавляется билдером
+ * геометрии после сеточного цикла). Юбка держит стык уровней LOD без щелей:
+ * вертикальная стенка вниз по периметру патча перекрывает шов с соседом
+ * другой глубины.
  */
 export function buildPatchIndex(segments: number): BufferAttribute {
-  const indices = new Uint16Array(segments * segments * 6)
+  const ringCount = 4 * segments
+  const gridVertexCount = (segments + 1) * (segments + 1)
+  const indices = new Uint16Array(segments * segments * 6 + ringCount * 6)
   let offset = 0
 
   for (let b = 0; b < segments; b++) {
@@ -26,6 +60,25 @@ export function buildPatchIndex(segments: number): BufferAttribute {
       indices[offset++] = v11
       indices[offset++] = v01
     }
+  }
+
+  for (let k = 0; k < ringCount; k++) {
+    const kNext = (k + 1) % ringCount
+    const edgeA = ringGridIndex(k, segments)
+    const edgeB = ringGridIndex(kNext, segments)
+    const skirtA = gridVertexCount + k
+    const skirtB = gridVertexCount + kNext
+
+    // обмотка наружу: стенка юбки — зеркало паттерна сеточного квада (там
+    // «вверх» по b — обычная соседняя строка сетки, здесь «вниз» — юбка,
+    // поэтому диагональный сплит зеркалится, иначе нормаль стенки смотрит
+    // внутрь патча, а не наружу по касательной
+    indices[offset++] = edgeA
+    indices[offset++] = skirtB
+    indices[offset++] = edgeB
+    indices[offset++] = edgeA
+    indices[offset++] = skirtA
+    indices[offset++] = skirtB
   }
 
   return new BufferAttribute(indices, 1)
@@ -46,7 +99,10 @@ const POLE_EPSILON = 1e-9
  * терраформных тел в RepeatWrapping); вершина ровно в полюсе берёт u центра
  * (там phi не определён). Развёртка шва корректна при азимутальном спане
  * патча < 180°: глубина ≥ 1; корень глубины 0 (этап 3б) потребует другой
- * развёртки.
+ * развёртки. Юбка (skirtDepthUnits > 0) добавляет по периметру патча
+ * вертикальную стенку — копию кромочных dir/normal/uv с радиусом, уменьшенным
+ * на skirtDepthUnits: скрывает щель на стыке с соседним патчем другой
+ * глубины квадродерева без необходимости совпадения тесселяций.
  */
 export function buildTerrainPatchGeometry(
   field: TerrainHeightField,
@@ -55,7 +111,8 @@ export function buildTerrainPatchGeometry(
   j: number,
   depth: number,
   segments: number,
-  index: BufferAttribute
+  index: BufferAttribute,
+  skirtDepthUnits: number
 ): { geometry: BufferGeometry; center: Vector3 } {
   const patches = 1 << depth
   const span = 2 / patches
@@ -69,7 +126,9 @@ export function buildTerrainPatchGeometry(
   const center = centerDir.clone().multiplyScalar(field.surfaceRadiusUnits(centerDir))
   const centerU = field.dirToUv(centerDir, new Vector2()).x
 
-  const vertexCount = (segments + 1) * (segments + 1)
+  const gridVertexCount = (segments + 1) * (segments + 1)
+  const ringCount = 4 * segments
+  const vertexCount = gridVertexCount + ringCount
   const positions = new Float32Array(vertexCount * 3)
   const normals = new Float32Array(vertexCount * 3)
   const uvs = new Float32Array(vertexCount * 2)
@@ -103,6 +162,33 @@ export function buildTerrainPatchGeometry(
 
       k++
     }
+  }
+
+  // юбка: копия кромочной вершины (dir/normal/uv), радиус кромки минус
+  // skirtDepthUnits. Вычитание нормали (=dir) из УЖЕ квантованной позиции
+  // кромки, а не пересборка dir·(r−skirtDepthUnits) заново, — общая ошибка
+  // округления кромочной позиции входит в обе вершины одинаково и почти
+  // полностью сокращается в разности длин edge/skirt (см. тест «юбочная
+  // вершина ниже своей кромочной ровно на skirtDepthUnits»); независимый
+  // пересчёт этого сокращения не даёт.
+  for (let ring = 0; ring < ringCount; ring++) {
+    const edgeIndex = ringGridIndex(ring, segments)
+    const skirtIndex = gridVertexCount + ring
+
+    const nx = normals[edgeIndex * 3]
+    const ny = normals[edgeIndex * 3 + 1]
+    const nz = normals[edgeIndex * 3 + 2]
+
+    positions[skirtIndex * 3] = positions[edgeIndex * 3] - nx * skirtDepthUnits
+    positions[skirtIndex * 3 + 1] = positions[edgeIndex * 3 + 1] - ny * skirtDepthUnits
+    positions[skirtIndex * 3 + 2] = positions[edgeIndex * 3 + 2] - nz * skirtDepthUnits
+
+    normals[skirtIndex * 3] = nx
+    normals[skirtIndex * 3 + 1] = ny
+    normals[skirtIndex * 3 + 2] = nz
+
+    uvs[skirtIndex * 2] = uvs[edgeIndex * 2]
+    uvs[skirtIndex * 2 + 1] = uvs[edgeIndex * 2 + 1]
   }
 
   const geometry = new BufferGeometry()

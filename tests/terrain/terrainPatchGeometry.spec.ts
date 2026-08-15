@@ -17,15 +17,17 @@ function bumpyField(): TerrainHeightField {
 
 const SEGMENTS = 8
 const DEPTH = 1
+const GRID_VERTEX_COUNT = (SEGMENTS + 1) ** 2
 
-function build(field: TerrainHeightField, face: number, i: number, j: number) {
-  return buildTerrainPatchGeometry(field, face, i, j, DEPTH, SEGMENTS, buildPatchIndex(SEGMENTS))
+function build(field: TerrainHeightField, face: number, i: number, j: number, skirtDepthUnits = 0) {
+  return buildTerrainPatchGeometry(field, face, i, j, DEPTH, SEGMENTS, buildPatchIndex(SEGMENTS), skirtDepthUnits)
 }
 
 describe('buildPatchIndex', () => {
-  it('segments² квадов по два треугольника, Uint16', () => {
+  it('segments² квадов по два треугольника + юбочная полоса, Uint16', () => {
     const index = buildPatchIndex(SEGMENTS)
-    expect(index.count).toBe(SEGMENTS * SEGMENTS * 6)
+    const ringCount = 4 * SEGMENTS
+    expect(index.count).toBe(SEGMENTS * SEGMENTS * 6 + ringCount * 6)
     expect(index.array).toBeInstanceOf(Uint16Array)
   })
 
@@ -50,7 +52,9 @@ describe('buildTerrainPatchGeometry: RTC и паритет с коллизией
     const pos = geometry.getAttribute('position')
     const normals = geometry.getAttribute('normal')
 
-    for (let k = 0; k < pos.count; k++) {
+    // паритет и радиальность нормали — инварианты СЕТОЧНЫХ вершин; юбочные
+    // намеренно проседают под поверхность (см. describe «юбка патча»)
+    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
       const absolute = new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).add(center)
       const dir = absolute.clone().normalize()
       // паритет мешер↔коллизия: та же каноническая функция высоты
@@ -70,7 +74,7 @@ describe('buildTerrainPatchGeometry: RTC и паритет с коллизией
     const pos = geometry.getAttribute('position')
     const normals = geometry.getAttribute('normal')
 
-    for (let k = 0; k < pos.count; k++) {
+    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
       const absolute = new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).add(center)
       const expectedNormal = absolute.clone().normalize()
       const actualNormal = new Vector3(normals.getX(k), normals.getY(k), normals.getZ(k))
@@ -86,7 +90,7 @@ describe('buildTerrainPatchGeometry: RTC и паритет с коллизией
     const pos = geometry.getAttribute('position')
 
     let maxLen = 0
-    for (let k = 0; k < pos.count; k++) {
+    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
       maxLen = Math.max(maxLen, new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).length())
     }
     // патч глубины 1 стягивает ~четверть грани: относительные позиции — доли радиуса
@@ -117,8 +121,8 @@ describe('buildTerrainPatchGeometry: RTC и паритет с коллизией
     const field = bumpyField()
     const index = buildPatchIndex(SEGMENTS)
     // depth=0: один патч на грань — общее ребро граней целиком в одном патче с каждой стороны
-    const topY = buildTerrainPatchGeometry(field, 2, 0, 0, 0, SEGMENTS, index) // +Y, t=+1 — общее ребро с −Z
-    const backZ = buildTerrainPatchGeometry(field, 5, 0, 0, 0, SEGMENTS, index) // −Z, t=+1 — общее ребро с +Y
+    const topY = buildTerrainPatchGeometry(field, 2, 0, 0, 0, SEGMENTS, index, 0) // +Y, t=+1 — общее ребро с −Z
+    const backZ = buildTerrainPatchGeometry(field, 5, 0, 0, 0, SEGMENTS, index, 0) // −Z, t=+1 — общее ребро с +Y
     const topPos = topY.geometry.getAttribute('position')
     const backPos = backZ.geometry.getAttribute('position')
 
@@ -149,7 +153,7 @@ describe('buildTerrainPatchGeometry: UV', () => {
     const uv = geometry.getAttribute('uv')
     const scratch = new Vector2()
 
-    for (let k = 0; k < pos.count; k++) {
+    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
       const dir = new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).add(center).normalize()
       field.dirToUv(dir, scratch)
       // dir восстановлен из float32-позиции — тот же квантовый шум, что и выше, сверка до 1e-6 вместо побитовой
@@ -174,7 +178,7 @@ describe('buildTerrainPatchGeometry: UV', () => {
 
     let min = Infinity
     let max = -Infinity
-    for (let k = 0; k < uv.count; k++) {
+    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
       min = Math.min(min, uv.getX(k))
       max = Math.max(max, uv.getX(k))
 
@@ -198,7 +202,7 @@ describe('buildTerrainPatchGeometry: UV', () => {
     const uv = geometry.getAttribute('uv')
 
     let found = 0
-    for (let k = 0; k < pos.count; k++) {
+    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
       const dir = new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).add(center).normalize()
       if (Math.abs(dir.y) < 1 - 1e-9) continue
       found++
@@ -221,10 +225,83 @@ describe('buildTerrainPatchGeometry: UV', () => {
     const pos = geometry.getAttribute('position')
     const uv = geometry.getAttribute('uv')
 
-    for (let k = 0; k < pos.count; k++) {
+    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
       const dir = new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).add(center).normalize()
       if (dir.y <= 0) continue
       expect(uv.getY(k)).toBeGreaterThan(0.5)
     }
+  })
+})
+
+describe('юбка патча', () => {
+  const SKIRT = 0.001 // юниты
+  // глубже общего DEPTH=1: RTC-позиции патча тем мельче, чем глубже дерево —
+  // на DEPTH=1 квантование float32 относительной позиции (~0.1 юнита) даёт
+  // шум ~8e-9 в разности длин edge/skirt, перебивая допуск теста 5e-10;
+  // на DEPTH=7 позиции меньше на два порядка, шум падает пропорционально
+  const SKIRT_TEST_DEPTH = 7
+
+  function buildFieldPatch() {
+    return buildTerrainPatchGeometry(
+      bumpyField(),
+      4,
+      0,
+      0,
+      SKIRT_TEST_DEPTH,
+      SEGMENTS,
+      buildPatchIndex(SEGMENTS),
+      SKIRT
+    )
+  }
+
+  it('счётчики: 4481 вершина, индекс = сетка + 256 квадов юбки', () => {
+    const index = buildPatchIndex(SEGMENTS) // SEGMENTS=8 в этом спеке → 81 + 32 кольцевых, 32 юбочных квада
+    const ringCount = 4 * SEGMENTS
+    expect(index.count).toBe(SEGMENTS * SEGMENTS * 6 + ringCount * 6)
+    const { geometry } = buildFieldPatch() // хелпер: build(field, 4, 0, 0) с skirtDepthUnits=SKIRT
+    expect(geometry.getAttribute('position').count).toBe((SEGMENTS + 1) ** 2 + ringCount)
+  })
+
+  it('юбочная вершина ниже своей кромочной ровно на skirtDepthUnits, нормаль и uv скопированы', () => {
+    const { geometry, center } = buildFieldPatch()
+    const pos = geometry.getAttribute('position')
+    const normals = geometry.getAttribute('normal')
+    const gridCount = (SEGMENTS + 1) ** 2
+
+    // первая кольцевая вершина соответствует кромочной (a=0,b=0) = сеточный индекс 0
+    const edge = new Vector3(pos.getX(0), pos.getY(0), pos.getZ(0)).add(center)
+    const skirt = new Vector3(pos.getX(gridCount), pos.getY(gridCount), pos.getZ(gridCount)).add(center)
+    expect(edge.length() - skirt.length()).toBeCloseTo(SKIRT, 9)
+    expect(skirt.clone().normalize().distanceTo(edge.clone().normalize())).toBeLessThan(1e-9)
+    expect(normals.getX(gridCount)).toBeCloseTo(normals.getX(0), 12)
+  })
+
+  it('юбочные треугольники обмотаны наружу (от центра патча по касательной)', () => {
+    // юбка — вертикальная стенка: «наружу» = от оси патча; проверяем проекцию
+    // нормали треугольника на касательное направление центр→кромка
+    const { geometry, center } = buildFieldPatch()
+    const idx = geometry.getIndex()!
+    const pos = geometry.getAttribute('position')
+    const centerDir = center.clone().normalize()
+    const gridIndexCount = SEGMENTS * SEGMENTS * 6
+
+    const vertexAt = (n: number): Vector3 =>
+      new Vector3(pos.getX(idx.getX(n)), pos.getY(idx.getX(n)), pos.getZ(idx.getX(n))).add(center)
+
+    let checked = 0
+    for (let k = gridIndexCount; k < idx.count; k += 3) {
+      const a = vertexAt(k)
+      const b = vertexAt(k + 1)
+      const c = vertexAt(k + 2)
+      const triangleNormal = b.clone().sub(a).cross(c.clone().sub(a))
+
+      const edgeDir = a.clone().normalize()
+      const outward = edgeDir.clone().addScaledVector(centerDir, -edgeDir.dot(centerDir))
+      if (outward.lengthSq() < 1e-12) continue // треугольник у самого центра дуги — направление вырождено
+
+      expect(triangleNormal.dot(outward.normalize())).toBeGreaterThan(0)
+      checked++
+    }
+    expect(checked).toBeGreaterThan(SEGMENTS * 4) // почти все юбочные треугольники проверены
   })
 })

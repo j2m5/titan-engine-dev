@@ -1,7 +1,8 @@
 import { Group, Mesh } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
-import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { CLEARANCE_MARGIN_METERS, TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { CUBE_FACES, TERRAIN_PATCH_DEPTH, TERRAIN_PATCH_SEGMENTS } from '@/core/terrain/cubeSphere'
 import { buildPatchIndex, buildTerrainPatchGeometry } from '@/core/terrain/terrainPatchGeometry'
 
@@ -29,6 +30,11 @@ class TerrainSphere extends Group {
 
     const index = buildPatchIndex(TERRAIN_PATCH_SEGMENTS)
     const patches = 1 << TERRAIN_PATCH_DEPTH
+    // юбка глубины дерева 3б пока статична — глубина дерева фиксирована этапом
+    // 3а, задача 4 сделает её переменной и разведёт запас по фактическому уровню
+    const skirtDepthUnits = toThreeJSUnits(
+      (field.geometricErrorMeters(TERRAIN_PATCH_DEPTH) + CLEARANCE_MARGIN_METERS) / 1000
+    )
 
     for (let face = 0; face < CUBE_FACES; face++) {
       for (let j = 0; j < patches; j++) {
@@ -40,7 +46,8 @@ class TerrainSphere extends Group {
             j,
             TERRAIN_PATCH_DEPTH,
             TERRAIN_PATCH_SEGMENTS,
-            index
+            index,
+            skirtDepthUnits
           )
 
           const patch = new Mesh(geometry, this.sharedMaterial)
