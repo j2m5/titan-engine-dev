@@ -660,6 +660,216 @@ describe('PlanetMaterial: счётные инварианты девяти тв�
   })
 })
 
+// Диона (actorId 27) — терраформная арка Task 2 стандартизации: реальная луна
+// Сатурна, height/slope из оффлайн-генератора, детальные текстуры делятся
+// с Луной (общие terrain/*.webp, шаринг ресурсов по id)
+function dione(): Actor {
+  return Actor.find(27)!
+}
+
+describe('PlanetMaterial: данные Дионы — height/slope/detail-связки и ручки детального слоя', () => {
+  it('height-строка Дионы: верный путь и резидентный lifecycle', () => {
+    const row = dione().resources.where('resourceType', 'height').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/dione/dione_height.raw')
+    expect(row!.getAttribute('lifecycle')).toBe('resident')
+  })
+
+  it('slope-строка Дионы: верный путь, streamable, wrapS RepeatWrapping', () => {
+    const row = dione().resources.where('resourceType', 'slope').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/dione/dione_slope.webp')
+    expect(row!.getAttribute('lifecycle')).toBe('streamable')
+    expect(row!.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('диффуз Дионы несёт wrapS: RepeatWrapping в данных (терраформный шов меридиана)', () => {
+    const diffuse = dione().resources.where('resourceType', 'diffuse').first()!
+
+    expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('detail-связки Дионы указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
+    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
+      const moonRow = moon().resources.where('resourceType', type).first()
+      const dioneRow = dione().resources.where('resourceType', type).first()
+
+      expect(dioneRow, type).toBeDefined()
+      expect(dioneRow!.getAttribute('id')).toBe(moonRow!.getAttribute('id'))
+      expect(dioneRow!.getAttribute('path')).toBe(moonRow!.getAttribute('path'))
+    }
+  })
+
+  it('renderingObjects Дионы несёт ручки детального слоя террейна (detailSaturation 0.1 — реальная луна)', () => {
+    const data = dione().renderingObject!.getAttribute('data') as Record<string, unknown>
+
+    expect(data.bumpScale).toBe(1)
+    expect(data.detailScaleMeters).toBe(40)
+    expect(data.detailScale2Meters).toBe(7)
+    expect(data.detailNormalScale).toBe(1)
+    expect(data.detailSaturation).toBe(0.1)
+    expect(data.detailBrightness).toBe(1)
+    expect(data.detailAoInfluence).toBe(0.5)
+    expect(data.detailFadeMeters).toBe(30000)
+    expect(data.detailFade2Meters).toBe(5000)
+  })
+})
+
+// Ohann I (actorId 68) — терраформная арка Task 2: вымышленная планета, ДЕЛИТ
+// вход-текстуру unnamed_planet_5.png с Adriana IV (actorId 74), но height/slope —
+// пер-тело генерации (разные пути/сиды), а диффуз — СВОЯ строка ресурса
+// (resourceId 100), отдельная от строки Adriana IV (resourceId 107) на тот же файл
+function ohann1(): Actor {
+  return Actor.find(68)!
+}
+
+describe('PlanetMaterial: данные Ohann I — height/slope/detail-связки, шаренный вход диффуза', () => {
+  it('height-строка Ohann I: верный путь и резидентный lifecycle', () => {
+    const row = ohann1().resources.where('resourceType', 'height').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/unnamed/ohann1_height.raw')
+    expect(row!.getAttribute('lifecycle')).toBe('resident')
+  })
+
+  it('slope-строка Ohann I: верный путь, streamable, wrapS RepeatWrapping', () => {
+    const row = ohann1().resources.where('resourceType', 'slope').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/unnamed/ohann1_slope.webp')
+    expect(row!.getAttribute('lifecycle')).toBe('streamable')
+    expect(row!.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('диффуз Ohann I: путь unnamed_planet_5.png (шаренный вход), wrapS RepeatWrapping, СВОЯ строка ресурса', () => {
+    const diffuse = ohann1().resources.where('resourceType', 'diffuse').first()!
+    const adriana4Diffuse = Actor.find(74)!.resources.where('resourceType', 'diffuse').first()!
+
+    expect(diffuse.getAttribute('path')).toBe('planets/unnamed/unnamed_planet_5.png')
+    expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
+    // общий файл, но разные строки ресурса (wrapS ставится обеим независимо)
+    expect(diffuse.getAttribute('id')).not.toBe(adriana4Diffuse.getAttribute('id'))
+    expect(adriana4Diffuse.getAttribute('path')).toBe('planets/unnamed/unnamed_planet_5.png')
+    expect(adriana4Diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('detail-связки Ohann I указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
+    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
+      const moonRow = moon().resources.where('resourceType', type).first()
+      const ohann1Row = ohann1().resources.where('resourceType', type).first()
+
+      expect(ohann1Row, type).toBeDefined()
+      expect(ohann1Row!.getAttribute('id')).toBe(moonRow!.getAttribute('id'))
+      expect(ohann1Row!.getAttribute('path')).toBe(moonRow!.getAttribute('path'))
+    }
+  })
+
+  it('renderingObjects Ohann I несёт ручки детального слоя террейна (detailSaturation 0.1 — вымышленная планета)', () => {
+    const data = ohann1().renderingObject!.getAttribute('data') as Record<string, unknown>
+
+    expect(data.bumpScale).toBe(1)
+    expect(data.detailScaleMeters).toBe(40)
+    expect(data.detailScale2Meters).toBe(7)
+    expect(data.detailNormalScale).toBe(1)
+    expect(data.detailSaturation).toBe(0.1)
+    expect(data.detailBrightness).toBe(1)
+    expect(data.detailAoInfluence).toBe(0.5)
+    expect(data.detailFadeMeters).toBe(30000)
+    expect(data.detailFade2Meters).toBe(5000)
+  })
+})
+
+// Коррибан (actorId 88) — терраформная арка Task 2: планета с атмосферой и
+// облаками (cloud-ресурс НЕ трогается этой волной), height/slope/detail —
+// как у остальных 18 тел волны
+function korriban(): Actor {
+  return Actor.find(88)!
+}
+
+describe('PlanetMaterial: данные Коррибана — height/slope/detail-связки, атмосфера и облака не тронуты', () => {
+  it('height-строка Коррибана: верный путь и резидентный lifecycle', () => {
+    const row = korriban().resources.where('resourceType', 'height').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/StarWars/korriban/korriban_height.raw')
+    expect(row!.getAttribute('lifecycle')).toBe('resident')
+  })
+
+  it('slope-строка Коррибана: верный путь, streamable, wrapS RepeatWrapping', () => {
+    const row = korriban().resources.where('resourceType', 'slope').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/StarWars/korriban/korriban_slope.webp')
+    expect(row!.getAttribute('lifecycle')).toBe('streamable')
+    expect(row!.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('диффуз Коррибана несёт wrapS: RepeatWrapping в данных (терраформный шов меридиана)', () => {
+    const diffuse = korriban().resources.where('resourceType', 'diffuse').first()!
+
+    expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('detail-связки Коррибана указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
+    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
+      const moonRow = moon().resources.where('resourceType', type).first()
+      const korribanRow = korriban().resources.where('resourceType', type).first()
+
+      expect(korribanRow, type).toBeDefined()
+      expect(korribanRow!.getAttribute('id')).toBe(moonRow!.getAttribute('id'))
+      expect(korribanRow!.getAttribute('path')).toBe(moonRow!.getAttribute('path'))
+    }
+  })
+
+  it('renderingObjects Коррибана несёт ручки детального слоя террейна (detailSaturation 0.15 — Татуин/Коррибан)', () => {
+    const data = korriban().renderingObject!.getAttribute('data') as Record<string, unknown>
+
+    expect(data.bumpScale).toBe(1)
+    expect(data.detailScaleMeters).toBe(40)
+    expect(data.detailScale2Meters).toBe(7)
+    expect(data.detailNormalScale).toBe(1)
+    expect(data.detailSaturation).toBe(0.15)
+    expect(data.detailBrightness).toBe(1)
+    expect(data.detailAoInfluence).toBe(0.5)
+    expect(data.detailFadeMeters).toBe(30000)
+    expect(data.detailFade2Meters).toBe(5000)
+  })
+
+  it('cloud-строка Коррибана существует и привязана (эта волна её не трогает)', () => {
+    const cloud = korriban().resources.where('resourceType', 'cloud').first()
+
+    expect(cloud).toBeDefined()
+    expect(cloud!.getAttribute('path')).toBe('planets/StarWars/korriban/korriban_clouds.png')
+  })
+})
+
+// Все 19 тел Task 2 стандартизации: 9 реальных лун (Мимас..Оберон), Татуин,
+// 3 луны Татуина, 2 Ohann, 3 Adriana (I/II/IV) и Коррибан — счётные инварианты
+// одинаковы для всех, тот же паритет, что у батча 18 спутников и девяти тел выше
+const TASK2_19_ACTOR_IDS = [24, 25, 26, 27, 31, 32, 33, 34, 35, 62, 65, 66, 67, 68, 69, 71, 72, 74, 88] as const
+
+describe('PlanetMaterial: счётные инварианты 19 тел Task 2 стандартизации', () => {
+  it.each(TASK2_19_ACTOR_IDS)('actorId %i: пара height+slope, wrapS у slope и диффуза, bumpScale 1, ровно 6 терраформных связок', (actorId) => {
+    const actor = Actor.find(actorId)!
+    const height = actor.resources.where('resourceType', 'height').first()
+    const slope = actor.resources.where('resourceType', 'slope').first()
+    const diffuse = actor.resources.where('resourceType', 'diffuse').first()
+
+    expect(height, `actorId ${actorId}: height`).toBeDefined()
+    expect(slope, `actorId ${actorId}: slope`).toBeDefined()
+    expect(slope!.getAttribute('wrapS'), `actorId ${actorId}: slope wrapS`).toBe(RepeatWrapping)
+    expect(diffuse!.getAttribute('wrapS'), `actorId ${actorId}: diffuse wrapS`).toBe(RepeatWrapping)
+
+    const data = actor.renderingObject!.getAttribute('data') as Record<string, unknown>
+    expect(data.bumpScale, `actorId ${actorId}: bumpScale`).toBe(1)
+
+    const terraformLinks = actor.resources.whereIn('resourceType', [...TERRAFORM_RESOURCE_TYPES]).count()
+    expect(terraformLinks, `actorId ${actorId}: терраформные связки`).toBe(6)
+  })
+})
+
 describe('PlanetMaterial: зачистка облаков Титана и Венеры', () => {
   it('у Титана и Венеры облачной строки больше нет', () => {
     const titan = Actor.find(29)!
