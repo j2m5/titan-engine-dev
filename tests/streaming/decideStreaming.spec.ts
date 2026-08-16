@@ -1,300 +1,176 @@
 import { describe, it, expect } from 'vitest'
 import { decideStreaming } from '@/core/streaming/decideStreaming'
 import { textureBytes } from '@/core/streaming/TextureBudget'
-import type { StreamCandidate } from '@/core/streaming/types'
+import type { MapCandidate } from '@/core/streaming/types'
 
 const SIZE_8K: number = textureBytes(8192, 4096) // ~171 МиБ
-const SIZE_2K: number = textureBytes(2048, 1024) // ~11 МиБ
 
-function candidate(actorId: number, priority: number, ...paths: string[]): StreamCandidate {
-  return { actorId, name: `actor-${actorId}`, priority, paths: paths.length ? paths : [`p${actorId}.jpg`] }
+/** Кандидат-карта: рангов и приоритетов достаточно, чтобы не тащить three.js в юнит. */
+function mc(actorId: number, path: string, typeRank: number, actorPriority: number): MapCandidate {
+  return { actorId, name: `a${actorId}`, path, typeRank, actorPriority }
 }
 
-/** Все пути весят как 8K. */
-const all8K = (): number => SIZE_8K
+/** Все пути весят одинаково n байт. */
+const size =
+  (n: number) =>
+  (): number =>
+    n
 
 const nothingPinned = (): boolean => false
-const noneExcluded: ReadonlySet<number> = new Set()
+const noneExcluded: ReadonlySet<string> = new Set()
 
 describe('decideStreaming', () => {
-  it('набирает по убыванию приоритета, пока влезает в бюджет', () => {
-    const decision = decideStreaming(
-      [candidate(1, 0.1), candidate(2, 0.5), candidate(3, 0.3)],
+  it('послойность: detail не в наборе, пока диффуз дальнего тела не влез', () => {
+    // Бюджет на 3 карты по 100: диффуз A(prio 2), диффуз B(prio 1), detail A(rank 2).
+    // Пол забирает диффуз A (топ-тело) безусловно, детейл того же тела всё равно
+    // не должен обогнать диффуз ДРУГОГО тела — послойность важнее актор-приоритета.
+    const d = decideStreaming(
+      [mc(1, 'a.diff', 0, 2), mc(2, 'b.diff', 0, 1), mc(1, 'a.detail', 2, 2)],
       new Set(),
       nothingPinned,
       noneExcluded,
-      all8K,
+      size(100),
+      250
+    )
+
+    expect(d.load.map((c: MapCandidate): string => c.path)).toEqual(['a.diff', 'b.diff'])
+  })
+
+  it('внутри слоя — по актор-приоритету', () => {
+    // Три диффуза одного слоя, бюджет на два: побеждают два больших приоритета.
+    const d = decideStreaming(
+      [mc(1, 'a.diff', 0, 1), mc(2, 'b.diff', 0, 5), mc(3, 'c.diff', 0, 3)],
+      new Set(),
+      nothingPinned,
+      noneExcluded,
+      size(100),
+      200
+    )
+
+    expect(d.load.map((c: MapCandidate): string => c.path)).toEqual(['b.diff', 'c.diff'])
+  })
+
+  it('зеркальное вытеснение: загруженный detail дальнего уходит первым', () => {
+    // a.diff (prio 5) — топ-тело, держит пол. b.diff и b.detail (prio 3) уже
+    // загружены, но бюджет тесный — влезает только пол. Внутри вытесняемого
+    // тела b детейл (младший слой) обязан уйти раньше диффуза того же тела.
+    const loadedPaths: ReadonlySet<string> = new Set(['a.diff', 'b.diff', 'b.detail'])
+
+    const d = decideStreaming(
+      [mc(1, 'a.diff', 0, 5), mc(2, 'b.diff', 0, 3), mc(2, 'b.detail', 2, 3)],
+      loadedPaths,
+      nothingPinned,
+      noneExcluded,
+      size(100),
+      150
+    )
+
+    expect(d.evict.map((c: MapCandidate): string => c.path)).toEqual(['b.detail', 'b.diff'])
+  })
+
+  it('дедуп путей: шаренный detail-путь один раз в стоимости, wantedPaths его содержит один раз', () => {
+    // terrain/d.webp запрошен и актором 1 (prio 5, тот же, что диффуз-пол), и
+    // актором 2 (prio 3). Дедуп сливает его в одну запись (max prio, min rank),
+    // поэтому его стоимость учитывается один раз, и бюджета на 200 хватает
+    // ровно на пол (диффуз) плюс детейл.
+    const d = decideStreaming(
+      [mc(1, 'a.diff', 0, 5), mc(1, 'terrain/d.webp', 2, 5), mc(2, 'terrain/d.webp', 2, 3)],
+      new Set(),
+      nothingPinned,
+      noneExcluded,
+      size(100),
+      200
+    )
+
+    const occurrences: number = [...d.wantedPaths].filter((p: string): boolean => p === 'terrain/d.webp').length
+
+    expect(occurrences).toBe(1)
+    expect(d.load.map((c: MapCandidate): string => c.path)).toEqual(['a.diff', 'terrain/d.webp'])
+  })
+
+  it('пол: диффуз+slope топ-тела грузятся при бюджете меньше их суммы', () => {
+    // Бюджет 50 не покрывает даже одну карту по 100 — без пола топ-тело
+    // осталось бы вовсе без карт. Диффуз и slope тела 1 (prio 5) обязаны
+    // попасть в набор оба, тело 2 — не попадает совсем.
+    const d = decideStreaming(
+      [mc(1, 'a.diff', 0, 5), mc(1, 'a.slope', 1, 5), mc(2, 'b.diff', 0, 3)],
+      new Set(),
+      nothingPinned,
+      noneExcluded,
+      size(100),
+      50
+    )
+
+    expect(d.load.map((c: MapCandidate): string => c.path)).toEqual(['a.diff', 'a.slope'])
+  })
+
+  it('пол пары без slope у топ-тела — только диффуз, чужой slope не подмешивается', () => {
+    // У топ-тела (актор 1) нет slope-кандидата вовсе. Пол обязан ограничиться
+    // диффузом топ-тела и не хватать slope чужого тела 2, даже если тот
+    // дешёвый и легко влез бы.
+    const d = decideStreaming(
+      [mc(1, 'a.diff', 0, 5), mc(2, 'b.diff', 0, 3), mc(2, 'b.slope', 1, 3)],
+      new Set(),
+      nothingPinned,
+      noneExcluded,
+      size(100),
+      0
+    )
+
+    expect(d.load.map((c: MapCandidate): string => c.path)).toEqual(['a.diff'])
+  })
+
+  it('пины и excluded — по путям (прежняя семантика на новой грануле)', () => {
+    // a.slope исключён: пол всё равно хочет его (wantedPaths), но он не
+    // грузится и не резервирует бюджет. b.diff уже загружен и закреплён —
+    // не должен уйти в evict, даже не попадая в reserved по бюджету.
+    const loadedPaths: ReadonlySet<string> = new Set(['a.diff', 'b.diff'])
+    const excludedPaths: ReadonlySet<string> = new Set(['a.slope'])
+
+    const d = decideStreaming(
+      [mc(1, 'a.diff', 0, 5), mc(1, 'a.slope', 1, 5), mc(2, 'b.diff', 0, 3)],
+      loadedPaths,
+      (path: string): boolean => path === 'b.diff',
+      excludedPaths,
+      size(100),
+      100
+    )
+
+    expect(d.wantedPaths.has('a.slope')).toBe(true)
+    expect(d.load.some((c: MapCandidate): boolean => c.path === 'a.slope')).toBe(false)
+    expect(d.evict.some((c: MapCandidate): boolean => c.path === 'b.diff')).toBe(false)
+  })
+
+  it('детерминизм: тот же вход — тот же результат, порядок load/evict стабилен', () => {
+    // Два тела делят актор-приоритет 5 (тай-брейк должен быть стабильным).
+    const candidates: MapCandidate[] = [mc(1, 'a.diff', 0, 5), mc(2, 'b.diff', 0, 5), mc(1, 'a.slope', 1, 5)]
+    const loadedPaths: ReadonlySet<string> = new Set(['a.diff', 'b.diff', 'a.slope'])
+
+    const run = (): ReturnType<typeof decideStreaming> =>
+      decideStreaming(candidates, loadedPaths, nothingPinned, noneExcluded, size(100), 100)
+
+    const first = run()
+    const second = run()
+
+    expect(second.load.map((c: MapCandidate): string => c.path)).toEqual(first.load.map((c: MapCandidate): string => c.path))
+    expect(second.evict.map((c: MapCandidate): string => c.path)).toEqual(
+      first.evict.map((c: MapCandidate): string => c.path)
+    )
+  })
+
+  it('неизвестный размер берётся по оценке 8K, а не как ноль', () => {
+    // Оценка равна 8K, значит при бюджете на два 8K влезают ровно двое.
+    // Считай мы неизвестное нулём — влезли бы все трое и бюджет был бы
+    // превышен втрое.
+    const d = decideStreaming(
+      [mc(1, 'a.diff', 0, 0.9), mc(2, 'b.diff', 0, 0.5), mc(3, 'c.diff', 0, 0.1)],
+      new Set(),
+      nothingPinned,
+      noneExcluded,
+      (): undefined => undefined,
       SIZE_8K * 2
     )
 
-    // Два самых приоритетных: 2 (0.5) и 3 (0.3). Актор 1 не влезает.
-    expect(decision.load.map((c: StreamCandidate): number => c.actorId)).toEqual([2, 3])
-    expect(decision.evict).toEqual([])
-  })
-
-  it('вытесняет загруженное, что не попало в бюджет', () => {
-    const decision = decideStreaming(
-      [candidate(1, 0.1), candidate(2, 0.5)],
-      new Set([1, 2]),
-      nothingPinned,
-      noneExcluded,
-      all8K,
-      SIZE_8K
-    )
-
-    expect(decision.load).toEqual([])
-    expect(decision.evict.map((c: StreamCandidate): number => c.actorId)).toEqual([1])
-  })
-
-  it('крупное далёкое тело обходит мелкое близкое', () => {
-    // Камера у Мимаса, 1000 км от него. Приоритет = радиус / дистанция.
-    // Мимас 198.8 / 1 000 = 0.199; Сатурн 58 232 / 185 540 = 0.314.
-    const mimas = candidate(1, 198.8 / 1000)
-    const saturn = candidate(2, 58232 / 185540)
-
-    const decision = decideStreaming([mimas, saturn], new Set(), nothingPinned, noneExcluded, all8K, SIZE_8K)
-
-    expect(decision.load.map((c: StreamCandidate): number => c.actorId)).toEqual([2])
-  })
-
-  it('стоимость актора — сумма его путей', () => {
-    const decision = decideStreaming(
-      [candidate(1, 0.9, 'a.jpg', 'b.jpg'), candidate(2, 0.5)],
-      new Set(),
-      nothingPinned,
-      noneExcluded,
-      all8K,
-      SIZE_8K * 2
-    )
-
-    // Актор 1 стоит два 8K и выбирает весь бюджет — актору 2 места нет.
-    expect(decision.load.map((c: StreamCandidate): number => c.actorId)).toEqual([1])
-  })
-
-  it('неизвестный размер берётся по оценке, а не как ноль', () => {
-    const decision = decideStreaming(
-      [candidate(1, 0.9), candidate(2, 0.5), candidate(3, 0.1)],
-      new Set(),
-      nothingPinned,
-      noneExcluded,
-      (): number | undefined => undefined,
-      SIZE_8K * 2
-    )
-
-    // Оценка равна 8K, значит влезают ровно двое. Считай мы неизвестное нулём —
-    // влезли бы все трое и бюджет был бы превышен втрое.
-    expect(decision.load).toHaveLength(2)
-  })
-
-  it('закреплённый актор не вытесняется', () => {
-    const decision = decideStreaming(
-      [candidate(1, 0.1), candidate(2, 0.5)],
-      new Set([1, 2]),
-      (actorId: number): boolean => actorId === 1,
-      noneExcluded,
-      all8K,
-      SIZE_8K
-    )
-
-    expect(decision.evict).toEqual([])
-  })
-
-  it('исключённый актор не грузится, но и не мешает остальным', () => {
-    // Бюджет ровно на одного. Исключённый актор 1 приоритетнее — если бы он
-    // резервировал бюджет перед тем, как его отфильтруют, актору 2 места
-    // бы не хватило. Ключевая проверка не "не загрузился", а "не заблокировал".
-    const decision = decideStreaming(
-      [candidate(1, 0.9), candidate(2, 0.5)],
-      new Set(),
-      nothingPinned,
-      new Set([1]),
-      all8K,
-      SIZE_8K
-    )
-
-    expect(decision.load.map((c: StreamCandidate): number => c.actorId)).toEqual([2])
-  })
-
-  it('уже загруженный не запрашивается повторно', () => {
-    const decision = decideStreaming(
-      [candidate(1, 0.9)],
-      new Set([1]),
-      nothingPinned,
-      noneExcluded,
-      all8K,
-      SIZE_8K
-    )
-
-    expect(decision.load).toEqual([])
-    expect(decision.evict).toEqual([])
-  })
-
-  it('дорогой, но не топ приоритета — пропускается (continue), а не останавливает цикл', () => {
-    // Пол защищает только САМОГО приоритетного кандидата (см. тесты floor
-    // ниже) — для всех остальных рангов действует обычная проверка. Актор 2
-    // стоит два 8K (вдвое дороже всего бюджета) и стоит НЕ на первом месте
-    // по приоритету — цикл обязан пропустить его (continue) и дойти до
-    // актора 3, а не остановиться на первом же промахе (break) и не
-    // применить к нему пол, как к топу.
-    const decision = decideStreaming(
-      [candidate(1, 0.9), candidate(2, 0.6, 'a.jpg', 'b.jpg'), candidate(3, 0.3)],
-      new Set(),
-      nothingPinned,
-      noneExcluded,
-      all8K,
-      SIZE_8K * 2
-    )
-
-    expect(decision.load.map((c: StreamCandidate): number => c.actorId)).toEqual([1, 3])
-  })
-
-  it('пол: топ-кандидат дороже всего бюджета всё равно допускается', () => {
-    // Харон (диффуз+bump 16K, 1366 МиБ) дороже всего бюджета (1 ГиБ) целиком —
-    // без пола он не попал бы НИКУДА, и тело, на которое смотрит пользователь,
-    // осталось бы с вечной заглушкой. Пол гарантирует резидентность самому
-    // приоритетному кандидату независимо от его стоимости.
-    const decision = decideStreaming(
-      [candidate(1, 0.9, 'a.jpg', 'b.jpg', 'c.jpg')], // 3 × 8K > бюджет в 1 × 8K
-      new Set(),
-      nothingPinned,
-      noneExcluded,
-      all8K,
-      SIZE_8K
-    )
-
-    expect(decision.load.map((c: StreamCandidate): number => c.actorId)).toEqual([1])
-  })
-
-  it('пол не распространяется на кандидата после дорогого топа', () => {
-    // Топ уже перебрал весь бюджет (и сверх того) — следующий по приоритету
-    // по-прежнему проверяется по ОСТАВШЕМУСЯ бюджету, который топ исчерпал:
-    // перерасход ограничен одним телом, а не превращается в цепочку допусков.
-    const decision = decideStreaming(
-      [candidate(1, 0.9, 'a.jpg', 'b.jpg', 'c.jpg'), candidate(2, 0.5)],
-      new Set(),
-      nothingPinned,
-      noneExcluded,
-      all8K,
-      SIZE_8K
-    )
-
-    expect(decision.load.map((c: StreamCandidate): number => c.actorId)).toEqual([1])
-  })
-
-  it('вытесняет несколько тел в порядке убывания приоритета', () => {
-    const decision = decideStreaming(
-      [candidate(1, 0.2), candidate(2, 0.6), candidate(3, 0.9)],
-      new Set([1, 2, 3]),
-      nothingPinned,
-      noneExcluded,
-      all8K,
-      SIZE_8K
-    )
-
-    // Влезает только актор 3. Вытесняются 2 и 1 — в порядке убывания
-    // приоритета, том же, в котором отдаётся load.
-    expect(decision.evict.map((c: StreamCandidate): number => c.actorId)).toEqual([2, 1])
-  })
-
-  it('wanted включает исключённого кандидата, если тот сам по себе влезает в бюджет', () => {
-    // Тот же сетап, что и «исключённый актор не грузится, но и не мешает
-    // остальным»: актор 1 приоритетнее и по бюджету заслуживает резидентности
-    // сам по себе — исключение блокирует только ЗАГРУЗКУ (load), а не то,
-    // что актор всё ещё «в зоне». Раньше единственная wanted строилась ИЗ
-    // decision.load и потому НИКОГДА не содержала исключённых — отсюда и
-    // Вызывающий код не мог отличить «ещё приоритетен, просто
-    // заблокирован» от «покинул зону», и снимал блокировку повтора на первом
-    // же цикле после провала.
-    const decision = decideStreaming(
-      [candidate(1, 0.9), candidate(2, 0.5)],
-      new Set(),
-      nothingPinned,
-      new Set([1]),
-      all8K,
-      SIZE_8K
-    )
-
-    expect(decision.wanted.has(1)).toBe(true)
-    expect(decision.load.map((c: StreamCandidate): number => c.actorId)).toEqual([2])
-  })
-
-  it('wanted включает уже загруженного кандидата, даже если его нет в load', () => {
-    // Актор уже резидентен и по-прежнему влезает в бюджет — decideStreaming
-    // не отдаёт его в load (незачем перезапрашивать то, что уже загружено),
-    // но по приоритету/бюджету он всё ещё «wanted».
-    const decision = decideStreaming([candidate(1, 0.9)], new Set([1]), nothingPinned, noneExcluded, all8K, SIZE_8K)
-
-    expect(decision.wanted.has(1)).toBe(true)
-    expect(decision.load).toEqual([])
-  })
-
-  it('load всегда подмножество wanted — даже когда исключение освобождает бюджет менее приоритетным', () => {
-    // Бюджет на два слота, кандидаты 0.9 (исключён),
-    // 0.5, 0.1. Раньше wanted и load считались ДВУМЯ раздельными проходами —
-    // wanted заряжал бюджет исключённому кандидату целиком (усекая место для
-    // менее приоритетных), а проход для load пропускал резервирование
-    // исключённому вовсе (тест выше). Из-за этого load мог получить актора
-    // 3 (0.1), а wanted — нет: load=[2,3], wanted={1,2}. Если бы актор 3
-    // потом провалился, attempted снялся бы на первом же цикле — тот самый
-    // бесконечный ретрай.
-    const decision = decideStreaming(
-      [candidate(1, 0.9), candidate(2, 0.5), candidate(3, 0.1)],
-      new Set(),
-      nothingPinned,
-      new Set([1]),
-      all8K,
-      SIZE_8K * 2
-    )
-
-    for (const candidate of decision.load) {
-      expect(decision.wanted.has(candidate.actorId)).toBe(true)
-    }
-
-    // Явная фиксация формы: если это когда-нибудь перестанет быть [2, 3],
-    // сам факт "подмножество" мог бы устоять случайно (пустой load тоже
-    // подмножество). Проверяем, что тест действительно нагружает механизм.
-    expect(decision.load.map((c: StreamCandidate): number => c.actorId)).toEqual([2, 3])
-  })
-
-  it('wanted и evict не пересекаются, пока loaded и excluded не пересекаются', () => {
-    // Реальный вызывающий код (ResourceObserver) поддерживает
-    // attempted ∩ loaded = ∅ как инвариант: провал синхронно убирает актора
-    // из loaded в момент, когда добавляет его в attempted (=excluded здесь).
-    // При этом условии ни один актор не может одновременно "заслуживать
-    // резидентности" (wanted) и "подлежать вытеснению" (evict) — иначе это
-    // было бы логическим противоречием в самих именах множеств.
-    const loaded = new Set([2, 3])
-    const excluded = new Set([4]) // не пересекается с loaded
-
-    const decision = decideStreaming(
-      [candidate(1, 0.9), candidate(2, 0.6), candidate(3, 0.3), candidate(4, 0.1)],
-      loaded,
-      nothingPinned,
-      excluded,
-      all8K,
-      SIZE_8K * 2 // впритык на двоих — кто-то из loaded окажется вытеснен
-    )
-
-    const overlap = [...decision.wanted].filter((actorId: number): boolean =>
-      decision.evict.some((c: StreamCandidate): boolean => c.actorId === actorId)
-    )
-
-    expect(overlap).toEqual([])
-  })
-
-  it('текстуры разного веса делят бюджет по-разному', () => {
-    const sizeOf = (path: string): number => (path === 'p1.jpg' ? SIZE_2K : SIZE_8K)
-
-    const decision = decideStreaming(
-      [candidate(1, 0.9), candidate(2, 0.5)],
-      new Set(),
-      nothingPinned,
-      noneExcluded,
-      sizeOf,
-      SIZE_8K + SIZE_2K
-    )
-
-    // Лёгкий и тяжёлый вместе влезают ровно.
-    expect(decision.load).toHaveLength(2)
+    expect(d.load).toHaveLength(2)
   })
 })
