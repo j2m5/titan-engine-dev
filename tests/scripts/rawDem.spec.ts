@@ -24,6 +24,18 @@ describe('readRawInt16Dem: чтение PDS IMG (сырой int16 LE)', () => {
   it('несовпадение размера файла с width×height×2 — ошибка с внятным сообщением', () => {
     expect(() => readRawInt16Dem(int16Buffer([1, 2, 3]), 2, 2, 1)).toThrow(/размер/i)
   })
+
+  it('bigEndian=true читает MSB_INTEGER (MOLA PDS) вместо LSB', () => {
+    const buffer = Buffer.alloc(4)
+
+    buffer.writeInt16BE(-8206, 0) // Эллада
+    buffer.writeInt16BE(21181, 2) // Олимп
+
+    const data = readRawInt16Dem(buffer, 2, 1, 1, true)
+
+    expect(data[0]).toBe(-8206)
+    expect(data[1]).toBe(21181)
+  })
 })
 
 describe('resampleDemGrid: area-average даунсемпл', () => {

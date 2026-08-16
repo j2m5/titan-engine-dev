@@ -1,15 +1,27 @@
 import { Buffer } from 'node:buffer'
 
 /**
- * Чтение сырого int16 little-endian растра — формат PDS IMG, в котором LOLA/MOLA
- * раздают даунсемплы DEM (глобальный GeoTIFF есть только у полного разрешения
- * и весит гигабайты). Заголовка у файла нет: размеры и масштаб приходят из
- * отдельного .LBL и передаются флагами.
+ * Чтение сырого int16 растра — формат PDS IMG, в котором LOLA/MOLA раздают
+ * даунсемплы DEM (глобальный GeoTIFF есть только у полного разрешения и весит
+ * гигабайты). Заголовка у файла нет: размеры, масштаб и порядок байт приходят
+ * из отдельного .LBL и передаются флагами.
  *
  * `scaleMeters` — множитель значения в метры (LDEM хранит единицы 0.5 м
  * относительно референсной сферы 1737.4 км: метры = значение × 0.5).
+ *
+ * `bigEndian` — порядок байт значения: LOLA (Луна) раздаёт LSB_INTEGER
+ * (little-endian, дефолт), MOLA (Марс, PDS MEGDR) — MSB_INTEGER (big-endian).
+ * Спутано с LE в наблюдаемом наборе — не датум/масштаб, а `.LBL` DATA_TYPE
+ * поле: значение min/max ушло к границам int16 (-32768/32767) вместо
+ * физического диапазона, если продукт на самом деле MSB, а флаг не передан.
  */
-export function readRawInt16Dem(buffer: Buffer, width: number, height: number, scaleMeters: number): Float32Array {
+export function readRawInt16Dem(
+  buffer: Buffer,
+  width: number,
+  height: number,
+  scaleMeters: number,
+  bigEndian: boolean = false
+): Float32Array {
   const expectedBytes = width * height * 2
 
   if (buffer.byteLength !== expectedBytes) {
@@ -17,12 +29,13 @@ export function readRawInt16Dem(buffer: Buffer, width: number, height: number, s
   }
 
   // Int16Array-вью требует чётного byteOffset — Buffer из readFile его не
-  // гарантирует, поэтому через DataView с явным little-endian
+  // гарантирует, поэтому через DataView с явным порядком байт
   const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength)
   const out = new Float32Array(width * height)
+  const littleEndian = !bigEndian
 
   for (let i = 0; i < out.length; i++) {
-    out[i] = view.getInt16(i * 2, true) * scaleMeters
+    out[i] = view.getInt16(i * 2, littleEndian) * scaleMeters
   }
 
   return out

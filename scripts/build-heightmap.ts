@@ -2,22 +2,40 @@ import process from 'node:process'
 import { readFile, writeFile } from 'node:fs/promises'
 import { resampleDem } from './lib/resampleDem'
 import { readRawInt16Dem, resampleDemGrid } from './lib/rawDem'
+import { readGeoTiffInt16 } from './lib/geoTiffInt16'
 import { encodeHeightMap, normalizeToUint16, resolveHeightRange } from './lib/heightMapEncode'
 import { argument } from './lib/cliArguments'
 
 /**
- * Подготовка карты высот тела: DEM (GeoTIFF/PNG или сырой PDS IMG) →
+ * Подготовка карты высот тела: DEM (GeoTIFF int16/PNG или сырой PDS IMG) →
  * raw Uint16 + заголовок TEHM.
  *
  * Запуск: npm run build:heightmap -- --in <файл> --out <файл> [--width 8192]
  *   [--height 4096] [--min-meters N --max-meters N]
- *   [--in-width N --in-height N [--scale-meters K]]
+ *   [--in-width N --in-height N [--scale-meters K] [--big-endian]]
+ *   [--scale-meters K] [--offset-meters K] [--nodata-fill N]
  *
- * Два режима входа:
- *   - GeoTIFF/PNG — читается sharp'ом, размеры из файла;
- *   - сырой int16 LE (PDS IMG: так LOLA/MOLA раздают даунсемплы) — включается
+ * Три режима входа:
+ *   - **.tif/.tiff** (signed int16, strip-based, без сжатия — так USGS
+ *     Astrogeology раздаёт DEM планет) — читается собственным
+ *     `lib/geoTiffInt16.ts` (не sharp — sharp/libvips путает буфер пикселей
+ *     на этих конкретных файлах, см. докблок модуля). Scale/offset
+ *     авто-детектятся из встроенных GDAL-тегов файла (`GDAL_METADATA`
+ *     SCALE/OFFSET), `--scale-meters`/`--offset-meters` их переопределяют;
+ *     итоговая высота = `DN×scale + offset`. NODATA-текселы (тег
+ *     `GDAL_NODATA`, если есть) заменяются на `--nodata-fill <метры>`
+ *     (по умолчанию 0 — опорная сфера); доля замены печатается в консоль —
+ *     если она заметная (проценты, не доли процента), решение по значению
+ *     заполнения проверить на приёмке.
+ *   - GeoTIFF (float)/PNG прочих форматов — читается sharp'ом, размеры из файла;
+ *   - сырой int16 (PDS IMG: так LOLA/MOLA раздают даунсемплы) — включается
  *     парой --in-width/--in-height (размеры из .LBL-лейбла рядом с файлом),
- *     --scale-meters переводит значение в метры (по умолчанию 1).
+ *     --scale-meters переводит значение в метры (по умолчанию 1). Порядок
+ *     байт — по умолчанию little-endian (LOLA, DATA_TYPE=LSB_INTEGER);
+ *     --big-endian переключает на MSB_INTEGER (MOLA/PDS MEGDR — сверить
+ *     DATA_TYPE в .LBL; спутанный порядок даёт min/max у границ int16
+ *     ±32767/±32768 вместо физического диапазона — верный сигнал перепроверить
+ *     флаг санити-проверкой перед принятием карты).
  *
  * Без --min/--max диапазон берётся из данных после ресемпла. Для тел с
  * известной привязкой (LOLA: высоты от радиуса 1737.4 км) значения лучше
@@ -73,16 +91,24 @@ if ((inWidthArg !== undefined) !== (inHeightArg !== undefined)) {
   console.error('Флаги --in-width и --in-height задаются только парой')
   process.exit(1)
 }
+const offsetArg = argument('offset-meters')
+const nodataFillArg = argument('nodata-fill')
+
 for (const [name, value] of [
   ['in-width', inWidthArg],
   ['in-height', inHeightArg],
-  ['scale-meters', scaleArg]
+  ['scale-meters', scaleArg],
+  ['offset-meters', offsetArg],
+  ['nodata-fill', nodataFillArg]
 ] as const) {
   if (value !== undefined && !Number.isFinite(Number(value))) {
     console.error(`Флаг --${name} должен быть конечным числом, получено:`, value)
     process.exit(1)
   }
 }
+
+const bigEndian = process.argv.includes('--big-endian')
+const isTiff = /\.tiff?$/i.test(input)
 
 const dem =
   inWidthArg !== undefined && inHeightArg !== undefined
@@ -91,12 +117,43 @@ const dem =
           await readFile(input),
           Number(inWidthArg),
           Number(inHeightArg),
-          Number(scaleArg ?? 1)
+          Number(scaleArg ?? 1),
+          bigEndian
         )
 
         return { width, height, data: resampleDemGrid(source, Number(inWidthArg), Number(inHeightArg), width, height) }
       })()
-    : await resampleDem(input, width, height)
+    : isTiff
+      ? await (async () => {
+          const parsed = readGeoTiffInt16(await readFile(input))
+          const scale = scaleArg !== undefined ? Number(scaleArg) : parsed.scale
+          const offset = offsetArg !== undefined ? Number(offsetArg) : parsed.offset
+          const nodataFillMeters = nodataFillArg !== undefined ? Number(nodataFillArg) : 0
+
+          const meters = new Float32Array(parsed.data.length)
+          let nodataCount = 0
+
+          for (let i = 0; i < parsed.data.length; i++) {
+            const dn = parsed.data[i]
+
+            if (parsed.nodata !== undefined && dn === parsed.nodata) {
+              meters[i] = nodataFillMeters
+              nodataCount++
+            } else {
+              meters[i] = dn * scale + offset
+            }
+          }
+
+          if (nodataCount > 0) {
+            console.log(
+              `GeoTIFF: NODATA-текселей ${nodataCount} из ${parsed.data.length} ` +
+                `(${((100 * nodataCount) / parsed.data.length).toFixed(2)}%), заменены на ${nodataFillMeters} м`
+            )
+          }
+
+          return { width, height, data: resampleDemGrid(meters, parsed.width, parsed.height, width, height) }
+        })()
+      : await resampleDem(input, width, height)
 
 // Разрешение диапазона высот: явные аргументы приоритизируются, отсутствующие берутся из данных.
 // Отслеживаем явность каждой границы отдельно — скан не трогает явно заданные значения.

@@ -12,11 +12,13 @@ import { argument } from './lib/cliArguments'
 import { bandLowKmFor, boxDownsampleGreyscale, resolutionCeiling } from './lib/batchBodyRules'
 
 /**
- * Батч-оркестратор перевода спутников на конвейер «тел без DEM» (арка
- * synth-heightmap): один прогон генерит height+slope для всех записей
- * `BODIES` (декларативный список — 18 генераций на 18 тел; фикс-раунд 1
- * реального прогона развёл Корribан I-VII на семь ПЕР-ТЕЛО генераций, общий
- * только вход-текстура, см. ниже). Математика синтеза НЕ дублируется:
+ * Батч-оркестратор перевода тел без DEM (спутников и карликовых планет) на
+ * конвейер «тел без DEM» (арка synth-heightmap): один прогон генерит
+ * height+slope для всех записей `BODIES` (декларативный список — 18
+ * спутниковых генераций плюс пятёрка карликовых планет пояса
+ * Койпера/рассеянного диска; фикс-раунд 1 реального прогона развёл Корribан
+ * I-VII на семь ПЕР-ТЕЛО генераций, общий только вход-текстура, см. ниже).
+ * Математика синтеза НЕ дублируется:
  * вызывает тот же библиотечный конвейер, что и одиночный
  * `build:synth-heightmap` (`buildSynthHeightField`, `buildSlopeMap`,
  * писатель TEHM `encodeHeightMap`).
@@ -44,7 +46,7 @@ import { bandLowKmFor, boxDownsampleGreyscale, resolutionCeiling } from './lib/b
  * Корribана в БД был ошибкой (радиус I откалиброван на VII дал 577% его
  * бюджета высоты), поэтому этот батч больше не производит общую карту.
  *
- * Запуск (все 18 генераций):
+ * Запуск (все генерации списка):
  *   npm run build:moon-heightmaps
  * Перегенерировать одно тело:
  *   npm run build:moon-heightmaps -- --only rhea
@@ -231,6 +233,48 @@ const BODIES: readonly BodyGeneration[] = [
     radiusMeters: 175_000,
     seedActorId: 99,
     actorIds: [99]
+  },
+  // Карликовые планеты пояса Койпера/рассеянного диска — вход diffuse (DEM
+  // нет), потолок разрешения 4096 у всех пяти (500–1500 км по resolutionCeiling).
+  {
+    name: 'pluto',
+    inputPath: `${TEXTURES_ROOT}/pluto/pluto.jpg`,
+    inputKind: 'diffuse',
+    radiusMeters: 1_188_300,
+    seedActorId: 14,
+    actorIds: [14]
+  },
+  {
+    name: 'haumea',
+    inputPath: `${TEXTURES_ROOT}/haumea/haumea.jpg`,
+    inputKind: 'diffuse',
+    radiusMeters: 816_000,
+    seedActorId: 15,
+    actorIds: [15]
+  },
+  {
+    name: 'makemake',
+    inputPath: `${TEXTURES_ROOT}/makemake/makemake.jpg`,
+    inputKind: 'diffuse',
+    radiusMeters: 739_000,
+    seedActorId: 16,
+    actorIds: [16]
+  },
+  {
+    name: 'eris',
+    inputPath: `${TEXTURES_ROOT}/eris/eris.jpg`,
+    inputKind: 'diffuse',
+    radiusMeters: 1_163_000,
+    seedActorId: 17,
+    actorIds: [17]
+  },
+  {
+    name: 'sedna',
+    inputPath: `${TEXTURES_ROOT}/sedna/sedna.jpg`,
+    inputKind: 'diffuse',
+    radiusMeters: 800_000,
+    seedActorId: 18,
+    actorIds: [18]
   }
 ]
 
