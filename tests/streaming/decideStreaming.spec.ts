@@ -68,24 +68,61 @@ describe('decideStreaming', () => {
     expect(d.evict.map((c: MapCandidate): string => c.path)).toEqual(['b.detail', 'b.diff'])
   })
 
-  it('дедуп путей: шаренный detail-путь один раз в стоимости, wantedPaths его содержит один раз', () => {
+  it('дедуп путей: шаренный detail-путь резервирует бюджет один раз, а не за каждого владельца', () => {
     // terrain/d.webp запрошен и актором 1 (prio 5, тот же, что диффуз-пол), и
-    // актором 2 (prio 3). Дедуп сливает его в одну запись (max prio, min rank),
-    // поэтому его стоимость учитывается один раз, и бюджета на 200 хватает
-    // ровно на пол (диффуз) плюс детейл.
+    // актором 2 (prio 3, дубль того же пути). Бюджет на 300 хватает ровно на
+    // пол (a.diff, 100) + terrain/d.webp (100, ОДИН раз) + c.detail (100).
+    // Если бы дедуп не сработал и путь зарезервировал бюджет ЗА КАЖДОГО из
+    // двух владельцев (100+100), сумма достигла бы 300 ещё до c.detail — тот
+    // не влез бы. То, что c.detail в наборе, и есть честное доказательство
+    // одноразового списания, а не тавтологичная проверка Set на дубликаты.
     const d = decideStreaming(
-      [mc(1, 'a.diff', 0, 5), mc(1, 'terrain/d.webp', 2, 5), mc(2, 'terrain/d.webp', 2, 3)],
+      [
+        mc(1, 'a.diff', 0, 5),
+        mc(1, 'terrain/d.webp', 2, 5),
+        mc(2, 'terrain/d.webp', 2, 3),
+        mc(3, 'c.detail', 2, 1)
+      ],
       new Set(),
       nothingPinned,
       noneExcluded,
       size(100),
-      200
+      300
     )
 
-    const occurrences: number = [...d.wantedPaths].filter((p: string): boolean => p === 'terrain/d.webp').length
+    // Путь встречается в load ровно один раз — дубли-кандидаты схлопнулись в
+    // одну запись ДО прохода, а не просто совпали числом дважды списанных.
+    expect(d.load.filter((c: MapCandidate): boolean => c.path === 'terrain/d.webp')).toHaveLength(1)
+    expect(d.load.map((c: MapCandidate): string => c.path)).toEqual(['a.diff', 'terrain/d.webp', 'c.detail'])
+  })
 
-    expect(occurrences).toBe(1)
-    expect(d.load.map((c: MapCandidate): string => c.path)).toEqual(['a.diff', 'terrain/d.webp'])
+  it('жадный остаток: диффуз не влез — slope того же тела всё равно занимает освободившееся место', () => {
+    // Ревью зафиксировало осознанное поведение (см. докблок decideStreaming):
+    // бюджет наполняется ЖАДНО в порядке (typeRank asc, actorPriority desc),
+    // а не строго послойно. Диффуз тела Б стоит 1000 и не влезает в остаток
+    // после пола — цикл его пропускает (`continue`), НЕ останавливая набор.
+    // slope того же тела Б стоит всего 10 и, дойдя до него по очереди, влезает
+    // в тот же остаток — и загружается, хотя диффуз того же тела не смог.
+    // Строгая послойность («младший слой не начинается, пока не влезли все
+    // старшие») здесь намеренно НЕ соблюдена: заполненный бюджет ценнее
+    // пустого остатка, который держала бы строгая иерархия ради тела Б.
+    const sizeOf = (path: string): number => {
+      if (path === 'a.diff') return 5
+      if (path === 'b.diff') return 1000
+      return 10 // b.slope
+    }
+
+    const d = decideStreaming(
+      [mc(1, 'a.diff', 0, 10), mc(2, 'b.diff', 0, 5), mc(2, 'b.slope', 1, 5)],
+      new Set(),
+      nothingPinned,
+      noneExcluded,
+      sizeOf,
+      20 // хватает на пол (5) и на b.slope (10), но не на b.diff (1000)
+    )
+
+    expect(d.load.some((c: MapCandidate): boolean => c.path === 'b.slope')).toBe(true)
+    expect(d.load.some((c: MapCandidate): boolean => c.path === 'b.diff')).toBe(false)
   })
 
   it('пол: диффуз+slope топ-тела грузятся при бюджете меньше их суммы', () => {
