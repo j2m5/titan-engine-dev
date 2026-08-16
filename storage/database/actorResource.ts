@@ -127,5 +127,11 @@ export const ActorResource: IActorResource[] = [
   { id: 121, actorId: 23, resourceId: 126 },
   { id: 122, actorId: 23, resourceId: 127 },
   { id: 123, actorId: 23, resourceId: 128 },
-  { id: 124, actorId: 23, resourceId: 129 }
+  { id: 124, actorId: 23, resourceId: 129 },
+  { id: 125, actorId: 21, resourceId: 132 },
+  { id: 126, actorId: 21, resourceId: 133 },
+  { id: 127, actorId: 21, resourceId: 126 },
+  { id: 128, actorId: 21, resourceId: 127 },
+  { id: 129, actorId: 21, resourceId: 128 },
+  { id: 130, actorId: 21, resourceId: 129 }
 ]

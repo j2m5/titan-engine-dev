@@ -55,7 +55,7 @@ export const Resources: IResource[] = [
   { id: 48, resourceType: "slope", lifecycle: "streamable", path: "planets/moon/moon_slope.webp", wrapS: RepeatWrapping },
   { id: 49, resourceType: "diffuse", lifecycle: "streamable", path: "planets/io/io.jpg", colorSpace: "srgb" },
   { id: 50, resourceType: "bump", lifecycle: "streamable", path: "planets/io/io_bump.jpg" },
-  { id: 51, resourceType: "diffuse", lifecycle: "streamable", path: "planets/europa/europa.jpg", colorSpace: "srgb" },
+  { id: 51, resourceType: "diffuse", lifecycle: "streamable", path: "planets/europa/europa.jpg", colorSpace: "srgb", wrapS: RepeatWrapping },
   { id: 52, resourceType: "bump", lifecycle: "streamable", path: "planets/europa/europa_bump.jpg" },
   { id: 53, resourceType: "diffuse", lifecycle: "streamable", path: "planets/ganymede/ganymede.jpg", colorSpace: "srgb" },
   { id: 54, resourceType: "bump", lifecycle: "streamable", path: "planets/ganymede/ganymede_bump.jpg" },
@@ -135,5 +135,7 @@ export const Resources: IResource[] = [
   { id: 128, resourceType: "detailArm", lifecycle: "streamable", path: "terrain/rocky_trail_arm.webp", wrapS: RepeatWrapping, wrapT: RepeatWrapping },
   { id: 129, resourceType: "detailNormal2", lifecycle: "streamable", path: "terrain/moon_01_nor.webp", wrapS: RepeatWrapping, wrapT: RepeatWrapping },
   { id: 130, resourceType: "height", lifecycle: "resident", path: "planets/callisto/callisto_height.raw" },
-  { id: 131, resourceType: "slope", lifecycle: "streamable", path: "planets/callisto/callisto_slope.webp", wrapS: RepeatWrapping }
+  { id: 131, resourceType: "slope", lifecycle: "streamable", path: "planets/callisto/callisto_slope.webp", wrapS: RepeatWrapping },
+  { id: 132, resourceType: "height", lifecycle: "resident", path: "planets/europa/europa_height.raw" },
+  { id: 133, resourceType: "slope", lifecycle: "streamable", path: "planets/europa/europa_slope.webp", wrapS: RepeatWrapping }
 ]

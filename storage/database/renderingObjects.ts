@@ -56,7 +56,11 @@ export const RenderingObjects: IRenderingObject[] = [
   { id: 47, actorId: 17, data: { emission: 1, bumpScale: 2 } },
   { id: 48, actorId: 18, data: { emission: 1, bumpScale: 2 } },
   { id: 49, actorId: 20, data: { emission: 1, bumpScale: 2 } },
-  { id: 50, actorId: 21, data: { emission: 1, bumpScale: 2 } },
+  // Европа: терраформная арка synth-heightmap (height/slope из оффлайн-генератора) — detail*
+  // делит масштабы и грейдинг с Луной и Каллисто, детальные текстуры общие по ресурсам (id 126-129);
+  // bumpScale 1 — slope-путь физически честный, множитель не нужен; осознанный компромисс:
+  // легаси-bump-фолбэк (без залитой height-карты) станет площе прежнего вида.
+  { id: 50, actorId: 21, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
   { id: 51, actorId: 22, data: { emission: 1, bumpScale: 2 } },
   // Каллисто: терраформная арка synth-heightmap (height/slope из оффлайн-генератора) — detail*
   // делит масштабы и грейдинг с Луной, детальные текстуры общие по ресурсам (id 126-129);
