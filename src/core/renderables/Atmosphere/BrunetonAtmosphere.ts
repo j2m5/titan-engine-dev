@@ -8,6 +8,10 @@ import { requireRenderingData } from '@/core/helpers/renderingData'
 import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
 import { UpdateContext } from '@/core/UpdateContext'
 import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+import {
+  adjustAtmosphereForTerrainFloor,
+  terrainFloorMetersFor
+} from '@/core/renderables/Atmosphere/terrainFloorAdjust'
 
 class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
   public model: Actor
@@ -50,14 +54,20 @@ class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
     // Форма `renderingObject.data` утверждается локально, где категория известна
     const config: AtmosphereConfig = requireRenderingData<AtmosphereConfig>(this.model, 'BrunetonAtmosphere')
 
-    const radius: number = toThreeJSUnits(config.topRadius)
+    // Терраформный родитель: дно опускается до пола рельефа, иначе аналитический
+    // горизонт шейдера повисает над реальным силуэтом (атмосфера «отлипает»).
+    // LUT и юниформы обязаны считаться из ОДНОГО подогнанного конфига.
+    const adjusted: AtmosphereConfig = adjustAtmosphereForTerrainFloor(config, terrainFloorMetersFor(this.model))
+
+    const radius: number = toThreeJSUnits(adjusted.topRadius)
 
     this.lutGenerator = new AtmosphereLUTGenerator(this.renderer)
-    const lut = this.lutGenerator.generate(config)
+    const lut = this.lutGenerator.generate(adjusted)
 
     this.geometry = new SphereGeometry(radius, 256, 256)
 
     this.material = new BrunetonAtmosphereMaterial(this.model, AtmospherePass.Transmittance)
+    this.material.setAtmosphereConfig(adjusted)
     this.material.bindLUTTextures(lut)
 
     this.name = this.model.getAttribute('name', '') + 'Atmosphere'
