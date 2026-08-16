@@ -233,6 +233,62 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
   })
 })
 
+// Каллисто (actorId 23) — второе тело с честным рельефом (терраформная арка
+// synth-heightmap): height/slope из оффлайн-генератора, детальные текстуры
+// делятся по пути с Луной (общие terrain/*.webp, шаринг ресурсов по id)
+function callisto(): Actor {
+  return Actor.find(23)!
+}
+
+describe('PlanetMaterial: данные Каллисто — height/slope/detail-связки и ручки детального слоя', () => {
+  it('height-строка Каллисто: верный путь и резидентный lifecycle', () => {
+    const row = callisto().resources.where('resourceType', 'height').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/callisto/callisto_height.raw')
+    expect(row!.getAttribute('lifecycle')).toBe('resident')
+  })
+
+  it('slope-строка Каллисто: верный путь, streamable, wrapS RepeatWrapping', () => {
+    const row = callisto().resources.where('resourceType', 'slope').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/callisto/callisto_slope.webp')
+    expect(row!.getAttribute('lifecycle')).toBe('streamable')
+    expect(row!.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('диффуз Каллисто несёт wrapS: RepeatWrapping в данных (терраформный шов меридиана)', () => {
+    const diffuse = callisto().resources.where('resourceType', 'diffuse').first()!
+
+    expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('detail-связки Каллисто указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
+    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
+      const moonRow = moon().resources.where('resourceType', type).first()
+      const callistoRow = callisto().resources.where('resourceType', type).first()
+
+      expect(callistoRow, type).toBeDefined()
+      expect(callistoRow!.getAttribute('id')).toBe(moonRow!.getAttribute('id'))
+      expect(callistoRow!.getAttribute('path')).toBe(moonRow!.getAttribute('path'))
+    }
+  })
+
+  it('renderingObjects Каллисто несёт ручки детального слоя террейна', () => {
+    const data = callisto().renderingObject!.getAttribute('data') as Record<string, unknown>
+
+    expect(data.detailScaleMeters).toBe(40)
+    expect(data.detailScale2Meters).toBe(7)
+    expect(data.detailNormalScale).toBe(1)
+    expect(data.detailSaturation).toBe(0.1)
+    expect(data.detailBrightness).toBe(1)
+    expect(data.detailAoInfluence).toBe(0.5)
+    expect(data.detailFadeMeters).toBe(30000)
+    expect(data.detailFade2Meters).toBe(5000)
+  })
+})
+
 describe('PlanetMaterial: гейты ночной и облачной карт', () => {
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())

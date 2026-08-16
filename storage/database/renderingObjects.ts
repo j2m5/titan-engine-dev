@@ -58,7 +58,9 @@ export const RenderingObjects: IRenderingObject[] = [
   { id: 49, actorId: 20, data: { emission: 1, bumpScale: 2 } },
   { id: 50, actorId: 21, data: { emission: 1, bumpScale: 2 } },
   { id: 51, actorId: 22, data: { emission: 1, bumpScale: 2 } },
-  { id: 52, actorId: 23, data: { emission: 1, bumpScale: 2 } },
+  // Каллисто: терраформная арка synth-heightmap (height/slope из оффлайн-генератора) — detail*
+  // делит масштабы и грейдинг с Луной, детальные текстуры общие по ресурсам (id 126-129)
+  { id: 52, actorId: 23, data: { emission: 1, bumpScale: 2, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
   { id: 53, actorId: 25, data: { emission: 1, bumpScale: 2 } },
   { id: 54, actorId: 26, data: { emission: 1, bumpScale: 2 } },
   { id: 55, actorId: 27, data: { emission: 1, bumpScale: 2 } },

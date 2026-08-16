@@ -59,7 +59,7 @@ export const Resources: IResource[] = [
   { id: 52, resourceType: "bump", lifecycle: "streamable", path: "planets/europa/europa_bump.jpg" },
   { id: 53, resourceType: "diffuse", lifecycle: "streamable", path: "planets/ganymede/ganymede.jpg", colorSpace: "srgb" },
   { id: 54, resourceType: "bump", lifecycle: "streamable", path: "planets/ganymede/ganymede_bump.jpg" },
-  { id: 55, resourceType: "diffuse", lifecycle: "streamable", path: "planets/callisto/callisto.jpg", colorSpace: "srgb" },
+  { id: 55, resourceType: "diffuse", lifecycle: "streamable", path: "planets/callisto/callisto.jpg", colorSpace: "srgb", wrapS: RepeatWrapping },
   { id: 56, resourceType: "bump", lifecycle: "streamable", path: "planets/callisto/callisto_bump.jpg" },
   { id: 57, resourceType: "diffuse", lifecycle: "streamable", path: "planets/mimas/mimas.jpg", colorSpace: "srgb" },
   { id: 58, resourceType: "bump", lifecycle: "streamable", path: "planets/mimas/mimas_bump.jpg" },
@@ -133,5 +133,7 @@ export const Resources: IResource[] = [
   { id: 126, resourceType: "detailDiffuse", lifecycle: "streamable", path: "terrain/rocky_trail_diff.webp", wrapS: RepeatWrapping, wrapT: RepeatWrapping, colorSpace: "srgb" },
   { id: 127, resourceType: "detailNormal", lifecycle: "streamable", path: "terrain/rocky_trail_nor.webp", wrapS: RepeatWrapping, wrapT: RepeatWrapping },
   { id: 128, resourceType: "detailArm", lifecycle: "streamable", path: "terrain/rocky_trail_arm.webp", wrapS: RepeatWrapping, wrapT: RepeatWrapping },
-  { id: 129, resourceType: "detailNormal2", lifecycle: "streamable", path: "terrain/moon_01_nor.webp", wrapS: RepeatWrapping, wrapT: RepeatWrapping }
+  { id: 129, resourceType: "detailNormal2", lifecycle: "streamable", path: "terrain/moon_01_nor.webp", wrapS: RepeatWrapping, wrapT: RepeatWrapping },
+  { id: 130, resourceType: "height", lifecycle: "resident", path: "planets/callisto/callisto_height.raw" },
+  { id: 131, resourceType: "slope", lifecycle: "streamable", path: "planets/callisto/callisto_slope.webp", wrapS: RepeatWrapping }
 ]
