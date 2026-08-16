@@ -13,8 +13,15 @@ export const RenderingObjects: IRenderingObject[] = [
   // detailFadeMeters/detailFade2Meters — явные значения (= дефолт движка), владелец будет крутить.
   { id: 5, actorId: 19, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
   { id: 6, actorId: 24, data: { emission: 1, bumpScale: 2 } },
-  { id: 7, actorId: 29, data: { emission: 1, bumpScale: 0.2 } },
-  { id: 8, actorId: 30, data: { emission: 1, bumpScale: 3 } },
+  // Батч 18 спутников: терраформная арка synth-heightmap (height/slope из оффлайн-генератора,
+  // scripts/batch-synth-heightmaps.ts) — detail* делит масштабы и грейдинг с Луной/Европой/Каллисто,
+  // детальные текстуры общие по ресурсам (id 126-129); bumpScale 1 — slope-путь физически честный,
+  // множитель не нужен. detailSaturation 0.15 только у Ио (как у Луны), у остальных 17 тел — 0.1.
+  // Тот же осознанный компромисс, что у прецедентов Европы/Каллисто (см. ниже):
+  // легаси-bump-фолбэк (без залитой height-карты) станет площе прежнего вида —
+  // у большинства из 18 (легаси bumpScale был 2) ровно вдвое.
+  { id: 7, actorId: 29, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 8, actorId: 30, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
   { id: 9, actorId: 39, data: { innerRadius: 74500, outerRadius: 140220, alphaTest: 0.2, asteroidDensityScale: 1, thicknessKm: 400, asteroidSizeKm: 10, profile: "stony", ringGapBleedKm: 300, dustBleedKm: 600, dustEnabled: true, dustColor: "#9b968c", dustTauGrazing: 0.52, dustScaleHeightKm: 200 } },
   { id: 10, actorId: 40, data: { innerRadius: 38000, outerRadius: 58000, alphaTest: 0.08, asteroidDensityScale: 20, thicknessKm: 400, asteroidSizeKm: 10, profile: "icy", ringGapBleedKm: 150, dustBleedKm: 400, dustEnabled: true, dustColor: "#9b968c", dustTauGrazing: 0.52, dustScaleHeightKm: 200 } },
   { id: 11, actorId: 41, data: { innerRadius: 40900, outerRadius: 62932, alphaTest: 0.08, asteroidDensityScale: 20, thicknessKm: 400, asteroidSizeKm: 10, profile: "icy", ringGapBleedKm: 150, dustBleedKm: 400, dustEnabled: true, dustColor: "#9b968c", dustTauGrazing: 0.52, dustScaleHeightKm: 200 } },
@@ -41,27 +48,27 @@ export const RenderingObjects: IRenderingObject[] = [
   { id: 32, actorId: 91, data: { solarIrradiance: [1.474, 1.8504, 1.91198], sunAngularRadius: 0.00465043373641781, bottomRadius: 25362, topRadius: 25562, rayleighDensity: [{ width: 0, expTerm: 0, expScale: 0, linearTerm: 0, constantTerm: 0 }, { width: 0, expTerm: 1, expScale: -0.03717472118959108, linearTerm: 0, constantTerm: 0 }], rayleighScattering: [0.00158395, 0.00370133, 0.0090363], mieDensity: [{ width: 0, expTerm: 0, expScale: 0, linearTerm: 0, constantTerm: 0 }, { width: 0, expTerm: 1, expScale: -0.05, linearTerm: 0, constantTerm: 0 }], mieScattering: [0.0032, 0.0032, 0.0032], mieExtinction: [4e-3, 4e-3, 4e-3], miePhaseFunctionG: 0.7, absorptionDensity: [{ width: 0, expTerm: 0, expScale: 0, linearTerm: 0, constantTerm: 0 }, { width: 0, expTerm: 1, expScale: -0.04, linearTerm: 0, constantTerm: 0 }], absorptionExtinction: [5e-3, 0.0015, 1e-4], groundAlbedo: [0.135, 0.165, 0.165], muSMin: -0.2836, exposure: 2.3 } },
   { id: 33, actorId: 90, data: { emission: 3, bumpScale: 0 } },
   { id: 34, actorId: 92, data: { innerRadius: 45000, outerRadius: 105000, alphaTest: 0.08, asteroidDensityScale: 1, thicknessKm: 400, asteroidSizeKm: 10, profile: "stony", ringGapBleedKm: 300, dustBleedKm: 600, dustEnabled: true, dustColor: "#9b968c", dustTauGrazing: 0.52, dustScaleHeightKm: 200 } },
-  { id: 35, actorId: 93, data: { emission: 1, bumpScale: 2 } },
-  { id: 36, actorId: 94, data: { emission: 1, bumpScale: 2 } },
-  { id: 37, actorId: 95, data: { emission: 1, bumpScale: 2 } },
-  { id: 38, actorId: 96, data: { emission: 1, bumpScale: 2 } },
-  { id: 39, actorId: 97, data: { emission: 1, bumpScale: 2 } },
-  { id: 40, actorId: 98, data: { emission: 1, bumpScale: 2 } },
-  { id: 41, actorId: 99, data: { emission: 1, bumpScale: 2 } },
-  { id: 42, actorId: 28, data: { emission: 1, bumpScale: 2 } },
+  { id: 35, actorId: 93, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 36, actorId: 94, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 37, actorId: 95, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 38, actorId: 96, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 39, actorId: 97, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 40, actorId: 98, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 41, actorId: 99, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 42, actorId: 28, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
   { id: 43, actorId: 7, data: { emission: 1, bumpScale: 1.5 } },
   { id: 44, actorId: 11, data: { emission: 1, bumpScale: 0.3 } },
   { id: 45, actorId: 14, data: { emission: 1, bumpScale: 2 } },
   { id: 46, actorId: 16, data: { emission: 1, bumpScale: 2 } },
   { id: 47, actorId: 17, data: { emission: 1, bumpScale: 2 } },
   { id: 48, actorId: 18, data: { emission: 1, bumpScale: 2 } },
-  { id: 49, actorId: 20, data: { emission: 1, bumpScale: 2 } },
+  { id: 49, actorId: 20, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
   // Европа: терраформная арка synth-heightmap (height/slope из оффлайн-генератора) — detail*
   // делит масштабы и грейдинг с Луной и Каллисто, детальные текстуры общие по ресурсам (id 126-129);
   // bumpScale 1 — slope-путь физически честный, множитель не нужен; осознанный компромисс:
   // легаси-bump-фолбэк (без залитой height-карты) станет площе прежнего вида.
   { id: 50, actorId: 21, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
-  { id: 51, actorId: 22, data: { emission: 1, bumpScale: 2 } },
+  { id: 51, actorId: 22, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
   // Каллисто: терраформная арка synth-heightmap (height/slope из оффлайн-генератора) — detail*
   // делит масштабы и грейдинг с Луной, детальные текстуры общие по ресурсам (id 126-129);
   // bumpScale 1 — slope-путь физически честный, множитель не нужен; осознанный компромисс:
@@ -75,10 +82,10 @@ export const RenderingObjects: IRenderingObject[] = [
   { id: 58, actorId: 33, data: { emission: 1, bumpScale: 2 } },
   { id: 59, actorId: 34, data: { emission: 1, bumpScale: 2 } },
   { id: 60, actorId: 35, data: { emission: 1, bumpScale: 2 } },
-  { id: 61, actorId: 36, data: { emission: 1, bumpScale: 2 } },
-  { id: 62, actorId: 37, data: { emission: 1, bumpScale: 2 } },
-  { id: 63, actorId: 38, data: { emission: 1, bumpScale: 2 } },
-  { id: 64, actorId: 73, data: { emission: 1, bumpScale: 2 } },
+  { id: 61, actorId: 36, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 62, actorId: 37, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 63, actorId: 38, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 64, actorId: 73, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
   { id: 65, actorId: 100, data: { seed: 5120, size: 360.11263, shape: "disk", axisRatios: [1, 0.5, 1], edgeFalloff: 0.6, density: 0.5, noise: { contrast: 2, worleyStrength: 0.35, ridged: 1 }, cavities: [{ center: [0.1, 0, 0], radius: 0.4, strength: 0.3 }] } },
   { id: 66, actorId: 102, data: { seed: 4096, bandCount: 4.5, turbulence: 1.6, opticalDepth: 3, gapGlow: 4.3, limbDarkening: 0.6, gapThreshold: 0.42, deckSoftness: 0.2, deckTint: 0.5, parallax: 0.02, breathAmplitude: 0.08, bandWarp: 0.16, zonalShear: 0.5, fineDetail: 0.25, polarChaos: 0.8, vortexStrength: 0.35, stormDepth: 0.5 } },
   { id: 67, actorId: 103, data: { seed: 8192, bandCount: 3.5, turbulence: 1.4, opticalDepth: 4, gapGlow: 4.8, limbDarkening: 0.6, gapThreshold: 0.3, deckSoftness: 0.13, deckTint: 0.5, parallax: 0.02, breathAmplitude: 0.05, bandWarp: 0.21, zonalShear: 0.4, fineDetail: 0.25, polarChaos: 0.5, vortexStrength: 0.25, stormDepth: 0.5 } },
@@ -88,5 +95,7 @@ export const RenderingObjects: IRenderingObject[] = [
   { id: 71, actorId: 111, data: { exposureBias: 1 } },
   { id: 72, actorId: 112, data: { preset: "emission", seed: 6720, size: 19000, shape: "torus", shapeThickness: 0.3, shapeRotation: [22, 0, 12], axisRatios: [1, 1, 1], edgeFalloff: 0.3, density: 0.55, noise: { octaves: 5, frequency: 2, warpStrength: 0.3, ridged: 0.8, contrast: 2.2, worleyStrength: 0.6 }, quality: { bakeResolution: 192 }, palette: { stops: [{ t: 0, color: "#05121a" }, { t: 0.45, color: "#15707a" }, { t: 0.8, color: "#46d6c2" }, { t: 1, color: "#d6f6ee" }], secondary: "#8f3018", secondaryThreshold: 0.8, emissiveIntensity: 1.6, radialMix: 0.6, innerColor: "#3fe0c8", outerColor: "#d4462c" }, dust: { strength: 0.4, threshold: 0.62, color: "#050a10" } } },
   { id: 73, actorId: 114, data: { exposureBias: 1 } },
-  { id: 74, actorId: 115, data: { preset: "emission", seed: 1618, size: 21000, shape: "hourglass", shapeThickness: 0.18, shapeRotation: [0, 0, 28], axisRatios: [0.8, 1, 0.8], edgeFalloff: 0.28, density: 0.6, noise: { octaves: 6, frequency: 2.4, warpStrength: 0.2, ridged: 1, contrast: 2.4, worleyStrength: 0.8 }, quality: { bakeResolution: 192 }, palette: { stops: [{ t: 0, color: "#12070a" }, { t: 0.45, color: "#8a4a1e" }, { t: 0.8, color: "#e08a3c" }, { t: 1, color: "#f8dcb0" }], secondary: "#a02810", secondaryThreshold: 0.78, emissiveIntensity: 1.6, radialMix: 0.6, innerColor: "#4fd8e0", outerColor: "#d05a24" }, dust: { strength: 0.5, threshold: 0.58, color: "#0a0508" } } }
+  { id: 74, actorId: 115, data: { preset: "emission", seed: 1618, size: 21000, shape: "hourglass", shapeThickness: 0.18, shapeRotation: [0, 0, 28], axisRatios: [0.8, 1, 0.8], edgeFalloff: 0.28, density: 0.6, noise: { octaves: 6, frequency: 2.4, warpStrength: 0.2, ridged: 1, contrast: 2.4, worleyStrength: 0.8 }, quality: { bakeResolution: 192 }, palette: { stops: [{ t: 0, color: "#12070a" }, { t: 0.45, color: "#8a4a1e" }, { t: 0.8, color: "#e08a3c" }, { t: 1, color: "#f8dcb0" }], secondary: "#a02810", secondaryThreshold: 0.78, emissiveIntensity: 1.6, radialMix: 0.6, innerColor: "#4fd8e0", outerColor: "#d05a24" }, dust: { strength: 0.5, threshold: 0.58, color: "#0a0508" } } },
+  { id: 75, actorId: 83, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 76, actorId: 70, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } }
 ]

@@ -637,15 +637,24 @@ function slidingRangeWrap(
   }
 }
 
-/** Один экземпляр на карту: мешер и коллизия делят его, пересборка сцены не пересканирует данные. */
-const cache = new WeakMap<HeightMapData, TerrainHeightField>()
+/**
+ * Экземпляр на пару (карта, радиус): мешер и коллизия делят его, пересборка
+ * сцены не пересканирует данные — шаренная карта высот у нескольких
+ * вымышленных лун разных радиусов легальна, у каждой свой инстанс.
+ */
+const cache = new WeakMap<HeightMapData, Map<number, TerrainHeightField>>()
 
 function terrainHeightFieldFor(map: HeightMapData, radiusKm: number): TerrainHeightField {
-  let field = cache.get(map)
+  let byRadius = cache.get(map)
+  if (!byRadius) {
+    byRadius = new Map()
+    cache.set(map, byRadius)
+  }
 
+  let field = byRadius.get(radiusKm)
   if (!field) {
     field = new TerrainHeightField(map, radiusKm)
-    cache.set(map, field)
+    byRadius.set(radiusKm, field)
   }
 
   return field
