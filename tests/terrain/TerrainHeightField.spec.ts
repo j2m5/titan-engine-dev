@@ -149,6 +149,20 @@ describe('terrainHeightFieldFor: кэш', () => {
 
     expect(terrainHeightFieldFor(map, R_KM)).toBe(terrainHeightFieldFor(map, R_KM))
   })
+
+  it('одна карта, разные радиусы (шаренная карта вымышленных лун) → разные экземпляры со своим surfaceRadiusUnits; тот же радиус повторно — тот же экземпляр', () => {
+    const map = makeMap(2, 2, [0, 0, 0, 0])
+    const dir = new Vector3(1, 0, 0)
+
+    const fieldBig = terrainHeightFieldFor(map, 1740)
+    const fieldSmall = terrainHeightFieldFor(map, 175)
+
+    expect(fieldBig).not.toBe(fieldSmall)
+    expect(fieldBig.surfaceRadiusUnits(dir)).toBeCloseTo(toThreeJSUnits(1740), 6)
+    expect(fieldSmall.surfaceRadiusUnits(dir)).toBeCloseTo(toThreeJSUnits(175), 6)
+
+    expect(terrainHeightFieldFor(map, 1740)).toBe(fieldBig)
+  })
 })
 
 describe('TerrainHeightField: карта провиса', () => {
