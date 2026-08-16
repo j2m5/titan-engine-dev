@@ -27,15 +27,51 @@ export function bandLowKmFor(radiusMeters: number): number {
   return Math.min(BAND_LOW_KM_DEFAULT, halfCircumferenceKm)
 }
 
+/** Веса area-average по одной оси: для каждого выходного индекса — список (исходный индекс, доля перекрытия окна). */
+interface AxisWeight {
+  index: number
+  weight: number
+}
+
 /**
- * Area-average (box) даунсемпл яркости [0..1] до кратного целого коэффициента
- * уменьшения. НЕ через sharp `.resize` — установленная версия sharp не
- * экспонирует box-кернел (`sharp.kernel` даёт только nearest/linear/cubic/
- * mitchell/lanczos2/lanczos3/mks2013/mks2021, без box); `resampleDem.ts`
- * заточен под float DEM другого конвейера (lanczos3, `.raw({depth:'float'})`)
- * — копировать нечего, кернел там для другой задачи. Коэффициент должен
- * делить оба измерения нацело — потолки разрешения батча (`resolutionCeiling`)
- * и реальные размеры входов это гарантируют для всех 18 генераций.
+ * Раскладка весов area-average по одной оси. Скейл (`sourceSize/targetSize`)
+ * НЕ обязан быть целым — окно выходного пикселя `[t·scale, (t+1)·scale)`
+ * пересекается с исходными пикселями по дробному перекрытию; для целого
+ * скейла веса вырождаются в 1 внутри блока и 0 снаружи (старое block-average
+ * поведение как частный случай).
+ */
+function axisWeights(sourceSize: number, targetSize: number): AxisWeight[][] {
+  const scale = sourceSize / targetSize
+  const weights: AxisWeight[][] = []
+
+  for (let t = 0; t < targetSize; t++) {
+    const start = t * scale
+    const end = start + scale
+    const row: AxisWeight[] = []
+
+    for (let i = Math.floor(start); i < Math.min(Math.ceil(end), sourceSize); i++) {
+      const overlap = Math.min(end, i + 1) - Math.max(start, i)
+      if (overlap > 0) row.push({ index: i, weight: overlap })
+    }
+
+    weights.push(row)
+  }
+
+  return weights
+}
+
+/**
+ * Area-average (box) даунсемпл яркости [0..1] до произвольного (не только
+ * кратного целого) коэффициента уменьшения. НЕ через sharp `.resize` —
+ * установленная версия sharp не экспонирует box-кернел (`sharp.kernel` даёт
+ * только nearest/linear/cubic/mitchell/lanczos2/lanczos3/mks2013/mks2021, без
+ * box); `resampleDem.ts` заточен под float DEM другого конвейера (lanczos3,
+ * `.raw({depth:'float'})`) — копировать нечего, кернел там для другой задачи.
+ *
+ * Потолки разрешения батча (`resolutionCeiling`) не всегда делят реальные
+ * размеры входов нацело (напр. Мимас 6356×3178 → потолок 2048 без остатка
+ * не делится) — раскладка через `axisWeights` считает честное дробное
+ * перекрытие, а не молчаливо округляет коэффициент до ближайшего целого.
  */
 export function boxDownsampleGreyscale(
   source: Buffer,
@@ -44,24 +80,21 @@ export function boxDownsampleGreyscale(
   targetWidth: number,
   targetHeight: number
 ): Float64Array {
-  if (sourceWidth % targetWidth !== 0 || sourceHeight % targetHeight !== 0) {
-    throw new Error(
-      `Даунсемпл: источник ${sourceWidth}×${sourceHeight} не делится нацело на выход ${targetWidth}×${targetHeight}`
-    )
-  }
-
-  const blockW = sourceWidth / targetWidth
-  const blockH = sourceHeight / targetHeight
+  const colWeights = axisWeights(sourceWidth, targetWidth)
+  const rowWeights = axisWeights(sourceHeight, targetHeight)
+  const scaleArea = (sourceWidth / targetWidth) * (sourceHeight / targetHeight)
   const out = new Float64Array(targetWidth * targetHeight)
 
   for (let ty = 0; ty < targetHeight; ty++) {
     for (let tx = 0; tx < targetWidth; tx++) {
       let sum = 0
-      for (let by = 0; by < blockH; by++) {
-        const rowOffset = (ty * blockH + by) * sourceWidth
-        for (let bx = 0; bx < blockW; bx++) sum += source[rowOffset + tx * blockW + bx]
+
+      for (const { index: ry, weight: wy } of rowWeights[ty]) {
+        const rowOffset = ry * sourceWidth
+        for (const { index: cx, weight: wx } of colWeights[tx]) sum += source[rowOffset + cx] * wy * wx
       }
-      out[ty * targetWidth + tx] = sum / (blockW * blockH * 255)
+
+      out[ty * targetWidth + tx] = sum / (scaleArea * 255)
     }
   }
 
