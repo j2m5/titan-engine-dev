@@ -9,6 +9,7 @@ import { encodeHeightMap, normalizeToUint16 } from './lib/heightMapEncode'
 import { buildSlopeMap, SLOPE_RANGE } from './lib/slopeMapEncode'
 import { autoCalibrateAmplitude, type CalibrationSample } from './lib/autoCalibrate'
 import { argument } from './lib/cliArguments'
+import { bandLowKmFor, boxDownsampleGreyscale, resolutionCeiling } from './lib/batchBodyRules'
 
 /**
  * Батч-оркестратор перевода спутников на конвейер «тел без DEM» (арка
@@ -55,8 +56,6 @@ const REF_AMPLITUDE_METERS = 3000
 const TARGET_RMS_TAN = 0.07
 /** Кламп амплитуды — доля радиуса тела (0.7%). */
 const HEIGHT_BUDGET_FRACTION = 0.007
-/** band-low по умолчанию, км — переопределяется половиной окружности у малых тел (см. `bandLowKmFor`). */
-const BAND_LOW_KM_DEFAULT = 1500
 /** band-high = N текселей экватора карты ВЫХОДНОГО разрешения тела. */
 const BAND_HIGH_TEXELS = 2
 
@@ -248,7 +247,12 @@ interface ReportRow {
   budgetMeters: number
   minMeters: number
   maxMeters: number
+  /** Отчётный флаг: пик-рескейл (peakClamped) ИЛИ подгонка амплитуды упёрлась в потолок бюджета (amplitudeClamped) — любой из двух означает, что число в колонке «RMS(tan)» не свободная подгонка к цели. */
   clamped: boolean
+  /** Пост-коррекция сработала: фактический пик поля после калибровки превышал бюджет высоты, bump+подложка рескейлены одной повторной генерацией. */
+  peakClamped: boolean
+  /** `autoCalibrateAmplitude` сама упёрлась в потолок 0.7% радиуса ещё на подгонке параметра — RMS цели 0.05–0.09 не достигнут (спековый случай «RMS недостигнут, потолок амплитуды»), независимо от peakClamped. */
+  amplitudeClamped: boolean
   iterations: number
   heightPath: string
   slopePath: string
@@ -259,64 +263,6 @@ interface ReportRow {
 /** Фактический пик поля высот — max(|min|,|max|), честная величина для сверки с бюджетом (не амплитуда-параметр). */
 function peakMetersOf(map: HeightMapData): number {
   return Math.max(Math.abs(map.minMeters), Math.abs(map.maxMeters))
-}
-
-/** Потолок разрешения по радиусу тела — Global Constraints плана арки; выход = min(источник, потолок). */
-function resolutionCeiling(radiusMeters: number): number {
-  const radiusKm = radiusMeters / 1000
-
-  if (radiusKm >= 1500) return 8192
-  if (radiusKm >= 500) return 4096
-
-  return 2048
-}
-
-/** band-low: 1500 км по умолчанию, либо половина окружности тела, если тело мельче. */
-function bandLowKmFor(radiusMeters: number): number {
-  const halfCircumferenceKm = (Math.PI * radiusMeters) / 1000
-
-  return Math.min(BAND_LOW_KM_DEFAULT, halfCircumferenceKm)
-}
-
-/**
- * Area-average (box) даунсемпл яркости [0..1] до кратного целого коэффициента
- * уменьшения. НЕ через sharp `.resize` — установленная версия sharp не
- * экспонирует box-кернел (`sharp.kernel` даёт только nearest/linear/cubic/
- * mitchell/lanczos2/lanczos3/mks2013/mks2021, без box); `resampleDem.ts`
- * заточен под float DEM другого конвейера (lanczos3, `.raw({depth:'float'})`)
- * — копировать нечего, кернел там для другой задачи. Коэффициент должен
- * делить оба измерения нацело — потолки разрешения батча (`resolutionCeiling`)
- * и реальные размеры входов это гарантируют для всех 12 генераций.
- */
-function boxDownsampleGreyscale(
-  source: Buffer,
-  sourceWidth: number,
-  sourceHeight: number,
-  targetWidth: number,
-  targetHeight: number
-): Float64Array {
-  if (sourceWidth % targetWidth !== 0 || sourceHeight % targetHeight !== 0) {
-    throw new Error(
-      `Даунсемпл: источник ${sourceWidth}×${sourceHeight} не делится нацело на выход ${targetWidth}×${targetHeight}`
-    )
-  }
-
-  const blockW = sourceWidth / targetWidth
-  const blockH = sourceHeight / targetHeight
-  const out = new Float64Array(targetWidth * targetHeight)
-
-  for (let ty = 0; ty < targetHeight; ty++) {
-    for (let tx = 0; tx < targetWidth; tx++) {
-      let sum = 0
-      for (let by = 0; by < blockH; by++) {
-        const rowOffset = (ty * blockH + by) * sourceWidth
-        for (let bx = 0; bx < blockW; bx++) sum += source[rowOffset + tx * blockW + bx]
-      }
-      out[ty * targetWidth + tx] = sum / (blockW * blockH * 255)
-    }
-  }
-
-  return out
 }
 
 /**
@@ -457,7 +403,7 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
   let finalAmplitudeMeters = calibration.amplitudeMeters
   let finalRmsTan = calibration.rmsTan
   let finalPeakMeters = calibration.peakMeters
-  let clamped = false
+  let peakClamped = false
 
   // Пост-коррекция по фактическому пику поля (фикс-раунд 1, находка 1):
   // autoCalibrateAmplitude клампит только ПАРАМЕТР bump-амплитуды, подложка
@@ -489,7 +435,7 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
     last = { map: result.map, slopeRgb: result.slopeRgb }
     finalRmsTan = result.rmsTan
     finalPeakMeters = peakMetersOf(result.map)
-    clamped = true
+    peakClamped = true
   }
 
   const dir = path.dirname(body.inputPath)
@@ -514,7 +460,13 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
     budgetMeters: maxHeightBudgetMeters,
     minMeters: last.map.minMeters,
     maxMeters: last.map.maxMeters,
-    clamped, // по фактическому пику (находка 1) — НЕ проброс calibration.clamped (тот про амплитуду-параметр)
+    // объединённый отчётный флаг (фикс-раунд 2, находка 5): раньше проброс
+    // терял calibration.clamped целиком — тело могло упереться в потолок ещё
+    // на подгонке амплитуды (RMS цели не достигнут) без единого следа в
+    // отчёте, если пик поля после этого не превысил бюджет повторно.
+    clamped: peakClamped || calibration.clamped,
+    peakClamped,
+    amplitudeClamped: calibration.clamped,
     iterations: calibration.iterations,
     heightPath,
     slopePath,
@@ -541,9 +493,10 @@ async function run(): Promise<void> {
 
     console.log(
       `  ${row.width}×${row.height}, амплитуда ${row.amplitudeMeters.toFixed(0)} м (${row.iterations} прогонов калибровки` +
-        `${row.clamped ? ' + рескейл под пик' : ''}), RMS(tan) ${row.rmsTan.toFixed(4)}, ` +
+        `${row.peakClamped ? ' + рескейл под пик' : ''}), RMS(tan) ${row.rmsTan.toFixed(4)}, ` +
         `пик ${row.peakMeters.toFixed(0)} м / бюджет ${row.budgetMeters.toFixed(0)} м` +
-        `${row.clamped ? ' [КЛАМП: пик поля превышал бюджет — bump и подложка рескейлены]' : ''}, ` +
+        `${row.peakClamped ? ' [КЛАМП: пик поля превышал бюджет — bump и подложка рескейлены]' : ''}` +
+        `${row.amplitudeClamped ? ' [АМПЛИТУДА НА ПОТОЛКЕ: RMS цель недостигнута, подгонка упёрлась в бюджет]' : ''}, ` +
         `высоты ${row.minMeters.toFixed(0)}..${row.maxMeters.toFixed(0)} м`
     )
   }

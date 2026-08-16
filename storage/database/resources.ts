@@ -137,8 +137,10 @@ export const Resources: IResource[] = [
   { id: 132, resourceType: "height", lifecycle: "resident", path: "planets/europa/europa_height.raw" },
   { id: 133, resourceType: "slope", lifecycle: "streamable", path: "planets/europa/europa_slope.webp", wrapS: RepeatWrapping },
   // Батч 18 спутников (терраформная арка synth-heightmap, scripts/batch-synth-heightmaps.ts):
-  // 12 генераций height+slope, пути — <каталог диффуза/бампа тела>/<имя>_height.raw и _slope.webp;
-  // Корribан I-VII делят одну пару (карта общая на все семь тел).
+  // 18 генераций height+slope, пути — <каталог диффуза/бампа тела>/<имя>_height.raw и _slope.webp;
+  // Корribан I-VII — ПЕР-ТЕЛО карты (общий только вход-текстура, но семь
+  // независимых генераций: общая карта в метрах под радиус I (1740 км)
+  // давала VII (175 км) 577% ЕГО бюджета высоты — фикс-раунд 1, находка 2).
   { id: 134, resourceType: "height", lifecycle: "resident", path: "planets/io/io_height.raw" },
   { id: 135, resourceType: "slope", lifecycle: "streamable", path: "planets/io/io_slope.webp", wrapS: RepeatWrapping },
   { id: 136, resourceType: "height", lifecycle: "resident", path: "planets/ganymede/ganymede_height.raw" },
@@ -163,8 +165,6 @@ export const Resources: IResource[] = [
   { id: 155, resourceType: "slope", lifecycle: "streamable", path: "planets/unnamed/ohann3_slope.webp", wrapS: RepeatWrapping },
   { id: 156, resourceType: "height", lifecycle: "resident", path: "planets/StarWars/korriban/i/korriban1_height.raw" },
   { id: 157, resourceType: "slope", lifecycle: "streamable", path: "planets/StarWars/korriban/i/korriban1_slope.webp", wrapS: RepeatWrapping },
-  // Фикс-раунд 1 (Task 4): общая карта Корribана давала VII 577% его бюджета
-  // высоты — семь пер-тело генераций (korriban1-korriban7) вместо одной общей.
   { id: 158, resourceType: "height", lifecycle: "resident", path: "planets/StarWars/korriban/i/korriban2_height.raw" },
   { id: 159, resourceType: "slope", lifecycle: "streamable", path: "planets/StarWars/korriban/i/korriban2_slope.webp", wrapS: RepeatWrapping },
   { id: 160, resourceType: "height", lifecycle: "resident", path: "planets/StarWars/korriban/i/korriban3_height.raw" },

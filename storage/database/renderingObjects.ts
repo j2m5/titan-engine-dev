@@ -17,6 +17,9 @@ export const RenderingObjects: IRenderingObject[] = [
   // scripts/batch-synth-heightmaps.ts) — detail* делит масштабы и грейдинг с Луной/Европой/Каллисто,
   // детальные текстуры общие по ресурсам (id 126-129); bumpScale 1 — slope-путь физически честный,
   // множитель не нужен. detailSaturation 0.15 только у Ио (как у Луны), у остальных 17 тел — 0.1.
+  // Тот же осознанный компромисс, что у прецедентов Европы/Каллисто (см. ниже):
+  // легаси-bump-фолбэк (без залитой height-карты) станет площе прежнего вида —
+  // у большинства из 18 (легаси bumpScale был 2) ровно вдвое.
   { id: 7, actorId: 29, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
   { id: 8, actorId: 30, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
   { id: 9, actorId: 39, data: { innerRadius: 74500, outerRadius: 140220, alphaTest: 0.2, asteroidDensityScale: 1, thicknessKm: 400, asteroidSizeKm: 10, profile: "stony", ringGapBleedKm: 300, dustBleedKm: 600, dustEnabled: true, dustColor: "#9b968c", dustTauGrazing: 0.52, dustScaleHeightKm: 200 } },
