@@ -744,4 +744,97 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     expect(state.attempted.has(MERCURY_BUMP)).toBe(true)
     expect(state.loaded.has(MERCURY_BUMP)).toBe(false)
   })
+
+  it('субпиксельное тело не становится кандидатом (карты не запрашиваются); крупное — кандидат как обычно', async () => {
+    // Угловая отсечка (config/streaming.minBodyPixels, порог см.
+    // src/core/streaming/angularCutoff.ts): тело с actorPriority ниже порога
+    // не разворачивается в MapCandidate вовсе — closestChange не запросит по
+    // нему ни одной сети. Меркурий (радиус 2440 км) на дистанции 2000
+    // субпикселен (диаметр < 4 px при номинальных fov 50°/1080p), на
+    // дистанции 300 — обычный кандидат (те же тесты выше используют именно
+    // эту дистанцию).
+    const load = vi.fn((): Promise<LoadResult> => Promise.resolve({ ok: true as const, texture: makeTexture() }))
+
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = SOLAR_SYSTEM
+
+    data.set('Mercury', record('Mercury', 2000))
+    await handlers['ClosestChange'](record('Mercury', 2000))
+
+    expect(load).not.toHaveBeenCalled()
+
+    data.set('Mercury', record('Mercury', 300))
+    await handlers['ClosestChange'](record('Mercury', 300))
+
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury.jpg' }))
+  })
+
+  it('регрессия владельца в миниатюре: далёкая субпиксельная "планета" не отжимает бюджет у detail ближней', async () => {
+    // Репро приёмки: без отсечки диффуз ЛЮБОГО наблюдаемого тела (даже
+    // субпиксельного) — это кандидат ранга 0, а decideStreaming ранжирует
+    // СНАЧАЛА по рангу, только потом по приоритету (см. decideStreaming.ts,
+    // «жадный остаток») — диффуз далёкого Урана в очереди раньше detail
+    // Луны по построению, независимо от того, насколько Уран крохотный на
+    // экране. Бюджет ровно на 6 путей Луны (диффуз+slope+4 detail, вес карт
+    // одинаков — makeBigTexture даёт то же значение, что и слепая оценка):
+    // без отсечки Уран отжимает один слот и Луна недополучает последнюю
+    // detail-карту; с отсечкой Уран вовсе не кандидат — Луна получает всё.
+    const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
+      const texture = makeBigTexture()
+      texture.name = request.name
+      return Promise.resolve({ ok: true as const, texture })
+    })
+
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 6, load)
+    observer.scenario = SOLAR_SYSTEM
+
+    const MOON_DETAIL_NORMAL2 = 'terrain/moon_01_nor.webp'
+    const URANUS_DIFFUSE = 'planets/uranus/uranus.png'
+
+    data.set('Moon', record('Moon', 10)) // близко — топ-приоритет, floor
+    data.set('Uranus', record('Uranus', 10000)) // далеко — субпиксельно
+
+    await handlers['ClosestChange'](record('Moon', 10))
+
+    const state = streamingState(observer)
+
+    expect(state.loaded.has(MOON_DETAIL_NORMAL2)).toBe(true)
+    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: URANUS_DIFFUSE }))
+  })
+
+  it('тело, упавшее под угловой порог, теряет резидентные карты — вытеснение орфанного пути', async () => {
+    // Путь без ЕДИНОГО текущего владельца невидим для decideStreaming (тот
+    // видит только текущих candidates) и никогда не попал бы в decision.evict
+    // сам по себе — closestChange обязан вытеснить такой путь напрямую
+    // (evictOrphanedPaths), иначе резидентная карта тела, упавшего под
+    // порог, зависла бы в loaded навсегда.
+    const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
+      const texture = makeBigTexture()
+      texture.name = request.name
+      return Promise.resolve({ ok: true as const, texture })
+    })
+
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = SOLAR_SYSTEM
+
+    const URANUS_DIFFUSE = 'planets/uranus/uranus.png'
+
+    data.set('Uranus', record('Uranus', 300)) // близко — обычный кандидат, грузится
+    await handlers['ClosestChange'](record('Uranus', 300))
+
+    const state = streamingState(observer)
+
+    expect(state.loaded.has(URANUS_DIFFUSE)).toBe(true)
+    expect(resourceStorage.getTexture(URANUS_DIFFUSE)).toBeDefined()
+
+    // Уран отодвинулся — субпиксельно, больше не кандидат вовсе. Орфанная
+    // очистка не зависит от MIN_RESIDENCY_MS: у пути НЕТ ни одного текущего
+    // владельца, пиновка decideStreaming тут ни при чём — путь снимается тем
+    // же тактом, где перестал быть кандидатом.
+    data.set('Uranus', record('Uranus', 10000))
+    await handlers['ClosestChange'](record('Uranus', 10000))
+
+    expect(state.loaded.has(URANUS_DIFFUSE)).toBe(false)
+    expect(resourceStorage.getTexture(URANUS_DIFFUSE)).toBeUndefined()
+  })
 })

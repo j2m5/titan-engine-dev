@@ -17,6 +17,8 @@ import { TextureBudget } from '@/core/streaming/TextureBudget'
 import { decideStreaming } from '@/core/streaming/decideStreaming'
 import type { MapCandidate, StreamDecision } from '@/core/streaming/types'
 import { MAP_TYPE_RANK, mapTypeRank } from '@/core/streaming/types'
+import { minBodyPixelsToPriorityThreshold } from '@/core/streaming/angularCutoff'
+import { streaming } from '@/config/streaming'
 
 /**
  * Сколько миллисекунд путь защищён от вытеснения после загрузки.
@@ -29,6 +31,13 @@ const MIN_RESIDENCY_MS: number = 10_000
 
 /** Защита от деления на ноль, когда камера внутри тела. */
 const MIN_DISTANCE: number = 1e-9
+
+/**
+ * Порог `actorPriority`, ниже которого тело субпиксельно (см.
+ * `minBodyPixelsToPriorityThreshold`, `config/streaming.minBodyPixels`) — его
+ * карты не разворачиваются в кандидатов `collectCandidates` вовсе.
+ */
+const MIN_ACTOR_PRIORITY: number = minBodyPixelsToPriorityThreshold(streaming.streaming.minBodyPixels)
 
 /**
  * Наблюдатель за ресурсами, отвечающий жизненный цикл ресурсов
@@ -310,7 +319,7 @@ class ResourceObserver {
    * то есть при изменении камеры, когда дистанции уже пересчитаны.
    */
   private closestChange = async (): Promise<void> => {
-    const candidates: MapCandidate[] = this.collectCandidates()
+    const { candidates, cutoffCount } = this.collectCandidates()
     const decision: StreamDecision = decideStreaming(
       candidates,
       this.loaded,
@@ -333,7 +342,7 @@ class ResourceObserver {
       if (!decision.wantedPaths.has(path)) this.attempted.delete(path)
     }
 
-    if (import.meta.env.DEV) this.logDecision(candidates, decision)
+    if (import.meta.env.DEV) this.logDecision(candidates, decision, cutoffCount)
 
     for (const candidate of decision.evict) this.evictPath(candidate)
     await Promise.all(decision.load.map((candidate: MapCandidate): Promise<void> => this.loadPath(candidate)))
@@ -343,9 +352,12 @@ class ResourceObserver {
    * Компактная dev-сводка решения по слоям — раз на пересчёт, за
    * `import.meta.env.DEV`, Vite вырезает вызов из прод-сборки. Дедуп по пути
    * повторяет тот, что `decideStreaming` делает внутри себя — иначе один
-   * шаренный путь посчитался бы дважды на каждого владельца.
+   * шаренный путь посчитался бы дважды на каждого владельца. `cutoffCount` —
+   * сколько тел `collectCandidates` не развернул в кандидатов вовсе из-за
+   * угловой отсечки (см. `MIN_ACTOR_PRIORITY`) — они в `candidates` не видны,
+   * поэтому считаются отдельно и добавляются последней строкой.
    */
-  private logDecision(candidates: MapCandidate[], decision: StreamDecision): void {
+  private logDecision(candidates: MapCandidate[], decision: StreamDecision, cutoffCount: number): void {
     const byRank: Map<number, { paths: number; bytes: number; skipped: number }> = new Map()
     const seen: Set<string> = new Set()
 
@@ -373,7 +385,7 @@ class ResourceObserver {
       )
       .join(' | ')
 
-    console.debug(`[streaming] ${summary}`)
+    console.debug(`[streaming] ${summary} | отсечено ${cutoffCount} тел ниже порога`)
   }
 
   /**
@@ -400,6 +412,17 @@ class ResourceObserver {
    * каждого наблюдаемого тела. Приоритет тела (радиус/дистанция) считается
    * один раз на актора, а не на карту.
    *
+   * Угловая отсечка: тело с `actorPriority < MIN_ACTOR_PRIORITY` (диаметр на
+   * экране меньше `config/streaming.minBodyPixels`) НЕ разворачивается в
+   * кандидатов вовсе — его текстуры неразличимы, плейсхолдер эквивалентен
+   * честной карте. Без отсечки диффузы ВСЕХ наблюдаемых тел (в том числе
+   * дальних субпиксельных) конкурируют за бюджет наравне с рельефом
+   * ближнего — послойная жадная политика тогда голодает: слой диффузов всей
+   * сцены съедает бюджет раньше, чем очередь доходит до slope/detail того,
+   * что реально видно (см. `config/streaming.minBodyPixels`, регрессия
+   * «тайлы на поверхностях планет пропали»). `cutoffCount` — счётчик
+   * отсечённых тел для dev-сводки (`logDecision`).
+   *
    * Параллельно перестраивает `pathActors` с нуля — актуальный список
    * владельцев каждого пути в этом пересчёте.
    *
@@ -408,11 +431,21 @@ class ResourceObserver {
    * никогда не попадёт в `decision.load` повторно (он уже в `loaded`), и без
    * догона материал нового актора остался бы на исходной заглушке навсегда.
    * `catchUp` собирает такие акторы и обновляет их материалы сразу здесь.
+   *
+   * Путь может лишиться ВСЕХ владельцев разом — тело единственного
+   * владельца ушло из наблюдения или упало под угловой порог. Такой путь
+   * невидим для `decideStreaming` (тот работает только с текущими
+   * `candidates`) и никогда не попал бы в `decision.evict` сам по себе —
+   * без явной чистки он завис бы в `loaded` без единого кандидата навсегда.
+   * `evictOrphanedPaths` находит такие пути (загружены, но нет записи в
+   * свежем `pathActors`) и вытесняет их напрямую, по владельцам из
+   * `previousOwners` — снимка `pathActors` ДО перестройки.
    */
-  private collectCandidates(): MapCandidate[] {
+  private collectCandidates(): { candidates: MapCandidate[]; cutoffCount: number } {
     const candidates: MapCandidate[] = []
     const previousOwners: Map<string, Set<number>> = new Map(this.pathActors)
     const catchUp: Set<number> = new Set()
+    let cutoffCount: number = 0
 
     this.pathActors.clear()
 
@@ -430,6 +463,11 @@ class ResourceObserver {
       const actorId: number = actor.getAttribute('id')!
       const radiusKm: number = actor.physicalObject?.getAttribute('radius', 0) ?? 0
       const actorPriority: number = toThreeJSUnits(radiusKm) / Math.max(record.distance, MIN_DISTANCE)
+
+      if (actorPriority < MIN_ACTOR_PRIORITY) {
+        cutoffCount += 1
+        continue
+      }
 
       for (const resource of streamableResources) {
         const path: string = resource.getAttribute('path', '')
@@ -459,7 +497,43 @@ class ResourceObserver {
       }
     }
 
-    return candidates
+    this.evictOrphanedPaths(previousOwners)
+
+    return { candidates, cutoffCount }
+  }
+
+  /**
+   * Вытесняет пути, у которых в свежепостроенном `pathActors` не осталось ни
+   * одного владельца, но которые всё ещё числятся `loaded`. Причина не
+   * важна для самого вытеснения (актор мог упасть под угловой порог, уйти
+   * из наблюдения или сменить набор ресурсов) — важен только факт: путь
+   * больше НИКЕМ не запрошен, а `decideStreaming` о нём не узнает, потому
+   * что видит только текущих `candidates`.
+   *
+   * Владелец резолвится по `previousOwners` — снимку `pathActors` ДО
+   * перестройки в этом же вызове `collectCandidates`; путь без владельца
+   * даже там (не должно происходить в норме — см. `evictPath`) вытесняется
+   * фиктивным заявителем: `evictPath` безопасно не находит для него узел
+   * сцены и просто чистит бухгалтерию/реестр.
+   */
+  private evictOrphanedPaths(previousOwners: ReadonlyMap<string, Set<number>>): void {
+    for (const path of [...this.loaded]) {
+      if (this.pathActors.has(path)) continue
+
+      const typeRank: number = mapTypeRank(Resource.where({ path }).first()?.getAttribute('resourceType') ?? '')
+      const owners: Set<number> = previousOwners.get(path) ?? new Set()
+
+      if (!owners.size) {
+        this.evictPath({ actorId: -1, name: '', path, typeRank, actorPriority: 0 })
+        continue
+      }
+
+      for (const actorId of owners) {
+        const name: string = this._map.get(actorId)?.getAttribute('name') ?? ''
+
+        this.evictPath({ actorId, name, path, typeRank, actorPriority: 0 })
+      }
+    }
   }
 
   /**
