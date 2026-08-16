@@ -11,13 +11,18 @@ import { argument } from './lib/cliArguments'
  *
  * Запуск: npm run build:heightmap -- --in <файл> --out <файл> [--width 8192]
  *   [--height 4096] [--min-meters N --max-meters N]
- *   [--in-width N --in-height N [--scale-meters K]]
+ *   [--in-width N --in-height N [--scale-meters K] [--big-endian]]
  *
  * Два режима входа:
  *   - GeoTIFF/PNG — читается sharp'ом, размеры из файла;
- *   - сырой int16 LE (PDS IMG: так LOLA/MOLA раздают даунсемплы) — включается
+ *   - сырой int16 (PDS IMG: так LOLA/MOLA раздают даунсемплы) — включается
  *     парой --in-width/--in-height (размеры из .LBL-лейбла рядом с файлом),
- *     --scale-meters переводит значение в метры (по умолчанию 1).
+ *     --scale-meters переводит значение в метры (по умолчанию 1). Порядок
+ *     байт — по умолчанию little-endian (LOLA, DATA_TYPE=LSB_INTEGER);
+ *     --big-endian переключает на MSB_INTEGER (MOLA/PDS MEGDR — сверить
+ *     DATA_TYPE в .LBL; спутанный порядок даёт min/max у границ int16
+ *     ±32767/±32768 вместо физического диапазона — верный сигнал перепроверить
+ *     флаг санити-проверкой перед принятием карты).
  *
  * Без --min/--max диапазон берётся из данных после ресемпла. Для тел с
  * известной привязкой (LOLA: высоты от радиуса 1737.4 км) значения лучше
@@ -84,6 +89,8 @@ for (const [name, value] of [
   }
 }
 
+const bigEndian = process.argv.includes('--big-endian')
+
 const dem =
   inWidthArg !== undefined && inHeightArg !== undefined
     ? await (async () => {
@@ -91,7 +98,8 @@ const dem =
           await readFile(input),
           Number(inWidthArg),
           Number(inHeightArg),
-          Number(scaleArg ?? 1)
+          Number(scaleArg ?? 1),
+          bigEndian
         )
 
         return { width, height, data: resampleDemGrid(source, Number(inWidthArg), Number(inHeightArg), width, height) }
