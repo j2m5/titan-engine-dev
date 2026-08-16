@@ -238,21 +238,31 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
     observer.scenario = HORUSET_SYSTEM
 
-    // Korriban I и II (реальные акторы 93 и 94) делят ОБА streamable-пути —
-    // диффуз и bump — один и тот же файл на семь планет Korriban I–VII.
+    // Korriban I и II (реальные акторы 93 и 94) делят все семь streamable-путей —
+    // диффуз, bump, slope и четыре detail-текстуры (терраформная арка synth-heightmap) —
+    // один и тот же комплект файлов на семь планет Korriban I–VII.
+    const sharedPaths = [
+      'planets/StarWars/korriban/i/i.jpg',
+      'planets/StarWars/korriban/i/i_bump.jpg',
+      'planets/StarWars/korriban/i/korriban_slope.webp',
+      'terrain/rocky_trail_diff.webp',
+      'terrain/rocky_trail_nor.webp',
+      'terrain/rocky_trail_arm.webp',
+      'terrain/moon_01_nor.webp'
+    ]
+
     data.set('Korriban I', record('Korriban I', 100))
     await handlers['ClosestChange'](record('Korriban I', 100))
 
-    expect(load).toHaveBeenCalledTimes(2) // диффуз + bump
-    expect(resourceStorage.getTexture('planets/StarWars/korriban/i/i.jpg')).toBeDefined()
-    expect(resourceStorage.getTexture('planets/StarWars/korriban/i/i_bump.jpg')).toBeDefined()
+    expect(load).toHaveBeenCalledTimes(7) // диффуз + bump + slope + 4 detail
+    for (const path of sharedPaths) expect(resourceStorage.getTexture(path), path).toBeDefined()
 
-    // Korriban II входит в зону, Korriban I остаётся резидентным. Оба пути
+    // Korriban II входит в зону, Korriban I остаётся резидентным. Все пути
     // уже в реестре — повторного сетевого запроса быть не должно.
     data.set('Korriban II', record('Korriban II', 120))
     await handlers['ClosestChange'](record('Korriban II', 120))
 
-    expect(load).toHaveBeenCalledTimes(2)
+    expect(load).toHaveBeenCalledTimes(7)
 
     // Прямое вытеснение Korriban I — ровно то, что сделал бы decideStreaming,
     // выбери он его на вытеснение. Пути принадлежат резиденции по данным.
@@ -260,13 +270,12 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       actorId: 93,
       name: 'Korriban I',
       priority: 0,
-      paths: ['planets/StarWars/korriban/i/i.jpg', 'planets/StarWars/korriban/i/i_bump.jpg']
+      paths: sharedPaths
     })
 
-    // Путь пережил вытеснение первого владельца — Korriban II всё ещё на него
+    // Пути пережили вытеснение первого владельца — Korriban II всё ещё на них
     // ссылается.
-    expect(resourceStorage.getTexture('planets/StarWars/korriban/i/i.jpg')).toBeDefined()
-    expect(resourceStorage.getTexture('planets/StarWars/korriban/i/i_bump.jpg')).toBeDefined()
+    for (const path of sharedPaths) expect(resourceStorage.getTexture(path), path).toBeDefined()
   })
 
   it('два актора, разделяющие путь, В ОДНОМ цикле грузят его один раз — не задваивают ни сеть, ни реестр', async () => {
@@ -290,14 +299,16 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     await handlers['ClosestChange'](record('Korriban I', 100))
 
-    // Диффуз + bump — ровно два сетевых запроса, а не четыре (по два на
-    // каждого из двух акторов, разделяющих оба пути).
-    expect(load).toHaveBeenCalledTimes(2)
+    // Семь общих путей (диффуз + bump + slope + 4 detail) — ровно семь
+    // сетевых запросов, а не четырнадцать (по семь на каждого из двух
+    // акторов, разделяющих весь комплект).
+    expect(load).toHaveBeenCalledTimes(7)
 
     // И ровно одна запись в реестре на путь, а не две — иначе вторая
     // Texture осталась бы в реестре недиспоузнутой и недостижимой.
     expect(resourceStorage.textures.where('name', 'planets/StarWars/korriban/i/i.jpg').count()).toBe(1)
     expect(resourceStorage.textures.where('name', 'planets/StarWars/korriban/i/i_bump.jpg').count()).toBe(1)
+    expect(resourceStorage.textures.where('name', 'planets/StarWars/korriban/i/korriban_slope.webp').count()).toBe(1)
   })
 
   it('устаревший владелец брони не снимает чужую (живую) бронь по тому же пути после смены сценария', async () => {

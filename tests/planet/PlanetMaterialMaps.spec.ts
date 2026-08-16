@@ -347,6 +347,173 @@ describe('PlanetMaterial: данные Европы — height/slope/detail-св
   })
 })
 
+// Рея (actorId 28, корзина A) — часть батча 18 спутников (терраформная арка synth-heightmap,
+// оркестратор scripts/batch-synth-heightmaps.ts)
+function rhea(): Actor {
+  return Actor.find(28)!
+}
+
+describe('PlanetMaterial: данные Реи — height/slope/detail-связки и ручки детального слоя', () => {
+  it('height-строка Реи: верный путь и резидентный lifecycle', () => {
+    const row = rhea().resources.where('resourceType', 'height').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/rhea/rhea_height.raw')
+    expect(row!.getAttribute('lifecycle')).toBe('resident')
+  })
+
+  it('slope-строка Реи: верный путь, streamable, wrapS RepeatWrapping', () => {
+    const row = rhea().resources.where('resourceType', 'slope').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/rhea/rhea_slope.webp')
+    expect(row!.getAttribute('lifecycle')).toBe('streamable')
+    expect(row!.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('диффуз Реи несёт wrapS: RepeatWrapping в данных (терраформный шов меридиана)', () => {
+    const diffuse = rhea().resources.where('resourceType', 'diffuse').first()!
+
+    expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('detail-связки Реи указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
+    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
+      const moonRow = moon().resources.where('resourceType', type).first()
+      const rheaRow = rhea().resources.where('resourceType', type).first()
+
+      expect(rheaRow, type).toBeDefined()
+      expect(rheaRow!.getAttribute('id')).toBe(moonRow!.getAttribute('id'))
+      expect(rheaRow!.getAttribute('path')).toBe(moonRow!.getAttribute('path'))
+    }
+  })
+
+  it('renderingObjects Реи несёт ручки детального слоя террейна', () => {
+    const data = rhea().renderingObject!.getAttribute('data') as Record<string, unknown>
+
+    expect(data.bumpScale).toBe(1)
+    expect(data.detailScaleMeters).toBe(40)
+    expect(data.detailScale2Meters).toBe(7)
+    expect(data.detailNormalScale).toBe(1)
+    expect(data.detailSaturation).toBe(0.1)
+    expect(data.detailBrightness).toBe(1)
+    expect(data.detailAoInfluence).toBe(0.5)
+    expect(data.detailFadeMeters).toBe(30000)
+    expect(data.detailFade2Meters).toBe(5000)
+  })
+})
+
+// Ио (actorId 20, корзина B) — часть батча 18 спутников; detailSaturation 0.15 (как у Луны),
+// у остальных 17 тел батча — 0.1
+function io(): Actor {
+  return Actor.find(20)!
+}
+
+describe('PlanetMaterial: данные Ио — height/slope/detail-связки и ручки детального слоя', () => {
+  it('height-строка Ио: верный путь и резидентный lifecycle', () => {
+    const row = io().resources.where('resourceType', 'height').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/io/io_height.raw')
+    expect(row!.getAttribute('lifecycle')).toBe('resident')
+  })
+
+  it('slope-строка Ио: верный путь, streamable, wrapS RepeatWrapping', () => {
+    const row = io().resources.where('resourceType', 'slope').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/io/io_slope.webp')
+    expect(row!.getAttribute('lifecycle')).toBe('streamable')
+    expect(row!.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('диффуз Ио несёт wrapS: RepeatWrapping в данных (терраформный шов меридиана)', () => {
+    const diffuse = io().resources.where('resourceType', 'diffuse').first()!
+
+    expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('detail-связки Ио указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
+    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
+      const moonRow = moon().resources.where('resourceType', type).first()
+      const ioRow = io().resources.where('resourceType', type).first()
+
+      expect(ioRow, type).toBeDefined()
+      expect(ioRow!.getAttribute('id')).toBe(moonRow!.getAttribute('id'))
+      expect(ioRow!.getAttribute('path')).toBe(moonRow!.getAttribute('path'))
+    }
+  })
+
+  it('renderingObjects Ио несёт ручки детального слоя террейна (detailSaturation 0.15 — как у Луны)', () => {
+    const data = io().renderingObject!.getAttribute('data') as Record<string, unknown>
+
+    expect(data.bumpScale).toBe(1)
+    expect(data.detailScaleMeters).toBe(40)
+    expect(data.detailScale2Meters).toBe(7)
+    expect(data.detailNormalScale).toBe(1)
+    expect(data.detailSaturation).toBe(0.15)
+    expect(data.detailBrightness).toBe(1)
+    expect(data.detailAoInfluence).toBe(0.5)
+    expect(data.detailFadeMeters).toBe(30000)
+    expect(data.detailFade2Meters).toBe(5000)
+  })
+})
+
+// Все 18 тел батча (терраформная арка synth-heightmap): 12 генераций, Корribан I-VII (93-99)
+// делят одну карту — счётные инварианты одинаковы для всех, без разбора по конкретным путям
+const BATCH_ACTOR_IDS = [20, 22, 28, 29, 30, 36, 37, 38, 73, 83, 70, 93, 94, 95, 96, 97, 98, 99] as const
+const TERRAFORM_RESOURCE_TYPES = ['height', 'slope', 'detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const
+
+describe('PlanetMaterial: счётные инварианты батча 18 спутников', () => {
+  it.each(BATCH_ACTOR_IDS)('actorId %i: пара height+slope, wrapS у slope и диффуза, bumpScale 1, ровно 6 терраформных связок', (actorId) => {
+    const actor = Actor.find(actorId)!
+    const height = actor.resources.where('resourceType', 'height').first()
+    const slope = actor.resources.where('resourceType', 'slope').first()
+    const diffuse = actor.resources.where('resourceType', 'diffuse').first()
+
+    expect(height, `actorId ${actorId}: height`).toBeDefined()
+    expect(slope, `actorId ${actorId}: slope`).toBeDefined()
+    expect(slope!.getAttribute('wrapS'), `actorId ${actorId}: slope wrapS`).toBe(RepeatWrapping)
+    expect(diffuse!.getAttribute('wrapS'), `actorId ${actorId}: diffuse wrapS`).toBe(RepeatWrapping)
+
+    const data = actor.renderingObject!.getAttribute('data') as Record<string, unknown>
+    expect(data.bumpScale, `actorId ${actorId}: bumpScale`).toBe(1)
+
+    const terraformLinks = actor.resources.whereIn('resourceType', [...TERRAFORM_RESOURCE_TYPES]).count()
+    expect(terraformLinks, `actorId ${actorId}: терраформные связки`).toBe(6)
+  })
+
+  it('Корribан I-VII (93-99) ссылаются на одни и те же height/slope-строки', () => {
+    const leader = Actor.find(93)!.resources
+    const leaderHeight = leader.where('resourceType', 'height').first()!.getAttribute('id')
+    const leaderSlope = leader.where('resourceType', 'slope').first()!.getAttribute('id')
+
+    for (const actorId of [94, 95, 96, 97, 98, 99]) {
+      const resources = Actor.find(actorId)!.resources
+      expect(resources.where('resourceType', 'height').first()!.getAttribute('id'), `actorId ${actorId}`).toBe(leaderHeight)
+      expect(resources.where('resourceType', 'slope').first()!.getAttribute('id'), `actorId ${actorId}`).toBe(leaderSlope)
+    }
+  })
+})
+
+describe('PlanetMaterial: зачистка облаков Титана и Венеры', () => {
+  it('у Титана и Венеры облачной строки больше нет', () => {
+    const titan = Actor.find(29)!
+    const venus = Actor.find(6)!
+
+    expect(titan.resources.where('resourceType', 'cloud').first()).toBeUndefined()
+    expect(venus.resources.where('resourceType', 'cloud').first()).toBeUndefined()
+  })
+
+  it('у Земли и Корribана облачная строка на месте', () => {
+    const earthCloud = earth().resources.where('resourceType', 'cloud').first()
+    const korribanCloud = Actor.find(88)!.resources.where('resourceType', 'cloud').first()
+
+    expect(earthCloud).toBeDefined()
+    expect(korribanCloud).toBeDefined()
+  })
+})
+
 describe('PlanetMaterial: гейты ночной и облачной карт', () => {
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
