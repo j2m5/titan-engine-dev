@@ -126,7 +126,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     // Цикл 1: провал, актор уходит в attempted.
     await handlers['ClosestChange'](record('Mercury', 300))
-    expect(load).toHaveBeenCalledTimes(2) // диффуз + bump
+    expect(load).toHaveBeenCalledTimes(7) // диффуз + slope + 4 detail + bump — терраформный набор Меркурия
 
     // Цикл 2: Меркурий по-прежнему на первом месте по приоритету (та же
     // дистанция) — значит decision.wanted всё ещё содержит его, и attempted
@@ -137,10 +137,10 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // wanted считался из decision.load, где исключённый никогда не
     // появляется, и снятие блокировки происходило уже на цикле 2), актор
     // ретраится здесь — новые вызовы load. Если фикс на месте, вызовов
-    // по-прежнему ровно два.
+    // по-прежнему ровно семь.
     await handlers['ClosestChange'](record('Mercury', 300))
 
-    expect(load).toHaveBeenCalledTimes(2)
+    expect(load).toHaveBeenCalledTimes(7)
   })
 
   it('крупное дальнее тело обходит мелкое ближнее и грузится первым', async () => {
@@ -166,19 +166,21 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     expect(order).toContain('planets/ceres/ceres.jpg')
   })
 
-  it('бюджет впритык двум диффузам — грузятся оба, bump менее приоритетного тела не помещается', async () => {
+  it('бюджет впритык двум диффузам — оба грузятся, но пара floor Меркурия (диффуз+slope) съедает остаток', async () => {
     // Единица бюджета — путь (карта), не тело: decideStreaming ранжирует
     // ЖАДНО по (typeRank asc, actorPriority desc), а не по актору целиком.
-    // При нехватке места диффуз ВТОРОГО по приоритету тела обгоняет bump
-    // ПЕРВОГО — рельеф всех тел важнее косметики одного (см. decideStreaming.ts,
-    // «жадный остаток»). Раньше (актор-центричный decideStreaming, до задачи 2)
-    // тот же бюджет грузил Меркурий целиком (диффуз+bump) и не трогал Цереру —
-    // сейчас это не так, и это осознанная смена гранулярности бюджета.
+    // Пол (floor) — терраформная арка задачи 2 дала Меркурию честный slope,
+    // и теперь пол это ПАРА (диффуз+slope) топ-тела, допущенная безусловно
+    // даже сверх бюджета (см. decideStreaming.ts). При бюджете ровно на два
+    // 8K-пути пол Меркурия сам занимает оба места, но диффуз Цереры всё
+    // равно проходит — он ранжирован выше slope и detail-набора Меркурия
+    // (typeRank diffuse=0 < slope=1), и бюджет считается по путям, не по
+    // акторам целиком.
     const load = vi.fn((): Promise<LoadResult> => Promise.resolve({ ok: true as const, texture: makeTexture() }))
 
     // Оба тела ещё ни разу не грузились — decideStreaming использует
     // завышенную оценку ~8K на путь, а не реальный вес мок-текстуры. Бюджет
-    // ровно на два диффуза (Меркурия и Цереры), не на два пути одного тела.
+    // ровно на два 8K-пути.
     const { observer, handlers, data } = makeObserver(SIZE_8K * 2, load)
     observer.scenario = SOLAR_SYSTEM
 
@@ -188,9 +190,11 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     await handlers['ClosestChange'](record('Mercury', 300))
 
     expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury.jpg' }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury_slope.webp' }))
     expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/ceres/ceres.jpg' }))
+    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/ceres/ceres_slope.webp' }))
     expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury_bump.jpg' }))
-    expect(load).toHaveBeenCalledTimes(2)
+    expect(load).toHaveBeenCalledTimes(3)
   })
 
   it('второй пересчёт, пока актор ещё грузится, не переспрашивает и не вытесняет его', async () => {
@@ -205,9 +209,10 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       callIndex += 1
 
       // Только диффуз Меркурия держится открытым — он и создаёт окно "в
-      // полёте", которое проверяет тест. Bump — независимый кандидат (задача
-      // 2 грузит пути конкурентно, не последовательно по актору) и
-      // резолвится сразу, чтобы обе загрузки могли нормально завершиться.
+      // полёте", которое проверяет тест. Остальные шесть путей (slope+4
+      // detail+bump) — независимые кандидаты (задача 2 грузит пути
+      // конкурентно, не последовательно по актору) и резолвятся сразу, чтобы
+      // все загрузки могли нормально завершиться.
       if (callIndex === 1) {
         return new Promise<LoadResult>((resolve: (result: LoadResult) => void): void => {
           hold.resolve = resolve
@@ -225,15 +230,16 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     const first: Promise<void> = handlers['ClosestChange'](record('Mercury', 300))
 
-    // Диффуз и bump — два независимых пути, оба стартуют в этом же цикле.
-    expect(load).toHaveBeenCalledTimes(2)
+    // Все семь путей Меркурия (диффуз+slope+4detail+bump) — независимые
+    // кандидаты, стартуют в этом же цикле.
+    expect(load).toHaveBeenCalledTimes(7)
 
-    // Второй пересчёт с той же дистанцией — оба пути Меркурия уже loaded, а
+    // Второй пересчёт с той же дистанцией — все пути Меркурия уже loaded, а
     // диффуз ещё и inFlight.
     await handlers['ClosestChange'](record('Mercury', 300))
 
-    // Не переспросили (те же два вызова) и не вытеснили.
-    expect(load).toHaveBeenCalledTimes(2)
+    // Не переспросили (те же семь вызовов) и не вытеснили.
+    expect(load).toHaveBeenCalledTimes(7)
     expect(evictSpy).not.toHaveBeenCalled()
 
     hold.resolve?.({ ok: true, texture: makeTexture() })
@@ -491,19 +497,21 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // последующее вытеснение освобождало разделяемый диффуз, который другое
     // тело ещё показывало.
     //
-    // Задача 2 сделала диффуз и bump ОДНОГО тела независимыми кандидатами:
+    // Задача 2 сделала все пути ОДНОГО тела независимыми кандидатами:
     // `Promise.all(decision.load.map(loadPath))` дозапускает их конкурентно
     // (а не строго друг за другом, как было у actor-центричного `loadActor`),
-    // так что в рамках одного пересчёта оба пути стартуют синхронно.
-    // Держим открытыми только вызовы диффуза (1-й — цикл 1 "устаревший", 3-й
-    // — цикл 2 "живой"); bump-вызовы (2-й, 4-й) резолвятся сразу — тест их
-    // не касается, но им нужно завершиться, чтобы Promise.all не завис.
+    // так что в рамках одного пересчёта все семь путей Меркурия (терраформная
+    // арка: диффуз+slope+4detail+bump) стартуют синхронно. Держим открытыми
+    // только вызовы диффуза (1-й — цикл 1 "устаревший", 8-й, первый в цикле
+    // 2, — "живой"); остальные пять путей каждого цикла резолвятся сразу —
+    // тест их не касается, но им нужно завершиться, чтобы Promise.all не
+    // завис.
     const resolvers: Array<(result: LoadResult) => void> = []
     let callIndex: number = 0
     const load = vi.fn((): Promise<LoadResult> => {
       callIndex += 1
 
-      if (callIndex === 1 || callIndex === 3) {
+      if (callIndex === 1 || callIndex === 8) {
         return new Promise<LoadResult>((resolve) => resolvers.push(resolve))
       }
 
@@ -584,7 +592,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       return Promise.resolve({ ok: true as const, texture: makeTexture() })
     })
 
-    // Бюджет ровно на одного актора (два пути по 8K-оценке).
+    // Бюджет ровно на пару floor Меркурия (диффуз+slope, два пути по 8K-оценке).
     const { observer, handlers, data } = makeObserver(SIZE_8K * 2, load)
     observer.scenario = SOLAR_SYSTEM
     const evictSpy = vi.spyOn(observer, 'evictPath')
@@ -592,7 +600,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     data.set('Mercury', record('Mercury', 300))
 
     const first: Promise<void> = handlers['ClosestChange'](record('Mercury', 300))
-    // Диффуз held, bump резолвится сразу — оба пути дозапускаются конкурентно.
+    // Диффуз held, slope резолвится сразу — оба floor-пути дозапускаются конкурентно.
     expect(load).toHaveBeenCalledTimes(2)
 
     // Луна (радиус 1735.97 км) совсем рядом — приоритет ~173.6, намного выше
@@ -608,14 +616,16 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     await first
   })
 
-  it('диффуз тела, чей замеренный вес равен всему бюджету, не вытесняется и не грузится заново — второстепенный путь просто не помещается', async () => {
+  it('диффуз и slope тела, чей замеренный вес занимает весь бюджет, не вытесняются и не грузятся заново — остальные пути просто не помещаются', async () => {
     // Меркурий — единственный кандидат, значит всегда топ по приоритету: пол
-    // decideStreaming обязан удержать его ДИФФУЗ в reserved на КАЖДОМ цикле,
-    // даже когда честный замер (не слепая оценка) показывает вес, равный
-    // всему бюджету целиком. Бюджет впритык ОДНОМУ 8K-пути — единица бюджета
-    // теперь путь, не тело: bump того же Меркурия никогда не помещается
-    // (не floor), но это не создаёт бесконечного цикла загрузки/вытеснения,
-    // потому что bump никогда и не грузился — вытеснять нечего.
+    // decideStreaming обязан удержать его ДИФФУЗ И SLOPE в reserved на
+    // КАЖДОМ цикле (терраформная арка задачи 2 дала телу честный slope — пол
+    // теперь пара, не одна карта), даже когда честный замер (не слепая
+    // оценка) показывает суммарный вес пары вдвое дороже всего бюджета.
+    // Бюджет впритык ОДНОМУ 8K-пути — bump и detail-набор того же Меркурия
+    // никогда не помещаются (не floor), но это не создаёт бесконечного цикла
+    // загрузки/вытеснения, потому что они никогда и не грузились — вытеснять
+    // нечего.
     const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
       const texture = makeBigTexture() // замер даст SIZE_8K на путь
       texture.name = request.name
@@ -628,19 +638,22 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     data.set('Mercury', record('Mercury', 300))
 
-    // Цикл 1: диффуз — floor, грузится безусловно и занимает весь бюджет;
-    // bump не помещается (не floor) и не грузится вовсе.
+    // Цикл 1: диффуз и slope — пара floor, грузятся безусловно и занимают
+    // весь бюджет (и сверх него); bump и detail не помещаются (не floor) и
+    // не грузятся вовсе.
     await handlers['ClosestChange'](record('Mercury', 300))
-    expect(load).toHaveBeenCalledTimes(1)
+    expect(load).toHaveBeenCalledTimes(2)
     expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury.jpg' }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury_slope.webp' }))
 
-    // Цикл 2: sizeOf теперь отдаёт честный SIZE_8K (не слепую оценку) — ровно
-    // весь бюджет. Меркурий по-прежнему единственный (топ) кандидат — пол
-    // обязан удержать диффуз резидентным.
+    // Цикл 2: sizeOf теперь отдаёт честный SIZE_8K на путь (не слепую
+    // оценку) — пара уже вдвое дороже всего бюджета. Меркурий по-прежнему
+    // единственный (топ) кандидат — пол обязан удержать оба пути
+    // резидентными.
     await handlers['ClosestChange'](record('Mercury', 300))
 
     expect(evictSpy).not.toHaveBeenCalled()
-    expect(load).toHaveBeenCalledTimes(1)
+    expect(load).toHaveBeenCalledTimes(2)
   })
 
   it('имя, разделяемое с кольцом/атмосферой, резолвится в планету, а не в актора без стримируемых путей', async () => {

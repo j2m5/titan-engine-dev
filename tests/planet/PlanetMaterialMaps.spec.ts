@@ -523,6 +523,143 @@ describe('PlanetMaterial: счётные инварианты батча 18 сп
   })
 })
 
+// Марс (actorId 8) — терраформная арка synth-heightmap, но height/slope из
+// РЕАЛЬНОГО DEM (MOLA-корзина), не синтетического генератора, как у батча спутников
+function mars(): Actor {
+  return Actor.find(8)!
+}
+
+describe('PlanetMaterial: данные Марса — height/slope/detail-связки и ручки детального слоя (DEM)', () => {
+  it('height-строка Марса: верный путь и резидентный lifecycle', () => {
+    const row = mars().resources.where('resourceType', 'height').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/mars/mars_height.raw')
+    expect(row!.getAttribute('lifecycle')).toBe('resident')
+  })
+
+  it('slope-строка Марса: верный путь, streamable, wrapS RepeatWrapping', () => {
+    const row = mars().resources.where('resourceType', 'slope').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/mars/mars_slope.webp')
+    expect(row!.getAttribute('lifecycle')).toBe('streamable')
+    expect(row!.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('диффуз Марса несёт wrapS: RepeatWrapping в данных (терраформный шов меридиана)', () => {
+    const diffuse = mars().resources.where('resourceType', 'diffuse').first()!
+
+    expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('detail-связки Марса указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
+    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
+      const moonRow = moon().resources.where('resourceType', type).first()
+      const marsRow = mars().resources.where('resourceType', type).first()
+
+      expect(marsRow, type).toBeDefined()
+      expect(marsRow!.getAttribute('id')).toBe(moonRow!.getAttribute('id'))
+      expect(marsRow!.getAttribute('path')).toBe(moonRow!.getAttribute('path'))
+    }
+  })
+
+  it('renderingObjects Марса несёт ручки детального слоя террейна (detailSaturation 0.15 — планета)', () => {
+    const data = mars().renderingObject!.getAttribute('data') as Record<string, unknown>
+
+    expect(data.bumpScale).toBe(1)
+    expect(data.detailScaleMeters).toBe(40)
+    expect(data.detailScale2Meters).toBe(7)
+    expect(data.detailNormalScale).toBe(1)
+    expect(data.detailSaturation).toBe(0.15)
+    expect(data.detailBrightness).toBe(1)
+    expect(data.detailAoInfluence).toBe(0.5)
+    expect(data.detailFadeMeters).toBe(30000)
+    expect(data.detailFade2Meters).toBe(5000)
+  })
+})
+
+// Плутон (actorId 14) — карликовая планета, терраформная арка synth-heightmap
+// (height/slope из оффлайн-генератора, как у батча спутников)
+function pluto(): Actor {
+  return Actor.find(14)!
+}
+
+describe('PlanetMaterial: данные Плутона — height/slope/detail-связки и ручки детального слоя (synth)', () => {
+  it('height-строка Плутона: верный путь и резидентный lifecycle', () => {
+    const row = pluto().resources.where('resourceType', 'height').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/pluto/pluto_height.raw')
+    expect(row!.getAttribute('lifecycle')).toBe('resident')
+  })
+
+  it('slope-строка Плутона: верный путь, streamable, wrapS RepeatWrapping', () => {
+    const row = pluto().resources.where('resourceType', 'slope').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/pluto/pluto_slope.webp')
+    expect(row!.getAttribute('lifecycle')).toBe('streamable')
+    expect(row!.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('диффуз Плутона несёт wrapS: RepeatWrapping в данных (терраформный шов меридиана)', () => {
+    const diffuse = pluto().resources.where('resourceType', 'diffuse').first()!
+
+    expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('detail-связки Плутона указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
+    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
+      const moonRow = moon().resources.where('resourceType', type).first()
+      const plutoRow = pluto().resources.where('resourceType', type).first()
+
+      expect(plutoRow, type).toBeDefined()
+      expect(plutoRow!.getAttribute('id')).toBe(moonRow!.getAttribute('id'))
+      expect(plutoRow!.getAttribute('path')).toBe(moonRow!.getAttribute('path'))
+    }
+  })
+
+  it('renderingObjects Плутона несёт ручки детального слоя террейна (detailSaturation 0.1 — карлик)', () => {
+    const data = pluto().renderingObject!.getAttribute('data') as Record<string, unknown>
+
+    expect(data.bumpScale).toBe(1)
+    expect(data.detailScaleMeters).toBe(40)
+    expect(data.detailScale2Meters).toBe(7)
+    expect(data.detailNormalScale).toBe(1)
+    expect(data.detailSaturation).toBe(0.1)
+    expect(data.detailBrightness).toBe(1)
+    expect(data.detailAoInfluence).toBe(0.5)
+    expect(data.detailFadeMeters).toBe(30000)
+    expect(data.detailFade2Meters).toBe(5000)
+  })
+})
+
+// Девять твёрдых тел задачи 2: планеты (Меркурий, Венера, Марс, Церера) и
+// карликовые (Плутон, Хаумеа, Макемаке, Эрида, Седна) — счётные инварианты
+// одинаковы для всех, как у батча спутников выше
+const NINE_BODIES_ACTOR_IDS = [5, 6, 8, 9, 14, 15, 16, 17, 18] as const
+
+describe('PlanetMaterial: счётные инварианты девяти твёрдых тел (планеты + карликовые)', () => {
+  it.each(NINE_BODIES_ACTOR_IDS)('actorId %i: пара height+slope, wrapS у slope и диффуза, bumpScale 1, ровно 6 терраформных связок', (actorId) => {
+    const actor = Actor.find(actorId)!
+    const height = actor.resources.where('resourceType', 'height').first()
+    const slope = actor.resources.where('resourceType', 'slope').first()
+    const diffuse = actor.resources.where('resourceType', 'diffuse').first()
+
+    expect(height, `actorId ${actorId}: height`).toBeDefined()
+    expect(slope, `actorId ${actorId}: slope`).toBeDefined()
+    expect(slope!.getAttribute('wrapS'), `actorId ${actorId}: slope wrapS`).toBe(RepeatWrapping)
+    expect(diffuse!.getAttribute('wrapS'), `actorId ${actorId}: diffuse wrapS`).toBe(RepeatWrapping)
+
+    const data = actor.renderingObject!.getAttribute('data') as Record<string, unknown>
+    expect(data.bumpScale, `actorId ${actorId}: bumpScale`).toBe(1)
+
+    const terraformLinks = actor.resources.whereIn('resourceType', [...TERRAFORM_RESOURCE_TYPES]).count()
+    expect(terraformLinks, `actorId ${actorId}: терраформные связки`).toBe(6)
+  })
+})
+
 describe('PlanetMaterial: зачистка облаков Титана и Венеры', () => {
   it('у Титана и Венеры облачной строки больше нет', () => {
     const titan = Actor.find(29)!

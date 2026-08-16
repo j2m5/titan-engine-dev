@@ -4,9 +4,16 @@
 import { IRenderingObject } from '@/core/models/types'
 
 export const RenderingObjects: IRenderingObject[] = [
-  { id: 1, actorId: 5, data: { emission: 1, bumpScale: 0.8 } },
-  { id: 2, actorId: 8, data: { emission: 1, bumpScale: 3 } },
-  { id: 3, actorId: 9, data: { emission: 1, bumpScale: 10 } },
+  // Девять твёрдых тел (Task 2 терраформной арки planets): планеты (Меркурий, Венера,
+  // Марс, Церера) и карликовые (Плутон, Хаумеа, Макемаке, Эрида, Седна) — bumpScale 1,
+  // slope-путь физически честный, множитель не нужен (легаси-значения были 0.8/3/10/2 —
+  // см. отдельные строки ниже); осознанный компромисс: легаси-bump-фолбэк (без залитой
+  // height-карты) станет площе прежнего вида. detailSaturation 0.15 у планет (Меркурий,
+  // Венера, Марс, Церера — как у Луны), 0.1 у карликовых (тот же прецедент, что у батча
+  // спутников).
+  { id: 1, actorId: 5, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 2, actorId: 8, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 3, actorId: 9, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
   { id: 4, actorId: 13, data: { emission: 1, bumpScale: 0.3 } },
   // Луна: bumpScale 1 — slope-путь физически честный, множитель не нужен;
   // detail* — периоды шкал в метрах и грейдинг детального слоя (см. IPlanetRenderingObject);
@@ -58,10 +65,10 @@ export const RenderingObjects: IRenderingObject[] = [
   { id: 42, actorId: 28, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
   { id: 43, actorId: 7, data: { emission: 1, bumpScale: 1.5 } },
   { id: 44, actorId: 11, data: { emission: 1, bumpScale: 0.3 } },
-  { id: 45, actorId: 14, data: { emission: 1, bumpScale: 2 } },
-  { id: 46, actorId: 16, data: { emission: 1, bumpScale: 2 } },
-  { id: 47, actorId: 17, data: { emission: 1, bumpScale: 2 } },
-  { id: 48, actorId: 18, data: { emission: 1, bumpScale: 2 } },
+  { id: 45, actorId: 14, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 46, actorId: 16, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 47, actorId: 17, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 48, actorId: 18, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
   { id: 49, actorId: 20, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
   // Европа: терраформная арка synth-heightmap (height/slope из оффлайн-генератора) — detail*
   // делит масштабы и грейдинг с Луной и Каллисто, детальные текстуры общие по ресурсам (id 126-129);
@@ -97,5 +104,10 @@ export const RenderingObjects: IRenderingObject[] = [
   { id: 73, actorId: 114, data: { exposureBias: 1 } },
   { id: 74, actorId: 115, data: { preset: "emission", seed: 1618, size: 21000, shape: "hourglass", shapeThickness: 0.18, shapeRotation: [0, 0, 28], axisRatios: [0.8, 1, 0.8], edgeFalloff: 0.28, density: 0.6, noise: { octaves: 6, frequency: 2.4, warpStrength: 0.2, ridged: 1, contrast: 2.4, worleyStrength: 0.8 }, quality: { bakeResolution: 192 }, palette: { stops: [{ t: 0, color: "#12070a" }, { t: 0.45, color: "#8a4a1e" }, { t: 0.8, color: "#e08a3c" }, { t: 1, color: "#f8dcb0" }], secondary: "#a02810", secondaryThreshold: 0.78, emissiveIntensity: 1.6, radialMix: 0.6, innerColor: "#4fd8e0", outerColor: "#d05a24" }, dust: { strength: 0.5, threshold: 0.58, color: "#0a0508" } } },
   { id: 75, actorId: 83, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
-  { id: 76, actorId: 70, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } }
+  { id: 76, actorId: 70, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  // Венера и Хаумеа не имели renderingObject-строки вовсе (Венера — без bump-карты,
+  // Хаумеа — без bump вовсе) — Task 2 добавляет обеим полный набор ручек детального слоя,
+  // тот же прецедент, что у остальных семи тел этого блока (см. комментарий выше).
+  { id: 77, actorId: 6, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  { id: 78, actorId: 15, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } }
 ]
