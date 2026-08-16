@@ -14,6 +14,7 @@
     "build:heightmap": "vite-node scripts/build-heightmap.ts --",
     "build:slopemap": "vite-node scripts/build-slopemap.ts --",
     "build:synth-heightmap": "vite-node scripts/build-synth-heightmap.ts --",
+    "build:moon-heightmaps": "vite-node scripts/batch-synth-heightmaps.ts --",
     "preview": "vite preview",
     "test": "npm run typecheck && vitest"
   },
