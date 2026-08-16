@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { Mesh, Scene, Texture } from 'three'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { TextureBudget, textureBytes } from '@/core/streaming/TextureBudget'
+import { MAP_TYPE_RANK } from '@/core/streaming/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import type { SceneObserver, ObservableRecord } from '@/core/services/SceneObserver'
 import type { TextureProvider } from '@/core/textures/TextureProvider'
@@ -68,7 +69,9 @@ describe('ResourceObserver: стриминг', () => {
     resourceStorage.addTexture(texture)
     vi.spyOn(resourceStorage, 'deleteTexture').mockImplementation((): void => void order.push('delete'))
 
-    observer.evictActor({ actorId: 1, name: 'Earth', priority: 0, paths: ['planets/earth.jpg'] })
+    // typeRank = diffuse: только диффуз откатывается на заглушку целиком —
+    // это и проверяет тест (resetMaterial, а не updateMaterial).
+    observer.evictPath({ actorId: 1, name: 'Earth', path: 'planets/earth.jpg', typeRank: MAP_TYPE_RANK.diffuse, actorPriority: 0 })
 
     expect(order).toEqual(['reset', 'delete'])
 
@@ -77,6 +80,9 @@ describe('ResourceObserver: стриминг', () => {
   })
 
   it('сбрасывает материал только выселяемого актора', async () => {
+    // Без предварительного collectCandidates у наблюдателя нет записи в
+    // pathActors для этого пути — эвикшен падает на кандидата-заявителя
+    // (fallback), поэтому Mars, у которого свой узел в сцене, не трогается.
     const { observer, scene } = makeObserver()
     const resets: string[] = []
 
@@ -88,7 +94,7 @@ describe('ResourceObserver: стриминг', () => {
       scene.add(mesh)
     }
 
-    observer.evictActor({ actorId: 1, name: 'Earth', priority: 0, paths: [] })
+    observer.evictPath({ actorId: 1, name: 'Earth', path: 'planets/earth.jpg', typeRank: MAP_TYPE_RANK.diffuse, actorPriority: 0 })
 
     expect(resets).toEqual(['Earth'])
   })
@@ -109,7 +115,7 @@ describe('ResourceObserver: стриминг', () => {
 
     expect(budget.sizeOf(PATH)).toBe(textureBytes(2048, 1024))
 
-    observer.evictActor({ actorId: 1, name: 'Earth', priority: 0, paths: [PATH] })
+    observer.evictPath({ actorId: 1, name: 'Earth', path: PATH, typeRank: MAP_TYPE_RANK.diffuse, actorPriority: 0 })
 
     expect(budget.sizeOf(PATH)).toBe(textureBytes(2048, 1024))
   })
@@ -127,6 +133,39 @@ describe('ResourceObserver: стриминг', () => {
     Object.defineProperty(mesh, 'renderable', { value: null, writable: true })
     scene.add(mesh)
 
-    expect(() => observer.evictActor({ actorId: 1, name: 'Earth', priority: 0, paths: [] })).not.toThrow()
+    expect(() =>
+      observer.evictPath({ actorId: 1, name: 'Earth', path: 'planets/earth.jpg', typeRank: MAP_TYPE_RANK.diffuse, actorPriority: 0 })
+    ).not.toThrow()
+  })
+
+  it('шаренный путь не удаляется, пока нужен другому загруженному телу', () => {
+    // pathActors заполняется вручную (обходя collectCandidates) — Earth и
+    // Mars оба ссылаются на общий диффуз. Эвикшен от лица Earth не должен
+    // трогать ни материалы, ни реестр: Mars всё ещё владеет путём.
+    const { observer, scene } = makeObserver()
+    const resets: string[] = []
+    const SHARED = 'planets/shared.jpg'
+
+    for (const name of ['Earth', 'Mars']) {
+      const mesh = new Mesh()
+      mesh.name = name
+      const material = { resetMaterial: (): void => void resets.push(name), updateMaterial: vi.fn() }
+      Object.defineProperty(mesh, 'renderable', { value: { material }, writable: true })
+      scene.add(mesh)
+    }
+
+    const texture = new Texture()
+    texture.name = SHARED
+    resourceStorage.addTexture(texture)
+
+    const pathActors = (observer as unknown as { pathActors: Map<string, Set<number>> }).pathActors
+    pathActors.set(SHARED, new Set([1, 2]))
+
+    observer.evictPath({ actorId: 1, name: 'Earth', path: SHARED, typeRank: MAP_TYPE_RANK.diffuse, actorPriority: 0 })
+
+    expect(resets).toEqual([])
+    expect(resourceStorage.getTexture(SHARED)).toBeDefined()
+
+    resourceStorage.deleteAllTextures()
   })
 })

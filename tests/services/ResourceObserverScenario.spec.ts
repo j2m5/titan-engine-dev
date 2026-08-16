@@ -10,18 +10,18 @@ import type { NotificationSink } from '@/core/ports/NotificationSink'
 
 /**
  * Раньше накопленное между сценариями лежало в публичном массиве `deferred`,
- * и тест писал в него напрямую. Задача 5 убрала `deferred` вовсе — учёт
- * стриминга теперь ведут четыре приватных поля (`loaded`, `loadedAt`,
- * `inFlight`, `attempted`). Инвариант («смена сценария не копит состояние
- * прошлого сценария») не изменился, изменился только носитель, поэтому тест
- * достаёт приватные поля через приведение типа — единственный способ
- * посмотреть на них снаружи класса.
+ * и тест писал в него напрямую. Задача 5 убрала `deferred` вовсе, задача 2
+ * (переезд на пути) сменила носитель ещё раз: `loaded`/`loadedAt`/`inFlight`/
+ * `attempted` теперь ключуются путём, а не id актора. Инвариант («смена
+ * сценария не копит состояние прошлого сценария») не изменился, изменился
+ * только тип ключа, поэтому тест достаёт приватные поля через приведение
+ * типа — единственный способ посмотреть на них снаружи класса.
  */
 type StreamingInternals = {
-  loaded: Set<number>
-  loadedAt: Map<number, number>
-  inFlight: Set<number>
-  attempted: Set<number>
+  loaded: Set<string>
+  loadedAt: Map<string, number>
+  inFlight: Set<string>
+  attempted: Set<string>
 }
 
 function streamingState(observer: ResourceObserver): StreamingInternals {
@@ -47,10 +47,10 @@ describe('ResourceObserver — смена сценария сбрасывает 
     const state = streamingState(observer)
 
     observer.scenario = Scenarios[0]
-    state.loaded.add(1)
-    state.loadedAt.set(1, Date.now())
-    state.inFlight.add(2)
-    state.attempted.add(3)
+    state.loaded.add('planets/a.jpg')
+    state.loadedAt.set('planets/a.jpg', Date.now())
+    state.inFlight.add('planets/b.jpg')
+    state.attempted.add('planets/c.jpg')
 
     observer.scenario = Scenarios[1]
 
@@ -77,7 +77,7 @@ describe('ResourceObserver — смена сценария сбрасывает 
     const state = streamingState(observer)
 
     observer.scenario = Scenarios[0]
-    state.loaded.add(1)
+    state.loaded.add('planets/a.jpg')
 
     observer.scenario = null
 

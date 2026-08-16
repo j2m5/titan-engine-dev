@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { Mesh, Scene, Texture, Vector3 } from 'three'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { TextureBudget, textureBytes } from '@/core/streaming/TextureBudget'
+import { MAP_TYPE_RANK } from '@/core/streaming/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { Actor } from '@/core/models/Actor'
 import { Scenarios } from '@/config/scenarios'
@@ -14,7 +15,7 @@ import type { NotificationSink } from '@/core/ports/NotificationSink'
 /**
  * Гоняет `closestChange`/`collectCandidates`/бюджетное ранжирование
  * end-to-end. Соседний `ResourceObserverStreaming.spec.ts` проверяет только
- * `evictActor` напрямую и эту связку не покрывает.
+ * `evictPath` напрямую и эту связку не покрывает.
  *
  * Тела — настоящие акторы движка (Mercury/Ceres/Korriban I/Korriban II), а не
  * фикстуры: `collectCandidates` ходит в реальный `Actor`/`Resource` через ORM,
@@ -55,14 +56,18 @@ function makeBigTexture(): Texture {
  * Приватная бухгалтерия наблюдателя, доступная снаружи только приведением
  * типа — тот же приём, что и в `ResourceObserverScenario.spec.ts`. Нужен,
  * когда поведенческие побочные эффекты (счётчик сетевых вызовов, вызов
- * `evictActor`) не отличают «гварда сработала» от «гварда сломана, но
+ * `evictPath`) не отличают «гварда сработала» от «гварда сломана, но
  * дедупликация путей замаскировала последствия».
+ *
+ * Задача 2 переехала с учёта по актору на учёт по пути: `loaded`/`inFlight`/
+ * `attempted` теперь `Set<string>`, а `actorPaths` (actorId → пути) заменён
+ * на `pathActors` (путь → id акторов-владельцев).
  */
 type StreamingInternals = {
-  loaded: Set<number>
-  inFlight: Set<number>
-  attempted: Set<number>
-  actorPaths: Map<number, string[]>
+  loaded: Set<string>
+  inFlight: Set<string>
+  attempted: Set<string>
+  pathActors: Map<string, Set<number>>
   pathLoads: Map<string, Promise<LoadResult | null>>
 }
 
@@ -162,12 +167,19 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     expect(order).toContain('planets/ceres/ceres.jpg')
   })
 
-  it('бюджет впритык одному телу — грузится только приоритетное', async () => {
+  it('бюджет впритык двум диффузам — грузятся оба, bump менее приоритетного тела не помещается', async () => {
+    // Единица бюджета — путь (карта), не тело: decideStreaming ранжирует
+    // ЖАДНО по (typeRank asc, actorPriority desc), а не по актору целиком.
+    // При нехватке места диффуз ВТОРОГО по приоритету тела обгоняет bump
+    // ПЕРВОГО — рельеф всех тел важнее косметики одного (см. decideStreaming.ts,
+    // «жадный остаток»). Раньше (актор-центричный decideStreaming, до задачи 2)
+    // тот же бюджет грузил Меркурий целиком (диффуз+bump) и не трогал Цереру —
+    // сейчас это не так, и это осознанная смена гранулярности бюджета.
     const load = vi.fn((): Promise<LoadResult> => Promise.resolve({ ok: true as const, texture: makeTexture() }))
 
     // Оба тела ещё ни разу не грузились — decideStreaming использует
     // завышенную оценку ~8K на путь, а не реальный вес мок-текстуры. Бюджет
-    // ровно на два пути (диффуз+bump) одного актора.
+    // ровно на два диффуза (Меркурия и Цереры), не на два пути одного тела.
     const { observer, handlers, data } = makeObserver(SIZE_8K * 2, load)
     observer.scenario = SOLAR_SYSTEM
 
@@ -177,7 +189,9 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     await handlers['ClosestChange'](record('Mercury', 300))
 
     expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury.jpg' }))
-    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/ceres/ceres.jpg' }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/ceres/ceres.jpg' }))
+    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury_bump.jpg' }))
+    expect(load).toHaveBeenCalledTimes(2)
   })
 
   it('второй пересчёт, пока актор ещё грузится, не переспрашивает и не вытесняет его', async () => {
@@ -191,9 +205,10 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const load = vi.fn((): Promise<LoadResult> => {
       callIndex += 1
 
-      // Только первый вызов (диффуз Меркурия) держится открытым — он и создаёт
-      // окно "в полёте", которое проверяет тест. Остальные (bump) резолвятся
-      // сразу, чтобы загрузка после resolve могла нормально завершиться.
+      // Только диффуз Меркурия держится открытым — он и создаёт окно "в
+      // полёте", которое проверяет тест. Bump — независимый кандидат (задача
+      // 2 грузит пути конкурентно, не последовательно по актору) и
+      // резолвится сразу, чтобы обе загрузки могли нормально завершиться.
       if (callIndex === 1) {
         return new Promise<LoadResult>((resolve: (result: LoadResult) => void): void => {
           hold.resolve = resolve
@@ -205,19 +220,21 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
     observer.scenario = SOLAR_SYSTEM
-    const evictSpy = vi.spyOn(observer, 'evictActor')
+    const evictSpy = vi.spyOn(observer, 'evictPath')
 
     data.set('Mercury', record('Mercury', 300))
 
     const first: Promise<void> = handlers['ClosestChange'](record('Mercury', 300))
 
-    expect(load).toHaveBeenCalledTimes(1)
+    // Диффуз и bump — два независимых пути, оба стартуют в этом же цикле.
+    expect(load).toHaveBeenCalledTimes(2)
 
-    // Второй пересчёт с той же дистанцией — Меркурий уже loaded И inFlight.
+    // Второй пересчёт с той же дистанцией — оба пути Меркурия уже loaded, а
+    // диффуз ещё и inFlight.
     await handlers['ClosestChange'](record('Mercury', 300))
 
-    // Не переспросили (тот же единственный вызов) и не вытеснили.
-    expect(load).toHaveBeenCalledTimes(1)
+    // Не переспросили (те же два вызова) и не вытеснили.
+    expect(load).toHaveBeenCalledTimes(2)
     expect(evictSpy).not.toHaveBeenCalled()
 
     hold.resolve?.({ ok: true, texture: makeTexture() })
@@ -268,14 +285,24 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     expect(load).toHaveBeenCalledTimes(8)
     expect(resourceStorage.getTexture(korribanIISlope)).toBeDefined()
 
-    // Прямое вытеснение Korriban I — ровно то, что сделал бы decideStreaming,
-    // выбери он его на вытеснение. Пути принадлежат резиденции по данным.
-    observer.evictActor({
-      actorId: 93,
-      name: 'Korriban I',
-      priority: 0,
-      paths: [...sharedPaths, korribanISlope]
-    })
+    // Прямое вытеснение путей Korriban I — по одному вызову на путь, ровно
+    // так, как их вернул бы decideStreaming.evict от лица актора 93.
+    // pathActors уже заполнен настоящими closestChange-циклами выше, поэтому
+    // "шаренный путь не удаляется" здесь проверяется на реальных данных, а
+    // не на подставном pathActors, как в ResourceObserverStreaming.spec.ts.
+    const evictedTypeRank: Record<string, number> = {
+      'planets/StarWars/korriban/i/i.jpg': MAP_TYPE_RANK.diffuse,
+      'planets/StarWars/korriban/i/i_bump.jpg': MAP_TYPE_RANK.bump,
+      'terrain/rocky_trail_diff.webp': MAP_TYPE_RANK.detailDiffuse,
+      'terrain/rocky_trail_nor.webp': MAP_TYPE_RANK.detailNormal,
+      'terrain/rocky_trail_arm.webp': MAP_TYPE_RANK.detailArm,
+      'terrain/moon_01_nor.webp': MAP_TYPE_RANK.detailNormal2,
+      [korribanISlope]: MAP_TYPE_RANK.slope
+    }
+
+    for (const path of [...sharedPaths, korribanISlope]) {
+      observer.evictPath({ actorId: 93, name: 'Korriban I', path, typeRank: evictedTypeRank[path], actorPriority: 0 })
+    }
 
     // Общие пути пережили вытеснение первого владельца — Korriban II всё ещё на
     // них ссылается. Собственная slope-карта Korriban I — больше ничья, снята.
@@ -333,12 +360,16 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // бронь при резолве устаревшего владельца — и третий заявитель по тому
     // же пути запустил бы дублирующую сетевую загрузку через границу смены
     // сценария, воссоздавая утечку.
+    //
+    // Держится открытым только запрос SHARED_DIFFUSE — путей у Korriban I
+    // семь, и задача 2 грузит их конкурентно (не по одному на актора, как
+    // было раньше), так что "первый вызов, второй вызов" по номеру больше не
+    // адресует именно диффуз. Остальные пути (bump/detail/собственная slope)
+    // резолвятся сразу и в проверяемую гонку не входят.
+    const SHARED_DIFFUSE = 'planets/StarWars/korriban/i/i.jpg'
     const resolvers: Array<(result: LoadResult) => void> = []
-    let callIndex: number = 0
     const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
-      callIndex += 1
-
-      if (callIndex <= 2) {
+      if (request.name === SHARED_DIFFUSE) {
         return new Promise<LoadResult>((resolve) => resolvers.push(resolve))
       }
 
@@ -350,7 +381,6 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
     observer.scenario = HORUSET_SYSTEM
     const pathLoads = streamingState(observer).pathLoads
-    const SHARED_DIFFUSE = 'planets/StarWars/korriban/i/i.jpg'
 
     // Korriban I заявляет общий путь первым — становится владельцем брони.
     // Это и есть будущий "устаревший владелец".
@@ -363,7 +393,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const staleReservation = pathLoads.get(SHARED_DIFFUSE)
 
     // Сценарий "сменился" — сеттер безусловно бампает epoch и полностью
-    // сбрасывает pathLoads/loaded/actorPaths независимо от того, каким
+    // сбрасывает pathLoads/loaded/pathActors независимо от того, каким
     // значением его перезаписали (см. докблок сеттера `scenario`). Тот же
     // сценарий переприсваивается заново (а не `null`), потому что код
     // резолвит кандидатов через `this._map`, а `null` очистил бы её без
@@ -401,35 +431,27 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     await live
   })
 
-  it('устаревший резолв после смены сценария не трогает живую загрузку того же актора', async () => {
-    // Удаления loaded/actorPaths и снятие inFlight,
-    // ключуемые только по actorId, без сверки эпохи, разбирали учёт СВЕЖЕЙ
-    // загрузки того же актора, начатой уже после смены сценария. Наблюдалось
-    // на реальном сценарии: устаревший резолв Korriban II
-    // снимал пометки живой загрузки того же актора, и последующее
-    // вытеснение освобождало разделяемый диффуз, который Korriban I ещё
-    // показывал.
+  it('устаревший резолв после смены сценария не трогает живую загрузку того же пути', async () => {
+    // Удаления `loaded`/`pathActors` и снятие `inFlight`, ключуемые путём,
+    // без сверки эпохи, разбирали бы учёт СВЕЖЕЙ загрузки того же пути,
+    // начатой уже после смены сценария. Наблюдалось на реальном сценарии:
+    // устаревший резолв снимал пометки живой загрузки того же пути, и
+    // последующее вытеснение освобождало разделяемый диффуз, который другое
+    // тело ещё показывало.
     //
-    // Побочных эффектов тут недостаточно (счётчик
-    // сетевых вызовов, вызов evictActor через третий пересчёт) — при снятых
-    // гвардах третий пересчёт ошибочно считал актора незагруженным, но
-    // повторный loadActor молча присоединялся (через pathLoads) к чужому
-    // незавершённому промису вместо нового сетевого запроса. Оба прежних
-    // assert'а проходили "случайно", хотя re-run произошёл, а третий
-    // пересчёт вдобавок зависал в реальном прогоне (join на промис, который
-    // тест ещё не отпустил). Теперь бухгалтерия живой загрузки проверяется
-    // НАПРЯМУЮ, без третьего пересчёта вовсе.
-    //
-    // Держим открытыми только первые два вызова (диффуз "устаревшего" и
-    // диффуз "живого" актора) — остальные (bump с обеих сторон) резолвятся
-    // сразу, чтобы обе загрузки могли нормально завершиться после того, как
-    // держащиеся пути будут отпущены явно.
+    // Задача 2 сделала диффуз и bump ОДНОГО тела независимыми кандидатами:
+    // `Promise.all(decision.load.map(loadPath))` дозапускает их конкурентно
+    // (а не строго друг за другом, как было у actor-центричного `loadActor`),
+    // так что в рамках одного пересчёта оба пути стартуют синхронно.
+    // Держим открытыми только вызовы диффуза (1-й — цикл 1 "устаревший", 3-й
+    // — цикл 2 "живой"); bump-вызовы (2-й, 4-й) резолвятся сразу — тест их
+    // не касается, но им нужно завершиться, чтобы Promise.all не завис.
     const resolvers: Array<(result: LoadResult) => void> = []
     let callIndex: number = 0
     const load = vi.fn((): Promise<LoadResult> => {
       callIndex += 1
 
-      if (callIndex <= 2) {
+      if (callIndex === 1 || callIndex === 3) {
         return new Promise<LoadResult>((resolve) => resolvers.push(resolve))
       }
 
@@ -440,13 +462,16 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     observer.scenario = SOLAR_SYSTEM
     const state = streamingState(observer)
     const MERCURY_ACTOR_ID = 5
+    const MERCURY_DIFFUSE = 'planets/mercury/mercury.jpg'
 
     data.set('Mercury', record('Mercury', 300))
 
-    // Цикл 1 (эпоха E1): Меркурий начинает грузиться, первый путь (диффуз)
-    // держится открытым — это и есть "устаревший" вызов.
+    // Цикл 1 (эпоха E1): диффуз Меркурия держится открытым — это и есть
+    // "устаревший" вызов.
     const stale: Promise<void> = handlers['ClosestChange'](record('Mercury', 300))
     expect(resolvers).toHaveLength(1)
+    expect(state.loaded.has(MERCURY_DIFFUSE)).toBe(true)
+    expect(state.inFlight.has(MERCURY_DIFFUSE)).toBe(true)
 
     // Сценарий "сменился" — тот же сценарий переприсваивается заново, а не
     // `null`: сеттер безусловно бампает epoch и сбрасывает весь учёт
@@ -457,11 +482,11 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     observer.scenario = SOLAR_SYSTEM
 
     // Цикл 2 (эпоха E2): Меркурий снова кандидат (тот же actorId) — живая,
-    // свежая загрузка. Её первый путь тоже держится открытым.
+    // свежая загрузка. Её диффуз тоже держится открытым.
     const live: Promise<void> = handlers['ClosestChange'](record('Mercury', 300))
     expect(resolvers).toHaveLength(2)
-    expect(state.loaded.has(MERCURY_ACTOR_ID)).toBe(true)
-    expect(state.inFlight.has(MERCURY_ACTOR_ID)).toBe(true)
+    expect(state.loaded.has(MERCURY_DIFFUSE)).toBe(true)
+    expect(state.inFlight.has(MERCURY_DIFFUSE)).toBe(true)
 
     // Резолвим УСТАРЕВШИЙ (первый) вызов — именно та гонка.
     resolvers[0]({ ok: true, texture: makeTexture() })
@@ -470,20 +495,17 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // Прямая проверка: бухгалтерия ЖИВОЙ загрузки (цикл 2) должна пережить
     // резолв устаревшего вызова в точности — не побочные эффекты, а сами
     // записи, которые устаревшая чистка не имеет права трогать.
-    expect(state.loaded.has(MERCURY_ACTOR_ID)).toBe(true)
-    expect(state.inFlight.has(MERCURY_ACTOR_ID)).toBe(true)
-    expect(state.actorPaths.get(MERCURY_ACTOR_ID)).toEqual([
-      'planets/mercury/mercury.jpg',
-      'planets/mercury/mercury_bump.jpg'
-    ])
+    expect(state.loaded.has(MERCURY_DIFFUSE)).toBe(true)
+    expect(state.inFlight.has(MERCURY_DIFFUSE)).toBe(true)
+    expect(state.pathActors.get(MERCURY_DIFFUSE)).toEqual(new Set([MERCURY_ACTOR_ID]))
 
     // Достраиваем живую загрузку, чтобы не оставить висящий промис.
     resolvers[1]({ ok: true, texture: makeTexture() })
     await live
 
-    // После завершения живой загрузки inFlight снят, актор остаётся loaded.
-    expect(state.loaded.has(MERCURY_ACTOR_ID)).toBe(true)
-    expect(state.inFlight.has(MERCURY_ACTOR_ID)).toBe(false)
+    // После завершения живой загрузки inFlight снят, путь остаётся loaded.
+    expect(state.loaded.has(MERCURY_DIFFUSE)).toBe(true)
+    expect(state.inFlight.has(MERCURY_DIFFUSE)).toBe(false)
   })
 
   it('inFlight защищает актор от вытеснения, пока он грузится впервые, даже если приоритет упал', async () => {
@@ -513,12 +535,13 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // Бюджет ровно на одного актора (два пути по 8K-оценке).
     const { observer, handlers, data } = makeObserver(SIZE_8K * 2, load)
     observer.scenario = SOLAR_SYSTEM
-    const evictSpy = vi.spyOn(observer, 'evictActor')
+    const evictSpy = vi.spyOn(observer, 'evictPath')
 
     data.set('Mercury', record('Mercury', 300))
 
     const first: Promise<void> = handlers['ClosestChange'](record('Mercury', 300))
-    expect(load).toHaveBeenCalledTimes(1) // held — Меркурий inFlight, ещё ни разу не succeeded
+    // Диффуз held, bump резолвится сразу — оба пути дозапускаются конкурентно.
+    expect(load).toHaveBeenCalledTimes(2)
 
     // Луна (радиус 1735.97 км) совсем рядом — приоритет ~173.6, намного выше
     // меркуриевых ~8.13. Бюджет впритык теперь достаётся ей, Меркурий
@@ -533,41 +556,39 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     await first
   })
 
-  it('тело, чей замеренный вес превышает весь бюджет, не вытесняется и не грузится заново', async () => {
+  it('диффуз тела, чей замеренный вес равен всему бюджету, не вытесняется и не грузится заново — второстепенный путь просто не помещается', async () => {
     // Меркурий — единственный кандидат, значит всегда топ по приоритету: пол
-    // decideStreaming обязан удержать его в reserved на КАЖДОМ цикле, даже
-    // когда честный замер (не слепая оценка) показывает вес больше всего
-    // бюджета. Без пола актор сначала грузится вслепую (первый цикл), замер
-    // на цикле 2 вскрывает перерасход, и БЕЗ пола актор ушёл бы в evict —
-    // ровно тот бесконечный цикл перезагрузки, который убирает пол.
+    // decideStreaming обязан удержать его ДИФФУЗ в reserved на КАЖДОМ цикле,
+    // даже когда честный замер (не слепая оценка) показывает вес, равный
+    // всему бюджету целиком. Бюджет впритык ОДНОМУ 8K-пути — единица бюджета
+    // теперь путь, не тело: bump того же Меркурия никогда не помещается
+    // (не floor), но это не создаёт бесконечного цикла загрузки/вытеснения,
+    // потому что bump никогда и не грузился — вытеснять нечего.
     const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
-      const texture = makeBigTexture() // замер даст SIZE_8K на каждый путь
+      const texture = makeBigTexture() // замер даст SIZE_8K на путь
       texture.name = request.name
       return Promise.resolve({ ok: true as const, texture })
     })
 
-    // Бюджет впритык ОДНОМУ 8K-пути — у Меркурия их два (диффуз+bump), то
-    // есть реальный вес после замера (2×SIZE_8K) вдвое больше всего бюджета.
     const { observer, handlers, data } = makeObserver(SIZE_8K, load)
     observer.scenario = SOLAR_SYSTEM
-    const evictSpy = vi.spyOn(observer, 'evictActor')
+    const evictSpy = vi.spyOn(observer, 'evictPath')
 
     data.set('Mercury', record('Mercury', 300))
 
-    // Цикл 1: оценка ещё слепая (ASSUMED_TEXTURE_BYTES = SIZE_8K на путь) —
-    // пол по-любому применился бы, но здесь актор проходит и без него, потому
-    // что слепая оценка для одного пути ровно на бюджет. Оба пути грузятся,
-    // budget.measure фиксирует их РЕАЛЬНЫЙ вес — SIZE_8K каждый.
+    // Цикл 1: диффуз — floor, грузится безусловно и занимает весь бюджет;
+    // bump не помещается (не floor) и не грузится вовсе.
     await handlers['ClosestChange'](record('Mercury', 300))
-    expect(load).toHaveBeenCalledTimes(2)
+    expect(load).toHaveBeenCalledTimes(1)
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury.jpg' }))
 
-    // Цикл 2: sizeOf теперь отдаёт честные SIZE_8K на путь, суммарно 2×SIZE_8K
-    // — больше всего бюджета. Меркурий по-прежнему единственный (топ)
-    // кандидат — пол обязан удержать его резидентным.
+    // Цикл 2: sizeOf теперь отдаёт честный SIZE_8K (не слепую оценку) — ровно
+    // весь бюджет. Меркурий по-прежнему единственный (топ) кандидат — пол
+    // обязан удержать диффуз резидентным.
     await handlers['ClosestChange'](record('Mercury', 300))
 
     expect(evictSpy).not.toHaveBeenCalled()
-    expect(load).toHaveBeenCalledTimes(2)
+    expect(load).toHaveBeenCalledTimes(1)
   })
 
   it('имя, разделяемое с кольцом/атмосферой, резолвится в планету, а не в актора без стримируемых путей', async () => {
@@ -608,8 +629,8 @@ describe('ResourceObserver: closestChange end-to-end', () => {
   })
 
   it('успешная загрузка не бросает, когда renderable === null', async () => {
-    // Тот же провал, что и в evictActor (см. ResourceObserverStreaming.spec.ts),
-    // но на пути успеха loadActor: hasRenderable({ renderable: null }) вернёт
+    // Тот же провал, что и в evictPath (см. ResourceObserverStreaming.spec.ts),
+    // но на пути успеха loadPath: hasRenderable({ renderable: null }) вернёт
     // true, node.renderable?.material — undefined, и .updateMaterial() на
     // undefined бросает необработанным исключением из closestChange.
     const load = vi.fn((): Promise<LoadResult> => Promise.resolve({ ok: true as const, texture: makeTexture() }))
@@ -627,17 +648,25 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     await expect(handlers['ClosestChange'](record('Mercury', 300))).resolves.toBeUndefined()
   })
 
-  it('бросок из updateMaterial не улетает необработанным — актор откатывается в attempted', async () => {
-    // tryLoad гасит ошибки ПРОВАЙДЕРА, но loadActor вокруг него — нет: бросок
+  it('бросок из updateMaterial не улетает необработанным — путь откатывается в attempted', async () => {
+    // tryLoad гасит ошибки ПРОВАЙДЕРА, но loadPath вокруг него — нет: бросок
     // из ORM, из сборки запроса или (как здесь) из updateMaterial() после
     // успешной загрузки раньше улетал из Promise.all необработанным отказом,
-    // а актор оставался в loaded без текстур — decideStreaming никогда больше
+    // а путь оставался в loaded без текстуры — decideStreaming никогда больше
     // его не запросит, поскольку не грузит уже loaded.
+    //
+    // Материал ломается на КАЖДОМ updateMaterial — значит throw'ы ловит и
+    // диффуз (успех → бросок в конце loadPath → handleLoadFailure →
+    // resetMaterial, у него отдельный мок, не бросает), и bump (успех →
+    // бросок → handleLoadFailure → сам же updateMaterial бросает СНОВА —
+    // ловится локальным try/catch внутри handleLoadFailure, не долетает до
+    // Promise.all).
     const load = vi.fn((): Promise<LoadResult> => Promise.resolve({ ok: true as const, texture: makeTexture() }))
 
     const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 8, load)
     observer.scenario = SOLAR_SYSTEM
-    const MERCURY_ACTOR_ID = 5
+    const MERCURY_DIFFUSE = 'planets/mercury/mercury.jpg'
+    const MERCURY_BUMP = 'planets/mercury/mercury_bump.jpg'
 
     const mesh = new Mesh()
     mesh.name = 'Mercury'
@@ -656,9 +685,11 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     const state = streamingState(observer)
 
-    // Откат идентичен обычному провалу: актор уходит в attempted и покидает
-    // loaded — а не остаётся в loaded без единого шанса на повторный запрос.
-    expect(state.attempted.has(MERCURY_ACTOR_ID)).toBe(true)
-    expect(state.loaded.has(MERCURY_ACTOR_ID)).toBe(false)
+    // Откат идентичен обычному провалу: оба пути уходят в attempted и
+    // покидают loaded — а не остаются в loaded без единого шанса на повтор.
+    expect(state.attempted.has(MERCURY_DIFFUSE)).toBe(true)
+    expect(state.loaded.has(MERCURY_DIFFUSE)).toBe(false)
+    expect(state.attempted.has(MERCURY_BUMP)).toBe(true)
+    expect(state.loaded.has(MERCURY_BUMP)).toBe(false)
   })
 })
