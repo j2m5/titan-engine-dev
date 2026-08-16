@@ -15,12 +15,15 @@ import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { TextureBudget } from '@/core/streaming/TextureBudget'
 import { decideStreaming } from '@/core/streaming/decideStreaming'
-import type { StreamCandidate } from '@/core/streaming/types'
+import type { MapCandidate, StreamDecision } from '@/core/streaming/types'
+import { MAP_TYPE_RANK, mapTypeRank } from '@/core/streaming/types'
+import { minBodyPixelsToPriorityThreshold } from '@/core/streaming/angularCutoff'
+import { streaming } from '@/config/streaming'
 
 /**
- * Сколько миллисекунд актор защищён от вытеснения после загрузки.
+ * Сколько миллисекунд путь защищён от вытеснения после загрузки.
  *
- * При рабочем наборе в единицы слотов объект у границы бюджета иначе будет
+ * При рабочем наборе в единицы слотов путь у границы бюджета иначе будет
  * грузиться и вытесняться по кругу. Одна ручка вместо двух порогов, и она не
  * зависит от того, как именно дрожит дистанция.
  */
@@ -28,6 +31,13 @@ const MIN_RESIDENCY_MS: number = 10_000
 
 /** Защита от деления на ноль, когда камера внутри тела. */
 const MIN_DISTANCE: number = 1e-9
+
+/**
+ * Порог `actorPriority`, ниже которого тело субпиксельно (см.
+ * `minBodyPixelsToPriorityThreshold`, `config/streaming.minBodyPixels`) — его
+ * карты не разворачиваются в кандидатов `collectCandidates` вовсе.
+ */
+const MIN_ACTOR_PRIORITY: number = minBodyPixelsToPriorityThreshold(streaming.streaming.minBodyPixels)
 
 /**
  * Наблюдатель за ресурсами, отвечающий жизненный цикл ресурсов
@@ -62,28 +72,34 @@ class ResourceObserver {
    */
   private readonly _map: Map<number, Actor>
 
-  /** Акторы, чьи текстуры в видеопамяти либо в процессе загрузки. */
-  private readonly loaded: Set<number> = new Set()
-  /** actorId → момент загрузки, для минимальной резидентности. */
-  private readonly loadedAt: Map<number, number> = new Map()
-  /** Акторы с загрузкой в полёте: их нельзя ни запрашивать, ни вытеснять. */
-  private readonly inFlight: Set<number> = new Set()
-  /** Акторы, чья загрузка провалилась; сбрасывается, когда актор выходит из `wanted`. */
-  private readonly attempted: Set<number> = new Set()
   /**
-   * actorId → пути, за которые актор отвечает. Реестр текстур ключуется по
-   * пути, а акторы могут делить файл (Korriban I–VII делят диффуз и bump), так
-   * что без проверки совместного владения вытеснение одного освобождало бы
-   * текстуру, которую показывает другой.
+   * Единица учёта стриминга — путь (карта), не актор: несколько тел могут
+   * делить один физический файл, и его резидентность одна на всех.
+   *
+   * Пути, чьи текстуры в видеопамяти либо в процессе загрузки.
    */
-  private readonly actorPaths: Map<number, string[]> = new Map()
+  private readonly loaded: Set<string> = new Set()
+  /** Путь → момент загрузки, для минимальной резидентности. */
+  private readonly loadedAt: Map<string, number> = new Map()
+  /** Пути с загрузкой в полёте: их нельзя ни запрашивать повторно, ни вытеснять. */
+  private readonly inFlight: Set<string> = new Set()
+  /** Пути, чья загрузка провалилась; сбрасывается, когда путь выходит из `wantedPaths`. */
+  private readonly attempted: Set<string> = new Set()
   /**
-   * Счётчик сбросов сценария. `loadActor` захватывает значение до первого
+   * Путь → id акторов, которые на него ссылаются в ТЕКУЩЕМ пересчёте.
+   * Перестраивается каждым `collectCandidates` с нуля — отвечает на вопрос
+   * «кому сейчас показывать» (материалы), а не «кто когда-то владел». Именно
+   * поэтому вытеснение одного тела не трогает путь, которым делится другое:
+   * оно всё ещё в этой карте.
+   */
+  private readonly pathActors: Map<string, Set<number>> = new Map()
+  /**
+   * Счётчик сбросов сценария. `loadPath` захватывает значение до первого
    * `await`: если к моменту догрузки оно изменилось, сценарий сменился посреди
    * загрузки и результат отбрасывается, а не пишется в разобранный реестр.
    *
    * При расхождении эпох устаревший вызов НЕ трогает состояние по одному
-   * `actorId`: под тем же ключом может уже лежать живая запись новой эпохи.
+   * пути: под тем же ключом может уже лежать живая запись новой эпохи.
    */
   private epoch: number = 0
   /**
@@ -153,7 +169,7 @@ class ResourceObserver {
     this.inFlight.clear()
     this.attempted.clear()
     this.pathLoads.clear()
-    this.actorPaths.clear()
+    this.pathActors.clear()
     this._map.clear()
     this.setMap()
     this.setCubeTextures()
@@ -303,31 +319,73 @@ class ResourceObserver {
    * то есть при изменении камеры, когда дистанции уже пересчитаны.
    */
   private closestChange = async (): Promise<void> => {
-    const candidates: StreamCandidate[] = this.collectCandidates()
-    const decision = decideStreaming(
+    const { candidates, cutoffCount } = this.collectCandidates()
+    const decision: StreamDecision = decideStreaming(
       candidates,
       this.loaded,
-      // Условия защищают разные моменты жизни актора и не дублируют друг друга:
-      // `inFlight` пинит того, кто грузится впервые (до первого успеха
-      // `loadedAt` не выставлен), а порог по `loadedAt` — уже загруженного.
-      // Без `inFlight` актор, потерявший приоритет прямо во время первой
+      // Условия защищают разные моменты жизни пути и не дублируют друг друга:
+      // `inFlight` пинит путь, который грузится впервые (до первого успеха
+      // `loadedAt` не выставлен), а порог по `loadedAt` — уже загруженный.
+      // Без `inFlight` путь, потерявший приоритет прямо во время первой
       // загрузки, попал бы в вытеснение, а загрузка дописала бы результат в
       // снесённое состояние
-      (actorId: number): boolean =>
-        this.inFlight.has(actorId) || Date.now() - (this.loadedAt.get(actorId) ?? 0) < MIN_RESIDENCY_MS,
+      (path: string): boolean =>
+        this.inFlight.has(path) || Date.now() - (this.loadedAt.get(path) ?? 0) < MIN_RESIDENCY_MS,
       this.attempted,
       (path: string): number | undefined => this.budget.sizeOf(path),
       this.budget.limit()
     )
 
-    // Провал снимается по `wanted`, а не по `load`: исключённый актор в `load`
-    // не появится никогда, и битый путь ретраился бы бесконечно
-    for (const actorId of this.attempted) {
-      if (!decision.wanted.has(actorId)) this.attempted.delete(actorId)
+    // Провал снимается по `wantedPaths`, а не по `load`: исключённый путь в
+    // `load` не появится никогда, и битый путь ретраился бы бесконечно
+    for (const path of this.attempted) {
+      if (!decision.wantedPaths.has(path)) this.attempted.delete(path)
     }
 
-    for (const candidate of decision.evict) this.evictActor(candidate)
-    await Promise.all(decision.load.map((candidate: StreamCandidate): Promise<void> => this.loadActor(candidate)))
+    if (import.meta.env.DEV) this.logDecision(candidates, decision, cutoffCount)
+
+    for (const candidate of decision.evict) this.evictPath(candidate)
+    await Promise.all(decision.load.map((candidate: MapCandidate): Promise<void> => this.loadPath(candidate)))
+  }
+
+  /**
+   * Компактная dev-сводка решения по слоям — раз на пересчёт, за
+   * `import.meta.env.DEV`, Vite вырезает вызов из прод-сборки. Дедуп по пути
+   * повторяет тот, что `decideStreaming` делает внутри себя — иначе один
+   * шаренный путь посчитался бы дважды на каждого владельца. `cutoffCount` —
+   * сколько тел `collectCandidates` не развернул в кандидатов вовсе из-за
+   * угловой отсечки (см. `MIN_ACTOR_PRIORITY`) — они в `candidates` не видны,
+   * поэтому считаются отдельно и добавляются последней строкой.
+   */
+  private logDecision(candidates: MapCandidate[], decision: StreamDecision, cutoffCount: number): void {
+    const byRank: Map<number, { paths: number; bytes: number; skipped: number }> = new Map()
+    const seen: Set<string> = new Set()
+
+    for (const candidate of candidates) {
+      if (seen.has(candidate.path)) continue
+      seen.add(candidate.path)
+
+      const bucket = byRank.get(candidate.typeRank) ?? { paths: 0, bytes: 0, skipped: 0 }
+
+      if (decision.wantedPaths.has(candidate.path)) {
+        bucket.paths += 1
+        bucket.bytes += this.budget.sizeOf(candidate.path) ?? 0
+      } else {
+        bucket.skipped += 1
+      }
+
+      byRank.set(candidate.typeRank, bucket)
+    }
+
+    const summary: string = [...byRank.entries()]
+      .sort(([a]: [number, unknown], [b]: [number, unknown]): number => a - b)
+      .map(
+        ([rank, stats]: [number, { paths: number; bytes: number; skipped: number }]): string =>
+          `rank ${rank}: ${stats.paths} путей, ${(stats.bytes / 1024 / 1024).toFixed(1)} МиБ, не влезло ${stats.skipped}`
+      )
+      .join(' | ')
+
+    console.debug(`[streaming] ${summary} | отсечено ${cutoffCount} тел ниже порога`)
   }
 
   /**
@@ -350,208 +408,367 @@ class ResourceObserver {
   }
 
   /**
-   * Собирает кандидатов: тела из SceneObserver.data, у которых есть
-   * стримируемые ресурсы. Приоритет — радиус, делённый на расстояние.
+   * Собирает кандидатов: по одному `MapCandidate` на каждый streamable-ресурс
+   * каждого наблюдаемого тела. Приоритет тела (радиус/дистанция) считается
+   * один раз на актора, а не на карту.
    *
-   * Радиус в данных в километрах, дистанция в ObservableRecord уже в
-   * three-единицах, поэтому радиус переводится — иначе отношение бессмысленно.
+   * Угловая отсечка: тело с `actorPriority < MIN_ACTOR_PRIORITY` (диаметр на
+   * экране меньше `config/streaming.minBodyPixels`) НЕ разворачивается в
+   * кандидатов вовсе — его текстуры неразличимы, плейсхолдер эквивалентен
+   * честной карте. Без отсечки диффузы ВСЕХ наблюдаемых тел (в том числе
+   * дальних субпиксельных) конкурируют за бюджет наравне с рельефом
+   * ближнего — послойная жадная политика тогда голодает: слой диффузов всей
+   * сцены съедает бюджет раньше, чем очередь доходит до slope/detail того,
+   * что реально видно (см. `config/streaming.minBodyPixels`, регрессия
+   * «тайлы на поверхностях планет пропали»). `cutoffCount` — счётчик
+   * отсечённых тел для dev-сводки (`logDecision`).
+   *
+   * Параллельно перестраивает `pathActors` с нуля — актуальный список
+   * владельцев каждого пути в этом пересчёте.
+   *
+   * Актор может впервые сослаться на путь, который уже резидентен (второе
+   * тело общего комплекта карт вошло в зону позже первого) — такой путь
+   * никогда не попадёт в `decision.load` повторно (он уже в `loaded`), и без
+   * догона материал нового актора остался бы на исходной заглушке навсегда.
+   * `catchUp` собирает такие акторы и обновляет их материалы сразу здесь.
+   *
+   * Путь может лишиться ВСЕХ владельцев разом — тело единственного
+   * владельца ушло из наблюдения или упало под угловой порог. Такой путь
+   * невидим для `decideStreaming` (тот работает только с текущими
+   * `candidates`) и никогда не попал бы в `decision.evict` сам по себе —
+   * без явной чистки он завис бы в `loaded` без единого кандидата навсегда.
+   * `evictOrphanedPaths` находит такие пути (загружены, но нет записи в
+   * свежем `pathActors`) и вытесняет их напрямую, по владельцам из
+   * `previousOwners` — снимка `pathActors` ДО перестройки.
    */
-  private collectCandidates(): StreamCandidate[] {
-    const candidates: StreamCandidate[] = []
+  private collectCandidates(): { candidates: MapCandidate[]; cutoffCount: number } {
+    const candidates: MapCandidate[] = []
+    const previousOwners: Map<string, Set<number>> = new Map(this.pathActors)
+    const catchUp: Set<number> = new Set()
+    let cutoffCount: number = 0
+
+    this.pathActors.clear()
 
     for (const record of this.sceneObserver.data.values()) {
       const actor: Actor | undefined = this.findActorByName(record.name)
 
       if (!actor) continue
 
-      const paths: string[] = actor.resources
+      const streamableResources: Resource[] = actor.resources
         .filter((resource: Resource): boolean => resource.getAttribute('lifecycle') === 'streamable')
-        .map((resource: Resource): string => resource.getAttribute('path', ''))
         .toArray()
 
-      if (!paths.length) continue
+      if (!streamableResources.length) continue
 
+      const actorId: number = actor.getAttribute('id')!
       const radiusKm: number = actor.physicalObject?.getAttribute('radius', 0) ?? 0
+      const actorPriority: number = toThreeJSUnits(radiusKm) / Math.max(record.distance, MIN_DISTANCE)
 
-      candidates.push({
-        actorId: actor.getAttribute('id')!,
-        name: record.name,
-        priority: toThreeJSUnits(radiusKm) / Math.max(record.distance, MIN_DISTANCE),
-        paths
-      })
+      if (actorPriority < MIN_ACTOR_PRIORITY) {
+        cutoffCount += 1
+        continue
+      }
+
+      for (const resource of streamableResources) {
+        const path: string = resource.getAttribute('path', '')
+        const typeRank: number = mapTypeRank(resource.getAttribute('resourceType') ?? '')
+
+        candidates.push({ actorId, name: record.name, path, typeRank, actorPriority })
+
+        let owners: Set<number> | undefined = this.pathActors.get(path)
+
+        if (!owners) {
+          owners = new Set()
+          this.pathActors.set(path, owners)
+        }
+
+        owners.add(actorId)
+
+        if (this.loaded.has(path) && !previousOwners.get(path)?.has(actorId)) catchUp.add(actorId)
+      }
     }
 
-    return candidates
+    for (const actorId of catchUp) {
+      try {
+        this.withActorMaterial(actorId, (material: AbstractShaderMaterial): void => material.updateMaterial())
+      } catch {
+        // Сломанный материал одного догоняющего актора не должен сорвать сам
+        // пересчёт — `closestChange` продолжает работать с candidates дальше.
+      }
+    }
+
+    this.evictOrphanedPaths(previousOwners)
+
+    return { candidates, cutoffCount }
   }
 
   /**
-   * Освобождает текстуры актора.
+   * Вытесняет пути, у которых в свежепостроенном `pathActors` не осталось ни
+   * одного владельца, но которые всё ещё числятся `loaded`. Причина не
+   * важна для самого вытеснения (актор мог упасть под угловой порог, уйти
+   * из наблюдения или сменить набор ресурсов) — важен только факт: путь
+   * больше НИКЕМ не запрошен, а `decideStreaming` о нём не узнает, потому
+   * что видит только текущих `candidates`.
    *
-   * Порядок обязателен: сначала материал переключается на резидентную заглушку
-   * и только потом освобождаются текстуры, иначе кадр между шагами рисуется
-   * освобождённой текстурой. Трогается только выселяемый актор.
+   * Владелец резолвится по `previousOwners` — снимку `pathActors` ДО
+   * перестройки в этом же вызове `collectCandidates`; путь без владельца
+   * даже там (не должно происходить в норме — см. `evictPath`) вытесняется
+   * фиктивным заявителем: `evictPath` безопасно не находит для него узел
+   * сцены и просто чистит бухгалтерию/реестр.
    *
-   * Двойная проверка узла обязательна: актора может не быть в графе сцены, а
-   * `hasRenderable` пропускает и `renderable: null`. Бросок отсюда прервал бы
-   * цикл вытеснения и отменил всех оставшихся кандидатов пересчёта.
+   * Два гварда защищают от порчи состояния, а не только от лишней работы:
    *
-   * Пути удаляются только если на них не ссылается другой загруженный актор:
-   * акторы сценария могут делить один файл.
+   * `inFlight` — путь в полёте у орфана пропускается ЦЕЛИКОМ. `loadPath`
+   * захватывает `epoch`, но не факт орфанности: догрузка после `await`
+   * безусловно зарегистрирует текстуру в `resourceStorage` и выставит
+   * `loadedAt`, ничего не зная о том, что путь уже вычищен ЗДЕСЬ. Вычисти
+   * его сейчас — и после резолва текстура осталась бы резидентной вне
+   * `this.loaded` (мы её оттуда уже убрали) и вне бюджета навсегда: следующий
+   * орфан-проход ходит по `this.loaded`, а пути в нём больше нет, чтобы
+   * заметить пропажу. Путь достроится штатно и станет настоящим орфаном
+   * (без `inFlight`) на следующем такте — там и вытеснится.
+   *
+   * `MIN_RESIDENCY_MS` — та же защита от дребезга, что и у бюджетного
+   * вытеснения (`isPinned` в `closestChange`): тело, приоритет которого
+   * дрожит у порога отсечки, иначе грузилось бы и вытеснялось по кругу
+   * каждый такт. Свежий орфан просто пропускается — вытеснится, когда
+   * (если) останется орфаном дольше резидентности.
    */
-  public evictActor(candidate: StreamCandidate): void {
-    const node = this.scene.getObjectByName(candidate.name)
+  private evictOrphanedPaths(previousOwners: ReadonlyMap<string, Set<number>>): void {
+    for (const path of [...this.loaded]) {
+      if (this.pathActors.has(path)) continue
+      if (this.inFlight.has(path)) continue
+      if (Date.now() - (this.loadedAt.get(path) ?? 0) < MIN_RESIDENCY_MS) continue
 
-    if (node && hasRenderable(node) && node.renderable !== null) {
-      (node.renderable.material as AbstractShaderMaterial).resetMaterial()
-    }
+      const typeRank: number = mapTypeRank(Resource.where({ path }).first()?.getAttribute('resourceType') ?? '')
+      const owners: Set<number> = previousOwners.get(path) ?? new Set()
 
-    this.loaded.delete(candidate.actorId)
-    this.loadedAt.delete(candidate.actorId)
-    this.actorPaths.delete(candidate.actorId)
+      if (!owners.size) {
+        this.evictPath({ actorId: -1, name: '', path, typeRank, actorPriority: 0 })
+        continue
+      }
 
-    for (const path of candidate.paths) {
-      if (this.pathStillReferenced(path)) continue
+      for (const actorId of owners) {
+        const name: string = this._map.get(actorId)?.getAttribute('name') ?? ''
 
-      resourceStorage.deleteTexture(path)
+        this.evictPath({ actorId, name, path, typeRank, actorPriority: 0 })
+      }
     }
   }
 
   /**
-   * Путь всё ещё нужен, если на него ссылается какой-то ДРУГОЙ актор,
-   * который сейчас в `loaded`. Вызывать ПОСЛЕ того, как выселяемый/
-   * откатываемый актор убран из `loaded`/`actorPaths` — иначе он сам себя
-   * посчитает «другим» владельцем.
+   * Освобождает путь БЕЗУСЛОВНО — вызывающий (обычно `closestChange`, по
+   * `decision.evict`) уже решил, что путь не нужен НИКОМУ. `decideStreaming`
+   * дедуплицирует кандидатов ПО ПУТИ до принятия решения: совместный спрос
+   * нескольких тел на общий файл слит в одну запись с максимальным
+   * приоритетом среди совладельцев ещё до того, как решается судьба пути.
+   * Значит попадание пути в `decision.evict` означает, что дедуплицированный
+   * спрос — то есть спрос ВСЕХ текущих совладельцев вместе — не наскрёб
+   * места в бюджете, а не то, что один конкретный владелец его разлюбил.
+   * Рефкаунт по отдельным владельцам здесь в принципе не нужен: `evictPath`
+   * доверяет решению целиком. Ловушка: пересчёт по `pathActors` на месте
+   * считал бы НАБЛЮДАЕМЫХ, а не оставшихся в бюджете — шаренный путь тогда
+   * не вытесняется никогда.
+   *
+   * Порядок обязателен: сначала материалы переключаются, и только потом
+   * освобождается текстура, иначе кадр между шагами рисуется освобождённой
+   * текстурой.
+   *
+   * Материал сбрасывается на заглушку (`resetMaterial`) только если путь —
+   * диффуз (ранг 0): потеря второстепенной карты не убивает тело, оно
+   * обязано пережить частичный набор (`updateMaterial`). Трогаются материалы
+   * ВСЕХ текущих владельцев пути (`pathActors`), а не только заявителя
+   * `candidate` — путь мог быть общим на несколько тел, и все они теряют
+   * текстуру одновременно.
+   *
+   * Материал каждого совладельца трогается в своём `try/catch`: сломанный
+   * материал ОДНОГО тела не должен ни оборвать откат остальных совладельцев,
+   * ни (что хуже) сорвать бухгалтерию ниже — путь иначе завис бы в `loaded`
+   * без текстуры навсегда.
    */
-  private pathStillReferenced(path: string): boolean {
-    for (const actorId of this.loaded) {
-      if (this.actorPaths.get(actorId)?.includes(path)) return true
+  public evictPath(candidate: MapCandidate): void {
+    const owners: ReadonlySet<number> = this.pathActors.get(candidate.path) ?? new Set([candidate.actorId])
+    const isDiffuse: boolean = candidate.typeRank === MAP_TYPE_RANK.diffuse
+
+    for (const actorId of owners) {
+      try {
+        this.withActorMaterial(
+          actorId,
+          (material: AbstractShaderMaterial): void => (isDiffuse ? material.resetMaterial() : material.updateMaterial()),
+          actorId === candidate.actorId ? candidate.name : undefined
+        )
+      } catch {
+        // см. докблок выше
+      }
     }
 
-    return false
+    this.loaded.delete(candidate.path)
+    this.loadedAt.delete(candidate.path)
+    resourceStorage.deleteTexture(candidate.path)
+  }
+
+  /** Владельцы пути для материального фан-аута — из `pathActors`, либо кандидат-заявитель, если путь пришёл в обход `collectCandidates` (прямой вызов). */
+  private materialOwners(path: string, fallbackActorId: number): ReadonlySet<number> {
+    return this.pathActors.get(path) ?? new Set([fallbackActorId])
   }
 
   /**
-   * Грузит текстуры актора и обновляет его материал.
+   * Находит рендерабл актора по id и, если он есть в графе сцены с материалом,
+   * применяет к нему `fn`. Двойная проверка узла обязательна: актора может не
+   * быть в графе сцены, а `hasRenderable` пропускает и `renderable: null`.
    *
-   * Путь из реестра повторно не запрашивается, но актор всё равно
-   * записывается его владельцем в `actorPaths` — иначе некому будет защитить
-   * путь при вытеснении первого владельца.
+   * Имя резолвится через `_map`, а при промахе — через `fallbackName`: заявитель
+   * (`candidate.actorId`/`candidate.name`) прямого вызова (тесты, ручное
+   * вытеснение) может прийти в обход `collectCandidates`, и тогда `_map` про
+   * него ничего не знает — сам кандидат уже несёт своё имя.
+   */
+  private withActorMaterial(actorId: number, fn: (material: AbstractShaderMaterial) => void, fallbackName?: string): void {
+    const name: string | undefined = this._map.get(actorId)?.getAttribute('name') ?? fallbackName
+
+    if (!name) return
+
+    const node = this.scene.getObjectByName(name)
+
+    if (!node || !hasRenderable(node) || node.renderable === null) return
+
+    fn(node.renderable.material as AbstractShaderMaterial)
+  }
+
+  /**
+   * Грузит один путь и обновляет материалы всех акторов, которые на него
+   * ссылаются (`pathActors` — общий файл может показывать несколько тел).
    *
-   * Реестра мало, когда оба разделяющих путь актора попали в один пересчёт:
-   * `Promise.all` запускает их конкурентно, и оба проверяют реестр до первой
-   * регистрации. Поэтому путь бронируется в `pathLoads`, а после общего
-   * ожидания реестр перепроверяется — владелец промиса мог успеть.
+   * Путь из реестра повторно не запрашивается (проверка `resourceStorage`), а
+   * гонка конкурентных заявителей закрыта бронью `pathLoads`: один путь —
+   * одна бронь на всех совладельцев сразу, кто бы её ни держал.
    *
-   * Частичный провал откатывает актора целиком: иначе `loaded` перестаёт
-   * означать «показывает то, что должен», а деградировавший актор второй
-   * попытки не получит — `decideStreaming` не грузит уже загруженное.
+   * Провал делится по значимости пути: диффуз (ранг 0) без него тело нечего
+   * показывать — материал уходит на заглушку (`resetMaterial`). Любая другая
+   * карта необязательна: тело переживает её отсутствие, материал просто
+   * пересобирается без неё (`updateMaterial`, дефайны молчат).
    *
    * Смена сценария посреди загрузки: `epoch` захватывается до первого `await`,
-   * при расхождении результат диспоузится, а `loaded`/`actorPaths`/`inFlight`
+   * при расхождении результат диспоузится, а `loaded`/`pathActors`/`inFlight`
    * не трогаются вовсе (см. докблок `epoch`).
    *
    * Внешний `try/catch` покрывает весь метод, а не только загрузку: бросок из
-   * ORM, из сборки запроса или из `updateMaterial()` оставил бы актора в
-   * `loaded` без единой текстуры и без шанса на повтор.
+   * ORM, из сборки запроса или из `updateMaterial()` оставил бы путь в
+   * `loaded` без текстуры и без шанса на повтор.
    */
-  private async loadActor(candidate: StreamCandidate): Promise<void> {
+  private async loadPath(candidate: MapCandidate): Promise<void> {
+    const path: string = candidate.path
     const epoch: number = this.epoch
 
-    this.inFlight.add(candidate.actorId)
-    this.loaded.add(candidate.actorId)
-    this.actorPaths.set(candidate.actorId, candidate.paths)
+    this.inFlight.add(path)
+    this.loaded.add(path)
 
     try {
       let ok: boolean = true
 
       try {
-        for (const path of candidate.paths) {
-          if (resourceStorage.getTexture(path)) continue
-
+        if (!resourceStorage.getTexture(path)) {
           let pending: Promise<LoadResult | null> | undefined = this.pathLoads.get(path)
           let owner: boolean = false
 
           if (!pending) {
             const resource: Resource | undefined = Resource.where({ path }).first()
 
-            if (!resource) continue
-
-            pending = this.tryLoad(textureRequestFrom(resource.toJSON() as IResource))
-            this.pathLoads.set(path, pending)
-            owner = true
+            if (resource) {
+              pending = this.tryLoad(textureRequestFrom(resource.toJSON() as IResource))
+              this.pathLoads.set(path, pending)
+              owner = true
+            }
           }
 
-          const result = await pending
+          if (pending) {
+            const result = await pending
 
-          // Только владелец убирает бронь, и только СВОЮ: сценарий мог
-          // смениться, пока мы ждали, `scenario` уже очистил `pathLoads`
-          // целиком, а по этому же пути мог появиться НОВЫЙ (уже живой)
-          // претендент — сверка на равенство промиса не даёт снять чужую бронь.
-          if (owner && this.pathLoads.get(path) === pending) this.pathLoads.delete(path)
+            // Только владелец убирает бронь, и только СВОЮ: сценарий мог
+            // смениться, пока мы ждали, `scenario` уже очистил `pathLoads`
+            // целиком, а по этому же пути мог появиться НОВЫЙ (уже живой)
+            // претендент — сверка на равенство промиса не даёт снять чужую бронь.
+            if (owner && this.pathLoads.get(path) === pending) this.pathLoads.delete(path)
 
-          if (this.epoch !== epoch) {
-            if (owner && result?.ok && result.texture) result.texture.dispose()
+            if (this.epoch !== epoch) {
+              if (owner && result?.ok && result.texture) result.texture.dispose()
 
-            return
+              return
+            }
+
+            if (!result || !result.ok || !result.texture) {
+              ok = false
+            } else if (!resourceStorage.getTexture(path)) {
+              // Сосед по той же брони мог зарегистрировать текстуру, пока мы
+              // ждали тот же промис — реестр проверяется заново, а не вслепую.
+              this.budget.measure(path, result.texture)
+              resourceStorage.addTexture(result.texture)
+            }
           }
-
-          if (!result || !result.ok || !result.texture) {
-            ok = false
-            continue
-          }
-
-          // Сосед по той же брони мог зарегистрировать текстуру, пока мы ждали
-          // тот же промис — реестр проверяется заново, а не вслепую.
-          if (resourceStorage.getTexture(path)) continue
-
-          this.budget.measure(path, result.texture)
-          resourceStorage.addTexture(result.texture)
         }
       } finally {
-        if (this.epoch === epoch) this.inFlight.delete(candidate.actorId)
+        if (this.epoch === epoch) this.inFlight.delete(path)
       }
 
       if (this.epoch !== epoch) return
 
       if (!ok) {
-        this.rollbackFailedLoad(candidate)
+        this.handleLoadFailure(candidate)
         return
       }
 
-      this.loadedAt.set(candidate.actorId, Date.now())
+      this.loadedAt.set(path, Date.now())
 
-      const node = this.scene.getObjectByName(candidate.name)
-
-      if (node && hasRenderable(node) && node.renderable !== null) {
-        (node.renderable.material as AbstractShaderMaterial).updateMaterial()
+      for (const actorId of this.materialOwners(path, candidate.actorId)) {
+        this.withActorMaterial(
+          actorId,
+          (material: AbstractShaderMaterial): void => material.updateMaterial(),
+          actorId === candidate.actorId ? candidate.name : undefined
+        )
       }
     } catch {
       // Сценарий мог смениться, пока мы были внутри — устаревший бросок не
       // вправе трогать состояние, которое уже либо очищено сеттером
-      // `scenario`, либо принадлежит чужой живой загрузке того же актора
-      // (тот же инвариант, что и у обычного провала, см. докблок `epoch`).
+      // `scenario`, либо принадлежит чужой живой загрузке того же пути (тот
+      // же инвариант, что и у обычного провала, см. докблок `epoch`).
       if (this.epoch !== epoch) return
 
-      this.rollbackFailedLoad(candidate)
+      this.handleLoadFailure(candidate)
     }
   }
 
   /**
-   * Откатывает актора после провала загрузки — полного (провайдер вернул
-   * `!ok`) или брошенного (см. `loadActor`): актор уходит в `attempted` и
-   * покидает `loaded`, а его пути освобождаются из реестра, если на них не
-   * ссылается кто-то ещё из `loaded` (`pathStillReferenced`): акторы
-   * сценария могут делить один файл.
+   * Откатывает путь после провала загрузки — полного (провайдер вернул
+   * `!ok`) или брошенного (см. `loadPath`): путь уходит в `attempted` и
+   * покидает `loaded`. Бухгалтерия применяется БЕЗУСЛОВНО, до касания
+   * материалов — путь обязан числиться проваленным, даже если материал у
+   * одного из совладельцев сам сломан.
+   *
+   * Диффуз (ранг 0) без текстуры нечего показывать — материалы владельцев
+   * уходят на заглушку. Любая другая карта необязательна — тело переживает
+   * её отсутствие, материал только пересобирается без неё.
+   *
+   * Вызов сюда может прийти уже ИЗ `catch` вокруг брошенного `updateMaterial()`
+   * успешного пути (см. `loadPath`) — сломанный материал того же актора
+   * бросит и здесь. `try/catch` на актора не даёт этому улететь необработанным
+   * из `loadPath` и не даёт одному сломанному материалу оборвать откат
+   * остальных совладельцев пути.
    */
-  private rollbackFailedLoad(candidate: StreamCandidate): void {
-    this.attempted.add(candidate.actorId)
-    this.loaded.delete(candidate.actorId)
-    this.actorPaths.delete(candidate.actorId)
+  private handleLoadFailure(candidate: MapCandidate): void {
+    this.attempted.add(candidate.path)
+    this.loaded.delete(candidate.path)
 
-    for (const path of candidate.paths) {
-      if (this.pathStillReferenced(path)) continue
+    const isDiffuse: boolean = candidate.typeRank === MAP_TYPE_RANK.diffuse
 
-      resourceStorage.deleteTexture(path)
+    for (const actorId of this.materialOwners(candidate.path, candidate.actorId)) {
+      try {
+        this.withActorMaterial(
+          actorId,
+          (material: AbstractShaderMaterial): void => (isDiffuse ? material.resetMaterial() : material.updateMaterial()),
+          actorId === candidate.actorId ? candidate.name : undefined
+        )
+      } catch {
+        // см. докблок выше
+      }
     }
   }
 }

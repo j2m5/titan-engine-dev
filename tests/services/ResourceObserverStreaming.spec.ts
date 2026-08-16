@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { Mesh, Scene, Texture } from 'three'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { TextureBudget, textureBytes } from '@/core/streaming/TextureBudget'
+import { MAP_TYPE_RANK } from '@/core/streaming/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import type { SceneObserver, ObservableRecord } from '@/core/services/SceneObserver'
 import type { TextureProvider } from '@/core/textures/TextureProvider'
@@ -68,7 +69,9 @@ describe('ResourceObserver: стриминг', () => {
     resourceStorage.addTexture(texture)
     vi.spyOn(resourceStorage, 'deleteTexture').mockImplementation((): void => void order.push('delete'))
 
-    observer.evictActor({ actorId: 1, name: 'Earth', priority: 0, paths: ['planets/earth.jpg'] })
+    // typeRank = diffuse: только диффуз откатывается на заглушку целиком —
+    // это и проверяет тест (resetMaterial, а не updateMaterial).
+    observer.evictPath({ actorId: 1, name: 'Earth', path: 'planets/earth.jpg', typeRank: MAP_TYPE_RANK.diffuse, actorPriority: 0 })
 
     expect(order).toEqual(['reset', 'delete'])
 
@@ -77,6 +80,9 @@ describe('ResourceObserver: стриминг', () => {
   })
 
   it('сбрасывает материал только выселяемого актора', async () => {
+    // Без предварительного collectCandidates у наблюдателя нет записи в
+    // pathActors для этого пути — эвикшен падает на кандидата-заявителя
+    // (fallback), поэтому Mars, у которого свой узел в сцене, не трогается.
     const { observer, scene } = makeObserver()
     const resets: string[] = []
 
@@ -88,7 +94,7 @@ describe('ResourceObserver: стриминг', () => {
       scene.add(mesh)
     }
 
-    observer.evictActor({ actorId: 1, name: 'Earth', priority: 0, paths: [] })
+    observer.evictPath({ actorId: 1, name: 'Earth', path: 'planets/earth.jpg', typeRank: MAP_TYPE_RANK.diffuse, actorPriority: 0 })
 
     expect(resets).toEqual(['Earth'])
   })
@@ -109,7 +115,7 @@ describe('ResourceObserver: стриминг', () => {
 
     expect(budget.sizeOf(PATH)).toBe(textureBytes(2048, 1024))
 
-    observer.evictActor({ actorId: 1, name: 'Earth', priority: 0, paths: [PATH] })
+    observer.evictPath({ actorId: 1, name: 'Earth', path: PATH, typeRank: MAP_TYPE_RANK.diffuse, actorPriority: 0 })
 
     expect(budget.sizeOf(PATH)).toBe(textureBytes(2048, 1024))
   })
@@ -127,6 +133,58 @@ describe('ResourceObserver: стриминг', () => {
     Object.defineProperty(mesh, 'renderable', { value: null, writable: true })
     scene.add(mesh)
 
-    expect(() => observer.evictActor({ actorId: 1, name: 'Earth', priority: 0, paths: [] })).not.toThrow()
+    expect(() =>
+      observer.evictPath({ actorId: 1, name: 'Earth', path: 'planets/earth.jpg', typeRank: MAP_TYPE_RANK.diffuse, actorPriority: 0 })
+    ).not.toThrow()
+  })
+
+  it('вытеснение трогает материалы ВСЕХ текущих владельцев пути (pathActors), а не только заявителя', () => {
+    // evictPath доверяет решению целиком (см. докблок метода): раз путь уже
+    // выбран на вытеснение (обычно — потому что дедуплицированный спрос ВСЕХ
+    // совладельцев вместе не поместился в бюджет), применяет его безусловно
+    // ко всем, кто на путь ссылается в `pathActors` — Earth и Mars оба лишаются
+    // общего диффуза, а не только заявитель. `pathActors` заполняется вручную
+    // (обходя `collectCandidates`) — так же, как это делает реальный пересчёт.
+    //
+    // «Держится, пока нужен другому телу» здесь НЕ проверяется: рефкаунт по
+    // отдельным наблюдателям — ловушка (наблюдаемость ≠ место в бюджете,
+    // шаренный путь не вытеснялся бы никогда), его в коде нет. Честный
+    // сценарий «путь пережил вытеснение ОДНОГО совладельца, потому что другой
+    // всё ещё в бюджете» проверяется через реальный decideStreaming/closestChange
+    // в ResourceObserverClosestChange.spec.ts — там дедупликация путей
+    // структурно не даёт такому пути попасть в decision.evict вовсе.
+    const { observer, scene } = makeObserver()
+    const resets: string[] = []
+    const SHARED = 'planets/shared.jpg'
+
+    for (const name of ['Earth', 'Mars']) {
+      const mesh = new Mesh()
+      mesh.name = name
+      const material = { resetMaterial: (): void => void resets.push(name), updateMaterial: vi.fn() }
+      Object.defineProperty(mesh, 'renderable', { value: { material }, writable: true })
+      scene.add(mesh)
+    }
+
+    const texture = new Texture()
+    texture.name = SHARED
+    resourceStorage.addTexture(texture)
+
+    // `_map` (actorId → имя) заполняется реальным `collectCandidates` в
+    // проде — здесь подставляется вручную тем же приёмом, что и `pathActors`,
+    // иначе `withActorMaterial` не найдёт Mars по одному только id.
+    const internals = observer as unknown as {
+      pathActors: Map<string, Set<number>>
+      _map: Map<number, { getAttribute: (key: string) => string }>
+    }
+    internals.pathActors.set(SHARED, new Set([1, 2]))
+    internals._map.set(1, { getAttribute: () => 'Earth' })
+    internals._map.set(2, { getAttribute: () => 'Mars' })
+
+    observer.evictPath({ actorId: 1, name: 'Earth', path: SHARED, typeRank: MAP_TYPE_RANK.diffuse, actorPriority: 0 })
+
+    expect(resets.slice().sort()).toEqual(['Earth', 'Mars'])
+    expect(resourceStorage.getTexture(SHARED)).toBeUndefined()
+
+    resourceStorage.deleteAllTextures()
   })
 })
