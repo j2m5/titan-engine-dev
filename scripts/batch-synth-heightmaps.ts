@@ -7,22 +7,29 @@ import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { buildSynthHeightField, type SynthHeightParams } from './lib/synthHeightMap'
 import { encodeHeightMap, normalizeToUint16 } from './lib/heightMapEncode'
 import { buildSlopeMap, SLOPE_RANGE } from './lib/slopeMapEncode'
-import { autoCalibrateAmplitude } from './lib/autoCalibrate'
+import { autoCalibrateAmplitude, type CalibrationSample } from './lib/autoCalibrate'
 import { argument } from './lib/cliArguments'
 
 /**
  * Батч-оркестратор перевода спутников на конвейер «тел без DEM» (арка
  * synth-heightmap): один прогон генерит height+slope для всех записей
- * `BODIES` (декларативный список из плана арки — 12 уникальных карт на
- * 18 тел, Корribан I-VII делят одну карту). Математика синтеза НЕ
- * дублируется: вызывает тот же библиотечный конвейер, что и одиночный
+ * `BODIES` (декларативный список — 18 генераций на 18 тел; фикс-раунд 1
+ * реального прогона развёл Корribан I-VII на семь ПЕР-ТЕЛО генераций, общий
+ * только вход-текстура, см. ниже). Математика синтеза НЕ дублируется:
+ * вызывает тот же библиотечный конвейер, что и одиночный
  * `build:synth-heightmap` (`buildSynthHeightField`, `buildSlopeMap`,
  * писатель TEHM `encodeHeightMap`).
  *
  * Автокалибровка амплитуды (`autoCalibrateAmplitude`) подгоняет
  * `bumpAmplitudeMeters` под целевой RMS(tan) итоговой slope-карты вместо
- * фиксированного значения на тело — референс 3000 м, цель 0.07, кламп
- * 0.7% радиуса тела (см. докблок `autoCalibrate.ts`).
+ * фиксированного значения на тело — референс 3000 м, цель 0.07 (см. докблок
+ * `autoCalibrate.ts`). Кламп 0.7% радиуса — ДВУХэтапный (фикс-раунд 1,
+ * находка 1): `autoCalibrateAmplitude` сама клампит только ПАРАМЕТР
+ * bump-амплитуды, а не итоговый пик поля (подложка ей не подконтрольна);
+ * после калибровки `generateBody` меряет фактический max(|min|,|max|)
+ * последнего прогона и, если он всё же над бюджетом, делает ОДНУ
+ * повторную генерацию с пропорционально рескейленными bump- И base-
+ * амплитудами (see `generateBody`).
  *
  * Даунсемпл входа — до потолка по радиусу тела, area-average (box) для
  * 8-бит растра (`boxDownsampleGreyscale`, тонкая самостоятельная реализация:
@@ -30,10 +37,13 @@ import { argument } from './lib/cliArguments'
  * под float DEM-числа другого конвейера — переиспользовать нечего).
  *
  * Пути вывода — `<каталог входного файла>/<имя>_height.raw` и `<имя>_slope.webp`
- * (имя — колонка «Генерация» списка ниже); для Корribана каталог входного
- * файла общий на все семь тел — это и есть «одна карта, семь связок».
+ * (имя — колонка «Генерация» списка ниже); у Корribана каталог входного
+ * файла общий на семь генераций (входная текстура одна), но КАЖДАЯ из
+ * korriban1..korriban7 пишет СВОИ height/slope — общий физический ресурс
+ * Корribана в БД был ошибкой (радиус I откалиброван на VII дал 577% его
+ * бюджета высоты), поэтому этот батч больше не производит общую карту.
  *
- * Запуск (все 12 генераций):
+ * Запуск (все 18 генераций):
  *   npm run build:moon-heightmaps
  * Перегенерировать одно тело:
  *   npm run build:moon-heightmaps -- --only rhea
@@ -56,17 +66,20 @@ interface BodyGeneration {
   inputPath: string
   inputKind: 'bump' | 'diffuse'
   radiusMeters: number
-  /** seed синтеза — actorId; у Корribана — actorId ведущего тела (I, 93). */
+  /** seed синтеза — actorId тела. */
   seedActorId: number
-  /** Все actorId, которые ссылаются на эту генерацию (Корribан — семь). */
+  /** actorId, ссылающийся на эту генерацию (по одному на генерацию — см. фикс-раунд 1, находка 2). */
   actorIds: readonly number[]
 }
 
 const TEXTURES_ROOT = 'storage/images/textures/planets'
 
 /**
- * Список генераций — см. «Список генераций (12 уникальных карт → 18 тел)»
- * в плане арки (`docs/superpowers/plans/2026-08-16-terrain-moons-batch.md`).
+ * Список генераций — изначально см. «Список генераций (12 уникальных карт →
+ * 18 тел)» в плане арки (`docs/superpowers/plans/2026-08-16-terrain-moons-batch.md`);
+ * фикс-раунд 1 (находка 2, рулинг контроллера) развёл общую карту Корribана
+ * на семь ПЕР-ТЕЛО генераций — общий бюджет 0.7% радиуса I (1740 км),
+ * откалиброванный под неё height/slope, давал VII (175 км) 577% ЕЁ бюджета.
  * Пути и радиусы — константы из инвентаризации/resources.ts, БД не читается.
  */
 const BODIES: readonly BodyGeneration[] = [
@@ -160,15 +173,65 @@ const BODIES: readonly BodyGeneration[] = [
     seedActorId: 70,
     actorIds: [70]
   },
+  // Korriban I-VII делят один физический вход (actorResource.ts переиспользует
+  // resourceId 117/118 для actorId 93-99), но КАЖДОЕ тело — своя генерация:
+  // общий выход, откалиброванный под радиус I, перегружал бюджет высоты
+  // мелких тел семьи (см. докблок модуля, находка 2). Радиусы — инвентаризация.
   {
-    // Korriban I-VII делят один физический файл (actorResource.ts переиспользует
-    // resourceId 117/118 для actorId 93-99) — одна генерация, семь тел
-    name: 'korriban',
+    name: 'korriban1',
     inputPath: `${TEXTURES_ROOT}/StarWars/korriban/i/i_bump.jpg`,
     inputKind: 'bump',
     radiusMeters: 1_740_000,
     seedActorId: 93,
-    actorIds: [93, 94, 95, 96, 97, 98, 99]
+    actorIds: [93]
+  },
+  {
+    name: 'korriban2',
+    inputPath: `${TEXTURES_ROOT}/StarWars/korriban/i/i_bump.jpg`,
+    inputKind: 'bump',
+    radiusMeters: 980_000,
+    seedActorId: 94,
+    actorIds: [94]
+  },
+  {
+    name: 'korriban3',
+    inputPath: `${TEXTURES_ROOT}/StarWars/korriban/i/i_bump.jpg`,
+    inputKind: 'bump',
+    radiusMeters: 1_290_000,
+    seedActorId: 95,
+    actorIds: [95]
+  },
+  {
+    name: 'korriban4',
+    inputPath: `${TEXTURES_ROOT}/StarWars/korriban/i/i_bump.jpg`,
+    inputKind: 'bump',
+    radiusMeters: 640_000,
+    seedActorId: 96,
+    actorIds: [96]
+  },
+  {
+    name: 'korriban5',
+    inputPath: `${TEXTURES_ROOT}/StarWars/korriban/i/i_bump.jpg`,
+    inputKind: 'bump',
+    radiusMeters: 410_000,
+    seedActorId: 97,
+    actorIds: [97]
+  },
+  {
+    name: 'korriban6',
+    inputPath: `${TEXTURES_ROOT}/StarWars/korriban/i/i_bump.jpg`,
+    inputKind: 'bump',
+    radiusMeters: 240_000,
+    seedActorId: 98,
+    actorIds: [98]
+  },
+  {
+    name: 'korriban7',
+    inputPath: `${TEXTURES_ROOT}/StarWars/korriban/i/i_bump.jpg`,
+    inputKind: 'bump',
+    radiusMeters: 175_000,
+    seedActorId: 99,
+    actorIds: [99]
   }
 ]
 
@@ -181,6 +244,8 @@ interface ReportRow {
   height: number
   amplitudeMeters: number
   rmsTan: number
+  peakMeters: number
+  budgetMeters: number
   minMeters: number
   maxMeters: number
   clamped: boolean
@@ -189,6 +254,11 @@ interface ReportRow {
   slopePath: string
   heightBytes: number
   slopeVramMiB: number
+}
+
+/** Фактический пик поля высот — max(|min|,|max|), честная величина для сверки с бюджетом (не амплитуда-параметр). */
+function peakMetersOf(map: HeightMapData): number {
+  return Math.max(Math.abs(map.minMeters), Math.abs(map.maxMeters))
 }
 
 /** Потолок разрешения по радиусу тела — Global Constraints плана арки; выход = min(источник, потолок). */
@@ -312,7 +382,12 @@ function measureRmsTan(rgb: Uint8Array, width: number, height: number): number {
   return Math.sqrt(sumSquares / count)
 }
 
-/** Один прогон конвейера: синтез поля высот → нормировка → slope-карта → замер RMS(tan). */
+/**
+ * Один прогон конвейера: синтез поля высот → нормировка → slope-карта →
+ * замер RMS(tan). `baseAmplitudeMeters` — параметр, а не константа модуля:
+ * пост-коррекция по фактическому пику (см. `generateBody`) рескейлит и
+ * подложку, не только bump-амплитуду.
+ */
 function synthesize(
   luminance: Float64Array,
   width: number,
@@ -321,15 +396,16 @@ function synthesize(
   seed: number,
   bandLowKm: number,
   bandHighKm: number,
-  amplitudeMeters: number
+  baseAmplitudeMeters: number,
+  bumpAmplitudeMeters: number
 ): { map: HeightMapData; slopeRgb: Uint8Array; rmsTan: number } {
   const params: SynthHeightParams = {
     widthTexels: width,
     heightTexels: height,
     radiusMeters,
     seed,
-    baseAmplitudeMeters: BASE_AMPLITUDE_METERS,
-    bumpAmplitudeMeters: amplitudeMeters,
+    baseAmplitudeMeters,
+    bumpAmplitudeMeters,
     bandLowKm,
     bandHighKm,
     bumpSign: 1,
@@ -356,17 +432,65 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
 
   let last: { map: HeightMapData; slopeRgb: Uint8Array } | undefined
 
-  const generate = (amplitudeMeters: number): number => {
-    const result = synthesize(luminance, width, height, body.radiusMeters, body.seedActorId, bandLowKm, bandHighKm, amplitudeMeters)
+  const generate = (bumpAmplitudeMeters: number): CalibrationSample => {
+    const result = synthesize(
+      luminance,
+      width,
+      height,
+      body.radiusMeters,
+      body.seedActorId,
+      bandLowKm,
+      bandHighKm,
+      BASE_AMPLITUDE_METERS,
+      bumpAmplitudeMeters
+    )
     last = { map: result.map, slopeRgb: result.slopeRgb }
 
-    return result.rmsTan
+    return { rmsTan: result.rmsTan, peakMeters: peakMetersOf(result.map) }
   }
 
   const calibration = autoCalibrateAmplitude(generate, REF_AMPLITUDE_METERS, TARGET_RMS_TAN, maxHeightBudgetMeters)
 
   // autoCalibrateAmplitude всегда зовёт generate минимум раз — last заполнен гарантированно
   if (!last) throw new Error(`Автокалибровка ${body.name}: колбэк ни разу не вызван`)
+
+  let finalAmplitudeMeters = calibration.amplitudeMeters
+  let finalRmsTan = calibration.rmsTan
+  let finalPeakMeters = calibration.peakMeters
+  let clamped = false
+
+  // Пост-коррекция по фактическому пику поля (фикс-раунд 1, находка 1):
+  // autoCalibrateAmplitude клампит только ПАРАМЕТР bump-амплитуды, подложка
+  // (BASE_AMPLITUDE_METERS) в неё не входит — реальный max(|min|,|max|) может
+  // превысить бюджет даже когда bump-амплитуда в рамках (типично для малых
+  // тел: константная подложка — заметная доля их крошечного бюджета).
+  // buildSynthHeightField однородна по паре амплитуд: heights[i] =
+  // base·baseAmplitude + band[i]·bumpAmplitude — оба слагаемых линейны по
+  // СВОЕЙ амплитуде без свободного члена, поэтому синхронный рескейл ОБЕИХ
+  // на один и тот же коэффициент масштабирует min/max РОВНО на этот
+  // коэффициент: одна повторная генерация точно возвращает пик на бюджет,
+  // без итерационного поиска.
+  if (finalPeakMeters > maxHeightBudgetMeters) {
+    const rescale = maxHeightBudgetMeters / finalPeakMeters
+    finalAmplitudeMeters = calibration.amplitudeMeters * rescale
+    const rescaledBaseAmplitudeMeters = BASE_AMPLITUDE_METERS * rescale
+
+    const result = synthesize(
+      luminance,
+      width,
+      height,
+      body.radiusMeters,
+      body.seedActorId,
+      bandLowKm,
+      bandHighKm,
+      rescaledBaseAmplitudeMeters,
+      finalAmplitudeMeters
+    )
+    last = { map: result.map, slopeRgb: result.slopeRgb }
+    finalRmsTan = result.rmsTan
+    finalPeakMeters = peakMetersOf(result.map)
+    clamped = true
+  }
 
   const dir = path.dirname(body.inputPath)
   const heightPath = path.join(dir, `${body.name}_height.raw`)
@@ -384,11 +508,13 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
     inputKind: body.inputKind,
     width,
     height,
-    amplitudeMeters: calibration.amplitudeMeters,
-    rmsTan: calibration.rmsTan,
+    amplitudeMeters: finalAmplitudeMeters,
+    rmsTan: finalRmsTan,
+    peakMeters: finalPeakMeters,
+    budgetMeters: maxHeightBudgetMeters,
     minMeters: last.map.minMeters,
     maxMeters: last.map.maxMeters,
-    clamped: calibration.clamped,
+    clamped, // по фактическому пику (находка 1) — НЕ проброс calibration.clamped (тот про амплитуду-параметр)
     iterations: calibration.iterations,
     heightPath,
     slopePath,
@@ -414,9 +540,11 @@ async function run(): Promise<void> {
     rows.push(row)
 
     console.log(
-      `  ${row.width}×${row.height}, амплитуда ${row.amplitudeMeters.toFixed(0)} м (${row.iterations} прогонов` +
-        `${row.clamped ? ', КЛАМП: цель недостижима под потолком' : ''}), ` +
-        `RMS(tan) ${row.rmsTan.toFixed(4)}, высоты ${row.minMeters.toFixed(0)}..${row.maxMeters.toFixed(0)} м`
+      `  ${row.width}×${row.height}, амплитуда ${row.amplitudeMeters.toFixed(0)} м (${row.iterations} прогонов калибровки` +
+        `${row.clamped ? ' + рескейл под пик' : ''}), RMS(tan) ${row.rmsTan.toFixed(4)}, ` +
+        `пик ${row.peakMeters.toFixed(0)} м / бюджет ${row.budgetMeters.toFixed(0)} м` +
+        `${row.clamped ? ' [КЛАМП: пик поля превышал бюджет — bump и подложка рескейлены]' : ''}, ` +
+        `высоты ${row.minMeters.toFixed(0)}..${row.maxMeters.toFixed(0)} м`
     )
   }
 
@@ -424,11 +552,13 @@ async function run(): Promise<void> {
   console.table(
     rows.map((row) => ({
       генерация: row.name,
-      тела: row.actorIds.join(','),
+      тело: row.actorIds.join(','),
       вход: row.inputKind,
       разрешение: `${row.width}×${row.height}`,
       'амплитуда, м': Math.round(row.amplitudeMeters),
       'RMS(tan)': row.rmsTan.toFixed(4),
+      'пик, м': Math.round(row.peakMeters),
+      'бюджет, м': Math.round(row.budgetMeters),
       'высоты, м': `${row.minMeters.toFixed(0)}..${row.maxMeters.toFixed(0)}`,
       'height, МиБ': (row.heightBytes / (1024 * 1024)).toFixed(2),
       'slope VRAM, МиБ': row.slopeVramMiB.toFixed(2),
@@ -436,11 +566,11 @@ async function run(): Promise<void> {
     }))
   )
 
+  // Каждая генерация теперь пишет СВОЙ физический файл (Корribан I-VII —
+  // тоже, фикс-раунд 1, находка 2) — дедуп не нужен, прямая сумма по строкам.
   const totalSlopeVramMiB = rows.reduce((sum, row) => sum + row.slopeVramMiB, 0)
   const totalHeightMiB = rows.reduce((sum, row) => sum + row.heightBytes, 0) / (1024 * 1024)
-  console.log(
-    `\nИтого (по уникальным картам этого прогона): slope VRAM ${totalSlopeVramMiB.toFixed(2)} МиБ, height CPU ${totalHeightMiB.toFixed(2)} МиБ`
-  )
+  console.log(`\nИтого: slope VRAM ${totalSlopeVramMiB.toFixed(2)} МиБ, height CPU ${totalHeightMiB.toFixed(2)} МиБ`)
 
   console.log('\nПути для заливки в бакет (пара height+slope на генерацию):')
   for (const row of rows) {

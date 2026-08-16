@@ -1,8 +1,15 @@
 export interface CalibrationResult {
   amplitudeMeters: number
   rmsTan: number
+  peakMeters: number
   clamped: boolean
   iterations: number
+}
+
+/** Один прогон дорогого колбэка: RMS(tan) итоговой slope-карты и фактический пик поля высот. */
+export interface CalibrationSample {
+  rmsTan: number
+  peakMeters: number
 }
 
 /** Больше прогонов не берём — колбэк дорогой (полный синтез карты высот + slope). */
@@ -23,26 +30,36 @@ function clampAmplitude(candidateMeters: number, maxHeightBudgetMeters: number):
  * откалиброванных телах движка — Каллисто/Европа — RMS(tan) практически
  * линеен по амплитуде в рабочем диапазоне), до `MAX_ITERATIONS` прогонов.
  * `generate` — весь дорогой конвейер (синтез поля высот → нормировка →
- * slope-карта → замер RMS) снаружи; здесь только числа, чем и тестируется
- * на синтетике без файлового ввода-вывода.
+ * slope-карта → замер RMS и фактического пика) снаружи; здесь только числа,
+ * чем и тестируется на синтетике без файлового ввода-вывода.
  *
- * Кламп: амплитуда никогда не превышает `maxHeightBudgetMeters` (0.7%
- * радиуса тела) — проверяется и для стартовой `refAmplitudeMeters` (малые
- * тела: 3000 м может УЖЕ быть больше 0.7% радиуса), и для каждой подгонки.
- * `clamped=true` означает, что итоговая амплитуда — потолок бюджета, а не
- * решение подгонки; `rmsTan` при этом — честный замер НА потолке, не
- * искусственно притянутый к target. Итерации останавливаются раньше
- * `MAX_ITERATIONS`, если подгонка не меняет амплитуду (потолок уже
- * достигнут — повторный прогон дал бы тот же результат).
+ * Кламп ПАРАМЕТРА: амплитуда, которую подгоняет эта функция, никогда не
+ * превышает `maxHeightBudgetMeters` — проверяется и для стартовой
+ * `refAmplitudeMeters` (малые тела: 3000 м может УЖЕ быть больше 0.7%
+ * радиуса), и для каждой подгонки. `clamped=true` означает, что итоговая
+ * амплитуда — потолок бюджета, а не решение подгонки по RMS. Итерации
+ * останавливаются раньше `MAX_ITERATIONS`, если подгонка не меняет амплитуду
+ * (потолок уже достигнут — повторный прогон дал бы тот же результат).
+ *
+ * ВАЖНО (находка фикс-раунда 1): этот кламп ограничивает только ПАРАМЕТР
+ * `amplitudeMeters`, а не фактический пик итогового поля высот — подложка
+ * (`baseAmplitudeMeters` конвейера) в эту амплитуду не входит и эта функция
+ * о ней ничего не знает. `peakMeters` в результате — честный пробрасываемый
+ * замер пика ПОСЛЕДНЕГО прогона `generate` (может превышать
+ * `maxHeightBudgetMeters`, даже когда `clamped=false` — амплитуда-параметр
+ * была в рамках, но подложка+band-овершут вытолкнули реальный max|h| выше).
+ * Рескейл по факту пика (затрагивает подложку — величину, которой эта
+ * функция не управляет) — ответственность вызывающего кода, которому
+ * известна вся композиция поля (см. `batch-synth-heightmaps.ts`).
  */
 export function autoCalibrateAmplitude(
-  generate: (amplitudeMeters: number) => number,
+  generate: (amplitudeMeters: number) => CalibrationSample,
   refAmplitudeMeters: number,
   targetRmsTan: number,
   maxHeightBudgetMeters: number
 ): CalibrationResult {
   let { amplitudeMeters: amplitude, clamped } = clampAmplitude(refAmplitudeMeters, maxHeightBudgetMeters)
-  let rms = generate(amplitude)
+  let { rmsTan: rms, peakMeters: peak } = generate(amplitude)
   let iterations = 1
 
   while (iterations < MAX_ITERATIONS) {
@@ -55,9 +72,11 @@ export function autoCalibrateAmplitude(
 
     amplitude = next.amplitudeMeters
     clamped = next.clamped
-    rms = generate(amplitude)
+    const sample = generate(amplitude)
+    rms = sample.rmsTan
+    peak = sample.peakMeters
     iterations++
   }
 
-  return { amplitudeMeters: amplitude, rmsTan: rms, clamped, iterations }
+  return { amplitudeMeters: amplitude, rmsTan: rms, peakMeters: peak, clamped, iterations }
 }
