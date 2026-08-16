@@ -138,10 +138,21 @@ describe('ResourceObserver: стриминг', () => {
     ).not.toThrow()
   })
 
-  it('шаренный путь не удаляется, пока нужен другому загруженному телу', () => {
-    // pathActors заполняется вручную (обходя collectCandidates) — Earth и
-    // Mars оба ссылаются на общий диффуз. Эвикшен от лица Earth не должен
-    // трогать ни материалы, ни реестр: Mars всё ещё владеет путём.
+  it('вытеснение трогает материалы ВСЕХ текущих владельцев пути (pathActors), а не только заявителя', () => {
+    // evictPath доверяет решению целиком (см. докблок метода): раз путь уже
+    // выбран на вытеснение (обычно — потому что дедуплицированный спрос ВСЕХ
+    // совладельцев вместе не поместился в бюджет), применяет его безусловно
+    // ко всем, кто на путь ссылается в `pathActors` — Earth и Mars оба лишаются
+    // общего диффуза, а не только заявитель. `pathActors` заполняется вручную
+    // (обходя `collectCandidates`) — так же, как это делает реальный пересчёт.
+    //
+    // «Держится, пока нужен другому телу» здесь больше НЕ проверяется:
+    // рефкаунт по отдельным наблюдателям был багом (ревью нашло численно —
+    // шаренный путь не вытеснялся никогда, см. git-историю) и удалён. Честный
+    // сценарий «путь пережил вытеснение ОДНОГО совладельца, потому что другой
+    // всё ещё в бюджете» проверяется через реальный decideStreaming/closestChange
+    // в ResourceObserverClosestChange.spec.ts — там дедупликация путей
+    // структурно не даёт такому пути попасть в decision.evict вовсе.
     const { observer, scene } = makeObserver()
     const resets: string[] = []
     const SHARED = 'planets/shared.jpg'
@@ -158,13 +169,21 @@ describe('ResourceObserver: стриминг', () => {
     texture.name = SHARED
     resourceStorage.addTexture(texture)
 
-    const pathActors = (observer as unknown as { pathActors: Map<string, Set<number>> }).pathActors
-    pathActors.set(SHARED, new Set([1, 2]))
+    // `_map` (actorId → имя) заполняется реальным `collectCandidates` в
+    // проде — здесь подставляется вручную тем же приёмом, что и `pathActors`,
+    // иначе `withActorMaterial` не найдёт Mars по одному только id.
+    const internals = observer as unknown as {
+      pathActors: Map<string, Set<number>>
+      _map: Map<number, { getAttribute: (key: string) => string }>
+    }
+    internals.pathActors.set(SHARED, new Set([1, 2]))
+    internals._map.set(1, { getAttribute: () => 'Earth' })
+    internals._map.set(2, { getAttribute: () => 'Mars' })
 
     observer.evictPath({ actorId: 1, name: 'Earth', path: SHARED, typeRank: MAP_TYPE_RANK.diffuse, actorPriority: 0 })
 
-    expect(resets).toEqual([])
-    expect(resourceStorage.getTexture(SHARED)).toBeDefined()
+    expect(resets.slice().sort()).toEqual(['Earth', 'Mars'])
+    expect(resourceStorage.getTexture(SHARED)).toBeUndefined()
 
     resourceStorage.deleteAllTextures()
   })

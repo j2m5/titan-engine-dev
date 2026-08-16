@@ -118,6 +118,31 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     expect(material.uniforms.uBumpTexelSize.value.y).toBe(0)
   })
 
+  it('частичный набор карт задачи 2 — диффуз и slope есть, detail нет: материал живёт, USE_TERRAIN_DETAIL молчит', () => {
+    // ResourceObserver (задача 2) грузит пути НЕЗАВИСИМО: тело показывает
+    // диффуз+рельеф раньше, чем догрузится опциональный детальный слой (или
+    // если тот вообще проиграл бюджету). Материал обязан пережить такой
+    // частичный набор без брошенных исключений и без лишних дефайнов —
+    // detail-текстуры здесь НЕ сеются вовсе.
+    seedMoonHeightMap()
+    seedTexture(moonPathOf('slope'), 8192, 4096)
+
+    const material = new PlanetMaterial(moon())
+
+    expect(() => material.updateMaterial()).not.toThrow()
+
+    // Тело живо: диффуз и рельеф на месте.
+    expect(material.uniforms.diffuseMap.value).toBeDefined()
+    expect(material.defines.USE_SLOPE).toBe('1')
+
+    // Детального слоя нет — ни юниформов, ни дефайна.
+    expect(material.defines.USE_TERRAIN_DETAIL).toBeUndefined()
+    expect(material.uniforms.uDetailNorMap.value).toBeNull()
+    expect(material.uniforms.uDetailDiffMap.value).toBeNull()
+    expect(material.uniforms.uDetailArmMap.value).toBeNull()
+    expect(material.uniforms.uDetailNor2Map.value).toBeNull()
+  })
+
   it('пока slope-текстура не пришла из стримера, дефайны рельефа молчат', () => {
     seedMoonHeightMap()
 

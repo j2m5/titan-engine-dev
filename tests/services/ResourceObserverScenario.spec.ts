@@ -7,21 +7,26 @@ import type { SceneObserver } from '@/core/services/SceneObserver'
 import type { TextureProvider } from '@/core/textures/TextureProvider'
 import type { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
 import type { NotificationSink } from '@/core/ports/NotificationSink'
+import type { LoadResult } from '@/core/textures/types'
 
 /**
  * Раньше накопленное между сценариями лежало в публичном массиве `deferred`,
  * и тест писал в него напрямую. Задача 5 убрала `deferred` вовсе, задача 2
  * (переезд на пути) сменила носитель ещё раз: `loaded`/`loadedAt`/`inFlight`/
- * `attempted` теперь ключуются путём, а не id актора. Инвариант («смена
- * сценария не копит состояние прошлого сценария») не изменился, изменился
- * только тип ключа, поэтому тест достаёт приватные поля через приведение
- * типа — единственный способ посмотреть на них снаружи класса.
+ * `attempted` теперь ключуются путём, а `actorPaths` заменён на `pathActors`
+ * (путь → id акторов-владельцев) и `pathLoads` (путь → промис загрузки).
+ * Инвариант («смена сценария не копит состояние прошлого сценария») не
+ * изменился, изменился только носитель, поэтому тест достаёт приватные поля
+ * через приведение типа — единственный способ посмотреть на них снаружи
+ * класса.
  */
 type StreamingInternals = {
   loaded: Set<string>
   loadedAt: Map<string, number>
   inFlight: Set<string>
   attempted: Set<string>
+  pathActors: Map<string, Set<number>>
+  pathLoads: Map<string, Promise<LoadResult | null>>
 }
 
 function streamingState(observer: ResourceObserver): StreamingInternals {
@@ -42,7 +47,7 @@ function makeObserver(): ResourceObserver {
 }
 
 describe('ResourceObserver — смена сценария сбрасывает накопленное', () => {
-  it('очищает учёт стриминга (loaded/loadedAt/inFlight/attempted)', () => {
+  it('очищает учёт стриминга (loaded/loadedAt/inFlight/attempted/pathActors/pathLoads)', () => {
     const observer = makeObserver()
     const state = streamingState(observer)
 
@@ -51,6 +56,8 @@ describe('ResourceObserver — смена сценария сбрасывает 
     state.loadedAt.set('planets/a.jpg', Date.now())
     state.inFlight.add('planets/b.jpg')
     state.attempted.add('planets/c.jpg')
+    state.pathActors.set('planets/a.jpg', new Set([1, 2]))
+    state.pathLoads.set('planets/d.jpg', Promise.resolve(null))
 
     observer.scenario = Scenarios[1]
 
@@ -58,6 +65,8 @@ describe('ResourceObserver — смена сценария сбрасывает 
     expect(state.loadedAt.size).toBe(0)
     expect(state.inFlight.size).toBe(0)
     expect(state.attempted.size).toBe(0)
+    expect(state.pathActors.size).toBe(0)
+    expect(state.pathLoads.size).toBe(0)
   })
 
   it('не копит акторов в карте сценария', () => {

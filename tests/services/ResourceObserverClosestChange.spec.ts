@@ -2,7 +2,6 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { Mesh, Scene, Texture, Vector3 } from 'three'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { TextureBudget, textureBytes } from '@/core/streaming/TextureBudget'
-import { MAP_TYPE_RANK } from '@/core/streaming/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { Actor } from '@/core/models/Actor'
 import { Scenarios } from '@/config/scenarios'
@@ -241,7 +240,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     await first
   })
 
-  it('два актора, разделяющие путь, грузят его один раз — путь переживает вытеснение одного из них', async () => {
+  it('два актора, разделяющие путь, грузят его один раз — сеть не задваивается', async () => {
     // Реестр ищет текстуру по `texture.name`; в проде его проставляет
     // `applyTextureParameters` (см. src/core/textures/applyTextureParameters.ts),
     // мок делает это вручную — иначе resourceStorage.getTexture(path) не
@@ -284,31 +283,84 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     expect(load).toHaveBeenCalledTimes(8)
     expect(resourceStorage.getTexture(korribanIISlope)).toBeDefined()
+  })
 
-    // Прямое вытеснение путей Korriban I — по одному вызову на путь, ровно
-    // так, как их вернул бы decideStreaming.evict от лица актора 93.
-    // pathActors уже заполнен настоящими closestChange-циклами выше, поэтому
-    // "шаренный путь не удаляется" здесь проверяется на реальных данных, а
-    // не на подставном pathActors, как в ResourceObserverStreaming.spec.ts.
-    const evictedTypeRank: Record<string, number> = {
-      'planets/StarWars/korriban/i/i.jpg': MAP_TYPE_RANK.diffuse,
-      'planets/StarWars/korriban/i/i_bump.jpg': MAP_TYPE_RANK.bump,
-      'terrain/rocky_trail_diff.webp': MAP_TYPE_RANK.detailDiffuse,
-      'terrain/rocky_trail_nor.webp': MAP_TYPE_RANK.detailNormal,
-      'terrain/rocky_trail_arm.webp': MAP_TYPE_RANK.detailArm,
-      'terrain/moon_01_nor.webp': MAP_TYPE_RANK.detailNormal2,
-      [korribanISlope]: MAP_TYPE_RANK.slope
+  it('шаренный путь честно вытесняется по бюджету, когда дедуплицированный спрос ВСЕХ совладельцев не помещается (репро ревью: Korriban I+II в бюджете на 8, вход III выталкивает bump)', async () => {
+    // Прежняя версия этого сценария вызывала evictPath НАПРЯМУЮ с рукодельным
+    // pathActors и проверяла, что «шаренный путь не удаляется, пока нужен
+    // другому телу» — это маскировало реальный баг (HIGH ревью после f6fe748):
+    // гвард `pathStillReferenced` смотрел на pathActors (кто НАБЛЮДАЕТСЯ), а не
+    // на решение decideStreaming (кто ПОМЕСТИЛСЯ В БЮДЖЕТ), и путь, честно
+    // проигравший бюджету, не вытеснялся никогда. Теперь сценарий идёт через
+    // РЕАЛЬНЫЙ closestChange/decision.evict — ту же дорогу, что и продакшен.
+    //
+    // Числа воспроизводят репро ревью буквально: у Korriban I+II 8 разных
+    // путей (диффуз+bump+4detail общие, у каждого своя slope), бюджет — ровно
+    // на 8. Вход Korriban III добавляет девятый путь (свою slope) — бюджет не
+    // резиновый, и младший ранг (bump, 6) уступает место старшим.
+    const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
+      // Единый вес что до, что после замера (8192×4096 — тот же размер, что
+      // ASSUMED_TEXTURE_BYTES) — бюджет считается в целых картах, без
+      // блуждания оценки между слепым и честным замером.
+      const texture = makeBigTexture()
+      texture.name = request.name
+      return Promise.resolve({ ok: true as const, texture })
+    })
+
+    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = HORUSET_SYSTEM
+    vi.useFakeTimers()
+
+    const BUMP = 'planets/StarWars/korriban/i/i_bump.jpg'
+    const DIFFUSE = 'planets/StarWars/korriban/i/i.jpg'
+    const owners: Record<string, ReturnType<typeof vi.fn>> = {}
+
+    // Korriban I (radius 1740) — топ-приоритет при равных дистанциях, его
+    // диффуз+slope — floor decideStreaming, держатся безусловно.
+    for (const name of ['Korriban I', 'Korriban II', 'Korriban III']) {
+      const mesh = new Mesh()
+      mesh.name = name
+      const updateMaterial = vi.fn()
+      owners[name] = updateMaterial
+      Object.defineProperty(mesh, 'renderable', { value: { material: { resetMaterial: vi.fn(), updateMaterial } }, writable: true })
+      scene.add(mesh)
     }
 
-    for (const path of [...sharedPaths, korribanISlope]) {
-      observer.evictPath({ actorId: 93, name: 'Korriban I', path, typeRank: evictedTypeRank[path], actorPriority: 0 })
-    }
+    data.set('Korriban I', record('Korriban I', 100))
+    data.set('Korriban II', record('Korriban II', 100))
 
-    // Общие пути пережили вытеснение первого владельца — Korriban II всё ещё на
-    // них ссылается. Собственная slope-карта Korriban I — больше ничья, снята.
-    for (const path of sharedPaths) expect(resourceStorage.getTexture(path), path).toBeDefined()
-    expect(resourceStorage.getTexture(korribanISlope)).toBeUndefined()
-    expect(resourceStorage.getTexture(korribanIISlope)).toBeDefined()
+    await handlers['ClosestChange'](record('Korriban I', 100))
+
+    const state = streamingState(observer)
+
+    expect(state.loaded.size).toBe(8)
+    expect(state.loaded.has(BUMP)).toBe(true)
+
+    // Резидентность младше MIN_RESIDENCY_MS пинит путь через isPinned
+    // независимо от бюджета — двигаем время, чтобы проверить именно
+    // бюджетное решение, а не защиту свежей загрузки.
+    vi.advanceTimersByTime(11_000)
+
+    data.set('Korriban III', record('Korriban III', 100))
+    await handlers['ClosestChange'](record('Korriban III', 100))
+
+    // Бюджет по-прежнему на 8 путей, а не на 9 — раньше (баг) loaded.size
+    // рос до 9, перерасходуя бюджет и никогда не возвращаясь к лимиту.
+    expect(state.loaded.size).toBe(8)
+    expect(state.loaded.has(BUMP)).toBe(false)
+    expect(resourceStorage.getTexture(BUMP)).toBeUndefined()
+
+    // Общий диффуз (floor топ-тела) как был резидентным, так и остался.
+    expect(state.loaded.has(DIFFUSE)).toBe(true)
+    expect(resourceStorage.getTexture(DIFFUSE)).toBeDefined()
+
+    // Материалы ВСЕХ трёх совладельцев bump обновились (не сброшены на
+    // заглушку — bump не диффуз, тело переживает его потерю).
+    expect(owners['Korriban I']).toHaveBeenCalled()
+    expect(owners['Korriban II']).toHaveBeenCalled()
+    expect(owners['Korriban III']).toHaveBeenCalled()
+
+    vi.useRealTimers()
   })
 
   it('два актора, разделяющие путь, В ОДНОМ цикле грузят его один раз — не задваивают ни сеть, ни реестр', async () => {
