@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { decideStreaming } from '@/core/streaming/decideStreaming'
 import { textureBytes } from '@/core/streaming/TextureBudget'
+import { MAP_TYPE_RANK } from '@/core/streaming/types'
 import type { MapCandidate } from '@/core/streaming/types'
 
 const SIZE_8K: number = textureBytes(8192, 4096) // ~171 МиБ
@@ -94,6 +95,31 @@ describe('decideStreaming', () => {
     // одну запись ДО прохода, а не просто совпали числом дважды списанных.
     expect(d.load.filter((c: MapCandidate): boolean => c.path === 'terrain/d.webp')).toHaveLength(1)
     expect(d.load.map((c: MapCandidate): string => c.path)).toEqual(['a.diff', 'terrain/d.webp', 'c.detail'])
+  })
+
+  it('суб-ранг detail: бюджет на одну detail-карту — влезает именно detailNormal (гейт слоя)', () => {
+    // Материал (этап 4) гейтит ВЕСЬ detail-набор по наличию detailNormal: без
+    // него detailDiffuse/detailArm/detailNormal2 в бюджете мёртвы, эффекта
+    // ноль. detailNormal нарочно ПОСЛЕДНИЙ в массиве кандидатов — если бы
+    // суб-ранги внутри detail-слоя были равны (как раньше, все detail* = 2),
+    // сортировка была бы стабильна и победителем стал бы ПЕРВЫЙ по вводу
+    // (detailDiffuse), а не значимый для гейта detailNormal. Один актор —
+    // общий actorPriority, так что порядок внутри слоя решает только typeRank.
+    const d = decideStreaming(
+      [
+        mc(1, 'x.detailDiffuse', MAP_TYPE_RANK.detailDiffuse, 5),
+        mc(1, 'x.detailArm', MAP_TYPE_RANK.detailArm, 5),
+        mc(1, 'x.detailNormal2', MAP_TYPE_RANK.detailNormal2, 5),
+        mc(1, 'x.detailNormal', MAP_TYPE_RANK.detailNormal, 5)
+      ],
+      new Set(),
+      nothingPinned,
+      noneExcluded,
+      size(100),
+      100 // ровно на одну карту
+    )
+
+    expect(d.load.map((c: MapCandidate): string => c.path)).toEqual(['x.detailNormal'])
   })
 
   it('жадный остаток: диффуз не влез — slope того же тела всё равно занимает освободившееся место', () => {

@@ -42,17 +42,20 @@ export interface StreamDecision {
  * Порядок значимости слоёв карты тела — решение владельца «рельеф важнее»:
  * diffuse > slope > detail* > cloud > night > specular > легаси-bump.
  *
- * Детейл-слои (нормаль, ARM, вторая нормаль) делят один ранг с detailDiffuse:
- * это один визуальный пакет, отбирать его по отдельным картам смысла нет.
+ * Внутри detail-слоя (2.0–2.3) суб-ранги идут по гейт-значимости, не по
+ * алфавиту: материал (см. PlanetMaterial) гейтит ВЕСЬ detail-набор по
+ * наличию detailNormal — без него detailDiffuse в бюджете мёртв (видимого
+ * эффекта ноль), поэтому detailNormal ранжирован первым внутри слоя и при
+ * тесном бюджете влезает раньше diffuse-компаньона детейла.
  * `height` сюда не входит: он resident и стримеру не виден.
  */
 export const MAP_TYPE_RANK: Readonly<Record<string, number>> = {
   diffuse: 0,
   slope: 1,
-  detailDiffuse: 2,
-  detailNormal: 2,
-  detailArm: 2,
-  detailNormal2: 2,
+  detailNormal: 2.0,
+  detailArm: 2.1,
+  detailDiffuse: 2.2,
+  detailNormal2: 2.3,
   cloud: 3,
   night: 4,
   specular: 5,
