@@ -11,6 +11,7 @@ import { grading } from '@/config/grading'
 import { brownDwarf } from '@/config/brownDwarf'
 import { whiteDwarf } from '@/config/whiteDwarf'
 import { terrain } from '@/config/terrain'
+import { streaming } from '@/config/streaming'
 
 type PrevDepth = [never, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
@@ -50,5 +51,6 @@ export const config = createConfig({
   ...brownDwarf,
   ...whiteDwarf,
   ...terrain,
+  ...streaming,
   database
 })
