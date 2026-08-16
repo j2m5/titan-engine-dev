@@ -20,6 +20,11 @@ describe('buildSlopeMap: честные уклоны из карты высот'
   const R = 1000
 
   it('плоская карта кодируется нейтральным байтом 128, синий канал нулевой', () => {
+    // точное равенство переживает дизер намеренно: честный ноль квантуется в
+    // целое число МЗР без остатка, а дизер добавляет смещение из [-0.5, 0.5) —
+    // round(n + u) для целого n и u из этого интервала всегда возвращает n
+    // (интервал целиком лежит в одной корзине округления). Дизер рассеивает
+    // только ДРОБНУЮ часть кванта — см. describe('дизер квантования') ниже
     const rgb = buildSlopeMap(makeMap(4, 2, new Array(8).fill(30000)), R)
 
     expect(rgb.length).toBe(4 * 2 * 3)
@@ -84,7 +89,9 @@ describe('buildSlopeMap: честные уклоны из карты высот'
 
     const northArc = (Math.PI * R) / height
     const expected = (400 - 0) / (2 * northArc)
-    expect(decode(rgb[(1 * width + 0) * 3 + 1])).toBeCloseTo(expected, 2)
+    // точность 1, не 2: дизер стохастически округляет дробную часть кванта,
+    // единичный тексель может уйти в соседний байт (шум до 1 МЗР ≈ 0.0157)
+    expect(decode(rgb[(1 * width + 0) * 3 + 1])).toBeCloseTo(expected, 1)
   })
 
   it('полярные строки: односторонняя разность делится на фактический пролёт, а не на 2 строки', () => {
@@ -97,7 +104,8 @@ describe('buildSlopeMap: честные уклоны из карты высот'
     // строка 0: северный сосед клампится в саму строку 0, пролёт — одна строка
     const northArc = (Math.PI * R) / height
     const expected = (400 - 100) / (1 * northArc)
-    expect(decode(rgb[1])).toBeCloseTo(expected, 2)
+    // точность 1: та же причина, см. тест выше
+    expect(decode(rgb[1])).toBeCloseTo(expected, 1)
   })
 
   it('у полюсов базис восточной разности расширяется до метрической длины экватора', () => {
@@ -124,6 +132,8 @@ describe('buildSlopeMap: честные уклоны из карты высот'
 
   it('уклон круче диапазона клампится в крайние байты, без переполнения', () => {
     // перепады в десятки км на тексель при R=1000 — уклон далеко за ±SLOPE_RANGE
+    // физический кламп даёт целое число МЗР (±127) — та же устойчивость к
+    // дизеру, что и у честного нуля выше, крайние байты остаются точными
     const row = [0, 30000, 60000, 30000]
     const rgb = buildSlopeMap(makeMap(4, 2, [...row, ...row]), R)
 
@@ -136,5 +146,70 @@ describe('buildSlopeMap: честные уклоны из карты высот'
 
     expect(() => buildSlopeMap(map, 0)).toThrow(/радиус/i)
     expect(() => buildSlopeMap(map, NaN)).toThrow(/радиус/i)
+  })
+})
+
+describe('дизер квантования: субквантовый сигнал не теряется целиком', () => {
+  // широта 22.5° (rowY=2 из 4) — eastSpan=1, как в «арки честные» выше;
+  // R и шаг высоты подобраны так, чтобы сырой уклон был меньше 0.5 МЗР —
+  // до дизера round() дал бы 128 НА КАЖДОМ текселе константного поля
+  const width = 2000
+  const height = 4
+  const rowY = 2
+  const bodyRadius = 100000
+  const deltaPerX = 1 // м/тексель — целые высоты Uint16, дробный уклон получается из геометрии дуги
+
+  function constantSlopeMap(): HeightMapData {
+    const values = new Array(width * height).fill(0)
+    for (let x = 0; x < width; x++) values[rowY * width + x] = deltaPerX * x
+    return makeMap(width, height, values)
+  }
+
+  // интерьер без крайних столбцов: у x=0 и x=width−1 сосед через шов долготы
+  // рвёт линейную рампу скачком на всю высоту поля — не о дизере тест
+  function meanDecodedEastSlope(rgb: Uint8Array): number {
+    let sum = 0
+    let count = 0
+    for (let x = 1; x < width - 1; x++) {
+      sum += decode(rgb[(rowY * width + x) * 3])
+      count++
+    }
+    return sum / count
+  }
+
+  it('постоянный уклон ниже кванта: среднее по большой области ловит истинную величину (без дизера было бы 0)', () => {
+    const eastArc = (2 * Math.PI * bodyRadius * Math.cos(rowLatitude(rowY, height))) / width
+    const expected = deltaPerX / eastArc
+
+    // сырое значение до округления должно лежать строго внутри «мёртвой»
+    // корзины [0, 0.5) МЗР — иначе тест проверяет не то явление
+    expect(expected).toBeLessThan(SLOPE_RANGE / 254)
+
+    const rgb = buildSlopeMap(constantSlopeMap(), bodyRadius)
+    const mean = meanDecodedEastSlope(rgb)
+
+    expect(Math.abs(mean - expected)).toBeLessThan(Math.abs(expected) * 0.1)
+  })
+
+  it('дизер не смещает среднее: разные дробные части кванта дают несмещённую оценку', () => {
+    // deltaPerX=25 даёт дробную часть МЗР около 0.5 — точка максимальной
+    // неопределённости округления, где систематическое смещение (если бы оно
+    // было) проявилось бы сильнее всего
+    const biasedDeltaPerX = 25
+    const values = new Array(width * height).fill(0)
+    for (let x = 0; x < width; x++) values[rowY * width + x] = biasedDeltaPerX * x
+    const eastArc = (2 * Math.PI * bodyRadius * Math.cos(rowLatitude(rowY, height))) / width
+    const expected = biasedDeltaPerX / eastArc
+
+    const rgb = buildSlopeMap(makeMap(width, height, values), bodyRadius)
+    let sum = 0
+    let count = 0
+    for (let x = 1; x < width - 1; x++) {
+      sum += decode(rgb[(rowY * width + x) * 3])
+      count++
+    }
+    const mean = sum / count
+
+    expect(Math.abs(mean - expected)).toBeLessThan(Math.abs(expected) * 0.05)
   })
 })
