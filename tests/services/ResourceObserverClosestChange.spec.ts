@@ -816,6 +816,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
     observer.scenario = SOLAR_SYSTEM
+    vi.useFakeTimers()
 
     const URANUS_DIFFUSE = 'planets/uranus/uranus.png'
 
@@ -828,13 +829,120 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     expect(resourceStorage.getTexture(URANUS_DIFFUSE)).toBeDefined()
 
     // Уран отодвинулся — субпиксельно, больше не кандидат вовсе. Орфанная
-    // очистка не зависит от MIN_RESIDENCY_MS: у пути НЕТ ни одного текущего
-    // владельца, пиновка decideStreaming тут ни при чём — путь снимается тем
-    // же тактом, где перестал быть кандидатом.
+    // очистка ТОЖЕ защищена MIN_RESIDENCY_MS (фикс-раунд ре-ревью, Low) — тот
+    // же гистерезис, что у бюджетного вытеснения — поэтому время двигается
+    // явно, иначе свежая загрузка была бы просто пропущена гвардом.
+    vi.advanceTimersByTime(11_000)
     data.set('Uranus', record('Uranus', 10000))
     await handlers['ClosestChange'](record('Uranus', 10000))
 
     expect(state.loaded.has(URANUS_DIFFUSE)).toBe(false)
     expect(resourceStorage.getTexture(URANUS_DIFFUSE)).toBeUndefined()
+
+    vi.useRealTimers()
+  })
+
+  it('орфан-очистка не трогает путь, ушедший под порог, пока он ещё в полёте — гонка, не утечка', async () => {
+    // Фикс-раунд ре-ревью (Medium-High): без гварда `inFlight` орфан-чистка
+    // делала бы loaded.delete + deleteTexture в ПУСТОТУ (реестр ещё ничего не
+    // зарегистрировал — путь в полёте), а loadPath после await всё равно
+    // регистрирует текстуру и ставит loadedAt, НЕ ЗНАЯ, что путь уже
+    // выселили отсюда. Текстура осталась бы резидентной вне `loaded` и вне
+    // бюджета навсегда: следующий орфан-проход ходит по `this.loaded`, а
+    // пути там уже нет, чтобы заметить пропажу.
+    const hold: { resolve: ((result: LoadResult) => void) | null } = { resolve: null }
+
+    const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
+      if (request.name === 'planets/uranus/uranus.png') {
+        return new Promise<LoadResult>((resolve) => {
+          hold.resolve = resolve
+        })
+      }
+
+      const texture = makeBigTexture()
+      texture.name = request.name
+      return Promise.resolve({ ok: true as const, texture })
+    })
+
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = SOLAR_SYSTEM
+
+    const URANUS_DIFFUSE = 'planets/uranus/uranus.png'
+    const state = streamingState(observer)
+
+    // Цикл 1: Уран близко — диффуз стартует загрузку, держится открытым
+    // (эмулирует загрузку "в полёте" на момент падения приоритета).
+    data.set('Uranus', record('Uranus', 300))
+    const inFlight: Promise<void> = handlers['ClosestChange'](record('Uranus', 300))
+
+    expect(state.inFlight.has(URANUS_DIFFUSE)).toBe(true)
+    expect(state.loaded.has(URANUS_DIFFUSE)).toBe(true)
+
+    // Цикл 2: Уран отодвинулся раньше, чем загрузка успела резолвиться —
+    // орфан-чистка обязана ПРОПУСТИТЬ путь целиком (он всё ещё inFlight).
+    data.set('Uranus', record('Uranus', 10000))
+    await handlers['ClosestChange'](record('Uranus', 10000))
+
+    expect(state.loaded.has(URANUS_DIFFUSE)).toBe(true)
+    expect(state.inFlight.has(URANUS_DIFFUSE)).toBe(true)
+
+    // Резолвим загрузку — loadPath регистрирует текстуру штатно. Реестр ищет
+    // по texture.name (в проде его проставляет applyTextureParameters).
+    const resolvedTexture = makeBigTexture()
+    resolvedTexture.name = URANUS_DIFFUSE
+    hold.resolve?.({ ok: true, texture: resolvedTexture })
+    await inFlight
+
+    expect(resourceStorage.getTexture(URANUS_DIFFUSE)).toBeDefined()
+    expect(state.loaded.has(URANUS_DIFFUSE)).toBe(true)
+    expect(state.inFlight.has(URANUS_DIFFUSE)).toBe(false)
+
+    // Цикл 3: Уран по-прежнему далеко (не кандидат) — теперь путь настоящий
+    // орфан (loaded, не inFlight). Прошло 0 мс с loadedAt — свежий орфан,
+    // MIN_RESIDENCY_MS его защищает: ещё НЕ вытеснен.
+    await handlers['ClosestChange'](record('Uranus', 10000))
+
+    expect(state.loaded.has(URANUS_DIFFUSE)).toBe(true)
+    expect(resourceStorage.getTexture(URANUS_DIFFUSE)).toBeDefined()
+  })
+
+  it('свежезагруженный орфан не вытесняется (гистерезис отсечки); устаревший — вытесняется', async () => {
+    // Фикс-раунд ре-ревью (Low): без MIN_RESIDENCY_MS тело, чей приоритет
+    // дрожит у порога 4 px, грузилось бы и вытеснялось по кругу каждый такт
+    // — тот же класс дребезга, что у бюджетного вытеснения (isPinned).
+    const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
+      const texture = makeBigTexture()
+      texture.name = request.name
+      return Promise.resolve({ ok: true as const, texture })
+    })
+
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = SOLAR_SYSTEM
+    vi.useFakeTimers()
+
+    const URANUS_DIFFUSE = 'planets/uranus/uranus.png'
+    const state = streamingState(observer)
+
+    data.set('Uranus', record('Uranus', 300))
+    await handlers['ClosestChange'](record('Uranus', 300))
+    expect(state.loaded.has(URANUS_DIFFUSE)).toBe(true)
+
+    // Уран падает под порог СРАЗУ после загрузки — путь свежий (loadedAt
+    // только что выставлен), орфан-чистка обязана его пропустить.
+    data.set('Uranus', record('Uranus', 10000))
+    await handlers['ClosestChange'](record('Uranus', 10000))
+
+    expect(state.loaded.has(URANUS_DIFFUSE)).toBe(true)
+    expect(resourceStorage.getTexture(URANUS_DIFFUSE)).toBeDefined()
+
+    // Время прошло дольше MIN_RESIDENCY_MS, Уран по-прежнему субпикселен —
+    // теперь орфан устарел, вытесняется.
+    vi.advanceTimersByTime(11_000)
+    await handlers['ClosestChange'](record('Uranus', 10000))
+
+    expect(state.loaded.has(URANUS_DIFFUSE)).toBe(false)
+    expect(resourceStorage.getTexture(URANUS_DIFFUSE)).toBeUndefined()
+
+    vi.useRealTimers()
   })
 })

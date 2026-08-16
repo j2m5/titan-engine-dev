@@ -515,10 +515,30 @@ class ResourceObserver {
    * даже там (не должно происходить в норме — см. `evictPath`) вытесняется
    * фиктивным заявителем: `evictPath` безопасно не находит для него узел
    * сцены и просто чистит бухгалтерию/реестр.
+   *
+   * Два гварда защищают от порчи состояния, а не только от лишней работы:
+   *
+   * `inFlight` — путь в полёте у орфана пропускается ЦЕЛИКОМ. `loadPath`
+   * захватывает `epoch`, но не факт орфанности: догрузка после `await`
+   * безусловно зарегистрирует текстуру в `resourceStorage` и выставит
+   * `loadedAt`, ничего не зная о том, что путь уже вычищен ЗДЕСЬ. Вычисти
+   * его сейчас — и после резолва текстура осталась бы резидентной вне
+   * `this.loaded` (мы её оттуда уже убрали) и вне бюджета навсегда: следующий
+   * орфан-проход ходит по `this.loaded`, а пути в нём больше нет, чтобы
+   * заметить пропажу. Путь достроится штатно и станет настоящим орфаном
+   * (без `inFlight`) на следующем такте — там и вытеснится.
+   *
+   * `MIN_RESIDENCY_MS` — та же защита от дребезга, что и у бюджетного
+   * вытеснения (`isPinned` в `closestChange`): тело, приоритет которого
+   * дрожит у порога отсечки, иначе грузилось бы и вытеснялось по кругу
+   * каждый такт. Свежий орфан просто пропускается — вытеснится, когда
+   * (если) останется орфаном дольше резидентности.
    */
   private evictOrphanedPaths(previousOwners: ReadonlyMap<string, Set<number>>): void {
     for (const path of [...this.loaded]) {
       if (this.pathActors.has(path)) continue
+      if (this.inFlight.has(path)) continue
+      if (Date.now() - (this.loadedAt.get(path) ?? 0) < MIN_RESIDENCY_MS) continue
 
       const typeRank: number = mapTypeRank(Resource.where({ path }).first()?.getAttribute('resourceType') ?? '')
       const owners: Set<number> = previousOwners.get(path) ?? new Set()
