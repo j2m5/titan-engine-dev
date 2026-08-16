@@ -1,6 +1,6 @@
 # Террейн: статус и продолжение (хендофф)
 
-Шпаргалка для продолжения работы без контекста прошлой сессии. Актуальна на 2026-08-17: арка стандартизации террейна (19 последних твёрдых тел без DEM — спутники Сатурна и Урана, тела систем Татуин и Хорусет; ветка `feature/terrain-standardization`, коммит `b9fb22a`) ЗАВЕРШЕНА, готова к финальному ревью и мержу — **легаси-материал твёрдых тел закрыт как класс**: на легаси осознанно остаются только газовые гиганты (Юпитер/Сатурн/Уран/Нептун — их ближний план не решён отдельной аркой) и Земля (ground-level/океаны вне скоупа). До неё — арка твёрдых планет (9 тел: Марс/Меркурий/Венера из реальных DEM, Церера с честной сплюснутостью, 5 карликов синтетикой) СМЕРЖЕНА в master (`49fa85c`), приёмка пройдена; до неё — бюджетная арка стримера (`b9f01f5`), батч 18 спутников (`ae5e1c0`), «тела без DEM» (`f5b3ccd`). Рантайм-эталон террейна — этап 4 (`27bb748`); этап 5 (октавы) отклонён и не мержился (см. его секцию). За владельцем: заливка в бакет ВСЕХ пар height+slope (9 планетных + 18 спутниковых + 19 стандартизации + Каллисто/Европа/Луна — списки в секциях). Кандидаты следующих арок: корзина C «детальные тайлы на легаси-сфере» (17 мыльных лун), ближний план газовых гигантов, Венера/Титан визуальный оверхол, вымышленные тела с нуля. Ленивая постройка `TerrainHeightField` СНЯТА с повестки рулингом владельца (см. секцию стандартизации) — не предлагать заново.
+Шпаргалка для продолжения работы без контекста прошлой сессии. Актуальна на 2026-08-17: арка стандартизации террейна (19 последних твёрдых тел без DEM — спутники Сатурна и Урана, тела систем Татуин и Хорусет; ветка `feature/terrain-standardization`, коммит `b9fb22a`) ЗАВЕРШЕНА, готова к финальному ревью и мержу — **легаси-материал твёрдых тел закрыт как класс**: на легаси осознанно остаются только газовые гиганты (Юпитер/Сатурн/Уран/Нептун — их ближний план не решён отдельной аркой) и Земля (ground-level/океаны вне скоупа). До неё — арка твёрдых планет (9 тел: Марс/Меркурий/Венера из реальных DEM, Церера с честной сплюснутостью, 5 карликов синтетикой) СМЕРЖЕНА в master (`49fa85c`), приёмка пройдена; до неё — бюджетная арка стримера (`b9f01f5`), батч 18 спутников (`ae5e1c0`), «тела без DEM» (`f5b3ccd`). Рантайм-эталон террейна — этап 4 (`27bb748`); этап 5 (октавы) отклонён и не мержился (см. его секцию). За владельцем: заливка в бакет ВСЕХ пар height+slope (9 планетных + 18 спутниковых + 19 стандартизации + Каллисто/Европа/Луна — списки в секциях). Кандидаты следующих арок: ближний план газовых гигантов, Венера/Титан визуальный оверхол, вымышленные тела с нуля (корзина C «детальные тайлы на легаси-сфере» СНЯТА с повестки — эта арка перевела её тела целиком на терраформный путь). Ленивая постройка `TerrainHeightField` СНЯТА с повестки рулингом владельца (см. секцию стандартизации) — не предлагать заново.
 
 ## Большая картина
 
@@ -166,7 +166,9 @@ VRAM-довесок (slope, RGBA8+мипы ×4/3): синтетическая п
 | adriana4 | 74 | 3072×1536 | 0.0295 | да (пик+ампл.) |
 | korriban | 88 | 4096×2048 | 0.0698 | — |
 
-RMS(tan) ниже цели 0.05 у четырёх тел (miranda, guermessa, ohann1, adriana4) — драйвер не размер тела, а `bandLowKmFor` (полуокружность πR либо схлопываетband-low ниже 1500 км, либо оставляет его прибитым к дефолту при огромном R — оба случая уводят амплитуду в кламп раньше целевого RMS; подробный разбор в `task-1-report.md`). Суммарный VRAM: slope +696.09 МиБ (RGBA8+мипы), height (CPU, TEHM) +261.04 МиБ. Данные (задача 2): 19×6 связок (height resident + slope streamable + 4 общих detail-ресурса, шаринг с Луной по пути), diffuse 19 строк получили `wrapS: RepeatWrapping`, `renderingObjects.bumpScale: 1` + полный набор ручек (detailSaturation 0.1 реальным лунам/Ohann/Adriana, 0.15 Татуину-семье и Коррибану). TDD: RED на 31 тесте (отсутствующие height/slope) → GREEN 115/115 в `PlanetMaterialMaps.spec.ts`.
+RMS(tan) ниже цели 0.05 у четырёх тел (miranda, guermessa, ohann1, adriana4) — драйвер не размер тела, а `bandLowKmFor` (полуокружность πR либо схлопывает band-low ниже 1500 км, либо оставляет его прибитым к дефолту при огромном R — оба случая уводят амплитуду в кламп раньше целевого RMS; подробный разбор в `task-1-report.md`). Разрешение источника ограничило вывод (потолок по радиусу не форсировался — штатно по брифу) у ШЕСТИ тел, не двух: tatooine (8000×4000 < потолок 8192), ohann1/adriana1/adriana2 (3072×1536 < потолок 4096), adriana4 (3072×1536 < потолок 8192), korriban (4096×2048 < потолок 8192) — таблица выше отражает фактические разрешения. Суммарный VRAM: slope +696.09 МиБ (RGBA8+мипы), height (CPU, TEHM) +261.04 МиБ. Данные (задача 2): 19×6 связок (height resident + slope streamable + 4 общих detail-ресурса, шаринг с Луной по пути), diffuse 19 строк получили `wrapS: RepeatWrapping`, `renderingObjects.bumpScale: 1` + полный набор ручек (detailSaturation 0.1 реальным лунам/Ohann/Adriana, 0.15 Татуину-семье и Коррибану). TDD: RED на 31 тесте (отсутствующие height/slope) → GREEN 115/115 в `PlanetMaterialMaps.spec.ts`.
+
+**Приёмочный указатель:** лимб и приземная дымка ТАТУИНА — второй и худший по множителю кандидат проверки `terrainFloorAdjust`, смотреть наравне с Коррибаном (числа и формула — в рулингах владельца ниже).
 
 Контрольный замер политики стримера (задача 3, методика бюджетной арки — чистая функция `decideStreaming` прогнана оффлайн на реальных данных БД и реальных размерах файлов карт с диска, RGBA8+мипы ×4/3; кандидаты собраны честным повтором `collectCandidates`: актор без streamable-ресурсов не считается вовсе, угловая отсечка `minBodyPixels=4`, камера — посадочная дистанция 3 радиуса от центра тела, как `CameraToObjectTransition`, бюджет `textureBudgetMiB=2048`):
 
@@ -186,28 +188,29 @@ RMS(tan) ниже цели 0.05 у четырёх тел (miranda, guermessa, oh
 - TOI-519b — хот-нептун, газовый: на терраформ не переводить, остаётся на легаси — осознанный класс тел наравне с гигантами.
 - Газовые гиганты (Юпитер/Сатурн/Уран/Нептун) остаются на легаси-материале до отдельного решения владельца по их ближнему плану — терраформная арка их не касается.
 - Коррибан — первое тело, переведённое на терраформный путь ПОСЛЕ фикса стыка атмосферы `terrainFloorAdjust` (`a607e6a`); при визуальной приёмке смотреть в первую очередь на стык поверхности с атмосферой на его лимбе.
+- **Татуин — ВТОРОЙ и худший по множителю кандидат той же проверки.** У Татуина дочерняя атмосфера (актор 75, `mieDensity` H=1.2 км), пол его новой карты рельефа −15.48 км (min высоты −15475.03 м из таблицы Task 1) — `terrainFloorAdjust` компенсирует опускание дна множителем `exp(|пол|/H_mie)` ≈ **×4.0e5** (у Коррибана: атмосфера актора 89, H=4 км, пол −25.72 км → ×620 — тоже штатно, но на три порядка мягче). Механизм тот же, что у Коррибана и прежний прецедент Yavin IV (`TerrainFloorAdjust.spec.ts`, «озоновый профиль Yavin IV») — рулинг тот же: приёмку лимба и приземной дымки смотреть на ОБОИХ телах, Татуин — первый кандидат по риску (множитель на три порядка больше).
 
 Заливка в бакет (19 пар height+slope, схема `storage/images/textures/<путь>` → `textures/<тот же путь>`, правило мягкой деградации из п. 8 в силе — обязателен только диффуз):
 ```
-planets\mimas\mimas_height.raw               planets\mimas\mimas_slope.webp
-planets\enceladus\enceladus_height.raw       planets\enceladus\enceladus_slope.webp
-planets\tethys\tethys_height.raw             planets\tethys\tethys_slope.webp
-planets\dione\dione_height.raw               planets\dione\dione_slope.webp
-planets\miranda\miranda_height.raw           planets\miranda\miranda_slope.webp
-planets\ariel\ariel_height.raw               planets\ariel\ariel_slope.webp
-planets\umbriel\umbriel_height.raw           planets\umbriel\umbriel_slope.webp
-planets\titania\titania_height.raw           planets\titania\titania_slope.webp
-planets\oberon\oberon_height.raw             planets\oberon\oberon_slope.webp
-planets\StarWars\tatooine\tatooine_height.raw       planets\StarWars\tatooine\tatooine_slope.webp
-planets\StarWars\ghomrassen\ghomrassen_height.raw   planets\StarWars\ghomrassen\ghomrassen_slope.webp
-planets\StarWars\guermessa\guermessa_height.raw     planets\StarWars\guermessa\guermessa_slope.webp
-planets\StarWars\chenini\chenini_height.raw         planets\StarWars\chenini\chenini_slope.webp
-planets\unnamed\ohann1_height.raw            planets\unnamed\ohann1_slope.webp
-planets\unnamed\ohann2_height.raw            planets\unnamed\ohann2_slope.webp
-planets\unnamed\adriana1_height.raw          planets\unnamed\adriana1_slope.webp
-planets\unnamed\adriana2_height.raw          planets\unnamed\adriana2_slope.webp
-planets\unnamed\adriana4_height.raw          planets\unnamed\adriana4_slope.webp
-planets\StarWars\korriban\korriban_height.raw       planets\StarWars\korriban\korriban_slope.webp
+planets/mimas/mimas_height.raw               planets/mimas/mimas_slope.webp
+planets/enceladus/enceladus_height.raw       planets/enceladus/enceladus_slope.webp
+planets/tethys/tethys_height.raw             planets/tethys/tethys_slope.webp
+planets/dione/dione_height.raw               planets/dione/dione_slope.webp
+planets/miranda/miranda_height.raw           planets/miranda/miranda_slope.webp
+planets/ariel/ariel_height.raw               planets/ariel/ariel_slope.webp
+planets/umbriel/umbriel_height.raw           planets/umbriel/umbriel_slope.webp
+planets/titania/titania_height.raw           planets/titania/titania_slope.webp
+planets/oberon/oberon_height.raw             planets/oberon/oberon_slope.webp
+planets/StarWars/tatooine/tatooine_height.raw       planets/StarWars/tatooine/tatooine_slope.webp
+planets/StarWars/ghomrassen/ghomrassen_height.raw   planets/StarWars/ghomrassen/ghomrassen_slope.webp
+planets/StarWars/guermessa/guermessa_height.raw     planets/StarWars/guermessa/guermessa_slope.webp
+planets/StarWars/chenini/chenini_height.raw         planets/StarWars/chenini/chenini_slope.webp
+planets/unnamed/ohann1_height.raw            planets/unnamed/ohann1_slope.webp
+planets/unnamed/ohann2_height.raw            planets/unnamed/ohann2_slope.webp
+planets/unnamed/adriana1_height.raw          planets/unnamed/adriana1_slope.webp
+planets/unnamed/adriana2_height.raw          planets/unnamed/adriana2_slope.webp
+planets/unnamed/adriana4_height.raw          planets/unnamed/adriana4_slope.webp
+planets/StarWars/korriban/korriban_height.raw       planets/StarWars/korriban/korriban_slope.webp
 ```
 (Ohann I и Adriana IV делят вход `unnamed_planet_5.png`, но это раздельные тела/ключи/файлы — генерации и сиды разные.)
 
@@ -242,6 +245,7 @@ planets\StarWars\korriban\korriban_height.raw       planets\StarWars\korriban\ko
    | ceres | 4 194 328 (4.00) | 1 509 874 (1.44) |
 
    Правило пар то же, что в п. 8: height resident (мягкий фолбэк — не доехал → легаси-bump-вид у 4 DEM-тел, у 5 синтетических без легаси-bump тело останется гладким плейсхолдером карты, но не всего актора), slope streamable (404 при залитом height даёт плейсхолдер тела).
+10. После арки стандартизации (`feature/terrain-standardization`) — залить в бакет ПАРАМИ height+slope все 19 тел: список путей — секция «Стандартизация террейна» выше (блок «Заливка в бакет», 19 пар height+slope, схема `storage/images/textures/<путь>` → `textures/<тот же путь>`). Правило пар то же, что в п. 8/9 (мягкая деградация, диффуз обязателен).
 5. Визуальная проверка: рельеф на лимбе и терминаторе Луны, кратеры ловят свет, нет шва по меридиану и артефактов на полюсах; терминатор без зерна, деталь сопоставима со старым bump-путём; при рассинхроне рельефа с диффузом по долготе — пересобрать со сдвигом. Земля не изменилась; Марс — теперь часть арки твёрдых тел (`feature/terrain-planets`, см. выше и п. 9), меняется после заливки его пары в бакет. Этап 2 сделан: камера садится на рельеф (`R+h(dir̂)+clearance(dir̂)`), а не на сферу `R×1.001` — над морями заметно ниже прежних ~1.7 км, дно и стенки кратеров останавливают полёт без протыкания сетки.
 
 ## Этап 5 (октавы): ПОПРОБОВАН И ОТКЛОНЁН владельцем (2026-08-16)

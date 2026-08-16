@@ -870,6 +870,73 @@ describe('PlanetMaterial: счётные инварианты 19 тел Task 2 �
   })
 })
 
+// Ключ тела по actorId — тот же порядок, что в task-2-report.md (таблица
+// соответствий). Нужен для проверки СВОЕГО суффикса пути ниже: счётные
+// инварианты выше проверяют факт наличия height/slope и общие атрибуты, но
+// не ловят подмену пути на чужой или на несуществующий файл, если тот
+// формально проходит whereIn/wrapS-проверки (найдено финальным ревью —
+// мутации «путь height Титании заменён на несуществующий» и «slope Оберона
+// указывает на карту Титании» проходили зелёными).
+const TASK2_BODY_KEYS: Record<number, string> = {
+  24: 'mimas',
+  25: 'enceladus',
+  26: 'tethys',
+  27: 'dione',
+  31: 'miranda',
+  32: 'ariel',
+  33: 'umbriel',
+  34: 'titania',
+  35: 'oberon',
+  62: 'tatooine',
+  65: 'ghomrassen',
+  66: 'guermessa',
+  67: 'chenini',
+  68: 'ohann1',
+  69: 'ohann2',
+  71: 'adriana1',
+  72: 'adriana2',
+  74: 'adriana4',
+  88: 'korriban'
+}
+
+function dirOf(resourcePath: string): string {
+  return resourcePath.slice(0, resourcePath.lastIndexOf('/'))
+}
+
+describe('PlanetMaterial: 19 тел Task 2 — пути не перепутаны и не подменены', () => {
+  it('все 19 height-путей уникальны, все 19 slope-путей уникальны — ни одна карта не шарится между телами', () => {
+    const heightPaths = TASK2_19_ACTOR_IDS.map(
+      (actorId) => Actor.find(actorId)!.resources.where('resourceType', 'height').first()!.getAttribute('path')
+    )
+    const slopePaths = TASK2_19_ACTOR_IDS.map(
+      (actorId) => Actor.find(actorId)!.resources.where('resourceType', 'slope').first()!.getAttribute('path')
+    )
+
+    expect(new Set(heightPaths).size, 'height-пути должны быть уникальны — общего размера 19').toBe(TASK2_19_ACTOR_IDS.length)
+    expect(new Set(slopePaths).size, 'slope-пути должны быть уникальны — общего размера 19').toBe(TASK2_19_ACTOR_IDS.length)
+  })
+
+  it.each(TASK2_19_ACTOR_IDS)(
+    'actorId %i: height/slope кончаются на СВОЙ суффикс и лежат в одной директории со своим diffuse',
+    (actorId) => {
+      const key = TASK2_BODY_KEYS[actorId]
+      const actor = Actor.find(actorId)!
+      const heightPath = actor.resources.where('resourceType', 'height').first()!.getAttribute('path') as string
+      const slopePath = actor.resources.where('resourceType', 'slope').first()!.getAttribute('path') as string
+      const diffusePath = actor.resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string
+
+      expect(heightPath, `actorId ${actorId}: height должен кончаться на ${key}_height.raw`).toMatch(
+        new RegExp(`/${key}_height\\.raw$`)
+      )
+      expect(slopePath, `actorId ${actorId}: slope должен кончаться на ${key}_slope.webp`).toMatch(
+        new RegExp(`/${key}_slope\\.webp$`)
+      )
+      expect(dirOf(heightPath), `actorId ${actorId}: height в той же директории, что diffuse`).toBe(dirOf(diffusePath))
+      expect(dirOf(slopePath), `actorId ${actorId}: slope в той же директории, что diffuse`).toBe(dirOf(diffusePath))
+    }
+  )
+})
+
 describe('PlanetMaterial: зачистка облаков Титана и Венеры', () => {
   it('у Титана и Венеры облачной строки больше нет', () => {
     const titan = Actor.find(29)!
