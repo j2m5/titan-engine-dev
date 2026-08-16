@@ -72,7 +72,11 @@ function boxBlurClamp(a: Float64Array, radius: number): Float64Array {
   return out
 }
 
-/** Широта центра строки по полутексельной конвенции: y=0 — юг, y=height−1 — север. */
+/**
+ * Широта центра строки по полутексельной конвенции: y=0 — север, y=height−1 — юг
+ * (см. dirToUv/heightMapFormat). Фильтру важен только |lat| (cos чётный), знак
+ * полушария на математику не влияет.
+ */
 function rowLatitude(y: number, height: number): number {
   return Math.PI * ((y + 0.5) / height - 0.5)
 }

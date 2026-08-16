@@ -278,6 +278,7 @@ describe('PlanetMaterial: данные Каллисто — height/slope/detail-
   it('renderingObjects Каллисто несёт ручки детального слоя террейна', () => {
     const data = callisto().renderingObject!.getAttribute('data') as Record<string, unknown>
 
+    expect(data.bumpScale).toBe(1)
     expect(data.detailScaleMeters).toBe(40)
     expect(data.detailScale2Meters).toBe(7)
     expect(data.detailNormalScale).toBe(1)

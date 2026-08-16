@@ -103,6 +103,12 @@ const baseAmplitudeMeters = numericFlag('base-amplitude-meters', CRATERED_ICY_PR
 const bumpAmplitudeMeters = numericFlag('bump-amplitude-meters', CRATERED_ICY_PRESET.bumpAmplitudeMeters)
 const bandLowKm = numericFlag('band-low-km', CRATERED_ICY_PRESET.bandLowKm)
 const bandHighKm = numericFlag('band-high-km', CRATERED_ICY_PRESET.bandHighKm)
+if (bandLowKm <= bandHighKm) {
+  console.error(
+    `Флаг --band-low-km должен быть больше --band-high-km (низкочастотная граница полосы длиннее высокочастотной), получено ${bandLowKm}..${bandHighKm}`
+  )
+  process.exit(1)
+}
 
 const bumpSignArg = argument('bump-sign')
 const bumpSignValue = bumpSignArg === undefined ? CRATERED_ICY_PRESET.bumpSign : Number(bumpSignArg)
@@ -146,5 +152,5 @@ await writeFile(output, encodeHeightMap({ width: info.width, height: info.height
 
 console.log(
   `записано ${output}: ${info.width}×${info.height}, высоты ${minMeters.toFixed(0)}..${maxMeters.toFixed(0)} м` +
-    (raw ? ' (--raw)' : ` (band ${bandLowKm}..${bandHighKm} км, подложка ${baseAmplitudeMeters} м)`)
+    (raw ? ' (--raw)' : ` (полоса ${bandHighKm}..${bandLowKm} км, подложка ${baseAmplitudeMeters} м)`)
 )
