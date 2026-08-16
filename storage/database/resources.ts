@@ -161,6 +161,20 @@ export const Resources: IResource[] = [
   { id: 153, resourceType: "slope", lifecycle: "streamable", path: "planets/StarWars/yavin/iv/yavin4_slope.webp", wrapS: RepeatWrapping },
   { id: 154, resourceType: "height", lifecycle: "resident", path: "planets/unnamed/ohann3_height.raw" },
   { id: 155, resourceType: "slope", lifecycle: "streamable", path: "planets/unnamed/ohann3_slope.webp", wrapS: RepeatWrapping },
-  { id: 156, resourceType: "height", lifecycle: "resident", path: "planets/StarWars/korriban/i/korriban_height.raw" },
-  { id: 157, resourceType: "slope", lifecycle: "streamable", path: "planets/StarWars/korriban/i/korriban_slope.webp", wrapS: RepeatWrapping }
+  { id: 156, resourceType: "height", lifecycle: "resident", path: "planets/StarWars/korriban/i/korriban1_height.raw" },
+  { id: 157, resourceType: "slope", lifecycle: "streamable", path: "planets/StarWars/korriban/i/korriban1_slope.webp", wrapS: RepeatWrapping },
+  // Фикс-раунд 1 (Task 4): общая карта Корribана давала VII 577% его бюджета
+  // высоты — семь пер-тело генераций (korriban1-korriban7) вместо одной общей.
+  { id: 158, resourceType: "height", lifecycle: "resident", path: "planets/StarWars/korriban/i/korriban2_height.raw" },
+  { id: 159, resourceType: "slope", lifecycle: "streamable", path: "planets/StarWars/korriban/i/korriban2_slope.webp", wrapS: RepeatWrapping },
+  { id: 160, resourceType: "height", lifecycle: "resident", path: "planets/StarWars/korriban/i/korriban3_height.raw" },
+  { id: 161, resourceType: "slope", lifecycle: "streamable", path: "planets/StarWars/korriban/i/korriban3_slope.webp", wrapS: RepeatWrapping },
+  { id: 162, resourceType: "height", lifecycle: "resident", path: "planets/StarWars/korriban/i/korriban4_height.raw" },
+  { id: 163, resourceType: "slope", lifecycle: "streamable", path: "planets/StarWars/korriban/i/korriban4_slope.webp", wrapS: RepeatWrapping },
+  { id: 164, resourceType: "height", lifecycle: "resident", path: "planets/StarWars/korriban/i/korriban5_height.raw" },
+  { id: 165, resourceType: "slope", lifecycle: "streamable", path: "planets/StarWars/korriban/i/korriban5_slope.webp", wrapS: RepeatWrapping },
+  { id: 166, resourceType: "height", lifecycle: "resident", path: "planets/StarWars/korriban/i/korriban6_height.raw" },
+  { id: 167, resourceType: "slope", lifecycle: "streamable", path: "planets/StarWars/korriban/i/korriban6_slope.webp", wrapS: RepeatWrapping },
+  { id: 168, resourceType: "height", lifecycle: "resident", path: "planets/StarWars/korriban/i/korriban7_height.raw" },
+  { id: 169, resourceType: "slope", lifecycle: "streamable", path: "planets/StarWars/korriban/i/korriban7_slope.webp", wrapS: RepeatWrapping }
 ]

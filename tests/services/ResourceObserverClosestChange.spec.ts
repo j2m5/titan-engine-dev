@@ -238,31 +238,35 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
     observer.scenario = HORUSET_SYSTEM
 
-    // Korriban I и II (реальные акторы 93 и 94) делят все семь streamable-путей —
-    // диффуз, bump, slope и четыре detail-текстуры (терраформная арка synth-heightmap) —
-    // один и тот же комплект файлов на семь планет Korriban I–VII.
+    // Korriban I и II (реальные акторы 93 и 94) делят диффуз, bump и четыре
+    // detail-текстуры (тот же физический файл на семь планет Korriban I–VII), но
+    // height/slope у каждого свои (фикс-раунд 1 Task 4: общая карта, откалиброванная
+    // под радиус I, давала VII 577% его бюджета высоты — батч перешёл на пер-тело
+    // генерации korriban1..korriban7).
     const sharedPaths = [
       'planets/StarWars/korriban/i/i.jpg',
       'planets/StarWars/korriban/i/i_bump.jpg',
-      'planets/StarWars/korriban/i/korriban_slope.webp',
       'terrain/rocky_trail_diff.webp',
       'terrain/rocky_trail_nor.webp',
       'terrain/rocky_trail_arm.webp',
       'terrain/moon_01_nor.webp'
     ]
+    const korribanISlope = 'planets/StarWars/korriban/i/korriban1_slope.webp'
+    const korribanIISlope = 'planets/StarWars/korriban/i/korriban2_slope.webp'
 
     data.set('Korriban I', record('Korriban I', 100))
     await handlers['ClosestChange'](record('Korriban I', 100))
 
-    expect(load).toHaveBeenCalledTimes(7) // диффуз + bump + slope + 4 detail
-    for (const path of sharedPaths) expect(resourceStorage.getTexture(path), path).toBeDefined()
+    expect(load).toHaveBeenCalledTimes(7) // диффуз + bump + своя slope + 4 detail
+    for (const path of [...sharedPaths, korribanISlope]) expect(resourceStorage.getTexture(path), path).toBeDefined()
 
-    // Korriban II входит в зону, Korriban I остаётся резидентным. Все пути
-    // уже в реестре — повторного сетевого запроса быть не должно.
+    // Korriban II входит в зону. Диффуз/bump/detail уже в реестре — повторного
+    // сетевого запроса по ним быть не должно, но своя slope-карта — новый путь.
     data.set('Korriban II', record('Korriban II', 120))
     await handlers['ClosestChange'](record('Korriban II', 120))
 
-    expect(load).toHaveBeenCalledTimes(7)
+    expect(load).toHaveBeenCalledTimes(8)
+    expect(resourceStorage.getTexture(korribanIISlope)).toBeDefined()
 
     // Прямое вытеснение Korriban I — ровно то, что сделал бы decideStreaming,
     // выбери он его на вытеснение. Пути принадлежат резиденции по данным.
@@ -270,12 +274,14 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       actorId: 93,
       name: 'Korriban I',
       priority: 0,
-      paths: sharedPaths
+      paths: [...sharedPaths, korribanISlope]
     })
 
-    // Пути пережили вытеснение первого владельца — Korriban II всё ещё на них
-    // ссылается.
+    // Общие пути пережили вытеснение первого владельца — Korriban II всё ещё на
+    // них ссылается. Собственная slope-карта Korriban I — больше ничья, снята.
     for (const path of sharedPaths) expect(resourceStorage.getTexture(path), path).toBeDefined()
+    expect(resourceStorage.getTexture(korribanISlope)).toBeUndefined()
+    expect(resourceStorage.getTexture(korribanIISlope)).toBeDefined()
   })
 
   it('два актора, разделяющие путь, В ОДНОМ цикле грузят его один раз — не задваивают ни сеть, ни реестр', async () => {
@@ -289,7 +295,11 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       return Promise.resolve({ ok: true as const, texture })
     })
 
-    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    // decideStreaming резервирует бюджет по СВОЕМУ списку путей каждого
+    // кандидата, не зная о меж-акторном совпадении строк — бюджет должен
+    // вместить оба «наивных» резерва (7+7 путей), иначе Korriban II не попадёт
+    // в wanted этого пересчёта вовсе, и тест перестанет проверять дедуп.
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = HORUSET_SYSTEM
 
     // Оба актора — candidates уже в ПЕРВОМ пересчёте, ни один ещё не
@@ -299,16 +309,18 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     await handlers['ClosestChange'](record('Korriban I', 100))
 
-    // Семь общих путей (диффуз + bump + slope + 4 detail) — ровно семь
-    // сетевых запросов, а не четырнадцать (по семь на каждого из двух
-    // акторов, разделяющих весь комплект).
-    expect(load).toHaveBeenCalledTimes(7)
+    // Шесть общих путей (диффуз + bump + 4 detail) грузятся по разу, а не по
+    // два (на каждого из двух акторов, разделяющих комплект); плюс две
+    // собственные slope-карты (korriban1/korriban2 — фикс-раунд 1 Task 4 снял
+    // общую карту) — итого восемь сетевых запросов, а не десять.
+    expect(load).toHaveBeenCalledTimes(8)
 
     // И ровно одна запись в реестре на путь, а не две — иначе вторая
     // Texture осталась бы в реестре недиспоузнутой и недостижимой.
     expect(resourceStorage.textures.where('name', 'planets/StarWars/korriban/i/i.jpg').count()).toBe(1)
     expect(resourceStorage.textures.where('name', 'planets/StarWars/korriban/i/i_bump.jpg').count()).toBe(1)
-    expect(resourceStorage.textures.where('name', 'planets/StarWars/korriban/i/korriban_slope.webp').count()).toBe(1)
+    expect(resourceStorage.textures.where('name', 'planets/StarWars/korriban/i/korriban1_slope.webp').count()).toBe(1)
+    expect(resourceStorage.textures.where('name', 'planets/StarWars/korriban/i/korriban2_slope.webp').count()).toBe(1)
   })
 
   it('устаревший владелец брони не снимает чужую (живую) бронь по тому же пути после смены сценария', async () => {

@@ -459,8 +459,9 @@ describe('PlanetMaterial: данные Ио — height/slope/detail-связки
   })
 })
 
-// Все 18 тел батча (терраформная арка synth-heightmap): 12 генераций, Корribан I-VII (93-99)
-// делят одну карту — счётные инварианты одинаковы для всех, без разбора по конкретным путям
+// Все 18 тел батча (терраформная арка synth-heightmap): 12+6 генераций (фикс-раунд 1 Task 4
+// перевёл Корribан I-VII на пер-тело height/slope — общая карта, откалиброванная под радиус I,
+// давала VII 577% его бюджета высоты) — счётные инварианты одинаковы для всех
 const BATCH_ACTOR_IDS = [20, 22, 28, 29, 30, 36, 37, 38, 73, 83, 70, 93, 94, 95, 96, 97, 98, 99] as const
 const TERRAFORM_RESOURCE_TYPES = ['height', 'slope', 'detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const
 
@@ -483,16 +484,17 @@ describe('PlanetMaterial: счётные инварианты батча 18 сп
     expect(terraformLinks, `actorId ${actorId}: терраформные связки`).toBe(6)
   })
 
-  it('Корribан I-VII (93-99) ссылаются на одни и те же height/slope-строки', () => {
-    const leader = Actor.find(93)!.resources
-    const leaderHeight = leader.where('resourceType', 'height').first()!.getAttribute('id')
-    const leaderSlope = leader.where('resourceType', 'slope').first()!.getAttribute('id')
+  it('у Корribан-тел (93-99) РАЗНЫЕ resourceId height/slope — общей карты больше нет', () => {
+    const korribanActorIds = [93, 94, 95, 96, 97, 98, 99] as const
+    const heightIds = korribanActorIds.map(
+      (actorId) => Actor.find(actorId)!.resources.where('resourceType', 'height').first()!.getAttribute('id')
+    )
+    const slopeIds = korribanActorIds.map(
+      (actorId) => Actor.find(actorId)!.resources.where('resourceType', 'slope').first()!.getAttribute('id')
+    )
 
-    for (const actorId of [94, 95, 96, 97, 98, 99]) {
-      const resources = Actor.find(actorId)!.resources
-      expect(resources.where('resourceType', 'height').first()!.getAttribute('id'), `actorId ${actorId}`).toBe(leaderHeight)
-      expect(resources.where('resourceType', 'slope').first()!.getAttribute('id'), `actorId ${actorId}`).toBe(leaderSlope)
-    }
+    expect(new Set(heightIds).size, 'height resourceId должны быть уникальны').toBe(korribanActorIds.length)
+    expect(new Set(slopeIds).size, 'slope resourceId должны быть уникальны').toBe(korribanActorIds.length)
   })
 })
 
