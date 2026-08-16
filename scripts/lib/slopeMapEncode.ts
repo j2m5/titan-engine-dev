@@ -13,7 +13,34 @@ export { SLOPE_RANGE }
  * полутексельной конвенции GPU (центр текселя на y+0.5): потребитель —
  * texture2D, и заодно cos никогда не обнуляется на полюсах. Долгота
  * заворачивается (шов меридиана), широта клампится (полярные строки).
+ *
+ * Квантование с дизером: к дробной части МЗР перед округлением добавляется
+ * детерминированный шум из хеша (x, y, канал) в [-0.5, 0.5). Уклоны положе
+ * половины МЗР (мелкий рельеф на теле с крупным текселем) иначе квантуются в
+ * константный байт на всей области - сигнал теряется целиком; дизер
+ * рассеивает их по соседним байтам стохастически, среднее по площади (мип,
+ * билинейка) сходится к истинной величине. Формат и декодер не меняются:
+ * round(n + u), u из [-0.5, 0.5) - целые значения МЗР (честный ноль, кламп
+ * диапазона) воспроизводятся точно, дизер трогает только дробный остаток.
  */
+
+/** Раунд finalizer-миксера дизера: умножение на нечётную константу + ксор-сдвиг для лавинного перемешивания битов. */
+function ditherMix32(value: number, constant: number): number {
+  let h = Math.imul(value ^ (value >>> 15), constant)
+  h ^= h >>> 13
+
+  return h
+}
+
+/** Детерминированный хеш (x, y, канал) в [0, 1) - свой маленький миксер, не рантайм-хеши src/. */
+function ditherHash01(x: number, y: number, channel: number): number {
+  let h = ditherMix32(x | 0, 0x27d4eb2f)
+  h = ditherMix32(h ^ (y | 0), 0x85ebca6b)
+  h = ditherMix32(h ^ (channel | 0), 0xc2b2ae35)
+
+  return (h >>> 0) / 0x100000000
+}
+
 export function buildSlopeMap(map: HeightMapData, radiusMeters: number): Uint8Array {
   if (!Number.isFinite(radiusMeters) || radiusMeters <= 0) {
     throw new Error(`Радиус тела невалиден: ${radiusMeters}`)
@@ -24,10 +51,12 @@ export function buildSlopeMap(map: HeightMapData, radiusMeters: number): Uint8Ar
   const northArc = (Math.PI * radiusMeters) / height
   const out = new Uint8Array(width * height * 3)
 
-  const encode = (slope: number): number => {
+  const encode = (slope: number, x: number, y: number, channel: number): number => {
     const clamped = Math.max(-SLOPE_RANGE, Math.min(SLOPE_RANGE, slope))
+    const value = (clamped / SLOPE_RANGE) * 127
+    const dithered = value + (ditherHash01(x, y, channel) - 0.5)
 
-    return Math.round(128 + (clamped / SLOPE_RANGE) * 127)
+    return Math.max(0, Math.min(255, Math.round(128 + dithered)))
   }
 
   for (let y = 0; y < height; y++) {
@@ -56,8 +85,8 @@ export function buildSlopeMap(map: HeightMapData, radiusMeters: number): Uint8Ar
         northSpanArc === 0 ? 0 : ((data[yNorth * width + x] - data[ySouth * width + x]) * metersPerRaw) / northSpanArc
 
       const i = (row + x) * 3
-      out[i] = encode(slopeEast)
-      out[i + 1] = encode(slopeNorth)
+      out[i] = encode(slopeEast, x, y, 0)
+      out[i + 1] = encode(slopeNorth, x, y, 1)
     }
   }
 
