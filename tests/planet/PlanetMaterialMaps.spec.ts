@@ -1114,3 +1114,37 @@ describe('PlanetMaterial: Явин IV остаётся на легаси до а
     expect(actor.resources.all()).toHaveLength(1)
   })
 })
+
+/**
+ * Хотфикс 2026-08-17: терраформный путь шейдера считает долготу двухдоменным
+ * fract-трюком, и второй домен даёт u ∈ [−0.5, 0.5] — отрицательные значения
+ * ClampToEdge растягивает краевым столбцом на полтела. Диффузам wrapS раздали
+ * волнами перевода, но облачная карта Коррибана осталась без него и рисовала
+ * дуги вместо облаков. Инвариант общий: ЛЮБАЯ карта, которую фрагмент читает
+ * по терраформному uv, обязана иметь wrapS.
+ */
+describe('PlanetMaterial: карты терраформных тел, читаемые по общему uv, заворачиваются по долготе', () => {
+  const SAMPLED_BY_TERRAIN_UV: readonly ResourceType[] = ['diffuse', 'cloud', 'night', 'specular']
+
+  const terraformActors = Actor.all()
+    .filter((actor) => actor.resources.where('resourceType', 'height').first() !== undefined)
+    .all()
+
+  it('терраформных тел в базе больше десятка — выборка инварианта не выродилась', () => {
+    expect(terraformActors.length).toBeGreaterThan(10)
+  })
+
+  it.each(SAMPLED_BY_TERRAIN_UV)('%s: wrapS: RepeatWrapping у всех терраформных тел', (kind) => {
+    const offenders = terraformActors
+      .flatMap((actor) =>
+        actor.resources
+          .where('resourceType', kind)
+          .all()
+          .map((resource) => ({ name: actor.getAttribute('name', ''), resource }))
+      )
+      .filter(({ resource }) => resource.getAttribute('wrapS') !== RepeatWrapping)
+      .map(({ name, resource }) => name + ': ' + String(resource.getAttribute('path')))
+
+    expect(offenders).toEqual([])
+  })
+})
