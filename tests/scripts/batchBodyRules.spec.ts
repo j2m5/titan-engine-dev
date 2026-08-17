@@ -113,9 +113,53 @@ describe('boxDownsampleGreyscale: area-average даунсемпл 2:1', () => {
     expect(resultMean).toBeCloseTo(sourceMean, 10)
   })
 
-  it('размер не делится нацело на выход — ошибка, а не молчаливое округление', () => {
-    const source = Buffer.from([0, 0, 0, 0, 0, 0])
+  it('нецелый коэффициент (Мимас 6356×3178 → потолок 2048 не делит нацело): дробное перекрытие, не молчаливое округление', () => {
+    // источник 3×1, выход 2×1 — скейл 1.5 (та же природа несоответствия, что
+    // у реальных входов батча). Окно пикселя 0: [0, 1.5) → индекс0 вес1,
+    // индекс1 вес0.5 → (0·1 + 90·0.5)/1.5 = 30. Окно пикселя 1: [1.5, 3) →
+    // индекс1 вес0.5, индекс2 вес1 → (90·0.5 + 180·1)/1.5 = 150.
+    const source = Buffer.from([0, 90, 180])
 
-    expect(() => boxDownsampleGreyscale(source, 3, 2, 2, 2)).toThrow(/не делится нацело/)
+    const result = boxDownsampleGreyscale(source, 3, 1, 2, 1)
+
+    expect(result[0]).toBeCloseTo(30 / 255, 6)
+    expect(result[1]).toBeCloseTo(150 / 255, 6)
+  })
+
+  it('нецелый коэффициент сохраняет общее среднее (энергию сигнала), как и целый', () => {
+    const width = 9
+    const bytes = Array.from({ length: width }, (_, i) => (i * 23) % 256)
+    const source = Buffer.from(bytes)
+
+    const sourceMean = bytes.reduce((sum, byte) => sum + byte, 0) / (bytes.length * 255)
+    const result = boxDownsampleGreyscale(source, width, 1, 4, 1) // скейл 2.25 — нецелый
+    const resultMean = Array.from(result).reduce((sum, value) => sum + value, 0) / result.length
+
+    expect(resultMean).toBeCloseTo(sourceMean, 10)
+  })
+
+  it('2D нецелый скейл по ОБЕИМ осям (6×3 → 4×2, скейлX=скейлY=1.5) — Y считается честно, не только X', () => {
+    // Каждая строка источника константна по X (0 / 200 / 100), поэтому X-веса
+    // не влияют на результат (Σwx по любому целевому столбцу = scaleX=1.5 —
+    // тождество вне зависимости от раскладки), и тест изолированно проверяет
+    // ИМЕННО Y-раскладку — на эквиректангулярной карте Y это широта, битый
+    // Y-путь молча смазал бы широтные полосы.
+    //
+    // Y-окна (скейл 1.5): целевая строка0 = [0, 1.5) → индекс0 вес1, индекс1
+    // вес0.5; целевая строка1 = [1.5, 3) → индекс1 вес0.5, индекс2 вес1.
+    // Блендинг по руке: строка0 = (0·1 + 200·0.5)/1.5 = 100/1.5 ≈ 66.667;
+    // строка1 = (200·0.5 + 100·1)/1.5 = 200/1.5 ≈ 133.333.
+    const source = Buffer.from([
+      0, 0, 0, 0, 0, 0,
+      200, 200, 200, 200, 200, 200,
+      100, 100, 100, 100, 100, 100
+    ])
+
+    const result = boxDownsampleGreyscale(source, 6, 3, 4, 2)
+
+    const expectedRow0 = 100 / 1.5 / 255
+    const expectedRow1 = 200 / 1.5 / 255
+    for (let x = 0; x < 4; x++) expect(result[x]).toBeCloseTo(expectedRow0, 6)
+    for (let x = 0; x < 4; x++) expect(result[4 + x]).toBeCloseTo(expectedRow1, 6)
   })
 })

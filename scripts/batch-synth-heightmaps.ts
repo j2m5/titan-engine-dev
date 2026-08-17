@@ -12,13 +12,15 @@ import { argument } from './lib/cliArguments'
 import { bandLowKmFor, boxDownsampleGreyscale, resolutionCeiling } from './lib/batchBodyRules'
 
 /**
- * Батч-оркестратор перевода тел без DEM (спутников и карликовых планет) на
- * конвейер «тел без DEM» (арка synth-heightmap): один прогон генерит
- * height+slope для всех записей `BODIES` (декларативный список — 18
- * спутниковых генераций плюс пятёрка карликовых планет пояса
- * Койпера/рассеянного диска; фикс-раунд 1 реального прогона развёл Корribан
- * I-VII на семь ПЕР-ТЕЛО генераций, общий только вход-текстура, см. ниже).
- * Математика синтеза НЕ дублируется:
+ * Батч-оркестратор перевода тел без DEM на конвейер «тел без DEM» (арка
+ * synth-heightmap): один прогон генерит height+slope для всех записей
+ * `BODIES` — ВСЕ твёрдые тела без DEM, включая планеты (спутники, карликовые
+ * планеты пояса Койпера/рассеянного диска, тела Звёздных Войн и безымянные
+ * планеты; фикс-раунд 1 реального прогона развёл Коррибан I-VII на семь
+ * ПЕР-ТЕЛО генераций, общий только вход-текстура, см. ниже; арка
+ * terrain-standardization добавила финальные 19 — луны Сатурна/Урана и
+ * оставшиеся тела Звёздных Войн/безымянные, см. докблок ниже). Математика
+ * синтеза НЕ дублируется:
  * вызывает тот же библиотечный конвейер, что и одиночный
  * `build:synth-heightmap` (`buildSynthHeightField`, `buildSlopeMap`,
  * писатель TEHM `encodeHeightMap`).
@@ -275,6 +277,174 @@ const BODIES: readonly BodyGeneration[] = [
     radiusMeters: 800_000,
     seedActorId: 18,
     actorIds: [18]
+  },
+  // Арка terrain-standardization (Task 1) — финальные 19 твёрдых тел без DEM:
+  // луны Сатурна/Урана, оставшиеся тела Звёздных Войн и безымянные планеты.
+  // Радиусы/входы/потолки — таблица плана арки; потолок у всех, кроме
+  // Adriana IV и Коррибана, совпадает с автовычисленным `resolutionCeiling`
+  // (не форсируется отдельно). Мимас/Тефия/Гуермесса/Ченини — источники не
+  // делятся нацело на потолок, тянут нецелый скейл в `boxDownsampleGreyscale`
+  // (обобщён под area-average с дробным перекрытием, см. `batchBodyRules.ts`).
+  {
+    name: 'mimas',
+    inputPath: `${TEXTURES_ROOT}/mimas/mimas.jpg`,
+    inputKind: 'diffuse',
+    radiusMeters: 198_800,
+    seedActorId: 24,
+    actorIds: [24]
+  },
+  {
+    name: 'enceladus',
+    inputPath: `${TEXTURES_ROOT}/enceladus/enceladus_bump.jpg`,
+    inputKind: 'bump',
+    radiusMeters: 252_300,
+    seedActorId: 25,
+    actorIds: [25]
+  },
+  {
+    name: 'tethys',
+    inputPath: `${TEXTURES_ROOT}/tethys/tethys.jpg`,
+    inputKind: 'diffuse',
+    radiusMeters: 536_300,
+    seedActorId: 26,
+    actorIds: [26]
+  },
+  {
+    name: 'dione',
+    inputPath: `${TEXTURES_ROOT}/dione/dione.jpg`,
+    inputKind: 'diffuse',
+    radiusMeters: 562_500,
+    seedActorId: 27,
+    actorIds: [27]
+  },
+  {
+    name: 'miranda',
+    inputPath: `${TEXTURES_ROOT}/miranda/miranda.jpg`,
+    inputKind: 'diffuse',
+    radiusMeters: 240_000,
+    seedActorId: 31,
+    actorIds: [31]
+  },
+  {
+    name: 'ariel',
+    inputPath: `${TEXTURES_ROOT}/ariel/ariel_bump.jpg`,
+    inputKind: 'bump',
+    radiusMeters: 577_900,
+    seedActorId: 32,
+    actorIds: [32]
+  },
+  {
+    name: 'umbriel',
+    inputPath: `${TEXTURES_ROOT}/umbriel/umbriel_bump.jpg`,
+    inputKind: 'bump',
+    radiusMeters: 585_000,
+    seedActorId: 33,
+    actorIds: [33]
+  },
+  {
+    name: 'titania',
+    inputPath: `${TEXTURES_ROOT}/titania/titania.jpg`,
+    inputKind: 'diffuse',
+    radiusMeters: 788_900,
+    seedActorId: 34,
+    actorIds: [34]
+  },
+  {
+    name: 'oberon',
+    inputPath: `${TEXTURES_ROOT}/oberon/oberon.jpg`,
+    inputKind: 'diffuse',
+    radiusMeters: 761_500,
+    seedActorId: 35,
+    actorIds: [35]
+  },
+  {
+    name: 'tatooine',
+    inputPath: `${TEXTURES_ROOT}/StarWars/tatooine/tatooine.png`,
+    inputKind: 'diffuse',
+    radiusMeters: 5_232_000,
+    seedActorId: 62,
+    actorIds: [62]
+  },
+  {
+    name: 'ghomrassen',
+    inputPath: `${TEXTURES_ROOT}/StarWars/ghomrassen/ghomrassen.png`,
+    inputKind: 'diffuse',
+    radiusMeters: 520_790,
+    seedActorId: 65,
+    actorIds: [65]
+  },
+  {
+    name: 'guermessa',
+    inputPath: `${TEXTURES_ROOT}/StarWars/guermessa/guermessa.png`,
+    inputKind: 'diffuse',
+    radiusMeters: 468_712,
+    seedActorId: 66,
+    actorIds: [66]
+  },
+  {
+    name: 'chenini',
+    inputPath: `${TEXTURES_ROOT}/StarWars/chenini/chenini.png`,
+    inputKind: 'diffuse',
+    radiusMeters: 364_554,
+    seedActorId: 67,
+    actorIds: [67]
+  },
+  // Ohann I и Adriana IV делят один физический вход (unnamed_planet_5.png),
+  // но КАЖДЫЙ — своя генерация со своим сидом (та же причина, что у Коррибана
+  // выше): общие выходы пишутся под разными именами (`dirname(input)` один,
+  // `<ключ>_height.raw`/`_slope.webp` — разные).
+  {
+    name: 'ohann1',
+    inputPath: `${TEXTURES_ROOT}/unnamed/unnamed_planet_5.png`,
+    inputKind: 'diffuse',
+    radiusMeters: 1_215_179,
+    seedActorId: 68,
+    actorIds: [68]
+  },
+  {
+    name: 'ohann2',
+    inputPath: `${TEXTURES_ROOT}/unnamed/unnamed_planet_6.png`,
+    inputKind: 'diffuse',
+    radiusMeters: 867_985,
+    seedActorId: 69,
+    actorIds: [69]
+  },
+  {
+    name: 'adriana1',
+    inputPath: `${TEXTURES_ROOT}/unnamed/unnamed_planet_1.png`,
+    inputKind: 'diffuse',
+    radiusMeters: 1_388_776,
+    seedActorId: 71,
+    actorIds: [71]
+  },
+  {
+    name: 'adriana2',
+    inputPath: `${TEXTURES_ROOT}/unnamed/unnamed_planet_3.png`,
+    inputKind: 'diffuse',
+    radiusMeters: 1_041_582,
+    seedActorId: 72,
+    actorIds: [72]
+  },
+  {
+    // Тот же вход, что у Ohann I (unnamed_planet_5.png) — источник 3072×1536
+    // меньше потолка 8192, разрешение ограничится исходным (штатно, потолок
+    // не форсируется), см. докблок выше.
+    name: 'adriana4',
+    inputPath: `${TEXTURES_ROOT}/unnamed/unnamed_planet_5.png`,
+    inputKind: 'diffuse',
+    radiusMeters: 1_701_251,
+    seedActorId: 74,
+    actorIds: [74]
+  },
+  {
+    // Источник 4096×2048 меньше потолка 8192 — разрешение ограничится
+    // исходным (штатно, потолок не форсируется).
+    name: 'korriban',
+    inputPath: `${TEXTURES_ROOT}/StarWars/korriban/korriban_bump.png`,
+    inputKind: 'bump',
+    radiusMeters: 5_950_000,
+    seedActorId: 88,
+    actorIds: [88]
   }
 ]
 
