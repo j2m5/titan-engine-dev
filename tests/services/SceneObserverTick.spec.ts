@@ -79,6 +79,10 @@ describe('SceneObserver: периодический пересчёт', () => {
   })
 
   it('dispose обнуляет накопитель — новый сценарий начинает отсчёт с нуля', () => {
+    // Числа подобраны так, чтобы тест ПАДАЛ без сброса в dispose: до разборки
+    // копится 400 мс (порог 500 не взят), после сборки добавляется ещё 100 мс.
+    // Переживи накопитель разборку — вышло бы ровно 500 мс, и пересчёт
+    // случился бы на камере, которую новый сценарий ещё не переставил.
     const observer = new SceneObserver()
     const controls = makeAstroControlsStub()
 
@@ -88,12 +92,15 @@ describe('SceneObserver: периодический пересчёт', () => {
     const seen: string[] = []
     observer.subscribe('ClosestChange', (record: ObservableRecord): void => void seen.push(record.name))
 
-    observer.tick(0.09) // накопили, но не выстрелили
+    // по 0.1 с — ровно потолок MAX_TICK_DELTA_SECONDS, кламп ничего не режет
+    for (let i = 0; i < 4; i += 1) observer.tick(0.1)
+    expect(seen).toEqual([])
+
     observer.dispose()
 
     observer.observable = controls
     observer.scene = makeSceneWithBody('planet', 'Mars')
-    observer.tick(0.09) // если бы накопитель пережил dispose, здесь было бы 180 мс
+    observer.tick(0.1)
 
     expect(seen).toEqual([])
   })
