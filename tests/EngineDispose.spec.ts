@@ -31,12 +31,16 @@ function makeEngine() {
     setAnimationLoop: vi.fn(() => order.push('loop')),
     setSize: vi.fn()
   } as unknown as WebGLRenderer
+  const cameraController = {
+    speed: 1,
+    stopFollowing: vi.fn(() => order.push('follow'))
+  }
 
   const engine = new Engine(
     sceneManager,
     sceneObserver,
     { advance: vi.fn(), epoch: 0 } as unknown as SimulationClock,
-    { speed: 1 } as unknown as CameraController,
+    cameraController as unknown as CameraController,
     renderer,
     { domElement: { ...domElement }, render: vi.fn() } as unknown as CSS2DRenderer,
     new Scene(),
@@ -47,15 +51,16 @@ function makeEngine() {
     { resolve: vi.fn(), reset: vi.fn() } as unknown as CameraCollision
   )
 
-  return { engine, order, sceneManager, sceneObserver, postprocessing, domElement }
+  return { engine, order, sceneManager, sceneObserver, postprocessing, domElement, cameraController }
 }
 
 describe('Engine.dispose', () => {
   it('делегирует разборку своим сотрудникам', () => {
-    const { engine, sceneManager, sceneObserver, postprocessing } = makeEngine()
+    const { engine, sceneManager, sceneObserver, postprocessing, cameraController } = makeEngine()
 
     engine.dispose()
 
+    expect(cameraController.stopFollowing).toHaveBeenCalledTimes(1)
     expect(sceneManager.dispose).toHaveBeenCalledTimes(1)
     expect(postprocessing.dispose).toHaveBeenCalledTimes(1)
     expect(sceneObserver.dispose).toHaveBeenCalledTimes(1)

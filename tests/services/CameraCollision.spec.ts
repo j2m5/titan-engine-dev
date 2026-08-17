@@ -205,6 +205,21 @@ describe('CameraCollision: свип и скольжение', () => {
     expect(camera.position.toArray()).toEqual([R * 5, 0, 0])
   })
 
+  it('перенос системы отсчёта не превращается в свип через сопровождаемое тело', () => {
+    const body = makeBody('planet', EARTH_RADIUS_KM)
+    const { collision, camera } = makeCollision([body], new Vector3(R * 2, 0, 0))
+    const displacement = new Vector3(R * 10, 0, 0)
+
+    collision.resolve()
+    body.position.add(displacement)
+    camera.position.add(displacement)
+    collision.translateReferenceFrame(displacement)
+    collision.resolve()
+
+    expect(camera.position.x).toBeCloseTo(R * 12, 10)
+    expect(camera.position.distanceTo(body.position)).toBeCloseTo(R * 2, 10)
+  })
+
   it('телепорт без reset() ловится свипом — контраст к предыдущему тесту', () => {
     const body = makeBody('planet', EARTH_RADIUS_KM)
     const { collision, camera } = makeCollision([body], new Vector3(-R * 5, 0, 0))

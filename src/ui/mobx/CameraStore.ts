@@ -1,4 +1,4 @@
-import { makeAutoObservable, runInAction } from 'mobx'
+import { makeAutoObservable, observable, runInAction } from 'mobx'
 import { Object3D, Vector3 } from 'three'
 import { AU, LightSpeed } from '@/core/constants'
 import { config } from '@/core/framework/config'
@@ -15,7 +15,10 @@ class CameraStore {
   private _controller: CameraController | null = null
 
   public constructor() {
-    makeAutoObservable<CameraStore, '_controller'>(this, { _controller: false })
+    makeAutoObservable<CameraStore, '_controller'>(this, {
+      _controller: false,
+      currentTarget: observable.ref
+    })
   }
 
   /** Подключение к сервису-владельцу скорости: стор становится его зеркалом. */
@@ -32,6 +35,7 @@ class CameraStore {
   private mirror = (): void => {
     runInAction((): void => {
       this.speed = this._controller!.speed
+      this.currentTarget = this._controller!.followTarget
     })
   }
 
@@ -54,7 +58,11 @@ class CameraStore {
   }
 
   public setCurrentTarget(payload: Object3D | null): void {
-    this.currentTarget = payload
+    this._controller?.setFollowTarget(payload)
+  }
+
+  public toggleFollow(payload: Object3D): void {
+    this._controller?.toggleFollow(payload)
   }
 
   public setPosition(payload: Vector3): void {

@@ -183,6 +183,15 @@ class CameraCollision {
     this.lastPosition = null
   }
 
+  /**
+   * Переносит начало следующего свипа вместе с сопутствующей системой отсчёта.
+   * Нужен позиционному слежению: орбитальный скачок цели (особенно на time warp)
+   * не должен считаться ручным прямолинейным пролётом камеры через полсистемы.
+   */
+  public translateReferenceFrame(displacement: Vector3): void {
+    this.lastPosition?.add(displacement)
+  }
+
   public resolve(): void {
     this.refreshColliders()
 

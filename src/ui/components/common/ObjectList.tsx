@@ -6,11 +6,12 @@ import TitanList from '@titanui/components/TitanList'
 import TitanListItem from '@titanui/components/TitanListItem'
 import TitanFlex from '@titanui/components/TitanFlex'
 import TitanIconButton from '@titanui/components/TitanIconButton'
-import { PlanetIcon, RocketLaunchIcon, SunIcon } from '@phosphor-icons/react'
+import { CrosshairIcon, PlanetIcon, RocketLaunchIcon, SunIcon } from '@phosphor-icons/react'
 import { Actor } from '@/core/models/Actor'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
 import { OBSERVED_TYPES } from '@/core/services/SceneObserver'
 import { engineStore } from '@/ui/mobx/EngineStore'
+import { cameraStore } from '@/ui/mobx/CameraStore'
 
 const ObjectList = observer(() => {
   const filter = (actor: Actor): boolean =>
@@ -42,6 +43,18 @@ const ObjectList = observer(() => {
     target?.add(sceneManager.crosshair)
   }
 
+  const handleFollow = (actor: Actor): void => {
+    const target = scene.getObjectByName(actor.getAttribute('name', ''))
+
+    if (target) cameraStore.toggleFollow(target)
+  }
+
+  const isFollowing = (actor: Actor): boolean => {
+    const target = scene.getObjectByName(actor.getAttribute('name', ''))
+
+    return target !== undefined && cameraStore.currentTarget === target
+  }
+
   return (
     <TitanList style={{ position: 'fixed', right: '10px', top: '80px', zIndex: 9999 }}>
       {actors.map((actor: Actor) => (
@@ -49,6 +62,9 @@ const ObjectList = observer(() => {
           <TitanFlex align="center" justify="between" width="100%">
             <div>{actor.attributes.name!}</div>
             <div style={{ justifySelf: 'start' }}>
+              <TitanIconButton height="auto" width="auto" onClick={() => handleFollow(actor)}>
+                <CrosshairIcon size={20} weight={isFollowing(actor) ? 'fill' : 'regular'} />
+              </TitanIconButton>
               <TitanIconButton height="auto" width="auto" onClick={() => handleMove(actor)}>
                 <RocketLaunchIcon size={20} />
               </TitanIconButton>

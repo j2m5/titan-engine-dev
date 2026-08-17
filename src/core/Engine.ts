@@ -126,6 +126,8 @@ class Engine {
    * ресайза окна и клик-по-объекту-в-прицел.
    */
   public dispose(): void {
+    // Цель принадлежит сценарию: освобождаем ссылку до разборки его графа.
+    this.camera.stopFollowing()
     this.sceneManager.dispose()
     this.postprocessing.dispose()
     this.sceneObserver.dispose()
@@ -152,7 +154,6 @@ class Engine {
     this.clock.advance(delta)
     this.astroControls.movementSpeed = toThreeJSUnits(this.camera.speed)
     this.astroControls.update(delta)
-    this.labelRenderer.render(this.scene, this.renderCamera)
 
     const ctx: UpdateContext = {
       delta,
@@ -165,7 +166,20 @@ class Engine {
     // После обновления позиций тел: тик видит свежие дистанции. Событие от
     // контролов ловит только движение камеры, а тела движутся сами.
     this.sceneObserver.tick(delta)
+
+    const followUpdate = this.camera.updateFollow(this.renderCamera.position)
+
+    if (followUpdate) {
+      // SceneObserver по-прежнему выбирает ближайшее тело для свободного полёта,
+      // но в follow-режиме вращаться нужно именно вокруг явно выбранной цели.
+      this.astroControls.setTarget(followUpdate.targetPosition)
+      // Орбитальная дельта — смена сопутствующей системы отсчёта, а не ручной
+      // прямолинейный полёт камеры. Коллизии всё ещё проверят ручной остаток.
+      this.cameraCollision.translateReferenceFrame(followUpdate.displacement)
+    }
+
     this.cameraCollision.resolve()
+    this.labelRenderer.render(this.scene, this.renderCamera)
     this.postprocessing.render(delta)
 
     this.renderer.setAnimationLoop(this.boundOnFrameRendered)
