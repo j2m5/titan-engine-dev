@@ -542,10 +542,11 @@ describe('PlanetMaterial: данные Ио — height/slope/detail-связки
   })
 })
 
-// Все 18 тел батча (терраформная арка synth-heightmap): 12+6 генераций (фикс-раунд 1 Task 4
+// Тела батча (терраформная арка synth-heightmap): 12+6 генераций (фикс-раунд 1 Task 4
 // перевёл Корribан I-VII на пер-тело height/slope — общая карта, откалиброванная под радиус I,
-// давала VII 577% его бюджета высоты) — счётные инварианты одинаковы для всех
-const BATCH_ACTOR_IDS = [20, 22, 28, 29, 30, 36, 37, 38, 73, 83, 70, 93, 94, 95, 96, 97, 98, 99] as const
+// давала VII 577% его бюджета высоты) — счётные инварианты одинаковы для всех.
+// Явин IV (83) выведен из списка хотфиксом 2026-08-17 — см. блок легаси ниже.
+const BATCH_ACTOR_IDS = [20, 22, 28, 29, 30, 36, 37, 38, 73, 70, 93, 94, 95, 96, 97, 98, 99] as const
 const TERRAFORM_RESOURCE_TYPES = ['height', 'slope', 'detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const
 
 describe('PlanetMaterial: счётные инварианты батча 18 спутников', () => {
@@ -1075,5 +1076,75 @@ describe('PlanetMaterial: паритет юниформов шаблон↔ра�
     for (const key of keys) {
       expect(material.uniforms[key].value).toBe(PlanetShaderTemplate.uniforms[key].value)
     }
+  })
+})
+
+/**
+ * Явин IV откачен на легаси-материал (хотфикс 2026-08-17, решение владельца):
+ * это терраподобная планета, и рельеф ей делается вместе с Землёй в арке воды —
+ * порог по высоте там несёт вода, а не синтетический пол. Батч 18 спутников
+ * перевёл его заодно со спутниками, что оказалось преждевременным.
+ */
+describe('PlanetMaterial: Явин IV остаётся на легаси до арки воды', () => {
+  const YAVIN_IV = 83
+
+  it('нет ни height, ни slope — тело идёт легаси-путём', () => {
+    const actor = Actor.find(YAVIN_IV)!
+
+    expect(actor.resources.where('resourceType', 'height').first()).toBeUndefined()
+    expect(actor.resources.where('resourceType', 'slope').first()).toBeUndefined()
+  })
+
+  it('нет detail-связок — трипланарная деталь живёт только на терраформном пути', () => {
+    const actor = Actor.find(YAVIN_IV)!
+    const terraform = actor.resources.all().filter((r) => TERRAFORM_RESOURCE_TYPES.includes(
+      r.getAttribute('resourceType') as (typeof TERRAFORM_RESOURCE_TYPES)[number]
+    ))
+
+    expect(terraform).toHaveLength(0)
+  })
+
+  it('диффуз остаётся единственным ресурсом и без wrapS терраформного шва', () => {
+    const actor = Actor.find(YAVIN_IV)!
+    const diffuse = actor.resources.where('resourceType', 'diffuse').first()
+
+    expect(diffuse).toBeDefined()
+    expect(diffuse!.getAttribute('path')).toBe('planets/StarWars/yavin/iv/iv.png')
+    expect(diffuse!.getAttribute('wrapS')).toBeUndefined()
+    expect(actor.resources.all()).toHaveLength(1)
+  })
+})
+
+/**
+ * Хотфикс 2026-08-17: терраформный путь шейдера считает долготу двухдоменным
+ * fract-трюком, и второй домен даёт u ∈ [−0.5, 0.5] — отрицательные значения
+ * ClampToEdge растягивает краевым столбцом на полтела. Диффузам wrapS раздали
+ * волнами перевода, но облачная карта Коррибана осталась без него и рисовала
+ * дуги вместо облаков. Инвариант общий: ЛЮБАЯ карта, которую фрагмент читает
+ * по терраформному uv, обязана иметь wrapS.
+ */
+describe('PlanetMaterial: карты терраформных тел, читаемые по общему uv, заворачиваются по долготе', () => {
+  const SAMPLED_BY_TERRAIN_UV: readonly ResourceType[] = ['diffuse', 'cloud', 'night', 'specular']
+
+  const terraformActors = Actor.all()
+    .filter((actor) => actor.resources.where('resourceType', 'height').first() !== undefined)
+    .all()
+
+  it('терраформных тел в базе больше десятка — выборка инварианта не выродилась', () => {
+    expect(terraformActors.length).toBeGreaterThan(10)
+  })
+
+  it.each(SAMPLED_BY_TERRAIN_UV)('%s: wrapS: RepeatWrapping у всех терраформных тел', (kind) => {
+    const offenders = terraformActors
+      .flatMap((actor) =>
+        actor.resources
+          .where('resourceType', kind)
+          .all()
+          .map((resource) => ({ name: actor.getAttribute('name', ''), resource }))
+      )
+      .filter(({ resource }) => resource.getAttribute('wrapS') !== RepeatWrapping)
+      .map(({ name, resource }) => name + ': ' + String(resource.getAttribute('path')))
+
+    expect(offenders).toEqual([])
   })
 })

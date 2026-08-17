@@ -10,10 +10,20 @@
  *
  * Опускание дна на d без компенсации разредило бы оптику на опорной высоте
  * в e^{−d/H} раз и увело калибровку. Компенсация по форме профиля:
- * exp-слой — коэффициенты × e^{d/H} (профиль не трогаем: плотность в шейдере
- * клампится в [0,1], масштабировать expTerm нельзя); линейный профиль
- * (озоновая «палатка») — сдвиг слоёв на d, абсолютная высота сохраняется.
- * Неопознанная форма — без компенсации: шов важнее дрейфа оптики.
+ * exp-слой — expTerm × e^{d/H} (профиль сдвигается вниз вместе с дном);
+ * линейный профиль (озоновая «палатка») — сдвиг слоёв на d, абсолютная
+ * высота сохраняется. Неопознанная форма — без компенсации: шов важнее
+ * дрейфа оптики.
+ *
+ * Компенсация живёт в ПРОФИЛЕ, а не в коэффициентах, и это несущее решение,
+ * а не вкус (хотфикс 2026-08-17). Шейдер ведёт луч до аналитического дна,
+ * поэтому слой между дном и датумом лежит под реальной поверхностью, но всё
+ * равно попадает в интеграл. С множителем в коэффициентах его толща росла как
+ * β·H·(e^{d/H}−1): у тел с глубоким рельефом и тонкой дымкой (Татуин d/H≈12.9)
+ * это τ≈2·10³ — диск заливало непрозрачной мглой. В профиле тот же множитель
+ * упирается в кламп плотности [0,1] шейдерного GetLayerDensity: под датумом
+ * ρ≡1, толща линейна (τ = β·d), а над датумом произведение β·ρ тождественно
+ * исходному — вид атмосферы сохраняется точно.
  */
 
 import { AtmosphereConfig, DensityProfileLayer } from '@/core/renderables/Atmosphere/AtmosphereConfig'
@@ -21,7 +31,6 @@ import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { Actor } from '@/core/models/Actor'
 
 type Profile = [DensityProfileLayer, DensityProfileLayer]
-type Rgb = [number, number, number]
 
 function isEmptyLayer(layer: DensityProfileLayer): boolean {
   return (
@@ -54,34 +63,26 @@ function shiftLayer(layer: DensityProfileLayer, dKm: number, widthShift: number)
   }
 }
 
-function scaleRgb(rgb: Rgb, factor: number): Rgb {
-  return [rgb[0] * factor, rgb[1] * factor, rgb[2] * factor]
-}
-
 /**
- * Компенсация одного вещества: exp-профиль масштабирует коэффициенты,
- * линейный — сдвигает слои. Возвращает пару «профиль + коэффициенты».
+ * Компенсация одного вещества: exp-профиль растит expTerm (кламп плотности
+ * шейдера держит подповерхностный слой на ρ=1), линейный — сдвигает слои.
+ * Коэффициенты не трогаются ни в одном случае — они паспорт вещества.
  */
-function adjustSpecies(profile: Profile, coefficients: Rgb[], dKm: number): { profile: Profile; coefficients: Rgb[] } {
-  if (isEmptyLayer(profile[0]) && isEmptyLayer(profile[1])) {
-    return { profile, coefficients }
-  }
+function adjustSpecies(profile: Profile, dKm: number): Profile {
+  if (isEmptyLayer(profile[0]) && isEmptyLayer(profile[1])) return profile
 
   if (isExpProfile(profile)) {
     const factor = Math.exp(dKm * -profile[1].expScale)
-    return { profile, coefficients: coefficients.map((c) => scaleRgb(c, factor)) }
+    return [profile[0], { ...profile[1], expTerm: profile[1].expTerm * factor }]
   }
 
   if (isLinearProfile(profile)) {
     // Граница слоёв width — тоже высота: сдвигается только у нижнего слоя,
     // верхний свой width (неиспользуемый ноль) сохраняет
-    return {
-      profile: [shiftLayer(profile[0], dKm, dKm), shiftLayer(profile[1], dKm, 0)],
-      coefficients
-    }
+    return [shiftLayer(profile[0], dKm, dKm), shiftLayer(profile[1], dKm, 0)]
   }
 
-  return { profile, coefficients }
+  return profile
 }
 
 /**
@@ -94,20 +95,12 @@ export function adjustAtmosphereForTerrainFloor(config: AtmosphereConfig, floorM
 
   const dKm = -floorMeters / 1000
 
-  const rayleigh = adjustSpecies(config.rayleighDensity, [config.rayleighScattering], dKm)
-  const mie = adjustSpecies(config.mieDensity, [config.mieScattering, config.mieExtinction], dKm)
-  const absorption = adjustSpecies(config.absorptionDensity, [config.absorptionExtinction], dKm)
-
   return {
     ...config,
     bottomRadius: config.bottomRadius - dKm,
-    rayleighDensity: rayleigh.profile,
-    rayleighScattering: rayleigh.coefficients[0],
-    mieDensity: mie.profile,
-    mieScattering: mie.coefficients[0],
-    mieExtinction: mie.coefficients[1],
-    absorptionDensity: absorption.profile,
-    absorptionExtinction: absorption.coefficients[0]
+    rayleighDensity: adjustSpecies(config.rayleighDensity, dKm),
+    mieDensity: adjustSpecies(config.mieDensity, dKm),
+    absorptionDensity: adjustSpecies(config.absorptionDensity, dKm)
   }
 }
 

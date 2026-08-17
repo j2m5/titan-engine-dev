@@ -66,20 +66,61 @@ describe('adjustAtmosphereForTerrainFloor: подгонка дна атмосф�
     }
   })
 
-  it('mie: масштабируются и scattering, и extinction, одним фактором e^{d/H}', () => {
+  it('exp-компенсация живёт в профиле: коэффициенты не трогаются, множитель уходит в expTerm', () => {
     const dKm = 8.17425
-    const factor = Math.exp(dKm / 1.2)
     const adjusted = adjustAtmosphereForTerrainFloor(stubConfig(), -8174.25)
 
-    expect(adjusted.mieScattering[0]).toBeCloseTo(0.003996 * factor, 6)
-    expect(adjusted.mieExtinction[0]).toBeCloseTo(0.00444 * factor, 6)
+    // Коэффициенты — паспорт вещества, они не зависят от того, где мы провели дно
+    expect(adjusted.mieScattering).toEqual([0.003996, 0.003996, 0.003996])
+    expect(adjusted.mieExtinction).toEqual([0.00444, 0.00444, 0.00444])
+    expect(adjusted.rayleighScattering).toEqual([0.005802, 0.013558, 0.0331])
+
+    expect(adjusted.mieDensity[1].expTerm).toBeCloseTo(Math.exp(dKm / 1.2), 6)
+    expect(adjusted.rayleighDensity[1].expTerm).toBeCloseTo(Math.exp(dKm / 8), 9)
+    expect(adjusted.mieDensity[1].expScale).toBe(-1 / 1.2)
   })
 
-  it('слои exp-профиля не меняются — кламп плотности [0,1] в шейдере не задевается', () => {
-    const adjusted = adjustAtmosphereForTerrainFloor(stubConfig(), -8174.25)
+  /**
+   * Регрессия хотфикса 2026-08-17: шейдер ведёт луч до АНАЛИТИЧЕСКОГО дна, поэтому
+   * слой между новым дном и датумом лежит под реальной поверхностью и всё равно
+   * попадает в интеграл. Пока компенсация сидела в коэффициентах, его толща росла
+   * как β·H·(e^{d/H}−1) — Татуин (d/H ≈ 12.9) получал τ ≈ 2·10³ и заливался
+   * непрозрачной дымкой. С компенсацией в профиле кламп плотности [0,1] в
+   * GetLayerDensity держит подповерхностный слой на ρ=1, и толща линейна: τ = β·d.
+   */
+  it('подповерхностный слой ограничен клампом плотности — толща линейна по глубине, не экспоненциальна', () => {
+    const floorMeters = -15475.03 // пол Татуина
+    const dKm = -floorMeters / 1000
+    const adjusted = adjustAtmosphereForTerrainFloor(stubConfig(), floorMeters)
 
-    expect(adjusted.rayleighDensity).toEqual([EMPTY_LAYER, expLayer(8)])
-    expect(profileDensity(adjusted.rayleighDensity, 0)).toBeLessThanOrEqual(1)
+    // Плотность под датумом упирается в потолок шейдера, а не растёт как e^{12.9}
+    for (const h of [0, 1, 5, 10, dKm - 0.01]) {
+      expect(profileDensity(adjusted.mieDensity, h)).toBe(1)
+    }
+
+    // Интеграл плотности по подповерхностному слою равен его толщине (ρ ≡ 1)
+    const N = 2000
+    let column = 0
+    for (let i = 0; i <= N; i++) {
+      const w = i === 0 || i === N ? 0.5 : 1
+      column += (w * profileDensity(adjusted.mieDensity, (i / N) * dKm) * dKm) / N
+    }
+    expect(column).toBeCloseTo(dKm, 2)
+
+    // Прежняя схема дала бы на четыре порядка больше — граница ловит возврат бага
+    expect(column * adjusted.mieExtinction[0]).toBeLessThan(0.5)
+    expect(1.2 * (Math.exp(dKm / 1.2) - 1) * 0.00444).toBeGreaterThan(1000)
+  })
+
+  it('над датумом профиль тождествен исходному — вид атмосферы не меняется', () => {
+    const config = stubConfig()
+    const dKm = 8.17425
+    const adjusted = adjustAtmosphereForTerrainFloor(config, -8174.25)
+
+    for (const h of [0, 0.5, 2, 8, 30, 60]) {
+      expect(profileDensity(adjusted.mieDensity, h + dKm)).toBeCloseTo(profileDensity(config.mieDensity, h), 9)
+      expect(profileDensity(adjusted.rayleighDensity, h + dKm)).toBeCloseTo(profileDensity(config.rayleighDensity, h), 9)
+    }
   })
 
   it('линейная «палатка» поглощения: плотность на той же абсолютной высоте сохраняется', () => {
