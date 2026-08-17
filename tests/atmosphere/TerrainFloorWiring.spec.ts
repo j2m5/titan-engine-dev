@@ -81,13 +81,20 @@ describe('BrunetonAtmosphere: дно следует полу рельефа ро
     expect(atmosphere.scatterPass.material.uniforms.u_bottom_radius.value).toBeCloseTo(3390 - 8.17425, 9)
   })
 
-  it('компенсация оптики доехала до юниформов', () => {
+  it('компенсация оптики доехала до юниформов — множитель в профиле, коэффициенты нетронуты', () => {
     seedMarsHeightMap()
     const atmosphere = new BrunetonAtmosphere(stubActor(true), {} as WebGLRenderer)
-    const factor = Math.exp(8.17425 / 10.859)
 
-    expect(atmosphere.material.uniforms.u_rayleigh_scattering.value.x).toBeCloseTo(1.21533e-4 * factor, 9)
-    expect(atmosphere.material.uniforms.u_mie_extinction.value.x).toBeCloseTo(0.0286364 * Math.exp(8.17425 / 11), 8)
+    // Слой в юниформе — [width, expTerm, expScale, linearTerm, constantTerm]
+    const rayleighLayer = atmosphere.material.uniforms.u_rayleigh_layer1.value as Float32Array
+    const mieLayer = atmosphere.material.uniforms.u_mie_layer1.value as Float32Array
+
+    expect(rayleighLayer[1]).toBeCloseTo(Math.exp(8.17425 / 10.859), 4)
+    expect(mieLayer[1]).toBeCloseTo(Math.exp(8.17425 / 11), 4)
+
+    // Коэффициенты остаются паспортными — их подгонка дна не касается
+    expect(atmosphere.material.uniforms.u_rayleigh_scattering.value.x).toBeCloseTo(1.21533e-4, 12)
+    expect(atmosphere.material.uniforms.u_mie_extinction.value.x).toBeCloseTo(0.0286364, 12)
   })
 
   it('LUT генерируются из того же подогнанного конфига, что и юниформы', () => {
