@@ -137,8 +137,9 @@ function makeClosestChangeObserver(
 /**
  * Провал по-разному бьёт по значимости пути (интерфейс задачи 2, brief §
  * loadPath): диффуз (ранг 0) без текстуры нечего показывать — материал уходит
- * на заглушку. Любая другая карта (здесь — bump Меркурия) необязательна: тело
- * переживает частичный набор, материал просто пересобирается без неё.
+ * на заглушку. Любая другая карта (здесь — slope Меркурия; легаси-bump
+ * Меркурия удалён из данных, тело переведено на height+slope) необязательна:
+ * тело переживает частичный набор, материал просто пересобирается без неё.
  *
  * Оба пути одного тела теперь независимые кандидаты (задача 2 грузит их
  * конкурентно) — провал одного не откатывает другой. Это и есть перевёрнутое
@@ -175,9 +176,17 @@ describe('ResourceObserver — провал по значимости пути (
     expect(state.loaded.has('planets/mercury/mercury.jpg')).toBe(false)
   })
 
-  it('провал второстепенной карты (bump) → updateMaterial, тело живёт своим диффузом', async () => {
+  it('провал второстепенной карты (slope) → updateMaterial, тело живёт своим диффузом', async () => {
+    // Легаси-bump Меркурия удалён из данных (тело переведено на height+slope,
+    // легаси-карта больше не в БД) — slope занимает ту же роль примера
+    // «второстепенной, не-диффузной карты»: её провал не должен ронять тело
+    // на плейсхолдер, только диффуз незаменим. Ранг slope (1) не самый
+    // младший в MAP_TYPE_RANK (detail-набор ниже, 2.x) — но это здесь не
+    // проверяется: тест смотрит на обработку ПРОВАЛА конкретного не-диффузного
+    // пути, а не на порядок вытеснения по бюджету (это отдельные тесты в
+    // ResourceObserverClosestChange.spec.ts).
     const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
-      if (request.name === 'planets/mercury/mercury_bump.jpg') {
+      if (request.name === 'planets/mercury/mercury_slope.webp') {
         return Promise.resolve({ ok: false as const, texture: null, error: new Error('404') })
       }
 
@@ -197,14 +206,14 @@ describe('ResourceObserver — провал по значимости пути (
     await handlers['ClosestChange'](record('Mercury', 300))
 
     // Тело живёт: резета на заглушку не было, диффуз успешно загружен и
-    // резидентен, только bump ушёл в attempted.
+    // резидентен, только slope ушёл в attempted.
     expect(material.resetMaterial).not.toHaveBeenCalled()
     expect(material.updateMaterial).toHaveBeenCalled()
 
     const state = streamingState(observer)
 
     expect(state.loaded.has('planets/mercury/mercury.jpg')).toBe(true)
-    expect(state.attempted.has('planets/mercury/mercury_bump.jpg')).toBe(true)
-    expect(state.loaded.has('planets/mercury/mercury_bump.jpg')).toBe(false)
+    expect(state.attempted.has('planets/mercury/mercury_slope.webp')).toBe(true)
+    expect(state.loaded.has('planets/mercury/mercury_slope.webp')).toBe(false)
   })
 })

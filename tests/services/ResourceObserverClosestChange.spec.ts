@@ -128,7 +128,9 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     // Цикл 1: провал, актор уходит в attempted.
     await handlers['ClosestChange'](record('Mercury', 300))
-    expect(load).toHaveBeenCalledTimes(7) // диффуз + slope + 4 detail + bump — терраформный набор Меркурия
+    // диффуз + slope + 4 detail — терраформный набор Меркурия (легаси-bump
+    // удалён из данных: тело переведено на height+slope, см. хендофф задачи 2).
+    expect(load).toHaveBeenCalledTimes(6)
 
     // Цикл 2: Меркурий по-прежнему на первом месте по приоритету (та же
     // дистанция) — значит decision.wanted всё ещё содержит его, и attempted
@@ -139,10 +141,10 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // wanted считался из decision.load, где исключённый никогда не
     // появляется, и снятие блокировки происходило уже на цикле 2), актор
     // ретраится здесь — новые вызовы load. Если фикс на месте, вызовов
-    // по-прежнему ровно семь.
+    // по-прежнему ровно шесть.
     await handlers['ClosestChange'](record('Mercury', 300))
 
-    expect(load).toHaveBeenCalledTimes(7)
+    expect(load).toHaveBeenCalledTimes(6)
   })
 
   it('крупное дальнее тело обходит мелкое ближнее и грузится первым', async () => {
@@ -211,10 +213,10 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       callIndex += 1
 
       // Только диффуз Меркурия держится открытым — он и создаёт окно "в
-      // полёте", которое проверяет тест. Остальные шесть путей (slope+4
-      // detail+bump) — независимые кандидаты (задача 2 грузит пути
-      // конкурентно, не последовательно по актору) и резолвятся сразу, чтобы
-      // все загрузки могли нормально завершиться.
+      // полёте", которое проверяет тест. Остальные пять путей (slope+4
+      // detail; легаси-bump удалён из данных) — независимые кандидаты (задача
+      // 2 грузит пути конкурентно, не последовательно по актору) и
+      // резолвятся сразу, чтобы все загрузки могли нормально завершиться.
       if (callIndex === 1) {
         return new Promise<LoadResult>((resolve: (result: LoadResult) => void): void => {
           hold.resolve = resolve
@@ -232,16 +234,16 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     const first: Promise<void> = handlers['ClosestChange'](record('Mercury', 300))
 
-    // Все семь путей Меркурия (диффуз+slope+4detail+bump) — независимые
+    // Все шесть путей Меркурия (диффуз+slope+4detail) — независимые
     // кандидаты, стартуют в этом же цикле.
-    expect(load).toHaveBeenCalledTimes(7)
+    expect(load).toHaveBeenCalledTimes(6)
 
     // Второй пересчёт с той же дистанцией — все пути Меркурия уже loaded, а
     // диффуз ещё и inFlight.
     await handlers['ClosestChange'](record('Mercury', 300))
 
-    // Не переспросили (те же семь вызовов) и не вытеснили.
-    expect(load).toHaveBeenCalledTimes(7)
+    // Не переспросили (те же шесть вызовов) и не вытеснили.
+    expect(load).toHaveBeenCalledTimes(6)
     expect(evictSpy).not.toHaveBeenCalled()
 
     hold.resolve?.({ ok: true, texture: makeTexture() })
@@ -262,14 +264,14 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
     observer.scenario = HORUSET_SYSTEM
 
-    // Korriban I и II (реальные акторы 93 и 94) делят диффуз, bump и четыре
-    // detail-текстуры (тот же физический файл на семь планет Korriban I–VII), но
+    // Korriban I и II (реальные акторы 93 и 94) делят диффуз и четыре
+    // detail-текстуры (тот же физический файл на семь планет Korriban I–VII; легаси-bump
+    // удалён из данных вместе с остальными переведёнными на height+slope телами), но
     // height/slope у каждого свои (фикс-раунд 1 Task 4: общая карта, откалиброванная
     // под радиус I, давала VII 577% его бюджета высоты — батч перешёл на пер-тело
     // генерации korriban1..korriban7).
     const sharedPaths = [
       'planets/StarWars/korriban/i/i.jpg',
-      'planets/StarWars/korriban/i/i_bump.jpg',
       'terrain/rocky_trail_diff.webp',
       'terrain/rocky_trail_nor.webp',
       'terrain/rocky_trail_arm.webp',
@@ -281,19 +283,19 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     data.set('Korriban I', record('Korriban I', 100))
     await handlers['ClosestChange'](record('Korriban I', 100))
 
-    expect(load).toHaveBeenCalledTimes(7) // диффуз + bump + своя slope + 4 detail
+    expect(load).toHaveBeenCalledTimes(6) // диффуз + своя slope + 4 detail
     for (const path of [...sharedPaths, korribanISlope]) expect(resourceStorage.getTexture(path), path).toBeDefined()
 
-    // Korriban II входит в зону. Диффуз/bump/detail уже в реестре — повторного
+    // Korriban II входит в зону. Диффуз/detail уже в реестре — повторного
     // сетевого запроса по ним быть не должно, но своя slope-карта — новый путь.
     data.set('Korriban II', record('Korriban II', 120))
     await handlers['ClosestChange'](record('Korriban II', 120))
 
-    expect(load).toHaveBeenCalledTimes(8)
+    expect(load).toHaveBeenCalledTimes(7)
     expect(resourceStorage.getTexture(korribanIISlope)).toBeDefined()
   })
 
-  it('шаренный путь честно вытесняется по бюджету, когда дедуплицированный спрос ВСЕХ совладельцев не помещается (репро ревью: Korriban I+II в бюджете на 8, вход III выталкивает bump)', async () => {
+  it('шаренный путь честно вытесняется по бюджету, когда дедуплицированный спрос ВСЕХ совладельцев не помещается (репро ревью: Korriban I+II в бюджете на 7, вход III выталкивает detailNormal2)', async () => {
     // Прежняя версия этого сценария вызывала evictPath НАПРЯМУЮ с рукодельным
     // pathActors и проверяла, что «шаренный путь не удаляется, пока нужен
     // другому телу» — это маскировало реальный баг (HIGH ревью после f6fe748):
@@ -302,10 +304,17 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // проигравший бюджету, не вытеснялся никогда. Теперь сценарий идёт через
     // РЕАЛЬНЫЙ closestChange/decision.evict — ту же дорогу, что и продакшен.
     //
-    // Числа воспроизводят репро ревью буквально: у Korriban I+II 8 разных
-    // путей (диффуз+bump+4detail общие, у каждого своя slope), бюджет — ровно
-    // на 8. Вход Korriban III добавляет девятый путь (свою slope) — бюджет не
-    // резиновый, и младший ранг (bump, 6) уступает место старшим.
+    // Числа воспроизводят репро ревью буквально, но легаси-bump (использовавшийся
+    // как жертва до данных-правки задачи 2) удалён из данных Korriban — у
+    // Korriban I+II теперь 7 разных путей (диффуз+4detail общие, у каждого
+    // своя slope), бюджет — ровно на 7. Жертва-замена — detailNormal2
+    // (terrain/moon_01_nor.webp, MAP_TYPE_RANK 2.3): он тоже общий на все
+    // Korriban-тела и, как и bump раньше, самый младший ранг среди путей этого
+    // раунда (ниже него по рангу в остальной системе нет ни одной общей
+    // карты у этих трёх акторов — только диффуз/slope/detail, см.
+    // storage/database/actorResource.ts). Вход Korriban III добавляет
+    // восьмой путь (свою slope, ранг 1) — бюджет не резиновый, и младший
+    // ранг уступает место старшему.
     const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
       // Единый вес что до, что после замера (8192×4096 — тот же размер, что
       // ASSUMED_TEXTURE_BYTES) — бюджет считается в целых картах, без
@@ -315,11 +324,11 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       return Promise.resolve({ ok: true as const, texture })
     })
 
-    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 8, load)
+    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 7, load)
     observer.scenario = HORUSET_SYSTEM
     vi.useFakeTimers()
 
-    const BUMP = 'planets/StarWars/korriban/i/i_bump.jpg'
+    const VICTIM = 'terrain/moon_01_nor.webp'
     const DIFFUSE = 'planets/StarWars/korriban/i/i.jpg'
     const owners: Record<string, ReturnType<typeof vi.fn>> = {}
 
@@ -341,8 +350,8 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     const state = streamingState(observer)
 
-    expect(state.loaded.size).toBe(8)
-    expect(state.loaded.has(BUMP)).toBe(true)
+    expect(state.loaded.size).toBe(7)
+    expect(state.loaded.has(VICTIM)).toBe(true)
 
     // Резидентность младше MIN_RESIDENCY_MS пинит путь через isPinned
     // независимо от бюджета — двигаем время, чтобы проверить именно
@@ -352,18 +361,18 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     data.set('Korriban III', record('Korriban III', 100))
     await handlers['ClosestChange'](record('Korriban III', 100))
 
-    // Бюджет по-прежнему на 8 путей, а не на 9 — раньше (баг) loaded.size
-    // рос до 9, перерасходуя бюджет и никогда не возвращаясь к лимиту.
-    expect(state.loaded.size).toBe(8)
-    expect(state.loaded.has(BUMP)).toBe(false)
-    expect(resourceStorage.getTexture(BUMP)).toBeUndefined()
+    // Бюджет по-прежнему на 7 путей, а не на 8 — раньше (баг) loaded.size
+    // рос до 8, перерасходуя бюджет и никогда не возвращаясь к лимиту.
+    expect(state.loaded.size).toBe(7)
+    expect(state.loaded.has(VICTIM)).toBe(false)
+    expect(resourceStorage.getTexture(VICTIM)).toBeUndefined()
 
     // Общий диффуз (floor топ-тела) как был резидентным, так и остался.
     expect(state.loaded.has(DIFFUSE)).toBe(true)
     expect(resourceStorage.getTexture(DIFFUSE)).toBeDefined()
 
-    // Материалы ВСЕХ трёх совладельцев bump обновились (не сброшены на
-    // заглушку — bump не диффуз, тело переживает его потерю).
+    // Материалы ВСЕХ трёх совладельцев detailNormal2 обновились (не сброшены
+    // на заглушку — это не диффуз, тело переживает потерю detail-карты).
     expect(owners['Korriban I']).toHaveBeenCalled()
     expect(owners['Korriban II']).toHaveBeenCalled()
     expect(owners['Korriban III']).toHaveBeenCalled()
@@ -384,7 +393,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     // decideStreaming резервирует бюджет по СВОЕМУ списку путей каждого
     // кандидата, не зная о меж-акторном совпадении строк — бюджет должен
-    // вместить оба «наивных» резерва (7+7 путей), иначе Korriban II не попадёт
+    // вместить оба «наивных» резерва (6+6 путей), иначе Korriban II не попадёт
     // в wanted этого пересчёта вовсе, и тест перестанет проверять дедуп.
     const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = HORUSET_SYSTEM
@@ -396,16 +405,19 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     await handlers['ClosestChange'](record('Korriban I', 100))
 
-    // Шесть общих путей (диффуз + bump + 4 detail) грузятся по разу, а не по
-    // два (на каждого из двух акторов, разделяющих комплект); плюс две
-    // собственные slope-карты (korriban1/korriban2 — фикс-раунд 1 Task 4 снял
-    // общую карту) — итого восемь сетевых запросов, а не десять.
-    expect(load).toHaveBeenCalledTimes(8)
+    // Пять общих путей (диффуз + 4 detail; легаси-bump удалён из данных)
+    // грузятся по разу, а не по два (на каждого из двух акторов, разделяющих
+    // комплект); плюс две собственные slope-карты (korriban1/korriban2 —
+    // фикс-раунд 1 Task 4 снял общую карту) — итого семь сетевых запросов, а
+    // не девять.
+    expect(load).toHaveBeenCalledTimes(7)
 
     // И ровно одна запись в реестре на путь, а не две — иначе вторая
-    // Texture осталась бы в реестре недиспоузнутой и недостижимой.
+    // Texture осталась бы в реестре недиспоузнутой и недостижимой. Диффуз и
+    // одна из shared detail-карт (detailDiffuse) достаточно, чтобы поймать
+    // регрессию дедупликации — не нужно перечислять все четыре detail-пути.
     expect(resourceStorage.textures.where('name', 'planets/StarWars/korriban/i/i.jpg').count()).toBe(1)
-    expect(resourceStorage.textures.where('name', 'planets/StarWars/korriban/i/i_bump.jpg').count()).toBe(1)
+    expect(resourceStorage.textures.where('name', 'terrain/rocky_trail_diff.webp').count()).toBe(1)
     expect(resourceStorage.textures.where('name', 'planets/StarWars/korriban/i/korriban1_slope.webp').count()).toBe(1)
     expect(resourceStorage.textures.where('name', 'planets/StarWars/korriban/i/korriban2_slope.webp').count()).toBe(1)
   })
@@ -502,18 +514,18 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // Задача 2 сделала все пути ОДНОГО тела независимыми кандидатами:
     // `Promise.all(decision.load.map(loadPath))` дозапускает их конкурентно
     // (а не строго друг за другом, как было у actor-центричного `loadActor`),
-    // так что в рамках одного пересчёта все семь путей Меркурия (терраформная
-    // арка: диффуз+slope+4detail+bump) стартуют синхронно. Держим открытыми
-    // только вызовы диффуза (1-й — цикл 1 "устаревший", 8-й, первый в цикле
-    // 2, — "живой"); остальные пять путей каждого цикла резолвятся сразу —
-    // тест их не касается, но им нужно завершиться, чтобы Promise.all не
-    // завис.
+    // так что в рамках одного пересчёта все шесть путей Меркурия (терраформная
+    // арка: диффуз+slope+4detail; легаси-bump удалён из данных) стартуют
+    // синхронно. Держим открытыми только вызовы диффуза (1-й — цикл 1
+    // "устаревший", 7-й, первый в цикле 2, — "живой"); остальные пять путей
+    // каждого цикла резолвятся сразу — тест их не касается, но им нужно
+    // завершиться, чтобы Promise.all не завис.
     const resolvers: Array<(result: LoadResult) => void> = []
     let callIndex: number = 0
     const load = vi.fn((): Promise<LoadResult> => {
       callIndex += 1
 
-      if (callIndex === 1 || callIndex === 8) {
+      if (callIndex === 1 || callIndex === 7) {
         return new Promise<LoadResult>((resolve) => resolvers.push(resolve))
       }
 
@@ -659,15 +671,17 @@ describe('ResourceObserver: closestChange end-to-end', () => {
   })
 
   it('имя, разделяемое с кольцом/атмосферой, резолвится в планету, а не в актора без стримируемых путей', async () => {
-    // Saturn — три реальных актора с ОДНИМ именем: планета (id 11, диффуз+
-    // bump), кольцо (id 39, единственный ресурс — resident PNG колец, не
-    // streamable) и атмосфера (id 50, вообще без ресурсов). Раньше
-    // `collectCandidates` резолвил имя через `Actor.where({ name }).first()`
-    // по ВСЕЙ таблице акторов без учёта сценария/дерева — совпадало с
-    // планетой только потому, что у неё меньший id, чем у кольца и атмосферы.
-    // Резолв через `this._map` (обход дерева сценария, родитель раньше детей)
-    // корректен структурно, а не по счастливой нумерации: ring/atmosphere —
-    // всегда дети своей планеты, не её соседи с тем же именем.
+    // Saturn — три реальных актора с ОДНИМ именем: планета (id 11, диффуз;
+    // легаси-bump планеты удалён из данных задачей 2 как старый эксперимент —
+    // Сатурн стримит только диффуз), кольцо (id 39, единственный ресурс —
+    // resident PNG колец, не streamable) и атмосфера (id 50, вообще без
+    // ресурсов). Раньше `collectCandidates` резолвил имя через
+    // `Actor.where({ name }).first()` по ВСЕЙ таблице акторов без учёта
+    // сценария/дерева — совпадало с планетой только потому, что у неё меньший
+    // id, чем у кольца и атмосферы. Резолв через `this._map` (обход дерева
+    // сценария, родитель раньше детей) корректен структурно, а не по
+    // счастливой нумерации: ring/atmosphere — всегда дети своей планеты, не
+    // её соседи с тем же именем.
     const whereSpy = vi.spyOn(Actor, 'where')
 
     const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
@@ -682,11 +696,10 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     data.set('Saturn', record('Saturn', 300))
     await handlers['ClosestChange'](record('Saturn', 300))
 
-    // Реальные пути ПЛАНЕТЫ — не resident-текстура кольца (её вообще не
+    // Реальный путь ПЛАНЕТЫ — не resident-текстура кольца (её вообще не
     // просят: `lifecycle !== 'streamable'`) и не пустой список атмосферы.
     expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/saturn/saturn.jpg' }))
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/saturn/saturn_bump.jpg' }))
-    expect(load).toHaveBeenCalledTimes(2)
+    expect(load).toHaveBeenCalledTimes(1)
 
     // collectCandidates больше не бьёт по ORM за каждое наблюдаемое тело —
     // резолв идёт через уже построенный this._map, а не через Actor.where.
@@ -724,7 +737,9 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     //
     // Материал ломается на КАЖДОМ updateMaterial — значит throw'ы ловит и
     // диффуз (успех → бросок в конце loadPath → handleLoadFailure →
-    // resetMaterial, у него отдельный мок, не бросает), и bump (успех →
+    // resetMaterial, у него отдельный мок, не бросает), и slope (легаси-bump
+    // Меркурия удалён из данных задачей 2; slope — такая же второстепенная,
+    // не-диффузная карта тела, её путь через loadPath идентичен: успех →
     // бросок → handleLoadFailure → сам же updateMaterial бросает СНОВА —
     // ловится локальным try/catch внутри handleLoadFailure, не долетает до
     // Promise.all).
@@ -733,7 +748,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 8, load)
     observer.scenario = SOLAR_SYSTEM
     const MERCURY_DIFFUSE = 'planets/mercury/mercury.jpg'
-    const MERCURY_BUMP = 'planets/mercury/mercury_bump.jpg'
+    const MERCURY_SLOPE = 'planets/mercury/mercury_slope.webp'
 
     const mesh = new Mesh()
     mesh.name = 'Mercury'
@@ -756,8 +771,8 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // покидают loaded — а не остаются в loaded без единого шанса на повтор.
     expect(state.attempted.has(MERCURY_DIFFUSE)).toBe(true)
     expect(state.loaded.has(MERCURY_DIFFUSE)).toBe(false)
-    expect(state.attempted.has(MERCURY_BUMP)).toBe(true)
-    expect(state.loaded.has(MERCURY_BUMP)).toBe(false)
+    expect(state.attempted.has(MERCURY_SLOPE)).toBe(true)
+    expect(state.loaded.has(MERCURY_SLOPE)).toBe(false)
   })
 
   it('субпиксельное тело не становится кандидатом (карты не запрашиваются); крупное — кандидат как обычно', async () => {

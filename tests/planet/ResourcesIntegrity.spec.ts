@@ -1,10 +1,44 @@
-import { Resources, RenderingObjects } from '@storage/database'
-import { IResource, IRenderingObject } from '@/core/models/types'
+import { Resources, RenderingObjects, ActorResource } from '@storage/database'
+import { IResource, IRenderingObject, IActorResource } from '@/core/models/types'
 
 describe('Целостность ресурсов планет', () => {
-  it('id 66 (rhea_bump) — bump, а не diffuse', () => {
-    const rheaBump: IResource | undefined = Resources.find((r: IResource) => r.id === 66)
-    expect(rheaBump?.resourceType).toBe('bump')
+  it('страж: у тела с картой высот не осталось planets/-bump — рельеф шейдит slope', () => {
+    // Прежний пин на конкретную строку (id 66, rhea_bump) снят вместе с самой
+    // строкой: терраформные тела перешли на пару height+slope, и легаси-bump
+    // им больше не фолбэк. Общий страж суффиксов ниже по-прежнему ловит класс
+    // «ресурс заведён не тем типом» для всех оставшихся строк.
+    const heightOwners: Set<number> = new Set(
+      ActorResource.filter((link: IActorResource): boolean => {
+        const resource = Resources.find((r: IResource): boolean => r.id === link.resourceId)
+
+        return resource?.resourceType === 'height'
+      }).map((link: IActorResource): number => link.actorId)
+    )
+
+    const leftovers = ActorResource.filter((link: IActorResource): boolean => {
+      const resource = Resources.find((r: IResource): boolean => r.id === link.resourceId)
+
+      return (
+        heightOwners.has(link.actorId) &&
+        resource?.resourceType === 'bump' &&
+        resource.path.startsWith('planets/')
+      )
+    })
+
+    expect(leftovers).toEqual([])
+  })
+
+  it('страж: астероидные карты типа bump на месте — это НЕ рельеф планет', () => {
+    // Тип `bump` означает две разные вещи: легаси-рельеф планет (остался
+    // только у Земли) и карты нормалей/ARM для трипланара астероидов. Вторые
+    // резидентные, ни к одному актору не привязаны и удалению не подлежат —
+    // без них рассыпается детализация колец.
+    const asteroidBumps = Resources.filter(
+      (r: IResource): boolean => r.resourceType === 'bump' && r.path.startsWith('asteroids/')
+    )
+
+    expect(asteroidBumps).toHaveLength(4)
+    expect(asteroidBumps.every((r: IResource): boolean => r.lifecycle === 'resident')).toBe(true)
   })
 
   it('id 113 (korriban_clouds) — cloud, а не specular', () => {
