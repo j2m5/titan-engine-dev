@@ -178,6 +178,44 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     expect(material.defines.USE_SLOPE).toBeUndefined()
   })
 
+  it('slope ушла из реестра — USE_SLOPE снимается следующим updateMaterial, а не врёт поверх', () => {
+    // Сценарий стримера: бюджет вытеснил slope тела, позже догрузился ЛЮБОЙ
+    // другой путь этого актора (или шаренная detail-текстура — она дёргает
+    // updateMaterial у всех совладельцев) — и материал пересобирается уже без
+    // slope. Дефайн, переживший вытеснение, оставил бы включённым код, которому
+    // three подставит пустую чёрную текстуру: декод в SlopeNormal прочитает из
+    // неё (0-128)*2/127 = -2.016 по обоим каналам, и тело зашейдится нормалью,
+    // отклонённой примерно на 70° — видимая катастрофа вместо тихой деградации.
+    seedMoonHeightMap()
+    seedTexture(moonPathOf('slope'), 8192, 4096)
+
+    const material = new PlanetMaterial(moon())
+    material.updateMaterial()
+    expect(material.defines.USE_SLOPE).toBe('1')
+
+    resourceStorage.deleteTexture(moonPathOf('slope'))
+    material.updateMaterial()
+
+    expect(material.defines.USE_SLOPE).toBeUndefined()
+    expect(material.uniforms.bumpMap.value).toBeUndefined()
+  })
+
+  it('detail-нормаль ушла из реестра — USE_TERRAIN_DETAIL снимается следующим updateMaterial', () => {
+    seedMoonHeightMap()
+    seedTexture(moonPathOf('slope'), 8192, 4096)
+    seedTexture(moonPathOf('detailNormal'), 2048, 2048)
+
+    const material = new PlanetMaterial(moon())
+    material.updateMaterial()
+    expect(material.defines.USE_TERRAIN_DETAIL).toBe('1')
+
+    resourceStorage.deleteTexture(moonPathOf('detailNormal'))
+    material.updateMaterial()
+
+    expect(material.defines.USE_TERRAIN_DETAIL).toBeUndefined()
+    expect(material.uniforms.uDetailNorMap.value).toBeNull()
+  })
+
   // Миграция: wrap больше не ставит updateMaterial мутацией — он приходит из
   // данных строки ресурса (загрузчик применяет их через applyTextureParameters).
   it('wrap задаётся данными ресурса, updateMaterial текстуры не мутирует', () => {
@@ -190,6 +228,26 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
 
     // материал больше НЕ переписывает wrap (раньше ставил RepeatWrapping принудительно)
     expect((material.uniforms.bumpMap.value as Texture).wrapS).toBe(ClampToEdgeWrapping)
+  })
+
+  it('конструкторные дефайны переживают пересборку: USE_RING жив после update и reset', () => {
+    // Дефайны собираются с нуля из снимка конструктора, а не накапливаются
+    // поверх прошлых. Снимок обязан нести то, что поставил PlanetShader
+    // (тень колец), иначе Сатурн терял бы кольца на первом обновлении карт.
+    const saturn = Actor.find(11)!
+    seedTexture(saturn.resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string)
+    // текстура колец идёт через getTextureOrMake — без посева PlaceholderTexture
+    // полезет рисовать на канвасе, которого в jsdom нет (см. seedPlaceholderKeys)
+    seedTexture(saturn.children.where('categoryId', 6).first()!.resources.first()!.getAttribute('path') as string)
+
+    const material = new PlanetMaterial(saturn)
+    expect(material.defines.USE_RING).toBe('1')
+
+    material.updateMaterial()
+    expect(material.defines.USE_RING).toBe('1')
+
+    material.resetMaterial()
+    expect(material.defines.USE_RING).toBe('1')
   })
 
   it('строки диффуза и slope Луны несут wrapS: RepeatWrapping в данных', () => {

@@ -9,6 +9,18 @@ import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 class PlanetMaterial extends AbstractShaderMaterial {
   public model: Actor
 
+  /**
+   * Снимок дефайнов, поставленных шейдером при конструировании (тень колец).
+   *
+   * `updateMaterial` пересобирает набор дефайнов от этого снимка, а не поверх
+   * прошлого состояния. Накопление (`{ ...this.defines, ... }`) не умело
+   * СНИМАТЬ дефайн: ложный spread — это no-op, поэтому карта, вытесненная
+   * стримером, оставляла свой `#define` включённым навсегда. Шейдер продолжал
+   * сэмплить сэмплер, в который three подставляет пустую чёрную текстуру, и
+   * декод читал из неё мусор вместо признания «карты нет».
+   */
+  private readonly baseDefines: Record<string, unknown>
+
   public constructor(model: Actor, parameters?: ShaderMaterialParameters) {
     super(parameters)
     this.model = model
@@ -19,6 +31,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.vertexShader = vertexShader
     this.fragmentShader = fragmentShader
     this.defines = defines
+    this.baseDefines = { ...defines }
   }
 
   public updateMaterial(): void {
@@ -94,8 +107,10 @@ class PlanetMaterial extends AbstractShaderMaterial {
       useClassicBump && bumpImage?.height ? 1 / bumpImage.height : 0
     )
 
+    // Набор собирается от снимка конструирования, а не поверх прошлого: только
+    // так дефайн ушедшей карты исчезает вместе с ней (см. baseDefines).
     this.defines = {
-      ...this.defines,
+      ...this.baseDefines,
       ...(useClassicBump && { USE_BUMP: '1' }),
       ...(hasHeightField && slopeMap && { USE_SLOPE: '1' }),
       // Попиксельный UV из направления вместо вершинного vUv — вершинная
@@ -125,13 +140,10 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uDetailNor2Map.value = null
     this.uniforms.uDetailLayerGates.value.set(0, 0, 0)
 
-    delete this.defines.USE_BUMP
-    delete this.defines.USE_SLOPE
-    delete this.defines.USE_TERRAIN_UV
-    delete this.defines.USE_TERRAIN_DETAIL
-    delete this.defines.USE_SPECULAR
-    delete this.defines.USE_NIGHT
-    delete this.defines.USE_CLOUD
+    // Возврат к состоянию «карт нет» — это и есть снимок конструирования:
+    // поимённый список дефайнов пришлось бы держать в синхроне вручную при
+    // каждом новом слое карт.
+    this.defines = { ...this.baseDefines }
 
     this.needsUpdate = true
   }

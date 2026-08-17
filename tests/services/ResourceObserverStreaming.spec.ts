@@ -52,9 +52,14 @@ describe('ResourceObserver: стриминг', () => {
     expect(typeof handlers['ClosestChange']).toBe('function')
   })
 
-  it('порядок при вытеснении: материал сбрасывается ДО освобождения текстуры', async () => {
-    // Если освободить раньше сброса, кадр между шагами рисуется освобождённой
-    // текстурой. Проверяется порядком вызовов, а не фактом каждого.
+  it('порядок при вытеснении: текстура покидает реестр ДО переключения материалов', async () => {
+    // Порядок обратный прежнему, и обоснование прежнего было ложным: между
+    // двумя шагами синхронного метода кадр не рисуется, так что «кадр между
+    // шагами рисуется освобождённой текстурой» не могло происходить. Зато
+    // updateMaterial перечитывает тот же реестр — пока путь в нём, материал
+    // находит текстуру снова, и переключение идёт вхолостую (см. соседний тест
+    // про второстепенную карту). resetMaterial от реестра не зависит вовсе
+    // (садится на 'default.png'), поэтому диффузу новый порядок безразличен.
     const order: string[] = []
     const { observer, scene } = makeObserver()
 
@@ -73,9 +78,41 @@ describe('ResourceObserver: стриминг', () => {
     // это и проверяет тест (resetMaterial, а не updateMaterial).
     observer.evictPath({ actorId: 1, name: 'Earth', path: 'planets/earth.jpg', typeRank: MAP_TYPE_RANK.diffuse, actorPriority: 0 })
 
-    expect(order).toEqual(['reset', 'delete'])
+    expect(order).toEqual(['delete', 'reset'])
 
     vi.restoreAllMocks()
+    resourceStorage.deleteAllTextures()
+  })
+
+  it('вытеснение второстепенной карты: к моменту updateMaterial путь уже вне реестра', () => {
+    // Ветка updateMaterial (не-диффуз) не была покрыта ни одним тестом, а
+    // именно в ней жил дефект: материал перечитывает resourceStorage, и пока
+    // текстура там, он находит её снова — ссылка остаётся, видеопамять не
+    // освобождается, бюджет считает путь вытесненным. Проверяется тем, что
+    // видит САМ материал в момент вызова, а не порядком строк.
+    const { observer, scene } = makeObserver()
+    const PATH = 'planets/moon/moon_slope.webp'
+    let seenAtUpdate: Texture | undefined
+
+    const mesh = new Mesh()
+    mesh.name = 'Moon'
+    const material = {
+      resetMaterial: vi.fn(),
+      updateMaterial: (): void => void (seenAtUpdate = resourceStorage.getTexture(PATH))
+    }
+    Object.defineProperty(mesh, 'renderable', { value: { material }, writable: true })
+    scene.add(mesh)
+
+    const texture = new Texture()
+    texture.name = PATH
+    resourceStorage.addTexture(texture)
+
+    observer.evictPath({ actorId: 19, name: 'Moon', path: PATH, typeRank: MAP_TYPE_RANK.slope, actorPriority: 0 })
+
+    expect(seenAtUpdate).toBeUndefined()
+    expect(resourceStorage.getTexture(PATH)).toBeUndefined()
+    expect(material.resetMaterial).not.toHaveBeenCalled()
+
     resourceStorage.deleteAllTextures()
   })
 

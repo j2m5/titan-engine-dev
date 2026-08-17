@@ -570,9 +570,16 @@ class ResourceObserver {
    * считал бы НАБЛЮДАЕМЫХ, а не оставшихся в бюджете — шаренный путь тогда
    * не вытесняется никогда.
    *
-   * Порядок обязателен: сначала материалы переключаются, и только потом
-   * освобождается текстура, иначе кадр между шагами рисуется освобождённой
-   * текстурой.
+   * Порядок обязателен, и он ОБРАТНЫЙ интуитивному: сначала путь покидает
+   * реестр, и только потом переключаются материалы. Причина — `updateMaterial`
+   * перечитывает тот же `resourceStorage`: пока текстура в нём, материал
+   * находит её снова, «переключение» проходит вхолостую, ссылка остаётся
+   * (видеопамять не освобождается, хотя бюджет считает путь вытесненным), а
+   * дефайн карты остаётся включённым. Прежнее обоснование обратного порядка —
+   * «кадр между шагами рисуется освобождённой текстурой» — было ложным: метод
+   * синхронный, кадра между его шагами не бывает. Диффузу порядок безразличен:
+   * `resetMaterial` реестр по вытесняемому пути не спрашивает, он садится на
+   * заглушку.
    *
    * Материал сбрасывается на заглушку (`resetMaterial`) только если путь —
    * диффуз (ранг 0): потеря второстепенной карты не убивает тело, оно
@@ -590,6 +597,10 @@ class ResourceObserver {
     const owners: ReadonlySet<number> = this.pathActors.get(candidate.path) ?? new Set([candidate.actorId])
     const isDiffuse: boolean = candidate.typeRank === MAP_TYPE_RANK.diffuse
 
+    this.loaded.delete(candidate.path)
+    this.loadedAt.delete(candidate.path)
+    resourceStorage.deleteTexture(candidate.path)
+
     for (const actorId of owners) {
       try {
         this.withActorMaterial(
@@ -601,10 +612,6 @@ class ResourceObserver {
         // см. докблок выше
       }
     }
-
-    this.loaded.delete(candidate.path)
-    this.loadedAt.delete(candidate.path)
-    resourceStorage.deleteTexture(candidate.path)
   }
 
   /** Владельцы пути для материального фан-аута — из `pathActors`, либо кандидат-заявитель, если путь пришёл в обход `collectCandidates` (прямой вызов). */
