@@ -25,6 +25,19 @@ export type SceneObserverRecord = {
  */
 export const OBSERVED_TYPES: readonly string[] = ['planet', 'star', 'blackHole', 'brownDwarf', 'whiteDwarf']
 
+/**
+ * Потолок дельты, которую накопитель тика впитывает за один кадр, с.
+ *
+ * `renderClock` не останавливается между сценариями, поэтому дельта первого
+ * кадра нового сценария вбирает всю паузу разборки и загрузки — секунды. Без
+ * потолка порог перепрыгивался бы всегда, и пересчёт случался бы на ещё не
+ * переставленной камере прошлого сценария: стример грузил бы чужие карты, а
+ * предоплата бюджета держала бы неверный набор до истечения MIN_RESIDENCY_MS.
+ * 0.1 с — заведомо плохой кадр: любой реальный проходит целиком, пауза
+ * загрузки — нет.
+ */
+const MAX_TICK_DELTA_SECONDS: number = 0.1
+
 class SceneObserver extends EventEmitter<{
   change: [Vector3]
   ClosestChange: [ObservableRecord]
@@ -104,7 +117,7 @@ class SceneObserver extends EventEmitter<{
    * module-const заморозил бы ручку в момент загрузки модуля.
    */
   public tick(deltaSeconds: number): void {
-    this.sinceRecompute += deltaSeconds * 1000
+    this.sinceRecompute += Math.min(deltaSeconds, MAX_TICK_DELTA_SECONDS) * 1000
 
     if (this.sinceRecompute < config('streaming.recomputeIntervalMs')) return
 
@@ -144,6 +157,10 @@ class SceneObserver extends EventEmitter<{
     this.data.clear()
     this.objects = []
     this._scene = null
+    // Новый сценарий начинает отсчёт периодического пересчёта с нуля, а не с
+    // хвоста, накопленного до разборки — иначе первый тик после запуска мог
+    // бы выстрелить раньше настоящих 500 мс.
+    this.sinceRecompute = 0
   }
 
   private defineObservableObjects(): void {

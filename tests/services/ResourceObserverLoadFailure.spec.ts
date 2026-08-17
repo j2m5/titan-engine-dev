@@ -96,8 +96,8 @@ function makeTexture(): Texture {
  * Учёт стриминга наблюдателя ключуется путём (задача 2) — приведение типа,
  * тот же приём, что и в соседних спеках.
  */
-function streamingState(observer: ResourceObserver): { loaded: Set<string>; attempted: Set<string> } {
-  return observer as unknown as { loaded: Set<string>; attempted: Set<string> }
+function streamingState(observer: ResourceObserver): { loaded: Set<string>; attempted: Map<string, number> } {
+  return observer as unknown as { loaded: Set<string>; attempted: Map<string, number> }
 }
 
 function makeClosestChangeObserver(

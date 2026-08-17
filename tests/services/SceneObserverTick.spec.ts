@@ -20,11 +20,13 @@ describe('SceneObserver: периодический пересчёт', () => {
     const seen: string[] = []
     observer.subscribe('ClosestChange', (record: ObservableRecord): void => void seen.push(record.name))
 
-    // дефолт интервала — 500 мс
-    observer.tick(0.2)
+    // дефолт интервала — 500 мс. Шаг тика ограничен клампом
+    // MAX_TICK_DELTA_SECONDS (0.1 с) — накопление симулируем несколькими
+    // кадрами, а не одним гигантским тиком, как раньше.
+    for (let i = 0; i < 4; i += 1) observer.tick(0.1) // накоплено 400 мс
     expect(seen).toEqual([])
 
-    observer.tick(0.4) // накоплено 600 мс
+    observer.tick(0.1) // накоплено 500 мс
     expect(seen).toEqual(['Mars'])
   })
 
@@ -38,13 +40,15 @@ describe('SceneObserver: периодический пересчёт', () => {
     const seen: string[] = []
     observer.subscribe('ClosestChange', (record: ObservableRecord): void => void seen.push(record.name))
 
-    observer.tick(0.6)
+    // Тот же кламп 0.1 с, что и в соседнем тесте — тики режем на кадровые
+    // шаги вместо одного тика, перепрыгивающего интервал.
+    for (let i = 0; i < 5; i += 1) observer.tick(0.1) // 500 мс — интервал пройден на пятом тике
     expect(seen).toHaveLength(1)
 
-    observer.tick(0.2)
+    observer.tick(0.1) // 100 мс с момента срабатывания
     expect(seen).toHaveLength(1)
 
-    observer.tick(0.4)
+    for (let i = 0; i < 4; i += 1) observer.tick(0.1) // ещё 400 мс — суммарно 500 мс
     expect(seen).toHaveLength(2)
   })
 
@@ -54,5 +58,43 @@ describe('SceneObserver: периодический пересчёт', () => {
     const observer = new SceneObserver()
 
     expect(() => observer.tick(10)).not.toThrow()
+  })
+
+  it('огромная дельта паузы загрузки не перепрыгивает интервал', () => {
+    // renderClock не останавливается между сценариями: дельта первого кадра
+    // нового сценария вбирает секунды. Без клампа тик выстрелил бы на ещё не
+    // переставленной камере прошлого сценария.
+    const observer = new SceneObserver()
+    const controls = makeAstroControlsStub()
+
+    observer.observable = controls
+    observer.scene = makeSceneWithBody('planet', 'Mars')
+
+    const seen: string[] = []
+    observer.subscribe('ClosestChange', (record: ObservableRecord): void => void seen.push(record.name))
+
+    observer.tick(10)
+
+    expect(seen).toEqual([])
+  })
+
+  it('dispose обнуляет накопитель — новый сценарий начинает отсчёт с нуля', () => {
+    const observer = new SceneObserver()
+    const controls = makeAstroControlsStub()
+
+    observer.observable = controls
+    observer.scene = makeSceneWithBody('planet', 'Mars')
+
+    const seen: string[] = []
+    observer.subscribe('ClosestChange', (record: ObservableRecord): void => void seen.push(record.name))
+
+    observer.tick(0.09) // накопили, но не выстрелили
+    observer.dispose()
+
+    observer.observable = controls
+    observer.scene = makeSceneWithBody('planet', 'Mars')
+    observer.tick(0.09) // если бы накопитель пережил dispose, здесь было бы 180 мс
+
+    expect(seen).toEqual([])
   })
 })

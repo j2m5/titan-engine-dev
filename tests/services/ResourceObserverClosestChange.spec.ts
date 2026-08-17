@@ -59,9 +59,10 @@ function makeBigTexture(): Texture {
  * `evictPath`) не отличают «гварда сработала» от «гварда сломана, но
  * дедупликация путей замаскировала последствия».
  *
- * Задача 2 переехала с учёта по актору на учёт по пути: `loaded`/`inFlight`/
- * `attempted` теперь `Set<string>`, а `actorPaths` (actorId → пути) заменён
- * на `pathActors` (путь → id акторов-владельцев).
+ * Задача 2 переехала с учёта по актору на учёт по пути: `loaded`/`inFlight`
+ * теперь `Set<string>`, `attempted` — `Map<string, number>` (путь → момент
+ * провала, нужен для бэкоффа части 3), а `actorPaths` (actorId → пути)
+ * заменён на `pathActors` (путь → id акторов-владельцев).
  */
 type StreamingInternals = {
   loaded: Set<string>
