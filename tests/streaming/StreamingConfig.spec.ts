@@ -19,4 +19,11 @@ describe('streaming config: значения приёмки', () => {
     expect(interval).toBeGreaterThan(0)
     expect(interval).toBeLessThanOrEqual(2000)
   })
+
+  it('бэкофф ретрая задан и разумен', () => {
+    const backoff = config('streaming.retryBackoffMs')
+
+    expect(typeof backoff).toBe('number')
+    expect(backoff).toBeGreaterThanOrEqual(1000)
+  })
 })

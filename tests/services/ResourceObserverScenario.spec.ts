@@ -24,7 +24,7 @@ type StreamingInternals = {
   loaded: Set<string>
   loadedAt: Map<string, number>
   inFlight: Set<string>
-  attempted: Set<string>
+  attempted: Map<string, number>
   pathActors: Map<string, Set<number>>
   pathLoads: Map<string, Promise<LoadResult | null>>
 }
@@ -55,7 +55,7 @@ describe('ResourceObserver — смена сценария сбрасывает 
     state.loaded.add('planets/a.jpg')
     state.loadedAt.set('planets/a.jpg', Date.now())
     state.inFlight.add('planets/b.jpg')
-    state.attempted.add('planets/c.jpg')
+    state.attempted.set('planets/c.jpg', Date.now())
     state.pathActors.set('planets/a.jpg', new Set([1, 2]))
     state.pathLoads.set('planets/d.jpg', Promise.resolve(null))
 

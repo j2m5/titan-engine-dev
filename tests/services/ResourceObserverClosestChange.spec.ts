@@ -5,6 +5,7 @@ import { TextureBudget, textureBytes } from '@/core/streaming/TextureBudget'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { Actor } from '@/core/models/Actor'
 import { Scenarios } from '@/config/scenarios'
+import { config } from '@/core/framework/config'
 import type { SceneObserver, ObservableRecord } from '@/core/services/SceneObserver'
 import type { TextureProvider } from '@/core/textures/TextureProvider'
 import type { TextureRequest, LoadResult } from '@/core/textures/types'
@@ -65,7 +66,7 @@ function makeBigTexture(): Texture {
 type StreamingInternals = {
   loaded: Set<string>
   inFlight: Set<string>
-  attempted: Set<string>
+  attempted: Map<string, number>
   pathActors: Map<string, Set<number>>
   pathLoads: Map<string, Promise<LoadResult | null>>
 }
@@ -813,6 +814,45 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     expect(state.loaded.has(MOON_DETAIL_NORMAL2)).toBe(true)
     expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: URANUS_DIFFUSE }))
+  })
+
+  it('после истечения бэкоффа провалившийся путь снова предлагается к загрузке', async () => {
+    // Пол (диффуз + slope ближайшего тела) попадает в wantedPaths безусловно,
+    // поэтому правило «вышел из желаемого — прощён» его не освобождает: без
+    // бэкоффа одна сетевая икота на теле, к которому летит пользователь,
+    // означала бы серый плейсхолдер до конца сессии.
+    vi.useFakeTimers()
+
+    let failing: boolean = true
+    const load = vi.fn(
+      (): Promise<LoadResult> =>
+        failing
+          ? Promise.resolve({ ok: false as const, texture: null, error: new Error('сеть недоступна') })
+          : Promise.resolve({ ok: true as const, texture: makeTexture() })
+    )
+
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = SOLAR_SYSTEM
+
+    data.set('Mercury', record('Mercury', 300))
+
+    // Цикл 1: всё проваливается, пути уходят в attempted.
+    await handlers['ClosestChange'](record('Mercury', 300))
+    const afterFirst: number = load.mock.calls.length
+    expect(afterFirst).toBeGreaterThan(0)
+
+    // Цикл 2 сразу же: бэкофф не истёк — ни одной новой попытки.
+    await handlers['ClosestChange'](record('Mercury', 300))
+    expect(load.mock.calls.length).toBe(afterFirst)
+
+    // Цикл 3 после бэкоффа: сеть починилась, пути снова предлагаются.
+    failing = false
+    vi.setSystemTime(Date.now() + config('streaming.retryBackoffMs') + 1)
+    await handlers['ClosestChange'](record('Mercury', 300))
+
+    expect(load.mock.calls.length).toBeGreaterThan(afterFirst)
+
+    vi.useRealTimers()
   })
 
   it('тело, упавшее под угловой порог, теряет резидентные карты — вытеснение орфанного пути', async () => {

@@ -18,6 +18,7 @@ import { decideStreaming } from '@/core/streaming/decideStreaming'
 import type { MapCandidate, StreamDecision } from '@/core/streaming/types'
 import { MAP_TYPE_RANK, mapTypeRank } from '@/core/streaming/types'
 import { minBodyPixelsToPriorityThreshold } from '@/core/streaming/angularCutoff'
+import { config } from '@/core/framework/config'
 import { streaming } from '@/config/streaming'
 
 /**
@@ -83,8 +84,12 @@ class ResourceObserver {
   private readonly loadedAt: Map<string, number> = new Map()
   /** Пути с загрузкой в полёте: их нельзя ни запрашивать повторно, ни вытеснять. */
   private readonly inFlight: Set<string> = new Set()
-  /** Пути, чья загрузка провалилась; сбрасывается, когда путь выходит из `wantedPaths`. */
-  private readonly attempted: Set<string> = new Set()
+  /**
+   * Пути, чья загрузка провалилась, и когда именно. Время нужно ради бэкоффа:
+   * путь в зоне пола не покидает `wantedPaths` никогда, и без истечения одна
+   * сетевая икота держала бы его исключённым до конца сессии.
+   */
+  private readonly attempted: Map<string, number> = new Map()
   /**
    * Путь → id акторов, которые на него ссылаются в ТЕКУЩЕМ пересчёте.
    * Перестраивается каждым `collectCandidates` с нуля — отвечает на вопрос
@@ -320,6 +325,18 @@ class ResourceObserver {
    */
   private closestChange = async (): Promise<void> => {
     const { candidates, cutoffCount } = this.collectCandidates()
+
+    // Бэкофф: истёкшие провалы прощаются и снова становятся кандидатами,
+    // остальные исключаются из предложения на этот такт.
+    const now: number = Date.now()
+    const backoffMs: number = config('streaming.retryBackoffMs')
+    const excluded: Set<string> = new Set()
+
+    for (const [path, failedAt] of this.attempted) {
+      if (now - failedAt >= backoffMs) this.attempted.delete(path)
+      else excluded.add(path)
+    }
+
     const decision: StreamDecision = decideStreaming(
       candidates,
       this.loaded,
@@ -331,14 +348,15 @@ class ResourceObserver {
       // снесённое состояние
       (path: string): boolean =>
         this.inFlight.has(path) || Date.now() - (this.loadedAt.get(path) ?? 0) < MIN_RESIDENCY_MS,
-      this.attempted,
+      excluded,
       (path: string): number | undefined => this.budget.sizeOf(path),
       this.budget.limit()
     )
 
     // Провал снимается по `wantedPaths`, а не по `load`: исключённый путь в
-    // `load` не появится никогда, и битый путь ретраился бы бесконечно
-    for (const path of this.attempted) {
+    // `load` не появится никогда, и битый путь ретраился бы бесконечно.
+    // Второе правило прощения — истечение бэкоффа выше.
+    for (const path of [...this.attempted.keys()]) {
       if (!decision.wantedPaths.has(path)) this.attempted.delete(path)
     }
 
@@ -761,7 +779,7 @@ class ResourceObserver {
    * остальных совладельцев пути.
    */
   private handleLoadFailure(candidate: MapCandidate): void {
-    this.attempted.add(candidate.path)
+    this.attempted.set(candidate.path, Date.now())
     this.loaded.delete(candidate.path)
 
     const isDiffuse: boolean = candidate.typeRank === MAP_TYPE_RANK.diffuse
