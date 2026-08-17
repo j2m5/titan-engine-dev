@@ -162,6 +162,9 @@ class Engine {
     }
 
     this.sceneManager.update(ctx)
+    // После обновления позиций тел: тик видит свежие дистанции. Событие от
+    // контролов ловит только движение камеры, а тела движутся сами.
+    this.sceneObserver.tick(delta)
     this.cameraCollision.resolve()
     this.postprocessing.render(delta)
 

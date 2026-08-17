@@ -1,4 +1,5 @@
 import { EventEmitter } from '@/core/framework/EventEmitter'
+import { config } from '@/core/framework/config'
 import { AstroControls } from '@/core/libs/AstroControls'
 import { Object3D, Scene, Vector3 } from 'three'
 
@@ -36,6 +37,8 @@ class SceneObserver extends EventEmitter<{
   public objects: Object3D[] = []
 
   private vector: Vector3 = new Vector3()
+  /** Накопленное с прошлого периодического пересчёта время, мс. */
+  private sinceRecompute: number = 0
 
   private readonly onObservableChange = (event: { data: Vector3 }): void => {
     this.emit('change', event.data)
@@ -87,6 +90,26 @@ class SceneObserver extends EventEmitter<{
     if (!this._observable) return new Vector3()
 
     return this._observable.object.position.clone()
+  }
+
+  /**
+   * Периодический пересчёт дистанций, независимый от движения камеры.
+   *
+   * Зовёт тот же `onChange`, что и событие `change` от контролов — одна
+   * реализация на оба повода, а не вторая копия. Событийный путь остаётся
+   * мгновенным (он же обновляет цель орбиты), тик его дополняет.
+   *
+   * Зовётся из кадрового цикла ПОСЛЕ обновления позиций тел, поэтому видит
+   * свежие дистанции. Интервал читается на каждом вызове, а не на импорте:
+   * module-const заморозил бы ручку в момент загрузки модуля.
+   */
+  public tick(deltaSeconds: number): void {
+    this.sinceRecompute += deltaSeconds * 1000
+
+    if (this.sinceRecompute < config('streaming.recomputeIntervalMs')) return
+
+    this.sinceRecompute = 0
+    this.onChange()
   }
 
   public getData(name: string): ObservableRecord | undefined {

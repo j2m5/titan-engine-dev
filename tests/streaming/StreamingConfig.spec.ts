@@ -9,4 +9,14 @@ describe('streaming config: значения приёмки', () => {
   it('секция streaming доезжает до config()', () => {
     expect(config('streaming.textureBudgetMiB')).toBe(2048)
   })
+
+  it('период пересчёта задан и разумен', () => {
+    // Стенные часы, не эпоха симуляции: частота пересчёта не должна зависеть
+    // от ускорения времени.
+    const interval = config('streaming.recomputeIntervalMs')
+
+    expect(typeof interval).toBe('number')
+    expect(interval).toBeGreaterThan(0)
+    expect(interval).toBeLessThanOrEqual(2000)
+  })
 })
