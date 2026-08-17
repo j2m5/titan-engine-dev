@@ -236,4 +236,86 @@ describe('decideStreaming', () => {
 
     expect(d.load).toHaveLength(2)
   })
+
+  it('закреплённый резидентный путь занимает бюджет, а не считается нулём', () => {
+    // Бюджет ровно на две карты по 100. Одна уже в памяти и закреплена
+    // (inFlight либо моложе MIN_RESIDENCY) — вытеснить её нельзя, значит
+    // свободно 100, а не 200. Без предоплаты обе новые карты «влезали» бы
+    // поверх занятой памяти — это и есть перерасход.
+    const d = decideStreaming(
+      [mc(1, 'new1', 0, 2), mc(2, 'new2', 0, 1)],
+      new Set(['pinned.slope']),
+      (path: string): boolean => path === 'pinned.slope',
+      noneExcluded,
+      size(100),
+      200
+    )
+
+    expect(d.load.map((c: MapCandidate): string => c.path)).toEqual(['new1'])
+  })
+
+  it('закреплённый путь, который И кандидат, списывается один раз', () => {
+    // 'a.diff' и загружен-закреплён, и присутствует среди кандидатов. Бюджет
+    // 200 при цене 100: двойное списание не оставило бы места для 'b.diff'.
+    const d = decideStreaming(
+      [mc(1, 'a.diff', 0, 2), mc(2, 'b.diff', 0, 1)],
+      new Set(['a.diff']),
+      (path: string): boolean => path === 'a.diff',
+      noneExcluded,
+      size(100),
+      200
+    )
+
+    expect(d.load.map((c: MapCandidate): string => c.path)).toEqual(['b.diff'])
+    // уже в памяти — повторно грузить нечего, но путь остаётся желаемым
+    expect(d.wantedPaths.has('a.diff')).toBe(true)
+  })
+
+  it('пол обходит бюджет, исчерпанный предоплатой закреплённого', () => {
+    // Закреплённый мусор дороже всего бюджета. Пол (диффуз + slope топ-тела)
+    // обязан пройти всё равно — иначе тело, которое разглядывает пользователь,
+    // осталось бы заглушкой из-за чужих закреплённых байт.
+    const d = decideStreaming(
+      [mc(1, 'top.diff', 0, 5), mc(1, 'top.slope', 1, 5)],
+      new Set(['junk']),
+      (path: string): boolean => path === 'junk',
+      noneExcluded,
+      size(1000),
+      100
+    )
+
+    expect(d.load.map((c: MapCandidate): string => c.path)).toEqual(['top.diff', 'top.slope'])
+  })
+
+  it('закреплённый сирота оплачен, но в wantedPaths не попадает', () => {
+    // Сирота — резидентный путь без кандидата (тело ушло под угловую отсечку).
+    // Байты его в памяти, поэтому оплачены; но пометить его желаемым нельзя —
+    // evictOrphanedPaths перестал бы вытеснять его по истечении пина.
+    const d = decideStreaming(
+      [mc(1, 'a.diff', 0, 1)],
+      new Set(['orphan']),
+      (path: string): boolean => path === 'orphan',
+      noneExcluded,
+      size(100),
+      150
+    )
+
+    expect(d.wantedPaths.has('orphan')).toBe(false)
+    expect(d.load.map((c: MapCandidate): string => c.path)).toEqual(['a.diff'])
+  })
+
+  it('незакреплённый резидентный кандидат, не влезший в бюджет, по-прежнему вытесняется', () => {
+    // Регрессия: предоплата не должна ломать обычное вытеснение. 'drop'
+    // резидентен, но НЕ закреплён — в предоплату не идёт и уходит в evict.
+    const d = decideStreaming(
+      [mc(1, 'keep', 0, 2), mc(2, 'drop', 0, 1)],
+      new Set(['drop']),
+      nothingPinned,
+      noneExcluded,
+      size(100),
+      100
+    )
+
+    expect(d.evict.map((c: MapCandidate): string => c.path)).toEqual(['drop'])
+  })
 })
