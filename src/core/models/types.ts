@@ -181,6 +181,10 @@ export interface IPlanetRenderingObject {
   // Начало fade = 0.4 × конца, зашито в PlanetShader (не отдельная ручка).
   detailFadeMeters?: number
   detailFade2Meters?: number
+
+  // Cavity-затемнение альбедо из канала B slope-карты (арка slope-cavity,
+  // Task 2/3). Отсутствие поля = 0 — путь бит-в-бит прежним (PlanetMaterial).
+  cavityStrength?: number
 }
 
 export type IAtmosphereRenderingObject = AtmosphereConfig

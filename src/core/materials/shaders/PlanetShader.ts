@@ -60,6 +60,7 @@ interface PlanetUniforms {
   uDetailAoInfluence: number
   uDetailLayerGates: Vector3
   uDetailFadeRange: Vector4
+  uCavityStrength: number
   shadowRingsInnerRadius: number
   shadowRingsOuterRadius: number
   shadowRingsTexture: Texture | null
@@ -129,6 +130,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uDetailBrightness: new Uniform(planetData.detailBrightness ?? DEFAULT_DETAIL_BRIGHTNESS),
       uDetailAoInfluence: new Uniform(planetData.detailAoInfluence ?? DEFAULT_DETAIL_AO_INFLUENCE),
       uDetailLayerGates: new Uniform(new Vector3(0, 0, 0)),
+      uCavityStrength: new Uniform(0),
       uDetailFadeRange: new Uniform(
         new Vector4(
           detailFadeEndUnits * DETAIL_FADE_START_RATIO,

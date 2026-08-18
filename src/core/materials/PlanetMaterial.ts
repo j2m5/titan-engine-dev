@@ -5,6 +5,7 @@ import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
 import { Texture } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
+import { IPlanetRenderingObject } from '@/core/models/types'
 
 class PlanetMaterial extends AbstractShaderMaterial {
   public model: Actor
@@ -72,6 +73,19 @@ class PlanetMaterial extends AbstractShaderMaterial {
     const slopeMap = textureOf('slope')
     const legacyBumpMap = textureOf('bump')
     const bumpMap: Texture | undefined = hasHeightField ? slopeMap : legacyBumpMap
+    const useSlope = hasHeightField && Boolean(slopeMap)
+
+    // Cavity-затемнение альбедо (арка slope-cavity, канал B slope-карты) —
+    // ручка пер-тела, отсутствие поля = 0 (Task 3 её пока не расставляет).
+    // Юниформ форвардится из data независимо от гейта ниже: значение само по
+    // себе безвредно, шейдер читает его только под USE_CAVITY.
+    const planetData: IPlanetRenderingObject = (this.model.renderingObject?.getAttribute('data') as
+      | IPlanetRenderingObject
+      | undefined) ?? {
+      bumpScale: 0,
+      emission: 1
+    }
+    const cavityStrength = planetData.cavityStrength ?? 0
 
     // Терраформный детальный слой (задача 4, чанк TerrainDetail): крупная
     // нормаль — база слоя, её наличие и есть условие USE_TERRAIN_DETAIL.
@@ -89,6 +103,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.cloudMap.value = cloudMap
     this.uniforms.specularMap.value = specularMap
     this.uniforms.bumpMap.value = bumpMap
+    this.uniforms.uCavityStrength.value = cavityStrength
 
     this.uniforms.uDetailNorMap.value = detailNorMap ?? null
     this.uniforms.uDetailDiffMap.value = detailDiffMap ?? null
@@ -112,12 +127,15 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.defines = {
       ...this.baseDefines,
       ...(useClassicBump && { USE_BUMP: '1' }),
-      ...(hasHeightField && slopeMap && { USE_SLOPE: '1' }),
+      ...(useSlope && { USE_SLOPE: '1' }),
       // Попиксельный UV из направления вместо вершинного vUv — вершинная
       // развёртка кубосферы вырождается у полюсов (см. PlanetShaderTemplate).
       // Тот же реестр карт высот, что решает геометрию TerrainSphere.
       ...(hasHeightField && { USE_TERRAIN_UV: '1' }),
       ...(USE_TERRAIN_DETAIL && { USE_TERRAIN_DETAIL: '1' }),
+      // Гейт: тот же slope, что USE_SLOPE (без него канал B недоступен), И
+      // ненулевая ручка — при cavityStrength 0 путь бит-в-бит прежним.
+      ...(useSlope && cavityStrength > 0 && { USE_CAVITY: '1' }),
       ...(specularMap && { USE_SPECULAR: '1' }),
       ...(nightMap && { USE_NIGHT: '1' }),
       ...(cloudMap && { USE_CLOUD: '1' })
@@ -133,6 +151,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.specularMap.value = null
     this.uniforms.bumpMap.value = null
     this.uniforms.uBumpTexelSize.value.set(0, 0)
+    this.uniforms.uCavityStrength.value = 0
 
     this.uniforms.uDetailNorMap.value = null
     this.uniforms.uDetailDiffMap.value = null
