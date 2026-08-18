@@ -70,6 +70,9 @@ export function buildCavityField(map: HeightMapData): Float64Array {
   const sum = new Float64Array(width * height)
 
   for (const [sigmaHighTexels, sigmaLowTexels] of BAND_SIGMAS) {
+    // Порядок аргументов ОБРАТЕН порядку в тюпле: сигнатура ждёт (sigmaLow, sigmaHigh).
+    // Перестановка меняет ЗНАК полосы (зеркало «яма светлит»), а глобально картинка
+    // выглядит правдоподобно — ловится только численно (ревью арки воспроизводило).
     const band = bandPassSpherical(field, width, height, sigmaLowTexels, sigmaHighTexels)
     const p99 = percentile99Abs(band)
     if (p99 === 0) continue // полоса нулевая (например, идеально плоское поле) — пропуск, а не деление на ноль
