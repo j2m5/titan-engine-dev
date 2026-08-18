@@ -19,13 +19,13 @@ function rowLatitude(y: number, height: number): number {
 describe('buildSlopeMap: честные уклоны из карты высот', () => {
   const R = 1000
 
-  it('плоская карта кодируется нейтральным байтом 128, синий канал нулевой', () => {
+  it('плоская карта кодируется нейтральным байтом 128 на R/G; с cavity:false синий канал нулевой', () => {
     // точное равенство переживает дизер намеренно: честный ноль квантуется в
     // целое число МЗР без остатка, а дизер добавляет смещение из [-0.5, 0.5) —
     // round(n + u) для целого n и u из этого интервала всегда возвращает n
     // (интервал целиком лежит в одной корзине округления). Дизер рассеивает
     // только ДРОБНУЮ часть кванта — см. describe('дизер квантования') ниже
-    const rgb = buildSlopeMap(makeMap(4, 2, new Array(8).fill(30000)), R)
+    const rgb = buildSlopeMap(makeMap(4, 2, new Array(8).fill(30000)), R, { cavity: false })
 
     expect(rgb.length).toBe(4 * 2 * 3)
     for (let i = 0; i < rgb.length; i += 3) {
@@ -33,6 +33,14 @@ describe('buildSlopeMap: честные уклоны из карты высот'
       expect(rgb[i + 1]).toBe(128)
       expect(rgb[i + 2]).toBe(0)
     }
+  })
+
+  it('плоская карта с cavity (дефолт): B тоже нейтральный байт 128, а не 0 — полости на плоском поле нет, но канал заполнен', () => {
+    // плоское поле → buildCavityField даёт честный ноль (см. cavityMap.spec.ts),
+    // а encode(0, ...) квантуется в 128 тем же путём, что и R/G
+    const rgb = buildSlopeMap(makeMap(4, 2, new Array(8).fill(30000)), R)
+
+    for (let i = 0; i < rgb.length; i += 3) expect(rgb[i + 2]).toBe(128)
   })
 
   it('восточный подъём даёт уклон Δh на длину дуги данной широты', () => {
@@ -149,6 +157,44 @@ describe('buildSlopeMap: честные уклоны из карты высот'
   })
 })
 
+describe('паритет { cavity: false } с реализацией ДО появления канала B', () => {
+  // Эталон зафиксирован ДО правки энкодера (честный RED): запущен текущий на
+  // тот момент buildSlopeMap на рукодельной карте 6×4 с неоднородным рельефом
+  // (data[i] = round(5000 + 1000·sin(0.7x + 1.3y) + 500y + 200x)), радиус
+  // 4000 м — байты скопированы из фактического вывода один в один.
+  const width = 6
+  const height = 4
+  const data = [
+    5000, 5844, 6385, 6463, 6135, 5649, 6464, 6609, 6327, 5844, 5482, 5504, 6516, 6042, 5643, 5600, 6027, 6818, 5812,
+    5706, 6068, 6821, 7705, 8399,
+  ]
+  const expectedRgb = [
+    131, 99, 0, 155, 113, 0, 140, 130, 0, 123, 141, 0, 112, 141, 0, 106, 131, 0, 137, 113, 0, 127, 126, 0, 122, 135,
+    0, 121, 136, 0, 125, 129, 0, 136, 116, 0, 122, 135, 0, 121, 137, 0, 124, 130, 0, 132, 118, 0, 138, 106, 0, 132,
+    99, 0, 75, 142, 0, 133, 135, 0, 150, 120, 0, 161, 103, 0, 159, 94, 0, 90, 96, 0,
+  ]
+
+  it('{ cavity: false } воспроизводит эталон байт-в-байт (R/G как раньше, B нулевой)', () => {
+    const map = makeMap(width, height, data)
+    const rgb = buildSlopeMap(map, 4000, { cavity: false })
+
+    expect(Array.from(rgb)).toEqual(expectedRgb)
+  })
+
+  it('дефолт (без options) отличается от паритетного эталона только каналом B', () => {
+    const map = makeMap(width, height, data)
+    const rgb = buildSlopeMap(map, 4000)
+
+    for (let i = 0; i < rgb.length; i += 3) {
+      expect(rgb[i]).toBe(expectedRgb[i]) // R не тронут
+      expect(rgb[i + 1]).toBe(expectedRgb[i + 1]) // G не тронут
+    }
+    // B не константа 0 на неоднородном рельефе (иначе cavity не запёкся)
+    const bChannel = Array.from(rgb).filter((_, idx) => idx % 3 === 2)
+    expect(bChannel.some((b) => b !== 0)).toBe(true)
+  })
+})
+
 describe('дизер квантования: субквантовый сигнал не теряется целиком', () => {
   // широта 22.5° (rowY=2 из 4) — eastSpan=1, как в «арки честные» выше;
   // R и шаг высоты подобраны так, чтобы сырой уклон был меньше 0.5 МЗР —
@@ -211,5 +257,37 @@ describe('дизер квантования: субквантовый сигна
     const mean = sum / count
 
     expect(Math.abs(mean - expected)).toBeLessThan(Math.abs(expected) * 0.05)
+  })
+})
+
+describe('канал B: signed cavity, знак соответствует buildCavityField', () => {
+  it('яма темнее нейтрали (байт < 128), гребень светлее (байт > 128) в центре каждой формы', () => {
+    const bodyRadius = 1000
+    const width = 512
+    const height = 256
+    const cx = 256
+    const cy = 128
+    const sigma = 3
+    const baseline = 30000
+    const amplitude = 20000
+
+    const pitValues = new Array(width * height)
+    const bumpValues = new Array(width * height)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const dx = x - cx
+        const dy = y - cy
+        const g = Math.exp(-(dx * dx + dy * dy) / (2 * sigma * sigma))
+        pitValues[y * width + x] = Math.round(baseline - amplitude * g)
+        bumpValues[y * width + x] = Math.round(baseline + amplitude * g)
+      }
+    }
+
+    const pitRgb = buildSlopeMap(makeMap(width, height, pitValues), bodyRadius)
+    const bumpRgb = buildSlopeMap(makeMap(width, height, bumpValues), bodyRadius)
+
+    const centerIdx = (cy * width + cx) * 3 + 2
+    expect(pitRgb[centerIdx]).toBeLessThan(128)
+    expect(bumpRgb[centerIdx]).toBeGreaterThan(128)
   })
 })

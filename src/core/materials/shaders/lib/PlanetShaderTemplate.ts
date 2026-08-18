@@ -25,7 +25,8 @@ const defaultUniforms = {
   uDetailSaturation: new Uniform(0.15),
   uDetailBrightness: new Uniform(1),
   uDetailAoInfluence: new Uniform(0.5),
-  uDetailLayerGates: new Uniform(new Vector3(0, 0, 0))
+  uDetailLayerGates: new Uniform(new Vector3(0, 0, 0)),
+  uCavityStrength: new Uniform(0)
 }
 const ringShadowUniforms = AppUniformsChunk.ringShadowUniforms
 
@@ -102,6 +103,7 @@ export const PlanetShaderTemplate: ShaderProps = {
     uniform float uSpecularStrength;
     uniform float uNightThreshold;
     uniform float uNightSoftness;
+    uniform float uCavityStrength;
     // three не биндит normalMatrix во фрагментник автоматически (только в
     // вершинный пролог) — юниформ общий на программу, объявление здесь просто
     // делает его видимым этому шейдеру.
@@ -187,6 +189,16 @@ export const PlanetShaderTemplate: ShaderProps = {
 
         #ifdef USE_SLOPE
           nLocal = perturbNormalFromSlope(nLocal, eastLocal, uv);
+        #endif
+
+        #ifdef USE_CAVITY
+          // Полость запечена офлайн в канале B slope-карты (DoG-полосы
+          // рельефа, scripts/lib/cavityMap.ts): плюс — гребень (светлее),
+          // минус — яма (темнее). Декод БЕЗ множителя SLOPE_RANGE — контракт
+          // канала B отличается от R/G (см. slopeMapEncode.ts). Светонезависимый
+          // контраст рельефа — как AO, но без пересчёта на GPU.
+          float cavity = (texture2D(bumpMap, uv).z * 255.0 - 128.0) / 127.0;
+          albedoMul *= clamp(1.0 + uCavityStrength * cavity, 0.0, 2.0);
         #endif
 
         #ifdef USE_TERRAIN_DETAIL
