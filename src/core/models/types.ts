@@ -185,6 +185,15 @@ export interface IPlanetRenderingObject {
   // Cavity-затемнение альбедо из канала B slope-карты (арка slope-cavity,
   // Task 2/3). Отсутствие поля = 0 — путь бит-в-бит прежним (PlanetMaterial).
   cavityStrength?: number
+
+  /**
+   * Уровень воды, метры (арка water-foundation, Task 3+). Гейт водной
+   * оболочки в RenderableFactory: WaterSphere строится, когда у актора ЕСТЬ
+   * height-карта И это поле — число (может быть отрицательным, уровень ниже
+   * номинального радиуса тела — например, Явин IV −667.2 м). Отсутствие поля
+   * = воды нет вовсе, ноль расходов.
+   */
+  waterLevelMeters?: number
 }
 
 export type IAtmosphereRenderingObject = AtmosphereConfig

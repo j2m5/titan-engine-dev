@@ -1,5 +1,4 @@
-import { BufferAttribute, BufferGeometry, DynamicDrawUsage, Mesh } from 'three'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { BufferAttribute, BufferGeometry, DynamicDrawUsage, Material, Mesh } from 'three'
 import { buildPatchIndex, terrainPatchVertexCount } from './terrainPatchGeometry'
 
 /**
@@ -23,15 +22,20 @@ export type PatchHandle = { mesh: Mesh; geometry: BufferGeometry }
  * index-атрибут на все геометрии пула (та же экономия, что у TerrainSphere
  * этапа 3а). Свободные слоты держат геометрию живой между acquire —
  * освобождаются вместе с индексом только в dispose.
+ *
+ * Материал типизирован общим `Material`, не `PlanetMaterial` — пул сам с
+ * материалом не взаимодействует (только держит ссылку для `new Mesh`), а
+ * TerrainPatchGroup (общая база TerrainSphere/WaterSphere) передаёт сюда
+ * конкретный класс своего потребителя.
  */
 class TerrainPatchPool {
-  private readonly material: PlanetMaterial
+  private readonly material: Material
   private readonly segments: number
   private readonly index: BufferAttribute
   private readonly free: PatchHandle[] = []
   private readonly occupied = new Set<PatchHandle>()
 
-  public constructor(material: PlanetMaterial, segments: number) {
+  public constructor(material: Material, segments: number) {
     this.material = material
     this.segments = segments
     this.index = buildPatchIndex(segments)
