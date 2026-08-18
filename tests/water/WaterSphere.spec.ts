@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
-import { Mesh, PerspectiveCamera, Texture, Vector3, type WebGLRenderer } from 'three'
+import { Group, Mesh, PerspectiveCamera, Texture, Vector3, type WebGLRenderer } from 'three'
 import '@/core/framework/TitanThree'
-import { WaterSphere, WATER_RENDER_ORDER } from '@/core/renderables/Water/WaterSphere'
+import { WaterSphere, WATER_RENDER_ORDER, WATER_MAX_LIVE_PATCHES } from '@/core/renderables/Water/WaterSphere'
 import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
 import { TerrainPatchPool } from '@/core/terrain/TerrainPatchPool'
 import { TerrainSphere } from '@/core/renderables/TerrainSphere'
@@ -66,9 +66,41 @@ describe('WaterSphere: оболочка без смещения', { timeout: 300
     expect(sphere.children.filter((c) => c instanceof Mesh)).toHaveLength(24)
   })
 
-  it('поле константно: глубина дерева ограничена — набор НЕ растёт на посадочной дистанции', () => {
+  // Фикс-раунд 1 (ревью): до фикса ε константного поля был ≡0, дерево не
+  // делилось НИКОГДА — этот тест раньше цементировал сам дефект («24 всегда»).
+  // Честная пара: на посадочной дистанции набор РАСТЁТ (кривизна сферы даёт
+  // ненулевую ε — «деление по кривизне» из спеки), но самотерминируется —
+  // конечен, упирается в TERRAIN_QUADTREE_MAX_LEVEL задолго до потолка пула
+  // (замер отчёта: 60 патчей у Луны на этой дистанции при H=1080).
+  it('поле делится по кривизне сферы: на посадочной дистанции набор РАСТЁТ, но самотерминируется', () => {
     const sphere = new WaterSphere(moon(), -667.2, makeRenderer())
-    for (let f = 0; f < 60; f++) sphere.updateObject(makeCtx(0.05)) // 50 м над уровнем воды
+    for (let f = 0; f < 120; f++) sphere.updateObject(makeCtx(0.05)) // 50 м над уровнем воды
+    const count = sphere.children.filter((c) => c instanceof Mesh).length
+
+    expect(count).toBeGreaterThan(24)
+    expect(count).toBeLessThan(WATER_MAX_LIVE_PATCHES)
+  })
+
+  it('из космоса — ровно 24 патча (SSE уровня MIN_LEVEL уже ниже порога на орбитальной дистанции)', () => {
+    const sphere = new WaterSphere(moon(), -667.2, makeRenderer())
+    for (let f = 0; f < 30; f++) sphere.updateObject(makeCtx(500000))
+    expect(sphere.children.filter((c) => c instanceof Mesh)).toHaveLength(24)
+  })
+
+  // Находка №4 ревью: LOD.update() переключает .visible только у объектов,
+  // добавленных через addLevel (TerrainSphere), не у их детей — WaterSphere
+  // висит ребёнком TerrainSphere (RenderableFactory), собственный visible
+  // остаётся true всегда. TerrainPatchGroup.updateObject проверяет ещё и
+  // parent.visible — без этого дерево воды продолжало бы гонять
+  // selectTerrainNodes впустую на дистанции переключения на FakePlanet.
+  it('родитель скрыт (LOD спрятал уровень) — updateObject заморожен даже на посадочной дистанции', () => {
+    const parent = new Group()
+    parent.visible = false
+    const sphere = new WaterSphere(moon(), -667.2, makeRenderer())
+    parent.add(sphere)
+
+    for (let f = 0; f < 60; f++) sphere.updateObject(makeCtx(0.05))
+
     expect(sphere.children.filter((c) => c instanceof Mesh)).toHaveLength(24)
   })
 
@@ -82,10 +114,16 @@ describe('WaterSphere: оболочка без смещения', { timeout: 300
     expect(material.depthTest).toBe(true)
   })
 
-  it('renderOrder патчей — после суши (положительный, задан константой WATER_RENDER_ORDER)', () => {
+  // Фикс-раунд 1 (ревью, находка №2): renderOrder=10 клал воду ПОСЛЕ обоих
+  // атмосферных проходов (пропускание renderOrder=0, in-scatter=1,
+  // BrunetonAtmosphere) — океан не домножался на пропускание и закрашивал
+  // ореол лимба. Суша непрозрачна и рисуется раньше воды в любом случае
+  // (opaque/transparent-разделение three.js), отрицательный renderOrder
+  // упорядочивает воду ДО прозрачных проходов атмосферы.
+  it('renderOrder патчей — ДО атмосферных проходов (отрицателен)', () => {
     const sphere = new WaterSphere(moon(), -667.2, makeRenderer())
     const patch = sphere.children[0] as Mesh
-    expect(WATER_RENDER_ORDER).toBeGreaterThan(0)
+    expect(WATER_RENDER_ORDER).toBeLessThan(0)
     expect(patch.renderOrder).toBe(WATER_RENDER_ORDER)
   })
 

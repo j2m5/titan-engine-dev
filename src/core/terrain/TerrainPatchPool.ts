@@ -27,6 +27,10 @@ export type PatchHandle = { mesh: Mesh; geometry: BufferGeometry }
  * материалом не взаимодействует (только держит ссылку для `new Mesh`), а
  * TerrainPatchGroup (общая база TerrainSphere/WaterSphere) передаёт сюда
  * конкретный класс своего потребителя.
+ *
+ * Потолок живых патчей — необязательный аргумент (дефолт MAX_LIVE_PATCHES):
+ * WaterSphere просит свой, меньший (см. её докблок и WATER_MAX_LIVE_PATCHES)
+ * — водная оболочка не обязана терпеть тот же пик, что рельеф.
  */
 class TerrainPatchPool {
   private readonly material: Material
@@ -34,11 +38,13 @@ class TerrainPatchPool {
   private readonly index: BufferAttribute
   private readonly free: PatchHandle[] = []
   private readonly occupied = new Set<PatchHandle>()
+  private readonly maxLivePatches: number
 
-  public constructor(material: Material, segments: number) {
+  public constructor(material: Material, segments: number, maxLivePatches: number = MAX_LIVE_PATCHES) {
     this.material = material
     this.segments = segments
     this.index = buildPatchIndex(segments)
+    this.maxLivePatches = maxLivePatches
   }
 
   public get liveCount(): number {
@@ -46,7 +52,7 @@ class TerrainPatchPool {
   }
 
   public acquire(): PatchHandle | null {
-    if (this.occupied.size >= MAX_LIVE_PATCHES) return null
+    if (this.occupied.size >= this.maxLivePatches) return null
 
     const handle = this.free.pop() ?? this.createHandle()
     this.occupied.add(handle)

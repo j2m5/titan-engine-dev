@@ -63,11 +63,12 @@ abstract class TerrainPatchGroup extends Group {
   protected constructor(
     field: TerrainHeightField,
     material: Material,
-    private readonly renderer: WebGLRenderer
+    private readonly renderer: WebGLRenderer,
+    maxLivePatches?: number
   ) {
     super()
     this.field = field
-    this.pool = new TerrainPatchPool(material, TERRAIN_PATCH_SEGMENTS)
+    this.pool = new TerrainPatchPool(material, TERRAIN_PATCH_SEGMENTS, maxLivePatches)
 
     // минимальный набор всегда есть (быстрый старт) — MIN_LEVEL всегда
     // спускается безусловно, split пуст (история гистерезиса ещё не набрана)
@@ -82,7 +83,16 @@ abstract class TerrainPatchGroup extends Group {
   }
 
   public updateObject(ctx: UpdateContext): void {
-    if (!this.visible) return // невидимый уровень LOD — квадродерево заморожено
+    // невидимый уровень LOD — квадродерево заморожено. Проверка родителя
+    // нужна отдельно от своего visible: LOD.update() переключает .visible
+    // ТОЛЬКО у объектов, добавленных через addLevel (сама группа уровня —
+    // TerrainSphere), а не рекурсивно у их детей; WaterSphere висит ребёнком
+    // TerrainSphere (не отдельным уровнем LOD, см. RenderableFactory), её
+    // собственный visible остаётся true всегда — сцена traverse зовёт
+    // updateObject независимо от видимости предков. Один уровень вверх
+    // достаточен (родитель WaterSphere — ровно тот объект, чей visible LOD
+    // переключает); общего обхода до корня сцены здесь не требуется.
+    if (!this.visible || this.parent?.visible === false) return
 
     ctx.camera.updateMatrixWorld() // matrixWorld И matrixWorldInverse (Camera override)
     this.updateWorldMatrix(true, false)
