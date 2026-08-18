@@ -110,6 +110,9 @@ class SceneManager {
     }
 
     this.scene.traverse((object: Object3D): void => object.updateObject(ctx))
+  }
+
+  public updateMarkers(): void {
     this.markerManager.update()
   }
 }

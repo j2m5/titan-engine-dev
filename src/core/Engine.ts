@@ -180,6 +180,7 @@ class Engine {
 
     this.cameraCollision.resolve()
     this.labelRenderer.render(this.scene, this.renderCamera)
+    this.sceneManager.updateMarkers()
     this.postprocessing.render(delta)
 
     this.renderer.setAnimationLoop(this.boundOnFrameRendered)

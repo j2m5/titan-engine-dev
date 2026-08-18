@@ -23,6 +23,7 @@ function makeEngine() {
   const sceneManager = {
     initialize: vi.fn(),
     update: vi.fn((): void => void order.push('scene')),
+    updateMarkers: vi.fn((): void => void order.push('markers')),
     dispose: vi.fn(),
     crosshair: {}
   } as unknown as SceneManager
@@ -112,7 +113,7 @@ describe('Engine: подключение периодического перес
     expect(sceneObserver.tick).toHaveBeenCalledTimes(1)
   })
 
-  it('после обновления тел применяет follow-дельту, сдвигает историю коллизий и только затем рендерит', () => {
+  it('после обновления тел применяет follow-дельту, рендерит CSS2D и затем фильтрует маркеры', () => {
     const {
       engine,
       cameraController,
@@ -134,6 +135,15 @@ describe('Engine: подключение периодического перес
 
     expect(astroControls.setTarget).toHaveBeenCalledWith(targetPosition)
     expect(cameraCollision.translateReferenceFrame).toHaveBeenCalledWith(displacement)
-    expect(order).toEqual(['scene', 'observer', 'follow', 'translate', 'collision', 'labels', 'render'])
+    expect(order).toEqual([
+      'scene',
+      'observer',
+      'follow',
+      'translate',
+      'collision',
+      'labels',
+      'markers',
+      'render'
+    ])
   })
 })
