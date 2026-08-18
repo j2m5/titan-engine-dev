@@ -8,17 +8,20 @@ import { TERRAIN_PATCH_SEGMENTS } from '@/core/terrain/cubeSphere'
 // синтетической константной карте, не отдельная реализация интерфейса (см.
 // отчёт Task 3). geometricErrorMeters НЕ вырождается в 0 (фикс-раунд 1,
 // ревью): у поля без рельефа numerator SSE замещается провисом хорды
-// вершинного шага уровня L на сфере радиуса R — ε(L) = R·(1−cos(θ_L/2)),
+// ДИАГОНАЛИ мешевой ячейки уровня L на сфере радиуса R (фикс-раунд 2 —
+// осевой шаг занижал провис вдвое, конвенция та же, что у MAX(ns,ew,cross)
+// настоящего рельефа, см. докблок ConstantHeightField) —
+// ε(L) = R·(1−cos(θ_diag/2)), θ_diag = θ_L·√2,
 // θ_L = (π/2)/(2^L·TERRAIN_PATCH_SEGMENTS). Это и есть «деление по кривизне»
 // из спеки: дерево самотерминируется в фактической SSE-метрике без ручек.
 function expectedEpsilonMeters(radiusKm: number, level: number): number {
   const clamped = Math.min(Math.max(level, 1), 6)
-  const theta = Math.PI / 2 / (2 ** clamped * TERRAIN_PATCH_SEGMENTS)
+  const theta = (Math.PI / 2 / (2 ** clamped * TERRAIN_PATCH_SEGMENTS)) * Math.SQRT2
   return radiusKm * 1000 * (1 - Math.cos(theta / 2))
 }
 
 describe('constantHeightField: поле без рельефа (уровень воды)', () => {
-  it('geometricErrorMeters = провис хорды вершинного шага уровня — НЕ ноль, растёт с приближением к MIN_LEVEL', () => {
+  it('geometricErrorMeters = провис хорды диагонали ячейки уровня — НЕ ноль, растёт с приближением к MIN_LEVEL', () => {
     const radiusKm = 6360 // Земля (physicalObjects actorId 7)
     const field = constantHeightField(radiusKm, 0)
 
@@ -30,10 +33,17 @@ describe('constantHeightField: поле без рельефа (уровень в
     expect(field.geometricErrorMeters(1)).toBeGreaterThan(field.geometricErrorMeters(6))
   })
 
-  it('ε(1) Земли — сотни метров (порядок величины из ревью, ~239 м в центре квада уровня 1)', () => {
+  // Числа посчитаны руками (не через формулу модуля — независимая проверка):
+  // R=6360 км, θ_L(level)=(π/2)/(2^level·64), θ_diag=θ_L·√2,
+  // ε=R·1000·(1−cos(θ_diag/2)). Диагональ ровно вдвое хуже осевого шага
+  // (сагитта ∝ θ², (√2)²=2) — level 1 было 119.7 м осевым занижением
+  // (фикс-раунд 1), теперь 239.4 м; level 5/6 — 0.935/0.234 м, совпадает с
+  // пересчётом ревью фикс-раунда 2.
+  it('ε(level) Земли — хэндовые числа фикс-раунда 2 (диагональ, не ось)', () => {
     const field = constantHeightField(6360, 0)
-    expect(field.geometricErrorMeters(1)).toBeGreaterThan(50)
-    expect(field.geometricErrorMeters(1)).toBeLessThan(1000)
+    expect(field.geometricErrorMeters(1)).toBeCloseTo(239.449654, 5)
+    expect(field.geometricErrorMeters(5)).toBeCloseTo(0.935356, 5)
+    expect(field.geometricErrorMeters(6)).toBeCloseTo(0.233839, 5)
   })
 
   it('heightMeters ≡ уровень в любом направлении', () => {

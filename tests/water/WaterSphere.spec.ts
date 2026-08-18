@@ -71,14 +71,23 @@ describe('WaterSphere: оболочка без смещения', { timeout: 300
   // Честная пара: на посадочной дистанции набор РАСТЁТ (кривизна сферы даёт
   // ненулевую ε — «деление по кривизне» из спеки), но самотерминируется —
   // конечен, упирается в TERRAIN_QUADTREE_MAX_LEVEL задолго до потолка пула
-  // (замер отчёта: 60 патчей у Луны на этой дистанции при H=1080).
+  // (замер отчёта, фикс-раунд 2 — диагональная ε: 72 патча у Луны на этой
+  // дистанции при H=1080, максимальный уровень 5; осевая ε фикс-раунда 1
+  // занижала вдвое и останавливала дерево на уровне 4).
   it('поле делится по кривизне сферы: на посадочной дистанции набор РАСТЁТ, но самотерминируется', () => {
     const sphere = new WaterSphere(moon(), -667.2, makeRenderer())
     for (let f = 0; f < 120; f++) sphere.updateObject(makeCtx(0.05)) // 50 м над уровнем воды
-    const count = sphere.children.filter((c) => c instanceof Mesh).length
+    const meshes = sphere.children.filter((c) => c instanceof Mesh)
+    const maxLevel = Math.max(
+      ...meshes.map((m) => (m.userData.terrainAddress as { level: number } | undefined)?.level ?? 0)
+    )
 
-    expect(count).toBeGreaterThan(24)
-    expect(count).toBeLessThan(WATER_MAX_LIVE_PATCHES)
+    expect(meshes.length).toBeGreaterThan(24)
+    expect(meshes.length).toBeLessThan(WATER_MAX_LIVE_PATCHES)
+    // диагональная ε доходит до уровня 5 у Луны на этой дистанции (осевая
+    // ε фикс-раунда 1 останавливалась на уровне 4 — это и была находка №1
+    // ре-ревью: недооценка вдвое держала дерево на уровень мельче)
+    expect(maxLevel).toBe(5)
   })
 
   it('из космоса — ровно 24 патча (SSE уровня MIN_LEVEL уже ниже порога на орбитальной дистанции)', () => {
