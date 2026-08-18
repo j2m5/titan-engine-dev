@@ -20,6 +20,16 @@ interface WaterUniforms {
   uWaterFresnelTint: Color
 }
 
+/**
+ * Подмножество IPlanetRenderingObject, которое реально читает WaterShader —
+ * все четыре поля опциональны в самом интерфейсе, поэтому пустой объект `{}`
+ * — честный фолбэк без чужих (планетных) полей. Раньше фолбэк тащил
+ * `{ bumpScale: 0, emission: 1 }`, скопированные у PlanetShader, — Water их
+ * не читает никогда, поле было мёртвым и вводящим в заблуждение (находка
+ * ревью Task 4, фикс-раунд 1, №8).
+ */
+type WaterRenderingData = Pick<IPlanetRenderingObject, 'waterColor' | 'waterShallowColor' | 'waterAlphaDeep' | 'waterFresnelTint'>
+
 class WaterShader extends AbstractShader<keyof WaterUniforms> {
   private readonly model: Actor
 
@@ -31,20 +41,17 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
     // (schema БД не различает конфиги по категориям, форма утверждается
     // локально); отсутствие data целиком (актор без ручек) — нейтральный
     // фолбэк на дефолты движка, ноль ручек не должен ронять конструктор.
-    const planetData: IPlanetRenderingObject = (this.model.renderingObject?.getAttribute('data') as
-      | IPlanetRenderingObject
-      | undefined) ?? {
-      bumpScale: 0,
-      emission: 1
-    }
+    const waterData: WaterRenderingData = (this.model.renderingObject?.getAttribute('data') as
+      | WaterRenderingData
+      | undefined) ?? {}
 
     this.uniforms = {
       lightPosition: new Uniform(new Vector3()),
       uSlopeMap: new Uniform(null),
-      uWaterColor: new Uniform(new Color(planetData.waterColor ?? DEFAULT_WATER_COLOR)),
-      uWaterShallowColor: new Uniform(new Color(planetData.waterShallowColor ?? DEFAULT_WATER_SHALLOW_COLOR)),
-      uWaterAlphaDeep: new Uniform(planetData.waterAlphaDeep ?? DEFAULT_WATER_ALPHA_DEEP),
-      uWaterFresnelTint: new Uniform(new Color(planetData.waterFresnelTint ?? DEFAULT_WATER_FRESNEL_TINT))
+      uWaterColor: new Uniform(new Color(waterData.waterColor ?? DEFAULT_WATER_COLOR)),
+      uWaterShallowColor: new Uniform(new Color(waterData.waterShallowColor ?? DEFAULT_WATER_SHALLOW_COLOR)),
+      uWaterAlphaDeep: new Uniform(waterData.waterAlphaDeep ?? DEFAULT_WATER_ALPHA_DEEP),
+      uWaterFresnelTint: new Uniform(new Color(waterData.waterFresnelTint ?? DEFAULT_WATER_FRESNEL_TINT))
     }
     this.name = 'WaterShader'
   }

@@ -1,7 +1,8 @@
-import { describe, expect, it, afterEach } from 'vitest'
+import { describe, expect, it, afterEach, vi } from 'vitest'
 import { Texture, Vector3 } from 'three'
 import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
+import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
@@ -68,6 +69,19 @@ describe('WaterShaderTemplate: строковые ассерты (Френель
 
   it('«звезда в нуле»: lightPosition — юниформ, инициализированный нулевым вектором (не обновляется рантаймом движка)', () => {
     expect(WaterShaderTemplate.uniforms.lightPosition.value).toEqual(new Vector3())
+  })
+
+  // Ревью Task 4 (фикс-раунд 1, №3): те же константы, что пиннует
+  // FragmentUv.spec.ts для суши — общий чанк terrainUvFunctions, разъехаться
+  // между потребителями формула не может, но каждый потребитель проверяется
+  // отдельно (шаблоны разворачиваются независимо). Мутация M2 (обмен 2π ↔ π
+  // в TerrainUv.ts) валит и этот тест — проверено вручную вместе с
+  // FragmentUv.spec.ts, откат восстанавливает GREEN.
+  it('константы разворотов запиннены и в водном фрагментнике (общий чанк terrainUvFunctions)', () => {
+    const resolvedFrag = AbstractShader.prepareSource(frag)
+
+    expect(resolvedFrag).toContain('phi / 6.28318530717958647692')
+    expect(resolvedFrag).toContain('/ 3.14159265358979323846')
   })
 })
 
@@ -186,5 +200,58 @@ describe('WaterMaterial: гейт USE_WATER_DEPTH из slope-текстуры а
 
     expect(material.defines.USE_WATER_DEPTH).toBeUndefined()
     expect(material.uniforms.uSlopeMap.value).toBeNull()
+  })
+})
+
+// Ревью Task 4 (фикс-раунд 1, №1): resources.where(...) — ORM-джойн
+// belongsToMany (actorResource × resources), не бесплатный лукап. updateMaterial
+// зовётся КАЖДЫЙ активный кадр (WaterSphere.onVisibleUpdate) — гонять джойн
+// там означало бы полный ORM-проход на каждое видимое водное тело каждый
+// кадр. Путь обязан резолвиться РОВНО один раз в конструкторе и переживать
+// сколько угодно кадровых updateMaterial() без повторного обращения к
+// resources; resetMaterial — редкий путь (вытеснение диффуза), там повтор
+// допустим и даже полезен (свежит путь).
+describe('WaterMaterial: slope-путь резолвится один раз (не ORM-джойн на каждый кадр)', () => {
+  afterEach(() => resourceStorage.deleteAllTextures())
+
+  function stubActorWithSpy(): { actor: Actor; whereSpy: ReturnType<typeof vi.fn> } {
+    const whereSpy = vi.fn((_field: string, type: string) => ({
+      first: () => (type === 'slope' ? { getAttribute: () => SLOPE_PATH } : undefined)
+    }))
+    const actor = {
+      renderingObject: { getAttribute: () => ({}) },
+      resources: { where: whereSpy }
+    } as unknown as Actor
+
+    return { actor, whereSpy }
+  }
+
+  it('resources.where зовётся один раз в конструкторе, НЕ на каждый updateMaterial()', () => {
+    seedSlopeTexture()
+    const { actor, whereSpy } = stubActorWithSpy()
+
+    const material = new WaterMaterial(actor)
+    expect(whereSpy).toHaveBeenCalledTimes(1)
+
+    material.updateMaterial()
+    material.updateMaterial()
+    material.updateMaterial()
+
+    // ни один кадровый updateMaterial не тронул resources — джойн не повторён
+    expect(whereSpy).toHaveBeenCalledTimes(1)
+    expect(material.defines.USE_WATER_DEPTH).toBe('1') // сам гейт при этом работает штатно
+  })
+
+  it('resetMaterial освежает путь — второй (и только второй) вызов resources.where', () => {
+    const { actor, whereSpy } = stubActorWithSpy()
+    const material = new WaterMaterial(actor)
+    expect(whereSpy).toHaveBeenCalledTimes(1)
+
+    material.resetMaterial()
+    expect(whereSpy).toHaveBeenCalledTimes(2)
+
+    material.updateMaterial()
+    material.updateMaterial()
+    expect(whereSpy).toHaveBeenCalledTimes(2) // после resetMaterial кадровые вызовы всё ещё не трогают resources
   })
 })

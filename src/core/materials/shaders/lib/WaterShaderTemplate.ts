@@ -1,5 +1,5 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
-import { Color, ShaderChunk, Uniform, Vector3 } from 'three'
+import { Color, ShaderChunk, Uniform, UniformsUtils, Vector3 } from 'three'
 
 const defaultUniforms = {
   // «Звезда в нуле» — общедвижковая конвенция (см. BrunetonAtmosphere
@@ -17,7 +17,13 @@ const defaultUniforms = {
 }
 
 export const WaterShaderTemplate: ShaderProps = {
-  uniforms: { ...defaultUniforms },
+  // UniformsUtils.merge (не {...defaultUniforms}) — та же конвенция, что
+  // PlanetShaderTemplate: клонирует значения (Vector3/Color — новыми
+  // экземплярами), не только сам объект-контейнер. Мелкий spread оставлял бы
+  // ОДНИ И ТЕ ЖЕ Color/Vector3 инстансы у каждого потребителя шаблона —
+  // будущий второй экземпляр WaterShader получил бы алиасинг на юниформы
+  // первого (находка ревью Task 4, фикс-раунд 1, №7).
+  uniforms: UniformsUtils.merge([defaultUniforms]),
   vertexShader: `
     precision highp float;
 

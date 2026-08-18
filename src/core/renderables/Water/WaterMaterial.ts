@@ -35,6 +35,22 @@ class WaterMaterial extends AbstractShaderMaterial {
    */
   private hasWaterDepth = false
 
+  /**
+   * slope-путь актора — резолвится ОДИН раз (конструктор, освежается в
+   * resetMaterial), не на каждый кадр. `resources.where(...).first()` —
+   * ORM-джойн belongsToMany (actorResource × resources, фильтр по сотням
+   * строк + аллокации моделей/коллекций на каждый вызов), а updateMaterial
+   * зовётся КАЖДЫЙ активный кадр (WaterSphere.onVisibleUpdate) — гонять
+   * полный джойн ради значения, которое для одного актора не меняется
+   * (строки БД статичны), было бы платить его за каждое видимое водное тело
+   * каждый кадр впустую (находка ревью Task 4, фикс-раунд 1, №1). resetMaterial
+   * — редкий путь (ResourceObserver.evictPath зовёт его только при вытеснении
+   * диффуза, не каждый кадр) — там передержка джойна безвредна и держит
+   * инвариант «путь в памяти = путь в БД» на случай будущей смены набора
+   * ресурсов актора в рантайме (сейчас такого не бывает).
+   */
+  private slopePath: string | undefined
+
   public constructor(model: Actor, parameters?: ShaderMaterialParameters) {
     super({
       transparent: true,
@@ -43,6 +59,7 @@ class WaterMaterial extends AbstractShaderMaterial {
       ...parameters
     })
     this.model = model
+    this.slopePath = WaterMaterial.resolveSlopePath(model)
 
     const { uniforms, defines, vertexShader, fragmentShader } = new WaterShader(this.model)
 
@@ -53,16 +70,34 @@ class WaterMaterial extends AbstractShaderMaterial {
     this.baseDefines = { ...defines }
   }
 
+  private static resolveSlopePath(model: Actor): string | undefined {
+    const path = model.resources.where('resourceType', 'slope').first()?.getAttribute('path')
+
+    return typeof path === 'string' ? path : undefined
+  }
+
   /**
-   * Перечитывает slope-текстуру актора из resourceStorage по тому же пути,
-   * что PlanetMaterial берёт под bumpMap (см. её updateMaterial) — общий
-   * реестр, WaterMaterial не грузит ничего сам. Текстура может быть ещё не
-   * догружена (streamable) — тогда сэмплер остаётся null и USE_WATER_DEPTH
-   * не ставится (константный режим шаблона, см. WaterShaderTemplate).
+   * Перечитывает slope-текстуру актора из resourceStorage по закешированному
+   * пути (см. slopePath) — тот же реестр, что PlanetMaterial берёт под
+   * bumpMap, но без повторного ORM-джойна на каждый кадр. Текстура может
+   * быть ещё не догружена (streamable) — тогда сэмплер остаётся null и
+   * USE_WATER_DEPTH не ставится (константный режим шаблона, см.
+   * WaterShaderTemplate). Гейт не переспрашивает hasHeightField (в отличие
+   * от PlanetMaterial.useSlope) — WaterSphere существует только когда
+   * RenderableFactory.createPlanet уже проверил обе ручки разом (высота И
+   * waterLevelMeters, см. её докблок), дублировать проверку тут незачем.
+   *
+   * Диагностика для Task 6: тело с waterLevelMeters, чья slope-карта ещё НЕ
+   * пересобрана с флагом --water-level-meters (Task 1), несёт 3-канальную
+   * (RGB) текстуру — GPU-сэмплер `.a` такой текстуры отдаёт 1.0 по спеке
+   * WebGL (нет альфа-плейна = непрозрачно), а не «канала нет». Гейт по факту
+   * ставится (текстура ЕСТЬ в реестре), но depthA≡1.0 везде — визуально это
+   * совпадает с константным режимом (mix(shallow,deep,1)=deep), однако кодовый
+   * путь другой (USE_WATER_DEPTH=1, не #else) — если понадобится отличать
+   * «карты нет» от «карта старого формата», нужен отдельный маркер не отсюда.
    */
   public updateMaterial(): void {
-    const slopePath = this.model.resources.where('resourceType', 'slope').first()?.getAttribute('path')
-    const slopeMap: Texture | undefined = typeof slopePath === 'string' ? resourceStorage.getTexture(slopePath) : undefined
+    const slopeMap: Texture | undefined = this.slopePath ? resourceStorage.getTexture(this.slopePath) : undefined
 
     this.uniforms.uSlopeMap.value = slopeMap ?? null
 
@@ -78,6 +113,7 @@ class WaterMaterial extends AbstractShaderMaterial {
   }
 
   public resetMaterial(): void {
+    this.slopePath = WaterMaterial.resolveSlopePath(this.model)
     this.uniforms.uSlopeMap.value = null
     this.hasWaterDepth = false
     this.defines = { ...this.baseDefines }
