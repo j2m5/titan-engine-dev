@@ -15,16 +15,22 @@ import { argument } from './lib/cliArguments'
  * вдвое меньше PNG при бит-в-бит тех же текселях), остальное — PNG.
  *
  * Запуск: npm run build:slopemap -- --in <файл .raw> --out <файл .webp|.png>
- *   --radius-meters <радиус тела в метрах>
+ *   --radius-meters <радиус тела в метрах> [--cavity on|off]
  *
  * Луна: npm run build:slopemap -- --in moon_height.raw --out moon_slope.webp
  *   --radius-meters 1737400
  * Залить в бакет: s3://textures/planets/moon/moon_slope.webp
+ *
+ * --cavity: по умолчанию on — канал B несёт signed cavity рельефа (см.
+ *   scripts/lib/cavityMap.ts). --cavity off — паритетный режим для
+ *   фотомозаичных тел (Меркурий, Венера, Марс, Луна): канал B остаётся
+ *   нулевым, выход байт-в-байт как до появления cavity.
  */
 
 const input: string | undefined = argument('in')
 const output: string | undefined = argument('out')
 const radiusArg = argument('radius-meters')
+const cavityArg = argument('cavity')
 
 if (!input || !output || radiusArg === undefined) {
   console.error('Нужны --in <файл .raw>, --out <файл .png> и --radius-meters <метры>')
@@ -38,15 +44,22 @@ if (!Number.isFinite(radiusMeters) || radiusMeters <= 0) {
   process.exit(1)
 }
 
+if (cavityArg !== undefined && cavityArg !== 'on' && cavityArg !== 'off') {
+  console.error('Флаг --cavity принимает только on|off, получено:', cavityArg)
+  process.exit(1)
+}
+
+const cavity = cavityArg !== 'off'
+
 // Buffer может быть вью в пуле с ненулевым byteOffset — parseHeightMap ждёт
 // ArrayBuffer, начинающийся с заголовка, поэтому режем явно.
 const raw = await readFile(input)
 const map = parseHeightMap(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer)
-const rgb = buildSlopeMap(map, radiusMeters)
+const rgb = buildSlopeMap(map, radiusMeters, { cavity })
 
 const image = sharp(Buffer.from(rgb.buffer), { raw: { width: map.width, height: map.height, channels: 3 } })
 
 await (output.endsWith('.webp') ? image.webp({ lossless: true, effort: 6 }) : image.png({ compressionLevel: 9 }))
   .toFile(output)
 
-console.log(`записано ${output}: ${map.width}×${map.height}, радиус ${radiusMeters} м`)
+console.log(`записано ${output}: ${map.width}×${map.height}, радиус ${radiusMeters} м, cavity=${cavity ? 'on' : 'off'}`)

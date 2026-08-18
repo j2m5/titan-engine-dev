@@ -1,13 +1,16 @@
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
+import { buildCavityField } from './cavityMap'
 
 export { SLOPE_RANGE }
 
 /**
  * Slope-карта из карты высот: на каждый тексель — безразмерный уклон
  * поверхности (Δh на метр дуги) центральной разностью. R — уклон на восток,
- * G — на север (строка 0 = север, как в TEHM), B — ноль. Кодировка знаковая:
- * байт 128 = 0, 1..255 = −SLOPE_RANGE..+SLOPE_RANGE — ноль представим точно.
+ * G — на север (строка 0 = север, как в TEHM), B — signed cavity рельефа
+ * (гребень светлее, яма темнее — см. cavityMap.ts), опционально нулевая.
+ * Кодировка знаковая: байт 128 = 0, 1..255 = −SLOPE_RANGE..+SLOPE_RANGE —
+ * ноль представим точно.
  *
  * Арки честные: восточная дуга делится на cos широты. Широта строки — по
  * полутексельной конвенции GPU (центр текселя на y+0.5): потребитель —
@@ -22,6 +25,15 @@ export { SLOPE_RANGE }
  * билинейка) сходится к истинной величине. Формат и декодер не меняются:
  * round(n + u), u из [-0.5, 0.5) - целые значения МЗР (честный ноль, кламп
  * диапазона) воспроизводятся точно, дизер трогает только дробный остаток.
+ *
+ * Канал B переиспользует ТОТ ЖЕ квантователь `encode`, что и R/G, поэтому
+ * значение cavity ∈ [−1, 1] домножается на SLOPE_RANGE перед вызовом — сам
+ * `encode` делит на SLOPE_RANGE обратно (это его контракт для уклонов), и
+ * без компенсирующего умножения cavity=±1 квантовался бы только в байты
+ * 128±63.5 (диапазон уклонов вдвое шире диапазона cavity). С умножением
+ * cavity=−1 → байт 1, cavity=+1 → байт 255 — та же точность и тот же дизер
+ * (хеш с channel=2), что и у R/G. Потребитель канала B декодирует его БЕЗ
+ * повторного умножения на SLOPE_RANGE: (byte−128)/127 сразу даёт cavity.
  */
 
 /** Раунд finalizer-миксера дизера: умножение на нечётную константу + ксор-сдвиг для лавинного перемешивания битов. */
@@ -41,7 +53,11 @@ function ditherHash01(x: number, y: number, channel: number): number {
   return (h >>> 0) / 0x100000000
 }
 
-export function buildSlopeMap(map: HeightMapData, radiusMeters: number): Uint8Array {
+export function buildSlopeMap(
+  map: HeightMapData,
+  radiusMeters: number,
+  options?: { cavity?: boolean }
+): Uint8Array {
   if (!Number.isFinite(radiusMeters) || radiusMeters <= 0) {
     throw new Error(`Радиус тела невалиден: ${radiusMeters}`)
   }
@@ -50,6 +66,9 @@ export function buildSlopeMap(map: HeightMapData, radiusMeters: number): Uint8Ar
   const metersPerRaw = (maxMeters - minMeters) / 65535
   const northArc = (Math.PI * radiusMeters) / height
   const out = new Uint8Array(width * height * 3)
+  // дефолт true (арка cavity); { cavity: false } — паритетный режим, канал B
+  // остаётся нулевым (Uint8Array уже заполнен нулями) байт-в-байт как раньше
+  const cavityField = (options?.cavity ?? true) ? buildCavityField(map) : null
 
   const encode = (slope: number, x: number, y: number, channel: number): number => {
     const clamped = Math.max(-SLOPE_RANGE, Math.min(SLOPE_RANGE, slope))
@@ -87,6 +106,7 @@ export function buildSlopeMap(map: HeightMapData, radiusMeters: number): Uint8Ar
       const i = (row + x) * 3
       out[i] = encode(slopeEast, x, y, 0)
       out[i + 1] = encode(slopeNorth, x, y, 1)
+      if (cavityField) out[i + 2] = encode(cavityField[row + x] * SLOPE_RANGE, x, y, 2)
     }
   }
 
