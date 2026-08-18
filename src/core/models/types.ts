@@ -194,6 +194,19 @@ export interface IPlanetRenderingObject {
    * = воды нет вовсе, ноль расходов.
    */
   waterLevelMeters?: number
+
+  // --- Ручки WaterMaterial (арка water-foundation, Task 4). Все опциональны:
+  // отсутствие → нейтральные дефолты движка (WaterShader). Цвета — число
+  // 0xRRGGBB или строка '#rrggbb', та же конвенция, что dustColor кольца.
+
+  /** Цвет глубокой воды (депонирована каналом A slope-карты → 1) */
+  waterColor?: number | string
+  /** Цвет мелкой воды/уреза (канал A → 0); без slope-карты не используется */
+  waterShallowColor?: number | string
+  /** Непрозрачность глубокой воды, 0..1. Без slope-карты — константная альфа тела целиком. */
+  waterAlphaDeep?: number
+  /** Тинт на грани тела (Френель) — грубая замена честному отражению неба */
+  waterFresnelTint?: number | string
 }
 
 export type IAtmosphereRenderingObject = AtmosphereConfig

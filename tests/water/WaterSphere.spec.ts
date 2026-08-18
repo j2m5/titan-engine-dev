@@ -182,6 +182,51 @@ describe('WaterSphere: оболочка без смещения', { timeout: 300
     expect(disposeSpy).toHaveBeenCalledTimes(1)
     disposeSpy.mockRestore()
   })
+
+  // Task 4: slope-текстура актора стримится асинхронно (ResourceObserver
+  // видит только node.renderable — TerrainSphere, не её ребёнка WaterSphere,
+  // см. докблок WaterMaterial.updateMaterial/task-3-report concern №3).
+  // onVisibleUpdate (хук TerrainPatchGroup) — точка, где WaterSphere сама
+  // освежает гейт материала каждый кадр вместо ожидания чужого коллбэка.
+  describe('WaterSphere: гейт USE_WATER_DEPTH освежается через onVisibleUpdate (slope-текстура стримится позже конструктора)', () => {
+    const MOON_SLOPE_PATH = 'planets/moon/moon_slope.webp' // resources.ts, actorId 19
+
+    it('в конструкторе slope ещё не в resourceStorage — материал в константном режиме', () => {
+      const sphere = new WaterSphere(moon(), -667.2, makeRenderer())
+      expect(sphere.material.defines.USE_WATER_DEPTH).toBeUndefined()
+    })
+
+    it('текстура догрузилась ПОСЛЕ конструктора — первый же updateObject подхватывает гейт', () => {
+      const sphere = new WaterSphere(moon(), -667.2, makeRenderer())
+      expect(sphere.material.defines.USE_WATER_DEPTH).toBeUndefined()
+
+      const texture = new Texture()
+      texture.name = MOON_SLOPE_PATH
+      texture.image = { width: 4, height: 2 }
+      resourceStorage.addTexture(texture)
+
+      sphere.updateObject(makeCtx(500000))
+
+      expect(sphere.material.defines.USE_WATER_DEPTH).toBe('1')
+      expect(sphere.material.uniforms.uSlopeMap.value).toBe(texture)
+    })
+
+    it('родитель скрыт (LOD спрятал уровень) — гейт не освежается, тот же гвард видимости, что у дерева', () => {
+      const parent = new Group()
+      parent.visible = false
+      const sphere = new WaterSphere(moon(), -667.2, makeRenderer())
+      parent.add(sphere)
+
+      const texture = new Texture()
+      texture.name = MOON_SLOPE_PATH
+      texture.image = { width: 4, height: 2 }
+      resourceStorage.addTexture(texture)
+
+      sphere.updateObject(makeCtx(500000))
+
+      expect(sphere.material.defines.USE_WATER_DEPTH).toBeUndefined()
+    })
+  })
 })
 
 // Гейт фабрики: height-карта И waterLevelMeters в data — обе ручки нужны разом.

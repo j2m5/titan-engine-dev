@@ -94,6 +94,8 @@ abstract class TerrainPatchGroup extends Group {
     // переключает); общего обхода до корня сцены здесь не требуется.
     if (!this.visible || this.parent?.visible === false) return
 
+    this.onVisibleUpdate()
+
     ctx.camera.updateMatrixWorld() // matrixWorld И matrixWorldInverse (Camera override)
     this.updateWorldMatrix(true, false)
 
@@ -201,6 +203,19 @@ abstract class TerrainPatchGroup extends Group {
    * WaterSphere здесь ставит renderOrder и снимает clickable.
    */
   protected configurePatchMesh(_mesh: Mesh): void {}
+
+  /**
+   * Хук наследника: вызывается РОВНО когда дерево фактически проснётся в
+   * этом кадре (после гварда видимости, до самого отбора/построек) — не
+   * реже, не чаще. WaterSphere здесь освежает гейт USE_WATER_DEPTH своего
+   * материала (slope-текстура актора стримится асинхронно и приходит уже
+   * ПОСЛЕ конструктора — см. WaterMaterial.updateMaterial): без хука либо
+   * пришлось бы дублировать здесь же гвард видимости (дрейф двух копий
+   * условия), либо материал никогда не узнал бы о догрузившейся текстуре
+   * (ResourceObserver видит только node.renderable — TerrainSphere, не её
+   * ребёнка). TerrainSphere хук не переопределяет — поведение не меняется.
+   */
+  protected onVisibleUpdate(): void {}
 
   private warnPoolExhausted(): void {
     if (this.poolExhaustedWarned) return

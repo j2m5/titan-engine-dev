@@ -42,9 +42,9 @@ export const WATER_MAX_LIVE_PATCHES = 256
  * радиуса R+уровень (уровень может быть отрицательным — например, Явин IV
  * −667.2 м, см. измерение Task 2). Квадродерево/пул/юбки — TerrainPatchGroup,
  * общая база с TerrainSphere (см. её докблок про инвариант «без дыр» и
- * владение пулом); здесь только то, что отличает воду: свой временный
- * материал (WaterMaterial, Task 4 заменит на честный шейдер — см. её
- * докблок), renderOrder до атмосферы (см. WATER_RENDER_ORDER), свой
+ * владение пулом); здесь только то, что отличает воду: свой материал
+ * (WaterMaterial — цвет/Френель/мелководье, см. её докблок), renderOrder до
+ * атмосферы (см. WATER_RENDER_ORDER), свой
  * (меньший) потолок пула (см. WATER_MAX_LIVE_PATCHES), патчи некликабельны
  * (вода не должна перехватывать выбор актора у рельефа под ней —
  * resolveCrosshairAnchor и клик-рейкаст собирают кандидатов по
@@ -77,7 +77,7 @@ class WaterSphere extends TerrainPatchGroup {
   public constructor(model: Actor, waterLevelMeters: number, renderer: WebGLRenderer) {
     const radiusKm: number = model.physicalObject!.getAttribute('radius')!
     const field = constantHeightField(radiusKm, waterLevelMeters)
-    const sharedMaterial = new WaterMaterial()
+    const sharedMaterial = new WaterMaterial(model)
 
     super(field, sharedMaterial, renderer, WATER_MAX_LIVE_PATCHES)
     this.model = model
@@ -96,6 +96,19 @@ class WaterSphere extends TerrainPatchGroup {
   protected configurePatchMesh(mesh: Mesh): void {
     mesh.renderOrder = WATER_RENDER_ORDER
     mesh.userData.clickable = false
+  }
+
+  /**
+   * Освежает гейт USE_WATER_DEPTH материала каждый раз, когда дерево реально
+   * просыпается (см. TerrainPatchGroup.onVisibleUpdate) — slope-текстура
+   * актора стримится асинхронно (ResourceObserver её не видит здесь, см.
+   * докблок класса и WaterMaterial.updateMaterial), поэтому на момент
+   * конструктора её почти наверняка ещё нет. Дешёвый lookup по хранилищу
+   * (см. WaterMaterial) — перекомпиляция шейдера случается только на
+   * фактической смене гейта, не на каждом кадре.
+   */
+  protected onVisibleUpdate(): void {
+    this.sharedMaterial.updateMaterial()
   }
 }
 
