@@ -13,6 +13,7 @@
     "downscale:cubemap": "vite-node scripts/downscale-cubemap.ts --",
     "build:heightmap": "vite-node scripts/build-heightmap.ts --",
     "build:slopemap": "vite-node scripts/build-slopemap.ts --",
+    "build:slopemaps-all": "vite-node scripts/rebuild-slopemaps.ts --",
     "build:synth-heightmap": "vite-node scripts/build-synth-heightmap.ts --",
     "build:moon-heightmaps": "vite-node scripts/batch-synth-heightmaps.ts --",
     "preview": "vite preview",

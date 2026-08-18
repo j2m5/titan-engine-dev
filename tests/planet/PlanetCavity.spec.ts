@@ -4,6 +4,9 @@ import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { Texture } from 'three'
+import { Resources } from '@storage/database/resources'
+import { ActorResource } from '@storage/database/actorResource'
+import { RenderingObjects } from '@storage/database/renderingObjects'
 
 // Строковые ассерты терраформной ветки шаблона — контракт Task 1 (report):
 // канал B декодится (byte-128)/127 БЕЗ множителя SLOPE_RANGE, знак «плюс —
@@ -225,5 +228,51 @@ describe('PlanetMaterial: проводка cavity (гейт USE_CAVITY, юниф
     withZero.updateMaterial()
 
     expect(withoutField.defines).toEqual(withZero.defines)
+  })
+})
+
+// Счётный инвариант данных (Task 3): охват выводится ПРОГРАММНО из БД —
+// акторы с height-ресурсом (путь заканчивается на _height.raw), минус
+// фотомозаичные {5, 6, 8, 19} (Меркурий, Венера, Марс, Луна — реальные DEM,
+// cavity им не полагается). Ожидание — ровно 44 тела.
+describe('Счётный инвариант: cavityStrength у 44 терраформных тел (Task 3)', () => {
+  const PHOTOMOSAIC_ACTOR_IDS: readonly number[] = [5, 6, 8, 19]
+
+  const heightActorIds = new Set(
+    ActorResource.filter((ar) => {
+      const resource = Resources.find((r) => r.id === ar.resourceId)
+
+      return resource?.resourceType === 'height' && resource.path.endsWith('_height.raw')
+    }).map((ar) => ar.actorId)
+  )
+
+  const coverageActorIds = [...heightActorIds].filter((id) => !PHOTOMOSAIC_ACTOR_IDS.includes(id))
+
+  it('охват — ровно 44 тела', () => {
+    expect(coverageActorIds.length).toBe(44)
+  })
+
+  it('у всех 44 тел охвата data.cavityStrength > 0', () => {
+    for (const actorId of coverageActorIds) {
+      const renderingObject = RenderingObjects.find((ro) => ro.actorId === actorId)
+
+      expect(renderingObject, `нет renderingObject для actorId ${actorId}`).toBeDefined()
+
+      const data = renderingObject!.data as { cavityStrength?: number }
+
+      expect(data.cavityStrength, `actorId ${actorId}: cavityStrength`).toBeGreaterThan(0)
+    }
+  })
+
+  it('у фотомозаичных тел {5, 6, 8, 19} поля cavityStrength нет', () => {
+    for (const actorId of PHOTOMOSAIC_ACTOR_IDS) {
+      const renderingObject = RenderingObjects.find((ro) => ro.actorId === actorId)
+
+      expect(renderingObject, `нет renderingObject для actorId ${actorId}`).toBeDefined()
+
+      const data = renderingObject!.data as { cavityStrength?: number }
+
+      expect(data.cavityStrength, `actorId ${actorId}: cavityStrength должен отсутствовать`).toBeUndefined()
+    }
   })
 })
