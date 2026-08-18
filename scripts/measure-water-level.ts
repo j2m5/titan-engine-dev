@@ -178,9 +178,6 @@ async function main(): Promise<void> {
 
   const heightSorted = Float64Array.from(heightMeters).sort()
 
-  let waterTexelsTotal = 0
-  for (let i = 0; i < count; i++) waterTexelsTotal += waterMask[i]
-
   interface Row {
     percentile: number
     levelMeters: number
