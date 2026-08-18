@@ -176,6 +176,7 @@ npm run build:heightmap -- --in storage/images/textures/megt90n000fb.img --out s
 npm run build:slopemap -- --in storage/images/textures/planets/mars/mars_height.raw --out storage/images/textures/planets/mars/mars_slope.webp --radius-meters 3390000
 ```
 → 8192×4096; доля не-нейтральных текселей (R≠128 или G≠128, RGB-скан webp) **59.12%** — заметно выше синтетики (Каллисто 33.3% после дизера), как и ожидалось у настоящего DEM с честной высокочастотной детализацией (mean|R-128|=0.79, mean|G-128|=0.79 из 127 возможных). Файлы НЕ закоммичены (текстуры гитигнорены): `mars_height.raw` 67 108 888 байт (64.00 МиБ), `mars_slope.webp` 13 050 694 байт (12.45 МиБ), оба в `storage/images/textures/planets/mars/`.
+Пометка (после арки cavity): при повторении команды выше добавить `--cavity off` — Марс фотомозаичный, полость ему не печём (дефолт `build:slopemap` теперь `cavity: true`).
 
 VRAM-довесок (slope, RGBA8+мипы ×4/3): синтетическая пятёрка +213.33 МиБ (задача 1) + Марс/Меркурий/Венера по +170.67 МиБ (8192×4096, задача 3) + Церера +10.67 МиБ (2048×1024, задача 3 раунд 4) = **+736.01 МиБ** — все девять тел арки посчитаны, довесок финальный.
 
@@ -187,12 +188,14 @@ VRAM-довесок (slope, RGBA8+мипы ×4/3): синтетическая п
    npm run build:slopemap -- --in storage/images/textures/planets/mercury/mercury_height.raw --out storage/images/textures/planets/mercury/mercury_slope.webp --radius-meters 2440000
    ```
    **ИСПОЛНЕНО в задаче 3 (раунд 3)**: высоты −5377.72…+4478.75 м — в допуске литературного ориентира (авто-детект `SCALE=0.5` из GDAL-тега подтверждён). NODATA не встретился (0 текселей). Slope: 8192×4096, не-нейтральных 83.47%. Файлы (не закоммичены): `mercury_height.raw` 67 108 888 байт (64.00 МиБ), `mercury_slope.webp` 13 191 920 байт (12.58 МиБ).
+   Пометка (после арки cavity): при повторении команды выше добавить `--cavity off` — Меркурий фотомозаичный, полость ему не печём (дефолт `build:slopemap` теперь `cavity: true`).
 2. **Венера** (R=6 051 800 м). Источник: USGS Astrogeology, «Venus Magellan Topography Global 4641m v02», GeoTIFF — страница `https://astrogeology.usgs.gov/search/map/Venus/Magellan/RadarProperties/Venus_Magellan_Topography_Global_4641m_v02`, файл `https://planetarymaps.usgs.gov/mosaic/Venus_Magellan_Topography_Global_4641m_v02.tif` (~65 МБ — порядок сходится с «~50 МБ» брифа). Литературный диапазон: −2951…+11687 м. Положить в `storage/images/textures/Venus_Magellan_Topography_Global_4641m_v02.tif`:
    ```
    npm run build:heightmap -- --in storage/images/textures/Venus_Magellan_Topography_Global_4641m_v02.tif --out storage/images/textures/planets/venus/venus_height.raw
    npm run build:slopemap -- --in storage/images/textures/planets/venus/venus_height.raw --out storage/images/textures/planets/venus/venus_slope.webp --radius-meters 6051800
    ```
    **ИСПОЛНЕНО в задаче 3 (раунд 3)**: высоты −2951…+11687 м — день-в-день с литературным ориентиром (`SCALE=1`/`OFFSET=0`, GDAL-тега метаданных у файла нет — дефолты сработали верно). NODATA (полюса/пробелы покрытия Magellan) — 2 781 024 текселя из 33 554 432 (**8.29%**), CLI-дефолт заменил их на 0 м (высота = опорная сфера), предупреждение напечатано при конвертации. Slope: 8192×4096, не-нейтральных 44.29% (ниже Меркурия — заполненные нулём NODATA-области плоские). Файлы (не закоммичены): `venus_height.raw` 67 108 888 байт (64.00 МиБ), `venus_slope.webp` 11 093 056 байт (10.58 МиБ).
+   Пометка (после арки cavity): при повторении команды выше добавить `--cavity off` — Венера фотомозаичная, полость ей не печём (дефолт `build:slopemap` теперь `cavity: true`).
 3. **Церера** (R=469 700 м). Источник: USGS Astrogeology, «Ceres Dawn FC2 HAMO Global DTM 137m» (60 ppd), GeoTIFF — страница `https://astrogeology.usgs.gov/search/map/ceres_dawn_fc2_hamo_global_dtm_137m`, файл `https://planetarymaps.usgs.gov/mosaic/Ceres_Dawn_FC_HAMO_DTM_DLR_Global_60ppd_Oct2016.tif`. Разрешение целевой карты — 2048×1024 (тело мало, конвейер режет размер прямо флагами `--width`/`--height`). Положить в `storage/images/textures/Ceres_Dawn_FC_HAMO_DTM_DLR_Global_60ppd_Oct2016.tif`:
    ```
    npm run build:heightmap -- --in storage/images/textures/Ceres_Dawn_FC_HAMO_DTM_DLR_Global_60ppd_Oct2016.tif --out storage/images/textures/planets/ceres/ceres_height.raw --width 2048 --height 1024 --offset-meters 300
@@ -340,9 +343,9 @@ planets/StarWars/korriban/korriban_height.raw       planets/StarWars/korriban/ko
    npm run build:heightmap -- --in storage/images/textures/LDEM_64.IMG --out storage/images/textures/moon_height.raw --in-width 23040 --in-height 11520 --scale-meters 0.5
    ```
 3. Залить результат (67 МБ) в Яндекс-бакет: `textures/planets/moon/moon_height.raw`.
-4. Собрать slope-карту и залить её в бакет (`textures/planets/moon/moon_slope.webp`, lossless, ~21 МБ):
+4. Собрать slope-карту и залить её в бакет (`textures/planets/moon/moon_slope.webp`, lossless, ~21 МБ). `--cavity off` обязателен: Луна — фотомозаичное тело (тени уже в диффузе, дефолт `build:slopemap` теперь печёт cavity и задвоил бы их, см. секцию «Cavity-канал slope-карты» выше):
    ```
-   npm run build:slopemap -- --in public/images/textures/planets/moon/moon_height.raw --out public/images/textures/planets/moon/moon_slope.webp --radius-meters 1737400
+   npm run build:slopemap -- --in public/images/textures/planets/moon/moon_height.raw --out public/images/textures/planets/moon/moon_slope.webp --radius-meters 1737400 --cavity off
    ```
    **Не деплоить до заливки обоих файлов**: стример катит ресурсы актора всё-или-ничего — 404 на slope-карте откатит и диффуз, Луна останется плейсхолдером.
 6. После этапа 4 — залить в бакет detail-сет из `storage/images/textures/terrain/` в `textures/terrain/`: `rocky_trail_diff.webp` (1.3 МБ), `rocky_trail_nor.webp` (7.1 МБ), `rocky_trail_arm.webp` (0.9 МБ), `moon_01_nor.webp` (8.0 МБ). Правило «не деплоить до заливки» распространяется и на detail-сет — те же ресурсы актора Луны, 404 на любом откатит все.

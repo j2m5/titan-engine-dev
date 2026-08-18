@@ -275,4 +275,23 @@ describe('Счётный инвариант: cavityStrength у 44 террафо
       expect(data.cavityStrength, `actorId ${actorId}: cavityStrength должен отсутствовать`).toBeUndefined()
     }
   })
+
+  // Фикс-волна финального ревью, находка 4: прежние два теста выше проверяют
+  // ручку ТОЛЬКО на множестве, выведенном из heightActorIds — лишняя ручка на
+  // теле ВНЕ этого множества (гигант, Земля, Явин IV — легаси-материал, никогда
+  // не несёт height-ресурс с суффиксом _height.raw) прошла бы обоими зелёной.
+  // Этот тест считает cavityStrength>0 по ВСЕЙ таблице RenderingObjects
+  // напрямую — единственный, кто ловит лишнюю ручку у тела вне охвата.
+  // Дискриминация подтверждена мутацией (руками, не в этом файле): временная
+  // строка cavityStrength: 0.35 у Нептуна (renderingObjects id 4, actorId 13,
+  // легаси-bump гигант) дала RED только на этом тесте, была отменена.
+  it('ровно 44 строки RenderingObjects несут cavityStrength (не только заявленный охват)', () => {
+    const withCavity = RenderingObjects.filter((ro) => {
+      const data = ro.data as { cavityStrength?: number }
+
+      return typeof data.cavityStrength === 'number' && data.cavityStrength > 0
+    })
+
+    expect(withCavity.length).toBe(44)
+  })
 })

@@ -4,9 +4,9 @@ import { Buffer } from 'node:buffer'
 import { writeFile } from 'node:fs/promises'
 import sharp from 'sharp'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
-import { buildSynthHeightField, type SynthHeightParams } from './lib/synthHeightMap'
-import { encodeHeightMap, normalizeToUint16 } from './lib/heightMapEncode'
-import { buildSlopeMap, SLOPE_RANGE } from './lib/slopeMapEncode'
+import { encodeHeightMap } from './lib/heightMapEncode'
+import { buildSlopeMap } from './lib/slopeMapEncode'
+import { synthesizeHeightAndSlope } from './lib/synthesizeSlope'
 import { autoCalibrateAmplitude, type CalibrationSample } from './lib/autoCalibrate'
 import { argument } from './lib/cliArguments'
 import { bandLowKmFor, boxDownsampleGreyscale, resolutionCeiling } from './lib/batchBodyRules'
@@ -20,7 +20,7 @@ import { bandLowKmFor, boxDownsampleGreyscale, resolutionCeiling } from './lib/b
  * ПЕР-ТЕЛО генераций, общий только вход-текстура, см. ниже; арка
  * terrain-standardization добавила финальные 19 — луны Сатурна/Урана и
  * оставшиеся тела Звёздных Войн/безымянные, см. докблок ниже). Математика
- * синтеза НЕ дублируется:
+ * синтеза НЕ дублируется: `synthesizeHeightAndSlope` (`scripts/lib/synthesizeSlope.ts`)
  * вызывает тот же библиотечный конвейер, что и одиночный
  * `build:synth-heightmap` (`buildSynthHeightField`, `buildSlopeMap`,
  * писатель TEHM `encodeHeightMap`).
@@ -522,63 +522,10 @@ function normalizeBytes(data: Buffer): Float64Array {
   return out
 }
 
-/**
- * RMS(tan) slope-карты — векторная величина по R(восток)/G(север) (B всегда
- * ноль). Считаем прямо на буфере `buildSlopeMap` — это байт-в-байт то, что
- * дальше пишется в lossless webp, раскодировка готового файла sharp'ом дала
- * бы те же числа; лишний файловый круг во время калибровки не нужен.
- */
-function measureRmsTan(rgb: Uint8Array, width: number, height: number): number {
-  const decode = (byte: number): number => ((byte - 128) / 127) * SLOPE_RANGE
-  const count = width * height
-  let sumSquares = 0
-
-  for (let i = 0; i < count; i++) {
-    const east = decode(rgb[i * 3])
-    const north = decode(rgb[i * 3 + 1])
-    sumSquares += east * east + north * north
-  }
-
-  return Math.sqrt(sumSquares / count)
-}
-
-/**
- * Один прогон конвейера: синтез поля высот → нормировка → slope-карта →
- * замер RMS(tan). `baseAmplitudeMeters` — параметр, а не константа модуля:
- * пост-коррекция по фактическому пику (см. `generateBody`) рескейлит и
- * подложку, не только bump-амплитуду.
- */
-function synthesize(
-  luminance: Float64Array,
-  width: number,
-  height: number,
-  radiusMeters: number,
-  seed: number,
-  bandLowKm: number,
-  bandHighKm: number,
-  baseAmplitudeMeters: number,
-  bumpAmplitudeMeters: number
-): { map: HeightMapData; slopeRgb: Uint8Array; rmsTan: number } {
-  const params: SynthHeightParams = {
-    widthTexels: width,
-    heightTexels: height,
-    radiusMeters,
-    seed,
-    baseAmplitudeMeters,
-    bumpAmplitudeMeters,
-    bandLowKm,
-    bandHighKm,
-    bumpSign: 1,
-    raw: false
-  }
-
-  const { heights, minMeters, maxMeters } = buildSynthHeightField(luminance, params)
-  const data = normalizeToUint16(Float32Array.from(heights), minMeters, maxMeters)
-  const map: HeightMapData = { width, height, minMeters, maxMeters, data }
-  const slopeRgb = buildSlopeMap(map, radiusMeters)
-
-  return { map, slopeRgb, rmsTan: measureRmsTan(slopeRgb, width, height) }
-}
+// measureRmsTan и synthesizeHeightAndSlope (синтез поля высот → нормировка →
+// slope-карта → замер RMS(tan), { cavity } пробрасывается в buildSlopeMap) —
+// вынесены в scripts/lib/synthesizeSlope.ts: без файлового ввода-вывода,
+// тестируемы напрямую (tests/scripts/synthesizeSlope.spec.ts), докблоки там.
 
 /** Полная генерация одного тела: даунсемпл → автокалибровка → запись height+slope → строка отчёта. */
 async function generateBody(body: BodyGeneration): Promise<ReportRow> {
@@ -592,8 +539,11 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
 
   let last: { map: HeightMapData; slopeRgb: Uint8Array } | undefined
 
+  // { cavity: false }: калибровка меряет только RMS(tan) (R/G), полость
+  // канала B тут не читается и была бы чистой потерей времени на каждой из
+  // до 3 итераций (см. докблок synthesizeHeightAndSlope).
   const generate = (bumpAmplitudeMeters: number): CalibrationSample => {
-    const result = synthesize(
+    const result = synthesizeHeightAndSlope(
       luminance,
       width,
       height,
@@ -602,7 +552,8 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
       bandLowKm,
       bandHighKm,
       BASE_AMPLITUDE_METERS,
-      bumpAmplitudeMeters
+      bumpAmplitudeMeters,
+      { cavity: false }
     )
     last = { map: result.map, slopeRgb: result.slopeRgb }
 
@@ -635,7 +586,9 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
     finalAmplitudeMeters = calibration.amplitudeMeters * rescale
     const rescaledBaseAmplitudeMeters = BASE_AMPLITUDE_METERS * rescale
 
-    const result = synthesize(
+    // { cavity: false }: этот прогон тоже только меряет rmsTan/peakMeters
+    // рескейленного поля — записываемый B ниже строится отдельным проходом.
+    const result = synthesizeHeightAndSlope(
       luminance,
       width,
       height,
@@ -644,13 +597,20 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
       bandLowKm,
       bandHighKm,
       rescaledBaseAmplitudeMeters,
-      finalAmplitudeMeters
+      finalAmplitudeMeters,
+      { cavity: false }
     )
     last = { map: result.map, slopeRgb: result.slopeRgb }
     finalRmsTan = result.rmsTan
     finalPeakMeters = peakMetersOf(result.map)
     peakClamped = true
   }
+
+  // Единственный проход с полостью (находка фикс-волны 3): калибровка и
+  // рескейл выше сознательно считали R/G без cavity — здесь пересчитываем
+  // финальную slope-карту ОДИН раз дефолтом buildSlopeMap (cavity: true), на
+  // уже готовой карте высот last.map — без повторного синтеза поля высот.
+  last.slopeRgb = buildSlopeMap(last.map, body.radiusMeters)
 
   const dir = path.dirname(body.inputPath)
   const heightPath = path.join(dir, `${body.name}_height.raw`)
