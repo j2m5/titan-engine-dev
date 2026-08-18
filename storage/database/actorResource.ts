@@ -7,7 +7,6 @@ export const ActorResource: IActorResource[] = [
   { id: 1, actorId: 5, resourceId: 20 },
   { id: 3, actorId: 6, resourceId: 22 },
   { id: 5, actorId: 7, resourceId: 24 },
-  { id: 6, actorId: 7, resourceId: 25 },
   { id: 7, actorId: 7, resourceId: 26 },
   { id: 8, actorId: 7, resourceId: 27 },
   { id: 9, actorId: 7, resourceId: 91 },
@@ -155,6 +154,14 @@ export const ActorResource: IActorResource[] = [
   { id: 182, actorId: 73, resourceId: 127 },
   { id: 183, actorId: 73, resourceId: 128 },
   { id: 184, actorId: 73, resourceId: 129 },
+  // Явин IV: возвращён с легаси-материала аркой воды (Task 6), зеркально
+  // хотфиксу отката 2026-08-17 — те же id, что до отката.
+  { id: 185, actorId: 83, resourceId: 152 },
+  { id: 186, actorId: 83, resourceId: 153 },
+  { id: 187, actorId: 83, resourceId: 126 },
+  { id: 188, actorId: 83, resourceId: 127 },
+  { id: 189, actorId: 83, resourceId: 128 },
+  { id: 190, actorId: 83, resourceId: 129 },
   { id: 191, actorId: 70, resourceId: 154 },
   { id: 192, actorId: 70, resourceId: 155 },
   { id: 193, actorId: 70, resourceId: 126 },
@@ -374,5 +381,13 @@ export const ActorResource: IActorResource[] = [
   { id: 403, actorId: 88, resourceId: 126 },
   { id: 404, actorId: 88, resourceId: 127 },
   { id: 405, actorId: 88, resourceId: 128 },
-  { id: 406, actorId: 88, resourceId: 129 }
+  { id: 406, actorId: 88, resourceId: 129 },
+  // Земля: терраформная арка воды (Task 6) — height+slope+4 общих detail-ресурса
+  // (126-129, те же, что у Луны и прочих терраформных тел).
+  { id: 407, actorId: 7, resourceId: 226 },
+  { id: 408, actorId: 7, resourceId: 227 },
+  { id: 409, actorId: 7, resourceId: 126 },
+  { id: 410, actorId: 7, resourceId: 127 },
+  { id: 411, actorId: 7, resourceId: 128 },
+  { id: 412, actorId: 7, resourceId: 129 }
 ]

@@ -63,7 +63,12 @@ export const RenderingObjects: IRenderingObject[] = [
   { id: 40, actorId: 98, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000, cavityStrength: 0.35 } },
   { id: 41, actorId: 99, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000, cavityStrength: 0.35 } },
   { id: 42, actorId: 28, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000, cavityStrength: 0.35 } },
-  { id: 43, actorId: 7, data: { emission: 1, bumpScale: 1.5 } },
+  // Земля: терраформная арка воды (Task 6) — bumpScale 1 (slope-путь честный,
+  // множитель не нужен), полный набор detail-ручек, waterLevelMeters 0
+  // (уровень моря, точный ноль — не замер, а определение). БЕЗ cavityStrength:
+  // фотомозаика (реальный снимок), тот же прецедент, что у Меркурия/Венеры/
+  // Марса/Луны.
+  { id: 43, actorId: 7, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000, waterLevelMeters: 0 } },
   { id: 44, actorId: 11, data: { emission: 1, bumpScale: 0.3 } },
   { id: 45, actorId: 14, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000, cavityStrength: 0.35 } },
   { id: 46, actorId: 16, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000, cavityStrength: 0.35 } },
@@ -103,6 +108,11 @@ export const RenderingObjects: IRenderingObject[] = [
   { id: 72, actorId: 112, data: { preset: "emission", seed: 6720, size: 19000, shape: "torus", shapeThickness: 0.3, shapeRotation: [22, 0, 12], axisRatios: [1, 1, 1], edgeFalloff: 0.3, density: 0.55, noise: { octaves: 5, frequency: 2, warpStrength: 0.3, ridged: 0.8, contrast: 2.2, worleyStrength: 0.6 }, quality: { bakeResolution: 192 }, palette: { stops: [{ t: 0, color: "#05121a" }, { t: 0.45, color: "#15707a" }, { t: 0.8, color: "#46d6c2" }, { t: 1, color: "#d6f6ee" }], secondary: "#8f3018", secondaryThreshold: 0.8, emissiveIntensity: 1.6, radialMix: 0.6, innerColor: "#3fe0c8", outerColor: "#d4462c" }, dust: { strength: 0.4, threshold: 0.62, color: "#050a10" } } },
   { id: 73, actorId: 114, data: { exposureBias: 1 } },
   { id: 74, actorId: 115, data: { preset: "emission", seed: 1618, size: 21000, shape: "hourglass", shapeThickness: 0.18, shapeRotation: [0, 0, 28], axisRatios: [0.8, 1, 0.8], edgeFalloff: 0.28, density: 0.6, noise: { octaves: 6, frequency: 2.4, warpStrength: 0.2, ridged: 1, contrast: 2.4, worleyStrength: 0.8 }, quality: { bakeResolution: 192 }, palette: { stops: [{ t: 0, color: "#12070a" }, { t: 0.45, color: "#8a4a1e" }, { t: 0.8, color: "#e08a3c" }, { t: 1, color: "#f8dcb0" }], secondary: "#a02810", secondaryThreshold: 0.78, emissiveIntensity: 1.6, radialMix: 0.6, innerColor: "#4fd8e0", outerColor: "#d05a24" }, dust: { strength: 0.5, threshold: 0.58, color: "#0a0508" } } },
+  // Явин IV: возвращён с легаси-материала аркой воды (Task 6), зеркально
+  // хотфиксу отката 2026-08-17 — cavityStrength и waterLevelMeters (−667.2,
+  // замер F1 по корреляции с диффузом — см. task-2-report.md) добавлены поверх
+  // прежних ручек детального слоя.
+  { id: 75, actorId: 83, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000, cavityStrength: 0.35, waterLevelMeters: -667.2 } },
   { id: 76, actorId: 70, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000, cavityStrength: 0.35 } },
   // Венера и Хаумеа не имели renderingObject-строки вовсе (Венера — без bump-карты,
   // Хаумеа — без bump вовсе) — Task 2 добавляет обеим полный набор ручек детального слоя,
