@@ -214,6 +214,19 @@ class TerrainHeightField {
     return toThreeJSUnits(this.radiusKm + this.heightMeters(dir) / 1000)
   }
 
+  /**
+   * Радиус водной оболочки в юнитах three.js: R + уровень, БЕЗ рельефа —
+   * та же геометрия, что и константное поле воды (`constantHeightField`), но
+   * вычисляется на лету по параметру, а не хранится: поле высот делится по
+   * (карта, радиус) в `terrainHeightFieldFor` и не знает уровня воды тела —
+   * несколько тел с одной картой могут иметь разные уровни (или не иметь его
+   * вовсе). Потребитель (`CameraCollision`) берёт max(surfaceRadiusUnits,
+   * этот радиус) там, где пол контакта обязан подниматься до воды.
+   */
+  public waterSurfaceRadiusUnits(waterLevelMeters: number): number {
+    return toThreeJSUnits(this.radiusKm + waterLevelMeters / 1000)
+  }
+
   /** Локальный запас на провис визуальной сетки в направлении dir̂, всегда ≥ CLEARANCE_MARGIN_METERS. */
   public clearanceMeters(dir: Vector3): number {
     const uv = this.dirToUv(dir, this.uvScratch)

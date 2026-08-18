@@ -64,7 +64,17 @@ abstract class TerrainPatchGroup extends Group {
     field: TerrainHeightField,
     material: Material,
     private readonly renderer: WebGLRenderer,
-    maxLivePatches?: number
+    maxLivePatches?: number,
+    /**
+     * Уровень воды тела, метры (Task 5, water-foundation) — ручка актора, не
+     * поля (см. докблок `TerrainHeightField.waterSurfaceRadiusUnits`).
+     * TerrainSphere передаёт свою (гейт SSE-потолка подводных патчей суши,
+     * см. `terrainQuadtreeSelect`); WaterSphere не передаёт вовсе — её
+     * собственное константное поле уже РАВНО уровню везде (h≡level), потолок
+     * там условие `h < level − margin` не пробивает никогда, поэтому лишний
+     * параметр ей не нужен.
+     */
+    private readonly waterLevelMeters?: number
   ) {
     super()
     this.field = field
@@ -113,7 +123,8 @@ abstract class TerrainPatchGroup extends Group {
       fovYRadians: degToRad(ctx.camera.fov),
       splitPixels: config('terrain.sseSplitPixels'),
       mergeFactor: config('terrain.sseMergeFactor'),
-      currentlySplit: this.persistedSplit
+      currentlySplit: this.persistedSplit,
+      waterLevelMeters: this.waterLevelMeters
     })
     this.persistedSplit = split
 

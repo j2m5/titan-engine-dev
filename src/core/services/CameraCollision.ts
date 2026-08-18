@@ -4,11 +4,22 @@ import type { SceneObserver } from '@/core/services/SceneObserver'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { CLEARANCE_MARGIN_METERS, terrainHeightFieldFor, type TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
+import { readRenderingData } from '@/core/helpers/renderingData'
+import type { IPlanetRenderingObject } from '@/core/models/types'
 
 export type Collider = {
   object: Object3D
   radius: number
   heightField?: TerrainHeightField
+  /**
+   * Уровень воды тела, метры (Task 5, water-foundation). Ручка актора
+   * (`renderingObject.data.waterLevelMeters`), не поля высот — поле делится
+   * по (карта, радиус) в `terrainHeightFieldFor` и уровня не знает (см. её
+   * докблок). Отсутствие ручки — воды нет, все три слоя коллизии (пуш-аут,
+   * поточечный марч, внешний консервативный марч по сетке клиренса) остаются
+   * бит-в-бит прежними (см. `withWaterFloor`).
+   */
+  waterLevelMeters?: number
 }
 
 /**
@@ -49,14 +60,31 @@ export function collectColliders(objects: Object3D[]): Collider[] {
     const map = typeof heightPath === 'string' ? heightFieldStorage.get(heightPath) : undefined
     const heightField = map ? terrainHeightFieldFor(map, radius) : undefined
 
+    // Уровень воды (Task 5) — ручка тела, не поля (см. докблок Collider);
+    // считается только для терраформных тел (без рельефа воду отделять не от чего)
+    const waterLevelMeters = heightField
+      ? readRenderingData<IPlanetRenderingObject>(model)?.waterLevelMeters
+      : undefined
+
     seen.add(model)
     colliders.push(
       heightField
         ? {
             object,
-            // широкая фаза: поверхность+клиренс нигде не выше maxH+maxClearance
-            radius: toThreeJSUnits(radius + heightField.maxMeters / 1000 + heightField.maxClearanceMeters / 1000),
-            heightField
+            // широкая фаза: поверхность+клиренс нигде не выше maxH+maxClearance —
+            // без ручки выражение бит-в-бит прежнее (heightField.maxMeters
+            // напрямую, без Math.max), с ручкой maxH заменяется на
+            // max(maxH, уровень) — на случай, если уровень воды когда-нибудь
+            // превысит максимум карты (гипотетическое глобальное море выше
+            // самой высокой точки рельефа)
+            radius: toThreeJSUnits(
+              radius +
+                (waterLevelMeters === undefined ? heightField.maxMeters : Math.max(heightField.maxMeters, waterLevelMeters)) /
+                  1000 +
+                heightField.maxClearanceMeters / 1000
+            ),
+            heightField,
+            waterLevelMeters
           }
         : { object, radius: toThreeJSUnits(radius) * COLLISION_GAP }
     )
@@ -325,6 +353,13 @@ class CameraCollision {
    * СТАРТОВУЮ точку, не путь между from и to). Поэтому вместо пропуска —
    * марч сразу в поточечном режиме на полный внешний бюджет, см.
    * `marchPointwise`.
+   *
+   * Уровень воды (Task 5) клампится ЗДЕСЬ, в потребителе `collisionRadiusUnits`
+   * (сетки клиренса), а не в самом поле: сетка без клампа консервативна для
+   * полётов НАД водой (никогда не занижает клиренс рельефа), но контакт/марч
+   * обязаны видеть, что вода ПОДНИМАЕТ пол там, где рельеф ниже уровня —
+   * `withWaterFloor` берёт max(...), то есть только увеличивает цель, не
+   * нарушая консервативности сетки снизу.
    */
   private marchTerrain(collider: Collider, field: TerrainHeightField, maxDistance: number): SweepHit | null {
     collider.object.updateWorldMatrix(true, false)
@@ -343,10 +378,13 @@ class CameraCollision {
     const step = this.marchStep.copy(to).sub(from).divideScalar(length)
 
     const epsilon = collider.radius * RELATIVE_CONTACT_EPSILON
+    const waterLevelMeters = collider.waterLevelMeters
     const distance = (p: Vector3): number => {
       const r = p.length()
-      if (r === 0) return -field.collisionRadiusUnits(this.localDir.set(0, 0, 1))
-      return r - field.collisionRadiusUnits(this.localDir.copy(p).divideScalar(r))
+      if (r === 0) {
+        return -withWaterFloor(field.collisionRadiusUnits(this.localDir.set(0, 0, 1)), field, waterLevelMeters)
+      }
+      return r - withWaterFloor(field.collisionRadiusUnits(this.localDir.copy(p).divideScalar(r)), field, waterLevelMeters)
     }
 
     if (distance(from) <= 0) {
@@ -429,7 +467,7 @@ class CameraCollision {
     for (let i = 0; i < budget; i++) {
       const r = p.length()
       const dir = r === 0 ? this.localDir.set(0, 0, 1) : this.localDir.copy(p).divideScalar(r)
-      const d = r - pointwiseFloorRadiusUnits(field, dir)
+      const d = r - pointwiseFloorRadiusUnits(field, dir, collider.waterLevelMeters)
       if (d <= epsilon) return this.buildHit(collider, field, p, s, length, false)
 
       const cosLat = Math.sqrt(Math.max(0, 1 - dir.y * dir.y))
@@ -526,7 +564,7 @@ class CameraCollision {
       this.localDir.copy(this.localPoint).divideScalar(r)
     }
 
-    const target = pointwiseFloorRadiusUnits(field, this.localDir)
+    const target = pointwiseFloorRadiusUnits(field, this.localDir, collider.waterLevelMeters)
     if (r >= target) return false
 
     this.localPoint.copy(this.localDir).multiplyScalar(target).applyMatrix4(collider.object.matrixWorld)
@@ -537,12 +575,26 @@ class CameraCollision {
 }
 
 /**
- * Честная поточечная поверхность контакта, юниты three.js: R+h(dir̂)+sag(dir̂)+margin.
- * Общая для `marchPointwise` (доуточнение свипа) и `pushOutTerrain` — единственное
+ * Честная поточечная поверхность контакта, юниты three.js: R+h(dir̂)+sag(dir̂)+margin,
+ * поднятая до уровня воды, если он выше (Task 5, water-foundation). Общая для
+ * `marchPointwise` (доуточнение свипа) и `pushOutTerrain` — единственное
  * место, где формула контакта у поверхности собрана, не дублируется.
  */
-function pointwiseFloorRadiusUnits(field: TerrainHeightField, dir: Vector3): number {
-  return field.surfaceRadiusUnits(dir) + toThreeJSUnits((field.sagMeters(dir) + CLEARANCE_MARGIN_METERS) / 1000)
+function pointwiseFloorRadiusUnits(field: TerrainHeightField, dir: Vector3, waterLevelMeters: number | undefined): number {
+  const terrainFloor = field.surfaceRadiusUnits(dir) + toThreeJSUnits((field.sagMeters(dir) + CLEARANCE_MARGIN_METERS) / 1000)
+  return withWaterFloor(terrainFloor, field, waterLevelMeters)
+}
+
+/**
+ * Пол контакта, поднятый до уровня воды: max(floorRadiusUnits, R+уровень).
+ * Без ручки (`waterLevelMeters === undefined`) возвращает `floorRadiusUnits`
+ * НЕ ТРОНУТЫМ — ни одного лишнего float-действия над ним, поведение тел без
+ * воды бит-в-бит прежнее. Только max(...) — вода ПОДНИМАЕТ пол, никогда не
+ * опускает: там, где рельеф уже выше уровня, эта функция — тождество.
+ */
+function withWaterFloor(floorRadiusUnits: number, field: TerrainHeightField, waterLevelMeters: number | undefined): number {
+  if (waterLevelMeters === undefined) return floorRadiusUnits
+  return Math.max(floorRadiusUnits, field.waterSurfaceRadiusUnits(waterLevelMeters))
 }
 
 export { CameraCollision }

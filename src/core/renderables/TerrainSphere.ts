@@ -3,6 +3,8 @@ import { Actor } from '@/core/models/Actor'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
+import { readRenderingData } from '@/core/helpers/renderingData'
+import type { IPlanetRenderingObject } from '@/core/models/types'
 
 export { PATCH_BUILDS_PER_FRAME } from '@/core/terrain/TerrainPatchGroup'
 
@@ -12,6 +14,11 @@ export { PATCH_BUILDS_PER_FRAME } from '@/core/terrain/TerrainPatchGroup'
  * специализация добавляет то, что относится к рельефу конкретно: PlanetMaterial
  * из Actor и контракт снапшота/ResourceObserver (model/type/clickable на
  * группе, .material — PlanetMaterial, единственный на все патчи).
+ *
+ * Уровень воды (Task 5, water-foundation) читается здесь же и передаётся
+ * TerrainPatchGroup только как гейт SSE-потолка подводных патчей —
+ * WaterSphere сама висит отдельной оболочкой (RenderableFactory), эта ручка
+ * её не строит, только ограничивает глубину дерева РЕЛЬЕФА под водой.
  */
 class TerrainSphere extends TerrainPatchGroup {
   public model: Actor
@@ -19,7 +26,8 @@ class TerrainSphere extends TerrainPatchGroup {
 
   public constructor(model: Actor, field: TerrainHeightField, renderer: WebGLRenderer) {
     const sharedMaterial = new PlanetMaterial(model)
-    super(field, sharedMaterial, renderer)
+    const waterLevelMeters = readRenderingData<IPlanetRenderingObject>(model)?.waterLevelMeters
+    super(field, sharedMaterial, renderer, undefined, waterLevelMeters)
     this.model = model
     this.sharedMaterial = sharedMaterial
 

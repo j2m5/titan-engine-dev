@@ -18,6 +18,34 @@ export const TERRAIN_QUADTREE_MAX_LEVEL = 6
 /** Клирофф дистанции у камеры на/под поверхностью — иначе sse делится на почти-ноль и уходит в бесконечность. */
 const MIN_DISTANCE_METERS = 100
 
+/**
+ * Потолок глубины подводных патчей суши (Task 5, water-foundation): узел на
+ * этом уровне или глубже, чей оценённый максимум высоты уверенно ниже уровня
+ * воды, дальше не делится — цель: океанские патчи не глубже ~L4 (не
+ * TERRAIN_QUADTREE_MAX_LEVEL=6). Ниже этого уровня потолок не действует —
+ * береговые/мелководные узлы обязаны домешаться честно на общих основаниях
+ * (SSE), запрет применяется только к уже достаточно мелким узлам, где
+ * визуальная разница под непрозрачной водой всё равно не видна.
+ */
+export const TERRAIN_QUADTREE_WATER_CEILING_LEVEL = 4
+
+/**
+ * Множитель ε-пирамиды (`geometricErrorMeters`, p99 размаха высот в окне
+ * уровня) в оценке максимума высоты узла для потолка воды: центр узла ±
+ * запас на локальный размах — статистическая (p99, не жёсткая) оценка,
+ * удвоенная как двусторонний запас на редкий выброс. Та же эпистемология,
+ * что и у самого SSE-отбора (ε-пирамида везде здесь p99, не honest max) —
+ * не строже остального дерева.
+ */
+const WATER_CEILING_ERROR_FACTOR = 2
+
+/**
+ * Фиксированный запас поверх статистической оценки, метры — берег обязан
+ * домешаться честно даже при небольшой недооценке максимума узла между
+ * центром выборки и его истинным пиком.
+ */
+const WATER_CEILING_MARGIN_METERS = 50
+
 export interface SelectParams {
   field: TerrainHeightField
   cameraLocal: Vector3 // юниты, теле-фиксированный фрейм
@@ -27,6 +55,13 @@ export interface SelectParams {
   splitPixels: number // ручка terrain.sseSplitPixels
   mergeFactor: number // ручка terrain.sseMergeFactor
   currentlySplit: ReadonlySet<string> // ключи узлов, разбитых в прошлом кадре
+  /**
+   * Уровень воды тела, метры (Task 5, water-foundation) — ручка актора, не
+   * поля (см. докблок `TerrainHeightField`/`CameraCollision.Collider`).
+   * Отсутствие — потолок подводных патчей не действует, отбор бит-в-бит
+   * прежний.
+   */
+  waterLevelMeters?: number
 }
 
 // Скретчи модуля: функция зовётся каждый кадр, аллокаций на вызов быть не должно.
@@ -84,7 +119,20 @@ function visitNode(
     visible = params.frustumLocal.intersectsSphere(sphereScratch)
   }
 
-  const shouldSplit = level < TERRAIN_QUADTREE_MAX_LEVEL && sse > threshold && visible
+  // Потолок подводных патчей суши (Task 5): считается только когда есть ручка
+  // И узел уже достаточно мелкий (level >= WATER_CEILING_LEVEL) — без ручки
+  // ни одного лишнего heightMeters-вызова на кадр, отбор бит-в-бит прежний.
+  // Оценка максимума узла — центр + запас ε-пирамиды текущего уровня (см.
+  // докблок константы); дороже sse не становится (тот же field.geometricErrorMeters,
+  // уже посчитанный выше, плюс один билинейный сэмпл высоты).
+  let belowWaterCeiling = false
+  if (params.waterLevelMeters !== undefined && level >= TERRAIN_QUADTREE_WATER_CEILING_LEVEL) {
+    const nodeMaxHeightEstimate =
+      field.heightMeters(centerDirScratch) + WATER_CEILING_ERROR_FACTOR * field.geometricErrorMeters(level)
+    belowWaterCeiling = nodeMaxHeightEstimate < params.waterLevelMeters - WATER_CEILING_MARGIN_METERS
+  }
+
+  const shouldSplit = level < TERRAIN_QUADTREE_MAX_LEVEL && sse > threshold && visible && !belowWaterCeiling
 
   if (shouldSplit) {
     split.add(key)

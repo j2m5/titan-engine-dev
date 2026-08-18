@@ -3,7 +3,14 @@ import { Frustum, Matrix4, PerspectiveCamera, Vector3 } from 'three'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
-import { selectTerrainNodes, terrainNodeKey, type SelectParams, type TerrainNodeAddress } from '@/core/terrain/terrainQuadtreeSelect'
+import {
+  selectTerrainNodes,
+  terrainNodeKey,
+  TERRAIN_QUADTREE_WATER_CEILING_LEVEL,
+  TERRAIN_QUADTREE_MAX_LEVEL,
+  type SelectParams,
+  type TerrainNodeAddress
+} from '@/core/terrain/terrainQuadtreeSelect'
 
 function makeMap(width: number, height: number, values: number[], minMeters = 0, maxMeters = 65535): HeightMapData {
   return { width, height, minMeters, maxMeters, data: new Uint16Array(values) }
@@ -121,5 +128,89 @@ describe('selectTerrainNodes: SSE-отбор узлов квадродерева
     const { leaves } = selectTerrainNodes(makeParams(-5))
     expect(leaves.length).toBeGreaterThan(24)
     expect(leaves.every((a) => Number.isFinite(a.level))).toBe(true)
+  })
+})
+
+// Task 5 (water-foundation): узел, чей оценённый максимум высоты уверенно
+// ниже уровня воды, дальше TERRAIN_QUADTREE_WATER_CEILING_LEVEL не делится.
+// Два ОДНОРОДНЫХ полушария (не чекерборд — см. WATER_TERRAIN_PATH в
+// CameraCollision.spec.ts, тот же урок: соседние текселя чекерборда сами
+// несут огромную ε даже вдали от границы): запад (col 0..31) — океан
+// (−25000/−15000 м), восток (col 32..63) — суша (15000/25000 м), лёгкий
+// чекерборд ВНУТРИ каждой половины (амплитуда 10000) держит ε-пирамиду
+// ненулевой (см. комментарий HEIGHT_AMPLITUDE_METERS у flatField выше — без
+// вариации SSE не пробивает порог вовсе).
+const WATER_WIDTH = 64
+const WATER_HEIGHT = 4
+const OCEAN_LOW = -25000
+const OCEAN_HIGH = -15000
+const LAND_LOW = 15000
+const LAND_HIGH = 25000
+
+const WATER_MIN_METERS = -40000
+const WATER_MAX_METERS = 40000
+// Uint16Array хранит RAW-код (0..65535), не метры напрямую — минус/максимум
+// карты кодируют интерполяцию, отрицательные метры нельзя писать в raw как
+// есть (переполнение). rawFor — точная обратная формула к sampleMeters.
+const rawFor = (meters: number): number => Math.round(((meters - WATER_MIN_METERS) / (WATER_MAX_METERS - WATER_MIN_METERS)) * 65535)
+
+function waterField(): TerrainHeightField {
+  const values: number[] = []
+  for (let row = 0; row < WATER_HEIGHT; row++) {
+    for (let col = 0; col < WATER_WIDTH; col++) {
+      const checker = (col + row) % 2 === 0
+      const isOcean = col < WATER_WIDTH / 2
+      const meters = isOcean ? (checker ? OCEAN_LOW : OCEAN_HIGH) : checker ? LAND_LOW : LAND_HIGH
+      values.push(rawFor(meters))
+    }
+  }
+  return new TerrainHeightField(makeMap(WATER_WIDTH, WATER_HEIGHT, values, WATER_MIN_METERS, WATER_MAX_METERS), R_KM)
+}
+
+// центры текселей вдали от границы полушарий (col=31/32) и от шва долготы
+// (col=0/63) — та же обратная формула dirToUv, что и в CameraCollision.spec.ts
+const dirAtWaterCol = (col: number): Vector3 => {
+  const phi = ((col + 0.5) / WATER_WIDTH) * 2 * Math.PI
+  return new Vector3(-Math.cos(phi), 0, Math.sin(phi))
+}
+const OCEAN_INTERIOR_DIR = dirAtWaterCol(16)
+const LAND_INTERIOR_DIR = dirAtWaterCol(48)
+
+function waterParamsAt(field: TerrainHeightField, dir: Vector3, altKm: number, waterLevelMeters: number | undefined): SelectParams {
+  const r = field.surfaceRadiusUnits(dir)
+
+  return {
+    field,
+    cameraLocal: dir.clone().multiplyScalar(r + toThreeJSUnits(altKm)),
+    frustumLocal: null,
+    screenHeight: 1080,
+    fovYRadians: (50 * Math.PI) / 180,
+    splitPixels: 6,
+    mergeFactor: 0.7,
+    currentlySplit: new Set<string>(),
+    waterLevelMeters
+  }
+}
+
+describe('selectTerrainNodes: SSE-потолок подводных патчей суши (Task 5, water-foundation)', () => {
+  it('океан вдали от берега не делится глубже потолка, хотя камера вплотную', () => {
+    const field = waterField()
+    const { leaves } = selectTerrainNodes(waterParamsAt(field, OCEAN_INTERIOR_DIR, 0.2, 0))
+
+    expect(Math.max(...leaves.map((a) => a.level))).toBe(TERRAIN_QUADTREE_WATER_CEILING_LEVEL)
+  })
+
+  it('суша вдали от берега делится честно до полного потолка дерева — вода её не ограничивает', () => {
+    const field = waterField()
+    const { leaves } = selectTerrainNodes(waterParamsAt(field, LAND_INTERIOR_DIR, 0.2, 0))
+
+    expect(Math.max(...leaves.map((a) => a.level))).toBe(TERRAIN_QUADTREE_MAX_LEVEL)
+  })
+
+  it('без ручки waterLevelMeters — потолок не действует вовсе (бит-в-бит): тот же океанский узел делится до предела', () => {
+    const field = waterField()
+    const { leaves } = selectTerrainNodes(waterParamsAt(field, OCEAN_INTERIOR_DIR, 0.2, undefined))
+
+    expect(Math.max(...leaves.map((a) => a.level))).toBe(TERRAIN_QUADTREE_MAX_LEVEL)
   })
 })
