@@ -3,8 +3,7 @@ import { Actor } from '@/core/models/Actor'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
-import { readRenderingData } from '@/core/helpers/renderingData'
-import type { IPlanetRenderingObject } from '@/core/models/types'
+import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 
 export { PATCH_BUILDS_PER_FRAME } from '@/core/terrain/TerrainPatchGroup'
 
@@ -26,7 +25,7 @@ class TerrainSphere extends TerrainPatchGroup {
 
   public constructor(model: Actor, field: TerrainHeightField, renderer: WebGLRenderer) {
     const sharedMaterial = new PlanetMaterial(model)
-    const waterLevelMeters = readRenderingData<IPlanetRenderingObject>(model)?.waterLevelMeters
+    const waterLevelMeters = readWaterLevelMeters(model)
     super(field, sharedMaterial, renderer, undefined, waterLevelMeters)
     this.model = model
     this.sharedMaterial = sharedMaterial

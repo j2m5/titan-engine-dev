@@ -20,29 +20,28 @@ const MIN_DISTANCE_METERS = 100
 
 /**
  * Потолок глубины подводных патчей суши (Task 5, water-foundation): узел на
- * этом уровне или глубже, чей оценённый максимум высоты уверенно ниже уровня
+ * этом уровне или глубже, чей ЧЕСТНЫЙ максимум высоты (`TerrainHeightField.nodeMaxHeightMeters`,
+ * пирамида честных per-node максимумов — не статистика) уверенно ниже уровня
  * воды, дальше не делится — цель: океанские патчи не глубже ~L4 (не
  * TERRAIN_QUADTREE_MAX_LEVEL=6). Ниже этого уровня потолок не действует —
  * береговые/мелководные узлы обязаны домешаться честно на общих основаниях
  * (SSE), запрет применяется только к уже достаточно мелким узлам, где
  * визуальная разница под непрозрачной водой всё равно не видна.
+ *
+ * Раньше здесь была статистическая оценка «центр+k·ε» — снята ревью Task 5,
+ * фикс-раунд 1, находка №1 (БЛОКЕР): недооценка максимума узла до 7.4 км на
+ * реальной карте (узел L4 с Гавайями), 211 замороженных прибрежных узлов с
+ * видимой сушей выше уровня; смешанный узел (центр в океане, остров у края)
+ * — необнаружимый случай для формулы «центр+k·ε» ни при каком k (просканировано).
  */
 export const TERRAIN_QUADTREE_WATER_CEILING_LEVEL = 4
 
 /**
- * Множитель ε-пирамиды (`geometricErrorMeters`, p99 размаха высот в окне
- * уровня) в оценке максимума высоты узла для потолка воды: центр узла ±
- * запас на локальный размах — статистическая (p99, не жёсткая) оценка,
- * удвоенная как двусторонний запас на редкий выброс. Та же эпистемология,
- * что и у самого SSE-отбора (ε-пирамида везде здесь p99, не honest max) —
- * не строже остального дерева.
- */
-const WATER_CEILING_ERROR_FACTOR = 2
-
-/**
- * Фиксированный запас поверх статистической оценки, метры — берег обязан
- * домешаться честно даже при небольшой недооценке максимума узла между
- * центром выборки и его истинным пиком.
+ * Фиксированный запас, метры — честный максимум узла (`nodeMaxHeightMeters`)
+ * сам по себе уже не занижает (см. её докблок и докблок билдера пирамиды в
+ * TerrainHeightField), запас здесь только на близость к порогу: берег
+ * обязан домешаться честно, даже когда честный максимум узла лишь чуть ниже
+ * уровня воды.
  */
 const WATER_CEILING_MARGIN_METERS = 50
 
@@ -92,7 +91,11 @@ function visitNode(
   const sc = -1 + i * span + span / 2
   const tc = -1 + j * span + span / 2
   cubeFaceDirection(face, sc, tc, centerDirScratch)
-  sphereCenterScratch.copy(centerDirScratch).multiplyScalar(field.surfaceRadiusUnits(centerDirScratch))
+  // heightMeters(центр) один раз на узел — раньше отдельно ещё раз читался
+  // потолком воды ниже (находка №6 ревью Task 5, фикс-раунд 1); surfaceRadiusUnits
+  // разворачивается вручную, чтобы переиспользовать уже посчитанную высоту
+  const centerHeightMeters = field.heightMeters(centerDirScratch)
+  sphereCenterScratch.copy(centerDirScratch).multiplyScalar(toThreeJSUnits(field.radiusKm + centerHeightMeters / 1000))
 
   // половина диагонали дуги патча (юниты) + запас на амплитуду рельефа
   const patchHalfDiagonal = ((toThreeJSUnits(field.radiusKm) * (Math.PI / 2)) / 2 ** level) * (Math.SQRT2 / 2)
@@ -121,15 +124,13 @@ function visitNode(
 
   // Потолок подводных патчей суши (Task 5): считается только когда есть ручка
   // И узел уже достаточно мелкий (level >= WATER_CEILING_LEVEL) — без ручки
-  // ни одного лишнего heightMeters-вызова на кадр, отбор бит-в-бит прежний.
-  // Оценка максимума узла — центр + запас ε-пирамиды текущего уровня (см.
-  // докблок константы); дороже sse не становится (тот же field.geometricErrorMeters,
-  // уже посчитанный выше, плюс один билинейный сэмпл высоты).
+  // ни одного лишнего обращения к пирамиде на кадр, отбор бит-в-бит прежний.
+  // Максимум узла — честный (`nodeMaxHeightMeters`, пирамида в TerrainHeightField,
+  // O(1) массив), не статистика — см. докблок константы TERRAIN_QUADTREE_WATER_CEILING_LEVEL.
   let belowWaterCeiling = false
   if (params.waterLevelMeters !== undefined && level >= TERRAIN_QUADTREE_WATER_CEILING_LEVEL) {
-    const nodeMaxHeightEstimate =
-      field.heightMeters(centerDirScratch) + WATER_CEILING_ERROR_FACTOR * field.geometricErrorMeters(level)
-    belowWaterCeiling = nodeMaxHeightEstimate < params.waterLevelMeters - WATER_CEILING_MARGIN_METERS
+    const nodeMaxHeightMeters = field.nodeMaxHeightMeters(face, level, i, j)
+    belowWaterCeiling = nodeMaxHeightMeters < params.waterLevelMeters - WATER_CEILING_MARGIN_METERS
   }
 
   const shouldSplit = level < TERRAIN_QUADTREE_MAX_LEVEL && sse > threshold && visible && !belowWaterCeiling

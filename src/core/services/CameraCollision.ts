@@ -4,8 +4,7 @@ import type { SceneObserver } from '@/core/services/SceneObserver'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { CLEARANCE_MARGIN_METERS, terrainHeightFieldFor, type TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
-import { readRenderingData } from '@/core/helpers/renderingData'
-import type { IPlanetRenderingObject } from '@/core/models/types'
+import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 
 export type Collider = {
   object: Object3D
@@ -61,10 +60,9 @@ export function collectColliders(objects: Object3D[]): Collider[] {
     const heightField = map ? terrainHeightFieldFor(map, radius) : undefined
 
     // Уровень воды (Task 5) — ручка тела, не поля (см. докблок Collider);
-    // считается только для терраформных тел (без рельефа воду отделять не от чего)
-    const waterLevelMeters = heightField
-      ? readRenderingData<IPlanetRenderingObject>(model)?.waterLevelMeters
-      : undefined
+    // считается только для терраформных тел (без рельефа воду отделять не от чего).
+    // Предикат валидности единый на все три места чтения — см. readWaterLevelMeters
+    const waterLevelMeters = heightField ? readWaterLevelMeters(model) : undefined
 
     seen.add(model)
     colliders.push(
@@ -483,9 +481,10 @@ class CameraCollision {
   }
 
   /**
-   * Хит марча: нормаль из градиента карты, контакт и доля отрезка — общие
-   * для обеих развязок marchTerrain (истинный контакт и исчерпание бюджета),
-   * отличается только `exhausted`.
+   * Хит марча: нормаль из градиента карты (или радиальная над водой, см.
+   * `isWaterBoundFloor` — находка №2 фикс-раунда 1), контакт и доля отрезка —
+   * общие для обеих развязок marchTerrain (истинный контакт и исчерпание
+   * бюджета), отличается только `exhausted`.
    */
   private buildHit(
     collider: Collider,
@@ -495,8 +494,18 @@ class CameraCollision {
     length: number,
     exhausted: boolean
   ): SweepHit {
+    const dir = this.localDir.copy(p).normalize()
     const normal = this.hitNormal
-    field.surfaceNormalLocal(this.localDir.copy(p).normalize(), normal)
+
+    if (isWaterBoundFloor(field, dir, collider.waterLevelMeters)) {
+      // над водой поверхность аналитически радиальна — нормаль дна здесь
+      // невидимого и не относящегося к делу рельефа заставила бы скольжение
+      // нырять/подпрыгивать у берега
+      normal.copy(dir)
+    } else {
+      field.surfaceNormalLocal(dir, normal)
+    }
+
     normal.transformDirection(collider.object.matrixWorld)
 
     return {
@@ -586,15 +595,55 @@ function pointwiseFloorRadiusUnits(field: TerrainHeightField, dir: Vector3, wate
 }
 
 /**
- * Пол контакта, поднятый до уровня воды: max(floorRadiusUnits, R+уровень).
+ * Пол воды, юниты three.js: R+уровень+margin — тот же CLEARANCE_MARGIN_METERS,
+ * что и у рельефа (пол суши — R+h+sag+margin), для симметрии: камера не
+ * должна отдыхать ровно в аналитической плоскости воды, у неё нет своего
+ * "sag" (плоскость идеальна), но амортизатор нужен тот же, что у любого
+ * честного контакта (ревью Task 5, фикс-раунд 1, находка №5).
+ */
+function waterFloorRadiusUnits(field: TerrainHeightField, waterLevelMeters: number): number {
+  return field.waterSurfaceRadiusUnits(waterLevelMeters) + toThreeJSUnits(CLEARANCE_MARGIN_METERS / 1000)
+}
+
+/**
+ * Пол контакта, поднятый до уровня воды: max(floorRadiusUnits, R+уровень+margin).
  * Без ручки (`waterLevelMeters === undefined`) возвращает `floorRadiusUnits`
  * НЕ ТРОНУТЫМ — ни одного лишнего float-действия над ним, поведение тел без
  * воды бит-в-бит прежнее. Только max(...) — вода ПОДНИМАЕТ пол, никогда не
  * опускает: там, где рельеф уже выше уровня, эта функция — тождество.
+ *
+ * Безопасность марча (`marchTerrain`/`marchPointwise`) после клампа доказывает
+ * ЛИПШИЦЕВОСТЬ, а не просто «консервативность» сама по себе (уточнение ревью
+ * Task 5, фикс-раунд 1): max(f, const) липшицева с ТОЙ ЖЕ константой L, что
+ * и f — константная функция 0-липшицева, максимум двух L-липшицевых функций
+ * снова L-липшицев. Шаг march'а d/(1+L) безопасен для ЛЮБОЙ L-липшицевой
+ * цели (это и есть всё допущение алгоритма, см. докблоки `marchTerrain`/
+ * `marchPointwise`), поэтому клампнутая max(...)-цель наследует ту же
+ * гарантию «шаг не перепрыгивает пол» без пересчёта константы уклона.
  */
 function withWaterFloor(floorRadiusUnits: number, field: TerrainHeightField, waterLevelMeters: number | undefined): number {
   if (waterLevelMeters === undefined) return floorRadiusUnits
-  return Math.max(floorRadiusUnits, field.waterSurfaceRadiusUnits(waterLevelMeters))
+  return Math.max(floorRadiusUnits, waterFloorRadiusUnits(field, waterLevelMeters))
+}
+
+/**
+ * Связывающее ограничение контакта в направлении dir̂ — водный пол, не рельеф
+ * (ревью Task 5, фикс-раунд 1, находка №2)? Тот же max(...), которым
+ * `withWaterFloor` поднимает пол — здесь нужно знать, КТО победил: нормаль
+ * контакта над водой обязана быть радиальной (p̂, аналитическая сфера), а не
+ * взятой с дна (`surfaceNormalLocal`) — иначе скольжение камеры у берега
+ * ныряет/подпрыгивает вслед за невидимым под водой рельефом. Сравнение — по
+ * честной поточечной формуле (та же, что `pointwiseFloorRadiusUnits`):
+ * сеточный (консервативный) пол везде ≥ поточечного, так что поточечное
+ * сравнение — наименее агрессивная (наиболее консервативная в пользу
+ * рельефа) оценка «чья это на самом деле поверхность», подходящая и для
+ * приближённых точек контакта (marchTerrain exhausted), не только для
+ * точного поточечного схождения.
+ */
+function isWaterBoundFloor(field: TerrainHeightField, dir: Vector3, waterLevelMeters: number | undefined): boolean {
+  if (waterLevelMeters === undefined) return false
+  const terrainFloor = field.surfaceRadiusUnits(dir) + toThreeJSUnits((field.sagMeters(dir) + CLEARANCE_MARGIN_METERS) / 1000)
+  return waterFloorRadiusUnits(field, waterLevelMeters) >= terrainFloor
 }
 
 export { CameraCollision }

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { Frustum, Matrix4, PerspectiveCamera, Vector3 } from 'three'
+import { Frustum, Matrix4, PerspectiveCamera, Vector2, Vector3 } from 'three'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { cubeFaceDirection } from '@/core/terrain/cubeSphere'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import {
   selectTerrainNodes,
@@ -212,5 +213,136 @@ describe('selectTerrainNodes: SSE-потолок подводных патчей
     const { leaves } = selectTerrainNodes(waterParamsAt(field, OCEAN_INTERIOR_DIR, 0.2, undefined))
 
     expect(Math.max(...leaves.map((a) => a.level))).toBe(TERRAIN_QUADTREE_MAX_LEVEL)
+  })
+})
+
+// Ревью Task 5, фикс-раунд 1, находка №1/№4: СМЕШАННЫЙ узел (центр в океане,
+// у КРАЯ — остров выше уровня воды) — ровно случай, где статистическая
+// оценка «центр+k·ε» недооценивает максимум узла (замер ревью на реальной
+// карте: узел с Гавайями, недооценка 7.4 км, 211 замороженных прибрежных
+// узлов). Целевой узел — face=0, level=4 (потолок), i=5, j=5: его bbox в UV
+// вычислен той же геометрией, что билдер пирамиды в TerrainHeightField
+// (cubeFaceDirection + dirToUv, 9 сэмплов узла) — остров кладётся у ДАЛЬНЕГО
+// (uHi) края узла, заведомо не в центре сэмпла. Без честного пер-узлового
+// максимума узел обязан заморозиться на уровне 4 несмотря на остров (RED);
+// с честным максимумом (bbox → блоки clearance-сетки) — обязан продолжить
+// деление вглубь.
+describe('selectTerrainNodes: честный максимум узла ловит остров у края (Task 5, фикс-раунд 1, находка №1/№4)', () => {
+  const ISLAND_FACE = 0
+  const ISLAND_LEVEL = 4
+  const ISLAND_I = 5
+  const ISLAND_J = 5
+  const ISLAND_WIDTH = 512
+  const ISLAND_HEIGHT = 256
+  const ISLAND_MIN_M = -40000
+  const ISLAND_MAX_M = 40000
+  const ISLAND_OCEAN_LOW = -25000
+  const ISLAND_OCEAN_HIGH = -15000
+  const ISLAND_PEAK_METERS = 500 // выше уровня воды (0)
+  const ISLAND_TEXEL_RADIUS = 2
+
+  const islandRawFor = (meters: number): number =>
+    Math.round(((meters - ISLAND_MIN_M) / (ISLAND_MAX_M - ISLAND_MIN_M)) * 65535)
+
+  // bbox узла в UV той же геометрией, что билдер пирамиды (9 сэмплов — 4 угла
+  // + 4 середины рёбер + центр, циклический анврап долготы относительно
+  // центра) — поле-затычка нужно только ради dirToUv, чистой геометрии без
+  // обращения к данным карты
+  function nodeBBoxUV(scratchField: TerrainHeightField, face: number, level: number, i: number, j: number) {
+    const patches = 2 ** level
+    const span = 2 / patches
+    const sLo = -1 + i * span
+    const sHi = sLo + span
+    const tLo = -1 + j * span
+    const tHi = tLo + span
+    const sMid = (sLo + sHi) / 2
+    const tMid = (tLo + tHi) / 2
+    const sSamples = [sLo, sHi, sLo, sHi, sMid, sMid, sLo, sHi, sMid]
+    const tSamples = [tLo, tLo, tHi, tHi, tLo, tHi, tMid, tMid, tMid]
+
+    const dirScratch = new Vector3()
+    const uvScratch = new Vector2()
+    const us: number[] = []
+    const vs: number[] = []
+    for (let k = 0; k < 9; k++) {
+      cubeFaceDirection(face, sSamples[k], tSamples[k], dirScratch)
+      scratchField.dirToUv(dirScratch, uvScratch)
+      us.push(uvScratch.x)
+      vs.push(uvScratch.y)
+    }
+    const centerU = us[8]
+    let uLo = Infinity
+    let uHi = -Infinity
+    let vLo = Infinity
+    let vHi = -Infinity
+    for (let k = 0; k < 9; k++) {
+      let u = us[k]
+      const d = u - centerU
+      if (d > 0.5) u -= 1
+      else if (d < -0.5) u += 1
+      if (u < uLo) uLo = u
+      if (u > uHi) uHi = u
+      if (vs[k] < vLo) vLo = vs[k]
+      if (vs[k] > vHi) vHi = vs[k]
+    }
+    return { uLo, uHi, vLo, vHi, centerV: vs[8] }
+  }
+
+  function islandField(): TerrainHeightField {
+    const scratchField = new TerrainHeightField(makeMap(4, 2, [0, 0, 0, 0, 0, 0, 0, 0]), R_KM)
+    const bbox = nodeBBoxUV(scratchField, ISLAND_FACE, ISLAND_LEVEL, ISLAND_I, ISLAND_J)
+
+    const islandU = bbox.uHi - (bbox.uHi - bbox.uLo) * 0.1 // у дальнего края, не в центре
+    const islandCol = Math.round((((islandU % 1) + 1) % 1) * ISLAND_WIDTH)
+    const islandRow = Math.round(bbox.centerV * ISLAND_HEIGHT)
+
+    const values: number[] = []
+    for (let row = 0; row < ISLAND_HEIGHT; row++) {
+      for (let col = 0; col < ISLAND_WIDTH; col++) {
+        const nearIsland = Math.abs(col - islandCol) <= ISLAND_TEXEL_RADIUS && Math.abs(row - islandRow) <= ISLAND_TEXEL_RADIUS
+        const checker = (col + row) % 2 === 0
+        const meters = nearIsland ? ISLAND_PEAK_METERS : checker ? ISLAND_OCEAN_LOW : ISLAND_OCEAN_HIGH
+        values.push(islandRawFor(meters))
+      }
+    }
+
+    return new TerrainHeightField(makeMap(ISLAND_WIDTH, ISLAND_HEIGHT, values, ISLAND_MIN_M, ISLAND_MAX_M), R_KM)
+  }
+
+  it('узел с островом у края продолжает делиться глубже потолка (не замораживается)', () => {
+    const field = islandField()
+
+    const patches = 2 ** ISLAND_LEVEL
+    const span = 2 / patches
+    const sc = -1 + ISLAND_I * span + span / 2
+    const tc = -1 + ISLAND_J * span + span / 2
+    const centerDir = new Vector3()
+    cubeFaceDirection(ISLAND_FACE, sc, tc, centerDir)
+    const r = field.surfaceRadiusUnits(centerDir)
+
+    const { leaves } = selectTerrainNodes({
+      field,
+      cameraLocal: centerDir.clone().multiplyScalar(r + toThreeJSUnits(0.05)),
+      frustumLocal: null,
+      screenHeight: 1080,
+      fovYRadians: (50 * Math.PI) / 180,
+      splitPixels: 6,
+      mergeFactor: 0.7,
+      currentlySplit: new Set<string>(),
+      waterLevelMeters: 0
+    })
+
+    // сам целевой узел НЕ должен остаться листом — под островом он обязан
+    // продолжить деление (без честного максимума узел замерзает здесь —
+    // RED, воспроизведено откатом на «центр+k·ε» при ревью)
+    const targetKey = terrainNodeKey({ face: ISLAND_FACE, level: ISLAND_LEVEL, i: ISLAND_I, j: ISLAND_J })
+    expect(leaves.some((a) => terrainNodeKey(a) === targetKey)).toBe(false)
+
+    const descendants = leaves.filter((a) => {
+      if (a.face !== ISLAND_FACE || a.level <= ISLAND_LEVEL) return false
+      const delta = a.level - ISLAND_LEVEL
+      return a.i >> delta === ISLAND_I && a.j >> delta === ISLAND_J
+    })
+    expect(descendants.length).toBeGreaterThan(0)
   })
 })

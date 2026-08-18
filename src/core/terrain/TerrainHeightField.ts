@@ -1,8 +1,8 @@
 import { Vector2, Vector3 } from 'three'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { HeightMapData } from './heightMapFormat'
-import { TERRAIN_PATCH_SEGMENTS } from './cubeSphere'
-import { TERRAIN_QUADTREE_MAX_LEVEL } from './terrainQuadtreeSelect'
+import { CUBE_FACES, TERRAIN_PATCH_SEGMENTS, cubeFaceDirection } from './cubeSphere'
+import { TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from './terrainQuadtreeSelect'
 
 /**
  * Экваториальный пояс кубосферы всегда пересекает ровно 4 из 6 граней (два
@@ -122,6 +122,19 @@ class TerrainHeightField {
    * per-body константа, локальная поправка считается на каждом шаге марча.
    */
   public readonly equatorTexelMeters: number
+  /**
+   * Честный (не статистический) пер-узловой максимум высоты квадродерева,
+   * метры — уровни `TERRAIN_QUADTREE_MIN_LEVEL..TERRAIN_QUADTREE_MAX_LEVEL`,
+   * 6 граней. Питается ЖИВОЙ (не удалён из живых полей) `blockMax` из
+   * `buildClearanceGrid` — честный MAX по текселям блока, не p99 (см.
+   * докблок `buildNodeMaxHeightPyramid`). Замена статистической оценки
+   * «центр+k·ε» (ревью Task 5, фикс-раунд 1, находка №1 — недооценка до 7.4
+   * км на смешанном узле с Гавайями, 211 замороженных узлов с видимой сушей
+   * на реальной карте): SSE-потолок воды (`terrainQuadtreeSelect`) обязан
+   * видеть НАСТОЯЩИЙ пик узла, включая смешанные узлы (центр в океане, край
+   * — остров) — только так остров у края узла честно продолжает делиться.
+   */
+  private readonly nodeMaxHeightMetersPyramid: Float32Array
 
   public constructor(
     private readonly map: HeightMapData,
@@ -153,6 +166,7 @@ class TerrainHeightField {
       built.blocksX,
       built.blocksY
     )
+    this.nodeMaxHeightMetersPyramid = this.buildNodeMaxHeightPyramid(block, built.blockMax, built.blocksX, built.blocksY)
   }
 
   public get minMeters(): number {
@@ -587,11 +601,162 @@ class TerrainHeightField {
     return levelErrorMeters
   }
 
+  /**
+   * Пер-узловой пирамидальный максимум высоты, метры — честный (не p99),
+   * заменяет статистическую оценку «центр+k·ε» (ревью Task 5, фикс-раунд 1,
+   * находка №1). Два прохода:
+   *
+   * (1) Лист `TERRAIN_QUADTREE_MAX_LEVEL`: bbox узла в UV карты (9 сэмплов —
+   * 4 угла + 4 середины рёбер + центр параметрического квада узла на грани
+   * кубосферы, через ту же `cubeFaceDirection`/`dirToUv`, что и мешер/SSE) →
+   * диапазон блочных индексов сетки клиренса (±1 блок запаса с каждой
+   * стороны) → MAX по `blockMax` в этом диапазоне (сам `blockMax` — честный
+   * MAX по текселям блока, не p99). Переоценка bbox 9 сэмплами КОНСЕРВАТИВНА
+   * в нужную сторону: равноугольная развёртка нелинейна, но на уровне 6
+   * (мелкий угловой охват) кривизна между сэмплами ничтожна относительно
+   * запаса в 1 блок — недооценка невозможна, блок только шире охваченного;
+   * долгота — циклический анврап относительно центрального сэмпла (узел
+   * компактен, ни один сэмпл не может уйти на честные пол-оборота).
+   *
+   * (2) Уровни `MAX_LEVEL-1..MIN_LEVEL`: родитель = MAX четырёх детей —
+   * дети точно партиционируют область родителя (квадродерево кубосферы, без
+   * пропусков/перекрытий), потому подъём не теряет консервативность и не
+   * требует повторного bbox-скана.
+   *
+   * Память: `6·Σ_{L=1}^{6}4^L` = 32760 записей Float32 ≈ 131 КБ на карту —
+   * посчитано один раз в конструкторе, не за кадр.
+   */
+  private buildNodeMaxHeightPyramid(block: number, blockMax: Uint16Array, blocksX: number, blocksY: number): Float32Array {
+    const { width, height, minMeters, maxMeters } = this.map
+    const pyramid = new Float32Array(CUBE_FACES * FACE_NODE_COUNT)
+    const rawToMeters = (raw: number): number => minMeters + (raw / 65535) * (maxMeters - minMeters)
+
+    // запас в блоках по каждой стороне bbox — покрывает нелинейность
+    // равноугольной развёртки между 9 сэмплами узла (см. докблок метода)
+    const BLOCK_PAD = 1
+
+    const dirScratch = new Vector3()
+    const uvScratch = new Vector2()
+    const sampleU = new Float64Array(9)
+    const sampleV = new Float64Array(9)
+
+    const leafPatches = 2 ** TERRAIN_QUADTREE_MAX_LEVEL
+    const leafSpan = 2 / leafPatches
+    const leafOffset = pyramidLevelOffset(TERRAIN_QUADTREE_MAX_LEVEL)
+
+    for (let face = 0; face < CUBE_FACES; face++) {
+      for (let i = 0; i < leafPatches; i++) {
+        const sLo = -1 + i * leafSpan
+        const sHi = sLo + leafSpan
+        const sMid = sLo + leafSpan / 2
+
+        for (let j = 0; j < leafPatches; j++) {
+          const tLo = -1 + j * leafSpan
+          const tHi = tLo + leafSpan
+          const tMid = tLo + leafSpan / 2
+
+          // 4 угла + 4 середины рёбер + центр — индекс 8 центр (опорная точка анврапа)
+          const sSamples = [sLo, sHi, sLo, sHi, sMid, sMid, sLo, sHi, sMid]
+          const tSamples = [tLo, tLo, tHi, tHi, tLo, tHi, tMid, tMid, tMid]
+
+          for (let k = 0; k < 9; k++) {
+            cubeFaceDirection(face, sSamples[k], tSamples[k], dirScratch)
+            this.dirToUv(dirScratch, uvScratch)
+            sampleU[k] = uvScratch.x
+            sampleV[k] = uvScratch.y
+          }
+
+          const centerU = sampleU[8]
+          let uLo = Infinity
+          let uHi = -Infinity
+          let vLo = Infinity
+          let vHi = -Infinity
+          for (let k = 0; k < 9; k++) {
+            let u = sampleU[k]
+            const delta = u - centerU
+            if (delta > 0.5) u -= 1
+            else if (delta < -0.5) u += 1
+            if (u < uLo) uLo = u
+            if (u > uHi) uHi = u
+            if (sampleV[k] < vLo) vLo = sampleV[k]
+            if (sampleV[k] > vHi) vHi = sampleV[k]
+          }
+
+          const colLo = Math.floor((uLo * width) / block) - BLOCK_PAD
+          const colHi = Math.floor((uHi * width) / block) + BLOCK_PAD
+          const rowLo = Math.max(0, Math.floor((vLo * height) / block) - BLOCK_PAD)
+          const rowHi = Math.min(blocksY - 1, Math.floor((vHi * height) / block) + BLOCK_PAD)
+
+          let maxRaw = 0
+          for (let row = rowLo; row <= rowHi; row++) {
+            for (let colRaw = colLo; colRaw <= colHi; colRaw++) {
+              const col = ((colRaw % blocksX) + blocksX) % blocksX
+              const value = blockMax[row * blocksX + col]
+              if (value > maxRaw) maxRaw = value
+            }
+          }
+
+          pyramid[face * FACE_NODE_COUNT + leafOffset + i * leafPatches + j] = rawToMeters(maxRaw)
+        }
+      }
+    }
+
+    // подъём вверх: родитель = MAX четырёх детей, партиция точная — консервативность не теряется
+    for (let level = TERRAIN_QUADTREE_MAX_LEVEL - 1; level >= TERRAIN_QUADTREE_MIN_LEVEL; level--) {
+      const patches = 2 ** level
+      const childPatches = patches * 2
+      const offset = pyramidLevelOffset(level)
+      const childOffset = pyramidLevelOffset(level + 1)
+
+      for (let face = 0; face < CUBE_FACES; face++) {
+        for (let i = 0; i < patches; i++) {
+          for (let j = 0; j < patches; j++) {
+            let m = -Infinity
+            for (let di = 0; di < 2; di++) {
+              for (let dj = 0; dj < 2; dj++) {
+                const ci = i * 2 + di
+                const cj = j * 2 + dj
+                const v = pyramid[face * FACE_NODE_COUNT + childOffset + ci * childPatches + cj]
+                if (v > m) m = v
+              }
+            }
+            pyramid[face * FACE_NODE_COUNT + offset + i * patches + j] = m
+          }
+        }
+      }
+    }
+
+    return pyramid
+  }
+
   /** ε уровня дерева, метры: p99 размаха высот в окне шага вершинной сетки уровня; ниже блочного разрешения — линейное масштабирование шага. Числитель SSE и глубина юбки. */
   public geometricErrorMeters(level: number): number {
     return this.levelErrorMeters[Math.min(Math.max(level, 1), 6)]
   }
+
+  /**
+   * Честный максимум высоты узла квадродерева (face, level, i, j), метры —
+   * см. докблок поля `nodeMaxHeightMetersPyramid` и билдера. `level` вне
+   * `[MIN_LEVEL, MAX_LEVEL]` клампится симметрично `geometricErrorMeters`.
+   */
+  public nodeMaxHeightMeters(face: number, level: number, i: number, j: number): number {
+    const clampedLevel = Math.min(Math.max(level, TERRAIN_QUADTREE_MIN_LEVEL), TERRAIN_QUADTREE_MAX_LEVEL)
+    const patches = 2 ** clampedLevel
+
+    return this.nodeMaxHeightMetersPyramid[face * FACE_NODE_COUNT + pyramidLevelOffset(clampedLevel) + i * patches + j]
+  }
 }
+
+/**
+ * Смещение уровня L (1..MAX_LEVEL) в поддереве ОДНОЙ грани пирамиды максимумов:
+ * Σ_{k=1}^{L-1} 4^k = (4^L − 4) / 3 — индексы уровней 1..L−1 уже заняты.
+ */
+function pyramidLevelOffset(level: number): number {
+  return (4 ** level - 4) / 3
+}
+
+/** Записей на одну грань в пирамиде максимумов: Σ_{L=1}^{MAX_LEVEL} 4^L = pyramidLevelOffset(MAX_LEVEL+1). */
+const FACE_NODE_COUNT = pyramidLevelOffset(TERRAIN_QUADTREE_MAX_LEVEL + 1)
 
 /** 99-й процентиль по копии массива (не мутирует вход): сортировка, индекс floor(0.99·(n−1)). */
 function percentile99(values: Float64Array): number {

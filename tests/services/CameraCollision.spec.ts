@@ -734,6 +734,10 @@ describe('CameraCollision: пуш-аут по воде (поточечный sag
     const dir = OCEAN_INTERIOR_DIR // h=−5000 м, вдали от берега — глубоко под уровнем воды
 
     const waterFloor = toThreeJSUnits(1736 + waterLevelMeters / 1000)
+    // пол воды несёт тот же CLEARANCE_MARGIN_METERS, что и пол суши (ревью
+    // Task 5, фикс-раунд 1, находка №5) — камера садится не на аналитическую
+    // плоскость воды ровно, а с тем же запасом, что у честного пола рельефа
+    const waterFloorWithMargin = waterFloor + toThreeJSUnits(CLEARANCE_MARGIN_METERS / 1000)
     expect(field.surfaceRadiusUnits(dir)).toBeLessThan(waterFloor - toThreeJSUnits(4)) // рельеф честно ниже уровня
 
     const start = dir.clone().multiplyScalar(field.surfaceRadiusUnits(dir) * 0.9)
@@ -741,7 +745,7 @@ describe('CameraCollision: пуш-аут по воде (поточечный sag
 
     collision.resolve()
 
-    expect(camera.position.length()).toBeCloseTo(waterFloor, 6)
+    expect(camera.position.length()).toBeCloseTo(waterFloorWithMargin, 6)
     expect(camera.position.clone().normalize().dot(dir)).toBeCloseTo(1, 6)
   })
 
@@ -770,6 +774,83 @@ describe('CameraCollision: пуш-аут по воде (поточечный sag
     collision.resolve()
 
     expect(camera.position.length()).toBeCloseTo(altitude, 10)
+  })
+})
+
+// Ревью Task 5, фикс-раунд 1, находка №2: нормаль контакта над водой обязана
+// быть радиальной (p̂), а не взятой с дна (surfaceNormalLocal) — иначе
+// скольжение у берега ныряет/подпрыгивает вслед за невидимым под водой
+// рельефом. Дискриминатор — СРАВНЕНИЕ: тело A несёт реальный (ненулевой,
+// СЕВЕР-ЮГ) склон дна, тело B — плоское дно (то же среднее значение) с той
+// же честной точкой контакта; оба на 20+ км ниже уровня воды, вода — везде
+// доминирующий пол. Если нормаль контакта радиальна (не берётся с дна),
+// склон дна тела A вообще не участвует в вычислении — итог свипа обязан
+// СОВПАСТЬ с плоским телом B (плоское дно и само по себе даёт радиальную
+// нормаль — стабильный, не зависящий от фикса ориентир). Расхождение между
+// A и B означало бы, что нормаль всё ещё частично берётся с дна.
+const NORMAL_PATH_SLOPED = 'planets/normal-water-sloped/height.raw'
+const NORMAL_PATH_FLAT = 'planets/normal-water-flat/height.raw'
+const NORMAL_WIDTH = 8
+const NORMAL_HEIGHT = 4
+const NORMAL_MIN_M = -40000
+const NORMAL_MAX_M = 40000
+const normalRawFor = (meters: number): number => Math.round(((meters - NORMAL_MIN_M) / (NORMAL_MAX_M - NORMAL_MIN_M)) * 65535)
+
+function normalTestBody(path: string, sloped: boolean, waterLevelMeters: number): { body: Object3D; field: TerrainHeightField } {
+  // sloped: строки −31500,−28500,−25500,−22500 (север-юг рамп, 3000 м/строка,
+  // среднее −27000); flat: все строки на среднем значении −27000 —
+  // одинаковая ЧЕСТНАЯ высота в интересующей точке (экватор, между строками
+  // 1 и 2), разный только градиент вокруг неё
+  const values: number[] = []
+  for (let row = 0; row < NORMAL_HEIGHT; row++) {
+    const meters = sloped ? -31500 + row * 3000 : -27000
+    for (let col = 0; col < NORMAL_WIDTH; col++) values.push(normalRawFor(meters))
+  }
+  seedHeightMap(values, NORMAL_WIDTH, NORMAL_HEIGHT, NORMAL_MIN_M, NORMAL_MAX_M, path)
+  const body = makeBody('planet', 1736, new Vector3(), undefined, path, waterLevelMeters)
+  const field = terrainHeightFieldFor((heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(path)!, 1736)
+  return { body, field }
+}
+
+describe('CameraCollision: нормаль контакта над водой радиальна, не с дна (Task 5, фикс-раунд 1, находка №2)', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  it('скольжение над глубокой впадиной со СКЛОНОМ дна не отличается от скольжения над плоским дном — нормаль радиальна, склон не участвует', () => {
+    const waterLevelMeters = 0
+    const { field: slopedField } = normalTestBody(NORMAL_PATH_SLOPED, true, waterLevelMeters)
+
+    const waterFloorWithMargin = toThreeJSUnits(1736 + waterLevelMeters / 1000) + toThreeJSUnits(CLEARANCE_MARGIN_METERS / 1000)
+    const dir0 = new Vector3(1, 0, 0)
+    // честный рельеф здесь на 20+ км ниже уровня воды — вода однозначно доминирующий пол
+    expect(slopedField.surfaceRadiusUnits(dir0)).toBeLessThan(waterFloorWithMargin - toThreeJSUnits(20))
+
+    // тот же диагональный свип, что и в «движение под углом скользит по
+    // поверхности» (плоская сфера) выше — далёкий старт, прицел за центр:
+    // надёжно даёт ОДИН чистый контакт+скольжение, без чехарды эпсилон-нюансов
+    // прямого старта ровно на границе (там, где начиналась исходная фикстура)
+    const runSweep = (path: string, sloped: boolean): Vector3 => {
+      const { body } = normalTestBody(path, sloped, waterLevelMeters)
+      const { collision, camera } = makeCollision([body], new Vector3(-waterFloorWithMargin * 2, waterFloorWithMargin * 0.5, 0))
+
+      collision.resolve()
+      camera.position.set(0, waterFloorWithMargin * 0.5, 0)
+      collision.resolve()
+
+      return camera.position.clone()
+    }
+
+    const slopedResult = runSweep(NORMAL_PATH_SLOPED, true)
+    const flatResult = runSweep(NORMAL_PATH_FLAT, false)
+
+    // не прилипла к контакту (тот же базовый инвариант, что и у плоской сферы)
+    expect(slopedResult.length()).toBeGreaterThanOrEqual(waterFloorWithMargin - toThreeJSUnits(0.001))
+    expect(slopedResult.y).toBeGreaterThan(waterFloorWithMargin * 0.5 * 0.9)
+
+    // главный дискриминатор: склон дна (недостижимого честного рельефа под
+    // водой) не отличим от плоского дна — нормаль контакта не берёт его в расчёт
+    expect(slopedResult.x).toBeCloseTo(flatResult.x, 6)
+    expect(slopedResult.y).toBeCloseTo(flatResult.y, 6)
+    expect(slopedResult.z).toBeCloseTo(flatResult.z, 6)
   })
 })
 

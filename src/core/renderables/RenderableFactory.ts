@@ -24,7 +24,8 @@ import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSyst
 import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
-import { readRenderingData, requireRenderingData } from '@/core/helpers/renderingData'
+import { requireRenderingData } from '@/core/helpers/renderingData'
+import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { BROWN_DWARF_IMPOSTOR_PIXELS, WHITE_DWARF_IMPOSTOR_PIXELS } from '@/core/helpers/apparentSize'
 import { Nebula } from '@/core/renderables/Nebula'
 import { nebulaParamsFromData } from '@/core/renderables/Nebula/NebulaRenderingData'
@@ -33,7 +34,7 @@ import { BrownDwarf } from '@/core/renderables/BrownDwarf'
 import { BrownDwarfImpostor } from '@/core/renderables/BrownDwarf/BrownDwarfImpostor'
 import { WhiteDwarf } from '@/core/renderables/WhiteDwarf/WhiteDwarf'
 import { WhiteDwarfImpostor } from '@/core/renderables/WhiteDwarf/WhiteDwarfImpostor'
-import { INebulaRenderingObject, IPlanetRenderingObject, IRingRenderingObject } from '@/core/models/types'
+import { INebulaRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 
 class RenderableFactory {
@@ -197,9 +198,12 @@ class RenderableFactory {
     // расставит по БД; до неё ручки нигде нет — ноль расходов везде). Вода
     // висит на TerrainSphere ребёнком, не отдельным уровнем LOD: делит с ней
     // видимость (LOD прячет и рельеф, и воду одним переключением), см.
-    // докблок WaterSphere.
-    const waterLevelMeters = readRenderingData<IPlanetRenderingObject>(actor)?.waterLevelMeters
-    if (lodl1 instanceof TerrainSphere && typeof waterLevelMeters === 'number') {
+    // докблок WaterSphere. Предикат валидности ручки — readWaterLevelMeters
+    // (единый на все три места чтения, включая коллизию и SSE-отбор — ревью
+    // Task 5, фикс-раунд 1, находка №3): раньше здесь была `typeof === 'number'`
+    // без Number.isFinite, NaN молча строил бы оболочку.
+    const waterLevelMeters = readWaterLevelMeters(actor)
+    if (lodl1 instanceof TerrainSphere && waterLevelMeters !== undefined) {
       lodl1.add(new WaterSphere(actor, waterLevelMeters, this.renderer))
     }
 
