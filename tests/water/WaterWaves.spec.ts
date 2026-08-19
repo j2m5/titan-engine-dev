@@ -6,10 +6,19 @@ import { WaterShader, WATER_WAVE_SMALLEST_PERIOD_METERS } from '@/core/materials
 import { Actor } from '@/core/models/Actor'
 import { distanceForApparentSize } from '@/core/helpers/apparentSize'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import {
+  OCTANT_DIRECTIONS,
+  angleDeg,
+  dot,
+  waterWaveNormalPerturbed,
+  waterWaveNormalWithoutSignFix
+} from './waterWaveNormalMirror'
 
 // Ядро волн (Task 1, арка water-shader; фикс-раунд 1 ревью учтён — №1 страж
 // кванта по фактическому ассету, №2 whiteout-реориентация трипланара, №4
-// анизотропные октавы 2/3): getNoise/sunLight/albedo дословно Water.js
+// анизотропные октавы 2/3; финальное whole-branch ревью учтено — БЛОКЕР №1:
+// несущая компонента трипланара теряла знак оси проекции, см. describe ниже
+// «CPU-зеркало waterWaveNormal»): getNoise/sunLight/albedo дословно Water.js
 // (three/examples/jsm/objects/Water.js) там, где спека не требует адаптации;
 // трипланарный whiteout-бленд в body-локальном XYZ, fade по дистанции, гейт
 // USE_WATER_WAVES не тронул ни одного символа Task 4 без карты (см. ниже).
@@ -194,15 +203,23 @@ describe('WaterShaderTemplate: трипланарный whiteout-бленд — 
   })
 
   it('каждая проекция реориентирована СВОИМ свизлом ДО суммирования — X→.zyx, Y→.xzy, Z→.xyz (порядок triplanarBlendNormal)', () => {
-    expect(frag).toContain('vec3 fromX = getNoise(p.zy).zyx * vec3(1.0, 1.5, 1.5);')
-    expect(frag).toContain('vec3 fromY = getNoise(p.xz).xzy * vec3(1.5, 1.0, 1.5);')
-    expect(frag).toContain('vec3 fromZ = getNoise(p.xy).xyz * vec3(1.5, 1.5, 1.0);')
+    expect(frag).toContain('vec3 fromX = getNoise(p.zy).zyx * vec3(1.0, 1.5, 1.5) * vec3(axisSign.x, 1.0, 1.0);')
+    expect(frag).toContain('vec3 fromY = getNoise(p.xz).xzy * vec3(1.5, 1.0, 1.5) * vec3(1.0, axisSign.y, 1.0);')
+    expect(frag).toContain('vec3 fromZ = getNoise(p.xy).xyz * vec3(1.5, 1.5, 1.0) * vec3(1.0, 1.0, axisSign.z);')
   })
 
-  it('Y-проекция (.xzy) — дословно одноплоскостная формула Water.js (world.xz + up=world.y)', () => {
+  it('Y-проекция (.xzy) — дословно одноплоскостная формула Water.js (world.xz + up=world.y), знаковая поправка отдельным множителем', () => {
     // Water.js: surfaceNormal = normalize(noise.xzy * vec3(1.5,1.0,1.5)) — тот
-    // же множитель на ТОЙ ЖЕ свизл-схеме, ноль адаптации для этой проекции.
+    // же множитель на ТОЙ ЖЕ свизл-схеме, ноль адаптации для этой проекции;
+    // sign(dirLocal.y) — отдельный сомножитель ПОВЕРХ (см. describe ниже).
     expect(frag).toContain('getNoise(p.xz).xzy * vec3(1.5, 1.0, 1.5)')
+  })
+
+  it('БЛОКЕР финального ревью №1: несущая компонента каждой проекции домножена на sign(dirLocal.ось), не только на абс. вес', () => {
+    expect(frag).toContain('vec3 axisSign = sign(dirLocal);')
+    expect(frag).toContain('vec3(axisSign.x, 1.0, 1.0)')
+    expect(frag).toContain('vec3(1.0, axisSign.y, 1.0)')
+    expect(frag).toContain('vec3(1.0, 1.0, axisSign.z)')
   })
 
   it('взвешенная сумма УЖЕ реориентированных проекций — normalize(fromX*w.x + fromY*w.y + fromZ*w.z)', () => {
@@ -215,6 +232,48 @@ describe('WaterShaderTemplate: трипланарный whiteout-бленд — 
 
   it('единственный normalMatrix-переход — пертурбация целиком тело-локальна', () => {
     expect(frag).toContain('normal = normalize(normalMatrix * waveLocalNormal);')
+  })
+})
+
+// CPU-зеркало waterWaveNormal (тот же класс стража, что знак cavity —
+// численный порт GLSL, читаемый ОТДЕЛЬНО от строковых пинов выше): блокер
+// финального whole-branch ревью, №1. Несущая компонента трипланарного
+// бленда (декод B-канала ассета, статистически смещённого к +z, см.
+// waterWaveNormalMirror.ts) без знаковой поправки ВСЕГДА положительна — на
+// октантах, где dirLocal отрицателен по оси, perturbed указывал «в мир», а
+// не «наружу» (dot(perturbed,dirLocal) < 0, угол > 90°, местами до 180°).
+describe('CPU-зеркало waterWaveNormal: знак несущей компоненты трипланара (БЛОКЕР финального ревью, №1)', () => {
+  it('RED на прежнем коде (без sign-фикса): минимум на одном октанте perturbed смотрит НАЗАД (dot < 0)', () => {
+    const worst = OCTANT_DIRECTIONS.map(([, dir]) => dot(waterWaveNormalWithoutSignFix(dir), dir)).reduce(
+      (min, d) => Math.min(min, d),
+      Infinity
+    )
+
+    // -X-Y-Z: несущая компонента каждой проекции положительна по построению
+    // (декод смещён к +z), а dirLocal отрицателен по всем трём осям —
+    // perturbed и dirLocal антипараллельны без поправки.
+    expect(worst).toBeLessThan(0)
+  })
+
+  it('GREEN на текущем коде (со sign-фиксом): dot(perturbed, dirLocal) > 0 на ВСЕХ 8 октантах', () => {
+    for (const [name, dir] of OCTANT_DIRECTIONS) {
+      const perturbed = waterWaveNormalPerturbed(dir)
+
+      expect(dot(perturbed, dir), `октант ${name}`).toBeGreaterThan(0)
+    }
+  })
+
+  it('углы до/после фикса — таблица (мельче ~15° на всех 8 октантах после фикса)', () => {
+    for (const [, dir] of OCTANT_DIRECTIONS) {
+      const before = angleDeg(waterWaveNormalWithoutSignFix(dir), dir)
+      const after = angleDeg(waterWaveNormalPerturbed(dir), dir)
+
+      // фикс обязан не УХУДШИТЬ угол ни на одном октанте (на +X+Y+Z, где все
+      // знаки положительны, sign()=+1 везде — фикс там тождественный, угол
+      // совпадает буквально; на остальных 7 — строго улучшает)
+      expect(after).toBeLessThanOrEqual(before)
+      expect(after).toBeLessThan(15) // страж числом (не только знаком) — ревью замерило 3.2–14.5°
+    }
   })
 })
 
@@ -435,5 +494,28 @@ describe('WaterShader: uWaterWaveFadeMeters — дефолт по видимом
     const shader = new WaterShader(stubActor({ waterWaveFadeMeters: 5000 }))
 
     expect(shader.uniforms.uWaterWaveFadeMeters.value).toBeCloseTo(toThreeJSUnits(5), 10)
+  })
+
+  // Финальное whole-branch ревью, №4: waterWaveScale не входил ни в дефолт
+  // fade, ни в квант-страж — scale=2 сжимает эффективный мельчайший период
+  // (period/scale = 1500 м) без предупреждения, мерцание возвращается.
+  it('scale=2 → дефолт fade РОВНО вдвое ближе (эффективный период вдвое мельче)', () => {
+    const base = new WaterShader(stubActor())
+    const scaled = new WaterShader(stubActor({ waterWaveScale: 2 }))
+
+    expect(scaled.uniforms.uWaterWaveFadeMeters.value).toBeCloseTo(
+      (base.uniforms.uWaterWaveFadeMeters.value as number) / 2,
+      10
+    )
+  })
+
+  it('явная ручка waterWaveFadeMeters НЕ делится на scale — автор данных берёт число метров на свою ответственность', () => {
+    const withoutScale = new WaterShader(stubActor({ waterWaveFadeMeters: 5000 }))
+    const withScale = new WaterShader(stubActor({ waterWaveFadeMeters: 5000, waterWaveScale: 2 }))
+
+    expect(withScale.uniforms.uWaterWaveFadeMeters.value).toBeCloseTo(
+      withoutScale.uniforms.uWaterWaveFadeMeters.value as number,
+      10
+    )
   })
 })

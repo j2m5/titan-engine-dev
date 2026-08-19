@@ -47,13 +47,16 @@ const WATER_WAVE_FADE_FOV_DEGREES = 50
 const WATER_WAVE_FADE_VIEWPORT_HEIGHT = 1080
 
 /**
- * Дефолт uWaterWaveFadeMeters — юниты сцены (не метры, несмотря на имя
- * ручки в data, см. её докблок): дистанция, на которой мельчайший период
- * getNoise (WATER_WAVE_SMALLEST_PERIOD_METERS) опускается ниже
- * WATER_WAVE_FADE_TARGET_PIXELS при номинале fov/viewport. Та же формула,
- * что starLodSwitchDistance (apparentSize.ts) — CPU переводит метры в юниты
- * ОДИН раз, здесь и при явной ручке (см. WaterShader ниже), шейдер сравнивает
- * готовые юниты с length(vViewPosition) без собственной конвертации.
+ * Базовый дефолт uWaterWaveFadeMeters при waveScaleHandle=1 — юниты сцены
+ * (не метры, несмотря на имя ручки в data, см. её докблок): дистанция, на
+ * которой мельчайший период getNoise (WATER_WAVE_SMALLEST_PERIOD_METERS)
+ * опускается ниже WATER_WAVE_FADE_TARGET_PIXELS при номинале fov/viewport.
+ * Та же формула, что starLodSwitchDistance (apparentSize.ts). При
+ * waveScaleHandle≠1 фактический дефолт (см. конструктор WaterShader ниже)
+ * делится на handle — увеличение ручки сжимает домен getNoise, эффективный
+ * мельчайший период = период/scale, fade обязан подступать пропорционально
+ * ближе, иначе мерцание возвращается на дистанциях, где страж кванта уже
+ * не проверял этот масштаб (финальное whole-branch ревью, №4).
  */
 const DEFAULT_WATER_WAVE_FADE_UNITS = distanceForApparentSize(
   toThreeJSUnits(WATER_WAVE_SMALLEST_PERIOD_METERS / 1000),
@@ -157,10 +160,18 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
       uTime: new Uniform(0),
       uWaterWaveScale: new Uniform(waveScaleHandle * radiusMeters),
       uWaterWaveSpeed: new Uniform(waterData.waterWaveSpeed ?? DEFAULT_WATER_WAVE_SPEED),
+      // Дефолт делится на waveScaleHandle (финальное whole-branch ревью, №4):
+      // uWaterWaveScale = radiusMeters·waveScaleHandle — увеличение ручки
+      // сжимает ДОМЕН getNoise пропорционально (эффективный мельчайший
+      // период = WATER_WAVE_SMALLEST_PERIOD_METERS/scale), а страж кванта
+      // (WaterWaves.spec.ts) слеп к ручке — считает по TS-константе периода
+      // без масштаба. Явную ручку `waterWaveFadeMeters` (метры) НЕ делим —
+      // автор данных берёт её как честное число метров на свою
+      // ответственность, деление касается только САМОВЫЧИСЛЕННОГО дефолта.
       uWaterWaveFadeMeters: new Uniform(
         waveFadeMetersHandle !== undefined
           ? toThreeJSUnits(waveFadeMetersHandle / 1000)
-          : DEFAULT_WATER_WAVE_FADE_UNITS
+          : DEFAULT_WATER_WAVE_FADE_UNITS / waveScaleHandle
       ),
       // Кубмапа — заглушка null: доставляется WaterMaterial конструктором
       // (ровно один раз, см. её докблок), не здесь (это CPU-путь "data",
