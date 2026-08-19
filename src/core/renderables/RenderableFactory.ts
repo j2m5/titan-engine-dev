@@ -1,4 +1,5 @@
 import { LOD, Object3D, WebGLRenderer } from 'three'
+import { disposeSceneTree } from '@/core/lifecycle/disposeSceneTree'
 import { Actor } from '@/core/models/Actor'
 import { Barycenter } from '@/core/renderables/Barycenter'
 import { BlackHole } from '@/core/renderables/BlackHole'
@@ -37,6 +38,7 @@ import { WhiteDwarf } from '@/core/renderables/WhiteDwarf/WhiteDwarf'
 import { WhiteDwarfImpostor } from '@/core/renderables/WhiteDwarf/WhiteDwarfImpostor'
 import { INebulaRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
+import { RenderableObject3D } from '@/core/renderables/types'
 
 class RenderableFactory {
   public constructor(
@@ -178,35 +180,96 @@ class RenderableFactory {
     return node
   }
 
+  /**
+   * Нулевой уровень LOD планеты: рельеф, если карта высот уже в реестре,
+   * иначе легаси-сфера. Общий для createPlanet и апгрейда/даунгрейда —
+   * иначе связка «рельеф + водная оболочка» существовала бы в двух копиях
+   * и разъехалась бы на первой же правке.
+   */
+  private buildPlanetSurface(actor: Actor): RenderableObject3D {
+    const heightPath: string | undefined = heightPathOf(actor)
+    const heightMap = heightPath ? heightFieldStorage.get(heightPath) : undefined
+
+    if (!heightMap) return new Planet(actor)
+
+    const terrain = new TerrainSphere(
+      actor,
+      terrainHeightFieldFor(heightMap, actor.physicalObject!.getAttribute('radius')!),
+      this.renderer
+    )
+
+    // Гейт водной оболочки: обе ручки разом — карта высот (без неё нет
+    // рельефа, отделять воду не от чего) И waterLevelMeters в data. Вода
+    // висит на TerrainSphere ребёнком, не отдельным уровнем LOD: делит с ней
+    // видимость (LOD прячет и рельеф, и воду одним переключением), см.
+    // докблок WaterSphere. Предикат валидности ручки — readWaterLevelMeters,
+    // единый на все места чтения, включая коллизию и SSE-отбор.
+    const waterLevelMeters = readWaterLevelMeters(actor)
+
+    if (waterLevelMeters !== undefined) terrain.add(new WaterSphere(actor, waterLevelMeters, this.renderer))
+
+    return terrain
+  }
+
+  /**
+   * Меняет нулевой уровень LOD на месте. Уровень, а не весь узел: пересоздание
+   * DynamicNode оборвало бы орбитальную линию, экваториальную рамку с кольцами
+   * и атмосферой и ссылки наблюдателей по имени.
+   *
+   * addLevel здесь непригоден — он добавил бы ВТОРОЙ уровень с той же
+   * дистанцией; правится сам элемент levels[0].
+   */
+  private swapSurface(node: DynamicNode, next: RenderableObject3D): void {
+    const lod = node.children.find((child): child is LOD => child instanceof LOD)
+
+    if (!lod || !lod.levels.length) return
+
+    const previous: Object3D = lod.levels[0].object
+
+    lod.remove(previous)
+    lod.levels[0].object = next
+    lod.add(next)
+    node.renderable = next
+
+    disposeSceneTree(previous)
+  }
+
+  /**
+   * Карта высот доехала — тело переходит с легаси-сферы на рельеф.
+   * Идемпотентен: гейт зовёт его на каждом пересчёте, пока тело близко.
+   */
+  public upgradePlanetToTerrain(node: DynamicNode): boolean {
+    const lod = node.children.find((child): child is LOD => child instanceof LOD)
+
+    if (!lod || !lod.levels.length) return false
+    if (lod.levels[0].object instanceof TerrainSphere) return false
+
+    const next: RenderableObject3D = this.buildPlanetSurface(node.model)
+
+    if (!(next instanceof TerrainSphere)) return false
+
+    this.swapSurface(node, next)
+
+    return true
+  }
+
+  /** Карта отпущена — тело возвращается на легаси-сферу. Идемпотентен. */
+  public downgradeTerrainToPlanet(node: DynamicNode): boolean {
+    const lod = node.children.find((child): child is LOD => child instanceof LOD)
+
+    if (!lod || !lod.levels.length) return false
+    if (!(lod.levels[0].object instanceof TerrainSphere)) return false
+
+    this.swapSurface(node, new Planet(node.model))
+
+    return true
+  }
+
   private createPlanet(actor: Actor): Object3D {
     const node = new DynamicNode(actor)
     const lod = new LOD()
-    // Рельеф — по фактически загруженной карте: провал загрузки деградирует
-    // к легаси-сфере согласованно с материалом и коллизией
-    const heightPath: string | undefined = heightPathOf(actor)
-    const heightMap = heightPath ? heightFieldStorage.get(heightPath) : undefined
-    const lodl1 = heightMap
-      ? new TerrainSphere(
-          actor,
-          terrainHeightFieldFor(heightMap, actor.physicalObject!.getAttribute('radius')!),
-          this.renderer
-        )
-      : new Planet(actor)
+    const lodl1: RenderableObject3D = this.buildPlanetSurface(actor)
     const lodl2 = new FakePlanet(actor)
-
-    // Гейт водной оболочки: обе ручки разом — карта высот (без неё нет
-    // рельефа, отделять воду не от чего) И waterLevelMeters в data (Task 6
-    // расставит по БД; до неё ручки нигде нет — ноль расходов везде). Вода
-    // висит на TerrainSphere ребёнком, не отдельным уровнем LOD: делит с ней
-    // видимость (LOD прячет и рельеф, и воду одним переключением), см.
-    // докблок WaterSphere. Предикат валидности ручки — readWaterLevelMeters
-    // (единый на все три места чтения, включая коллизию и SSE-отбор — ревью
-    // Task 5, фикс-раунд 1, находка №3): раньше здесь была `typeof === 'number'`
-    // без Number.isFinite, NaN молча строил бы оболочку.
-    const waterLevelMeters = readWaterLevelMeters(actor)
-    if (lodl1 instanceof TerrainSphere && waterLevelMeters !== undefined) {
-      lodl1.add(new WaterSphere(actor, waterLevelMeters, this.renderer))
-    }
 
     // Известно-неверная высота кадра: tan(fov) вместо 2*tan(fov/2), поэтому
     // переключение происходит на 3.8 px вместо номинальных 3. Не тронута

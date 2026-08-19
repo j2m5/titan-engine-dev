@@ -1,0 +1,157 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { LOD, Texture } from 'three'
+import { Actor } from '@/core/models/Actor'
+import { RenderableFactory } from '@/core/renderables/RenderableFactory'
+import { Planet } from '@/core/renderables/Planet'
+import { TerrainSphere } from '@/core/renderables/TerrainSphere'
+import { WaterSphere } from '@/core/renderables/Water/WaterSphere'
+import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
+import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
+import { heightPathOf } from '@/core/terrain/heightPath'
+import { resourceStorage } from '@/core/services/ResourceStorage'
+import type { HeightMapData } from '@/core/terrain/heightMapFormat'
+
+/** Луна: тело с height-ресурсом и без воды (actorId 19 ↔ resourceId 125, moon_height.raw). */
+const MOON_ID: number = 19
+
+/**
+ * PlanetMaterial (её держат и Planet, и TerrainSphere) на промахе по ключу
+ * текстуры зовёт PlaceholderTexture — она рисует на canvas 2d, которого в
+ * jsdom нет («canvas» npm-пакет не установлен). Приём и набор ключей — из
+ * `tests/planet/PlanetTerrain.spec.ts`: те же тела (Луна, Земля), тот же
+ * список ('', 'default.png', 'night.jpg', diffuse-путь каждого тела).
+ */
+function seedTexture(name: string): void {
+  const texture = new Texture()
+  texture.name = name
+  texture.image = { width: 4, height: 2 }
+  resourceStorage.addTexture(texture)
+}
+
+function seedPlaceholderKeys(): void {
+  seedTexture('')
+  seedTexture('default.png')
+  seedTexture('night.jpg')
+  seedTexture(Actor.find(MOON_ID)!.resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string)
+  seedTexture(Actor.find(7)!.resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string)
+}
+
+/**
+ * Ровная карта: значения одинаковы, поэтому TerrainHeightField выродится в
+ * константное поле — быстро строится и не зависит от данных LOLA.
+ */
+function flatMap(): HeightMapData {
+  return { width: 4, height: 2, minMeters: 0, maxMeters: 1000, data: new Uint16Array(8).fill(32768) }
+}
+
+function makeFactory(): RenderableFactory {
+  const renderer = { domElement: { width: 1920, height: 1080 } }
+  const resourceObserver = { textureOf: vi.fn(() => null) }
+
+  return new RenderableFactory(renderer as never, resourceObserver as never)
+}
+
+function lodOf(node: DynamicNode): LOD {
+  const lod = node.children.find((child): child is LOD => child instanceof LOD)
+
+  if (!lod) throw new Error('LOD не найден в узле')
+
+  return lod
+}
+
+let factory: RenderableFactory
+let moon: Actor
+
+beforeEach(() => {
+  factory = makeFactory()
+  moon = Actor.find(MOON_ID)!
+  seedPlaceholderKeys()
+})
+
+afterEach(() => {
+  heightFieldStorage.clear()
+  resourceStorage.deleteAllTextures()
+  vi.restoreAllMocks()
+})
+
+describe('RenderableFactory: подмена нулевого уровня LOD', () => {
+  it('апгрейд ставит TerrainSphere вместо Planet и переводит renderable', () => {
+    const node = factory.make(moon) as DynamicNode
+    const before = lodOf(node).levels[0].object
+
+    expect(before).toBeInstanceOf(Planet)
+
+    heightFieldStorage['maps'].set(heightPathOf(moon)!, flatMap())
+
+    expect(factory.upgradePlanetToTerrain(node)).toBe(true)
+
+    const after = lodOf(node).levels[0].object
+    expect(after).toBeInstanceOf(TerrainSphere)
+    expect(node.renderable).toBe(after)
+    expect(lodOf(node).children).toContain(after)
+    expect(lodOf(node).children).not.toContain(before)
+  })
+
+  it('апгрейд без карты в реестре ничего не делает', () => {
+    const node = factory.make(moon) as DynamicNode
+
+    expect(factory.upgradePlanetToTerrain(node)).toBe(false)
+    expect(lodOf(node).levels[0].object).toBeInstanceOf(Planet)
+  })
+
+  it('повторный апгрейд идемпотентен', () => {
+    const node = factory.make(moon) as DynamicNode
+    heightFieldStorage['maps'].set(heightPathOf(moon)!, flatMap())
+
+    factory.upgradePlanetToTerrain(node)
+
+    expect(factory.upgradePlanetToTerrain(node)).toBe(false)
+  })
+
+  it('даунгрейд возвращает Planet и убирает рельеф из графа', () => {
+    const node = factory.make(moon) as DynamicNode
+    heightFieldStorage['maps'].set(heightPathOf(moon)!, flatMap())
+    factory.upgradePlanetToTerrain(node)
+    const terrain = lodOf(node).levels[0].object
+
+    expect(factory.downgradeTerrainToPlanet(node)).toBe(true)
+
+    const after = lodOf(node).levels[0].object
+    expect(after).toBeInstanceOf(Planet)
+    expect(node.renderable).toBe(after)
+    expect(lodOf(node).children).not.toContain(terrain)
+  })
+
+  it('даунгрейд легаси-узла идемпотентен', () => {
+    const node = factory.make(moon) as DynamicNode
+
+    expect(factory.downgradeTerrainToPlanet(node)).toBe(false)
+  })
+
+  it('дальний уровень LOD апгрейд не трогает', () => {
+    const node = factory.make(moon) as DynamicNode
+    const far = lodOf(node).levels[1].object
+    const farDistance = lodOf(node).levels[1].distance
+    heightFieldStorage['maps'].set(heightPathOf(moon)!, flatMap())
+
+    factory.upgradePlanetToTerrain(node)
+
+    expect(lodOf(node).levels.length).toBe(2)
+    expect(lodOf(node).levels[1].object).toBe(far)
+    expect(lodOf(node).levels[1].distance).toBe(farDistance)
+  })
+
+  it('водная оболочка едет вместе с рельефом, если ручка задана', () => {
+    // Земля (actorId 7) — единственное тело Solar с waterLevelMeters в БД (0);
+    // мокать renderingObject не нужно и опасно: через тот же getAttribute
+    // TerrainSphere читает остальные ручки материала
+    const earth: Actor = Actor.find(7)!
+    const node = factory.make(earth) as DynamicNode
+    heightFieldStorage['maps'].set(heightPathOf(earth)!, flatMap())
+
+    factory.upgradePlanetToTerrain(node)
+
+    const terrain = lodOf(node).levels[0].object
+    expect(terrain.children.some((child) => child instanceof WaterSphere)).toBe(true)
+  })
+})
