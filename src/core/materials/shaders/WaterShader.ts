@@ -1,6 +1,7 @@
-import { Color, Texture, Uniform, Vector3 } from 'three'
+import { Color, CubeTexture, Texture, Uniform, Vector3 } from 'three'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { WaterShaderTemplate as Shader } from '@/core/materials/shaders/lib/WaterShaderTemplate'
+import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
 import { Actor } from '@/core/models/Actor'
 import { IPlanetRenderingObject } from '@/core/models/types'
 import { distanceForApparentSize } from '@/core/helpers/apparentSize'
@@ -13,6 +14,10 @@ const DEFAULT_WATER_SHALLOW_COLOR = 0x2e8b9e
 const DEFAULT_WATER_ALPHA_DEEP = 0.85
 const DEFAULT_WATER_FRESNEL_TINT = 0xbfe9ff
 const DEFAULT_WATER_NIGHT_FLOOR = 0.08
+// Дисторсия выборки отражения кубмапы (арка water-shader, Task 2) — аналог
+// distortionScale Water.js (см. WaterShaderTemplate). Инертна без
+// USE_WATER_REFLECTION (гейт по факту доставки кубмапы, см. WaterMaterial).
+const DEFAULT_WATER_DISTORTION = 20
 
 // --- Ряд волн (арка water-shader, Task 1). ---
 
@@ -70,6 +75,17 @@ interface WaterUniforms {
   uWaterWaveScale: number
   uWaterWaveSpeed: number
   uWaterWaveFadeMeters: number
+  // Отражение фоновой кубмапы (арка water-shader, Task 2). uSkyboxMap — сама
+  // текстура, доставляется WaterMaterial конструктором (не data-ручка, см.
+  // её докблок), здесь только null-заглушка. Набор общей выборки фона —
+  // createSkyboxSampleUniforms, ЖЕЛЕЗНЫЙ констрейнт (см. SkyboxSample chunk).
+  uSkyboxMap: CubeTexture | null
+  uWaterDistortion: number
+  uSkyHighlightThreshold: number
+  uSkyHighlightBoost: number
+  uSkyFloor: number
+  uSkyGain: number
+  uSkyFlipX: number
 }
 
 /**
@@ -90,6 +106,7 @@ type WaterRenderingData = Pick<
   | 'waterWaveScale'
   | 'waterWaveSpeed'
   | 'waterWaveFadeMeters'
+  | 'waterDistortion'
 >
 
 class WaterShader extends AbstractShader<keyof WaterUniforms> {
@@ -119,6 +136,13 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
     const waveScaleHandle = waterData.waterWaveScale ?? DEFAULT_WATER_WAVE_SCALE
     const waveFadeMetersHandle = waterData.waterWaveFadeMeters
 
+    // Общий набор ручек выборки фона (highlight/floor/gain/flip) — та же
+    // фабрика, что SkyboxBackground/BlackHole (ЖЕЛЕЗНЫЙ констрейнт, см.
+    // SkyboxSample chunk докблок uSkyFlipX). Раскладывается по отдельным
+    // ключам (не spread) — Record<keyof WaterUniforms, IUniform> строгий,
+    // а фабрика типизирована шире (Record<string, IUniform>).
+    const skySampleUniforms = createSkyboxSampleUniforms()
+
     this.uniforms = {
       lightPosition: new Uniform(new Vector3()),
       uSlopeMap: new Uniform(null),
@@ -137,7 +161,18 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
         waveFadeMetersHandle !== undefined
           ? toThreeJSUnits(waveFadeMetersHandle / 1000)
           : DEFAULT_WATER_WAVE_FADE_UNITS
-      )
+      ),
+      // Кубмапа — заглушка null: доставляется WaterMaterial конструктором
+      // (ровно один раз, см. её докблок), не здесь (это CPU-путь "data",
+      // текстуры сюда не приходят). Остальной набор — общая выборка фона,
+      // тот же `createSkyboxSampleUniforms`, что SkyboxBackground/BlackHole.
+      uWaterDistortion: new Uniform(waterData.waterDistortion ?? DEFAULT_WATER_DISTORTION),
+      uSkyboxMap: new Uniform(null),
+      uSkyHighlightThreshold: skySampleUniforms.uSkyHighlightThreshold,
+      uSkyHighlightBoost: skySampleUniforms.uSkyHighlightBoost,
+      uSkyFloor: skySampleUniforms.uSkyFloor,
+      uSkyGain: skySampleUniforms.uSkyGain,
+      uSkyFlipX: skySampleUniforms.uSkyFlipX
     }
     this.name = 'WaterShader'
   }

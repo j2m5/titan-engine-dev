@@ -1,5 +1,5 @@
 import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
-import { Texture } from 'three'
+import { CubeTexture, Texture } from 'three'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
 import { WaterShader } from '@/core/materials/shaders/WaterShader'
@@ -63,7 +63,26 @@ class WaterMaterial extends AbstractShaderMaterial {
   /** Последний известный гейт USE_WATER_WAVES — тот же приём, что hasWaterDepth (needsUpdate только на фактической смене). */
   private hasWaterWaves = false
 
-  public constructor(model: Actor, parameters?: ShaderMaterialParameters) {
+  /**
+   * `skyboxTexture` — кубмапа фона сценария (арка water-shader, Task 2),
+   * доставляется РОВНО ОДИН РАЗ здесь, не через updateMaterial: в отличие от
+   * slope/waterNormal (асинхронный стрим текстур ТЕЛА, догоняются в любой
+   * момент жизни оболочки — updateMaterial перечитывает resourceStorage
+   * каждый кадр), фон СЦЕНАРИЯ грузится ДО построения графа сцены
+   * (`Application.run` ждёт `loadPrimaryTextures`, только потом
+   * `Engine.start` → `SceneManager.initialize` строит акторов, см. цепочку
+   * вызовов) — WaterSphere физически не может родиться раньше, чем фон уже
+   * лежит в `ResourceObserver.sceneBackground`. Смены сценария посреди жизни
+   * оболочки не бывает: `SceneManager.dispose` разбирает граф целиком перед
+   * повторной сборкой — тот же инвариант, на который опирается докблок
+   * `BlackHole.__setup` (там кубмапа читается покадрово, но по причине
+   * унификации с остальными per-frame uniforms того шейдера, не из-за
+   * динамики фона — см. её комментарий). Гейт USE_WATER_REFLECTION поэтому
+   * СТАТИЧЕН на весь срок жизни материала и живёт в baseDefines (не
+   * пересчитывается updateMaterial/resetMaterial, как USE_WATER_DEPTH/
+   * USE_WATER_WAVES) — resetMaterial ниже его не снимает.
+   */
+  public constructor(model: Actor, skyboxTexture: CubeTexture | null = null, parameters?: ShaderMaterialParameters) {
     super({
       transparent: true,
       depthWrite: false,
@@ -79,8 +98,15 @@ class WaterMaterial extends AbstractShaderMaterial {
     this.uniforms = uniforms
     this.vertexShader = vertexShader
     this.fragmentShader = fragmentShader
-    this.defines = defines
-    this.baseDefines = { ...defines }
+    this.uniforms.uSkyboxMap.value = skyboxTexture
+
+    const useWaterReflection = skyboxTexture !== null
+
+    this.baseDefines = {
+      ...defines,
+      ...(useWaterReflection && { USE_WATER_REFLECTION: '1' })
+    }
+    this.defines = { ...this.baseDefines }
   }
 
   private static resolveSlopePath(model: Actor): string | undefined {

@@ -1,5 +1,6 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { Color, ShaderChunk, Uniform, UniformsUtils, Vector3 } from 'three'
+import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
 
 const defaultUniforms = {
   // «Звезда в нуле» — общедвижковая конвенция (см. BrunetonAtmosphere
@@ -26,7 +27,17 @@ const defaultUniforms = {
   uTime: new Uniform(0),
   uWaterWaveScale: new Uniform(0),
   uWaterWaveSpeed: new Uniform(1),
-  uWaterWaveFadeMeters: new Uniform(0)
+  uWaterWaveFadeMeters: new Uniform(0),
+  // Отражение фоновой кубмапы (арка water-shader, Task 2) — инертно без
+  // USE_WATER_REFLECTION (гейт по факту доставки кубмапы, см. WaterMaterial):
+  // сэмплер null до конструктора материала, дисторсия — честная ручка (см.
+  // IPlanetRenderingObject.waterDistortion). Набор ручек общей выборки фона
+  // (highlight/floor/gain/flip) — тот же `createSkyboxSampleUniforms`, что и
+  // SkyboxBackground/BlackHole, ЖЕЛЕЗНЫЙ констрейнт: сэмплировать фон можно
+  // только через этот общий чанк (см. её докблок про uSkyFlipX).
+  uSkyboxMap: new Uniform(null),
+  uWaterDistortion: new Uniform(20),
+  ...createSkyboxSampleUniforms()
 }
 
 export const WaterShaderTemplate: ShaderProps = {
@@ -49,6 +60,17 @@ export const WaterShaderTemplate: ShaderProps = {
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
+    // Мировая позиция фрагмента (арка water-shader, Task 2) — вход отражения
+    // кубмапы: тела вращаются, кубмапа мировая, взгляд обязан считаться в
+    // мировых осях (cameraPosition − vWorldPosition), не в view-пространстве
+    // vViewPosition ниже (то для Френеля/sunLight, оно камера-локальное).
+    // Считается ЗДЕСЬ (не в фрагментнике) буквально по спеке: modelMatrix
+    // доступен в вершиннике безусловно (three биндит его сам), не нужен явный
+    // uniform, как для normalMatrix во фрагментнике (см. её докблок ниже).
+    // Заведена безусловно, как vLocalDir — используется только под
+    // USE_WATER_REFLECTION, но нулевой ценой для остальных режимов (та же
+    // экономия, что у остальных generic-геометрических varying этого шейдера).
+    varying vec3 vWorldPosition;
 
     void main() {
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
@@ -57,6 +79,7 @@ export const WaterShaderTemplate: ShaderProps = {
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
 
       vNormal = normalize(normalMatrix * normal);
+      vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
       // Нормаль воды = dir̂ (аналитическая, не из карты): патчи водной
       // оболочки строит тот же writeTerrainPatchAttributes, что и рельеф —
       // атрибут normal радиален всегда (см. terrainPatchGeometry.ts), волн
@@ -203,6 +226,28 @@ export const WaterShaderTemplate: ShaderProps = {
 
         return normalize(mix(dirLocal, perturbed, fade));
       }
+
+      // Отражение фоновой кубмапы (арка water-shader, Task 2) — ВЛОЖЕНО в
+      // USE_WATER_WAVES (не сиблинг-блок): отражению нечего отражать без
+      // возмущённой нормали волн (waveLocalNormal, см. main ниже), и
+      // паритетный тест (WaterReflection.spec.ts) снимает ровно
+      // USE_WATER_REFLECTION целиком, ожидая байт-в-байт Task 1 у остального.
+      #ifdef USE_WATER_REFLECTION
+        uniform samplerCube uSkyboxMap;
+        uniform float uWaterDistortion;
+        // three не биндит modelMatrix во фрагментник автоматически (тот же
+        // приём, что normalMatrix выше) — нужен для мировой ориентации
+        // возмущённой нормали (тела вращаются, кубмапа мировая).
+        uniform mat4 modelMatrix;
+        // Мировая позиция фрагмента (см. её докблок в вершиннике) — varying
+        // объявлен ЗДЕСЬ, под гейтом, а не безусловно с vNormal/vLocalDir
+        // выше: паритетный снимок Task 1 не должен потерять байт-в-байт
+        // равенство из-за лишнего варьинга, который Task 1 не объявлял.
+        varying vec3 vWorldPosition;
+
+        #include <skyboxSampleUniforms>
+        #include <skyboxSampleFunctions>
+      #endif
     #endif
 
     void main() {
@@ -269,6 +314,39 @@ export const WaterShaderTemplate: ShaderProps = {
         float waveReflectance = waveRf0 + (1.0 - waveRf0) * pow((1.0 - waveTheta), 5.0);
         vec3 waveScatter = max(0.0, dot(normal, viewDir)) * baseColor;
         vec3 waveReflectionSample = uWaterFresnelTint;
+        #ifdef USE_WATER_REFLECTION
+        {
+          // Отражение фоновой кубмапы (Task 2) — МИРОВЫЕ оси: тела вращаются
+          // (modelMatrix), кубмапа мировая; объектно-/view-локальный reflect
+          // паразитно вращал бы отражение вместе с телом или камерой.
+          // cameraPosition — билдин three (доступен во фрагментнике без
+          // объявления, в отличие от modelMatrix выше); vWorldPosition — из
+          // вершинника (modelMatrix·position, точности float32 хватает
+          // направлению камера→фрагмент на масштабах тел движка).
+          vec3 worldNormal = normalize(mat3(modelMatrix) * waveLocalNormal);
+          vec3 toCamera = cameraPosition - vWorldPosition;
+          float dist = length(toCamera);
+          vec3 worldViewDir = toCamera / max(dist, 1e-6);
+
+          // Дисторсия — дословно форма Water.js (distortionScale): растёт к
+          // горизонту (1/dist), 0.001 — пол на бесконечности. surfaceNormal
+          // Water.js — world-space нормаль волны, здесь worldNormal.
+          vec3 reflectDir = reflect(-worldViewDir, worldNormal);
+          reflectDir.xy += worldNormal.xy * (0.001 + 1.0 / dist) * uWaterDistortion;
+
+          vec3 skySample = sampleSkyboxHdr(uSkyboxMap, normalize(reflectDir), uSkyFlipX);
+
+          // Дневной бленд — та же форма терминатора (порог/ширина), что и
+          // ночной пол ниже — см. WaterReflection.spec.ts. Блок обособлен в
+          // { }: main() этого шейдера не заводит вложенных областей
+          // видимости, а без неё имена NdotL/dayFactor столкнулись бы с
+          // одноимёнными переменными ночного пола ниже (та же функция main).
+          float NdotL = dot(normal, normalize(vViewLightDirection));
+          float dayFactor = smoothstep(-0.08, 0.25, NdotL);
+
+          waveReflectionSample = mix(skySample, uWaterFresnelTint, dayFactor);
+        }
+        #endif
         color = mix(
           waterSunColor * waveDiffuseLight * 0.3 + waveScatter,
           vec3(0.1) + waveReflectionSample * 0.9 + waveReflectionSample * waveSpecularLight,

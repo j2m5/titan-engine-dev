@@ -1,4 +1,4 @@
-import { Mesh, type WebGLRenderer } from 'three'
+import { CubeTexture, Mesh, type WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
 import { constantHeightField } from '@/core/terrain/constantHeightField'
@@ -75,10 +75,22 @@ class WaterSphere extends TerrainPatchGroup {
   public model: Actor
   private readonly sharedMaterial: WaterMaterial
 
-  public constructor(model: Actor, waterLevelMeters: number, renderer: WebGLRenderer) {
+  /**
+   * `skyboxTexture` — кубмапа фона сценария (арка water-shader, Task 2),
+   * см. докблок `WaterMaterial` конструктора: прокидывается насквозь до
+   * материала, сама WaterSphere её не читает. `= null` по умолчанию —
+   * существующие вызовы (тесты) без 4-го аргумента остаются валидны,
+   * отражение просто не включается (без кубмапы гейт не ставится).
+   */
+  public constructor(
+    model: Actor,
+    waterLevelMeters: number,
+    renderer: WebGLRenderer,
+    skyboxTexture: CubeTexture | null = null
+  ) {
     const radiusKm: number = model.physicalObject!.getAttribute('radius')!
     const field = constantHeightField(radiusKm, waterLevelMeters)
-    const sharedMaterial = new WaterMaterial(model)
+    const sharedMaterial = new WaterMaterial(model, skyboxTexture)
 
     super(field, sharedMaterial, renderer, WATER_MAX_LIVE_PATCHES)
     this.model = model

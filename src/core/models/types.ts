@@ -231,6 +231,17 @@ export interface IPlanetRenderingObject {
    * (fov 50°/1080p, см. WaterShader).
    */
   waterWaveFadeMeters?: number
+
+  /**
+   * Дисторсия выборки отражения фоновой кубмапы (арка water-shader, Task 2,
+   * см. WaterShaderTemplate) — масштаб добавки world-space нормали волн к
+   * направлению отражения, аналог `distortionScale` Water.js
+   * (`surfaceNormal.xy * (0.001 + 1.0 / distance) * distortionScale`). Без
+   * ручки — дефолт движка 20. Инертна без USE_WATER_REFLECTION (гейт по
+   * факту доставки кубмапы фона, см. WaterMaterial) — отложена в Task 1
+   * явной записью (фикс-раунд 1, находка №7), реализована здесь.
+   */
+  waterDistortion?: number
 }
 
 export type IAtmosphereRenderingObject = AtmosphereConfig

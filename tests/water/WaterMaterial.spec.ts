@@ -378,4 +378,14 @@ describe('WaterShaderTemplate ↔ WaterShader: паритет дефолтов (
     expect(material.uniforms.uWaterFresnelTint.value.getHex()).toBe(templateUniforms.uWaterFresnelTint.value.getHex())
     expect(material.uniforms.uWaterNightFloor.value).toBe(templateUniforms.uWaterNightFloor.value)
   })
+
+  // Расширение Task 2 (арка water-shader): дисторсия отражения — та же
+  // ловушка, что и остальные пять ручек (два независимых места дефолта,
+  // ничто их не сцепляет само по себе, см. докблок выше).
+  it('uWaterDistortion: значение из WaterShaderTemplate.uniforms совпадает с дефолтом WaterShader при пустом data', () => {
+    const material = new WaterMaterial(stubActor({ data: {} }))
+    const templateUniforms = WaterShaderTemplate.uniforms
+
+    expect(material.uniforms.uWaterDistortion.value).toBe(templateUniforms.uWaterDistortion.value)
+  })
 })

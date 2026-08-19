@@ -226,10 +226,15 @@ describe('WaterShaderTemplate: fade по дистанции — юниформ u
 })
 
 describe('Парный страж терминатора: одна и та же форма smoothstep(-0.08, 0.25, NdotL) — суша/вода', () => {
-  it('водный фрагментник (единственный терминатор — ночной пол, дневная ветка волн своего не заводит)', () => {
+  // Task 2 (арка water-shader) добавила ТРЕТЬЕ место: дневной бленд
+  // отражения кубмапы использует ТУ ЖЕ форму (см. WaterReflection.spec.ts,
+  // блок { } внутри USE_WATER_REFLECTION) — количество вхождений выросло
+  // 1 → 2 (Planet's NdotLraw — отдельная, другая переменная, не считается
+  // здесь, проверяется следующим тестом).
+  it('водный фрагментник — ДВА вхождения (ночной пол Task 4 + дневной бленд отражения Task 2)', () => {
     const matches = frag.match(/smoothstep\(-0\.08, 0\.25, NdotL\)/g) ?? []
 
-    expect(matches.length).toBe(1) // ровно одно вхождение — волны не дублируют формулу терминатора
+    expect(matches.length).toBe(2)
   })
 
   it('PlanetShaderTemplate использует ТУ ЖЕ форму (см. её NdotLraw)', () => {
@@ -250,10 +255,42 @@ describe('Вершинник — БЕЗ волн вовсе (T/B/N считаю�
 // совпасть с этим снимком с точностью до пустых строк (GLSL их игнорирует —
 // считать разницу в их количестве регрессией было бы придиркой к пробелам,
 // не к содержимому).
+//
+// Балансирующий парсер строк, не regex (фикс Task 2, арка water-shader):
+// Task 2 завела #ifdef USE_WATER_REFLECTION ВНУТРИ #ifdef USE_WATER_WAVES
+// (main-body блок — отражению нечего отражать без возмущённой нормали волн,
+// см. WaterShaderTemplate). Прежний non-greedy regex останавливался на
+// ПЕРВОМ попавшемся #endif — то есть на закрывающей вложенного блока, а не
+// на своей — и портил вывод. Парсер считает глубину ЛЮБОГО #ifdef/#endif
+// (не только совпадающего guard) — ровно семантика реального препроцессора:
+// когда внешний guard не определён, всё вложенное (включая другие guard'ы)
+// тоже недостижимо и обязано пропасть целиком.
 function stripGuardedBlock(source: string, guard: string): string {
-  const pattern = new RegExp(`[ \\t]*#ifdef ${guard}\\n[\\s\\S]*?[ \\t]*#endif\\n`, 'g')
+  const lines = source.split('\n')
+  const result: string[] = []
+  let depth = 0
 
-  return source.replace(pattern, '')
+  for (const line of lines) {
+    const trimmed = line.trim()
+
+    if (depth === 0) {
+      if (trimmed === `#ifdef ${guard}`) {
+        depth = 1
+        continue
+      }
+      result.push(line)
+      continue
+    }
+
+    if (trimmed.startsWith('#ifdef ') || trimmed.startsWith('#ifndef ')) {
+      depth++
+    } else if (trimmed === '#endif') {
+      depth--
+    }
+    // тело вырезаемого блока (и любые вложенные ifdef/endif) — не выводим
+  }
+
+  return result.join('\n')
 }
 
 function normalizeBlankLines(source: string): string {
