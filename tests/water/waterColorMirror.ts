@@ -110,10 +110,16 @@ function sunLight(
  * ПЛЮС собственный ночной пол (waveNdotL/waveDayFactor, НЕ фундаментный
  * dayFactor) — то, во что main() кладёт wavesColor непосредственно перед
  * финальным `color = mix(color, wavesColor, waveFade)`.
+ *
+ * `skyColor` — приёмочная волна 4, №1: Water.js слагаемое vec3(0.1) было
+ * вкладом ЗЕРКАЛЬНОЙ сцены (ambient окружения демо), у нас зеркала нет —
+ * порт тонирует тот же вклад градиентным skyColor (0.1·skyColor, не
+ * vec3(0.1)), иначе дневной альбедо читался серым.
  */
 export function wavesColor(
   baseColor: Vec3,
   reflectionSample: Vec3,
+  skyColor: Vec3,
   waveNormal: Vec3,
   viewDir: Vec3,
   lightDir: Vec3,
@@ -127,7 +133,7 @@ export function wavesColor(
   const scatter = scale3(baseColor, Math.max(0, dot3(waveNormal, viewDir)))
 
   const term1 = add3(scale3(mulVec3(sunColor, diffuseColor), 0.3), scatter)
-  const term2 = add3(add3([0.1, 0.1, 0.1], scale3(reflectionSample, 0.9)), mulVec3(reflectionSample, specularColor))
+  const term2 = add3(add3(scale3(skyColor, 0.1), scale3(reflectionSample, 0.9)), mulVec3(reflectionSample, specularColor))
   const raw = mix3(term1, term2, reflectance)
 
   const waveNdotL = dot3(waveNormal, lightDir)
@@ -136,10 +142,38 @@ export function wavesColor(
   return scale3(raw, mixScalar(nightFloor, 1, waveDayFactor))
 }
 
+/**
+ * Alpha-грань «звёзды сквозь воду» (приёмочная волна 4, №2) —
+ * фундаментный путь: `alpha = mix(depthAlpha, 1.0, fresnel)` — тот же
+ * pow5-Френель, что и у цвета (fresnel параметр — уже посчитанное значение,
+ * не пересчитывается здесь).
+ */
+export function foundationAlpha(depthAlpha: number, fresnel: number): number {
+  return mixScalar(depthAlpha, 1, fresnel)
+}
+
+/**
+ * Alpha-грань waves-пути — тот же паттерн, что foundationAlpha, но по
+ * waveReflectance (волновая нормаль): пол waveRf0 вычтен и перенормирован
+ * на его дополнение, чистый grazing-прогресс ≡ pow(1-waveTheta,5)
+ * алгебраически. Финально смешивается с фундаментной alpha по waveFade —
+ * та же схема, что цвет.
+ */
+export function waveAlpha(depthAlpha: number, waveReflectance: number, waveRf0: number): number {
+  const grazing = (waveReflectance - waveRf0) / (1 - waveRf0)
+
+  return mixScalar(depthAlpha, 1, grazing)
+}
+
+export function blendedAlpha(foundation: number, waves: number, waveFade: number): number {
+  return mixScalar(foundation, waves, waveFade)
+}
+
 export interface BlendInputs {
   baseColor: Vec3
   fresnelTint: Vec3
   reflectionSample: Vec3
+  skyColor: Vec3
   normal: Vec3
   waveNormal: Vec3
   viewDir: Vec3
@@ -161,6 +195,7 @@ export function blendedColor(inputs: BlendInputs, waveFade: number): Vec3 {
   const waves = wavesColor(
     inputs.baseColor,
     inputs.reflectionSample,
+    inputs.skyColor,
     inputs.waveNormal,
     inputs.viewDir,
     inputs.lightDir,

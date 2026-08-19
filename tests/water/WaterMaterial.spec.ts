@@ -37,9 +37,9 @@ describe('WaterShaderTemplate: строковые ассерты (Френель
     expect(frag).toContain('uWaterAlphaDeep * depthA')
   })
 
-  it('без карты — константный режим: единый цвет uWaterColor, константная альфа uWaterAlphaDeep', () => {
+  it('без карты — константный режим: единый цвет uWaterColor, базовая альфа uWaterAlphaDeep (до grazing-подъёма)', () => {
     expect(frag).toContain('vec3 baseColor = uWaterColor;')
-    expect(frag).toContain('float alpha = uWaterAlphaDeep;')
+    expect(frag).toContain('float depthAlpha = uWaterAlphaDeep;')
   })
 
   it('Френель Шлика-класса: pow(1 - max(dot(viewDir, normal), 0), 5)', () => {
@@ -138,7 +138,7 @@ describe('WaterMaterial: проводка ручек data (дефолты чес
     expect(material.uniforms.uWaterColor.value.getHex()).toBe(0x0b3d66)
     expect(material.uniforms.uWaterShallowColor.value.getHex()).toBe(0x2e8b9e)
     expect(material.uniforms.uWaterAlphaDeep.value).toBe(0.85)
-    expect(material.uniforms.uWaterFresnelTint.value.getHex()).toBe(0x87b8d8) // приёмочная волна 2, №1 — затемнён/насыщен (был 0xbfe9ff, читался молоком)
+    expect(material.uniforms.uWaterFresnelTint.value.getHex()).toBe(0x4a8ac4) // приёмочная волна 4, №1 — насыщеннее/синее (был 0x87b8d8, читался серовато)
     expect(material.uniforms.uWaterNightFloor.value).toBe(0.08)
   })
 

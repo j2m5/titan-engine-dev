@@ -13,7 +13,16 @@ import {
   waterWaveNormalPerturbed,
   waterWaveNormalWithoutSignFix
 } from './waterWaveNormalMirror'
-import { blendedColor, dirFromLatLon, foundationColor, wavesColor, type Vec3 } from './waterColorMirror'
+import {
+  blendedAlpha,
+  blendedColor,
+  dirFromLatLon,
+  foundationAlpha,
+  foundationColor,
+  waveAlpha as waveAlphaMirror,
+  wavesColor,
+  type Vec3
+} from './waterColorMirror'
 
 // Ядро волн (Task 1, арка water-shader; фикс-раунд 1 ревью учтён — №1 страж
 // кванта по фактическому ассету, №2 whiteout-реориентация трипланара, №4
@@ -175,7 +184,10 @@ describe('WaterShaderTemplate: sunLight/albedo — дословно Water.js (ge
     expect(frag).toContain('getShadowMask опущен')
     expect(frag).toContain('vec3 wavesColor = mix(')
     expect(frag).toContain('waterSunColor * waveDiffuseLight * 0.3 + waveScatter,')
-    expect(frag).toContain('vec3(0.1) + waveReflectionSample * 0.9 + waveReflectionSample * waveSpecularLight,')
+    // Приёмочная волна 4, №1: Water.js vec3(0.1) — вклад ambient ЗЕРКАЛЬНОЙ
+    // сцены, у нас зеркала нет — адаптация тонирует тот же вклад градиентным
+    // skyColor (0.1·skyColor), не плоской серой константой.
+    expect(frag).toContain('0.1 * skyColor + waveReflectionSample * 0.9 + waveReflectionSample * waveSpecularLight,')
     expect(frag).toContain('waveReflectance')
   })
 
@@ -324,6 +336,7 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
   const baseColor: Vec3 = [0.043, 0.239, 0.4] // uWaterColor-подобный
   const shallowLikeColor: Vec3 = [0.18, 0.545, 0.62]
   const fresnelTint: Vec3 = [0.749, 0.914, 1.0]
+  const skyColor: Vec3 = [0.6, 0.75, 0.85] // градиентный skyColor-подобный (приёмочная волна 4, №1)
   const sunColor: Vec3 = [1, 1, 1]
   const nightFloor = 0.08
 
@@ -358,7 +371,7 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
               for (const reflectionSample of foreignReflectionSamples) {
                 const foundation = foundationColor(bc, fresnelTint, normal, viewDir, lightDir, nightFloor)
                 const blended = blendedColor(
-                  { baseColor: bc, fresnelTint, reflectionSample, normal, waveNormal, viewDir, lightDir, sunColor, nightFloor },
+                  { baseColor: bc, fresnelTint, reflectionSample, skyColor, normal, waveNormal, viewDir, lightDir, sunColor, nightFloor },
                   0
                 )
 
@@ -380,7 +393,7 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
     for (const normal of normals) {
       for (const viewDir of viewDirs) {
         for (const lightDir of lightDirs) {
-          const waves = wavesColor(baseColor, fresnelTint, normal, viewDir, lightDir, sunColor, nightFloor)
+          const waves = wavesColor(baseColor, fresnelTint, skyColor, normal, viewDir, lightDir, sunColor, nightFloor)
 
           expect(Number.isFinite(waves[0])).toBe(true)
           expect(Number.isFinite(waves[1])).toBe(true)
@@ -395,6 +408,7 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
       baseColor,
       fresnelTint,
       reflectionSample: fresnelTint,
+      skyColor,
       normal: normals[1],
       waveNormal: dirFromLatLon(15, -30),
       viewDir: viewDirs[0],
@@ -427,6 +441,7 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
       baseColor,
       fresnelTint,
       reflectionSample: [1, 1, 1] as Vec3, // максимально яркий — контрастная проверка
+      skyColor,
       normal: normals[1],
       waveNormal: normals[1], // специально совпадает с normal — специулярный пик виден
       viewDir: viewDirs[0],
@@ -436,7 +451,7 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
     }
 
     const foundation = foundationColor(inputs.baseColor, inputs.fresnelTint, inputs.normal, inputs.viewDir, inputs.lightDir, inputs.nightFloor)
-    const waves = wavesColor(inputs.baseColor, inputs.reflectionSample, inputs.waveNormal, inputs.viewDir, inputs.lightDir, inputs.sunColor, inputs.nightFloor)
+    const waves = wavesColor(inputs.baseColor, inputs.reflectionSample, inputs.skyColor, inputs.waveNormal, inputs.viewDir, inputs.lightDir, inputs.sunColor, inputs.nightFloor)
 
     // mix — линейная функция: blended(fade) === foundation + fade*(waves-foundation)
     // покомпонентно. Проверяем ЭТУ ТОЧНУЮ линейность на нескольких fade —
@@ -451,6 +466,82 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
         expect(blended[c]).toBeCloseTo(expected, 12)
       }
     }
+  })
+})
+
+// Приёмочная волна 4, №2 (владелец: звёзды сквозь воду на горизонте) —
+// depthAlpha держал потолок uWaterAlphaDeep ВЕЗДЕ, включая скользящий взгляд
+// у лимба, где физически вода непрозрачна. Alpha теперь поднимается к 1.0 по
+// тому же классу pow5-Френеля, что и цвет — фундаментный путь по normal/
+// viewDir, waves-путь по waveNormal/waveTheta с вычетом пола waveRf0.
+describe('WaterShaderTemplate: alpha поднимается к 1.0 на скользящем взгляде (приёмочная волна 4, №2)', () => {
+  it('фундаментный путь пином: depthAlpha → alpha = mix(depthAlpha, 1.0, fresnel)', () => {
+    expect(frag).toContain('float depthAlpha = uWaterAlphaDeep * depthA;')
+    expect(frag).toContain('float depthAlpha = uWaterAlphaDeep;')
+    expect(frag).toContain('float alpha = mix(depthAlpha, 1.0, fresnel);')
+  })
+
+  it('waves-путь пином: grazing = (waveReflectance-waveRf0)/(1-waveRf0), waveAlpha = mix(depthAlpha, 1.0, grazing), финальный блендинг по waveFade', () => {
+    expect(frag).toContain('float waveGrazing = (waveReflectance - waveRf0) / (1.0 - waveRf0);')
+    expect(frag).toContain('float waveAlpha = mix(depthAlpha, 1.0, waveGrazing);')
+    expect(frag).toContain('alpha = mix(alpha, waveAlpha, waveFade);')
+  })
+
+  it('CPU-зеркало: в надир (fresnel=0) alpha === depthAlpha — дальний план из космоса (центр диска) не сдвинулся', () => {
+    const depthAlpha = 0.85
+
+    expect(foundationAlpha(depthAlpha, 0)).toBe(depthAlpha)
+  })
+
+  it('CPU-зеркало: на пределе скользящего взгляда (fresnel=1) alpha === 1.0 — лимб непрозрачен', () => {
+    const depthAlpha = 0.85
+
+    expect(foundationAlpha(depthAlpha, 1)).toBe(1)
+  })
+
+  it('CPU-зеркало: fresnel непрерывно поднимает alpha между depthAlpha и 1.0 (монотонно)', () => {
+    const depthAlpha = 0.6
+    let previous = foundationAlpha(depthAlpha, 0)
+
+    for (const fresnel of [0.1, 0.3, 0.5, 0.7, 0.9, 1]) {
+      const current = foundationAlpha(depthAlpha, fresnel)
+
+      expect(current).toBeGreaterThanOrEqual(previous)
+      previous = current
+    }
+    expect(previous).toBe(1)
+  })
+
+  it('CPU-зеркало waves: в надир (waveTheta=1 → waveReflectance=waveRf0) waveAlpha === depthAlpha — пол reflectance вычтен корректно', () => {
+    const depthAlpha = 0.85
+    const waveRf0 = 0.3
+    // theta=1 → pow(1-theta,5)=0 → waveReflectance = waveRf0 ровно
+    const waveReflectance = waveRf0
+
+    expect(waveAlphaMirror(depthAlpha, waveReflectance, waveRf0)).toBeCloseTo(depthAlpha, 12)
+  })
+
+  it('CPU-зеркало waves: на пределе (waveTheta=0 → waveReflectance=1) waveAlpha === 1.0', () => {
+    const depthAlpha = 0.85
+    const waveRf0 = 0.3
+    // theta=0 → pow(1-0,5)=1 → waveReflectance = waveRf0 + (1-waveRf0)*1 = 1
+    const waveReflectance = 1
+
+    expect(waveAlphaMirror(depthAlpha, waveReflectance, waveRf0)).toBeCloseTo(1, 12)
+  })
+
+  it('CPU-зеркало: blendedAlpha(fade=0) === foundationAlpha, blendedAlpha(fade=1) === waveAlpha — тот же паттерн, что цвет', () => {
+    const depthAlpha = 0.7
+    const fresnel = 0.4
+    const waveRf0 = 0.3
+    const waveReflectance = 0.65
+
+    const foundation = foundationAlpha(depthAlpha, fresnel)
+    const waves = waveAlphaMirror(depthAlpha, waveReflectance, waveRf0)
+
+    expect(blendedAlpha(foundation, waves, 0)).toBe(foundation)
+    expect(blendedAlpha(foundation, waves, 1)).toBe(waves)
+    expect(blendedAlpha(foundation, waves, 0.5)).toBeCloseTo((foundation + waves) / 2, 12)
   })
 })
 
@@ -574,14 +665,16 @@ const BASELINE_FRAGMENT_SHADER = `
         vec2 uv = terrainUv(dirLocal);
         float depthA = texture2D(uSlopeMap, uv).a;
         vec3 baseColor = mix(uWaterShallowColor, uWaterColor, depthA);
-        // Альфа → 0 на урезе: закрывает z-fighting стыка воды и берега без
-        // масок (см. WaterMaterial докблок depthWrite=false).
-        float alpha = uWaterAlphaDeep * depthA;
+        // depthAlpha → 0 на урезе: закрывает z-fighting стыка воды и берега
+        // без масок (см. WaterMaterial докблок depthWrite=false). Финальная
+        // alpha (ниже, после fresnel) поднимает ЭТОТ пол к 1.0 на скользящем
+        // взгляде — здесь только базовая непрозрачность по глубине.
+        float depthAlpha = uWaterAlphaDeep * depthA;
       #else
         // Без запечённой глубины (карты нет / тело не готово Task 6) —
         // константный режим: единая непрозрачность, единый глубокий цвет.
         vec3 baseColor = uWaterColor;
-        float alpha = uWaterAlphaDeep;
+        float depthAlpha = uWaterAlphaDeep;
       #endif
 
       // Френель Шлика-класса: грань тела светлеет к тинту — грубая замена
@@ -589,6 +682,16 @@ const BASELINE_FRAGMENT_SHADER = `
       // ещё нет. Показатель 5 — классический ход Шлика при F0≈0.
       float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 5.0);
       vec3 color = mix(baseColor, uWaterFresnelTint, fresnel);
+
+      // Приёмочная волна 4, №2 (владелец: звёзды сквозь воду на горизонте) —
+      // depthAlpha держал потолок uWaterAlphaDeep (0.85) ВЕЗДЕ, включая
+      // скользящий взгляд у лимба, где физически вода непрозрачна (Френель→1,
+      // почти всё падающее/уходящее рассеяно поверхностью, а не пропущено
+      // насквозь) — лимб просвечивал звёзды фона. Тот же fresnel, что и у
+      // цвета выше: в надир (theta≈1, вид из космоса в центр диска) fresnel≈0,
+      // alpha=depthAlpha без изменений (дальний план не сдвинулся); к
+      // горизонту fresnel→1, alpha→1.0 (непрозрачно).
+      float alpha = mix(depthAlpha, 1.0, fresnel);
 
       // Ночная сторона темнее, не чёрная: вода не светится сама, но полный
       // ноль на терминаторе неправдоподобен (рассеянный свет неба/атмосферы).

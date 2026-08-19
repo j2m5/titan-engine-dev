@@ -23,11 +23,12 @@ const defaultUniforms = {
   uWaterColor: new Uniform(new Color(0x0b3d66)),
   uWaterShallowColor: new Uniform(new Color(0x2e8b9e)),
   uWaterAlphaDeep: new Uniform(0.85),
-  // 0x87b8d8 — приёмочная волна 2, №1: прежний 0xbfe9ff (почти белый)
-  // читался молоком на скользящем взгляде (см. WaterShader.ts докблок
-  // DEFAULT_WATER_FRESNEL_TINT, оба места держат одно значение — паритетный
-  // тест). Дефолт ПОД ПРИЁМКУ, финальный цвет — за владельцем.
-  uWaterFresnelTint: new Uniform(new Color(0x87b8d8)),
+  // 0x4a8ac4 — приёмочная волна 4, №1: прежний 0x87b8d8 (приёмочная волна 2)
+  // читался серовато — насыщенный синий класса «яркий дневной океан» (см.
+  // WaterShader.ts докблок DEFAULT_WATER_FRESNEL_TINT, оба места держат одно
+  // значение — паритетный тест). Дефолт ПОД ПРИЁМКУ, финальный цвет — за
+  // владельцем.
+  uWaterFresnelTint: new Uniform(new Color(0x4a8ac4)),
   // Пол яркости ночной стороны (см. фрагментник ниже) — сверх исходной спеки
   // Task 4, находка №5 финального ревью: было зашито константой без ручки,
   // теперь пятая ручка воды по той же конвенции, что и остальные четыре.
@@ -313,14 +314,16 @@ export const WaterShaderTemplate: ShaderProps = {
         vec2 uv = terrainUv(dirLocal);
         float depthA = texture2D(uSlopeMap, uv).a;
         vec3 baseColor = mix(uWaterShallowColor, uWaterColor, depthA);
-        // Альфа → 0 на урезе: закрывает z-fighting стыка воды и берега без
-        // масок (см. WaterMaterial докблок depthWrite=false).
-        float alpha = uWaterAlphaDeep * depthA;
+        // depthAlpha → 0 на урезе: закрывает z-fighting стыка воды и берега
+        // без масок (см. WaterMaterial докблок depthWrite=false). Финальная
+        // alpha (ниже, после fresnel) поднимает ЭТОТ пол к 1.0 на скользящем
+        // взгляде — здесь только базовая непрозрачность по глубине.
+        float depthAlpha = uWaterAlphaDeep * depthA;
       #else
         // Без запечённой глубины (карты нет / тело не готово Task 6) —
         // константный режим: единая непрозрачность, единый глубокий цвет.
         vec3 baseColor = uWaterColor;
-        float alpha = uWaterAlphaDeep;
+        float depthAlpha = uWaterAlphaDeep;
       #endif
 
       // Френель Шлика-класса: грань тела светлеет к тинту — грубая замена
@@ -328,6 +331,16 @@ export const WaterShaderTemplate: ShaderProps = {
       // ещё нет. Показатель 5 — классический ход Шлика при F0≈0.
       float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 5.0);
       vec3 color = mix(baseColor, uWaterFresnelTint, fresnel);
+
+      // Приёмочная волна 4, №2 (владелец: звёзды сквозь воду на горизонте) —
+      // depthAlpha держал потолок uWaterAlphaDeep (0.85) ВЕЗДЕ, включая
+      // скользящий взгляд у лимба, где физически вода непрозрачна (Френель→1,
+      // почти всё падающее/уходящее рассеяно поверхностью, а не пропущено
+      // насквозь) — лимб просвечивал звёзды фона. Тот же fresnel, что и у
+      // цвета выше: в надир (theta≈1, вид из космоса в центр диска) fresnel≈0,
+      // alpha=depthAlpha без изменений (дальний план не сдвинулся); к
+      // горизонту fresnel→1, alpha→1.0 (непрозрачно).
+      float alpha = mix(depthAlpha, 1.0, fresnel);
 
       // Ночная сторона темнее, не чёрная: вода не светится сама, но полный
       // ноль на терминаторе неправдоподобен (рассеянный свет неба/атмосферы).
@@ -386,6 +399,19 @@ export const WaterShaderTemplate: ShaderProps = {
         float waveRf0 = 0.3;
         float waveReflectance = waveRf0 + (1.0 - waveRf0) * pow((1.0 - waveTheta), 5.0);
         vec3 waveScatter = max(0.0, dot(waveNormal, viewDir)) * baseColor;
+
+        // Приёмочная волна 4, №2 — тот же паттерн alpha→1 на скользящем
+        // взгляде, что и у фундамента выше, но по waveReflectance (волновая
+        // нормаль, не аналитическая dir̂): reflectance держит физический пол
+        // waveRf0=0.3 даже в надир (theta=1), где alpha не должна расти —
+        // вычитаем пол и перенормируем на его дополнение, оставляя чистый
+        // grazing-прогресс: (waveReflectance-waveRf0)/(1-waveRf0) ≡
+        // pow(1-waveTheta,5) алгебраически (та же форма Френеля), явная
+        // форма через reflectance — чтобы не заводить второй независимый
+        // pow5 по другому входу.
+        float waveGrazing = (waveReflectance - waveRf0) / (1.0 - waveRf0);
+        float waveAlpha = mix(depthAlpha, 1.0, waveGrazing);
+        alpha = mix(alpha, waveAlpha, waveFade);
 
         // Геометрия отражённого луча — МИРОВЫЕ оси, БЕЗ мировых координат на
         // GPU (находка ревью фикс-раунда 1 №2: первая версия заводила
@@ -463,9 +489,18 @@ export const WaterShaderTemplate: ShaderProps = {
           waveReflectionSample = mix(skySample, skyColor, waveDayFactor);
         }
         #endif
+
+        // Приёмочная волна 4, №1 (владелец: дневная вода слишком СЕРАЯ) —
+        // Water.js слагаемое vec3(0.1) в albedo-миксе было вкладом
+        // ЗЕРКАЛЬНОЙ СЦЕНЫ (ambient окружения демо three.js: комната/небо в
+        // отражении зеркала-пола). У нас зеркала нет — плоская серая
+        // константа обесцвечивала весь дневной альбедо к нейтральному серому
+        // вместо тона неба. Адаптация: тот же вклад, но тонированный
+        // градиентным skyColor (уже посчитан выше, тот же зенит/горизонт,
+        // что и у reflection) — 0.1·skyColor, не vec3(0.1).
         vec3 wavesColor = mix(
           waterSunColor * waveDiffuseLight * 0.3 + waveScatter,
-          vec3(0.1) + waveReflectionSample * 0.9 + waveReflectionSample * waveSpecularLight,
+          0.1 * skyColor + waveReflectionSample * 0.9 + waveReflectionSample * waveSpecularLight,
           waveReflectance
         );
         // Свой ночной пол waves-цвета (waveDayFactor, НЕ общий dayFactor

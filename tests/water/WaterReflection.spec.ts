@@ -266,7 +266,7 @@ describe('CPU-зеркало skyColorGradient: зенит темнее гори�
     const sunColor: Vec3 = [1, 1, 1]
     const nightFloor = 0.08
 
-    const nightColor = wavesColor(baseColor, brightReflection, waveNormal, viewDir, nightLightDir, sunColor, nightFloor)
+    const nightColor = wavesColor(baseColor, brightReflection, brightReflection, waveNormal, viewDir, nightLightDir, sunColor, nightFloor)
     const brightest = Math.max(nightColor[0], nightColor[1], nightColor[2])
 
     // Верхняя оценка: без ночного пола reflectance·0.9·[1,1,1] уже даёт
@@ -384,14 +384,16 @@ const BASELINE_FRAGMENT_SHADER = `
         vec2 uv = terrainUv(dirLocal);
         float depthA = texture2D(uSlopeMap, uv).a;
         vec3 baseColor = mix(uWaterShallowColor, uWaterColor, depthA);
-        // Альфа → 0 на урезе: закрывает z-fighting стыка воды и берега без
-        // масок (см. WaterMaterial докблок depthWrite=false).
-        float alpha = uWaterAlphaDeep * depthA;
+        // depthAlpha → 0 на урезе: закрывает z-fighting стыка воды и берега
+        // без масок (см. WaterMaterial докблок depthWrite=false). Финальная
+        // alpha (ниже, после fresnel) поднимает ЭТОТ пол к 1.0 на скользящем
+        // взгляде — здесь только базовая непрозрачность по глубине.
+        float depthAlpha = uWaterAlphaDeep * depthA;
       #else
         // Без запечённой глубины (карты нет / тело не готово Task 6) —
         // константный режим: единая непрозрачность, единый глубокий цвет.
         vec3 baseColor = uWaterColor;
-        float alpha = uWaterAlphaDeep;
+        float depthAlpha = uWaterAlphaDeep;
       #endif
 
       // Френель Шлика-класса: грань тела светлеет к тинту — грубая замена
@@ -399,6 +401,16 @@ const BASELINE_FRAGMENT_SHADER = `
       // ещё нет. Показатель 5 — классический ход Шлика при F0≈0.
       float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 5.0);
       vec3 color = mix(baseColor, uWaterFresnelTint, fresnel);
+
+      // Приёмочная волна 4, №2 (владелец: звёзды сквозь воду на горизонте) —
+      // depthAlpha держал потолок uWaterAlphaDeep (0.85) ВЕЗДЕ, включая
+      // скользящий взгляд у лимба, где физически вода непрозрачна (Френель→1,
+      // почти всё падающее/уходящее рассеяно поверхностью, а не пропущено
+      // насквозь) — лимб просвечивал звёзды фона. Тот же fresnel, что и у
+      // цвета выше: в надир (theta≈1, вид из космоса в центр диска) fresnel≈0,
+      // alpha=depthAlpha без изменений (дальний план не сдвинулся); к
+      // горизонту fresnel→1, alpha→1.0 (непрозрачно).
+      float alpha = mix(depthAlpha, 1.0, fresnel);
 
       // Ночная сторона темнее, не чёрная: вода не светится сама, но полный
       // ноль на терминаторе неправдоподобен (рассеянный свет неба/атмосферы).
