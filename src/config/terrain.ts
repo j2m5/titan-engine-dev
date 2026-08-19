@@ -19,12 +19,26 @@ export interface TerrainConfig {
      * на границе порога кадр к кадру.
      */
     sseMergeFactor: number
+    /**
+     * Видимый диаметр тела в пикселях, при котором запрашивается его карта
+     * высот. Много выше порога, на котором LOD меняет билборд на настоящий
+     * меш (distanceLod(3) в RenderableFactory, ~3–4 px): карта успевает
+     * доехать до того, как тело станет мешем.
+     */
+    heightMapLoadPixels: number
+    /**
+     * Видимый диаметр, ниже которого карта освобождается. Разрыв с
+     * heightMapLoadPixels — гистерезис против качания 64 МиБ на границе.
+     */
+    heightMapReleasePixels: number
   }
 }
 
 export const terrain: TerrainConfig = {
   terrain: {
     sseSplitPixels: 6,
-    sseMergeFactor: 0.7
+    sseMergeFactor: 0.7,
+    heightMapLoadPixels: 32,
+    heightMapReleasePixels: 16
   }
 }
