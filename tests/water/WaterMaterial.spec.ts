@@ -93,18 +93,25 @@ describe('WaterShaderTemplate: строковые ассерты (Френель
 // Проводка ручек data — образец stubActor (PlanetCavity.spec.ts): объект без
 // реальной записи в БД, только то, что читают WaterShader/WaterMaterial.
 const SLOPE_PATH = 'stub/water/slope.webp'
+const WATER_NORMAL_PATH = 'stub/water/waternormals.webp'
 
 interface StubOptions {
   data: Record<string, unknown>
   slopeResource?: boolean
+  waterNormalResource?: boolean
 }
 
-function stubActor({ data, slopeResource = true }: StubOptions): Actor {
+function stubActor({ data, slopeResource = true, waterNormalResource = false }: StubOptions): Actor {
   return {
     renderingObject: { getAttribute: () => data },
     resources: {
       where: (_field: string, type: string) => ({
-        first: () => (type === 'slope' && slopeResource ? { getAttribute: () => SLOPE_PATH } : undefined)
+        first: () => {
+          if (type === 'slope' && slopeResource) return { getAttribute: () => SLOPE_PATH }
+          if (type === 'waterNormal' && waterNormalResource) return { getAttribute: () => WATER_NORMAL_PATH }
+
+          return undefined
+        }
       })
     }
   } as unknown as Actor
@@ -113,6 +120,13 @@ function stubActor({ data, slopeResource = true }: StubOptions): Actor {
 function seedSlopeTexture(): void {
   const texture = new Texture()
   texture.name = SLOPE_PATH
+  texture.image = { width: 4, height: 2 }
+  resourceStorage.addTexture(texture)
+}
+
+function seedWaterNormalTexture(): void {
+  const texture = new Texture()
+  texture.name = WATER_NORMAL_PATH
   texture.image = { width: 4, height: 2 }
   resourceStorage.addTexture(texture)
 }
@@ -211,6 +225,101 @@ describe('WaterMaterial: гейт USE_WATER_DEPTH из slope-текстуры а
   })
 })
 
+// Task 1 (арка water-shader): USE_WATER_WAVES — независимый гейт от
+// USE_WATER_DEPTH выше, тот же ленивый стрим-паттерн (путь кешируется в
+// конструкторе, текстура резолвится из resourceStorage каждый updateMaterial).
+describe('WaterMaterial: гейт USE_WATER_WAVES из waterNormal-текстуры актора (resourceStorage)', () => {
+  afterEach(() => resourceStorage.deleteAllTextures())
+
+  it('у актора нет waterNormal-ресурса вовсе — без дефайна, сэмплер null', () => {
+    const material = new WaterMaterial(stubActor({ data: {} }))
+    material.updateMaterial()
+
+    expect(material.defines.USE_WATER_WAVES).toBeUndefined()
+    expect(material.uniforms.uWaterNormalMap.value).toBeNull()
+  })
+
+  it('waterNormal-путь у актора есть, но текстура ещё не догрузилась — без дефайна', () => {
+    const material = new WaterMaterial(stubActor({ data: {}, waterNormalResource: true }))
+    material.updateMaterial()
+
+    expect(material.defines.USE_WATER_WAVES).toBeUndefined()
+    expect(material.uniforms.uWaterNormalMap.value).toBeNull()
+  })
+
+  it('waterNormal-текстура доступна в resourceStorage — гейт ставится, сэмплер получает текстуру', () => {
+    seedWaterNormalTexture()
+    const material = new WaterMaterial(stubActor({ data: {}, waterNormalResource: true }))
+    material.updateMaterial()
+
+    expect(material.defines.USE_WATER_WAVES).toBe('1')
+    expect(material.uniforms.uWaterNormalMap.value).not.toBeNull()
+  })
+
+  it('гейт USE_WATER_WAVES не зависит от USE_WATER_DEPTH — оба одновременно, независимо', () => {
+    seedSlopeTexture()
+    seedWaterNormalTexture()
+    const material = new WaterMaterial(stubActor({ data: {}, waterNormalResource: true }))
+    material.updateMaterial()
+
+    expect(material.defines.USE_WATER_DEPTH).toBe('1')
+    expect(material.defines.USE_WATER_WAVES).toBe('1')
+  })
+
+  it('перекомпиляция случается только на ФАКТИЧЕСКОЙ смене гейта волн — не на каждом вызове', () => {
+    seedWaterNormalTexture()
+    const material = new WaterMaterial(stubActor({ data: {}, waterNormalResource: true }))
+    material.updateMaterial() // первая догрузка текстуры — гейт меняется false→true
+    expect(material.defines.USE_WATER_WAVES).toBe('1')
+
+    const versionAfterGate = material.version
+    material.updateMaterial() // текстура та же, гейт остаётся true — без перекомпиляции
+    expect(material.version).toBe(versionAfterGate)
+  })
+
+  it('resetMaterial снимает гейт волн и сэмплер', () => {
+    seedWaterNormalTexture()
+    const material = new WaterMaterial(stubActor({ data: {}, waterNormalResource: true }))
+    material.updateMaterial()
+
+    material.resetMaterial()
+
+    expect(material.defines.USE_WATER_WAVES).toBeUndefined()
+    expect(material.uniforms.uWaterNormalMap.value).toBeNull()
+  })
+
+  it('uTime обновляется каждый updateMaterial() независимо от гейтов (не застывает на раннем возврате)', () => {
+    const nowSpy = vi.spyOn(performance, 'now')
+    const material = new WaterMaterial(stubActor({ data: {} }))
+
+    nowSpy.mockReturnValue(1000)
+    material.updateMaterial()
+    const first = material.uniforms.uTime.value as number
+
+    nowSpy.mockReturnValue(5000)
+    material.updateMaterial() // ни один гейт не менялся (waterNormal-ресурса нет вовсе) — ранний return ниже по методу
+    const second = material.uniforms.uTime.value as number
+
+    expect(second - first).toBeCloseTo(4, 5) // (5000-1000)/1000 секунд
+
+    nowSpy.mockRestore()
+  })
+
+  it('uTime сворачивается по формуле BlackHoleMaterial (epoch - floor(epoch/wrap)*wrap), не растёт неограниченно', () => {
+    const wrap = 5000 * 16384
+    const nowSpy = vi.spyOn(performance, 'now')
+    const material = new WaterMaterial(stubActor({ data: {} }))
+
+    const epochMs = (wrap + 1234) * 1000 // на секунду больше wrap+1234с
+    nowSpy.mockReturnValue(epochMs)
+    material.updateMaterial()
+
+    expect(material.uniforms.uTime.value).toBeCloseTo(1234, 5)
+
+    nowSpy.mockRestore()
+  })
+})
+
 // Ревью Task 4 (фикс-раунд 1, №1): resources.where(...) — ORM-джойн
 // belongsToMany (actorResource × resources), не бесплатный лукап. updateMaterial
 // зовётся КАЖДЫЙ активный кадр (WaterSphere.onVisibleUpdate) — гонять джойн
@@ -234,33 +343,33 @@ describe('WaterMaterial: slope-путь резолвится один раз (н
     return { actor, whereSpy }
   }
 
-  it('resources.where зовётся один раз в конструкторе, НЕ на каждый updateMaterial()', () => {
+  it('resources.where зовётся дважды в конструкторе (slope + waterNormal, Task 1), НЕ на каждый updateMaterial()', () => {
     seedSlopeTexture()
     const { actor, whereSpy } = stubActorWithSpy()
 
     const material = new WaterMaterial(actor)
-    expect(whereSpy).toHaveBeenCalledTimes(1)
+    expect(whereSpy).toHaveBeenCalledTimes(2)
 
     material.updateMaterial()
     material.updateMaterial()
     material.updateMaterial()
 
     // ни один кадровый updateMaterial не тронул resources — джойн не повторён
-    expect(whereSpy).toHaveBeenCalledTimes(1)
+    expect(whereSpy).toHaveBeenCalledTimes(2)
     expect(material.defines.USE_WATER_DEPTH).toBe('1') // сам гейт при этом работает штатно
   })
 
-  it('resetMaterial освежает путь — второй (и только второй) вызов resources.where', () => {
+  it('resetMaterial освежает оба пути — второй (и только второй) раунд вызовов resources.where', () => {
     const { actor, whereSpy } = stubActorWithSpy()
     const material = new WaterMaterial(actor)
-    expect(whereSpy).toHaveBeenCalledTimes(1)
-
-    material.resetMaterial()
     expect(whereSpy).toHaveBeenCalledTimes(2)
 
+    material.resetMaterial()
+    expect(whereSpy).toHaveBeenCalledTimes(4)
+
     material.updateMaterial()
     material.updateMaterial()
-    expect(whereSpy).toHaveBeenCalledTimes(2) // после resetMaterial кадровые вызовы всё ещё не трогают resources
+    expect(whereSpy).toHaveBeenCalledTimes(4) // после resetMaterial кадровые вызовы всё ещё не трогают resources
   })
 })
 

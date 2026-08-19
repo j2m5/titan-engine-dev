@@ -45,7 +45,11 @@ export enum ResourceTypes {
   detailDiffuse,
   detailNormal,
   detailArm,
-  detailNormal2
+  detailNormal2,
+  // Normal-карта ряби воды (арка water-shader, Task 1) — тайлящийся сет,
+  // трипланарный getNoise сэмплирует её 3×4 раза (см. WaterShaderTemplate).
+  // resident, wrapS+wrapT Repeat (спека Task 1) — как height/slope, не стрим.
+  waterNormal
 }
 
 export type ResourceType = keyof typeof ResourceTypes
@@ -209,6 +213,24 @@ export interface IPlanetRenderingObject {
   waterFresnelTint?: number | string
   /** Пол яркости ночной стороны воды, 0..1 (терминатор, см. WaterShaderTemplate). Без ручки — дефолт движка 0.08. */
   waterNightFloor?: number
+
+  // --- Ручки ряби воды (арка water-shader, Task 1). Все опциональны:
+  // отсутствие → нейтральные дефолты движка (WaterShader). Гейт
+  // USE_WATER_WAVES — по наличию waterNormal-текстуры актора в resourceStorage
+  // (см. WaterMaterial), не по этим ручкам — они лишь калибруют уже
+  // включённые волны.
+
+  /** Множитель домена getNoise (см. WaterShaderTemplate) — 1 = периоды ряда как есть, без искусственного зума. */
+  waterWaveScale?: number
+  /** Множитель скорости прокрутки uTime в getNoise. 1 = как есть. */
+  waterWaveSpeed?: number
+  /**
+   * Дистанция затухания амплитуды нормали волн до чистого dir̂, метры камеры
+   * до поверхности. Без ручки — дефолт: дистанция, где период мельчайшей
+   * октавы (см. WaterShaderTemplate) опускается ниже ~1.5 экранного пикселя
+   * (fov 50°/1080p, см. WaterShader).
+   */
+  waterWaveFadeMeters?: number
 }
 
 export type IAtmosphereRenderingObject = AtmosphereConfig

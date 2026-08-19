@@ -6,6 +6,17 @@ import { WaterShader } from '@/core/materials/shaders/WaterShader'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
 /**
+ * Период сворачивания uTime, секунды — тот же приём, что BlackHoleMaterial.ts:145
+ * (`epoch - floor(epoch/wrap)*wrap`): держит float32-точность на долгих
+ * сессиях без скачка узора волн в момент сворачивания. 16384 = 2^14 — та же
+ * степень двойки, что у BlackHole (кратное представимо точно). База 5000 —
+ * крупнейший по модулю делитель времени ряда getNoise (WaterShaderTemplate.ts,
+ * октава 3, `t / -5000.0`): на границе врапа фаза САМОЙ медленной октавы
+ * честно проходит целое число периодов.
+ */
+const WATER_TIME_WRAP_SECONDS = 5000 * 16384
+
+/**
  * Материал водной оболочки — честный шейдер (Task 4): цвет глубокой/мелкой
  * воды, аналитический Френель (нормаль = dir̂, геометрия патча радиальна
  * везде, см. terrainPatchGeometry), мелководье из канала A slope-карты суши
@@ -51,6 +62,18 @@ class WaterMaterial extends AbstractShaderMaterial {
    */
   private slopePath: string | undefined
 
+  /**
+   * Путь waterNormal-текстуры актора — резолвится ОДИН раз в конструкторе,
+   * та же экономия ORM-джойна, что и slopePath (см. её докблок): гейт
+   * USE_WATER_WAVES проверяется каждый активный кадр (updateMaterial),
+   * повторный `resources.where(...)` на каждый кадр был бы тем же найденным
+   * находкой ревью Task 4 расходом, только для второго ресурса.
+   */
+  private waterNormalPath: string | undefined
+
+  /** Последний известный гейт USE_WATER_WAVES — тот же приём, что hasWaterDepth (needsUpdate только на фактической смене). */
+  private hasWaterWaves = false
+
   public constructor(model: Actor, parameters?: ShaderMaterialParameters) {
     super({
       transparent: true,
@@ -60,6 +83,7 @@ class WaterMaterial extends AbstractShaderMaterial {
     })
     this.model = model
     this.slopePath = WaterMaterial.resolveSlopePath(model)
+    this.waterNormalPath = WaterMaterial.resolveWaterNormalPath(model)
 
     const { uniforms, defines, vertexShader, fragmentShader } = new WaterShader(this.model)
 
@@ -72,6 +96,12 @@ class WaterMaterial extends AbstractShaderMaterial {
 
   private static resolveSlopePath(model: Actor): string | undefined {
     const path = model.resources.where('resourceType', 'slope').first()?.getAttribute('path')
+
+    return typeof path === 'string' ? path : undefined
+  }
+
+  private static resolveWaterNormalPath(model: Actor): string | undefined {
+    const path = model.resources.where('resourceType', 'waterNormal').first()?.getAttribute('path')
 
     return typeof path === 'string' ? path : undefined
   }
@@ -102,20 +132,44 @@ class WaterMaterial extends AbstractShaderMaterial {
     this.uniforms.uSlopeMap.value = slopeMap ?? null
 
     const useWaterDepth = Boolean(slopeMap)
-    if (useWaterDepth === this.hasWaterDepth) return // гейт не изменился — перекомпиляция не нужна
+
+    // waterNormal — независимый гейт (USE_WATER_WAVES), тот же ленивый
+    // стрим-паттерн, что slope: путь закеширован конструктором, текстура
+    // может догрузиться в resourceStorage в любой момент жизни оболочки.
+    const waterNormalMap: Texture | undefined = this.waterNormalPath
+      ? resourceStorage.getTexture(this.waterNormalPath)
+      : undefined
+
+    this.uniforms.uWaterNormalMap.value = waterNormalMap ?? null
+
+    const useWaterWaves = Boolean(waterNormalMap)
+
+    // uTime — КАЖДЫЙ активный кадр, независимо от того, поменялся ли
+    // какой-либо гейт (иначе волны замирали бы всякий раз, когда
+    // updateMaterial рано выходит по неизменным гейтам ниже). Дешёвая
+    // uniform-запись, needsUpdate/перекомпиляцию не трогает.
+    const epoch = performance.now() / 1000
+    this.uniforms.uTime.value = epoch - Math.floor(epoch / WATER_TIME_WRAP_SECONDS) * WATER_TIME_WRAP_SECONDS
+
+    if (useWaterDepth === this.hasWaterDepth && useWaterWaves === this.hasWaterWaves) return // ни один гейт не изменился — перекомпиляция не нужна
 
     this.hasWaterDepth = useWaterDepth
+    this.hasWaterWaves = useWaterWaves
     this.defines = {
       ...this.baseDefines,
-      ...(useWaterDepth && { USE_WATER_DEPTH: '1' })
+      ...(useWaterDepth && { USE_WATER_DEPTH: '1' }),
+      ...(useWaterWaves && { USE_WATER_WAVES: '1' })
     }
     this.needsUpdate = true
   }
 
   public resetMaterial(): void {
     this.slopePath = WaterMaterial.resolveSlopePath(this.model)
+    this.waterNormalPath = WaterMaterial.resolveWaterNormalPath(this.model)
     this.uniforms.uSlopeMap.value = null
+    this.uniforms.uWaterNormalMap.value = null
     this.hasWaterDepth = false
+    this.hasWaterWaves = false
     this.defines = { ...this.baseDefines }
     this.needsUpdate = true
   }
