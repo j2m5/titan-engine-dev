@@ -18,6 +18,7 @@ import { WaterSphere } from '@/core/renderables/Water/WaterSphere'
 import { FakePlanet } from '@/core/renderables/utils/FakePlanet'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { terrainHeightFieldFor } from '@/core/terrain/TerrainHeightField'
+import { heightPathOf } from '@/core/terrain/heightPath'
 import { BrunetonAtmosphere } from '@/core/renderables/Atmosphere/BrunetonAtmosphere'
 import { Ring } from '@/core/renderables/Ring'
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
@@ -182,8 +183,8 @@ class RenderableFactory {
     const lod = new LOD()
     // Рельеф — по фактически загруженной карте: провал загрузки деградирует
     // к легаси-сфере согласованно с материалом и коллизией
-    const heightPath = actor.resources.where('resourceType', 'height').first()?.getAttribute('path')
-    const heightMap = typeof heightPath === 'string' ? heightFieldStorage.get(heightPath) : undefined
+    const heightPath: string | undefined = heightPathOf(actor)
+    const heightMap = heightPath ? heightFieldStorage.get(heightPath) : undefined
     const lodl1 = heightMap
       ? new TerrainSphere(
           actor,
