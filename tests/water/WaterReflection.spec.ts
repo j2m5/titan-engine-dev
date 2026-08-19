@@ -4,7 +4,14 @@ import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTem
 import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
 import { WaterShader } from '@/core/materials/shaders/WaterShader'
 import { Actor } from '@/core/models/Actor'
-import { ZENITH_DARKEN, dirFromLatLon, reflectionSampleBlend, skyColorGradient, type Vec3 } from './waterColorMirror'
+import {
+  ZENITH_DARKEN,
+  dirFromLatLon,
+  reflectionSampleBlend,
+  skyColorGradient,
+  wavesColor,
+  type Vec3
+} from './waterColorMirror'
 
 // Task 2 (арка water-shader): отражение фоновой кубмапы. Consumes: чанк
 // SkyboxSample (createSkyboxSampleUniforms, флип-конвенция uSkyFlipX) — единая
@@ -155,15 +162,19 @@ describe('WaterShaderTemplate: дневное небо — градиент зе
     expect(frag).not.toContain('uniform float uWaterZenithDarken')
   })
 
-  it('ночная сторона НЕ тронута — skySample кубмапы по-прежнему честный (без зенитного затемнения)', () => {
-    // skyColor участвует ТОЛЬКО в дневной половине mix(skySample, skyColor,
-    // waveDayFactor) — сам skySample (ночь) вычисляется до skyColor и от
-    // него не зависит.
-    const skySampleLine = frag.indexOf('vec3 skySample = sampleSkyboxHdr(')
+  it('skyColor вычисляется БЕЗУСЛОВНО (вне #ifdef USE_WATER_REFLECTION) — раньше жил только под гейтом, приёмочная волна 3, №1', () => {
+    // Приёмочная волна 3 переместила skyColor В UnconditionAL часть
+    // USE_WATER_WAVES (кубмапа исключена решением владельца — звёздная
+    // сыпь): skyColor теперь считается ДО #ifdef USE_WATER_REFLECTION, а
+    // не внутри него — обратный порядок волне 2 (там skySample шёл первым,
+    // skyColor — внутри того же блока, после).
+    const reflectionGateLine = frag.indexOf('#ifdef USE_WATER_REFLECTION\n        {')
     const skyColorLine = frag.indexOf('vec3 skyColor = mix(')
+    const skySampleLine = frag.indexOf('vec3 skySample = sampleSkyboxHdr(')
 
-    expect(skySampleLine).toBeGreaterThan(-1)
-    expect(skyColorLine).toBeGreaterThan(skySampleLine)
+    expect(skyColorLine).toBeGreaterThan(-1)
+    expect(reflectionGateLine).toBeGreaterThan(skyColorLine)
+    expect(skySampleLine).toBeGreaterThan(reflectionGateLine)
   })
 })
 
@@ -222,6 +233,50 @@ describe('CPU-зеркало skyColorGradient: зенит темнее гори�
     expect(blended[1]).toBeCloseTo(expected[1], 12)
     expect(blended[2]).toBeCloseTo(expected[2], 12)
   })
+
+  // Приёмочная волна 3, №1: reflection = ТОЛЬКО skyColorGradient (день И
+  // ночь), кубмапа исключена. Днём это ЧИСЛЕННО тот же результат, что и
+  // "полный день" волны 2 выше (reflectionSampleBlend(..., waveDayFactor=1)
+  // === skyColorGradient) — паритет по дневному пути доказан ровно тем
+  // тестом. Здесь — явное сравнение НОВОГО дефолта (без day/night-бленда
+  // reflection вовсе) с ним же.
+  it('приёмочная волна 3: reflection БЕЗ бленда (день=ночь=skyColorGradient) численно равен дневному пути волны 2 — паритет', () => {
+    const direct = skyColorGradient(tint, zenith, zenith)
+    const wave2Day = reflectionSampleBlend([0.02, 0.02, 0.05], tint, zenith, zenith, 1)
+
+    expect(direct[0]).toBeCloseTo(wave2Day[0], 12)
+    expect(direct[1]).toBeCloseTo(wave2Day[1], 12)
+    expect(direct[2]).toBeCloseTo(wave2Day[2], 12)
+  })
+
+  // "ночной путь тёмный, без сыпи": даже если reflectionSample максимально
+  // ЯРКИЙ (имитация того, чем раньше была бы вспышка звезды в кубмапе),
+  // ночной wavesColor остаётся тёмным — множитель nightFloor гасит ВЕСЬ
+  // цвет, включая reflection-часть, а не только diffuse/specular. Это и
+  // есть механизм «ночной пол», на который теперь безусловно опирается
+  // reflection (day/night-бленда САМОГО reflection больше нет).
+  it('ночной путь тёмный: даже яркий reflectionSample тонет в ночном поле (нет "сыпи" — нет отдельного day/night-бленда reflection)', () => {
+    const baseColor: Vec3 = [0.043, 0.239, 0.4]
+    const brightReflection: Vec3 = [1, 1, 1] // предельный случай — "звезда"
+    const waveNormal = dirFromLatLon(10, 0)
+    const viewDir = dirFromLatLon(60, 20)
+    // lightDir РОВНО противоположен waveNormal — waveNdotL = -1, глубже
+    // некуда (гарантирует diffuse=specular=0 точно, не приближённо).
+    const nightLightDir: Vec3 = [-waveNormal[0], -waveNormal[1], -waveNormal[2]]
+    const sunColor: Vec3 = [1, 1, 1]
+    const nightFloor = 0.08
+
+    const nightColor = wavesColor(baseColor, brightReflection, waveNormal, viewDir, nightLightDir, sunColor, nightFloor)
+    const brightest = Math.max(nightColor[0], nightColor[1], nightColor[2])
+
+    // Верхняя оценка: без ночного пола reflectance·0.9·[1,1,1] уже даёт
+    // компоненту вплоть до 0.9+0.1=1.0 — с полом 0.08 предел ~0.08 (diffuse/
+    // specular — ТОЧНО 0 при waveNdotL=-1: diffuse — max(dot(lightDir,
+    // normal),0)=max(-1,0)=0; specular — reflect(-lightDir,normal)=normal
+    // при этом lightDir, а waveNormal·viewDir даёт направление, никак не
+    // усиливающее pow(...,100) выше пренебрежимого).
+    expect(brightest).toBeLessThan(0.09)
+  })
 })
 
 function scaleForTest(v: Vec3, s: number): Vec3 {
@@ -235,8 +290,13 @@ describe('WaterShaderTemplate: гейт USE_WATER_REFLECTION — вложен в
     expect(matches.length).toBe(2)
   })
 
-  it('подстановка идёт вместо тинта Task 1: vec3 waveReflectionSample = uWaterFresnelTint; остаётся дефолтом ДО гейта', () => {
-    expect(frag).toContain('vec3 waveReflectionSample = uWaterFresnelTint;')
+  it('дефолт reflectionSample — градиентный skyColor (приёмочная волна 3, №1: не тинт Task 1, не кубмапа)', () => {
+    // Приёмочная волна 3: waveReflectionSample = uWaterFresnelTint (плоский
+    // тинт Task 1) заменён на = skyColor (градиент волны 2) — reflection
+    // безусловна и НЕ зависит от USE_WATER_REFLECTION, только сам сэмпл
+    // кубмапы (skySample) остался под гейтом.
+    expect(frag).toContain('vec3 waveReflectionSample = skyColor;')
+    expect(frag).not.toContain('vec3 waveReflectionSample = uWaterFresnelTint;')
   })
 })
 
@@ -374,15 +434,24 @@ describe('Паритет: без USE_WATER_REFLECTION компилируемый
   // not.toContain — ни один из них не завязан именно на чанк. Добавлены
   // отдельные утверждения на #include/sampleSkyboxHdr — RED на этой мутации
   // подтверждён вручную (см. task-2-report.md, раздел находки №4).
-  it('вырезав ТОЛЬКО USE_WATER_REFLECTION (волны остаются) — reflection = тинт Task 1 (waveReflectionSample), без skySample/дневного бленда/чанка', () => {
+  //
+  // Приёмочная волна 3, №1 (кубмапа исключена решением владельца) сдвинула
+  // границу: geometry/skyColor (worldNormal/reflectDir/upFactor/skyColor)
+  // переехали в БЕЗУСЛОВНУЮ часть USE_WATER_WAVES — снятие ТОЛЬКО
+  // USE_WATER_REFLECTION больше НЕ убирает их (раньше убирало, до волны 3).
+  // Остаётся под гейтом СТРОГО то, что реально читает кубмапу: сэмплер
+  // uSkyboxMap, чанк SkyboxSample, сам сэмпл skySample.
+  it('вырезав ТОЛЬКО USE_WATER_REFLECTION (волны остаются) — reflection = градиентный skyColor, кубмапа/чанк убраны, geometry/градиент — нет (они безусловны)', () => {
     const stripped = stripGuardedBlock(frag, 'USE_WATER_REFLECTION')
 
-    expect(stripped).toContain('vec3 waveReflectionSample = uWaterFresnelTint;')
+    expect(stripped).toContain('vec3 waveReflectionSample = skyColor;')
     expect(stripped).not.toContain('skySample')
     expect(stripped).not.toContain('uSkyboxMap')
-    expect(stripped).not.toContain('worldNormal')
     expect(stripped).not.toContain('#include <skyboxSample')
     expect(stripped).not.toContain('sampleSkyboxHdr')
+    // geometry/градиент — БЕЗУСЛОВНЫ с волны 3, снятие гейта их не трогает.
+    expect(stripped).toContain('vec3 worldNormal = normalize(mat3(modelMatrix) * waveLocalNormal);')
+    expect(stripped).toContain('vec3 skyColor = mix(uWaterFresnelTint, uWaterFresnelTint * ZENITH_DARKEN, upFactor);')
     // Остальная структура волновой ветки Task 1 не тронута (albedo-mix цел)
     expect(stripped).toContain('color = mix(')
     expect(stripped).toContain('waterSunColor * waveDiffuseLight * 0.3 + waveScatter,')
@@ -463,7 +532,17 @@ describe('WaterShader: uWaterDistortion — ручка дисторсии отр
 // Проводка кубмапы + гейт USE_WATER_REFLECTION — WaterMaterial, не WaterShader
 // (текстура доставляется конструктором материала, не CPU-путём "data", см. её
 // докблок). stubActor — тот же образец, что WaterMaterial.spec.ts.
-describe('WaterMaterial: доставка кубмапы фона + гейт USE_WATER_REFLECTION (арка water-shader, Task 2)', () => {
+//
+// Приёмочная волна 3, №1 (владелец: звёздная сыпь на ночном океане —
+// grazing-дисторсия размазывала HDR-звёзды кубмапы в яркие кляксы). Гейт
+// USE_WATER_REFLECTION больше НЕ СТАВИТСЯ материалом ни при каких условиях
+// (WATER_REFLECTION_ENABLED_BY_OWNER = false, см. докблок-рулинг в
+// WaterMaterial.ts) — до этой волны кубмапа включала гейт, теперь нет: тест
+// «кубмапа доставлена — гейт ставится» ниже был бы RED без фикса, доказывает
+// именно рулинг, не отсутствие данных. Доставка `skyboxTexture` НЕ разобрана
+// (обратимость) — `uSkyboxMap.value` по-прежнему получает переданную
+// текстуру, просто шейдер её не сэмплирует без гейта.
+describe('WaterMaterial: доставка кубмапы фона — гейт USE_WATER_REFLECTION отключён рулингом владельца (приёмочная волна 3)', () => {
   function stubActor(): Actor {
     return {
       renderingObject: { getAttribute: () => ({}) },
@@ -472,7 +551,7 @@ describe('WaterMaterial: доставка кубмапы фона + гейт USE
     } as unknown as Actor
   }
 
-  it('без кубмапы (аргумент не передан) — гейт не ставится, сэмплер null (обратная совместимость вызовов Task 1)', () => {
+  it('без кубмапы (аргумент не передан) — гейт не ставится, сэмплер null (как и раньше)', () => {
     const material = new WaterMaterial(stubActor())
 
     expect(material.defines.USE_WATER_REFLECTION).toBeUndefined()
@@ -486,31 +565,33 @@ describe('WaterMaterial: доставка кубмапы фона + гейт USE
     expect(material.uniforms.uSkyboxMap.value).toBeNull()
   })
 
-  it('кубмапа доставлена конструктором — гейт ставится сразу, сэмплер получает ЭТУ ЖЕ текстуру', () => {
+  it('С кубмапой (доставлена конструктором) гейт ВСЁ РАВНО НЕ ставится — рулинг, не отсутствие данных (RED без фикса — до волны 3 та же выборка давала USE_WATER_REFLECTION="1")', () => {
     const texture = new CubeTexture()
     const material = new WaterMaterial(stubActor(), texture)
 
-    expect(material.defines.USE_WATER_REFLECTION).toBe('1')
+    expect(material.defines.USE_WATER_REFLECTION).toBeUndefined()
+    // Доставка НЕ разобрана (обратимость) — сэмплер honestly получает
+    // переданную текстуру, просто гейт её не подключает к шейдеру.
     expect(material.uniforms.uSkyboxMap.value).toBe(texture)
   })
 
-  it('гейт СТАТИЧЕН: updateMaterial() (гоняющий USE_WATER_DEPTH/USE_WATER_WAVES) его не трогает', () => {
+  it('гейт СТАТИЧЕН: updateMaterial() (гоняющий USE_WATER_DEPTH/USE_WATER_WAVES) не включает его задним числом', () => {
     const texture = new CubeTexture()
     const material = new WaterMaterial(stubActor(), texture)
 
     material.updateMaterial()
     material.updateMaterial(1000)
 
-    expect(material.defines.USE_WATER_REFLECTION).toBe('1')
+    expect(material.defines.USE_WATER_REFLECTION).toBeUndefined()
   })
 
-  it('resetMaterial() НЕ снимает гейт отражения (в отличие от USE_WATER_DEPTH/USE_WATER_WAVES) — кубмапа не часть слопа/waterNormal стрима', () => {
+  it('resetMaterial() — гейт остаётся undefined (нечего снимать), сэмплер по-прежнему несёт доставленную текстуру', () => {
     const texture = new CubeTexture()
     const material = new WaterMaterial(stubActor(), texture)
 
     material.resetMaterial()
 
-    expect(material.defines.USE_WATER_REFLECTION).toBe('1')
+    expect(material.defines.USE_WATER_REFLECTION).toBeUndefined()
     expect(material.uniforms.uSkyboxMap.value).toBe(texture)
   })
 })

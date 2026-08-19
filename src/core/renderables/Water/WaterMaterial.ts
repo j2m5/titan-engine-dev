@@ -6,6 +6,23 @@ import { WaterShader } from '@/core/materials/shaders/WaterShader'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
 /**
+ * Отражение фоновой кубмапы в воде — ОТКЛЮЧЕНО РЕШЕНИЕМ ВЛАДЕЛЬЦА
+ * (2026-08-19, приёмочная волна 3, №1): ночная кубмапа давала звёздную
+ * сыпь — HDR-звёзды кубмапы, размазанные grazing-дисторсией отражённого
+ * луча, читались яркими кляксами по тёмному океану. `false` держит гейт
+ * USE_WATER_REFLECTION снятым БЕЗУСЛОВНО, независимо от наличия
+ * `skyboxTexture` (см. конструктор) — механика (uniform `uSkyboxMap`,
+ * `#ifdef USE_WATER_REFLECTION` в `WaterShaderTemplate.ts`, доставка
+ * `skyboxTexture` из `RenderableFactory`) НЕ разобрана, вернуть можно одной
+ * строкой здесь. Reflection воды теперь всегда градиентный `skyColor`
+ * (приёмочная волна 2, зенит/горизонт), день и ночь, без сэмпла кубмапы.
+ */
+// Явная аннотация :boolean (не литерал false) — иначе TS сужает
+// useWaterReflection ниже до типа литерала false и spread
+// `...(useWaterReflection && {...})` не типизируется (spread не из object).
+const WATER_REFLECTION_ENABLED_BY_OWNER: boolean = false
+
+/**
  * Материал водной оболочки — честный шейдер (Task 4): цвет глубокой/мелкой
  * воды, аналитический Френель (нормаль = dir̂, геометрия патча радиальна
  * везде, см. terrainPatchGeometry), мелководье из канала A slope-карты суши
@@ -81,6 +98,17 @@ class WaterMaterial extends AbstractShaderMaterial {
    * СТАТИЧЕН на весь срок жизни материала и живёт в baseDefines (не
    * пересчитывается updateMaterial/resetMaterial, как USE_WATER_DEPTH/
    * USE_WATER_WAVES) — resetMaterial ниже его не снимает.
+   *
+   * Отражение кубмапы ОТКЛЮЧЕНО РЕШЕНИЕМ ВЛАДЕЛЬЦА (2026-08-19, приёмочная
+   * волна 3, №1): ночная кубмапа давала звёздную сыпь — HDR-звёзды,
+   * размазанные grazing-дисторсией отражённого луча, читались яркими
+   * кляксами по тёмному океану. `WATER_REFLECTION_ENABLED_BY_OWNER = false`
+   * держит гейт снятым БЕЗУСЛОВНО (не зависит от `skyboxTexture` вовсе) —
+   * механика (`uSkyboxMap`, `#ifdef USE_WATER_REFLECTION` в
+   * `WaterShaderTemplate.ts`, доставка `skyboxTexture` из
+   * `RenderableFactory`) НЕ разобрана, вернуть можно одной строкой здесь.
+   * Reflection воды теперь всегда градиентный `skyColor` (приёмочная волна
+   * 2), день и ночь, без сэмпла кубмапы — см. докблок в шейдере.
    */
   public constructor(model: Actor, skyboxTexture: CubeTexture | null = null, parameters?: ShaderMaterialParameters) {
     super({
@@ -100,7 +128,7 @@ class WaterMaterial extends AbstractShaderMaterial {
     this.fragmentShader = fragmentShader
     this.uniforms.uSkyboxMap.value = skyboxTexture
 
-    const useWaterReflection = skyboxTexture !== null
+    const useWaterReflection = skyboxTexture !== null && WATER_REFLECTION_ENABLED_BY_OWNER
 
     this.baseDefines = {
       ...defines,

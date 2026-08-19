@@ -179,8 +179,8 @@ describe('WaterShaderTemplate: sunLight/albedo — дословно Water.js (ge
     expect(frag).toContain('waveReflectance')
   })
 
-  it('reflection = существующий тинт Task 4 (Task 2 подменит источник)', () => {
-    expect(frag).toContain('vec3 waveReflectionSample = uWaterFresnelTint;')
+  it('reflection = градиентный skyColor (Task 2 добавила зенит/горизонт, приёмочная волна 3 сделала его безусловным дефолтом — см. WaterReflection.spec.ts)', () => {
+    expect(frag).toContain('vec3 waveReflectionSample = skyColor;')
   })
 })
 
