@@ -35,29 +35,64 @@ describe('WaterShaderTemplate: отражение — сэмпл ТОЛЬКО ч
   })
 })
 
-describe('WaterShaderTemplate: отражение — мировые оси (тела вращаются, кубмапа мировая)', () => {
-  it('нормаль поворачивается modelMatrix (не normalMatrix — тот view-space, не мировой)', () => {
+// Фикс-раунд 1 ревью Task 2, находка №2: первая версия заводила мировой
+// varying vWorldPosition = modelMatrix·position — в f32 это ПОЛНАЯ
+// гелиоцентрическая координата (Земля на 1 а.е.: ulp ≈ 14 км), а
+// cameraPosition-vWorldPosition — катастрофическое сокращение (вплоть до
+// нулевого вектора). Фикс: мировые НАПРАВЛЕНИЯ получаются поворотом уже
+// RTC-безопасных view-space величин (viewDir/waveDist, camera-relative), а
+// не переносом полноразрядных мировых координат — vWorldPosition убран
+// целиком, вершинник вернулся к безусловному виду Task 1 (см. паритетный
+// тест ниже — байт-в-байт, не только «без гейта»).
+describe('WaterShaderTemplate: отражение — мировые оси БЕЗ мировых координат на GPU (находка №2)', () => {
+  it('нормаль — поворот mat3(modelMatrix) body-локальной возмущённой нормали', () => {
     expect(frag).toContain('vec3 worldNormal = normalize(mat3(modelMatrix) * waveLocalNormal);')
   })
 
-  it('взгляд — cameraPosition (билдин three) минус vWorldPosition (вершинник, modelMatrix·position)', () => {
-    expect(frag).toContain('vec3 toCamera = cameraPosition - vWorldPosition;')
-    expect(vert).toContain('vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;')
+  it('взгляд — уже RTC-безопасный view-space viewDir, повёрнутый в мир transpose(mat3(viewMatrix)), НЕ вычитание мировых координат', () => {
+    expect(frag).toContain('vec3 worldViewDir = transpose(mat3(viewMatrix)) * viewDir;')
+    expect(frag).not.toContain('cameraPosition')
   })
 
-  it('modelMatrix объявлен явно во фрагментнике (three не биндит его туда автоматически, в отличие от вершинника)', () => {
+  it('vWorldPosition убран целиком — ни в вершиннике, ни во фрагментнике (RTC-опасный полноразрядный мировой varying)', () => {
+    expect(vert).not.toContain('vWorldPosition')
+    expect(frag).not.toContain('vWorldPosition')
+  })
+
+  it('modelMatrix объявлен явно во фрагментнике (three не биндит его туда автоматически, в отличие от вершинника); viewMatrix — билдин three, без явного объявления', () => {
     expect(frag).toContain('uniform mat4 modelMatrix;')
+    expect(frag).not.toContain('uniform mat4 viewMatrix;')
   })
 })
 
-describe('WaterShaderTemplate: дисторсия Water.js — surfaceNormal.xy·(0.001+1/dist)·uWaterDistortion', () => {
-  it('формула пином (worldNormal — мировая нормаль волны, аналог surfaceNormal Water.js)', () => {
-    expect(frag).toContain('vec3 reflectDir = reflect(-worldViewDir, worldNormal);')
-    expect(frag).toContain('reflectDir.xy += worldNormal.xy * (0.001 + 1.0 / dist) * uWaterDistortion;')
+// Фикс-раунд 1 ревью Task 2, находка №1: Water.js писал дисторсию для сцены
+// В МЕТРАХ (0.001 + 1/distance), у нас 1 юнит сцены ≈ 1995 км — без перевода
+// добавка была на 4-5 порядков больше единичного reflectDir, normalize()
+// переставал зависеть от взгляда («чужое небо»). Находка №3: worldNormal.xy
+// — не аналог тангенциального surfaceNormal.xz Water.js (несёт саму
+// радиальную ось, сила искажения гуляла бы по долготе) — фикс: тангенциальная
+// проекция (dev), не сырой .xy среза мировой нормали.
+describe('WaterShaderTemplate: дисторсия Water.js — единицы метры (находка №1), тангенциальная проекция (находка №3)', () => {
+  it('dist переведён в метры ДО деления (waveDist * WATER_METERS_PER_UNIT, не сырой юнит сцены)', () => {
+    expect(frag).toContain('float distMeters = waveDist * WATER_METERS_PER_UNIT;')
+    expect(frag).toContain('const float WATER_METERS_PER_UNIT = ')
   })
 
-  it('dist — мировая дистанция камера-фрагмент (length от cameraPosition-vWorldPosition, не от view-space vViewPosition)', () => {
-    expect(frag).toContain('float dist = length(toCamera);')
+  it('гард на dist=0: max(distMeters, 1e-6) — деление на дистанцию не голое (несогласованность прежней версии устранена)', () => {
+    expect(frag).toContain('reflectDir += worldDev * (0.001 + 1.0 / max(distMeters, 1e-6)) * uWaterDistortion;')
+  })
+
+  it('дисторсия — тангенциальная проекция waveLocalNormal на плоскость к waveDirLocal (dev), не worldNormal.xy', () => {
+    expect(frag).toContain(
+      'vec3 dev = waveLocalNormal - waveDirLocal * dot(waveLocalNormal, waveDirLocal);'
+    )
+    expect(frag).toContain('vec3 worldDev = mat3(modelMatrix) * dev;')
+    expect(frag).not.toContain('worldNormal.xy')
+    expect(frag).not.toContain('reflectDir.xy')
+  })
+
+  it('reflect() — дословная форма Water.js (reflect(-view, normal)), полный 3D-вектор дисторсии, не срез .xy', () => {
+    expect(frag).toContain('vec3 reflectDir = reflect(-worldViewDir, worldNormal);')
   })
 
   it('ручка uWaterDistortion объявлена, не зашитый литерал', () => {
@@ -77,9 +112,14 @@ describe('WaterShaderTemplate: дневной бленд отражения — 
     expect(matches.length).toBe(2) // WaterWaves.spec.ts пиннует тот же счёт с той же стороны (парный страж)
   })
 
-  it('блок обособлен в { } — свой NdotL/dayFactor не конфликтует с одноимёнными переменными ночного пола (main() без вложенных scope иначе)', () => {
-    expect(frag).toContain('float NdotL = dot(normal, normalize(vViewLightDirection));')
-    expect(frag).toContain('float dayFactor = smoothstep(-0.08, 0.25, NdotL);')
+  // Находка ревью фикс-раунда 1 №7б: страж терминатора считал только
+  // smoothstep(...), а определение NdotL/lightDirection в двух местах было
+  // записано по-разному (инлайн normalize() тут, отдельная переменная там)
+  // — приведено к ОДНОЙ и той же записи, страж теперь считает и её.
+  it('блок обособлен в { } — своё NdotL/lightDirection не конфликтует с одноимёнными переменными ночного пола (main() без вложенных scope иначе), запись идентична ночному полу', () => {
+    const definitionMatches = frag.match(/vec3 lightDirection = normalize\(vViewLightDirection\);\n\s*float NdotL = dot\(normal, lightDirection\);/g) ?? []
+
+    expect(definitionMatches.length).toBe(2) // дневной бленд отражения + ночной пол — буквально одна и та же запись
   })
 })
 
@@ -99,6 +139,12 @@ describe('WaterShaderTemplate: гейт USE_WATER_REFLECTION — вложен в
 // приём, ниже приведено обоснование в исходном файле): non-greedy regex
 // останавливался бы на ПЕРВОМ #endif, а USE_WATER_REFLECTION вложен внутрь
 // USE_WATER_WAVES — нужен парсер, считающий глубину любого #ifdef/#endif.
+// Контракт ограничен (находка ревью фикс-раунда 1 №6, честно, не молчание):
+// считает только `#ifdef`/`#ifndef` как открывающие директивы, `#endif`
+// строгим построчным равенством после trim() — `#if`/`#elif`/`#endif` с
+// хвостовым комментарием на той же строке НЕ распознаются и сломают баланс.
+// В этом файле (и в WaterShaderTemplate.ts) такие формы не используются —
+// латентная мина для будущего guard'а, не текущий баг.
 function stripGuardedBlock(source: string, guard: string): string {
   const lines = source.split('\n')
   const result: string[] = []
@@ -217,16 +263,73 @@ describe('Паритет: без USE_WATER_REFLECTION компилируемый
     expect(normalizeBlankLines(stripped)).toBe(normalizeBlankLines(BASELINE_FRAGMENT_SHADER))
   })
 
-  it('вырезав ТОЛЬКО USE_WATER_REFLECTION (волны остаются) — reflection = тинт Task 1 (waveReflectionSample), без skySample/дневного бленда', () => {
+  // Находка ревью фикс-раунда 1 №4 (блайндспот): мутация «закрыть гейт
+  // USE_WATER_REFLECTION ДО #include» (переместить оба #include за #endif,
+  // сделав их безусловными) проходила прежний набор из пяти toContain/
+  // not.toContain — ни один из них не завязан именно на чанк. Добавлены
+  // отдельные утверждения на #include/sampleSkyboxHdr — RED на этой мутации
+  // подтверждён вручную (см. task-2-report.md, раздел находки №4).
+  it('вырезав ТОЛЬКО USE_WATER_REFLECTION (волны остаются) — reflection = тинт Task 1 (waveReflectionSample), без skySample/дневного бленда/чанка', () => {
     const stripped = stripGuardedBlock(frag, 'USE_WATER_REFLECTION')
 
     expect(stripped).toContain('vec3 waveReflectionSample = uWaterFresnelTint;')
     expect(stripped).not.toContain('skySample')
     expect(stripped).not.toContain('uSkyboxMap')
     expect(stripped).not.toContain('worldNormal')
+    expect(stripped).not.toContain('#include <skyboxSample')
+    expect(stripped).not.toContain('sampleSkyboxHdr')
     // Остальная структура волновой ветки Task 1 не тронута (albedo-mix цел)
     expect(stripped).toContain('color = mix(')
     expect(stripped).toContain('waterSunColor * waveDiffuseLight * 0.3 + waveScatter,')
+  })
+})
+
+// Находка ревью фикс-раунда 1 №5: закрыта устранением vWorldPosition (№2) —
+// вершинник больше НЕ несёт ни одной строки Task 2 ни в каком режиме, класс
+// «безусловная правка вершинника проскакивает мимо паритетных тестов»
+// закрыт структурно (нечего страховать stripGuardedBlock'ом — снимать
+// нечего), но страж по образцу фрагментного всё равно заведён явно, чтобы
+// будущая правка вершинника не проскочила молча.
+const BASELINE_VERTEX_SHADER = `
+    precision highp float;
+
+    ${ShaderChunk['common']}
+    ${ShaderChunk['logdepthbuf_pars_vertex']}
+
+    uniform vec3 lightPosition;
+
+    varying vec3 vNormal;
+    varying vec3 vViewLightDirection;
+    varying vec3 vViewPosition;
+    varying vec3 vLocalDir;
+
+    void main() {
+      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+      gl_Position = projectionMatrix * mvPosition;
+
+      vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
+
+      vNormal = normalize(normalMatrix * normal);
+      // Нормаль воды = dir̂ (аналитическая, не из карты): патчи водной
+      // оболочки строит тот же writeTerrainPatchAttributes, что и рельеф —
+      // атрибут normal радиален всегда (см. terrainPatchGeometry.ts), волн
+      // и мелкой пертурбации у Task 4 нет. vNormal — уже готовый view-space
+      // dir̂ для Френеля во фрагментнике.
+      //
+      // Body-локальное радиальное направление — отдельно, для терраформного
+      // UV (канал A той же slope-карты, что и суша): та же конвенция vLocalDir,
+      // что у PlanetShaderTemplate — без нормали, без матриц, только normal.
+      vLocalDir = normal;
+      vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
+      vViewPosition = -mvPosition.xyz;
+
+      ${ShaderChunk['logdepthbuf_vertex']}
+    }
+  `
+
+describe('Паритет вершинника: байт-в-байт Task 1 БЕЗУСЛОВНО (находка ревью фикс-раунда 1 №5)', () => {
+  it('vertexShader равен снимку Task 1 без всякого strip — Task 2 не добавила вершиннику ни единого символа', () => {
+    expect(normalizeBlankLines(vert)).toBe(normalizeBlankLines(BASELINE_VERTEX_SHADER))
   })
 })
 

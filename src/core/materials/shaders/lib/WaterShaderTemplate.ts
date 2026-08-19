@@ -1,6 +1,15 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { Color, ShaderChunk, Uniform, UniformsUtils, Vector3 } from 'three'
 import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
+import { SpaceScale } from '@/core/constants'
+
+// Юниты сцены → метры (арка water-shader, Task 2, находка ревью фикс-раунда
+// 1 №1): дисторсия Water.js писана для сцены В МЕТРАХ (0.001 + 1/distance,
+// distance — метры), у нас 1 юнит сцены ≈ 1995 км (см. SpaceScale) — без
+// перевода добавка на 4-5 порядков превышала единичный вектор reflectDir,
+// normalize() переставал зависеть от взгляда вовсе. 1000 — км в метре,
+// SpaceScale — юниты сцены на км (см. scaling.ts toThreeJSUnits).
+const WATER_METERS_PER_UNIT = 1000 / SpaceScale
 
 const defaultUniforms = {
   // «Звезда в нуле» — общедвижковая конвенция (см. BrunetonAtmosphere
@@ -60,17 +69,6 @@ export const WaterShaderTemplate: ShaderProps = {
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
-    // Мировая позиция фрагмента (арка water-shader, Task 2) — вход отражения
-    // кубмапы: тела вращаются, кубмапа мировая, взгляд обязан считаться в
-    // мировых осях (cameraPosition − vWorldPosition), не в view-пространстве
-    // vViewPosition ниже (то для Френеля/sunLight, оно камера-локальное).
-    // Считается ЗДЕСЬ (не в фрагментнике) буквально по спеке: modelMatrix
-    // доступен в вершиннике безусловно (three биндит его сам), не нужен явный
-    // uniform, как для normalMatrix во фрагментнике (см. её докблок ниже).
-    // Заведена безусловно, как vLocalDir — используется только под
-    // USE_WATER_REFLECTION, но нулевой ценой для остальных режимов (та же
-    // экономия, что у остальных generic-геометрических varying этого шейдера).
-    varying vec3 vWorldPosition;
 
     void main() {
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
@@ -79,7 +77,6 @@ export const WaterShaderTemplate: ShaderProps = {
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
 
       vNormal = normalize(normalMatrix * normal);
-      vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
       // Нормаль воды = dir̂ (аналитическая, не из карты): патчи водной
       // оболочки строит тот же writeTerrainPatchAttributes, что и рельеф —
       // атрибут normal радиален всегда (см. terrainPatchGeometry.ts), волн
@@ -237,13 +234,23 @@ export const WaterShaderTemplate: ShaderProps = {
         uniform float uWaterDistortion;
         // three не биндит modelMatrix во фрагментник автоматически (тот же
         // приём, что normalMatrix выше) — нужен для мировой ориентации
-        // возмущённой нормали (тела вращаются, кубмапа мировая).
+        // возмущённой нормали (тела вращаются, кубмапа мировая). ВАЖНО: не
+        // заводить мировой varying позиции фрагмента, как в первой версии
+        // (снят находкой ревью фикс-раунда 1 №2) — умножение модельной
+        // матрицы на позицию вершины в f32 несёт полную гелиоцентрическую
+        // координату (Земля на 1 а.е.: ulp ≈ 14 км), а последующее вычитание
+        // из мировой позиции камеры — катастрофическое сокращение вплоть до
+        // нулевого вектора. Взгляд/дистанция ниже считаются из УЖЕ
+        // RTC-безопасных view-space величин (сам взгляд и посчитанная
+        // раньше waveDist — camera-relative, не полноразрядные мировые
+        // координаты), мировые направления получаются ЧИСТЫМ поворотом
+        // (mat3(modelMatrix) для нормали, transpose(mat3(viewMatrix)) для
+        // взгляда) — не переносом начала координат.
         uniform mat4 modelMatrix;
-        // Мировая позиция фрагмента (см. её докблок в вершиннике) — varying
-        // объявлен ЗДЕСЬ, под гейтом, а не безусловно с vNormal/vLocalDir
-        // выше: паритетный снимок Task 1 не должен потерять байт-в-байт
-        // равенство из-за лишнего варьинга, который Task 1 не объявлял.
-        varying vec3 vWorldPosition;
+
+        // Юниты сцены → метры (см. её докблок вверху файла) — дисторсия
+        // Water.js писана для метров, не для юнитов сцены (~1995 км/юнит).
+        const float WATER_METERS_PER_UNIT = ${WATER_METERS_PER_UNIT};
 
         #include <skyboxSampleUniforms>
         #include <skyboxSampleFunctions>
@@ -316,32 +323,52 @@ export const WaterShaderTemplate: ShaderProps = {
         vec3 waveReflectionSample = uWaterFresnelTint;
         #ifdef USE_WATER_REFLECTION
         {
-          // Отражение фоновой кубмапы (Task 2) — МИРОВЫЕ оси: тела вращаются
-          // (modelMatrix), кубмапа мировая; объектно-/view-локальный reflect
-          // паразитно вращал бы отражение вместе с телом или камерой.
-          // cameraPosition — билдин three (доступен во фрагментнике без
-          // объявления, в отличие от modelMatrix выше); vWorldPosition — из
-          // вершинника (modelMatrix·position, точности float32 хватает
-          // направлению камера→фрагмент на масштабах тел движка).
+          // Отражение фоновой кубмапы (Task 2) — МИРОВЫЕ оси, БЕЗ мировых
+          // координат на GPU (находка ревью фикс-раунда 1 №2: первая версия
+          // заводила варьинг мировой позиции фрагмента — умножение модельной
+          // матрицы на позицию вершины в f32 несёт полную гелиоцентрическую
+          // координату, а вычитание из мировой позиции камеры давало
+          // катастрофическое сокращение вплоть до нулевого вектора). Нормаль
+          // — поворот mat3(modelMatrix) (тела вращаются); взгляд — уже
+          // RTC-безопасный view-space viewDir, повёрнутый в мир через
+          // transpose(mat3(viewMatrix)) (viewMatrix биндит three сам;
+          // обратная матрица чистого поворота = транспонированная, дешевле
+          // inverse()).
           vec3 worldNormal = normalize(mat3(modelMatrix) * waveLocalNormal);
-          vec3 toCamera = cameraPosition - vWorldPosition;
-          float dist = length(toCamera);
-          vec3 worldViewDir = toCamera / max(dist, 1e-6);
+          vec3 worldViewDir = transpose(mat3(viewMatrix)) * viewDir;
 
-          // Дисторсия — дословно форма Water.js (distortionScale): растёт к
-          // горизонту (1/dist), 0.001 — пол на бесконечности. surfaceNormal
-          // Water.js — world-space нормаль волны, здесь worldNormal.
+          // dist — уже посчитанный waveDist (length(vViewPosition), тоже
+          // camera-relative), переведённый в метры: формула дисторсии
+          // Water.js писана для сцены В МЕТРАХ (находка ревью фикс-раунда 1
+          // №1) — без перевода добавка была на 4-5 порядков больше
+          // единичного reflectDir, отражение переставало зависеть от взгляда.
+          float distMeters = waveDist * WATER_METERS_PER_UNIT;
+
+          // Дисторсия — тангенциальное отклонение волны от базового
+          // радиального направления, а НЕ произвольный срез мировой нормали
+          // по двум осям (находка ревью фикс-раунда 1 №3: такой срез несёт
+          // саму радиальную/несущую компоненту нормали — сила искажения
+          // гуляла бы 0..1 по долготе относительно мировой оси Z). dev —
+          // проекция waveLocalNormal на тангентную плоскость к waveDirLocal
+          // (обе единичные — отклонение только от шума волны, малое и
+          // изотропное по построению, честный аналог тангенциальной
+          // компоненты нормали карты Water.js без несущей оси "up").
+          vec3 dev = waveLocalNormal - waveDirLocal * dot(waveLocalNormal, waveDirLocal);
+          vec3 worldDev = mat3(modelMatrix) * dev;
+
           vec3 reflectDir = reflect(-worldViewDir, worldNormal);
-          reflectDir.xy += worldNormal.xy * (0.001 + 1.0 / dist) * uWaterDistortion;
+          reflectDir += worldDev * (0.001 + 1.0 / max(distMeters, 1e-6)) * uWaterDistortion;
 
           vec3 skySample = sampleSkyboxHdr(uSkyboxMap, normalize(reflectDir), uSkyFlipX);
 
           // Дневной бленд — та же форма терминатора (порог/ширина), что и
           // ночной пол ниже — см. WaterReflection.spec.ts. Блок обособлен в
           // { }: main() этого шейдера не заводит вложенных областей
-          // видимости, а без неё имена NdotL/dayFactor столкнулись бы с
-          // одноимёнными переменными ночного пола ниже (та же функция main).
-          float NdotL = dot(normal, normalize(vViewLightDirection));
+          // видимости, а без неё определение NdotL/lightDirection
+          // столкнулось бы с одноимёнными переменными ночного пола ниже
+          // (та же функция main) — форма записи намеренно идентична ей.
+          vec3 lightDirection = normalize(vViewLightDirection);
+          float NdotL = dot(normal, lightDirection);
           float dayFactor = smoothstep(-0.08, 0.25, NdotL);
 
           waveReflectionSample = mix(skySample, uWaterFresnelTint, dayFactor);
