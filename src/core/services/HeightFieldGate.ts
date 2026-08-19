@@ -43,6 +43,10 @@ export class HeightFieldGate {
   public recompute(): void {
     const candidates: HeightMapCandidate[] = []
     const nodeByPath: Map<string, DynamicNode> = new Map()
+    // Растёт в true, если апгрейд/даунгрейд ХОТЯ БЫ РАЗ реально подменил
+    // поверхность узла (обе операции фабрики возвращают это булем). Триггерит
+    // единственный пересбор снимка наблюдения в конце — см. докблок ниже.
+    let surfaceSwapped: boolean = false
 
     for (const record of this.sceneObserver.data.values()) {
       // Актор берётся из узла, а не поиском по имени в ORM: имена в БД не
@@ -76,7 +80,7 @@ export class HeightFieldGate {
       // на данных, которых уже нет.
       const node: DynamicNode | undefined = nodeByPath.get(path)
 
-      if (node) this.factory.downgradeTerrainToPlanet(node)
+      if (node && this.factory.downgradeTerrainToPlanet(node)) surfaceSwapped = true
 
       heightFieldStorage.release(path)
     }
@@ -84,8 +88,19 @@ export class HeightFieldGate {
     // Апгрейд тех, чьи карты уже доехали: приход асинхронен и никого не
     // будит, поэтому проверка на каждом пересчёте.
     for (const [path, node] of nodeByPath) {
-      if (heightFieldStorage.get(path)) this.factory.upgradePlanetToTerrain(node)
+      if (heightFieldStorage.get(path) && this.factory.upgradePlanetToTerrain(node)) surfaceSwapped = true
     }
+
+    // Один пересбор на весь пересчёт, а не по разу на тело: userData.type
+    // висит на самой поверхности (Planet/TerrainSphere), а не на DynamicNode
+    // — swapSurface открепляет старую поверхность от узла и диспоузит её, и
+    // старый снимок SceneObserver.objects продолжал бы держать её ссылку
+    // (getWorldPosition открепленного объекта схлопывается в начало
+    // координат, дистанция до тела превращается в дистанцию до центра
+    // системы — ломает ближайшее тело, стример, переход камеры и сам гейт).
+    // CameraCollision.refreshColliders сравнивает ссылку sceneObserver.objects
+    // — пересбор чинит и коллизию тем же ходом.
+    if (surfaceSwapped) this.sceneObserver.refreshObservableObjects()
   }
 
   private onClosestChange = (): void => {

@@ -32,8 +32,15 @@ function distanceForPixels(actor: Actor, pixels: number): number {
   return radiusUnits / minBodyPixelsToPriorityThreshold(pixels)
 }
 
-/** Стенд: сцена с узлами перечисленных тел, наблюдатель и заглушка фабрики. */
-function makeStand(actors: Actor[]): { gate: HeightFieldGate; observer: SceneObserver; factory: FactoryStub } {
+/**
+ * Стенд: сцена с узлами перечисленных тел, наблюдатель и заглушка фабрики.
+ * `factoryOverrides` подменяет возвращаемое значение операций фабрики —
+ * по умолчанию обе идемпотентно отвечают «ничего не поменялось».
+ */
+function makeStand(
+  actors: Actor[],
+  factoryOverrides?: Partial<{ upgrade: boolean; downgrade: boolean }>
+): { gate: HeightFieldGate; observer: SceneObserver; factory: FactoryStub } {
   const scene = new Scene()
 
   for (const actor of actors) {
@@ -45,8 +52,8 @@ function makeStand(actors: Actor[]): { gate: HeightFieldGate; observer: SceneObs
 
   const observer = new SceneObserver()
   const factory: FactoryStub = {
-    upgradePlanetToTerrain: vi.fn(() => false),
-    downgradeTerrainToPlanet: vi.fn(() => false)
+    upgradePlanetToTerrain: vi.fn(() => factoryOverrides?.upgrade ?? false),
+    downgradeTerrainToPlanet: vi.fn(() => factoryOverrides?.downgrade ?? false)
   }
 
   const gate = new HeightFieldGate(observer, scene, factory as never)
@@ -136,5 +143,35 @@ describe('HeightFieldGate: запрос и освобождение карт п�
     observer.emit('ClosestChange', { name: 'x', distance: 1, position: undefined as never })
 
     expect(request).not.toHaveBeenCalled()
+  })
+})
+
+describe('HeightFieldGate: пересбор снимка наблюдения после свапа поверхности', () => {
+  it('апгрейд или даунгрейд поверхности перестраивает снимок наблюдения ОДИН раз за пересчёт', () => {
+    const moon: Actor = Actor.find(MOON_ID)!
+    const callisto: Actor = Actor.find(23)!
+    const { gate, observer, factory } = makeStand([moon, callisto], { upgrade: true })
+    const refresh = vi.spyOn(observer, 'refreshObservableObjects')
+
+    heightFieldStorage['maps'].set(heightPathOf(moon)!, flatMap())
+    heightFieldStorage['maps'].set(heightPathOf(callisto)!, flatMap())
+    observeAt(observer, moon, config('terrain.heightMapLoadPixels') * 2)
+    observeAt(observer, callisto, config('terrain.heightMapLoadPixels') * 2)
+
+    gate.recompute()
+
+    expect(factory.upgradePlanetToTerrain).toHaveBeenCalledTimes(2)
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('без апгрейда и даунгрейда снимок наблюдения не перестраивается', () => {
+    const moon: Actor = Actor.find(MOON_ID)!
+    const { gate, observer } = makeStand([moon])
+    const refresh = vi.spyOn(observer, 'refreshObservableObjects')
+
+    observeAt(observer, moon, config('terrain.heightMapLoadPixels') * 2)
+    gate.recompute()
+
+    expect(refresh).not.toHaveBeenCalled()
   })
 })

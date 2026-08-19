@@ -139,6 +139,28 @@ class SceneObserver extends EventEmitter<{
   }
 
   /**
+   * Пересобирает снимок наблюдаемых объектов (`objects`) прямо сейчас, не
+   * дожидаясь смены `scene`.
+   *
+   * Состав наблюдения меняется не только при входе в новый сценарий:
+   * `RenderableFactory.upgradePlanetToTerrain`/`downgradeTerrainToPlanet`
+   * подменяют поверхность тела ПРЯМО В СЦЕНЕ (легаси `Planet` ↔ `TerrainSphere`,
+   * `userData.type = 'planet'` висит на самой поверхности, не на `DynamicNode`
+   * — см. `Planet.ts`/`TerrainSphere.ts`). Без пересбора старый снимок
+   * `objects` продолжает держать ссылку на уже открепившийся и задиспоуженный
+   * объект: `getWorldPosition` у объекта без родителя схлопывается в начало
+   * координат, и дистанция до тела навсегда превращается в дистанцию до
+   * центра системы — ломает ближайшее тело, приоритеты стримера, переход
+   * камеры и сам гейт карт высот (см. хендофф террейна). Присваивает НОВЫЙ
+   * массив (`defineObservableObjects` делает `this.objects = []`), поэтому
+   * потребители, сравнивающие ссылку (`CameraCollision.refreshColliders`),
+   * тоже увидят изменение.
+   */
+  public refreshObservableObjects(): void {
+    this.defineObservableObjects()
+  }
+
+  /**
    * Разборка сценария, а не самого объекта: `SceneObserver` — синглтон
    * контейнера, конструируется один раз за сессию, и `Engine.initialize()`
    * при входе в новый сценарий переустанавливает только `observable` и
