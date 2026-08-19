@@ -29,10 +29,14 @@ import { requireRenderingData } from '@/core/helpers/renderingData'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import {
   AtmosphereConfig,
+  atmosphereTuningRanges,
   DensityProfileLayer,
   EMPTY_LAYER,
   expLayer
 } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+
+/** Центр тела в сцене — от него считаются кадр, орбита камеры и дальняя плоскость. */
+const PLANET_Z = 10
 
 const getH = (layers: [DensityProfileLayer, DensityProfileLayer]): number =>
   layers[1].expScale !== 0 ? -1 / layers[1].expScale : 8
@@ -44,16 +48,18 @@ const getH = (layers: [DensityProfileLayer, DensityProfileLayer]): number =>
 function makeDebugParams(data: AtmosphereConfig) {
   // Неизменяемая часть конфига: GUI её не правит, но cfg() собирает из неё
   // результат, поэтому кортежи обязаны пережить копирование
-  const base: Pick<AtmosphereConfig, 'solarIrradiance' | 'sunAngularRadius' | 'bottomRadius' | 'topRadius' | 'muSMin'> =
-    {
-      solarIrradiance: [...data.solarIrradiance],
-      sunAngularRadius: data.sunAngularRadius,
-      bottomRadius: data.bottomRadius,
-      topRadius: data.topRadius,
-      muSMin: data.muSMin
-    }
+  const base: Pick<AtmosphereConfig, 'solarIrradiance' | 'sunAngularRadius' | 'bottomRadius' | 'muSMin'> = {
+    solarIrradiance: [...data.solarIrradiance],
+    sunAngularRadius: data.sunAngularRadius,
+    bottomRadius: data.bottomRadius,
+    muSMin: data.muSMin
+  }
 
   return {
+    // Толщина оболочки, а не topRadius: дно приколочено к радиусу планеты
+    // (якорь 6d валидации), меняется только внешняя граница
+    shellKm: data.topRadius - data.bottomRadius,
+
     rayleigh_R: data.rayleighScattering[0],
     rayleigh_G: data.rayleighScattering[1],
     rayleigh_B: data.rayleighScattering[2],
@@ -103,6 +109,10 @@ class AtmosphereDebugScene {
   private controls: OrbitControls
   private gui: GUI
   private readonly atmoMesh: Mesh
+  /** Второй проход композиции: геометрию делит с atmoMesh, пересобирается вместе с ней. */
+  private readonly scatterMesh: Mesh
+  /** Радиус тела в юнитах сцены — мерка кадра, орбиты камеры и дистанции солнца. */
+  private readonly bodyUnits: number
   private readonly mat: BrunetonAtmosphereMaterial
   private gen: AtmosphereLUTGenerator
   private light = new Vector3()
@@ -127,19 +137,31 @@ class AtmosphereDebugScene {
     this.renderer.setClearColor(0x000000)
     container.appendChild(this.renderer.domElement)
 
-    this.camera = new PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.01, 1000)
-    this.camera.position.set(0, 0, 55.5)
+    // Кадр строится от радиуса тела, а не абсолютными числами. Прежние
+    // 55.5/1.05/150/1000 были откалиброваны по Земле (3.2 юнита) и на газовом
+    // гиганте разваливались: у Явина Прайма радиус — 98 юнитов, то есть камера
+    // стартовала ВНУТРИ планеты, а дальняя плоскость резала её же силуэт.
+    // Множители подобраны так, чтобы на Земле кадр совпал с прежним.
+    this.bodyUnits = toThreeJSUnits(data.bottomRadius)
+
+    this.camera = new PerspectiveCamera(
+      50,
+      container.clientWidth / container.clientHeight,
+      this.bodyUnits / 300,
+      PLANET_Z + 320 * this.bodyUnits
+    )
+    this.camera.position.set(0, 0, PLANET_Z + 14.3 * this.bodyUnits)
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.controls.enableDamping = true
-    this.controls.minDistance = 1.05
-    this.controls.maxDistance = 150
+    this.controls.minDistance = 0.33 * this.bodyUnits
+    this.controls.maxDistance = 45 * this.bodyUnits
 
     const plMat = new PlanetMaterial(this.actor.parent!)
     plMat.uniforms.diffuseMap.value = map
     plMat.uniforms.nightMap.value = night
     const planet = new Mesh(new SphereGeometry(toThreeJSUnits(data.bottomRadius), 256, 256), plMat)
-    planet.position.set(0, 0, 10)
+    planet.position.set(0, 0, PLANET_Z)
 
     this.scene.add(planet)
 
@@ -151,9 +173,9 @@ class AtmosphereDebugScene {
     const scatterMaterial = new BrunetonAtmosphereMaterial(this.actor, AtmospherePass.InScatter)
     scatterMaterial.shareUniformsWith(this.mat)
 
-    const scatterMesh = new Mesh(this.atmoMesh.geometry, scatterMaterial)
-    scatterMesh.renderOrder = 1
-    this.atmoMesh.add(scatterMesh)
+    this.scatterMesh = new Mesh(this.atmoMesh.geometry, scatterMaterial)
+    this.scatterMesh.renderOrder = 1
+    this.atmoMesh.add(this.scatterMesh)
 
     planet.add(this.atmoMesh)
 
@@ -182,7 +204,7 @@ class AtmosphereDebugScene {
       solarIrradiance: b.solarIrradiance,
       sunAngularRadius: b.sunAngularRadius,
       bottomRadius: b.bottomRadius,
-      topRadius: b.topRadius,
+      topRadius: b.bottomRadius + p.shellKm,
       rayleighDensity: [EMPTY_LAYER, expLayer(p.rayleighH)],
       rayleighScattering: [p.rayleigh_R, p.rayleigh_G, p.rayleigh_B],
       mieDensity: [EMPTY_LAYER, expLayer(p.mieH)],
@@ -209,7 +231,14 @@ class AtmosphereDebugScene {
     )
     this.mat.exposure = this.p.exposure
     this.mat.setWhitePoint(this.p.wp_R, this.p.wp_G, this.p.wp_B)
+
+    // Меш обязан переехать вместе с topRadius: без этого рост оболочки упрётся
+    // в старый силуэт и картинка не изменится — тот самый «потолок протяжённости».
+    // Геометрия одна на оба прохода, поэтому переприсваивается обоим мешам.
+    const geometry = new SphereGeometry(toThreeJSUnits(c.topRadius), 128, 128)
     this.atmoMesh.geometry.dispose()
+    this.atmoMesh.geometry = geometry
+    this.scatterMesh.geometry = geometry
   }
 
   private regen = () => {
@@ -230,11 +259,20 @@ class AtmosphereDebugScene {
       r = this.regen,
       v = this.vis
 
+    // Потолки протяжённости — от тела. Прежние абсолютные 100 км были земной
+    // меркой: на Явине Прайме это 0.05% радиуса, то есть ручка физически не
+    // могла вывести атмосферу за долю пикселя — ровно тот «скрытый» предел
+    // протяжённости, из-за которого газовый гигант не тюнился
+    const { scaleHeightMax: hMax, step: hStep, shellMax } = atmosphereTuningRanges(this.p._.bottomRadius)
+
+    const geo = this.gui.addFolder('Geometry')
+    geo.add(p, 'shellKm', hStep, shellMax, hStep).name('Shell, km').onChange(r)
+
     const ray = this.gui.addFolder('Rayleigh')
     ray.add(p, 'rayleigh_R', 0, 0.15, 0.0001).name('R').onChange(r)
     ray.add(p, 'rayleigh_G', 0, 0.15, 0.0001).name('G').onChange(r)
     ray.add(p, 'rayleigh_B', 0, 0.15, 0.0001).name('B').onChange(r)
-    ray.add(p, 'rayleighH', 1, 100, 0.1).name('Scale H').onChange(r)
+    ray.add(p, 'rayleighH', hStep, hMax, hStep).name('Scale H').onChange(r)
 
     const mie = this.gui.addFolder('Mie')
     mie.add(p, 'mie_R', 0, 0.1, 0.00001).name('Scat R').onChange(r)
@@ -244,14 +282,14 @@ class AtmosphereDebugScene {
     mie.add(p, 'mieExt_G', 0, 0.1, 0.00001).name('Ext G').onChange(r)
     mie.add(p, 'mieExt_B', 0, 0.1, 0.00001).name('Ext B').onChange(r)
     mie.add(p, 'mieG', 0, 0.999, 0.001).name('Phase G').onChange(r)
-    mie.add(p, 'mieH', 0.5, 100, 0.1).name('Scale H').onChange(r)
+    mie.add(p, 'mieH', hStep, hMax, hStep).name('Scale H').onChange(r)
     mie.close()
 
     const abs = this.gui.addFolder('Absorption')
     abs.add(p, 'abs_R', 0, 0.02, 0.00001).name('R').onChange(r)
     abs.add(p, 'abs_G', 0, 0.02, 0.00001).name('G').onChange(r)
     abs.add(p, 'abs_B', 0, 0.02, 0.00001).name('B').onChange(r)
-    abs.add(p, 'absH', 1, 100, 0.1).name('Scale H').onChange(r)
+    abs.add(p, 'absH', hStep, hMax, hStep).name('Scale H').onChange(r)
     abs.close()
 
     const alb = this.gui.addFolder('Albedo')
@@ -339,7 +377,10 @@ class AtmosphereDebugScene {
     // Позиция солнца из GUI-слайдеров Lat/Lon — вокруг центра планеты
     const lat = (this.p.sunLat * Math.PI) / 180
     const lon = (this.p.sunLon * Math.PI) / 180
-    const sunDistance = 1000
+    // Материал нормирует (свет − центр), поэтому важно только направление:
+    // дистанция берётся от тела, иначе у крупных планет «солнце» оказывается
+    // рядом и терминатор уезжает от параллельного освещения
+    const sunDistance = 1000 * Math.max(1, this.bodyUnits)
     this.atmoMesh.getWorldPosition(this.light)
     this.light.x += sunDistance * Math.cos(lat) * Math.sin(lon)
     this.light.y += sunDistance * Math.sin(lat)

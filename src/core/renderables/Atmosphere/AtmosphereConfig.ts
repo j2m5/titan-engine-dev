@@ -37,6 +37,27 @@ export function expLayer(scaleHeight: number): DensityProfileLayer {
   return { width: 0, expTerm: 1, expScale: -1.0 / scaleHeight, linearTerm: 0, constantTerm: 0 }
 }
 
+/**
+ * Потолки ручек протяжённости для тюнинга — выводятся из радиуса тела.
+ *
+ * Видимую толщину атмосферы задаёт шкала высот H, а не topRadius: полоса на
+ * лимбе набирается за первые ~7 шкал, выше оболочка оптически пуста. Значит
+ * и потолок ручки обязан быть относительным: абсолютные 100 км — земная
+ * мерка (1.6% радиуса), а на газовом гиганте те же 100 км дают 0.05% и
+ * атмосферу тоньше пикселя. R/40 держит потолок видимой полосы около 17%
+ * радиуса на любом теле, оболочка — 20 шкал (дальше вакуум, граница
+ * закреплена правилом checkAtmosphereExtent валидатора).
+ */
+export function atmosphereTuningRanges(bottomRadius: number): {
+  scaleHeightMax: number
+  step: number
+  shellMax: number
+} {
+  const scaleHeightMax: number = Math.max(100, bottomRadius / 40)
+
+  return { scaleHeightMax, step: scaleHeightMax / 1000, shellMax: 20 * scaleHeightMax }
+}
+
 export interface DensityProfileLayer {
   width: number
   expTerm: number

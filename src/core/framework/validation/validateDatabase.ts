@@ -300,6 +300,106 @@ function checkAtmosphereAnchoring(
 }
 
 /**
+ * Протяжённость атмосферы задаёт ШКАЛА ВЫСОТ, а не topRadius.
+ *
+ * Плотность вещества — exp(−h/H), где H = −1/expScale. Видимая на лимбе
+ * полоса набирается за первые ~7 шкал: выше оптическая толща падает ниже
+ * порога, и оболочка там пуста. topRadius — только внешняя граница меша и
+ * области определения LUT, собственной толщины он не даёт. Отсюда ловушка,
+ * ради которой заведено правило: у тела с земной H (8–25 км) и большим
+ * радиусом атмосфера выходит волосяной линией (Явин Прайм: 7H = 0.09% R,
+ * доли пикселя на диске), а попытка «раздуть» её ростом topRadius не меняет
+ * ничего — растёт только пустая оболочка. Толстая атмосфера газового
+ * гиганта делается ростом H с пропорциональным ростом оболочки.
+ *
+ * Отсюда обе границы отношения оболочка/H:
+ *   > MAX — за 20 шкал плотность 2·10⁻⁹, дальше оболочка пуста: topRadius
+ *           тут можно только уменьшить, видимую атмосферу растит H;
+ *   < MIN — профиль обрезан на плотности e⁻⁵ ≈ 7·10⁻³, на границе меша
+ *           виден жёсткий край вместо плавного схода в вакуум.
+ *
+ * Вещество с нулевыми коэффициентами (у половины базы это озоновый слой)
+ * в счёт не идёт: его профиль на картинку не влияет.
+ */
+const SHELL_SCALE_HEIGHTS_MIN = 5
+const SHELL_SCALE_HEIGHTS_MAX = 20
+
+/** Шкала высот exp-профиля идиомы expLayer() в км; 0 — профиль не экспоненциальный. */
+function exponentialScaleHeight(profile: unknown): number {
+  if (!Array.isArray(profile) || profile.length !== 2) return 0
+
+  const top: unknown = profile[1]
+  if (typeof top !== 'object' || top === null) return 0
+
+  const { expScale, expTerm } = top as { expScale?: unknown; expTerm?: unknown }
+  if (typeof expScale !== 'number' || typeof expTerm !== 'number') return 0
+  if (!Number.isFinite(expScale) || expScale >= 0 || expTerm === 0) return 0
+
+  return -1 / expScale
+}
+
+/** Вещество влияет на картинку, только если хоть один его коэффициент положителен. */
+function isActiveSpecies(coefficients: unknown): boolean {
+  return Array.isArray(coefficients) && coefficients.some((x: unknown) => typeof x === 'number' && x > 0)
+}
+
+function checkAtmosphereExtent(
+  rows: Array<{ id: number; actorId: number; data: Record<string, unknown> | null }>,
+  issues: ValidationIssue[]
+): void {
+  for (const row of rows) {
+    if (!row.data || !('solarIrradiance' in row.data)) continue
+
+    const bottom: unknown = row.data.bottomRadius
+    const top: unknown = row.data.topRadius
+
+    // Битые радиусы уже отчитаны якорем — здесь молча пропускаем
+    if (typeof bottom !== 'number' || typeof top !== 'number' || !(top > bottom)) continue
+
+    const scaleHeights: number[] = []
+    if (isActiveSpecies(row.data.rayleighScattering)) {
+      scaleHeights.push(exponentialScaleHeight(row.data.rayleighDensity))
+    }
+    if (isActiveSpecies(row.data.mieExtinction)) {
+      scaleHeights.push(exponentialScaleHeight(row.data.mieDensity))
+    }
+    if (isActiveSpecies(row.data.absorptionExtinction)) {
+      scaleHeights.push(exponentialScaleHeight(row.data.absorptionDensity))
+    }
+
+    const scaleHeight = Math.max(0, ...scaleHeights)
+    if (scaleHeight <= 0) continue
+
+    const shell = top - bottom
+    const shells = shell / scaleHeight
+
+    const head =
+      `renderingObjects#${row.id} (actor ${row.actorId}) atmosphere shell ${shell.toFixed(0)} km ` +
+      `= ${shells.toFixed(1)} scale heights (H=${scaleHeight.toFixed(1)} km)`
+
+    if (shells > SHELL_SCALE_HEIGHTS_MAX) {
+      issues.push({
+        level: 'warning',
+        collection: 'renderingObjects',
+        entity: row.id,
+        message:
+          `${head}: above ${SHELL_SCALE_HEIGHTS_MAX} the shell is vacuum — raising topRadius ` +
+          `adds nothing, visible thickness grows with the density scale height`
+      })
+    } else if (shells < SHELL_SCALE_HEIGHTS_MIN) {
+      issues.push({
+        level: 'warning',
+        collection: 'renderingObjects',
+        entity: row.id,
+        message:
+          `${head}: the profile is cut at density ${Math.exp(-shells).toExponential(1)} — ` +
+          `a hard edge shows at the mesh boundary`
+      })
+    }
+  }
+}
+
+/**
  * Формы берутся из ЕДИНОГО источника, а не из копии списка. Копия уже разошлась
  * однажды: shell, torus и hourglass завелись в NebulaShape и в шейдере, а
  * валидатор продолжал знать только два имени и забраковал всю поставляемую базу.
@@ -689,6 +789,9 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
 
   // --- 6d. Якорь атмосферы: bottomRadius == радиус родительской планеты ---
   checkAtmosphereAnchoring(db.renderingObjects, db.actors, db.physicalObjects, issues)
+
+  // --- 6g. Протяжённость атмосферы: оболочка против шкалы высот ---
+  checkAtmosphereExtent(db.renderingObjects, issues)
 
   // --- 6f. Форма конфига туманностей ---
   checkNebulaShapes(db.renderingObjects, aliasByActor, issues)
