@@ -88,28 +88,60 @@ describe('adjustAtmosphereForTerrainFloor: подгонка дна атмосф�
    * непрозрачной дымкой. С компенсацией в профиле кламп плотности [0,1] в
    * GetLayerDensity держит подповерхностный слой на ρ=1, и толща линейна: τ = β·d.
    */
-  it('подповерхностный слой ограничен клампом плотности — толща линейна по глубине, не экспоненциальна', () => {
+  it('подповерхностный слой не даёт оптики вовсе — нижний слой профиля обнулён', () => {
+    // Прежде здесь закреплялось ρ≡1 под датумом: компенсация жила в профиле, и
+    // кламп шейдера держал раздутую экспоненту на потолке. Толща выходила
+    // линейной (τ = β·d) вместо экспоненциальной — это спасло от τ≈2·10³, но
+    // оставило паразитный слой в интеграле КАЖДОГО луча к диску планеты.
+    //
+    // Оценка τ = β·d вертикальная, и в этом была ошибка: луч к лимбу проходит
+    // тот же слой вдоль хорды 2·√(2Rd). У Татуина (R=5232 км, d=15.5 км) это
+    // 805 км против 15.5 — в 52 раза больше; у Земли при поле −11 км в 68 раз.
+    // Отсюда пересинение диска и мгла на лимбе.
+    //
+    // Лечение: нижний слой профиля становится нулевой прокладкой толщиной d.
+    // GetProfileDensity берёт его при altitude < layers[0].width, кламп даёт
+    // ровно 0 — паразитный вклад исчезает, а не уменьшается. Раз ρ=0, длина
+    // пути роли не играет: вклад нулевой для луча любого наклона.
     const floorMeters = -15475.03 // пол Татуина
     const dKm = -floorMeters / 1000
     const adjusted = adjustAtmosphereForTerrainFloor(stubConfig(), floorMeters)
 
-    // Плотность под датумом упирается в потолок шейдера, а не растёт как e^{12.9}
     for (const h of [0, 1, 5, 10, dKm - 0.01]) {
-      expect(profileDensity(adjusted.mieDensity, h)).toBe(1)
+      expect(profileDensity(adjusted.mieDensity, h)).toBe(0)
+      expect(profileDensity(adjusted.rayleighDensity, h)).toBe(0)
     }
 
-    // Интеграл плотности по подповерхностному слою равен его толщине (ρ ≡ 1)
+    // Интеграл плотности строго ПОД датумом равен нулю. Срединные точки, а не
+    // трапеция: её крайний узел лёг бы ровно на датум, где плотность уже
+    // приземная, и дал бы ненулевой хвост от границы, а не от слоя.
     const N = 2000
     let column = 0
-    for (let i = 0; i <= N; i++) {
-      const w = i === 0 || i === N ? 0.5 : 1
-      column += (w * profileDensity(adjusted.mieDensity, (i / N) * dKm) * dKm) / N
+    for (let i = 0; i < N; i++) {
+      column += (profileDensity(adjusted.mieDensity, ((i + 0.5) / N) * dKm) * dKm) / N
     }
-    expect(column).toBeCloseTo(dKm, 2)
+    expect(column).toBe(0)
 
-    // Прежняя схема дала бы на четыре порядка больше — граница ловит возврат бага
-    expect(column * adjusted.mieExtinction[0]).toBeLessThan(0.5)
+    // Границы ловят возврат обеих прежних схем: коэффициентной (τ≈2·10³) и
+    // профильной с клампом (τ = β·d, здесь 0.069 — уже больше настоящей
+    // колонны β·H = 0.0053, а на лимбе эта добавка множится ещё на ~52)
+    expect(column * adjusted.mieExtinction[0]).toBe(0)
     expect(1.2 * (Math.exp(dKm / 1.2) - 1) * 0.00444).toBeGreaterThan(1000)
+    expect(dKm * 0.00444).toBeGreaterThan(0.06)
+  })
+
+  it('граница слоёв стоит ровно на датуме — прокладка не съедает атмосферу над ним', () => {
+    // Ширина нижнего слоя обязана совпадать с глубиной опускания: чуть выше
+    // датума уже работает верхний слой с настоящей приземной плотностью.
+    const floorMeters = -8174.25
+    const dKm = -floorMeters / 1000
+    const adjusted = adjustAtmosphereForTerrainFloor(stubConfig(), floorMeters)
+
+    expect(adjusted.mieDensity[0].width).toBeCloseTo(dKm, 9)
+    expect(adjusted.rayleighDensity[0].width).toBeCloseTo(dKm, 9)
+
+    expect(profileDensity(adjusted.mieDensity, dKm)).toBeCloseTo(1, 9)
+    expect(profileDensity(adjusted.rayleighDensity, dKm)).toBeCloseTo(1, 9)
   })
 
   it('над датумом профиль тождествен исходному — вид атмосферы не меняется', () => {
