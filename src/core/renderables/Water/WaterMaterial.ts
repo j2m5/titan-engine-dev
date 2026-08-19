@@ -114,8 +114,7 @@ class WaterMaterial extends AbstractShaderMaterial {
    * совпадает с константным режимом (mix(shallow,deep,1)=deep), однако кодовый
    * путь другой (USE_WATER_DEPTH=1, не #else) — если понадобится отличать
    * «карты нет» от «карта старого формата», нужен отдельный маркер не отсюда.
-   */
-  /**
+   *
    * `elapsed` — секунды с запуска часов рендера (`UpdateContext.elapsed`,
    * см. WaterSphere.onVisibleUpdate), не `performance.now()` напрямую
    * (фикс-раунд 1, №3 ревью: докблок `UpdateContext` прямо запрещает
