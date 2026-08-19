@@ -90,8 +90,16 @@ const encoded = buildSlopeMap(map, radiusMeters, { cavity, waterLevelMeters, sha
 const channels = (encoded.length / (map.width * map.height)) as 3 | 4
 const image = sharp(Buffer.from(encoded.buffer), { raw: { width: map.width, height: map.height, channels } })
 
-await (output.endsWith('.webp') ? image.webp({ lossless: true, effort: 6 }) : image.png({ compressionLevel: 9 }))
-  .toFile(output)
+// exact: без него libwebp переписывает RGB полностью прозрачных текселей
+// ради сжатия — а A=0 у карт с водой стоит ровно на СУШЕ. Уклон и cavity
+// обнулялись бы на всей суше, а байт 0 декодируется не в «ноль уклона», а
+// в край диапазона: (0−128)·2/127 = −2.016 по обеим осям, то есть нормаль
+// шейдинга уводило на 70° от радиальной. Тела без воды (3 канала) дефекту
+// не подвержены, но флаг ставится безусловно — он ничего не стоит.
+await (output.endsWith('.webp')
+  ? image.webp({ lossless: true, effort: 6, exact: true })
+  : image.png({ compressionLevel: 9 })
+).toFile(output)
 
 console.log(
   `записано ${output}: ${map.width}×${map.height}, радиус ${radiusMeters} м, cavity=${cavity ? 'on' : 'off'}, ` +

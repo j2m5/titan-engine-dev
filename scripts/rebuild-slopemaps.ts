@@ -9,6 +9,8 @@ import { Resources } from '@storage/database/resources'
 import { ActorResource } from '@storage/database/actorResource'
 import { PhysicalObjects } from '@storage/database/physicalObjects'
 import { Actors } from '@storage/database/actors'
+import { RenderingObjects } from '@storage/database/renderingObjects'
+import { WATER_SHALLOW_RANGE_METERS } from '@/core/terrain/waterLevel'
 
 /**
  * Пересборка slope-карт терраформного охвата (арка cavity-канала, Task 3):
@@ -34,7 +36,16 @@ import { Actors } from '@storage/database/actors'
  */
 
 const PHOTOMOSAIC_ACTOR_IDS: readonly number[] = [5, 6, 8, 19]
-const EXPECTED_COVERAGE_COUNT = 44
+/**
+ * Тела охвата, которым cavity НЕ полагается: реальный DEM вместо синтетики.
+ * Фотомозаичные {5,6,8,19} пропускаются целиком (их карты 3-канальные и
+ * пересборки не требуют), а Земля (7) пересобирается — ей нужен канал воды —
+ * но с cavity off, как в её задокументированной команде.
+ */
+const NO_CAVITY_ACTOR_IDS: readonly number[] = [7]
+
+// 46 = 44 прежних + Земля и Явин IV, переведённые аркой воды.
+const EXPECTED_COVERAGE_COUNT = 46
 const TEXTURES_ROOT = 'storage/images/textures'
 
 interface Job {
@@ -43,6 +54,8 @@ interface Job {
   readonly heightPath: string
   readonly slopePath: string
   readonly radiusMeters: number
+  /** Уровень воды тела из renderingObjects; undefined — тело без воды, выход 3-канальный. */
+  readonly waterLevelMeters: number | undefined
 }
 
 const heightPathByActor = new Map<number, string>()
@@ -87,7 +100,11 @@ for (const [actorId, heightPath] of heightPathByActor) {
 
   const name = Actors.find((a) => a.id === actorId)?.name ?? `actor ${actorId}`
 
-  coverage.push({ actorId, name, heightPath, slopePath, radiusMeters: physicalObject.radius * 1000 })
+  const data = RenderingObjects.find((r) => r.actorId === actorId)?.data as { waterLevelMeters?: unknown } | undefined
+  const level = data?.waterLevelMeters
+  const waterLevelMeters = typeof level === 'number' && Number.isFinite(level) ? level : undefined
+
+  coverage.push({ actorId, name, heightPath, slopePath, radiusMeters: physicalObject.radius * 1000, waterLevelMeters })
 }
 
 console.log(`Фотомозаичные пропущены (${skippedPhotomosaic.length}): [${skippedPhotomosaic.sort((a, b) => a - b).join(', ')}]`)
@@ -121,11 +138,21 @@ for (const job of coverage) {
 
   const raw = await readFile(inputPath)
   const map = parseHeightMap(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer)
-  const rgb = buildSlopeMap(map, job.radiusMeters, { cavity: true })
+  // Вода и cavity — из данных тела, а не безусловно: прогон без уровня снял бы
+  // канал A у Земли и Явина IV (мелководье и урез исчезли бы, а USE_WATER_DEPTH
+  // остался бы взведён), а cavity у Земли противоречит её же команде сборки.
+  const encoded = buildSlopeMap(map, job.radiusMeters, {
+    cavity: !NO_CAVITY_ACTOR_IDS.includes(job.actorId),
+    waterLevelMeters: job.waterLevelMeters,
+    shallowRangeMeters: job.waterLevelMeters !== undefined ? WATER_SHALLOW_RANGE_METERS : undefined
+  })
 
-  const image = sharp(Buffer.from(rgb.buffer), { raw: { width: map.width, height: map.height, channels: 3 } })
+  // Число каналов — по фактическому буферу, как в build-slopemap.ts.
+  const channels = (encoded.length / (map.width * map.height)) as 3 | 4
+  const image = sharp(Buffer.from(encoded.buffer), { raw: { width: map.width, height: map.height, channels } })
 
-  await image.webp({ lossless: true, effort: 6 }).toFile(outputPath)
+  // exact — см. докблок в build-slopemap.ts: без него RGB суши обнуляется.
+  await image.webp({ lossless: true, effort: 6, exact: true }).toFile(outputPath)
 
   console.log(
     `[ok] ${job.name} (actorId ${job.actorId}): ${map.width}×${map.height}, радиус ${job.radiusMeters} м → ${outputPath}`

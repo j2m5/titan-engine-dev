@@ -380,3 +380,73 @@ describe('канал B: signed cavity, знак соответствует build
     expect(bumpRgb[centerIdx]).toBeGreaterThan(128)
   })
 })
+
+describe('round-trip через файл: артефакт на диске, а не буфер в памяти', () => {
+  // Настоящий страж контракта. Прежние тесты паритета проверяли БУФЕР, и
+  // именно поэтому пропустили дефект: libwebp с дефолтным exact=0 переписывает
+  // RGB полностью прозрачных текселей ради сжатия, а A=0 у карт с водой стоит
+  // ровно на СУШЕ. Уклон и cavity обнулялись на всей суше Земли и Явина IV, и
+  // байт 0 декодируется не в «ноль уклона», а в −2.016 по обеим осям —
+  // нормаль шейдинга уводило на 70° от радиальной.
+  const R = 1000
+
+  it('lossless webp с exact сохраняет RGB под прозрачными текселями суши', async () => {
+    const sharp = (await import('sharp')).default
+
+    // Карта с водой: половина текселей суша (A=0), половина океан (A>0).
+    const width = 8
+    const height = 4
+    const values: number[] = []
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) values.push(x % 2 === 0 ? 400 : 100)
+    }
+    const encoded = buildSlopeMap(makeMap(width, height, values), R, {
+      waterLevelMeters: 250,
+      shallowRangeMeters: 200
+    })
+
+    expect(encoded.length).toBe(width * height * 4)
+
+    const written = await sharp(Buffer.from(encoded.buffer), { raw: { width, height, channels: 4 } })
+      .webp({ lossless: true, effort: 6, exact: true })
+      .toBuffer()
+    const back = await sharp(written).raw().toBuffer()
+
+    let landTexels = 0
+    for (let i = 0; i < width * height; i++) {
+      if (encoded[i * 4 + 3] === 0) landTexels++
+      for (let c = 0; c < 4; c++) expect(back[i * 4 + c]).toBe(encoded[i * 4 + c])
+    }
+
+    // Фикстура обязана содержать сушу, иначе тест зелен вакуумно
+    expect(landTexels).toBeGreaterThan(0)
+  })
+
+  it('без exact тот же кодек стирает RGB суши — фиксируем сам дефект, чтобы флаг не сняли', async () => {
+    const sharp = (await import('sharp')).default
+
+    const width = 8
+    const height = 4
+    const values: number[] = []
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) values.push(x % 2 === 0 ? 400 : 100)
+    }
+    const encoded = buildSlopeMap(makeMap(width, height, values), R, {
+      waterLevelMeters: 250,
+      shallowRangeMeters: 200
+    })
+
+    const written = await sharp(Buffer.from(encoded.buffer), { raw: { width, height, channels: 4 } })
+      .webp({ lossless: true, effort: 6 })
+      .toBuffer()
+    const back = await sharp(written).raw().toBuffer()
+
+    let corrupted = 0
+    for (let i = 0; i < width * height; i++) {
+      if (encoded[i * 4 + 3] !== 0) continue
+      if (back[i * 4] !== encoded[i * 4]) corrupted++
+    }
+
+    expect(corrupted).toBeGreaterThan(0)
+  })
+})

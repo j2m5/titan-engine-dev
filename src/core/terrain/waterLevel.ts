@@ -6,7 +6,7 @@ import type { IPlanetRenderingObject } from '@/core/models/types'
  * Диапазон мелководья, метры — вода прозрачна (канал A slope-карты, см.
  * `scripts/lib/slopeMapEncode.ts`) от уреза до этой глубины, дальше запечена
  * непрозрачной. ПРОШИТО В ЗАПЕЧЁННЫЕ КАРТЫ КАНАЛА A — менять только синхронно
- * с пересборкой всех slope-карт тел с водой (`npm run rebuild:slopemaps`),
+ * с пересборкой всех slope-карт тел с водой (`npm run build:slopemaps-all`),
  * иначе декодер на GPU и энкодер разъедутся молча (тот же байт будет значить
  * разную глубину). Общий источник для энкодера (дефолт `shallowRangeMeters`)
  * и SSE-потолка подводных патчей суши (`terrainQuadtreeSelect` — запас потолка
