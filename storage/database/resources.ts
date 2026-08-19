@@ -213,5 +213,10 @@ export const Resources: IResource[] = [
   // Земля: терраформная арка воды (Task 6) — height+slope, легаси-bump (id 25)
   // снят вместе со связкой (мёртвый вес, см. 30999f3).
   { id: 226, resourceType: "height", lifecycle: "resident", path: "planets/earth/earth_height.raw" },
-  { id: 227, resourceType: "slope", lifecycle: "streamable", path: "planets/earth/earth_slope.webp", wrapS: RepeatWrapping }
+  { id: 227, resourceType: "slope", lifecycle: "streamable", path: "planets/earth/earth_slope.webp", wrapS: RepeatWrapping },
+  // Ряд ряби воды (арка water-shader, Task 3) — тайлящийся сет, resident (как
+  // height/slope, не стрим), wrapS+wrapT Repeat на обеих осях (трипланарный
+  // getNoise сэмплирует 3 проекции). Одна строка на ОБА водных тела —
+  // связки actorResource ниже шарят этот resourceId, одна копия в VRAM.
+  { id: 228, resourceType: "waterNormal", lifecycle: "resident", path: "water/waternormals.jpg", wrapS: RepeatWrapping, wrapT: RepeatWrapping }
 ]

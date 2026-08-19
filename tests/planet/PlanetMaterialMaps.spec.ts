@@ -1269,3 +1269,60 @@ describe('PlanetMaterial: карты терраформных тел, читае
     expect(offenders).toEqual([])
   })
 })
+
+// waterNormal-ассет (арка water-shader, Task 3): ровно два тела в БД несут
+// waterLevelMeters в data (Земля actorId 7, Явин IV actorId 83, см.
+// storage/database/renderingObjects.ts) — оба обязаны иметь ровно одну
+// waterNormal-связку на ОБЩИЙ resourceId (шаринг тайлящегося ассета по пути,
+// одна копия в VRAM, см. task-3-brief.md), resident lifecycle, wrapS+wrapT
+// Repeat (трипланарный getNoise, WaterShaderTemplate). Любое тело без
+// waterLevelMeters — waterNormal-связок ноль.
+describe('PlanetMaterial: данные waterNormal-ассета (Task 3 арки water-shader)', () => {
+  const WATER_ACTOR_IDS = [7, 83] as const
+  const WATER_ACTOR_ID_SET = new Set<number>(WATER_ACTOR_IDS)
+
+  const waterActors = Actor.all()
+    .filter((actor) => {
+      const data = actor.renderingObject?.getAttribute('data') as Record<string, unknown> | undefined
+      return data?.waterLevelMeters !== undefined
+    })
+    .all()
+
+  it('ровно два тела в БД несут waterLevelMeters — Земля и Явин IV, выборка не разъехалась', () => {
+    const ids = waterActors.map((actor) => actor.getAttribute('id') as number).sort((a, b) => a - b)
+    expect(ids).toEqual([...WATER_ACTOR_IDS])
+  })
+
+  it.each(WATER_ACTOR_IDS)(
+    'actorId %i: ровно одна waterNormal-связка, resident, wrapS+wrapT Repeat, путь water/waternormals.jpg',
+    (actorId) => {
+      const actor = Actor.find(actorId)!
+      const links = actor.resources.where('resourceType', 'waterNormal')
+
+      expect(links.count(), `actorId ${actorId}: waterNormal-связок`).toBe(1)
+
+      const row = links.first()!
+      expect(row.getAttribute('path'), `actorId ${actorId}: path`).toBe('water/waternormals.jpg')
+      expect(row.getAttribute('lifecycle'), `actorId ${actorId}: lifecycle`).toBe('resident')
+      expect(row.getAttribute('wrapS'), `actorId ${actorId}: wrapS`).toBe(RepeatWrapping)
+      expect(row.getAttribute('wrapT'), `actorId ${actorId}: wrapT`).toBe(RepeatWrapping)
+    }
+  )
+
+  it('Земля и Явин IV шарят ОДИН resourceId waterNormal — одна текстура в VRAM', () => {
+    const earthRow = earth().resources.where('resourceType', 'waterNormal').first()!
+    const yavinRow = Actor.find(83)!.resources.where('resourceType', 'waterNormal').first()!
+
+    expect(earthRow.getAttribute('id')).toBe(yavinRow.getAttribute('id'))
+  })
+
+  it('у тел без waterLevelMeters waterNormal-связок нет вовсе', () => {
+    const offenders = Actor.all()
+      .filter((actor) => !WATER_ACTOR_ID_SET.has(actor.getAttribute('id') as number))
+      .all()
+      .filter((actor) => actor.resources.where('resourceType', 'waterNormal').first() !== undefined)
+      .map((actor) => actor.getAttribute('id'))
+
+    expect(offenders).toEqual([])
+  })
+})

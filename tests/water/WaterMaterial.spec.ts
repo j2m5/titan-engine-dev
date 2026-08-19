@@ -389,3 +389,52 @@ describe('WaterShaderTemplate ↔ WaterShader: паритет дефолтов (
     expect(material.uniforms.uWaterDistortion.value).toBe(templateUniforms.uWaterDistortion.value)
   })
 })
+
+// Task 3 (арка water-shader): смоук на РЕАЛЬНОЙ БД — предыдущие гейт-тесты
+// выше стабят resources.where целиком (WaterMaterial.spec.ts исторически не
+// зависел от строк БД, см. stubActor), Task 1/2 писаны и приняты на стабах.
+// Теперь путь waterNormal приходит из ФАКТИЧЕСКИХ строк resources.ts/
+// actorResource.ts (Task 3) — этот блок проверяет, что резолвер
+// (WaterMaterial.resolveWaterNormalPath) находит ресурс через настоящий
+// Actor.find(...).resources ORM-джойн, не только через стаб. Текстура
+// стабится (ассет может отсутствовать на диске у CI/чужой машины, см. её
+// докблок в task-3-brief.md) — тест данных, не тест загрузчика.
+describe('WaterMaterial: рантайм-связка с реальной БД (Task 3) — резолвер находит waterNormal по фактическим строкам', () => {
+  afterEach(() => resourceStorage.deleteAllTextures())
+
+  function seedResidentWaterNormalStub(path: string): Texture {
+    const texture = new Texture()
+    texture.name = path
+    texture.image = { width: 4, height: 2 }
+    resourceStorage.addTexture(texture)
+
+    return texture
+  }
+
+  it('Земля (actorId 7): реальная строка БД резолвится, стаб резидентной текстуры включает USE_WATER_WAVES', () => {
+    const earth = Actor.find(7)!
+    const path = earth.resources.where('resourceType', 'waterNormal').first()!.getAttribute('path') as string
+    const texture = seedResidentWaterNormalStub(path)
+
+    const material = new WaterMaterial(earth)
+    material.updateMaterial()
+
+    expect(material.defines.USE_WATER_WAVES).toBe('1')
+    expect(material.uniforms.uWaterNormalMap.value).toBe(texture)
+    // радиус Земли (physicalObjects.ts) должен дойти до uWaterWaveScale через тот же путь, что Task 1
+    expect(material.uniforms.uWaterWaveScale.value).toBeCloseTo(6360000, 6)
+  })
+
+  it('Явин IV (actorId 83): та же проверка — второй водный актор', () => {
+    const yavin = Actor.find(83)!
+    const path = yavin.resources.where('resourceType', 'waterNormal').first()!.getAttribute('path') as string
+    const texture = seedResidentWaterNormalStub(path)
+
+    const material = new WaterMaterial(yavin)
+    material.updateMaterial()
+
+    expect(material.defines.USE_WATER_WAVES).toBe('1')
+    expect(material.uniforms.uWaterNormalMap.value).toBe(texture)
+    expect(material.uniforms.uWaterWaveScale.value).toBeCloseTo(6100000, 6)
+  })
+})
