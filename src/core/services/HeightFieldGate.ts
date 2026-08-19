@@ -36,13 +36,32 @@ export class HeightFieldGate {
     this.sceneObserver.subscribe('ClosestChange', this.onClosestChange)
   }
 
+  /**
+   * ТОЛЬКО ДЛЯ ТЕСТОВ — из продакшена звать нельзя. Подписка на
+   * `ClosestChange` ставится в конструкторе синглтона контейнера, который
+   * строится один раз за сессию и при входе в новый сценарий не
+   * пересоздаётся: снятая здесь подписка не восстанавливается НИКОГДА, и
+   * вызов тихо выключил бы гейт карт высот до конца сессии — тела остались бы
+   * на легаси-сферах навсегда, без единой ошибки в консоли. Ровно та же
+   * оговорка, что у `SceneObserver.dispose` про самоподписку из конструктора.
+   * Продакшен-вызовов сегодня нет; метод живёт ради изоляции тестов
+   * (`tests/services/HeightFieldGate.spec.ts`), которым нужно снять подписку
+   * стенда со сцены.
+   */
   public dispose(): void {
     this.sceneObserver.unsubscribe('ClosestChange', this.onClosestChange)
   }
 
   public recompute(): void {
     const candidates: HeightMapCandidate[] = []
-    const nodeByPath: Map<string, DynamicNode> = new Map()
+    // Путь → ВСЕ узлы, которые его просят: одна карта высот легально шарится
+    // несколькими телами (политика схлопывает дубли пути по максимуму
+    // приоритета, а terrainHeightFieldFor кэширует поле по паре «карта +
+    // радиус» именно ради вымышленных лун разных радиусов на общей карте).
+    // Одиночным значением последний кандидат затирал бы предыдущих, и все,
+    // кроме него, застряли бы на легаси-сфере навсегда: апгрейд узла просто
+    // никогда бы не вызвался.
+    const nodesByPath: Map<string, DynamicNode[]> = new Map()
     // Растёт в true, если апгрейд/даунгрейд ХОТЯ БЫ РАЗ реально подменил
     // поверхность узла (обе операции фабрики возвращают это булем). Триггерит
     // единственный пересбор снимка наблюдения в конце — см. докблок ниже.
@@ -62,7 +81,11 @@ export class HeightFieldGate {
       if (!path) continue
 
       candidates.push({ path, actorPriority: this.priorityOf(node.model, record) })
-      nodeByPath.set(path, node)
+
+      const shared: DynamicNode[] | undefined = nodesByPath.get(path)
+
+      if (shared) shared.push(node)
+      else nodesByPath.set(path, [node])
     }
 
     const decision = decideHeightMaps(
@@ -78,17 +101,21 @@ export class HeightFieldGate {
       // Даунгрейд до release: узел обязан отцепиться от поля высот раньше,
       // чем карта уйдёт из реестра, иначе TerrainSphere осталась бы стоять
       // на данных, которых уже нет.
-      const node: DynamicNode | undefined = nodeByPath.get(path)
-
-      if (node && this.factory.downgradeTerrainToPlanet(node)) surfaceSwapped = true
+      for (const node of nodesByPath.get(path) ?? []) {
+        if (this.factory.downgradeTerrainToPlanet(node)) surfaceSwapped = true
+      }
 
       heightFieldStorage.release(path)
     }
 
     // Апгрейд тех, чьи карты уже доехали: приход асинхронен и никого не
     // будит, поэтому проверка на каждом пересчёте.
-    for (const [path, node] of nodeByPath) {
-      if (heightFieldStorage.get(path) && this.factory.upgradePlanetToTerrain(node)) surfaceSwapped = true
+    for (const [path, nodes] of nodesByPath) {
+      if (!heightFieldStorage.get(path)) continue
+
+      for (const node of nodes) {
+        if (this.factory.upgradePlanetToTerrain(node)) surfaceSwapped = true
+      }
     }
 
     // Один пересбор на весь пересчёт, а не по разу на тело: userData.type

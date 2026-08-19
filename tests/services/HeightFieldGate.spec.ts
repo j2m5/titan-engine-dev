@@ -33,20 +33,37 @@ function distanceForPixels(actor: Actor, pixels: number): number {
 }
 
 /**
+ * Тело стенда — либо актор (узел зовётся его именем в БД), либо пара
+ * «актор + имя узла». Вторая форма нужна тестам общей карты высот: гейт
+ * различает тела ТОЛЬКО по имени узла в сцене, а путь карты берёт из
+ * `node.model` — два узла над одним актором дают ровно тот же стык, что два
+ * разных тела с одинаковым height-ресурсом, без фикстуры в БД.
+ */
+type StandBody = Actor | { actor: Actor; name: string }
+
+function bodyActor(body: StandBody): Actor {
+  return body instanceof Actor ? body : body.actor
+}
+
+function bodyName(body: StandBody): string {
+  return body instanceof Actor ? body.getAttribute('name', '') : body.name
+}
+
+/**
  * Стенд: сцена с узлами перечисленных тел, наблюдатель и заглушка фабрики.
  * `factoryOverrides` подменяет возвращаемое значение операций фабрики —
  * по умолчанию обе идемпотентно отвечают «ничего не поменялось».
  */
 function makeStand(
-  actors: Actor[],
+  bodies: StandBody[],
   factoryOverrides?: Partial<{ upgrade: boolean; downgrade: boolean }>
 ): { gate: HeightFieldGate; observer: SceneObserver; factory: FactoryStub } {
   const scene = new Scene()
 
-  for (const actor of actors) {
-    const node = new DynamicNode(actor)
+  for (const body of bodies) {
+    const node = new DynamicNode(bodyActor(body))
 
-    node.name = actor.getAttribute('name', '')
+    node.name = bodyName(body)
     scene.add(node)
   }
 
@@ -62,10 +79,14 @@ function makeStand(
 }
 
 /** Кладёт тело в наблюдение на дистанции, дающей нужный видимый размер. */
-function observeAt(observer: SceneObserver, actor: Actor, pixels: number): void {
-  const name: string = actor.getAttribute('name', '')
+function observeAt(observer: SceneObserver, body: StandBody, pixels: number): void {
+  const name: string = bodyName(body)
 
-  observer.data.set(name, { name, distance: distanceForPixels(actor, pixels), position: undefined as never })
+  observer.data.set(name, {
+    name,
+    distance: distanceForPixels(bodyActor(body), pixels),
+    position: undefined as never
+  })
 }
 
 afterEach(() => {
@@ -173,5 +194,53 @@ describe('HeightFieldGate: пересбор снимка наблюдения п
     gate.recompute()
 
     expect(refresh).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * Находка №2 финального ревью ветки: индекс «путь → узел» был одиночным
+ * значением, и при общей карте высот последний кандидат затирал предыдущих —
+ * все, кроме него, не получали ни апгрейда, ни даунгрейда НИКОГДА. Общая
+ * карта легальна по дизайну сразу в двух местах: политика схлопывает дубли
+ * пути по максимуму приоритета, а terrainHeightFieldFor кэширует поле по паре
+ * «карта + радиус» именно ради вымышленных лун разных радиусов на одной
+ * карте. В БД такой пары сегодня нет — стенд воспроизводит стык двумя узлами
+ * над одним актором (см. StandBody).
+ */
+describe('HeightFieldGate: общая карта высот у нескольких тел', () => {
+  /** Два узла сцены над одним актором: один путь карты, разные имена. */
+  function sharedBodies(): { actor: Actor; name: string }[] {
+    const moon: Actor = Actor.find(MOON_ID)!
+
+    return [
+      { actor: moon, name: 'ОбщаяКартаПервое' },
+      { actor: moon, name: 'ОбщаяКартаВторое' }
+    ]
+  }
+
+  it('апгрейдятся ВСЕ тела на общей карте, а не только последнее', () => {
+    const bodies = sharedBodies()
+    const { gate, observer, factory } = makeStand(bodies, { upgrade: true })
+
+    heightFieldStorage['maps'].set(heightPathOf(bodies[0].actor)!, flatMap())
+    for (const body of bodies) observeAt(observer, body, config('terrain.heightMapLoadPixels') * 2)
+
+    gate.recompute()
+
+    expect(factory.upgradePlanetToTerrain).toHaveBeenCalledTimes(2)
+  })
+
+  it('даунгрейдятся ВСЕ тела на общей карте до того, как она покинет реестр', () => {
+    const bodies = sharedBodies()
+    const { gate, observer, factory } = makeStand(bodies, { downgrade: true })
+    const path: string = heightPathOf(bodies[0].actor)!
+
+    heightFieldStorage['maps'].set(path, flatMap())
+    for (const body of bodies) observeAt(observer, body, 1)
+
+    gate.recompute()
+
+    expect(factory.downgradeTerrainToPlanet).toHaveBeenCalledTimes(2)
+    expect(heightFieldStorage.get(path)).toBeUndefined()
   })
 })
