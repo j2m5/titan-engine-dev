@@ -3,6 +3,7 @@ import { LOD, Texture } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { Planet } from '@/core/renderables/Planet'
+import type { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { TerrainSphere } from '@/core/renderables/TerrainSphere'
 import { WaterSphere } from '@/core/renderables/Water/WaterSphere'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
@@ -10,6 +11,7 @@ import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { heightPathOf } from '@/core/terrain/heightPath'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
+import type { ResourceType } from '@/core/models/types'
 
 /** Луна: тело с height-ресурсом и без воды (actorId 19 ↔ resourceId 125, moon_height.raw). */
 const MOON_ID: number = 19
@@ -49,6 +51,11 @@ function makeFactory(): RenderableFactory {
   const resourceObserver = { textureOf: vi.fn(() => null) }
 
   return new RenderableFactory(renderer as never, resourceObserver as never)
+}
+
+/** Путь ресурса тела по типу — тот же джойн, которым его резолвят материалы. */
+function pathOf(actor: Actor, resourceType: ResourceType): string {
+  return actor.resources.where('resourceType', resourceType).first()!.getAttribute('path') as string
 }
 
 function lodOf(node: DynamicNode): LOD {
@@ -153,5 +160,57 @@ describe('RenderableFactory: подмена нулевого уровня LOD', 
 
     const terrain = lodOf(node).levels[0].object
     expect(terrain.children.some((child) => child instanceof WaterSphere)).toBe(true)
+  })
+})
+
+/**
+ * Находка №1 финального ревью ветки: конструктор PlanetMaterial текстуры не
+ * читает (в юниформах плейсхолдеры default.png/night.jpg), а ResourceObserver
+ * зовёт updateMaterial только по своим поводам — свап поверхности ни одним из
+ * них не является. Без синхронизации в swapSurface апгрейднутое тело теряло
+ * все давно загруженные карты: угловая отсечка стримера (4 px) на порядок
+ * мягче порога гейта карт высот (32 px), так что к моменту свапа они уже
+ * лежат в resourceStorage и повторно НЕ приедут.
+ */
+describe('RenderableFactory: свап поверхности подтягивает уже загруженные текстуры', () => {
+  it('апгрейд отдаёт рельефу реальный диффуз тела, а не плейсхолдер', () => {
+    const node = factory.make(moon) as DynamicNode
+
+    // Легаси-сфера построена на плейсхолдере: реальную карту ей отдаёт
+    // ResourceObserver, которого в этом стенде нет — исходное состояние теста
+    const legacy = lodOf(node).levels[0].object as Planet
+    expect((legacy.material as PlanetMaterial).uniforms.diffuseMap.value.name).toBe('default.png')
+
+    heightFieldStorage['maps'].set(heightPathOf(moon)!, flatMap())
+    factory.upgradePlanetToTerrain(node)
+
+    const terrain = lodOf(node).levels[0].object as TerrainSphere
+    expect(terrain.material.uniforms.diffuseMap.value.name).toBe(pathOf(moon, 'diffuse'))
+  })
+
+  it('даунгрейд отдаёт легаси-сфере реальный диффуз тела, а не плейсхолдер', () => {
+    const node = factory.make(moon) as DynamicNode
+    heightFieldStorage['maps'].set(heightPathOf(moon)!, flatMap())
+    factory.upgradePlanetToTerrain(node)
+
+    factory.downgradeTerrainToPlanet(node)
+
+    const planet = lodOf(node).levels[0].object as Planet
+    expect((planet.material as PlanetMaterial).uniforms.diffuseMap.value.name).toBe(pathOf(moon, 'diffuse'))
+  })
+
+  it('водная оболочка получает slope-карту прямо на свапе, не ожидая первого кадра', () => {
+    const earth: Actor = Actor.find(7)!
+    const slopePath: string = pathOf(earth, 'slope')
+    seedTexture(slopePath)
+
+    const node = factory.make(earth) as DynamicNode
+    heightFieldStorage['maps'].set(heightPathOf(earth)!, flatMap())
+    factory.upgradePlanetToTerrain(node)
+
+    const water = lodOf(node).levels[0].object.children.find((child): child is WaterSphere => child instanceof WaterSphere)
+
+    expect(water).toBeDefined()
+    expect((water!.material.uniforms.uSlopeMap.value as Texture | null)?.name).toBe(slopePath)
   })
 })

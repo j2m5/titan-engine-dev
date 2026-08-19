@@ -39,6 +39,7 @@ import { WhiteDwarfImpostor } from '@/core/renderables/WhiteDwarf/WhiteDwarfImpo
 import { INebulaRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { RenderableObject3D } from '@/core/renderables/types'
+import { syncRenderableMaterials } from '@/core/materials/materialSync'
 
 class RenderableFactory {
   public constructor(
@@ -218,6 +219,24 @@ class RenderableFactory {
    *
    * addLevel здесь непригоден — он добавил бы ВТОРОЙ уровень с той же
    * дистанцией; правится сам элемент levels[0].
+   *
+   * Материал новой поверхности синхронизируется с уже загруженными текстурами
+   * тела в конце (см. докблок syncRenderableMaterials): конструктор
+   * PlanetMaterial сажает в юниформы плейсхолдеры, а ResourceObserver зовёт
+   * updateMaterial только по СВОИМ поводам (загрузка пути, вытеснение пути,
+   * догон нового владельца) — свап ни одним из них не является, владелец и
+   * пути те же. Без этого шага апгрейднутое тело теряло бы диффуз, night,
+   * cloud, specular и slope, давно лежащие в resourceStorage: угловая отсечка
+   * стримера (4 px) на порядок мягче порога гейта карт высот (32 px), так что
+   * к моменту свапа они гарантированно загружены и повторно не приедут.
+   *
+   * Порядок в гейте на даунгрейде — сначала свап, потом
+   * heightFieldStorage.release: синхронизация видит карту высот ещё в реестре
+   * и на один тик оставляет легаси-сфере рельефные дефайны (USE_TERRAIN_UV
+   * даёт ровно ту же равнопрямоугольную развёртку, что вершинный vUv сферы,
+   * см. TerrainUv). Безвредно и самоизлечивается ближайшим событием стримера;
+   * менять порядок в гейте нельзя — узел обязан отцепиться от поля высот
+   * раньше, чем данные уйдут из реестра.
    */
   private swapSurface(node: DynamicNode, next: RenderableObject3D): void {
     const lod = node.children.find((child): child is LOD => child instanceof LOD)
@@ -232,6 +251,7 @@ class RenderableFactory {
     node.renderable = next
 
     disposeSceneTree(previous)
+    syncRenderableMaterials(next)
   }
 
   /**
