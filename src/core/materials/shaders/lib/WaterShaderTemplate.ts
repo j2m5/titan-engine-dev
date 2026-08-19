@@ -289,22 +289,6 @@ export const WaterShaderTemplate: ShaderProps = {
       vec3 normal = normalize(vNormal);
       vec3 viewDir = normalize(vViewPosition);
 
-      #ifdef USE_WATER_WAVES
-        // Fade по дистанции камера-поверхность: 1 у поверхности, 0 дальше
-        // uWaterWaveFadeMeters (CPU уже перевёл ручку из метров в юниты сцены,
-        // см. WaterShader) — та же схема начала fade (0.4×конец), что
-        // uDetailFadeRange террейна (TerrainDetail.ts), здесь без отдельного
-        // юниформа старта: только конец — ручка, начало зашито.
-        float waveDist = length(vViewPosition);
-        float waveFade = 1.0 - smoothstep(0.4 * uWaterWaveFadeMeters, uWaterWaveFadeMeters, waveDist);
-        vec3 waveDirLocal = normalize(vLocalDir);
-        vec3 waveLocalNormal = waterWaveNormal(waveDirLocal, waveFade);
-        // Единственный normalMatrix-переход — та же конвенция, что
-        // PlanetShaderTemplate.USE_TERRAIN_UV: пертурбация целиком в
-        // тело-локальном пространстве, поворот в view — самым последним шагом.
-        normal = normalize(normalMatrix * waveLocalNormal);
-      #endif
-
       #ifdef USE_WATER_DEPTH
         // Мелководье из канала A slope-карты — запечённая глубина воды,
         // декод НАПРЯМУЮ [0,1] (см. scripts/lib/slopeMapEncode.ts, Task 1):
@@ -331,7 +315,49 @@ export const WaterShaderTemplate: ShaderProps = {
       float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 5.0);
       vec3 color = mix(baseColor, uWaterFresnelTint, fresnel);
 
+      // Ночная сторона темнее, не чёрная: вода не светится сама, но полный
+      // ноль на терминаторе неправдоподобен (рассеянный свет неба/атмосферы).
+      // Терминатор — та же зона, что у PlanetShaderTemplate (эстетическая
+      // консистентность суши/воды); ночной пол — ручка uWaterNightFloor
+      // (дефолт 0.08, честно помеченный), приёмка вида — за владельцем.
+      vec3 lightDirection = normalize(vViewLightDirection);
+      float NdotL = dot(normal, lightDirection);
+      float dayFactor = smoothstep(-0.08, 0.25, NdotL);
+      color *= mix(uWaterNightFloor, 1.0, dayFactor);
+
       #ifdef USE_WATER_WAVES
+        // На этом месте (снаружи этого #ifdef) color — ПОЛНОСТЬЮ готовый
+        // фундаментный цвет (Task 4, byte-в-byte тот же, что и без
+        // USE_WATER_WAVES — см. паритетный тест): фундамент/ночной пол
+        // выше ни разу не тронуты этой правкой, только точка, где им дают
+        // говорить последнее слово, сдвинута сюда.
+        //
+        // Fade по дистанции камера-поверхность: 1 у поверхности, 0 дальше
+        // uWaterWaveFadeMeters (CPU уже перевёл ручку из метров в юниты сцены,
+        // см. WaterShader) — та же схема начала fade (0.4×конец), что
+        // uDetailFadeRange террейна (TerrainDetail.ts), здесь без отдельного
+        // юниформа старта: только конец — ручка, начало зашито.
+        float waveDist = length(vViewPosition);
+        float waveFade = 1.0 - smoothstep(0.4 * uWaterWaveFadeMeters, uWaterWaveFadeMeters, waveDist);
+        vec3 waveDirLocal = normalize(vLocalDir);
+        vec3 waveLocalNormal = waterWaveNormal(waveDirLocal, waveFade);
+        // СВОЙ вектор waveNormal, не общий normal (приёмочный фикс —
+        // владелец: молочный океан по всему диску + яркое пятно в центре +
+        // голубое гало за лимбом на скрине из космоса, см. докблок ниже).
+        // Раньше эта строка ПЕРЕЗАПИСЫВАЛА общий normal, и вся waves-
+        // формула цвета считалась НА НЁМ безусловно; normal теперь
+        // остаётся аналитическим dir̂ (тем же, что у фундамента выше),
+        // единственный normalMatrix-переход применяется к своей переменной.
+        vec3 waveNormal = normalize(normalMatrix * waveLocalNormal);
+
+        // Терминатор waveNormal — общий для дневного бленда отражения (если
+        // USE_WATER_REFLECTION) И для собственного ночного пола waves-цвета
+        // ниже: одна величина, не пересчитывается дважды. lightDirection
+        // уже посчитан выше (фундаментный блок) — тот же вектор, повторно
+        // не заводим.
+        float waveNdotL = dot(waveNormal, lightDirection);
+        float waveDayFactor = smoothstep(-0.08, 0.25, waveNdotL);
+
         // Albedo Water.js ДОСЛОВНО (getShadowMask опущен — теней в движке
         // нет, см. докблок класса): reflectance по Шлику (rf0=0.3),
         // scatter — рассеяние в толще по уже посчитанному baseColor
@@ -340,12 +366,12 @@ export const WaterShaderTemplate: ShaderProps = {
         // на честную выборку кубмапы неба).
         vec3 waveDiffuseLight = vec3(0.0);
         vec3 waveSpecularLight = vec3(0.0);
-        sunLight(normal, viewDir, 100.0, 2.0, 0.5, waveDiffuseLight, waveSpecularLight);
+        sunLight(waveNormal, viewDir, 100.0, 2.0, 0.5, waveDiffuseLight, waveSpecularLight);
 
-        float waveTheta = max(dot(viewDir, normal), 0.0);
+        float waveTheta = max(dot(viewDir, waveNormal), 0.0);
         float waveRf0 = 0.3;
         float waveReflectance = waveRf0 + (1.0 - waveRf0) * pow((1.0 - waveTheta), 5.0);
-        vec3 waveScatter = max(0.0, dot(normal, viewDir)) * baseColor;
+        vec3 waveScatter = max(0.0, dot(waveNormal, viewDir)) * baseColor;
         vec3 waveReflectionSample = uWaterFresnelTint;
         #ifdef USE_WATER_REFLECTION
         {
@@ -388,34 +414,58 @@ export const WaterShaderTemplate: ShaderProps = {
           vec3 skySample = sampleSkyboxHdr(uSkyboxMap, normalize(reflectDir), uSkyFlipX);
 
           // Дневной бленд — та же форма терминатора (порог/ширина), что и
-          // ночной пол ниже — см. WaterReflection.spec.ts. Блок обособлен в
-          // { }: main() этого шейдера не заводит вложенных областей
-          // видимости, а без неё определение NdotL/lightDirection
-          // столкнулось бы с одноимёнными переменными ночного пола ниже
-          // (та же функция main) — форма записи намеренно идентична ей.
-          vec3 lightDirection = normalize(vViewLightDirection);
-          float NdotL = dot(normal, lightDirection);
-          float dayFactor = smoothstep(-0.08, 0.25, NdotL);
-
-          waveReflectionSample = mix(skySample, uWaterFresnelTint, dayFactor);
+          // ночной пол waves-цвета ниже — waveDayFactor уже посчитан один
+          // раз выше, вторично NdotL/lightDirection здесь не заводим.
+          waveReflectionSample = mix(skySample, uWaterFresnelTint, waveDayFactor);
         }
         #endif
-        color = mix(
+        vec3 wavesColor = mix(
           waterSunColor * waveDiffuseLight * 0.3 + waveScatter,
           vec3(0.1) + waveReflectionSample * 0.9 + waveReflectionSample * waveSpecularLight,
           waveReflectance
         );
-      #endif
+        // Свой ночной пол waves-цвета (waveDayFactor, НЕ общий dayFactor
+        // фундамента) — та же форма терминатора (парный строковый страж),
+        // другой NdotL (waveNormal, не аналитический normal): без этого
+        // при waveFade=0 равенство фундаменту держалось бы только на
+        // спекуляре/reflectance, а не на цвете целиком.
+        wavesColor *= mix(uWaterNightFloor, 1.0, waveDayFactor);
 
-      // Ночная сторона темнее, не чёрная: вода не светится сама, но полный
-      // ноль на терминаторе неправдоподобен (рассеянный свет неба/атмосферы).
-      // Терминатор — та же зона, что у PlanetShaderTemplate (эстетическая
-      // консистентность суши/воды); ночной пол — ручка uWaterNightFloor
-      // (дефолт 0.08, честно помеченный), приёмка вида — за владельцем.
-      vec3 lightDirection = normalize(vViewLightDirection);
-      float NdotL = dot(normal, lightDirection);
-      float dayFactor = smoothstep(-0.08, 0.25, NdotL);
-      color *= mix(uWaterNightFloor, 1.0, dayFactor);
+        // ПРИЁМОЧНЫЙ ФИКС (владелец: молочный океан по всему диску + яркое
+        // пятно в центре диска + голубое гало за лимбом на скрине из
+        // космоса). Корень: fade раньше гасил ТОЛЬКО возмущение нормали
+        // (waterWaveNormal сама честно деградирует в dir̂ при waveFade→0,
+        // см. её докблок) — но СОСТАВ ФОРМУЛЫ ЦВЕТА оставался waves-веткой
+        // безусловно (простая перезапись color= на любой дистанции).
+        // Water.js reflectance держит пол 0.3 (0.3 + 0.7·pow5(1-theta)) —
+        // минимум 30% тинта/отражения даже в надир (theta=1), где
+        // фундаментный pow5-Френель даёт ≈0 — отсюда молочность ВСЕГО диска
+        // с орбиты. sunLight-спекуляр pow100 по гладкой (fade→dir̂) сфере
+        // давал концентрированное яркое пятно ровно там, где отражение
+        // солнца совпадает со взглядом (в фундаменте спекуляра нет вовсе).
+        // Спека §2: «за fade-порогом вода деградирует РОВНО в базовый вид
+        // фундамента — дальний план не меняется вовсе» — было нарушено.
+        //
+        // Фикс — смешивание ДВУХ ПОЛНОСТЬЮ ГОТОВЫХ цветов (оба уже несут
+        // СВОЙ ночной пол): color здесь — фундаментный (посчитан ВЫШЕ,
+        // byte-в-byte тем же путём, что и без USE_WATER_WAVES, см.
+        // паритетный тест), wavesColor — полная формула Water.js. При
+        // waveFade=0.0 mix(color, wavesColor, 0.0) РОВНО равен
+        // фундаментному color (IEEE mix: a·(1−0)+b·0=a), НЕЗАВИСИМО от
+        // wavesColor — спекуляр/reflectance-надбавка растут строго от fade
+        // (за порогом — нулевой вклад в смеси по построению самого mix, не
+        // по случайному совпадению). Непрерывность по fade — color,
+        // wavesColor и сам waveFade непрерывны каждый по отдельности
+        // (smoothstep/mix/dot/pow — гладкие функции, дублирующихся веток
+        // нет), значит непрерывен и итог, разрыва ни на пороге, ни в
+        // середине. Двойного счёта тинта нет: mix — ВЫПУКЛАЯ комбинация
+        // (не сумма) двух самодостаточных цветов; waveReflectionSample
+        // дважды входит В ПРЕДЕЛАХ ОДНОЙ формулы Water.js (база отражения +
+        // тон спекуляра) — так задумано оригиналом, это не удвоение с
+        // фундаментным Френель-тинтом снаружи (тот в wavesColor не входит
+        // вовсе, живёт только в color-ветке до этого mix).
+        color = mix(color, wavesColor, waveFade);
+      #endif
 
       gl_FragColor = vec4(color, alpha);
 

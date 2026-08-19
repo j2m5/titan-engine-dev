@@ -100,26 +100,30 @@ describe('WaterShaderTemplate: дисторсия Water.js — единицы м
   })
 })
 
-describe('WaterShaderTemplate: дневной бленд отражения — та же форма терминатора, что ночной пол (третье место)', () => {
-  it('reflection = mix(skySample, uWaterFresnelTint, dayFactor)', () => {
+describe('WaterShaderTemplate: дневной бленд отражения — та же форма терминатора, что ночной пол waves-цвета', () => {
+  // Приёмочный фикс (владелец: молочный океан/яркое пятно/гало из космоса,
+  // см. WaterWaves.spec.ts describe «CPU-зеркало цвета») развёл терминатор
+  // на ДВЕ переменные — NdotL фундамента (normal) и waveNdotL waves-ветки
+  // (waveNormal) — дневной бленд отражения ПЕРЕИСПОЛЬЗУЕТ waveDayFactor
+  // (посчитан один раз в начале блока USE_WATER_WAVES, до сэмпла отражения
+  // И до собственного ночного пола waves-цвета) — своего smoothstep-вызова
+  // и своих NdotL/lightDirection здесь больше не заводит (было третье
+  // место до фикса, теперь ровно два — см. WaterWaves.spec.ts).
+  it('reflection = mix(skySample, uWaterFresnelTint, waveDayFactor)', () => {
     expect(frag).toContain('vec3 skySample = sampleSkyboxHdr(uSkyboxMap, normalize(reflectDir), uSkyFlipX);')
-    expect(frag).toContain('waveReflectionSample = mix(skySample, uWaterFresnelTint, dayFactor);')
+    expect(frag).toContain('waveReflectionSample = mix(skySample, uWaterFresnelTint, waveDayFactor);')
   })
 
-  it('dayFactor считается той же формулой smoothstep(-0.08, 0.25, NdotL), что ночной пол ниже', () => {
-    const matches = frag.match(/smoothstep\(-0\.08, 0\.25, NdotL\)/g) ?? []
+  it('дневной бленд НЕ заводит собственных NdotL/lightDirection/dayFactor внутри блока { } — переиспользует внешний waveDayFactor', () => {
+    expect(frag).not.toContain('waveReflectionSample = mix(skySample, uWaterFresnelTint, dayFactor);')
 
-    expect(matches.length).toBe(2) // WaterWaves.spec.ts пиннует тот же счёт с той же стороны (парный страж)
-  })
+    // vViewLightDirection считывается РОВНО один раз во всём фрагментнике
+    // (фундаментный блок) — реориентационный блок отражения раньше заводил
+    // второй такой же вызов внутри { }, теперь переиспользует lightDirection
+    // фундамента через уже посчитанный waveDayFactor.
+    const lightDirectionDeclarations = frag.match(/vec3 lightDirection = normalize\(vViewLightDirection\);/g) ?? []
 
-  // Находка ревью фикс-раунда 1 №7б: страж терминатора считал только
-  // smoothstep(...), а определение NdotL/lightDirection в двух местах было
-  // записано по-разному (инлайн normalize() тут, отдельная переменная там)
-  // — приведено к ОДНОЙ и той же записи, страж теперь считает и её.
-  it('блок обособлен в { } — своё NdotL/lightDirection не конфликтует с одноимёнными переменными ночного пола (main() без вложенных scope иначе), запись идентична ночному полу', () => {
-    const definitionMatches = frag.match(/vec3 lightDirection = normalize\(vViewLightDirection\);\n\s*float NdotL = dot\(normal, lightDirection\);/g) ?? []
-
-    expect(definitionMatches.length).toBe(2) // дневной бленд отражения + ночной пол — буквально одна и та же запись
+    expect(lightDirectionDeclarations.length).toBe(1)
   })
 })
 

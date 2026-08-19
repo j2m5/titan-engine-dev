@@ -13,6 +13,7 @@ import {
   waterWaveNormalPerturbed,
   waterWaveNormalWithoutSignFix
 } from './waterWaveNormalMirror'
+import { blendedColor, dirFromLatLon, foundationColor, wavesColor, type Vec3 } from './waterColorMirror'
 
 // Ядро волн (Task 1, арка water-shader; фикс-раунд 1 ревью учтён — №1 страж
 // кванта по фактическому ассету, №2 whiteout-реориентация трипланара, №4
@@ -151,7 +152,7 @@ describe('WaterShaderTemplate: sunLight/albedo — дословно Water.js (ge
     expect(frag).toContain(
       'void sunLight(const vec3 surfaceNormal, const vec3 eyeDirection, float shiny, float spec, float diffuse, inout vec3 diffuseColor, inout vec3 specularColor) {'
     )
-    expect(frag).toContain('sunLight(normal, viewDir, 100.0, 2.0, 0.5, waveDiffuseLight, waveSpecularLight);')
+    expect(frag).toContain('sunLight(waveNormal, viewDir, 100.0, 2.0, 0.5, waveDiffuseLight, waveSpecularLight);')
   })
 
   it('sunLight: формулы diffuse/specular не тронуты (единственная адаптация — источник sunDirection)', () => {
@@ -167,12 +168,12 @@ describe('WaterShaderTemplate: sunLight/albedo — дословно Water.js (ge
   })
 
   it('scatter — тот же вход baseColor, что и fresnel-mix Task 4 (мелководье/константа сохранены)', () => {
-    expect(frag).toContain('vec3 waveScatter = max(0.0, dot(normal, viewDir)) * baseColor;')
+    expect(frag).toContain('vec3 waveScatter = max(0.0, dot(waveNormal, viewDir)) * baseColor;')
   })
 
-  it('albedo — mix дословно Water.js БЕЗ getShadowMask (комментарий-оговорка обязателен)', () => {
+  it('albedo — mix дословно Water.js БЕЗ getShadowMask (комментарий-оговорка обязателен), результат в свою переменную wavesColor', () => {
     expect(frag).toContain('getShadowMask опущен')
-    expect(frag).toContain('color = mix(')
+    expect(frag).toContain('vec3 wavesColor = mix(')
     expect(frag).toContain('waterSunColor * waveDiffuseLight * 0.3 + waveScatter,')
     expect(frag).toContain('vec3(0.1) + waveReflectionSample * 0.9 + waveReflectionSample * waveSpecularLight,')
     expect(frag).toContain('waveReflectance')
@@ -231,7 +232,11 @@ describe('WaterShaderTemplate: трипланарный whiteout-бленд — 
   })
 
   it('единственный normalMatrix-переход — пертурбация целиком тело-локальна', () => {
-    expect(frag).toContain('normal = normalize(normalMatrix * waveLocalNormal);')
+    expect(frag).toContain('vec3 waveNormal = normalize(normalMatrix * waveLocalNormal);')
+  })
+
+  it('waveNormal — СВОЯ переменная, не общий normal (приёмочный фикс: normal фундамента больше не перезаписывается)', () => {
+    expect(frag).not.toContain('normal = normalize(normalMatrix * waveLocalNormal);')
   })
 })
 
@@ -284,16 +289,185 @@ describe('WaterShaderTemplate: fade по дистанции — юниформ u
   })
 })
 
+// Приёмочный фикс владельца: скрин из космоса показал молочный океан по
+// всему диску + размытое яркое пятно в центре + голубое гало за лимбом
+// (блум от переяркой воды). Корень (диагноз контроллера, подтверждён
+// математикой): fade глушил ТОЛЬКО возмущение нормали (waterWaveNormal уже
+// честно деградирует в dir̂), но НЕ состав формулы цвета — waves-ветка
+// перезаписывала `color` безусловно на любой дистанции. Water.js
+// reflectance держит пол 0.3 (30% тинта/отражения даже в надир, theta=1,
+// где фундаментный pow5-Френель даёт ≈0) — молочность всего диска;
+// sunLight-спекуляр pow100 по гладкой сфере — яркое пятно. Спека §2: «за
+// fade-порогом вода деградирует РОВНО в базовый вид фундамента».
+describe('WaterShaderTemplate: приёмочный фикс — fade смешивает ВЕСЬ состав цвета, не только нормаль', () => {
+  it('color = mix(color, wavesColor, waveFade) — итоговый блендинг, не безусловная перезапись', () => {
+    expect(frag).toContain('color = mix(color, wavesColor, waveFade);')
+    expect(frag).not.toMatch(/\n\s*color = mix\(\s*\n\s*waterSunColor/) // старая безусловная перезапись `color =` полной формулой убрана
+  })
+
+  it('фундаментный color посчитан ДО #ifdef USE_WATER_WAVES (byte-в-byte тем же путём, что и без волн)', () => {
+    const waveBlockStart = frag.indexOf('#ifdef USE_WATER_WAVES', frag.indexOf('void main()'))
+    const foundationColorLine = frag.indexOf('vec3 color = mix(baseColor, uWaterFresnelTint, fresnel);')
+    const nightFloorLine = frag.indexOf('color *= mix(uWaterNightFloor, 1.0, dayFactor);')
+
+    expect(foundationColorLine).toBeGreaterThan(-1)
+    expect(nightFloorLine).toBeGreaterThan(foundationColorLine)
+    expect(waveBlockStart).toBeGreaterThan(nightFloorLine) // ночной пол фундамента отработал ДО waves-блока
+  })
+
+  it('wavesColor несёт СВОЙ ночной пол (waveDayFactor, не общий dayFactor) — иначе fade=0 не был бы численно равен фундаменту', () => {
+    expect(frag).toContain('wavesColor *= mix(uWaterNightFloor, 1.0, waveDayFactor);')
+  })
+})
+
+describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочный фикс — критерии 1-3', () => {
+  const baseColor: Vec3 = [0.043, 0.239, 0.4] // uWaterColor-подобный
+  const shallowLikeColor: Vec3 = [0.18, 0.545, 0.62]
+  const fresnelTint: Vec3 = [0.749, 0.914, 1.0]
+  const sunColor: Vec3 = [1, 1, 1]
+  const nightFloor = 0.08
+
+  const normals: Vec3[] = [
+    dirFromLatLon(89, 0), // почти полюс — грань полюсного гарда, но не сам полюс
+    dirFromLatLon(0, 0),
+    dirFromLatLon(-5, 40), // около терминатора
+    dirFromLatLon(35, -160), // произвольная точка (в т.ч. «Тихий океан»)
+    dirFromLatLon(1, 89) // близко к грани (grazing) относительно viewDirs ниже
+  ]
+  const viewDirs: Vec3[] = [dirFromLatLon(80, 10), dirFromLatLon(10, -20), dirFromLatLon(-30, 170)]
+  const lightDirs: Vec3[] = [dirFromLatLon(60, 0), dirFromLatLon(-10, 130), dirFromLatLon(20, -90)]
+  const baseColors: Vec3[] = [baseColor, shallowLikeColor]
+
+  // waveNormal/reflectionSample НАМЕРЕННО другие, не связанные с normal —
+  // критерий 1 обязан держаться НЕЗАВИСИМО от того, что вернула бы waves-
+  // ветка (иначе fade=0 «случайно» совпадал бы только когда waveNormal≈normal).
+  const foreignWaveNormals: Vec3[] = [dirFromLatLon(-70, 150), dirFromLatLon(45, 45)]
+  const foreignReflectionSamples: Vec3[] = [
+    [0.9, 0.9, 0.95],
+    [0.05, 0.05, 0.08]
+  ]
+
+  it('критерий 1: fadeFactor == 0 → blendedColor ЧИСЛЕННО (===) равен foundationColor, независимо от waves-входов', () => {
+    let samples = 0
+
+    for (const normal of normals) {
+      for (const viewDir of viewDirs) {
+        for (const lightDir of lightDirs) {
+          for (const bc of baseColors) {
+            for (const waveNormal of foreignWaveNormals) {
+              for (const reflectionSample of foreignReflectionSamples) {
+                const foundation = foundationColor(bc, fresnelTint, normal, viewDir, lightDir, nightFloor)
+                const blended = blendedColor(
+                  { baseColor: bc, fresnelTint, reflectionSample, normal, waveNormal, viewDir, lightDir, sunColor, nightFloor },
+                  0
+                )
+
+                expect(blended[0]).toBe(foundation[0])
+                expect(blended[1]).toBe(foundation[1])
+                expect(blended[2]).toBe(foundation[2])
+                samples++
+              }
+            }
+          }
+        }
+      }
+    }
+
+    expect(samples).toBeGreaterThan(100) // выборка честно широкая, не 1-2 точки
+  })
+
+  it('критерий 1б: wavesColor сам по себе всегда конечен (finite) на той же выборке — mix(a,b,0) полагается на это', () => {
+    for (const normal of normals) {
+      for (const viewDir of viewDirs) {
+        for (const lightDir of lightDirs) {
+          const waves = wavesColor(baseColor, fresnelTint, normal, viewDir, lightDir, sunColor, nightFloor)
+
+          expect(Number.isFinite(waves[0])).toBe(true)
+          expect(Number.isFinite(waves[1])).toBe(true)
+          expect(Number.isFinite(waves[2])).toBe(true)
+        }
+      }
+    }
+  })
+
+  it('критерий 2: непрерывность по fade — нет скачка ни на пороге (fade→0), ни в середине', () => {
+    const inputs = {
+      baseColor,
+      fresnelTint,
+      reflectionSample: fresnelTint,
+      normal: normals[1],
+      waveNormal: dirFromLatLon(15, -30),
+      viewDir: viewDirs[0],
+      lightDir: lightDirs[0],
+      sunColor,
+      nightFloor
+    }
+
+    // mix — линейная функция fade по построению (см. blendedColor): шаг по
+    // fade даёт пропорциональный шаг по цвету, без разрывов ни у порога,
+    // ни в середине диапазона.
+    const fadeSteps = [0, 0.001, 0.01, 0.1, 0.3, 0.5, 0.5 + 1e-6, 0.7, 0.999, 1]
+    let previous = blendedColor(inputs, fadeSteps[0])
+
+    for (let i = 1; i < fadeSteps.length; i++) {
+      const current = blendedColor(inputs, fadeSteps[i])
+      const step = fadeSteps[i] - fadeSteps[i - 1]
+      const jump = Math.hypot(current[0] - previous[0], current[1] - previous[1], current[2] - previous[2])
+
+      // Скачок ограничен ЛИНЕЙНО шагом по fade (константа запаса ×5 —
+      // цветовые компоненты держатся в разумном [0, ~1.5] диапазоне) —
+      // никакая ветка не может дать скачок на ПОРЯДОК больше шага аргумента.
+      expect(jump).toBeLessThan(step * 5 + 1e-6)
+      previous = current
+    }
+  })
+
+  it('критерий 3: вклад waves (спекуляр/reflectance-надбавка) растёт СТРОГО от fade — линейно, ноль на пороге', () => {
+    const inputs = {
+      baseColor,
+      fresnelTint,
+      reflectionSample: [1, 1, 1] as Vec3, // максимально яркий — контрастная проверка
+      normal: normals[1],
+      waveNormal: normals[1], // специально совпадает с normal — специулярный пик виден
+      viewDir: viewDirs[0],
+      lightDir: lightDirs[0],
+      sunColor,
+      nightFloor
+    }
+
+    const foundation = foundationColor(inputs.baseColor, inputs.fresnelTint, inputs.normal, inputs.viewDir, inputs.lightDir, inputs.nightFloor)
+    const waves = wavesColor(inputs.baseColor, inputs.reflectionSample, inputs.waveNormal, inputs.viewDir, inputs.lightDir, inputs.sunColor, inputs.nightFloor)
+
+    // mix — линейная функция: blended(fade) === foundation + fade*(waves-foundation)
+    // покомпонентно. Проверяем ЭТУ ТОЧНУЮ линейность на нескольких fade —
+    // она же доказывает «рост строго от fade, ноль на пороге» аналитически,
+    // не приближённо.
+    for (const fade of [0, 0.25, 0.5, 0.75, 1]) {
+      const blended = blendedColor(inputs, fade)
+
+      for (let c = 0; c < 3; c++) {
+        const expected = foundation[c] + fade * (waves[c] - foundation[c])
+
+        expect(blended[c]).toBeCloseTo(expected, 12)
+      }
+    }
+  })
+})
+
 describe('Парный страж терминатора: одна и та же форма smoothstep(-0.08, 0.25, NdotL) — суша/вода', () => {
-  // Task 2 (арка water-shader) добавила ТРЕТЬЕ место: дневной бленд
-  // отражения кубмапы использует ТУ ЖЕ форму (см. WaterReflection.spec.ts,
-  // блок { } внутри USE_WATER_REFLECTION) — количество вхождений выросло
-  // 1 → 2 (Planet's NdotLraw — отдельная, другая переменная, не считается
-  // здесь, проверяется следующим тестом).
-  it('водный фрагментник — ДВА вхождения (ночной пол Task 4 + дневной бленд отражения Task 2)', () => {
-    const matches = frag.match(/smoothstep\(-0\.08, 0\.25, NdotL\)/g) ?? []
+  // Приёмочный фикс (владелец: молочный океан/яркое пятно/гало) развёл
+  // терминатор на ДВЕ переменные — NdotL фундамента (normal, unperturbed)
+  // и waveNdotL waves-ветки (waveNormal) — та же ФОРМА (порог/ширина), но
+  // разные операнды: без этого equality при fade=0 держалось бы неточно
+  // (см. describe «CPU-зеркало цвета» ниже). Дневной бленд отражения
+  // (USE_WATER_REFLECTION) переиспользует waveDayFactor — своего
+  // smoothstep-вызова больше не заводит (было третье место до фикса).
+  it('водный фрагментник — ДВА вхождения формы: NdotL (фундамент) и waveNdotL (waves)', () => {
+    const matches = frag.match(/smoothstep\(-0\.08, 0\.25, \w*NdotL\)/g) ?? []
 
     expect(matches.length).toBe(2)
+    expect(frag).toContain('smoothstep(-0.08, 0.25, NdotL)')
+    expect(frag).toContain('smoothstep(-0.08, 0.25, waveNdotL)')
   })
 
   it('PlanetShaderTemplate использует ТУ ЖЕ форму (см. её NdotLraw)', () => {
