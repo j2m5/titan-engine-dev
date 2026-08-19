@@ -4,6 +4,7 @@ import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTem
 import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
 import { WaterShader } from '@/core/materials/shaders/WaterShader'
 import { Actor } from '@/core/models/Actor'
+import { ZENITH_DARKEN, dirFromLatLon, reflectionSampleBlend, skyColorGradient, type Vec3 } from './waterColorMirror'
 
 // Task 2 (арка water-shader): отражение фоновой кубмапы. Consumes: чанк
 // SkyboxSample (createSkyboxSampleUniforms, флип-конвенция uSkyFlipX) — единая
@@ -109,13 +110,14 @@ describe('WaterShaderTemplate: дневной бленд отражения — 
   // И до собственного ночного пола waves-цвета) — своего smoothstep-вызова
   // и своих NdotL/lightDirection здесь больше не заводит (было третье
   // место до фикса, теперь ровно два — см. WaterWaves.spec.ts).
-  it('reflection = mix(skySample, uWaterFresnelTint, waveDayFactor)', () => {
+  it('reflection = mix(skySample, skyColor, waveDayFactor) — ночь честный skySample, день градиентное небо', () => {
     expect(frag).toContain('vec3 skySample = sampleSkyboxHdr(uSkyboxMap, normalize(reflectDir), uSkyFlipX);')
-    expect(frag).toContain('waveReflectionSample = mix(skySample, uWaterFresnelTint, waveDayFactor);')
+    expect(frag).toContain('waveReflectionSample = mix(skySample, skyColor, waveDayFactor);')
   })
 
   it('дневной бленд НЕ заводит собственных NdotL/lightDirection/dayFactor внутри блока { } — переиспользует внешний waveDayFactor', () => {
     expect(frag).not.toContain('waveReflectionSample = mix(skySample, uWaterFresnelTint, dayFactor);')
+    expect(frag).not.toContain('waveReflectionSample = mix(skySample, uWaterFresnelTint, waveDayFactor);') // приёмочная волна 2, №1 — плоский тинт больше не источник дневного неба
 
     // vViewLightDirection считывается РОВНО один раз во всём фрагментнике
     // (фундаментный блок) — реориентационный блок отражения раньше заводил
@@ -126,6 +128,105 @@ describe('WaterShaderTemplate: дневной бленд отражения — 
     expect(lightDirectionDeclarations.length).toBe(1)
   })
 })
+
+// Приёмочная волна 2, №1 (владелец, скрин на подлёте): дневное "небо" было
+// плоским uWaterFresnelTint на всю полусферу — при скользящем взгляде
+// waveReflectance→1 и albedo≈0.1+reflection·0.9 читались одним сплошным
+// светлым цветом по всему видимому диску («молоко»), не посветлением к
+// горизонту, как у настоящего неба. Фикс — градиент по высоте отражённого
+// луча относительно зенита ФРАГМЕНТА (waveDirLocal, аналитический dir̂, не
+// возмущённая волнами нормаль).
+describe('WaterShaderTemplate: дневное небо — градиент зенит/горизонт (приёмочная волна 2, №1)', () => {
+  it('зенит фрагмента — waveDirLocal (аналитический dir̂), НЕ waveLocalNormal (возмущённая волнами)', () => {
+    expect(frag).toContain('vec3 worldZenith = normalize(mat3(modelMatrix) * waveDirLocal);')
+  })
+
+  it('upFactor — dot(отражённый луч, зенит), зажат в [0,1]', () => {
+    expect(frag).toContain('float upFactor = clamp(dot(normalize(reflectDir), worldZenith), 0.0, 1.0);')
+  })
+
+  it('skyColor = mix(горизонт=tint, зенит=tint·ZENITH_DARKEN, upFactor) — горизонт светлее зенита', () => {
+    expect(frag).toContain('vec3 skyColor = mix(uWaterFresnelTint, uWaterFresnelTint * ZENITH_DARKEN, upFactor);')
+  })
+
+  it('ZENITH_DARKEN — константа (~0.35), НЕ юниформ-ручка (YAGNI, владелец явно просил не плодить ручки)', () => {
+    expect(frag).toContain('const float ZENITH_DARKEN = 0.35;')
+    expect(frag).not.toContain('uniform float uZenithDarken')
+    expect(frag).not.toContain('uniform float uWaterZenithDarken')
+  })
+
+  it('ночная сторона НЕ тронута — skySample кубмапы по-прежнему честный (без зенитного затемнения)', () => {
+    // skyColor участвует ТОЛЬКО в дневной половине mix(skySample, skyColor,
+    // waveDayFactor) — сам skySample (ночь) вычисляется до skyColor и от
+    // него не зависит.
+    const skySampleLine = frag.indexOf('vec3 skySample = sampleSkyboxHdr(')
+    const skyColorLine = frag.indexOf('vec3 skyColor = mix(')
+
+    expect(skySampleLine).toBeGreaterThan(-1)
+    expect(skyColorLine).toBeGreaterThan(skySampleLine)
+  })
+})
+
+// CPU-зеркало (waterColorMirror.ts) — численный порт skyColorGradient/
+// reflectionSampleBlend, тот же класс стража, что остальные CPU-зеркала.
+describe('CPU-зеркало skyColorGradient: зенит темнее горизонта, ночь не тронута', () => {
+  const tint: Vec3 = [0x87 / 255, 0xb8 / 255, 0xd8 / 255] // DEFAULT_WATER_FRESNEL_TINT
+  const zenith = dirFromLatLon(90, 0) // зенит "вверх"
+
+  it('луч в зенит (upFactor=1) — tint·ZENITH_DARKEN', () => {
+    const sky = skyColorGradient(tint, zenith, zenith)
+
+    expect(sky[0]).toBeCloseTo(tint[0] * ZENITH_DARKEN, 12)
+    expect(sky[1]).toBeCloseTo(tint[1] * ZENITH_DARKEN, 12)
+    expect(sky[2]).toBeCloseTo(tint[2] * ZENITH_DARKEN, 12)
+  })
+
+  it('луч к горизонту (upFactor=0, reflectDir перпендикулярен зениту) — tint как есть, без затемнения', () => {
+    const horizonRay = dirFromLatLon(0, 0) // перпендикулярен zenith=(0,1,0)
+
+    const sky = skyColorGradient(tint, horizonRay, zenith)
+
+    expect(sky[0]).toBeCloseTo(tint[0], 12)
+    expect(sky[1]).toBeCloseTo(tint[1], 12)
+    expect(sky[2]).toBeCloseTo(tint[2], 12)
+  })
+
+  it('луч НИЖЕ горизонта (dot<0) — upFactor зажат в 0, не даёт "перезасветку" за пределами tint', () => {
+    const belowHorizon = scaleForTest(zenith, -1)
+
+    const sky = skyColorGradient(tint, belowHorizon, zenith)
+
+    expect(sky[0]).toBeCloseTo(tint[0], 12)
+    expect(sky[1]).toBeCloseTo(tint[1], 12)
+    expect(sky[2]).toBeCloseTo(tint[2], 12)
+  })
+
+  it('зенит СТРОГО темнее горизонта (ZENITH_DARKEN < 1, не косметика)', () => {
+    expect(ZENITH_DARKEN).toBeLessThan(1)
+    expect(ZENITH_DARKEN).toBeGreaterThan(0)
+  })
+
+  it('ночь (waveDayFactor=0) игнорирует skyColor целиком — reflectionSampleBlend === skySample', () => {
+    const skySample: Vec3 = [0.02, 0.02, 0.05] // тёмное звёздное небо
+    const blended = reflectionSampleBlend(skySample, tint, zenith, zenith, 0)
+
+    expect(blended).toEqual(skySample)
+  })
+
+  it('полный день (waveDayFactor=1) игнорирует skySample целиком — reflectionSampleBlend === skyColorGradient', () => {
+    const skySample: Vec3 = [0.02, 0.02, 0.05]
+    const expected = skyColorGradient(tint, zenith, zenith)
+    const blended = reflectionSampleBlend(skySample, tint, zenith, zenith, 1)
+
+    expect(blended[0]).toBeCloseTo(expected[0], 12)
+    expect(blended[1]).toBeCloseTo(expected[1], 12)
+    expect(blended[2]).toBeCloseTo(expected[2], 12)
+  })
+})
+
+function scaleForTest(v: Vec3, s: number): Vec3 {
+  return [v[0] * s, v[1] * s, v[2] * s]
+}
 
 describe('WaterShaderTemplate: гейт USE_WATER_REFLECTION — вложен в USE_WATER_WAVES дважды (декларации + main)', () => {
   it('ровно два вхождения #ifdef USE_WATER_REFLECTION (блок деклараций, блок потребления в main)', () => {

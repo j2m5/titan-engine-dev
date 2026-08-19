@@ -138,7 +138,7 @@ describe('WaterMaterial: проводка ручек data (дефолты чес
     expect(material.uniforms.uWaterColor.value.getHex()).toBe(0x0b3d66)
     expect(material.uniforms.uWaterShallowColor.value.getHex()).toBe(0x2e8b9e)
     expect(material.uniforms.uWaterAlphaDeep.value).toBe(0.85)
-    expect(material.uniforms.uWaterFresnelTint.value.getHex()).toBe(0xbfe9ff)
+    expect(material.uniforms.uWaterFresnelTint.value.getHex()).toBe(0x87b8d8) // приёмочная волна 2, №1 — затемнён/насыщен (был 0xbfe9ff, читался молоком)
     expect(material.uniforms.uWaterNightFloor.value).toBe(0.08)
   })
 

@@ -177,3 +177,36 @@ export function dirFromLatLon(latDeg: number, lonDeg: number): Vec3 {
 
   return [Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon)]
 }
+
+/**
+ * Затемнение зенита дневного "неба" отражения (приёмочная волна 2, №1) —
+ * константа шейдера, НЕ ручка (YAGNI, владелец явно просил не плодить).
+ */
+export const ZENITH_DARKEN = 0.35
+
+/**
+ * Дневной "небесный" градиент — port `skyColor = mix(uWaterFresnelTint,
+ * uWaterFresnelTint * ZENITH_DARKEN, upFactor)` (WaterShaderTemplate.ts,
+ * блок USE_WATER_REFLECTION): зенит фрагмента (worldZenith) темнее
+ * горизонта, upFactor = clamp(dot(отражённый луч, зенит), 0, 1).
+ */
+export function skyColorGradient(fresnelTint: Vec3, reflectDir: Vec3, worldZenith: Vec3): Vec3 {
+  const upFactor = clamp01(dot3(normalize3(reflectDir), worldZenith))
+
+  return mix3(fresnelTint, scale3(fresnelTint, ZENITH_DARKEN), upFactor)
+}
+
+/**
+ * Полный дневной/ночной бленд отражения — port `waveReflectionSample =
+ * mix(skySample, skyColor, waveDayFactor)`: ночь — честный skySample
+ * кубмапы (не тронут фиксом), день — градиент skyColorGradient.
+ */
+export function reflectionSampleBlend(
+  skySample: Vec3,
+  fresnelTint: Vec3,
+  reflectDir: Vec3,
+  worldZenith: Vec3,
+  waveDayFactor: number
+): Vec3 {
+  return mix3(skySample, skyColorGradient(fresnelTint, reflectDir, worldZenith), waveDayFactor)
+}

@@ -12,7 +12,12 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 const DEFAULT_WATER_COLOR = 0x0b3d66
 const DEFAULT_WATER_SHALLOW_COLOR = 0x2e8b9e
 const DEFAULT_WATER_ALPHA_DEEP = 0.85
-const DEFAULT_WATER_FRESNEL_TINT = 0xbfe9ff
+// Приёмочная волна 2, №1 (владелец: молочная вода на подлёте) — прежний
+// 0xbfe9ff почти белый, и на скользящем взгляде (waveReflectance→1,
+// albedo≈0.1+reflection·0.9) читался как сплошное молоко. Затемнён и
+// насыщен до устойчивого голубого — дефолт ПОД ПРИЁМКУ, финальный подбор
+// цвета/яркости за владельцем (см. память «Flare Visual Checks Are Owner's»).
+const DEFAULT_WATER_FRESNEL_TINT = 0x87b8d8
 const DEFAULT_WATER_NIGHT_FLOOR = 0.08
 // Дисторсия выборки отражения кубмапы (арка water-shader, Task 2) — аналог
 // distortionScale Water.js (см. WaterShaderTemplate). Инертна без

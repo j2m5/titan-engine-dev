@@ -23,7 +23,11 @@ const defaultUniforms = {
   uWaterColor: new Uniform(new Color(0x0b3d66)),
   uWaterShallowColor: new Uniform(new Color(0x2e8b9e)),
   uWaterAlphaDeep: new Uniform(0.85),
-  uWaterFresnelTint: new Uniform(new Color(0xbfe9ff)),
+  // 0x87b8d8 — приёмочная волна 2, №1: прежний 0xbfe9ff (почти белый)
+  // читался молоком на скользящем взгляде (см. WaterShader.ts докблок
+  // DEFAULT_WATER_FRESNEL_TINT, оба места держат одно значение — паритетный
+  // тест). Дефолт ПОД ПРИЁМКУ, финальный цвет — за владельцем.
+  uWaterFresnelTint: new Uniform(new Color(0x87b8d8)),
   // Пол яркости ночной стороны (см. фрагментник ниже) — сверх исходной спеки
   // Task 4, находка №5 финального ревью: было зашито константой без ручки,
   // теперь пятая ручка воды по той же конвенции, что и остальные четыре.
@@ -278,6 +282,15 @@ export const WaterShaderTemplate: ShaderProps = {
         // Water.js писана для метров, не для юнитов сцены (~1995 км/юнит).
         const float WATER_METERS_PER_UNIT = ${WATER_METERS_PER_UNIT};
 
+        // Приёмочная волна 2, №1 (владелец: молочная вода на подлёте) —
+        // дневное "небо" было плоским uWaterFresnelTint на всю полусферу
+        // (0.1 + reflection·0.9 при waveReflectance→1 на скользящем взгляде
+        // давало почти-белый цвет ВЕЗДЕ, не только у горизонта, где реальное
+        // небо реально светлеет). Затемнение зенита — константа, не ручка
+        // (YAGNI, владелец явно просил не плодить): 0.35 — тот же порядок,
+        // что типичное отношение яркости зенита к горизонту ясного неба.
+        const float ZENITH_DARKEN = 0.35;
+
         #include <skyboxSampleUniforms>
         #include <skyboxSampleFunctions>
       #endif
@@ -413,10 +426,27 @@ export const WaterShaderTemplate: ShaderProps = {
 
           vec3 skySample = sampleSkyboxHdr(uSkyboxMap, normalize(reflectDir), uSkyFlipX);
 
+          // Дневное "небо" — градиент по высоте отражённого луча, не плоский
+          // uWaterFresnelTint на всю полусферу (приёмочная волна 2, №1:
+          // владелец увидел молочную воду на подлёте — при скользящем
+          // взгляде waveReflectance→1, и albedo≈0.1+reflection·0.9 читало
+          // ЕДИНСТВЕННЫЙ плоский цвет по всему диску, а не посветление к
+          // горизонту, как у настоящего неба). Зенит фрагмента — waveDirLocal
+          // (аналитический dir̂, НЕ возмущённая волнами waveLocalNormal —
+          // «где верх» не должно дрожать от ряби), повёрнутый в мир тем же
+          // mat3(modelMatrix), что и worldNormal. upFactor=1 — луч смотрит в
+          // зенит (тёмное небо, ZENITH_DARKEN·tint), upFactor=0 — луч
+          // смотрит к горизонту (светлый tint как есть — больше воздуха на
+          // луче в реальном небе, горизонт светлее зенита).
+          vec3 worldZenith = normalize(mat3(modelMatrix) * waveDirLocal);
+          float upFactor = clamp(dot(normalize(reflectDir), worldZenith), 0.0, 1.0);
+          vec3 skyColor = mix(uWaterFresnelTint, uWaterFresnelTint * ZENITH_DARKEN, upFactor);
+
           // Дневной бленд — та же форма терминатора (порог/ширина), что и
           // ночной пол waves-цвета ниже — waveDayFactor уже посчитан один
-          // раз выше, вторично NdotL/lightDirection здесь не заводим.
-          waveReflectionSample = mix(skySample, uWaterFresnelTint, waveDayFactor);
+          // раз выше, вторично NdotL/lightDirection здесь не заводим. Ночная
+          // сторона НЕ тронута — по-прежнему честный skySample кубмапы.
+          waveReflectionSample = mix(skySample, skyColor, waveDayFactor);
         }
         #endif
         vec3 wavesColor = mix(
