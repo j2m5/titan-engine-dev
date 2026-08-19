@@ -201,6 +201,32 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     expect(load).toHaveBeenCalledTimes(3)
   })
 
+  // Облачный слой ОТКЛЮЧЁН РЕШЕНИЕМ ВЛАДЕЛЬЦА (2026-08-19, приёмочная волна
+  // 2, №2, см. докблок-рулинг в PlanetMaterial.updateMaterial и
+  // ResourceObserver.collectCandidates): USE_CLOUD больше не ставится ни
+  // при каком cloudMap — стримить облачную карту в VRAM ради текстуры,
+  // которую шейдер никогда не сэмплирует, чистые расходы. collectCandidates
+  // фильтрует cloud-ресурсы ДО decideStreaming (mapTypeRank/бюджетная
+  // политика не тронуты — минимальная обратимость).
+  it('облачная карта Земли НЕ становится кандидатом streaming — не запрашивается сетью даже с щедрым бюджетом', async () => {
+    const load = vi.fn((): Promise<LoadResult> => Promise.resolve({ ok: true as const, texture: makeTexture() }))
+
+    // Бюджет с большим запасом — если бы cloud не фильтровался, он поместился бы.
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = SOLAR_SYSTEM
+
+    data.set('Earth', record('Earth', 300))
+    await handlers['ClosestChange'](record('Earth', 300))
+
+    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth_clouds.jpg' }))
+    // Остальные потоковые карты Земли — по-прежнему честные кандидаты
+    // (фильтр точечный, только тип 'cloud', не вся Земля).
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth.jpg' }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth_night.jpg' }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth_specular.jpg' }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth_slope.webp' }))
+  })
+
   it('второй пересчёт, пока актор ещё грузится, не переспрашивает и не вытесняет его', async () => {
     // Мутируемый объект-обёртка вместо голого `let`: иначе TS сужает тип
     // резолвера по видимому потоку управления, теряя его после промежуточных
