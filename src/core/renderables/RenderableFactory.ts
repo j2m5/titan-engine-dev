@@ -207,7 +207,16 @@ class RenderableFactory {
     // единый на все места чтения, включая коллизию и SSE-отбор.
     const waterLevelMeters = readWaterLevelMeters(actor)
 
-    if (waterLevelMeters !== undefined) terrain.add(new WaterSphere(actor, waterLevelMeters, this.renderer))
+    // Кубмапа фона (арка water-shader, Task 2) — та же текстура, что рисует
+    // SkyboxBackground/BlackHole, ЖЕ доступна фабрике (resourceObserver уже
+    // конструкторный аргумент, отдельного реестра заводить не нужно): к
+    // моменту создания WaterSphere сценарий уже прогрузился (Application.run
+    // ждёт loadPrimaryTextures до SceneManager.initialize, см. докблок
+    // WaterMaterial конструктора) — sceneBackground либо готов, либо честно
+    // null (сценарий без фона).
+    if (waterLevelMeters !== undefined) {
+      terrain.add(new WaterSphere(actor, waterLevelMeters, this.renderer, this.resourceObserver.sceneBackground))
+    }
 
     return terrain
   }

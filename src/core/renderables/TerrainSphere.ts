@@ -1,9 +1,10 @@
-import { type WebGLRenderer } from 'three'
+import { type WebGLRenderer, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
+import type { UpdateContext } from '@/core/UpdateContext'
 
 export { PATCH_BUILDS_PER_FRAME } from '@/core/terrain/TerrainPatchGroup'
 
@@ -23,6 +24,14 @@ class TerrainSphere extends TerrainPatchGroup {
   public model: Actor
   private readonly sharedMaterial: PlanetMaterial
 
+  // Скретчи кадра (см. TerrainPatchGroup.cameraWorldScratch — тот же приём,
+  // приватный там, недоступен подклассу): облачный высотный fade нужен
+  // РОВНО в момент onVisibleUpdate, а не после (TerrainPatchGroup.
+  // updateObject считает свой cameraWorldScratch ПОСЛЕ onVisibleUpdate —
+  // повторное использование читало бы позицию камеры прошлого кадра).
+  private readonly cloudCameraWorldScratch = new Vector3()
+  private readonly cloudSelfWorldScratch = new Vector3()
+
   public constructor(model: Actor, field: TerrainHeightField, renderer: WebGLRenderer) {
     const sharedMaterial = new PlanetMaterial(model)
     const waterLevelMeters = readWaterLevelMeters(model)
@@ -38,6 +47,19 @@ class TerrainSphere extends TerrainPatchGroup {
   /** Контракт ResourceObserver: у renderable один материал на все патчи. */
   public get material(): PlanetMaterial {
     return this.sharedMaterial
+  }
+
+  /**
+   * Высотный fade облаков (приёмочная волна 4, №3) — каждый активный кадр
+   * (тот же паттерн, что WaterSphere.onVisibleUpdate/uTime): дистанция
+   * камера-тело меняется с каждым кадром, а формула/резолв толщины
+   * атмосферы живут в PlanetMaterial (см. её докблок) — здесь только мировые
+   * позиции, дешёвые и без аллокаций (скретчи выше).
+   */
+  protected onVisibleUpdate(ctx: UpdateContext): void {
+    ctx.camera.getWorldPosition(this.cloudCameraWorldScratch)
+    this.getWorldPosition(this.cloudSelfWorldScratch)
+    this.sharedMaterial.updateCloudOpacity(this.cloudCameraWorldScratch, this.cloudSelfWorldScratch)
   }
 }
 

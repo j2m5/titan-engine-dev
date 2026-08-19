@@ -1,9 +1,26 @@
 import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
-import { Texture } from 'three'
+import { CubeTexture, Texture } from 'three'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
 import { WaterShader } from '@/core/materials/shaders/WaterShader'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+
+/**
+ * Отражение фоновой кубмапы в воде — ОТКЛЮЧЕНО РЕШЕНИЕМ ВЛАДЕЛЬЦА
+ * (2026-08-19, приёмочная волна 3, №1): ночная кубмапа давала звёздную
+ * сыпь — HDR-звёзды кубмапы, размазанные grazing-дисторсией отражённого
+ * луча, читались яркими кляксами по тёмному океану. `false` держит гейт
+ * USE_WATER_REFLECTION снятым БЕЗУСЛОВНО, независимо от наличия
+ * `skyboxTexture` (см. конструктор) — механика (uniform `uSkyboxMap`,
+ * `#ifdef USE_WATER_REFLECTION` в `WaterShaderTemplate.ts`, доставка
+ * `skyboxTexture` из `RenderableFactory`) НЕ разобрана, вернуть можно одной
+ * строкой здесь. Reflection воды теперь всегда градиентный `skyColor`
+ * (приёмочная волна 2, зенит/горизонт), день и ночь, без сэмпла кубмапы.
+ */
+// Явная аннотация :boolean (не литерал false) — иначе TS сужает
+// useWaterReflection ниже до типа литерала false и spread
+// `...(useWaterReflection && {...})` не типизируется (spread не из object).
+const WATER_REFLECTION_ENABLED_BY_OWNER: boolean = false
 
 /**
  * Материал водной оболочки — честный шейдер (Task 4): цвет глубокой/мелкой
@@ -51,7 +68,49 @@ class WaterMaterial extends AbstractShaderMaterial {
    */
   private slopePath: string | undefined
 
-  public constructor(model: Actor, parameters?: ShaderMaterialParameters) {
+  /**
+   * Путь waterNormal-текстуры актора — резолвится ОДИН раз в конструкторе,
+   * та же экономия ORM-джойна, что и slopePath (см. её докблок): гейт
+   * USE_WATER_WAVES проверяется каждый активный кадр (updateMaterial),
+   * повторный `resources.where(...)` на каждый кадр был бы тем же найденным
+   * находкой ревью Task 4 расходом, только для второго ресурса.
+   */
+  private waterNormalPath: string | undefined
+
+  /** Последний известный гейт USE_WATER_WAVES — тот же приём, что hasWaterDepth (needsUpdate только на фактической смене). */
+  private hasWaterWaves = false
+
+  /**
+   * `skyboxTexture` — кубмапа фона сценария (арка water-shader, Task 2),
+   * доставляется РОВНО ОДИН РАЗ здесь, не через updateMaterial: в отличие от
+   * slope/waterNormal (асинхронный стрим текстур ТЕЛА, догоняются в любой
+   * момент жизни оболочки — updateMaterial перечитывает resourceStorage
+   * каждый кадр), фон СЦЕНАРИЯ грузится ДО построения графа сцены
+   * (`Application.run` ждёт `loadPrimaryTextures`, только потом
+   * `Engine.start` → `SceneManager.initialize` строит акторов, см. цепочку
+   * вызовов) — WaterSphere физически не может родиться раньше, чем фон уже
+   * лежит в `ResourceObserver.sceneBackground`. Смены сценария посреди жизни
+   * оболочки не бывает: `SceneManager.dispose` разбирает граф целиком перед
+   * повторной сборкой — тот же инвариант, на который опирается докблок
+   * `BlackHole.__setup` (там кубмапа читается покадрово, но по причине
+   * унификации с остальными per-frame uniforms того шейдера, не из-за
+   * динамики фона — см. её комментарий). Гейт USE_WATER_REFLECTION поэтому
+   * СТАТИЧЕН на весь срок жизни материала и живёт в baseDefines (не
+   * пересчитывается updateMaterial/resetMaterial, как USE_WATER_DEPTH/
+   * USE_WATER_WAVES) — resetMaterial ниже его не снимает.
+   *
+   * Отражение кубмапы ОТКЛЮЧЕНО РЕШЕНИЕМ ВЛАДЕЛЬЦА (2026-08-19, приёмочная
+   * волна 3, №1): ночная кубмапа давала звёздную сыпь — HDR-звёзды,
+   * размазанные grazing-дисторсией отражённого луча, читались яркими
+   * кляксами по тёмному океану. `WATER_REFLECTION_ENABLED_BY_OWNER = false`
+   * держит гейт снятым БЕЗУСЛОВНО (не зависит от `skyboxTexture` вовсе) —
+   * механика (`uSkyboxMap`, `#ifdef USE_WATER_REFLECTION` в
+   * `WaterShaderTemplate.ts`, доставка `skyboxTexture` из
+   * `RenderableFactory`) НЕ разобрана, вернуть можно одной строкой здесь.
+   * Reflection воды теперь всегда градиентный `skyColor` (приёмочная волна
+   * 2), день и ночь, без сэмпла кубмапы — см. докблок в шейдере.
+   */
+  public constructor(model: Actor, skyboxTexture: CubeTexture | null = null, parameters?: ShaderMaterialParameters) {
     super({
       transparent: true,
       depthWrite: false,
@@ -60,18 +119,32 @@ class WaterMaterial extends AbstractShaderMaterial {
     })
     this.model = model
     this.slopePath = WaterMaterial.resolveSlopePath(model)
+    this.waterNormalPath = WaterMaterial.resolveWaterNormalPath(model)
 
     const { uniforms, defines, vertexShader, fragmentShader } = new WaterShader(this.model)
 
     this.uniforms = uniforms
     this.vertexShader = vertexShader
     this.fragmentShader = fragmentShader
-    this.defines = defines
-    this.baseDefines = { ...defines }
+    this.uniforms.uSkyboxMap.value = skyboxTexture
+
+    const useWaterReflection = skyboxTexture !== null && WATER_REFLECTION_ENABLED_BY_OWNER
+
+    this.baseDefines = {
+      ...defines,
+      ...(useWaterReflection && { USE_WATER_REFLECTION: '1' })
+    }
+    this.defines = { ...this.baseDefines }
   }
 
   private static resolveSlopePath(model: Actor): string | undefined {
     const path = model.resources.where('resourceType', 'slope').first()?.getAttribute('path')
+
+    return typeof path === 'string' ? path : undefined
+  }
+
+  private static resolveWaterNormalPath(model: Actor): string | undefined {
+    const path = model.resources.where('resourceType', 'waterNormal').first()?.getAttribute('path')
 
     return typeof path === 'string' ? path : undefined
   }
@@ -95,27 +168,67 @@ class WaterMaterial extends AbstractShaderMaterial {
    * совпадает с константным режимом (mix(shallow,deep,1)=deep), однако кодовый
    * путь другой (USE_WATER_DEPTH=1, не #else) — если понадобится отличать
    * «карты нет» от «карта старого формата», нужен отдельный маркер не отсюда.
+   *
+   * `elapsed` — секунды с запуска часов рендера (`UpdateContext.elapsed`,
+   * см. WaterSphere.onVisibleUpdate), не `performance.now()` напрямую
+   * (фикс-раунд 1, №3 ревью: докблок `UpdateContext` прямо запрещает
+   * материалам брать время в обход контекста — тот же приём, что
+   * `NebulaRaymarchMaterial.updateMaterial(elapsed)`). Дефолт 0 — вызовы без
+   * аргумента (существующие тесты гейтов) остаются валидны, `uTime` просто
+   * не продвигается.
+   *
+   * Без сворачивания (`epoch - floor(epoch/wrap)*wrap`, как у
+   * BlackHoleMaterial): там wrap кратен РЕАЛЬНОМУ периоду вращения диска —
+   * физически осмысленная граница. Здесь делители времени — авторские
+   * художественные константы (см. WaterShaderTemplate.getNoise), их НОК на
+   * порядки больше любой разумной длины сессии, и общий делитель нашёлся бы
+   * только у 3 из 8 — сворачивание на такой границе давало бы фазовый скачок
+   * у 5 октав из 8, а не «честную» точку. Float32 на реальных длинах сессий
+   * (часы, не годы) даёт суб-миллисекундную ошибку — незаметно для волн.
    */
-  public updateMaterial(): void {
+  public updateMaterial(elapsed: number = 0): void {
     const slopeMap: Texture | undefined = this.slopePath ? resourceStorage.getTexture(this.slopePath) : undefined
 
     this.uniforms.uSlopeMap.value = slopeMap ?? null
 
     const useWaterDepth = Boolean(slopeMap)
-    if (useWaterDepth === this.hasWaterDepth) return // гейт не изменился — перекомпиляция не нужна
+
+    // waterNormal — независимый гейт (USE_WATER_WAVES), тот же ленивый
+    // стрим-паттерн, что slope: путь закеширован конструктором, текстура
+    // может догрузиться в resourceStorage в любой момент жизни оболочки.
+    const waterNormalMap: Texture | undefined = this.waterNormalPath
+      ? resourceStorage.getTexture(this.waterNormalPath)
+      : undefined
+
+    this.uniforms.uWaterNormalMap.value = waterNormalMap ?? null
+
+    const useWaterWaves = Boolean(waterNormalMap)
+
+    // uTime — КАЖДЫЙ активный кадр, независимо от того, поменялся ли
+    // какой-либо гейт (иначе волны замирали бы всякий раз, когда
+    // updateMaterial рано выходит по неизменным гейтам ниже). Дешёвая
+    // uniform-запись, needsUpdate/перекомпиляцию не трогает.
+    this.uniforms.uTime.value = elapsed
+
+    if (useWaterDepth === this.hasWaterDepth && useWaterWaves === this.hasWaterWaves) return // ни один гейт не изменился — перекомпиляция не нужна
 
     this.hasWaterDepth = useWaterDepth
+    this.hasWaterWaves = useWaterWaves
     this.defines = {
       ...this.baseDefines,
-      ...(useWaterDepth && { USE_WATER_DEPTH: '1' })
+      ...(useWaterDepth && { USE_WATER_DEPTH: '1' }),
+      ...(useWaterWaves && { USE_WATER_WAVES: '1' })
     }
     this.needsUpdate = true
   }
 
   public resetMaterial(): void {
     this.slopePath = WaterMaterial.resolveSlopePath(this.model)
+    this.waterNormalPath = WaterMaterial.resolveWaterNormalPath(this.model)
     this.uniforms.uSlopeMap.value = null
+    this.uniforms.uWaterNormalMap.value = null
     this.hasWaterDepth = false
+    this.hasWaterWaves = false
     this.defines = { ...this.baseDefines }
     this.needsUpdate = true
   }

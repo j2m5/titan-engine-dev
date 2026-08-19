@@ -104,7 +104,7 @@ abstract class TerrainPatchGroup extends Group {
     // переключает); общего обхода до корня сцены здесь не требуется.
     if (!this.visible || this.parent?.visible === false) return
 
-    this.onVisibleUpdate()
+    this.onVisibleUpdate(ctx)
 
     ctx.camera.updateMatrixWorld() // matrixWorld И matrixWorldInverse (Camera override)
     this.updateWorldMatrix(true, false)
@@ -225,8 +225,16 @@ abstract class TerrainPatchGroup extends Group {
    * условия), либо материал никогда не узнал бы о догрузившейся текстуре
    * (ResourceObserver видит только node.renderable — TerrainSphere, не её
    * ребёнка). TerrainSphere хук не переопределяет — поведение не меняется.
+   *
+   * Принимает `ctx` (арка water-shader, фикс-раунд 1, №3): WaterSphere читает
+   * `ctx.elapsed` для `uTime` волн — «звёздное» глобальное время
+   * (`performance.now()`) было дрейфом мимо `UpdateContext`, чей докблок прямо
+   * запрещает материалам брать время откуда-то ещё. `_ctx` здесь не читается
+   * (TerrainSphere хук не переопределяет), но параметр обязан присутствовать
+   * в базовой сигнатуре — иначе `updateObject` не смог бы передать `ctx`
+   * переопределяющим потомкам типобезопасно.
    */
-  protected onVisibleUpdate(): void {}
+  protected onVisibleUpdate(_ctx: UpdateContext): void {}
 
   private warnPoolExhausted(): void {
     if (this.poolExhaustedWarned) return

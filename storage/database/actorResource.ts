@@ -389,5 +389,10 @@ export const ActorResource: IActorResource[] = [
   { id: 409, actorId: 7, resourceId: 126 },
   { id: 410, actorId: 7, resourceId: 127 },
   { id: 411, actorId: 7, resourceId: 128 },
-  { id: 412, actorId: 7, resourceId: 129 }
+  { id: 412, actorId: 7, resourceId: 129 },
+  // Ряд ряби воды (арка water-shader, Task 3) — Земля и Явин IV, единственные
+  // два тела с waterLevelMeters (см. renderingObjects.ts), шарят ОДИН
+  // resourceId 228 (одна текстура в VRAM, см. её докблок в resources.ts).
+  { id: 413, actorId: 7, resourceId: 228 },
+  { id: 414, actorId: 83, resourceId: 228 }
 ]

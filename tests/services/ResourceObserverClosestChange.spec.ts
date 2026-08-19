@@ -201,6 +201,29 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     expect(load).toHaveBeenCalledTimes(3)
   })
 
+  // Облачный слой ВЕРНУЛСЯ решением владельца (2026-08-19, приёмочная волна
+  // 4, №3) — фильтр 'cloud' из streamable-кандидатов (приёмочная волна 2,
+  // №2) снят: USE_CLOUD снова ставится при cloudMap, карту снова стоит
+  // стримить в VRAM.
+  it('облачная карта Земли становится кандидатом streaming — запрашивается сетью при щедром бюджете', async () => {
+    const load = vi.fn((): Promise<LoadResult> => Promise.resolve({ ok: true as const, texture: makeTexture() }))
+
+    // Бюджет шире обычного (×16, не ×8): облако снова конкурирует за место —
+    // ×8 хватало, пока cloud был отфильтрован (волна 2), теперь ему нужен запас.
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
+    observer.scenario = SOLAR_SYSTEM
+
+    data.set('Earth', record('Earth', 300))
+    await handlers['ClosestChange'](record('Earth', 300))
+
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth_clouds.jpg' }))
+    // Остальные потоковые карты Земли — по-прежнему честные кандидаты.
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth.jpg' }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth_night.jpg' }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth_specular.jpg' }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth_slope.webp' }))
+  })
+
   it('второй пересчёт, пока актор ещё грузится, не переспрашивает и не вытесняет его', async () => {
     // Мутируемый объект-обёртка вместо голого `let`: иначе TS сужает тип
     // резолвера по видимому потоку управления, теряя его после промежуточных

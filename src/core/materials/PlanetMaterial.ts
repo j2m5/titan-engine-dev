@@ -2,10 +2,36 @@ import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
 import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
-import { Texture } from 'three'
+import { Texture, Vector3 } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { IPlanetRenderingObject } from '@/core/models/types'
+import { readRenderingData } from '@/core/helpers/renderingData'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+
+/**
+ * Категория актора-атмосферы (см. `RenderableFactory.make`'s switch, case 5) —
+ * тот же литерал, что использует `PlanetShader` для дочернего кольца
+ * (categoryId 6, `this.model.children.where('categoryId', 6)`); отдельной
+ * именованной константы категорий в проекте нет.
+ */
+const ATMOSPHERE_CATEGORY_ID = 5
+
+/**
+ * Opacity облачного слоя от высоты камеры над поверхностью (приёмочная волна
+ * 4, №3 — идея владельца): 1.0 из космоса (alt ≥ H, вся толщина атмосферы над
+ * камерой), линейно к 0 на середине толщины (alt = 0.5·H), 0 ниже. Чистая
+ * функция от alt/H — юнит-независима (числитель и знаменатель в ОДНИХ и тех
+ * же юнитах сокращаются), тестируется напрямую без CPU-зеркала шейдера (сама
+ * формула считается в TS/JS, не в GLSL — уходит в юниформ уже готовым числом,
+ * как uWaterNightFloor и прочие ручки).
+ */
+export function cloudOpacityForAltitude(altitudeUnits: number, atmosphereThicknessUnits: number): number {
+  const half = 0.5 * Math.max(atmosphereThicknessUnits, 1e-6) // гард от деления на 0/отрицательной толщины (битые данные)
+
+  return Math.max(0, Math.min(1, (altitudeUnits - half) / half))
+}
 
 class PlanetMaterial extends AbstractShaderMaterial {
   public model: Actor
@@ -22,9 +48,26 @@ class PlanetMaterial extends AbstractShaderMaterial {
    */
   private readonly baseDefines: Record<string, unknown>
 
+  /**
+   * Толщина атмосферы тела (top−bottom radius, юниты сцены) — резолвится ОДИН
+   * раз в конструкторе по дочернему актору-атмосфере (тот же паттерн, что
+   * ringData/USE_RING в PlanetShader: `model.children.where('categoryId', N)`,
+   * разовый резолв, не на каждый кадр). `undefined` — у тела нет атмосферы
+   * (нет актора categoryId=5 ИЛИ у него нет renderingObject.data) — облачный
+   * слой такому телу без атмосферы не положен по смыслу фичи, но если данные
+   * когда-нибудь дадут cloudMap без атмосферы, opacity держится константой 1
+   * (см. updateCloudOpacity) — не гасить то, что нечем гасить.
+   */
+  private readonly cloudAtmosphereThicknessUnits: number | undefined
+
+  /** Радиус тела (юниты сцены) — та же экономия ORM/аллокаций, что и толщина атмосферы выше; 0 у стаб-акторов тестов без physicalObject. */
+  private readonly bodyRadiusUnits: number
+
   public constructor(model: Actor, parameters?: ShaderMaterialParameters) {
     super(parameters)
     this.model = model
+    this.cloudAtmosphereThicknessUnits = PlanetMaterial.resolveCloudAtmosphereThicknessUnits(model)
+    this.bodyRadiusUnits = toThreeJSUnits(this.model.physicalObject?.getAttribute('radius') ?? 0)
 
     const { uniforms, defines, vertexShader, fragmentShader } = new PlanetShader(this.model)
 
@@ -33,6 +76,41 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.fragmentShader = fragmentShader
     this.defines = defines
     this.baseDefines = { ...defines }
+  }
+
+  private static resolveCloudAtmosphereThicknessUnits(model: Actor): number | undefined {
+    const atmosphereActor = model.children.where('categoryId', ATMOSPHERE_CATEGORY_ID).first()
+
+    if (!atmosphereActor) return undefined
+
+    const config = readRenderingData<AtmosphereConfig>(atmosphereActor)
+
+    if (!config) return undefined
+
+    return toThreeJSUnits(config.topRadius - config.bottomRadius)
+  }
+
+  /**
+   * Высотный fade облаков (приёмочная волна 4, №3) — вызывается КАЖДЫЙ
+   * активный кадр (см. TerrainSphere.onVisibleUpdate, тот же паттерн, что
+   * WaterMaterial.updateMaterial(elapsed)): дистанция камера-тело меняется
+   * каждый кадр, юниформ обязан догонять. Мировые позиции — на вызывающей
+   * стороне (TerrainSphere владеет своей мировой позицией и позицией камеры
+   * из UpdateContext, см. AsteroidRingSystem/NebulaVolume — тот же приём
+   * скретч-векторов кадра без аллокаций); здесь только вычитание и формула.
+   * Без атмосферы (cloudAtmosphereThicknessUnits === undefined) opacity
+   * держится константой 1 — тело без атмосферы не в скоупе этой фичи.
+   */
+  public updateCloudOpacity(cameraWorldPosition: Vector3, modelWorldPosition: Vector3): void {
+    if (this.cloudAtmosphereThicknessUnits === undefined) {
+      this.uniforms.uCloudOpacity.value = 1
+
+      return
+    }
+
+    const altitudeUnits = cameraWorldPosition.distanceTo(modelWorldPosition) - this.bodyRadiusUnits
+
+    this.uniforms.uCloudOpacity.value = cloudOpacityForAltitude(altitudeUnits, this.cloudAtmosphereThicknessUnits)
   }
 
   public updateMaterial(): void {
@@ -138,6 +216,15 @@ class PlanetMaterial extends AbstractShaderMaterial {
       ...(useSlope && cavityStrength > 0 && { USE_CAVITY: '1' }),
       ...(specularMap && { USE_SPECULAR: '1' }),
       ...(nightMap && { USE_NIGHT: '1' }),
+      // Облачный слой ВЕРНУЛСЯ решением владельца (2026-08-19, приёмочная
+      // волна 4, №3: идея владельца — высотный fade). Прежний рулинг
+      // (приёмочная волна 2, №2 — полосы на полюсах от терраформной
+      // равнопрямоугольной UV-развёртки) снят: облака теперь гаснут ДО того,
+      // как камера подлетает достаточно близко, чтобы полосы стали заметны
+      // (uCloudOpacity → 0 к середине толщины атмосферы, см. её докблок в
+      // PlanetShaderTemplate/BrunetonAtmosphereMaterial-подобный резолв ниже) —
+      // полюсный артефакт больше не в кадре у тел с атмосферой. Гейт снова
+      // ставится ПРИ НАЛИЧИИ cloudMap, как до волны 2.
       ...(cloudMap && { USE_CLOUD: '1' })
     }
 

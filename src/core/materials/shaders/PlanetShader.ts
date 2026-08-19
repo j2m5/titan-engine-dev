@@ -40,6 +40,7 @@ interface PlanetUniforms {
   diffuseMap: Texture | null
   nightMap: Texture | null
   cloudMap: Texture | null
+  uCloudOpacity: number
   specularMap: Texture | null
   bumpMap: Texture | null
   bumpScale: number
@@ -111,6 +112,9 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       diffuseMap: new Uniform(resourceStorage.getTextureOrMake('default.png')),
       nightMap: new Uniform(resourceStorage.getTextureOrMake('night.jpg')),
       cloudMap: new Uniform(null),
+      // Высотный fade (приёмочная волна 4, №3) — дефолт 1 (виден целиком),
+      // per-frame значение считает PlanetMaterial.updateCloudOpacity.
+      uCloudOpacity: new Uniform(1),
       specularMap: new Uniform(null),
       bumpMap: new Uniform(null),
       bumpScale: new Uniform(planetData.bumpScale),

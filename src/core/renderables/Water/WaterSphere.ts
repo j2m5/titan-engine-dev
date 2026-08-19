@@ -1,8 +1,9 @@
-import { Mesh, type WebGLRenderer } from 'three'
+import { CubeTexture, Mesh, type WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
 import { constantHeightField } from '@/core/terrain/constantHeightField'
 import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
+import type { UpdateContext } from '@/core/UpdateContext'
 
 /**
  * Патчи воды рисуются ДО атмосферных проходов, не после: BrunetonAtmosphere
@@ -74,10 +75,22 @@ class WaterSphere extends TerrainPatchGroup {
   public model: Actor
   private readonly sharedMaterial: WaterMaterial
 
-  public constructor(model: Actor, waterLevelMeters: number, renderer: WebGLRenderer) {
+  /**
+   * `skyboxTexture` — кубмапа фона сценария (арка water-shader, Task 2),
+   * см. докблок `WaterMaterial` конструктора: прокидывается насквозь до
+   * материала, сама WaterSphere её не читает. `= null` по умолчанию —
+   * существующие вызовы (тесты) без 4-го аргумента остаются валидны,
+   * отражение просто не включается (без кубмапы гейт не ставится).
+   */
+  public constructor(
+    model: Actor,
+    waterLevelMeters: number,
+    renderer: WebGLRenderer,
+    skyboxTexture: CubeTexture | null = null
+  ) {
     const radiusKm: number = model.physicalObject!.getAttribute('radius')!
     const field = constantHeightField(radiusKm, waterLevelMeters)
-    const sharedMaterial = new WaterMaterial(model)
+    const sharedMaterial = new WaterMaterial(model, skyboxTexture)
 
     super(field, sharedMaterial, renderer, WATER_MAX_LIVE_PATCHES)
     this.model = model
@@ -99,16 +112,21 @@ class WaterSphere extends TerrainPatchGroup {
   }
 
   /**
-   * Освежает гейт USE_WATER_DEPTH материала каждый раз, когда дерево реально
-   * просыпается (см. TerrainPatchGroup.onVisibleUpdate) — slope-текстура
-   * актора стримится асинхронно (ResourceObserver её не видит здесь, см.
-   * докблок класса и WaterMaterial.updateMaterial), поэтому на момент
-   * конструктора её почти наверняка ещё нет. Дешёвый lookup по хранилищу
-   * (см. WaterMaterial) — перекомпиляция шейдера случается только на
-   * фактической смене гейта, не на каждом кадре.
+   * Освежает гейт USE_WATER_DEPTH/USE_WATER_WAVES материала каждый раз, когда
+   * дерево реально просыпается (см. TerrainPatchGroup.onVisibleUpdate) —
+   * slope/waterNormal текстуры актора стримятся асинхронно (ResourceObserver
+   * их не видит здесь, см. докблок класса и WaterMaterial.updateMaterial),
+   * поэтому на момент конструктора их почти наверняка ещё нет. Дешёвый
+   * lookup по хранилищу (см. WaterMaterial) — перекомпиляция шейдера
+   * случается только на фактической смене гейта, не на каждом кадре.
+   *
+   * `ctx.elapsed` — единственный источник uTime волн (фикс-раунд 1, №3):
+   * секунды с запуска часов рендера, тот же `UpdateContext`, что и весь
+   * остальной движок (не `performance.now()` напрямую — её докблок прямо
+   * запрещает материалам брать время в обход контекста).
    */
-  protected onVisibleUpdate(): void {
-    this.sharedMaterial.updateMaterial()
+  protected onVisibleUpdate(ctx: UpdateContext): void {
+    this.sharedMaterial.updateMaterial(ctx.elapsed)
   }
 }
 
