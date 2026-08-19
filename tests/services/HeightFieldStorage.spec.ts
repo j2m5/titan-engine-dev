@@ -23,66 +23,6 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('HeightFieldStorage: загрузка карт высот', () => {
-  it('успешная загрузка кладёт распарсенную карту в реестр по пути', async () => {
-    stubFetch(validBody())
-
-    await heightFieldStorage.load(['planets/moon/moon_height.raw'])
-
-    const map = heightFieldStorage.get('planets/moon/moon_height.raw')
-    expect(map?.width).toBe(2)
-    expect(map?.maxMeters).toBeCloseTo(100, 3)
-  })
-
-  it('повторная загрузка того же пути не дёргает сеть', async () => {
-    stubFetch(validBody())
-
-    await heightFieldStorage.load(['planets/moon/moon_height.raw'])
-    await heightFieldStorage.load(['planets/moon/moon_height.raw'])
-
-    expect(vi.mocked(fetch).mock.calls.length).toBe(1)
-  })
-
-  it('битый файл — warn и пропуск, реестр пуст, исключение не летит', async () => {
-    stubFetch(Buffer.from([1, 2, 3]))
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-
-    await expect(heightFieldStorage.load(['planets/moon/moon_height.raw'])).resolves.toBeUndefined()
-
-    expect(heightFieldStorage.get('planets/moon/moon_height.raw')).toBeUndefined()
-    expect(warn).toHaveBeenCalled()
-    warn.mockRestore()
-  })
-
-  it('HTTP-ошибка — warn и пропуск', async () => {
-    stubFetch(null, 404)
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-
-    await heightFieldStorage.load(['planets/moon/moon_height.raw'])
-
-    expect(heightFieldStorage.get('planets/moon/moon_height.raw')).toBeUndefined()
-    warn.mockRestore()
-  })
-
-  it('clear() опустошает реестр', async () => {
-    stubFetch(validBody())
-    await heightFieldStorage.load(['planets/moon/moon_height.raw'])
-
-    heightFieldStorage.clear()
-
-    expect(heightFieldStorage.get('planets/moon/moon_height.raw')).toBeUndefined()
-  })
-
-  it('репортер получает имя ассета', async () => {
-    stubFetch(validBody())
-    const reporter = { setAsset: vi.fn(), setProgress: vi.fn(), setTotal: vi.fn() }
-
-    await heightFieldStorage.load(['planets/moon/moon_height.raw'], reporter)
-
-    expect(reporter.setAsset).toHaveBeenCalledWith('planets/moon/moon_height.raw')
-  })
-})
-
 /** Даёт fetch-стабу доехать: request() промис не возвращает, ждать нечего. */
 async function settle(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0))

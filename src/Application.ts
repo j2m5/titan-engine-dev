@@ -5,7 +5,7 @@ import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { Scene } from 'three'
 import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
-import type { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
+import type { HeightFieldGate } from '@/core/services/HeightFieldGate'
 import { SkyboxBackground } from '@/core/renderables/SkyboxBackground'
 
 class Application {
@@ -16,7 +16,7 @@ class Application {
     private resourceObserver: ResourceObserver,
     private scene: Scene,
     private leakDetector: LeakDetector,
-    private loadingReporter: LoadingProgressReporter
+    private heightFieldGate: HeightFieldGate
   ) {}
 
   /**
@@ -54,9 +54,6 @@ class Application {
     this.resourceObserver.scenario = scenario
     await this.resourceObserver.loadPrimaryTextures()
 
-    // До построения сцены: конструктор Planet читает карты синхронно
-    await heightFieldStorage.loadForScenario(scenario, this.loadingReporter)
-
     if (!this.resourceObserver.sceneBackground) {
       console.warn('[Application] Кубическая карта фона сценария не загружена, сцена останется без фона')
     } else {
@@ -67,6 +64,11 @@ class Application {
 
     this.everLoaded = true
     this.engine.start()
+
+    // Синглтон гейта строится лениво контейнером — этот вызов и есть первая
+    // подписка/пересчёт, запускающий загрузку карты ближайшего тела, не
+    // дожидаясь первого ClosestChange от движения камеры.
+    this.heightFieldGate.recompute()
   }
 
   public dispose(): void {

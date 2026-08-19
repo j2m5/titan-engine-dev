@@ -24,6 +24,7 @@ import type { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
 import type { TextureBudget } from '@/core/streaming/TextureBudget'
 import type { CameraCollision } from '@/core/services/CameraCollision'
+import type { HeightFieldGate } from '@/core/services/HeightFieldGate'
 
 export const Tokens = {
   Engine: token<Engine>('Engine'),
@@ -34,6 +35,7 @@ export const Tokens = {
   ResourceObserver: token<ResourceObserver>('ResourceObserver'),
   SceneObserver: token<SceneObserver>('SceneObserver'),
   CameraCollision: token<CameraCollision>('CameraCollision'),
+  HeightFieldGate: token<HeightFieldGate>('HeightFieldGate'),
   SimulationClock: token<SimulationClock>('SimulationClock'),
   CameraController: token<CameraController>('CameraController'),
   Settings: token<Settings>('Settings'),

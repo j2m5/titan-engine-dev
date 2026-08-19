@@ -1,9 +1,6 @@
-import { Actor } from '@/core/models/Actor'
 import { Storage } from '@/core/framework/file/Storage'
 import { config } from '@/core/framework/config'
 import { parseHeightMap, type HeightMapData } from '@/core/terrain/heightMapFormat'
-import type { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
-import type { ScenarioConfig } from '@/config/scenarios'
 
 /**
  * Реестр карт высот, CPU-сторона. Модульный синглтон по образцу
@@ -84,40 +81,6 @@ class HeightFieldStorage {
     if (!this.maps.delete(path)) return
 
     this.registryVersion += 1
-  }
-
-  /**
-   * Провал одной карты — warn и пропуск, не исключение: тело без карты
-   * живёт на легаси-сфере, ронять сценарий не за что.
-   */
-  public async load(paths: string[], reporter?: LoadingProgressReporter): Promise<void> {
-    for (const path of paths) {
-      if (this.maps.has(path) || this.inFlight.has(path)) continue
-
-      reporter?.setAsset(path)
-      this.inFlight.add(path)
-
-      await this.fetchInto(path, this.epoch)
-    }
-  }
-
-  /** Карты всех тел сценария: корень + рекурсивно дети, как setMap у ResourceObserver. */
-  public async loadForScenario(scenario: ScenarioConfig, reporter?: LoadingProgressReporter): Promise<void> {
-    const root: Actor | null = Actor.find(scenario.rootId)
-
-    if (!root) return
-
-    const paths: string[] = []
-    const collect = (actor: Actor): void => {
-      const path = actor.resources.where('resourceType', 'height').first()?.getAttribute('path')
-
-      if (typeof path === 'string') paths.push(path)
-    }
-
-    collect(root)
-    root.children.eachRecursive(collect)
-
-    await this.load(paths, reporter)
   }
 
   public clear(): void {

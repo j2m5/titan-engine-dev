@@ -10,6 +10,7 @@ import { MarkerManager } from '@/core/services/MarkerManager'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { SceneObserver } from '@/core/services/SceneObserver'
 import { CameraCollision } from '@/core/services/CameraCollision'
+import { HeightFieldGate } from '@/core/services/HeightFieldGate'
 import { SimulationClock } from '@/core/time/SimulationClock'
 import { CameraController } from '@/core/camera/CameraController'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
@@ -99,6 +100,12 @@ class AppServiceProvider extends ServiceProvider {
     this.app.singleton(Tokens.LeakDetector, (c: Container) => new LeakDetector(c.get(Tokens.Renderer)))
 
     this.app.singleton(
+      Tokens.HeightFieldGate,
+      (c: Container) =>
+        new HeightFieldGate(c.get(Tokens.SceneObserver), c.get(Tokens.Scene), c.get(Tokens.RenderableFactory))
+    )
+
+    this.app.singleton(
       Tokens.Application,
       (c: Container) =>
         new Application(
@@ -106,7 +113,7 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.ResourceObserver),
           c.get(Tokens.Scene),
           c.get(Tokens.LeakDetector),
-          c.get(Tokens.LoadingProgressReporter)
+          c.get(Tokens.HeightFieldGate)
         )
     )
 
