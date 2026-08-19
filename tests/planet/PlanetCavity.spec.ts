@@ -231,12 +231,13 @@ describe('PlanetMaterial: проводка cavity (гейт USE_CAVITY, юниф
   })
 })
 
-// Счётный инвариант данных (Task 3): охват выводится ПРОГРАММНО из БД —
-// акторы с height-ресурсом (путь заканчивается на _height.raw), минус
-// фотомозаичные {5, 6, 8, 19} (Меркурий, Венера, Марс, Луна — реальные DEM,
-// cavity им не полагается). Ожидание — ровно 44 тела.
-describe('Счётный инвариант: cavityStrength у 44 терраформных тел (Task 3)', () => {
-  const PHOTOMOSAIC_ACTOR_IDS: readonly number[] = [5, 6, 8, 19]
+// Счётный инвариант данных (Task 3, дополнен Task 6 аркой воды): охват
+// выводится ПРОГРАММНО из БД — акторы с height-ресурсом (путь заканчивается
+// на _height.raw), минус фотомозаичные {5, 6, 8, 19, 7} (Меркурий, Венера,
+// Марс, Луна, Земля — реальные снимки/DEM, cavity им не полагается).
+// Ожидание — ровно 45 тел (44 прежних + Явин IV, возвращённый аркой воды).
+describe('Счётный инвариант: cavityStrength у 45 терраформных тел (Task 3 + Task 6)', () => {
+  const PHOTOMOSAIC_ACTOR_IDS: readonly number[] = [5, 6, 8, 19, 7]
 
   const heightActorIds = new Set(
     ActorResource.filter((ar) => {
@@ -248,11 +249,11 @@ describe('Счётный инвариант: cavityStrength у 44 террафо
 
   const coverageActorIds = [...heightActorIds].filter((id) => !PHOTOMOSAIC_ACTOR_IDS.includes(id))
 
-  it('охват — ровно 44 тела', () => {
-    expect(coverageActorIds.length).toBe(44)
+  it('охват — ровно 45 тел', () => {
+    expect(coverageActorIds.length).toBe(45)
   })
 
-  it('у всех 44 тел охвата data.cavityStrength > 0', () => {
+  it('у всех 45 тел охвата data.cavityStrength > 0', () => {
     for (const actorId of coverageActorIds) {
       const renderingObject = RenderingObjects.find((ro) => ro.actorId === actorId)
 
@@ -264,7 +265,7 @@ describe('Счётный инвариант: cavityStrength у 44 террафо
     }
   })
 
-  it('у фотомозаичных тел {5, 6, 8, 19} поля cavityStrength нет', () => {
+  it('у фотомозаичных тел {5, 6, 8, 19, 7} поля cavityStrength нет', () => {
     for (const actorId of PHOTOMOSAIC_ACTOR_IDS) {
       const renderingObject = RenderingObjects.find((ro) => ro.actorId === actorId)
 
@@ -278,20 +279,20 @@ describe('Счётный инвариант: cavityStrength у 44 террафо
 
   // Фикс-волна финального ревью, находка 4: прежние два теста выше проверяют
   // ручку ТОЛЬКО на множестве, выведенном из heightActorIds — лишняя ручка на
-  // теле ВНЕ этого множества (гигант, Земля, Явин IV — легаси-материал, никогда
-  // не несёт height-ресурс с суффиксом _height.raw) прошла бы обоими зелёной.
+  // теле ВНЕ этого множества (газовый гигант — легаси-материал, никогда не
+  // несёт height-ресурс с суффиксом _height.raw) прошла бы обоими зелёной.
   // Этот тест считает cavityStrength>0 по ВСЕЙ таблице RenderingObjects
   // напрямую — единственный, кто ловит лишнюю ручку у тела вне охвата.
   // Дискриминация подтверждена мутацией (руками, не в этом файле): временная
   // строка cavityStrength: 0.35 у Нептуна (renderingObjects id 4, actorId 13,
   // легаси-bump гигант) дала RED только на этом тесте, была отменена.
-  it('ровно 44 строки RenderingObjects несут cavityStrength (не только заявленный охват)', () => {
+  it('ровно 45 строк RenderingObjects несут cavityStrength (не только заявленный охват)', () => {
     const withCavity = RenderingObjects.filter((ro) => {
       const data = ro.data as { cavityStrength?: number }
 
       return typeof data.cavityStrength === 'number' && data.cavityStrength > 0
     })
 
-    expect(withCavity.length).toBe(44)
+    expect(withCavity.length).toBe(45)
   })
 })

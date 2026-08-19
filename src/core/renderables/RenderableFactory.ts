@@ -14,6 +14,7 @@ import { StarLod } from '@/core/renderables/utils/StarLod'
 import { ApparentSizeLod } from '@/core/renderables/utils/ApparentSizeLod'
 import { Planet } from '@/core/renderables/Planet'
 import { TerrainSphere } from '@/core/renderables/TerrainSphere'
+import { WaterSphere } from '@/core/renderables/Water/WaterSphere'
 import { FakePlanet } from '@/core/renderables/utils/FakePlanet'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { terrainHeightFieldFor } from '@/core/terrain/TerrainHeightField'
@@ -24,6 +25,7 @@ import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { requireRenderingData } from '@/core/helpers/renderingData'
+import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { BROWN_DWARF_IMPOSTOR_PIXELS, WHITE_DWARF_IMPOSTOR_PIXELS } from '@/core/helpers/apparentSize'
 import { Nebula } from '@/core/renderables/Nebula'
 import { nebulaParamsFromData } from '@/core/renderables/Nebula/NebulaRenderingData'
@@ -190,6 +192,20 @@ class RenderableFactory {
         )
       : new Planet(actor)
     const lodl2 = new FakePlanet(actor)
+
+    // Гейт водной оболочки: обе ручки разом — карта высот (без неё нет
+    // рельефа, отделять воду не от чего) И waterLevelMeters в data (Task 6
+    // расставит по БД; до неё ручки нигде нет — ноль расходов везде). Вода
+    // висит на TerrainSphere ребёнком, не отдельным уровнем LOD: делит с ней
+    // видимость (LOD прячет и рельеф, и воду одним переключением), см.
+    // докблок WaterSphere. Предикат валидности ручки — readWaterLevelMeters
+    // (единый на все три места чтения, включая коллизию и SSE-отбор — ревью
+    // Task 5, фикс-раунд 1, находка №3): раньше здесь была `typeof === 'number'`
+    // без Number.isFinite, NaN молча строил бы оболочку.
+    const waterLevelMeters = readWaterLevelMeters(actor)
+    if (lodl1 instanceof TerrainSphere && waterLevelMeters !== undefined) {
+      lodl1.add(new WaterSphere(actor, waterLevelMeters, this.renderer))
+    }
 
     // Известно-неверная высота кадра: tan(fov) вместо 2*tan(fov/2), поэтому
     // переключение происходит на 3.8 px вместо номинальных 3. Не тронута

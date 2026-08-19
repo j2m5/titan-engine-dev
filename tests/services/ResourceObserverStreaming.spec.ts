@@ -225,3 +225,92 @@ describe('ResourceObserver: стриминг', () => {
     resourceStorage.deleteAllTextures()
   })
 })
+
+// Финальное ревью water-foundation, находка №2: вода висит ребёнком
+// TerrainSphere (WaterSphere), не самим .renderable узла — фан-аут
+// вытеснения раньше видел только node.renderable.material (PlanetMaterial) и
+// не трогал водный материал вовсе. Вода узнавала о диспоузе своей slope-карты
+// лишь на следующем кадре (WaterSphere.onVisibleUpdate), а рендер ТЕКУЩЕГО
+// кадра успевал перезалить уже диспоузнутую resourceStorage.deleteTexture
+// текстуру в GL без владельца в реестре — утечка GL-объекта.
+describe('ResourceObserver: дочерний материал-подписчик (WaterMaterial на WaterSphere), находка №2 финального ревью', () => {
+  it('вытеснение slope-пути земли: uSlopeMap воды становится null В ТОМ ЖЕ тике, что и primary', () => {
+    const { observer, scene } = makeObserver()
+    const PATH = 'planets/earth/earth_slope.webp'
+    let waterSeenAtUpdate: unknown = 'не вызывался'
+
+    const mesh = new Mesh()
+    mesh.name = 'Earth'
+    const primaryMaterial = { resetMaterial: vi.fn(), updateMaterial: vi.fn() }
+    const waterMaterial = {
+      resetMaterial: vi.fn(),
+      updateMaterial: (): void => void (waterSeenAtUpdate = resourceStorage.getTexture(PATH))
+    }
+    Object.defineProperty(mesh, 'renderable', {
+      value: { material: primaryMaterial, children: [{ material: waterMaterial }] },
+      writable: true
+    })
+    scene.add(mesh)
+
+    const texture = new Texture()
+    texture.name = PATH
+    resourceStorage.addTexture(texture)
+
+    // slope — не диффуз (typeRank), primary получает updateMaterial, не resetMaterial
+    observer.evictPath({ actorId: 1, name: 'Earth', path: PATH, typeRank: MAP_TYPE_RANK.slope, actorPriority: 0 })
+
+    expect(waterSeenAtUpdate).toBeUndefined() // updateMaterial воды видел путь уже вне резервуара
+    expect(primaryMaterial.updateMaterial).toHaveBeenCalledTimes(1)
+    expect(waterMaterial.resetMaterial).not.toHaveBeenCalled()
+
+    resourceStorage.deleteAllTextures()
+  })
+
+  it('живые патчи рельефа (Mesh.material === primary) не дублируют вызов — дедуп по ссылке', () => {
+    const { observer, scene } = makeObserver()
+
+    const mesh = new Mesh()
+    mesh.name = 'Earth'
+    const primaryMaterial = { resetMaterial: vi.fn(), updateMaterial: vi.fn() }
+    const waterMaterial = { resetMaterial: vi.fn(), updateMaterial: vi.fn() }
+    // патч рельефа — ребёнок renderable с ТЕМ ЖЕ материалом, что primary (как
+    // TerrainPatchPool реально шарит один материал на все живые меши)
+    const patchChild = { material: primaryMaterial }
+    const waterChild = { material: waterMaterial }
+    Object.defineProperty(mesh, 'renderable', {
+      value: { material: primaryMaterial, children: [patchChild, patchChild, waterChild] },
+      writable: true
+    })
+    scene.add(mesh)
+
+    observer.evictPath({ actorId: 1, name: 'Earth', path: 'planets/earth/earth.jpg', typeRank: MAP_TYPE_RANK.diffuse, actorPriority: 0 })
+
+    // primary: ровно один вызов fn() строкой withActorMaterial — дубли патчей
+    // с той же ссылкой на материал не вызывают его повторно через фан-аут детей
+    expect(primaryMaterial.resetMaterial).toHaveBeenCalledTimes(1)
+    // вода — отдельный материал, синхронизируется updateMaterial(), не resetMaterial
+    // (диффуз — ресурс PRIMARY, не подписчика, см. докблок syncSubscriberMaterials)
+    expect(waterMaterial.updateMaterial).toHaveBeenCalledTimes(1)
+    expect(waterMaterial.resetMaterial).not.toHaveBeenCalled()
+  })
+
+  it('вытеснение НЕсвязанного диффуза не сбрасывает воду на заглушку — только updateMaterial, не resetMaterial', () => {
+    const { observer, scene } = makeObserver()
+
+    const mesh = new Mesh()
+    mesh.name = 'Earth'
+    const primaryMaterial = { resetMaterial: vi.fn(), updateMaterial: vi.fn() }
+    const waterMaterial = { resetMaterial: vi.fn(), updateMaterial: vi.fn() }
+    Object.defineProperty(mesh, 'renderable', {
+      value: { material: primaryMaterial, children: [{ material: waterMaterial }] },
+      writable: true
+    })
+    scene.add(mesh)
+
+    observer.evictPath({ actorId: 1, name: 'Earth', path: 'planets/earth/earth.jpg', typeRank: MAP_TYPE_RANK.diffuse, actorPriority: 0 })
+
+    expect(primaryMaterial.resetMaterial).toHaveBeenCalledTimes(1) // диффуз земли — primary уходит на заглушку
+    expect(waterMaterial.resetMaterial).not.toHaveBeenCalled() // вода не диффузная, resetMaterial ей не про это
+    expect(waterMaterial.updateMaterial).toHaveBeenCalledTimes(1) // но пересинхронизацию получает — идемпотентно
+  })
+})

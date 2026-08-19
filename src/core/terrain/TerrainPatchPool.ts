@@ -1,5 +1,4 @@
-import { BufferAttribute, BufferGeometry, DynamicDrawUsage, Mesh } from 'three'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { BufferAttribute, BufferGeometry, DynamicDrawUsage, Material, Mesh } from 'three'
 import { buildPatchIndex, terrainPatchVertexCount } from './terrainPatchGeometry'
 
 /**
@@ -23,18 +22,29 @@ export type PatchHandle = { mesh: Mesh; geometry: BufferGeometry }
  * index-атрибут на все геометрии пула (та же экономия, что у TerrainSphere
  * этапа 3а). Свободные слоты держат геометрию живой между acquire —
  * освобождаются вместе с индексом только в dispose.
+ *
+ * Материал типизирован общим `Material`, не `PlanetMaterial` — пул сам с
+ * материалом не взаимодействует (только держит ссылку для `new Mesh`), а
+ * TerrainPatchGroup (общая база TerrainSphere/WaterSphere) передаёт сюда
+ * конкретный класс своего потребителя.
+ *
+ * Потолок живых патчей — необязательный аргумент (дефолт MAX_LIVE_PATCHES):
+ * WaterSphere просит свой, меньший (см. её докблок и WATER_MAX_LIVE_PATCHES)
+ * — водная оболочка не обязана терпеть тот же пик, что рельеф.
  */
 class TerrainPatchPool {
-  private readonly material: PlanetMaterial
+  private readonly material: Material
   private readonly segments: number
   private readonly index: BufferAttribute
   private readonly free: PatchHandle[] = []
   private readonly occupied = new Set<PatchHandle>()
+  private readonly maxLivePatches: number
 
-  public constructor(material: PlanetMaterial, segments: number) {
+  public constructor(material: Material, segments: number, maxLivePatches: number = MAX_LIVE_PATCHES) {
     this.material = material
     this.segments = segments
     this.index = buildPatchIndex(segments)
+    this.maxLivePatches = maxLivePatches
   }
 
   public get liveCount(): number {
@@ -42,7 +52,7 @@ class TerrainPatchPool {
   }
 
   public acquire(): PatchHandle | null {
-    if (this.occupied.size >= MAX_LIVE_PATCHES) return null
+    if (this.occupied.size >= this.maxLivePatches) return null
 
     const handle = this.free.pop() ?? this.createHandle()
     this.occupied.add(handle)

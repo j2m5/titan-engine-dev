@@ -11,6 +11,7 @@ import { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
 import { NotificationSink } from '@/core/ports/NotificationSink'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { hasRenderable } from '@/core/services/SceneManager'
+import type { RenderableObject3D } from '@/core/renderables/types'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { TextureBudget } from '@/core/streaming/TextureBudget'
@@ -646,6 +647,12 @@ class ResourceObserver {
    * (`candidate.actorId`/`candidate.name`) прямого вызова (тесты, ручное
    * вытеснение) может прийти в обход `collectCandidates`, и тогда `_map` про
    * него ничего не знает — сам кандидат уже несёт своё имя.
+   *
+   * Помимо самого `renderable.material`, синхронизирует и дочерние
+   * материалы-подписчики (см. `syncSubscriberMaterials`) — находка №2
+   * финального ревью water-foundation: вода на теле висит ребёнком
+   * `TerrainSphere`, а не самим `.renderable` узла (см. докблок
+   * `WaterSphere.material`), и раньше не входила в этот фан-аут вовсе.
    */
   private withActorMaterial(actorId: number, fn: (material: AbstractShaderMaterial) => void, fallbackName?: string): void {
     const name: string | undefined = this._map.get(actorId)?.getAttribute('name') ?? fallbackName
@@ -656,7 +663,44 @@ class ResourceObserver {
 
     if (!node || !hasRenderable(node) || node.renderable === null) return
 
-    fn(node.renderable.material as AbstractShaderMaterial)
+    const primary = node.renderable.material as AbstractShaderMaterial
+    fn(primary)
+    this.syncSubscriberMaterials(node.renderable, primary)
+  }
+
+  /**
+   * Дочерние материалы-подписчики `renderable` (сейчас — только `WaterMaterial`
+   * на `WaterSphere`, ребёнок `TerrainSphere`). Всегда `updateMaterial()`, не
+   * `fn`: у подписчика нет семантики «диффуз потерян → заглушка» primary-материала
+   * (ветка `isDiffuse` в `evictPath`/`handleLoadFailure` читает РЕСУРС primary,
+   * не подписчика) — вызов `resetMaterial()` primary на её месте нёс бы
+   * заглушечный сброс воде даже когда её собственный slope-путь цел.
+   * `updateMaterial()` у подписчика идемпотентен — пересинхронизируется с
+   * `resourceStorage` по своему кэшированному пути, needsUpdate дёргается
+   * только при фактической смене гейта (см. `WaterMaterial.updateMaterial`).
+   *
+   * Раньше вода узнавала о вытеснении своей карты лишь на следующем кадре
+   * (`WaterSphere.onVisibleUpdate`, вызывается из update-цикла): рендер
+   * ТЕКУЩЕГО кадра успевал перезалить уже диспоузнутую `resourceStorage.deleteTexture`
+   * текстуру в GL без владельца в реестре — утечка GL-объекта.
+   *
+   * Дедуп по ссылке на `primary`: живые патчи рельефа в `children` — Mesh с
+   * ТЕМ ЖЕ материалом, что уже обработан выше, без дедупа `updateMaterial()`
+   * улетел бы на каждый живой патч. `?? []` — тестовые дублёры `renderable`
+   * в `tests/services` подставляют голый `{ material }` без `children`.
+   *
+   * Детекция подписчика — структурная (`typeof .updateMaterial === 'function'`),
+   * не `instanceof AbstractShaderMaterial`: та же конвенция, что `hasRenderable`
+   * в SceneManager, и она же не ломает существующие тесты вытеснения — там
+   * материалы всегда лёгкие моки `{ resetMaterial, updateMaterial }`, а не
+   * настоящие подклассы AbstractShaderMaterial.
+   */
+  private syncSubscriberMaterials(renderable: RenderableObject3D, primary: AbstractShaderMaterial): void {
+    for (const child of renderable.children ?? []) {
+      const material = (child as { material?: unknown }).material as AbstractShaderMaterial | undefined
+
+      if (material && material !== primary && typeof material.updateMaterial === 'function') material.updateMaterial()
+    }
   }
 
   /**

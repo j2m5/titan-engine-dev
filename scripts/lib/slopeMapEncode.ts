@@ -1,5 +1,6 @@
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
+import { WATER_SHALLOW_RANGE_METERS } from '@/core/terrain/waterLevel'
 import { buildCavityField } from './cavityMap'
 
 export { SLOPE_RANGE }
@@ -34,6 +35,21 @@ export { SLOPE_RANGE }
  * cavity=−1 → байт 1, cavity=+1 → байт 255 — та же точность и тот же дизер
  * (хеш с channel=2), что и у R/G. Потребитель канала B декодирует его БЕЗ
  * повторного умножения на SLOPE_RANGE: (byte−128)/127 сразу даёт cavity.
+ *
+ * Канал A (опционально, `options.waterLevelMeters` задан) — запечённая
+ * глубина воды: `clamp((уровень − h) / range, 0, 1)` → байт 0..255 без знака
+ * (0 = суша/урез, 255 = глубже `shallowRangeMeters`, дефолт `WATER_SHALLOW_RANGE_METERS`
+ * = 200 м — общая константа с SSE-потолком подводных патчей суши, см. её
+ * докблок в `src/core/terrain/waterLevel.ts`). БЕЗ
+ * дизера — в отличие от R/G/B глубина воды гладкая монотонная величина без
+ * мелкого рельефа, который дизер существует спасать; квант 8 бит на 200 м —
+ * 0.8 м на байт, ступеньки ниже порога восприятия воды и не нуждаются в
+ * рассеивании шумом. Выход становится 4-канальным RGBA только когда
+ * `waterLevelMeters` задан — тела без воды остаются 3-канальными RGB
+ * байт-в-байт (44 карты арки cavity не пересобираются). Загрузчик текстур
+ * расширяет 3-канальные текстуры до RGBA на GPU (opaque, A=255) — это
+ * безвредно: шейдер читает канал A только под `USE_WATER_DEPTH`, а этот
+ * дефайн ставится только телам с водой, у которых карта и так 4-канальная.
  */
 
 /** Раунд finalizer-миксера дизера: умножение на нечётную константу + ксор-сдвиг для лавинного перемешивания битов. */
@@ -56,7 +72,7 @@ function ditherHash01(x: number, y: number, channel: number): number {
 export function buildSlopeMap(
   map: HeightMapData,
   radiusMeters: number,
-  options?: { cavity?: boolean }
+  options?: { cavity?: boolean; waterLevelMeters?: number; shallowRangeMeters?: number }
 ): Uint8Array {
   if (!Number.isFinite(radiusMeters) || radiusMeters <= 0) {
     throw new Error(`Радиус тела невалиден: ${radiusMeters}`)
@@ -65,7 +81,18 @@ export function buildSlopeMap(
   const { width, height, minMeters, maxMeters, data } = map
   const metersPerRaw = (maxMeters - minMeters) / 65535
   const northArc = (Math.PI * radiusMeters) / height
-  const out = new Uint8Array(width * height * 3)
+  // канал A (вода) только когда явно задан уровень — иначе выход 3-канальный
+  // байт-в-байт как до этой правки (44 карты арки cavity не пересобираются)
+  const waterLevelMeters = options?.waterLevelMeters
+  const hasWater = waterLevelMeters !== undefined
+  const shallowRangeMeters = options?.shallowRangeMeters ?? WATER_SHALLOW_RANGE_METERS
+
+  if (hasWater && (!Number.isFinite(shallowRangeMeters) || shallowRangeMeters <= 0)) {
+    throw new Error(`shallowRangeMeters (диапазон обмеления) невалиден: ${shallowRangeMeters}`)
+  }
+
+  const channels = hasWater ? 4 : 3
+  const out = new Uint8Array(width * height * channels)
   // дефолт true (арка cavity); { cavity: false } — паритетный режим, канал B
   // остаётся нулевым (Uint8Array уже заполнен нулями) байт-в-байт как раньше
   const cavityField = (options?.cavity ?? true) ? buildCavityField(map) : null
@@ -103,10 +130,15 @@ export function buildSlopeMap(
       const slopeNorth =
         northSpanArc === 0 ? 0 : ((data[yNorth * width + x] - data[ySouth * width + x]) * metersPerRaw) / northSpanArc
 
-      const i = (row + x) * 3
+      const i = (row + x) * channels
       out[i] = encode(slopeEast, x, y, 0)
       out[i + 1] = encode(slopeNorth, x, y, 1)
       if (cavityField) out[i + 2] = encode(cavityField[row + x] * SLOPE_RANGE, x, y, 2)
+      if (hasWater) {
+        const hMeters = minMeters + data[row + x] * metersPerRaw
+        const depthFraction = Math.max(0, Math.min(1, (waterLevelMeters! - hMeters) / shallowRangeMeters))
+        out[i + 3] = Math.round(depthFraction * 255)
+      }
     }
   }
 

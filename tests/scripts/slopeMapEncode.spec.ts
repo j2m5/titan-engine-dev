@@ -260,6 +260,95 @@ describe('дизер квантования: субквантовый сигна
   })
 })
 
+describe('канал A: запечённая глубина воды', () => {
+  const R = 1000
+  const level = 1000
+  const range = 200
+
+  it('без waterLevelMeters выход остаётся 3-канальным', () => {
+    const rgb = buildSlopeMap(makeMap(4, 2, new Array(8).fill(30000)), R)
+
+    expect(rgb.length).toBe(4 * 2 * 3)
+  })
+
+  it('с waterLevelMeters выход становится 4-канальным, а R/G/B идентичны варианту без воды', () => {
+    const map = makeMap(4, 2, [500, 900, 1000, 1100, 800, 950, 1050, 1200])
+    const withoutWater = buildSlopeMap(map, R)
+    const withWater = buildSlopeMap(map, R, { waterLevelMeters: level, shallowRangeMeters: range })
+
+    expect(withWater.length).toBe(4 * 2 * 4)
+    for (let texel = 0; texel < 8; texel++) {
+      expect(withWater[texel * 4]).toBe(withoutWater[texel * 3]) // R
+      expect(withWater[texel * 4 + 1]).toBe(withoutWater[texel * 3 + 1]) // G
+      expect(withWater[texel * 4 + 2]).toBe(withoutWater[texel * 3 + 2]) // B
+    }
+  })
+
+  it('h глубже уровня на ≥ range → байт 255 (глубина насыщена)', () => {
+    // texel 0: h=800 (level-h=200=range, ровно на границе), texel 1: h=700 (глубже диапазона)
+    const rgb = buildSlopeMap(makeMap(2, 1, [800, 700]), R, { waterLevelMeters: level, shallowRangeMeters: range })
+
+    expect(rgb[0 * 4 + 3]).toBe(255)
+    expect(rgb[1 * 4 + 3]).toBe(255)
+  })
+
+  it('h ровно на уровне воды (урез) → байт 0', () => {
+    const rgb = buildSlopeMap(makeMap(2, 1, [level, level]), R, { waterLevelMeters: level, shallowRangeMeters: range })
+
+    expect(rgb[3]).toBe(0)
+  })
+
+  it('суша выше уровня воды → байт 0 (кламп снизу, не отрицательное значение)', () => {
+    const rgb = buildSlopeMap(makeMap(2, 1, [level + 500, level + 1]), R, {
+      waterLevelMeters: level,
+      shallowRangeMeters: range
+    })
+
+    expect(rgb[0 * 4 + 3]).toBe(0)
+    expect(rgb[1 * 4 + 3]).toBe(0)
+  })
+
+  it('посередине диапазона — линейное значение: (level-h)/range=0.5 → байт round(0.5·255)=128', () => {
+    // h=900: level-h=100, ровно половина range=200
+    const rgb = buildSlopeMap(makeMap(2, 1, [900, 900]), R, { waterLevelMeters: level, shallowRangeMeters: range })
+
+    expect(rgb[0 * 4 + 3]).toBe(128)
+    expect(rgb[1 * 4 + 3]).toBe(128)
+  })
+
+  it('канал A БЕЗ дизера: одна и та же глубина на разных позициях (разный хеш x,y) даёт байт-в-байт одинаковый байт', () => {
+    // плоское поле h=900 на карте 6×4 — если бы A дизерился как R/G/B, разные
+    // (x,y) дали бы разброс байтов вокруг 128; без дизера все текселя равны
+    const width = 6
+    const height = 4
+    const rgb = buildSlopeMap(makeMap(width, height, new Array(width * height).fill(900)), R, {
+      waterLevelMeters: level,
+      shallowRangeMeters: range
+    })
+
+    const aBytes = new Set<number>()
+    for (let texel = 0; texel < width * height; texel++) aBytes.add(rgb[texel * 4 + 3])
+
+    expect(aBytes.size).toBe(1)
+    expect([...aBytes][0]).toBe(128)
+  })
+
+  it('shallowRangeMeters опущен при заданном waterLevelMeters → дефолт 200 м', () => {
+    const map = makeMap(2, 1, [900, 900])
+    const withDefault = buildSlopeMap(map, R, { waterLevelMeters: level })
+    const withExplicit200 = buildSlopeMap(map, R, { waterLevelMeters: level, shallowRangeMeters: 200 })
+
+    expect(Array.from(withDefault)).toEqual(Array.from(withExplicit200))
+  })
+
+  it('shallowRangeMeters невалиден (0 или отрицательный) — ошибка с внятным сообщением', () => {
+    const map = makeMap(2, 1, [900, 900])
+
+    expect(() => buildSlopeMap(map, R, { waterLevelMeters: level, shallowRangeMeters: 0 })).toThrow(/range|диапазон/i)
+    expect(() => buildSlopeMap(map, R, { waterLevelMeters: level, shallowRangeMeters: -50 })).toThrow(/range|диапазон/i)
+  })
+})
+
 describe('канал B: signed cavity, знак соответствует buildCavityField', () => {
   it('яма темнее нейтрали (байт < 128), гребень светлее (байт > 128) в центре каждой формы', () => {
     const bodyRadius = 1000

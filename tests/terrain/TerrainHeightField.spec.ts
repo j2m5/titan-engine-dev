@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { BufferAttribute, SphereGeometry, Vector2, Vector3 } from 'three'
 import {
   CLEARANCE_GRID_BASE_SEGMENTS,
@@ -9,8 +9,9 @@ import {
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { SpaceScale } from '@/core/constants'
 import { TERRAIN_PATCH_SEGMENTS, cubeFaceDirection } from '@/core/terrain/cubeSphere'
-import { TERRAIN_QUADTREE_MAX_LEVEL } from '@/core/terrain/terrainQuadtreeSelect'
+import { TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from '@/core/terrain/terrainQuadtreeSelect'
 import { buildPatchIndex, buildTerrainPatchGeometry } from '@/core/terrain/terrainPatchGeometry'
+import { constantHeightField } from '@/core/terrain/constantHeightField'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 
 // min 0, max 65535 → метры численно равны raw-значению
@@ -140,6 +141,62 @@ describe('TerrainHeightField: нормаль поверхности', () => {
     const normal = field.surfaceNormalLocal(new Vector3(0, 1, 0), new Vector3())
 
     expect(normal.y).toBeCloseTo(1, 6)
+  })
+})
+
+// Финальное ревью water-foundation, находка №3, фикс-раунд 2 (рулинг
+// владельца): фикс-раунд 1 (ленивая постройка пирамиды) закешировал не ту
+// структуру — снимок blockMax/blocksX/blocksY на входе билдера пережил бы
+// конструктор НАВСЕГДА (поле кешируется в terrainHeightFieldFor на весь
+// сеанс), ~1 МиБ на тело против 128 КиБ готовой пирамиды. Откачено: пирамида
+// снова строится безусловно и синхронно в конструкторе для обычных полей
+// (рост времени старта принят рулингом владельца — критерий здесь память, не
+// время загрузки); единственный оставшийся спецслучай — КОНСТАНТНОЕ поле
+// (`constantHeightField`, вода): максимум узла тождественно уровню, пирамида
+// ему не нужна вовсе. Билдер приватный — спай идёт через прототип с
+// приведением к `any`, единственный способ достучаться до приватного метода
+// класса извне теста.
+describe('TerrainHeightField: пирамида nodeMaxHeightMeters (Task 5, финальное ревью, находка №3, фикс-раунд 2)', () => {
+  it('обычное поле: пирамида строится безусловно и синхронно в конструкторе, до первого nodeMaxHeightMeters', () => {
+    const spy = vi.spyOn(TerrainHeightField.prototype as unknown as { buildNodeMaxHeightPyramid: () => Float32Array }, 'buildNodeMaxHeightPyramid')
+
+    const field = new TerrainHeightField(makeMap(4, 2, [0, 65535, 0, 0, 0, 0, 0, 0]), R_KM)
+    expect(spy).toHaveBeenCalledTimes(1) // конструктор уже построил её, не первый запрос
+
+    const first = field.nodeMaxHeightMeters(0, TERRAIN_QUADTREE_MAX_LEVEL, 0, 0)
+    expect(Number.isFinite(first)).toBe(true)
+    expect(spy).toHaveBeenCalledTimes(1) // запрос не перестраивает — билдер зовётся ровно один раз, конструктором
+
+    spy.mockRestore()
+  })
+
+  it('константное поле (min === max): конструктор пирамиду НЕ строит вовсе — ни один вызов буилдера', () => {
+    const spy = vi.spyOn(TerrainHeightField.prototype as unknown as { buildNodeMaxHeightPyramid: () => Float32Array }, 'buildNodeMaxHeightPyramid')
+
+    const field = constantHeightField(R_KM, -667.2) // Явин IV, уровень воды в data
+
+    field.nodeMaxHeightMeters(0, TERRAIN_QUADTREE_MIN_LEVEL, 0, 0)
+    field.nodeMaxHeightMeters(3, TERRAIN_QUADTREE_MAX_LEVEL, 5, 7)
+
+    expect(spy).not.toHaveBeenCalled()
+
+    spy.mockRestore()
+  })
+
+  it('константное поле: nodeMaxHeightMeters == levelMeters на любых валидных (face, level, i, j) — углы, оба конца диапазона уровней, все грани', () => {
+    const LEVEL_METERS = 1234.5
+    const field = constantHeightField(R_KM, LEVEL_METERS)
+
+    for (let face = 0; face < 6; face++) {
+      for (const level of [TERRAIN_QUADTREE_MIN_LEVEL, TERRAIN_QUADTREE_MAX_LEVEL]) {
+        const patches = 2 ** level
+        for (const i of [0, patches - 1]) {
+          for (const j of [0, patches - 1]) {
+            expect(field.nodeMaxHeightMeters(face, level, i, j)).toBeCloseTo(LEVEL_METERS, 6)
+          }
+        }
+      }
+    }
   })
 })
 

@@ -1,6 +1,7 @@
 import { Frustum, Sphere, Vector3 } from 'three'
 import { SpaceScale } from '@/core/constants'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { WATER_SHALLOW_RANGE_METERS } from './waterLevel'
 import { CUBE_FACES, cubeFaceDirection } from './cubeSphere'
 import type { TerrainHeightField } from './TerrainHeightField'
 
@@ -18,6 +19,40 @@ export const TERRAIN_QUADTREE_MAX_LEVEL = 6
 /** Клирофф дистанции у камеры на/под поверхностью — иначе sse делится на почти-ноль и уходит в бесконечность. */
 const MIN_DISTANCE_METERS = 100
 
+/**
+ * Потолок глубины подводных патчей суши (Task 5, water-foundation): узел на
+ * этом уровне или глубже, чей ЧЕСТНЫЙ максимум высоты (`TerrainHeightField.nodeMaxHeightMeters`,
+ * пирамида честных per-node максимумов — не статистика) уверенно ниже уровня
+ * воды, дальше не делится — цель: океанские патчи не глубже ~L4 (не
+ * TERRAIN_QUADTREE_MAX_LEVEL=6). Ниже этого уровня потолок не действует —
+ * береговые/мелководные узлы обязаны домешаться честно на общих основаниях
+ * (SSE), запрет применяется только к уже достаточно мелким узлам, где
+ * визуальная разница под непрозрачной водой всё равно не видна.
+ *
+ * Раньше здесь была статистическая оценка «центр+k·ε» — снята ревью Task 5,
+ * фикс-раунд 1, находка №1 (БЛОКЕР): недооценка максимума узла до 7.4 км на
+ * реальной карте (узел L4 с Гавайями), 211 замороженных прибрежных узлов с
+ * видимой сушей выше уровня; смешанный узел (центр в океане, остров у края)
+ * — необнаружимый случай для формулы «центр+k·ε» ни при каком k (просканировано).
+ */
+export const TERRAIN_QUADTREE_WATER_CEILING_LEVEL = 4
+
+/**
+ * Запас потолка, метры — честный максимум узла (`nodeMaxHeightMeters`) сам
+ * по себе уже не занижает (см. её докблок и докблок билдера пирамиды в
+ * TerrainHeightField), запас здесь на то, чтобы замораживать узел ТОЛЬКО под
+ * непрозрачной водой. `= WATER_SHALLOW_RANGE_METERS` (диапазон мелководья
+ * канала A slope-карты, см. её докблок) — было 50 м, что уже ЗАКОРОЧЕ
+ * 200-метрового диапазона мелководья энкодера: узел мог замёрзнуть на уровне
+ * L4, чей честный максимум лежит между 50 и 200 м под водой — то есть под
+ * ещё ЧАСТИЧНО прозрачной водой, гранёный шельф был виден сквозь неё (находка
+ * №1 финального ревью, замер: 60 шельфовых L4-узлов Земли, самый мелкий
+ * −51.6 м при альфе 0.22 из 0.85). Запас потолка обязан быть ≥ диапазона
+ * мелководья — тогда заморозка начинается не раньше полностью непрозрачной
+ * глубины.
+ */
+const WATER_CEILING_MARGIN_METERS = WATER_SHALLOW_RANGE_METERS
+
 export interface SelectParams {
   field: TerrainHeightField
   cameraLocal: Vector3 // юниты, теле-фиксированный фрейм
@@ -27,6 +62,13 @@ export interface SelectParams {
   splitPixels: number // ручка terrain.sseSplitPixels
   mergeFactor: number // ручка terrain.sseMergeFactor
   currentlySplit: ReadonlySet<string> // ключи узлов, разбитых в прошлом кадре
+  /**
+   * Уровень воды тела, метры (Task 5, water-foundation) — ручка актора, не
+   * поля (см. докблок `TerrainHeightField`/`CameraCollision.Collider`).
+   * Отсутствие — потолок подводных патчей не действует, отбор бит-в-бит
+   * прежний.
+   */
+  waterLevelMeters?: number
 }
 
 // Скретчи модуля: функция зовётся каждый кадр, аллокаций на вызов быть не должно.
@@ -57,7 +99,11 @@ function visitNode(
   const sc = -1 + i * span + span / 2
   const tc = -1 + j * span + span / 2
   cubeFaceDirection(face, sc, tc, centerDirScratch)
-  sphereCenterScratch.copy(centerDirScratch).multiplyScalar(field.surfaceRadiusUnits(centerDirScratch))
+  // heightMeters(центр) один раз на узел — раньше отдельно ещё раз читался
+  // потолком воды ниже (находка №6 ревью Task 5, фикс-раунд 1); surfaceRadiusUnits
+  // разворачивается вручную, чтобы переиспользовать уже посчитанную высоту
+  const centerHeightMeters = field.heightMeters(centerDirScratch)
+  sphereCenterScratch.copy(centerDirScratch).multiplyScalar(toThreeJSUnits(field.radiusKm + centerHeightMeters / 1000))
 
   // половина диагонали дуги патча (юниты) + запас на амплитуду рельефа
   const patchHalfDiagonal = ((toThreeJSUnits(field.radiusKm) * (Math.PI / 2)) / 2 ** level) * (Math.SQRT2 / 2)
@@ -84,7 +130,18 @@ function visitNode(
     visible = params.frustumLocal.intersectsSphere(sphereScratch)
   }
 
-  const shouldSplit = level < TERRAIN_QUADTREE_MAX_LEVEL && sse > threshold && visible
+  // Потолок подводных патчей суши (Task 5): считается только когда есть ручка
+  // И узел уже достаточно мелкий (level >= WATER_CEILING_LEVEL) — без ручки
+  // ни одного лишнего обращения к пирамиде на кадр, отбор бит-в-бит прежний.
+  // Максимум узла — честный (`nodeMaxHeightMeters`, пирамида в TerrainHeightField,
+  // O(1) массив), не статистика — см. докблок константы TERRAIN_QUADTREE_WATER_CEILING_LEVEL.
+  let belowWaterCeiling = false
+  if (params.waterLevelMeters !== undefined && level >= TERRAIN_QUADTREE_WATER_CEILING_LEVEL) {
+    const nodeMaxHeightMeters = field.nodeMaxHeightMeters(face, level, i, j)
+    belowWaterCeiling = nodeMaxHeightMeters < params.waterLevelMeters - WATER_CEILING_MARGIN_METERS
+  }
+
+  const shouldSplit = level < TERRAIN_QUADTREE_MAX_LEVEL && sse > threshold && visible && !belowWaterCeiling
 
   if (shouldSplit) {
     split.add(key)

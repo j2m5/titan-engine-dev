@@ -26,10 +26,9 @@ export const Resources: IResource[] = [
   { id: 19, resourceType: "diffuse", lifecycle: "resident", path: "sun.png", colorSpace: "srgb" },
   { id: 20, resourceType: "diffuse", lifecycle: "streamable", path: "planets/mercury/mercury.jpg", colorSpace: "srgb", wrapS: RepeatWrapping },
   { id: 22, resourceType: "diffuse", lifecycle: "streamable", path: "planets/venus/venus.jpg", colorSpace: "srgb", wrapS: RepeatWrapping },
-  { id: 24, resourceType: "diffuse", lifecycle: "streamable", path: "planets/earth/earth.jpg", colorSpace: "srgb" },
-  { id: 25, resourceType: "bump", lifecycle: "streamable", path: "planets/earth/earth_bump.jpg" },
-  { id: 26, resourceType: "cloud", lifecycle: "streamable", path: "planets/earth/earth_clouds.jpg" },
-  { id: 27, resourceType: "night", lifecycle: "streamable", path: "planets/earth/earth_night.jpg", colorSpace: "srgb" },
+  { id: 24, resourceType: "diffuse", lifecycle: "streamable", path: "planets/earth/earth.jpg", colorSpace: "srgb", wrapS: RepeatWrapping },
+  { id: 26, resourceType: "cloud", lifecycle: "streamable", path: "planets/earth/earth_clouds.jpg", wrapS: RepeatWrapping },
+  { id: 27, resourceType: "night", lifecycle: "streamable", path: "planets/earth/earth_night.jpg", colorSpace: "srgb", wrapS: RepeatWrapping },
   { id: 28, resourceType: "diffuse", lifecycle: "streamable", path: "planets/mars/mars.jpg", colorSpace: "srgb", wrapS: RepeatWrapping },
   { id: 30, resourceType: "diffuse", lifecycle: "streamable", path: "planets/ceres/ceres.jpg", colorSpace: "srgb", wrapS: RepeatWrapping },
   { id: 32, resourceType: "diffuse", lifecycle: "streamable", path: "planets/jupiter/jupiter.jpg", colorSpace: "srgb" },
@@ -66,7 +65,7 @@ export const Resources: IResource[] = [
   { id: 88, resourceType: "diffuse", lifecycle: "resident", path: "planets/saturn/saturn_rings.png", colorSpace: "srgb" },
   { id: 89, resourceType: "diffuse", lifecycle: "resident", path: "planets/uranus/uranus_rings.png", colorSpace: "srgb" },
   { id: 90, resourceType: "diffuse", lifecycle: "resident", path: "planets/neptune/neptune_rings.png", colorSpace: "srgb" },
-  { id: 91, resourceType: "specular", lifecycle: "streamable", path: "planets/earth/earth_specular.jpg", colorSpace: "srgb" },
+  { id: 91, resourceType: "specular", lifecycle: "streamable", path: "planets/earth/earth_specular.jpg", colorSpace: "srgb", wrapS: RepeatWrapping },
   { id: 92, resourceType: "diffuse", lifecycle: "streamable", path: "planets/exoplanets/toi_519b/toi_519b.jpg", colorSpace: "srgb" },
   { id: 93, resourceType: "night", lifecycle: "streamable", path: "planets/exoplanets/toi_519b/toi_519b_night.png" },
   { id: 94, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/tatooine/tatooine.png", colorSpace: "srgb", wrapS: RepeatWrapping },
@@ -84,7 +83,7 @@ export const Resources: IResource[] = [
   { id: 107, resourceType: "diffuse", lifecycle: "streamable", path: "planets/unnamed/unnamed_planet_5.png", colorSpace: "srgb", wrapS: RepeatWrapping },
   { id: 108, resourceType: "diffuse", lifecycle: "resident", path: "planets/StarWars/adriana/adriana_rings.png" },
   { id: 109, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/yavin/prime/yavin_prime.png", colorSpace: "srgb" },
-  { id: 110, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/yavin/iv/iv.png", colorSpace: "srgb" },
+  { id: 110, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/yavin/iv/iv.png", colorSpace: "srgb", wrapS: RepeatWrapping },
   { id: 111, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/korriban/korriban.png", colorSpace: "srgb", wrapS: RepeatWrapping },
   { id: 113, resourceType: "cloud", lifecycle: "streamable", path: "planets/StarWars/korriban/korriban_clouds.png", colorSpace: "srgb", wrapS: RepeatWrapping },
   { id: 114, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/darkness/darkness.png", colorSpace: "srgb" },
@@ -129,6 +128,10 @@ export const Resources: IResource[] = [
   { id: 149, resourceType: "slope", lifecycle: "streamable", path: "planets/dysnomia/dysnomia_slope.webp", wrapS: RepeatWrapping },
   { id: 150, resourceType: "height", lifecycle: "resident", path: "planets/StarWars/adriana3/adriana3_height.raw" },
   { id: 151, resourceType: "slope", lifecycle: "streamable", path: "planets/StarWars/adriana3/adriana3_slope.webp", wrapS: RepeatWrapping },
+  // Явин IV: возвращён с легаси-материала аркой воды (Task 6), зеркально
+  // хотфиксу отката 2026-08-17 — те же пути, что до отката.
+  { id: 152, resourceType: "height", lifecycle: "resident", path: "planets/StarWars/yavin/iv/yavin4_height.raw" },
+  { id: 153, resourceType: "slope", lifecycle: "streamable", path: "planets/StarWars/yavin/iv/yavin4_slope.webp", wrapS: RepeatWrapping },
   { id: 154, resourceType: "height", lifecycle: "resident", path: "planets/unnamed/ohann3_height.raw" },
   { id: 155, resourceType: "slope", lifecycle: "streamable", path: "planets/unnamed/ohann3_slope.webp", wrapS: RepeatWrapping },
   { id: 156, resourceType: "height", lifecycle: "resident", path: "planets/StarWars/korriban/i/korriban1_height.raw" },
@@ -206,5 +209,9 @@ export const Resources: IResource[] = [
   { id: 222, resourceType: "height", lifecycle: "resident", path: "planets/unnamed/adriana4_height.raw" },
   { id: 223, resourceType: "slope", lifecycle: "streamable", path: "planets/unnamed/adriana4_slope.webp", wrapS: RepeatWrapping },
   { id: 224, resourceType: "height", lifecycle: "resident", path: "planets/StarWars/korriban/korriban_height.raw" },
-  { id: 225, resourceType: "slope", lifecycle: "streamable", path: "planets/StarWars/korriban/korriban_slope.webp", wrapS: RepeatWrapping }
+  { id: 225, resourceType: "slope", lifecycle: "streamable", path: "planets/StarWars/korriban/korriban_slope.webp", wrapS: RepeatWrapping },
+  // Земля: терраформная арка воды (Task 6) — height+slope, легаси-bump (id 25)
+  // снят вместе со связкой (мёртвый вес, см. 30999f3).
+  { id: 226, resourceType: "height", lifecycle: "resident", path: "planets/earth/earth_height.raw" },
+  { id: 227, resourceType: "slope", lifecycle: "streamable", path: "planets/earth/earth_slope.webp", wrapS: RepeatWrapping }
 ]

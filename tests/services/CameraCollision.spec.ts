@@ -659,3 +659,275 @@ describe('CameraCollision: марч не пропускается, когда с
     expect(camera.position.length()).toBeGreaterThanOrEqual(target * 0.999)
   })
 })
+
+// Task 5 (water-foundation): пол контакта становится R + max(h(dir̂), уровень)
+// во всех трёх слоях коллизии (пуш-аут/поточечный марч, внешний консервативный
+// марч по сетке клиренса, широкая фаза collectColliders). Уровень доставляется
+// как ручка тела (renderingObject.data.waterLevelMeters, см. cameraCollisionStubs) —
+// поле высот его не хранит (кэш общий по карте+радиусу, см. terrainHeightFieldFor).
+describe('collectColliders: широкая фаза учитывает уровень воды', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  it('уровень воды НИЖЕ maxMeters карты — радиус широкой фазы не меняется (бит-в-бит без влияния)', () => {
+    seedHeightMap(new Array(8).fill(65535), 4, 2, 0, 10000)
+    const withoutWater = makeBody('planet', 1736, new Vector3(), undefined, MOON_HEIGHT_PATH)
+    const withWater = makeBody('planet', 1736, new Vector3(), undefined, MOON_HEIGHT_PATH, 500)
+
+    const a = collectColliders([withoutWater])[0]
+    const b = collectColliders([withWater])[0]
+
+    expect(b.radius).toBeCloseTo(a.radius, 10)
+  })
+
+  it('уровень воды ВЫШЕ maxMeters карты (гипотетическое глобальное море) — широкая фаза расширяется до уровня', () => {
+    seedHeightMap(new Array(8).fill(65535), 4, 2, 0, 10000)
+    const body = makeBody('planet', 1736, new Vector3(), undefined, MOON_HEIGHT_PATH, 50000)
+
+    const collider = collectColliders([body])[0]
+
+    expect(collider.radius).toBeCloseTo(
+      toThreeJSUnits(1736 + 50000 / 1000 + collider.heightField!.maxClearanceMeters / 1000),
+      10
+    )
+  })
+})
+
+// 64×2: два ОДНОРОДНЫХ полушария (не чекерборд — у чекерборда из terrainBody()
+// соседние текселя различаются на всю амплитуду, и sagMeters там сам по себе
+// уже в half-амплитуду, что мешает дискриминатору «пол = уровень воды, не
+// рельеф»). Западное полушарие (col 0..31) — океан (−5000 м), восточное
+// (col 32..63) — суша (20000 м). Направления берутся вдали от границы (по
+// 23-24 текселя запаса на каждую сторону) — sagMeters/clearanceMeters там
+// честно ≈0 (однородные соседи), дискриминатор чист.
+const WATER_TERRAIN_PATH = 'planets/water-terrain/height.raw'
+const WATER_TERRAIN_WIDTH = 64
+
+function waterTerrainBody(waterLevelMeters: number | undefined): { body: Object3D; field: TerrainHeightField } {
+  const oceanRaw = 0 // → −5000 м (minMeters)
+  const landRaw = 65535 // → 20000 м (maxMeters)
+  const row = new Array(WATER_TERRAIN_WIDTH).fill(oceanRaw)
+  for (let x = WATER_TERRAIN_WIDTH / 2; x < WATER_TERRAIN_WIDTH; x++) row[x] = landRaw
+  seedHeightMap([...row, ...row], WATER_TERRAIN_WIDTH, 2, -5000, 20000, WATER_TERRAIN_PATH)
+  const body = makeBody('planet', 1736, new Vector3(), undefined, WATER_TERRAIN_PATH, waterLevelMeters)
+  const field = terrainHeightFieldFor(
+    (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(WATER_TERRAIN_PATH)!,
+    1736
+  )
+  return { body, field }
+}
+
+// центр текселя вдали от границы полушарий: col=8 (океан) / col=48 (суша) —
+// та же обратная формула dirToUv, что и в блоке «свип по рельефу» выше
+const dirAtWaterCol = (col: number): Vector3 => {
+  const phi = ((col + 0.5) / WATER_TERRAIN_WIDTH) * 2 * Math.PI
+  return new Vector3(-Math.cos(phi), 0, Math.sin(phi))
+}
+const OCEAN_INTERIOR_DIR = dirAtWaterCol(8)
+const LAND_INTERIOR_DIR = dirAtWaterCol(48)
+
+describe('CameraCollision: пуш-аут по воде (поточечный sagMeters-пол, Task 5)', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  it('впадина под водой — пуш-аут поднимает камеру до уровня воды, а не до честного пола рельефа', () => {
+    const waterLevelMeters = 0
+    const { body, field } = waterTerrainBody(waterLevelMeters)
+    const dir = OCEAN_INTERIOR_DIR // h=−5000 м, вдали от берега — глубоко под уровнем воды
+
+    const waterFloor = toThreeJSUnits(1736 + waterLevelMeters / 1000)
+    // пол воды несёт тот же CLEARANCE_MARGIN_METERS, что и пол суши (ревью
+    // Task 5, фикс-раунд 1, находка №5) — камера садится не на аналитическую
+    // плоскость воды ровно, а с тем же запасом, что у честного пола рельефа
+    const waterFloorWithMargin = waterFloor + toThreeJSUnits(CLEARANCE_MARGIN_METERS / 1000)
+    expect(field.surfaceRadiusUnits(dir)).toBeLessThan(waterFloor - toThreeJSUnits(4)) // рельеф честно ниже уровня
+
+    const start = dir.clone().multiplyScalar(field.surfaceRadiusUnits(dir) * 0.9)
+    const { collision, camera } = makeCollision([body], start)
+
+    collision.resolve()
+
+    expect(camera.position.length()).toBeCloseTo(waterFloorWithMargin, 6)
+    expect(camera.position.clone().normalize().dot(dir)).toBeCloseTo(1, 6)
+  })
+
+  it('без ручки waterLevelMeters — пуш-аут по-прежнему садится на честный поточечный пол впадины (бит-в-бит)', () => {
+    const { body, field } = waterTerrainBody(undefined)
+    const dir = OCEAN_INTERIOR_DIR
+
+    const start = dir.clone().multiplyScalar(field.surfaceRadiusUnits(dir) * 0.9)
+    const { collision, camera } = makeCollision([body], start)
+
+    collision.resolve()
+
+    const landedAltitudeMeters = ((camera.position.length() - field.surfaceRadiusUnits(dir)) / SpaceScale) * 1000
+    expect(landedAltitudeMeters).toBeGreaterThanOrEqual(CLEARANCE_MARGIN_METERS - 1)
+    expect(landedAltitudeMeters).toBeLessThan(50)
+  })
+
+  it('суша выше уровня воды — пуш-аут не тронут (вода не поднимает пол там, где рельеф уже выше)', () => {
+    const waterLevelMeters = 0
+    const { body, field } = waterTerrainBody(waterLevelMeters)
+    const dir = LAND_INTERIOR_DIR // h=20000 м, вдали от берега — суша выше уровня воды
+
+    const altitude = field.collisionRadiusUnits(dir) * 1.0001
+    const { collision, camera } = makeCollision([body], dir.clone().multiplyScalar(altitude))
+
+    collision.resolve()
+
+    expect(camera.position.length()).toBeCloseTo(altitude, 10)
+  })
+})
+
+// Ревью Task 5, фикс-раунд 1, находка №2: нормаль контакта над водой обязана
+// быть радиальной (p̂), а не взятой с дна (surfaceNormalLocal) — иначе
+// скольжение у берега ныряет/подпрыгивает вслед за невидимым под водой
+// рельефом. Дискриминатор — СРАВНЕНИЕ: тело A несёт реальный (ненулевой,
+// СЕВЕР-ЮГ) склон дна, тело B — плоское дно (то же среднее значение) с той
+// же честной точкой контакта; оба на 20+ км ниже уровня воды, вода — везде
+// доминирующий пол. Если нормаль контакта радиальна (не берётся с дна),
+// склон дна тела A вообще не участвует в вычислении — итог свипа обязан
+// СОВПАСТЬ с плоским телом B (плоское дно и само по себе даёт радиальную
+// нормаль — стабильный, не зависящий от фикса ориентир). Расхождение между
+// A и B означало бы, что нормаль всё ещё частично берётся с дна.
+const NORMAL_PATH_SLOPED = 'planets/normal-water-sloped/height.raw'
+const NORMAL_PATH_FLAT = 'planets/normal-water-flat/height.raw'
+const NORMAL_WIDTH = 8
+const NORMAL_HEIGHT = 4
+const NORMAL_MIN_M = -40000
+const NORMAL_MAX_M = 40000
+const normalRawFor = (meters: number): number => Math.round(((meters - NORMAL_MIN_M) / (NORMAL_MAX_M - NORMAL_MIN_M)) * 65535)
+
+function normalTestBody(path: string, sloped: boolean, waterLevelMeters: number): { body: Object3D; field: TerrainHeightField } {
+  // sloped: строки −31500,−28500,−25500,−22500 (север-юг рамп, 3000 м/строка,
+  // среднее −27000); flat: все строки на среднем значении −27000 —
+  // одинаковая ЧЕСТНАЯ высота в интересующей точке (экватор, между строками
+  // 1 и 2), разный только градиент вокруг неё
+  const values: number[] = []
+  for (let row = 0; row < NORMAL_HEIGHT; row++) {
+    const meters = sloped ? -31500 + row * 3000 : -27000
+    for (let col = 0; col < NORMAL_WIDTH; col++) values.push(normalRawFor(meters))
+  }
+  seedHeightMap(values, NORMAL_WIDTH, NORMAL_HEIGHT, NORMAL_MIN_M, NORMAL_MAX_M, path)
+  const body = makeBody('planet', 1736, new Vector3(), undefined, path, waterLevelMeters)
+  const field = terrainHeightFieldFor((heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(path)!, 1736)
+  return { body, field }
+}
+
+describe('CameraCollision: нормаль контакта над водой радиальна, не с дна (Task 5, фикс-раунд 1, находка №2)', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  it('скольжение над глубокой впадиной со СКЛОНОМ дна не отличается от скольжения над плоским дном — нормаль радиальна, склон не участвует', () => {
+    const waterLevelMeters = 0
+    const { field: slopedField } = normalTestBody(NORMAL_PATH_SLOPED, true, waterLevelMeters)
+
+    const waterFloorWithMargin = toThreeJSUnits(1736 + waterLevelMeters / 1000) + toThreeJSUnits(CLEARANCE_MARGIN_METERS / 1000)
+    const dir0 = new Vector3(1, 0, 0)
+    // честный рельеф здесь на 20+ км ниже уровня воды — вода однозначно доминирующий пол
+    expect(slopedField.surfaceRadiusUnits(dir0)).toBeLessThan(waterFloorWithMargin - toThreeJSUnits(20))
+
+    // тот же диагональный свип, что и в «движение под углом скользит по
+    // поверхности» (плоская сфера) выше — далёкий старт, прицел за центр:
+    // надёжно даёт ОДИН чистый контакт+скольжение, без чехарды эпсилон-нюансов
+    // прямого старта ровно на границе (там, где начиналась исходная фикстура)
+    const runSweep = (path: string, sloped: boolean): Vector3 => {
+      const { body } = normalTestBody(path, sloped, waterLevelMeters)
+      const { collision, camera } = makeCollision([body], new Vector3(-waterFloorWithMargin * 2, waterFloorWithMargin * 0.5, 0))
+
+      collision.resolve()
+      camera.position.set(0, waterFloorWithMargin * 0.5, 0)
+      collision.resolve()
+
+      return camera.position.clone()
+    }
+
+    const slopedResult = runSweep(NORMAL_PATH_SLOPED, true)
+    const flatResult = runSweep(NORMAL_PATH_FLAT, false)
+
+    // не прилипла к контакту (тот же базовый инвариант, что и у плоской сферы)
+    expect(slopedResult.length()).toBeGreaterThanOrEqual(waterFloorWithMargin - toThreeJSUnits(0.001))
+    expect(slopedResult.y).toBeGreaterThan(waterFloorWithMargin * 0.5 * 0.9)
+
+    // главный дискриминатор: склон дна (недостижимого честного рельефа под
+    // водой) не отличим от плоского дна — нормаль контакта не берёт его в расчёт
+    expect(slopedResult.x).toBeCloseTo(flatResult.x, 6)
+    expect(slopedResult.y).toBeCloseTo(flatResult.y, 6)
+    expect(slopedResult.z).toBeCloseTo(flatResult.z, 6)
+  })
+})
+
+describe('CameraCollision: марч не туннелирует под уровень воды (Task 5, RED-фикстура)', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  // Плоское дно на 40 км ниже уровня воды ВЕЗДЕ (min=max=−40000 м) — та же
+  // амплитуда провала, что у фикстуры «хребет 40 км» этапа 4 (см.
+  // «CameraCollision: марч не пропускается…» выше), но без ридж-геометрии:
+  // дискриминатор здесь — САГИТТА хорды быстрого тангенциального свипа между
+  // двумя точками на сфере уровня воды, а не рельеф. Без клампа воды честный
+  // террейновый пол (R−40000 м) остаётся так далеко внизу, что старый марч не
+  // находит вдоль хорды ни одной обструкции — камера долетает до конца
+  // отрезка, провалившись на километры НИЖЕ уровня воды (тоннель).
+  const FLAT_DEEP_PATH = 'planets/flat-deep/height.raw'
+  const RADIUS_KM = 1736
+
+  function flatDeepBody(waterLevelMeters: number): { body: Object3D; field: TerrainHeightField } {
+    seedHeightMap(new Array(8 * 4).fill(0), 8, 4, -40000, 40000, FLAT_DEEP_PATH)
+    const body = makeBody('planet', RADIUS_KM, new Vector3(), undefined, FLAT_DEEP_PATH, waterLevelMeters)
+    const field = terrainHeightFieldFor(
+      (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(FLAT_DEEP_PATH)!,
+      RADIUS_KM
+    )
+    return { body, field }
+  }
+
+  it('быстрый тангенциальный пролёт над глубокой впадиной ПОД водой не туннелирует под уровень', () => {
+    const waterLevelMeters = 0
+    const { body, field } = flatDeepBody(waterLevelMeters)
+
+    const waterFloor = toThreeJSUnits(RADIUS_KM + waterLevelMeters / 1000)
+    // рельеф честно на 40 км ниже уровня воды — без клампа обструкции по пути нет
+    expect(field.surfaceRadiusUnits(new Vector3(1, 0, 0))).toBeLessThan(waterFloor - toThreeJSUnits(39))
+
+    const THETA = (10 * Math.PI) / 180 // угловой разнос старт→финиш
+    const startDir = new Vector3(1, 0, 0)
+    const endDir = new Vector3(Math.cos(THETA), 0, Math.sin(THETA))
+    // 5 км над уровнем воды — заведомо вне узкой margin-оболочки (внешняя,
+    // консервативная фаза марча, не поточечная): сагитта хорды на этом угле
+    // (~1.6 км при R≈1736 км) продавливает её НИЖЕ уровня воды у середины
+    // отрезка, оставаясь на десятки км выше честного дна
+    const altitudeUnits = toThreeJSUnits(5)
+    const start = startDir.clone().multiplyScalar(waterFloor + altitudeUnits)
+    const end = endDir.clone().multiplyScalar(waterFloor + altitudeUnits)
+
+    const { collision, camera } = makeCollision([body], start)
+    collision.resolve() // фиксирует lastPosition
+    camera.position.copy(end)
+    collision.resolve()
+
+    // не туннелирует под уровень воды (запас на эпсилон контакта)
+    expect(camera.position.length()).toBeGreaterThanOrEqual(waterFloor - toThreeJSUnits(0.01))
+    // и реально была остановлена по пути — не долетела до наивного финиша
+    // (иначе тест не отличает старое поведение от нового)
+    expect(camera.position.clone().normalize().dot(endDir)).toBeLessThan(0.999)
+  })
+
+  it('без ручки waterLevelMeters — то же движение не ловится (бит-в-бит): камера долетает до финиша', () => {
+    seedHeightMap(new Array(8 * 4).fill(0), 8, 4, -40000, 40000, FLAT_DEEP_PATH)
+    const bodyNoWater = makeBody('planet', RADIUS_KM, new Vector3(), undefined, FLAT_DEEP_PATH)
+
+    const surfaceRadius = toThreeJSUnits(RADIUS_KM) // приблизительный ориентир масштаба, не честный пол
+    const THETA = (10 * Math.PI) / 180
+    const startDir = new Vector3(1, 0, 0)
+    const endDir = new Vector3(Math.cos(THETA), 0, Math.sin(THETA))
+    const altitudeUnits = toThreeJSUnits(5)
+    const start = startDir.clone().multiplyScalar(surfaceRadius + altitudeUnits)
+    const end = endDir.clone().multiplyScalar(surfaceRadius + altitudeUnits)
+
+    const { collision, camera } = makeCollision([bodyNoWater], start)
+    collision.resolve()
+    camera.position.copy(end)
+    collision.resolve()
+
+    // без воды честный рельеф на 40 км ниже — обструкции по пути нет вовсе,
+    // камера долетает до наивного финиша нетронутой
+    expect(camera.position.distanceTo(end)).toBeCloseTo(0, 6)
+  })
+})

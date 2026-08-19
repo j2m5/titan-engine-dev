@@ -185,6 +185,30 @@ export interface IPlanetRenderingObject {
   // Cavity-затемнение альбедо из канала B slope-карты (арка slope-cavity,
   // Task 2/3). Отсутствие поля = 0 — путь бит-в-бит прежним (PlanetMaterial).
   cavityStrength?: number
+
+  /**
+   * Уровень воды, метры (арка water-foundation, Task 3+). Гейт водной
+   * оболочки в RenderableFactory: WaterSphere строится, когда у актора ЕСТЬ
+   * height-карта И это поле — число (может быть отрицательным, уровень ниже
+   * номинального радиуса тела — например, Явин IV −667.2 м). Отсутствие поля
+   * = воды нет вовсе, ноль расходов.
+   */
+  waterLevelMeters?: number
+
+  // --- Ручки WaterMaterial (арка water-foundation, Task 4). Все опциональны:
+  // отсутствие → нейтральные дефолты движка (WaterShader). Цвета — число
+  // 0xRRGGBB или строка '#rrggbb', та же конвенция, что dustColor кольца.
+
+  /** Цвет глубокой воды (депонирована каналом A slope-карты → 1) */
+  waterColor?: number | string
+  /** Цвет мелкой воды/уреза (канал A → 0); без slope-карты не используется */
+  waterShallowColor?: number | string
+  /** Непрозрачность глубокой воды, 0..1. Без slope-карты — константная альфа тела целиком. */
+  waterAlphaDeep?: number
+  /** Тинт на грани тела (Френель) — грубая замена честному отражению неба */
+  waterFresnelTint?: number | string
+  /** Пол яркости ночной стороны воды, 0..1 (терминатор, см. WaterShaderTemplate). Без ручки — дефолт движка 0.08. */
+  waterNightFloor?: number
 }
 
 export type IAtmosphereRenderingObject = AtmosphereConfig

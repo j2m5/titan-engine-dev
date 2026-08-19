@@ -37,14 +37,48 @@ function seedPlaceholderKeys(): void {
   seedTexture(pathOf('diffuse'))
 }
 
+const LEGACY_BUMP_DIFFUSE_PATH = 'stub/legacy-bump/diffuse.png'
+const LEGACY_BUMP_PATH = 'stub/legacy-bump/bump.jpg'
+
+/**
+ * Классический bump-путь (USE_BUMP) больше не живёт ни на одном реальном теле
+ * БД — Земля, последнее тело с легаси-bump, переведена на height+slope этой
+ * аркой (арка воды, Task 6). Сам механизм в PlanetMaterial остаётся общим
+ * (тело без карты высот падает на bump), поэтому тест держит его на стабе —
+ * образец `stubActor` из PlanetCavity.spec.ts.
+ */
+function legacyBumpActor(): Actor {
+  const pathByType: Record<string, string> = {
+    diffuse: LEGACY_BUMP_DIFFUSE_PATH,
+    bump: LEGACY_BUMP_PATH
+  }
+
+  return {
+    renderingObject: { getAttribute: () => ({ bumpScale: 1, emission: 1 }) },
+    children: { where: () => ({ first: () => undefined, isNotEmpty: () => false }) },
+    resources: {
+      where: (_field: string, type: string) => ({
+        first: () => {
+          const path = pathByType[type]
+
+          return path === undefined ? undefined : { getAttribute: () => path }
+        }
+      })
+    }
+  } as unknown as Actor
+}
+
 describe('PlanetMaterial: привязка карт к юниформам', () => {
-  beforeEach(() => seedPlaceholderKeys())
+  beforeEach(() => {
+    seedPlaceholderKeys()
+    seedTexture(LEGACY_BUMP_DIFFUSE_PATH)
+  })
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('шаг текселя берётся из размеров загруженной карты высот', () => {
-    seedTexture(pathOf('bump'), 8192, 4096)
+    seedTexture(LEGACY_BUMP_PATH, 8192, 4096)
 
-    const material = new PlanetMaterial(earth())
+    const material = new PlanetMaterial(legacyBumpActor())
     material.updateMaterial()
 
     expect(material.uniforms.uBumpTexelSize.value.x).toBeCloseTo(1 / 8192, 10)
@@ -53,7 +87,7 @@ describe('PlanetMaterial: привязка карт к юниформам', () =
   })
 
   it('без карты высот шаг нулевой — рельеф выключается, а не мусорит', () => {
-    const material = new PlanetMaterial(earth())
+    const material = new PlanetMaterial(legacyBumpActor())
     material.updateMaterial()
 
     expect(material.uniforms.uBumpTexelSize.value.x).toBe(0)
@@ -62,9 +96,9 @@ describe('PlanetMaterial: привязка карт к юниформам', () =
   })
 
   it('resetMaterial возвращает шаг в ноль', () => {
-    seedTexture(pathOf('bump'), 8192, 4096)
+    seedTexture(LEGACY_BUMP_PATH, 8192, 4096)
 
-    const material = new PlanetMaterial(earth())
+    const material = new PlanetMaterial(legacyBumpActor())
     material.updateMaterial()
     material.resetMaterial()
 
@@ -278,9 +312,10 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
   })
 
   it('у тела без карты высот wrap текстур не меняется', () => {
-    seedTexture(pathOf('bump'), 8192, 4096)
+    seedTexture(LEGACY_BUMP_DIFFUSE_PATH)
+    seedTexture(LEGACY_BUMP_PATH, 8192, 4096)
 
-    const material = new PlanetMaterial(earth())
+    const material = new PlanetMaterial(legacyBumpActor())
     material.updateMaterial()
 
     expect((material.uniforms.diffuseMap.value as Texture).wrapS).toBe(ClampToEdgeWrapping)
@@ -545,8 +580,9 @@ describe('PlanetMaterial: данные Ио — height/slope/detail-связки
 // Тела батча (терраформная арка synth-heightmap): 12+6 генераций (фикс-раунд 1 Task 4
 // перевёл Корribан I-VII на пер-тело height/slope — общая карта, откалиброванная под радиус I,
 // давала VII 577% его бюджета высоты) — счётные инварианты одинаковы для всех.
-// Явин IV (83) выведен из списка хотфиксом 2026-08-17 — см. блок легаси ниже.
-const BATCH_ACTOR_IDS = [20, 22, 28, 29, 30, 36, 37, 38, 73, 70, 93, 94, 95, 96, 97, 98, 99] as const
+// Явин IV (83) возвращён в список аркой воды (Task 6) — хотфикс 2026-08-17,
+// временно выводивший его на легаси, исполнил своё условие (вода готова).
+const BATCH_ACTOR_IDS = [20, 22, 28, 29, 30, 36, 37, 38, 73, 83, 70, 93, 94, 95, 96, 97, 98, 99] as const
 const TERRAFORM_RESOURCE_TYPES = ['height', 'slope', 'detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const
 
 describe('PlanetMaterial: счётные инварианты батча 18 спутников', () => {
@@ -1079,39 +1115,124 @@ describe('PlanetMaterial: паритет юниформов шаблон↔ра�
   })
 })
 
-/**
- * Явин IV откачен на легаси-материал (хотфикс 2026-08-17, решение владельца):
- * это терраподобная планета, и рельеф ей делается вместе с Землёй в арке воды —
- * порог по высоте там несёт вода, а не синтетический пол. Батч 18 спутников
- * перевёл его заодно со спутниками, что оказалось преждевременным.
- */
-describe('PlanetMaterial: Явин IV остаётся на легаси до арки воды', () => {
-  const YAVIN_IV = 83
+// Земля (actorId 7) — терраформная арка воды (Task 6): единственное тело с
+// ПОЛНЫМ набором карт (диффуз+cloud+night+specular+height+slope+detail).
+// Легаси-bump снят вместе со связкой (мёртвый вес — тело шейдит рельеф
+// slope-картой, см. 30999f3). Фотомозаика (реальный снимок, не синтетическая
+// генерация) — cavityStrength ей не полагается, тот же прецедент, что у
+// Меркурия/Венеры/Марса/Луны.
+describe('PlanetMaterial: данные Земли — полный набор карт, вода, легаси-bump снят', () => {
+  it('height-строка Земли: верный путь и резидентный lifecycle', () => {
+    const row = earth().resources.where('resourceType', 'height').first()
 
-  it('нет ни height, ни slope — тело идёт легаси-путём', () => {
-    const actor = Actor.find(YAVIN_IV)!
-
-    expect(actor.resources.where('resourceType', 'height').first()).toBeUndefined()
-    expect(actor.resources.where('resourceType', 'slope').first()).toBeUndefined()
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/earth/earth_height.raw')
+    expect(row!.getAttribute('lifecycle')).toBe('resident')
   })
 
-  it('нет detail-связок — трипланарная деталь живёт только на терраформном пути', () => {
-    const actor = Actor.find(YAVIN_IV)!
-    const terraform = actor.resources.all().filter((r) => TERRAFORM_RESOURCE_TYPES.includes(
-      r.getAttribute('resourceType') as (typeof TERRAFORM_RESOURCE_TYPES)[number]
-    ))
+  it('slope-строка Земли: верный путь, streamable, wrapS RepeatWrapping', () => {
+    const row = earth().resources.where('resourceType', 'slope').first()
 
-    expect(terraform).toHaveLength(0)
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/earth/earth_slope.webp')
+    expect(row!.getAttribute('lifecycle')).toBe('streamable')
+    expect(row!.getAttribute('wrapS')).toBe(RepeatWrapping)
   })
 
-  it('диффуз остаётся единственным ресурсом и без wrapS терраформного шва', () => {
-    const actor = Actor.find(YAVIN_IV)!
-    const diffuse = actor.resources.where('resourceType', 'diffuse').first()
+  it('bump-строки у Земли больше нет — легаси-путь снят вместе со связкой', () => {
+    expect(earth().resources.where('resourceType', 'bump').first()).toBeUndefined()
+  })
 
-    expect(diffuse).toBeDefined()
-    expect(diffuse!.getAttribute('path')).toBe('planets/StarWars/yavin/iv/iv.png')
-    expect(diffuse!.getAttribute('wrapS')).toBeUndefined()
-    expect(actor.resources.all()).toHaveLength(1)
+  it.each(['diffuse', 'cloud', 'night', 'specular'] as const)('%s Земли несёт wrapS: RepeatWrapping', (kind) => {
+    const row = earth().resources.where('resourceType', kind).first()!
+
+    expect(row.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('detail-связки Земли указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
+    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
+      const moonRow = moon().resources.where('resourceType', type).first()
+      const earthRow = earth().resources.where('resourceType', type).first()
+
+      expect(earthRow, type).toBeDefined()
+      expect(earthRow!.getAttribute('id')).toBe(moonRow!.getAttribute('id'))
+      expect(earthRow!.getAttribute('path')).toBe(moonRow!.getAttribute('path'))
+    }
+  })
+
+  it('renderingObjects Земли несёт ручки детального слоя и waterLevelMeters, БЕЗ cavityStrength', () => {
+    const data = earth().renderingObject!.getAttribute('data') as Record<string, unknown>
+
+    expect(data.bumpScale).toBe(1)
+    expect(data.detailScaleMeters).toBe(40)
+    expect(data.detailScale2Meters).toBe(7)
+    expect(data.detailNormalScale).toBe(1)
+    expect(data.detailSaturation).toBe(0.15)
+    expect(data.detailBrightness).toBe(1)
+    expect(data.detailAoInfluence).toBe(0.5)
+    expect(data.detailFadeMeters).toBe(30000)
+    expect(data.detailFade2Meters).toBe(5000)
+    expect(data.waterLevelMeters).toBe(0)
+    expect(data.cavityStrength).toBeUndefined()
+  })
+})
+
+// Явин IV (actorId 83) — терраформная арка воды (Task 6): возврат с легаси на
+// height+slope, зеркально хотфиксу отката 2026-08-17 (см. task-2-report.md —
+// источник уровня воды −667.2 м, замер F1 по корреляции с диффузом).
+function yavinIV(): Actor {
+  return Actor.find(83)!
+}
+
+describe('PlanetMaterial: данные Явина IV — height/slope/detail-связки возвращены, вода', () => {
+  it('height-строка Явина IV: верный путь и резидентный lifecycle', () => {
+    const row = yavinIV().resources.where('resourceType', 'height').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/StarWars/yavin/iv/yavin4_height.raw')
+    expect(row!.getAttribute('lifecycle')).toBe('resident')
+  })
+
+  it('slope-строка Явина IV: верный путь, streamable, wrapS RepeatWrapping', () => {
+    const row = yavinIV().resources.where('resourceType', 'slope').first()
+
+    expect(row).toBeDefined()
+    expect(row!.getAttribute('path')).toBe('planets/StarWars/yavin/iv/yavin4_slope.webp')
+    expect(row!.getAttribute('lifecycle')).toBe('streamable')
+    expect(row!.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('диффуз Явина IV несёт wrapS: RepeatWrapping в данных (терраформный шов меридиана)', () => {
+    const diffuse = yavinIV().resources.where('resourceType', 'diffuse').first()!
+
+    expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
+  })
+
+  it('detail-связки Явина IV указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
+    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
+      const moonRow = moon().resources.where('resourceType', type).first()
+      const yavinRow = yavinIV().resources.where('resourceType', type).first()
+
+      expect(yavinRow, type).toBeDefined()
+      expect(yavinRow!.getAttribute('id')).toBe(moonRow!.getAttribute('id'))
+      expect(yavinRow!.getAttribute('path')).toBe(moonRow!.getAttribute('path'))
+    }
+  })
+
+  it('renderingObjects Явина IV несёт ручки детального слоя, cavityStrength и waterLevelMeters', () => {
+    const data = yavinIV().renderingObject!.getAttribute('data') as Record<string, unknown>
+
+    expect(data.bumpScale).toBe(1)
+    expect(data.detailScaleMeters).toBe(40)
+    expect(data.detailScale2Meters).toBe(7)
+    expect(data.detailNormalScale).toBe(1)
+    expect(data.detailSaturation).toBe(0.1)
+    expect(data.detailBrightness).toBe(1)
+    expect(data.detailAoInfluence).toBe(0.5)
+    expect(data.detailFadeMeters).toBe(30000)
+    expect(data.detailFade2Meters).toBe(5000)
+    expect(data.cavityStrength).toBe(0.35)
+    expect(data.waterLevelMeters).toBe(-667.2)
   })
 })
 

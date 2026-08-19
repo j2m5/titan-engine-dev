@@ -1,0 +1,285 @@
+import { describe, expect, it, afterEach, vi } from 'vitest'
+import { Texture, Vector3 } from 'three'
+import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
+import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
+import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
+import { Actor } from '@/core/models/Actor'
+import { resourceStorage } from '@/core/services/ResourceStorage'
+
+// Строковые ассерты шаблона — контракт брифа Task 4: Френель, декод канала A
+// напрямую [0,1] (Task 1, без множителя SLOPE_RANGE и без знаковой byte-128
+// перекодировки R/G/B), гейт USE_WATER_DEPTH, переиспользование общего чанка
+// terrainUvFunctions (не копия PlanetShaderTemplate).
+describe('WaterShaderTemplate: строковые ассерты (Френель, декод канала A, гейт мелководья)', () => {
+  const frag: string = WaterShaderTemplate.fragmentShader
+  const vert: string = WaterShaderTemplate.vertexShader
+
+  it('гейт USE_WATER_DEPTH переключает мелководье', () => {
+    expect(frag).toContain('#ifdef USE_WATER_DEPTH')
+  })
+
+  it('терраформный uv переиспользован из общего чанка, формула не задублирована инлайн', () => {
+    expect(frag).toContain('#include <terrainUvFunctions>')
+    expect(frag).not.toContain('float phi = atan(dirLocal.z, -dirLocal.x);')
+  })
+
+  it('канал A декодируется НАПРЯМУЮ [0,1] — без множителя SLOPE_RANGE и без byte-128 перекодировки R/G/B/cavity', () => {
+    expect(frag).toContain('texture2D(uSlopeMap, uv).a')
+    expect(frag).not.toContain('.a * 255.0 - 128.0')
+    expect(frag).not.toContain('SLOPE_RANGE')
+  })
+
+  it('мелководье: mix(shallow -> deep) по каналу A', () => {
+    expect(frag).toContain('mix(uWaterShallowColor, uWaterColor, depthA)')
+  })
+
+  it('альфа урезается к нулю на урезе: uWaterAlphaDeep * depthA', () => {
+    expect(frag).toContain('uWaterAlphaDeep * depthA')
+  })
+
+  it('без карты — константный режим: единый цвет uWaterColor, константная альфа uWaterAlphaDeep', () => {
+    expect(frag).toContain('vec3 baseColor = uWaterColor;')
+    expect(frag).toContain('float alpha = uWaterAlphaDeep;')
+  })
+
+  it('Френель Шлика-класса: pow(1 - max(dot(viewDir, normal), 0), 5)', () => {
+    expect(frag).toContain('float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 5.0);')
+  })
+
+  it('итоговый цвет смешивается к тинту по Френелю', () => {
+    expect(frag).toContain('mix(baseColor, uWaterFresnelTint, fresnel)')
+  })
+
+  it('ночная сторона темнее по N·L, не гасится в ноль (терминатор тот же, что у PlanetShaderTemplate)', () => {
+    expect(frag).toContain('smoothstep(-0.08, 0.25, NdotL)')
+  })
+
+  it('ночной пол — ручка uWaterNightFloor, не зашитая константа (находка №5 финального ревью)', () => {
+    expect(frag).toContain('uniform float uWaterNightFloor;')
+    expect(frag).toContain('color *= mix(uWaterNightFloor, 1.0, dayFactor);')
+  })
+
+  it('лог-депт подключён на обоих концах (та же логарифмическая глубина, что у патчей суши) — ${ShaderChunk[...]} разворачивается на этапе шаблонной строки JS, не #include', () => {
+    expect(vert).toContain('USE_LOGARITHMIC_DEPTH_BUFFER')
+    expect(vert).toContain('vFragDepth = 1.0 + gl_Position.w;')
+    expect(frag).toContain('USE_LOGARITHMIC_DEPTH_BUFFER')
+    expect(frag).toContain('gl_FragDepth')
+  })
+
+  it('нормаль воды — аналитическая dir̂: vNormal из радиального атрибута normal, без карт возмущения', () => {
+    expect(vert).toContain('vNormal = normalize(normalMatrix * normal);')
+    expect(frag).not.toContain('perturbNormalFromSlope')
+    expect(frag).not.toContain('perturbNormalFromHeight')
+  })
+
+  it('«звезда в нуле»: lightPosition — юниформ, инициализированный нулевым вектором (не обновляется рантаймом движка)', () => {
+    expect(WaterShaderTemplate.uniforms.lightPosition.value).toEqual(new Vector3())
+  })
+
+  // Ревью Task 4 (фикс-раунд 1, №3): те же константы, что пиннует
+  // FragmentUv.spec.ts для суши — общий чанк terrainUvFunctions, разъехаться
+  // между потребителями формула не может, но каждый потребитель проверяется
+  // отдельно (шаблоны разворачиваются независимо). Мутация M2 (обмен 2π ↔ π
+  // в TerrainUv.ts) валит и этот тест — проверено вручную вместе с
+  // FragmentUv.spec.ts, откат восстанавливает GREEN.
+  it('константы разворотов запиннены и в водном фрагментнике (общий чанк terrainUvFunctions)', () => {
+    const resolvedFrag = AbstractShader.prepareSource(frag)
+
+    expect(resolvedFrag).toContain('phi / 6.28318530717958647692')
+    expect(resolvedFrag).toContain('/ 3.14159265358979323846')
+  })
+})
+
+// Проводка ручек data — образец stubActor (PlanetCavity.spec.ts): объект без
+// реальной записи в БД, только то, что читают WaterShader/WaterMaterial.
+const SLOPE_PATH = 'stub/water/slope.webp'
+
+interface StubOptions {
+  data: Record<string, unknown>
+  slopeResource?: boolean
+}
+
+function stubActor({ data, slopeResource = true }: StubOptions): Actor {
+  return {
+    renderingObject: { getAttribute: () => data },
+    resources: {
+      where: (_field: string, type: string) => ({
+        first: () => (type === 'slope' && slopeResource ? { getAttribute: () => SLOPE_PATH } : undefined)
+      })
+    }
+  } as unknown as Actor
+}
+
+function seedSlopeTexture(): void {
+  const texture = new Texture()
+  texture.name = SLOPE_PATH
+  texture.image = { width: 4, height: 2 }
+  resourceStorage.addTexture(texture)
+}
+
+describe('WaterMaterial: проводка ручек data (дефолты честно помечены, приёмка вида — за владельцем)', () => {
+  it('data пуст — применяются дефолты движка', () => {
+    const material = new WaterMaterial(stubActor({ data: {} }))
+
+    expect(material.uniforms.uWaterColor.value.getHex()).toBe(0x0b3d66)
+    expect(material.uniforms.uWaterShallowColor.value.getHex()).toBe(0x2e8b9e)
+    expect(material.uniforms.uWaterAlphaDeep.value).toBe(0.85)
+    expect(material.uniforms.uWaterFresnelTint.value.getHex()).toBe(0xbfe9ff)
+    expect(material.uniforms.uWaterNightFloor.value).toBe(0.08)
+  })
+
+  it('ручки data перекрывают дефолты — число и строка цвета обе конвенции (как dustColor кольца)', () => {
+    const material = new WaterMaterial(
+      stubActor({
+        data: {
+          waterColor: 0x112233,
+          waterShallowColor: '#445566',
+          waterAlphaDeep: 0.5,
+          waterFresnelTint: 0x778899,
+          waterNightFloor: 0.2
+        }
+      })
+    )
+
+    expect(material.uniforms.uWaterColor.value.getHex()).toBe(0x112233)
+    expect(material.uniforms.uWaterShallowColor.value.getHex()).toBe(0x445566)
+    expect(material.uniforms.uWaterAlphaDeep.value).toBe(0.5)
+    expect(material.uniforms.uWaterFresnelTint.value.getHex()).toBe(0x778899)
+    expect(material.uniforms.uWaterNightFloor.value).toBe(0.2)
+  })
+
+  it('контракт материала WaterSphere: transparent, depthWrite=false, depthTest=true (див. WaterSphere.spec.ts)', () => {
+    const material = new WaterMaterial(stubActor({ data: {} }))
+
+    expect(material.transparent).toBe(true)
+    expect(material.depthWrite).toBe(false)
+    expect(material.depthTest).toBe(true)
+  })
+})
+
+describe('WaterMaterial: гейт USE_WATER_DEPTH из slope-текстуры актора (resourceStorage)', () => {
+  afterEach(() => resourceStorage.deleteAllTextures())
+
+  it('у актора нет slope-ресурса вовсе — константный режим', () => {
+    const material = new WaterMaterial(stubActor({ data: {}, slopeResource: false }))
+    material.updateMaterial()
+
+    expect(material.defines.USE_WATER_DEPTH).toBeUndefined()
+    expect(material.uniforms.uSlopeMap.value).toBeNull()
+  })
+
+  it('slope-путь у актора есть, но текстура ещё не догрузилась в resourceStorage — константный режим', () => {
+    const material = new WaterMaterial(stubActor({ data: {} }))
+    material.updateMaterial()
+
+    expect(material.defines.USE_WATER_DEPTH).toBeUndefined()
+    expect(material.uniforms.uSlopeMap.value).toBeNull()
+  })
+
+  it('slope-текстура доступна в resourceStorage — гейт ставится, сэмплер получает текстуру', () => {
+    seedSlopeTexture()
+    const material = new WaterMaterial(stubActor({ data: {} }))
+    material.updateMaterial()
+
+    expect(material.defines.USE_WATER_DEPTH).toBe('1')
+    expect(material.uniforms.uSlopeMap.value).not.toBeNull()
+  })
+
+  it('перекомпиляция случается только на ФАКТИЧЕСКОЙ смене гейта — не на каждом вызове', () => {
+    // three.js Material.needsUpdate — сеттер-инкремент без геттера (читается
+    // как undefined всегда), поэтому наблюдаем через .version — он растёт
+    // РОВНО когда needsUpdate=true фактически присваивался.
+    seedSlopeTexture()
+    const material = new WaterMaterial(stubActor({ data: {} }))
+    material.updateMaterial() // первая догрузка текстуры — гейт меняется false→true
+    expect(material.defines.USE_WATER_DEPTH).toBe('1')
+
+    const versionAfterGate = material.version
+    material.updateMaterial() // текстура та же, гейт остаётся true — без перекомпиляции
+    expect(material.version).toBe(versionAfterGate)
+  })
+
+  it('resetMaterial снимает гейт и сэмплер', () => {
+    seedSlopeTexture()
+    const material = new WaterMaterial(stubActor({ data: {} }))
+    material.updateMaterial()
+
+    material.resetMaterial()
+
+    expect(material.defines.USE_WATER_DEPTH).toBeUndefined()
+    expect(material.uniforms.uSlopeMap.value).toBeNull()
+  })
+})
+
+// Ревью Task 4 (фикс-раунд 1, №1): resources.where(...) — ORM-джойн
+// belongsToMany (actorResource × resources), не бесплатный лукап. updateMaterial
+// зовётся КАЖДЫЙ активный кадр (WaterSphere.onVisibleUpdate) — гонять джойн
+// там означало бы полный ORM-проход на каждое видимое водное тело каждый
+// кадр. Путь обязан резолвиться РОВНО один раз в конструкторе и переживать
+// сколько угодно кадровых updateMaterial() без повторного обращения к
+// resources; resetMaterial — редкий путь (вытеснение диффуза), там повтор
+// допустим и даже полезен (свежит путь).
+describe('WaterMaterial: slope-путь резолвится один раз (не ORM-джойн на каждый кадр)', () => {
+  afterEach(() => resourceStorage.deleteAllTextures())
+
+  function stubActorWithSpy(): { actor: Actor; whereSpy: ReturnType<typeof vi.fn> } {
+    const whereSpy = vi.fn((_field: string, type: string) => ({
+      first: () => (type === 'slope' ? { getAttribute: () => SLOPE_PATH } : undefined)
+    }))
+    const actor = {
+      renderingObject: { getAttribute: () => ({}) },
+      resources: { where: whereSpy }
+    } as unknown as Actor
+
+    return { actor, whereSpy }
+  }
+
+  it('resources.where зовётся один раз в конструкторе, НЕ на каждый updateMaterial()', () => {
+    seedSlopeTexture()
+    const { actor, whereSpy } = stubActorWithSpy()
+
+    const material = new WaterMaterial(actor)
+    expect(whereSpy).toHaveBeenCalledTimes(1)
+
+    material.updateMaterial()
+    material.updateMaterial()
+    material.updateMaterial()
+
+    // ни один кадровый updateMaterial не тронул resources — джойн не повторён
+    expect(whereSpy).toHaveBeenCalledTimes(1)
+    expect(material.defines.USE_WATER_DEPTH).toBe('1') // сам гейт при этом работает штатно
+  })
+
+  it('resetMaterial освежает путь — второй (и только второй) вызов resources.where', () => {
+    const { actor, whereSpy } = stubActorWithSpy()
+    const material = new WaterMaterial(actor)
+    expect(whereSpy).toHaveBeenCalledTimes(1)
+
+    material.resetMaterial()
+    expect(whereSpy).toHaveBeenCalledTimes(2)
+
+    material.updateMaterial()
+    material.updateMaterial()
+    expect(whereSpy).toHaveBeenCalledTimes(2) // после resetMaterial кадровые вызовы всё ещё не трогают resources
+  })
+})
+
+// Находка №6 финального ревью water-foundation: дефолты воды продублированы
+// в двух независимых местах — WaterShaderTemplate.defaultUniforms (шаблон,
+// на деле не участвует в рантайме WaterShader, см. её докблок) и
+// WaterShader.DEFAULT_* (фактически применяются при пустом data). Ничто их
+// не сцепляет — правка одного места молча расходится с другим. Тест-паритет
+// (тот же приём, что у планетных материалов — шаблон и рантайм-дефолт
+// обязаны совпадать) ловит именно расхождение, не механизм подстановки.
+describe('WaterShaderTemplate ↔ WaterShader: паритет дефолтов (находка №6 финального ревью)', () => {
+  it('пять ручек воды: значение из WaterShaderTemplate.uniforms совпадает с дефолтом WaterShader при пустом data', () => {
+    const material = new WaterMaterial(stubActor({ data: {} }))
+    const templateUniforms = WaterShaderTemplate.uniforms
+
+    expect(material.uniforms.uWaterColor.value.getHex()).toBe(templateUniforms.uWaterColor.value.getHex())
+    expect(material.uniforms.uWaterShallowColor.value.getHex()).toBe(templateUniforms.uWaterShallowColor.value.getHex())
+    expect(material.uniforms.uWaterAlphaDeep.value).toBe(templateUniforms.uWaterAlphaDeep.value)
+    expect(material.uniforms.uWaterFresnelTint.value.getHex()).toBe(templateUniforms.uWaterFresnelTint.value.getHex())
+    expect(material.uniforms.uWaterNightFloor.value).toBe(templateUniforms.uWaterNightFloor.value)
+  })
+})
