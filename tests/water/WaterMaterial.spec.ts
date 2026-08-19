@@ -288,35 +288,22 @@ describe('WaterMaterial: гейт USE_WATER_WAVES из waterNormal-тексту�
     expect(material.uniforms.uWaterNormalMap.value).toBeNull()
   })
 
-  it('uTime обновляется каждый updateMaterial() независимо от гейтов (не застывает на раннем возврате)', () => {
-    const nowSpy = vi.spyOn(performance, 'now')
+  it('uTime = elapsed из updateMaterial(elapsed), не performance.now() (фикс-раунд 1, №3: источник — UpdateContext.elapsed)', () => {
     const material = new WaterMaterial(stubActor({ data: {} }))
 
-    nowSpy.mockReturnValue(1000)
-    material.updateMaterial()
-    const first = material.uniforms.uTime.value as number
+    material.updateMaterial(1000)
+    expect(material.uniforms.uTime.value).toBe(1000)
 
-    nowSpy.mockReturnValue(5000)
-    material.updateMaterial() // ни один гейт не менялся (waterNormal-ресурса нет вовсе) — ранний return ниже по методу
-    const second = material.uniforms.uTime.value as number
-
-    expect(second - first).toBeCloseTo(4, 5) // (5000-1000)/1000 секунд
-
-    nowSpy.mockRestore()
+    material.updateMaterial(5000) // ни один гейт не менялся (waterNormal-ресурса нет вовсе) — ранний return ниже по методу, uTime всё равно продвигается
+    expect(material.uniforms.uTime.value).toBe(5000)
   })
 
-  it('uTime сворачивается по формуле BlackHoleMaterial (epoch - floor(epoch/wrap)*wrap), не растёт неограниченно', () => {
-    const wrap = 5000 * 16384
-    const nowSpy = vi.spyOn(performance, 'now')
+  it('updateMaterial() без аргумента — elapsed по умолчанию 0 (вызовы гейт-тестов выше валидны без правки)', () => {
     const material = new WaterMaterial(stubActor({ data: {} }))
 
-    const epochMs = (wrap + 1234) * 1000 // на секунду больше wrap+1234с
-    nowSpy.mockReturnValue(epochMs)
     material.updateMaterial()
 
-    expect(material.uniforms.uTime.value).toBeCloseTo(1234, 5)
-
-    nowSpy.mockRestore()
+    expect(material.uniforms.uTime.value).toBe(0)
   })
 })
 

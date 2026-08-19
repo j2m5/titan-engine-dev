@@ -6,17 +6,6 @@ import { WaterShader } from '@/core/materials/shaders/WaterShader'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
 /**
- * Период сворачивания uTime, секунды — тот же приём, что BlackHoleMaterial.ts:145
- * (`epoch - floor(epoch/wrap)*wrap`): держит float32-точность на долгих
- * сессиях без скачка узора волн в момент сворачивания. 16384 = 2^14 — та же
- * степень двойки, что у BlackHole (кратное представимо точно). База 5000 —
- * крупнейший по модулю делитель времени ряда getNoise (WaterShaderTemplate.ts,
- * октава 3, `t / -5000.0`): на границе врапа фаза САМОЙ медленной октавы
- * честно проходит целое число периодов.
- */
-const WATER_TIME_WRAP_SECONDS = 5000 * 16384
-
-/**
  * Материал водной оболочки — честный шейдер (Task 4): цвет глубокой/мелкой
  * воды, аналитический Френель (нормаль = dir̂, геометрия патча радиальна
  * везде, см. terrainPatchGeometry), мелководье из канала A slope-карты суши
@@ -126,7 +115,25 @@ class WaterMaterial extends AbstractShaderMaterial {
    * путь другой (USE_WATER_DEPTH=1, не #else) — если понадобится отличать
    * «карты нет» от «карта старого формата», нужен отдельный маркер не отсюда.
    */
-  public updateMaterial(): void {
+  /**
+   * `elapsed` — секунды с запуска часов рендера (`UpdateContext.elapsed`,
+   * см. WaterSphere.onVisibleUpdate), не `performance.now()` напрямую
+   * (фикс-раунд 1, №3 ревью: докблок `UpdateContext` прямо запрещает
+   * материалам брать время в обход контекста — тот же приём, что
+   * `NebulaRaymarchMaterial.updateMaterial(elapsed)`). Дефолт 0 — вызовы без
+   * аргумента (существующие тесты гейтов) остаются валидны, `uTime` просто
+   * не продвигается.
+   *
+   * Без сворачивания (`epoch - floor(epoch/wrap)*wrap`, как у
+   * BlackHoleMaterial): там wrap кратен РЕАЛЬНОМУ периоду вращения диска —
+   * физически осмысленная граница. Здесь делители времени — авторские
+   * художественные константы (см. WaterShaderTemplate.getNoise), их НОК на
+   * порядки больше любой разумной длины сессии, и общий делитель нашёлся бы
+   * только у 3 из 8 — сворачивание на такой границе давало бы фазовый скачок
+   * у 5 октав из 8, а не «честную» точку. Float32 на реальных длинах сессий
+   * (часы, не годы) даёт суб-миллисекундную ошибку — незаметно для волн.
+   */
+  public updateMaterial(elapsed: number = 0): void {
     const slopeMap: Texture | undefined = this.slopePath ? resourceStorage.getTexture(this.slopePath) : undefined
 
     this.uniforms.uSlopeMap.value = slopeMap ?? null
@@ -148,8 +155,7 @@ class WaterMaterial extends AbstractShaderMaterial {
     // какой-либо гейт (иначе волны замирали бы всякий раз, когда
     // updateMaterial рано выходит по неизменным гейтам ниже). Дешёвая
     // uniform-запись, needsUpdate/перекомпиляцию не трогает.
-    const epoch = performance.now() / 1000
-    this.uniforms.uTime.value = epoch - Math.floor(epoch / WATER_TIME_WRAP_SECONDS) * WATER_TIME_WRAP_SECONDS
+    this.uniforms.uTime.value = elapsed
 
     if (useWaterDepth === this.hasWaterDepth && useWaterWaves === this.hasWaterWaves) return // ни один гейт не изменился — перекомпиляция не нужна
 

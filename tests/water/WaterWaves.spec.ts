@@ -7,10 +7,12 @@ import { Actor } from '@/core/models/Actor'
 import { distanceForApparentSize } from '@/core/helpers/apparentSize'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 
-// Ядро волн (Task 1, арка water-shader): getNoise/sunLight/albedo дословно
-// Water.js (three/examples/jsm/objects/Water.js) там, где спека не требует
-// адаптации; трипланарная TBN сферы, fade по дистанции, гейт USE_WATER_WAVES
-// не тронул ни одного символа Task 4 без карты (см. описания ниже).
+// Ядро волн (Task 1, арка water-shader; фикс-раунд 1 ревью учтён — №1 страж
+// кванта по фактическому ассету, №2 whiteout-реориентация трипланара, №4
+// анизотропные октавы 2/3): getNoise/sunLight/albedo дословно Water.js
+// (three/examples/jsm/objects/Water.js) там, где спека не требует адаптации;
+// трипланарный whiteout-бленд в body-локальном XYZ, fade по дистанции, гейт
+// USE_WATER_WAVES не тронул ни одного символа Task 4 без карты (см. ниже).
 const frag: string = WaterShaderTemplate.fragmentShader
 const vert: string = WaterShaderTemplate.vertexShader
 
@@ -24,27 +26,32 @@ describe('WaterShaderTemplate: getNoise — дословная структур�
     expect(frag).toContain('return noise * 0.5 - 1.0;')
   })
 
-  it('ряд периодов 1500/4500/13500/45000 м — честно поднят относительно черновика плана (страж ниже)', () => {
-    expect(frag).toContain('uv / 1500.0 +')
-    expect(frag).toContain('uv / 4500.0 +')
-    expect(frag).toContain('uv / 13500.0 +')
-    expect(frag).toContain('uv / 45000.0 +')
-    expect(WATER_WAVE_SMALLEST_PERIOD_METERS).toBe(1500) // синхронизирован с литералом выше (см. её докблок)
+  it('ряд периодов 3000/9000 м (октавы 0/1, скаляр) — честно поднят дважды (страж ниже читает фактический ассет)', () => {
+    expect(frag).toContain('uv / 3000.0 +')
+    expect(frag).toContain('uv / 9000.0 +')
+    expect(WATER_WAVE_SMALLEST_PERIOD_METERS).toBe(3000) // синхронизирован с литералом выше (см. её докблок)
   })
 
-  it('ряд — геометрическая прогрессия ×3 от мельчайшего периода (1:3:9:30), не произвольные числа', () => {
-    const base = WATER_WAVE_SMALLEST_PERIOD_METERS
-
-    expect(base * 3).toBe(4500)
-    expect(base * 9).toBe(13500)
-    expect(base * 30).toBe(45000)
+  it('октавы 2/3 АНИЗОТРОПНЫ (vec2 на ось) — как у Water.js (8907×9803, 1091×1027), не скаляр (фикс-раунд 1, №4)', () => {
+    expect(frag).toContain('uv / vec2(25736.53, 28325.50) +')
+    expect(frag).toContain('uv / vec2(92761.91, 87320.33) +')
   })
 
-  it('коэффициенты времени 250/430, -800/1300, 150/140, 4500/-5000 — та же ФОРМА добавки, что Water.js (t/T на каждую ось)', () => {
-    expect(frag).toContain('vec2(t / 250.0, t / 430.0)')
-    expect(frag).toContain('vec2(t / -800.0, t / 1300.0)')
-    expect(frag).toContain('vec2(t / 150.0, t / 140.0)')
-    expect(frag).toContain('vec2(t / 4500.0, t / -5000.0)')
+  it('анизотропные пары получены геометрическим средним = прежнему скаляру (27000/90000), пропорция Water.js сохранена', () => {
+    const oct2 = [25736.53, 28325.5]
+    const oct3 = [92761.91, 87320.33]
+
+    expect(Math.sqrt(oct2[0] * oct2[1])).toBeCloseTo(27000, 0)
+    expect(Math.sqrt(oct3[0] * oct3[1])).toBeCloseTo(90000, 0)
+    expect(oct2[1] / oct2[0]).toBeCloseTo(9803 / 8907, 4)
+    expect(oct3[0] / oct3[1]).toBeCloseTo(1091 / 1027, 4)
+  })
+
+  it('коэффициенты времени 500/860, -1600/2600, 300/280, 9000/-10000 — ×2 от прежней реализации (период тоже ×2)', () => {
+    expect(frag).toContain('vec2(t / 500.0, t / 860.0)')
+    expect(frag).toContain('vec2(t / -1600.0, t / 2600.0)')
+    expect(frag).toContain('vec2(t / 300.0, t / 280.0)')
+    expect(frag).toContain('vec2(t / 9000.0, t / -10000.0)')
   })
 
   it('t = uTime * uWaterWaveSpeed (ручка скорости — множитель времени, не периода)', () => {
@@ -58,34 +65,75 @@ describe('WaterShaderTemplate: getNoise — дословная структур�
   })
 })
 
-describe('CPU-страж кванта домена: quant(R) = R_метры · 2^-23, период/512 >= 3·quant', () => {
+// Путь к фактическому ассету на диске — тот же файл, что грузит движок
+// (resourceType 'waterNormal', Task 3). Число текселей страж читает ИЗ
+// НЕГО, не литералом (фикс-раунд 1, №1 ревью Task 1): реализация Task 1
+// хардкодила 512 по спеке плана, а реальный скачанный ассет — 1024×1024
+// (проверено sharp) — страж на 512 молчал бы про фактический провал на 1024.
+const WATER_NORMAL_ASSET_PATH = 'storage/images/textures/water/waternormals.jpg'
+
+describe('CPU-страж кванта домена: quant(R) = R_метры · 2^-23, период/N_texels >= 3·quant', () => {
   // Формула — не таблица плана (та честно помечена как потенциально неверная,
   // см. task-1-brief.md): quant выводится из float32 ULP полноразрядной
   // величины ~R (dirLocal ⋅ uWaterWaveScale в WaterShaderTemplate.waterWaveNormal
   // формирует именно такую величину ДО деления на период — см. её докблок в
-  // WaterShader.ts). period/512 — метров на тексель мельчайшей октавы;
+  // WaterShader.ts). period/N_texels — метров на тексель мельчайшей октавы;
   // требуем запас ×3 над ошибкой квантования, чтобы шум не читался полосами.
   function quantMeters(radiusMeters: number): number {
     return radiusMeters * Math.pow(2, -23)
   }
 
+  async function assetTexelWidth(): Promise<number> {
+    const sharp = (await import('sharp')).default
+    const metadata = await sharp(WATER_NORMAL_ASSET_PATH).metadata()
+
+    if (!metadata.width) throw new Error('waternormals.jpg: ширина не читается — ассет отсутствует или повреждён')
+
+    return metadata.width
+  }
+
   const EARTH_RADIUS_METERS = 6360 * 1000 // physicalObjects.ts actorId 7 (id 4)
   const YAVIN_IV_RADIUS_METERS = 6100 * 1000 // physicalObjects.ts actorId 83 (id 64)
+
+  it('фактический ассет 1024×1024 (пин текущего состояния — если файл сменится, страж ниже пересчитает сам)', async () => {
+    const width = await assetTexelWidth()
+
+    expect(width).toBe(1024)
+  })
 
   it.each([
     ['Земля', EARTH_RADIUS_METERS],
     ['Явин IV', YAVIN_IV_RADIUS_METERS]
-  ])('%s: мельчайший период (%d) / 512 >= 3 · quant(R)', (_name, radiusMeters) => {
+  ])('%s (R=%d м): мельчайший период / N_texels(факт. ассета) >= 3 · quant(R)', async (_name, radiusMeters) => {
+    const width = await assetTexelWidth()
     const quant = quantMeters(radiusMeters)
-    const smallestPeriodTexelMeters = WATER_WAVE_SMALLEST_PERIOD_METERS / 512
+    const smallestPeriodTexelMeters = WATER_WAVE_SMALLEST_PERIOD_METERS / width
 
     expect(smallestPeriodTexelMeters).toBeGreaterThanOrEqual(3 * quant)
   })
 
-  it('страж — для честности: черновик плана (1000 м) НЕ прошёл бы его для Земли (см. task-1-brief.md)', () => {
+  it('запас для Земли на фактических 1024 текселях — +28.8% (число ревью)', async () => {
+    const width = await assetTexelWidth()
+    const quant = quantMeters(EARTH_RADIUS_METERS)
+    const margin = WATER_WAVE_SMALLEST_PERIOD_METERS / width / (3 * quant) - 1
+
+    expect(margin).toBeCloseTo(0.288, 3)
+  })
+
+  it('потолок радиуса тела для этого ряда/ассета — 8192 км (страж ровно на границе)', async () => {
+    const width = await assetTexelWidth()
+    const ceilingRadiusMeters = 8192 * 1000
+    const quant = quantMeters(ceilingRadiusMeters)
+
+    expect(WATER_WAVE_SMALLEST_PERIOD_METERS / width).toBeCloseTo(3 * quant, 6)
+  })
+
+  it('страж — для честности: обе прежние версии ряда НЕ прошли бы его на фактических 1024 текселях', async () => {
+    const width = await assetTexelWidth()
     const quant = quantMeters(EARTH_RADIUS_METERS)
 
-    expect(1000 / 512).toBeLessThan(3 * quant) // 1.953 < 2.275 — план сам себя честно предупредил
+    expect(1000 / width).toBeLessThan(3 * quant) // черновик плана (task-1-brief.md)
+    expect(1500 / width).toBeLessThan(3 * quant) // первая реализация Task 1 (страж на 512-литерале молчал про это)
   })
 })
 
@@ -126,35 +174,39 @@ describe('WaterShaderTemplate: sunLight/albedo — дословно Water.js (ge
   })
 })
 
-describe('WaterShaderTemplate: TBN трипланарная — T=восток попиксельно, B=север, N=dir̂, бленд |N|', () => {
-  it('T = cross(UP, dir̂) нормированный (та же конвенция, что perturbNormalFromSlope/Height)', () => {
-    expect(frag).toContain('vec3 eastRaw = cross(vec3(0.0, 1.0, 0.0), dirLocal);')
-    expect(frag).toContain('vec3 T = eastRaw / eastLen;')
-  })
-
-  it('B = cross(N, T) — тот же порядок операндов, что B = cross(surfNormal, T) в slopeNormalFunctions', () => {
-    expect(frag).toContain('vec3 B = cross(dirLocal, T);')
-  })
-
-  it('полюс: тангенс вырожден, len < 1e-4 — та же граница, что HeightNormal/SlopeNormal', () => {
-    expect(frag).toContain('if (eastLen < 1e-4) return dirLocal;')
-  })
-
-  it('бленд весами |N| (нормированная сумма компонент) — не вызов triplanarWeights^4, не #include чанка TriplanarDetail', () => {
+describe('WaterShaderTemplate: трипланарный whiteout-бленд — реориентация ДО суммирования (фикс-раунд 1, №2)', () => {
+  it('вес |N| (нормированная сумма компонент) — не вызов triplanarWeights^4, не #include чанка TriplanarDetail', () => {
     expect(frag).toContain('vec3 w = abs(dirLocal);')
     expect(frag).toContain('w /= max(w.x + w.y + w.z, 1e-6);')
     expect(frag).not.toContain('triplanarWeights(')
     expect(frag).not.toContain('#include <triplanar')
   })
 
-  it('3 проекции getNoise(p.zy/p.xz/p.xy) взвешены и просуммированы', () => {
-    expect(frag).toContain('vec4 noise = getNoise(p.zy) * w.x + getNoise(p.xz) * w.y + getNoise(p.xy) * w.z;')
+  it('полюсный гард (eastLen<1e-4) остаётся НЕ ТРОНУТЫМ (рулинг контроллера, фикс-раунд 1, №8)', () => {
+    expect(frag).toContain('vec3 eastRaw = cross(vec3(0.0, 1.0, 0.0), dirLocal);')
+    expect(frag).toContain('float eastLen = length(eastRaw);')
+    expect(frag).toContain('if (eastLen < 1e-4) return dirLocal;')
   })
 
-  it('surfaceNormal Water.js (noise.xzy * vec3(1.5,1.0,1.5)) дословно перенесён в T/N/B', () => {
-    expect(frag).toContain(
-      'vec3 perturbed = normalize(T * (noise.x * 1.5) + dirLocal * (noise.z * 1.0) + B * (noise.y * 1.5));'
-    )
+  it('T/B полюсного фрейма БОЛЬШЕ НЕ строятся — реориентация теперь в body-локальном XYZ, не в TBN', () => {
+    expect(frag).not.toContain('vec3 T = eastRaw')
+    expect(frag).not.toContain('vec3 B = cross(dirLocal, T)')
+  })
+
+  it('каждая проекция реориентирована СВОИМ свизлом ДО суммирования — X→.zyx, Y→.xzy, Z→.xyz (порядок triplanarBlendNormal)', () => {
+    expect(frag).toContain('vec3 fromX = getNoise(p.zy).zyx * vec3(1.0, 1.5, 1.5);')
+    expect(frag).toContain('vec3 fromY = getNoise(p.xz).xzy * vec3(1.5, 1.0, 1.5);')
+    expect(frag).toContain('vec3 fromZ = getNoise(p.xy).xyz * vec3(1.5, 1.5, 1.0);')
+  })
+
+  it('Y-проекция (.xzy) — дословно одноплоскостная формула Water.js (world.xz + up=world.y)', () => {
+    // Water.js: surfaceNormal = normalize(noise.xzy * vec3(1.5,1.0,1.5)) — тот
+    // же множитель на ТОЙ ЖЕ свизл-схеме, ноль адаптации для этой проекции.
+    expect(frag).toContain('getNoise(p.xz).xzy * vec3(1.5, 1.0, 1.5)')
+  })
+
+  it('взвешенная сумма УЖЕ реориентированных проекций — normalize(fromX*w.x + fromY*w.y + fromZ*w.z)', () => {
+    expect(frag).toContain('vec3 perturbed = normalize(fromX * w.x + fromY * w.y + fromZ * w.z);')
   })
 
   it('fade — mix к чистому dir̂ (амплитуда 1→0)', () => {

@@ -3,6 +3,7 @@ import { Actor } from '@/core/models/Actor'
 import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
 import { constantHeightField } from '@/core/terrain/constantHeightField'
 import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
+import type { UpdateContext } from '@/core/UpdateContext'
 
 /**
  * Патчи воды рисуются ДО атмосферных проходов, не после: BrunetonAtmosphere
@@ -99,16 +100,21 @@ class WaterSphere extends TerrainPatchGroup {
   }
 
   /**
-   * Освежает гейт USE_WATER_DEPTH материала каждый раз, когда дерево реально
-   * просыпается (см. TerrainPatchGroup.onVisibleUpdate) — slope-текстура
-   * актора стримится асинхронно (ResourceObserver её не видит здесь, см.
-   * докблок класса и WaterMaterial.updateMaterial), поэтому на момент
-   * конструктора её почти наверняка ещё нет. Дешёвый lookup по хранилищу
-   * (см. WaterMaterial) — перекомпиляция шейдера случается только на
-   * фактической смене гейта, не на каждом кадре.
+   * Освежает гейт USE_WATER_DEPTH/USE_WATER_WAVES материала каждый раз, когда
+   * дерево реально просыпается (см. TerrainPatchGroup.onVisibleUpdate) —
+   * slope/waterNormal текстуры актора стримятся асинхронно (ResourceObserver
+   * их не видит здесь, см. докблок класса и WaterMaterial.updateMaterial),
+   * поэтому на момент конструктора их почти наверняка ещё нет. Дешёвый
+   * lookup по хранилищу (см. WaterMaterial) — перекомпиляция шейдера
+   * случается только на фактической смене гейта, не на каждом кадре.
+   *
+   * `ctx.elapsed` — единственный источник uTime волн (фикс-раунд 1, №3):
+   * секунды с запуска часов рендера, тот же `UpdateContext`, что и весь
+   * остальной движок (не `performance.now()` напрямую — её докблок прямо
+   * запрещает материалам брать время в обход контекста).
    */
-  protected onVisibleUpdate(): void {
-    this.sharedMaterial.updateMaterial()
+  protected onVisibleUpdate(ctx: UpdateContext): void {
+    this.sharedMaterial.updateMaterial(ctx.elapsed)
   }
 }
 
