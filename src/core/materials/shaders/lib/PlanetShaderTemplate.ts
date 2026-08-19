@@ -26,7 +26,13 @@ const defaultUniforms = {
   uDetailBrightness: new Uniform(1),
   uDetailAoInfluence: new Uniform(0.5),
   uDetailLayerGates: new Uniform(new Vector3(0, 0, 0)),
-  uCavityStrength: new Uniform(0)
+  uCavityStrength: new Uniform(0),
+  // Высотный fade облачного слоя (приёмочная волна 4, №3, идея владельца) —
+  // 1 из космоса, гаснет к середине толщины атмосферы (см. докблок
+  // cloudOpacityForAltitude в PlanetMaterial.ts). Дефолт 1 — до первого
+  // updateCloudOpacity (или у тела без атмосферы, где юниформ так и
+  // остаётся 1 навсегда) слой виден целиком, как раньше.
+  uCloudOpacity: new Uniform(1)
 }
 const ringShadowUniforms = AppUniformsChunk.ringShadowUniforms
 
@@ -96,6 +102,7 @@ export const PlanetShaderTemplate: ShaderProps = {
     uniform sampler2D diffuseMap;
     uniform sampler2D nightMap;
     uniform sampler2D cloudMap;
+    uniform float uCloudOpacity;
     uniform sampler2D specularMap;
     uniform sampler2D bumpMap;
     uniform float bumpScale;
@@ -227,6 +234,11 @@ export const PlanetShaderTemplate: ShaderProps = {
         cloudColor *= pow(max(0.5 * lightIntensity + 0.1, 0.0), 0.5);
         cloudAlpha = dot(cloudColor, vec3(1.0)) / 3.0;
         cloudAlpha = pow(cloudAlpha, 0.5);
+        // Высотный fade (приёмочная волна 4, №3) — 1 из космоса, гаснет к
+        // середине толщины атмосферы (CPU-считанный юниформ, см.
+        // PlanetMaterial.updateCloudOpacity/cloudOpacityForAltitude).
+        cloudColor *= uCloudOpacity;
+        cloudAlpha *= uCloudOpacity;
       #endif
 
       vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);

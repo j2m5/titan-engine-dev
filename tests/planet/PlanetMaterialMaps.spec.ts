@@ -1050,82 +1050,50 @@ describe('PlanetMaterial: зачистка облаков Титана и Вен
   })
 })
 
-describe('PlanetMaterial: гейт ночной карты (облачный — см. describe ниже, отключён рулингом владельца)', () => {
+describe('PlanetMaterial: гейты ночной и облачной карт', () => {
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
 
-  it('без ночной карты дефайн не ставится', () => {
+  it('без ночной и облачной карт дефайны не ставятся', () => {
     const material = new PlanetMaterial(earth())
     material.updateMaterial()
 
     expect(material.defines.USE_NIGHT).toBeUndefined()
-  })
-
-  it('с загруженной картой дефайн появляется', () => {
-    const nightPath = earth().resources.where('resourceType', 'night').first()!.getAttribute('path') as string
-    seedTexture(nightPath, 4096, 2048)
-
-    const material = new PlanetMaterial(earth())
-    material.updateMaterial()
-
-    expect(material.defines.USE_NIGHT).toBe('1')
-  })
-
-  it('resetMaterial снимает дефайн', () => {
-    const nightPath = earth().resources.where('resourceType', 'night').first()!.getAttribute('path') as string
-    seedTexture(nightPath, 4096, 2048)
-
-    const material = new PlanetMaterial(earth())
-    material.updateMaterial()
-    expect(material.defines.USE_NIGHT).toBe('1')
-
-    material.resetMaterial()
-
-    expect(material.defines.USE_NIGHT).toBeUndefined()
-  })
-})
-
-// Облачный слой ОТКЛЮЧЁН РЕШЕНИЕМ ВЛАДЕЛЬЦА (2026-08-19, приёмочная волна 2,
-// №2, см. докблок-рулинг в PlanetMaterial.updateMaterial): на полюсах
-// терраформная равнопрямоугольная UV-развёртка закручивает облачную текстуру
-// в полосы, замешивание в диффуз признано негодным — переосмысление вынесено
-// в будущую арку. Данные (renderingObjects/resources, cloud-строки в БД) эта
-// волна НЕ трогает — см. describe «зачистка облаков Титана и Венеры» выше,
-// он по-прежнему проверяет данные, не гейт.
-describe('PlanetMaterial: облачный гейт USE_CLOUD отключён глобально (рулинг владельца)', () => {
-  beforeEach(() => seedPlaceholderKeys())
-  afterEach(() => resourceStorage.deleteAllTextures())
-
-  it('без облачной карты USE_CLOUD не ставится (как и раньше)', () => {
-    const material = new PlanetMaterial(earth())
-    material.updateMaterial()
-
     expect(material.defines.USE_CLOUD).toBeUndefined()
   })
 
-  it('С ЗАГРУЖЕННОЙ облачной картой USE_CLOUD ВСЁ РАВНО не ставится — рулинг, не отсутствие данных (RED без фикса: до этой правки та же выборка давала USE_CLOUD="1", см. историю коммита)', () => {
+  // Облачный слой ВЕРНУЛСЯ решением владельца (2026-08-19, приёмочная волна
+  // 4, №3): рулинг приёмочной волны 2 (№2 — полосы на полюсах от терраформной
+  // равнопрямоугольной UV-развёртки) снят — идея владельца в том, что
+  // высотный fade (uCloudOpacity, см. describe ниже) гасит слой ДО того, как
+  // камера подлетает достаточно близко для видимых полос.
+  it('с загруженными картами дефайны появляются', () => {
+    const nightPath = earth().resources.where('resourceType', 'night').first()!.getAttribute('path') as string
     const cloudPath = earth().resources.where('resourceType', 'cloud').first()!.getAttribute('path') as string
+    seedTexture(nightPath, 4096, 2048)
     seedTexture(cloudPath, 8192, 4096)
 
     const material = new PlanetMaterial(earth())
     material.updateMaterial()
 
-    expect(material.defines.USE_CLOUD).toBeUndefined()
-    // cloudMap по-прежнему грузится в юниформ (см. PlanetMaterial) — гейт
-    // именно ОТКЛЮЧЁН, а не текстура молча пропала.
-    expect(material.uniforms.cloudMap.value).toBeDefined()
+    expect(material.defines.USE_NIGHT).toBe('1')
+    expect(material.defines.USE_CLOUD).toBe('1')
   })
 
-  it('resetMaterial: USE_CLOUD остаётся undefined до и после (нечего снимать)', () => {
+  it('resetMaterial снимает оба дефайна', () => {
+    const nightPath = earth().resources.where('resourceType', 'night').first()!.getAttribute('path') as string
     const cloudPath = earth().resources.where('resourceType', 'cloud').first()!.getAttribute('path') as string
+    seedTexture(nightPath, 4096, 2048)
     seedTexture(cloudPath, 8192, 4096)
 
     const material = new PlanetMaterial(earth())
     material.updateMaterial()
-    expect(material.defines.USE_CLOUD).toBeUndefined()
+    expect(material.defines.USE_NIGHT).toBe('1')
+    expect(material.defines.USE_CLOUD).toBe('1')
 
     material.resetMaterial()
 
+    expect(material.defines.USE_NIGHT).toBeUndefined()
     expect(material.defines.USE_CLOUD).toBeUndefined()
   })
 })

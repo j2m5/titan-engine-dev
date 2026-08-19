@@ -473,19 +473,12 @@ class ResourceObserver {
 
       if (!actor) continue
 
+      // Облачный слой ВЕРНУЛСЯ решением владельца (2026-08-19, приёмочная
+      // волна 4, №3) — фильтр 'cloud' из кандидатов streaming (приёмочная
+      // волна 2, №2) снят: USE_CLOUD снова ставится при cloudMap (см.
+      // PlanetMaterial.updateMaterial), карту снова стоит стримить.
       const streamableResources: Resource[] = actor.resources
-        .filter(
-          (resource: Resource): boolean =>
-            resource.getAttribute('lifecycle') === 'streamable' &&
-            // Облачный слой ОТКЛЮЧЁН РЕШЕНИЕМ ВЛАДЕЛЬЦА (2026-08-19,
-            // приёмочная волна 2, №2, см. PlanetMaterial.updateMaterial —
-            // тот же докблок-рулинг): USE_CLOUD больше не ставится ни при
-            // каком cloudMap, стримить облачные карты в VRAM ради текстуры,
-            // которую шейдер никогда не сэмплирует, — чистые расходы.
-            // Только фильтр КАНДИДАТОВ здесь — mapTypeRank/политика ранга
-            // (streaming/types.ts) не тронуты, минимальная обратимость.
-            resource.getAttribute('resourceType') !== 'cloud'
-        )
+        .filter((resource: Resource): boolean => resource.getAttribute('lifecycle') === 'streamable')
         .toArray()
 
       if (!streamableResources.length) continue
