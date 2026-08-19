@@ -4,6 +4,7 @@ import sharp from 'sharp'
 import { parseHeightMap } from '@/core/terrain/heightMapFormat'
 import { buildSlopeMap } from './lib/slopeMapEncode'
 import { argument } from './lib/cliArguments'
+import { WATER_SHALLOW_RANGE_METERS } from '@/core/terrain/waterLevel'
 
 /**
  * Slope-карта тела из готовой карты высот: TEHM → изображение с уклонами
@@ -94,5 +95,5 @@ await (output.endsWith('.webp') ? image.webp({ lossless: true, effort: 6 }) : im
 
 console.log(
   `записано ${output}: ${map.width}×${map.height}, радиус ${radiusMeters} м, cavity=${cavity ? 'on' : 'off'}, ` +
-    `вода=${waterLevelMeters !== undefined ? `уровень ${waterLevelMeters} м, range ${shallowRangeMeters ?? 200} м` : 'off'}`
+    `вода=${waterLevelMeters !== undefined ? `уровень ${waterLevelMeters} м, range ${shallowRangeMeters ?? WATER_SHALLOW_RANGE_METERS} м` : 'off'}`
 )

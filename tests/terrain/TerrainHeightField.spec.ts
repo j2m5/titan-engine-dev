@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { BufferAttribute, SphereGeometry, Vector2, Vector3 } from 'three'
 import {
   CLEARANCE_GRID_BASE_SEGMENTS,
@@ -140,6 +140,30 @@ describe('TerrainHeightField: нормаль поверхности', () => {
     const normal = field.surfaceNormalLocal(new Vector3(0, 1, 0), new Vector3())
 
     expect(normal.y).toBeCloseTo(1, 6)
+  })
+})
+
+// Финальное ревью water-foundation, находка №3: пирамида пер-узловых
+// максимумов раньше строилась БЕЗУСЛОВНО в конструкторе (+37..44 мс на карту,
+// +22.5 мс даже на вырожденной 4×4 constantHeightField), хотя её спрашивают
+// только тела с водой. Билдер приватный — спай идёт через прототип с
+// приведением к `any`, единственный способ достучаться до приватного метода
+// класса извне теста.
+describe('TerrainHeightField: пирамида nodeMaxHeightMeters строится лениво (Task 5, финальное ревью, находка №3)', () => {
+  it('конструктор не строит пирамиду; первый nodeMaxHeightMeters строит и кеширует, повторный вызов не перестраивает', () => {
+    const spy = vi.spyOn(TerrainHeightField.prototype as unknown as { buildNodeMaxHeightPyramid: () => Float32Array }, 'buildNodeMaxHeightPyramid')
+
+    const field = new TerrainHeightField(makeMap(4, 2, [0, 65535, 0, 0, 0, 0, 0, 0]), R_KM)
+    expect(spy).not.toHaveBeenCalled()
+
+    const first = field.nodeMaxHeightMeters(0, TERRAIN_QUADTREE_MAX_LEVEL, 0, 0)
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(Number.isFinite(first)).toBe(true)
+
+    field.nodeMaxHeightMeters(0, TERRAIN_QUADTREE_MAX_LEVEL, 1, 1)
+    expect(spy).toHaveBeenCalledTimes(1) // кеш — второй вызов не перестраивает
+
+    spy.mockRestore()
   })
 })
 

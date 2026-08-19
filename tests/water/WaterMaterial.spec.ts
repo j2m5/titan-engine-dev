@@ -54,6 +54,11 @@ describe('WaterShaderTemplate: строковые ассерты (Френель
     expect(frag).toContain('smoothstep(-0.08, 0.25, NdotL)')
   })
 
+  it('ночной пол — ручка uWaterNightFloor, не зашитая константа (находка №5 финального ревью)', () => {
+    expect(frag).toContain('uniform float uWaterNightFloor;')
+    expect(frag).toContain('color *= mix(uWaterNightFloor, 1.0, dayFactor);')
+  })
+
   it('лог-депт подключён на обоих концах (та же логарифмическая глубина, что у патчей суши) — ${ShaderChunk[...]} разворачивается на этапе шаблонной строки JS, не #include', () => {
     expect(vert).toContain('USE_LOGARITHMIC_DEPTH_BUFFER')
     expect(vert).toContain('vFragDepth = 1.0 + gl_Position.w;')
@@ -120,6 +125,7 @@ describe('WaterMaterial: проводка ручек data (дефолты чес
     expect(material.uniforms.uWaterShallowColor.value.getHex()).toBe(0x2e8b9e)
     expect(material.uniforms.uWaterAlphaDeep.value).toBe(0.85)
     expect(material.uniforms.uWaterFresnelTint.value.getHex()).toBe(0xbfe9ff)
+    expect(material.uniforms.uWaterNightFloor.value).toBe(0.08)
   })
 
   it('ручки data перекрывают дефолты — число и строка цвета обе конвенции (как dustColor кольца)', () => {
@@ -129,7 +135,8 @@ describe('WaterMaterial: проводка ручек data (дефолты чес
           waterColor: 0x112233,
           waterShallowColor: '#445566',
           waterAlphaDeep: 0.5,
-          waterFresnelTint: 0x778899
+          waterFresnelTint: 0x778899,
+          waterNightFloor: 0.2
         }
       })
     )
@@ -138,6 +145,7 @@ describe('WaterMaterial: проводка ручек data (дефолты чес
     expect(material.uniforms.uWaterShallowColor.value.getHex()).toBe(0x445566)
     expect(material.uniforms.uWaterAlphaDeep.value).toBe(0.5)
     expect(material.uniforms.uWaterFresnelTint.value.getHex()).toBe(0x778899)
+    expect(material.uniforms.uWaterNightFloor.value).toBe(0.2)
   })
 
   it('контракт материала WaterSphere: transparent, depthWrite=false, depthTest=true (див. WaterSphere.spec.ts)', () => {
@@ -253,5 +261,25 @@ describe('WaterMaterial: slope-путь резолвится один раз (н
     material.updateMaterial()
     material.updateMaterial()
     expect(whereSpy).toHaveBeenCalledTimes(2) // после resetMaterial кадровые вызовы всё ещё не трогают resources
+  })
+})
+
+// Находка №6 финального ревью water-foundation: дефолты воды продублированы
+// в двух независимых местах — WaterShaderTemplate.defaultUniforms (шаблон,
+// на деле не участвует в рантайме WaterShader, см. её докблок) и
+// WaterShader.DEFAULT_* (фактически применяются при пустом data). Ничто их
+// не сцепляет — правка одного места молча расходится с другим. Тест-паритет
+// (тот же приём, что у планетных материалов — шаблон и рантайм-дефолт
+// обязаны совпадать) ловит именно расхождение, не механизм подстановки.
+describe('WaterShaderTemplate ↔ WaterShader: паритет дефолтов (находка №6 финального ревью)', () => {
+  it('пять ручек воды: значение из WaterShaderTemplate.uniforms совпадает с дефолтом WaterShader при пустом data', () => {
+    const material = new WaterMaterial(stubActor({ data: {} }))
+    const templateUniforms = WaterShaderTemplate.uniforms
+
+    expect(material.uniforms.uWaterColor.value.getHex()).toBe(templateUniforms.uWaterColor.value.getHex())
+    expect(material.uniforms.uWaterShallowColor.value.getHex()).toBe(templateUniforms.uWaterShallowColor.value.getHex())
+    expect(material.uniforms.uWaterAlphaDeep.value).toBe(templateUniforms.uWaterAlphaDeep.value)
+    expect(material.uniforms.uWaterFresnelTint.value.getHex()).toBe(templateUniforms.uWaterFresnelTint.value.getHex())
+    expect(material.uniforms.uWaterNightFloor.value).toBe(templateUniforms.uWaterNightFloor.value)
   })
 })

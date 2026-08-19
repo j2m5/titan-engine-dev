@@ -1,5 +1,6 @@
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
+import { WATER_SHALLOW_RANGE_METERS } from '@/core/terrain/waterLevel'
 import { buildCavityField } from './cavityMap'
 
 export { SLOPE_RANGE }
@@ -37,7 +38,9 @@ export { SLOPE_RANGE }
  *
  * Канал A (опционально, `options.waterLevelMeters` задан) — запечённая
  * глубина воды: `clamp((уровень − h) / range, 0, 1)` → байт 0..255 без знака
- * (0 = суша/урез, 255 = глубже `shallowRangeMeters`, дефолт 200 м). БЕЗ
+ * (0 = суша/урез, 255 = глубже `shallowRangeMeters`, дефолт `WATER_SHALLOW_RANGE_METERS`
+ * = 200 м — общая константа с SSE-потолком подводных патчей суши, см. её
+ * докблок в `src/core/terrain/waterLevel.ts`). БЕЗ
  * дизера — в отличие от R/G/B глубина воды гладкая монотонная величина без
  * мелкого рельефа, который дизер существует спасать; квант 8 бит на 200 м —
  * 0.8 м на байт, ступеньки ниже порога восприятия воды и не нуждаются в
@@ -82,7 +85,7 @@ export function buildSlopeMap(
   // байт-в-байт как до этой правки (44 карты арки cavity не пересобираются)
   const waterLevelMeters = options?.waterLevelMeters
   const hasWater = waterLevelMeters !== undefined
-  const shallowRangeMeters = options?.shallowRangeMeters ?? 200
+  const shallowRangeMeters = options?.shallowRangeMeters ?? WATER_SHALLOW_RANGE_METERS
 
   if (hasWater && (!Number.isFinite(shallowRangeMeters) || shallowRangeMeters <= 0)) {
     throw new Error(`shallowRangeMeters (диапазон обмеления) невалиден: ${shallowRangeMeters}`)

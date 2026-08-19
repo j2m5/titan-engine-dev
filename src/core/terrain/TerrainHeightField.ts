@@ -133,8 +133,23 @@ class TerrainHeightField {
    * на реальной карте): SSE-потолок воды (`terrainQuadtreeSelect`) обязан
    * видеть НАСТОЯЩИЙ пик узла, включая смешанные узлы (центр в океане, край
    * — остров) — только так остров у края узла честно продолжает делиться.
+   *
+   * Построение ОТЛОЖЕНО до первого `nodeMaxHeightMeters` и закешировано здесь
+   * (находка №3 финального ревью water-foundation): пирамида нужна только
+   * телам с водой (SSE-потолок в `terrainQuadtreeSelect`), а строилась
+   * безусловно в конструкторе КАЖДОГО поля — +37..44 мс на карту, +22.5 мс
+   * даже на вырожденной 4×4 карте `constantHeightField` (расход
+   * пропорционален числу узлов дерева, 32760, не размеру карты), суммарно
+   * ~1.8 с старта на 46 тел, из которых пирамиду реально спрашивают два.
+   * Поля шарятся между потребителями в одном треде (см. `terrainHeightFieldFor`)
+   * — потокобезопасность лениво построенного кеша не нужна.
    */
-  private readonly nodeMaxHeightMetersPyramid: Float32Array
+  private nodeMaxHeightMetersPyramid: Float32Array | null = null
+  /** Входные блоки билдера пирамиды выше — снимок на момент конструктора, живут до первого ленивого построения. */
+  private readonly nodeMaxHeightBlock: number
+  private readonly nodeMaxHeightBlockMax: Uint16Array
+  private readonly nodeMaxHeightBlocksX: number
+  private readonly nodeMaxHeightBlocksY: number
 
   public constructor(
     private readonly map: HeightMapData,
@@ -156,8 +171,10 @@ class TerrainHeightField {
     this.maxClearanceMeters = built.maxClearance
     this.maxSagMeters = built.maxSag
     this.equatorTexelMeters = (TWO_PI * radiusKm * 1000) / map.width
-    // blockMin/blockMax/blocksX/blocksY служат только ε-пирамиде ниже —
-    // не хранятся полями тела (2 МБ на карту Луны), передаются аргументами
+    // blockMin/blockMax/blocksX/blocksY служат только ε-пирамиде ниже и
+    // ленивому билдеру пирамиды максимумов — не хранятся полями тела целиком
+    // (2 МБ на карту Луны), только blockMax переживает конструктор (нужен
+    // отложенной пирамиде максимумов)
     this.levelErrorMeters = this.buildGeometricErrors(
       block,
       this.metersPerRaw,
@@ -166,7 +183,10 @@ class TerrainHeightField {
       built.blocksX,
       built.blocksY
     )
-    this.nodeMaxHeightMetersPyramid = this.buildNodeMaxHeightPyramid(block, built.blockMax, built.blocksX, built.blocksY)
+    this.nodeMaxHeightBlock = block
+    this.nodeMaxHeightBlockMax = built.blockMax
+    this.nodeMaxHeightBlocksX = built.blocksX
+    this.nodeMaxHeightBlocksY = built.blocksY
   }
 
   public get minMeters(): number {
@@ -628,7 +648,8 @@ class TerrainHeightField {
    * требует повторного bbox-скана.
    *
    * Память: `6·Σ_{L=1}^{6}4^L` = 32760 записей Float32 ≈ 131 КБ на карту —
-   * посчитано один раз в конструкторе, не за кадр.
+   * считается один раз лениво (см. докблок поля `nodeMaxHeightMetersPyramid`),
+   * не за кадр.
    */
   private buildNodeMaxHeightPyramid(block: number, blockMax: Uint16Array, blocksX: number, blocksY: number): Float32Array {
     const { width, height, minMeters, maxMeters } = this.map
@@ -749,10 +770,18 @@ class TerrainHeightField {
    * через рекурсию отбора; звать с level вне диапазона и чужими i/j нельзя.
    */
   public nodeMaxHeightMeters(face: number, level: number, i: number, j: number): number {
+    const pyramid =
+      this.nodeMaxHeightMetersPyramid ??
+      (this.nodeMaxHeightMetersPyramid = this.buildNodeMaxHeightPyramid(
+        this.nodeMaxHeightBlock,
+        this.nodeMaxHeightBlockMax,
+        this.nodeMaxHeightBlocksX,
+        this.nodeMaxHeightBlocksY
+      ))
     const clampedLevel = Math.min(Math.max(level, TERRAIN_QUADTREE_MIN_LEVEL), TERRAIN_QUADTREE_MAX_LEVEL)
     const patches = 2 ** clampedLevel
 
-    return this.nodeMaxHeightMetersPyramid[face * FACE_NODE_COUNT + pyramidLevelOffset(clampedLevel) + i * patches + j]
+    return pyramid[face * FACE_NODE_COUNT + pyramidLevelOffset(clampedLevel) + i * patches + j]
   }
 }
 

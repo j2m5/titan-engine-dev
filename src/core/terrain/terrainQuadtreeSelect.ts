@@ -1,6 +1,7 @@
 import { Frustum, Sphere, Vector3 } from 'three'
 import { SpaceScale } from '@/core/constants'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { WATER_SHALLOW_RANGE_METERS } from './waterLevel'
 import { CUBE_FACES, cubeFaceDirection } from './cubeSphere'
 import type { TerrainHeightField } from './TerrainHeightField'
 
@@ -37,13 +38,20 @@ const MIN_DISTANCE_METERS = 100
 export const TERRAIN_QUADTREE_WATER_CEILING_LEVEL = 4
 
 /**
- * Фиксированный запас, метры — честный максимум узла (`nodeMaxHeightMeters`)
- * сам по себе уже не занижает (см. её докблок и докблок билдера пирамиды в
- * TerrainHeightField), запас здесь только на близость к порогу: берег
- * обязан домешаться честно, даже когда честный максимум узла лишь чуть ниже
- * уровня воды.
+ * Запас потолка, метры — честный максимум узла (`nodeMaxHeightMeters`) сам
+ * по себе уже не занижает (см. её докблок и докблок билдера пирамиды в
+ * TerrainHeightField), запас здесь на то, чтобы замораживать узел ТОЛЬКО под
+ * непрозрачной водой. `= WATER_SHALLOW_RANGE_METERS` (диапазон мелководья
+ * канала A slope-карты, см. её докблок) — было 50 м, что уже ЗАКОРОЧЕ
+ * 200-метрового диапазона мелководья энкодера: узел мог замёрзнуть на уровне
+ * L4, чей честный максимум лежит между 50 и 200 м под водой — то есть под
+ * ещё ЧАСТИЧНО прозрачной водой, гранёный шельф был виден сквозь неё (находка
+ * №1 финального ревью, замер: 60 шельфовых L4-узлов Земли, самый мелкий
+ * −51.6 м при альфе 0.22 из 0.85). Запас потолка обязан быть ≥ диапазона
+ * мелководья — тогда заморозка начинается не раньше полностью непрозрачной
+ * глубины.
  */
-const WATER_CEILING_MARGIN_METERS = 50
+const WATER_CEILING_MARGIN_METERS = WATER_SHALLOW_RANGE_METERS
 
 export interface SelectParams {
   field: TerrainHeightField

@@ -13,7 +13,11 @@ const defaultUniforms = {
   uWaterColor: new Uniform(new Color(0x0b3d66)),
   uWaterShallowColor: new Uniform(new Color(0x2e8b9e)),
   uWaterAlphaDeep: new Uniform(0.85),
-  uWaterFresnelTint: new Uniform(new Color(0xbfe9ff))
+  uWaterFresnelTint: new Uniform(new Color(0xbfe9ff)),
+  // Пол яркости ночной стороны (см. фрагментник ниже) — сверх исходной спеки
+  // Task 4, находка №5 финального ревью: было зашито константой без ручки,
+  // теперь пятая ручка воды по той же конвенции, что и остальные четыре.
+  uWaterNightFloor: new Uniform(0.08)
 }
 
 export const WaterShaderTemplate: ShaderProps = {
@@ -71,6 +75,7 @@ export const WaterShaderTemplate: ShaderProps = {
     uniform vec3 uWaterShallowColor;
     uniform float uWaterAlphaDeep;
     uniform vec3 uWaterFresnelTint;
+    uniform float uWaterNightFloor;
 
     varying vec3 vNormal;
     varying vec3 vViewLightDirection;
@@ -116,12 +121,12 @@ export const WaterShaderTemplate: ShaderProps = {
       // Ночная сторона темнее, не чёрная: вода не светится сама, но полный
       // ноль на терминаторе неправдоподобен (рассеянный свет неба/атмосферы).
       // Терминатор — та же зона, что у PlanetShaderTemplate (эстетическая
-      // консистентность суши/воды); ночной пол 0.08 — честно помеченная
-      // константа, приёмка вида — за владельцем.
+      // консистентность суши/воды); ночной пол — ручка uWaterNightFloor
+      // (дефолт 0.08, честно помеченный), приёмка вида — за владельцем.
       vec3 lightDirection = normalize(vViewLightDirection);
       float NdotL = dot(normal, lightDirection);
       float dayFactor = smoothstep(-0.08, 0.25, NdotL);
-      color *= mix(0.08, 1.0, dayFactor);
+      color *= mix(uWaterNightFloor, 1.0, dayFactor);
 
       gl_FragColor = vec4(color, alpha);
 

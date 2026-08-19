@@ -207,6 +207,8 @@ export interface IPlanetRenderingObject {
   waterAlphaDeep?: number
   /** Тинт на грани тела (Френель) — грубая замена честному отражению неба */
   waterFresnelTint?: number | string
+  /** Пол яркости ночной стороны воды, 0..1 (терминатор, см. WaterShaderTemplate). Без ручки — дефолт движка 0.08. */
+  waterNightFloor?: number
 }
 
 export type IAtmosphereRenderingObject = AtmosphereConfig

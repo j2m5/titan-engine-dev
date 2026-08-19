@@ -3,6 +3,19 @@ import { readRenderingData } from '@/core/helpers/renderingData'
 import type { IPlanetRenderingObject } from '@/core/models/types'
 
 /**
+ * Диапазон мелководья, метры — вода прозрачна (канал A slope-карты, см.
+ * `scripts/lib/slopeMapEncode.ts`) от уреза до этой глубины, дальше запечена
+ * непрозрачной. ПРОШИТО В ЗАПЕЧЁННЫЕ КАРТЫ КАНАЛА A — менять только синхронно
+ * с пересборкой всех slope-карт тел с водой (`npm run rebuild:slopemaps`),
+ * иначе декодер на GPU и энкодер разъедутся молча (тот же байт будет значить
+ * разную глубину). Общий источник для энкодера (дефолт `shallowRangeMeters`)
+ * и SSE-потолка подводных патчей суши (`terrainQuadtreeSelect` — запас потолка
+ * обязан быть НЕ УЖЕ этого диапазона, иначе узел замерзает под ещё прозрачной
+ * водой, находка №1 финального ревью).
+ */
+export const WATER_SHALLOW_RANGE_METERS = 200
+
+/**
  * Единый предикат валидности `waterLevelMeters` (Task 5, water-foundation).
  * `readRenderingData` отдаёт `unknown` под капотом (см. её докблок): БД не
  * различает `null`/`NaN`/строку на уровне типов, а три места чтения этой

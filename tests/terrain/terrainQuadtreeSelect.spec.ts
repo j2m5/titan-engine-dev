@@ -216,6 +216,43 @@ describe('selectTerrainNodes: SSE-потолок подводных патчей
   })
 })
 
+// Финальное ревью water-foundation, находка №1 (БЛОКЕР): запас потолка обязан
+// быть ≥ WATER_SHALLOW_RANGE_METERS (диапазон мелководья канала A) — иначе
+// узел, чей честный максимум лежит МЕЖДУ старым запасом (50 м) и диапазоном
+// мелководья (200 м), замерзает под ещё ЧАСТИЧНО ПРОЗРАЧНОЙ водой (альфа
+// плавно растёт 0→1 на этом диапазоне, не 0/1-скачком на границе запаса).
+// Тот же профиль ocean/land, что и waterField() выше, но с параметризуемым
+// пиком океана — изолирует именно порог запаса, а не форму карты.
+function waterFieldWithOceanHigh(oceanHigh: number): TerrainHeightField {
+  const oceanLow = oceanHigh - 10000 // та же амплитуда 10000, что у LAND_HIGH−LAND_LOW — гарантирует непустой ε на всех уровнях (см. HEIGHT_AMPLITUDE_METERS выше)
+  const values: number[] = []
+  for (let row = 0; row < WATER_HEIGHT; row++) {
+    for (let col = 0; col < WATER_WIDTH; col++) {
+      const checker = (col + row) % 2 === 0
+      const isOcean = col < WATER_WIDTH / 2
+      const meters = isOcean ? (checker ? oceanLow : oceanHigh) : checker ? LAND_LOW : LAND_HIGH
+      values.push(rawFor(meters))
+    }
+  }
+  return new TerrainHeightField(makeMap(WATER_WIDTH, WATER_HEIGHT, values, WATER_MIN_METERS, WATER_MAX_METERS), R_KM)
+}
+
+describe('selectTerrainNodes: запас SSE-потолка ≥ диапазона мелководья (Task 5, финальное ревью, находка №1)', () => {
+  it('честный максимум узла на 100 м ниже уровня (внутри мелководья, вода ещё прозрачна) — узел НЕ замораживается', () => {
+    const field = waterFieldWithOceanHigh(-100) // уровень 0 − 100 м
+    const { leaves } = selectTerrainNodes(waterParamsAt(field, OCEAN_INTERIOR_DIR, 0.2, 0))
+
+    expect(Math.max(...leaves.map((a) => a.level))).toBe(TERRAIN_QUADTREE_MAX_LEVEL)
+  })
+
+  it('честный максимум узла на 250 м ниже уровня (глубже мелководья, вода непрозрачна) — узел замораживается на потолке', () => {
+    const field = waterFieldWithOceanHigh(-250) // уровень 0 − 250 м
+    const { leaves } = selectTerrainNodes(waterParamsAt(field, OCEAN_INTERIOR_DIR, 0.2, 0))
+
+    expect(Math.max(...leaves.map((a) => a.level))).toBe(TERRAIN_QUADTREE_WATER_CEILING_LEVEL)
+  })
+})
+
 // Ревью Task 5, фикс-раунд 1, находка №1/№4: СМЕШАННЫЙ узел (центр в океане,
 // у КРАЯ — остров выше уровня воды) — ровно случай, где статистическая
 // оценка «центр+k·ε» недооценивает максимум узла (замер ревью на реальной
