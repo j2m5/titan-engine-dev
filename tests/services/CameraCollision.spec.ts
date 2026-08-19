@@ -931,3 +931,40 @@ describe('CameraCollision: марч не туннелирует под уров�
     expect(camera.position.distanceTo(end)).toBeCloseTo(0, 6)
   })
 })
+
+describe('CameraCollision: приход карты высот в середине сценария', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  it('карта, приехавшая после первого кадра, начинает работать в коллизии', () => {
+    const body = makeBody('planet', 1736, new Vector3(), undefined, MOON_HEIGHT_PATH)
+    // Камера снаружи гладкой сферы Луны (1736×GAP ≈ 1737.7 км), но ниже
+    // рельефа, который даст карта (1736 + 10 км)
+    const start = toThreeJSUnits(1741)
+    const { collision, camera } = makeCollision([body], new Vector3(start, 0, 0))
+
+    collision.resolve()
+    expect(camera.position.x).toBeCloseTo(start, 10)
+
+    // seedHeightMap пишет реестр в обход request() и версию не двигает —
+    // поднимаем её вручную, ровно как это сделала бы приехавшая загрузка
+    seedHeightMap(new Array(8).fill(65535), 4, 2, 0, 10000)
+    ;(heightFieldStorage as unknown as { registryVersion: number }).registryVersion += 1
+    collision.resolve()
+
+    expect(camera.position.x).toBeGreaterThan(start)
+  })
+
+  it('без смены версии и состава сцены коллайдеры не пересобираются', () => {
+    seedHeightMap(new Array(8).fill(65535), 4, 2, 0, 10000)
+    const body = makeBody('planet', 1736, new Vector3(), undefined, MOON_HEIGHT_PATH)
+    const { collision } = makeCollision([body], new Vector3(toThreeJSUnits(3000), 0, 0))
+    const internals = collision as unknown as { colliders: unknown[] }
+
+    collision.resolve()
+    const before = internals.colliders
+
+    collision.resolve()
+
+    expect(internals.colliders).toBe(before)
+  })
+})

@@ -165,6 +165,9 @@ class CameraCollision {
   private colliders: Collider[] = []
   private snapshot: Object3D[] | null = null
 
+  /** Версия реестра карт высот на момент последней пересборки коллайдеров. */
+  private mapsVersion: number = -1
+
   private readonly center: Vector3 = new Vector3()
   private readonly normal: Vector3 = new Vector3()
 
@@ -234,13 +237,17 @@ class CameraCollision {
   }
 
   /**
-   * Кэш перестраивается по смене ссылки: SceneObserver пересоздаёт `objects`
-   * новым массивом при установке сцены и в dispose.
+   * Коллайдеры пересобираются при смене сцены (новая ссылка на массив
+   * наблюдения) ИЛИ при смене состава реестра карт высот. Второе условие
+   * обязательно с приходом гейта: карта доезжает в середине сценария, узел
+   * апгрейдится на рельеф, а ссылка sceneObserver.objects при этом та же —
+   * без версии камера продолжила бы сталкиваться с гладкой сферой.
    */
   private refreshColliders(): void {
-    if (this.snapshot === this.sceneObserver.objects) return
+    if (this.snapshot === this.sceneObserver.objects && this.mapsVersion === heightFieldStorage.version) return
 
     this.snapshot = this.sceneObserver.objects
+    this.mapsVersion = heightFieldStorage.version
     this.colliders = collectColliders(this.snapshot)
   }
 
