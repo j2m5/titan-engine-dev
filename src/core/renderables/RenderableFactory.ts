@@ -236,7 +236,14 @@ class RenderableFactory {
 
   /**
    * Карта высот доехала — тело переходит с легаси-сферы на рельеф.
-   * Идемпотентен: гейт зовёт его на каждом пересчёте, пока тело близко.
+   * Идемпотентен: гейт (Task 5) зовёт его на каждом пересчёте, пока тело
+   * близко, но только когда карта уже лежит в реестре — холостых вызовов
+   * без карты в горячем пути сегодня нет.
+   *
+   * Наличие карты проверяется ДО постройки поверхности: без карты
+   * buildPlanetSurface всё равно вернул бы легаси Planet (SphereGeometry
+   * 256×256 + PlanetMaterial), который тут же ушёл бы в мусор проверкой
+   * ниже — тяжёлая аллокация ради значения, которое немедленно выбрасывается.
    */
   public upgradePlanetToTerrain(node: DynamicNode): boolean {
     const lod = node.children.find((child): child is LOD => child instanceof LOD)
@@ -244,11 +251,13 @@ class RenderableFactory {
     if (!lod || !lod.levels.length) return false
     if (lod.levels[0].object instanceof TerrainSphere) return false
 
-    const next: RenderableObject3D = this.buildPlanetSurface(node.model)
+    const heightPath: string | undefined = heightPathOf(node.model)
 
-    if (!(next instanceof TerrainSphere)) return false
+    if (!heightPath || !heightFieldStorage.get(heightPath)) return false
 
-    this.swapSurface(node, next)
+    // Карта в реестре подтверждена выше — buildPlanetSurface заведомо
+    // вернёт TerrainSphere.
+    this.swapSurface(node, this.buildPlanetSurface(node.model))
 
     return true
   }
