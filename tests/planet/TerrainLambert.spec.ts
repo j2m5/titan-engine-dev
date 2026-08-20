@@ -29,19 +29,25 @@ function terrainShade(ndotl: number, lambert: number, ambient: number): number {
 describe('PlanetShaderTemplate: ламберт суши (спайк, USE_TERRAIN_UV)', () => {
   const frag: string = PlanetShaderTemplate.fragmentShader
 
-  it('юниформы объявлены, множитель стоит ПОСЛЕ состава day и ДО терминаторного mix', () => {
+  it('юниформы объявлены, множитель стоит на dayColor — ДО состава с облаками', () => {
     expect(frag).toContain('uniform float uTerrainLambert;')
     expect(frag).toContain('uniform float uTerrainAmbient;')
+    const albedoIdx = frag.indexOf('dayColor *= albedoMul;')
+    const lambertIdx = frag.indexOf('dayColor *= mix(1.0, mix(uTerrainAmbient, 1.0, max(NdotLraw, 0.0)), uTerrainLambert);')
     const dayIdx = frag.indexOf('vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);')
-    const lambertIdx = frag.indexOf('day *= mix(1.0, mix(uTerrainAmbient, 1.0, max(NdotLraw, 0.0)), uTerrainLambert);')
-    const mixIdx = frag.indexOf('vec3 finalColor = mix(night, day, dayFactor);')
-    expect(dayIdx).toBeGreaterThan(-1)
-    expect(lambertIdx).toBeGreaterThan(dayIdx)
-    expect(mixIdx).toBeGreaterThan(lambertIdx)
+    expect(albedoIdx).toBeGreaterThan(-1)
+    expect(lambertIdx).toBeGreaterThan(albedoIdx)
+    expect(dayIdx).toBeGreaterThan(lambertIdx)
+  })
+
+  it('облака ламбертом суши не затеняются: множителя на составленном day нет', () => {
+    // Облака живут по своему закону (pow(0.5·lightIntensity + 0.1, 0.5)):
+    // затенять их нормалью РЕЛЬЕФА — двойной учёт и наклон не по их высоте.
+    expect(frag).not.toContain('day *= mix(1.0, mix(uTerrainAmbient')
   })
 
   it('множитель под гейтом USE_TERRAIN_UV — легаси-путь гигантов не тронут', () => {
-    const lambertIdx = frag.indexOf('day *= mix(1.0, mix(uTerrainAmbient')
+    const lambertIdx = frag.indexOf('dayColor *= mix(1.0, mix(uTerrainAmbient')
     const guardIdx = frag.lastIndexOf('#ifdef USE_TERRAIN_UV', lambertIdx)
     const endifIdx = frag.indexOf('#endif', lambertIdx)
     expect(guardIdx).toBeGreaterThan(-1)
