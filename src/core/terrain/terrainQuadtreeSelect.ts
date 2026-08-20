@@ -78,6 +78,31 @@ const centerDirScratch = new Vector3()
 const sphereCenterScratch = new Vector3()
 const sphereScratch = new Sphere()
 
+/**
+ * Стретч диагонали ячейки равноугольной развёртки у угла грани относительно
+ * центра: √(4/3). Радиус сферы узла обязан покрывать ХУДШИЙ узел уровня —
+ * иначе частично видимый угловой узел признаётся невидимым и не сплитится.
+ */
+const CORNER_DIAGONAL_STRETCH = Math.sqrt(4 / 3)
+
+/**
+ * Радиус ограничивающей сферы узла (юниты) с центром на R + h(центр):
+ * полудиагональ дуги патча с угловым стретчем + размах высот карты
+ * ОТНОСИТЕЛЬНО высоты центра (не |min|/|max| от датума).
+ *
+ * Дуга меряется по сфере ВЕРШИН (R + max), а не по датуму: хорда той же
+ * угловой ширины на радиусе R + h длиннее в (R + h)/R раз. Впадины
+ * (max ≤ 0) множителя не дают — сфера не должна сжиматься.
+ */
+export function nodeBoundingSphereRadiusUnits(field: TerrainHeightField, level: number, centerHeightMeters: number): number {
+  const arcRadiusKm = field.radiusKm + Math.max(field.maxMeters, 0) / 1000
+  const patchHalfDiagonal =
+    ((toThreeJSUnits(arcRadiusKm) * (Math.PI / 2)) / 2 ** level) * (Math.SQRT2 / 2) * CORNER_DIAGONAL_STRETCH
+  const heightPadMeters = Math.max(field.maxMeters - centerHeightMeters, centerHeightMeters - field.minMeters, 0)
+
+  return patchHalfDiagonal + toThreeJSUnits(heightPadMeters / 1000)
+}
+
 function visitNode(
   face: number,
   level: number,
@@ -105,10 +130,7 @@ function visitNode(
   const centerHeightMeters = field.heightMeters(centerDirScratch)
   sphereCenterScratch.copy(centerDirScratch).multiplyScalar(toThreeJSUnits(field.radiusKm + centerHeightMeters / 1000))
 
-  // половина диагонали дуги патча (юниты) + запас на амплитуду рельефа
-  const patchHalfDiagonal = ((toThreeJSUnits(field.radiusKm) * (Math.PI / 2)) / 2 ** level) * (Math.SQRT2 / 2)
-  const heightPad = toThreeJSUnits(Math.max(Math.abs(field.minMeters), Math.abs(field.maxMeters)) / 1000)
-  const sphereRadius = patchHalfDiagonal + heightPad
+  const sphereRadius = nodeBoundingSphereRadiusUnits(field, level, centerHeightMeters)
 
   const minDistanceUnits = toThreeJSUnits(MIN_DISTANCE_METERS / 1000)
   const distance = Math.max(params.cameraLocal.distanceTo(sphereCenterScratch) - sphereRadius, minDistanceUnits)
@@ -121,7 +143,8 @@ function visitNode(
   // формат совпадает с terrainNodeKey — вызывается без промежуточного
   // TerrainNodeAddress, чтобы не аллоцировать объект на каждый посещённый узел
   const key = `${face}/${level}/${i}/${j}`
-  const threshold = params.currentlySplit.has(key) ? params.splitPixels * params.mergeFactor : params.splitPixels
+  const alreadySplit = params.currentlySplit.has(key)
+  const threshold = alreadySplit ? params.splitPixels * params.mergeFactor : params.splitPixels
 
   let visible = true
   if (params.frustumLocal) {
@@ -141,7 +164,11 @@ function visitNode(
     belowWaterCeiling = nodeMaxHeightMeters < params.waterLevelMeters - WATER_CEILING_MARGIN_METERS
   }
 
-  const shouldSplit = level < TERRAIN_QUADTREE_MAX_LEVEL && sse > threshold && visible && !belowWaterCeiling
+  // Видимость гейтит только НОВЫЕ сплиты: уже разбитый узел держится по SSE
+  // (merge-порог), иначе поворот камеры схлопывал бы поддерево до L1 и при
+  // возврате в кадр требовал полной пересборки (бюджет 6 патчей/кадр).
+  const shouldSplit =
+    level < TERRAIN_QUADTREE_MAX_LEVEL && sse > threshold && (visible || alreadySplit) && !belowWaterCeiling
 
   if (shouldSplit) {
     split.add(key)

@@ -18,7 +18,8 @@ export const RenderingObjects: IRenderingObject[] = [
   // Луна: bumpScale 1 — slope-путь физически честный, множитель не нужен;
   // detail* — периоды шкал в метрах и грейдинг детального слоя (см. IPlanetRenderingObject);
   // detailFadeMeters/detailFade2Meters — явные значения (= дефолт движка), владелец будет крутить.
-  { id: 5, actorId: 19, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000 } },
+  // terrainLambert/terrainAmbient — ламберт суши; включён только Луне — приёмка владельца.
+  { id: 5, actorId: 19, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000, terrainLambert: 1, terrainAmbient: 0.04 } },
   { id: 6, actorId: 24, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 30000, detailFade2Meters: 5000, cavityStrength: 0.35 } },
   // Батч 18 спутников: терраформная арка synth-heightmap (height/slope из оффлайн-генератора,
   // scripts/batch-synth-heightmaps.ts) — detail* делит масштабы и грейдинг с Луной/Европой/Каллисто,

@@ -7,6 +7,7 @@ import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import {
   selectTerrainNodes,
   terrainNodeKey,
+  nodeBoundingSphereRadiusUnits,
   TERRAIN_QUADTREE_WATER_CEILING_LEVEL,
   TERRAIN_QUADTREE_MAX_LEVEL,
   type SelectParams,
@@ -79,9 +80,9 @@ describe('selectTerrainNodes: SSE-отбор узлов квадродерева
 
   it('гистерезис: между τ_merge и τ_split разбитый узел не схлопывается, kMerge реально применяется', () => {
     // Высоты подобраны эмпирически под HEIGHT_AMPLITUDE_METERS=20000 и splitPixels=6:
-    // на ALT_SPLIT четыре пограничных узла face=0 уровня 1 имеют sse≈6.10-6.12 (>
+    // на ALT_SPLIT четыре пограничных узла face=0 уровня 1 имеют sse≈6.34-6.35 (>
     // splitPixels=6) — реально разбиваются с пустой историей. На ALT_MERGE_ZONE
-    // (дальше — камера отодвинута) те же четыре узла имеют sse≈5.40-5.42: НИЖЕ
+    // (дальше — камера отодвинута) те же четыре узла имеют sse≈5.585-5.591: НИЖЕ
     // splitPixels=6 (без истории схлопнулись бы), но ВЫШЕ splitPixels·mergeFactor=
     // 6·0.7=4.2 (с историей остаются разбитыми) — ровно зона гистерезиса.
     const ALT_SPLIT = 4500
@@ -125,10 +126,121 @@ describe('selectTerrainNodes: SSE-отбор узлов квадродерева
     expect(leaves).toHaveLength(24)
   })
 
+  it('гистерезис вне фрустума: уже разбитый узел остаётся разбитым, когда камера отворачивается', () => {
+    // Кадр А: камера смотрит на тело с 1000 км без фрустума — набор глубже 24.
+    const params = makeParams(1000)
+    const runA = selectTerrainNodes(params)
+    expect(runA.leaves.length).toBeGreaterThan(24)
+
+    // Кадр Б: та же позиция, взгляд от тела (все узлы вне фрустума), история из А.
+    const frustum = new Frustum()
+    const away = new PerspectiveCamera(50, 1, 0.001, 1e9)
+    away.position.copy(params.cameraLocal)
+    away.lookAt(params.cameraLocal.clone().multiplyScalar(2))
+    away.updateMatrixWorld(true)
+    frustum.setFromProjectionMatrix(new Matrix4().multiplyMatrices(away.projectionMatrix, away.matrixWorldInverse))
+
+    const runB = selectTerrainNodes({ ...params, frustumLocal: frustum, currentlySplit: runA.split })
+    expect(new Set(runB.leaves.map(terrainNodeKey))).toEqual(new Set(runA.leaves.map(terrainNodeKey)))
+
+    // Контроль: без истории тот же кадр Б схлопывается до 24 — тест дискриминирует.
+    const fresh = selectTerrainNodes({ ...params, frustumLocal: frustum })
+    expect(fresh.leaves).toHaveLength(24)
+  })
+
   it('камера под поверхностью не роняет отбор (кламп дистанции)', () => {
     const { leaves } = selectTerrainNodes(makeParams(-5))
     expect(leaves.length).toBeGreaterThan(24)
     expect(leaves.every((a) => Number.isFinite(a.level))).toBe(true)
+  })
+})
+
+// Земля (R=6371 км), не flatField/R=1736: heightPad в проверяемой формуле берётся
+// от field.minMeters/maxMeters — на flatField они равны ЗАГОЛОВКУ карты (0/65535,
+// формат кодирования, не данные), пад ~45-65 км на R=1736 км тонет любую недооценку
+// углового стретча (ratio без стретча — 1.09, тест ложно зелёный на старой формуле).
+// −11000/9000 м (Марианская впадина/Эверест) — реалистичный размах относительно
+// R=6371 км, где пад того же порядка, что диагональ патча — тест дискриминирует
+// стретч по-настоящему (замер ревью: без стретча ratio 1.09 FAIL, со стретчем 0.95 PASS).
+function sphereTestField(): TerrainHeightField {
+  const values: number[] = []
+  for (let row = 0; row < 4; row++) {
+    for (let col = 0; col < 8; col++) values.push(((col + row) % 2) * 65535)
+  }
+  return new TerrainHeightField(makeMap(8, 4, values, -11000, 9000), 6371)
+}
+
+// Малое тело (порядок Мимаса/Энцелада): размах высот на три порядка меньше
+// радиуса, зато дуга патча короткая — доля высотного члена в радиусе иная,
+// чем у Земли. Вторая точка той же проверки, дискриминации стретча от неё
+// не ждём (её несёт поле Земли выше).
+function smallBodyTestField(): TerrainHeightField {
+  const values: number[] = []
+  for (let row = 0; row < 4; row++) {
+    for (let col = 0; col < 8; col++) values.push(((col + row) % 2) * 65535)
+  }
+  return new TerrainHeightField(makeMap(8, 4, values, -1200, 1200), 175)
+}
+
+describe.each([
+  ['Земля (R=6371 км, −11000..9000 м)', sphereTestField()],
+  ['малое тело (R=175 км, −1200..1200 м)', smallBodyTestField()]
+])('сфера узла консервативна: все вершины патча внутри (угол грани, размах высот) — %s', (_name, field) => {
+  for (const level of [1, 2, 4, 6]) {
+    it(`уровень ${level}: угловой узел (i=j=0) грани 0`, () => {
+      const patches = 2 ** level
+      const span = 2 / patches
+      const sc = -1 + span / 2
+      const tc = -1 + span / 2
+      const centerDir = cubeFaceDirection(0, sc, tc, new Vector3())
+      const centerHeight = field.heightMeters(centerDir)
+      const center = centerDir.clone().multiplyScalar(toThreeJSUnits(field.radiusKm + centerHeight / 1000))
+      const radius = nodeBoundingSphereRadiusUnits(field, level, centerHeight)
+
+      let maxDist = 0
+      for (let v = 0; v <= 64; v++) {
+        for (let u = 0; u <= 64; u++) {
+          const s = -1 + (u / 64) * span
+          const t = -1 + (v / 64) * span
+          const dir = cubeFaceDirection(0, s, t, new Vector3())
+          // худший случай по высоте — вершина на максимуме/минимуме карты
+          for (const h of [field.minMeters, field.maxMeters]) {
+            const p = dir.clone().multiplyScalar(toThreeJSUnits(field.radiusKm + h / 1000))
+            maxDist = Math.max(maxDist, p.distanceTo(center))
+          }
+        }
+      }
+
+      expect(maxDist).toBeLessThanOrEqual(radius)
+    })
+  }
+})
+
+// Плоское поле (min = max = h): высотный член радиуса тождественно 0, остаётся
+// одна дуга — так её и видно отдельно от пада. Конструктивная проверка выше
+// этот множитель не ловит: она меряет расстояние до центра сферы, где пад
+// |max − h(центр)| перекрывает разницу дуг с запасом (замер: худшее отношение
+// 0.62–0.95 при любых R и размахах, обе формулы проходят).
+function flatAtMeters(radiusKm: number, meters: number): TerrainHeightField {
+  return new TerrainHeightField(makeMap(8, 4, new Array(32).fill(0), meters, meters), radiusKm)
+}
+
+describe('сфера узла: дуга меряется по сфере ВЕРШИН (R + max), а не по датуму', () => {
+  // Хорда той же угловой ширины на радиусе R + h длиннее в (R + h)/R раз.
+  it('плоское поле на 20 км над датумом R=1000 км — дуга ровно в 1.02 раза длиннее', () => {
+    for (const level of [1, 2, 4, 6]) {
+      const datum = nodeBoundingSphereRadiusUnits(flatAtMeters(1000, 0), level, 0)
+      const elevated = nodeBoundingSphereRadiusUnits(flatAtMeters(1000, 20_000), level, 20_000)
+
+      expect(elevated / datum).toBeCloseTo(1.02, 9)
+    }
+  })
+
+  it('впадины дугу не удлиняют: max ≤ 0 — множитель 1 (иначе сфера бы СЖИМАЛАСЬ)', () => {
+    const datum = nodeBoundingSphereRadiusUnits(flatAtMeters(1000, 0), 4, 0)
+    const below = nodeBoundingSphereRadiusUnits(flatAtMeters(1000, -20_000), 4, -20_000)
+
+    expect(below).toBe(datum)
   })
 })
 

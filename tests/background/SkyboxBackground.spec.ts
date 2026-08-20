@@ -54,7 +54,8 @@ describe('SkyboxBackground: собственный фоновый проход',
     const observer = {
       scenario: null,
       loadPrimaryTextures: vi.fn(() => Promise.resolve()),
-      sceneBackground: new CubeTexture()
+      sceneBackground: new CubeTexture(),
+      map: new Map()
     } as unknown as ResourceObserver
     const leakDetector = { record: () => null } as unknown as LeakDetector
     const heightFieldGate = { recompute: vi.fn(), dispose: vi.fn() } as never

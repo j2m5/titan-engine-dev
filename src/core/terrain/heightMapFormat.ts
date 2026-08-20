@@ -1,3 +1,5 @@
+export type HeightMapHeader = Pick<HeightMapData, 'width' | 'height' | 'minMeters' | 'maxMeters'>
+
 export type HeightMapData = {
   width: number
   height: number
@@ -18,7 +20,8 @@ export const HEIGHT_MAP_MAGIC = 0x4d484554 // байты 'T','E','H','M' как 
 export const HEIGHT_MAP_VERSION = 1
 export const HEIGHT_MAP_HEADER_BYTES = 24
 
-export function parseHeightMap(buffer: ArrayBuffer): HeightMapData {
+/** Только заголовок: хватает первых HEIGHT_MAP_HEADER_BYTES байт файла. */
+export function parseHeightMapHeader(buffer: ArrayBuffer): HeightMapHeader {
   if (buffer.byteLength < HEIGHT_MAP_HEADER_BYTES) {
     throw new Error(`Карта высот: файл короче заголовка (${buffer.byteLength} байт)`)
   }
@@ -41,12 +44,16 @@ export function parseHeightMap(buffer: ArrayBuffer): HeightMapData {
   const minMeters = view.getFloat32(16, true)
   const maxMeters = view.getFloat32(20, true)
 
-  // Валидация диапазона высот: битый заголовок не должен доехать до вычислений с NaN.
   if (!Number.isFinite(minMeters) || !Number.isFinite(maxMeters)) {
     throw new Error(`Карта высот: невалидные границы диапазона minMeters=${minMeters}, maxMeters=${maxMeters}`)
   }
 
-  const expectedBytes = HEIGHT_MAP_HEADER_BYTES + width * height * 2
+  return { width, height, minMeters, maxMeters }
+}
+
+export function parseHeightMap(buffer: ArrayBuffer): HeightMapData {
+  const header = parseHeightMapHeader(buffer)
+  const expectedBytes = HEIGHT_MAP_HEADER_BYTES + header.width * header.height * 2
 
   if (buffer.byteLength !== expectedBytes) {
     throw new Error(`Карта высот: размер тела не сходится (ожидалось ${expectedBytes}, получено ${buffer.byteLength})`)
@@ -54,7 +61,7 @@ export function parseHeightMap(buffer: ArrayBuffer): HeightMapData {
 
   // Смещение 24 кратно 2 — Uint16Array-вью валиден. Платформа предполагается
   // little-endian, как всюду в вебе.
-  const data = new Uint16Array(buffer, HEIGHT_MAP_HEADER_BYTES, width * height)
+  const data = new Uint16Array(buffer, HEIGHT_MAP_HEADER_BYTES, header.width * header.height)
 
-  return { width, height, minMeters, maxMeters, data }
+  return { ...header, data }
 }

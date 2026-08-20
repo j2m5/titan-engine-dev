@@ -20,3 +20,10 @@ export const YEAR = 365.25
 export const CENTURY = 100 * YEAR
 export const SceneSize = 5 * Math.pow(10, 13)
 export const SpaceScale = Math.pow(10, -3.3)
+
+/**
+ * Категория актора-атмосферы (`storage/database/categories.ts`, alias
+ * `atmosphere`): атмосфера — дочерний актор своего тела, и её ищут по
+ * `children.where('categoryId', …)`.
+ */
+export const ATMOSPHERE_CATEGORY_ID = 5

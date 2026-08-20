@@ -23,6 +23,11 @@ const DEFAULT_DETAIL_AO_INFLUENCE = 0.5
 const DEFAULT_DETAIL_FADE_METERS = 30000
 const DEFAULT_DETAIL_FADE2_METERS = 5000
 
+// Ламберт суши (спайк) — 0 выключен (бит-в-бит прежний шейдер), 0.04 — пол
+// рассеянного света в тени рельефа при включённом ламберте.
+const DEFAULT_TERRAIN_LAMBERT = 0
+const DEFAULT_TERRAIN_AMBIENT = 0.04
+
 // Начало fade относительно конца: не отдельная ручка (см. IPlanetRenderingObject).
 const DETAIL_FADE_START_RATIO = 0.4
 
@@ -62,6 +67,8 @@ interface PlanetUniforms {
   uDetailLayerGates: Vector3
   uDetailFadeRange: Vector4
   uCavityStrength: number
+  uTerrainLambert: number
+  uTerrainAmbient: number
   shadowRingsInnerRadius: number
   shadowRingsOuterRadius: number
   shadowRingsTexture: Texture | null
@@ -135,6 +142,8 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uDetailAoInfluence: new Uniform(planetData.detailAoInfluence ?? DEFAULT_DETAIL_AO_INFLUENCE),
       uDetailLayerGates: new Uniform(new Vector3(0, 0, 0)),
       uCavityStrength: new Uniform(0),
+      uTerrainLambert: new Uniform(planetData.terrainLambert ?? DEFAULT_TERRAIN_LAMBERT),
+      uTerrainAmbient: new Uniform(planetData.terrainAmbient ?? DEFAULT_TERRAIN_AMBIENT),
       uDetailFadeRange: new Uniform(
         new Vector4(
           detailFadeEndUnits * DETAIL_FADE_START_RATIO,

@@ -28,6 +28,7 @@
 
 import { AtmosphereConfig, DensityProfileLayer } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
+import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { Actor } from '@/core/models/Actor'
 
 type Profile = [DensityProfileLayer, DensityProfileLayer]
@@ -123,8 +124,14 @@ export function adjustAtmosphereForTerrainFloor(config: AtmosphereConfig, floorM
 }
 
 /**
- * Пол рельефа родительской планеты в метрах (≤ 0). Тело без карты — 0:
- * легаси-сфера сидит ровно на bottomRadius, шов закрыт прежним равенством.
+ * Пол рельефа родительской планеты в метрах (≤ 0): минимум карты высот
+ * (заголовок известен с начала сценария, полная карта — с приходом гейта),
+ * поднятый до уровня воды — под водой дно атмосфере не видно. Тело без
+ * height-ресурса — 0.
+ *
+ * Пока гейт не подменил поверхность, тело — легаси-сфера ровно на
+ * bottomRadius, а дно атмосферы уже опущено под неё. Расхождение остаётся
+ * только на далёком (мелком в кадре) теле: к подлёту рельеф уже приехал.
  */
 export function terrainFloorMetersFor(actor: Actor): number {
   const parent = actor.parent
@@ -132,7 +139,12 @@ export function terrainFloorMetersFor(actor: Actor): number {
   if (!parent) return 0
 
   const path = parent.resources.where('resourceType', 'height').first()?.getAttribute('path')
-  const map = typeof path === 'string' ? heightFieldStorage.get(path) : undefined
+  const minMeters = typeof path === 'string' ? heightFieldStorage.floorMeters(path) : undefined
 
-  return map ? Math.min(0, map.minMeters) : 0
+  if (minMeters === undefined) return 0
+
+  const waterLevel = readWaterLevelMeters(parent)
+  const floor = waterLevel === undefined ? minMeters : Math.max(minMeters, waterLevel)
+
+  return Math.min(0, floor)
 }

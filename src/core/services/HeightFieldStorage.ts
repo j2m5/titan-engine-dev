@@ -1,6 +1,12 @@
 import { Storage } from '@/core/framework/file/Storage'
 import { config } from '@/core/framework/config'
-import { parseHeightMap, type HeightMapData } from '@/core/terrain/heightMapFormat'
+import {
+  HEIGHT_MAP_HEADER_BYTES,
+  parseHeightMap,
+  parseHeightMapHeader,
+  type HeightMapData,
+  type HeightMapHeader
+} from '@/core/terrain/heightMapFormat'
 
 /**
  * Реестр карт высот, CPU-сторона. Модульный синглтон по образцу
@@ -23,6 +29,13 @@ class HeightFieldStorage {
 
   /** Путь → Date.now() последнего провала. Ключ уходит по истечении бэкоффа. */
   private failedAt: Map<string, number> = new Map()
+
+  /**
+   * Заголовки карт (24 байта): пол рельефа нужен атмосфере в КОНСТРУКТОРЕ —
+   * до того, как спросовый гейт привезёт полную карту. Факт файла, не
+   * сценария: clear() не трогает, повторный сценарий не перечитывает.
+   */
+  private headers: Map<string, HeightMapHeader> = new Map()
 
   /**
    * Номер сценария. Захватывается до первого await; при расхождении по
@@ -50,6 +63,41 @@ class HeightFieldStorage {
 
   public get(path: string): HeightMapData | undefined {
     return this.maps.get(path)
+  }
+
+  /** Минимум высот (м): полная карта, иначе заголовок, иначе undefined. */
+  public floorMeters(path: string): number | undefined {
+    return this.maps.get(path)?.minMeters ?? this.headers.get(path)?.minMeters
+  }
+
+  /**
+   * Параллельно, провалы — пропуск без броска: атмосфера без пола хуже, чем
+   * без заголовка. Итог сводится в ОДИН warn — деградация (пол 0 у всех
+   * перечисленных тел) видна с одного взгляда, а не собирается из N строк.
+   */
+  public async preloadHeaders(paths: readonly string[]): Promise<void> {
+    const failed: string[] = []
+    let firstCause: unknown
+
+    await Promise.all(
+      paths
+        .filter((path: string) => !this.headers.has(path))
+        .map(async (path: string) => {
+          try {
+            this.headers.set(path, await this.fetchHeader(path))
+          } catch (cause) {
+            failed.push(path)
+            firstCause ??= cause
+          }
+        })
+    )
+
+    if (failed.length > 0) {
+      console.warn(
+        `[HeightFieldStorage] заголовки карт высот не прочитаны (${failed.length}): ${failed.join(', ')} — пол рельефа этих тел остаётся 0`,
+        firstCause
+      )
+    }
   }
 
   /** Загруженные плюс летящие: то, за что гейт уже «заплатил». */
@@ -95,6 +143,37 @@ class HeightFieldStorage {
     this.inFlight.clear()
     this.failedAt.clear()
     this.registryVersion += 1
+  }
+
+  /**
+   * Range-запрос на заголовок плюс отмена потока после первых байт: сервер,
+   * игнорирующий Range, отдаст 200 с полным телом (64–128 МиБ) — читаем
+   * только до HEIGHT_MAP_HEADER_BYTES и рвём соединение.
+   */
+  private async fetchHeader(path: string): Promise<HeightMapHeader> {
+    const response = await fetch(Storage.url(path), { headers: { Range: `bytes=0-${HEIGHT_MAP_HEADER_BYTES - 1}` } })
+
+    if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
+
+    const reader = response.body.getReader()
+    const head = new Uint8Array(HEIGHT_MAP_HEADER_BYTES)
+    let filled = 0
+
+    try {
+      while (filled < HEIGHT_MAP_HEADER_BYTES) {
+        const { done, value } = await reader.read()
+
+        if (done) throw new Error(`тело короче заголовка (${filled} байт)`)
+
+        const take = Math.min(value.byteLength, HEIGHT_MAP_HEADER_BYTES - filled)
+        head.set(value.subarray(0, take), filled)
+        filled += take
+      }
+    } finally {
+      void reader.cancel().catch(() => undefined)
+    }
+
+    return parseHeightMapHeader(head.buffer)
   }
 
   private async fetchInto(path: string, epoch: number): Promise<void> {

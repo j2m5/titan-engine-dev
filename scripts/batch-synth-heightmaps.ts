@@ -84,6 +84,8 @@ const TEXTURES_ROOT = 'storage/images/textures/planets'
  * на семь ПЕР-ТЕЛО генераций — общий бюджет 0.7% радиуса I (1740 км),
  * откалиброванный под неё height/slope, давал VII (175 км) 577% ЕЁ бюджета.
  * Пути и радиусы — константы из инвентаризации/resources.ts, БД не читается.
+ * Тела с водой (waterLevelMeters в БД — Земля, Явин IV) сюда НЕ входят: их
+ * slope-карта несёт канал A и собирается только `build:slopemaps-all`.
  */
 const BODIES: readonly BodyGeneration[] = [
   {
@@ -159,14 +161,6 @@ const BODIES: readonly BodyGeneration[] = [
     radiusMeters: 2_256_760,
     seedActorId: 73,
     actorIds: [73]
-  },
-  {
-    name: 'yavin4',
-    inputPath: `${TEXTURES_ROOT}/StarWars/yavin/iv/iv.png`,
-    inputKind: 'diffuse',
-    radiusMeters: 6_100_000,
-    seedActorId: 83,
-    actorIds: [83]
   },
   {
     name: 'ohann3',
@@ -618,7 +612,7 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
 
   await writeFile(heightPath, encodeHeightMap(last.map))
   await sharp(Buffer.from(last.slopeRgb.buffer), { raw: { width, height, channels: 3 } })
-    .webp({ lossless: true, effort: 6 })
+    .webp({ lossless: true, effort: 6, exact: true })
     .toFile(slopePath)
 
   return {

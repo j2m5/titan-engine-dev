@@ -191,6 +191,15 @@ export interface IPlanetRenderingObject {
   cavityStrength?: number
 
   /**
+   * Ламберт суши (терраформный путь): 0 — выключен (дневной цвет не зависит
+   * от N·L, как у легаси-текстур с запечённым освещением), 1 — полный
+   * max(N·L, 0) с полом terrainAmbient. Дефолт 0.
+   */
+  terrainLambert?: number
+  /** Пол ламберта (0..1): рассеянный свет в тени рельефа. Дефолт 0.04. */
+  terrainAmbient?: number
+
+  /**
    * Уровень воды, метры (арка water-foundation, Task 3+). Гейт водной
    * оболочки в RenderableFactory: WaterSphere строится, когда у актора ЕСТЬ
    * height-карта И это поле — число (может быть отрицательным, уровень ниже

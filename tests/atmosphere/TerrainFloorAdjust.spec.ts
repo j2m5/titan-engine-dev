@@ -215,19 +215,21 @@ describe('adjustAtmosphereForTerrainFloor: подгонка дна атмосф�
 describe('terrainFloorMetersFor: пол рельефа родительской планеты', () => {
   afterEach(() => {
     heightFieldStorage.clear()
+    ;(heightFieldStorage as unknown as { headers: Map<string, unknown> }).headers.clear()
   })
 
   function stubAtmosphereActor(parent: unknown): Actor {
     return { parent } as unknown as Actor
   }
 
-  function stubParent(heightPath: string | undefined): unknown {
+  function stubParent(heightPath: string | undefined, data?: Record<string, unknown>): unknown {
     return {
       resources: {
         where: () => ({
           first: () => (heightPath === undefined ? undefined : { getAttribute: () => heightPath })
         })
-      }
+      },
+      renderingObject: data ? { getAttribute: () => data } : undefined
     }
   }
 
@@ -266,5 +268,30 @@ describe('terrainFloorMetersFor: пол рельефа родительской 
   it('нет родителя — пол 0', () => {
     expect(terrainFloorMetersFor(stubAtmosphereActor(null))).toBe(0)
     expect(terrainFloorMetersFor(stubAtmosphereActor(undefined))).toBe(0)
+  })
+
+  it('без полной карты пол берётся из заголовка (preloadHeaders на старте сценария)', () => {
+    ;(heightFieldStorage as unknown as { headers: Map<string, unknown> }).headers.set('planets/mars/mars_height.raw', {
+      width: 4, height: 2, minMeters: -8174.25, maxMeters: 21171.5
+    })
+
+    expect(terrainFloorMetersFor(stubAtmosphereActor(stubParent('planets/mars/mars_height.raw')))).toBe(-8174.25)
+  })
+
+  it('уровень воды поднимает пол: дно океана под водой атмосфере не видно', () => {
+    ;(heightFieldStorage as unknown as { headers: Map<string, unknown> }).headers.set('planets/earth/earth_height.raw', {
+      width: 4, height: 2, minMeters: -10900, maxMeters: 8850
+    })
+
+    expect(terrainFloorMetersFor(stubAtmosphereActor(stubParent('planets/earth/earth_height.raw', { waterLevelMeters: 0 })))).toBe(0)
+    expect(terrainFloorMetersFor(stubAtmosphereActor(stubParent('planets/earth/earth_height.raw', { waterLevelMeters: -667.2 })))).toBe(-667.2)
+  })
+
+  it('уровень воды выше нуля не поднимает пол выше 0 — дно никогда не выше датума', () => {
+    ;(heightFieldStorage as unknown as { headers: Map<string, unknown> }).headers.set('x/h.raw', {
+      width: 4, height: 2, minMeters: -300, maxMeters: 100
+    })
+
+    expect(terrainFloorMetersFor(stubAtmosphereActor(stubParent('x/h.raw', { waterLevelMeters: 50 })))).toBe(0)
   })
 })
