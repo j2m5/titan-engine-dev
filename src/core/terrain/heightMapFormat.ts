@@ -1,9 +1,22 @@
+import type { TerrainAuxPayload } from './terrainAuxFormat'
+
 export type HeightMapData = {
   width: number
   height: number
   minMeters: number
   maxMeters: number
   data: Uint16Array
+  /**
+   * Запечённое производное состояние поля высот (`terrainAuxFormat`), если
+   * компаньон карты приехал и сошёлся с ней по отпечатку и калибровке.
+   * Прикрепляет `HeightFieldStorage` при загрузке — `parseHeightMap` остаётся
+   * чистым разбором контейнера 'TEHM' и об этом поле не знает.
+   *
+   * Живёт ЗДЕСЬ, а не отдельным аргументом `terrainHeightFieldFor`, ради
+   * нулевой правки на местах вызова: компаньон путешествует вместе с картой,
+   * которой принадлежит, и ни один потребитель поля о нём не осведомлён.
+   */
+  aux?: TerrainAuxPayload
 }
 
 /**

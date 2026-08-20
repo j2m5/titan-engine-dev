@@ -1,21 +1,57 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
+import { parseHeightMap } from '@/core/terrain/heightMapFormat'
+import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { encodeHeightMap } from '../../scripts/lib/heightMapEncode'
+import { encodeTerrainAux } from '../../scripts/lib/terrainAuxEncode'
 
-function stubFetch(body: Buffer | null, status: number = 200): void {
+const MAP_PATH = 'planets/moon/moon_height.raw'
+const AUX_PATH = 'planets/moon/moon_height.aux'
+
+function toArrayBuffer(buffer: Buffer): ArrayBuffer {
+  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer
+}
+
+/**
+ * Карта и её компаньон — разные URL, поэтому стаб отвечает по адресу.
+ * `aux === undefined` означает «штатный компаньон, посчитанный из этой же
+ * карты»: так выглядит продакшен после запечки, и тесты, которым компаньон
+ * безразличен, не должны сидеть на аварийной ветке. Явный `null` — компаньона
+ * на сервере нет (404).
+ */
+function stubFetch(body: Buffer | null, status: number = 200, aux?: Buffer | null): void {
+  const auxBody: Buffer | null = aux === undefined ? (body ? auxFor(body) : null) : aux
+
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => ({
-      ok: status >= 200 && status < 300,
-      status,
-      arrayBuffer: async () =>
-        body ? body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) : new ArrayBuffer(0)
-    }))
+    vi.fn(async (url: string) => {
+      const isAux = String(url).endsWith('.aux')
+      const payload: Buffer | null = isAux ? auxBody : body
+      const code = isAux ? (auxBody ? 200 : 404) : status
+
+      return {
+        ok: code >= 200 && code < 300,
+        status: code,
+        arrayBuffer: async () => (payload ? toArrayBuffer(payload) : new ArrayBuffer(0))
+      }
+    })
   )
+}
+
+/** Обращений к САМОЙ карте: компаньон едет своим запросом и в этот счёт не входит. */
+function mapFetchCount(): number {
+  return vi.mocked(fetch).mock.calls.filter((call) => !String(call[0]).endsWith('.aux')).length
 }
 
 function validBody(): Buffer {
   return encodeHeightMap({ width: 2, height: 2, minMeters: 0, maxMeters: 100, data: new Uint16Array([0, 1, 2, 3]) })
+}
+
+/** Настоящий компаньон настоящей карты — через то же поле, что строит его офлайн-скрипт. */
+function auxFor(body: Buffer): Buffer {
+  const map = parseHeightMap(toArrayBuffer(body))
+
+  return encodeTerrainAux(new TerrainHeightField(map, 1737.4).exportAux(), map)
 }
 
 afterEach(() => {
@@ -48,7 +84,7 @@ describe('HeightFieldStorage: спросовый режим', () => {
     heightFieldStorage.request('planets/moon/moon_height.raw')
     await settle()
 
-    expect(vi.mocked(fetch).mock.calls.length).toBe(1)
+    expect(mapFetchCount()).toBe(1)
   })
 
   it('request во время полёта той же карты не дёргает сеть второй раз', async () => {
@@ -58,7 +94,7 @@ describe('HeightFieldStorage: спросовый режим', () => {
     heightFieldStorage.request('planets/moon/moon_height.raw')
     await settle()
 
-    expect(vi.mocked(fetch).mock.calls.length).toBe(1)
+    expect(mapFetchCount()).toBe(1)
   })
 
   it('release освобождает карту и поднимает версию', async () => {
@@ -121,7 +157,7 @@ describe('HeightFieldStorage: спросовый режим', () => {
     heightFieldStorage.request('planets/moon/moon_height.raw')
     await settle()
 
-    expect(vi.mocked(fetch).mock.calls.length).toBe(1)
+    expect(mapFetchCount()).toBe(1)
     expect(heightFieldStorage.heldPaths()).toEqual([])
     warn.mockRestore()
   })
@@ -139,8 +175,83 @@ describe('HeightFieldStorage: спросовый режим', () => {
     heightFieldStorage.request('planets/moon/moon_height.raw')
     await settle()
 
-    expect(vi.mocked(fetch).mock.calls.length).toBe(2)
+    expect(mapFetchCount()).toBe(2)
     nowSpy.mockRestore()
+    warn.mockRestore()
+  })
+})
+
+describe('HeightFieldStorage: компаньон карты высот', () => {
+  it('компаньон едет своим запросом по производному пути и прикрепляется к карте', async () => {
+    stubFetch(validBody())
+
+    heightFieldStorage.request(MAP_PATH)
+    await settle()
+
+    expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))).toEqual([
+      expect.stringContaining(MAP_PATH),
+      expect.stringContaining(AUX_PATH)
+    ])
+    expect(heightFieldStorage.get(MAP_PATH)?.aux?.blocksX).toBe(2)
+  })
+
+  it('карта публикуется в реестр РОВНО ОДИН раз, уже с компаньоном', async () => {
+    // атомарность несущая: поле высот кешируется по ССЫЛКЕ на карту
+    // (terrainHeightFieldFor), и публикация карты без компаньона с
+    // дозаписью после означала бы поле, посчитанное вручную и закешированное
+    // на весь сеанс — ровно тот фриз, который компаньон убирает
+    stubFetch(validBody())
+    const before = heightFieldStorage.version
+
+    heightFieldStorage.request(MAP_PATH)
+    await settle()
+
+    expect(heightFieldStorage.version).toBe(before + 1)
+    expect(heightFieldStorage.get(MAP_PATH)?.aux).toBeDefined()
+  })
+
+  it('компаньона нет на сервере — карта всё равно доезжает, поле посчитает блоки само', async () => {
+    stubFetch(validBody(), 200, null)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    heightFieldStorage.request(MAP_PATH)
+    await settle()
+
+    expect(heightFieldStorage.get(MAP_PATH)?.width).toBe(2)
+    expect(heightFieldStorage.get(MAP_PATH)?.aux).toBeUndefined()
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(AUX_PATH), expect.anything())
+    warn.mockRestore()
+  })
+
+  it('битый компаньон карту не роняет — она доезжает без него', async () => {
+    stubFetch(validBody(), 200, Buffer.from('это не компаньон'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    heightFieldStorage.request(MAP_PATH)
+    await settle()
+
+    expect(heightFieldStorage.get(MAP_PATH)?.width).toBe(2)
+    expect(heightFieldStorage.get(MAP_PATH)?.aux).toBeUndefined()
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('компаньон от другой версии карты отбрасывается с указанием причины', async () => {
+    const stale = encodeHeightMap({
+      width: 2,
+      height: 2,
+      minMeters: 0,
+      maxMeters: 100,
+      data: new Uint16Array([9, 9, 9, 9])
+    })
+    stubFetch(validBody(), 200, auxFor(stale))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    heightFieldStorage.request(MAP_PATH)
+    await settle()
+
+    expect(heightFieldStorage.get(MAP_PATH)?.aux).toBeUndefined()
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/отпечат/i), expect.anything())
     warn.mockRestore()
   })
 })

@@ -1,6 +1,7 @@
 import { Vector2, Vector3 } from 'three'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { HeightMapData } from './heightMapFormat'
+import type { TerrainAuxPayload } from './terrainAuxFormat'
 import { CUBE_FACES, TERRAIN_PATCH_SEGMENTS, cubeFaceDirection } from './cubeSphere'
 import { TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from './terrainQuadtreeSelect'
 
@@ -42,6 +43,19 @@ export const CLEARANCE_MARGIN_METERS = 5
  * 1024×512 ≈ 2 МБ.
  */
 export const CLEARANCE_GRID_BASE_SEGMENTS = 1024
+
+/**
+ * Версия МОДЕЛИ провиса — не формата и не файла: поднимается при любой правке
+ * формул `buildClearanceGrid`/`texelSagRaw`/`buildGeometricErrors`, из-за
+ * которой прежде посчитанные числа перестают означать то же самое.
+ *
+ * Смысл ровно один: запечённый компаньон (`terrainAuxFormat`) хранит это число
+ * и на расхождении отбрасывается — поле считает блоки сама. Забыть поднять
+ * версию значит оставить в ассетах числа старой модели под видом новой, и
+ * единственный признак этого — тихо неверный пол камеры. Раскладка файла при
+ * такой правке не меняется, поэтому версия формата здесь не помощник.
+ */
+export const TERRAIN_SAG_MODEL_VERSION = 1
 
 const TWO_PI = 2 * Math.PI
 
@@ -149,6 +163,14 @@ class TerrainHeightField {
    */
   private readonly nodeMaxHeightMetersPyramid: Float32Array | null
 
+  /**
+   * Блоки пришли запечёнными (`map.aux`), а не посчитаны здесь. Честный
+   * наблюдаемый признак вместо замера времени: тест «блоки взяты из
+   * компаньона, а не пересчитаны» иначе опирался бы на плавающий тайминг.
+   * Заодно — то, что видно в дев-предупреждении, когда компаньон потерялся.
+   */
+  public readonly usedBakedAux: boolean
+
   public constructor(
     private readonly map: HeightMapData,
     public readonly radiusKm: number
@@ -161,27 +183,84 @@ class TerrainHeightField {
     this.metersPerRaw = (map.maxMeters - map.minMeters) / 65535
     this.equatorStepTexels = map.width / TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS
     this.spanCap = Math.max(1, Math.floor(map.width / 4))
-
-    const built = this.buildClearanceGrid(block, this.metersPerRaw)
-    this.clearanceGrid = built.grid
-    this.clearanceGridWidth = built.width
-    this.clearanceGridHeight = built.height
-    this.maxClearanceMeters = built.maxClearance
-    this.maxSagMeters = built.maxSag
+    // единственное, что зависит от РАДИУСА, а не от карты — потому и весь
+    // остальной блок ниже запекается пер-карту, а не пер-тело
     this.equatorTexelMeters = (TWO_PI * radiusKm * 1000) / map.width
-    // blockMin/blockMax/blocksX/blocksY служат только ε-пирамиде и билдеру
-    // пирамиды максимумов ниже — не хранятся полями тела (2 МБ на карту
-    // Луны), передаются аргументами и умирают локалами конструктора
-    this.levelErrorMeters = this.buildGeometricErrors(
-      block,
-      this.metersPerRaw,
-      built.blockMin,
-      built.blockMax,
-      built.blocksX,
-      built.blocksY
-    )
-    this.nodeMaxHeightMetersPyramid =
-      map.minMeters === map.maxMeters ? null : this.buildNodeMaxHeightPyramid(block, built.blockMax, built.blocksX, built.blocksY)
+
+    // Запечённый компаньон, если он приехал с картой и сошёлся с ней
+    // (`HeightFieldStorage` сверяет отпечаток и калибровку ДО прикрепления —
+    // сюда payload приходит уже доверенным), иначе — тот же счёт, что и
+    // раньше. Это единственная развилка: дальше обе ветки неотличимы.
+    const aux: TerrainAuxPayload = map.aux ?? this.computeAux(block)
+
+    this.usedBakedAux = map.aux !== undefined
+    this.clearanceGrid = aux.clearanceGrid
+    this.clearanceGridWidth = aux.blocksX
+    this.clearanceGridHeight = aux.blocksY
+    this.maxClearanceMeters = aux.maxClearanceMeters
+    this.maxSagMeters = aux.maxSagMeters
+    this.levelErrorMeters = aux.levelErrorMeters
+    this.nodeMaxHeightMetersPyramid = aux.nodeMaxHeightMetersPyramid
+  }
+
+  /**
+   * Тот самый проход по карте, ради выноса которого заведён компаньон: сетка
+   * провиса, ε-пирамида уровней, пирамида честных максимумов узлов. Порядка
+   * секунды на карте 8192×4096 — в рантайме это кадр-фриз в момент доезда
+   * карты, поэтому штатно результат приходит запечённым
+   * (`scripts/build-terrain-aux.ts`), а эта ветка остаётся фолбэком на случай
+   * отсутствующего или протухшего компаньона.
+   *
+   * blockMin/blockMax/blocksX/blocksY служат только ε-пирамиде и билдеру
+   * пирамиды максимумов — не хранятся полями тела (2 МБ на карту Луны),
+   * передаются аргументами и умирают локалами этого метода.
+   */
+  private computeAux(block: number): TerrainAuxPayload {
+    const built = this.buildClearanceGrid(block, this.metersPerRaw)
+
+    return {
+      blocksX: built.blocksX,
+      blocksY: built.blocksY,
+      maxClearanceMeters: built.maxClearance,
+      maxSagMeters: built.maxSag,
+      clearanceGrid: built.grid,
+      levelErrorMeters: this.buildGeometricErrors(
+        block,
+        this.metersPerRaw,
+        built.blockMin,
+        built.blockMax,
+        built.blocksX,
+        built.blocksY
+      ),
+      nodeMaxHeightMetersPyramid:
+        this.map.minMeters === this.map.maxMeters
+          ? null
+          : this.buildNodeMaxHeightPyramid(block, built.blockMax, built.blocksX, built.blocksY)
+    }
+  }
+
+  /**
+   * Производное состояние поля для запечки в компаньон. Отдаёт ЖИВЫЕ массивы
+   * (не копии): единственный вызывающий — офлайн-скрипт сборки ассета, он их
+   * только сериализует, а лишняя копия сетки провиса на 50 тел — лишние
+   * 100 МБ пикового heap'а на прогон.
+   *
+   * Метод существует ровно затем, чтобы второй реализации формул НЕ БЫЛО:
+   * скрипт строит настоящее поле и забирает у него посчитанное, поэтому
+   * запечённое равно вычисленному по построению, а не по сверке двух кодов
+   * (болезнь slope-карт, где энкодер и GLSL-декод держатся ручным контрактом
+   * SLOPE_RANGE).
+   */
+  public exportAux(): TerrainAuxPayload {
+    return {
+      blocksX: this.clearanceGridWidth,
+      blocksY: this.clearanceGridHeight,
+      maxClearanceMeters: this.maxClearanceMeters,
+      maxSagMeters: this.maxSagMeters,
+      clearanceGrid: this.clearanceGrid,
+      levelErrorMeters: this.levelErrorMeters,
+      nodeMaxHeightMetersPyramid: this.nodeMaxHeightMetersPyramid
+    }
   }
 
   public get minMeters(): number {
