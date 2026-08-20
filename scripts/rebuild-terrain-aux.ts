@@ -6,9 +6,12 @@ import { parseHeightMap } from '@/core/terrain/heightMapFormat'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { terrainAuxPathFor } from '@/core/terrain/terrainAuxFormat'
 import { AUX_BAKE_RADIUS_KM, encodeTerrainAux } from './lib/terrainAuxEncode'
+import { terrainFloorStatus } from './lib/terrainFloorStatus'
 import { Resources } from '@storage/database/resources'
 import { ActorResource } from '@storage/database/actorResource'
 import { Actors } from '@storage/database/actors'
+import { Categories } from '@storage/database/categories'
+import { RenderingObjects } from '@storage/database/renderingObjects'
 
 /**
  * Пакетная сборка компаньонов карт высот — по одному на КАРТУ (см. докблок
@@ -35,9 +38,11 @@ interface Job {
   readonly auxPath: string
   /** Тела, делящие эту карту — только для лога: сама запечка о них не знает. */
   readonly owners: string[]
+  /** Их id — для сверки объявленного пола рельефа у атмосфер (см. конец файла). */
+  readonly ownerIds: number[]
 }
 
-const ownersByPath = new Map<string, string[]>()
+const ownersByPath = new Map<string, { names: string[]; ids: number[] }>()
 
 for (const link of ActorResource) {
   const resource = Resources.find((r) => r.id === link.resourceId)
@@ -47,17 +52,23 @@ for (const link of ActorResource) {
   const name = Actors.find((a) => a.id === link.actorId)?.name ?? `actor ${link.actorId}`
   const owners = ownersByPath.get(resource.path)
 
-  if (owners) owners.push(name)
-  else ownersByPath.set(resource.path, [name])
+  if (owners) {
+    owners.names.push(name)
+    owners.ids.push(link.actorId)
+  } else {
+    ownersByPath.set(resource.path, { names: [name], ids: [link.actorId] })
+  }
 }
 
 const coverage: Job[] = [...ownersByPath].map(([heightPath, owners]) => ({
   heightPath,
   auxPath: terrainAuxPathFor(heightPath),
-  owners
+  owners: owners.names,
+  ownerIds: owners.ids
 }))
 
-console.log(`Карт высот в БД: ${coverage.length} (тел-владельцев: ${[...ownersByPath.values()].flat().length})`)
+const ownerCount = [...ownersByPath.values()].reduce((sum, owners) => sum + owners.names.length, 0)
+console.log(`Карт высот в БД: ${coverage.length} (тел-владельцев: ${ownerCount})`)
 
 if (coverage.length === 0) {
   console.error('СТОП: в БД не нашлось ни одной строки ресурса типа height — проверить БД, не подгонять')
@@ -68,6 +79,41 @@ let built = 0
 let skippedMissingFile = 0
 let totalMillis = 0
 let totalBytes = 0
+
+/**
+ * Сверка объявленного пола рельефа (`AtmosphereConfig.terrainFloorMeters`) с
+ * фактическим минимумом карты. Едет вместе с запечкой намеренно: это
+ * единственный прогон, который парсит заголовок КАЖДОЙ карты, а отдельный
+ * скрипт ради одного числа перечитывал бы те же гигабайты. Копится здесь,
+ * печатается в конце — см. секцию после итогов сборки.
+ */
+const floorReport: string[] = []
+const atmosphereCategoryId = Categories.find((c) => c.alias === 'atmosphere')?.id
+
+function checkTerrainFloors(job: Job, minMeters: number): void {
+  if (atmosphereCategoryId === undefined) return
+
+  for (const ownerId of job.ownerIds) {
+    const atmosphere = Actors.find((a) => a.parentId === ownerId && a.categoryId === atmosphereCategoryId)
+
+    if (!atmosphere) continue // тело без атмосферы — полу рельефа некому пригодиться
+
+    const bodyName = Actors.find((a) => a.id === ownerId)?.name ?? `actor ${ownerId}`
+    const data = RenderingObjects.find((r) => r.actorId === atmosphere.id)?.data as
+      | { terrainFloorMeters?: unknown }
+      | undefined
+
+    const check = terrainFloorStatus(data?.terrainFloorMeters, minMeters)
+
+    if (check.status === 'missing') {
+      floorReport.push(`[НЕТ]  ${bodyName}: поставить terrainFloorMeters = ${check.expected}`)
+    } else if (check.status === 'mismatch') {
+      floorReport.push(`[РАЗОШЁЛСЯ] ${bodyName}: объявлено ${check.declared}, в карте ${check.expected}`)
+    } else {
+      floorReport.push(`[ок]   ${bodyName}: ${check.declared}`)
+    }
+  }
+}
 
 for (const job of coverage) {
   const inputPath = path.join(TEXTURES_ROOT, job.heightPath)
@@ -88,6 +134,8 @@ for (const job of coverage) {
 
   await writeFile(outputPath, encoded)
 
+  checkTerrainFloors(job, map.minMeters)
+
   totalMillis += millis
   totalBytes += encoded.byteLength
   built++
@@ -105,4 +153,20 @@ console.log(
 
 if (built + skippedMissingFile !== coverage.length) {
   throw new Error('внутренняя ошибка счётчиков: built + skippedMissingFile !== coverage.length')
+}
+
+// ── Пол рельефа у тел с атмосферой (см. докблок checkTerrainFloors) ──
+if (floorReport.length > 0) {
+  const problems = floorReport.filter((line) => !line.startsWith('[ок]'))
+
+  console.log(`\nПол рельефа (AtmosphereConfig.terrainFloorMeters), тел с атмосферой: ${floorReport.length}`)
+  for (const line of floorReport.sort()) console.log(`  ${line}`)
+
+  if (problems.length > 0) {
+    console.log(
+      `\n${problems.length} тел(а) без сходящегося пола: без него дно атмосферы остаётся на опорной сфере,\n` +
+        'и над низинами аналитический горизонт висит выше реального силуэта. Править в редакторе БД,\n' +
+        'в data атмосферы тела.'
+    )
+  }
 }

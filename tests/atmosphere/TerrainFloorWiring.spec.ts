@@ -4,7 +4,14 @@ import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { Actor } from '@/core/models/Actor'
 import { WebGLRenderer } from 'three'
 
-function stubConfig(): AtmosphereConfig {
+/**
+ * Пол рельефа приходит ИЗ КОНФИГА атмосферы, а не из реестра карт высот, и
+ * этот стенд нарочно не засевает реестр ничем: до ревью 2026-08-20 (находка
+ * №3) `terrainFloorMetersFor` читала реестр в конструкторе атмосферы, куда
+ * карта после гейта не успевает НИКОГДА — фича была мертва, а зелёный
+ * wiring-тест это скрывал, потому что засевал реестр сам.
+ */
+function stubConfig(terrainFloorMeters?: unknown): AtmosphereConfig {
   return {
     solarIrradiance: [1.474, 1.8504, 1.91198],
     sunAngularRadius: 0.004,
@@ -19,25 +26,15 @@ function stubConfig(): AtmosphereConfig {
     absorptionDensity: [EMPTY_LAYER, EMPTY_LAYER],
     absorptionExtinction: [0, 0, 0],
     groundAlbedo: [0.1, 0.1, 0.1],
-    muSMin: -0.2
+    muSMin: -0.2,
+    ...(terrainFloorMeters === undefined ? {} : { terrainFloorMeters: terrainFloorMeters as number })
   }
 }
 
-const MARS_HEIGHT_PATH = 'planets/mars/mars_height.raw'
-
-function stubActor(withTerrainParent: boolean): Actor {
-  const parent = withTerrainParent
-    ? {
-        resources: {
-          where: () => ({ first: () => ({ getAttribute: () => MARS_HEIGHT_PATH }) })
-        }
-      }
-    : null
-
+function stubActor(terrainFloorMeters?: unknown): Actor {
   return {
-    renderingObject: { getAttribute: () => stubConfig() },
-    getAttribute: () => 'StubPlanet',
-    parent
+    renderingObject: { getAttribute: () => stubConfig(terrainFloorMeters) },
+    getAttribute: () => 'StubPlanet'
   } as unknown as Actor
 }
 
@@ -54,17 +51,7 @@ vi.mock('@/core/renderables/Atmosphere/AtmosphereLUTGenerator', () => ({
   }
 }))
 
-function seedMarsHeightMap(): void {
-  ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(MARS_HEIGHT_PATH, {
-    width: 4,
-    height: 2,
-    minMeters: -8174.25,
-    maxMeters: 21171.5,
-    data: new Uint16Array(8)
-  })
-}
-
-describe('BrunetonAtmosphere: дно следует полу рельефа родителя', () => {
+describe('BrunetonAtmosphere: дно следует объявленному полу рельефа', () => {
   beforeEach(() => {
     generateCalls.length = 0
   })
@@ -73,17 +60,26 @@ describe('BrunetonAtmosphere: дно следует полу рельефа ро
     heightFieldStorage.clear()
   })
 
-  it('терраформный родитель — u_bottom_radius опущен на |пол| у обоих проходов', () => {
-    seedMarsHeightMap()
-    const atmosphere = new BrunetonAtmosphere(stubActor(true), {} as WebGLRenderer)
+  it('реестр карт высот ПУСТ — подгонка всё равно происходит: источник пола в данных, а не в загрузке', () => {
+    // Ровно продакшн-состояние на сборке сцены: Application.teardown чистит
+    // реестр, гейт грузит карту только на подлёте (32 px). Прежняя реализация
+    // здесь молча отдавала bottomRadius нетронутым.
+    expect(heightFieldStorage.heldPaths()).toEqual([])
+
+    const atmosphere = new BrunetonAtmosphere(stubActor(-8174.25), {} as WebGLRenderer)
+
+    expect(atmosphere.material.uniforms.u_bottom_radius.value).toBeCloseTo(3390 - 8.17425, 9)
+  })
+
+  it('дно опущено на |пол| у ОБОИХ проходов — пропускание и in-scatter делят одну геометрию атмосферы', () => {
+    const atmosphere = new BrunetonAtmosphere(stubActor(-8174.25), {} as WebGLRenderer)
 
     expect(atmosphere.material.uniforms.u_bottom_radius.value).toBeCloseTo(3390 - 8.17425, 9)
     expect(atmosphere.scatterPass.material.uniforms.u_bottom_radius.value).toBeCloseTo(3390 - 8.17425, 9)
   })
 
   it('компенсация оптики доехала до юниформов — множитель в профиле, коэффициенты нетронуты', () => {
-    seedMarsHeightMap()
-    const atmosphere = new BrunetonAtmosphere(stubActor(true), {} as WebGLRenderer)
+    const atmosphere = new BrunetonAtmosphere(stubActor(-8174.25), {} as WebGLRenderer)
 
     // Слой в юниформе — [width, expTerm, expScale, linearTerm, constantTerm]
     const rayleighLayer = atmosphere.material.uniforms.u_rayleigh_layer1.value as Float32Array
@@ -98,31 +94,36 @@ describe('BrunetonAtmosphere: дно следует полу рельефа ро
   })
 
   it('LUT генерируются из того же подогнанного конфига, что и юниформы', () => {
-    seedMarsHeightMap()
-    new BrunetonAtmosphere(stubActor(true), {} as WebGLRenderer)
+    new BrunetonAtmosphere(stubActor(-8174.25), {} as WebGLRenderer)
 
     expect(generateCalls).toHaveLength(1)
     expect(generateCalls[0].bottomRadius).toBeCloseTo(3390 - 8.17425, 9)
   })
 
-  it('карта не загружена — дно и оптика прежние (легаси-путь бит-в-бит)', () => {
-    const atmosphere = new BrunetonAtmosphere(stubActor(true), {} as WebGLRenderer)
+  it('пол не объявлен — дно и оптика прежние (легаси-путь бит-в-бит)', () => {
+    const atmosphere = new BrunetonAtmosphere(stubActor(), {} as WebGLRenderer)
 
     expect(atmosphere.material.uniforms.u_bottom_radius.value).toBe(3390)
     expect(atmosphere.material.uniforms.u_rayleigh_scattering.value.x).toBeCloseTo(1.21533e-4, 12)
     expect(generateCalls[0].bottomRadius).toBe(3390)
   })
 
-  it('актор без родителя — дно прежнее', () => {
-    const atmosphere = new BrunetonAtmosphere(stubActor(false), {} as WebGLRenderer)
+  it.each([
+    ['NaN', NaN],
+    ['числовая строка из БД', '-8174.25'],
+    ['null', null],
+    ['-Infinity', -Infinity],
+    ['положительный (пол выше опорной сферы)', 120]
+  ])('нечисловой или неотрицательный пол (%s) — дно прежнее, а не мусор в LUT', (_label, value) => {
+    const atmosphere = new BrunetonAtmosphere(stubActor(value), {} as WebGLRenderer)
 
     expect(atmosphere.material.uniforms.u_bottom_radius.value).toBe(3390)
+    expect(generateCalls[0].bottomRadius).toBe(3390)
   })
 
   it('геометрия меша остаётся на topRadius — подгонка дна её не трогает', () => {
-    seedMarsHeightMap()
-    const atmosphere = new BrunetonAtmosphere(stubActor(true), {} as WebGLRenderer)
-    const withoutTerrain = new BrunetonAtmosphere(stubActor(false), {} as WebGLRenderer)
+    const atmosphere = new BrunetonAtmosphere(stubActor(-8174.25), {} as WebGLRenderer)
+    const withoutTerrain = new BrunetonAtmosphere(stubActor(), {} as WebGLRenderer)
 
     expect(atmosphere.geometry.getAttribute('position').count).toBe(
       withoutTerrain.geometry.getAttribute('position').count

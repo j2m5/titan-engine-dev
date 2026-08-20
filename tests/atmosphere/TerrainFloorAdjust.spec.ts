@@ -1,10 +1,5 @@
-import {
-  adjustAtmosphereForTerrainFloor,
-  terrainFloorMetersFor
-} from '@/core/renderables/Atmosphere/terrainFloorAdjust'
+import { adjustAtmosphereForTerrainFloor } from '@/core/renderables/Atmosphere/terrainFloorAdjust'
 import { AtmosphereConfig, DensityProfileLayer, EMPTY_LAYER, expLayer } from '@/core/renderables/Atmosphere/AtmosphereConfig'
-import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
-import { Actor } from '@/core/models/Actor'
 
 function stubConfig(extra: Partial<AtmosphereConfig> = {}): AtmosphereConfig {
   return {
@@ -212,59 +207,3 @@ describe('adjustAtmosphereForTerrainFloor: подгонка дна атмосф�
   })
 })
 
-describe('terrainFloorMetersFor: пол рельефа родительской планеты', () => {
-  afterEach(() => {
-    heightFieldStorage.clear()
-  })
-
-  function stubAtmosphereActor(parent: unknown): Actor {
-    return { parent } as unknown as Actor
-  }
-
-  function stubParent(heightPath: string | undefined): unknown {
-    return {
-      resources: {
-        where: () => ({
-          first: () => (heightPath === undefined ? undefined : { getAttribute: () => heightPath })
-        })
-      }
-    }
-  }
-
-  it('родитель с загруженной картой — минимум высот из заголовка', () => {
-    ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set('planets/mars/mars_height.raw', {
-      width: 4,
-      height: 2,
-      minMeters: -8174.25,
-      maxMeters: 21171.5,
-      data: new Uint16Array(8)
-    })
-
-    expect(terrainFloorMetersFor(stubAtmosphereActor(stubParent('planets/mars/mars_height.raw')))).toBe(-8174.25)
-  })
-
-  it('карта с минимумом выше нуля — пол 0 (дно не поднимаем)', () => {
-    ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set('planets/x/x_height.raw', {
-      width: 4,
-      height: 2,
-      minMeters: 120,
-      maxMeters: 900,
-      data: new Uint16Array(8)
-    })
-
-    expect(terrainFloorMetersFor(stubAtmosphereActor(stubParent('planets/x/x_height.raw')))).toBe(0)
-  })
-
-  it('карта не загружена — пол 0 (легаси-сфера, шов закрыт прежним равенством радиусов)', () => {
-    expect(terrainFloorMetersFor(stubAtmosphereActor(stubParent('planets/mars/mars_height.raw')))).toBe(0)
-  })
-
-  it('у родителя нет height-ресурса — пол 0', () => {
-    expect(terrainFloorMetersFor(stubAtmosphereActor(stubParent(undefined)))).toBe(0)
-  })
-
-  it('нет родителя — пол 0', () => {
-    expect(terrainFloorMetersFor(stubAtmosphereActor(null))).toBe(0)
-    expect(terrainFloorMetersFor(stubAtmosphereActor(undefined))).toBe(0)
-  })
-})

@@ -8,10 +8,7 @@ import { requireRenderingData } from '@/core/helpers/renderingData'
 import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
 import { UpdateContext } from '@/core/UpdateContext'
 import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
-import {
-  adjustAtmosphereForTerrainFloor,
-  terrainFloorMetersFor
-} from '@/core/renderables/Atmosphere/terrainFloorAdjust'
+import { adjustAtmosphereForTerrainFloor } from '@/core/renderables/Atmosphere/terrainFloorAdjust'
 
 class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
   public model: Actor
@@ -57,7 +54,12 @@ class BrunetonAtmosphere extends Mesh implements Acceptable<IObject3DVisitor> {
     // Терраформный родитель: дно опускается до пола рельефа, иначе аналитический
     // горизонт шейдера повисает над реальным силуэтом (атмосфера «отлипает»).
     // LUT и юниформы обязаны считаться из ОДНОГО подогнанного конфига.
-    const adjusted: AtmosphereConfig = adjustAtmosphereForTerrainFloor(config, terrainFloorMetersFor(this.model))
+    //
+    // Пол берётся из САМОГО конфига (ручка данных), а не из реестра карт
+    // высот: карта с гейтом приезжает только на подлёте, здесь её нет
+    // НИКОГДА, и прежнее чтение реестра давало ноль всегда — подгонка была
+    // мертва у всех 8 тел с атмосферой. См. докблок terrainFloorMeters.
+    const adjusted: AtmosphereConfig = adjustAtmosphereForTerrainFloor(config, config.terrainFloorMeters ?? 0)
 
     const radius: number = toThreeJSUnits(adjusted.topRadius)
 
