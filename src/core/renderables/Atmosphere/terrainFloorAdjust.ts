@@ -27,9 +27,6 @@
  */
 
 import { AtmosphereConfig, DensityProfileLayer } from '@/core/renderables/Atmosphere/AtmosphereConfig'
-import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
-import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
-import { Actor } from '@/core/models/Actor'
 
 type Profile = [DensityProfileLayer, DensityProfileLayer]
 
@@ -105,12 +102,20 @@ function adjustSpecies(profile: Profile, dKm: number): Profile {
 }
 
 /**
- * Опускает дно атмосферы до пола рельефа (floorMeters — минимум карты высот,
- * метры) с компенсацией оптики на опорной сфере. Пол ≥ 0 — конфиг как есть:
- * дно никогда не поднимается, иначе горизонтный скачок вылезет из-за силуэта.
+ * Опускает дно атмосферы до пола рельефа (floorMeters — самая низкая точка
+ * рельефа родителя, метры; источник — `AtmosphereConfig.terrainFloorMeters`,
+ * см. её докблок) с компенсацией оптики на опорной сфере. Дно никогда не
+ * ПОДНИМАЕТСЯ: иначе горизонтный скачок вылезет из-за силуэта.
+ *
+ * Проверка полная (тип + конечность + знак), а не просто `floorMeters >= 0`:
+ * значение приходит из БД, где типов нет, и сигнатура `number` тут обещание,
+ * а не гарантия. `NaN >= 0` — false, то есть мусор проехал бы дальше и осел
+ * в LUT неотличимо от чёрного экрана; ЧИСЛОВАЯ СТРОКА (`'-8174.25'`) обманула
+ * бы и форму `!(x < 0)` — JS приводит её к числу при сравнении, так что одним
+ * отрицанием тут не обойтись (поймано тестом на нечисловой пол).
  */
 export function adjustAtmosphereForTerrainFloor(config: AtmosphereConfig, floorMeters: number): AtmosphereConfig {
-  if (floorMeters >= 0) return config
+  if (typeof floorMeters !== 'number' || !Number.isFinite(floorMeters) || floorMeters >= 0) return config
 
   const dKm = -floorMeters / 1000
 
@@ -121,30 +126,4 @@ export function adjustAtmosphereForTerrainFloor(config: AtmosphereConfig, floorM
     mieDensity: adjustSpecies(config.mieDensity, dKm),
     absorptionDensity: adjustSpecies(config.absorptionDensity, dKm)
   }
-}
-
-/**
- * Пол рельефа родительской планеты в метрах (≤ 0): минимум карты высот
- * (заголовок известен с начала сценария, полная карта — с приходом гейта),
- * поднятый до уровня воды — под водой дно атмосфере не видно. Тело без
- * height-ресурса — 0.
- *
- * Пока гейт не подменил поверхность, тело — легаси-сфера ровно на
- * bottomRadius, а дно атмосферы уже опущено под неё. Расхождение остаётся
- * только на далёком (мелком в кадре) теле: к подлёту рельеф уже приехал.
- */
-export function terrainFloorMetersFor(actor: Actor): number {
-  const parent = actor.parent
-
-  if (!parent) return 0
-
-  const path = parent.resources.where('resourceType', 'height').first()?.getAttribute('path')
-  const minMeters = typeof path === 'string' ? heightFieldStorage.floorMeters(path) : undefined
-
-  if (minMeters === undefined) return 0
-
-  const waterLevel = readWaterLevelMeters(parent)
-  const floor = waterLevel === undefined ? minMeters : Math.max(minMeters, waterLevel)
-
-  return Math.min(0, floor)
 }

@@ -1,3 +1,4 @@
+import type { TerrainAuxPayload } from './terrainAuxFormat'
 export type HeightMapHeader = Pick<HeightMapData, 'width' | 'height' | 'minMeters' | 'maxMeters'>
 
 export type HeightMapData = {
@@ -6,6 +7,17 @@ export type HeightMapData = {
   minMeters: number
   maxMeters: number
   data: Uint16Array
+  /**
+   * Запечённое производное состояние поля высот (`terrainAuxFormat`), если
+   * компаньон карты приехал и сошёлся с ней по отпечатку и калибровке.
+   * Прикрепляет `HeightFieldStorage` при загрузке — `parseHeightMap` остаётся
+   * чистым разбором контейнера 'TEHM' и об этом поле не знает.
+   *
+   * Живёт ЗДЕСЬ, а не отдельным аргументом `terrainHeightFieldFor`, ради
+   * нулевой правки на местах вызова: компаньон путешествует вместе с картой,
+   * которой принадлежит, и ни один потребитель поля о нём не осведомлён.
+   */
+  aux?: TerrainAuxPayload
 }
 
 /**
@@ -41,6 +53,16 @@ export function parseHeightMapHeader(buffer: ArrayBuffer): HeightMapHeader {
 
   const width = view.getUint32(8, true)
   const height = view.getUint32(12, true)
+
+  // Карта без текселей сходится по длине тела (0 байт) и прежде проезжала
+  // все проверки насквозь, а ломалась молча и далеко: сетка провиса нулевого
+  // размера, p99 по пустому массиву — undefined, ε — NaN, SSE-отбор перестаёт
+  // делить дерево, sampleMeters отдаёт NaN в геометрию. Отказ обязан быть
+  // здесь, на границе формата, где ещё видно причину.
+  if (width === 0 || height === 0) {
+    throw new Error(`Карта высот: нулевые размеры (width=${width}, height=${height})`)
+  }
+
   const minMeters = view.getFloat32(16, true)
   const maxMeters = view.getFloat32(20, true)
 

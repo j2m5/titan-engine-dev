@@ -1,21 +1,57 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
+import { parseHeightMap } from '@/core/terrain/heightMapFormat'
+import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { encodeHeightMap } from '../../scripts/lib/heightMapEncode'
+import { encodeTerrainAux } from '../../scripts/lib/terrainAuxEncode'
 
-function stubFetch(body: Buffer | null, status: number = 200): void {
+const MAP_PATH = 'planets/moon/moon_height.raw'
+const AUX_PATH = 'planets/moon/moon_height.aux'
+
+function toArrayBuffer(buffer: Buffer): ArrayBuffer {
+  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer
+}
+
+/**
+ * Карта и её компаньон — разные URL, поэтому стаб отвечает по адресу.
+ * `aux === undefined` означает «штатный компаньон, посчитанный из этой же
+ * карты»: так выглядит продакшен после запечки, и тесты, которым компаньон
+ * безразличен, не должны сидеть на аварийной ветке. Явный `null` — компаньона
+ * на сервере нет (404).
+ */
+function stubFetch(body: Buffer | null, status: number = 200, aux?: Buffer | null): void {
+  const auxBody: Buffer | null = aux === undefined ? (body ? auxFor(body) : null) : aux
+
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => ({
-      ok: status >= 200 && status < 300,
-      status,
-      arrayBuffer: async () =>
-        body ? body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) : new ArrayBuffer(0)
-    }))
+    vi.fn(async (url: string) => {
+      const isAux = String(url).endsWith('.aux')
+      const payload: Buffer | null = isAux ? auxBody : body
+      const code = isAux ? (auxBody ? 200 : 404) : status
+
+      return {
+        ok: code >= 200 && code < 300,
+        status: code,
+        arrayBuffer: async () => (payload ? toArrayBuffer(payload) : new ArrayBuffer(0))
+      }
+    })
   )
+}
+
+/** Обращений к САМОЙ карте: компаньон едет своим запросом и в этот счёт не входит. */
+function mapFetchCount(): number {
+  return vi.mocked(fetch).mock.calls.filter((call) => !String(call[0]).endsWith('.aux')).length
 }
 
 function validBody(): Buffer {
   return encodeHeightMap({ width: 2, height: 2, minMeters: 0, maxMeters: 100, data: new Uint16Array([0, 1, 2, 3]) })
+}
+
+/** Настоящий компаньон настоящей карты — через то же поле, что строит его офлайн-скрипт. */
+function auxFor(body: Buffer): Buffer {
+  const map = parseHeightMap(toArrayBuffer(body))
+
+  return encodeTerrainAux(new TerrainHeightField(map, 1737.4).exportAux(), map)
 }
 
 afterEach(() => {
@@ -26,49 +62,6 @@ afterEach(() => {
 /** Даёт fetch-стабу доехать: request() промис не возвращает, ждать нечего. */
 async function settle(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0))
-}
-
-/**
- * Тело ответа потоком. Не `new Blob([body]).stream()`: у jsdom-Blob метода
- * stream() нет, а среда тестов — jsdom (src/config тянет window).
- */
-function streamOf(body: Buffer): ReadableStream<Uint8Array> {
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(new Uint8Array(body))
-      controller.close()
-    }
-  })
-}
-
-/** fetch, отдающий тело ПОТОКОМ чанками — preloadHeaders обязан отменить чтение после заголовка. */
-function stubStreamingFetch(body: Buffer, chunkBytes: number): { cancelled: () => boolean; pulls: () => number } {
-  let cancelled = false
-  let pulls = 0
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      body: new ReadableStream<Uint8Array>({
-        pull(controller) {
-          // отдаём по чанку за вызов
-          const offset = (controller as unknown as { offset?: number }).offset ?? 0
-          if (offset >= body.length) return controller.close()
-          pulls += 1
-          controller.enqueue(new Uint8Array(body.subarray(offset, offset + chunkBytes)))
-          ;(controller as unknown as { offset: number }).offset = offset + chunkBytes
-        },
-        cancel() {
-          cancelled = true
-        }
-      },
-      // highWaterMark 0 — поток не тянет чанк впрок: счётчик pull равен числу
-      // чанков, которые фактически понадобились читателю
-      { highWaterMark: 0 })
-    }))
-  )
-  return { cancelled: () => cancelled, pulls: () => pulls }
 }
 
 describe('HeightFieldStorage: спросовый режим', () => {
@@ -91,7 +84,7 @@ describe('HeightFieldStorage: спросовый режим', () => {
     heightFieldStorage.request('planets/moon/moon_height.raw')
     await settle()
 
-    expect(vi.mocked(fetch).mock.calls.length).toBe(1)
+    expect(mapFetchCount()).toBe(1)
   })
 
   it('request во время полёта той же карты не дёргает сеть второй раз', async () => {
@@ -101,7 +94,7 @@ describe('HeightFieldStorage: спросовый режим', () => {
     heightFieldStorage.request('planets/moon/moon_height.raw')
     await settle()
 
-    expect(vi.mocked(fetch).mock.calls.length).toBe(1)
+    expect(mapFetchCount()).toBe(1)
   })
 
   it('release освобождает карту и поднимает версию', async () => {
@@ -164,7 +157,7 @@ describe('HeightFieldStorage: спросовый режим', () => {
     heightFieldStorage.request('planets/moon/moon_height.raw')
     await settle()
 
-    expect(vi.mocked(fetch).mock.calls.length).toBe(1)
+    expect(mapFetchCount()).toBe(1)
     expect(heightFieldStorage.heldPaths()).toEqual([])
     warn.mockRestore()
   })
@@ -182,86 +175,83 @@ describe('HeightFieldStorage: спросовый режим', () => {
     heightFieldStorage.request('planets/moon/moon_height.raw')
     await settle()
 
-    expect(vi.mocked(fetch).mock.calls.length).toBe(2)
+    expect(mapFetchCount()).toBe(2)
     nowSpy.mockRestore()
     warn.mockRestore()
   })
 })
 
-describe('HeightFieldStorage: заголовки карт (preloadHeaders / floorMeters)', () => {
-  // Заголовки переживают clear() по построению — межтестовую изоляцию держим здесь
-  afterEach(() => {
-    ;(heightFieldStorage as unknown as { headers: Map<string, unknown> }).headers.clear()
+describe('HeightFieldStorage: компаньон карты высот', () => {
+  it('компаньон едет своим запросом по производному пути и прикрепляется к карте', async () => {
+    stubFetch(validBody())
+
+    heightFieldStorage.request(MAP_PATH)
+    await settle()
+
+    expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))).toEqual([
+      expect.stringContaining(MAP_PATH),
+      expect.stringContaining(AUX_PATH)
+    ])
+    expect(heightFieldStorage.get(MAP_PATH)?.aux?.blocksX).toBe(2)
   })
 
-  it('читает minMeters из первых байт и отменяет поток, не дожидаясь тела', async () => {
-    const big = encodeHeightMap({ width: 64, height: 32, minMeters: -8174.25, maxMeters: 21171.5, data: new Uint16Array(64 * 32) })
-    const stream = stubStreamingFetch(big, 16) // чанки по 16 байт — заголовок приходит за два
+  it('карта публикуется в реестр РОВНО ОДИН раз, уже с компаньоном', async () => {
+    // атомарность несущая: поле высот кешируется по ССЫЛКЕ на карту
+    // (terrainHeightFieldFor), и публикация карты без компаньона с
+    // дозаписью после означала бы поле, посчитанное вручную и закешированное
+    // на весь сеанс — ровно тот фриз, который компаньон убирает
+    stubFetch(validBody())
+    const before = heightFieldStorage.version
 
-    await heightFieldStorage.preloadHeaders(['planets/mars/mars_height.raw'])
+    heightFieldStorage.request(MAP_PATH)
+    await settle()
 
-    expect(heightFieldStorage.floorMeters('planets/mars/mars_height.raw')).toBeCloseTo(-8174.25, 2)
-    expect(heightFieldStorage.get('planets/mars/mars_height.raw')).toBeUndefined() // полной карты нет
-    expect(stream.cancelled()).toBe(true)
-    // 24 байта заголовка = два чанка по 16; всё тело — 257 чанков
-    expect(stream.pulls()).toBe(2)
+    expect(heightFieldStorage.version).toBe(before + 1)
+    expect(heightFieldStorage.get(MAP_PATH)?.aux).toBeDefined()
   })
 
-  it('провал одного пути не валит остальные и не бросает', async () => {
+  it('компаньона нет на сервере — карта всё равно доезжает, поле посчитает блоки само', async () => {
+    stubFetch(validBody(), 200, null)
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const good = encodeHeightMap({ width: 2, height: 2, minMeters: -5, maxMeters: 5, data: new Uint16Array(4) })
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string) =>
-        String(url).includes('bad')
-          ? { ok: false, status: 404, body: null }
-          : { ok: true, status: 200, body: streamOf(good) }
-      )
-    )
 
-    await expect(heightFieldStorage.preloadHeaders(['x/bad_height.raw', 'x/good_height.raw'])).resolves.toBeUndefined()
-    expect(heightFieldStorage.floorMeters('x/bad_height.raw')).toBeUndefined()
-    expect(heightFieldStorage.floorMeters('x/good_height.raw')).toBe(-5)
+    heightFieldStorage.request(MAP_PATH)
+    await settle()
+
+    expect(heightFieldStorage.get(MAP_PATH)?.width).toBe(2)
+    expect(heightFieldStorage.get(MAP_PATH)?.aux).toBeUndefined()
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(AUX_PATH), expect.anything())
     warn.mockRestore()
   })
 
-  it('провалы сводятся в ОДИН warn со счётом и списком путей', async () => {
-    // Деградация (пол 0 у всех перечисленных тел) должна читаться с одного
-    // взгляда, а не собираться из N строк консоли.
+  it('битый компаньон карту не роняет — она доезжает без него', async () => {
+    stubFetch(validBody(), 200, Buffer.from('это не компаньон'))
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 404, body: null })))
 
-    await heightFieldStorage.preloadHeaders(['x/a_height.raw', 'x/b_height.raw', 'x/c_height.raw'])
+    heightFieldStorage.request(MAP_PATH)
+    await settle()
 
-    expect(warn).toHaveBeenCalledTimes(1)
-    const message: string = String(warn.mock.calls[0][0])
-    expect(message).toContain('(3)')
-    for (const path of ['x/a_height.raw', 'x/b_height.raw', 'x/c_height.raw']) expect(message).toContain(path)
+    expect(heightFieldStorage.get(MAP_PATH)?.width).toBe(2)
+    expect(heightFieldStorage.get(MAP_PATH)?.aux).toBeUndefined()
+    expect(warn).toHaveBeenCalled()
     warn.mockRestore()
   })
 
-  it('все заголовки прочитаны — консоль молчит', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const good = encodeHeightMap({ width: 2, height: 2, minMeters: -5, maxMeters: 5, data: new Uint16Array(4) })
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, body: streamOf(good) })))
-
-    await heightFieldStorage.preloadHeaders(['x/good_height.raw'])
-
-    expect(warn).not.toHaveBeenCalled()
-    warn.mockRestore()
-  })
-
-  it('полная карта в реестре имеет приоритет над заголовком; заголовок переживает clear()', async () => {
-    const good = encodeHeightMap({ width: 2, height: 2, minMeters: -5, maxMeters: 5, data: new Uint16Array(4) })
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, body: streamOf(good) })))
-    await heightFieldStorage.preloadHeaders(['x/good_height.raw'])
-
-    heightFieldStorage.clear()
-    expect(heightFieldStorage.floorMeters('x/good_height.raw')).toBe(-5)
-
-    ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set('x/good_height.raw', {
-      width: 2, height: 2, minMeters: -7, maxMeters: 5, data: new Uint16Array(4)
+  it('компаньон от другой версии карты отбрасывается с указанием причины', async () => {
+    const stale = encodeHeightMap({
+      width: 2,
+      height: 2,
+      minMeters: 0,
+      maxMeters: 100,
+      data: new Uint16Array([9, 9, 9, 9])
     })
-    expect(heightFieldStorage.floorMeters('x/good_height.raw')).toBe(-7)
+    stubFetch(validBody(), 200, auxFor(stale))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    heightFieldStorage.request(MAP_PATH)
+    await settle()
+
+    expect(heightFieldStorage.get(MAP_PATH)?.aux).toBeUndefined()
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/отпечат/i), expect.anything())
+    warn.mockRestore()
   })
 })

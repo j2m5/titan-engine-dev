@@ -3,7 +3,8 @@ import type { WebGLRenderer } from 'three'
 import {
   STAR_IMPOSTOR_PIXELS,
   apparentSizeAtDistance,
-  distanceForApparentSize
+  distanceForApparentSize,
+  worldSizeForPixels
 } from '@/core/helpers/apparentSize'
 import { FakeStar } from '@/core/renderables/utils/FakeStar'
 import { StarLod } from '@/core/renderables/utils/StarLod'
@@ -167,5 +168,22 @@ describe('стык LOD звезды', () => {
 
     expect(lod.levels[1].hysteresis).toBe(config('star.lodHysteresis'))
     expect(config('star.lodHysteresis')).toBeGreaterThan(0)
+  })
+})
+
+describe('worldSizeForPixels: обратная задача видимого размера', () => {
+  it('мировой размер под N пикселей даёт ровно N пикселей на той же дистанции', () => {
+    // Пол видимого размера у импосторов держится этой функцией: разъехавшись
+    // с apparentSizeAtDistance, он давал бы не тот экранный размер, что обещал
+    const size = worldSizeForPixels(24, 500, 50, 1080)
+
+    expect(apparentSizeAtDistance(size, 500, 50, 1080)).toBeCloseTo(24, 6)
+  })
+
+  it('вдвое дальше — вдвое крупнее мировой размер под тот же экранный', () => {
+    const near = worldSizeForPixels(24, 500, 50, 1080)
+    const far = worldSizeForPixels(24, 1000, 50, 1080)
+
+    expect(far / near).toBeCloseTo(2, 6)
   })
 })

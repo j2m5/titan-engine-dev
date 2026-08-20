@@ -4,6 +4,7 @@ import type { SceneObserver } from '@/core/services/SceneObserver'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { CLEARANCE_MARGIN_METERS, terrainHeightFieldFor, type TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
+import { heightPathOf } from '@/core/terrain/heightPath'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 
 export type Collider = {
@@ -55,8 +56,8 @@ export function collectColliders(objects: Object3D[]): Collider[] {
 
     // Рельеф — по фактически загруженной карте (реестр Planet'а): провал загрузки
     // деградирует к сфере согласованно с геометрией и материалом
-    const heightPath = model.resources?.where('resourceType', 'height').first()?.getAttribute('path')
-    const map = typeof heightPath === 'string' ? heightFieldStorage.get(heightPath) : undefined
+    const heightPath: string | undefined = heightPathOf(model)
+    const map = heightPath === undefined ? undefined : heightFieldStorage.get(heightPath)
     const heightField = map ? terrainHeightFieldFor(map, radius) : undefined
 
     // Уровень воды (Task 5) — ручка тела, не поля (см. докблок Collider);

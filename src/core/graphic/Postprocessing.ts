@@ -29,15 +29,20 @@ import { config } from '@/core/framework/config'
  * экстраполяция, и SCREEN с отрицательным блумом ЗАТЕМНЯЕТ. intensity — сила.
  * Ручки связаны: вклад самого широкого мипа равен radius^(levels − 1).
  * Значения СТАРТОВЫЕ, не замер — приёмку по картинке делает владелец.
+ *
+ * Гало намеренно сильное: диск звезды не должен читаться жёсткой границей.
+ * Мягкость даёт radius (вес размытых нижних мипов), силу — intensity; порог
+ * не участвует, он часть bloom-guard. Ручка ГЛОБАЛЬНАЯ: ярче становятся все
+ * честные HDR-источники — диск ЧД, туманности, глинт океана.
  */
 export const BLOOM_OPTIONS = {
-  radius: 0.95,
+  radius: 0.98,
   levels: 9,
   blendFunction: BlendFunction.SCREEN,
   mipmapBlur: true,
   luminanceThreshold: 1,
   luminanceSmoothing: 0.0025,
-  intensity: 1.4
+  intensity: 2.2
 } as const
 
 // A/B-сравнение кривой: заменить mode на ToneMappingMode.ACES_FILMIC

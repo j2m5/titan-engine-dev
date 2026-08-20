@@ -3,6 +3,7 @@ import { Vector3 } from 'three'
 import { constantHeightField } from '@/core/terrain/constantHeightField'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { TERRAIN_PATCH_SEGMENTS } from '@/core/terrain/cubeSphere'
+import { TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from '@/core/terrain/terrainQuadtreeSelect'
 
 // Поле воды: вся карта на одном уровне — реальный TerrainHeightField на
 // синтетической константной карте, не отдельная реализация интерфейса (см.
@@ -15,7 +16,7 @@ import { TERRAIN_PATCH_SEGMENTS } from '@/core/terrain/cubeSphere'
 // θ_L = (π/2)/(2^L·TERRAIN_PATCH_SEGMENTS). Это и есть «деление по кривизне»
 // из спеки: дерево самотерминируется в фактической SSE-метрике без ручек.
 function expectedEpsilonMeters(radiusKm: number, level: number): number {
-  const clamped = Math.min(Math.max(level, 1), 6)
+  const clamped = Math.min(Math.max(level, TERRAIN_QUADTREE_MIN_LEVEL), TERRAIN_QUADTREE_MAX_LEVEL)
   const theta = (Math.PI / 2 / (2 ** clamped * TERRAIN_PATCH_SEGMENTS)) * Math.SQRT2
   return radiusKm * 1000 * (1 - Math.cos(theta / 2))
 }
@@ -25,12 +26,14 @@ describe('constantHeightField: поле без рельефа (уровень в
     const radiusKm = 6360 // Земля (physicalObjects actorId 7)
     const field = constantHeightField(radiusKm, 0)
 
-    for (let level = 1; level <= 6; level++) {
+    for (let level = TERRAIN_QUADTREE_MIN_LEVEL; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
       expect(field.geometricErrorMeters(level)).toBeCloseTo(expectedEpsilonMeters(radiusKm, level), 6)
     }
 
     // ε падает с глубиной уровня (вершинный шаг мельче — провис хорды меньше)
-    expect(field.geometricErrorMeters(1)).toBeGreaterThan(field.geometricErrorMeters(6))
+    expect(field.geometricErrorMeters(TERRAIN_QUADTREE_MIN_LEVEL)).toBeGreaterThan(
+      field.geometricErrorMeters(TERRAIN_QUADTREE_MAX_LEVEL)
+    )
   })
 
   // Числа посчитаны руками (не через формулу модуля — независимая проверка):

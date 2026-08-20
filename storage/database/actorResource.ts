@@ -95,11 +95,6 @@ export const ActorResource: IActorResource[] = [
   { id: 128, actorId: 21, resourceId: 127 },
   { id: 129, actorId: 21, resourceId: 128 },
   { id: 130, actorId: 21, resourceId: 129 },
-  // Батч 18 спутников (терраформная арка synth-heightmap): height+slope своей генерации
-  // + 4 общих detail-ресурса (126-129, те же, что у Луны/Европы/Каллисто). Корribан I-VII
-  // (actorId 93-99) делят диффуз/бамп (resourceId 117/118), но height/slope у КАЖДОГО
-  // свои (фикс-раунд 1 Task 4: общая карта, откалиброванная под радиус I, давала VII
-  // 577% его бюджета высоты — батч перешёл на пер-тело генерации korriban1..korriban7).
   { id: 131, actorId: 20, resourceId: 134 },
   { id: 132, actorId: 20, resourceId: 135 },
   { id: 133, actorId: 20, resourceId: 126 },
@@ -154,8 +149,6 @@ export const ActorResource: IActorResource[] = [
   { id: 182, actorId: 73, resourceId: 127 },
   { id: 183, actorId: 73, resourceId: 128 },
   { id: 184, actorId: 73, resourceId: 129 },
-  // Явин IV: возвращён с легаси-материала аркой воды (Task 6), зеркально
-  // хотфиксу отката 2026-08-17 — те же id, что до отката.
   { id: 185, actorId: 83, resourceId: 152 },
   { id: 186, actorId: 83, resourceId: 153 },
   { id: 187, actorId: 83, resourceId: 126 },
@@ -210,8 +203,6 @@ export const ActorResource: IActorResource[] = [
   { id: 236, actorId: 99, resourceId: 127 },
   { id: 237, actorId: 99, resourceId: 128 },
   { id: 238, actorId: 99, resourceId: 129 },
-  // Девять твёрдых тел (Task 2 терраформной арки planets): height+slope своей генерации
-  // + 4 общих detail-ресурса (126-129, те же, что у Луны и батча спутников).
   { id: 239, actorId: 5, resourceId: 170 },
   { id: 240, actorId: 5, resourceId: 171 },
   { id: 241, actorId: 5, resourceId: 126 },
@@ -266,8 +257,6 @@ export const ActorResource: IActorResource[] = [
   { id: 290, actorId: 18, resourceId: 127 },
   { id: 291, actorId: 18, resourceId: 128 },
   { id: 292, actorId: 18, resourceId: 129 },
-  // Task 2 стандартизации террейна: 19 последних твёрдых тел — height+slope своей
-  // генерации + 4 общих detail-ресурса (126-129, те же, что у Луны и всех прежних волн).
   { id: 293, actorId: 24, resourceId: 188 },
   { id: 294, actorId: 24, resourceId: 189 },
   { id: 295, actorId: 24, resourceId: 126 },
@@ -382,17 +371,12 @@ export const ActorResource: IActorResource[] = [
   { id: 404, actorId: 88, resourceId: 127 },
   { id: 405, actorId: 88, resourceId: 128 },
   { id: 406, actorId: 88, resourceId: 129 },
-  // Земля: терраформная арка воды (Task 6) — height+slope+4 общих detail-ресурса
-  // (126-129, те же, что у Луны и прочих терраформных тел).
   { id: 407, actorId: 7, resourceId: 226 },
   { id: 408, actorId: 7, resourceId: 227 },
   { id: 409, actorId: 7, resourceId: 126 },
   { id: 410, actorId: 7, resourceId: 127 },
   { id: 411, actorId: 7, resourceId: 128 },
   { id: 412, actorId: 7, resourceId: 129 },
-  // Ряд ряби воды (арка water-shader, Task 3) — Земля и Явин IV, единственные
-  // два тела с waterLevelMeters (см. renderingObjects.ts), шарят ОДИН
-  // resourceId 228 (одна текстура в VRAM, см. её докблок в resources.ts).
   { id: 413, actorId: 7, resourceId: 228 },
   { id: 414, actorId: 83, resourceId: 228 }
 ]

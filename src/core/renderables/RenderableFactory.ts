@@ -79,7 +79,7 @@ class RenderableFactory {
   private createBlackHole(actor: Actor): Object3D {
     const node = new DynamicNode(actor)
     const lodl1 = new BlackHole(actor, this.resourceObserver)
-    const lodl2 = new BlackHoleImpostor(actor, lodl1.parameters)
+    const lodl2 = new BlackHoleImpostor(actor, lodl1.parameters, this.renderer)
     const lod = new BlackHoleLod(lodl1.parameters.simulationRadius, this.renderer)
 
     node.name = actor.getAttribute('name', '')

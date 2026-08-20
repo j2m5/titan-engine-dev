@@ -16,6 +16,8 @@
     "build:slopemaps-all": "vite-node scripts/rebuild-slopemaps.ts --",
     "verify:slopemaps": "vite-node scripts/verify-slopemaps.ts --",
     "build:synth-heightmap": "vite-node scripts/build-synth-heightmap.ts --",
+    "build:terrain-aux": "vite-node scripts/build-terrain-aux.ts --",
+    "build:terrain-aux-all": "vite-node scripts/rebuild-terrain-aux.ts --",
     "build:moon-heightmaps": "vite-node scripts/batch-synth-heightmaps.ts --",
     "measure:water-level": "vite-node scripts/measure-water-level.ts --",
     "preview": "vite preview",
