@@ -137,10 +137,10 @@ describe('TerrainSphere: динамическое квадродерево па�
   // при вдвое большем screenHeight тот же узел пересекает splitPixels раньше,
   // набор глубже/крупнее. HiDPI (dpr=2) даёт domElement.height = innerHeight·dpr —
   // подмена на window.innerHeight занижала бы SSE вдвое на таких экранах.
-  // 40 км, не 2 — на 2 км SSE обеих высот пробивает потолок TERRAIN_QUADTREE_MAX_LEVEL
-  // одинаково (набор совпал бы, разница SSE замаскирована потолком); 40 км —
-  // зона, где 1080 и 2160 расходятся, ниже потолка (проверено selectTerrainNodes
-  // напрямую: leaves 72@1080 против 84@2160, окно расхождения ~38.5–40.5 км).
+  // 75 км, не 2 — на 2 км SSE обеих высот пробивает потолок TERRAIN_QUADTREE_MAX_LEVEL
+  // одинаково (набор совпал бы, разница SSE замаскирована потолком); 75 км —
+  // середина окна 73–78 км, где 1080 и 2160 расходятся (60 vs 72 меша), ниже
+  // потолка — измерено сканированием шагом 0.25 км, запас от обеих границ ≥2 км.
   it('screenHeight — device-пиксели канваса: больший domElement.height даёт более глубокий набор при той же камере', () => {
     const field = makeField()
     const sphereLow = new TerrainSphere(moon(), field, makeRenderer(1080))
@@ -148,8 +148,8 @@ describe('TerrainSphere: динамическое квадродерево па�
 
     const FRAMES = 60
     for (let f = 0; f < FRAMES; f++) {
-      sphereLow.updateObject(makeCtx(40))
-      sphereHigh.updateObject(makeCtx(40))
+      sphereLow.updateObject(makeCtx(75))
+      sphereHigh.updateObject(makeCtx(75))
     }
 
     const countLow = sphereLow.children.filter((c) => c instanceof Mesh).length
