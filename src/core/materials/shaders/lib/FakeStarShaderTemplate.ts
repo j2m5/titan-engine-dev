@@ -72,19 +72,26 @@ export const FakeStarShaderTemplate: ShaderProps = {
       vec2 c = vUv * 2.0 - 1.0;
       float r = length(c);
 
-      // AA-кромка по экранной производной; fwidth — ДО ветвления, в
-      // равномерном потоке управления (WebGL2, деривативы в ядре)
+      // Псевдосфера: mu — косинус к взгляду (вход лимба), он же z-подъём
+      // точки шума на «купол», чтобы ячейки не растягивались к кромке
+      float mu = sqrt(max(1.0 - r * r, 0.0));
+
+      // Домен шума диска при |vPosition| = R — та же формула, тот же масштаб
+      vec3 noiseDomain = vec3(c, mu) * uRadius * 0.05;
+
+      // ВСЕ производные — ДО ветвления, в равномерном потоке управления
+      // (WebGL2, деривативы в ядре): AA-кромка и экранный масштаб зерна.
+      // Билборд живёт на STAR_IMPOSTOR_PIXELS, поэтому fade тут по факту
+      // ноль — и диск на дистанции переключения приходит к тому же нулю
       float alpha = 1.0 - smoothstep(1.0 - fwidth(r) * 1.5, 1.0, r);
+      float fade = starGranulationFade(starDomainPerPixel(noiseDomain));
+
       if (alpha <= 0.0) {
         gl_FragColor = vec4(0.0);
         return;
       }
 
-      // Псевдосфера: mu — косинус к взгляду (вход лимба), он же z-подъём
-      // точки шума на «купол», чтобы ячейки не растягивались к кромке
-      float mu = sqrt(max(1.0 - r * r, 0.0));
-
-      float t = starGranulationT(vec4(vec3(c, mu) * uRadius * 0.05, uTime));
+      float t = starGranulationT(vec4(noiseDomain, uTime), fade);
       vec3 granule = starGranuleColor(t, uColorCool, uColorBase, uColorHot);
       float energy = starEnergy(t, uCoreIntensity);
       vec3 limb = starLimb(mu, uLimbCoeff);

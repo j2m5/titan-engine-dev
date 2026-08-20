@@ -41,3 +41,21 @@ describe('StarShaderTemplate: HDR-поверхность с чёрнотельн
     expect(frag).not.toContain('0.5 + fbm(')
   })
 })
+
+describe('StarShaderTemplate: зерно гаснет с расстоянием', () => {
+  const frag: string = StarShaderTemplate.fragmentShader
+
+  it('диск меряет экранный масштаб домена и подаёт фейд в грануляцию', () => {
+    // Один домен на измерение и на сэмпл: разойдясь, они дали бы фейд не от
+    // того масштаба, что рисуется
+    expect(frag).toContain('vec3 noiseDomain = vPosition * 0.05;')
+    expect(frag).toContain('starGranulationFade(starDomainPerPixel(noiseDomain))')
+    expect(frag).toContain('starGranulationT(vec4(noiseDomain, time), fade)')
+  })
+
+  it('яркость от дистанции не вернулась: гаснет только зерно', () => {
+    // Прежний хак поднимал цвет с расстоянием и выжигал диск в белое
+    expect(frag).not.toContain('noiseIntensity')
+    expect(frag).toContain('min(granule * energy * limb, vec3(64.0))')
+  })
+})

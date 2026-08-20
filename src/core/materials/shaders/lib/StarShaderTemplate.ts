@@ -54,8 +54,14 @@ export const StarShaderTemplate: ShaderProps = {
 
       // Домен шума: |vPosition| = R, множитель 0.05 — масштаб ячеек;
       // тот же домен воспроизводит импостор (uRadius * 0.05)
-      vec4 noisePos = vec4(vPosition * 0.05, time);
-      float t = starGranulationT(noisePos);
+      vec3 noiseDomain = vPosition * 0.05;
+
+      // Зерно гаснет по экранному масштабу ячеек, а не по расстоянию до
+      // камеры: мера общая с импостором (чанк starSurface), поэтому на
+      // переключении LOD погасшая поверхность стыкуется сама собой. Побочно
+      // домен сжат ракурсом у кромки — грануляция тускнеет к лимбу, как у Солнца
+      float fade = starGranulationFade(starDomainPerPixel(noiseDomain));
+      float t = starGranulationT(vec4(noiseDomain, time), fade);
 
       vec3 granule = starGranuleColor(t, uColorCool, spectralColor, uColorHot);
       float energy = starEnergy(t, uCoreIntensity);

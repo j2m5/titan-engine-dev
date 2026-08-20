@@ -111,3 +111,28 @@ describe('FakeStar: контракт материала', () => {
     expect(star.material.uniforms.uTime.value).toBe(321 * STAR_GRANULATION_TIME_SCALE)
   })
 })
+
+describe('FakeStar: зерно погашено той же мерой, что у диска', () => {
+  it('импостор меряет экранный масштаб СВОЕГО домена и подаёт фейд в грануляцию', () => {
+    // Домен тот же, что у диска (uRadius * 0.05 против vPosition * 0.05 при
+    // |vPosition| = R), значит на дистанции переключения мера совпадает и
+    // погасшее зерно билборда стыкуется с погасшим зерном диска
+    const star = new FakeStar(stubActor(TEMPERATURE_K), stubRenderer())
+    const frag = star.material.fragmentShader
+
+    expect(frag).toContain('vec3 noiseDomain = vec3(c, mu) * uRadius * 0.05;')
+    expect(frag).toContain('starGranulationFade(starDomainPerPixel(noiseDomain))')
+    expect(frag).toContain('starGranulationT(vec4(noiseDomain, uTime), fade)')
+  })
+
+  it('производные считаются ДО выхода по альфе — равномерный поток управления', () => {
+    // dFdx/dFdy за ветвлением дают неопределённый результат: кромка квада
+    // отбрасывается первой, и мера домена обязана быть посчитана раньше
+    const star = new FakeStar(stubActor(TEMPERATURE_K), stubRenderer())
+    const frag = star.material.fragmentShader
+
+    expect(frag.indexOf('starDomainPerPixel(noiseDomain)')).toBeGreaterThan(0)
+    expect(frag.indexOf('starDomainPerPixel(noiseDomain)')).toBeLessThan(frag.indexOf('if (alpha <= 0.0)'))
+    expect(frag.indexOf('if (alpha <= 0.0)')).toBeGreaterThan(0)
+  })
+})
