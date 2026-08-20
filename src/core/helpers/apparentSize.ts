@@ -61,6 +61,21 @@ export function distanceForApparentSize(
 }
 
 /**
+ * Мировой размер, дающий заданное число пикселей на заданном расстоянии.
+ * Обратная задача к apparentSizeAtDistance, и считаться обязана тем же
+ * frameHeightAt: по ней импосторы держат пол видимого размера, и своя копия
+ * формулы означала бы пол не на том числе пикселей, что обещан.
+ */
+export function worldSizeForPixels(
+  pixels: number,
+  distance: number,
+  fovDegrees: number,
+  viewportHeight: number
+): number {
+  return (pixels / viewportHeight) * frameHeightAt(distance, fovDegrees)
+}
+
+/**
  * Расстояние переключения LOD звезды: настоящий диск и билборд-импостор
  * занимают на нём одинаковое число пикселей (STAR_IMPOSTOR_PIXELS).
  * Константа зашита внутри намеренно — вызывающей стороне нечем её подменить.

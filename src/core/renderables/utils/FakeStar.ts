@@ -9,7 +9,7 @@ import {
   WebGLRenderer
 } from 'three'
 import { Actor } from '@/core/models/Actor'
-import { STAR_IMPOSTOR_PIXELS, frameHeightAt } from '@/core/helpers/apparentSize'
+import { STAR_IMPOSTOR_PIXELS, worldSizeForPixels } from '@/core/helpers/apparentSize'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import {
   buildStarPalette,
@@ -87,10 +87,14 @@ class FakeStar extends Mesh {
     // и по локальной мерилось бы расстояние до начала сцены. Ту же величину
     // меряет LOD.update, выбирая между диском и билбордом
     const distance: number = this.getWorldPosition(this.worldPosition).distanceTo(cameraPosition)
-    const viewportHeight: number = this.renderer.domElement.height
-    // Мировой размер, дающий STAR_IMPOSTOR_PIXELS пикселей на этом расстоянии:
-    // доля кадра по высоте, пропорциональная доле пикселей по высоте
-    const worldSize: number = (STAR_IMPOSTOR_PIXELS / viewportHeight) * frameHeightAt(distance, ctx.camera.fov)
+    // Мировой размер, дающий STAR_IMPOSTOR_PIXELS пикселей на этом расстоянии.
+    // Общий helper, а не своя копия формулы: тот же пол держит импостор ЧД
+    const worldSize: number = worldSizeForPixels(
+      STAR_IMPOSTOR_PIXELS,
+      distance,
+      ctx.camera.fov,
+      this.renderer.domElement.height
+    )
 
     this.scale.setScalar(worldSize)
   }

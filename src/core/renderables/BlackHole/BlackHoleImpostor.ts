@@ -1,9 +1,22 @@
-import { DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry, ShaderMaterial, SphereGeometry } from 'three'
+import {
+  DoubleSide,
+  Group,
+  Mesh,
+  MeshBasicMaterial,
+  RingGeometry,
+  ShaderMaterial,
+  SphereGeometry,
+  Vector3,
+  WebGLRenderer
+} from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
 import { UpdateContext } from '@/core/UpdateContext'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
 import { BlackHoleNoiseTexture } from '@/core/renderables/BlackHole/BlackHoleNoiseTexture'
+import { config } from '@/core/framework/config'
+import { worldSizeForPixels } from '@/core/helpers/apparentSize'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 import {
   BlackHoleImpostorShaderTemplate,
   createBlackHoleImpostorUniforms
@@ -19,6 +32,12 @@ import {
  *
  * У «голой» дыры (temperature = 0) кольцо не создаётся — остаётся только
  * чёрный силуэт тени на фоне звёзд
+ *
+ * Видимый размер снизу ограничен полом blackHole.impostorPixels — той же
+ * конвенцией, что у звёздных импосторов: дыра с диском не сжимается ниже
+ * этого размера и держит полную яркость, поэтому издалека продолжает
+ * блумить, а не тает вместе с субпиксельным кольцом. Голая дыра пола не
+ * получает: светить нечему, а тень крупнее физической — это дыра в фоне.
  */
 class BlackHoleImpostor extends Group {
   public model: Actor
@@ -26,7 +45,14 @@ class BlackHoleImpostor extends Group {
 
   private ringMaterial: ShaderMaterial | null = null
 
-  public constructor(model: Actor, parameters: BlackHoleParameters) {
+  private readonly worldPosition: Vector3 = new Vector3()
+  private readonly cameraPosition: Vector3 = new Vector3()
+
+  public constructor(
+    model: Actor,
+    parameters: BlackHoleParameters,
+    private readonly renderer: WebGLRenderer
+  ) {
     super()
     this.model = model
     this.parameters = parameters
@@ -95,10 +121,40 @@ class BlackHoleImpostor extends Group {
   public updateObject(ctx: UpdateContext): void {
     if (!this.ringMaterial) return
 
+    this.__applySizeFloor(ctx)
+
     // та же свёртка эпохи, что у L0 (см. BlackHoleMaterial.update, шаг 7) —
     // фаза вращения диска непрерывна при переключении LOD
     const wrap: number = this.parameters.rotationPeriod * 16384
     this.ringMaterial.uniforms.uTime.value = ctx.epoch - Math.floor(ctx.epoch / wrap) * wrap
+  }
+
+  /**
+   * Пол видимого размера: ниже blackHole.impostorPixels дыра рисуется
+   * увеличенной, но с прежней (полной) яркостью — конвенция звёздных
+   * импосторов, см. FakeStar.updateObject.
+   *
+   * Меряется диаметр зоны симуляции — та же величина, по которой BlackHoleLod
+   * выбирает дистанцию переключения. Пока настоящий размер выше пола, масштаб
+   * ровно 1, поэтому на стыке LOD не меняется ничего.
+   *
+   * Позиция мировая, а не локальная: импостор висит в нуле родительского узла,
+   * и по локальной мерилось бы расстояние до начала сцены. Ту же величину
+   * меряет LOD.update, выбирая уровень
+   */
+  private __applySizeFloor(ctx: UpdateContext): void {
+    const cameraPosition: Vector3 = ctx.camera.getWorldPosition(this.cameraPosition)
+    const distance: number = this.getWorldPosition(this.worldPosition).distanceTo(cameraPosition)
+
+    const trueSize: number = toThreeJSUnits(2 * this.parameters.simulationRadius)
+    const floorSize: number = worldSizeForPixels(
+      config('blackHole.impostorPixels'),
+      distance,
+      ctx.camera.fov,
+      this.renderer.domElement.height
+    )
+
+    this.scale.setScalar(Math.max(1, floorSize / trueSize))
   }
 }
 
