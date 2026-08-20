@@ -1,6 +1,7 @@
 import type { HeightMapData } from './heightMapFormat'
 import { TerrainHeightField } from './TerrainHeightField'
 import { TERRAIN_PATCH_SEGMENTS } from './cubeSphere'
+import { TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from './terrainQuadtreeSelect'
 
 /**
  * Сторона синтетической карты константного поля. Отбор решает не разрешение
@@ -52,7 +53,9 @@ const CUBE_FACE_ANGLE = Math.PI / 2
  */
 class ConstantHeightField extends TerrainHeightField {
   public geometricErrorMeters(level: number): number {
-    const clamped = Math.min(Math.max(level, 1), 6)
+    // тот же диапазон, что у базовой пирамиды — переопределение обязано
+    // клампить по глубине дерева, а не по числам, при которых писалось
+    const clamped = Math.min(Math.max(level, TERRAIN_QUADTREE_MIN_LEVEL), TERRAIN_QUADTREE_MAX_LEVEL)
     const theta = CUBE_FACE_ANGLE / (2 ** clamped * TERRAIN_PATCH_SEGMENTS)
     const thetaDiag = theta * Math.SQRT2 // диагональ квада — худшее ребро мешевой ячейки, см. докблок класса
 

@@ -796,10 +796,56 @@ describe('TerrainHeightField: геометрическая ошибка уров
     expect(field.geometricErrorMeters(2)).toBeLessThan(2000)
   })
 
-  it('level клампится в [1..6]', () => {
+  it('level клампится в диапазон уровней квадродерева', () => {
     const field = new TerrainHeightField(makeMap(4, 2, new Array(8).fill(0)), R_KM)
-    expect(field.geometricErrorMeters(0)).toBe(field.geometricErrorMeters(1))
-    expect(field.geometricErrorMeters(9)).toBe(field.geometricErrorMeters(6))
+    expect(field.geometricErrorMeters(TERRAIN_QUADTREE_MIN_LEVEL - 1)).toBe(
+      field.geometricErrorMeters(TERRAIN_QUADTREE_MIN_LEVEL)
+    )
+    expect(field.geometricErrorMeters(TERRAIN_QUADTREE_MAX_LEVEL + 3)).toBe(
+      field.geometricErrorMeters(TERRAIN_QUADTREE_MAX_LEVEL)
+    )
+  })
+
+  /**
+   * Связка ε-пирамиды с глубиной дерева. Потолок массива, верх цикла билдера,
+   * клампы и формула вершинного шага были зашиты числами 7/6/4/64 при
+   * TERRAIN_QUADTREE_MAX_LEVEL = 6, CUBE_EQUATOR_FACES = 4 и
+   * TERRAIN_PATCH_SEGMENTS = 64. Подними глубину дерева — и ε(7) молча
+   * вернула бы ε(6) через кламп: SSE на седьмом уровне сравнялась бы с
+   * шестым, и дерево уходило бы на уровень глубже везде, где ушло на шестой,
+   * вчетверо умножая патчи без единой ошибки в консоли (ревью 2026-08-20,
+   * находка №4). Эти два теста и есть отсутствовавший громкий отказ.
+   */
+  it('ε определена на ВСЕЙ глубине квадродерева и строго убывает к листу', () => {
+    const values = Array.from({ length: 64 * 32 }, (_, k) => (k * 4001) % 65535)
+    const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
+
+    for (let level = TERRAIN_QUADTREE_MIN_LEVEL; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
+      const epsilon = field.geometricErrorMeters(level)
+
+      // undefined из короткого массива дал бы здесь NaN, а не число
+      expect(Number.isFinite(epsilon)).toBe(true)
+      expect(epsilon).toBeGreaterThan(0)
+    }
+
+    // Строгость — от уровня, чей вершинный шаг уже мельче блока (там ε
+    // масштабируется шагом). Между ℓ1 и ℓ2 равенство законно: у карты с
+    // block = 1 тексель окно 1×1 вырождено и ℓ2 честно падает на p99(2×2).
+    for (let level = 2; level < TERRAIN_QUADTREE_MAX_LEVEL; level++) {
+      expect(field.geometricErrorMeters(level)).toBeGreaterThan(field.geometricErrorMeters(level + 1))
+    }
+  })
+
+  it('шаг вершинной сетки половинится на уровень — ε соседних подблочных уровней ровно вдвое', () => {
+    // Отношение ровно 2 держит формула шага (CUBE_EQUATOR_FACES · 2^level ·
+    // TERRAIN_PATCH_SEGMENTS): ошибись в основании или в множителях — и
+    // отношение уедет, даже если пирамида по-прежнему заполнена целиком.
+    const values = Array.from({ length: 64 * 32 }, (_, k) => (k * 4001) % 65535)
+    const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
+
+    for (let level = 3; level < TERRAIN_QUADTREE_MAX_LEVEL; level++) {
+      expect(field.geometricErrorMeters(level) / field.geometricErrorMeters(level + 1)).toBeCloseTo(2, 9)
+    }
   })
 
   it('block > 1: фолбэк на p99(2×2) не срабатывает — ℓ2 равен именно p99(1×1)', () => {

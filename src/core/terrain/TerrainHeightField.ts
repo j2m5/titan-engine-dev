@@ -23,8 +23,19 @@ const CUBE_EQUATOR_FACES = 4
  * экваторе хорда не выходит за пределы одного излома, а к полюсу окно
  * раскрывается непрерывно.
  */
-export const TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS =
-  CUBE_EQUATOR_FACES * 2 ** TERRAIN_QUADTREE_MAX_LEVEL * TERRAIN_PATCH_SEGMENTS
+export const TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS = terrainEquatorSegmentsAtLevel(TERRAIN_QUADTREE_MAX_LEVEL)
+
+/**
+ * Сегментов вершинной сетки по экватору на уровне `level`: `2^level` патчей
+ * на ребро грани, по `TERRAIN_PATCH_SEGMENTS` сегментов в каждом, четыре
+ * грани на пояс. Одна формула на все уровни — и на максимальный (константа
+ * выше), и на промежуточные (ε-пирамида, `buildGeometricErrors`). Раньше
+ * промежуточные считались своим выражением с зашитыми `4` и `64`: две записи
+ * одного и того же, расходящиеся при первой же правке размера патча.
+ */
+function terrainEquatorSegmentsAtLevel(level: number): number {
+  return CUBE_EQUATOR_FACES * 2 ** level * TERRAIN_PATCH_SEGMENTS
+}
 
 /** Базовый запас клиренса поверх провиса — амортизатор под шум карты и погрешность сетки. */
 export const CLEARANCE_MARGIN_METERS = 5
@@ -710,11 +721,18 @@ class TerrainHeightField {
     // всегда 0) — тогда p99(2×2) как консервативная база, юбка не проседает
     const p99_1x1_eff = p99_1x1 > 0 ? p99_1x1 : p99_2x2
 
-    const levelErrorMeters = new Float64Array(7)
-    levelErrorMeters[1] = p99_2x2
-    levelErrorMeters[2] = p99_1x1_eff
-    for (let level = 3; level <= 6; level++) {
-      const stepTexels = width / (4 * Math.pow(2, level) * 64)
+    // Уровни 1 и 2 названы поимённо не по глубине дерева, а по БЛОЧНОМУ
+    // базису: вершинный шаг ℓ2 равен ровно блоку, шаг ℓ1 — двум блокам
+    // (`width / 2^(level+8)` против `block = width / CLEARANCE_GRID_BASE_SEGMENTS`
+    // при TERRAIN_PATCH_SEGMENTS = 64 и CUBE_EQUATOR_FACES = 4). От
+    // TERRAIN_QUADTREE_MAX_LEVEL эта пара не зависит вовсе — сдвинуть её
+    // может только смена размера патча или базиса сетки провиса.
+    const levelErrorMeters = new Float64Array(TERRAIN_QUADTREE_MAX_LEVEL + 1)
+    levelErrorMeters[TERRAIN_QUADTREE_MIN_LEVEL] = p99_2x2
+    levelErrorMeters[TERRAIN_QUADTREE_MIN_LEVEL + 1] = p99_1x1_eff
+
+    for (let level = TERRAIN_QUADTREE_MIN_LEVEL + 2; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
+      const stepTexels = width / terrainEquatorSegmentsAtLevel(level)
       const scale = Math.min(1, stepTexels / block)
       levelErrorMeters[level] = p99_1x1_eff * scale
     }
@@ -857,7 +875,9 @@ class TerrainHeightField {
 
   /** ε уровня дерева, метры: p99 размаха высот в окне шага вершинной сетки уровня; ниже блочного разрешения — линейное масштабирование шага. Числитель SSE и глубина юбки. */
   public geometricErrorMeters(level: number): number {
-    return this.levelErrorMeters[Math.min(Math.max(level, 1), 6)]
+    return this.levelErrorMeters[
+      Math.min(Math.max(level, TERRAIN_QUADTREE_MIN_LEVEL), TERRAIN_QUADTREE_MAX_LEVEL)
+    ]
   }
 
   /**
