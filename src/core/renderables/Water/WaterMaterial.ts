@@ -173,9 +173,9 @@ class WaterMaterial extends AbstractShaderMaterial {
    * см. WaterSphere.onVisibleUpdate), не `performance.now()` напрямую
    * (фикс-раунд 1, №3 ревью: докблок `UpdateContext` прямо запрещает
    * материалам брать время в обход контекста — тот же приём, что
-   * `NebulaRaymarchMaterial.updateMaterial(elapsed)`). Дефолт 0 — вызовы без
-   * аргумента (существующие тесты гейтов) остаются валидны, `uTime` просто
-   * не продвигается.
+   * `NebulaRaymarchMaterial.updateMaterial(elapsed)`). Без аргумента uTime
+   * не трогается: materialSync зовёт этот метод на событиях стримера
+   * (loadPath/evictPath/catchUp), время там неизвестно.
    *
    * Без сворачивания (`epoch - floor(epoch/wrap)*wrap`, как у
    * BlackHoleMaterial): там wrap кратен РЕАЛЬНОМУ периоду вращения диска —
@@ -186,7 +186,7 @@ class WaterMaterial extends AbstractShaderMaterial {
    * у 5 октав из 8, а не «честную» точку. Float32 на реальных длинах сессий
    * (часы, не годы) даёт суб-миллисекундную ошибку — незаметно для волн.
    */
-  public updateMaterial(elapsed: number = 0): void {
+  public updateMaterial(elapsed?: number): void {
     const slopeMap: Texture | undefined = this.slopePath ? resourceStorage.getTexture(this.slopePath) : undefined
 
     this.uniforms.uSlopeMap.value = slopeMap ?? null
@@ -204,11 +204,10 @@ class WaterMaterial extends AbstractShaderMaterial {
 
     const useWaterWaves = Boolean(waterNormalMap)
 
-    // uTime — КАЖДЫЙ активный кадр, независимо от того, поменялся ли
-    // какой-либо гейт (иначе волны замирали бы всякий раз, когда
-    // updateMaterial рано выходит по неизменным гейтам ниже). Дешёвая
-    // uniform-запись, needsUpdate/перекомпиляцию не трогает.
-    this.uniforms.uTime.value = elapsed
+    // uTime — только от кадрового вызова (WaterSphere.onVisibleUpdate).
+    // materialSync зовёт updateMaterial() без аргумента на событиях стримера —
+    // время там неизвестно, писать 0 значило бы рвать фазу волн на кадр.
+    if (elapsed !== undefined) this.uniforms.uTime.value = elapsed
 
     if (useWaterDepth === this.hasWaterDepth && useWaterWaves === this.hasWaterWaves) return // ни один гейт не изменился — перекомпиляция не нужна
 

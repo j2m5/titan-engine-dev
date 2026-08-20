@@ -298,12 +298,13 @@ describe('WaterMaterial: гейт USE_WATER_WAVES из waterNormal-тексту�
     expect(material.uniforms.uTime.value).toBe(5000)
   })
 
-  it('updateMaterial() без аргумента — elapsed по умолчанию 0 (вызовы гейт-тестов выше валидны без правки)', () => {
+  it('updateMaterial() без аргумента НЕ трогает uTime (события стримера не сбрасывают фазу волн)', () => {
     const material = new WaterMaterial(stubActor({ data: {} }))
 
-    material.updateMaterial()
+    material.updateMaterial(1234)
+    material.updateMaterial() // путь materialSync: гейты перечитать, время — не наше дело
 
-    expect(material.uniforms.uTime.value).toBe(0)
+    expect(material.uniforms.uTime.value).toBe(1234)
   })
 })
 
