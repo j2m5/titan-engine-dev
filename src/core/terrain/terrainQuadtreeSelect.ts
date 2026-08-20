@@ -89,10 +89,15 @@ const CORNER_DIAGONAL_STRETCH = Math.sqrt(4 / 3)
  * Радиус ограничивающей сферы узла (юниты) с центром на R + h(центр):
  * полудиагональ дуги патча с угловым стретчем + размах высот карты
  * ОТНОСИТЕЛЬНО высоты центра (не |min|/|max| от датума).
+ *
+ * Дуга меряется по сфере ВЕРШИН (R + max), а не по датуму: хорда той же
+ * угловой ширины на радиусе R + h длиннее в (R + h)/R раз. Впадины
+ * (max ≤ 0) множителя не дают — сфера не должна сжиматься.
  */
 export function nodeBoundingSphereRadiusUnits(field: TerrainHeightField, level: number, centerHeightMeters: number): number {
+  const arcRadiusKm = field.radiusKm + Math.max(field.maxMeters, 0) / 1000
   const patchHalfDiagonal =
-    ((toThreeJSUnits(field.radiusKm) * (Math.PI / 2)) / 2 ** level) * (Math.SQRT2 / 2) * CORNER_DIAGONAL_STRETCH
+    ((toThreeJSUnits(arcRadiusKm) * (Math.PI / 2)) / 2 ** level) * (Math.SQRT2 / 2) * CORNER_DIAGONAL_STRETCH
   const heightPadMeters = Math.max(field.maxMeters - centerHeightMeters, centerHeightMeters - field.minMeters, 0)
 
   return patchHalfDiagonal + toThreeJSUnits(heightPadMeters / 1000)

@@ -70,8 +70,15 @@ class HeightFieldStorage {
     return this.maps.get(path)?.minMeters ?? this.headers.get(path)?.minMeters
   }
 
-  /** Параллельно, провалы — warn и пропуск: атмосфера без пола хуже, чем без заголовка. */
+  /**
+   * Параллельно, провалы — пропуск без броска: атмосфера без пола хуже, чем
+   * без заголовка. Итог сводится в ОДИН warn — деградация (пол 0 у всех
+   * перечисленных тел) видна с одного взгляда, а не собирается из N строк.
+   */
   public async preloadHeaders(paths: readonly string[]): Promise<void> {
+    const failed: string[] = []
+    let firstCause: unknown
+
     await Promise.all(
       paths
         .filter((path: string) => !this.headers.has(path))
@@ -79,10 +86,18 @@ class HeightFieldStorage {
           try {
             this.headers.set(path, await this.fetchHeader(path))
           } catch (cause) {
-            console.warn(`[HeightFieldStorage] заголовок карты высот не прочитан: ${path}`, cause)
+            failed.push(path)
+            firstCause ??= cause
           }
         })
     )
+
+    if (failed.length > 0) {
+      console.warn(
+        `[HeightFieldStorage] заголовки карт высот не прочитаны (${failed.length}): ${failed.join(', ')} — пол рельефа этих тел остаётся 0`,
+        firstCause
+      )
+    }
   }
 
   /** Загруженные плюс летящие: то, за что гейт уже «заплатил». */

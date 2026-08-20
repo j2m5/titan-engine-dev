@@ -170,9 +170,22 @@ function sphereTestField(): TerrainHeightField {
   return new TerrainHeightField(makeMap(8, 4, values, -11000, 9000), 6371)
 }
 
-describe('сфера узла консервативна: все вершины патча внутри (угол грани, размах высот)', () => {
-  const field = sphereTestField()
+// Малое тело (порядок Мимаса/Энцелада): размах высот на три порядка меньше
+// радиуса, зато дуга патча короткая — доля высотного члена в радиусе иная,
+// чем у Земли. Вторая точка той же проверки, дискриминации стретча от неё
+// не ждём (её несёт поле Земли выше).
+function smallBodyTestField(): TerrainHeightField {
+  const values: number[] = []
+  for (let row = 0; row < 4; row++) {
+    for (let col = 0; col < 8; col++) values.push(((col + row) % 2) * 65535)
+  }
+  return new TerrainHeightField(makeMap(8, 4, values, -1200, 1200), 175)
+}
 
+describe.each([
+  ['Земля (R=6371 км, −11000..9000 м)', sphereTestField()],
+  ['малое тело (R=175 км, −1200..1200 м)', smallBodyTestField()]
+])('сфера узла консервативна: все вершины патча внутри (угол грани, размах высот) — %s', (_name, field) => {
   for (const level of [1, 2, 4, 6]) {
     it(`уровень ${level}: угловой узел (i=j=0) грани 0`, () => {
       const patches = 2 ** level
@@ -201,6 +214,34 @@ describe('сфера узла консервативна: все вершины 
       expect(maxDist).toBeLessThanOrEqual(radius)
     })
   }
+})
+
+// Плоское поле (min = max = h): высотный член радиуса тождественно 0, остаётся
+// одна дуга — так её и видно отдельно от пада. Конструктивная проверка выше
+// этот множитель не ловит: она меряет расстояние до центра сферы, где пад
+// |max − h(центр)| перекрывает разницу дуг с запасом (замер: худшее отношение
+// 0.62–0.95 при любых R и размахах, обе формулы проходят).
+function flatAtMeters(radiusKm: number, meters: number): TerrainHeightField {
+  return new TerrainHeightField(makeMap(8, 4, new Array(32).fill(0), meters, meters), radiusKm)
+}
+
+describe('сфера узла: дуга меряется по сфере ВЕРШИН (R + max), а не по датуму', () => {
+  // Хорда той же угловой ширины на радиусе R + h длиннее в (R + h)/R раз.
+  it('плоское поле на 20 км над датумом R=1000 км — дуга ровно в 1.02 раза длиннее', () => {
+    for (const level of [1, 2, 4, 6]) {
+      const datum = nodeBoundingSphereRadiusUnits(flatAtMeters(1000, 0), level, 0)
+      const elevated = nodeBoundingSphereRadiusUnits(flatAtMeters(1000, 20_000), level, 20_000)
+
+      expect(elevated / datum).toBeCloseTo(1.02, 9)
+    }
+  })
+
+  it('впадины дугу не удлиняют: max ≤ 0 — множитель 1 (иначе сфера бы СЖИМАЛАСЬ)', () => {
+    const datum = nodeBoundingSphereRadiusUnits(flatAtMeters(1000, 0), 4, 0)
+    const below = nodeBoundingSphereRadiusUnits(flatAtMeters(1000, -20_000), 4, -20_000)
+
+    expect(below).toBe(datum)
+  })
 })
 
 // Task 5 (water-foundation): узел, чей оценённый максимум высоты уверенно

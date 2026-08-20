@@ -36,14 +36,17 @@ for (const job of slopeJobsWithWater()) {
   }
 
   const { data, info } = await sharp(file).raw().toBuffer({ resolveWithObject: true })
-  const channels = info.channels as 3 | 4
-  const { land, zeroed } = countZeroedLandTexels(new Uint8Array(data.buffer, data.byteOffset, data.byteLength), channels)
 
-  if (channels !== 4) {
-    console.error(`[FAIL] actorId ${job.actorId}: ${file} — ${channels} канала, у тела с водой ожидается 4 (канал A = глубина)`)
+  // Число каналов проверяется ДО подсчёта: у тела с водой карта без альфы —
+  // уже провал, а countZeroedLandTexels принимает только 3|4 (проверка
+  // сужает number до 4, каста не нужно).
+  if (info.channels !== 4) {
+    console.error(`[FAIL] actorId ${job.actorId}: ${file} — ${info.channels} канала, у тела с водой ожидается 4 (канал A = глубина)`)
     broken++
     continue
   }
+
+  const { land, zeroed } = countZeroedLandTexels(new Uint8Array(data.buffer, data.byteOffset, data.byteLength), info.channels)
 
   if (zeroed > 0) {
     console.error(`[FAIL] actorId ${job.actorId}: ${file} — RGB=0 у ${zeroed} из ${land} текселей суши (карта собрана без exact: true)`)

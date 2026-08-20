@@ -225,6 +225,32 @@ describe('HeightFieldStorage: заголовки карт (preloadHeaders / floo
     warn.mockRestore()
   })
 
+  it('провалы сводятся в ОДИН warn со счётом и списком путей', async () => {
+    // Деградация (пол 0 у всех перечисленных тел) должна читаться с одного
+    // взгляда, а не собираться из N строк консоли.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 404, body: null })))
+
+    await heightFieldStorage.preloadHeaders(['x/a_height.raw', 'x/b_height.raw', 'x/c_height.raw'])
+
+    expect(warn).toHaveBeenCalledTimes(1)
+    const message: string = String(warn.mock.calls[0][0])
+    expect(message).toContain('(3)')
+    for (const path of ['x/a_height.raw', 'x/b_height.raw', 'x/c_height.raw']) expect(message).toContain(path)
+    warn.mockRestore()
+  })
+
+  it('все заголовки прочитаны — консоль молчит', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const good = encodeHeightMap({ width: 2, height: 2, minMeters: -5, maxMeters: 5, data: new Uint16Array(4) })
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, body: streamOf(good) })))
+
+    await heightFieldStorage.preloadHeaders(['x/good_height.raw'])
+
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
   it('полная карта в реестре имеет приоритет над заголовком; заголовок переживает clear()', async () => {
     const good = encodeHeightMap({ width: 2, height: 2, minMeters: -5, maxMeters: 5, data: new Uint16Array(4) })
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, body: streamOf(good) })))
