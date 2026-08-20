@@ -358,36 +358,44 @@ describe('TerrainHeightField: восток-запад окно расширяе�
   // width = CLEARANCE_GRID_BASE_SEGMENTS, block=1 (ячейка = тексель —
   // изолирует эффект от дилатации по крупным ячейкам). equatorStepTexels =
   // 1024/TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS(16384) = 0.0625. Строка 0: theta =
-  // π·0.5/64 ≈ 1.406°, cosLat = sin(theta) ≈ 0.02454, span = round(0.0625 /
-  // cosLat) ≈ round(2.55) = 3 ≥ 2 — высокоширотная, восток-запад переходит на
-  // размах по скользящему окну ±3 текселя (`slidingRangeWrap`), а не вторую
-  // разность соседних текселей.
+  // π·0.5/64 ≈ 1.406°, cosLat = sin(theta) ≈ 0.02454, вершинный пролёт
+  // 0.0625/cosLat ≈ 2.55 текселя — окно кривизнной суммы раскрыто на ±1
+  // тексель целиком плюс дробный вес 0.55 на паре ±2 (sagWindow), тогда как
+  // на экваторе оно сжато в один тексель.
   const width = CLEARANCE_GRID_BASE_SEGMENTS
   const height = 64
   const pitCol = 200
 
-  it('на высокоширотной строке (row 0) клиренс дотягивается на несколько текселей дальше экватора', () => {
+  it('на высокоширотной строке (row 0) клиренс дотягивается на несколько текселей дальше экватора и УБЫВАЕТ с расстоянием', () => {
     const values = new Array(width * height).fill(20000)
     values[0 * width + pitCol] = 10000
     const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
 
-    // офсет 4: вне досягаемости обычной (не полярной) поточечной модели —
-    // ловится только скользящим окном ±3 (плюс 1 ячейка дилатации)
-    expect(field.clearanceMeters(uvToDir((pitCol - 4 + 0.5) / width, 0.5 / height))).toBeCloseTo(
-      10000 + CLEARANCE_MARGIN_METERS,
-      3
-    )
-    // офсет 8: уже вне скользящего окна — только базовый запас
+    const sagAt = (offset: number): number =>
+      field.sagMeters(uvToDir((pitCol + offset + 0.5) / width, 0.5 / height))
+
+    // Досягаемость: офсет −3 внутри окна (дробный край до ±2 плюс вторая
+    // разность, которую яма наводит на своих соседях), офсет −4 — уже за ним.
+    // На экваторе (тест ниже) ненулевым остаётся только сам тексель ямы.
+    expect(sagAt(-3)).toBeGreaterThan(1000)
+    expect(sagAt(-4)).toBeCloseTo(0, 3)
+
+    // Убывание — то, чего у прежней размаховой оценки НЕ БЫЛО: размах по окну
+    // давал одинаковый полный провис ямы на всех офсетах до края окна, будто
+    // хорда в трёх текселях от ямы проседает так же, как над ней самой.
+    // Кривизнная мажоранта считает вклад излома с весом его удалённости.
+    // Вплотную к яме (офсеты 0..−2) видно не убывание, а потолок-размах: там
+    // кривизнная сумма выше глубины ямы, и её срезает до 10000 ровно.
+    expect(sagAt(-2)).toBeGreaterThan(sagAt(-3))
+    expect(sagAt(-3)).toBeGreaterThan(sagAt(-4))
+
+    // Клиренс — тот же провис плюс ячейка дилатации и базовый запас
+    expect(field.clearanceMeters(uvToDir((pitCol - 4 + 0.5) / width, 0.5 / height))).toBeGreaterThan(1000)
+    // офсет 8: далеко за окном — только базовый запас
     expect(field.clearanceMeters(uvToDir((pitCol - 8 + 0.5) / width, 0.5 / height))).toBeCloseTo(
       CLEARANCE_MARGIN_METERS,
       3
     )
-
-    // sagMeters (раунд 3, тот же гибрид, БЕЗ дилатации и без margin — честная
-    // поточечная граница окна ±3, а не размазанная ещё на ±1 ячейку дилатацией):
-    // офсет 3 (внутри окна) — полный провис ямы, офсет 4 (сразу за окном) — 0
-    expect(field.sagMeters(uvToDir((pitCol - 3 + 0.5) / width, 0.5 / height))).toBeCloseTo(10000, 3)
-    expect(field.sagMeters(uvToDir((pitCol - 4 + 0.5) / width, 0.5 / height))).toBeCloseTo(0, 3)
   })
 
   it('регрессия: на экваторе (row 32) та же яма даёт узкую (не полярную) досягаемость', () => {
@@ -404,7 +412,7 @@ describe('TerrainHeightField: восток-запад окно расширяе�
   })
 })
 
-describe('TerrainHeightField: полоса вершинного пролёта (1, 1.5] текселя — ceil, не round, переключает EW-гибрид на широкое окно', () => {
+describe('TerrainHeightField: полоса вершинного пролёта (1, 1.5] текселя — окно раскрывается дробно, а не по порогу округления', () => {
   const uvToDir = (u: number, v: number): Vector3 => {
     const theta = v * Math.PI
     const phi = u * 2 * Math.PI
@@ -413,38 +421,44 @@ describe('TerrainHeightField: полоса вершинного пролёта (
 
   // width = CLEARANCE_GRID_BASE_SEGMENTS, block=1 (та же изоляция от
   // дилатации, что и в тесте выше). equatorStepTexels = 1024/16384 = 0.0625.
-  // Строка 8: theta = π·8.5/512 ≈ 2.988°, cosLat ≈ 0.05213, span_raw =
-  // 0.0625/0.05213 ≈ 1.199 — строго в полосе (1, 1.5]: пролёт вершины шире
-  // одного текселя (вторые разности соседних текселей его уже не ограничивают),
-  // но round(1.199)=1 держит EW на узкой (диффной) модели; ceil(1.199)=2
-  // обязан переключить на широкое окно ±2 (в отличие от строки 0 теста выше,
-  // где ratio≈2.55 и round/ceil совпадают — эта строка изолирует именно
-  // разницу между округлением и потолком).
+  // Строка 8: theta = π·8.5/512 ≈ 2.988°, cosLat ≈ 0.05213, пролёт вершины
+  // 0.0625/0.05213 ≈ 1.199 — строго в полосе (1, 1.5]: шире текселя, но
+  // ненамного. Окно кривизнной суммы здесь раскрыто ТОЛЬКО дробным весом
+  // 0.199 на паре соседей — на этой строке и проверяется, что раскрытие
+  // идёт непрерывно по пролёту, а не скачком по порогу округления (прежняя
+  // модель округляла пролёт до целого окна: round(1.199)=1 не видел ничего
+  // за соседним текселем, ceil(1.199)=2 сразу видел два — оба ответа
+  // ступенчаты по широте, что и было находкой ревью №2).
   const width = CLEARANCE_GRID_BASE_SEGMENTS
   const height = 512
   const row = 8
   const pitCol = 200
 
-  it('яма в 2 текселях от точки запроса: честная поточечная модель обязана её видеть — узкая (round) модель не видит, широкая (ceil) видит', () => {
+  it('яма в 2 текселях от точки запроса видна, но вкладом по своей удалённости, а не целиком', () => {
     const values = new Array(width * height).fill(20000)
     const D = 10000
     values[row * width + pitCol] = 20000 - D
     const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
 
-    // офсет 0 — прямое попадание в яму, справедливо для узкой и широкой
-    // модели одинаково (контроль, что фикстура и запрос вообще совпадают)
-    expect(field.sagMeters(uvToDir((pitCol + 0.5) / width, (row + 0.5) / height))).toBeCloseTo(D, 3)
+    const sagAt = (offset: number): number =>
+      field.sagMeters(uvToDir((pitCol + offset + 0.5) / width, (row + 0.5) / height))
 
-    // офсет 2 — РЕШАЮЩАЯ проверка: пролёт вершины максимального уровня здесь
-    // ~1.2 текселя, поэтому честная поверхность между соседними вершинами
-    // квадродерева может опираться на тексель в 2 позициях от точки запроса.
-    // До Fix 1 (round) окно здесь узкое (±1, ямы не видно, sag=0) — то самое
-    // занижение из разбора ревью; после (ceil) окно ±2 её видит целиком
-    expect(field.sagMeters(uvToDir((pitCol + 2 + 0.5) / width, (row + 0.5) / height))).toBeCloseTo(D, 3)
+    // офсет 0 — прямое попадание в яму: кривизнная мажоранта здесь выше
+    // размаха, и её срезает потолок ровно до глубины ямы
+    expect(sagAt(0)).toBeCloseTo(D, 3)
 
-    // офсет 3 — контроль: даже широкое окно ±2 сюда не дотягивается, рост
-    // окна не безграничен
-    expect(field.sagMeters(uvToDir((pitCol + 3 + 0.5) / width, (row + 0.5) / height))).toBeCloseTo(0, 3)
+    // офсет 2 — досягаемость шире одного текселя: пролёт вершины ~1.2 текселя,
+    // хорда может опираться на тексель в двух позициях от запроса. Прежняя
+    // модель отдавала здесь ПОЛНУЮ глубину ямы (размах по окну), новая —
+    // вклад излома с весом его удалённости, то есть заметно меньше
+    expect(sagAt(2)).toBeGreaterThan(0)
+    expect(sagAt(2)).toBeLessThan(D / 2)
+
+    // убывание с удалением — то, чего у размаховой оценки не было
+    expect(sagAt(1)).toBeGreaterThan(sagAt(2))
+
+    // офсет 3 — контроль: рост окна не безграничен
+    expect(sagAt(3)).toBeCloseTo(0, 3)
   })
 })
 
@@ -586,6 +600,122 @@ describe('TerrainHeightField: sagMeters ≥ фактический провис 
     expect(maxProvisMeters).toBeGreaterThan(0.01)
     // см. таймаут теста выше — та же плотная выборка
   }, 20_000)
+
+  it('та же проверка у полюса (face 2, i=32 j=36, ~84°): вершинный пролёт вчетверо шире текселя, EW-модель работает широким окном', () => {
+    const field = buildSyntheticField()
+    const face = 2
+    const i = 32
+    const j = 36
+
+    const level = TERRAIN_QUADTREE_MAX_LEVEL
+    const patches = 1 << level
+    const span = 2 / patches
+    const centerDir = cubeFaceDirection(face, -1 + i * span + span / 2, -1 + j * span + span / 2, new Vector3())
+    const latitudeDeg = (Math.asin(centerDir.y) * 180) / Math.PI
+    expect(latitudeDeg).toBeGreaterThan(80)
+
+    const { checked, maxProvisMeters } = assertSagCoversPatchChord(field, face, i, j)
+
+    expect(checked).toBeGreaterThan(30000)
+    expect(maxProvisMeters).toBeGreaterThan(0.01)
+  }, 20_000)
+})
+
+describe('TerrainHeightField: EW-модель провиса непрерывна на границе расширения окна', () => {
+  /**
+   * Граница — там, где вершинный пролёт максимального уровня равен текселю:
+   * `equatorStepTexels / cos(широты) = 1`. Ниже неё провис хорды ограничивает
+   * вторая разность соседних текселей, выше окно обязано расширяться. Прежняя
+   * модель меняла на этой широте не окно, а САМУ величину — с половины второй
+   * разности на полный размах по окну, то есть с кривизны на наклон: оценка
+   * подскакивала в разы, и пол камеры (`pointwiseFloorRadiusUnits`) вместе с
+   * ней — толчок вверх на ровном месте при перелёте через параллель.
+   *
+   * Карта 2048×1024: equatorStepTexels = 2048/16384 = 0.125, граница на
+   * широте acos(0.125) ≈ 82.8°.
+   */
+  const width = 2048
+  const height = 1024
+  const minMeters = -2000
+  const maxMeters = 2000
+
+  const buildField = (): TerrainHeightField => {
+    const values = new Array(width * height)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        // многооктавный рельеф: излом в каждом текселе, но и выраженный наклон —
+        // именно на нём прежняя размаховая оценка и расходилась с кривизнной
+        let h = 0
+        let amplitude = 900
+        let fx = 0.05
+        let fy = 0.09
+        for (let octave = 0; octave < 5; octave++) {
+          h += amplitude * Math.sin(x * fx + octave * 1.7) * Math.cos(y * fy + octave * 2.3)
+          amplitude *= 0.55
+          fx *= 2.1
+          fy *= 2.1
+        }
+        const raw = Math.round(((h - minMeters) / (maxMeters - minMeters)) * 65535)
+        values[y * width + x] = Math.min(65535, Math.max(0, raw))
+      }
+    }
+
+    return new TerrainHeightField(makeMap(width, height, values, minMeters, maxMeters), R_KM)
+  }
+
+  /** Средний sag по кольцу долгот — усреднение гасит рельеф и оставляет саму модель. */
+  const meanSagAtLatitude = (field: TerrainHeightField, latitudeDeg: number): number => {
+    const latitude = (latitudeDeg * Math.PI) / 180
+    const dir = new Vector3()
+    let sum = 0
+    const samples = 128
+
+    for (let k = 0; k < samples; k++) {
+      const longitude = (k / samples) * 2 * Math.PI
+      dir
+        .set(-Math.cos(latitude) * Math.cos(longitude), Math.sin(latitude), Math.cos(latitude) * Math.sin(longitude))
+        .normalize()
+      sum += field.sagMeters(dir)
+    }
+
+    return sum / samples
+  }
+
+  it('средний sag по обе стороны границы не расходится в разы — модель сшита, а не переключена', () => {
+    const field = buildField()
+    const switchLatitudeDeg = (Math.acos(width / (4 * 2 ** TERRAIN_QUADTREE_MAX_LEVEL * TERRAIN_PATCH_SEGMENTS)) * 180) / Math.PI
+
+    const below = meanSagAtLatitude(field, switchLatitudeDeg - 0.4)
+    const above = meanSagAtLatitude(field, switchLatitudeDeg + 0.4)
+
+    expect(below).toBeGreaterThan(0) // фикстура нетривиальна: провис вообще есть
+    expect(above / below).toBeLessThan(1.5)
+  })
+
+  it('ниже границы (вершинный пролёт ≤ текселя) оценка — ровно половина второй разности, как и была', () => {
+    // Плоская карта с одиночной ямой на экваторе: пролёт 0.125 текселя, окно
+    // сжато в один тексель. |d2| в самой яме = 2D, в соседях = D — пин на то,
+    // что сшивка широкой ветки не сдвинула узкую ни на единицу младшего разряда.
+    const D = 10000
+    const values = new Array(width * height).fill(30000)
+    values[(height / 2) * width + 100] = 30000 - D
+    const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
+
+    const equatorV = (height / 2 + 0.5) / height
+    const sagAtColumn = (column: number): number => {
+      const theta = equatorV * Math.PI
+      const phi = ((column + 0.5) / width) * 2 * Math.PI
+
+      return field.sagMeters(
+        new Vector3(-Math.cos(phi) * Math.sin(theta), Math.cos(theta), Math.sin(phi) * Math.sin(theta))
+      )
+    }
+
+    expect(sagAtColumn(100)).toBeCloseTo(D, 3)
+    expect(sagAtColumn(99)).toBeCloseTo(D / 2, 3)
+    expect(sagAtColumn(101)).toBeCloseTo(D / 2, 3)
+    expect(sagAtColumn(102)).toBeCloseTo(0, 3)
+  })
 })
 
 describe('TerrainHeightField: билинейная выборка клиренса', () => {
