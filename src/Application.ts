@@ -8,6 +8,27 @@ import type { Actor } from '@/core/models/Actor'
 import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
 import type { HeightFieldGate } from '@/core/services/HeightFieldGate'
 import { SkyboxBackground } from '@/core/renderables/SkyboxBackground'
+import { heightPathOf } from '@/core/terrain/heightPath'
+import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
+
+/**
+ * Пути карт высот тел, у которых есть дочерний актор-атмосфера: только им
+ * нужен пол рельефа в конструкторе `BrunetonAtmosphere`. Пути уникальны —
+ * общая карта у двух тел даёт один запрос.
+ */
+export function atmosphericHeightPaths(actors: Iterable<Actor>): string[] {
+  const paths: Set<string> = new Set()
+
+  for (const actor of actors) {
+    if (actor.children.where('categoryId', ATMOSPHERE_CATEGORY_ID).isEmpty()) continue
+
+    const path: string | undefined = heightPathOf(actor)
+
+    if (path !== undefined) paths.add(path)
+  }
+
+  return [...paths]
+}
 
 class Application {
   private everLoaded: boolean = false
@@ -58,7 +79,7 @@ class Application {
     // Заголовки карт высот тел с атмосферой — ДО построения графа: дно
     // атмосферы подгоняется под пол рельефа в конструкторе BrunetonAtmosphere,
     // а полная карта приходит спросовым гейтом много позже.
-    await heightFieldStorage.preloadHeaders(Application.atmosphericHeightPaths(this.resourceObserver.map))
+    await heightFieldStorage.preloadHeaders(atmosphericHeightPaths(this.resourceObserver.map.values()))
 
     if (!this.resourceObserver.sceneBackground) {
       console.warn('[Application] Кубическая карта фона сценария не загружена, сцена останется без фона')
@@ -81,21 +102,6 @@ class Application {
     // первым ClosestChange (в пределах streaming.recomputeIntervalMs = 500 мс
     // даже при неподвижной камере).
     this.heightFieldGate.recompute()
-  }
-
-  /** Пути height-ресурсов акторов сценария, у которых есть дочерняя атмосфера (categoryId 5). */
-  private static atmosphericHeightPaths(actors: Map<number, Actor>): string[] {
-    const paths: string[] = []
-
-    for (const actor of actors.values()) {
-      if (actor.children.where('categoryId', 5).isEmpty()) continue
-
-      const path = actor.resources.where('resourceType', 'height').first()?.getAttribute('path')
-
-      if (typeof path === 'string') paths.push(path)
-    }
-
-    return paths
   }
 
   public dispose(): void {

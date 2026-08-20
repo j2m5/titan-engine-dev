@@ -82,6 +82,20 @@ describe('Application.run: предзагрузка заголовков кар�
     expect(order).toEqual(['headers', 'start'])
   })
 
+  it('общая карта высот у двух тел с атмосферой — один путь, не два', async () => {
+    const preload = vi.spyOn(heightFieldStorage, 'preloadHeaders').mockResolvedValue(undefined)
+    const shared = 'planets/unnamed/twins_height.raw'
+    const map = new Map<number, Actor>([
+      [1, stubActor(true, shared)],
+      [2, stubActor(true, shared)]
+    ])
+    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+
+    await new Application(engine, stubObserver(map), new Scene(), leakDetector, heightFieldGate).run(Scenarios[0])
+
+    expect(preload).toHaveBeenCalledWith([shared])
+  })
+
   it('сценарий без тел с атмосферой — вызов с пустым списком, сети нет', async () => {
     const preload = vi.spyOn(heightFieldStorage, 'preloadHeaders').mockResolvedValue(undefined)
     const map = new Map<number, Actor>([[1, stubActor(false, 'planets/moon/moon_height.raw')]])

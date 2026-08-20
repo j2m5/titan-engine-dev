@@ -9,14 +9,7 @@ import { IPlanetRenderingObject } from '@/core/models/types'
 import { readRenderingData } from '@/core/helpers/renderingData'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
-
-/**
- * Категория актора-атмосферы (см. `RenderableFactory.make`'s switch, case 5) —
- * тот же литерал, что использует `PlanetShader` для дочернего кольца
- * (categoryId 6, `this.model.children.where('categoryId', 6)`); отдельной
- * именованной константы категорий в проекте нет.
- */
-const ATMOSPHERE_CATEGORY_ID = 5
+import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
 
 /**
  * Opacity облачного слоя от высоты камеры над поверхностью (приёмочная волна
