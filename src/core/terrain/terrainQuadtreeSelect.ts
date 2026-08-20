@@ -78,6 +78,26 @@ const centerDirScratch = new Vector3()
 const sphereCenterScratch = new Vector3()
 const sphereScratch = new Sphere()
 
+/**
+ * Стретч диагонали ячейки равноугольной развёртки у угла грани относительно
+ * центра: √(4/3). Радиус сферы узла обязан покрывать ХУДШИЙ узел уровня —
+ * иначе частично видимый угловой узел признаётся невидимым и не сплитится.
+ */
+const CORNER_DIAGONAL_STRETCH = Math.sqrt(4 / 3)
+
+/**
+ * Радиус ограничивающей сферы узла (юниты) с центром на R + h(центр):
+ * полудиагональ дуги патча с угловым стретчем + размах высот карты
+ * ОТНОСИТЕЛЬНО высоты центра (не |min|/|max| от датума).
+ */
+export function nodeBoundingSphereRadiusUnits(field: TerrainHeightField, level: number, centerHeightMeters: number): number {
+  const patchHalfDiagonal =
+    ((toThreeJSUnits(field.radiusKm) * (Math.PI / 2)) / 2 ** level) * (Math.SQRT2 / 2) * CORNER_DIAGONAL_STRETCH
+  const heightPadMeters = Math.max(field.maxMeters - centerHeightMeters, centerHeightMeters - field.minMeters, 0)
+
+  return patchHalfDiagonal + toThreeJSUnits(heightPadMeters / 1000)
+}
+
 function visitNode(
   face: number,
   level: number,
@@ -105,10 +125,7 @@ function visitNode(
   const centerHeightMeters = field.heightMeters(centerDirScratch)
   sphereCenterScratch.copy(centerDirScratch).multiplyScalar(toThreeJSUnits(field.radiusKm + centerHeightMeters / 1000))
 
-  // половина диагонали дуги патча (юниты) + запас на амплитуду рельефа
-  const patchHalfDiagonal = ((toThreeJSUnits(field.radiusKm) * (Math.PI / 2)) / 2 ** level) * (Math.SQRT2 / 2)
-  const heightPad = toThreeJSUnits(Math.max(Math.abs(field.minMeters), Math.abs(field.maxMeters)) / 1000)
-  const sphereRadius = patchHalfDiagonal + heightPad
+  const sphereRadius = nodeBoundingSphereRadiusUnits(field, level, centerHeightMeters)
 
   const minDistanceUnits = toThreeJSUnits(MIN_DISTANCE_METERS / 1000)
   const distance = Math.max(params.cameraLocal.distanceTo(sphereCenterScratch) - sphereRadius, minDistanceUnits)

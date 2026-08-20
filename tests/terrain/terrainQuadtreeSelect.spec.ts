@@ -7,6 +7,7 @@ import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import {
   selectTerrainNodes,
   terrainNodeKey,
+  nodeBoundingSphereRadiusUnits,
   TERRAIN_QUADTREE_WATER_CEILING_LEVEL,
   TERRAIN_QUADTREE_MAX_LEVEL,
   type SelectParams,
@@ -79,11 +80,14 @@ describe('selectTerrainNodes: SSE-отбор узлов квадродерева
 
   it('гистерезис: между τ_merge и τ_split разбитый узел не схлопывается, kMerge реально применяется', () => {
     // Высоты подобраны эмпирически под HEIGHT_AMPLITUDE_METERS=20000 и splitPixels=6:
-    // на ALT_SPLIT четыре пограничных узла face=0 уровня 1 имеют sse≈6.10-6.12 (>
+    // на ALT_SPLIT четыре пограничных узла face=0 уровня 1 имеют sse≈6.34-6.35 (>
     // splitPixels=6) — реально разбиваются с пустой историей. На ALT_MERGE_ZONE
-    // (дальше — камера отодвинута) те же четыре узла имеют sse≈5.40-5.42: НИЖЕ
+    // (дальше — камера отодвинута) те же четыре узла имеют sse≈5.585-5.591: НИЖЕ
     // splitPixels=6 (без истории схлопнулись бы), но ВЫШЕ splitPixels·mergeFactor=
-    // 6·0.7=4.2 (с историей остаются разбитыми) — ровно зона гистерезиса.
+    // 6·0.7=4.2 (с историей остаются разбитыми) — ровно зона гистерезиса. (Числа
+    // пересчитаны Task 5: консервативная сфера узла увеличила радиус и слегка
+    // подняла sse на обеих высотах — тот же диапазон между τ·0.7 и τ сохранился,
+    // сами ALT_SPLIT/ALT_MERGE_ZONE не менялись.)
     const ALT_SPLIT = 4500
     const ALT_MERGE_ZONE = 5000
 
@@ -152,6 +156,39 @@ describe('selectTerrainNodes: SSE-отбор узлов квадродерева
     expect(leaves.length).toBeGreaterThan(24)
     expect(leaves.every((a) => Number.isFinite(a.level))).toBe(true)
   })
+})
+
+describe('сфера узла консервативна: все вершины патча внутри (угол грани, размах высот)', () => {
+  const field = flatField() // чекерборд 0/20000 м — размах максимальный
+
+  for (const level of [1, 2, 4, 6]) {
+    it(`уровень ${level}: угловой узел (i=j=0) грани 0`, () => {
+      const patches = 2 ** level
+      const span = 2 / patches
+      const sc = -1 + span / 2
+      const tc = -1 + span / 2
+      const centerDir = cubeFaceDirection(0, sc, tc, new Vector3())
+      const centerHeight = field.heightMeters(centerDir)
+      const center = centerDir.clone().multiplyScalar(toThreeJSUnits(field.radiusKm + centerHeight / 1000))
+      const radius = nodeBoundingSphereRadiusUnits(field, level, centerHeight)
+
+      let maxDist = 0
+      for (let v = 0; v <= 64; v++) {
+        for (let u = 0; u <= 64; u++) {
+          const s = -1 + (u / 64) * span
+          const t = -1 + (v / 64) * span
+          const dir = cubeFaceDirection(0, s, t, new Vector3())
+          // худший случай по высоте — вершина на максимуме/минимуме карты
+          for (const h of [field.minMeters, field.maxMeters]) {
+            const p = dir.clone().multiplyScalar(toThreeJSUnits(field.radiusKm + h / 1000))
+            maxDist = Math.max(maxDist, p.distanceTo(center))
+          }
+        }
+      }
+
+      expect(maxDist).toBeLessThanOrEqual(radius)
+    })
+  }
 })
 
 // Task 5 (water-foundation): узел, чей оценённый максимум высоты уверенно
