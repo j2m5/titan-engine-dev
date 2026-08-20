@@ -27,6 +27,9 @@ const defaultUniforms = {
   uDetailAoInfluence: new Uniform(0.5),
   uDetailLayerGates: new Uniform(new Vector3(0, 0, 0)),
   uCavityStrength: new Uniform(0),
+  // Ламберт суши (спайк) — 0 выключен, дефолт бит-в-бит прежний шейдер.
+  uTerrainLambert: new Uniform(0),
+  uTerrainAmbient: new Uniform(0.04),
   // Высотный fade облачного слоя (приёмочная волна 4, №3, идея владельца) —
   // 1 из космоса, гаснет к середине толщины атмосферы (см. докблок
   // cloudOpacityForAltitude в PlanetMaterial.ts). Дефолт 1 — до первого
@@ -111,6 +114,8 @@ export const PlanetShaderTemplate: ShaderProps = {
     uniform float uNightThreshold;
     uniform float uNightSoftness;
     uniform float uCavityStrength;
+    uniform float uTerrainLambert;
+    uniform float uTerrainAmbient;
     // three не биндит normalMatrix во фрагментник автоматически (только в
     // вершинный пролог) — юниформ общий на программу, объявление здесь просто
     // делает его видимым этому шейдеру.
@@ -242,6 +247,14 @@ export const PlanetShaderTemplate: ShaderProps = {
       #endif
 
       vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);
+
+      #ifdef USE_TERRAIN_UV
+        // Ламберт суши: без него нормаль (slope-карта, детальные трипланары)
+        // видна только в полосе терминатора — dayFactor ниже насыщается при
+        // N·L > 0.25. При uTerrainLambert = 0 множитель ≡ 1 (прежний вид).
+        day *= mix(1.0, mix(uTerrainAmbient, 1.0, max(NdotLraw, 0.0)), uTerrainLambert);
+      #endif
+
       // Огни городов: порог с мягкостью вместо квадрата. Квадрат душил
       // середину и оставлял размытый ореол вокруг агломераций; порог гасит
       // слабую засветку и сохраняет яркие ядра. Тинт по яркости: тусклые
