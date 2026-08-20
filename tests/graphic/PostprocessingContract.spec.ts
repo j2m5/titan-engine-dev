@@ -59,3 +59,18 @@ describe('Postprocessing: контракт цветового конвейера
     expect(BLOOM_OPTIONS.luminanceThreshold).toBe(1)
   })
 })
+
+describe('Postprocessing: гало усилено, кромка диска мягче', () => {
+  it('сила гало поднята выше прежних 1.4', () => {
+    // Приёмка по картинке: диск звезды не должен читаться жёсткой границей.
+    // Порог остаётся 1.0 — усиление идёт силой и весом размытых мипов
+    expect(BLOOM_OPTIONS.intensity).toBeGreaterThanOrEqual(2.2)
+  })
+
+  it('вес размытых мипов поднят: гало наползает на кромку', () => {
+    // radius — вес mix(резкий уровень, размытый нижний): ближе к 1 —
+    // больше нижних мипов в наложении, мягче граница источника
+    expect(BLOOM_OPTIONS.radius).toBeGreaterThanOrEqual(0.98)
+    expect(BLOOM_OPTIONS.radius).toBeLessThanOrEqual(1)
+  })
+})
