@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Actor } from '@/core/models/Actor'
 import { atmosphericHeightPaths } from '@/Application'
+import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
 
 /**
  * Отбор на РЕАЛЬНОЙ БД, а не на стабах: стаб доказывает форму запроса, но не
@@ -33,7 +34,7 @@ describe('atmosphericHeightPaths на реальной БД', () => {
   it('газовый гигант с атмосферой без карты высот в набор не попадает (Юпитер)', () => {
     const jupiter: Actor = Actor.find(10)!
 
-    expect(jupiter.children.where('categoryId', 5).isNotEmpty()).toBe(true)
+    expect(jupiter.children.where('categoryId', ATMOSPHERE_CATEGORY_ID).isNotEmpty()).toBe(true)
     expect(atmosphericHeightPaths([jupiter])).toEqual([])
   })
 })
