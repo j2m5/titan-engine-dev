@@ -13,7 +13,7 @@
 export type TerrainFloorStatus = {
   /** ok — сходится; missing — не объявлено или объявлено не числом; mismatch — разошлось. */
   status: 'ok' | 'missing' | 'mismatch'
-  /** Что должно быть объявлено: min(0, minMeters) карты. */
+  /** Что должно быть объявлено: min(0, max(minMeters карты, уровень воды)). */
   expected: number
   /** Что объявлено (как лежит в БД, без приведения) — для сообщения о расхождении. */
   declared: unknown
@@ -26,8 +26,15 @@ export type TerrainFloorStatus = {
  */
 const TOLERANCE_METERS = 1
 
-export function terrainFloorStatus(declared: unknown, minMeters: number): TerrainFloorStatus {
-  const expected = Math.min(0, minMeters)
+/**
+ * `waterLevelMeters` — уровень воды тела (`IPlanetRenderingObject`), если есть:
+ * дно океана под водой атмосфере не видно, опускать до него аналитическое дно
+ * незачем — пол поднимается до уровня воды. Нечисловой уровень = воды нет.
+ * Выше датума пол не поднимается никогда (иначе горизонт вылезет из-за силуэта).
+ */
+export function terrainFloorStatus(declared: unknown, minMeters: number, waterLevelMeters?: unknown): TerrainFloorStatus {
+  const hasWater = typeof waterLevelMeters === 'number' && Number.isFinite(waterLevelMeters)
+  const expected = Math.min(0, hasWater ? Math.max(minMeters, waterLevelMeters) : minMeters)
 
   if (typeof declared !== 'number' || !Number.isFinite(declared)) {
     return { status: 'missing', expected, declared }

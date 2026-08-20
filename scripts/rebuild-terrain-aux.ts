@@ -103,12 +103,14 @@ function checkTerrainFloors(job: Job, minMeters: number): void {
       | { terrainFloorMeters?: unknown }
       | undefined
 
-    const check = terrainFloorStatus(data?.terrainFloorMeters, minMeters)
+    // Уровень воды тела-владельца: под водой дно атмосфере не видно, пол поднимается до уровня.
+    const ownerData = RenderingObjects.find((r) => r.actorId === ownerId)?.data as { waterLevelMeters?: unknown } | undefined
+    const check = terrainFloorStatus(data?.terrainFloorMeters, minMeters, ownerData?.waterLevelMeters)
 
     if (check.status === 'missing') {
       floorReport.push(`[НЕТ]  ${bodyName}: поставить terrainFloorMeters = ${check.expected}`)
     } else if (check.status === 'mismatch') {
-      floorReport.push(`[РАЗОШЁЛСЯ] ${bodyName}: объявлено ${check.declared}, в карте ${check.expected}`)
+      floorReport.push(`[РАЗОШЁЛСЯ] ${bodyName}: объявлено ${check.declared}, ожидается ${check.expected}`)
     } else {
       floorReport.push(`[ок]   ${bodyName}: ${check.declared}`)
     }
