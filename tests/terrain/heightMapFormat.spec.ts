@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HEIGHT_MAP_HEADER_BYTES, parseHeightMap } from '@/core/terrain/heightMapFormat'
+import { HEIGHT_MAP_HEADER_BYTES, parseHeightMap, parseHeightMapHeader } from '@/core/terrain/heightMapFormat'
 import { encodeHeightMap, normalizeToUint16, resolveHeightRange } from '../../scripts/lib/heightMapEncode'
 
 function toArrayBuffer(buffer: Buffer): ArrayBuffer {
@@ -119,5 +119,21 @@ describe('parseHeightMap: NaN в заголовке', () => {
     encoded.writeFloatLE(NaN, 20)
 
     expect(() => parseHeightMap(toArrayBuffer(encoded))).toThrow()
+  })
+})
+
+describe('parseHeightMapHeader: заголовок без тела', () => {
+  it('читает размеры и диапазон из первых 24 байт, тело не требуется', () => {
+    const full = encodeHeightMap({ width: 2, height: 2, minMeters: -8174.25, maxMeters: 21171.5, data: new Uint16Array([0, 1, 2, 3]) })
+    const headerOnly = full.buffer.slice(full.byteOffset, full.byteOffset + HEIGHT_MAP_HEADER_BYTES)
+
+    expect(parseHeightMapHeader(headerOnly)).toEqual({ width: 2, height: 2, minMeters: -8174.25, maxMeters: 21171.5 })
+  })
+
+  it('короче заголовка / чужой magic — ошибка', () => {
+    expect(() => parseHeightMapHeader(new ArrayBuffer(10))).toThrow()
+    const bad = new ArrayBuffer(24)
+    new DataView(bad).setUint32(0, 0xdeadbeef, true)
+    expect(() => parseHeightMapHeader(bad)).toThrow(/magic/)
   })
 })
