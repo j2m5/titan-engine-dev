@@ -125,6 +125,28 @@ describe('selectTerrainNodes: SSE-отбор узлов квадродерева
     expect(leaves).toHaveLength(24)
   })
 
+  it('гистерезис вне фрустума: уже разбитый узел остаётся разбитым, когда камера отворачивается', () => {
+    // Кадр А: камера смотрит на тело с 1000 км без фрустума — набор глубже 24.
+    const params = makeParams(1000)
+    const runA = selectTerrainNodes(params)
+    expect(runA.leaves.length).toBeGreaterThan(24)
+
+    // Кадр Б: та же позиция, взгляд от тела (все узлы вне фрустума), история из А.
+    const frustum = new Frustum()
+    const away = new PerspectiveCamera(50, 1, 0.001, 1e9)
+    away.position.copy(params.cameraLocal)
+    away.lookAt(params.cameraLocal.clone().multiplyScalar(2))
+    away.updateMatrixWorld(true)
+    frustum.setFromProjectionMatrix(new Matrix4().multiplyMatrices(away.projectionMatrix, away.matrixWorldInverse))
+
+    const runB = selectTerrainNodes({ ...params, frustumLocal: frustum, currentlySplit: runA.split })
+    expect(new Set(runB.leaves.map(terrainNodeKey))).toEqual(new Set(runA.leaves.map(terrainNodeKey)))
+
+    // Контроль: без истории тот же кадр Б схлопывается до 24 — тест дискриминирует.
+    const fresh = selectTerrainNodes({ ...params, frustumLocal: frustum })
+    expect(fresh.leaves).toHaveLength(24)
+  })
+
   it('камера под поверхностью не роняет отбор (кламп дистанции)', () => {
     const { leaves } = selectTerrainNodes(makeParams(-5))
     expect(leaves.length).toBeGreaterThan(24)

@@ -121,7 +121,8 @@ function visitNode(
   // формат совпадает с terrainNodeKey — вызывается без промежуточного
   // TerrainNodeAddress, чтобы не аллоцировать объект на каждый посещённый узел
   const key = `${face}/${level}/${i}/${j}`
-  const threshold = params.currentlySplit.has(key) ? params.splitPixels * params.mergeFactor : params.splitPixels
+  const alreadySplit = params.currentlySplit.has(key)
+  const threshold = alreadySplit ? params.splitPixels * params.mergeFactor : params.splitPixels
 
   let visible = true
   if (params.frustumLocal) {
@@ -141,7 +142,11 @@ function visitNode(
     belowWaterCeiling = nodeMaxHeightMeters < params.waterLevelMeters - WATER_CEILING_MARGIN_METERS
   }
 
-  const shouldSplit = level < TERRAIN_QUADTREE_MAX_LEVEL && sse > threshold && visible && !belowWaterCeiling
+  // Видимость гейтит только НОВЫЕ сплиты: уже разбитый узел держится по SSE
+  // (merge-порог), иначе поворот камеры схлопывал бы поддерево до L1 и при
+  // возврате в кадр требовал полной пересборки (бюджет 6 патчей/кадр).
+  const shouldSplit =
+    level < TERRAIN_QUADTREE_MAX_LEVEL && sse > threshold && (visible || alreadySplit) && !belowWaterCeiling
 
   if (shouldSplit) {
     split.add(key)
