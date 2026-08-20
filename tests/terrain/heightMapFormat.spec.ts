@@ -50,6 +50,23 @@ describe('Формат карты высот: round-trip энкодер ↔ па
   it('обрезанный заголовок — ошибка', () => {
     expect(() => parseHeightMap(new ArrayBuffer(10))).toThrow()
   })
+
+  it.each([
+    ['нулевая ширина', 0, 2],
+    ['нулевая высота', 4, 0],
+    ['нулевые обе', 0, 0]
+  ])('%s — ошибка, а не карта без текселей', (_label, width, height) => {
+    // Карта без текселей проходила все прежние проверки: длина тела сходится
+    // (0 байт), magic и версия на месте. Дальше она молча ломала ВСЁ ниже по
+    // течению — сетка провиса нулевого размера, percentile99 по пустому
+    // массиву отдавал undefined, ε становилась NaN, и SSE-отбор переставал
+    // делить дерево вовсе; sampleMeters возвращала NaN, то есть тело
+    // получало NaN-геометрию. Ни одной ошибки в консоли (ревью 2026-08-20,
+    // находка №8).
+    const encoded = encodeHeightMap({ width, height, minMeters: 0, maxMeters: 1, data: new Uint16Array(0) })
+
+    expect(() => parseHeightMap(toArrayBuffer(encoded))).toThrow(/нулев/i)
+  })
 })
 
 describe('resolveHeightRange: явные границы не затираются сканом данных', () => {

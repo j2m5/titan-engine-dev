@@ -5,6 +5,7 @@ import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
 import { Texture, Vector3 } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
+import { heightPathOf } from '@/core/terrain/heightPath'
 import { IPlanetRenderingObject } from '@/core/models/types'
 import { readRenderingData } from '@/core/helpers/renderingData'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -131,8 +132,8 @@ class PlanetMaterial extends AbstractShaderMaterial {
     // авторитет: если карта не доехала (HeightFieldStorage предупредил и
     // пропустил), сфера гладкая, и кратерный slope-шейдинг на ней был бы
     // враньём — тогда рельефные дефайны молчат целиком.
-    const heightPath = this.model.resources.where('resourceType', 'height').first()?.getAttribute('path')
-    const hasHeightField = typeof heightPath === 'string' && Boolean(heightFieldStorage.get(heightPath))
+    const heightPath: string | undefined = heightPathOf(this.model)
+    const hasHeightField = heightPath !== undefined && Boolean(heightFieldStorage.get(heightPath))
 
     // slope-карта — уклоны из той же карты высот (см. slopeMapFormat): шейдит
     // попиксельно то, что не влезло в вершинную сетку, мипы фильтруют издалека.

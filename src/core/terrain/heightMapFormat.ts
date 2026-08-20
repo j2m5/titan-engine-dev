@@ -51,6 +51,16 @@ export function parseHeightMap(buffer: ArrayBuffer): HeightMapData {
 
   const width = view.getUint32(8, true)
   const height = view.getUint32(12, true)
+
+  // Карта без текселей сходится по длине тела (0 байт) и прежде проезжала
+  // все проверки насквозь, а ломалась молча и далеко: сетка провиса нулевого
+  // размера, p99 по пустому массиву — undefined, ε — NaN, SSE-отбор перестаёт
+  // делить дерево, sampleMeters отдаёт NaN в геометрию. Отказ обязан быть
+  // здесь, на границе формата, где ещё видно причину.
+  if (width === 0 || height === 0) {
+    throw new Error(`Карта высот: нулевые размеры (width=${width}, height=${height})`)
+  }
+
   const minMeters = view.getFloat32(16, true)
   const maxMeters = view.getFloat32(20, true)
 
