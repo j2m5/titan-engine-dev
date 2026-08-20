@@ -56,7 +56,8 @@ describe('Application.teardown', () => {
     const observer = {
       scenario: null,
       loadPrimaryTextures: vi.fn(() => Promise.resolve()),
-      sceneBackground: new CubeTexture()
+      sceneBackground: new CubeTexture(),
+      map: new Map()
     } as unknown as ResourceObserver
     const recordSpy = vi.fn(() => null)
     const detector = { record: recordSpy } as unknown as LeakDetector
@@ -91,7 +92,8 @@ describe('Application.teardown', () => {
     const observer = {
       scenario: null,
       loadPrimaryTextures: vi.fn(() => Promise.resolve()),
-      sceneBackground: new CubeTexture()
+      sceneBackground: new CubeTexture(),
+      map: new Map()
     } as unknown as ResourceObserver
     const recordSpy = vi.fn(() => null)
     const detector = { record: recordSpy } as unknown as LeakDetector

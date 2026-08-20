@@ -28,6 +28,44 @@ async function settle(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0))
 }
 
+/**
+ * Тело ответа потоком. Не `new Blob([body]).stream()`: у jsdom-Blob метода
+ * stream() нет, а среда тестов — jsdom (src/config тянет window).
+ */
+function streamOf(body: Buffer): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array(body))
+      controller.close()
+    }
+  })
+}
+
+/** fetch, отдающий тело ПОТОКОМ чанками — preloadHeaders обязан отменить чтение после заголовка. */
+function stubStreamingFetch(body: Buffer, chunkBytes: number): { cancelled: () => boolean } {
+  let cancelled = false
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      body: new ReadableStream<Uint8Array>({
+        pull(controller) {
+          // отдаём по чанку за вызов
+          const offset = (controller as unknown as { offset?: number }).offset ?? 0
+          if (offset >= body.length) return controller.close()
+          controller.enqueue(new Uint8Array(body.subarray(offset, offset + chunkBytes)))
+          ;(controller as unknown as { offset: number }).offset = offset + chunkBytes
+        },
+        cancel() {
+          cancelled = true
+        }
+      })
+    }))
+  )
+  return { cancelled: () => cancelled }
+}
+
 describe('HeightFieldStorage: спросовый режим', () => {
   it('request загружает карту и поднимает версию', async () => {
     stubFetch(validBody())
@@ -142,5 +180,55 @@ describe('HeightFieldStorage: спросовый режим', () => {
     expect(vi.mocked(fetch).mock.calls.length).toBe(2)
     nowSpy.mockRestore()
     warn.mockRestore()
+  })
+})
+
+describe('HeightFieldStorage: заголовки карт (preloadHeaders / floorMeters)', () => {
+  // Заголовки переживают clear() по построению — межтестовую изоляцию держим здесь
+  afterEach(() => {
+    ;(heightFieldStorage as unknown as { headers: Map<string, unknown> }).headers.clear()
+  })
+
+  it('читает minMeters из первых байт и отменяет поток, не дожидаясь тела', async () => {
+    const big = encodeHeightMap({ width: 64, height: 32, minMeters: -8174.25, maxMeters: 21171.5, data: new Uint16Array(64 * 32) })
+    const stream = stubStreamingFetch(big, 16) // чанки по 16 байт — заголовок приходит за два
+
+    await heightFieldStorage.preloadHeaders(['planets/mars/mars_height.raw'])
+
+    expect(heightFieldStorage.floorMeters('planets/mars/mars_height.raw')).toBeCloseTo(-8174.25, 2)
+    expect(heightFieldStorage.get('planets/mars/mars_height.raw')).toBeUndefined() // полной карты нет
+    expect(stream.cancelled()).toBe(true)
+  })
+
+  it('провал одного пути не валит остальные и не бросает', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const good = encodeHeightMap({ width: 2, height: 2, minMeters: -5, maxMeters: 5, data: new Uint16Array(4) })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        String(url).includes('bad')
+          ? { ok: false, status: 404, body: null }
+          : { ok: true, status: 200, body: streamOf(good) }
+      )
+    )
+
+    await expect(heightFieldStorage.preloadHeaders(['x/bad_height.raw', 'x/good_height.raw'])).resolves.toBeUndefined()
+    expect(heightFieldStorage.floorMeters('x/bad_height.raw')).toBeUndefined()
+    expect(heightFieldStorage.floorMeters('x/good_height.raw')).toBe(-5)
+    warn.mockRestore()
+  })
+
+  it('полная карта в реестре имеет приоритет над заголовком; заголовок переживает clear()', async () => {
+    const good = encodeHeightMap({ width: 2, height: 2, minMeters: -5, maxMeters: 5, data: new Uint16Array(4) })
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, body: streamOf(good) })))
+    await heightFieldStorage.preloadHeaders(['x/good_height.raw'])
+
+    heightFieldStorage.clear()
+    expect(heightFieldStorage.floorMeters('x/good_height.raw')).toBe(-5)
+
+    ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set('x/good_height.raw', {
+      width: 2, height: 2, minMeters: -7, maxMeters: 5, data: new Uint16Array(4)
+    })
+    expect(heightFieldStorage.floorMeters('x/good_height.raw')).toBe(-7)
   })
 })

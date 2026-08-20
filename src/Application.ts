@@ -4,6 +4,7 @@ import { ScenarioConfig } from '@/config/scenarios'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { Scene } from 'three'
+import type { Actor } from '@/core/models/Actor'
 import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
 import type { HeightFieldGate } from '@/core/services/HeightFieldGate'
 import { SkyboxBackground } from '@/core/renderables/SkyboxBackground'
@@ -54,6 +55,11 @@ class Application {
     this.resourceObserver.scenario = scenario
     await this.resourceObserver.loadPrimaryTextures()
 
+    // Заголовки карт высот тел с атмосферой — ДО построения графа: дно
+    // атмосферы подгоняется под пол рельефа в конструкторе BrunetonAtmosphere,
+    // а полная карта приходит спросовым гейтом много позже.
+    await heightFieldStorage.preloadHeaders(Application.atmosphericHeightPaths(this.resourceObserver.map))
+
     if (!this.resourceObserver.sceneBackground) {
       console.warn('[Application] Кубическая карта фона сценария не загружена, сцена останется без фона')
     } else {
@@ -75,6 +81,21 @@ class Application {
     // первым ClosestChange (в пределах streaming.recomputeIntervalMs = 500 мс
     // даже при неподвижной камере).
     this.heightFieldGate.recompute()
+  }
+
+  /** Пути height-ресурсов акторов сценария, у которых есть дочерняя атмосфера (categoryId 5). */
+  private static atmosphericHeightPaths(actors: Map<number, Actor>): string[] {
+    const paths: string[] = []
+
+    for (const actor of actors.values()) {
+      if (actor.children.where('categoryId', 5).isEmpty()) continue
+
+      const path = actor.resources.where('resourceType', 'height').first()?.getAttribute('path')
+
+      if (typeof path === 'string') paths.push(path)
+    }
+
+    return paths
   }
 
   public dispose(): void {
