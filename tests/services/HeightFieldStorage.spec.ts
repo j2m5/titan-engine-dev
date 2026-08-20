@@ -42,8 +42,9 @@ function streamOf(body: Buffer): ReadableStream<Uint8Array> {
 }
 
 /** fetch, отдающий тело ПОТОКОМ чанками — preloadHeaders обязан отменить чтение после заголовка. */
-function stubStreamingFetch(body: Buffer, chunkBytes: number): { cancelled: () => boolean } {
+function stubStreamingFetch(body: Buffer, chunkBytes: number): { cancelled: () => boolean; pulls: () => number } {
   let cancelled = false
+  let pulls = 0
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => ({
@@ -54,16 +55,20 @@ function stubStreamingFetch(body: Buffer, chunkBytes: number): { cancelled: () =
           // отдаём по чанку за вызов
           const offset = (controller as unknown as { offset?: number }).offset ?? 0
           if (offset >= body.length) return controller.close()
+          pulls += 1
           controller.enqueue(new Uint8Array(body.subarray(offset, offset + chunkBytes)))
           ;(controller as unknown as { offset: number }).offset = offset + chunkBytes
         },
         cancel() {
           cancelled = true
         }
-      })
+      },
+      // highWaterMark 0 — поток не тянет чанк впрок: счётчик pull равен числу
+      // чанков, которые фактически понадобились читателю
+      { highWaterMark: 0 })
     }))
   )
-  return { cancelled: () => cancelled }
+  return { cancelled: () => cancelled, pulls: () => pulls }
 }
 
 describe('HeightFieldStorage: спросовый режим', () => {
@@ -198,6 +203,8 @@ describe('HeightFieldStorage: заголовки карт (preloadHeaders / floo
     expect(heightFieldStorage.floorMeters('planets/mars/mars_height.raw')).toBeCloseTo(-8174.25, 2)
     expect(heightFieldStorage.get('planets/mars/mars_height.raw')).toBeUndefined() // полной карты нет
     expect(stream.cancelled()).toBe(true)
+    // 24 байта заголовка = два чанка по 16; всё тело — 257 чанков
+    expect(stream.pulls()).toBe(2)
   })
 
   it('провал одного пути не валит остальные и не бросает', async () => {
