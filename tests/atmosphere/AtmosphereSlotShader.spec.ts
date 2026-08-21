@@ -79,17 +79,30 @@ describe('слот', () => {
   it('обрезка луча оболочкой изоморфна clipRayToShell', () => {
     for (const line of [
       'float b = dot(dir, center);',
-      'float c = dot(center, center) - top * top;',
+      'float cc = dot(center, center);',
+      'float c = cc - top * top;',
       'if (disc <= 0.0) return;',
       'float tExit = b + root;',
       'if (tExit <= 0.0) return;',
       'bool inside = c < 0.0;',
       'float t0 = inside ? 0.0 : b - root;',
       'if (t0 >= distKm) return;',
-      'bool hitSurface = distKm < tExit;'
+      'bool hitSurface = distKm < tExit;',
+      'float t1 = hitSurface ? distKm : tExit;',
+      'float cBottom = cc - bottom * bottom;',
+      'float discBottom = b * b - cBottom;',
+      'if (cBottom > 0.0 && discBottom > 0.0) {',
+      'float tBottom = b - sqrt(discBottom);',
+      'if (tBottom > 0.0 && tBottom < t1) {',
+      't1 = tBottom;',
+      'hitSurface = true;'
     ]) {
       expect(slot).toContain(line)
     }
+  })
+
+  it('дно оболочки берётся из bottom_radius слота', () => {
+    expect(slot).toContain('float bottom = uSlot1_bottom_radius;')
   })
 })
 

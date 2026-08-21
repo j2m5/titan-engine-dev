@@ -30,17 +30,18 @@ describe('logDepthToDistanceKm', () => {
 
 describe('clipRayToShell: камера в нуле, всё в км', () => {
   const top = 6420
+  const bottom = 6360
   const dir = new Vector3(0, 0, -1)
 
   it('луч мимо оболочки → null', () => {
     const center = new Vector3(20000, 0, -50000)
-    expect(clipRayToShell(dir, center, top, Infinity)).toBeNull()
+    expect(clipRayToShell(dir, center, top, bottom, Infinity)).toBeNull()
   })
 
   it('снаружи, луч в небо сквозь оболочку: t0 — вход, t1 — выход, поверхности нет', () => {
-    const center = new Vector3(0, 6000, -50000) // хорда на высоте 6000 над центром
-    const seg = clipRayToShell(dir, center, top, Infinity)!
-    const half = Math.sqrt(top * top - 6000 * 6000)
+    const center = new Vector3(0, 6400, -50000) // хорда выше дна: 6400 > bottom
+    const seg = clipRayToShell(dir, center, top, bottom, Infinity)!
+    const half = Math.sqrt(top * top - 6400 * 6400)
     expect(seg.t0).toBeCloseTo(50000 - half, 6)
     expect(seg.t1).toBeCloseTo(50000 + half, 6)
     expect(seg.hitSurface).toBe(false)
@@ -49,7 +50,7 @@ describe('clipRayToShell: камера в нуле, всё в км', () => {
   it('снаружи, луч в землю: t1 обрезан глубиной, hitSurface', () => {
     const center = new Vector3(0, 0, -50000)
     const distKm = 50000 - 6360 // поверхность на датуме
-    const seg = clipRayToShell(dir, center, top, distKm)!
+    const seg = clipRayToShell(dir, center, top, bottom, distKm)!
     expect(seg.t0).toBeCloseTo(50000 - top, 6)
     expect(seg.t1).toBeCloseTo(distKm, 6)
     expect(seg.hitSurface).toBe(true)
@@ -57,12 +58,12 @@ describe('clipRayToShell: камера в нуле, всё в км', () => {
 
   it('поверхность ПЕРЕД оболочкой (луна перед планетой) → null', () => {
     const center = new Vector3(0, 0, -50000)
-    expect(clipRayToShell(dir, center, top, 1000)).toBeNull()
+    expect(clipRayToShell(dir, center, top, bottom, 1000)).toBeNull()
   })
 
   it('камера внутри оболочки: t0 = 0', () => {
     const center = new Vector3(0, -6380, 0) // камера в 20 км над датумом
-    const seg = clipRayToShell(dir, center, top, Infinity)!
+    const seg = clipRayToShell(dir, center, top, bottom, Infinity)!
     expect(seg.t0).toBe(0)
     expect(seg.t1).toBeGreaterThan(0)
     expect(seg.hitSurface).toBe(false)
@@ -71,10 +72,41 @@ describe('clipRayToShell: камера в нуле, всё в км', () => {
   it('камера внутри, взгляд в грунт: t1 = глубина, hitSurface', () => {
     const center = new Vector3(0, -6380, 0)
     const down = new Vector3(0, -1, 0)
-    const seg = clipRayToShell(down, center, top, 20)!
+    const seg = clipRayToShell(down, center, top, bottom, 20)!
     expect(seg.t0).toBe(0)
     expect(seg.t1).toBe(20)
     expect(seg.hitSurface).toBe(true)
+  })
+})
+
+// Дно океана под прозрачной водой пишет глубину, а bottom стоит на уровне воды:
+// конец отрезка уходил под дно оболочки → мусор из LUT Брунетона (чёрная полоса)
+describe('clipRayToShell: обрезка сферой дна', () => {
+  const top = 6420
+  const bottom = 6360
+  const dir = new Vector3(0, 0, -1)
+
+  it('снаружи, глубина на 5 км НИЖЕ дна: t1 = |center| − bottom, hitSurface', () => {
+    const center = new Vector3(0, 0, -50000)
+    const seg = clipRayToShell(dir, center, top, bottom, 50000 - bottom + 5)!
+    expect(seg.t1).toBeCloseTo(50000 - bottom, 6)
+    expect(seg.hitSurface).toBe(true)
+  })
+
+  it('камера внутри оболочки над грунтом, взгляд вниз, глубина на 3 км ниже дна: t1 обрезан дном', () => {
+    const center = new Vector3(0, -6380, 0) // камера в 20 км над датумом bottom
+    const down = new Vector3(0, -1, 0)
+    const seg = clipRayToShell(down, center, top, bottom, 23)!
+    expect(seg.t0).toBe(0)
+    expect(seg.t1).toBeCloseTo(20, 6)
+    expect(seg.hitSurface).toBe(true)
+  })
+
+  it('луч по касательной ВЫШЕ дна (мимо сферы дна), глубина — небо: выход по top не тронут', () => {
+    const center = new Vector3(0, 6400, -50000) // хорда на 6400 > bottom = 6360
+    const seg = clipRayToShell(dir, center, top, bottom, Infinity)!
+    expect(seg.t1).toBeCloseTo(50000 + Math.sqrt(top * top - 6400 * 6400), 6)
+    expect(seg.hitSurface).toBe(false)
   })
 })
 

@@ -28,11 +28,19 @@ export interface ShellSegment {
 /**
  * Отрезок луча внутри сферы `top`. Камера — начало координат, `dir` единичный.
  * null — луч мимо оболочки или поверхность перед ней (затуманивать нечего).
+ * Дно сферы `bottom` — грунт модели: ниже него луч не продолжается.
  */
-export function clipRayToShell(dir: Vector3, centerKm: Vector3, topRadiusKm: number, distKm: number): ShellSegment | null {
+export function clipRayToShell(
+  dir: Vector3,
+  centerKm: Vector3,
+  topRadiusKm: number,
+  bottomRadiusKm: number,
+  distKm: number
+): ShellSegment | null {
   // |dir·t − c|² = top² → t² − 2(dir·c)t + |c|² − top² = 0
   const b = dir.dot(centerKm)
-  const c = centerKm.lengthSq() - topRadiusKm * topRadiusKm
+  const cc = centerKm.lengthSq()
+  const c = cc - topRadiusKm * topRadiusKm
   const disc = b * b - c
   if (disc <= 0) return null
 
@@ -44,8 +52,25 @@ export function clipRayToShell(dir: Vector3, centerKm: Vector3, topRadiusKm: num
   const t0 = inside ? 0 : b - root
   if (t0 >= distKm) return null // поверхность перед оболочкой
 
-  const hitSurface = distKm < tExit
-  return { t0, t1: hitSurface ? distKm : tExit, hitSurface }
+  let hitSurface = distKm < tExit
+  let t1 = hitSurface ? distKm : tExit
+
+  // Дно оболочки — грунт модели Брунетона: под bottom LUT не заданы. Глубина
+  // может уводить конец ниже (дно океана под прозрачной водой без depthWrite,
+  // ошибка декода ~20 м) — обрезаем первым положительным корнем сферы дна.
+  // Камера уже ниже дна (cBottom ≤ 0) — обрезка пропускается: точку у дна
+  // вытягивает кламп +0.01 км ниже по коду.
+  const cBottom = cc - bottomRadiusKm * bottomRadiusKm
+  const discBottom = b * b - cBottom
+  if (cBottom > 0 && discBottom > 0) {
+    const tBottom = b - Math.sqrt(discBottom)
+    if (tBottom > 0 && tBottom < t1) {
+      t1 = tBottom
+      hitSurface = true
+    }
+  }
+
+  return { t0, t1, hitSurface }
 }
 
 export interface SlotCandidate<T> {

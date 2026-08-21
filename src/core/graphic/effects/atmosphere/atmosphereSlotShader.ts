@@ -139,9 +139,11 @@ export function buildSlotGlsl(i: number): string {
   void applySlot${i}(vec3 dir, float distKm, inout vec3 color) {
     vec3 center = ${u('center')};
     float top = ${u('top_radius')};
+    float bottom = ${u('bottom_radius')};
 
     float b = dot(dir, center);
-    float c = dot(center, center) - top * top;
+    float cc = dot(center, center);
+    float c = cc - top * top;
     float disc = b * b - c;
     if (disc <= 0.0) return;
     float root = sqrt(disc);
@@ -153,6 +155,22 @@ export function buildSlotGlsl(i: number): string {
 
     bool hitSurface = distKm < tExit;
     float t1 = hitSurface ? distKm : tExit;
+
+    // Дно оболочки — грунт модели Брунетона: под bottom LUT не заданы, точка
+    // ниже даёт отрицательное рассеяние (чёрная полоса). Глубина уводит конец
+    // под дно там, где вода прозрачна и depthWrite выключен: пишет глубину дно
+    // океана (Земля до −10.5 км), а bottom стоит на уровне воды.
+    // Камера уже ниже дна (cBottom ≤ 0) — обрезка пропускается: точку у дна
+    // вытягивает кламп +0.01 км ниже по коду.
+    float cBottom = cc - bottom * bottom;
+    float discBottom = b * b - cBottom;
+    if (cBottom > 0.0 && discBottom > 0.0) {
+      float tBottom = b - sqrt(discBottom);
+      if (tBottom > 0.0 && tBottom < t1) {
+        t1 = tBottom;
+        hitSurface = true;
+      }
+    }
 
     AtmosphereParameters atm = buildSlot${i}();
     vec3 p0 = dir * t0 - center;
