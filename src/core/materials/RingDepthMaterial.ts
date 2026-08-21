@@ -45,13 +45,19 @@ export const RING_DEPTH_ALPHA_TEST_DEFAULT: number = 0.12
  * глубину и невидимым заслоняло бы камни и пыль за плоскостью кольца, а на
  * лимбе давало бы жёсткую линию «поверхности» в эффекте по глубине.
  *
- * Юниформы `diffuseMap`/`innerRadius`/`outerRadius` и ручки затуханий
- * (`minDistance`/`maxDistance`/`ringEdgeOpacity`/`ringAngleCurve`) разделяются с
- * цветовым материалом ПО ССЫЛКЕ (те же объекты `Uniform`): оба прохода обязаны
- * видеть одну текстуру, одни радиусы и одни пороги затуханий, иначе силуэт
- * глубины разойдётся с картинкой. `updateMaterial` — точка входа фан-аута
- * `materialSync`: если карта кольца когда-нибудь начнёт стримиться, значение
- * подтянется и без общего объекта.
+ * Юниформы `diffuseMap`/`innerRadius`/`outerRadius`, ручки затуханий
+ * (`minDistance`/`maxDistance`/`ringEdgeOpacity`/`ringAngleCurve`) и `alphaTest`
+ * разделяются с цветовым материалом ПО ССЫЛКЕ (те же объекты `Uniform`): оба
+ * прохода обязаны видеть одну текстуру, одни радиусы и одни пороги, иначе
+ * силуэт глубины разойдётся с картинкой. `updateMaterial` — точка входа
+ * фан-аута `materialSync`: если карта кольца когда-нибудь начнёт стримиться,
+ * значение подтянется и без общего объекта.
+ *
+ * Пре-пасс обязан быть строгим ПОДМНОЖЕСТВОМ цветового прохода: тот отбрасывает
+ * тексель по сырой альфе текстуры раньше собственных затуханий
+ * (`color.a <= alphaTest`), и пре-пасс повторяет этот ранний гейт дословно —
+ * иначе тексель с альфой между `uDepthAlphaTest` и `alphaTest` не рисуется
+ * цветом, но пишет глубину.
  */
 class RingDepthMaterial extends AbstractShaderMaterial {
   private readonly source: RingMaterial
@@ -68,6 +74,7 @@ class RingDepthMaterial extends AbstractShaderMaterial {
       maxDistance: source.uniforms.maxDistance,
       ringEdgeOpacity: source.uniforms.ringEdgeOpacity,
       ringAngleCurve: source.uniforms.ringAngleCurve,
+      alphaTest: source.uniforms.alphaTest,
       uDepthAlphaTest: new Uniform(depthAlphaTest)
     }
 
@@ -124,6 +131,7 @@ class RingDepthMaterial extends AbstractShaderMaterial {
     uniform float maxDistance;
     uniform float ringEdgeOpacity;
     uniform float ringAngleCurve;
+    uniform float alphaTest;
     uniform float uDepthAlphaTest;
 
     varying vec3 vPosition;
@@ -137,6 +145,10 @@ class RingDepthMaterial extends AbstractShaderMaterial {
       uv.y = 0.0;
 
       vec4 color = texture2D(diffuseMap, uv);
+
+      // Ранний гейт цветового прохода дословно: пре-пасс обязан быть его
+      // подмножеством, иначе тексель невидимый цветом продолжает писать глубину
+      if (color.a <= 0.0 || color.a <= alphaTest) discard;
 
       // Затухания дословно из цветового прохода: глубину пишет только то,
       // что там действительно видно

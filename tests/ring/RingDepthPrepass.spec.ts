@@ -112,6 +112,28 @@ describe('Депт-пре-пасс кольца', () => {
     expect(material.fragmentShader).toContain('float a = color.a * transparencyFactor * angleOpacity;')
   })
 
+  it('пре-пасс — строгое подмножество цветового прохода: повторяет его ранний гейт по alphaTest ДО затуханий', () => {
+    // Иначе тексель с сырой альфой между uDepthAlphaTest и alphaTest не
+    // рисуется цветом, но продолжает писать глубину
+    const material = prepassOf(new Ring(ringActor())).material as RingDepthMaterial
+    const earlyDiscard = colorPassLine(/if \(color\.a <= 0\.0 \|\| color\.a <= alphaTest\) discard;/)
+
+    expect(material.fragmentShader).toContain(earlyDiscard)
+
+    const discardIndex = material.fragmentShader.indexOf(earlyDiscard)
+    const transparencyFactorIndex = material.fragmentShader.indexOf('transparencyFactor')
+
+    expect(discardIndex).toBeGreaterThan(-1)
+    expect(discardIndex).toBeLessThan(transparencyFactorIndex)
+  })
+
+  it('alphaTest пре-пасса — тот же объект Uniform, что у цветового материала кольца', () => {
+    const ring = new Ring(ringActor())
+    const material = prepassOf(ring).material as RingDepthMaterial
+
+    expect(material.uniforms.alphaTest).toBe(ring.material.uniforms.alphaTest)
+  })
+
   it('варьинг локальной камеры есть в обоих шейдерах пре-пасса — затуханиям нужен ракурс', () => {
     const material = prepassOf(new Ring(ringActor())).material as RingDepthMaterial
 
@@ -146,6 +168,16 @@ describe('Депт-пре-пасс кольца', () => {
     const ring = new Ring(ringActor())
 
     expect(RING_DEPTH_ALPHA_TEST_DEFAULT).toBeGreaterThan(ring.material.uniforms.ringEdgeOpacity.value)
+  })
+
+  it('порог из данных клампится строго выше ringEdgeOpacity: 0.05 из данных → 0.11', () => {
+    ringData().depthAlphaTest = 0.05
+
+    const ring = new Ring(ringActor())
+    const material = prepassOf(ring).material as RingDepthMaterial
+
+    expect(ring.material.uniforms.ringEdgeOpacity.value).toBe(0.1)
+    expect(material.uniforms.uDepthAlphaTest.value).toBeCloseTo(0.11)
   })
 
   it('текстура и радиусы разделяются с цветовым материалом кольца по ссылке', () => {

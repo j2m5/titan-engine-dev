@@ -60,7 +60,12 @@ class Ring extends Mesh {
    * освобождается тем же обходом.
    */
   private __makeDepthPrepass(material: RingMaterial, ringData: IRingRenderingObject): Mesh {
-    const depthAlphaTest: number = ringData.depthAlphaTest ?? RING_DEPTH_ALPHA_TEST_DEFAULT
+    // Клампим строго выше ringEdgeOpacity: значение из данных ниже пола угла
+    // (см. докблок RingDepthMaterial) дало бы жёсткую линию глубины на ребре
+    const depthAlphaTest: number = Math.max(
+      ringData.depthAlphaTest ?? RING_DEPTH_ALPHA_TEST_DEFAULT,
+      material.uniforms.ringEdgeOpacity.value + 0.01
+    )
     const prepass: Mesh = new Mesh(this.geometry, new RingDepthMaterial(material, depthAlphaTest))
 
     prepass.name = this.name + 'DepthPrepass'
