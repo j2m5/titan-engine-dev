@@ -255,3 +255,47 @@ describe('HeightFieldStorage: компаньон карты высот', () => {
     warn.mockRestore()
   })
 })
+
+describe('HeightFieldStorage: учёт занятой памяти', () => {
+  it('незагруженный путь размера не имеет — политика бюджета посчитает его по максимуму', () => {
+    expect(heightFieldStorage.bytesOf(MAP_PATH)).toBeUndefined()
+  })
+
+  it('без компаньона — ровно тело карты', async () => {
+    stubFetch(validBody(), 200, null)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    heightFieldStorage.request(MAP_PATH)
+    await settle()
+
+    expect(heightFieldStorage.bytesOf(MAP_PATH)).toBe(heightFieldStorage.get(MAP_PATH)!.data.byteLength)
+    warn.mockRestore()
+  })
+
+  it('с компаньоном — тело плюс запечённые блоки: они такая же резидентная память', async () => {
+    stubFetch(validBody())
+
+    heightFieldStorage.request(MAP_PATH)
+    await settle()
+
+    const map = heightFieldStorage.get(MAP_PATH)!
+    const aux = map.aux!
+
+    expect(heightFieldStorage.bytesOf(MAP_PATH)).toBe(
+      map.data.byteLength +
+        aux.clearanceGrid.byteLength +
+        aux.levelErrorMeters.byteLength +
+        aux.nodeMaxHeightMetersPyramid!.byteLength
+    )
+  })
+
+  it('отпущенная карта снова без размера', async () => {
+    stubFetch(validBody())
+    heightFieldStorage.request(MAP_PATH)
+    await settle()
+
+    heightFieldStorage.release(MAP_PATH)
+
+    expect(heightFieldStorage.bytesOf(MAP_PATH)).toBeUndefined()
+  })
+})

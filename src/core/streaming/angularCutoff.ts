@@ -1,10 +1,19 @@
 /**
  * Номинальные fov/высота вьюпорта для перевода `minBodyPixels` в порог
- * `actorPriority`. `ResourceObserver` не хранит камеру и не знает фактический
- * размер окна — по прецеденту `PlanetShader.ts` (fade-дистанции детального
- * слоя калиброваны на «1080p, fov ~50°») порог считается по фиксированным
- * номинальным значениям, а не по живым: субпиксельная отсечка — грубая
- * защита бюджета, а не точная величина, зависящая от факта окна пользователя.
+ * `actorPriority` — ДЕФОЛТЫ, а не единственный режим.
+ *
+ * Ими пользуется `ResourceObserver`: он не хранит камеру и не знает
+ * фактический размер окна, а его отсечка (4 px) — грубая защита бюджета, где
+ * фактор 2 по высоте вьюпорта ничего не решает. По тому же прецеденту, что
+ * fade-дистанции детального слоя в `PlanetShader.ts` («1080p, fov ~50°»).
+ *
+ * Гейт карт высот (`HeightFieldGate`) передаёт ЖИВЫЕ значения и обязан это
+ * делать: его пороги (32/16 px) — не отсечка мелочи, а обещание «карта
+ * приедет к моменту, когда тело такого-то размера на экране», и рядом,
+ * в SSE-отборе того же террейна, размер уже меряется живым
+ * `renderer.domElement.height`. На 4K номинал давал фактические 64 px вместо
+ * 32 — карта запрашивалась вдвое позже обещанного (ревью 2026-08-20,
+ * находка №9).
  */
 const NOMINAL_FOV_Y_DEGREES: number = 50
 const NOMINAL_SCREEN_HEIGHT_PX: number = 1080
@@ -39,8 +48,12 @@ const NOMINAL_SCREEN_HEIGHT_PX: number = 1080
  * Функция возвращает именно эту нижнюю границу — `collectCandidates`
  * отбрасывает актора, если его `actorPriority` строго меньше неё.
  */
-export function minBodyPixelsToPriorityThreshold(minBodyPixels: number): number {
-  const fovRad: number = (NOMINAL_FOV_Y_DEGREES * Math.PI) / 180
+export function minBodyPixelsToPriorityThreshold(
+  minBodyPixels: number,
+  fovDegrees: number = NOMINAL_FOV_Y_DEGREES,
+  viewportHeight: number = NOMINAL_SCREEN_HEIGHT_PX
+): number {
+  const fovRad: number = (fovDegrees * Math.PI) / 180
 
-  return (minBodyPixels * fovRad) / (2 * NOMINAL_SCREEN_HEIGHT_PX)
+  return (minBodyPixels * fovRad) / (2 * viewportHeight)
 }

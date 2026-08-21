@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Scene } from 'three'
+import { Scene, type WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { SceneObserver } from '@/core/services/SceneObserver'
 import { HeightFieldGate } from '@/core/services/HeightFieldGate'
@@ -26,10 +26,17 @@ function flatMap(): HeightMapData {
  * Дистанция, на которой видимый диаметр тела равен заданному числу пикселей:
  * обратная к actorPriority = radiusUnits / distance.
  */
-function distanceForPixels(actor: Actor, pixels: number): number {
+function distanceForPixels(actor: Actor, pixels: number, viewportHeight: number = NOMINAL_HEIGHT): number {
   const radiusUnits: number = toThreeJSUnits(actor.physicalObject!.getAttribute('radius')!)
 
-  return radiusUnits / minBodyPixelsToPriorityThreshold(pixels)
+  return radiusUnits / minBodyPixelsToPriorityThreshold(pixels, config('camera.fov'), viewportHeight)
+}
+
+/** Высота вьюпорта стенда по умолчанию — совпадает с номинальной у стримера, поэтому прежние тесты бит-в-бит те же. */
+const NOMINAL_HEIGHT: number = 1080
+
+function makeRenderer(height: number): WebGLRenderer {
+  return { domElement: { height } } as unknown as WebGLRenderer
 }
 
 /**
@@ -56,7 +63,8 @@ function bodyName(body: StandBody): string {
  */
 function makeStand(
   bodies: StandBody[],
-  factoryOverrides?: Partial<{ upgrade: boolean; downgrade: boolean }>
+  factoryOverrides?: Partial<{ upgrade: boolean; downgrade: boolean }>,
+  viewportHeight: number = NOMINAL_HEIGHT
 ): { gate: HeightFieldGate; observer: SceneObserver; factory: FactoryStub } {
   const scene = new Scene()
 
@@ -73,18 +81,23 @@ function makeStand(
     downgradeTerrainToPlanet: vi.fn(() => factoryOverrides?.downgrade ?? false)
   }
 
-  const gate = new HeightFieldGate(observer, scene, factory as never)
+  const gate = new HeightFieldGate(observer, scene, factory as never, makeRenderer(viewportHeight))
 
   return { gate, observer, factory }
 }
 
 /** Кладёт тело в наблюдение на дистанции, дающей нужный видимый размер. */
-function observeAt(observer: SceneObserver, body: StandBody, pixels: number): void {
+function observeAt(
+  observer: SceneObserver,
+  body: StandBody,
+  pixels: number,
+  viewportHeight: number = NOMINAL_HEIGHT
+): void {
   const name: string = bodyName(body)
 
   observer.data.set(name, {
     name,
-    distance: distanceForPixels(bodyActor(body), pixels),
+    distance: distanceForPixels(bodyActor(body), pixels, viewportHeight),
     position: undefined as never
   })
 }
@@ -242,5 +255,78 @@ describe('HeightFieldGate: общая карта высот у нескольк�
 
     expect(factory.downgradeTerrainToPlanet).toHaveBeenCalledTimes(2)
     expect(heightFieldStorage.get(path)).toBeUndefined()
+  })
+})
+
+describe('HeightFieldGate: пороги в ЖИВЫХ пикселях вьюпорта', () => {
+  /**
+   * Пороги гейта заданы в пикселях видимого диаметра тела, а считались через
+   * номинальные 1080p стримера — при том, что сам террейн (SSE-отбор) живёт
+   * на `renderer.domElement.height`. На 4K обещанные 32 px оборачивались
+   * фактическими 64: карта запрашивалась вдвое позже задуманного, то есть
+   * тело успевало вырасти вдвое крупнее, прежде чем получить рельеф
+   * (ревью 2026-08-20, находка №9).
+   */
+  const HIDPI_HEIGHT: number = 2160
+
+  it('на 4K карта запрашивается там, где обещано порогом — а не вдвое позже', () => {
+    const moon: Actor = Actor.find(MOON_ID)!
+    const { gate, observer } = makeStand([moon], undefined, HIDPI_HEIGHT)
+
+    observeAt(observer, moon, config('terrain.heightMapLoadPixels'), HIDPI_HEIGHT)
+    gate.recompute()
+
+    expect(heightFieldStorage.heldPaths()).toEqual([heightPathOf(moon)])
+  })
+
+  it('та же дистанция на 1080p карту НЕ запрашивает — тело там вдвое мельче порога', () => {
+    const moon: Actor = Actor.find(MOON_ID)!
+    const { gate, observer } = makeStand([moon], undefined, NOMINAL_HEIGHT)
+
+    // дистанция посчитана под 4K: на 1080p тот же диаметр даёт вдвое меньше пикселей
+    observeAt(observer, moon, config('terrain.heightMapLoadPixels'), HIDPI_HEIGHT)
+    gate.recompute()
+
+    expect(heightFieldStorage.heldPaths()).toEqual([])
+  })
+})
+
+describe('HeightFieldGate: бюджет резидентных карт', () => {
+  /**
+   * Спутники Юпитера плюс Луна — пять тел с РАЗНЫМИ картами высот. Размер
+   * незагруженной карты неизвестен, политика считает её по максимуму
+   * (8192×4096 = 64 МиБ), поэтому все пятеро сразу в бюджет не помещаются:
+   * гейт обязан отсечь лишних по приоритету, а не запрашивать всё подряд
+   * (ревью 2026-08-20, находка №7).
+   */
+  const SATELLITE_IDS: readonly number[] = [19, 20, 21, 22, 23]
+
+  it('пять тел выше порога загрузки — запрашиваются не все, но ближайшее среди них', () => {
+    const bodies: Actor[] = SATELLITE_IDS.map((id: number): Actor => Actor.find(id)!)
+    const { gate, observer } = makeStand(bodies)
+
+    const load: number = config('terrain.heightMapLoadPixels')
+
+    // ближайшее — вдвое крупнее порога, остальные ровно на пороге
+    observeAt(observer, bodies[0], load * 2)
+    for (const body of bodies.slice(1)) observeAt(observer, body, load)
+
+    gate.recompute()
+
+    const held: string[] = heightFieldStorage.heldPaths()
+
+    expect(held.length).toBeGreaterThan(0)
+    expect(held.length).toBeLessThan(bodies.length)
+    expect(held).toContain(heightPathOf(bodies[0]))
+  })
+
+  it('одно тело — бюджет ему не помеха, каким бы ни был размер карты', () => {
+    const moon: Actor = Actor.find(19)!
+    const { gate, observer } = makeStand([moon])
+
+    observeAt(observer, moon, config('terrain.heightMapLoadPixels'))
+    gate.recompute()
+
+    expect(heightFieldStorage.heldPaths()).toEqual([heightPathOf(moon)])
   })
 })

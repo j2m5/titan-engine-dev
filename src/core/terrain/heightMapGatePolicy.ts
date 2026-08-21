@@ -1,3 +1,12 @@
+/**
+ * Во сколько обходится путь, размер которого ещё неизвестен (не загружен либо
+ * в полёте): столько же, сколько самая большая реальная карта — 8192×4096
+ * текселей по два байта. Наверх, а не в среднее: недооценка неизмеренного
+ * пути и есть способ пробить бюджет, который он же и должен держать. Тот же
+ * приём, что ASSUMED_TEXTURE_BYTES у стримера текстур.
+ */
+const ASSUMED_HEIGHT_MAP_BYTES: number = 8192 * 4096 * 2
+
 /** Тело-претендент: путь его карты высот и угловой приоритет (радиус/дистанция). */
 export type HeightMapCandidate = {
   path: string
@@ -35,7 +44,9 @@ export function decideHeightMaps(
   candidates: readonly HeightMapCandidate[],
   held: readonly string[],
   loadThreshold: number,
-  releaseThreshold: number
+  releaseThreshold: number,
+  sizeOf: (path: string) => number | undefined,
+  budgetBytes: number
 ): HeightMapGateDecision {
   const priorityByPath: Map<string, number> = new Map()
 
@@ -48,19 +59,32 @@ export function decideHeightMaps(
   }
 
   const heldSet: Set<string> = new Set(held)
-  const request: string[] = []
 
-  for (const [path, priority] of priorityByPath) {
-    if (priority >= loadThreshold && !heldSet.has(path)) request.push(path)
+  // Претенденты на резидентность — и гистерезис записан ОДИН раз: новый путь
+  // входит по верхнему порогу, уже удерживаемый держится по нижнему. Сирота
+  // (путь без кандидата) в претенденты не попадает вовсе и потому отпускается.
+  const contenders: [string, number][] = [...priorityByPath]
+    .filter(([path, priority]) => priority >= (heldSet.has(path) ? releaseThreshold : loadThreshold))
+    .sort((a, b) => b[1] - a[1])
+
+  const admitted: Set<string> = new Set()
+  let used: number = 0
+
+  for (const [index, [path]] of contenders.entries()) {
+    const cost: number = sizeOf(path) ?? ASSUMED_HEIGHT_MAP_BYTES
+
+    // Пол: самый приоритетный претендент резидентен всегда, даже если один
+    // дороже всего бюджета. Иначе тело, к которому подлетели, осталось бы без
+    // рельефа именно потому, что его карта самая большая — тот же приём, что
+    // floorPaths у стримера текстур (decideStreaming).
+    if (index > 0 && used + cost > budgetBytes) continue
+
+    admitted.add(path)
+    used += cost
   }
 
-  const release: string[] = []
-
-  for (const path of heldSet) {
-    const priority: number | undefined = priorityByPath.get(path)
-
-    if (priority === undefined || priority < releaseThreshold) release.push(path)
-  }
+  const request: string[] = [...admitted].filter((path: string): boolean => !heldSet.has(path))
+  const release: string[] = [...heldSet].filter((path: string): boolean => !admitted.has(path))
 
   return { request, release }
 }

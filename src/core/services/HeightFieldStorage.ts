@@ -67,6 +67,31 @@ class HeightFieldStorage {
     return this.maps.get(path)
   }
 
+  /**
+   * Сколько heap занимает загруженная карта — тело плюс её запечённый
+   * компаньон, если он приехал (сетка провиса, ε-пирамида, пирамида
+   * максимумов узлов — все три живут вью на буфере компаньона и памятью
+   * являются такой же, как само тело). `undefined` — путь не загружен или в
+   * полёте: размер известен только по факту, и политика бюджета считает такой
+   * путь по максимуму (см. ASSUMED_HEIGHT_MAP_BYTES).
+   */
+  public bytesOf(path: string): number | undefined {
+    const map: HeightMapData | undefined = this.maps.get(path)
+
+    if (!map) return undefined
+
+    const aux: TerrainAuxPayload | undefined = map.aux
+
+    return (
+      map.data.byteLength +
+      (aux === undefined
+        ? 0
+        : aux.clearanceGrid.byteLength +
+          aux.levelErrorMeters.byteLength +
+          (aux.nodeMaxHeightMetersPyramid?.byteLength ?? 0))
+    )
+  }
+
   /** Загруженные плюс летящие: то, за что гейт уже «заплатил». */
   public heldPaths(): string[] {
     return [...new Set([...this.maps.keys(), ...this.inFlight])]

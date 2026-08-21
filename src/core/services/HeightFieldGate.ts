@@ -1,4 +1,4 @@
-import type { Scene } from 'three'
+import type { Scene, WebGLRenderer } from 'three'
 import type { Actor } from '@/core/models/Actor'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -31,7 +31,8 @@ export class HeightFieldGate {
   public constructor(
     private sceneObserver: SceneObserver,
     private scene: Scene,
-    private factory: RenderableFactory
+    private factory: RenderableFactory,
+    private renderer: WebGLRenderer
   ) {
     this.sceneObserver.subscribe('ClosestChange', this.onClosestChange)
   }
@@ -88,11 +89,20 @@ export class HeightFieldGate {
       else nodesByPath.set(path, [node])
     }
 
+    // Пороги — в ЖИВЫХ пикселях канваса, не в номинальных 1080p стримера:
+    // обещание «карта приедет к такому-то размеру тела на экране» обязано
+    // выполняться на том экране, который у пользователя, и мериться так же,
+    // как меряет размер SSE-отбор того же террейна (см. angularCutoff)
+    const fovDegrees: number = config('camera.fov')
+    const viewportHeight: number = this.renderer.domElement.height
+
     const decision = decideHeightMaps(
       candidates,
       heightFieldStorage.heldPaths(),
-      minBodyPixelsToPriorityThreshold(config('terrain.heightMapLoadPixels')),
-      minBodyPixelsToPriorityThreshold(config('terrain.heightMapReleasePixels'))
+      minBodyPixelsToPriorityThreshold(config('terrain.heightMapLoadPixels'), fovDegrees, viewportHeight),
+      minBodyPixelsToPriorityThreshold(config('terrain.heightMapReleasePixels'), fovDegrees, viewportHeight),
+      (path: string): number | undefined => heightFieldStorage.bytesOf(path),
+      config('terrain.heightMapBudgetMiB') * 1024 * 1024
     )
 
     for (const path of decision.request) heightFieldStorage.request(path)

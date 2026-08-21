@@ -102,7 +102,12 @@ class AppServiceProvider extends ServiceProvider {
     this.app.singleton(
       Tokens.HeightFieldGate,
       (c: Container) =>
-        new HeightFieldGate(c.get(Tokens.SceneObserver), c.get(Tokens.Scene), c.get(Tokens.RenderableFactory))
+        new HeightFieldGate(
+          c.get(Tokens.SceneObserver),
+          c.get(Tokens.Scene),
+          c.get(Tokens.RenderableFactory),
+          c.get(Tokens.Renderer)
+        )
     )
 
     this.app.singleton(
