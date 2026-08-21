@@ -50,8 +50,27 @@ export function buildAtmosphereCoreGlsl(): string {
   const constRegex = /const\s+AtmosphereParameters\s+ATMOSPHERE\s*=\s*AtmosphereParameters\s*\([^;]+\);/s
   if (!constRegex.test(head)) throw new Error('atmosphereSlotShader: константа ATMOSPHERE не найдена')
 
-  return head.replace(constRegex, '')
+  // Ядро объявляет `const float PI`, а three's <common> выше по проходу держит
+  // `#define PI ...` — без снятия макроса объявление препроцессится в мусор.
+  return `\n  #undef PI\n${head.replace(constRegex, '')}`
 }
+
+/**
+ * Снятие макросов ядра в конце фрагмента: postprocessing склеивает эффекты
+ * прохода в один шейдер, и `Length`/`Number`/`IN` не должны течь к соседям.
+ * PI возвращается таким же, как в three's <common>.
+ */
+const CORE_MACROS_CLEANUP_GLSL = /* glsl */ `
+  #undef Length
+  #undef Number
+  #undef Position
+  #undef Direction
+  #undef Angle
+  #undef IN
+  #undef OUT
+  #undef assert
+  #define PI 3.141592653589793
+`
 
 export function buildSlotGlsl(i: number): string {
   const u = (base: string): string => slotUniformName(i, base)
@@ -242,5 +261,6 @@ ${calls}
 
     outputColor = vec4(color, inputColor.a);
   }
+${CORE_MACROS_CLEANUP_GLSL}
   `
 }

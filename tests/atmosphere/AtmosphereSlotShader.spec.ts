@@ -1,5 +1,6 @@
 import {
   ATMOSPHERE_SLOTS,
+  SLOT_PARAM_NAMES,
   buildAtmosphereCoreGlsl,
   buildAtmosphereEffectFragment,
   buildSlotGlsl,
@@ -19,6 +20,11 @@ describe('ядро Брунетона без глобальных обёрток
     expect(core).toContain('RadianceSpectrum GetSkyRadiance(\n      IN(AtmosphereParameters) atmosphere,')
     expect(core).toContain('RadianceSpectrum GetSkyRadianceToPoint(\n      IN(AtmosphereParameters) atmosphere,')
     expect(core).toContain('#define COMBINED_SCATTERING_TEXTURES')
+  })
+
+  it('снимает макрос PI из three <common> до объявления const float PI', () => {
+    expect(core.indexOf('#undef PI')).toBeGreaterThan(-1)
+    expect(core.indexOf('#undef PI')).toBeLessThan(core.indexOf('const float PI'))
   })
 })
 
@@ -60,6 +66,31 @@ describe('слот', () => {
   it('имя юниформа строится одной функцией', () => {
     expect(slotUniformName(2, 'top_radius')).toBe('uSlot2_top_radius')
   })
+
+  it('каждое имя из SLOT_PARAM_NAMES объявлено юниформом слота', () => {
+    expect(SLOT_PARAM_NAMES).toHaveLength(17)
+    for (const name of SLOT_PARAM_NAMES) {
+      expect(slot).toMatch(new RegExp(`uniform \\w+ uSlot1_${name}(\\[5\\])?;`))
+    }
+  })
+
+  // Клиппинг в GLSL — построчный близнец clipRayToShell (atmosphereDepthMath.ts),
+  // который и покрыт числами; расхождение текста = расхождение математики
+  it('обрезка луча оболочкой изоморфна clipRayToShell', () => {
+    for (const line of [
+      'float b = dot(dir, center);',
+      'float c = dot(center, center) - top * top;',
+      'if (disc <= 0.0) return;',
+      'float tExit = b + root;',
+      'if (tExit <= 0.0) return;',
+      'bool inside = c < 0.0;',
+      'float t0 = inside ? 0.0 : b - root;',
+      'if (t0 >= distKm) return;',
+      'bool hitSurface = distKm < tExit;'
+    ]) {
+      expect(slot).toContain(line)
+    }
+  })
 })
 
 describe('фрагмент эффекта', () => {
@@ -87,5 +118,28 @@ describe('фрагмент эффекта', () => {
 
   it('точность сэмплера 3D объявлена highp (LUT FloatType)', () => {
     expect(frag).toContain('precision highp sampler3D;')
+  })
+
+  it('порядок объявлений: типы ядра → buildLayer → слоты → mainImage', () => {
+    const struct = frag.indexOf('struct AtmosphereParameters')
+    const layer = frag.indexOf('DensityProfileLayer buildLayer')
+    const build0 = frag.indexOf('AtmosphereParameters buildSlot0()')
+    const debug = frag.indexOf('uniform float uDebugView;')
+    const apply0 = frag.indexOf('void applySlot0(')
+    const apply2 = frag.indexOf('void applySlot2(')
+    const main = frag.indexOf('void mainImage(')
+
+    expect(struct).toBeGreaterThan(-1)
+    expect(struct).toBeLessThan(layer)
+    expect(layer).toBeLessThan(build0)
+    expect(debug).toBeGreaterThan(-1)
+    expect(debug).toBeLessThan(apply0)
+    expect(apply2).toBeLessThan(main)
+  })
+
+  it('макросы ядра сняты после mainImage, PI возвращён', () => {
+    const main = frag.indexOf('void mainImage(')
+    expect(frag.indexOf('#undef IN')).toBeGreaterThan(main)
+    expect(frag.indexOf('#define PI 3.141592653589793')).toBeGreaterThan(main)
   })
 })
