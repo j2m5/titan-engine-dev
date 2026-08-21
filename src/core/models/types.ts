@@ -302,6 +302,15 @@ export interface IRingRenderingObject {
   dustTauGrazing?: number
   /** Масштабная полутолщина пылевого слоя в км */
   dustScaleHeightKm?: number
+
+  /**
+   * Порог альфы глубинного пре-пасса кольца: тексели плотнее порога считаются
+   * поверхностью для эффектов по глубине (полноэкранная атмосфера), тонкие
+   * остаются «прозрачными» и набирают дымку того, что за ними. Отсутствие →
+   * `RING_DEPTH_ALPHA_TEST_DEFAULT`. Не путать с `alphaTest` — тот решает,
+   * рисовать ли пиксель в цветовом проходе вообще.
+   */
+  depthAlphaTest?: number
 }
 
 export interface IBrownDwarfRenderingObject {
