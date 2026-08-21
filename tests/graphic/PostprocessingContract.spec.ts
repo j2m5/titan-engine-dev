@@ -2,8 +2,8 @@ import { PerspectiveCamera } from 'three'
 import { BLOOM_OPTIONS, Postprocessing, readAtmosphereDebugView, TONE_MAPPING_OPTIONS } from '@/core/graphic/Postprocessing'
 import { BlendFunction, Effect, EffectPass, RenderPass, ToneMappingMode } from 'postprocessing'
 import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
-import { BrunetonAtmosphereShaderTemplate } from '@/core/renderables/Atmosphere/BrunetonAtmosphereShaderTemplate'
 import { AtmosphereEffect, createAtmospherePass } from '@/core/graphic/effects/atmosphere/AtmosphereEffect'
+import { buildSlotGlsl } from '@/core/graphic/effects/atmosphere/atmosphereSlotShader'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 
 describe('Postprocessing: контракт цветового конвейера', () => {
@@ -33,7 +33,7 @@ describe('Postprocessing: контракт цветового конвейера
 
   it('колено атмосферы калибровано на порог bloom 1.0 — при смене порога пересмотреть колено', () => {
     expect(BLOOM_OPTIONS.luminanceThreshold).toBe(1)
-    expect(BrunetonAtmosphereShaderTemplate.fragmentShader).toContain('min(color, vec3(1.0)) + excess * uHdrKnee')
+    expect(buildSlotGlsl(0)).toContain('min(scatter, vec3(1.0)) + excess * uSlot0_hdrKnee')
   })
 
   it('охват гало задан явно, а не унаследован от дефолта библиотеки', () => {

@@ -124,13 +124,10 @@ describe('WaterSphere: оболочка без смещения', { timeout: 300
     expect(material.depthTest).toBe(true)
   })
 
-  // Фикс-раунд 1 (ревью, находка №2): renderOrder=10 клал воду ПОСЛЕ обоих
-  // атмосферных проходов (пропускание renderOrder=0, in-scatter=1,
-  // BrunetonAtmosphere) — океан не домножался на пропускание и закрашивал
-  // ореол лимба. Суша непрозрачна и рисуется раньше воды в любом случае
-  // (opaque/transparent-разделение three.js), отрицательный renderOrder
-  // упорядочивает воду ДО прозрачных проходов атмосферы.
-  it('renderOrder патчей — ДО атмосферных проходов (отрицателен)', () => {
+  // Отрицательный renderOrder держит воду раньше прочих прозрачных тел;
+  // суша непрозрачна и идёт раньше в любом случае (opaque/transparent-
+  // разделение three.js).
+  it('renderOrder патчей отрицателен', () => {
     const sphere = new WaterSphere(moon(), -667.2, makeRenderer())
     const patch = sphere.children[0] as Mesh
     expect(WATER_RENDER_ORDER).toBeLessThan(0)

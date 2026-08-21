@@ -88,7 +88,7 @@ describe('Протяжённость атмосферы: оболочка про
     expect(message).toMatch(/raising topRadius adds nothing/)
   })
 
-  it('оболочка в 3 шкалы: профиль обрезан, на границе меша жёсткий край', () => {
+  it('оболочка в 3 шкалы: профиль обрезан, на границе оболочки жёсткий край', () => {
     const [message] = extentWarnings(atmosphereRow(24, 8))
 
     expect(message).toMatch(/hard edge/)

@@ -5,10 +5,10 @@ import type { Actor } from '@/core/models/Actor'
  *
  * `IRenderingObject.data` — это `Record<string, unknown>`: схема БД не различает
  * конфиги по категориям, поэтому форма утверждается локально, там где категория
- * известна. Раньше эта пара «каст + гард» дублировалась в шести местах
- * (Ring, RingShader, RenderableFactory, BrunetonAtmosphere,
- * BrunetonAtmosphereMaterial, AtmosphereDebugScene) — здесь она в одном месте,
- * а сужение на стороне вызова доказывает сам tsc, без `!` и без каста.
+ * известна. Раньше эта пара «каст + гард» дублировалась по местам вызова
+ * (Ring, RingShader, RenderableFactory, BrunetonAtmosphere) — здесь она в
+ * одном месте, а сужение на стороне вызова доказывает сам tsc, без `!` и
+ * без каста.
  */
 
 /**

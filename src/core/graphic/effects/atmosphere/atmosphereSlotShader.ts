@@ -196,8 +196,9 @@ export function buildSlotGlsl(i: number): string {
 
 /**
  * Общая для слотов радиантность диска: solar_irradiance / (π·α²).
- * buildLayer живёт в atmosphereParametric.ts (меш-материал), в ядре его нет —
- * объявляем здесь. Блок идёт после ядра (нужны типы) и до слотов (они зовут).
+ * buildLayer живёт в atmosphereParametric.ts (шейдер генератора LUT), в ядре
+ * его нет — объявляем здесь. Блок идёт после ядра (нужны типы) и до слотов
+ * (они зовут).
  */
 const SOLAR_RADIANCE_GLSL = /* glsl */ `
   vec3 GetSolarRadianceFor(AtmosphereParameters atm) {

@@ -6,15 +6,10 @@ import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
 import type { UpdateContext } from '@/core/UpdateContext'
 
 /**
- * Патчи воды рисуются ДО атмосферных проходов, не после: BrunetonAtmosphere
- * кладёт пропускание на renderOrder=0 и in-scatter на 1 (умножение на
- * пропускание обязано лечь до сложения in-scatter — см. её докблок).
- * Положительный renderOrder (было 10 — находка ревью Task 3, фикс-раунд 1)
- * рисовал воду ПОСЛЕ обоих проходов атмосферы: océan закрашивал ореол лимба,
- * не домножаясь на пропускание. Суша (TerrainSphere) непрозрачна и рисуется
- * раньше воды в любом случае — opaque/transparent разделение three.js само
- * разводит очереди, renderOrder здесь упорядочивает только ВНУТРИ
- * прозрачной очереди, где иначе оказались бы вода и атмосфера.
+ * Вода прозрачна и живёт в прозрачной очереди; отрицательный renderOrder
+ * держит её раньше прочих прозрачных тел. Суша (TerrainSphere) непрозрачна и
+ * рисуется раньше воды в любом случае — opaque/transparent разделение three.js
+ * само разводит очереди.
  */
 export const WATER_RENDER_ORDER = -1
 

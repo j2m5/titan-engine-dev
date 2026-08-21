@@ -1,5 +1,6 @@
 import { Color, Vector3 } from 'three'
 import { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
+import { RING_RENDER_ORDER } from '@/core/renderables/Ring'
 
 const makeVolume = () =>
   new RingDustVolume({
@@ -48,8 +49,10 @@ describe('RingDustVolume', () => {
     expect(volume.frustumCulled).toBe(false)
   })
 
-  it('рисуется поверх 2D-текстуры кольца и атмосферы (политика renderOrder из спеки)', () => {
-    expect(makeVolume().renderOrder).toBe(3)
+  it('рисуется поверх 2D-текстуры кольца', () => {
+    const volume = makeVolume()
+    expect(volume.renderOrder).toBe(3)
+    expect(volume.renderOrder).toBeGreaterThan(RING_RENDER_ORDER)
   })
 
   it('передаёт гейт/рамп/бюджет шагов/радиус планеты в uniforms материала', () => {
