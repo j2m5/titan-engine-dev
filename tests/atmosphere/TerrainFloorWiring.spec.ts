@@ -91,8 +91,14 @@ describe('BrunetonAtmosphere: дно следует объявленному п�
       adjustAtmosphereForTerrainFloor({ ...stubConfig(), terrainFloorMeters: -8174.25 }, -8174.25)
     )
     expect(entry.config.bottomRadius).toBeCloseTo(stubConfig().bottomRadius - 8.17425, 9)
-    // generate() мока получил тот же объект
-    expect(generateSpy).toHaveBeenCalledWith(entry.config)
+
+    // Проверка ССЫЛОЧНАЯ, а не структурная: копия конфига прошла бы toEqual,
+    // но означала бы две подгонки — и расхождение LUT с записью реестра
+    expect(generateSpy.mock.calls[0][0]).toBe(entry.config)
+    // LUT в записи — ровно то, что вернул generate()
+    expect(entry.lut).toBe(generateSpy.mock.results[0].value)
+    // LUT считаются один раз на узел
+    expect(generateSpy).toHaveBeenCalledTimes(1)
   })
 
   it('компенсация оптики доехала до записи реестра — множитель в профиле, коэффициенты нетронуты', () => {
