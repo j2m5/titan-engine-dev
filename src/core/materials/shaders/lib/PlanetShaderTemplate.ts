@@ -245,9 +245,14 @@ export const PlanetShaderTemplate: ShaderProps = {
       float cloudAlpha = 0.0;
       #ifdef USE_CLOUD
         cloudColor = texture2D(cloudMap, uv).rgb;
-        cloudColor *= pow(max(0.5 * lightIntensity + 0.1, 0.0), 0.5);
-        cloudAlpha = dot(cloudColor, vec3(1.0)) / 3.0;
-        cloudAlpha = pow(cloudAlpha, 0.5);
+        // Покрытие — свойство текстуры, не освещения: считается до шейдинга,
+        // иначе облака истончались к терминатору вместе с яркостью.
+        cloudAlpha = pow(dot(cloudColor, vec3(1.0)) / 3.0, 0.5);
+        // Слой лежит на высоте: шейдится геометрической нормалью сферы, а не
+        // нормалью рельефа (slope + детали) — склоны гор к облакам отношения
+        // не имеют.
+        float cloudLight = max(dot(normalize(vNormal), lightDirection), 0.0);
+        cloudColor *= pow(max(0.5 * cloudLight + 0.1, 0.0), 0.5);
         // Высотный fade (приёмочная волна 4, №3) — 1 из космоса, гаснет к
         // середине толщины атмосферы (CPU-считанный юниформ, см.
         // PlanetMaterial.updateCloudOpacity/cloudOpacityForAltitude).
