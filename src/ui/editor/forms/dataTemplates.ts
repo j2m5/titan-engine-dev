@@ -31,7 +31,7 @@ export const renderingDataTemplates: DataTemplate[] = [
       innerRadius: 74500,
       outerRadius: 140220,
       alphaTest: 0.2,
-      depthAlphaTest: 0.5,
+      depthAlphaTest: 0.12,
       asteroidDensityScale: 1,
       thicknessKm: 400,
       asteroidSizeKm: 10,

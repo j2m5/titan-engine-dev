@@ -3,16 +3,26 @@ import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import type { RingMaterial } from '@/core/materials/RingMaterial'
 
 /**
- * Порог альфы текстуры кольца, с которого тексель считается ПОВЕРХНОСТЬЮ для
- * эффектов по глубине: он пишет глубину в пре-пассе, и полноэкранная атмосфера
- * тонирует то, что перед ним, а не то, что за ним. Тексели тоньше порога
- * глубину не пишут — кольцо там остаётся «прозрачным», и дымку набирает то,
- * что видно сквозь него (диск планеты, космос).
+ * Порог ВИДИМОЙ альфы кольца (альфа текстуры после затуханий по дистанции и по
+ * углу взгляда), с которого тексель считается ПОВЕРХНОСТЬЮ для эффектов по
+ * глубине: он пишет глубину в пре-пассе, и полноэкранная атмосфера тонирует то,
+ * что перед ним, а не то, что за ним. Тексели тоньше порога глубину не пишут —
+ * кольцо там остаётся «прозрачным», и дымку набирает то, что видно сквозь него
+ * (диск планеты, космос).
+ *
+ * Значение обязано быть СТРОГО ВЫШЕ `ringEdgeOpacity` (0.1): на ребре угловое
+ * затухание кладёт пол именно на этой величине, и порог ниже пола вернул бы
+ * жёсткую линию глубины вдоль почти невидимого кольца.
+ *
+ * Верхний край шкалы недостижим на пологих ракурсах: под 7° к плоскости угловое
+ * затухание даёт максимум ≈0.14, под 20° ≈0.28. Порог 0.5 (он стоял, пока гейт
+ * читал сырую альфу текстуры) после включения затуханий выключал бы пре-пасс
+ * везде положе ~36°.
  *
  * Это ДРУГАЯ ручка, нежели `alphaTest` цветового прохода (0.08–0.2 в данных):
  * тот решает, рисовать ли пиксель вообще, этот — считать ли его непрозрачным.
  */
-export const RING_DEPTH_ALPHA_TEST_DEFAULT: number = 0.5
+export const RING_DEPTH_ALPHA_TEST_DEFAULT: number = 0.12
 
 /**
  * Материал глубинного пре-пасса кольца: цвета не пишет, пишет только глубину.
@@ -27,11 +37,21 @@ export const RING_DEPTH_ALPHA_TEST_DEFAULT: number = 0.5
  * всех прозрачных, то есть до самого кольца; цветовой проход остаётся на
  * дефолтном `LessEqualDepth` и потому рисуется поверх собственной глубины.
  *
- * Юниформы `diffuseMap`/`innerRadius`/`outerRadius` разделяются с цветовым
- * материалом ПО ССЫЛКЕ (те же объекты `Uniform`): оба прохода обязаны видеть
- * одну текстуру и одни радиусы, иначе силуэт глубины разойдётся с картинкой.
- * `updateMaterial` — точка входа фан-аута `materialSync`: если карта кольца
- * когда-нибудь начнёт стримиться, значение подтянется и без общего объекта.
+ * Силуэт глубины равен ВИДИМОМУ силуэту цветового прохода на пороге: гейт
+ * повторяет обе его затухающие — по дистанции (`transparencyFactor`) и по углу
+ * взгляда (`angleOpacity`) — и режет по произведению
+ * `color.a * transparencyFactor * angleOpacity`. Иначе выцветшее в ноль кольцо
+ * (камера ближе `minDistance`, либо взгляд почти на ребро) осталось бы писать
+ * глубину и невидимым заслоняло бы камни и пыль за плоскостью кольца, а на
+ * лимбе давало бы жёсткую линию «поверхности» в эффекте по глубине.
+ *
+ * Юниформы `diffuseMap`/`innerRadius`/`outerRadius` и ручки затуханий
+ * (`minDistance`/`maxDistance`/`ringEdgeOpacity`/`ringAngleCurve`) разделяются с
+ * цветовым материалом ПО ССЫЛКЕ (те же объекты `Uniform`): оба прохода обязаны
+ * видеть одну текстуру, одни радиусы и одни пороги затуханий, иначе силуэт
+ * глубины разойдётся с картинкой. `updateMaterial` — точка входа фан-аута
+ * `materialSync`: если карта кольца когда-нибудь начнёт стримиться, значение
+ * подтянется и без общего объекта.
  */
 class RingDepthMaterial extends AbstractShaderMaterial {
   private readonly source: RingMaterial
@@ -44,6 +64,10 @@ class RingDepthMaterial extends AbstractShaderMaterial {
       diffuseMap: source.uniforms.diffuseMap,
       innerRadius: source.uniforms.innerRadius,
       outerRadius: source.uniforms.outerRadius,
+      minDistance: source.uniforms.minDistance,
+      maxDistance: source.uniforms.maxDistance,
+      ringEdgeOpacity: source.uniforms.ringEdgeOpacity,
+      ringAngleCurve: source.uniforms.ringAngleCurve,
       uDepthAlphaTest: new Uniform(depthAlphaTest)
     }
 
@@ -74,6 +98,7 @@ class RingDepthMaterial extends AbstractShaderMaterial {
     ${ShaderChunk['logdepthbuf_pars_vertex']}
 
     varying vec3 vPosition;
+    varying vec3 vLocalCameraPosition;
 
     void main() {
       vec3 viewPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
@@ -81,6 +106,7 @@ class RingDepthMaterial extends AbstractShaderMaterial {
       gl_Position = projectionMatrix * vec4(viewPosition, 1.0);
 
       vPosition = position;
+      vLocalCameraPosition = (inverse(modelMatrix) * vec4(cameraPosition, 1.0)).xyz;
       ${ShaderChunk['logdepthbuf_vertex']}
     }
   `
@@ -94,9 +120,14 @@ class RingDepthMaterial extends AbstractShaderMaterial {
     uniform sampler2D diffuseMap;
     uniform float innerRadius;
     uniform float outerRadius;
+    uniform float minDistance;
+    uniform float maxDistance;
+    uniform float ringEdgeOpacity;
+    uniform float ringAngleCurve;
     uniform float uDepthAlphaTest;
 
     varying vec3 vPosition;
+    varying vec3 vLocalCameraPosition;
 
     void main() {
       vec2 uv;
@@ -107,7 +138,18 @@ class RingDepthMaterial extends AbstractShaderMaterial {
 
       vec4 color = texture2D(diffuseMap, uv);
 
-      if (color.a <= uDepthAlphaTest) discard;
+      // Затухания дословно из цветового прохода: глубину пишет только то,
+      // что там действительно видно
+      float distance = length(vLocalCameraPosition - vPosition);
+      float transparencyFactor = smoothstep(minDistance, maxDistance, distance);
+
+      vec3 viewDirLocal = normalize(vLocalCameraPosition - vPosition);
+      float faceCos = abs(viewDirLocal.z);
+      float angleOpacity = mix(ringEdgeOpacity, 1.0, pow(faceCos, ringAngleCurve));
+
+      float a = color.a * transparencyFactor * angleOpacity;
+
+      if (a <= uDepthAlphaTest) discard;
 
       ${ShaderChunk['logdepthbuf_fragment']}
       gl_FragColor = vec4(0.0);

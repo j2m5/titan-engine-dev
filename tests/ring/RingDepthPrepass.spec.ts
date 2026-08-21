@@ -14,6 +14,27 @@ const SATURN_RING_ID = 39
 /** Формула радиальной uv — одна на цветовой проход и на пре-пасс */
 const UV_FORMULA = 'uv.x = (length(vPosition) - innerRadius) / (outerRadius - innerRadius);'
 
+/**
+ * Строку формулы берём ИЗ цветового шейдера, а не пишем в тесте: тогда правка
+ * затухания в одном проходе и не перенесённая в другой валит тест
+ */
+function colorPassLine(pattern: RegExp): string {
+  const match: RegExpMatchArray | null = RingShaderTemplate.fragmentShader.match(pattern)
+
+  expect(match, `в цветовом шейдере нет строки ${String(pattern)}`).not.toBeNull()
+
+  return match![0]
+}
+
+/** Обе затухающие цветового прохода: по дистанции и по углу взгляда */
+const FADE_PATTERNS: RegExp[] = [
+  /float distance = length\([^;]*\);/,
+  /float transparencyFactor = smoothstep\([^;]*\);/,
+  /vec3 viewDirLocal = normalize\([^;]*\);/,
+  /float faceCos = abs\([^;]*\);/,
+  /float angleOpacity = mix\([^;]*\);/
+]
+
 function ringActor(): Actor {
   return Actor.find(SATURN_RING_ID)!
 }
@@ -72,7 +93,30 @@ describe('Депт-пре-пасс кольца', () => {
 
     expect(RingShaderTemplate.fragmentShader).toContain(UV_FORMULA)
     expect(material.fragmentShader).toContain(UV_FORMULA)
-    expect(material.fragmentShader).toContain('if (color.a <= uDepthAlphaTest) discard;')
+    expect(material.fragmentShader).toContain('if (a <= uDepthAlphaTest) discard;')
+  })
+
+  it('пре-пасс повторяет обе затухающие цветового прохода дословно', () => {
+    const material = prepassOf(new Ring(ringActor())).material as RingDepthMaterial
+
+    for (const pattern of FADE_PATTERNS) {
+      expect(material.fragmentShader).toContain(colorPassLine(pattern))
+    }
+  })
+
+  it('гейт глубины режет по произведению альфы текстуры на оба затухания', () => {
+    // Иначе выцветшее в ноль кольцо продолжает писать глубину и невидимым
+    // заслоняет камни и пыль за своей плоскостью
+    const material = prepassOf(new Ring(ringActor())).material as RingDepthMaterial
+
+    expect(material.fragmentShader).toContain('float a = color.a * transparencyFactor * angleOpacity;')
+  })
+
+  it('варьинг локальной камеры есть в обоих шейдерах пре-пасса — затуханиям нужен ракурс', () => {
+    const material = prepassOf(new Ring(ringActor())).material as RingDepthMaterial
+
+    expect(material.vertexShader).toContain('vLocalCameraPosition = (inverse(modelMatrix) * vec4(cameraPosition, 1.0)).xyz;')
+    expect(material.fragmentShader).toContain('varying vec3 vLocalCameraPosition;')
   })
 
   it('логарифмическая глубина подключена в обоих шейдерах пре-пасса', () => {
@@ -84,8 +128,8 @@ describe('Депт-пре-пасс кольца', () => {
     expect(material.vertexShader).toContain('vFragDepth')
   })
 
-  it('порог берётся из данных, при отсутствии — дефолт 0.5', () => {
-    expect(RING_DEPTH_ALPHA_TEST_DEFAULT).toBe(0.5)
+  it('порог берётся из данных, при отсутствии — дефолт 0.12', () => {
+    expect(RING_DEPTH_ALPHA_TEST_DEFAULT).toBe(0.12)
 
     const byDefault = prepassOf(new Ring(ringActor())).material as RingDepthMaterial
     expect(byDefault.uniforms.uDepthAlphaTest.value).toBe(RING_DEPTH_ALPHA_TEST_DEFAULT)
@@ -96,6 +140,14 @@ describe('Депт-пре-пасс кольца', () => {
     expect(fromData.uniforms.uDepthAlphaTest.value).toBe(0.3)
   })
 
+  it('дефолтный порог строго выше непрозрачности на ребре — иначе кольцо на ребре снова пишет глубину', () => {
+    // На ребре угловое затухание кладёт пол ровно на ringEdgeOpacity: порог
+    // ниже пола пропускает плотные тексели почти невидимого кольца
+    const ring = new Ring(ringActor())
+
+    expect(RING_DEPTH_ALPHA_TEST_DEFAULT).toBeGreaterThan(ring.material.uniforms.ringEdgeOpacity.value)
+  })
+
   it('текстура и радиусы разделяются с цветовым материалом кольца по ссылке', () => {
     const ring = new Ring(ringActor())
     const material = prepassOf(ring).material as RingDepthMaterial
@@ -103,6 +155,16 @@ describe('Депт-пре-пасс кольца', () => {
     expect(material.uniforms.diffuseMap.value).toBe(ring.material.uniforms.diffuseMap.value)
     expect(material.uniforms.innerRadius.value).toBe(ring.material.uniforms.innerRadius.value)
     expect(material.uniforms.outerRadius.value).toBe(ring.material.uniforms.outerRadius.value)
+  })
+
+  it('ручки затуханий — те же объекты Uniform, что у материала кольца', () => {
+    // Ручка одна на два прохода: подстройка не может разъехаться с силуэтом глубины
+    const ring = new Ring(ringActor())
+    const material = prepassOf(ring).material as RingDepthMaterial
+
+    for (const key of ['minDistance', 'maxDistance', 'ringEdgeOpacity', 'ringAngleCurve']) {
+      expect(material.uniforms[key]).toBe(ring.material.uniforms[key])
+    }
   })
 
   it('после обновления карты у материала кольца пре-пасс смотрит на ту же текстуру', () => {

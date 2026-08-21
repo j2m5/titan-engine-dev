@@ -17,6 +17,10 @@ interface RingUniforms {
   planetRadius: number
   minDistance: number
   maxDistance: number
+  /** Непрозрачность кольца на ребре (тюнить визуально) */
+  ringEdgeOpacity: number
+  /** Круче → быстрее гаснет к ребру */
+  ringAngleCurve: number
   uRingForwardScattering: number
   uRingOppositionSurge: number
   uRingDensityExtinction: number
@@ -47,6 +51,8 @@ class RingShader extends AbstractShader<keyof RingUniforms> {
       planetRadius: new Uniform(toThreeJSUnits(parent.physicalObject?.getAttribute('radius', 1) ?? 1)),
       minDistance: new Uniform(toThreeJSUnits(1000)),
       maxDistance: new Uniform(toThreeJSUnits(5000)),
+      ringEdgeOpacity: new Uniform(0.1),
+      ringAngleCurve: new Uniform(1.5),
       uRingForwardScattering: new Uniform(config('ring.forwardScattering')),
       uRingOppositionSurge: new Uniform(config('ring.oppositionSurge')),
       uRingDensityExtinction: new Uniform(config('ring.densityExtinction'))

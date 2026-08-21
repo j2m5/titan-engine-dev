@@ -12,6 +12,8 @@ export const RingShaderTemplate: ShaderProps = {
     planetRadius: new Uniform(0),
     minDistance: new Uniform(toThreeJSUnits(1000)),
     maxDistance: new Uniform(toThreeJSUnits(5000)),
+    ringEdgeOpacity: new Uniform(0.1),
+    ringAngleCurve: new Uniform(1.5),
     uRingForwardScattering: new Uniform(0),
     uRingOppositionSurge: new Uniform(0),
     uRingDensityExtinction: new Uniform(0)
@@ -56,6 +58,8 @@ export const RingShaderTemplate: ShaderProps = {
     uniform float planetRadius;
     uniform float minDistance;
     uniform float maxDistance;
+    uniform float ringEdgeOpacity;
+    uniform float ringAngleCurve;
     uniform float uRingForwardScattering;
     uniform float uRingOppositionSurge;
     uniform float uRingDensityExtinction;
@@ -114,8 +118,6 @@ export const RingShaderTemplate: ShaderProps = {
       // faceCos = |cos| между лучом камера→фрагмент и нормалью кольца (лок. +Z).
       vec3 viewDirLocal = normalize(vLocalCameraPosition - vPosition);
       float faceCos = abs(viewDirLocal.z);
-      const float ringEdgeOpacity = 0.1; // непрозрачность на ребре (тюнить визуально)
-      const float ringAngleCurve = 1.5;  // круче → быстрее гаснет к ребру
       float angleOpacity = mix(ringEdgeOpacity, 1.0, pow(faceCos, ringAngleCurve));
       color.a *= angleOpacity;
 
