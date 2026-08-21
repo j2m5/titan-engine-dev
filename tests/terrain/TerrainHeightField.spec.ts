@@ -909,3 +909,114 @@ describe('TerrainHeightField: геометрическая ошибка уров
     }
   })
 })
+
+/**
+ * Закон убывания ε по уровням. ε(L) — p99 размаха высот в окне вершинного
+ * шага уровня; замеряется он ровно на двух окнах (2×2 блока и 1×1 блок),
+ * остальные уровни экстраполируются. Экстраполяция была ЛИНЕЙНОЙ — «шаг вдвое
+ * мельче, ε вдвое меньше», — а рельеф самоподобен: размах падает как шаг^H,
+ * где H (показатель Хёрста) у планетных DEM 0.6–0.9. Линейная экстраполяция
+ * при H<1 занижает, и занижение НАКАПЛИВАЕТСЯ с глубиной: замер на fBm с
+ * энергией до Найквиста давал ε/честный 0.89 на L2 и 0.48–0.69 на L6.
+ *
+ * Следствие занижения — SSE меньше настоящей: дерево делится реже, чем
+ * обещает ручка sseSplitPixels, и тем сильнее, чем глубже уровень; юбка
+ * (ε(L−2)) короче нужного.
+ *
+ * Тест меряет не абсолютную точность (у неё своя систематика: окно блока —
+ * 8 отсчётов, то есть шаг 7, а не 8), а именно ОДНОРОДНОСТЬ: во сколько раз
+ * ε расходится с честным p99 на глубоком уровне против измеренного.
+ */
+describe('TerrainHeightField: ε убывает по закону самоподобия рельефа, а не линейно', () => {
+  const width = 4096
+  const height = 2048
+  const minMeters = -9000
+  const maxMeters = 10000
+
+  /** value-noise fBm: октавы от ячейки 1024 до 1 текселя — рельеф самоподобен вплоть до Найквиста. */
+  const buildFractalField = (hurst: number): { field: TerrainHeightField; data: Uint16Array } => {
+    const acc = new Float32Array(width * height)
+    const hash = (x: number, y: number): number => {
+      let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263)
+      h = Math.imul(h ^ (h >>> 13), 1274126177)
+      return ((h ^ (h >>> 16)) >>> 0) / 4294967295
+    }
+    const smooth = (t: number): number => t * t * (3 - 2 * t)
+
+    for (let cell = 1024; cell >= 1; cell >>= 1) {
+      const amplitude = Math.pow(cell, hurst)
+      for (let y = 0; y < height; y++) {
+        const gy = y / cell
+        const y0 = Math.floor(gy)
+        const fy = smooth(gy - y0)
+        const row = y * width
+        for (let x = 0; x < width; x++) {
+          const gx = x / cell
+          const x0 = Math.floor(gx)
+          const fx = smooth(gx - x0)
+          const top = hash(x0, y0) + (hash(x0 + 1, y0) - hash(x0, y0)) * fx
+          const bottom = hash(x0, y0 + 1) + (hash(x0 + 1, y0 + 1) - hash(x0, y0 + 1)) * fx
+          acc[row + x] += amplitude * (top + (bottom - top) * fy)
+        }
+      }
+    }
+
+    let lo = Infinity
+    let hi = -Infinity
+    for (const value of acc) {
+      if (value < lo) lo = value
+      if (value > hi) hi = value
+    }
+
+    const data = new Uint16Array(width * height)
+    for (let i = 0; i < acc.length; i++) data[i] = Math.round(((acc[i] - lo) / (hi - lo)) * 65535)
+
+    return { field: new TerrainHeightField(makeMap(width, height, [...data], minMeters, maxMeters), R_KM), data }
+  }
+
+  /** Честный p99 размаха в окне вершинного шага: шагу step отвечает окно из step+1 отсчётов. */
+  const honestP99 = (data: Uint16Array, step: number): number => {
+    const window = step + 1
+    const nx = Math.floor((width - window) / step)
+    const ny = Math.floor((height - window) / step)
+    const ranges = new Float64Array(nx * ny)
+
+    for (let by = 0; by < ny; by++) {
+      for (let bx = 0; bx < nx; bx++) {
+        let lo = 65535
+        let hi = 0
+        for (let y = by * step; y < by * step + window; y++) {
+          const row = y * width
+          for (let x = bx * step; x < bx * step + window; x++) {
+            const value = data[row + x]
+            if (value < lo) lo = value
+            if (value > hi) hi = value
+          }
+        }
+        ranges[by * nx + bx] = hi - lo
+      }
+    }
+
+    return (
+      Float64Array.from(ranges).sort()[Math.floor(0.99 * (nx * ny - 1))] * ((maxMeters - minMeters) / 65535)
+    )
+  }
+
+  const stepTexelsAt = (level: number): number => width / (4 * 2 ** level * 64)
+
+  it.each([[0.6], [0.75], [0.9]])(
+    'на fBm с показателем %s расхождение ε с честным p99 не растёт от измеренного уровня к глубокому',
+    (hurst: number) => {
+      const { field, data } = buildFractalField(hurst)
+
+      // L2 — уровень, чей шаг РАВЕН блоку: ε там измерена, а не выведена
+      const measuredRatio = field.geometricErrorMeters(2) / honestP99(data, stepTexelsAt(2))
+      // L4 — два уровня экстраполяции вглубь, ещё в пределах текселя
+      const extrapolatedRatio = field.geometricErrorMeters(4) / honestP99(data, stepTexelsAt(4))
+
+      expect(measuredRatio).toBeGreaterThan(0.5)
+      expect(extrapolatedRatio / measuredRatio).toBeGreaterThan(0.85)
+    },
+    120_000
+  )
+})
