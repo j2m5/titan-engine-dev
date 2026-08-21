@@ -134,6 +134,22 @@ describe('AtmosphereEffect', () => {
     warn.mockRestore()
   })
 
+  it('пустые слоты не держат LUT ушедшего сценария', () => {
+    const registry = new AtmosphereRegistry()
+    registry.register(entry(1, new Vector3(0, 0, -10000), 2575, 2875))
+    registry.register(entry(2, new Vector3(0, 0, -90000), 58232, 58632))
+    const effect = new AtmosphereEffect(cameraAtOrigin(), registry)
+    effect.update(renderer, buffer)
+    expect(effect.uniforms.get(slotUniformName(1, 'transmittance'))!.value).not.toBeNull()
+
+    registry.unregister(1)
+    effect.update(renderer, buffer)
+    expect(effect.uniforms.get('uCount')!.value).toBe(1)
+    expect(effect.uniforms.get(slotUniformName(1, 'transmittance'))!.value).toBeNull()
+    expect(effect.uniforms.get(slotUniformName(1, 'scattering'))!.value).toBeNull()
+    expect(effect.uniforms.get(slotUniformName(1, 'irradiance'))!.value).toBeNull()
+  })
+
   it('матрицы камеры и лог-фактор обновляются из камеры', () => {
     const camera = cameraAtOrigin()
     const effect = new AtmosphereEffect(camera, new AtmosphereRegistry())

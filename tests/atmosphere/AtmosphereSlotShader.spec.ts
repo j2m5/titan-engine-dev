@@ -56,7 +56,9 @@ describe('слот', () => {
     expect(slot).toContain('GetSkyRadiance(atm, uSlot1_transmittance, uSlot1_scattering, uSlot1_scattering,')
   })
 
-  it('диск солнца — только под небом (внутри ветки !hitSurface)', () => {
+  // Гейт !hitSurface остаётся, но двойного источника он не снимает: импостор
+  // звезды лежит дальше оболочки — открытый вопрос владельца
+  it('диск солнца — на небесной ветке (внутри !hitSurface)', () => {
     const sky = slot.indexOf('} else {')
     const disc = slot.indexOf('GetSolarRadianceFor(atm)')
     expect(disc).toBeGreaterThan(sky)
@@ -103,6 +105,15 @@ describe('слот', () => {
 
   it('дно оболочки берётся из bottom_radius слота', () => {
     expect(slot).toContain('float bottom = uSlot1_bottom_radius;')
+  })
+
+  it('обе точки отрезка вытянуты на дно: кламп p1 симметричен клампу p0', () => {
+    const p1 = slot.indexOf('vec3 p1 = dir * t1 - center;')
+    const clamp1 = slot.indexOf('p1 *= max(r1, atm.bottom_radius + 0.01) / max(r1, 1e-6);')
+    expect(p1).toBeGreaterThan(-1)
+    expect(clamp1).toBeGreaterThan(p1)
+    expect(slot).toContain('float r1 = length(p1);')
+    expect(slot).toContain('p0 *= max(r0, atm.bottom_radius + 0.01) / max(r0, 1e-6);')
   })
 })
 

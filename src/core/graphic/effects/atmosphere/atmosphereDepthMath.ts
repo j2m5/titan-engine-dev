@@ -58,8 +58,8 @@ export function clipRayToShell(
   // Дно оболочки — грунт модели Брунетона: под bottom LUT не заданы. Глубина
   // может уводить конец ниже (дно океана под прозрачной водой без depthWrite,
   // ошибка декода ~20 м) — обрезаем первым положительным корнем сферы дна.
-  // Камера уже ниже дна (cBottom ≤ 0) — обрезка пропускается: точку у дна
-  // вытягивает кламп +0.01 км ниже по коду.
+  // Камера ниже дна — обрезка не делается: состояние недостижимо
+  // (CameraCollision держит камеру выше max(рельеф, вода), bottom = пол рельефа).
   const cBottom = cc - bottomRadiusKm * bottomRadiusKm
   const discBottom = b * b - cBottom
   if (cBottom > 0 && discBottom > 0) {
@@ -81,34 +81,36 @@ export interface SlotCandidate<T> {
 }
 
 /**
- * Отбор K оболочек в кадр. Порядок — от дальней к ближней: вложенные
+ * Отбор K оболочек в кадр. Порядок композиции — от дальней к ближней: вложенные
  * оболочки (Титан внутри кадра Сатурна) композируются дальняя первой.
- * Потолок K — видимые, но отброшенные возвращаются для лога (без молчаливых
- * потолков). Записи мельче `minAngular` (top/dist) невидимы — отсев, не дроп.
+ * `filtered` — мельче `minAngular` (top/dist), в кадре невидимы: тихий отсев.
+ * `dropped` — видимые, но не влезли в потолок K: молчаливых потолков нет.
  */
 export function orderSlots<T>(
   items: Array<{ entry: T; centerKm: Vector3; topRadiusKm: number }>,
   slots: number,
   minAngular: number
-): { chosen: SlotCandidate<T>[]; dropped: T[] } {
+): { chosen: SlotCandidate<T>[]; dropped: T[]; filtered: T[] } {
   const visible: SlotCandidate<T>[] = []
-  const dropped: T[] = []
+  const filtered: T[] = []
 
   for (const item of items) {
     const distKm = item.centerKm.length()
     const angular = distKm < item.topRadiusKm ? Infinity : item.topRadiusKm / distKm
     if (angular < minAngular) {
-      dropped.push(item.entry)
+      filtered.push(item.entry)
       continue
     }
     visible.push({ entry: item.entry, distKm, angular })
   }
 
-  // Ближние важнее: оставляем K ближайших, затем переворачиваем в порядок композиции
-  visible.sort((a, b) => a.distKm - b.distKm)
+  // Крупные в кадре важнее: отбор K по УГЛОВОМУ размеру, а не по расстоянию —
+  // близкая мелкая луна не должна вытеснять гиганта на полкадра
+  visible.sort((a, b) => b.angular - a.angular)
   const kept = visible.slice(0, slots)
-  for (const extra of visible.slice(slots)) dropped.push(extra.entry)
+  const dropped = visible.slice(slots).map((extra) => extra.entry)
+  // Порядок композиции: дальняя первой
   kept.sort((a, b) => b.distKm - a.distKm)
 
-  return { chosen: kept, dropped }
+  return { chosen: kept, dropped, filtered }
 }

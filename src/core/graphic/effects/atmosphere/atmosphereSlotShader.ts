@@ -160,8 +160,8 @@ export function buildSlotGlsl(i: number): string {
     // ниже даёт отрицательное рассеяние (чёрная полоса). Глубина уводит конец
     // под дно там, где вода прозрачна и depthWrite выключен: пишет глубину дно
     // океана (Земля до −10.5 км), а bottom стоит на уровне воды.
-    // Камера уже ниже дна (cBottom ≤ 0) — обрезка пропускается: точку у дна
-    // вытягивает кламп +0.01 км ниже по коду.
+    // Камера ниже дна — обрезка не делается: состояние недостижимо
+    // (CameraCollision держит камеру выше max(рельеф, вода), bottom = пол рельефа).
     float cBottom = cc - bottom * bottom;
     float discBottom = b * b - cBottom;
     if (cBottom > 0.0 && discBottom > 0.0) {
@@ -182,12 +182,17 @@ export function buildSlotGlsl(i: number): string {
     vec3 radiance;
     if (hitSurface) {
       vec3 p1 = dir * t1 - center;
+      // Страховка: точка конца не ниже дна (погрешность декода глубины ~20 м)
+      float r1 = length(p1);
+      p1 *= max(r1, atm.bottom_radius + 0.01) / max(r1, 1e-6);
       radiance = GetSkyRadianceToPoint(atm, ${u('transmittance')}, ${u('scattering')}, ${u('scattering')},
         p0, p1, 0.0, ${u('sunDir')}, transmittance);
     } else {
       radiance = GetSkyRadiance(atm, ${u('transmittance')}, ${u('scattering')}, ${u('scattering')},
         p0, dir, 0.0, ${u('sunDir')}, transmittance);
-      // Диск солнца только под небом: импостор звезды пишет глубину, под ним hitSurface
+      // Диск рисуется на небесной ветке; импостор звезды лежит дальше оболочки
+      // (hitSurface там false), поэтому источник двойной — открытый вопрос
+      // владельца, см. docs/terrain-handoff.md
       if (dot(dir, ${u('sunDir')}) > ${u('sunSize')}.y) {
         radiance += transmittance * GetSolarRadianceFor(atm);
       }

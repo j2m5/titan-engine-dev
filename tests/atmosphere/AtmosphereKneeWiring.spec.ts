@@ -64,6 +64,14 @@ describe('AtmosphereEffect: проводка exposure/hdrKnee из data', () => 
     expect(effect.uniforms.get(slotUniformName(0, 'hdrKnee'))!.value).toBe(0.1)
   })
 
+  it('отрицательное колено клампится нулём — избыток не инвертируется в потемнение', () => {
+    const registry = new AtmosphereRegistry()
+    registry.register(entryWith({ hdrKnee: -0.5 }))
+    const effect = new AtmosphereEffect(cameraAtOrigin(), registry)
+    effect.update({} as WebGLRenderer, {} as WebGLRenderTarget)
+    expect(effect.uniforms.get(slotUniformName(0, 'hdrKnee'))!.value).toBe(0)
+  })
+
   it('колено применяется к in-scatter ДО потолка 64 и после exposure — формула в GLSL слота', () => {
     const slot = buildSlotGlsl(0)
     const exposure = slot.indexOf('vec3 scatter = radiance * uSlot0_exposure;')

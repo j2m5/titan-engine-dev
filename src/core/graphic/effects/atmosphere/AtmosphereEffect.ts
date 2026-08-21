@@ -125,10 +125,11 @@ export class AtmosphereEffect extends Effect {
       return { entry, centerKm, topRadiusKm: entry.config.topRadius, sunDir }
     })
 
+    // filtered (мельче порога) в кадре не видны — про них молчим
     const { chosen, dropped } = orderSlots(items, ATMOSPHERE_SLOTS, MIN_ANGULAR)
-    if (items.length > ATMOSPHERE_SLOTS && !this.warnedDropped) {
+    if (dropped.length > 0 && !this.warnedDropped) {
       console.warn(
-        `AtmosphereEffect: в кадре ${items.length} атмосфер, слотов ${ATMOSPHERE_SLOTS} — не рисуются (потолок слотов или угловой размер ниже порога): ${dropped.map((e) => e.name).join(', ')}`
+        `AtmosphereEffect: видимых атмосфер больше, чем слотов (${ATMOSPHERE_SLOTS}) — не рисуются: ${dropped.map((e) => e.name).join(', ')}`
       )
       this.warnedDropped = true
     }
@@ -137,8 +138,18 @@ export class AtmosphereEffect extends Effect {
       const item = items.find((it) => it.entry === slot.entry)!
       this.fillSlot(i, item)
     })
+    this.clearSlotsFrom(chosen.length)
     this.filled = chosen.length
     this.uniforms.get('uCount')!.value = chosen.length
+  }
+
+  /** Пустые слоты не держат LUT ушедшего сценария живыми до смерти композера. */
+  private clearSlotsFrom(from: number): void {
+    for (let i = from; i < ATMOSPHERE_SLOTS; i++) {
+      this.uniforms.get(slotUniformName(i, 'transmittance'))!.value = null
+      this.uniforms.get(slotUniformName(i, 'scattering'))!.value = null
+      this.uniforms.get(slotUniformName(i, 'irradiance'))!.value = null
+    }
   }
 
   private fillSlot(i: number, item: SlotItem): void {
@@ -182,7 +193,8 @@ export class AtmosphereEffect extends Effect {
     ;(u('sunDir').value as Vector3).copy(item.sunDir)
     ;(u('sunSize').value as Vector2).set(Math.tan(c.sunAngularRadius), Math.cos(c.sunAngularRadius))
     u('exposure').value = c.exposure ?? 10
-    u('hdrKnee').value = c.hdrKnee ?? 1
+    // Колено ниже нуля инвертировало бы избыток над 1.0 (потемнение вместо сжатия)
+    u('hdrKnee').value = Math.max(0, c.hdrKnee ?? 1)
   }
 }
 

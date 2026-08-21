@@ -118,16 +118,33 @@ describe('orderSlots: от дальней к ближней, потолок K, �
     expect(chosen.map((c) => c.entry)).toEqual(['far', 'mid', 'near'])
   })
 
-  it('лишние сверх K уходят в dropped — самые дальние и мелкие', () => {
-    const { chosen, dropped } = orderSlots([mk('a', 1000, 100), mk('b', 2000, 100), mk('c', 3000, 100), mk('d', 4000, 100)], 3, 0)
+  it('лишние сверх K уходят в dropped — самые мелкие по углу', () => {
+    const { chosen, dropped, filtered } = orderSlots(
+      [mk('a', 1000, 100), mk('b', 2000, 100), mk('c', 3000, 100), mk('d', 4000, 100)],
+      3,
+      0
+    )
     expect(chosen).toHaveLength(3)
     expect(dropped).toEqual(['d'])
+    expect(filtered).toEqual([])
   })
 
-  it('отсев по угловому размеру top/dist ниже порога', () => {
-    const { chosen, dropped } = orderSlots([mk('tiny', 1e6, 1), mk('big', 1e5, 5000)], 3, 1e-4)
+  it('потолок K режет по угловому размеру, а не по расстоянию: ближняя мелочь выпадает', () => {
+    const { chosen, dropped } = orderSlots(
+      [mk('nearTiny', 1000, 1), mk('midBig', 20000, 5000), mk('farBig', 90000, 20000)],
+      2,
+      0
+    )
+    // угловые: nearTiny 1e-3, midBig 0.25, farBig 0.22 — ближняя мелочь не влезает
+    expect(chosen.map((c) => c.entry)).toEqual(['farBig', 'midBig'])
+    expect(dropped).toEqual(['nearTiny'])
+  })
+
+  it('мельче порога — тихий filtered, не dropped', () => {
+    const { chosen, dropped, filtered } = orderSlots([mk('tiny', 1e6, 1), mk('big', 1e5, 5000)], 3, 1e-4)
     expect(chosen.map((c) => c.entry)).toEqual(['big'])
-    expect(dropped).toEqual(['tiny'])
+    expect(filtered).toEqual(['tiny'])
+    expect(dropped).toEqual([])
   })
 
   it('камера внутри оболочки — угловой размер бесконечный, запись не отсеивается', () => {
