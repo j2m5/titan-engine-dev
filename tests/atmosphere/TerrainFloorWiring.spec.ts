@@ -1,5 +1,7 @@
 import { BrunetonAtmosphere } from '@/core/renderables/Atmosphere/BrunetonAtmosphere'
 import { AtmosphereConfig, EMPTY_LAYER, expLayer } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+import { adjustAtmosphereForTerrainFloor } from '@/core/renderables/Atmosphere/terrainFloorAdjust'
+import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { Actor } from '@/core/models/Actor'
 import { WebGLRenderer } from 'three'
@@ -31,29 +33,35 @@ function stubConfig(terrainFloorMeters?: unknown): AtmosphereConfig {
   }
 }
 
-function stubActor(terrainFloorMeters?: unknown): Actor {
+function stubActor(config: AtmosphereConfig): Actor {
   return {
-    renderingObject: { getAttribute: () => stubConfig(terrainFloorMeters) },
-    getAttribute: () => 'StubPlanet'
+    renderingObject: { getAttribute: () => config },
+    getAttribute: (key: string) => (key === 'id' ? 42 : 'StubPlanet')
   } as unknown as Actor
 }
 
 // LUT-генератор трогает GPU, которого в jsdom нет: подменяем на пустышку,
-// запоминающую конфиг — совпадение конфига LUT и юниформов ассертится ниже.
-const generateCalls: AtmosphereConfig[] = []
+// запоминающую конфиг — совпадение конфига LUT и записи реестра ассертится ниже.
+const { generateSpy, disposeSpy } = vi.hoisted(() => ({
+  generateSpy: vi.fn((_config: AtmosphereConfig) => ({ transmittance: null, scattering: null, irradiance: null })),
+  disposeSpy: vi.fn()
+}))
+
 vi.mock('@/core/renderables/Atmosphere/AtmosphereLUTGenerator', () => ({
   AtmosphereLUTGenerator: class {
     public generate(config: AtmosphereConfig): { transmittance: null; scattering: null; irradiance: null } {
-      generateCalls.push(config)
-      return { transmittance: null, scattering: null, irradiance: null }
+      return generateSpy(config)
     }
-    public dispose(): void {}
+    public dispose(): void {
+      disposeSpy()
+    }
   }
 }))
 
 describe('BrunetonAtmosphere: дно следует объявленному полу рельефа', () => {
   beforeEach(() => {
-    generateCalls.length = 0
+    generateSpy.mockClear()
+    disposeSpy.mockClear()
   })
 
   afterEach(() => {
@@ -66,46 +74,48 @@ describe('BrunetonAtmosphere: дно следует объявленному п�
     // здесь молча отдавала bottomRadius нетронутым.
     expect(heightFieldStorage.heldPaths()).toEqual([])
 
-    const atmosphere = new BrunetonAtmosphere(stubActor(-8174.25), {} as WebGLRenderer)
+    const registry = new AtmosphereRegistry()
+    new BrunetonAtmosphere(stubActor(stubConfig(-8174.25)), {} as WebGLRenderer, registry)
 
-    expect(atmosphere.material.uniforms.u_bottom_radius.value).toBeCloseTo(3390 - 8.17425, 9)
+    expect(registry.entries()[0].config.bottomRadius).toBeCloseTo(3390 - 8.17425, 9)
   })
 
-  it('дно опущено на |пол| у ОБОИХ проходов — пропускание и in-scatter делят одну геометрию атмосферы', () => {
-    const atmosphere = new BrunetonAtmosphere(stubActor(-8174.25), {} as WebGLRenderer)
+  it('LUT и запись реестра считаются из ОДНОГО подогнанного конфига', () => {
+    const registry = new AtmosphereRegistry()
+    const actor = stubActor({ ...stubConfig(), terrainFloorMeters: -8174.25 })
+    const node = new BrunetonAtmosphere(actor, {} as WebGLRenderer, registry)
 
-    expect(atmosphere.material.uniforms.u_bottom_radius.value).toBeCloseTo(3390 - 8.17425, 9)
-    expect(atmosphere.scatterPass.material.uniforms.u_bottom_radius.value).toBeCloseTo(3390 - 8.17425, 9)
+    const entry = registry.entries()[0]
+    expect(entry.object).toBe(node)
+    expect(entry.config).toEqual(
+      adjustAtmosphereForTerrainFloor({ ...stubConfig(), terrainFloorMeters: -8174.25 }, -8174.25)
+    )
+    expect(entry.config.bottomRadius).toBeCloseTo(stubConfig().bottomRadius - 8.17425, 9)
+    // generate() мока получил тот же объект
+    expect(generateSpy).toHaveBeenCalledWith(entry.config)
   })
 
-  it('компенсация оптики доехала до юниформов — множитель в профиле, коэффициенты нетронуты', () => {
-    const atmosphere = new BrunetonAtmosphere(stubActor(-8174.25), {} as WebGLRenderer)
+  it('компенсация оптики доехала до записи реестра — множитель в профиле, коэффициенты нетронуты', () => {
+    const registry = new AtmosphereRegistry()
+    new BrunetonAtmosphere(stubActor(stubConfig(-8174.25)), {} as WebGLRenderer, registry)
 
-    // Слой в юниформе — [width, expTerm, expScale, linearTerm, constantTerm]
-    const rayleighLayer = atmosphere.material.uniforms.u_rayleigh_layer1.value as Float32Array
-    const mieLayer = atmosphere.material.uniforms.u_mie_layer1.value as Float32Array
+    const config = registry.entries()[0].config
 
-    expect(rayleighLayer[1]).toBeCloseTo(Math.exp(8.17425 / 10.859), 4)
-    expect(mieLayer[1]).toBeCloseTo(Math.exp(8.17425 / 11), 4)
+    expect(config.rayleighDensity[1].expTerm).toBeCloseTo(Math.exp(8.17425 / 10.859), 4)
+    expect(config.mieDensity[1].expTerm).toBeCloseTo(Math.exp(8.17425 / 11), 4)
 
     // Коэффициенты остаются паспортными — их подгонка дна не касается
-    expect(atmosphere.material.uniforms.u_rayleigh_scattering.value.x).toBeCloseTo(1.21533e-4, 12)
-    expect(atmosphere.material.uniforms.u_mie_extinction.value.x).toBeCloseTo(0.0286364, 12)
-  })
-
-  it('LUT генерируются из того же подогнанного конфига, что и юниформы', () => {
-    new BrunetonAtmosphere(stubActor(-8174.25), {} as WebGLRenderer)
-
-    expect(generateCalls).toHaveLength(1)
-    expect(generateCalls[0].bottomRadius).toBeCloseTo(3390 - 8.17425, 9)
+    expect(config.rayleighScattering[0]).toBeCloseTo(1.21533e-4, 12)
+    expect(config.mieExtinction[0]).toBeCloseTo(0.0286364, 12)
   })
 
   it('пол не объявлен — дно и оптика прежние (легаси-путь бит-в-бит)', () => {
-    const atmosphere = new BrunetonAtmosphere(stubActor(), {} as WebGLRenderer)
+    const registry = new AtmosphereRegistry()
+    new BrunetonAtmosphere(stubActor(stubConfig()), {} as WebGLRenderer, registry)
 
-    expect(atmosphere.material.uniforms.u_bottom_radius.value).toBe(3390)
-    expect(atmosphere.material.uniforms.u_rayleigh_scattering.value.x).toBeCloseTo(1.21533e-4, 12)
-    expect(generateCalls[0].bottomRadius).toBe(3390)
+    expect(registry.entries()[0].config.bottomRadius).toBe(3390)
+    expect(registry.entries()[0].config.rayleighScattering[0]).toBeCloseTo(1.21533e-4, 12)
+    expect(generateSpy.mock.calls[0][0].bottomRadius).toBe(3390)
   })
 
   it.each([
@@ -115,21 +125,25 @@ describe('BrunetonAtmosphere: дно следует объявленному п�
     ['-Infinity', -Infinity],
     ['положительный (пол выше опорной сферы)', 120]
   ])('нечисловой или неотрицательный пол (%s) — дно прежнее, а не мусор в LUT', (_label, value) => {
-    const atmosphere = new BrunetonAtmosphere(stubActor(value), {} as WebGLRenderer)
+    const registry = new AtmosphereRegistry()
+    new BrunetonAtmosphere(stubActor(stubConfig(value)), {} as WebGLRenderer, registry)
 
-    expect(atmosphere.material.uniforms.u_bottom_radius.value).toBe(3390)
-    expect(generateCalls[0].bottomRadius).toBe(3390)
+    expect(registry.entries()[0].config.bottomRadius).toBe(3390)
+    expect(generateSpy.mock.calls[0][0].bottomRadius).toBe(3390)
   })
 
-  it('геометрия меша остаётся на topRadius — подгонка дна её не трогает', () => {
-    const atmosphere = new BrunetonAtmosphere(stubActor(-8174.25), {} as WebGLRenderer)
-    const withoutTerrain = new BrunetonAtmosphere(stubActor(), {} as WebGLRenderer)
+  it('dispose снимает запись из реестра и освобождает генератор', () => {
+    const registry = new AtmosphereRegistry()
+    const node = new BrunetonAtmosphere(stubActor(stubConfig()), {} as WebGLRenderer, registry)
+    node.dispose()
+    expect(registry.size).toBe(0)
+    expect(disposeSpy).toHaveBeenCalledTimes(1)
+  })
 
-    expect(atmosphere.geometry.getAttribute('position').count).toBe(
-      withoutTerrain.geometry.getAttribute('position').count
-    )
-    expect((atmosphere.geometry as unknown as { parameters: { radius: number } }).parameters.radius).toBe(
-      (withoutTerrain.geometry as unknown as { parameters: { radius: number } }).parameters.radius
-    )
+  it('узел — не Mesh: ни геометрии, ни материала, ни дочернего прохода', () => {
+    const node = new BrunetonAtmosphere(stubActor(stubConfig()), {} as WebGLRenderer, new AtmosphereRegistry())
+    expect((node as unknown as { geometry?: unknown }).geometry).toBeUndefined()
+    expect((node as unknown as { material?: unknown }).material).toBeUndefined()
+    expect(node.children).toHaveLength(0)
   })
 })

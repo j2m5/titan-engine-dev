@@ -2,6 +2,7 @@ import { Sprite, Texture, WebGLRenderer } from 'three'
 import '@/core/framework/TitanThree'
 import { Actor } from '@/core/models/Actor'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
+import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { StarInnerLayer } from '@/core/renderables/utils/StarInnerLayer'
 import { ApparentSizeLod } from '@/core/renderables/utils/ApparentSizeLod'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -53,7 +54,7 @@ describe('ореол коричневого карлика', () => {
   it('спрайт висит на LOD, а не на теле: он нужен и на дальнем уровне', () => {
     // На дистанции переключения тело меньше пикселя, и блуму работать не с
     // чем — ореол там и остаётся единственным следом объекта
-    const factory = new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver)
+    const factory = new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver, new AtmosphereRegistry())
     const halo = findHalo(factory.make(stubActor()))
 
     expect(halo).toBeInstanceOf(Sprite)
@@ -61,7 +62,7 @@ describe('ореол коричневого карлика', () => {
   })
 
   it('карлик тлеет тише звезды', () => {
-    const factory = new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver)
+    const factory = new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver, new AtmosphereRegistry())
     const halo = findHalo(factory.make(stubActor()))
 
     expect(halo!.material.opacity).toBeCloseTo(config('brownDwarf.haloOpacity'))

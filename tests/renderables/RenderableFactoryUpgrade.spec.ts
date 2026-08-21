@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LOD, Texture } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
+import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { Planet } from '@/core/renderables/Planet'
 import type { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { TerrainSphere } from '@/core/renderables/TerrainSphere'
@@ -50,7 +51,7 @@ function makeFactory(): RenderableFactory {
   const renderer = { domElement: { width: 1920, height: 1080 } }
   const resourceObserver = { textureOf: vi.fn(() => null) }
 
-  return new RenderableFactory(renderer as never, resourceObserver as never)
+  return new RenderableFactory(renderer as never, resourceObserver as never, new AtmosphereRegistry())
 }
 
 /** Путь ресурса тела по типу — тот же джойн, которым его резолвят материалы. */

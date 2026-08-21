@@ -3,6 +3,7 @@ import { WebGLRenderer } from 'three'
 import '@/core/framework/TitanThree'
 import { Actor } from '@/core/models/Actor'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
+import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import { ApparentSizeLod } from '@/core/renderables/utils/ApparentSizeLod'
 import { WhiteDwarf } from '@/core/renderables/WhiteDwarf/WhiteDwarf'
@@ -192,7 +193,7 @@ describe('сборка узла белого карлика', () => {
   })
 
   it('тело остаётся под DynamicNode, а не подменяет его собой', () => {
-    const factory = new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver)
+    const factory = new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver, new AtmosphereRegistry())
     const node = factory.make(stubActor())
 
     expect(node).toBeInstanceOf(DynamicNode)
@@ -201,7 +202,7 @@ describe('сборка узла белого карлика', () => {
   })
 
   it('оба уровня LOD собраны и помечены типом для навигации', () => {
-    const factory = new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver)
+    const factory = new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver, new AtmosphereRegistry())
     const node = factory.make(stubActor())
 
     let body: WhiteDwarf | undefined

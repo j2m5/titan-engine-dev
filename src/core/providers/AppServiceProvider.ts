@@ -9,6 +9,7 @@ import { SceneManager } from '@/core/services/SceneManager'
 import { MarkerManager } from '@/core/services/MarkerManager'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { SceneObserver } from '@/core/services/SceneObserver'
+import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { CameraCollision } from '@/core/services/CameraCollision'
 import { HeightFieldGate } from '@/core/services/HeightFieldGate'
 import { SimulationClock } from '@/core/time/SimulationClock'
@@ -38,9 +39,12 @@ class AppServiceProvider extends ServiceProvider {
       (c: Container) => new MarkerManager(c.get(Tokens.SceneObserver), c.get(Tokens.Settings))
     )
 
+    this.app.singleton(Tokens.AtmosphereRegistry, () => new AtmosphereRegistry())
+
     this.app.singleton(
       Tokens.RenderableFactory,
-      (c: Container) => new RenderableFactory(c.get(Tokens.Renderer), c.get(Tokens.ResourceObserver))
+      (c: Container) =>
+        new RenderableFactory(c.get(Tokens.Renderer), c.get(Tokens.ResourceObserver), c.get(Tokens.AtmosphereRegistry))
     )
 
     this.app.singleton(

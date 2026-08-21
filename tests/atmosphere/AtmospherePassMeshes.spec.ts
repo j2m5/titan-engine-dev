@@ -1,9 +1,11 @@
 import { BrunetonAtmosphere } from '@/core/renderables/Atmosphere/BrunetonAtmosphere'
+import { BrunetonAtmosphereMaterial } from '@/core/renderables/Atmosphere/BrunetonAtmosphereMaterial'
 import { AtmosphereConfig, EMPTY_LAYER, expLayer } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { DUST_RENDER_ORDER } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
 import { RING_RENDER_ORDER } from '@/core/renderables/Ring'
 import { Actor } from '@/core/models/Actor'
-import { Mesh, WebGLRenderer } from 'three'
+import { BufferGeometry, Mesh, WebGLRenderer } from 'three'
 
 function stubConfig(): AtmosphereConfig {
   return {
@@ -42,9 +44,23 @@ vi.mock('@/core/renderables/Atmosphere/AtmosphereLUTGenerator', () => ({
   }
 }))
 
-describe('BrunetonAtmosphere: меши двух проходов', () => {
+/** Форма узла ДО перехода на полноэкранный эффект: меша у него больше нет. */
+type LegacyAtmosphere = BrunetonAtmosphere & {
+  material: BrunetonAtmosphereMaterial
+  geometry: BufferGeometry
+  scatterPass: Mesh<BufferGeometry, BrunetonAtmosphereMaterial>
+}
+
+function makeLegacyAtmosphere(): LegacyAtmosphere {
+  const node = new BrunetonAtmosphere(stubActor(), {} as WebGLRenderer, new AtmosphereRegistry())
+
+  return node as unknown as LegacyAtmosphere
+}
+
+// снимается Task 5 плана 2026-08-21
+describe.skip('BrunetonAtmosphere: меши двух проходов', () => {
   it('сам объект — проход пропускания, дочерний меш — проход in-scatter', () => {
-    const atmosphere = new BrunetonAtmosphere(stubActor(), {} as WebGLRenderer)
+    const atmosphere = makeLegacyAtmosphere()
 
     expect(atmosphere.material.defines.ATMOSPHERE_PASS_TRANSMITTANCE).toBe('1')
     expect(atmosphere.scatterPass).toBeInstanceOf(Mesh)
@@ -52,27 +68,27 @@ describe('BrunetonAtmosphere: меши двух проходов', () => {
   })
 
   it('проход in-scatter — единственный потомок и рисуется после умножения', () => {
-    const atmosphere = new BrunetonAtmosphere(stubActor(), {} as WebGLRenderer)
+    const atmosphere = makeLegacyAtmosphere()
 
     expect(atmosphere.children).toHaveLength(1)
     expect(atmosphere.renderOrder).toBeLessThan(atmosphere.scatterPass.renderOrder)
   })
 
   it('геометрия общая — вершины не дублируются', () => {
-    const atmosphere = new BrunetonAtmosphere(stubActor(), {} as WebGLRenderer)
+    const atmosphere = makeLegacyAtmosphere()
 
     expect(atmosphere.scatterPass.geometry).toBe(atmosphere.geometry)
   })
 
   it('юниформы общие — update одного прохода кормит оба', () => {
-    const atmosphere = new BrunetonAtmosphere(stubActor(), {} as WebGLRenderer)
+    const atmosphere = makeLegacyAtmosphere()
     const scatter = atmosphere.scatterPass.material
 
     expect(scatter.uniforms).toBe(atmosphere.material.uniforms)
   })
 
   it('dispose освобождает оба материала и геометрию один раз', () => {
-    const atmosphere = new BrunetonAtmosphere(stubActor(), {} as WebGLRenderer)
+    const atmosphere = makeLegacyAtmosphere()
     const scatter = atmosphere.scatterPass.material
     const geometryDispose = vi.spyOn(atmosphere.geometry, 'dispose')
     const scatterDispose = vi.spyOn(scatter, 'dispose')
@@ -84,7 +100,7 @@ describe('BrunetonAtmosphere: меши двух проходов', () => {
   })
 
   it('пыль кольца рисуется строго после in-scatter атмосферы — иначе гало ляжет на недостроенную атмосферу', () => {
-    const atmosphere = new BrunetonAtmosphere(stubActor(), {} as WebGLRenderer)
+    const atmosphere = makeLegacyAtmosphere()
 
     expect(DUST_RENDER_ORDER).toBeGreaterThan(atmosphere.scatterPass.renderOrder)
   })
@@ -94,7 +110,7 @@ describe('BrunetonAtmosphere: меши двух проходов', () => {
   // Кольцо держалось на дефолтном 0 и делило точку сортировки с проходом A:
   // порядок решал тай-брейк по id. Пыль — гало текстуры кольца, поверх неё.
   it('кольцо рисуется после in-scatter атмосферы, пыль — поверх кольца', () => {
-    const atmosphere = new BrunetonAtmosphere(stubActor(), {} as WebGLRenderer)
+    const atmosphere = makeLegacyAtmosphere()
 
     expect(RING_RENDER_ORDER).toBeGreaterThan(atmosphere.scatterPass.renderOrder)
     expect(DUST_RENDER_ORDER).toBeGreaterThan(RING_RENDER_ORDER)

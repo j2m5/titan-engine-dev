@@ -38,13 +38,15 @@ import { WhiteDwarf } from '@/core/renderables/WhiteDwarf/WhiteDwarf'
 import { WhiteDwarfImpostor } from '@/core/renderables/WhiteDwarf/WhiteDwarfImpostor'
 import { INebulaRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
+import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { RenderableObject3D } from '@/core/renderables/types'
 import { syncRenderableMaterials } from '@/core/materials/materialSync'
 
 class RenderableFactory {
   public constructor(
     private readonly renderer: WebGLRenderer,
-    private readonly resourceObserver: ResourceObserver
+    private readonly resourceObserver: ResourceObserver,
+    private readonly atmosphereRegistry: AtmosphereRegistry
   ) {}
 
   public make(actor: Actor): Object3D {
@@ -335,7 +337,7 @@ class RenderableFactory {
   }
 
   private createAtmosphere(actor: Actor): Object3D {
-    return new BrunetonAtmosphere(actor, this.renderer)
+    return new BrunetonAtmosphere(actor, this.renderer, this.atmosphereRegistry)
   }
 
   private createRing(actor: Actor): Object3D {

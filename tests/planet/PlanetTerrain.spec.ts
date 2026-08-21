@@ -4,6 +4,7 @@ import '@/core/framework/TitanThree'
 import { Planet } from '@/core/renderables/Planet'
 import { TerrainSphere } from '@/core/renderables/TerrainSphere'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
+import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
@@ -46,7 +47,8 @@ function seedHeightMap(): void {
 function makeFactory(): RenderableFactory {
   return new RenderableFactory(
     { domElement: { height: 1080 } } as unknown as WebGLRenderer,
-    {} as unknown as ResourceObserver
+    {} as unknown as ResourceObserver,
+    new AtmosphereRegistry()
   )
 }
 
