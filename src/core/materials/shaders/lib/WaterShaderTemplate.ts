@@ -12,8 +12,8 @@ import { SpaceScale } from '@/core/constants'
 const WATER_METERS_PER_UNIT = 1000 / SpaceScale
 
 const defaultUniforms = {
-  // «Звезда в нуле» — общедвижковая конвенция (см. BrunetonAtmosphere
-  // докблок lightPosition): движок не доставляет позицию светила в
+  // «Звезда в нуле» — общедвижковая конвенция (см. AtmosphereEffect.fillSlot:
+  // sunDir = normalize(−centerWorld)): движок не доставляет позицию светила в
   // материалы, ноль здесь корректен и согласован с терминатором планеты.
   lightPosition: new Uniform(new Vector3()),
   // Канал A slope-карты суши тела (запечённая глубина воды) — та же

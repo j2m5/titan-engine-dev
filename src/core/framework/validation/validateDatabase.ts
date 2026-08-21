@@ -393,7 +393,7 @@ function checkAtmosphereExtent(
         entity: row.id,
         message:
           `${head}: the profile is cut at density ${Math.exp(-shells).toExponential(1)} — ` +
-          `a hard edge shows at the mesh boundary`
+          `a hard edge shows at the shell boundary`
       })
     }
   }
