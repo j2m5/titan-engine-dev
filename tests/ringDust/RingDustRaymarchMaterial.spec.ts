@@ -1,4 +1,4 @@
-import { AdditiveBlending, BackSide } from 'three'
+import { AdditiveBlending, BackSide, ShaderChunk } from 'three'
 import { RingDustRaymarchMaterial } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustRaymarchMaterial'
 
 describe('RingDustRaymarchMaterial', () => {
@@ -50,5 +50,19 @@ describe('RingDustRaymarchMaterial', () => {
 
   it('НЕ использует замкнутую форму tau в объёме (марш — точка расширения под шум)', () => {
     expect(make().fragmentShader).not.toContain('ringDustTauRay')
+  })
+
+  it('пишет глубину от точки входа луча, а не от поверхности прокси-сферы', () => {
+    const fs = make().fragmentShader
+    // Чанк three взял бы vFragDepth дальней грани прокси — глубину за плоскостью
+    // кольца: депт-пре-пасс кольца и камни отбраковывали бы гало перед собой
+    expect(fs).not.toContain(ShaderChunk.logdepthbuf_fragment)
+    expect(fs).not.toContain('gl_FragDepth = vIsPerspective')
+    // Ручная запись по формуле чанка от дистанции входа tEntry
+    expect(fs).toContain('float tEntry = ')
+    expect(fs).toContain('modelViewMatrix * vec4(uDustCamRingPos + rayDir * tEntry, 1.0)')
+    expect(fs).toContain('gl_FragDepth = log2(max(-entryView.z, 1e-6) + 1.0) * logDepthBufFC * 0.5')
+    // logDepthBufFC приходит из pars-чанка — он остаётся подключён
+    expect(fs).toContain(ShaderChunk.logdepthbuf_pars_fragment)
   })
 })
