@@ -6,6 +6,7 @@ import { Texture, Vector3 } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { heightPathOf } from '@/core/terrain/heightPath'
+import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { IPlanetRenderingObject } from '@/core/models/types'
 import { readRenderingData } from '@/core/helpers/renderingData'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -127,6 +128,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
     // враньём — тогда рельефные дефайны молчат целиком.
     const heightPath: string | undefined = heightPathOf(this.model)
     const hasHeightField = heightPath !== undefined && Boolean(heightFieldStorage.get(heightPath))
+    const hasWaterShell = readWaterLevelMeters(this.model) !== undefined
 
     // slope-карта — уклоны из той же карты высот (см. slopeMapFormat): шейдит
     // попиксельно то, что не влезло в вершинную сетку, мипы фильтруют издалека.
@@ -208,7 +210,11 @@ class PlanetMaterial extends AbstractShaderMaterial {
       // Гейт: тот же slope, что USE_SLOPE (без него канал B недоступен), И
       // ненулевая ручка — при cavityStrength 0 путь бит-в-бит прежним.
       ...(useSlope && cavityStrength > 0 && { USE_CAVITY: '1' }),
-      ...(specularMap && { USE_SPECULAR: '1' }),
+      // Specular-карта — маска «океан/суша» легаси-вида. У тела с водной
+      // оболочкой (WaterSphere) блик солнца принадлежит воде: HDR-блик суши
+      // под полупрозрачной водой просачивался вторым, белым бликом поверх
+      // голубого водного.
+      ...(specularMap && !hasWaterShell && { USE_SPECULAR: '1' }),
       ...(nightMap && { USE_NIGHT: '1' }),
       // Облачный слой ВЕРНУЛСЯ решением владельца (2026-08-19, приёмочная
       // волна 4, №3: идея владельца — высотный fade). Прежний рулинг

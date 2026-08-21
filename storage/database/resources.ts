@@ -64,7 +64,7 @@ export const Resources: IResource[] = [
   { id: 88, resourceType: "diffuse", lifecycle: "resident", path: "planets/saturn/saturn_rings.png", colorSpace: "srgb" },
   { id: 89, resourceType: "diffuse", lifecycle: "resident", path: "planets/uranus/uranus_rings.png", colorSpace: "srgb" },
   { id: 90, resourceType: "diffuse", lifecycle: "resident", path: "planets/neptune/neptune_rings.png", colorSpace: "srgb" },
-  { id: 91, resourceType: "specular", lifecycle: "streamable", path: "planets/earth/earth_specular.jpg", colorSpace: "srgb", wrapS: 1e3 },
+  { id: 91, resourceType: "specular", lifecycle: "streamable", path: "planets/earth/earth_specular.jpg", wrapS: 1e3 },
   { id: 92, resourceType: "diffuse", lifecycle: "streamable", path: "planets/exoplanets/toi_519b/toi_519b.jpg", colorSpace: "srgb" },
   { id: 93, resourceType: "night", lifecycle: "streamable", path: "planets/exoplanets/toi_519b/toi_519b_night.png" },
   { id: 94, resourceType: "diffuse", lifecycle: "streamable", path: "planets/StarWars/tatooine/tatooine.png", colorSpace: "srgb", wrapS: 1e3 },
