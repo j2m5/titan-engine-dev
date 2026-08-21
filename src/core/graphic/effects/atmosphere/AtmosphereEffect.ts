@@ -34,11 +34,12 @@ const SLOT_LAYER_PARAMS: readonly string[] = [
   'absorption_layer1'
 ]
 
-/** Кандидат в слот: центр в км уже относительно камеры. */
+/** Кандидат в слот: центр в км уже относительно камеры, направление на звезду — в мировых осях. */
 interface SlotItem {
   entry: AtmosphereEntry
   centerKm: Vector3
   topRadiusKm: number
+  sunDir: Vector3
 }
 
 /**
@@ -58,10 +59,6 @@ export class AtmosphereEffect extends Effect {
   private warnedDropped = false
 
   private readonly cameraWorld = new Vector3()
-  private readonly centerWorld = new Vector3()
-  /** Пул кандидатов: растёт под размер реестра, переиспользуется между кадрами */
-  private readonly itemPool: SlotItem[] = []
-  private readonly items: SlotItem[] = []
 
   public constructor(camera: PerspectiveCamera, registry: AtmosphereRegistry, options: { debugView?: number } = {}) {
     const uniforms = new Map<string, Uniform>([
@@ -116,45 +113,35 @@ export class AtmosphereEffect extends Effect {
 
     this.cameraWorld.setFromMatrixPosition(camera.matrixWorld)
 
-    const entries = this.registry.entries()
-    const items = this.items
-    items.length = 0
-    entries.forEach((entry, index) => {
+    // Кандидаты собираются заново каждый кадр: хранить их между кадрами значит
+    // держать узлы и LUT удалённых сценариев живыми до смерти композера
+    const items: SlotItem[] = this.registry.entries().map((entry) => {
+      const centerWorld = new Vector3().setFromMatrixPosition(entry.object.matrixWorld)
+      // Звезда в мировом (0,0,0): направление от центра оболочки к нулю СЦЕНЫ,
+      // а не к камере — иначе освещённая сторона всегда смотрела бы в кадр
+      const sunDir = centerWorld.clone().negate().normalize()
       // Центр относительно камеры в float64, затем юниты → км
-      this.centerWorld.setFromMatrixPosition(entry.object.matrixWorld).sub(this.cameraWorld)
-      const item = this.poolItem(index)
-      item.entry = entry
-      item.centerKm.copy(this.centerWorld).multiplyScalar(1 / SpaceScale)
-      item.topRadiusKm = entry.config.topRadius
-      items.push(item)
+      const centerKm = centerWorld.sub(this.cameraWorld).multiplyScalar(1 / SpaceScale)
+      return { entry, centerKm, topRadiusKm: entry.config.topRadius, sunDir }
     })
 
     const { chosen, dropped } = orderSlots(items, ATMOSPHERE_SLOTS, MIN_ANGULAR)
     if (items.length > ATMOSPHERE_SLOTS && !this.warnedDropped) {
       console.warn(
-        `AtmosphereEffect: в кадре ${items.length} атмосфер, слотов ${ATMOSPHERE_SLOTS} — не рисуются: ${dropped.map((e) => e.name).join(', ')}`
+        `AtmosphereEffect: в кадре ${items.length} атмосфер, слотов ${ATMOSPHERE_SLOTS} — не рисуются (потолок слотов или угловой размер ниже порога): ${dropped.map((e) => e.name).join(', ')}`
       )
       this.warnedDropped = true
     }
 
     chosen.forEach((slot, i) => {
       const item = items.find((it) => it.entry === slot.entry)!
-      this.fillSlot(i, item.entry, item.centerKm)
+      this.fillSlot(i, item)
     })
     this.filled = chosen.length
     this.uniforms.get('uCount')!.value = chosen.length
   }
 
-  private poolItem(index: number): SlotItem {
-    let item = this.itemPool[index]
-    if (item === undefined) {
-      item = { entry: null as unknown as AtmosphereEntry, centerKm: new Vector3(), topRadiusKm: 0 }
-      this.itemPool[index] = item
-    }
-    return item
-  }
-
-  private fillSlot(i: number, entry: AtmosphereEntry, centerKm: Vector3): void {
+  private fillSlot(i: number, item: SlotItem): void {
     const u = (name: string): Uniform => this.uniforms.get(slotUniformName(i, name))!
     const setVec3 = (name: string, v: readonly [number, number, number]): void => {
       ;(u(name).value as Vector3).set(v[0], v[1], v[2])
@@ -167,6 +154,7 @@ export class AtmosphereEffect extends Effect {
       a[3] = layer.linearTerm
       a[4] = layer.constantTerm
     }
+    const entry = item.entry
     const c: AtmosphereConfig = entry.config
 
     setVec3('solar_irradiance', c.solarIrradiance)
@@ -190,9 +178,8 @@ export class AtmosphereEffect extends Effect {
     u('transmittance').value = entry.lut.transmittance
     u('scattering').value = entry.lut.scattering
     u('irradiance').value = entry.lut.irradiance
-    ;(u('center').value as Vector3).copy(centerKm)
-    // Звезда в (0,0,0): направление от центра оболочки к нулю сцены
-    ;(u('sunDir').value as Vector3).copy(centerKm).negate().normalize()
+    ;(u('center').value as Vector3).copy(item.centerKm)
+    ;(u('sunDir').value as Vector3).copy(item.sunDir)
     ;(u('sunSize').value as Vector2).set(Math.tan(c.sunAngularRadius), Math.cos(c.sunAngularRadius))
     u('exposure').value = c.exposure ?? 10
     u('hdrKnee').value = c.hdrKnee ?? 1

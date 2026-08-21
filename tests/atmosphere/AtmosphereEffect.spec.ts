@@ -89,6 +89,26 @@ describe('AtmosphereEffect', () => {
     expect(sunSize.y).toBeCloseTo(Math.cos(0.004), 12)
   })
 
+  it('камера вне нуля: sunDir считается от МИРОВОГО центра, center — относительно камеры', () => {
+    const registry = new AtmosphereRegistry()
+    registry.register(entry(1, new Vector3(0, 0, -50000), 6360, 6420))
+    const camera = new PerspectiveCamera(50, 1, 1e-6, 1e12)
+    camera.position.set(10000 * SpaceScale, 0, 0)
+    camera.updateMatrixWorld(true)
+    camera.updateProjectionMatrix()
+    const effect = new AtmosphereEffect(camera, registry)
+    effect.update(renderer, buffer)
+
+    // Звезда в мировом нуле: от центра (0,0,−50000) на неё смотрит (0,0,1)
+    const sunDir = effect.uniforms.get(slotUniformName(0, 'sunDir'))!.value as Vector3
+    expect(sunDir.x).toBeCloseTo(0, 9)
+    expect(sunDir.z).toBeCloseTo(1, 9)
+    // Центр оболочки остаётся в осях камеры
+    const center = effect.uniforms.get(slotUniformName(0, 'center'))!.value as Vector3
+    expect(center.x).toBeCloseTo(-10000, 3)
+    expect(center.z).toBeCloseTo(-50000, 3)
+  })
+
   it('две атмосферы: дальняя в слоте 0, ближняя в слоте 1', () => {
     const registry = new AtmosphereRegistry()
     registry.register(entry(1, new Vector3(0, 0, -10000), 2575, 2875))
