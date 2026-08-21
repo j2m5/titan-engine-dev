@@ -5,10 +5,13 @@ import {
   ChromaticAberrationEffect,
   EffectComposer,
   EffectPass,
+  Pass,
   RenderPass,
   ToneMappingEffect,
   ToneMappingMode
 } from 'postprocessing'
+import { createAtmospherePass } from '@/core/graphic/effects/atmosphere/AtmosphereEffect'
+import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { ExposureEffect } from '@/core/graphic/effects/grading/ExposureEffect'
 import { ColorGradeEffect } from '@/core/graphic/effects/grading/ColorGradeEffect'
@@ -141,14 +144,40 @@ export function createEffectPasses(camera: PerspectiveCamera): readonly [EffectP
   ] as const
 }
 
+/** `?atmoDebug=<1|2|3|4>` — дебаг-вид эффекта атмосферы в основной сцене (0 — выключен). */
+export function readAtmosphereDebugView(search: string = location.search): number {
+  const raw = new URLSearchParams(search).get('atmoDebug')
+  const value = raw === null ? 0 : Number(raw)
+  return Number.isInteger(value) && value >= 1 && value <= 4 ? value : 0
+}
+
 class Postprocessing {
   public composer: EffectComposer | null = null
 
   public constructor(
     private readonly renderer: WebGLRenderer,
     private readonly scene: Scene,
-    private readonly camera: PerspectiveCamera
+    private readonly camera: PerspectiveCamera,
+    private readonly atmosphereRegistry: AtmosphereRegistry
   ) {}
+
+  /**
+   * Список пассов в порядке рендера. Вынесен из `initialize()`: composer
+   * требует рендерер, а порядок — несущий инвариант и проверяется тестом.
+   *
+   * Атмосфера — СВОЙ пасс между сценой и HDR-проходом: блум считает яркость
+   * по входу своего пасса, значит должен видеть уже затуманенный кадр.
+   */
+  public buildPasses(): readonly Pass[] {
+    const [hdrPass, ldrPass] = createEffectPasses(this.camera)
+
+    return [
+      new RenderPass(this.scene, this.camera),
+      createAtmospherePass(this.camera, this.atmosphereRegistry, readAtmosphereDebugView()),
+      hdrPass,
+      ldrPass
+    ]
+  }
 
   public initialize(): void {
     this.composer = new EffectComposer(this.renderer, {
@@ -157,12 +186,7 @@ class Postprocessing {
       multisampling: 8
     })
 
-    const renderPass: RenderPass = new RenderPass(this.scene, this.camera)
-    const [hdrPass, ldrPass] = createEffectPasses(this.camera)
-
-    this.composer.addPass(renderPass)
-    this.composer.addPass(hdrPass)
-    this.composer.addPass(ldrPass)
+    for (const pass of this.buildPasses()) this.composer.addPass(pass)
   }
 
   public render(delta?: number): void {

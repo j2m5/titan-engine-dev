@@ -1,7 +1,10 @@
-import { BLOOM_OPTIONS, TONE_MAPPING_OPTIONS } from '@/core/graphic/Postprocessing'
-import { BlendFunction, ToneMappingMode } from 'postprocessing'
+import { PerspectiveCamera } from 'three'
+import { BLOOM_OPTIONS, Postprocessing, readAtmosphereDebugView, TONE_MAPPING_OPTIONS } from '@/core/graphic/Postprocessing'
+import { BlendFunction, Effect, EffectPass, RenderPass, ToneMappingMode } from 'postprocessing'
 import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
 import { BrunetonAtmosphereShaderTemplate } from '@/core/renderables/Atmosphere/BrunetonAtmosphereShaderTemplate'
+import { AtmosphereEffect, createAtmospherePass } from '@/core/graphic/effects/atmosphere/AtmosphereEffect'
+import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 
 describe('Postprocessing: контракт цветового конвейера', () => {
   it('тонмаппинг реально применяется: NORMAL-бленд, не DST-заглушка', () => {
@@ -57,6 +60,46 @@ describe('Postprocessing: контракт цветового конвейера
     // Ширина и сила гало меняются, а порог остаётся частью bloom-guard:
     // он связан с клампом планет 0.99 и с порогом блика объектива
     expect(BLOOM_OPTIONS.luminanceThreshold).toBe(1)
+  })
+})
+
+describe('Postprocessing: пасс атмосферы', () => {
+  it('readAtmosphereDebugView: 1..4 принимаются, прочее — 0', () => {
+    expect(readAtmosphereDebugView('?atmoDebug=4')).toBe(4)
+    expect(readAtmosphereDebugView('?atmoDebug=0')).toBe(0)
+    expect(readAtmosphereDebugView('?atmoDebug=7')).toBe(0)
+    expect(readAtmosphereDebugView('?atmoDebug=abc')).toBe(0)
+    expect(readAtmosphereDebugView('')).toBe(0)
+  })
+
+  it('пасс атмосферы — отдельный EffectPass с единственным эффектом DEPTH', () => {
+    const pass = createAtmospherePass(new PerspectiveCamera(), new AtmosphereRegistry(), 0)
+    expect(pass).toBeInstanceOf(EffectPass)
+    const effects = (pass as unknown as { effects: Effect[] }).effects
+    expect(effects).toHaveLength(1)
+    expect(effects[0]).toBeInstanceOf(AtmosphereEffect)
+
+    // needsDepthTexture выводится при сборке материала; в приложении её делает
+    // composer.addPass → pass.initialize, здесь — явный recompile
+    pass.recompile()
+    expect(pass.needsDepthTexture).toBe(true)
+  })
+
+  it('порядок пассов: атмосфера между RenderPass и HDR-проходом', () => {
+    // Блум считает яркость по входу СВОЕГО пасса — он обязан видеть уже
+    // затуманенный кадр, поэтому атмосфера идёт отдельным пассом раньше
+    const passes = new Postprocessing(
+      null as never,
+      null as never,
+      new PerspectiveCamera(),
+      new AtmosphereRegistry()
+    ).buildPasses()
+
+    expect(passes).toHaveLength(4)
+    expect(passes[0]).toBeInstanceOf(RenderPass)
+    expect((passes[1] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(AtmosphereEffect)
+    expect(passes[2]).toBeInstanceOf(EffectPass)
+    expect(passes[3]).toBeInstanceOf(EffectPass)
   })
 })
 

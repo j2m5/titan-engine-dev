@@ -60,7 +60,13 @@ class AppServiceProvider extends ServiceProvider {
 
     this.app.singleton(
       Tokens.Postprocessing,
-      (c: Container) => new Postprocessing(c.get(Tokens.Renderer), c.get(Tokens.Scene), c.get(Tokens.Camera))
+      (c: Container) =>
+        new Postprocessing(
+          c.get(Tokens.Renderer),
+          c.get(Tokens.Scene),
+          c.get(Tokens.Camera),
+          c.get(Tokens.AtmosphereRegistry)
+        )
     )
 
     this.app.singleton(
