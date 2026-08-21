@@ -22,6 +22,7 @@
 
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { Uniform, Vector2, Vector3 } from 'three'
+import { SpaceScale } from '@/core/constants'
 import { createParametricAtmosphereShader } from './atmosphereParametric'
 
 const parametricAtmosphere = createParametricAtmosphereShader()
@@ -33,7 +34,8 @@ export const BrunetonAtmosphereShaderTemplate: ShaderProps = {
   uniforms: {
     localCameraPos: new Uniform(new Vector3()),
     localSunDir: new Uniform(new Vector3()),
-    inverseSpaceScale: new Uniform(1.0 / Math.pow(10, -3.3)),
+    // Юниты сцены → км: та же SpaceScale, что у террейна и воды (toThreeJSUnits)
+    inverseSpaceScale: new Uniform(1.0 / SpaceScale),
     exposure: new Uniform(10.0),
     white_point: new Uniform(new Vector3(1.0, 1.0, 1.0)),
     uHdrKnee: new Uniform(1.0),

@@ -1,6 +1,7 @@
 import { BrunetonAtmosphere } from '@/core/renderables/Atmosphere/BrunetonAtmosphere'
 import { AtmosphereConfig, EMPTY_LAYER, expLayer } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { DUST_RENDER_ORDER } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
+import { RING_RENDER_ORDER } from '@/core/renderables/Ring'
 import { Actor } from '@/core/models/Actor'
 import { Mesh, WebGLRenderer } from 'three'
 
@@ -86,5 +87,16 @@ describe('BrunetonAtmosphere: меши двух проходов', () => {
     const atmosphere = new BrunetonAtmosphere(stubActor(), {} as WebGLRenderer)
 
     expect(DUST_RENDER_ORDER).toBeGreaterThan(atmosphere.scatterPass.renderOrder)
+  })
+
+  // Инвариант H4: прозрачное ПЕРЕД планетой — после обоих проходов, иначе
+  // проход A гасит его пропусканием столба до земли, а B кладёт дымку.
+  // Кольцо держалось на дефолтном 0 и делило точку сортировки с проходом A:
+  // порядок решал тай-брейк по id. Пыль — гало текстуры кольца, поверх неё.
+  it('кольцо рисуется после in-scatter атмосферы, пыль — поверх кольца', () => {
+    const atmosphere = new BrunetonAtmosphere(stubActor(), {} as WebGLRenderer)
+
+    expect(RING_RENDER_ORDER).toBeGreaterThan(atmosphere.scatterPass.renderOrder)
+    expect(DUST_RENDER_ORDER).toBeGreaterThan(RING_RENDER_ORDER)
   })
 })

@@ -7,6 +7,16 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { requireRenderingData } from '@/core/helpers/renderingData'
 import { IRingRenderingObject } from '@/core/models/types'
 
+/**
+ * Кольцо — прозрачное ПЕРЕД планетой, поэтому рисуется после обоих проходов
+ * атмосферы (пропускание 0, in-scatter 1; инвариант арки H4). На дефолтном 0
+ * оно делило точку сортировки с проходом пропускания (центры совпадают, тай-брейк
+ * по id) и перед диском гасилось столбом пропускания до земли, получая сверху
+ * дымку — как будто лежит на поверхности. Пыль кольца — его гало, рисуется
+ * поверх (DUST_RENDER_ORDER).
+ */
+export const RING_RENDER_ORDER = 2
+
 class Ring extends Mesh {
   public model: Actor
   declare public geometry: BufferGeometry
@@ -30,6 +40,7 @@ class Ring extends Mesh {
     this.material = new RingMaterial(this.model)
 
     this.name = this.model.getAttribute('name', '') + 'Ring'
+    this.renderOrder = RING_RENDER_ORDER
     this.rotateX(degToRad(90))
   }
 }

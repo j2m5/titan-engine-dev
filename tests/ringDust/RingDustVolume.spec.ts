@@ -49,7 +49,7 @@ describe('RingDustVolume', () => {
   })
 
   it('рисуется поверх 2D-текстуры кольца и атмосферы (политика renderOrder из спеки)', () => {
-    expect(makeVolume().renderOrder).toBe(2)
+    expect(makeVolume().renderOrder).toBe(3)
   })
 
   it('передаёт гейт/рамп/бюджет шагов/радиус планеты в uniforms материала', () => {

@@ -9,8 +9,8 @@ import { RingDustRaymarchMaterial } from './RingDustRaymarchMaterial'
  */
 const DUST_SLAB_FACTOR = 12
 
-/** renderOrder гало пыли: поверх 2D-текстуры кольца (0) и атмосферы */
-const DUST_RENDER_ORDER = 2
+/** renderOrder гало пыли: поверх атмосферы (0/1) и 2D-текстуры кольца (RING_RENDER_ORDER = 2) */
+const DUST_RENDER_ORDER = 3
 
 /** Радиальный запас охватывающей сферы относительно внешнего радиуса кольца */
 const RADIAL_PADDING = 1.05
