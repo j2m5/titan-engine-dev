@@ -44,7 +44,7 @@ export function encodeTerrainAux(payload: TerrainAuxPayload, map: HeightMapData)
     TERRAIN_AUX_HEADER_BYTES +
       payload.levelErrorMeters.byteLength +
       payload.clearanceGrid.byteLength +
-      (pyramid?.byteLength ?? 0)
+      (pyramid?.byteLength ?? 0) * 2
   )
 
   buffer.writeUInt32LE(TERRAIN_AUX_MAGIC, 0)
@@ -73,7 +73,8 @@ export function encodeTerrainAux(payload: TerrainAuxPayload, map: HeightMapData)
 
   let offset = writeArray(buffer, payload.levelErrorMeters, TERRAIN_AUX_HEADER_BYTES)
   offset = writeArray(buffer, payload.clearanceGrid, offset)
-  if (pyramid) writeArray(buffer, pyramid, offset)
+  if (pyramid) offset = writeArray(buffer, pyramid, offset)
+  if (payload.nodeErrorMetersPyramid) writeArray(buffer, payload.nodeErrorMetersPyramid, offset)
 
   return buffer
 }

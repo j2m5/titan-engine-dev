@@ -37,6 +37,20 @@ function terrainEquatorSegmentsAtLevel(level: number): number {
   return CUBE_EQUATOR_FACES * 2 ** level * TERRAIN_PATCH_SEGMENTS
 }
 
+/**
+ * Множитель перехода от шероховатости, замеренной на БЛОЧНОМ масштабе, к
+ * ошибке на вершинном шаге уровня. Два режима, граница — тексель: выше него
+ * рельеф самоподобен (шаг^H), ниже работает билинейка карты, а она линейна.
+ * Общий для по-уровневой ε (`buildGeometricErrors`) и пер-узловой
+ * (`buildNodeErrorPyramid`) — две записи этого закона разошлись бы, и SSE
+ * поехала бы относительно юбок.
+ */
+function terrainLevelScale(width: number, level: number, block: number, hurst: number): number {
+  const stepTexels = width / terrainEquatorSegmentsAtLevel(level)
+
+  return Math.min(1, Math.max(stepTexels, 1) / block) ** hurst * Math.min(1, stepTexels)
+}
+
 /** Базовый запас клиренса поверх провиса — амортизатор под шум карты и погрешность сетки. */
 export const CLEARANCE_MARGIN_METERS = 5
 
@@ -210,6 +224,13 @@ class TerrainHeightField {
   private readonly nodeMaxHeightMetersPyramid: Float32Array | null
 
   /**
+   * Пер-узловая ε — шероховатость МЕСТА вместо одного p99 на всё тело;
+   * см. докблок `buildNodeErrorPyramid`. `null` у константного поля (вода):
+   * там ε задаётся кривизной сферы и от узла не зависит.
+   */
+  private readonly nodeErrorMetersPyramid: Float32Array | null
+
+  /**
    * Блоки пришли запечёнными (`map.aux`), а не посчитаны здесь. Честный
    * наблюдаемый признак вместо замера времени: тест «блоки взяты из
    * компаньона, а не пересчитаны» иначе опирался бы на плавающий тайминг.
@@ -247,6 +268,7 @@ class TerrainHeightField {
     this.maxSagMeters = aux.maxSagMeters
     this.levelErrorMeters = aux.levelErrorMeters
     this.nodeMaxHeightMetersPyramid = aux.nodeMaxHeightMetersPyramid
+    this.nodeErrorMetersPyramid = aux.nodeErrorMetersPyramid
   }
 
   /**
@@ -263,6 +285,17 @@ class TerrainHeightField {
    */
   private computeAux(block: number): TerrainAuxPayload {
     const built = this.buildClearanceGrid(block, this.metersPerRaw)
+    const errors = this.buildGeometricErrors(
+      block,
+      this.metersPerRaw,
+      built.blockMin,
+      built.blockMax,
+      built.blocksX,
+      built.blocksY
+    )
+    // константное поле (вода): шероховатости нет ни у одного узла, обе
+    // пирамиды ему структурно не нужны — ε берётся по-уровневая (кривизна сферы)
+    const constantField = this.map.minMeters === this.map.maxMeters
 
     return {
       blocksX: built.blocksX,
@@ -270,18 +303,22 @@ class TerrainHeightField {
       maxClearanceMeters: built.maxClearance,
       maxSagMeters: built.maxSag,
       clearanceGrid: built.grid,
-      levelErrorMeters: this.buildGeometricErrors(
-        block,
-        this.metersPerRaw,
-        built.blockMin,
-        built.blockMax,
-        built.blocksX,
-        built.blocksY
-      ),
-      nodeMaxHeightMetersPyramid:
-        this.map.minMeters === this.map.maxMeters
-          ? null
-          : this.buildNodeMaxHeightPyramid(block, built.blockMax, built.blocksX, built.blocksY)
+      levelErrorMeters: errors.levelErrorMeters,
+      nodeMaxHeightMetersPyramid: constantField
+        ? null
+        : this.buildNodeMaxHeightPyramid(block, built.blockMax, built.blocksX, built.blocksY),
+      nodeErrorMetersPyramid: constantField
+        ? null
+        : this.buildNodeErrorPyramid(
+            block,
+            built.blockMin,
+            built.blockMax,
+            built.blocksX,
+            built.blocksY,
+            errors.levelErrorMeters,
+            errors.anchorMeters,
+            errors.wideAnchor
+          )
     }
   }
 
@@ -305,7 +342,8 @@ class TerrainHeightField {
       maxSagMeters: this.maxSagMeters,
       clearanceGrid: this.clearanceGrid,
       levelErrorMeters: this.levelErrorMeters,
-      nodeMaxHeightMetersPyramid: this.nodeMaxHeightMetersPyramid
+      nodeMaxHeightMetersPyramid: this.nodeMaxHeightMetersPyramid,
+      nodeErrorMetersPyramid: this.nodeErrorMetersPyramid
     }
   }
 
@@ -737,7 +775,7 @@ class TerrainHeightField {
     blockMax: Uint16Array,
     blocksX: number,
     blocksY: number
-  ): Float64Array {
+  ): { levelErrorMeters: Float64Array; anchorMeters: number; wideAnchor: boolean } {
     const { width } = this.map
 
     // окно 1×1 блок: размах внутри блока (та же по-блочная сетка, что и провис)
@@ -783,25 +821,20 @@ class TerrainHeightField {
     // Показатель самоподобия рельефа, замеренный по ТЕМ ЖЕ двум окнам, что
     // уже посчитаны: окно ℓ1 ровно вдвое шире окна ℓ2, значит отношение их
     // p99 и есть 2^H. Своей ручки не заводится — H берётся из данных тела.
-    const hurst = Math.min(
-      MAX_TERRAIN_HURST,
-      Math.max(MIN_TERRAIN_HURST, Math.log2(p99_2x2 / p99_1x1_eff))
-    )
+    // Плоская карта (обе p99 нулевые) отношения не имеет: log2(0/0) — NaN, и
+    // он ушёл бы в СТЕПЕНЬ, отравив ε всех экстраполированных уровней. Ловится
+    // только явной проверкой: `toBe(NaN)` в тестах проходит (Object.is(NaN,
+    // NaN) — true), а ноль на NaN даёт снова NaN, не ноль.
+    const hurst =
+      p99_2x2 > 0 && p99_1x1_eff > 0
+        ? Math.min(MAX_TERRAIN_HURST, Math.max(MIN_TERRAIN_HURST, Math.log2(p99_2x2 / p99_1x1_eff)))
+        : MAX_TERRAIN_HURST
 
     for (let level = TERRAIN_QUADTREE_MIN_LEVEL + 2; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
-      const stepTexels = width / terrainEquatorSegmentsAtLevel(level)
-
-      // Два режима, и граница между ними — тексель. Выше текселя рельеф
-      // самоподобен: размах падает как шаг^H. Ниже текселя самоподобия нет
-      // вовсе — там работает билинейка карты, а она ЛИНЕЙНА, и размах падает
-      // ровно как шаг.
-      const fractalScale = Math.min(1, Math.max(stepTexels, 1) / block) ** hurst
-      const subTexelScale = Math.min(1, stepTexels)
-
-      levelErrorMeters[level] = p99_1x1_eff * fractalScale * subTexelScale
+      levelErrorMeters[level] = p99_1x1_eff * terrainLevelScale(width, level, block, hurst)
     }
 
-    return levelErrorMeters
+    return { levelErrorMeters, anchorMeters: p99_1x1_eff, wideAnchor: !(p99_1x1 > 0) }
   }
 
   /**
@@ -834,10 +867,20 @@ class TerrainHeightField {
    * посчитано один раз в конструкторе (кроме константного поля, см. докблок
    * поля `nodeMaxHeightMetersPyramid`), не за кадр.
    */
-  private buildNodeMaxHeightPyramid(block: number, blockMax: Uint16Array, blocksX: number, blocksY: number): Float32Array {
-    const { width, height, minMeters, maxMeters } = this.map
-    const pyramid = new Float32Array(CUBE_FACES * FACE_NODE_COUNT)
-    const rawToMeters = (raw: number): number => minMeters + (raw / 65535) * (maxMeters - minMeters)
+  /**
+   * Обход листьев квадродерева с bbox каждого в блоках сетки — общая
+   * механика двух пирамид (максимумов высоты и пер-узловой ε). Раскладка
+   * bbox, анврап долготы и запас в блоках описаны в докблоке
+   * `buildNodeMaxHeightPyramid`; держать это в двух копиях значит уронить
+   * одну из них при первой же правке развёртки.
+   */
+  private forEachLeafBlockBounds(
+    block: number,
+    blocksX: number,
+    blocksY: number,
+    visit: (leafIndex: number, colLo: number, colHi: number, rowLo: number, rowHi: number) => void
+  ): void {
+    const { width, height } = this.map
 
     // запас в блоках по каждой стороне bbox — покрывает нелинейность
     // равноугольной развёртки между 9 сэмплами узла (см. докблок метода)
@@ -890,26 +933,20 @@ class TerrainHeightField {
             if (sampleV[k] > vHi) vHi = sampleV[k]
           }
 
-          const colLo = Math.floor((uLo * width) / block) - BLOCK_PAD
-          const colHi = Math.floor((uHi * width) / block) + BLOCK_PAD
-          const rowLo = Math.max(0, Math.floor((vLo * height) / block) - BLOCK_PAD)
-          const rowHi = Math.min(blocksY - 1, Math.floor((vHi * height) / block) + BLOCK_PAD)
-
-          let maxRaw = 0
-          for (let row = rowLo; row <= rowHi; row++) {
-            for (let colRaw = colLo; colRaw <= colHi; colRaw++) {
-              const col = ((colRaw % blocksX) + blocksX) % blocksX
-              const value = blockMax[row * blocksX + col]
-              if (value > maxRaw) maxRaw = value
-            }
-          }
-
-          pyramid[face * FACE_NODE_COUNT + leafOffset + i * leafPatches + j] = rawToMeters(maxRaw)
+          visit(
+            face * FACE_NODE_COUNT + leafOffset + i * leafPatches + j,
+            Math.floor((uLo * width) / block) - BLOCK_PAD,
+            Math.floor((uHi * width) / block) + BLOCK_PAD,
+            Math.max(0, Math.floor((vLo * height) / block) - BLOCK_PAD),
+            Math.min(blocksY - 1, Math.floor((vHi * height) / block) + BLOCK_PAD)
+          )
         }
       }
     }
+  }
 
-    // подъём вверх: родитель = MAX четырёх детей, партиция точная — консервативность не теряется
+  /** Подъём пирамиды узлов: родитель — максимум четверых детей, партиция точная. */
+  private raiseNodePyramid(pyramid: Float32Array): void {
     for (let level = TERRAIN_QUADTREE_MAX_LEVEL - 1; level >= TERRAIN_QUADTREE_MIN_LEVEL; level--) {
       const patches = 2 ** level
       const childPatches = patches * 2
@@ -920,24 +957,176 @@ class TerrainHeightField {
         for (let i = 0; i < patches; i++) {
           for (let j = 0; j < patches; j++) {
             let m = -Infinity
+
             for (let di = 0; di < 2; di++) {
               for (let dj = 0; dj < 2; dj++) {
-                const ci = i * 2 + di
-                const cj = j * 2 + dj
-                const v = pyramid[face * FACE_NODE_COUNT + childOffset + ci * childPatches + cj]
-                if (v > m) m = v
+                const value = pyramid[face * FACE_NODE_COUNT + childOffset + (i * 2 + di) * childPatches + (j * 2 + dj)]
+                if (value > m) m = value
               }
             }
+
             pyramid[face * FACE_NODE_COUNT + offset + i * patches + j] = m
           }
         }
+      }
+    }
+  }
+
+  /**
+   * Пер-узловая ε (числитель SSE): шероховатость МЕСТА вместо одного p99 на
+   * всё тело. Глобальная ε обслуживает поверхность одинаково — замер на карте
+   * с переменной шероховатостью: половина узлов вдвое глаже её (равнины
+   * тесселируются подробнее нужного), 9% грубее, самый грубый в 2.2 раза
+   * (то есть обещание ручки sseSplitPixels на нём не выполняется).
+   *
+   * Лист берёт ВТОРОЙ ПО ВЕЛИЧИНЕ размах среди блоков своего bbox, а не
+   * максимум (решение владельца): одиночный битый блок — артефакт DEM, шов,
+   * NODATA — при свёртке максимумом поднял бы ε своего листа и всей цепочки
+   * предков до корня грани. Второй по величине его не видит, пока соседние
+   * блоки плоские; это тот же мотив, что у глобального p99 («одиночный обрыв
+   * не задирает ε»), только локальный.
+   *
+   * Узел МОДУЛИРУЕТ готовый по-уровневый профиль, а не пересчитывает его:
+   * ε(узел, L) = ε(L) × шероховатость_узла / глобальный_анкер. Своей копии
+   * закона убывания здесь нет намеренно — по-уровневая ε меряет ℓ1/ℓ2 прямо
+   * по окнам, а не выводит их законом, и копия разошлась бы с ней на картах,
+   * где вершинный шаг далёк от блока (на игрушечной карте 8×4 расхождение
+   * доходило до 64 раз). При шероховатости, равной анкеру, пер-узловая ε
+   * тождественна по-уровневой — это и есть точка отсчёта.
+   *
+   * Монотонность вниз по дереву выходит по построению: шероховатость
+   * родителя ≥ детской (максимум при подъёме), профиль с глубиной убывает.
+   *
+   * Юбки НА ЭТУ ε НЕ ПЕРЕВОДЯТСЯ: юбка закрывает недобор ГРУБОГО СОСЕДА, а
+   * не свой собственный, и своя (меньшая) ε сузила бы стенку там, где сосед
+   * как раз шероховатее — им остаётся глобальная `geometricErrorMeters`.
+   */
+  private buildNodeErrorPyramid(
+    block: number,
+    blockMin: Uint16Array,
+    blockMax: Uint16Array,
+    blocksX: number,
+    blocksY: number,
+    levelErrorMeters: Float64Array,
+    anchorMeters: number,
+    wideAnchor: boolean
+  ): Float32Array {
+    const pyramid = new Float32Array(CUBE_FACES * FACE_NODE_COUNT)
+
+    /**
+     * Размах окна 2×2 блока — фолбэк ровно того же случая, что у по-уровневой
+     * ε: при блоке в один тексель размах ОДИНОЧНОГО блока тождественно нулевой
+     * (один отсчёт), и вся пирамида выродилась бы в нули, а дерево перестало
+     * бы делиться вовсе. Долгота заворачивается, широта клампится — как всюду.
+     */
+    const wideRange = (row: number, col: number): number => {
+      let lo = 65535
+      let hi = 0
+
+      for (let dy = 0; dy <= 1; dy++) {
+        const ny = Math.min(row + dy, blocksY - 1)
+
+        for (let dx = 0; dx <= 1; dx++) {
+          const b = ny * blocksX + ((col + dx) % blocksX)
+          if (blockMin[b] < lo) lo = blockMin[b]
+          if (blockMax[b] > hi) hi = blockMax[b]
+        }
+      }
+
+      return hi - lo
+    }
+
+    this.forEachLeafBlockBounds(block, blocksX, blocksY, (leafIndex, colLo, colHi, rowLo, rowHi) => {
+      let first = 0
+      let second = 0
+
+      for (let row = rowLo; row <= rowHi; row++) {
+        for (let colRaw = colLo; colRaw <= colHi; colRaw++) {
+          const col = ((colRaw % blocksX) + blocksX) % blocksX
+          const range = wideAnchor ? wideRange(row, col) : blockMax[row * blocksX + col] - blockMin[row * blocksX + col]
+
+          if (range > first) {
+            second = first
+            first = range
+          } else if (range > second) {
+            second = range
+          }
+        }
+      }
+
+      pyramid[leafIndex] = second * this.metersPerRaw
+    })
+
+    this.raiseNodePyramid(pyramid)
+
+    // По-уровневый профиль берётся ГОТОВЫМ, узел лишь модулирует его своей
+    // шероховатостью относительно глобального анкера. Пересчитывать профиль
+    // заново нельзя: по-уровневая ε меряет ℓ1/ℓ2 напрямую по окнам, а не
+    // выводит их законом, и своя копия закона разошлась бы с ней на картах,
+    // где вершинный шаг далёк от блока. При шероховатости, равной анкеру,
+    // пер-узловая ε тождественна по-уровневой — это и есть точка отсчёта.
+    for (let level = TERRAIN_QUADTREE_MIN_LEVEL; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
+      const scale = anchorMeters > 0 ? levelErrorMeters[level] / anchorMeters : 0
+      const offset = pyramidLevelOffset(level)
+      const patches = 2 ** level
+
+      for (let face = 0; face < CUBE_FACES; face++) {
+        const base = face * FACE_NODE_COUNT + offset
+
+        for (let n = 0; n < patches * patches; n++) pyramid[base + n] *= scale
       }
     }
 
     return pyramid
   }
 
-  /** ε уровня дерева, метры: p99 размаха высот в окне шага вершинной сетки уровня; ниже блочного разрешения — линейное масштабирование шага. Числитель SSE и глубина юбки. */
+  private buildNodeMaxHeightPyramid(block: number, blockMax: Uint16Array, blocksX: number, blocksY: number): Float32Array {
+    const { minMeters, maxMeters } = this.map
+    const pyramid = new Float32Array(CUBE_FACES * FACE_NODE_COUNT)
+    const rawToMeters = (raw: number): number => minMeters + (raw / 65535) * (maxMeters - minMeters)
+
+    this.forEachLeafBlockBounds(block, blocksX, blocksY, (leafIndex, colLo, colHi, rowLo, rowHi) => {
+      let maxRaw = 0
+
+      for (let row = rowLo; row <= rowHi; row++) {
+        for (let colRaw = colLo; colRaw <= colHi; colRaw++) {
+          const col = ((colRaw % blocksX) + blocksX) % blocksX
+          const value = blockMax[row * blocksX + col]
+          if (value > maxRaw) maxRaw = value
+        }
+      }
+
+      pyramid[leafIndex] = rawToMeters(maxRaw)
+    })
+
+    this.raiseNodePyramid(pyramid)
+
+    return pyramid
+  }
+
+
+  /**
+   * ε КОНКРЕТНОГО узла, метры — числитель SSE (`terrainQuadtreeSelect`).
+   * Шероховатость места, а не тела целиком: см. докблок
+   * `buildNodeErrorPyramid`, там же почему юбки остались на по-уровневой.
+   *
+   * Константное поле (пирамида `null`, вода) падает на по-уровневую: её ε
+   * задаётся кривизной сферы и от узла не зависит по определению.
+   *
+   * Кламп уровня тот же и с той же ловушкой, что у `nodeMaxHeightMeters`:
+   * `i, j` под клампнутый уровень НЕ пересчитываются, звать с уровнем вне
+   * диапазона и чужими индексами нельзя.
+   */
+  public nodeGeometricErrorMeters(face: number, level: number, i: number, j: number): number {
+    if (this.nodeErrorMetersPyramid === null) return this.geometricErrorMeters(level)
+
+    const clampedLevel = Math.min(Math.max(level, TERRAIN_QUADTREE_MIN_LEVEL), TERRAIN_QUADTREE_MAX_LEVEL)
+    const patches = 2 ** clampedLevel
+
+    return this.nodeErrorMetersPyramid[face * FACE_NODE_COUNT + pyramidLevelOffset(clampedLevel) + i * patches + j]
+  }
+
+  /** ε уровня дерева, метры: p99 размаха высот в окне шага вершинной сетки уровня; ниже блочного разрешения — линейное масштабирование шага. Глубина юбки; для SSE — `nodeGeometricErrorMeters`. */
   public geometricErrorMeters(level: number): number {
     return this.levelErrorMeters[
       Math.min(Math.max(level, TERRAIN_QUADTREE_MIN_LEVEL), TERRAIN_QUADTREE_MAX_LEVEL)

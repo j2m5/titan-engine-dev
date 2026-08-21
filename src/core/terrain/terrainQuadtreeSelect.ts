@@ -137,7 +137,7 @@ function visitNode(
   const distanceMeters = (distance / SpaceScale) * 1000
 
   const sse =
-    (field.geometricErrorMeters(level) * params.screenHeight) /
+    (field.nodeGeometricErrorMeters(face, level, i, j) * params.screenHeight) /
     (2 * Math.tan(params.fovYRadians / 2) * distanceMeters)
 
   // формат совпадает с terrainNodeKey — вызывается без промежуточного

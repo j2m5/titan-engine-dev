@@ -33,7 +33,8 @@ function payload(withPyramid: boolean = true): TerrainAuxPayload {
     maxSagMeters: 1229.5,
     levelErrorMeters: new Float64Array([0, 100, 50, 25, 12.5, 6.25, 3.125]),
     clearanceGrid: new Float32Array([1, 2, 3, 4, 5, 6, 7, 8]),
-    nodeMaxHeightMetersPyramid: withPyramid ? new Float32Array([10, 20, 30, 40]) : null
+    nodeMaxHeightMetersPyramid: withPyramid ? new Float32Array([10, 20, 30, 40]) : null,
+    nodeErrorMetersPyramid: withPyramid ? new Float32Array([1, 2, 3, 4]) : null
   }
 }
 
@@ -50,12 +51,14 @@ describe('Формат компаньона карты высот: round-trip э
     expect(Array.from(parsed.levelErrorMeters)).toEqual(Array.from(source.levelErrorMeters))
     expect(Array.from(parsed.clearanceGrid)).toEqual(Array.from(source.clearanceGrid))
     expect(Array.from(parsed.nodeMaxHeightMetersPyramid!)).toEqual(Array.from(source.nodeMaxHeightMetersPyramid!))
+    expect(Array.from(parsed.nodeErrorMetersPyramid!)).toEqual(Array.from(source.nodeErrorMetersPyramid!))
   })
 
   it('отсутствие пирамиды (константное поле) переживает round-trip как null, а не как пустой массив', () => {
     const parsed = parseTerrainAux(toArrayBuffer(encodeTerrainAux(payload(false), map())))
 
     expect(parsed.nodeMaxHeightMetersPyramid).toBeNull()
+    expect(parsed.nodeErrorMetersPyramid).toBeNull()
   })
 
   it('энкодер штампует отпечаток карты и текущую калибровку — их не передают снаружи', () => {

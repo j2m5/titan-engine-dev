@@ -31,6 +31,8 @@ export type TerrainAuxPayload = {
   clearanceGrid: Float32Array
   /** null у КОНСТАНТНОГО поля (min === max) — см. докблок поля в TerrainHeightField. */
   nodeMaxHeightMetersPyramid: Float32Array | null
+  /** Пер-узловая ε (числитель SSE); null у константного поля — там ε задаётся кривизной сферы. */
+  nodeErrorMetersPyramid: Float32Array | null
 }
 
 /**
@@ -78,7 +80,7 @@ export type TerrainAuxData = TerrainAuxPayload & {
 
 /** Байты 'T','E','H','A' как u32 LE — компаньон карты 'TEHM'. */
 export const TERRAIN_AUX_MAGIC = 0x41484554
-export const TERRAIN_AUX_VERSION = 1
+export const TERRAIN_AUX_VERSION = 2
 
 /**
  * Раскладка заголовка (little-endian). Смещения зафиксированы здесь и в
@@ -211,8 +213,10 @@ export function parseTerrainAux(buffer: ArrayBuffer): TerrainAuxData {
 
   const levelBytes = levelCount * 8
   const gridBytes = blocksX * blocksY * 4
+  // pyramidCount один на ОБЕ пирамиды: длина у них одна (CUBE_FACES × FACE_NODE_COUNT),
+  // и отсутствуют они тоже вместе — у константного поля нет ни максимумов, ни шероховатости
   const pyramidBytes = pyramidCount * 4
-  const expectedBytes = TERRAIN_AUX_HEADER_BYTES + levelBytes + gridBytes + pyramidBytes
+  const expectedBytes = TERRAIN_AUX_HEADER_BYTES + levelBytes + gridBytes + 2 * pyramidBytes
 
   if (buffer.byteLength !== expectedBytes) {
     throw new Error(
@@ -249,6 +253,8 @@ export function parseTerrainAux(buffer: ArrayBuffer): TerrainAuxData {
     clearanceGrid: new Float32Array(buffer, gridOffset, blocksX * blocksY),
     // Ноль записей — это КОНСТАНТНОЕ поле, у которого пирамиды нет вовсе, а не
     // пустой массив: `nodeMaxHeightMeters` различает эти случаи по null
-    nodeMaxHeightMetersPyramid: pyramidCount > 0 ? new Float32Array(buffer, pyramidOffset, pyramidCount) : null
+    nodeMaxHeightMetersPyramid: pyramidCount > 0 ? new Float32Array(buffer, pyramidOffset, pyramidCount) : null,
+    nodeErrorMetersPyramid:
+      pyramidCount > 0 ? new Float32Array(buffer, pyramidOffset + pyramidBytes, pyramidCount) : null
   }
 }
