@@ -233,8 +233,13 @@ export function buildAtmosphereEffectFragment(): string {
   void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
     if (uCount == 0) { outputColor = inputColor; return; }
 
-    // Луч через пиксель: обратная проекция в view, поворот в мир (без переноса)
-    vec4 clip = vec4(uv * 2.0 - 1.0, 1.0, 1.0);
+    // Луч через пиксель: обратная проекция в view, поворот в мир (без переноса).
+    // clip.z = 0, а НЕ 1: у обратной проекции строка w — это
+    // (z·(n−far) + (n+far))/(2·far·n), и на дальней плоскости два слагаемых
+    // порядка 5·10⁵ гасят друг друга до ~7·10⁻⁹ — в float32 это ноль, деление
+    // на него даёт NaN во всём кадре (замер 2026-08-21, near 1e-6, far 1.5e8).
+    // Точка на ближней плоскости лежит на том же луче из начала координат.
+    vec4 clip = vec4(uv * 2.0 - 1.0, 0.0, 1.0);
     vec4 viewH = uProjectionInverse * clip;
     vec3 dirView = normalize(viewH.xyz / viewH.w);
     vec3 dirWorld = normalize(mat3(uCameraWorldMatrix) * dirView);

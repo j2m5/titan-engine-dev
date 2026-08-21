@@ -110,6 +110,14 @@ describe('фрагмент эффекта', () => {
     expect(frag).not.toContain('getViewZ(')
   })
 
+  it('луч строится через ближнюю плоскость: на дальней w обратной проекции гаснет в float32', () => {
+    // clip.z = 1 даёт w = (n+far)/(2·far·n) + (n−far)/(2·far·n): при near 1e-6
+    // и far 1.5e8 это разность двух чисел порядка 5·10⁵ с ответом ~7·10⁻⁹ —
+    // в float32 ровно ноль, деление даёт NaN во всём кадре (замер в браузере)
+    expect(frag).toContain('vec4 clip = vec4(uv * 2.0 - 1.0, 0.0, 1.0);')
+    expect(frag).not.toContain('vec4 clip = vec4(uv * 2.0 - 1.0, 1.0, 1.0);')
+  })
+
   it('uCount == 0 — копия входа до любых выборок', () => {
     const early = frag.indexOf('if (uCount == 0) { outputColor = inputColor; return; }')
     expect(early).toBeGreaterThan(-1)
