@@ -500,7 +500,10 @@ export const WaterShaderTemplate: ShaderProps = {
         // что и у reflection) — 0.1·skyColor, не vec3(0.1).
         vec3 wavesColor = mix(
           waterSunColor * waveDiffuseLight * 0.3 + waveScatter,
-          0.1 * skyColor + waveReflectionSample * 0.9 + waveReflectionSample * waveSpecularLight,
+          // Блик — белый waterSunColor, не отражённое небо: у Water.js
+          // reflectionSample несёт солнце, у нас это константный голубой
+          // градиент, и глинт выходил голубым.
+          0.1 * skyColor + waveReflectionSample * 0.9 + waterSunColor * waveSpecularLight,
           waveReflectance
         );
         // Свой ночной пол waves-цвета (waveDayFactor, НЕ общий dayFactor

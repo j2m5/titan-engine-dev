@@ -187,7 +187,11 @@ describe('WaterShaderTemplate: sunLight/albedo — дословно Water.js (ge
     // Приёмочная волна 4, №1: Water.js vec3(0.1) — вклад ambient ЗЕРКАЛЬНОЙ
     // сцены, у нас зеркала нет — адаптация тонирует тот же вклад градиентным
     // skyColor (0.1·skyColor), не плоской серой константой.
-    expect(frag).toContain('0.1 * skyColor + waveReflectionSample * 0.9 + waveReflectionSample * waveSpecularLight,')
+    // Блик — белый waterSunColor, не тинт неба: у Water.js reflectionSample —
+    // честное небо с солнцем в нём, у нас константный голубой градиент, и
+    // глинт выходил голубым (пик 1.1 в синем, 0.14 в красном).
+    expect(frag).toContain('0.1 * skyColor + waveReflectionSample * 0.9 + waterSunColor * waveSpecularLight,')
+    expect(frag).not.toContain('waveReflectionSample * waveSpecularLight')
     expect(frag).toContain('waveReflectance')
   })
 
