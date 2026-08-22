@@ -140,6 +140,14 @@ describe('PlanetShader: ручки детали гиганта', () => {
     expect(shader.uniforms.uGiantDetailTextureWarp.value).toBe(1)
     expect(shader.uniforms.uGiantDetailFadeUnits.value).toBeCloseTo(toThreeJSUnits(9000), 12)
   })
+
+  it('кламп: giantDetailScaleKm/giantDetailStretch 0 → 1e-3 (деление на ноль в giantDomain)', () => {
+    const shader = new PlanetShader(
+      stubActor({ radius: 1000 }, { giantDetailScaleKm: 0, giantDetailStretch: 0 })
+    )
+    expect(shader.uniforms.uGiantDetailScaleKm.value).toBe(1e-3)
+    expect(shader.uniforms.uGiantDetailStretch.value).toBe(1e-3)
+  })
 })
 
 describe('PlanetMaterial: дефайн USE_GIANT_DETAIL', () => {

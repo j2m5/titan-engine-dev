@@ -198,8 +198,10 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uSunTintStrength: new Uniform(clampSunTintStrength(planetData.sunTintStrength)),
       uGiantRadiusKm: new Uniform(radiusKm),
       uGiantDetailStrength: new Uniform(planetData.giantDetailStrength ?? DEFAULT_GIANT_DETAIL_STRENGTH),
-      uGiantDetailScaleKm: new Uniform(planetData.giantDetailScaleKm ?? DEFAULT_GIANT_DETAIL_SCALE_KM),
-      uGiantDetailStretch: new Uniform(planetData.giantDetailStretch ?? DEFAULT_GIANT_DETAIL_STRETCH),
+      // Кламп положительным минимумом: 0 в знаменателе домена (giantDomain)
+      // дал бы деление на ноль/NaN, как у fade ниже.
+      uGiantDetailScaleKm: new Uniform(Math.max(planetData.giantDetailScaleKm ?? DEFAULT_GIANT_DETAIL_SCALE_KM, 1e-3)),
+      uGiantDetailStretch: new Uniform(Math.max(planetData.giantDetailStretch ?? DEFAULT_GIANT_DETAIL_STRETCH, 1e-3)),
       uGiantDetailWarp: new Uniform(planetData.giantDetailWarp ?? DEFAULT_GIANT_DETAIL_WARP),
       uGiantDetailTextureWarp: new Uniform(planetData.giantDetailTextureWarp ?? DEFAULT_GIANT_DETAIL_TEXTURE_WARP),
       // Кламп положительным минимумом: нулевой fade дал бы деление на ноль в

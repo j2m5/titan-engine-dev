@@ -4,7 +4,8 @@
  * шума вытянута вдоль полосы; варп по шуму (вихри) и по производной яркости
  * текстуры по широте (складки прилипают к краям полос). Октавы гаснут по
  * экранному следу — издали вклад ноль математически. Требует
- * #include <noiseFunctions> (snoise(vec3)) до этого чанка.
+ * #include <noiseFunctions> (snoise(vec3)) до этого чанка, и объявление
+ * хостом uniform sampler2D diffuseMap до include giantDetailFunctions.
  */
 export const giantDetailUniforms = /* glsl */ `
   uniform float uGiantRadiusKm;
@@ -37,7 +38,8 @@ export const giantDetailFunctions = /* glsl */ `
       amplitude *= 0.6;
       frequency *= 2.0;
     }
-    return norm > 1e-4 ? 0.5 + 0.5 * sum / norm : 0.5;
+    // хвост гаснет по норме, а не обрывается
+    return 0.5 + 0.5 * (sum / max(norm, 1e-4)) * smoothstep(0.0, 0.25, norm);
   }
 
   /**
@@ -51,11 +53,13 @@ export const giantDetailFunctions = /* glsl */ `
     float footprint = length(fwidth(q));
 
     float polar = 1.0 - smoothstep(0.85, 0.98, abs(dir.y));
-    float fade = 1.0 - smoothstep(0.4 * uGiantDetailFadeUnits, uGiantDetailFadeUnits, viewDistance);
-    float contrast = uGiantDetailStrength * polar * fade * smoothstep(0.05, 0.35, lumTex);
+    float distFade = 1.0 - smoothstep(0.4 * uGiantDetailFadeUnits, uGiantDetailFadeUnits, viewDistance);
+    float contrast = uGiantDetailStrength * polar * distFade * smoothstep(0.05, 0.35, lumTex);
     if (contrast <= 0.0) return;
 
     q += uGiantDetailWarp * (vec3(snoise(q * 0.25), snoise(q * 0.25 + 17.0), snoise(q * 0.25 + 31.0)));
+    // Выборки под неоднородным ветвлением — на границе гейта contrast → 0,
+    // множитель ≈ 1 независимо от dLum; поэтому оставлено (без textureLod)
     // Производная яркости текстуры по широте — две выборки, без dFdx
     vec2 dv = vec2(0.0, 1.0 / 4096.0);
     float dLum = dot(texture2D(diffuseMap, uv + dv).rgb, vec3(0.2126, 0.7152, 0.0722))

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { distFade, giantDomain, polarWeight } from '@/core/materials/shaders/lib/chunks/giantDetailMath'
+import { distFade, fbmTail, giantDomain, polarWeight } from '@/core/materials/shaders/lib/chunks/giantDetailMath'
 import { giantDetailFunctions, giantDetailUniforms } from '@/core/materials/shaders/lib/chunks/GiantDetail'
 import { AppShaderChunk } from '@/core/materials/shaders/lib/chunks'
 
@@ -49,6 +49,24 @@ describe('polarWeight / distFade', () => {
   })
 })
 
+describe('fbmTail — хвост giantFbm гаснет по норме, без обрыва', () => {
+  it('полный размах при norm ≥ 0.25, нейтраль при norm = 0', () => {
+    expect(fbmTail(1, 0.25)).toBe(1)
+    expect(fbmTail(1, 0)).toBe(0.5)
+  })
+
+  it('монотонно растёт по norm на (0, 0.25) — без скачка', () => {
+    const samples = [0.01, 0.05, 0.1, 0.15, 0.2, 0.24]
+    let prev = fbmTail(1, 0)
+    for (const norm of samples) {
+      const value = fbmTail(1, norm)
+      expect(value).toBeGreaterThan(prev)
+      prev = value
+    }
+    expect(fbmTail(1, 0.25)).toBeGreaterThan(prev)
+  })
+})
+
 describe('чанк GiantDetail — контракт', () => {
   it('зарегистрирован и объявляет юниформы', () => {
     expect(AppShaderChunk.giantDetailUniforms).toBe(giantDetailUniforms)
@@ -76,5 +94,17 @@ describe('чанк GiantDetail — контракт', () => {
     expect(giantDetailFunctions).toContain('q.z += uGiantDetailTextureWarp * dLum;')
     expect(giantDetailFunctions).toContain('smoothstep(0.05, 0.35, lumTex)')
     expect(giantDetailFunctions).toContain('albedoMul *= clamp(1.0 + contrast * (n - 0.5) * 2.0, 0.0, 2.0);')
+  })
+
+  it('хвост fbm гаснет по норме, а не обрывается (I-1) — без старого тернарного обрыва', () => {
+    expect(giantDetailFunctions).toContain(
+      'return 0.5 + 0.5 * (sum / max(norm, 1e-4)) * smoothstep(0.0, 0.25, norm);'
+    )
+    expect(giantDetailFunctions).not.toMatch(/norm > 1e-4 \? 0\.5 \+ 0\.5 \* sum \/ norm : 0\.5;/)
+  })
+
+  it('local distFade не затеняет vec3 fade(vec3) из noiseFunctions', () => {
+    expect(giantDetailFunctions).toContain('float distFade = 1.0 - smoothstep(0.4 * uGiantDetailFadeUnits')
+    expect(giantDetailFunctions).not.toMatch(/float fade =/)
   })
 })

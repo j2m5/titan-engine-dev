@@ -28,3 +28,11 @@ export function polarWeight(dirY: number): number {
 export function distFade(viewDistance: number, fadeEnd: number): number {
   return 1 - smoothstep(0.4 * fadeEnd, fadeEnd, viewDistance)
 }
+
+/**
+ * Хвост giantFbm (GiantDetail.ts): контраст держится, пока норма выживших
+ * амплитуд ≥ 0.25, дальше гаснет непрерывно до 0.5 — без обрыва на границе.
+ */
+export function fbmTail(sumOverNorm: number, norm: number): number {
+  return 0.5 + 0.5 * sumOverNorm * smoothstep(0, 0.25, norm)
+}
