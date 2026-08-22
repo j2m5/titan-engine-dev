@@ -163,6 +163,14 @@ export const PlanetShaderTemplate: ShaderProps = {
       #include <terrainDetailFunctions>
     #endif
 
+    // Средняя полоса детали рельефа (терраформный путь): километровый fbm
+    // под текселем диффуза. Шум — только под этим гейтом (у гигантов свой).
+    #ifdef USE_TERRAIN_MACRO_DETAIL
+      #include <noiseFunctions>
+      #include <terrainMacroDetailUniforms>
+      #include <terrainMacroDetailFunctions>
+    #endif
+
     #ifdef USE_RING
       #include <ringShadowUniforms>
       #include <ringShadowFunctions>
@@ -223,6 +231,10 @@ export const PlanetShaderTemplate: ShaderProps = {
           // контраст рельефа — как AO, но без пересчёта на GPU.
           float cavity = (texture2D(bumpMap, uv).z * 255.0 - 128.0) / 127.0;
           albedoMul *= clamp(1.0 + uCavityStrength * cavity, 0.0, 2.0);
+        #endif
+
+        #ifdef USE_TERRAIN_MACRO_DETAIL
+          applyTerrainMacroDetail(nLocal, albedoMul, dirLocal, eastLocal, uv, length(vViewPosition));
         #endif
 
         #ifdef USE_TERRAIN_DETAIL
