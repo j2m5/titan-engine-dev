@@ -1,6 +1,6 @@
 import { RenderingObjects } from '@storage/database'
 
-type TunedData = { exposure?: number; hdrKnee?: number }
+type TunedData = { exposure?: number; hdrKnee?: number; groundAlbedo?: readonly number[] }
 
 function dataOf(id: number): TunedData {
   const row = RenderingObjects.find((r: { id: number }) => r.id === id)
@@ -25,5 +25,14 @@ describe('Калибровка пересвета атмосфер (спека 2
   it('Земля (id 14): exposure появился при переходе на покомпонентную композицию (H4), hdrKnee по-прежнему дефолтный', () => {
     expect(dataOf(14).exposure).toBe(1.4)
     expect(dataOf(14).hdrKnee).toBeUndefined()
+  })
+
+  // groundAlbedo — доля света, которую грунт возвращает в атмосферу (вклад
+  // в многократное рассеяние). Коррибан красно-бурый, палубное альбедо по
+  // диффузу — 0.3/0.25/0.18; прежние 0.7/0.7/0.6 давали снежный подсвет.
+  // Венера остаётся высокой ОСОЗНАННО: под облаками отражает почти всё.
+  it('groundAlbedo: Коррибан (id 31) палубный, Венера (id 13) высокая — так и задумано', () => {
+    expect(dataOf(31).groundAlbedo).toEqual([0.3, 0.25, 0.18])
+    expect(dataOf(13).groundAlbedo).toEqual([0.8, 0.75, 0.62])
   })
 })
