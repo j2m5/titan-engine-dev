@@ -218,6 +218,16 @@ class PlanetMaterial extends AbstractShaderMaterial {
       useClassicBump && bumpImage?.height ? 1 / bumpImage.height : 0
     )
 
+    // Тексель диффуза для варпа средней полосы — только у ЗАГРУЖЕННОЙ карты
+    // (плейсхолдер размером не является): нули выключают варп, а не врут.
+    const diffusePath: string = this.model.resources.where('resourceType', 'diffuse').first()?.getAttribute('path') ?? ''
+    const loadedDiffuse = resourceStorage.getTexture(diffusePath)?.image as { width?: number; height?: number } | undefined
+    this.uniforms.uDiffuseTexelSize.value.set(
+      loadedDiffuse?.width ? 1 / loadedDiffuse.width : 0,
+      loadedDiffuse?.height ? 1 / loadedDiffuse.height : 0
+    )
+    const macroStrength = planetData.macroStrength ?? 0
+
     // Набор собирается от снимка конструирования, а не поверх прошлого: только
     // так дефайн ушедшей карты исчезает вместе с ней (см. baseDefines).
     this.defines = {
@@ -232,6 +242,9 @@ class PlanetMaterial extends AbstractShaderMaterial {
       // Гейт: тот же slope, что USE_SLOPE (без него канал B недоступен), И
       // ненулевая ручка — при cavityStrength 0 путь бит-в-бит прежним.
       ...(useSlope && cavityStrength > 0 && { USE_CAVITY: '1' }),
+      // Средняя полоса детали: тот же slope-гейт (амплитуда подчинена уклону
+      // и cavity) И ненулевая ручка — при macroStrength 0 путь бит-в-бит прежним.
+      ...(useSlope && macroStrength > 0 && { USE_TERRAIN_MACRO_DETAIL: '1' }),
       // Specular-карта — маска «океан/суша» легаси-вида. У тела с водной
       // оболочкой (WaterSphere) блик солнца принадлежит воде: HDR-блик суши
       // под полупрозрачной водой просачивался вторым, белым бликом поверх
@@ -270,6 +283,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.specularMap.value = null
     this.uniforms.bumpMap.value = null
     this.uniforms.uBumpTexelSize.value.set(0, 0)
+    this.uniforms.uDiffuseTexelSize.value.set(0, 0)
     this.uniforms.uCavityStrength.value = 0
 
     this.uniforms.uDetailNorMap.value = null

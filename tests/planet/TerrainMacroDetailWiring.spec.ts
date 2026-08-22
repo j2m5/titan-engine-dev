@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Texture, Vector2 } from 'three'
 import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
 import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
+import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { macroFadeMetersFor } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
 
@@ -114,6 +116,116 @@ describe('PlanetShader: ручки средней полосы', () => {
     expect(shader.uniforms.uMacroPeriodUnits.value).toBeCloseTo(toThreeJSUnits(5), 12)
     expect(shader.uniforms.uMacroTextureWarp.value).toBe(2)
     const texel = shader.uniforms.uDiffuseTexelSize.value as Vector2
+    expect(texel.x).toBe(0)
+    expect(texel.y).toBe(0)
+  })
+})
+
+const HEIGHT_PATH = 'stub/macro/height.raw'
+const SLOPE_PATH = 'stub/macro/slope.webp'
+
+function seedHeightField(): void {
+  ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(HEIGHT_PATH, {
+    width: 4,
+    height: 2,
+    minMeters: 0,
+    maxMeters: 1000,
+    data: new Uint16Array(8)
+  })
+}
+
+function stubTerraformActor(data: Record<string, unknown>, slopeResource: boolean = true): Actor {
+  const pathByType: Record<string, string> = {
+    diffuse: DIFFUSE_PATH,
+    height: HEIGHT_PATH,
+    ...(slopeResource ? { slope: SLOPE_PATH } : {})
+  }
+  return {
+    renderingObject: { getAttribute: () => ({ emission: 1, ...data }) },
+    physicalObject: { getAttribute: () => 1737 },
+    children: { where: () => ({ first: () => undefined, isNotEmpty: () => false }) },
+    resources: {
+      where: (_field: string, type: string) => ({
+        first: () => {
+          const path = pathByType[type]
+          return path === undefined ? undefined : { getAttribute: () => path }
+        }
+      })
+    }
+  } as unknown as Actor
+}
+
+describe('PlanetMaterial: гейт USE_TERRAIN_MACRO_DETAIL и тексель диффуза', () => {
+  beforeEach(() => {
+    seedPlaceholderKeys()
+    seedTexture(DIFFUSE_PATH, 8192, 4096)
+  })
+  afterEach(() => {
+    resourceStorage.deleteAllTextures()
+    heightFieldStorage.clear()
+  })
+
+  it('slope готова, macroStrength>0 — дефайн ставится', () => {
+    seedHeightField()
+    seedTexture(SLOPE_PATH, 8, 4)
+    const material = new PlanetMaterial(stubTerraformActor({ macroStrength: 0.25 }))
+    material.updateMaterial()
+    expect(material.defines.USE_TERRAIN_MACRO_DETAIL).toBe('1')
+  })
+
+  it('macroStrength отсутствует или 0 — дефайна нет, набор defines идентичен телу без ручки', () => {
+    seedHeightField()
+    seedTexture(SLOPE_PATH, 8, 4)
+    const without = new PlanetMaterial(stubTerraformActor({}))
+    without.updateMaterial()
+    const zero = new PlanetMaterial(stubTerraformActor({ macroStrength: 0 }))
+    zero.updateMaterial()
+    expect(without.defines.USE_TERRAIN_MACRO_DETAIL).toBeUndefined()
+    expect(zero.defines).toEqual(without.defines)
+  })
+
+  it('без slope-карты дефайн не ставится даже при macroStrength>0', () => {
+    seedHeightField()
+    const material = new PlanetMaterial(stubTerraformActor({ macroStrength: 0.25 }, false))
+    material.updateMaterial()
+    expect(material.defines.USE_TERRAIN_MACRO_DETAIL).toBeUndefined()
+  })
+
+  it('карта высот не загружена — дефайна нет (гигантский и терраформный гейты взаимоисключающи)', () => {
+    seedTexture(SLOPE_PATH, 8, 4)
+    const material = new PlanetMaterial(stubTerraformActor({ macroStrength: 0.25, giantDetail: true }))
+    material.updateMaterial()
+    expect(material.defines.USE_TERRAIN_MACRO_DETAIL).toBeUndefined()
+    expect(material.defines.USE_GIANT_DETAIL).toBe('1')
+  })
+
+  it('uDiffuseTexelSize — из размера загруженного диффуза; после reset — нули', () => {
+    seedHeightField()
+    seedTexture(SLOPE_PATH, 8, 4)
+    const material = new PlanetMaterial(stubTerraformActor({ macroStrength: 0.25 }))
+    material.updateMaterial()
+    const texel = material.uniforms.uDiffuseTexelSize.value as Vector2
+    expect(texel.x).toBeCloseTo(1 / 8192, 15)
+    expect(texel.y).toBeCloseTo(1 / 4096, 15)
+    material.resetMaterial()
+    expect(texel.x).toBe(0)
+    expect(texel.y).toBe(0)
+  })
+
+  it('диффуз ещё не загружен (плейсхолдер) — тексель нули, не размер плейсхолдера', () => {
+    // PlaceholderTexture в jsdom требует канвас-контекст, которого тут нет —
+    // тот же контракт «размер неизвестен → нули» проверяем картой без width/height.
+    resourceStorage.deleteAllTextures()
+    seedPlaceholderKeys()
+    const placeholderSizedTexture = new Texture()
+    placeholderSizedTexture.name = DIFFUSE_PATH
+    placeholderSizedTexture.image = {}
+    resourceStorage.addTexture(placeholderSizedTexture)
+    seedHeightField()
+    seedTexture(SLOPE_PATH, 8, 4)
+    const material = new PlanetMaterial(stubTerraformActor({ macroStrength: 0.25 }))
+    material.updateMaterial()
+    const texel = material.uniforms.uDiffuseTexelSize.value as Vector2
     expect(texel.x).toBe(0)
     expect(texel.y).toBe(0)
   })
