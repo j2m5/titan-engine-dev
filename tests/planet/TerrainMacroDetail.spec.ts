@@ -28,6 +28,8 @@ describe('TerrainMacroDetail: контракт чанка', () => {
     expect(fn).toContain('snoiseGrad(')
     expect(fn).not.toMatch(/dFd[xy]\(\s*h\b/)
     expect(fn).toContain('g - dirLocal * dot(g, dirLocal)')
+    expect(fn).toContain('vec4(n.yzw * frequency, n.x)')
+    expect(fn).not.toContain('vec4(n.xyz * frequency, n.w)')
   })
 
   it('след считается до варпа и до раннего выхода; вес октавы и хвост — формулы зеркала', () => {

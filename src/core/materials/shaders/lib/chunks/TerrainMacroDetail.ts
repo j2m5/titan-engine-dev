@@ -24,6 +24,7 @@ export const terrainMacroDetailUniforms = /* glsl */ `
 
 export const terrainMacroDetailFunctions = /* glsl */ `
   // fbm с гашением октав по следу; w — значение, xyz — градиент по домену
+  // (snoiseGrad возвращает x = значение, yzw = градиент — см. AsteroidShape.ts)
   vec4 macroFbm(vec3 q, float footprint) {
     vec4 sum = vec4(0.0);
     float norm = 0.0;
@@ -32,7 +33,7 @@ export const terrainMacroDetailFunctions = /* glsl */ `
     for (int i = 0; i < 3; i++) {
       float w = 1.0 - smoothstep(0.5, 1.0, footprint * frequency);
       vec4 n = snoiseGrad(q * frequency);
-      sum += w * amplitude * vec4(n.xyz * frequency, n.w);
+      sum += w * amplitude * vec4(n.yzw * frequency, n.x);
       norm += w * amplitude;
       amplitude *= 0.5;
       frequency *= 2.0;
