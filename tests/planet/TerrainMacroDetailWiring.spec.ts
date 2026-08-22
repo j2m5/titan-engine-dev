@@ -87,6 +87,7 @@ describe('PlanetShader: ручки средней полосы', () => {
     expect(shader.uniforms.uMacroPeriodUnits.value).toBeCloseTo(toThreeJSUnits(3), 12)
     expect(shader.uniforms.uMacroNormalScale.value).toBe(1)
     expect(shader.uniforms.uMacroSlopeInfluence.value).toBe(0.6)
+    expect(shader.uniforms.uMacroSlopeRef.value).toBe(0.15)
     expect(shader.uniforms.uMacroCavityInfluence.value).toBe(0.5)
     expect(shader.uniforms.uMacroTextureWarp.value).toBe(1.5)
     expect(shader.uniforms.uBodyRadiusUnits.value).toBeCloseTo(toThreeJSUnits(6371), 12)
@@ -121,6 +122,11 @@ describe('PlanetShader: ручки средней полосы', () => {
     const texel = shader.uniforms.uDiffuseTexelSize.value as Vector2
     expect(texel.x).toBe(0)
     expect(texel.y).toBe(0)
+  })
+
+  it('macroSlopeRef из data доезжает и клампится положительным минимумом', () => {
+    expect(new PlanetShader(stubActor(1737, { macroSlopeRef: 0.4 })).uniforms.uMacroSlopeRef.value).toBe(0.4)
+    expect(new PlanetShader(stubActor(1737, { macroSlopeRef: 0 })).uniforms.uMacroSlopeRef.value).toBe(1e-3)
   })
 })
 

@@ -13,6 +13,13 @@ export const MACRO_FADE_TEXEL_FACTOR = 1500
 /** Начало fade относительно конца — общее для всех шкал детали (TerrainDetail, полоса). */
 export const DETAIL_FADE_START_RATIO = 0.4
 
+/**
+ * Отношение амплитуды рельефа полосы к её периоду. Наклон нормали = (A/P)·grad:
+ * домен задан в периодах, ∂/∂s = (1/P)·∂/∂q — чистое отношение, от радиуса тела
+ * не зависит. 0.03 ≈ 90 м рельефа на 3-км период — стартовое число, приёмка владельца.
+ */
+export const MACRO_RELIEF_ASPECT = 0.03
+
 /** Конец fade полосы по умолчанию: полоса включается там, где диффуз перестаёт нести информацию. */
 export function macroFadeMetersFor(radiusKm: number, diffuseWidth: number): number {
   if (radiusKm <= 0 || diffuseWidth <= 0) return 0
@@ -36,6 +43,11 @@ export function octaveWeight(footprint: number, frequency: number): number {
 /** 1 до 0.4·fadeEnd, 0 за fadeEnd — как у шкал TerrainDetail. */
 export function distFade(viewDistance: number, fadeEnd: number): number {
   return 1 - smoothstep(DETAIL_FADE_START_RATIO * fadeEnd, fadeEnd, viewDistance)
+}
+
+/** Угол наклона нормали полосой (радианы) от длины градиента fbm — зеркало строки нормали в чанке. */
+export function macroTiltRadians(gradLen: number, normalScale: number, contrast: number): number {
+  return Math.atan(normalScale * MACRO_RELIEF_ASPECT * contrast * gradLen)
 }
 
 /** Амплитуда по крутизне: равнина тише на influence, крутой склон (|slope|/SLOPE_RANGE ≥ 1) — полная. */

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   MACRO_FADE_TEXEL_FACTOR,
+  MACRO_RELIEF_ASPECT,
   cavityGain,
   distFade,
   macroFadeMetersFor,
+  macroTiltRadians,
   octaveWeight,
   slopeGain
 } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
@@ -58,5 +60,20 @@ describe('terrainMacroDetailMath: подчинение данным рельеф
     expect(cavityGain(1, 0.5)).toBeCloseTo(1.5, 9)
     expect(cavityGain(0, 0.5)).toBe(1)
     expect(cavityGain(-1, 2)).toBe(0)
+  })
+})
+
+describe('terrainMacroDetailMath: наклон нормали полосой', () => {
+  it('типичный |grad| fbm (2) при дефолтных ручках даёт 1°–10°, а не микрорадианы', () => {
+    const tilt = macroTiltRadians(2, 1, 1)
+    expect(tilt).toBeGreaterThan(0.017)
+    expect(tilt).toBeLessThan(0.175)
+    expect(tilt).toBeCloseTo(Math.atan(2 * MACRO_RELIEF_ASPECT), 12)
+  })
+
+  it('нулевой градиент или нулевой контраст — наклона нет; ручка normalScale линейна по тангенсу', () => {
+    expect(macroTiltRadians(0, 1, 1)).toBe(0)
+    expect(macroTiltRadians(2, 1, 0)).toBe(0)
+    expect(Math.tan(macroTiltRadians(2, 2, 1))).toBeCloseTo(2 * Math.tan(macroTiltRadians(2, 1, 1)), 12)
   })
 })

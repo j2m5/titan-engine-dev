@@ -57,6 +57,10 @@ const DEFAULT_MACRO_NORMAL_SCALE = 1
 const DEFAULT_MACRO_SLOPE_INFLUENCE = 0.6
 const DEFAULT_MACRO_CAVITY_INFLUENCE = 0.5
 const DEFAULT_MACRO_TEXTURE_WARP = 1.5
+// Уклон (tan) полной амплитуды полосы: у километровых текселей уклоны на
+// порядок ниже потолка кодировки SLOPE_RANGE (tan 63°) — нормировка по нему
+// обнуляла бы гейт всюду.
+const DEFAULT_MACRO_SLOPE_REF = 0.15
 
 // Период (метры → юниты) в масштаб трипланарной проекции: чанк TerrainDetail
 // умножает домен на 1/период напрямую (см. докстрока чанка) — нулевой период
@@ -116,6 +120,7 @@ interface PlanetUniforms {
   uMacroNormalScale: number
   uMacroPeriodUnits: number
   uMacroSlopeInfluence: number
+  uMacroSlopeRef: number
   uMacroCavityInfluence: number
   uMacroTextureWarp: number
   uMacroFadeRange: Vector2
@@ -247,6 +252,8 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       // Кламп положительным минимумом: период — знаменатель домена в чанке.
       uMacroPeriodUnits: new Uniform(Math.max(toThreeJSUnits(planetData.macroScaleKm ?? DEFAULT_MACRO_SCALE_KM), 1e-9)),
       uMacroSlopeInfluence: new Uniform(planetData.macroSlopeInfluence ?? DEFAULT_MACRO_SLOPE_INFLUENCE),
+      // Кламп положительным минимумом: опорный уклон — знаменатель гейта в чанке.
+      uMacroSlopeRef: new Uniform(Math.max(planetData.macroSlopeRef ?? DEFAULT_MACRO_SLOPE_REF, 1e-3)),
       uMacroCavityInfluence: new Uniform(planetData.macroCavityInfluence ?? DEFAULT_MACRO_CAVITY_INFLUENCE),
       uMacroTextureWarp: new Uniform(planetData.macroTextureWarp ?? DEFAULT_MACRO_TEXTURE_WARP),
       uMacroFadeRange: new Uniform(new Vector2(macroFadeEndUnits * DETAIL_FADE_START_RATIO, macroFadeEndUnits)),

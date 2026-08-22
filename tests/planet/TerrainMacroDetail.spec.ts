@@ -14,6 +14,7 @@ describe('TerrainMacroDetail: контракт чанка', () => {
       'uniform float uMacroNormalScale;',
       'uniform float uMacroPeriodUnits;',
       'uniform float uMacroSlopeInfluence;',
+      'uniform float uMacroSlopeRef;',
       'uniform float uMacroCavityInfluence;',
       'uniform float uMacroTextureWarp;',
       'uniform vec2 uMacroFadeRange;',
@@ -51,6 +52,16 @@ describe('TerrainMacroDetail: контракт чанка', () => {
     expect(fn).toContain('uv + vec2(0.0, uDiffuseTexelSize.y)')
     expect(fn).toContain('uv - vec2(0.0, uDiffuseTexelSize.y)')
     expect(fn).not.toContain('4096')
+  })
+
+  it('гейт уклона нормируется опорным уклоном, а не потолком кодировки', () => {
+    expect(fn).toContain('float s = clamp(length(slope) / uMacroSlopeRef, 0.0, 1.0);')
+  })
+
+  it('наклон нормали — отношение амплитуды к периоду, без множителя P/R', () => {
+    expect(fn).toContain('#define MACRO_RELIEF_ASPECT 0.03')
+    expect(fn).toContain('MACRO_RELIEF_ASPECT')
+    expect(fn).not.toContain('uMacroPeriodUnits / max(uBodyRadiusUnits')
   })
 
   it('полярный гард по длине eastLocal и кламп альбедо [0, 2]', () => {

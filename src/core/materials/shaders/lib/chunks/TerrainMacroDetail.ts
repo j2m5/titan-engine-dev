@@ -15,6 +15,7 @@ export const terrainMacroDetailUniforms = /* glsl */ `
   uniform float uMacroNormalScale;
   uniform float uMacroPeriodUnits;
   uniform float uMacroSlopeInfluence;
+  uniform float uMacroSlopeRef;
   uniform float uMacroCavityInfluence;
   uniform float uMacroTextureWarp;
   uniform vec2 uMacroFadeRange;
@@ -23,6 +24,10 @@ export const terrainMacroDetailUniforms = /* glsl */ `
 `
 
 export const terrainMacroDetailFunctions = /* glsl */ `
+  // Отношение амплитуды рельефа к периоду (см. MACRO_RELIEF_ASPECT в зеркале):
+  // 0.03 ≈ 90 м рельефа на 3-км период — стартовое число, приёмка владельца.
+  #define MACRO_RELIEF_ASPECT 0.03
+
   // fbm с гашением октав по следу; w — значение, xyz — градиент по домену
   // (snoiseGrad возвращает x = значение, yzw = градиент — см. AsteroidShape.ts)
   vec4 macroFbm(vec3 q, float footprint) {
@@ -52,7 +57,9 @@ export const terrainMacroDetailFunctions = /* glsl */ `
 
     vec4 slopeSample = texture2D(bumpMap, uv);
     vec2 slope = (slopeSample.xy * 255.0 - 128.0) * (${SLOPE_RANGE.toFixed(1)} / 127.0);
-    float s = clamp(length(slope) / ${SLOPE_RANGE.toFixed(1)}, 0.0, 1.0);
+    // uMacroSlopeRef — уклон полной амплитуды: у километровых текселей |slope|
+    // на порядок ниже потолка кодировки, нормировка по нему обнуляла бы полосу.
+    float s = clamp(length(slope) / uMacroSlopeRef, 0.0, 1.0);
     float cavity = (slopeSample.z * 255.0 - 128.0) / 127.0;
     float gain = (1.0 - uMacroSlopeInfluence + uMacroSlopeInfluence * s) * max(0.0, 1.0 + uMacroCavityInfluence * cavity);
 
@@ -74,7 +81,8 @@ export const terrainMacroDetailFunctions = /* glsl */ `
     // Касательная часть градиента (домен ∝ dirLocal, радиальная компонента не наклоняет нормаль)
     vec3 g = f.xyz;
     vec3 gradTangent = g - dirLocal * dot(g, dirLocal);
-    nLocal = normalize(nLocal - uMacroNormalScale * fade * gradTangent * (uMacroPeriodUnits / max(uBodyRadiusUnits, 1e-6)));
+    // Наклон = (амплитуда/период)·grad: домен в периодах, ∂/∂s = (1/P)·∂/∂q.
+    nLocal = normalize(nLocal - uMacroNormalScale * MACRO_RELIEF_ASPECT * fade * gradTangent);
 
     albedoMul *= clamp(1.0 + uMacroStrength * fade * h, 0.0, 2.0);
   }

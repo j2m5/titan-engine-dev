@@ -196,9 +196,12 @@ export interface IPlanetRenderingObject {
   // дефайн не ставится, путь бит-в-бит прежний. Период — в КИЛОМЕТРАХ поверхности.
   macroStrength?: number
   macroScaleKm?: number
+  /** Множитель отношения «амплитуда/период» рельефа полосы (база 0.03) — им задаётся наклон нормали. */
   macroNormalScale?: number
   /** 0..1: насколько равнина тише крутого склона. */
   macroSlopeInfluence?: number
+  /** Уклон (tan), при котором полоса достигает полной амплитуды; дефолт 0.15. */
+  macroSlopeRef?: number
   macroCavityInfluence?: number
   macroTextureWarp?: number
   /** Конец fade (метры дистанции камеры); отсутствует — расчёт от радиуса и ширины диффуза. */
