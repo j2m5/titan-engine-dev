@@ -1,6 +1,7 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { ShaderChunk, Uniform, UniformsUtils, Vector2, Vector3 } from 'three'
 import { AppUniformsChunk } from './chunks'
+import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 
 const defaultUniforms = {
   lightPosition: new Uniform(new Vector3()),
@@ -234,7 +235,16 @@ export const PlanetShaderTemplate: ShaderProps = {
         #endif
 
         #ifdef USE_TERRAIN_MACRO_DETAIL
-          applyTerrainMacroDetail(nLocal, albedoMul, dirLocal, eastLocal, uv, length(vViewPosition));
+          // Данные рельефа читает хост: чанк не сэмплит slope-карту, декод
+          // живёт рядом с декодом cavity выше. Канал B — только под USE_CAVITY
+          // (без гейта карта может быть без полости).
+          vec4 macroSlopeSample = texture2D(bumpMap, uv);
+          vec2 macroSlope = (macroSlopeSample.xy * 255.0 - 128.0) * (${SLOPE_RANGE.toFixed(1)} / 127.0);
+          float macroCavity = 0.0;
+          #ifdef USE_CAVITY
+            macroCavity = (macroSlopeSample.z * 255.0 - 128.0) / 127.0;
+          #endif
+          applyTerrainMacroDetail(nLocal, albedoMul, dirLocal, eastLocal, macroSlope, macroCavity, uv, length(vViewPosition));
         #endif
 
         #ifdef USE_TERRAIN_DETAIL

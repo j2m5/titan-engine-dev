@@ -3,7 +3,6 @@ import {
   terrainMacroDetailFunctions,
   terrainMacroDetailUniforms
 } from '@/core/materials/shaders/lib/chunks/TerrainMacroDetail'
-import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 
 describe('TerrainMacroDetail: контракт чанка', () => {
   const fn: string = terrainMacroDetailFunctions
@@ -33,20 +32,34 @@ describe('TerrainMacroDetail: контракт чанка', () => {
     expect(fn).not.toContain('vec4(n.xyz * frequency, n.w)')
   })
 
-  it('след считается до варпа и до раннего выхода; вес октавы и хвост — формулы зеркала', () => {
+  it('след считается до всех ранних выходов и до варпа; вес октавы и хвост — формулы зеркала', () => {
     const footprint = fn.indexOf('float footprint = length(fwidth(q));')
+    const polar = fn.indexOf('if (eastLen < 1e-4) return;')
+    const distEarly = fn.indexOf('if (distFade <= 0.0) return;')
+    const contrastEarly = fn.indexOf('if (contrast <= 0.0) return;')
     const warp = fn.indexOf('q += uMacroTextureWarp')
-    const early = fn.indexOf('if (contrast <= 0.0) return;')
     expect(footprint).toBeGreaterThan(-1)
-    expect(footprint).toBeLessThan(warp)
-    expect(footprint).toBeLessThan(early)
+    // fwidth однороден по кваду: полярный гард и оба выхода — строго ПОСЛЕ следа
+    expect(footprint).toBeLessThan(polar)
+    expect(polar).toBeLessThan(distEarly)
+    expect(distEarly).toBeLessThan(contrastEarly)
+    expect(contrastEarly).toBeLessThan(warp)
     expect(fn).toContain('1.0 - smoothstep(0.5, 1.0, footprint * frequency)')
     expect(fn).toContain('smoothstep(0.0, 0.25, norm)')
   })
 
-  it('подчинение данным: slope через SLOPE_RANGE, cavity из канала B, варп по dLum вдоль north', () => {
-    expect(fn).toContain(`(${SLOPE_RANGE.toFixed(1)} / 127.0)`)
-    expect(fn).toContain('(slopeSample.z * 255.0 - 128.0) / 127.0')
+  it('ранний выход по дистанции стоит до единственных выборок текстуры (диффуз варпа)', () => {
+    const distEarly = fn.indexOf('if (distFade <= 0.0) return;')
+    const firstFetch = fn.indexOf('texture2D(')
+    expect(firstFetch).toBeGreaterThan(distEarly)
+    // slope/cavity приходят параметрами — чанк slope-карту не сэмплит
+    expect(fn).not.toContain('texture2D(bumpMap')
+    expect(fn).not.toContain('slopeSample')
+  })
+
+  it('подчинение данным: гейт уклона по uMacroSlopeRef, варп по dLum вдоль north', () => {
+    expect(fn).toContain('float s = clamp(length(slope) / uMacroSlopeRef, 0.0, 1.0);')
+    expect(fn).toContain('1.0 + uMacroCavityInfluence * cavity')
     expect(fn).toContain('vec3 north = cross(dirLocal, eastLocal);')
     expect(fn).toContain('q += uMacroTextureWarp * dLum * north;')
     expect(fn).toContain('uv + vec2(0.0, uDiffuseTexelSize.y)')
@@ -54,18 +67,21 @@ describe('TerrainMacroDetail: контракт чанка', () => {
     expect(fn).not.toContain('4096')
   })
 
-  it('гейт уклона нормируется опорным уклоном, а не потолком кодировки', () => {
-    expect(fn).toContain('float s = clamp(length(slope) / uMacroSlopeRef, 0.0, 1.0);')
+  it('сигнатура принимает slope и cavity от хоста', () => {
+    expect(fn).toContain(
+      'void applyTerrainMacroDetail(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 eastLocal, vec2 slope, float cavity, vec2 uv, float viewDistance)'
+    )
   })
 
   it('наклон нормали — отношение амплитуды к периоду, без множителя P/R', () => {
     expect(fn).toContain('#define MACRO_RELIEF_ASPECT 0.03')
-    expect(fn).toContain('MACRO_RELIEF_ASPECT')
+    expect(fn).toContain('MACRO_RELIEF_ASPECT * contrast * gradTangent')
     expect(fn).not.toContain('uMacroPeriodUnits / max(uBodyRadiusUnits')
   })
 
-  it('полярный гард по длине eastLocal и кламп альбедо [0, 2]', () => {
+  it('полярный гард по длине eastLocal и кламп альбедо [0, 2]; алиаса fade нет (тень vec3 fade из noiseFunctions)', () => {
     expect(fn).toContain('if (eastLen < 1e-4) return;')
-    expect(fn).toContain('clamp(1.0 + uMacroStrength * fade * h, 0.0, 2.0)')
+    expect(fn).toContain('clamp(1.0 + uMacroStrength * contrast * h, 0.0, 2.0)')
+    expect(fn).not.toContain('float fade = contrast;')
   })
 })

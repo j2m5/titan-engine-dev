@@ -11,6 +11,7 @@ import {
   DETAIL_FADE_START_RATIO,
   macroFadeMetersFor
 } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
+import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 
 describe('PlanetShaderTemplate: средняя полоса детали в терраформной ветке', () => {
   const frag: string = PlanetShaderTemplate.fragmentShader
@@ -33,13 +34,27 @@ describe('PlanetShaderTemplate: средняя полоса детали в те
   it('вызов стоит после USE_CAVITY и до applyTerrainDetail, в терраформной ветке', () => {
     const cavity = frag.indexOf('#ifdef USE_CAVITY')
     const call = frag.indexOf(
-      'applyTerrainMacroDetail(nLocal, albedoMul, dirLocal, eastLocal, uv, length(vViewPosition));'
+      'applyTerrainMacroDetail(nLocal, albedoMul, dirLocal, eastLocal, macroSlope, macroCavity, uv, length(vViewPosition));'
     )
     const detail = frag.indexOf('applyTerrainDetail(nLocal, albedoMul, dirLocal, length(vViewPosition));')
     const normalOut = frag.indexOf('normal = normalize(normalMatrix * nLocal);')
     expect(call).toBeGreaterThan(cavity)
     expect(call).toBeLessThan(detail)
     expect(detail).toBeLessThan(normalOut)
+  })
+
+  it('slope декодит хост из общей выборки; cavity — только под USE_CAVITY', () => {
+    const gate = frag.indexOf('#ifdef USE_TERRAIN_MACRO_DETAIL', frag.indexOf('void main()'))
+    const sample = frag.indexOf('vec4 macroSlopeSample = texture2D(bumpMap, uv);', gate)
+    expect(sample).toBeGreaterThan(gate)
+    expect(frag).toContain(`vec2 macroSlope = (macroSlopeSample.xy * 255.0 - 128.0) * (${SLOPE_RANGE.toFixed(1)} / 127.0);`)
+    // Присваивание канала B зажато между #ifdef USE_CAVITY и его #endif
+    const cavityGate = frag.indexOf('#ifdef USE_CAVITY', sample)
+    const cavityAssign = frag.indexOf('macroCavity = (macroSlopeSample.z * 255.0 - 128.0) / 127.0;', sample)
+    const cavityEnd = frag.indexOf('#endif', cavityGate)
+    expect(cavityAssign).toBeGreaterThan(cavityGate)
+    expect(cavityAssign).toBeLessThan(cavityEnd)
+    expect(frag.indexOf('float macroCavity = 0.0;', sample)).toBeLessThan(cavityGate)
   })
 
   it('noiseFunctions подключается не более двух раз (гиганты и полоса — разные гейты)', () => {
