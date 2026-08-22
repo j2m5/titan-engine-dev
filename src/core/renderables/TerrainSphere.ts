@@ -4,6 +4,7 @@ import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
+import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import type { UpdateContext } from '@/core/UpdateContext'
 
 export { PATCH_BUILDS_PER_FRAME } from '@/core/terrain/TerrainPatchGroup'
@@ -32,8 +33,13 @@ class TerrainSphere extends TerrainPatchGroup {
   private readonly cloudCameraWorldScratch = new Vector3()
   private readonly cloudSelfWorldScratch = new Vector3()
 
-  public constructor(model: Actor, field: TerrainHeightField, renderer: WebGLRenderer) {
-    const sharedMaterial = new PlanetMaterial(model)
+  public constructor(
+    model: Actor,
+    field: TerrainHeightField,
+    renderer: WebGLRenderer,
+    atmosphereRegistry?: AtmosphereRegistry
+  ) {
+    const sharedMaterial = new PlanetMaterial(model, atmosphereRegistry)
     const waterLevelMeters = readWaterLevelMeters(model)
     super(field, sharedMaterial, renderer, undefined, waterLevelMeters)
     this.model = model
@@ -55,11 +61,16 @@ class TerrainSphere extends TerrainPatchGroup {
    * камера-тело меняется с каждым кадром, а формула/резолв толщины
    * атмосферы живут в PlanetMaterial (см. её докблок) — здесь только мировые
    * позиции, дешёвые и без аллокаций (скретчи выше).
+   *
+   * Тинт солнца синхронизируется здесь же: узел атмосферы мог появиться или
+   * уйти после конструирования материала, а сам вызов на кадрах без смены
+   * записи пустой (сравнение по ссылке внутри).
    */
   protected onVisibleUpdate(ctx: UpdateContext): void {
     ctx.camera.getWorldPosition(this.cloudCameraWorldScratch)
     this.getWorldPosition(this.cloudSelfWorldScratch)
     this.sharedMaterial.updateCloudOpacity(this.cloudCameraWorldScratch, this.cloudSelfWorldScratch)
+    this.sharedMaterial.syncSunTint()
   }
 }
 

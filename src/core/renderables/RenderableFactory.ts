@@ -193,12 +193,13 @@ class RenderableFactory {
     const heightPath: string | undefined = heightPathOf(actor)
     const heightMap = heightPath ? heightFieldStorage.get(heightPath) : undefined
 
-    if (!heightMap) return new Planet(actor)
+    if (!heightMap) return new Planet(actor, this.atmosphereRegistry)
 
     const terrain = new TerrainSphere(
       actor,
       terrainHeightFieldFor(heightMap, actor.physicalObject!.getAttribute('radius')!),
-      this.renderer
+      this.renderer,
+      this.atmosphereRegistry
     )
 
     // Гейт водной оболочки: обе ручки разом — карта высот (без неё нет
@@ -300,7 +301,7 @@ class RenderableFactory {
     if (!lod || !lod.levels.length) return false
     if (!(lod.levels[0].object instanceof TerrainSphere)) return false
 
-    this.swapSurface(node, new Planet(node.model))
+    this.swapSurface(node, new Planet(node.model, this.atmosphereRegistry))
 
     return true
   }

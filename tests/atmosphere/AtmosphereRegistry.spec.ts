@@ -30,6 +30,14 @@ describe('AtmosphereRegistry', () => {
     expect(registry.entries()[0]).toBe(second)
   })
 
+  it('get(actorId) возвращает запись или undefined', () => {
+    const registry = new AtmosphereRegistry()
+    const e = entry(5)
+    registry.register(e)
+    expect(registry.get(5)).toBe(e)
+    expect(registry.get(6)).toBeUndefined()
+  })
+
   it('entries() — снимок: мутация снаружи реестр не трогает', () => {
     const registry = new AtmosphereRegistry()
     registry.register(entry(1))

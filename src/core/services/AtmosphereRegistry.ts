@@ -28,6 +28,11 @@ export class AtmosphereRegistry {
     this.byActor.delete(actorId)
   }
 
+  /** Точечный доступ по actorId атмосферы — материалы тел читают свою запись каждый видимый кадр. */
+  public get(actorId: number): AtmosphereEntry | undefined {
+    return this.byActor.get(actorId)
+  }
+
   public entries(): readonly AtmosphereEntry[] {
     return Array.from(this.byActor.values())
   }
