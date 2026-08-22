@@ -191,6 +191,19 @@ export interface IPlanetRenderingObject {
   // Task 2/3). Отсутствие поля = 0 — путь бит-в-бит прежним (PlanetMaterial).
   cavityStrength?: number
 
+  // --- Средняя полоса детали рельефа (TerrainMacroDetail): километровый
+  // fbm под текселем диффуза. macroStrength 0/отсутствует — полоса выключена,
+  // дефайн не ставится, путь бит-в-бит прежний. Период — в КИЛОМЕТРАХ поверхности.
+  macroStrength?: number
+  macroScaleKm?: number
+  macroNormalScale?: number
+  /** 0..1: насколько равнина тише крутого склона. */
+  macroSlopeInfluence?: number
+  macroCavityInfluence?: number
+  macroTextureWarp?: number
+  /** Конец fade (метры дистанции камеры); отсутствует — расчёт от радиуса и ширины диффуза. */
+  macroFadeMeters?: number
+
   /**
    * Ламберт суши (терраформный путь): 0 — выключен (дневной цвет не зависит
    * от N·L, как у легаси-текстур с запечённым освещением), 1 — полный

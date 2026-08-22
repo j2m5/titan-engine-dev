@@ -6,6 +6,7 @@ import { IPlanetRenderingObject, IRingRenderingObject } from '@/core/models/type
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { clampSunTintStrength } from '@/core/materials/SunTintBinding'
+import { macroFadeMetersFor } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
 
 // Нейтральные дефолты детального слоя (используются, только если данные тела
 // не задали ручку явно) — см. IPlanetRenderingObject.detail*, ручки Луны в
@@ -43,6 +44,16 @@ const DEFAULT_GIANT_DETAIL_STRETCH = 6
 const DEFAULT_GIANT_DETAIL_WARP = 0.6
 const DEFAULT_GIANT_DETAIL_TEXTURE_WARP = 2
 const DEFAULT_GIANT_DETAIL_FADE_RADII = 1.5
+
+// Средняя полоса детали рельефа (чанк TerrainMacroDetail) — дефолты ручек;
+// strength 0 = выключено (дефайн не ставится). Период 3 км — между текселем
+// диффуза (~1–5 км) и крупной шкалой TerrainDetail (40 м).
+const DEFAULT_MACRO_STRENGTH = 0
+const DEFAULT_MACRO_SCALE_KM = 3
+const DEFAULT_MACRO_NORMAL_SCALE = 1
+const DEFAULT_MACRO_SLOPE_INFLUENCE = 0.6
+const DEFAULT_MACRO_CAVITY_INFLUENCE = 0.5
+const DEFAULT_MACRO_TEXTURE_WARP = 1.5
 
 // Период (метры → юниты) в масштаб трипланарной проекции: чанк TerrainDetail
 // умножает домен на 1/период напрямую (см. докстрока чанка) — нулевой период
@@ -98,6 +109,15 @@ interface PlanetUniforms {
   uGiantDetailWarp: number
   uGiantDetailTextureWarp: number
   uGiantDetailFadeUnits: number
+  uMacroStrength: number
+  uMacroNormalScale: number
+  uMacroPeriodUnits: number
+  uMacroSlopeInfluence: number
+  uMacroCavityInfluence: number
+  uMacroTextureWarp: number
+  uMacroFadeRange: Vector2
+  uDiffuseTexelSize: Vector2
+  uBodyRadiusUnits: number
 }
 
 class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
@@ -145,6 +165,16 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
     )
     const detailFade2EndUnits = toThreeJSUnits(
       (planetData.detailFade2Meters ?? DEFAULT_DETAIL_FADE2_METERS) / 1000
+    )
+
+    // Конец fade полосы: явная ручка или расчёт от текселя диффуза. Ширина
+    // берётся у ЗАГРУЖЕННОЙ карты (getTexture, не плейсхолдер); пока карты
+    // нет — 0 → кламп положительным минимумом (деление на 0 в smoothstep).
+    const diffusePath: string = this.model.resources.where('resourceType', 'diffuse').first()?.getAttribute('path') ?? ''
+    const diffuseWidth: number = (resourceStorage.getTexture(diffusePath)?.image as { width?: number } | undefined)?.width ?? 0
+    const macroFadeEndUnits = Math.max(
+      toThreeJSUnits((planetData.macroFadeMeters ?? macroFadeMetersFor(radiusKm, diffuseWidth)) / 1000),
+      1e-6
     )
 
     this.uniforms = {
@@ -208,7 +238,17 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       // smoothstep чанка (тело без physicalObject или с giantDetailFadeKm: 0).
       uGiantDetailFadeUnits: new Uniform(
         Math.max(toThreeJSUnits(planetData.giantDetailFadeKm ?? DEFAULT_GIANT_DETAIL_FADE_RADII * radiusKm), 1e-6)
-      )
+      ),
+      uMacroStrength: new Uniform(planetData.macroStrength ?? DEFAULT_MACRO_STRENGTH),
+      uMacroNormalScale: new Uniform(planetData.macroNormalScale ?? DEFAULT_MACRO_NORMAL_SCALE),
+      // Кламп положительным минимумом: период — знаменатель домена в чанке.
+      uMacroPeriodUnits: new Uniform(Math.max(toThreeJSUnits(planetData.macroScaleKm ?? DEFAULT_MACRO_SCALE_KM), 1e-9)),
+      uMacroSlopeInfluence: new Uniform(planetData.macroSlopeInfluence ?? DEFAULT_MACRO_SLOPE_INFLUENCE),
+      uMacroCavityInfluence: new Uniform(planetData.macroCavityInfluence ?? DEFAULT_MACRO_CAVITY_INFLUENCE),
+      uMacroTextureWarp: new Uniform(planetData.macroTextureWarp ?? DEFAULT_MACRO_TEXTURE_WARP),
+      uMacroFadeRange: new Uniform(new Vector2(macroFadeEndUnits * DETAIL_FADE_START_RATIO, macroFadeEndUnits)),
+      uDiffuseTexelSize: new Uniform(new Vector2()),
+      uBodyRadiusUnits: new Uniform(toThreeJSUnits(radiusKm))
     }
     this.defines = {
       ...(USE_RING && { USE_RING: '1' })
