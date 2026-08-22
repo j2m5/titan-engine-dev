@@ -44,8 +44,8 @@ import { createParametricAtmosphereShader } from './atmosphereParametric'
 // Constants
 // ════════════════════════════════════════════════════════════════════
 
-const TRANSMITTANCE_W = 256
-const TRANSMITTANCE_H = 64
+export const TRANSMITTANCE_W = 256
+export const TRANSMITTANCE_H = 64
 const SCATTERING_W = 256
 const SCATTERING_H = 128
 const SCATTERING_D = 32

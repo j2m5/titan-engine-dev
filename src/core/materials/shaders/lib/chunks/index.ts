@@ -12,6 +12,7 @@ import { ringDustFunctions, ringDustUniforms } from '@/core/materials/shaders/li
 import { triplanarDetailFunctions, triplanarDetailUniforms } from '@/core/materials/shaders/lib/chunks/TriplanarDetail'
 import { terrainDetailFunctions, terrainDetailUniforms } from '@/core/materials/shaders/lib/chunks/TerrainDetail'
 import { skyboxSampleFunctions, skyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
+import { sunTransmittanceFunctions, sunTransmittanceUniforms } from '@/core/materials/shaders/lib/chunks/SunTransmittance'
 import { IUniform, Uniform } from 'three'
 
 export const AppUniformsChunk: Record<string, Record<string, IUniform>> = {
@@ -43,5 +44,7 @@ export const AppShaderChunk: Record<string, string> = {
   terrainDetailUniforms,
   terrainDetailFunctions,
   skyboxSampleUniforms,
-  skyboxSampleFunctions
+  skyboxSampleFunctions,
+  sunTransmittanceUniforms,
+  sunTransmittanceFunctions
 }
