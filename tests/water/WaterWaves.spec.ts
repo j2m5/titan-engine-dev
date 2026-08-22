@@ -646,6 +646,7 @@ const BASELINE_FRAGMENT_SHADER = `
 
     varying vec3 vNormal;
     varying vec3 vViewLightDirection;
+    varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
 
@@ -715,8 +716,11 @@ const BASELINE_FRAGMENT_SHADER = `
   `
 
 describe('Паритет: без USE_WATER_WAVES компилируемый фрагментник бит-в-бит прежний (Task 4)', () => {
+  // USE_SUN_TINT снимается вторым (арка «тинт солнца для воды»): весь её вклад
+  // во фрагментник живёт под своим гейтом, вне гейта прибавилось только
+  // объявление варьинга vLocalLightDirection — оно в снимке выше.
   it('вырезав все блоки #ifdef USE_WATER_WAVES...#endif, получаем ровно снимок ДО Task 1', () => {
-    const stripped = stripGuardedBlock(frag, 'USE_WATER_WAVES')
+    const stripped = stripGuardedBlock(stripGuardedBlock(frag, 'USE_WATER_WAVES'), 'USE_SUN_TINT')
 
     expect(normalizeBlankLines(stripped)).toBe(normalizeBlankLines(BASELINE_FRAGMENT_SHADER))
   })

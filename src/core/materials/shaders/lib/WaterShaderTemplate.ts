@@ -72,13 +72,20 @@ export const WaterShaderTemplate: ShaderProps = {
 
     varying vec3 vNormal;
     varying vec3 vViewLightDirection;
+    varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
 
     void main() {
+      vec4 worldPosition = modelMatrix * vec4(position, 1.0);
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
       gl_Position = projectionMatrix * mvPosition;
 
+      // Направление ОТ солнца к фрагменту в body-локальных осях — вход μ_s
+      // тинта заката (см. фрагментник): те же строки, что у палубы
+      // (PlanetShaderTemplate), парный строковый страж в тестах.
+      vec3 worldLightDirection = normalize(worldPosition.xyz - lightPosition);
+      vec3 localLightDirection = (inverse(modelMatrix) * vec4(worldLightDirection, 0.0)).xyz;
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
 
       vNormal = normalize(normalMatrix * normal);
@@ -93,6 +100,7 @@ export const WaterShaderTemplate: ShaderProps = {
       // что у PlanetShaderTemplate — без нормали, без матриц, только normal.
       vLocalDir = normal;
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
+      vLocalLightDirection = localLightDirection;
       vViewPosition = -mvPosition.xyz;
 
       ${ShaderChunk['logdepthbuf_vertex']}
@@ -111,13 +119,22 @@ export const WaterShaderTemplate: ShaderProps = {
     uniform vec3 uWaterFresnelTint;
     uniform float uWaterNightFloor;
 
+    #ifdef USE_SUN_TINT
+      #include <sunTransmittanceUniforms>
+    #endif
+
     varying vec3 vNormal;
     varying vec3 vViewLightDirection;
+    varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
 
     #ifdef USE_WATER_DEPTH
       #include <terrainUvFunctions>
+    #endif
+
+    #ifdef USE_SUN_TINT
+      #include <sunTransmittanceFunctions>
     #endif
 
     #ifdef USE_WATER_WAVES
@@ -547,6 +564,13 @@ export const WaterShaderTemplate: ShaderProps = {
         // фундаментным Френель-тинтом снаружи (тот в wavesColor не входит
         // вовсе, живёт только в color-ветке до этого mix).
         color = mix(color, wavesColor, waveFade);
+      #endif
+
+      #ifdef USE_SUN_TINT
+        // Тинт ИТОГОВОГО цвета — база, Френель, волны и блик разом: закатный
+        // глинт выходит оранжевым. Знак минус — vLocalLightDirection направлен
+        // ОТ солнца к фрагменту (см. вершинник).
+        color *= mix(vec3(1.0), sunTint(dot(normalize(vLocalDir), -normalize(vLocalLightDirection))), uSunTintStrength);
       #endif
 
       gl_FragColor = vec4(color, alpha);

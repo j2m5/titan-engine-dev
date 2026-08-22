@@ -218,7 +218,15 @@ class RenderableFactory {
     // WaterMaterial конструктора) — sceneBackground либо готов, либо честно
     // null (сценарий без фона).
     if (waterLevelMeters !== undefined) {
-      terrain.add(new WaterSphere(actor, waterLevelMeters, this.renderer, this.resourceObserver.sceneBackground))
+      terrain.add(
+        new WaterSphere(
+          actor,
+          waterLevelMeters,
+          this.renderer,
+          this.resourceObserver.sceneBackground,
+          this.atmosphereRegistry
+        )
+      )
     }
 
     return terrain

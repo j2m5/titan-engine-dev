@@ -26,6 +26,11 @@ const DEFAULT_WATER_NIGHT_FLOOR = 0.08
 // USE_WATER_REFLECTION (гейт по факту доставки кубмапы, см. WaterMaterial).
 const DEFAULT_WATER_DISTORTION = 20
 
+// Тинт заката — та же ручка данных, что у палубы (см. PlanetShader): 1
+// нейтрально, весь эффект гейтит USE_SUN_TINT, дефолт лишь на случай данных
+// без ручки.
+const DEFAULT_SUN_TINT_STRENGTH = 1
+
 // --- Ряд волн (арка water-shader, Task 1). ---
 
 const DEFAULT_WATER_WAVE_SCALE = 1
@@ -96,6 +101,15 @@ interface WaterUniforms {
   uSkyFloor: number
   uSkyGain: number
   uSkyFlipX: number
+  // Закатный тинт (LUT пропускания атмосферы) — те же пять юниформов
+  // геометрии/LUT и та же ручка, что у палубы: проводит их SunTintBinding из
+  // AtmosphereRegistry (см. WaterMaterial), здесь только заглушки.
+  uAtmoTransmittance: Texture | null
+  uAtmoBottomRadius: number
+  uAtmoTopRadius: number
+  uAtmoSunAngularRadius: number
+  uAtmoDatumRadius: number
+  uSunTintStrength: number
 }
 
 /**
@@ -117,6 +131,7 @@ type WaterRenderingData = Pick<
   | 'waterWaveSpeed'
   | 'waterWaveFadeMeters'
   | 'waterDistortion'
+  | 'sunTintStrength'
 >
 
 class WaterShader extends AbstractShader<keyof WaterUniforms> {
@@ -190,7 +205,18 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
       uSkyHighlightBoost: skySampleUniforms.uSkyHighlightBoost,
       uSkyFloor: skySampleUniforms.uSkyFloor,
       uSkyGain: skySampleUniforms.uSkyGain,
-      uSkyFlipX: skySampleUniforms.uSkyFlipX
+      uSkyFlipX: skySampleUniforms.uSkyFlipX,
+      // LUT и геометрия оболочки приходят из реестра атмосфер каждый видимый
+      // кадр (SunTintBinding, см. WaterMaterial) — здесь нулевые заглушки,
+      // инертные без USE_SUN_TINT. Кламп ручки к [0,1] — тот же, что у палубы
+      // (PlanetShader): вне диапазона тинт либо не действует (>1 не сильнее
+      // зенита LUT — clamp внутри sunTint), либо переворачивает знак смеси.
+      uAtmoTransmittance: new Uniform(null),
+      uAtmoBottomRadius: new Uniform(0),
+      uAtmoTopRadius: new Uniform(0),
+      uAtmoSunAngularRadius: new Uniform(0),
+      uAtmoDatumRadius: new Uniform(0),
+      uSunTintStrength: new Uniform(Math.min(1, Math.max(0, waterData.sunTintStrength ?? DEFAULT_SUN_TINT_STRENGTH)))
     }
     this.name = 'WaterShader'
   }

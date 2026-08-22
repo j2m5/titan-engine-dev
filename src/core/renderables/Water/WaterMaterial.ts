@@ -4,6 +4,9 @@ import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
 import { WaterShader } from '@/core/materials/shaders/WaterShader'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+import { SunTintBinding } from '@/core/materials/sunTintBinding'
+import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
+import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
 
 /**
  * Отражение фоновой кубмапы в воде — ОТКЛЮЧЕНО РЕШЕНИЕМ ВЛАДЕЛЬЦА
@@ -81,6 +84,13 @@ class WaterMaterial extends AbstractShaderMaterial {
   private hasWaterWaves = false
 
   /**
+   * Проводка закатного тинта из реестра атмосфер — ТА ЖЕ, что у палубы
+   * (SunTintBinding): вода и суша тела красятся одной LUT и одной ручкой
+   * данных, иначе на берегу у терминатора был бы тональный шов.
+   */
+  private readonly sunTint: SunTintBinding
+
+  /**
    * `skyboxTexture` — кубмапа фона сценария (арка water-shader, Task 2),
    * доставляется РОВНО ОДИН РАЗ здесь, не через updateMaterial: в отличие от
    * slope/waterNormal (асинхронный стрим текстур ТЕЛА, догоняются в любой
@@ -110,7 +120,12 @@ class WaterMaterial extends AbstractShaderMaterial {
    * Reflection воды теперь всегда градиентный `skyColor` (приёмочная волна
    * 2), день и ночь, без сэмпла кубмапы — см. докблок в шейдере.
    */
-  public constructor(model: Actor, skyboxTexture: CubeTexture | null = null, parameters?: ShaderMaterialParameters) {
+  public constructor(
+    model: Actor,
+    skyboxTexture: CubeTexture | null = null,
+    atmosphereRegistry?: AtmosphereRegistry,
+    parameters?: ShaderMaterialParameters
+  ) {
     super({
       transparent: true,
       depthWrite: false,
@@ -120,6 +135,14 @@ class WaterMaterial extends AbstractShaderMaterial {
     this.model = model
     this.slopePath = WaterMaterial.resolveSlopePath(model)
     this.waterNormalPath = WaterMaterial.resolveWaterNormalPath(model)
+    // Дочерняя атмосфера и радиус датума — разовый резолв ORM, тот же паттерн,
+    // что у PlanetMaterial (строки БД статичны, а sync зовётся каждый кадр).
+    this.sunTint = new SunTintBinding(
+      this,
+      atmosphereRegistry,
+      model.children.where('categoryId', ATMOSPHERE_CATEGORY_ID).first()?.getAttribute('id') as number | undefined,
+      model.physicalObject?.getAttribute('radius') ?? 0
+    )
 
     const { uniforms, defines, vertexShader, fragmentShader } = new WaterShader(this.model)
 
@@ -216,9 +239,23 @@ class WaterMaterial extends AbstractShaderMaterial {
     this.defines = {
       ...this.baseDefines,
       ...(useWaterDepth && { USE_WATER_DEPTH: '1' }),
-      ...(useWaterWaves && { USE_WATER_WAVES: '1' })
+      ...(useWaterWaves && { USE_WATER_WAVES: '1' }),
+      // Пересборка от снимка стирает и дефайн тинта — он не про карты и живёт
+      // своей синхронизацией (см. syncSunTint), поэтому восстанавливается
+      // здесь же по текущей записи реестра.
+      ...(this.sunTint.active && { USE_SUN_TINT: '1' })
     }
     this.needsUpdate = true
+  }
+
+  /**
+   * Закатный тинт воды — вызывается КАЖДЫЙ видимый кадр (WaterSphere.
+   * onVisibleUpdate): узел атмосферы мог появиться или уйти после
+   * конструирования материала, а на кадрах без смены записи вызов пустой
+   * (сравнение по ссылке внутри SunTintBinding).
+   */
+  public syncSunTint(): void {
+    this.sunTint.sync()
   }
 
   public resetMaterial(): void {
@@ -229,6 +266,9 @@ class WaterMaterial extends AbstractShaderMaterial {
     this.hasWaterDepth = false
     this.hasWaterWaves = false
     this.defines = { ...this.baseDefines }
+    // Снимок конструирования тинта не знает — проводка забывает запись, чтобы
+    // ближайший syncSunTint увидел смену и вернул дефайн одним рекомпилом.
+    this.sunTint.reset()
     this.needsUpdate = true
   }
 }

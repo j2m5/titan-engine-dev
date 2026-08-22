@@ -361,6 +361,7 @@ const BASELINE_FRAGMENT_SHADER = `
 
     varying vec3 vNormal;
     varying vec3 vViewLightDirection;
+    varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
 
@@ -435,7 +436,9 @@ describe('Паритет: без USE_WATER_REFLECTION компилируемый
     // отсутствие USE_WATER_WAVES автоматически означает отсутствие
     // USE_WATER_REFLECTION (вложен внутрь) — тестируется здесь для полноты
     // паритетного контракта Task 2, не дублирует, а подтверждает вложенность.
-    const stripped = stripGuardedBlock(frag, 'USE_WATER_WAVES')
+    // USE_SUN_TINT снимается вторым (арка «тинт солнца для воды») — весь её
+    // вклад во фрагментник под своим гейтом, вне гейта только варьинг.
+    const stripped = stripGuardedBlock(stripGuardedBlock(frag, 'USE_WATER_WAVES'), 'USE_SUN_TINT')
 
     expect(normalizeBlankLines(stripped)).toBe(normalizeBlankLines(BASELINE_FRAGMENT_SHADER))
   })
@@ -476,6 +479,11 @@ describe('Паритет: без USE_WATER_REFLECTION компилируемый
 // закрыт структурно (нечего страховать stripGuardedBlock'ом — снимать
 // нечего), но страж по образцу фрагментного всё равно заведён явно, чтобы
 // будущая правка вершинника не проскочила молча.
+//
+// Снимок ОБНОВЛЁН аркой «тинт солнца для воды»: vLocalLightDirection считается
+// БЕЗУСЛОВНО (те же строки, что у палубы — PlanetShaderTemplate; гейтить
+// вершинник отдельно от палубы значило бы развести два одинаковых по смыслу
+// шейдера). Это осознанная правка вершинника, страж её и поймал.
 const BASELINE_VERTEX_SHADER = `
     precision highp float;
 
@@ -486,13 +494,20 @@ const BASELINE_VERTEX_SHADER = `
 
     varying vec3 vNormal;
     varying vec3 vViewLightDirection;
+    varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
 
     void main() {
+      vec4 worldPosition = modelMatrix * vec4(position, 1.0);
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
       gl_Position = projectionMatrix * mvPosition;
 
+      // Направление ОТ солнца к фрагменту в body-локальных осях — вход μ_s
+      // тинта заката (см. фрагментник): те же строки, что у палубы
+      // (PlanetShaderTemplate), парный строковый страж в тестах.
+      vec3 worldLightDirection = normalize(worldPosition.xyz - lightPosition);
+      vec3 localLightDirection = (inverse(modelMatrix) * vec4(worldLightDirection, 0.0)).xyz;
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
 
       vNormal = normalize(normalMatrix * normal);
@@ -507,6 +522,7 @@ const BASELINE_VERTEX_SHADER = `
       // что у PlanetShaderTemplate — без нормали, без матриц, только normal.
       vLocalDir = normal;
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
+      vLocalLightDirection = localLightDirection;
       vViewPosition = -mvPosition.xyz;
 
       ${ShaderChunk['logdepthbuf_vertex']}
@@ -559,6 +575,8 @@ describe('WaterMaterial: доставка кубмапы фона — гейт U
     return {
       renderingObject: { getAttribute: () => ({}) },
       resources: { where: () => ({ first: () => undefined }) },
+      // Детей нет — тело без атмосферы, проводка тинта (SunTintBinding) молчит.
+      children: { where: () => ({ first: () => undefined, isNotEmpty: () => false }) },
       physicalObject: { getAttribute: () => 6360 }
     } as unknown as Actor
   }

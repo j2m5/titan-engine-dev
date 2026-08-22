@@ -104,6 +104,8 @@ interface StubOptions {
 function stubActor({ data, slopeResource = true, waterNormalResource = false }: StubOptions): Actor {
   return {
     renderingObject: { getAttribute: () => data },
+    // Детей нет — тело без атмосферы, проводка тинта (SunTintBinding) молчит.
+    children: { where: () => ({ first: () => undefined, isNotEmpty: () => false }) },
     resources: {
       where: (_field: string, type: string) => ({
         first: () => {
@@ -325,6 +327,8 @@ describe('WaterMaterial: slope-путь резолвится один раз (н
     }))
     const actor = {
       renderingObject: { getAttribute: () => ({}) },
+      // Отдельная коллекция от resources — счётчик джойна ресурсов её не видит.
+      children: { where: () => ({ first: () => undefined, isNotEmpty: () => false }) },
       resources: { where: whereSpy }
     } as unknown as Actor
 

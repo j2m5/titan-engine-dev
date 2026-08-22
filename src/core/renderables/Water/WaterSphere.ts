@@ -4,6 +4,7 @@ import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
 import { constantHeightField } from '@/core/terrain/constantHeightField'
 import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
 import type { UpdateContext } from '@/core/UpdateContext'
+import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 
 /**
  * Вода прозрачна и живёт в прозрачной очереди; отрицательный renderOrder
@@ -81,11 +82,12 @@ class WaterSphere extends TerrainPatchGroup {
     model: Actor,
     waterLevelMeters: number,
     renderer: WebGLRenderer,
-    skyboxTexture: CubeTexture | null = null
+    skyboxTexture: CubeTexture | null = null,
+    atmosphereRegistry?: AtmosphereRegistry
   ) {
     const radiusKm: number = model.physicalObject!.getAttribute('radius')!
     const field = constantHeightField(radiusKm, waterLevelMeters)
-    const sharedMaterial = new WaterMaterial(model, skyboxTexture)
+    const sharedMaterial = new WaterMaterial(model, skyboxTexture, atmosphereRegistry)
 
     super(field, sharedMaterial, renderer, WATER_MAX_LIVE_PATCHES)
     this.model = model
@@ -119,9 +121,14 @@ class WaterSphere extends TerrainPatchGroup {
    * секунды с запуска часов рендера, тот же `UpdateContext`, что и весь
    * остальной движок (не `performance.now()` напрямую — её докблок прямо
    * запрещает материалам брать время в обход контекста).
+   *
+   * Закатный тинт синхронизируется здесь же (тот же хук, что у палубы в
+   * TerrainSphere.onVisibleUpdate): узел атмосферы мог появиться или уйти
+   * после конструирования материала, вызов на кадрах без смены записи пустой.
    */
   protected onVisibleUpdate(ctx: UpdateContext): void {
     this.sharedMaterial.updateMaterial(ctx.elapsed)
+    this.sharedMaterial.syncSunTint()
   }
 }
 
