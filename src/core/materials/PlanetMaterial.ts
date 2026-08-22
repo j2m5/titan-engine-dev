@@ -11,7 +11,8 @@ import { IPlanetRenderingObject } from '@/core/models/types'
 import { readRenderingData } from '@/core/helpers/renderingData'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
-import type { AtmosphereEntry, AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
+import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
+import { SunTintBinding } from '@/core/materials/sunTintBinding'
 import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
 
 /**
@@ -59,29 +60,24 @@ class PlanetMaterial extends AbstractShaderMaterial {
   /** Радиус тела (юниты сцены) — та же экономия ORM/аллокаций, что и толщина атмосферы выше; 0 у стаб-акторов тестов без physicalObject. */
   private readonly bodyRadiusUnits: number
 
-  /**
-   * actorId дочерней атмосферы (categoryId=5) — разовый резолв ORM в
-   * конструкторе, тот же паттерн, что толщина выше. `undefined` — у тела нет
-   * атмосферы, тинт солнца ему не положен.
-   */
-  private readonly atmosphereActorId: number | undefined
+  /** Проводка закатного тинта из реестра атмосфер — общая с водной оболочкой (см. SunTintBinding). */
+  private readonly sunTint: SunTintBinding
 
-  /** Запись реестра, по которой сейчас настроены юниформы; сравнение по ссылке решает, нужен ли рекомпил. */
-  private sunTintEntry: AtmosphereEntry | undefined
-
-  public constructor(
-    model: Actor,
-    private readonly atmosphereRegistry?: AtmosphereRegistry,
-    parameters?: ShaderMaterialParameters
-  ) {
+  public constructor(model: Actor, atmosphereRegistry?: AtmosphereRegistry, parameters?: ShaderMaterialParameters) {
     super(parameters)
     this.model = model
     // Дочерняя атмосфера резолвится ОДИН раз — толщина и actorId читаются из
     // одного и того же актора, а не двух отдельных обходов ORM.
     const atmosphereActor = model.children.where('categoryId', ATMOSPHERE_CATEGORY_ID).first()
+    const radiusKm: number = this.model.physicalObject?.getAttribute('radius') ?? 0
     this.cloudAtmosphereThicknessUnits = PlanetMaterial.resolveCloudAtmosphereThicknessUnits(atmosphereActor)
-    this.bodyRadiusUnits = toThreeJSUnits(this.model.physicalObject?.getAttribute('radius') ?? 0)
-    this.atmosphereActorId = atmosphereActor?.getAttribute('id') as number | undefined
+    this.bodyRadiusUnits = toThreeJSUnits(radiusKm)
+    this.sunTint = new SunTintBinding(
+      this,
+      atmosphereRegistry,
+      atmosphereActor?.getAttribute('id') as number | undefined,
+      radiusKm
+    )
 
     const { uniforms, defines, vertexShader, fragmentShader } = new PlanetShader(this.model)
 
@@ -126,52 +122,12 @@ class PlanetMaterial extends AbstractShaderMaterial {
   }
 
   /**
-   * Тинт солнца у терминатора: LUT пропускания и геометрия оболочки берутся из
-   * AtmosphereRegistry по actorId дочерней атмосферы КАЖДЫЙ видимый кадр —
-   * порядок создания узлов сцены (тело раньше атмосферы или наоборот) тогда не
-   * важен, а снятие узла само гасит эффект. Рекомпил программы только при
-   * смене записи (сравнение по ссылке) — на кадрах без изменений вызов пустой.
-   *
-   * Радиусы идут из ПОДОГНАННОГО конфига записи (тот же, из которого считались
-   * LUT, см. terrainFloorAdjust) — сырая строка БД дала бы другой bottomRadius
-   * и рассинхрон с таблицей. Датум — радиус самого тела в КИЛОМЕТРАХ: LUT
-   * параметризована километрами, юниты сцены здесь не при чём.
-   *
-   * Текстура LUT принадлежит узлу атмосферы — материал держит её по ссылке и
-   * никогда не диспозит.
+   * Тинт солнца у терминатора — вызывается КАЖДЫЙ видимый кадр (Planet.
+   * updateObject, TerrainSphere.onVisibleUpdate); вся механика в SunTintBinding
+   * (общей с водной оболочкой), здесь только точка входа материала.
    */
   public syncSunTint(): void {
-    // Датум ≤ 0 (стаб-актор без physicalObject, битые данные) не несёт LUT
-    // ни в km, ни в юнитах — эффект гасится тем же путём, что снятие атмосферы
-    // из реестра, а не отдельной веткой.
-    const radius = this.model.physicalObject?.getAttribute('radius') ?? 0
-    const rawEntry =
-      this.atmosphereActorId !== undefined ? this.atmosphereRegistry?.get(this.atmosphereActorId) : undefined
-    const entry = radius > 0 ? rawEntry : undefined
-
-    if (entry === this.sunTintEntry) return
-
-    this.sunTintEntry = entry
-
-    if (entry) {
-      this.uniforms.uAtmoTransmittance.value = entry.lut.transmittance
-      this.uniforms.uAtmoBottomRadius.value = entry.config.bottomRadius
-      this.uniforms.uAtmoTopRadius.value = entry.config.topRadius
-      this.uniforms.uAtmoSunAngularRadius.value = entry.config.sunAngularRadius
-      this.uniforms.uAtmoDatumRadius.value = radius
-      this.defines = { ...this.defines, USE_SUN_TINT: '1' }
-    } else {
-      this.uniforms.uAtmoTransmittance.value = null
-
-      // Копия без ключа — прежний объект дефайнов мог уйти в ключ программы,
-      // мутировать его на месте нельзя.
-      const defines = { ...this.defines }
-
-      delete defines.USE_SUN_TINT
-      this.defines = defines
-    }
-
-    this.needsUpdate = true
+    this.sunTint.sync()
   }
 
   public updateMaterial(): void {
@@ -296,7 +252,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
       // своей синхронизацией, поэтому восстанавливается здесь же по текущей
       // записи реестра (иначе стриминг карт гасил бы тинт до следующей смены
       // записи, которой может не быть никогда).
-      ...(this.sunTintEntry && { USE_SUN_TINT: '1' })
+      ...(this.sunTint.active && { USE_SUN_TINT: '1' })
     }
 
     this.needsUpdate = true
@@ -321,11 +277,9 @@ class PlanetMaterial extends AbstractShaderMaterial {
     // поимённый список дефайнов пришлось бы держать в синхроне вручную при
     // каждом новом слое карт.
     this.defines = { ...this.baseDefines }
-    // Снимок конструирования тинта не знает — забываем запись, чтобы ближайший
-    // syncSunTint увидел смену и вернул дефайн одним рекомпилом. Сэмплер тоже
-    // возвращаем в null — снимок defines не несёт юниформы.
-    this.sunTintEntry = undefined
-    this.uniforms.uAtmoTransmittance.value = null
+    // Снимок конструирования тинта не знает — проводка забывает запись, чтобы
+    // ближайший syncSunTint увидел смену и вернул дефайн одним рекомпилом.
+    this.sunTint.reset()
 
     this.needsUpdate = true
   }
