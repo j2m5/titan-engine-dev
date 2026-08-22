@@ -13,6 +13,7 @@ import { triplanarDetailFunctions, triplanarDetailUniforms } from '@/core/materi
 import { terrainDetailFunctions, terrainDetailUniforms } from '@/core/materials/shaders/lib/chunks/TerrainDetail'
 import { skyboxSampleFunctions, skyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
 import { sunTransmittanceFunctions, sunTransmittanceUniforms } from '@/core/materials/shaders/lib/chunks/SunTransmittance'
+import { giantDetailFunctions, giantDetailUniforms } from '@/core/materials/shaders/lib/chunks/GiantDetail'
 import { IUniform, Uniform } from 'three'
 
 export const AppUniformsChunk: Record<string, Record<string, IUniform>> = {
@@ -46,5 +47,7 @@ export const AppShaderChunk: Record<string, string> = {
   skyboxSampleUniforms,
   skyboxSampleFunctions,
   sunTransmittanceUniforms,
-  sunTransmittanceFunctions
+  sunTransmittanceFunctions,
+  giantDetailUniforms,
+  giantDetailFunctions
 }
