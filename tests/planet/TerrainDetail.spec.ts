@@ -86,13 +86,13 @@ describe('TerrainDetail: чанк — регистрация и структур
 
   it('стохастические обёртки существуют, разделяют общий l и зовут triplanar-ядро бленда, не копируют его', () => {
     expect(terrainDetailFunctions).toContain(
-      'vec3 triplanarNormalDetiled(sampler2D map, vec3 p, float scale, vec3 n, vec3 w, vec2 offset, vec3 l)'
+      'vec3 triplanarNormalDetiled(sampler2D map, vec3 p, float scale, vec3 n, vec3 w, vec3 l)'
     )
     expect(terrainDetailFunctions).toContain(
-      'vec3 triplanarArmDetiled(sampler2D map, vec3 p, float scale, vec3 w, vec2 offset, vec3 l)'
+      'vec3 triplanarArmDetiled(sampler2D map, vec3 p, float scale, vec3 w, vec3 l)'
     )
     expect(terrainDetailFunctions).toContain(
-      'vec3 triplanarAlbedoDetiled(sampler2D map, vec3 p, float scale, vec3 w, vec2 offset, vec3 l)'
+      'vec3 triplanarAlbedoDetiled(sampler2D map, vec3 p, float scale, vec3 w, vec3 l)'
     )
     expect(terrainDetailFunctions).toContain('triplanarBlendNormal(')
     expect(terrainDetailFunctions).toContain('triplanarBlendRgb(')

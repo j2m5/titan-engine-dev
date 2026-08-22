@@ -34,9 +34,11 @@ describe('TerrainDetail: домен из точной позиции патча'
     expect(fn).toContain('triplanarWeights(dirLocal)')
   })
 
-  it('индекс вариантов W-периодичен: ячейка 4 тайла, хеш решётки по модулю 256', () => {
+  it('индекс вариантов W-периодичен: ячейка 4 тайла, хеш решётки по модулю 256, соседи сворачиваются раздельно', () => {
     expect(fn).toContain('8.0 * vnoise(0.25 * (detailPos.zy * uDetailScale')
     expect(fn).not.toContain('vnoise(0.3 *')
-    expect(fn).toContain('vec2 i = mod(floor(p), 256.0);')
+    expect(fn).toContain('vec2 i0 = mod(i, 256.0);')
+    expect(fn).toContain('vec2 i1 = mod(i + 1.0, 256.0);')
+    expect(fn).not.toContain('hash21(i + vec2(1.0, 0.0))')
   })
 })
