@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { Texture } from 'three'
 import { transmittanceUv } from '@/core/materials/shaders/lib/chunks/sunTransmittanceMath'
 import { TRANSMITTANCE_H, TRANSMITTANCE_W } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
 import { sunTransmittanceFunctions, sunTransmittanceUniforms } from '@/core/materials/shaders/lib/chunks/SunTransmittance'
 import { atmosphereShader } from '@/core/renderables/Atmosphere/atmosphere'
+import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
+import { Actor } from '@/core/models/Actor'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 
 /** Зеркало GetTextureCoordFromUnitRange: 0.5/n + x·(1 − 1/n). */
 function unitToTexCoord(x: number, n: number): number {
@@ -83,5 +88,65 @@ describe('чанк SunTransmittance — порт ядра Брунетона', (
     expect(sunTransmittanceFunctions).toContain('atmoTransmittanceToSun(uAtmoDatumRadius, muS)')
     expect(sunTransmittanceFunctions).toContain('max(atmoTransmittanceToSun(uAtmoDatumRadius, 1.0), vec3(1e-3))')
     expect(sunTransmittanceFunctions).toContain('clamp(')
+  })
+})
+
+describe('PlanetShaderTemplate: тинт солнца под USE_SUN_TINT', () => {
+  const frag = PlanetShaderTemplate.fragmentShader
+
+  it('чанки включены под гейтом', () => {
+    expect(frag).toContain('#include <sunTransmittanceUniforms>')
+    expect(frag).toContain('#include <sunTransmittanceFunctions>')
+    const gate = frag.indexOf('#ifdef USE_SUN_TINT')
+    expect(gate).toBeGreaterThan(-1)
+    expect(frag.indexOf('#include <sunTransmittanceFunctions>')).toBeGreaterThan(gate)
+  })
+
+  it('day умножается на тинт ПОСЛЕ облаков и ДО микса с ночью, mu_s — из vLocalDir', () => {
+    const dayLine = frag.indexOf('vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);')
+    const tint = frag.indexOf('day *= mix(vec3(1.0), sunTint(dot(normalize(vLocalDir), normalize(vLocalLightDirection))), uSunTintStrength);')
+    const night = frag.indexOf('vec3 finalColor = mix(night, day, dayFactor);')
+    expect(dayLine).toBeGreaterThan(-1)
+    expect(tint).toBeGreaterThan(dayLine)
+    expect(night).toBeGreaterThan(tint)
+  })
+
+  it('tint не берёт нормаль рельефа и не берёт vPosition', () => {
+    // Лукахед (?!ize) отсекает ложное срабатывание на normalize(vLocalDir) —
+    // мандатная строка задачи; проверяем именно голую переменную normal.
+    expect(frag).not.toMatch(/sunTint\(dot\(normal(?!ize)/)
+    expect(frag).not.toMatch(/sunTint\([^)]*vPosition/)
+  })
+})
+
+describe('PlanetShader: ручка uSunTintStrength', () => {
+  function seedPlaceholderKeys(): void {
+    for (const name of ['', 'default.png', 'night.jpg']) {
+      const texture = new Texture()
+      texture.name = name
+      texture.image = { width: 4, height: 2 }
+      resourceStorage.addTexture(texture)
+    }
+  }
+
+  function stubActor(data: Record<string, unknown>): Actor {
+    return {
+      renderingObject: { getAttribute: () => ({ emission: 1, bumpScale: 1, ...data }) },
+      children: { where: () => ({ first: () => undefined, isNotEmpty: () => false }) },
+      resources: { where: () => ({ first: () => undefined }) }
+    } as unknown as Actor
+  }
+
+  beforeEach(() => seedPlaceholderKeys())
+  afterEach(() => resourceStorage.deleteAllTextures())
+
+  it('ручка из данных тела доезжает в юниформ', () => {
+    const shader = new PlanetShader(stubActor({ sunTintStrength: 0.4 }))
+    expect(shader.uniforms.uSunTintStrength.value).toBe(0.4)
+  })
+
+  it('без поля — дефолт 1', () => {
+    const shader = new PlanetShader(stubActor({}))
+    expect(shader.uniforms.uSunTintStrength.value).toBe(1)
   })
 })

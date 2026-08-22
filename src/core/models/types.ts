@@ -262,6 +262,9 @@ export interface IPlanetRenderingObject {
    * явной записью (фикс-раунд 1, находка №7), реализована здесь.
    */
   waterDistortion?: number
+
+  /** Сила закатного тинта палубы 0..1 (LUT пропускания атмосферы). 0 — прежний вид. */
+  sunTintStrength?: number
 }
 
 export type IAtmosphereRenderingObject = AtmosphereConfig

@@ -121,6 +121,10 @@ export const PlanetShaderTemplate: ShaderProps = {
     // делает его видимым этому шейдеру.
     uniform mat3 normalMatrix;
 
+    #ifdef USE_SUN_TINT
+      #include <sunTransmittanceUniforms>
+    #endif
+
     varying vec2 vUv;
     varying vec3 vNormal;
     varying vec3 vPosition;
@@ -141,6 +145,10 @@ export const PlanetShaderTemplate: ShaderProps = {
 
     #ifdef USE_TERRAIN_UV
       #include <terrainUvFunctions>
+    #endif
+
+    #ifdef USE_SUN_TINT
+      #include <sunTransmittanceFunctions>
     #endif
 
     #ifdef USE_TERRAIN_DETAIL
@@ -261,6 +269,13 @@ export const PlanetShaderTemplate: ShaderProps = {
       #endif
 
       vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);
+
+      // Цвет солнца сквозь атмосферу (LUT пропускания): палуба и облака у
+      // терминатора теплеют и темнеют синхронно с небом; в зените тинт ≡ 1.
+      // mu_s — по радиальному направлению сферы, не по нормали рельефа.
+      #ifdef USE_SUN_TINT
+        day *= mix(vec3(1.0), sunTint(dot(normalize(vLocalDir), normalize(vLocalLightDirection))), uSunTintStrength);
+      #endif
 
       // Огни городов: порог с мягкостью вместо квадрата. Квадрат душил
       // середину и оставлял размытый ореол вокруг агломераций; порог гасит

@@ -28,6 +28,10 @@ const DEFAULT_DETAIL_FADE2_METERS = 5000
 const DEFAULT_TERRAIN_LAMBERT = 0
 const DEFAULT_TERRAIN_AMBIENT = 0.04
 
+// Тинт заката (LUT пропускания атмосферы) — 1 нейтрально, юниформ гейтит
+// весь эффект (USE_SUN_TINT), дефолт лишь на случай данных без ручки.
+const DEFAULT_SUN_TINT_STRENGTH = 1
+
 // Начало fade относительно конца: не отдельная ручка (см. IPlanetRenderingObject).
 const DETAIL_FADE_START_RATIO = 0.4
 
@@ -72,6 +76,12 @@ interface PlanetUniforms {
   shadowRingsInnerRadius: number
   shadowRingsOuterRadius: number
   shadowRingsTexture: Texture | null
+  uAtmoTransmittance: Texture | null
+  uAtmoBottomRadius: number
+  uAtmoTopRadius: number
+  uAtmoSunAngularRadius: number
+  uAtmoDatumRadius: number
+  uSunTintStrength: number
 }
 
 class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
@@ -154,7 +164,13 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       ),
       shadowRingsInnerRadius: new Uniform(toThreeJSUnits(ringData.innerRadius)),
       shadowRingsOuterRadius: new Uniform(toThreeJSUnits(ringData.outerRadius)),
-      shadowRingsTexture: new Uniform(ringMap)
+      shadowRingsTexture: new Uniform(ringMap),
+      uAtmoTransmittance: new Uniform(null),
+      uAtmoBottomRadius: new Uniform(0),
+      uAtmoTopRadius: new Uniform(0),
+      uAtmoSunAngularRadius: new Uniform(0),
+      uAtmoDatumRadius: new Uniform(0),
+      uSunTintStrength: new Uniform(planetData.sunTintStrength ?? DEFAULT_SUN_TINT_STRENGTH)
     }
     this.defines = {
       ...(USE_RING && { USE_RING: '1' })
