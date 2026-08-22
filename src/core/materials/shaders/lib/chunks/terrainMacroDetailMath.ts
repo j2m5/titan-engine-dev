@@ -50,7 +50,7 @@ export function macroTiltRadians(gradLen: number, normalScale: number, contrast:
   return Math.atan(normalScale * MACRO_RELIEF_ASPECT * contrast * gradLen)
 }
 
-/** Амплитуда по крутизне: равнина тише на influence, крутой склон (|slope|/SLOPE_RANGE ≥ 1) — полная. */
+/** Амплитуда по крутизне: равнина тише на influence, крутой склон (|slope|/macroSlopeRef ≥ 1) — полная. */
 export function slopeGain(slopeLength: number, slopeInfluence: number): number {
   const s = Math.max(0, Math.min(1, slopeLength))
 
