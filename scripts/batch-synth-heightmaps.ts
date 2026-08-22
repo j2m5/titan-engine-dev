@@ -605,7 +605,7 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
 
   // Единственный проход с полостью (находка фикс-волны 3): калибровка и
   // рескейл выше сознательно считали R/G без cavity — здесь пересчитываем
-  // финальную slope-карту ОДИН раз дефолтом buildSlopeMap (cavity: true), на
+  // финальную slope-карту ОДИН раз с cavity: true, на
   // уже готовой карте высот last.map — без повторного синтеза поля высот.
   const dir = path.dirname(body.inputPath)
   const heightPath = path.join(dir, `${body.name}_height.raw`)
