@@ -1,5 +1,6 @@
 import { Resources, RenderingObjects, ActorResource } from '@storage/database'
 import { IResource, IRenderingObject, IActorResource } from '@/core/models/types'
+import { isValidSlopeRange } from '@/core/terrain/slopeMapFormat'
 
 describe('Целостность ресурсов планет', () => {
   it('страж: у тела с картой высот не осталось planets/-bump — рельеф шейдит slope', () => {
@@ -97,5 +98,13 @@ describe('Целостность ресурсов планет', () => {
     const wrong = Resources.filter((r: IResource) => r.resourceType === 'height' && r.lifecycle !== 'resident')
 
     expect(wrong).toEqual([])
+  })
+
+  it('страж: у каждой slope-строки объявлен slopeRange из сетки', () => {
+    const slopes = Resources.filter((r) => r.resourceType === 'slope')
+    expect(slopes.length).toBeGreaterThanOrEqual(50)
+    for (const r of slopes) {
+      expect(isValidSlopeRange(r.slopeRange), `${r.path}: slopeRange=${String(r.slopeRange)}`).toBe(true)
+    }
   })
 })
