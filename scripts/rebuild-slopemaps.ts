@@ -6,7 +6,7 @@ import sharp from 'sharp'
 import { parseHeightMap } from '@/core/terrain/heightMapFormat'
 import { buildSlopeMap, countClampedTexels } from './lib/slopeMapEncode'
 import { slopeStatistics } from './lib/slopeStats'
-import { slopeRangeForPath } from './lib/slopeRangeFromDb'
+import { resolveSlopeRanges } from './lib/slopeRangeFromDb'
 import { recommendSlopeRange } from '@/core/terrain/slopeMapFormat'
 import { Resources } from '@storage/database/resources'
 import { ActorResource } from '@storage/database/actorResource'
@@ -165,6 +165,11 @@ if (RECOMMEND_MODE) {
   process.exit(0)
 }
 
+// Пред-пасс: диапазоны ВСЕХ карт до первой записи файла — если где-то в БД
+// не хватает slopeRange, падаем здесь, не начав перезаписывать более ранние
+// карты набора (иначе прогон встал бы посреди работы с уже тронутым диском).
+const rangeByPath = resolveSlopeRanges(coverage, Resources)
+
 let rebuilt = 0
 let skippedMissingFile = 0
 
@@ -180,7 +185,8 @@ for (const job of coverage) {
 
   const raw = await readFile(inputPath)
   const map = parseHeightMap(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer)
-  const slopeRange = slopeRangeForPath(job.slopePath, Resources)
+  const slopeRange = rangeByPath.get(job.slopePath)
+  if (slopeRange === undefined) throw new Error(`внутренняя ошибка: нет диапазона для ${job.slopePath} после пред-пасса`)
   // Вода и cavity — из данных тела, а не безусловно: прогон без уровня снял бы
   // канал A у Земли и Явина IV (мелководье и урез исчезли бы, а USE_WATER_DEPTH
   // остался бы взведён), а cavity у Земли противоречит её же команде сборки.
