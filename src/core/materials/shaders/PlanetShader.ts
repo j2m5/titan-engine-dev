@@ -11,12 +11,11 @@ import {
   DETAIL_FADE_START_RATIO,
   macroFadeMetersFor
 } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
+import { DEFAULT_DETAIL_SCALE2_METERS, DEFAULT_DETAIL_SCALE_METERS } from '@/core/terrain/detailWrap'
 
 // Нейтральные дефолты детального слоя (используются, только если данные тела
 // не задали ручку явно) — см. IPlanetRenderingObject.detail*, ручки Луны в
 // storage/database/renderingObjects.ts.
-const DEFAULT_DETAIL_SCALE_METERS = 40
-const DEFAULT_DETAIL_SCALE2_METERS = 7
 const DEFAULT_DETAIL_NORMAL_SCALE = 1
 const DEFAULT_DETAIL_SATURATION = 0.15
 const DEFAULT_DETAIL_BRIGHTNESS = 1
