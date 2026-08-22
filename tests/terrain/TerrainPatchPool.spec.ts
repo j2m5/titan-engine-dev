@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Texture } from 'three'
+import { BufferAttribute, DynamicDrawUsage, Texture } from 'three'
 import {
   MAX_LIVE_PATCHES,
   TerrainPatchPool,
   type PatchHandle
 } from '@/core/terrain/TerrainPatchPool'
 import { buildPatchIndex, buildTerrainPatchGeometry, buildTerrainPatchInto } from '@/core/terrain/terrainPatchGeometry'
+import { detailWrapFor } from '@/core/terrain/detailWrap'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { Actor } from '@/core/models/Actor'
@@ -59,8 +60,9 @@ describe('TerrainPatchPool', () => {
     const field = bumpyField()
     const pool = makePool()
     const handle = pool.acquire()!
-    buildTerrainPatchInto(field, 2, 1, 0, DEPTH, SEGMENTS, SKIRT, handle)
-    const fresh = buildTerrainPatchGeometry(field, 2, 1, 0, DEPTH, SEGMENTS, buildPatchIndex(SEGMENTS), SKIRT)
+    const wrap = detailWrapFor(undefined)
+    buildTerrainPatchInto(field, 2, 1, 0, DEPTH, SEGMENTS, SKIRT, handle, wrap)
+    const fresh = buildTerrainPatchGeometry(field, 2, 1, 0, DEPTH, SEGMENTS, buildPatchIndex(SEGMENTS), SKIRT, wrap)
 
     expect(Array.from(handle.geometry.getAttribute('position').array)).toEqual(
       Array.from(fresh.geometry.getAttribute('position').array)
@@ -115,6 +117,17 @@ describe('TerrainPatchPool', () => {
   // acquire (см. докблок класса), pool.dispose() освобождает их и общий
   // индекс, но НЕ трогает слоты, которые вызывающий не release'нул —
   // это его ответственность (см. TerrainSphere.dispose)
+  it('геометрия слота несёт атрибуты detailPos/detailPos2 (vec3, DynamicDrawUsage)', () => {
+    const pool = makePool()
+    const handle = pool.acquire()!
+    for (const name of ['detailPos', 'detailPos2']) {
+      const attr = handle.geometry.getAttribute(name) as BufferAttribute
+      expect(attr.itemSize).toBe(3)
+      expect(attr.count).toBe(handle.geometry.getAttribute('position').count)
+      expect(attr.usage).toBe(DynamicDrawUsage)
+    }
+  })
+
   it('dispose освобождает геометрии свободных слотов и общий индекс; живые слоты не трогает', () => {
     const pool = makePool()
     const a = pool.acquire()!

@@ -7,6 +7,7 @@ import { disposeSceneTree } from '@/core/lifecycle/disposeSceneTree'
 import { CLEARANCE_MARGIN_METERS, TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { CUBE_FACES, TERRAIN_PATCH_SEGMENTS } from '@/core/terrain/cubeSphere'
 import { buildTerrainPatchInto } from '@/core/terrain/terrainPatchGeometry'
+import { detailWrapFor, type DetailWrap } from '@/core/terrain/detailWrap'
 import { TerrainPatchPool, type PatchHandle } from '@/core/terrain/TerrainPatchPool'
 import {
   selectTerrainNodes,
@@ -47,6 +48,9 @@ export const PATCH_BUILDS_PER_FRAME = 6
  * dispose идемпотентен). Метод и есть тот самый Disposable, которого при
  * обходе сцены дожидается disposeSceneTree родителя — двойной dispose узлов,
  * уже освобождённых им напрямую, безвреден по тому же контракту.
+ *
+ * Геометрия патча несёт также detailPos/detailPos2 — домен детальных слоёв
+ * (см. detailWrap.ts), периоды которого приходят сюда параметром detailWrap.
  */
 abstract class TerrainPatchGroup extends Group {
   private readonly field: TerrainHeightField
@@ -74,7 +78,8 @@ abstract class TerrainPatchGroup extends Group {
      * там условие `h < level − margin` не пробивает никогда, поэтому лишний
      * параметр ей не нужен.
      */
-    private readonly waterLevelMeters?: number
+    private readonly waterLevelMeters?: number,
+    private readonly detailWrap: DetailWrap = detailWrapFor(undefined)
   ) {
     super()
     this.field = field
@@ -201,7 +206,8 @@ abstract class TerrainPatchGroup extends Group {
       address.level,
       TERRAIN_PATCH_SEGMENTS,
       skirtDepthUnits,
-      handle
+      handle,
+      this.detailWrap
     )
     handle.mesh.userData.terrainAddress = address
     this.configurePatchMesh(handle.mesh)

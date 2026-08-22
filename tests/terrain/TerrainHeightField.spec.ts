@@ -11,6 +11,7 @@ import { SpaceScale } from '@/core/constants'
 import { TERRAIN_PATCH_SEGMENTS, cubeFaceDirection } from '@/core/terrain/cubeSphere'
 import { TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from '@/core/terrain/terrainQuadtreeSelect'
 import { buildPatchIndex, buildTerrainPatchGeometry } from '@/core/terrain/terrainPatchGeometry'
+import { detailWrapFor } from '@/core/terrain/detailWrap'
 import { constantHeightField } from '@/core/terrain/constantHeightField'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 
@@ -479,7 +480,7 @@ function assertSagCoversPatchChord(
   const level = TERRAIN_QUADTREE_MAX_LEVEL
   const segments = TERRAIN_PATCH_SEGMENTS
   const index = buildPatchIndex(segments)
-  const { geometry, center } = buildTerrainPatchGeometry(field, face, i, j, level, segments, index, 0)
+  const { geometry, center } = buildTerrainPatchGeometry(field, face, i, j, level, segments, index, 0, detailWrapFor(undefined))
   const positions = geometry.getAttribute('position') as BufferAttribute
 
   const gridVertex = (a: number, b: number): Vector3 => {

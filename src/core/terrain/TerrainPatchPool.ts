@@ -90,15 +90,21 @@ class TerrainPatchPool {
     const position = new BufferAttribute(new Float32Array(vertexCount * 3), 3)
     const normal = new BufferAttribute(new Float32Array(vertexCount * 3), 3)
     const uv = new BufferAttribute(new Float32Array(vertexCount * 2), 2)
+    const detailPos = new BufferAttribute(new Float32Array(vertexCount * 3), 3)
+    const detailPos2 = new BufferAttribute(new Float32Array(vertexCount * 3), 3)
     // DynamicDrawUsage: split/merge перезаписывает эти атрибуты на месте
     // каждый раз, когда слот переиспользуется (buildTerrainPatchInto) — не
     // однократная запись, которую предполагает дефолтный StaticDrawUsage.
     position.setUsage(DynamicDrawUsage)
     normal.setUsage(DynamicDrawUsage)
     uv.setUsage(DynamicDrawUsage)
+    detailPos.setUsage(DynamicDrawUsage)
+    detailPos2.setUsage(DynamicDrawUsage)
     geometry.setAttribute('position', position)
     geometry.setAttribute('normal', normal)
     geometry.setAttribute('uv', uv)
+    geometry.setAttribute('detailPos', detailPos)
+    geometry.setAttribute('detailPos2', detailPos2)
     geometry.setIndex(this.index)
 
     const mesh = new Mesh(geometry, this.material)

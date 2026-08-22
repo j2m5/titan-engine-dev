@@ -1,6 +1,7 @@
 import { BufferAttribute, BufferGeometry, Mesh, Vector2, Vector3 } from 'three'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { cubeFaceDirection } from './cubeSphere'
+import { wrapIndex, wrappedComponent, type DetailWrap } from './detailWrap'
 import type { TerrainHeightField } from './TerrainHeightField'
 
 /** Вершин в регулярной сетке патча segments×segments (без юбки). */
@@ -123,6 +124,11 @@ const POLE_EPSILON = 1e-9
  * вертикальную стенку — копию кромочных dir/normal/uv с радиусом, уменьшенным
  * на skirtDepthUnits: скрывает щель на стыке с соседним патчем другой
  * глубины квадродерева без необходимости совпадения тесселяций.
+ *
+ * detailPos/detailPos2 — тело-локальная позиция вершины (dir·r, ДО вычитания
+ * center) минус k·W домена детали (см. detailWrap.ts), k общий на весь патч
+ * и берётся от центра патча — иначе обёртка рвала бы треугольники внутри
+ * патча. Два набора — под два слоя детали (40 м / 7 м), каждый со своим W.
  */
 function writeTerrainPatchAttributes(
   field: TerrainHeightField,
@@ -134,7 +140,10 @@ function writeTerrainPatchAttributes(
   skirtDepthUnits: number,
   positions: Float32Array,
   normals: Float32Array,
-  uvs: Float32Array
+  uvs: Float32Array,
+  detailPos: Float32Array,
+  detailPos2: Float32Array,
+  wrap: DetailWrap
 ): Vector3 {
   const patches = 1 << depth
   const span = 2 / patches
@@ -147,6 +156,9 @@ function writeTerrainPatchAttributes(
   const centerDir = cubeFaceDirection(face, s0 + span / 2, t0 + span / 2, new Vector3())
   const center = centerDir.clone().multiplyScalar(field.surfaceRadiusUnits(centerDir))
   const centerU = field.dirToUv(centerDir, new Vector2()).x
+
+  const k1 = [wrapIndex(center.x, wrap.w1), wrapIndex(center.y, wrap.w1), wrapIndex(center.z, wrap.w1)]
+  const k2 = [wrapIndex(center.x, wrap.w2), wrapIndex(center.y, wrap.w2), wrapIndex(center.z, wrap.w2)]
 
   const gridCount = gridVertexCount(segments)
   const ringCount = ringVertexCount(segments)
@@ -164,6 +176,14 @@ function writeTerrainPatchAttributes(
       positions[k * 3] = dir.x * r - center.x
       positions[k * 3 + 1] = dir.y * r - center.y
       positions[k * 3 + 2] = dir.z * r - center.z
+
+      // домен детали: точная позиция минус k·W (double → float32), см. detailWrap.ts
+      detailPos[k * 3] = wrappedComponent(dir.x * r, k1[0], wrap.w1)
+      detailPos[k * 3 + 1] = wrappedComponent(dir.y * r, k1[1], wrap.w1)
+      detailPos[k * 3 + 2] = wrappedComponent(dir.z * r, k1[2], wrap.w1)
+      detailPos2[k * 3] = wrappedComponent(dir.x * r, k2[0], wrap.w2)
+      detailPos2[k * 3 + 1] = wrappedComponent(dir.y * r, k2[1], wrap.w2)
+      detailPos2[k * 3 + 2] = wrappedComponent(dir.z * r, k2[2], wrap.w2)
 
       normals[k * 3] = dir.x
       normals[k * 3 + 1] = dir.y
@@ -207,6 +227,15 @@ function writeTerrainPatchAttributes(
 
     uvs[skirtIndex * 2] = uvs[edgeIndex * 2]
     uvs[skirtIndex * 2 + 1] = uvs[edgeIndex * 2 + 1]
+
+    // юбка несёт позицию своей кромочной вершины домена детали — радиальный
+    // сдвиг юбки (skirtDepthUnits) вносил бы фиктивную деталь на стенке
+    detailPos[skirtIndex * 3] = detailPos[edgeIndex * 3]
+    detailPos[skirtIndex * 3 + 1] = detailPos[edgeIndex * 3 + 1]
+    detailPos[skirtIndex * 3 + 2] = detailPos[edgeIndex * 3 + 2]
+    detailPos2[skirtIndex * 3] = detailPos2[edgeIndex * 3]
+    detailPos2[skirtIndex * 3 + 1] = detailPos2[edgeIndex * 3 + 1]
+    detailPos2[skirtIndex * 3 + 2] = detailPos2[edgeIndex * 3 + 2]
   }
 
   return center
@@ -225,19 +254,38 @@ export function buildTerrainPatchGeometry(
   depth: number,
   segments: number,
   index: BufferAttribute,
-  skirtDepthUnits: number
+  skirtDepthUnits: number,
+  wrap: DetailWrap
 ): { geometry: BufferGeometry; center: Vector3 } {
   const vertexCount = terrainPatchVertexCount(segments)
   const positions = new Float32Array(vertexCount * 3)
   const normals = new Float32Array(vertexCount * 3)
   const uvs = new Float32Array(vertexCount * 2)
+  const detailPos = new Float32Array(vertexCount * 3)
+  const detailPos2 = new Float32Array(vertexCount * 3)
 
-  const center = writeTerrainPatchAttributes(field, face, i, j, depth, segments, skirtDepthUnits, positions, normals, uvs)
+  const center = writeTerrainPatchAttributes(
+    field,
+    face,
+    i,
+    j,
+    depth,
+    segments,
+    skirtDepthUnits,
+    positions,
+    normals,
+    uvs,
+    detailPos,
+    detailPos2,
+    wrap
+  )
 
   const geometry = new BufferGeometry()
   geometry.setAttribute('position', new BufferAttribute(positions, 3))
   geometry.setAttribute('normal', new BufferAttribute(normals, 3))
   geometry.setAttribute('uv', new BufferAttribute(uvs, 2))
+  geometry.setAttribute('detailPos', new BufferAttribute(detailPos, 3))
+  geometry.setAttribute('detailPos2', new BufferAttribute(detailPos2, 3))
   geometry.setIndex(index)
   geometry.computeBoundingSphere()
 
@@ -258,12 +306,15 @@ export function buildTerrainPatchInto(
   depth: number,
   segments: number,
   skirtDepthUnits: number,
-  handle: { mesh: Mesh; geometry: BufferGeometry }
+  handle: { mesh: Mesh; geometry: BufferGeometry },
+  wrap: DetailWrap
 ): void {
   const { geometry, mesh } = handle
   const positions = geometry.getAttribute('position') as BufferAttribute
   const normals = geometry.getAttribute('normal') as BufferAttribute
   const uvs = geometry.getAttribute('uv') as BufferAttribute
+  const detailPos = geometry.getAttribute('detailPos') as BufferAttribute
+  const detailPos2 = geometry.getAttribute('detailPos2') as BufferAttribute
 
   const center = writeTerrainPatchAttributes(
     field,
@@ -275,12 +326,17 @@ export function buildTerrainPatchInto(
     skirtDepthUnits,
     positions.array as Float32Array,
     normals.array as Float32Array,
-    uvs.array as Float32Array
+    uvs.array as Float32Array,
+    detailPos.array as Float32Array,
+    detailPos2.array as Float32Array,
+    wrap
   )
 
   positions.needsUpdate = true
   normals.needsUpdate = true
   uvs.needsUpdate = true
+  detailPos.needsUpdate = true
+  detailPos2.needsUpdate = true
   geometry.computeBoundingSphere()
   mesh.position.copy(center)
 }

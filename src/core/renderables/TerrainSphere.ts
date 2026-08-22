@@ -4,7 +4,10 @@ import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
+import { detailWrapFor } from '@/core/terrain/detailWrap'
+import { readRenderingData } from '@/core/helpers/renderingData'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
+import type { IPlanetRenderingObject } from '@/core/models/types'
 import type { UpdateContext } from '@/core/UpdateContext'
 
 export { PATCH_BUILDS_PER_FRAME } from '@/core/terrain/TerrainPatchGroup'
@@ -41,7 +44,8 @@ class TerrainSphere extends TerrainPatchGroup {
   ) {
     const sharedMaterial = new PlanetMaterial(model, atmosphereRegistry)
     const waterLevelMeters = readWaterLevelMeters(model)
-    super(field, sharedMaterial, renderer, undefined, waterLevelMeters)
+    const detailWrap = detailWrapFor(readRenderingData<IPlanetRenderingObject>(model))
+    super(field, sharedMaterial, renderer, undefined, waterLevelMeters, detailWrap)
     this.model = model
     this.sharedMaterial = sharedMaterial
 

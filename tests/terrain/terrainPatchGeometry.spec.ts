@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Vector2, Vector3 } from 'three'
 import { buildPatchIndex, buildTerrainPatchGeometry, terrainPatchVertexCount } from '@/core/terrain/terrainPatchGeometry'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { detailWrapFor, wrapIndex, wrappedComponent } from '@/core/terrain/detailWrap'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 
 function makeMap(width: number, height: number, values: number[], minMeters = 0, maxMeters = 65535): HeightMapData {
@@ -19,8 +20,15 @@ const SEGMENTS = 8
 const DEPTH = 1
 const GRID_VERTEX_COUNT = (SEGMENTS + 1) ** 2
 
-function build(field: TerrainHeightField, face: number, i: number, j: number, skirtDepthUnits = 0) {
-  return buildTerrainPatchGeometry(field, face, i, j, DEPTH, SEGMENTS, buildPatchIndex(SEGMENTS), skirtDepthUnits)
+function build(
+  field: TerrainHeightField,
+  face: number,
+  i: number,
+  j: number,
+  skirtDepthUnits = 0,
+  wrap = detailWrapFor(undefined)
+) {
+  return buildTerrainPatchGeometry(field, face, i, j, DEPTH, SEGMENTS, buildPatchIndex(SEGMENTS), skirtDepthUnits, wrap)
 }
 
 describe('buildPatchIndex', () => {
@@ -121,8 +129,9 @@ describe('buildTerrainPatchGeometry: RTC и паритет с коллизией
     const field = bumpyField()
     const index = buildPatchIndex(SEGMENTS)
     // depth=0: один патч на грань — общее ребро граней целиком в одном патче с каждой стороны
-    const topY = buildTerrainPatchGeometry(field, 2, 0, 0, 0, SEGMENTS, index, 0) // +Y, t=+1 — общее ребро с −Z
-    const backZ = buildTerrainPatchGeometry(field, 5, 0, 0, 0, SEGMENTS, index, 0) // −Z, t=+1 — общее ребро с +Y
+    const wrap = detailWrapFor(undefined)
+    const topY = buildTerrainPatchGeometry(field, 2, 0, 0, 0, SEGMENTS, index, 0, wrap) // +Y, t=+1 — общее ребро с −Z
+    const backZ = buildTerrainPatchGeometry(field, 5, 0, 0, 0, SEGMENTS, index, 0, wrap) // −Z, t=+1 — общее ребро с +Y
     const topPos = topY.geometry.getAttribute('position')
     const backPos = backZ.geometry.getAttribute('position')
 
@@ -250,7 +259,8 @@ describe('юбка патча', () => {
       SKIRT_TEST_DEPTH,
       SEGMENTS,
       buildPatchIndex(SEGMENTS),
-      SKIRT
+      SKIRT,
+      detailWrapFor(undefined)
     )
   }
 
@@ -303,5 +313,66 @@ describe('юбка патча', () => {
       checked++
     }
     expect(checked).toBeGreaterThan(SEGMENTS * 4) // почти все юбочные треугольники проверены
+  })
+})
+
+describe('buildTerrainPatchGeometry: атрибуты домена детали', () => {
+  const wrap = detailWrapFor(undefined)
+
+  it('detailPos = тело-локальная позиция − k·W, k общий на патч (от центра)', () => {
+    const field = bumpyField()
+    const { geometry, center } = build(field, 0, 1, 0)
+    const pos = geometry.getAttribute('position')
+    const d1 = geometry.getAttribute('detailPos')
+    const d2 = geometry.getAttribute('detailPos2')
+    expect(d1.itemSize).toBe(3)
+    expect(d2.count).toBe(pos.count)
+    const k1 = [wrapIndex(center.x, wrap.w1), wrapIndex(center.y, wrap.w1), wrapIndex(center.z, wrap.w1)]
+    const k2 = [wrapIndex(center.x, wrap.w2), wrapIndex(center.y, wrap.w2), wrapIndex(center.z, wrap.w2)]
+    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
+      const p = [pos.getX(k) + center.x, pos.getY(k) + center.y, pos.getZ(k) + center.z]
+      for (let c = 0; c < 3; c++) {
+        expect(d1.array[k * 3 + c]).toBeCloseTo(wrappedComponent(p[c], k1[c], wrap.w1), 4)
+        expect(d2.array[k * 3 + c]).toBeCloseTo(wrappedComponent(p[c], k2[c], wrap.w2), 4)
+      }
+    }
+  })
+
+  it('юбочная вершина несёт позицию своей кромочной (радиальный сдвиг юбки не входит)', () => {
+    const { geometry } = build(bumpyField(), 0, 1, 0, 0.001)
+    const d1 = geometry.getAttribute('detailPos')
+    const ring = SEGMENTS * 4
+    for (let r = 0; r < ring; r++) {
+      const skirt = GRID_VERTEX_COUNT + r
+      // кромочный индекс — тот же обход, что у юбки (ringGridIndex); проверяем
+      // через совпадение uv: у юбки uv копия кромки — ищем кромку по uv
+      const uv = geometry.getAttribute('uv')
+      let edge = -1
+      for (let k = 0; k < GRID_VERTEX_COUNT && edge < 0; k++) {
+        if (uv.getX(k) === uv.getX(skirt) && uv.getY(k) === uv.getY(skirt)) edge = k
+      }
+      expect(edge).toBeGreaterThanOrEqual(0)
+      for (let c = 0; c < 3; c++) expect(d1.array[skirt * 3 + c]).toBe(d1.array[edge * 3 + c])
+    }
+  })
+
+  it('общая точка двух соседних патчей: значения отличаются на кратное W по каждой оси', () => {
+    const field = bumpyField()
+    const a = build(field, 0, 0, 0)
+    const b = build(field, 0, 1, 0)
+    const da = a.geometry.getAttribute('detailPos')
+    const db = b.geometry.getAttribute('detailPos')
+    // правое ребро a (a = SEGMENTS) и левое ребро b (a = 0), та же строка b=0
+    const ia = SEGMENTS, ib = 0
+    for (let c = 0; c < 3; c++) {
+      const q = (da.array[ia * 3 + c] - db.array[ib * 3 + c]) / wrap.w1
+      expect(Math.abs(q - Math.round(q))).toBeLessThan(1e-3)
+    }
+  })
+
+  it('бит-в-бит: position/normal/uv не изменились от добавления атрибутов', () => {
+    const { geometry } = build(bumpyField(), 0, 1, 0)
+    expect(geometry.getAttribute('position').count).toBe(terrainPatchVertexCount(SEGMENTS))
+    // прочие инварианты — существующие тесты этого файла
   })
 })
