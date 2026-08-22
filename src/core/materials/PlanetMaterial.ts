@@ -10,6 +10,10 @@ import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { IPlanetRenderingObject } from '@/core/models/types'
 import { readRenderingData } from '@/core/helpers/renderingData'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import {
+  DETAIL_FADE_START_RATIO,
+  macroFadeMetersFor
+} from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
 import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { SunTintBinding } from '@/core/materials/SunTintBinding'
@@ -226,6 +230,18 @@ class PlanetMaterial extends AbstractShaderMaterial {
       loadedDiffuse?.width ? 1 / loadedDiffuse.width : 0,
       loadedDiffuse?.height ? 1 / loadedDiffuse.height : 0
     )
+
+    // Конец fade полосы по умолчанию считается от ширины диффуза, а диффуз
+    // приезжает сюда, а не в конструктор шейдера (там ширина ещё 0 и диапазон
+    // вырождался в 1e-6 — полоса не рисовалась никогда). Явная ручка
+    // macroFadeMeters расчёт перекрывает и от загрузки карты не зависит.
+    const radiusKm: number = this.model.physicalObject?.getAttribute('radius') ?? 0
+    const macroFadeEndUnits = Math.max(
+      toThreeJSUnits((planetData.macroFadeMeters ?? macroFadeMetersFor(radiusKm, loadedDiffuse?.width ?? 0)) / 1000),
+      1e-6
+    )
+    this.uniforms.uMacroFadeRange.value.set(macroFadeEndUnits * DETAIL_FADE_START_RATIO, macroFadeEndUnits)
+
     const macroStrength = planetData.macroStrength ?? 0
 
     // Набор собирается от снимка конструирования, а не поверх прошлого: только

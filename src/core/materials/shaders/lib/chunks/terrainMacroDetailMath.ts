@@ -10,6 +10,9 @@
  */
 export const MACRO_FADE_TEXEL_FACTOR = 1500
 
+/** Начало fade относительно конца — общее для всех шкал детали (TerrainDetail, полоса). */
+export const DETAIL_FADE_START_RATIO = 0.4
+
 /** Конец fade полосы по умолчанию: полоса включается там, где диффуз перестаёт нести информацию. */
 export function macroFadeMetersFor(radiusKm: number, diffuseWidth: number): number {
   if (radiusKm <= 0 || diffuseWidth <= 0) return 0
@@ -32,7 +35,7 @@ export function octaveWeight(footprint: number, frequency: number): number {
 
 /** 1 до 0.4·fadeEnd, 0 за fadeEnd — как у шкал TerrainDetail. */
 export function distFade(viewDistance: number, fadeEnd: number): number {
-  return 1 - smoothstep(0.4 * fadeEnd, fadeEnd, viewDistance)
+  return 1 - smoothstep(DETAIL_FADE_START_RATIO * fadeEnd, fadeEnd, viewDistance)
 }
 
 /** Амплитуда по крутизне: равнина тише на influence, крутой склон (|slope|/SLOPE_RANGE ≥ 1) — полная. */

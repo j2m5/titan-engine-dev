@@ -7,7 +7,10 @@ import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
-import { macroFadeMetersFor } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
+import {
+  DETAIL_FADE_START_RATIO,
+  macroFadeMetersFor
+} from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
 
 describe('PlanetShaderTemplate: средняя полоса детали в терраформной ветке', () => {
   const frag: string = PlanetShaderTemplate.fragmentShader
@@ -228,5 +231,40 @@ describe('PlanetMaterial: гейт USE_TERRAIN_MACRO_DETAIL и тексель д
     const texel = material.uniforms.uDiffuseTexelSize.value as Vector2
     expect(texel.x).toBe(0)
     expect(texel.y).toBe(0)
+  })
+
+  it('конец fade пересчитывается в updateMaterial, когда диффуз доехал', () => {
+    // Диффуз неизвестного размера на момент конструирования — в шейдере
+    // диапазон вырожден в минимум; после загрузки карты материал его чинит.
+    resourceStorage.deleteAllTextures()
+    seedPlaceholderKeys()
+    const unknownSized = new Texture()
+    unknownSized.name = DIFFUSE_PATH
+    unknownSized.image = {}
+    resourceStorage.addTexture(unknownSized)
+    seedHeightField()
+    seedTexture(SLOPE_PATH, 8, 4)
+
+    const material = new PlanetMaterial(stubTerraformActor({ macroStrength: 0.25 }))
+    const range = material.uniforms.uMacroFadeRange.value as Vector2
+    expect(range.y).toBeLessThanOrEqual(1.01e-6)
+
+    resourceStorage.deleteTexture(DIFFUSE_PATH)
+    seedTexture(DIFFUSE_PATH, 8192, 4096)
+    material.updateMaterial()
+
+    const end = toThreeJSUnits(macroFadeMetersFor(1737, 8192) / 1000)
+    expect(range.y).toBeCloseTo(end, 12)
+    expect(range.x).toBeCloseTo(DETAIL_FADE_START_RATIO * end, 12)
+  })
+
+  it('явный macroFadeMeters переживает updateMaterial без изменений', () => {
+    seedHeightField()
+    seedTexture(SLOPE_PATH, 8, 4)
+    const material = new PlanetMaterial(stubTerraformActor({ macroStrength: 0.25, macroFadeMeters: 2e6 }))
+    material.updateMaterial()
+    const range = material.uniforms.uMacroFadeRange.value as Vector2
+    expect(range.y).toBeCloseTo(toThreeJSUnits(2000), 12)
+    expect(range.x).toBeCloseTo(DETAIL_FADE_START_RATIO * toThreeJSUnits(2000), 12)
   })
 })

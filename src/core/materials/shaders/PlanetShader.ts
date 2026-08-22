@@ -6,7 +6,10 @@ import { IPlanetRenderingObject, IRingRenderingObject } from '@/core/models/type
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { clampSunTintStrength } from '@/core/materials/SunTintBinding'
-import { macroFadeMetersFor } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
+import {
+  DETAIL_FADE_START_RATIO,
+  macroFadeMetersFor
+} from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
 
 // Нейтральные дефолты детального слоя (используются, только если данные тела
 // не задали ручку явно) — см. IPlanetRenderingObject.detail*, ручки Луны в
@@ -30,8 +33,8 @@ const DEFAULT_DETAIL_FADE2_METERS = 5000
 const DEFAULT_TERRAIN_LAMBERT = 0
 const DEFAULT_TERRAIN_AMBIENT = 0.04
 
-// Начало fade относительно конца: не отдельная ручка (см. IPlanetRenderingObject).
-const DETAIL_FADE_START_RATIO = 0.4
+// Начало fade относительно конца: не отдельная ручка (см. IPlanetRenderingObject),
+// константа общая с CPU-зеркалом полосы (terrainMacroDetailMath.DETAIL_FADE_START_RATIO).
 
 // Деталь облаков гиганта (чанк GiantDetail) — дефолты ручек тела; сама фича
 // живёт под дефайном USE_GIANT_DETAIL, юниформы форвардятся всегда.
