@@ -82,6 +82,17 @@ describe('Целостность ресурсов планет', () => {
     expect((rheaRenderingObject?.data as { bumpScale?: number })?.bumpScale).toBeGreaterThan(0)
   })
 
+  it('страж: карты облаков и ночных огней читаются как sRGB', () => {
+    // Обе — художественные картинки в sRGB, а не данные: без colorSpace
+    // загрузчик берёт линейное чтение, и середина шкалы уезжает вверх
+    // (облака бледнеют, огни городов пересвечены). Политика единая на тип.
+    const wrong = Resources.filter(
+      (r: IResource) => (r.resourceType === 'cloud' || r.resourceType === 'night') && r.colorSpace !== 'srgb'
+    )
+
+    expect(wrong).toEqual([])
+  })
+
   it('height-ресурсы всегда resident: streamable-провал на неизвестном расширении откатывает все ресурсы актора', () => {
     const wrong = Resources.filter((r: IResource) => r.resourceType === 'height' && r.lifecycle !== 'resident')
 
