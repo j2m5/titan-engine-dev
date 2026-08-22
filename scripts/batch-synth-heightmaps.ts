@@ -10,6 +10,9 @@ import { synthesizeHeightAndSlope } from './lib/synthesizeSlope'
 import { autoCalibrateAmplitude, type CalibrationSample } from './lib/autoCalibrate'
 import { argument } from './lib/cliArguments'
 import { bandLowKmFor, boxDownsampleGreyscale, resolutionCeiling } from './lib/batchBodyRules'
+import { slopeRangeForPath } from './lib/slopeRangeFromDb'
+import { dbPathFor } from './lib/dbPathFor'
+import { Resources } from '@storage/database/resources'
 
 /**
  * Батч-оркестратор перевода тел без DEM на конвейер «тел без DEM» (арка
@@ -604,11 +607,15 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
   // рескейл выше сознательно считали R/G без cavity — здесь пересчитываем
   // финальную slope-карту ОДИН раз дефолтом buildSlopeMap (cavity: true), на
   // уже готовой карте высот last.map — без повторного синтеза поля высот.
-  last.slopeRgb = buildSlopeMap(last.map, body.radiusMeters)
-
   const dir = path.dirname(body.inputPath)
   const heightPath = path.join(dir, `${body.name}_height.raw`)
   const slopePath = path.join(dir, `${body.name}_slope.webp`)
+
+  // финальная карта кодируется диапазоном своей строки ресурса — иначе байты
+  // на диске разойдутся с uSlopeRange шейдера; калибровка выше намеренно
+  // остаётся на дефолте (measureRmsTan декодирует им же).
+  const dbSlopePath = dbPathFor(slopePath, path.dirname(TEXTURES_ROOT))
+  last.slopeRgb = buildSlopeMap(last.map, body.radiusMeters, { slopeRange: slopeRangeForPath(dbSlopePath, Resources) })
 
   await writeFile(heightPath, encodeHeightMap(last.map))
   await sharp(Buffer.from(last.slopeRgb.buffer), { raw: { width, height, channels: 3 } })

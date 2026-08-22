@@ -18,7 +18,9 @@ export interface SynthesizeResult {
  * предполагает). Считаем прямо на буфере `buildSlopeMap` — это байт-в-байт
  * то, что дальше пишется в lossless webp, раскодировка готового файла
  * sharp'ом дала бы те же числа; лишний файловый круг во время калибровки не
- * нужен.
+ * нужен. Декод здесь захардкожен на дефолтный SLOPE_RANGE — калибровочные
+ * прогоны (в отличие от финальной записи) кодируются им же, пара
+ * энкод/декод остаётся согласованной.
  */
 export function measureRmsTan(rgb: Uint8Array, width: number, height: number): number {
   const decode = (byte: number): number => ((byte - 128) / 127) * SLOPE_RANGE
