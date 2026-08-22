@@ -122,6 +122,10 @@ class AstroControls extends EventDispatcher<AstroControlsEventMap> {
     const theta: number = 2 * Math.PI * (deltaX / window.innerWidth) * rotationSpeed
     const phi: number = 2 * Math.PI * (deltaY / window.innerHeight) * rotationSpeed
 
+    // Радиус — от текущей позиции, не от запомненной на mousedown: между
+    // событиями мыши коллизия выталкивает камеру из рельефа, возврат на
+    // прежний радиус загонял бы её обратно — дрожание всего рельефа.
+    this.spherical.radius = this.object.position.distanceTo(this.target)
     this.spherical.theta -= theta
     this.spherical.phi -= phi
 
