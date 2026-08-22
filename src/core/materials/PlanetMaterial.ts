@@ -252,7 +252,12 @@ class PlanetMaterial extends AbstractShaderMaterial {
       // своей синхронизацией, поэтому восстанавливается здесь же по текущей
       // записи реестра (иначе стриминг карт гасил бы тинт до следующей смены
       // записи, которой может не быть никогда).
-      ...(this.sunTint.active && { USE_SUN_TINT: '1' })
+      ...(this.sunTint.active && { USE_SUN_TINT: '1' }),
+      // Процедурная деталь облаков гиганта — только легаси-сфера: у тела с
+      // загруженной картой высот ветка #else шаблона вообще не компилируется
+      // (UV идёт через terrainUv), а домен детали построен на body-локальном
+      // vPosition той же ветки.
+      ...(planetData.giantDetail === true && !hasHeightField && { USE_GIANT_DETAIL: '1' })
     }
 
     this.needsUpdate = true

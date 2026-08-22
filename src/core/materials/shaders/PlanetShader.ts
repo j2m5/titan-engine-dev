@@ -32,6 +32,18 @@ const DEFAULT_TERRAIN_AMBIENT = 0.04
 // Начало fade относительно конца: не отдельная ручка (см. IPlanetRenderingObject).
 const DETAIL_FADE_START_RATIO = 0.4
 
+// Деталь облаков гиганта (чанк GiantDetail) — дефолты ручек тела; сама фича
+// живёт под дефайном USE_GIANT_DETAIL, юниформы форвардятся всегда.
+// Клетка 400 км ≈ мелкая турбулентность полос Юпитера (R 69 911 км),
+// вытяжка 6 — вдоль полосы; конец fade по умолчанию 3·R (с этой дистанции
+// экранный след клетки уже гасит все октавы чанка).
+const DEFAULT_GIANT_DETAIL_STRENGTH = 0.35
+const DEFAULT_GIANT_DETAIL_SCALE_KM = 400
+const DEFAULT_GIANT_DETAIL_STRETCH = 6
+const DEFAULT_GIANT_DETAIL_WARP = 0.6
+const DEFAULT_GIANT_DETAIL_TEXTURE_WARP = 2
+const DEFAULT_GIANT_DETAIL_FADE_RADII = 3
+
 // Период (метры → юниты) в масштаб трипланарной проекции: чанк TerrainDetail
 // умножает домен на 1/период напрямую (см. докстрока чанка) — нулевой период
 // невозможен по вводу (метры > 0), гард только от деления на 0 у мусорных данных.
@@ -79,6 +91,13 @@ interface PlanetUniforms {
   uAtmoSunAngularRadius: number
   uAtmoDatumRadius: number
   uSunTintStrength: number
+  uGiantRadiusKm: number
+  uGiantDetailStrength: number
+  uGiantDetailScaleKm: number
+  uGiantDetailStretch: number
+  uGiantDetailWarp: number
+  uGiantDetailTextureWarp: number
+  uGiantDetailFadeUnits: number
 }
 
 class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
@@ -113,6 +132,11 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
     )
 
     const USE_RING: boolean = this.model.children.where('categoryId', 6).isNotEmpty()
+
+    // Радиус тела (км) — домен шума гиганта задан в километрах поверхности,
+    // поэтому клетка не зависит от размера тела. 0 у стаб-акторов без
+    // physicalObject: домен вырождается в ноль, деталь плоская — не падает.
+    const radiusKm: number = this.model.physicalObject?.getAttribute('radius') ?? 0
 
     const detailFadeEndUnits = toThreeJSUnits(
       (planetData.detailFadeMeters ?? DEFAULT_DETAIL_FADE_METERS) / 1000
@@ -169,7 +193,16 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uAtmoDatumRadius: new Uniform(0),
       // Дефолт и кламп ручки — ОБЩИЕ с водной оболочкой (clampSunTintStrength):
       // разъехавшись, суша и вода дали бы тональный шов на берегу.
-      uSunTintStrength: new Uniform(clampSunTintStrength(planetData.sunTintStrength))
+      uSunTintStrength: new Uniform(clampSunTintStrength(planetData.sunTintStrength)),
+      uGiantRadiusKm: new Uniform(radiusKm),
+      uGiantDetailStrength: new Uniform(planetData.giantDetailStrength ?? DEFAULT_GIANT_DETAIL_STRENGTH),
+      uGiantDetailScaleKm: new Uniform(planetData.giantDetailScaleKm ?? DEFAULT_GIANT_DETAIL_SCALE_KM),
+      uGiantDetailStretch: new Uniform(planetData.giantDetailStretch ?? DEFAULT_GIANT_DETAIL_STRETCH),
+      uGiantDetailWarp: new Uniform(planetData.giantDetailWarp ?? DEFAULT_GIANT_DETAIL_WARP),
+      uGiantDetailTextureWarp: new Uniform(planetData.giantDetailTextureWarp ?? DEFAULT_GIANT_DETAIL_TEXTURE_WARP),
+      uGiantDetailFadeUnits: new Uniform(
+        toThreeJSUnits(planetData.giantDetailFadeKm ?? DEFAULT_GIANT_DETAIL_FADE_RADII * radiusKm)
+      )
     }
     this.defines = {
       ...(USE_RING && { USE_RING: '1' })

@@ -7,7 +7,7 @@ export const RenderingObjects: IRenderingObject[] = [
   { id: 1, actorId: 5, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3 } },
   { id: 2, actorId: 8, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3 } },
   { id: 3, actorId: 9, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3, cavityStrength: 0.35 } },
-  { id: 4, actorId: 13, data: { emission: 1, bumpScale: 0.3 } },
+  { id: 4, actorId: 13, data: { emission: 1, giantDetail: true } },
   { id: 5, actorId: 19, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3, terrainLambert: 1, terrainAmbient: 0.04 } },
   { id: 6, actorId: 24, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3, cavityStrength: 0.35 } },
   { id: 7, actorId: 29, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3, cavityStrength: 0.35 } },
@@ -47,7 +47,7 @@ export const RenderingObjects: IRenderingObject[] = [
   { id: 41, actorId: 99, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3, cavityStrength: 0.35 } },
   { id: 42, actorId: 28, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3, cavityStrength: 0.35 } },
   { id: 43, actorId: 7, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.15, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3, waterLevelMeters: 0 } },
-  { id: 44, actorId: 11, data: { emission: 1, bumpScale: 0.3 } },
+  { id: 44, actorId: 11, data: { emission: 1, giantDetail: true } },
   { id: 45, actorId: 14, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3, cavityStrength: 0.35 } },
   { id: 46, actorId: 16, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3, cavityStrength: 0.35 } },
   { id: 47, actorId: 17, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3, cavityStrength: 0.35 } },
@@ -90,5 +90,7 @@ export const RenderingObjects: IRenderingObject[] = [
   { id: 84, actorId: 69, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3, cavityStrength: 0.35 } },
   { id: 85, actorId: 71, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3, cavityStrength: 0.35 } },
   { id: 86, actorId: 72, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3, cavityStrength: 0.35 } },
-  { id: 87, actorId: 74, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3, cavityStrength: 0.35 } }
+  { id: 87, actorId: 74, data: { emission: 1, bumpScale: 1, detailScaleMeters: 40, detailScale2Meters: 7, detailNormalScale: 1, detailSaturation: 0.1, detailBrightness: 1, detailAoInfluence: 0.5, detailFadeMeters: 3e4, detailFade2Meters: 5e3, cavityStrength: 0.35 } },
+  { id: 88, actorId: 10, data: { emission: 1, giantDetail: true } },
+  { id: 89, actorId: 12, data: { emission: 1, giantDetail: true } }
 ]

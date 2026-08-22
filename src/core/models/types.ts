@@ -271,6 +271,25 @@ export interface IPlanetRenderingObject {
    * атмосферы у тела.
    */
   sunTintStrength?: number
+
+  // --- Ручки процедурной детали облаков гиганта (чанк GiantDetail). Все
+  // опциональны: отсутствие → дефолты движка (PlanetShader). Гейт
+  // USE_GIANT_DETAIL — по giantDetail И отсутствию карты высот (PlanetMaterial).
+
+  /** Процедурная деталь облаков гиганта под текселем (легаси-сфера без карты высот). */
+  giantDetail?: boolean
+  /** Сила детали 0..1 (дефолт 0.35). */
+  giantDetailStrength?: number
+  /** Клетка шума, км поверхности (дефолт 400). */
+  giantDetailScaleKm?: number
+  /** Вытяжка клетки вдоль полосы (дефолт 6). */
+  giantDetailStretch?: number
+  /** Варп домена низкочастотным шумом — вихри (дефолт 0.6). */
+  giantDetailWarp?: number
+  /** Варп по производной яркости текстуры по широте — складки у краёв полос (дефолт 2). */
+  giantDetailTextureWarp?: number
+  /** Конец дистанционного fade, км (дефолт 3·R). */
+  giantDetailFadeKm?: number
 }
 
 export type IAtmosphereRenderingObject = AtmosphereConfig

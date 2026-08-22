@@ -194,9 +194,13 @@ describe('TerrainDetail: хук в терраформной ветке шабл�
   })
 
   it('albedoMul применяется на месте выборки dayColor', () => {
-    const dayColorIdx = frag.indexOf('vec3 dayColor = texture2D(diffuseMap, uv).rgb;')
+    // Выборка диффуза переехала в ветки UV (deteail гиганта читает её яркость
+    // в легаси-ветке, арка giant-detail) — dayColor берёт готовый diffuseSample.
+    const dayColorIdx = frag.indexOf('vec3 dayColor = diffuseSample;')
+    const sampleIdx = frag.indexOf('vec3 diffuseSample = texture2D(diffuseMap, uv).rgb;')
     const mulIdx = frag.indexOf('dayColor *= albedoMul;')
-    expect(dayColorIdx).toBeGreaterThan(-1)
+    expect(sampleIdx).toBeGreaterThan(-1)
+    expect(dayColorIdx).toBeGreaterThan(sampleIdx)
     expect(mulIdx).toBeGreaterThan(dayColorIdx)
   })
 })

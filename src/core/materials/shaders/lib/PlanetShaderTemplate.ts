@@ -125,6 +125,10 @@ export const PlanetShaderTemplate: ShaderProps = {
       #include <sunTransmittanceUniforms>
     #endif
 
+    #ifdef USE_GIANT_DETAIL
+      #include <giantDetailUniforms>
+    #endif
+
     varying vec2 vUv;
     varying vec3 vNormal;
     varying vec3 vPosition;
@@ -162,6 +166,13 @@ export const PlanetShaderTemplate: ShaderProps = {
       #include <ringShadowFunctions>
     #endif
 
+    // Деталь облаков гиганта (легаси-ветка): чанку нужен snoise(vec3) — шум
+    // включается ТОЛЬКО под этим гейтом, безгейтового noiseFunctions в шаблоне нет.
+    #ifdef USE_GIANT_DETAIL
+      #include <noiseFunctions>
+      #include <giantDetailFunctions>
+    #endif
+
     void main() {
       ${ShaderChunk['logdepthbuf_fragment']}
       vec3 normal = normalize(vNormal);
@@ -179,6 +190,9 @@ export const PlanetShaderTemplate: ShaderProps = {
         // отрицательный домен u2 ∈ [-0.5, 0.5).
         vec3 dirLocal = normalize(vLocalDir);
         vec2 uv = terrainUv(dirLocal);
+        // Единственная выборка диффуза ветки (дальше идёт в dayColor) — как и
+        // uv, объявляется по одной на ветку препроцессора.
+        vec3 diffuseSample = texture2D(diffuseMap, uv).rgb;
         // Тело-локальный конвейер нормалей: вся пертурбация (slope, следом
         // детальный слой задачи 4) работает в системе координат ТЕЛА, а не
         // вида — normalMatrix применяется РОВНО ОДИН раз, после всех слоёв.
@@ -223,13 +237,20 @@ export const PlanetShaderTemplate: ShaderProps = {
         #ifdef USE_BUMP
           normal = perturbNormalFromHeight(normal, east, uv);
         #endif
+
+        vec3 diffuseSample = texture2D(diffuseMap, uv).rgb;
+
+        #ifdef USE_GIANT_DETAIL
+          // Деталь облаков гиганта под текселем — множитель альбедо, как cavity/детальный слой суши
+          applyGiantDetail(albedoMul, normalize(vPosition), uv, dot(diffuseSample, vec3(0.2126, 0.7152, 0.0722)), length(vViewPosition));
+        #endif
       #endif
 
       vec3 lightDirection = normalize(vViewLightDirection);
       float NdotLraw = dot(normal, lightDirection);
       float lightIntensity = max(NdotLraw, 0.0);
 
-      vec3 dayColor = texture2D(diffuseMap, uv).rgb;
+      vec3 dayColor = diffuseSample;
       dayColor *= albedoMul;
 
       #ifdef USE_TERRAIN_UV
