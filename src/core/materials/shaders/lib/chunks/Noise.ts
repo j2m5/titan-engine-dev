@@ -1,4 +1,10 @@
 export const noiseFunctions = `
+  // Страж двойного включения: чанк подключают несколько взаимоисключающих
+  // гейтов одного шейдера (USE_GIANT_DETAIL, USE_TERRAIN_MACRO_DETAIL) — при
+  // совпадении гейтов GLSL иначе падает на переопределении функций.
+  #ifndef TITAN_NOISE_INCLUDED
+  #define TITAN_NOISE_INCLUDED
+
   // float→float хеш для декоррелированных пер-инстансных сидов. ВАЖНО: вызывать
   // только от значений, стабильных в пределах примитива (вершинный шейдер /
   // юниформы). От ИНТЕРПОЛИРОВАННОГО varying'а — запрещено: ULP-джиттер
@@ -403,4 +409,6 @@ export const noiseFunctions = `
 
     return vec4(value, grad);
   }
+
+  #endif
 `

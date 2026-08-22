@@ -11,6 +11,7 @@ import {
   DETAIL_FADE_START_RATIO,
   macroFadeMetersFor
 } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
+import { noiseFunctions } from '@/core/materials/shaders/lib/chunks/Noise'
 import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 
 describe('PlanetShaderTemplate: средняя полоса детали в терраформной ветке', () => {
@@ -57,8 +58,10 @@ describe('PlanetShaderTemplate: средняя полоса детали в те
     expect(frag.indexOf('float macroCavity = 0.0;', sample)).toBeLessThan(cavityGate)
   })
 
-  it('noiseFunctions подключается не более двух раз (гиганты и полоса — разные гейты)', () => {
-    expect((frag.match(/#include <noiseFunctions>/g) ?? []).length).toBeLessThanOrEqual(2)
+  it('noiseFunctions защищён от двойного включения собственным стражем', () => {
+    expect(noiseFunctions).toContain('#ifndef TITAN_NOISE_INCLUDED')
+    expect(noiseFunctions).toContain('#define TITAN_NOISE_INCLUDED')
+    expect(noiseFunctions.trimEnd().endsWith('#endif')).toBe(true)
   })
 })
 
