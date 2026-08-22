@@ -38,11 +38,11 @@ const DETAIL_FADE_START_RATIO = 0.4
 // вытяжка 6 — вдоль полосы; конец fade по умолчанию 3·R (с этой дистанции
 // экранный след клетки уже гасит все октавы чанка).
 const DEFAULT_GIANT_DETAIL_STRENGTH = 0.35
-const DEFAULT_GIANT_DETAIL_SCALE_KM = 400
+const DEFAULT_GIANT_DETAIL_SCALE_KM = 600
 const DEFAULT_GIANT_DETAIL_STRETCH = 6
 const DEFAULT_GIANT_DETAIL_WARP = 0.6
 const DEFAULT_GIANT_DETAIL_TEXTURE_WARP = 2
-const DEFAULT_GIANT_DETAIL_FADE_RADII = 3
+const DEFAULT_GIANT_DETAIL_FADE_RADII = 6
 
 // Период (метры → юниты) в масштаб трипланарной проекции: чанк TerrainDetail
 // умножает домен на 1/период напрямую (см. докстрока чанка) — нулевой период
