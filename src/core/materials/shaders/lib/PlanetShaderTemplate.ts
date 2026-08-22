@@ -65,7 +65,9 @@ export const PlanetShaderTemplate: ShaderProps = {
       gl_Position = projectionMatrix * mvPosition;
 
       vec3 worldLightDirection = normalize(worldPosition.xyz - lightPosition);
-      vec3 localLightDirection = (inverse(modelMatrix) * vec4(worldLightDirection, 0.0)).xyz;
+      // modelMatrix — поворот + трансляция (без scale): обратная для
+      // направления = транспонированная 3×3, без обращения 4×4 на вершину.
+      vec3 localLightDirection = transpose(mat3(modelMatrix)) * worldLightDirection;
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
 
       vUv = uv;

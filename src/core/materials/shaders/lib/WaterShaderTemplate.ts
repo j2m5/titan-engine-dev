@@ -85,7 +85,7 @@ export const WaterShaderTemplate: ShaderProps = {
       // тинта заката (см. фрагментник): те же строки, что у палубы
       // (PlanetShaderTemplate), парный строковый страж в тестах.
       vec3 worldLightDirection = normalize(worldPosition.xyz - lightPosition);
-      vec3 localLightDirection = (inverse(modelMatrix) * vec4(worldLightDirection, 0.0)).xyz;
+      vec3 localLightDirection = transpose(mat3(modelMatrix)) * worldLightDirection;
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
 
       vNormal = normalize(normalMatrix * normal);

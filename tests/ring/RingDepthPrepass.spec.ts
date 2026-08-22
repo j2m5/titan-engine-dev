@@ -137,7 +137,7 @@ describe('Депт-пре-пасс кольца', () => {
   it('варьинг локальной камеры есть в обоих шейдерах пре-пасса — затуханиям нужен ракурс', () => {
     const material = prepassOf(new Ring(ringActor())).material as RingDepthMaterial
 
-    expect(material.vertexShader).toContain('vLocalCameraPosition = (inverse(modelMatrix) * vec4(cameraPosition, 1.0)).xyz;')
+    expect(material.vertexShader).toContain('vLocalCameraPosition = worldToLocal * (cameraPosition - modelMatrix[3].xyz);')
     expect(material.fragmentShader).toContain('varying vec3 vLocalCameraPosition;')
   })
 

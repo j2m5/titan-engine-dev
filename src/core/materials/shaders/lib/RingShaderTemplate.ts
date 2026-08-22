@@ -37,11 +37,14 @@ export const RingShaderTemplate: ShaderProps = {
       gl_Position = projectionMatrix * vec4(viewPosition, 1.0);
 
       vec3 lightDirWorld = normalize(worldPosition.xyz - lightPosition);
-      vec3 lightDirLocal = (inverse(modelMatrix) * vec4(lightDirWorld, 0.0)).xyz;
+      // modelMatrix — поворот + трансляция (без scale): обратная = транспонированная
+      // 3×3; для точки сначала снять трансляцию (4-й столбец).
+      mat3 worldToLocal = transpose(mat3(modelMatrix));
+      vec3 lightDirLocal = worldToLocal * lightDirWorld;
 
       vPosition = position;
       vLightDirectionL = lightDirLocal;
-      vLocalCameraPosition = (inverse(modelMatrix) * vec4(cameraPosition, 1.0)).xyz;
+      vLocalCameraPosition = worldToLocal * (cameraPosition - modelMatrix[3].xyz);
       ${ShaderChunk['logdepthbuf_vertex']}
     }
   `,

@@ -113,7 +113,8 @@ class RingDepthMaterial extends AbstractShaderMaterial {
       gl_Position = projectionMatrix * vec4(viewPosition, 1.0);
 
       vPosition = position;
-      vLocalCameraPosition = (inverse(modelMatrix) * vec4(cameraPosition, 1.0)).xyz;
+      mat3 worldToLocal = transpose(mat3(modelMatrix));
+      vLocalCameraPosition = worldToLocal * (cameraPosition - modelMatrix[3].xyz);
       ${ShaderChunk['logdepthbuf_vertex']}
     }
   `
