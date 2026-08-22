@@ -22,4 +22,10 @@ describe('slopeStatistics', () => {
     expect(s.p90).toBeGreaterThanOrEqual(s.p50)
     expect(s.max).toBeGreaterThan(0)
   })
+
+  it('точное значение: рампа [0,300,600,300] при R=1000 → max ≈ 0.2701', () => {
+    const row = [0, 300, 600, 300]
+    const s = slopeStatistics(makeMap(4, 2, [...row, ...row]), 1000)
+    expect(s.max).toBeCloseTo(0.2701, 3)
+  })
 })

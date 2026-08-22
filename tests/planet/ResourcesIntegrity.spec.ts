@@ -1,6 +1,6 @@
 import { Resources, RenderingObjects, ActorResource } from '@storage/database'
 import { IResource, IRenderingObject, IActorResource } from '@/core/models/types'
-import { isValidSlopeRange } from '@/core/terrain/slopeMapFormat'
+import { isValidSlopeRange, SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 
 describe('Целостность ресурсов планет', () => {
   it('страж: у тела с картой высот не осталось planets/-bump — рельеф шейдит slope', () => {
@@ -106,5 +106,10 @@ describe('Целостность ресурсов планет', () => {
     for (const r of slopes) {
       expect(isValidSlopeRange(r.slopeRange), `${r.path}: slopeRange=${String(r.slopeRange)}`).toBe(true)
     }
+  })
+
+  it('страж: slopeRange не выше SLOPE_RANGE — липшицева константа марша CameraCollision', () => {
+    const steep = Resources.filter((r) => r.resourceType === 'slope' && (r.slopeRange ?? SLOPE_RANGE) > SLOPE_RANGE)
+    expect(steep).toEqual([]) // 4 в сетке допустим только вместе с ревизией marchTerrain
   })
 })

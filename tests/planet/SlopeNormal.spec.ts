@@ -5,6 +5,7 @@ import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderT
 describe('SlopeNormal: попиксельная нормаль из slope-карты', () => {
   it('чанк зарегистрирован — иначе include молча раскроется в пустоту', () => {
     expect(AppShaderChunk.slopeNormalFunctions).toBe(slopeNormalFunctions)
+    expect(AppShaderChunk.slopeNormalUniforms).toBe(slopeNormalUniforms)
   })
 
   it('одна выборка RG вместо четырёх выборок высот — мипы фильтруют уклоны сами', () => {

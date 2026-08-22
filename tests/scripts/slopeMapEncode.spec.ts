@@ -457,8 +457,9 @@ describe('buildSlopeMap: per-map диапазон slopeRange', () => {
   // → уклон ≈ 0.000637; для заметных байтов берём крутой подъём
   function rampMap(): HeightMapData {
     // 4×2, строка: 0, 300, 600, 300 → центральная разность x=1: (600-0)/(2·arc);
-    // шаг подобран так, чтобы сырой уклон (~0.18) не насыщал диапазон 0.5 —
-    // иначе сравнение «4x МЗР» проверяло бы кламп, а не масштаб квантования
+    // шаг подобран так, чтобы сырой уклон (≈0.27, точно 0.27009: широта π/4,
+    // eastArc 1110.72 м, Δh 600 м) не насыщал диапазон 0.5 — иначе сравнение
+    // «4x МЗР» проверяло бы кламп, а не масштаб квантования
     const row = [0, 300, 600, 300]
     return makeMap(4, 2, [...row, ...row])
   }
@@ -469,8 +470,8 @@ describe('buildSlopeMap: per-map диапазон slopeRange', () => {
     const dWide = wide[1 * 3] - 128
     const dNarrow = narrow[1 * 3] - 128
     expect(dWide).toBeGreaterThan(0)
-    // дизер ±0.5 МЗР: допуск 2 на четырёхкратно усиленном значении
-    expect(Math.abs(dNarrow - 4 * dWide)).toBeLessThanOrEqual(2)
+    // дизер ±0.5 МЗР на dWide, ×4 → ±2, плюс ±0.5 на dNarrow: честная граница 3
+    expect(Math.abs(dNarrow - 4 * dWide)).toBeLessThanOrEqual(3)
   })
 
   it('кламп по slopeRange: уклон выше диапазона — крайние байты', () => {

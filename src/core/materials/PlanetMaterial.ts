@@ -165,13 +165,15 @@ class PlanetMaterial extends AbstractShaderMaterial {
     // живёт плейсхолдер с пустым именем (getTextureOrMake('') у колец), и
     // фолбэк на '' находил бы его как фантомную карту рельефа.
     const textureOf = (
-      type: 'slope' | 'bump' | 'detailDiffuse' | 'detailNormal' | 'detailArm' | 'detailNormal2'
+      type: 'bump' | 'detailDiffuse' | 'detailNormal' | 'detailArm' | 'detailNormal2'
     ): Texture | undefined => {
       const path = this.model.resources.where('resourceType', type).first()?.getAttribute('path')
 
       return typeof path === 'string' ? resourceStorage.getTexture(path) : undefined
     }
-    const slopeMap = textureOf('slope')
+    const slopeResource = this.model.resources.where('resourceType', 'slope').first()
+    const slopePath = slopeResource?.getAttribute('path')
+    const slopeMap = typeof slopePath === 'string' ? resourceStorage.getTexture(slopePath) : undefined
     const legacyBumpMap = textureOf('bump')
     const bumpMap: Texture | undefined = hasHeightField ? slopeMap : legacyBumpMap
     const useSlope = hasHeightField && Boolean(slopeMap)
@@ -179,7 +181,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
     // Диапазон декода — per-map поле ресурса (см. slopeMapFormat), отсутствие
     // или невалидное значение (грид степеней двойки) — дефолт SLOPE_RANGE,
     // прежнее поведение тел без ручки.
-    const slopeRange = this.model.resources.where('resourceType', 'slope').first()?.getAttribute('slopeRange')
+    const slopeRange = slopeResource?.getAttribute('slopeRange')
     this.uniforms.uSlopeRange.value = isValidSlopeRange(slopeRange) ? slopeRange : SLOPE_RANGE
 
     // Cavity-затемнение альбедо (арка slope-cavity, канал B slope-карты) —
