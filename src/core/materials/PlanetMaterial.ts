@@ -12,7 +12,7 @@ import { readRenderingData } from '@/core/helpers/renderingData'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
-import { SunTintBinding } from '@/core/materials/sunTintBinding'
+import { SunTintBinding } from '@/core/materials/SunTintBinding'
 import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
 
 /**

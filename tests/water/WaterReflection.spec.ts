@@ -314,6 +314,10 @@ function stripGuardedBlock(source: string, guard: string): string {
   const lines = source.split('\n')
   const result: string[] = []
   let depth = 0
+  // Ветка `#else` снимаемого гейта — ровно то, что компилятор видит БЕЗ
+  // дефайна, поэтому она остаётся в выводе (арка «тинт солнца для воды»:
+  // ночной пол воды живёт в обеих ветках, см. WaterShaderTemplate).
+  let keepElseBranch = false
 
   for (const line of lines) {
     const trimmed = line.trim()
@@ -321,6 +325,7 @@ function stripGuardedBlock(source: string, guard: string): string {
     if (depth === 0) {
       if (trimmed === `#ifdef ${guard}`) {
         depth = 1
+        keepElseBranch = false
         continue
       }
       result.push(line)
@@ -331,7 +336,17 @@ function stripGuardedBlock(source: string, guard: string): string {
       depth++
     } else if (trimmed === '#endif') {
       depth--
+
+      if (depth === 0) {
+        keepElseBranch = false
+        continue
+      }
+    } else if (depth === 1 && trimmed === '#else') {
+      keepElseBranch = true
+      continue
     }
+
+    if (keepElseBranch) result.push(line)
   }
 
   return result.join('\n')
@@ -339,6 +354,18 @@ function stripGuardedBlock(source: string, guard: string): string {
 
 function normalizeBlankLines(source: string): string {
   return source.replace(/\n[ \t]*\n(?:[ \t]*\n)*/g, '\n\n').trim()
+}
+
+/**
+ * Отступ: ветка `#else` лежит на уровень глубже снятой директивы — снимок
+ * сверяется с точностью до отступа. Любая правка кода или комментария всё
+ * равно даёт RED — теряется только выравнивание.
+ */
+function normalizeIndent(source: string): string {
+  return source
+    .split('\n')
+    .map((line: string) => line.trim())
+    .join('\n')
 }
 
 // Снимок Task 1 (фрагментник ДО Task 2, коммит b002690) — та же конструкция
@@ -440,7 +467,7 @@ describe('Паритет: без USE_WATER_REFLECTION компилируемый
     // вклад во фрагментник под своим гейтом, вне гейта только варьинг.
     const stripped = stripGuardedBlock(stripGuardedBlock(frag, 'USE_WATER_WAVES'), 'USE_SUN_TINT')
 
-    expect(normalizeBlankLines(stripped)).toBe(normalizeBlankLines(BASELINE_FRAGMENT_SHADER))
+    expect(normalizeIndent(normalizeBlankLines(stripped))).toBe(normalizeIndent(normalizeBlankLines(BASELINE_FRAGMENT_SHADER)))
   })
 
   // Находка ревью фикс-раунда 1 №4 (блайндспот): мутация «закрыть гейт
@@ -529,8 +556,8 @@ const BASELINE_VERTEX_SHADER = `
     }
   `
 
-describe('Паритет вершинника: байт-в-байт Task 1 БЕЗУСЛОВНО (находка ревью фикс-раунда 1 №5)', () => {
-  it('vertexShader равен снимку Task 1 без всякого strip — Task 2 не добавила вершиннику ни единого символа', () => {
+describe('Паритет вершинника: снимок БЕЗУСЛОВНЫЙ (находка ревью фикс-раунда 1 №5)', () => {
+  it('вершинник равен текущему снимку — любая незаявленная правка RED', () => {
     expect(normalizeBlankLines(vert)).toBe(normalizeBlankLines(BASELINE_VERTEX_SHADER))
   })
 })

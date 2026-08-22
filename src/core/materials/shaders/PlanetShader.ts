@@ -5,6 +5,7 @@ import { Actor } from '@/core/models/Actor'
 import { IPlanetRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+import { clampSunTintStrength } from '@/core/materials/SunTintBinding'
 
 // Нейтральные дефолты детального слоя (используются, только если данные тела
 // не задали ручку явно) — см. IPlanetRenderingObject.detail*, ручки Луны в
@@ -27,10 +28,6 @@ const DEFAULT_DETAIL_FADE2_METERS = 5000
 // рассеянного света в тени рельефа при включённом ламберте.
 const DEFAULT_TERRAIN_LAMBERT = 0
 const DEFAULT_TERRAIN_AMBIENT = 0.04
-
-// Тинт заката (LUT пропускания атмосферы) — 1 нейтрально, юниформ гейтит
-// весь эффект (USE_SUN_TINT), дефолт лишь на случай данных без ручки.
-const DEFAULT_SUN_TINT_STRENGTH = 1
 
 // Начало fade относительно конца: не отдельная ручка (см. IPlanetRenderingObject).
 const DETAIL_FADE_START_RATIO = 0.4
@@ -170,12 +167,9 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uAtmoTopRadius: new Uniform(0),
       uAtmoSunAngularRadius: new Uniform(0),
       uAtmoDatumRadius: new Uniform(0),
-      // Кламп к [0,1]: ручка данных — не гарантированно валидный ввод,
-      // а вне диапазона тинт либо не действует (>1 не сильнее зенита LUT
-      // — clamp внутри sunTint), либо переворачивает знак смеси (<0).
-      uSunTintStrength: new Uniform(
-        Math.min(1, Math.max(0, planetData.sunTintStrength ?? DEFAULT_SUN_TINT_STRENGTH))
-      )
+      // Дефолт и кламп ручки — ОБЩИЕ с водной оболочкой (clampSunTintStrength):
+      // разъехавшись, суша и вода дали бы тональный шов на берегу.
+      uSunTintStrength: new Uniform(clampSunTintStrength(planetData.sunTintStrength))
     }
     this.defines = {
       ...(USE_RING && { USE_RING: '1' })

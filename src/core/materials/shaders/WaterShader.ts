@@ -5,6 +5,7 @@ import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/
 import { Actor } from '@/core/models/Actor'
 import { IPlanetRenderingObject } from '@/core/models/types'
 import { distanceForApparentSize } from '@/core/helpers/apparentSize'
+import { clampSunTintStrength } from '@/core/materials/SunTintBinding'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 // Дефолты ручек воды — честно помеченные заглушки (см. IPlanetRenderingObject),
@@ -25,11 +26,6 @@ const DEFAULT_WATER_NIGHT_FLOOR = 0.08
 // distortionScale Water.js (см. WaterShaderTemplate). Инертна без
 // USE_WATER_REFLECTION (гейт по факту доставки кубмапы, см. WaterMaterial).
 const DEFAULT_WATER_DISTORTION = 20
-
-// Тинт заката — та же ручка данных, что у палубы (см. PlanetShader): 1
-// нейтрально, весь эффект гейтит USE_SUN_TINT, дефолт лишь на случай данных
-// без ручки.
-const DEFAULT_SUN_TINT_STRENGTH = 1
 
 // --- Ряд волн (арка water-shader, Task 1). ---
 
@@ -208,15 +204,14 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
       uSkyFlipX: skySampleUniforms.uSkyFlipX,
       // LUT и геометрия оболочки приходят из реестра атмосфер каждый видимый
       // кадр (SunTintBinding, см. WaterMaterial) — здесь нулевые заглушки,
-      // инертные без USE_SUN_TINT. Кламп ручки к [0,1] — тот же, что у палубы
-      // (PlanetShader): вне диапазона тинт либо не действует (>1 не сильнее
-      // зенита LUT — clamp внутри sunTint), либо переворачивает знак смеси.
+      // инертные без USE_SUN_TINT. Дефолт и кламп ручки — ОБЩИЕ с палубой
+      // (clampSunTintStrength), разъехаться не могут.
       uAtmoTransmittance: new Uniform(null),
       uAtmoBottomRadius: new Uniform(0),
       uAtmoTopRadius: new Uniform(0),
       uAtmoSunAngularRadius: new Uniform(0),
       uAtmoDatumRadius: new Uniform(0),
-      uSunTintStrength: new Uniform(Math.min(1, Math.max(0, waterData.sunTintStrength ?? DEFAULT_SUN_TINT_STRENGTH)))
+      uSunTintStrength: new Uniform(clampSunTintStrength(waterData.sunTintStrength))
     }
     this.name = 'WaterShader'
   }

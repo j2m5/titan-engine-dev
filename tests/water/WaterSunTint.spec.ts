@@ -3,6 +3,8 @@ import { Object3D, Texture } from 'three'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
 import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
 import { WaterShader } from '@/core/materials/shaders/WaterShader'
+import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
+import { clampSunTintStrength, SUN_TINT_STRENGTH_DEFAULT } from '@/core/materials/SunTintBinding'
 import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
 import { Actor } from '@/core/models/Actor'
 import { AtmosphereEntry, AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
@@ -15,9 +17,16 @@ const EARTH_ACTOR_ID = 7
 const ATMO_ACTOR_ID = 47
 const MOON_ACTOR_ID = 19
 
-const TINT_LINE =
-  'color *= mix(vec3(1.0), sunTint(dot(normalize(vLocalDir), -normalize(vLocalLightDirection))), uSunTintStrength);'
-const FRAG_COLOR_LINE = 'gl_FragColor = vec4(color, alpha);'
+const FACTOR_LINE =
+  'vec3 sunTintFactor = mix(vec3(1.0), sunTint(dot(normalize(vLocalDir), -normalize(vLocalLightDirection))), uSunTintStrength);'
+// Тинтуется ДНЕВНАЯ составляющая (обе — фундамент и волны), ночной пол
+// uWaterNightFloor остаётся ручкой владельца: sunTint у терминатора уходит
+// в ноль, и общий множитель обнулил бы пол на всей ночной стороне.
+const DAY_TINT_LINE = 'color *= mix(vec3(uWaterNightFloor), sunTintFactor, dayFactor);'
+const WAVES_TINT_LINE = 'wavesColor *= mix(vec3(uWaterNightFloor), sunTintFactor, waveDayFactor);'
+// Ветки «дефайна нет» — дословный master (страж: без гейта картинка прежняя).
+const DAY_PLAIN_LINE = 'color *= mix(uWaterNightFloor, 1.0, dayFactor);'
+const WAVES_PLAIN_LINE = 'wavesColor *= mix(uWaterNightFloor, 1.0, waveDayFactor);'
 
 const frag: string = WaterShaderTemplate.fragmentShader
 const vert: string = WaterShaderTemplate.vertexShader
@@ -87,18 +96,32 @@ describe('WaterShaderTemplate: тинт солнца — контракт шей
     expect(frag).toContain('varying vec3 vLocalLightDirection;')
   })
 
-  it('тинт домножает ИТОГОВЫЙ цвет — последним выражением перед gl_FragColor', () => {
-    const tintIndex = frag.indexOf(TINT_LINE)
-    const fragColorIndex = frag.indexOf(FRAG_COLOR_LINE)
-
-    expect(tintIndex).toBeGreaterThan(-1)
-    expect(fragColorIndex).toBeGreaterThan(tintIndex)
-    // Между тинтом и записью цвета — только закрытие его же гейта.
-    expect(frag.slice(tintIndex + TINT_LINE.length, fragColorIndex).replace(/\s+/g, '')).toBe('#endif')
+  it('тинтуется ДНЕВНАЯ составляющая обоих цветов — ночной пол uWaterNightFloor остаётся ручкой', () => {
+    expect(frag).toContain(DAY_TINT_LINE)
+    expect(frag).toContain(WAVES_TINT_LINE)
+    // Общего множителя итогового цвета больше нет: sunTint у терминатора
+    // ровно 0 (smoothstep диска в atmoTransmittanceToSun) и обнулял бы пол.
+    expect(frag).not.toContain('color *= mix(vec3(1.0), sunTint(')
   })
 
-  it('тинт и оба чанка стоят под гейтом USE_SUN_TINT', () => {
-    expect(gatedBySunTint(frag, TINT_LINE)).toBe(true)
+  it('ветка без дефайна — дословный master: тинт не трогает картинку тел без атмосферы', () => {
+    expect(frag).toContain(DAY_PLAIN_LINE)
+    expect(frag).toContain(WAVES_PLAIN_LINE)
+  })
+
+  it('множитель считается ОДИН раз под гейтом и ДО обоих применений', () => {
+    const factorIndex = frag.indexOf(FACTOR_LINE)
+
+    expect(factorIndex).toBeGreaterThan(-1)
+    expect(frag.indexOf(FACTOR_LINE, factorIndex + 1)).toBe(-1)
+    expect(factorIndex).toBeLessThan(frag.indexOf(DAY_TINT_LINE))
+    expect(factorIndex).toBeLessThan(frag.indexOf(WAVES_TINT_LINE))
+  })
+
+  it('множитель, оба применения и оба чанка стоят под гейтом USE_SUN_TINT', () => {
+    expect(gatedBySunTint(frag, FACTOR_LINE)).toBe(true)
+    expect(gatedBySunTint(frag, DAY_TINT_LINE)).toBe(true)
+    expect(gatedBySunTint(frag, WAVES_TINT_LINE)).toBe(true)
     expect(gatedBySunTint(frag, '#include <sunTransmittanceUniforms>')).toBe(true)
     expect(gatedBySunTint(frag, '#include <sunTransmittanceFunctions>')).toBe(true)
   })
@@ -113,6 +136,8 @@ describe('WaterShaderTemplate: тинт солнца — контракт шей
 })
 
 describe('WaterShader: юниформы тинта (дефолты и кламп ручки)', () => {
+  afterEach(() => resourceStorage.deleteAllTextures())
+
   it('дефолты: сэмплер null, геометрия нулевая, сила ручки 1 (нейтрально — гейтит эффект дефайн)', () => {
     const shader = new WaterShader(stubActor({}))
 
@@ -128,6 +153,33 @@ describe('WaterShader: юниформы тинта (дефолты и кламп
     expect(new WaterShader(stubActor({ sunTintStrength: 0.4 })).uniforms.uSunTintStrength.value).toBe(0.4)
     expect(new WaterShader(stubActor({ sunTintStrength: 2 })).uniforms.uSunTintStrength.value).toBe(1)
     expect(new WaterShader(stubActor({ sunTintStrength: -1 })).uniforms.uSunTintStrength.value).toBe(0)
+  })
+
+  // Дефолт и кламп у палубы и воды — ОДНА функция (clampSunTintStrength):
+  // разъехавшись, они дали бы тональный шов на берегу у терминатора.
+  it('палуба и вода клампят одинаково — общий clampSunTintStrength, не две копии', () => {
+    // PlanetShader ходит в хранилище через getTextureOrMake, а тот в jsdom
+    // строит канвас-текстуру (канвас 2d недоступен) — сеем все три ключа
+    // заранее, тот же приём, что seedPlaceholderKeys в
+    // tests/planet/SunTintWiring.spec.ts.
+    for (const name of ['', 'default.png', 'night.jpg']) {
+      const placeholder = new Texture()
+
+      placeholder.name = name
+      placeholder.image = { width: 4, height: 2 }
+      resourceStorage.addTexture(placeholder)
+    }
+
+    for (const value of [undefined, 0.4, 2, -1]) {
+      const data = value === undefined ? {} : { sunTintStrength: value }
+
+      expect(new WaterShader(stubActor(data)).uniforms.uSunTintStrength.value).toBe(
+        new PlanetShader(stubActor(data)).uniforms.uSunTintStrength.value
+      )
+    }
+
+    expect(clampSunTintStrength(undefined)).toBe(SUN_TINT_STRENGTH_DEFAULT)
+    expect(new WaterShader(stubActor({})).uniforms.uSunTintStrength.value).toBe(SUN_TINT_STRENGTH_DEFAULT)
   })
 })
 

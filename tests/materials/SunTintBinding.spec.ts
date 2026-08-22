@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Object3D, Texture } from 'three'
-import { SunTintBinding, SunTintTarget } from '@/core/materials/sunTintBinding'
+import { SunTintBinding, SunTintTarget } from '@/core/materials/SunTintBinding'
 import { AtmosphereEntry, AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { AtmosphereConfig, EMPTY_LAYER, expLayer } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 

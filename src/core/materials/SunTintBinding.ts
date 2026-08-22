@@ -1,5 +1,18 @@
 import type { AtmosphereEntry, AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 
+/** Сила закатного тинта без ручки в данных: 1 нейтрально — весь эффект гейтит USE_SUN_TINT. */
+export const SUN_TINT_STRENGTH_DEFAULT = 1
+
+/**
+ * Ручка данных — не гарантированно валидный ввод: вне [0,1] тинт либо не
+ * действует (>1 не сильнее зенита LUT — clamp внутри sunTint), либо
+ * переворачивает знак смеси (<0). Один кламп на палубу и воду — расхождение
+ * дефолтов дало бы тональный шов на берегу.
+ */
+export function clampSunTintStrength(strength?: number): number {
+  return Math.min(1, Math.max(0, strength ?? SUN_TINT_STRENGTH_DEFAULT))
+}
+
 /**
  * Материал глазами проводки тинта: юниформы, дефайны и флаг рекомпила. Уже
  * структурного ShaderMaterial — проводка не должна уметь ничего сверх этого,

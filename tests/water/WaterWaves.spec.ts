@@ -603,6 +603,10 @@ function stripGuardedBlock(source: string, guard: string): string {
   const lines = source.split('\n')
   const result: string[] = []
   let depth = 0
+  // Ветка `#else` снимаемого гейта — ровно то, что компилятор видит БЕЗ
+  // дефайна, поэтому она остаётся в выводе (арка «тинт солнца для воды»:
+  // ночной пол воды живёт в обеих ветках, см. WaterShaderTemplate).
+  let keepElseBranch = false
 
   for (const line of lines) {
     const trimmed = line.trim()
@@ -610,6 +614,7 @@ function stripGuardedBlock(source: string, guard: string): string {
     if (depth === 0) {
       if (trimmed === `#ifdef ${guard}`) {
         depth = 1
+        keepElseBranch = false
         continue
       }
       result.push(line)
@@ -620,8 +625,18 @@ function stripGuardedBlock(source: string, guard: string): string {
       depth++
     } else if (trimmed === '#endif') {
       depth--
+
+      if (depth === 0) {
+        keepElseBranch = false
+        continue
+      }
+    } else if (depth === 1 && trimmed === '#else') {
+      keepElseBranch = true
+      continue
     }
-    // тело вырезаемого блока (и любые вложенные ifdef/endif) — не выводим
+
+    // тело вырезаемой ветки (и любые вложенные ifdef/endif) — не выводим
+    if (keepElseBranch) result.push(line)
   }
 
   return result.join('\n')
@@ -629,6 +644,18 @@ function stripGuardedBlock(source: string, guard: string): string {
 
 function normalizeBlankLines(source: string): string {
   return source.replace(/\n[ \t]*\n(?:[ \t]*\n)*/g, '\n\n').trim()
+}
+
+/**
+ * Отступ: ветка `#else` лежит на уровень глубже снятой директивы — снимок
+ * сверяется с точностью до отступа. Любая правка кода или комментария
+ * (символ, слово, строка) всё равно даёт RED — теряется только выравнивание.
+ */
+function normalizeIndent(source: string): string {
+  return source
+    .split('\n')
+    .map((line: string) => line.trim())
+    .join('\n')
 }
 
 const BASELINE_FRAGMENT_SHADER = `
@@ -722,7 +749,7 @@ describe('Паритет: без USE_WATER_WAVES компилируемый фр
   it('вырезав все блоки #ifdef USE_WATER_WAVES...#endif, получаем ровно снимок ДО Task 1', () => {
     const stripped = stripGuardedBlock(stripGuardedBlock(frag, 'USE_WATER_WAVES'), 'USE_SUN_TINT')
 
-    expect(normalizeBlankLines(stripped)).toBe(normalizeBlankLines(BASELINE_FRAGMENT_SHADER))
+    expect(normalizeIndent(normalizeBlankLines(stripped))).toBe(normalizeIndent(normalizeBlankLines(BASELINE_FRAGMENT_SHADER)))
   })
 })
 

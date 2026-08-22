@@ -4,7 +4,7 @@ import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
 import { WaterShader } from '@/core/materials/shaders/WaterShader'
 import { resourceStorage } from '@/core/services/ResourceStorage'
-import { SunTintBinding } from '@/core/materials/sunTintBinding'
+import { SunTintBinding } from '@/core/materials/SunTintBinding'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
 

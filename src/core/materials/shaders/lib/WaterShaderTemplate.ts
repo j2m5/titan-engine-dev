@@ -359,6 +359,12 @@ export const WaterShaderTemplate: ShaderProps = {
       // горизонту fresnel→1, alpha→1.0 (непрозрачно).
       float alpha = mix(depthAlpha, 1.0, fresnel);
 
+      #ifdef USE_SUN_TINT
+        // Тинт только дневной составляющей — ночной пол uWaterNightFloor
+        // остаётся, как у палубы; минус — vLocalLightDirection от солнца.
+        vec3 sunTintFactor = mix(vec3(1.0), sunTint(dot(normalize(vLocalDir), -normalize(vLocalLightDirection))), uSunTintStrength);
+      #endif
+
       // Ночная сторона темнее, не чёрная: вода не светится сама, но полный
       // ноль на терминаторе неправдоподобен (рассеянный свет неба/атмосферы).
       // Терминатор — та же зона, что у PlanetShaderTemplate (эстетическая
@@ -367,7 +373,11 @@ export const WaterShaderTemplate: ShaderProps = {
       vec3 lightDirection = normalize(vViewLightDirection);
       float NdotL = dot(normal, lightDirection);
       float dayFactor = smoothstep(-0.08, 0.25, NdotL);
-      color *= mix(uWaterNightFloor, 1.0, dayFactor);
+      #ifdef USE_SUN_TINT
+        color *= mix(vec3(uWaterNightFloor), sunTintFactor, dayFactor);
+      #else
+        color *= mix(uWaterNightFloor, 1.0, dayFactor);
+      #endif
 
       #ifdef USE_WATER_WAVES
         // На этом месте (снаружи этого #ifdef) color — ПОЛНОСТЬЮ готовый
@@ -528,7 +538,11 @@ export const WaterShaderTemplate: ShaderProps = {
         // другой NdotL (waveNormal, не аналитический normal): без этого
         // при waveFade=0 равенство фундаменту держалось бы только на
         // спекуляре/reflectance, а не на цвете целиком.
-        wavesColor *= mix(uWaterNightFloor, 1.0, waveDayFactor);
+        #ifdef USE_SUN_TINT
+          wavesColor *= mix(vec3(uWaterNightFloor), sunTintFactor, waveDayFactor);
+        #else
+          wavesColor *= mix(uWaterNightFloor, 1.0, waveDayFactor);
+        #endif
 
         // ПРИЁМОЧНЫЙ ФИКС (владелец: молочный океан по всему диску + яркое
         // пятно в центре диска + голубое гало за лимбом на скрине из
@@ -564,13 +578,6 @@ export const WaterShaderTemplate: ShaderProps = {
         // фундаментным Френель-тинтом снаружи (тот в wavesColor не входит
         // вовсе, живёт только в color-ветке до этого mix).
         color = mix(color, wavesColor, waveFade);
-      #endif
-
-      #ifdef USE_SUN_TINT
-        // Тинт ИТОГОВОГО цвета — база, Френель, волны и блик разом: закатный
-        // глинт выходит оранжевым. Знак минус — vLocalLightDirection направлен
-        // ОТ солнца к фрагменту (см. вершинник).
-        color *= mix(vec3(1.0), sunTint(dot(normalize(vLocalDir), -normalize(vLocalLightDirection))), uSunTintStrength);
       #endif
 
       gl_FragColor = vec4(color, alpha);
