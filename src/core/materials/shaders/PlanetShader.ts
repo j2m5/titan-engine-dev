@@ -11,7 +11,7 @@ import {
   DETAIL_FADE_START_RATIO,
   macroFadeMetersFor
 } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
-import { DEFAULT_DETAIL_SCALE2_METERS, DEFAULT_DETAIL_SCALE_METERS } from '@/core/terrain/detailWrap'
+import { DEFAULT_DETAIL_SCALE2_METERS, DEFAULT_DETAIL_SCALE_METERS, validPeriodMeters } from '@/core/terrain/detailWrap'
 
 // Нейтральные дефолты детального слоя (используются, только если данные тела
 // не задали ручку явно) — см. IPlanetRenderingObject.detail*, ручки Луны в
@@ -206,8 +206,8 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uDetailNorMap: new Uniform(null),
       uDetailArmMap: new Uniform(null),
       uDetailNor2Map: new Uniform(null),
-      uDetailScale: new Uniform(detailPeriodToScale(planetData.detailScaleMeters ?? DEFAULT_DETAIL_SCALE_METERS)),
-      uDetailScale2: new Uniform(detailPeriodToScale(planetData.detailScale2Meters ?? DEFAULT_DETAIL_SCALE2_METERS)),
+      uDetailScale: new Uniform(detailPeriodToScale(validPeriodMeters(planetData.detailScaleMeters, DEFAULT_DETAIL_SCALE_METERS))),
+      uDetailScale2: new Uniform(detailPeriodToScale(validPeriodMeters(planetData.detailScale2Meters, DEFAULT_DETAIL_SCALE2_METERS))),
       uDetailNormalScale: new Uniform(planetData.detailNormalScale ?? DEFAULT_DETAIL_NORMAL_SCALE),
       uDetailSaturation: new Uniform(planetData.detailSaturation ?? DEFAULT_DETAIL_SATURATION),
       uDetailBrightness: new Uniform(planetData.detailBrightness ?? DEFAULT_DETAIL_BRIGHTNESS),

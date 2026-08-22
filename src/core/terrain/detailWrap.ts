@@ -20,8 +20,13 @@ export function wrapUnitsFor(periodMeters: number): number {
   return WRAP_TILES * toThreeJSUnits(periodMeters / 1000)
 }
 
-/** Ручка БД валидна, только если конечное положительное число — иначе период 0/NaN даёт NaN во всём атрибуте. */
-function validPeriodMeters(value: number | undefined, fallback: number): number {
+/**
+ * Ручка БД валидна, только если конечное положительное число — иначе период
+ * 0/NaN даёт NaN во всём атрибуте. Экспортируется — энкодер (W здесь) и
+ * шейдер (масштаб в PlanetShader.ts) читают одну и ту же ручку данных и
+ * обязаны сходиться на мусорном вводе одинаковым фолбэком.
+ */
+export function validPeriodMeters(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
 }
 

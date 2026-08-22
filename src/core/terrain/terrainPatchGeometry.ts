@@ -157,8 +157,16 @@ function writeTerrainPatchAttributes(
   const center = centerDir.clone().multiplyScalar(field.surfaceRadiusUnits(centerDir))
   const centerU = field.dirToUv(centerDir, new Vector2()).x
 
-  const k1 = [wrapIndex(center.x, wrap.w1), wrapIndex(center.y, wrap.w1), wrapIndex(center.z, wrap.w1)]
-  const k2 = [wrapIndex(center.x, wrap.w2), wrapIndex(center.y, wrap.w2), wrapIndex(center.z, wrap.w2)]
+  const wrapK1: readonly [number, number, number] = [
+    wrapIndex(center.x, wrap.w1),
+    wrapIndex(center.y, wrap.w1),
+    wrapIndex(center.z, wrap.w1)
+  ]
+  const wrapK2: readonly [number, number, number] = [
+    wrapIndex(center.x, wrap.w2),
+    wrapIndex(center.y, wrap.w2),
+    wrapIndex(center.z, wrap.w2)
+  ]
 
   const gridCount = gridVertexCount(segments)
   const ringCount = ringVertexCount(segments)
@@ -178,12 +186,12 @@ function writeTerrainPatchAttributes(
       positions[k * 3 + 2] = dir.z * r - center.z
 
       // домен детали: точная позиция минус k·W (double → float32), см. detailWrap.ts
-      detailPos[k * 3] = wrappedComponent(dir.x * r, k1[0], wrap.w1)
-      detailPos[k * 3 + 1] = wrappedComponent(dir.y * r, k1[1], wrap.w1)
-      detailPos[k * 3 + 2] = wrappedComponent(dir.z * r, k1[2], wrap.w1)
-      detailPos2[k * 3] = wrappedComponent(dir.x * r, k2[0], wrap.w2)
-      detailPos2[k * 3 + 1] = wrappedComponent(dir.y * r, k2[1], wrap.w2)
-      detailPos2[k * 3 + 2] = wrappedComponent(dir.z * r, k2[2], wrap.w2)
+      detailPos[k * 3] = wrappedComponent(dir.x * r, wrapK1[0], wrap.w1)
+      detailPos[k * 3 + 1] = wrappedComponent(dir.y * r, wrapK1[1], wrap.w1)
+      detailPos[k * 3 + 2] = wrappedComponent(dir.z * r, wrapK1[2], wrap.w1)
+      detailPos2[k * 3] = wrappedComponent(dir.x * r, wrapK2[0], wrap.w2)
+      detailPos2[k * 3 + 1] = wrappedComponent(dir.y * r, wrapK2[1], wrap.w2)
+      detailPos2[k * 3 + 2] = wrappedComponent(dir.z * r, wrapK2[2], wrap.w2)
 
       normals[k * 3] = dir.x
       normals[k * 3 + 1] = dir.y

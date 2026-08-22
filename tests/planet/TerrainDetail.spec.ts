@@ -331,6 +331,20 @@ describe('PlanetMaterial: терраформный детальный слой',
     expect(range.w).toBeCloseTo(end2, 10)
   })
 
+  it('detailScaleMeters: 0 (мусорная ручка) — тот же uDetailScale, что и дефолт (validPeriodMeters в PlanetShader)', () => {
+    const stub = {
+      renderingObject: { getAttribute: () => ({ emission: 1, bumpScale: 0, detailScaleMeters: 0, detailScale2Meters: 0 }) },
+      physicalObject: { getAttribute: () => 1737 },
+      children: { where: () => ({ first: () => undefined, isNotEmpty: () => false }) },
+      resources: { where: () => ({ first: () => undefined }) }
+    } as unknown as Actor
+
+    const material = new PlanetMaterial(stub)
+
+    expect(material.uniforms.uDetailScale.value).toBeCloseTo(1 / toThreeJSUnits(40 / 1000), 10)
+    expect(material.uniforms.uDetailScale2.value).toBeCloseTo(1 / toThreeJSUnits(7 / 1000), 10)
+  })
+
   it('resetMaterial снимает дефайн и обнуляет гейты и текстуры', () => {
     seedMoonHeightMap()
     seedTexture(moonPathOf('detailNormal'), 8, 4)

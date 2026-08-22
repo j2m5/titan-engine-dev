@@ -332,8 +332,8 @@ describe('buildTerrainPatchGeometry: атрибуты домена детали'
     for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
       const p = [pos.getX(k) + center.x, pos.getY(k) + center.y, pos.getZ(k) + center.z]
       for (let c = 0; c < 3; c++) {
-        expect(d1.array[k * 3 + c]).toBeCloseTo(wrappedComponent(p[c], k1[c], wrap.w1), 4)
-        expect(d2.array[k * 3 + c]).toBeCloseTo(wrappedComponent(p[c], k2[c], wrap.w2), 4)
+        expect(d1.array[k * 3 + c]).toBeCloseTo(wrappedComponent(p[c], k1[c], wrap.w1), 6)
+        expect(d2.array[k * 3 + c]).toBeCloseTo(wrappedComponent(p[c], k2[c], wrap.w2), 6)
       }
     }
   })
@@ -374,7 +374,7 @@ describe('buildTerrainPatchGeometry: атрибуты домена детали'
     expect(q.some((v) => Math.round(v) !== 0)).toBe(true)
   })
 
-  it('|detailPos| ≤ W + радиус патча на глубине 8 — float32 держит миллиметры', () => {
+  it('|detailPos| ≤ W/2 + радиус патча на глубине 8 (round() гарантирует полупериод) — float32 держит миллиметры', () => {
     const field = bumpyField()
     const DEEP_DEPTH = 8
     const { geometry } = buildTerrainPatchGeometry(
@@ -406,7 +406,7 @@ describe('buildTerrainPatchGeometry: атрибуты домена детали'
       }
     }
 
-    expect(maxD1).toBeLessThan(wrap.w1 + patchRadius)
-    expect(maxD2).toBeLessThan(wrap.w2 + patchRadius)
+    expect(maxD1).toBeLessThan(wrap.w1 / 2 + patchRadius)
+    expect(maxD2).toBeLessThan(wrap.w2 / 2 + patchRadius)
   })
 })

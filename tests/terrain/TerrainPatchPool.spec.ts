@@ -64,11 +64,36 @@ describe('TerrainPatchPool', () => {
     buildTerrainPatchInto(field, 2, 1, 0, DEPTH, SEGMENTS, SKIRT, handle, wrap)
     const fresh = buildTerrainPatchGeometry(field, 2, 1, 0, DEPTH, SEGMENTS, buildPatchIndex(SEGMENTS), SKIRT, wrap)
 
-    expect(Array.from(handle.geometry.getAttribute('position').array)).toEqual(
-      Array.from(fresh.geometry.getAttribute('position').array)
-    )
+    for (const name of ['position', 'normal', 'uv', 'detailPos', 'detailPos2']) {
+      expect(Array.from(handle.geometry.getAttribute(name).array)).toEqual(
+        Array.from(fresh.geometry.getAttribute(name).array)
+      )
+    }
     expect(handle.mesh.position.distanceTo(fresh.center)).toBe(0)
     expect(handle.geometry.boundingSphere!.radius).toBeCloseTo(fresh.geometry.boundingSphere!.radius, 12)
+  })
+
+  // needsUpdate у three — сеттер без геттера (пишет version++, читается как
+  // undefined всегда), поэтому наблюдаем через .version (см. WaterMaterial.spec.ts)
+  it('into выставляет needsUpdate на всех перезаписанных атрибутах, включая detailPos/detailPos2', () => {
+    const field = bumpyField()
+    const pool = makePool()
+    const handle = pool.acquire()!
+    const wrap = detailWrapFor(undefined)
+
+    const versionsBefore: Record<string, number> = {}
+    for (const name of ['position', 'detailPos', 'detailPos2']) {
+      const attr = handle.geometry.getAttribute(name) as BufferAttribute
+      attr.needsUpdate = false
+      versionsBefore[name] = attr.version
+    }
+
+    buildTerrainPatchInto(field, 2, 1, 0, DEPTH, SEGMENTS, SKIRT, handle, wrap)
+
+    for (const name of ['position', 'detailPos', 'detailPos2']) {
+      const attr = handle.geometry.getAttribute(name) as BufferAttribute
+      expect(attr.version).toBeGreaterThan(versionsBefore[name])
+    }
   })
 
   it('повторное использование не создаёт новых геометрий', () => {

@@ -4,6 +4,7 @@ import {
   DEFAULT_DETAIL_SCALE_METERS,
   WRAP_TILES,
   detailWrapFor,
+  validPeriodMeters,
   wrapIndex,
   wrapUnitsFor,
   wrappedComponent
@@ -44,5 +45,22 @@ describe('detailWrap: период обёртки детальных слоёв'
     const b = wrappedComponent(p, wrapIndex(p + 0.3 * w, w), w)
     expect(Number.isInteger(Math.round((a - b) / w))).toBe(true)
     expect(Math.abs((a - b) / w - Math.round((a - b) / w))).toBeLessThan(1e-9)
+  })
+
+  it('validPeriodMeters: валидное число проходит, мусор — фолбэк', () => {
+    expect(validPeriodMeters(40, 1)).toBe(40)
+    expect(validPeriodMeters(0, 1)).toBe(1)
+    expect(validPeriodMeters(-5, 1)).toBe(1)
+    expect(validPeriodMeters(Number.NaN, 1)).toBe(1)
+    expect(validPeriodMeters(undefined, 1)).toBe(1)
+    expect(validPeriodMeters('40', 1)).toBe(1)
+  })
+
+  it('инвариант W·scale ≡ WRAP_TILES: энкодер (wrapUnitsFor) и шейдер (1/toThreeJSUnits) сходятся на одном периоде', () => {
+    for (const periodMeters of [40, 7]) {
+      const w = wrapUnitsFor(periodMeters)
+      const scale = 1 / toThreeJSUnits(periodMeters / 1000)
+      expect(w * scale).toBeCloseTo(WRAP_TILES, 9)
+    }
   })
 })
