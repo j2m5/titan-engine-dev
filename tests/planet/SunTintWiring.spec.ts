@@ -6,6 +6,7 @@ import { Actor } from '@/core/models/Actor'
 import { ResourceType } from '@/core/models/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { EMPTY_LAYER, expLayer, AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
 
 // Земля (actorId 7) и её дочерняя атмосфера (actorId 47, categoryId 5) — те же
 // реальные данные БД, что в PlanetCloudOpacity.spec.ts.
@@ -62,6 +63,32 @@ function config(): AtmosphereConfig {
     groundAlbedo: [0.1, 0.1, 0.1],
     muSMin: -0.2
   }
+}
+
+/**
+ * Стаб-актор с атмосферным ребёнком (тем же categoryId, что у реальных тел),
+ * но радиусом датума 0 — форма стаба, что actorWithoutAtmosphere в
+ * PlanetCloudOpacity.spec.ts, только children.where отдаёт атмосферу.
+ */
+function stubActorWithZeroRadiusAtmosphere(atmosphereActorId: number): Actor {
+  const atmosphereChild = {
+    getAttribute: (key: string) => (key === 'id' ? atmosphereActorId : undefined),
+    renderingObject: { getAttribute: () => undefined },
+    children: { where: () => ({ first: () => undefined, isNotEmpty: () => false }) },
+    resources: { where: () => ({ first: () => undefined }) }
+  } as unknown as Actor
+
+  return {
+    renderingObject: { getAttribute: () => ({ bumpScale: 0, emission: 1 }) },
+    children: {
+      where: (key: string, value: unknown) =>
+        key === 'categoryId' && value === ATMOSPHERE_CATEGORY_ID
+          ? { first: () => atmosphereChild, isNotEmpty: () => true }
+          : { first: () => undefined, isNotEmpty: () => false }
+    },
+    resources: { where: () => ({ first: () => undefined }) },
+    physicalObject: { getAttribute: () => 0 }
+  } as unknown as Actor
 }
 
 function entry(): AtmosphereEntry {
@@ -153,6 +180,7 @@ describe('PlanetMaterial.syncSunTint: запись реестра → дефай
     m.syncSunTint()
     m.resetMaterial()
     expect(m.defines.USE_SUN_TINT).toBeUndefined()
+    expect(m.uniforms.uAtmoTransmittance.value).toBeNull()
 
     m.syncSunTint()
     expect(m.defines.USE_SUN_TINT).toBe('1')
@@ -162,6 +190,17 @@ describe('PlanetMaterial.syncSunTint: запись реестра → дефай
     const registry = new AtmosphereRegistry()
     registry.register(entry())
     const m = new PlanetMaterial(Actor.find(MOON_ACTOR_ID)!, registry)
+
+    m.updateMaterial()
+    m.syncSunTint()
+    expect(m.defines.USE_SUN_TINT).toBeUndefined()
+  })
+
+  it('радиус датума 0 (стаб без физики) — дефайна нет, даже если запись в реестре есть', () => {
+    const registry = new AtmosphereRegistry()
+    const e = entry()
+    registry.register(e)
+    const m = new PlanetMaterial(stubActorWithZeroRadiusAtmosphere(e.actorId), registry)
 
     m.updateMaterial()
     m.syncSunTint()

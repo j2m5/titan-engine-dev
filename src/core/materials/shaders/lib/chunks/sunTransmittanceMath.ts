@@ -17,8 +17,8 @@ export function transmittanceUv(
   const d = Math.max(-r * mu + Math.sqrt(Math.max(discriminant, 0)), 0)
   const dMin = top - r
   const dMax = rho + H
-  // discriminant для (bottom, top) не уходит в минус, поэтому клампим x_mu
-  // явно: ниже горизонта датума d уходит за d_max, u не должен покидать 1-й тексель.
+  // Ниже горизонта d выходит за d_max (x_mu > 1) — кламп к [0,1] = ClampToEdge
+  // самой LUT; smoothstep солнечного диска там и так даёт 0.
   const xMu = Math.min(Math.max((d - dMin) / (dMax - dMin), 0), 1)
   const xR = rho / H
   const unit = (x: number, n: number): number => 0.5 / n + x * (1 - 1 / n)

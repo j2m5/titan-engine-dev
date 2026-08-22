@@ -170,7 +170,12 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uAtmoTopRadius: new Uniform(0),
       uAtmoSunAngularRadius: new Uniform(0),
       uAtmoDatumRadius: new Uniform(0),
-      uSunTintStrength: new Uniform(planetData.sunTintStrength ?? DEFAULT_SUN_TINT_STRENGTH)
+      // Кламп к [0,1]: ручка данных — не гарантированно валидный ввод,
+      // а вне диапазона тинт либо не действует (>1 не сильнее зенита LUT
+      // — clamp внутри sunTint), либо переворачивает знак смеси (<0).
+      uSunTintStrength: new Uniform(
+        Math.min(1, Math.max(0, planetData.sunTintStrength ?? DEFAULT_SUN_TINT_STRENGTH))
+      )
     }
     this.defines = {
       ...(USE_RING && { USE_RING: '1' })

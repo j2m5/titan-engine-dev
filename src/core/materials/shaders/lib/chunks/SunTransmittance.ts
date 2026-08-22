@@ -38,8 +38,8 @@ export const sunTransmittanceFunctions = /* glsl */ `
     float d_min = uAtmoTopRadius - r;
     float d_max = rho + H;
     float x_mu = (d - d_min) / (d_max - d_min);
-    // discriminant для (bottom, top) не уходит в минус, поэтому клампим x_mu
-    // явно: ниже горизонта датума d уходит за d_max, u не должен покидать 1-й тексель.
+    // Ниже горизонта d выходит за d_max (x_mu > 1) — кламп к [0,1] = ClampToEdge
+    // самой LUT; smoothstep солнечного диска там и так даёт 0.
     x_mu = clamp(x_mu, 0.0, 1.0);
     float x_r = rho / H;
     return vec2(atmoUnitToTexCoord(x_mu, ATMO_TRANSMITTANCE_W), atmoUnitToTexCoord(x_r, ATMO_TRANSMITTANCE_H));

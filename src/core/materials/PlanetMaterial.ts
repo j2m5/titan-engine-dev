@@ -76,11 +76,12 @@ class PlanetMaterial extends AbstractShaderMaterial {
   ) {
     super(parameters)
     this.model = model
-    this.cloudAtmosphereThicknessUnits = PlanetMaterial.resolveCloudAtmosphereThicknessUnits(model)
+    // Дочерняя атмосфера резолвится ОДИН раз — толщина и actorId читаются из
+    // одного и того же актора, а не двух отдельных обходов ORM.
+    const atmosphereActor = model.children.where('categoryId', ATMOSPHERE_CATEGORY_ID).first()
+    this.cloudAtmosphereThicknessUnits = PlanetMaterial.resolveCloudAtmosphereThicknessUnits(atmosphereActor)
     this.bodyRadiusUnits = toThreeJSUnits(this.model.physicalObject?.getAttribute('radius') ?? 0)
-    this.atmosphereActorId = model.children.where('categoryId', ATMOSPHERE_CATEGORY_ID).first()?.getAttribute('id') as
-      | number
-      | undefined
+    this.atmosphereActorId = atmosphereActor?.getAttribute('id') as number | undefined
 
     const { uniforms, defines, vertexShader, fragmentShader } = new PlanetShader(this.model)
 
@@ -91,9 +92,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.baseDefines = { ...defines }
   }
 
-  private static resolveCloudAtmosphereThicknessUnits(model: Actor): number | undefined {
-    const atmosphereActor = model.children.where('categoryId', ATMOSPHERE_CATEGORY_ID).first()
-
+  private static resolveCloudAtmosphereThicknessUnits(atmosphereActor: Actor | undefined): number | undefined {
     if (!atmosphereActor) return undefined
 
     const config = readRenderingData<AtmosphereConfig>(atmosphereActor)
@@ -142,8 +141,13 @@ class PlanetMaterial extends AbstractShaderMaterial {
    * никогда не диспозит.
    */
   public syncSunTint(): void {
-    const entry =
+    // Датум ≤ 0 (стаб-актор без physicalObject, битые данные) не несёт LUT
+    // ни в km, ни в юнитах — эффект гасится тем же путём, что снятие атмосферы
+    // из реестра, а не отдельной веткой.
+    const radius = this.model.physicalObject?.getAttribute('radius') ?? 0
+    const rawEntry =
       this.atmosphereActorId !== undefined ? this.atmosphereRegistry?.get(this.atmosphereActorId) : undefined
+    const entry = radius > 0 ? rawEntry : undefined
 
     if (entry === this.sunTintEntry) return
 
@@ -154,14 +158,13 @@ class PlanetMaterial extends AbstractShaderMaterial {
       this.uniforms.uAtmoBottomRadius.value = entry.config.bottomRadius
       this.uniforms.uAtmoTopRadius.value = entry.config.topRadius
       this.uniforms.uAtmoSunAngularRadius.value = entry.config.sunAngularRadius
-      this.uniforms.uAtmoDatumRadius.value = this.model.physicalObject?.getAttribute('radius') ?? 0
+      this.uniforms.uAtmoDatumRadius.value = radius
       this.defines = { ...this.defines, USE_SUN_TINT: '1' }
     } else {
       this.uniforms.uAtmoTransmittance.value = null
 
-      // Копия, а не мутация на месте: три сравнивает набор дефайнов по ссылке
-      // объекта не хуже, чем по содержимому, но ложный spread снять дефайн не
-      // умеет (см. baseDefines) — снимаем явно.
+      // Копия без ключа — прежний объект дефайнов мог уйти в ключ программы,
+      // мутировать его на месте нельзя.
       const defines = { ...this.defines }
 
       delete defines.USE_SUN_TINT
@@ -319,8 +322,10 @@ class PlanetMaterial extends AbstractShaderMaterial {
     // каждом новом слое карт.
     this.defines = { ...this.baseDefines }
     // Снимок конструирования тинта не знает — забываем запись, чтобы ближайший
-    // syncSunTint увидел смену и вернул дефайн одним рекомпилом.
+    // syncSunTint увидел смену и вернул дефайн одним рекомпилом. Сэмплер тоже
+    // возвращаем в null — снимок defines не несёт юниформы.
     this.sunTintEntry = undefined
+    this.uniforms.uAtmoTransmittance.value = null
 
     this.needsUpdate = true
   }

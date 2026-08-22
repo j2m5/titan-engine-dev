@@ -43,7 +43,7 @@ describe('transmittanceUv — зеркало GetTransmittanceTextureUvFromRMu', 
     expect(uv.v).toBeCloseTo(unitToTexCoord(rho / H, TRANSMITTANCE_H), 12)
   })
 
-  it('mu ниже горизонта клампится дискриминантом: u не выходит за 1-й тексель', () => {
+  it('mu ниже горизонта: x_mu клампится к [0,1]', () => {
     const uv = transmittanceUv(BOTTOM, -0.5, BOTTOM, TOP, TRANSMITTANCE_W, TRANSMITTANCE_H)
     expect(uv.u).toBeLessThanOrEqual(unitToTexCoord(1, TRANSMITTANCE_W) + 1e-12)
     expect(uv.u).toBeGreaterThanOrEqual(unitToTexCoord(0, TRANSMITTANCE_W) - 1e-12)
@@ -163,5 +163,10 @@ describe('PlanetShader: ручка uSunTintStrength', () => {
   it('без поля — дефолт 1', () => {
     const shader = new PlanetShader(stubActor({}))
     expect(shader.uniforms.uSunTintStrength.value).toBe(1)
+  })
+
+  it('ручка клампится к [0,1]: 2 → 1, -1 → 0', () => {
+    expect(new PlanetShader(stubActor({ sunTintStrength: 2 })).uniforms.uSunTintStrength.value).toBe(1)
+    expect(new PlanetShader(stubActor({ sunTintStrength: -1 })).uniforms.uSunTintStrength.value).toBe(0)
   })
 })
