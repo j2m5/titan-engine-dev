@@ -149,6 +149,8 @@ export interface IResource extends ResourceParameters {
   readonly resourceType: ResourceType
   readonly lifecycle: ResourceLifecycle
   readonly path: string
+  /** Предел кодировки уклона slope-карты (tan): байт 1/255 = ∓slopeRange, значения из SLOPE_RANGE_GRID. Только у resourceType "slope"; отсутствует — SLOPE_RANGE. */
+  readonly slopeRange?: number
 }
 
 export interface IActorResource {

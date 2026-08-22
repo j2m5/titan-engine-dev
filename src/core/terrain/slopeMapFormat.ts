@@ -19,3 +19,19 @@
  * гребень (светлее), отрицательное — яма (темнее).
  */
 export const SLOPE_RANGE = 2
+
+/**
+ * Допустимые per-map пределы (строка slope-ресурса `slopeRange`): сетка
+ * степеней двойки, чтобы значения не плавали при пересборке. Отсутствие
+ * поля = SLOPE_RANGE.
+ */
+export const SLOPE_RANGE_GRID: readonly number[] = [0.25, 0.5, 1, 2, 4]
+
+/** Наименьшее значение сетки ≥ p99.9 модуля уклона карты; выше потолка — потолок (выбросы клампятся). */
+export function recommendSlopeRange(p999: number): number {
+  return SLOPE_RANGE_GRID.find((v) => v >= p999) ?? SLOPE_RANGE_GRID[SLOPE_RANGE_GRID.length - 1]
+}
+
+export function isValidSlopeRange(value: unknown): value is number {
+  return typeof value === 'number' && SLOPE_RANGE_GRID.includes(value)
+}
