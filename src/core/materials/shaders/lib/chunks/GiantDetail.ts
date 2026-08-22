@@ -45,14 +45,15 @@ export const giantDetailFunctions = /* glsl */ `
    * lumTex — яркость диффуза в точке, viewDistance — юниты.
    */
   void applyGiantDetail(inout vec3 albedoMul, vec3 dir, vec2 uv, float lumTex, float viewDistance) {
+    // След считается от гладкого домена ДО варпа (производная шума
+    // высокочастотна) и ДО раннего выхода — однородный поток в кваде
+    vec3 q = giantDomain(dir);
+    float footprint = length(fwidth(q));
+
     float polar = 1.0 - smoothstep(0.85, 0.98, abs(dir.y));
     float fade = 1.0 - smoothstep(0.4 * uGiantDetailFadeUnits, uGiantDetailFadeUnits, viewDistance);
     float contrast = uGiantDetailStrength * polar * fade * smoothstep(0.05, 0.35, lumTex);
     if (contrast <= 0.0) return;
-
-    vec3 q = giantDomain(dir);
-    // След считается от гладкого домена ДО варпа: производная шума высокочастотна
-    float footprint = length(fwidth(q));
 
     q += uGiantDetailWarp * (vec3(snoise(q * 0.25), snoise(q * 0.25 + 17.0), snoise(q * 0.25 + 31.0)));
     // Производная яркости текстуры по широте — две выборки, без dFdx

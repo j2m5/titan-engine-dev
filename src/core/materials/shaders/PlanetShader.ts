@@ -134,8 +134,10 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
     const USE_RING: boolean = this.model.children.where('categoryId', 6).isNotEmpty()
 
     // Радиус тела (км) — домен шума гиганта задан в километрах поверхности,
-    // поэтому клетка не зависит от размера тела. 0 у стаб-акторов без
-    // physicalObject: домен вырождается в ноль, деталь плоская — не падает.
+    // поэтому клетка не зависит от размера тела. Дефайн USE_GIANT_DETAIL
+    // ставится только телам БД (у них physicalObject есть); 0 остаётся у
+    // стаб-акторов тестов, которые шейдер не компилируют, — при нём домен и
+    // fade вырождаются, отсюда кламп fade ниже (деление на 0 в чанке).
     const radiusKm: number = this.model.physicalObject?.getAttribute('radius') ?? 0
 
     const detailFadeEndUnits = toThreeJSUnits(
@@ -155,7 +157,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uCloudOpacity: new Uniform(1),
       specularMap: new Uniform(null),
       bumpMap: new Uniform(null),
-      bumpScale: new Uniform(planetData.bumpScale),
+      bumpScale: new Uniform(planetData.bumpScale ?? 0),
       uBumpTexelSize: new Uniform(new Vector2()),
       emission: new Uniform(planetData.emission),
       uSpecularStrength: new Uniform(2.0),
@@ -200,8 +202,10 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uGiantDetailStretch: new Uniform(planetData.giantDetailStretch ?? DEFAULT_GIANT_DETAIL_STRETCH),
       uGiantDetailWarp: new Uniform(planetData.giantDetailWarp ?? DEFAULT_GIANT_DETAIL_WARP),
       uGiantDetailTextureWarp: new Uniform(planetData.giantDetailTextureWarp ?? DEFAULT_GIANT_DETAIL_TEXTURE_WARP),
+      // Кламп положительным минимумом: нулевой fade дал бы деление на ноль в
+      // smoothstep чанка (тело без physicalObject или с giantDetailFadeKm: 0).
       uGiantDetailFadeUnits: new Uniform(
-        toThreeJSUnits(planetData.giantDetailFadeKm ?? DEFAULT_GIANT_DETAIL_FADE_RADII * radiusKm)
+        Math.max(toThreeJSUnits(planetData.giantDetailFadeKm ?? DEFAULT_GIANT_DETAIL_FADE_RADII * radiusKm), 1e-6)
       )
     }
     this.defines = {

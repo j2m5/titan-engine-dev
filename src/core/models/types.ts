@@ -169,7 +169,8 @@ export interface IActorBoundResource extends IResource {
 
 export interface IPlanetRenderingObject {
   emission: number
-  bumpScale: number
+  /** Мёртвая ручка легаси-bump: без ресурса типа bump шейдером не читается. Отсутствие поля = 0. */
+  bumpScale?: number
 
   // --- Ручки терраформного детального слоя (задача 4, TerrainDetail). ---
   // Все опциональны: отсутствие → нейтральные дефолты движка (PlanetShader).

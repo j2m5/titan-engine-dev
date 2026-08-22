@@ -194,8 +194,8 @@ describe('TerrainDetail: хук в терраформной ветке шабл�
   })
 
   it('albedoMul применяется на месте выборки dayColor', () => {
-    // Выборка диффуза переехала в ветки UV (deteail гиганта читает её яркость
-    // в легаси-ветке, арка giant-detail) — dayColor берёт готовый diffuseSample.
+    // Выборка диффуза живёт в ветках UV (по одной на ветку), dayColor берёт
+    // готовый diffuseSample — и уже он домножается на albedoMul.
     const dayColorIdx = frag.indexOf('vec3 dayColor = diffuseSample;')
     const sampleIdx = frag.indexOf('vec3 diffuseSample = texture2D(diffuseMap, uv).rgb;')
     const mulIdx = frag.indexOf('dayColor *= albedoMul;')

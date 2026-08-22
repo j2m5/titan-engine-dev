@@ -39,14 +39,17 @@ function seedHeightField(path: string): void {
   })
 }
 
-/** Стаб легаси-тела: радиус в physicalObject, ручки в renderingObject.data. */
+/**
+ * Стаб легаси-тела: радиус в physicalObject, ручки в renderingObject.data.
+ * `bumpScale` НЕ подставляется — строки гигантов его не несут (ручка мёртвая).
+ */
 function stubActor(
   physical: { radius: number },
   data: Record<string, unknown>,
   pathByType: Record<string, string> = {}
 ): Actor {
   return {
-    renderingObject: { getAttribute: () => ({ emission: 1, bumpScale: 1, ...data }) },
+    renderingObject: { getAttribute: () => ({ emission: 1, ...data }) },
     physicalObject: { getAttribute: () => physical.radius },
     children: { where: () => ({ first: () => undefined, isNotEmpty: () => false }) },
     resources: {
@@ -109,6 +112,11 @@ describe('PlanetShader: ручки детали гиганта', () => {
     expect(shader.uniforms.uGiantDetailWarp.value).toBe(0.6)
     expect(shader.uniforms.uGiantDetailTextureWarp.value).toBe(2)
     expect(shader.uniforms.uGiantDetailFadeUnits.value).toBeCloseTo(toThreeJSUnits(3 * 69911), 12)
+  })
+
+  it('строка без bumpScale (мёртвая ручка) — юниформ 0, а не undefined', () => {
+    const shader = new PlanetShader(stubActor({ radius: 69911 }, { giantDetail: true }))
+    expect(shader.uniforms.bumpScale.value).toBe(0)
   })
 
   it('ручки из data', () => {
