@@ -20,10 +20,15 @@ export function wrapUnitsFor(periodMeters: number): number {
   return WRAP_TILES * toThreeJSUnits(periodMeters / 1000)
 }
 
+/** Ручка БД валидна, только если конечное положительное число — иначе период 0/NaN даёт NaN во всём атрибуте. */
+function validPeriodMeters(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
+}
+
 export function detailWrapFor(data: { detailScaleMeters?: number; detailScale2Meters?: number } | undefined): DetailWrap {
   return {
-    w1: wrapUnitsFor(data?.detailScaleMeters ?? DEFAULT_DETAIL_SCALE_METERS),
-    w2: wrapUnitsFor(data?.detailScale2Meters ?? DEFAULT_DETAIL_SCALE2_METERS)
+    w1: wrapUnitsFor(validPeriodMeters(data?.detailScaleMeters, DEFAULT_DETAIL_SCALE_METERS)),
+    w2: wrapUnitsFor(validPeriodMeters(data?.detailScale2Meters, DEFAULT_DETAIL_SCALE2_METERS))
   }
 }
 

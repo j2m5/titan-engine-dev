@@ -25,6 +25,11 @@ describe('detailWrap: период обёртки детальных слоёв'
     expect(m.w2).toBeCloseTo(wrapUnitsFor(6), 15)
   })
 
+  it('detailWrapFor: невалидная ручка (0, NaN) — фолбэк на дефолт, не NaN', () => {
+    expect(detailWrapFor({ detailScaleMeters: 0 }).w1).toBeCloseTo(wrapUnitsFor(DEFAULT_DETAIL_SCALE_METERS), 15)
+    expect(detailWrapFor({ detailScaleMeters: Number.NaN }).w1).toBeCloseTo(wrapUnitsFor(DEFAULT_DETAIL_SCALE_METERS), 15)
+  })
+
   it('wrapIndex — ближайшее целое число периодов; wrappedComponent вычитает ровно k·W', () => {
     expect(wrapIndex(0.49, 1)).toBe(0)
     expect(wrapIndex(0.51, 1)).toBe(1)

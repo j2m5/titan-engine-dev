@@ -364,15 +364,49 @@ describe('buildTerrainPatchGeometry: атрибуты домена детали'
     const db = b.geometry.getAttribute('detailPos')
     // правое ребро a (a = SEGMENTS) и левое ребро b (a = 0), та же строка b=0
     const ia = SEGMENTS, ib = 0
+    const q: number[] = []
     for (let c = 0; c < 3; c++) {
-      const q = (da.array[ia * 3 + c] - db.array[ib * 3 + c]) / wrap.w1
-      expect(Math.abs(q - Math.round(q))).toBeLessThan(1e-3)
+      q[c] = (da.array[ia * 3 + c] - db.array[ib * 3 + c]) / wrap.w1
+      expect(Math.abs(q[c] - Math.round(q[c]))).toBeLessThan(1e-3)
     }
+    // k общий НА ПАТЧ (от центра), не на вершину — иначе q было бы кратным W
+    // тривиально (тождественно 0) на любых соседях, тест ничего бы не ловил
+    expect(q.some((v) => Math.round(v) !== 0)).toBe(true)
   })
 
-  it('бит-в-бит: position/normal/uv не изменились от добавления атрибутов', () => {
-    const { geometry } = build(bumpyField(), 0, 1, 0)
-    expect(geometry.getAttribute('position').count).toBe(terrainPatchVertexCount(SEGMENTS))
-    // прочие инварианты — существующие тесты этого файла
+  it('|detailPos| ≤ W + радиус патча на глубине 8 — float32 держит миллиметры', () => {
+    const field = bumpyField()
+    const DEEP_DEPTH = 8
+    const { geometry } = buildTerrainPatchGeometry(
+      field,
+      0,
+      100,
+      100,
+      DEEP_DEPTH,
+      SEGMENTS,
+      buildPatchIndex(SEGMENTS),
+      0,
+      wrap
+    )
+    const pos = geometry.getAttribute('position')
+    const d1 = geometry.getAttribute('detailPos')
+    const d2 = geometry.getAttribute('detailPos2')
+
+    let patchRadius = 0
+    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
+      patchRadius = Math.max(patchRadius, new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).length())
+    }
+
+    let maxD1 = 0
+    let maxD2 = 0
+    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
+      for (let c = 0; c < 3; c++) {
+        maxD1 = Math.max(maxD1, Math.abs(d1.array[k * 3 + c]))
+        maxD2 = Math.max(maxD2, Math.abs(d2.array[k * 3 + c]))
+      }
+    }
+
+    expect(maxD1).toBeLessThan(wrap.w1 + patchRadius)
+    expect(maxD2).toBeLessThan(wrap.w2 + patchRadius)
   })
 })
