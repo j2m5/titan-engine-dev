@@ -86,13 +86,13 @@ describe('TerrainDetail: чанк — регистрация и структур
 
   it('стохастические обёртки существуют, разделяют общий l и зовут triplanar-ядро бленда, не копируют его', () => {
     expect(terrainDetailFunctions).toContain(
-      'vec3 triplanarNormalDetiled(sampler2D map, vec3 p, vec3 n, vec3 w, vec2 offset, vec3 l)'
+      'vec3 triplanarNormalDetiled(sampler2D map, vec3 p, float scale, vec3 n, vec3 w, vec2 offset, vec3 l)'
     )
     expect(terrainDetailFunctions).toContain(
-      'vec3 triplanarArmDetiled(sampler2D map, vec3 p, vec3 w, vec2 offset, vec3 l)'
+      'vec3 triplanarArmDetiled(sampler2D map, vec3 p, float scale, vec3 w, vec2 offset, vec3 l)'
     )
     expect(terrainDetailFunctions).toContain(
-      'vec3 triplanarAlbedoDetiled(sampler2D map, vec3 p, vec3 w, vec2 offset, vec3 l)'
+      'vec3 triplanarAlbedoDetiled(sampler2D map, vec3 p, float scale, vec3 w, vec2 offset, vec3 l)'
     )
     expect(terrainDetailFunctions).toContain('triplanarBlendNormal(')
     expect(terrainDetailFunctions).toContain('triplanarBlendRgb(')
@@ -171,7 +171,7 @@ describe('TerrainDetail: чанк — регистрация и структур
 
   it('сигнатура applyTerrainDetail совпадает с интерфейсом брифа', () => {
     expect(terrainDetailFunctions).toContain(
-      'void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, float viewDistance)'
+      'void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 detailPos, vec3 detailPos2, float viewDistance)'
     )
   })
 })
@@ -186,7 +186,7 @@ describe('TerrainDetail: хук в терраформной ветке шабл�
   })
 
   it('applyTerrainDetail зовётся строго перед финальным normalMatrix', () => {
-    const callIdx = frag.indexOf('applyTerrainDetail(nLocal, albedoMul, dirLocal, length(vViewPosition))')
+    const callIdx = frag.indexOf('applyTerrainDetail(nLocal, albedoMul, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition))')
     const finalIdx = frag.indexOf('normal = normalize(normalMatrix * nLocal);')
     expect(callIdx).toBeGreaterThan(-1)
     expect(finalIdx).toBeGreaterThan(-1)

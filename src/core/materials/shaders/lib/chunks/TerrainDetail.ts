@@ -9,14 +9,17 @@
  * AO/diffuse-модуляции на этой частоте, только шум.
  *
  * Проекции и whiteout-бленд — переиспользованы из чанка TriplanarDetail
- * (triplanarWeights/triplanarBlendRgb/triplanarBlendNormal), домен —
- * dirLocal (body-локальное направление на единичной сфере). Период задаётся
- * в метрах в данных тела и пересчитывается в юниты на CPU (toThreeJSUnits).
- * Домен — единичный dirLocal без домножения на радиус тела, поэтому
- * фактический период на поверхности ≈ номинал × R_тела в юнитах: у Луны
- * (R ≈ 0.87 юнита) 40 м рендерятся как ~35 м. Для одного тела это съедает
- * ручка detailScaleMeters; при подключении следующего тела либо принять ту
- * же поправку, либо домножать домен на радиус.
+ * (triplanarWeights/triplanarBlendRgb/triplanarBlendNormal). Домен адресации
+ * текстур — атрибуты detailPos/detailPos2 (varying vDetailPos/vDetailPos2,
+ * см. PlanetShaderTemplate): точная тело-локальная позиция вершины минус
+ * k·W патча (k общий на патч, W = WRAP_TILES периодов слоя, см.
+ * detailWrap.ts) — не единичный dirLocal, чей float32 не различает соседние
+ * тексели 40/7-метровых тайлов на теле планетного радиуса. Период честный
+ * в метрах, без поправки на радиус. Веса трипланара (triplanarWeights) и
+ * общая нормаль (nLocal) по-прежнему берутся от dirLocal/нормали — это
+ * ориентация, не адресация карты. Любая новая функция, читающая эти позиции
+ * (включая vnoise ниже), обязана быть W-периодичной — иначе обёртка вносит
+ * шов на границе k.
  *
  * СТОХАСТИЧЕСКИЙ АНТИ-ТАЙЛИНГ (владелец на приёмке увидел повтор 40-метрового
  * тайла на холмах). Обе шкалы (крупная и мелкая нормаль) читаются через
@@ -28,7 +31,7 @@
  * обе выборки скачком меняют UV, а blend-вес это не компенсирует (переход
  * ячейки не совпадает с переходом веса). Заменено непрерывной схемой IQ
  * technique 3 / Suslik: индекс варианта — не floor(uv) самой текстуры, а
- * floor(l), где l = 8·vnoise(0.3·uv) — НЕПРЕРЫВНАЯ скалярная функция позиции
+ * floor(l), где l = 8·vnoise(0.25·uv) — НЕПРЕРЫВНАЯ скалярная функция позиции
  * (value noise, без текстур). floor(l) меняется РОВНО там, где fract(l)
  * проходит через 0 — а в этой точке smoothstep-вес уже полностью на стороне
  * входящего варианта (b→1 перед переходом при fract→1, b→0 сразу после при
@@ -63,14 +66,12 @@
  * см. «Экономика» выше). Fade по дистанции (ниже) — единственная защита от
  * оплаты этого бюджета там, где деталь всё равно не читается.
  *
- * triplanarNormalDetiled/ArmDetiled/AlbedoDetiled читают масштаб из
- * ГЛОБАЛЬНОГО uDetailScale (см. чанк TriplanarDetail — сэмплер первым
- * параметром, масштаб — нет). Для мелкой шкалы домен предварительно
- * домножается на uDetailScale2/uDetailScale, так что внутреннее p*uDetailScale
- * даёт тот же результат, что и p*uDetailScale2 напрямую — функции
- * переиспользуются без копирования бленда под вторую шкалу (задача 3:
- * чужой бленд не копируем, зовём чужую функцию). Общий l (см. выше) вычислен
- * из домена КРУПНОЙ шкалы и переиспользуется мелкой — вариант мелкой карты
+ * triplanarNormalDetiled/ArmDetiled/AlbedoDetiled принимают масштаб явным
+ * параметром scale (а не читают глобальный uDetailScale) — крупный слой
+ * зовётся с (detailPos, uDetailScale), мелкий (только нормаль) — со своей
+ * позицией (detailPos2, uDetailScale2): функции переиспользуются без
+ * копирования бленда под вторую шкалу. Общий l (см. выше) вычислен из
+ * домена КРУПНОЙ шкалы и переиспользуется мелкой — вариант мелкой карты
  * переключается на частоте крупной оси, это осознанное упрощение ради ALU.
  *
  * uDetailLayerGates (x=AO, y=diffuse, z=мелкая нормаль) — рантайм-множители
@@ -128,8 +129,12 @@ export const terrainDetailFunctions = `
   // Value noise — непрерывная скалярная функция без текстур: билинейный mix
   // хешей четырёх углов ячейки floor(p) по Hermite-сглаженной дробной части.
   // Нужна как НЕПРЕРЫВНЫЙ индекс варианта для sampleDetiled — см. её докстроку.
+  // Решётка хеша — по модулю 256 ячеек: p приходит из детального домена
+  // (detailPos*scale, ячейка 4 тайла из-за множителя 0.25 в applyTerrainDetail)
+  // — 256×4 = 1024 = WRAP_TILES (detailWrap.ts), поэтому шов обёртки k·W
+  // домена невидим для vnoise.
   float vnoise(vec2 p) {
-    vec2 i = floor(p);
+    vec2 i = mod(floor(p), 256.0);
     vec2 f = fract(p);
     float a = hash21(i);
     float b = hash21(i + vec2(1.0, 0.0));
@@ -143,7 +148,7 @@ export const terrainDetailFunctions = `
   // repetition» technique 3 / Suslik): вариант выбирается НЕ ячейкой самого
   // uv (та схема разрывна на каждой границе ячейки текстуры — раунд 0), а
   // floor(l)/fract(l) НЕПРЕРЫВНОГО индекса l (см. вызывающую сторону —
-  // applyTerrainDetail считает l = 8·vnoise(0.3·uv) один раз на ось). floor(l)
+  // applyTerrainDetail считает l = 8·vnoise(0.25·uv) один раз на ось). floor(l)
   // меняется РОВНО там, где fract(l) проходит через 0 — в этой точке вес b
   // уже полностью переключён на входящий вариант (offB текущего интервала ==
   // offA следующего, оба — hash22 одного и того же floor(l)+1), поэтому
@@ -165,39 +170,41 @@ export const terrainDetailFunctions = `
   // классические triplanarAlbedo/Arm/Normal, но каждая читается через
   // sampleDetiled вместо прямой выборки. l — общий индекс на ось (см.
   // докстроку чанка), делится всеми четырьмя картами и обеими шкалами.
-  // Бленд трёх проекций — ОБЩЕЕ ядро из чанка TriplanarDetail
-  // (triplanarBlendRgb/Normal), не копия.
-  vec3 triplanarAlbedoDetiled(sampler2D map, vec3 p, vec3 w, vec2 offset, vec3 l) {
-    vec2 uvZY = p.zy * uDetailScale + offset;
-    vec2 uvXZ = p.xz * uDetailScale + offset;
-    vec2 uvXY = p.xy * uDetailScale + offset;
+  // scale — явный параметр (не глобальный uDetailScale): одна и та же
+  // функция обслуживает крупный слой (detailPos, uDetailScale) и мелкий
+  // (detailPos2, uDetailScale2). Бленд трёх проекций — ОБЩЕЕ ядро из чанка
+  // TriplanarDetail (triplanarBlendRgb/Normal), не копия.
+  vec3 triplanarAlbedoDetiled(sampler2D map, vec3 p, float scale, vec3 w, vec2 offset, vec3 l) {
+    vec2 uvZY = p.zy * scale + offset;
+    vec2 uvXZ = p.xz * scale + offset;
+    vec2 uvXY = p.xy * scale + offset;
     vec3 cx = sampleDetiled(map, uvZY, dFdx(uvZY), dFdy(uvZY), l.x).rgb;
     vec3 cy = sampleDetiled(map, uvXZ, dFdx(uvXZ), dFdy(uvXZ), l.y).rgb;
     vec3 cz = sampleDetiled(map, uvXY, dFdx(uvXY), dFdy(uvXY), l.z).rgb;
     return triplanarBlendRgb(cx, cy, cz, w);
   }
 
-  vec3 triplanarArmDetiled(sampler2D map, vec3 p, vec3 w, vec2 offset, vec3 l) {
-    vec2 uvZY = p.zy * uDetailScale + offset;
-    vec2 uvXZ = p.xz * uDetailScale + offset;
-    vec2 uvXY = p.xy * uDetailScale + offset;
+  vec3 triplanarArmDetiled(sampler2D map, vec3 p, float scale, vec3 w, vec2 offset, vec3 l) {
+    vec2 uvZY = p.zy * scale + offset;
+    vec2 uvXZ = p.xz * scale + offset;
+    vec2 uvXY = p.xy * scale + offset;
     vec3 ax = sampleDetiled(map, uvZY, dFdx(uvZY), dFdy(uvZY), l.x).rgb;
     vec3 ay = sampleDetiled(map, uvXZ, dFdx(uvXZ), dFdy(uvXZ), l.y).rgb;
     vec3 az = sampleDetiled(map, uvXY, dFdx(uvXY), dFdy(uvXY), l.z).rgb;
     return triplanarBlendRgb(ax, ay, az, w);
   }
 
-  vec3 triplanarNormalDetiled(sampler2D map, vec3 p, vec3 n, vec3 w, vec2 offset, vec3 l) {
-    vec2 uvZY = p.zy * uDetailScale + offset;
-    vec2 uvXZ = p.xz * uDetailScale + offset;
-    vec2 uvXY = p.xy * uDetailScale + offset;
+  vec3 triplanarNormalDetiled(sampler2D map, vec3 p, float scale, vec3 n, vec3 w, vec2 offset, vec3 l) {
+    vec2 uvZY = p.zy * scale + offset;
+    vec2 uvXZ = p.xz * scale + offset;
+    vec2 uvXY = p.xy * scale + offset;
     vec3 tx = sampleDetiled(map, uvZY, dFdx(uvZY), dFdy(uvZY), l.x).xyz * 2.0 - 1.0;
     vec3 ty = sampleDetiled(map, uvXZ, dFdx(uvXZ), dFdy(uvXZ), l.y).xyz * 2.0 - 1.0;
     vec3 tz = sampleDetiled(map, uvXY, dFdx(uvXY), dFdy(uvXY), l.z).xyz * 2.0 - 1.0;
     return triplanarBlendNormal(tx, ty, tz, n, w);
   }
 
-  void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, float viewDistance) {
+  void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 detailPos, vec3 detailPos2, float viewDistance) {
     // Пороги фейда — ручки пер-тела в метрах дистанции, сконвертированные
     // в юниты на CPU (см. докстрока чанка и PlanetShader.uDetailFadeRange).
     float fade1 = 1.0 - smoothstep(uDetailFadeRange.x, uDetailFadeRange.y, viewDistance);
@@ -205,31 +212,35 @@ export const terrainDetailFunctions = `
 
     if (max(fade1, fade2) > 0.0) {
       vec2 offset = vec2(0.0);
+      // Веса трипланара — от направления (ориентация проекций), не от
+      // домена адресации карт.
       vec3 w = triplanarWeights(dirLocal);
 
       // Непрерывный индекс варианта — один раз на проекционную ось, делится
       // всеми четырьмя картами обеих шкал (см. «Экономика» в докстроке чанка).
+      // Домен — detailPos (крупная шкала); ячейка vnoise — 4 тайла (0.25),
+      // решётка хеша mod 256 — вместе 1024 = WRAP_TILES, шов k·W не виден.
       vec3 l = vec3(
-        8.0 * vnoise(0.3 * (dirLocal.zy * uDetailScale + offset)),
-        8.0 * vnoise(0.3 * (dirLocal.xz * uDetailScale + offset)),
-        8.0 * vnoise(0.3 * (dirLocal.xy * uDetailScale + offset))
+        8.0 * vnoise(0.25 * (detailPos.zy * uDetailScale + offset)),
+        8.0 * vnoise(0.25 * (detailPos.xz * uDetailScale + offset)),
+        8.0 * vnoise(0.25 * (detailPos.xy * uDetailScale + offset))
       );
 
       if (fade1 > 0.0) {
-        vec3 nDetail = triplanarNormalDetiled(uDetailNorMap, dirLocal, nLocal, w, offset, l);
+        vec3 nDetail = triplanarNormalDetiled(uDetailNorMap, detailPos, uDetailScale, nLocal, w, offset, l);
         nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (nDetail - nLocal));
 
         if (uDetailLayerGates.x > 0.0) {
           float aoDetail = mix(
             1.0,
-            triplanarArmDetiled(uDetailArmMap, dirLocal, w, offset, l).r,
+            triplanarArmDetiled(uDetailArmMap, detailPos, uDetailScale, w, offset, l).r,
             uDetailAoInfluence
           );
           albedoMul *= mix(1.0, aoDetail, fade1);
         }
 
         if (uDetailLayerGates.y > 0.0) {
-          vec3 diffuseDetail = triplanarAlbedoDetiled(uDetailDiffMap, dirLocal, w, offset, l);
+          vec3 diffuseDetail = triplanarAlbedoDetiled(uDetailDiffMap, detailPos, uDetailScale, w, offset, l);
           float lum = dot(diffuseDetail, vec3(0.299, 0.587, 0.114));
           vec3 tint = mix(vec3(lum), diffuseDetail, uDetailSaturation) * uDetailBrightness;
           albedoMul *= mix(vec3(1.0), tint, fade1);
@@ -237,13 +248,10 @@ export const terrainDetailFunctions = `
       }
 
       if (fade2 > 0.0) {
-        // Ратио масштабов вместо своего texture2D: triplanarNormalDetiled
-        // сам умножит p на uDetailScale — предварительное домножение на
-        // uDetailScale2/uDetailScale компенсирует разницу и даёт эффективный
-        // масштаб uDetailScale2. l переиспользован из крупной шкалы (см.
-        // докстроку чанка) — своего vnoise для мелкой шкалы нет.
-        vec3 pSmall = dirLocal * (uDetailScale2 / max(uDetailScale, 1e-6));
-        vec3 nDetail2 = triplanarNormalDetiled(uDetailNor2Map, pSmall, nLocal, w, offset, l);
+        // Своя точная позиция мелкого слоя (detailPos2, W2 ≠ W1) — не ratio
+        // от крупной. l переиспользован из крупной шкалы (см. докстроку
+        // чанка) — своего vnoise для мелкой шкалы нет.
+        vec3 nDetail2 = triplanarNormalDetiled(uDetailNor2Map, detailPos2, uDetailScale2, nLocal, w, offset, l);
         nLocal = normalize(nLocal + uDetailNormalScale * fade2 * (nDetail2 - nLocal));
       }
     }

@@ -58,6 +58,15 @@ export const PlanetShaderTemplate: ShaderProps = {
     varying vec3 vEast;
     varying vec3 vLocalDir;
 
+    #ifdef USE_TERRAIN_DETAIL
+      // Точная тело-локальная позиция минус k·W (detailWrap.ts): домен
+      // детальных текстур без квантования float32 единичного направления.
+      attribute vec3 detailPos;
+      attribute vec3 detailPos2;
+      varying vec3 vDetailPos;
+      varying vec3 vDetailPos2;
+    #endif
+
     void main() {
       vec4 worldPosition = modelMatrix * vec4(position, 1.0);
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
@@ -93,6 +102,11 @@ export const PlanetShaderTemplate: ShaderProps = {
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
       vViewPosition = -mvPosition.xyz;
+
+      #ifdef USE_TERRAIN_DETAIL
+        vDetailPos = detailPos;
+        vDetailPos2 = detailPos2;
+      #endif
 
       ${ShaderChunk['logdepthbuf_vertex']}
     }
@@ -159,6 +173,8 @@ export const PlanetShaderTemplate: ShaderProps = {
     #endif
 
     #ifdef USE_TERRAIN_DETAIL
+      varying vec3 vDetailPos;
+      varying vec3 vDetailPos2;
       #include <terrainDetailUniforms>
       #include <triplanarDetailFunctions>
       #include <terrainDetailFunctions>
@@ -248,7 +264,7 @@ export const PlanetShaderTemplate: ShaderProps = {
         #endif
 
         #ifdef USE_TERRAIN_DETAIL
-          applyTerrainDetail(nLocal, albedoMul, dirLocal, length(vViewPosition));
+          applyTerrainDetail(nLocal, albedoMul, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition));
         #endif
 
         // Единственный переход тело-локальной нормали в view-пространство —
