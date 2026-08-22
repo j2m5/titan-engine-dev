@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildSlopeMap, SLOPE_RANGE } from '../../scripts/lib/slopeMapEncode'
+import { buildSlopeMap, countClampedTexels, SLOPE_RANGE } from '../../scripts/lib/slopeMapEncode'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 
 // min 0, max 65535 → метры численно равны raw-значению
@@ -448,5 +448,65 @@ describe('round-trip через файл: артефакт на диске, а �
     }
 
     expect(corrupted).toBeGreaterThan(0)
+  })
+})
+
+describe('buildSlopeMap: per-map диапазон slopeRange', () => {
+  const R = 1000
+  // подъём 1 м на тексель при R=1000: дуга на экваторе 2π·1000/4 ≈ 1570.8 м
+  // → уклон ≈ 0.000637; для заметных байтов берём крутой подъём
+  function rampMap(): HeightMapData {
+    // 4×2, строка: 0, 300, 600, 300 → центральная разность x=1: (600-0)/(2·arc);
+    // шаг подобран так, чтобы сырой уклон (~0.18) не насыщал диапазон 0.5 —
+    // иначе сравнение «4x МЗР» проверяло бы кламп, а не масштаб квантования
+    const row = [0, 300, 600, 300]
+    return makeMap(4, 2, [...row, ...row])
+  }
+
+  it('при slopeRange 0.5 тот же уклон занимает в 4 раза больше МЗР, чем при 2', () => {
+    const wide = buildSlopeMap(rampMap(), R, { slopeRange: 2, cavity: false })
+    const narrow = buildSlopeMap(rampMap(), R, { slopeRange: 0.5, cavity: false })
+    const dWide = wide[1 * 3] - 128
+    const dNarrow = narrow[1 * 3] - 128
+    expect(dWide).toBeGreaterThan(0)
+    // дизер ±0.5 МЗР: допуск 2 на четырёхкратно усиленном значении
+    expect(Math.abs(dNarrow - 4 * dWide)).toBeLessThanOrEqual(2)
+  })
+
+  it('кламп по slopeRange: уклон выше диапазона — крайние байты', () => {
+    const row = [0, 30000, 60000, 30000]
+    const out = buildSlopeMap(makeMap(4, 2, [...row, ...row]), R, { slopeRange: 0.25, cavity: false })
+    expect(out[1 * 3]).toBe(255)
+    expect(out[3 * 3]).toBe(1)
+  })
+
+  it('cavity ±1 кодируется в байты 1/255 при любом slopeRange (компенсация тем же диапазоном)', () => {
+    // Одиночный пик: cavity в центре пика положительная. Проверяем инвариант
+    // через две сборки: байты канала B не зависят от slopeRange.
+    const values = [0, 0, 0, 0, 0, 5000, 0, 0, 0, 0, 0, 0]
+    const a = buildSlopeMap(makeMap(4, 3, values), R, { slopeRange: 2 })
+    const b = buildSlopeMap(makeMap(4, 3, values), R, { slopeRange: 0.25 })
+    for (let i = 0; i < 12; i++) expect(b[i * 3 + 2]).toBe(a[i * 3 + 2])
+  })
+
+  it('без опции — байт-в-байт прежний выход (slopeRange = SLOPE_RANGE)', () => {
+    const map = rampMap()
+    expect(buildSlopeMap(map, R)).toEqual(buildSlopeMap(map, R, { slopeRange: SLOPE_RANGE }))
+  })
+
+  it('невалидный slopeRange (не из сетки) — ошибка', () => {
+    expect(() => buildSlopeMap(rampMap(), R, { slopeRange: 0.3 })).toThrow(/slopeRange/)
+  })
+
+  it('countClampedTexels считает долю текселей за диапазоном', () => {
+    // раскладка та же, что в тесте клампа выше, но на порядок меньше:
+    // сырой уклон (~2.7) должен уместиться в диапазон 4 (clamped=0) и
+    // выйти за диапазон 0.25 (clamped>0) — тест на границу, не на насыщение
+    const row = [0, 3000, 6000, 3000]
+    const map = makeMap(4, 2, [...row, ...row])
+    expect(countClampedTexels(map, R, 4).clamped).toBe(0)
+    const narrow = countClampedTexels(map, R, 0.25)
+    expect(narrow.total).toBe(8)
+    expect(narrow.clamped).toBeGreaterThan(0)
   })
 })

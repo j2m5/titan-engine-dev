@@ -1,5 +1,5 @@
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
-import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
+import { isValidSlopeRange, SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 import { WATER_SHALLOW_RANGE_METERS } from '@/core/terrain/waterLevel'
 import { buildCavityField } from './cavityMap'
 
@@ -10,8 +10,9 @@ export { SLOPE_RANGE }
  * поверхности (Δh на метр дуги) центральной разностью. R — уклон на восток,
  * G — на север (строка 0 = север, как в TEHM), B — signed cavity рельефа
  * (гребень светлее, яма темнее — см. cavityMap.ts), опционально нулевая.
- * Кодировка знаковая: байт 128 = 0, 1..255 = −SLOPE_RANGE..+SLOPE_RANGE —
- * ноль представим точно.
+ * Кодировка знаковая: байт 128 = 0, 1..255 = −slopeRange..+slopeRange —
+ * ноль представим точно. Диапазон — параметр конкретной карты (`options.slopeRange`,
+ * значение из `SLOPE_RANGE_GRID`), дефолт `SLOPE_RANGE`.
  *
  * Арки честные: восточная дуга делится на cos широты. Широта строки — по
  * полутексельной конвенции GPU (центр текселя на y+0.5): потребитель —
@@ -28,13 +29,14 @@ export { SLOPE_RANGE }
  * диапазона) воспроизводятся точно, дизер трогает только дробный остаток.
  *
  * Канал B переиспользует ТОТ ЖЕ квантователь `encode`, что и R/G, поэтому
- * значение cavity ∈ [−1, 1] домножается на SLOPE_RANGE перед вызовом — сам
- * `encode` делит на SLOPE_RANGE обратно (это его контракт для уклонов), и
+ * значение cavity ∈ [−1, 1] домножается на slopeRange перед вызовом — сам
+ * `encode` делит на slopeRange обратно (это его контракт для уклонов), и
  * без компенсирующего умножения cavity=±1 квантовался бы только в байты
- * 128±63.5 (диапазон уклонов вдвое шире диапазона cavity). С умножением
- * cavity=−1 → байт 1, cavity=+1 → байт 255 — та же точность и тот же дизер
- * (хеш с channel=2), что и у R/G. Потребитель канала B декодирует его БЕЗ
- * повторного умножения на SLOPE_RANGE: (byte−128)/127 сразу даёт cavity.
+ * 128±63.5 при slopeRange=2 (диапазон уклонов вдвое шире диапазона cavity).
+ * С умножением cavity=−1 → байт 1, cavity=+1 → байт 255 при ЛЮБОМ slopeRange —
+ * та же точность и тот же дизер (хеш с channel=2), что и у R/G. Потребитель
+ * канала B декодирует его БЕЗ повторного умножения на slopeRange:
+ * (byte−128)/127 сразу даёт cavity.
  *
  * Канал A (опционально, `options.waterLevelMeters` задан) — запечённая
  * глубина воды: `clamp((уровень − h) / range, 0, 1)` → байт 0..255 без знака
@@ -69,41 +71,20 @@ function ditherHash01(x: number, y: number, channel: number): number {
   return (h >>> 0) / 0x100000000
 }
 
-export function buildSlopeMap(
+/**
+ * Общая геометрия обхода slope-карты: центральные разности высот в честных
+ * метрических уклонах (арки, полутексельная широта, шов долготы, полярный
+ * кламп пролёта — см. докблок модуля). Вызывает `visit` на каждый тексель,
+ * без квантования в байты — используется энкодером и статистикой (Task 3).
+ */
+export function forEachSlope(
   map: HeightMapData,
   radiusMeters: number,
-  options?: { cavity?: boolean; waterLevelMeters?: number; shallowRangeMeters?: number }
-): Uint8Array {
-  if (!Number.isFinite(radiusMeters) || radiusMeters <= 0) {
-    throw new Error(`Радиус тела невалиден: ${radiusMeters}`)
-  }
-
+  visit: (x: number, y: number, slopeEast: number, slopeNorth: number) => void
+): void {
   const { width, height, minMeters, maxMeters, data } = map
   const metersPerRaw = (maxMeters - minMeters) / 65535
   const northArc = (Math.PI * radiusMeters) / height
-  // канал A (вода) только когда явно задан уровень — иначе выход 3-канальный
-  // байт-в-байт как до этой правки (44 карты арки cavity не пересобираются)
-  const waterLevelMeters = options?.waterLevelMeters
-  const hasWater = waterLevelMeters !== undefined
-  const shallowRangeMeters = options?.shallowRangeMeters ?? WATER_SHALLOW_RANGE_METERS
-
-  if (hasWater && (!Number.isFinite(shallowRangeMeters) || shallowRangeMeters <= 0)) {
-    throw new Error(`shallowRangeMeters (диапазон обмеления) невалиден: ${shallowRangeMeters}`)
-  }
-
-  const channels = hasWater ? 4 : 3
-  const out = new Uint8Array(width * height * channels)
-  // дефолт true (арка cavity); { cavity: false } — паритетный режим, канал B
-  // остаётся нулевым (Uint8Array уже заполнен нулями) байт-в-байт как раньше
-  const cavityField = (options?.cavity ?? true) ? buildCavityField(map) : null
-
-  const encode = (slope: number, x: number, y: number, channel: number): number => {
-    const clamped = Math.max(-SLOPE_RANGE, Math.min(SLOPE_RANGE, slope))
-    const value = (clamped / SLOPE_RANGE) * 127
-    const dithered = value + (ditherHash01(x, y, channel) - 0.5)
-
-    return Math.max(0, Math.min(255, Math.round(128 + dithered)))
-  }
 
   for (let y = 0; y < height; y++) {
     const latitude = Math.PI / 2 - ((y + 0.5) / height) * Math.PI
@@ -130,17 +111,76 @@ export function buildSlopeMap(
       const slopeNorth =
         northSpanArc === 0 ? 0 : ((data[yNorth * width + x] - data[ySouth * width + x]) * metersPerRaw) / northSpanArc
 
-      const i = (row + x) * channels
-      out[i] = encode(slopeEast, x, y, 0)
-      out[i + 1] = encode(slopeNorth, x, y, 1)
-      if (cavityField) out[i + 2] = encode(cavityField[row + x] * SLOPE_RANGE, x, y, 2)
-      if (hasWater) {
-        const hMeters = minMeters + data[row + x] * metersPerRaw
-        const depthFraction = Math.max(0, Math.min(1, (waterLevelMeters! - hMeters) / shallowRangeMeters))
-        out[i + 3] = Math.round(depthFraction * 255)
-      }
+      visit(x, y, slopeEast, slopeNorth)
     }
   }
+}
+
+/** Доля текселей, чей уклон по любой оси выходит за slopeRange (клампится энкодером). */
+export function countClampedTexels(
+  map: HeightMapData,
+  radiusMeters: number,
+  slopeRange: number
+): { clamped: number; total: number } {
+  let clamped = 0
+  forEachSlope(map, radiusMeters, (_x, _y, e, n) => {
+    if (Math.abs(e) > slopeRange || Math.abs(n) > slopeRange) clamped++
+  })
+  return { clamped, total: map.width * map.height }
+}
+
+export function buildSlopeMap(
+  map: HeightMapData,
+  radiusMeters: number,
+  options?: { cavity?: boolean; waterLevelMeters?: number; shallowRangeMeters?: number; slopeRange?: number }
+): Uint8Array {
+  if (!Number.isFinite(radiusMeters) || radiusMeters <= 0) {
+    throw new Error(`Радиус тела невалиден: ${radiusMeters}`)
+  }
+
+  const slopeRange = options?.slopeRange ?? SLOPE_RANGE
+  if (!isValidSlopeRange(slopeRange)) {
+    throw new Error(`slopeRange вне сетки: ${slopeRange}`)
+  }
+
+  const { width, height, minMeters, maxMeters, data } = map
+  const metersPerRaw = (maxMeters - minMeters) / 65535
+  // канал A (вода) только когда явно задан уровень — иначе выход 3-канальный
+  // байт-в-байт как до этой правки (44 карты арки cavity не пересобираются)
+  const waterLevelMeters = options?.waterLevelMeters
+  const hasWater = waterLevelMeters !== undefined
+  const shallowRangeMeters = options?.shallowRangeMeters ?? WATER_SHALLOW_RANGE_METERS
+
+  if (hasWater && (!Number.isFinite(shallowRangeMeters) || shallowRangeMeters <= 0)) {
+    throw new Error(`shallowRangeMeters (диапазон обмеления) невалиден: ${shallowRangeMeters}`)
+  }
+
+  const channels = hasWater ? 4 : 3
+  const out = new Uint8Array(width * height * channels)
+  // дефолт true (арка cavity); { cavity: false } — паритетный режим, канал B
+  // остаётся нулевым (Uint8Array уже заполнен нулями) байт-в-байт как раньше
+  const cavityField = (options?.cavity ?? true) ? buildCavityField(map) : null
+
+  const encode = (slope: number, x: number, y: number, channel: number): number => {
+    const clamped = Math.max(-slopeRange, Math.min(slopeRange, slope))
+    const value = (clamped / slopeRange) * 127
+    const dithered = value + (ditherHash01(x, y, channel) - 0.5)
+
+    return Math.max(0, Math.min(255, Math.round(128 + dithered)))
+  }
+
+  forEachSlope(map, radiusMeters, (x, y, slopeEast, slopeNorth) => {
+    const row = y * width
+    const i = (row + x) * channels
+    out[i] = encode(slopeEast, x, y, 0)
+    out[i + 1] = encode(slopeNorth, x, y, 1)
+    if (cavityField) out[i + 2] = encode(cavityField[row + x] * slopeRange, x, y, 2)
+    if (hasWater) {
+      const hMeters = minMeters + data[row + x] * metersPerRaw
+      const depthFraction = Math.max(0, Math.min(1, (waterLevelMeters! - hMeters) / shallowRangeMeters))
+      out[i + 3] = Math.round(depthFraction * 255)
+    }
+  })
 
   return out
 }
