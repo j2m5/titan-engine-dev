@@ -24,3 +24,25 @@ export function transmittanceUv(
   const unit = (x: number, n: number): number => 0.5 / n + x * (1 - 1 / n)
   return { u: unit(xMu, width), v: unit(xR, height) }
 }
+
+type Vec3 = readonly [number, number, number]
+
+function normalize3([x, y, z]: Vec3): Vec3 {
+  const len = Math.sqrt(x * x + y * y + z * z) || 1
+  return [x / len, y / len, z / len]
+}
+
+function dot3(a: Vec3, b: Vec3): number {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+/**
+ * CPU-зеркало GLSL-выражения `dot(normalize(vLocalDir), -normalize(vLocalLightDirection))`
+ * (PlanetShaderTemplate.ts) — muS для sunTint. `lightDirFromSun` направлен ОТ солнца
+ * К точке (см. вершинник), поэтому знак минус: подсолнечная точка (dir совпадает с
+ * направлением НА солнце) даёт muS = +1.
+ */
+export function subsolarMuS(dir: Vec3, lightDirFromSun: Vec3): number {
+  const n = normalize3(lightDirFromSun)
+  return dot3(normalize3(dir), [-n[0], -n[1], -n[2]])
+}

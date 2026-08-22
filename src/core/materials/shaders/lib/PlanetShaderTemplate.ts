@@ -273,8 +273,10 @@ export const PlanetShaderTemplate: ShaderProps = {
       // Цвет солнца сквозь атмосферу (LUT пропускания): палуба и облака у
       // терминатора теплеют и темнеют синхронно с небом; в зените тинт ≡ 1.
       // mu_s — по радиальному направлению сферы, не по нормали рельефа.
+      // vLocalLightDirection направлен ОТ солнца к точке (см. вершинник) —
+      // знак минус даёт μ_s = +1 в подсолнечной точке.
       #ifdef USE_SUN_TINT
-        day *= mix(vec3(1.0), sunTint(dot(normalize(vLocalDir), normalize(vLocalLightDirection))), uSunTintStrength);
+        day *= mix(vec3(1.0), sunTint(dot(normalize(vLocalDir), -normalize(vLocalLightDirection))), uSunTintStrength);
       #endif
 
       // Огни городов: порог с мягкостью вместо квадрата. Квадрат душил

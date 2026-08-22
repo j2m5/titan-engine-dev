@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Texture } from 'three'
-import { transmittanceUv } from '@/core/materials/shaders/lib/chunks/sunTransmittanceMath'
+import { subsolarMuS, transmittanceUv } from '@/core/materials/shaders/lib/chunks/sunTransmittanceMath'
 import { TRANSMITTANCE_H, TRANSMITTANCE_W } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
 import { sunTransmittanceFunctions, sunTransmittanceUniforms } from '@/core/materials/shaders/lib/chunks/SunTransmittance'
 import { atmosphereShader } from '@/core/renderables/Atmosphere/atmosphere'
@@ -104,7 +104,7 @@ describe('PlanetShaderTemplate: тинт солнца под USE_SUN_TINT', () =
 
   it('day умножается на тинт ПОСЛЕ облаков и ДО микса с ночью, mu_s — из vLocalDir', () => {
     const dayLine = frag.indexOf('vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);')
-    const tint = frag.indexOf('day *= mix(vec3(1.0), sunTint(dot(normalize(vLocalDir), normalize(vLocalLightDirection))), uSunTintStrength);')
+    const tint = frag.indexOf('day *= mix(vec3(1.0), sunTint(dot(normalize(vLocalDir), -normalize(vLocalLightDirection))), uSunTintStrength);')
     const night = frag.indexOf('vec3 finalColor = mix(night, day, dayFactor);')
     expect(dayLine).toBeGreaterThan(-1)
     expect(tint).toBeGreaterThan(dayLine)
@@ -116,6 +116,21 @@ describe('PlanetShaderTemplate: тинт солнца под USE_SUN_TINT', () =
     // мандатная строка задачи; проверяем именно голую переменную normal.
     expect(frag).not.toMatch(/sunTint\(dot\(normal(?!ize)/)
     expect(frag).not.toMatch(/sunTint\([^)]*vPosition/)
+  })
+
+  it('mu_s со знаком минус: vLocalLightDirection направлен ОТ солнца, минус даёт +1 в зените', () => {
+    expect(frag).toContain('sunTint(dot(normalize(vLocalDir), -normalize(vLocalLightDirection))')
+  })
+})
+
+describe('subsolarMuS — CPU-зеркало знака GLSL-выражения muS', () => {
+  it('подсолнечная точка: dir на солнце, свет летит в противоположную сторону — muS = +1', () => {
+    // Солнце в +z: свет летит к −z (lightDirFromSun = (0,0,-1)), точка на +z — под солнцем.
+    expect(subsolarMuS([0, 0, 1], [0, 0, -1])).toBeCloseTo(1, 12)
+  })
+
+  it('антиподная точка — muS = -1', () => {
+    expect(subsolarMuS([0, 0, -1], [0, 0, -1])).toBeCloseTo(-1, 12)
   })
 })
 
