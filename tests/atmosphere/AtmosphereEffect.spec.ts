@@ -84,9 +84,14 @@ describe('AtmosphereEffect', () => {
     expect(effect.uniforms.get(slotUniformName(0, 'top_radius'))!.value).toBe(6420)
     expect(effect.uniforms.get(slotUniformName(0, 'exposure'))!.value).toBe(1.4)
     expect(effect.uniforms.get(slotUniformName(0, 'hdrKnee'))!.value).toBe(0.5)
-    const sunSize = effect.uniforms.get(slotUniformName(0, 'sunSize'))!.value as { x: number; y: number }
-    expect(sunSize.x).toBeCloseTo(Math.tan(0.004), 12)
-    expect(sunSize.y).toBeCloseTo(Math.cos(0.004), 12)
+  })
+
+  // Аналитический диск снят: импостор звезды уже проходит через T эффекта
+  it('юниформа размера диска солнца нет ни в одном слоте', () => {
+    const effect = new AtmosphereEffect(cameraAtOrigin(), new AtmosphereRegistry())
+    for (let i = 0; i < ATMOSPHERE_SLOTS; i++) {
+      expect(effect.uniforms.has(slotUniformName(i, 'sunSize'))).toBe(false)
+    }
   })
 
   it('камера вне нуля: sunDir считается от МИРОВОГО центра, center — относительно камеры', () => {

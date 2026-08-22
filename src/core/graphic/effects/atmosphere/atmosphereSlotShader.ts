@@ -102,7 +102,6 @@ export function buildSlotGlsl(i: number): string {
   // Центр оболочки относительно камеры, км (float64-вычитание на CPU)
   uniform vec3 ${u('center')};
   uniform vec3 ${u('sunDir')};
-  uniform vec2 ${u('sunSize')};
   uniform float ${u('exposure')};
   uniform float ${u('hdrKnee')};
 
@@ -188,14 +187,11 @@ export function buildSlotGlsl(i: number): string {
       radiance = GetSkyRadianceToPoint(atm, ${u('transmittance')}, ${u('scattering')}, ${u('scattering')},
         p0, p1, 0.0, ${u('sunDir')}, transmittance);
     } else {
+      // Аналитического диска солнца здесь нет: импостор звезды — меш сцены за
+      // оболочкой, и его цвет во входном кадре уже умножается на transmittance
+      // ниже. Второй диск давал двойной источник под блумом.
       radiance = GetSkyRadiance(atm, ${u('transmittance')}, ${u('scattering')}, ${u('scattering')},
         p0, dir, 0.0, ${u('sunDir')}, transmittance);
-      // Диск рисуется на небесной ветке; импостор звезды лежит дальше оболочки
-      // (hitSurface там false), поэтому источник двойной — открытый вопрос
-      // владельца, см. docs/terrain-handoff.md
-      if (dot(dir, ${u('sunDir')}) > ${u('sunSize')}.y) {
-        radiance += transmittance * GetSolarRadianceFor(atm);
-      }
     }
 
     if (uDebugView > 0.5) {
@@ -206,7 +202,7 @@ export function buildSlotGlsl(i: number): string {
     }
 
     // Линейный HDR-выход; колено сжимает только избыток над 1.0; потолок 64
-    // держит half-float буфер от переполнения на диске солнца
+    // держит half-float буфер от переполнения у лимба вблизи солнца
     vec3 scatter = radiance * ${u('exposure')};
     vec3 excess = max(scatter - vec3(1.0), vec3(0.0));
     scatter = min(scatter, vec3(1.0)) + excess * ${u('hdrKnee')};
@@ -218,16 +214,11 @@ export function buildSlotGlsl(i: number): string {
 }
 
 /**
- * Общая для слотов радиантность диска: solar_irradiance / (π·α²).
  * buildLayer живёт в atmosphereParametric.ts (шейдер генератора LUT), в ядре
  * его нет — объявляем здесь. Блок идёт после ядра (нужны типы) и до слотов
  * (они зовут).
  */
-const SOLAR_RADIANCE_GLSL = /* glsl */ `
-  vec3 GetSolarRadianceFor(AtmosphereParameters atm) {
-    return atm.solar_irradiance / (PI * atm.sun_angular_radius * atm.sun_angular_radius);
-  }
-
+const SLOT_HELPERS_GLSL = /* glsl */ `
   DensityProfileLayer buildLayer(float params[5]) {
     return DensityProfileLayer(params[0], params[1], params[2], params[3], params[4]);
   }
@@ -251,7 +242,7 @@ export function buildAtmosphereEffectFragment(): string {
   uniform float uDebugView;
 
   ${buildAtmosphereCoreGlsl()}
-  ${SOLAR_RADIANCE_GLSL}
+  ${SLOT_HELPERS_GLSL}
   ${slots}
 
   void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {

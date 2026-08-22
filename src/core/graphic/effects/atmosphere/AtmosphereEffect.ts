@@ -1,5 +1,5 @@
 import { BlendFunction, Effect, EffectAttribute, EffectPass } from 'postprocessing'
-import { PerspectiveCamera, Uniform, Vector2, Vector3, WebGLRenderer, WebGLRenderTarget } from 'three'
+import { PerspectiveCamera, Uniform, Vector3, WebGLRenderer, WebGLRenderTarget } from 'three'
 import { SpaceScale } from '@/core/constants'
 import { AtmosphereRegistry, AtmosphereEntry } from '@/core/services/AtmosphereRegistry'
 import { orderSlots } from '@/core/graphic/effects/atmosphere/atmosphereDepthMath'
@@ -86,7 +86,6 @@ export class AtmosphereEffect extends Effect {
       uniforms.set(slotUniformName(i, 'irradiance'), new Uniform(null))
       uniforms.set(slotUniformName(i, 'center'), new Uniform(new Vector3()))
       uniforms.set(slotUniformName(i, 'sunDir'), new Uniform(new Vector3(0, 0, 1)))
-      uniforms.set(slotUniformName(i, 'sunSize'), new Uniform(new Vector2()))
       uniforms.set(slotUniformName(i, 'exposure'), new Uniform(1))
       uniforms.set(slotUniformName(i, 'hdrKnee'), new Uniform(1))
     }
@@ -191,7 +190,6 @@ export class AtmosphereEffect extends Effect {
     u('irradiance').value = entry.lut.irradiance
     ;(u('center').value as Vector3).copy(item.centerKm)
     ;(u('sunDir').value as Vector3).copy(item.sunDir)
-    ;(u('sunSize').value as Vector2).set(Math.tan(c.sunAngularRadius), Math.cos(c.sunAngularRadius))
     u('exposure').value = c.exposure ?? 10
     // Колено ниже нуля инвертировало бы избыток над 1.0 (потемнение вместо сжатия)
     u('hdrKnee').value = Math.max(0, c.hdrKnee ?? 1)

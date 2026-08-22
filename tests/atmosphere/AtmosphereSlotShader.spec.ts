@@ -40,7 +40,6 @@ describe('слот', () => {
     expect(slot).toContain('uniform sampler2D uSlot1_irradiance;')
     expect(slot).toContain('uniform vec3 uSlot1_center;')
     expect(slot).toContain('uniform vec3 uSlot1_sunDir;')
-    expect(slot).toContain('uniform vec2 uSlot1_sunSize;')
     expect(slot).toContain('uniform float uSlot1_exposure;')
     expect(slot).toContain('uniform float uSlot1_hdrKnee;')
   })
@@ -56,13 +55,11 @@ describe('слот', () => {
     expect(slot).toContain('GetSkyRadiance(atm, uSlot1_transmittance, uSlot1_scattering, uSlot1_scattering,')
   })
 
-  // Гейт !hitSurface остаётся, но двойного источника он не снимает: импостор
-  // звезды лежит дальше оболочки — открытый вопрос владельца
-  it('диск солнца — на небесной ветке (внутри !hitSurface)', () => {
-    const sky = slot.indexOf('} else {')
-    const disc = slot.indexOf('GetSolarRadianceFor(atm)')
-    expect(disc).toBeGreaterThan(sky)
-    expect(slot.indexOf('hitSurface')).toBeLessThan(disc)
+  // Импостор звезды — меш сцены за оболочкой, его цвет во входном кадре уже
+  // множится на transmittance: аналитический диск был вторым источником
+  it('аналитического диска солнца в слоте нет', () => {
+    expect(slot).not.toContain('GetSolarRadianceFor')
+    expect(slot).not.toContain('sunSize')
   })
 
   it('имя юниформа строится одной функцией', () => {
@@ -125,6 +122,11 @@ describe('фрагмент эффекта', () => {
     for (let i = 0; i < ATMOSPHERE_SLOTS; i++) {
       expect(frag).toContain(`if (uCount > ${i}) applySlot${i}(dirWorld, distKm, color);`)
     }
+  })
+
+  it('диск солнца снят целиком: ни функции, ни юниформа размера', () => {
+    expect(frag).not.toContain('GetSolarRadianceFor')
+    expect(frag).not.toContain('sunSize')
   })
 
   it('свой декод лог-глубины, без readDepth/getViewZ postprocessing', () => {
