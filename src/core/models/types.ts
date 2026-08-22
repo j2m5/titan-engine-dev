@@ -289,7 +289,7 @@ export interface IPlanetRenderingObject {
   giantDetailWarp?: number
   /** Варп по производной яркости текстуры по широте — складки у краёв полос (дефолт 2). */
   giantDetailTextureWarp?: number
-  /** Конец дистанционного fade, км (дефолт 2·R — деталь проявляется с ~0.8 R над палубой). */
+  /** Конец дистанционного fade, км (дефолт 1.5·R — деталь проявляется с ~0.6 R над палубой). */
   giantDetailFadeKm?: number
 }
 

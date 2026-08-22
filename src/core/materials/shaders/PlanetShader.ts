@@ -42,7 +42,7 @@ const DEFAULT_GIANT_DETAIL_SCALE_KM = 300
 const DEFAULT_GIANT_DETAIL_STRETCH = 6
 const DEFAULT_GIANT_DETAIL_WARP = 0.6
 const DEFAULT_GIANT_DETAIL_TEXTURE_WARP = 2
-const DEFAULT_GIANT_DETAIL_FADE_RADII = 2
+const DEFAULT_GIANT_DETAIL_FADE_RADII = 1.5
 
 // Период (метры → юниты) в масштаб трипланарной проекции: чанк TerrainDetail
 // умножает домен на 1/период напрямую (см. докстрока чанка) — нулевой период
