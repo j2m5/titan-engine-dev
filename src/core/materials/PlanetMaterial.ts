@@ -6,6 +6,7 @@ import { Texture, Vector3 } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { heightPathOf } from '@/core/terrain/heightPath'
+import { SLOPE_RANGE, isValidSlopeRange } from '@/core/terrain/slopeMapFormat'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { IPlanetRenderingObject } from '@/core/models/types'
 import { readRenderingData } from '@/core/helpers/renderingData'
@@ -175,6 +176,12 @@ class PlanetMaterial extends AbstractShaderMaterial {
     const bumpMap: Texture | undefined = hasHeightField ? slopeMap : legacyBumpMap
     const useSlope = hasHeightField && Boolean(slopeMap)
 
+    // Диапазон декода — per-map поле ресурса (см. slopeMapFormat), отсутствие
+    // или невалидное значение (грид степеней двойки) — дефолт SLOPE_RANGE,
+    // прежнее поведение тел без ручки.
+    const slopeRange = this.model.resources.where('resourceType', 'slope').first()?.getAttribute('slopeRange')
+    this.uniforms.uSlopeRange.value = isValidSlopeRange(slopeRange) ? slopeRange : SLOPE_RANGE
+
     // Cavity-затемнение альбедо (арка slope-cavity, канал B slope-карты) —
     // ручка пер-тела, отсутствие поля = 0 (Task 3 её пока не расставляет).
     // Юниформ форвардится из data независимо от гейта ниже: значение само по
@@ -301,6 +308,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uBumpTexelSize.value.set(0, 0)
     this.uniforms.uDiffuseTexelSize.value.set(0, 0)
     this.uniforms.uCavityStrength.value = 0
+    this.uniforms.uSlopeRange.value = SLOPE_RANGE
 
     this.uniforms.uDetailNorMap.value = null
     this.uniforms.uDetailDiffMap.value = null

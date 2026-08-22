@@ -6,6 +6,7 @@ import { IPlanetRenderingObject, IRingRenderingObject } from '@/core/models/type
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { clampSunTintStrength } from '@/core/materials/SunTintBinding'
+import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 import {
   DETAIL_FADE_START_RATIO,
   macroFadeMetersFor
@@ -98,6 +99,7 @@ interface PlanetUniforms {
   uDetailLayerGates: Vector3
   uDetailFadeRange: Vector4
   uCavityStrength: number
+  uSlopeRange: number
   uTerrainLambert: number
   uTerrainAmbient: number
   shadowRingsInnerRadius: number
@@ -213,6 +215,9 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uDetailAoInfluence: new Uniform(planetData.detailAoInfluence ?? DEFAULT_DETAIL_AO_INFLUENCE),
       uDetailLayerGates: new Uniform(new Vector3(0, 0, 0)),
       uCavityStrength: new Uniform(0),
+      // Per-map диапазон декода (строка slope-ресурса) — PlanetMaterial.updateMaterial
+      // ставит фактическое значение, здесь дефолт до первой загрузки ресурса.
+      uSlopeRange: new Uniform(SLOPE_RANGE),
       uTerrainLambert: new Uniform(planetData.terrainLambert ?? DEFAULT_TERRAIN_LAMBERT),
       uTerrainAmbient: new Uniform(planetData.terrainAmbient ?? DEFAULT_TERRAIN_AMBIENT),
       uDetailFadeRange: new Uniform(
