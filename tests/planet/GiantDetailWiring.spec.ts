@@ -103,15 +103,15 @@ describe('PlanetShader: ручки детали гиганта', () => {
   beforeEach(seedPlaceholderKeys)
   afterEach(() => resourceStorage.deleteAllTextures())
 
-  it('дефолты: strength 0.35, scale 600, stretch 6, warp 0.6, textureWarp 2, fade 6·R в юнитах, радиус из physicalObject', () => {
+  it('дефолты: strength 0.35, scale 300, stretch 6, warp 0.6, textureWarp 2, fade 2·R в юнитах, радиус из physicalObject', () => {
     const shader = new PlanetShader(stubActor({ radius: 69911 }, {}))
     expect(shader.uniforms.uGiantRadiusKm.value).toBe(69911)
     expect(shader.uniforms.uGiantDetailStrength.value).toBe(0.35)
-    expect(shader.uniforms.uGiantDetailScaleKm.value).toBe(600)
+    expect(shader.uniforms.uGiantDetailScaleKm.value).toBe(300)
     expect(shader.uniforms.uGiantDetailStretch.value).toBe(6)
     expect(shader.uniforms.uGiantDetailWarp.value).toBe(0.6)
     expect(shader.uniforms.uGiantDetailTextureWarp.value).toBe(2)
-    expect(shader.uniforms.uGiantDetailFadeUnits.value).toBeCloseTo(toThreeJSUnits(6 * 69911), 12)
+    expect(shader.uniforms.uGiantDetailFadeUnits.value).toBeCloseTo(toThreeJSUnits(2 * 69911), 12)
   })
 
   it('строка без bumpScale (мёртвая ручка) — юниформ 0, а не undefined', () => {

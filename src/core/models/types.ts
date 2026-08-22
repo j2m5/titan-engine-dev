@@ -281,7 +281,7 @@ export interface IPlanetRenderingObject {
   giantDetail?: boolean
   /** Сила детали 0..1 (дефолт 0.35). */
   giantDetailStrength?: number
-  /** Клетка шума, км поверхности (дефолт 600). */
+  /** Клетка шума, км поверхности (дефолт 300). */
   giantDetailScaleKm?: number
   /** Вытяжка клетки вдоль полосы (дефолт 6). */
   giantDetailStretch?: number
@@ -289,7 +289,7 @@ export interface IPlanetRenderingObject {
   giantDetailWarp?: number
   /** Варп по производной яркости текстуры по широте — складки у краёв полос (дефолт 2). */
   giantDetailTextureWarp?: number
-  /** Конец дистанционного fade, км (дефолт 6·R — деталь проявляется с ~2.4 R). */
+  /** Конец дистанционного fade, км (дефолт 2·R — деталь проявляется с ~0.8 R над палубой). */
   giantDetailFadeKm?: number
 }
 
