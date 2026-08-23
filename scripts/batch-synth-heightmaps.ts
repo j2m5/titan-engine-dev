@@ -45,7 +45,7 @@ import { Resources } from '@storage/database/resources'
  * повторную генерацию с пропорционально рескейленными bump- И base-
  * амплитудами (see `generateBody`).
  *
- * Вид входа `elevation` (Плутон, Европа, Эрида, Дисномия, Харон) — настоящая
+ * Вид входа `elevation` (Плутон, Европа, Эрида, Дисномия, Харон, Диона) — настоящая
  * карта высот вместо bump/диффуза: ни подложки-шума, ни полосового фильтра, ни
  * калибровки по RMS — амплитуду задаёт бюджет высоты тела либо явная ручка
  * `peakMeters` на генерацию (Европа: пик занижен до 1800 м, бюджет 0.7%
@@ -352,12 +352,14 @@ const BODIES: readonly BodyGeneration[] = [
     actorIds: [26]
   },
   {
+    // Настоящая карта высот владельца (18928×9464, яркость = высота) — путь elevation вместо синтеза из диффуза.
     name: 'dione',
-    inputPath: `${TEXTURES_ROOT}/dione/dione.jpg`,
-    inputKind: 'diffuse',
+    inputPath: `${TEXTURES_ROOT}/dione/dione_elevation_18k.png`,
+    inputKind: 'elevation',
     radiusMeters: 562_500,
     seedActorId: 27,
-    actorIds: [27]
+    actorIds: [27],
+    ceilingWidth: 4096
   },
   {
     name: 'miranda',
