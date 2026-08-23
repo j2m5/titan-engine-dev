@@ -45,7 +45,8 @@ import { Resources } from '@storage/database/resources'
  * повторную генерацию с пропорционально рескейленными bump- И base-
  * амплитудами (see `generateBody`).
  *
- * Вид входа `elevation` (Плутон, Европа, Эрида, Дисномия, Харон, Диона, Седна) —
+ * Вид входа `elevation` (Плутон, Европа, Эрида, Дисномия, Харон, Диона, Седна,
+ * Ганимед) —
  * настоящая карта высот вместо bump/диффуза: ни подложки-шума, ни полосового
  * фильтра, ни калибровки по RMS — амплитуду задаёт бюджет высоты тела либо явная
  * ручка `peakMeters` на генерацию (Европа: пик занижен до 1800 м, бюджет 0.7%
@@ -130,12 +131,15 @@ const BODIES: readonly BodyGeneration[] = [
     actorIds: [20]
   },
   {
+    // Настоящая карта высот (= ganymede_bump, корреляция 0.999) — путь elevation вместо синтеза из диффуза; пик занижен до 6000 м (реальный рельеф Ганимеда ±1-2 км, бюджет 18.4 км неправдоподобен).
     name: 'ganymede',
-    inputPath: `${TEXTURES_ROOT}/ganymede/ganymede.jpg`,
-    inputKind: 'diffuse',
+    inputPath: `${TEXTURES_ROOT}/ganymede/ganymede_elevation_11k.png`,
+    inputKind: 'elevation',
     radiusMeters: 2_631_200,
     seedActorId: 22,
-    actorIds: [22]
+    actorIds: [22],
+    smoothSigmaTexels: 1.0,
+    peakMeters: 6_000
   },
   {
     name: 'rhea',
