@@ -48,7 +48,7 @@ import { Resources } from '@storage/database/resources'
  * амплитудами (see `generateBody`).
  *
  * Вид входа `elevation` (Плутон, Европа, Эрида, Дисномия, Харон, Диона, Седна,
- * Ганимед) —
+ * Ганимед, Ио) —
  * настоящая карта высот вместо bump/диффуза: ни подложки-шума, ни калибровки
  * по RMS — амплитуду задаёт бюджет высоты тела либо явная ручка `peakMeters`
  * на генерацию (Европа: пик занижен до 1800 м, бюджет 0.7% радиуса не
@@ -141,12 +141,16 @@ const TEXTURES_ROOT = 'storage/images/textures/planets'
  */
 const BODIES: readonly BodyGeneration[] = [
   {
+    // Настоящая карта высот владельца (16384×8192, яркость = высота) — путь elevation вместо синтеза из диффуза; блочность JPEG-происхождения — σ 2.0, 41% дисперсии шире 560 км — highPassKm 600.
     name: 'io',
-    inputPath: `${TEXTURES_ROOT}/io/io.jpg`,
-    inputKind: 'diffuse',
+    inputPath: `${TEXTURES_ROOT}/io/io_elevation_16k.png`,
+    inputKind: 'elevation',
     radiusMeters: 1_821_500,
     seedActorId: 20,
-    actorIds: [20]
+    actorIds: [20],
+    smoothSigmaTexels: 2.0,
+    highPassKm: 600,
+    peakPercentile: 0.999
   },
   {
     // Настоящая карта высот (= ganymede_bump, корреляция 0.999) — путь elevation вместо синтеза из диффуза; пик занижен до 6000 м (реальный рельеф Ганимеда ±1-2 км, бюджет 18.4 км неправдоподобен); highPassKm 800 — половина дисперсии карты на масштабах шире 800 км (широкие светлые/тёмные пятна), без фильтра съедала бы бюджет высоты у кратеров/борозд; peakPercentile 0.999 — верхние 0.1% текселей задавали половину амплитуды нормировки, не типичный рельеф.
