@@ -1,4 +1,4 @@
-import { bandPassSpherical, gaussianBlurSpherical } from './sphericalBandFilter'
+import { bandPassSpherical, blurSpherical, gaussianBlurSpherical } from './sphericalBandFilter'
 import { synthBaseField } from './synthNoise'
 
 export interface ElevationHeightParams {
@@ -8,6 +8,12 @@ export interface ElevationHeightParams {
   peakMeters: number
   /** σ сглаживания в текселях ВЫХОДНОГО разрешения; 0 — без сглаживания. */
   smoothSigmaTexels: number
+  /**
+   * σ высокочастотного фильтра, тексели экватора — вычитает крупномасштабный
+   * тренд (`h ← h − blur_σ(h)`, box-триплет `blurSpherical`) перед нормировкой
+   * по пику; undefined — без фильтра, поле не меняется (см. докблок функции).
+   */
+  highPassSigmaTexels?: number
 }
 
 export interface SynthHeightParams {
@@ -67,9 +73,10 @@ function rangeOf(heights: Float64Array): { minMeters: number; maxMeters: number 
 
 /**
  * Сборка поля высот из ЧЕСТНОЙ карты высот (яркость = высота, а не альбедо):
- * `h = сглаживание(яркость − среднее)`, затем нормировка по пику до
- * `peakMeters`. Ни подложки-шума, ни полосового фильтра — рельеф уже есть во
- * входе, дорисовывать и вырезать полосу нечего.
+ * `h = сглаживание(яркость − среднее)`, опционально высокочастотный фильтр,
+ * затем нормировка по пику до `peakMeters`. Ни подложки-шума, ни двухстороннего
+ * полосового фильтра bump-входа — рельеф уже есть во входе, дорисовывать
+ * нечего.
  *
  * Вычитание среднего убирает произвольный уровень входа (нулевая высота =
  * средний уровень тела), нормировка по МАКСИМУМУ модуля (а не p99, как у
@@ -81,7 +88,19 @@ function rangeOf(heights: Float64Array): { minMeters: number; maxMeters: number 
  * заметные террасы в производной (slope-карта считается разностями соседей),
  * — и НЕ дорисовывает рельеф: σ суб-текселная.
  *
- * Вырожденный вход (поле после сглаживания всюду 0) даёт нулевые высоты, а не
+ * Высокочастотный фильтр (`highPassSigmaTexels`, опционален, ручка владельца
+ * на тело) вычитает крупномасштабный тренд: `h ← h − blur_σ(h)`, блюр —
+ * box-триплет `blurSpherical` (σ здесь на порядки крупнее сглаживания выше —
+ * сотни текселей, точное ядро `gaussianBlurSpherical` было бы неприемлемо
+ * медленным). Нужен, когда во входе много энергии на масштабах шире нужного
+ * рельефа (широкие светлые/тёмные пятна альбедо честной карты высот) — без
+ * фильтра нормировка по пику отдаёт им большую часть бюджета высоты, и
+ * мелкие формы (кратеры, борозды) остаются плоскими. Применяется ПОСЛЕ
+ * сглаживания и ДО нормировки — разнесение масштабов (суб-тексельное
+ * сглаживание против сотен текселей фильтра) делает порядок двух шагов
+ * практически неотличимым.
+ *
+ * Вырожденный вход (поле после фильтрации всюду 0) даёт нулевые высоты, а не
  * деление на ноль.
  */
 export function buildElevationHeightField(
@@ -106,12 +125,19 @@ export function buildElevationHeightField(
   const smoothed =
     params.smoothSigmaTexels > 0 ? gaussianBlurSpherical(centered, width, height, params.smoothSigmaTexels) : centered
 
+  let highPassed = smoothed
+  if (params.highPassSigmaTexels !== undefined && params.highPassSigmaTexels > 0) {
+    const trend = blurSpherical(smoothed, width, height, params.highPassSigmaTexels)
+    highPassed = new Float64Array(smoothed.length)
+    for (let i = 0; i < highPassed.length; i++) highPassed[i] = smoothed[i] - trend[i]
+  }
+
   let peak = 0
-  for (const value of smoothed) peak = Math.max(peak, Math.abs(value))
+  for (const value of highPassed) peak = Math.max(peak, Math.abs(value))
   const scale = peak > 0 ? params.peakMeters / peak : 0
 
-  const heights = new Float64Array(smoothed.length)
-  for (let i = 0; i < heights.length; i++) heights[i] = smoothed[i] * scale
+  const heights = new Float64Array(highPassed.length)
+  for (let i = 0; i < heights.length; i++) heights[i] = highPassed[i] * scale
 
   return { heights, ...rangeOf(heights) }
 }

@@ -69,6 +69,22 @@ export function elevationPeakMeters(radiusMeters: number, override?: number): nu
   return override
 }
 
+/**
+ * σ высокочастотного фильтра входа `elevation`, тексели экватора — из ручки
+ * владельца `highPassKm` (км волны на теле), той же формулой перевода
+ * км→тексели, что и края band-фильтра bump-входа (`buildSynthHeightField`):
+ * `σ_текселей = highPassKm·1000 / equatorTexelMeters`. Без ручки — undefined
+ * (фильтр не применяется, большинство тел не меняются). `highPassKm` обязан
+ * быть > 0 — ноль или отрицательное значение бессмысленны как масштаб волны.
+ */
+export function elevationHighPassSigmaTexels(equatorTexelMeters: number, highPassKm?: number): number | undefined {
+  if (highPassKm === undefined) return undefined
+
+  if (!(highPassKm > 0)) throw new Error(`highPassKm должен быть > 0, получено ${highPassKm}`)
+
+  return (highPassKm * 1000) / equatorTexelMeters
+}
+
 /** Потолок ручки σ сглаживания входа `elevation` — выше уже не срез 8-битных ступенек, а размытие рельефа. */
 const ELEVATION_SMOOTH_SIGMA_MAX = 4
 

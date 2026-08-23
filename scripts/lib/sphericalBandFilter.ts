@@ -89,8 +89,14 @@ function rowLatitude(y: number, height: number): number {
  * Гауссово (приближённое тройным box-blur) размытие эквиректангулярной карты
  * со std=σ в текселях экватора. EW честен по широте и заворачивает шов
  * долготы, NS константный и клампит полюса — детали в докблоке модуля.
+ *
+ * O(n) на любой радиус (в отличие от `gaussianBlurSpherical`, точного ядра
+ * ценой O(n·σ)) — экспортирован отдельно от `bandPassSpherical` ради
+ * высокочастотного фильтра elevation-входа (`buildElevationHeightField`,
+ * `highPassSigmaTexels`): там нужен ОДИН блюр большого σ (сотни текселей),
+ * а не разность двух — точное ядро на таком σ было бы неприемлемо медленным.
  */
-function blurSpherical(src: Float64Array, width: number, height: number, sigmaTexels: number): Float64Array {
+export function blurSpherical(src: Float64Array, width: number, height: number, sigmaTexels: number): Float64Array {
   if (sigmaTexels <= 0) return src.slice()
 
   const maxRadius = Math.max(0, Math.floor(width / 4))

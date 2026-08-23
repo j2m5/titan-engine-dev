@@ -12,6 +12,7 @@ import { argument } from './lib/cliArguments'
 import {
   bandLowKmFor,
   boxDownsampleGreyscale,
+  elevationHighPassSigmaTexels,
   elevationPeakMeters,
   elevationSmoothSigmaTexels,
   resolutionCeiling
@@ -47,14 +48,20 @@ import { Resources } from '@storage/database/resources'
  *
  * Вид входа `elevation` (Плутон, Европа, Эрида, Дисномия, Харон, Диона, Седна,
  * Ганимед) —
- * настоящая карта высот вместо bump/диффуза: ни подложки-шума, ни полосового
- * фильтра, ни калибровки по RMS — амплитуду задаёт бюджет высоты тела либо явная
- * ручка `peakMeters` на генерацию (Европа: пик занижен до 1800 м, бюджет 0.7%
- * радиуса не тронут), см. `elevationField`/`elevationPeakMeters`. Сглаживание
- * входа — дефолт `ELEVATION_SMOOTH_SIGMA_TEXELS` (0.7) либо явная ручка
+ * настоящая карта высот вместо bump/диффуза: ни подложки-шума, ни калибровки
+ * по RMS — амплитуду задаёт бюджет высоты тела либо явная ручка `peakMeters`
+ * на генерацию (Европа: пик занижен до 1800 м, бюджет 0.7% радиуса не
+ * тронут), см. `elevationField`/`elevationPeakMeters`. Сглаживание входа —
+ * дефолт `ELEVATION_SMOOTH_SIGMA_TEXELS` (0.7) либо явная ручка
  * `smoothSigmaTexels` на тело (Эрида: 1.5, Седна: 2.0 — зернистый вход; Харон:
  * 1.0 — 111 уровней яркости, ступени вдвое грубее обычного), см.
- * `elevationSmoothSigmaTexels`.
+ * `elevationSmoothSigmaTexels`. Высокочастотный фильтр — явная ручка
+ * `highPassKm` на тело (км волны, переводится в тексели формулой края
+ * band-фильтра bump-входа): вычитает крупномасштабный тренд карты высот перед
+ * нормировкой по пику, без ручки не применяется (Ганимед: 800 км — половина
+ * дисперсии его карты лежит на масштабах шире 800 км, без фильтра пик 6000 м
+ * уходил в широкие светлые/тёмные пятна вместо кратеров/борозд), см.
+ * `elevationHighPassSigmaTexels`.
  *
  * Даунсемпл входа — до потолка по радиусу тела (или явного `ceilingWidth`), area-average (box) для
  * 8-бит растра (`boxDownsampleGreyscale`, тонкая самостоятельная реализация:
@@ -104,6 +111,8 @@ interface BodyGeneration {
   peakMeters?: number
   /** σ сглаживания входа `elevation`, тексели выхода — ручка владельца на тело; без неё `ELEVATION_SMOOTH_SIGMA_TEXELS` (см. `elevationSmoothSigmaTexels`). */
   smoothSigmaTexels?: number
+  /** Высокочастотный фильтр входа `elevation`, км волны — ручка владельца на тело; без неё фильтр не применяется (см. `elevationHighPassSigmaTexels`). */
+  highPassKm?: number
 }
 
 /** Вид входа: bump/diffuse — синтез рельефа, elevation — честная карта высот (яркость = высота). */
@@ -131,7 +140,7 @@ const BODIES: readonly BodyGeneration[] = [
     actorIds: [20]
   },
   {
-    // Настоящая карта высот (= ganymede_bump, корреляция 0.999) — путь elevation вместо синтеза из диффуза; пик занижен до 6000 м (реальный рельеф Ганимеда ±1-2 км, бюджет 18.4 км неправдоподобен).
+    // Настоящая карта высот (= ganymede_bump, корреляция 0.999) — путь elevation вместо синтеза из диффуза; пик занижен до 6000 м (реальный рельеф Ганимеда ±1-2 км, бюджет 18.4 км неправдоподобен); highPassKm 800 — половина дисперсии карты на масштабах шире 800 км (широкие светлые/тёмные пятна), без фильтра съедала бы бюджет высоты у кратеров/борозд.
     name: 'ganymede',
     inputPath: `${TEXTURES_ROOT}/ganymede/ganymede_elevation_11k.png`,
     inputKind: 'elevation',
@@ -139,7 +148,8 @@ const BODIES: readonly BodyGeneration[] = [
     seedActorId: 22,
     actorIds: [22],
     smoothSigmaTexels: 1.0,
-    peakMeters: 6_000
+    peakMeters: 6_000,
+    highPassKm: 800
   },
   {
     name: 'rhea',
@@ -598,6 +608,11 @@ interface BodyField {
  * (`buildElevationHeightField` нормирует пик ровно на него — бюджет тела по
  * умолчанию, либо явная ручка `body.peakMeters`, см. `elevationPeakMeters`),
  * клампу нечего ловить, а RMS(tan) — отчётная величина, а не цель подгонки.
+ *
+ * `body.highPassKm` (км волны) переводится в тексели экватора той же
+ * формулой, что и края band-фильтра bump-входа (`equatorTexelMeters` —
+ * длина экваториальной дуги на тексель ВЫХОДНОГО разрешения), см.
+ * `elevationHighPassSigmaTexels`.
  */
 function elevationField(
   body: BodyGeneration,
@@ -607,6 +622,8 @@ function elevationField(
   peakMeters: number
 ): BodyField {
   const smoothSigmaTexels = elevationSmoothSigmaTexels(ELEVATION_SMOOTH_SIGMA_TEXELS, body.smoothSigmaTexels)
+  const equatorTexelMeters = (2 * Math.PI * body.radiusMeters) / width
+  const highPassSigmaTexels = elevationHighPassSigmaTexels(equatorTexelMeters, body.highPassKm)
 
   // { cavity: false }: полость B пересчитывается единственным финальным
   // проходом ниже, здесь она была бы чистой потерей времени (как и в калибровке).
@@ -617,6 +634,7 @@ function elevationField(
     body.radiusMeters,
     peakMeters,
     smoothSigmaTexels,
+    highPassSigmaTexels,
     { cavity: false }
   )
 

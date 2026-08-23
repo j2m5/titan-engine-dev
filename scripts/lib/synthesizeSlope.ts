@@ -58,10 +58,12 @@ function assembleSlope(
 
 /**
  * Тот же конвейер для ЧЕСТНОЙ карты высот (`buildElevationHeightField`):
- * подложки и полосового фильтра нет, амплитуду задаёт `peakMeters` (бюджет
- * высоты тела), поэтому ни автокалибровки по RMS, ни пост-коррекции по пику
- * вызывающему не нужно — пик равен бюджету по построению. `rmsTan` здесь
- * отчётная величина, а не цель подгонки.
+ * подложки нет, амплитуду задаёт `peakMeters` (бюджет высоты тела), поэтому
+ * ни автокалибровки по RMS, ни пост-коррекции по пику вызывающему не нужно —
+ * пик равен бюджету по построению. `highPassSigmaTexels` (опционален) —
+ * σ высокочастотного фильтра, вычитающего крупномасштабный тренд карты
+ * высот до нормировки по пику, см. докблок `buildElevationHeightField`.
+ * `rmsTan` здесь отчётная величина, а не цель подгонки.
  */
 export function synthesizeElevationHeightAndSlope(
   luminance: Float64Array,
@@ -70,13 +72,15 @@ export function synthesizeElevationHeightAndSlope(
   radiusMeters: number,
   peakMeters: number,
   smoothSigmaTexels: number,
+  highPassSigmaTexels?: number,
   options?: SlopeOptions
 ): SynthesizeResult {
   const { heights, minMeters, maxMeters } = buildElevationHeightField(luminance, {
     widthTexels: width,
     heightTexels: height,
     peakMeters,
-    smoothSigmaTexels
+    smoothSigmaTexels,
+    highPassSigmaTexels
   })
 
   return assembleSlope(heights, minMeters, maxMeters, width, height, radiusMeters, options)

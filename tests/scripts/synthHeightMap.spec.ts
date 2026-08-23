@@ -248,6 +248,70 @@ describe('buildElevationHeightField: честная карта высот', () =
   })
 })
 
+describe('buildElevationHeightField: highPassSigmaTexels — высокочастотный фильтр', () => {
+  // 640×64, σ=40: период тренда = вся ширина карты (одна волна на весь виток,
+  // отношение σ/период = 1/16 — то же соотношение, что доказанно даёт
+  // T(λ,σ)≈0.9258 у box-триплета в sphericalBandFilter.spec.ts, т.е. фильтр
+  // гасит ~92.6% амплитуды тренда). Экватор — строка height/2.
+  const width = 640
+  const height = 64
+  const equatorRow = height / 2
+  const sigma = 40
+  const bumpX = 100
+
+  /** Тренд (период = ширина карты — крупный масштаб, гасится) + локальный бугор (~5 текселей — много уже σ, переживает фильтр). */
+  function trendPlusBump(): Float64Array {
+    const out = new Float64Array(width * height)
+    const period = width
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const trend = 0.3 * Math.sin((2 * Math.PI * x) / period)
+        const dx = Math.min(Math.abs(x - bumpX), width - Math.abs(x - bumpX))
+        const bump = dx <= 2 ? 0.2 : 0
+        out[y * width + x] = 0.5 + trend + bump
+      }
+    }
+
+    return out
+  }
+
+  it('крупномасштабный тренд подавлен вдали от бугра, локальный бугор выделяется на этом фоне', () => {
+    const { heights } = buildElevationHeightField(trendPlusBump(), {
+      widthTexels: width,
+      heightTexels: height,
+      peakMeters: 1000,
+      smoothSigmaTexels: 0,
+      highPassSigmaTexels: sigma
+    })
+
+    // вдали от бугра (вне его блюр-окна ±3σ) — остаточная амплитуда тренда, шумовой пол
+    let farMin = Infinity
+    let farMax = -Infinity
+    for (let x = 300; x < 340; x++) {
+      const v = heights[equatorRow * width + x]
+      farMin = Math.min(farMin, v)
+      farMax = Math.max(farMax, v)
+    }
+    const farAmplitude = farMax - farMin
+
+    const bumpValue = Math.abs(heights[equatorRow * width + bumpX])
+
+    expect(farAmplitude).toBeGreaterThan(0) // не вырождено в абсолютный ноль
+    expect(bumpValue).toBeGreaterThan(5 * farAmplitude) // бугор на порядок выше шумового пола тренда
+  })
+
+  it('без ручки — выход байт-в-байт как раньше (highPassSigmaTexels не указан)', () => {
+    const luminance = trendPlusBump()
+    const params = { widthTexels: width, heightTexels: height, peakMeters: 1000, smoothSigmaTexels: 0.7 }
+
+    const withoutField = buildElevationHeightField(luminance, params)
+    const withUndefined = buildElevationHeightField(luminance, { ...params, highPassSigmaTexels: undefined })
+
+    expect(Array.from(withUndefined.heights)).toEqual(Array.from(withoutField.heights))
+  })
+})
+
 describe('интеграция: синтетическая карта → TEHM → TerrainHeightField', () => {
   it('строится без NaN, ε(1..6) конечны, clearanceMeters конечен (block>1 путь буфера провиса)', () => {
     // 1536×768: block = round(width/CLEARANCE_GRID_BASE_SEGMENTS) = round(1536/1024) = 2 (>1) —

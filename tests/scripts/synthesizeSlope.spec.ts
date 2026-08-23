@@ -104,6 +104,7 @@ describe('synthesizeElevationHeightAndSlope: вход-карта высот', ()
       radiusMeters,
       peakMeters,
       smoothSigmaTexels,
+      undefined,
       options
     )
   }
@@ -128,6 +129,22 @@ describe('synthesizeElevationHeightAndSlope: вход-карта высот', ()
       expect(withoutCavity[i + 1]).toBe(withCavity[i + 1])
       expect(withoutCavity[i + 2]).toBe(0)
     }
+  })
+
+  it('highPassSigmaTexels пробрасывается в buildElevationHeightField (заданный фильтр меняет карту)', () => {
+    const withoutFilter = run({ cavity: false })
+    const withFilter = synthesizeElevationHeightAndSlope(
+      luminance,
+      width,
+      height,
+      radiusMeters,
+      peakMeters,
+      smoothSigmaTexels,
+      8,
+      { cavity: false }
+    )
+
+    expect(Array.from(withFilter.map.data)).not.toEqual(Array.from(withoutFilter.map.data))
   })
 })
 

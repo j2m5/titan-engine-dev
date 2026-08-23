@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   bandLowKmFor,
   boxDownsampleGreyscale,
+  elevationHighPassSigmaTexels,
   elevationPeakMeters,
   elevationSmoothSigmaTexels,
   resolutionCeiling
@@ -145,6 +146,21 @@ describe('elevationSmoothSigmaTexels: σ сглаживания входа eleva
   it('нулевой и отрицательный override отвергаются', () => {
     expect(() => elevationSmoothSigmaTexels(0.7, 0)).toThrow()
     expect(() => elevationSmoothSigmaTexels(0.7, -1)).toThrow()
+  })
+})
+
+describe('elevationHighPassSigmaTexels: σ высокочастотного фильтра входа elevation', () => {
+  it('без highPassKm — undefined (большинство тел без фильтра)', () => {
+    expect(elevationHighPassSigmaTexels(1000)).toBeUndefined()
+  })
+
+  it('переводит км в тексели той же формулой, что край band-фильтра bump-входа (highPassKm·1000 / equatorTexelMeters)', () => {
+    expect(elevationHighPassSigmaTexels(2000, 800)).toBeCloseTo(400, 6)
+  })
+
+  it('нулевой и отрицательный highPassKm отвергаются', () => {
+    expect(() => elevationHighPassSigmaTexels(2000, 0)).toThrow()
+    expect(() => elevationHighPassSigmaTexels(2000, -10)).toThrow()
   })
 })
 
