@@ -117,7 +117,7 @@ export const Resources: IResource[] = [
   { id: 144, resourceType: "height", lifecycle: "resident", path: "planets/triton/triton_height.raw" },
   { id: 145, resourceType: "slope", lifecycle: "streamable", path: "planets/triton/triton_slope.webp", slopeRange: 0.5, wrapS: 1e3 },
   { id: 146, resourceType: "height", lifecycle: "resident", path: "planets/charon/charon_height.raw" },
-  { id: 147, resourceType: "slope", lifecycle: "streamable", path: "planets/charon/charon_slope.webp", slopeRange: 0.5, wrapS: 1e3 },
+  { id: 147, resourceType: "slope", lifecycle: "streamable", path: "planets/charon/charon_slope.webp", slopeRange: 0.25, wrapS: 1e3 },
   { id: 148, resourceType: "height", lifecycle: "resident", path: "planets/dysnomia/dysnomia_height.raw" },
   { id: 149, resourceType: "slope", lifecycle: "streamable", path: "planets/dysnomia/dysnomia_slope.webp", slopeRange: 0.5, wrapS: 1e3 },
   { id: 150, resourceType: "height", lifecycle: "resident", path: "planets/StarWars/adriana3/adriana3_height.raw" },
