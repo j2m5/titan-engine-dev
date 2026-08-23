@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { describe, expect, it } from 'vitest'
-import { bandLowKmFor, boxDownsampleGreyscale, resolutionCeiling } from '../../scripts/lib/batchBodyRules'
+import { bandLowKmFor, boxDownsampleGreyscale, elevationPeakMeters, resolutionCeiling } from '../../scripts/lib/batchBodyRules'
 
 describe('resolutionCeiling: потолок разрешения по радиусу тела', () => {
   it('≥1500 км → 8192, граница включительно', () => {
@@ -88,6 +88,34 @@ describe('bandLowKmFor: band-low = min(1500, полуокружность тел
 
   it('самое малое тело батча (Корribан VII, 175 км): половина окружности ~550 км', () => {
     expect(bandLowKmFor(175_000)).toBeCloseTo((Math.PI * 175_000) / 1000, 6)
+  })
+})
+
+describe('elevationPeakMeters: пик высоты для входа elevation', () => {
+  it('без override — бюджет 0.7% радиуса (Плутон не меняется)', () => {
+    const radiusMeters = 1_188_300
+    expect(elevationPeakMeters(radiusMeters)).toBeCloseTo(0.007 * radiusMeters, 6)
+  })
+
+  it('override в пределах бюджета принимается как есть (Европа: 1800 м при бюджете ~10927 м)', () => {
+    expect(elevationPeakMeters(1_561_000, 1800)).toBe(1800)
+  })
+
+  it('override ровно на бюджете — граница включительно', () => {
+    const radiusMeters = 1_000_000
+    const budgetMeters = 0.007 * radiusMeters
+    expect(elevationPeakMeters(radiusMeters, budgetMeters)).toBeCloseTo(budgetMeters, 6)
+  })
+
+  it('override выше бюджета отвергается', () => {
+    const radiusMeters = 1_000_000
+    const budgetMeters = 0.007 * radiusMeters
+    expect(() => elevationPeakMeters(radiusMeters, budgetMeters + 1)).toThrow()
+  })
+
+  it('нулевой и отрицательный override отвергаются', () => {
+    expect(() => elevationPeakMeters(1_000_000, 0)).toThrow()
+    expect(() => elevationPeakMeters(1_000_000, -100)).toThrow()
   })
 })
 

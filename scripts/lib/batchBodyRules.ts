@@ -47,6 +47,28 @@ export function bandLowKmFor(radiusMeters: number): number {
   return Math.min(BAND_LOW_KM_DEFAULT, halfCircumferenceKm)
 }
 
+/** Кламп бюджета высоты — доля радиуса тела (0.7%), та же, что у калиброванных тел. */
+const HEIGHT_BUDGET_FRACTION = 0.007
+
+/**
+ * Пик высоты для входа `elevation`: явный `override` (ручка владельца на
+ * тело) либо бюджет `HEIGHT_BUDGET_FRACTION·radiusMeters` по умолчанию
+ * (Плутон — без override, поведение не меняется). `override` должен быть
+ * в (0, бюджет] — выше бюджета `buildElevationHeightField` дал бы пик
+ * больше кламп-порога остальных тел батча незаметно для отчёта.
+ */
+export function elevationPeakMeters(radiusMeters: number, override?: number): number {
+  const budgetMeters = HEIGHT_BUDGET_FRACTION * radiusMeters
+
+  if (override === undefined) return budgetMeters
+
+  if (!(override > 0) || override > budgetMeters) {
+    throw new Error(`peakMeters должен быть в (0, ${budgetMeters.toFixed(0)}] м (бюджет 0.7% радиуса), получено ${override}`)
+  }
+
+  return override
+}
+
 /** Веса area-average по одной оси: для каждого выходного индекса — список (исходный индекс, доля перекрытия окна). */
 interface AxisWeight {
   index: number

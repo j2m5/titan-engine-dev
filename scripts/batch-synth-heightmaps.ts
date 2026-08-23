@@ -9,7 +9,7 @@ import { buildSlopeMap } from './lib/slopeMapEncode'
 import { synthesizeElevationHeightAndSlope, synthesizeHeightAndSlope } from './lib/synthesizeSlope'
 import { autoCalibrateAmplitude, type CalibrationSample } from './lib/autoCalibrate'
 import { argument } from './lib/cliArguments'
-import { bandLowKmFor, boxDownsampleGreyscale, resolutionCeiling } from './lib/batchBodyRules'
+import { bandLowKmFor, boxDownsampleGreyscale, elevationPeakMeters, resolutionCeiling } from './lib/batchBodyRules'
 import { slopeRangeForPath } from './lib/slopeRangeFromDb'
 import { dbPathFor } from './lib/dbPathFor'
 import { Resources } from '@storage/database/resources'
@@ -39,9 +39,11 @@ import { Resources } from '@storage/database/resources'
  * повторную генерацию с пропорционально рескейленными bump- И base-
  * амплитудами (see `generateBody`).
  *
- * Вид входа `elevation` (Плутон) — настоящая карта высот вместо bump/диффуза:
- * ни подложки-шума, ни полосового фильтра, ни калибровки по RMS — амплитуду
- * задаёт бюджет высоты, см. `elevationField`.
+ * Вид входа `elevation` (Плутон, Европа) — настоящая карта высот вместо
+ * bump/диффуза: ни подложки-шума, ни полосового фильтра, ни калибровки по
+ * RMS — амплитуду задаёт бюджет высоты тела либо явная ручка `peakMeters` на
+ * генерацию (Европа: пик занижен до 1800 м, бюджет 0.7% радиуса не тронут),
+ * см. `elevationField`/`elevationPeakMeters`.
  *
  * Даунсемпл входа — до потолка по радиусу тела (или явного `ceilingWidth`), area-average (box) для
  * 8-бит растра (`boxDownsampleGreyscale`, тонкая самостоятельная реализация:
@@ -87,6 +89,8 @@ interface BodyGeneration {
   actorIds: readonly number[]
   /** Явный потолок разрешения вместо правила по радиусу (честный вход тянет больше текселей). */
   ceilingWidth?: number
+  /** Пик высоты для входа `elevation` — ручка владельца на тело; без неё бюджет 0.7% радиуса (см. `elevationPeakMeters`). */
+  peakMeters?: number
 }
 
 /** Вид входа: bump/diffuse — синтез рельефа, elevation — честная карта высот (яркость = высота). */
@@ -260,6 +264,18 @@ const BODIES: readonly BodyGeneration[] = [
     seedActorId: 14,
     actorIds: [14],
     ceilingWidth: 8192
+  },
+  {
+    // Вход — обработанная мозаика 20k владельца (яркость = высота); пик занижен
+    // относительно бюджета осознанно (рельеф Европы — сотни метров).
+    name: 'europa',
+    inputPath: `${TEXTURES_ROOT}/europa/europa_elevation_20k.png`,
+    inputKind: 'elevation',
+    radiusMeters: 1_561_000,
+    seedActorId: 21,
+    actorIds: [21],
+    ceilingWidth: 8192,
+    peakMeters: 1800
   },
   {
     name: 'haumea',
@@ -551,16 +567,17 @@ interface BodyField {
 
 /**
  * Вход `elevation`: карта высот честная, поэтому ни автокалибровки по RMS, ни
- * пост-коррекции по пику — амплитуда равна бюджету высоты по построению
- * (`buildElevationHeightField` нормирует пик ровно на него), клампу нечего
- * ловить, а RMS(tan) — отчётная величина, а не цель подгонки.
+ * пост-коррекции по пику — амплитуда равна `peakMeters` по построению
+ * (`buildElevationHeightField` нормирует пик ровно на него — бюджет тела по
+ * умолчанию, либо явная ручка `body.peakMeters`, см. `elevationPeakMeters`),
+ * клампу нечего ловить, а RMS(tan) — отчётная величина, а не цель подгонки.
  */
 function elevationField(
   body: BodyGeneration,
   luminance: Float64Array,
   width: number,
   height: number,
-  maxHeightBudgetMeters: number
+  peakMeters: number
 ): BodyField {
   // { cavity: false }: полость B пересчитывается единственным финальным
   // проходом ниже, здесь она была бы чистой потерей времени (как и в калибровке).
@@ -569,14 +586,14 @@ function elevationField(
     width,
     height,
     body.radiusMeters,
-    maxHeightBudgetMeters,
+    peakMeters,
     ELEVATION_SMOOTH_SIGMA_TEXELS,
     { cavity: false }
   )
 
   return {
     map: result.map,
-    amplitudeMeters: maxHeightBudgetMeters,
+    amplitudeMeters: peakMeters,
     rmsTan: result.rmsTan,
     peakMeters: peakMetersOf(result.map),
     peakClamped: false,
@@ -688,7 +705,7 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
 
   const field =
     body.inputKind === 'elevation'
-      ? elevationField(body, luminance, width, height, maxHeightBudgetMeters)
+      ? elevationField(body, luminance, width, height, elevationPeakMeters(body.radiusMeters, body.peakMeters))
       : calibratedField(body, luminance, width, height, maxHeightBudgetMeters)
 
   // Единственный проход с полостью (находка фикс-волны 3): прогоны выше
