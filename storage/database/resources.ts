@@ -157,7 +157,7 @@ export const Resources: IResource[] = [
   { id: 184, resourceType: "height", lifecycle: "resident", path: "planets/eris/eris_height.raw" },
   { id: 185, resourceType: "slope", lifecycle: "streamable", path: "planets/eris/eris_slope.webp", slopeRange: 2, wrapS: 1e3 },
   { id: 186, resourceType: "height", lifecycle: "resident", path: "planets/sedna/sedna_height.raw" },
-  { id: 187, resourceType: "slope", lifecycle: "streamable", path: "planets/sedna/sedna_slope.webp", slopeRange: 0.5, wrapS: 1e3 },
+  { id: 187, resourceType: "slope", lifecycle: "streamable", path: "planets/sedna/sedna_slope.webp", slopeRange: 1, wrapS: 1e3 },
   { id: 188, resourceType: "height", lifecycle: "resident", path: "planets/mimas/mimas_height.raw" },
   { id: 189, resourceType: "slope", lifecycle: "streamable", path: "planets/mimas/mimas_slope.webp", slopeRange: 0.25, wrapS: 1e3 },
   { id: 190, resourceType: "height", lifecycle: "resident", path: "planets/enceladus/enceladus_height.raw" },
