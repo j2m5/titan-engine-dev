@@ -10,8 +10,28 @@ import type { Buffer } from 'node:buffer'
 /** band-low по умолчанию, км — переопределяется половиной окружности у малых тел (см. `bandLowKmFor`). */
 export const BAND_LOW_KM_DEFAULT = 1500
 
-/** Потолок разрешения по радиусу тела — Global Constraints плана арки; выход = min(источник, потолок). */
-export function resolutionCeiling(radiusMeters: number): number {
+/** Верхняя граница явного потолка — размер самых крупных входов (16k). */
+const RESOLUTION_OVERRIDE_MAX = 16384
+
+/**
+ * Потолок разрешения по радиусу тела — Global Constraints плана арки; выход =
+ * min(источник, потолок). `override` перебивает правило по радиусу: потолок
+ * задают ДАННЫЕ, когда вход честнее обычного (карта высот вместо диффуза), а
+ * не только размер тела. Валидируется как степень двойки ≤ 16384 — иначе
+ * даунсемпл 2:1 перестанет быть точной двоичной дробью, а VRAM slope-карты
+ * уйдёт за бюджет незаметно.
+ */
+export function resolutionCeiling(radiusMeters: number, override?: number): number {
+  if (override !== undefined) {
+    const isPowerOfTwo = Number.isInteger(override) && override > 0 && (override & (override - 1)) === 0
+
+    if (!isPowerOfTwo || override > RESOLUTION_OVERRIDE_MAX) {
+      throw new Error(`Потолок разрешения должен быть степенью двойки ≤ ${RESOLUTION_OVERRIDE_MAX}, получено ${override}`)
+    }
+
+    return override
+  }
+
   const radiusKm = radiusMeters / 1000
 
   if (radiusKm >= 1500) return 8192

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { measureRmsTan, synthesizeHeightAndSlope } from '../../scripts/lib/synthesizeSlope'
+import {
+  measureRmsTan,
+  synthesizeElevationHeightAndSlope,
+  synthesizeHeightAndSlope
+} from '../../scripts/lib/synthesizeSlope'
 
 /**
  * Радиус подобран так, что 1 км трассы ровно равен 1 текселю экватора (тот
@@ -75,6 +79,55 @@ describe('synthesizeHeightAndSlope: cavity фикс-волны 3 (находка
     }
 
     expect(hasNonZeroB).toBe(true)
+  })
+})
+
+describe('synthesizeElevationHeightAndSlope: вход-карта высот', () => {
+  const width = 128
+  const height = 64
+  const radiusMeters = radiusForOneKmPerTexel(width)
+  const peakMeters = 8318 // 0.7% радиуса Плутона — тот же бюджет, что в батче
+  const smoothSigmaTexels = 0.7
+
+  const luminance = new Float64Array(width * height)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      luminance[y * width + x] = 0.5 + 0.4 * Math.sin((2 * Math.PI * x) / 9) * Math.cos((2 * Math.PI * y) / 7)
+    }
+  }
+
+  function run(options?: { cavity?: boolean }) {
+    return synthesizeElevationHeightAndSlope(
+      luminance,
+      width,
+      height,
+      radiusMeters,
+      peakMeters,
+      smoothSigmaTexels,
+      options
+    )
+  }
+
+  it('RMS(tan) > 0 и пик карты равен бюджету высоты', () => {
+    const { map, rmsTan } = run({ cavity: false })
+
+    expect(rmsTan).toBeGreaterThan(0)
+    expect(Math.max(Math.abs(map.minMeters), Math.abs(map.maxMeters))).toBeCloseTo(peakMeters, 6)
+  })
+
+  it('детерминизм: байты slope-карты совпадают между прогонами', () => {
+    expect(Array.from(run({ cavity: false }).slopeRgb)).toEqual(Array.from(run({ cavity: false }).slopeRgb))
+  })
+
+  it('{ cavity: false } не меняет R/G и обнуляет B (полость — отдельный канал)', () => {
+    const withCavity = run({ cavity: true }).slopeRgb
+    const withoutCavity = run({ cavity: false }).slopeRgb
+
+    for (let i = 0; i < withCavity.length; i += 3) {
+      expect(withoutCavity[i]).toBe(withCavity[i])
+      expect(withoutCavity[i + 1]).toBe(withCavity[i + 1])
+      expect(withoutCavity[i + 2]).toBe(0)
+    }
   })
 })
 

@@ -6,7 +6,7 @@ import sharp from 'sharp'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { encodeHeightMap } from './lib/heightMapEncode'
 import { buildSlopeMap } from './lib/slopeMapEncode'
-import { synthesizeHeightAndSlope } from './lib/synthesizeSlope'
+import { synthesizeElevationHeightAndSlope, synthesizeHeightAndSlope } from './lib/synthesizeSlope'
 import { autoCalibrateAmplitude, type CalibrationSample } from './lib/autoCalibrate'
 import { argument } from './lib/cliArguments'
 import { bandLowKmFor, boxDownsampleGreyscale, resolutionCeiling } from './lib/batchBodyRules'
@@ -39,7 +39,11 @@ import { Resources } from '@storage/database/resources'
  * повторную генерацию с пропорционально рескейленными bump- И base-
  * амплитудами (see `generateBody`).
  *
- * Даунсемпл входа — до потолка по радиусу тела, area-average (box) для
+ * Вид входа `elevation` (Плутон) — настоящая карта высот вместо bump/диффуза:
+ * ни подложки-шума, ни полосового фильтра, ни калибровки по RMS — амплитуду
+ * задаёт бюджет высоты, см. `elevationField`.
+ *
+ * Даунсемпл входа — до потолка по радиусу тела (или явного `ceilingWidth`), area-average (box) для
  * 8-бит растра (`boxDownsampleGreyscale`, тонкая самостоятельная реализация:
  * установленный sharp box-кернел не экспонирует, а `resampleDem.ts` заточен
  * под float DEM-числа другого конвейера — переиспользовать нечего).
@@ -65,18 +69,25 @@ const TARGET_RMS_TAN = 0.07
 const HEIGHT_BUDGET_FRACTION = 0.007
 /** band-high = N текселей экватора карты ВЫХОДНОГО разрешения тела. */
 const BAND_HIGH_TEXELS = 2
+/** σ сглаживания входа `elevation`, тексели выхода: срез 8-битных ступенек, не дорисовка рельефа. */
+const ELEVATION_SMOOTH_SIGMA_TEXELS = 0.7
 
 interface BodyGeneration {
   /** Колонка «Генерация» — имя выходных файлов и ключ `--only`. */
   name: string
   inputPath: string
-  inputKind: 'bump' | 'diffuse'
+  inputKind: BodyInputKind
   radiusMeters: number
   /** seed синтеза — actorId тела. */
   seedActorId: number
   /** actorId, ссылающийся на эту генерацию (по одному на генерацию — см. фикс-раунд 1, находка 2). */
   actorIds: readonly number[]
+  /** Явный потолок разрешения вместо правила по радиусу (честный вход тянет больше текселей). */
+  ceilingWidth?: number
 }
+
+/** Вид входа: bump/diffuse — синтез рельефа, elevation — честная карта высот (яркость = высота). */
+type BodyInputKind = 'bump' | 'diffuse' | 'elevation'
 
 const TEXTURES_ROOT = 'storage/images/textures/planets'
 
@@ -236,12 +247,16 @@ const BODIES: readonly BodyGeneration[] = [
   // Карликовые планеты пояса Койпера/рассеянного диска — вход diffuse (DEM
   // нет), потолок разрешения 4096 у всех пяти (500–1500 км по resolutionCeiling).
   {
+    // Единственное тело батча с настоящей картой высот (16384×8192, яркость =
+    // высота): ни подложки, ни полосы — и потолок поднят до 8192 вместо 4096
+    // по радиусу, вход это оправдывает. Файл локальный, в git не хранится.
     name: 'pluto',
-    inputPath: `${TEXTURES_ROOT}/pluto/pluto.jpg`,
-    inputKind: 'diffuse',
+    inputPath: `${TEXTURES_ROOT}/pluto/pluto_elevation_16k.png`,
+    inputKind: 'elevation',
     radiusMeters: 1_188_300,
     seedActorId: 14,
-    actorIds: [14]
+    actorIds: [14],
+    ceilingWidth: 8192
   },
   {
     name: 'haumea',
@@ -449,7 +464,7 @@ interface ReportRow {
   name: string
   actorIds: readonly number[]
   inputPath: string
-  inputKind: 'bump' | 'diffuse'
+  inputKind: BodyInputKind
   width: number
   height: number
   amplitudeMeters: number
@@ -524,17 +539,70 @@ function normalizeBytes(data: Buffer): Float64Array {
 // вынесены в scripts/lib/synthesizeSlope.ts: без файлового ввода-вывода,
 // тестируемы напрямую (tests/scripts/synthesizeSlope.spec.ts), докблоки там.
 
-/** Полная генерация одного тела: даунсемпл → автокалибровка → запись height+slope → строка отчёта. */
-async function generateBody(body: BodyGeneration): Promise<ReportRow> {
-  const ceilingWidth = resolutionCeiling(body.radiusMeters)
-  const { width, height, luminance } = await loadDownsampledGreyscale(body.inputPath, ceilingWidth)
+/**
+ * Поле высот тела до записи файлов — общий результат обоих видов входа.
+ * slope-карта прогонов сюда не попадает: финальная всё равно пересобирается
+ * с cavity и slopeRange своей строки БД (см. `generateBody`).
+ */
+interface BodyField {
+  map: HeightMapData
+  amplitudeMeters: number
+  rmsTan: number
+  peakMeters: number
+  peakClamped: boolean
+  amplitudeClamped: boolean
+  iterations: number
+}
 
+/**
+ * Вход `elevation`: карта высот честная, поэтому ни автокалибровки по RMS, ни
+ * пост-коррекции по пику — амплитуда равна бюджету высоты по построению
+ * (`buildElevationHeightField` нормирует пик ровно на него), клампу нечего
+ * ловить, а RMS(tan) — отчётная величина, а не цель подгонки.
+ */
+function elevationField(
+  body: BodyGeneration,
+  luminance: Float64Array,
+  width: number,
+  height: number,
+  maxHeightBudgetMeters: number
+): BodyField {
+  // { cavity: false }: полость B пересчитывается единственным финальным
+  // проходом ниже, здесь она была бы чистой потерей времени (как и в калибровке).
+  const result = synthesizeElevationHeightAndSlope(
+    luminance,
+    width,
+    height,
+    body.radiusMeters,
+    maxHeightBudgetMeters,
+    ELEVATION_SMOOTH_SIGMA_TEXELS,
+    { cavity: false }
+  )
+
+  return {
+    map: result.map,
+    amplitudeMeters: maxHeightBudgetMeters,
+    rmsTan: result.rmsTan,
+    peakMeters: peakMetersOf(result.map),
+    peakClamped: false,
+    amplitudeClamped: false,
+    iterations: 0
+  }
+}
+
+/** Входы `bump`/`diffuse`: синтез рельефа с автокалибровкой амплитуды и пост-коррекцией по пику. */
+function calibratedField(
+  body: BodyGeneration,
+  luminance: Float64Array,
+  width: number,
+  height: number,
+  maxHeightBudgetMeters: number
+): BodyField {
   const bandLowKm = bandLowKmFor(body.radiusMeters)
   const equatorTexelKm = (2 * Math.PI * body.radiusMeters) / width / 1000
   const bandHighKm = BAND_HIGH_TEXELS * equatorTexelKm
-  const maxHeightBudgetMeters = HEIGHT_BUDGET_FRACTION * body.radiusMeters
 
-  let last: { map: HeightMapData; slopeRgb: Uint8Array } | undefined
+  let last: HeightMapData | undefined
 
   // { cavity: false }: калибровка меряет только RMS(tan) (R/G), полость
   // канала B тут не читается и была бы чистой потерей времени на каждой из
@@ -552,7 +620,7 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
       bumpAmplitudeMeters,
       { cavity: false }
     )
-    last = { map: result.map, slopeRgb: result.slopeRgb }
+    last = result.map
 
     return { rmsTan: result.rmsTan, peakMeters: peakMetersOf(result.map) }
   }
@@ -597,28 +665,55 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
       finalAmplitudeMeters,
       { cavity: false }
     )
-    last = { map: result.map, slopeRgb: result.slopeRgb }
+    last = result.map
     finalRmsTan = result.rmsTan
     finalPeakMeters = peakMetersOf(result.map)
     peakClamped = true
   }
 
-  // Единственный проход с полостью (находка фикс-волны 3): калибровка и
-  // рескейл выше сознательно считали R/G без cavity — здесь пересчитываем
-  // финальную slope-карту ОДИН раз с cavity: true, на
-  // уже готовой карте высот last.map — без повторного синтеза поля высот.
+  return {
+    map: last,
+    amplitudeMeters: finalAmplitudeMeters,
+    rmsTan: finalRmsTan,
+    peakMeters: finalPeakMeters,
+    peakClamped,
+    // фикс-раунд 2, находка 5: тело могло упереться в потолок ещё на подгонке
+    // амплитуды (RMS цели не достигнут) без единого следа в отчёте, если пик
+    // поля после этого бюджет повторно не превысил.
+    amplitudeClamped: calibration.clamped,
+    iterations: calibration.iterations
+  }
+}
+
+/** Полная генерация одного тела: даунсемпл → поле высот → запись height+slope → строка отчёта. */
+async function generateBody(body: BodyGeneration): Promise<ReportRow> {
+  const ceilingWidth = resolutionCeiling(body.radiusMeters, body.ceilingWidth)
+  const { width, height, luminance } = await loadDownsampledGreyscale(body.inputPath, ceilingWidth)
+  const maxHeightBudgetMeters = HEIGHT_BUDGET_FRACTION * body.radiusMeters
+
+  const field =
+    body.inputKind === 'elevation'
+      ? elevationField(body, luminance, width, height, maxHeightBudgetMeters)
+      : calibratedField(body, luminance, width, height, maxHeightBudgetMeters)
+
+  // Единственный проход с полостью (находка фикс-волны 3): прогоны выше
+  // сознательно считали R/G без cavity — здесь собираем финальную slope-карту
+  // ОДИН раз с cavity: true, на уже готовой карте высот field.map — без
+  // повторного синтеза поля.
   const dir = path.dirname(body.inputPath)
   const heightPath = path.join(dir, `${body.name}_height.raw`)
   const slopePath = path.join(dir, `${body.name}_slope.webp`)
 
   // финальная карта кодируется диапазоном своей строки ресурса — иначе байты
-  // на диске разойдутся с uSlopeRange шейдера; калибровка выше намеренно
-  // остаётся на дефолте (measureRmsTan декодирует им же).
+  // на диске разойдутся с uSlopeRange шейдера; прогоны выше намеренно
+  // остаются на дефолте (measureRmsTan декодирует им же).
   const dbSlopePath = dbPathFor(slopePath, path.dirname(TEXTURES_ROOT))
-  last.slopeRgb = buildSlopeMap(last.map, body.radiusMeters, { slopeRange: slopeRangeForPath(dbSlopePath, Resources) })
+  const slopeRgb = buildSlopeMap(field.map, body.radiusMeters, {
+    slopeRange: slopeRangeForPath(dbSlopePath, Resources)
+  })
 
-  await writeFile(heightPath, encodeHeightMap(last.map))
-  await sharp(Buffer.from(last.slopeRgb.buffer), { raw: { width, height, channels: 3 } })
+  await writeFile(heightPath, encodeHeightMap(field.map))
+  await sharp(Buffer.from(slopeRgb.buffer), { raw: { width, height, channels: 3 } })
     .webp({ lossless: true, effort: 6, exact: true })
     .toFile(slopePath)
 
@@ -629,20 +724,16 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
     inputKind: body.inputKind,
     width,
     height,
-    amplitudeMeters: finalAmplitudeMeters,
-    rmsTan: finalRmsTan,
-    peakMeters: finalPeakMeters,
+    amplitudeMeters: field.amplitudeMeters,
+    rmsTan: field.rmsTan,
+    peakMeters: field.peakMeters,
     budgetMeters: maxHeightBudgetMeters,
-    minMeters: last.map.minMeters,
-    maxMeters: last.map.maxMeters,
-    // объединённый отчётный флаг (фикс-раунд 2, находка 5): раньше проброс
-    // терял calibration.clamped целиком — тело могло упереться в потолок ещё
-    // на подгонке амплитуды (RMS цели не достигнут) без единого следа в
-    // отчёте, если пик поля после этого не превысил бюджет повторно.
-    clamped: peakClamped || calibration.clamped,
-    peakClamped,
-    amplitudeClamped: calibration.clamped,
-    iterations: calibration.iterations,
+    minMeters: field.map.minMeters,
+    maxMeters: field.map.maxMeters,
+    clamped: field.peakClamped || field.amplitudeClamped,
+    peakClamped: field.peakClamped,
+    amplitudeClamped: field.amplitudeClamped,
+    iterations: field.iterations,
     heightPath,
     slopePath,
     heightBytes: 24 + width * height * 2, // заголовок TEHM + uint16 тело
@@ -667,7 +758,7 @@ async function run(): Promise<void> {
     rows.push(row)
 
     console.log(
-      `  ${row.width}×${row.height}, амплитуда ${row.amplitudeMeters.toFixed(0)} м (${row.iterations} прогонов калибровки` +
+      `  ${row.width}×${row.height} (вход ${row.inputKind}), амплитуда ${row.amplitudeMeters.toFixed(0)} м (${row.iterations} прогонов калибровки` +
         `${row.peakClamped ? ' + рескейл под пик' : ''}), RMS(tan) ${row.rmsTan.toFixed(4)}, ` +
         `пик ${row.peakMeters.toFixed(0)} м / бюджет ${row.budgetMeters.toFixed(0)} м` +
         `${row.peakClamped ? ' [КЛАМП: пик поля превышал бюджет — bump и подложка рескейлены]' : ''}` +

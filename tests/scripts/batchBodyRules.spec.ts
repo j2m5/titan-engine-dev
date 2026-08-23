@@ -28,6 +28,38 @@ describe('resolutionCeiling: потолок разрешения по радиу
   })
 })
 
+describe('resolutionCeiling: явный override потолка', () => {
+  it('override побеждает правило по радиусу (Плутон 1188 км: 4096 → 8192)', () => {
+    expect(resolutionCeiling(1_188_300)).toBe(4096)
+    expect(resolutionCeiling(1_188_300, 8192)).toBe(8192)
+  })
+
+  it('override ниже автоправила тоже принимается (потолок задаёт данные, не радиус)', () => {
+    expect(resolutionCeiling(6_100_000, 2048)).toBe(2048)
+  })
+
+  it('верхняя граница 16384 допустима', () => {
+    expect(resolutionCeiling(1_188_300, 16384)).toBe(16384)
+  })
+
+  it('override > 16384 отвергается', () => {
+    expect(() => resolutionCeiling(1_188_300, 32768)).toThrow()
+  })
+
+  it('override не степень двойки отвергается', () => {
+    expect(() => resolutionCeiling(1_188_300, 3000)).toThrow()
+  })
+
+  it('нулевой и отрицательный override отвергаются', () => {
+    expect(() => resolutionCeiling(1_188_300, 0)).toThrow()
+    expect(() => resolutionCeiling(1_188_300, -2048)).toThrow()
+  })
+
+  it('undefined — прежняя логика по радиусу', () => {
+    expect(resolutionCeiling(1_188_300, undefined)).toBe(4096)
+  })
+})
+
 describe('bandLowKmFor: band-low = min(1500, полуокружность тела)', () => {
   it('крупное тело: полуокружность далеко за 1500 км → дефолт 1500', () => {
     // R=2000 км → полуокружность π·2000 ≈ 6283 км, дефолт побеждает

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bandPassSpherical } from '../../scripts/lib/sphericalBandFilter'
+import { bandPassSpherical, gaussianBlurSpherical } from '../../scripts/lib/sphericalBandFilter'
 
 function makeWave(width: number, height: number, cyclesX: number): Float64Array {
   const out = new Float64Array(width * height)
@@ -150,5 +150,66 @@ describe('bandPassSpherical', () => {
       expect(Number.isFinite(out1[x])).toBe(true) // верхняя строка (полюс)
       expect(Number.isFinite(out1[(h - 1) * w + x])).toBe(true) // нижняя строка (полюс)
     }
+  })
+})
+
+describe('gaussianBlurSpherical', () => {
+  it('константа остаётся константой (размытие не смещает уровень)', () => {
+    const w = 64,
+      h = 32
+    const src = new Float64Array(w * h).fill(0.37)
+
+    const out = gaussianBlurSpherical(src, w, h, 2)
+
+    for (const v of out) expect(v).toBeCloseTo(0.37, 12)
+  })
+
+  it('σ ≤ 0 — тождество (копия входа, не тот же буфер)', () => {
+    const w = 8,
+      h = 4
+    const src = makeWave(w, h, 2)
+
+    const out = gaussianBlurSpherical(src, w, h, 0)
+
+    expect(Array.from(out)).toEqual(Array.from(src))
+    expect(out).not.toBe(src)
+  })
+
+  it('ступенька сглаживается: скачок расползается на несколько текселей', () => {
+    const w = 128,
+      h = 8
+    const src = new Float64Array(w * h)
+    for (let y = 0; y < h; y++) for (let x = w / 2; x < w; x++) src[y * w + x] = 1
+
+    const out = gaussianBlurSpherical(src, w, h, 3)
+    const row = Array.from(out.subarray((h / 2) * w, (h / 2) * w + w))
+
+    const edge = w / 2
+    expect(row[edge - 1]).toBeGreaterThan(0) // «холодная» сторона подтянута вверх
+    expect(row[edge]).toBeLessThan(1) // «горячая» — просажена вниз
+    let maxJump = 0
+    for (let x = 1; x < w; x++) maxJump = Math.max(maxJump, Math.abs(row[x] - row[x - 1]))
+    expect(maxJump).toBeLessThan(0.5) // исходный скачок был 1.0
+  })
+
+  it('среднее сохраняется (поле, постоянное по широте: EW заворачивается, NS тождество)', () => {
+    const w = 128,
+      h = 32
+    const src = new Float64Array(w * h)
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) src[y * w + x] = 0.5 + 0.4 * Math.sin((2 * Math.PI * x) / 11)
+
+    const mean = (a: Float64Array): number => a.reduce((s, v) => s + v, 0) / a.length
+    const out = gaussianBlurSpherical(src, w, h, 2)
+
+    expect(mean(out)).toBeCloseTo(mean(src), 12)
+  })
+
+  it('детерминизм', () => {
+    const w = 64,
+      h = 32
+    const src = makeWave(w, h, 5)
+
+    expect(Array.from(gaussianBlurSpherical(src, w, h, 1.5))).toEqual(Array.from(gaussianBlurSpherical(src, w, h, 1.5)))
   })
 })

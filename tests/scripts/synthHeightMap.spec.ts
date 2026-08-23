@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Vector3 } from 'three'
-import { buildSynthHeightField, type SynthHeightParams } from '../../scripts/lib/synthHeightMap'
+import { buildElevationHeightField, buildSynthHeightField, type SynthHeightParams } from '../../scripts/lib/synthHeightMap'
 import { encodeHeightMap, normalizeToUint16 } from '../../scripts/lib/heightMapEncode'
 import { parseHeightMap } from '@/core/terrain/heightMapFormat'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
@@ -145,6 +145,106 @@ describe('buildSynthHeightField: диапазон заголовка', () => {
 
     expect(minMeters).toBe(Math.min(...heights))
     expect(maxMeters).toBe(Math.max(...heights))
+  })
+})
+
+describe('buildElevationHeightField: честная карта высот', () => {
+  const width = 64
+  const height = 32
+
+  /** Яркость [0..1] с крупной структурой — не константа, иначе нормировка вырождена. */
+  function elevationLuminance(): Float64Array {
+    const out = new Float64Array(width * height)
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++)
+        out[y * width + x] = 0.5 + 0.3 * Math.sin((2 * Math.PI * x) / width) + 0.15 * Math.cos((2 * Math.PI * y) / height)
+
+    return out
+  }
+
+  it('пик поля равен peakMeters — амплитуду задаёт бюджет, не RMS-калибровка', () => {
+    const { minMeters, maxMeters } = buildElevationHeightField(elevationLuminance(), {
+      widthTexels: width,
+      heightTexels: height,
+      peakMeters: 8318,
+      smoothSigmaTexels: 0.7
+    })
+
+    expect(Math.max(Math.abs(minMeters), Math.abs(maxMeters))).toBeCloseTo(8318, 6)
+  })
+
+  it('среднее поля ≈ 0 — вычтено среднее яркости, а не подобран уровень', () => {
+    const { heights, maxMeters } = buildElevationHeightField(elevationLuminance(), {
+      widthTexels: width,
+      heightTexels: height,
+      peakMeters: 8318,
+      smoothSigmaTexels: 0.7
+    })
+
+    const mean = heights.reduce((sum, v) => sum + v, 0) / heights.length
+    expect(Math.abs(mean)).toBeLessThan(0.01 * maxMeters)
+  })
+
+  it('монотонность: ярче → выше (без сглаживания порядок текселей сохранён)', () => {
+    const luminance = new Float64Array(width * height)
+    for (let i = 0; i < luminance.length; i++) luminance[i] = i / (luminance.length - 1)
+
+    const { heights } = buildElevationHeightField(luminance, {
+      widthTexels: width,
+      heightTexels: height,
+      peakMeters: 1000,
+      smoothSigmaTexels: 0
+    })
+
+    for (let i = 1; i < heights.length; i++) expect(heights[i]).toBeGreaterThan(heights[i - 1])
+  })
+
+  it('сглаживание срезает 8-битную ступеньку: соседний скачок меньше, чем без него', () => {
+    const luminance = new Float64Array(width * height)
+    for (let y = 0; y < height; y++) for (let x = width / 2; x < width; x++) luminance[y * width + x] = 1
+
+    const params = { widthTexels: width, heightTexels: height, peakMeters: 1000 }
+    const crisp = buildElevationHeightField(luminance, { ...params, smoothSigmaTexels: 0 })
+    const smooth = buildElevationHeightField(luminance, { ...params, smoothSigmaTexels: 0.7 })
+
+    const rowJump = (heights: Float64Array): number => {
+      const row = height / 2
+      return Math.abs(heights[row * width + width / 2] - heights[row * width + width / 2 - 1])
+    }
+
+    expect(rowJump(smooth.heights)).toBeLessThan(rowJump(crisp.heights))
+  })
+
+  it('min/max — фактический диапазон поля', () => {
+    const { heights, minMeters, maxMeters } = buildElevationHeightField(elevationLuminance(), {
+      widthTexels: width,
+      heightTexels: height,
+      peakMeters: 500,
+      smoothSigmaTexels: 0.7
+    })
+
+    expect(minMeters).toBe(Math.min(...heights))
+    expect(maxMeters).toBe(Math.max(...heights))
+  })
+
+  it('детерминизм: два прогона байт-в-байт совпадают', () => {
+    const luminance = elevationLuminance()
+    const params = { widthTexels: width, heightTexels: height, peakMeters: 8318, smoothSigmaTexels: 0.7 }
+
+    expect(Array.from(buildElevationHeightField(luminance, params).heights)).toEqual(
+      Array.from(buildElevationHeightField(luminance, params).heights)
+    )
+  })
+
+  it('длина яркости не сходится с width×height — ошибка, а не молчаливый мусор', () => {
+    expect(() =>
+      buildElevationHeightField(new Float64Array(10), {
+        widthTexels: width,
+        heightTexels: height,
+        peakMeters: 1000,
+        smoothSigmaTexels: 0.7
+      })
+    ).toThrow()
   })
 })
 

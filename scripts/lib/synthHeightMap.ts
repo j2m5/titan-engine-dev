@@ -1,5 +1,14 @@
-import { bandPassSpherical } from './sphericalBandFilter'
+import { bandPassSpherical, gaussianBlurSpherical } from './sphericalBandFilter'
 import { synthBaseField } from './synthNoise'
+
+export interface ElevationHeightParams {
+  widthTexels: number
+  heightTexels: number
+  /** Пик поля |h| после нормировки, м — бюджет высоты тела (0.7% радиуса). */
+  peakMeters: number
+  /** σ сглаживания в текселях ВЫХОДНОГО разрешения; 0 — без сглаживания. */
+  smoothSigmaTexels: number
+}
 
 export interface SynthHeightParams {
   widthTexels: number
@@ -41,6 +50,70 @@ function texelDirection(x: number, y: number, width: number, height: number): [n
   const sinTheta = Math.sin(theta)
 
   return [-Math.cos(phi) * sinTheta, Math.cos(theta), Math.sin(phi) * sinTheta]
+}
+
+/** Фактический min/max поля — реальный диапазон данных для заголовка TEHM. */
+function rangeOf(heights: Float64Array): { minMeters: number; maxMeters: number } {
+  let minMeters = Infinity
+  let maxMeters = -Infinity
+
+  for (const h of heights) {
+    if (h < minMeters) minMeters = h
+    if (h > maxMeters) maxMeters = h
+  }
+
+  return { minMeters, maxMeters }
+}
+
+/**
+ * Сборка поля высот из ЧЕСТНОЙ карты высот (яркость = высота, а не альбедо):
+ * `h = сглаживание(яркость − среднее)`, затем нормировка по пику до
+ * `peakMeters`. Ни подложки-шума, ни полосового фильтра — рельеф уже есть во
+ * входе, дорисовывать и вырезать полосу нечего.
+ *
+ * Вычитание среднего убирает произвольный уровень входа (нулевая высота =
+ * средний уровень тела), нормировка по МАКСИМУМУ модуля (а не p99, как у
+ * bump-синтеза) ставит самую высокую/глубокую точку ровно на бюджет высоты:
+ * калибровка по RMS не нужна — амплитуду задаёт бюджет, а не подгонка.
+ *
+ * Сглаживание (`gaussianBlurSpherical`, σ = `smoothSigmaTexels` текселей
+ * экватора) режет 8-битные ступеньки входа — 255 уровней на весь размах дают
+ * заметные террасы в производной (slope-карта считается разностями соседей),
+ * — и НЕ дорисовывает рельеф: σ суб-текселная.
+ *
+ * Вырожденный вход (поле после сглаживания всюду 0) даёт нулевые высоты, а не
+ * деление на ноль.
+ */
+export function buildElevationHeightField(
+  luminance: Float64Array,
+  params: ElevationHeightParams
+): { heights: Float64Array; minMeters: number; maxMeters: number } {
+  const { widthTexels: width, heightTexels: height } = params
+
+  if (luminance.length !== width * height) {
+    throw new Error(
+      `Карта высот: длина яркости не сходится с width×height (ожидалось ${width * height}, получено ${luminance.length})`
+    )
+  }
+
+  let sum = 0
+  for (const value of luminance) sum += value
+  const mean = sum / luminance.length
+
+  const centered = new Float64Array(luminance.length)
+  for (let i = 0; i < centered.length; i++) centered[i] = luminance[i] - mean
+
+  const smoothed =
+    params.smoothSigmaTexels > 0 ? gaussianBlurSpherical(centered, width, height, params.smoothSigmaTexels) : centered
+
+  let peak = 0
+  for (const value of smoothed) peak = Math.max(peak, Math.abs(value))
+  const scale = peak > 0 ? params.peakMeters / peak : 0
+
+  const heights = new Float64Array(smoothed.length)
+  for (let i = 0; i < heights.length; i++) heights[i] = smoothed[i] * scale
+
+  return { heights, ...rangeOf(heights) }
 }
 
 /**
@@ -108,12 +181,5 @@ export function buildSynthHeightField(
     }
   }
 
-  let minMeters = Infinity
-  let maxMeters = -Infinity
-  for (const h of heights) {
-    if (h < minMeters) minMeters = h
-    if (h > maxMeters) maxMeters = h
-  }
-
-  return { heights, minMeters, maxMeters }
+  return { heights, ...rangeOf(heights) }
 }

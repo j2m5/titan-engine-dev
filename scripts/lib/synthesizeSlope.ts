@@ -1,5 +1,5 @@
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
-import { buildSynthHeightField, type SynthHeightParams } from './synthHeightMap'
+import { buildElevationHeightField, buildSynthHeightField, type SynthHeightParams } from './synthHeightMap'
 import { normalizeToUint16 } from './heightMapEncode'
 import { buildSlopeMap, SLOPE_RANGE } from './slopeMapEncode'
 
@@ -8,6 +8,9 @@ export interface SynthesizeResult {
   slopeRgb: Uint8Array
   rmsTan: number
 }
+
+/** Опции `buildSlopeMap`, пробрасываемые без изменений. */
+type SlopeOptions = { cavity?: boolean; slopeRange?: number }
 
 /**
  * RMS(tan) slope-карты — векторная величина по R(восток)/G(север); канал B
@@ -36,6 +39,49 @@ export function measureRmsTan(rgb: Uint8Array, width: number, height: number): n
   return Math.sqrt(sumSquares / count)
 }
 
+/** Общий хвост обоих конвейеров: поле высот → нормировка uint16 → slope-карта → замер RMS(tan). */
+function assembleSlope(
+  heights: Float64Array,
+  minMeters: number,
+  maxMeters: number,
+  width: number,
+  height: number,
+  radiusMeters: number,
+  options?: SlopeOptions
+): SynthesizeResult {
+  const data = normalizeToUint16(Float32Array.from(heights), minMeters, maxMeters)
+  const map: HeightMapData = { width, height, minMeters, maxMeters, data }
+  const slopeRgb = buildSlopeMap(map, radiusMeters, options)
+
+  return { map, slopeRgb, rmsTan: measureRmsTan(slopeRgb, width, height) }
+}
+
+/**
+ * Тот же конвейер для ЧЕСТНОЙ карты высот (`buildElevationHeightField`):
+ * подложки и полосового фильтра нет, амплитуду задаёт `peakMeters` (бюджет
+ * высоты тела), поэтому ни автокалибровки по RMS, ни пост-коррекции по пику
+ * вызывающему не нужно — пик равен бюджету по построению. `rmsTan` здесь
+ * отчётная величина, а не цель подгонки.
+ */
+export function synthesizeElevationHeightAndSlope(
+  luminance: Float64Array,
+  width: number,
+  height: number,
+  radiusMeters: number,
+  peakMeters: number,
+  smoothSigmaTexels: number,
+  options?: SlopeOptions
+): SynthesizeResult {
+  const { heights, minMeters, maxMeters } = buildElevationHeightField(luminance, {
+    widthTexels: width,
+    heightTexels: height,
+    peakMeters,
+    smoothSigmaTexels
+  })
+
+  return assembleSlope(heights, minMeters, maxMeters, width, height, radiusMeters, options)
+}
+
 /**
  * Один прогон конвейера: синтез поля высот → нормировка → slope-карта →
  * замер RMS(tan). `baseAmplitudeMeters` — параметр, а не константа модуля:
@@ -59,7 +105,7 @@ export function synthesizeHeightAndSlope(
   bandHighKm: number,
   baseAmplitudeMeters: number,
   bumpAmplitudeMeters: number,
-  options?: { cavity?: boolean }
+  options?: SlopeOptions
 ): SynthesizeResult {
   const params: SynthHeightParams = {
     widthTexels: width,
@@ -75,9 +121,6 @@ export function synthesizeHeightAndSlope(
   }
 
   const { heights, minMeters, maxMeters } = buildSynthHeightField(luminance, params)
-  const data = normalizeToUint16(Float32Array.from(heights), minMeters, maxMeters)
-  const map: HeightMapData = { width, height, minMeters, maxMeters, data }
-  const slopeRgb = buildSlopeMap(map, radiusMeters, options)
 
-  return { map, slopeRgb, rmsTan: measureRmsTan(slopeRgb, width, height) }
+  return assembleSlope(heights, minMeters, maxMeters, width, height, radiusMeters, options)
 }
