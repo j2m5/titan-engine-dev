@@ -107,7 +107,7 @@ export const Resources: IResource[] = [
   { id: 134, resourceType: "height", lifecycle: "resident", path: "planets/io/io_height.raw" },
   { id: 135, resourceType: "slope", lifecycle: "streamable", path: "planets/io/io_slope.webp", slopeRange: 1, wrapS: 1e3 },
   { id: 136, resourceType: "height", lifecycle: "resident", path: "planets/ganymede/ganymede_height.raw" },
-  { id: 137, resourceType: "slope", lifecycle: "streamable", path: "planets/ganymede/ganymede_slope.webp", slopeRange: 0.5, wrapS: 1e3 },
+  { id: 137, resourceType: "slope", lifecycle: "streamable", path: "planets/ganymede/ganymede_slope.webp", slopeRange: 1, wrapS: 1e3 },
   { id: 138, resourceType: "height", lifecycle: "resident", path: "planets/rhea/rhea_height.raw" },
   { id: 139, resourceType: "slope", lifecycle: "streamable", path: "planets/rhea/rhea_slope.webp", slopeRange: 0.5, wrapS: 1e3 },
   { id: 140, resourceType: "height", lifecycle: "resident", path: "planets/titan/titan_height.raw" },
