@@ -48,7 +48,7 @@ import { Resources } from '@storage/database/resources'
  * амплитудами (see `generateBody`).
  *
  * Вид входа `elevation` (Плутон, Европа, Эрида, Дисномия, Харон, Диона, Седна,
- * Ганимед, Ио, Макемаке) —
+ * Ганимед, Ио, Макемаке, Тритон) —
  * настоящая карта высот вместо bump/диффуза: ни подложки-шума, ни калибровки
  * по RMS — амплитуду задаёт бюджет высоты тела либо явная ручка `peakMeters`
  * на генерацию (Европа: пик занижен до 1800 м, бюджет 0.7% радиуса не
@@ -190,12 +190,18 @@ const BODIES: readonly BodyGeneration[] = [
     actorIds: [30]
   },
   {
+    // Настоящая карта высот (= triton_bump, корреляция 1.0) — путь elevation вместо синтеза; сильно альбедная (80% дисперсии шире ~415 км) — highPassKm 400; пик занижен до 4000 м (реальный рельеф Тритона < 1 км, бюджет 9.5 км неправдоподобен).
     name: 'triton',
-    inputPath: `${TEXTURES_ROOT}/triton/triton_bump.jpg`,
-    inputKind: 'bump',
+    inputPath: `${TEXTURES_ROOT}/triton/triton_elevation_16k.png`,
+    inputKind: 'elevation',
     radiusMeters: 1_352_600,
     seedActorId: 36,
-    actorIds: [36]
+    actorIds: [36],
+    ceilingWidth: 8192,
+    smoothSigmaTexels: 1.5,
+    highPassKm: 400,
+    peakPercentile: 0.999,
+    peakMeters: 4_000
   },
   {
     // Настоящая карта высот (= charon_bump_16k, корреляция 1.0) — путь elevation вместо синтеза; 111 уровней яркости, ступени вдвое грубее обычного.
