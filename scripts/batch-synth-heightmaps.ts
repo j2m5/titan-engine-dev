@@ -55,6 +55,9 @@ import { Resources } from '@storage/database/resources'
  *   npm run build:moon-heightmaps
  * Перегенерировать одно тело:
  *   npm run build:moon-heightmaps -- --only rhea
+ *
+ * Энцелад в списке НЕ значится — он DEM-тело, как Церера (DEM Cassini,
+ * Schenk 2024; см. `docs/terrain-handoff.md`).
  */
 
 /** Дефолт подложки — тот же пресет cratered-icy, что и у одиночного build:synth-heightmap (докблок там же). */
@@ -289,14 +292,6 @@ const BODIES: readonly BodyGeneration[] = [
     radiusMeters: 198_800,
     seedActorId: 24,
     actorIds: [24]
-  },
-  {
-    name: 'enceladus',
-    inputPath: `${TEXTURES_ROOT}/enceladus/enceladus_bump.jpg`,
-    inputKind: 'bump',
-    radiusMeters: 252_300,
-    seedActorId: 25,
-    actorIds: [25]
   },
   {
     name: 'tethys',

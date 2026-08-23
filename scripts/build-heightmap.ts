@@ -3,6 +3,8 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { resampleDem } from './lib/resampleDem'
 import { readRawInt16Dem, resampleDemGrid } from './lib/rawDem'
 import { readGeoTiffInt16 } from './lib/geoTiffInt16'
+import { readGeoTiffFloat32 } from './lib/geoTiffFloat32'
+import { readGeoTiffHeader } from './lib/geoTiffIfd'
 import { encodeHeightMap, normalizeToUint16, resolveHeightRange } from './lib/heightMapEncode'
 import { argument } from './lib/cliArguments'
 
@@ -16,10 +18,12 @@ import { argument } from './lib/cliArguments'
  *   [--scale-meters K] [--offset-meters K] [--nodata-fill N]
  *
  * Три режима входа:
- *   - **.tif/.tiff** (signed int16, strip-based, без сжатия — так USGS
- *     Astrogeology раздаёт DEM планет) — читается собственным
- *     `lib/geoTiffInt16.ts` (не sharp — sharp/libvips путает буфер пикселей
- *     на этих конкретных файлах, см. докблок модуля). Scale/offset
+ *   - **.tif/.tiff** (strip-based, без сжатия) — читается собственными
+ *     ридерами по тегу SampleFormat: 2 → `lib/geoTiffInt16.ts` (signed int16,
+ *     так USGS Astrogeology раздаёт DEM планет), 3 → `lib/geoTiffFloat32.ts`
+ *     (float32, так раздают DEM внешних спутников — Энцелад Schenk 2024).
+ *     Не sharp: на int16-файлах sharp путает буфер пикселей (см. докблок
+ *     модуля), а его путь ресемплит ДО подмены NODATA. Scale/offset
  *     авто-детектятся из встроенных GDAL-тегов файла (`GDAL_METADATA`
  *     SCALE/OFFSET), `--scale-meters`/`--offset-meters` их переопределяют;
  *     итоговая высота = `DN×scale + offset`. NODATA-текселы (тег
@@ -125,7 +129,9 @@ const dem =
       })()
     : isTiff
       ? await (async () => {
-          const parsed = readGeoTiffInt16(await readFile(input))
+          const buffer = await readFile(input)
+          // Формат сэмплов решает ридер: 3 — IEEE float32, иначе signed int16 (ридер сам отвергнет чужой тег).
+          const parsed = readGeoTiffHeader(buffer).sampleFormat === 3 ? readGeoTiffFloat32(buffer) : readGeoTiffInt16(buffer)
           const scale = scaleArg !== undefined ? Number(scaleArg) : parsed.scale
           const offset = offsetArg !== undefined ? Number(offsetArg) : parsed.offset
           const nodataFillMeters = nodataFillArg !== undefined ? Number(nodataFillArg) : 0
