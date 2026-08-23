@@ -165,7 +165,7 @@ export const Resources: IResource[] = [
   { id: 192, resourceType: "height", lifecycle: "resident", path: "planets/tethys/tethys_height.raw" },
   { id: 193, resourceType: "slope", lifecycle: "streamable", path: "planets/tethys/tethys_slope.webp", slopeRange: 0.5, wrapS: 1e3 },
   { id: 194, resourceType: "height", lifecycle: "resident", path: "planets/dione/dione_height.raw" },
-  { id: 195, resourceType: "slope", lifecycle: "streamable", path: "planets/dione/dione_slope.webp", slopeRange: 0.5, wrapS: 1e3 },
+  { id: 195, resourceType: "slope", lifecycle: "streamable", path: "planets/dione/dione_slope.webp", slopeRange: 1, wrapS: 1e3 },
   { id: 196, resourceType: "height", lifecycle: "resident", path: "planets/miranda/miranda_height.raw" },
   { id: 197, resourceType: "slope", lifecycle: "streamable", path: "planets/miranda/miranda_slope.webp", slopeRange: 0.25, wrapS: 1e3 },
   { id: 198, resourceType: "height", lifecycle: "resident", path: "planets/ariel/ariel_height.raw" },
