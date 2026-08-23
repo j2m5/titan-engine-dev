@@ -45,13 +45,14 @@ import { Resources } from '@storage/database/resources'
  * повторную генерацию с пропорционально рескейленными bump- И base-
  * амплитудами (see `generateBody`).
  *
- * Вид входа `elevation` (Плутон, Европа, Эрида, Дисномия) — настоящая карта высот
- * вместо bump/диффуза: ни подложки-шума, ни полосового фильтра, ни
+ * Вид входа `elevation` (Плутон, Европа, Эрида, Дисномия, Харон) — настоящая
+ * карта высот вместо bump/диффуза: ни подложки-шума, ни полосового фильтра, ни
  * калибровки по RMS — амплитуду задаёт бюджет высоты тела либо явная ручка
  * `peakMeters` на генерацию (Европа: пик занижен до 1800 м, бюджет 0.7%
  * радиуса не тронут), см. `elevationField`/`elevationPeakMeters`. Сглаживание
  * входа — дефолт `ELEVATION_SMOOTH_SIGMA_TEXELS` (0.7) либо явная ручка
- * `smoothSigmaTexels` на тело (Эрида: 1.5 — зернистый вход), см.
+ * `smoothSigmaTexels` на тело (Эрида: 1.5 — зернистый вход; Харон: 1.0 — 111
+ * уровней яркости, ступени вдвое грубее обычного), см.
  * `elevationSmoothSigmaTexels`.
  *
  * Даунсемпл входа — до потолка по радиусу тела (или явного `ceilingWidth`), area-average (box) для
@@ -169,13 +170,15 @@ const BODIES: readonly BodyGeneration[] = [
     actorIds: [36]
   },
   {
-    // 16k-вариант с диска (не тот, что в resources.ts) — больше сигнала до даунсемпла
+    // Настоящая карта высот (= charon_bump_16k, корреляция 1.0) — путь elevation вместо синтеза; 111 уровней яркости, ступени вдвое грубее обычного.
     name: 'charon',
-    inputPath: `${TEXTURES_ROOT}/charon/charon_16k.jpg`,
-    inputKind: 'diffuse',
+    inputPath: `${TEXTURES_ROOT}/charon/charon_elevation_16k.png`,
+    inputKind: 'elevation',
     radiusMeters: 606_000,
     seedActorId: 37,
-    actorIds: [37]
+    actorIds: [37],
+    ceilingWidth: 4096,
+    smoothSigmaTexels: 1.0
   },
   {
     // Та же карта, что была bump-входом, — путь elevation вместо синтеза; вход зернистый (44% энергии мельче 8 px).
