@@ -5,6 +5,7 @@ import {
   boxDownsampleGreyscale,
   elevationHighPassSigmaTexels,
   elevationPeakMeters,
+  elevationPeakPercentile,
   elevationSmoothSigmaTexels,
   resolutionCeiling
 } from '../../scripts/lib/batchBodyRules'
@@ -146,6 +147,26 @@ describe('elevationSmoothSigmaTexels: σ сглаживания входа eleva
   it('нулевой и отрицательный override отвергаются', () => {
     expect(() => elevationSmoothSigmaTexels(0.7, 0)).toThrow()
     expect(() => elevationSmoothSigmaTexels(0.7, -1)).toThrow()
+  })
+})
+
+describe('elevationPeakPercentile: квантиль нормировки пика входа elevation', () => {
+  it('без override — дефолт 1 (максимум, большинство тел не меняются)', () => {
+    expect(elevationPeakPercentile()).toBe(1)
+  })
+
+  it('override в пределах [0.9, 1] принимается как есть (Ганимед: 0.999)', () => {
+    expect(elevationPeakPercentile(0.999)).toBe(0.999)
+  })
+
+  it('override ровно на границах 0.9 и 1 — включительно', () => {
+    expect(elevationPeakPercentile(0.9)).toBe(0.9)
+    expect(elevationPeakPercentile(1)).toBe(1)
+  })
+
+  it('override ниже 0.9 или выше 1 отвергается', () => {
+    expect(() => elevationPeakPercentile(0.8999)).toThrow()
+    expect(() => elevationPeakPercentile(1.0001)).toThrow()
   })
 })
 

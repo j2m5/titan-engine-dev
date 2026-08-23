@@ -312,6 +312,80 @@ describe('buildElevationHeightField: highPassSigmaTexels — высокочас�
   })
 })
 
+describe('buildElevationHeightField: peakPercentile — нормировка пика по квантилю модуля', () => {
+  // 256×128: N=32768 достаточно, чтобы одиночный выброс (индекс 10) сдвигал
+  // среднее яркости незначительно (5/32768) — сравнение с «чистым» (без
+  // выброса) прогоном остаётся показательным, не тонет в сдвиге центрирования.
+  const width = 256
+  const height = 128
+  const peakMeters = 1000
+  const spikeIndex = 10
+
+  /** Гладкий периодический рельеф в типичном диапазоне [0.4, 0.6]. */
+  function baseline(): Float64Array {
+    const out = new Float64Array(width * height)
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++) out[y * width + x] = 0.5 + 0.1 * Math.sin((2 * Math.PI * x) / 32)
+    return out
+  }
+
+  it('peakPercentile не указан (или =1) — совпадает со старым max-поведением, байт-в-байт', () => {
+    const luminance = baseline()
+    const params = { widthTexels: width, heightTexels: height, peakMeters, smoothSigmaTexels: 0 }
+
+    const withoutOption = buildElevationHeightField(luminance, params)
+    const withP1 = buildElevationHeightField(luminance, { ...params, peakPercentile: 1 })
+
+    expect(Array.from(withP1.heights)).toEqual(Array.from(withoutOption.heights))
+  })
+
+  it('p=0.99: одиночный выброс не задаёт масштаб (типичные тексели ≈ нормировка без выброса) и сам клампится в ±peakMeters', () => {
+    const spiked = baseline()
+    spiked[spikeIndex] = 5 // на порядок больше типичного диапазона [0.4, 0.6]
+
+    const reference = buildElevationHeightField(baseline(), {
+      widthTexels: width,
+      heightTexels: height,
+      peakMeters,
+      smoothSigmaTexels: 0
+    })
+    const withOutlier = buildElevationHeightField(spiked, {
+      widthTexels: width,
+      heightTexels: height,
+      peakMeters,
+      smoothSigmaTexels: 0,
+      peakPercentile: 0.99
+    })
+
+    // масштаб не сбит выбросом — типичные тексели близки к нормировке «чистого» поля
+    let maxDiff = 0
+    for (let i = 0; i < reference.heights.length; i++) {
+      if (i === spikeIndex) continue
+      maxDiff = Math.max(maxDiff, Math.abs(withOutlier.heights[i] - reference.heights[i]))
+    }
+    expect(maxDiff).toBeLessThan(0.1 * peakMeters)
+
+    // сам выброс клампится ровно в бюджет высоты (превысил бы его без клампа)
+    expect(Math.abs(withOutlier.heights[spikeIndex])).toBeCloseTo(peakMeters, 6)
+  })
+
+  it('среднее поля ≈ 0 сохраняется — кламп единичного выброса не сдвигает его заметно', () => {
+    const spiked = baseline()
+    spiked[spikeIndex] = 5
+
+    const { heights } = buildElevationHeightField(spiked, {
+      widthTexels: width,
+      heightTexels: height,
+      peakMeters,
+      smoothSigmaTexels: 0,
+      peakPercentile: 0.99
+    })
+
+    const mean = heights.reduce((sum, v) => sum + v, 0) / heights.length
+    expect(Math.abs(mean)).toBeLessThan(0.05 * peakMeters)
+  })
+})
+
 describe('интеграция: синтетическая карта → TEHM → TerrainHeightField', () => {
   it('строится без NaN, ε(1..6) конечны, clearanceMeters конечен (block>1 путь буфера провиса)', () => {
     // 1536×768: block = round(width/CLEARANCE_GRID_BASE_SEGMENTS) = round(1536/1024) = 2 (>1) —

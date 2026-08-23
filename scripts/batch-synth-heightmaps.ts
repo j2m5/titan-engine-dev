@@ -14,6 +14,7 @@ import {
   boxDownsampleGreyscale,
   elevationHighPassSigmaTexels,
   elevationPeakMeters,
+  elevationPeakPercentile,
   elevationSmoothSigmaTexels,
   resolutionCeiling
 } from './lib/batchBodyRules'
@@ -61,7 +62,13 @@ import { Resources } from '@storage/database/resources'
  * нормировкой по пику, без ручки не применяется (Ганимед: 800 км — половина
  * дисперсии его карты лежит на масштабах шире 800 км, без фильтра пик 6000 м
  * уходил в широкие светлые/тёмные пятна вместо кратеров/борозд), см.
- * `elevationHighPassSigmaTexels`.
+ * `elevationHighPassSigmaTexels`. Квантиль нормировки пика — явная ручка
+ * `peakPercentile` на тело (0.9..1, дефолт 1 — максимум модуля, без клампа):
+ * p<1 ставит на `peakMeters` не абсолютный максимум, а квантиль |h| — редкие
+ * тексели-выбросы (шум скана/сшивки) не отъедают весь бюджет высоты у
+ * типичного рельефа, превышение клампится в ±`peakMeters` (Ганимед: 0.999 —
+ * замер показал, что верхние 0.1% текселей карты задавали половину амплитуды
+ * нормировки), см. `elevationPeakPercentile`.
  *
  * Даунсемпл входа — до потолка по радиусу тела (или явного `ceilingWidth`), area-average (box) для
  * 8-бит растра (`boxDownsampleGreyscale`, тонкая самостоятельная реализация:
@@ -113,6 +120,8 @@ interface BodyGeneration {
   smoothSigmaTexels?: number
   /** Высокочастотный фильтр входа `elevation`, км волны — ручка владельца на тело; без неё фильтр не применяется (см. `elevationHighPassSigmaTexels`). */
   highPassKm?: number
+  /** Квантиль |h| нормировки пика входа `elevation` (0.9..1) — ручка владельца на тело; без неё 1 (максимум, см. `elevationPeakPercentile`). */
+  peakPercentile?: number
 }
 
 /** Вид входа: bump/diffuse — синтез рельефа, elevation — честная карта высот (яркость = высота). */
@@ -140,7 +149,7 @@ const BODIES: readonly BodyGeneration[] = [
     actorIds: [20]
   },
   {
-    // Настоящая карта высот (= ganymede_bump, корреляция 0.999) — путь elevation вместо синтеза из диффуза; пик занижен до 6000 м (реальный рельеф Ганимеда ±1-2 км, бюджет 18.4 км неправдоподобен); highPassKm 800 — половина дисперсии карты на масштабах шире 800 км (широкие светлые/тёмные пятна), без фильтра съедала бы бюджет высоты у кратеров/борозд.
+    // Настоящая карта высот (= ganymede_bump, корреляция 0.999) — путь elevation вместо синтеза из диффуза; пик занижен до 6000 м (реальный рельеф Ганимеда ±1-2 км, бюджет 18.4 км неправдоподобен); highPassKm 800 — половина дисперсии карты на масштабах шире 800 км (широкие светлые/тёмные пятна), без фильтра съедала бы бюджет высоты у кратеров/борозд; peakPercentile 0.999 — верхние 0.1% текселей задавали половину амплитуды нормировки, не типичный рельеф.
     name: 'ganymede',
     inputPath: `${TEXTURES_ROOT}/ganymede/ganymede_elevation_11k.png`,
     inputKind: 'elevation',
@@ -149,7 +158,8 @@ const BODIES: readonly BodyGeneration[] = [
     actorIds: [22],
     smoothSigmaTexels: 1.0,
     peakMeters: 6_000,
-    highPassKm: 800
+    highPassKm: 800,
+    peakPercentile: 0.999
   },
   {
     name: 'rhea',
@@ -604,15 +614,19 @@ interface BodyField {
 
 /**
  * Вход `elevation`: карта высот честная, поэтому ни автокалибровки по RMS, ни
- * пост-коррекции по пику — амплитуда равна `peakMeters` по построению
- * (`buildElevationHeightField` нормирует пик ровно на него — бюджет тела по
- * умолчанию, либо явная ручка `body.peakMeters`, см. `elevationPeakMeters`),
- * клампу нечего ловить, а RMS(tan) — отчётная величина, а не цель подгонки.
+ * пост-коррекции по пику (`peakClamped`/`amplitudeClamped` этого пути всегда
+ * `false` — иной кламп, см. ниже) — амплитуда равна `peakMeters` по
+ * построению (`buildElevationHeightField` нормирует пик ровно на него —
+ * бюджет тела по умолчанию, либо явная ручка `body.peakMeters`, см.
+ * `elevationPeakMeters`), а RMS(tan) — отчётная величина, а не цель подгонки.
  *
  * `body.highPassKm` (км волны) переводится в тексели экватора той же
  * формулой, что и края band-фильтра bump-входа (`equatorTexelMeters` —
  * длина экваториальной дуги на тексель ВЫХОДНОГО разрешения), см.
- * `elevationHighPassSigmaTexels`.
+ * `elevationHighPassSigmaTexels`. `body.peakPercentile` (0.9..1, дефолт 1) —
+ * квантиль нормировки пика вместо абсолютного максимума; при p<1
+ * `buildElevationHeightField` сама клампит превышение в ±`peakMeters`
+ * (внутренний кламп функции, НЕ `peakClamped` этой генерации).
  */
 function elevationField(
   body: BodyGeneration,
@@ -624,6 +638,7 @@ function elevationField(
   const smoothSigmaTexels = elevationSmoothSigmaTexels(ELEVATION_SMOOTH_SIGMA_TEXELS, body.smoothSigmaTexels)
   const equatorTexelMeters = (2 * Math.PI * body.radiusMeters) / width
   const highPassSigmaTexels = elevationHighPassSigmaTexels(equatorTexelMeters, body.highPassKm)
+  const peakPercentile = elevationPeakPercentile(body.peakPercentile)
 
   // { cavity: false }: полость B пересчитывается единственным финальным
   // проходом ниже, здесь она была бы чистой потерей времени (как и в калибровке).
@@ -635,6 +650,7 @@ function elevationField(
     peakMeters,
     smoothSigmaTexels,
     highPassSigmaTexels,
+    peakPercentile,
     { cavity: false }
   )
 

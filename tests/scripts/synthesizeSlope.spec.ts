@@ -105,6 +105,7 @@ describe('synthesizeElevationHeightAndSlope: вход-карта высот', ()
       peakMeters,
       smoothSigmaTexels,
       undefined,
+      undefined,
       options
     )
   }
@@ -141,10 +142,41 @@ describe('synthesizeElevationHeightAndSlope: вход-карта высот', ()
       peakMeters,
       smoothSigmaTexels,
       8,
+      undefined,
       { cavity: false }
     )
 
     expect(Array.from(withFilter.map.data)).not.toEqual(Array.from(withoutFilter.map.data))
+  })
+
+  it('peakPercentile пробрасывается в buildElevationHeightField (заданный квантиль меняет карту при наличии выброса)', () => {
+    const spiked = luminance.slice()
+    spiked[0] = 100 // выброс, много больше типичного диапазона [0.1, 0.9]
+
+    const withMax = synthesizeElevationHeightAndSlope(
+      spiked,
+      width,
+      height,
+      radiusMeters,
+      peakMeters,
+      smoothSigmaTexels,
+      undefined,
+      undefined,
+      { cavity: false }
+    )
+    const withPercentile = synthesizeElevationHeightAndSlope(
+      spiked,
+      width,
+      height,
+      radiusMeters,
+      peakMeters,
+      smoothSigmaTexels,
+      undefined,
+      0.99,
+      { cavity: false }
+    )
+
+    expect(Array.from(withPercentile.map.data)).not.toEqual(Array.from(withMax.map.data))
   })
 })
 

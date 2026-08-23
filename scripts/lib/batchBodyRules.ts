@@ -85,6 +85,26 @@ export function elevationHighPassSigmaTexels(equatorTexelMeters: number, highPas
   return (highPassKm * 1000) / equatorTexelMeters
 }
 
+/** Диапазон ручки квантиля нормировки пика — ниже 0.9 отсекается уже значимая доля рельефа, не только редкий выброс. */
+const PEAK_PERCENTILE_MIN = 0.9
+const PEAK_PERCENTILE_MAX = 1
+
+/**
+ * Квантиль |h| нормировки пика входа `elevation` — явный `override` (ручка
+ * владельца на тело, редкие выбросы яркости не должны диктовать масштаб всей
+ * карты) либо дефолт 1 (максимум модуля, прежнее поведение — большинство тел
+ * не меняются). `override` обязан быть в [0.9, 1].
+ */
+export function elevationPeakPercentile(override?: number): number {
+  if (override === undefined) return 1
+
+  if (override < PEAK_PERCENTILE_MIN || override > PEAK_PERCENTILE_MAX) {
+    throw new Error(`peakPercentile должен быть в [${PEAK_PERCENTILE_MIN}, ${PEAK_PERCENTILE_MAX}], получено ${override}`)
+  }
+
+  return override
+}
+
 /** Потолок ручки σ сглаживания входа `elevation` — выше уже не срез 8-битных ступенек, а размытие рельефа. */
 const ELEVATION_SMOOTH_SIGMA_MAX = 4
 

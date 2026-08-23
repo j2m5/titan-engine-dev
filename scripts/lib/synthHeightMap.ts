@@ -14,6 +14,13 @@ export interface ElevationHeightParams {
    * по пику; undefined — без фильтра, поле не меняется (см. докблок функции).
    */
   highPassSigmaTexels?: number
+  /**
+   * Квантиль |h|, который нормировка ставит на `peakMeters` (0.9..1);
+   * undefined или 1 — прежнее поведение (максимум модуля, без клампа, байт-в-байт).
+   * p < 1 отдаёт масштаб типичному рельефу, а не редким выбросам — превышение
+   * клампится в ±`peakMeters` (см. докблок функции).
+   */
+  peakPercentile?: number
 }
 
 export interface SynthHeightParams {
@@ -33,13 +40,18 @@ export interface SynthHeightParams {
 const BASE_FIELD_OCTAVES = 3
 const BASE_FIELD_WAVE_FRACTION = 4 // λ0 = окружность / 4
 
-/** 99-й процентиль |values| (не мутирует вход) — «выброс не сжимает рельеф»: топ-1% исключён из нормировки. */
-function percentile99Abs(values: Float64Array): number {
+/** p-й процентиль |values| (не мутирует вход, p∈[0,1]) — топ-(1−p) исключён из результата. */
+function percentileAbs(values: Float64Array, p: number): number {
   const abs = Float64Array.from(values, (v) => Math.abs(v))
   abs.sort()
-  const idx = Math.floor(0.99 * (abs.length - 1))
+  const idx = Math.floor(p * (abs.length - 1))
 
   return abs[idx]
+}
+
+/** 99-й процентиль |values| — «выброс не сжимает рельеф»: топ-1% исключён из нормировки. */
+function percentile99Abs(values: Float64Array): number {
+  return percentileAbs(values, 0.99)
 }
 
 /**
@@ -100,6 +112,15 @@ function rangeOf(heights: Float64Array): { minMeters: number; maxMeters: number 
  * сглаживание против сотен текселей фильтра) делает порядок двух шагов
  * практически неотличимым.
  *
+ * Пик нормировки — квантиль `peakPercentile` (по умолчанию 1 — максимум
+ * модуля, прежнее поведение БЕЗ клампа: сам максимум и становится
+ * `peakMeters`, превышать нечему). `peakPercentile < 1` — те же данные, но
+ * единичные выбросы (считанные тексели, шум скана/сшивки) не задают масштаб
+ * всей карты: квантиль исключает верхний хвост из нормировки, а тексели,
+ * которые в него не попали, клампятся в `±peakMeters` ПОСЛЕ масштабирования.
+ * Клампится вычислимо редко (доля `1−peakPercentile` текселей) — иначе честная
+ * деталь (не выброс) осталась бы плоской там, где выброс отъедал весь бюджет.
+ *
  * Вырожденный вход (поле после фильтрации всюду 0) даёт нулевые высоты, а не
  * деление на ноль.
  */
@@ -132,12 +153,20 @@ export function buildElevationHeightField(
     for (let i = 0; i < highPassed.length; i++) highPassed[i] = smoothed[i] - trend[i]
   }
 
-  let peak = 0
-  for (const value of highPassed) peak = Math.max(peak, Math.abs(value))
+  const peakPercentile = params.peakPercentile ?? 1
+  const peak = percentileAbs(highPassed, peakPercentile)
   const scale = peak > 0 ? params.peakMeters / peak : 0
 
+  // Кламп — только когда p<1 реально может что-то отсечь: при p=1 (или
+  // undefined) peak — точный максимум модуля, превысить его после масштаба
+  // нечему, а клампить единственный кандидат означало бы рисковать
+  // байт-в-байт совместимостью на округлении x·(c/x) вокруг c.
+  const clampEnabled = peakPercentile < 1
   const heights = new Float64Array(highPassed.length)
-  for (let i = 0; i < heights.length; i++) heights[i] = highPassed[i] * scale
+  for (let i = 0; i < heights.length; i++) {
+    const scaled = highPassed[i] * scale
+    heights[i] = clampEnabled ? Math.min(params.peakMeters, Math.max(-params.peakMeters, scaled)) : scaled
+  }
 
   return { heights, ...rangeOf(heights) }
 }
