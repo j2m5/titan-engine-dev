@@ -1,6 +1,12 @@
 import { Buffer } from 'node:buffer'
 import { describe, expect, it } from 'vitest'
-import { bandLowKmFor, boxDownsampleGreyscale, elevationPeakMeters, resolutionCeiling } from '../../scripts/lib/batchBodyRules'
+import {
+  bandLowKmFor,
+  boxDownsampleGreyscale,
+  elevationPeakMeters,
+  elevationSmoothSigmaTexels,
+  resolutionCeiling
+} from '../../scripts/lib/batchBodyRules'
 
 describe('resolutionCeiling: потолок разрешения по радиусу тела', () => {
   it('≥1500 км → 8192, граница включительно', () => {
@@ -116,6 +122,29 @@ describe('elevationPeakMeters: пик высоты для входа elevation',
   it('нулевой и отрицательный override отвергаются', () => {
     expect(() => elevationPeakMeters(1_000_000, 0)).toThrow()
     expect(() => elevationPeakMeters(1_000_000, -100)).toThrow()
+  })
+})
+
+describe('elevationSmoothSigmaTexels: σ сглаживания входа elevation', () => {
+  it('без override — дефолт (Плутон и Европа не меняются)', () => {
+    expect(elevationSmoothSigmaTexels(0.7)).toBe(0.7)
+  })
+
+  it('override в пределах (0, 4] принимается как есть (Эрида: 1.5)', () => {
+    expect(elevationSmoothSigmaTexels(0.7, 1.5)).toBe(1.5)
+  })
+
+  it('override ровно на верхней границе 4 — включительно', () => {
+    expect(elevationSmoothSigmaTexels(0.7, 4)).toBe(4)
+  })
+
+  it('override выше 4 отвергается', () => {
+    expect(() => elevationSmoothSigmaTexels(0.7, 4.0001)).toThrow()
+  })
+
+  it('нулевой и отрицательный override отвергаются', () => {
+    expect(() => elevationSmoothSigmaTexels(0.7, 0)).toThrow()
+    expect(() => elevationSmoothSigmaTexels(0.7, -1)).toThrow()
   })
 })
 

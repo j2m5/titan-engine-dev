@@ -9,7 +9,13 @@ import { buildSlopeMap } from './lib/slopeMapEncode'
 import { synthesizeElevationHeightAndSlope, synthesizeHeightAndSlope } from './lib/synthesizeSlope'
 import { autoCalibrateAmplitude, type CalibrationSample } from './lib/autoCalibrate'
 import { argument } from './lib/cliArguments'
-import { bandLowKmFor, boxDownsampleGreyscale, elevationPeakMeters, resolutionCeiling } from './lib/batchBodyRules'
+import {
+  bandLowKmFor,
+  boxDownsampleGreyscale,
+  elevationPeakMeters,
+  elevationSmoothSigmaTexels,
+  resolutionCeiling
+} from './lib/batchBodyRules'
 import { slopeRangeForPath } from './lib/slopeRangeFromDb'
 import { dbPathFor } from './lib/dbPathFor'
 import { Resources } from '@storage/database/resources'
@@ -39,11 +45,14 @@ import { Resources } from '@storage/database/resources'
  * повторную генерацию с пропорционально рескейленными bump- И base-
  * амплитудами (see `generateBody`).
  *
- * Вид входа `elevation` (Плутон, Европа) — настоящая карта высот вместо
- * bump/диффуза: ни подложки-шума, ни полосового фильтра, ни калибровки по
- * RMS — амплитуду задаёт бюджет высоты тела либо явная ручка `peakMeters` на
- * генерацию (Европа: пик занижен до 1800 м, бюджет 0.7% радиуса не тронут),
- * см. `elevationField`/`elevationPeakMeters`.
+ * Вид входа `elevation` (Плутон, Европа, Эрида) — настоящая карта высот
+ * вместо bump/диффуза: ни подложки-шума, ни полосового фильтра, ни
+ * калибровки по RMS — амплитуду задаёт бюджет высоты тела либо явная ручка
+ * `peakMeters` на генерацию (Европа: пик занижен до 1800 м, бюджет 0.7%
+ * радиуса не тронут), см. `elevationField`/`elevationPeakMeters`. Сглаживание
+ * входа — дефолт `ELEVATION_SMOOTH_SIGMA_TEXELS` (0.7) либо явная ручка
+ * `smoothSigmaTexels` на тело (Эрида: 1.5 — зернистый вход), см.
+ * `elevationSmoothSigmaTexels`.
  *
  * Даунсемпл входа — до потолка по радиусу тела (или явного `ceilingWidth`), area-average (box) для
  * 8-бит растра (`boxDownsampleGreyscale`, тонкая самостоятельная реализация:
@@ -91,6 +100,8 @@ interface BodyGeneration {
   ceilingWidth?: number
   /** Пик высоты для входа `elevation` — ручка владельца на тело; без неё бюджет 0.7% радиуса (см. `elevationPeakMeters`). */
   peakMeters?: number
+  /** σ сглаживания входа `elevation`, тексели выхода — ручка владельца на тело; без неё `ELEVATION_SMOOTH_SIGMA_TEXELS` (см. `elevationSmoothSigmaTexels`). */
+  smoothSigmaTexels?: number
 }
 
 /** Вид входа: bump/diffuse — синтез рельефа, elevation — честная карта высот (яркость = высота). */
@@ -294,12 +305,15 @@ const BODIES: readonly BodyGeneration[] = [
     actorIds: [16]
   },
   {
+    // Вход зернистый (35% энергии мельче 4 px) — σ 1.5 против зерна, сильнее дефолта.
     name: 'eris',
-    inputPath: `${TEXTURES_ROOT}/eris/eris.jpg`,
-    inputKind: 'diffuse',
+    inputPath: `${TEXTURES_ROOT}/eris/eris_elevation_16k.png`,
+    inputKind: 'elevation',
     radiusMeters: 1_163_000,
     seedActorId: 17,
-    actorIds: [17]
+    actorIds: [17],
+    ceilingWidth: 8192,
+    smoothSigmaTexels: 1.5
   },
   {
     name: 'sedna',
@@ -579,6 +593,8 @@ function elevationField(
   height: number,
   peakMeters: number
 ): BodyField {
+  const smoothSigmaTexels = elevationSmoothSigmaTexels(ELEVATION_SMOOTH_SIGMA_TEXELS, body.smoothSigmaTexels)
+
   // { cavity: false }: полость B пересчитывается единственным финальным
   // проходом ниже, здесь она была бы чистой потерей времени (как и в калибровке).
   const result = synthesizeElevationHeightAndSlope(
@@ -587,7 +603,7 @@ function elevationField(
     height,
     body.radiusMeters,
     peakMeters,
-    ELEVATION_SMOOTH_SIGMA_TEXELS,
+    smoothSigmaTexels,
     { cavity: false }
   )
 

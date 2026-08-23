@@ -69,6 +69,27 @@ export function elevationPeakMeters(radiusMeters: number, override?: number): nu
   return override
 }
 
+/** Потолок ручки σ сглаживания входа `elevation` — выше уже не срез 8-битных ступенек, а размытие рельефа. */
+const ELEVATION_SMOOTH_SIGMA_MAX = 4
+
+/**
+ * σ сглаживания входа `elevation`, тексели выхода: явный `override` (ручка
+ * владельца на тело — зернистый вход требует сильнее дефолта) либо
+ * `defaultSigmaTexels` (0.7 в батче, см. `ELEVATION_SMOOTH_SIGMA_TEXELS`,
+ * Плутон и Европа без override не меняются). `override` должен быть в
+ * (0, 4] — выше это уже не де-квантование 8-битных ступенек, а размытие
+ * самого рельефа.
+ */
+export function elevationSmoothSigmaTexels(defaultSigmaTexels: number, override?: number): number {
+  if (override === undefined) return defaultSigmaTexels
+
+  if (!(override > 0) || override > ELEVATION_SMOOTH_SIGMA_MAX) {
+    throw new Error(`smoothSigmaTexels должен быть в (0, ${ELEVATION_SMOOTH_SIGMA_MAX}], получено ${override}`)
+  }
+
+  return override
+}
+
 /** Веса area-average по одной оси: для каждого выходного индекса — список (исходный индекс, доля перекрытия окна). */
 interface AxisWeight {
   index: number
