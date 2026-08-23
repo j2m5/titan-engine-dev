@@ -22,7 +22,22 @@ import { percentile99Abs } from './synthHeightMap'
  * рельеф — та же конвенция, что у `buildSynthHeightField`), амплитуда задаётся
  * флагом, а не калибруется: сколько детали добавить — решение по замеру уклона,
  * а не подгонка внутри скрипта.
+ *
+ * `normalizeBelt` меняет ОБЛАСТЬ нормировки, а не саму полосу: p99 считается
+ * только по экваториальному поясу |lat| < 30°. У эквиректангулярных входов
+ * полюса растянуты проекцией и несут швы мозаики — их значения задают
+ * глобальный p99, и на экваторе прибавка выходит в разы слабее номинала
+ * (замер по Меркурию: |Δh| p90 254 м в поясе против 814 м за 60°). Полюсам при
+ * этом достаётся больше номинала — это цена решения, а не побочный дефект.
  */
+
+/** Граница пояса нормировки, градусы широты. */
+const NORM_BELT_LATITUDE_DEG = 30
+
+/** Широта центра строки, радианы: y=0 — север (полутексельная конвенция карт). */
+function rowLatitude(y: number, height: number): number {
+  return Math.PI / 2 - ((y + 0.5) / height) * Math.PI
+}
 
 export interface EnhanceHeightParams {
   widthTexels: number
@@ -34,6 +49,25 @@ export interface EnhanceHeightParams {
   bandHighKm: number
   /** Амплитуда прибавки, м — значение p99 модуля полосы после нормировки. */
   amplitudeMeters: number
+  /** Нормировать полосу по p99 экваториального пояса |lat| < 30° вместо всей карты (см. докблок модуля). */
+  normalizeBelt?: boolean
+}
+
+/** p99 модуля полосы в строках пояса |lat| < NORM_BELT_LATITUDE_DEG. */
+function beltPercentile99Abs(band: Float64Array, width: number, height: number): number {
+  const limit = (NORM_BELT_LATITUDE_DEG * Math.PI) / 180
+  const rows: number[] = []
+
+  for (let y = 0; y < height; y++) if (Math.abs(rowLatitude(y, height)) < limit) rows.push(y)
+
+  // Карта в одну-две строки может не иметь ни одной строки пояса — тогда
+  // нормировать нечем, и честный ответ «полоса вырождена», а не деление на ноль.
+  if (rows.length === 0) return 0
+
+  const belt = new Float64Array(rows.length * width)
+  for (let i = 0; i < rows.length; i++) belt.set(band.subarray(rows[i] * width, rows[i] * width + width), i * width)
+
+  return percentile99Abs(belt)
 }
 
 /** Uint16-тело TEHM → метры (min→0, max→65535). */
@@ -80,7 +114,7 @@ export function enhanceHeightField(
   const sigmaHighTexels = (params.bandHighKm * 1000) / equatorTexelMeters
 
   const band = bandPassSpherical(bumpLuminance, width, height, sigmaLowTexels, sigmaHighTexels)
-  const p99 = percentile99Abs(band)
+  const p99 = params.normalizeBelt ? beltPercentile99Abs(band, width, height) : percentile99Abs(band)
   const scale = p99 > 0 ? params.amplitudeMeters / p99 : 0
 
   const heights = new Float64Array(texels)

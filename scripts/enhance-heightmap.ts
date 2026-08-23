@@ -14,18 +14,22 @@ import { argument } from './lib/cliArguments'
  *
  * Запуск: npm run build:enhance-heightmap -- --dem <файл .raw> --bump <изображение>
  *   --radius-meters <метры> --amplitude-meters <метры> --out <файл .raw>
- *   [--band-low-km 40] [--band-high-km 4]
+ *   [--band-low-km 40] [--band-high-km 4] [--norm-belt]
  *
  * `--dem` — существующая карта высот (TEHM), она же задаёт разрешение выхода;
  * bump приводится к нему area-average даунсемплом (`boxDownsampleGreyscale`),
- * апсемпл не делается — вход должен быть не мельче DEM и строго 2:1.
- * `--amplitude-meters` — p99 модуля прибавки, подбирается ЗАМЕРОМ уклона, а не
- * скриптом (калибровки здесь нет намеренно).
+ * апсемпл не делается — вход должен быть не мельче DEM и строго 2:1. Источником
+ * детали годится любая карта, где яркость коррелирует с рельефом, — в том числе
+ * диффуз (у него в полосе 2–20 км есть фактура кратеров, которой нет у
+ * ретушированной bump-карты). `--amplitude-meters` — p99 модуля прибавки,
+ * подбирается ЗАМЕРОМ уклона, а не скриптом (калибровки здесь нет намеренно).
+ * `--norm-belt` — считать этот p99 только по экваториальному поясу |lat| < 30°:
+ * растянутые проекцией полюса иначе задают норму всей карте (докблок lib).
  *
  * Меркурий (DEM 8192×4096, тексель ≈ 1.87 км):
  *   npm run build:enhance-heightmap -- --dem mercury_height.prev.raw
- *     --bump mercury_bump.jpg --radius-meters 2439700 --amplitude-meters 1200
- *     --out mercury_height.raw
+ *     --bump mercury.jpg --radius-meters 2440000 --band-low-km 20 --band-high-km 2
+ *     --norm-belt --amplitude-meters 900 --out mercury_height.raw
  * Дальше — slope-карта и компаньон: `build:slopemap` (--cavity off) и
  * `build:terrain-aux` по новому файлу высот.
  */
@@ -43,6 +47,7 @@ const radiusArg = argument('radius-meters')
 const amplitudeArg = argument('amplitude-meters')
 const bandLowArg = argument('band-low-km')
 const bandHighArg = argument('band-high-km')
+const normalizeBelt = process.argv.includes('--norm-belt')
 
 const radiusMeters = Number(radiusArg)
 const amplitudeMeters = Number(amplitudeArg)
@@ -102,7 +107,8 @@ const { heights, minMeters, maxMeters } = enhanceHeightField(decodeHeightMeters(
   radiusMeters,
   bandLowKm,
   bandHighKm,
-  amplitudeMeters
+  amplitudeMeters,
+  normalizeBelt
 })
 
 const data = normalizeToUint16(Float32Array.from(heights), minMeters, maxMeters)
@@ -110,6 +116,7 @@ const data = normalizeToUint16(Float32Array.from(heights), minMeters, maxMeters)
 await writeFile(output, encodeHeightMap({ width: dem.width, height: dem.height, minMeters, maxMeters, data }))
 
 console.log(
-  `записано ${output}: ${dem.width}×${dem.height}, полоса ${bandLowKm}..${bandHighKm} км, амплитуда ${amplitudeMeters} м, ` +
+  `записано ${output}: ${dem.width}×${dem.height}, полоса ${bandLowKm}..${bandHighKm} км, амплитуда ${amplitudeMeters} м ` +
+    `(нормировка ${normalizeBelt ? 'по поясу |lat|<30°' : 'по всей карте'}), ` +
     `высоты ${dem.minMeters.toFixed(0)}..${dem.maxMeters.toFixed(0)} → ${minMeters.toFixed(0)}..${maxMeters.toFixed(0)} м`
 )

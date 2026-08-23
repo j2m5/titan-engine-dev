@@ -179,6 +179,45 @@ describe('enhanceHeightField', () => {
     expect(maxMeters).toBeGreaterThan(dem.maxMeters)
   })
 
+  it('нормировка по поясу задаёт масштаб экватором, а не полюсами', () => {
+    const dem = makeDem()
+    const demMeters = decodeHeightMeters(dem)
+    const amplitudeMeters = 1000
+    const limit = (30 * Math.PI) / 180
+
+    // Та же волна в полосе, но к полюсам она разгоняется до ×100 — типичный
+    // эквиректангулярный вход (растяжка проекции, швы мозаики). Огибающая
+    // ГЛАДКАЯ: ступенька по широте сама была бы краем в полосе пропускания и
+    // подмешивала бы полярную энергию в пояс через NS-размытие.
+    const bump = wave(64, 1)
+    for (let y = 0; y < HEIGHT; y++) {
+      const latitude = Math.PI / 2 - ((y + 0.5) / HEIGHT) * Math.PI
+      const envelope = 1 + 99 * Math.pow(Math.abs(latitude) / (Math.PI / 2), 6)
+      for (let x = 0; x < WIDTH; x++) bump[y * WIDTH + x] *= envelope
+    }
+
+    /** p99 |прибавки| в строках пояса |lat| < 30°. */
+    const beltPercentile99 = (heights: Float64Array): number => {
+      const values: number[] = []
+      for (let y = 0; y < HEIGHT; y++) {
+        const latitude = Math.PI / 2 - ((y + 0.5) / HEIGHT) * Math.PI
+        if (Math.abs(latitude) >= limit) continue
+        for (let x = 0; x < WIDTH; x++) values.push(Math.abs(heights[y * WIDTH + x] - demMeters[y * WIDTH + x]))
+      }
+      values.sort((a, b) => a - b)
+
+      return values[Math.floor(0.99 * (values.length - 1))]
+    }
+
+    const belt = enhanceHeightField(demMeters, bump, { ...baseParams(amplitudeMeters), normalizeBelt: true })
+    const global = enhanceHeightField(demMeters, bump, baseParams(amplitudeMeters))
+
+    // По поясу нормируется ровно пояс: его p99 и есть заказанная амплитуда.
+    expect(beltPercentile99(belt.heights)).toBeCloseTo(amplitudeMeters, 6)
+    // Глобальная нормировка отдаёт норму полюсам — экватор получает много меньше.
+    expect(beltPercentile99(global.heights)).toBeLessThan(0.5 * amplitudeMeters)
+  })
+
   it('перепутанные границы полосы и несходящиеся длины отвергаются', () => {
     const dem = makeDem()
     const demMeters = decodeHeightMeters(dem)
