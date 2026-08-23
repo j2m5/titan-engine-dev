@@ -45,7 +45,7 @@ import { Resources } from '@storage/database/resources'
  * повторную генерацию с пропорционально рескейленными bump- И base-
  * амплитудами (see `generateBody`).
  *
- * Вид входа `elevation` (Плутон, Европа, Эрида) — настоящая карта высот
+ * Вид входа `elevation` (Плутон, Европа, Эрида, Дисномия) — настоящая карта высот
  * вместо bump/диффуза: ни подложки-шума, ни полосового фильтра, ни
  * калибровки по RMS — амплитуду задаёт бюджет высоты тела либо явная ручка
  * `peakMeters` на генерацию (Европа: пик занижен до 1800 м, бюджет 0.7%
@@ -178,13 +178,15 @@ const BODIES: readonly BodyGeneration[] = [
     actorIds: [37]
   },
   {
-    // 16k-вариант с диска — та же причина, что у Харона
+    // Та же карта, что была bump-входом, — путь elevation вместо синтеза; вход зернистый (44% энергии мельче 8 px).
     name: 'dysnomia',
-    inputPath: `${TEXTURES_ROOT}/dysnomia/dysnomia_bump_16k.jpg`,
-    inputKind: 'bump',
+    inputPath: `${TEXTURES_ROOT}/dysnomia/dysnomia_elevation_16k.png`,
+    inputKind: 'elevation',
     radiusMeters: 320_000,
     seedActorId: 38,
-    actorIds: [38]
+    actorIds: [38],
+    ceilingWidth: 4096,
+    smoothSigmaTexels: 2.0
   },
   {
     name: 'adriana3',
