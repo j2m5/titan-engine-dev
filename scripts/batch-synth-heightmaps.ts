@@ -48,7 +48,7 @@ import { Resources } from '@storage/database/resources'
  * амплитудами (see `generateBody`).
  *
  * Вид входа `elevation` (Плутон, Европа, Эрида, Дисномия, Харон, Диона, Седна,
- * Ганимед, Ио) —
+ * Ганимед, Ио, Макемаке) —
  * настоящая карта высот вместо bump/диффуза: ни подложки-шума, ни калибровки
  * по RMS — амплитуду задаёт бюджет высоты тела либо явная ручка `peakMeters`
  * на генерацию (Европа: пик занижен до 1800 м, бюджет 0.7% радиуса не
@@ -330,12 +330,16 @@ const BODIES: readonly BodyGeneration[] = [
     actorIds: [15]
   },
   {
+    // Настоящая карта высот владельца (16384×8192, яркость = высота) — путь elevation вместо синтеза из диффуза; независимый зернистый вход (32% энергии мельче 8 px) — σ 2.0, highPassKm 300 против крупномасштабного тренда (40% дисперсии шире ~230 км).
     name: 'makemake',
-    inputPath: `${TEXTURES_ROOT}/makemake/makemake.jpg`,
-    inputKind: 'diffuse',
+    inputPath: `${TEXTURES_ROOT}/makemake/makemake_elevation_16k.png`,
+    inputKind: 'elevation',
     radiusMeters: 739_000,
     seedActorId: 16,
-    actorIds: [16]
+    actorIds: [16],
+    smoothSigmaTexels: 2.0,
+    highPassKm: 300,
+    peakPercentile: 0.999
   },
   {
     // Вход зернистый (35% энергии мельче 4 px) — σ 1.5 против зерна, сильнее дефолта.
