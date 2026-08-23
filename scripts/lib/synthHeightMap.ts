@@ -50,7 +50,7 @@ function percentileAbs(values: Float64Array, p: number): number {
 }
 
 /** 99-й процентиль |values| — «выброс не сжимает рельеф»: топ-1% исключён из нормировки. */
-function percentile99Abs(values: Float64Array): number {
+export function percentile99Abs(values: Float64Array): number {
   return percentileAbs(values, 0.99)
 }
 
