@@ -8,7 +8,13 @@ import type { TerrainHeightField } from './TerrainHeightField'
 /** Адрес узла квадродерева грани кубосферы: (face, level, i, j). level 0 — целая грань, не адресуется наружу. */
 export type TerrainNodeAddress = { face: number; level: number; i: number; j: number }
 
-export const terrainNodeKey = (a: TerrainNodeAddress): string => `${a.face}/${a.level}/${a.i}/${a.j}`
+/**
+ * Числовой ключ узла: face(3 бита)|level(3)|i(6)|j(6) — 18 бит, SMI.
+ * Диапазоны: face 0..5, level 0..TERRAIN_QUADTREE_MAX_LEVEL(6), i/j 0..63.
+ * Ключ строковым был источником 74 880 строковых аллокаций/кадр в дифе
+ * покрытия (ревью 2026-08-17, перф-долг №5/№10) — Map/Set по числу их не платят.
+ */
+export const terrainNodeKey = (a: TerrainNodeAddress): number => (a.face << 15) | (a.level << 12) | (a.i << 6) | a.j
 
 /** Ниже этого уровня узел спускается безусловно — минимальный набор всегда 6·4^MIN_LEVEL листьев. */
 export const TERRAIN_QUADTREE_MIN_LEVEL = 1
@@ -61,7 +67,7 @@ export interface SelectParams {
   fovYRadians: number
   splitPixels: number // ручка terrain.sseSplitPixels
   mergeFactor: number // ручка terrain.sseMergeFactor
-  currentlySplit: ReadonlySet<string> // ключи узлов, разбитых в прошлом кадре
+  currentlySplit: ReadonlySet<number> // ключи узлов (terrainNodeKey), разбитых в прошлом кадре
   /**
    * Уровень воды тела, метры (Task 5, water-foundation) — ручка актора, не
    * поля (см. докблок `TerrainHeightField`/`CameraCollision.Collider`).
@@ -71,7 +77,9 @@ export interface SelectParams {
   waterLevelMeters?: number
 }
 
-// Скретчи модуля: функция зовётся каждый кадр, аллокаций на вызов быть не должно.
+// Скретчи модуля: функция зовётся каждый кадр, аллокаций на ПОСЕЩЁННЫЙ узел
+// быть не должно (ключ — число, не строка). Единственная аллокация на вызов —
+// объект адреса на каждый ЛИСТ (leaves.push) и возвращаемые leaves/split.
 // Recursion синхронна и глубину узла не переиспользует после ветвления — общие
 // скретчи безопасны между уровнями.
 const centerDirScratch = new Vector3()
@@ -110,7 +118,7 @@ function visitNode(
   j: number,
   params: SelectParams,
   leaves: TerrainNodeAddress[],
-  split: Set<string>
+  split: Set<number>
 ): void {
   if (level < TERRAIN_QUADTREE_MIN_LEVEL) {
     descend(face, level, i, j, params, leaves, split)
@@ -140,9 +148,9 @@ function visitNode(
     (field.nodeGeometricErrorMeters(face, level, i, j) * params.screenHeight) /
     (2 * Math.tan(params.fovYRadians / 2) * distanceMeters)
 
-  // формат совпадает с terrainNodeKey — вызывается без промежуточного
+  // раскладка бит совпадает с terrainNodeKey — считается без промежуточного
   // TerrainNodeAddress, чтобы не аллоцировать объект на каждый посещённый узел
-  const key = `${face}/${level}/${i}/${j}`
+  const key = (face << 15) | (level << 12) | (i << 6) | j
   const alreadySplit = params.currentlySplit.has(key)
   const threshold = alreadySplit ? params.splitPixels * params.mergeFactor : params.splitPixels
 
@@ -185,7 +193,7 @@ function descend(
   j: number,
   params: SelectParams,
   leaves: TerrainNodeAddress[],
-  split: Set<string>
+  split: Set<number>
 ): void {
   const childLevel = level + 1
 
@@ -205,13 +213,83 @@ function descend(
  * TERRAIN_QUADTREE_MAX_LEVEL. Без побочных эффектов, без обращения к сцене —
  * вызывается каждый кадр отдельно на CPU.
  */
-export function selectTerrainNodes(params: SelectParams): { leaves: TerrainNodeAddress[]; split: Set<string> } {
+export function selectTerrainNodes(params: SelectParams): { leaves: TerrainNodeAddress[]; split: Set<number> } {
   const leaves: TerrainNodeAddress[] = []
-  const split = new Set<string>()
+  const split = new Set<number>()
 
   for (let face = 0; face < CUBE_FACES; face++) {
     visitNode(face, 0, 0, 0, params, leaves, split)
   }
 
   return { leaves, split }
+}
+
+/** Результат обхода потомков: в поддереве нет желаемых / все желаемые живые / есть не живой. */
+const enum DescendantsState {
+  None,
+  AllLive,
+  NotLive
+}
+
+function descendantsState(
+  face: number,
+  level: number,
+  i: number,
+  j: number,
+  wanted: ReadonlyMap<number, TerrainNodeAddress>,
+  isLive: (key: number) => boolean
+): DescendantsState {
+  if (level >= TERRAIN_QUADTREE_MAX_LEVEL) return DescendantsState.None
+
+  let found = false
+  const childLevel = level + 1
+  for (let di = 0; di < 2; di++) {
+    for (let dj = 0; dj < 2; dj++) {
+      const ci = i * 2 + di
+      const cj = j * 2 + dj
+      const childKey = (face << 15) | (childLevel << 12) | (ci << 6) | cj
+      if (wanted.has(childKey)) {
+        if (!isLive(childKey)) return DescendantsState.NotLive
+        found = true
+        continue
+      }
+      const deeper = descendantsState(face, childLevel, ci, cj, wanted, isLive)
+      if (deeper === DescendantsState.NotLive) return DescendantsState.NotLive
+      if (deeper === DescendantsState.AllLive) found = true
+    }
+  }
+
+  return found ? DescendantsState.AllLive : DescendantsState.None
+}
+
+/**
+ * x (показанный, но не желаемый узел) готов к освобождению, когда готова его
+ * замена: либо ВСЕ желаемые листья внутри x построены (x дробится мельче),
+ * либо построен желаемый предок x (x схлопывается крупнее). Отношение —
+ * префикс адреса: тот же face, i>>Δ/j>>Δ совпадают на разнице уровней.
+ *
+ * Прежняя реализация в TerrainPatchGroup дважды сканировала весь `wanted` на
+ * каждый освобождаемый узел (O(|live|×|wanted|), замер ревью 2026-08-17 —
+ * 74 880 итераций/кадр со строковым ключом на итерацию). Здесь потомки
+ * обходятся спуском по дереву (wanted — всегда полное разбиение граней,
+ * рекурсия останавливается на его листьях), предок — подъёмом по битовым
+ * сдвигам: стоимость O(листьев wanted внутри x) и O(level) соответственно,
+ * аллокаций нет.
+ */
+export function coverageReady(
+  x: TerrainNodeAddress,
+  wanted: ReadonlyMap<number, TerrainNodeAddress>,
+  isLive: (key: number) => boolean
+): boolean {
+  const below = descendantsState(x.face, x.level, x.i, x.j, wanted, isLive)
+  if (below === DescendantsState.NotLive) return false
+  if (below === DescendantsState.AllLive) return true
+
+  for (let level = x.level - 1; level >= 0; level--) {
+    const delta = x.level - level
+    const key = (x.face << 15) | (level << 12) | ((x.i >> delta) << 6) | (x.j >> delta)
+    if (wanted.has(key)) return isLive(key)
+  }
+
+  return false // связи не нашлось — не должно случаться, но пин безопаснее дыры
 }

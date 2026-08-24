@@ -10,6 +10,7 @@ import { buildTerrainPatchInto } from '@/core/terrain/terrainPatchGeometry'
 import { detailWrapFor, type DetailWrap } from '@/core/terrain/detailWrap'
 import { TerrainPatchPool, type PatchHandle } from '@/core/terrain/TerrainPatchPool'
 import {
+  coverageReady,
   selectTerrainNodes,
   terrainNodeKey,
   TERRAIN_QUADTREE_MIN_LEVEL,
@@ -55,9 +56,12 @@ export const PATCH_BUILDS_PER_FRAME = 6
 abstract class TerrainPatchGroup extends Group {
   private readonly field: TerrainHeightField
   private readonly pool: TerrainPatchPool
-  private readonly live = new Map<string, { handle: PatchHandle; address: TerrainNodeAddress }>()
-  private persistedSplit: ReadonlySet<string> = new Set()
+  private readonly live = new Map<number, { handle: PatchHandle; address: TerrainNodeAddress }>()
+  private persistedSplit: ReadonlySet<number> = new Set()
   private poolExhaustedWarned = false
+  // замыкание переиспользуется между кадрами — coverageReady зовётся на каждый
+  // освобождаемый узел, аллокация лямбды на вызов была бы мусором в горячем пути
+  private readonly isLive = (key: number): boolean => this.live.has(key)
 
   // скретчи кадра: updateObject зовётся каждый кадр, аллокаций быть не должно
   private readonly cameraWorldScratch = new Vector3()
@@ -133,7 +137,7 @@ abstract class TerrainPatchGroup extends Group {
     })
     this.persistedSplit = split
 
-    const wanted = new Map<string, TerrainNodeAddress>()
+    const wanted = new Map<number, TerrainNodeAddress>()
     for (const address of leaves) wanted.set(terrainNodeKey(address), address)
 
     // очередь построек пересобирается из свежего дифа каждый кадр. leaves —
@@ -165,7 +169,7 @@ abstract class TerrainPatchGroup extends Group {
     // без дыр: показанный узел освобождается только когда готова его замена
     for (const [key, entry] of this.live) {
       if (wanted.has(key)) continue
-      if (!this.coverageReady(entry.address, wanted)) continue
+      if (!coverageReady(entry.address, wanted, this.isLive)) continue
 
       this.remove(entry.handle.mesh)
       this.pool.release(entry.handle)
@@ -248,38 +252,6 @@ abstract class TerrainPatchGroup extends Group {
     this.poolExhaustedWarned = true
   }
 
-  /**
-   * x (показанный, но не желаемый узел) готов к освобождению, когда готова
-   * его замена: либо ВСЕ желаемые листья внутри x построены (x дробится
-   * мельче), либо построен желаемый предок x (x схлопывается крупнее).
-   * Отношение — префикс адреса: тот же face, i>>Δ/j>>Δ совпадают на разнице
-   * уровней (Δ = |level x − level y|).
-   */
-  private coverageReady(x: TerrainNodeAddress, wanted: ReadonlyMap<string, TerrainNodeAddress>): boolean {
-    let hasDescendant = false
-
-    for (const y of wanted.values()) {
-      if (y.face !== x.face || y.level <= x.level) continue
-
-      const delta = y.level - x.level
-      if ((y.i >> delta) === x.i && (y.j >> delta) === x.j) {
-        hasDescendant = true
-        if (!this.live.has(terrainNodeKey(y))) return false
-      }
-    }
-    if (hasDescendant) return true
-
-    for (const y of wanted.values()) {
-      if (y.face !== x.face || y.level >= x.level) continue
-
-      const delta = x.level - y.level
-      if ((x.i >> delta) === y.i && (x.j >> delta) === y.j) {
-        return this.live.has(terrainNodeKey(y))
-      }
-    }
-
-    return false // связи не нашлось — не должно случаться, но пин безопаснее дыры
-  }
 }
 
 export { TerrainPatchGroup }

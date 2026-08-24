@@ -50,7 +50,7 @@ function makeParams(altKm: number, over: Partial<SelectParams> = {}): SelectPara
     fovYRadians: (50 * Math.PI) / 180,
     splitPixels: 6,
     mergeFactor: 0.7,
-    currentlySplit: new Set<string>(),
+    currentlySplit: new Set<number>(),
     ...over
   }
 }
@@ -300,7 +300,7 @@ function waterParamsAt(field: TerrainHeightField, dir: Vector3, altKm: number, w
     fovYRadians: (50 * Math.PI) / 180,
     splitPixels: 6,
     mergeFactor: 0.7,
-    currentlySplit: new Set<string>(),
+    currentlySplit: new Set<number>(),
     waterLevelMeters
   }
 }
@@ -477,7 +477,7 @@ describe('selectTerrainNodes: честный максимум узла лови�
       fovYRadians: (50 * Math.PI) / 180,
       splitPixels: 6,
       mergeFactor: 0.7,
-      currentlySplit: new Set<string>(),
+      currentlySplit: new Set<number>(),
       waterLevelMeters: 0
     })
 
