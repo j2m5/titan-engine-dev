@@ -802,6 +802,13 @@ class ResourceObserver {
   private handleLoadFailure(candidate: MapCandidate): void {
     this.attempted.set(candidate.path, Date.now())
     this.loaded.delete(candidate.path)
+    // Провал МОГ случиться уже после регистрации текстуры (updateMaterial
+    // бросил): без симметричного с `evictPath` отката байты остались бы в
+    // реестре и в памяти, но вне бухгалтерии — `evictOrphanedPaths` итерирует
+    // `loaded` и такой путь не увидел бы никогда. Для незарегистрированного
+    // пути deleteTexture — no-op.
+    this.loadedAt.delete(candidate.path)
+    resourceStorage.deleteTexture(candidate.path)
 
     const isDiffuse: boolean = candidate.typeRank === MAP_TYPE_RANK.diffuse
 

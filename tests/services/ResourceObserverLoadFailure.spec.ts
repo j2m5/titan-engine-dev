@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { Mesh, Scene, Texture, Vector3 } from 'three'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 import { TextureBudget, textureBytes } from '@/core/streaming/TextureBudget'
 import { Scenarios } from '@/config/scenarios'
 import type { SceneObserver, ObservableRecord } from '@/core/services/SceneObserver'
@@ -96,8 +97,12 @@ function makeTexture(): Texture {
  * Учёт стриминга наблюдателя ключуется путём (задача 2) — приведение типа,
  * тот же приём, что и в соседних спеках.
  */
-function streamingState(observer: ResourceObserver): { loaded: Set<string>; attempted: Map<string, number> } {
-  return observer as unknown as { loaded: Set<string>; attempted: Map<string, number> }
+function streamingState(observer: ResourceObserver): {
+  loaded: Set<string>
+  loadedAt: Map<string, number>
+  attempted: Map<string, number>
+} {
+  return observer as unknown as { loaded: Set<string>; loadedAt: Map<string, number>; attempted: Map<string, number> }
 }
 
 function makeClosestChangeObserver(
@@ -147,6 +152,10 @@ function makeClosestChangeObserver(
  * откатывал АКТОРА ЦЕЛИКОМ (см. старый докблок `loadActor`, git-история).
  */
 describe('ResourceObserver — провал по значимости пути (диффуз против второстепенной карты)', () => {
+  afterEach(() => {
+    resourceStorage.deleteAllTextures()
+  })
+
   it('провал диффуза → resetMaterial (плейсхолдер), путь уходит в attempted', async () => {
     const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
       if (request.name === 'planets/mercury/mercury.jpg') {
@@ -215,5 +224,39 @@ describe('ResourceObserver — провал по значимости пути (
     expect(state.loaded.has('planets/mercury/mercury.jpg')).toBe(true)
     expect(state.attempted.has('planets/mercury/mercury_slope.webp')).toBe(true)
     expect(state.loaded.has('planets/mercury/mercury_slope.webp')).toBe(false)
+  })
+
+  it('провал ПОСЛЕ успешной загрузки (updateMaterial бросил) откатывает loadedAt и реестр текстур', async () => {
+    // К моменту броска updateMaterial текстура уже в resourceStorage, а
+    // loadedAt уже проставлен. handleLoadFailure убирал путь только из
+    // `loaded` — байты оставались в памяти и в реестре, но вне бухгалтерии:
+    // evictOrphanedPaths итерирует `loaded` и такой путь не видел никогда.
+    // Симметрия с evictPath: loadedAt.delete + resourceStorage.deleteTexture.
+    const load = vi.fn((): Promise<LoadResult> => Promise.resolve({ ok: true as const, texture: makeTexture() }))
+
+    const { observer, handlers, data, scene } = makeClosestChangeObserver(SIZE_8K * 8, load)
+    observer.scenario = SOLAR_SYSTEM
+
+    const mesh = new Mesh()
+    mesh.name = 'Mercury'
+    const material = {
+      resetMaterial: vi.fn(),
+      updateMaterial: vi.fn(() => {
+        throw new Error('материал сломан')
+      })
+    }
+    Object.defineProperty(mesh, 'renderable', { value: { material }, writable: true })
+    scene.add(mesh)
+
+    data.set('Mercury', record('Mercury', 300))
+    await handlers['ClosestChange'](record('Mercury', 300))
+
+    const state = streamingState(observer)
+    const path = 'planets/mercury/mercury.jpg'
+
+    expect(state.attempted.has(path)).toBe(true)
+    expect(state.loaded.has(path)).toBe(false)
+    expect(state.loadedAt.has(path)).toBe(false)
+    expect(resourceStorage.getTexture(path)).toBeUndefined()
   })
 })
