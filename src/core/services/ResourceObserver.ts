@@ -133,7 +133,15 @@ class ResourceObserver {
     this._scenario = null
     this._sceneBackground = null
     this._map = new Map()
-    this.sceneObserver.subscribe('ClosestChange', this.closestChange)
+    // EventEmitter.emit дропает возврат хендлера (callbacks — `=> void`), а
+    // ClosestChange щёлкает дважды в секунду по тику: без .catch любой бросок
+    // из пересчёта — тихий unhandled rejection. Промис возвращается наружу
+    // (не void): тесты ждут завершение конвейера через await хендлера.
+    this.sceneObserver.subscribe('ClosestChange', (): Promise<void> =>
+      this.closestChange().catch((cause: unknown): void => {
+        console.error('[streaming] пересчёт состава видеопамяти провалился', cause)
+      })
+    )
     this.setResidentTextures()
   }
 

@@ -115,6 +115,23 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     resourceStorage.deleteAllTextures()
   })
 
+  it('провал пересчёта не улетает необработанным reject: подписка гасит ошибку и логирует', async () => {
+    // EventEmitter.emit дропает промис async-хендлера (callbacks — `=> void`),
+    // а тик щёлкает дважды в секунду: любой бросок из closestChange был бы
+    // тихим unhandled rejection. Подписка обязана держать .catch, читая
+    // this.closestChange в момент вызова — тест подменяет поле на реджект.
+    const { observer, handlers } = makeObserver(SIZE_8K, vi.fn())
+    observer.scenario = SOLAR_SYSTEM
+
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    ;(observer as unknown as { closestChange: (e: ObservableRecord) => Promise<void> }).closestChange = () =>
+      Promise.reject(new Error('boom'))
+
+    await expect(handlers['ClosestChange'](record('Mercury', 300))).resolves.toBeUndefined()
+    expect(error).toHaveBeenCalledOnce()
+    error.mockRestore()
+  })
+
   it('провалившийся актор не ретраится немедленно, пока остаётся приоритетным', async () => {
     // Все пути Меркурия проваливаются — актор целиком уходит в attempted.
     const load = vi.fn(
