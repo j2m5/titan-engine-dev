@@ -115,6 +115,8 @@ class ResourceObserver {
    * его тоже ещё грузит, и второй Texture остаётся недостижимым навсегда.
    */
   private readonly pathLoads: Map<string, Promise<LoadResult | null>> = new Map()
+  /** Последняя напечатанная dev-сводка решения — гейт спама `logDecision`. */
+  private lastDecisionLine: string = ''
 
   /**
    * @param sceneObserver Наблюдатель за сценой
@@ -184,6 +186,7 @@ class ResourceObserver {
     this.attempted.clear()
     this.pathLoads.clear()
     this.pathActors.clear()
+    this.lastDecisionLine = ''
     this._map.clear()
     this.setMap()
     this.setCubeTextures()
@@ -412,7 +415,16 @@ class ResourceObserver {
       )
       .join(' | ')
 
-    console.debug(`[streaming] ${summary} | отсечено ${cutoffCount} тел ниже порога`)
+    // Гейт по строке сводки: тик зовёт пересчёт каждые 500 мс и при
+    // неподвижной камере — без дедупа сводка превращается в постоянный спам.
+    // Сравнивается готовая строка, а не решение: actorPriority — непрерывный
+    // float (тела движутся по орбитам) и менялся бы каждый тик без видимой
+    // разницы в том, что печатается.
+    const line = `[streaming] ${summary} | отсечено ${cutoffCount} тел ниже порога`
+    if (line === this.lastDecisionLine) return
+    this.lastDecisionLine = line
+
+    console.debug(line)
   }
 
   /**

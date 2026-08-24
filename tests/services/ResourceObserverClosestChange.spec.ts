@@ -132,6 +132,32 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     error.mockRestore()
   })
 
+  it('dev-сводка решения печатается только при его смене — одинаковые тики не спамят', async () => {
+    // Тик SceneObserver зовёт closestChange каждые 500 мс и при неподвижной
+    // камере: без гейта console.debug превращается в постоянный dev-спам.
+    // Идентичность — сама строка сводки: первая печать (веса путей ещё не
+    // замерены, sizeOf=0), вторая после замера (байты изменились), третий
+    // одинаковый тик печати уже не даёт.
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {})
+    const load = vi.fn((): Promise<LoadResult> => Promise.resolve({ ok: true as const, texture: makeTexture() }))
+
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = SOLAR_SYSTEM
+
+    data.set('Mercury', record('Mercury', 300))
+
+    await handlers['ClosestChange'](record('Mercury', 300))
+    const printsAfterFirst = debug.mock.calls.length
+    await handlers['ClosestChange'](record('Mercury', 300))
+    const printsAfterSecond = debug.mock.calls.length
+    await handlers['ClosestChange'](record('Mercury', 300))
+
+    expect(printsAfterFirst).toBe(1)
+    // третий тик бит-в-бит повторяет второй — новой печати нет
+    expect(debug.mock.calls.length).toBe(printsAfterSecond)
+    debug.mockRestore()
+  })
+
   it('провалившийся актор не ретраится немедленно, пока остаётся приоритетным', async () => {
     // Все пути Меркурия проваливаются — актор целиком уходит в attempted.
     const load = vi.fn(
