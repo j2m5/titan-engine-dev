@@ -399,6 +399,22 @@ export const atmosphereShader = /* glsl */ `
   }
   
   /**
+   * Отношение двух сэмплов LUT пропускания с полом знаменателя. У тел с
+   * глубоким полом рельефа (adjustAtmosphereForTerrainFloor) горизонтные
+   * тексели LUT уходят к порогу underflow float32 (exp(-87.3) = 0 точно;
+   * Венера при поле -5967 м — tau ~ 82.7, ближайшее к обрыву тело): голое
+   * деление даёт 0/0 = NaN, а min(NaN, 1.0) по спецификации GLSL ES
+   * недетерминирован между вендорами. Пол 1e-30 выше любого денормала после
+   * дальнейшей арифметики; при T ниже пола свет физически не проходит —
+   * занижение отношения там неотличимо от честного нуля.
+   */
+  DimensionlessSpectrum SafeTransmittanceRatio(
+      IN(DimensionlessSpectrum) numerator, IN(DimensionlessSpectrum) denominator) {
+    return min(numerator / max(denominator, DimensionlessSpectrum(1e-30)),
+        DimensionlessSpectrum(1.0));
+  }
+
+  /**
    * Computes the transmittance along a ray with direction mu and distance d
    */
   DimensionlessSpectrum GetTransmittance(
@@ -411,19 +427,17 @@ export const atmosphereShader = /* glsl */ `
     Length r_d = ClampRadius(atmosphere, sqrt(d * d + 2.0 * r * mu * d + r * r));
     Number mu_d = ClampCosine((r * mu + d) / r_d);
     if (ray_r_mu_intersects_ground) {
-      return min(
+      return SafeTransmittanceRatio(
           GetTransmittanceToTopAtmosphereBoundary(
-              atmosphere, transmittance_texture, r_d, -mu_d) /
+              atmosphere, transmittance_texture, r_d, -mu_d),
           GetTransmittanceToTopAtmosphereBoundary(
-              atmosphere, transmittance_texture, r, -mu),
-          DimensionlessSpectrum(1.0));
+              atmosphere, transmittance_texture, r, -mu));
     } else {
-      return min(
+      return SafeTransmittanceRatio(
           GetTransmittanceToTopAtmosphereBoundary(
-              atmosphere, transmittance_texture, r, mu) /
+              atmosphere, transmittance_texture, r, mu),
           GetTransmittanceToTopAtmosphereBoundary(
-              atmosphere, transmittance_texture, r_d, mu_d),
-          DimensionlessSpectrum(1.0));
+              atmosphere, transmittance_texture, r_d, mu_d));
     }
   }
   
@@ -1001,7 +1015,9 @@ export const atmosphereShader = /* glsl */ `
   #ifdef COMBINED_SCATTERING_TEXTURES
   vec3 GetExtrapolatedSingleMieScattering(
       IN(AtmosphereParameters) atmosphere, IN(vec4) scattering) {
-    if (scattering.r <= 0.0) {
+    // Инвертированное условие ловит и NaN: NaN <= 0.0 == false пропускал бы
+    // отравленный сэмпл в деление ниже, !(NaN > 0.0) == true — гасит в ноль.
+    if (!(scattering.r > 0.0)) {
       return vec3(0.0);
     }
     return scattering.rgb * scattering.a / scattering.r *
