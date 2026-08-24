@@ -660,6 +660,82 @@ describe('CameraCollision: марч не пропускается, когда с
   })
 })
 
+describe('CameraCollision: внешний марч учитывает широтный градиент клиренса (приполярный туннель)', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  // 2048×128: фон 1000 м, шип 40000 м (колонки 100..102, ряды 3..5 — широта
+  // ~83.7°). Клиренс-сетка над шипом (замерено пробой): оболочка h+clearance
+  // превышает высоту полёта 45000 м ТОЛЬКО на колонках ~99.5..102.5 (шип
+  // 40000 + клиренс 39005), при фоновом клиренсе 5 м — стенка шириной ~1.9 км
+  // при шаге старого марша d/(1+SLOPE_RANGE) ≈ 14.7 км: гарантированный
+  // перепрыг. E-W градиент клиренса на этой широте ≈ maxClearance/(дуга
+  // ячейки × cos 83.7°) ≈ 33 — в 16 раз выше SLOPE_RANGE=2, которым старый
+  // внешний марч ограничивал шаг.
+  const POLAR_PATH = 'planets/polar/height.raw'
+  const P_WIDTH = 2048
+  const P_HEIGHT = 128
+
+  function polarSpikeBody(): { body: Object3D; field: TerrainHeightField } {
+    const values = new Array(P_WIDTH * P_HEIGHT).fill(1000)
+    for (let y = 3; y <= 5; y++) {
+      for (let x = 100; x <= 102; x++) values[y * P_WIDTH + x] = 40000
+    }
+
+    ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(POLAR_PATH, {
+      width: P_WIDTH,
+      height: P_HEIGHT,
+      minMeters: 0,
+      maxMeters: 65535,
+      data: new Uint16Array(values)
+    })
+    const body = makeBody('planet', 1736, new Vector3(), undefined, POLAR_PATH)
+    const field = terrainHeightFieldFor(
+      (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(POLAR_PATH)!,
+      1736
+    )
+    return { body, field }
+  }
+
+  /** Направление на (колонку, ряд) в uv-конвенции поля (сверено с heightMeters по шипу). */
+  const dirAtColRow = (col: number, row: number): Vector3 => {
+    const theta = Math.PI * ((row + 0.5) / P_HEIGHT)
+    const phi = ((col + 0.5) / P_WIDTH) * 2 * Math.PI
+    return new Vector3(-Math.sin(theta) * Math.cos(phi), Math.cos(theta), Math.sin(theta) * Math.sin(phi))
+  }
+
+  it('быстрый тангенциальный E-W пролёт на 83.7° над шипом не туннелирует сквозь клиренс-стенку', () => {
+    const { body, field } = polarSpikeBody()
+
+    // санити фикстуры: шип на месте, полёт выше рельефа, но ниже оболочки шипа
+    expect(field.heightMeters(dirAtColRow(101, 4))).toBeCloseTo(40000, 0)
+    const flightRadius = field.surfaceRadiusUnits(dirAtColRow(84, 4)) + toThreeJSUnits(44 /* км до 45000 м */)
+    expect(field.collisionRadiusUnits(dirAtColRow(101, 4))).toBeGreaterThan(flightRadius)
+
+    const startDir = dirAtColRow(84, 4)
+    const endDir = dirAtColRow(120, 4)
+    const start = startDir.clone().multiplyScalar(flightRadius)
+    const end = endDir.clone().multiplyScalar(flightRadius)
+
+    const { collision, camera } = makeCollision([body], start)
+    collision.resolve() // фиксирует lastPosition
+    camera.position.copy(end)
+    collision.resolve()
+
+    const localDir = camera.position.clone().normalize()
+    // старый код: единственный сэмпл внешнего марша между стартом и финишем
+    // ложится на ~кол. 108 (вне стенки), s перешагивает length — null; после
+    // марша с бондом стенку вскрывала вторая половина: непроверенная цель
+    // последнего скольжения (нормаль хита почти радиальна — честный рельеф
+    // под клиренс-стенкой плоский). Камера обязана остановиться ДО стенки —
+    // угловое положение вдоль пути меньше угла до колонки шипа
+    expect(startDir.angleTo(localDir)).toBeLessThan(startDir.angleTo(dirAtColRow(100, 4)))
+    // и не встроена глубже честного поточечного пола своего направления
+    const floor =
+      field.surfaceRadiusUnits(localDir) + toThreeJSUnits((field.sagMeters(localDir) + CLEARANCE_MARGIN_METERS) / 1000)
+    expect(camera.position.length()).toBeGreaterThanOrEqual(Math.min(floor, flightRadius) * 0.999)
+  })
+})
+
 // Task 5 (water-foundation): пол контакта становится R + max(h(dir̂), уровень)
 // во всех трёх слоях коллизии (пуш-аут/поточечный марч, внешний консервативный
 // марч по сетке клиренса, широкая фаза collectColliders). Уровень доставляется

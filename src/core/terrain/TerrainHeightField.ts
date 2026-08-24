@@ -183,6 +183,16 @@ class TerrainHeightField {
    */
   public readonly equatorTexelMeters: number
   /**
+   * Экваториальная дуга ячейки клиренс-сетки, метры — знаменатель липшицева
+   * бонда клиренса во ВНЕШНЕМ марше `CameraCollision.marchTerrain` (числитель
+   * — `maxClearanceMeters`): билинейная интерполяция сетки не меняется быстрее
+   * maxClearance за ячейку, а E-W дуга ячейки сжимается как cos(широты) —
+   * потребитель делит на cos(широты) СВОЕГО текущего направления сам, по тому
+   * же контракту, что `equatorTexelMeters` у sag-бонда `marchPointwise`.
+   * Производная от радиуса и ширины сетки — формат компаньона не меняет.
+   */
+  public readonly clearanceCellEquatorArcMeters: number
+  /**
    * Честный (не статистический) пер-узловой максимум высоты квадродерева,
    * метры — уровни `TERRAIN_QUADTREE_MIN_LEVEL..TERRAIN_QUADTREE_MAX_LEVEL`,
    * 6 граней. Питается ЖИВОЙ (не удалён из живых полей) `blockMax` из
@@ -264,6 +274,7 @@ class TerrainHeightField {
     this.clearanceGrid = aux.clearanceGrid
     this.clearanceGridWidth = aux.blocksX
     this.clearanceGridHeight = aux.blocksY
+    this.clearanceCellEquatorArcMeters = (TWO_PI * radiusKm * 1000) / aux.blocksX
     this.maxClearanceMeters = aux.maxClearanceMeters
     this.maxSagMeters = aux.maxSagMeters
     this.levelErrorMeters = aux.levelErrorMeters

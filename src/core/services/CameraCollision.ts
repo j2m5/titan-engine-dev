@@ -297,6 +297,22 @@ class CameraCollision {
       this.remainder.copy(position).sub(hit.contact).projectOnPlane(hit.normal)
       position.copy(this.origin).add(this.remainder)
     }
+
+    // Итерации кончились, а цель ПОСЛЕДНЕГО скольжения легла в position без
+    // свипа. Обычно безвредно (нет контакта — вышли бы раньше), но у
+    // клиренс-стенки над плоским честным рельефом нормаль хита почти
+    // радиальна: каждая итерация продвигала origin лишь на ε, а непроверенный
+    // остаток тащил камеру сквозь стенку (приполярный туннель, вторая половина
+    // фикса локального бонда marchTerrain). Контрольный свип: контакт всё ещё
+    // есть — жёсткий стоп в нём, по той же логике перестраховки, что exhausted.
+    const length = this.origin.distanceTo(position)
+    if (length === 0) return
+
+    this.ray.origin.copy(this.origin)
+    this.ray.direction.copy(position).sub(this.origin).divideScalar(length)
+
+    const hit = this.findNearestHit(length)
+    if (hit) position.copy(hit.contact)
   }
 
   /**
@@ -350,10 +366,15 @@ class CameraCollision {
 
   /**
    * Консервативный сферический марч в теле-фиксированном фрейме:
-   * f(p) = |p| − (R + h(p̂) + clearance(p̂)); липшицева константа уклона —
-   * SLOPE_RANGE — допущение о крутизне DEM (слоуп-карта клампится энкодером,
+   * f(p) = |p| − (R + h(p̂) + clearance(p̂)); липшицева константа шага —
+   * SLOPE_RANGE (допущение о крутизне DEM: слоуп-карта клампится энкодером,
    * сама карта высот — нет; у полюсов равнопрямоугольная сетка нарушает его
-   * в ~3-км шапке, страхует пуш-аут), шаг f/(1+L) не перепрыгивает
+   * в ~3-км шапке, страхует пуш-аут) ПЛЮС локальный бонд клиренс-сетки:
+   * её E-W градиент растёт как 1/cos(широты) (ячейка сетки сжимается по
+   * дуге), maxClearance/дуга_ячейки откалиброван по экватору, и без поправки
+   * шаг с ~65° широты перепрыгивал бы клиренс-стенку (на 89° недооценка в
+   * 16 раз — окно туннеля на приполярном пролёте). Та же схема, что у
+   * sag-бонда `marchPointwise` ниже. Шаг f/(1+L) не перепрыгивает
    * поверхность. Бюджет исчерпан — контакт в текущей точке помечается
    * `exhausted`: sweep() ставит камеру туда без скольжения (перестраховка
    * вместо туннеля через то, что марч не успел домаршировать). Истинный
@@ -411,6 +432,11 @@ class CameraCollision {
       return this.marchPointwise(collider, field, from, 0, step, length, epsilon, SWEEP_MARCH_BUDGET, true)
     }
 
+    // экваториальный коэффициент бонда клиренс-сетки — per-body константа,
+    // локальная поправка на 1/cosLat считается ниже на каждом шаге (см. докблок)
+    const clearanceBond =
+      field.clearanceCellEquatorArcMeters > 0 ? field.maxClearanceMeters / field.clearanceCellEquatorArcMeters : 0
+
     let s = 0
     const p = this.marchPoint.copy(from)
     for (let i = 0; i < SWEEP_MARCH_BUDGET; i++) {
@@ -421,7 +447,10 @@ class CameraCollision {
         return this.marchPointwise(collider, field, p, s, step, length, epsilon, REFINE_MARCH_BUDGET, false)
       }
 
-      s += d / (1 + SLOPE_RANGE)
+      // localDir уже несёт p̂ после distance(p) (ветка r=0 отдаёт полюс — там
+      // cosLat и так клампится снизу)
+      const cosLat = Math.sqrt(Math.max(0, 1 - this.localDir.y * this.localDir.y))
+      s += d / (1 + SLOPE_RANGE + clearanceBond / Math.max(cosLat, MIN_MARCH_COS_LAT))
       if (s >= length) return null
       p.copy(from).addScaledVector(step, s)
     }
