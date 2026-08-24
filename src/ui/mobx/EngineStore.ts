@@ -52,14 +52,20 @@ class EngineStore implements LoadingProgressReporter {
 
       timeStore.setSpeedOfTime(1)
 
-      await this.app.run(payload)
-
-      this.setAppLoadingStatus(false)
-
+      // Телепорт ДО run(): первый кадр бежит синхронно внутри engine.start()
+      // (Engine.start → update → тик стримера/коллизий), и телепорт после
+      // await опаздывал бы на кадр — SceneObserver успевал пересчитать состав
+      // видеопамяти по устаревшей позиции и через предоплату закрепить
+      // неверный набор на минимальную резидентность. Камера — синглтон
+      // контейнера, run() её не трогает; старая сцена скрыта экраном загрузки.
       this.renderCamera?.position.set(...payload.defaultCameraPosition)
       this.renderCamera?.lookAt(new Vector3())
       // Телепорт: без сброса свип коллизий протянет отрезок от старой позиции
       this.cameraCollision?.reset()
+
+      await this.app.run(payload)
+
+      this.setAppLoadingStatus(false)
     }
   }
 
