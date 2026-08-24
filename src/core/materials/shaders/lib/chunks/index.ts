@@ -5,7 +5,6 @@ import { brownDwarfSurface } from './BrownDwarfSurface'
 import { whiteDwarfSurface } from './WhiteDwarfSurface'
 import { asteroidShapeFunctions } from './AsteroidShape'
 import { asteroidSurfaceFunctions } from './AsteroidSurface'
-import { heightNormalFunctions, heightNormalUniforms } from '@/core/materials/shaders/lib/chunks/HeightNormal'
 import { slopeNormalFunctions, slopeNormalUniforms } from '@/core/materials/shaders/lib/chunks/SlopeNormal'
 import { terrainUvFunctions } from '@/core/materials/shaders/lib/chunks/TerrainUv'
 import { ringDustFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
@@ -35,8 +34,6 @@ export const AppShaderChunk: Record<string, string> = {
   whiteDwarfSurface,
   asteroidShapeFunctions,
   asteroidSurfaceFunctions,
-  heightNormalUniforms,
-  heightNormalFunctions,
   slopeNormalUniforms,
   slopeNormalFunctions,
   terrainUvFunctions,

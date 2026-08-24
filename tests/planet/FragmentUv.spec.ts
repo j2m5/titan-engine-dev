@@ -34,7 +34,6 @@ describe('FragmentUv: попиксельные UV терраформных те�
     expect(frag).not.toContain('texture2D(nightMap, vUv)')
     expect(frag).not.toContain('texture2D(cloudMap, vUv)')
     expect(frag).not.toContain('texture2D(specularMap, vUv)')
-    expect(frag).not.toContain('perturbNormalFromHeight(normal, vEast, vUv)')
     expect(frag).not.toContain('perturbNormalFromSlope(normal, vEast, vUv)')
     // легаси-ветка (#else) — единственное оставшееся использование vUv
     expect(frag).toContain('vec2 uv = vUv;')
@@ -51,21 +50,17 @@ describe('FragmentUv: попиксельные UV терраформных те�
     expect(resolvedFrag).toContain('float u = fwidth(u1) <= fwidth(u2) ? u1 : u2;')
   })
 
-  it('восток терраформного пути попиксельный из dirLocal — интерполированный varying vEast врал у полюса (вертушка TBN)', () => {
-    // между соседними вершинами полярного квада азимут vEast прыгал на
-    // десятки градусов — интерполяция varying этого не сглаживала.
-    // cross с точным попиксельным dirLocal свободен от проблемы; длина
-    // по-прежнему ∝ cos(широты) — полюсный гард чанков (len < 1e-4) цел.
+  it('восток терраформного пути попиксельный из dirLocal — интерполированный varying востока врал у полюса (вертушка TBN)', () => {
+    // между соседними вершинами полярного квада азимут varying-востока прыгал
+    // на десятки градусов — интерполяция этого не сглаживала. cross с точным
+    // попиксельным dirLocal свободен от проблемы; длина по-прежнему
+    // ∝ cos(широты) — полюсный гард чанков (len < 1e-4) цел. Сам varying vEast
+    // вымер вместе с легаси-путём USE_BUMP.
     expect(frag).toContain('cross(vec3(0.0, 1.0, 0.0), dirLocal)')
     // normalMatrix не биндится во фрагментник three.js автоматически
     expect(frag).toContain('uniform mat3 normalMatrix;')
-    // легаси-путь — прежний интерполированный varying
-    expect(frag).toContain('vec3 east = vEast;')
-    // perturb-вызовы переведены на единый идентификатор east
-    expect(frag).not.toContain('perturbNormalFromHeight(normal, vEast')
-    expect(frag).not.toContain('perturbNormalFromSlope(normal, vEast')
-    expect(frag).toContain('perturbNormalFromHeight(normal, east, uv)')
-    // терраформная ветка перешла на локальные аргументы (см. тест ниже)
+    expect(frag).not.toContain('vEast')
+    // терраформная ветка на локальных аргументах (см. тест ниже)
     expect(frag).toContain('perturbNormalFromSlope(nLocal, eastLocal, uv)')
   })
 

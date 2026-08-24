@@ -37,75 +37,9 @@ function seedPlaceholderKeys(): void {
   seedTexture(pathOf('diffuse'))
 }
 
-const LEGACY_BUMP_DIFFUSE_PATH = 'stub/legacy-bump/diffuse.png'
-const LEGACY_BUMP_PATH = 'stub/legacy-bump/bump.jpg'
-
-/**
- * Классический bump-путь (USE_BUMP) больше не живёт ни на одном реальном теле
- * БД — Земля, последнее тело с легаси-bump, переведена на height+slope этой
- * аркой (арка воды, Task 6). Сам механизм в PlanetMaterial остаётся общим
- * (тело без карты высот падает на bump), поэтому тест держит его на стабе —
- * образец `stubActor` из PlanetCavity.spec.ts.
- */
-function legacyBumpActor(): Actor {
-  const pathByType: Record<string, string> = {
-    diffuse: LEGACY_BUMP_DIFFUSE_PATH,
-    bump: LEGACY_BUMP_PATH
-  }
-
-  return {
-    renderingObject: { getAttribute: () => ({ bumpScale: 1, emission: 1 }) },
-    children: { where: () => ({ first: () => undefined, isNotEmpty: () => false }) },
-    resources: {
-      where: (_field: string, type: string) => ({
-        first: () => {
-          const path = pathByType[type]
-
-          return path === undefined ? undefined : { getAttribute: () => path }
-        }
-      })
-    }
-  } as unknown as Actor
-}
-
-describe('PlanetMaterial: привязка карт к юниформам', () => {
-  beforeEach(() => {
-    seedPlaceholderKeys()
-    seedTexture(LEGACY_BUMP_DIFFUSE_PATH)
-  })
-  afterEach(() => resourceStorage.deleteAllTextures())
-
-  it('шаг текселя берётся из размеров загруженной карты высот', () => {
-    seedTexture(LEGACY_BUMP_PATH, 8192, 4096)
-
-    const material = new PlanetMaterial(legacyBumpActor())
-    material.updateMaterial()
-
-    expect(material.uniforms.uBumpTexelSize.value.x).toBeCloseTo(1 / 8192, 10)
-    expect(material.uniforms.uBumpTexelSize.value.y).toBeCloseTo(1 / 4096, 10)
-    expect(material.defines.USE_BUMP).toBe('1')
-  })
-
-  it('без карты высот шаг нулевой — рельеф выключается, а не мусорит', () => {
-    const material = new PlanetMaterial(legacyBumpActor())
-    material.updateMaterial()
-
-    expect(material.uniforms.uBumpTexelSize.value.x).toBe(0)
-    expect(material.uniforms.uBumpTexelSize.value.y).toBe(0)
-    expect(material.defines.USE_BUMP).toBeUndefined()
-  })
-
-  it('resetMaterial возвращает шаг в ноль', () => {
-    seedTexture(LEGACY_BUMP_PATH, 8192, 4096)
-
-    const material = new PlanetMaterial(legacyBumpActor())
-    material.updateMaterial()
-    material.resetMaterial()
-
-    expect(material.uniforms.uBumpTexelSize.value.x).toBe(0)
-    expect(material.uniforms.uBumpTexelSize.value.y).toBe(0)
-  })
-})
+// Классический bump-путь (USE_BUMP) и его стаб legacyBumpActor удалены вместе
+// с типом ресурса bump: планетного носителя у него не осталось, тело без карты
+// высот рендерится гладкой сферой с одним диффузом.
 
 // Луна (actorId 19) — тело с height-ресурсом: рельеф в геометрии, шейдинг из slope-карты
 function moon(): Actor {
@@ -145,11 +79,7 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     material.updateMaterial()
 
     expect(material.defines.USE_SLOPE).toBe('1')
-    expect(material.defines.USE_BUMP).toBeUndefined()
     expect(material.uniforms.bumpMap.value).not.toBeNull()
-    // шаг текселя — атрибут четырёхвыборочного bump-пути, slope-пути не нужен
-    expect(material.uniforms.uBumpTexelSize.value.x).toBe(0)
-    expect(material.uniforms.uBumpTexelSize.value.y).toBe(0)
   })
 
   it('частичный набор карт задачи 2 — диффуз и slope есть, detail нет: материал живёт, USE_TERRAIN_DETAIL молчит', () => {
@@ -312,14 +242,24 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
   })
 
   it('у тела без карты высот wrap текстур не меняется', () => {
-    seedTexture(LEGACY_BUMP_DIFFUSE_PATH)
-    seedTexture(LEGACY_BUMP_PATH, 8192, 4096)
+    const STUB_DIFFUSE_PATH = 'stub/plain/diffuse.png'
+    seedTexture(STUB_DIFFUSE_PATH)
 
-    const material = new PlanetMaterial(legacyBumpActor())
+    // Минимальный актор без карты высот (образец stubActor из PlanetCavity.spec.ts)
+    const stub = {
+      renderingObject: { getAttribute: () => ({ emission: 1 }) },
+      children: { where: () => ({ first: () => undefined, isNotEmpty: () => false }) },
+      resources: {
+        where: (_field: string, type: string) => ({
+          first: () => (type === 'diffuse' ? { getAttribute: () => STUB_DIFFUSE_PATH } : undefined)
+        })
+      }
+    } as unknown as Actor
+
+    const material = new PlanetMaterial(stub)
     material.updateMaterial()
 
     expect((material.uniforms.diffuseMap.value as Texture).wrapS).toBe(ClampToEdgeWrapping)
-    expect((material.uniforms.bumpMap.value as Texture).wrapS).toBe(ClampToEdgeWrapping)
   })
 
   it('USE_TERRAIN_UV ставится по факту загруженной карты высот — независимо от slope-текстуры', () => {
@@ -1144,9 +1084,8 @@ describe('PlanetMaterial: данные Земли — полный набор к
     expect(row!.getAttribute('wrapS')).toBe(RepeatWrapping)
   })
 
-  it('bump-строки у Земли больше нет — легаси-путь снят вместе со связкой', () => {
-    expect(earth().resources.where('resourceType', 'bump').first()).toBeUndefined()
-  })
+  // Тест «bump-строки у Земли больше нет» снят вместе с самим типом bump:
+  // его отсутствие в БД теперь гарантирует страж ResourcesIntegrity.spec.
 
   it.each(['diffuse', 'cloud', 'night', 'specular'] as const)('%s Земли несёт wrapS: RepeatWrapping', (kind) => {
     const row = earth().resources.where('resourceType', kind).first()!

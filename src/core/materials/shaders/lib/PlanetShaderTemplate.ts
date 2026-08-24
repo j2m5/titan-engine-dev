@@ -1,5 +1,5 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
-import { ShaderChunk, Uniform, UniformsUtils, Vector2, Vector3 } from 'three'
+import { ShaderChunk, Uniform, UniformsUtils, Vector3 } from 'three'
 import { AppUniformsChunk } from './chunks'
 
 const defaultUniforms = {
@@ -10,7 +10,6 @@ const defaultUniforms = {
   specularMap: new Uniform(null),
   bumpMap: new Uniform(null),
   bumpScale: new Uniform(0),
-  uBumpTexelSize: new Uniform(new Vector2()),
   emission: new Uniform(1),
   uSpecularStrength: new Uniform(2.0),
   uNightThreshold: new Uniform(0.06),
@@ -55,7 +54,6 @@ export const PlanetShaderTemplate: ShaderProps = {
     varying vec3 vViewLightDirection;
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
-    varying vec3 vEast;
     varying vec3 vLocalDir;
 
     #ifdef USE_TERRAIN_DETAIL
@@ -86,18 +84,9 @@ export const PlanetShaderTemplate: ShaderProps = {
       // только для тел без колец-детей — терраформное тело с кольцом даст
       // неверную тень (чинить при первом таком теле).
       vPosition = position;
-      // Восток (касательная вдоль долготы) для TBN нормали из карты высот.
-      // Строим из НОРМАЛИ, не из position: normal радиальна на обоих путях
-      // (SphereGeometry и RTC-патчи кубосферы), а position патча — нет, и
-      // cross(up, position) вращался бы вокруг центра патча, а не тела.
-      // Не нормализуем: длина ∝ cos(широты) и служит детектором полюса, где
-      // касательная вырождается — |vEast| = cos(lat) вместо R·cos(lat)
-      // старого пути, гард len < 1e-4 срабатывает у полюса на ~0.006°
-      // вместо ~0.002° (пренебрежимо у обоих).
-      vEast = normalMatrix * cross(vec3(0.0, 1.0, 0.0), normal);
       // Body-локальное радиальное направление для попиксельного UV терраформных
       // тел (USE_TERRAIN_UV) — без матриц: normal уже радиальна и body-локальна
-      // на обоих путях (SphereGeometry и RTC-патчи кубосферы, см. vEast выше).
+      // на обоих путях (SphereGeometry и RTC-патчи кубосферы).
       vLocalDir = normal;
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
@@ -151,13 +140,7 @@ export const PlanetShaderTemplate: ShaderProps = {
     varying vec3 vViewLightDirection;
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
-    varying vec3 vEast;
     varying vec3 vLocalDir;
-
-    #ifdef USE_BUMP
-      #include <heightNormalUniforms>
-      #include <heightNormalFunctions>
-    #endif
 
     #ifdef USE_SLOPE
       #include <slopeNormalUniforms>
@@ -228,12 +211,12 @@ export const PlanetShaderTemplate: ShaderProps = {
         // ортонормальна с точностью до масштаба, а normalize после неё этот
         // масштаб убирает — коммутирует с cross/вычитанием базисов.
         vec3 nLocal = dirLocal;
-        // Восток попиксельно, без матриц: интерполяция varying vEast врёт у
-        // полюса — азимут между соседними вершинами полярного квада ~десятки
-        // градусов, и TBN закручивался вертушкой. cross с точным dirLocal
-        // свободен от этого; длина по-прежнему ∝ cos(широты) — полюсный гард
-        // чанков (len < 1e-4) работает от той же длины, только без масштаба
-        // normalMatrix.
+        // Восток попиксельно, без матриц: интерполяция востока varying'ом
+        // (вымерший легаси-путь) врала у полюса — азимут между
+        // соседними вершинами полярного квада ~десятки градусов, и TBN
+        // закручивался вертушкой. cross с точным dirLocal свободен от этого;
+        // длина ∝ cos(широты) — полюсный гард чанков (len < 1e-4) работает
+        // от той же длины.
         vec3 eastLocal = cross(vec3(0.0, 1.0, 0.0), dirLocal);
 
         #ifdef USE_SLOPE
@@ -272,11 +255,6 @@ export const PlanetShaderTemplate: ShaderProps = {
         normal = normalize(normalMatrix * nLocal);
       #else
         vec2 uv = vUv;
-        vec3 east = vEast;
-
-        #ifdef USE_BUMP
-          normal = perturbNormalFromHeight(normal, east, uv);
-        #endif
 
         vec3 diffuseSample = texture2D(diffuseMap, uv).rgb;
 

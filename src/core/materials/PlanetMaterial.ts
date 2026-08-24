@@ -159,13 +159,12 @@ class PlanetMaterial extends AbstractShaderMaterial {
 
     // slope-карта — уклоны из той же карты высот (см. slopeMapFormat): шейдит
     // попиксельно то, что не влезло в вершинную сетку, мипы фильтруют издалека.
-    // Классический bump живёт только у тел без честного рельефа.
     //
     // Отсутствие строки ресурса — undefined, а не запрос по '': в хранилище
     // живёт плейсхолдер с пустым именем (getTextureOrMake('') у колец), и
     // фолбэк на '' находил бы его как фантомную карту рельефа.
     const textureOf = (
-      type: 'bump' | 'detailDiffuse' | 'detailNormal' | 'detailArm' | 'detailNormal2'
+      type: 'detailDiffuse' | 'detailNormal' | 'detailArm' | 'detailNormal2'
     ): Texture | undefined => {
       const path = this.model.resources.where('resourceType', type).first()?.getAttribute('path')
 
@@ -174,8 +173,9 @@ class PlanetMaterial extends AbstractShaderMaterial {
     const slopeResource = this.model.resources.where('resourceType', 'slope').first()
     const slopePath = slopeResource?.getAttribute('path')
     const slopeMap = typeof slopePath === 'string' ? resourceStorage.getTexture(slopePath) : undefined
-    const legacyBumpMap = textureOf('bump')
-    const bumpMap: Texture | undefined = hasHeightField ? slopeMap : legacyBumpMap
+    // Сэмплер bumpMap исторически общий: под USE_SLOPE в него кладётся
+    // slope-карта; легаси-путь USE_BUMP вымер вместе с типом ресурса bump.
+    const bumpMap: Texture | undefined = hasHeightField ? slopeMap : undefined
     const useSlope = hasHeightField && Boolean(slopeMap)
 
     // Диапазон декода — per-map поле ресурса (см. slopeMapFormat), отсутствие
@@ -220,17 +220,6 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uDetailNor2Map.value = detailNor2Map ?? null
     this.uniforms.uDetailLayerGates.value.set(detailArmMap ? 1 : 0, detailDiffMap ? 1 : 0, detailNor2Map ? 1 : 0)
 
-    // Шаг выборки соседних текселей для аналитического градиента нормали —
-    // атрибут четырёхвыборочного bump-пути; slope-путь читает одну выборку.
-    // Нули = рельеф выключен: все четыре выборки совпадают, градиент нулевой —
-    // безопасное поведение, пока карта не загружена.
-    const bumpImage = bumpMap?.image as { width?: number; height?: number } | undefined
-    const useClassicBump = !hasHeightField && Boolean(legacyBumpMap)
-    this.uniforms.uBumpTexelSize.value.set(
-      useClassicBump && bumpImage?.width ? 1 / bumpImage.width : 0,
-      useClassicBump && bumpImage?.height ? 1 / bumpImage.height : 0
-    )
-
     // Тексель диффуза для варпа средней полосы — только у ЗАГРУЖЕННОЙ карты
     // (плейсхолдер размером не является): нули выключают варп, а не врут.
     const diffusePath: string = this.model.resources.where('resourceType', 'diffuse').first()?.getAttribute('path') ?? ''
@@ -257,7 +246,6 @@ class PlanetMaterial extends AbstractShaderMaterial {
     // так дефайн ушедшей карты исчезает вместе с ней (см. baseDefines).
     this.defines = {
       ...this.baseDefines,
-      ...(useClassicBump && { USE_BUMP: '1' }),
       ...(useSlope && { USE_SLOPE: '1' }),
       // Попиксельный UV из направления вместо вершинного vUv — вершинная
       // развёртка кубосферы вырождается у полюсов (см. PlanetShaderTemplate).
@@ -307,7 +295,6 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.cloudMap.value = null
     this.uniforms.specularMap.value = null
     this.uniforms.bumpMap.value = null
-    this.uniforms.uBumpTexelSize.value.set(0, 0)
     this.uniforms.uDiffuseTexelSize.value.set(0, 0)
     this.uniforms.uCavityStrength.value = 0
     this.uniforms.uSlopeRange.value = SLOPE_RANGE

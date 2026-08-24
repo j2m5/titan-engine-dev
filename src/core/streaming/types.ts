@@ -40,7 +40,7 @@ export interface StreamDecision {
 
 /**
  * Порядок значимости слоёв карты тела — решение владельца «рельеф важнее»:
- * diffuse > slope > detail* > cloud > night > specular > легаси-bump.
+ * diffuse > slope > detail* > cloud > night > specular.
  *
  * Внутри detail-слоя (2.0–2.3) суб-ранги идут по гейт-значимости, не по
  * алфавиту: материал (см. PlanetMaterial) гейтит ВЕСЬ detail-набор по
@@ -58,11 +58,10 @@ export const MAP_TYPE_RANK: Readonly<Record<string, number>> = {
   detailNormal2: 2.3,
   cloud: 3,
   night: 4,
-  specular: 5,
-  bump: 6
+  specular: 5
 }
 
-/** Ранг неизвестного типа карты — между `specular` и легаси-`bump`. */
+/** Ранг неизвестного типа карты — после `specular`, в самом хвосте. */
 const UNKNOWN_MAP_TYPE_RANK: number = 5.5
 
 /**

@@ -273,7 +273,7 @@ export const WaterShaderTemplate: ShaderProps = {
       //
       // Полюсный гард (eastLen<1e-4, круг ~636 м у полюса Земли) — НЕ
       // трогаем (рулинг контроллера, фикс-раунд 1, №8): та же граница, что
-      // SlopeNormal/HeightNormal. T/B полюсного фрейма сам больше не нужен
+      // SlopeNormal. T/B полюсного фрейма сам больше не нужен
       // (реориентация теперь в XYZ, не TBN), но порог остаётся — дешёвый
       // ранний выход у полюса, поведение принято как есть.
       vec3 waterWaveNormal(vec3 dirLocal, float fade) {

@@ -24,12 +24,12 @@ describe('SlopeNormal: попиксельная нормаль из slope-кар
     expect(slopeNormalFunctions).toContain('if (len < 1e-4) return surfNormal;')
   })
 
-  it('шаблон ветвится: USE_SLOPE зовёт perturbNormalFromSlope, USE_BUMP не тронут', () => {
+  it('шаблон зовёт perturbNormalFromSlope локальными аргументами под USE_SLOPE', () => {
     expect(PlanetShaderTemplate.fragmentShader).toContain('#ifdef USE_SLOPE')
     // терраформная ветка (USE_SLOPE) зовёт локальными аргументами — один
     // normalMatrix применяется в конце ветки (см. FragmentUv.spec); легаси
-    // ветка (USE_BUMP) остаётся на view-проводе east/uv
+    // ветка USE_BUMP вымерла вместе с типом ресурса bump
     expect(PlanetShaderTemplate.fragmentShader).toContain('perturbNormalFromSlope(nLocal, eastLocal, uv)')
-    expect(PlanetShaderTemplate.fragmentShader).toContain('perturbNormalFromHeight(normal, east, uv)')
+    expect(PlanetShaderTemplate.fragmentShader).not.toContain('USE_BUMP')
   })
 })

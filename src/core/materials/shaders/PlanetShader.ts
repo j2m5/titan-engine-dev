@@ -80,7 +80,6 @@ interface PlanetUniforms {
   specularMap: Texture | null
   bumpMap: Texture | null
   bumpScale: number
-  uBumpTexelSize: Vector2
   emission: number
   uSpecularStrength: number
   uNightThreshold: number
@@ -197,7 +196,6 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       specularMap: new Uniform(null),
       bumpMap: new Uniform(null),
       bumpScale: new Uniform(planetData.bumpScale ?? 0),
-      uBumpTexelSize: new Uniform(new Vector2()),
       emission: new Uniform(planetData.emission),
       uSpecularStrength: new Uniform(2.0),
       uNightThreshold: new Uniform(0.06),

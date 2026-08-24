@@ -35,7 +35,6 @@ export type ResourceLifecycle = keyof typeof ResourceLifecycles
 
 export enum ResourceTypes {
   diffuse,
-  bump,
   cloud,
   night,
   specular,
@@ -171,7 +170,7 @@ export interface IActorBoundResource extends IResource {
 
 export interface IPlanetRenderingObject {
   emission: number
-  /** Мёртвая ручка легаси-bump: без ресурса типа bump шейдером не читается. Отсутствие поля = 0. */
+  /** Множитель наклона нормали из slope-карты (чанк SlopeNormal, USE_SLOPE): 1 = физически честно. Отсутствие поля = 0 → плоско. */
   bumpScale?: number
 
   // --- Ручки терраформного детального слоя (задача 4, TerrainDetail). ---

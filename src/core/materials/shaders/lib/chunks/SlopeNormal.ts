@@ -9,8 +9,8 @@
  * Декод зеркалит знаковую кодировку slopeMapFormat (байт 128 = 0, крайние
  * 1/255 = ∓диапазон) через юниформ uSlopeRange — диапазон per-map (строка
  * slope-ресурса), дефолт SLOPE_RANGE выставляет CPU (PlanetShader/Material).
- * TBN тот же, что у perturbNormalFromHeight: T — восток из vEast, B =
- * cross(N, T) — север; R-канал — уклон на восток, G — на север. bumpScale —
+ * TBN: T — восток (попиксельный cross(up, dirLocal) хоста), B = cross(N, T) —
+ * север; R-канал — уклон на восток, G — на север. bumpScale —
  * художественный множитель, 1 = физически честно.
  */
 export const slopeNormalUniforms = `uniform float uSlopeRange;`

@@ -1,45 +1,32 @@
-import { Resources, RenderingObjects, ActorResource } from '@storage/database'
-import { IResource, IRenderingObject, IActorResource } from '@/core/models/types'
+import { Resources, RenderingObjects } from '@storage/database'
+import { IResource, IRenderingObject } from '@/core/models/types'
 import { isValidSlopeRange, SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 
 describe('Целостность ресурсов планет', () => {
-  it('страж: у тела с картой высот не осталось planets/-bump — рельеф шейдит slope', () => {
-    // Прежний пин на конкретную строку (id 66, rhea_bump) снят вместе с самой
-    // строкой: терраформные тела перешли на пару height+slope, и легаси-bump
-    // им больше не фолбэк. Общий страж суффиксов ниже по-прежнему ловит класс
-    // «ресурс заведён не тем типом» для всех оставшихся строк.
-    const heightOwners: Set<number> = new Set(
-      ActorResource.filter((link: IActorResource): boolean => {
-        const resource = Resources.find((r: IResource): boolean => r.id === link.resourceId)
+  // Прежний страж «у тела с картой высот не осталось planets/-bump» поглощён
+  // стражем ниже: тип bump снят целиком, ни одной строки с ним нет в принципе.
 
-        return resource?.resourceType === 'height'
-      }).map((link: IActorResource): number => link.actorId)
+  it('страж: астероидные наборы камня лежат под detail*-типами, тип bump вымер', () => {
+    // Наборы PBR-карт трипланара астероидов резидентные, ни к одному актору не
+    // привязаны (кольца ищут их по пути, см. AsteroidRingSystem.__applyDetailMaps)
+    // и удалению не подлежат — без них рассыпается детализация колец. Исторически
+    // лежали под типом bump; после ретайпа на detail*-типы планетного носителя у
+    // bump не осталось и тип снят целиком.
+    const detail = Resources.filter(
+      (r: IResource): boolean => r.path.startsWith('asteroids/') && /_2k\.jpg$/.test(r.path)
     )
 
-    const leftovers = ActorResource.filter((link: IActorResource): boolean => {
-      const resource = Resources.find((r: IResource): boolean => r.id === link.resourceId)
+    expect(detail).toHaveLength(6)
+    expect(detail.every((r: IResource): boolean => r.lifecycle === 'resident')).toBe(true)
 
-      return (
-        heightOwners.has(link.actorId) &&
-        resource?.resourceType === 'bump' &&
-        resource.path.startsWith('planets/')
-      )
-    })
+    const typeBySuffix: Record<string, string> = { _diff: 'detailDiffuse', _nor_gl: 'detailNormal', _arm: 'detailArm' }
+    for (const r of detail) {
+      const suffix = Object.keys(typeBySuffix).find((s: string): boolean => r.path.includes(s))
+      expect(suffix, r.path).toBeDefined()
+      expect(r.resourceType, r.path).toBe(typeBySuffix[suffix!])
+    }
 
-    expect(leftovers).toEqual([])
-  })
-
-  it('страж: астероидные карты типа bump на месте — это НЕ рельеф планет', () => {
-    // Тип `bump` означает две разные вещи: легаси-рельеф планет (остался
-    // только у Земли) и карты нормалей/ARM для трипланара астероидов. Вторые
-    // резидентные, ни к одному актору не привязаны и удалению не подлежат —
-    // без них рассыпается детализация колец.
-    const asteroidBumps = Resources.filter(
-      (r: IResource): boolean => r.resourceType === 'bump' && r.path.startsWith('asteroids/')
-    )
-
-    expect(asteroidBumps).toHaveLength(4)
-    expect(asteroidBumps.every((r: IResource): boolean => r.lifecycle === 'resident')).toBe(true)
+    expect(Resources.filter((r: IResource): boolean => (r.resourceType as string) === 'bump')).toEqual([])
   })
 
   it('id 113 (korriban_clouds) — cloud, а не specular', () => {
@@ -60,7 +47,6 @@ describe('Целостность ресурсов планет', () => {
       _clouds: 'cloud',
       _night: 'night',
       _specular: 'specular',
-      _bump: 'bump',
       _height: 'height'
     }
     const mislabeled: Array<{ id: number; path: string; resourceType: string; expected: string }> = []
