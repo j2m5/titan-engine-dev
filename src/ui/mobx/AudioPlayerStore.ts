@@ -1,10 +1,15 @@
 import { makeAutoObservable, runInAction } from 'mobx'
 import { IAudioMetadata, parseBlob } from 'music-metadata'
+import AHiddenHome from '@/ui/components/common/audio/tracks/Star Citizen Soundtrack - A Hidden Home (Pedro Macedo Camacho).mp3'
 import StarMap from '@/ui/components/common/audio/tracks/StarMap.ogg'
 import { ITrack } from '@/ui/types'
 import { notificationStore } from '@/ui/mobx/NotificationStore'
 
 const defaultTracks: ITrack[] = [
+  {
+    title: 'A Hidden Home',
+    src: AHiddenHome
+  },
   {
     title: 'StarMap.ogg',
     src: StarMap
