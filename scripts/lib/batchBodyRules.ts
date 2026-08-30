@@ -51,19 +51,29 @@ export function bandLowKmFor(radiusMeters: number): number {
 const HEIGHT_BUDGET_FRACTION = 0.007
 
 /**
+ * Потолок явной ручки пика — доля радиуса. Малые тела реально круче бюджета
+ * 0.7%: Гершель на Мимасе ~3% R, экваториальный хребет Япета ~1.8% R —
+ * решение владельца 2026-08-30 разрешило превышать бюджет ручкой. 5% —
+ * порядок самого экстремального известного рельефа (Мимас), не произвол.
+ */
+const PEAK_OVERRIDE_MAX_FRACTION = 0.05
+
+/**
  * Пик высоты для входа `elevation`: явный `override` (ручка владельца на
  * тело) либо бюджет `HEIGHT_BUDGET_FRACTION·radiusMeters` по умолчанию
- * (Плутон — без override, поведение не меняется). `override` должен быть
- * в (0, бюджет] — выше бюджета `buildElevationHeightField` дал бы пик
- * больше кламп-порога остальных тел батча незаметно для отчёта.
+ * (Плутон — без override, поведение не меняется). `override` может и
+ * ПРЕВЫШАТЬ бюджет — до `PEAK_OVERRIDE_MAX_FRACTION·R` (Мимас 6 км ≈ 3% R,
+ * Япет 11 км ≈ 1.5% R); выше — ошибка: такой рельеф не встречается и почти
+ * наверняка опечатка в метрах.
  */
 export function elevationPeakMeters(radiusMeters: number, override?: number): number {
   const budgetMeters = HEIGHT_BUDGET_FRACTION * radiusMeters
+  const maxMeters = PEAK_OVERRIDE_MAX_FRACTION * radiusMeters
 
   if (override === undefined) return budgetMeters
 
-  if (!(override > 0) || override > budgetMeters) {
-    throw new Error(`peakMeters должен быть в (0, ${budgetMeters.toFixed(0)}] м (бюджет 0.7% радиуса), получено ${override}`)
+  if (!(override > 0) || override > maxMeters) {
+    throw new Error(`peakMeters должен быть в (0, ${maxMeters.toFixed(0)}] м (потолок 5% радиуса), получено ${override}`)
   }
 
   return override

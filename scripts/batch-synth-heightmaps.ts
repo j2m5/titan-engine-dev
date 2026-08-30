@@ -168,10 +168,13 @@ const BODIES: readonly BodyGeneration[] = [
   {
     name: 'rhea',
     inputPath: `${TEXTURES_ROOT}/rhea/rhea_bump.jpg`,
-    inputKind: 'bump',
+    inputKind: 'elevation',
     radiusMeters: 764_500,
     seedActorId: 28,
-    actorIds: [28]
+    actorIds: [28],
+    smoothSigmaTexels: 2.0,
+    highPassKm: 300,
+    peakPercentile: 0.999
   },
   {
     name: 'titan',
@@ -183,11 +186,16 @@ const BODIES: readonly BodyGeneration[] = [
   },
   {
     name: 'iapetus',
-    inputPath: `${TEXTURES_ROOT}/iapetus/iapetus.jpg`,
-    inputKind: 'diffuse',
+    inputPath: `${TEXTURES_ROOT}/iapetus/iapetus_bump.jpg`,
+    inputKind: 'elevation',
     radiusMeters: 734_500,
     seedActorId: 30,
-    actorIds: [30]
+    actorIds: [30],
+    smoothSigmaTexels: 1.5,
+    highPassKm: 300,
+    peakPercentile: 0.999,
+    // экваториальный хребет до 13 км (~1.5 % R) — дефолт 0.7 % занижает вдвое (решение владельца)
+    peakMeters: 11_000
   },
   {
     // Настоящая карта высот (= triton_bump, корреляция 1.0) — путь elevation вместо синтеза; сильно альбедная (80% дисперсии шире ~415 км) — highPassKm 400; пик занижен до 4000 м (реальный рельеф Тритона < 1 км, бюджет 9.5 км неправдоподобен).
@@ -377,19 +385,28 @@ const BODIES: readonly BodyGeneration[] = [
   // (обобщён под area-average с дробным перекрытием, см. `batchBodyRules.ts`).
   {
     name: 'mimas',
-    inputPath: `${TEXTURES_ROOT}/mimas/mimas.jpg`,
-    inputKind: 'diffuse',
+    inputPath: `${TEXTURES_ROOT}/mimas/mimas_bump.jpg`,
+    inputKind: 'elevation',
     radiusMeters: 198_800,
     seedActorId: 24,
-    actorIds: [24]
+    actorIds: [24],
+    ceilingWidth: 4096,
+    smoothSigmaTexels: 1.5,
+    highPassKm: 80,
+    peakPercentile: 0.999,
+    // Гершель: стенки 5 км, горка 6 км — рельеф ~3 % R, дефолт 0.7 % врёт (решение владельца)
+    peakMeters: 6_000
   },
   {
     name: 'tethys',
-    inputPath: `${TEXTURES_ROOT}/tethys/tethys.jpg`,
-    inputKind: 'diffuse',
+    inputPath: `${TEXTURES_ROOT}/tethys/tethys_bump.jpg`,
+    inputKind: 'elevation',
     radiusMeters: 536_300,
     seedActorId: 26,
-    actorIds: [26]
+    actorIds: [26],
+    smoothSigmaTexels: 2.0,
+    highPassKm: 200,
+    peakPercentile: 0.999
   },
   {
     // Настоящая карта высот владельца (18928×9464, яркость = высота) — путь elevation вместо синтеза из диффуза.
