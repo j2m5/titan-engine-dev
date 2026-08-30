@@ -115,10 +115,14 @@ describe('elevationPeakMeters: пик высоты для входа elevation',
     expect(elevationPeakMeters(radiusMeters, budgetMeters)).toBeCloseTo(budgetMeters, 6)
   })
 
-  it('override выше бюджета отвергается', () => {
+  it('override выше бюджета 0.7% принимается — до потолка 5% радиуса (Мимас 6 км ≈ 3% R, решение владельца 2026-08-30)', () => {
+    expect(elevationPeakMeters(198_800, 6_000)).toBe(6_000)
+    expect(elevationPeakMeters(734_500, 11_000)).toBe(11_000)
+  })
+
+  it('override выше потолка 5% радиуса отвергается (почти наверняка опечатка в метрах)', () => {
     const radiusMeters = 1_000_000
-    const budgetMeters = 0.007 * radiusMeters
-    expect(() => elevationPeakMeters(radiusMeters, budgetMeters + 1)).toThrow()
+    expect(() => elevationPeakMeters(radiusMeters, 0.05 * radiusMeters + 1)).toThrow()
   })
 
   it('нулевой и отрицательный override отвергаются', () => {
