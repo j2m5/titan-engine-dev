@@ -198,5 +198,8 @@ export const Resources: IResource[] = [
   { id: 225, resourceType: "slope", lifecycle: "streamable", path: "planets/StarWars/korriban/korriban_slope.webp", slopeRange: 0.5, wrapS: 1e3 },
   { id: 226, resourceType: "height", lifecycle: "resident", path: "planets/earth/earth_height.raw" },
   { id: 227, resourceType: "slope", lifecycle: "streamable", path: "planets/earth/earth_slope.webp", slopeRange: 0.25, wrapS: 1e3 },
-  { id: 228, resourceType: "waterNormal", lifecycle: "resident", path: "water/waternormals.jpg", wrapS: 1e3, wrapT: 1e3 }
+  { id: 228, resourceType: "waterNormal", lifecycle: "resident", path: "water/waternormals.jpg", wrapS: 1e3, wrapT: 1e3 },
+  { id: 229, resourceType: "detailDiffuse", lifecycle: "streamable", path: "terrain/ice_diff.webp", wrapS: 1e3, wrapT: 1e3, colorSpace: "srgb" },
+  { id: 230, resourceType: "detailNormal", lifecycle: "streamable", path: "terrain/ice_nor.webp", wrapS: 1e3, wrapT: 1e3 },
+  { id: 231, resourceType: "detailArm", lifecycle: "streamable", path: "terrain/ice_arm.webp", wrapS: 1e3, wrapT: 1e3 }
 ]

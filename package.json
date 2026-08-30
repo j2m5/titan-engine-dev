@@ -18,6 +18,7 @@
     "build:synth-heightmap": "vite-node scripts/build-synth-heightmap.ts --",
     "build:enhance-heightmap": "vite-node scripts/enhance-heightmap.ts --",
     "build:sculpt-heightmap": "vite-node scripts/sculpt-heightmap.ts --",
+    "build:ice-archetype": "vite-node scripts/build-ice-archetype.ts --",
     "build:terrain-aux": "vite-node scripts/build-terrain-aux.ts --",
     "build:terrain-aux-all": "vite-node scripts/rebuild-terrain-aux.ts --",
     "build:moon-heightmaps": "vite-node scripts/batch-synth-heightmaps.ts --",
