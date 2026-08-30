@@ -403,43 +403,59 @@ const BODIES: readonly BodyGeneration[] = [
   },
   {
     name: 'miranda',
-    inputPath: `${TEXTURES_ROOT}/miranda/miranda.jpg`,
-    inputKind: 'diffuse',
+    inputPath: `${TEXTURES_ROOT}/miranda/miranda_bump.jpg`,
+    inputKind: 'elevation',
     radiusMeters: 240_000,
     seedActorId: 31,
-    actorIds: [31]
+    actorIds: [31],
+    ceilingWidth: 4096,
+    smoothSigmaTexels: 1.5,
+    highPassKm: 100,
+    peakPercentile: 0.999
   },
   {
     name: 'ariel',
     inputPath: `${TEXTURES_ROOT}/ariel/ariel_bump.jpg`,
-    inputKind: 'bump',
+    inputKind: 'elevation',
     radiusMeters: 577_900,
     seedActorId: 32,
-    actorIds: [32]
+    actorIds: [32],
+    smoothSigmaTexels: 1.5,
+    highPassKm: 250,
+    peakPercentile: 0.999
   },
   {
     name: 'umbriel',
     inputPath: `${TEXTURES_ROOT}/umbriel/umbriel_bump.jpg`,
-    inputKind: 'bump',
+    inputKind: 'elevation',
     radiusMeters: 585_000,
     seedActorId: 33,
-    actorIds: [33]
+    actorIds: [33],
+    smoothSigmaTexels: 1.5,
+    highPassKm: 250,
+    peakPercentile: 0.999
   },
   {
     name: 'titania',
-    inputPath: `${TEXTURES_ROOT}/titania/titania.jpg`,
-    inputKind: 'diffuse',
+    inputPath: `${TEXTURES_ROOT}/titania/titania_bump.jpg`,
+    inputKind: 'elevation',
     radiusMeters: 788_900,
     seedActorId: 34,
-    actorIds: [34]
+    actorIds: [34],
+    smoothSigmaTexels: 1.5,
+    highPassKm: 300,
+    peakPercentile: 0.999
   },
   {
     name: 'oberon',
-    inputPath: `${TEXTURES_ROOT}/oberon/oberon.jpg`,
-    inputKind: 'diffuse',
+    inputPath: `${TEXTURES_ROOT}/oberon/oberon_bump.jpg`,
+    inputKind: 'elevation',
     radiusMeters: 761_500,
     seedActorId: 35,
-    actorIds: [35]
+    actorIds: [35],
+    smoothSigmaTexels: 1.5,
+    highPassKm: 300,
+    peakPercentile: 0.999
   },
   {
     name: 'tatooine',
