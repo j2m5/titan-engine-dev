@@ -294,6 +294,29 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
 // Каллисто (actorId 23) — второе тело с честным рельефом (терраформная арка
 // synth-heightmap): height/slope из оффлайн-генератора, детальные текстуры
 // делятся по пути с Луной (общие terrain/*.webp, шаринг ресурсов по id)
+/** Детальная тройка тела = архетип ice (terrain/ice_*), мелкая нормаль — общая с Луной (ресурс 129). */
+function expectIceDetailSet(actor: Actor): void {
+  const expectedPaths = {
+    detailDiffuse: 'terrain/ice_diff.webp',
+    detailNormal: 'terrain/ice_nor.webp',
+    detailArm: 'terrain/ice_arm.webp'
+  } as const
+
+  for (const type of Object.keys(expectedPaths) as (keyof typeof expectedPaths)[]) {
+    const row = actor.resources.where('resourceType', type).first()
+
+    expect(row, type).toBeDefined()
+    expect(row!.getAttribute('path')).toBe(expectedPaths[type])
+    expect(row!.getAttribute('lifecycle')).toBe('streamable')
+    expect(row!.getAttribute('wrapS')).toBe(RepeatWrapping)
+    expect(row!.getAttribute('wrapT')).toBe(RepeatWrapping)
+  }
+
+  const moonMicro = moon().resources.where('resourceType', 'detailNormal2').first()!
+  const micro = actor.resources.where('resourceType', 'detailNormal2').first()!
+  expect(micro.getAttribute('id')).toBe(moonMicro.getAttribute('id'))
+}
+
 function callisto(): Actor {
   return Actor.find(23)!
 }
@@ -322,15 +345,8 @@ describe('PlanetMaterial: данные Каллисто — height/slope/detail-
     expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
   })
 
-  it('detail-связки Каллисто указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
-    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
-      const moonRow = moon().resources.where('resourceType', type).first()
-      const callistoRow = callisto().resources.where('resourceType', type).first()
-
-      expect(callistoRow, type).toBeDefined()
-      expect(callistoRow!.getAttribute('id')).toBe(moonRow!.getAttribute('id'))
-      expect(callistoRow!.getAttribute('path')).toBe(moonRow!.getAttribute('path'))
-    }
+  it('detail-тройка Каллисто — ледяной архетип terrain/ice_* (тёмный лёд), мелкая нормаль общая с Луной', () => {
+    expectIceDetailSet(callisto())
   })
 
   it('renderingObjects Каллисто несёт ручки детального слоя террейна', () => {
@@ -379,15 +395,8 @@ describe('PlanetMaterial: данные Европы — height/slope/detail-св
     expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
   })
 
-  it('detail-связки Европы указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
-    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
-      const moonRow = moon().resources.where('resourceType', type).first()
-      const europaRow = europa().resources.where('resourceType', type).first()
-
-      expect(europaRow, type).toBeDefined()
-      expect(europaRow!.getAttribute('id')).toBe(moonRow!.getAttribute('id'))
-      expect(europaRow!.getAttribute('path')).toBe(moonRow!.getAttribute('path'))
-    }
+  it('detail-тройка Европы — ледяной архетип terrain/ice_*, мелкая нормаль общая с Луной', () => {
+    expectIceDetailSet(europa())
   })
 
   it('renderingObjects Европы несёт ручки детального слоя террейна', () => {
@@ -435,15 +444,8 @@ describe('PlanetMaterial: данные Реи — height/slope/detail-связк
     expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
   })
 
-  it('detail-связки Реи указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
-    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
-      const moonRow = moon().resources.where('resourceType', type).first()
-      const rheaRow = rhea().resources.where('resourceType', type).first()
-
-      expect(rheaRow, type).toBeDefined()
-      expect(rheaRow!.getAttribute('id')).toBe(moonRow!.getAttribute('id'))
-      expect(rheaRow!.getAttribute('path')).toBe(moonRow!.getAttribute('path'))
-    }
+  it('detail-тройка Реи — ледяной архетип terrain/ice_*, мелкая нормаль общая с Луной', () => {
+    expectIceDetailSet(rhea())
   })
 
   it('renderingObjects Реи несёт ручки детального слоя террейна', () => {
@@ -738,15 +740,8 @@ describe('PlanetMaterial: данные Дионы — height/slope/detail-свя
     expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
   })
 
-  it('detail-связки Дионы указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
-    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
-      const moonRow = moon().resources.where('resourceType', type).first()
-      const dioneRow = dione().resources.where('resourceType', type).first()
-
-      expect(dioneRow, type).toBeDefined()
-      expect(dioneRow!.getAttribute('id')).toBe(moonRow!.getAttribute('id'))
-      expect(dioneRow!.getAttribute('path')).toBe(moonRow!.getAttribute('path'))
-    }
+  it('detail-тройка Дионы — ледяной архетип terrain/ice_*, мелкая нормаль общая с Луной', () => {
+    expectIceDetailSet(dione())
   })
 
   it('renderingObjects Дионы несёт ручки детального слоя террейна (detailSaturation 0.1 — реальная луна)', () => {
@@ -1321,12 +1316,22 @@ describe('PlanetMaterial: у каждого терраформного тела 
     }
   )
 
-  it('Плутон и Энцелад — на ледяном архетипе (пилоты приёмки), Луна — на каменистом', () => {
-    const archetype = (actorId: number): string | null =>
-      archetypeOf(Actor.find(actorId)!.resources.where('resourceType', 'detailDiffuse').first()!.getAttribute('path') as string)
+  // Раскладка спеки архетипов (2026-08-24) после раската ice (2026-08-30): 23 ледяных тела —
+  // ледяные луны Юпитера/Сатурна/Урана/Нептуна, Плутон/Харон, КБО, Оханн II (тёмно-серый диффуз);
+  // Оханн I (бурый диффуз) остался камнем. Япет/Каллисто — тёмный лёд, откат на камень = строка пивота.
+  const ICE_ACTOR_IDS = [14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 69] as const
 
-    expect(archetype(14)).toBe('ice')
-    expect(archetype(25)).toBe('ice')
-    expect(archetype(19)).toBe('rocky_trail')
+  const archetype = (actorId: number): string | null =>
+    archetypeOf(Actor.find(actorId)!.resources.where('resourceType', 'detailDiffuse').first()!.getAttribute('path') as string)
+
+  it.each(ICE_ACTOR_IDS)('actorId %i — ледяной архетип', (actorId) => {
+    expect(archetype(actorId)).toBe('ice')
+  })
+
+  it('ледяных тел в базе ровно столько, сколько в раскладке — и остальные терраформные на камне', () => {
+    const iceActors = terraformActors.filter((actor) => archetype(actor.getAttribute('id') as number) === 'ice')
+    expect(iceActors.map((actor) => actor.getAttribute('id')).sort((a, b) => Number(a) - Number(b))).toEqual([...ICE_ACTOR_IDS])
+
+    for (const actorId of [19, 8, 5, 6, 20, 68]) expect(archetype(actorId), `actorId ${actorId}`).toBe('rocky_trail')
   })
 })
