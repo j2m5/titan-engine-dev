@@ -644,15 +644,27 @@ describe('PlanetMaterial: данные Плутона — height/slope/detail-с
     expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
   })
 
-  it('detail-связки Плутона указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
-    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
-      const moonRow = moon().resources.where('resourceType', type).first()
-      const plutoRow = pluto().resources.where('resourceType', type).first()
+  it('detail-тройка Плутона — ледяной архетип terrain/ice_*, мелкая нормаль общая с Луной', () => {
+    const expectedPaths = {
+      detailDiffuse: 'terrain/ice_diff.webp',
+      detailNormal: 'terrain/ice_nor.webp',
+      detailArm: 'terrain/ice_arm.webp'
+    } as const
 
-      expect(plutoRow, type).toBeDefined()
-      expect(plutoRow!.getAttribute('id')).toBe(moonRow!.getAttribute('id'))
-      expect(plutoRow!.getAttribute('path')).toBe(moonRow!.getAttribute('path'))
+    for (const type of Object.keys(expectedPaths) as (keyof typeof expectedPaths)[]) {
+      const path = expectedPaths[type]
+      const row = pluto().resources.where('resourceType', type).first()
+
+      expect(row, type).toBeDefined()
+      expect(row!.getAttribute('path')).toBe(path)
+      expect(row!.getAttribute('lifecycle')).toBe('streamable')
+      expect(row!.getAttribute('wrapS')).toBe(RepeatWrapping)
+      expect(row!.getAttribute('wrapT')).toBe(RepeatWrapping)
     }
+
+    const moonMicro = moon().resources.where('resourceType', 'detailNormal2').first()!
+    const plutoMicro = pluto().resources.where('resourceType', 'detailNormal2').first()!
+    expect(plutoMicro.getAttribute('id')).toBe(moonMicro.getAttribute('id'))
   })
 
   it('renderingObjects Плутона несёт ручки детального слоя террейна (detailSaturation 0.1 — карлик)', () => {
@@ -1268,5 +1280,53 @@ describe('PlanetMaterial: данные waterNormal-ассета (Task 3 арки
       .map((actor) => actor.getAttribute('id'))
 
     expect(offenders).toEqual([])
+  })
+})
+
+// Архетипы грунта (кампания «облик рельефа», арка 1): детальная тройка тела —
+// diffuse+normal+ARM ОДНОГО набора terrain/<archetype>_*, мелкая нормаль общая.
+// Тест дискриминирует ПУТИ: смесь «лёд-нормаль + камень-диффуз» — дефект пивотов.
+const SHARED_MICRO_NORMAL_PATH = 'terrain/moon_01_nor.webp'
+
+function archetypeOf(path: string): string | null {
+  const match = /^terrain\/(.+)_(diff|nor|arm)\.webp$/.exec(path)
+  return match ? match[1] : null
+}
+
+describe('PlanetMaterial: у каждого терраформного тела полный комплект детали одного архетипа', () => {
+  const terraformActors = Actor.all()
+    .filter((actor) => actor.resources.where('resourceType', 'height').first() !== undefined)
+    .all()
+
+  it('в базе есть терраформные тела', () => {
+    expect(terraformActors.length).toBeGreaterThan(40)
+  })
+
+  it.each(terraformActors.map((actor) => [actor.getAttribute('id') as number] as const))(
+    'actorId %i: diffuse/normal/ARM из одной тройки terrain/<archetype>_*, мелкая нормаль — общая',
+    (actorId) => {
+      const actor = Actor.find(actorId)!
+      const archetypes = (['detailDiffuse', 'detailNormal', 'detailArm'] as const).map((type) => {
+        const row = actor.resources.where('resourceType', type).first()
+        expect(row, `actorId ${actorId}: ${type}`).toBeDefined()
+        return archetypeOf(row!.getAttribute('path') as string)
+      })
+
+      expect(archetypes[0], `actorId ${actorId}: путь детали вне схемы terrain/<archetype>_*`).not.toBeNull()
+      expect(new Set(archetypes).size, `actorId ${actorId}: смесь архетипов ${archetypes.join('/')}`).toBe(1)
+
+      const micro = actor.resources.where('resourceType', 'detailNormal2').first()
+      expect(micro, `actorId ${actorId}: detailNormal2`).toBeDefined()
+      expect(micro!.getAttribute('path')).toBe(SHARED_MICRO_NORMAL_PATH)
+    }
+  )
+
+  it('Плутон и Энцелад — на ледяном архетипе (пилоты приёмки), Луна — на каменистом', () => {
+    const archetype = (actorId: number): string | null =>
+      archetypeOf(Actor.find(actorId)!.resources.where('resourceType', 'detailDiffuse').first()!.getAttribute('path') as string)
+
+    expect(archetype(14)).toBe('ice')
+    expect(archetype(25)).toBe('ice')
+    expect(archetype(19)).toBe('rocky_trail')
   })
 })
