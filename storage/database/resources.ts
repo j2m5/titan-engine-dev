@@ -145,7 +145,7 @@ export const Resources: IResource[] = [
   { id: 172, resourceType: "height", lifecycle: "resident", path: "planets/venus/venus_height.raw" },
   { id: 173, resourceType: "slope", lifecycle: "streamable", path: "planets/venus/venus_slope.webp", slopeRange: 0.5, wrapS: 1e3 },
   { id: 174, resourceType: "height", lifecycle: "resident", path: "planets/mars/mars_height.raw" },
-  { id: 175, resourceType: "slope", lifecycle: "streamable", path: "planets/mars/mars_slope.webp", slopeRange: 0.5, wrapS: 1e3 },
+  { id: 175, resourceType: "slope", lifecycle: "streamable", path: "planets/mars/mars_slope.webp", slopeRange: 1, wrapS: 1e3 },
   { id: 176, resourceType: "height", lifecycle: "resident", path: "planets/ceres/ceres_height.raw" },
   { id: 177, resourceType: "slope", lifecycle: "streamable", path: "planets/ceres/ceres_slope.webp", slopeRange: 2, wrapS: 1e3 },
   { id: 178, resourceType: "height", lifecycle: "resident", path: "planets/pluto/pluto_height.raw" },
