@@ -41,7 +41,7 @@ export const Resources: IResource[] = [
   { id: 43, resourceType: "diffuse", lifecycle: "streamable", path: "planets/eris/eris.jpg", colorSpace: "srgb", wrapS: 1e3 },
   { id: 45, resourceType: "diffuse", lifecycle: "streamable", path: "planets/sedna/sedna.jpg", colorSpace: "srgb", wrapS: 1e3 },
   { id: 47, resourceType: "diffuse", lifecycle: "streamable", path: "planets/moon/moon.jpg", colorSpace: "srgb", wrapS: 1e3 },
-  { id: 48, resourceType: "slope", lifecycle: "streamable", path: "planets/moon/moon_slope.webp", slopeRange: 1, wrapS: 1e3 },
+  { id: 48, resourceType: "slope", lifecycle: "streamable", path: "planets/moon/moon_slope.webp", slopeRange: 2, wrapS: 1e3 },
   { id: 49, resourceType: "diffuse", lifecycle: "streamable", path: "planets/io/io.jpg", colorSpace: "srgb", wrapS: 1e3 },
   { id: 51, resourceType: "diffuse", lifecycle: "streamable", path: "planets/europa/europa.jpg", colorSpace: "srgb", wrapS: 1e3 },
   { id: 53, resourceType: "diffuse", lifecycle: "streamable", path: "planets/ganymede/ganymede.jpg", colorSpace: "srgb", wrapS: 1e3 },
