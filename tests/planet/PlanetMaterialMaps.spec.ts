@@ -1314,10 +1314,11 @@ describe('PlanetMaterial: у каждого терраформного тела 
     expect(archetype(actorId)).toBe('ice')
   })
 
-  // Пилоты арки sand/volcanic (2026-08-31): sand → Марс (8) + Титан (29), volcanic → Ио (20);
-  // раскат остатка (Татуин+луны, Венера и пр.) — после приёмки владельца.
-  const SAND_ACTOR_IDS = [8, 29] as const
-  const VOLCANIC_ACTOR_IDS = [20] as const
+  // Раскладка sand/volcanic (2026-08-31, приёмка пилотов пройдена): sand — Марс, Титан, Татуин,
+  // Гермесса (66) и Адриана IV (74) — тёплые песчаные диффузы; Гомрассен/Хенини/Адриана II — серые,
+  // остались камнем. volcanic — Венера (6) и Ио (20).
+  const SAND_ACTOR_IDS = [8, 29, 62, 66, 74] as const
+  const VOLCANIC_ACTOR_IDS = [6, 20] as const
 
   it.each(SAND_ACTOR_IDS)('actorId %i — песчаный архетип', (actorId) => {
     expect(archetype(actorId)).toBe('sand')
@@ -1331,6 +1332,6 @@ describe('PlanetMaterial: у каждого терраформного тела 
     const iceActors = terraformActors.filter((actor) => archetype(actor.getAttribute('id') as number) === 'ice')
     expect(iceActors.map((actor) => actor.getAttribute('id')).sort((a, b) => Number(a) - Number(b))).toEqual([...ICE_ACTOR_IDS])
 
-    for (const actorId of [19, 5, 6, 68]) expect(archetype(actorId), `actorId ${actorId}`).toBe('rocky_trail')
+    for (const actorId of [19, 5, 65, 68]) expect(archetype(actorId), `actorId ${actorId}`).toBe('rocky_trail')
   })
 })
