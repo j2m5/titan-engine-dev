@@ -1,0 +1,52 @@
+name: Deploy demo to GitHub Pages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Один деплой за раз; начатый прогон не обрываем, чтобы не публиковать полусобранный артефакт
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      VITE_APP_NAME: Titan Engine
+      VITE_FS_DRIVER: s3
+      VITE_S3_URL: https://storage.yandexcloud.net
+      VITE_FILE_BUCKET: textures
+      VITE_SHOW_STATS_PANEL: false
+    steps:
+      - uses: actions/checkout@v4
+      # enablement включает Pages (source: GitHub Actions) при первом запуске,
+      # чтобы не трогать настройки репозитория руками
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build -- --base=/${{ github.event.repository.name }}/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
