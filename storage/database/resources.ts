@@ -20,8 +20,6 @@ export const Resources: IResource[] = [
   { id: 14, resourceType: "diffuse", lifecycle: "resident", path: "night.jpg" },
   { id: 15, resourceType: "diffuse", lifecycle: "resident", path: "star.png", colorSpace: "" },
   { id: 16, resourceType: "diffuse", lifecycle: "resident", path: "round.png", colorSpace: "srgb" },
-  { id: 17, resourceType: "diffuse", lifecycle: "resident", path: "asteroid.jpg" },
-  { id: 18, resourceType: "diffuse", lifecycle: "resident", path: "asteroid_bump.jpg" },
   { id: 19, resourceType: "diffuse", lifecycle: "resident", path: "sun.png", colorSpace: "srgb" },
   { id: 20, resourceType: "diffuse", lifecycle: "streamable", path: "planets/mercury/mercury.jpg", colorSpace: "srgb", wrapS: 1e3 },
   { id: 22, resourceType: "diffuse", lifecycle: "streamable", path: "planets/venus/venus.jpg", colorSpace: "srgb", wrapS: 1e3 },
