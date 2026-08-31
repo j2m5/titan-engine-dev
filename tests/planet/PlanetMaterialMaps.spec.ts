@@ -294,12 +294,12 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
 // Каллисто (actorId 23) — второе тело с честным рельефом (терраформная арка
 // synth-heightmap): height/slope из оффлайн-генератора, детальные текстуры
 // делятся по пути с Луной (общие terrain/*.webp, шаринг ресурсов по id)
-/** Детальная тройка тела = архетип ice (terrain/ice_*), мелкая нормаль — общая с Луной (ресурс 129). */
-function expectIceDetailSet(actor: Actor): void {
+/** Детальная тройка тела = один архетип (terrain/<archetype>_*), мелкая нормаль — общая с Луной (ресурс 129). */
+function expectArchetypeDetailSet(actor: Actor, archetype: 'ice' | 'sand' | 'volcanic'): void {
   const expectedPaths = {
-    detailDiffuse: 'terrain/ice_diff.webp',
-    detailNormal: 'terrain/ice_nor.webp',
-    detailArm: 'terrain/ice_arm.webp'
+    detailDiffuse: `terrain/${archetype}_diff.webp`,
+    detailNormal: `terrain/${archetype}_nor.webp`,
+    detailArm: `terrain/${archetype}_arm.webp`
   } as const
 
   for (const type of Object.keys(expectedPaths) as (keyof typeof expectedPaths)[]) {
@@ -346,7 +346,7 @@ describe('PlanetMaterial: данные Каллисто — height/slope/detail-
   })
 
   it('detail-тройка Каллисто — ледяной архетип terrain/ice_* (тёмный лёд), мелкая нормаль общая с Луной', () => {
-    expectIceDetailSet(callisto())
+    expectArchetypeDetailSet(callisto(), 'ice')
   })
 
   it('renderingObjects Каллисто несёт ручки детального слоя террейна', () => {
@@ -396,7 +396,7 @@ describe('PlanetMaterial: данные Европы — height/slope/detail-св
   })
 
   it('detail-тройка Европы — ледяной архетип terrain/ice_*, мелкая нормаль общая с Луной', () => {
-    expectIceDetailSet(europa())
+    expectArchetypeDetailSet(europa(), 'ice')
   })
 
   it('renderingObjects Европы несёт ручки детального слоя террейна', () => {
@@ -445,7 +445,7 @@ describe('PlanetMaterial: данные Реи — height/slope/detail-связк
   })
 
   it('detail-тройка Реи — ледяной архетип terrain/ice_*, мелкая нормаль общая с Луной', () => {
-    expectIceDetailSet(rhea())
+    expectArchetypeDetailSet(rhea(), 'ice')
   })
 
   it('renderingObjects Реи несёт ручки детального слоя террейна', () => {
@@ -493,15 +493,8 @@ describe('PlanetMaterial: данные Ио — height/slope/detail-связки
     expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
   })
 
-  it('detail-связки Ио указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
-    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
-      const moonRow = moon().resources.where('resourceType', type).first()
-      const ioRow = io().resources.where('resourceType', type).first()
-
-      expect(ioRow, type).toBeDefined()
-      expect(ioRow!.getAttribute('id')).toBe(moonRow!.getAttribute('id'))
-      expect(ioRow!.getAttribute('path')).toBe(moonRow!.getAttribute('path'))
-    }
+  it('detail-тройка Ио — вулканический архетип terrain/volcanic_* (пилот приёмки), мелкая нормаль общая с Луной', () => {
+    expectArchetypeDetailSet(io(), 'volcanic')
   })
 
   it('renderingObjects Ио несёт ручки детального слоя террейна (detailSaturation 0.15 — как у Луны)', () => {
@@ -590,15 +583,8 @@ describe('PlanetMaterial: данные Марса — height/slope/detail-свя
     expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
   })
 
-  it('detail-связки Марса указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
-    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
-      const moonRow = moon().resources.where('resourceType', type).first()
-      const marsRow = mars().resources.where('resourceType', type).first()
-
-      expect(marsRow, type).toBeDefined()
-      expect(marsRow!.getAttribute('id')).toBe(moonRow!.getAttribute('id'))
-      expect(marsRow!.getAttribute('path')).toBe(moonRow!.getAttribute('path'))
-    }
+  it('detail-тройка Марса — песчаный архетип terrain/sand_* (пилот приёмки), мелкая нормаль общая с Луной', () => {
+    expectArchetypeDetailSet(mars(), 'sand')
   })
 
   it('renderingObjects Марса несёт ручки детального слоя террейна (detailSaturation 0.15 — планета)', () => {
@@ -741,7 +727,7 @@ describe('PlanetMaterial: данные Дионы — height/slope/detail-свя
   })
 
   it('detail-тройка Дионы — ледяной архетип terrain/ice_*, мелкая нормаль общая с Луной', () => {
-    expectIceDetailSet(dione())
+    expectArchetypeDetailSet(dione(), 'ice')
   })
 
   it('renderingObjects Дионы несёт ручки детального слоя террейна (detailSaturation 0.1 — реальная луна)', () => {
@@ -1328,10 +1314,23 @@ describe('PlanetMaterial: у каждого терраформного тела 
     expect(archetype(actorId)).toBe('ice')
   })
 
-  it('ледяных тел в базе ровно столько, сколько в раскладке — и остальные терраформные на камне', () => {
+  // Пилоты арки sand/volcanic (2026-08-31): sand → Марс (8) + Титан (29), volcanic → Ио (20);
+  // раскат остатка (Татуин+луны, Венера и пр.) — после приёмки владельца.
+  const SAND_ACTOR_IDS = [8, 29] as const
+  const VOLCANIC_ACTOR_IDS = [20] as const
+
+  it.each(SAND_ACTOR_IDS)('actorId %i — песчаный архетип', (actorId) => {
+    expect(archetype(actorId)).toBe('sand')
+  })
+
+  it.each(VOLCANIC_ACTOR_IDS)('actorId %i — вулканический архетип', (actorId) => {
+    expect(archetype(actorId)).toBe('volcanic')
+  })
+
+  it('ледяных тел в базе ровно столько, сколько в раскладке — и контрольные тела на камне', () => {
     const iceActors = terraformActors.filter((actor) => archetype(actor.getAttribute('id') as number) === 'ice')
     expect(iceActors.map((actor) => actor.getAttribute('id')).sort((a, b) => Number(a) - Number(b))).toEqual([...ICE_ACTOR_IDS])
 
-    for (const actorId of [19, 8, 5, 6, 20, 68]) expect(archetype(actorId), `actorId ${actorId}`).toBe('rocky_trail')
+    for (const actorId of [19, 5, 6, 68]) expect(archetype(actorId), `actorId ${actorId}`).toBe('rocky_trail')
   })
 })
