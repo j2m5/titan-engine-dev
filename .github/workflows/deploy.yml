@@ -26,11 +26,6 @@ jobs:
       VITE_SHOW_STATS_PANEL: false
     steps:
       - uses: actions/checkout@v4
-      # enablement включает Pages (source: GitHub Actions) при первом запуске,
-      # чтобы не трогать настройки репозитория руками
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - uses: actions/setup-node@v4
         with:
           node-version: 24
