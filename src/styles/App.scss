@@ -9,7 +9,8 @@ body {
 }
 
 .loading-screen {
-  background: url('@storage/images/loading-screen.jpg') no-repeat;
+  /* ассет живёт в public/images (канонический дом UI-статики) — vite сам подставит base */
+  background: url('/images/loading-screen.jpg') no-repeat;
   background-size: cover;
   color: #fff;
   position: absolute;
