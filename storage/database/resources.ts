@@ -199,5 +199,11 @@ export const Resources: IResource[] = [
   { id: 228, resourceType: "waterNormal", lifecycle: "resident", path: "water/waternormals.jpg", wrapS: 1e3, wrapT: 1e3 },
   { id: 229, resourceType: "detailDiffuse", lifecycle: "streamable", path: "terrain/ice_diff.webp", wrapS: 1e3, wrapT: 1e3, colorSpace: "srgb" },
   { id: 230, resourceType: "detailNormal", lifecycle: "streamable", path: "terrain/ice_nor.webp", wrapS: 1e3, wrapT: 1e3 },
-  { id: 231, resourceType: "detailArm", lifecycle: "streamable", path: "terrain/ice_arm.webp", wrapS: 1e3, wrapT: 1e3 }
+  { id: 231, resourceType: "detailArm", lifecycle: "streamable", path: "terrain/ice_arm.webp", wrapS: 1e3, wrapT: 1e3 },
+  { id: 232, resourceType: "detailDiffuse", lifecycle: "streamable", path: "terrain/sand_diff.webp", wrapS: 1e3, wrapT: 1e3, colorSpace: "srgb" },
+  { id: 233, resourceType: "detailNormal", lifecycle: "streamable", path: "terrain/sand_nor.webp", wrapS: 1e3, wrapT: 1e3 },
+  { id: 234, resourceType: "detailArm", lifecycle: "streamable", path: "terrain/sand_arm.webp", wrapS: 1e3, wrapT: 1e3 },
+  { id: 235, resourceType: "detailDiffuse", lifecycle: "streamable", path: "terrain/volcanic_diff.webp", wrapS: 1e3, wrapT: 1e3, colorSpace: "srgb" },
+  { id: 236, resourceType: "detailNormal", lifecycle: "streamable", path: "terrain/volcanic_nor.webp", wrapS: 1e3, wrapT: 1e3 },
+  { id: 237, resourceType: "detailArm", lifecycle: "streamable", path: "terrain/volcanic_arm.webp", wrapS: 1e3, wrapT: 1e3 }
 ]
