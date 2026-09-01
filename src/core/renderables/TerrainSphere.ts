@@ -7,6 +7,7 @@ import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { detailWrapFor } from '@/core/terrain/detailWrap'
 import { readRenderingData } from '@/core/helpers/renderingData'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
+import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
 import type { IPlanetRenderingObject } from '@/core/models/types'
 import type { UpdateContext } from '@/core/UpdateContext'
 
@@ -40,8 +41,18 @@ class TerrainSphere extends TerrainPatchGroup {
     model: Actor,
     field: TerrainHeightField,
     renderer: WebGLRenderer,
-    atmosphereRegistry?: AtmosphereRegistry
+    atmosphereRegistry?: AtmosphereRegistry,
+    proceduralSurfaceGenerator?: ProceduralSurfaceGenerator
   ) {
+    // Диффуз процедурного тела обязан лежать в resourceStorage ДО постройки
+    // PlanetMaterial: конструктор материала сажает диффуз в юниформ уже в
+    // updateMaterial/резолве PlanetShader (см. PlanetMaterial.diffuseKey) —
+    // без этого шага тело схлопывается на плейсхолдер. Тела без ручки — no-op
+    // здесь и в самом ensureDiffuse (гейт по data.proceduralSurface совпадает).
+    if (proceduralSurfaceGenerator && readRenderingData<IPlanetRenderingObject>(model)?.proceduralSurface) {
+      proceduralSurfaceGenerator.ensureDiffuse(model)
+    }
+
     const sharedMaterial = new PlanetMaterial(model, atmosphereRegistry)
     const waterLevelMeters = readWaterLevelMeters(model)
     const detailWrap = detailWrapFor(readRenderingData<IPlanetRenderingObject>(model))

@@ -39,6 +39,7 @@ import { WhiteDwarfImpostor } from '@/core/renderables/WhiteDwarf/WhiteDwarfImpo
 import { INebulaRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
+import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
 import { RenderableObject3D } from '@/core/renderables/types'
 import { syncRenderableMaterials } from '@/core/materials/materialSync'
 
@@ -46,7 +47,10 @@ class RenderableFactory {
   public constructor(
     private readonly renderer: WebGLRenderer,
     private readonly resourceObserver: ResourceObserver,
-    private readonly atmosphereRegistry: AtmosphereRegistry
+    private readonly atmosphereRegistry: AtmosphereRegistry,
+    // Опционален: тестовые сборки фабрики без процедурных тел его не заводят
+    // (см. TerrainSphere — тот же гейт по data.proceduralSurface, no-op без него).
+    private readonly proceduralSurfaceGenerator?: ProceduralSurfaceGenerator
   ) {}
 
   public make(actor: Actor): Object3D {
@@ -199,7 +203,8 @@ class RenderableFactory {
       actor,
       terrainHeightFieldFor(heightMap, actor.physicalObject!.getAttribute('radius')!),
       this.renderer,
-      this.atmosphereRegistry
+      this.atmosphereRegistry,
+      this.proceduralSurfaceGenerator
     )
 
     // Гейт водной оболочки: обе ручки разом — карта высот (без неё нет

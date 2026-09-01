@@ -10,6 +10,7 @@ import { SLOPE_RANGE, isValidSlopeRange } from '@/core/terrain/slopeMapFormat'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { IPlanetRenderingObject } from '@/core/models/types'
 import { readRenderingData } from '@/core/helpers/renderingData'
+import { proceduralDiffuseKey } from '@/core/services/ProceduralSurfaceGenerator'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import {
   DETAIL_FADE_START_RATIO,
@@ -135,10 +136,24 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.sunTint.sync()
   }
 
+  /**
+   * Ключ диффуза тела: у процедурного (`data.proceduralSurface`) — синтетический
+   * ключ рантайм-генератора (`ProceduralSurfaceGenerator.ensureDiffuse` уже
+   * зарегистрировал под ним текстуру в resourceStorage к моменту постройки
+   * материала — см. TerrainSphere), у обычного — путь ресурса из БД.
+   * Отсутствие ресурса — пустая строка: getTextureOrMake находит по ней
+   * плейсхолдер, прежнее поведение тел без диффуза.
+   */
+  private diffuseKey(): string {
+    const proceduralSurface = readRenderingData<IPlanetRenderingObject>(this.model)?.proceduralSurface
+
+    if (proceduralSurface) return proceduralDiffuseKey(this.model.getAttribute('id', -1))
+
+    return this.model.resources.where('resourceType', 'diffuse').first()?.getAttribute('path') ?? ''
+  }
+
   public updateMaterial(): void {
-    const diffuseMap: Texture = resourceStorage.getTextureOrMake(
-      this.model.resources.where('resourceType', 'diffuse').first()?.getAttribute('path') ?? ''
-    )
+    const diffuseMap: Texture = resourceStorage.getTextureOrMake(this.diffuseKey())
     const nightMap: Texture | undefined = resourceStorage.getTexture(
       this.model.resources.where('resourceType', 'night').first()?.getAttribute('path') ?? ''
     )
@@ -222,8 +237,9 @@ class PlanetMaterial extends AbstractShaderMaterial {
 
     // Тексель диффуза для варпа средней полосы — только у ЗАГРУЖЕННОЙ карты
     // (плейсхолдер размером не является): нули выключают варп, а не врут.
-    const diffusePath: string = this.model.resources.where('resourceType', 'diffuse').first()?.getAttribute('path') ?? ''
-    const loadedDiffuse = resourceStorage.getTexture(diffusePath)?.image as { width?: number; height?: number } | undefined
+    const loadedDiffuse = resourceStorage.getTexture(this.diffuseKey())?.image as
+      | { width?: number; height?: number }
+      | undefined
     this.uniforms.uDiffuseTexelSize.value.set(
       loadedDiffuse?.width ? 1 / loadedDiffuse.width : 0,
       loadedDiffuse?.height ? 1 / loadedDiffuse.height : 0
