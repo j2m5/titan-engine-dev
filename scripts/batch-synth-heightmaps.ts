@@ -20,7 +20,7 @@ import {
 } from './lib/batchBodyRules'
 import { slopeRangeForPath } from './lib/slopeRangeFromDb'
 import { dbPathFor } from './lib/dbPathFor'
-import { proceduralLuminance } from './lib/proceduralHeightInput'
+import { assertProceduralBodyKnobs, proceduralLuminance } from './lib/proceduralHeightInput'
 import { Resources } from '@storage/database/resources'
 
 /**
@@ -734,6 +734,11 @@ function elevationField(
  * «альбедных» пятен растровой карты, которые он вычитает у `elevation`. Пик —
  * бюджет 0.7% радиуса по умолчанию либо явная ручка `body.peakMeters`, тот же
  * механизм `elevationPeakMeters`, что и у `elevation`.
+ *
+ * `assertProceduralBodyKnobs` — громкий отказ ДО синтеза, если запись несёт
+ * `smoothSigmaTexels`/`highPassKm`/`peakPercentile`: эти поля здесь не
+ * читаются вовсе (см. параметры вызова ниже), тихая потеря ручки — ловушка
+ * для записи, дополненной по шаблону соседней `elevation`-записи.
  */
 function proceduralHeightField(
   body: BodyGeneration,
@@ -742,6 +747,8 @@ function proceduralHeightField(
   height: number,
   peakMeters: number
 ): BodyField {
+  assertProceduralBodyKnobs(body)
+
   // { cavity: false }: полость B пересчитывается единственным финальным
   // проходом ниже, здесь она была бы чистой потерей времени (как и в калибровке).
   const result = synthesizeElevationHeightAndSlope(

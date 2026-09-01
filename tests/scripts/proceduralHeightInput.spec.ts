@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { proceduralLuminance } from '../../scripts/lib/proceduralHeightInput'
+import { assertProceduralBodyKnobs, proceduralLuminance } from '../../scripts/lib/proceduralHeightInput'
 
 describe('proceduralLuminance', () => {
   it('детерминирован, в [0,1], полюса без NaN, шов долготы непрерывен', () => {
@@ -20,5 +20,24 @@ describe('proceduralLuminance', () => {
     let diff = 0
     for (let i = 0; i < a.length; i++) diff += Math.abs(a[i] - b[i])
     expect(diff / a.length).toBeGreaterThan(0.05)
+  })
+})
+
+describe('assertProceduralBodyKnobs', () => {
+  it('бросает на smoothSigmaTexels — ручка elevation, procedural-ветка её тихо игнорирует', () => {
+    expect(() => assertProceduralBodyKnobs({ name: 'korriban1', smoothSigmaTexels: 1.5 })).toThrow(/smoothSigmaTexels/)
+  })
+
+  it('бросает на highPassKm', () => {
+    expect(() => assertProceduralBodyKnobs({ name: 'korriban1', highPassKm: 300 })).toThrow(/highPassKm/)
+  })
+
+  it('бросает на peakPercentile', () => {
+    expect(() => assertProceduralBodyKnobs({ name: 'korriban1', peakPercentile: 0.999 })).toThrow(/peakPercentile/)
+  })
+
+  it('не бросает на чистой записи; peakMeters разрешён — процедурная ветка его читает (elevationPeakMeters)', () => {
+    expect(() => assertProceduralBodyKnobs({ name: 'korriban1', peakMeters: 5000 })).not.toThrow()
+    expect(() => assertProceduralBodyKnobs({ name: 'korriban1' })).not.toThrow()
   })
 })

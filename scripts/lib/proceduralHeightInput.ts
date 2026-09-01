@@ -49,3 +49,38 @@ export function proceduralLuminance(actorId: number, width: number, height: numb
 
   return out
 }
+
+/** Поля записи `BODIES`, которыми интересуется `assertProceduralBodyKnobs` — подмножество `BodyGeneration` (тип живёт в `batch-synth-heightmaps.ts`, не импортируется, чтобы не тянуть весь батч-модуль в этот файл). */
+export interface ProceduralBodyKnobs {
+  name: string
+  /** Единственная общая ручка `elevation`, которую процедурная ветка ДЕЙСТВИТЕЛЬНО читает (`elevationPeakMeters`) — guard её не трогает. */
+  peakMeters?: number
+  smoothSigmaTexels?: number
+  highPassKm?: number
+  peakPercentile?: number
+}
+
+/**
+ * Громкий отказ на elevation-ручках у записи `procedural`: вход procedural
+ * получает поле напрямую из `proceduralLuminance` (аналитическое, без
+ * растровых артефактов) — `proceduralHeightField` в батче зовёт
+ * elevation-конвейер со `smoothSigmaTexels` ЖЁСТКО 0 и без highPass/
+ * peakPercentile, игнорируя одноимённые поля записи BODIES. Без этого guard'а
+ * запись, дополненная по шаблону соседней elevation-записи (`smoothSigmaTexels`,
+ * `highPassKm`, `peakPercentile`), тихо теряла бы эти ручки — их значения
+ * нигде не читаются. `peakMeters` в проверку НЕ входит: процедурная ветка его
+ * читает (`elevationPeakMeters(radiusMeters, body.peakMeters)`), это
+ * единственная общая с elevation ручка, которая реально работает.
+ */
+export function assertProceduralBodyKnobs(body: ProceduralBodyKnobs): void {
+  const ignored: string[] = []
+  if (body.smoothSigmaTexels !== undefined) ignored.push('smoothSigmaTexels')
+  if (body.highPassKm !== undefined) ignored.push('highPassKm')
+  if (body.peakPercentile !== undefined) ignored.push('peakPercentile')
+
+  if (ignored.length > 0) {
+    throw new Error(
+      `${body.name}: вход procedural не использует ручки elevation (${ignored.join(', ')}) — убери их из записи BODIES`
+    )
+  }
+}
