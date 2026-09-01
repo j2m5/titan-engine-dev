@@ -20,6 +20,7 @@ import {
 } from './lib/batchBodyRules'
 import { slopeRangeForPath } from './lib/slopeRangeFromDb'
 import { dbPathFor } from './lib/dbPathFor'
+import { proceduralLuminance } from './lib/proceduralHeightInput'
 import { Resources } from '@storage/database/resources'
 
 /**
@@ -105,7 +106,8 @@ const ELEVATION_SMOOTH_SIGMA_TEXELS = 0.7
 interface BodyGeneration {
   /** Колонка «Генерация» — имя выходных файлов и ключ `--only`. */
   name: string
-  inputPath: string
+  /** Обязателен для входов bump/diffuse/elevation (файл читается); `procedural` физического источника не имеет — см. `outputDir`. */
+  inputPath?: string
   inputKind: BodyInputKind
   radiusMeters: number
   /** seed синтеза — actorId тела. */
@@ -122,10 +124,12 @@ interface BodyGeneration {
   highPassKm?: number
   /** Квантиль |h| нормировки пика входа `elevation` (0.9..1) — ручка владельца на тело; без неё 1 (максимум, см. `elevationPeakPercentile`). */
   peakPercentile?: number
+  /** Каталог вывода height/slope для входа `procedural` (нет `inputPath`, дирректорию определять неоткуда) — обязателен для procedural, для прочих видов входа выводится из `inputPath`. */
+  outputDir?: string
 }
 
-/** Вид входа: bump/diffuse — синтез рельефа, elevation — честная карта высот (яркость = высота). */
-type BodyInputKind = 'bump' | 'diffuse' | 'elevation'
+/** Вид входа: bump/diffuse — синтез рельефа, elevation — честная карта высот (яркость = высота), procedural — растр сид-поля облика тела (Task 6/7 арки procedural-surface). */
+type BodyInputKind = 'bump' | 'diffuse' | 'elevation' | 'procedural'
 
 const TEXTURES_ROOT = 'storage/images/textures/planets'
 
@@ -249,62 +253,65 @@ const BODIES: readonly BodyGeneration[] = [
     seedActorId: 70,
     actorIds: [70]
   },
-  // Korriban I-VII делят один физический вход (actorResource.ts переиспользует
-  // resourceId 117/118 для actorId 93-99), но КАЖДОЕ тело — своя генерация:
-  // общий выход, откалиброванный под радиус I, перегружал бюджет высоты
-  // мелких тел семьи (см. докблок модуля, находка 2). Радиусы — инвентаризация.
+  // Korriban I-VII: вход `procedural` (арка procedural-surface, Task 7) —
+  // растр берётся из сид-поля тела (`proceduralLuminance`, ручки
+  // `proceduralSurface` из RenderingObjects по actorId), общего физического
+  // файла-источника больше нет (диффуз снят в Task 6). `outputDir` общий
+  // (тот же каталог, где раньше лежал общий bump-вход) — КАЖДОЕ тело всё
+  // равно пишет СВОИ height/slope под своим именем, общий бюджет высоты не
+  // делится (см. докблок модуля, находка 2). Радиусы — инвентаризация.
   {
     name: 'korriban1',
-    inputPath: `${TEXTURES_ROOT}/StarWars/korriban/i/i_bump.jpg`,
-    inputKind: 'bump',
+    outputDir: `${TEXTURES_ROOT}/StarWars/korriban/i`,
+    inputKind: 'procedural',
     radiusMeters: 1_740_000,
     seedActorId: 93,
     actorIds: [93]
   },
   {
     name: 'korriban2',
-    inputPath: `${TEXTURES_ROOT}/StarWars/korriban/i/i_bump.jpg`,
-    inputKind: 'bump',
+    outputDir: `${TEXTURES_ROOT}/StarWars/korriban/i`,
+    inputKind: 'procedural',
     radiusMeters: 980_000,
     seedActorId: 94,
     actorIds: [94]
   },
   {
     name: 'korriban3',
-    inputPath: `${TEXTURES_ROOT}/StarWars/korriban/i/i_bump.jpg`,
-    inputKind: 'bump',
+    outputDir: `${TEXTURES_ROOT}/StarWars/korriban/i`,
+    inputKind: 'procedural',
     radiusMeters: 1_290_000,
     seedActorId: 95,
     actorIds: [95]
   },
   {
     name: 'korriban4',
-    inputPath: `${TEXTURES_ROOT}/StarWars/korriban/i/i_bump.jpg`,
-    inputKind: 'bump',
+    outputDir: `${TEXTURES_ROOT}/StarWars/korriban/i`,
+    inputKind: 'procedural',
     radiusMeters: 640_000,
     seedActorId: 96,
     actorIds: [96]
   },
   {
     name: 'korriban5',
-    inputPath: `${TEXTURES_ROOT}/StarWars/korriban/i/i_bump.jpg`,
-    inputKind: 'bump',
+    outputDir: `${TEXTURES_ROOT}/StarWars/korriban/i`,
+    inputKind: 'procedural',
     radiusMeters: 410_000,
     seedActorId: 97,
     actorIds: [97]
   },
   {
     name: 'korriban6',
-    inputPath: `${TEXTURES_ROOT}/StarWars/korriban/i/i_bump.jpg`,
-    inputKind: 'bump',
+    outputDir: `${TEXTURES_ROOT}/StarWars/korriban/i`,
+    inputKind: 'procedural',
     radiusMeters: 240_000,
     seedActorId: 98,
     actorIds: [98]
   },
   {
     name: 'korriban7',
-    inputPath: `${TEXTURES_ROOT}/StarWars/korriban/i/i_bump.jpg`,
-    inputKind: 'bump',
+    outputDir: `${TEXTURES_ROOT}/StarWars/korriban/i`,
+    inputKind: 'procedural',
     radiusMeters: 175_000,
     seedActorId: 99,
     actorIds: [99]
@@ -596,6 +603,11 @@ function peakMetersOf(map: HeightMapData): number {
   return Math.max(Math.abs(map.minMeters), Math.abs(map.maxMeters))
 }
 
+/** Отображаемый «путь» входа в отчёте/логе: физический файл, либо `procedural://<seedActorId>` (нет физического источника у `procedural`, ключ по конвенции `ProceduralSurfaceGenerator.ts`). */
+function inputLabel(body: BodyGeneration): string {
+  return body.inputPath ?? `procedural://${body.seedActorId}`
+}
+
 /**
  * Вход → яркость [0..1] в целевом (даунсемпленном) разрешении. 2:1 проверяется
  * до ресемпла — источник должен быть честной эквиректангулярной картой.
@@ -712,6 +724,49 @@ function elevationField(
   }
 }
 
+/**
+ * Вход `procedural`: тот же конвейер `buildElevationHeightField`
+ * (`synthesizeElevationHeightAndSlope`), что и `elevation`, но σ сглаживания
+ * ЖЁСТКО 0 (не `ELEVATION_SMOOTH_SIGMA_TEXELS` и не ручка тела) — поле
+ * аналитическое (`proceduralLuminance`, сид-fBM), 8-битных ступенек, которые
+ * режет сглаживание честных растровых карт, тут нет: сглаживать нечего.
+ * Высокочастотный фильтр не применяется — в аналитическом поле нет широких
+ * «альбедных» пятен растровой карты, которые он вычитает у `elevation`. Пик —
+ * бюджет 0.7% радиуса по умолчанию либо явная ручка `body.peakMeters`, тот же
+ * механизм `elevationPeakMeters`, что и у `elevation`.
+ */
+function proceduralHeightField(
+  body: BodyGeneration,
+  luminance: Float64Array,
+  width: number,
+  height: number,
+  peakMeters: number
+): BodyField {
+  // { cavity: false }: полость B пересчитывается единственным финальным
+  // проходом ниже, здесь она была бы чистой потерей времени (как и в калибровке).
+  const result = synthesizeElevationHeightAndSlope(
+    luminance,
+    width,
+    height,
+    body.radiusMeters,
+    peakMeters,
+    0,
+    undefined,
+    undefined,
+    { cavity: false }
+  )
+
+  return {
+    map: result.map,
+    amplitudeMeters: peakMeters,
+    rmsTan: result.rmsTan,
+    peakMeters: peakMetersOf(result.map),
+    peakClamped: false,
+    amplitudeClamped: false,
+    iterations: 0
+  }
+}
+
 /** Входы `bump`/`diffuse`: синтез рельефа с автокалибровкой амплитуды и пост-коррекцией по пику. */
 function calibratedField(
   body: BodyGeneration,
@@ -807,22 +862,54 @@ function calibratedField(
   }
 }
 
-/** Полная генерация одного тела: даунсемпл → поле высот → запись height+slope → строка отчёта. */
+/**
+ * Растр входа `procedural` — нет исходного файла (`proceduralLuminance`
+ * генерит сразу целевое разрешение, даунсемплить нечего), потолок разрешения
+ * тот же `resolutionCeiling`. `outputDir` обязателен (ручка тела) — каталог,
+ * куда пишутся height/slope этой генерации.
+ */
+function proceduralGreyscale(
+  body: BodyGeneration,
+  ceilingWidth: number
+): { width: number; height: number; luminance: Float64Array; dir: string } {
+  if (!body.outputDir) throw new Error(`${body.name}: inputKind 'procedural' требует outputDir`)
+
+  const width = ceilingWidth
+  const height = width / 2
+
+  return { width, height, luminance: proceduralLuminance(body.seedActorId, width, height), dir: body.outputDir }
+}
+
+/** Растр входов `bump`/`diffuse`/`elevation` — читает и даунсемплит файл `body.inputPath`, каталог вывода = его директория. */
+async function fileGreyscale(
+  body: BodyGeneration,
+  ceilingWidth: number
+): Promise<{ width: number; height: number; luminance: Float64Array; dir: string }> {
+  if (!body.inputPath) throw new Error(`${body.name}: inputKind '${body.inputKind}' требует inputPath`)
+
+  const loaded = await loadDownsampledGreyscale(body.inputPath, ceilingWidth)
+
+  return { ...loaded, dir: path.dirname(body.inputPath) }
+}
+
+/** Полная генерация одного тела: вход → поле высот → запись height+slope → строка отчёта. */
 async function generateBody(body: BodyGeneration): Promise<ReportRow> {
   const ceilingWidth = resolutionCeiling(body.radiusMeters, body.ceilingWidth)
-  const { width, height, luminance } = await loadDownsampledGreyscale(body.inputPath, ceilingWidth)
+  const { width, height, luminance, dir } =
+    body.inputKind === 'procedural' ? proceduralGreyscale(body, ceilingWidth) : await fileGreyscale(body, ceilingWidth)
   const maxHeightBudgetMeters = HEIGHT_BUDGET_FRACTION * body.radiusMeters
 
   const field =
     body.inputKind === 'elevation'
       ? elevationField(body, luminance, width, height, elevationPeakMeters(body.radiusMeters, body.peakMeters))
-      : calibratedField(body, luminance, width, height, maxHeightBudgetMeters)
+      : body.inputKind === 'procedural'
+        ? proceduralHeightField(body, luminance, width, height, elevationPeakMeters(body.radiusMeters, body.peakMeters))
+        : calibratedField(body, luminance, width, height, maxHeightBudgetMeters)
 
   // Единственный проход с полостью (находка фикс-волны 3): прогоны выше
   // сознательно считали R/G без cavity — здесь собираем финальную slope-карту
   // ОДИН раз с cavity: true, на уже готовой карте высот field.map — без
   // повторного синтеза поля.
-  const dir = path.dirname(body.inputPath)
   const heightPath = path.join(dir, `${body.name}_height.raw`)
   const slopePath = path.join(dir, `${body.name}_slope.webp`)
 
@@ -842,7 +929,7 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
   return {
     name: body.name,
     actorIds: body.actorIds,
-    inputPath: body.inputPath,
+    inputPath: inputLabel(body),
     inputKind: body.inputKind,
     width,
     height,
@@ -875,7 +962,7 @@ async function run(): Promise<void> {
   const rows: ReportRow[] = []
 
   for (const body of selected) {
-    console.log(`Генерация ${body.name} (${body.inputKind}: ${body.inputPath})…`)
+    console.log(`Генерация ${body.name} (${body.inputKind}: ${inputLabel(body)})…`)
     const row = await generateBody(body)
     rows.push(row)
 
