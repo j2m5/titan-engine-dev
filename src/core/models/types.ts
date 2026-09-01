@@ -9,6 +9,7 @@ import type {
 } from 'three'
 import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { NebulaRenderingData } from '@/core/renderables/Nebula/NebulaRenderingData'
+import type { ProceduralSurfaceParams } from '@/core/terrain/proceduralSurfaceParams'
 
 export type ValueOf<T> = T[keyof T]
 
@@ -308,6 +309,9 @@ export interface IPlanetRenderingObject {
   giantDetailTextureWarp?: number
   /** Конец дистанционного fade, км (дефолт 1.5·R — деталь проявляется с ~0.6 R над палубой). */
   giantDetailFadeKm?: number
+
+  /** Процедурная поверхность (сид-поле → рантайм-диффуз + офлайн-высоты); валидация — validateProceduralSurface. */
+  proceduralSurface?: ProceduralSurfaceParams
 }
 
 export type IAtmosphereRenderingObject = AtmosphereConfig
