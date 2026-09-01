@@ -14,6 +14,28 @@ import type { UpdateContext } from '@/core/UpdateContext'
 export { PATCH_BUILDS_PER_FRAME } from '@/core/terrain/TerrainPatchGroup'
 
 /**
+ * Fail-fast на разрыв DI-цепочки (стиль сообщения — как `requireRenderingData`):
+ * тело с `data.proceduralSurface` обязано получить `ProceduralSurfaceGenerator`,
+ * иначе `PlanetMaterial.diffuseKey()` молча отдаёт `procedural://`-ключ, под
+ * который никто не зарегистрировал текстуру, и `getTextureOrMake` тихо
+ * садится на плейсхолдер — тело было бы неверным без единого сигнала.
+ * Тело БЕЗ `proceduralSurface` генератора не требует — легаси-тесты и тела
+ * без процедурной поверхности строят `TerrainSphere` без него, это норма.
+ *
+ * Вынесена отдельно от конструктора — чистая функция от модели и (опционально)
+ * генератора, тестируется без тяжёлой постройки `TerrainSphere`
+ * (`TerrainHeightField`/`WebGLRenderer`/квадродерево патчей).
+ */
+export function assertProceduralWiring(model: Actor, generator: ProceduralSurfaceGenerator | undefined): void {
+  if (generator || !readRenderingData<IPlanetRenderingObject>(model)?.proceduralSurface) return
+
+  throw new Error(
+    `[TerrainSphere] У тела "${model.getAttribute('name', '?')}" задан data.proceduralSurface, но ` +
+      'ProceduralSurfaceGenerator не передан — проверь проводку Tokens.ProceduralSurfaceGenerator'
+  )
+}
+
+/**
  * Рельеф тела кубосферой из патчей ПЕРЕМЕННОЙ глубины — квадродерево/пул/юбки
  * общие с WaterSphere, вынесены в TerrainPatchGroup (см. её докблок); эта
  * специализация добавляет то, что относится к рельефу конкретно: PlanetMaterial
@@ -44,6 +66,8 @@ class TerrainSphere extends TerrainPatchGroup {
     atmosphereRegistry?: AtmosphereRegistry,
     proceduralSurfaceGenerator?: ProceduralSurfaceGenerator
   ) {
+    assertProceduralWiring(model, proceduralSurfaceGenerator)
+
     // Диффуз процедурного тела обязан лежать в resourceStorage ДО постройки
     // PlanetMaterial: конструктор материала сажает диффуз в юниформ уже в
     // updateMaterial/резолве PlanetShader (см. PlanetMaterial.diffuseKey) —

@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Texture } from 'three'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { proceduralDiffuseKey } from '@/core/services/ProceduralSurfaceGenerator'
+import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
+import { assertProceduralWiring } from '@/core/renderables/TerrainSphere'
 import { Actor } from '@/core/models/Actor'
 import { ResourceType } from '@/core/models/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -102,5 +104,27 @@ describe('PlanetMaterial: диффуз процедурного тела', () =>
     material.updateMaterial()
 
     expect(material.uniforms.diffuseMap.value.name).toBe(moonPathOf('diffuse'))
+  })
+})
+
+describe('TerrainSphere.assertProceduralWiring: fail-fast на разрыв DI-цепочки', () => {
+  it('proceduralSurface есть, генератор НЕ передан — throw с именем тела и подсказкой по токену', () => {
+    const actor = stubActor(93, 1740, { proceduralSurface: VALID_PARAMS })
+
+    expect(() => assertProceduralWiring(actor, undefined)).toThrow(/ProceduralSurfaceGenerator/)
+    expect(() => assertProceduralWiring(actor, undefined)).toThrow(/Stub 93/)
+  })
+
+  it('proceduralSurface есть, генератор передан — не бросает', () => {
+    const actor = stubActor(93, 1740, { proceduralSurface: VALID_PARAMS })
+    const generator = {} as unknown as ProceduralSurfaceGenerator
+
+    expect(() => assertProceduralWiring(actor, generator)).not.toThrow()
+  })
+
+  it('proceduralSurface нет, генератор не передан — норма (легаси-тела/тесты)', () => {
+    const actor = stubActor(19, 1737, {})
+
+    expect(() => assertProceduralWiring(actor, undefined)).not.toThrow()
   })
 })
