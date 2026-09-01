@@ -1,4 +1,10 @@
 /**
+ * Потолок октав — контракт с GPU-циклом proceduralFieldChunk (константная граница
+ * цикла GLSL). Менять только синхронно с чанком.
+ */
+export const MAX_FIELD_OCTAVES = 12
+
+/**
  * Ручки процедурной поверхности тела (см. спеку 2026-08-31): одно сидированное
  * fBM-поле кормит и рантайм-диффуз (GPU), и офлайн-высоты (CPU). Все поля
  * обязательные — молчаливый дефолт облика недопустим (решение владельца).
@@ -36,7 +42,7 @@ export function validateProceduralSurface(value: unknown, context: string): Proc
   const seed = num('seed')
   if (!Number.isInteger(seed)) fail('seed', `должен быть целым: ${seed}`)
   const octaves = num('octaves')
-  if (!Number.isInteger(octaves) || octaves < 1) fail('octaves', `целое ≥ 1: ${octaves}`)
+  if (!Number.isInteger(octaves) || octaves < 1 || octaves > MAX_FIELD_OCTAVES) fail('octaves', `целое в [1, ${MAX_FIELD_OCTAVES}]: ${octaves}`)
   const frequencyPerRadius = num('frequencyPerRadius')
   if (frequencyPerRadius <= 0) fail('frequencyPerRadius', `> 0: ${frequencyPerRadius}`)
   const gain = num('gain')

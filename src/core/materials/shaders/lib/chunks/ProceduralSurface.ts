@@ -4,6 +4,8 @@ import { noiseFunctions } from './Noise'
  * GLSL-зеркало proceduralField (см. src/core/terrain/proceduralSurfaceField.ts).
  * Сид сюда НЕ передаётся — CPU разворачивает его в uFieldOffset (паритет
  * держится на общем симплексе, не на хешах). Менять только синхронно с TS.
+ * КОНТРАКТ: цикл на 12 итераций — потолок MAX_FIELD_OCTAVES из
+ * proceduralSurfaceParams.ts; валидатор обязан держать octaves ≤ 12.
  */
 export const proceduralFieldChunk = `
   uniform vec3 uFieldOffset;

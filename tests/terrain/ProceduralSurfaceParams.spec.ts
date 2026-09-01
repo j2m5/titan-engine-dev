@@ -17,6 +17,10 @@ describe('validateProceduralSurface', () => {
     expect(() => validateProceduralSurface({ ...valid, palette: ['#fff'] }, 'X')).toThrow(/palette/)
     expect(() => validateProceduralSurface({ ...valid, palette: ['x', '#222222', '#333333', '#444444'] }, 'X')).toThrow(/palette/)
   })
+
+  it('октавы > MAX_FIELD_OCTAVES (12) отвергаются: контракт с GPU-циклом', () => {
+    expect(() => validateProceduralSurface({ ...valid, octaves: 13 }, 'test')).toThrow(/octaves/)
+  })
 })
 
 describe('seedOffset', () => {
