@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { simplexNoise3 } from '@/core/terrain/simplexNoise3'
 import { proceduralField } from '@/core/terrain/proceduralSurfaceField'
-import type { ProceduralSurfaceParams } from '@/core/terrain/proceduralSurfaceParams'
+import { seedOffset, type ProceduralSurfaceParams } from '@/core/terrain/proceduralSurfaceParams'
 
 const params: ProceduralSurfaceParams = {
   seed: 42, frequencyPerRadius: 3, octaves: 5, gain: 0.5, lacunarity: 2,
@@ -31,11 +31,21 @@ describe('simplexNoise3 (порт Ашимы)', () => {
 describe('proceduralField', () => {
   it('octaves=1, contrast=1 — ровно одна выборка симплекса по сдвинутому домену', () => {
     const p = { ...params, octaves: 1 }
-    // значение должно совпасть с прямым вызовом симплекса — пин связи формул
     const dir = [0.267261, 0.534522, 0.801784] as const
     const field = proceduralField(dir[0], dir[1], dir[2], p)
     expect(Math.abs(field)).toBeLessThanOrEqual(1)
     expect(field).not.toBe(0)
+
+    // Честная сверка: повторяем арифметику домена вручную (amplitude=1,
+    // frequency=frequencyPerRadius, norm=1, contrast=1 — тождество) и сравниваем
+    // с прямым вызовом simplexNoise3 по тому же сдвинутому домену.
+    const offset = seedOffset(p.seed)
+    const expected = simplexNoise3(
+      dir[0] * p.frequencyPerRadius + offset.x,
+      dir[1] * p.frequencyPerRadius + offset.y,
+      dir[2] * p.frequencyPerRadius + offset.z
+    )
+    expect(field).toBeCloseTo(expected, 12)
   })
 
   it('contrast сохраняет знак и |v|≤1; contrast=1 — тождество', () => {

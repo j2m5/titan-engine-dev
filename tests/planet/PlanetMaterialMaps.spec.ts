@@ -566,13 +566,24 @@ describe(`PlanetMaterial: счётные инварианты батча ${BATCH
 const PROCEDURAL_ACTOR_IDS = [93, 94, 95, 96, 97, 98, 99] as const
 
 describe('PlanetMaterial: процедурные тела (луны Коррибана)', () => {
-  it.each(PROCEDURAL_ACTOR_IDS)('actorId %i: proceduralSurface валиден, diffuse-ресурса нет, height+slope есть', (actorId) => {
+  it.each(PROCEDURAL_ACTOR_IDS)('actorId %i: proceduralSurface валиден, diffuse-ресурса нет, height+slope есть, slope repeat, bumpScale 1, ровно 4 детальные связки', (actorId) => {
     const actor = Actor.find(actorId)!
     const data = actor.renderingObject!.getAttribute('data') as Record<string, unknown>
     expect(() => validateProceduralSurface(data.proceduralSurface, String(actorId))).not.toThrow()
     expect(actor.resources.where('resourceType', 'diffuse').count()).toBe(0)
     expect(actor.resources.where('resourceType', 'height').count()).toBe(1)
     expect(actor.resources.where('resourceType', 'slope').count()).toBe(1)
+
+    const slope = actor.resources.where('resourceType', 'slope').first()!
+    expect(slope.getAttribute('wrapS'), `actorId ${actorId}: slope wrapS`).toBe(RepeatWrapping)
+    expect(data.bumpScale, `actorId ${actorId}: bumpScale`).toBe(1)
+
+    // 4 детальные связки — терраформная шестёрка минус height+slope, которые
+    // уже проверены выше отдельно (страж компенсации 93-99: диффуз тела
+    // генерируется рантаймом, но детальный слой всё равно файловый).
+    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
+      expect(actor.resources.where('resourceType', type).count(), `actorId ${actorId}: ${type}`).toBe(1)
+    }
   })
 
   it('терраформные тела БЕЗ proceduralSurface по-прежнему несут diffuse-ресурс', () => {

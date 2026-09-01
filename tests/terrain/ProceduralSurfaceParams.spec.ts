@@ -21,6 +21,14 @@ describe('validateProceduralSurface', () => {
   it('октавы > MAX_FIELD_OCTAVES (12) отвергаются: контракт с GPU-циклом', () => {
     expect(() => validateProceduralSurface({ ...valid, octaves: 13 }, 'test')).toThrow(/octaves/)
   })
+
+  it('gain ⩽ 0 отвергается: отрицательный gain может занулить норму Σgainᵏ → NaN-поле молча', () => {
+    expect(() => validateProceduralSurface({ ...valid, gain: 0 }, 'test')).toThrow(/gain/)
+  })
+
+  it('lacunarity ⩽ 0 отвергается', () => {
+    expect(() => validateProceduralSurface({ ...valid, lacunarity: -1 }, 'test')).toThrow(/lacunarity/)
+  })
 })
 
 describe('seedOffset', () => {

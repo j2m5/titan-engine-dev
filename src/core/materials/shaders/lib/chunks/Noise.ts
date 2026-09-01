@@ -119,6 +119,8 @@ export const noiseFunctions = `
     return 49.0 * (dot(m0 * m0, vec3(dot(p0, x0), dot(p1, x1), dot(p2, x2))) + dot(m1 * m1, vec2(dot(p3, x3), dot(p4, x4)))) ;
   }
 
+    // ВНИМАНИЕ: у snoise(vec3) есть CPU-зеркало src/core/terrain/simplexNoise3.ts
+    // (паритет процедурных поверхностей) — править только синхронно.
     float snoise(vec3 v){
       const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
       const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
