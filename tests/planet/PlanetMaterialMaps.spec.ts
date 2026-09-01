@@ -4,6 +4,7 @@ import { Actor } from '@/core/models/Actor'
 import { ResourceType } from '@/core/models/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
+import { validateProceduralSurface } from '@/core/terrain/proceduralSurfaceParams'
 import { ClampToEdgeWrapping, RepeatWrapping, Texture } from 'three'
 
 // Земля (actorId 7) — единственное тело с полным набором карт
@@ -517,10 +518,14 @@ describe('PlanetMaterial: данные Ио — height/slope/detail-связки
 // давала VII 577% его бюджета высоты) — счётные инварианты одинаковы для всех.
 // Явин IV (83) возвращён в список аркой воды (Task 6) — хотфикс 2026-08-17,
 // временно выводивший его на легаси, исполнил своё условие (вода готова).
-const BATCH_ACTOR_IDS = [20, 22, 28, 29, 30, 36, 37, 38, 73, 83, 70, 93, 94, 95, 96, 97, 98, 99] as const
+// Корribан I-VII (93-99) ИЗ этого списка снова УБРАНЫ отдельной аркой Task 6
+// (процедурная поверхность): диффуз-ресурс 117 у них снят, диффуз рендерится
+// рантайм-генератором из proceduralSurface — инвариант «диффуз есть» этого
+// describe им больше не подходит, свой страж — PROCEDURAL_ACTOR_IDS ниже.
+const BATCH_ACTOR_IDS = [20, 22, 28, 29, 30, 36, 37, 38, 73, 83, 70] as const
 const TERRAFORM_RESOURCE_TYPES = ['height', 'slope', 'detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const
 
-describe('PlanetMaterial: счётные инварианты батча 18 спутников', () => {
+describe(`PlanetMaterial: счётные инварианты батча ${BATCH_ACTOR_IDS.length} спутников`, () => {
   it.each(BATCH_ACTOR_IDS)('actorId %i: пара height+slope, wrapS у slope и диффуза, bumpScale 1, ровно 6 терраформных связок', (actorId) => {
     const actor = Actor.find(actorId)!
     const height = actor.resources.where('resourceType', 'height').first()
@@ -550,6 +555,30 @@ describe('PlanetMaterial: счётные инварианты батча 18 сп
 
     expect(new Set(heightIds).size, 'height resourceId должны быть уникальны').toBe(korribanActorIds.length)
     expect(new Set(slopeIds).size, 'slope resourceId должны быть уникальны').toBe(korribanActorIds.length)
+  })
+})
+
+// Луны Коррибана (actorId 93-99, Task 6 арки «процедурная поверхность»):
+// диффуз больше не файловый ресурс — его рендерит ProceduralSurfaceGenerator
+// из data.proceduralSurface (Task 4/5), а данные тела несут только сид+ручки
+// fBM-поля. height/slope — как у остального батча (пер-тело, задача 4 прошлой
+// арки), общий шаренный диффуз (ресурс 117) снят вместе со связками.
+const PROCEDURAL_ACTOR_IDS = [93, 94, 95, 96, 97, 98, 99] as const
+
+describe('PlanetMaterial: процедурные тела (луны Коррибана)', () => {
+  it.each(PROCEDURAL_ACTOR_IDS)('actorId %i: proceduralSurface валиден, diffuse-ресурса нет, height+slope есть', (actorId) => {
+    const actor = Actor.find(actorId)!
+    const data = actor.renderingObject!.getAttribute('data') as Record<string, unknown>
+    expect(() => validateProceduralSurface(data.proceduralSurface, String(actorId))).not.toThrow()
+    expect(actor.resources.where('resourceType', 'diffuse').count()).toBe(0)
+    expect(actor.resources.where('resourceType', 'height').count()).toBe(1)
+    expect(actor.resources.where('resourceType', 'slope').count()).toBe(1)
+  })
+
+  it('терраформные тела БЕЗ proceduralSurface по-прежнему несут diffuse-ресурс', () => {
+    for (const actorId of [19, 8, 25]) {
+      expect(Actor.find(actorId)!.resources.where('resourceType', 'diffuse').count(), `actorId ${actorId}`).toBe(1)
+    }
   })
 })
 
