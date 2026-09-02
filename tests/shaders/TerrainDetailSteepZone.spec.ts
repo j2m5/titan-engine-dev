@@ -9,9 +9,14 @@ describe('TerrainDetail: зоны материала по уклону', () => {
     }
   })
 
-  it('маска: smoothstep по tan с шумовой рваной границей (существующий vnoise, ноль новых текстурных выборок)', () => {
-    expect(terrainDetailFunctions).toContain('uSteepMask.z * (vnoise(')
+  it('маска: smoothstep по tan с шумовой рваной границей — breakup переиспользует готовый l.z, ни нового vnoise, ни выборок', () => {
+    expect(terrainDetailFunctions).toContain('uSteepMask.z * (l.z / 8.0 - 0.5)')
     expect(terrainDetailFunctions).toContain('smoothstep(uSteepMask.x, uSteepMask.y, slopeTan +')
+    // ровно 3 вызова vnoise на всю applyTerrainDetail (l.x/l.y/l.z) — маска
+    // зон не добавляет четвёртый (фикс-раунд 1: дубль вычисления)
+    const applyStart = terrainDetailFunctions.indexOf('void applyTerrainDetail(')
+    const vnoiseCalls = (terrainDetailFunctions.slice(applyStart).match(/vnoise\(/g) ?? []).length
+    expect(vnoiseCalls).toBe(3)
   })
 
   it('множитель uSteepGate живёт в самой маске (рулинг), не отдельным if', () => {

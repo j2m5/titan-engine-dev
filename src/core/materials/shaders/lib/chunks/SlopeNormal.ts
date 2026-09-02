@@ -12,19 +12,38 @@
  * TBN: T — восток (попиксельный cross(up, dirLocal) хоста), B = cross(N, T) —
  * север; R-канал — уклон на восток, G — на север. bumpScale —
  * художественный множитель, 1 = физически честно.
+ *
+ * Перегрузка (GLSL ES поддерживает overloading по сигнатуре параметров) с
+ * out vec2 slopeOut — отдаёт наружу уже декодированный вектор уклона (до
+ * умножения на bumpScale/проекции на TBN), чтобы вызывающая сторона (см.
+ * PlanetShaderTemplate — маска зон материала TerrainDetail) могла взять
+ * length(slopeOut) без ВТОРОЙ выборки той же текстуры под тем же uv. У
+ * полюса (len < 1e-4, тангенс вырожден) slopeOut = vec2(0.0) — согласовано
+ * с семантикой «нет уклона», ничего не декодировано и не должно быть. Старая
+ * 3-аргументная сигнатура — тонкая обёртка над этой (локальная заглушка под
+ * out-параметр), остальные вызывающие стороны не меняются.
  */
 export const slopeNormalUniforms = `uniform float uSlopeRange;`
 
 export const slopeNormalFunctions = `
-  vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv) {
+  vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv, out vec2 slopeOut) {
     float len = length(east);
-    if (len < 1e-4) return surfNormal; // полюс: тангенс вырожден
+    if (len < 1e-4) {
+      slopeOut = vec2(0.0);
+      return surfNormal; // полюс: тангенс вырожден
+    }
 
     vec3 T = east / len;
     vec3 B = cross(surfNormal, T);
 
     vec2 slope = (texture2D(bumpMap, uv).xy * 255.0 - 128.0) * (uSlopeRange / 127.0);
+    slopeOut = slope;
 
     return normalize(surfNormal - bumpScale * (slope.x * T + slope.y * B));
+  }
+
+  vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv) {
+    vec2 slopeUnused;
+    return perturbNormalFromSlope(surfNormal, east, uv, slopeUnused);
   }
 `

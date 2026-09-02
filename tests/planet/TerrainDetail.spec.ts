@@ -135,11 +135,13 @@ describe('TerrainDetail: чанк — регистрация и структур
     const applyStart = terrainDetailFunctions.indexOf('void applyTerrainDetail(')
     const applyBody = terrainDetailFunctions.slice(applyStart)
 
-    // 4 вызова vnoise в applyTerrainDetail: 3 по одному на проекционную ось l
-    // (zy/xz/xy, делят их 4 карты) + 1 breakup маски зон (задача 2, другая ось
-    // того же домена, см. докстроку чанка «ЗОНЫ МАТЕРИАЛА»)
+    // ровно 3 вызова vnoise в applyTerrainDetail — по одному на проекционную
+    // ось l (zy/xz/xy), НЕ на карту (карт четыре — они делят эти три
+    // значения). Breakup маски зон (задача 2) переиспользует готовый l.z
+    // (см. докстроку чанка «ЗОНЫ МАТЕРИАЛА») — четвёртого вызова нет
+    // (фикс-раунд 1: убран дубль вычисления).
     const vnoiseCalls = (applyBody.match(/vnoise\(/g) ?? []).length
-    expect(vnoiseCalls).toBe(4)
+    expect(vnoiseCalls).toBe(3)
 
     // l вычислен раньше первого использования (вызов sampleDetailSet — общий
     // helper обоих наборов зоны, см. «зоны материала по уклону»)

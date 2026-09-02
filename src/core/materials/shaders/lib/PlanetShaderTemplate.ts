@@ -225,11 +225,12 @@ export const PlanetShaderTemplate: ShaderProps = {
         // (mask смотрит только на slopeTan, см. докстроку чанка).
         float terrainSlopeTan = 0.0;
         #ifdef USE_SLOPE
-          nLocal = perturbNormalFromSlope(nLocal, eastLocal, uv);
-          // Тот же декод, что в perturbNormalFromSlope (SlopeNormal.ts,
-          // uSlopeRange / 127.0) — НЕ macroSlope ниже (тот же формат байта,
-          // но отдельный путь под другим гейтом, не переиспользуем).
-          vec2 terrainSlopeVec = (texture2D(bumpMap, uv).xy * 255.0 - 128.0) * (uSlopeRange / 127.0);
+          // out-перегрузка perturbNormalFromSlope (SlopeNormal.ts) отдаёт уже
+          // декодированный вектор уклона — ВТОРОЙ выборки той же текстуры
+          // под тем же uv здесь больше нет (не macroSlope ниже: тот же
+          // формат байта, но отдельный путь под другим гейтом).
+          vec2 terrainSlopeVec;
+          nLocal = perturbNormalFromSlope(nLocal, eastLocal, uv, terrainSlopeVec);
           terrainSlopeTan = length(terrainSlopeVec);
         #endif
 

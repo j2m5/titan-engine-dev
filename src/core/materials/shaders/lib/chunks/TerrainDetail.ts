@@ -98,10 +98,12 @@
  * Маска m ∈ [0,1] — smoothstep по tan уклона (slopeTan, аргумент функции;
  * приходит из PlanetShaderTemplate — декод той же slope-карты, что и
  * perturbNormalFromSlope, см. её докстроку) с рваной границей: к порогам
- * uSteepMask.xy прибавлен uSteepMask.z·(vnoise(...) − 0.5) — тот же vnoise
- * без новых текстурных выборок (домен detailPos.xy·uDetailScale, та же
- * W-периодичность 1024, что у l выше, другая проекционная ось намеренно —
- * граница зоны не обязана совпадать с фазой l). Множитель uSteepGate — часть
+ * uSteepMask.xy прибавлен uSteepMask.z·(l.z/8.0 − 0.5) — домен и ось те же,
+ * что у l.z (detailPos.xy·uDetailScale, та же W-периодичность 1024, что у l
+ * выше), готовое значение просто переиспользуется делением на 8 (обратное
+ * домножению в определении l) — ни нового vnoise, ни новой выборки текстуры;
+ * граница зоны не обязана совпадать с фазой l, но математически это та же
+ * функция позиции. Множитель uSteepGate — часть
  * произведения самой маски (рулинг: не отдельный if), поэтому m ≡ 0 при
  * выключенном/неполном steep-наборе (Task 3 гарантирует это на CPU) —
  * дальше работает только ветка STEEP_EPS-ниже, значения численно совпадают
@@ -306,14 +308,15 @@ export const terrainDetailFunctions = `
       );
 
       if (fade1 > 0.0) {
-        // Маска зон: камень на крутом. breakup — существующий W-периодичный
-        // vnoise (другая ось, тот же домен) — граница рваная, новых
-        // текстурных выборок ноль. uSteepGate — множитель прямо в маске
+        // Маска зон: камень на крутом. breakup переиспользует l.z (домен и
+        // ось те же — detailPos.xy·uDetailScale, см. l выше) делением на 8
+        // (обратное домножению в определении l) — ни второго vnoise, ни
+        // новых текстурных выборок. uSteepGate — множитель прямо в маске
         // (рулинг): выключенный/неполный steep-набор даёт m ≡ 0 и код ниже
         // сваливается в единственную ветку m < STEEP_EPS — родной набор,
         // как до этой задачи. Без slope-карты slopeTan = 0 (см. вызывающую
         // сторону, PlanetShaderTemplate) — тот же эффект.
-        float m = uSteepGate * smoothstep(uSteepMask.x, uSteepMask.y, slopeTan + uSteepMask.z * (vnoise(0.25 * (detailPos.xy * uDetailScale)) - 0.5));
+        float m = uSteepGate * smoothstep(uSteepMask.x, uSteepMask.y, slopeTan + uSteepMask.z * (l.z / 8.0 - 0.5));
 
         vec3 nNative, nSteep;
         float aoNative, aoSteep;

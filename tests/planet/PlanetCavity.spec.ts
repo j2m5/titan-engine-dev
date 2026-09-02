@@ -28,7 +28,7 @@ describe('PlanetShaderTemplate: декод cavity-канала (строковы
   })
 
   it('выборка cavity стоит ПОСЛЕ perturbNormalFromSlope и ДО applyTerrainDetail', () => {
-    const slopeIdx = frag.indexOf('perturbNormalFromSlope(nLocal, eastLocal, uv)')
+    const slopeIdx = frag.indexOf('perturbNormalFromSlope(nLocal, eastLocal, uv, terrainSlopeVec)')
     const cavityIdx = frag.indexOf('#ifdef USE_CAVITY')
     const detailIdx = frag.indexOf('applyTerrainDetail(')
 
