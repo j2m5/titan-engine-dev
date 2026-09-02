@@ -522,7 +522,7 @@ describe('PlanetMaterial: данные Ио — height/slope/detail-связки
 // (процедурная поверхность): диффуз-ресурс 117 у них снят, диффуз рендерится
 // рантайм-генератором из proceduralSurface — инвариант «диффуз есть» этого
 // describe им больше не подходит, свой страж — PROCEDURAL_ACTOR_IDS ниже.
-const BATCH_ACTOR_IDS = [20, 22, 28, 29, 30, 36, 37, 38, 73, 83, 70] as const
+const BATCH_ACTOR_IDS = [20, 22, 28, 29, 30, 36, 37, 38, 73, 83] as const
 const TERRAFORM_RESOURCE_TYPES = ['height', 'slope', 'detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const
 
 describe(`PlanetMaterial: счётные инварианты батча ${BATCH_ACTOR_IDS.length} спутников`, () => {
@@ -563,7 +563,7 @@ describe(`PlanetMaterial: счётные инварианты батча ${BATCH
 // из data.proceduralSurface (Task 4/5), а данные тела несут только сид+ручки
 // fBM-поля. height/slope — как у остального батча (пер-тело, задача 4 прошлой
 // арки), общий шаренный диффуз (ресурс 117) снят вместе со связками.
-const PROCEDURAL_ACTOR_IDS = [93, 94, 95, 96, 97, 98, 99] as const
+const PROCEDURAL_ACTOR_IDS = [65, 66, 67, 68, 69, 70, 71, 72, 74, 93, 94, 95, 96, 97, 98, 99] as const
 
 describe('PlanetMaterial: процедурные тела (луны Коррибана)', () => {
   it.each(PROCEDURAL_ACTOR_IDS)('actorId %i: proceduralSurface валиден, diffuse-ресурса нет, height+slope есть, slope repeat, bumpScale 1, ровно 4 детальные связки', (actorId) => {
@@ -793,7 +793,7 @@ function ohann1(): Actor {
   return Actor.find(68)!
 }
 
-describe('PlanetMaterial: данные Ohann I — height/slope/detail-связки, шаренный вход диффуза', () => {
+describe('PlanetMaterial: данные Ohann I — height/slope/detail-связки (диффуз процедурный)', () => {
   it('height-строка Ohann I: верный путь и резидентный lifecycle', () => {
     const row = ohann1().resources.where('resourceType', 'height').first()
 
@@ -811,16 +811,9 @@ describe('PlanetMaterial: данные Ohann I — height/slope/detail-связ�
     expect(row!.getAttribute('wrapS')).toBe(RepeatWrapping)
   })
 
-  it('диффуз Ohann I: путь unnamed_planet_5.png (шаренный вход), wrapS RepeatWrapping, СВОЯ строка ресурса', () => {
-    const diffuse = ohann1().resources.where('resourceType', 'diffuse').first()!
-    const adriana4Diffuse = Actor.find(74)!.resources.where('resourceType', 'diffuse').first()!
-
-    expect(diffuse.getAttribute('path')).toBe('planets/unnamed/unnamed_planet_5.png')
-    expect(diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
-    // общий файл, но разные строки ресурса (wrapS ставится обеим независимо)
-    expect(diffuse.getAttribute('id')).not.toBe(adriana4Diffuse.getAttribute('id'))
-    expect(adriana4Diffuse.getAttribute('path')).toBe('planets/unnamed/unnamed_planet_5.png')
-    expect(adriana4Diffuse.getAttribute('wrapS')).toBe(RepeatWrapping)
+  it('диффуза у Ohann I больше нет — тело на процедурной поверхности (волна 2026-09-02), как и бывший сосед по шаренному входу Adriana IV', () => {
+    expect(ohann1().resources.where('resourceType', 'diffuse').count()).toBe(0)
+    expect(Actor.find(74)!.resources.where('resourceType', 'diffuse').count()).toBe(0)
   })
 
   it('detail-связки Ohann I указывают на те же ресурсы terrain/*.webp, что у Луны — шаринг по id', () => {
@@ -913,10 +906,12 @@ describe('PlanetMaterial: данные Коррибана — height/slope/detai
   })
 })
 
-// Все 19 тел Task 2 стандартизации: 9 реальных лун (Мимас..Оберон), Татуин,
+// Тела Task 2 стандартизации, оставшиеся на файловом диффузе: луны Татуина (65-67)
+// ушли на процедурную поверхность (2026-09-02) — их инварианты несёт страж PROCEDURAL_ACTOR_IDS.
+// Изначально: 9 реальных лун (Мимас..Оберон), Татуин,
 // 3 луны Татуина, 2 Ohann, 3 Adriana (I/II/IV) и Коррибан — счётные инварианты
 // одинаковы для всех, тот же паритет, что у батча 18 спутников и девяти тел выше
-const TASK2_19_ACTOR_IDS = [24, 25, 26, 27, 31, 32, 33, 34, 35, 62, 65, 66, 67, 68, 69, 71, 72, 74, 88] as const
+const TASK2_19_ACTOR_IDS = [24, 25, 26, 27, 31, 32, 33, 34, 35, 62, 88] as const
 
 describe('PlanetMaterial: счётные инварианты 19 тел Task 2 стандартизации', () => {
   it.each(TASK2_19_ACTOR_IDS)('actorId %i: пара height+slope, wrapS у slope и диффуза, bumpScale 1, ровно 6 терраформных связок', (actorId) => {

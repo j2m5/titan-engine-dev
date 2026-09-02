@@ -247,11 +247,11 @@ const BODIES: readonly BodyGeneration[] = [
   },
   {
     name: 'ohann3',
-    inputPath: `${TEXTURES_ROOT}/unnamed/unnamed_planet_7.png`,
-    inputKind: 'diffuse',
+    inputKind: 'procedural',
     radiusMeters: 347_190,
     seedActorId: 70,
-    actorIds: [70]
+    actorIds: [70],
+    outputDir: `${TEXTURES_ROOT}/unnamed`
   },
   // Korriban I-VII: вход `procedural` (арка procedural-surface, Task 7) —
   // растр берётся из сид-поля тела (`proceduralLuminance`, ручки
@@ -491,27 +491,27 @@ const BODIES: readonly BodyGeneration[] = [
   },
   {
     name: 'ghomrassen',
-    inputPath: `${TEXTURES_ROOT}/StarWars/ghomrassen/ghomrassen.png`,
-    inputKind: 'diffuse',
+    inputKind: 'procedural',
     radiusMeters: 520_790,
     seedActorId: 65,
-    actorIds: [65]
+    actorIds: [65],
+    outputDir: `${TEXTURES_ROOT}/StarWars/ghomrassen`
   },
   {
     name: 'guermessa',
-    inputPath: `${TEXTURES_ROOT}/StarWars/guermessa/guermessa.png`,
-    inputKind: 'diffuse',
+    inputKind: 'procedural',
     radiusMeters: 468_712,
     seedActorId: 66,
-    actorIds: [66]
+    actorIds: [66],
+    outputDir: `${TEXTURES_ROOT}/StarWars/guermessa`
   },
   {
     name: 'chenini',
-    inputPath: `${TEXTURES_ROOT}/StarWars/chenini/chenini.png`,
-    inputKind: 'diffuse',
+    inputKind: 'procedural',
     radiusMeters: 364_554,
     seedActorId: 67,
-    actorIds: [67]
+    actorIds: [67],
+    outputDir: `${TEXTURES_ROOT}/StarWars/chenini`
   },
   // Ohann I и Adriana IV делят один физический вход (unnamed_planet_5.png),
   // но КАЖДЫЙ — своя генерация со своим сидом (та же причина, что у Коррибана
@@ -519,46 +519,46 @@ const BODIES: readonly BodyGeneration[] = [
   // `<ключ>_height.raw`/`_slope.webp` — разные).
   {
     name: 'ohann1',
-    inputPath: `${TEXTURES_ROOT}/unnamed/unnamed_planet_5.png`,
-    inputKind: 'diffuse',
+    inputKind: 'procedural',
     radiusMeters: 1_215_179,
     seedActorId: 68,
-    actorIds: [68]
+    actorIds: [68],
+    outputDir: `${TEXTURES_ROOT}/unnamed`
   },
   {
     name: 'ohann2',
-    inputPath: `${TEXTURES_ROOT}/unnamed/unnamed_planet_6.png`,
-    inputKind: 'diffuse',
+    inputKind: 'procedural',
     radiusMeters: 867_985,
     seedActorId: 69,
-    actorIds: [69]
+    actorIds: [69],
+    outputDir: `${TEXTURES_ROOT}/unnamed`
   },
   {
     name: 'adriana1',
-    inputPath: `${TEXTURES_ROOT}/unnamed/unnamed_planet_1.png`,
-    inputKind: 'diffuse',
+    inputKind: 'procedural',
     radiusMeters: 1_388_776,
     seedActorId: 71,
-    actorIds: [71]
+    actorIds: [71],
+    outputDir: `${TEXTURES_ROOT}/unnamed`
   },
   {
     name: 'adriana2',
-    inputPath: `${TEXTURES_ROOT}/unnamed/unnamed_planet_3.png`,
-    inputKind: 'diffuse',
+    inputKind: 'procedural',
     radiusMeters: 1_041_582,
     seedActorId: 72,
-    actorIds: [72]
+    actorIds: [72],
+    outputDir: `${TEXTURES_ROOT}/unnamed`
   },
   {
     // Тот же вход, что у Ohann I (unnamed_planet_5.png) — источник 3072×1536
     // меньше потолка 8192, разрешение ограничится исходным (штатно, потолок
     // не форсируется), см. докблок выше.
     name: 'adriana4',
-    inputPath: `${TEXTURES_ROOT}/unnamed/unnamed_planet_5.png`,
-    inputKind: 'diffuse',
+    inputKind: 'procedural',
     radiusMeters: 1_701_251,
     seedActorId: 74,
-    actorIds: [74]
+    actorIds: [74],
+    outputDir: `${TEXTURES_ROOT}/unnamed`
   },
   {
     // Источник 4096×2048 меньше потолка 8192 — разрешение ограничится
