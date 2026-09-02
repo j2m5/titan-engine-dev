@@ -2,11 +2,13 @@ import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
 import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
-import { Texture, Vector3 } from 'three'
+import { Texture, Uniform, Vector3 } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { heightPathOf } from '@/core/terrain/heightPath'
 import { SLOPE_RANGE, isValidSlopeRange } from '@/core/terrain/slopeMapFormat'
+import { STEEP_DETAIL_PATHS } from '@/core/terrain/steepDetailPaths'
+import { resolveSteepZoneParams } from '@/core/terrain/steepZoneParams'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { IPlanetRenderingObject } from '@/core/models/types'
 import { readRenderingData } from '@/core/helpers/renderingData'
@@ -92,6 +94,17 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.fragmentShader = fragmentShader
     this.defines = defines
     this.baseDefines = { ...defines }
+
+    // Steep-зона материала (Task 3, чанк TerrainDetail — GLSL-сторона уже
+    // объявлена задачей 2): второй набор detail-сэмплеров и маска уклона
+    // добавляются прямо здесь, а не в PlanetShader — тот несёт только
+    // родной detail-слой тела, steep-набор общий на все терраформные тела
+    // (см. STEEP_DETAIL_PATHS) и логике конструктора шейдера не принадлежит.
+    this.uniforms.uSteepNorMap = new Uniform(null)
+    this.uniforms.uSteepArmMap = new Uniform(null)
+    this.uniforms.uSteepDiffMap = new Uniform(null)
+    this.uniforms.uSteepGate = new Uniform(0)
+    this.uniforms.uSteepMask = new Uniform(new Vector3(0.35, 0.55, 0.15))
   }
 
   private static resolveCloudAtmosphereThicknessUnits(atmosphereActor: Actor | undefined): number | undefined {
@@ -235,6 +248,37 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uDetailNor2Map.value = detailNor2Map ?? null
     this.uniforms.uDetailLayerGates.value.set(detailArmMap ? 1 : 0, detailDiffMap ? 1 : 0, detailNor2Map ? 1 : 0)
 
+    // Steep-зона материала (Task 3): rocky_trail поверх крутых склонов ЛЮБОГО
+    // терраформного тела (решение владельца, см. STEEP_DETAIL_PATHS). Гейт
+    // открыт только когда набор ПОЛНЫЙ (все три текстуры доехали от
+    // стримера) И родной detailDiffuse тела — это НЕ сам steep-набор: у Луны
+    // родной набор уже rocky_trail, второй проход тем же набором был бы
+    // бессмысленной двойной выборкой.
+    const steepNorMap = resourceStorage.getTexture(STEEP_DETAIL_PATHS.normal)
+    const steepArmMap = resourceStorage.getTexture(STEEP_DETAIL_PATHS.arm)
+    const steepDiffMap = resourceStorage.getTexture(STEEP_DETAIL_PATHS.diffuse)
+    const nativeDetailDiffusePath = this.model.resources.where('resourceType', 'detailDiffuse').first()?.getAttribute('path')
+    const steepSetComplete = Boolean(steepNorMap) && Boolean(steepArmMap) && Boolean(steepDiffMap)
+
+    this.uniforms.uSteepNorMap.value = steepNorMap ?? null
+    this.uniforms.uSteepArmMap.value = steepArmMap ?? null
+    this.uniforms.uSteepDiffMap.value = steepDiffMap ?? null
+    this.uniforms.uSteepGate.value = steepSetComplete && nativeDetailDiffusePath !== STEEP_DETAIL_PATHS.diffuse ? 1 : 0
+
+    // Маска зависит только от ручек данных (context = имя тела, как у прочих
+    // громких ошибок материала) — резолвится безусловно, независимо от гейта,
+    // тем же паттерном, что uCavityStrength/uSlopeRange выше. Опциональный
+    // вызов: минимальные стаб-акторы других спеков этого пакета не несут
+    // getAttribute на верхнем уровне (только renderingObject/physicalObject/
+    // children/resources) — материал не обязан требовать больше того, что уже
+    // требовал ДО этой задачи.
+    const steepZoneParams = resolveSteepZoneParams(planetData, this.model.getAttribute?.('name', '?') ?? '?')
+    ;(this.uniforms.uSteepMask.value as Vector3).set(
+      steepZoneParams.steepStart,
+      steepZoneParams.steepFull,
+      steepZoneParams.steepBreakup
+    )
+
     // Тексель диффуза для варпа средней полосы — только у ЗАГРУЖЕННОЙ карты
     // (плейсхолдер размером не является): нули выключают варп, а не врут.
     const loadedDiffuse = resourceStorage.getTexture(this.diffuseKey())?.image as
@@ -320,6 +364,11 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uDetailArmMap.value = null
     this.uniforms.uDetailNor2Map.value = null
     this.uniforms.uDetailLayerGates.value.set(0, 0, 0)
+
+    this.uniforms.uSteepNorMap.value = null
+    this.uniforms.uSteepArmMap.value = null
+    this.uniforms.uSteepDiffMap.value = null
+    this.uniforms.uSteepGate.value = 0
 
     // Возврат к состоянию «карт нет» — это и есть снимок конструирования:
     // поимённый список дефайнов пришлось бы держать в синхроне вручную при
