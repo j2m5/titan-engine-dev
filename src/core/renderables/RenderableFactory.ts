@@ -39,6 +39,7 @@ import { WhiteDwarfImpostor } from '@/core/renderables/WhiteDwarf/WhiteDwarfImpo
 import { INebulaRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
+import { RingDustRegistry } from '@/core/services/RingDustRegistry'
 import { RenderableObject3D } from '@/core/renderables/types'
 import { syncRenderableMaterials } from '@/core/materials/materialSync'
 
@@ -46,7 +47,8 @@ class RenderableFactory {
   public constructor(
     private readonly renderer: WebGLRenderer,
     private readonly resourceObserver: ResourceObserver,
-    private readonly atmosphereRegistry: AtmosphereRegistry
+    private readonly atmosphereRegistry: AtmosphereRegistry,
+    private readonly ringDustRegistry: RingDustRegistry
   ) {}
 
   public make(actor: Actor): Object3D {
@@ -362,7 +364,7 @@ class RenderableFactory {
     const lod = new LOD()
     const base = new Ring(actor)
     const detailed = new Ring(actor)
-    detailed.add(new AsteroidRingSystem(actor))
+    detailed.add(new AsteroidRingSystem(actor, {}, this.ringDustRegistry))
 
     const distanceLod = toThreeJSUnits(ringData.outerRadius * 2)
 

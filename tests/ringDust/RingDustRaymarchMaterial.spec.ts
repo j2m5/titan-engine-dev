@@ -4,15 +4,17 @@ import { RingDustRaymarchMaterial } from '@/core/renderables/DetailedRingStreami
 describe('RingDustRaymarchMaterial', () => {
   const make = () => new RingDustRaymarchMaterial()
 
-  it('настроен как аддитивное backface-гало: depthTest ON, depthWrite OFF', () => {
+  it('настроен как аддитивное backface-гало: depthTest OFF, depthWrite OFF', () => {
     const m = make()
     expect(m.side).toBe(BackSide)
     expect(m.transparent).toBe(true)
-    // depthWrite OFF — не блокирует другие прозрачные; depthTest ON (дефолт) —
-    // гало корректно перекрывается планетой (не просвечивает сквозь неё);
-    // аддитивный блендинг делает порядок прозрачных неважным
+    // Аппаратный тест глубины бинарен и не умеет «часть луча до камня»: с ним
+    // гало либо целиком срезалось планетой и камнями, либо целиком просвечивало
+    // сквозь них. Перекрытие теперь считает сам марш по текстуре глубины сцены
+    // (обрыв луча на tScene), поэтому тест и запись глубины выключены.
+    // Аддитивный блендинг делает порядок прозрачных неважным
     expect(m.depthWrite).toBe(false)
-    expect(m.depthTest).toBe(true)
+    expect(m.depthTest).toBe(false)
     expect(m.blending).toBe(AdditiveBlending)
   })
 
@@ -52,17 +54,36 @@ describe('RingDustRaymarchMaterial', () => {
     expect(make().fragmentShader).not.toContain('ringDustTauRay')
   })
 
-  it('пишет глубину от точки входа луча, а не от поверхности прокси-сферы', () => {
+  it('несёт юниформы глубины сцены для обрыва марша', () => {
+    const u = make().uniforms
+    expect(u.uSceneDepth).toBeDefined()
+    expect(u.uSceneDepth.value).toBeNull()
+    expect(u.uResolution).toBeDefined()
+    expect(u.uResolution.value.x).toBe(1)
+    expect(u.uResolution.value.y).toBe(1)
+    expect(u.uLogFarFactor).toBeDefined()
+    expect(u.uLogFarFactor.value).toBe(1)
+  })
+
+  it('обрывает пыльные интервалы на глубине сцены, а не пишет глубину сам', () => {
     const fs = make().fragmentShader
-    // Чанк three взял бы vFragDepth дальней грани прокси — глубину за плоскостью
-    // кольца: депт-пре-пасс кольца и камни отбраковывали бы гало перед собой
+    // Глубина сцены читается по экранной координате из копии depth-текстуры
+    expect(fs).toContain('texture2D(uSceneDepth, gl_FragCoord.xy / uResolution)')
+    // Декод лог-глубины three: w = 2^(z·log2(far+1)) − 1 — вдоль оси камеры
+    expect(fs).toContain('exp2(z * uLogFarFactor) - 1.0')
+    // Перевод в параметр луча в ring-local: w / (−z направления луча во view),
+    // без нормировки — масштаб modelViewMatrix учитывается сам
+    expect(fs).toContain('mat3(modelViewMatrix) * rayDir')
+    // Оба интервала режутся по tScene ДО вычисления длин: пыль за камнем и за
+    // планетой в τ не попадает, а луч, упёршийся в поверхность до входа в слой,
+    // схлопывается и уходит в discard
+    expect(fs).toContain('segA.y = min(segA.y, tScene)')
+    expect(fs).toContain('segB.y = min(segB.y, tScene)')
+    expect(fs.indexOf('min(segA.y, tScene)')).toBeLessThan(fs.indexOf('float lenA = '))
+    // Небо (z = 1) не режет ничего
+    expect(fs).toContain('z < 1.0 - 1e-6')
+    // Своей глубины материал не пишет: ни чанком three, ни вручную
     expect(fs).not.toContain(ShaderChunk.logdepthbuf_fragment)
-    expect(fs).not.toContain('gl_FragDepth = vIsPerspective')
-    // Ручная запись по формуле чанка от дистанции входа tEntry
-    expect(fs).toContain('float tEntry = ')
-    expect(fs).toContain('modelViewMatrix * vec4(uDustCamRingPos + rayDir * tEntry, 1.0)')
-    expect(fs).toContain('gl_FragDepth = log2(max(-entryView.z, 1e-6) + 1.0) * logDepthBufFC * 0.5')
-    // logDepthBufFC приходит из pars-чанка — он остаётся подключён
-    expect(fs).toContain(ShaderChunk.logdepthbuf_pars_fragment)
+    expect(fs).not.toContain('gl_FragDepth')
   })
 })

@@ -12,6 +12,8 @@ import {
 } from 'postprocessing'
 import { createAtmospherePass } from '@/core/graphic/effects/atmosphere/AtmosphereEffect'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
+import type { RingDustRegistry } from '@/core/services/RingDustRegistry'
+import { RingDustPass } from '@/core/graphic/passes/RingDustPass'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { ExposureEffect } from '@/core/graphic/effects/grading/ExposureEffect'
 import { ColorGradeEffect } from '@/core/graphic/effects/grading/ColorGradeEffect'
@@ -158,21 +160,27 @@ class Postprocessing {
     private readonly renderer: WebGLRenderer,
     private readonly scene: Scene,
     private readonly camera: PerspectiveCamera,
-    private readonly atmosphereRegistry: AtmosphereRegistry
+    private readonly atmosphereRegistry: AtmosphereRegistry,
+    private readonly ringDustRegistry: RingDustRegistry
   ) {}
 
   /**
    * Список пассов в порядке рендера. Вынесен из `initialize()`: composer
    * требует рендерер, а порядок — несущий инвариант и проверяется тестом.
    *
-   * Атмосфера — СВОЙ пасс между сценой и HDR-проходом: блум считает яркость
-   * по входу своего пасса, значит должен видеть уже затуманенный кадр.
+   * Пыль колец — сразу за сценой, в тот же буфер (без swap): её марш режется
+   * по глубине сцены, а глубина готова только после RenderPass.
+   *
+   * Атмосфера — СВОЙ пасс между пылью и HDR-проходом: она тонирует и гало
+   * пыли, а блум считает яркость по входу своего пасса, значит должен видеть
+   * уже затуманенный кадр.
    */
   public buildPasses(): readonly Pass[] {
     const [hdrPass, ldrPass] = createEffectPasses(this.camera)
 
     return [
       new RenderPass(this.scene, this.camera),
+      new RingDustPass(this.camera, this.ringDustRegistry),
       createAtmospherePass(this.camera, this.atmosphereRegistry, readAtmosphereDebugView()),
       hdrPass,
       ldrPass

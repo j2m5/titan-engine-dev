@@ -1,4 +1,4 @@
-import { AdditiveBlending, BackSide, Color, ShaderChunk, ShaderMaterial, Vector3 } from 'three'
+import { AdditiveBlending, BackSide, Color, ShaderChunk, ShaderMaterial, Vector2, Vector3 } from 'three'
 import { ringDustRaymarchFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
 
 /**
@@ -12,16 +12,23 @@ import { ringDustRaymarchFunctions, ringDustUniforms } from '@/core/materials/sh
  * собственных граней; сфера этого артефакта лишена.
  *
  * Блендинг АДДИТИВНЫЙ (порядок прозрачных не важен, гало не даёт «бруса»),
- * depthWrite OFF (не блокирует другие прозрачные), depthTest ON.
+ * depthWrite OFF и depthTest OFF: перекрытие считает сам марш.
  *
- * Глубина фрагмента — от ТОЧКИ ВХОДА луча в первый пыльный интервал (ближняя
- * точка объёма), а не от дальней поверхности прокси-сферы, которую даёт чанк
- * logdepthbuf_fragment: та лежит за плоскостью кольца, и тест глубины отбраковывал
- * бы гало над плотными текселями кольца (депт-пре-пасс кольца пишет глубину) и
- * над камнями. С глубиной входа перекрывает только то, что реально ближе входа:
- * планета (вход за её диском) и камни/тексели ПЕРЕД гало; пыль перед ними живёт.
- * Формула — ровно формула чанка (vFragDepth = 1 + w, w = -viewZ), проект всегда
- * рендерит с логарифмическим буфером (src/config/three.ts).
+ * Перекрытие — по ГЛУБИНЕ СЦЕНЫ, а не аппаратным тестом. Один фрагмент прокси
+ * несёт интеграл вдоль всего луча, и бинарный тест не умеет «пыль до камня
+ * есть, за камнем нет»: с глубиной дальней стенки прокси гало целиком срезали
+ * камни, плотные тексели кольца и планета; с глубиной точки входа в слой —
+ * целиком пропускали вместе с пылью ЗА ними, и планета в дыре кольца с камнями
+ * внутри слоя просвечивали. Поэтому материал рисуется пассом RingDustPass после
+ * сцены, читает копию depth-текстуры по экранной координате, декодирует
+ * логарифмическую глубину three (z = log2(1 + w)/log2(far + 1), w = −viewZ;
+ * проект всегда рендерит с лог-буфером, src/config/three.ts) и режет оба
+ * пыльных интервала по tScene. Луч, упёршийся в поверхность до входа в слой,
+ * схлопывается в пустой интервал и уходит в discard.
+ *
+ * Перевод глубины в параметр луча: точка камеры — начало view-пространства,
+ * поэтому −viewZ(t) = t · (−(M·rayDir).z), где M = mat3(modelViewMatrix).
+ * Направление не нормируется — масштаб модели, если появится, учитывается сам.
  *
  * Марш идёт только внутри пыльных интервалов (не жжём шаги на пустоте):
  * фиксированный бюджет шагов, IGN-джиттер против бандинга, early-exit по
@@ -57,11 +64,16 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
         /** Множитель профиля (среднее модуляции ≈ 1); 0 — профиль выключен */
         uDustRadialMapScale: { value: 0.0 },
         /** Диагностика: 0 выкл, 1 τ, 2 alpha, 3 гейт, 4 теплокарта шагов */
-        uDustDebugMode: { value: 0 }
+        uDustDebugMode: { value: 0 },
+        /** Копия глубины сцены (RingDustPass), лог-глубина three в .r */
+        uSceneDepth: { value: null },
+        /** Размер таргета в пикселях: gl_FragCoord → uv копии глубины */
+        uResolution: { value: new Vector2(1, 1) },
+        /** log2(far + 1) камеры — знаменатель лог-глубины three */
+        uLogFarFactor: { value: 1.0 }
       },
       vertexShader: /* glsl */ `
         ${ShaderChunk.common}
-        ${ShaderChunk.logdepthbuf_pars_vertex}
 
         varying vec3 vRingPos;
 
@@ -69,19 +81,19 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
           // Геометрия запечена в ring-local space (см. RingDustVolume)
           vRingPos = position;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-
-          ${ShaderChunk.logdepthbuf_vertex}
         }
       `,
       fragmentShader: /* glsl */ `
         ${ShaderChunk.common}
-        ${ShaderChunk.logdepthbuf_pars_fragment}
 
         ${ringDustUniforms}
         ${ringDustRaymarchFunctions}
 
         uniform int uDustMaxSteps;
         uniform int uDustDebugMode;
+        uniform sampler2D uSceneDepth;
+        uniform vec2 uResolution;
+        uniform float uLogFarFactor;
 
         // Во фрагментном префиксе three modelViewMatrix не объявлен, но рендерер
         // грузит его по имени в любой стадии. Берём именно его, а не
@@ -91,6 +103,20 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
 
         varying vec3 vRingPos;
 
+        // Параметр луча (ring-local), на котором луч упирается в сцену.
+        // Небо (z = 1) не режет ничего.
+        float ringDustSceneT(vec3 rayDir) {
+          float z = texture2D(uSceneDepth, gl_FragCoord.xy / uResolution).r;
+          if (z < 1.0 - 1e-6) {
+            // Лог-глубина three: z = log2(1 + w)/log2(far + 1), w = -viewZ
+            float w = exp2(z * uLogFarFactor) - 1.0;
+            // Камера — начало view-пространства: -viewZ(t) = t * (-(M*rayDir).z)
+            vec3 dirView = mat3(modelViewMatrix) * rayDir;
+            return w / max(-dirView.z, 1e-6);
+          }
+          return 1.0e30;
+        }
+
         // Теплокарта для диагностических режимов: синий → зелёный → красный
         vec3 dustDebugHeat(float x) {
           x = clamp(x, 0.0, 1.0);
@@ -99,9 +125,6 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
         }
 
         void main() {
-          // logdepthbuf_fragment здесь НЕ подключён: он пишет глубину дальней
-          // поверхности прокси-сферы. Глубина берётся ниже, от точки входа луча.
-
           // Фрагмент прокси задаёт только направление луча
           vec3 rayDir = normalize(vRingPos - uDustCamRingPos);
           float gate = ringDustAngleGate(rayDir);
@@ -130,20 +153,17 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
             segB = vec2(max(segB.x, s0), min(segB.y, s1));
           }
 
+          // Обрыв по глубине сцены: пыль за камнем, планетой и плотным текселем
+          // кольца в τ не попадает. Луч, упёршийся в поверхность до входа в слой,
+          // схлопывает оба интервала и уходит в discard ниже.
+          float tScene = ringDustSceneT(rayDir);
+          segA.y = min(segA.y, tScene);
+          segB.y = min(segB.y, tScene);
+
           float lenA = max(segA.y - segA.x, 0.0);
           float lenB = max(segB.y - segB.x, 0.0);
           float total = lenA + lenB;
           if (total <= 0.0) discard;
-
-          // Глубина гало — от точки входа в первый пыльный интервал (segA, а если
-          // он схлопнут обрезкой — segB). Камера внутри слоя: tEntry = 0, глубина
-          // у ближней плоскости. Луч без пыли сюда не доходит (discard выше).
-          float tEntry = lenA > 0.0 ? segA.x : segB.x;
-          #ifdef USE_LOGARITHMIC_DEPTH_BUFFER
-            vec4 entryView = modelViewMatrix * vec4(uDustCamRingPos + rayDir * tEntry, 1.0);
-            // Формула чанка logdepthbuf_fragment при vFragDepth = 1 + w, w = -viewZ
-            gl_FragDepth = log2(max(-entryView.z, 1e-6) + 1.0) * logDepthBufFC * 0.5;
-          #endif
 
           float steps = float(uDustMaxSteps);
           float dt = total / steps;
@@ -194,6 +214,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
       side: BackSide,
       transparent: true,
       depthWrite: false,
+      depthTest: false,
       blending: AdditiveBlending
     })
   }

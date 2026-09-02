@@ -1,5 +1,5 @@
 import { Vector3 } from 'three'
-import { angleGate, nearRamp, densityAt, tauMarch } from './tauMirror'
+import { angleGate, nearRamp, densityAt, tauMarch, circleInterval } from './tauMirror'
 import type { DustParams } from './tauMirror'
 
 const params: DustParams = { rho0: 0.02, H: 0.5, rIn: 70, rOut: 140 }
@@ -100,5 +100,32 @@ describe('tauMarch (зеркало марша объёма)', () => {
   it('нулевой τ вне конуса кольца', () => {
     const march = tauMarch(new Vector3(300, 100, 0), new Vector3(0, 1, 0), params, { steps: 16, jitter: 0.5, nearFade: 20 })
     expect(march).toBe(0)
+  })
+
+  describe('обрыв по глубине сцены (tScene)', () => {
+    // Луч через дыру кольца: два интервала, «планета» упирает луч посреди дыры
+    const [o, d] = rays[1]
+
+    it('пыль за поверхностью в τ не попадает: марш до tScene = плотный интеграл до tScene', () => {
+      const tScene = 150
+      const dense = denseTauRamped(o, d, tScene, 20)
+      const march = tauMarch(o, d, params, { steps: 64, jitter: 0.5, nearFade: 20, tScene })
+      const full = tauMarch(o, d, params, { steps: 64, jitter: 0.5, nearFade: 20 })
+      expect(march).toBeGreaterThan(0)
+      expect(march).toBeLessThan(full)
+      expect(Math.abs(march - dense)).toBeLessThan(dense * 0.06 + 1e-6)
+    })
+
+    it('поверхность до входа в слой схлопывает интервалы — τ ровно 0', () => {
+      const outer = circleInterval(o, d, params.rOut)
+      const march = tauMarch(o, d, params, { steps: 64, jitter: 0.5, nearFade: 20, tScene: outer[0] * 0.5 })
+      expect(march).toBe(0)
+    })
+
+    it('небо (tScene не задан) режет ничего: τ равен полному', () => {
+      const a = tauMarch(o, d, params, { steps: 64, jitter: 0.5, nearFade: 20 })
+      const b = tauMarch(o, d, params, { steps: 64, jitter: 0.5, nearFade: 20, tScene: Infinity })
+      expect(b).toBe(a)
+    })
   })
 })

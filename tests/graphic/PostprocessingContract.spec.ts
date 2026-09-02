@@ -5,6 +5,8 @@ import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderT
 import { AtmosphereEffect, createAtmospherePass } from '@/core/graphic/effects/atmosphere/AtmosphereEffect'
 import { buildSlotGlsl } from '@/core/graphic/effects/atmosphere/atmosphereSlotShader'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
+import { RingDustRegistry } from '@/core/services/RingDustRegistry'
+import { RingDustPass } from '@/core/graphic/passes/RingDustPass'
 
 describe('Postprocessing: контракт цветового конвейера', () => {
   it('тонмаппинг реально применяется: NORMAL-бленд, не DST-заглушка', () => {
@@ -85,21 +87,25 @@ describe('Postprocessing: пасс атмосферы', () => {
     expect(pass.needsDepthTexture).toBe(true)
   })
 
-  it('порядок пассов: атмосфера между RenderPass и HDR-проходом', () => {
-    // Блум считает яркость по входу СВОЕГО пасса — он обязан видеть уже
-    // затуманенный кадр, поэтому атмосфера идёт отдельным пассом раньше
+  it('порядок пассов: пыль колец сразу за RenderPass, атмосфера перед HDR-проходом', () => {
+    // Гало пыли режет марш по глубине сцены — ему нужен готовый depth-буфер,
+    // поэтому оно идёт сразу за RenderPass и рисует в тот же буфер (без swap).
+    // Атмосфера — за ним: она тонирует и пыль, а блум считает яркость по входу
+    // СВОЕГО пасса и обязан видеть уже затуманенный кадр
     const passes = new Postprocessing(
       null as never,
       null as never,
       new PerspectiveCamera(),
-      new AtmosphereRegistry()
+      new AtmosphereRegistry(),
+      new RingDustRegistry()
     ).buildPasses()
 
-    expect(passes).toHaveLength(4)
+    expect(passes).toHaveLength(5)
     expect(passes[0]).toBeInstanceOf(RenderPass)
-    expect((passes[1] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(AtmosphereEffect)
-    expect(passes[2]).toBeInstanceOf(EffectPass)
+    expect(passes[1]).toBeInstanceOf(RingDustPass)
+    expect((passes[2] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(AtmosphereEffect)
     expect(passes[3]).toBeInstanceOf(EffectPass)
+    expect(passes[4]).toBeInstanceOf(EffectPass)
   })
 })
 
