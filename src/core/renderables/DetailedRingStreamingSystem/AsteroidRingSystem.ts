@@ -12,6 +12,7 @@ import { InstancePool, PoolLayerConfig } from './InstancePool'
 import { SectorManager, LODThresholds } from './SectorManager'
 import { RingDustVolume } from './dust/RingDustVolume'
 import { installRingDustDebug, type RockDustUniforms } from './dust/RingDustDebug'
+import type { RingDustRegistry } from '@/core/services/RingDustRegistry'
 import { ASTEROID_PROFILES, type AsteroidProfileName } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
 import { UpdateContext } from '@/core/UpdateContext'
 import { getArchetypeGeometries } from './archetypes/ArchetypeLibrary'
@@ -220,6 +221,9 @@ class AsteroidRingSystem extends Group {
 
   private dustVolume: RingDustVolume | null = null
 
+  /** Реестр пасса пыли; null — объём в графе есть, но пасс его не рисует (тесты, автономные сцены) */
+  private readonly dustRegistry: RingDustRegistry | null
+
   // Reusable objects
   private readonly _localCamPos = new Vector3()
   private readonly _worldPos = new Vector3()
@@ -240,9 +244,14 @@ class AsteroidRingSystem extends Group {
   private ringInnerTU = 0
   private ringOuterTU = 0
 
-  public constructor(model: Actor, configOverrides: Partial<AsteroidRingConfig> = {}) {
+  public constructor(
+    model: Actor,
+    configOverrides: Partial<AsteroidRingConfig> = {},
+    dustRegistry: RingDustRegistry | null = null
+  ) {
     super()
     this.model = model
+    this.dustRegistry = dustRegistry
 
     // `IRenderingObject.data` — это `Record<string, unknown>`, форма утверждается локально
     const renderData = model.renderingObject?.getAttribute('data') as IRingRenderingObject | undefined
@@ -418,7 +427,8 @@ class AsteroidRingSystem extends Group {
         anglePower: cfg.dustAnglePower,
         nearFade: dustNearFade,
         maxSteps: cfg.dustMaxSteps,
-        planetRadius: dustPlanetRadius
+        planetRadius: dustPlanetRadius,
+        registry: this.dustRegistry ?? undefined
       })
       this.add(this.dustVolume)
 

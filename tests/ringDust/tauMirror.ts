@@ -94,12 +94,18 @@ interface MarchOptions {
   jitter: number
   /** Дистанция полного проявления пыли (зеркало uDustNearFade), юниты */
   nearFade: number
+  /**
+   * Параметр луча, на котором луч упирается в сцену (зеркало ringDustSceneT):
+   * оба интервала режутся по нему. undefined — небо, ничего не режется.
+   */
+  tScene?: number
 }
 
 /**
  * Марш-квадратура τ вдоль луча — зеркало цикла RingDustRaymarchMaterial.
  * Интервалы: внешний цилиндр минус дыра, обрезка по вертикальной оболочке
- * |y| <= 12H. Шаги распределяются по объединённой длине интервалов.
+ * |y| <= 12H, обрыв по глубине сцены tScene. Шаги распределяются по
+ * объединённой длине интервалов.
  */
 const tauMarch = (origin: Vector3, dir: Vector3, params: DustParams, opts: MarchOptions): number => {
   const outer = circleInterval(origin, dir, params.rOut)
@@ -125,6 +131,11 @@ const tauMarch = (origin: Vector3, dir: Vector3, params: DustParams, opts: March
     segA = [Math.max(segA[0], s0), Math.min(segA[1], s1)]
     segB = [Math.max(segB[0], s0), Math.min(segB[1], s1)]
   }
+
+  // Обрыв по глубине сцены (зеркало GLSL): пыль за поверхностью в τ не попадает
+  const tScene = opts.tScene ?? Infinity
+  segA[1] = Math.min(segA[1], tScene)
+  segB[1] = Math.min(segB[1], tScene)
 
   const lenA = Math.max(segA[1] - segA[0], 0)
   const lenB = Math.max(segB[1] - segB[0], 0)

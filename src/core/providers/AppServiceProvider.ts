@@ -10,6 +10,7 @@ import { MarkerManager } from '@/core/services/MarkerManager'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { SceneObserver } from '@/core/services/SceneObserver'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
+import { RingDustRegistry } from '@/core/services/RingDustRegistry'
 import { CameraCollision } from '@/core/services/CameraCollision'
 import { HeightFieldGate } from '@/core/services/HeightFieldGate'
 import { SimulationClock } from '@/core/time/SimulationClock'
@@ -40,11 +41,17 @@ class AppServiceProvider extends ServiceProvider {
     )
 
     this.app.singleton(Tokens.AtmosphereRegistry, () => new AtmosphereRegistry())
+    this.app.singleton(Tokens.RingDustRegistry, () => new RingDustRegistry())
 
     this.app.singleton(
       Tokens.RenderableFactory,
       (c: Container) =>
-        new RenderableFactory(c.get(Tokens.Renderer), c.get(Tokens.ResourceObserver), c.get(Tokens.AtmosphereRegistry))
+        new RenderableFactory(
+          c.get(Tokens.Renderer),
+          c.get(Tokens.ResourceObserver),
+          c.get(Tokens.AtmosphereRegistry),
+          c.get(Tokens.RingDustRegistry)
+        )
     )
 
     this.app.singleton(
@@ -65,7 +72,8 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.Renderer),
           c.get(Tokens.Scene),
           c.get(Tokens.Camera),
-          c.get(Tokens.AtmosphereRegistry)
+          c.get(Tokens.AtmosphereRegistry),
+          c.get(Tokens.RingDustRegistry)
         )
     )
 

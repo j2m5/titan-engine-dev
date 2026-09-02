@@ -8,6 +8,7 @@ vi.mock('@/core/services/ResourceStorage', () => ({
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
 import { Actor } from '@/core/models/Actor'
 import { poolOf } from '../helpers/ringSystemInternals'
+import { RingDustRegistry } from '@/core/services/RingDustRegistry'
 
 const makeFakeActor = (): Actor =>
   ({
@@ -37,6 +38,13 @@ describe('AsteroidRingSystem dust integration', () => {
     const u = poolOf(system).billboardMaterial.uniforms
     expect(u.uDustAnglePower.value).toBe(2)
     expect(u.uDustNearFade.value).toBeGreaterThan(0)
+  })
+
+  it('регистрирует объём пыли в реестре пасса, когда реестр передан', () => {
+    const registry = new RingDustRegistry()
+    const system = new AsteroidRingSystem(makeFakeActor(), {}, registry)
+    const dust = system.children.find((c) => c.name === 'RingDustVolume')
+    expect(registry.volumes()).toEqual([dust])
   })
 
   it('respects dustEnabled: false override', () => {

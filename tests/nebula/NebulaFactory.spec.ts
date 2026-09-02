@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { Vector2, WebGLRenderer } from 'three'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
+import { RingDustRegistry } from '@/core/services/RingDustRegistry'
 import { PlacedNode } from '@/core/renderables/utils/PlacedNode'
 import { Nebula } from '@/core/renderables/Nebula'
 import { Actor } from '@/core/models/Actor'
@@ -42,7 +43,7 @@ function nebulaActor(
 }
 
 function makeFactory(): RenderableFactory {
-  return new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver, new AtmosphereRegistry())
+  return new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver, new AtmosphereRegistry(), new RingDustRegistry())
 }
 
 describe('RenderableFactory — туманность', () => {
