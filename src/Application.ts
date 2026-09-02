@@ -6,6 +6,7 @@ import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { Scene } from 'three'
 import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
 import type { HeightFieldGate } from '@/core/services/HeightFieldGate'
+import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
 import { SkyboxBackground } from '@/core/renderables/SkyboxBackground'
 
 class Application {
@@ -16,7 +17,11 @@ class Application {
     private resourceObserver: ResourceObserver,
     private scene: Scene,
     private leakDetector: LeakDetector,
-    private heightFieldGate: HeightFieldGate
+    private heightFieldGate: HeightFieldGate,
+    // Опционален: существующие тесты Application строят его без генератора —
+    // тот же приём, что у остальных сценарных сервисов (AtmosphereRegistry
+    // и т.п. приходят опциональными параметром там, где нет DI-контейнера).
+    private proceduralSurfaceGenerator?: ProceduralSurfaceGenerator
   ) {}
 
   /**
@@ -36,6 +41,10 @@ class Application {
     this.engine.dispose()
     resourceStorage.deleteAllTextures()
     heightFieldStorage.clear()
+    // Инвариант владения: генератор рантайм-диффуза процедурных тел — общий
+    // синглтон сцены (см. AppServiceProvider), а не собственность акторов —
+    // его render target'ы разбирает владелец, здесь же, а не сами тела.
+    this.proceduralSurfaceGenerator?.dispose()
 
     if (import.meta.env.DEV && this.everLoaded) {
       const leak = this.leakDetector.record()

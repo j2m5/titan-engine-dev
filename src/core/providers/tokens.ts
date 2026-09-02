@@ -26,6 +26,7 @@ import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
 import type { TextureBudget } from '@/core/streaming/TextureBudget'
 import type { CameraCollision } from '@/core/services/CameraCollision'
 import type { HeightFieldGate } from '@/core/services/HeightFieldGate'
+import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
 
 export const Tokens = {
   Engine: token<Engine>('Engine'),
@@ -53,5 +54,6 @@ export const Tokens = {
   Postprocessing: token<Postprocessing>('Postprocessing'),
   RenderableFactory: token<RenderableFactory>('RenderableFactory'),
   LeakDetector: token<LeakDetector>('LeakDetector'),
-  TextureBudget: token<TextureBudget>('TextureBudget')
+  TextureBudget: token<TextureBudget>('TextureBudget'),
+  ProceduralSurfaceGenerator: token<ProceduralSurfaceGenerator>('ProceduralSurfaceGenerator')
 } as const

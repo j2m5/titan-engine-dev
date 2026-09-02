@@ -19,6 +19,7 @@ import { Postprocessing } from '@/core/graphic/Postprocessing'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { LeakDetector } from '@/core/lifecycle/LeakDetector'
 import { TextureBudget } from '@/core/streaming/TextureBudget'
+import { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
 
 class AppServiceProvider extends ServiceProvider {
   public register(): void {
@@ -41,10 +42,24 @@ class AppServiceProvider extends ServiceProvider {
 
     this.app.singleton(Tokens.AtmosphereRegistry, () => new AtmosphereRegistry())
 
+    // Один генератор на сцену (владение рендерером — по прецеденту
+    // BrunetonAtmosphere, см. докблок ProceduralSurfaceGenerator): его
+    // ensureDiffuse доезжает до TerrainSphere через RenderableFactory, а
+    // dispose() — до Application.teardown() тем же путём, синглтон общий.
+    this.app.singleton(
+      Tokens.ProceduralSurfaceGenerator,
+      (c: Container) => new ProceduralSurfaceGenerator(c.get(Tokens.Renderer))
+    )
+
     this.app.singleton(
       Tokens.RenderableFactory,
       (c: Container) =>
-        new RenderableFactory(c.get(Tokens.Renderer), c.get(Tokens.ResourceObserver), c.get(Tokens.AtmosphereRegistry))
+        new RenderableFactory(
+          c.get(Tokens.Renderer),
+          c.get(Tokens.ResourceObserver),
+          c.get(Tokens.AtmosphereRegistry),
+          c.get(Tokens.ProceduralSurfaceGenerator)
+        )
     )
 
     this.app.singleton(
@@ -128,7 +143,8 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.ResourceObserver),
           c.get(Tokens.Scene),
           c.get(Tokens.LeakDetector),
-          c.get(Tokens.HeightFieldGate)
+          c.get(Tokens.HeightFieldGate),
+          c.get(Tokens.ProceduralSurfaceGenerator)
         )
     )
 

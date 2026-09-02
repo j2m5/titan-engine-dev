@@ -330,38 +330,34 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
     observer.scenario = HORUSET_SYSTEM
 
-    // Korriban I и II (реальные акторы 93 и 94) делят диффуз и четыре
-    // detail-текстуры (тот же физический файл на семь планет Korriban I–VII; легаси-bump
-    // удалён из данных вместе с остальными переведёнными на height+slope телами), но
-    // height/slope у каждого свои (фикс-раунд 1 Task 4: общая карта, откалиброванная
-    // под радиус I, давала VII 577% его бюджета высоты — батч перешёл на пер-тело
-    // генерации korriban1..korriban7).
-    const sharedPaths = [
-      'planets/StarWars/korriban/i/i.jpg',
-      'terrain/rocky_trail_diff.webp',
-      'terrain/rocky_trail_nor.webp',
-      'terrain/rocky_trail_arm.webp',
-      'terrain/moon_01_nor.webp'
-    ]
+    // Korriban I и II (реальные акторы 93 и 94) делят четыре detail-текстуры
+    // (тот же физический файл на семь планет Korriban I–VII; легаси-bump
+    // удалён из данных вместе с остальными переведёнными на height+slope
+    // телами; диффуз-ресурс удалён аркой процедурной поверхности Task 6 —
+    // диффуз у этих тел больше не файл, а рантайм-генерация, стримеру не
+    // виден), но height/slope у каждого свои (фикс-раунд 1 Task 4: общая
+    // карта, откалиброванная под радиус I, давала VII 577% его бюджета
+    // высоты — батч перешёл на пер-тело генерации korriban1..korriban7).
+    const sharedPaths = ['terrain/rocky_trail_diff.webp', 'terrain/rocky_trail_nor.webp', 'terrain/rocky_trail_arm.webp', 'terrain/moon_01_nor.webp']
     const korribanISlope = 'planets/StarWars/korriban/i/korriban1_slope.webp'
     const korribanIISlope = 'planets/StarWars/korriban/i/korriban2_slope.webp'
 
     data.set('Korriban I', record('Korriban I', 100))
     await handlers['ClosestChange'](record('Korriban I', 100))
 
-    expect(load).toHaveBeenCalledTimes(6) // диффуз + своя slope + 4 detail
+    expect(load).toHaveBeenCalledTimes(5) // своя slope + 4 detail (без диффуза — процедурное тело)
     for (const path of [...sharedPaths, korribanISlope]) expect(resourceStorage.getTexture(path), path).toBeDefined()
 
-    // Korriban II входит в зону. Диффуз/detail уже в реестре — повторного
-    // сетевого запроса по ним быть не должно, но своя slope-карта — новый путь.
+    // Korriban II входит в зону. Detail уже в реестре — повторного
+    // сетевого запроса по нему быть не должно, но своя slope-карта — новый путь.
     data.set('Korriban II', record('Korriban II', 120))
     await handlers['ClosestChange'](record('Korriban II', 120))
 
-    expect(load).toHaveBeenCalledTimes(7)
+    expect(load).toHaveBeenCalledTimes(6)
     expect(resourceStorage.getTexture(korribanIISlope)).toBeDefined()
   })
 
-  it('шаренный путь честно вытесняется по бюджету, когда дедуплицированный спрос ВСЕХ совладельцев не помещается (репро ревью: Korriban I+II в бюджете на 7, вход III выталкивает detailNormal2)', async () => {
+  it('шаренный путь честно вытесняется по бюджету, когда дедуплицированный спрос ВСЕХ совладельцев не помещается (репро ревью: Korriban I+II в бюджете на 6, вход III выталкивает detailNormal2)', async () => {
     // Прежняя версия этого сценария вызывала evictPath НАПРЯМУЮ с рукодельным
     // pathActors и проверяла, что «шаренный путь не удаляется, пока нужен
     // другому телу» — это маскировало реальный баг (HIGH ревью после f6fe748):
@@ -371,15 +367,17 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // РЕАЛЬНЫЙ closestChange/decision.evict — ту же дорогу, что и продакшен.
     //
     // Числа воспроизводят репро ревью буквально, но легаси-bump (использовавшийся
-    // как жертва до данных-правки задачи 2) удалён из данных Korriban — у
-    // Korriban I+II теперь 7 разных путей (диффуз+4detail общие, у каждого
-    // своя slope), бюджет — ровно на 7. Жертва-замена — detailNormal2
+    // как жертва до данных-правки задачи 2) удалён из данных Korriban, а
+    // диффуз-ресурс снят целиком аркой процедурной поверхности (Task 6 —
+    // диффуз тел рендерится рантайм-генератором, стримеру не виден) — у
+    // Korriban I+II теперь 6 разных путей (4detail общие, у каждого своя
+    // slope), бюджет — ровно на 6. Жертва-замена — detailNormal2
     // (terrain/moon_01_nor.webp, MAP_TYPE_RANK 2.3): он тоже общий на все
     // Korriban-тела и, как и bump раньше, самый младший ранг среди путей этого
     // раунда (ниже него по рангу в остальной системе нет ни одной общей
-    // карты у этих трёх акторов — только диффуз/slope/detail, см.
+    // карты у этих трёх акторов — только slope/detail, см.
     // storage/database/actorResource.ts). Вход Korriban III добавляет
-    // восьмой путь (свою slope, ранг 1) — бюджет не резиновый, и младший
+    // седьмой путь (свою slope, ранг 1) — бюджет не резиновый, и младший
     // ранг уступает место старшему.
     const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
       // Единый вес что до, что после замера (8192×4096 — тот же размер, что
@@ -390,16 +388,18 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       return Promise.resolve({ ok: true as const, texture })
     })
 
-    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 7, load)
+    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 6, load)
     observer.scenario = HORUSET_SYSTEM
     vi.useFakeTimers()
 
     const VICTIM = 'terrain/moon_01_nor.webp'
-    const DIFFUSE = 'planets/StarWars/korriban/i/i.jpg'
+    // Процедурное тело без диффуз-ресурса: floor decideStreaming у топ-тела —
+    // одна лишь его slope (floorDiffuse не находится, floorPaths = {slope}).
+    const FLOOR_SLOPE = 'planets/StarWars/korriban/i/korriban1_slope.webp'
     const owners: Record<string, ReturnType<typeof vi.fn>> = {}
 
     // Korriban I (radius 1740) — топ-приоритет при равных дистанциях, его
-    // диффуз+slope — floor decideStreaming, держатся безусловно.
+    // slope — floor decideStreaming, держится безусловно.
     for (const name of ['Korriban I', 'Korriban II', 'Korriban III']) {
       const mesh = new Mesh()
       mesh.name = name
@@ -416,7 +416,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     const state = streamingState(observer)
 
-    expect(state.loaded.size).toBe(7)
+    expect(state.loaded.size).toBe(6)
     expect(state.loaded.has(VICTIM)).toBe(true)
 
     // Резидентность младше MIN_RESIDENCY_MS пинит путь через isPinned
@@ -427,15 +427,15 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     data.set('Korriban III', record('Korriban III', 100))
     await handlers['ClosestChange'](record('Korriban III', 100))
 
-    // Бюджет по-прежнему на 7 путей, а не на 8 — раньше (баг) loaded.size
-    // рос до 8, перерасходуя бюджет и никогда не возвращаясь к лимиту.
-    expect(state.loaded.size).toBe(7)
+    // Бюджет по-прежнему на 6 путей, а не на 7 — раньше (баг) loaded.size
+    // рос до 7, перерасходуя бюджет и никогда не возвращаясь к лимиту.
+    expect(state.loaded.size).toBe(6)
     expect(state.loaded.has(VICTIM)).toBe(false)
     expect(resourceStorage.getTexture(VICTIM)).toBeUndefined()
 
-    // Общий диффуз (floor топ-тела) как был резидентным, так и остался.
-    expect(state.loaded.has(DIFFUSE)).toBe(true)
-    expect(resourceStorage.getTexture(DIFFUSE)).toBeDefined()
+    // Floor топ-тела (его slope) как был резидентным, так и остался.
+    expect(state.loaded.has(FLOOR_SLOPE)).toBe(true)
+    expect(resourceStorage.getTexture(FLOOR_SLOPE)).toBeDefined()
 
     // Материалы ВСЕХ трёх совладельцев detailNormal2 обновились (не сброшены
     // на заглушку — это не диффуз, тело переживает потерю detail-карты).
@@ -459,8 +459,9 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     // decideStreaming резервирует бюджет по СВОЕМУ списку путей каждого
     // кандидата, не зная о меж-акторном совпадении строк — бюджет должен
-    // вместить оба «наивных» резерва (6+6 путей), иначе Korriban II не попадёт
-    // в wanted этого пересчёта вовсе, и тест перестанет проверять дедуп.
+    // вместить оба «наивных» резерва (5+5 путей — процедурное тело без
+    // диффуз-ресурса, Task 6), иначе Korriban II не попадёт в wanted этого
+    // пересчёта вовсе, и тест перестанет проверять дедуп.
     const { observer, handlers, data } = makeObserver(SIZE_8K * 16, load)
     observer.scenario = HORUSET_SYSTEM
 
@@ -471,18 +472,18 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     await handlers['ClosestChange'](record('Korriban I', 100))
 
-    // Пять общих путей (диффуз + 4 detail; легаси-bump удалён из данных)
-    // грузятся по разу, а не по два (на каждого из двух акторов, разделяющих
-    // комплект); плюс две собственные slope-карты (korriban1/korriban2 —
-    // фикс-раунд 1 Task 4 снял общую карту) — итого семь сетевых запросов, а
-    // не девять.
-    expect(load).toHaveBeenCalledTimes(7)
+    // Четыре общих detail-пути (легаси-bump и диффуз-ресурс удалены из
+    // данных — тело процедурное, Task 6) грузятся по разу, а не по два (на
+    // каждого из двух акторов, разделяющих детальный комплект); плюс две
+    // собственные slope-карты (korriban1/korriban2 — фикс-раунд 1 Task 4
+    // снял общую карту) — итого шесть сетевых запросов, а не десять
+    // (было бы 4×2 + 2 при полном провале дедупа общих путей).
+    expect(load).toHaveBeenCalledTimes(6)
 
     // И ровно одна запись в реестре на путь, а не две — иначе вторая
-    // Texture осталась бы в реестре недиспоузнутой и недостижимой. Диффуз и
-    // одна из shared detail-карт (detailDiffuse) достаточно, чтобы поймать
+    // Texture осталась бы в реестре недиспоузнутой и недостижимой. Одной из
+    // shared detail-карт (detailDiffuse) достаточно, чтобы поймать
     // регрессию дедупликации — не нужно перечислять все четыре detail-пути.
-    expect(resourceStorage.textures.where('name', 'planets/StarWars/korriban/i/i.jpg').count()).toBe(1)
     expect(resourceStorage.textures.where('name', 'terrain/rocky_trail_diff.webp').count()).toBe(1)
     expect(resourceStorage.textures.where('name', 'planets/StarWars/korriban/i/korriban1_slope.webp').count()).toBe(1)
     expect(resourceStorage.textures.where('name', 'planets/StarWars/korriban/i/korriban2_slope.webp').count()).toBe(1)
@@ -499,15 +500,17 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // же пути запустил бы дублирующую сетевую загрузку через границу смены
     // сценария, воссоздавая утечку.
     //
-    // Держится открытым только запрос SHARED_DIFFUSE — путей у Korriban I
-    // семь, и задача 2 грузит их конкурентно (не по одному на актора, как
-    // было раньше), так что "первый вызов, второй вызов" по номеру больше не
-    // адресует именно диффуз. Остальные пути (bump/detail/собственная slope)
-    // резолвятся сразу и в проверяемую гонку не входят.
-    const SHARED_DIFFUSE = 'planets/StarWars/korriban/i/i.jpg'
+    // Держится открытым только запрос SHARED_DETAIL (одна из четырёх общих
+    // detail-текстур Korriban — диффуз-ресурса у процедурного тела больше
+    // нет, Task 6) — путей у Korriban I пять, и задача 2 грузит их
+    // конкурентно (не по одному на актора, как было раньше), так что
+    // "первый вызов, второй вызов" по номеру больше не адресует именно
+    // держащийся путь. Остальные пути (detail/собственная slope) резолвятся
+    // сразу и в проверяемую гонку не входят.
+    const SHARED_DETAIL = 'terrain/rocky_trail_diff.webp'
     const resolvers: Array<(result: LoadResult) => void> = []
     const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
-      if (request.name === SHARED_DIFFUSE) {
+      if (request.name === SHARED_DETAIL) {
         return new Promise<LoadResult>((resolve) => resolvers.push(resolve))
       }
 
@@ -526,9 +529,9 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const stale: Promise<void> = handlers['ClosestChange'](record('Korriban I', 100))
 
     expect(resolvers).toHaveLength(1)
-    expect(pathLoads.has(SHARED_DIFFUSE)).toBe(true)
+    expect(pathLoads.has(SHARED_DETAIL)).toBe(true)
 
-    const staleReservation = pathLoads.get(SHARED_DIFFUSE)
+    const staleReservation = pathLoads.get(SHARED_DETAIL)
 
     // Сценарий "сменился" — сеттер безусловно бампает epoch и полностью
     // сбрасывает pathLoads/loaded/pathActors независимо от того, каким
@@ -549,9 +552,9 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const live: Promise<void> = handlers['ClosestChange'](record('Korriban II', 120))
 
     expect(resolvers).toHaveLength(2)
-    expect(pathLoads.has(SHARED_DIFFUSE)).toBe(true)
+    expect(pathLoads.has(SHARED_DETAIL)).toBe(true)
 
-    const liveReservation = pathLoads.get(SHARED_DIFFUSE)
+    const liveReservation = pathLoads.get(SHARED_DETAIL)
 
     expect(liveReservation).not.toBe(staleReservation)
 
@@ -562,7 +565,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     resolvers[0]({ ok: true, texture: makeTexture() })
     await stale
 
-    expect(pathLoads.get(SHARED_DIFFUSE)).toBe(liveReservation)
+    expect(pathLoads.get(SHARED_DETAIL)).toBe(liveReservation)
 
     // Достраиваем живую загрузку, чтобы не оставить висящий промис.
     resolvers[1]({ ok: true, texture: makeTexture() })
