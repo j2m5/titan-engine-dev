@@ -12,8 +12,8 @@ import {
 } from 'postprocessing'
 import { createAtmospherePass } from '@/core/graphic/effects/atmosphere/AtmosphereEffect'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
-import type { RingDustRegistry } from '@/core/services/RingDustRegistry'
-import { RingDustPass } from '@/core/graphic/passes/RingDustPass'
+import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
+import { DepthVolumePass } from '@/core/graphic/passes/DepthVolumePass'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { ExposureEffect } from '@/core/graphic/effects/grading/ExposureEffect'
 import { ColorGradeEffect } from '@/core/graphic/effects/grading/ColorGradeEffect'
@@ -161,7 +161,7 @@ class Postprocessing {
     private readonly scene: Scene,
     private readonly camera: PerspectiveCamera,
     private readonly atmosphereRegistry: AtmosphereRegistry,
-    private readonly ringDustRegistry: RingDustRegistry
+    private readonly depthVolumeRegistry: DepthVolumeRegistry
   ) {}
 
   /**
@@ -180,7 +180,7 @@ class Postprocessing {
 
     return [
       new RenderPass(this.scene, this.camera),
-      new RingDustPass(this.camera, this.ringDustRegistry),
+      new DepthVolumePass(this.camera, this.depthVolumeRegistry),
       createAtmospherePass(this.camera, this.atmosphereRegistry, readAtmosphereDebugView()),
       hdrPass,
       ldrPass

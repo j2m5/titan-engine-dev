@@ -1,13 +1,13 @@
 import { Object3D } from 'three'
-import { RingDustRegistry } from '@/core/services/RingDustRegistry'
-import type { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
+import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
+import type { DepthVolume } from '@/core/graphic/passes/DepthVolume'
 
 // Реестру нужна только идентичность объёма — материал он не трогает
-const fakeVolume = (): RingDustVolume => new Object3D() as unknown as RingDustVolume
+const fakeVolume = (): DepthVolume => new Object3D() as unknown as DepthVolume
 
-describe('RingDustRegistry', () => {
+describe('DepthVolumeRegistry', () => {
   it('хранит объёмы по идентичности, повторная регистрация не дублирует', () => {
-    const registry = new RingDustRegistry()
+    const registry = new DepthVolumeRegistry()
     const a = fakeVolume()
     const b = fakeVolume()
     registry.register(a)
@@ -18,7 +18,7 @@ describe('RingDustRegistry', () => {
   })
 
   it('unregister снимает объём, повторный вызов безвреден', () => {
-    const registry = new RingDustRegistry()
+    const registry = new DepthVolumeRegistry()
     const a = fakeVolume()
     registry.register(a)
     registry.unregister(a)
@@ -27,9 +27,9 @@ describe('RingDustRegistry', () => {
   })
 
   it('volumes() отдаёт снимок: мутация результата не трогает реестр', () => {
-    const registry = new RingDustRegistry()
+    const registry = new DepthVolumeRegistry()
     registry.register(fakeVolume())
-    const snapshot = registry.volumes() as RingDustVolume[]
+    const snapshot = registry.volumes() as DepthVolume[]
     snapshot.length = 0
     expect(registry.size).toBe(1)
   })

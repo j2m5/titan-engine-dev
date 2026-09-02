@@ -1,6 +1,8 @@
-import { Mesh, PerspectiveCamera, Vector2, Vector3, WebGLRenderer } from 'three'
+import { Mesh, PerspectiveCamera, Texture, Vector2, Vector3, WebGLRenderer } from 'three'
 import { Nebula } from '@/core/renderables/Nebula'
 import type { NebulaVolume } from '@/core/renderables/Nebula/volume/NebulaVolume'
+import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
+import { DEPTH_VOLUME_LAYER } from '@/core/graphic/passes/DepthVolume'
 
 const fakeRenderer = {
   getSize: (v: Vector2) => {
@@ -11,6 +13,9 @@ const fakeRenderer = {
   setRenderTarget: () => {},
   render: () => {}
 } as unknown as WebGLRenderer
+
+// Тесты ниже, где Nebula создаётся без реестра, проверяют автономный режим:
+// объём есть в графе, но пасс о нём не знает (тесты, standalone-сцены)
 
 describe('Nebula construction', () => {
   it('builds an Object3D hierarchy containing a volume mesh', () => {
@@ -47,6 +52,33 @@ describe('Nebula construction', () => {
   it('dispose runs without throwing', () => {
     const nebula = new Nebula(fakeRenderer)
     expect(() => nebula.dispose()).not.toThrow()
+  })
+
+  it('объём лежит на слое DepthVolumePass и числится в реестре до dispose', () => {
+    const registry = new DepthVolumeRegistry()
+    const nebula = new Nebula(fakeRenderer, {}, registry)
+    const volume = nebula.children[0] as NebulaVolume
+    // Основной проход камеры (слой 0) объём не видит — его рисует пасс
+    expect(volume.layers.mask).toBe(1 << DEPTH_VOLUME_LAYER)
+    expect(new PerspectiveCamera().layers.test(volume.layers)).toBe(false)
+    expect(registry.volumes()).toEqual([volume])
+
+    nebula.dispose()
+    expect(registry.volumes()).toEqual([])
+  })
+
+  it('bindSceneDepth/unbindSceneDepth управляют обрезкой марша', () => {
+    const nebula = new Nebula(fakeRenderer)
+    const volume = nebula.children[0] as NebulaVolume
+    const u = volume.material.uniforms
+    const texture = new Texture()
+    volume.bindSceneDepth(texture, new Vector2(640, 480), 5)
+    expect(u.uSceneDepth.value).toBe(texture)
+    expect(u.uResolution.value.y).toBe(480)
+    expect(u.uLogFarFactor.value).toBe(5)
+    expect(u.uSceneDepthEnabled.value).toBe(1)
+    volume.unbindSceneDepth()
+    expect(u.uSceneDepthEnabled.value).toBe(0)
   })
 
   it('bakes a 3D density field when quality.bake3DTexture is set', () => {

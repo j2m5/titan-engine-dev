@@ -1,5 +1,6 @@
 import { AdditiveBlending, BackSide, Color, ShaderChunk, ShaderMaterial, Vector2, Vector3 } from 'three'
 import { ringDustRaymarchFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
+import { sceneDepthFunctions, sceneDepthUniforms } from '@/core/materials/shaders/lib/chunks/SceneDepth'
 
 /**
  * RingDustRaymarchMaterial — аддитивное пылевое гало кольца (реймарч).
@@ -19,16 +20,11 @@ import { ringDustRaymarchFunctions, ringDustUniforms } from '@/core/materials/sh
  * есть, за камнем нет»: с глубиной дальней стенки прокси гало целиком срезали
  * камни, плотные тексели кольца и планета; с глубиной точки входа в слой —
  * целиком пропускали вместе с пылью ЗА ними, и планета в дыре кольца с камнями
- * внутри слоя просвечивали. Поэтому материал рисуется пассом RingDustPass после
- * сцены, читает копию depth-текстуры по экранной координате, декодирует
- * логарифмическую глубину three (z = log2(1 + w)/log2(far + 1), w = −viewZ;
- * проект всегда рендерит с лог-буфером, src/config/three.ts) и режет оба
- * пыльных интервала по tScene. Луч, упёршийся в поверхность до входа в слой,
- * схлопывается в пустой интервал и уходит в discard.
- *
- * Перевод глубины в параметр луча: точка камеры — начало view-пространства,
- * поэтому −viewZ(t) = t · (−(M·rayDir).z), где M = mat3(modelViewMatrix).
- * Направление не нормируется — масштаб модели, если появится, учитывается сам.
+ * внутри слоя просвечивали. Поэтому материал рисуется пассом DepthVolumePass после
+ * сцены и режет оба пыльных интервала по tScene из общего чанка SceneDepth
+ * (копия depth-текстуры, декод лог-глубины three, перевод в параметр луча).
+ * Луч, упёршийся в поверхность до входа в слой, схлопывается в пустой
+ * интервал и уходит в discard.
  *
  * Марш идёт только внутри пыльных интервалов (не жжём шаги на пустоте):
  * фиксированный бюджет шагов, IGN-джиттер против бандинга, early-exit по
@@ -65,12 +61,11 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
         uDustRadialMapScale: { value: 0.0 },
         /** Диагностика: 0 выкл, 1 τ, 2 alpha, 3 гейт, 4 теплокарта шагов */
         uDustDebugMode: { value: 0 },
-        /** Копия глубины сцены (RingDustPass), лог-глубина three в .r */
+        // Глубина сцены (чанк SceneDepth): привязывает DepthVolumePass перед рендером
         uSceneDepth: { value: null },
-        /** Размер таргета в пикселях: gl_FragCoord → uv копии глубины */
         uResolution: { value: new Vector2(1, 1) },
-        /** log2(far + 1) камеры — знаменатель лог-глубины three */
-        uLogFarFactor: { value: 1.0 }
+        uLogFarFactor: { value: 1.0 },
+        uSceneDepthEnabled: { value: 0.0 }
       },
       vertexShader: /* glsl */ `
         ${ShaderChunk.common}
@@ -91,9 +86,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
 
         uniform int uDustMaxSteps;
         uniform int uDustDebugMode;
-        uniform sampler2D uSceneDepth;
-        uniform vec2 uResolution;
-        uniform float uLogFarFactor;
+        ${sceneDepthUniforms}
 
         // Во фрагментном префиксе three modelViewMatrix не объявлен, но рендерер
         // грузит его по имени в любой стадии. Берём именно его, а не
@@ -101,21 +94,9 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
         // на межпланетных координатах.
         uniform mat4 modelViewMatrix;
 
-        varying vec3 vRingPos;
+        ${sceneDepthFunctions}
 
-        // Параметр луча (ring-local), на котором луч упирается в сцену.
-        // Небо (z = 1) не режет ничего.
-        float ringDustSceneT(vec3 rayDir) {
-          float z = texture2D(uSceneDepth, gl_FragCoord.xy / uResolution).r;
-          if (z < 1.0 - 1e-6) {
-            // Лог-глубина three: z = log2(1 + w)/log2(far + 1), w = -viewZ
-            float w = exp2(z * uLogFarFactor) - 1.0;
-            // Камера — начало view-пространства: -viewZ(t) = t * (-(M*rayDir).z)
-            vec3 dirView = mat3(modelViewMatrix) * rayDir;
-            return w / max(-dirView.z, 1e-6);
-          }
-          return 1.0e30;
-        }
+        varying vec3 vRingPos;
 
         // Теплокарта для диагностических режимов: синий → зелёный → красный
         vec3 dustDebugHeat(float x) {
@@ -156,7 +137,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
           // Обрыв по глубине сцены: пыль за камнем, планетой и плотным текселем
           // кольца в τ не попадает. Луч, упёршийся в поверхность до входа в слой,
           // схлопывает оба интервала и уходит в discard ниже.
-          float tScene = ringDustSceneT(rayDir);
+          float tScene = sceneDepthRayT(mat3(modelViewMatrix) * rayDir);
           segA.y = min(segA.y, tScene);
           segB.y = min(segB.y, tScene);
 

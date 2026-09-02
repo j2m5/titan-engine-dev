@@ -1,6 +1,45 @@
 import { Vector3 } from 'three'
 import { NebulaRaymarchMaterial } from '@/core/renderables/Nebula/material/NebulaRaymarchMaterial'
 import { mergeNebulaParams } from '@/core/renderables/Nebula/NebulaParams'
+import { sceneDepthFunctions, sceneDepthUniforms } from '@/core/materials/shaders/lib/chunks/SceneDepth'
+
+describe('NebulaRaymarchMaterial: перекрытие по глубине сцены', () => {
+  const make = () => new NebulaRaymarchMaterial(mergeNebulaParams())
+
+  it('depthTest и depthWrite выключены: перекрытие считает марш, а не аппаратный тест', () => {
+    // Бинарный тест глубины давал либо жёсткие вырезы (глубина дальней стенки
+    // прокси), либо туман поверх всего. Объём рисует DepthVolumePass после сцены
+    // и режет луч на глубине сцены
+    const m = make()
+    expect(m.depthTest).toBe(false)
+    expect(m.depthWrite).toBe(false)
+  })
+
+  it('несёт юниформы глубины сцены, обрезка по умолчанию выключена (запекание импостора идёт без неё)', () => {
+    const u = make().uniforms
+    expect(u.uSceneDepth.value).toBeNull()
+    expect(u.uResolution.value.x).toBe(1)
+    expect(u.uLogFarFactor.value).toBe(1)
+    expect(u.uSceneDepthEnabled.value).toBe(0)
+    // Своей записи глубины больше нет — её фактор не нужен
+    expect(u.uLogDepthBufFC).toBeUndefined()
+  })
+
+  it('режет дальнюю границу луча по глубине сцены общим чанком и не пишет глубину', () => {
+    const fs = make().fragmentShader
+    expect(fs).toContain(sceneDepthUniforms)
+    expect(fs).toContain(sceneDepthFunctions)
+    // Направление луча в proxy-local переводится во view без нормировки:
+    // масштаб прокси-куба (size) учитывается сам
+    expect(fs).toContain('tf = min(tf, sceneDepthRayT(mat3(modelViewMatrix) * rdLocal))')
+    // Обрезка стоит ДО проверки пустого интервала: луч, упёршийся в поверхность
+    // раньше входа в куб, уходит в discard
+    expect(fs.indexOf('sceneDepthRayT(')).toBeLessThan(fs.indexOf('if (tf <= tn) discard'))
+    expect(fs).not.toContain('gl_FragDepth')
+    expect(fs).not.toContain('vFragDepth')
+    expect(make().vertexShader).not.toContain('vFragDepth')
+  })
+})
 
 describe('NebulaRaymarchMaterial', () => {
   it('constructs with uniforms derived from params', () => {

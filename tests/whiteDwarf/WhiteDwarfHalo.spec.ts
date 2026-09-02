@@ -4,7 +4,7 @@ import '@/core/framework/TitanThree'
 import { Actor } from '@/core/models/Actor'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
-import { RingDustRegistry } from '@/core/services/RingDustRegistry'
+import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { StarInnerLayer } from '@/core/renderables/utils/StarInnerLayer'
 import { ApparentSizeLod } from '@/core/renderables/utils/ApparentSizeLod'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -56,7 +56,7 @@ describe('ореол белого карлика', () => {
     // У карлика это несущая деталь, а не украшение: с 1 а.е. его угловой размер
     // около 17 угловых секунд против 1919 у Солнца, и порога в 12 пикселей диск
     // достигает лишь примерно с 1.3 млн км. Всё остальное время виден ореол
-    const factory = new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver, new AtmosphereRegistry(), new RingDustRegistry())
+    const factory = new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver, new AtmosphereRegistry(), new DepthVolumeRegistry())
     const halo = findHalo(factory.make(stubActor()))
 
     expect(halo).toBeInstanceOf(Sprite)
@@ -64,7 +64,7 @@ describe('ореол белого карлика', () => {
   })
 
   it('горит ярче звёздного и туже коричневого', () => {
-    const factory = new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver, new AtmosphereRegistry(), new RingDustRegistry())
+    const factory = new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver, new AtmosphereRegistry(), new DepthVolumeRegistry())
     const halo = findHalo(factory.make(stubActor()))
 
     expect(halo!.material.opacity).toBeCloseTo(config('whiteDwarf.haloOpacity'))
@@ -75,7 +75,7 @@ describe('ореол белого карлика', () => {
     // StarInnerLayer красит спрайт через colorTemperatureToRGB. При 25 200 K
     // синий обязан быть выше красного — если сравнение перевернётся, значит
     // температуру до слоя не донесли и он взял солнечный дефолт
-    const factory = new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver, new AtmosphereRegistry(), new RingDustRegistry())
+    const factory = new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver, new AtmosphereRegistry(), new DepthVolumeRegistry())
     const halo = findHalo(factory.make(stubActor()))
 
     expect(halo!.material.color.b).toBeGreaterThan(halo!.material.color.r)

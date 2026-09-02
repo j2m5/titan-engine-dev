@@ -11,7 +11,7 @@ import type { MarkerManager } from '@/core/services/MarkerManager'
 import type { ResourceObserver } from '@/core/services/ResourceObserver'
 import type { SceneObserver } from '@/core/services/SceneObserver'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
-import type { RingDustRegistry } from '@/core/services/RingDustRegistry'
+import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import type { SimulationClock } from '@/core/time/SimulationClock'
 import type { CameraController } from '@/core/camera/CameraController'
 import type { Settings } from '@/core/ports/Settings'
@@ -37,7 +37,7 @@ export const Tokens = {
   ResourceObserver: token<ResourceObserver>('ResourceObserver'),
   SceneObserver: token<SceneObserver>('SceneObserver'),
   AtmosphereRegistry: token<AtmosphereRegistry>('AtmosphereRegistry'),
-  RingDustRegistry: token<RingDustRegistry>('RingDustRegistry'),
+  DepthVolumeRegistry: token<DepthVolumeRegistry>('DepthVolumeRegistry'),
   CameraCollision: token<CameraCollision>('CameraCollision'),
   HeightFieldGate: token<HeightFieldGate>('HeightFieldGate'),
   SimulationClock: token<SimulationClock>('SimulationClock'),

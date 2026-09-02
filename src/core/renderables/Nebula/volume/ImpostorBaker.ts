@@ -11,6 +11,7 @@ import {
   WebGLRenderTarget
 } from 'three'
 import { IMPOSTOR_FRAME_FILL } from '@/core/renderables/Nebula/volume/lod'
+import { DEPTH_VOLUME_LAYER } from '@/core/graphic/passes/DepthVolume'
 
 /**
  * Bakes the raymarched volume into a render target from the current view direction,
@@ -40,6 +41,10 @@ class ImpostorBaker {
       depthBuffer: false
     })
     this.bakeCamera = new PerspectiveCamera(ImpostorBaker.BAKE_FOV, 1, 0.01, 100)
+    // The volume sits on the DepthVolumePass layer, invisible to a default camera;
+    // the bake renders it standalone and must see that layer. No scene depth is
+    // bound here, so the marcher runs uncut (uSceneDepthEnabled = 0).
+    this.bakeCamera.layers.enable(DEPTH_VOLUME_LAYER)
   }
 
   public get texture(): Texture {
