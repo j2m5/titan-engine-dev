@@ -602,6 +602,10 @@ class ResourceObserver {
    * дрожит у порога отсечки, иначе грузилось бы и вытеснялось по кругу
    * каждый такт. Свежий орфан просто пропускается — вытеснится, когда
    * (если) останется орфаном дольше резидентности.
+   *
+   * Синтетические steep-пути зон материала ранжируются здесь их СОБСТВЕННЫМ
+   * resourceType (2.0–2.2), а не STEEP_TYPE_RANKS (2.31–2.33) — допущение
+   * безвредно, пока единственный потребитель ранга — бинарный isDiffuse-гейт.
    */
   private evictOrphanedPaths(previousOwners: ReadonlyMap<string, Set<number>>): void {
     for (const path of [...this.loaded]) {
