@@ -7,7 +7,7 @@ import { TerrainPatchPool } from '@/core/terrain/TerrainPatchPool'
 import { TerrainSphere } from '@/core/renderables/TerrainSphere'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
-import { RingDustRegistry } from '@/core/services/RingDustRegistry'
+import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { Actor } from '@/core/models/Actor'
 import type { RenderingObject } from '@/core/models/RenderingObject'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -236,7 +236,7 @@ function mockRenderingObject(data: Record<string, unknown> | null): void {
 }
 
 function makeFactory(): RenderableFactory {
-  return new RenderableFactory(makeRenderer(1080), {} as unknown as ResourceObserver, new AtmosphereRegistry(), new RingDustRegistry())
+  return new RenderableFactory(makeRenderer(1080), {} as unknown as ResourceObserver, new AtmosphereRegistry(), new DepthVolumeRegistry())
 }
 
 describe('RenderableFactory: гейт водной оболочки', { timeout: 30000 }, () => {

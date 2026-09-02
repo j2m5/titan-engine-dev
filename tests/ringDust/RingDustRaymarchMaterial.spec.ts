@@ -1,5 +1,6 @@
 import { AdditiveBlending, BackSide, ShaderChunk } from 'three'
 import { RingDustRaymarchMaterial } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustRaymarchMaterial'
+import { sceneDepthFunctions } from '@/core/materials/shaders/lib/chunks/SceneDepth'
 
 describe('RingDustRaymarchMaterial', () => {
   const make = () => new RingDustRaymarchMaterial()
@@ -63,6 +64,14 @@ describe('RingDustRaymarchMaterial', () => {
     expect(u.uResolution.value.y).toBe(1)
     expect(u.uLogFarFactor).toBeDefined()
     expect(u.uLogFarFactor.value).toBe(1)
+    // Обрезка выключена, пока пасс её не включит: рендер вне пасса идёт без глубины сцены
+    expect(u.uSceneDepthEnabled.value).toBe(0)
+  })
+
+  it('декод глубины сцены — общий чанк SceneDepth, а не своя копия', () => {
+    const fs = make().fragmentShader
+    expect(fs).toContain(sceneDepthFunctions)
+    expect(fs).toContain('float tScene = sceneDepthRayT(mat3(modelViewMatrix) * rayDir)')
   })
 
   it('обрывает пыльные интервалы на глубине сцены, а не пишет глубину сам', () => {

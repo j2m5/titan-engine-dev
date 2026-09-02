@@ -39,8 +39,12 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
     }
 
     this.transparent = true
+    // Neither writes nor tests depth: the material is drawn by DepthVolumePass after
+    // the scene and cuts its ray at the scene depth itself (SceneDepth chunk). The
+    // hardware test was a binary "lesser evil" — hard cutouts against a black hole's
+    // bounding sphere, or fog over everything.
     this.depthWrite = false
-    this.depthTest = params.quality.depthTest
+    this.depthTest = false
     // The shader outputs PREMULTIPLIED (accum, alpha), so composite premultiplied
     // (One, OneMinusSrcAlpha) = correct front-to-back "over". This (a) avoids the
     // alpha double-apply NormalBlending would cause (thin regions stay correct),

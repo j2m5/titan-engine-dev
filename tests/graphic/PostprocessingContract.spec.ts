@@ -5,8 +5,8 @@ import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderT
 import { AtmosphereEffect, createAtmospherePass } from '@/core/graphic/effects/atmosphere/AtmosphereEffect'
 import { buildSlotGlsl } from '@/core/graphic/effects/atmosphere/atmosphereSlotShader'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
-import { RingDustRegistry } from '@/core/services/RingDustRegistry'
-import { RingDustPass } from '@/core/graphic/passes/RingDustPass'
+import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
+import { DepthVolumePass } from '@/core/graphic/passes/DepthVolumePass'
 
 describe('Postprocessing: контракт цветового конвейера', () => {
   it('тонмаппинг реально применяется: NORMAL-бленд, не DST-заглушка', () => {
@@ -97,12 +97,12 @@ describe('Postprocessing: пасс атмосферы', () => {
       null as never,
       new PerspectiveCamera(),
       new AtmosphereRegistry(),
-      new RingDustRegistry()
+      new DepthVolumeRegistry()
     ).buildPasses()
 
     expect(passes).toHaveLength(5)
     expect(passes[0]).toBeInstanceOf(RenderPass)
-    expect(passes[1]).toBeInstanceOf(RingDustPass)
+    expect(passes[1]).toBeInstanceOf(DepthVolumePass)
     expect((passes[2] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(AtmosphereEffect)
     expect(passes[3]).toBeInstanceOf(EffectPass)
     expect(passes[4]).toBeInstanceOf(EffectPass)

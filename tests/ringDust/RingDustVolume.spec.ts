@@ -1,6 +1,7 @@
-import { Color, PerspectiveCamera, Vector3 } from 'three'
-import { RING_DUST_LAYER, RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
-import { RingDustRegistry } from '@/core/services/RingDustRegistry'
+import { Color, PerspectiveCamera, Texture, Vector2, Vector3 } from 'three'
+import { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
+import { DEPTH_VOLUME_LAYER } from '@/core/graphic/passes/DepthVolume'
+import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 
 const makeVolume = () =>
   new RingDustVolume({
@@ -61,12 +62,12 @@ describe('RingDustVolume', () => {
     const volume = makeVolume()
     // Основной RenderPass рисует слой 0; гало рисует свой пасс, включая слой
     // пыли на камере только на время своего рендера
-    expect(volume.layers.mask).toBe(1 << RING_DUST_LAYER)
+    expect(volume.layers.mask).toBe(1 << DEPTH_VOLUME_LAYER)
     expect(new PerspectiveCamera().layers.test(volume.layers)).toBe(false)
   })
 
   it('регистрируется в реестре при создании и снимается в dispose (идемпотентно)', () => {
-    const registry = new RingDustRegistry()
+    const registry = new DepthVolumeRegistry()
     const volume = new RingDustVolume({
       innerRadius: 70,
       outerRadius: 140,
@@ -84,6 +85,22 @@ describe('RingDustVolume', () => {
     volume.dispose()
     volume.dispose()
     expect(registry.volumes()).toEqual([])
+  })
+
+  it('bindSceneDepth включает обрезку и передаёт копию глубины, unbind выключает', () => {
+    const volume = makeVolume()
+    const u = volume.dustMaterial.uniforms
+    expect(u.uSceneDepthEnabled.value).toBe(0)
+
+    const texture = new Texture()
+    volume.bindSceneDepth(texture, new Vector2(800, 600), 7)
+    expect(u.uSceneDepth.value).toBe(texture)
+    expect(u.uResolution.value.x).toBe(800)
+    expect(u.uLogFarFactor.value).toBe(7)
+    expect(u.uSceneDepthEnabled.value).toBe(1)
+
+    volume.unbindSceneDepth()
+    expect(u.uSceneDepthEnabled.value).toBe(0)
   })
 
   it('без реестра живёт автономно: dispose не падает', () => {

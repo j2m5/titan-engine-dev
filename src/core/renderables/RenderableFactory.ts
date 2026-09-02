@@ -39,7 +39,7 @@ import { WhiteDwarfImpostor } from '@/core/renderables/WhiteDwarf/WhiteDwarfImpo
 import { INebulaRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
-import { RingDustRegistry } from '@/core/services/RingDustRegistry'
+import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { RenderableObject3D } from '@/core/renderables/types'
 import { syncRenderableMaterials } from '@/core/materials/materialSync'
 
@@ -48,7 +48,7 @@ class RenderableFactory {
     private readonly renderer: WebGLRenderer,
     private readonly resourceObserver: ResourceObserver,
     private readonly atmosphereRegistry: AtmosphereRegistry,
-    private readonly ringDustRegistry: RingDustRegistry
+    private readonly depthVolumeRegistry: DepthVolumeRegistry
   ) {}
 
   public make(actor: Actor): Object3D {
@@ -364,7 +364,7 @@ class RenderableFactory {
     const lod = new LOD()
     const base = new Ring(actor)
     const detailed = new Ring(actor)
-    detailed.add(new AsteroidRingSystem(actor, {}, this.ringDustRegistry))
+    detailed.add(new AsteroidRingSystem(actor, {}, this.depthVolumeRegistry))
 
     const distanceLod = toThreeJSUnits(ringData.outerRadius * 2)
 
@@ -395,7 +395,7 @@ class RenderableFactory {
     // renderable намеренно остаётся null: Nebula — контейнер без собственных
     // geometry/material, а RenderableObject3D требует оба. Следствие —
     // у туманности нет маркера и прицела, она не навигационное тело.
-    node.add(new Nebula(this.renderer, nebulaParamsFromData(data)))
+    node.add(new Nebula(this.renderer, nebulaParamsFromData(data), this.depthVolumeRegistry))
 
     return node
   }

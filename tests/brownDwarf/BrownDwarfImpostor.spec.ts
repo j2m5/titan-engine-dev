@@ -7,7 +7,7 @@ import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import { OrientationModel } from '@/core/libs/OrientationModel'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
-import { RingDustRegistry } from '@/core/services/RingDustRegistry'
+import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { BrownDwarf } from '@/core/renderables/BrownDwarf'
 import { BrownDwarfImpostorShaderTemplate } from '@/core/renderables/BrownDwarf/BrownDwarfImpostorShaderTemplate'
 import { BrownDwarfShaderTemplate } from '@/core/renderables/BrownDwarf/BrownDwarfShaderTemplate'
@@ -70,7 +70,7 @@ describe('сборка узла карлика', () => {
     // Без обёртки тело потеряло бы кеплерово обновление и регистрацию маркера,
     // а traverse по корню прошёл бы и по самому корню — то есть проверка
     // «BrownDwarf достижим» такую подмену не ловит
-    const factory = new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver, new AtmosphereRegistry(), new RingDustRegistry())
+    const factory = new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver, new AtmosphereRegistry(), new DepthVolumeRegistry())
     const node = factory.make(stubActor())
 
     expect(node).toBeInstanceOf(DynamicNode)

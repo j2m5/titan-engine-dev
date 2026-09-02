@@ -12,7 +12,7 @@ import { InstancePool, PoolLayerConfig } from './InstancePool'
 import { SectorManager, LODThresholds } from './SectorManager'
 import { RingDustVolume } from './dust/RingDustVolume'
 import { installRingDustDebug, type RockDustUniforms } from './dust/RingDustDebug'
-import type { RingDustRegistry } from '@/core/services/RingDustRegistry'
+import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { ASTEROID_PROFILES, type AsteroidProfileName } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
 import { UpdateContext } from '@/core/UpdateContext'
 import { getArchetypeGeometries } from './archetypes/ArchetypeLibrary'
@@ -222,7 +222,7 @@ class AsteroidRingSystem extends Group {
   private dustVolume: RingDustVolume | null = null
 
   /** Реестр пасса пыли; null — объём в графе есть, но пасс его не рисует (тесты, автономные сцены) */
-  private readonly dustRegistry: RingDustRegistry | null
+  private readonly dustRegistry: DepthVolumeRegistry | null
 
   // Reusable objects
   private readonly _localCamPos = new Vector3()
@@ -247,7 +247,7 @@ class AsteroidRingSystem extends Group {
   public constructor(
     model: Actor,
     configOverrides: Partial<AsteroidRingConfig> = {},
-    dustRegistry: RingDustRegistry | null = null
+    dustRegistry: DepthVolumeRegistry | null = null
   ) {
     super()
     this.model = model
