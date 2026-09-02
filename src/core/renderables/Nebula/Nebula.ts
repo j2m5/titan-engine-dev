@@ -6,6 +6,7 @@ import { ImpostorBaker } from '@/core/renderables/Nebula/volume/ImpostorBaker'
 import { NebulaDensityBaker } from '@/core/renderables/Nebula/volume/NebulaDensityBaker'
 import { IMPOSTOR_FRAME_FILL, selectLOD } from '@/core/renderables/Nebula/volume/lod'
 import { UpdateContext } from '@/core/UpdateContext'
+import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 
 const REBAKE_ANGLE = 0.15 // rad (~8.6°): rebake the impostor past this view-dir change
 const IMPOSTOR_RESOLUTION = 512
@@ -32,16 +33,22 @@ class Nebula extends Object3D {
   private readonly _ndcB = new Vector3()
   private readonly _viewSize = new Vector2()
 
+  /**
+   * @param depthVolumeRegistry registry of DepthVolumePass — the raymarch volume is
+   * drawn by that pass (ray cut at the scene depth). null: the volume stays in the
+   * graph but no pass draws it (tests, standalone scenes).
+   */
   public constructor(
     private readonly renderer: WebGLRenderer,
-    params: DeepPartial<NebulaParams> = {}
+    params: DeepPartial<NebulaParams> = {},
+    depthVolumeRegistry: DepthVolumeRegistry | null = null
   ) {
     super()
     this.params = mergeNebulaParams(params)
     this.name = 'Nebula'
     this.boundingRadius = this.params.size
 
-    this.volume = new NebulaVolume(this.params)
+    this.volume = new NebulaVolume(this.params, depthVolumeRegistry)
     this.add(this.volume)
     // size is the proxy half-extent; geometry is the [-1,1] cube.
     this.volume.scale.multiplyScalar(this.params.size)
@@ -107,6 +114,7 @@ class Nebula extends Object3D {
   }
 
   public dispose(): void {
+    this.volume.dispose()
     this.volume.geometry.dispose()
     this.volume.material.dispose()
     this.impostor.geometry.dispose()

@@ -10,6 +10,7 @@ import { MarkerManager } from '@/core/services/MarkerManager'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { SceneObserver } from '@/core/services/SceneObserver'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
+import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { CameraCollision } from '@/core/services/CameraCollision'
 import { HeightFieldGate } from '@/core/services/HeightFieldGate'
 import { SimulationClock } from '@/core/time/SimulationClock'
@@ -41,6 +42,7 @@ class AppServiceProvider extends ServiceProvider {
     )
 
     this.app.singleton(Tokens.AtmosphereRegistry, () => new AtmosphereRegistry())
+    this.app.singleton(Tokens.DepthVolumeRegistry, () => new DepthVolumeRegistry())
 
     // Один генератор на сцену (владение рендерером — по прецеденту
     // BrunetonAtmosphere, см. докблок ProceduralSurfaceGenerator): его
@@ -58,6 +60,7 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.Renderer),
           c.get(Tokens.ResourceObserver),
           c.get(Tokens.AtmosphereRegistry),
+          c.get(Tokens.DepthVolumeRegistry),
           c.get(Tokens.ProceduralSurfaceGenerator)
         )
     )
@@ -80,7 +83,8 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.Renderer),
           c.get(Tokens.Scene),
           c.get(Tokens.Camera),
-          c.get(Tokens.AtmosphereRegistry)
+          c.get(Tokens.AtmosphereRegistry),
+          c.get(Tokens.DepthVolumeRegistry)
         )
     )
 

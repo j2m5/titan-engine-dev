@@ -88,7 +88,8 @@ const installRingDustDebug = (target: RingDustDebugTarget): void => {
       return {
         volume: {
           visible: target.volume.visible,
-          renderOrder: target.volume.renderOrder,
+          // Слой пыли: объём рисует DepthVolumePass, не основной проход камеры
+          layersMask: target.volume.layers.mask,
           frustumCulled: target.volume.frustumCulled,
           parentChain: (() => {
             const chain: string[] = []

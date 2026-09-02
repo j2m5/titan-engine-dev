@@ -1,5 +1,6 @@
-import { AdditiveBlending, BackSide, Color, ShaderChunk, ShaderMaterial, Vector3 } from 'three'
+import { AdditiveBlending, BackSide, Color, ShaderChunk, ShaderMaterial, Vector2, Vector3 } from 'three'
 import { ringDustRaymarchFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
+import { sceneDepthFunctions, sceneDepthUniforms } from '@/core/materials/shaders/lib/chunks/SceneDepth'
 
 /**
  * RingDustRaymarchMaterial — аддитивное пылевое гало кольца (реймарч).
@@ -12,16 +13,18 @@ import { ringDustRaymarchFunctions, ringDustUniforms } from '@/core/materials/sh
  * собственных граней; сфера этого артефакта лишена.
  *
  * Блендинг АДДИТИВНЫЙ (порядок прозрачных не важен, гало не даёт «бруса»),
- * depthWrite OFF (не блокирует другие прозрачные), depthTest ON.
+ * depthWrite OFF и depthTest OFF: перекрытие считает сам марш.
  *
- * Глубина фрагмента — от ТОЧКИ ВХОДА луча в первый пыльный интервал (ближняя
- * точка объёма), а не от дальней поверхности прокси-сферы, которую даёт чанк
- * logdepthbuf_fragment: та лежит за плоскостью кольца, и тест глубины отбраковывал
- * бы гало над плотными текселями кольца (депт-пре-пасс кольца пишет глубину) и
- * над камнями. С глубиной входа перекрывает только то, что реально ближе входа:
- * планета (вход за её диском) и камни/тексели ПЕРЕД гало; пыль перед ними живёт.
- * Формула — ровно формула чанка (vFragDepth = 1 + w, w = -viewZ), проект всегда
- * рендерит с логарифмическим буфером (src/config/three.ts).
+ * Перекрытие — по ГЛУБИНЕ СЦЕНЫ, а не аппаратным тестом. Один фрагмент прокси
+ * несёт интеграл вдоль всего луча, и бинарный тест не умеет «пыль до камня
+ * есть, за камнем нет»: с глубиной дальней стенки прокси гало целиком срезали
+ * камни, плотные тексели кольца и планета; с глубиной точки входа в слой —
+ * целиком пропускали вместе с пылью ЗА ними, и планета в дыре кольца с камнями
+ * внутри слоя просвечивали. Поэтому материал рисуется пассом DepthVolumePass после
+ * сцены и режет оба пыльных интервала по tScene из общего чанка SceneDepth
+ * (копия depth-текстуры, декод лог-глубины three, перевод в параметр луча).
+ * Луч, упёршийся в поверхность до входа в слой, схлопывается в пустой
+ * интервал и уходит в discard.
  *
  * Марш идёт только внутри пыльных интервалов (не жжём шаги на пустоте):
  * фиксированный бюджет шагов, IGN-джиттер против бандинга, early-exit по
@@ -57,11 +60,15 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
         /** Множитель профиля (среднее модуляции ≈ 1); 0 — профиль выключен */
         uDustRadialMapScale: { value: 0.0 },
         /** Диагностика: 0 выкл, 1 τ, 2 alpha, 3 гейт, 4 теплокарта шагов */
-        uDustDebugMode: { value: 0 }
+        uDustDebugMode: { value: 0 },
+        // Глубина сцены (чанк SceneDepth): привязывает DepthVolumePass перед рендером
+        uSceneDepth: { value: null },
+        uResolution: { value: new Vector2(1, 1) },
+        uLogFarFactor: { value: 1.0 },
+        uSceneDepthEnabled: { value: 0.0 }
       },
       vertexShader: /* glsl */ `
         ${ShaderChunk.common}
-        ${ShaderChunk.logdepthbuf_pars_vertex}
 
         varying vec3 vRingPos;
 
@@ -69,25 +76,25 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
           // Геометрия запечена в ring-local space (см. RingDustVolume)
           vRingPos = position;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-
-          ${ShaderChunk.logdepthbuf_vertex}
         }
       `,
       fragmentShader: /* glsl */ `
         ${ShaderChunk.common}
-        ${ShaderChunk.logdepthbuf_pars_fragment}
 
         ${ringDustUniforms}
         ${ringDustRaymarchFunctions}
 
         uniform int uDustMaxSteps;
         uniform int uDustDebugMode;
+        ${sceneDepthUniforms}
 
         // Во фрагментном префиксе three modelViewMatrix не объявлен, но рендерер
         // грузит его по имени в любой стадии. Берём именно его, а не
         // viewMatrix * modelMatrix: он camera-relative и не теряет точность
         // на межпланетных координатах.
         uniform mat4 modelViewMatrix;
+
+        ${sceneDepthFunctions}
 
         varying vec3 vRingPos;
 
@@ -99,9 +106,6 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
         }
 
         void main() {
-          // logdepthbuf_fragment здесь НЕ подключён: он пишет глубину дальней
-          // поверхности прокси-сферы. Глубина берётся ниже, от точки входа луча.
-
           // Фрагмент прокси задаёт только направление луча
           vec3 rayDir = normalize(vRingPos - uDustCamRingPos);
           float gate = ringDustAngleGate(rayDir);
@@ -130,20 +134,17 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
             segB = vec2(max(segB.x, s0), min(segB.y, s1));
           }
 
+          // Обрыв по глубине сцены: пыль за камнем, планетой и плотным текселем
+          // кольца в τ не попадает. Луч, упёршийся в поверхность до входа в слой,
+          // схлопывает оба интервала и уходит в discard ниже.
+          float tScene = sceneDepthRayT(mat3(modelViewMatrix) * rayDir);
+          segA.y = min(segA.y, tScene);
+          segB.y = min(segB.y, tScene);
+
           float lenA = max(segA.y - segA.x, 0.0);
           float lenB = max(segB.y - segB.x, 0.0);
           float total = lenA + lenB;
           if (total <= 0.0) discard;
-
-          // Глубина гало — от точки входа в первый пыльный интервал (segA, а если
-          // он схлопнут обрезкой — segB). Камера внутри слоя: tEntry = 0, глубина
-          // у ближней плоскости. Луч без пыли сюда не доходит (discard выше).
-          float tEntry = lenA > 0.0 ? segA.x : segB.x;
-          #ifdef USE_LOGARITHMIC_DEPTH_BUFFER
-            vec4 entryView = modelViewMatrix * vec4(uDustCamRingPos + rayDir * tEntry, 1.0);
-            // Формула чанка logdepthbuf_fragment при vFragDepth = 1 + w, w = -viewZ
-            gl_FragDepth = log2(max(-entryView.z, 1e-6) + 1.0) * logDepthBufFC * 0.5;
-          #endif
 
           float steps = float(uDustMaxSteps);
           float dt = total / steps;
@@ -194,6 +195,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
       side: BackSide,
       transparent: true,
       depthWrite: false,
+      depthTest: false,
       blending: AdditiveBlending
     })
   }

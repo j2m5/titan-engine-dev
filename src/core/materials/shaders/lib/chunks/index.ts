@@ -8,6 +8,7 @@ import { asteroidSurfaceFunctions } from './AsteroidSurface'
 import { slopeNormalFunctions, slopeNormalUniforms } from '@/core/materials/shaders/lib/chunks/SlopeNormal'
 import { terrainUvFunctions } from '@/core/materials/shaders/lib/chunks/TerrainUv'
 import { ringDustFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
+import { sceneDepthFunctions, sceneDepthUniforms } from '@/core/materials/shaders/lib/chunks/SceneDepth'
 import { triplanarDetailFunctions, triplanarDetailUniforms } from '@/core/materials/shaders/lib/chunks/TriplanarDetail'
 import { terrainDetailFunctions, terrainDetailUniforms } from '@/core/materials/shaders/lib/chunks/TerrainDetail'
 import { skyboxSampleFunctions, skyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
@@ -37,6 +38,8 @@ export const AppShaderChunk: Record<string, string> = {
   slopeNormalUniforms,
   slopeNormalFunctions,
   terrainUvFunctions,
+  sceneDepthUniforms,
+  sceneDepthFunctions,
   ringDustUniforms,
   ringDustFunctions,
   triplanarDetailUniforms,

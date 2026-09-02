@@ -40,6 +40,7 @@ import { INebulaRenderingObject, IRingRenderingObject } from '@/core/models/type
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
+import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { RenderableObject3D } from '@/core/renderables/types'
 import { syncRenderableMaterials } from '@/core/materials/materialSync'
 
@@ -48,6 +49,7 @@ class RenderableFactory {
     private readonly renderer: WebGLRenderer,
     private readonly resourceObserver: ResourceObserver,
     private readonly atmosphereRegistry: AtmosphereRegistry,
+    private readonly depthVolumeRegistry: DepthVolumeRegistry,
     // Опционален: тестовые сборки фабрики без процедурных тел его не заводят
     // (см. TerrainSphere — тот же гейт по data.proceduralSurface, no-op без него).
     private readonly proceduralSurfaceGenerator?: ProceduralSurfaceGenerator
@@ -367,7 +369,7 @@ class RenderableFactory {
     const lod = new LOD()
     const base = new Ring(actor)
     const detailed = new Ring(actor)
-    detailed.add(new AsteroidRingSystem(actor))
+    detailed.add(new AsteroidRingSystem(actor, {}, this.depthVolumeRegistry))
 
     const distanceLod = toThreeJSUnits(ringData.outerRadius * 2)
 
@@ -398,7 +400,7 @@ class RenderableFactory {
     // renderable намеренно остаётся null: Nebula — контейнер без собственных
     // geometry/material, а RenderableObject3D требует оба. Следствие —
     // у туманности нет маркера и прицела, она не навигационное тело.
-    node.add(new Nebula(this.renderer, nebulaParamsFromData(data)))
+    node.add(new Nebula(this.renderer, nebulaParamsFromData(data), this.depthVolumeRegistry))
 
     return node
   }

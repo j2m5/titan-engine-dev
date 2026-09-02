@@ -1,8 +1,9 @@
-import { Color, IUniform, Matrix3, Uniform, Vector3, Vector4 } from 'three'
+import { Color, IUniform, Matrix3, Uniform, Vector2, Vector3, Vector4 } from 'three'
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { nebulaNoiseChunk } from './chunks/NebulaNoise'
 import { nebulaDensityChunk } from './chunks/NebulaDensity'
 import { nebulaColorChunk } from './chunks/NebulaColor'
+import { sceneDepthFunctions, sceneDepthUniforms } from '@/core/materials/shaders/lib/chunks/SceneDepth'
 
 // Fresh uniform set per shader instance. Module-level Uniform singletons would be
 // shared by every NebulaRaymarchMaterial (toJSON spreads references), so two
@@ -27,7 +28,12 @@ export function createNebulaUniforms(): Record<string, IUniform> {
     uEmissiveIntensity: new Uniform(1.6),
     uDensityScale: new Uniform(4.0), // optical thickness / absorption per step
     uOpacityScale: new Uniform(1.0), // crossfade against the impostor
-    uLogDepthBufFC: new Uniform(1.0), // logarithmic depth factor (set per-frame)
+    // Глубина сцены (чанк SceneDepth): привязывает DepthVolumePass перед рендером;
+    // по умолчанию выключена — запекание импостора маршит без обрезки
+    uSceneDepth: new Uniform(null),
+    uResolution: new Uniform(new Vector2(1, 1)),
+    uLogFarFactor: new Uniform(1.0),
+    uSceneDepthEnabled: new Uniform(0.0),
     // lobes / cavities (field-level composition) + Worley filaments
     uLobeCount: new Uniform(0),
     uLobeData: new Uniform(Array.from({ length: 8 }, () => new Vector4())),
@@ -60,7 +66,6 @@ export function createNebulaUniforms(): Record<string, IUniform> {
 export const nebulaRaymarchVertex = `
   precision highp float;
   varying vec3 vLocalPos;      // proxy-local position [-1,1]
-  varying float vFragDepth;    // logarithmic depth, resolved per-fragment in the FS
   void main() {
     vLocalPos = position;       // unit-cube geometry in [-1,1]
     // modelViewMatrix, NOT modelMatrix followed by viewMatrix. Three builds it on
@@ -75,14 +80,12 @@ export const nebulaRaymarchVertex = `
     // The world-space varying that used to live here was dead — declared in both
     // stages, assigned, never read: the raymarch works off vLocalPos.
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    // gl_Position.z stays the standard projective value: only near/far CLIPPING of
+    // this large proxy box depends on it (a per-vertex z-remap used to corrupt the
+    // near-plane clip of triangles straddling a camera INSIDE the box). Depth is
+    // neither tested nor written — occlusion is resolved by the marcher against the
+    // scene depth (DepthVolumePass), see the fragment shader.
     gl_Position = projectionMatrix * mvPosition;
-    // Logarithmic depth, the Three.js way (logdepthbuf): leave gl_Position.z as the
-    // standard projective value so the near/far CLIPPING of this large proxy box stays
-    // correct, and resolve the actual log depth per-fragment via gl_FragDepth below.
-    // A per-vertex z-remap (the old approach) corrupts the near-plane clip of the box
-    // triangles that straddle the camera when it is INSIDE the box (huge proxies),
-    // punching a hard wedge of missing coverage. Mirrors BlackHole/atmosphere.
-    vFragDepth = 1.0 + gl_Position.w;
   }
 `
 
@@ -98,16 +101,22 @@ export const nebulaRaymarchFragment = `
   ${nebulaColorChunk}
 
   varying vec3 vLocalPos;
-  varying float vFragDepth;
   uniform float uMaxSteps;
   uniform float uEmissiveIntensity;
   uniform float uDensityScale;
   uniform float uOpacityScale;
-  uniform float uLogDepthBufFC; // logarithmic depth factor (= 2 / log2(far + 1))
 
   // Camera position in proxy-local space via the model matrix inverse.
   uniform mat4 uInvModelMatrix;
   uniform vec3 uCameraWorld;
+
+  // Scene depth for the ray cut (SceneDepth chunk, bound by DepthVolumePass).
+  // Three does not declare modelViewMatrix in the fragment prefix but uploads it
+  // by name in any stage; it is camera-relative, so it keeps precision far from
+  // the world origin.
+  uniform mat4 modelViewMatrix;
+  ${sceneDepthUniforms}
+  ${sceneDepthFunctions}
 
   // Ray-box intersection in local space, box [-1,1]^3.
   vec2 intersectBox(vec3 ro, vec3 rd) {
@@ -131,6 +140,11 @@ export const nebulaRaymarchFragment = `
     vec2 hit = intersectBox(roLocal, rdLocal);
     float tn = max(hit.x, 0.0);
     float tf = hit.y;
+    // Cut the ray at the scene depth: fog behind an opaque surface inside the box
+    // is not integrated, and a ray hitting a surface before entering the box
+    // collapses and is discarded. rdLocal is proxy-local; mat3(modelViewMatrix)
+    // carries the proxy scale into view space, so no normalisation here.
+    tf = min(tf, sceneDepthRayT(mat3(modelViewMatrix) * rdLocal));
     if (tf <= tn) discard;
 
     int steps = int(uMaxSteps);
@@ -155,10 +169,6 @@ export const nebulaRaymarchFragment = `
     }
     float alpha = 1.0 - transmittance;
     if (alpha < 0.002) discard;
-    // Per-fragment logarithmic depth (see vertex shader). depthWrite is off, so this
-    // only feeds the depth TEST: the proxy's back-wall depth lets opaque geometry in
-    // front of it occlude the fog (depthTest=true), now correct at 2000 AU scales.
-    gl_FragDepth = log2(vFragDepth) * uLogDepthBufFC * 0.5;
     fragColor = vec4(accum, alpha) * uOpacityScale; // premultiplied; scaled for crossfade
   }
 `
