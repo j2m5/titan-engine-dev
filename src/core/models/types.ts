@@ -312,6 +312,14 @@ export interface IPlanetRenderingObject {
 
   /** Процедурная поверхность (сид-поле → рантайм-диффуз + офлайн-высоты); валидация — validateProceduralSurface. */
   proceduralSurface?: ProceduralSurfaceParams
+
+  /**
+   * Зоны материала по уклону (tan-единицы): маска камня smoothstep(steepStart, steepFull, tan + steepBreakup·шум);
+   * дефолты 0.35/0.55/0.15 — resolveSteepZoneParams.
+   */
+  steepStart?: number
+  steepFull?: number
+  steepBreakup?: number
 }
 
 export type IAtmosphereRenderingObject = AtmosphereConfig
