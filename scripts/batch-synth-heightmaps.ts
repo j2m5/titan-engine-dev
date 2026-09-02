@@ -491,27 +491,27 @@ const BODIES: readonly BodyGeneration[] = [
   },
   {
     name: 'ghomrassen',
-    inputPath: `${TEXTURES_ROOT}/StarWars/ghomrassen/ghomrassen.png`,
-    inputKind: 'diffuse',
+    inputKind: 'procedural',
     radiusMeters: 520_790,
     seedActorId: 65,
-    actorIds: [65]
+    actorIds: [65],
+    outputDir: `${TEXTURES_ROOT}/StarWars/ghomrassen`
   },
   {
     name: 'guermessa',
-    inputPath: `${TEXTURES_ROOT}/StarWars/guermessa/guermessa.png`,
-    inputKind: 'diffuse',
+    inputKind: 'procedural',
     radiusMeters: 468_712,
     seedActorId: 66,
-    actorIds: [66]
+    actorIds: [66],
+    outputDir: `${TEXTURES_ROOT}/StarWars/guermessa`
   },
   {
     name: 'chenini',
-    inputPath: `${TEXTURES_ROOT}/StarWars/chenini/chenini.png`,
-    inputKind: 'diffuse',
+    inputKind: 'procedural',
     radiusMeters: 364_554,
     seedActorId: 67,
-    actorIds: [67]
+    actorIds: [67],
+    outputDir: `${TEXTURES_ROOT}/StarWars/chenini`
   },
   // Ohann I и Adriana IV делят один физический вход (unnamed_planet_5.png),
   // но КАЖДЫЙ — своя генерация со своим сидом (та же причина, что у Коррибана

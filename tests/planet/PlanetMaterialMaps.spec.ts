@@ -563,7 +563,7 @@ describe(`PlanetMaterial: счётные инварианты батча ${BATCH
 // из data.proceduralSurface (Task 4/5), а данные тела несут только сид+ручки
 // fBM-поля. height/slope — как у остального батча (пер-тело, задача 4 прошлой
 // арки), общий шаренный диффуз (ресурс 117) снят вместе со связками.
-const PROCEDURAL_ACTOR_IDS = [93, 94, 95, 96, 97, 98, 99] as const
+const PROCEDURAL_ACTOR_IDS = [65, 66, 67, 93, 94, 95, 96, 97, 98, 99] as const
 
 describe('PlanetMaterial: процедурные тела (луны Коррибана)', () => {
   it.each(PROCEDURAL_ACTOR_IDS)('actorId %i: proceduralSurface валиден, diffuse-ресурса нет, height+slope есть, slope repeat, bumpScale 1, ровно 4 детальные связки', (actorId) => {
@@ -913,10 +913,12 @@ describe('PlanetMaterial: данные Коррибана — height/slope/detai
   })
 })
 
-// Все 19 тел Task 2 стандартизации: 9 реальных лун (Мимас..Оберон), Татуин,
+// Тела Task 2 стандартизации, оставшиеся на файловом диффузе: луны Татуина (65-67)
+// ушли на процедурную поверхность (2026-09-02) — их инварианты несёт страж PROCEDURAL_ACTOR_IDS.
+// Изначально: 9 реальных лун (Мимас..Оберон), Татуин,
 // 3 луны Татуина, 2 Ohann, 3 Adriana (I/II/IV) и Коррибан — счётные инварианты
 // одинаковы для всех, тот же паритет, что у батча 18 спутников и девяти тел выше
-const TASK2_19_ACTOR_IDS = [24, 25, 26, 27, 31, 32, 33, 34, 35, 62, 65, 66, 67, 68, 69, 71, 72, 74, 88] as const
+const TASK2_19_ACTOR_IDS = [24, 25, 26, 27, 31, 32, 33, 34, 35, 62, 68, 69, 71, 72, 74, 88] as const
 
 describe('PlanetMaterial: счётные инварианты 19 тел Task 2 стандартизации', () => {
   it.each(TASK2_19_ACTOR_IDS)('actorId %i: пара height+slope, wrapS у slope и диффуза, bumpScale 1, ровно 6 терраформных связок', (actorId) => {
