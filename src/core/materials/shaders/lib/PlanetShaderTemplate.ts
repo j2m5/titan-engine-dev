@@ -219,8 +219,18 @@ export const PlanetShaderTemplate: ShaderProps = {
         // от той же длины.
         vec3 eastLocal = cross(vec3(0.0, 1.0, 0.0), dirLocal);
 
+        // tan уклона для маски зон материала (TerrainDetail.applyTerrainDetail,
+        // задача 2) — объявлен ДО ветки, чтобы имя было в скоупе вызова ниже
+        // независимо от USE_SLOPE. Без slope-карты 0 — steep-зона закрыта
+        // (mask смотрит только на slopeTan, см. докстроку чанка).
+        float terrainSlopeTan = 0.0;
         #ifdef USE_SLOPE
           nLocal = perturbNormalFromSlope(nLocal, eastLocal, uv);
+          // Тот же декод, что в perturbNormalFromSlope (SlopeNormal.ts,
+          // uSlopeRange / 127.0) — НЕ macroSlope ниже (тот же формат байта,
+          // но отдельный путь под другим гейтом, не переиспользуем).
+          vec2 terrainSlopeVec = (texture2D(bumpMap, uv).xy * 255.0 - 128.0) * (uSlopeRange / 127.0);
+          terrainSlopeTan = length(terrainSlopeVec);
         #endif
 
         #ifdef USE_CAVITY
@@ -247,7 +257,7 @@ export const PlanetShaderTemplate: ShaderProps = {
         #endif
 
         #ifdef USE_TERRAIN_DETAIL
-          applyTerrainDetail(nLocal, albedoMul, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition));
+          applyTerrainDetail(nLocal, albedoMul, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);
         #endif
 
         // Единственный переход тело-локальной нормали в view-пространство —

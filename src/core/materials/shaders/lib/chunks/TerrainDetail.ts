@@ -90,6 +90,47 @@
  * границе всё равно исполняются и дают корректные производные, а вклад на
  * самой кромке умножается на fade → 0. Производные для sampleDetiled берутся
  * ДО стохастического сдвига (см. её докстроку) — этот аргумент их не портит.
+ *
+ * ЗОНЫ МАТЕРИАЛА ПО УКЛОНУ (крупная шкала, fade1-ветка; мелкая шкала задачи 4
+ * зон не знает — см. её код ниже, вне маски). Второй набор карт (uSteep*)
+ * читается тем же доменом адресации, что родной (тот же detailPos/scale/w/l —
+ * зона меняет ТЕКСТУРЫ, не проекцию и не индекс варианта sampleDetiled).
+ * Маска m ∈ [0,1] — smoothstep по tan уклона (slopeTan, аргумент функции;
+ * приходит из PlanetShaderTemplate — декод той же slope-карты, что и
+ * perturbNormalFromSlope, см. её докстроку) с рваной границей: к порогам
+ * uSteepMask.xy прибавлен uSteepMask.z·(vnoise(...) − 0.5) — тот же vnoise
+ * без новых текстурных выборок (домен detailPos.xy·uDetailScale, та же
+ * W-периодичность 1024, что у l выше, другая проекционная ось намеренно —
+ * граница зоны не обязана совпадать с фазой l). Множитель uSteepGate — часть
+ * произведения самой маски (рулинг: не отдельный if), поэтому m ≡ 0 при
+ * выключенном/неполном steep-наборе (Task 3 гарантирует это на CPU) —
+ * дальше работает только ветка STEEP_EPS-ниже, значения численно совпадают
+ * с кодом до этой задачи.
+ *
+ * Ветвление на STEEP_EPS (0.003) — не оптимизация читаемости, а экономия
+ * бюджета: без него компилятор обязан читать ОБА набора на каждом пикселе,
+ * даже там, где второй даёт вклад 0 (m точно 0 или 1 почти никогда из-за
+ * шумовой границы и float, поэтому голый `m > 0.0`/`m < 1.0` не разрежал бы
+ * ничего). Три ветки: m < EPS — только родной набор (одна выборка на
+ * распаковку), m > 1-EPS — только steep, иначе — обе. Общее чтение тройки
+ * (нормаль/AO/тинт-diffuse) вынесено в sampleDetailSet — тело идентично
+ * старому коду ветки fade1, просто параметризовано тремя сэмплерами; звать
+ * его 1 раз (края маски) или 2 (полоса перехода) вместо копипаста.
+ *
+ * Бленд в полосе перехода: нормали — тот же whiteout-паттерн, что уже
+ * применяется между крупной и мелкой шкалой (nLocal = normalize(nLocal +
+ * k·(nDetail − nLocal)), последовательно родной вес (1−m), затем steep вес
+ * m — а не единая интерполяция двух нормалей, которая укорачивает вектор
+ * ближе к краям сферы Buhler). AO/tint — не направления, им whiteout не
+ * нужен, обычный mix(native, steep, m).
+ *
+ * БЮДЖЕТ ПОЛОСЫ (худший случай, обе шкалы + все три канала крупной, ОБА
+ * набора крупной шкалы одновременно): 3 карты (нормаль/ARM/диффуз) × 3
+ * проекции × 2 стохастических варианта × 2 набора (родной + steep) = 36,
+ * плюс мелкая шкала (одна нормаль, зон не знает) 3 × 2 × 1 = 6 — итого 42
+ * против 24 вне полосы (см. БЮДЖЕТ выше). Полоса — по построению узкая
+ * (ширина ~uSteepMask.y − uSteepMask.x, ручка Task 3), поэтому среднее по
+ * кадру ближе к 24, чем к 42.
  */
 export const terrainDetailUniforms = `
   uniform sampler2D uDetailDiffMap;
@@ -104,9 +145,22 @@ export const terrainDetailUniforms = `
   uniform float uDetailAoInfluence;
   uniform vec3 uDetailLayerGates;
   uniform vec4 uDetailFadeRange;
+  uniform sampler2D uSteepNorMap;
+  uniform sampler2D uSteepArmMap;
+  uniform sampler2D uSteepDiffMap;
+  // 0/1 по факту наличия всех трёх steep-карт И несовпадения с родным
+  // набором (rocky-тела — вырожденный бленд, гейт держит Task 3 на CPU).
+  uniform float uSteepGate;
+  // x = steepStart, y = steepFull, z = steepBreakup — tan-единицы уклона
+  // (см. докстроку чанка, раздел «ЗОНЫ МАТЕРИАЛА»; резолвит Task 3).
+  uniform vec3 uSteepMask;
 `
 
 export const terrainDetailFunctions = `
+  // Полуширина ветвления маски зон (см. докстроку чанка, «ЗОНЫ МАТЕРИАЛА»):
+  // < EPS/> 1-EPS читает один набор, между ними — оба.
+  #define STEEP_EPS 0.003
+
   // Скалярный/векторный хеш — от КВАНТОВАННОЙ величины на вызове (floor(p)
   // передаёт вызывающая сторона), не от сырого варьинга.
   float hash21(vec2 p) {
@@ -205,7 +259,32 @@ export const terrainDetailFunctions = `
     return triplanarBlendNormal(tx, ty, tz, n, w);
   }
 
-  void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 detailPos, vec3 detailPos2, float viewDistance) {
+  // Общее чтение тройки (нормаль/AO/tint-diffuse) для ОДНОГО набора крупной
+  // шкалы (родного или steep) — тело идентично прежнему коду ветки fade1,
+  // параметризовано сэмплерами набора. Гейты AO/diffuse — те же
+  // uDetailLayerGates.x/y, общие на оба набора (свойство слоя, не зоны).
+  // scale/detailPos/w/l не параметризованы — зона не меняет домен адресации
+  // (см. докстроку чанка, «ЗОНЫ МАТЕРИАЛА»), только сами карты.
+  void sampleDetailSet(
+    sampler2D nor, sampler2D arm, sampler2D diff, vec3 detailPos, vec3 w, vec3 l, vec3 nLocal,
+    out vec3 nOut, out float aoOut, out vec3 tintOut
+  ) {
+    nOut = triplanarNormalDetiled(nor, detailPos, uDetailScale, nLocal, w, l);
+
+    aoOut = 1.0;
+    if (uDetailLayerGates.x > 0.0) {
+      aoOut = mix(1.0, triplanarArmDetiled(arm, detailPos, uDetailScale, w, l).r, uDetailAoInfluence);
+    }
+
+    tintOut = vec3(1.0);
+    if (uDetailLayerGates.y > 0.0) {
+      vec3 diffuseDetail = triplanarAlbedoDetiled(diff, detailPos, uDetailScale, w, l);
+      float lum = dot(diffuseDetail, vec3(0.299, 0.587, 0.114));
+      tintOut = mix(vec3(lum), diffuseDetail, uDetailSaturation) * uDetailBrightness;
+    }
+  }
+
+  void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan) {
     // Пороги фейда — ручки пер-тела в метрах дистанции, сконвертированные
     // в юниты на CPU (см. докстрока чанка и PlanetShader.uDetailFadeRange).
     float fade1 = 1.0 - smoothstep(uDetailFadeRange.x, uDetailFadeRange.y, viewDistance);
@@ -227,23 +306,44 @@ export const terrainDetailFunctions = `
       );
 
       if (fade1 > 0.0) {
-        vec3 nDetail = triplanarNormalDetiled(uDetailNorMap, detailPos, uDetailScale, nLocal, w, l);
-        nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (nDetail - nLocal));
+        // Маска зон: камень на крутом. breakup — существующий W-периодичный
+        // vnoise (другая ось, тот же домен) — граница рваная, новых
+        // текстурных выборок ноль. uSteepGate — множитель прямо в маске
+        // (рулинг): выключенный/неполный steep-набор даёт m ≡ 0 и код ниже
+        // сваливается в единственную ветку m < STEEP_EPS — родной набор,
+        // как до этой задачи. Без slope-карты slopeTan = 0 (см. вызывающую
+        // сторону, PlanetShaderTemplate) — тот же эффект.
+        float m = uSteepGate * smoothstep(uSteepMask.x, uSteepMask.y, slopeTan + uSteepMask.z * (vnoise(0.25 * (detailPos.xy * uDetailScale)) - 0.5));
 
-        if (uDetailLayerGates.x > 0.0) {
-          float aoDetail = mix(
-            1.0,
-            triplanarArmDetiled(uDetailArmMap, detailPos, uDetailScale, w, l).r,
-            uDetailAoInfluence
-          );
-          albedoMul *= mix(1.0, aoDetail, fade1);
-        }
+        vec3 nNative, nSteep;
+        float aoNative, aoSteep;
+        vec3 tintNative, tintSteep;
 
-        if (uDetailLayerGates.y > 0.0) {
-          vec3 diffuseDetail = triplanarAlbedoDetiled(uDetailDiffMap, detailPos, uDetailScale, w, l);
-          float lum = dot(diffuseDetail, vec3(0.299, 0.587, 0.114));
-          vec3 tint = mix(vec3(lum), diffuseDetail, uDetailSaturation) * uDetailBrightness;
-          albedoMul *= mix(vec3(1.0), tint, fade1);
+        if (m < STEEP_EPS) {
+          // Вне зоны — читается ровно один (родной) набор.
+          sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, detailPos, w, l, nLocal, nNative, aoNative, tintNative);
+          nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (nNative - nLocal));
+          albedoMul *= mix(1.0, aoNative, fade1);
+          albedoMul *= mix(vec3(1.0), tintNative, fade1);
+        } else if (m > 1.0 - STEEP_EPS) {
+          // Только steep — симметрично ветке выше.
+          sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, detailPos, w, l, nLocal, nSteep, aoSteep, tintSteep);
+          nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (nSteep - nLocal));
+          albedoMul *= mix(1.0, aoSteep, fade1);
+          albedoMul *= mix(vec3(1.0), tintSteep, fade1);
+        } else {
+          // Полоса перехода: оба набора (бюджет — см. докстроку чанка).
+          // Нормали — whiteout, последовательно родной вес (1-m), затем
+          // steep вес m (тот же паттерн, что крупная/мелкая шкала ниже).
+          // AO/tint — не направления, обычный mix(a, b, m).
+          sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, detailPos, w, l, nLocal, nNative, aoNative, tintNative);
+          nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (1.0 - m) * (nNative - nLocal));
+
+          sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, detailPos, w, l, nLocal, nSteep, aoSteep, tintSteep);
+          nLocal = normalize(nLocal + uDetailNormalScale * fade1 * m * (nSteep - nLocal));
+
+          albedoMul *= mix(1.0, mix(aoNative, aoSteep, m), fade1);
+          albedoMul *= mix(vec3(1.0), mix(tintNative, tintSteep, m), fade1);
         }
       }
 

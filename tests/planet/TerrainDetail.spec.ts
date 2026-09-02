@@ -68,9 +68,12 @@ describe('TerrainDetail: чанк — регистрация и структур
 
   it('применяет крупную шкалу через стохастические обёртки с uDetail-самплерами — бленд не копируется', () => {
     expect(terrainDetailFunctions).toContain('triplanarWeights(dirLocal)')
-    expect(terrainDetailFunctions).toContain('triplanarNormalDetiled(uDetailNorMap')
-    expect(terrainDetailFunctions).toContain('triplanarArmDetiled(uDetailArmMap')
-    expect(terrainDetailFunctions).toContain('triplanarAlbedoDetiled(uDetailDiffMap')
+    // родной набор читается через общий helper sampleDetailSet (зоны материала,
+    // задача 2) — сам helper вызывает triplanarNormal/Arm/AlbedoDetiled параметризованно
+    expect(terrainDetailFunctions).toContain('sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap')
+    expect(terrainDetailFunctions).toContain('triplanarNormalDetiled(nor')
+    expect(terrainDetailFunctions).toContain('triplanarArmDetiled(arm')
+    expect(terrainDetailFunctions).toContain('triplanarAlbedoDetiled(diff')
   })
 
   it('мелкая шкала несёт только нормаль — на uDetailNor2Map', () => {
@@ -132,20 +135,28 @@ describe('TerrainDetail: чанк — регистрация и структур
     const applyStart = terrainDetailFunctions.indexOf('void applyTerrainDetail(')
     const applyBody = terrainDetailFunctions.slice(applyStart)
 
-    // ровно 3 вызова vnoise в applyTerrainDetail — по одному на проекционную ось
-    // (zy/xz/xy), НЕ на карту (карт четыре — они делят эти три значения)
+    // 4 вызова vnoise в applyTerrainDetail: 3 по одному на проекционную ось l
+    // (zy/xz/xy, делят их 4 карты) + 1 breakup маски зон (задача 2, другая ось
+    // того же домена, см. докстроку чанка «ЗОНЫ МАТЕРИАЛА»)
     const vnoiseCalls = (applyBody.match(/vnoise\(/g) ?? []).length
-    expect(vnoiseCalls).toBe(3)
+    expect(vnoiseCalls).toBe(4)
 
-    // l вычислен раньше первого вызова *Detiled-обёртки
+    // l вычислен раньше первого использования (вызов sampleDetailSet — общий
+    // helper обоих наборов зоны, см. «зоны материала по уклону»)
     const lIdx = applyBody.indexOf('vnoise(')
-    const firstDetiledCallIdx = applyBody.indexOf('Detiled(uDetail')
+    const firstUseIdx = applyBody.indexOf('sampleDetailSet(')
     expect(lIdx).toBeGreaterThan(-1)
-    expect(firstDetiledCallIdx).toBeGreaterThan(-1)
-    expect(lIdx).toBeLessThan(firstDetiledCallIdx)
+    expect(firstUseIdx).toBeGreaterThan(-1)
+    expect(lIdx).toBeLessThan(firstUseIdx)
 
-    // общий l передаётся во все четыре вызова (три на крупной шкале + один на мелкой)
-    const lPassedCount = (applyBody.match(/Detiled\([^)]*\bl\)/g) ?? []).length
+    // общий l передаётся во все четыре вызова *Detiled-обёртки: три — внутри
+    // sampleDetailSet (родной/steep набор читает его же тело параметризованно),
+    // один — мелкая шкала (fade2-ветка, вне зон). Область поиска — от
+    // sampleDetailSet и дальше, иначе сигнатуры sampleDetiled/triplanar*Detiled
+    // (тоже заканчиваются на «vec3 l)») ложно засчитываются как вызовы.
+    const helperStart = terrainDetailFunctions.indexOf('void sampleDetailSet(')
+    const tail = terrainDetailFunctions.slice(helperStart)
+    const lPassedCount = (tail.match(/Detiled\([^)]*\bl\)/g) ?? []).length
     expect(lPassedCount).toBe(4)
   })
 
@@ -169,9 +180,9 @@ describe('TerrainDetail: чанк — регистрация и структур
     expect(terrainDetailFunctions).toContain('uDetailLayerGates.z')
   })
 
-  it('сигнатура applyTerrainDetail совпадает с интерфейсом брифа', () => {
+  it('сигнатура applyTerrainDetail совпадает с интерфейсом брифа задачи 2 (+ slopeTan для маски зон)', () => {
     expect(terrainDetailFunctions).toContain(
-      'void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 detailPos, vec3 detailPos2, float viewDistance)'
+      'void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan)'
     )
   })
 })
@@ -186,7 +197,9 @@ describe('TerrainDetail: хук в терраформной ветке шабл�
   })
 
   it('applyTerrainDetail зовётся строго перед финальным normalMatrix', () => {
-    const callIdx = frag.indexOf('applyTerrainDetail(nLocal, albedoMul, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition))')
+    const callIdx = frag.indexOf(
+      'applyTerrainDetail(nLocal, albedoMul, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan)'
+    )
     const finalIdx = frag.indexOf('normal = normalize(normalMatrix * nLocal);')
     expect(callIdx).toBeGreaterThan(-1)
     expect(finalIdx).toBeGreaterThan(-1)

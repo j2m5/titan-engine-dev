@@ -19,7 +19,9 @@ describe('TerrainDetail: домен из точной позиции патча'
 
   it('фрагментник зовёт чанк с varying-позициями', () => {
     expect(frag).toContain('varying vec3 vDetailPos;')
-    expect(frag).toContain('applyTerrainDetail(nLocal, albedoMul, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition));')
+    expect(frag).toContain(
+      'applyTerrainDetail(nLocal, albedoMul, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);'
+    )
     expect(frag).not.toContain('applyTerrainDetail(nLocal, albedoMul, dirLocal, length(vViewPosition));')
   })
 
