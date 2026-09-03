@@ -75,24 +75,40 @@ describe('TerrainDetail: зоны материала по уклону', () => {
   // частоте (шумовая граница) — dFdx/dFdy, посчитанные ВНУТРИ этой ветки
   // (или внутри triplanar*Detiled, вызываемых из неё), формально UB под
   // дивергентным потоком и давали видимый артефакт (мип-волоски вдоль
-  // изоконтуров m = STEEP_EPS/1-EPS). Регресс-пин: все вхождения dFdx( в
-  // чанке обязаны стоять textуально РАНЬШЕ первой ветки маски — иначе
-  // производные снова считаются под ветвлением по m.
-  it('регресс: dFdx( встречается только до первой ветки маски зон (мип-волоски вдоль изоконтуров)', () => {
-    const maskGateIdx = terrainDetailFunctions.indexOf('if (m < STEEP_EPS')
-    expect(maskGateIdx).toBeGreaterThan(-1)
+  // изоконтуров m = STEEP_EPS/1-EPS).
+  //
+  // Фикс-раунд 3 (ре-ревью, CRITICAL): пин на позицию ОПРЕДЕЛЕНИЯ dFdx(
+  // внутри triplanarUvFor вакуумный — определение функции лексически ВСЕГДА
+  // раньше applyTerrainDetail независимо от того, откуда её реально зовут;
+  // тест оставался зелёным даже при откате фикса (мутация — CALL SITE
+  // uvBig/uvSmall перенесён внутрь if (fade1 > 0.0) — не ловилась). Пин
+  // теперь на CALL SITE: индекс вызова triplanarUvFor должен быть строго
+  // раньше индекса ближайшей внутренней ветки (fade1) — вот она реально
+  // двигается при регрессе.
+  it('регресс: triplanarUvFor зовётся ДО ветки fade1/маски — не внутри неё (ловит перенос вызова, не только определения)', () => {
+    const uvBigCallIdx = terrainDetailFunctions.indexOf('TriplanarUv uvBig = triplanarUvFor(')
+    const uvSmallCallIdx = terrainDetailFunctions.indexOf('TriplanarUv uvSmall = triplanarUvFor(')
+    const fade1GateIdx = terrainDetailFunctions.indexOf('if (fade1 > 0.0)')
 
-    const dFdxIndices: number[] = []
-    let from = 0
-    for (;;) {
-      const idx = terrainDetailFunctions.indexOf('dFdx(', from)
-      if (idx === -1) break
-      dFdxIndices.push(idx)
-      from = idx + 1
-    }
-    expect(dFdxIndices.length).toBeGreaterThan(0)
-    for (const idx of dFdxIndices) {
-      expect(idx).toBeLessThan(maskGateIdx)
-    }
+    expect(uvBigCallIdx).toBeGreaterThan(-1)
+    expect(uvSmallCallIdx).toBeGreaterThan(-1)
+    expect(fade1GateIdx).toBeGreaterThan(-1)
+    expect(uvBigCallIdx).toBeLessThan(fade1GateIdx)
+    expect(uvSmallCallIdx).toBeLessThan(fade1GateIdx)
+  })
+
+  // Дополняющий grep-пин (не самодостаточный сам по себе — см. тест выше):
+  // dFdx( встречается ровно 3 раза на весь чанк, все — внутри triplanarUvFor
+  // (по одному на проекцию zy/xz/xy); обёртки/sampleDetailSet/applyTerrainDetail
+  // dFdx больше не считают.
+  it('dFdx( встречается ровно 3 раза на весь чанк — только внутри triplanarUvFor', () => {
+    const dFdxCalls = (terrainDetailFunctions.match(/dFdx\(/g) ?? []).length
+    expect(dFdxCalls).toBe(3)
+
+    const uvForStart = terrainDetailFunctions.indexOf('TriplanarUv triplanarUvFor(')
+    const uvForEnd = terrainDetailFunctions.indexOf('\n  }', uvForStart)
+    const uvForBody = terrainDetailFunctions.slice(uvForStart, uvForEnd)
+    const dFdxInUvFor = (uvForBody.match(/dFdx\(/g) ?? []).length
+    expect(dFdxInUvFor).toBe(3)
   })
 })
