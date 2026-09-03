@@ -98,10 +98,11 @@ interface AsteroidRingConfig {
   /** Сила planetshine; при 1.5 на середине кольца вклад до четверти альбедо */
   planetshineStrength: number
   /**
-   * Сила самозатенения слоя кольца (чанк RingDust, ringLayerShadow): множитель
-   * оптической толщи слоя по альфе текстуры. 1 — физическая толща: камень в
-   * средней плоскости плотного кольца получает треть прямого света; 0.6 —
-   * компромисс, держит принятый вид Сатурна при высоком солнце.
+   * Сила самозатенения слоя кольца (чанк RingDust, ringLayerShadow): смесь
+   * между единицей и физической экспонентой по толще слоя, худший случай
+   * (1 − сила). 1 — физика: у Сатурна (α ≈ 1, солнце ≤ 27° над плоскостью)
+   * камни в слое чёрные, потому что рендер показывает и глубокие камни, которых
+   * в плотном слое не видно. 0.25 — мягкая сезонная зависимость без регрессии.
    */
   layerShadowStrength: number
   /** Сила тинта камней по цвету полос кольца 0..1 */
@@ -198,7 +199,7 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   dustNearFadeKm: 3000,
   planetshineColor: 0xb8ad9c,
   planetshineStrength: 1.5,
-  layerShadowStrength: 0.6,
+  layerShadowStrength: 0.25,
   bandTintStrength: 1,
   dustAnglePower: 2,
   dustMaxSteps: 16,

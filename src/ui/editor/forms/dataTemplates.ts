@@ -44,7 +44,7 @@ export const renderingDataTemplates: DataTemplate[] = [
       dustScaleHeightKm: 200,
       planetshineColor: '#b8ad9c',
       planetshineStrength: 1.5,
-      layerShadowStrength: 0.6,
+      layerShadowStrength: 0.25,
       bandTintStrength: 1
     }
   },

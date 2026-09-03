@@ -29,10 +29,9 @@ import { internalsOf, poolOf } from '../helpers/ringSystemInternals'
 
 describe('Самозатенение слоя кольца (зеркало ringLayerShadow)', () => {
   it('толща слоя: прозрачная полоса — 0, α = 0.9 — ln(10), α = 1 зажата', () => {
-    expect(layerTau(0, 1)).toBeCloseTo(0, 12)
-    expect(layerTau(0.9, 1)).toBeCloseTo(Math.log(10), 9)
-    expect(Number.isFinite(layerTau(1, 1))).toBe(true)
-    expect(layerTau(0.9, 0.5)).toBeCloseTo(Math.log(10) / 2, 9)
+    expect(layerTau(0)).toBeCloseTo(0, 12)
+    expect(layerTau(0.9)).toBeCloseTo(Math.log(10), 9)
+    expect(Number.isFinite(layerTau(1))).toBe(true)
   })
 
   it('доля столба над точкой: верх слоя 0, средняя плоскость ½, низ 1, за слоем зажато', () => {
@@ -63,18 +62,22 @@ describe('Самозатенение слоя кольца (зеркало ringL
     expect(layerShadow(new Vector3(50, -10, 0), down, 0.9, 10, 1)).toBeCloseTo(1, 12)
   })
 
-  it('низкое солнце удлиняет путь: тень глубже, пол синуса 0.05 держит конечной', () => {
+  it('низкое солнце удлиняет путь: тень глубже, пол синуса 0.2 держит конечной', () => {
     const p = new Vector3(50, 0, 0)
     const high = layerShadow(p, new Vector3(0, 1, 0), 0.5, 10, 1)
-    const low = layerShadow(p, new Vector3(1, 0.2, 0).normalize(), 0.5, 10, 1)
+    const low = layerShadow(p, new Vector3(1, 0.3, 0).normalize(), 0.5, 10, 1)
     const grazing = layerShadow(p, new Vector3(1, 0, 0), 0.5, 10, 1)
     expect(low).toBeLessThan(high)
     expect(grazing).toBeLessThan(low)
     expect(grazing).toBeGreaterThan(0)
-    expect(grazing).toBeCloseTo(Math.exp((-layerTau(0.5, 1) * 0.5) / 0.05), 9)
+    expect(grazing).toBeCloseTo(Math.exp((-layerTau(0.5) * 0.5) / 0.2), 9)
   })
 
-  it('сила 0 выключает самозатенение', () => {
+  it('сила — смесь с единицей: худший случай (1 − s), чёрных камней не бывает', () => {
+    // Сатурн: α ≈ 1, солнце низко, камень у нижней кромки — физически ноль,
+    // но при силе 0.25 остаётся 0.75 прямого света
+    const worst = layerShadow(new Vector3(50, -10, 0), new Vector3(1, 0, 0), 0.99, 10, 0.25)
+    expect(worst).toBeCloseTo(0.75, 3)
     expect(layerShadow(new Vector3(50, -10, 0), new Vector3(0, 1, 0), 0.99, 10, 0)).toBe(1)
   })
 })
@@ -110,11 +113,13 @@ describe('RingDust GLSL: слой кольца и полосы', () => {
   it('ядро (общее для камней и марша) содержит толщу, долю столба, тень слоя и тинт — зеркала формул', () => {
     const core = ringDustRaymarchFunctions
     expect(core).toContain('float ringLayerTau(float r)')
-    expect(core).toContain('-log(1.0 - min(a, 0.98)) * uLayerShadowStrength')
+    expect(core).toContain('return -log(1.0 - min(a, 0.98));')
+    // Сила — смесь с единицей, не множитель толщи; пол синуса 0.2
+    expect(core).toContain('return mix(1.0, physical, uLayerShadowStrength);')
     expect(core).toContain('float ringLayerColumnFraction(float ySun)')
     expect(core).toContain('u >= 0.0 ? (1.0 - u) * (1.0 - u) * 0.5 : 1.0 - (1.0 + u) * (1.0 + u) * 0.5')
     expect(core).toContain('float ringLayerShadow(vec3 p)')
-    expect(core).toContain('max(abs(uDustLightDirRing.y), 0.05)')
+    expect(core).toContain('max(abs(uDustLightDirRing.y), 0.2)')
     expect(core).toContain('vec3 ringBandTint(float r)')
     expect(core).toContain('clamp(band / max(uBandMeanColor, vec3(0.05)), 0.5, 1.5)')
   })
@@ -164,7 +169,7 @@ describe('AsteroidRingSystem: проводка слоя и полос', () => {
     ]
     for (const u of sets) {
       expect(u.uLayerHalfThickness.value).toBeCloseTo(toThreeJSUnits(200), 9)
-      expect(u.uLayerShadowStrength.value).toBe(0.6)
+      expect(u.uLayerShadowStrength.value).toBe(0.25)
       expect(u.uBandTintStrength.value).toBe(1)
       // Без прочитанной текстуры полос обе фичи выключены
       expect(u.uRingBandEnabled.value).toBe(0)

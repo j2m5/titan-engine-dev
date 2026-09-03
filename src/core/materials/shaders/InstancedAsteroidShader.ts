@@ -96,7 +96,7 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       uBandMeanColor: new Uniform(new Vector3(1, 1, 1)),
       uBandTintStrength: new Uniform(1),
       uLayerHalfThickness: new Uniform(1),
-      uLayerShadowStrength: new Uniform(0.6),
+      uLayerShadowStrength: new Uniform(0.25),
       uShapeAmpMin: new Uniform(0),
       uShapeAmpMax: new Uniform(0),
       uShapeFreq: new Uniform(1),

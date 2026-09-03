@@ -288,9 +288,9 @@ const tauRay = (origin: Vector3, dir: Vector3, tMax: number, p: DustParams): Tau
 
 /**
  * Оптическая толща слоя кольца по нормали на радиусе из альфы текстуры:
- * пропускание слоя = 1 − α → τ = −ln(1 − min(α, 0.98)) · strength (зеркало ringLayerTau)
+ * пропускание слоя = 1 − α → τ = −ln(1 − min(α, 0.98)) (зеркало ringLayerTau)
  */
-const layerTau = (alpha: number, strength: number): number => -Math.log(1 - Math.min(alpha, 0.98)) * strength
+const layerTau = (alpha: number): number => -Math.log(1 - Math.min(alpha, 0.98))
 
 /**
  * Доля столба слоя НАД точкой в сторону солнца при треугольном вертикальном
@@ -303,15 +303,17 @@ const columnFraction = (ySun: number, half: number): number => {
 }
 
 /**
- * Самозатенение слоя: exp(−τ · доля_над / sin(высота солнца)), пол синуса 0.05
- * (зеркало ringLayerShadow). lightDir — направление на звезду в ring-local.
+ * Самозатенение слоя: mix(1, exp(−τ · доля_над / sin(высота солнца)), strength),
+ * пол синуса 0.2 (зеркало ringLayerShadow). lightDir — направление на звезду в
+ * ring-local. Худший случай при силе s — (1 − s): чёрных камней не бывает.
  */
 const layerShadow = (p: Vector3, lightDir: Vector3, alpha: number, half: number, strength: number): number => {
-  const tau = layerTau(alpha, strength)
-  if (tau <= 0) return 1
+  const tau = layerTau(alpha)
+  if (tau <= 0 || strength <= 0) return 1
   const ySun = lightDir.y >= 0 ? p.y : -p.y
-  const sinE = Math.max(Math.abs(lightDir.y), 0.05)
-  return Math.exp((-tau * columnFraction(ySun, half)) / sinE)
+  const sinE = Math.max(Math.abs(lightDir.y), 0.2)
+  const physical = Math.exp((-tau * columnFraction(ySun, half)) / sinE)
+  return 1 + (physical - 1) * strength
 }
 
 /** Тинт альбедо по цвету полосы: clamp(цвет/средний, 0.5, 1.5), смешан с 1 по силе (зеркало ringBandTint) */

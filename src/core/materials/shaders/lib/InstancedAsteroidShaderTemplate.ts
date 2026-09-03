@@ -51,7 +51,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uBandMeanColor: new Uniform(new Vector3(1, 1, 1)),
     uBandTintStrength: new Uniform(1),
     uLayerHalfThickness: new Uniform(1),
-    uLayerShadowStrength: new Uniform(0.6),
+    uLayerShadowStrength: new Uniform(0.25),
     // Деформация силуэта (см. чанк AsteroidShape). Амплитуда — per-instance из
     // диапазона [min,max]; min=max=0 → форма выключена.
     uShapeAmpMin: new Uniform(0),

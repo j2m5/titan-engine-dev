@@ -65,7 +65,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
         uBandMeanColor: { value: new Vector3(1, 1, 1) },
         uBandTintStrength: { value: 1.0 },
         uLayerHalfThickness: { value: 1.0 },
-        uLayerShadowStrength: { value: 0.6 },
+        uLayerShadowStrength: { value: 0.25 },
         /** Диагностика: 0 выкл, 1 τ, 2 alpha, 3 гейт, 4 теплокарта шагов */
         uDustDebugMode: { value: 0 },
         // Глубина сцены (чанк SceneDepth): привязывает DepthVolumePass перед рендером
