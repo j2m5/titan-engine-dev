@@ -286,5 +286,56 @@ const tauRay = (origin: Vector3, dir: Vector3, tMax: number, p: DustParams): Tau
   return { tau, span: [o0, o1] }
 }
 
-export { radialMask, verticalAntiderivative, verticalIntegral, circleInterval, tauRay, densityAt, angleGate, nearRamp, tauMarch }
+/**
+ * Оптическая толща слоя кольца по нормали на радиусе из альфы текстуры:
+ * пропускание слоя = 1 − α → τ = −ln(1 − min(α, 0.98)) (зеркало ringLayerTau)
+ */
+const layerTau = (alpha: number): number => -Math.log(1 - Math.min(alpha, 0.98))
+
+/**
+ * Доля столба слоя НАД точкой в сторону солнца при треугольном вертикальном
+ * распределении генератора (пик в средней плоскости, ноль на ±half):
+ * ySun — высота точки, отсчитанная в сторону солнца (зеркало ringLayerColumnFraction)
+ */
+const columnFraction = (ySun: number, half: number): number => {
+  const u = Math.max(-1, Math.min(1, ySun / Math.max(half, 1e-9)))
+  return u >= 0 ? ((1 - u) * (1 - u)) / 2 : 1 - ((1 + u) * (1 + u)) / 2
+}
+
+/**
+ * Самозатенение слоя: mix(1, exp(−τ · доля_над / sin(высота солнца)), strength),
+ * пол синуса 0.2 (зеркало ringLayerShadow). lightDir — направление на звезду в
+ * ring-local. Худший случай при силе s — (1 − s): чёрных камней не бывает.
+ */
+const layerShadow = (p: Vector3, lightDir: Vector3, alpha: number, half: number, strength: number): number => {
+  const tau = layerTau(alpha)
+  if (tau <= 0 || strength <= 0) return 1
+  const ySun = lightDir.y >= 0 ? p.y : -p.y
+  const sinE = Math.max(Math.abs(lightDir.y), 0.2)
+  const physical = Math.exp((-tau * columnFraction(ySun, half)) / sinE)
+  return 1 + (physical - 1) * strength
+}
+
+/** Тинт альбедо по цвету полосы: clamp(цвет/средний, 0.5, 1.5), смешан с 1 по силе (зеркало ringBandTint) */
+const bandTint = (rgb: [number, number, number], mean: [number, number, number], strength: number): number[] =>
+  rgb.map((c, i) => {
+    const t = Math.max(0.5, Math.min(1.5, c / Math.max(mean[i], 0.05)))
+    return 1 + (t - 1) * strength
+  })
+
+export {
+  radialMask,
+  verticalAntiderivative,
+  verticalIntegral,
+  circleInterval,
+  tauRay,
+  densityAt,
+  angleGate,
+  nearRamp,
+  tauMarch,
+  layerTau,
+  columnFraction,
+  layerShadow,
+  bandTint
+}
 export type { DustParams, TauResult, MarchOptions }

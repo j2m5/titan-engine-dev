@@ -51,7 +51,14 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         uDustPlanetRadius: { value: 0.0 },
         // Радиальный профиль пыли из альфы текстуры кольца; scale 0 — выключен
         uDustRadialMap: { value: null },
-        uDustRadialMapScale: { value: 0.0 }
+        uDustRadialMapScale: { value: 0.0 },
+        // Полосы кольца и слой (см. чанк RingDust): выключены, пока система не отдаст текстуру
+        uRingBandMap: { value: null },
+        uRingBandEnabled: { value: 0.0 },
+        uBandMeanColor: { value: new Vector3(1, 1, 1) },
+        uBandTintStrength: { value: 1.0 },
+        uLayerHalfThickness: { value: 1.0 },
+        uLayerShadowStrength: { value: 0.25 }
       },
       vertexShader: /* glsl */ `
         ${ShaderChunk.common}
@@ -236,9 +243,11 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
           // Тень планеты (умбра) — та же модель, что у пыли/2D-кольца/L0. Гасит
           // прямой свет; uAmbient остаётся (не в глухой ноль).
           float planetShadow = ringDustPlanetShadow(vRingPos);
+          // Самозатенение слоя кольца — как у L0: прямой свет = тень планеты × тень слоя
+          float direct = planetShadow * ringLayerShadow(vRingPos);
           // Planetshine планеты-хозяина — как у L0, ложится на цвет
           float shine = asteroidPlanetshine(normal, normalize(vPlanetDirView), vRingPos, uDustLightDirRing, uDustPlanetRadius);
-          float lighting = uAmbient + diffuse * planetShadow;
+          float lighting = uAmbient + diffuse * direct;
 
           // --- Итоговый цвет ---
           // vFade — плавный fade-in/out сектора; abs, т.к. знак кодирует лишь
@@ -248,6 +257,8 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
 
           // Идентичность камня: пер-инстансный джиттер яркости, как у L0
           vec3 base = uColor * (1.0 + uColorJitter * (vInstanceSeed - 0.5) * 2.0);
+          // Тинт по цвету полосы кольца — как у L0
+          base *= ringBandTint(length(vRingPos.xz));
           vec3 color = base * lighting + base * uPlanetshineColor * (uPlanetshineStrength * shine);
           // Аэроперспектива: дальние импосторы тонут в пылевой дымке
           color = ringDustApplyFog(color, vRingPos);

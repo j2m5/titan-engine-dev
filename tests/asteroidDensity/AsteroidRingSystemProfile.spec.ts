@@ -11,7 +11,8 @@ vi.mock('@/core/services/ResourceStorage', () => ({
 
 vi.mock('@/core/renderables/DetailedRingStreamingSystem/RingAlphaReadback', () => ({
   readRingAlphaProfile: vi.fn(),
-  readRingAlphaBins: vi.fn()
+  readRingAlphaBins: vi.fn(),
+  readRingBandBins: vi.fn(() => null)
 }))
 
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
