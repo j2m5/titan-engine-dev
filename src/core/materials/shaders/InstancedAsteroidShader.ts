@@ -39,6 +39,10 @@ interface InstancedAsteroidUniforms {
   uShapeFreq: number
   uFreshnessBrighten: number
   uCavityShade: number
+  uLunarMix: number
+  uOppositionSurge: number
+  uPlanetshineColor: Color
+  uPlanetshineStrength: number
 }
 
 class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUniforms> {
@@ -86,7 +90,12 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       // Запечённые атрибуты породы (см. чанк AsteroidShape / ArchetypeShape.surfaceAt):
       // свежий скол разлома светлее/глаже, днища кратерных чаш затенены
       uFreshnessBrighten: new Uniform(0.15),
-      uCavityShade: new Uniform(0.5)
+      uCavityShade: new Uniform(0.5),
+      // Модель освещения камня (см. чанк AsteroidBrdf): реголит + planetshine
+      uLunarMix: new Uniform(0.8),
+      uOppositionSurge: new Uniform(0.3),
+      uPlanetshineColor: new Uniform(new Color(0xb8ad9c)),
+      uPlanetshineStrength: new Uniform(1.5)
     }
     this.name = 'InstancedAsteroidShader'
   }

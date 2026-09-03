@@ -31,6 +31,14 @@ export interface AsteroidProfile {
    *  самозатенение AO глубоких впадин от запечённого рельефа. */
   cavityShade: number
   /**
+   * Доля Ломмеля-Зелигера в диффузе (см. чанк AsteroidBrdf): 0 — Ламберт
+   * («пластиковый шар»), 1 — реголит, ровный по диску с резким лимбом. Тёмный
+   * пылевой реголит (углистые) ближе к 1, металл с гладкими сколами — к Ламберту.
+   */
+  lunarMix: number
+  /** Сила оппозиционного пика при взгляде со стороны звезды (0 — нет) */
+  oppositionSurge: number
+  /**
    * Пропорции морфологий в библиотеке архетипов породы (сумма ≈ 1):
    * fragment — осколок Вороного (свежий скол/удар), rubble — слипшиеся
    * лобы (гравитационная переупаковка), cratered — монолит с чашами (старая
@@ -64,6 +72,7 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
     surfaceAmbient: 0.03,
     specularStrength: 0.05, specularPower: 8.0, specularTint: 0.0,
     freshnessBrighten: 0.15, cavityShade: 0.5,
+    lunarMix: 0.8, oppositionSurge: 0.3,
     morphologyWeights: { fragment: 0.6, rubble: 0.25, cratered: 0.15 },
     detailSet: 'rock_boulder_dry'
   },
@@ -73,6 +82,7 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
     surfaceAmbient: 0.02,
     specularStrength: 0.0, specularPower: 8.0, specularTint: 0.0,
     freshnessBrighten: 0.1, cavityShade: 0.5,
+    lunarMix: 0.9, oppositionSurge: 0.4,
     morphologyWeights: { fragment: 0.5, rubble: 0.35, cratered: 0.15 },
     detailSet: 'rock_boulder_dry'
   },
@@ -82,6 +92,7 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
     surfaceAmbient: 0.04,
     specularStrength: 0.6, specularPower: 48.0, specularTint: 0.8,
     freshnessBrighten: 0.2, cavityShade: 0.5,
+    lunarMix: 0.4, oppositionSurge: 0.15,
     morphologyWeights: { fragment: 0.7, rubble: 0.15, cratered: 0.15 },
     detailSet: 'rock_boulder_dry'
   },
@@ -91,6 +102,7 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
     surfaceAmbient: 0.06,
     specularStrength: 0.5, specularPower: 12.0, specularTint: 0.0,
     freshnessBrighten: 0.3, cavityShade: 0.35,
+    lunarMix: 0.5, oppositionSurge: 0.2,
     morphologyWeights: { fragment: 0.7, rubble: 0.2, cratered: 0.1 },
     detailSet: 'rocks_ground_04'
   }

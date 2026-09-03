@@ -352,6 +352,10 @@ export interface IRingRenderingObject {
   dustTauGrazing?: number
   /** Масштабная полутолщина пылевого слоя в км */
   dustScaleHeightKm?: number
+  /** Planetshine на камнях: цвет отражённого света планеты-хозяина, 0xRRGGBB или '#rrggbb' */
+  planetshineColor?: number | string
+  /** Сила planetshine (дефолт 1.5) */
+  planetshineStrength?: number
 
   /**
    * Порог ВИДИМОЙ альфы кольца (альфа текстуры после затуханий по дистанции и

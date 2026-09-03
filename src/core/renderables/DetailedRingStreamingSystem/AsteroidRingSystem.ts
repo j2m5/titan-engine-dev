@@ -88,6 +88,14 @@ interface AsteroidRingConfig {
   dustTauGrazing: number
   /** Дистанция полного проявления пыли в км (рамп ближней зоны) */
   dustNearFadeKm: number
+  /**
+   * Planetshine (см. чанк AsteroidBrdf): цвет отражённого света планеты-хозяина,
+   * число 0xRRGGBB или строка '#rrggbb'. Дефолт — тёплый серый под каменистую
+   * планету; газовые гиганты задают свой в данных кольца.
+   */
+  planetshineColor: number | string
+  /** Сила planetshine; при 1.5 на середине кольца вклад до четверти альбедо */
+  planetshineStrength: number
   /** Крутизна гейта по углу обзора */
   dustAnglePower: number
   /** Бюджет шагов марша объёма */
@@ -178,6 +186,8 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   dustScaleHeightKm: 200,
   dustTauGrazing: 0.52,
   dustNearFadeKm: 3000,
+  planetshineColor: 0xb8ad9c,
+  planetshineStrength: 1.5,
   dustAnglePower: 2,
   dustMaxSteps: 16,
   asteroidShapeDetail: 3,
@@ -288,6 +298,8 @@ class AsteroidRingSystem extends Group {
     if (data.dustColor !== undefined) overrides.dustColor = data.dustColor
     if (data.dustTauGrazing !== undefined) overrides.dustTauGrazing = data.dustTauGrazing
     if (data.dustScaleHeightKm !== undefined) overrides.dustScaleHeightKm = data.dustScaleHeightKm
+    if (data.planetshineColor !== undefined) overrides.planetshineColor = data.planetshineColor
+    if (data.planetshineStrength !== undefined) overrides.planetshineStrength = data.planetshineStrength
     // Имя профиля приходит строкой из JSON — неизвестное тихо игнорируем
     // (останется дефолт), чтобы опечатка в редакторе данных не роняла рендер
     if (data.profile !== undefined && data.profile in ASTEROID_PROFILES) {
@@ -382,6 +394,18 @@ class AsteroidRingSystem extends Group {
     l0ShapeMaterial.uniforms.uSpecularTint.value = profile.specularTint
     l0ShapeMaterial.uniforms.uFreshnessBrighten.value = profile.freshnessBrighten
     l0ShapeMaterial.uniforms.uCavityShade.value = profile.cavityShade
+
+    // Модель освещения (чанк AsteroidBrdf) — одна на L0 и L1, иначе виден шов
+    // при смене тира: диффуз реголита из профиля, planetshine из данных кольца.
+    // Билборд берёт и базовый цвет породы — прежде оставался дефолт материала
+    const billboardMaterial = this.pool.billboardMaterial
+    billboardMaterial.uniforms.uColor.value.set(profile.baseColor)
+    for (const uniforms of [l0ShapeMaterial.uniforms, billboardMaterial.uniforms]) {
+      uniforms.uLunarMix.value = profile.lunarMix
+      uniforms.uOppositionSurge.value = profile.oppositionSurge
+      uniforms.uPlanetshineColor.value.set(cfg.planetshineColor)
+      uniforms.uPlanetshineStrength.value = cfg.planetshineStrength
+    }
 
     // PBR-микрослой (фотограмметрические текстуры) — поверх макро-профиля
     this.__applyDetailMaps(asteroidSize)
