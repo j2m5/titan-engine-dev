@@ -28,7 +28,9 @@ const defaultUniforms = {
   uCavityStrength: new Uniform(0),
   // Ламберт суши (спайк) — 0 выключен, дефолт бит-в-бит прежний шейдер.
   uTerrainLambert: new Uniform(0),
-  uTerrainAmbient: new Uniform(0.04),
+  // Пол ламберта суши: обратные к солнцу склоны дневной стороны; под AgX
+  // 0.04 читался углём, 0.15 — тёмно-серый с читаемой формой.
+  uTerrainAmbient: new Uniform(0.15),
   // Высотный fade облачного слоя (приёмочная волна 4, №3, идея владельца) —
   // 1 из космоса, гаснет к середине толщины атмосферы (см. докблок
   // cloudOpacityForAltitude в PlanetMaterial.ts). Дефолт 1 — до первого
@@ -339,14 +341,23 @@ export const PlanetShaderTemplate: ShaderProps = {
       vec3 nightTint = mix(vec3(1.0, 0.78, 0.45), vec3(1.0, 0.97, 0.92), smoothstep(0.15, 0.6, nightLum));
       vec3 night = nightColor * nightTint * nightMask * emission;
 
+      // Угол солнца для терминатора. У суши — по геометрической (радиальной)
+      // нормали сферы, как у облаков: рельефная normal здесь уводила обратные
+      // склоны дневной стороны в ветку «ночь» (ровно 0, пол ламберта не
+      // доезжал). Форма рельефа — только в ламберте выше (NdotLraw).
+      float terminatorNdotL = NdotLraw;
+      #ifdef USE_TERRAIN_UV
+        terminatorNdotL = dot(normalize(vNormal), lightDirection);
+      #endif
+
       // Терминатор: компактная smoothstep-зона вместо линейного mix по всей
       // полусфере; края зоны — ручки приёмки. Цвет НЕ подкрашивается:
       // покраснение заката — атрибут рассеяния в атмосфере (слой Брюнетона),
       // на поверхности и у безатмосферных тел оно нефизично.
-      float dayFactor = smoothstep(-0.08, 0.25, NdotLraw);
+      float dayFactor = smoothstep(-0.08, 0.25, terminatorNdotL);
 
       // Ночные огни только в темноте (раньше просвечивали на дневной стороне)
-      float nightGate = 1.0 - smoothstep(-0.05, 0.12, NdotLraw);
+      float nightGate = 1.0 - smoothstep(-0.05, 0.12, terminatorNdotL);
       night *= nightGate;
 
       vec3 finalColor = mix(night, day, dayFactor);

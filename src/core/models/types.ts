@@ -215,7 +215,7 @@ export interface IPlanetRenderingObject {
    * max(N·L, 0) с полом terrainAmbient. Дефолт 0.
    */
   terrainLambert?: number
-  /** Пол ламберта (0..1): рассеянный свет в тени рельефа. Дефолт 0.04. */
+  /** Пол ламберта (0..1): рассеянный свет в тени рельефа. Дефолт 0.15. */
   terrainAmbient?: number
 
   /**

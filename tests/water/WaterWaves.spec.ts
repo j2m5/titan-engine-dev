@@ -565,8 +565,8 @@ describe('Парный страж терминатора: одна и та же 
     expect(frag).toContain('smoothstep(-0.08, 0.25, waveNdotL)')
   })
 
-  it('PlanetShaderTemplate использует ТУ ЖЕ форму (см. её NdotLraw)', () => {
-    expect(PlanetShaderTemplate.fragmentShader).toContain('smoothstep(-0.08, 0.25, NdotLraw)')
+  it('PlanetShaderTemplate использует ТУ ЖЕ форму (её terminatorNdotL — по геометрической нормали, как NdotL фундамента воды)', () => {
+    expect(PlanetShaderTemplate.fragmentShader).toContain('smoothstep(-0.08, 0.25, terminatorNdotL)')
   })
 })
 

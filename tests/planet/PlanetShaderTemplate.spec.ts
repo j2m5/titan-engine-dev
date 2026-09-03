@@ -28,13 +28,13 @@ describe('PlanetShaderTemplate: блик, терминатор, ночные о�
 
   it('терминатор: smoothstep-зона и гейт ночных огней; закатный тинт удалён', () => {
     expect(frag).toContain('dayFactor')
-    expect(frag).toContain('smoothstep(-0.08, 0.25, NdotLraw)')
+    expect(frag).toContain('smoothstep(-0.08, 0.25, terminatorNdotL)')
     // Тинт на поверхности нефизичен для безатмосферных тел; покраснение
     // заката у атмосферных планет даёт рассеяние слоя Брюнетона
     expect(frag).not.toContain('duskBand')
     expect(frag).not.toContain('vec3(1.0, 0.55, 0.35)')
     expect(frag).toContain('nightGate')
-    expect(frag).toContain('1.0 - smoothstep(-0.05, 0.12, NdotLraw)')
+    expect(frag).toContain('1.0 - smoothstep(-0.05, 0.12, terminatorNdotL)')
   })
 
   it('тень кольца — единый множитель на диффуз и блик', () => {
