@@ -81,12 +81,11 @@ const isReadableImage = (image: unknown): image is CanvasImageSource & { width: 
  * 2D-контекста, CORS-tainted canvas) — вызывающий остаётся на равномерной
  * плотности с B-гейтом, визуал корректен.
  */
-function readRingAlphaBins(
-  texture: Texture,
-  innerRadius: number,
-  outerRadius: number,
-  options: RingAlphaProfileOptions = {}
-): Float32Array | null {
+/**
+ * Прочитать RGBA-колонки текстуры кольца, усреднённые по строкам (даунскейл
+ * canvas до высоты 1). null — текстура нечитаема (см. readRingAlphaBins).
+ */
+function readRingPixels(texture: Texture, innerRadius: number, outerRadius: number): { pixels: Uint8ClampedArray; bins: number } | null {
   if (!(outerRadius > innerRadius)) return null
 
   // CompressedTexture (ktx2 и т.п.): mipmap-данные не рисуются в canvas
@@ -106,22 +105,75 @@ function readRingAlphaBins(
 
     context.clearRect(0, 0, bins, 1)
     context.drawImage(image, 0, 0, bins, 1)
-    const pixels = context.getImageData(0, 0, bins, 1).data
-
-    const alpha = new Float32Array(bins)
-    for (let i = 0; i < bins; i++) {
-      alpha[i] = pixels[i * 4 + 3] / 255
-    }
-
-    // Сигма размытия: единицы радиуса → бины профиля
-    const binWidth = (outerRadius - innerRadius) / bins
-    const sigmaBins = (options.blurRadius ?? 0) / binWidth
-
-    return thresholdAndBlur(alpha, options.alphaTest ?? 0, sigmaBins)
+    return { pixels: context.getImageData(0, 0, bins, 1).data, bins }
   } catch {
     // SecurityError (tainted canvas) и прочие сбои чтения — профиля не будет
     return null
   }
+}
+
+/** Сигма размытия: единицы радиуса → бины профиля */
+const sigmaInBins = (blurRadius: number | undefined, innerRadius: number, outerRadius: number, bins: number): number =>
+  (blurRadius ?? 0) / ((outerRadius - innerRadius) / bins)
+
+function readRingAlphaBins(
+  texture: Texture,
+  innerRadius: number,
+  outerRadius: number,
+  options: RingAlphaProfileOptions = {}
+): Float32Array | null {
+  const read = readRingPixels(texture, innerRadius, outerRadius)
+  if (!read) return null
+
+  const alpha = new Float32Array(read.bins)
+  for (let i = 0; i < read.bins; i++) {
+    alpha[i] = read.pixels[i * 4 + 3] / 255
+  }
+
+  return thresholdAndBlur(alpha, options.alphaTest ?? 0, sigmaInBins(options.blurRadius, innerRadius, outerRadius, read.bins))
+}
+
+/** Цвет и альфа полос кольца по бинам (см. readRingBandBins) */
+interface RingBandBins {
+  /** RGB полос, по три значения 0..1 на бин */
+  color: Float32Array
+  /** Альфа полос 0..1 по бинам */
+  alpha: Float32Array
+}
+
+/**
+ * Прочитать цвет и альфу полос кольца по бинам — источник 1D-текстуры полос
+ * (см. RingBandTexture): тинт камней по цвету полосы и оптическая толща слоя
+ * для самозатенения. Без порога alphaTest (тусклые полосы — тусклая толща);
+ * размытие одной сигмой и для цвета, и для альфы, чтобы кромки совпадали.
+ */
+function readRingBandBins(
+  texture: Texture,
+  innerRadius: number,
+  outerRadius: number,
+  options: Pick<RingAlphaProfileOptions, 'blurRadius'> = {}
+): RingBandBins | null {
+  const read = readRingPixels(texture, innerRadius, outerRadius)
+  if (!read) return null
+
+  const sigma = sigmaInBins(options.blurRadius, innerRadius, outerRadius, read.bins)
+  const channel = (k: number): Float32Array => {
+    const values = new Float32Array(read.bins)
+    for (let i = 0; i < read.bins; i++) values[i] = read.pixels[i * 4 + k] / 255
+    return thresholdAndBlur(values, 0, sigma)
+  }
+
+  const r = channel(0)
+  const g = channel(1)
+  const b = channel(2)
+  const color = new Float32Array(read.bins * 3)
+  for (let i = 0; i < read.bins; i++) {
+    color[i * 3] = r[i]
+    color[i * 3 + 1] = g[i]
+    color[i * 3 + 2] = b[i]
+  }
+
+  return { color, alpha: channel(3) }
 }
 
 /**
@@ -139,5 +191,5 @@ function readRingAlphaProfile(
   return bins ? new RadialDensityProfile(bins, innerRadius, outerRadius) : null
 }
 
-export { readRingAlphaProfile, readRingAlphaBins }
-export type { RingAlphaProfileOptions }
+export { readRingAlphaProfile, readRingAlphaBins, readRingBandBins }
+export type { RingAlphaProfileOptions, RingBandBins }

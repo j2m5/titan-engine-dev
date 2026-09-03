@@ -59,6 +59,13 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
         uDustRadialMap: { value: null },
         /** Множитель профиля (среднее модуляции ≈ 1); 0 — профиль выключен */
         uDustRadialMapScale: { value: 0.0 },
+        // Полосы кольца и слой (см. чанк RingDust): самозатенение марша
+        uRingBandMap: { value: null },
+        uRingBandEnabled: { value: 0.0 },
+        uBandMeanColor: { value: new Vector3(1, 1, 1) },
+        uBandTintStrength: { value: 1.0 },
+        uLayerHalfThickness: { value: 1.0 },
+        uLayerShadowStrength: { value: 0.6 },
         /** Диагностика: 0 выкл, 1 τ, 2 alpha, 3 гейт, 4 теплокарта шагов */
         uDustDebugMode: { value: 0 },
         // Глубина сцены (чанк SceneDepth): привязывает DepthVolumePass перед рендером
@@ -164,7 +171,8 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
             vec3 p = uDustCamRingPos + rayDir * t;
             float contrib = ringDustDensityAt(p) * ringDustNearRamp(t) * dt;
             tau += contrib;
-            litTau += contrib * ringDustPlanetShadow(p);
+            // Тень планеты и самозатенение слоя кольца — на каждом шаге
+            litTau += contrib * ringDustPlanetShadow(p) * ringLayerShadow(p);
             marched = float(i) + 1.0;
             // early-exit: насыщение непрозрачности
             if (1.0 - exp(-tau) > 0.995) break;

@@ -91,7 +91,8 @@ describe('AsteroidBrdf GLSL: одна модель для L0 и L1', () => {
     expect(fs).toContain('asteroidPlanetshine(normal, normalize(vPlanetDirView), vRingPos, uDustLightDirRing, uDustPlanetRadius)')
     expect(fs).toContain('uPlanetshineColor * (uPlanetshineStrength * shine')
     // Блик — только на освещённой стороне по сырому косинусу, не по LS-диффузу (тот до 2)
-    expect(fs).toContain('spec * specColor * max(NdotL, 0.0) * planetShadow')
+    // direct = тень планеты × самозатенение слоя (см. RingLayerShadow.spec)
+    expect(fs).toContain('spec * specColor * max(NdotL, 0.0) * direct')
     // Направление на центр планеты — в view из вершинника (ring-local начало = планета)
     expect(vs).toContain('vPlanetDirView = normalize((modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz - mvPosition.xyz)')
     for (const name of ['uLunarMix', 'uOppositionSurge', 'uPlanetshineColor', 'uPlanetshineStrength']) {

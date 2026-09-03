@@ -1,6 +1,6 @@
 import { vi, type MockInstance } from 'vitest'
 import type { Texture } from 'three'
-import { readRingAlphaProfile } from '@/core/renderables/DetailedRingStreamingSystem/RingAlphaReadback'
+import { readRingAlphaProfile, readRingBandBins } from '@/core/renderables/DetailedRingStreamingSystem/RingAlphaReadback'
 
 /**
  * Собирает фейковый canvas: drawImage — noop, getImageData отдаёт заранее
@@ -141,5 +141,57 @@ describe('readRingAlphaProfile: построение профиля из аль�
     createElementSpy = vi.spyOn(document, 'createElement').mockReturnValue(canvas)
 
     expect(readRingAlphaProfile(fakeTexture({ width: 4, height: 4 }), 100, 200)).toBeNull()
+  })
+})
+
+describe('readRingBandBins: цвет и альфа полос по бинам', () => {
+  let createElementSpy: MockInstance | null = null
+
+  afterEach(() => {
+    createElementSpy?.mockRestore()
+    createElementSpy = null
+  })
+
+  /** Канвас с RGBA-колонками (0..1) */
+  const stubRgbaCanvas = (columns: number[][]): HTMLCanvasElement => {
+    const pixels = new Uint8ClampedArray(columns.length * 4)
+    columns.forEach((c, i) => c.forEach((v, k) => (pixels[i * 4 + k] = Math.round(v * 255))))
+    return {
+      width: 0,
+      height: 0,
+      getContext: () => ({
+        clearRect: () => undefined,
+        drawImage: () => undefined,
+        getImageData: () => ({ data: pixels })
+      })
+    } as unknown as HTMLCanvasElement
+  }
+
+  it('без размытия отдаёт RGB и альфу колонок как есть', () => {
+    createElementSpy = vi
+      .spyOn(document, 'createElement')
+      .mockReturnValue(stubRgbaCanvas([[1, 0, 0, 1], [0, 0, 1, 0.5]]))
+    const bins = readRingBandBins(fakeTexture({ width: 2, height: 2 }), 100, 200)!
+    expect(bins).not.toBeNull()
+    // 8-битное квантование канваса: 0.5 → 128/255
+    expect(bins.alpha[0]).toBe(1)
+    expect(bins.alpha[1]).toBeCloseTo(0.5, 2)
+    expect(Array.from(bins.color)).toEqual([1, 0, 0, 0, 0, 1])
+  })
+
+  it('размытие сглаживает и цвет, и альфу одной сигмой', () => {
+    createElementSpy = vi
+      .spyOn(document, 'createElement')
+      .mockReturnValue(stubRgbaCanvas([[1, 0, 0, 1], [1, 0, 0, 1], [0, 0, 0, 0], [0, 0, 0, 0]]))
+    const bins = readRingBandBins(fakeTexture({ width: 4, height: 2 }), 100, 200, { blurRadius: 25 })!
+    // Кромка размыта: в третьем бине появился хвост и по альфе, и по красному
+    expect(bins.alpha[2]).toBeGreaterThan(0)
+    expect(bins.color[2 * 3]).toBeGreaterThan(0)
+    expect(bins.alpha[2]).toBeLessThan(bins.alpha[1])
+  })
+
+  it('нечитаемая текстура — null', () => {
+    const texture = { image: { width: 4, height: 4 }, isCompressedTexture: true } as unknown as Texture
+    expect(readRingBandBins(texture, 100, 200)).toBeNull()
   })
 })

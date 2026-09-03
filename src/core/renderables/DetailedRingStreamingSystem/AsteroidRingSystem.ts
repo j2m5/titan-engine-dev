@@ -1,11 +1,12 @@
-import { Color, Group, Matrix4, Object3D, RepeatWrapping, Vector3, type Texture } from 'three'
+import { Color, Group, Matrix4, Object3D, RepeatWrapping, Vector3, type IUniform, type Texture } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
 import type { IRingRenderingObject } from '@/core/models/types'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { resourceStorage } from '@/core/services/ResourceStorage'
-import { readRingAlphaProfile, readRingAlphaBins } from './RingAlphaReadback'
+import { readRingAlphaProfile, readRingAlphaBins, readRingBandBins } from './RingAlphaReadback'
 import { createDustRadialTexture } from './dust/DustRadialProfile'
+import { createRingBandTexture } from './dust/RingBandTexture'
 import { SectorGrid, SectorGridConfig } from './SectorGrid'
 import { AsteroidGenerator, GeneratorConfig } from './AsteroidGenerator'
 import { InstancePool, PoolLayerConfig } from './InstancePool'
@@ -96,6 +97,15 @@ interface AsteroidRingConfig {
   planetshineColor: number | string
   /** Сила planetshine; при 1.5 на середине кольца вклад до четверти альбедо */
   planetshineStrength: number
+  /**
+   * Сила самозатенения слоя кольца (чанк RingDust, ringLayerShadow): множитель
+   * оптической толщи слоя по альфе текстуры. 1 — физическая толща: камень в
+   * средней плоскости плотного кольца получает треть прямого света; 0.6 —
+   * компромисс, держит принятый вид Сатурна при высоком солнце.
+   */
+  layerShadowStrength: number
+  /** Сила тинта камней по цвету полос кольца 0..1 */
+  bandTintStrength: number
   /** Крутизна гейта по углу обзора */
   dustAnglePower: number
   /** Бюджет шагов марша объёма */
@@ -188,6 +198,8 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   dustNearFadeKm: 3000,
   planetshineColor: 0xb8ad9c,
   planetshineStrength: 1.5,
+  layerShadowStrength: 0.6,
+  bandTintStrength: 1,
   dustAnglePower: 2,
   dustMaxSteps: 16,
   asteroidShapeDetail: 3,
@@ -300,6 +312,8 @@ class AsteroidRingSystem extends Group {
     if (data.dustScaleHeightKm !== undefined) overrides.dustScaleHeightKm = data.dustScaleHeightKm
     if (data.planetshineColor !== undefined) overrides.planetshineColor = data.planetshineColor
     if (data.planetshineStrength !== undefined) overrides.planetshineStrength = data.planetshineStrength
+    if (data.layerShadowStrength !== undefined) overrides.layerShadowStrength = data.layerShadowStrength
+    if (data.bandTintStrength !== undefined) overrides.bandTintStrength = data.bandTintStrength
     // Имя профиля приходит строкой из JSON — неизвестное тихо игнорируем
     // (останется дефолт), чтобы опечатка в редакторе данных не роняла рендер
     if (data.profile !== undefined && data.profile in ASTEROID_PROFILES) {
@@ -478,6 +492,15 @@ class AsteroidRingSystem extends Group {
       }
     }
 
+    // --- Слой кольца (чанк RingDust): полутолщина слоя для самозатенения и
+    // ручки из данных кольца — во все три материала. Текстура полос приходит
+    // позже, когда догрузится текстура кольца (см. __applyRingBandProfile)
+    for (const uniforms of this.__ringDustUniformSets()) {
+      uniforms.uLayerHalfThickness.value = thickness * 0.5
+      uniforms.uLayerShadowStrength.value = cfg.layerShadowStrength
+      uniforms.uBandTintStrength.value = cfg.bandTintStrength
+    }
+
     // --- Поворот ---
     this.rotateX(degToRad(90))
 
@@ -644,6 +667,7 @@ class AsteroidRingSystem extends Group {
     }
 
     this.__applyDustRadialProfile(texture)
+    this.__applyRingBandProfile(texture)
     this.densityProfileReady = true // строим один раз (успех или нечитаемо)
   }
 
@@ -654,6 +678,38 @@ class AsteroidRingSystem extends Group {
    * нормирована на среднее 1 → калибровка dustTauGrazing сохраняется,
    * пыль лишь перераспределяется в субкольца. Нечитаемо → равномерная пыль.
    */
+  /**
+   * Полосы кольца (RGB + альфа по радиусу, см. RingBandTexture) — во все три
+   * материала модели RingDust: тинт камней по цвету полосы и самозатенение слоя
+   * по его оптической толще. Размытие то же, что у профиля пыли, без порога.
+   * Нечитаемо → обе фичи остаются выключенными (uRingBandEnabled = 0).
+   */
+  private __applyRingBandProfile(texture: Texture): void {
+    const bins = readRingBandBins(texture, this.ringInnerTU, this.ringOuterTU, {
+      blurRadius: toThreeJSUnits(this.config.dustBleedKm)
+    })
+    if (!bins) return
+
+    const band = createRingBandTexture(bins.color, bins.alpha)
+    if (!band) return
+
+    for (const uniforms of this.__ringDustUniformSets()) {
+      uniforms.uRingBandMap.value = band.texture
+      uniforms.uBandMeanColor.value.set(band.meanColor[0], band.meanColor[1], band.meanColor[2])
+      uniforms.uRingBandEnabled.value = 1
+    }
+  }
+
+  /** Юниформы всех материалов модели RingDust: камни L0/L1 и, если есть, объём дымки */
+  private __ringDustUniformSets(): Array<Record<string, IUniform>> {
+    const sets: Array<Record<string, IUniform>> = [
+      this.pool.geometryMaterial.uniforms,
+      this.pool.billboardMaterial.uniforms
+    ]
+    if (this.dustVolume) sets.push(this.dustVolume.dustMaterial.uniforms)
+    return sets
+  }
+
   private __applyDustRadialProfile(texture: Texture): void {
     const bins = readRingAlphaBins(texture, this.ringInnerTU, this.ringOuterTU, {
       blurRadius: toThreeJSUnits(this.config.dustBleedKm)

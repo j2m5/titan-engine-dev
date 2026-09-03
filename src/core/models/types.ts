@@ -356,6 +356,13 @@ export interface IRingRenderingObject {
   planetshineColor?: number | string
   /** Сила planetshine (дефолт 1.5) */
   planetshineStrength?: number
+  /**
+   * Сила самозатенения слоя кольца на камнях и пыли, множитель оптической толщи
+   * слоя (0 — выключено, 1 — физическая толща по альфе текстуры). Дефолт 0.6
+   */
+  layerShadowStrength?: number
+  /** Сила тинта камней по цвету полос кольца 0..1 (дефолт 1) */
+  bandTintStrength?: number
 
   /**
    * Порог ВИДИМОЙ альфы кольца (альфа текстуры после затуханий по дистанции и

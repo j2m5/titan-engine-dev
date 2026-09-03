@@ -34,6 +34,12 @@ interface InstancedAsteroidUniforms {
   uDustPlanetRadius: number
   uDustRadialMap: Texture | null
   uDustRadialMapScale: number
+  uRingBandMap: Texture | null
+  uRingBandEnabled: number
+  uBandMeanColor: Vector3
+  uBandTintStrength: number
+  uLayerHalfThickness: number
+  uLayerShadowStrength: number
   uShapeAmpMin: number
   uShapeAmpMax: number
   uShapeFreq: number
@@ -84,6 +90,13 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       // Радиальный профиль пыли из альфы текстуры кольца; scale 0 — выключен
       uDustRadialMap: new Uniform(null),
       uDustRadialMapScale: new Uniform(0),
+      // Полосы кольца и слой (см. чанк RingDust): выключены, пока система не отдаст текстуру
+      uRingBandMap: new Uniform(null),
+      uRingBandEnabled: new Uniform(0),
+      uBandMeanColor: new Uniform(new Vector3(1, 1, 1)),
+      uBandTintStrength: new Uniform(1),
+      uLayerHalfThickness: new Uniform(1),
+      uLayerShadowStrength: new Uniform(0.6),
       uShapeAmpMin: new Uniform(0),
       uShapeAmpMax: new Uniform(0),
       uShapeFreq: new Uniform(1),
