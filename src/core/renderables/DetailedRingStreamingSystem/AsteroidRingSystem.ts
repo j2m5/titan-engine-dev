@@ -400,6 +400,7 @@ class AsteroidRingSystem extends Group {
     // Билборд берёт и базовый цвет породы — прежде оставался дефолт материала
     const billboardMaterial = this.pool.billboardMaterial
     billboardMaterial.uniforms.uColor.value.set(profile.baseColor)
+    billboardMaterial.uniforms.uColorJitter.value = profile.colorJitter
     for (const uniforms of [l0ShapeMaterial.uniforms, billboardMaterial.uniforms]) {
       uniforms.uLunarMix.value = profile.lunarMix
       uniforms.uOppositionSurge.value = profile.oppositionSurge
