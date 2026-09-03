@@ -1,5 +1,6 @@
 import { ShaderMaterial, Color, ShaderChunk, Vector3 } from 'three'
 import { ringDustFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
+import { asteroidBrdfFunctions } from '@/core/materials/shaders/lib/chunks/AsteroidBrdf'
 
 /**
  * BillboardAsteroidMaterial — шейдерный материал для L1 billboard-импосторов.
@@ -25,6 +26,11 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         uMaxDistance: { value: 100.0 },
         /** Ambient свет — минимальная освещённость тёмной стороны */
         uAmbient: { value: 0.08 },
+        // Модель освещения камня (см. чанк AsteroidBrdf) — та же, что у L0
+        uLunarMix: { value: 0.8 },
+        uOppositionSurge: { value: 0.3 },
+        uPlanetshineColor: { value: new Color(0xb8ad9c) },
+        uPlanetshineStrength: { value: 1.5 },
         // Пылевая дымка (см. чанк RingDust); uDustDensity = 0 — туман выключен
         uDustColor: { value: new Color(0x9b968c) },
         uDustDensity: { value: 0.0 },
@@ -53,6 +59,7 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         varying vec2 vUv;
         varying float vDistanceFade;
         varying vec3 vLightDirView;
+        varying vec3 vPlanetDirView;
         varying float vInstanceSeed;
         varying vec3 vRingPos;
         varying float vFade;
@@ -104,6 +111,8 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
 
           // Переводим направление света в view space для согласования с impostor normal
           vLightDirView = normalize((viewMatrix * vec4(worldLightDir, 0.0)).xyz);
+          // Направление на центр планеты (начало ring-local) во view — для planetshine
+          vPlanetDirView = normalize((modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz - mvInstancePos.xyz);
 
           // Затухание по расстоянию
           float dist = length(mvInstancePos.xyz);
@@ -121,16 +130,22 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         uniform vec3 uColor;
         uniform float uFade;
         uniform float uAmbient;
+        uniform float uLunarMix;
+        uniform float uOppositionSurge;
+        uniform vec3 uPlanetshineColor;
+        uniform float uPlanetshineStrength;
 
         varying vec2 vUv;
         varying float vDistanceFade;
         varying vec3 vLightDirView;
+        varying vec3 vPlanetDirView;
         varying float vInstanceSeed;
         varying vec3 vRingPos;
         varying float vFade;
 
         ${ringDustUniforms}
         ${ringDustFunctions}
+        ${asteroidBrdfFunctions}
 
         // Простой хеш для процедурного шума
         float hash(vec2 p) {
@@ -167,15 +182,17 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
           // Мягкий край (antialiasing)
           float edgeAlpha = 1.0 - smoothstep(edgeThreshold - 0.08, edgeThreshold, distFromCenter);
 
-          // --- Освещение (Lambertian diffuse) ---
+          // --- Освещение: та же модель, что у L0 (чанк AsteroidBrdf) ---
+          // Билборд смотрит на камеру: view-направление ≈ +Z, поэтому NdotV = normal.z,
+          // cosPhase = L.z
           float NdotL = dot(normal, vLightDirView);
-          // Wrap lighting: мягкий переход свет→тень
-          float diffuse = NdotL * 0.5 + 0.5;
-          diffuse = diffuse * diffuse; // Квадратичный falloff для более контрастных теней
+          float diffuse = asteroidRegolithDiffuse(NdotL, normal.z, vLightDirView.z, uLunarMix, uOppositionSurge);
           // Тень планеты (умбра) — та же модель, что у пыли/2D-кольца/L0. Гасит
           // прямой свет; uAmbient остаётся (не в глухой ноль).
           float planetShadow = ringDustPlanetShadow(vRingPos);
-          float lighting = uAmbient + (0.3 - uAmbient) * diffuse * planetShadow;
+          // Planetshine планеты-хозяина — как у L0, ложится на цвет
+          float shine = asteroidPlanetshine(normal, normalize(vPlanetDirView), vRingPos, uDustLightDirRing, uDustPlanetRadius);
+          float lighting = uAmbient + diffuse * planetShadow;
 
           // --- Итоговый цвет ---
           // vFade — плавный fade-in/out сектора; abs, т.к. знак кодирует лишь
@@ -183,7 +200,7 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
           float alpha = edgeAlpha * uFade * vDistanceFade * abs(vFade);
           if (alpha < 0.01) discard;
 
-          vec3 color = uColor * lighting;
+          vec3 color = uColor * lighting + uColor * uPlanetshineColor * (uPlanetshineStrength * shine);
           // Аэроперспектива: дальние импосторы тонут в пылевой дымке
           color = ringDustApplyFog(color, vRingPos);
           gl_FragColor = vec4(color, alpha);
