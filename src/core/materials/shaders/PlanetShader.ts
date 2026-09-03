@@ -28,10 +28,11 @@ const DEFAULT_DETAIL_AO_INFLUENCE = 0.5
 const DEFAULT_DETAIL_FADE_METERS = 30000
 const DEFAULT_DETAIL_FADE2_METERS = 5000
 
-// Ламберт суши (спайк) — 0 выключен (бит-в-бит прежний шейдер), 0.04 — пол
-// рассеянного света в тени рельефа при включённом ламберте.
+// Ламберт суши (спайк) — 0 выключен (бит-в-бит прежний шейдер), 0.15 — пол
+// рассеянного света в тени рельефа при включённом ламберте (0.04 под AgX
+// читался углём).
 const DEFAULT_TERRAIN_LAMBERT = 0
-const DEFAULT_TERRAIN_AMBIENT = 0.04
+const DEFAULT_TERRAIN_AMBIENT = 0.15
 
 // Начало fade относительно конца: не отдельная ручка (см. IPlanetRenderingObject),
 // константа общая с CPU-зеркалом полосы (terrainMacroDetailMath.DETAIL_FADE_START_RATIO).
