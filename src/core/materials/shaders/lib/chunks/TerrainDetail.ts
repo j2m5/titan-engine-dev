@@ -85,11 +85,21 @@
  * экранного пикселя (1080p, fov ~50°). uDetailLayerGates — по-слойные
  * uniform-гейты (одинаковы для всех пикселей драв-колла). Ветка
  * `if (max(fade1, fade2) > 0.0)` — другое: viewDistance попиксельна, поэтому
- * дивергентна и она. texture()-выборки внутри дивергентного потока формально
- * UB по производным (dFdx/dFdy), практически безвредно: helper-инвокации на
- * границе всё равно исполняются и дают корректные производные, а вклад на
- * самой кромке умножается на fade → 0. Производные для sampleDetiled берутся
- * ДО стохастического сдвига (см. её докстроку) — этот аргумент их не портит.
+ * дивергентна и она. Текстурные градиенты (dFdx/dFdy) при этом считаются в
+ * ОДНОРОДНОМ потоке — сразу после w/l, ДО этой ветки и до любых дальнейших
+ * ветвлений (маска зон ниже) — через triplanarUvFor (см. «ЗОНЫ МАТЕРИАЛА»),
+ * и передаются в sampleDetiled/triplanar*Detiled явно параметром TriplanarUv,
+ * а не пересчитываются внутри условных веток. Раньше (до фикс-раунда 2)
+ * производные считались ВНУТРИ веток по fade/маске — формально UB (соседние
+ * инвокации квада на разных ветках дают несогласованные dFdx/dFdy), и для
+ * узкой шумовой границы маски зон (ветвление на ПИКСЕЛЬНОЙ частоте) это было
+ * ВИДИМО — мип-волоски вдоль изоконтуров m = STEEP_EPS / 1-EPS. Для плавной
+ * по-дистанции fade-границы то же UB было практически безвредно (helper-
+ * инвокации на кромке всё равно исполняются и дают корректные производные, а
+ * вклад умножается на fade → 0), но раз выносим — выносим единообразно для
+ * обеих шкал: UB уходит классом, а не точечной заплаткой только для маски.
+ * Производные для sampleDetiled по-прежнему берутся ДО стохастического
+ * сдвига offA/offB (см. её докстроку) — вынос выше этот аргумент не портит.
  *
  * ЗОНЫ МАТЕРИАЛА ПО УКЛОНУ (крупная шкала, fade1-ветка; мелкая шкала задачи 4
  * зон не знает — см. её код ниже, вне маски). Второй набор карт (uSteep*)
@@ -223,41 +233,60 @@ export const terrainDetailFunctions = `
     return mix(colA, colB, b);
   }
 
+  // Группа uv + производные для трёх планарных проекций (zy/xz/xy) ОДНОГО
+  // домена (p*scale). Вычисляется в triplanarUvFor ниже — ОДИН раз, в
+  // однородном потоке, до любых ветвлений по fade/маске (см. докстроку
+  // чанка) — dFdx/dFdy под дивергентным потоком формально UB, а маска зон
+  // ветвится на пиксельной частоте, где UB был видимым (мип-волоски).
+  struct TriplanarUv {
+    vec2 zy; vec2 zyDx; vec2 zyDy;
+    vec2 xz; vec2 xzDx; vec2 xzDy;
+    vec2 xy; vec2 xyDx; vec2 xyDy;
+  };
+
+  TriplanarUv triplanarUvFor(vec3 p, float scale) {
+    TriplanarUv t;
+    t.zy = p.zy * scale;
+    t.xz = p.xz * scale;
+    t.xy = p.xy * scale;
+    t.zyDx = dFdx(t.zy);
+    t.zyDy = dFdy(t.zy);
+    t.xzDx = dFdx(t.xz);
+    t.xzDy = dFdy(t.xz);
+    t.xyDx = dFdx(t.xy);
+    t.xyDy = dFdy(t.xy);
+    return t;
+  }
+
   // Стохастические обёртки террейна: те же 3 планарные проекции, что и
   // классические triplanarAlbedo/Arm/Normal, но каждая читается через
   // sampleDetiled вместо прямой выборки. l — общий индекс на ось (см.
   // докстроку чанка), делится всеми четырьмя картами и обеими шкалами.
-  // scale — явный параметр (не глобальный uDetailScale): одна и та же
-  // функция обслуживает крупный слой (detailPos, uDetailScale) и мелкий
-  // (detailPos2, uDetailScale2). Бленд трёх проекций — ОБЩЕЕ ядро из чанка
-  // TriplanarDetail (triplanarBlendRgb/Normal), не копия.
-  vec3 triplanarAlbedoDetiled(sampler2D map, vec3 p, float scale, vec3 w, vec3 l) {
-    vec2 uvZY = p.zy * scale;
-    vec2 uvXZ = p.xz * scale;
-    vec2 uvXY = p.xy * scale;
-    vec3 cx = sampleDetiled(map, uvZY, dFdx(uvZY), dFdy(uvZY), l.x).rgb;
-    vec3 cy = sampleDetiled(map, uvXZ, dFdx(uvXZ), dFdy(uvXZ), l.y).rgb;
-    vec3 cz = sampleDetiled(map, uvXY, dFdx(uvXY), dFdy(uvXY), l.z).rgb;
+  // uv+производные приходят готовыми (TriplanarUv, см. выше) — обёртки сами
+  // больше не считают dFdx/dFdy, только читают текстуру. Один и тот же t
+  // обслуживает оба набора крупной шкалы (родной/steep — зона меняет
+  // ТЕКСТУРЫ, не домен адресации) и, с другим t (от detailPos2/uDetailScale2),
+  // мелкую шкалу — функции переиспользуются без копирования бленда. Бленд
+  // трёх проекций — ОБЩЕЕ ядро из чанка TriplanarDetail (triplanarBlendRgb/
+  // Normal), не копия.
+  vec3 triplanarAlbedoDetiled(sampler2D map, TriplanarUv t, vec3 w, vec3 l) {
+    vec3 cx = sampleDetiled(map, t.zy, t.zyDx, t.zyDy, l.x).rgb;
+    vec3 cy = sampleDetiled(map, t.xz, t.xzDx, t.xzDy, l.y).rgb;
+    vec3 cz = sampleDetiled(map, t.xy, t.xyDx, t.xyDy, l.z).rgb;
     return triplanarBlendRgb(cx, cy, cz, w);
   }
 
-  vec3 triplanarArmDetiled(sampler2D map, vec3 p, float scale, vec3 w, vec3 l) {
-    vec2 uvZY = p.zy * scale;
-    vec2 uvXZ = p.xz * scale;
-    vec2 uvXY = p.xy * scale;
-    vec3 ax = sampleDetiled(map, uvZY, dFdx(uvZY), dFdy(uvZY), l.x).rgb;
-    vec3 ay = sampleDetiled(map, uvXZ, dFdx(uvXZ), dFdy(uvXZ), l.y).rgb;
-    vec3 az = sampleDetiled(map, uvXY, dFdx(uvXY), dFdy(uvXY), l.z).rgb;
+  vec3 triplanarArmDetiled(sampler2D map, TriplanarUv t, vec3 w, vec3 l) {
+    vec3 ax = sampleDetiled(map, t.zy, t.zyDx, t.zyDy, l.x).rgb;
+    vec3 ay = sampleDetiled(map, t.xz, t.xzDx, t.xzDy, l.y).rgb;
+    vec3 az = sampleDetiled(map, t.xy, t.xyDx, t.xyDy, l.z).rgb;
     return triplanarBlendRgb(ax, ay, az, w);
   }
 
-  vec3 triplanarNormalDetiled(sampler2D map, vec3 p, float scale, vec3 n, vec3 w, vec3 l) {
-    vec2 uvZY = p.zy * scale;
-    vec2 uvXZ = p.xz * scale;
-    vec2 uvXY = p.xy * scale;
-    vec3 tx = sampleDetiled(map, uvZY, dFdx(uvZY), dFdy(uvZY), l.x).xyz * 2.0 - 1.0;
-    vec3 ty = sampleDetiled(map, uvXZ, dFdx(uvXZ), dFdy(uvXZ), l.y).xyz * 2.0 - 1.0;
-    vec3 tz = sampleDetiled(map, uvXY, dFdx(uvXY), dFdy(uvXY), l.z).xyz * 2.0 - 1.0;
+  vec3 triplanarNormalDetiled(sampler2D map, TriplanarUv t, vec3 n, vec3 w, vec3 l) {
+    vec3 tx = sampleDetiled(map, t.zy, t.zyDx, t.zyDy, l.x).xyz * 2.0 - 1.0;
+    vec3 ty = sampleDetiled(map, t.xz, t.xzDx, t.xzDy, l.y).xyz * 2.0 - 1.0;
+    vec3 tz = sampleDetiled(map, t.xy, t.xyDx, t.xyDy, l.z).xyz * 2.0 - 1.0;
     return triplanarBlendNormal(tx, ty, tz, n, w);
   }
 
@@ -265,22 +294,24 @@ export const terrainDetailFunctions = `
   // шкалы (родного или steep) — тело идентично прежнему коду ветки fade1,
   // параметризовано сэмплерами набора. Гейты AO/diffuse — те же
   // uDetailLayerGates.x/y, общие на оба набора (свойство слоя, не зоны).
-  // scale/detailPos/w/l не параметризованы — зона не меняет домен адресации
-  // (см. докстроку чанка, «ЗОНЫ МАТЕРИАЛА»), только сами карты.
+  // t/w/l не параметризованы по зоне — зона не меняет домен адресации (см.
+  // докстроку чанка, «ЗОНЫ МАТЕРИАЛА»), только сами карты. t — готовый
+  // TriplanarUv, посчитанный ДО ветвления по маске (см. applyTerrainDetail) —
+  // сама функция dFdx/dFdy не считает.
   void sampleDetailSet(
-    sampler2D nor, sampler2D arm, sampler2D diff, vec3 detailPos, vec3 w, vec3 l, vec3 nLocal,
+    sampler2D nor, sampler2D arm, sampler2D diff, TriplanarUv t, vec3 w, vec3 l, vec3 nLocal,
     out vec3 nOut, out float aoOut, out vec3 tintOut
   ) {
-    nOut = triplanarNormalDetiled(nor, detailPos, uDetailScale, nLocal, w, l);
+    nOut = triplanarNormalDetiled(nor, t, nLocal, w, l);
 
     aoOut = 1.0;
     if (uDetailLayerGates.x > 0.0) {
-      aoOut = mix(1.0, triplanarArmDetiled(arm, detailPos, uDetailScale, w, l).r, uDetailAoInfluence);
+      aoOut = mix(1.0, triplanarArmDetiled(arm, t, w, l).r, uDetailAoInfluence);
     }
 
     tintOut = vec3(1.0);
     if (uDetailLayerGates.y > 0.0) {
-      vec3 diffuseDetail = triplanarAlbedoDetiled(diff, detailPos, uDetailScale, w, l);
+      vec3 diffuseDetail = triplanarAlbedoDetiled(diff, t, w, l);
       float lum = dot(diffuseDetail, vec3(0.299, 0.587, 0.114));
       tintOut = mix(vec3(lum), diffuseDetail, uDetailSaturation) * uDetailBrightness;
     }
@@ -307,6 +338,16 @@ export const terrainDetailFunctions = `
         8.0 * vnoise(0.25 * (detailPos.xy * uDetailScale))
       );
 
+      // Текстурные градиенты — здесь, СРАЗУ после w/l, в однородном потоке:
+      // ДО ветки по маске зон (пиксельная частота ветвления — там UB dFdx
+      // под дивергентным потоком был ВИДИМ, мип-волоски вдоль изоконтуров
+      // m = STEEP_EPS/1-EPS) и ДО fade1/fade2 (там UB почти безвреден, но
+      // выносим единообразно — см. докстроку чанка). Обе шкалы — свой домен,
+      // считаются здесь безусловно, даже если соответствующий fade окажется
+      // < 0 ниже (дешёвая ALU, не текстурная выборка).
+      TriplanarUv uvBig = triplanarUvFor(detailPos, uDetailScale);
+      TriplanarUv uvSmall = triplanarUvFor(detailPos2, uDetailScale2);
+
       if (fade1 > 0.0) {
         // Маска зон: камень на крутом. breakup переиспользует l.z (домен и
         // ось те же — detailPos.xy·uDetailScale, см. l выше) делением на 8
@@ -324,13 +365,13 @@ export const terrainDetailFunctions = `
 
         if (m < STEEP_EPS) {
           // Вне зоны — читается ровно один (родной) набор.
-          sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, detailPos, w, l, nLocal, nNative, aoNative, tintNative);
+          sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, uvBig, w, l, nLocal, nNative, aoNative, tintNative);
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (nNative - nLocal));
           albedoMul *= mix(1.0, aoNative, fade1);
           albedoMul *= mix(vec3(1.0), tintNative, fade1);
         } else if (m > 1.0 - STEEP_EPS) {
           // Только steep — симметрично ветке выше.
-          sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, detailPos, w, l, nLocal, nSteep, aoSteep, tintSteep);
+          sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uvBig, w, l, nLocal, nSteep, aoSteep, tintSteep);
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (nSteep - nLocal));
           albedoMul *= mix(1.0, aoSteep, fade1);
           albedoMul *= mix(vec3(1.0), tintSteep, fade1);
@@ -339,10 +380,10 @@ export const terrainDetailFunctions = `
           // Нормали — whiteout, последовательно родной вес (1-m), затем
           // steep вес m (тот же паттерн, что крупная/мелкая шкала ниже).
           // AO/tint — не направления, обычный mix(a, b, m).
-          sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, detailPos, w, l, nLocal, nNative, aoNative, tintNative);
+          sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, uvBig, w, l, nLocal, nNative, aoNative, tintNative);
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (1.0 - m) * (nNative - nLocal));
 
-          sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, detailPos, w, l, nLocal, nSteep, aoSteep, tintSteep);
+          sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uvBig, w, l, nLocal, nSteep, aoSteep, tintSteep);
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * m * (nSteep - nLocal));
 
           albedoMul *= mix(1.0, mix(aoNative, aoSteep, m), fade1);
@@ -352,9 +393,10 @@ export const terrainDetailFunctions = `
 
       if (fade2 > 0.0) {
         // Своя точная позиция мелкого слоя (detailPos2, W2 ≠ W1) — не ratio
-        // от крупной. l переиспользован из крупной шкалы (см. докстроку
-        // чанка) — своего vnoise для мелкой шкалы нет.
-        vec3 nDetail2 = triplanarNormalDetiled(uDetailNor2Map, detailPos2, uDetailScale2, nLocal, w, l);
+        // от крупной, свой TriplanarUv (uvSmall, посчитан выше вместе с
+        // uvBig). l переиспользован из крупной шкалы (см. докстроку чанка) —
+        // своего vnoise для мелкой шкалы нет.
+        vec3 nDetail2 = triplanarNormalDetiled(uDetailNor2Map, uvSmall, nLocal, w, l);
         nLocal = normalize(nLocal + uDetailNormalScale * fade2 * (nDetail2 - nLocal));
       }
     }

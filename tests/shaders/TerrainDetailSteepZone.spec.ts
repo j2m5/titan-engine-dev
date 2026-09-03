@@ -70,4 +70,29 @@ describe('TerrainDetail: зоны материала по уклону', () => {
     expect(slopeGateIdx).toBeGreaterThan(declIdx)
     expect(callIdx).toBeGreaterThan(slopeGateIdx)
   })
+
+  // Фикс-раунд 2 (приёмка владельца): маска зон ветвится на ПИКСЕЛЬНОЙ
+  // частоте (шумовая граница) — dFdx/dFdy, посчитанные ВНУТРИ этой ветки
+  // (или внутри triplanar*Detiled, вызываемых из неё), формально UB под
+  // дивергентным потоком и давали видимый артефакт (мип-волоски вдоль
+  // изоконтуров m = STEEP_EPS/1-EPS). Регресс-пин: все вхождения dFdx( в
+  // чанке обязаны стоять textуально РАНЬШЕ первой ветки маски — иначе
+  // производные снова считаются под ветвлением по m.
+  it('регресс: dFdx( встречается только до первой ветки маски зон (мип-волоски вдоль изоконтуров)', () => {
+    const maskGateIdx = terrainDetailFunctions.indexOf('if (m < STEEP_EPS')
+    expect(maskGateIdx).toBeGreaterThan(-1)
+
+    const dFdxIndices: number[] = []
+    let from = 0
+    for (;;) {
+      const idx = terrainDetailFunctions.indexOf('dFdx(', from)
+      if (idx === -1) break
+      dFdxIndices.push(idx)
+      from = idx + 1
+    }
+    expect(dFdxIndices.length).toBeGreaterThan(0)
+    for (const idx of dFdxIndices) {
+      expect(idx).toBeLessThan(maskGateIdx)
+    }
+  })
 })

@@ -88,17 +88,26 @@ describe('TerrainDetail: чанк — регистрация и структур
   })
 
   it('стохастические обёртки существуют, разделяют общий l и зовут triplanar-ядро бленда, не копируют его', () => {
-    expect(terrainDetailFunctions).toContain(
-      'vec3 triplanarNormalDetiled(sampler2D map, vec3 p, float scale, vec3 n, vec3 w, vec3 l)'
-    )
-    expect(terrainDetailFunctions).toContain(
-      'vec3 triplanarArmDetiled(sampler2D map, vec3 p, float scale, vec3 w, vec3 l)'
-    )
-    expect(terrainDetailFunctions).toContain(
-      'vec3 triplanarAlbedoDetiled(sampler2D map, vec3 p, float scale, vec3 w, vec3 l)'
-    )
+    // сигнатуры берут готовый TriplanarUv (uv+dFdx/dFdy, посчитан ДО
+    // ветвлений — фикс-раунд 2, мип-волоски вдоль изоконтуров маски зон),
+    // сами больше не считают dFdx/dFdy — см. тест на позицию dFdx( ниже
+    expect(terrainDetailFunctions).toContain('vec3 triplanarNormalDetiled(sampler2D map, TriplanarUv t, vec3 n, vec3 w, vec3 l)')
+    expect(terrainDetailFunctions).toContain('vec3 triplanarArmDetiled(sampler2D map, TriplanarUv t, vec3 w, vec3 l)')
+    expect(terrainDetailFunctions).toContain('vec3 triplanarAlbedoDetiled(sampler2D map, TriplanarUv t, vec3 w, vec3 l)')
     expect(terrainDetailFunctions).toContain('triplanarBlendNormal(')
     expect(terrainDetailFunctions).toContain('triplanarBlendRgb(')
+  })
+
+  it('TriplanarUv: производные считаются ровно один раз, в triplanarUvFor — обёртки их не пересчитывают', () => {
+    expect(terrainDetailFunctions).toContain('struct TriplanarUv {')
+    expect(terrainDetailFunctions).toContain('TriplanarUv triplanarUvFor(vec3 p, float scale)')
+    // ровно 6 вызовов dFdx/dFdy на весь чанк — по одному на проекцию×ось,
+    // внутри triplanarUvFor; обёртки (Normal/Arm/AlbedoDetiled) и sampleDetailSet
+    // читают уже готовые t.zyDx/t.zyDy и т.п., не зовут dFdx/dFdy сами
+    const dFdxCalls = (terrainDetailFunctions.match(/dFdx\(/g) ?? []).length
+    const dFdyCalls = (terrainDetailFunctions.match(/dFdy\(/g) ?? []).length
+    expect(dFdxCalls).toBe(3)
+    expect(dFdyCalls).toBe(3)
   })
 
   it('vnoise и хеши — квантованные (floor), никакой ячейки от сырого текстурного uv', () => {

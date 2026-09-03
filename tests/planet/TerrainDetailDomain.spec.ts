@@ -29,7 +29,10 @@ describe('TerrainDetail: домен из точной позиции патча'
     expect(fn).toContain('detailPos.zy * uDetailScale')
     expect(fn).toContain('detailPos.xz * uDetailScale')
     expect(fn).toContain('detailPos.xy * uDetailScale')
-    expect(fn).toContain('triplanarNormalDetiled(uDetailNor2Map, detailPos2, uDetailScale2,')
+    // мелкий слой — свой TriplanarUv (uvSmall, от detailPos2/uDetailScale2 —
+    // см. triplanarUvFor в applyTerrainDetail, фикс-раунд 2), не сырые p/scale
+    expect(fn).toContain('TriplanarUv uvSmall = triplanarUvFor(detailPos2, uDetailScale2);')
+    expect(fn).toContain('triplanarNormalDetiled(uDetailNor2Map, uvSmall,')
     expect(fn).not.toContain('dirLocal.zy * uDetailScale')
     expect(fn).not.toContain('uDetailScale2 / max(uDetailScale')
     // веса трипланара — по-прежнему от направления
