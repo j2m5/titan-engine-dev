@@ -17,8 +17,10 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { TextureBudget } from '@/core/streaming/TextureBudget'
 import { decideStreaming } from '@/core/streaming/decideStreaming'
 import type { MapCandidate, StreamDecision } from '@/core/streaming/types'
-import { MAP_TYPE_RANK, mapTypeRank } from '@/core/streaming/types'
+import { MAP_TYPE_RANK, mapTypeRank, STEEP_TYPE_RANKS } from '@/core/streaming/types'
 import { minBodyPixelsToPriorityThreshold } from '@/core/streaming/angularCutoff'
+import { STEEP_DETAIL_PATHS } from '@/core/terrain/steepDetailPaths'
+import { heightPathOf } from '@/core/terrain/heightPath'
 import { config } from '@/core/framework/config'
 import { streaming } from '@/config/streaming'
 
@@ -512,10 +514,11 @@ class ResourceObserver {
         continue
       }
 
-      for (const resource of streamableResources) {
-        const path: string = resource.getAttribute('path', '')
-        const typeRank: number = mapTypeRank(resource.getAttribute('resourceType') ?? '')
-
+      // Регистрирует один кандидата: пуш в `candidates`, владение в
+      // `pathActors`, догон материала для актора, впервые заставшего путь
+      // уже резидентным — общий код для родных ресурсов актора и синтетики
+      // steep-набора ниже (см. докблок гейта steep).
+      const pushCandidate = (path: string, typeRank: number): void => {
         candidates.push({ actorId, name: record.name, path, typeRank, actorPriority })
 
         let owners: Set<number> | undefined = this.pathActors.get(path)
@@ -528,6 +531,29 @@ class ResourceObserver {
         owners.add(actorId)
 
         if (this.loaded.has(path) && !previousOwners.get(path)?.has(actorId)) catchUp.add(actorId)
+      }
+
+      for (const resource of streamableResources) {
+        pushCandidate(resource.getAttribute('path', ''), mapTypeRank(resource.getAttribute('resourceType') ?? ''))
+      }
+
+      // Steep-набор зон материала (задача 4 «Material Zones»): rocky_trail на
+      // крутых склонах ЛЮБОГО терраформного тела — решение владельца
+      // 2026-09-02. Гейт — есть честный height-ресурс (тело терраформно, не
+      // легаси-гигант) И родной detailDiffuse ещё не сам steep-набор
+      // (rocky-архетип уже совпадает с STEEP_DETAIL_PATHS — дублировать
+      // нечего). Steep-набор шарится всей базой; провал загрузки —
+      // второстепенная карта: тело живёт одной зоной, гейт материала
+      // остаётся 0.
+      const hasHeight: boolean = heightPathOf(actor) !== undefined
+      const nativeDetailDiffusePath: string | undefined = streamableResources
+        .find((resource: Resource): boolean => resource.getAttribute('resourceType') === 'detailDiffuse')
+        ?.getAttribute('path', '')
+
+      if (hasHeight && nativeDetailDiffusePath !== STEEP_DETAIL_PATHS.diffuse) {
+        pushCandidate(STEEP_DETAIL_PATHS.normal, STEEP_TYPE_RANKS.normal)
+        pushCandidate(STEEP_DETAIL_PATHS.arm, STEEP_TYPE_RANKS.arm)
+        pushCandidate(STEEP_DETAIL_PATHS.diffuse, STEEP_TYPE_RANKS.diffuse)
       }
     }
 
@@ -576,6 +602,10 @@ class ResourceObserver {
    * дрожит у порога отсечки, иначе грузилось бы и вытеснялось по кругу
    * каждый такт. Свежий орфан просто пропускается — вытеснится, когда
    * (если) останется орфаном дольше резидентности.
+   *
+   * Синтетические steep-пути зон материала ранжируются здесь их СОБСТВЕННЫМ
+   * resourceType (2.0–2.2), а не STEEP_TYPE_RANKS (2.31–2.33) — допущение
+   * безвредно, пока единственный потребитель ранга — бинарный isDiffuse-гейт.
    */
   private evictOrphanedPaths(previousOwners: ReadonlyMap<string, Set<number>>): void {
     for (const path of [...this.loaded]) {

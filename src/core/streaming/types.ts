@@ -61,6 +61,19 @@ export const MAP_TYPE_RANK: Readonly<Record<string, number>> = {
   specular: 5
 }
 
+/**
+ * Ранги steep-набора зон материала (задача 4 «Material Zones»): rocky_trail
+ * на крутых склонах ЛЮБОГО терраформного тела (см. `STEEP_DETAIL_PATHS`).
+ * Суб-ранги после родного detail-набора (2.0–2.3) и до `cloud` (3) —
+ * steep-набор шарится всей базой; провал загрузки — второстепенная карта:
+ * тело живёт одной зоной, гейт материала остаётся 0.
+ */
+export const STEEP_TYPE_RANKS: Readonly<Record<string, number>> = {
+  normal: 2.31,
+  arm: 2.32,
+  diffuse: 2.33
+}
+
 /** Ранг неизвестного типа карты — после `specular`, в самом хвосте. */
 const UNKNOWN_MAP_TYPE_RANK: number = 5.5
 
