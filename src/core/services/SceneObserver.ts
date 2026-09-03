@@ -52,11 +52,19 @@ class SceneObserver extends EventEmitter<{
   private vector: Vector3 = new Vector3()
   /** Накопленное с прошлого периодического пересчёта время, мс. */
   private sinceRecompute: number = 0
+  /** Имя тела, отданного контролам как цель орбиты в последний раз. */
+  private targetName: string | null = null
 
   private readonly onObservableChange = (event: { data: Vector3 }): void => {
     this.emit('change', event.data)
   }
 
+  /**
+   * Пока зажата ПКМ, цель орбиты не перескакивает на тело, оказавшееся
+   * ближе (луна между камерой и Сатурном), но продолжает следовать за своим
+   * телом — оно движется по орбите и во время драга. `ClosestChange` при этом
+   * несёт честно ближайшее тело: стример и гейт карт высот живут по нему.
+   */
   private readonly onChange = (): void => {
     this.defineDataRecords()
 
@@ -66,7 +74,12 @@ class SceneObserver extends EventEmitter<{
 
     if (!closest) return
 
-    this.observable.setTarget(closest.position)
+    const held: ObservableRecord | undefined =
+      this.observable.isOrbiting && this.targetName !== null ? this.data.get(this.targetName) : undefined
+    const target: ObservableRecord = held ?? closest
+
+    this.targetName = target.name
+    this.observable.setTarget(target.position)
     this.emit('ClosestChange', closest)
   }
 
@@ -179,6 +192,7 @@ class SceneObserver extends EventEmitter<{
     this.data.clear()
     this.objects = []
     this._scene = null
+    this.targetName = null
     // Новый сценарий начинает отсчёт периодического пересчёта с нуля, а не с
     // хвоста, накопленного до разборки — иначе первый тик после запуска мог
     // бы выстрелить раньше настоящих 500 мс.

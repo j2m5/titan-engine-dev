@@ -88,6 +88,11 @@ class AstroControls extends EventDispatcher<AstroControlsEventMap> {
     this.updateRotationVector()
   }
 
+  /** Зажата ПКМ — камера вращается вокруг `target`. */
+  public get isOrbiting(): boolean {
+    return this.isRotating
+  }
+
   private mousedown(event: MouseEvent): void {
     if (!this.enabled) return
 

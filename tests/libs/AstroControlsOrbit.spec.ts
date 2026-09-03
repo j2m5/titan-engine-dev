@@ -47,4 +47,19 @@ describe('AstroControls: орбитальный поворот и внешнее
 
     expect(camera.position.distanceTo(target)).toBeCloseTo(10, 9)
   })
+
+  it('isOrbiting — true между нажатием и отпусканием ПКМ, ЛКМ не считается', () => {
+    const { controls, dom } = makeControls()
+
+    expect(controls.isOrbiting).toBe(false)
+
+    mouse(dom, 'mousedown', 0, 0, 0)
+    expect(controls.isOrbiting).toBe(false)
+
+    mouse(dom, 'mousedown', 0, 0)
+    expect(controls.isOrbiting).toBe(true)
+
+    mouse(dom, 'mouseup', 0, 0)
+    expect(controls.isOrbiting).toBe(false)
+  })
 })
