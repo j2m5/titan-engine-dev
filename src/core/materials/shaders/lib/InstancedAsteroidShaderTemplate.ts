@@ -37,9 +37,21 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uDustAnglePower: new Uniform(2),
     uDustNearFade: new Uniform(1),
     uDustPlanetRadius: new Uniform(0),
+    // Модель освещения камня (см. чанк AsteroidBrdf): реголит + planetshine
+    uLunarMix: new Uniform(0.8),
+    uOppositionSurge: new Uniform(0.3),
+    uPlanetshineColor: new Uniform(new Color(0xb8ad9c)),
+    uPlanetshineStrength: new Uniform(1.5),
     // Радиальный профиль пыли из альфы текстуры кольца; scale 0 — выключен
     uDustRadialMap: new Uniform(null),
     uDustRadialMapScale: new Uniform(0),
+    // Полосы кольца и слой (см. чанк RingDust): выключены, пока система не отдаст текстуру
+    uRingBandMap: new Uniform(null),
+    uRingBandEnabled: new Uniform(0),
+    uBandMeanColor: new Uniform(new Vector3(1, 1, 1)),
+    uBandTintStrength: new Uniform(1),
+    uLayerHalfThickness: new Uniform(1),
+    uLayerShadowStrength: new Uniform(0.25),
     // Деформация силуэта (см. чанк AsteroidShape). Амплитуда — per-instance из
     // диапазона [min,max]; min=max=0 → форма выключена.
     uShapeAmpMin: new Uniform(0),
@@ -69,6 +81,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
+    varying vec3 vPlanetDirView;
     varying vec3 vRingPos;
     varying vec3 vObjectPos;
     varying vec3 vObjectNormal;
@@ -110,6 +123,8 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
+      // Направление на центр планеты (начало ring-local) во view — для planetshine
+      vPlanetDirView = normalize((modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz - mvPosition.xyz);
 
       // Для макро-облика (см. чанк AsteroidSurface): объектная позиция (домен),
       // геом. нормаль объекта (нормаль больше не возмущается процедурно) и
@@ -153,9 +168,14 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uniform float uSpecularTint;
     uniform float uFreshnessBrighten;
     uniform float uCavityShade;
+    uniform float uLunarMix;
+    uniform float uOppositionSurge;
+    uniform vec3 uPlanetshineColor;
+    uniform float uPlanetshineStrength;
 
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
+    varying vec3 vPlanetDirView;
     varying vec3 vRingPos;
     varying vec3 vObjectPos;
     varying vec3 vObjectNormal;
@@ -169,6 +189,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
     #include <noiseFunctions>
     #include <asteroidSurfaceFunctions>
+    #include <asteroidBrdfFunctions>
     #include <triplanarDetailUniforms>
     #include <triplanarDetailFunctions>
     #include <ringDustUniforms>
@@ -197,6 +218,9 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       // Макро-облик: альбедо (джиттер/мотл/maria), рельеф больше не возмущает
       // нормаль процедурно — нормаль геометрическая, деталь несёт PBR-микрослой.
       vec3 albedo = applyAsteroidSurface(surfDir, vTintSeed, vDomainOffset, uRockColor, uColorJitter, uTintStrength, uMariaStrength);
+      // Тинт по цвету полосы кольца на радиусе камня (см. чанк RingDust): вблизи
+      // камни несут ту же палитру, что кольцо издали. До микрослоя — тот ложится сверху
+      albedo *= ringBandTint(length(vRingPos.xz));
 
       // Геометрическая объектная нормаль; трипланарная дельта нормали (ниже)
       // применяется к ней. AO — единственный источник теперь ARM-карта микрослоя.
@@ -245,18 +269,32 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       if (!gl_FrontFacing) normal = -normal;
 
       vec3 lightDirection = normalize(vViewLightDirection);
-      float lightIntensity = max(dot(normal, lightDirection), 0.0);
+      vec3 viewDir = normalize(vViewPosition);
+      float NdotL = dot(normal, lightDirection);
+      float NdotV = dot(normal, viewDir);
+      float cosPhase = dot(lightDirection, viewDir);
+
+      // Диффуз реголита (см. чанк AsteroidBrdf): Ламберт/Ломмель-Зелигер по
+      // профилю + оппозиционный пик — камень ровный по диску, с резким лимбом
+      float lightIntensity = asteroidRegolithDiffuse(NdotL, NdotV, cosPhase, uLunarMix, uOppositionSurge);
 
       // Тень планеты (умбра): та же аналитическая модель, что у пыли и 2D-кольца
       // (ringDustPlanetShadow), поэтому граница тени совпадает между слоями. Гасит
       // ТОЛЬКО прямой свет звезды (диффуз + блик ниже); эмбиент остаётся → камень
       // в тени не проваливается в глухой ноль (floor 0.04, как у прочих слоёв).
       float planetShadow = ringDustPlanetShadow(vRingPos);
+      // Самозатенение слоя кольца: камни и пыль над точкой вдоль луча звезды
+      // (ringLayerShadow). Прямой свет = тень планеты × тень слоя
+      float direct = planetShadow * ringLayerShadow(vRingPos);
 
-      vec3 finalColor = albedo * (lightIntensity * surfAO * planetShadow + uSurfaceAmbient);
+      // Planetshine: второй источник — планета рядом; ложится на альбедо с AO,
+      // в умбре фаза сама уходит в ноль
+      float shine = asteroidPlanetshine(normal, normalize(vPlanetDirView), vRingPos, uDustLightDirRing, uDustPlanetRadius);
+
+      vec3 finalColor = albedo * (lightIntensity * surfAO * direct + uSurfaceAmbient)
+                      + albedo * uPlanetshineColor * (uPlanetshineStrength * shine * surfAO);
 
       // Blinn-Phong блик (металл/лёд), только на освещённой стороне, со спекуляр-AA.
-      vec3 viewDir = normalize(vViewPosition);
       vec3 halfVec = normalize(lightDirection + viewDir);
       // Спекуляр-AA (B4): на дальних/мелких камнях нормаль сильно меняется в
       // пределах пикселя → узкий блик «фейерит». Разброс нормали оцениваем
@@ -268,7 +306,8 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       float specPowerAA = specPower * specToksvig;
       float spec = pow(max(dot(normal, halfVec), 0.0), specPowerAA) * specStrength * specToksvig;
       vec3 specColor = mix(vec3(1.0), albedo, uSpecularTint);
-      finalColor += spec * specColor * lightIntensity * planetShadow;
+      // Гейт блика — сырой косинус к свету, а не LS-диффуз (тот к лимбу доходит до 2)
+      finalColor += spec * specColor * max(NdotL, 0.0) * direct;
 
       // Аэроперспектива: камни тонут в пылевой дымке с расстоянием
       finalColor = ringDustApplyFog(finalColor, vRingPos);

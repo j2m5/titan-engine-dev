@@ -35,6 +35,15 @@ export const ringDustUniforms = `
   uniform float uDustPlanetRadius;
   uniform sampler2D uDustRadialMap;
   uniform float uDustRadialMapScale;
+  // Полосы кольца (RGB — цвет, A — альфа; см. RingBandTexture): 0 — текстуры нет,
+  // тинт и самозатенение слоя выключены
+  uniform sampler2D uRingBandMap;
+  uniform float uRingBandEnabled;
+  uniform vec3 uBandMeanColor;
+  uniform float uBandTintStrength;
+  // Слой кольца: полутолщина (ring-local) и сила самозатенения (множитель τ)
+  uniform float uLayerHalfThickness;
+  uniform float uLayerShadowStrength;
 `
 
 // Общее ядро модели: плотность, гейт, рамп, интервалы, цвет дымки.
@@ -88,6 +97,53 @@ const ringDustCoreGlsl = `
     if (disc <= 0.0) return vec2(1.0, 0.0);
     float sq = sqrt(disc);
     return vec2((-b - sq) / a, (-b + sq) / a);
+  }
+
+  // --- Слой кольца: самозатенение и тинт по полосам (общее для камней и марша) ---
+  // CPU-зеркало: layerTau/columnFraction/layerShadow/bandTint в tests/ringDust/tauMirror.ts
+
+  // Выборка полос по радиусу (тот же маппинг u, что у RingShader)
+  vec4 ringBandAt(float r) {
+    float u = clamp((r - uDustRingInner) / (uDustRingOuter - uDustRingInner), 0.0, 1.0);
+    return texture2D(uRingBandMap, vec2(u, 0.5));
+  }
+
+  // Оптическая толща слоя по нормали на радиусе: пропускание = 1 − α
+  float ringLayerTau(float r) {
+    if (uRingBandEnabled < 0.5) return 0.0;
+    float a = ringBandAt(r).a;
+    return -log(1.0 - min(a, 0.98));
+  }
+
+  // Доля столба слоя НАД точкой в сторону солнца при треугольном вертикальном
+  // распределении камней (пик в средней плоскости, ноль на ±half)
+  float ringLayerColumnFraction(float ySun) {
+    float u = clamp(ySun / max(uLayerHalfThickness, 1e-9), -1.0, 1.0);
+    return u >= 0.0 ? (1.0 - u) * (1.0 - u) * 0.5 : 1.0 - (1.0 + u) * (1.0 + u) * 0.5;
+  }
+
+  // Самозатенение слоя: камни и пыль над точкой вдоль направления на звезду.
+  // Путь через слой делится на синус высоты звезды над плоскостью (пол 0.2).
+  // Физическая экспонента СМЕШИВАЕТСЯ с единицей по uLayerShadowStrength, а не
+  // множит толщу: рендер показывает и глубокие камни, которых в оптически
+  // плотном слое не видно, и честная толща Сатурна (α ≈ 1, солнце ≤ 27° над
+  // плоскостью) красила их в чёрное. При силе s худший случай — (1 − s)
+  float ringLayerShadow(vec3 p) {
+    float tau = ringLayerTau(length(p.xz));
+    if (tau <= 0.0 || uLayerShadowStrength <= 0.0) return 1.0;
+    float ySun = uDustLightDirRing.y >= 0.0 ? p.y : -p.y;
+    float sinE = max(abs(uDustLightDirRing.y), 0.2);
+    float physical = exp(-tau * ringLayerColumnFraction(ySun) / sinE);
+    return mix(1.0, physical, uLayerShadowStrength);
+  }
+
+  // Тинт альбедо по цвету полосы относительно среднего цвета кольца:
+  // светлые ледяные полосы — светлые камни, тёмные пыльные — тёмные
+  vec3 ringBandTint(float r) {
+    if (uRingBandEnabled < 0.5) return vec3(1.0);
+    vec3 band = ringBandAt(r).rgb;
+    vec3 tint = clamp(band / max(uBandMeanColor, vec3(0.05)), 0.5, 1.5);
+    return mix(vec3(1.0), tint, uBandTintStrength);
   }
 
   // Цвет дымки: базовый + мягкий forward-scattering буст в сторону звезды
