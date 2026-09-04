@@ -148,6 +148,14 @@ describe('PlanetShader: ручки средней полосы', () => {
     expect(new PlanetShader(stubActor(1737, { macroSlopeRef: 0.4 })).uniforms.uMacroSlopeRef.value).toBe(0.4)
     expect(new PlanetShader(stubActor(1737, { macroSlopeRef: 0 })).uniforms.uMacroSlopeRef.value).toBe(1e-3)
   })
+
+  it('юниформы форм склона: дефолты у тела без ручек', () => {
+    const shader = new PlanetShader(Actor.find(19)!) // Луна: ручек форм в data нет
+    expect(shader.uniforms.uMacroStreakStrength.value).toBe(1)
+    expect(shader.uniforms.uMacroStreakPeriodUnits.value).toBeCloseTo(toThreeJSUnits(0.5), 12)
+    expect(shader.uniforms.uMacroTerraceStrength.value).toBe(0.5)
+    expect(shader.uniforms.uMacroTerraceStepMeters.value).toBe(150)
+  })
 })
 
 const HEIGHT_PATH = 'stub/macro/height.raw'
