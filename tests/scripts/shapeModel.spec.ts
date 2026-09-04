@@ -1,6 +1,8 @@
 import { IcosahedronGeometry } from 'three'
 import {
   buildShapeTiers,
+  clusterDecimate,
+  parseRadiusGrid,
   centerAndNormalize,
   decimateToTriangles,
   parseObjMesh,
@@ -98,5 +100,70 @@ describe('decimateToTriangles / buildShapeTiers: ярусы под икосфе�
     expect(tiers.near.indices.length).toBeGreaterThan(tiers.l0.indices.length * 2)
     const back = parseShapeModel(encodeShapeModel(tiers.l0))
     expect(back.indices.length).toBe(tiers.l0.indices.length)
+  })
+})
+
+describe('parseRadiusGrid: таблицы радиусов PDS «lon lat r» / «lat lon r» на сетке 5°', () => {
+  /** Сфера радиуса R на сетке 5°: 73 долгот × 37 широт, порядок колонок задаётся */
+  const grid = (R: number, latFirst: boolean): string => {
+    const lines: string[] = []
+    for (let lon = 0; lon <= 360; lon += 5) {
+      for (let lat = -90; lat <= 90; lat += 5) {
+        lines.push(latFirst ? `${lat} ${lon} ${R}` : `${lon} ${lat} ${R}`)
+      }
+    }
+    return lines.join('\n')
+  }
+
+  it('порядок колонок определяется по диапазонам: [0,360] — долгота, [-90,90] — широта', () => {
+    const a = parseRadiusGrid(grid(2, false))
+    const b = parseRadiusGrid(grid(2, true))
+    expect(a.positions).toEqual(b.positions)
+    expect(a.indices).toEqual(b.indices)
+  })
+
+  it('полюса схлопнуты, шов долготы 360 = 0 не дублируется: 72·35 + 2 вершин, замкнутая сетка', () => {
+    const mesh = parseRadiusGrid(grid(2, false))
+    expect(mesh.positions.length / 3).toBe(72 * 35 + 2)
+    // Квадов 72·34, по два треугольника, у полюсных поясов по одному → 72·34·2 + 72·2
+    expect(mesh.indices.length / 3).toBe(72 * 34 * 2 + 72 * 2)
+    for (const i of mesh.indices) expect(i).toBeLessThan(mesh.positions.length / 3)
+  })
+
+  it('радиусы воспроизводятся: все вершины сферы на расстоянии R', () => {
+    const mesh = parseRadiusGrid(grid(3.5, false))
+    for (let i = 0; i < mesh.positions.length; i += 3) {
+      expect(Math.hypot(mesh.positions[i], mesh.positions[i + 1], mesh.positions[i + 2])).toBeCloseTo(3.5, 6)
+    }
+  })
+
+  it('parseShapeMesh распознаёт таблицу радиусов (нет заголовка nv nf, три колонки, диапазоны углов)', () => {
+    expect(parseShapeMesh(grid(1, false)).positions.length / 3).toBe(72 * 35 + 2)
+  })
+})
+
+describe('clusterDecimate: быстрое предпрореживание сеткой ячеек для многомиллионных мешей', () => {
+  it('сливает вершины по ячейкам: число вершин падает, вырожденные треугольники выброшены, габарит сохранён', () => {
+    const src = icosphere(15)
+    const positions = centerAndNormalize(src)
+    const out = clusterDecimate(positions, Uint32Array.from(src.indices), 16)
+    expect(out.positions.length / 3).toBeLessThan(positions.length / 3 / 4)
+    expect(out.indices.length).toBeGreaterThan(0)
+    for (let t = 0; t < out.indices.length; t += 3) {
+      const [a, b, c] = [out.indices[t], out.indices[t + 1], out.indices[t + 2]]
+      expect(a !== b && b !== c && a !== c).toBe(true)
+    }
+    let maxR = 0
+    for (let i = 0; i < out.positions.length; i += 3) maxR = Math.max(maxR, Math.hypot(out.positions[i], out.positions[i + 1], out.positions[i + 2]))
+    expect(maxR).toBeGreaterThan(0.9)
+    expect(maxR).toBeLessThanOrEqual(1.0001)
+  })
+
+  it('decimateToTriangles сам предпрореживает меш плотнее порога перед SimplifyModifier', () => {
+    const src = icosphere(15)
+    const data = decimateToTriangles(centerAndNormalize(src), Uint32Array.from(src.indices), TIER_TRIANGLES.l0, 1000)
+    const tris = data.indices.length / 3
+    expect(tris).toBeGreaterThan(TIER_TRIANGLES.l0 * 0.7)
+    expect(tris).toBeLessThan(TIER_TRIANGLES.l0 * 1.3)
   })
 })

@@ -100,7 +100,7 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
     freshnessBrighten: 0.1, cavityShade: 0.5,
     lunarMix: 0.9, oppositionSurge: 0.4,
     morphologyWeights: { fragment: 0.4, rubble: 0.3, binary: 0.1, top: 0.05, cratered: 0.15 },
-    shapeModels: ['bennu', 'ryugu', 'mathilde'],
+    shapeModels: ['bennu', 'mathilde'],
     realShare: 0.5,
     detailSet: 'rock_boulder_dry'
   },
@@ -112,7 +112,7 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
     freshnessBrighten: 0.2, cavityShade: 0.5,
     lunarMix: 0.4, oppositionSurge: 0.15,
     morphologyWeights: { fragment: 0.65, rubble: 0.1, binary: 0.1, top: 0, cratered: 0.15 },
-    shapeModels: ['kleopatra', 'psyche'],
+    shapeModels: ['kleopatra'],
     realShare: 0.5,
     detailSet: 'rock_boulder_dry'
   },

@@ -76,10 +76,170 @@ export function parsePlateMesh(text: string): RawMesh {
   return { positions, indices }
 }
 
-/** OBJ, если есть строки `v `/`f `, иначе plate-таблица */
-export function parseShapeMesh(text: string): RawMesh {
-  return /^\s*v\s/m.test(text) ? parseObjMesh(text) : parsePlateMesh(text)
+/**
+ * Разбор таблицы радиусов PDS (модели Томаса: Гаспра, Ида, Матильда, Деймос):
+ * строки `lon lat r` или `lat lon r` на сетке 5° (73 долготы × 37 широт),
+ * порядок колонок определяется по диапазонам ([0, 360] — долгота, [−90, 90] —
+ * широта). Сетка триангулируется: полюса схлопнуты в одну вершину, шов
+ * долготы 360 = 0 не дублируется. Планетоцентрические координаты:
+ * x = r·cos(lat)·cos(lon), y = r·cos(lat)·sin(lon), z = r·sin(lat).
+ */
+export function parseRadiusGrid(text: string): RawMesh {
+  const rows = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !l.startsWith('#'))
+    .map((l) => l.split(/\s+/).map(Number))
+    .filter((t) => t.length >= 3 && t.slice(0, 3).every(Number.isFinite))
+  if (rows.length === 0) throw new Error('radius grid: no rows')
+
+  const range = (col: number): [number, number] => {
+    let lo = Infinity
+    let hi = -Infinity
+    for (const r of rows) {
+      lo = Math.min(lo, r[col])
+      hi = Math.max(hi, r[col])
+    }
+    return [lo, hi]
+  }
+  const lonCol = range(0)[1] > 180 ? 0 : 1
+  const latCol = 1 - lonCol
+
+  // Радиус по (lon mod 360, lat): последняя точка на шве 360 совпадает с 0
+  const radii = new Map<string, number>()
+  const lons = new Set<number>()
+  const lats = new Set<number>()
+  for (const r of rows) {
+    const lon = ((r[lonCol] % 360) + 360) % 360
+    const lat = r[latCol]
+    lons.add(lon)
+    lats.add(lat)
+    radii.set(`${lon}|${lat}`, r[2])
+  }
+  const lonList = [...lons].sort((a, b) => a - b)
+  const latList = [...lats].sort((a, b) => a - b).filter((lat) => lat > -90 && lat < 90)
+  const hasSouth = lats.has(-90)
+  const hasNorth = lats.has(90)
+  if (lonList.length < 3 || latList.length < 1) throw new Error('radius grid: degenerate grid')
+
+  const positions: number[] = []
+  const toRad = Math.PI / 180
+  const push = (lon: number, lat: number, r: number): number => {
+    const cl = Math.cos(lat * toRad)
+    positions.push(r * cl * Math.cos(lon * toRad), r * cl * Math.sin(lon * toRad), r * Math.sin(lat * toRad))
+    return positions.length / 3 - 1
+  }
+  const radiusAt = (lon: number, lat: number): number => {
+    const r = radii.get(`${lon}|${lat}`)
+    if (r === undefined) throw new Error(`radius grid: missing sample lon=${lon} lat=${lat}`)
+    return r
+  }
+
+  // Вершины поясов: index[latIdx][lonIdx]
+  const ring: number[][] = latList.map((lat) => lonList.map((lon) => push(lon, lat, radiusAt(lon, lat))))
+  const poleRadius = (lat: number): number => {
+    let sum = 0
+    for (const lon of lonList) sum += radiusAt(lon, lat)
+    return sum / lonList.length
+  }
+  const south = hasSouth ? push(0, -90, poleRadius(-90)) : -1
+  const north = hasNorth ? push(0, 90, poleRadius(90)) : -1
+
+  const indices: number[] = []
+  const L = lonList.length
+  for (let j = 0; j + 1 < ring.length; j++) {
+    for (let i = 0; i < L; i++) {
+      const a = ring[j][i]
+      const b = ring[j][(i + 1) % L]
+      const c = ring[j + 1][(i + 1) % L]
+      const d = ring[j + 1][i]
+      indices.push(a, b, c, a, c, d)
+    }
+  }
+  if (south >= 0) for (let i = 0; i < L; i++) indices.push(south, ring[0][(i + 1) % L], ring[0][i])
+  if (north >= 0) {
+    const top = ring[ring.length - 1]
+    for (let i = 0; i < L; i++) indices.push(north, top[i], top[(i + 1) % L])
+  }
+  return { positions, indices }
 }
+
+/** Таблица радиусов: нет строк v/f, нет заголовка `nv nf`, три числовые колонки */
+const looksLikeRadiusGrid = (text: string): boolean => {
+  const first = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .find((l) => l.length > 0 && !l.startsWith('#'))
+  if (!first) return false
+  const tokens = first.split(/\s+/)
+  return tokens.length === 3 && tokens.every((t) => Number.isFinite(Number(t)))
+}
+
+/** OBJ (строки `v `/`f `), таблица радиусов (три колонки без заголовка) или plate-таблица */
+export function parseShapeMesh(text: string): RawMesh {
+  if (/^\s*v\s/m.test(text)) return parseObjMesh(text)
+  if (looksLikeRadiusGrid(text)) return parseRadiusGrid(text)
+  return parsePlateMesh(text)
+}
+
+/**
+ * Быстрое предпрореживание сеткой ячеек (vertex clustering): вершины в одной
+ * ячейке куба resolution³ по габариту сливаются в среднюю, вырожденные
+ * треугольники выбрасываются. O(n), нужно для многомиллионных моделей
+ * (Фобос — 3.1 млн граней), где SimplifyModifier непрактичен напрямую.
+ */
+export function clusterDecimate(positions: Float32Array, indices: Uint32Array, resolution: number): ShapeModelData {
+  const min = [Infinity, Infinity, Infinity]
+  const max = [-Infinity, -Infinity, -Infinity]
+  for (let i = 0; i < positions.length; i += 3) {
+    for (let k = 0; k < 3; k++) {
+      min[k] = Math.min(min[k], positions[i + k])
+      max[k] = Math.max(max[k], positions[i + k])
+    }
+  }
+  const size = max.map((m, k) => Math.max(m - min[k], 1e-9))
+  const cellOf = new Int32Array(positions.length / 3)
+  const cellIndex = new Map<number, number>()
+  const sums: number[] = []
+  const counts: number[] = []
+  for (let v = 0; v < positions.length / 3; v++) {
+    const cx = Math.min(resolution - 1, Math.floor(((positions[v * 3] - min[0]) / size[0]) * resolution))
+    const cy = Math.min(resolution - 1, Math.floor(((positions[v * 3 + 1] - min[1]) / size[1]) * resolution))
+    const cz = Math.min(resolution - 1, Math.floor(((positions[v * 3 + 2] - min[2]) / size[2]) * resolution))
+    const key = (cx * resolution + cy) * resolution + cz
+    let idx = cellIndex.get(key)
+    if (idx === undefined) {
+      idx = counts.length
+      cellIndex.set(key, idx)
+      sums.push(0, 0, 0)
+      counts.push(0)
+    }
+    cellOf[v] = idx
+    sums[idx * 3] += positions[v * 3]
+    sums[idx * 3 + 1] += positions[v * 3 + 1]
+    sums[idx * 3 + 2] += positions[v * 3 + 2]
+    counts[idx]++
+  }
+  const outPositions = new Float32Array(counts.length * 3)
+  for (let c = 0; c < counts.length; c++) {
+    outPositions[c * 3] = sums[c * 3] / counts[c]
+    outPositions[c * 3 + 1] = sums[c * 3 + 1] / counts[c]
+    outPositions[c * 3 + 2] = sums[c * 3 + 2] / counts[c]
+  }
+  const outIndices: number[] = []
+  for (let t = 0; t < indices.length; t += 3) {
+    const a = cellOf[indices[t]]
+    const b = cellOf[indices[t + 1]]
+    const c = cellOf[indices[t + 2]]
+    if (a !== b && b !== c && a !== c) outIndices.push(a, b, c)
+  }
+  return { positions: outPositions, normals: new Float32Array(0), indices: Uint32Array.from(outIndices) }
+}
+
+/** Порог граней, выше которого перед SimplifyModifier идёт clusterDecimate */
+export const CLUSTER_THRESHOLD_TRIANGLES = 120000
+/** Разрешение сетки предпрореживания: ~50k граней на выходе у замкнутого тела */
+const CLUSTER_RESOLUTION = 96
 
 /**
  * Центрирование по объёмному центроиду (сумма ориентированных тетраэдров
@@ -138,7 +298,19 @@ export function centerAndNormalize(mesh: RawMesh): Float32Array {
  * снимает заданное число вершин; у замкнутого меша V ≈ F/2 + 2). Меш беднее
  * цели остаётся как есть. Нормали — сглаженные, из three (взвешены площадью).
  */
-export function decimateToTriangles(positions: Float32Array, indices: Uint32Array, targetTriangles: number): ShapeModelData {
+export function decimateToTriangles(
+  positions: Float32Array,
+  indices: Uint32Array,
+  targetTriangles: number,
+  clusterThreshold: number = CLUSTER_THRESHOLD_TRIANGLES
+): ShapeModelData {
+  // Многомиллионные модели сначала грубо режутся сеткой ячеек — O(n)
+  if (indices.length / 3 > clusterThreshold) {
+    const clustered = clusterDecimate(positions, indices, CLUSTER_RESOLUTION)
+    positions = clustered.positions
+    indices = clustered.indices
+  }
+
   const source = new BufferGeometry()
   source.setAttribute('position', new BufferAttribute(positions.slice(), 3))
   source.setIndex(new BufferAttribute(indices.slice(), 1))
