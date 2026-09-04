@@ -18,7 +18,12 @@ describe('TerrainMacroDetail: контракт чанка', () => {
       'uniform float uMacroTextureWarp;',
       'uniform vec2 uMacroFadeRange;',
       'uniform vec2 uDiffuseTexelSize;',
-      'uniform float uBodyRadiusUnits;'
+      'uniform float uBodyRadiusUnits;',
+      'uniform float uMacroStreakStrength;',
+      'uniform float uMacroStreakPeriodUnits;',
+      'uniform float uMacroTerraceStrength;',
+      'uniform float uMacroTerraceStepMeters;',
+      'varying float vHeightMeters;'
     ]) {
       expect(terrainMacroDetailUniforms).toContain(name)
     }
