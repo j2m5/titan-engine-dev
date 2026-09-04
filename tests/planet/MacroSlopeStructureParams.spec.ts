@@ -24,5 +24,6 @@ describe('resolveMacroSlopeStructureParams: ручки форм склона', (
     expect(() => resolveMacroSlopeStructureParams({ macroStreakScaleKm: 0 }, 'Титания')).toThrow(/macroStreakScaleKm/)
     expect(() => resolveMacroSlopeStructureParams({ macroTerraceStepMeters: -5 }, 'Титания')).toThrow(/macroTerraceStepMeters/)
     expect(() => resolveMacroSlopeStructureParams({ macroTerraceStrength: 'x' }, 'Титания')).toThrow(/не число/)
+    expect(() => resolveMacroSlopeStructureParams({ macroTerraceStrength: -1 }, 'Титания')).toThrow(/macroTerraceStrength/)
   })
 })

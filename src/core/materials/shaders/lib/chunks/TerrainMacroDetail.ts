@@ -54,7 +54,9 @@ export const terrainMacroDetailFunctions = /* glsl */ `
   }
 
   // Струи одной плоскости трипланара: uv — координаты плоскости в периодах,
-  // d2 — единичная проекция «вниз по склону». x — значение, yz — градиент по uv
+  // d2 — единичная проекция «вниз по склону». x — значение, yz — градиент по uv.
+  // Цепное правило при замороженном d2 (поворот базиса по склону не
+  // дифференцируется — d меняется на масштабе текселя ≥ 1.3 км против периода 0.5 км)
   vec3 streakPlane(vec2 uv, vec2 d2, float seed) {
     vec2 p2 = vec2(-d2.y, d2.x);
     vec4 n = snoiseGrad(vec3(dot(uv, d2) / STREAK_STRETCH, dot(uv, p2), seed));
@@ -66,7 +68,7 @@ export const terrainMacroDetailFunctions = /* glsl */ `
   // отсюда 2D-чарты по осям тела. Внутри нет экранных производных: ветвление
   // по весам плоскостей безопасно. qs — домен струй (след посчитан хостом),
   // s — нормированный уклон, contrast/distFade — множители полосы
-  void applyMacroSlopeStructures(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 eastLocal, vec2 slope, float s, float contrast, float distFade, vec3 qs, float streakWeight, float fbmValue) {
+  void applyMacroSlopeStructures(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 eastLocal, vec2 slope, float s, float contrast, float distFade, vec3 qs, float streakWeight, float terraceWeight, float fbmValue) {
     float gate = smoothstep(0.35, 1.0, s);
     if (gate <= 0.0) return;
     float slopeLen = length(slope);
@@ -119,11 +121,13 @@ export const terrainMacroDetailFunctions = /* glsl */ `
     }
 
     if (uMacroTerraceStrength > 0.0) {
+      // Производная берётся по h; член вобла TERRACE_WOBBLE·∇fbm (~6 % при
+      // дефолтах) намеренно опущен
       vec2 tp = terraceProfile(vHeightMeters / max(uMacroTerraceStepMeters, 1e-3) + TERRACE_WOBBLE * fbmValue);
-      float k = uMacroTerraceStrength * gate * distFade;
+      float k = uMacroTerraceStrength * gate * distFade * terraceWeight;
       // площадка (tp.y = −1) положе, уступ круче — модуляция собственного уклона
       nLocal = normalize(nLocal - k * tp.y * slopeVec);
-      albedoMul *= 1.0 - TERRACE_SHADE * k * max(tp.x, 0.0);
+      albedoMul *= max(1.0 - TERRACE_SHADE * k * max(tp.x, 0.0), 0.0);
     }
   }
 
@@ -151,9 +155,14 @@ export const terrainMacroDetailFunctions = /* glsl */ `
     vec3 q = dirLocal * (uBodyRadiusUnits / max(uMacroPeriodUnits, 1e-6));
     float footprint = length(fwidth(q));
 
-    // Домен и след струй — тоже до всех ранних выходов (однородный поток в кваде)
+    // Домен и след струй — тоже до всех ранних выходов (однородный поток в кваде).
+    // Домен через единичный dir: квант float32 ≈ 0.2 м при периоде 0.5 км;
+    // период ниже ~0.2 км вернёт артефакт класса tile-jitter (см. detailPos)
     vec3 qs = dirLocal * (uBodyRadiusUnits / max(uMacroStreakPeriodUnits, 1e-9));
     float streakWeight = 1.0 - smoothstep(0.5, 1.0, length(fwidth(qs)));
+
+    // След террас: шаг фазы на пиксель = fwidth(высоты)/step; полоса тоньше ~2 px гаснет
+    float terraceWeight = 1.0 - smoothstep(0.5, 1.0, fwidth(vHeightMeters) / max(uMacroTerraceStepMeters, 1e-3));
 
     float eastLen = length(eastLocal);
     if (eastLen < 1e-4) return; // полюс: тангенс вырожден
@@ -187,6 +196,6 @@ export const terrainMacroDetailFunctions = /* glsl */ `
 
     albedoMul *= clamp(1.0 + uMacroStrength * contrast * h, 0.0, 2.0);
 
-    applyMacroSlopeStructures(nLocal, albedoMul, dirLocal, eastLocal, slope, s, contrast, distFade, qs, streakWeight, h);
+    applyMacroSlopeStructures(nLocal, albedoMul, dirLocal, eastLocal, slope, s, contrast, distFade, qs, streakWeight, terraceWeight, h);
   }
 `

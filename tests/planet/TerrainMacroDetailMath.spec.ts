@@ -103,6 +103,11 @@ describe('terrainMacroDetailMath: направленные формы склон
     expect(terraceProfile(TERRACE_RISER / 2).derivative).toBeGreaterThan(0)
   })
 
+  it('фаза отрицательная — эквивалент fract (period 1): значение и производная совпадают со смещённой на период', () => {
+    expect(terraceProfile(-0.1).value).toBeCloseTo(terraceProfile(0.9).value, 9)
+    expect(terraceProfile(-0.1).derivative).toBeCloseTo(terraceProfile(0.9).derivative, 9)
+  })
+
   it('производная профиля совпадает с конечной разностью', () => {
     for (const phase of [0.05, 0.15, 0.29, 0.5, 0.9]) {
       const h = 1e-5

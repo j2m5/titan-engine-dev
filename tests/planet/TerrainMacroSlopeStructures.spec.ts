@@ -18,13 +18,13 @@ const fn: string = terrainMacroDetailFunctions
 
 describe('TerrainMacroDetail: направленные формы склона (арка A)', () => {
   it('константы чанка равны зеркалу', () => {
-    expect(fn).toContain(`#define STREAK_STRETCH ${STREAK_STRETCH.toFixed(1)}`)
-    expect(fn).toContain(`#define MACRO_RELIEF_ASPECT_STREAK ${MACRO_RELIEF_ASPECT_STREAK}`)
-    expect(fn).toContain(`#define STREAK_PLANE_POW ${STREAK_PLANE_POW.toFixed(1)}`)
-    expect(fn).toContain(`#define STREAK_PLANE_MIN_WEIGHT ${STREAK_PLANE_MIN_WEIGHT}`)
-    expect(fn).toContain(`#define TERRACE_WOBBLE ${TERRACE_WOBBLE}`)
-    expect(fn).toContain(`#define TERRACE_RISER ${TERRACE_RISER}`)
-    expect(fn).toContain(`#define TERRACE_SHADE ${TERRACE_SHADE}`)
+    expect(fn).toContain(`#define STREAK_STRETCH ${STREAK_STRETCH.toFixed(1)}\n`)
+    expect(fn).toContain(`#define MACRO_RELIEF_ASPECT_STREAK ${MACRO_RELIEF_ASPECT_STREAK}\n`)
+    expect(fn).toContain(`#define STREAK_PLANE_POW ${STREAK_PLANE_POW.toFixed(1)}\n`)
+    expect(fn).toContain(`#define STREAK_PLANE_MIN_WEIGHT ${STREAK_PLANE_MIN_WEIGHT}\n`)
+    expect(fn).toContain(`#define TERRACE_WOBBLE ${TERRACE_WOBBLE}\n`)
+    expect(fn).toContain(`#define TERRACE_RISER ${TERRACE_RISER}\n`)
+    expect(fn).toContain(`#define TERRACE_SHADE ${TERRACE_SHADE}\n`)
   })
 
   it('юниформы форм и varying высоты объявлены в блоке чанка', () => {
@@ -73,11 +73,22 @@ describe('TerrainMacroDetail: направленные формы склона (
     const terr = fn.slice(fn.indexOf('vec2 tp = terraceProfile('), fn.indexOf('TERRACE_SHADE * k'))
     expect(terr).toContain('vHeightMeters / max(uMacroTerraceStepMeters, 1e-3) + TERRACE_WOBBLE * fbmValue')
     expect(terr).toContain('tp.y * slopeVec')
+    expect(terr).toContain('* terraceWeight')
     expect(terr).not.toContain('vPosition')
   })
 
+  it('гейт террас по экранному следу: считается до полярного выхода, входит в k террас', () => {
+    const line = 'float terraceWeight = 1.0 - smoothstep(0.5, 1.0, fwidth(vHeightMeters) / max(uMacroTerraceStepMeters, 1e-3));'
+    const terraceWeightDecl = fn.indexOf(line)
+    const polar = fn.indexOf('if (eastLen < 1e-4) return;')
+    expect(terraceWeightDecl).toBeGreaterThan(-1)
+    expect(terraceWeightDecl).toBeLessThan(polar)
+    expect(fn).toContain('float terraceWeight')
+    expect(fn).toContain('uMacroTerraceStrength * gate * distFade * terraceWeight')
+  })
+
   it('в функциях форм нет экранных производных по шуму', () => {
-    const structures = fn.slice(fn.indexOf('void applyMacroSlopeStructures('), fn.indexOf('vec4 macroFbm('))
+    const structures = fn.slice(fn.indexOf('vec2 terraceProfile('), fn.indexOf('vec4 macroFbm('))
     expect(structures).not.toMatch(/dFd[xy]\(/)
     expect(structures).not.toContain('fwidth(')
   })
