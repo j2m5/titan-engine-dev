@@ -41,17 +41,31 @@ export interface AsteroidProfile {
   /**
    * Пропорции морфологий в библиотеке архетипов породы (сумма ≈ 1):
    * fragment — осколок Вороного (свежий скол/удар), rubble — слипшиеся
-   * лобы (гравитационная переупаковка), cratered — монолит с чашами (старая
-   * поверхность). Каменные/углистые тела чаще дробятся при столкновениях
-   * (выше fragment/rubble); металл держит форму монолита лучше камня —
-   * cratered/fragment сопоставимы с камнем, rubble ниже; лёд колется свежими
-   * расколами чаще, чем накапливает rubble-переупаковку.
+   * лобы (гравитационная переупаковка), binary — контактная двойная с
+   * перемычкой (Итокава), top — волчок с экваториальным гребнем (Бенну),
+   * cratered — монолит с чашами (старая поверхность). Каменные/углистые тела
+   * чаще дробятся при столкновениях (выше fragment/rubble); металл держит
+   * форму монолита и волчков из щебня не образует (top 0); лёд колется свежими
+   * расколами чаще, чем накапливает rubble-переупаковку. Порядок ключей задаёт
+   * раскладку индексов библиотеки (см. ArchetypeLibrary.MORPHOLOGY_ORDER).
    */
   morphologyWeights: {
     fragment: number
     rubble: number
+    binary: number
+    top: number
     cratered: number
   }
+  /**
+   * Реальные модели форм малых тел (имена бинарников `asteroids/shapes/<имя>_*.bin`,
+   * см. ShapeModelFormat и scripts/build-shape-models.ts). Занимают хвост
+   * библиотеки архетипов долей realShare, список идёт по кругу, если слотов
+   * больше моделей. Подбор по породе: каменные и углистые — астероиды своих
+   * спектральных классов, металл — M-класс, лёд — малые ледяные спутники.
+   */
+  shapeModels: string[]
+  /** Доля библиотеки под реальные модели, 0..1 (0 — только процедурные) */
+  realShare: number
   /**
    * Базовое имя PBR-сета трипланарных детальных карт (файлы вида
    * `asteroids/<detailSet>_{diff,nor_gl,arm}_2k.jpg`). Сет пер-профильный,
@@ -73,7 +87,9 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
     specularStrength: 0.05, specularPower: 8.0, specularTint: 0.0,
     freshnessBrighten: 0.15, cavityShade: 0.5,
     lunarMix: 0.8, oppositionSurge: 0.3,
-    morphologyWeights: { fragment: 0.6, rubble: 0.25, cratered: 0.15 },
+    morphologyWeights: { fragment: 0.5, rubble: 0.2, binary: 0.1, top: 0.05, cratered: 0.15 },
+    shapeModels: ['itokawa', 'eros', 'gaspra', 'ida', 'steins', 'lutetia', 'toutatis'],
+    realShare: 0.5,
     detailSet: 'rock_boulder_dry'
   },
   // Углистый — очень тёмный, матовый
@@ -83,7 +99,9 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
     specularStrength: 0.0, specularPower: 8.0, specularTint: 0.0,
     freshnessBrighten: 0.1, cavityShade: 0.5,
     lunarMix: 0.9, oppositionSurge: 0.4,
-    morphologyWeights: { fragment: 0.5, rubble: 0.35, cratered: 0.15 },
+    morphologyWeights: { fragment: 0.4, rubble: 0.3, binary: 0.1, top: 0.05, cratered: 0.15 },
+    shapeModels: ['bennu', 'mathilde'],
+    realShare: 0.5,
     detailSet: 'rock_boulder_dry'
   },
   // Железный — тёплый серый, резкий окрашенный блик
@@ -93,7 +111,9 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
     specularStrength: 0.6, specularPower: 48.0, specularTint: 0.8,
     freshnessBrighten: 0.2, cavityShade: 0.5,
     lunarMix: 0.4, oppositionSurge: 0.15,
-    morphologyWeights: { fragment: 0.7, rubble: 0.15, cratered: 0.15 },
+    morphologyWeights: { fragment: 0.65, rubble: 0.1, binary: 0.1, top: 0, cratered: 0.15 },
+    shapeModels: ['kleopatra'],
+    realShare: 0.5,
     detailSet: 'rock_boulder_dry'
   },
   // Ледяной — голубовато-белый, мягкий блик
@@ -103,7 +123,9 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
     specularStrength: 0.5, specularPower: 12.0, specularTint: 0.0,
     freshnessBrighten: 0.3, cavityShade: 0.35,
     lunarMix: 0.5, oppositionSurge: 0.2,
-    morphologyWeights: { fragment: 0.7, rubble: 0.2, cratered: 0.1 },
+    morphologyWeights: { fragment: 0.6, rubble: 0.15, binary: 0.1, top: 0.05, cratered: 0.1 },
+    shapeModels: ['epimetheus', 'janus', 'pandora', 'prometheus', 'phobos', 'deimos'],
+    realShare: 0.5,
     detailSet: 'rocks_ground_04'
   }
 }

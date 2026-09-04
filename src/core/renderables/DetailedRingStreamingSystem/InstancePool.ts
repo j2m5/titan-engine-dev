@@ -211,6 +211,32 @@ class InstancePool {
     }
   }
 
+  /**
+   * Подменить геометрию архетипа k в L0- и Near-стримах — приход реальной
+   * модели формы (см. ShapeModelStorage) на место процедурной заглушки.
+   * Меш, его матрицы инстансов и буфер instanceFade остаются теми же: меняется
+   * только источник вершин. Старая геометрия стрима освобождается; исходные
+   * геометрии библиотеки (кэш) не трогаются.
+   */
+  public replaceArchetypeGeometry(k: number, l0Geometry: BufferGeometry, nearGeometry: BufferGeometry): void {
+    this.__swapStreamGeometry(this.geometryMeshes[k], l0Geometry)
+    this.__swapStreamGeometry(this.nearMeshes[k], nearGeometry)
+  }
+
+  private __swapStreamGeometry(mesh: InstancedMesh | undefined, source: BufferGeometry): void {
+    if (!mesh) return
+    const old = mesh.geometry
+    const fade = old.getAttribute('instanceFade')
+    const streamGeometry = new BufferGeometry()
+    for (const attrName of Object.keys(source.attributes)) {
+      streamGeometry.setAttribute(attrName, source.getAttribute(attrName))
+    }
+    if (source.getIndex() !== null) streamGeometry.setIndex(source.getIndex())
+    streamGeometry.setAttribute('instanceFade', fade)
+    mesh.geometry = streamGeometry
+    old.dispose()
+  }
+
   /** Количество Geometry-стримов (K архетипов). */
   public get geometryStreamCount(): number {
     return this.geometryMeshes.length

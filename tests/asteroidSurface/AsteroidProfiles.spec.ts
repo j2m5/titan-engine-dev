@@ -31,18 +31,19 @@ describe('ASTEROID_PROFILES', () => {
     for (const profile of Object.values(ASTEROID_PROFILES)) {
       const w = profile.morphologyWeights
       expect(w).toBeDefined()
-      expect(typeof w.fragment).toBe('number')
-      expect(typeof w.rubble).toBe('number')
-      expect(typeof w.cratered).toBe('number')
-      expect(w.fragment + w.rubble + w.cratered).toBeCloseTo(1, 10)
+      for (const m of ['fragment', 'rubble', 'binary', 'top', 'cratered'] as const) {
+        expect(typeof w[m]).toBe('number')
+      }
+      expect(w.fragment + w.rubble + w.binary + w.top + w.cratered).toBeCloseTo(1, 10)
     }
   })
 
-  it('ожидаемые пропорции морфологий по спеке (fragment/rubble/cratered)', () => {
-    expect(ASTEROID_PROFILES.stony.morphologyWeights).toEqual({ fragment: 0.6, rubble: 0.25, cratered: 0.15 })
-    expect(ASTEROID_PROFILES.carbonaceous.morphologyWeights).toEqual({ fragment: 0.5, rubble: 0.35, cratered: 0.15 })
-    expect(ASTEROID_PROFILES.metallic.morphologyWeights).toEqual({ fragment: 0.7, rubble: 0.15, cratered: 0.15 })
-    expect(ASTEROID_PROFILES.icy.morphologyWeights).toEqual({ fragment: 0.7, rubble: 0.2, cratered: 0.1 })
+  it('ожидаемые пропорции морфологий: осколок/rubble/двойная/волчок/кратерный', () => {
+    expect(ASTEROID_PROFILES.stony.morphologyWeights).toEqual({ fragment: 0.5, rubble: 0.2, binary: 0.1, top: 0.05, cratered: 0.15 })
+    expect(ASTEROID_PROFILES.carbonaceous.morphologyWeights).toEqual({ fragment: 0.4, rubble: 0.3, binary: 0.1, top: 0.05, cratered: 0.15 })
+    // Металл держит монолит, волчков из слипшегося щебня не образует
+    expect(ASTEROID_PROFILES.metallic.morphologyWeights).toEqual({ fragment: 0.65, rubble: 0.1, binary: 0.1, top: 0, cratered: 0.15 })
+    expect(ASTEROID_PROFILES.icy.morphologyWeights).toEqual({ fragment: 0.6, rubble: 0.15, binary: 0.1, top: 0.05, cratered: 0.1 })
   })
 
   it('freshnessBrighten и cavityShade по спеке (свежий скол/днища кратеров)', () => {

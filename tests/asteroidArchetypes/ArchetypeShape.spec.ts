@@ -82,6 +82,8 @@ describe('ArchetypeShape.radiusAt: свойства радиальной фун�
       noiseFreq: 3,
       seed: 1,
       normalization: 1, // без нормализации: проверяем геометрию среза как есть
+      ridgeAmp: 0,
+      ridgeWidth: 0,
       morphology: 'fragment',
       lobes: [],
       craters: []
@@ -113,6 +115,8 @@ describe('ArchetypeShape.radiusAt: свойства радиальной фун�
       noiseFreq: 3,
       seed: 1,
       normalization: 1,
+      ridgeAmp: 0,
+      ridgeWidth: 0,
       morphology: 'fragment',
       lobes: [],
       craters: []
@@ -185,6 +189,8 @@ describe('ArchetypeShape.radiusAt: морфология B — rubble pile', () =
       noiseFreq: 3,
       seed: 1,
       normalization: 1,
+      ridgeAmp: 0,
+      ridgeWidth: 0,
       morphology: 'rubble'
     })
     expect(shape.radiusAt(1, 0, 0)).toBeCloseTo(1.2, 6)
@@ -206,6 +212,8 @@ describe('ArchetypeShape.radiusAt: морфология B — rubble pile', () =
       noiseFreq: 3,
       seed: 1,
       normalization: 1,
+      ridgeAmp: 0,
+      ridgeWidth: 0,
       morphology: 'rubble'
     })
     const along = shape.radiusAt(1, 0, 0) // вдоль линии центров лобов
@@ -252,6 +260,8 @@ describe('ArchetypeShape.surfaceAt: freshness (только морфология
       noiseFreq: 3,
       seed: 1,
       normalization: 1,
+      ridgeAmp: 0,
+      ridgeWidth: 0,
       morphology: 'fragment',
       lobes: [],
       craters: []
@@ -275,6 +285,8 @@ describe('ArchetypeShape.surfaceAt: freshness (только морфология
       noiseFreq: 3,
       seed: 1,
       normalization: 1,
+      ridgeAmp: 0,
+      ridgeWidth: 0,
       morphology: 'fragment',
       lobes: [],
       craters: []
@@ -333,6 +345,8 @@ describe('ArchetypeShape.surfaceAt: cavity (только морфология C)
       noiseFreq: 3,
       seed: 1,
       normalization: 1,
+      ridgeAmp: 0,
+      ridgeWidth: 0,
       morphology: 'cratered'
     })
     expect(shape.surfaceAt(0, 0, 1).cavity).toBeGreaterThan(0.3)
@@ -413,6 +427,8 @@ describe('ArchetypeShape.radiusAt: морфология C — кратерный
       noiseFreq: 3,
       seed: 1,
       normalization: 1,
+      ridgeAmp: 0,
+      ridgeWidth: 0,
       morphology: 'cratered'
     })
     // База без кратеров: единичный эллипсоид, r(0,0,1) = 1 (та же ось axes=[1,1,1])
@@ -434,6 +450,8 @@ describe('ArchetypeShape.radiusAt: морфология C — кратерный
       noiseFreq: 3,
       seed: 1,
       normalization: 1,
+      ridgeAmp: 0,
+      ridgeWidth: 0,
       morphology: 'cratered'
     })
     // Направление на угловом расстоянии u=0.9·angularRadius от центра [0,0,1]:
@@ -458,6 +476,8 @@ describe('ArchetypeShape.radiusAt: морфология C — кратерный
       noiseFreq: 3,
       seed: 1,
       normalization: 1,
+      ridgeAmp: 0,
+      ridgeWidth: 0,
       morphology: 'cratered'
     })
     const shapeNoCrater = new ArchetypeShape({
@@ -470,6 +490,8 @@ describe('ArchetypeShape.radiusAt: морфология C — кратерный
       noiseFreq: 3,
       seed: 1,
       normalization: 1,
+      ridgeAmp: 0,
+      ridgeWidth: 0,
       morphology: 'cratered'
     })
     // u = 1.1 > 1 → направление строго за краем кратера
@@ -480,5 +502,131 @@ describe('ArchetypeShape.radiusAt: морфология C — кратерный
       shapeNoCrater.radiusAt(sinTheta, 0, cosTheta),
       9
     )
+  })
+})
+
+describe('generateArchetypeParams: морфология D — контактная двойная (binary)', () => {
+  it('ровно два лоба на оси X, начало координат внутри каждого, лобы разного размера', () => {
+    for (let seed = 0; seed < 20; seed++) {
+      const p = generateArchetypeParams(new SeededRandom(seed), 'binary')
+      expect(p.morphology).toBe('binary')
+      expect(p.planes).toEqual([])
+      expect(p.craters).toEqual([])
+      expect(p.lobes.length).toBe(2)
+      const [big, small] = p.lobes
+      // Разведены по X в разные стороны — перемычка между ними
+      expect(big.center[0]).toBeGreaterThan(0)
+      expect(small.center[0]).toBeLessThan(0)
+      expect(big.center[1]).toBe(0)
+      expect(big.center[2]).toBe(0)
+      // Начало внутри лоба: Σ (c/axes)² < 1 — звёздность каждого лоба и объединения
+      for (const lobe of p.lobes) {
+        const inside =
+          (lobe.center[0] / lobe.axes[0]) ** 2 + (lobe.center[1] / lobe.axes[1]) ** 2 + (lobe.center[2] / lobe.axes[2]) ** 2
+        expect(inside).toBeLessThan(1)
+        // Центр разведён заметно: не меньше 55% полуоси вдоль X (иначе это rubble, а не двойная)
+        expect(Math.abs(lobe.center[0]) / lobe.axes[0]).toBeGreaterThanOrEqual(0.55 - 1e-9)
+      }
+      // Голова меньше тела: отношение полуосей 0.6–0.9
+      const ratio = small.axes[0] / big.axes[0]
+      expect(ratio).toBeGreaterThanOrEqual(0.6 - 1e-9)
+      expect(ratio).toBeLessThanOrEqual(0.9 + 1e-9)
+    }
+  })
+
+  it('одинаковый сид → побитово одинаковые параметры (детерминизм)', () => {
+    expect(generateArchetypeParams(new SeededRandom(7), 'binary')).toEqual(
+      generateArchetypeParams(new SeededRandom(7), 'binary')
+    )
+  })
+})
+
+describe('ArchetypeShape.radiusAt: морфология D — контактная двойная', () => {
+  it('звёздность и нормализация генерализуются на чужую сетку (икосфера)', () => {
+    for (let seed = 0; seed < 8; seed++) {
+      const shape = new ArchetypeShape(generateArchetypeParams(new SeededRandom(seed), 'binary'))
+      let max = 0
+      for (const [x, y, z] of sphereDirs(3)) {
+        const r = shape.radiusAt(x, y, z)
+        expect(r).toBeGreaterThan(0)
+        expect(r).toBeLessThanOrEqual(1.03)
+        if (r > max) max = r
+      }
+      expect(max).toBeGreaterThan(0.95)
+    }
+  })
+
+  it('перемычка: радиус поперёк оси в плоскости шейки меньше радиуса вдоль оси и радиусов над центрами лобов', () => {
+    for (let seed = 0; seed < 8; seed++) {
+      const params = generateArchetypeParams(new SeededRandom(seed), 'binary')
+      const shape = new ArchetypeShape({ ...params, noiseAmp: 0 })
+      const alongPlus = shape.radiusAt(1, 0, 0)
+      const alongMinus = shape.radiusAt(-1, 0, 0)
+      const neckY = shape.radiusAt(0, 1, 0)
+      const neckZ = shape.radiusAt(0, 0, 1)
+      expect(neckY).toBeLessThan(alongPlus)
+      expect(neckY).toBeLessThan(alongMinus)
+      expect(neckZ).toBeLessThan(alongPlus)
+      // Тело (большой лоб, +X) дальше от центра, чем голова (−X)
+      expect(alongPlus).toBeGreaterThan(alongMinus)
+    }
+  })
+})
+
+describe('generateArchetypeParams: морфология E — волчок (top, экваториальный гребень)', () => {
+  it('сплюснутый эллипсоид с полярной осью Y и гребнем в диапазонах', () => {
+    for (let seed = 0; seed < 20; seed++) {
+      const p = generateArchetypeParams(new SeededRandom(seed), 'top')
+      expect(p.morphology).toBe('top')
+      expect(p.planes).toEqual([])
+      expect(p.lobes).toEqual([])
+      expect(p.craters).toEqual([])
+      // Экваториальные полуоси равны, полярная меньше
+      expect(p.axes[0]).toBe(p.axes[2])
+      expect(p.axes[1]).toBeLessThan(p.axes[0])
+      expect(p.ridgeAmp).toBeGreaterThanOrEqual(0.06 - 1e-9)
+      expect(p.ridgeAmp).toBeLessThanOrEqual(0.14 + 1e-9)
+      expect(p.ridgeWidth).toBeGreaterThan(0)
+    }
+  })
+
+  it('морфологии A/B/C несут нулевой гребень', () => {
+    for (const m of ['fragment', 'rubble', 'cratered'] as const) {
+      const p = generateArchetypeParams(new SeededRandom(3), m)
+      expect(p.ridgeAmp).toBe(0)
+    }
+  })
+})
+
+describe('ArchetypeShape.radiusAt: морфология E — волчок', () => {
+  it('звёздность и нормализация генерализуются на чужую сетку (икосфера)', () => {
+    for (let seed = 0; seed < 8; seed++) {
+      const shape = new ArchetypeShape(generateArchetypeParams(new SeededRandom(seed), 'top'))
+      let max = 0
+      for (const [x, y, z] of sphereDirs(3)) {
+        const r = shape.radiusAt(x, y, z)
+        expect(r).toBeGreaterThan(0)
+        expect(r).toBeLessThanOrEqual(1.03)
+        if (r > max) max = r
+      }
+      expect(max).toBeGreaterThan(0.95)
+    }
+  })
+
+  it('гребень: экватор шире эллипсоида без гребня, широта 30° и полюс — нет', () => {
+    for (let seed = 0; seed < 8; seed++) {
+      const params = generateArchetypeParams(new SeededRandom(seed), 'top')
+      const ridged = new ArchetypeShape({ ...params, noiseAmp: 0, normalization: 1 })
+      const plain = new ArchetypeShape({ ...params, noiseAmp: 0, ridgeAmp: 0, normalization: 1 })
+      const eqRatio = ridged.radiusAt(1, 0, 0) / plain.radiusAt(1, 0, 0)
+      expect(eqRatio).toBeCloseTo(1 + params.ridgeAmp, 6)
+      const lat30 = Math.sin(Math.PI / 6)
+      const cos30 = Math.cos(Math.PI / 6)
+      const midRatio = ridged.radiusAt(cos30, lat30, 0) / plain.radiusAt(cos30, lat30, 0)
+      expect(midRatio).toBeLessThan(eqRatio)
+      expect(ridged.radiusAt(0, 1, 0)).toBeCloseTo(plain.radiusAt(0, 1, 0), 3)
+      // Экватор — самое широкое место тела
+      expect(ridged.radiusAt(1, 0, 0)).toBeGreaterThan(ridged.radiusAt(0, 1, 0))
+    }
   })
 })

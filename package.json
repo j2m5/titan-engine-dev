@@ -21,6 +21,7 @@
     "build:ice-archetype": "vite-node scripts/build-ice-archetype.ts --",
     "cloud:manifest": "vite-node scripts/cloud-manifest.ts --",
     "build:archetype-set": "vite-node scripts/build-archetype-set.ts --",
+    "build:shape-models": "vite-node scripts/build-shape-models.ts --",
     "build:terrain-aux": "vite-node scripts/build-terrain-aux.ts --",
     "build:terrain-aux-all": "vite-node scripts/rebuild-terrain-aux.ts --",
     "build:moon-heightmaps": "vite-node scripts/batch-synth-heightmaps.ts --",

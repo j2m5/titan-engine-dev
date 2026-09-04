@@ -1,5 +1,6 @@
 import type { IResource } from '@/core/models/types'
 import { terrainAuxPathFor } from '@/core/terrain/terrainAuxFormat'
+import { shapeModelManifestPaths } from '@/core/renderables/DetailedRingStreamingSystem/archetypes/shapeModelPaths'
 
 /**
  * Манифест облака: точный список файлов под `storage/images/textures`,
@@ -23,7 +24,9 @@ export const CODE_REFERENCED_PATHS: readonly string[] = ['lenscolor.png', 'lenss
  * отсортировано.
  */
 export function cloudManifestPaths(resources: readonly IResource[]): string[] {
-  const paths = new Set<string>(CODE_REFERENCED_PATHS)
+  // Реальные модели форм астероидов: строк в БД нет, имена живут в профилях
+  // породы (AsteroidProfiles.shapeModels), рантайм грузит их сам
+  const paths = new Set<string>([...CODE_REFERENCED_PATHS, ...shapeModelManifestPaths()])
 
   for (const resource of resources) {
     paths.add(resource.path)

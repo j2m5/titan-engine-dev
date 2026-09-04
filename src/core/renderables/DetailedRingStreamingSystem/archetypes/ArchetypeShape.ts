@@ -35,8 +35,13 @@ interface ArchetypeCrater {
   depth: number
 }
 
-/** Морфология архетипа: A — осколок (fragment), B — слипшиеся лобы (rubble), C — кратерный монолит (cratered) */
-type ArchetypeMorphology = 'fragment' | 'rubble' | 'cratered'
+/**
+ * Морфология архетипа: A — осколок (fragment), B — слипшиеся лобы (rubble),
+ * C — кратерный монолит (cratered), D — контактная двойная (binary: два лоба на
+ * оси X с перемычкой, как Итокава/Аррокот), E — волчок (top: сплюснутый
+ * эллипсоид с экваториальным гребнем, как Бенну/Рюгу).
+ */
+type ArchetypeMorphology = 'fragment' | 'rubble' | 'binary' | 'top' | 'cratered'
 
 /**
  * Параметры архетипа-осколка (морфология A спеки): тело = эллипсоид ∩
@@ -69,6 +74,13 @@ interface ArchetypeParams {
   seed: number
   /** Множитель нормализации (max r = 1); 0 = AUTO, другие значения = явный множитель */
   normalization: number
+  /**
+   * Экваториальный гребень волчка (морфология E): амплитуда в долях радиуса и
+   * ширина колокола в единицах синуса широты (полярная ось — Y). У остальных
+   * морфологий 0.
+   */
+  ridgeAmp: number
+  ridgeWidth: number
   /** Морфология тела (см. ArchetypeMorphology) */
   morphology: ArchetypeMorphology
 }
@@ -128,6 +140,8 @@ function generateFragmentParams(rng: SeededRandom): ArchetypeParams {
     noiseFreq: rng.range(2.5, 4),
     seed: rng.int(1, 0x7fffffff),
     normalization: 0,
+    ridgeAmp: 0,
+    ridgeWidth: 0,
     morphology: 'fragment'
   }
 }
@@ -173,6 +187,8 @@ function generateRubbleParams(rng: SeededRandom): ArchetypeParams {
     noiseFreq: rng.range(2.5, 4),
     seed: rng.int(1, 0x7fffffff),
     normalization: 0,
+    ridgeAmp: 0,
+    ridgeWidth: 0,
     morphology: 'rubble'
   }
 }
@@ -216,7 +232,71 @@ function generateCrateredParams(rng: SeededRandom): ArchetypeParams {
     noiseFreq: rng.range(2.5, 4),
     seed: rng.int(1, 0x7fffffff),
     normalization: 0,
+    ridgeAmp: 0,
+    ridgeWidth: 0,
     morphology: 'cratered'
+  }
+}
+
+/**
+ * Сгенерировать параметры контактной двойной (морфология D): два лоба на оси X,
+ * разведённые в разные стороны — тело (+X) и меньшая голова (−X, полуоси в
+ * 0.6–0.9 от тела). Центр каждого лоба на 55–80% его полуоси вдоль X: начало
+ * координат остаётся внутри обоих лобов (Σ(c/axes)² < 1), поэтому объединение
+ * через smooth-max звёздно, а перекрытие мало — получается перемычка, а не
+ * комок rubble. Ось X условна: инстанс поворачивается случайно.
+ */
+function generateBinaryParams(rng: SeededRandom): ArchetypeParams {
+  const bodyAxes: [number, number, number] = [rng.range(0.6, 0.8), rng.range(0.45, 0.65), rng.range(0.45, 0.65)]
+  const ratio = rng.range(0.6, 0.9)
+  const headAxes: [number, number, number] = [bodyAxes[0] * ratio, bodyAxes[1] * ratio, bodyAxes[2] * ratio]
+  const bodyOffset = bodyAxes[0] * rng.range(0.55, 0.8)
+  const headOffset = headAxes[0] * rng.range(0.55, 0.8)
+
+  return {
+    axes: [1, 1, 1],
+    planes: [],
+    lobes: [
+      { center: [bodyOffset, 0, 0], axes: bodyAxes },
+      { center: [-headOffset, 0, 0], axes: headAxes }
+    ],
+    craters: [],
+    // Радиус smooth-max перемычки
+    edgeRadius: rng.range(0.1, 0.18),
+    noiseAmp: rng.range(0.04, 0.08),
+    noiseFreq: rng.range(2.5, 4),
+    seed: rng.int(1, 0x7fffffff),
+    normalization: 0,
+    ridgeAmp: 0,
+    ridgeWidth: 0,
+    morphology: 'binary'
+  }
+}
+
+/**
+ * Сгенерировать параметры волчка (морфология E): сплюснутый эллипсоид с
+ * полярной осью Y (экваториальные полуоси равны, полярная меньше) и
+ * экваториальным гребнем — колокол по синусу широты, амплитуда 6–14% радиуса.
+ * Быстровращающиеся rubble pile (Бенну, Рюгу, Дидим) имеют именно такой
+ * ромбический профиль.
+ */
+function generateTopParams(rng: SeededRandom): ArchetypeParams {
+  const equatorial = rng.range(1.0, 1.12)
+  const polar = rng.range(0.72, 0.9)
+
+  return {
+    axes: [equatorial, polar, equatorial],
+    planes: [],
+    lobes: [],
+    craters: [],
+    edgeRadius: 0,
+    noiseAmp: rng.range(0.03, 0.05),
+    noiseFreq: rng.range(2.5, 4),
+    seed: rng.int(1, 0x7fffffff),
+    normalization: 0,
+    ridgeAmp: rng.range(0.06, 0.14),
+    ridgeWidth: rng.range(0.15, 0.3),
+    morphology: 'top'
   }
 }
 
@@ -229,13 +309,18 @@ function generateArchetypeParams(
   rng: SeededRandom,
   morphology: ArchetypeMorphology = 'fragment'
 ): ArchetypeParams {
-  if (morphology === 'cratered') {
-    return generateCrateredParams(rng)
+  switch (morphology) {
+    case 'cratered':
+      return generateCrateredParams(rng)
+    case 'rubble':
+      return generateRubbleParams(rng)
+    case 'binary':
+      return generateBinaryParams(rng)
+    case 'top':
+      return generateTopParams(rng)
+    default:
+      return generateFragmentParams(rng)
   }
-  if (morphology === 'rubble') {
-    return generateRubbleParams(rng)
-  }
-  return generateFragmentParams(rng)
 }
 
 /**
@@ -274,7 +359,11 @@ class ArchetypeShape {
   private rawSurface(dx: number, dy: number, dz: number): { r: number; freshness: number; cavity: number } {
     switch (this.params.morphology) {
       case 'rubble':
+      case 'binary':
+        // Двойная — те же слипшиеся лобы, разведённые генератором параметров
         return { r: this.rubbleRadius(dx, dy, dz), freshness: 0, cavity: 0 }
+      case 'top':
+        return { r: this.topRadius(dx, dy, dz), freshness: 0, cavity: 0 }
       case 'cratered': {
         const { r, cavity } = this.crateredRadius(dx, dy, dz)
         return { r, freshness: 0, cavity }
@@ -366,6 +455,32 @@ class ArchetypeShape {
     }
 
     // Бугристость поверх слипшихся лобов (тот же fBm-домен, что у морфологии A)
+    if (noiseAmp > 0) {
+      const f = fbm3({ x: dx * noiseFreq, y: dy * noiseFreq, z: dz * noiseFreq }, seed, 2, 2, 0.5)
+      r *= 1 + noiseAmp * f
+    }
+
+    return r
+  }
+
+  /**
+   * Радиус волчка (морфология E) до нормализации: сплюснутый эллипсоид ×
+   * (1 + ridgeAmp · exp(−(sin широты / ridgeWidth)²)) — экваториальный гребень
+   * (полярная ось Y, sin широты = dy), плюс щадящий fBm.
+   */
+  private topRadius(dx: number, dy: number, dz: number): number {
+    const { axes, ridgeAmp, ridgeWidth, noiseAmp, noiseFreq, seed } = this.params
+
+    const ex = dx / axes[0]
+    const ey = dy / axes[1]
+    const ez = dz / axes[2]
+    let r = 1 / Math.sqrt(ex * ex + ey * ey + ez * ez)
+
+    if (ridgeAmp > 0 && ridgeWidth > 0) {
+      const u = dy / ridgeWidth
+      r *= 1 + ridgeAmp * Math.exp(-u * u)
+    }
+
     if (noiseAmp > 0) {
       const f = fbm3({ x: dx * noiseFreq, y: dy * noiseFreq, z: dz * noiseFreq }, seed, 2, 2, 0.5)
       r *= 1 + noiseAmp * f
