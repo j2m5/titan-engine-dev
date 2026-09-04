@@ -113,13 +113,14 @@ interface AsteroidRingConfig {
   dustAnglePower: number
   /** Бюджет шагов марша объёма */
   dustMaxSteps: number
-  /** Детализация икосферы запекания архетипа; 3 ≈ 1280 треугольников */
+  /** Детализация икосферы запекания архетипа: three даёт 20·(detail+1)² граней, 3 → 320 треугольников */
   asteroidShapeDetail: number
   /**
    * Детализация икосферы запекания архетипа для ближнего тира (Near) —
    * отдельная, более высокая ступень detail той же библиотеки архетипов
-   * (тот же профиль/сид, см. getArchetypeGeometries). Выбор Near ещё не
-   * реализован, геометрии уже запекаются.
+   * (тот же профиль/сид, см. getArchetypeGeometries). 7 → 1280 треугольников:
+   * уровень 4 (500) показывал полигональный контур вблизи рядом с реальными
+   * моделями (у них near-ярус 2000); инстансов в Near мало, цена копеечная.
    */
   asteroidShapeNearDetail: number
   /**
@@ -206,7 +207,7 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   dustAnglePower: 2,
   dustMaxSteps: 16,
   asteroidShapeDetail: 3,
-  asteroidShapeNearDetail: 4,
+  asteroidShapeNearDetail: 7,
   archetypeCount: 14,
   shapeAmpMin: 0.03,
   shapeAmpMax: 0.06,
