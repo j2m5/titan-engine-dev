@@ -153,14 +153,28 @@ describe('getArchetypeGeometries: библиотека K архетипов с �
 })
 
 describe('morphologyForIndex: пороговое разбиение архетипов по весам профиля', () => {
-  // (1) K=14, stony: округление даёт 8 fragment / 4 rubble / 2 cratered
-  // (round(14·0.6)=8, round(14·0.85)=12 ⇒ rubble=12-8=4, cratered=14-12=2)
-  it('stony K=14: 8 fragment, 4 rubble, 2 cratered', () => {
-    const counts = { fragment: 0, rubble: 0, cratered: 0 }
+  // (1) K=14, stony 0.5/0.2/0.1/0.05/0.15: кумулятивное округление даёт
+  // ends 7, 10, 11, 12, 14 ⇒ 7 fragment / 3 rubble / 1 binary / 1 top / 2 cratered
+  it('stony K=14: 7 fragment, 3 rubble, 1 binary, 1 top, 2 cratered', () => {
+    const counts = { fragment: 0, rubble: 0, binary: 0, top: 0, cratered: 0 }
     for (let k = 0; k < 14; k++) {
       counts[morphologyForIndex('stony', k, 14)]++
     }
-    expect(counts).toEqual({ fragment: 8, rubble: 4, cratered: 2 })
+    expect(counts).toEqual({ fragment: 7, rubble: 3, binary: 1, top: 1, cratered: 2 })
+  })
+
+  it('порядок категорий в библиотеке: fragment, rubble, binary, top, cratered — индексы контигуальны', () => {
+    const order = ['fragment', 'rubble', 'binary', 'top', 'cratered']
+    let last = -1
+    for (let k = 0; k < 14; k++) {
+      const idx = order.indexOf(morphologyForIndex('stony', k, 14))
+      expect(idx).toBeGreaterThanOrEqual(last)
+      last = idx
+    }
+  })
+
+  it('metallic: вес top равен 0 → волчков в библиотеке нет', () => {
+    for (let k = 0; k < 14; k++) expect(morphologyForIndex('metallic', k, 14)).not.toBe('top')
   })
 
   // (2) k=0 — всегда fragment для любого профиля (преемственность 2a/2b)
@@ -173,29 +187,31 @@ describe('morphologyForIndex: пороговое разбиение архети
     }
   })
 
-  // (3) K=3: каждая морфология (вес > 0 у всех 4 профилей) представлена хотя бы раз
-  it('K=3: каждая морфология представлена хотя бы одним k для всех профилей', () => {
+  // (3) K ≥ числу категорий с ненулевым весом: каждая такая категория представлена хотя бы раз
+  it('K=5: каждая морфология с весом > 0 представлена хотя бы одним k для всех профилей', () => {
     const profiles: AsteroidProfileName[] = ['stony', 'carbonaceous', 'metallic', 'icy']
     for (const profile of profiles) {
+      const w = ASTEROID_PROFILES[profile].morphologyWeights
+      const expected = new Set(Object.entries(w).filter(([, v]) => v > 0).map(([m]) => m))
       const seen = new Set<string>()
-      for (let k = 0; k < 3; k++) {
-        seen.add(morphologyForIndex(profile, k, 3))
+      for (let k = 0; k < 5; k++) {
+        seen.add(morphologyForIndex(profile, k, 5))
       }
-      expect(seen).toEqual(new Set(['fragment', 'rubble', 'cratered']))
+      expect(seen).toEqual(expected)
     }
   })
 })
 
 describe('getArchetypeGeometries: геометрии разных морфологий различаются', () => {
-  it('fragment/rubble/cratered архетипы одного профиля попарно различны', () => {
+  it('архетипы всех пяти морфологий одного профиля попарно различны', () => {
     const detail = 2
     const radius = 0.1
-    // K=3 у stony гарантированно даёт по одному архетипу каждой морфологии
-    // (см. morphologyForIndex K=3), поэтому k=0,1,2 — fragment, rubble, cratered.
-    const geoms = getArchetypeGeometries('stony', 3, detail, radius)
-    expect(morphologyForIndex('stony', 0, 3)).toBe('fragment')
-    expect(morphologyForIndex('stony', 1, 3)).toBe('rubble')
-    expect(morphologyForIndex('stony', 2, 3)).toBe('cratered')
+    // K=5 у stony гарантированно даёт по одному архетипу каждой морфологии
+    // (см. morphologyForIndex K=5)
+    const geoms = getArchetypeGeometries('stony', 5, detail, radius)
+    const seen = new Set<string>()
+    for (let k = 0; k < 5; k++) seen.add(morphologyForIndex('stony', k, 5))
+    expect(seen).toEqual(new Set(['fragment', 'rubble', 'binary', 'top', 'cratered']))
 
     const checkCount = Math.min(30, geoms[0].getAttribute('position').count)
     const posArrays = geoms.map((g) =>

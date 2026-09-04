@@ -357,7 +357,9 @@ class AsteroidRingSystem extends Group {
     const genConfig: GeneratorConfig = {
       thickness,
       minScale: cfg.minScale,
-      maxScale: cfg.maxScale
+      maxScale: cfg.maxScale,
+      // Раскладка по архетипам с учётом размера камня (см. AsteroidGenerator.pickArchetype)
+      profile: cfg.profile
     }
     this.generator = new AsteroidGenerator(genConfig)
 

@@ -5,35 +5,43 @@ import { ArchetypeShape, generateArchetypeParams, type ArchetypeMorphology } fro
 import { buildArchetypeGeometry } from './ArchetypeGeometry'
 
 /**
- * Число архетипов каждой морфологии в библиотеке из `count` штук: пороговое
- * разбиение по кумулятивным весам профиля (round(count·wFragment) первых —
- * fragment, следующие round(count·(wFragment+wRubble)) - fragment — rubble,
- * остаток — cratered). При count ≥ 3 округление может выродить одну из
- * категорий в 0 при ненулевом весе — тогда у неё отбирается один индекс у
- * категории с наибольшим текущим избытком (детерминированно: перебор в
- * порядке fragment → rubble → cratered, наибольший донор побеждает).
+ * Порядок категорий в библиотеке: индексы каждой морфологии контигуальны и идут
+ * в этом порядке. fragment первым — k=0 всегда осколок (преемственность кэша).
  */
-function morphologyCounts(
-  profile: AsteroidProfileName,
-  count: number
-): Record<ArchetypeMorphology, number> {
+const MORPHOLOGY_ORDER: readonly ArchetypeMorphology[] = ['fragment', 'rubble', 'binary', 'top', 'cratered']
+
+/**
+ * Число архетипов каждой морфологии в библиотеке из `count` штук: пороговое
+ * разбиение по кумулятивным весам профиля в порядке MORPHOLOGY_ORDER
+ * (end_j = round(count · Σ_{i≤j} w_i), count_j = end_j − end_{j−1}). Когда
+ * count не меньше числа категорий с ненулевым весом, округление не имеет права
+ * выродить такую категорию в 0 — у неё отбирается один индекс у категории с
+ * наибольшим текущим избытком (детерминированно: перебор в порядке
+ * MORPHOLOGY_ORDER, наибольший донор побеждает).
+ */
+function morphologyCounts(profile: AsteroidProfileName, count: number): Record<ArchetypeMorphology, number> {
   const w = ASTEROID_PROFILES[profile].morphologyWeights
+  const weights = MORPHOLOGY_ORDER.map((m) => w[m])
 
-  const fragmentEnd = Math.round(count * w.fragment)
-  const rubbleEnd = Math.round(count * (w.fragment + w.rubble))
-  const counts = [fragmentEnd, rubbleEnd - fragmentEnd, count - rubbleEnd]
+  const counts: number[] = []
+  let cumulative = 0
+  let prevEnd = 0
+  for (let j = 0; j < weights.length; j++) {
+    cumulative += weights[j]
+    const end = j === weights.length - 1 ? count : Math.round(count * cumulative)
+    counts.push(end - prevEnd)
+    prevEnd = end
+  }
 
-  if (count >= 3) {
-    const weightsArr = [w.fragment, w.rubble, w.cratered]
-    const mins = weightsArr.map((v) => (v > 0 ? 1 : 0))
-    for (let i = 0; i < 3; i++) {
+  const mins: number[] = weights.map((v) => (v > 0 ? 1 : 0))
+  const nonZero = mins.reduce((s: number, v: number) => s + v, 0)
+  if (count >= nonZero) {
+    for (let i = 0; i < counts.length; i++) {
       while (counts[i] < mins[i]) {
         let donor = -1
-        for (let j = 0; j < 3; j++) {
+        for (let j = 0; j < counts.length; j++) {
           if (j === i) continue
-          if (counts[j] > mins[j] && (donor === -1 || counts[j] > counts[donor])) {
-            donor = j
-          }
+          if (counts[j] > mins[j] && (donor === -1 || counts[j] > counts[donor])) donor = j
         }
         if (donor === -1) break
         counts[donor]--
@@ -42,7 +50,41 @@ function morphologyCounts(
     }
   }
 
-  return { fragment: counts[0], rubble: counts[1], cratered: counts[2] }
+  // Преемственность кэша: k=0 всегда осколок. Округление может отдать
+  // единственный индекс другой категории (carbonaceous, count=1: round(0.4)=0) —
+  // тогда индекс забирается у самой крупной категории
+  if (count > 0 && counts[0] === 0) {
+    let donor = 1
+    for (let j = 2; j < counts.length; j++) if (counts[j] > counts[donor]) donor = j
+    counts[donor]--
+    counts[0]++
+  }
+
+  const result = {} as Record<ArchetypeMorphology, number>
+  MORPHOLOGY_ORDER.forEach((m, i) => (result[m] = counts[i]))
+  return result
+}
+
+/** Диапазон индексов библиотеки одной морфологии (start, count); count может быть 0 */
+interface MorphologyRange {
+  morphology: ArchetypeMorphology
+  start: number
+  count: number
+}
+
+/**
+ * Диапазоны индексов библиотеки по морфологиям в порядке MORPHOLOGY_ORDER —
+ * для раскладки инстансов по размеру (см. AsteroidGenerator.pickArchetype).
+ */
+function morphologyRanges(profile: AsteroidProfileName, count: number): MorphologyRange[] {
+  const counts = morphologyCounts(profile, count)
+  const ranges: MorphologyRange[] = []
+  let start = 0
+  for (const morphology of MORPHOLOGY_ORDER) {
+    ranges.push({ morphology, start, count: counts[morphology] })
+    start += counts[morphology]
+  }
+  return ranges
 }
 
 /**
@@ -51,15 +93,11 @@ function morphologyCounts(
  * k=0 всегда 'fragment' (fragment — самая тяжёлая доля во всех профилях,
  * округление даёт ей минимум 1 индекс уже при count=1).
  */
-function morphologyForIndex(
-  profile: AsteroidProfileName,
-  k: number,
-  count: number
-): ArchetypeMorphology {
-  const counts = morphologyCounts(profile, count)
-  if (k < counts.fragment) return 'fragment'
-  if (k < counts.fragment + counts.rubble) return 'rubble'
-  return 'cratered'
+function morphologyForIndex(profile: AsteroidProfileName, k: number, count: number): ArchetypeMorphology {
+  for (const range of morphologyRanges(profile, count)) {
+    if (k < range.start + range.count) return range.morphology
+  }
+  return MORPHOLOGY_ORDER[MORPHOLOGY_ORDER.length - 1]
 }
 
 /**
@@ -93,4 +131,5 @@ function getArchetypeGeometries(
   return geometries
 }
 
-export { getArchetypeGeometries, morphologyForIndex }
+export { getArchetypeGeometries, morphologyForIndex, morphologyRanges, MORPHOLOGY_ORDER }
+export type { MorphologyRange }

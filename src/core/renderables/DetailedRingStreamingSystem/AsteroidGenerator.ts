@@ -1,6 +1,9 @@
 import { SeededRandom, hashSectorKey } from './SeededRandom'
 import type { SectorBounds } from './SectorGrid'
 import { RadialDensityProfile } from './RadialDensityProfile'
+import type { AsteroidProfileName } from './AsteroidProfiles'
+import type { ArchetypeMorphology } from './archetypes/ArchetypeShape'
+import { morphologyRanges, type MorphologyRange } from './archetypes/ArchetypeLibrary'
 
 /**
  * Финализирующая лавинная перемешка (fmix32 из MurmurHash3) поверх hashSectorKey.
@@ -50,6 +53,72 @@ interface GeneratorConfig {
   minScale: number
   /** Максимальный масштаб экземпляра */
   maxScale: number
+  /**
+   * Профиль породы — раскладка инстансов по архетипам с учётом размера (см.
+   * pickArchetype): мелкие камни чаще осколки, крупные — слипшиеся формы.
+   * Без профиля раскладка равновероятна по хешу (archetypeForInstance).
+   */
+  profile?: AsteroidProfileName
+}
+
+/**
+ * Наклон весов морфологий по доле размера t ∈ [0, 1]: осколки (fragment)
+ * убывают с размером 1.6 → 0.4, слипшиеся формы (rubble/binary/top) растут
+ * зеркально 0.4 → 1.6, кратерный монолит без наклона. В реальной популяции
+ * крупные тела — гравитационные агрегаты, мелкие — угловатые обломки.
+ */
+function sizeTilt(morphology: ArchetypeMorphology, t: number): number {
+  switch (morphology) {
+    case 'fragment':
+      return 1.6 - 1.2 * t
+    case 'rubble':
+    case 'binary':
+    case 'top':
+      return 0.4 + 1.2 * t
+    default:
+      return 1
+  }
+}
+
+/**
+ * Выбор архетипа по двум равномерным величинам и доле размера: u1 выбирает
+ * морфологию по весам профиля × наклон размера (диапазоны с count 0 не
+ * участвуют), u2 — равновероятный индекс внутри диапазона морфологии.
+ * Чистая функция — детерминизм и распределение тестируются отдельно.
+ */
+function pickArchetype(u1: number, u2: number, sizeT: number, ranges: readonly MorphologyRange[]): number {
+  const t = Math.min(Math.max(sizeT, 0), 1)
+  let total = 0
+  const weights: number[] = []
+  for (const range of ranges) {
+    const w = range.count > 0 ? ASTEROID_WEIGHT_EPS + sizeTilt(range.morphology, t) * range.count : 0
+    weights.push(w)
+    total += w
+  }
+  if (total <= 0) return 0
+
+  let acc = 0
+  for (let i = 0; i < ranges.length; i++) {
+    acc += weights[i] / total
+    if (u1 < acc || i === ranges.length - 1) {
+      const range = ranges[i]
+      if (range.count <= 0) continue
+      return range.start + Math.min(range.count - 1, Math.floor(u2 * range.count))
+    }
+  }
+  return 0
+}
+
+/**
+ * Веса выбора морфологии — доля библиотеки (count) × наклон размера: доля уже
+ * несёт веса профиля (см. morphologyCounts). Эпсилон держит ненулевой шанс у
+ * категории с одним индексом при экстремальном наклоне.
+ */
+const ASTEROID_WEIGHT_EPS = 1e-6
+
+/** Равномерная величина [0, 1) из хеша — вторая перемешка fmix32 поверх ключа */
+function hashUnit(seed: number, index: number, salt: number): number {
+  return (fmix32(hashSectorKey(seed, index, salt)) >>> 0) / 4294967296
 }
 
 /**
@@ -96,14 +165,46 @@ class AsteroidGenerator {
   }
 
   /**
+   * Раскладка инстансов сектора по архетипам библиотеки (индекс k на инстанс).
+   *
+   * Без профиля — равновероятный хеш archetypeForInstance (прежнее поведение).
+   * С профилем — по размеру камня: доля размера t каждого инстанса читается
+   * реплеем того же rng-потока, что у generateMatricesGrouped (тот же порядок
+   * вызовов, отдельный экземпляр SeededRandom → поток матриц не сдвигается),
+   * морфология выбирается по весам профиля × наклон размера, индекс внутри
+   * морфологии — по хешу (см. pickArchetype). Мелкие камни чаще осколки,
+   * крупные — слипшиеся формы, как в реальной популяции.
+   */
+  public archetypeAssignment(seed: number, count: number, archetypeCount: number): Int32Array {
+    const archetypeOf = new Int32Array(count)
+    const profile = this.config.profile
+    if (!profile) {
+      for (let i = 0; i < count; i++) archetypeOf[i] = archetypeForInstance(seed, i, archetypeCount)
+      return archetypeOf
+    }
+
+    const ranges = morphologyRanges(profile, archetypeCount)
+    const rng = new SeededRandom(seed)
+    for (let i = 0; i < count; i++) {
+      // Реплей потока generateMatricesGrouped: радиус (1), угол (1), высота (2),
+      // повороты (3), затем t = next·next — доля размера, затем анизотропия (3)
+      for (let d = 0; d < 7; d++) rng.next()
+      const t = rng.next() * rng.next()
+      for (let d = 0; d < 3; d++) rng.next()
+      archetypeOf[i] = pickArchetype(hashUnit(seed, i, 0x9e37), hashUnit(seed, i, 0x7f4a), t, ranges)
+    }
+    return archetypeOf
+  }
+
+  /**
    * Генерирует матрицы инстансов и группирует их по номеру архетипа.
    *
-   * Два прохода: сначала хеш archetypeForInstance без обращения к rng — под
-   * каждую группу выделяется Float32Array нужной длины; затем обычный цикл
-   * генерации, матрица пишется в буфер своей группы.
+   * Два прохода: сначала раскладка archetypeAssignment — под каждую группу
+   * выделяется Float32Array нужной длины; затем обычный цикл генерации,
+   * матрица пишется в буфер своей группы.
    *
-   * Раскладка по архетипам не влияет на позиции и повороты камней, потому что
-   * archetypeForInstance не потребляет rng.
+   * Раскладка по архетипам не влияет на позиции и повороты камней: она либо
+   * хеш, либо реплей rng-потока отдельным экземпляром.
    *
    * @param seed — детерминированный seed сектора
    * @param count — количество экземпляров для генерации
@@ -118,14 +219,12 @@ class AsteroidGenerator {
     bounds: SectorBounds,
     archetypeCount: number
   ): Float32Array[] {
-    // Проход 1: только счётчики групп — rng здесь не создаётся и не используется.
+    // Проход 1: раскладка по архетипам (см. archetypeAssignment) — на rng-поток
+    // прохода 2 не влияет: без профиля это хеш, с профилем — реплей того же
+    // потока отдельным экземпляром SeededRandom.
+    const archetypeOf = this.archetypeAssignment(seed, count, archetypeCount)
     const groupCounts = new Array<number>(archetypeCount).fill(0)
-    const archetypeOf = new Int32Array(count)
-    for (let i = 0; i < count; i++) {
-      const k = archetypeForInstance(seed, i, archetypeCount)
-      archetypeOf[i] = k
-      groupCounts[k]++
-    }
+    for (let i = 0; i < count; i++) groupCounts[archetypeOf[i]]++
 
     const groups: Float32Array[] = groupCounts.map((c) => new Float32Array(c * 16))
     const runningOffsets = new Array<number>(archetypeCount).fill(0)
@@ -238,5 +337,5 @@ class AsteroidGenerator {
   }
 }
 
-export { AsteroidGenerator, archetypeForInstance }
+export { AsteroidGenerator, archetypeForInstance, pickArchetype }
 export type { GeneratorConfig }
