@@ -2,8 +2,7 @@ import { SeededRandom, hashSectorKey } from './SeededRandom'
 import type { SectorBounds } from './SectorGrid'
 import { RadialDensityProfile } from './RadialDensityProfile'
 import type { AsteroidProfileName } from './AsteroidProfiles'
-import type { ArchetypeMorphology } from './archetypes/ArchetypeShape'
-import { morphologyRanges, type MorphologyRange } from './archetypes/ArchetypeLibrary'
+import { morphologyRanges, type LibraryCategory, type MorphologyRange } from './archetypes/ArchetypeLibrary'
 
 /**
  * Финализирующая лавинная перемешка (fmix32 из MurmurHash3) поверх hashSectorKey.
@@ -67,13 +66,15 @@ interface GeneratorConfig {
  * зеркально 0.4 → 1.6, кратерный монолит без наклона. В реальной популяции
  * крупные тела — гравитационные агрегаты, мелкие — угловатые обломки.
  */
-function sizeTilt(morphology: ArchetypeMorphology, t: number): number {
+function sizeTilt(morphology: LibraryCategory, t: number): number {
   switch (morphology) {
     case 'fragment':
       return 1.6 - 1.2 * t
     case 'rubble':
     case 'binary':
     case 'top':
+    case 'real':
+      // Реальные модели — формы крупных тел (агрегаты, спутники): как слипшиеся
       return 0.4 + 1.2 * t
     default:
       return 1

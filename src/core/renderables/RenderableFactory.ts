@@ -23,6 +23,7 @@ import { heightPathOf } from '@/core/terrain/heightPath'
 import { BrunetonAtmosphere } from '@/core/renderables/Atmosphere/BrunetonAtmosphere'
 import { Ring } from '@/core/renderables/Ring'
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
+import { shapeModelStorage } from '@/core/renderables/DetailedRingStreamingSystem/archetypes/ShapeModelStorage'
 import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -369,7 +370,7 @@ class RenderableFactory {
     const lod = new LOD()
     const base = new Ring(actor)
     const detailed = new Ring(actor)
-    detailed.add(new AsteroidRingSystem(actor, {}, this.depthVolumeRegistry))
+    detailed.add(new AsteroidRingSystem(actor, {}, this.depthVolumeRegistry, shapeModelStorage))
 
     const distanceLod = toThreeJSUnits(ringData.outerRadius * 2)
 

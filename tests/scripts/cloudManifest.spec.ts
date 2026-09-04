@@ -12,6 +12,13 @@ describe('cloudManifestPaths: список файлов, нужных ранта
     for (const p of CODE_REFERENCED_PATHS) expect(paths).toContain(p)
   })
 
+  it('включает бинарники реальных моделей форм астероидов (имена — из профилей породы, строк в БД нет)', () => {
+    const paths = cloudManifestPaths([])
+    expect(paths).toContain('asteroids/shapes/itokawa_l0.bin')
+    expect(paths).toContain('asteroids/shapes/itokawa_near.bin')
+    expect(paths).toContain('asteroids/shapes/bennu_l0.bin')
+  })
+
   it('каждой height-карте добавляет производный .aux (рантайм выводит путь сам, строки в БД нет)', () => {
     const paths = cloudManifestPaths([{ id: 1, resourceType: 'height', lifecycle: 'resident', path: 'planets/moon/moon_height.raw' }])
 

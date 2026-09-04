@@ -10,7 +10,8 @@ const columnNorm = (buf: Float32Array, i: number): number =>
   Math.hypot(buf[i * 16], buf[i * 16 + 1], buf[i * 16 + 2])
 
 describe('pickArchetype: морфология по доле размера (чистая функция)', () => {
-  const ranges = morphologyRanges('stony', K)
+  // Только процедурная библиотека: доли категорий равны весам профиля
+  const ranges = morphologyRanges('stony', K, { shapeModels: [], realShare: 0 })
 
   it('индексы всегда в [0, K) и внутри диапазона выбранной морфологии', () => {
     for (let i = 0; i < 2000; i++) {

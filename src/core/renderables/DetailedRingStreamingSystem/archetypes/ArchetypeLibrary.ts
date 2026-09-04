@@ -5,10 +5,46 @@ import { ArchetypeShape, generateArchetypeParams, type ArchetypeMorphology } fro
 import { buildArchetypeGeometry } from './ArchetypeGeometry'
 
 /**
- * Порядок категорий в библиотеке: индексы каждой морфологии контигуальны и идут
- * в этом порядке. fragment первым — k=0 всегда осколок (преемственность кэша).
+ * Порядок процедурных категорий в библиотеке: индексы каждой морфологии
+ * контигуальны и идут в этом порядке. fragment первым — k=0 всегда осколок
+ * (преемственность кэша). Реальные модели занимают ХВОСТ библиотеки после них
+ * (категория 'real', см. archetypeLayout).
  */
 const MORPHOLOGY_ORDER: readonly ArchetypeMorphology[] = ['fragment', 'rubble', 'binary', 'top', 'cratered']
+
+/** Категория слота библиотеки: процедурная морфология либо реальная модель формы */
+type LibraryCategory = ArchetypeMorphology | 'real'
+
+/** Настройка реальной части библиотеки (по умолчанию — из профиля) */
+interface RealModelsOverride {
+  shapeModels: readonly string[]
+  realShare: number
+}
+
+/** Раскладка библиотеки: сколько слотов процедурных и какие реальные модели в хвосте */
+interface ArchetypeLayout {
+  proceduralCount: number
+  /** Имена моделей по слотам хвоста (список профиля по кругу) */
+  realModels: string[]
+}
+
+/**
+ * Раскладка библиотеки из `count` слотов: хвост под реальные модели —
+ * round(count · realShare), но не больше count − 1 (k=0 всегда процедурный
+ * осколок) и только при непустом списке; список профиля идёт по кругу, если
+ * слотов больше моделей.
+ */
+function archetypeLayout(profile: AsteroidProfileName, count: number, override?: RealModelsOverride): ArchetypeLayout {
+  const source = override ?? ASTEROID_PROFILES[profile]
+  const names = source.shapeModels
+  const share = source.realShare
+  if (names.length === 0 || share <= 0 || count <= 1) return { proceduralCount: count, realModels: [] }
+
+  const realCount = Math.min(count - 1, Math.max(0, Math.round(count * share)))
+  const realModels: string[] = []
+  for (let i = 0; i < realCount; i++) realModels.push(names[i % names.length])
+  return { proceduralCount: count - realCount, realModels }
+}
 
 /**
  * Число архетипов каждой морфологии в библиотеке из `count` штук: пороговое
@@ -65,39 +101,41 @@ function morphologyCounts(profile: AsteroidProfileName, count: number): Record<A
   return result
 }
 
-/** Диапазон индексов библиотеки одной морфологии (start, count); count может быть 0 */
+/** Диапазон индексов библиотеки одной категории (start, count); count может быть 0 */
 interface MorphologyRange {
-  morphology: ArchetypeMorphology
+  morphology: LibraryCategory
   start: number
   count: number
 }
 
 /**
- * Диапазоны индексов библиотеки по морфологиям в порядке MORPHOLOGY_ORDER —
+ * Диапазоны индексов библиотеки: процедурные категории в порядке
+ * MORPHOLOGY_ORDER по голове (размером proceduralCount), затем хвост 'real' —
  * для раскладки инстансов по размеру (см. AsteroidGenerator.pickArchetype).
  */
-function morphologyRanges(profile: AsteroidProfileName, count: number): MorphologyRange[] {
-  const counts = morphologyCounts(profile, count)
+function morphologyRanges(profile: AsteroidProfileName, count: number, override?: RealModelsOverride): MorphologyRange[] {
+  const layout = archetypeLayout(profile, count, override)
+  const counts = morphologyCounts(profile, layout.proceduralCount)
   const ranges: MorphologyRange[] = []
   let start = 0
   for (const morphology of MORPHOLOGY_ORDER) {
     ranges.push({ morphology, start, count: counts[morphology] })
     start += counts[morphology]
   }
+  ranges.push({ morphology: 'real', start, count: layout.realModels.length })
   return ranges
 }
 
 /**
- * Морфология k-го архетипа библиотеки из `count` штук профиля `profile`
- * (чистая функция — тестируется отдельно от кэша геометрий). Преемственность:
- * k=0 всегда 'fragment' (fragment — самая тяжёлая доля во всех профилях,
- * округление даёт ей минимум 1 индекс уже при count=1).
+ * Категория k-го слота библиотеки из `count` штук профиля `profile` (чистая
+ * функция — тестируется отдельно от кэша геометрий). Преемственность: k=0
+ * всегда 'fragment'; хвост — 'real'.
  */
-function morphologyForIndex(profile: AsteroidProfileName, k: number, count: number): ArchetypeMorphology {
-  for (const range of morphologyRanges(profile, count)) {
+function morphologyForIndex(profile: AsteroidProfileName, k: number, count: number, override?: RealModelsOverride): LibraryCategory {
+  for (const range of morphologyRanges(profile, count, override)) {
     if (k < range.start + range.count) return range.morphology
   }
-  return MORPHOLOGY_ORDER[MORPHOLOGY_ORDER.length - 1]
+  return 'real'
 }
 
 /**
@@ -122,14 +160,19 @@ function getArchetypeGeometries(
   const profileIndex = Object.keys(ASTEROID_PROFILES).indexOf(profile)
   const geometries: BufferGeometry[] = []
   for (let k = 0; k < count; k++) {
-    // Сид согласован с 2a: k=0 воспроизводит прежний единственный архетип
+    // Сид согласован с 2a: k=0 воспроизводит прежний единственный архетип.
+    // Слот реальной модели получает процедурную ЗАГЛУШКУ-осколок: пул строится
+    // сразу, а геометрия стрима подменяется по приходу бинарника
+    // (AsteroidRingSystem → InstancePool.replaceArchetypeGeometry)
+    const category = morphologyForIndex(profile, k, count)
+    const morphology: ArchetypeMorphology = category === 'real' ? 'fragment' : category
     const rng = new SeededRandom(hashSectorKey(0xa57, k, profileIndex))
-    const shape = new ArchetypeShape(generateArchetypeParams(rng, morphologyForIndex(profile, k, count)))
+    const shape = new ArchetypeShape(generateArchetypeParams(rng, morphology))
     geometries.push(buildArchetypeGeometry(shape, detail, radius))
   }
   cache.set(key, geometries)
   return geometries
 }
 
-export { getArchetypeGeometries, morphologyForIndex, morphologyRanges, MORPHOLOGY_ORDER }
-export type { MorphologyRange }
+export { getArchetypeGeometries, morphologyForIndex, morphologyRanges, archetypeLayout, MORPHOLOGY_ORDER }
+export type { MorphologyRange, LibraryCategory, ArchetypeLayout, RealModelsOverride }

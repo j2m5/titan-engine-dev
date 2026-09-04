@@ -16,7 +16,9 @@ import { installRingDustDebug, type RockDustUniforms } from './dust/RingDustDebu
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { ASTEROID_PROFILES, type AsteroidProfileName } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
 import { UpdateContext } from '@/core/UpdateContext'
-import { getArchetypeGeometries } from './archetypes/ArchetypeLibrary'
+import { archetypeLayout, getArchetypeGeometries } from './archetypes/ArchetypeLibrary'
+import type { ShapeModelStorage } from './archetypes/ShapeModelStorage'
+import { shapeModelGeometry } from './archetypes/ShapeModelFormat'
 
 /**
  * Конфигурация системы астероидного кольца
@@ -247,6 +249,12 @@ class AsteroidRingSystem extends Group {
   /** Реестр пасса пыли; null — объём в графе есть, но пасс его не рисует (тесты, автономные сцены) */
   private readonly dustRegistry: DepthVolumeRegistry | null
 
+  /**
+   * Хранилище реальных моделей форм; null — хвост библиотеки остаётся на
+   * процедурных заглушках (тесты, автономные сцены). См. __requestShapeModels.
+   */
+  private readonly shapeModels: ShapeModelStorage | null
+
   // Reusable objects
   private readonly _localCamPos = new Vector3()
   private readonly _worldPos = new Vector3()
@@ -270,11 +278,13 @@ class AsteroidRingSystem extends Group {
   public constructor(
     model: Actor,
     configOverrides: Partial<AsteroidRingConfig> = {},
-    dustRegistry: DepthVolumeRegistry | null = null
+    dustRegistry: DepthVolumeRegistry | null = null,
+    shapeModels: ShapeModelStorage | null = null
   ) {
     super()
     this.model = model
     this.dustRegistry = dustRegistry
+    this.shapeModels = shapeModels
 
     // `IRenderingObject.data` — это `Record<string, unknown>`, форма утверждается локально
     const renderData = model.renderingObject?.getAttribute('data') as IRingRenderingObject | undefined
@@ -398,6 +408,9 @@ class AsteroidRingSystem extends Group {
     l0ShapeMaterial.uniforms.uShapeAmpMin.value = cfg.shapeAmpMin
     l0ShapeMaterial.uniforms.uShapeAmpMax.value = cfg.shapeAmpMax
     l0ShapeMaterial.uniforms.uShapeFreq.value = cfg.shapeFreq
+
+    // Реальные модели форм в хвост библиотеки — асинхронно, поверх заглушек
+    this.__requestShapeModels(asteroidSize)
 
     // Макро-облик — профиль, тоже только L0
     const profile = ASTEROID_PROFILES[cfg.profile]
@@ -681,6 +694,27 @@ class AsteroidRingSystem extends Group {
    * нормирована на среднее 1 → калибровка dustTauGrazing сохраняется,
    * пыль лишь перераспределяется в субкольца. Нечитаемо → равномерная пыль.
    */
+  /**
+   * Реальные модели форм (см. ArchetypeLibrary.archetypeLayout): для каждого
+   * слота хвоста библиотеки тянем оба яруса и по приходу подменяем геометрию
+   * стримов пула (заглушка-осколок → настоящая форма). Сбой загрузки любого
+   * яруса оставляет заглушку — визуал корректен, ошибок нет. Без хранилища
+   * (тесты, автономные сцены) ничего не запрашивается.
+   */
+  private __requestShapeModels(asteroidSize: number): void {
+    const storage = this.shapeModels
+    if (!storage) return
+    const layout = archetypeLayout(this.config.profile, this.config.archetypeCount)
+    const pool = this.pool
+    layout.realModels.forEach((name, i) => {
+      const k = layout.proceduralCount + i
+      void Promise.all([storage.load(name, 'l0'), storage.load(name, 'near')]).then(([l0, near]) => {
+        if (!l0 || !near) return
+        pool.replaceArchetypeGeometry(k, shapeModelGeometry(l0, asteroidSize), shapeModelGeometry(near, asteroidSize))
+      })
+    })
+  }
+
   /**
    * Полосы кольца (RGB + альфа по радиусу, см. RingBandTexture) — во все три
    * материала модели RingDust: тинт камней по цвету полосы и самозатенение слоя
