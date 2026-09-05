@@ -279,12 +279,15 @@ export const PlanetShaderTemplate: ShaderProps = {
           // живёт рядом с декодом cavity выше. Канал B — только под USE_CAVITY
           // (без гейта карта может быть без полости).
           vec4 macroSlopeSample = texture2D(bumpMap, uv);
-          vec2 macroSlope = (macroSlopeSample.xy * 255.0 - 128.0) * (uSlopeRange / 127.0) + vMidTilt;
+          // Гейт форм склона — по уклону КАРТЫ: с наклоном полосы B он
+          // открывался бы на холмистых равнинах (террасы как горизонтали)
+          vec2 macroMapSlope = (macroSlopeSample.xy * 255.0 - 128.0) * (uSlopeRange / 127.0);
+          vec2 macroSlope = macroMapSlope + vMidTilt;
           float macroCavity = 0.0;
           #ifdef USE_CAVITY
             macroCavity = (macroSlopeSample.z * 255.0 - 128.0) / 127.0;
           #endif
-          applyTerrainMacroDetail(nLocal, albedoMul, dirLocal, eastLocal, macroSlope, macroCavity, uv, length(vViewPosition));
+          applyTerrainMacroDetail(nLocal, albedoMul, dirLocal, eastLocal, macroSlope, length(macroMapSlope), macroCavity, uv, length(vViewPosition));
         #endif
 
         #ifdef USE_TERRAIN_DETAIL

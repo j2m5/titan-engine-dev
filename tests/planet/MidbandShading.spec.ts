@@ -27,8 +27,15 @@ describe('Полоса B в затенении: наклон по вершина
     expect(frag).toContain('perturbNormalFromSlope(nLocal, eastLocal, uv, vMidTilt, terrainSlopeVec)')
   })
 
-  it('macroSlope средней полосы тоже несёт наклон полосы B', () => {
-    expect(frag).toContain('vec2 macroSlope = (macroSlopeSample.xy * 255.0 - 128.0) * (uSlopeRange / 127.0) + vMidTilt;')
+  it('macroSlope средней полосы несёт наклон полосы B, а гейт форм склона — только уклон карты', () => {
+    expect(frag).toContain('vec2 macroMapSlope = (macroSlopeSample.xy * 255.0 - 128.0) * (uSlopeRange / 127.0);')
+    expect(frag).toContain('vec2 macroSlope = macroMapSlope + vMidTilt;')
+    // приёмка 3.png: с суммой в гейте террасы читались горизонталями топокарты на
+    // холмистых равнинах (на Луне гейт открывался на 10–47 % точек с уклоном карты 0.05–0.2)
+    expect(frag).toContain('applyTerrainMacroDetail(nLocal, albedoMul, dirLocal, eastLocal, macroSlope, length(macroMapSlope), macroCavity, uv, length(vViewPosition));')
+    const gateFn = terrainMacroDetailFunctions
+    expect(gateFn).toContain('float gate = smoothstep(uMacroStructureSlope.x, uMacroStructureSlope.y, gateSlopeLen);')
+    expect(gateFn).not.toContain('smoothstep(uMacroStructureSlope.x, uMacroStructureSlope.y, slopeLen)')
   })
 
   it('наклон изотропного fbm под гейтом uMacroTiltGate; в чанках и шаблоне нет нового шума в пикселе', () => {

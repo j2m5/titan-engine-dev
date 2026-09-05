@@ -63,7 +63,8 @@ describe('TerrainMacroDetail: направленные формы склона (
 
   it('гейт форм и ранний выход по нему', () => {
     // гейт по АБСОЛЮТНОМУ уклону, не по s = |slope|/uMacroSlopeRef (тот ~4.6° при дефолте)
-    expect(fn).toContain('float gate = smoothstep(uMacroStructureSlope.x, uMacroStructureSlope.y, slopeLen);')
+    // ...и по уклону КАРТЫ (gateSlopeLen), не суммы с наклоном полосы B — см. MidbandShading.spec
+    expect(fn).toContain('float gate = smoothstep(uMacroStructureSlope.x, uMacroStructureSlope.y, gateSlopeLen);')
     expect(fn).not.toContain('smoothstep(0.35, 1.0, s)')
     expect(fn).toContain('if (gate <= 0.0) return;')
     expect(terrainMacroDetailUniforms).toContain('uniform vec2 uMacroStructureSlope;')

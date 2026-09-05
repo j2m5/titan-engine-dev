@@ -75,7 +75,7 @@ describe('TerrainMacroDetail: контракт чанка', () => {
 
   it('сигнатура принимает slope и cavity от хоста', () => {
     expect(fn).toContain(
-      'void applyTerrainMacroDetail(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 eastLocal, vec2 slope, float cavity, vec2 uv, float viewDistance)'
+      'void applyTerrainMacroDetail(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 eastLocal, vec2 slope, float gateSlopeLen, float cavity, vec2 uv, float viewDistance)'
     )
   })
 

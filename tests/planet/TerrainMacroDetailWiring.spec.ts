@@ -34,7 +34,7 @@ describe('PlanetShaderTemplate: средняя полоса детали в те
   it('вызов стоит после USE_CAVITY и до applyTerrainDetail, в терраформной ветке', () => {
     const cavity = frag.indexOf('#ifdef USE_CAVITY')
     const call = frag.indexOf(
-      'applyTerrainMacroDetail(nLocal, albedoMul, dirLocal, eastLocal, macroSlope, macroCavity, uv, length(vViewPosition));'
+      'applyTerrainMacroDetail(nLocal, albedoMul, dirLocal, eastLocal, macroSlope, length(macroMapSlope), macroCavity, uv, length(vViewPosition));'
     )
     const detail = frag.indexOf(
       'applyTerrainDetail(nLocal, albedoMul, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);'
@@ -49,7 +49,8 @@ describe('PlanetShaderTemplate: средняя полоса детали в те
     const gate = frag.indexOf('#ifdef USE_TERRAIN_MACRO_DETAIL', frag.indexOf('void main()'))
     const sample = frag.indexOf('vec4 macroSlopeSample = texture2D(bumpMap, uv);', gate)
     expect(sample).toBeGreaterThan(gate)
-    expect(frag).toContain('vec2 macroSlope = (macroSlopeSample.xy * 255.0 - 128.0) * (uSlopeRange / 127.0) + vMidTilt;')
+    expect(frag).toContain('vec2 macroMapSlope = (macroSlopeSample.xy * 255.0 - 128.0) * (uSlopeRange / 127.0);')
+    expect(frag).toContain('vec2 macroSlope = macroMapSlope + vMidTilt;')
     expect(frag).not.toContain('(2.0 / 127.0)')
     // Присваивание канала B зажато между #ifdef USE_CAVITY и его #endif
     const cavityGate = frag.indexOf('#ifdef USE_CAVITY', sample)
