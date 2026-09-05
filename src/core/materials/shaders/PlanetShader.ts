@@ -13,6 +13,8 @@ import {
 } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
 import { DEFAULT_DETAIL_SCALE2_METERS, DEFAULT_DETAIL_SCALE_METERS, validPeriodMeters } from '@/core/terrain/detailWrap'
 import { resolveMacroSlopeStructureParams } from '@/core/terrain/macroSlopeStructureParams'
+import { resolveWaterFoamParams } from '@/core/terrain/waterFoamParams'
+import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 
 // Нейтральные дефолты детального слоя (используются, только если данные тела
 // не задали ручку явно) — см. IPlanetRenderingObject.detail*, ручки Луны в
@@ -136,6 +138,9 @@ interface PlanetUniforms {
   uMacroStructureSlope: Vector2
   uDiffuseTexelSize: Vector2
   uBodyRadiusUnits: number
+  uWaterLevelMeters: number
+  uWetBandMeters: number
+  uWetDarken: number
 }
 
 class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
@@ -196,6 +201,8 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
     )
 
     const slopeStructures = resolveMacroSlopeStructureParams(planetData, this.model.getAttribute?.('name', '?') ?? '?')
+    const foam = resolveWaterFoamParams(planetData, this.model.getAttribute?.('name', '?') ?? '?')
+    const waterLevelMeters = readWaterLevelMeters(this.model) ?? 0
 
     this.uniforms = {
       lightPosition: new Uniform(new Vector3()),
@@ -278,7 +285,11 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uMacroTerraceStepMeters: new Uniform(slopeStructures.macroTerraceStepMeters),
       uMacroStructureSlope: new Uniform(new Vector2(slopeStructures.macroStructureSlopeStart, slopeStructures.macroStructureSlopeFull)),
       uDiffuseTexelSize: new Uniform(new Vector2()),
-      uBodyRadiusUnits: new Uniform(toThreeJSUnits(radiusKm))
+      uBodyRadiusUnits: new Uniform(toThreeJSUnits(radiusKm)),
+      // Мокрая кромка берега — инертна без USE_WATER_EDGE (PlanetMaterial)
+      uWaterLevelMeters: new Uniform(waterLevelMeters),
+      uWetBandMeters: new Uniform(foam.terrainWetBandMeters),
+      uWetDarken: new Uniform(foam.terrainWetDarken)
     }
     this.defines = {
       ...(USE_RING && { USE_RING: '1' })

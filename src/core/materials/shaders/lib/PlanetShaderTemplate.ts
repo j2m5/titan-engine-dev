@@ -71,8 +71,9 @@ export const PlanetShaderTemplate: ShaderProps = {
       varying vec3 vDetailPos2;
     #endif
 
-    #ifdef USE_TERRAIN_MACRO_DETAIL
-      // Высота КАРТЫ в вершине (метры над референсом, без полосы B) — фаза террас
+    #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE)
+      // Высота КАРТЫ в вершине (метры над референсом, без полосы B) — фаза
+      // террас и мокрая кромка берега
       attribute float height;
       varying float vHeightMeters;
     #endif
@@ -116,7 +117,7 @@ export const PlanetShaderTemplate: ShaderProps = {
         vDetailPos2 = detailPos2;
       #endif
 
-      #ifdef USE_TERRAIN_MACRO_DETAIL
+      #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE)
         vHeightMeters = height;
       #endif
 
@@ -193,6 +194,18 @@ export const PlanetShaderTemplate: ShaderProps = {
       #include <terrainDetailFunctions>
     #endif
 
+    #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE)
+      varying float vHeightMeters;
+    #endif
+
+    #ifdef USE_WATER_EDGE
+      // Мокрая кромка берега: уровень воды тела и ширина/потемнение полосы
+      uniform float uWaterLevelMeters;
+      uniform float uWetBandMeters;
+      uniform float uWetDarken;
+      #define WET_GLOSS 0.6
+    #endif
+
     // Средняя полоса детали рельефа (терраформный путь): километровый fbm
     // под текселем диффуза. Шум — только под этим гейтом (у гигантов свой).
     #ifdef USE_TERRAIN_MACRO_DETAIL
@@ -213,12 +226,22 @@ export const PlanetShaderTemplate: ShaderProps = {
       #include <giantDetailFunctions>
     #endif
 
+    // Блинн-Фонг + френель Шлика (F0 воды 0.02): солнечная дорожка воды и
+    // блеск мокрой кромки берега считаются одним телом
+    float blinnPhongGlint(vec3 normal, vec3 lightDirection, vec3 viewDir) {
+      vec3 halfVec = normalize(lightDirection + viewDir);
+      float specComp = pow(max(dot(normal, halfVec), 0.0), 64.0);
+      float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(normal, viewDir), 0.0), 5.0);
+      return specComp * fresnel;
+    }
+
     void main() {
       ${ShaderChunk['logdepthbuf_fragment']}
       vec3 normal = normalize(vNormal);
       // Множитель альбедо от терраформного детального слоя (задача 4) —
       // применяется на месте выборки dayColor ниже, дальше самого UV-ветвления
       vec3 albedoMul = vec3(1.0);
+      float wetEdge = 0.0;
 
       #ifdef USE_TERRAIN_UV
         // UV из направления, попиксельно (общий чанк terrainUvFunctions —
@@ -288,6 +311,14 @@ export const PlanetShaderTemplate: ShaderProps = {
             macroCavity = (macroSlopeSample.z * 255.0 - 128.0) / 127.0;
           #endif
           applyTerrainMacroDetail(nLocal, albedoMul, dirLocal, eastLocal, macroSlope, length(macroMapSlope), macroCavity, uv, length(vViewPosition));
+        #endif
+
+        #ifdef USE_WATER_EDGE
+          // Мокрая кромка: полоса над уровнем воды темнеет (ниже уреза — дно под
+          // мелкой водой, тоже мокрое); гейт по дистанции — тот же fade полосы
+          float hAbove = vHeightMeters - uWaterLevelMeters;
+          wetEdge = (1.0 - smoothstep(0.0, uWetBandMeters, hAbove)) * (1.0 - smoothstep(uMacroFadeRange.x, uMacroFadeRange.y, length(vViewPosition)));
+          albedoMul *= 1.0 - uWetDarken * wetEdge;
         #endif
 
         #ifdef USE_TERRAIN_DETAIL
@@ -412,16 +443,18 @@ export const PlanetShaderTemplate: ShaderProps = {
       // bloom (0.99 < 1.0) — планета не блумит. Блик добавляется ПОСЛЕ.
       finalColor = clamp(finalColor, 0.0, 0.99);
 
+      vec3 viewDir = normalize(vViewPosition);
       #ifdef USE_SPECULAR
-        // Blinn-Phong + френель Шлика (F0 воды 0.02): дорожка следит за
-        // камерой, вспыхивает на скользящих углах, гаснет у терминатора.
-        // HDR-глинт поверх клампа — блумит только солнечная дорожка.
-        vec3 viewDir = normalize(vViewPosition);
-        vec3 halfVec = normalize(lightDirection + viewDir);
-        float specComp = pow(max(dot(normal, halfVec), 0.0), 64.0);
-        float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(normal, viewDir), 0.0), 5.0);
+        // Дорожка следит за камерой, вспыхивает на скользящих углах, гаснет у
+        // терминатора. HDR-глинт поверх клампа — блумит только солнечная дорожка.
         float specularIntensity = texture2D(specularMap, uv).r;
-        finalColor += specularIntensity * specComp * fresnel * uSpecularStrength
+        finalColor += specularIntensity * blinnPhongGlint(normal, lightDirection, viewDir) * uSpecularStrength
+                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor;
+      #endif
+
+      #ifdef USE_WATER_EDGE
+        // Блеск мокрой кромки — тот же глинт без карты, силой WET_GLOSS
+        finalColor += wetEdge * blinnPhongGlint(normal, lightDirection, viewDir) * WET_GLOSS
                     * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor;
       #endif
 

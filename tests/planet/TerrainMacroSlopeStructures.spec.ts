@@ -36,8 +36,8 @@ describe('TerrainMacroDetail: направленные формы склона (
       'uniform float uMacroStreakStrength;',
       'uniform float uMacroStreakPeriodUnits;',
       'uniform float uMacroTerraceStrength;',
-      'uniform float uMacroTerraceStepMeters;',
-      'varying float vHeightMeters;'
+      'uniform float uMacroTerraceStepMeters;'
+      // varying float vHeightMeters переехал в шаблон под объединённый гейт кромки
     ]) {
       expect(terrainMacroDetailUniforms).toContain(line)
     }
@@ -102,9 +102,10 @@ describe('TerrainMacroDetail: направленные формы склона (
     expect(structures).not.toContain('fwidth(')
   })
 
-  it('вершинник: атрибут height и varying под USE_TERRAIN_MACRO_DETAIL', () => {
+  it('вершинник: атрибут height и varying под объединённым гейтом полосы/кромки', () => {
     const vert: string = PlanetShaderTemplate.vertexShader
-    const gate = vert.indexOf('#ifdef USE_TERRAIN_MACRO_DETAIL')
+    // гейт объединён с USE_WATER_EDGE (Task 5, мокрая кромка берега)
+    const gate = vert.indexOf('#if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE)')
     expect(gate).toBeGreaterThan(-1)
     expect(vert.indexOf('attribute float height;')).toBeGreaterThan(gate)
     expect(vert).toContain('vHeightMeters = height;')

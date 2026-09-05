@@ -26,8 +26,6 @@ export const terrainMacroDetailUniforms = /* glsl */ `
   uniform float uMacroTerraceStepMeters;
   // Гейт форм по АБСОЛЮТНОМУ уклону (tan): x — начало, y — полная сила
   uniform vec2 uMacroStructureSlope;
-  // Высота вершины (метры над референсом, атрибут height) — фаза террас
-  varying float vHeightMeters;
   // Гейт наклона изотропного fbm (арка "средняя полоса B"): 0 у тел с
   // геометрией полосы - её рельеф уже покрывает то же место, что fbm, двойной
   // наклон нормали иначе. Альбедо-модуляция fbm и его роль источника вобла
