@@ -131,9 +131,9 @@ const POLE_EPSILON = 1e-9
  * и берётся от центра патча — иначе обёртка рвала бы треугольники внутри
  * патча. Два набора — под два слоя детали (40 м / 7 м), каждый со своим W.
  *
- * height — метры над референсом (карта + полоса, `field.midbandSample`),
- * фаза террас средней полосы в шейдере. midTilt — наклон полосы (tan) в
- * базисе восток/север вершины (Task 8 читает его в шейдере).
+ * height — метры над референсом ТОЛЬКО по карте (без полосы) — фаза террас
+ * средней полосы в шейдере; позиция вершины при этом несёт карту + полосу.
+ * midTilt — наклон полосы (tan) в базисе восток/север вершины.
  */
 function writeTerrainPatchAttributes(
   field: TerrainHeightField,
@@ -189,8 +189,11 @@ function writeTerrainPatchAttributes(
       // его повторно (heightMeters → dirToUv) — 1.62М лишних atan2+acos на сборке
       field.dirToUv(dir, uv)
       const band = field.midbandSample(dir, uv.x, uv.y, bandScratch)
-      const heightMeters = field.sampleMeters(uv.x, uv.y) + band.heightMeters
-      heights[k] = heightMeters
+      const mapMeters = field.sampleMeters(uv.x, uv.y)
+      const heightMeters = mapMeters + band.heightMeters
+      // Фаза террас — от высоты КАРТЫ: бугры полосы (до ~84 м при шаге 150 м)
+      // рисовали бы замкнутые горизонтали вокруг каждого бугра
+      heights[k] = mapMeters
       midTilts[k * 2] = band.tiltE
       midTilts[k * 2 + 1] = band.tiltN
       const r = toThreeJSUnits(field.radiusKm + heightMeters / 1000)

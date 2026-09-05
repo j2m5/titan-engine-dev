@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Vector2, Vector3 } from 'three'
 import { buildPatchIndex, buildTerrainPatchGeometry, terrainPatchVertexCount } from '@/core/terrain/terrainPatchGeometry'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { MIDBAND_DEFAULTS, type MidbandParams } from '@/core/terrain/midbandParams'
 import { detailWrapFor, wrapIndex, wrappedComponent } from '@/core/terrain/detailWrap'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { SpaceScale } from '@/core/constants'
@@ -15,9 +16,9 @@ const R_KM = 1736
 // Полоса ВКЛЮЧЕНА (дефолт, Task 7): мешер теперь читает field.midbandSample
 // тем же dir/uv, что и heightMeters/surfaceRadiusUnits — паритет позиции
 // вершины держится и с полосой (обе стороны считают карту и полосу одинаково).
-function bumpyField(): TerrainHeightField {
+function bumpyField(midband?: MidbandParams): TerrainHeightField {
   const values = Array.from({ length: 16 * 8 }, (_, k) => (k * 4001) % 65535)
-  return new TerrainHeightField(makeMap(16, 8, values, -2000, 9000), R_KM)
+  return new TerrainHeightField(makeMap(16, 8, values, -2000, 9000), R_KM, midband)
 }
 
 const SEGMENTS = 8
@@ -416,8 +417,8 @@ describe('buildTerrainPatchGeometry: атрибуты домена детали'
 })
 
 describe('buildTerrainPatchGeometry: атрибут height', () => {
-  it('height = метры над референсом той же вершины, что и позиция', () => {
-    const { geometry, center } = build(bumpyField(), 0, 1, 0)
+  it('height = метры над референсом той же вершины, что и позиция (полоса выключена)', () => {
+    const { geometry, center } = build(bumpyField({ ...MIDBAND_DEFAULTS, midbandStrength: 0 }), 0, 1, 0)
     const pos = geometry.getAttribute('position')
     const height = geometry.getAttribute('height')
     expect(height.itemSize).toBe(1)
@@ -431,6 +432,27 @@ describe('buildTerrainPatchGeometry: атрибут height', () => {
     // не константа: рельеф bumpyField случайный
     const values = Array.from({ length: GRID_VERTEX_COUNT }, (_, k) => height.getX(k))
     expect(Math.max(...values) - Math.min(...values)).toBeGreaterThan(100)
+  })
+
+  it('с полосой height — высота КАРТЫ (фаза террас без бугров полосы), позиция — карта + полоса', () => {
+    const field = bumpyField()
+    const { geometry, center } = build(field, 0, 1, 0)
+    const pos = geometry.getAttribute('position')
+    const height = geometry.getAttribute('height')
+    const dir = new Vector3()
+    let maxBand = 0
+    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
+      dir.set(pos.getX(k) + center.x, pos.getY(k) + center.y, pos.getZ(k) + center.z)
+      const r = dir.length()
+      dir.divideScalar(r)
+      expect(Math.abs(height.getX(k) - field.mapHeightMeters(dir))).toBeLessThan(1e-3)
+      const metersFromPosition = (r / SpaceScale - R_KM) * 1000
+      maxBand = Math.max(maxBand, Math.abs(metersFromPosition - height.getX(k)))
+    }
+    // позиция несёт полосу: расхождение с картой заметно больше кванта float32 (~0.2 м)
+    expect(maxBand).toBeGreaterThan(5)
+    // maxHeightWithMidbandMeters = maxMeters карты (9000) + maxAmplitude полосы
+    expect(maxBand).toBeLessThanOrEqual(field.maxHeightWithMidbandMeters - 9000 + 2)
   })
 
   it('юбочная вершина несёт высоту своей кромочной (радиальный сдвиг юбки не входит)', () => {

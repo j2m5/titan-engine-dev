@@ -72,7 +72,7 @@ export const PlanetShaderTemplate: ShaderProps = {
     #endif
 
     #ifdef USE_TERRAIN_MACRO_DETAIL
-      // Высота вершины (метры над референсом) — фаза террас средней полосы
+      // Высота КАРТЫ в вершине (метры над референсом, без полосы B) — фаза террас
       attribute float height;
       varying float vHeightMeters;
     #endif
