@@ -242,6 +242,7 @@ export const PlanetShaderTemplate: ShaderProps = {
       // применяется на месте выборки dayColor ниже, дальше самого UV-ветвления
       vec3 albedoMul = vec3(1.0);
       float wetEdge = 0.0;
+      float glintEdge = 0.0;
 
       #ifdef USE_TERRAIN_UV
         // UV из направления, попиксельно (общий чанк terrainUvFunctions —
@@ -319,6 +320,8 @@ export const PlanetShaderTemplate: ShaderProps = {
           float hAbove = vHeightMeters - uWaterLevelMeters;
           wetEdge = (1.0 - smoothstep(0.0, uWetBandMeters, hAbove)) * (1.0 - smoothstep(uMacroFadeRange.x, uMacroFadeRange.y, length(vViewPosition)));
           albedoMul *= 1.0 - uWetDarken * wetEdge;
+          // глинт только в полосе ±W у уреза: глубже блик суши под водой давал бы второй белый блик
+          glintEdge = wetEdge * smoothstep(-uWetBandMeters, 0.0, hAbove);
         #endif
 
         #ifdef USE_TERRAIN_DETAIL
@@ -454,7 +457,7 @@ export const PlanetShaderTemplate: ShaderProps = {
 
       #ifdef USE_WATER_EDGE
         // Блеск мокрой кромки — тот же глинт без карты, силой WET_GLOSS
-        finalColor += wetEdge * blinnPhongGlint(normal, lightDirection, viewDir) * WET_GLOSS
+        finalColor += glintEdge * blinnPhongGlint(normal, lightDirection, viewDir) * WET_GLOSS
                     * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor;
       #endif
 
