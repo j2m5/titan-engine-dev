@@ -42,6 +42,14 @@ describe('MidbandEnvelopeGrid: уклон, кривизна и сток из к�
     expect(Math.abs(peak)).toBeLessThanOrEqual(1)
   })
 
+  it('наклон на север: сток на юг (downN = −1) — ловит перевёрнутый знак gN', () => {
+    // h растёт при убывающем v (север) — 10 м на тексель
+    const grid = new MidbandEnvelopeGrid((_u, v) => -10 * v * H, W, H, R_M)
+    grid.sample(0.5, 0.5, out)
+    expect(out.downN).toBeCloseTo(-1, 3)
+    expect(Math.abs(out.downE)).toBeLessThan(1e-3)
+  })
+
   it('оборот по долготе: u = 1.2 ≡ 0.2; размеры сетки — константы', () => {
     const grid = new MidbandEnvelopeGrid((u) => 500 * Math.sin(2 * Math.PI * u), W, H, R_M)
     const a = { ...grid.sample(0.2, 0.4, out) }

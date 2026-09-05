@@ -4,6 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { parseHeightMap } from '@/core/terrain/heightMapFormat'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
 import { terrainAuxPathFor } from '@/core/terrain/terrainAuxFormat'
 import { AUX_BAKE_RADIUS_KM, encodeTerrainAux } from './lib/terrainAuxEncode'
 import { terrainFloorStatus } from './lib/terrainFloorStatus'
@@ -131,7 +132,11 @@ for (const job of coverage) {
   const map = parseHeightMap(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer)
 
   const startedAt = Date.now()
-  const encoded = encodeTerrainAux(new TerrainHeightField(map, AUX_BAKE_RADIUS_KM).exportAux(), map)
+  // бейк не использует полосу — strength 0 не строит сетку огибающей (8 МБ) и её p99-сортировку впустую
+  const encoded = encodeTerrainAux(
+    new TerrainHeightField(map, AUX_BAKE_RADIUS_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 }).exportAux(),
+    map
+  )
   const millis = Date.now() - startedAt
 
   await writeFile(outputPath, encoded)

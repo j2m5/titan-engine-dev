@@ -23,20 +23,15 @@ function dirs(n: number): Vector3[] {
 
 describe('TerrainHeightField: геометрия средней полосы в каноне высоты', () => {
   it('strength 0 — heightMeters бит-в-бит как без параметров; midband null, бонды 0', () => {
-    // ПРИМЕЧАНИЕ (Task 4): в брифе `plain` строился без параметров — но по
-    // умолчанию полоса ВКЛЮЧЕНА (см. тест ниже), так что такой `plain`
-    // реально отличался бы от `off` на вклад полосы. Название и заголовок
-    // теста однозначно про «выключенную полосу как бит-в-бит карту» —
-    // здесь `plain` строится с тем же strength: 0, что и `off`:
-    // детерминизм (два независимых построения с одними параметрами дают
-    // побайтно одинаковый heightMeters), тот же смысл, без противоречия со
-    // следующим тестом.
-    const plain = new TerrainHeightField(bumpyMap(), R_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
+    // Пинит: при strength 0 heightMeters тождественно raw-карте (sampleMeters), без вклада полосы.
     const off = new TerrainHeightField(bumpyMap(), R_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
     expect(off.midband).toBeNull()
     expect(off.midbandSlopeBound).toBe(0)
     expect(off.maxHeightWithMidbandMeters).toBe(off.maxMeters)
-    for (const d of dirs(200)) expect(off.heightMeters(d)).toBe(plain.heightMeters(d))
+    for (const d of dirs(200)) {
+      const uv = off.dirToUv(d, new Vector2())
+      expect(off.heightMeters(d)).toBe(off.sampleMeters(uv.x, uv.y))
+    }
   })
 
   it('по умолчанию (без параметров) полоса ВКЛЮЧЕНА: высота = карта + mid, |mid| ≤ maxAmplitude', () => {
@@ -83,6 +78,6 @@ describe('TerrainHeightField: геометрия средней полосы в 
     let maxTilt = 0
     for (const d of dirs(3000)) maxTilt = Math.max(maxTilt, field.midbandTilt(d, tilt).length())
     expect(maxTilt).toBeLessThanOrEqual(field.midbandSlopeBound)
-    expect(field.midbandSlopeBound).toBeLessThan(3) // ≈ 2.2 при GRAD_BOUND 6 и варпе 0.35; с бондом архива (27.6) было бы ≈ 29 и марш коллизии замедлился бы в ~10 раз
+    expect(field.midbandSlopeBound).toBeLessThan(3) // ≈ 2.8 при GRAD_BOUND 7 и варпе 0.35; с бондом архива (27.6) было бы ≈ 29 и марш коллизии замедлился бы в ~10 раз
   })
 })
