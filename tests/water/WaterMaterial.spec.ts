@@ -469,17 +469,21 @@ describe('WaterMaterial: пена прибоя — ручки и тексель 
     const actor = stubActor({ data: {} })
     ;(actor as unknown as { physicalObject: { getAttribute: () => number } }).physicalObject = { getAttribute: () => 6360 }
     const material = new WaterMaterial(actor)
-    expect(material.uniforms.uSlopeTexelMeters.value).toBe(0)
+    expect((material.uniforms.uSlopeTexelMeters.value as Vector2).x).toBe(0)
+    expect((material.uniforms.uSlopeTexelMeters.value as Vector2).y).toBe(0)
     expect((material.uniforms.uSlopeTexel.value as Vector2).x).toBe(0)
 
     seedSlopeTexture() // 4×2
     material.updateMaterial()
     expect((material.uniforms.uSlopeTexel.value as Vector2).x).toBeCloseTo(1 / 4, 12)
     expect((material.uniforms.uSlopeTexel.value as Vector2).y).toBeCloseTo(1 / 2, 12)
-    expect(material.uniforms.uSlopeTexelMeters.value).toBeCloseTo((2 * Math.PI * 6360 * 1000) / 4, 6)
+    // vec2: x — экваториальный u-тексель (2πR/width), y — v-тексель (πR/height, широты не касается)
+    expect((material.uniforms.uSlopeTexelMeters.value as Vector2).x).toBeCloseTo((2 * Math.PI * 6360 * 1000) / 4, 6)
+    expect((material.uniforms.uSlopeTexelMeters.value as Vector2).y).toBeCloseTo((Math.PI * 6360 * 1000) / 2, 6)
     expect(material.uniforms.uFoamRadiusMeters.value).toBe(6360 * 1000)
 
     material.resetMaterial()
-    expect(material.uniforms.uSlopeTexelMeters.value).toBe(0)
+    expect((material.uniforms.uSlopeTexelMeters.value as Vector2).x).toBe(0)
+    expect((material.uniforms.uSlopeTexelMeters.value as Vector2).y).toBe(0)
   })
 })

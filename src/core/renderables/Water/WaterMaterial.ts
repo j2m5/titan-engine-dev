@@ -216,13 +216,17 @@ class WaterMaterial extends AbstractShaderMaterial {
 
     // Тексель slope-карты для градиента глубины (пена): от фактического
     // размера загруженной текстуры, не от строки БД; без карты — нули.
+    // uSlopeTexelMeters — vec2: экваториальный u-тексель (2πR/width) и
+    // v-тексель (πR/height, широты не касается) — равнопрямоугольная сетка
+    // несёт разные метры на тексель по осям (см. блок пены в шейдере).
     const image = slopeMap?.image as { width?: number; height?: number } | undefined
     if (image?.width && image.height) {
+      const radiusMeters = this.uniforms.uFoamRadiusMeters.value
       this.uniforms.uSlopeTexel.value.set(1 / image.width, 1 / image.height)
-      this.uniforms.uSlopeTexelMeters.value = (2 * Math.PI * this.uniforms.uFoamRadiusMeters.value) / image.width
+      this.uniforms.uSlopeTexelMeters.value.set((2 * Math.PI * radiusMeters) / image.width, (Math.PI * radiusMeters) / image.height)
     } else {
       this.uniforms.uSlopeTexel.value.set(0, 0)
-      this.uniforms.uSlopeTexelMeters.value = 0
+      this.uniforms.uSlopeTexelMeters.value.set(0, 0)
     }
 
     const useWaterDepth = Boolean(slopeMap)
@@ -274,7 +278,7 @@ class WaterMaterial extends AbstractShaderMaterial {
     this.waterNormalPath = WaterMaterial.resolveWaterNormalPath(this.model)
     this.uniforms.uSlopeMap.value = null
     this.uniforms.uSlopeTexel.value.set(0, 0)
-    this.uniforms.uSlopeTexelMeters.value = 0
+    this.uniforms.uSlopeTexelMeters.value.set(0, 0)
     this.uniforms.uWaterNormalMap.value = null
     this.hasWaterDepth = false
     this.hasWaterWaves = false

@@ -54,7 +54,10 @@ const defaultUniforms = {
   uFoamColor: new Uniform(new Color(0xe6e9ec)),
   uFoamRadiusMeters: new Uniform(1),
   uSlopeTexel: new Uniform(new Vector2()),
-  uSlopeTexelMeters: new Uniform(0),
+  // vec2: u-тексель (экваториальный, сжимается на cos широты) и v-тексель
+  // (постоянный) — равнопрямоугольная сетка терраформного UV несёт разные
+  // метры на тексель по осям (см. блок пены во фрагментнике).
+  uSlopeTexelMeters: new Uniform(new Vector2()),
   // Отражение фоновой кубмапы (арка water-shader, Task 2) — инертно без
   // USE_WATER_REFLECTION (гейт по факту доставки кубмапы, см. WaterMaterial):
   // сэмплер null до конструктора материала, дисторсия — честная ручка (см.
@@ -166,10 +169,13 @@ export const WaterShaderTemplate: ShaderProps = {
       uniform vec3 uFoamColor;
       uniform float uFoamRadiusMeters;
       uniform vec2 uSlopeTexel;
-      uniform float uSlopeTexelMeters;
+      uniform vec2 uSlopeTexelMeters;
       // Смещение уреза в текселях: суша клампит канал A в 0, билинейный скат
       // начинается на полтекселя раньше берега — на урезе оценка dist = texel/3
-      #define FOAM_SHORE_BIAS 0.33333
+      #define FOAM_SHORE_BIAS 0.3333333
+      // Контраст шума рвани: канал .x нормалей волн узкий вокруг 0.5, без
+      // растяжки smoothstep(0.35,0.75,...) почти не отличает рваные пиксели
+      #define FOAM_NOISE_CONTRAST 3.0
       // three не биндит normalMatrix во фрагментник автоматически (см. тот же
       // приём в PlanetShaderTemplate) — юниформ общий на программу, объявление
       // здесь просто делает его видимым этому шейдеру.
@@ -620,34 +626,35 @@ export const WaterShaderTemplate: ShaderProps = {
         color = mix(color, wavesColor, waveFade);
 
         #ifdef USE_WATER_DEPTH
-          // Пена прибоя. Расстояние до уреза — из глубины и её градиента по
-          // текселю: dist = depth/|∇depth|, диапазон обмеления сокращается.
-          // Нормировка даёт одну ширину пены в метрах на пологом шельфе и у
-          // крутого берега. Плоское дно: градиент под полом → dist → ∞, пены нет.
-          float a0 = depthA;
-          float aE = texture2D(uSlopeMap, uv + vec2(uSlopeTexel.x, 0.0)).a;
-          // юг = −v (terrainUv растёт на север); нужна только длина градиента
-          float aS = texture2D(uSlopeMap, uv - vec2(0.0, uSlopeTexel.y)).a;
-          float gradLen = length(vec2(aE - a0, aS - a0));
-          // тексель по широте: восточный шаг сжимается на cos(lat); у полюсов кламп
-          float texelMeters = uSlopeTexelMeters * max(sqrt(max(1.0 - dirLocal.y * dirLocal.y, 0.0)), 0.05);
-          float dist = a0 * texelMeters / max(gradLen, 1e-4);
-          dist = max(dist - FOAM_SHORE_BIAS * texelMeters, 0.0);
-          // экранный след ДО раннего выхода (однородный поток в кваде)
-          float distFootprint = fwidth(dist);
-          // step(1e-6, uSlopeTexelMeters) — страховка: без реального текселя (Task 4
-          // ещё не залил юниформ) dist ≡ 0 везде, и вся вода стала бы белой при strength>0
-          float foamWeight = (1.0 - smoothstep(0.5, 1.0, distFootprint / uFoamShoreMeters)) * waveFade * step(1e-6, uSlopeTexelMeters);
-          if (foamWeight > 0.0 && uFoamStrength > 0.0) {
+          // Гейт юниформный (однородный поток: fwidth и выборки ниже определены);
+          // тела с выключенной пеной и до прихода карты не платят ни одной выборки
+          if (uFoamStrength > 0.0 && uSlopeTexelMeters.y > 0.0) {
+            // Расстояние до уреза — из глубины и её градиента по метру:
+            // dist = depth/|∇depth|, диапазон обмеления сокращается. Плоское
+            // дно: градиент под полом → dist → ∞, пены нет.
+            float a0 = depthA;
+            float aE = texture2D(uSlopeMap, uv + vec2(uSlopeTexel.x, 0.0)).a;
+            float aS = texture2D(uSlopeMap, uv - vec2(0.0, uSlopeTexel.y)).a; // юг = −v; нужна только длина
+            // метры текселя: u сжимается на cos(широты) (у полюсов кламп), v — постоянный
+            float cosLat = max(sqrt(max(1.0 - dirLocal.y * dirLocal.y, 0.0)), 0.05);
+            vec2 texelM = vec2(uSlopeTexelMeters.x * cosLat, uSlopeTexelMeters.y);
+            vec2 gradM = vec2(aE - a0, aS - a0) / texelM;                 // прирост A на метр
+            float gradLen = max(length(gradM), 1e-4 / uSlopeTexelMeters.y); // пол: 1e-4 на тексель, как раньше
+            float dist = a0 / gradLen;
+            // тексель вдоль градиента: смещение уреза (texel/3) считается по нему
+            float texelAlong = gradLen / max(length(gradM / texelM), 1e-12);
+            dist = max(dist - FOAM_SHORE_BIAS * texelAlong, 0.0);
+            float distFootprint = fwidth(dist);
+            float foamWeight = (1.0 - smoothstep(0.5, 1.0, distFootprint / uFoamShoreMeters)) * waveFade;
             float t = uTime / uFoamPeriod;
             float shore = 1.0 - smoothstep(0.0, uFoamShoreMeters * (1.0 + 0.15 * sin(6.2832 * t)), dist);
-            // накаты: фаза убывает с t при росте dist — гребни бегут к берегу
-            float phase = dist / uFoamWavelengthMeters - t;
+            float phase = dist / uFoamWavelengthMeters + t;   // гребни (фаза = const) бегут к берегу: dist = λ(n − t)
             float crest = pow(1.0 - abs(fract(phase) * 2.0 - 1.0), 6.0);
             float surfEnv = smoothstep(uFoamShoreMeters * 0.5, uFoamShoreMeters, dist)
                           * (1.0 - smoothstep(uFoamSurfMeters * 0.6, uFoamSurfMeters, dist));
             float surf = crest * surfEnv;
             float noise = foamNoise(dirLocal, uFoamShoreMeters * uFoamNoiseScale, t);
+            noise = clamp((noise - 0.5) * FOAM_NOISE_CONTRAST + 0.5, 0.0, 1.0); // канал .x нормалей узкий вокруг 0.5
             float foam = clamp(shore + surf, 0.0, 1.0);
             // рвань: сплошная кайма рвётся меньше, чем гребни
             foam *= smoothstep(0.35, 0.75, noise + 0.3 * foam);

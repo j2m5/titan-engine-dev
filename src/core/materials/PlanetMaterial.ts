@@ -339,8 +339,10 @@ class PlanetMaterial extends AbstractShaderMaterial {
       // Средняя полоса детали: тот же slope-гейт (амплитуда подчинена уклону
       // и cavity) И ненулевая ручка — при macroStrength 0 путь бит-в-бит прежним.
       ...(useSlope && macroStrength > 0 && { USE_TERRAIN_MACRO_DETAIL: '1' }),
-      // Мокрая кромка берега: нужен атрибут height (ставится вместе с полосой)
-      // и уровень воды тела; uMacroFadeRange кромки — из чанка полосы.
+      // Мокрая кромка берега: атрибут height есть у ЛЮБОГО патча (не только
+      // с полосой) — реальная зависимость от USE_TERRAIN_MACRO_DETAIL это
+      // uMacroFadeRange (fade кромки читает чанк полосы); при macroStrength 0
+      // кромка выключается вместе с полосой.
       ...(useSlope && macroStrength > 0 && hasWaterShell && { USE_WATER_EDGE: '1' }),
       // Specular-карта — маска «океан/суша» легаси-вида. У тела с водной
       // оболочкой (WaterSphere) блик солнца принадлежит воде: HDR-блик суши

@@ -116,7 +116,7 @@ interface WaterUniforms {
   uFoamColor: Color
   uFoamRadiusMeters: number
   uSlopeTexel: Vector2
-  uSlopeTexelMeters: number
+  uSlopeTexelMeters: Vector2
 }
 
 /**
@@ -225,7 +225,7 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
       uFoamColor: new Uniform(new Color(foam.waterFoamColor)),
       uFoamRadiusMeters: new Uniform(radiusMeters),
       uSlopeTexel: new Uniform(new Vector2()),
-      uSlopeTexelMeters: new Uniform(0),
+      uSlopeTexelMeters: new Uniform(new Vector2()),
       // Кубмапа — заглушка null: доставляется WaterMaterial конструктором
       // (ровно один раз, см. её докблок), не здесь (это CPU-путь "data",
       // текстуры сюда не приходят). Остальной набор — общая выборка фона,
