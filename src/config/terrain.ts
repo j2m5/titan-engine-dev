@@ -45,6 +45,20 @@ export interface TerrainConfig {
      * без рельефа именно из-за размера своей карты.
      */
     heightMapBudgetMiB: number
+    lod: {
+      /**
+       * Бюджет на постройки патчей за кадр (TerrainPatchGroup.updateObject), мс.
+       * Гейтит только СТАРТ следующей постройки — сама постройка атомарна
+       * (прервать её серединой нельзя), бюджет не ограничивает её длительность.
+       * Очередь построена coarse-first, минимум одна постройка происходит
+       * всегда (иначе на слабом CPU дыры не закрываются никогда), дальше цикл
+       * идёт, пока не исчерпан бюджет. Дефолт 6 — у самой поверхности (суб-
+       * текселя детали, глубина у L8) одна постройка стоит сопоставимо с
+       * бюджетом или выше, там цикл обычно и укладывается в одну постройку за
+       * кадр.
+       */
+      patchBuildBudgetMs: number
+    }
   }
 }
 
@@ -54,6 +68,9 @@ export const terrain: TerrainConfig = {
     sseMergeFactor: 0.7,
     heightMapLoadPixels: 32,
     heightMapReleasePixels: 16,
-    heightMapBudgetMiB: 256
+    heightMapBudgetMiB: 256,
+    lod: {
+      patchBuildBudgetMs: 6
+    }
   }
 }

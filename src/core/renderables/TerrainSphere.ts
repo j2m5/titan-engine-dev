@@ -11,8 +11,6 @@ import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfa
 import type { IPlanetRenderingObject } from '@/core/models/types'
 import type { UpdateContext } from '@/core/UpdateContext'
 
-export { PATCH_BUILDS_PER_FRAME } from '@/core/terrain/TerrainPatchGroup'
-
 /**
  * Fail-fast на разрыв DI-цепочки (стиль сообщения — как `requireRenderingData`):
  * тело с `data.proceduralSurface` обязано получить `ProceduralSurfaceGenerator`,
@@ -64,7 +62,9 @@ class TerrainSphere extends TerrainPatchGroup {
     field: TerrainHeightField,
     renderer: WebGLRenderer,
     atmosphereRegistry?: AtmosphereRegistry,
-    proceduralSurfaceGenerator?: ProceduralSurfaceGenerator
+    proceduralSurfaceGenerator?: ProceduralSurfaceGenerator,
+    // инъекция часов бюджета построек (тест) — прокидка до TerrainPatchGroup.nowMs
+    nowMs?: () => number
   ) {
     assertProceduralWiring(model, proceduralSurfaceGenerator)
 
@@ -80,7 +80,7 @@ class TerrainSphere extends TerrainPatchGroup {
     const sharedMaterial = new PlanetMaterial(model, atmosphereRegistry)
     const waterLevelMeters = readWaterLevelMeters(model)
     const detailWrap = detailWrapFor(readRenderingData<IPlanetRenderingObject>(model))
-    super(field, sharedMaterial, renderer, undefined, waterLevelMeters, detailWrap)
+    super(field, sharedMaterial, renderer, undefined, waterLevelMeters, detailWrap, nowMs)
     this.model = model
     this.sharedMaterial = sharedMaterial
 

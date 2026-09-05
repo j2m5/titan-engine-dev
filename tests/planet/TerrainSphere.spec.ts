@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { Mesh, PerspectiveCamera, Texture, Vector3, type WebGLRenderer } from 'three'
-import { PATCH_BUILDS_PER_FRAME, TerrainSphere } from '@/core/renderables/TerrainSphere'
+import { TerrainSphere } from '@/core/renderables/TerrainSphere'
+import { config } from '@/core/framework/config'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { CLEARANCE_MARGIN_METERS, TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { TERRAIN_PATCH_SEGMENTS } from '@/core/terrain/cubeSphere'
@@ -125,11 +126,17 @@ describe('TerrainSphere: динамическое квадродерево па�
     expect(sphere.children.length).toBe(before)
   })
 
-  it('бюджет построек соблюдается: за один кадр добавляется ≤ PATCH_BUILDS_PER_FRAME мешей', () => {
-    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
+  // бюджет теперь временной (terrain.lod.patchBuildBudgetMs), не счётчик —
+  // прогоняем детерминированные часы через конструктор (Task 6, TerrainPatchGroup.nowMs)
+  it('бюджет построек соблюдается: часы сразу выходят за бюджет после первой постройки — за кадр добавляется ровно 1 меш', () => {
+    const budgetMs = config('terrain.lod.patchBuildBudgetMs')
+    let call = 0
+    const nowMs = (): number => (call++ === 0 ? 0 : budgetMs + 1)
+
+    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080), undefined, undefined, nowMs)
     const before = sphere.children.length
     sphere.updateObject(makeCtx(2))
-    expect(sphere.children.length - before).toBeLessThanOrEqual(PATCH_BUILDS_PER_FRAME)
+    expect(sphere.children.length - before).toBe(1)
   })
 
   // screenHeight обязан быть device-пикселями канваса (renderer.domElement.height),

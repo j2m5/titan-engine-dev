@@ -17,9 +17,6 @@ import {
   type TerrainNodeAddress
 } from '@/core/terrain/terrainQuadtreeSelect'
 
-/** Построек патчей за один кадр — раздвигает набор постепенно, не роняя кадр на дальнем приближении. */
-export const PATCH_BUILDS_PER_FRAME = 6
-
 /**
  * Общая машинерия квадродерева патчей кубосферы: пул, отбор по SSE
  * (selectTerrainNodes), гистерезис split/merge без дыр, юбки, dispose.
@@ -30,8 +27,9 @@ export const PATCH_BUILDS_PER_FRAME = 6
  *
  * Каждый кадр selectTerrainNodes отбирает желаемый набор листьев по
  * экранной ошибке, updateObject доводит фактические патчи (пул, split/merge
- * без аллокаций геометрий) до этого набора с бюджетом PATCH_BUILDS_PER_FRAME
- * построек.
+ * без аллокаций геометрий) до этого набора с временны́м бюджетом построек за
+ * кадр (terrain.lod.patchBuildBudgetMs) — минимум одна постройка происходит
+ * всегда, дальше цикл идёт, пока не исчерпан бюджет.
  *
  * Инвариант «без дыр»: показанный узел, переставший быть желаемым,
  * освобождается ТОЛЬКО когда его замена готова — либо все желаемые листья
@@ -83,7 +81,17 @@ abstract class TerrainPatchGroup extends Group {
      * параметр ей не нужен.
      */
     private readonly waterLevelMeters?: number,
-    private readonly detailWrap: DetailWrap = detailWrapFor(undefined)
+    private readonly detailWrap: DetailWrap = detailWrapFor(undefined),
+    /**
+     * Часы бюджета построек (terrain.lod.patchBuildBudgetMs), инъекция для
+     * теста — детерминированная последовательность вместо реальных мс.
+     * Дефолт performance.now() не спорит с запретом брать время в обход
+     * UpdateContext (см. докблок onVisibleUpdate ниже): там речь про
+     * СОСТОЯНИЕ анимации (uTime), здесь — внутрикадровая длительность уже
+     * прошедших построек ЭТОГО кадра, к симуляционному ctx.elapsed отношения
+     * не имеющая.
+     */
+    private readonly nowMs: () => number = () => performance.now()
   ) {
     super()
     this.field = field
@@ -148,12 +156,21 @@ abstract class TerrainPatchGroup extends Group {
     // стоит): coarse-first ближе всего заполняет крупные дыры первым.
     const buildQueue = [...leaves].sort((a, b) => a.level - b.level)
 
+    // временной бюджет вместо счётчика: минимум одна постройка гарантирована
+    // всегда (built===0 пропускает проверку), дальше цикл идёт, пока
+    // nowMs()−frameStart не достигнет бюджета — гейт СТАРТА следующей
+    // постройки, сама постройка атомарна (не прерывается серединой). Часы
+    // читаются ПОСЛЕ пропуска уже живых узлов — их пропуск дешёвый lookup,
+    // не постройка, и не должен тратить бюджет впустую.
+    const budgetMs = config('terrain.lod.patchBuildBudgetMs')
+    const frameStart = this.nowMs()
     let built = 0
     for (const address of buildQueue) {
-      if (built >= PATCH_BUILDS_PER_FRAME) break
-
       const key = terrainNodeKey(address)
       if (this.live.has(key)) continue
+
+      const elapsedMs = this.nowMs() - frameStart
+      if (built > 0 && elapsedMs >= budgetMs) break
 
       const handle = this.pool.acquire()
       if (!handle) {
