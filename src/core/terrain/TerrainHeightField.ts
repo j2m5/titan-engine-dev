@@ -480,26 +480,38 @@ class TerrainHeightField {
     return minMeters + (raw / 65535) * (maxMeters - minMeters)
   }
 
+  /**
+   * Высота И наклон полосы одним вызовом по УЖЕ посчитанному uv — единственная
+   * точка входа (heightMeters/midbandTilt и мешер зовут её, второй dirToUv не
+   * нужен нигде). Нули при отключённой полосе (`midband === null`).
+   */
+  public midbandSample(dir: Vector3, u: number, v: number, out: MidbandSample): MidbandSample {
+    if (this.midband === null || this.envelopeGrid === null) {
+      out.heightMeters = 0
+      out.tiltE = 0
+      out.tiltN = 0
+
+      return out
+    }
+
+    const env = this.envelopeGrid.sample(u, v, this.midbandEnvScratch)
+
+    return this.midband.sample(dir.x, dir.y, dir.z, env, out)
+  }
+
   /** Канон высоты: карта + средняя полоса (`null` — полоса выключена, бит-в-бит карта). */
   public heightMeters(dir: Vector3): number {
     const uv = this.dirToUv(dir, this.uvScratch)
     const base = this.sampleMeters(uv.x, uv.y)
-
-    if (this.midband === null || this.envelopeGrid === null) return base
-
-    const env = this.envelopeGrid.sample(uv.x, uv.y, this.midbandEnvScratch)
-    const sample = this.midband.sample(dir.x, dir.y, dir.z, env, this.midbandSampleScratch)
+    const sample = this.midbandSample(dir, uv.x, uv.y, this.midbandSampleScratch)
 
     return base + sample.heightMeters
   }
 
   /** Наклон полосы (tan) в местном базисе E/N точки; `(0, 0)` без полосы. */
   public midbandTilt(dir: Vector3, out: Vector2): Vector2 {
-    if (this.midband === null || this.envelopeGrid === null) return out.set(0, 0)
-
     const uv = this.dirToUv(dir, this.uvScratch)
-    const env = this.envelopeGrid.sample(uv.x, uv.y, this.midbandEnvScratch)
-    const sample = this.midband.sample(dir.x, dir.y, dir.z, env, this.midbandSampleScratch)
+    const sample = this.midbandSample(dir, uv.x, uv.y, this.midbandSampleScratch)
 
     return out.set(sample.tiltE, sample.tiltN)
   }

@@ -3,6 +3,7 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { cubeFaceDirection } from './cubeSphere'
 import { wrapIndex, wrappedComponent, type DetailWrap } from './detailWrap'
 import type { TerrainHeightField } from './TerrainHeightField'
+import type { MidbandSample } from './midbandField'
 
 /** Вершин в регулярной сетке патча segments×segments (без юбки). */
 const gridVertexCount = (segments: number): number => (segments + 1) * (segments + 1)
@@ -130,7 +131,9 @@ const POLE_EPSILON = 1e-9
  * и берётся от центра патча — иначе обёртка рвала бы треугольники внутри
  * патча. Два набора — под два слоя детали (40 м / 7 м), каждый со своим W.
  *
- * height — метры над референсом (sampleMeters), фаза террас средней полосы в шейдере.
+ * height — метры над референсом (карта + полоса, `field.midbandSample`),
+ * фаза террас средней полосы в шейдере. midTilt — наклон полосы (tan) в
+ * базисе восток/север вершины (Task 8 читает его в шейдере).
  */
 function writeTerrainPatchAttributes(
   field: TerrainHeightField,
@@ -146,6 +149,7 @@ function writeTerrainPatchAttributes(
   detailPos: Float32Array,
   detailPos2: Float32Array,
   heights: Float32Array,
+  midTilts: Float32Array,
   wrap: DetailWrap
 ): Vector3 {
   const patches = 1 << depth
@@ -155,6 +159,8 @@ function writeTerrainPatchAttributes(
 
   const dir = new Vector3()
   const uv = new Vector2()
+  // скретч полосы: один на всю сборку патча, аллокаций в цикле нет
+  const bandScratch: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0 }
 
   const centerDir = cubeFaceDirection(face, s0 + span / 2, t0 + span / 2, new Vector3())
   const center = centerDir.clone().multiplyScalar(field.surfaceRadiusUnits(centerDir))
@@ -182,8 +188,11 @@ function writeTerrainPatchAttributes(
       // dirToUv один раз на вершину: surfaceRadiusUnits(dir) внутри тоже звал бы
       // его повторно (heightMeters → dirToUv) — 1.62М лишних atan2+acos на сборке
       field.dirToUv(dir, uv)
-      const heightMeters = field.sampleMeters(uv.x, uv.y)
+      const band = field.midbandSample(dir, uv.x, uv.y, bandScratch)
+      const heightMeters = field.sampleMeters(uv.x, uv.y) + band.heightMeters
       heights[k] = heightMeters
+      midTilts[k * 2] = band.tiltE
+      midTilts[k * 2 + 1] = band.tiltN
       const r = toThreeJSUnits(field.radiusKm + heightMeters / 1000)
       positions[k * 3] = dir.x * r - center.x
       positions[k * 3 + 1] = dir.y * r - center.y
@@ -251,6 +260,10 @@ function writeTerrainPatchAttributes(
 
     // юбка несёт высоту кромки — радиальный сдвиг юбки не рельеф
     heights[skirtIndex] = heights[edgeIndex]
+
+    // юбка несёт наклон полосы своей кромочной вершины
+    midTilts[skirtIndex * 2] = midTilts[edgeIndex * 2]
+    midTilts[skirtIndex * 2 + 1] = midTilts[edgeIndex * 2 + 1]
   }
 
   return center
@@ -279,6 +292,7 @@ export function buildTerrainPatchGeometry(
   const detailPos = new Float32Array(vertexCount * 3)
   const detailPos2 = new Float32Array(vertexCount * 3)
   const heights = new Float32Array(vertexCount)
+  const midTilts = new Float32Array(vertexCount * 2)
 
   const center = writeTerrainPatchAttributes(
     field,
@@ -294,6 +308,7 @@ export function buildTerrainPatchGeometry(
     detailPos,
     detailPos2,
     heights,
+    midTilts,
     wrap
   )
 
@@ -304,6 +319,7 @@ export function buildTerrainPatchGeometry(
   geometry.setAttribute('detailPos', new BufferAttribute(detailPos, 3))
   geometry.setAttribute('detailPos2', new BufferAttribute(detailPos2, 3))
   geometry.setAttribute('height', new BufferAttribute(heights, 1))
+  geometry.setAttribute('midTilt', new BufferAttribute(midTilts, 2))
   geometry.setIndex(index)
   geometry.computeBoundingSphere()
 
@@ -334,6 +350,7 @@ export function buildTerrainPatchInto(
   const detailPos = geometry.getAttribute('detailPos') as BufferAttribute
   const detailPos2 = geometry.getAttribute('detailPos2') as BufferAttribute
   const height = geometry.getAttribute('height') as BufferAttribute
+  const midTilt = geometry.getAttribute('midTilt') as BufferAttribute
 
   const center = writeTerrainPatchAttributes(
     field,
@@ -349,6 +366,7 @@ export function buildTerrainPatchInto(
     detailPos.array as Float32Array,
     detailPos2.array as Float32Array,
     height.array as Float32Array,
+    midTilt.array as Float32Array,
     wrap
   )
 
@@ -358,6 +376,7 @@ export function buildTerrainPatchInto(
   detailPos.needsUpdate = true
   detailPos2.needsUpdate = true
   height.needsUpdate = true
+  midTilt.needsUpdate = true
   geometry.computeBoundingSphere()
   mesh.position.copy(center)
 }

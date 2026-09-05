@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { Vector2, Vector3 } from 'three'
 import { buildPatchIndex, buildTerrainPatchGeometry, terrainPatchVertexCount } from '@/core/terrain/terrainPatchGeometry'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
-import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
 import { detailWrapFor, wrapIndex, wrappedComponent } from '@/core/terrain/detailWrap'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { SpaceScale } from '@/core/constants'
@@ -13,12 +12,12 @@ function makeMap(width: number, height: number, values: number[], minMeters = 0,
 
 const R_KM = 1736
 // небольшой случайный рельеф — паритет и RTC должны держаться не на константе.
-// Полоса (Task 4) выключена: этот файл проверяет мешер против КАРТЫ (мешер
-// пока строится по sampleMeters, без полосы) — с полосой по умолчанию
-// heightMeters/surfaceRadiusUnits разошлись бы с позицией вершины.
+// Полоса ВКЛЮЧЕНА (дефолт, Task 7): мешер теперь читает field.midbandSample
+// тем же dir/uv, что и heightMeters/surfaceRadiusUnits — паритет позиции
+// вершины держится и с полосой (обе стороны считают карту и полосу одинаково).
 function bumpyField(): TerrainHeightField {
   const values = Array.from({ length: 16 * 8 }, (_, k) => (k * 4001) % 65535)
-  return new TerrainHeightField(makeMap(16, 8, values, -2000, 9000), R_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
+  return new TerrainHeightField(makeMap(16, 8, values, -2000, 9000), R_KM)
 }
 
 const SEGMENTS = 8
@@ -447,6 +446,43 @@ describe('buildTerrainPatchGeometry: атрибут height', () => {
       }
       expect(edge).toBeGreaterThanOrEqual(0)
       expect(height.getX(skirt)).toBe(height.getX(edge))
+    }
+  })
+})
+
+describe('buildTerrainPatchGeometry: атрибут midTilt', () => {
+  it('midTilt = midbandTilt поля в направлении вершины', () => {
+    const field = bumpyField()
+    const { geometry, center } = build(field, 0, 1, 0)
+    const pos = geometry.getAttribute('position')
+    const tilt = geometry.getAttribute('midTilt')
+    expect(tilt.itemSize).toBe(2)
+    expect(tilt.count).toBe(pos.count)
+    const expected = new Vector2()
+    let nonZero = 0
+    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
+      const dir = new Vector3(pos.getX(k) + center.x, pos.getY(k) + center.y, pos.getZ(k) + center.z).normalize()
+      field.midbandTilt(dir, expected)
+      expect(Math.abs(tilt.getX(k) - expected.x)).toBeLessThan(1e-4)
+      expect(Math.abs(tilt.getY(k) - expected.y)).toBeLessThan(1e-4)
+      if (expected.lengthSq() > 0) nonZero++
+    }
+    expect(nonZero).toBeGreaterThan(GRID_VERTEX_COUNT / 2)
+  })
+
+  it('юбочная вершина несёт midTilt своей кромочной', () => {
+    const { geometry } = build(bumpyField(), 0, 1, 0, 0.001)
+    const tilt = geometry.getAttribute('midTilt')
+    const uv = geometry.getAttribute('uv')
+    for (let r = 0; r < SEGMENTS * 4; r++) {
+      const skirt = GRID_VERTEX_COUNT + r
+      let edge = -1
+      for (let k = 0; k < GRID_VERTEX_COUNT && edge < 0; k++) {
+        if (uv.getX(k) === uv.getX(skirt) && uv.getY(k) === uv.getY(skirt)) edge = k
+      }
+      expect(edge).toBeGreaterThanOrEqual(0)
+      expect(tilt.getX(skirt)).toBe(tilt.getX(edge))
+      expect(tilt.getY(skirt)).toBe(tilt.getY(edge))
     }
   })
 })

@@ -5,18 +5,18 @@ import { buildPatchIndex, terrainPatchVertexCount } from './terrainPatchGeometry
  * Потолок одновременно живых патчей квадродерева. Замер: на HiDPI (H=2160)
  * при τ≈2 желаемый набор SSE-отбора уже 552+ листьев, а живых на переходах
  * split/merge больше (старый и новый узел видны одновременно, см. инвариант
- * «без дыр» в TerrainSphere) — 640 пробивается. 1024 слота = ~275 МБ
- * атрибутов (15 float на вершину: position 3 + normal 3 + uv 2 + detailPos 3
- * + detailPos2 3 + height 1, TERRAIN_PATCH_SEGMENTS=64 → 4481 вершина на
- * патч) при ленивой аллокации (createHandle зовётся по факту, не заранее) —
- * платит только дошедший до этой глубины набор. Потолок страхует от
- * неограниченного роста при патологическом отборе (камера в стене, дребезг),
- * не отражает штатный размер набора.
+ * «без дыр» в TerrainSphere) — 640 пробивается. 1024 слота = ~312 МБ
+ * атрибутов (17 float на вершину: position 3 + normal 3 + uv 2 + detailPos 3
+ * + detailPos2 3 + height 1 + midTilt 2, TERRAIN_PATCH_SEGMENTS=64 → 4481
+ * вершина на патч) при ленивой аллокации (createHandle зовётся по факту, не
+ * заранее) — платит только дошедший до этой глубины набор. Потолок страхует
+ * от неограниченного роста при патологическом отборе (камера в стене,
+ * дребезг), не отражает штатный размер набора.
  *
  * Водный пул (WATER_MAX_LIVE_PATCHES, см. WaterSphere, 256 слотов) платит тот
- * же бюджет на слот — detailPos/detailPos2 и height заведены пулом безусловно
- * (общая TerrainPatchPool), хотя WaterMaterial их не читает; осознанная цена
- * общего пула, та же, что у detailPos.
+ * же бюджет на слот — detailPos/detailPos2, height и midTilt заведены пулом
+ * безусловно (общая TerrainPatchPool), хотя WaterMaterial их не читает;
+ * осознанная цена общего пула, та же, что у detailPos.
  */
 export const MAX_LIVE_PATCHES = 1024
 
@@ -100,6 +100,7 @@ class TerrainPatchPool {
     const detailPos = new BufferAttribute(new Float32Array(vertexCount * 3), 3)
     const detailPos2 = new BufferAttribute(new Float32Array(vertexCount * 3), 3)
     const height = new BufferAttribute(new Float32Array(vertexCount), 1)
+    const midTilt = new BufferAttribute(new Float32Array(vertexCount * 2), 2)
     // DynamicDrawUsage: split/merge перезаписывает эти атрибуты на месте
     // каждый раз, когда слот переиспользуется (buildTerrainPatchInto) — не
     // однократная запись, которую предполагает дефолтный StaticDrawUsage.
@@ -109,12 +110,14 @@ class TerrainPatchPool {
     detailPos.setUsage(DynamicDrawUsage)
     detailPos2.setUsage(DynamicDrawUsage)
     height.setUsage(DynamicDrawUsage)
+    midTilt.setUsage(DynamicDrawUsage)
     geometry.setAttribute('position', position)
     geometry.setAttribute('normal', normal)
     geometry.setAttribute('uv', uv)
     geometry.setAttribute('detailPos', detailPos)
     geometry.setAttribute('detailPos2', detailPos2)
     geometry.setAttribute('height', height)
+    geometry.setAttribute('midTilt', midTilt)
     geometry.setIndex(this.index)
 
     const mesh = new Mesh(geometry, this.material)
