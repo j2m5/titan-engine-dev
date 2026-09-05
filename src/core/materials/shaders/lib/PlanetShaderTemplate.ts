@@ -77,6 +77,13 @@ export const PlanetShaderTemplate: ShaderProps = {
       varying float vHeightMeters;
     #endif
 
+    #ifdef USE_SLOPE
+      // Наклон геометрии средней полосы B (tan в базисе T/B SlopeNormal) —
+      // атрибут TerrainSphere, домешивается в декод slope-карты во фрагменте
+      attribute vec2 midTilt;
+      varying vec2 vMidTilt;
+    #endif
+
     void main() {
       vec4 worldPosition = modelMatrix * vec4(position, 1.0);
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
@@ -111,6 +118,10 @@ export const PlanetShaderTemplate: ShaderProps = {
 
       #ifdef USE_TERRAIN_MACRO_DETAIL
         vHeightMeters = height;
+      #endif
+
+      #ifdef USE_SLOPE
+        vMidTilt = midTilt;
       #endif
 
       ${ShaderChunk['logdepthbuf_vertex']}
@@ -160,6 +171,8 @@ export const PlanetShaderTemplate: ShaderProps = {
     varying vec3 vLocalDir;
 
     #ifdef USE_SLOPE
+      // Наклон геометрии средней полосы B — домешивается в декод slope-карты
+      varying vec2 vMidTilt;
       #include <slopeNormalUniforms>
       #include <slopeNormalFunctions>
     #endif
@@ -247,7 +260,7 @@ export const PlanetShaderTemplate: ShaderProps = {
           // под тем же uv здесь больше нет (не macroSlope ниже: тот же
           // формат байта, но отдельный путь под другим гейтом).
           vec2 terrainSlopeVec;
-          nLocal = perturbNormalFromSlope(nLocal, eastLocal, uv, terrainSlopeVec);
+          nLocal = perturbNormalFromSlope(nLocal, eastLocal, uv, vMidTilt, terrainSlopeVec);
           terrainSlopeTan = length(terrainSlopeVec);
         #endif
 
@@ -266,7 +279,7 @@ export const PlanetShaderTemplate: ShaderProps = {
           // живёт рядом с декодом cavity выше. Канал B — только под USE_CAVITY
           // (без гейта карта может быть без полости).
           vec4 macroSlopeSample = texture2D(bumpMap, uv);
-          vec2 macroSlope = (macroSlopeSample.xy * 255.0 - 128.0) * (uSlopeRange / 127.0);
+          vec2 macroSlope = (macroSlopeSample.xy * 255.0 - 128.0) * (uSlopeRange / 127.0) + vMidTilt;
           float macroCavity = 0.0;
           #ifdef USE_CAVITY
             macroCavity = (macroSlopeSample.z * 255.0 - 128.0) / 127.0;

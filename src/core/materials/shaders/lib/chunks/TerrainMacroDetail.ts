@@ -28,6 +28,11 @@ export const terrainMacroDetailUniforms = /* glsl */ `
   uniform vec2 uMacroStructureSlope;
   // Высота вершины (метры над референсом, атрибут height) — фаза террас
   varying float vHeightMeters;
+  // Гейт наклона изотропного fbm (арка "средняя полоса B"): 0 у тел с
+  // геометрией полосы - её рельеф уже покрывает то же место, что fbm, двойной
+  // наклон нормали иначе. Альбедо-модуляция fbm и его роль источника вобла
+  // для форм склона (applyMacroSlopeStructures) под этот гейт не подпадают.
+  uniform float uMacroTiltGate;
 `
 
 export const terrainMacroDetailFunctions = /* glsl */ `
@@ -200,7 +205,9 @@ export const terrainMacroDetailFunctions = /* glsl */ `
     vec3 g = f.xyz;
     vec3 gradTangent = g - dirLocal * dot(g, dirLocal);
     // Наклон = (амплитуда/период)·grad: домен в периодах, ∂/∂s = (1/P)·∂/∂q.
-    nLocal = normalize(nLocal - uMacroNormalScale * MACRO_RELIEF_ASPECT * contrast * gradTangent);
+    // uMacroTiltGate гасит только наклон нормали — альбедо и вклад в fbmValue
+    // формам склона ниже (applyMacroSlopeStructures) идут отдельно, без гейта.
+    nLocal = normalize(nLocal - uMacroTiltGate * uMacroNormalScale * MACRO_RELIEF_ASPECT * contrast * gradTangent);
 
     albedoMul *= clamp(1.0 + uMacroStrength * contrast * h, 0.0, 2.0);
 

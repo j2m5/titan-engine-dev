@@ -61,7 +61,7 @@ describe('FragmentUv: попиксельные UV терраформных те�
     expect(frag).toContain('uniform mat3 normalMatrix;')
     expect(frag).not.toContain('vEast')
     // терраформная ветка на локальных аргументах (см. тест ниже)
-    expect(frag).toContain('perturbNormalFromSlope(nLocal, eastLocal, uv, terrainSlopeVec)')
+    expect(frag).toContain('perturbNormalFromSlope(nLocal, eastLocal, uv, vMidTilt, terrainSlopeVec)')
   })
 
   it('терраформная цепочка нормалей локальна: один normalMatrix в конце', () => {
@@ -69,7 +69,7 @@ describe('FragmentUv: попиксельные UV терраформных те�
     expect(frag).toContain('vec3 nLocal = dirLocal;')
     expect(frag).toContain('vec3 eastLocal = cross(vec3(0.0, 1.0, 0.0), dirLocal);')
     // перturb-слои зовутся с локальными аргументами
-    expect(frag).toContain('perturbNormalFromSlope(nLocal, eastLocal, uv, terrainSlopeVec)')
+    expect(frag).toContain('perturbNormalFromSlope(nLocal, eastLocal, uv, vMidTilt, terrainSlopeVec)')
     // финальный переход — один
     expect(frag).toContain('normal = normalize(normalMatrix * nLocal);')
     // старой view-space связки в терраформной ветке нет

@@ -38,6 +38,14 @@ describe('SlopeNormal: попиксельная нормаль из slope-кар
     expect(sampleCalls).toBe(1)
   })
 
+  it('out-перегрузка (без extraSlope) — одно тело: делегирует 4-арг перегрузке с vec2(0.0)', () => {
+    expect(slopeNormalFunctions).toContain(
+      'return perturbNormalFromSlope(surfNormal, east, uv, vec2(0.0), slopeOut);'
+    )
+    // старое тело (decoded = slope напрямую, без сложения) в чанке больше не встречается
+    expect(slopeNormalFunctions).not.toContain('slope = (texture2D(bumpMap, uv).xy')
+  })
+
   it('шаблон зовёт perturbNormalFromSlope локальными аргументами под USE_SLOPE, out-вариантом (без второй выборки bumpMap)', () => {
     expect(PlanetShaderTemplate.fragmentShader).toContain('#ifdef USE_SLOPE')
     // терраформная ветка (USE_SLOPE) зовёт локальными аргументами — один
@@ -46,7 +54,7 @@ describe('SlopeNormal: попиксельная нормаль из slope-кар
     // terrainSlopeVec — маска зон материала TerrainDetail (задача 2, фикс-раунд 1):
     // тот же декод, что внутри чанка, без повторной выборки текстуры.
     expect(PlanetShaderTemplate.fragmentShader).toContain(
-      'perturbNormalFromSlope(nLocal, eastLocal, uv, terrainSlopeVec)'
+      'perturbNormalFromSlope(nLocal, eastLocal, uv, vMidTilt, terrainSlopeVec)'
     )
     expect(PlanetShaderTemplate.fragmentShader).not.toContain('USE_BUMP')
   })

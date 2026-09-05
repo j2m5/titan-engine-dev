@@ -10,6 +10,7 @@ import { SLOPE_RANGE, isValidSlopeRange } from '@/core/terrain/slopeMapFormat'
 import { STEEP_DETAIL_PATHS } from '@/core/terrain/steepDetailPaths'
 import { detailTintNorm } from '@/core/terrain/detailTextureStats'
 import { resolveSteepZoneParams } from '@/core/terrain/steepZoneParams'
+import { midbandParamsOf } from '@/core/terrain/midbandParams'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { IPlanetRenderingObject } from '@/core/models/types'
 import { readRenderingData } from '@/core/helpers/renderingData'
@@ -109,6 +110,12 @@ class PlanetMaterial extends AbstractShaderMaterial {
     // Нормировка детальных наборов к их средним (detailTextureStats.ts), 1 = нет
     this.uniforms.uDetailTintNorm = new Uniform(new Vector2(1, 1))
     this.uniforms.uSteepTintNorm = new Uniform(new Vector2(1, 1))
+
+    // Гейт наклона изотропного fbm средней полосы (арка "средняя полоса B"):
+    // 0 у тел с геометрией полосы — её рельеф уже покрывает то же место, что
+    // раньше давал fbm-наклон, двойной рельеф иначе. 1 — прежний вид (fbm сам
+    // наклоняет нормаль) у тел без геометрии полосы.
+    this.uniforms.uMacroTiltGate = new Uniform(midbandParamsOf(model).midbandStrength > 0 ? 0 : 1)
   }
 
   private static resolveCloudAtmosphereThicknessUnits(atmosphereActor: Actor | undefined): number | undefined {
