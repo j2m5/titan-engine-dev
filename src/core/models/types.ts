@@ -217,6 +217,8 @@ export interface IPlanetRenderingObject {
   terrainLambert?: number
   /** Пол ламберта (0..1): рассеянный свет в тени рельефа. Дефолт 0.15. */
   terrainAmbient?: number
+  /** Геометрический N·L, при котором пол ламберта полный; ниже пол ∝ солнцу над горизонтом (0 на терминаторе). Дефолт 0.3. */
+  terrainAmbientSunRef?: number
 
   /**
    * Уровень воды, метры (арка water-foundation, Task 3+). Гейт водной

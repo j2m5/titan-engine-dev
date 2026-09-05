@@ -33,7 +33,7 @@ describe('PlanetShaderTemplate: ламберт суши (спайк, USE_TERRAIN
     expect(frag).toContain('uniform float uTerrainLambert;')
     expect(frag).toContain('uniform float uTerrainAmbient;')
     const albedoIdx = frag.indexOf('dayColor *= albedoMul;')
-    const lambertIdx = frag.indexOf('dayColor *= mix(1.0, mix(uTerrainAmbient, 1.0, max(NdotLraw, 0.0)), uTerrainLambert);')
+    const lambertIdx = frag.indexOf('dayColor *= mix(1.0, mix(ambientFloor, 1.0, max(NdotLraw, 0.0)), uTerrainLambert);')
     const dayIdx = frag.indexOf('vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);')
     expect(albedoIdx).toBeGreaterThan(-1)
     expect(lambertIdx).toBeGreaterThan(albedoIdx)
@@ -43,11 +43,11 @@ describe('PlanetShaderTemplate: ламберт суши (спайк, USE_TERRAIN
   it('облака ламбертом суши не затеняются: множителя на составленном day нет', () => {
     // Облака живут по своему закону (pow(0.5·lightIntensity + 0.1, 0.5)):
     // затенять их нормалью РЕЛЬЕФА — двойной учёт и наклон не по их высоте.
-    expect(frag).not.toContain('day *= mix(1.0, mix(uTerrainAmbient')
+    expect(frag).not.toContain('day *= mix(1.0, mix(ambientFloor')
   })
 
   it('множитель под гейтом USE_TERRAIN_UV — легаси-путь гигантов не тронут', () => {
-    const lambertIdx = frag.indexOf('dayColor *= mix(1.0, mix(uTerrainAmbient')
+    const lambertIdx = frag.indexOf('dayColor *= mix(1.0, mix(ambientFloor')
     const guardIdx = frag.lastIndexOf('#ifdef USE_TERRAIN_UV', lambertIdx)
     const endifIdx = frag.indexOf('#endif', lambertIdx)
     expect(guardIdx).toBeGreaterThan(-1)
@@ -98,8 +98,14 @@ describe('PlanetShader: ручки terrainLambert/terrainAmbient', () => {
   })
 
   it('ручки из данных тела доезжают в юниформы', () => {
-    const shader = new PlanetShader(stubActor({ terrainLambert: 1, terrainAmbient: 0.06 }))
+    const shader = new PlanetShader(stubActor({ terrainLambert: 1, terrainAmbient: 0.06, terrainAmbientSunRef: 0.5 }))
     expect(shader.uniforms.uTerrainLambert.value).toBe(1)
     expect(shader.uniforms.uTerrainAmbient.value).toBe(0.06)
+    expect(shader.uniforms.uTerrainAmbientSunRef.value).toBe(0.5)
+  })
+
+  it('дефолт terrainAmbientSunRef 0.3; ноль клампится гардом от деления', () => {
+    expect(new PlanetShader(stubActor({})).uniforms.uTerrainAmbientSunRef.value).toBe(0.3)
+    expect(new PlanetShader(stubActor({ terrainAmbientSunRef: 0 })).uniforms.uTerrainAmbientSunRef.value).toBe(1e-3)
   })
 })
