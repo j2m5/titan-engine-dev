@@ -5,7 +5,11 @@ import { constantHeightField } from '@/core/terrain/constantHeightField'
 import { selectTerrainNodes, TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from '@/core/terrain/terrainQuadtreeSelect'
 import { CUBE_FACES } from '@/core/terrain/cubeSphere'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
+
+// полоса выключена там, где тест пинит ε КАРТЫ (см. конвенцию TerrainHeightField.spec.ts)
+const MIDBAND_OFF = { ...MIDBAND_DEFAULTS, midbandStrength: 0 }
 
 /**
  * Пер-узловая ε (числитель SSE). Глобальная ε — один p99 на всё тело, и она
@@ -55,6 +59,9 @@ describe('TerrainHeightField: пер-узловая ε различает шер
     expect(smooth).toBeLessThan(rough / 10)
   })
 
+  // Таймаут поднят (Task 5, MAX_LEVEL 6→8): полный перебор родитель/4×ребёнка
+  // по всем граням и уровням растёт как 4^level — level=8 даёт 16× итераций
+  // против level=6, дефолтные 5с тесны под параллельной нагрузкой полного прогона.
   it('ε родителя не меньше ε любого его ребёнка — иначе спуск по дереву мог бы увеличить ошибку', () => {
     const field = halfRoughField()
 
@@ -77,8 +84,9 @@ describe('TerrainHeightField: пер-узловая ε различает шер
         }
       }
     }
-  })
+  }, 20_000)
 
+  // см. таймаут теста выше — тот же класс нагрузки (полный перебор листьев MAX_LEVEL)
   it('одиночный битый блок не задирает ε НИ ОДНОГО узла — лист берёт второй по величине размах', () => {
     // Артефакт DEM (шов, NODATA, выброс) — один блок с огромным размахом на
     // идеально плоской карте. При свёртке максимумом он поднял бы ε своего
@@ -97,7 +105,7 @@ describe('TerrainHeightField: пер-узловая ε различает шер
         }
       }
     }
-  })
+  }, 20_000)
 
   it('константное поле (вода) пер-узловой ε не имеет — падает на по-уровневую, дерево воды не трогается', () => {
     const water = constantHeightField(R_KM, -667.2)
@@ -142,7 +150,7 @@ describe('TerrainHeightField: вырожденная карта не отрав�
     // экстраполированные уровни. Ловится только явной проверкой на конечность:
     // `toBe(NaN)` проходит (Object.is(NaN, NaN) === true), а ноль, умноженный
     // на NaN, снова NaN.
-    const field = new TerrainHeightField(makeMap(new Uint16Array(WIDTH * HEIGHT).fill(30000)), R_KM)
+    const field = new TerrainHeightField(makeMap(new Uint16Array(WIDTH * HEIGHT).fill(30000)), R_KM, MIDBAND_OFF)
 
     for (let level = TERRAIN_QUADTREE_MIN_LEVEL; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
       expect(Number.isFinite(field.geometricErrorMeters(level))).toBe(true)

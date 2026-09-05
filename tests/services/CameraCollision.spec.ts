@@ -77,8 +77,12 @@ describe('collectColliders: терраформные тела', () => {
     const colliders = collectColliders([body])
 
     expect(colliders[0].heightField).toBeDefined()
+    // maxH = maxHeightWithMidbandMeters (Task 5), не буквально 10000 м карты —
+    // полоса включена по умолчанию и добавляет свою амплитуду к потолку
     expect(colliders[0].radius).toBeCloseTo(
-      toThreeJSUnits(1736 + 10000 / 1000 + colliders[0].heightField!.maxClearanceMeters / 1000),
+      toThreeJSUnits(
+        1736 + colliders[0].heightField!.maxHeightWithMidbandMeters / 1000 + colliders[0].heightField!.maxClearanceMeters / 1000
+      ),
       10
     )
   })
@@ -506,10 +510,15 @@ describe('CameraCollision: двухфазный контакт — поточе�
       maxMeters: 65535,
       data: new Uint16Array(values)
     })
-    const body = makeBody('planet', 1736, new Vector3(), undefined, DISTANT_KINK_PATH)
+    // полоса (Task 4) выключена намеренно — тест дискриминирует sag/клиренс
+    // МАП, а не геометрию полосы (тот же приём, что и у polarSpikeBody ниже:
+    // ручка и на карте, и у модели, иначе кэш terrainHeightFieldFor разошёлся
+    // бы на два поля одной карты)
+    const body = makeBody('planet', 1736, new Vector3(), undefined, DISTANT_KINK_PATH, undefined, 0)
     const field = terrainHeightFieldFor(
       (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(DISTANT_KINK_PATH)!,
-      1736
+      1736,
+      { ...MIDBAND_DEFAULTS, midbandStrength: 0 }
     )
     return { body, field }
   }
@@ -732,9 +741,17 @@ describe('CameraCollision: внешний марч учитывает широт
     // ложится на ~кол. 108 (вне стенки), s перешагивает length — null; после
     // марша с бондом стенку вскрывала вторая половина: непроверенная цель
     // последнего скольжения (нормаль хита почти радиальна — честный рельеф
-    // под клиренс-стенкой плоский). Камера обязана остановиться ДО стенки —
-    // угловое положение вдоль пути меньше угла до колонки шипа
-    expect(startDir.angleTo(localDir)).toBeLessThan(startDir.angleTo(dirAtColRow(100, 4)))
+    // под клиренс-стенкой плоский). Камера обязана остановиться ДО стенки.
+    //
+    // Дискриминатор — ДОЛЯ пройденного пути start→end, а не конкретная
+    // колонка (Task 5: MAX_LEVEL 6→8 вчетверо уменьшил equatorStepTexels для
+    // этой карты — клиренс-модель точнее калибрует шаг сетки, стенка стала
+    // шире и ниже, ровно колонка остановки съехала с ~99.x на ~100.4; сам
+    // факт остановки у переднего края стенки, а не тоннель до конца, не
+    // изменился): непойманный тоннель долетает почти до конца (fraction≈1),
+    // пойманный останавливается заметно раньше (замерено: ≈0.46)
+    const traveledFraction = start.distanceTo(camera.position) / start.distanceTo(end)
+    expect(traveledFraction).toBeLessThan(0.8)
     // и не встроена глубже честного поточечного пола своего направления
     const floor =
       field.surfaceRadiusUnits(localDir) + toThreeJSUnits((field.sagMeters(localDir) + CLEARANCE_MARGIN_METERS) / 1000)
@@ -1011,6 +1028,101 @@ describe('CameraCollision: марч не туннелирует под уров�
     // без воды честный рельеф на 40 км ниже — обструкции по пути нет вовсе,
     // камера долетает до наивного финиша нетронутой
     expect(camera.position.distanceTo(end)).toBeCloseTo(0, 6)
+  })
+})
+
+// Task 5 (midband-geometry): march-бонды (`marchTerrain`/`marchPointwise`)
+// обязаны нести `field.midbandSlopeBound` — до этой задачи `heightMeters` уже
+// включал полосу (Task 4), а марч ограничивал шаг только SLOPE_RANGE карты,
+// то есть мог перепрыгнуть гребень полосы. Поле здесь — ДЕФОЛТНОЕ (полоса
+// включена), не strength:0, как у большинства фикстур выше — тест обязан
+// увидеть именно её геометрию.
+describe('CameraCollision: липшицев бонд полосы в марче (Task 5, midband-geometry)', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  const MIDBAND_PATH = 'planets/midband-collision/height.raw'
+  const MB_RADIUS_KM = 1736
+  const MB_WIDTH = 512
+  const MB_HEIGHT = 256
+
+  function midbandBody(): { body: Object3D; field: TerrainHeightField } {
+    const values = new Array(MB_WIDTH * MB_HEIGHT)
+    for (let y = 0; y < MB_HEIGHT; y++) {
+      for (let x = 0; x < MB_WIDTH; x++) {
+        values[y * MB_WIDTH + x] = Math.round(32768 + 20000 * Math.sin(x * 0.09) * Math.cos(y * 0.13))
+      }
+    }
+    ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(MIDBAND_PATH, {
+      width: MB_WIDTH,
+      height: MB_HEIGHT,
+      minMeters: -9000,
+      maxMeters: 9000,
+      data: new Uint16Array(values)
+    })
+    const body = makeBody('planet', MB_RADIUS_KM, new Vector3(), undefined, MIDBAND_PATH)
+    const field = terrainHeightFieldFor(
+      (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(MIDBAND_PATH)!,
+      MB_RADIUS_KM
+    )
+    return { body, field }
+  }
+
+  // Детерминированная псевдослучайная развёртка направлений (LCG), |y|<0.9:
+  // у самого полюса аналитический наклон полосы может втрое превышать
+  // slopeBound (известный нюанс Task 3, замороженное направление стока в
+  // производной варпа) — направления теста держатся вдали от него.
+  function randomDirs(n: number): Vector3[] {
+    const out: Vector3[] = []
+    let seed = 12345
+    const rand = (): number => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff
+      return seed / 0x7fffffff
+    }
+    for (let i = 0; i < n; i++) {
+      const y = (rand() * 2 - 1) * 0.9
+      const theta = rand() * 2 * Math.PI
+      const r = Math.sqrt(Math.max(0, 1 - y * y))
+      out.push(new Vector3(r * Math.cos(theta), y, r * Math.sin(theta)))
+    }
+    return out
+  }
+
+  it('быстрый свип снаружи оболочки к поверхности в 50 направлениях не туннелирует (полоса включена по умолчанию)', () => {
+    const { body, field } = midbandBody()
+    expect(field.midband).not.toBeNull() // фикстура честна: полоса реально активна
+
+    for (const dir of randomDirs(50)) {
+      const outerAltitudeUnits = toThreeJSUnits(50) // 50 км над консервативной оболочкой — заведомо снаружи
+      const start = dir.clone().multiplyScalar(field.collisionRadiusUnits(dir) + outerAltitudeUnits)
+      // финиш глубоко под честным полом — непойманный тоннель долетел бы досюда
+      const end = dir.clone().multiplyScalar(field.surfaceRadiusUnits(dir) * 0.5)
+      expect((start.distanceTo(end) / SpaceScale) * 1000).toBeGreaterThan(1000) // санити: шаг реально > 1 км/кадр
+
+      const { collision, camera } = makeCollision([body], start)
+      collision.resolve() // фиксирует lastPosition снаружи
+      camera.position.copy(end)
+      collision.resolve()
+
+      const localDir = camera.position.clone().normalize()
+      // тот же критерий, что и у существующих тестов «нет туннелирования»
+      // (см. «внешний марч учитывает широтный градиент клиренса» выше):
+      // честный поточечный пол + margin, допуск 0.1% на эпсилон контакта
+      const target =
+        field.surfaceRadiusUnits(localDir) + toThreeJSUnits((field.sagMeters(localDir) + CLEARANCE_MARGIN_METERS) / 1000)
+      expect(camera.position.length()).toBeGreaterThanOrEqual(target * 0.999)
+    }
+  })
+
+  it('широкая фаза учитывает амплитуду полосы: R + maxHeightWithMidbandMeters + maxClearanceMeters', () => {
+    const { body, field } = midbandBody()
+    expect(field.midband).not.toBeNull()
+
+    const colliders = collectColliders([body])
+
+    expect(colliders[0].radius).toBeCloseTo(
+      toThreeJSUnits(MB_RADIUS_KM + field.maxHeightWithMidbandMeters / 1000 + field.maxClearanceMeters / 1000),
+      10
+    )
   })
 })
 

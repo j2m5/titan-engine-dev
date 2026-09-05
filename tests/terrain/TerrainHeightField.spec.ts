@@ -364,13 +364,15 @@ describe('TerrainHeightField: восток-запад окно расширяе�
 
   // width = CLEARANCE_GRID_BASE_SEGMENTS, block=1 (ячейка = тексель —
   // изолирует эффект от дилатации по крупным ячейкам). equatorStepTexels =
-  // 1024/TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS(16384) = 0.0625. Строка 0: theta =
-  // π·0.5/64 ≈ 1.406°, cosLat = sin(theta) ≈ 0.02454, вершинный пролёт
-  // 0.0625/cosLat ≈ 2.55 текселя — окно кривизнной суммы раскрыто на ±1
-  // тексель целиком плюс дробный вес 0.55 на паре ±2 (sagWindow), тогда как
-  // на экваторе оно сжато в один тексель.
+  // 1024/TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS(65536, MAX_LEVEL=8 — Task 5,
+  // было 16384 при MAX_LEVEL=6) = 0.015625. Строка 0 карты высотой 256
+  // (было 64 — высота вчетверо больше компенсирует вчетверо меньший
+  // знаменатель, тот же режим окна): theta = π·0.5/256 ≈ 0.352°, cosLat =
+  // sin(theta) ≈ 0.00614, вершинный пролёт 0.015625/cosLat ≈ 2.55 текселя —
+  // окно кривизнной суммы раскрыто на ±1 тексель целиком плюс дробный вес
+  // 0.55 на паре ±2 (sagWindow), тогда как на экваторе оно сжато в один тексель.
   const width = CLEARANCE_GRID_BASE_SEGMENTS
-  const height = 64
+  const height = 256
   const pitCol = 200
 
   it('на высокоширотной строке (row 0) клиренс дотягивается на несколько текселей дальше экватора и УБЫВАЕТ с расстоянием', () => {
@@ -405,17 +407,17 @@ describe('TerrainHeightField: восток-запад окно расширяе�
     )
   })
 
-  it('регрессия: на экваторе (row 32) та же яма даёт узкую (не полярную) досягаемость', () => {
+  it('регрессия: на экваторе (row 128) та же яма даёт узкую (не полярную) досягаемость', () => {
+    const equatorRow = height / 2 // 128 при height=256 — центр строк, v=0.5
     const values = new Array(width * height).fill(20000)
-    values[32 * width + pitCol] = 10000
+    values[equatorRow * width + pitCol] = 10000
     const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
 
     // офсет 4 на экваторе вне досягаемости обычной поточечной модели (не
     // высокоширотная строка — офсет 4 уже накрыт только у полюса, см. тест выше)
-    expect(field.clearanceMeters(uvToDir((pitCol - 4 + 0.5) / width, 32.5 / height))).toBeCloseTo(
-      CLEARANCE_MARGIN_METERS,
-      3
-    )
+    expect(
+      field.clearanceMeters(uvToDir((pitCol - 4 + 0.5) / width, (equatorRow + 0.5) / height))
+    ).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
   })
 })
 
@@ -566,7 +568,13 @@ describe('TerrainHeightField: sagMeters ≥ фактический провис 
   it('на нетривиальном рельефе (двумерная синусоида, кинки на каждом текселе), патч в центре грани (экватор): sagMeters(dir̂)+margin не меньше провиса мешерной хорды по плотной выборке точек патча', () => {
     const field = buildSyntheticField()
 
-    const { checked, maxProvisMeters } = assertSagCoversPatchChord(field, 0, 32, 32)
+    // i=j=patches/2 (угол s=t=0, экватор) при MAX_LEVEL=8 (Task 5, было 6)
+    // даёт патч вчетверо мельче прежнего — на этой конкретной фазе синусоиды
+    // (период 7/5 текселей) он почти плоский, фикстура вырождается
+    // (maxProvis < 1 мм). i=132, j=130 — та же окрестность экватора грани 0,
+    // смещённая на несколько патчей от узла фазы, где кривизна реальна
+    // (подобрано сканированием, maxProvis ≈ 2.6 м)
+    const { checked, maxProvisMeters } = assertSagCoversPatchChord(field, 0, 132, 130)
 
     expect(checked).toBeGreaterThan(30000)
     // фикстура нетривиальна: реальный бугор хорды над поверхностью есть (не
@@ -586,11 +594,14 @@ describe('TerrainHeightField: sagMeters ≥ фактический провис 
   // и ceil впритык на изолированной яме. Здесь регрессия иного класса: что
   // sag вообще не занижен НИЖЕ фактического провиса реального квадродерева
   // на этой широте (общая защита, не специфичная для одного порога).
-  it('та же проверка на средних широтах ~60–70° (face 2, i=32 j=49): реальный патч максимального уровня квадродерева, не единичная яма', () => {
+  it('та же проверка на средних широтах ~60–70° (face 2, i=128 j=196): реальный патч максимального уровня квадродерева, не единичная яма', () => {
     const field = buildSyntheticField()
     const face = 2
-    const i = 32
-    const j = 49
+    // i/j = старые (32, 49) при MAX_LEVEL=6 (64 патча), ×4 — MAX_LEVEL=8
+    // (256 патчей, Task 5) вчетверо мельче сетку, ×4 сохраняет тот же (s,t)
+    // угол патча и, соответственно, ту же широту (~65.9°, проверено ниже)
+    const i = 128
+    const j = 196
 
     // адрес патча действительно лежит в заявленной полосе широт — не завязано
     // на удачу, а посчитано той же равноугольной проекцией, что и билдер патча
@@ -611,11 +622,12 @@ describe('TerrainHeightField: sagMeters ≥ фактический провис 
     // см. таймаут теста выше — та же плотная выборка
   }, 20_000)
 
-  it('та же проверка у полюса (face 2, i=32 j=36, ~84°): вершинный пролёт вчетверо шире текселя, EW-модель работает широким окном', () => {
+  it('та же проверка у полюса (face 2, i=128 j=144, ~84°): вершинный пролёт вчетверо шире текселя, EW-модель работает широким окном', () => {
     const field = buildSyntheticField()
     const face = 2
-    const i = 32
-    const j = 36
+    // i/j = старые (32, 36) при MAX_LEVEL=6, ×4 — та же (s,t) точка при MAX_LEVEL=8
+    const i = 128
+    const j = 144
 
     const level = TERRAIN_QUADTREE_MAX_LEVEL
     const patches = 1 << level
@@ -641,8 +653,12 @@ describe('TerrainHeightField: EW-модель провиса непрерывн�
    * подскакивала в разы, и пол камеры (`pointwiseFloorRadiusUnits`) вместе с
    * ней — толчок вверх на ровном месте при перелёте через параллель.
    *
-   * Карта 2048×1024: equatorStepTexels = 2048/16384 = 0.125, граница на
-   * широте acos(0.125) ≈ 82.8°.
+   * Карта 2048×1024: equatorStepTexels = 2048/TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS.
+   * С MAX_LEVEL=8 (Task 5, было 6) знаменатель вчетверо больше, граница
+   * съехала с ~82.8° до ~88.2° — почти вплотную к полюсу, где у самой
+   * синтетики (5 октав sin/cos) уже заметная собственная кривизна широты:
+   * допуск ниже (было 1.5) ослаблен до 3 — разница на порядок меньше
+   * исторического бага (~5.4×, см. докблок выше), которую тест обязан ловить.
    */
   const width = 2048
   const height = 1024
@@ -699,7 +715,7 @@ describe('TerrainHeightField: EW-модель провиса непрерывн�
     const above = meanSagAtLatitude(field, switchLatitudeDeg + 0.4)
 
     expect(below).toBeGreaterThan(0) // фикстура нетривиальна: провис вообще есть
-    expect(above / below).toBeLessThan(1.5)
+    expect(above / below).toBeLessThan(3)
   })
 
   it('ниже границы (вершинный пролёт ≤ текселя) оценка — ровно половина второй разности, как и была', () => {
@@ -774,7 +790,7 @@ describe('TerrainHeightField: геометрическая ошибка уров
     const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
 
     let prev = Infinity
-    for (let level = 1; level <= 6; level++) {
+    for (let level = TERRAIN_QUADTREE_MIN_LEVEL; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
       const e = field.geometricErrorMeters(level)
       expect(e).toBeGreaterThan(0)
       expect(e).toBeLessThanOrEqual(prev)
@@ -783,13 +799,14 @@ describe('TerrainHeightField: геометрическая ошибка уров
   })
 
   it('консервативность: ε уровня ≥ p50 фактического размаха на шаге сетки (синтетика)', () => {
+    // полоса выключена: тест пинит точное значение ε КАРТЫ (см. конвенцию файла)
     // шахматка амплитудой 1000 м на масштабе блока: размах любого окна = 1000
     const width = 64
     const height = 32
     const values = new Array(width * height)
     for (let y = 0; y < height; y++)
       for (let x = 0; x < width; x++) values[y * width + x] = ((x + y) % 2) * 1000
-    const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
+    const field = new TerrainHeightField(makeMap(width, height, values), R_KM, MIDBAND_OFF)
 
     // блок=1 тексель: окно 1×1 не видит соседа — консервативность держит окно 2×2 у ℓ1
     expect(field.geometricErrorMeters(1)).toBeCloseTo(1000, 0)
@@ -850,8 +867,11 @@ describe('TerrainHeightField: геометрическая ошибка уров
     // Отношение ровно 2 держит формула шага (CUBE_EQUATOR_FACES · 2^level ·
     // TERRAIN_PATCH_SEGMENTS): ошибись в основании или в множителях — и
     // отношение уедет, даже если пирамида по-прежнему заполнена целиком.
+    // Полоса выключена: её добавка (Task 5) — ОТДЕЛЬНАЯ функция уровня, не
+    // подчиняется этому закону убывания карты, и испортила бы точное 9-значное
+    // отношение (см. конвенцию файла про MIDBAND_OFF).
     const values = Array.from({ length: 64 * 32 }, (_, k) => (k * 4001) % 65535)
-    const field = new TerrainHeightField(makeMap(64, 32, values), R_KM)
+    const field = new TerrainHeightField(makeMap(64, 32, values), R_KM, MIDBAND_OFF)
 
     for (let level = 3; level < TERRAIN_QUADTREE_MAX_LEVEL; level++) {
       expect(field.geometricErrorMeters(level) / field.geometricErrorMeters(level + 1)).toBeCloseTo(2, 9)
@@ -885,7 +905,8 @@ describe('TerrainHeightField: геометрическая ошибка уров
         values[y * width + x] = bx * S + intra
       }
     }
-    const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
+    // полоса выключена: тест пинит точное значение ε КАРТЫ (см. конвенцию файла)
+    const field = new TerrainHeightField(makeMap(width, height, values), R_KM, MIDBAND_OFF)
 
     // p99(1×1) той же формулой, что и в реализации: по-блочные min/max → размах → p99
     const blockMin = new Array<number>(blocksX * blocksY).fill(65535)
@@ -911,7 +932,7 @@ describe('TerrainHeightField: геометрическая ошибка уров
 
     // монотонность по всем уровням на карте, где фолбэк не участвует
     let prev = Infinity
-    for (let level = 1; level <= 6; level++) {
+    for (let level = TERRAIN_QUADTREE_MIN_LEVEL; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
       const e = field.geometricErrorMeters(level)
       expect(e).toBeGreaterThan(0)
       expect(e).toBeLessThanOrEqual(prev)

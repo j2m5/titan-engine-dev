@@ -260,10 +260,13 @@ class TerrainHeightField {
    * 0 — тогда `heightMeters` бит-в-бит равен карте (см. докблок класса и
    * инвариант ниже про computeAux). Полоса читает карту ТОЛЬКО через
    * `sampleMeters`/`envelopeGrid` (сама карта высот) — её вклад никогда не
-   * участвует в ε/клиренсе (`computeAux`/`buildClearanceGrid`/
-   * `buildGeometricErrors`), это отдельный аналитический бонд
-   * (`maxHeightWithMidbandMeters`/`midbandSlopeBound`) для консьюмеров вне
-   * этого класса.
+   * участвует в ПОСТРОЕНИИ пирамид (`computeAux`/`buildClearanceGrid`/
+   * `buildGeometricErrors` считают блоки ТОЛЬКО по карте, компаньон не
+   * зависит от ручек полосы), это отдельный аналитический бонд
+   * (`maxHeightWithMidbandMeters`/`midbandSlopeBound`/`midbandErrorMeters`,
+   * Task 5) для консьюмеров вне этого класса и для ε-геометрии
+   * (`geometricErrorMeters`/`nodeGeometricErrorMeters` домешивают его поверх
+   * готовой по-карте пирамиды при ЧТЕНИИ, см. `midbandErrorTable` ниже).
    */
   public readonly midband: MidbandField | null
   private readonly envelopeGrid: MidbandEnvelopeGrid | null
@@ -271,6 +274,17 @@ class TerrainHeightField {
   public readonly maxHeightWithMidbandMeters: number
   /** Липшицев бонд |∇mid| полосы (0 без полосы) — для внешнего марча коллизии. */
   public readonly midbandSlopeBound: number
+  /**
+   * ε-добавка полосы по уровням (Task 5): `midbandErrorMeters(level)` —
+   * p99 амплитуды октав полосы короче удвоенного вершинного шага уровня
+   * (`2π·R/terrainEquatorSegmentsAtLevel(level)`), то есть волн, которые
+   * сетка этого уровня физически не может представить. Считается
+   * АНАЛИТИЧЕСКИ здесь, в конструкторе, ПОСЛЕ постройки `midband` — отдельно
+   * от `computeAux`/aux-пирамид (карта их не знает, см. докблок поля
+   * `midband`), поэтому запечённый компаньон не зависит от ручек полосы и
+   * переживает их смену без пересборки ассета.
+   */
+  private readonly midbandErrorTable: Float64Array
 
   public constructor(
     private readonly map: HeightMapData,
@@ -326,6 +340,16 @@ class TerrainHeightField {
     }
     this.maxHeightWithMidbandMeters = map.maxMeters + (this.midband?.maxAmplitudeMeters ?? 0)
     this.midbandSlopeBound = this.midband?.slopeBound ?? 0
+
+    // ε-добавка полосы по уровням (Task 5) — см. докблок поля midbandErrorTable.
+    // Считается ПОСЛЕ midband: без полосы (null) добавка тождественно 0 на
+    // всех уровнях, ветка p99AmplitudeBelowMeters не звана вовсе
+    const midbandErrorTable = new Float64Array(TERRAIN_QUADTREE_MAX_LEVEL + 1)
+    for (let level = TERRAIN_QUADTREE_MIN_LEVEL; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
+      const stepMeters = (TWO_PI * radiusKm * 1000) / terrainEquatorSegmentsAtLevel(level)
+      midbandErrorTable[level] = this.midband ? this.midband.p99AmplitudeBelowMeters(2 * stepMeters) : 0
+    }
+    this.midbandErrorTable = midbandErrorTable
   }
 
   /**
@@ -1193,19 +1217,31 @@ class TerrainHeightField {
    * диапазона и чужими индексами нельзя.
    */
   public nodeGeometricErrorMeters(face: number, level: number, i: number, j: number): number {
-    if (this.nodeErrorMetersPyramid === null) return this.geometricErrorMeters(level)
+    if (this.nodeErrorMetersPyramid === null) return this.geometricErrorMeters(level) // фолбэк уже несёт добавку полосы
 
     const clampedLevel = Math.min(Math.max(level, TERRAIN_QUADTREE_MIN_LEVEL), TERRAIN_QUADTREE_MAX_LEVEL)
     const patches = 2 ** clampedLevel
 
-    return this.nodeErrorMetersPyramid[face * FACE_NODE_COUNT + pyramidLevelOffset(clampedLevel) + i * patches + j]
+    return (
+      this.nodeErrorMetersPyramid[face * FACE_NODE_COUNT + pyramidLevelOffset(clampedLevel) + i * patches + j] +
+      this.midbandErrorMeters(clampedLevel)
+    )
   }
 
-  /** ε уровня дерева, метры: p99 размаха высот в окне шага вершинной сетки уровня; ниже блочного разрешения — линейное масштабирование шага. Глубина юбки; для SSE — `nodeGeometricErrorMeters`. */
+  /** ε уровня дерева, метры: p99 размаха высот в окне шага вершинной сетки уровня (карта) + добавка полосы (`midbandErrorMeters`); ниже блочного разрешения — линейное масштабирование шага. Глубина юбки; для SSE — `nodeGeometricErrorMeters`. */
   public geometricErrorMeters(level: number): number {
-    return this.levelErrorMeters[
-      Math.min(Math.max(level, TERRAIN_QUADTREE_MIN_LEVEL), TERRAIN_QUADTREE_MAX_LEVEL)
-    ]
+    const clampedLevel = Math.min(Math.max(level, TERRAIN_QUADTREE_MIN_LEVEL), TERRAIN_QUADTREE_MAX_LEVEL)
+
+    return this.levelErrorMeters[clampedLevel] + this.midbandErrorMeters(clampedLevel)
+  }
+
+  /**
+   * ε-добавка полосы уровня, метры (Task 5) — см. докблок поля
+   * `midbandErrorTable`. 0 без полосы (`midband === null`). Кламп уровня тот
+   * же, что у `geometricErrorMeters`.
+   */
+  public midbandErrorMeters(level: number): number {
+    return this.midbandErrorTable[Math.min(Math.max(level, TERRAIN_QUADTREE_MIN_LEVEL), TERRAIN_QUADTREE_MAX_LEVEL)]
   }
 
   /**

@@ -3,6 +3,7 @@ import { Frustum, Matrix4, PerspectiveCamera, Vector2, Vector3 } from 'three'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { cubeFaceDirection } from '@/core/terrain/cubeSphere'
+import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import {
   selectTerrainNodes,
@@ -73,11 +74,14 @@ describe('selectTerrainNodes: SSE-отбор узлов квадродерева
     expect(coverage(far)).toBeCloseTo(24, 10)
   })
 
-  it('потолок глубины 6 держится вплотную к поверхности', () => {
+  it('потолок глубины держится вплотную к поверхности', () => {
     const { leaves } = selectTerrainNodes(makeParams(0.2))
-    expect(Math.max(...leaves.map((a) => a.level))).toBe(6)
+    expect(Math.max(...leaves.map((a) => a.level))).toBe(TERRAIN_QUADTREE_MAX_LEVEL)
   })
 
+  // Таймаут поднят (Task 5, MAX_LEVEL 6→8): 4 прогона selectTerrainNodes на
+  // близкой дистанции спускаются на глубину вчетверо больше прежней, дефолтные
+  // 5с тесны под параллельной нагрузкой полного прогона.
   it('гистерезис: между τ_merge и τ_split разбитый узел не схлопывается, kMerge реально применяется', () => {
     // Высоты подобраны эмпирически под HEIGHT_AMPLITUDE_METERS=20000 и splitPixels=6:
     // на ALT_SPLIT четыре пограничных узла face=0 уровня 1 имеют sse≈6.34-6.35 (>
@@ -106,7 +110,7 @@ describe('selectTerrainNodes: SSE-отбор узлов квадродерева
     // (б) ↔ (в): разница доказывает, что kMerge действительно применяется, а не
     // просто демонстрирует детерминизм чистой функции
     expect(withHysteresis.leaves.length).toBeGreaterThan(withoutHysteresis.leaves.length)
-  })
+  }, 20_000)
 
   it('вне фрустума не сплитится', () => {
     // фрустум, смотрящий строго от планеты: все узлы вне → набор минимальный несмотря на близость.
@@ -221,8 +225,13 @@ describe.each([
 // этот множитель не ловит: она меряет расстояние до центра сферы, где пад
 // |max − h(центр)| перекрывает разницу дуг с запасом (замер: худшее отношение
 // 0.62–0.95 при любых R и размахах, обе формулы проходят).
+// полоса выключена намеренно: тест мерит ЧИСТУЮ дугу без пада, добавка
+// амплитуды полосы к heightPadMeters (Task 5) исказила бы ratio
 function flatAtMeters(radiusKm: number, meters: number): TerrainHeightField {
-  return new TerrainHeightField(makeMap(8, 4, new Array(32).fill(0), meters, meters), radiusKm)
+  return new TerrainHeightField(makeMap(8, 4, new Array(32).fill(0), meters, meters), radiusKm, {
+    ...MIDBAND_DEFAULTS,
+    midbandStrength: 0
+  })
 }
 
 describe('сфера узла: дуга меряется по сфере ВЕРШИН (R + max), а не по датуму', () => {
@@ -241,6 +250,25 @@ describe('сфера узла: дуга меряется по сфере ВЕР�
     const below = nodeBoundingSphereRadiusUnits(flatAtMeters(1000, -20_000), 4, -20_000)
 
     expect(below).toBe(datum)
+  })
+})
+
+// Task 5 (midband-geometry): полоса не привязана к сетке узлов — сфера узла
+// обязана нести глобальный потолок амплитуды полосы (2×maxAmplitude), иначе
+// узел на грани поля может не покрыть свой же рельеф с полосой.
+describe('сфера узла учитывает амплитуду полосы (Task 5)', () => {
+  it('radius(с полосой) − radius(без полосы) = toThreeJSUnits(2·midband.maxAmplitudeMeters/1000)', () => {
+    const map = makeMap(64, 32, Array.from({ length: 64 * 32 }, (_, k) => (k * 4001) % 65535), -2000, 9000)
+    const on = new TerrainHeightField(map, R_KM)
+    const off = new TerrainHeightField(map, R_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
+    expect(on.midband).not.toBeNull()
+
+    const level = 2
+    const centerHeight = 100 // одна и та же условная высота центра для обоих полей — дискриминирует только полосу
+    const radiusOn = nodeBoundingSphereRadiusUnits(on, level, centerHeight)
+    const radiusOff = nodeBoundingSphereRadiusUnits(off, level, centerHeight)
+
+    expect(radiusOn - radiusOff).toBeCloseTo(toThreeJSUnits((2 * on.midband!.maxAmplitudeMeters) / 1000), 9)
   })
 })
 

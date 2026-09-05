@@ -74,15 +74,19 @@ export function collectColliders(objects: Object3D[]): Collider[] {
       heightField
         ? {
             object,
-            // широкая фаза: поверхность+клиренс нигде не выше maxH+maxClearance —
-            // без ручки выражение бит-в-бит прежнее (heightField.maxMeters
-            // напрямую, без Math.max), с ручкой maxH заменяется на
-            // max(maxH, уровень) — на случай, если уровень воды когда-нибудь
-            // превысит максимум карты (гипотетическое глобальное море выше
-            // самой высокой точки рельефа)
+            // широкая фаза: поверхность+клиренс нигде не выше maxH+maxClearance.
+            // maxH = maxHeightWithMidbandMeters (Task 5, не maxMeters карты):
+            // heightMeters канона уже несёт полосу (Task 4), широкая фаза обязана
+            // видеть тот же потолок — иначе узкая фаза (collisionRadiusUnits)
+            // могла бы выйти за пределы этой сферы на гребне полосы. С ручкой
+            // воды maxH заменяется на max(maxH, уровень) — на случай, если
+            // уровень воды когда-нибудь превысит максимум рельефа (гипотетическое
+            // глобальное море выше самой высокой точки)
             radius: toThreeJSUnits(
               radius +
-                (waterLevelMeters === undefined ? heightField.maxMeters : Math.max(heightField.maxMeters, waterLevelMeters)) /
+                (waterLevelMeters === undefined
+                  ? heightField.maxHeightWithMidbandMeters
+                  : Math.max(heightField.maxHeightWithMidbandMeters, waterLevelMeters)) /
                   1000 +
                 heightField.maxClearanceMeters / 1000
             ),
@@ -377,8 +381,16 @@ class CameraCollision {
    * её E-W градиент растёт как 1/cos(широты) (ячейка сетки сжимается по
    * дуге), maxClearance/дуга_ячейки откалиброван по экватору, и без поправки
    * шаг с ~65° широты перепрыгивал бы клиренс-стенку (на 89° недооценка в
-   * 16 раз — окно туннеля на приполярном пролёте). Та же схема, что у
-   * sag-бонда `marchPointwise` ниже. Шаг f/(1+L) не перепрыгивает
+   * 16 раз — окно туннеля на приполярном пролёте) ПЛЮС `field.midbandSlopeBound`
+   * (Task 5, 0 без полосы): `distance()` читает `collisionRadiusUnits(dir)`, в
+   * которую уже подмешана полная высота полосы (Task 4) — без добавки к бонду
+   * шаг этой (внешней, консервативной) фазы марча мог перепрыгнуть гребень
+   * полосы целиком при подлёте СНАРУЖИ оболочки (SLOPE_RANGE ограничивает
+   * только уклон DEM, не полосы). Прибавляется как per-body КОНСТАНТА, без
+   * деления на cosLat — сумма амплитуда·частота у полосы уже безразмерна
+   * (см. докблок `MidbandField.slopeBound`), широтный член остаётся только у
+   * clearanceBond. Та же схема, что у sag-бонда `marchPointwise` ниже. Шаг
+   * f/(1+L) не перепрыгивает
    * поверхность. Бюджет исчерпан — контакт в текущей точке помечается
    * `exhausted`: sweep() ставит камеру туда без скольжения (перестраховка
    * вместо туннеля через то, что марч не успел домаршировать). Истинный
@@ -454,7 +466,7 @@ class CameraCollision {
       // localDir уже несёт p̂ после distance(p) (ветка r=0 отдаёт полюс — там
       // cosLat и так клампится снизу)
       const cosLat = Math.sqrt(Math.max(0, 1 - this.localDir.y * this.localDir.y))
-      s += d / (1 + SLOPE_RANGE + clearanceBond / Math.max(cosLat, MIN_MARCH_COS_LAT))
+      s += d / (1 + SLOPE_RANGE + clearanceBond / Math.max(cosLat, MIN_MARCH_COS_LAT) + field.midbandSlopeBound)
       if (s >= length) return null
       p.copy(from).addScaledVector(step, s)
     }
@@ -494,6 +506,14 @@ class CameraCollision {
    * true для режима (б) (потенциально длинный/быстрый отрезок, риск как у
    * внешнего марча), false для режима (а) (короткий гарантированный довесок,
    * сходимость должна была хватить).
+   *
+   * + `field.midbandSlopeBound` (Task 5, 0 без полосы): сама честная
+   * поверхность (`pointwiseFloorRadiusUnits` → `heightMeters`) уже везде
+   * несёт полосу (поле построено с ней, см. `collectColliders`), без добавки
+   * к бонду шаг марча мог бы перепрыгнуть крутой гребень полосы. Прибавляется
+   * как per-body константа, БЕЗ деления на cosLat — сумма амплитуда·частота
+   * уже безразмерна (см. докблок `MidbandField.slopeBound`), поточечный
+   * широтный член остаётся только у sag-поля карты (`equatorSagBond`).
    */
   private marchPointwise(
     collider: Collider,
@@ -519,7 +539,7 @@ class CameraCollision {
       if (d <= epsilon) return this.buildHit(collider, field, p, s, length, false)
 
       const cosLat = Math.sqrt(Math.max(0, 1 - dir.y * dir.y))
-      const localSlopeBond = SLOPE_RANGE + equatorSagBond / Math.max(cosLat, MIN_MARCH_COS_LAT)
+      const localSlopeBond = SLOPE_RANGE + equatorSagBond / Math.max(cosLat, MIN_MARCH_COS_LAT) + field.midbandSlopeBound
 
       s += d / (1 + localSlopeBond)
       if (s >= length) return null // честный пол не встречен в пределах отрезка

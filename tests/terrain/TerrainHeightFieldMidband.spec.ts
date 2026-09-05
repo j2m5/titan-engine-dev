@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Vector2, Vector3 } from 'three'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
+import { TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from '@/core/terrain/terrainQuadtreeSelect'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 
 function makeMap(width: number, height: number, values: number[], minMeters = 0, maxMeters = 65535): HeightMapData {
@@ -79,5 +80,29 @@ describe('TerrainHeightField: геометрия средней полосы в 
     for (const d of dirs(3000)) maxTilt = Math.max(maxTilt, field.midbandTilt(d, tilt).length())
     expect(maxTilt).toBeLessThanOrEqual(field.midbandSlopeBound)
     expect(field.midbandSlopeBound).toBeLessThan(3) // ≈ 2.8 при GRAD_BOUND 7 и варпе 0.35; с бондом архива (27.6) было бы ≈ 29 и марш коллизии замедлился бы в ~10 раз
+  })
+})
+
+describe('ε-пирамида с полосой B', () => {
+  it('MAX_LEVEL 8; добавка ε равна p99 октав короче 2·шага уровня; на грубых уровнях 0', () => {
+    expect(TERRAIN_QUADTREE_MAX_LEVEL).toBe(8)
+    const field = new TerrainHeightField(bumpyMap(), R_KM)
+    const R_M = R_KM * 1000
+    for (let level = TERRAIN_QUADTREE_MIN_LEVEL; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
+      const step = (2 * Math.PI * R_M) / (4 * 2 ** level * 64)
+      expect(field.midbandErrorMeters(level)).toBeCloseTo(field.midband!.p99AmplitudeBelowMeters(2 * step), 9)
+    }
+    // L1: шаг ~21 км, все волны (≤1.6 км) короче → добавка = полный p99; L8: шаг 167 м → 2·шаг = 333 м < 400 м → 0
+    expect(field.midbandErrorMeters(TERRAIN_QUADTREE_MAX_LEVEL)).toBe(0)
+    expect(field.midbandErrorMeters(TERRAIN_QUADTREE_MIN_LEVEL)).toBeCloseTo(field.midband!.maxAmplitudeMeters, 9)
+  })
+
+  it('geometricErrorMeters(level) = ε карты + добавка; без полосы — ровно ε карты', () => {
+    const on = new TerrainHeightField(bumpyMap(), R_KM)
+    const off = new TerrainHeightField(bumpyMap(), R_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
+    for (let level = TERRAIN_QUADTREE_MIN_LEVEL; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
+      expect(on.geometricErrorMeters(level)).toBeCloseTo(off.geometricErrorMeters(level) + on.midbandErrorMeters(level), 9)
+      expect(on.nodeGeometricErrorMeters(0, level, 0, 0)).toBeCloseTo(off.nodeGeometricErrorMeters(0, level, 0, 0) + on.midbandErrorMeters(level), 9)
+    }
   })
 })

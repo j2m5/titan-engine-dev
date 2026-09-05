@@ -9,18 +9,27 @@ import type { TerrainHeightField } from './TerrainHeightField'
 export type TerrainNodeAddress = { face: number; level: number; i: number; j: number }
 
 /**
- * Числовой ключ узла: face(3 бита)|level(3)|i(6)|j(6) — 18 бит, SMI.
- * Диапазоны: face 0..5, level 0..TERRAIN_QUADTREE_MAX_LEVEL(6), i/j 0..63.
- * Ключ строковым был источником 74 880 строковых аллокаций/кадр в дифе
- * покрытия (ревью 2026-08-17, перф-долг №5/№10) — Map/Set по числу их не платят.
+ * Числовой ключ узла: face(3 бита)|level(4)|i(8)|j(8) — 23 бита, SMI.
+ * Диапазоны: face 0..5, level 0..TERRAIN_QUADTREE_MAX_LEVEL(8), i/j 0..255
+ * (2^level патчей на грани, level=8 ⇒ 256). Раскладка была 3|3|6|6 (18 бит,
+ * i/j 0..63) под MAX_LEVEL=6 — подъём до 8 требует i/j до 255 (8 бит), старая
+ * раскладка бы молча коллизировала (i=64 задевает бит level). Ключ строковым
+ * был источником 74 880 строковых аллокаций/кадр в дифе покрытия (ревью
+ * 2026-08-17, перф-долг №5/№10) — Map/Set по числу их не платят.
  */
-export const terrainNodeKey = (a: TerrainNodeAddress): number => (a.face << 15) | (a.level << 12) | (a.i << 6) | a.j
+export const terrainNodeKey = (a: TerrainNodeAddress): number => (a.face << 20) | (a.level << 16) | (a.i << 8) | a.j
 
 /** Ниже этого уровня узел спускается безусловно — минимальный набор всегда 6·4^MIN_LEVEL листьев. */
 export const TERRAIN_QUADTREE_MIN_LEVEL = 1
 
-/** Глубже этого уровня спуск не идёт даже при недостижимом SSE-пороге. */
-export const TERRAIN_QUADTREE_MAX_LEVEL = 6
+/**
+ * Глубже этого уровня спуск не идёт даже при недостижимом SSE-пороге.
+ * Поднят с 6 до 8 (Task 5, midband-geometry): запас глубины под геометрию
+ * средней полосы B (шаг вершинной сетки Луны на L8 ≈ 167 м — ≥2.4 узла на
+ * волну 400 м, минимальную октаву полосы). Спуск на практике останавливает
+ * SSE-порог задолго до потолка — сам потолок остаётся лишь страховкой.
+ */
+export const TERRAIN_QUADTREE_MAX_LEVEL = 8
 
 /** Клирофф дистанции у камеры на/под поверхностью — иначе sse делится на почти-ноль и уходит в бесконечность. */
 const MIN_DISTANCE_METERS = 100
@@ -106,7 +115,13 @@ export function nodeBoundingSphereRadiusUnits(field: TerrainHeightField, level: 
   const arcRadiusKm = field.radiusKm + Math.max(field.maxMeters, 0) / 1000
   const patchHalfDiagonal =
     ((toThreeJSUnits(arcRadiusKm) * (Math.PI / 2)) / 2 ** level) * (Math.SQRT2 / 2) * CORNER_DIAGONAL_STRETCH
-  const heightPadMeters = Math.max(field.maxMeters - centerHeightMeters, centerHeightMeters - field.minMeters, 0)
+  // + 2·maxAmplitude полосы (Task 5): полоса не привязана к сетке узлов
+  // (аналитическая добавка поверх карты, см. докблок TerrainHeightField) —
+  // тот же паттерн, что у архивных октав: глобальный потолок амплитуды на
+  // каждый узел, а не per-node оценка
+  const heightPadMeters =
+    Math.max(field.maxMeters - centerHeightMeters, centerHeightMeters - field.minMeters, 0) +
+    2 * (field.midband?.maxAmplitudeMeters ?? 0)
 
   return patchHalfDiagonal + toThreeJSUnits(heightPadMeters / 1000)
 }
@@ -150,7 +165,7 @@ function visitNode(
 
   // раскладка бит совпадает с terrainNodeKey — считается без промежуточного
   // TerrainNodeAddress, чтобы не аллоцировать объект на каждый посещённый узел
-  const key = (face << 15) | (level << 12) | (i << 6) | j
+  const key = (face << 20) | (level << 16) | (i << 8) | j
   const alreadySplit = params.currentlySplit.has(key)
   const threshold = alreadySplit ? params.splitPixels * params.mergeFactor : params.splitPixels
 
@@ -247,7 +262,7 @@ function descendantsState(
     for (let dj = 0; dj < 2; dj++) {
       const ci = i * 2 + di
       const cj = j * 2 + dj
-      const childKey = (face << 15) | (childLevel << 12) | (ci << 6) | cj
+      const childKey = (face << 20) | (childLevel << 16) | (ci << 8) | cj
       if (wanted.has(childKey)) {
         if (!isLive(childKey)) return DescendantsState.NotLive
         found = true
@@ -287,7 +302,7 @@ export function coverageReady(
 
   for (let level = x.level - 1; level >= 0; level--) {
     const delta = x.level - level
-    const key = (x.face << 15) | (level << 12) | ((x.i >> delta) << 6) | (x.j >> delta)
+    const key = (x.face << 20) | (level << 16) | ((x.i >> delta) << 8) | (x.j >> delta)
     if (wanted.has(key)) return isLive(key)
   }
 

@@ -6,9 +6,12 @@ import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { parseTerrainAux } from '@/core/terrain/terrainAuxFormat'
 import { TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from '@/core/terrain/terrainQuadtreeSelect'
 import { CUBE_FACES } from '@/core/terrain/cubeSphere'
+import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
 import { encodeTerrainAux } from '../../scripts/lib/terrainAuxEncode'
 
 const RADIUS_KM = 1737.4
+// полоса выключена там, где тест пинит ε КАРТЫ напрямую (см. конвенцию TerrainHeightField.spec.ts)
+const MIDBAND_OFF = { ...MIDBAND_DEFAULTS, midbandStrength: 0 }
 
 /** Карта с настоящей структурой: кинки на каждом текселе, чтобы провис и максимумы узлов не были константой. */
 function texturedMap(width: number = 256, height: number = 128): HeightMapData {
@@ -113,11 +116,13 @@ describe('TerrainHeightField: запечённые блоки вместо сч�
   })
 
   it('ε-пирамида уровней тоже приходит из компаньона, а не считается', () => {
+    // полоса выключена: тест пинит ε КАРТЫ из компаньона напрямую — с полосой
+    // по умолчанию geometricErrorMeters домешал бы ещё и её добавку (Task 5)
     const map = texturedMap()
-    const aux = new TerrainHeightField(map, RADIUS_KM).exportAux()
+    const aux = new TerrainHeightField(map, RADIUS_KM, MIDBAND_OFF).exportAux()
     aux.levelErrorMeters.fill(777)
 
-    expect(new TerrainHeightField({ ...map, aux }, RADIUS_KM).geometricErrorMeters(3)).toBe(777)
+    expect(new TerrainHeightField({ ...map, aux }, RADIUS_KM, MIDBAND_OFF).geometricErrorMeters(3)).toBe(777)
   })
 
   it('запечённые блоки не зависят от радиуса тела — на этом стоит запечка пер-КАРТУ, а не пер-тело', () => {
