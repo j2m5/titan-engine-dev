@@ -314,6 +314,29 @@ export interface IPlanetRenderingObject {
    */
   waterDistortion?: number
 
+  // --- Ручки пены прибоя и мокрой кромки берега (арка surf-foam). Все
+  // опциональны: отсутствие → дефолты waterFoamParams.ts. Активны только у
+  // тел с waterLevelMeters (гейты ставят WaterMaterial/PlanetMaterial).
+
+  /** Сила пены; 0 — выключено. Дефолт 1. */
+  waterFoamStrength?: number
+  /** Ширина каймы уреза, метры от уреза. Дефолт 600. */
+  waterFoamShoreMeters?: number
+  /** Дальняя граница зоны накатов, метры от уреза; > waterFoamShoreMeters. Дефолт 3000. */
+  waterFoamSurfMeters?: number
+  /** Шаг накатов, метры. Дефолт 800. */
+  waterFoamWavelengthMeters?: number
+  /** Период наката и пульса каймы, секунды. Дефолт 8. */
+  waterFoamPeriodSeconds?: number
+  /** Масштаб рваности относительно ширины каймы. Дефолт 1. */
+  waterFoamNoiseScale?: number
+  /** Цвет пены, 0xRRGGBB или '#rrggbb'. Дефолт 0xe6e9ec. */
+  waterFoamColor?: number | string
+  /** Ширина мокрой кромки суши над уровнем воды, метры. Дефолт 3. */
+  terrainWetBandMeters?: number
+  /** Потемнение альбедо под кромкой, 0..1. Дефолт 0.35. */
+  terrainWetDarken?: number
+
   /**
    * Сила закатного тинта 0..1 (LUT пропускания атмосферы) — ОДНА ручка на
    * палубу и водную оболочку тела: разъехавшись, они дали бы тональный шов на
