@@ -163,7 +163,7 @@ function visitNode(
   const sc = -1 + i * span + span / 2
   const tc = -1 + j * span + span / 2
   cubeFaceDirection(face, sc, tc, centerDirScratch)
-  // mapHeightMeters(центр) — КАРТА без полосы (Task 5, фикс-раунд 2, I1):
+  // mapHeightMeters(центр) — КАРТА без полосы:
   // пад радиуса узла (nodeBoundingSphereRadiusUnits) уже несёт глобальный
   // 2·maxAmplitude полосы, попиксельная оценка полосы в центре ничего не
   // добавляла к покрытию и стоила 0.8–1.4 мс/кадр/тело (3 октавы snoiseGrad3

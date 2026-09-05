@@ -153,7 +153,7 @@ describe('TerrainSphere: динамическое квадродерево па�
     const sphereLow = new TerrainSphere(moon(), field, makeRenderer(1080))
     const sphereHigh = new TerrainSphere(moon(), field, makeRenderer(2160))
 
-    // 150 км, а не 130 (Task 5, фикс-раунд 2, I2): центр сферы узла теперь
+    // 150 км, а не 130: центр сферы узла теперь
     // считается по КАРТЕ (mapHeightMeters), не по канону высоты с полосой —
     // окно, где удвоение высоты вьюпорта переводит узел через порог,
     // сдвинулось вместе с этим фиксом. Высота подобрана пересканом (окно
