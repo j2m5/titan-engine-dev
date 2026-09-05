@@ -9,7 +9,7 @@ import {
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { SpaceScale } from '@/core/constants'
 import { TERRAIN_PATCH_SEGMENTS, cubeFaceDirection } from '@/core/terrain/cubeSphere'
-import { TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from '@/core/terrain/terrainQuadtreeSelect'
+import { TERRAIN_MODEL_LEVEL, TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from '@/core/terrain/terrainQuadtreeSelect'
 import { buildPatchIndex, buildTerrainPatchGeometry } from '@/core/terrain/terrainPatchGeometry'
 import { detailWrapFor } from '@/core/terrain/detailWrap'
 import { constantHeightField } from '@/core/terrain/constantHeightField'
@@ -364,15 +364,13 @@ describe('TerrainHeightField: восток-запад окно расширяе�
 
   // width = CLEARANCE_GRID_BASE_SEGMENTS, block=1 (ячейка = тексель —
   // изолирует эффект от дилатации по крупным ячейкам). equatorStepTexels =
-  // 1024/TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS(65536, MAX_LEVEL=8 — Task 5,
-  // было 16384 при MAX_LEVEL=6) = 0.015625. Строка 0 карты высотой 256
-  // (было 64 — высота вчетверо больше компенсирует вчетверо меньший
-  // знаменатель, тот же режим окна): theta = π·0.5/256 ≈ 0.352°, cosLat =
-  // sin(theta) ≈ 0.00614, вершинный пролёт 0.015625/cosLat ≈ 2.55 текселя —
-  // окно кривизнной суммы раскрыто на ±1 тексель целиком плюс дробный вес
-  // 0.55 на паре ±2 (sagWindow), тогда как на экваторе оно сжато в один тексель.
+  // 1024/TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS(16384) = 0.0625. Строка 0: theta =
+  // π·0.5/64 ≈ 1.406°, cosLat = sin(theta) ≈ 0.02454, вершинный пролёт
+  // 0.0625/cosLat ≈ 2.55 текселя — окно кривизнной суммы раскрыто на ±1
+  // тексель целиком плюс дробный вес 0.55 на паре ±2 (sagWindow), тогда как
+  // на экваторе оно сжато в один тексель.
   const width = CLEARANCE_GRID_BASE_SEGMENTS
-  const height = 256
+  const height = 64
   const pitCol = 200
 
   it('на высокоширотной строке (row 0) клиренс дотягивается на несколько текселей дальше экватора и УБЫВАЕТ с расстоянием', () => {
@@ -407,17 +405,17 @@ describe('TerrainHeightField: восток-запад окно расширяе�
     )
   })
 
-  it('регрессия: на экваторе (row 128) та же яма даёт узкую (не полярную) досягаемость', () => {
-    const equatorRow = height / 2 // 128 при height=256 — центр строк, v=0.5
+  it('регрессия: на экваторе (row 32) та же яма даёт узкую (не полярную) досягаемость', () => {
     const values = new Array(width * height).fill(20000)
-    values[equatorRow * width + pitCol] = 10000
+    values[32 * width + pitCol] = 10000
     const field = new TerrainHeightField(makeMap(width, height, values), R_KM)
 
     // офсет 4 на экваторе вне досягаемости обычной поточечной модели (не
     // высокоширотная строка — офсет 4 уже накрыт только у полюса, см. тест выше)
-    expect(
-      field.clearanceMeters(uvToDir((pitCol - 4 + 0.5) / width, (equatorRow + 0.5) / height))
-    ).toBeCloseTo(CLEARANCE_MARGIN_METERS, 3)
+    expect(field.clearanceMeters(uvToDir((pitCol - 4 + 0.5) / width, 32.5 / height))).toBeCloseTo(
+      CLEARANCE_MARGIN_METERS,
+      3
+    )
   })
 })
 
@@ -473,10 +471,12 @@ describe('TerrainHeightField: полоса вершинного пролёта (
 
 /**
  * Общая проверка property-теста «sagMeters ≥ фактический провис хорды» для
- * одного адреса патча максимального уровня квадродерева (buildTerrainPatchGeometry,
- * TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_PATCH_SEGMENTS — продакшн-параметры, не
- * урезанные для теста) — это и есть та сетка, под которую должен быть
- * посчитан клиренс. Возвращает сводку (checked/maxProvisMeters) для проверки
+ * одного адреса патча уровня калибровки модели (buildTerrainPatchGeometry,
+ * TERRAIN_MODEL_LEVEL, TERRAIN_PATCH_SEGMENTS — продакшн-параметры, не
+ * урезанные для теста) — это и есть та сетка, под которую посчитан клиренс
+ * (см. докблок TERRAIN_MODEL_LEVEL: отбор узлов может спуститься глубже, но
+ * модель провиса/клиренса продолжает считать так, будто дно дерева — здесь,
+ * консервативно). Возвращает сводку (checked/maxProvisMeters) для проверки
  * нетривиальности фикстуры вызывающим.
  */
 function assertSagCoversPatchChord(
@@ -485,7 +485,7 @@ function assertSagCoversPatchChord(
   i: number,
   j: number
 ): { checked: number; maxProvisMeters: number } {
-  const level = TERRAIN_QUADTREE_MAX_LEVEL
+  const level = TERRAIN_MODEL_LEVEL
   const segments = TERRAIN_PATCH_SEGMENTS
   const index = buildPatchIndex(segments)
   const { geometry, center } = buildTerrainPatchGeometry(field, face, i, j, level, segments, index, 0, detailWrapFor(undefined))
@@ -568,13 +568,7 @@ describe('TerrainHeightField: sagMeters ≥ фактический провис 
   it('на нетривиальном рельефе (двумерная синусоида, кинки на каждом текселе), патч в центре грани (экватор): sagMeters(dir̂)+margin не меньше провиса мешерной хорды по плотной выборке точек патча', () => {
     const field = buildSyntheticField()
 
-    // i=j=patches/2 (угол s=t=0, экватор) при MAX_LEVEL=8 (Task 5, было 6)
-    // даёт патч вчетверо мельче прежнего — на этой конкретной фазе синусоиды
-    // (период 7/5 текселей) он почти плоский, фикстура вырождается
-    // (maxProvis < 1 мм). i=132, j=130 — та же окрестность экватора грани 0,
-    // смещённая на несколько патчей от узла фазы, где кривизна реальна
-    // (подобрано сканированием, maxProvis ≈ 2.6 м)
-    const { checked, maxProvisMeters } = assertSagCoversPatchChord(field, 0, 132, 130)
+    const { checked, maxProvisMeters } = assertSagCoversPatchChord(field, 0, 32, 32)
 
     expect(checked).toBeGreaterThan(30000)
     // фикстура нетривиальна: реальный бугор хорды над поверхностью есть (не
@@ -594,18 +588,15 @@ describe('TerrainHeightField: sagMeters ≥ фактический провис 
   // и ceil впритык на изолированной яме. Здесь регрессия иного класса: что
   // sag вообще не занижен НИЖЕ фактического провиса реального квадродерева
   // на этой широте (общая защита, не специфичная для одного порога).
-  it('та же проверка на средних широтах ~60–70° (face 2, i=128 j=196): реальный патч максимального уровня квадродерева, не единичная яма', () => {
+  it('та же проверка на средних широтах ~60–70° (face 2, i=32 j=49): реальный патч максимального уровня квадродерева, не единичная яма', () => {
     const field = buildSyntheticField()
     const face = 2
-    // i/j = старые (32, 49) при MAX_LEVEL=6 (64 патча), ×4 — MAX_LEVEL=8
-    // (256 патчей, Task 5) вчетверо мельче сетку, ×4 сохраняет тот же (s,t)
-    // угол патча и, соответственно, ту же широту (~65.9°, проверено ниже)
-    const i = 128
-    const j = 196
+    const i = 32
+    const j = 49
 
     // адрес патча действительно лежит в заявленной полосе широт — не завязано
     // на удачу, а посчитано той же равноугольной проекцией, что и билдер патча
-    const level = TERRAIN_QUADTREE_MAX_LEVEL
+    const level = TERRAIN_MODEL_LEVEL
     const patches = 1 << level
     const span = 2 / patches
     const s0 = -1 + i * span
@@ -622,14 +613,13 @@ describe('TerrainHeightField: sagMeters ≥ фактический провис 
     // см. таймаут теста выше — та же плотная выборка
   }, 20_000)
 
-  it('та же проверка у полюса (face 2, i=128 j=144, ~84°): вершинный пролёт вчетверо шире текселя, EW-модель работает широким окном', () => {
+  it('та же проверка у полюса (face 2, i=32 j=36, ~84°): вершинный пролёт вчетверо шире текселя, EW-модель работает широким окном', () => {
     const field = buildSyntheticField()
     const face = 2
-    // i/j = старые (32, 36) при MAX_LEVEL=6, ×4 — та же (s,t) точка при MAX_LEVEL=8
-    const i = 128
-    const j = 144
+    const i = 32
+    const j = 36
 
-    const level = TERRAIN_QUADTREE_MAX_LEVEL
+    const level = TERRAIN_MODEL_LEVEL
     const patches = 1 << level
     const span = 2 / patches
     const centerDir = cubeFaceDirection(face, -1 + i * span + span / 2, -1 + j * span + span / 2, new Vector3())
@@ -653,12 +643,8 @@ describe('TerrainHeightField: EW-модель провиса непрерывн�
    * подскакивала в разы, и пол камеры (`pointwiseFloorRadiusUnits`) вместе с
    * ней — толчок вверх на ровном месте при перелёте через параллель.
    *
-   * Карта 2048×1024: equatorStepTexels = 2048/TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS.
-   * С MAX_LEVEL=8 (Task 5, было 6) знаменатель вчетверо больше, граница
-   * съехала с ~82.8° до ~88.2° — почти вплотную к полюсу, где у самой
-   * синтетики (5 октав sin/cos) уже заметная собственная кривизна широты:
-   * допуск ниже (было 1.5) ослаблен до 3 — разница на порядок меньше
-   * исторического бага (~5.4×, см. докблок выше), которую тест обязан ловить.
+   * Карта 2048×1024: equatorStepTexels = 2048/16384 = 0.125, граница на
+   * широте acos(0.125) ≈ 82.8°.
    */
   const width = 2048
   const height = 1024
@@ -709,13 +695,13 @@ describe('TerrainHeightField: EW-модель провиса непрерывн�
 
   it('средний sag по обе стороны границы не расходится в разы — модель сшита, а не переключена', () => {
     const field = buildField()
-    const switchLatitudeDeg = (Math.acos(width / (4 * 2 ** TERRAIN_QUADTREE_MAX_LEVEL * TERRAIN_PATCH_SEGMENTS)) * 180) / Math.PI
+    const switchLatitudeDeg = (Math.acos(width / (4 * 2 ** TERRAIN_MODEL_LEVEL * TERRAIN_PATCH_SEGMENTS)) * 180) / Math.PI
 
     const below = meanSagAtLatitude(field, switchLatitudeDeg - 0.4)
     const above = meanSagAtLatitude(field, switchLatitudeDeg + 0.4)
 
     expect(below).toBeGreaterThan(0) // фикстура нетривиальна: провис вообще есть
-    expect(above / below).toBeLessThan(3)
+    expect(above / below).toBeLessThan(1.5)
   })
 
   it('ниже границы (вершинный пролёт ≤ текселя) оценка — ровно половина второй разности, как и была', () => {

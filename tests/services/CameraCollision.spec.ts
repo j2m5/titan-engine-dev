@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { Object3D, Vector3 } from 'three'
+import { Object3D, Vector2, Vector3 } from 'three'
 import '@/core/framework/TitanThree'
 import { COLLISION_GAP, collectColliders } from '@/core/services/CameraCollision'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -8,7 +8,7 @@ import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { CLEARANCE_MARGIN_METERS, terrainHeightFieldFor, type TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
-import { makeBody, makeModel, makeCollision } from './cameraCollisionStubs'
+import { makeBody, makeModel, makeCollision, type ModelStub } from './cameraCollisionStubs'
 
 const EARTH_RADIUS_KM = 6360
 const R = toThreeJSUnits(EARTH_RADIUS_KM) * COLLISION_GAP
@@ -1104,12 +1104,13 @@ describe('CameraCollision: липшицев бонд полосы в марче 
       collision.resolve()
 
       const localDir = camera.position.clone().normalize()
-      // тот же критерий, что и у существующих тестов «нет туннелирования»
-      // (см. «внешний марч учитывает широтный градиент клиренса» выше):
-      // честный поточечный пол + margin, допуск 0.1% на эпсилон контакта
+      // честный поточечный пол + margin; допуск АБСОЛЮТНЫЙ (0.5 м на эпсилон
+      // контакта), не относительный — 0.1% от R~1736 км (старый критерий
+      // `target * 0.999`) давал бы допуск ±1.7 КМ, маскируя реальный туннель
+      // (находка ревью Task 5, фикс-раунд 1)
       const target =
         field.surfaceRadiusUnits(localDir) + toThreeJSUnits((field.sagMeters(localDir) + CLEARANCE_MARGIN_METERS) / 1000)
-      expect(camera.position.length()).toBeGreaterThanOrEqual(target * 0.999)
+      expect(camera.position.length()).toBeGreaterThanOrEqual(target - toThreeJSUnits(0.5 / 1000))
     }
   })
 
@@ -1123,6 +1124,212 @@ describe('CameraCollision: липшицев бонд полосы в марче 
       toThreeJSUnits(MB_RADIUS_KM + field.maxHeightWithMidbandMeters / 1000 + field.maxClearanceMeters / 1000),
       10
     )
+  })
+})
+
+// Task 5, фикс-раунд 1 (ревью): дискриминирующий тест на гребень ИМЕННО
+// полосы — карта плоская (minMeters=maxMeters=0, sampleMeters ≡ 0 всюду), весь
+// рельеф на пути идёт от полосы, поэтому она СВЯЗЫВАЮЩЕЕ ограничение марча.
+//
+// Дефолтные ручки дают реализованный |∇mid| << SLOPE_RANGE=2 почти везде
+// (замер: обход 20 000 направлений на дефолте — максимум ≈0.85, ниже
+// консервативного slopeBound≈2.8 с большим запасом — сам бонд защищает
+// АНАЛИТИЧЕСКИЙ худший случай, редко достижимый на практике). Фикстура
+// намеренно раскручивает ручки (midbandFlat:2 — потолок огибающей ENVELOPE_MAX
+// вместо дефолтных 0.15 на плоской карте; midbandWarp:5 вместо 0.35 — домен
+// варпа сильнее сжимается/растягивается, давая локально более острые
+// перепады): при этих ручках максимум |∇mid| у того же обхода вырастает до
+// ≈5.3 — заведомо больше SLOPE_RANGE=2.
+//
+// ВАЖНЫЙ УРОК фикс-раунда: пуш-аут В КОНЦЕ resolve() безусловно доводит
+// итоговый радиус до честного пола НАПРАВЛЕНИЯ, В КОТОРОМ ОСТАЛАСЬ камера —
+// поэтому проверка «контакт = честный пол» одна НЕ дискриминирует: она
+// истинна и тогда, когда свип тоннелирует до `end` нетронутым (пуш-аут чинит
+// магнитуду уже там). Дискриминатор — ДОЛЯ ПРОЙДЕННОГО ПУТИ до `end` (тот же
+// приём, что и в архивных октавных тестах, git show 1d5a4bb): непойманный
+// тоннель проходит весь путь (или дальше — пуш-аут в направлении `end` может
+// увеличить магнитуду сверх исходной длины сегмента), пойманный — заметно
+// меньше. Margin снаружи оболочки — 2×приблизительной хорды (при бонде
+// SLOPE_RANGE=2 без полосы шаг margin/3 уже ≥ хорды — перепрыг одним шагом;
+// с field.midbandSlopeBound шаг многим мельче хорды — шанс поймать по пути).
+//
+// Проверено вручную мутацией (временно убрать `+ field.midbandSlopeBound` из
+// `marchTerrain`/`marchPointwise`): traveled 0.6967→1.5983 (перепрыг + пуш-аут
+// дальше `end`), см. отчёт фикс-раунда.
+describe('CameraCollision: гребень полосы — связывающее ограничение марча (Task 5, фикс-раунд 1)', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  const FLAT_MIDBAND_PATH = 'planets/flat-midband/height.raw'
+  const FLAT_RADIUS_KM = 1736
+  const FLAT_WIDTH = 64
+  const FLAT_HEIGHT = 32
+  const BOOSTED_PARAMS = { ...MIDBAND_DEFAULTS, midbandFlat: 2, midbandWarp: 5 }
+
+  function flatMidbandBody(): { body: Object3D; field: TerrainHeightField } {
+    seedHeightMap(new Array(FLAT_WIDTH * FLAT_HEIGHT).fill(0), FLAT_WIDTH, FLAT_HEIGHT, 0, 0, FLAT_MIDBAND_PATH)
+    // ручки — и на карте (для ручного расчёта field ниже), и у модели (иначе
+    // кэш terrainHeightFieldFor разошёлся бы на два разных поля одной карты,
+    // см. докблок «одна функция чтения» в CameraCollision.ts)
+    const customModel: ModelStub = {
+      physicalObject: { getAttribute: (key: string): unknown => (key === 'radius' ? FLAT_RADIUS_KM : undefined) },
+      resources: {
+        where: (_field: string, value: string) => ({
+          first: () =>
+            value === 'height' ? { getAttribute: (key: string): unknown => (key === 'path' ? FLAT_MIDBAND_PATH : undefined) } : undefined
+        })
+      },
+      renderingObject: { getAttribute: (key: string): unknown => (key === 'data' ? { midbandFlat: 2, midbandWarp: 5 } : undefined) }
+    }
+    const body = makeBody('planet', FLAT_RADIUS_KM, new Vector3(), customModel)
+    const field = terrainHeightFieldFor(
+      (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(FLAT_MIDBAND_PATH)!,
+      FLAT_RADIUS_KM,
+      BOOSTED_PARAMS
+    )
+    return { body, field }
+  }
+
+  it('гребень полосы (|y|<0.9, локальный |∇mid| > SLOPE_RANGE) не туннелируется быстрым пролётом снаружи', () => {
+    const { body, field } = flatMidbandBody()
+    expect(field.midband).not.toBeNull() // фикстура честна: полоса реально активна
+
+    // поиск направления с максимальным аналитическим наклоном полосы —
+    // детерминированный обход (золотая спираль), |y|<0.9 (Task 3: у самого
+    // полюса наклон полосы — известный нюанс, не показательный случай)
+    let maxTilt = -Infinity
+    let bestDir = new Vector3()
+    const tilt = new Vector2()
+    const N = 20000
+    for (let k = 0; k < N; k++) {
+      const y = 1 - (2 * (k + 0.5)) / N
+      if (Math.abs(y) > 0.9) continue
+      const r = Math.sqrt(Math.max(0, 1 - y * y))
+      const phi = k * 2.399963229728653
+      const dir = new Vector3(r * Math.cos(phi), y, r * Math.sin(phi))
+      field.midbandTilt(dir, tilt)
+      const mag = tilt.length()
+      if (mag > maxTilt) {
+        maxTilt = mag
+        bestDir = dir
+      }
+    }
+    expect(maxTilt).toBeGreaterThan(2) // фикстура честна: локальный наклон реально превышает SLOPE_RANGE=2
+
+    // хорда через найденную точку вдоль направления стока
+    const R_M = FLAT_RADIUS_KM * 1000
+    const east = new Vector3(0, 1, 0).cross(bestDir).normalize()
+    const north = new Vector3().crossVectors(bestDir, east)
+    field.midbandTilt(bestDir, tilt)
+    const downDir = new Vector3().addScaledVector(east, tilt.x).addScaledVector(north, tilt.y).normalize()
+    const halfStepMeters = 5
+    const lowDir = bestDir.clone().addScaledVector(downDir, -halfStepMeters / R_M).normalize()
+    const highDir = bestDir.clone().addScaledVector(downDir, halfStepMeters / R_M).normalize()
+    const heightDiffMeters = field.heightMeters(highDir) - field.heightMeters(lowDir)
+    expect(heightDiffMeters).toBeGreaterThan(0) // фикстура честна: находка реально «вверх» от low к high
+
+    // margin снаружи оболочки НИЗКОЙ точки — 2×хорды: без бонда полосы шаг
+    // margin/(1+SLOPE_RANGE)=margin/3 ≥ хорды (перепрыг одним шагом), с
+    // field.midbandSlopeBound шаг margin/(1+SLOPE_RANGE+bond) многим мельче
+    const chordMeters = 2 * halfStepMeters
+    const marginMeters = 2 * chordMeters
+    expect(marginMeters).toBeLessThan(heightDiffMeters) // фикстура честна: финиш реально заглублён под гребень
+    const outerAltitude = field.collisionRadiusUnits(lowDir) + toThreeJSUnits(marginMeters / 1000)
+    const start = lowDir.clone().multiplyScalar(outerAltitude)
+    const end = highDir.clone().multiplyScalar(outerAltitude)
+
+    const { collision, camera } = makeCollision([body], start)
+    collision.resolve() // фиксирует lastPosition
+    camera.position.copy(end)
+    collision.resolve()
+
+    // дискриминатор — ДОЛЯ пройденного пути (пуш-аут в конце resolve()
+    // безусловно чинит магнитуду там, где камера осталась, поэтому проверка
+    // одной точной высоты контакта не различает «поймано» от «протуннелило»,
+    // см. докблок describe): непойманный тоннель долетает до `end` или дальше
+    // (fraction ≥ ~1), пойманный останавливается заметно раньше
+    const traveledFraction = start.distanceTo(camera.position) / start.distanceTo(end)
+    expect(traveledFraction).toBeLessThan(0.9)
+
+    // и не встроена глубже честного поточечного пола своего направления —
+    // абсолютный допуск в единицы метров (не относительный, не доли метра:
+    // сходимость у самого гребня умышленно короче, см. докблок marchPointwise)
+    const localDir = camera.position.clone().normalize()
+    const target =
+      field.surfaceRadiusUnits(localDir) + toThreeJSUnits((field.sagMeters(localDir) + CLEARANCE_MARGIN_METERS) / 1000)
+    expect(Math.abs(camera.position.length() - target)).toBeLessThan(toThreeJSUnits(3 / 1000))
+  })
+})
+
+// Task 5, фикс-раунд 1 (ревью): быстрый низкий пролёт с полосой ВКЛЮЧЕНА
+// обязан дойти до цели márchPointwise без исчерпания бюджета — иначе
+// добавка `midbandSlopeBound` к локальному бонду делает шаг настолько
+// мельче, что типичный низкий пролёт над полосой систематически не
+// сходится (штатный жёсткий стоп вместо честного контакта).
+describe('CameraCollision: быстрый низкий пролёт с полосой не исчерпывает бюджет марча (Task 5, фикс-раунд 1)', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  it('низкий тангенциальный пролёт (шаг >1 км/кадр) над полосой сходится к честному полу', () => {
+    const RADIUS_KM = 1736
+    // карта плоская (sampleMeters ≡ 0) — весь рельеф здесь честно от полосы,
+    // ДЕФОЛТНЫЕ ручки (не раскрученные, как в «гребне» выше) — типичный, не
+    // пограничный случай
+    seedHeightMap(new Array(64 * 32).fill(0), 64, 32, 0, 0)
+    const body = makeBody('planet', RADIUS_KM, new Vector3(), undefined, MOON_HEIGHT_PATH)
+    const field = terrainHeightFieldFor(
+      (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(MOON_HEIGHT_PATH)!,
+      RADIUS_KM
+    )
+    expect(field.midband).not.toBeNull()
+
+    // направление максимального аналитического наклона полосы — та же
+    // детерминированная золотая спираль, |y|<0.9, что и в «гребне» выше
+    let maxTilt = -Infinity
+    let bestDir = new Vector3()
+    const tilt = new Vector2()
+    const N = 20000
+    for (let k = 0; k < N; k++) {
+      const y = 1 - (2 * (k + 0.5)) / N
+      if (Math.abs(y) > 0.9) continue
+      const r = Math.sqrt(Math.max(0, 1 - y * y))
+      const phi = k * 2.399963229728653
+      const dir = new Vector3(r * Math.cos(phi), y, r * Math.sin(phi))
+      field.midbandTilt(dir, tilt)
+      const mag = tilt.length()
+      if (mag > maxTilt) {
+        maxTilt = mag
+        bestDir = dir
+      }
+    }
+
+    // хорда >1 км через найденную точку вдоль направления стока: старт чуть
+    // выше честного пола НИЗКОГО конца, финиш — та же магнитуда радиуса, но
+    // направление ВЫСОКОГО конца (естественное заглубление на перепад полосы)
+    const R_M = RADIUS_KM * 1000
+    const east = new Vector3(0, 1, 0).cross(bestDir).normalize()
+    const north = new Vector3().crossVectors(bestDir, east)
+    field.midbandTilt(bestDir, tilt)
+    const downDir = new Vector3().addScaledVector(east, tilt.x).addScaledVector(north, tilt.y).normalize()
+    const halfStepMeters = 600 // хорда ~1.2 км — «шаг > 1 км/кадр» из брифа
+    const lowDir = bestDir.clone().addScaledVector(downDir, -halfStepMeters / R_M).normalize()
+    const highDir = bestDir.clone().addScaledVector(downDir, halfStepMeters / R_M).normalize()
+
+    const startAltitudeMeters = 1
+    const start = lowDir.clone().multiplyScalar(field.surfaceRadiusUnits(lowDir) + toThreeJSUnits(startAltitudeMeters / 1000))
+    const end = highDir.clone().multiplyScalar(start.length())
+    expect((start.distanceTo(end) / SpaceScale) * 1000).toBeGreaterThan(1000) // санити: шаг реально > 1 км/кадр
+
+    const { collision, camera } = makeCollision([body], start)
+    collision.resolve() // фиксирует lastPosition
+    camera.position.copy(end)
+    collision.resolve()
+
+    const localDir = camera.position.clone().normalize()
+    const target =
+      field.surfaceRadiusUnits(localDir) + toThreeJSUnits((field.sagMeters(localDir) + CLEARANCE_MARGIN_METERS) / 1000)
+    // сходимость честная — контакт у самого пола, не «жёсткий стоп» на
+    // полпути (замерено: сходится за считанные шаги обеих фаз, задолго до
+    // исчерпания SWEEP_MARCH_BUDGET/REFINE_MARCH_BUDGET, см. отчёт фикс-раунда)
+    expect(Math.abs(camera.position.length() - target)).toBeLessThan(toThreeJSUnits(5 / 1000))
   })
 })
 

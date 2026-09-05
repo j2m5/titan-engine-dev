@@ -8,6 +8,7 @@ import {
   terrainAuxPathFor,
   type TerrainAuxPayload
 } from '@/core/terrain/terrainAuxFormat'
+import { TERRAIN_MODEL_LEVEL } from '@/core/terrain/terrainQuadtreeSelect'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { encodeTerrainAux } from '../../scripts/lib/terrainAuxEncode'
 
@@ -68,6 +69,24 @@ describe('Формат компаньона карты высот: round-trip э
 
     expect(parsed.fingerprint).toEqual(heightMapFingerprint(source))
     expect(parsed.calibration).toEqual(currentTerrainAuxCalibration())
+  })
+
+  // Task 5, фикс-раунд 1 (ревью): calibration.quadtreeMaxLevel несёт
+  // TERRAIN_MODEL_LEVEL (уровень калибровки модели провиса/пирамид), а НЕ
+  // TERRAIN_QUADTREE_MAX_LEVEL (потолок ОТБОРА узлов, вырос до 8) — иначе
+  // подъём потолка отбора отбраковал бы ВСЕ существующие запечённые
+  // компаньоны бакета (были посчитаны на модели L6). Раскладка байт та же
+  // (u16 по смещению 42), меняется только семантика поля и значение.
+  it('calibration.quadtreeMaxLevel — уровень модели (TERRAIN_MODEL_LEVEL=6), не потолок отбора узлов', () => {
+    expect(currentTerrainAuxCalibration().quadtreeMaxLevel).toBe(TERRAIN_MODEL_LEVEL)
+
+    const source = map()
+    const parsed = parseTerrainAux(toArrayBuffer(encodeTerrainAux(payload(), source)))
+    expect(parsed.calibration.quadtreeMaxLevel).toBe(TERRAIN_MODEL_LEVEL)
+    // компаньон, посчитанный на текущей калибровке, обязан быть принят —
+    // расхождения по калибровке нет (это и есть «существующие компаньоны
+    // бакета остаются валидны», ревью Task 5 фикс-раунда 1)
+    expect(terrainAuxMismatch(parsed, source)).toBeNull()
   })
 
   it('битый magic — ошибка с внятным сообщением', () => {

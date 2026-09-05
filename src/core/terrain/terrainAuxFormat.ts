@@ -6,7 +6,7 @@ import {
   TERRAIN_SAG_MODEL_VERSION
 } from './TerrainHeightField'
 import { TERRAIN_PATCH_SEGMENTS } from './cubeSphere'
-import { TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from './terrainQuadtreeSelect'
+import { TERRAIN_MODEL_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from './terrainQuadtreeSelect'
 
 /**
  * Производное состояние поля высот — то, что `TerrainHeightField` считает в
@@ -68,6 +68,13 @@ export type TerrainAuxCalibration = {
   clearanceMarginMeters: number
   maxLevelEquatorSegments: number
   quadtreeMinLevel: number
+  /**
+   * Имя и раскладка байт — исторические (было ровно потолком квадродерева):
+   * с TERRAIN_MODEL_LEVEL/TERRAIN_QUADTREE_MAX_LEVEL (Task 5, фикс-раунд 1)
+   * несёт TERRAIN_MODEL_LEVEL — глубину, на которой честны пирамиды/ε карты,
+   * а не глубину отбора узлов (та выросла до TERRAIN_QUADTREE_MAX_LEVEL, но
+   * не входит в калибровку компаньона — компаньон от неё не зависит).
+   */
   quadtreeMaxLevel: number
   patchSegments: number
   sagModelVersion: number
@@ -148,7 +155,7 @@ export function currentTerrainAuxCalibration(): TerrainAuxCalibration {
     clearanceMarginMeters: CLEARANCE_MARGIN_METERS,
     maxLevelEquatorSegments: TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS,
     quadtreeMinLevel: TERRAIN_QUADTREE_MIN_LEVEL,
-    quadtreeMaxLevel: TERRAIN_QUADTREE_MAX_LEVEL,
+    quadtreeMaxLevel: TERRAIN_MODEL_LEVEL,
     patchSegments: TERRAIN_PATCH_SEGMENTS,
     sagModelVersion: TERRAIN_SAG_MODEL_VERSION
   }

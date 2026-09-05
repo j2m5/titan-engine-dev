@@ -3,7 +3,7 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { HeightMapData } from './heightMapFormat'
 import type { TerrainAuxPayload } from './terrainAuxFormat'
 import { CUBE_FACES, TERRAIN_PATCH_SEGMENTS, cubeFaceDirection } from './cubeSphere'
-import { TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from './terrainQuadtreeSelect'
+import { TERRAIN_MODEL_LEVEL, TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from './terrainQuadtreeSelect'
 import { MidbandEnvelopeGrid } from './midbandEnvelopeGrid'
 import { MidbandField, type MidbandEnvelope, type MidbandSample } from './midbandField'
 import { MIDBAND_DEFAULTS, midbandCacheKey, midbandWavelengthMeters, type MidbandParams } from './midbandParams'
@@ -16,17 +16,18 @@ import { MIDBAND_DEFAULTS, midbandCacheKey, midbandWavelengthMeters, type Midban
 const CUBE_EQUATOR_FACES = 4
 
 /**
- * Вершинный шаг ФАКТИЧЕСКИ рендерящейся сетки на экваторе, в текселях карты
- * высот: у поверхности квадродерево (этап 3б) всегда на максимальном уровне
- * `TERRAIN_QUADTREE_MAX_LEVEL`, там `2^level` патчей на ребро грани, каждый —
- * `TERRAIN_PATCH_SEGMENTS` сегментов. Отсюда берётся вершинный пролёт на
- * любой широте (`шаг/cos(широты)`), а он задаёт и ширину окна кривизнной
- * суммы, и её множитель — см. `sagWindow`/`ewCurvatureRaw`. Для Луны (карта
- * 8192 текселя) экваториальный шаг = 8192/16384 = 0.5 текселя, то есть на
- * экваторе хорда не выходит за пределы одного излома, а к полюсу окно
- * раскрывается непрерывно.
+ * Вершинный шаг мешевой сетки, на который калибрована модель провиса/
+ * клиренса, в текселях карты высот: `TERRAIN_MODEL_LEVEL`, там `2^level`
+ * патчей на ребро грани, каждый — `TERRAIN_PATCH_SEGMENTS` сегментов (отбор
+ * узлов может спускаться глубже, до `TERRAIN_QUADTREE_MAX_LEVEL`, — модель
+ * ниже намеренно НЕ следует за ним, см. докблок `TERRAIN_MODEL_LEVEL`).
+ * Отсюда берётся вершинный пролёт на любой широте (`шаг/cos(широты)`), а он
+ * задаёт и ширину окна кривизнной суммы, и её множитель — см.
+ * `sagWindow`/`ewCurvatureRaw`. Для Луны (карта 8192 текселя) экваториальный
+ * шаг = 8192/16384 = 0.5 текселя, то есть на экваторе хорда не выходит за
+ * пределы одного излома, а к полюсу окно раскрывается непрерывно.
  */
-export const TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS = terrainEquatorSegmentsAtLevel(TERRAIN_QUADTREE_MAX_LEVEL)
+export const TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS = terrainEquatorSegmentsAtLevel(TERRAIN_MODEL_LEVEL)
 
 /**
  * Сегментов вершинной сетки по экватору на уровне `level`: `2^level` патчей
@@ -201,8 +202,9 @@ class TerrainHeightField {
   public readonly clearanceCellEquatorArcMeters: number
   /**
    * Честный (не статистический) пер-узловой максимум высоты квадродерева,
-   * метры — уровни `TERRAIN_QUADTREE_MIN_LEVEL..TERRAIN_QUADTREE_MAX_LEVEL`,
-   * 6 граней. Питается ЖИВОЙ (не удалён из живых полей) `blockMax` из
+   * метры — уровни `TERRAIN_QUADTREE_MIN_LEVEL..TERRAIN_MODEL_LEVEL`
+   * (глубже — честный максимум предка, см. `nodeMaxHeightMeters`), 6 граней.
+   * Питается ЖИВОЙ (не удалён из живых полей) `blockMax` из
    * `buildClearanceGrid` — честный MAX по текселям блока, не p99 (см.
    * докблок `buildNodeMaxHeightPyramid`). Замена статистической оценки
    * «центр+k·ε» (ревью Task 5, фикс-раунд 1, находка №1 — недооценка до 7.4
@@ -911,9 +913,11 @@ class TerrainHeightField {
     // базису: вершинный шаг ℓ2 равен ровно блоку, шаг ℓ1 — двум блокам
     // (`width / 2^(level+8)` против `block = width / CLEARANCE_GRID_BASE_SEGMENTS`
     // при TERRAIN_PATCH_SEGMENTS = 64 и CUBE_EQUATOR_FACES = 4). От
-    // TERRAIN_QUADTREE_MAX_LEVEL эта пара не зависит вовсе — сдвинуть её
-    // может только смена размера патча или базиса сетки провиса.
-    const levelErrorMeters = new Float64Array(TERRAIN_QUADTREE_MAX_LEVEL + 1)
+    // TERRAIN_MODEL_LEVEL эта пара не зависит вовсе — сдвинуть её может
+    // только смена размера патча или базиса сетки провиса. Массив по
+    // TERRAIN_MODEL_LEVEL (не MAX_LEVEL квадродерева) — уровни глубже
+    // экстраполируются при чтении, см. `extrapolatedLevelErrorMeters`.
+    const levelErrorMeters = new Float64Array(TERRAIN_MODEL_LEVEL + 1)
     levelErrorMeters[TERRAIN_QUADTREE_MIN_LEVEL] = p99_2x2
     levelErrorMeters[TERRAIN_QUADTREE_MIN_LEVEL + 1] = p99_1x1_eff
 
@@ -929,7 +933,7 @@ class TerrainHeightField {
         ? Math.min(MAX_TERRAIN_HURST, Math.max(MIN_TERRAIN_HURST, Math.log2(p99_2x2 / p99_1x1_eff)))
         : MAX_TERRAIN_HURST
 
-    for (let level = TERRAIN_QUADTREE_MIN_LEVEL + 2; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
+    for (let level = TERRAIN_QUADTREE_MIN_LEVEL + 2; level <= TERRAIN_MODEL_LEVEL; level++) {
       levelErrorMeters[level] = p99_1x1_eff * terrainLevelScale(width, level, block, hurst)
     }
 
@@ -941,7 +945,8 @@ class TerrainHeightField {
    * заменяет статистическую оценку «центр+k·ε» (ревью Task 5, фикс-раунд 1,
    * находка №1). Два прохода:
    *
-   * (1) Лист `TERRAIN_QUADTREE_MAX_LEVEL`: bbox узла в UV карты (9 сэмплов —
+   * (1) Лист `TERRAIN_MODEL_LEVEL` (глубина пирамиды — уровень калибровки
+   * модели, не потолок отбора узлов, см. её докблок): bbox узла в UV карты (9 сэмплов —
    * 4 угла + 4 середины рёбер + центр параметрического квада узла на грани
    * кубосферы, через ту же `cubeFaceDirection`/`dirToUv`, что и мешер/SSE) →
    * диапазон блочных индексов сетки клиренса (±1 блок запаса с каждой
@@ -957,7 +962,7 @@ class TerrainHeightField {
    * этого только РАСШИРЯЕТСЯ (замерено ре-ревью: недооценки нет нигде),
    * поэтому не чинится, а документируется.
    *
-   * (2) Уровни `MAX_LEVEL-1..MIN_LEVEL`: родитель = MAX четырёх детей —
+   * (2) Уровни `TERRAIN_MODEL_LEVEL-1..MIN_LEVEL`: родитель = MAX четырёх детей —
    * дети точно партиционируют область родителя (квадродерево кубосферы, без
    * пропусков/перекрытий), потому подъём не теряет консервативность и не
    * требует повторного bbox-скана.
@@ -990,9 +995,9 @@ class TerrainHeightField {
     const sampleU = new Float64Array(9)
     const sampleV = new Float64Array(9)
 
-    const leafPatches = 2 ** TERRAIN_QUADTREE_MAX_LEVEL
+    const leafPatches = 2 ** TERRAIN_MODEL_LEVEL
     const leafSpan = 2 / leafPatches
-    const leafOffset = pyramidLevelOffset(TERRAIN_QUADTREE_MAX_LEVEL)
+    const leafOffset = pyramidLevelOffset(TERRAIN_MODEL_LEVEL)
 
     for (let face = 0; face < CUBE_FACES; face++) {
       for (let i = 0; i < leafPatches; i++) {
@@ -1046,7 +1051,7 @@ class TerrainHeightField {
 
   /** Подъём пирамиды узлов: родитель — максимум четверых детей, партиция точная. */
   private raiseNodePyramid(pyramid: Float32Array): void {
-    for (let level = TERRAIN_QUADTREE_MAX_LEVEL - 1; level >= TERRAIN_QUADTREE_MIN_LEVEL; level--) {
+    for (let level = TERRAIN_MODEL_LEVEL - 1; level >= TERRAIN_QUADTREE_MIN_LEVEL; level--) {
       const patches = 2 ** level
       const childPatches = patches * 2
       const offset = pyramidLevelOffset(level)
@@ -1164,7 +1169,7 @@ class TerrainHeightField {
     // выводит их законом, и своя копия закона разошлась бы с ней на картах,
     // где вершинный шаг далёк от блока. При шероховатости, равной анкеру,
     // пер-узловая ε тождественна по-уровневой — это и есть точка отсчёта.
-    for (let level = TERRAIN_QUADTREE_MIN_LEVEL; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
+    for (let level = TERRAIN_QUADTREE_MIN_LEVEL; level <= TERRAIN_MODEL_LEVEL; level++) {
       const scale = anchorMeters > 0 ? levelErrorMeters[level] / anchorMeters : 0
       const offset = pyramidLevelOffset(level)
       const patches = 2 ** level
@@ -1212,33 +1217,81 @@ class TerrainHeightField {
    * Константное поле (пирамида `null`, вода) падает на по-уровневую: её ε
    * задаётся кривизной сферы и от узла не зависит по определению.
    *
-   * Кламп уровня тот же и с той же ловушкой, что у `nodeMaxHeightMeters`:
-   * `i, j` под клампнутый уровень НЕ пересчитываются, звать с уровнем вне
-   * диапазона и чужими индексами нельзя.
+   * Глубже `TERRAIN_MODEL_LEVEL` пирамиды нет (см. её докблок): берётся
+   * ЧЕСТНЫЙ предок на `TERRAIN_MODEL_LEVEL` (`i, j` сдвинуты на разницу
+   * уровней — квадродерево кубосферы партиционирует без пропусков и
+   * перекрытий, сдвиг однозначен) и модулируется отношением экстраполированной
+   * по-уровневой ε к ε(`TERRAIN_MODEL_LEVEL`) — тот же приём, которым узел
+   * модулирует готовый профиль в `buildNodeErrorPyramid`, продолженный за
+   * калибровку модели; монотонность родитель≥ребёнок через границу
+   * `TERRAIN_MODEL_LEVEL` сохраняется (общий множитель = предка, экстраполяция
+   * убывает по level).
+   *
+   * Кламп уровня — как у `geometricErrorMeters`; `i, j` ПОД клампнутый
+   * уровень не пересчитываются (кламп корректен только при согласованных
+   * (level, i, j) — все вызывающие держат level в диапазоне рекурсией отбора).
    */
   public nodeGeometricErrorMeters(face: number, level: number, i: number, j: number): number {
     if (this.nodeErrorMetersPyramid === null) return this.geometricErrorMeters(level) // фолбэк уже несёт добавку полосы
 
     const clampedLevel = Math.min(Math.max(level, TERRAIN_QUADTREE_MIN_LEVEL), TERRAIN_QUADTREE_MAX_LEVEL)
-    const patches = 2 ** clampedLevel
 
-    return (
-      this.nodeErrorMetersPyramid[face * FACE_NODE_COUNT + pyramidLevelOffset(clampedLevel) + i * patches + j] +
-      this.midbandErrorMeters(clampedLevel)
-    )
+    if (clampedLevel <= TERRAIN_MODEL_LEVEL) {
+      const patches = 2 ** clampedLevel
+
+      return (
+        this.nodeErrorMetersPyramid[face * FACE_NODE_COUNT + pyramidLevelOffset(clampedLevel) + i * patches + j] +
+        this.midbandErrorMeters(clampedLevel)
+      )
+    }
+
+    const delta = clampedLevel - TERRAIN_MODEL_LEVEL
+    const ancestorPatches = 2 ** TERRAIN_MODEL_LEVEL
+    const ancestorValue =
+      this.nodeErrorMetersPyramid[
+        face * FACE_NODE_COUNT + pyramidLevelOffset(TERRAIN_MODEL_LEVEL) + (i >> delta) * ancestorPatches + (j >> delta)
+      ]
+    const atModel = this.levelErrorMeters[TERRAIN_MODEL_LEVEL]
+    const scale = atModel > 0 ? this.extrapolatedLevelErrorMeters(clampedLevel) / atModel : 0
+
+    return ancestorValue * scale + this.midbandErrorMeters(clampedLevel)
   }
 
-  /** ε уровня дерева, метры: p99 размаха высот в окне шага вершинной сетки уровня (карта) + добавка полосы (`midbandErrorMeters`); ниже блочного разрешения — линейное масштабирование шага. Глубина юбки; для SSE — `nodeGeometricErrorMeters`. */
+  /** ε уровня дерева, метры: p99 размаха высот в окне шага вершинной сетки уровня (карта, экстраполяция глубже `TERRAIN_MODEL_LEVEL`, см. `extrapolatedLevelErrorMeters`) + добавка полосы (`midbandErrorMeters`); ниже блочного разрешения — линейное масштабирование шага. Глубина юбки; для SSE — `nodeGeometricErrorMeters`. */
   public geometricErrorMeters(level: number): number {
     const clampedLevel = Math.min(Math.max(level, TERRAIN_QUADTREE_MIN_LEVEL), TERRAIN_QUADTREE_MAX_LEVEL)
+    const mapEpsilon =
+      clampedLevel <= TERRAIN_MODEL_LEVEL ? this.levelErrorMeters[clampedLevel] : this.extrapolatedLevelErrorMeters(clampedLevel)
 
-    return this.levelErrorMeters[clampedLevel] + this.midbandErrorMeters(clampedLevel)
+    return mapEpsilon + this.midbandErrorMeters(clampedLevel)
+  }
+
+  /**
+   * ε карты глубже `TERRAIN_MODEL_LEVEL`, метры — модель провиса/клиренса и
+   * пер-узловые пирамиды дальше `TERRAIN_MODEL_LEVEL` не считаются (см. её
+   * докблок), поэтому уровни отбора глубже него экстраполируются ТЕМ ЖЕ
+   * степенным законом самоподобия, что `buildGeometricErrors` использует
+   * внутри пирамиды (размах падает как шаг^H). H здесь — из ПОСЛЕДНЕЙ
+   * измеренной пары уровней (`MODEL_LEVEL−1`, `MODEL_LEVEL`), не из ℓ1/ℓ2:
+   * это самая глубокая доступная оценка локального самоподобия рельефа.
+   * Кламп `[MIN_TERRAIN_HURST, MAX_TERRAIN_HURST]` и фолбэк на вырожденный
+   * (нулевой/NaN) анкер — MAX_TERRAIN_HURST, как и в `buildGeometricErrors`.
+   */
+  private extrapolatedLevelErrorMeters(level: number): number {
+    const atModel = this.levelErrorMeters[TERRAIN_MODEL_LEVEL]
+    const atModelMinus1 = this.levelErrorMeters[TERRAIN_MODEL_LEVEL - 1]
+    const ratio = atModelMinus1 / atModel
+    const hurst = Number.isFinite(ratio) && ratio > 0 ? Math.min(MAX_TERRAIN_HURST, Math.max(MIN_TERRAIN_HURST, Math.log2(ratio))) : MAX_TERRAIN_HURST
+
+    return atModel * 2 ** (-hurst * (level - TERRAIN_MODEL_LEVEL))
   }
 
   /**
    * ε-добавка полосы уровня, метры (Task 5) — см. докблок поля
    * `midbandErrorTable`. 0 без полосы (`midband === null`). Кламп уровня тот
-   * же, что у `geometricErrorMeters`.
+   * же, что у `geometricErrorMeters`, до `TERRAIN_QUADTREE_MAX_LEVEL` включая
+   * уровни глубже `TERRAIN_MODEL_LEVEL` — полоса не привязана к модели
+   * провиса/клиренса и считается аналитически на каждом уровне отбора.
    */
   public midbandErrorMeters(level: number): number {
     return this.midbandErrorTable[Math.min(Math.max(level, TERRAIN_QUADTREE_MIN_LEVEL), TERRAIN_QUADTREE_MAX_LEVEL)]
@@ -1253,32 +1306,46 @@ class TerrainHeightField {
    * читать пирамиду незачем: любой честный MAX по константе равен самой
    * константе.
    *
+   * Глубже `TERRAIN_MODEL_LEVEL` честного максимума узла нет — отдаётся
+   * максимум ПРЕДКА на `TERRAIN_MODEL_LEVEL` (`i, j` сдвинуты на разницу
+   * уровней): он консервативен по построению (родитель = MAX всех потомков),
+   * просто грубее, чем мог бы быть честный максимум более глубокого узла.
+   *
    * ЛОВУШКА клампа: `level` вне `[MIN_LEVEL, MAX_LEVEL]` клампится, но `i, j`
-   * под клампнутый уровень НЕ пересчитываются — в отличие от
-   * `geometricErrorMeters` (у той индексов нет), здесь кламп корректен только
-   * при согласованных (level, i, j). Все вызывающие держат level в диапазоне
+   * под клампнутый уровень НЕ пересчитываются — кламп корректен только при
+   * согласованных (level, i, j). Все вызывающие держат level в диапазоне
    * через рекурсию отбора; звать с level вне диапазона и чужими i/j нельзя.
    */
   public nodeMaxHeightMeters(face: number, level: number, i: number, j: number): number {
     if (this.nodeMaxHeightMetersPyramid === null) return this.map.minMeters
 
     const clampedLevel = Math.min(Math.max(level, TERRAIN_QUADTREE_MIN_LEVEL), TERRAIN_QUADTREE_MAX_LEVEL)
-    const patches = 2 ** clampedLevel
 
-    return this.nodeMaxHeightMetersPyramid[face * FACE_NODE_COUNT + pyramidLevelOffset(clampedLevel) + i * patches + j]
+    if (clampedLevel <= TERRAIN_MODEL_LEVEL) {
+      const patches = 2 ** clampedLevel
+
+      return this.nodeMaxHeightMetersPyramid[face * FACE_NODE_COUNT + pyramidLevelOffset(clampedLevel) + i * patches + j]
+    }
+
+    const delta = clampedLevel - TERRAIN_MODEL_LEVEL
+    const ancestorPatches = 2 ** TERRAIN_MODEL_LEVEL
+
+    return this.nodeMaxHeightMetersPyramid[
+      face * FACE_NODE_COUNT + pyramidLevelOffset(TERRAIN_MODEL_LEVEL) + (i >> delta) * ancestorPatches + (j >> delta)
+    ]
   }
 }
 
 /**
- * Смещение уровня L (1..MAX_LEVEL) в поддереве ОДНОЙ грани пирамиды максимумов:
- * Σ_{k=1}^{L-1} 4^k = (4^L − 4) / 3 — индексы уровней 1..L−1 уже заняты.
+ * Смещение уровня L (1..TERRAIN_MODEL_LEVEL) в поддереве ОДНОЙ грани пирамиды
+ * максимумов: Σ_{k=1}^{L-1} 4^k = (4^L − 4) / 3 — индексы уровней 1..L−1 уже заняты.
  */
 function pyramidLevelOffset(level: number): number {
   return (4 ** level - 4) / 3
 }
 
-/** Записей на одну грань в пирамиде максимумов: Σ_{L=1}^{MAX_LEVEL} 4^L = pyramidLevelOffset(MAX_LEVEL+1). */
-const FACE_NODE_COUNT = pyramidLevelOffset(TERRAIN_QUADTREE_MAX_LEVEL + 1)
+/** Записей на одну грань в пирамиде максимумов: Σ_{L=1}^{TERRAIN_MODEL_LEVEL} 4^L = pyramidLevelOffset(TERRAIN_MODEL_LEVEL+1). */
+const FACE_NODE_COUNT = pyramidLevelOffset(TERRAIN_MODEL_LEVEL + 1)
 
 /** 99-й процентиль по копии массива (не мутирует вход): сортировка, индекс floor(0.99·(n−1)). */
 function percentile99(values: Float64Array): number {

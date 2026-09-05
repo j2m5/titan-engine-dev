@@ -14,6 +14,7 @@ import {
   type SelectParams,
   type TerrainNodeAddress
 } from '@/core/terrain/terrainQuadtreeSelect'
+import { MAX_LIVE_PATCHES } from '@/core/terrain/TerrainPatchPool'
 
 function makeMap(width: number, height: number, values: number[], minMeters = 0, maxMeters = 65535): HeightMapData {
   return { width, height, minMeters, maxMeters, data: new Uint16Array(values) }
@@ -77,11 +78,12 @@ describe('selectTerrainNodes: SSE-отбор узлов квадродерева
   it('потолок глубины держится вплотную к поверхности', () => {
     const { leaves } = selectTerrainNodes(makeParams(0.2))
     expect(Math.max(...leaves.map((a) => a.level))).toBe(TERRAIN_QUADTREE_MAX_LEVEL)
+    // страж пула (ревью Task 5, фикс-раунд 1): набор листьев у самой
+    // поверхности обязан оставаться заметно ниже потолка живых патчей —
+    // иначе глубина L8 вычерпывает пул уже на одном теле
+    expect(leaves.length).toBeLessThanOrEqual(0.8 * MAX_LIVE_PATCHES)
   })
 
-  // Таймаут поднят (Task 5, MAX_LEVEL 6→8): 4 прогона selectTerrainNodes на
-  // близкой дистанции спускаются на глубину вчетверо больше прежней, дефолтные
-  // 5с тесны под параллельной нагрузкой полного прогона.
   it('гистерезис: между τ_merge и τ_split разбитый узел не схлопывается, kMerge реально применяется', () => {
     // Высоты подобраны эмпирически под HEIGHT_AMPLITUDE_METERS=20000 и splitPixels=6:
     // на ALT_SPLIT четыре пограничных узла face=0 уровня 1 имеют sse≈6.34-6.35 (>
@@ -110,7 +112,7 @@ describe('selectTerrainNodes: SSE-отбор узлов квадродерева
     // (б) ↔ (в): разница доказывает, что kMerge действительно применяется, а не
     // просто демонстрирует детерминизм чистой функции
     expect(withHysteresis.leaves.length).toBeGreaterThan(withoutHysteresis.leaves.length)
-  }, 20_000)
+  })
 
   it('вне фрустума не сплитится', () => {
     // фрустум, смотрящий строго от планеты: все узлы вне → набор минимальный несмотря на близость.
