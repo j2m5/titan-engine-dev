@@ -23,7 +23,8 @@ describe('midbandParams: ручки геометрии средней полос
   })
 
   it('λ₀ = clamp(1.2·тексель, 800, 3000) м; явная ручка перебивает', () => {
-    expect(midbandWavelengthMeters(1333, MIDBAND_DEFAULTS)).toBeCloseTo(1600, 6) // Луна 8192
+    // Луна 8192 → тексель ≈ 1333 м → 1.2·1333
+    expect(midbandWavelengthMeters(1333, MIDBAND_DEFAULTS)).toBeCloseTo(1599.6, 6)
     expect(midbandWavelengthMeters(500, MIDBAND_DEFAULTS)).toBe(800)
     expect(midbandWavelengthMeters(5000, MIDBAND_DEFAULTS)).toBe(3000)
     expect(midbandWavelengthMeters(1333, { ...MIDBAND_DEFAULTS, midbandWavelengthKm: 2.2 })).toBe(2200)
@@ -35,11 +36,13 @@ describe('midbandParams: ручки геометрии средней полос
     expect(() => resolveMidbandParams({ midbandSlopeRef: 0 }, 'Титания')).toThrow(/midbandSlopeRef/)
     expect(() => resolveMidbandParams({ midbandFlat: 'x' }, 'Титания')).toThrow(/не число/)
     expect(() => resolveMidbandParams({ midbandWarp: -0.1 }, 'Титания')).toThrow(/midbandWarp/)
+    expect(() => resolveMidbandParams({ midbandRidge: -1 }, 'Титания')).toThrow(/midbandRidge/)
   })
 
   it('ключ кеша различает параметры, одинаковые параметры — один ключ', () => {
     expect(midbandCacheKey(MIDBAND_DEFAULTS)).toBe(midbandCacheKey({ ...MIDBAND_DEFAULTS }))
     expect(midbandCacheKey(MIDBAND_DEFAULTS)).not.toBe(midbandCacheKey({ ...MIDBAND_DEFAULTS, midbandStrength: 0 }))
+    expect(midbandCacheKey(MIDBAND_DEFAULTS)).not.toBe(midbandCacheKey({ ...MIDBAND_DEFAULTS, midbandWavelengthKm: 2 }))
   })
 
   it('midbandParamsOf читает data тела: у Луны (19) ручек нет — дефолты', () => {

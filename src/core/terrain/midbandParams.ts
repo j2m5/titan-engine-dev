@@ -78,8 +78,7 @@ export function midbandParamsOf(model: Actor): MidbandParams {
 export function midbandWavelengthMeters(equatorTexelMeters: number, params: MidbandParams): number {
   if (params.midbandWavelengthKm !== null) return params.midbandWavelengthKm * 1000
 
-  const raw = Math.round(TEXEL_TO_WAVELENGTH * equatorTexelMeters)
-  return Math.min(MAX_WAVELENGTH_METERS, Math.max(MIN_WAVELENGTH_METERS, raw))
+  return Math.min(MAX_WAVELENGTH_METERS, Math.max(MIN_WAVELENGTH_METERS, TEXEL_TO_WAVELENGTH * equatorTexelMeters))
 }
 
 export function midbandCacheKey(params: MidbandParams): string {
