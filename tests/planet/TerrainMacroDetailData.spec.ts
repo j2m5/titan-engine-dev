@@ -44,4 +44,19 @@ describe('Данные средней полосы детали рельефа',
     expect(withMacro.length).toBe(50)
     expect(withMacro.every((row: IRenderingObject): boolean => (row.data as { macroStrength: number }).macroStrength === 0.25)).toBe(true)
   })
+
+  it('ручки геометрии средней полосы (арка B) в БД не проставлены — дефолты глобальные, живут в midbandParams.ts', () => {
+    const midbandKeys = [
+      'midbandStrength',
+      'midbandWavelengthKm',
+      'midbandFlat',
+      'midbandSlopeRef',
+      'midbandRidge',
+      'midbandWarp'
+    ]
+    const withMidband = RenderingObjects.filter((row: IRenderingObject): boolean =>
+      midbandKeys.some((key: string): boolean => (row.data as Record<string, unknown> | undefined)?.[key] !== undefined)
+    )
+    expect(withMidband).toEqual([])
+  })
 })
