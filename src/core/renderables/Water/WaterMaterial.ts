@@ -214,6 +214,17 @@ class WaterMaterial extends AbstractShaderMaterial {
 
     this.uniforms.uSlopeMap.value = slopeMap ?? null
 
+    // Тексель slope-карты для градиента глубины (пена): от фактического
+    // размера загруженной текстуры, не от строки БД; без карты — нули.
+    const image = slopeMap?.image as { width?: number; height?: number } | undefined
+    if (image?.width && image.height) {
+      this.uniforms.uSlopeTexel.value.set(1 / image.width, 1 / image.height)
+      this.uniforms.uSlopeTexelMeters.value = (2 * Math.PI * this.uniforms.uFoamRadiusMeters.value) / image.width
+    } else {
+      this.uniforms.uSlopeTexel.value.set(0, 0)
+      this.uniforms.uSlopeTexelMeters.value = 0
+    }
+
     const useWaterDepth = Boolean(slopeMap)
 
     // waterNormal — независимый гейт (USE_WATER_WAVES), тот же ленивый
@@ -262,6 +273,8 @@ class WaterMaterial extends AbstractShaderMaterial {
     this.slopePath = WaterMaterial.resolveSlopePath(this.model)
     this.waterNormalPath = WaterMaterial.resolveWaterNormalPath(this.model)
     this.uniforms.uSlopeMap.value = null
+    this.uniforms.uSlopeTexel.value.set(0, 0)
+    this.uniforms.uSlopeTexelMeters.value = 0
     this.uniforms.uWaterNormalMap.value = null
     this.hasWaterDepth = false
     this.hasWaterWaves = false

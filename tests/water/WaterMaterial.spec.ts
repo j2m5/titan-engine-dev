@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach, vi } from 'vitest'
-import { Texture, Vector3 } from 'three'
+import { Color, Texture, Vector2, Vector3 } from 'three'
 import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
@@ -441,5 +441,45 @@ describe('WaterMaterial: рантайм-связка с реальной БД (T
     expect(material.defines.USE_WATER_WAVES).toBe('1')
     expect(material.uniforms.uWaterNormalMap.value).toBe(texture)
     expect(material.uniforms.uWaterWaveScale.value).toBeCloseTo(6100000, 6)
+  })
+})
+
+describe('WaterMaterial: пена прибоя — ручки и тексель карты', () => {
+  afterEach(() => resourceStorage.deleteAllTextures())
+
+  it('дефолты резолвера доезжают до юниформов; цвет — Color', () => {
+    const material = new WaterMaterial(stubActor({ data: {} }))
+    expect(material.uniforms.uFoamStrength.value).toBe(1)
+    expect(material.uniforms.uFoamShoreMeters.value).toBe(600)
+    expect(material.uniforms.uFoamSurfMeters.value).toBe(3000)
+    expect(material.uniforms.uFoamWavelengthMeters.value).toBe(800)
+    expect(material.uniforms.uFoamPeriod.value).toBe(8)
+    expect(material.uniforms.uFoamNoiseScale.value).toBe(1)
+    expect((material.uniforms.uFoamColor.value as Color).getHex()).toBe(0xe6e9ec)
+  })
+
+  it('ручки data доезжают; невалидная — громко с именем тела', () => {
+    const material = new WaterMaterial(stubActor({ data: { waterFoamStrength: 0.5, waterFoamColor: '#ff0000' } }))
+    expect(material.uniforms.uFoamStrength.value).toBe(0.5)
+    expect((material.uniforms.uFoamColor.value as Color).getHex()).toBe(0xff0000)
+    expect(() => new WaterMaterial(stubActor({ data: { waterFoamShoreMeters: -1 } }))).toThrow(/waterFoamShoreMeters/)
+  })
+
+  it('uSlopeTexel/uSlopeTexelMeters ставятся при приходе slope-карты, до того — нули; сброс обнуляет', () => {
+    const actor = stubActor({ data: {} })
+    ;(actor as unknown as { physicalObject: { getAttribute: () => number } }).physicalObject = { getAttribute: () => 6360 }
+    const material = new WaterMaterial(actor)
+    expect(material.uniforms.uSlopeTexelMeters.value).toBe(0)
+    expect((material.uniforms.uSlopeTexel.value as Vector2).x).toBe(0)
+
+    seedSlopeTexture() // 4×2
+    material.updateMaterial()
+    expect((material.uniforms.uSlopeTexel.value as Vector2).x).toBeCloseTo(1 / 4, 12)
+    expect((material.uniforms.uSlopeTexel.value as Vector2).y).toBeCloseTo(1 / 2, 12)
+    expect(material.uniforms.uSlopeTexelMeters.value).toBeCloseTo((2 * Math.PI * 6360 * 1000) / 4, 6)
+    expect(material.uniforms.uFoamRadiusMeters.value).toBe(6360 * 1000)
+
+    material.resetMaterial()
+    expect(material.uniforms.uSlopeTexelMeters.value).toBe(0)
   })
 })

@@ -1,4 +1,4 @@
-import { Color, CubeTexture, Texture, Uniform, Vector3 } from 'three'
+import { Color, CubeTexture, Texture, Uniform, Vector2, Vector3 } from 'three'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { WaterShaderTemplate as Shader } from '@/core/materials/shaders/lib/WaterShaderTemplate'
 import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
@@ -7,6 +7,7 @@ import { IPlanetRenderingObject } from '@/core/models/types'
 import { distanceForApparentSize } from '@/core/helpers/apparentSize'
 import { clampSunTintStrength } from '@/core/materials/SunTintBinding'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { resolveWaterFoamParams } from '@/core/terrain/waterFoamParams'
 
 // Дефолты ручек воды — честно помеченные заглушки (см. IPlanetRenderingObject),
 // приёмка по виду за владельцем (см. память «Flare Visual Checks Are Owner's»).
@@ -106,6 +107,16 @@ interface WaterUniforms {
   uAtmoSunAngularRadius: number
   uAtmoDatumRadius: number
   uSunTintStrength: number
+  uFoamStrength: number
+  uFoamShoreMeters: number
+  uFoamSurfMeters: number
+  uFoamWavelengthMeters: number
+  uFoamPeriod: number
+  uFoamNoiseScale: number
+  uFoamColor: Color
+  uFoamRadiusMeters: number
+  uSlopeTexel: Vector2
+  uSlopeTexelMeters: number
 }
 
 /**
@@ -128,6 +139,15 @@ type WaterRenderingData = Pick<
   | 'waterWaveFadeMeters'
   | 'waterDistortion'
   | 'sunTintStrength'
+  | 'waterFoamStrength'
+  | 'waterFoamShoreMeters'
+  | 'waterFoamSurfMeters'
+  | 'waterFoamWavelengthMeters'
+  | 'waterFoamPeriodSeconds'
+  | 'waterFoamNoiseScale'
+  | 'waterFoamColor'
+  | 'terrainWetBandMeters'
+  | 'terrainWetDarken'
 >
 
 class WaterShader extends AbstractShader<keyof WaterUniforms> {
@@ -156,6 +176,9 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
     const radiusMeters = (this.model.physicalObject?.getAttribute('radius') ?? 0) * 1000
     const waveScaleHandle = waterData.waterWaveScale ?? DEFAULT_WATER_WAVE_SCALE
     const waveFadeMetersHandle = waterData.waterWaveFadeMeters
+
+    // Пена прибоя — тот же приём именования тела в ошибках, что PlanetShader.ts:198.
+    const foam = resolveWaterFoamParams(waterData, this.model.getAttribute?.('name', '?') ?? '?')
 
     // Общий набор ручек выборки фона (highlight/floor/gain/flip) — та же
     // фабрика, что SkyboxBackground/BlackHole (ЖЕЛЕЗНЫЙ констрейнт, см.
@@ -191,6 +214,18 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
           ? toThreeJSUnits(waveFadeMetersHandle / 1000)
           : DEFAULT_WATER_WAVE_FADE_UNITS / waveScaleHandle
       ),
+      // Пена прибоя — ручки из резолвера (глобальные дефолты); тексель карты —
+      // заглушки до прихода slope-карты (WaterMaterial.updateMaterial).
+      uFoamStrength: new Uniform(foam.waterFoamStrength),
+      uFoamShoreMeters: new Uniform(foam.waterFoamShoreMeters),
+      uFoamSurfMeters: new Uniform(foam.waterFoamSurfMeters),
+      uFoamWavelengthMeters: new Uniform(foam.waterFoamWavelengthMeters),
+      uFoamPeriod: new Uniform(foam.waterFoamPeriodSeconds),
+      uFoamNoiseScale: new Uniform(foam.waterFoamNoiseScale),
+      uFoamColor: new Uniform(new Color(foam.waterFoamColor)),
+      uFoamRadiusMeters: new Uniform(radiusMeters),
+      uSlopeTexel: new Uniform(new Vector2()),
+      uSlopeTexelMeters: new Uniform(0),
       // Кубмапа — заглушка null: доставляется WaterMaterial конструктором
       // (ровно один раз, см. её докблок), не здесь (это CPU-путь "data",
       // текстуры сюда не приходят). Остальной набор — общая выборка фона,
