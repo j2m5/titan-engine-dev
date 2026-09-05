@@ -31,6 +31,10 @@ const defaultUniforms = {
   // Пол ламберта суши: обратные к солнцу склоны дневной стороны; под AgX
   // 0.04 читался углём, 0.15 — тёмно-серый с читаемой формой.
   uTerrainAmbient: new Uniform(0.15),
+  // Пол ламберта — свет, отражённый от соседнего освещённого грунта: его
+  // столько, сколько солнца над горизонтом. Полный пол при геометрическом
+  // N·L ≥ 0.3 (~17°), у терминатора → 0 — рельеф с орбиты остаётся контрастным.
+  uTerrainAmbientSunRef: new Uniform(0.3),
   // Высотный fade облачного слоя (приёмочная волна 4, №3, идея владельца) —
   // 1 из космоса, гаснет к середине толщины атмосферы (см. докблок
   // cloudOpacityForAltitude в PlanetMaterial.ts). Дефолт 1 — до первого
@@ -123,6 +127,7 @@ export const PlanetShaderTemplate: ShaderProps = {
     uniform float uCavityStrength;
     uniform float uTerrainLambert;
     uniform float uTerrainAmbient;
+    uniform float uTerrainAmbientSunRef;
     // three не биндит normalMatrix во фрагментник автоматически (только в
     // вершинный пролог) — юниформ общий на программу, объявление здесь просто
     // делает его видимым этому шейдеру.
@@ -279,6 +284,9 @@ export const PlanetShaderTemplate: ShaderProps = {
 
       vec3 lightDirection = normalize(vViewLightDirection);
       float NdotLraw = dot(normal, lightDirection);
+      // Угол солнца над геометрическим горизонтом (радиальная нормаль сферы) —
+      // терминатор суши и масштаб пола ламберта; рельеф сюда не входит.
+      float sunElevation = dot(normalize(vNormal), lightDirection);
       float lightIntensity = max(NdotLraw, 0.0);
 
       vec3 dayColor = diffuseSample;
@@ -290,7 +298,11 @@ export const PlanetShaderTemplate: ShaderProps = {
         // N·L > 0.25. Только на dayColor: облака ниже шейдятся своим законом,
         // нормаль рельефа к ним отношения не имеет. При uTerrainLambert = 0
         // множитель ≡ 1 (прежний вид).
-        dayColor *= mix(1.0, mix(uTerrainAmbient, 1.0, max(NdotLraw, 0.0)), uTerrainLambert);
+        // Пол ∝ солнцу над горизонтом: рассеянный свет — от соседнего
+        // освещённого грунта; у терминатора грунт тёмный, пол уходит к нулю,
+        // и рельеф там читается контрастно с орбиты. В полдень пол = terrainAmbient.
+        float ambientFloor = uTerrainAmbient * clamp(sunElevation / max(uTerrainAmbientSunRef, 1e-3), 0.0, 1.0);
+        dayColor *= mix(1.0, mix(ambientFloor, 1.0, max(NdotLraw, 0.0)), uTerrainLambert);
       #endif
 
       // Ночная и облачная карты есть не у всех тел. Раньше сэмплеры читались
@@ -347,7 +359,7 @@ export const PlanetShaderTemplate: ShaderProps = {
       // доезжал). Форма рельефа — только в ламберте выше (NdotLraw).
       float terminatorNdotL = NdotLraw;
       #ifdef USE_TERRAIN_UV
-        terminatorNdotL = dot(normalize(vNormal), lightDirection);
+        terminatorNdotL = sunElevation;
       #endif
 
       // Терминатор: компактная smoothstep-зона вместо линейного mix по всей

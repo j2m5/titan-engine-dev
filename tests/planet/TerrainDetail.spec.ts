@@ -70,7 +70,8 @@ describe('TerrainDetail: чанк — регистрация и структур
     expect(terrainDetailFunctions).toContain('triplanarWeights(dirLocal)')
     // родной набор читается через общий helper sampleDetailSet (зоны материала,
     // задача 2) — сам helper вызывает triplanarNormal/Arm/AlbedoDetiled параметризованно
-    expect(terrainDetailFunctions).toContain('sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap')
+    expect(terrainDetailFunctions).toContain('sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, uDetailTintNorm')
+    expect(terrainDetailFunctions).toContain('sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uSteepTintNorm')
     expect(terrainDetailFunctions).toContain('triplanarNormalDetiled(nor')
     expect(terrainDetailFunctions).toContain('triplanarArmDetiled(arm')
     expect(terrainDetailFunctions).toContain('triplanarAlbedoDetiled(diff')

@@ -33,6 +33,8 @@ const DEFAULT_DETAIL_FADE2_METERS = 5000
 // читался углём).
 const DEFAULT_TERRAIN_LAMBERT = 0
 const DEFAULT_TERRAIN_AMBIENT = 0.15
+// Геометрический N·L полного пола: ниже — пол ∝ солнцу над горизонтом (0 на терминаторе).
+const DEFAULT_TERRAIN_AMBIENT_SUN_REF = 0.3
 
 // Начало fade относительно конца: не отдельная ручка (см. IPlanetRenderingObject),
 // константа общая с CPU-зеркалом полосы (terrainMacroDetailMath.DETAIL_FADE_START_RATIO).
@@ -101,6 +103,7 @@ interface PlanetUniforms {
   uSlopeRange: number
   uTerrainLambert: number
   uTerrainAmbient: number
+  uTerrainAmbientSunRef: number
   shadowRingsInnerRadius: number
   shadowRingsOuterRadius: number
   shadowRingsTexture: Texture | null
@@ -218,6 +221,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uSlopeRange: new Uniform(SLOPE_RANGE),
       uTerrainLambert: new Uniform(planetData.terrainLambert ?? DEFAULT_TERRAIN_LAMBERT),
       uTerrainAmbient: new Uniform(planetData.terrainAmbient ?? DEFAULT_TERRAIN_AMBIENT),
+      uTerrainAmbientSunRef: new Uniform(Math.max(planetData.terrainAmbientSunRef ?? DEFAULT_TERRAIN_AMBIENT_SUN_REF, 1e-3)),
       uDetailFadeRange: new Uniform(
         new Vector4(
           detailFadeEndUnits * DETAIL_FADE_START_RATIO,
