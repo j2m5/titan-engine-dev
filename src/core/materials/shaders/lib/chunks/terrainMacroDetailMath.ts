@@ -69,14 +69,29 @@ export const STREAK_STRETCH = 6
 export const MACRO_RELIEF_ASPECT_STREAK = 0.08
 export const STREAK_PLANE_POW = 8
 export const STREAK_PLANE_MIN_WEIGHT = 0.02
-export const TERRACE_WOBBLE = 0.35
+export const TERRACE_WOBBLE = 0.7
 /** Доля периода под уступом; остальное — площадка. */
 export const TERRACE_RISER = 0.3
-export const TERRACE_SHADE = 0.15
+export const TERRACE_SHADE = 0.07
+/** Маска покрытия террас по значению fbm: ниже LO — нет полок, выше HI — полная. */
+export const TERRACE_COVER_LO = 0.1
+export const TERRACE_COVER_HI = 0.4
+/** Дефолты гейта форм по абсолютному уклону (tan): 0.2 ≈ 11°, 0.45 ≈ 24°. */
+export const DEFAULT_STRUCTURE_SLOPE_START = 0.2
+export const DEFAULT_STRUCTURE_SLOPE_FULL = 0.45
 
 /** Гейт форм от нормированного уклона s = |slope|/slopeRef: равнина 0, крутое 1. */
-export function structureGate(s: number): number {
-  return smoothstep(0.35, 1, s)
+export function structureGate(
+  slopeTan: number,
+  start: number = DEFAULT_STRUCTURE_SLOPE_START,
+  full: number = DEFAULT_STRUCTURE_SLOPE_FULL
+): number {
+  return smoothstep(start, full, slopeTan)
+}
+
+/** Покрытие террас от значения fbm (пятна полок на стене). */
+export function terraceCoverage(fbmValue: number): number {
+  return smoothstep(TERRACE_COVER_LO, TERRACE_COVER_HI, fbmValue)
 }
 
 /**

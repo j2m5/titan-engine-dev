@@ -10,6 +10,8 @@ import {
   STREAK_PLANE_POW,
   STREAK_STRETCH,
   TERRACE_RISER,
+  TERRACE_COVER_HI,
+  TERRACE_COVER_LO,
   TERRACE_SHADE,
   TERRACE_WOBBLE
 } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
@@ -25,6 +27,8 @@ describe('TerrainMacroDetail: направленные формы склона (
     expect(fn).toContain(`#define TERRACE_WOBBLE ${TERRACE_WOBBLE}\n`)
     expect(fn).toContain(`#define TERRACE_RISER ${TERRACE_RISER}\n`)
     expect(fn).toContain(`#define TERRACE_SHADE ${TERRACE_SHADE}\n`)
+    expect(fn).toContain(`#define TERRACE_COVER_LO ${TERRACE_COVER_LO}\n`)
+    expect(fn).toContain(`#define TERRACE_COVER_HI ${TERRACE_COVER_HI}\n`)
   })
 
   it('юниформы форм и varying высоты объявлены в блоке чанка', () => {
@@ -58,8 +62,11 @@ describe('TerrainMacroDetail: направленные формы склона (
   })
 
   it('гейт форм и ранний выход по нему', () => {
-    expect(fn).toContain('float gate = smoothstep(0.35, 1.0, s);')
+    // гейт по АБСОЛЮТНОМУ уклону, не по s = |slope|/uMacroSlopeRef (тот ~4.6° при дефолте)
+    expect(fn).toContain('float gate = smoothstep(uMacroStructureSlope.x, uMacroStructureSlope.y, slopeLen);')
+    expect(fn).not.toContain('smoothstep(0.35, 1.0, s)')
     expect(fn).toContain('if (gate <= 0.0) return;')
+    expect(terrainMacroDetailUniforms).toContain('uniform vec2 uMacroStructureSlope;')
   })
 
   it('струи: трипланар с весом |dir|^POW, порог веса, цепное правило с делением на STREAK_STRETCH', () => {
@@ -84,7 +91,8 @@ describe('TerrainMacroDetail: направленные формы склона (
     expect(terraceWeightDecl).toBeGreaterThan(-1)
     expect(terraceWeightDecl).toBeLessThan(polar)
     expect(fn).toContain('float terraceWeight')
-    expect(fn).toContain('uMacroTerraceStrength * gate * distFade * terraceWeight')
+    expect(fn).toContain('uMacroTerraceStrength * gate * distFade * terraceWeight * cover')
+    expect(fn).toContain('float cover = smoothstep(TERRACE_COVER_LO, TERRACE_COVER_HI, fbmValue);')
   })
 
   it('в функциях форм нет экранных производных по шуму', () => {

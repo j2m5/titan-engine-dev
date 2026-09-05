@@ -130,6 +130,7 @@ interface PlanetUniforms {
   uMacroStreakPeriodUnits: number
   uMacroTerraceStrength: number
   uMacroTerraceStepMeters: number
+  uMacroStructureSlope: Vector2
   uDiffuseTexelSize: Vector2
   uBodyRadiusUnits: number
 }
@@ -271,6 +272,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uMacroStreakPeriodUnits: new Uniform(Math.max(toThreeJSUnits(slopeStructures.macroStreakScaleKm), 1e-9)),
       uMacroTerraceStrength: new Uniform(slopeStructures.macroTerraceStrength),
       uMacroTerraceStepMeters: new Uniform(slopeStructures.macroTerraceStepMeters),
+      uMacroStructureSlope: new Uniform(new Vector2(slopeStructures.macroStructureSlopeStart, slopeStructures.macroStructureSlopeFull)),
       uDiffuseTexelSize: new Uniform(new Vector2()),
       uBodyRadiusUnits: new Uniform(toThreeJSUnits(radiusKm))
     }

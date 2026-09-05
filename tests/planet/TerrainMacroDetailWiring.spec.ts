@@ -151,8 +151,10 @@ describe('PlanetShader: ручки средней полосы', () => {
 
   it('юниформы форм склона: дефолты у тела без ручек', () => {
     const shader = new PlanetShader(Actor.find(19)!) // Луна: ручек форм в data нет
-    expect(shader.uniforms.uMacroStreakStrength.value).toBe(1)
-    expect(shader.uniforms.uMacroStreakPeriodUnits.value).toBeCloseTo(toThreeJSUnits(0.5), 12)
+    expect(shader.uniforms.uMacroStreakStrength.value).toBe(0.6)
+    expect(shader.uniforms.uMacroStreakPeriodUnits.value).toBeCloseTo(toThreeJSUnits(0.8), 12)
+    expect(shader.uniforms.uMacroStructureSlope.value.x).toBe(0.2)
+    expect(shader.uniforms.uMacroStructureSlope.value.y).toBe(0.45)
     expect(shader.uniforms.uMacroTerraceStrength.value).toBe(0.5)
     expect(shader.uniforms.uMacroTerraceStepMeters.value).toBe(150)
   })

@@ -24,6 +24,8 @@ export const terrainMacroDetailUniforms = /* glsl */ `
   uniform float uMacroStreakPeriodUnits;
   uniform float uMacroTerraceStrength;
   uniform float uMacroTerraceStepMeters;
+  // Гейт форм по АБСОЛЮТНОМУ уклону (tan): x — начало, y — полная сила
+  uniform vec2 uMacroStructureSlope;
   // Высота вершины (метры над референсом, атрибут height) — фаза террас
   varying float vHeightMeters;
 `
@@ -39,9 +41,12 @@ export const terrainMacroDetailFunctions = /* glsl */ `
   #define MACRO_RELIEF_ASPECT_STREAK 0.08
   #define STREAK_PLANE_POW 8.0
   #define STREAK_PLANE_MIN_WEIGHT 0.02
-  #define TERRACE_WOBBLE 0.35
+  #define TERRACE_WOBBLE 0.7
   #define TERRACE_RISER 0.3
-  #define TERRACE_SHADE 0.15
+  #define TERRACE_SHADE 0.07
+  // Покрытие террас маской fbm: полки пятнами на стене, не сплошной изогипсой
+  #define TERRACE_COVER_LO 0.1
+  #define TERRACE_COVER_HI 0.4
 
   // Профиль террасы, период 1: уступ — подъём на [0, RISER], площадка —
   // линейный спад. x — значение (0 на концах периода), y — производная по фазе
@@ -67,11 +72,13 @@ export const terrainMacroDetailFunctions = /* glsl */ `
   // Анизотропия в 3D-домене dir·R/P невозможна (dot(q, d) ≡ 0 на сфере) —
   // отсюда 2D-чарты по осям тела. Внутри нет экранных производных: ветвление
   // по весам плоскостей безопасно. qs — домен струй (след посчитан хостом),
-  // s — нормированный уклон, contrast/distFade — множители полосы
-  void applyMacroSlopeStructures(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 eastLocal, vec2 slope, float s, float contrast, float distFade, vec3 qs, float streakWeight, float terraceWeight, float fbmValue) {
-    float gate = smoothstep(0.35, 1.0, s);
-    if (gate <= 0.0) return;
+  // contrast/distFade — множители полосы. Гейт — по абсолютному уклону (tan),
+  // НЕ по uMacroSlopeRef: тот калибрует амплитуду fbm (p90 уклонов на текселе,
+  // ~4.6°) и включал бы формы на любой холмистости; стены кратеров — от ~11°
+  void applyMacroSlopeStructures(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 eastLocal, vec2 slope, float contrast, float distFade, vec3 qs, float streakWeight, float terraceWeight, float fbmValue) {
     float slopeLen = length(slope);
+    float gate = smoothstep(uMacroStructureSlope.x, uMacroStructureSlope.y, slopeLen);
+    if (gate <= 0.0) return;
     if (slopeLen < 1e-5) return;
 
     vec3 T = normalize(eastLocal);
@@ -124,7 +131,8 @@ export const terrainMacroDetailFunctions = /* glsl */ `
       // Производная берётся по h; член вобла TERRACE_WOBBLE·∇fbm (~6 % при
       // дефолтах) намеренно опущен
       vec2 tp = terraceProfile(vHeightMeters / max(uMacroTerraceStepMeters, 1e-3) + TERRACE_WOBBLE * fbmValue);
-      float k = uMacroTerraceStrength * gate * distFade * terraceWeight;
+      float cover = smoothstep(TERRACE_COVER_LO, TERRACE_COVER_HI, fbmValue);
+      float k = uMacroTerraceStrength * gate * distFade * terraceWeight * cover;
       // площадка (tp.y = −1) положе, уступ круче — модуляция собственного уклона
       nLocal = normalize(nLocal - k * tp.y * slopeVec);
       albedoMul *= max(1.0 - TERRACE_SHADE * k * max(tp.x, 0.0), 0.0);
@@ -196,6 +204,6 @@ export const terrainMacroDetailFunctions = /* glsl */ `
 
     albedoMul *= clamp(1.0 + uMacroStrength * contrast * h, 0.0, 2.0);
 
-    applyMacroSlopeStructures(nLocal, albedoMul, dirLocal, eastLocal, slope, s, contrast, distFade, qs, streakWeight, terraceWeight, h);
+    applyMacroSlopeStructures(nLocal, albedoMul, dirLocal, eastLocal, slope, contrast, distFade, qs, streakWeight, terraceWeight, h);
   }
 `

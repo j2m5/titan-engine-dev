@@ -11,6 +11,7 @@ import {
   octaveWeight,
   slopeGain,
   structureGate,
+  terraceCoverage,
   terraceProfile,
   triplanarWeights,
   streakGradient2D
@@ -86,10 +87,17 @@ describe('terrainMacroDetailMath: наклон нормали полосой', (
 
 describe('terrainMacroDetailMath: направленные формы склона (арка A)', () => {
   it('гейт форм: ноль до s = 0.35, единица при s = 1', () => {
+    // абсолютный уклон (tan): холмистость до 0.2 (≈11°) — ноль, стена от 0.45 (≈24°) — единица
     expect(structureGate(0)).toBe(0)
-    expect(structureGate(0.35)).toBe(0)
-    expect(structureGate(1)).toBe(1)
-    expect(structureGate(0.675)).toBeCloseTo(0.5, 6)
+    expect(structureGate(0.2)).toBe(0)
+    expect(structureGate(0.45)).toBe(1)
+    expect(structureGate(0.325)).toBeCloseTo(0.5, 6)
+    expect(structureGate(0.3, 0.1, 0.5)).toBeCloseTo(0.5, 6)
+    // покрытие террас: ниже LO нет полок, выше HI — полные
+    expect(terraceCoverage(0)).toBe(0)
+    expect(terraceCoverage(0.1)).toBe(0)
+    expect(terraceCoverage(0.4)).toBe(1)
+    expect(terraceCoverage(0.25)).toBeCloseTo(0.5, 6)
   })
 
   it('профиль террасы: период 1, ноль на концах, площадка спадает с наклоном −1, уступ поднимается', () => {
