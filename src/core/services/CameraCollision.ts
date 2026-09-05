@@ -6,6 +6,7 @@ import { CLEARANCE_MARGIN_METERS, terrainHeightFieldFor, type TerrainHeightField
 import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 import { heightPathOf } from '@/core/terrain/heightPath'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
+import { midbandParamsOf } from '@/core/terrain/midbandParams'
 
 export type Collider = {
   object: Object3D
@@ -58,7 +59,10 @@ export function collectColliders(objects: Object3D[]): Collider[] {
     // деградирует к сфере согласованно с геометрией и материалом
     const heightPath: string | undefined = heightPathOf(model)
     const map = heightPath === undefined ? undefined : heightFieldStorage.get(heightPath)
-    const heightField = map ? terrainHeightFieldFor(map, radius) : undefined
+    // одна функция чтения параметров полосы с RenderableFactory — иначе
+    // кеш terrainHeightFieldFor разойдётся на два поля одной карты и
+    // мешер с коллизией разъедутся (урок архива этапа 5)
+    const heightField = map ? terrainHeightFieldFor(map, radius, midbandParamsOf(model)) : undefined
 
     // Уровень воды (Task 5) — ручка тела, не поля (см. докблок Collider);
     // считается только для терраформных тел (без рельефа воду отделять не от чего).

@@ -6,6 +6,7 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { SpaceScale } from '@/core/constants'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { CLEARANCE_MARGIN_METERS, terrainHeightFieldFor, type TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { makeBody, makeModel, makeCollision } from './cameraCollisionStubs'
 
@@ -688,10 +689,15 @@ describe('CameraCollision: внешний марч учитывает широт
       maxMeters: 65535,
       data: new Uint16Array(values)
     })
-    const body = makeBody('planet', 1736, new Vector3(), undefined, POLAR_PATH)
+    // полоса (Task 4) выключена и на карте, и у модели тела разом (иначе
+    // кэш terrainHeightFieldFor разошёлся бы на два поля одной карты —
+    // «одна функция чтения», см. CameraCollision.ts): тест сверяет точную
+    // высоту шипа (санити фикстуры) и геометрию клиренс-стенки от карты
+    const body = makeBody('planet', 1736, new Vector3(), undefined, POLAR_PATH, undefined, 0)
     const field = terrainHeightFieldFor(
       (heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.get(POLAR_PATH)!,
-      1736
+      1736,
+      { ...MIDBAND_DEFAULTS, midbandStrength: 0 }
     )
     return { body, field }
   }

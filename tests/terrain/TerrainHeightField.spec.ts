@@ -13,7 +13,13 @@ import { TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from '@/core/t
 import { buildPatchIndex, buildTerrainPatchGeometry } from '@/core/terrain/terrainPatchGeometry'
 import { detailWrapFor } from '@/core/terrain/detailWrap'
 import { constantHeightField } from '@/core/terrain/constantHeightField'
+import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
+
+// Полоса (Task 4) включена по умолчанию — этот файл проверяет ПОЛЕ КАРТЫ
+// (билинейка, провис, ε, пирамиды, кэш), поэтому там, где тест пинит точную
+// высоту/радиус/кэш-идентичность по значениям карты, полоса явно выключается.
+const MIDBAND_OFF = { ...MIDBAND_DEFAULTS, midbandStrength: 0 }
 
 // min 0, max 65535 → метры численно равны raw-значению
 function makeMap(width: number, height: number, values: number[], minMeters = 0, maxMeters = 65535): HeightMapData {
@@ -109,7 +115,7 @@ describe('TerrainHeightField: паритет dirToUv с UV-развёрткой 
 describe('TerrainHeightField: высоты по направлению', () => {
   it('surfaceRadiusUnits = юниты(R + h)', () => {
     // константная карта: raw 65535 при 0..1000 м → h = 1 км всюду
-    const field = new TerrainHeightField(makeMap(4, 2, new Array(8).fill(65535), 0, 1000), R_KM)
+    const field = new TerrainHeightField(makeMap(4, 2, new Array(8).fill(65535), 0, 1000), R_KM, MIDBAND_OFF)
 
     const dir = new Vector3(1, 1, 1).normalize()
     expect(field.surfaceRadiusUnits(dir)).toBeCloseTo(toThreeJSUnits(R_KM + 1), 10)
@@ -212,14 +218,14 @@ describe('terrainHeightFieldFor: кэш', () => {
     const map = makeMap(2, 2, [0, 0, 0, 0])
     const dir = new Vector3(1, 0, 0)
 
-    const fieldBig = terrainHeightFieldFor(map, 1740)
-    const fieldSmall = terrainHeightFieldFor(map, 175)
+    const fieldBig = terrainHeightFieldFor(map, 1740, MIDBAND_OFF)
+    const fieldSmall = terrainHeightFieldFor(map, 175, MIDBAND_OFF)
 
     expect(fieldBig).not.toBe(fieldSmall)
     expect(fieldBig.surfaceRadiusUnits(dir)).toBeCloseTo(toThreeJSUnits(1740), 6)
     expect(fieldSmall.surfaceRadiusUnits(dir)).toBeCloseTo(toThreeJSUnits(175), 6)
 
-    expect(terrainHeightFieldFor(map, 1740)).toBe(fieldBig)
+    expect(terrainHeightFieldFor(map, 1740, MIDBAND_OFF)).toBe(fieldBig)
   })
 })
 
@@ -551,7 +557,10 @@ describe('TerrainHeightField: sagMeters ≥ фактический провис 
         values[y * width + x] = Math.min(65535, Math.max(0, raw))
       }
     }
-    return new TerrainHeightField(makeMap(width, height, values, minMeters, maxMeters), R_KM)
+    // полоса выключена: тест сравнивает мешерную хорду (строится по
+    // sampleMeters, без полосы) с field.heightMeters — с полосой по
+    // умолчанию они честно разошлись бы на вклад полосы
+    return new TerrainHeightField(makeMap(width, height, values, minMeters, maxMeters), R_KM, MIDBAND_OFF)
   }
 
   it('на нетривиальном рельефе (двумерная синусоида, кинки на каждом текселе), патч в центре грани (экватор): sagMeters(dir̂)+margin не меньше провиса мешерной хорды по плотной выборке точек патча', () => {

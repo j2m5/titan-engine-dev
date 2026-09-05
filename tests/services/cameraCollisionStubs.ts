@@ -13,10 +13,22 @@ export type ModelStub = {
  * `model.physicalObject.getAttribute('radius')` (км), для терраформных тел —
  * `model.resources.where('resourceType', 'height').first().getAttribute('path')`,
  * и, через `readRenderingData`, `model.renderingObject.getAttribute('data')`
- * (Task 5 water-foundation: `waterLevelMeters`). Отсутствие ручки — `renderingObject`
+ * (Task 5 water-foundation: `waterLevelMeters`; Task 4 midband-geometry:
+ * `midbandStrength` — читается `midbandParamsOf` внутри `collectColliders`,
+ * см. её докблок «одна функция чтения»). Отсутствие ручки — `renderingObject`
  * равен `null`, как у настоящего актора без строки в `renderingObjects`.
  */
-export function makeModel(radiusKm: number | null, heightPath?: string, waterLevelMeters?: number): ModelStub {
+export function makeModel(
+  radiusKm: number | null,
+  heightPath?: string,
+  waterLevelMeters?: number,
+  midbandStrength?: number
+): ModelStub {
+  const data: Record<string, unknown> = {}
+  if (waterLevelMeters !== undefined) data.waterLevelMeters = waterLevelMeters
+  if (midbandStrength !== undefined) data.midbandStrength = midbandStrength
+  const hasData = Object.keys(data).length > 0
+
   return {
     physicalObject:
       radiusKm === null
@@ -30,17 +42,15 @@ export function makeModel(radiusKm: number | null, heightPath?: string, waterLev
             : undefined
       })
     },
-    renderingObject:
-      waterLevelMeters === undefined
-        ? null
-        : { getAttribute: (key: string): unknown => (key === 'data' ? { waterLevelMeters } : undefined) }
+    renderingObject: hasData ? { getAttribute: (key: string): unknown => (key === 'data' ? data : undefined) } : null
   }
 }
 
 /**
  * Тело с `userData.type` — полем, по которому SceneObserver собирает снапшот.
  * Явно переданная `model` нужна тестам на дедупликацию: две ноды одного актора
- * делят один экземпляр модели (при явной `model` `heightPath`/`waterLevelMeters` игнорируются).
+ * делят один экземпляр модели (при явной `model` `heightPath`/`waterLevelMeters`/
+ * `midbandStrength` игнорируются).
  */
 export function makeBody(
   type: string,
@@ -48,13 +58,14 @@ export function makeBody(
   position: Vector3 = new Vector3(),
   model?: ModelStub,
   heightPath?: string,
-  waterLevelMeters?: number
+  waterLevelMeters?: number,
+  midbandStrength?: number
 ): Object3D {
   const body = new Object3D()
 
   body.userData.type = type
   body.position.copy(position)
-  body.model = (model ?? makeModel(radiusKm, heightPath, waterLevelMeters)) as never
+  body.model = (model ?? makeModel(radiusKm, heightPath, waterLevelMeters, midbandStrength)) as never
 
   return body
 }

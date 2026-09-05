@@ -2,6 +2,7 @@ import type { HeightMapData } from './heightMapFormat'
 import { TerrainHeightField } from './TerrainHeightField'
 import { TERRAIN_PATCH_SEGMENTS } from './cubeSphere'
 import { TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from './terrainQuadtreeSelect'
+import { MIDBAND_DEFAULTS } from './midbandParams'
 
 /**
  * Сторона синтетической карты константного поля. Отбор решает не разрешение
@@ -71,6 +72,11 @@ class ConstantHeightField extends TerrainHeightField {
  * selectTerrainNodes продолжают работать без изменений. `heightMeters` ≡
  * levelMeters, `surfaceRadiusUnits` = radiusKm + levelMeters/1000 —
  * оболочка радиуса «R + уровень», уровень может быть отрицательным.
+ *
+ * Полоса (Task 4, арка B) здесь отключена намеренно: это идеальная сфера
+ * уровня, не рельеф — `heightMeters` обязан быть тождественно `levelMeters`
+ * (инвариант держат `WaterSphere` и коллизия воды), а огибающая полосы даёт
+ * ненулевую амплитуду даже на плоской карте (`midbandFlat` в MIDBAND_DEFAULTS).
  */
 export function constantHeightField(radiusKm: number, levelMeters: number): TerrainHeightField {
   const map: HeightMapData = {
@@ -81,5 +87,5 @@ export function constantHeightField(radiusKm: number, levelMeters: number): Terr
     data: new Uint16Array(CONSTANT_FIELD_SIDE * CONSTANT_FIELD_SIDE)
   }
 
-  return new ConstantHeightField(map, radiusKm)
+  return new ConstantHeightField(map, radiusKm, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
 }

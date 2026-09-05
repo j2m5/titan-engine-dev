@@ -19,6 +19,7 @@ import { WaterSphere } from '@/core/renderables/Water/WaterSphere'
 import { FakePlanet } from '@/core/renderables/utils/FakePlanet'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { terrainHeightFieldFor } from '@/core/terrain/TerrainHeightField'
+import { midbandParamsOf } from '@/core/terrain/midbandParams'
 import { heightPathOf } from '@/core/terrain/heightPath'
 import { BrunetonAtmosphere } from '@/core/renderables/Atmosphere/BrunetonAtmosphere'
 import { Ring } from '@/core/renderables/Ring'
@@ -204,7 +205,10 @@ class RenderableFactory {
 
     const terrain = new TerrainSphere(
       actor,
-      terrainHeightFieldFor(heightMap, actor.physicalObject!.getAttribute('radius')!),
+      // одна функция чтения параметров полосы с CameraCollision — иначе
+      // кеш terrainHeightFieldFor разойдётся на два поля одной карты и
+      // мешер с коллизией разъедутся (урок архива этапа 5)
+      terrainHeightFieldFor(heightMap, actor.physicalObject!.getAttribute('radius')!, midbandParamsOf(actor)),
       this.renderer,
       this.atmosphereRegistry,
       this.proceduralSurfaceGenerator

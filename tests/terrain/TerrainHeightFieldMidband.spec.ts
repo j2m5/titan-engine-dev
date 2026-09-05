@@ -1,0 +1,88 @@
+import { describe, expect, it } from 'vitest'
+import { Vector2, Vector3 } from 'three'
+import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
+import type { HeightMapData } from '@/core/terrain/heightMapFormat'
+
+function makeMap(width: number, height: number, values: number[], minMeters = 0, maxMeters = 65535): HeightMapData {
+  return { width, height, minMeters, maxMeters, data: new Uint16Array(values) }
+}
+const R_KM = 1736
+function bumpyMap(): HeightMapData {
+  const w = 64, h = 32
+  const values = Array.from({ length: w * h }, (_, k) => (k * 4001) % 65535)
+  return makeMap(w, h, values, -2000, 9000)
+}
+function dirs(n: number): Vector3[] {
+  return Array.from({ length: n }, (_, k) => {
+    const y = 1 - (2 * (k + 0.5)) / n
+    const r = Math.sqrt(Math.max(0, 1 - y * y))
+    return new Vector3(r * Math.cos(k * 2.399963), y, r * Math.sin(k * 2.399963))
+  })
+}
+
+describe('TerrainHeightField: геометрия средней полосы в каноне высоты', () => {
+  it('strength 0 — heightMeters бит-в-бит как без параметров; midband null, бонды 0', () => {
+    // ПРИМЕЧАНИЕ (Task 4): в брифе `plain` строился без параметров — но по
+    // умолчанию полоса ВКЛЮЧЕНА (см. тест ниже), так что такой `plain`
+    // реально отличался бы от `off` на вклад полосы. Название и заголовок
+    // теста однозначно про «выключенную полосу как бит-в-бит карту» —
+    // здесь `plain` строится с тем же strength: 0, что и `off`:
+    // детерминизм (два независимых построения с одними параметрами дают
+    // побайтно одинаковый heightMeters), тот же смысл, без противоречия со
+    // следующим тестом.
+    const plain = new TerrainHeightField(bumpyMap(), R_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
+    const off = new TerrainHeightField(bumpyMap(), R_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
+    expect(off.midband).toBeNull()
+    expect(off.midbandSlopeBound).toBe(0)
+    expect(off.maxHeightWithMidbandMeters).toBe(off.maxMeters)
+    for (const d of dirs(200)) expect(off.heightMeters(d)).toBe(plain.heightMeters(d))
+  })
+
+  it('по умолчанию (без параметров) полоса ВКЛЮЧЕНА: высота = карта + mid, |mid| ≤ maxAmplitude', () => {
+    const field = new TerrainHeightField(bumpyMap(), R_KM)
+    const plain = new TerrainHeightField(bumpyMap(), R_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
+    expect(field.midband).not.toBeNull()
+    let maxDelta = 0
+    for (const d of dirs(1000)) maxDelta = Math.max(maxDelta, Math.abs(field.heightMeters(d) - plain.heightMeters(d)))
+    expect(maxDelta).toBeGreaterThan(0)
+    expect(maxDelta).toBeLessThanOrEqual(field.midband!.maxAmplitudeMeters)
+    expect(field.maxHeightWithMidbandMeters).toBeCloseTo(field.maxMeters + field.midband!.maxAmplitudeMeters, 9)
+  })
+
+  it('midbandTilt: наклон полосы совпадает с конечной разностью высоты по дуге (E/N), полюс — 0', () => {
+    const field = new TerrainHeightField(bumpyMap(), R_KM)
+    const plain = new TerrainHeightField(bumpyMap(), R_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
+    const R_M = R_KM * 1000
+    const hArc = 0.05
+    const up = new Vector3(0, 1, 0)
+    const tilt = new Vector2()
+    let worst = 0
+    for (const d of dirs(200)) {
+      const e = new Vector3().crossVectors(up, d)
+      if (e.length() < 1e-3) continue
+      e.normalize()
+      const n = new Vector3().crossVectors(d, e)
+      field.midbandTilt(d, tilt)
+      const mid = (p: Vector3): number => field.heightMeters(p) - plain.heightMeters(p)
+      const dE1 = d.clone().addScaledVector(e, hArc / R_M).normalize()
+      const dE0 = d.clone().addScaledVector(e, -hArc / R_M).normalize()
+      const dN1 = d.clone().addScaledVector(n, hArc / R_M).normalize()
+      const dN0 = d.clone().addScaledVector(n, -hArc / R_M).normalize()
+      worst = Math.max(worst, Math.abs(tilt.x - (mid(dE1) - mid(dE0)) / (2 * hArc)), Math.abs(tilt.y - (mid(dN1) - mid(dN0)) / (2 * hArc)))
+    }
+    expect(worst).toBeLessThan(2e-2) // огибающая билинейна по сетке (ячейка ~10 км) — её производная в наклон не входит намеренно, отсюда допуск шире, чем у поля
+    field.midbandTilt(new Vector3(0, 1, 0), tilt)
+    expect(tilt.x).toBe(0)
+    expect(tilt.y).toBe(0)
+  })
+
+  it('slopeBound накрывает замер max |∇mid| по 3000 направлениям', () => {
+    const field = new TerrainHeightField(bumpyMap(), R_KM)
+    const tilt = new Vector2()
+    let maxTilt = 0
+    for (const d of dirs(3000)) maxTilt = Math.max(maxTilt, field.midbandTilt(d, tilt).length())
+    expect(maxTilt).toBeLessThanOrEqual(field.midbandSlopeBound)
+    expect(field.midbandSlopeBound).toBeLessThan(3) // ≈ 2.2 при GRAD_BOUND 6 и варпе 0.35; с бондом архива (27.6) было бы ≈ 29 и марш коллизии замедлился бы в ~10 раз
+  })
+})

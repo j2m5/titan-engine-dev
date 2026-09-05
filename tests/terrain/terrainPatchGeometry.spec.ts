@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Vector2, Vector3 } from 'three'
 import { buildPatchIndex, buildTerrainPatchGeometry, terrainPatchVertexCount } from '@/core/terrain/terrainPatchGeometry'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
 import { detailWrapFor, wrapIndex, wrappedComponent } from '@/core/terrain/detailWrap'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { SpaceScale } from '@/core/constants'
@@ -11,10 +12,13 @@ function makeMap(width: number, height: number, values: number[], minMeters = 0,
 }
 
 const R_KM = 1736
-// небольшой случайный рельеф — паритет и RTC должны держаться не на константе
+// небольшой случайный рельеф — паритет и RTC должны держаться не на константе.
+// Полоса (Task 4) выключена: этот файл проверяет мешер против КАРТЫ (мешер
+// пока строится по sampleMeters, без полосы) — с полосой по умолчанию
+// heightMeters/surfaceRadiusUnits разошлись бы с позицией вершины.
 function bumpyField(): TerrainHeightField {
   const values = Array.from({ length: 16 * 8 }, (_, k) => (k * 4001) % 65535)
-  return new TerrainHeightField(makeMap(16, 8, values, -2000, 9000), R_KM)
+  return new TerrainHeightField(makeMap(16, 8, values, -2000, 9000), R_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
 }
 
 const SEGMENTS = 8

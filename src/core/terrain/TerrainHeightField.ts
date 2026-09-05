@@ -4,6 +4,9 @@ import type { HeightMapData } from './heightMapFormat'
 import type { TerrainAuxPayload } from './terrainAuxFormat'
 import { CUBE_FACES, TERRAIN_PATCH_SEGMENTS, cubeFaceDirection } from './cubeSphere'
 import { TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from './terrainQuadtreeSelect'
+import { MidbandEnvelopeGrid } from './midbandEnvelopeGrid'
+import { MidbandField, type MidbandEnvelope, type MidbandSample } from './midbandField'
+import { MIDBAND_DEFAULTS, midbandCacheKey, midbandWavelengthMeters, type MidbandParams } from './midbandParams'
 
 /**
  * Экваториальный пояс кубосферы всегда пересекает ровно 4 из 6 граней (два
@@ -159,6 +162,10 @@ class TerrainHeightField {
   private readonly eastScratch = new Vector3()
   private readonly northScratch = new Vector3()
   private static readonly UP = new Vector3(0, 1, 0)
+  // скретчи полосы (Task 4): heightMeters/midbandTilt — горячий путь мешера
+  // и коллизии, аллокаций там быть не должно
+  private readonly midbandEnvScratch: MidbandEnvelope = { slopeTan: 0, curvature: 0, downE: 1, downN: 0 }
+  private readonly midbandSampleScratch: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0 }
   private readonly clearanceGrid: Float32Array
   private readonly clearanceGridWidth: number
   private readonly clearanceGridHeight: number
@@ -248,9 +255,27 @@ class TerrainHeightField {
    */
   public readonly usedBakedAux: boolean
 
+  /**
+   * Геометрия средней полосы (арка B, Task 4): `null` при `midbandStrength`
+   * 0 — тогда `heightMeters` бит-в-бит равен карте (см. докблок класса и
+   * инвариант ниже про computeAux). Полоса читает карту ТОЛЬКО через
+   * `sampleMeters`/`envelopeGrid` (сама карта высот) — её вклад никогда не
+   * участвует в ε/клиренсе (`computeAux`/`buildClearanceGrid`/
+   * `buildGeometricErrors`), это отдельный аналитический бонд
+   * (`maxHeightWithMidbandMeters`/`midbandSlopeBound`) для консьюмеров вне
+   * этого класса.
+   */
+  public readonly midband: MidbandField | null
+  private readonly envelopeGrid: MidbandEnvelopeGrid | null
+  /** maxMeters карты + честная верхняя оценка амплитуды полосы (0 без полосы). */
+  public readonly maxHeightWithMidbandMeters: number
+  /** Липшицев бонд |∇mid| полосы (0 без полосы) — для внешнего марча коллизии. */
+  public readonly midbandSlopeBound: number
+
   public constructor(
     private readonly map: HeightMapData,
-    public readonly radiusKm: number
+    public readonly radiusKm: number,
+    midbandParams: MidbandParams = MIDBAND_DEFAULTS
   ) {
     // block/metersPerRaw — общий по-блочный базис клиренса и ε-пирамиды,
     // считается один раз здесь, а не дублируется в обоих билдерах.
@@ -268,6 +293,8 @@ class TerrainHeightField {
     // (`HeightFieldStorage` сверяет отпечаток и калибровку ДО прикрепления —
     // сюда payload приходит уже доверенным), иначе — тот же счёт, что и
     // раньше. Это единственная развилка: дальше обе ветки неотличимы.
+    // ВАЖНО: computeAux читает карту через sampleMeters/raw, не через
+    // heightMeters — полоса ниже не должна задваиваться в ε/клиренсе.
     const aux: TerrainAuxPayload = map.aux ?? this.computeAux(block)
 
     this.usedBakedAux = map.aux !== undefined
@@ -280,6 +307,25 @@ class TerrainHeightField {
     this.levelErrorMeters = aux.levelErrorMeters
     this.nodeMaxHeightMetersPyramid = aux.nodeMaxHeightMetersPyramid
     this.nodeErrorMetersPyramid = aux.nodeErrorMetersPyramid
+
+    if (midbandParams.midbandStrength > 0) {
+      this.midband = new MidbandField(
+        midbandParams,
+        midbandWavelengthMeters(this.equatorTexelMeters, midbandParams),
+        radiusKm * 1000
+      )
+      this.envelopeGrid = new MidbandEnvelopeGrid(
+        (u, v) => this.sampleMeters(u, v),
+        map.width,
+        map.height,
+        radiusKm * 1000
+      )
+    } else {
+      this.midband = null
+      this.envelopeGrid = null
+    }
+    this.maxHeightWithMidbandMeters = map.maxMeters + (this.midband?.maxAmplitudeMeters ?? 0)
+    this.midbandSlopeBound = this.midband?.slopeBound ?? 0
   }
 
   /**
@@ -407,10 +453,28 @@ class TerrainHeightField {
     return minMeters + (raw / 65535) * (maxMeters - minMeters)
   }
 
+  /** Канон высоты: карта + средняя полоса (`null` — полоса выключена, бит-в-бит карта). */
   public heightMeters(dir: Vector3): number {
     const uv = this.dirToUv(dir, this.uvScratch)
+    const base = this.sampleMeters(uv.x, uv.y)
 
-    return this.sampleMeters(uv.x, uv.y)
+    if (this.midband === null || this.envelopeGrid === null) return base
+
+    const env = this.envelopeGrid.sample(uv.x, uv.y, this.midbandEnvScratch)
+    const sample = this.midband.sample(dir.x, dir.y, dir.z, env, this.midbandSampleScratch)
+
+    return base + sample.heightMeters
+  }
+
+  /** Наклон полосы (tan) в местном базисе E/N точки; `(0, 0)` без полосы. */
+  public midbandTilt(dir: Vector3, out: Vector2): Vector2 {
+    if (this.midband === null || this.envelopeGrid === null) return out.set(0, 0)
+
+    const uv = this.dirToUv(dir, this.uvScratch)
+    const env = this.envelopeGrid.sample(uv.x, uv.y, this.midbandEnvScratch)
+    const sample = this.midband.sample(dir.x, dir.y, dir.z, env, this.midbandSampleScratch)
+
+    return out.set(sample.tiltE, sample.tiltN)
   }
 
   public surfaceRadiusUnits(dir: Vector3): number {
@@ -1309,23 +1373,32 @@ function slidingRangeWrap(
 }
 
 /**
- * Экземпляр на пару (карта, радиус): мешер и коллизия делят его, пересборка
- * сцены не пересканирует данные — шаренная карта высот у нескольких
- * вымышленных лун разных радиусов легальна, у каждой свой инстанс.
+ * Экземпляр на тройку (карта, радиус, параметры полосы): мешер и коллизия
+ * делят его, пересборка сцены не пересканирует данные — шаренная карта высот
+ * у нескольких вымышленных лун разных радиусов легальна, у каждой свой
+ * инстанс. Ключ параметров полосы — `midbandCacheKey` (строка, не объект):
+ * два разных объекта `MidbandParams` с одинаковыми значениями обязаны попасть
+ * в ОДИН и тот же инстанс, иначе мешер и коллизия одного тела получат разные
+ * поля (см. `midbandParamsOf` — единая точка чтения именно поэтому).
  */
-const cache = new WeakMap<HeightMapData, Map<number, TerrainHeightField>>()
+const cache = new WeakMap<HeightMapData, Map<string, TerrainHeightField>>()
 
-function terrainHeightFieldFor(map: HeightMapData, radiusKm: number): TerrainHeightField {
-  let byRadius = cache.get(map)
-  if (!byRadius) {
-    byRadius = new Map()
-    cache.set(map, byRadius)
+function terrainHeightFieldFor(
+  map: HeightMapData,
+  radiusKm: number,
+  midbandParams: MidbandParams = MIDBAND_DEFAULTS
+): TerrainHeightField {
+  let byKey = cache.get(map)
+  if (!byKey) {
+    byKey = new Map()
+    cache.set(map, byKey)
   }
 
-  let field = byRadius.get(radiusKm)
+  const key = `${radiusKm}|${midbandCacheKey(midbandParams)}`
+  let field = byKey.get(key)
   if (!field) {
-    field = new TerrainHeightField(map, radiusKm)
-    byRadius.set(radiusKm, field)
+    field = new TerrainHeightField(map, radiusKm, midbandParams)
+    byKey.set(key, field)
   }
 
   return field
