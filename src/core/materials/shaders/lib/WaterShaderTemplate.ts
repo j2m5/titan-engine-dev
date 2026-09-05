@@ -1,5 +1,5 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
-import { Color, ShaderChunk, Uniform, UniformsUtils, Vector3 } from 'three'
+import { Color, ShaderChunk, Uniform, UniformsUtils, Vector2, Vector3 } from 'three'
 import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
 import { SpaceScale } from '@/core/constants'
 
@@ -42,6 +42,19 @@ const defaultUniforms = {
   uWaterWaveScale: new Uniform(0),
   uWaterWaveSpeed: new Uniform(1),
   uWaterWaveFadeMeters: new Uniform(0),
+  // Пена прибоя — инертна без USE_WATER_WAVES && USE_WATER_DEPTH: strength 0,
+  // ширины — положительные заглушки (знаменатели), тексель карты и радиус —
+  // от материала при приходе slope-карты (WaterMaterial.updateMaterial).
+  uFoamStrength: new Uniform(0),
+  uFoamShoreMeters: new Uniform(1),
+  uFoamSurfMeters: new Uniform(2),
+  uFoamWavelengthMeters: new Uniform(1),
+  uFoamPeriod: new Uniform(1),
+  uFoamNoiseScale: new Uniform(1),
+  uFoamColor: new Uniform(new Color(0xe6e9ec)),
+  uFoamRadiusMeters: new Uniform(0),
+  uSlopeTexel: new Uniform(new Vector2()),
+  uSlopeTexelMeters: new Uniform(0),
   // Отражение фоновой кубмапы (арка water-shader, Task 2) — инертно без
   // USE_WATER_REFLECTION (гейт по факту доставки кубмапы, см. WaterMaterial):
   // сэмплер null до конструктора материала, дисторсия — честная ручка (см.
@@ -143,6 +156,20 @@ export const WaterShaderTemplate: ShaderProps = {
       uniform float uWaterWaveScale;
       uniform float uWaterWaveSpeed;
       uniform float uWaterWaveFadeMeters;
+      // Пена прибоя (внутри USE_WATER_WAVES: время, шум и fade — общие с волнами)
+      uniform float uFoamStrength;
+      uniform float uFoamShoreMeters;
+      uniform float uFoamSurfMeters;
+      uniform float uFoamWavelengthMeters;
+      uniform float uFoamPeriod;
+      uniform float uFoamNoiseScale;
+      uniform vec3 uFoamColor;
+      uniform float uFoamRadiusMeters;
+      uniform vec2 uSlopeTexel;
+      uniform float uSlopeTexelMeters;
+      // Смещение уреза в текселях: суша клампит канал A в 0, билинейный скат
+      // начинается на полтекселя раньше берега — на урезе оценка dist = texel/3
+      #define FOAM_SHORE_BIAS 0.33333
       // three не биндит normalMatrix во фрагментник автоматически (см. тот же
       // приём в PlanetShaderTemplate) — юниформ общий на программу, объявление
       // здесь просто делает его видимым этому шейдеру.
@@ -293,6 +320,19 @@ export const WaterShaderTemplate: ShaderProps = {
         vec3 perturbed = normalize(fromX * w.x + fromY * w.y + fromZ * w.z);
 
         return normalize(mix(dirLocal, perturbed, fade));
+      }
+
+      // Скаляр рваности пены: трипланар по осям тела на периоде periodMeters
+      // (домен dir·R/period, как у волн), канал .x текстуры нормалей волн
+      // — новых сэмплеров нет; медленный дрейф домена по t.
+      float foamNoise(vec3 dirLocal, float periodMeters, float t) {
+        vec3 w = abs(dirLocal);
+        w /= max(w.x + w.y + w.z, 1e-6);
+        vec3 p = dirLocal * (uFoamRadiusMeters / max(periodMeters, 1e-3)) + vec3(0.05 * t);
+        float nx = texture2D(uWaterNormalMap, p.zy).x;
+        float ny = texture2D(uWaterNormalMap, p.xz).x;
+        float nz = texture2D(uWaterNormalMap, p.xy).x;
+        return nx * w.x + ny * w.y + nz * w.z;
       }
 
       // Отражение фоновой кубмапы (арка water-shader, Task 2) —
@@ -578,6 +618,42 @@ export const WaterShaderTemplate: ShaderProps = {
         // фундаментным Френель-тинтом снаружи (тот в wavesColor не входит
         // вовсе, живёт только в color-ветке до этого mix).
         color = mix(color, wavesColor, waveFade);
+
+        #ifdef USE_WATER_DEPTH
+          // Пена прибоя. Расстояние до уреза — из глубины и её градиента по
+          // текселю: dist = depth/|∇depth|, диапазон обмеления сокращается.
+          // Нормировка даёт одну ширину пены в метрах на пологом шельфе и у
+          // крутого берега. Плоское дно: градиент под полом → dist → ∞, пены нет.
+          float a0 = depthA;
+          float aE = texture2D(uSlopeMap, uv + vec2(uSlopeTexel.x, 0.0)).a;
+          float aN = texture2D(uSlopeMap, uv - vec2(0.0, uSlopeTexel.y)).a;
+          float gradLen = length(vec2(aE - a0, aN - a0));
+          // тексель по широте: восточный шаг сжимается на cos(lat); у полюсов кламп
+          float texelMeters = uSlopeTexelMeters * max(sqrt(1.0 - dirLocal.y * dirLocal.y), 0.05);
+          float dist = a0 * texelMeters / max(gradLen, 1e-4);
+          dist = max(dist - FOAM_SHORE_BIAS * texelMeters, 0.0);
+          // экранный след ДО раннего выхода (однородный поток в кваде)
+          float distFootprint = fwidth(dist);
+          float foamWeight = (1.0 - smoothstep(0.5, 1.0, distFootprint / uFoamShoreMeters)) * waveFade;
+          if (foamWeight > 0.0) {
+            float t = uTime / uFoamPeriod;
+            float shore = 1.0 - smoothstep(0.0, uFoamShoreMeters * (1.0 + 0.15 * sin(6.2832 * t)), dist);
+            // накаты: фаза убывает с t при росте dist — гребни бегут к берегу
+            float phase = dist / uFoamWavelengthMeters - t;
+            float crest = pow(1.0 - abs(fract(phase) * 2.0 - 1.0), 6.0);
+            float surfEnv = smoothstep(uFoamShoreMeters * 0.5, uFoamShoreMeters, dist)
+                          * (1.0 - smoothstep(uFoamSurfMeters * 0.6, uFoamSurfMeters, dist));
+            float surf = crest * surfEnv;
+            float noise = foamNoise(dirLocal, uFoamShoreMeters * uFoamNoiseScale, t);
+            float foam = clamp(shore + surf, 0.0, 1.0);
+            // рвань: сплошная кайма рвётся меньше, чем гребни
+            foam *= smoothstep(0.35, 0.75, noise + 0.3 * foam);
+            foam *= uFoamStrength * foamWeight;
+            // после готового цвета волн: спекуляр и отражение под пеной гаснут самим mix
+            color = mix(color, uFoamColor, foam);
+            alpha = max(alpha, foam);
+          }
+        #endif
       #endif
 
       gl_FragColor = vec4(color, alpha);
