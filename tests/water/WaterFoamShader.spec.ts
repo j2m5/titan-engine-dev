@@ -12,9 +12,10 @@ describe('WaterShaderTemplate: пена прибоя из градиента к�
     expect(u.uFoamWavelengthMeters.value).toBe(1)
     expect(u.uFoamPeriod.value).toBe(1)
     expect(u.uFoamNoiseScale.value).toBe(1)
-    expect(u.uFoamRadiusMeters.value).toBe(0)
+    expect(u.uFoamRadiusMeters.value).toBe(1)
     expect(u.uSlopeTexelMeters.value).toBe(0)
     expect((u.uSlopeTexel.value as { x: number; y: number }).x).toBe(0)
+    expect((u.uSlopeTexel.value as { x: number; y: number }).y).toBe(0)
     for (const name of ['uFoamStrength', 'uFoamShoreMeters', 'uFoamSurfMeters', 'uFoamWavelengthMeters', 'uFoamPeriod', 'uFoamNoiseScale', 'uFoamRadiusMeters', 'uSlopeTexelMeters']) {
       expect(frag).toContain(`uniform float ${name};`)
     }
@@ -25,9 +26,10 @@ describe('WaterShaderTemplate: пена прибоя из градиента к�
   it('расстояние до уреза: два дополнительных сэмпла канала A и формула спеки', () => {
     expect((frag.match(/texture2D\(uSlopeMap/g) ?? []).length).toBe(3)
     expect(frag).toContain('float aE = texture2D(uSlopeMap, uv + vec2(uSlopeTexel.x, 0.0)).a;')
-    expect(frag).toContain('float aN = texture2D(uSlopeMap, uv - vec2(0.0, uSlopeTexel.y)).a;')
-    expect(frag).toContain('float gradLen = length(vec2(aE - a0, aN - a0));')
-    expect(frag).toContain('float texelMeters = uSlopeTexelMeters * max(sqrt(1.0 - dirLocal.y * dirLocal.y), 0.05);')
+    // aS — юг (terrainUv растёт на север, uv - vec2(0, texel.y) шагает на юг)
+    expect(frag).toContain('float aS = texture2D(uSlopeMap, uv - vec2(0.0, uSlopeTexel.y)).a;')
+    expect(frag).toContain('float gradLen = length(vec2(aE - a0, aS - a0));')
+    expect(frag).toContain('float texelMeters = uSlopeTexelMeters * max(sqrt(max(1.0 - dirLocal.y * dirLocal.y, 0.0)), 0.05);')
     expect(frag).toContain('float dist = a0 * texelMeters / max(gradLen, 1e-4);')
     // смещение уреза: суша клампит канал A в 0, скат начинается на полтекселя раньше берега (спека §1.1)
     expect(frag).toContain('#define FOAM_SHORE_BIAS 0.33333')
@@ -39,7 +41,7 @@ describe('WaterShaderTemplate: пена прибоя из градиента к�
     const foamOpen = frag.indexOf('#ifdef USE_WATER_DEPTH', frag.indexOf('float waveFade ='))
     const distLine = frag.indexOf('float dist = a0 * texelMeters')
     const wavesMix = frag.indexOf('color = mix(color, wavesColor, waveFade);')
-    const foamMix = frag.indexOf('color = mix(color, uFoamColor, foam);')
+    const foamMix = frag.indexOf('color = mix(color, foamLit, foam);')
     const alphaLine = frag.indexOf('alpha = max(alpha, foam);')
     const out = frag.indexOf('gl_FragColor = vec4(color, alpha);')
     expect(wavesOpen).toBeGreaterThan(-1)
@@ -51,11 +53,12 @@ describe('WaterShaderTemplate: пена прибоя из градиента к�
     expect(out).toBeGreaterThan(alphaLine)
   })
 
-  it('гейты: экранный след до ранних выходов, fade волн множителем, strength множителем', () => {
+  it('гейты: экранный след до ранних выходов, fade волн множителем, strength множителем, отказоустойчивость по текселю', () => {
     const footprint = frag.indexOf('float distFootprint = fwidth(dist);')
-    const gate = frag.indexOf('if (foamWeight > 0.0) {', footprint)
+    const gate = frag.indexOf('if (foamWeight > 0.0 && uFoamStrength > 0.0) {', footprint)
     expect(footprint).toBeGreaterThan(-1)
-    expect(frag).toContain('float foamWeight = (1.0 - smoothstep(0.5, 1.0, distFootprint / uFoamShoreMeters)) * waveFade;')
+    // step(1e-6, uSlopeTexelMeters) — без реального текселя (Task 4 ещё не залил юниформ) dist ≡ 0 везде
+    expect(frag).toContain('float foamWeight = (1.0 - smoothstep(0.5, 1.0, distFootprint / uFoamShoreMeters)) * waveFade * step(1e-6, uSlopeTexelMeters);')
     // fwidth(dist) стоит ДО ветвления (однородный поток в кваде)
     expect(gate).toBeGreaterThan(footprint)
     expect(frag).toContain('foam *= uFoamStrength * foamWeight;')
@@ -71,6 +74,12 @@ describe('WaterShaderTemplate: пена прибоя из градиента к�
     // шум пены — из той же текстуры нормалей волн, других сэмплеров в шаблоне нет
     expect((frag.match(/uniform sampler2D /g) ?? []).length).toBe(2) // uSlopeMap + uWaterNormalMap
     expect(frag).toContain('float foamNoise(vec3 dirLocal, float periodMeters, float t) {')
+  })
+
+  it('пена освещена так же, как wavesColor — не сырой цвет поверх ночной тьмы', () => {
+    const sunTintBlock = frag.match(/#ifdef USE_SUN_TINT\s*\n\s*vec3 foamLit = uFoamColor \* mix\(vec3\(uWaterNightFloor\), sunTintFactor, waveDayFactor\);\s*\n\s*#else\s*\n\s*vec3 foamLit = uFoamColor \* mix\(uWaterNightFloor, 1\.0, waveDayFactor\);\s*\n\s*#endif/)
+    expect(sunTintBlock).not.toBeNull()
+    expect(frag).toContain('color = mix(color, foamLit, foam);')
   })
 
   it('без карты глубины / без волн — ни одного символа пены не компилируется (только #ifdef-гейты)', () => {

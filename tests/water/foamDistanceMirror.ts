@@ -16,8 +16,9 @@ export function foamDistanceMeters(
 ): number {
   const a0 = sampleA(u, v)
   const aE = sampleA(u + texelUv.x, v)
-  const aN = sampleA(u, v - texelUv.y)
-  const gradLen = Math.hypot(aE - a0, aN - a0)
+  // юг = −v (terrainUv растёт на север)
+  const aS = sampleA(u, v - texelUv.y)
+  const gradLen = Math.hypot(aE - a0, aS - a0)
   const raw = (a0 * texelMeters) / Math.max(gradLen, FOAM_GRAD_FLOOR)
 
   return Math.max(raw - FOAM_SHORE_BIAS_TEXELS * texelMeters, 0)

@@ -52,7 +52,7 @@ const defaultUniforms = {
   uFoamPeriod: new Uniform(1),
   uFoamNoiseScale: new Uniform(1),
   uFoamColor: new Uniform(new Color(0xe6e9ec)),
-  uFoamRadiusMeters: new Uniform(0),
+  uFoamRadiusMeters: new Uniform(1),
   uSlopeTexel: new Uniform(new Vector2()),
   uSlopeTexelMeters: new Uniform(0),
   // Отражение фоновой кубмапы (арка water-shader, Task 2) — инертно без
@@ -626,16 +626,19 @@ export const WaterShaderTemplate: ShaderProps = {
           // крутого берега. Плоское дно: градиент под полом → dist → ∞, пены нет.
           float a0 = depthA;
           float aE = texture2D(uSlopeMap, uv + vec2(uSlopeTexel.x, 0.0)).a;
-          float aN = texture2D(uSlopeMap, uv - vec2(0.0, uSlopeTexel.y)).a;
-          float gradLen = length(vec2(aE - a0, aN - a0));
+          // юг = −v (terrainUv растёт на север); нужна только длина градиента
+          float aS = texture2D(uSlopeMap, uv - vec2(0.0, uSlopeTexel.y)).a;
+          float gradLen = length(vec2(aE - a0, aS - a0));
           // тексель по широте: восточный шаг сжимается на cos(lat); у полюсов кламп
-          float texelMeters = uSlopeTexelMeters * max(sqrt(1.0 - dirLocal.y * dirLocal.y), 0.05);
+          float texelMeters = uSlopeTexelMeters * max(sqrt(max(1.0 - dirLocal.y * dirLocal.y, 0.0)), 0.05);
           float dist = a0 * texelMeters / max(gradLen, 1e-4);
           dist = max(dist - FOAM_SHORE_BIAS * texelMeters, 0.0);
           // экранный след ДО раннего выхода (однородный поток в кваде)
           float distFootprint = fwidth(dist);
-          float foamWeight = (1.0 - smoothstep(0.5, 1.0, distFootprint / uFoamShoreMeters)) * waveFade;
-          if (foamWeight > 0.0) {
+          // step(1e-6, uSlopeTexelMeters) — страховка: без реального текселя (Task 4
+          // ещё не залил юниформ) dist ≡ 0 везде, и вся вода стала бы белой при strength>0
+          float foamWeight = (1.0 - smoothstep(0.5, 1.0, distFootprint / uFoamShoreMeters)) * waveFade * step(1e-6, uSlopeTexelMeters);
+          if (foamWeight > 0.0 && uFoamStrength > 0.0) {
             float t = uTime / uFoamPeriod;
             float shore = 1.0 - smoothstep(0.0, uFoamShoreMeters * (1.0 + 0.15 * sin(6.2832 * t)), dist);
             // накаты: фаза убывает с t при росте dist — гребни бегут к берегу
@@ -649,8 +652,14 @@ export const WaterShaderTemplate: ShaderProps = {
             // рвань: сплошная кайма рвётся меньше, чем гребни
             foam *= smoothstep(0.35, 0.75, noise + 0.3 * foam);
             foam *= uFoamStrength * foamWeight;
+            // пена освещена так же, как wavesColor (её ночной пол/тинт) — не сырой цвет поверх темноты
+            #ifdef USE_SUN_TINT
+              vec3 foamLit = uFoamColor * mix(vec3(uWaterNightFloor), sunTintFactor, waveDayFactor);
+            #else
+              vec3 foamLit = uFoamColor * mix(uWaterNightFloor, 1.0, waveDayFactor);
+            #endif
             // после готового цвета волн: спекуляр и отражение под пеной гаснут самим mix
-            color = mix(color, uFoamColor, foam);
+            color = mix(color, foamLit, foam);
             alpha = max(alpha, foam);
           }
         #endif
