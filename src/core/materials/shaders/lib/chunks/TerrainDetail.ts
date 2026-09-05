@@ -161,6 +161,11 @@ export const terrainDetailUniforms = `
   uniform float uDetailAoInfluence;
   uniform vec3 uDetailLayerGates;
   uniform vec4 uDetailFadeRange;
+  // Нормировка набора к его средним (detailTextureStats.ts): x = 1/meanLum
+  // диффуза, y = 1/meanAo ARM. Без неё деталь умножала альбедо на среднюю
+  // яркость файла (rocky ≈ 0.23) и тело темнело по мере вхождения слоя.
+  uniform vec2 uDetailTintNorm;
+  uniform vec2 uSteepTintNorm;
   uniform sampler2D uSteepNorMap;
   uniform sampler2D uSteepArmMap;
   uniform sampler2D uSteepDiffMap;
@@ -303,19 +308,21 @@ export const terrainDetailFunctions = `
   // TriplanarUv, посчитанный ДО ветвления по маске (см. applyTerrainDetail) —
   // сама функция dFdx/dFdy не считает.
   void sampleDetailSet(
-    sampler2D nor, sampler2D arm, sampler2D diff, TriplanarUv t, vec3 w, vec3 l, vec3 nLocal,
+    sampler2D nor, sampler2D arm, sampler2D diff, vec2 norm, TriplanarUv t, vec3 w, vec3 l, vec3 nLocal,
     out vec3 nOut, out float aoOut, out vec3 tintOut
   ) {
     nOut = triplanarNormalDetiled(nor, t, nLocal, w, l);
 
+    // AO и диффуз — относительно СВОИХ средних (norm): среднее слоя = 1,
+    // модуляция ±; кламп 2 — гард от битой статистики
     aoOut = 1.0;
     if (uDetailLayerGates.x > 0.0) {
-      aoOut = mix(1.0, triplanarArmDetiled(arm, t, w, l).r, uDetailAoInfluence);
+      aoOut = mix(1.0, clamp(triplanarArmDetiled(arm, t, w, l).r * norm.y, 0.0, 2.0), uDetailAoInfluence);
     }
 
     tintOut = vec3(1.0);
     if (uDetailLayerGates.y > 0.0) {
-      vec3 diffuseDetail = triplanarAlbedoDetiled(diff, t, w, l);
+      vec3 diffuseDetail = clamp(triplanarAlbedoDetiled(diff, t, w, l) * norm.x, 0.0, 2.0);
       float lum = dot(diffuseDetail, vec3(0.299, 0.587, 0.114));
       tintOut = mix(vec3(lum), diffuseDetail, uDetailSaturation) * uDetailBrightness;
     }
@@ -369,13 +376,13 @@ export const terrainDetailFunctions = `
 
         if (m < STEEP_EPS) {
           // Вне зоны — читается ровно один (родной) набор.
-          sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, uvBig, w, l, nLocal, nNative, aoNative, tintNative);
+          sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, uDetailTintNorm, uvBig, w, l, nLocal, nNative, aoNative, tintNative);
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (nNative - nLocal));
           albedoMul *= mix(1.0, aoNative, fade1);
           albedoMul *= mix(vec3(1.0), tintNative, fade1);
         } else if (m > 1.0 - STEEP_EPS) {
           // Только steep — симметрично ветке выше.
-          sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uvBig, w, l, nLocal, nSteep, aoSteep, tintSteep);
+          sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uSteepTintNorm, uvBig, w, l, nLocal, nSteep, aoSteep, tintSteep);
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (nSteep - nLocal));
           albedoMul *= mix(1.0, aoSteep, fade1);
           albedoMul *= mix(vec3(1.0), tintSteep, fade1);
@@ -384,10 +391,10 @@ export const terrainDetailFunctions = `
           // Нормали — whiteout, последовательно родной вес (1-m), затем
           // steep вес m (тот же паттерн, что крупная/мелкая шкала ниже).
           // AO/tint — не направления, обычный mix(a, b, m).
-          sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, uvBig, w, l, nLocal, nNative, aoNative, tintNative);
+          sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, uDetailTintNorm, uvBig, w, l, nLocal, nNative, aoNative, tintNative);
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (1.0 - m) * (nNative - nLocal));
 
-          sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uvBig, w, l, nLocal, nSteep, aoSteep, tintSteep);
+          sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uSteepTintNorm, uvBig, w, l, nLocal, nSteep, aoSteep, tintSteep);
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * m * (nSteep - nLocal));
 
           albedoMul *= mix(1.0, mix(aoNative, aoSteep, m), fade1);

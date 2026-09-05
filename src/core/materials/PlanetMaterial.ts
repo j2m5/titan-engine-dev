@@ -2,12 +2,13 @@ import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
 import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
-import { Texture, Uniform, Vector3 } from 'three'
+import { Texture, Uniform, Vector2, Vector3 } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { heightPathOf } from '@/core/terrain/heightPath'
 import { SLOPE_RANGE, isValidSlopeRange } from '@/core/terrain/slopeMapFormat'
 import { STEEP_DETAIL_PATHS } from '@/core/terrain/steepDetailPaths'
+import { detailTintNorm } from '@/core/terrain/detailTextureStats'
 import { resolveSteepZoneParams } from '@/core/terrain/steepZoneParams'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { IPlanetRenderingObject } from '@/core/models/types'
@@ -105,6 +106,9 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uSteepDiffMap = new Uniform(null)
     this.uniforms.uSteepGate = new Uniform(0)
     this.uniforms.uSteepMask = new Uniform(new Vector3(0.35, 0.55, 0.15))
+    // Нормировка детальных наборов к их средним (detailTextureStats.ts), 1 = нет
+    this.uniforms.uDetailTintNorm = new Uniform(new Vector2(1, 1))
+    this.uniforms.uSteepTintNorm = new Uniform(new Vector2(1, 1))
   }
 
   private static resolveCloudAtmosphereThicknessUnits(atmosphereActor: Actor | undefined): number | undefined {
@@ -248,6 +252,16 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uDetailNor2Map.value = detailNor2Map ?? null
     this.uniforms.uDetailLayerGates.value.set(detailArmMap ? 1 : 0, detailDiffMap ? 1 : 0, detailNor2Map ? 1 : 0)
 
+    // Нормировка к средним файлов: деталь модулирует альбедо вокруг 1, а не
+    // умножает на среднюю яркость набора (иначе тело темнеет по мере fade-in)
+    const nativeNorm = detailTintNorm(
+      this.model.resources.where('resourceType', 'detailDiffuse').first()?.getAttribute('path'),
+      this.model.resources.where('resourceType', 'detailArm').first()?.getAttribute('path')
+    )
+    const steepNorm = detailTintNorm(STEEP_DETAIL_PATHS.diffuse, STEEP_DETAIL_PATHS.arm)
+    ;(this.uniforms.uDetailTintNorm.value as Vector2).set(nativeNorm.x, nativeNorm.y)
+    ;(this.uniforms.uSteepTintNorm.value as Vector2).set(steepNorm.x, steepNorm.y)
+
     // Steep-зона материала (Task 3): rocky_trail поверх крутых склонов ЛЮБОГО
     // терраформного тела (решение владельца, см. STEEP_DETAIL_PATHS). Гейт
     // открыт только когда набор ПОЛНЫЙ (все три текстуры доехали от
@@ -369,6 +383,8 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uSteepArmMap.value = null
     this.uniforms.uSteepDiffMap.value = null
     this.uniforms.uSteepGate.value = 0
+    ;(this.uniforms.uDetailTintNorm.value as Vector2).set(1, 1)
+    ;(this.uniforms.uSteepTintNorm.value as Vector2).set(1, 1)
 
     // Возврат к состоянию «карт нет» — это и есть снимок конструирования:
     // поимённый список дефайнов пришлось бы держать в синхроне вручную при
