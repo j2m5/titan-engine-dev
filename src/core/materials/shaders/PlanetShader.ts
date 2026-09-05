@@ -12,6 +12,7 @@ import {
   macroFadeMetersFor
 } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
 import { DEFAULT_DETAIL_SCALE2_METERS, DEFAULT_DETAIL_SCALE_METERS, validPeriodMeters } from '@/core/terrain/detailWrap'
+import { resolveMacroSlopeStructureParams } from '@/core/terrain/macroSlopeStructureParams'
 
 // Нейтральные дефолты детального слоя (используются, только если данные тела
 // не задали ручку явно) — см. IPlanetRenderingObject.detail*, ручки Луны в
@@ -128,6 +129,11 @@ interface PlanetUniforms {
   uMacroCavityInfluence: number
   uMacroTextureWarp: number
   uMacroFadeRange: Vector2
+  uMacroStreakStrength: number
+  uMacroStreakPeriodUnits: number
+  uMacroTerraceStrength: number
+  uMacroTerraceStepMeters: number
+  uMacroStructureSlope: Vector2
   uDiffuseTexelSize: Vector2
   uBodyRadiusUnits: number
 }
@@ -188,6 +194,8 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       toThreeJSUnits((planetData.macroFadeMeters ?? macroFadeMetersFor(radiusKm, diffuseWidth)) / 1000),
       1e-6
     )
+
+    const slopeStructures = resolveMacroSlopeStructureParams(planetData, this.model.getAttribute?.('name', '?') ?? '?')
 
     this.uniforms = {
       lightPosition: new Uniform(new Vector3()),
@@ -264,6 +272,11 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uMacroCavityInfluence: new Uniform(planetData.macroCavityInfluence ?? DEFAULT_MACRO_CAVITY_INFLUENCE),
       uMacroTextureWarp: new Uniform(planetData.macroTextureWarp ?? DEFAULT_MACRO_TEXTURE_WARP),
       uMacroFadeRange: new Uniform(new Vector2(macroFadeEndUnits * DETAIL_FADE_START_RATIO, macroFadeEndUnits)),
+      uMacroStreakStrength: new Uniform(slopeStructures.macroStreakStrength),
+      uMacroStreakPeriodUnits: new Uniform(Math.max(toThreeJSUnits(slopeStructures.macroStreakScaleKm), 1e-9)),
+      uMacroTerraceStrength: new Uniform(slopeStructures.macroTerraceStrength),
+      uMacroTerraceStepMeters: new Uniform(slopeStructures.macroTerraceStepMeters),
+      uMacroStructureSlope: new Uniform(new Vector2(slopeStructures.macroStructureSlopeStart, slopeStructures.macroStructureSlopeFull)),
       uDiffuseTexelSize: new Uniform(new Vector2()),
       uBodyRadiusUnits: new Uniform(toThreeJSUnits(radiusKm))
     }

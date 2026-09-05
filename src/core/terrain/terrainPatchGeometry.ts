@@ -129,6 +129,8 @@ const POLE_EPSILON = 1e-9
  * center) минус k·W домена детали (см. detailWrap.ts), k общий на весь патч
  * и берётся от центра патча — иначе обёртка рвала бы треугольники внутри
  * патча. Два набора — под два слоя детали (40 м / 7 м), каждый со своим W.
+ *
+ * height — метры над референсом (sampleMeters), фаза террас средней полосы в шейдере.
  */
 function writeTerrainPatchAttributes(
   field: TerrainHeightField,
@@ -143,6 +145,7 @@ function writeTerrainPatchAttributes(
   uvs: Float32Array,
   detailPos: Float32Array,
   detailPos2: Float32Array,
+  heights: Float32Array,
   wrap: DetailWrap
 ): Vector3 {
   const patches = 1 << depth
@@ -180,6 +183,7 @@ function writeTerrainPatchAttributes(
       // его повторно (heightMeters → dirToUv) — 1.62М лишних atan2+acos на сборке
       field.dirToUv(dir, uv)
       const heightMeters = field.sampleMeters(uv.x, uv.y)
+      heights[k] = heightMeters
       const r = toThreeJSUnits(field.radiusKm + heightMeters / 1000)
       positions[k * 3] = dir.x * r - center.x
       positions[k * 3 + 1] = dir.y * r - center.y
@@ -244,6 +248,9 @@ function writeTerrainPatchAttributes(
     detailPos2[skirtIndex * 3] = detailPos2[edgeIndex * 3]
     detailPos2[skirtIndex * 3 + 1] = detailPos2[edgeIndex * 3 + 1]
     detailPos2[skirtIndex * 3 + 2] = detailPos2[edgeIndex * 3 + 2]
+
+    // юбка несёт высоту кромки — радиальный сдвиг юбки не рельеф
+    heights[skirtIndex] = heights[edgeIndex]
   }
 
   return center
@@ -271,6 +278,7 @@ export function buildTerrainPatchGeometry(
   const uvs = new Float32Array(vertexCount * 2)
   const detailPos = new Float32Array(vertexCount * 3)
   const detailPos2 = new Float32Array(vertexCount * 3)
+  const heights = new Float32Array(vertexCount)
 
   const center = writeTerrainPatchAttributes(
     field,
@@ -285,6 +293,7 @@ export function buildTerrainPatchGeometry(
     uvs,
     detailPos,
     detailPos2,
+    heights,
     wrap
   )
 
@@ -294,6 +303,7 @@ export function buildTerrainPatchGeometry(
   geometry.setAttribute('uv', new BufferAttribute(uvs, 2))
   geometry.setAttribute('detailPos', new BufferAttribute(detailPos, 3))
   geometry.setAttribute('detailPos2', new BufferAttribute(detailPos2, 3))
+  geometry.setAttribute('height', new BufferAttribute(heights, 1))
   geometry.setIndex(index)
   geometry.computeBoundingSphere()
 
@@ -323,6 +333,7 @@ export function buildTerrainPatchInto(
   const uvs = geometry.getAttribute('uv') as BufferAttribute
   const detailPos = geometry.getAttribute('detailPos') as BufferAttribute
   const detailPos2 = geometry.getAttribute('detailPos2') as BufferAttribute
+  const height = geometry.getAttribute('height') as BufferAttribute
 
   const center = writeTerrainPatchAttributes(
     field,
@@ -337,6 +348,7 @@ export function buildTerrainPatchInto(
     uvs.array as Float32Array,
     detailPos.array as Float32Array,
     detailPos2.array as Float32Array,
+    height.array as Float32Array,
     wrap
   )
 
@@ -345,6 +357,7 @@ export function buildTerrainPatchInto(
   uvs.needsUpdate = true
   detailPos.needsUpdate = true
   detailPos2.needsUpdate = true
+  height.needsUpdate = true
   geometry.computeBoundingSphere()
   mesh.position.copy(center)
 }

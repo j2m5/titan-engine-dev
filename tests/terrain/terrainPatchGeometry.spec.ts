@@ -4,6 +4,7 @@ import { buildPatchIndex, buildTerrainPatchGeometry, terrainPatchVertexCount } f
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { detailWrapFor, wrapIndex, wrappedComponent } from '@/core/terrain/detailWrap'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
+import { SpaceScale } from '@/core/constants'
 
 function makeMap(width: number, height: number, values: number[], minMeters = 0, maxMeters = 65535): HeightMapData {
   return { width, height, minMeters, maxMeters, data: new Uint16Array(values) }
@@ -408,5 +409,40 @@ describe('buildTerrainPatchGeometry: атрибуты домена детали'
 
     expect(maxD1).toBeLessThan(wrap.w1 / 2 + patchRadius)
     expect(maxD2).toBeLessThan(wrap.w2 / 2 + patchRadius)
+  })
+})
+
+describe('buildTerrainPatchGeometry: атрибут height', () => {
+  it('height = метры над референсом той же вершины, что и позиция', () => {
+    const { geometry, center } = build(bumpyField(), 0, 1, 0)
+    const pos = geometry.getAttribute('position')
+    const height = geometry.getAttribute('height')
+    expect(height.itemSize).toBe(1)
+    expect(height.count).toBe(pos.count)
+    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
+      const r = Math.hypot(pos.getX(k) + center.x, pos.getY(k) + center.y, pos.getZ(k) + center.z)
+      const metersFromPosition = (r / SpaceScale - R_KM) * 1000
+      // float32 позиции ~0.87 юнита → ~0.2 м; допуск 2 м
+      expect(Math.abs(height.getX(k) - metersFromPosition)).toBeLessThan(2)
+    }
+    // не константа: рельеф bumpyField случайный
+    const values = Array.from({ length: GRID_VERTEX_COUNT }, (_, k) => height.getX(k))
+    expect(Math.max(...values) - Math.min(...values)).toBeGreaterThan(100)
+  })
+
+  it('юбочная вершина несёт высоту своей кромочной (радиальный сдвиг юбки не входит)', () => {
+    const { geometry } = build(bumpyField(), 0, 1, 0, 0.001)
+    const height = geometry.getAttribute('height')
+    const uv = geometry.getAttribute('uv')
+    const ring = SEGMENTS * 4
+    for (let r = 0; r < ring; r++) {
+      const skirt = GRID_VERTEX_COUNT + r
+      let edge = -1
+      for (let k = 0; k < GRID_VERTEX_COUNT && edge < 0; k++) {
+        if (uv.getX(k) === uv.getX(skirt) && uv.getY(k) === uv.getY(skirt)) edge = k
+      }
+      expect(edge).toBeGreaterThanOrEqual(0)
+      expect(height.getX(skirt)).toBe(height.getX(edge))
+    }
   })
 })

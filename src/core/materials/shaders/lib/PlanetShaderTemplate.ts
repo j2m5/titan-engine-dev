@@ -71,6 +71,12 @@ export const PlanetShaderTemplate: ShaderProps = {
       varying vec3 vDetailPos2;
     #endif
 
+    #ifdef USE_TERRAIN_MACRO_DETAIL
+      // Высота вершины (метры над референсом) — фаза террас средней полосы
+      attribute float height;
+      varying float vHeightMeters;
+    #endif
+
     void main() {
       vec4 worldPosition = modelMatrix * vec4(position, 1.0);
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
@@ -101,6 +107,10 @@ export const PlanetShaderTemplate: ShaderProps = {
       #ifdef USE_TERRAIN_DETAIL
         vDetailPos = detailPos;
         vDetailPos2 = detailPos2;
+      #endif
+
+      #ifdef USE_TERRAIN_MACRO_DETAIL
+        vHeightMeters = height;
       #endif
 
       ${ShaderChunk['logdepthbuf_vertex']}

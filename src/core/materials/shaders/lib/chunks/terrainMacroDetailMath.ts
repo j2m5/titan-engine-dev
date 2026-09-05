@@ -61,3 +61,77 @@ export function slopeGain(slopeLength: number, slopeInfluence: number): number {
 export function cavityGain(cavity: number, cavityInfluence: number): number {
   return Math.max(0, 1 + cavityInfluence * cavity)
 }
+
+// --- Направленные формы склона (арка A средней полосы). Константы зеркалят
+// #define чанка TerrainMacroDetail — менять строго синхронно.
+export const STREAK_STRETCH = 6
+/** Амплитуда/период струй: глубже относительно ширины, чем километровый fbm (0.03). */
+export const MACRO_RELIEF_ASPECT_STREAK = 0.08
+export const STREAK_PLANE_POW = 8
+export const STREAK_PLANE_MIN_WEIGHT = 0.02
+export const TERRACE_WOBBLE = 0.7
+/** Доля периода под уступом; остальное — площадка. */
+export const TERRACE_RISER = 0.3
+export const TERRACE_SHADE = 0.07
+/** Маска покрытия террас по значению fbm: ниже LO — нет полок, выше HI — полная. */
+export const TERRACE_COVER_LO = 0.1
+export const TERRACE_COVER_HI = 0.4
+/** Дефолты гейта форм по абсолютному уклону (tan): 0.2 ≈ 11°, 0.45 ≈ 24°. */
+export const DEFAULT_STRUCTURE_SLOPE_START = 0.2
+export const DEFAULT_STRUCTURE_SLOPE_FULL = 0.45
+
+/** Гейт форм от нормированного уклона s = |slope|/slopeRef: равнина 0, крутое 1. */
+export function structureGate(
+  slopeTan: number,
+  start: number = DEFAULT_STRUCTURE_SLOPE_START,
+  full: number = DEFAULT_STRUCTURE_SLOPE_FULL
+): number {
+  return smoothstep(start, full, slopeTan)
+}
+
+/** Покрытие террас от значения fbm (пятна полок на стене). */
+export function terraceCoverage(fbmValue: number): number {
+  return smoothstep(TERRACE_COVER_LO, TERRACE_COVER_HI, fbmValue)
+}
+
+/**
+ * Профиль террасы, период 1: уступ — подъём smoothstep на [0, TERRACE_RISER],
+ * площадка — линейный спад; value = rise − t обнуляется на концах периода.
+ * derivative — по фазе: площадка −1 (уклон положе), уступ > 0 (круче).
+ */
+export function terraceProfile(phase: number): { value: number; derivative: number } {
+  const t = phase - Math.floor(phase)
+  const r = Math.max(0, Math.min(1, t / TERRACE_RISER))
+  const rise = r * r * (3 - 2 * r)
+  const dRise = t < TERRACE_RISER ? (6 * r * (1 - r)) / TERRACE_RISER : 0
+
+  return { value: rise - t, derivative: dRise - 1 }
+}
+
+/** Веса плоскостей трипланара по единичному направлению: |dir|^POW, нормированные на сумму. */
+export function triplanarWeights(dir: readonly [number, number, number]): [number, number, number] {
+  const w: [number, number, number] = [
+    Math.abs(dir[0]) ** STREAK_PLANE_POW,
+    Math.abs(dir[1]) ** STREAK_PLANE_POW,
+    Math.abs(dir[2]) ** STREAK_PLANE_POW
+  ]
+  const sum = Math.max(w[0] + w[1] + w[2], 1e-6)
+
+  return [w[0] / sum, w[1] / sum, w[2] / sum]
+}
+
+/**
+ * Цепное правило струй в плоскости: шум берётся в координатах
+ * (вдоль/STRETCH, поперёк); noiseGradAlongAcross — его градиент по ним.
+ * Возвращает градиент по исходным uv плоскости.
+ */
+export function streakGradient2D(
+  d2: readonly [number, number],
+  noiseGradAlongAcross: readonly [number, number]
+): [number, number] {
+  const p2: [number, number] = [-d2[1], d2[0]]
+  const along = noiseGradAlongAcross[0] / STREAK_STRETCH
+  const across = noiseGradAlongAcross[1]
+
+  return [along * d2[0] + across * p2[0], along * d2[1] + across * p2[1]]
+}
