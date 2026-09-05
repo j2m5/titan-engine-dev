@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ENVELOPE_GRID_HEIGHT, ENVELOPE_GRID_WIDTH, MidbandEnvelopeGrid } from '@/core/terrain/midbandEnvelopeGrid'
+import { ENVELOPE_GRID_HEIGHT, ENVELOPE_GRID_WIDTH, MidbandEnvelopeGrid, percentile99Abs } from '@/core/terrain/midbandEnvelopeGrid'
 import type { MidbandEnvelope } from '@/core/terrain/midbandField'
 
 const R_M = 1737400
@@ -57,5 +57,52 @@ describe('MidbandEnvelopeGrid: уклон, кривизна и сток из к�
     expect(b.slopeTan).toBeCloseTo(a.slopeTan, 9)
     expect(ENVELOPE_GRID_WIDTH).toBe(1024)
     expect(ENVELOPE_GRID_HEIGHT).toBe(512)
+  })
+})
+
+// Раскладка лапласиана на сетке ENVELOPE_GRID_WIDTH×HEIGHT — та же формула,
+// что в конструкторе MidbandEnvelopeGrid (лапласиан на однотекселном шаге
+// duFixed/dv, север = убывающий v), воспроизведена здесь напрямую (не через
+// класс — у него нет геттера сырой кривизны), чтобы независимо посчитать
+// сортировочный p99 «в лоб» и сравнить с гистограммной оценкой производства.
+function curvatureRawArray(sampleMeters: (u: number, v: number) => number, mapWidth: number, mapHeight: number, radiusMeters: number): Float32Array {
+  const w = ENVELOPE_GRID_WIDTH
+  const h = ENVELOPE_GRID_HEIGHT
+  const curvatureRaw = new Float32Array(w * h)
+  const texelArcN = (Math.PI * radiusMeters) / mapHeight
+  const dv = 1 / mapHeight
+  const duFixed = 1 / mapWidth
+
+  for (let row = 0; row < h; row++) {
+    const v = (row + 0.5) / h
+    for (let col = 0; col < w; col++) {
+      const u = (col + 0.5) / w
+      const center = sampleMeters(u, v)
+      const east1 = sampleMeters(u + duFixed, v)
+      const east0 = sampleMeters(u - duFixed, v)
+      const north1 = sampleMeters(u, v - dv) // север = убывающий v
+      const north0 = sampleMeters(u, v + dv)
+      const lap = (east1 + east0 + north1 + north0 - 4 * center) / (texelArcN * texelArcN)
+      curvatureRaw[row * w + col] = -lap
+    }
+  }
+
+  return curvatureRaw
+}
+
+describe('percentile99Abs: гистограммная оценка против сортировки (I2)', () => {
+  it('на синусоидальной карте гистограммный p99 отличается от сортировочного не более чем на 2% от max|κ|', () => {
+    const sample = (u: number, v: number): number => 1000 * Math.cos(2 * Math.PI * 8 * u) * Math.cos(2 * Math.PI * 4 * v)
+    const raw = curvatureRawArray(sample, W, H, R_M)
+
+    const sorted = Float64Array.from(raw, (v) => Math.abs(v))
+    sorted.sort()
+    const maxAbs = sorted[sorted.length - 1]
+    const sortP99 = sorted[Math.floor(0.99 * (sorted.length - 1))]
+
+    const histP99 = percentile99Abs(raw)
+
+    expect(histP99).toBeGreaterThanOrEqual(sortP99) // гистограмма — верхняя граница бина, не занижает
+    expect(Math.abs(histP99 - sortP99)).toBeLessThanOrEqual(0.02 * maxAbs)
   })
 })

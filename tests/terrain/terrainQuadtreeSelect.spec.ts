@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { Frustum, Matrix4, PerspectiveCamera, Vector2, Vector3 } from 'three'
+import { Frustum, Matrix4, PerspectiveCamera, Sphere, Vector2, Vector3 } from 'three'
+import { SpaceScale } from '@/core/constants'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
-import { cubeFaceDirection } from '@/core/terrain/cubeSphere'
+import { CUBE_FACES, cubeFaceDirection } from '@/core/terrain/cubeSphere'
 import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import {
@@ -11,6 +12,7 @@ import {
   nodeBoundingSphereRadiusUnits,
   TERRAIN_QUADTREE_WATER_CEILING_LEVEL,
   TERRAIN_QUADTREE_MAX_LEVEL,
+  TERRAIN_QUADTREE_MIN_LEVEL,
   type SelectParams,
   type TerrainNodeAddress
 } from '@/core/terrain/terrainQuadtreeSelect'
@@ -271,6 +273,99 @@ describe('сфера узла учитывает амплитуду полосы
     const radiusOff = nodeBoundingSphereRadiusUnits(off, level, centerHeight)
 
     expect(radiusOn - radiusOff).toBeCloseTo(toThreeJSUnits((2 * on.midband!.maxAmplitudeMeters) / 1000), 9)
+  })
+})
+
+// Task 5, фикс-раунд 2 (I2): центр сферы узла теперь считается по КАРТЕ
+// (`field.mapHeightMeters`), не по канону высоты с полосой (`heightMeters`) —
+// пад узла уже несёт глобальный 2·maxAmplitude полосы (см. describe выше),
+// попиксельная оценка полосы в центре была избыточна. Ниже — прямое
+// доказательство избыточности: копия СТАРОГО алгоритма (heightMeters в
+// центре, тот же обход, что и до фикса) должна отбирать РОВНО ТЕ ЖЕ листья,
+// что текущий selectTerrainNodes, на одном и том же band-ON поле, при любой
+// дистанции камеры — иначе замена была бы не оптимизацией, а поведенческим
+// регрессом.
+describe('отбор узлов не зависит от полосы в центре сферы (Task 5, фикс-раунд 2, I2)', () => {
+  const MIN_DISTANCE_METERS_REF = 100
+
+  // Точная копия ДОФИКСОВОГО visitNode/descend/selectTerrainNodes: единственное
+  // отличие от текущей реализации — centerHeightMeters через field.heightMeters
+  // (карта + полоса), а не field.mapHeightMeters (только карта). Без фрустума и
+  // без потолка воды — они не участвуют в этом сравнении.
+  function selectWithBandAtCenter(params: SelectParams): TerrainNodeAddress[] {
+    const leaves: TerrainNodeAddress[] = []
+    const centerDirScratch = new Vector3()
+    const sphereCenterScratch = new Vector3()
+
+    function visit(face: number, level: number, i: number, j: number): void {
+      if (level < TERRAIN_QUADTREE_MIN_LEVEL) {
+        descend(face, level, i, j)
+        return
+      }
+      const { field } = params
+      const patches = 2 ** level
+      const span = 2 / patches
+      const sc = -1 + i * span + span / 2
+      const tc = -1 + j * span + span / 2
+      cubeFaceDirection(face, sc, tc, centerDirScratch)
+      const centerHeightMeters = field.heightMeters(centerDirScratch) // СТАРЫЙ путь: карта + полоса
+      sphereCenterScratch.copy(centerDirScratch).multiplyScalar(toThreeJSUnits(field.radiusKm + centerHeightMeters / 1000))
+      const sphereRadius = nodeBoundingSphereRadiusUnits(field, level, centerHeightMeters)
+      const minDistanceUnits = toThreeJSUnits(MIN_DISTANCE_METERS_REF / 1000)
+      const distance = Math.max(params.cameraLocal.distanceTo(sphereCenterScratch) - sphereRadius, minDistanceUnits)
+      const distanceMeters = (distance / SpaceScale) * 1000
+      const sse = (field.nodeGeometricErrorMeters(face, level, i, j) * params.screenHeight) / (2 * Math.tan(params.fovYRadians / 2) * distanceMeters)
+      const key = (face << 20) | (level << 16) | (i << 8) | j
+      const alreadySplit = params.currentlySplit.has(key)
+      const threshold = alreadySplit ? params.splitPixels * params.mergeFactor : params.splitPixels
+      let visible = true
+      if (params.frustumLocal) {
+        const sphere = new Sphere(sphereCenterScratch.clone(), sphereRadius)
+        visible = params.frustumLocal.intersectsSphere(sphere)
+      }
+      const shouldSplit = level < TERRAIN_QUADTREE_MAX_LEVEL && sse > threshold && (visible || alreadySplit)
+      if (shouldSplit) descend(face, level, i, j)
+      else leaves.push({ face, level, i, j })
+    }
+    function descend(face: number, level: number, i: number, j: number): void {
+      const childLevel = level + 1
+      for (let di = 0; di < 2; di++) for (let dj = 0; dj < 2; dj++) visit(face, childLevel, i * 2 + di, j * 2 + dj)
+    }
+    for (let face = 0; face < CUBE_FACES; face++) visit(face, 0, 0, 0)
+
+    return leaves
+  }
+
+  it('набор листьев старого (heightMeters@центр) и нового (mapHeightMeters@центр) алгоритма совпадает на любой дистанции', () => {
+    const map = makeMap(64, 32, Array.from({ length: 64 * 32 }, (_, k) => (k * 4001) % 65535), -2000, 9000)
+    const field = new TerrainHeightField(map, R_KM)
+    expect(field.midband).not.toBeNull()
+
+    for (const altKm of [500000, 500, 50, 5, 0.2]) {
+      const r = field.surfaceRadiusUnits(new Vector3(1, 0, 0))
+      const params: SelectParams = {
+        field,
+        cameraLocal: new Vector3(r + toThreeJSUnits(altKm), 0, 0),
+        frustumLocal: null,
+        screenHeight: 1080,
+        fovYRadians: (50 * Math.PI) / 180,
+        splitPixels: 6,
+        mergeFactor: 0.7,
+        currentlySplit: new Set<number>()
+      }
+      const newLeaves = selectTerrainNodes(params).leaves
+      const oldLeaves = selectWithBandAtCenter(params)
+      expect(new Set(newLeaves.map(terrainNodeKey))).toEqual(new Set(oldLeaves.map(terrainNodeKey)))
+    }
+  })
+
+  it('ε-добавка полосы присутствует в SSE (geometricErrorMeters с полосой строго больше, чем без неё)', () => {
+    const map = makeMap(64, 32, Array.from({ length: 64 * 32 }, (_, k) => (k * 4001) % 65535), -2000, 9000)
+    const on = new TerrainHeightField(map, R_KM)
+    const off = new TerrainHeightField(map, R_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
+
+    expect(on.geometricErrorMeters(TERRAIN_QUADTREE_MIN_LEVEL)).toBeGreaterThan(off.geometricErrorMeters(TERRAIN_QUADTREE_MIN_LEVEL))
+    expect(on.midbandErrorMeters(TERRAIN_QUADTREE_MIN_LEVEL)).toBeGreaterThan(0)
   })
 })
 

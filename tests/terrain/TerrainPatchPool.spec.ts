@@ -142,12 +142,17 @@ describe('TerrainPatchPool', () => {
   // acquire (см. докблок класса), pool.dispose() освобождает их и общий
   // индекс, но НЕ трогает слоты, которые вызывающий не release'нул —
   // это его ответственность (см. TerrainSphere.dispose)
-  it('геометрия слота несёт атрибуты detailPos/detailPos2 (vec3, DynamicDrawUsage)', () => {
+  it('геометрия слота несёт атрибуты detailPos/detailPos2 (vec3) и midTilt (vec2), все DynamicDrawUsage', () => {
     const pool = makePool()
     const handle = pool.acquire()!
-    for (const name of ['detailPos', 'detailPos2']) {
+    const attrs: Array<[string, number]> = [
+      ['detailPos', 3],
+      ['detailPos2', 3],
+      ['midTilt', 2]
+    ]
+    for (const [name, itemSize] of attrs) {
       const attr = handle.geometry.getAttribute(name) as BufferAttribute
-      expect(attr.itemSize).toBe(3)
+      expect(attr.itemSize).toBe(itemSize)
       expect(attr.count).toBe(handle.geometry.getAttribute('position').count)
       expect(attr.usage).toBe(DynamicDrawUsage)
     }

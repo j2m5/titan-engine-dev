@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Vector2, Vector3 } from 'three'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
-import { TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from '@/core/terrain/terrainQuadtreeSelect'
+import { TERRAIN_MODEL_LEVEL, TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from '@/core/terrain/terrainQuadtreeSelect'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 
 function makeMap(width: number, height: number, values: number[], minMeters = 0, maxMeters = 65535): HeightMapData {
@@ -92,7 +92,9 @@ describe('ε-пирамида с полосой B', () => {
       const step = (2 * Math.PI * R_M) / (4 * 2 ** level * 64)
       expect(field.midbandErrorMeters(level)).toBeCloseTo(field.midband!.p99AmplitudeBelowMeters(2 * step), 9)
     }
-    // L1: шаг ~21 км, все волны (≤1.6 км) короче → добавка = полный p99; L8: шаг 167 м → 2·шаг = 333 м < 400 м → 0
+    // на этой карте (64×32, R=1736 км) λ₀ клампится в потолок 3000 м (тексель ≈170 км
+    // ≫ MAX_WAVELENGTH_METERS), короткая октава — 750 м: L1 — шаг ~21 км, все волны
+    // (≤3 км) короче → добавка = полный p99; L8 — шаг 167 м → 2·шаг = 333 м < 750 м → 0
     expect(field.midbandErrorMeters(TERRAIN_QUADTREE_MAX_LEVEL)).toBe(0)
     expect(field.midbandErrorMeters(TERRAIN_QUADTREE_MIN_LEVEL)).toBeCloseTo(field.midband!.maxAmplitudeMeters, 9)
   })
@@ -104,5 +106,18 @@ describe('ε-пирамида с полосой B', () => {
       expect(on.geometricErrorMeters(level)).toBeCloseTo(off.geometricErrorMeters(level) + on.midbandErrorMeters(level), 9)
       expect(on.nodeGeometricErrorMeters(0, level, 0, 0)).toBeCloseTo(off.nodeGeometricErrorMeters(0, level, 0, 0) + on.midbandErrorMeters(level), 9)
     }
+  })
+
+  it('экстраполяция глубже TERRAIN_MODEL_LEVEL: ε(7) = ε(6)/2, ε(8) = ε(6)/4 на субтексельной карте (strength 0)', () => {
+    // bumpyMap 64×32: шаг вершинной сетки L6 = 64/TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS(16384) ≪ 1
+    // текселя — уже на L5/L6 работает линейный (билинейный) хвост terrainLevelScale,
+    // не степенной закон самоподобия; ratio ε(5)/ε(6) = 2 ⇒ hurst = log2(2) = 1
+    // (кламп MAX_TERRAIN_HURST) ⇒ экстраполяция глубже L6 честно линейна: ровно
+    // деление на 2 за уровень, без приближения. Полоса выключена (strength 0) —
+    // изолирует ε карты от аналитической добавки полосы.
+    const off = new TerrainHeightField(bumpyMap(), R_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
+    const e6 = off.geometricErrorMeters(TERRAIN_MODEL_LEVEL)
+    expect(off.geometricErrorMeters(TERRAIN_MODEL_LEVEL + 1)).toBeCloseTo(e6 / 2, 9)
+    expect(off.geometricErrorMeters(TERRAIN_MODEL_LEVEL + 2)).toBeCloseTo(e6 / 4, 9)
   })
 })

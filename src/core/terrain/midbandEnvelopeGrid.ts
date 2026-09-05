@@ -150,11 +150,39 @@ function bilerpChannel(
   return (v00 * (1 - fx) + v10 * fx) * (1 - fy) + (v01 * (1 - fx) + v11 * fx) * fy
 }
 
-/** 99-й процентиль |значений|, копия массива (не мутирует вход) — та же идиома, что percentile99 в TerrainHeightField. */
-function percentile99Abs(values: Float32Array): number {
-  const abs = new Float64Array(values.length)
-  for (let i = 0; i < values.length; i++) abs[i] = Math.abs(values[i])
-  abs.sort()
+/**
+ * 99-й процентиль |значений|, гистограммная оценка (не сортировка): проход 1
+ * находит max|v|, проход 2 раскладывает |v| по 1024 бинам на [0, max], проход
+ * 3 копит счётчик с хвоста (наибольших бинов) до 1 % значений и возвращает
+ * ВЕРХНЮЮ границу найденного бина — оценка ≥ истинного p99, ошибка вверх не
+ * больше ширины бина (max/1024). Точная сортировка 524 288 элементов
+ * (1024×512 сетки) стоила ≈ 65 мс на тело (замер) — три линейных прохода
+ * дешевле на два порядка; страж на синусоидальной карте (midbandEnvelopeGrid.spec)
+ * проверяет отклонение от сортировочного p99 (≤ 2 % от max|v|).
+ */
+export function percentile99Abs(values: Float32Array): number {
+  let max = 0
+  for (let i = 0; i < values.length; i++) {
+    const v = Math.abs(values[i])
+    if (v > max) max = v
+  }
+  if (max === 0) return 0
 
-  return abs[Math.floor(0.99 * (abs.length - 1))]
+  const BINS = 1024
+  const counts = new Uint32Array(BINS)
+  const scale = BINS / max
+  for (let i = 0; i < values.length; i++) {
+    const v = Math.abs(values[i])
+    const bin = Math.min(BINS - 1, Math.floor(v * scale))
+    counts[bin]++
+  }
+
+  const tailTarget = 0.01 * values.length
+  let cumulative = 0
+  for (let bin = BINS - 1; bin >= 0; bin--) {
+    cumulative += counts[bin]
+    if (cumulative >= tailTarget) return ((bin + 1) / BINS) * max
+  }
+
+  return max
 }

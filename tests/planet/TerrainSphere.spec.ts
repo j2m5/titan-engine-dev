@@ -153,14 +153,16 @@ describe('TerrainSphere: динамическое квадродерево па�
     const sphereLow = new TerrainSphere(moon(), field, makeRenderer(1080))
     const sphereHigh = new TerrainSphere(moon(), field, makeRenderer(2160))
 
-    // 130 км, а не 75: с пер-узловой ε (числитель SSE — шероховатость МЕСТА,
-    // а не p99 тела) полоса, где удвоение высоты вьюпорта переводит узел
-    // через порог, сдвинулась. Высота подобрана сканом — на ней 1080p даёт
-    // 48 листьев, 2160p — 60.
+    // 150 км, а не 130 (Task 5, фикс-раунд 2, I2): центр сферы узла теперь
+    // считается по КАРТЕ (mapHeightMeters), не по канону высоты с полосой —
+    // окно, где удвоение высоты вьюпорта переводит узел через порог,
+    // сдвинулось вместе с этим фиксом. Высота подобрана пересканом (окно
+    // 136–186 км устойчиво, запас ≥14 км от обеих границ) — на ней 1080p
+    // даёт 60 листьев, 2160p — 66.
     const FRAMES = 60
     for (let f = 0; f < FRAMES; f++) {
-      sphereLow.updateObject(makeCtx(130))
-      sphereHigh.updateObject(makeCtx(130))
+      sphereLow.updateObject(makeCtx(150))
+      sphereHigh.updateObject(makeCtx(150))
     }
 
     const countLow = sphereLow.children.filter((c) => c instanceof Mesh).length

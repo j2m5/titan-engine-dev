@@ -1,10 +1,15 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { beforeAll, describe, expect, it } from 'vitest'
+import { Frustum, Matrix4, PerspectiveCamera, Vector3 } from 'three'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { parseHeightMap } from '@/core/terrain/heightMapFormat'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
 import { buildPatchIndex, buildTerrainPatchGeometry } from '@/core/terrain/terrainPatchGeometry'
 import { detailWrapFor } from '@/core/terrain/detailWrap'
+import { selectTerrainNodes, type SelectParams } from '@/core/terrain/terrainQuadtreeSelect'
+import { MAX_LIVE_PATCHES } from '@/core/terrain/TerrainPatchPool'
+import { terrain as terrainConfig } from '@/config/terrain'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 
 const MOON_HEIGHT_PATH = 'storage/images/textures/planets/moon/moon_height.raw'
@@ -112,5 +117,55 @@ describe.skipIf(!existsSync(MOON_HEIGHT_PATH))('Бюджет полосы B на
       onMedian,
       `медиана постройки патча: с полосой ${onMedian.toFixed(3)} мс, без полосы ${offMedian.toFixed(3)} мс (дельта ${(onMedian - offMedian).toFixed(3)} мс)`
     ).toBeLessThanOrEqual(offMedian + 10)
+  })
+
+  /**
+   * Факт-пин (не порог 0.8·MAX_LIVE_PATCHES, как у синтетической карты в
+   * terrainQuadtreeSelect.spec — там дискриминирует регресс потолка глубины,
+   * здесь другая цель): на РЕАЛЬНОЙ карте Луны у поверхности (H=2160,
+   * splitPixels/mergeFactor из конфига) набор листьев ≈ 860–910. Живых
+   * патчей больше листьев (split/merge даёт нахлёст истории, ×1.16 по
+   * замеру) — при потолке 1024 запас у поверхности МЕНЬШЕ, чем кажется
+   * из голого количества листьев: пул может насыщаться без дыр в кадре
+   * (деградация LOD, не визуальный провал), рычаг — MAX_LIVE_PATCHES
+   * (+78 МБ за +256 слотов) — решение владельца после приёмки.
+   */
+  it('selectTerrainNodes у поверхности реальной карты Луны (H=2160) — набор листьев в пределах потолка живых патчей', () => {
+    const field = on
+    const dir = new Vector3(1, 0, 0)
+    const r = field.surfaceRadiusUnits(dir)
+    const cameraLocal = dir.clone().multiplyScalar(r + toThreeJSUnits(0.2)) // 200 м над поверхностью
+
+    // Реальный фрустум (как в TerrainPatchGroup.updateObject), не null: без
+    // культинга по видимости отбор проходит ВЕСЬ кубосфер по одной дистанции/SSE
+    // (даже дальнюю сторону тела) — на реальной шероховатой карте это даёт
+    // 2400-4200 листьев, что не отражает то, что реально строится за кадр.
+    // Камера смотрит вдоль касательной (типичный ракурс игрока у поверхности).
+    const up = Math.abs(dir.y) < 0.9 ? new Vector3(0, 1, 0) : new Vector3(1, 0, 0)
+    const tangent = new Vector3().crossVectors(up, dir).normalize()
+    const fovYDegrees = 70
+    const camera = new PerspectiveCamera(fovYDegrees, 16 / 9, 0.0001, 1e9)
+    camera.position.copy(cameraLocal)
+    camera.up.copy(dir)
+    camera.lookAt(cameraLocal.clone().add(tangent))
+    camera.updateMatrixWorld(true)
+    const frustumLocal = new Frustum()
+    frustumLocal.setFromProjectionMatrix(new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse))
+
+    const params: SelectParams = {
+      field,
+      cameraLocal,
+      frustumLocal,
+      screenHeight: 2160,
+      fovYRadians: (fovYDegrees * Math.PI) / 180,
+      splitPixels: terrainConfig.terrain.sseSplitPixels,
+      mergeFactor: terrainConfig.terrain.sseMergeFactor,
+      currentlySplit: new Set<number>()
+    }
+
+    const { leaves } = selectTerrainNodes(params)
+    console.log(`selectTerrainNodes H=2160 у поверхности Луны: leaves.length=${leaves.length}`)
+
+    expect(leaves.length).toBeLessThanOrEqual(MAX_LIVE_PATCHES)
   })
 })

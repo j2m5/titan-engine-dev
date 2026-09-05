@@ -8,6 +8,7 @@ import {
   MIDBAND_GRAD_BOUND,
   MIDBAND_OCTAVES,
   MIDBAND_P99,
+  MIDBAND_RIDGE_MEAN,
   MidbandField,
   type MidbandEnvelope,
   type MidbandSample
@@ -107,13 +108,40 @@ describe('MidbandField: амплитуды, огибающая, бонды', () 
       const z = 5.3 * Math.sin(k * 0.2931 + 2.0) + 0.007 * k
       snoiseGrad3(x, y, z, g)
       maxGrad = Math.max(maxGrad, Math.hypot(g.dx, g.dy, g.dz))
-      maxAbs = Math.max(maxAbs, Math.abs(1 - Math.abs(g.value) - 0.5))
+      maxAbs = Math.max(maxAbs, Math.abs(1 - Math.abs(g.value) - MIDBAND_RIDGE_MEAN))
     }
     expect(maxGrad * 1.1).toBeLessThanOrEqual(MIDBAND_GRAD_BOUND)
     expect(maxAbs).toBeLessThanOrEqual(MIDBAND_P99)
     // при провале НЕ подгонять тест: впиши в константу maxGrad·1.1 с округлением вверх до 0.5 и сообщи число
     const unit = new MidbandField({ ...MIDBAND_DEFAULTS, midbandFlat: 1, midbandRidge: 0 }, 1000, 1000 / (2 * Math.PI))
     expect(unit.maxAmplitudeMeters).toBeCloseTo(MIDBAND_ENVELOPE_MAX * MIDBAND_P99 * (30 + 15 + 7.5), 6)
+  })
+
+  it('страж среднего: E|snoise| по 100k точкам домена совпадает с (1 − MIDBAND_RIDGE_MEAN) в пределах 0.02', () => {
+    const g: NoiseGrad3 = { value: 0, dx: 0, dy: 0, dz: 0 }
+    let sumAbs = 0
+    const N = 100000
+    for (let k = 0; k < N; k++) {
+      const x = 13.1 * Math.sin(k * 0.7311) + 0.017 * k
+      const y = 9.7 * Math.cos(k * 1.1173) - 0.011 * k
+      const z = 5.3 * Math.sin(k * 0.2931 + 2.0) + 0.007 * k
+      snoiseGrad3(x, y, z, g)
+      sumAbs += Math.abs(g.value)
+    }
+    const meanAbsSnoise = sumAbs / N
+    // при провале — не подгонять тест: сообщить измеренное meanAbsSnoise и обновить MIDBAND_RIDGE_MEAN = 1 − meanAbsSnoise
+    expect(Math.abs(meanAbsSnoise - (1 - MIDBAND_RIDGE_MEAN))).toBeLessThan(0.02)
+  })
+
+  it('среднее mid по 4000 направлениям при постоянной огибающей близко к 0 (тело не «толстеет»)', () => {
+    // огибающая = flat 1 (ridge 0, slope 0 на flatEnv) — постоянна на всех направлениях,
+    // изолирует центрирование гребневой октавы от модуляции огибающей
+    const unitEnvelopeField = new MidbandField({ ...MIDBAND_DEFAULTS, midbandFlat: 1, midbandRidge: 0 }, LAMBDA0, R_M)
+    let sum = 0
+    const ds = dirs(4000)
+    for (const d of ds) sum += unitEnvelopeField.sample(d.x, d.y, d.z, flatEnv, out).heightMeters
+    const mean = sum / ds.length
+    expect(Math.abs(mean)).toBeLessThan(0.05 * unitEnvelopeField.maxAmplitudeMeters)
   })
 
   it('p99AmplitudeBelowMeters — только октавы короче порога', () => {

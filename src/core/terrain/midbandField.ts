@@ -13,10 +13,24 @@ const WARP_FREQUENCY = 0.5
 const WARP_OFFSET = 31.7
 
 /**
- * Гребневая октава r = 1 − |snoise|: |r − 0.5| ≤ 0.5 всегда, p99 по обходу
- * домена ≈ 0.45 (страж в midbandField.spec — пересчитать при смене шума).
+ * Среднее гребневой октавы r = 1 − |snoise| по домену: E[r] = 1 − E|snoise|.
+ * E|snoise| ≈ 0.309 по обходу 200k точек домена (страж в midbandField.spec
+ * пересчитывает и падает при расхождении > 0.02) ⇒ E[r] ≈ 0.691, округлено
+ * до 0.69. Вычитается из r в `sample` — центрирует смещение (среднее ≈ 0):
+ * без центрирования (вычитание 0.5 вместо среднего) тело «толстело» —
+ * аплифт +2.4 м на равнине и +31 м на стенах (замер живой карты Луны,
+ * ревью всей ветки).
  */
-export const MIDBAND_P99 = 0.5
+export const MIDBAND_RIDGE_MEAN = 0.69
+
+/**
+ * Бонд |r − MIDBAND_RIDGE_MEAN|: аналитический максимум 0.69 при |n| → 1
+ * (r → 0, |0 − 0.69| = 0.69), запас округлён вверх до 0.7. Это НЕ p99 —
+ * имя историческое (переименовывать не нужно, на него пинуются консьюмеры
+ * и другие константы), но с центрированием бонд стал точным максимумом,
+ * а не статистической оценкой.
+ */
+export const MIDBAND_P99 = 0.7
 /**
  * max |∇r| единичной гребневой октавы в единицах 1/домен = max |∇snoise|
  * (модуль меняет только знак). Аналитический градиент snoiseGrad3 по 100k
@@ -95,7 +109,7 @@ export class MidbandField {
     return Math.min(MIDBAND_ENVELOPE_MAX, Math.max(0, this.params.midbandFlat + slope + ridge))
   }
 
-  /** Σ A_i·P99 по октавам короче порога — добавка к ε уровня, шаг которого их не представляет. */
+  /** strength·ENVELOPE_MAX·Σ A_i·P99 по октавам короче порога (тот же множитель, что у maxAmplitudeMeters) — добавка к ε уровня, шаг которого их не представляет. */
   public p99AmplitudeBelowMeters(wavelengthMeters: number): number {
     let sum = 0
     for (let i = 0; i < MIDBAND_OCTAVES; i++) {
@@ -158,7 +172,7 @@ export class MidbandField {
       const g = snoiseGrad3(px * frequency, py * frequency, pz * frequency, this.grad)
       const sign = g.value >= 0 ? -1 : 1 // r = 1 − |n| ⇒ ∂r = −sign(n)·∂n
       const a = this.amplitudesMeters[i]
-      height += a * (1 - Math.abs(g.value) - 0.5)
+      height += a * (1 - Math.abs(g.value) - MIDBAND_RIDGE_MEAN)
       // ∂r/∂s = sign · (∇n · ∂q/∂s), ∂q/∂s = frequency · ∂p/∂s
       tE += a * sign * frequency * (g.dx * dpEx + g.dy * dpEy + g.dz * dpEz)
       tN += a * sign * frequency * (g.dx * dpNx + g.dy * dpNy + g.dz * dpNz)

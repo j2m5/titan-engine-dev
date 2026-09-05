@@ -508,6 +508,23 @@ class TerrainHeightField {
     return base + sample.heightMeters
   }
 
+  /**
+   * Высота ТОЛЬКО карты, без полосы (Task 5, фикс-раунд 2, I1) — для мест,
+   * где полоса уже учтена отдельно (глобальным падом/аналитической ε), и
+   * повторная попиксельная оценка полосы избыточна. Пример — центр
+   * ограничивающей сферы узла квадродерева (`terrainQuadtreeSelect`):
+   * `nodeBoundingSphereRadiusUnits` уже несёт `2·maxAmplitude` полосы в паде,
+   * попиксельный `heightMeters` в центре узла был лишним обращением к
+   * `MidbandField.sample` (3 октавы `snoiseGrad3`) на КАЖДЫЙ посещённый узел
+   * каждый кадр — 0.8–1.4 мс/кадр/тело по замеру, при том что итог всё равно
+   * тонет в паде.
+   */
+  public mapHeightMeters(dir: Vector3): number {
+    const uv = this.dirToUv(dir, this.uvScratch)
+
+    return this.sampleMeters(uv.x, uv.y)
+  }
+
   /** Наклон полосы (tan) в местном базисе E/N точки; `(0, 0)` без полосы. */
   public midbandTilt(dir: Vector3, out: Vector2): Vector2 {
     const uv = this.dirToUv(dir, this.uvScratch)
@@ -1305,6 +1322,14 @@ class TerrainHeightField {
    * же, что у `geometricErrorMeters`, до `TERRAIN_QUADTREE_MAX_LEVEL` включая
    * уровни глубже `TERRAIN_MODEL_LEVEL` — полоса не привязана к модели
    * провиса/клиренса и считается аналитически на каждом уровне отбора.
+   *
+   * Конвенция карты (`levelErrorMeters`) — РАЗМАХ (max−min по окну шага
+   * уровня), полоса же добавляет ОДНОСТОРОННИЙ бонд `Σ Aᵢ·P99` (половину
+   * размаха полосы, не полный). Несогласованность осознанная, не забытый
+   * ×2: полосный вклад тонет на фоне ε карты (юбка ≫ амплитуды полосы) почти
+   * везде, а место, где это неверно (глубокие уровни с малым ε карты),
+   * консервативно уже перекрыто запасом клиренса. Если полоса когда-нибудь
+   * станет доминирующим членом ε — здесь нужно удвоить.
    */
   public midbandErrorMeters(level: number): number {
     return this.midbandErrorTable[Math.min(Math.max(level, TERRAIN_QUADTREE_MIN_LEVEL), TERRAIN_QUADTREE_MAX_LEVEL)]

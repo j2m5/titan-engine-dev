@@ -163,10 +163,15 @@ function visitNode(
   const sc = -1 + i * span + span / 2
   const tc = -1 + j * span + span / 2
   cubeFaceDirection(face, sc, tc, centerDirScratch)
-  // heightMeters(центр) один раз на узел — раньше отдельно ещё раз читался
-  // потолком воды ниже (находка №6 ревью Task 5, фикс-раунд 1); surfaceRadiusUnits
-  // разворачивается вручную, чтобы переиспользовать уже посчитанную высоту
-  const centerHeightMeters = field.heightMeters(centerDirScratch)
+  // mapHeightMeters(центр) — КАРТА без полосы (Task 5, фикс-раунд 2, I1):
+  // пад радиуса узла (nodeBoundingSphereRadiusUnits) уже несёт глобальный
+  // 2·maxAmplitude полосы, попиксельная оценка полосы в центре ничего не
+  // добавляла к покрытию и стоила 0.8–1.4 мс/кадр/тело (3 октавы snoiseGrad3
+  // на каждый посещённый узел каждый кадр). heightMeters(центр) один раз на
+  // узел — раньше отдельно ещё раз читался потолком воды ниже (находка №6
+  // ревью Task 5, фикс-раунд 1); surfaceRadiusUnits разворачивается вручную,
+  // чтобы переиспользовать уже посчитанную высоту
+  const centerHeightMeters = field.mapHeightMeters(centerDirScratch)
   sphereCenterScratch.copy(centerDirScratch).multiplyScalar(toThreeJSUnits(field.radiusKm + centerHeightMeters / 1000))
 
   const sphereRadius = nodeBoundingSphereRadiusUnits(field, level, centerHeightMeters)
@@ -205,7 +210,7 @@ function visitNode(
 
   // Видимость гейтит только НОВЫЕ сплиты: уже разбитый узел держится по SSE
   // (merge-порог), иначе поворот камеры схлопывал бы поддерево до L1 и при
-  // возврате в кадр требовал полной пересборки (бюджет 6 патчей/кадр).
+  // возврате в кадр требовал полной пересборки (бюджет времени terrain.lod.patchBuildBudgetMs).
   const shouldSplit =
     level < TERRAIN_QUADTREE_MAX_LEVEL && sse > threshold && (visible || alreadySplit) && !belowWaterCeiling
 
