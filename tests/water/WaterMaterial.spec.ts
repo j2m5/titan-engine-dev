@@ -450,7 +450,8 @@ describe('WaterMaterial: пена прибоя — ручки и тексель 
   it('дефолты резолвера доезжают до юниформов; цвет — Color', () => {
     const material = new WaterMaterial(stubActor({ data: {} }))
     expect(material.uniforms.uFoamStrength.value).toBe(1)
-    expect(material.uniforms.uFoamShoreMeters.value).toBe(600)
+    expect(material.uniforms.uFoamShoreMeters.value).toBe(1000)
+    expect(material.uniforms.uFoamSurfStrength.value).toBe(0)
     expect(material.uniforms.uFoamSurfMeters.value).toBe(3000)
     expect(material.uniforms.uFoamWavelengthMeters.value).toBe(800)
     expect(material.uniforms.uFoamPeriod.value).toBe(8)

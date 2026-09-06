@@ -109,6 +109,7 @@ interface WaterUniforms {
   uSunTintStrength: number
   uFoamStrength: number
   uFoamShoreMeters: number
+  uFoamSurfStrength: number
   uFoamSurfMeters: number
   uFoamWavelengthMeters: number
   uFoamPeriod: number
@@ -141,6 +142,7 @@ type WaterRenderingData = Pick<
   | 'sunTintStrength'
   | 'waterFoamStrength'
   | 'waterFoamShoreMeters'
+  | 'waterFoamSurfStrength'
   | 'waterFoamSurfMeters'
   | 'waterFoamWavelengthMeters'
   | 'waterFoamPeriodSeconds'
@@ -218,6 +220,7 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
       // заглушки до прихода slope-карты (WaterMaterial.updateMaterial).
       uFoamStrength: new Uniform(foam.waterFoamStrength),
       uFoamShoreMeters: new Uniform(foam.waterFoamShoreMeters),
+      uFoamSurfStrength: new Uniform(foam.waterFoamSurfStrength),
       uFoamSurfMeters: new Uniform(foam.waterFoamSurfMeters),
       uFoamWavelengthMeters: new Uniform(foam.waterFoamWavelengthMeters),
       uFoamPeriod: new Uniform(foam.waterFoamPeriodSeconds),

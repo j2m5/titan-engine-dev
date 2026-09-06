@@ -320,8 +320,10 @@ export interface IPlanetRenderingObject {
 
   /** Сила пены; 0 — выключено. Дефолт 1. */
   waterFoamStrength?: number
-  /** Ширина каймы уреза, метры от уреза. Дефолт 600. */
+  /** Ширина каймы уреза, метры от уреза. Дефолт 1000. */
   waterFoamShoreMeters?: number
+  /** Сила накатов (гребни за каймой); 0 — только кайма. Дефолт 0. */
+  waterFoamSurfStrength?: number
   /** Дальняя граница зоны накатов, метры от уреза; > waterFoamShoreMeters. Дефолт 3000. */
   waterFoamSurfMeters?: number
   /** Шаг накатов, метры. Дефолт 800. */

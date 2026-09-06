@@ -8,6 +8,8 @@ export interface WaterFoamParams {
   waterFoamStrength: number
   /** Ширина каймы уреза, метры от уреза. */
   waterFoamShoreMeters: number
+  /** Сила накатов (параллельных гребней за каймой); 0 — только кайма. */
+  waterFoamSurfStrength: number
   /** Дальняя граница зоны накатов, метры от уреза; > waterFoamShoreMeters. */
   waterFoamSurfMeters: number
   /** Шаг накатов, метры. */
@@ -26,7 +28,10 @@ export interface WaterFoamParams {
 
 export const WATER_FOAM_DEFAULTS: WaterFoamParams = {
   waterFoamStrength: 1,
-  waterFoamShoreMeters: 600,
+  // приёмочные дефолты: кайма 1000 м без накатов — на текселе 5–9 км
+  // параллельные гребни в километрах друг от друга читались как полосы
+  waterFoamShoreMeters: 1000,
+  waterFoamSurfStrength: 0,
   waterFoamSurfMeters: 3000,
   waterFoamWavelengthMeters: 800,
   waterFoamPeriodSeconds: 8,
@@ -65,6 +70,7 @@ export function resolveWaterFoamParams(data: Raw | undefined, context: string): 
   const params: WaterFoamParams = {
     waterFoamStrength: readNumber('waterFoamStrength'),
     waterFoamShoreMeters: readNumber('waterFoamShoreMeters'),
+    waterFoamSurfStrength: readNumber('waterFoamSurfStrength'),
     waterFoamSurfMeters: readNumber('waterFoamSurfMeters'),
     waterFoamWavelengthMeters: readNumber('waterFoamWavelengthMeters'),
     waterFoamPeriodSeconds: readNumber('waterFoamPeriodSeconds'),
@@ -76,6 +82,7 @@ export function resolveWaterFoamParams(data: Raw | undefined, context: string): 
 
   if (params.waterFoamStrength < 0) fail(`waterFoamStrength должен быть >= 0: ${params.waterFoamStrength}`)
   if (params.waterFoamShoreMeters <= 0) fail(`waterFoamShoreMeters должен быть > 0: ${params.waterFoamShoreMeters}`)
+  if (params.waterFoamSurfStrength < 0) fail(`waterFoamSurfStrength должен быть >= 0: ${params.waterFoamSurfStrength}`)
   if (params.waterFoamSurfMeters <= params.waterFoamShoreMeters) {
     fail(`waterFoamSurfMeters должен быть > waterFoamShoreMeters: ${params.waterFoamSurfMeters} <= ${params.waterFoamShoreMeters}`)
   }

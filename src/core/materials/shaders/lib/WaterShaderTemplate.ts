@@ -47,6 +47,7 @@ const defaultUniforms = {
   // от материала при приходе slope-карты (WaterMaterial.updateMaterial).
   uFoamStrength: new Uniform(0),
   uFoamShoreMeters: new Uniform(1),
+  uFoamSurfStrength: new Uniform(0),
   uFoamSurfMeters: new Uniform(2),
   uFoamWavelengthMeters: new Uniform(1),
   uFoamPeriod: new Uniform(1),
@@ -162,6 +163,7 @@ export const WaterShaderTemplate: ShaderProps = {
       // Пена прибоя (внутри USE_WATER_WAVES: время, шум и fade — общие с волнами)
       uniform float uFoamStrength;
       uniform float uFoamShoreMeters;
+      uniform float uFoamSurfStrength;
       uniform float uFoamSurfMeters;
       uniform float uFoamWavelengthMeters;
       uniform float uFoamPeriod;
@@ -173,9 +175,11 @@ export const WaterShaderTemplate: ShaderProps = {
       // Смещение уреза в текселях: суша клампит канал A в 0, билинейный скат
       // начинается на полтекселя раньше берега — на урезе оценка dist = texel/3
       #define FOAM_SHORE_BIAS 0.3333333
-      // Контраст шума рвани: канал .x нормалей волн узкий вокруг 0.5, без
-      // растяжки smoothstep(0.35,0.75,...) почти не отличает рваные пиксели
-      #define FOAM_NOISE_CONTRAST 3.0
+      // Контраст шума рвани: канал .x нормалей волн узкий вокруг 0.5
+      #define FOAM_NOISE_CONTRAST 1.5
+      // Рвань — модуляция плотности каймы в [1 − FOAM_TEAR, 1], не вырезание до нуля:
+      // на текселе 5–9 км дыры в каймe читались как клочья, а не как пена
+      #define FOAM_TEAR 0.5
       // three не биндит normalMatrix во фрагментник автоматически (см. тот же
       // приём в PlanetShaderTemplate) — юниформ общий на программу, объявление
       // здесь просто делает его видимым этому шейдеру.
@@ -328,13 +332,12 @@ export const WaterShaderTemplate: ShaderProps = {
         return normalize(mix(dirLocal, perturbed, fade));
       }
 
-      // Скаляр рваности пены: трипланар по осям тела на периоде periodMeters
-      // (домен dir·R/period, как у волн), канал .x текстуры нормалей волн
-      // — новых сэмплеров нет; медленный дрейф домена по t.
-      float foamNoise(vec3 dirLocal, float periodMeters, float t) {
+      // Скаляр рваности пены: трипланар по осям тела в домене p (dir·R/period,
+      // как у волн; домен считает вызывающий — ему нужен его экранный след),
+      // канал .x текстуры нормалей волн — новых сэмплеров нет.
+      float foamNoise(vec3 dirLocal, vec3 p) {
         vec3 w = abs(dirLocal);
         w /= max(w.x + w.y + w.z, 1e-6);
-        vec3 p = dirLocal * (uFoamRadiusMeters / max(periodMeters, 1e-3)) + vec3(0.05 * t);
         float nx = texture2D(uWaterNormalMap, p.zy).x;
         float ny = texture2D(uWaterNormalMap, p.xz).x;
         float nz = texture2D(uWaterNormalMap, p.xy).x;
@@ -652,12 +655,16 @@ export const WaterShaderTemplate: ShaderProps = {
             float crest = pow(1.0 - abs(fract(phase) * 2.0 - 1.0), 6.0);
             float surfEnv = smoothstep(uFoamShoreMeters * 0.5, uFoamShoreMeters, dist)
                           * (1.0 - smoothstep(uFoamSurfMeters * 0.6, uFoamSurfMeters, dist));
-            float surf = crest * surfEnv;
-            float noise = foamNoise(dirLocal, uFoamShoreMeters * uFoamNoiseScale, t);
+            float surf = crest * surfEnv * uFoamSurfStrength;
+            // Домен шума: период вдвое шире каймы, медленный дрейф по t. Вдали
+            // (период тоньше ~2 px) шум стягивается к среднему — крупы и мерцания нет
+            vec3 pNoise = dirLocal * (uFoamRadiusMeters / max(2.0 * uFoamShoreMeters * uFoamNoiseScale, 1e-3)) + vec3(0.05 * t);
+            float noiseWeight = 1.0 - smoothstep(0.5, 1.0, length(fwidth(pNoise)));
+            float noise = mix(0.5, foamNoise(dirLocal, pNoise), noiseWeight);
             noise = clamp((noise - 0.5) * FOAM_NOISE_CONTRAST + 0.5, 0.0, 1.0); // канал .x нормалей узкий вокруг 0.5
             float foam = clamp(shore + surf, 0.0, 1.0);
-            // рвань: сплошная кайма рвётся меньше, чем гребни
-            foam *= smoothstep(0.35, 0.75, noise + 0.3 * foam);
+            // рвань: плотность каймы гуляет в [1 − FOAM_TEAR, 1]; сплошная кайма рвётся меньше гребней
+            foam *= mix(1.0 - FOAM_TEAR, 1.0, smoothstep(0.3, 0.7, noise + 0.3 * foam));
             foam *= uFoamStrength * foamWeight;
             // пена освещена так же, как wavesColor (её ночной пол/тинт) — не сырой цвет поверх темноты
             #ifdef USE_SUN_TINT

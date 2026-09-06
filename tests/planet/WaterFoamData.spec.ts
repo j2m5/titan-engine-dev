@@ -6,6 +6,7 @@ import { resolveWaterFoamParams } from '@/core/terrain/waterFoamParams'
 const FOAM_KEYS = [
   'waterFoamStrength',
   'waterFoamShoreMeters',
+  'waterFoamSurfStrength',
   'waterFoamSurfMeters',
   'waterFoamWavelengthMeters',
   'waterFoamPeriodSeconds',

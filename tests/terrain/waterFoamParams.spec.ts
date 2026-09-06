@@ -5,7 +5,8 @@ describe('resolveWaterFoamParams: ручки пены прибоя и мокро
   it('дефолты при отсутствии ручек и при отсутствии data', () => {
     expect(resolveWaterFoamParams({}, 'Земля')).toEqual({
       waterFoamStrength: 1,
-      waterFoamShoreMeters: 600,
+      waterFoamShoreMeters: 1000,
+      waterFoamSurfStrength: 0,
       waterFoamSurfMeters: 3000,
       waterFoamWavelengthMeters: 800,
       waterFoamPeriodSeconds: 8,
@@ -18,9 +19,10 @@ describe('resolveWaterFoamParams: ручки пены прибоя и мокро
   })
 
   it('заданные значения доезжают, остальные — дефолт', () => {
-    const p = resolveWaterFoamParams({ waterFoamStrength: 0, waterFoamShoreMeters: 1000, waterFoamColor: '#ffffff' }, 'Явин IV')
+    const p = resolveWaterFoamParams({ waterFoamStrength: 0, waterFoamShoreMeters: 800, waterFoamSurfStrength: 0.5, waterFoamColor: '#ffffff' }, 'Явин IV')
     expect(p.waterFoamStrength).toBe(0)
-    expect(p.waterFoamShoreMeters).toBe(1000)
+    expect(p.waterFoamShoreMeters).toBe(800)
+    expect(p.waterFoamSurfStrength).toBe(0.5)
     expect(p.waterFoamColor).toBe('#ffffff')
     expect(p.waterFoamSurfMeters).toBe(3000)
   })
@@ -28,6 +30,7 @@ describe('resolveWaterFoamParams: ручки пены прибоя и мокро
   it('валидация громкая, с именем тела и именем поля', () => {
     expect(() => resolveWaterFoamParams({ waterFoamStrength: -1 }, 'Явин IV')).toThrow(/Явин IV/)
     expect(() => resolveWaterFoamParams({ waterFoamStrength: -1 }, 'Явин IV')).toThrow(/waterFoamStrength/)
+    expect(() => resolveWaterFoamParams({ waterFoamSurfStrength: -1 }, 'Явин IV')).toThrow(/waterFoamSurfStrength/)
     expect(() => resolveWaterFoamParams({ waterFoamShoreMeters: 0 }, 'Явин IV')).toThrow(/waterFoamShoreMeters/)
     expect(() => resolveWaterFoamParams({ waterFoamSurfMeters: 600 }, 'Явин IV')).toThrow(/waterFoamSurfMeters/)
     expect(() => resolveWaterFoamParams({ waterFoamShoreMeters: 4000 }, 'Явин IV')).toThrow(/waterFoamSurfMeters/)
