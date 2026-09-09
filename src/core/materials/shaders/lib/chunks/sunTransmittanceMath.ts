@@ -25,6 +25,21 @@ export function transmittanceUv(
   return { u: unit(xMu, width), v: unit(xR, height) }
 }
 
+/** CPU-зеркало GetIrradianceTextureUvFromRMuS (atmosphere.ts): x = μ_s·0.5+0.5, y = (r−bottom)/(top−bottom). Единицы — км. */
+export function irradianceUv(
+  r: number,
+  muS: number,
+  bottom: number,
+  top: number,
+  width: number,
+  height: number
+): { u: number; v: number } {
+  const xR = Math.min(Math.max((r - bottom) / (top - bottom), 0), 1)
+  const xMuS = muS * 0.5 + 0.5
+  const unit = (x: number, n: number): number => 0.5 / n + x * (1 - 1 / n)
+  return { u: unit(xMuS, width), v: unit(xR, height) }
+}
+
 type Vec3 = readonly [number, number, number]
 
 function normalize3([x, y, z]: Vec3): Vec3 {

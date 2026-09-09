@@ -56,7 +56,7 @@ export class SunTintBinding {
     private readonly datumRadiusKm: number
   ) {}
 
-  /** Запись реестра стоит — материалу нужен дефайн USE_SUN_TINT (в том числе при пересборке набора дефайнов с нуля). */
+  /** Запись реестра стоит — материалу нужны дефайны USE_SUN_TINT и USE_SKY_AMBIENT (в том числе при пересборке набора дефайнов с нуля). */
   public get active(): boolean {
     return this.entry !== undefined
   }
@@ -71,19 +71,22 @@ export class SunTintBinding {
 
     if (entry) {
       this.material.uniforms.uAtmoTransmittance.value = entry.lut.transmittance
+      this.material.uniforms.uAtmoIrradiance.value = entry.lut.irradiance
       this.material.uniforms.uAtmoBottomRadius.value = entry.config.bottomRadius
       this.material.uniforms.uAtmoTopRadius.value = entry.config.topRadius
       this.material.uniforms.uAtmoSunAngularRadius.value = entry.config.sunAngularRadius
       this.material.uniforms.uAtmoDatumRadius.value = this.datumRadiusKm
-      this.material.defines = { ...this.material.defines, USE_SUN_TINT: '1' }
+      this.material.defines = { ...this.material.defines, USE_SUN_TINT: '1', USE_SKY_AMBIENT: '1' }
     } else {
       this.material.uniforms.uAtmoTransmittance.value = null
+      this.material.uniforms.uAtmoIrradiance.value = null
 
       // Копия без ключа — прежний объект дефайнов мог уйти в ключ программы,
       // мутировать его на месте нельзя.
       const defines = { ...this.material.defines }
 
       delete defines.USE_SUN_TINT
+      delete defines.USE_SKY_AMBIENT
       this.material.defines = defines
     }
 
@@ -99,5 +102,6 @@ export class SunTintBinding {
   public reset(): void {
     this.entry = undefined
     this.material.uniforms.uAtmoTransmittance.value = null
+    this.material.uniforms.uAtmoIrradiance.value = null
   }
 }

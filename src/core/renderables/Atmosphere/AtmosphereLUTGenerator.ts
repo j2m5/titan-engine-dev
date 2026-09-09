@@ -49,8 +49,8 @@ export const TRANSMITTANCE_H = 64
 const SCATTERING_W = 256
 const SCATTERING_H = 128
 const SCATTERING_D = 32
-const IRRADIANCE_W = 64
-const IRRADIANCE_H = 16
+export const IRRADIANCE_W = 64
+export const IRRADIANCE_H = 16
 
 // Number of scattering orders (reference implementation uses 4).
 // Orders 2+ soften the shadow terminator and add subtle twilight ambient.

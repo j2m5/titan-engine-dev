@@ -111,6 +111,7 @@ describe('PlanetMaterial.syncSunTint: запись реестра → дефай
     m.updateMaterial()
     m.syncSunTint()
     expect(m.defines.USE_SUN_TINT).toBeUndefined()
+    expect(m.defines.USE_SKY_AMBIENT).toBeUndefined()
   })
 
   it('запись появилась → дефайн, подогнанные радиусы, LUT по ссылке, датум из physicalObject', () => {
@@ -125,6 +126,7 @@ describe('PlanetMaterial.syncSunTint: запись реестра → дефай
     const versionBefore = m.version
     m.syncSunTint()
     expect(m.defines.USE_SUN_TINT).toBe('1')
+    expect(m.defines.USE_SKY_AMBIENT).toBe('1')
     expect(m.version).toBeGreaterThan(versionBefore)
     expect(m.uniforms.uAtmoTransmittance.value).toBe(e.lut.transmittance)
     expect(m.uniforms.uAtmoBottomRadius.value).toBe(6351.8)
@@ -157,6 +159,7 @@ describe('PlanetMaterial.syncSunTint: запись реестра → дефай
     registry.unregister(ATMO_ACTOR_ID)
     m.syncSunTint()
     expect(m.defines.USE_SUN_TINT).toBeUndefined()
+    expect(m.defines.USE_SKY_AMBIENT).toBeUndefined()
     expect(m.uniforms.uAtmoTransmittance.value).toBeNull()
   })
 
@@ -169,6 +172,7 @@ describe('PlanetMaterial.syncSunTint: запись реестра → дефай
     m.syncSunTint()
     m.updateMaterial()
     expect(m.defines.USE_SUN_TINT).toBe('1')
+    expect(m.defines.USE_SKY_AMBIENT).toBe('1')
   })
 
   it('resetMaterial сбрасывает дефайн, следующий syncSunTint возвращает его', () => {
@@ -180,10 +184,12 @@ describe('PlanetMaterial.syncSunTint: запись реестра → дефай
     m.syncSunTint()
     m.resetMaterial()
     expect(m.defines.USE_SUN_TINT).toBeUndefined()
+    expect(m.defines.USE_SKY_AMBIENT).toBeUndefined()
     expect(m.uniforms.uAtmoTransmittance.value).toBeNull()
 
     m.syncSunTint()
     expect(m.defines.USE_SUN_TINT).toBe('1')
+    expect(m.defines.USE_SKY_AMBIENT).toBe('1')
   })
 
   it('тело без атмосферы (Луна, actor 19) — no-op', () => {

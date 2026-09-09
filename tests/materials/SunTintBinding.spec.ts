@@ -45,6 +45,7 @@ function target(): SunTintTarget {
   return {
     uniforms: {
       uAtmoTransmittance: { value: null },
+      uAtmoIrradiance: { value: null },
       uAtmoBottomRadius: { value: 0 },
       uAtmoTopRadius: { value: 0 },
       uAtmoSunAngularRadius: { value: 0 },
@@ -69,6 +70,8 @@ describe('SunTintBinding: запись реестра → дефайн и юни
     expect(material.defines.USE_SUN_TINT).toBe('1')
     expect(material.needsUpdate).toBe(true)
     expect(material.uniforms.uAtmoTransmittance.value).toBe(e.lut.transmittance)
+    expect(material.uniforms.uAtmoIrradiance.value).toBe(e.lut.irradiance)
+    expect(material.defines.USE_SKY_AMBIENT).toBe('1')
     expect(material.uniforms.uAtmoBottomRadius.value).toBe(6351.8)
     expect(material.uniforms.uAtmoTopRadius.value).toBe(6420)
     expect(material.uniforms.uAtmoSunAngularRadius.value).toBe(0.004)
@@ -105,7 +108,9 @@ describe('SunTintBinding: запись реестра → дефайн и юни
 
     expect(binding.active).toBe(false)
     expect(material.defines.USE_SUN_TINT).toBeUndefined()
+    expect(material.defines.USE_SKY_AMBIENT).toBeUndefined()
     expect(material.uniforms.uAtmoTransmittance.value).toBeNull()
+    expect(material.uniforms.uAtmoIrradiance.value).toBeNull()
     // Прежний объект мог уйти в ключ программы — снятие ключа только копией.
     expect(definesWithTint.USE_SUN_TINT).toBe('1')
   })
@@ -146,10 +151,12 @@ describe('SunTintBinding: запись реестра → дефайн и юни
 
     expect(binding.active).toBe(false)
     expect(material.uniforms.uAtmoTransmittance.value).toBeNull()
+    expect(material.uniforms.uAtmoIrradiance.value).toBeNull()
 
     binding.sync()
 
     expect(binding.active).toBe(true)
     expect(material.defines.USE_SUN_TINT).toBe('1')
+    expect(material.defines.USE_SKY_AMBIENT).toBe('1')
   })
 })
