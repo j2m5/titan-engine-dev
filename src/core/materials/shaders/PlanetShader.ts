@@ -35,7 +35,8 @@ const DEFAULT_DETAIL_FADE2_METERS = 5000
 // Ламберт суши (спайк) — 0 выключен (бит-в-бит прежний шейдер), 0.15 — пол
 // рассеянного света в тени рельефа при включённом ламберте (0.04 под AgX
 // читался углём).
-const DEFAULT_TERRAIN_LAMBERT = 0
+// 1: окклюзия (cavity/AO) живёт внутри mix(…, uTerrainLambert) — при 0 она исчезла бы; все терраформные тела БД несут 1
+const DEFAULT_TERRAIN_LAMBERT = 1
 const DEFAULT_TERRAIN_AMBIENT = 0.15
 // Геометрический N·L полного пола: ниже — пол ∝ солнцу над горизонтом (0 на терминаторе).
 const DEFAULT_TERRAIN_AMBIENT_SUN_REF = 0.3

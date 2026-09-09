@@ -75,6 +75,13 @@ describe('cloudShadowUvOffset: сдвиг тени облака по солнц�
     expect(dv).toBe(0)
   })
 
+  it('солнце на севере под 45°: dv = h/(πR), du = 0 — знак и знаменатель v-оси', () => {
+    const s = Math.SQRT1_2
+    const { du, dv } = cloudShadowUvOffset([0, s], s, 0.003, 3.19, 1)
+    expect(du).toBe(0)
+    expect(dv).toBeCloseTo(0.003 / (Math.PI * 3.19), 12)
+  })
+
   it('у терминатора tan θ ограничен: μ_s = 0.01 даёт то же, что 0.15', () => {
     expect(cloudShadowUvOffset([1, 0], 0.01, 0.003, 3.19, 1)).toEqual(cloudShadowUvOffset([1, 0], 0.15, 0.003, 3.19, 1))
   })

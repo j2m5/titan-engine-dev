@@ -258,7 +258,9 @@ class WaterMaterial extends AbstractShaderMaterial {
       // Пересборка от снимка стирает и дефайн тинта — он не про карты и живёт
       // своей синхронизацией (см. syncSunTint), поэтому восстанавливается
       // здесь же по текущей записи реестра.
-      ...(this.sunTint.active && { USE_SUN_TINT: '1' })
+      // Пара USE_SUN_TINT / USE_SKY_AMBIENT неразрывна (см. SunTintBinding):
+      // обе таблицы приходят одной записью реестра.
+      ...(this.sunTint.active && { USE_SUN_TINT: '1', USE_SKY_AMBIENT: '1' })
     }
     this.needsUpdate = true
   }

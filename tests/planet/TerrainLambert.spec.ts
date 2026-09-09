@@ -96,9 +96,9 @@ describe('PlanetShader: ручки terrainLambert/terrainAmbient', () => {
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
 
-  it('дефолты: lambert 0 (выключено), ambient 0.15', () => {
+  it('дефолт lambert 1 — окклюзия внутри ламберта; ambient 0.15', () => {
     const shader = new PlanetShader(stubActor({}))
-    expect(shader.uniforms.uTerrainLambert.value).toBe(0)
+    expect(shader.uniforms.uTerrainLambert.value).toBe(1)
     expect(shader.uniforms.uTerrainAmbient.value).toBe(0.15)
   })
 

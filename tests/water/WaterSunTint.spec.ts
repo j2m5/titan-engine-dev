@@ -247,7 +247,9 @@ describe('WaterMaterial.syncSunTint: запись реестра → дефай�
     material.updateMaterial()
 
     expect(material.defines.USE_WATER_DEPTH).toBe('1')
+    // пара неразрывна: пересборка дефайнов возвращает обе, иначе чанк остался бы без uSkyAmbientStrength
     expect(material.defines.USE_SUN_TINT).toBe('1')
+    expect(material.defines.USE_SKY_AMBIENT).toBe('1')
   })
 
   it('resetMaterial сбрасывает дефайн, следующий syncSunTint возвращает его', () => {

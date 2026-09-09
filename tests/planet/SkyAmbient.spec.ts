@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { irradianceUv } from '@/core/materials/shaders/lib/chunks/sunTransmittanceMath'
 import { sunTransmittanceFunctions, sunTransmittanceUniforms } from '@/core/materials/shaders/lib/chunks/SunTransmittance'
 import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { atmosphereShader } from '@/core/renderables/Atmosphere/atmosphere'
+
+/** Ключевые строки ядра — берутся из источника, чтобы порт не разъехался. */
+function coreLine(regex: RegExp): string {
+  const m = atmosphereShader.match(regex)
+  expect(m, `в atmosphere.ts не найдено: ${regex}`).not.toBeNull()
+  return m![0]
+}
 
 describe('irradianceUv: порт GetIrradianceTextureUvFromRMuS', () => {
   it('x = μ_s·0.5+0.5, y = (r−bottom)/(top−bottom), полутексельные отступы 64×16', () => {
@@ -30,8 +38,15 @@ describe('Небесный амбиент: irradiance-LUT в чанке SunTrans
 
   it('шаблон смешивает серый пол с небом под USE_SKY_AMBIENT весом uSkyAmbientStrength', () => {
     const frag = PlanetShaderTemplate.fragmentShader
-    expect(frag).toContain('skyTerm = mix(skyTerm, skyAmbientTint(muS), uSkyAmbientStrength);')
+    // юниформный гейт: при 0 два тапа LUT не платятся
+    expect(frag).toContain('if (uSkyAmbientStrength > 0.0) skyTerm = mix(skyTerm, skyAmbientTint(muS), uSkyAmbientStrength);')
     const idx = frag.indexOf('skyTerm = mix(skyTerm, skyAmbientTint')
-    expect(frag.lastIndexOf('#ifdef USE_SKY_AMBIENT', idx)).toBeGreaterThan(frag.lastIndexOf('vec3 skyTerm = vec3(clamp(', idx))
+    // гейт парный: uSkyAmbientStrength и skyAmbientTint живут в чанке под USE_SUN_TINT
+    expect(frag.lastIndexOf('#if defined(USE_SKY_AMBIENT) && defined(USE_SUN_TINT)', idx)).toBeGreaterThan(frag.lastIndexOf('vec3 skyTerm = vec3(clamp(', idx))
+  })
+
+  it('порт формулы x_mu_s не разъехался с ядром Брунетона', () => {
+    expect(coreLine(/Number x_mu_s = mu_s \* 0\.5 \+ 0\.5;/)).toBe('Number x_mu_s = mu_s * 0.5 + 0.5;')
+    expect(sunTransmittanceFunctions).toContain('float xMuS = muS * 0.5 + 0.5;')
   })
 })

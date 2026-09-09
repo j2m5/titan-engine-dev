@@ -103,6 +103,10 @@ interface WaterUniforms {
   // AtmosphereRegistry (см. WaterMaterial), здесь только заглушки.
   uAtmoTransmittance: Texture | null
   uAtmoIrradiance: Texture | null
+  // Чанк объявляет ручку небесного амбиента и в водной программе: воде она не
+  // нужна (свой закон), но JS-юниформ должен существовать — иначе активный
+  // юниформ остался бы без значения.
+  uSkyAmbientStrength: number
   uAtmoBottomRadius: number
   uAtmoTopRadius: number
   uAtmoSunAngularRadius: number
@@ -247,6 +251,7 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
       // (clampSunTintStrength), разъехаться не могут.
       uAtmoTransmittance: new Uniform(null),
       uAtmoIrradiance: new Uniform(null),
+      uSkyAmbientStrength: new Uniform(0),
       uAtmoBottomRadius: new Uniform(0),
       uAtmoTopRadius: new Uniform(0),
       uAtmoSunAngularRadius: new Uniform(0),

@@ -10,9 +10,15 @@ describe('PlanetShaderTemplate: тени облаков на земле', () => 
     expect(start).toBeGreaterThan(-1)
     expect(block).toContain('#define CLOUD_SHADOW_MIN_COS 0.15')
     expect(block).toContain('texture2D(cloudMap, uvShadow)')
-    expect(block).toContain('cloudShadow = 1.0 - uCloudShadowStrength * alphaShadow * smoothstep(0.0, 0.2, muS);')
+    expect(block).toContain('cloudShadow = 1.0 - uCloudShadowStrength * alphaShadow * smoothstep(0.0, 0.2, muS) * step(1e-4, length(eastLocal));')
     expect(block).toContain('float cosZ = max(muS, CLOUD_SHADOW_MIN_COS);')
     expect(block).not.toContain('dFdx')
+  })
+
+  it('сдвиг uv — восточно-северный базис: u по 2πR cos φ, v по πR', () => {
+    expect(block).toContain('vec3 northUnit = normalize(cross(dirLocal, eastUnit));')
+    expect(block).toContain('vec2 uvShadow = uv + vec2(dot(offsetUnits, eastUnit) / (6.2831853 * uBodyRadiusUnits * cosLat),')
+    expect(block).toContain('dot(offsetUnits, northUnit) / (3.1415927 * uBodyRadiusUnits));')
   })
 
   it('тень множит только прямой свет: входит в directGain, не в ambient', () => {

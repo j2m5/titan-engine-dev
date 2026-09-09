@@ -158,7 +158,7 @@ export const PlanetShaderTemplate: ShaderProps = {
     // Доля окклюзии на ПРЯМОМ свете: 0 — AO/полость не гасят солнце (физика),
     // 1 — прежний вид (окклюзия множила и прямой свет вместе с цветом)
     uniform float uTerrainOcclusionDirect;
-    // Тень облаков на земле (читает USE_CLOUD_SHADOW, отдельная задача арки)
+    // Тень облаков на земле (читает блок USE_CLOUD_SHADOW ниже)
     uniform float uCloudShadowStrength;
     uniform float uCloudShadowHeightUnits;
     // three не биндит normalMatrix во фрагментник автоматически (только в
@@ -380,8 +380,9 @@ export const PlanetShaderTemplate: ShaderProps = {
         // Амбиент — свет от неба/соседнего грунта: серый пол ∝ солнцу над геометрическим
         // горизонтом (безвоздушные тела); у тел с атмосферой — цвет и спад из irradiance-LUT
         vec3 skyTerm = vec3(clamp(sunElevation / max(uTerrainAmbientSunRef, 1e-3), 0.0, 1.0));
-        #ifdef USE_SKY_AMBIENT
-          skyTerm = mix(skyTerm, skyAmbientTint(muS), uSkyAmbientStrength);
+        #if defined(USE_SKY_AMBIENT) && defined(USE_SUN_TINT)
+          // ветка юниформная (без производных внутри): при 0 два тапа LUT не платятся
+          if (uSkyAmbientStrength > 0.0) skyTerm = mix(skyTerm, skyAmbientTint(muS), uSkyAmbientStrength);
         #endif
         vec3 ambient = uTerrainAmbient * skyTerm * occlusion;
         // Тень облаков на земле — только прямой свет
@@ -390,7 +391,7 @@ export const PlanetShaderTemplate: ShaderProps = {
           #define CLOUD_SHADOW_MIN_COS 0.15
           // облако, затеняющее точку, стоит по направлению к солнцу на h·tan θ (θ — зенитный угол)
           vec3 sunLocal = -normalize(vLocalLightDirection);
-          vec3 sunTangent = sunLocal - dirLocal * dot(sunLocal, dirLocal);
+          vec3 sunTangent = sunLocal - dirLocal * muS; // muS = dot(sunLocal, dirLocal), см. выше
           float cosZ = max(muS, CLOUD_SHADOW_MIN_COS);
           vec3 offsetUnits = sunTangent / cosZ * uCloudShadowHeightUnits;
           // eastLocal = cross(up, dir): длина = cos φ; north = cross(dir, east)
@@ -400,8 +401,10 @@ export const PlanetShaderTemplate: ShaderProps = {
           vec2 uvShadow = uv + vec2(dot(offsetUnits, eastUnit) / (6.2831853 * uBodyRadiusUnits * cosLat),
                                     dot(offsetUnits, northUnit) / (3.1415927 * uBodyRadiusUnits));
           vec3 cloudAtShadow = texture2D(cloudMap, uvShadow).rgb;
+          // × uCloudOpacity: тень гаснет с высотой камеры вместе с самим слоем (высотный fade облаков) — не баг
           float alphaShadow = pow(dot(cloudAtShadow, vec3(1.0)) / 3.0, 0.5) * uCloudOpacity;
-          cloudShadow = 1.0 - uCloudShadowStrength * alphaShadow * smoothstep(0.0, 0.2, muS);
+          // ровно в полюсе eastLocal = 0 → базис вырожден: тень гасится, NaN не рождается
+          cloudShadow = 1.0 - uCloudShadowStrength * alphaShadow * smoothstep(0.0, 0.2, muS) * step(1e-4, length(eastLocal));
         #endif
         // Окклюзия на прямом свете — ручкой: 0 — AO не гасит солнце (физика), 1 — прежний вид
         float directGain = mix(1.0, occlusion, uTerrainOcclusionDirect) * cloudShadow;
