@@ -20,7 +20,7 @@ describe('TerrainDetail: домен из точной позиции патча'
   it('фрагментник зовёт чанк с varying-позициями', () => {
     expect(frag).toContain('varying vec3 vDetailPos;')
     expect(frag).toContain(
-      'applyTerrainDetail(nLocal, albedoMul, occlusion, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);'
+      'applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);'
     )
     expect(frag).not.toContain('applyTerrainDetail(nLocal, albedoMul, dirLocal, length(vViewPosition));')
   })
@@ -35,8 +35,9 @@ describe('TerrainDetail: домен из точной позиции патча'
     expect(fn).toContain('triplanarNormalDetiled(uDetailNor2Map, uvSmall,')
     expect(fn).not.toContain('dirLocal.zy * uDetailScale')
     expect(fn).not.toContain('uDetailScale2 / max(uDetailScale')
-    // веса трипланара — по-прежнему от направления
-    expect(fn).toContain('triplanarWeights(dirLocal)')
+    // веса трипланара — от нормали после slope-карты и полосы (Task 4)
+    expect(fn).toContain('triplanarWeights(nLocal)')
+    expect(fn).not.toContain('triplanarWeights(dirLocal)')
   })
 
   it('индекс вариантов W-периодичен: ячейка 4 тайла, хеш решётки по модулю 256, соседи сворачиваются раздельно', () => {

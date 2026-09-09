@@ -17,11 +17,13 @@
  * k·W патча (k общий на патч, W = WRAP_TILES периодов слоя, см.
  * detailWrap.ts) — не единичный dirLocal, чей float32 не различает соседние
  * тексели 40/7-метровых тайлов на теле планетного радиуса. Период честный
- * в метрах, без поправки на радиус. Веса трипланара (triplanarWeights) и
- * общая нормаль (nLocal) по-прежнему берутся от dirLocal/нормали — это
- * ориентация, не адресация карты. Любая новая функция, читающая эти позиции
- * (включая vnoise ниже), обязана быть W-периодичной — иначе обёртка вносит
- * шов на границе k.
+ * в метрах, без поправки на радиус. Веса трипланара (triplanarWeights)
+ * берутся от nLocal (общей нормали после slope-карты и полосы, до наклона
+ * деталью) — это ориентация проекций, не адресация карты (Task 4: раньше
+ * был единичный dirLocal — на стенах проекция сверху растягивала деталь
+ * 1.4–2.2×; nLocal мип-фильтрована, веса непрерывны). Любая новая функция,
+ * читающая позиции detailPos/detailPos2 (включая vnoise ниже), обязана быть
+ * W-периодичной — иначе обёртка вносит шов на границе k.
  *
  * СТОХАСТИЧЕСКИЙ АНТИ-ТАЙЛИНГ: обе шкалы (крупная и мелкая нормаль) читаются
  * через стохастические обёртки triplanarNormalDetiled/ArmDetiled/AlbedoDetiled
@@ -149,6 +151,11 @@
  * против 24 вне полосы (см. БЮДЖЕТ выше). Полоса — по построению узкая
  * (ширина ~uSteepMask.y − uSteepMask.x, ручка Task 3), поэтому среднее по
  * кадру ближе к 24, чем к 42.
+ *
+ * uSteepTint — цвет каменной зоны: множит tintSteep сразу после sampleDetailSet
+ * steep-набора, в обеих ветках, где steep-тинт вообще читается (чистый steep
+ * и полоса перехода) — до mix/whiteout с родным тинтом, поэтому доля вклада
+ * в полосе задаётся той же m, что и у остальных каналов.
  */
 export const terrainDetailUniforms = `
   uniform sampler2D uDetailDiffMap;
@@ -177,6 +184,10 @@ export const terrainDetailUniforms = `
   // x = steepStart, y = steepFull, z = steepBreakup — tan-единицы уклона
   // (см. докстроку чанка, раздел «ЗОНЫ МАТЕРИАЛА»; резолвит Task 3).
   uniform vec3 uSteepMask;
+  // Цвет каменной зоны — множитель tintSteep (обе ветки: чистый steep и
+  // полоса перехода), после нормировки к среднему (uSteepTintNorm) и до
+  // насыщенности/яркости общих ручек детали.
+  uniform vec3 uSteepTint;
 `
 
 export const terrainDetailFunctions = `
@@ -330,16 +341,18 @@ export const terrainDetailFunctions = `
     }
   }
 
-  void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, vec3 dirLocal, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan) {
+  void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan) {
     // Пороги фейда — ручки пер-тела в метрах дистанции, сконвертированные
     // в юниты на CPU (см. докстрока чанка и PlanetShader.uDetailFadeRange).
     float fade1 = 1.0 - smoothstep(uDetailFadeRange.x, uDetailFadeRange.y, viewDistance);
     float fade2 = uDetailLayerGates.z * (1.0 - smoothstep(uDetailFadeRange.z, uDetailFadeRange.w, viewDistance));
 
     if (max(fade1, fade2) > 0.0) {
-      // Веса трипланара — от направления (ориентация проекций), не от
-      // домена адресации карт.
-      vec3 w = triplanarWeights(dirLocal);
+      // Веса трипланара — от нормали после slope-карты и полосы (до
+      // наклона деталью), не от домена адресации карт: на стенах проекция
+      // сверху (по dirLocal) растягивала деталь 1.4–2.2× — nLocal
+      // мип-фильтрована, веса непрерывны.
+      vec3 w = triplanarWeights(nLocal);
 
       // Непрерывный индекс варианта — один раз на проекционную ось, делится
       // всеми четырьмя картами обеих шкал (см. «Экономика» в докстроке чанка).
@@ -385,6 +398,7 @@ export const terrainDetailFunctions = `
         } else if (m > 1.0 - STEEP_EPS) {
           // Только steep — симметрично ветке выше.
           sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uSteepTintNorm, uvBig, w, l, nLocal, nSteep, aoSteep, tintSteep);
+          tintSteep *= uSteepTint;
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (nSteep - nLocal));
           occlusion *= mix(1.0, aoSteep, fade1);
           albedoMul *= mix(vec3(1.0), tintSteep, fade1);
@@ -397,6 +411,7 @@ export const terrainDetailFunctions = `
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (1.0 - m) * (nNative - nLocal));
 
           sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uSteepTintNorm, uvBig, w, l, nLocal, nSteep, aoSteep, tintSteep);
+          tintSteep *= uSteepTint;
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * m * (nSteep - nLocal));
 
           occlusion *= mix(1.0, mix(aoNative, aoSteep, m), fade1);

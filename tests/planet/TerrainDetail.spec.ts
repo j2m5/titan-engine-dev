@@ -67,7 +67,8 @@ describe('TerrainDetail: чанк — регистрация и структур
   })
 
   it('применяет крупную шкалу через стохастические обёртки с uDetail-самплерами — бленд не копируется', () => {
-    expect(terrainDetailFunctions).toContain('triplanarWeights(dirLocal)')
+    expect(terrainDetailFunctions).toContain('triplanarWeights(nLocal)')
+    expect(terrainDetailFunctions).not.toContain('triplanarWeights(dirLocal)')
     // родной набор читается через общий helper sampleDetailSet (зоны материала,
     // задача 2) — сам helper вызывает triplanarNormal/Arm/AlbedoDetiled параметризованно
     expect(terrainDetailFunctions).toContain('sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, uDetailTintNorm')
@@ -194,7 +195,7 @@ describe('TerrainDetail: чанк — регистрация и структур
 
   it('сигнатура applyTerrainDetail совпадает с интерфейсом брифа задачи 2 (+ slopeTan для маски зон)', () => {
     expect(terrainDetailFunctions).toContain(
-      'void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, vec3 dirLocal, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan)'
+      'void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan)'
     )
   })
 
@@ -215,7 +216,7 @@ describe('TerrainDetail: хук в терраформной ветке шабл�
 
   it('applyTerrainDetail зовётся строго перед финальным normalMatrix', () => {
     const callIdx = frag.indexOf(
-      'applyTerrainDetail(nLocal, albedoMul, occlusion, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan)'
+      'applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan)'
     )
     const finalIdx = frag.indexOf('normal = normalize(normalMatrix * nLocal);')
     expect(callIdx).toBeGreaterThan(-1)

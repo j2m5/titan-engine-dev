@@ -58,14 +58,14 @@ describe('TerrainDetail: зоны материала по уклону', () => {
     expect(frag).toContain('(uSlopeRange / 127.0)')
     expect(frag).toContain('terrainSlopeTan = length(terrainSlopeVec);')
     expect(frag).toContain(
-      'applyTerrainDetail(nLocal, albedoMul, occlusion, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);'
+      'applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);'
     )
 
     // terrainSlopeTan объявлен ДО #ifdef USE_SLOPE — имя в скоупе вызова
     // применения детали даже когда тело не несёт slope-карты
     const declIdx = frag.indexOf('float terrainSlopeTan = 0.0;')
     const slopeGateIdx = frag.indexOf('#ifdef USE_SLOPE', declIdx)
-    const callIdx = frag.indexOf('applyTerrainDetail(nLocal, albedoMul, occlusion, dirLocal, vDetailPos')
+    const callIdx = frag.indexOf('applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos')
     expect(declIdx).toBeGreaterThan(-1)
     expect(slopeGateIdx).toBeGreaterThan(declIdx)
     expect(callIdx).toBeGreaterThan(slopeGateIdx)
@@ -110,5 +110,10 @@ describe('TerrainDetail: зоны материала по уклону', () => {
     const uvForBody = terrainDetailFunctions.slice(uvForStart, uvForEnd)
     const dFdxInUvFor = (uvForBody.match(/dFdx\(/g) ?? []).length
     expect(dFdxInUvFor).toBe(3)
+  })
+
+  it('цвет крутой зоны: uSteepTint множит tintSteep в обеих ветках (только steep и полоса перехода)', () => {
+    expect(terrainDetailUniforms).toContain('uniform vec3 uSteepTint;')
+    expect((terrainDetailFunctions.match(/tintSteep \*= uSteepTint;/g) ?? []).length).toBe(2)
   })
 })
