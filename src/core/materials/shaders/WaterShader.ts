@@ -102,6 +102,7 @@ interface WaterUniforms {
   // геометрии/LUT и та же ручка, что у палубы: проводит их SunTintBinding из
   // AtmosphereRegistry (см. WaterMaterial), здесь только заглушки.
   uAtmoTransmittance: Texture | null
+  uAtmoIrradiance: Texture | null
   uAtmoBottomRadius: number
   uAtmoTopRadius: number
   uAtmoSunAngularRadius: number
@@ -245,6 +246,7 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
       // инертные без USE_SUN_TINT. Дефолт и кламп ручки — ОБЩИЕ с палубой
       // (clampSunTintStrength), разъехаться не могут.
       uAtmoTransmittance: new Uniform(null),
+      uAtmoIrradiance: new Uniform(null),
       uAtmoBottomRadius: new Uniform(0),
       uAtmoTopRadius: new Uniform(0),
       uAtmoSunAngularRadius: new Uniform(0),

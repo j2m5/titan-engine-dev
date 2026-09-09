@@ -2,7 +2,7 @@ import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
 import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
-import { Texture, Uniform, Vector2, Vector3 } from 'three'
+import { Color, Texture, Uniform, Vector2, Vector3 } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { heightPathOf } from '@/core/terrain/heightPath'
@@ -107,6 +107,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uSteepDiffMap = new Uniform(null)
     this.uniforms.uSteepGate = new Uniform(0)
     this.uniforms.uSteepMask = new Uniform(new Vector3(0.35, 0.55, 0.15))
+    this.uniforms.uSteepTint = new Uniform(new Color(0xe7e7e7))
     // Нормировка детальных наборов к их средним (detailTextureStats.ts), 1 = нет
     this.uniforms.uDetailTintNorm = new Uniform(new Vector2(1, 1))
     this.uniforms.uSteepTintNorm = new Uniform(new Vector2(1, 1))
@@ -300,6 +301,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
       steepZoneParams.steepFull,
       steepZoneParams.steepBreakup
     )
+    ;(this.uniforms.uSteepTint.value as Color).copy(steepZoneParams.steepTint)
 
     // Тексель диффуза для варпа средней полосы — только у ЗАГРУЖЕННОЙ карты
     // (плейсхолдер размером не является): нули выключают варп, а не врут.

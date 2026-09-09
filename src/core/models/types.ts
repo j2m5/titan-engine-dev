@@ -377,6 +377,14 @@ export interface IPlanetRenderingObject {
   steepStart?: number
   steepFull?: number
   steepBreakup?: number
+
+  /** Цвет каменной зоны на крутом (hex sRGB, множитель в линейном); дефолт 0xe7e7e7 ≈ ×0.8. */
+  steepTint?: number | string
+  /** Композиция света суши (арка «Свет»): резолвер terrainLightParams.ts, дефолты глобальные. */
+  terrainOcclusionDirect?: number
+  skyAmbientStrength?: number
+  cloudShadowStrength?: number
+  cloudShadowHeightKm?: number
 }
 
 export type IAtmosphereRenderingObject = AtmosphereConfig

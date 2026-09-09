@@ -13,6 +13,7 @@ import {
 } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
 import { DEFAULT_DETAIL_SCALE2_METERS, DEFAULT_DETAIL_SCALE_METERS, validPeriodMeters } from '@/core/terrain/detailWrap'
 import { resolveMacroSlopeStructureParams } from '@/core/terrain/macroSlopeStructureParams'
+import { resolveTerrainLightParams } from '@/core/terrain/terrainLightParams'
 import { resolveWaterFoamParams } from '@/core/terrain/waterFoamParams'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 
@@ -107,10 +108,15 @@ interface PlanetUniforms {
   uTerrainLambert: number
   uTerrainAmbient: number
   uTerrainAmbientSunRef: number
+  uTerrainOcclusionDirect: number
+  uSkyAmbientStrength: number
+  uCloudShadowStrength: number
+  uCloudShadowHeightUnits: number
   shadowRingsInnerRadius: number
   shadowRingsOuterRadius: number
   shadowRingsTexture: Texture | null
   uAtmoTransmittance: Texture | null
+  uAtmoIrradiance: Texture | null
   uAtmoBottomRadius: number
   uAtmoTopRadius: number
   uAtmoSunAngularRadius: number
@@ -201,6 +207,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
     )
 
     const slopeStructures = resolveMacroSlopeStructureParams(planetData, this.model.getAttribute?.('name', '?') ?? '?')
+    const light = resolveTerrainLightParams(planetData, this.model.getAttribute?.('name', '?') ?? '?')
     const foam = resolveWaterFoamParams(planetData, this.model.getAttribute?.('name', '?') ?? '?')
     const waterLevelMeters = readWaterLevelMeters(this.model) ?? 0
 
@@ -237,6 +244,10 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uTerrainLambert: new Uniform(planetData.terrainLambert ?? DEFAULT_TERRAIN_LAMBERT),
       uTerrainAmbient: new Uniform(planetData.terrainAmbient ?? DEFAULT_TERRAIN_AMBIENT),
       uTerrainAmbientSunRef: new Uniform(Math.max(planetData.terrainAmbientSunRef ?? DEFAULT_TERRAIN_AMBIENT_SUN_REF, 1e-3)),
+      uTerrainOcclusionDirect: new Uniform(light.terrainOcclusionDirect),
+      uSkyAmbientStrength: new Uniform(light.skyAmbientStrength),
+      uCloudShadowStrength: new Uniform(light.cloudShadowStrength),
+      uCloudShadowHeightUnits: new Uniform(toThreeJSUnits(light.cloudShadowHeightKm)),
       uDetailFadeRange: new Uniform(
         new Vector4(
           detailFadeEndUnits * DETAIL_FADE_START_RATIO,
@@ -249,6 +260,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       shadowRingsOuterRadius: new Uniform(toThreeJSUnits(ringData.outerRadius)),
       shadowRingsTexture: new Uniform(ringMap),
       uAtmoTransmittance: new Uniform(null),
+      uAtmoIrradiance: new Uniform(null),
       uAtmoBottomRadius: new Uniform(0),
       uAtmoTopRadius: new Uniform(0),
       uAtmoSunAngularRadius: new Uniform(0),

@@ -4,6 +4,7 @@ import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderT
 import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 /**
  * Конструктор PlanetShader читает 'default.png'/'night.jpg' (diffuse/night
@@ -109,5 +110,17 @@ describe('PlanetShader: ручки terrainLambert/terrainAmbient', () => {
   it('дефолт terrainAmbientSunRef 0.3; ноль клампится гардом от деления', () => {
     expect(new PlanetShader(stubActor({})).uniforms.uTerrainAmbientSunRef.value).toBe(0.3)
     expect(new PlanetShader(stubActor({ terrainAmbientSunRef: 0 })).uniforms.uTerrainAmbientSunRef.value).toBe(1e-3)
+  })
+
+  it('ручки света: дефолты 0.35 / 1 / 0.6 / 6 км в юнитах; из data доезжают', () => {
+    const shader = new PlanetShader(stubActor({}))
+    expect(shader.uniforms.uTerrainOcclusionDirect.value).toBe(0.35)
+    expect(shader.uniforms.uSkyAmbientStrength.value).toBe(1)
+    expect(shader.uniforms.uCloudShadowStrength.value).toBe(0.6)
+    expect(shader.uniforms.uCloudShadowHeightUnits.value).toBeCloseTo(toThreeJSUnits(6), 12)
+    expect(shader.uniforms.uAtmoIrradiance.value).toBeNull()
+    const tuned = new PlanetShader(stubActor({ terrainOcclusionDirect: 1, skyAmbientStrength: 0 }))
+    expect(tuned.uniforms.uTerrainOcclusionDirect.value).toBe(1)
+    expect(tuned.uniforms.uSkyAmbientStrength.value).toBe(0)
   })
 })
