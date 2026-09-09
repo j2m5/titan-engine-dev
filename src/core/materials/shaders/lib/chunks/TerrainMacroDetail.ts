@@ -81,7 +81,7 @@ export const terrainMacroDetailFunctions = /* glsl */ `
   // gateSlopeLen — уклон ТОЛЬКО карты: наклон полосы B (до ~0.13 tan на холмах)
   // в сумме открывал бы гейт на пологих равнинах, и террасы читались бы
   // горизонталями топокарты; slope (с полосой) задаёт лишь направление стока
-  void applyMacroSlopeStructures(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 eastLocal, vec2 slope, float gateSlopeLen, float contrast, float distFade, vec3 qs, float streakWeight, float terraceWeight, float fbmValue) {
+  void applyMacroSlopeStructures(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, vec3 dirLocal, vec3 eastLocal, vec2 slope, float gateSlopeLen, float contrast, float distFade, vec3 qs, float streakWeight, float terraceWeight, float fbmValue) {
     float gate = smoothstep(uMacroStructureSlope.x, uMacroStructureSlope.y, gateSlopeLen);
     if (gate <= 0.0) return;
     float slopeLen = length(slope);
@@ -141,7 +141,8 @@ export const terrainMacroDetailFunctions = /* glsl */ `
       float k = uMacroTerraceStrength * gate * distFade * terraceWeight * cover;
       // площадка (tp.y = −1) положе, уступ круче — модуляция собственного уклона
       nLocal = normalize(nLocal - k * tp.y * slopeVec);
-      albedoMul *= max(1.0 - TERRACE_SHADE * k * max(tp.x, 0.0), 0.0);
+      // тень уступа — окклюзия формы, не цвет
+      occlusion *= max(1.0 - TERRACE_SHADE * k * max(tp.x, 0.0), 0.0);
     }
   }
 
@@ -166,7 +167,7 @@ export const terrainMacroDetailFunctions = /* glsl */ `
 
   // slope — уклон карты + наклон полосы B (усиление fbm и направление форм);
   // gateSlopeLen — |уклон карты| для гейта форм склона (см. applyMacroSlopeStructures)
-  void applyTerrainMacroDetail(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 eastLocal, vec2 slope, float gateSlopeLen, float cavity, vec2 uv, float viewDistance) {
+  void applyTerrainMacroDetail(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, vec3 dirLocal, vec3 eastLocal, vec2 slope, float gateSlopeLen, float cavity, vec2 uv, float viewDistance) {
     // След — от гладкого домена ДО варпа и ДО раннего выхода (однородный поток в кваде)
     vec3 q = dirLocal * (uBodyRadiusUnits / max(uMacroPeriodUnits, 1e-6));
     float footprint = length(fwidth(q));
@@ -214,6 +215,6 @@ export const terrainMacroDetailFunctions = /* glsl */ `
 
     albedoMul *= clamp(1.0 + uMacroStrength * contrast * h, 0.0, 2.0);
 
-    applyMacroSlopeStructures(nLocal, albedoMul, dirLocal, eastLocal, slope, gateSlopeLen, contrast, distFade, qs, streakWeight, terraceWeight, h);
+    applyMacroSlopeStructures(nLocal, albedoMul, occlusion, dirLocal, eastLocal, slope, gateSlopeLen, contrast, distFade, qs, streakWeight, terraceWeight, h);
   }
 `

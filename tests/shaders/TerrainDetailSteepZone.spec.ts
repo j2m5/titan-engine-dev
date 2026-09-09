@@ -58,14 +58,14 @@ describe('TerrainDetail: зоны материала по уклону', () => {
     expect(frag).toContain('(uSlopeRange / 127.0)')
     expect(frag).toContain('terrainSlopeTan = length(terrainSlopeVec);')
     expect(frag).toContain(
-      'applyTerrainDetail(nLocal, albedoMul, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);'
+      'applyTerrainDetail(nLocal, albedoMul, occlusion, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);'
     )
 
     // terrainSlopeTan объявлен ДО #ifdef USE_SLOPE — имя в скоупе вызова
     // применения детали даже когда тело не несёт slope-карты
     const declIdx = frag.indexOf('float terrainSlopeTan = 0.0;')
     const slopeGateIdx = frag.indexOf('#ifdef USE_SLOPE', declIdx)
-    const callIdx = frag.indexOf('applyTerrainDetail(nLocal, albedoMul, dirLocal, vDetailPos')
+    const callIdx = frag.indexOf('applyTerrainDetail(nLocal, albedoMul, occlusion, dirLocal, vDetailPos')
     expect(declIdx).toBeGreaterThan(-1)
     expect(slopeGateIdx).toBeGreaterThan(declIdx)
     expect(callIdx).toBeGreaterThan(slopeGateIdx)

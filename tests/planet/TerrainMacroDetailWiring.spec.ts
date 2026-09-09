@@ -34,10 +34,10 @@ describe('PlanetShaderTemplate: средняя полоса детали в те
   it('вызов стоит после USE_CAVITY и до applyTerrainDetail, в терраформной ветке', () => {
     const cavity = frag.indexOf('#ifdef USE_CAVITY')
     const call = frag.indexOf(
-      'applyTerrainMacroDetail(nLocal, albedoMul, dirLocal, eastLocal, macroSlope, length(macroMapSlope), macroCavity, uv, length(vViewPosition));'
+      'applyTerrainMacroDetail(nLocal, albedoMul, occlusion, dirLocal, eastLocal, macroSlope, length(macroMapSlope), macroCavity, uv, length(vViewPosition));'
     )
     const detail = frag.indexOf(
-      'applyTerrainDetail(nLocal, albedoMul, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);'
+      'applyTerrainDetail(nLocal, albedoMul, occlusion, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);'
     )
     const normalOut = frag.indexOf('normal = normalize(normalMatrix * nLocal);')
     expect(call).toBeGreaterThan(cavity)

@@ -6,7 +6,9 @@
  * единственным normalMatrix). Крупная шкала (период uDetailScale) несёт
  * нормаль + AO + diffuse-модуляцию, мелкая (uDetailScale2) — только нормаль:
  * высокочастотный микрорельеф не даёт выигрыша в читаемости от повторной
- * AO/diffuse-модуляции на этой частоте, только шум.
+ * AO/diffuse-модуляции на этой частоте, только шум. AO — окклюзия
+ * (аккумулятор occlusion), не альбедо: гасит амбиент целиком, прямой свет —
+ * ручкой uTerrainOcclusionDirect; тинт остаётся цветом (albedoMul).
  *
  * Проекции и whiteout-бленд — переиспользованы из чанка TriplanarDetail
  * (triplanarWeights/triplanarBlendRgb/triplanarBlendNormal). Домен адресации
@@ -328,7 +330,7 @@ export const terrainDetailFunctions = `
     }
   }
 
-  void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan) {
+  void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, vec3 dirLocal, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan) {
     // Пороги фейда — ручки пер-тела в метрах дистанции, сконвертированные
     // в юниты на CPU (см. докстрока чанка и PlanetShader.uDetailFadeRange).
     float fade1 = 1.0 - smoothstep(uDetailFadeRange.x, uDetailFadeRange.y, viewDistance);
@@ -378,13 +380,13 @@ export const terrainDetailFunctions = `
           // Вне зоны — читается ровно один (родной) набор.
           sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, uDetailTintNorm, uvBig, w, l, nLocal, nNative, aoNative, tintNative);
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (nNative - nLocal));
-          albedoMul *= mix(1.0, aoNative, fade1);
+          occlusion *= mix(1.0, aoNative, fade1);
           albedoMul *= mix(vec3(1.0), tintNative, fade1);
         } else if (m > 1.0 - STEEP_EPS) {
           // Только steep — симметрично ветке выше.
           sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uSteepTintNorm, uvBig, w, l, nLocal, nSteep, aoSteep, tintSteep);
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (nSteep - nLocal));
-          albedoMul *= mix(1.0, aoSteep, fade1);
+          occlusion *= mix(1.0, aoSteep, fade1);
           albedoMul *= mix(vec3(1.0), tintSteep, fade1);
         } else {
           // Полоса перехода: оба набора (бюджет — см. докстроку чанка).
@@ -397,7 +399,7 @@ export const terrainDetailFunctions = `
           sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uSteepTintNorm, uvBig, w, l, nLocal, nSteep, aoSteep, tintSteep);
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * m * (nSteep - nLocal));
 
-          albedoMul *= mix(1.0, mix(aoNative, aoSteep, m), fade1);
+          occlusion *= mix(1.0, mix(aoNative, aoSteep, m), fade1);
           albedoMul *= mix(vec3(1.0), mix(tintNative, tintSteep, m), fade1);
         }
       }

@@ -33,9 +33,9 @@ describe('PlanetShaderTemplate: ламберт суши (спайк, USE_TERRAIN
   it('юниформы объявлены, множитель стоит на dayColor — ДО состава с облаками', () => {
     expect(frag).toContain('uniform float uTerrainLambert;')
     expect(frag).toContain('uniform float uTerrainAmbient;')
-    const albedoIdx = frag.indexOf('dayColor *= albedoMul;')
+    const albedoIdx = frag.indexOf('float occlusion = 1.0;')
     const lambertIdx = frag.indexOf(
-      'dayColor *= mix(1.0, mix(ambientFloor, 1.0, max(NdotLraw, 0.0)), uTerrainLambert);'
+      'dayColor = diffuseSample * albedoMul * mix(vec3(1.0), lit, uTerrainLambert);'
     )
     const dayIdx = frag.indexOf('vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);')
     expect(albedoIdx).toBeGreaterThan(-1)
@@ -46,17 +46,19 @@ describe('PlanetShaderTemplate: ламберт суши (спайк, USE_TERRAIN
   it('облака ламбертом суши не затеняются: множителя на составленном day нет', () => {
     // Облака живут по своему закону (pow(0.5·cloudLight + 0.1, 0.5)):
     // затенять их нормалью РЕЛЬЕФА — двойной учёт и наклон не по их высоте.
-    expect(frag).not.toContain('day *= mix(1.0, mix(ambientFloor')
+    expect(frag).not.toContain('day *= mix(vec3(1.0), lit')
   })
 
   it('множитель под гейтом USE_TERRAIN_UV — легаси-путь гигантов не тронут', () => {
-    const lambertIdx = frag.indexOf('dayColor *= mix(1.0, mix(ambientFloor')
+    const lambertIdx = frag.indexOf('dayColor = diffuseSample * albedoMul * mix(vec3(1.0), lit')
     const guardIdx = frag.lastIndexOf('#ifdef USE_TERRAIN_UV', lambertIdx)
     const endifIdx = frag.indexOf('#endif', lambertIdx)
     expect(guardIdx).toBeGreaterThan(-1)
     expect(endifIdx).toBeGreaterThan(lambertIdx)
-    // между гардом и множителем нет другого #endif — множитель внутри этого блока
-    expect(frag.slice(guardIdx, lambertIdx)).not.toContain('#endif')
+    // препроцессор между гардом и множителем сбалансирован: вложенный
+    // #ifdef USE_SKY_AMBIENT закрывает сам себя, гард USE_TERRAIN_UV — открыт
+    const inner = frag.slice(guardIdx + '#ifdef USE_TERRAIN_UV'.length, lambertIdx)
+    expect((inner.match(/#endif/g) ?? []).length).toBe((inner.match(/#if/g) ?? []).length)
   })
 })
 

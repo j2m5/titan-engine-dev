@@ -104,7 +104,7 @@ describe('PlanetShaderTemplate: тинт солнца под USE_SUN_TINT', () =
 
   it('day умножается на тинт ПОСЛЕ облаков и ДО микса с ночью, mu_s — из vLocalDir', () => {
     const dayLine = frag.indexOf('vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);')
-    const tint = frag.indexOf('day *= mix(vec3(1.0), sunTint(dot(normalize(vLocalDir), -normalize(vLocalLightDirection))), uSunTintStrength);')
+    const tint = frag.indexOf('day *= mix(vec3(1.0), sunTint(muS), uSunTintStrength);')
     const night = frag.indexOf('vec3 finalColor = mix(night, day, dayFactor);')
     expect(dayLine).toBeGreaterThan(-1)
     expect(tint).toBeGreaterThan(dayLine)
@@ -114,12 +114,14 @@ describe('PlanetShaderTemplate: тинт солнца под USE_SUN_TINT', () =
   it('tint не берёт нормаль рельефа и не берёт vPosition', () => {
     // Лукахед (?!ize) отсекает ложное срабатывание на normalize(vLocalDir) —
     // мандатная строка задачи; проверяем именно голую переменную normal.
-    expect(frag).not.toMatch(/sunTint\(dot\(normal(?!ize)/)
-    expect(frag).not.toMatch(/sunTint\([^)]*vPosition/)
+    // muS вынесен в переменную до ветвления (её же читает амбиент суши),
+    // поэтому пин стоит на её определении, а не на аргументе sunTint.
+    expect(frag).not.toMatch(/float muS = dot\(normal(?!ize)/)
+    expect(frag).not.toMatch(/float muS = [^;]*vPosition/)
   })
 
   it('mu_s со знаком минус: vLocalLightDirection направлен ОТ солнца, минус даёт +1 в зените', () => {
-    expect(frag).toContain('sunTint(dot(normalize(vLocalDir), -normalize(vLocalLightDirection))')
+    expect(frag).toContain('float muS = dot(normalize(vLocalDir), -normalize(vLocalLightDirection));')
   })
 })
 

@@ -194,7 +194,7 @@ describe('TerrainDetail: чанк — регистрация и структур
 
   it('сигнатура applyTerrainDetail совпадает с интерфейсом брифа задачи 2 (+ slopeTan для маски зон)', () => {
     expect(terrainDetailFunctions).toContain(
-      'void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan)'
+      'void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, vec3 dirLocal, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan)'
     )
   })
 
@@ -215,7 +215,7 @@ describe('TerrainDetail: хук в терраформной ветке шабл�
 
   it('applyTerrainDetail зовётся строго перед финальным normalMatrix', () => {
     const callIdx = frag.indexOf(
-      'applyTerrainDetail(nLocal, albedoMul, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan)'
+      'applyTerrainDetail(nLocal, albedoMul, occlusion, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan)'
     )
     const finalIdx = frag.indexOf('normal = normalize(normalMatrix * nLocal);')
     expect(callIdx).toBeGreaterThan(-1)
@@ -225,13 +225,12 @@ describe('TerrainDetail: хук в терраформной ветке шабл�
 
   it('albedoMul применяется на месте выборки dayColor', () => {
     // Выборка диффуза живёт в ветках UV (по одной на ветку), dayColor берёт
-    // готовый diffuseSample — и уже он домножается на albedoMul.
-    const dayColorIdx = frag.indexOf('vec3 dayColor = diffuseSample;')
+    // готовый diffuseSample — и уже он домножается на albedoMul (и на
+    // occlusion: в легаси-ветке та ≡ 1, терраформная перезаписывает dayColor).
+    const dayColorIdx = frag.indexOf('vec3 dayColor = diffuseSample * albedoMul * occlusion;')
     const sampleIdx = frag.indexOf('vec3 diffuseSample = texture2D(diffuseMap, uv).rgb;')
-    const mulIdx = frag.indexOf('dayColor *= albedoMul;')
     expect(sampleIdx).toBeGreaterThan(-1)
     expect(dayColorIdx).toBeGreaterThan(sampleIdx)
-    expect(mulIdx).toBeGreaterThan(dayColorIdx)
   })
 })
 

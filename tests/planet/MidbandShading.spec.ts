@@ -32,7 +32,7 @@ describe('Полоса B в затенении: наклон по вершина
     expect(frag).toContain('vec2 macroSlope = macroMapSlope + vMidTilt;')
     // приёмка 3.png: с суммой в гейте террасы читались горизонталями топокарты на
     // холмистых равнинах (на Луне гейт открывался на 10–47 % точек с уклоном карты 0.05–0.2)
-    expect(frag).toContain('applyTerrainMacroDetail(nLocal, albedoMul, dirLocal, eastLocal, macroSlope, length(macroMapSlope), macroCavity, uv, length(vViewPosition));')
+    expect(frag).toContain('applyTerrainMacroDetail(nLocal, albedoMul, occlusion, dirLocal, eastLocal, macroSlope, length(macroMapSlope), macroCavity, uv, length(vViewPosition));')
     const gateFn = terrainMacroDetailFunctions
     expect(gateFn).toContain('float gate = smoothstep(uMacroStructureSlope.x, uMacroStructureSlope.y, gateSlopeLen);')
     expect(gateFn).not.toContain('smoothstep(uMacroStructureSlope.x, uMacroStructureSlope.y, slopeLen)')

@@ -150,6 +150,12 @@ export const PlanetShaderTemplate: ShaderProps = {
     uniform float uTerrainLambert;
     uniform float uTerrainAmbient;
     uniform float uTerrainAmbientSunRef;
+    // Доля окклюзии на ПРЯМОМ свете: 0 — AO/полость не гасят солнце (физика),
+    // 1 — прежний вид (окклюзия множила и прямой свет вместе с цветом)
+    uniform float uTerrainOcclusionDirect;
+    // Тень облаков на земле (читает USE_CLOUD_SHADOW, отдельная задача арки)
+    uniform float uCloudShadowStrength;
+    uniform float uCloudShadowHeightUnits;
     // three не биндит normalMatrix во фрагментник автоматически (только в
     // вершинный пролог) — юниформ общий на программу, объявление здесь просто
     // делает его видимым этому шейдеру.
@@ -241,6 +247,7 @@ export const PlanetShaderTemplate: ShaderProps = {
       // Множитель альбедо от терраформного детального слоя (задача 4) —
       // применяется на месте выборки dayColor ниже, дальше самого UV-ветвления
       vec3 albedoMul = vec3(1.0);
+      float occlusion = 1.0; // геометрическое затенение: cavity, AO детали, уступы — гасит амбиент целиком, прямой свет ручкой
       float wetEdge = 0.0;
       float glintEdge = 0.0;
 
@@ -293,9 +300,10 @@ export const PlanetShaderTemplate: ShaderProps = {
           // рельефа, scripts/lib/cavityMap.ts): плюс — гребень (светлее),
           // минус — яма (темнее). Декод БЕЗ множителя SLOPE_RANGE — контракт
           // канала B отличается от R/G (см. slopeMapEncode.ts). Светонезависимый
-          // контраст рельефа — как AO, но без пересчёта на GPU.
+          // контраст рельефа — как AO, но без пересчёта на GPU: пишется в
+          // occlusion (геометрическое затенение), не в альбедо.
           float cavity = (texture2D(bumpMap, uv).z * 255.0 - 128.0) / 127.0;
-          albedoMul *= clamp(1.0 + uCavityStrength * cavity, 0.0, 2.0);
+          occlusion *= clamp(1.0 + uCavityStrength * cavity, 0.0, 2.0);
         #endif
 
         #ifdef USE_TERRAIN_MACRO_DETAIL
@@ -311,7 +319,7 @@ export const PlanetShaderTemplate: ShaderProps = {
           #ifdef USE_CAVITY
             macroCavity = (macroSlopeSample.z * 255.0 - 128.0) / 127.0;
           #endif
-          applyTerrainMacroDetail(nLocal, albedoMul, dirLocal, eastLocal, macroSlope, length(macroMapSlope), macroCavity, uv, length(vViewPosition));
+          applyTerrainMacroDetail(nLocal, albedoMul, occlusion, dirLocal, eastLocal, macroSlope, length(macroMapSlope), macroCavity, uv, length(vViewPosition));
         #endif
 
         #ifdef USE_WATER_EDGE
@@ -325,7 +333,7 @@ export const PlanetShaderTemplate: ShaderProps = {
         #endif
 
         #ifdef USE_TERRAIN_DETAIL
-          applyTerrainDetail(nLocal, albedoMul, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);
+          applyTerrainDetail(nLocal, albedoMul, occlusion, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);
         #endif
 
         // Единственный переход тело-локальной нормали в view-пространство —
@@ -347,9 +355,14 @@ export const PlanetShaderTemplate: ShaderProps = {
       // Угол солнца над геометрическим горизонтом (радиальная нормаль сферы) —
       // терминатор суши и масштаб пола ламберта; рельеф сюда не входит.
       float sunElevation = dot(normalize(vNormal), lightDirection);
+      // Косинус солнца по радиальному направлению тела: общий вход амбиента
+      // суши (ниже) и тинта солнца (в самом конце). vLocalLightDirection
+      // направлен ОТ солнца к точке (см. вершинник) — минус даёт +1 в зените.
+      float muS = dot(normalize(vLocalDir), -normalize(vLocalLightDirection));
 
-      vec3 dayColor = diffuseSample;
-      dayColor *= albedoMul;
+      // Легаси-значение (гиганты): окклюзия там никем не трогается и ≡ 1 —
+      // состав бит-в-бит прежний. Терраформная ветка перезаписывает dayColor.
+      vec3 dayColor = diffuseSample * albedoMul * occlusion;
 
       #ifdef USE_TERRAIN_UV
         // Ламберт суши: без него нормаль (slope-карта, детальные трипланары)
@@ -357,11 +370,20 @@ export const PlanetShaderTemplate: ShaderProps = {
         // N·L > 0.25. Только на dayColor: облака ниже шейдятся своим законом,
         // нормаль рельефа к ним отношения не имеет. При uTerrainLambert = 0
         // множитель ≡ 1 (прежний вид).
-        // Пол ∝ солнцу над горизонтом: рассеянный свет — от соседнего
-        // освещённого грунта; у терминатора грунт тёмный, пол уходит к нулю,
-        // и рельеф там читается контрастно с орбиты. В полдень пол = terrainAmbient.
-        float ambientFloor = uTerrainAmbient * clamp(sunElevation / max(uTerrainAmbientSunRef, 1e-3), 0.0, 1.0);
-        dayColor *= mix(1.0, mix(ambientFloor, 1.0, max(NdotLraw, 0.0)), uTerrainLambert);
+        // Амбиент — свет от неба/соседнего грунта: серый пол ∝ солнцу над геометрическим
+        // горизонтом (безвоздушные тела); у тел с атмосферой — цвет и спад из irradiance-LUT
+        vec3 skyTerm = vec3(clamp(sunElevation / max(uTerrainAmbientSunRef, 1e-3), 0.0, 1.0));
+        #ifdef USE_SKY_AMBIENT
+          skyTerm = mix(skyTerm, skyAmbientTint(muS), uSkyAmbientStrength);
+        #endif
+        vec3 ambient = uTerrainAmbient * skyTerm * occlusion;
+        // Тень облаков на земле — только прямой свет (заполняется под USE_CLOUD_SHADOW)
+        float cloudShadow = 1.0;
+        // Окклюзия на прямом свете — ручкой: 0 — AO не гасит солнце (физика), 1 — прежний вид
+        float directGain = mix(1.0, occlusion, uTerrainOcclusionDirect) * cloudShadow;
+        // Та же форма mix(пол, 1, N·L), что прежде: в полдень при occlusion = 1 и без тени ровно 1
+        vec3 lit = mix(ambient, vec3(directGain), max(NdotLraw, 0.0));
+        dayColor = diffuseSample * albedoMul * mix(vec3(1.0), lit, uTerrainLambert);
       #endif
 
       // Ночная и облачная карты есть не у всех тел. Раньше сэмплеры читались
@@ -395,11 +417,9 @@ export const PlanetShaderTemplate: ShaderProps = {
 
       // Цвет солнца сквозь атмосферу (LUT пропускания): палуба и облака у
       // терминатора теплеют и темнеют синхронно с небом; в зените тинт ≡ 1.
-      // mu_s — по радиальному направлению сферы, не по нормали рельефа.
-      // vLocalLightDirection направлен ОТ солнца к точке (см. вершинник) —
-      // знак минус даёт μ_s = +1 в подсолнечной точке.
+      // muS — по радиальному направлению сферы, не по нормали рельефа (см. выше).
       #ifdef USE_SUN_TINT
-        day *= mix(vec3(1.0), sunTint(dot(normalize(vLocalDir), -normalize(vLocalLightDirection))), uSunTintStrength);
+        day *= mix(vec3(1.0), sunTint(muS), uSunTintStrength);
       #endif
 
       // Огни городов: порог с мягкостью вместо квадрата. Квадрат душил

@@ -84,16 +84,16 @@ describe('PlanetShaderTemplate: деталь гиганта в легаси-ве
     expect(gate).toBeGreaterThan(-1)
   })
 
-  it('вызов в ветке #else (легаси), до dayColor *= albedoMul, с одной выборкой диффуза', () => {
+  it('вызов в ветке #else (легаси), до состава dayColor, с одной выборкой диффуза', () => {
     const elseBranch = frag.indexOf('vec2 uv = vUv;')
     const call = frag.indexOf(
       'applyGiantDetail(albedoMul, normalize(vPosition), uv, dot(diffuseSample, vec3(0.2126, 0.7152, 0.0722)), length(vViewPosition));'
     )
-    const mul = frag.indexOf('dayColor *= albedoMul;')
+    // occlusion в легаси-ветке никем не трогается (≡ 1) — состав бит-в-бит прежний
+    const mul = frag.indexOf('vec3 dayColor = diffuseSample * albedoMul * occlusion;')
     expect(call).toBeGreaterThan(elseBranch)
     expect(mul).toBeGreaterThan(call)
     expect(frag).toContain('vec3 diffuseSample = texture2D(diffuseMap, uv).rgb;')
-    expect(frag).toContain('vec3 dayColor = diffuseSample;')
     // по одной выборке диффуза на ветку UV (терраформ / легаси); выборки dLum живут в чанке, не в шаблоне
     expect(frag.match(/texture2D\(diffuseMap, uv\)/g)).toHaveLength(2)
   })

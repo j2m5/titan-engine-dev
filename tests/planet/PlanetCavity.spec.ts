@@ -1,5 +1,7 @@
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { terrainDetailFunctions } from '@/core/materials/shaders/lib/chunks/TerrainDetail'
+import { terrainMacroDetailFunctions } from '@/core/materials/shaders/lib/chunks/TerrainMacroDetail'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
@@ -23,8 +25,18 @@ describe('PlanetShaderTemplate: декод cavity-канала (строковы
     expect(frag).toContain('texture2D(bumpMap, uv).z * 255.0 - 128.0) / 127.0')
   })
 
-  it('множитель альбедо: clamp(1.0 + uCavityStrength * cavity, 0.0, 2.0)', () => {
-    expect(frag).toContain('albedoMul *= clamp(1.0 + uCavityStrength * cavity, 0.0, 2.0);')
+  it('множитель окклюзии: clamp(1.0 + uCavityStrength * cavity, 0.0, 2.0)', () => {
+    expect(frag).toContain('occlusion *= clamp(1.0 + uCavityStrength * cavity, 0.0, 2.0);')
+  })
+
+  it('окклюзия и цвет — два аккумулятора: cavity, AO детали и тень уступов в occlusion, тинт и fbm — в albedoMul', () => {
+    expect(frag).toContain('float occlusion = 1.0;')
+    expect(frag).toContain('uniform float uTerrainOcclusionDirect;')
+    expect(terrainDetailFunctions).toContain('occlusion *= mix(1.0, aoNative, fade1);')
+    expect(terrainDetailFunctions).toContain('occlusion *= mix(1.0, mix(aoNative, aoSteep, m), fade1);')
+    expect(terrainDetailFunctions).not.toContain('albedoMul *= mix(1.0, aoNative')
+    expect(terrainMacroDetailFunctions).toContain('occlusion *= max(1.0 - TERRACE_SHADE * k * max(tp.x, 0.0), 0.0);')
+    expect(terrainMacroDetailFunctions).toContain('albedoMul *= clamp(1.0 + uMacroStrength * contrast * h, 0.0, 2.0);')
   })
 
   it('выборка cavity стоит ПОСЛЕ perturbNormalFromSlope и ДО applyTerrainDetail', () => {
