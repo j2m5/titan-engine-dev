@@ -73,8 +73,10 @@ export const CLEARANCE_MARGIN_METERS = 5
 export const CLEARANCE_GRID_BASE_SEGMENTS = 1024
 
 /**
- * Версия МОДЕЛИ провиса — не формата и не файла: поднимается при любой правке
- * формул `buildClearanceGrid`/`texelSagRaw`/`buildGeometricErrors`, из-за
+ * Версия МОДЕЛИ провиса и пирамид — не формата и не файла: поднимается при
+ * любой правке формул `buildClearanceGrid`/`texelSagRaw`/`buildGeometricErrors`,
+ * а также правил пирамид узлов (`BLOCK_PAD`, 9-точечный bbox листа, «второй
+ * по величине» размах в `nodeErrorMetersPyramid`, подъём максимумом), из-за
  * которой прежде посчитанные числа перестают означать то же самое.
  *
  * Смысл ровно один: запечённый компаньон (`terrainAuxFormat`) хранит это число

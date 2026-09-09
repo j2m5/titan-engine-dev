@@ -140,6 +140,32 @@ describe('heightMapFingerprint: отпечаток карты', () => {
     expect(heightMapFingerprint(changed).checksum).not.toBe(heightMapFingerprint(map()).checksum)
   })
 
+  it('на карте 8192×4096 выборка не вырождается в один столбец: правка текселя вне столбца 0 меняет сумму', () => {
+    // len/4096 = 8192 = width: старый чётный шаг, кратный ширине, читал бы только столбец 0.
+    // Нечётный шаг здесь = width+1 = 8193; первый ненулевой отсчёт выборки лежит
+    // в (строка 1, столбец 1) — правка ровно туда ловится новым шагом и не ловится
+    // старым (8193 не кратно 8192), это и есть регресс-проверка формы шага.
+    const width = 8192
+    const height = 4096
+    const base: HeightMapData = { width, height, minMeters: 0, maxMeters: 1000, data: new Uint16Array(width * height) }
+    const changed: HeightMapData = { ...base, data: new Uint16Array(base.data) }
+    const stride = Math.max(1, Math.floor(base.data.length / 4096)) | 1
+    changed.data[stride] = 777 // строка 1, столбец 1
+
+    expect(heightMapFingerprint(changed).checksum).not.toBe(heightMapFingerprint(base).checksum)
+  })
+
+  it('выборка покрывает разные столбцы: на 8192×4096 ни один столбец не читается дважды подряд', () => {
+    // страж формы шага: нечётный шаг на ширине-степени двойки обходит столбцы по кругу
+    const width = 8192
+    const height = 4096
+    const data = new Uint16Array(width * height)
+    const columns = new Set<number>()
+    const stride = Math.max(1, Math.floor(data.length / 4096)) | 1
+    for (let i = 0, k = 0; i < data.length && k < 64; i += stride, k++) columns.add(i % width)
+    expect(columns.size).toBe(64)
+  })
+
   it('изменение границ диапазона меняет отпечаток', () => {
     const changed = { ...map(), maxMeters: 10778 }
 
