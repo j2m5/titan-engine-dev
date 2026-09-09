@@ -197,6 +197,11 @@ describe('TerrainDetail: чанк — регистрация и структур
       'void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, vec3 dirLocal, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan)'
     )
   })
+
+  it('люма тинта — Rec.709 в линейном свете, как в статистике средних (detailTextureStats)', () => {
+    expect(terrainDetailFunctions).toContain('dot(diffuseDetail, vec3(0.2126, 0.7152, 0.0722))')
+    expect(terrainDetailFunctions).not.toContain('0.299, 0.587, 0.114')
+  })
 })
 
 describe('TerrainDetail: хук в терраформной ветке шаблона', () => {

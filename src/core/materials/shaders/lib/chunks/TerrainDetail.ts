@@ -323,7 +323,7 @@ export const terrainDetailFunctions = `
     tintOut = vec3(1.0);
     if (uDetailLayerGates.y > 0.0) {
       vec3 diffuseDetail = clamp(triplanarAlbedoDetiled(diff, t, w, l) * norm.x, 0.0, 2.0);
-      float lum = dot(diffuseDetail, vec3(0.299, 0.587, 0.114));
+      float lum = dot(diffuseDetail, vec3(0.2126, 0.7152, 0.0722));
       tintOut = mix(vec3(lum), diffuseDetail, uDetailSaturation) * uDetailBrightness;
     }
   }

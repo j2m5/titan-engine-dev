@@ -26,6 +26,7 @@
     "build:terrain-aux-all": "vite-node scripts/rebuild-terrain-aux.ts --",
     "build:moon-heightmaps": "vite-node scripts/batch-synth-heightmaps.ts --",
     "measure:water-level": "vite-node scripts/measure-water-level.ts --",
+    "measure:detail-stats": "vite-node scripts/measure-detail-stats.ts --",
     "preview": "vite preview",
     "test": "npm run typecheck && vitest"
   },
