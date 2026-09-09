@@ -415,15 +415,6 @@ export const PlanetShaderTemplate: ShaderProps = {
         cloudAlpha *= uCloudOpacity;
       #endif
 
-      vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);
-
-      // Цвет солнца сквозь атмосферу (LUT пропускания): палуба и облака у
-      // терминатора теплеют и темнеют синхронно с небом; в зените тинт ≡ 1.
-      // muS — по радиальному направлению сферы, не по нормали рельефа (см. выше).
-      #ifdef USE_SUN_TINT
-        day *= mix(vec3(1.0), sunTint(muS), uSunTintStrength);
-      #endif
-
       // Огни городов: порог с мягкостью вместо квадрата. Квадрат душил
       // середину и оставлял размытый ореол вокруг агломераций; порог гасит
       // слабую засветку и сохраняет яркие ядра. Тинт по яркости: тусклые
@@ -453,7 +444,25 @@ export const PlanetShaderTemplate: ShaderProps = {
       float nightGate = 1.0 - smoothstep(-0.05, 0.12, terminatorNdotL);
       night *= nightGate;
 
-      vec3 finalColor = mix(night, day, dayFactor);
+      #ifdef USE_TERRAIN_UV
+        // Суша под ламбертом самогасится (пол → 0 за горизонтом, освещённые вершины за
+        // терминатором остаются освещёнными); dayFactor гейтит облака и ночь
+        float landGate = mix(dayFactor, 1.0, uTerrainLambert);
+        vec3 day = cloudColor * dayFactor + dayColor * (1.0 - cloudAlpha) * landGate;
+        // Цвет солнца сквозь атмосферу (LUT пропускания): палуба и облака у
+        // терминатора теплеют и темнеют синхронно с небом; в зените тинт ≡ 1.
+        // muS — по радиальному направлению сферы, не по нормали рельефа (см. выше).
+        #ifdef USE_SUN_TINT
+          day *= mix(vec3(1.0), sunTint(muS), uSunTintStrength);
+        #endif
+        vec3 finalColor = night * (1.0 - dayFactor) + day;
+      #else
+        vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);
+        #ifdef USE_SUN_TINT
+          day *= mix(vec3(1.0), sunTint(muS), uSunTintStrength);
+        #endif
+        vec3 finalColor = mix(night, day, dayFactor);
+      #endif
       finalColor = clamp(finalColor, 0.0, 1.0);
 
       // Единый теневой множитель кольца: гасит и диффуз, и блик ниже

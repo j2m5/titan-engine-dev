@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { terrainLit } from '@/core/materials/shaders/lib/chunks/terrainLightMath'
+import { composeLegacy, composeTerrain, terrainLit, type Vec3 } from '@/core/materials/shaders/lib/chunks/terrainLightMath'
 
 const grey = (v: number): [number, number, number] => [v, v, v]
 
@@ -34,5 +34,25 @@ describe('terrainLit: CPU-зеркало lit = mix(ambient·occ, directGain, max
     const shade = terrainLit({ ndotl: 0, ambient: 0.15, skyTerm: grey(1), occlusion: 1, kDirect: 0.35, cloudShadow: 0.4, lambert: 1 })
     expect(noon).toEqual(grey(0.4))
     expect(shade).toEqual(grey(0.15))
+  })
+})
+
+describe('composeTerrain: терминатор гейтит облака и ночь, суша под ламбертом самогасится', () => {
+  const base = { night: [0.1, 0.1, 0.1] as Vec3, cloudColor: [0.3, 0.3, 0.3] as Vec3, cloudAlpha: 0.5, dayColor: [0.6, 0.6, 0.6] as Vec3 }
+
+  it('lambert = 0 — тождественна легаси mix(night, day, dayFactor)', () => {
+    // toBeCloseTo, не toEqual: a·c + b·c ≠ (a+b)·c в float64 ни при каком порядке
+    // множителей (см. terrainLit выше) — формулы алгебраически тождественны,
+    // бит-в-бит не обязаны
+    for (const dayFactor of [0, 0.3, 0.7, 1]) {
+      const terrain = composeTerrain({ ...base, dayFactor, lambert: 0 })
+      const legacy = composeLegacy({ ...base, dayFactor, lambert: 0 })
+      for (const c of [0, 1, 2]) expect(terrain[c]).toBeCloseTo(legacy[c], 12)
+    }
+  })
+
+  it('lambert = 1 — суша не множится на dayFactor, облака и ночь — множатся', () => {
+    const out = composeTerrain({ ...base, dayFactor: 0.5, lambert: 1 })
+    expect(out[0]).toBeCloseTo(0.1 * 0.5 + 0.3 * 0.5 + 0.6 * 0.5 * 1, 12)
   })
 })
