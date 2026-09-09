@@ -58,7 +58,7 @@ describe('SkyboxBackground: собственный фоновый проход',
       map: new Map()
     } as unknown as ResourceObserver
     const leakDetector = { record: () => null } as unknown as LeakDetector
-    const heightFieldGate = { recompute: vi.fn(), dispose: vi.fn() } as never
+    const heightFieldGate = { recompute: vi.fn(), dispose: vi.fn(), clearNodeCache: vi.fn() } as never
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
 
     const application = new Application(engine, observer, scene, leakDetector, heightFieldGate)
