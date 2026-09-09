@@ -155,15 +155,15 @@ describe('heightMapFingerprint: отпечаток карты', () => {
     expect(heightMapFingerprint(changed).checksum).not.toBe(heightMapFingerprint(base).checksum)
   })
 
-  it('выборка покрывает разные столбцы: на 8192×4096 ни один столбец не читается дважды подряд', () => {
-    // страж формы шага: нечётный шаг на ширине-степени двойки обходит столбцы по кругу
-    const width = 8192
-    const height = 4096
-    const data = new Uint16Array(width * height)
-    const columns = new Set<number>()
-    const stride = Math.max(1, Math.floor(data.length / 4096)) | 1
-    for (let i = 0, k = 0; i < data.length && k < 64; i += stride, k++) columns.add(i % width)
-    expect(columns.size).toBe(64)
+  it('шаг взаимно прост с шириной, не только нечётный: ширина 6000 при шаге 15 читала бы каждый 15-й столбец', () => {
+    // len 60000 → floor(60000/4096) = 14 → |1 = 15, gcd(15, 6000) = 15; следующий взаимно простой — 17
+    const width = 6000
+    const height = 10
+    const base: HeightMapData = { width, height, minMeters: 0, maxMeters: 1000, data: new Uint16Array(width * height) }
+    const changed: HeightMapData = { ...base, data: new Uint16Array(base.data) }
+    changed.data[17] = 777 // строка 0, столбец 17: в выборке шага 17, вне выборки шага 15
+
+    expect(heightMapFingerprint(changed).checksum).not.toBe(heightMapFingerprint(base).checksum)
   })
 
   it('изменение границ диапазона меняет отпечаток', () => {
