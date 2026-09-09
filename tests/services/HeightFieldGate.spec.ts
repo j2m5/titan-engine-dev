@@ -178,6 +178,34 @@ describe('HeightFieldGate: запрос и освобождение карт п�
 
     expect(request).not.toHaveBeenCalled()
   })
+
+  it('узел ищется в сцене один раз, а не на каждом пересчёте (кеш по имени)', () => {
+    const moon: Actor = Actor.find(MOON_ID)!
+    const { gate, observer } = makeStand([moon])
+    const lookup = vi.spyOn(Scene.prototype, 'getObjectByName')
+
+    observeAt(observer, moon, 1)
+    gate.recompute()
+    gate.recompute()
+    gate.recompute()
+
+    expect(lookup).toHaveBeenCalledTimes(1)
+  })
+
+  it('кеш не держит узел, снятый со сцены: после удаления идёт новый поиск', () => {
+    const moon: Actor = Actor.find(MOON_ID)!
+    const { gate, observer } = makeStand([moon])
+    observeAt(observer, moon, 1)
+    gate.recompute()
+
+    const scene = (gate as unknown as { scene: Scene }).scene
+    const node = scene.getObjectByName(bodyName(moon)) as DynamicNode
+    scene.remove(node)
+    const lookup = vi.spyOn(Scene.prototype, 'getObjectByName')
+    gate.recompute()
+
+    expect(lookup).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('HeightFieldGate: пересбор снимка наблюдения после свапа поверхности', () => {

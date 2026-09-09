@@ -1,4 +1,4 @@
-import type { Scene, WebGLRenderer } from 'three'
+import type { Object3D, Scene, WebGLRenderer } from 'three'
 import type { Actor } from '@/core/models/Actor'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -28,6 +28,8 @@ const MIN_DISTANCE: number = 1e-9
  * instanceof.
  */
 export class HeightFieldGate {
+  private readonly nodeCache: Map<string, DynamicNode> = new Map()
+
   public constructor(
     private sceneObserver: SceneObserver,
     private scene: Scene,
@@ -156,13 +158,35 @@ export class HeightFieldGate {
   }
 
   /**
-   * Узел тела по имени. getObjectByName идёт в глубину от корня, поэтому
-   * DynamicNode планеты находится раньше своих детей; instanceof отсекает
-   * одноимённые атмосферу и уровни LOD.
+   * Узел тела по имени. getObjectByName — полный обход сцены, а гейт зовёт его
+   * на каждое тело дважды в секунду; результат кешируется по имени. Кеш
+   * валиден, пока узел висит в этой сцене (смена сценария пересобирает
+   * дерево — отвязанный узел отбрасывается и ищется заново). instanceof
+   * отсекает одноимённые атмосферу и уровни LOD.
    */
   private findNode(name: string): DynamicNode | undefined {
+    const cached = this.nodeCache.get(name)
+
+    if (cached && this.isAttached(cached)) return cached
+
+    this.nodeCache.delete(name)
     const found = this.scene.getObjectByName(name)
 
-    return found instanceof DynamicNode ? found : undefined
+    if (!(found instanceof DynamicNode)) return undefined
+
+    this.nodeCache.set(name, found)
+
+    return found
+  }
+
+  private isAttached(node: DynamicNode): boolean {
+    let current: Object3D | null = node
+
+    while (current) {
+      if (current === this.scene) return true
+      current = current.parent
+    }
+
+    return false
   }
 }
