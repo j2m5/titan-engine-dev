@@ -26,24 +26,16 @@ describe('SlopeNormal: попиксельная нормаль из slope-кар
     expect(slopeNormalFunctions).toContain('return surfNormal; // полюс: тангенс вырожден')
   })
 
-  it('перегрузка с out vec2 slopeOut отдаёт декодированный вектор наружу без второй выборки; 3-арг версия — тонкая обёртка', () => {
+  it('ровно одна форма функции — с extraSlope и out slopeOut; обёртки без вызывающих сняты', () => {
+    const declarations = (slopeNormalFunctions.match(/vec3 perturbNormalFromSlope\(/g) ?? []).length
+    expect(declarations).toBe(1)
     expect(slopeNormalFunctions).toContain(
-      'vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv, out vec2 slopeOut)'
+      'vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv, vec2 extraSlope, out vec2 slopeOut)'
     )
     expect(slopeNormalFunctions).toContain('slopeOut = slope;')
-    expect(slopeNormalFunctions).toContain('vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv) {')
-    expect(slopeNormalFunctions).toContain('return perturbNormalFromSlope(surfNormal, east, uv, slopeUnused);')
-    // ровно одна текстурная выборка на весь чанк — перегрузка её не дублирует
+    // ровно одна текстурная выборка на весь чанк
     const sampleCalls = (slopeNormalFunctions.match(/texture2D\(bumpMap, uv\)/g) ?? []).length
     expect(sampleCalls).toBe(1)
-  })
-
-  it('out-перегрузка (без extraSlope) — одно тело: делегирует 4-арг перегрузке с vec2(0.0)', () => {
-    expect(slopeNormalFunctions).toContain(
-      'return perturbNormalFromSlope(surfNormal, east, uv, vec2(0.0), slopeOut);'
-    )
-    // старое тело (decoded = slope напрямую, без сложения) в чанке больше не встречается
-    expect(slopeNormalFunctions).not.toContain('slope = (texture2D(bumpMap, uv).xy')
   })
 
   it('шаблон зовёт perturbNormalFromSlope локальными аргументами под USE_SLOPE, out-вариантом (без второй выборки bumpMap)', () => {

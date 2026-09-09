@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Vector3 } from 'three'
-import { CUBE_FACES, cubeFaceDirection, TERRAIN_PATCH_DEPTH, TERRAIN_PATCH_SEGMENTS } from '@/core/terrain/cubeSphere'
+import { CUBE_FACES, cubeFaceDirection, TERRAIN_PATCH_SEGMENTS } from '@/core/terrain/cubeSphere'
 
 describe('cubeFaceDirection: равноугольная развёртка куба', () => {
   it('центр каждой грани — её нормаль', () => {
@@ -53,9 +53,7 @@ describe('cubeFaceDirection: равноугольная развёртка ку�
     }
   })
 
-  it('константы каркаса: глубина 3, сегментов 64', () => {
-    expect(TERRAIN_PATCH_DEPTH).toBe(3)
+  it('константа каркаса: сегментов 64 (65×65 вершин)', () => {
     expect(TERRAIN_PATCH_SEGMENTS).toBe(64)
-    expect(6 * 4 ** TERRAIN_PATCH_DEPTH).toBe(384)
   })
 })

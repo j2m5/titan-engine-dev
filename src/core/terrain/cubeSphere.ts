@@ -1,8 +1,5 @@
 import { Vector3 } from 'three'
 
-/** Глубина статической кубосферы: 6·4³ = 384 патча (этап 3а; квадродерево 3б сделает её переменной). */
-export const TERRAIN_PATCH_DEPTH = 3
-
 /** Квадов на сторону патча (65×65 вершин) — размер из роадмапа. */
 export const TERRAIN_PATCH_SEGMENTS = 64
 

@@ -347,7 +347,6 @@ export const PlanetShaderTemplate: ShaderProps = {
       // Угол солнца над геометрическим горизонтом (радиальная нормаль сферы) —
       // терминатор суши и масштаб пола ламберта; рельеф сюда не входит.
       float sunElevation = dot(normalize(vNormal), lightDirection);
-      float lightIntensity = max(NdotLraw, 0.0);
 
       vec3 dayColor = diffuseSample;
       dayColor *= albedoMul;

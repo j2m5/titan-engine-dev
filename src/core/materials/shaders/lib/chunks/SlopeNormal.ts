@@ -13,19 +13,11 @@
  * север; R-канал — уклон на восток, G — на север. bumpScale —
  * художественный множитель, 1 = физически честно.
  *
- * Перегрузка (GLSL ES поддерживает overloading по сигнатуре параметров) с
- * out vec2 slopeOut — отдаёт наружу уже декодированный вектор уклона (до
- * умножения на bumpScale/проекции на TBN), чтобы вызывающая сторона (см.
- * PlanetShaderTemplate — маска зон материала TerrainDetail) могла взять
- * length(slopeOut) без ВТОРОЙ выборки той же текстуры под тем же uv. У
- * полюса (len < 1e-4, тангенс вырожден) slopeOut = vec2(0.0) - согласовано
- * с семантикой «нет уклона», ничего не декодировано и не должно быть.
- *
- * Перегрузка с vec2 extraSlope (арка "средняя полоса B") складывает наклон
- * геометрии полосы (атрибут midTilt, интерполирован по вершинам - в пикселе
- * шума нет) с декодированным вектором ДО наклона нормали - одна нормаль на
- * сумму, а не два независимых наклона. out-перегрузка (без extraSlope) и
- * 3-аргументная - тонкие обёртки над ней (vec2(0.0), одно тело).
+ * out vec2 slopeOut отдаёт наружу декодированный вектор уклона (до bumpScale
+ * и проекции на TBN) — маска зон материала берёт length(slopeOut) без второй
+ * выборки. extraSlope — наклон геометрии полосы B (атрибут midTilt, tan в
+ * базисе T/B), складывается с декодом ДО наклона нормали: одна нормаль на
+ * сумму. У полюса (len < 1e-4) slopeOut = vec2(0.0).
  */
 export const slopeNormalUniforms = `uniform float uSlopeRange;`
 
@@ -47,14 +39,5 @@ export const slopeNormalFunctions = `
     slopeOut = slope;
 
     return normalize(surfNormal - bumpScale * (slope.x * T + slope.y * B));
-  }
-
-  vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv, out vec2 slopeOut) {
-    return perturbNormalFromSlope(surfNormal, east, uv, vec2(0.0), slopeOut);
-  }
-
-  vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv) {
-    vec2 slopeUnused;
-    return perturbNormalFromSlope(surfNormal, east, uv, slopeUnused);
   }
 `

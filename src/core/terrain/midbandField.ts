@@ -5,7 +5,6 @@ import type { MidbandParams } from './midbandParams'
 export const MIDBAND_ASPECT = 0.03
 export const MIDBAND_OCTAVES = 3
 export const MIDBAND_LACUNARITY = 2
-export const MIDBAND_GAIN = 0.5
 export const MIDBAND_ENVELOPE_MAX = 2
 /** Домен варпа — вдвое грубее базовой октавы. */
 const WARP_FREQUENCY = 0.5
@@ -89,7 +88,7 @@ export class MidbandField {
     for (let i = 0; i < MIDBAND_OCTAVES; i++) {
       const lambda = baseWavelengthMeters / MIDBAND_LACUNARITY ** i
       wavelengths.push(lambda)
-      amplitudes.push(MIDBAND_ASPECT * lambda) // = A₀·GAIN^i при GAIN = 1/LACUNARITY
+      amplitudes.push(MIDBAND_ASPECT * lambda) // амплитуда ∝ длине волны: A_i = ASPECT·λ_i
     }
     this.wavelengthsMeters = wavelengths
     this.amplitudesMeters = amplitudes

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { simplexNoise3 } from '@/core/terrain/simplexNoise3'
+import { simplexNoise3, snoiseGrad3, type NoiseGrad3 } from '@/core/terrain/simplexNoise3'
 import { proceduralField } from '@/core/terrain/proceduralSurfaceField'
 import { seedOffset, type ProceduralSurfaceParams } from '@/core/terrain/proceduralSurfaceParams'
 
@@ -25,6 +25,16 @@ describe('simplexNoise3 (порт Ашимы)', () => {
     const a = simplexNoise3(1.234, 2.345, 3.456)
     const b = simplexNoise3(1.2341, 2.345, 3.456)
     expect(Math.abs(a - b)).toBeLessThan(0.01)
+  })
+
+  it('бит-в-бит равен значению snoiseGrad3 — одно тело шума на оба потребителя', () => {
+    const out: NoiseGrad3 = { value: 0, dx: 0, dy: 0, dz: 0 }
+    for (let i = 0; i < 5000; i++) {
+      const x = Math.sin(i) * 7 + i * 0.001
+      const y = Math.cos(i * 1.3) * 7
+      const z = i * 0.011 - 100
+      expect(simplexNoise3(x, y, z)).toBe(snoiseGrad3(x, y, z, out).value)
+    }
   })
 })
 
