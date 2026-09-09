@@ -33,10 +33,23 @@ describe('PlanetShaderTemplate: декод cavity-канала (строковы
     expect(frag).toContain('float occlusion = 1.0;')
     expect(frag).toContain('uniform float uTerrainOcclusionDirect;')
     expect(terrainDetailFunctions).toContain('occlusion *= mix(1.0, aoNative, fade1);')
+    expect(terrainDetailFunctions).toContain('occlusion *= mix(1.0, aoSteep, fade1);')
     expect(terrainDetailFunctions).toContain('occlusion *= mix(1.0, mix(aoNative, aoSteep, m), fade1);')
     expect(terrainDetailFunctions).not.toContain('albedoMul *= mix(1.0, aoNative')
+    expect(terrainDetailFunctions).not.toContain('albedoMul *= mix(1.0, aoSteep')
     expect(terrainMacroDetailFunctions).toContain('occlusion *= max(1.0 - TERRACE_SHADE * k * max(tp.x, 0.0), 0.0);')
     expect(terrainMacroDetailFunctions).toContain('albedoMul *= clamp(1.0 + uMacroStrength * contrast * h, 0.0, 2.0);')
+  })
+
+  it('потолок окклюзии [0, 2] — после всех слоёв затенения и ДО света', () => {
+    // cavity гребня (до 1 + strength) множится на AO детали, клампленный в
+    // sampleDetailSet на 2: без потолка произведение уходит выше 2
+    const clampIdx = frag.indexOf('occlusion = clamp(occlusion, 0.0, 2.0);')
+    const detailIdx = frag.indexOf('applyTerrainDetail(')
+    const lightIdx = frag.indexOf('vec3 skyTerm')
+    expect(detailIdx).toBeGreaterThan(-1)
+    expect(clampIdx).toBeGreaterThan(detailIdx)
+    expect(lightIdx).toBeGreaterThan(clampIdx)
   })
 
   it('выборка cavity стоит ПОСЛЕ perturbNormalFromSlope и ДО applyTerrainDetail', () => {

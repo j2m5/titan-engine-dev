@@ -244,10 +244,10 @@ export const PlanetShaderTemplate: ShaderProps = {
     void main() {
       ${ShaderChunk['logdepthbuf_fragment']}
       vec3 normal = normalize(vNormal);
-      // Множитель альбедо от терраформного детального слоя (задача 4) —
-      // применяется на месте выборки dayColor ниже, дальше самого UV-ветвления
+      // albedoMul — ЦВЕТ (fbm полосы, тинт детали, мокрое, деталь гигантов)
+      // occlusion — ЗАТЕНЕНИЕ (cavity, AO детали, уступы): амбиент целиком, прямой свет ручкой
       vec3 albedoMul = vec3(1.0);
-      float occlusion = 1.0; // геометрическое затенение: cavity, AO детали, уступы — гасит амбиент целиком, прямой свет ручкой
+      float occlusion = 1.0;
       float wetEdge = 0.0;
       float glintEdge = 0.0;
 
@@ -335,6 +335,8 @@ export const PlanetShaderTemplate: ShaderProps = {
         #ifdef USE_TERRAIN_DETAIL
           applyTerrainDetail(nLocal, albedoMul, occlusion, dirLocal, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);
         #endif
+
+        occlusion = clamp(occlusion, 0.0, 2.0); // гребни cavity × AO детали уходят выше 2 — единый потолок перед светом
 
         // Единственный переход тело-локальной нормали в view-пространство —
         // применяется уже ПОСЛЕ детального слоя (нормаль слоя тоже body-локальна)

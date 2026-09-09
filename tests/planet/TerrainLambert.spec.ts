@@ -33,13 +33,13 @@ describe('PlanetShaderTemplate: ламберт суши (спайк, USE_TERRAIN
   it('юниформы объявлены, множитель стоит на dayColor — ДО состава с облаками', () => {
     expect(frag).toContain('uniform float uTerrainLambert;')
     expect(frag).toContain('uniform float uTerrainAmbient;')
-    const albedoIdx = frag.indexOf('float occlusion = 1.0;')
+    const occlusionIdx = frag.indexOf('float occlusion = 1.0;')
     const lambertIdx = frag.indexOf(
       'dayColor = diffuseSample * albedoMul * mix(vec3(1.0), lit, uTerrainLambert);'
     )
     const dayIdx = frag.indexOf('vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);')
-    expect(albedoIdx).toBeGreaterThan(-1)
-    expect(lambertIdx).toBeGreaterThan(albedoIdx)
+    expect(occlusionIdx).toBeGreaterThan(-1)
+    expect(lambertIdx).toBeGreaterThan(occlusionIdx)
     expect(dayIdx).toBeGreaterThan(lambertIdx)
   })
 
