@@ -179,7 +179,7 @@ describe('TerrainDetail: чанк — регистрация и структур
     // sampleDetiled не за fade-гейтом — гейт только вокруг ВЫЗОВОВ в applyTerrainDetail).
     const applyStart = terrainDetailFunctions.indexOf('void applyTerrainDetail(')
     const body = terrainDetailFunctions.slice(applyStart)
-    const gateIdx = body.indexOf('if (')
+    const gateIdx = body.indexOf('if (max(fade1, fade2) > 0.0) {')
     const firstSampleIdx = body.indexOf('triplanar')
     expect(gateIdx).toBeGreaterThan(-1)
     expect(firstSampleIdx).toBeGreaterThan(-1)

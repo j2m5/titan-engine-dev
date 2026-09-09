@@ -69,11 +69,11 @@ class HeightFieldStorage {
 
   /**
    * Сколько heap занимает загруженная карта — тело плюс её запечённый
-   * компаньон, если он приехал (сетка провиса, ε-пирамида, пирамида
-   * максимумов узлов — все три живут вью на буфере компаньона и памятью
-   * являются такой же, как само тело). `undefined` — путь не загружен или в
-   * полёте: размер известен только по факту, и политика бюджета считает такой
-   * путь по максимуму (см. ASSUMED_HEIGHT_MAP_BYTES).
+   * компаньон, если он приехал (сетка провиса, ε-пирамида, пирамиды
+   * максимумов и шероховатости узлов — все четыре живут вью на буфере
+   * компаньона и памятью являются такой же, как само тело). `undefined` —
+   * путь не загружен или в полёте: размер известен только по факту, и
+   * политика бюджета считает такой путь по максимуму (см. ASSUMED_HEIGHT_MAP_BYTES).
    */
   public bytesOf(path: string): number | undefined {
     const map: HeightMapData | undefined = this.maps.get(path)
@@ -88,7 +88,8 @@ class HeightFieldStorage {
         ? 0
         : aux.clearanceGrid.byteLength +
           aux.levelErrorMeters.byteLength +
-          (aux.nodeMaxHeightMetersPyramid?.byteLength ?? 0))
+          (aux.nodeMaxHeightMetersPyramid?.byteLength ?? 0) +
+          (aux.nodeErrorMetersPyramid?.byteLength ?? 0))
     )
   }
 

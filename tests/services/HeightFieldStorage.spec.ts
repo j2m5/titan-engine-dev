@@ -285,7 +285,8 @@ describe('HeightFieldStorage: учёт занятой памяти', () => {
       map.data.byteLength +
         aux.clearanceGrid.byteLength +
         aux.levelErrorMeters.byteLength +
-        aux.nodeMaxHeightMetersPyramid!.byteLength
+        aux.nodeMaxHeightMetersPyramid!.byteLength +
+        aux.nodeErrorMetersPyramid!.byteLength
     )
   })
 

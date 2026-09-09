@@ -11,7 +11,7 @@ import { resourceStorage } from '@/core/services/ResourceStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { UpdateContext } from '@/core/UpdateContext'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
-import type { TerrainNodeAddress } from '@/core/terrain/terrainQuadtreeSelect'
+import { TERRAIN_QUADTREE_MAX_LEVEL, terrainNodeKey, type TerrainNodeAddress } from '@/core/terrain/terrainQuadtreeSelect'
 
 // Луна (actorId 19) — тело с height-ресурсом
 function moon(): Actor {
@@ -61,17 +61,40 @@ function makeCtx(altKm: number): UpdateContext {
   return { delta: 0.016, epoch: 0, elapsed: 0, camera } as UpdateContext
 }
 
-// покрытие: сумма 4^{-(level-1)} по ВИДИМЫМ мешам — перекрытие родитель+дети
-// допустимо (инвариант «без дыр» требует только ≥ полного покрытия сферы = 24)
-function visibleLeavesCoverage(sphere: TerrainSphere): number {
-  let sum = 0
+// покрытие по МНОЖЕСТВУ адресов: ячейка L1 покрыта, если видим её меш либо
+// покрыты все четыре ребёнка (рекурсивно до потолка). Сумма площадей это не
+// ловила: перекрытие родитель+дети в одном месте компенсировало дыру в другом
+function visibleAddressKeys(sphere: TerrainSphere): Set<number> {
+  const keys = new Set<number>()
   for (const child of sphere.children) {
     if (!(child instanceof Mesh) || !child.visible) continue
     const address = child.userData.terrainAddress as TerrainNodeAddress | undefined
-    if (!address) continue
-    sum += 4 ** -(address.level - 1)
+    if (address) keys.add(terrainNodeKey(address))
   }
-  return sum
+  return keys
+}
+
+function covered(keys: Set<number>, face: number, level: number, i: number, j: number): boolean {
+  if (keys.has(terrainNodeKey({ face, level, i, j }))) return true
+  if (level >= TERRAIN_QUADTREE_MAX_LEVEL) return false
+  for (let a = 0; a < 2; a++) {
+    for (let b = 0; b < 2; b++) {
+      if (!covered(keys, face, level + 1, 2 * i + a, 2 * j + b)) return false
+    }
+  }
+  return true
+}
+
+function sphereFullyCovered(sphere: TerrainSphere): boolean {
+  const keys = visibleAddressKeys(sphere)
+  for (let face = 0; face < 6; face++) {
+    for (let i = 0; i < 2; i++) {
+      for (let j = 0; j < 2; j++) {
+        if (!covered(keys, face, 1, i, j)) return false
+      }
+    }
+  }
+  return true
 }
 
 describe('TerrainSphere: динамическое квадродерево патчей', { timeout: 30000 }, () => {
@@ -103,8 +126,7 @@ describe('TerrainSphere: динамическое квадродерево па�
     const counts: number[] = []
     for (let f = 0; f < 120; f++) {
       sphere.updateObject(ctx)
-      const cover = visibleLeavesCoverage(sphere)
-      expect(cover).toBeGreaterThanOrEqual(24 - 1e-9)
+      expect(sphereFullyCovered(sphere)).toBe(true)
       counts.push(sphere.children.filter((c) => c instanceof Mesh && c.visible).length)
     }
     expect(counts.at(-1)!).toBeGreaterThan(24)
