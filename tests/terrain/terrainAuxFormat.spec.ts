@@ -149,7 +149,7 @@ describe('heightMapFingerprint: отпечаток карты', () => {
     const height = 4096
     const base: HeightMapData = { width, height, minMeters: 0, maxMeters: 1000, data: new Uint16Array(width * height) }
     const changed: HeightMapData = { ...base, data: new Uint16Array(base.data) }
-    const stride = Math.max(1, Math.floor(base.data.length / 4096)) | 1
+    const stride = 8193 // шаг 8192 | 1 = 8193, gcd(8193, 8192) = 1 — первая выборка после нуля
     changed.data[stride] = 777 // строка 1, столбец 1
 
     expect(heightMapFingerprint(changed).checksum).not.toBe(heightMapFingerprint(base).checksum)

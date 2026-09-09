@@ -55,6 +55,11 @@ export class HeightFieldGate {
     this.sceneObserver.unsubscribe('ClosestChange', this.onClosestChange)
   }
 
+  /** Сброс кеша узлов при разборке сценария — иначе выброшенные узлы (и их пулы патчей) живут в куче до следующего поиска того же имени. */
+  public clearNodeCache(): void {
+    this.nodeCache.clear()
+  }
+
   public recompute(): void {
     const candidates: HeightMapCandidate[] = []
     // Путь → ВСЕ узлы, которые его просят: одна карта высот легально шарится
@@ -161,8 +166,9 @@ export class HeightFieldGate {
    * Узел тела по имени. getObjectByName — полный обход сцены, а гейт зовёт его
    * на каждое тело дважды в секунду; результат кешируется по имени. Кеш
    * валиден, пока узел висит в этой сцене (смена сценария пересобирает
-   * дерево — отвязанный узел отбрасывается и ищется заново). instanceof
-   * отсекает одноимённые атмосферу и уровни LOD.
+   * дерево — отвязанный узел отбрасывается и ищется заново). getObjectByName
+   * идёт в глубину от корня, поэтому DynamicNode планеты находится раньше
+   * своих детей; instanceof отсекает одноимённые атмосферу и уровни LOD.
    */
   private findNode(name: string): DynamicNode | undefined {
     const cached = this.nodeCache.get(name)

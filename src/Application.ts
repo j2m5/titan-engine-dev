@@ -41,6 +41,10 @@ class Application {
     this.engine.dispose()
     resourceStorage.deleteAllTextures()
     heightFieldStorage.clear()
+    // Иначе выброшенные узлы (и их пулы патчей TerrainPatchPool) живут в
+    // куче до следующего поиска того же имени — гейт синглтон-сессии, а
+    // не пересоздаётся при смене сценария.
+    this.heightFieldGate.clearNodeCache()
     // Инвариант владения: генератор рантайм-диффуза процедурных тел — общий
     // синглтон сцены (см. AppServiceProvider), а не собственность акторов —
     // его render target'ы разбирает владелец, здесь же, а не сами тела.

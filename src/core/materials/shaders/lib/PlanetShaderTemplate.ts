@@ -279,7 +279,7 @@ export const PlanetShaderTemplate: ShaderProps = {
         // (mask смотрит только на slopeTan, см. докстроку чанка).
         float terrainSlopeTan = 0.0;
         #ifdef USE_SLOPE
-          // out-перегрузка perturbNormalFromSlope (SlopeNormal.ts) отдаёт уже
+          // out-параметр perturbNormalFromSlope (SlopeNormal.ts) отдаёт уже
           // декодированный вектор уклона — ВТОРОЙ выборки той же текстуры
           // под тем же uv здесь больше нет (не macroSlope ниже: тот же
           // формат байта, но отдельный путь под другим гейтом).

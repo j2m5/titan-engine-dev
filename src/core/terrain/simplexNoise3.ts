@@ -13,7 +13,7 @@ function mod289(x: number): number {
 }
 
 function permute(x: number): number {
-  return mod289(((x * 34.0) + 1.0) * x)
+  return mod289((x * 34.0 + 1.0) * x)
 }
 
 function taylorInvSqrt(r: number): number {
@@ -34,7 +34,7 @@ export interface NoiseGrad3 {
 
 /**
  * snoise(vec3) + аналитический градиент — порт GLSL `snoiseGrad` (Noise.ts, ~строка 344).
- * value бит-в-бит равен simplexNoise3 (тот же код до m); градиент — формула
+ * value — значение шума (обёртка simplexNoise3 отдаёт его без градиента); градиент — формула
  * Ashima/Gustavson: 42·Σ( -8·m³·(p·x)·x + m⁴·p ) по четырём вершинам симплекса. Пишет в out.
  */
 export function snoiseGrad3(vx: number, vy: number, vz: number, out: NoiseGrad3): NoiseGrad3 {
@@ -182,10 +182,18 @@ export function snoiseGrad3(vx: number, vy: number, vz: number, out: NoiseGrad3)
   const a1_3 = b1_3 + s1_3 * sh3
 
   // p0 = vec3(a0.xy, h.x); p1 = vec3(a0.zw, h.y); p2 = vec3(a1.xy, h.z); p3 = vec3(a1.zw, h.w)
-  let p0x = a0_0, p0y = a0_1, p0z = h0
-  let p1x = a0_2, p1y = a0_3, p1z = h1
-  let p2x = a1_0, p2y = a1_1, p2z = h2
-  let p3x = a1_2, p3y = a1_3, p3z = h3
+  let p0x = a0_0,
+    p0y = a0_1,
+    p0z = h0
+  let p1x = a0_2,
+    p1y = a0_3,
+    p1z = h1
+  let p2x = a1_0,
+    p2y = a1_1,
+    p2z = h2
+  let p3x = a1_2,
+    p3y = a1_3,
+    p3z = h3
 
   // Normalise gradients
   const norm0 = taylorInvSqrt(p0x * p0x + p0y * p0y + p0z * p0z)
@@ -193,10 +201,18 @@ export function snoiseGrad3(vx: number, vy: number, vz: number, out: NoiseGrad3)
   const norm2 = taylorInvSqrt(p2x * p2x + p2y * p2y + p2z * p2z)
   const norm3 = taylorInvSqrt(p3x * p3x + p3y * p3y + p3z * p3z)
 
-  p0x *= norm0; p0y *= norm0; p0z *= norm0
-  p1x *= norm1; p1y *= norm1; p1z *= norm1
-  p2x *= norm2; p2y *= norm2; p2z *= norm2
-  p3x *= norm3; p3y *= norm3; p3z *= norm3
+  p0x *= norm0
+  p0y *= norm0
+  p0z *= norm0
+  p1x *= norm1
+  p1y *= norm1
+  p1z *= norm1
+  p2x *= norm2
+  p2y *= norm2
+  p2z *= norm2
+  p3x *= norm3
+  p3y *= norm3
+  p3z *= norm3
 
   // Mix final noise value
   const mu0 = Math.max(0.6 - (x0x * x0x + x0y * x0y + x0z * x0z), 0.0) // m (не в квадрате)

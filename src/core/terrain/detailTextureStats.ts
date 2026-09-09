@@ -8,8 +8,9 @@
  * декод); meanAo — средний R канала ARM (линейный, без colorSpace). Считано
  * по файлам storage рецептом `scripts/lib/detailTextureStats.ts`: ресайз
  * 512², люма 0.2126/0.7152/0.0722 в линейном свете, среднее — с учётом
- * клампа шейдера [0, 2] (`clampedMean`), иначе яркий хвост срезался и
- * среднее слоя было < 1 — страж tests/terrain/detailTextureStats.spec.ts
+ * клампа шейдера [0, 2] на КАЖДЫЙ канал diff/norm ДО люмы (`clampedLumaMean`
+ * для meanLum, `clampedMean` для скалярного meanAo), иначе яркий хвост
+ * срезался и среднее слоя было < 1 — страж tests/terrain/detailTextureStats.spec.ts
  * пересчитывает при наличии файлов. Неизвестный путь — 1 (нормировки нет,
  * поведение как раньше).
  */
@@ -25,7 +26,7 @@ export const DETAIL_TEXTURE_STATS: Readonly<Record<string, Readonly<Partial<Deta
   'terrain/ice_arm.webp': { meanAo: 0.942 },
   'terrain/sand_diff.webp': { meanLum: 0.342 },
   'terrain/sand_arm.webp': { meanAo: 0.882 },
-  'terrain/volcanic_diff.webp': { meanLum: 0.090 },
+  'terrain/volcanic_diff.webp': { meanLum: 0.09 },
   'terrain/volcanic_arm.webp': { meanAo: 0.928 }
 }
 

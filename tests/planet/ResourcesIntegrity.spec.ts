@@ -2,6 +2,8 @@ import { Actors, ActorResource, Resources, RenderingObjects } from '@storage/dat
 import { IActor, IActorResource, IResource, IRenderingObject } from '@/core/models/types'
 import { isValidSlopeRange, SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 
+const RING_CATEGORY_ID = 6 // categories.ts: alias "ring"
+
 describe('Целостность ресурсов планет', () => {
   // Прежний страж «у тела с картой высот не осталось planets/-bump» поглощён
   // стражем ниже: тип bump снят целиком, ни одной строки с ним нет в принципе.
@@ -105,7 +107,7 @@ describe('Целостность ресурсов планет', () => {
       ActorResource.filter((link: IActorResource): boolean => heightIds.has(link.resourceId)).map((l) => l.actorId)
     )
     const ringParentsWithHeight = Actors.filter(
-      (a: IActor): boolean => a.categoryId === 6 && a.parentId !== null && heightOwners.has(a.parentId)
+      (a: IActor): boolean => a.categoryId === RING_CATEGORY_ID && a.parentId !== null && heightOwners.has(a.parentId)
     )
     expect(ringParentsWithHeight).toEqual([])
   })

@@ -38,7 +38,7 @@ describe('SlopeNormal: попиксельная нормаль из slope-кар
     expect(sampleCalls).toBe(1)
   })
 
-  it('шаблон зовёт perturbNormalFromSlope локальными аргументами под USE_SLOPE, out-вариантом (без второй выборки bumpMap)', () => {
+  it('шаблон зовёт perturbNormalFromSlope локальными аргументами под USE_SLOPE, out-параметром (без второй выборки bumpMap)', () => {
     expect(PlanetShaderTemplate.fragmentShader).toContain('#ifdef USE_SLOPE')
     // терраформная ветка (USE_SLOPE) зовёт локальными аргументами — один
     // normalMatrix применяется в конце ветки (см. FragmentUv.spec); легаси

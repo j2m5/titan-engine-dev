@@ -8,7 +8,7 @@ import type { ResourceObserver } from '@/core/services/ResourceObserver'
 import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
 
 const leakDetector = { record: () => null } as unknown as LeakDetector
-const heightFieldGate = { recompute: vi.fn(), dispose: vi.fn() } as never
+const heightFieldGate = { recompute: vi.fn(), dispose: vi.fn(), clearNodeCache: vi.fn() } as never
 
 describe('Application.teardown', () => {
   beforeEach(() => {
@@ -26,6 +26,18 @@ describe('Application.teardown', () => {
     new Application(engine, observer, new Scene(), leakDetector, heightFieldGate).teardown()
 
     expect(order).toEqual(['engine', 'textures'])
+  })
+
+  it('сбрасывает кеш узлов гейта карт высот', () => {
+    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    const observer = {} as unknown as ResourceObserver
+    vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
+    const clearNodeCache = vi.fn()
+    const gate = { recompute: vi.fn(), dispose: vi.fn(), clearNodeCache } as never
+
+    new Application(engine, observer, new Scene(), leakDetector, gate).teardown()
+
+    expect(clearNodeCache).toHaveBeenCalledTimes(1)
   })
 
   it('dispose() выполняет ту же разборку', () => {

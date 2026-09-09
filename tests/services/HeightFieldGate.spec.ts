@@ -192,6 +192,19 @@ describe('HeightFieldGate: запрос и освобождение карт п�
     expect(lookup).toHaveBeenCalledTimes(1)
   })
 
+  it('clearNodeCache сбрасывает кеш: следующий пересчёт ищет узел заново', () => {
+    const moon: Actor = Actor.find(MOON_ID)!
+    const { gate, observer } = makeStand([moon])
+    observeAt(observer, moon, 1)
+    gate.recompute()
+    const lookup = vi.spyOn(Scene.prototype, 'getObjectByName')
+
+    gate.clearNodeCache()
+    gate.recompute()
+
+    expect(lookup).toHaveBeenCalledTimes(1)
+  })
+
   it('кеш не держит узел, снятый со сцены: после удаления идёт новый поиск', () => {
     const moon: Actor = Actor.find(MOON_ID)!
     const { gate, observer } = makeStand([moon])
