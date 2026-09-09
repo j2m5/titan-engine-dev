@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { composeLegacy, composeTerrain, terrainLit, type Vec3 } from '@/core/materials/shaders/lib/chunks/terrainLightMath'
+import {
+  cloudShadowUvOffset,
+  composeLegacy,
+  composeTerrain,
+  terrainLit,
+  type Vec3
+} from '@/core/materials/shaders/lib/chunks/terrainLightMath'
 
 const grey = (v: number): [number, number, number] => [v, v, v]
 
@@ -54,5 +60,22 @@ describe('composeTerrain: терминатор гейтит облака и но
   it('lambert = 1 — суша не множится на dayFactor, облака и ночь — множатся', () => {
     const out = composeTerrain({ ...base, dayFactor: 0.5, lambert: 1 })
     expect(out[0]).toBeCloseTo(0.1 * 0.5 + 0.3 * 0.5 + 0.6 * 0.5 * 1, 12)
+  })
+})
+
+describe('cloudShadowUvOffset: сдвиг тени облака по солнцу', () => {
+  it('солнце в зените — смещения нет', () => {
+    expect(cloudShadowUvOffset([0, 0], 1, 0.003, 3.19, 1)).toEqual({ du: 0, dv: 0 })
+  })
+
+  it('солнце на востоке под 45°: du = h/(2πR cosφ), dv = 0', () => {
+    const s = Math.SQRT1_2
+    const { du, dv } = cloudShadowUvOffset([s, 0], s, 0.003, 3.19, 1)
+    expect(du).toBeCloseTo(0.003 / (2 * Math.PI * 3.19), 12)
+    expect(dv).toBe(0)
+  })
+
+  it('у терминатора tan θ ограничен: μ_s = 0.01 даёт то же, что 0.15', () => {
+    expect(cloudShadowUvOffset([1, 0], 0.01, 0.003, 3.19, 1)).toEqual(cloudShadowUvOffset([1, 0], 0.15, 0.003, 3.19, 1))
   })
 })

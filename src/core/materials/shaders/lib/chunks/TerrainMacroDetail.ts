@@ -6,8 +6,8 @@
  * Подчинение данным: амплитуда по |slope| и cavity — оба приходят параметрами
  * от хоста (чанк slope-карту не читает; cavity = 0 без USE_CAVITY), варп домена по
  * производной яркости диффуза вдоль меридиана. Октавы гаснут по экранному
- * следу. Требует #include <noiseFunctions> и объявления diffuseMap хостом
- * до include. CPU-зеркало: terrainMacroDetailMath.ts.
+ * следу. Требует #include <noiseFunctions> и объявления diffuseMap и
+ * uBodyRadiusUnits хостом до include. CPU-зеркало: terrainMacroDetailMath.ts.
  */
 export const terrainMacroDetailUniforms = /* glsl */ `
   uniform float uMacroStrength;
@@ -19,7 +19,8 @@ export const terrainMacroDetailUniforms = /* glsl */ `
   uniform float uMacroTextureWarp;
   uniform vec2 uMacroFadeRange;
   uniform vec2 uDiffuseTexelSize;
-  uniform float uBodyRadiusUnits;
+  // uBodyRadiusUnits объявлен ХОСТОМ безусловно (PlanetShaderTemplate): его же
+  // читает тень облаков, живущая вне гейта USE_TERRAIN_MACRO_DETAIL
   uniform float uMacroStreakStrength;
   uniform float uMacroStreakPeriodUnits;
   uniform float uMacroTerraceStrength;

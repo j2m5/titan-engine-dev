@@ -150,6 +150,11 @@ export const PlanetShaderTemplate: ShaderProps = {
     uniform float uTerrainLambert;
     uniform float uTerrainAmbient;
     uniform float uTerrainAmbientSunRef;
+    // Радиус тела в единицах сцены: домен средней полосы детали И длина дуги uv
+    // в тени облаков — обоим нужен БЕЗ гейта USE_TERRAIN_MACRO_DETAIL (тень
+    // облаков работает и при macroStrength 0), поэтому объявление живёт здесь,
+    // а не в чанке terrainMacroDetailUniforms.
+    uniform float uBodyRadiusUnits;
     // Доля окклюзии на ПРЯМОМ свете: 0 — AO/полость не гасят солнце (физика),
     // 1 — прежний вид (окклюзия множила и прямой свет вместе с цветом)
     uniform float uTerrainOcclusionDirect;
@@ -379,8 +384,25 @@ export const PlanetShaderTemplate: ShaderProps = {
           skyTerm = mix(skyTerm, skyAmbientTint(muS), uSkyAmbientStrength);
         #endif
         vec3 ambient = uTerrainAmbient * skyTerm * occlusion;
-        // Тень облаков на земле — только прямой свет (заполняется под USE_CLOUD_SHADOW)
+        // Тень облаков на земле — только прямой свет
         float cloudShadow = 1.0;
+        #ifdef USE_CLOUD_SHADOW
+          #define CLOUD_SHADOW_MIN_COS 0.15
+          // облако, затеняющее точку, стоит по направлению к солнцу на h·tan θ (θ — зенитный угол)
+          vec3 sunLocal = -normalize(vLocalLightDirection);
+          vec3 sunTangent = sunLocal - dirLocal * dot(sunLocal, dirLocal);
+          float cosZ = max(muS, CLOUD_SHADOW_MIN_COS);
+          vec3 offsetUnits = sunTangent / cosZ * uCloudShadowHeightUnits;
+          // eastLocal = cross(up, dir): длина = cos φ; north = cross(dir, east)
+          float cosLat = max(length(eastLocal), 1e-3);
+          vec3 eastUnit = eastLocal / cosLat;
+          vec3 northUnit = normalize(cross(dirLocal, eastUnit));
+          vec2 uvShadow = uv + vec2(dot(offsetUnits, eastUnit) / (6.2831853 * uBodyRadiusUnits * cosLat),
+                                    dot(offsetUnits, northUnit) / (3.1415927 * uBodyRadiusUnits));
+          vec3 cloudAtShadow = texture2D(cloudMap, uvShadow).rgb;
+          float alphaShadow = pow(dot(cloudAtShadow, vec3(1.0)) / 3.0, 0.5) * uCloudOpacity;
+          cloudShadow = 1.0 - uCloudShadowStrength * alphaShadow * smoothstep(0.0, 0.2, muS);
+        #endif
         // Окклюзия на прямом свете — ручкой: 0 — AO не гасит солнце (физика), 1 — прежний вид
         float directGain = mix(1.0, occlusion, uTerrainOcclusionDirect) * cloudShadow;
         // Та же форма mix(пол, 1, N·L), что прежде: в полдень при occlusion = 1 и без тени ровно 1

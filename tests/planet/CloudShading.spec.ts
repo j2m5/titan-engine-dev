@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
 
 function cloudBlock(frag: string): string {
-  const start = frag.indexOf('#ifdef USE_CLOUD')
+  // '\n' обязателен: USE_CLOUD_SHADOW (тень облаков на земле) стоит в шейдере
+  // ВЫШЕ и матчился бы префиксом — блок уехал бы не туда
+  const start = frag.indexOf('#ifdef USE_CLOUD\n')
   const end = frag.indexOf('#endif', start)
   expect(start).toBeGreaterThan(0)
   return frag.slice(start, end)

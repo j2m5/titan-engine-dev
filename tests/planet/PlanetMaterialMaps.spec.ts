@@ -4,6 +4,7 @@ import { Actor } from '@/core/models/Actor'
 import { ResourceType } from '@/core/models/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
+import { heightPathOf } from '@/core/terrain/heightPath'
 import { validateProceduralSurface } from '@/core/terrain/proceduralSurfaceParams'
 import { ClampToEdgeWrapping, RepeatWrapping, Texture } from 'three'
 
@@ -54,6 +55,17 @@ function moonPathOf(kind: ResourceType): string {
 // содержимое не важно: материал спрашивает только факт наличия карты в реестре
 function seedMoonHeightMap(): void {
   ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(moonPathOf('height'), {
+    width: 4,
+    height: 2,
+    minMeters: 0,
+    maxMeters: 1000,
+    data: new Uint16Array(8)
+  })
+}
+
+// то же для Земли — единственного тела с облачной картой в этих тестах
+function seedEarthHeightMap(): void {
+  ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(heightPathOf(earth())!, {
     width: 4,
     height: 2,
     minMeters: 0,
@@ -277,6 +289,37 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     material.updateMaterial()
 
     expect(material.defines.USE_TERRAIN_UV).toBeUndefined()
+  })
+
+  it('USE_CLOUD_SHADOW — только при cloudMap И загруженной карте высот (через updateMaterial)', () => {
+    seedTexture(pathOf('cloud'))
+    seedEarthHeightMap()
+
+    const material = new PlanetMaterial(earth())
+    material.updateMaterial()
+
+    expect(material.defines.USE_CLOUD).toBe('1')
+    expect(material.defines.USE_CLOUD_SHADOW).toBe('1')
+  })
+
+  it('без карты высот тень облаков молчит даже при cloudMap; без cloudMap — при карте высот', () => {
+    seedTexture(pathOf('cloud'))
+    const noHeight = new PlanetMaterial(earth())
+    noHeight.updateMaterial()
+    expect(noHeight.defines.USE_CLOUD).toBe('1')
+    expect(noHeight.defines.USE_CLOUD_SHADOW).toBeUndefined()
+
+    seedMoonHeightMap()
+    const noCloud = new PlanetMaterial(moon())
+    // Только фикстура: у тела без облачной строки путь падает в `?? ''`, а
+    // заглушку с пустым именем сеет seedPlaceholderKeys (нужна конструктору —
+    // кольца). В рантайме под '' в реестре ничего нет (getTextureOrMake
+    // плейсхолдер НЕ регистрирует), и Луна там честно бесоблачна — снимаем
+    // заглушку после постройки материала, чтобы гейт мерился по данным.
+    resourceStorage.deleteTexture('')
+    noCloud.updateMaterial()
+    expect(noCloud.defines.USE_TERRAIN_UV).toBe('1')
+    expect(noCloud.defines.USE_CLOUD_SHADOW).toBeUndefined()
   })
 
   it('resetMaterial снимает USE_TERRAIN_UV', () => {

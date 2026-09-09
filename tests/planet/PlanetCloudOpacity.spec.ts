@@ -53,7 +53,8 @@ describe('PlanetShaderTemplate: uCloudOpacity — высотный fade обла
   it('юниформ uCloudOpacity объявлен и домножает cloudColor/cloudAlpha ВНУТРИ USE_CLOUD', () => {
     expect(frag).toContain('uniform float uCloudOpacity;')
 
-    const cloudBlockStart = frag.indexOf('#ifdef USE_CLOUD')
+    // '\n' обязателен: USE_CLOUD_SHADOW стоит выше и матчился бы префиксом
+    const cloudBlockStart = frag.indexOf('#ifdef USE_CLOUD\n')
     const cloudBlockEnd = frag.indexOf('#endif', cloudBlockStart)
     const block = frag.slice(cloudBlockStart, cloudBlockEnd)
 
