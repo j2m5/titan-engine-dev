@@ -224,7 +224,8 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uSlopeRange.value = isValidSlopeRange(slopeRange) ? slopeRange : SLOPE_RANGE
 
     // Cavity-затемнение альбедо (арка slope-cavity, канал B slope-карты) —
-    // ручка пер-тела, отсутствие поля = 0 (Task 3 её пока не расставляет).
+    // ручка пер-тела, отсутствие поля = 0 (фотомозаичные тела без ручки —
+    // cavity им не печётся).
     // Юниформ форвардится из data независимо от гейта ниже: значение само по
     // себе безвредно, шейдер читает его только под USE_CAVITY.
     const planetData: IPlanetRenderingObject = (this.model.renderingObject?.getAttribute('data') as

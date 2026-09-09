@@ -214,8 +214,8 @@ abstract class TerrainPatchGroup extends Group {
   private writePatch(handle: PatchHandle, address: TerrainNodeAddress): void {
     // юбка закрывает недобор ГРУБОГО соседа, не свой: фрустум-гейт допускает
     // перепад до двух уровней (сосед вне фрустума не сплитится), поэтому
-    // глубина берётся по ε(level−2) — на дне (ℓ6) это 746 м стенки против
-    // патча 42 км
+    // глубина берётся по ε(level−2); на глубоких уровнях (L7–L8) ε мала,
+    // стенка — метры при патче в километры
     const skirtLevel = Math.max(TERRAIN_QUADTREE_MIN_LEVEL, address.level - 2)
     const skirtDepthUnits = toThreeJSUnits((this.field.geometricErrorMeters(skirtLevel) + CLEARANCE_MARGIN_METERS) / 1000)
 

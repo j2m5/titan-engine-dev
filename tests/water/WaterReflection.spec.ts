@@ -540,9 +540,9 @@ const BASELINE_VERTEX_SHADER = `
       vNormal = normalize(normalMatrix * normal);
       // Нормаль воды = dir̂ (аналитическая, не из карты): патчи водной
       // оболочки строит тот же writeTerrainPatchAttributes, что и рельеф —
-      // атрибут normal радиален всегда (см. terrainPatchGeometry.ts), волн
-      // и мелкой пертурбации у Task 4 нет. vNormal — уже готовый view-space
-      // dir̂ для Френеля во фрагментнике.
+      // атрибут normal радиален всегда (см. terrainPatchGeometry.ts), волны
+      // и рябь наклоняют нормаль во фрагментнике (waveNormal), не здесь.
+      // vNormal — уже готовый view-space dir̂ для Френеля во фрагментнике.
       //
       // Body-локальное радиальное направление — отдельно, для терраформного
       // UV (канал A той же slope-карты, что и суша): та же конвенция vLocalDir,

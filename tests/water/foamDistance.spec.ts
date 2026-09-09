@@ -63,7 +63,7 @@ describe('пена: расстояние до уреза из градиента
     expect(shoreBand(dist, 600)).toBe(0)
   })
 
-  it('суша (A = 0) — dist = 0 (смещение клампится нулём), кайма полная, но её гасит альфа воды', () => {
+  it('суша (A = 0) — dist = 0 (смещение клампится нулём): кайма на суше полная, шов прячет лог-глубина (alpha = max(alpha, foam))', () => {
     const sampleA = linearShelfSampler(1 / 100, WIDTH, TEXEL_METERS)
     expect(foamDistanceMeters(sampleA, 0.2, 0.5, TEXEL_UV, TEXEL_M)).toBe(0)
   })

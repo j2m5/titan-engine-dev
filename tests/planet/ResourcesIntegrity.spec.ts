@@ -1,5 +1,5 @@
-import { Resources, RenderingObjects } from '@storage/database'
-import { IResource, IRenderingObject } from '@/core/models/types'
+import { Actors, ActorResource, Resources, RenderingObjects } from '@storage/database'
+import { IActor, IActorResource, IResource, IRenderingObject } from '@/core/models/types'
 import { isValidSlopeRange, SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 
 describe('Целостность ресурсов планет', () => {
@@ -97,5 +97,16 @@ describe('Целостность ресурсов планет', () => {
   it('страж: slopeRange не выше SLOPE_RANGE — липшицева константа марша CameraCollision', () => {
     const steep = Resources.filter((r) => r.resourceType === 'slope' && (r.slopeRange ?? SLOPE_RANGE) > SLOPE_RANGE)
     expect(steep).toEqual([]) // 4 в сетке допустим только вместе с ревизией marchTerrain
+  })
+
+  it('страж: у родителя кольца нет карты высот — RingShadow читает vPosition как тело-локальную, у патчей террейна она патч-относительная', () => {
+    const heightIds = new Set(Resources.filter((r: IResource): boolean => r.resourceType === 'height').map((r) => r.id))
+    const heightOwners = new Set(
+      ActorResource.filter((link: IActorResource): boolean => heightIds.has(link.resourceId)).map((l) => l.actorId)
+    )
+    const ringParentsWithHeight = Actors.filter(
+      (a: IActor): boolean => a.categoryId === 6 && a.parentId !== null && heightOwners.has(a.parentId)
+    )
+    expect(ringParentsWithHeight).toEqual([])
   })
 })

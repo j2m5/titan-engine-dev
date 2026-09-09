@@ -108,9 +108,9 @@ export const WaterShaderTemplate: ShaderProps = {
       vNormal = normalize(normalMatrix * normal);
       // Нормаль воды = dir̂ (аналитическая, не из карты): патчи водной
       // оболочки строит тот же writeTerrainPatchAttributes, что и рельеф —
-      // атрибут normal радиален всегда (см. terrainPatchGeometry.ts), волн
-      // и мелкой пертурбации у Task 4 нет. vNormal — уже готовый view-space
-      // dir̂ для Френеля во фрагментнике.
+      // атрибут normal радиален всегда (см. terrainPatchGeometry.ts), волны
+      // и рябь наклоняют нормаль во фрагментнике (waveNormal), не здесь.
+      // vNormal — уже готовый view-space dir̂ для Френеля во фрагментнике.
       //
       // Body-локальное радиальное направление — отдельно, для терраформного
       // UV (канал A той же slope-карты, что и суша): та же конвенция vLocalDir,
@@ -465,8 +465,8 @@ export const WaterShaderTemplate: ShaderProps = {
         // нет, см. докблок класса): reflectance по Шлику (rf0=0.3),
         // scatter — рассеяние в толще по уже посчитанному baseColor
         // (мелководье/константа сохранены — тот же вход, что у fresnel-mix
-        // выше), reflectionSample — тинт Task 4 (Task 2 подменит источник
-        // на честную выборку кубмапы неба).
+        // выше), reflectionSample — градиентное небо зенит/горизонт (кубмапа
+        // отключена рулингом, см. USE_WATER_REFLECTION).
         vec3 waveDiffuseLight = vec3(0.0);
         vec3 waveSpecularLight = vec3(0.0);
         sunLight(waveNormal, viewDir, 100.0, 2.0, 0.5, waveDiffuseLight, waveSpecularLight);
