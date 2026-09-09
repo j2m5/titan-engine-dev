@@ -98,7 +98,7 @@ interface WaterUniforms {
   uSkyFloor: number
   uSkyGain: number
   uSkyFlipX: number
-  // Закатный тинт (LUT пропускания атмосферы) — те же пять юниформов
+  // Закатный тинт (LUT пропускания атмосферы) — те же шесть юниформов
   // геометрии/LUT и та же ручка, что у палубы: проводит их SunTintBinding из
   // AtmosphereRegistry (см. WaterMaterial), здесь только заглушки.
   uAtmoTransmittance: Texture | null

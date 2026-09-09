@@ -15,12 +15,21 @@ describe('STEEP_DETAIL_PATHS', () => {
 
 describe('resolveSteepZoneParams', () => {
   it('пустые данные — глобальные дефолты 0.35/0.55/0.15', () => {
-    expect(resolveSteepZoneParams({}, 'Moon')).toMatchObject({ steepStart: 0.35, steepFull: 0.55, steepBreakup: 0.15 })
+    expect(resolveSteepZoneParams({}, 'Moon')).toEqual({
+      steepStart: 0.35,
+      steepFull: 0.55,
+      steepBreakup: 0.15,
+      steepTint: new Color(0xe7e7e7)
+    })
   })
 
   it('пер-тельные значения проходят как есть', () => {
-    expect(resolveSteepZoneParams({ steepStart: 0.5, steepFull: 0.9, steepBreakup: 0 }, 'Io'))
-      .toMatchObject({ steepStart: 0.5, steepFull: 0.9, steepBreakup: 0 })
+    expect(resolveSteepZoneParams({ steepStart: 0.5, steepFull: 0.9, steepBreakup: 0 }, 'Io')).toEqual({
+      steepStart: 0.5,
+      steepFull: 0.9,
+      steepBreakup: 0,
+      steepTint: new Color(0xe7e7e7)
+    })
   })
 
   it('невалидные — громкая ошибка с телом и полем', () => {
