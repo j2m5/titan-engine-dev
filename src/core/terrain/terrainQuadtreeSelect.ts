@@ -24,7 +24,11 @@ export type TerrainLeaf = TerrainNodeAddress & { visible: boolean; sse: number }
  * был источником 74 880 строковых аллокаций/кадр в дифе покрытия (ревью
  * 2026-08-17, перф-долг №5/№10) — Map/Set по числу их не платят.
  */
-export const terrainNodeKey = (a: TerrainNodeAddress): number => (a.face << 20) | (a.level << 16) | (a.i << 8) | a.j
+export const nodeKeyOf = (face: number, level: number, i: number, j: number): number =>
+  (face << 20) | (level << 16) | (i << 8) | j
+
+/** Тот же ключ по адресу; горячие пути считают его из компонент (nodeKeyOf), без промежуточного объекта. */
+export const terrainNodeKey = (a: TerrainNodeAddress): number => nodeKeyOf(a.face, a.level, a.i, a.j)
 
 /** Ниже этого уровня узел спускается безусловно — минимальный набор всегда 6·4^MIN_LEVEL листьев. */
 export const TERRAIN_QUADTREE_MIN_LEVEL = 1
@@ -191,9 +195,9 @@ function visitNode(
     (field.nodeGeometricErrorMeters(face, level, i, j) * params.screenHeight) /
     (2 * Math.tan(params.fovYRadians / 2) * distanceMeters)
 
-  // раскладка бит совпадает с terrainNodeKey — считается без промежуточного
-  // TerrainNodeAddress, чтобы не аллоцировать объект на каждый посещённый узел
-  const key = (face << 20) | (level << 16) | (i << 8) | j
+  // из компонент — без промежуточного TerrainNodeAddress: аллокация объекта на
+  // каждый посещённый узел была бы мусором в горячем пути
+  const key = nodeKeyOf(face, level, i, j)
   const alreadySplit = params.currentlySplit.has(key)
   const threshold = alreadySplit ? params.splitPixels * params.mergeFactor : params.splitPixels
 
@@ -299,7 +303,7 @@ function descendantsState(
     for (let dj = 0; dj < 2; dj++) {
       const ci = i * 2 + di
       const cj = j * 2 + dj
-      const childKey = (face << 20) | (childLevel << 16) | (ci << 8) | cj
+      const childKey = nodeKeyOf(face, childLevel, ci, cj)
       if (wanted.has(childKey)) {
         if (!isLive(childKey)) return DescendantsState.NotLive
         found = true
@@ -337,9 +341,9 @@ export function coverageReady(
   if (below === DescendantsState.NotLive) return false
   if (below === DescendantsState.AllLive) return true
 
-  for (let level = x.level - 1; level >= 0; level--) {
+  for (let level = x.level - 1; level >= TERRAIN_QUADTREE_MIN_LEVEL; level--) {
     const delta = x.level - level
-    const key = (x.face << 20) | (level << 16) | ((x.i >> delta) << 8) | (x.j >> delta)
+    const key = nodeKeyOf(x.face, level, x.i >> delta, x.j >> delta)
     if (wanted.has(key)) return isLive(key)
   }
 
@@ -359,7 +363,7 @@ export function forEachWantedDescendant(
       for (let dj = 0; dj < 2; dj++) {
         const ci = i * 2 + di
         const cj = j * 2 + dj
-        const childKey = (x.face << 20) | (childLevel << 16) | (ci << 8) | cj
+        const childKey = nodeKeyOf(x.face, childLevel, ci, cj)
         if (wanted.has(childKey)) fn(childKey)
         else walk(childLevel, ci, cj)
       }
@@ -372,7 +376,7 @@ export function forEachWantedDescendant(
 export function liveAncestorKey(x: TerrainNodeAddress, isLive: (key: number) => boolean): number {
   for (let level = x.level - 1; level >= TERRAIN_QUADTREE_MIN_LEVEL; level--) {
     const delta = x.level - level
-    const key = (x.face << 20) | (level << 16) | ((x.i >> delta) << 8) | (x.j >> delta)
+    const key = nodeKeyOf(x.face, level, x.i >> delta, x.j >> delta)
     if (isLive(key)) return key
   }
   return -1
