@@ -255,4 +255,18 @@ describe('клапан пула', () => {
     const minAfterPeak = Math.min(...counts.slice(peakIndex))
     expect(minAfterPeak).toBeLessThan(peak)
   })
+
+  // Пул 44 и качающаяся высота: давление доходит до 1.0, а сплиты ДОВОДЯТСЯ
+  // до показа (видимая глубина L2) — клапан и атомарный своп работают
+  // одновременно, чего стенд 32/600 км не даёт
+  it('клапан × атомарный своп: под давлением с завершёнными сплитами «без дыр» держится каждый кадр', () => {
+    const clock = makeFrameClock()
+    const group = new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), 44, clock.nowMs)
+    for (let f = 0; f < 800; f++) {
+      clock.startFrame()
+      group.updateObject(makeCtx(2 + 1500 * (0.5 + 0.5 * Math.sin(f / 41))))
+      expect(unbackedHiddenAddresses(group)).toEqual([])
+      expect(fullyCovered(group)).toBe(true)
+    }
+  })
 })
