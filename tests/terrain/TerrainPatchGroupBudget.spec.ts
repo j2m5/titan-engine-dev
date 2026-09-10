@@ -18,6 +18,7 @@ import {
   type TerrainNodeAddress
 } from '@/core/terrain/terrainQuadtreeSelect'
 import { fullyCovered, patchMeshes, unbackedHiddenAddresses } from './coverageHelpers'
+import { makeFrameClock } from './frameClock'
 
 // TerrainPatchGroup абстрактен — минимальный конкретный подкласс без
 // специализации (материал/хуки TerrainSphere/WaterSphere здесь не нужны),
@@ -155,20 +156,18 @@ describe('TerrainPatchGroup: бюджет построек патчей по в�
    * тут: скрытый патч не создаёт дыры, пока над ним жив видимый родитель.
    *
    * Пул 30 = 24 стартовых патча уровня 1 + 6 слотов: на высоте 2 км отбор
-   * хочет заметно больше, предупреждение об исчерпании приходит на первом же
-   * кадре (замер: warns=1, скрытых патчей до 6, набор застывает на
-   * [[1,24],[2,2],[7,4]] и дальше не меняется 200 кадров).
+   * хочет заметно больше, поэтому режим достигается с первого же кадра.
    */
   it('исчерпанный пул: замена застревает недостроенной, но скрытые патчи всегда перекрыты видимым родителем', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    let reads = 0
-    const group = makeGroup(() => (reads++ === 0 ? 0 : 7), 30)
+    const clock = makeFrameClock()
+    const group = makeGroup(clock.nowMs, 30)
     const ctx = makeCtx(2)
 
     let exhaustedAtFrame = -1
     let maxHidden = 0
     for (let f = 0; f < 200; f++) {
-      reads = 0
+      clock.startFrame()
       group.updateObject(ctx)
 
       if (exhaustedAtFrame === -1 && warnSpy.mock.calls.some((c) => String(c[0]).includes('пул патчей исчерпан'))) {
@@ -199,43 +198,56 @@ describe('клапан пула', () => {
     expect(effectiveSplitPixels(6, 973, 1024)).toBeLessThan(24)
   })
 
-  // На 600 км желаемый набор 36 → 24 при полном давлении клапана; у
-  // поверхности (2 км, см. Task 4 отчёт) порог не влияет — там ε держит
-  // сагитта, не карта. cap 30/31 всё ещё бьют «исчерпан» (гистерезис
-  // split/merge схлопывает набор рывком только на пиковом давлении, потом
-  // пул сразу опустошается и цикл начинается заново) — 32 первый запас, на
-  // котором пул больше не касается потолка (проверено 600 кадров).
+  // Высота 600 км: желаемый набор пробивает потолок пула, и клапан коарсит его
+  // обратно. У поверхности (2 км) порог не влияет — там ε держит сагитта, не
+  // карта. Потолок 32 — первый, на котором пул не касается потолка (30/31 ещё
+  // бьют «исчерпан»). Часы кадровые: одна постройка за кадр, иначе фаза
+  // предельного цикла клапана зависит от скорости машины.
   it('малый пул (32 слота, 600 км): при давлении набор реально коарсится, «пул исчерпан» не печатается, слоты не замерзают', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const group = new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), 32)
+    const clock = makeFrameClock()
+    const group = new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), 32, clock.nowMs)
     const tail: number[] = []
     for (let f = 0; f < 300; f++) {
+      clock.startFrame()
       group.updateObject(makeCtx(600))
+      // покадровый пин «без дыр» в режиме давления: под клапаном своп
+      // застревает недостроенным (видимым остаётся базовый набор L1), поэтому
+      // пин ловит прежде всего преждевременное освобождение узла
+      expect(unbackedHiddenAddresses(group)).toEqual([])
+      expect(fullyCovered(group)).toBe(true)
       if (f >= 280) tail.push(meshCount(group))
     }
     expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('пул патчей исчерпан'))
     expect(Math.max(...tail)).toBeLessThanOrEqual(32)
-    expect(tail).toContain(24) // клапан реально доводит набор до коарсенного пола
+    // на кадровых часах режим выходит на предельный цикл периода 8 (24 → 31 → 24):
+    // клапан доводит набор до коарсенного пола, а не упирается в потолок
+    expect(tail).toContain(24)
     // после отлёта набор возвращается к 24 — слоты освобождены, не заморожены
-    for (let f = 0; f < 200; f++) group.updateObject(makeCtx(500000))
+    for (let f = 0; f < 200; f++) {
+      clock.startFrame()
+      group.updateObject(makeCtx(500000))
+      expect(unbackedHiddenAddresses(group)).toEqual([])
+      expect(fullyCovered(group)).toBe(true)
+    }
     expect(meshCount(group)).toBe(24)
     warn.mockRestore()
   })
 
   // Доказательство подключения клапана к updateObject: сравнение с потолком
   // САМО ПО СЕБЕ не дискриминирует (acquire() и без клапана держит meshCount
-  // <= cap тривиально — жёсткий кламп есть всегда). Дискриминирует ОТКАТ
-  // ПОСЛЕ ПИКА: без клапана набор монотонно растёт до потолка и застывает
-  // там (мутация — splitPixels: config(...) напрямую — проверено вручную:
-  // meshCount(cap=32) доходит до 32 и не опускается все 300 кадров,
-  // «исчерпан» печатается). С клапаном набор после пика (когда давление
-  // подняло порог) реально откатывается вниз — минимум ПОСЛЕ пика строго
-  // меньше самого пика.
+  // <= cap тривиально). Дискриминирует ОТКАТ ПОСЛЕ ПИКА: без клапана набор
+  // растёт до потолка и застывает там, с клапаном давление поднимает порог и
+  // набор откатывается — минимум ПОСЛЕ пика строго меньше самого пика.
   it('клапан подключён к updateObject: набор откатывается вниз после пика, не застывает на потолке', () => {
-    const group = new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), 32)
+    const clock = makeFrameClock()
+    const group = new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), 32, clock.nowMs)
     const counts: number[] = []
     for (let f = 0; f < 300; f++) {
+      clock.startFrame()
       group.updateObject(makeCtx(600))
+      expect(unbackedHiddenAddresses(group)).toEqual([])
+      expect(fullyCovered(group)).toBe(true)
       counts.push(meshCount(group))
     }
     const peak = Math.max(...counts)

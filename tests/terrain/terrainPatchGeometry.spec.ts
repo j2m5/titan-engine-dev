@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { Vector2, Vector3, type BufferGeometry } from 'three'
-import { buildPatchIndex, buildTerrainPatchGeometry, terrainPatchVertexCount } from '@/core/terrain/terrainPatchGeometry'
+import {
+  buildPatchIndex,
+  buildTerrainPatchGeometry,
+  ringGridIndex,
+  terrainPatchVertexCount
+} from '@/core/terrain/terrainPatchGeometry'
 import { cubeFaceDirection } from '@/core/terrain/cubeSphere'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { MIDBAND_DEFAULTS, type MidbandParams } from '@/core/terrain/midbandParams'
@@ -142,12 +147,12 @@ describe('buildTerrainPatchGeometry: RTC и паритет с коллизией
       expect(vertexDir(geometry, k).distanceTo(honest)).toBeLessThan(1e-6)
     }
 
-    // юбочная вершина сдвинута строго радиально — её направление совпадает с
-    // кромочным (edgeIndexForSkirt и проверяет совпадение, не просто близость)
+    // юбочная вершина сдвинута строго радиально — направление совпадает с
+    // кромочной вершиной ТОГО ЖЕ витка кольца (ringGridIndex): порядок юбки
+    // не разъезжается с обходом периметра
     for (let ring = 0; ring < SEGMENTS * 4; ring++) {
       const skirt = GRID_VERTEX_COUNT + ring
-      const edge = edgeIndexForSkirt(geometry, skirt)
-      expect(vertexDir(geometry, skirt).distanceTo(vertexDir(geometry, edge))).toBeLessThan(1e-6)
+      expect(edgeIndexForSkirt(geometry, skirt)).toBe(ringGridIndex(ring, SEGMENTS))
     }
   })
 

@@ -34,7 +34,7 @@ export function terrainPatchVertexCount(segments: number): number {
  * снизу вверх, верх справа налево, лево сверху вниз. Каждая точка периметра
  * встречается ровно один раз (углы не дублируются между сторонами).
  */
-function ringGridIndex(k: number, segments: number): number {
+export function ringGridIndex(k: number, segments: number): number {
   let a: number
   let b: number
 
