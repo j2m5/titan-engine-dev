@@ -45,21 +45,25 @@ class TerrainPatchPool {
   private readonly index: BufferAttribute
   private readonly free: PatchHandle[] = []
   private readonly occupied = new Set<PatchHandle>()
-  private readonly maxLivePatches: number
+  private readonly maxLivePatchesLimit: number
 
   public constructor(material: Material, segments: number, maxLivePatches: number = MAX_LIVE_PATCHES) {
     this.material = material
     this.segments = segments
     this.index = buildPatchIndex(segments)
-    this.maxLivePatches = maxLivePatches
+    this.maxLivePatchesLimit = maxLivePatches
   }
 
   public get liveCount(): number {
     return this.occupied.size
   }
 
+  public get maxLivePatches(): number {
+    return this.maxLivePatchesLimit
+  }
+
   public acquire(): PatchHandle | null {
-    if (this.occupied.size >= this.maxLivePatches) return null
+    if (this.occupied.size >= this.maxLivePatchesLimit) return null
 
     const handle = this.free.pop() ?? this.createHandle()
     this.occupied.add(handle)
@@ -89,6 +93,19 @@ class TerrainPatchPool {
   public dispose(): void {
     for (const handle of this.free) handle.geometry.dispose()
     this.free.length = 0
+  }
+
+  /**
+   * Возврат памяти после ухода с поверхности: свободных слотов остаётся не
+   * больше maxFree, лишние (самые старые в стеке) диспозятся — GPU-буферы и
+   * массивы; общий индекс не трогается (живёт до dispose()). На подлёте слоты
+   * создаются заново (createHandle — доли миллисекунды).
+   */
+  public trimFree(maxFree: number): number {
+    const extra = Math.max(0, this.free.length - Math.max(0, Math.floor(maxFree)))
+    for (let k = 0; k < extra; k++) this.free[k].geometry.dispose()
+    this.free.splice(0, extra)
+    return extra
   }
 
   private createHandle(): PatchHandle {

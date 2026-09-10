@@ -176,4 +176,17 @@ describe('TerrainPatchPool', () => {
     expect(disposeB).toHaveBeenCalledTimes(1)
     expect(disposeC).not.toHaveBeenCalled() // живой слот — на совести вызывающего
   })
+
+  it('trimFree(k): свободных остаётся не больше k, лишние геометрии диспозятся, живые не тронуты', () => {
+    const pool = makePool()
+    const handles = Array.from({ length: 6 }, () => pool.acquire()!)
+    for (const h of handles.slice(0, 5)) pool.release(h)
+    const disposed = vi.spyOn(handles[0].geometry, 'dispose')
+    expect(pool.trimFree(2)).toBe(3)
+    expect(pool.liveCount).toBe(1)
+    expect(pool.maxLivePatches).toBe(MAX_LIVE_PATCHES)
+    // диспозятся ровно лишние (первые освобождённые лежат глубже в стеке — вытесняются они)
+    expect(disposed).toHaveBeenCalled()
+    expect(pool.trimFree(2)).toBe(0)
+  })
 })

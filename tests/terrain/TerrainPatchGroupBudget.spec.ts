@@ -18,6 +18,7 @@ import {
   type TerrainNodeAddress
 } from '@/core/terrain/terrainQuadtreeSelect'
 import { fullyCovered, patchMeshes, unbackedHiddenAddresses } from './coverageHelpers'
+import { effectiveSplitPixels, POOL_PRESSURE_START, POOL_PRESSURE_GAIN } from '@/core/terrain/TerrainPatchGroup'
 
 // TerrainPatchGroup абстрактен — минимальный конкретный подкласс без
 // специализации (материал/хуки TerrainSphere/WaterSphere здесь не нужны),
@@ -184,5 +185,39 @@ describe('TerrainPatchGroup: бюджет построек патчей по в�
     expect(exhaustedAtFrame).toBeGreaterThanOrEqual(0) // пул действительно исчерпан — режим достигнут
     expect(maxHidden).toBeGreaterThan(0) // и скрытые (недопоказанные) патчи действительно были
     expect(meshCount(group)).toBe(30) // все слоты заняты, дерево застыло
+  })
+})
+
+describe('клапан пула', () => {
+  beforeEach(() => seedPlaceholderKeys())
+  afterEach(() => resourceStorage.deleteAllTextures())
+
+  it('ниже 85 % — базовый порог; при полном пуле ×(1+GAIN) = ×4; между — линейно', () => {
+    expect(effectiveSplitPixels(6, 0, 1024)).toBe(6)
+    expect(effectiveSplitPixels(6, Math.floor(1024 * POOL_PRESSURE_START), 1024)).toBeCloseTo(6, 6)
+    expect(effectiveSplitPixels(6, 1024, 1024)).toBeCloseTo(6 * (1 + POOL_PRESSURE_GAIN), 12)
+    expect(effectiveSplitPixels(6, 973, 1024)).toBeGreaterThan(6)
+    expect(effectiveSplitPixels(6, 973, 1024)).toBeLessThan(24)
+  })
+
+  // Бриф предлагал 40 слотов; замер (реальные часы, altKm=2, TestPatchGroup.makeField)
+  // показал, что честный желаемый набор у поверхности для ЭТОГО поля — ровно 96
+  // листьев (1:20, 2..6:12 каждый, 7:16) и он НЕ меняется в диапазоне
+  // splitPixels 6..24 (весь ход клапана, ×1..×4) — нужно ×1000+, чтобы порог вообще
+  // задел этот набор (замерено сканом sp=6/24/100/1000/10000/100000). Клапан на
+  // 40 слотах тут не спасает: acquire() неизбежно вернёт null почти сразу (замер:
+  // при cap=96 «исчерпан» ещё печатается, при cap=100 — уже нет, peak/final=96 в
+  // обоих случаях). 100 — с запасом над честным пиком 96, тест остаётся честной
+  // проверкой «не тупик и не свал» вместо тесной проверки конкретно клапана здесь.
+  it('малый пул (100 слотов): при спуске набор коарсится, «пул исчерпан» не печатается, слоты не замерзают', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const group = new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), 100)
+    for (let f = 0; f < 200; f++) group.updateObject(makeCtx(2))
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('пул патчей исчерпан'))
+    expect(meshCount(group)).toBeLessThanOrEqual(100)
+    // после отлёта набор возвращается к 24 — слоты освобождены, не заморожены
+    for (let f = 0; f < 200; f++) group.updateObject(makeCtx(500000))
+    expect(meshCount(group)).toBe(24)
+    warn.mockRestore()
   })
 })
