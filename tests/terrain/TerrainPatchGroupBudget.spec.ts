@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { Mesh, PerspectiveCamera, Texture, type WebGLRenderer } from 'three'
+import { Frustum, Matrix4, Mesh, PerspectiveCamera, Texture, type Mesh as ThreeMesh, type WebGLRenderer } from 'three'
+import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
@@ -9,6 +10,13 @@ import { resourceStorage } from '@/core/services/ResourceStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { UpdateContext } from '@/core/UpdateContext'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
+import {
+  selectTerrainNodes,
+  byBuildPriority,
+  terrainNodeKey,
+  TERRAIN_QUADTREE_MIN_LEVEL,
+  type TerrainNodeAddress
+} from '@/core/terrain/terrainQuadtreeSelect'
 
 // TerrainPatchGroup абстрактен — минимальный конкретный подкласс без
 // специализации (материал/хуки TerrainSphere/WaterSphere здесь не нужны),
@@ -103,5 +111,32 @@ describe('TerrainPatchGroup: бюджет построек патчей по в�
     group.updateObject(makeCtx(2))
 
     expect(meshCount(group) - before).toBeGreaterThanOrEqual(4)
+  })
+
+  it('при бюджете «одна постройка» первым строится видимый узел с наибольшей SSE, не грубый за спиной', () => {
+    const field = makeField()
+    const group = new TestPatchGroup(field, new PlanetMaterial(moon()), makeRenderer(), sequence([0, 0, 7, 7]))
+    const ctx = makeCtx(2)
+    const before = new Set(group.children.map((c) => (c as ThreeMesh).userData.terrainAddress).filter(Boolean).map(terrainNodeKey))
+
+    group.updateObject(ctx)
+
+    const added = group.children
+      .map((c) => (c as ThreeMesh).userData.terrainAddress as TerrainNodeAddress | undefined)
+      .filter((a): a is TerrainNodeAddress => Boolean(a) && !before.has(terrainNodeKey(a!)))
+    expect(added).toHaveLength(1)
+
+    // ожидаемый первый — по тому же отбору, что сделала группа (группа в начале координат: frustum = камера)
+    const frustum = new Frustum().setFromProjectionMatrix(
+      new Matrix4().multiplyMatrices(ctx.camera.projectionMatrix, ctx.camera.matrixWorldInverse)
+    )
+    const { leaves } = selectTerrainNodes({
+      field, cameraLocal: ctx.camera.position.clone(), frustumLocal: frustum, screenHeight: 1080,
+      fovYRadians: degToRad(ctx.camera.fov), splitPixels: config('terrain.sseSplitPixels'),
+      mergeFactor: config('terrain.sseMergeFactor'), currentlySplit: new Set(), waterLevelMeters: undefined
+    })
+    const expected = [...leaves].sort(byBuildPriority).find((l) => l.level > TERRAIN_QUADTREE_MIN_LEVEL)!
+    expect(expected.visible).toBe(true)
+    expect(terrainNodeKey(added[0])).toBe(terrainNodeKey(expected))
   })
 })

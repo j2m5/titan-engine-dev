@@ -9,6 +9,13 @@ import type { TerrainHeightField } from './TerrainHeightField'
 export type TerrainNodeAddress = { face: number; level: number; i: number; j: number }
 
 /**
+ * Лист отбора: адрес узла + его видимость во фрустуме и SSE (обе величины
+ * уже посчитаны visitNode при принятии решения о сплите, здесь — просто
+ * пронесены наружу для очереди построек, см. `byBuildPriority`).
+ */
+export type TerrainLeaf = TerrainNodeAddress & { visible: boolean; sse: number }
+
+/**
  * Числовой ключ узла: face(3 бита)|level(4)|i(8)|j(8) — 23 бита, SMI.
  * Диапазоны: face 0..5, level 0..TERRAIN_QUADTREE_MAX_LEVEL(8), i/j 0..255
  * (2^level патчей на грани, level=8 ⇒ 256). Раскладка была 3|3|6|6 (18 бит,
@@ -148,7 +155,7 @@ function visitNode(
   i: number,
   j: number,
   params: SelectParams,
-  leaves: TerrainNodeAddress[],
+  leaves: TerrainLeaf[],
   split: Set<number>
 ): void {
   if (level < TERRAIN_QUADTREE_MIN_LEVEL) {
@@ -218,7 +225,7 @@ function visitNode(
     split.add(key)
     descend(face, level, i, j, params, leaves, split)
   } else {
-    leaves.push({ face, level, i, j })
+    leaves.push({ face, level, i, j, visible, sse })
   }
 }
 
@@ -228,7 +235,7 @@ function descend(
   i: number,
   j: number,
   params: SelectParams,
-  leaves: TerrainNodeAddress[],
+  leaves: TerrainLeaf[],
   split: Set<number>
 ): void {
   const childLevel = level + 1
@@ -249,8 +256,8 @@ function descend(
  * TERRAIN_QUADTREE_MAX_LEVEL. Без побочных эффектов, без обращения к сцене —
  * вызывается каждый кадр отдельно на CPU.
  */
-export function selectTerrainNodes(params: SelectParams): { leaves: TerrainNodeAddress[]; split: Set<number> } {
-  const leaves: TerrainNodeAddress[] = []
+export function selectTerrainNodes(params: SelectParams): { leaves: TerrainLeaf[]; split: Set<number> } {
+  const leaves: TerrainLeaf[] = []
   const split = new Set<number>()
 
   for (let face = 0; face < CUBE_FACES; face++) {
@@ -259,6 +266,15 @@ export function selectTerrainNodes(params: SelectParams): { leaves: TerrainNodeA
 
   return { leaves, split }
 }
+
+/**
+ * Порядок построек за кадр: видимые узлы раньше невидимых (у поверхности
+ * постройка одна за кадр — мерж за спиной не должен опережать сплит перед
+ * камерой); среди видимых — большая SSE первой (самый грубый на экране);
+ * среди невидимых — грубые первыми (крупные дыры закрываются раньше).
+ */
+export const byBuildPriority = (a: TerrainLeaf, b: TerrainLeaf): number =>
+  a.visible !== b.visible ? (a.visible ? -1 : 1) : a.visible ? b.sse - a.sse : a.level - b.level
 
 /** Результат обхода потомков: в поддереве нет желаемых / все желаемые живые / есть не живой. */
 const enum DescendantsState {

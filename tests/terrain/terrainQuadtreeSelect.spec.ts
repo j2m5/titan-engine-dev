@@ -10,11 +10,13 @@ import {
   selectTerrainNodes,
   terrainNodeKey,
   nodeBoundingSphereRadiusUnits,
+  byBuildPriority,
   TERRAIN_QUADTREE_WATER_CEILING_LEVEL,
   TERRAIN_QUADTREE_MAX_LEVEL,
   TERRAIN_QUADTREE_MIN_LEVEL,
   type SelectParams,
-  type TerrainNodeAddress
+  type TerrainNodeAddress,
+  type TerrainLeaf
 } from '@/core/terrain/terrainQuadtreeSelect'
 import { MAX_LIVE_PATCHES } from '@/core/terrain/TerrainPatchPool'
 
@@ -618,5 +620,34 @@ describe('selectTerrainNodes: честный максимум узла лови�
       return a.i >> delta === ISLAND_I && a.j >> delta === ISLAND_J
     })
     expect(descendants.length).toBeGreaterThan(0)
+  })
+})
+
+describe('byBuildPriority: видимые по убыванию SSE, потом невидимые по уровню', () => {
+  const leaf = (level: number, visible: boolean, sse: number): TerrainLeaf => ({ face: 0, level, i: 0, j: 0, visible, sse })
+
+  it('видимый L8 раньше невидимого L3; среди видимых — большая SSE первой; среди невидимых — грубые первыми', () => {
+    const sorted = [leaf(3, false, 50), leaf(8, true, 2), leaf(5, true, 9), leaf(2, false, 80)].sort(byBuildPriority)
+    expect(sorted.map((l) => [l.level, l.visible])).toEqual([[5, true], [8, true], [2, false], [3, false]])
+  })
+
+  it('листья отбора несут visible и sse: без фрустума все видимы, sse конечна и неотрицательна', () => {
+    const { leaves } = selectTerrainNodes(makeParams(50))
+    expect(leaves.length).toBeGreaterThan(24)
+    for (const l of leaves) {
+      expect(l.visible).toBe(true)
+      expect(Number.isFinite(l.sse)).toBe(true)
+      expect(l.sse).toBeGreaterThanOrEqual(0)
+    }
+  })
+
+  it('с фрустумом часть листьев невидима, и невидимые не глубже видимых-разбитых (гейт видимости на сплит)', () => {
+    const camera = new PerspectiveCamera(50, 1, 1e-6, 1e9)
+    camera.position.set(toThreeJSUnits(1737.4 + 50), 0, 0)
+    camera.updateMatrixWorld(true)
+    const frustum = new Frustum().setFromProjectionMatrix(new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse))
+    const { leaves } = selectTerrainNodes(makeParams(50, { frustumLocal: frustum }))
+    expect(leaves.some((l) => !l.visible)).toBe(true)
+    expect(leaves.some((l) => l.visible)).toBe(true)
   })
 })

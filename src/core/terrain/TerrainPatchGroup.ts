@@ -10,10 +10,12 @@ import { buildTerrainPatchInto } from '@/core/terrain/terrainPatchGeometry'
 import { detailWrapFor, type DetailWrap } from '@/core/terrain/detailWrap'
 import { TerrainPatchPool, type PatchHandle } from '@/core/terrain/TerrainPatchPool'
 import {
+  byBuildPriority,
   coverageReady,
   selectTerrainNodes,
   terrainNodeKey,
   TERRAIN_QUADTREE_MIN_LEVEL,
+  type TerrainLeaf,
   type TerrainNodeAddress
 } from '@/core/terrain/terrainQuadtreeSelect'
 
@@ -145,16 +147,16 @@ abstract class TerrainPatchGroup extends Group {
     })
     this.persistedSplit = split
 
-    const wanted = new Map<number, TerrainNodeAddress>()
+    const wanted = new Map<number, TerrainLeaf>()
     for (const address of leaves) wanted.set(terrainNodeKey(address), address)
 
-    // очередь построек пересобирается из свежего дифа каждый кадр. leaves —
-    // DFS-обход пространства квадродерева (спуск по face/i/j), НЕ порядок
-    // грубое→мелкое, вопреки прежней формулировке здесь. Спека просила
-    // приоритет по SSE; сортировка по level по возрастанию — дешёвый прокси
-    // (сотни элементов раз в кадр, полноценная сортировка по SSE того не
-    // стоит): coarse-first ближе всего заполняет крупные дыры первым.
-    const buildQueue = [...leaves].sort((a, b) => a.level - b.level)
+    // очередь построек пересобирается из свежего дифа каждый кадр. Постройка
+    // одна за кадр (бюджет ниже) — порядок решает, что появится первым:
+    // видимые узлы идут раньше невидимых (мерж за спиной не должен опережать
+    // сплит перед камерой), среди видимых — с наибольшей SSE (самый грубый
+    // на экране закрывается первым), среди невидимых — грубые впереди
+    // (крупные дыры сзади/сбоку закрываются раньше мелких), см. byBuildPriority.
+    const buildQueue = [...leaves].sort(byBuildPriority)
 
     // временной бюджет вместо счётчика: минимум одна постройка гарантирована
     // всегда (built===0 пропускает проверку), дальше цикл идёт, пока
