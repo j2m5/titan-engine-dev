@@ -49,7 +49,7 @@ function terrainEquatorSegmentsAtLevel(level: number): number {
  * (`buildNodeErrorPyramid`) — две записи этого закона разошлись бы, и SSE
  * поехала бы относительно юбок.
  */
-function terrainLevelScale(width: number, level: number, block: number, hurst: number): number {
+export function terrainLevelScale(width: number, level: number, block: number, hurst: number): number {
   const stepTexels = width / terrainEquatorSegmentsAtLevel(level)
 
   return Math.min(1, Math.max(stepTexels, 1) / block) ** hurst * Math.min(1, stepTexels)
@@ -102,6 +102,22 @@ export const TERRAIN_SAG_MODEL_VERSION = 3
  */
 const MIN_TERRAIN_HURST = 0.5
 const MAX_TERRAIN_HURST = 1
+
+/** Блок сетки провиса/ε-пирамиды в текселях — детерминирован от ширины карты (общий с компаньоном). */
+export function terrainBlockTexels(width: number): number {
+  return Math.max(1, Math.round(width / CLEARANCE_GRID_BASE_SEGMENTS))
+}
+
+/**
+ * Показатель самоподобия по двум окнам ε-пирамиды (2×2 и 1×1 блока): их
+ * отношение = 2^H. Кламп [MIN, MAX]; вырожденные окна (плоская карта) → MAX.
+ * Одна функция на билдер и на чтение из компаньона — иначе разошлись бы.
+ */
+export function terrainHurst(p99Wide: number, p99Narrow: number): number {
+  return p99Wide > 0 && p99Narrow > 0
+    ? Math.min(MAX_TERRAIN_HURST, Math.max(MIN_TERRAIN_HURST, Math.log2(p99Wide / p99Narrow)))
+    : MAX_TERRAIN_HURST
+}
 
 const TWO_PI = 2 * Math.PI
 
@@ -175,6 +191,10 @@ class TerrainHeightField {
   private readonly clearanceGridHeight: number
   public readonly maxClearanceMeters: number
   private readonly levelErrorMeters: Float64Array
+  /** Блок ε-пирамиды в текселях (`terrainBlockTexels`) — тот же закон в билдере и в экстраполяции глубже модели. */
+  private readonly block: number
+  /** Показатель самоподобия карты (`terrainHurst`), из ℓ1/ℓ2 компаньона — общий якорь для экстраполяции ниже `TERRAIN_MODEL_LEVEL`. */
+  private readonly hurst: number
   private readonly metersPerRaw: number
   private readonly equatorStepTexels: number
   private readonly spanCap: number
@@ -300,7 +320,7 @@ class TerrainHeightField {
     // считается один раз здесь, а не дублируется в обоих билдерах.
     // equatorStepTexels/spanCap — общая калибровка поточечной формулы,
     // делится сеткой (buildClearanceGrid) и поточечным sagMeters ниже
-    const block = Math.max(1, Math.round(map.width / CLEARANCE_GRID_BASE_SEGMENTS))
+    const block = terrainBlockTexels(map.width)
     this.metersPerRaw = (map.maxMeters - map.minMeters) / 65535
     this.equatorStepTexels = map.width / TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS
     this.spanCap = Math.max(1, Math.floor(map.width / 4))
@@ -324,6 +344,8 @@ class TerrainHeightField {
     this.maxClearanceMeters = aux.maxClearanceMeters
     this.maxSagMeters = aux.maxSagMeters
     this.levelErrorMeters = aux.levelErrorMeters
+    this.block = block
+    this.hurst = terrainHurst(aux.levelErrorMeters[TERRAIN_QUADTREE_MIN_LEVEL], aux.levelErrorMeters[TERRAIN_QUADTREE_MIN_LEVEL + 1])
     this.nodeMaxHeightMetersPyramid = aux.nodeMaxHeightMetersPyramid
     this.nodeErrorMetersPyramid = aux.nodeErrorMetersPyramid
 
@@ -960,10 +982,7 @@ class TerrainHeightField {
     // он ушёл бы в СТЕПЕНЬ, отравив ε всех экстраполированных уровней. Ловится
     // только явной проверкой: `toBe(NaN)` в тестах проходит (Object.is(NaN,
     // NaN) — true), а ноль на NaN даёт снова NaN, не ноль.
-    const hurst =
-      p99_2x2 > 0 && p99_1x1_eff > 0
-        ? Math.min(MAX_TERRAIN_HURST, Math.max(MIN_TERRAIN_HURST, Math.log2(p99_2x2 / p99_1x1_eff)))
-        : MAX_TERRAIN_HURST
+    const hurst = terrainHurst(p99_2x2, p99_1x1_eff)
 
     for (let level = TERRAIN_QUADTREE_MIN_LEVEL + 2; level <= TERRAIN_MODEL_LEVEL; level++) {
       levelErrorMeters[level] = p99_1x1_eff * terrainLevelScale(width, level, block, hurst)
@@ -1299,23 +1318,14 @@ class TerrainHeightField {
   }
 
   /**
-   * ε карты глубже `TERRAIN_MODEL_LEVEL`, метры — модель провиса/клиренса и
-   * пер-узловые пирамиды дальше `TERRAIN_MODEL_LEVEL` не считаются (см. её
-   * докблок), поэтому уровни отбора глубже него экстраполируются ТЕМ ЖЕ
-   * степенным законом самоподобия, что `buildGeometricErrors` использует
-   * внутри пирамиды (размах падает как шаг^H). H здесь — из ПОСЛЕДНЕЙ
-   * измеренной пары уровней (`MODEL_LEVEL−1`, `MODEL_LEVEL`), не из ℓ1/ℓ2:
-   * это самая глубокая доступная оценка локального самоподобия рельефа.
-   * Кламп `[MIN_TERRAIN_HURST, MAX_TERRAIN_HURST]` и фолбэк на вырожденный
-   * (нулевой/NaN) анкер — MAX_TERRAIN_HURST, как и в `buildGeometricErrors`.
+   * ε карты глубже `TERRAIN_MODEL_LEVEL`, метры — тот же закон, что построил
+   * таблицу уровней 3..6 (`p99(1×1) · terrainLevelScale`), продолженный
+   * глубже: выше текселя — самоподобие шаг^H, ниже — линейная билинейка.
+   * Прежняя степенная экстраполяция от ε(6) не знала о линейном режиме и на
+   * 16k-картах завышала ε(8) в 2^(2(1−H)) раз — лишние сплиты у поверхности.
    */
   private extrapolatedLevelErrorMeters(level: number): number {
-    const atModel = this.levelErrorMeters[TERRAIN_MODEL_LEVEL]
-    const atModelMinus1 = this.levelErrorMeters[TERRAIN_MODEL_LEVEL - 1]
-    const ratio = atModelMinus1 / atModel
-    const hurst = Number.isFinite(ratio) && ratio > 0 ? Math.min(MAX_TERRAIN_HURST, Math.max(MIN_TERRAIN_HURST, Math.log2(ratio))) : MAX_TERRAIN_HURST
-
-    return atModel * 2 ** (-hurst * (level - TERRAIN_MODEL_LEVEL))
+    return this.levelErrorMeters[TERRAIN_QUADTREE_MIN_LEVEL + 1] * terrainLevelScale(this.map.width, level, this.block, this.hurst)
   }
 
   /**
