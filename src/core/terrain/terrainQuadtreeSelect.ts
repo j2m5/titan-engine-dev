@@ -288,7 +288,7 @@ function descendantsState(
   level: number,
   i: number,
   j: number,
-  wanted: ReadonlyMap<number, TerrainNodeAddress>,
+  wanted: ReadonlyMap<number, unknown>,
   isLive: (key: number) => boolean
 ): DescendantsState {
   if (level >= TERRAIN_QUADTREE_MAX_LEVEL) return DescendantsState.None
@@ -344,4 +344,41 @@ export function coverageReady(
   }
 
   return false // связи не нашлось — не должно случаться, но пин безопаснее дыры
+}
+
+/** Обход желаемых листьев внутри x спуском по дереву (те же ключи, что видит descendantsState). */
+export function forEachWantedDescendant(
+  x: TerrainNodeAddress,
+  wanted: ReadonlyMap<number, unknown>,
+  fn: (key: number) => void
+): void {
+  const walk = (level: number, i: number, j: number): void => {
+    if (level >= TERRAIN_QUADTREE_MAX_LEVEL) return
+    const childLevel = level + 1
+    for (let di = 0; di < 2; di++) {
+      for (let dj = 0; dj < 2; dj++) {
+        const ci = i * 2 + di
+        const cj = j * 2 + dj
+        const childKey = (x.face << 20) | (childLevel << 16) | (ci << 8) | cj
+        if (wanted.has(childKey)) fn(childKey)
+        else walk(childLevel, ci, cj)
+      }
+    }
+  }
+  walk(x.level, x.i, x.j)
+}
+
+/** Ключ ближайшего живого предка x (подъём по битовым сдвигам) или −1. */
+export function liveAncestorKey(x: TerrainNodeAddress, isLive: (key: number) => boolean): number {
+  for (let level = x.level - 1; level >= TERRAIN_QUADTREE_MIN_LEVEL; level--) {
+    const delta = x.level - level
+    const key = (x.face << 20) | (level << 16) | ((x.i >> delta) << 8) | (x.j >> delta)
+    if (isLive(key)) return key
+  }
+  return -1
+}
+
+/** Есть ли внутри x хоть один живой узел (live — множество живых ключей). */
+export function hasLiveDescendant(x: TerrainNodeAddress, live: ReadonlyMap<number, unknown>): boolean {
+  return descendantsState(x.face, x.level, x.i, x.j, live, () => true) !== DescendantsState.None
 }

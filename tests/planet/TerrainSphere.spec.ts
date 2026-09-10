@@ -11,7 +11,12 @@ import { resourceStorage } from '@/core/services/ResourceStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { UpdateContext } from '@/core/UpdateContext'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
-import { TERRAIN_QUADTREE_MAX_LEVEL, terrainNodeKey, type TerrainNodeAddress } from '@/core/terrain/terrainQuadtreeSelect'
+import {
+  liveAncestorKey,
+  TERRAIN_QUADTREE_MAX_LEVEL,
+  terrainNodeKey,
+  type TerrainNodeAddress
+} from '@/core/terrain/terrainQuadtreeSelect'
 
 // Луна (actorId 19) — тело с height-ресурсом
 function moon(): Actor {
@@ -131,6 +136,36 @@ describe('TerrainSphere: динамическое квадродерево па�
     }
     expect(counts.at(-1)!).toBeGreaterThan(24)
     expect(counts.at(-1)).toEqual(counts.at(-10))
+  })
+
+  // Часы бюджета — циклическая последовательность (не performance.now()):
+  // своп откладывает показ только при постройке по одной за кадр, на реальных
+  // часах стенд успевает построить всю замену в первом же кадре и скрытых
+  // узлов в снимке не остаётся.
+  it('атомарный своп: дети скрыты, пока жив родитель; после его ухода видимы все; скрытый узел всегда перекрыт видимым', () => {
+    let tick = 0
+    const nowMs = (): number => (tick++ % 4 < 2 ? 0 : 7)
+
+    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080), undefined, undefined, nowMs)
+    const ctx = makeCtx(2)
+    let sawHidden = false
+    for (let f = 0; f < 120; f++) {
+      sphere.updateObject(ctx)
+      const meshes = sphere.children.filter((c): c is Mesh => c instanceof Mesh)
+      const visibleKeys = new Set(
+        meshes.filter((m) => m.visible).map((m) => terrainNodeKey(m.userData.terrainAddress as TerrainNodeAddress))
+      )
+      for (const m of meshes) {
+        if (m.visible) continue
+        sawHidden = true
+        const a = m.userData.terrainAddress as TerrainNodeAddress
+        // скрытый узел обязан быть перекрыт: видимый предок ИЛИ полностью видимые потомки
+        const ancestorVisible = liveAncestorKey(a, (k) => visibleKeys.has(k)) !== -1
+        expect(ancestorVisible || covered(visibleKeys, a.face, a.level, a.i, a.j)).toBe(true)
+      }
+      expect(sphereFullyCovered(sphere)).toBe(true)
+    }
+    expect(sawHidden).toBe(true) // при одной постройке за кадр своп действительно откладывает показ
   })
 
   it('удаление камеры мержит обратно к 24', () => {

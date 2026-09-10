@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   coverageReady,
+  forEachWantedDescendant,
+  hasLiveDescendant,
+  liveAncestorKey,
   terrainNodeKey,
   TERRAIN_QUADTREE_MAX_LEVEL,
   type TerrainNodeAddress
@@ -160,5 +163,27 @@ describe('coverageReady: быстрый обход эквивалентен эт
 
       expect(fast, `round ${round}: x=${JSON.stringify(x)}`).toBe(reference)
     }
+  })
+
+  it('forEachWantedDescendant обходит ровно желаемые листья внутри узла; liveAncestorKey — ближайший живой предок; hasLiveDescendant', () => {
+    const key = terrainNodeKey
+    const wanted = new Map<number, true>([
+      [key({ face: 0, level: 3, i: 0, j: 0 }), true],
+      [key({ face: 0, level: 3, i: 0, j: 1 }), true],
+      [key({ face: 0, level: 2, i: 1, j: 0 }), true]
+    ])
+    const seen: number[] = []
+    forEachWantedDescendant({ face: 0, level: 1, i: 0, j: 0 }, wanted, (k) => seen.push(k))
+    expect(new Set(seen)).toEqual(new Set(wanted.keys()))
+
+    const live = new Set([key({ face: 0, level: 1, i: 0, j: 0 })])
+    expect(liveAncestorKey({ face: 0, level: 4, i: 3, j: 2 }, (k) => live.has(k))).toBe(
+      key({ face: 0, level: 1, i: 0, j: 0 })
+    )
+    expect(liveAncestorKey({ face: 1, level: 4, i: 3, j: 2 }, (k) => live.has(k))).toBe(-1)
+
+    const liveMap = new Map<number, true>([[key({ face: 0, level: 5, i: 7, j: 7 }), true]])
+    expect(hasLiveDescendant({ face: 0, level: 2, i: 0, j: 0 }, liveMap)).toBe(true)
+    expect(hasLiveDescendant({ face: 0, level: 2, i: 1, j: 1 }, liveMap)).toBe(false)
   })
 })

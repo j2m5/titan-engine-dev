@@ -12,6 +12,9 @@ import { TerrainPatchPool, type PatchHandle } from '@/core/terrain/TerrainPatchP
 import {
   byBuildPriority,
   coverageReady,
+  forEachWantedDescendant,
+  hasLiveDescendant,
+  liveAncestorKey,
   selectTerrainNodes,
   terrainNodeKey,
   TERRAIN_QUADTREE_MIN_LEVEL,
@@ -36,8 +39,10 @@ import {
  * Инвариант «без дыр»: показанный узел, переставший быть желаемым,
  * освобождается ТОЛЬКО когда его замена готова — либо все желаемые листья
  * внутри него построены (дробится мельче), либо построен желаемый предок
- * (схлопывается крупнее), см. coverageReady. До этого момента старый и
- * новый узлы видны одновременно (перекрытие допустимо, дыра — нет).
+ * (схлопывается крупнее), см. coverageReady. Своп атомарен: новые патчи
+ * входят в сцену скрытыми и показываются РОВНО в кадр освобождения заменяемого
+ * узла — перекрытия старого и нового больше нет, z-fight между двумя уровнями
+ * не возникает.
  *
  * patches делят один материал (аргумент конструктора) — контракт
  * ResourceObserver (.material на TerrainSphere) остаётся за наследником, эта
@@ -62,6 +67,12 @@ abstract class TerrainPatchGroup extends Group {
   // замыкание переиспользуется между кадрами — coverageReady зовётся на каждый
   // освобождаемый узел, аллокация лямбды на вызов была бы мусором в горячем пути
   private readonly isLive = (key: number): boolean => this.live.has(key)
+  // тот же приём, что isLive: колбэк forEachWantedDescendant зовётся на каждый
+  // желаемый лист внутри освобождаемого узла — лямбда на вызов была бы мусором
+  private readonly showLive = (key: number): void => {
+    const entry = this.live.get(key)
+    if (entry) entry.handle.mesh.visible = true
+  }
 
   // скретчи кадра: updateObject зовётся каждый кадр, аллокаций быть не должно
   private readonly cameraWorldScratch = new Vector3()
@@ -180,19 +191,34 @@ abstract class TerrainPatchGroup extends Group {
         continue
       }
 
-      this.writePatch(handle, address)
+      this.writePatch(handle, address, false)
       this.live.set(key, { handle, address })
       built++
     }
 
-    // без дыр: показанный узел освобождается только когда готова его замена
+    // без дыр: показанный узел освобождается только когда готова его замена;
+    // замена показывается в тот же кадр (атомарный своп): все живые потомки при
+    // дроблении, живой предок — при схлопывании
     for (const [key, entry] of this.live) {
       if (wanted.has(key)) continue
       if (!coverageReady(entry.address, wanted, this.isLive)) continue
 
+      forEachWantedDescendant(entry.address, wanted, this.showLive)
+      const ancestor = liveAncestorKey(entry.address, this.isLive)
+      if (ancestor !== -1 && wanted.has(ancestor)) this.showLive(ancestor)
+
       this.remove(entry.handle.mesh)
       this.pool.release(entry.handle)
       this.live.delete(key)
+    }
+
+    // страховка от дыр: скрытый узел, которого никто живой не перекрывает,
+    // показывается сразу (слот освободился после исчерпания пула и т.п.)
+    for (const entry of this.live.values()) {
+      if (entry.handle.mesh.visible) continue
+      if (liveAncestorKey(entry.address, this.isLive) !== -1) continue
+      if (hasLiveDescendant(entry.address, this.live)) continue
+      entry.handle.mesh.visible = true
     }
   }
 
@@ -209,11 +235,17 @@ abstract class TerrainPatchGroup extends Group {
       return
     }
 
-    this.writePatch(handle, address)
+    this.writePatch(handle, address, true)
     this.live.set(terrainNodeKey(address), { handle, address })
   }
 
-  private writePatch(handle: PatchHandle, address: TerrainNodeAddress): void {
+  /**
+   * `visible` — стартовая видимость патча: минимальный набор конструктора
+   * входит видимым (заменять нечего, скрытый старт был бы дырой), постройки
+   * кадра — скрытыми, до кадра освобождения заменяемого узла (атомарный своп,
+   * см. докблок класса).
+   */
+  private writePatch(handle: PatchHandle, address: TerrainNodeAddress, visible: boolean): void {
     // юбка закрывает недобор ГРУБОГО соседа, не свой: фрустум-гейт допускает
     // перепад до двух уровней (сосед вне фрустума не сплитится), поэтому
     // глубина берётся по ε(level−2); на глубоких уровнях (L7–L8) ε мала,
@@ -235,6 +267,7 @@ abstract class TerrainPatchGroup extends Group {
     handle.mesh.userData.terrainAddress = address
     this.configurePatchMesh(handle.mesh)
     this.add(handle.mesh)
+    handle.mesh.visible = visible
   }
 
   /**
