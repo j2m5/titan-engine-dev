@@ -1,6 +1,5 @@
 import {
   BufferAttribute,
-  BufferGeometry,
   DynamicDrawUsage,
   InstancedBufferAttribute,
   InstancedBufferGeometry,
@@ -28,7 +27,7 @@ import { buildPatchIndex, terrainPatchVertexCount } from './terrainPatchGeometry
  */
 export const MAX_LIVE_PATCHES = 1024
 
-export type PatchHandle = { mesh: Mesh; geometry: BufferGeometry }
+export type PatchHandle = { mesh: Mesh; geometry: InstancedBufferGeometry }
 
 /**
  * Пул патчей квадродерева: split/merge переиспользует геометрии слотов без
@@ -141,7 +140,7 @@ class TerrainPatchPool {
     // Центр патча — один на весь патч (инстансный атрибут, делитель 1):
     // вершинник восстанавливает радиальное направление normalize(position +
     // patchCenter), а атрибуты normal (= то же направление) и uv (мёртв для
-    // рендера — фрагментник считает uv сам) сняты: 17 → 12 float на вершину.
+    // рендера — фрагментник считает uv сам) сняты.
     const patchCenter = new InstancedBufferAttribute(new Float32Array(3), 3)
     // DynamicDrawUsage: split/merge перезаписывает эти атрибуты на месте
     // каждый раз, когда слот переиспользуется (buildTerrainPatchInto) — не

@@ -97,6 +97,14 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.defines = defines
     this.baseDefines = { ...defines }
 
+    // USE_TERRAIN_UV ставится по наличию карты в реестре, а не по типу
+    // геометрии: на окно даунгрейда легаси-сфера несёт рельефные дефайны (см.
+    // докблок RenderableFactory.swapSurface), а атрибута patchCenter у
+    // SphereGeometry нет. Без явного дефолта three не биндит ничего и значение
+    // приходит из общего generic-слота GL. Ноль даёт вершиннику
+    // normalize(position) — радиаль тело-центричной сферы.
+    this.defaultAttributeValues = { ...this.defaultAttributeValues, patchCenter: [0, 0, 0] }
+
     // Steep-зона материала (Task 3, чанк TerrainDetail — GLSL-сторона уже
     // объявлена задачей 2): второй набор detail-сэмплеров и маска уклона
     // добавляются прямо здесь, а не в PlanetShader — тот несёт только

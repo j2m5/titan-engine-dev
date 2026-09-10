@@ -344,7 +344,7 @@ export function buildTerrainPatchInto(
   depth: number,
   segments: number,
   skirtDepthUnits: number,
-  handle: { mesh: Mesh; geometry: BufferGeometry },
+  handle: { mesh: Mesh; geometry: InstancedBufferGeometry },
   wrap: DetailWrap
 ): void {
   const { geometry, mesh } = handle
@@ -372,7 +372,7 @@ export function buildTerrainPatchInto(
 
   // центр патча — инстансный атрибут (один элемент): его пишет вызывающий,
   // ядро сборки центр только возвращает
-  const patchCenter = geometry.getAttribute('patchCenter') as InstancedBufferAttribute
+  const patchCenter = geometry.getAttribute('patchCenter') as BufferAttribute
   ;(patchCenter.array as Float32Array).set([center.x, center.y, center.z])
   patchCenter.needsUpdate = true
 

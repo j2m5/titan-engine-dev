@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Texture } from 'three'
 import '@/core/framework/TitanThree'
 import { Planet } from '@/core/renderables/Planet'
+import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { TerrainSphere } from '@/core/renderables/TerrainSphere'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
@@ -93,5 +94,17 @@ describe('Planet: легаси-сфера', () => {
     const parameters = (planet.geometry as unknown as { parameters: { widthSegments: number } }).parameters
 
     expect(parameters.widthSegments).toBe(256)
+  })
+
+  // Окно даунгрейда (см. докблок RenderableFactory.swapSurface): сфера на тик
+  // несёт USE_TERRAIN_UV, а вершинник под этим дефайном читает patchCenter,
+  // которого у SphereGeometry нет. Без дефолта значение приходит из общего
+  // generic-слота GL; ноль даёт normalize(position) — радиаль сферы.
+  it('материал несёт дефолт атрибута patchCenter — нули', () => {
+    const material = new PlanetMaterial(moon())
+
+    expect(material.defaultAttributeValues.patchCenter).toEqual([0, 0, 0])
+    // дефолты three (color/uv/uv1) не затёрты
+    expect(material.defaultAttributeValues.uv).toEqual([0, 0])
   })
 })

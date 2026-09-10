@@ -179,6 +179,8 @@ describe('TerrainPatchPool', () => {
     expect(patchCenter.count).toBe(1)
     expect(patchCenter.itemSize).toBe(3)
     expect(patchCenter.usage).toBe(DynamicDrawUsage)
+    // делитель инстанса: он же идёт в _maxInstanceCount = meshPerAttribute × count
+    expect(patchCenter.meshPerAttribute).toBe(1)
   })
 
   it('dispose освобождает геометрии свободных слотов и общий индекс; живые слоты не трогает', () => {

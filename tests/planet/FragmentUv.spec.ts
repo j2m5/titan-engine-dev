@@ -39,13 +39,15 @@ describe('FragmentUv: попиксельные UV терраформных те�
     const terrainBranch = vert.slice(vert.indexOf('#ifdef USE_TERRAIN_UV', vert.indexOf('void main()')))
     const [gated, legacy] = terrainBranch.split('#else')
 
-    expect(vert).toContain('attribute vec3 patchCenter;')
+    // объявление атрибута — внутри своего гейта, а не «где-то после него»
+    const declBlock = vert.slice(vert.indexOf('#ifdef USE_TERRAIN_UV'), vert.indexOf('void main()'))
+    const [gatedDecls] = declBlock.split('#endif')
+    expect(gatedDecls).toContain('attribute vec3 patchCenter;')
+
     expect(gated).toContain('vec3 vertexDir = normalize(position + patchCenter);')
     expect(gated).not.toContain('vUv = uv;')
     expect(legacy.slice(0, legacy.indexOf('#endif'))).toContain('vec3 vertexDir = normal;')
     expect(legacy.slice(0, legacy.indexOf('#endif'))).toContain('vUv = uv;')
-    // объявление атрибута — тоже под гейтом: у легаси-сферы такого атрибута нет
-    expect(vert.slice(0, vert.indexOf('attribute vec3 patchCenter;'))).toContain('#ifdef USE_TERRAIN_UV')
   })
 
   it('выборки текстур фрагментника переведены на попиксельный uv — vUv остаётся только легаси-присвоением', () => {
