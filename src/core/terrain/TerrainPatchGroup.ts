@@ -21,6 +21,20 @@ import {
   type TerrainNodeAddress
 } from '@/core/terrain/terrainQuadtreeSelect'
 
+export const POOL_PRESSURE_START = 0.85
+export const POOL_PRESSURE_GAIN = 3
+
+/**
+ * Порог сплита с учётом заполнения пула: ниже POOL_PRESSURE_START — базовый,
+ * при полном пуле ×(1 + GAIN) — набор коарсится, родители становятся
+ * желаемыми, слоты возвращаются. Без клапана acquire()→null при полном пуле
+ * и освобождение по coverageReady замыкались в тупик.
+ */
+export function effectiveSplitPixels(base: number, live: number, max: number): number {
+  const pressure = max > 0 ? live / max : 0
+  return base * (1 + POOL_PRESSURE_GAIN * Math.max(0, (pressure - POOL_PRESSURE_START) / (1 - POOL_PRESSURE_START)))
+}
+
 /**
  * Общая машинерия квадродерева патчей кубосферы: пул, отбор по SSE
  * (selectTerrainNodes), гистерезис split/merge без дыр, юбки, dispose.
@@ -57,20 +71,6 @@ import {
  * Геометрия патча несёт также detailPos/detailPos2 — домен детальных слоёв
  * (см. detailWrap.ts), периоды которого приходят сюда параметром detailWrap.
  */
-export const POOL_PRESSURE_START = 0.85
-export const POOL_PRESSURE_GAIN = 3
-
-/**
- * Порог сплита с учётом заполнения пула: ниже POOL_PRESSURE_START — базовый,
- * при полном пуле ×(1 + GAIN) — набор коарсится, родители становятся
- * желаемыми, слоты возвращаются. Без клапана acquire()→null при полном пуле
- * и освобождение по coverageReady замыкались в тупик.
- */
-export function effectiveSplitPixels(base: number, live: number, max: number): number {
-  const pressure = max > 0 ? live / max : 0
-  return base * (1 + POOL_PRESSURE_GAIN * Math.max(0, (pressure - POOL_PRESSURE_START) / (1 - POOL_PRESSURE_START)))
-}
-
 abstract class TerrainPatchGroup extends Group {
   private readonly field: TerrainHeightField
   private readonly pool: TerrainPatchPool
@@ -168,6 +168,9 @@ abstract class TerrainPatchGroup extends Group {
       frustumLocal: this.frustumScratch,
       screenHeight: this.renderer.domElement.height,
       fovYRadians: degToRad(ctx.camera.fov),
+      // liveCount читается ДО построек этого кадра — давление отстаёт на
+      // один кадр от факта (после-release состояние прошлого кадра), но
+      // консервативно: потолок acquire() всё равно держит жёсткий кламп
       splitPixels: effectiveSplitPixels(config('terrain.sseSplitPixels'), this.pool.liveCount, this.pool.maxLivePatches),
       mergeFactor: config('terrain.sseMergeFactor'),
       currentlySplit: this.persistedSplit,

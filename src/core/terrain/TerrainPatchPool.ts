@@ -98,12 +98,21 @@ class TerrainPatchPool {
   /**
    * Возврат памяти после ухода с поверхности: свободных слотов остаётся не
    * больше maxFree, лишние (самые старые в стеке) диспозятся — GPU-буферы и
-   * массивы; общий индекс не трогается (живёт до dispose()). На подлёте слоты
-   * создаются заново (createHandle — доли миллисекунды).
+   * массивы. Индекс отвязывается (`setIndex(null)`) ДО dispose() каждой
+   * лишней геометрии — общий GL-буфер живёт до dispose() ПУЛА: WebGL
+   * `onGeometryDispose` снимает `attributes.remove(geometry.index)` для
+   * ЛЮБОЙ диспозящейся геометрии, а индекс общий по ссылке у всех геометрий
+   * пула (см. докблок класса) — без отвязки dispose() свободного слота стирал
+   * бы GL-буфер индекса ПОКА живые патчи ещё рисуются им же (тихая
+   * пересборка буфера на следующей отрисовке, осиротевшие копии VAO). На
+   * подлёте слоты создаются заново (createHandle — доли миллисекунды).
    */
   public trimFree(maxFree: number): number {
     const extra = Math.max(0, this.free.length - Math.max(0, Math.floor(maxFree)))
-    for (let k = 0; k < extra; k++) this.free[k].geometry.dispose()
+    for (let k = 0; k < extra; k++) {
+      this.free[k].geometry.setIndex(null)
+      this.free[k].geometry.dispose()
+    }
     this.free.splice(0, extra)
     return extra
   }

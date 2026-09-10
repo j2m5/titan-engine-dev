@@ -189,4 +189,22 @@ describe('TerrainPatchPool', () => {
     expect(disposed).toHaveBeenCalled()
     expect(pool.trimFree(2)).toBe(0)
   })
+
+  // index отвязан (setIndex(null)) ДО dispose() у вытесненных — иначе
+  // BufferGeometry.dispose() снял бы GL-буфер ОБЩЕГО индекса, которым всё ещё
+  // рисуют оставшиеся свободные и живые геометрии (см. докблок trimFree)
+  it('trimFree(k): у вытесненных geometry.index отвязан, у оставшихся (свободных и живых) — общий индекс цел', () => {
+    const pool = makePool()
+    const handles = Array.from({ length: 6 }, () => pool.acquire()!)
+    for (const h of handles.slice(0, 5)) pool.release(h)
+
+    expect(pool.trimFree(2)).toBe(3)
+
+    for (const h of handles.slice(0, 3)) expect(h.geometry.getIndex()).toBeNull() // вытеснены
+    for (const h of [handles[3], handles[4]]) expect(h.geometry.getIndex()).not.toBeNull() // остались свободными
+    expect(handles[5].geometry.getIndex()).not.toBeNull() // живой — не тронут вовсе
+    // общий по ссылке у всех переживших, не только у "свободных"
+    expect(handles[3].geometry.getIndex()).toBe(handles[4].geometry.getIndex())
+    expect(handles[3].geometry.getIndex()).toBe(handles[5].geometry.getIndex())
+  })
 })
