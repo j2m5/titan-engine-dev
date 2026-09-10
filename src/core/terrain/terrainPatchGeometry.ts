@@ -1,4 +1,12 @@
-import { BufferAttribute, BufferGeometry, Mesh, Vector2, Vector3 } from 'three'
+import {
+  BufferAttribute,
+  BufferGeometry,
+  InstancedBufferAttribute,
+  InstancedBufferGeometry,
+  Mesh,
+  Vector2,
+  Vector3
+} from 'three'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { cubeFaceDirection } from './cubeSphere'
 import { wrapIndex, wrappedComponent, type DetailWrap } from './detailWrap'
@@ -101,14 +109,28 @@ export function buildPatchIndex(segments: number): BufferAttribute {
   return new BufferAttribute(indices, 1)
 }
 
-const POLE_EPSILON = 1e-9
+/**
+ * Скретч направлений сеточных вершин: НЕ атрибут — направление живёт в
+ * геометрии как position + patchCenter, а здесь нужно только юбке (радиальный
+ * сдвиг кромки). Один буфер на модуль, а не аллокация на сборку: into-вариант
+ * существует ровно ради отсутствия аллокаций в split/merge. Мешер
+ * синхронный и не реентерабельный — перекрытия сборок не бывает.
+ */
+let gridDirsScratch = new Float32Array(0)
+
+function gridDirs(gridCount: number): Float32Array {
+  if (gridDirsScratch.length < gridCount * 3) gridDirsScratch = new Float32Array(gridCount * 3)
+
+  return gridDirsScratch
+}
 
 /**
- * Ядро сборки RTC-патча (face, i, j) глубины depth: пишет position/normal/uv
+ * Ядро сборки RTC-патча (face, i, j) глубины depth: пишет вершинные атрибуты
  * в переданные массивы (уже нужного размера — вызывающий считает
  * vertexCount) и возвращает RTC-центр. Общее для fresh-варианта (аллоцирует
  * массивы сам) и into-варианта пула (переиспользует буферы существующей
- * геометрии без аллокаций).
+ * геометрии без аллокаций). Инстансный атрибут patchCenter пишет вызывающий
+ * из возвращённого center.
  *
  * Позиции хранятся ОТНОСИТЕЛЬНО центра патча (центр — в position меша),
  * больших чисел во float32 нет, катастрофическое сокращение происходит в f64
@@ -116,15 +138,13 @@ const POLE_EPSILON = 1e-9
  * dirToUv/sampleMeters, что использует surfaceRadiusUnits (мешер и коллизия
  * читают одни данные одной формулой; мешер зовёт dirToUv один раз на
  * вершину, не через surfaceRadiusUnits повторно — см. перф-заметку в цикле
- * ниже). Нормали радиальные — наклон шейдит slope-карта. UV разворачивается
- * вокруг u центра патча (|u−uc| ≤ 0.5, допускается выход за [0,1] — текстуры
- * терраформных тел в RepeatWrapping); вершина ровно в полюсе берёт u центра
- * (там phi не определён). Развёртка шва корректна при азимутальном спане
- * патча < 180°: глубина ≥ 1; корень глубины 0 (этап 3б) потребует другой
- * развёртки. Юбка (skirtDepthUnits > 0) добавляет по периметру патча
- * вертикальную стенку — копию кромочных dir/normal/uv с радиусом, уменьшенным
- * на skirtDepthUnits: скрывает щель на стыке с соседним патчем другой
- * глубины квадродерева без необходимости совпадения тесселяций.
+ * ниже). Радиальное направление вершины — не атрибут: вершинник считает его
+ * как normalize(position + patchCenter), развёртку uv фрагментник считает
+ * попиксельно из этого направления (см. terrainUvFunctions). Юбка
+ * (skirtDepthUnits > 0) добавляет по периметру патча вертикальную стенку —
+ * копию кромочной вершины с радиусом, уменьшенным на skirtDepthUnits:
+ * скрывает щель на стыке с соседним патчем другой глубины квадродерева без
+ * необходимости совпадения тесселяций.
  *
  * detailPos/detailPos2 — тело-локальная позиция вершины (dir·r, ДО вычитания
  * center) минус k·W домена детали (см. detailWrap.ts), k общий на весь патч
@@ -144,8 +164,6 @@ function writeTerrainPatchAttributes(
   segments: number,
   skirtDepthUnits: number,
   positions: Float32Array,
-  normals: Float32Array,
-  uvs: Float32Array,
   detailPos: Float32Array,
   detailPos2: Float32Array,
   heights: Float32Array,
@@ -164,7 +182,6 @@ function writeTerrainPatchAttributes(
 
   const centerDir = cubeFaceDirection(face, s0 + span / 2, t0 + span / 2, new Vector3())
   const center = centerDir.clone().multiplyScalar(field.surfaceRadiusUnits(centerDir))
-  const centerU = field.dirToUv(centerDir, new Vector2()).x
 
   const wrapK1: readonly [number, number, number] = [
     wrapIndex(center.x, wrap.w1),
@@ -179,6 +196,8 @@ function writeTerrainPatchAttributes(
 
   const gridCount = gridVertexCount(segments)
   const ringCount = ringVertexCount(segments)
+
+  const dirs = gridDirs(gridCount)
 
   let k = 0
   for (let b = 0; b <= segments; b++) {
@@ -209,25 +228,16 @@ function writeTerrainPatchAttributes(
       detailPos2[k * 3 + 1] = wrappedComponent(dir.y * r, wrapK2[1], wrap.w2)
       detailPos2[k * 3 + 2] = wrappedComponent(dir.z * r, wrapK2[2], wrap.w2)
 
-      normals[k * 3] = dir.x
-      normals[k * 3 + 1] = dir.y
-      normals[k * 3 + 2] = dir.z
-
-      const u = Math.abs(dir.y) >= 1 - POLE_EPSILON ? centerU : uv.x - Math.round(uv.x - centerU)
-      uvs[k * 2] = u
-      // Текстурное v = 1 − v карты: dirToUv отдаёт v в координатах карты
-      // (строка 0 = север), а загрузчик текстур флипует изображение (север =
-      // v 1). Этот атрибут сейчас мёртв для рендера (фрагментник считает uv
-      // сам, см. USE_TERRAIN_UV в PlanetShaderTemplate) — но незеркальный он
-      // был бы миной для будущего потребителя вершинных uv.
-      uvs[k * 2 + 1] = 1 - uv.y
+      dirs[k * 3] = dir.x
+      dirs[k * 3 + 1] = dir.y
+      dirs[k * 3 + 2] = dir.z
 
       k++
     }
   }
 
-  // юбка: копия кромочной вершины (dir/normal/uv), радиус кромки минус
-  // skirtDepthUnits. Вычитание нормали (=dir) из УЖЕ квантованной позиции
+  // юбка: копия кромочной вершины, радиус кромки минус skirtDepthUnits.
+  // Вычитание направления (float32, из dirs) из УЖЕ квантованной позиции
   // кромки, а не пересборка dir·(r−skirtDepthUnits) заново, — общая ошибка
   // округления кромочной позиции входит в обе вершины одинаково и почти
   // полностью сокращается в разности длин edge/skirt (см. тест «юбочная
@@ -237,20 +247,13 @@ function writeTerrainPatchAttributes(
     const edgeIndex = ringGridIndex(ring, segments)
     const skirtIndex = gridCount + ring
 
-    const nx = normals[edgeIndex * 3]
-    const ny = normals[edgeIndex * 3 + 1]
-    const nz = normals[edgeIndex * 3 + 2]
+    const nx = dirs[edgeIndex * 3]
+    const ny = dirs[edgeIndex * 3 + 1]
+    const nz = dirs[edgeIndex * 3 + 2]
 
     positions[skirtIndex * 3] = positions[edgeIndex * 3] - nx * skirtDepthUnits
     positions[skirtIndex * 3 + 1] = positions[edgeIndex * 3 + 1] - ny * skirtDepthUnits
     positions[skirtIndex * 3 + 2] = positions[edgeIndex * 3 + 2] - nz * skirtDepthUnits
-
-    normals[skirtIndex * 3] = nx
-    normals[skirtIndex * 3 + 1] = ny
-    normals[skirtIndex * 3 + 2] = nz
-
-    uvs[skirtIndex * 2] = uvs[edgeIndex * 2]
-    uvs[skirtIndex * 2 + 1] = uvs[edgeIndex * 2 + 1]
 
     // юбка несёт позицию своей кромочной вершины домена детали — радиальный
     // сдвиг юбки (skirtDepthUnits) вносил бы фиктивную деталь на стенке
@@ -290,8 +293,6 @@ export function buildTerrainPatchGeometry(
 ): { geometry: BufferGeometry; center: Vector3 } {
   const vertexCount = terrainPatchVertexCount(segments)
   const positions = new Float32Array(vertexCount * 3)
-  const normals = new Float32Array(vertexCount * 3)
-  const uvs = new Float32Array(vertexCount * 2)
   const detailPos = new Float32Array(vertexCount * 3)
   const detailPos2 = new Float32Array(vertexCount * 3)
   const heights = new Float32Array(vertexCount)
@@ -306,8 +307,6 @@ export function buildTerrainPatchGeometry(
     segments,
     skirtDepthUnits,
     positions,
-    normals,
-    uvs,
     detailPos,
     detailPos2,
     heights,
@@ -315,14 +314,16 @@ export function buildTerrainPatchGeometry(
     wrap
   )
 
-  const geometry = new BufferGeometry()
+  // раскладка бит-в-бит как у слота пула (см. TerrainPatchPool.createHandle):
+  // InstancedBufferGeometry с одним инстансом и центром патча в инстансном атрибуте
+  const geometry = new InstancedBufferGeometry()
+  geometry.instanceCount = 1
   geometry.setAttribute('position', new BufferAttribute(positions, 3))
-  geometry.setAttribute('normal', new BufferAttribute(normals, 3))
-  geometry.setAttribute('uv', new BufferAttribute(uvs, 2))
   geometry.setAttribute('detailPos', new BufferAttribute(detailPos, 3))
   geometry.setAttribute('detailPos2', new BufferAttribute(detailPos2, 3))
   geometry.setAttribute('height', new BufferAttribute(heights, 1))
   geometry.setAttribute('midTilt', new BufferAttribute(midTilts, 2))
+  geometry.setAttribute('patchCenter', new InstancedBufferAttribute(new Float32Array([center.x, center.y, center.z]), 3))
   geometry.setIndex(index)
   geometry.computeBoundingSphere()
 
@@ -348,8 +349,6 @@ export function buildTerrainPatchInto(
 ): void {
   const { geometry, mesh } = handle
   const positions = geometry.getAttribute('position') as BufferAttribute
-  const normals = geometry.getAttribute('normal') as BufferAttribute
-  const uvs = geometry.getAttribute('uv') as BufferAttribute
   const detailPos = geometry.getAttribute('detailPos') as BufferAttribute
   const detailPos2 = geometry.getAttribute('detailPos2') as BufferAttribute
   const height = geometry.getAttribute('height') as BufferAttribute
@@ -364,8 +363,6 @@ export function buildTerrainPatchInto(
     segments,
     skirtDepthUnits,
     positions.array as Float32Array,
-    normals.array as Float32Array,
-    uvs.array as Float32Array,
     detailPos.array as Float32Array,
     detailPos2.array as Float32Array,
     height.array as Float32Array,
@@ -373,9 +370,13 @@ export function buildTerrainPatchInto(
     wrap
   )
 
+  // центр патча — инстансный атрибут (один элемент): его пишет вызывающий,
+  // ядро сборки центр только возвращает
+  const patchCenter = geometry.getAttribute('patchCenter') as InstancedBufferAttribute
+  ;(patchCenter.array as Float32Array).set([center.x, center.y, center.z])
+  patchCenter.needsUpdate = true
+
   positions.needsUpdate = true
-  normals.needsUpdate = true
-  uvs.needsUpdate = true
   detailPos.needsUpdate = true
   detailPos2.needsUpdate = true
   height.needsUpdate = true

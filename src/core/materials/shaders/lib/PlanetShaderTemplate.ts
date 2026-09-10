@@ -62,6 +62,14 @@ export const PlanetShaderTemplate: ShaderProps = {
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
 
+    #ifdef USE_TERRAIN_UV
+      // Патчи кубосферы: атрибуты normal (= радиальное направление) и uv
+      // (мёртв для рендера — фрагментник считает uv сам) сняты из геометрии,
+      // направление вершины восстанавливается из RTC-позиции и центра патча.
+      // Инстансный атрибут: один элемент на патч (см. TerrainPatchPool).
+      attribute vec3 patchCenter;
+    #endif
+
     #ifdef USE_TERRAIN_DETAIL
       // Точная тело-локальная позиция минус k·W (detailWrap.ts): домен
       // детальных текстур без квантования float32 единичного направления.
@@ -97,17 +105,26 @@ export const PlanetShaderTemplate: ShaderProps = {
       vec3 localLightDirection = transpose(mat3(modelMatrix)) * worldLightDirection;
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
 
-      vUv = uv;
-      vNormal = normalize(normalMatrix * normal);
+      // Body-локальное радиальное направление вершины: у патчей кубосферы —
+      // из RTC-позиции и центра патча, у легаси-сферы (SphereGeometry) —
+      // готовый атрибут normal. vUv жив только на легаси-пути: у патчей
+      // атрибута uv нет, а терраформный фрагментник считает uv сам.
+      #ifdef USE_TERRAIN_UV
+        vec3 vertexDir = normalize(position + patchCenter);
+      #else
+        vec3 vertexDir = normal;
+        vUv = uv;
+      #endif
+
+      vNormal = normalize(normalMatrix * vertexDir);
       // У патчей кубосферы position — смещение от ЦЕНТРА ПАТЧА (RTC), не от
       // центра тела; USE_RING (RingShadow) сегодня безвредно её использует
       // только для тел без колец-детей — терраформное тело с кольцом даст
       // неверную тень (чинить при первом таком теле).
       vPosition = position;
-      // Body-локальное радиальное направление для попиксельного UV терраформных
-      // тел (USE_TERRAIN_UV) — без матриц: normal уже радиальна и body-локальна
-      // на обоих путях (SphereGeometry и RTC-патчи кубосферы).
-      vLocalDir = normal;
+      // Тот же вектор — во фрагментник: попиксельный UV терраформных тел
+      // (USE_TERRAIN_UV) считается из него без матриц.
+      vLocalDir = vertexDir;
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
       vViewPosition = -mvPosition.xyz;

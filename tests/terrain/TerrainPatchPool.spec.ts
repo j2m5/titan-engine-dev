@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { BufferAttribute, DynamicDrawUsage, Texture } from 'three'
+import {
+  BufferAttribute,
+  DynamicDrawUsage,
+  InstancedBufferAttribute,
+  InstancedBufferGeometry,
+  Texture
+} from 'three'
 import {
   MAX_LIVE_PATCHES,
   TerrainPatchPool,
@@ -64,25 +70,36 @@ describe('TerrainPatchPool', () => {
     buildTerrainPatchInto(field, 2, 1, 0, DEPTH, SEGMENTS, SKIRT, handle, wrap)
     const fresh = buildTerrainPatchGeometry(field, 2, 1, 0, DEPTH, SEGMENTS, buildPatchIndex(SEGMENTS), SKIRT, wrap)
 
-    for (const name of ['position', 'normal', 'uv', 'detailPos', 'detailPos2']) {
+    for (const name of ['position', 'detailPos', 'detailPos2', 'height', 'midTilt']) {
       expect(Array.from(handle.geometry.getAttribute(name).array)).toEqual(
         Array.from(fresh.geometry.getAttribute(name).array)
       )
     }
+    // диета атрибутов: normal (= радиальное направление) и uv (мёртв для
+    // рендера) сняты, направление вершинник берёт из position + patchCenter
+    expect(handle.geometry.getAttribute('normal')).toBeUndefined()
+    expect(handle.geometry.getAttribute('uv')).toBeUndefined()
+    const center = handle.geometry.getAttribute('patchCenter') as InstancedBufferAttribute
+    expect(center.isInstancedBufferAttribute).toBe(true)
+    expect(center.itemSize).toBe(3)
+    expect(Array.from(center.array)).toEqual(Array.from(fresh.geometry.getAttribute('patchCenter').array))
+    expect((handle.geometry as InstancedBufferGeometry).isInstancedBufferGeometry).toBe(true)
+    expect((handle.geometry as InstancedBufferGeometry).instanceCount).toBe(1)
+    expect((fresh.geometry as InstancedBufferGeometry).instanceCount).toBe(1)
     expect(handle.mesh.position.distanceTo(fresh.center)).toBe(0)
     expect(handle.geometry.boundingSphere!.radius).toBeCloseTo(fresh.geometry.boundingSphere!.radius, 12)
   })
 
   // needsUpdate у three — сеттер без геттера (пишет version++, читается как
   // undefined всегда), поэтому наблюдаем через .version (см. WaterMaterial.spec.ts)
-  it('into выставляет needsUpdate на всех перезаписанных атрибутах, включая detailPos/detailPos2', () => {
+  it('into выставляет needsUpdate на всех перезаписанных атрибутах, включая detailPos/detailPos2 и patchCenter', () => {
     const field = bumpyField()
     const pool = makePool()
     const handle = pool.acquire()!
     const wrap = detailWrapFor(undefined)
 
     const versionsBefore: Record<string, number> = {}
-    for (const name of ['position', 'detailPos', 'detailPos2']) {
+    for (const name of ['position', 'detailPos', 'detailPos2', 'patchCenter']) {
       const attr = handle.geometry.getAttribute(name) as BufferAttribute
       attr.needsUpdate = false
       versionsBefore[name] = attr.version
@@ -90,7 +107,7 @@ describe('TerrainPatchPool', () => {
 
     buildTerrainPatchInto(field, 2, 1, 0, DEPTH, SEGMENTS, SKIRT, handle, wrap)
 
-    for (const name of ['position', 'detailPos', 'detailPos2']) {
+    for (const name of ['position', 'detailPos', 'detailPos2', 'patchCenter']) {
       const attr = handle.geometry.getAttribute(name) as BufferAttribute
       expect(attr.version).toBeGreaterThan(versionsBefore[name])
     }
@@ -156,6 +173,12 @@ describe('TerrainPatchPool', () => {
       expect(attr.count).toBe(handle.geometry.getAttribute('position').count)
       expect(attr.usage).toBe(DynamicDrawUsage)
     }
+    // patchCenter — один элемент на ПАТЧ (инстансный, делитель 1), не на
+    // вершину; перезаписывается на каждом acquire, как и вершинные атрибуты
+    const patchCenter = handle.geometry.getAttribute('patchCenter') as InstancedBufferAttribute
+    expect(patchCenter.count).toBe(1)
+    expect(patchCenter.itemSize).toBe(3)
+    expect(patchCenter.usage).toBe(DynamicDrawUsage)
   })
 
   it('dispose освобождает геометрии свободных слотов и общий индекс; живые слоты не трогает', () => {

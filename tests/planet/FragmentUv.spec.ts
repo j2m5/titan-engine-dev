@@ -26,7 +26,26 @@ describe('FragmentUv: попиксельные UV терраформных те�
   })
 
   it('вершинник передаёт body-локальное радиальное направление без матриц', () => {
-    expect(vert).toContain('vLocalDir = normal;')
+    expect(vert).toContain('vLocalDir = vertexDir;')
+    expect(vert).toContain('vNormal = normalize(normalMatrix * vertexDir);')
+    expect(vert).not.toContain('vLocalDir = normal;')
+  })
+
+  // Диета атрибутов патча (L5): у патчей кубосферы normal и uv сняты с
+  // геометрии — направление вершины считается из RTC-позиции и центра патча
+  // (инстансный атрибут). Легаси-путь (SphereGeometry у Planet) остаётся на
+  // normal/uv, поэтому оба присвоения — по разные стороны гейта USE_TERRAIN_UV.
+  it('терраформный путь: направление из position + patchCenter, легаси-путь — из normal, vUv жив только в #else', () => {
+    const terrainBranch = vert.slice(vert.indexOf('#ifdef USE_TERRAIN_UV', vert.indexOf('void main()')))
+    const [gated, legacy] = terrainBranch.split('#else')
+
+    expect(vert).toContain('attribute vec3 patchCenter;')
+    expect(gated).toContain('vec3 vertexDir = normalize(position + patchCenter);')
+    expect(gated).not.toContain('vUv = uv;')
+    expect(legacy.slice(0, legacy.indexOf('#endif'))).toContain('vec3 vertexDir = normal;')
+    expect(legacy.slice(0, legacy.indexOf('#endif'))).toContain('vUv = uv;')
+    // объявление атрибута — тоже под гейтом: у легаси-сферы такого атрибута нет
+    expect(vert.slice(0, vert.indexOf('attribute vec3 patchCenter;'))).toContain('#ifdef USE_TERRAIN_UV')
   })
 
   it('выборки текстур фрагментника переведены на попиксельный uv — vUv остаётся только легаси-присвоением', () => {
@@ -82,6 +101,10 @@ describe('FragmentUv: попиксельные UV терраформных те�
     // диффуз и slope зеркалились по С-Ю (в точке — рельеф зеркальной
     // широты). CPU-канон dirToUv остаётся в координатах карты (sampleMeters
     // его не трогаем) — флип только на текстурном v фрагментника.
+    //
+    // После диеты атрибутов (L5) это ЕДИНСТВЕННЫЙ страж конвенции: вершинного
+    // атрибута uv, который раньше дублировал флип, у патчей больше нет.
+    // «1.0 −» здесь и означает «v растёт на север» = север — верх текстуры.
     expect(resolvedFrag).toContain('1.0 - acos(clamp(dirLocal.y')
     expect(resolvedFrag).not.toContain('vec2(u, acos(clamp(')
   })

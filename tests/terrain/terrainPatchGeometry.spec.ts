@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { Vector2, Vector3 } from 'three'
+import { Vector2, Vector3, type BufferGeometry } from 'three'
 import { buildPatchIndex, buildTerrainPatchGeometry, terrainPatchVertexCount } from '@/core/terrain/terrainPatchGeometry'
+import { cubeFaceDirection } from '@/core/terrain/cubeSphere'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { MIDBAND_DEFAULTS, type MidbandParams } from '@/core/terrain/midbandParams'
 import { detailWrapFor, wrapIndex, wrappedComponent } from '@/core/terrain/detailWrap'
@@ -36,6 +37,41 @@ function build(
   return buildTerrainPatchGeometry(field, face, i, j, DEPTH, SEGMENTS, buildPatchIndex(SEGMENTS), skirtDepthUnits, wrap)
 }
 
+/**
+ * Направление вершины k ровно так, как его восстанавливает вершинник:
+ * normalize(position + patchCenter). Атрибута normal у патча больше нет —
+ * направление живёт в позиции и центре патча (диета атрибутов).
+ */
+function vertexDir(geometry: BufferGeometry, k: number): Vector3 {
+  const pos = geometry.getAttribute('position')
+  const pc = geometry.getAttribute('patchCenter')
+
+  return new Vector3(pos.getX(k) + pc.getX(0), pos.getY(k) + pc.getY(0), pos.getZ(k) + pc.getZ(0)).normalize()
+}
+
+/**
+ * Кромочная вершина юбочной: юбка сдвинута строго радиально, направления
+ * совпадают до кванта float32 — ищем ближайшее по dot. Раньше кромку искали
+ * по побайтной копии uv, атрибута uv у патча больше нет.
+ */
+function edgeIndexForSkirt(geometry: BufferGeometry, skirt: number): number {
+  const target = vertexDir(geometry, skirt)
+  let best = -1
+  let bestDot = -Infinity
+  for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
+    const dot = vertexDir(geometry, k).dot(target)
+    if (dot > bestDot) {
+      bestDot = dot
+      best = k
+    }
+  }
+  // не «просто ближайшая», а совпадающая: соседние вершины сетки разведены на
+  // ~0.1 рад (dot ≈ 0.99), так что порог дискриминирует промах
+  expect(bestDot).toBeGreaterThan(1 - 1e-9)
+
+  return best
+}
+
 describe('buildPatchIndex', () => {
   it('segments² квадов по два треугольника + юбочная полоса, Uint16', () => {
     const index = buildPatchIndex(SEGMENTS)
@@ -63,37 +99,55 @@ describe('buildTerrainPatchGeometry: RTC и паритет с коллизией
     const field = bumpyField()
     const { geometry, center } = build(field, 0, 1, 0)
     const pos = geometry.getAttribute('position')
-    const normals = geometry.getAttribute('normal')
 
-    // паритет и радиальность нормали — инварианты СЕТОЧНЫХ вершин; юбочные
-    // намеренно проседают под поверхность (см. describe «юбка патча»)
+    // паритет — инвариант СЕТОЧНЫХ вершин; юбочные намеренно проседают под
+    // поверхность (см. describe «юбка патча»)
     for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
       const absolute = new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).add(center)
       const dir = absolute.clone().normalize()
       // паритет мешер↔коллизия: та же каноническая функция высоты
       expect(absolute.length()).toBeCloseTo(field.surfaceRadiusUnits(dir), 6)
-      // нормали радиальные — наклон шейдит slope-карта
-      expect(new Vector3(normals.getX(k), normals.getY(k), normals.getZ(k)).dot(dir)).toBeCloseTo(1, 5)
     }
   })
 
-  it('нормаль каждой вершины — радиальное направление тела (инвариант vEast шейдера)', () => {
-    // Потребитель: PlanetShaderTemplate.vEast = normalMatrix * cross(up, normal).
-    // vEast опирается на радиальность normal — если бы normal вдруг перестала
-    // совпадать с normalize(center + position_rel), TBN slope-шейдинга снова
+  it('normalize(position + patchCenter) — радиальное направление вершины (сетка и юбка), patchCenter = center билдера', () => {
+    // Потребитель: вершинник (vLocalDir = normalize(position + patchCenter)) и
+    // через него весь TBN slope-шейдинга. Атрибут normal снят диетой — если бы
+    // направление перестало совпадать с честным dir параметров вершины, TBN
     // сломался бы так же, как ломался на RTC-position (см. HeightNormal.spec)
     const field = bumpyField()
-    const { geometry, center } = build(field, 3, 1, 0)
-    const pos = geometry.getAttribute('position')
-    const normals = geometry.getAttribute('normal')
+    const FACE = 3
+    const I = 1
+    const J = 0
+    const SKIRT = 0.001
+    const { geometry, center } = build(field, FACE, I, J, SKIRT)
+    const pc = geometry.getAttribute('patchCenter')
 
+    expect(pc.count).toBe(1)
+    expect([pc.getX(0), pc.getY(0), pc.getZ(0)]).toEqual([
+      Math.fround(center.x),
+      Math.fround(center.y),
+      Math.fround(center.z)
+    ])
+
+    // честное направление — из ПАРАМЕТРОВ вершины (та же арифметика, что в мешере)
+    const span = 2 / (1 << DEPTH)
+    const s0 = -1 + I * span
+    const t0 = -1 + J * span
+    const honest = new Vector3()
     for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
-      const absolute = new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).add(center)
-      const expectedNormal = absolute.clone().normalize()
-      const actualNormal = new Vector3(normals.getX(k), normals.getY(k), normals.getZ(k))
-      expect(actualNormal.x).toBeCloseTo(expectedNormal.x, 6)
-      expect(actualNormal.y).toBeCloseTo(expectedNormal.y, 6)
-      expect(actualNormal.z).toBeCloseTo(expectedNormal.z, 6)
+      const a = k % (SEGMENTS + 1)
+      const b = Math.floor(k / (SEGMENTS + 1))
+      cubeFaceDirection(FACE, s0 + (span * a) / SEGMENTS, t0 + (span * b) / SEGMENTS, honest)
+      expect(vertexDir(geometry, k).distanceTo(honest)).toBeLessThan(1e-6)
+    }
+
+    // юбочная вершина сдвинута строго радиально — её направление совпадает с
+    // кромочным (edgeIndexForSkirt и проверяет совпадение, не просто близость)
+    for (let ring = 0; ring < SEGMENTS * 4; ring++) {
+      const skirt = GRID_VERTEX_COUNT + ring
+      const edge = edgeIndexForSkirt(geometry, skirt)
+      expect(vertexDir(geometry, skirt).distanceTo(vertexDir(geometry, edge))).toBeLessThan(1e-6)
     }
   })
 
@@ -158,92 +212,42 @@ describe('buildTerrainPatchGeometry: RTC и паритет с коллизией
   })
 })
 
-describe('buildTerrainPatchGeometry: UV', () => {
-  it('патч вдали от шва: uv == dirToUv и в [0,1]', () => {
+describe('buildTerrainPatchGeometry: развёртка вершинных направлений', () => {
+  // Атрибута uv у патча больше нет (диета): развёртку считает ФРАГМЕНТНИК из
+  // vLocalDir (чанк terrainUvFunctions, пины в FragmentUv.spec/WaterMaterial.spec),
+  // а вершина несёт только направление. Здесь проверяется, что направления,
+  // восстановленные как в вершиннике, дают вменяемую развёртку: непрерывную
+  // по долготе внутри шовного патча и с картным v (север = 0).
+  it('dirToUv непрерывна по долготе внутри шовного патча (mod 1) и северное полушарие даёт v карты < 0.5', () => {
     const field = bumpyField()
-    // +X-грань: u в районе 0.75, шов (u=0) не задевает
-    const { geometry, center } = build(field, 0, 0, 0)
-    const pos = geometry.getAttribute('position')
-    const uv = geometry.getAttribute('uv')
-    const scratch = new Vector2()
+    const uv = new Vector2()
 
-    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
-      const dir = new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).add(center).normalize()
-      field.dirToUv(dir, scratch)
-      // dir восстановлен из float32-позиции — тот же квантовый шум, что и выше, сверка до 1e-6 вместо побитовой
-      expect(uv.getX(k)).toBeCloseTo(scratch.x, 6)
-      // v атрибута — флип v карты: dirToUv.y=0 на севере (строка 0 карты),
-      // загрузчик текстур флипует изображение (север = v 1, как у нативной
-      // SphereGeometry) — атрибут сейчас мёртв для рендера (фрагмент считает
-      // uv сам), но зеркальный атрибут был бы миной для будущего потребителя
-      expect(uv.getY(k)).toBeCloseTo(1 - scratch.y, 6)
-      expect(uv.getX(k)).toBeGreaterThanOrEqual(0)
-      expect(uv.getX(k)).toBeLessThanOrEqual(1)
-    }
-  })
-
-  it('шовный патч: u непрерывен внутри патча (разброс < 0.5), может выйти за [0,1], и по модулю 1 совпадает с dirToUv', () => {
-    const field = bumpyField()
     // −X-грань содержит меридиан u=0/1 (dir=(−1,0,0) → phi=0)
-    const { geometry, center } = build(field, 1, 0, 0)
-    const pos = geometry.getAttribute('position')
-    const uv = geometry.getAttribute('uv')
-    const scratch = new Vector2()
-
-    let min = Infinity
-    let max = -Infinity
+    const seam = build(field, 1, 0, 0).geometry
+    let prevU = NaN
     for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
-      min = Math.min(min, uv.getX(k))
-      max = Math.max(max, uv.getX(k))
-
-      // развёртка допускает выход за [0,1] (шов раскрыт непрерывно), но не
-      // меняет физический меридиан — остаток по модулю 1 обязан совпасть с
-      // dirToUv с f32-точностью, а не просто "разброс небольшой"
-      const dir = new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).add(center).normalize()
-      field.dirToUv(dir, scratch)
-      const wrapped = uv.getX(k) - Math.floor(uv.getX(k))
-      const delta = Math.abs(wrapped - scratch.x)
-      expect(Math.min(delta, 1 - delta)).toBeLessThan(1e-6)
+      field.dirToUv(vertexDir(seam, k), uv)
+      if (!Number.isNaN(prevU) && k % (SEGMENTS + 1) !== 0) {
+        const d = Math.abs(uv.x - prevU)
+        // шаг сетки по долготе много меньше 0.1 оборота: скачок больше —
+        // разрыв развёртки, а не шаг (обход по строкам, стыки строк пропущены)
+        expect(Math.min(d, 1 - d)).toBeLessThan(0.1)
+      }
+      prevU = uv.x
     }
-    expect(max - min).toBeLessThan(0.5)
-  })
 
-  it('вершина ровно в полюсе: v ровно 0/1, u — центра патча', () => {
-    const field = bumpyField()
-    // +Y-грань, глубина 1: патч (1,1) касается полюса углом (s=0,t=0)
-    const { geometry, center } = build(field, 2, 1, 1)
-    const pos = geometry.getAttribute('position')
-    const uv = geometry.getAttribute('uv')
-
-    let found = 0
+    // +Y-грань — вся в северном полушарии; dirToUv отдаёт v КАРТЫ (строка 0 =
+    // север), флип на текстурное v делает фрагментник (1.0 - acos(...)/π)
+    const north = build(field, 2, 0, 0).geometry
+    let checked = 0
     for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
-      const dir = new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).add(center).normalize()
-      if (Math.abs(dir.y) < 1 - 1e-9) continue
-      found++
-      // dirToUv.y = 0 на севере (картная конвенция), атрибут — флип
-      // картного (см. тест выше) → север ровно 1, как у нативной SphereGeometry
-      expect(uv.getY(k)).toBe(1) // север
-      // u полюса = u параметрического центра патча
-      const centerDir = center.clone().normalize()
-      const centerUv = field.dirToUv(centerDir, new Vector2())
-      expect(Math.abs(uv.getX(k) - centerUv.x)).toBeLessThan(0.51)
-    }
-    expect(found).toBe(1)
-  })
-
-  it('страж конвенции: северное полушарие (dir.y > 0) — вершинный uv.y > 0.5 (север — верх текстуры)', () => {
-    // однострочный тест, который поймал бы зеркало С-Ю с самого начала:
-    // текстурное v растёт от юга (0) к северу (1), как у нативных uv старой сферы
-    const field = bumpyField()
-    const { geometry, center } = build(field, 2, 0, 0) // +Y-грань — вся в северном полушарии
-    const pos = geometry.getAttribute('position')
-    const uv = geometry.getAttribute('uv')
-
-    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
-      const dir = new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).add(center).normalize()
+      const dir = vertexDir(north, k)
       if (dir.y <= 0) continue
-      expect(uv.getY(k)).toBeGreaterThan(0.5)
+      field.dirToUv(dir, uv)
+      expect(uv.y).toBeLessThan(0.5)
+      checked++
     }
+    expect(checked).toBe(GRID_VERTEX_COUNT)
   })
 })
 
@@ -277,10 +281,9 @@ describe('юбка патча', () => {
     expect(geometry.getAttribute('position').count).toBe(terrainPatchVertexCount(SEGMENTS))
   })
 
-  it('юбочная вершина ниже своей кромочной ровно на skirtDepthUnits, нормаль и uv скопированы', () => {
+  it('юбочная вершина ниже своей кромочной ровно на skirtDepthUnits, направление то же', () => {
     const { geometry, center } = buildFieldPatch()
     const pos = geometry.getAttribute('position')
-    const normals = geometry.getAttribute('normal')
     const gridCount = (SEGMENTS + 1) ** 2
 
     // первая кольцевая вершина соответствует кромочной (a=0,b=0) = сеточный индекс 0
@@ -288,7 +291,8 @@ describe('юбка патча', () => {
     const skirt = new Vector3(pos.getX(gridCount), pos.getY(gridCount), pos.getZ(gridCount)).add(center)
     expect(edge.length() - skirt.length()).toBeCloseTo(SKIRT, 9)
     expect(skirt.clone().normalize().distanceTo(edge.clone().normalize())).toBeLessThan(1e-9)
-    expect(normals.getX(gridCount)).toBeCloseTo(normals.getX(0), 12)
+    // направление юбочной вершины (для вершинника — normalize(pos+patchCenter)) — кромочное
+    expect(vertexDir(geometry, gridCount).distanceTo(vertexDir(geometry, 0))).toBeLessThan(1e-9)
   })
 
   it('юбочные треугольники обмотаны наружу (от центра патча по касательной)', () => {
@@ -349,14 +353,9 @@ describe('buildTerrainPatchGeometry: атрибуты домена детали'
     const ring = SEGMENTS * 4
     for (let r = 0; r < ring; r++) {
       const skirt = GRID_VERTEX_COUNT + r
-      // кромочный индекс — тот же обход, что у юбки (ringGridIndex); проверяем
-      // через совпадение uv: у юбки uv копия кромки — ищем кромку по uv
-      const uv = geometry.getAttribute('uv')
-      let edge = -1
-      for (let k = 0; k < GRID_VERTEX_COUNT && edge < 0; k++) {
-        if (uv.getX(k) === uv.getX(skirt) && uv.getY(k) === uv.getY(skirt)) edge = k
-      }
-      expect(edge).toBeGreaterThanOrEqual(0)
+      // кромочный индекс — тот же обход, что у юбки (ringGridIndex); ищем
+      // кромку по совпадению направления (юбка сдвинута строго радиально)
+      const edge = edgeIndexForSkirt(geometry, skirt)
       for (let c = 0; c < 3; c++) expect(d1.array[skirt * 3 + c]).toBe(d1.array[edge * 3 + c])
     }
   })
@@ -458,15 +457,10 @@ describe('buildTerrainPatchGeometry: атрибут height', () => {
   it('юбочная вершина несёт высоту своей кромочной (радиальный сдвиг юбки не входит)', () => {
     const { geometry } = build(bumpyField(), 0, 1, 0, 0.001)
     const height = geometry.getAttribute('height')
-    const uv = geometry.getAttribute('uv')
     const ring = SEGMENTS * 4
     for (let r = 0; r < ring; r++) {
       const skirt = GRID_VERTEX_COUNT + r
-      let edge = -1
-      for (let k = 0; k < GRID_VERTEX_COUNT && edge < 0; k++) {
-        if (uv.getX(k) === uv.getX(skirt) && uv.getY(k) === uv.getY(skirt)) edge = k
-      }
-      expect(edge).toBeGreaterThanOrEqual(0)
+      const edge = edgeIndexForSkirt(geometry, skirt)
       expect(height.getX(skirt)).toBe(height.getX(edge))
     }
   })
@@ -495,14 +489,9 @@ describe('buildTerrainPatchGeometry: атрибут midTilt', () => {
   it('юбочная вершина несёт midTilt своей кромочной', () => {
     const { geometry } = build(bumpyField(), 0, 1, 0, 0.001)
     const tilt = geometry.getAttribute('midTilt')
-    const uv = geometry.getAttribute('uv')
     for (let r = 0; r < SEGMENTS * 4; r++) {
       const skirt = GRID_VERTEX_COUNT + r
-      let edge = -1
-      for (let k = 0; k < GRID_VERTEX_COUNT && edge < 0; k++) {
-        if (uv.getX(k) === uv.getX(skirt) && uv.getY(k) === uv.getY(skirt)) edge = k
-      }
-      expect(edge).toBeGreaterThanOrEqual(0)
+      const edge = edgeIndexForSkirt(geometry, skirt)
       expect(tilt.getX(skirt)).toBe(tilt.getX(edge))
       expect(tilt.getY(skirt)).toBe(tilt.getY(edge))
     }

@@ -93,6 +93,11 @@ export const WaterShaderTemplate: ShaderProps = {
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
 
+    // Водная оболочка — всегда патчи кубосферы (тот же TerrainPatchPool, что и
+    // у рельефа): атрибут normal снят, центр патча приходит инстансным
+    // атрибутом (один элемент на патч), гейта не нужно.
+    attribute vec3 patchCenter;
+
     void main() {
       vec4 worldPosition = modelMatrix * vec4(position, 1.0);
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
@@ -105,17 +110,20 @@ export const WaterShaderTemplate: ShaderProps = {
       vec3 localLightDirection = transpose(mat3(modelMatrix)) * worldLightDirection;
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
 
-      vNormal = normalize(normalMatrix * normal);
       // Нормаль воды = dir̂ (аналитическая, не из карты): патчи водной
       // оболочки строит тот же writeTerrainPatchAttributes, что и рельеф —
-      // атрибут normal радиален всегда (см. terrainPatchGeometry.ts), волны
+      // направление вершины радиально всегда и восстанавливается из
+      // RTC-позиции и центра патча (см. terrainPatchGeometry.ts), волны
       // и рябь наклоняют нормаль во фрагментнике (waveNormal), не здесь.
       // vNormal — уже готовый view-space dir̂ для Френеля во фрагментнике.
       //
       // Body-локальное радиальное направление — отдельно, для терраформного
       // UV (канал A той же slope-карты, что и суша): та же конвенция vLocalDir,
-      // что у PlanetShaderTemplate — без нормали, без матриц, только normal.
-      vLocalDir = normal;
+      // что у PlanetShaderTemplate — без матриц, тот же vertexDir.
+      vec3 vertexDir = normalize(position + patchCenter);
+
+      vNormal = normalize(normalMatrix * vertexDir);
+      vLocalDir = vertexDir;
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
       vViewPosition = -mvPosition.xyz;

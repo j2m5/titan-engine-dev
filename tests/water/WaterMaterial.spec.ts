@@ -66,10 +66,22 @@ describe('WaterShaderTemplate: строковые ассерты (Френель
     expect(frag).toContain('gl_FragDepth')
   })
 
-  it('нормаль воды — аналитическая dir̂: vNormal из радиального атрибута normal, без карт возмущения', () => {
-    expect(vert).toContain('vNormal = normalize(normalMatrix * normal);')
+  it('нормаль воды — аналитическая dir̂: vNormal из радиального направления вершины, без карт возмущения', () => {
+    expect(vert).toContain('vNormal = normalize(normalMatrix * vertexDir);')
     expect(frag).not.toContain('perturbNormalFromSlope')
     expect(frag).not.toContain('perturbNormalFromHeight')
+  })
+
+  // Диета атрибутов патча (L5): normal и uv сняты с геометрии, направление
+  // вершины — из RTC-позиции и центра патча. Водная оболочка это ВСЕГДА патчи
+  // (легаси-пути у воды нет), поэтому атрибут без гейта — гейт означал бы
+  // компиляцию варианта, которого не существует.
+  it('направление вершины — normalize(position + patchCenter), атрибут patchCenter без гейта', () => {
+    expect(vert).toContain('attribute vec3 patchCenter;')
+    expect(vert).toContain('vec3 vertexDir = normalize(position + patchCenter);')
+    expect(vert).toContain('vLocalDir = vertexDir;')
+    expect(vert).not.toContain('#ifdef USE_TERRAIN_UV')
+    expect(vert).not.toContain('vLocalDir = normal;')
   })
 
   it('«звезда в нуле»: lightPosition — юниформ, инициализированный нулевым вектором (не обновляется рантаймом движка)', () => {
