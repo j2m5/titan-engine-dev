@@ -9,9 +9,9 @@ import type { TerrainHeightField } from './TerrainHeightField'
 export type TerrainNodeAddress = { face: number; level: number; i: number; j: number }
 
 /**
- * Лист отбора: адрес узла + его видимость во фрустуме и SSE (обе величины
- * уже посчитаны visitNode при принятии решения о сплите, здесь — просто
- * пронесены наружу для очереди построек, см. `byBuildPriority`).
+ * Лист отбора: адрес узла + его видимость во фрустуме и SSE — обе величины
+ * visitNode уже посчитал при решении о сплите, наружу они идут ради порядка
+ * очереди построек (`byBuildPriority`).
  */
 export type TerrainLeaf = TerrainNodeAddress & { visible: boolean; sse: number }
 

@@ -1321,8 +1321,6 @@ class TerrainHeightField {
    * ε карты глубже `TERRAIN_MODEL_LEVEL`, метры — тот же закон, что построил
    * таблицу уровней 3..6 (`p99(1×1) · terrainLevelScale`), продолженный
    * глубже: выше текселя — самоподобие шаг^H, ниже — линейная билинейка.
-   * Прежняя степенная экстраполяция от ε(6) не знала о линейном режиме и на
-   * 16k-картах завышала ε(8) в 2^(2(1−H)) раз — лишние сплиты у поверхности.
    */
   private extrapolatedLevelErrorMeters(level: number): number {
     return this.levelErrorMeters[TERRAIN_QUADTREE_MIN_LEVEL + 1] * terrainLevelScale(this.map.width, level, this.block, this.hurst)
