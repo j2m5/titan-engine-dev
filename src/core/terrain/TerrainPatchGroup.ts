@@ -13,7 +13,6 @@ import {
   byBuildPriority,
   coverageReady,
   forEachWantedDescendant,
-  hasLiveDescendant,
   liveAncestorKey,
   selectTerrainNodes,
   terrainNodeKey,
@@ -222,13 +221,12 @@ abstract class TerrainPatchGroup extends Group {
       this.live.delete(key)
     }
 
-    // страховка от дыр: скрытый узел, которого никто живой не перекрывает,
-    // показывается сразу. При исправном показе замены выше сюда не доходит
-    // никто — проход держит инвариант, а не участвует в обычном свопе
+    // страховка от дыр: скрытый узел без живого предка показывается сразу;
+    // двойное покрытие с ещё живыми потомками допустимо (дыра — нет), обхода
+    // потомков не делаем — O(level) на скрытый узел
     for (const entry of this.live.values()) {
       if (entry.handle.mesh.visible) continue
       if (liveAncestorKey(entry.address, this.isLive) !== -1) continue
-      if (hasLiveDescendant(entry.address, this.live)) continue
       entry.handle.mesh.visible = true
     }
   }

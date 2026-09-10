@@ -121,10 +121,12 @@ describe('TerrainSphere: динамическое квадродерево па�
   })
 
   it('за серию кадров у поверхности набор растёт и сходится; покрытие без дыр на каждом кадре', () => {
-    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
+    const clock = makeFrameClock()
+    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080), undefined, undefined, clock.nowMs)
     const ctx = makeCtx(2)
     const counts: number[] = []
-    for (let f = 0; f < 120; f++) {
+    for (let f = 0; f < 200; f++) {
+      clock.startFrame()
       sphere.updateObject(ctx)
       expect(fullyCovered(sphere)).toBe(true)
       counts.push(sphere.children.filter((c) => c instanceof Mesh && c.visible).length)
@@ -133,6 +135,16 @@ describe('TerrainSphere: динамическое квадродерево па�
     expect(counts.at(-1)).toEqual(counts.at(-10))
   })
 
+  // Что тест закрепляет: (1) покадровое покрытие кубосферы ВИДИМЫМИ мешами без
+  // дыр, (2) скрытые патчи под ещё видимым предком действительно наблюдаются —
+  // показ отложен, а не мгновенен, (3) в кадр ухода родителя вся его площадь
+  // закрыта видимыми ПОТОМКАМИ (покадровый диф).
+  //
+  // Чего тест НЕ различает: показ спуском (forEachWantedDescendant) и
+  // страховочный проход дают одинаковое состояние на конце кадра — по
+  // наблюдению за кадрами они неразделимы, спуск здесь ручка цены, а не
+  // условие корректности.
+  //
   // Часы бюджета — инъекция (не performance.now()): своп откладывает показ
   // только при постройке по одной за кадр, на реальных часах стенд успевает
   // построить всю замену в первом же кадре и скрытых узлов в снимке не
@@ -277,8 +289,12 @@ describe('TerrainSphere: динамическое квадродерево па�
   // потолка — измерено сканированием шагом 0.25 км, запас от обеих границ ≥2 км.
   it('screenHeight — device-пиксели канваса: больший domElement.height даёт более глубокий набор при той же камере', () => {
     const field = makeField()
-    const sphereLow = new TerrainSphere(moon(), field, makeRenderer(1080))
-    const sphereHigh = new TerrainSphere(moon(), field, makeRenderer(2160))
+    // у каждой сферы свои кадровые часы — иначе постройки одной съедали бы
+    // бюджет другой, и сравнение мерило бы порядок вызовов, а не screenHeight
+    const clockLow = makeFrameClock()
+    const clockHigh = makeFrameClock()
+    const sphereLow = new TerrainSphere(moon(), field, makeRenderer(1080), undefined, undefined, clockLow.nowMs)
+    const sphereHigh = new TerrainSphere(moon(), field, makeRenderer(2160), undefined, undefined, clockHigh.nowMs)
 
     // 150 км, а не 130: центр сферы узла теперь
     // считается по КАРТЕ (mapHeightMeters), не по канону высоты с полосой —
@@ -286,9 +302,13 @@ describe('TerrainSphere: динамическое квадродерево па�
     // сдвинулось вместе с этим фиксом. Высота подобрана пересканом (окно
     // 136–186 км устойчиво, запас ≥14 км от обеих границ) — на ней 1080p
     // даёт 60 листьев, 2160p — 66.
-    const FRAMES = 60
+    // кадров больше прежних 60: на кадровых часах постройка одна за кадр, и
+    // обоим наборам нужно успеть дорасти до своей глубины (60 и 66 листьев)
+    const FRAMES = 200
     for (let f = 0; f < FRAMES; f++) {
+      clockLow.startFrame()
       sphereLow.updateObject(makeCtx(150))
+      clockHigh.startFrame()
       sphereHigh.updateObject(makeCtx(150))
     }
 
@@ -304,8 +324,12 @@ describe('TerrainSphere: динамическое квадродерево па�
   // не закрывает (см. геометрию замера в брифе ревью)
   it('юбка патча уровня L глубиной ε(L−2) — по недобору грубого соседа, не своей ε', () => {
     const field = makeField()
-    const sphere = new TerrainSphere(moon(), field, makeRenderer(1080))
-    for (let f = 0; f < 200; f++) sphere.updateObject(makeCtx(2))
+    const clock = makeFrameClock()
+    const sphere = new TerrainSphere(moon(), field, makeRenderer(1080), undefined, undefined, clock.nowMs)
+    for (let f = 0; f < 200; f++) {
+      clock.startFrame()
+      sphere.updateObject(makeCtx(2))
+    }
 
     const patch = sphere.children.find(
       (c) => c instanceof Mesh && (c.userData.terrainAddress as TerrainNodeAddress | undefined)?.level === 4

@@ -276,13 +276,7 @@ export function selectTerrainNodes(params: SelectParams): { leaves: TerrainLeaf[
 export const byBuildPriority = (a: TerrainLeaf, b: TerrainLeaf): number =>
   a.visible !== b.visible ? (a.visible ? -1 : 1) : a.visible ? b.sse - a.sse : a.level - b.level
 
-/**
- * Результат обхода потомков: в поддереве нет отмеченных / все отмеченные живые /
- * есть не живой. «Отмеченные» — ключи карты-аргумента: у `coverageReady` это
- * `wanted` (желаемые листья), у `hasLiveDescendant` — сама карта живых узлов
- * с `isLive ≡ true`, и тогда ответ читается как «внутри есть живой / нет»
- * (`AllLive` / `None`, третьего состояния при таком `isLive` не бывает).
- */
+/** Результат обхода потомков: в поддереве нет желаемых / все желаемые живые / есть не живой. */
 const enum DescendantsState {
   None,
   AllLive,
@@ -294,7 +288,7 @@ function descendantsState(
   level: number,
   i: number,
   j: number,
-  wanted: ReadonlyMap<number, unknown>,
+  wanted: ReadonlyMap<number, TerrainNodeAddress>,
   isLive: (key: number) => boolean
 ): DescendantsState {
   if (level >= TERRAIN_QUADTREE_MAX_LEVEL) return DescendantsState.None
@@ -382,9 +376,4 @@ export function liveAncestorKey(x: TerrainNodeAddress, isLive: (key: number) => 
     if (isLive(key)) return key
   }
   return -1
-}
-
-/** Есть ли внутри x хоть один живой узел (live — множество живых ключей). */
-export function hasLiveDescendant(x: TerrainNodeAddress, live: ReadonlyMap<number, unknown>): boolean {
-  return descendantsState(x.face, x.level, x.i, x.j, live, () => true) !== DescendantsState.None
 }
