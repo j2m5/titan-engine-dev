@@ -68,8 +68,12 @@ abstract class TerrainPatchGroup extends Group {
   // освобождаемый узел, аллокация лямбды на вызов была бы мусором в горячем пути
   private readonly isLive = (key: number): boolean => this.live.has(key)
   // тот же приём, что isLive: колбэк forEachWantedDescendant зовётся на каждый
-  // желаемый лист внутри освобождаемого узла — лямбда на вызов была бы мусором
+  // желаемый лист внутри освобождаемого узла — лямбда на вызов была бы мусором.
+  // revealedDescendant — флаг «спуск что-то показал» вместо локальной переменной
+  // по той же причине (замыкание на витке цикла освобождения было бы аллокацией)
+  private revealedDescendant = false
   private readonly showLive = (key: number): void => {
+    this.revealedDescendant = true
     const entry = this.live.get(key)
     if (entry) entry.handle.mesh.visible = true
   }
@@ -203,9 +207,15 @@ abstract class TerrainPatchGroup extends Group {
       if (wanted.has(key)) continue
       if (!coverageReady(entry.address, wanted, this.isLive)) continue
 
+      // ветки coverageReady взаимоисключающи: спуск что-то показал ⇒ узел
+      // дробился (все желаемые листья внутри него живы), предок в этом случае
+      // не при чём — подъём не считается вовсе
+      this.revealedDescendant = false
       forEachWantedDescendant(entry.address, wanted, this.showLive)
-      const ancestor = liveAncestorKey(entry.address, this.isLive)
-      if (ancestor !== -1 && wanted.has(ancestor)) this.showLive(ancestor)
+      if (!this.revealedDescendant) {
+        const ancestor = liveAncestorKey(entry.address, this.isLive)
+        if (ancestor !== -1 && wanted.has(ancestor)) this.showLive(ancestor)
+      }
 
       this.remove(entry.handle.mesh)
       this.pool.release(entry.handle)
@@ -213,7 +223,8 @@ abstract class TerrainPatchGroup extends Group {
     }
 
     // страховка от дыр: скрытый узел, которого никто живой не перекрывает,
-    // показывается сразу (слот освободился после исчерпания пула и т.п.)
+    // показывается сразу. При исправном показе замены выше сюда не доходит
+    // никто — проход держит инвариант, а не участвует в обычном свопе
     for (const entry of this.live.values()) {
       if (entry.handle.mesh.visible) continue
       if (liveAncestorKey(entry.address, this.isLive) !== -1) continue

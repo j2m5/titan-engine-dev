@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { Frustum, Matrix4, Mesh, PerspectiveCamera, Texture, type Mesh as ThreeMesh, type WebGLRenderer } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
@@ -17,13 +17,20 @@ import {
   TERRAIN_QUADTREE_MIN_LEVEL,
   type TerrainNodeAddress
 } from '@/core/terrain/terrainQuadtreeSelect'
+import { fullyCovered, patchMeshes, unbackedHiddenAddresses } from './coverageHelpers'
 
 // TerrainPatchGroup абстрактен — минимальный конкретный подкласс без
 // специализации (материал/хуки TerrainSphere/WaterSphere здесь не нужны),
 // открывает protected-конструктор и инъекцию nowMs наружу для теста.
 class TestPatchGroup extends TerrainPatchGroup {
-  public constructor(field: TerrainHeightField, material: PlanetMaterial, renderer: WebGLRenderer, nowMs?: () => number) {
-    super(field, material, renderer, undefined, undefined, undefined, nowMs)
+  public constructor(
+    field: TerrainHeightField,
+    material: PlanetMaterial,
+    renderer: WebGLRenderer,
+    maxLivePatches?: number,
+    nowMs?: () => number
+  ) {
+    super(field, material, renderer, maxLivePatches, undefined, undefined, nowMs)
   }
 }
 
@@ -79,8 +86,8 @@ function sequence(values: number[]): () => number {
   return () => values[Math.min(i++, values.length - 1)]
 }
 
-function makeGroup(nowMs?: () => number): TestPatchGroup {
-  return new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), nowMs)
+function makeGroup(nowMs?: () => number, maxLivePatches?: number): TestPatchGroup {
+  return new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), maxLivePatches, nowMs)
 }
 
 function meshCount(group: TestPatchGroup): number {
@@ -115,7 +122,7 @@ describe('TerrainPatchGroup: бюджет построек патчей по в�
 
   it('при бюджете «одна постройка» первым строится видимый узел с наибольшей SSE, не грубый за спиной', () => {
     const field = makeField()
-    const group = new TestPatchGroup(field, new PlanetMaterial(moon()), makeRenderer(), sequence([0, 0, 7, 7]))
+    const group = new TestPatchGroup(field, new PlanetMaterial(moon()), makeRenderer(), undefined, sequence([0, 0, 7, 7]))
     const ctx = makeCtx(2)
     const before = new Set(group.children.map((c) => (c as ThreeMesh).userData.terrainAddress).filter(Boolean).map(terrainNodeKey))
 
@@ -138,5 +145,44 @@ describe('TerrainPatchGroup: бюджет построек патчей по в�
     const expected = [...leaves].sort(byBuildPriority).find((l) => l.level > TERRAIN_QUADTREE_MIN_LEVEL)!
     expect(expected.visible).toBe(true)
     expect(terrainNodeKey(added[0])).toBe(terrainNodeKey(expected))
+  })
+
+  /**
+   * Исчерпание пула — режим, в котором своп ЗАСТРЕВАЕТ: замена построена
+   * частично (слотов на всех желаемых листьев не хватило), поэтому
+   * coverageReady не пускает освобождение родителя, а построенные дети
+   * остаются скрытыми сколько угодно кадров. Инвариант обязан держаться и
+   * тут: скрытый патч не создаёт дыры, пока над ним жив видимый родитель.
+   *
+   * Пул 30 = 24 стартовых патча уровня 1 + 6 слотов: на высоте 2 км отбор
+   * хочет заметно больше, предупреждение об исчерпании приходит на первом же
+   * кадре (замер: warns=1, скрытых патчей до 6, набор застывает на
+   * [[1,24],[2,2],[7,4]] и дальше не меняется 200 кадров).
+   */
+  it('исчерпанный пул: замена застревает недостроенной, но скрытые патчи всегда перекрыты видимым родителем', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let reads = 0
+    const group = makeGroup(() => (reads++ === 0 ? 0 : 7), 30)
+    const ctx = makeCtx(2)
+
+    let exhaustedAtFrame = -1
+    let maxHidden = 0
+    for (let f = 0; f < 200; f++) {
+      reads = 0
+      group.updateObject(ctx)
+
+      if (exhaustedAtFrame === -1 && warnSpy.mock.calls.some((c) => String(c[0]).includes('пул патчей исчерпан'))) {
+        exhaustedAtFrame = f
+      }
+
+      maxHidden = Math.max(maxHidden, patchMeshes(group).filter((m) => !m.visible).length)
+      expect(unbackedHiddenAddresses(group)).toEqual([])
+      expect(fullyCovered(group)).toBe(true)
+    }
+    warnSpy.mockRestore()
+
+    expect(exhaustedAtFrame).toBeGreaterThanOrEqual(0) // пул действительно исчерпан — режим достигнут
+    expect(maxHidden).toBeGreaterThan(0) // и скрытые (недопоказанные) патчи действительно были
+    expect(meshCount(group)).toBe(30) // все слоты заняты, дерево застыло
   })
 })

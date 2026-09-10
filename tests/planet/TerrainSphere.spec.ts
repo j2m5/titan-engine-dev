@@ -11,12 +11,16 @@ import { resourceStorage } from '@/core/services/ResourceStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { UpdateContext } from '@/core/UpdateContext'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
+import { liveAncestorKey, terrainNodeKey, type TerrainNodeAddress } from '@/core/terrain/terrainQuadtreeSelect'
 import {
-  liveAncestorKey,
-  TERRAIN_QUADTREE_MAX_LEVEL,
-  terrainNodeKey,
-  type TerrainNodeAddress
-} from '@/core/terrain/terrainQuadtreeSelect'
+  addressOf,
+  covered,
+  fullyCovered,
+  isStrictDescendant,
+  patchMeshes,
+  unbackedHiddenAddresses,
+  visibleAddressKeys
+} from '../terrain/coverageHelpers'
 
 // Луна (actorId 19) — тело с height-ресурсом
 function moon(): Actor {
@@ -66,40 +70,31 @@ function makeCtx(altKm: number): UpdateContext {
   return { delta: 0.016, epoch: 0, elapsed: 0, camera } as UpdateContext
 }
 
-// покрытие по МНОЖЕСТВУ адресов: ячейка L1 покрыта, если видим её меш либо
-// покрыты все четыре ребёнка (рекурсивно до потолка). Сумма площадей это не
-// ловила: перекрытие родитель+дети в одном месте компенсировало дыру в другом
-function visibleAddressKeys(sphere: TerrainSphere): Set<number> {
-  const keys = new Set<number>()
-  for (const child of sphere.children) {
-    if (!(child instanceof Mesh) || !child.visible) continue
-    const address = child.userData.terrainAddress as TerrainNodeAddress | undefined
-    if (address) keys.add(terrainNodeKey(address))
-  }
-  return keys
+// камера на altKm над поверхностью и повёрнутая на angle вокруг тела —
+// меняется и глубина набора, и фрустум (makeCtx смотрит всегда из одной точки)
+function makeCtxAt(altKm: number, angle: number): UpdateContext {
+  const camera = new PerspectiveCamera(50, 1, 1e-6, 1e9)
+  const r = toThreeJSUnits(1737.4 + altKm)
+  camera.position.set(r * Math.cos(angle), r * Math.sin(angle) * 0.3, r * Math.sin(angle))
+  camera.lookAt(0, 0, 0)
+  camera.updateMatrixWorld(true)
+  return { delta: 0.016, epoch: 0, elapsed: 0, camera } as UpdateContext
 }
 
-function covered(keys: Set<number>, face: number, level: number, i: number, j: number): boolean {
-  if (keys.has(terrainNodeKey({ face, level, i, j }))) return true
-  if (level >= TERRAIN_QUADTREE_MAX_LEVEL) return false
-  for (let a = 0; a < 2; a++) {
-    for (let b = 0; b < 2; b++) {
-      if (!covered(keys, face, level + 1, 2 * i + a, 2 * j + b)) return false
-    }
-  }
-  return true
-}
-
-function sphereFullyCovered(sphere: TerrainSphere): boolean {
-  const keys = visibleAddressKeys(sphere)
-  for (let face = 0; face < 6; face++) {
-    for (let i = 0; i < 2; i++) {
-      for (let j = 0; j < 2; j++) {
-        if (!covered(keys, face, 1, i, j)) return false
-      }
-    }
-  }
-  return true
+/**
+ * Часы бюджета построек: РОВНО одна постройка за кадр. Первое чтение кадра —
+ * frameStart (0), все последующие — 7 (> бюджета 6): цикл построек ставит
+ * первый патч (при built===0 проверка бюджета пропускается) и выходит на
+ * втором кандидате. Счётчик сбрасывается тестом перед каждым updateObject —
+ * без сброса фаза уплывает, потому что кадр съедает НЕ фиксированное число
+ * тиков: один на frameStart плюс по одному на каждого НЕЖИЛОГО кандидата
+ * очереди. Циклическая последовательность вида [0,0,7,7] на этом и ломается —
+ * замер: 1 постройка на первом кадре, 71 на втором, дальше сходимость, то
+ * есть своп наблюдался ровно на одном кадре из 120.
+ */
+function makeFrameClock(): { nowMs: () => number; startFrame: () => void } {
+  let reads = 0
+  return { nowMs: (): number => (reads++ === 0 ? 0 : 7), startFrame: (): void => void (reads = 0) }
 }
 
 describe('TerrainSphere: динамическое квадродерево патчей', { timeout: 30000 }, () => {
@@ -131,47 +126,122 @@ describe('TerrainSphere: динамическое квадродерево па�
     const counts: number[] = []
     for (let f = 0; f < 120; f++) {
       sphere.updateObject(ctx)
-      expect(sphereFullyCovered(sphere)).toBe(true)
+      expect(fullyCovered(sphere)).toBe(true)
       counts.push(sphere.children.filter((c) => c instanceof Mesh && c.visible).length)
     }
     expect(counts.at(-1)!).toBeGreaterThan(24)
     expect(counts.at(-1)).toEqual(counts.at(-10))
   })
 
-  // Часы бюджета — циклическая последовательность (не performance.now()):
-  // своп откладывает показ только при постройке по одной за кадр, на реальных
-  // часах стенд успевает построить всю замену в первом же кадре и скрытых
-  // узлов в снимке не остаётся.
-  it('атомарный своп: дети скрыты, пока жив родитель; после его ухода видимы все; скрытый узел всегда перекрыт видимым', () => {
-    let tick = 0
-    const nowMs = (): number => (tick++ % 4 < 2 ? 0 : 7)
-
-    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080), undefined, undefined, nowMs)
+  // Часы бюджета — инъекция (не performance.now()): своп откладывает показ
+  // только при постройке по одной за кадр, на реальных часах стенд успевает
+  // построить всю замену в первом же кадре и скрытых узлов в снимке не
+  // остаётся. См. makeFrameClock — там же, почему счётчик сбрасывается на кадр.
+  it('атомарный своп: дети скрыты, пока жив родитель; в кадр его ухода видимы ВСЕ они; скрытый узел всегда перекрыт видимым', () => {
+    const clock = makeFrameClock()
+    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080), undefined, undefined, clock.nowMs)
     const ctx = makeCtx(2)
-    let sawHidden = false
-    for (let f = 0; f < 120; f++) {
-      sphere.updateObject(ctx)
-      const meshes = sphere.children.filter((c): c is Mesh => c instanceof Mesh)
-      const visibleKeys = new Set(
-        meshes.filter((m) => m.visible).map((m) => terrainNodeKey(m.userData.terrainAddress as TerrainNodeAddress))
-      )
-      for (const m of meshes) {
-        if (m.visible) continue
-        sawHidden = true
-        const a = m.userData.terrainAddress as TerrainNodeAddress
-        // скрытый узел обязан быть перекрыт: видимый предок ИЛИ полностью видимые потомки
-        const ancestorVisible = liveAncestorKey(a, (k) => visibleKeys.has(k)) !== -1
-        expect(ancestorVisible || covered(visibleKeys, a.face, a.level, a.i, a.j)).toBe(true)
+
+    // снимок кадра: адрес и видимость каждого живого патча
+    const snapshot = (): Map<number, { address: TerrainNodeAddress; visible: boolean }> => {
+      const map = new Map<number, { address: TerrainNodeAddress; visible: boolean }>()
+      for (const mesh of patchMeshes(sphere)) {
+        const address = addressOf(mesh)
+        map.set(terrainNodeKey(address), { address, visible: mesh.visible })
       }
-      expect(sphereFullyCovered(sphere)).toBe(true)
+      return map
     }
+
+    let sawHidden = false
+    let sawHiddenUnderVisibleAncestor = false // именно отложенный показ, а не «скрытый где-то сбоку»
+    let splitSwapsSeen = 0 // кадры, где родитель ушёл, а вся его замена стала видимой
+    let previous = snapshot()
+
+    for (let f = 0; f < 120; f++) {
+      clock.startFrame()
+      sphere.updateObject(ctx)
+
+      const current = snapshot()
+      const visibleKeys = visibleAddressKeys(sphere)
+
+      for (const mesh of patchMeshes(sphere)) {
+        if (mesh.visible) continue
+        sawHidden = true
+        if (liveAncestorKey(addressOf(mesh), (k) => visibleKeys.has(k)) !== -1) sawHiddenUnderVisibleAncestor = true
+      }
+
+      // скрытый узел обязан быть перекрыт: видимый предок ИЛИ полностью видимые потомки
+      expect(unbackedHiddenAddresses(sphere)).toEqual([])
+      expect(fullyCovered(sphere)).toBe(true)
+
+      // атомарность дробления: родитель, который был ВИДИМ и имел скрытого
+      // живого потомка на начале кадра, к концу кадра либо ещё жив, либо ушёл —
+      // и тогда его площадь целиком закрыта видимыми ПОТОМКАМИ (не предком)
+      for (const [key, before] of previous) {
+        if (current.has(key) || !before.visible) continue
+        const hadHiddenChild = [...previous.values()].some(
+          (other) => !other.visible && isStrictDescendant(other.address, before.address)
+        )
+        if (!hadHiddenChild) continue
+
+        const { face, level, i, j } = before.address
+        for (let a = 0; a < 2; a++) {
+          for (let b = 0; b < 2; b++) {
+            expect(covered(visibleKeys, face, level + 1, 2 * i + a, 2 * j + b)).toBe(true)
+          }
+        }
+        splitSwapsSeen++
+      }
+
+      previous = current
+    }
+
     expect(sawHidden).toBe(true) // при одной постройке за кадр своп действительно откладывает показ
+    expect(sawHiddenUnderVisibleAncestor).toBe(true) // и откладывает именно под ещё живым родителем
+    expect(splitSwapsSeen).toBeGreaterThan(0) // кадр атомарной подмены наблюдался
   })
 
-  it('удаление камеры мержит обратно к 24', () => {
-    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
-    for (let f = 0; f < 120; f++) sphere.updateObject(makeCtx(2))
-    for (let f = 0; f < 200; f++) sphere.updateObject(makeCtx(500000))
+  // Качающаяся камера — единственный режим, где показ замены СПУСКОМ отличим
+  // от страховочного прохода: глубокий узел, построенный под прежнюю глубину и
+  // так и не показанный, остаётся живым внутри желаемого листа, и страховка на
+  // нём спотыкается о свой же гейт hasLiveDescendant (лист пропускается как
+  // «перекрытый изнутри», хотя перекрывающий сам скрыт). Замер: без строки
+  // forEachWantedDescendant этот тест даёт дыры, ровный спуск/подъём — нет.
+  it('своп при качающейся камере: ни одного скрытого патча без видимого перекрытия за 600 кадров', () => {
+    const clock = makeFrameClock()
+    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080), undefined, undefined, clock.nowMs)
+
+    for (let f = 0; f < 600; f++) {
+      // высота гуляет на порядки — желаемая глубина то растёт, то падает,
+      // и построенные под прежнюю глубину узлы не успевают быть показанными
+      const altKm = 2 + 400000 * (0.5 + 0.5 * Math.sin(f / 37))
+      clock.startFrame()
+      sphere.updateObject(makeCtxAt(altKm, f / 11))
+      expect(unbackedHiddenAddresses(sphere)).toEqual([])
+      expect(fullyCovered(sphere)).toBe(true)
+    }
+  })
+
+  // Мерж под теми же часами (одна постройка за кадр) и с ПОКАДРОВЫМ покрытием:
+  // схлопывание — вторая ветка coverageReady (показ живого предка), и до этого
+  // теста она проверялась только по итоговому счётчику, без инварианта дыр.
+  it('удаление камеры мержит обратно к 24; покрытие без дыр на каждом кадре спуска и подъёма', () => {
+    const clock = makeFrameClock()
+    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080), undefined, undefined, clock.nowMs)
+
+    for (let f = 0; f < 120; f++) {
+      clock.startFrame()
+      sphere.updateObject(makeCtx(2))
+      expect(unbackedHiddenAddresses(sphere)).toEqual([])
+      expect(fullyCovered(sphere)).toBe(true)
+    }
+    for (let f = 0; f < 200; f++) {
+      clock.startFrame()
+      sphere.updateObject(makeCtx(500000))
+      expect(unbackedHiddenAddresses(sphere)).toEqual([])
+      expect(fullyCovered(sphere)).toBe(true)
+    }
+
     expect(sphere.children.filter((c) => c instanceof Mesh).length).toBe(24)
   })
 

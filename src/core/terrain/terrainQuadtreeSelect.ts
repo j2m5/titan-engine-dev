@@ -276,7 +276,13 @@ export function selectTerrainNodes(params: SelectParams): { leaves: TerrainLeaf[
 export const byBuildPriority = (a: TerrainLeaf, b: TerrainLeaf): number =>
   a.visible !== b.visible ? (a.visible ? -1 : 1) : a.visible ? b.sse - a.sse : a.level - b.level
 
-/** Результат обхода потомков: в поддереве нет желаемых / все желаемые живые / есть не живой. */
+/**
+ * Результат обхода потомков: в поддереве нет отмеченных / все отмеченные живые /
+ * есть не живой. «Отмеченные» — ключи карты-аргумента: у `coverageReady` это
+ * `wanted` (желаемые листья), у `hasLiveDescendant` — сама карта живых узлов
+ * с `isLive ≡ true`, и тогда ответ читается как «внутри есть живой / нет»
+ * (`AllLive` / `None`, третьего состояния при таком `isLive` не бывает).
+ */
 const enum DescendantsState {
   None,
   AllLive,
