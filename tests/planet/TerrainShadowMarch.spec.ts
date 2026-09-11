@@ -31,6 +31,10 @@ describe('TerrainShadowMarch: чанк', () => {
   it('константы — из CPU-зеркала', () => {
     expect(terrainShadowMarchFunctions).toContain(`#define TERRAIN_SHADOW_STEPS ${TERRAIN_SHADOW_STEPS}`)
     expect(terrainShadowMarchFunctions).toContain(`#define TERRAIN_SHADOW_BIAS_SLOPE ${TERRAIN_SHADOW_BIAS_SLOPE}`)
+    // Литералы буквально: интерполяция той же константы формы не доказывает, а
+    // целая константа дала бы `float * int` — в GLSL ES 1.0 ошибка компиляции.
+    expect(terrainShadowMarchFunctions).toContain('#define TERRAIN_SHADOW_STEPS 20')
+    expect(terrainShadowMarchFunctions).toContain('#define TERRAIN_SHADOW_BIAS_SLOPE 0.05')
   })
 
   it('без производных (мипов нет, fwidth в цикле с break не определён); v — север на 0', () => {

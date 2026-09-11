@@ -322,7 +322,20 @@ describe('HeightFieldGate: окно даунгрейда не оставляет
     resourceStorage.addTexture(texture)
   }
 
-  it('после release материал легаси-сферы без USE_TERRAIN_SHADOW и без карты тени', () => {
+  /**
+   * Стенд с НАСТОЯЩИМ материалом на узле: карта высот уже в реестре, легаси-
+   * сфера синхронизирована при ней — ровно то состояние, в котором юниформ
+   * держит карту тени. `swaps` = что отвечает даунгрейд фабрики: true —
+   * поверхность подменена (заглушка повторяет хвост swapSurface), false —
+   * узел и так на легаси-сфере, свапа не было.
+   */
+  function makeShadowStand(swaps: boolean): {
+    gate: HeightFieldGate
+    observer: SceneObserver
+    node: DynamicNode
+    moon: Actor
+    path: string
+  } {
     const moon: Actor = Actor.find(MOON_ID)!
     const path: string = heightPathOf(moon)!
 
@@ -334,14 +347,18 @@ describe('HeightFieldGate: окно даунгрейда не оставляет
     const node = new DynamicNode(moon)
 
     node.name = moon.getAttribute('name', '')
+    node.renderable = new Planet(moon)
+    // Материал догнали при карте ЕЩЁ в реестре: так делает и свап, и
+    // ResourceObserver на любом событии текстуры этого тела.
+    syncRenderableMaterials(node.renderable)
     scene.add(node)
 
     const observer = new SceneObserver()
-    // Заглушка повторяет хвост swapSurface: поверхность подменяется на
-    // легаси-сферу, её материал синхронизируется при карте ещё в реестре.
     const factory = {
       upgradePlanetToTerrain: vi.fn(() => false),
       downgradeTerrainToPlanet: vi.fn((target: DynamicNode) => {
+        if (!swaps) return false
+
         target.renderable = new Planet(target.model)
         syncRenderableMaterials(target.renderable)
 
@@ -353,15 +370,38 @@ describe('HeightFieldGate: окно даунгрейда не оставляет
     }
     const gate = new HeightFieldGate(observer, scene, factory as never, makeRenderer(NOMINAL_HEIGHT))
 
+    return { gate, observer, node, moon, path }
+  }
+
+  function shadowStateOf(node: DynamicNode): { define: unknown; map: unknown } {
+    const material = node.renderable!.material as PlanetMaterial
+
+    return { define: material.defines.USE_TERRAIN_SHADOW, map: material.uniforms.uShadowHeightMap.value }
+  }
+
+  it('даунгрейднутый узел: после release без USE_TERRAIN_SHADOW и без карты тени', () => {
+    const { gate, observer, node, moon, path } = makeShadowStand(true)
+
     observeAt(observer, moon, 1)
     gate.recompute()
 
-    const material = node.renderable!.material as PlanetMaterial
-
-    expect(factory.downgradeTerrainToPlanet).toHaveBeenCalled()
     expect(heightFieldStorage.get(path)).toBeUndefined()
-    expect(material.defines.USE_TERRAIN_SHADOW).toBeUndefined()
-    expect(material.uniforms.uShadowHeightMap.value).toBeNull()
+    expect(shadowStateOf(node)).toEqual({ define: undefined, map: null })
+  })
+
+  // Узел уже на легаси-сфере — даунгрейд отвечает false, но карту тени его
+  // материал держит: updateMaterial гейтится наличием карты, не типом поверхности.
+  it('узел без свапа: ресинк всё равно снимает дефайн и карту тени', () => {
+    const { gate, observer, node, moon, path } = makeShadowStand(false)
+
+    // предусловие: до тика материал действительно держит карту тени
+    expect(shadowStateOf(node).define).toBe('1')
+
+    observeAt(observer, moon, 1)
+    gate.recompute()
+
+    expect(heightFieldStorage.get(path)).toBeUndefined()
+    expect(shadowStateOf(node)).toEqual({ define: undefined, map: null })
   })
 })
 

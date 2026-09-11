@@ -118,21 +118,19 @@ export class HeightFieldGate {
       // Даунгрейд до release: узел обязан отцепиться от поля высот раньше,
       // чем карта уйдёт из реестра, иначе TerrainSphere осталась бы стоять
       // на данных, которых уже нет.
-      const downgraded: DynamicNode[] = []
+      const nodes: DynamicNode[] = nodesByPath.get(path) ?? []
 
-      for (const node of nodesByPath.get(path) ?? []) {
-        if (!this.factory.downgradeTerrainToPlanet(node)) continue
-
-        surfaceSwapped = true
-        downgraded.push(node)
+      for (const node of nodes) {
+        if (this.factory.downgradeTerrainToPlanet(node)) surfaceSwapped = true
       }
 
       heightFieldStorage.release(path)
 
-      // Свап синхронизировал материал при карте ЕЩЁ в реестре — в юниформе
-      // осталась GL-текстура тени, которую release только что диспозил.
-      // Второй проход видит пустой реестр и обнуляет её (см. swapSurface).
-      for (const node of downgraded) this.factory.resyncSurfaceMaterials(node)
+      // Ресинк ВСЕХ узлов пути, а не только даунгрейднутых: карту тени сажает
+      // updateMaterial по наличию карты в реестре, тип поверхности ему
+      // безразличен — легаси-сфера, которую свап не трогал (её мог обновить
+      // ResourceObserver), держала бы диспознутую release'ом текстуру.
+      for (const node of nodes) this.factory.resyncSurfaceMaterials(node)
     }
 
     // Апгрейд тех, чьи карты уже доехали: приход асинхронен и никого не

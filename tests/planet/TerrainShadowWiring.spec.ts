@@ -53,7 +53,8 @@ function seedHeightMap(): void {
   ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(MOON_HEIGHT_PATH, {
     width: 4,
     height: 2,
-    minMeters: 0,
+    // дно НЕ на нуле: иначе сброс uShadowHeightMin неотличим от его же привязки
+    minMeters: 200,
     maxMeters: 1000,
     data: new Uint16Array([65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535])
   })
@@ -111,10 +112,13 @@ describe('PlanetMaterial: гейт тени рельефа', () => {
     expect(material.defines.USE_TERRAIN_SHADOW).toBe('1')
     expect(material.uniforms.uShadowHeightMap.value).not.toBeNull()
     expect(material.uniforms.uShadowTexelAngle.value).toBeGreaterThan(0)
+    expect(material.uniforms.uShadowHeightMin.value).toBeGreaterThan(0)
     material.resetMaterial()
     expect(material.defines.USE_TERRAIN_SHADOW).toBeUndefined()
     expect(material.uniforms.uShadowHeightMap.value).toBeNull()
+    expect(material.uniforms.uShadowHeightMin.value).toBe(0)
     expect(material.uniforms.uShadowHeightRange.value).toBe(0)
+    expect(material.uniforms.uShadowTexelAngle.value).toBe(0)
   })
 
   it('без карты высот дефайна нет', () => {

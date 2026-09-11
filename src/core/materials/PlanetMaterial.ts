@@ -458,6 +458,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uSteepGate.value = 0
 
     this.uniforms.uShadowHeightMap.value = null
+    this.uniforms.uShadowHeightMin.value = 0
     this.uniforms.uShadowHeightRange.value = 0
     this.uniforms.uShadowTexelAngle.value = 0
     ;(this.uniforms.uDetailTintNorm.value as Vector2).set(1, 1)
