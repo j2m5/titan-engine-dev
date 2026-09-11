@@ -46,6 +46,24 @@ describe('TerrainShadowMarch: чанк', () => {
       expect(terrainShadowMarchUniforms).toContain(name)
     }
   })
+
+  it('тело марша — построчно как в CPU-зеркале', () => {
+    for (const line of [
+      'vec3 p0 = dir * (R + terrainShadowHeight(dir));',
+      'float texel = R * uShadowTexelAngle;',
+      'float bias = texel * TERRAIN_SHADOW_BIAS_SLOPE;',
+      'float sMin = texel * 2.0;',
+      'float sMax = max(uShadowMaxDistUnits, sMin * 2.0);',
+      'float ratio = pow(sMax / sMin, 1.0 / float(TERRAIN_SHADOW_STEPS - 1));',
+      'float hRay = r - R;',
+      'float pen = (terrainShadowHeight(d) - hRay - bias) / max(s * uShadowPenumbraTan, 1e-6);',
+      'occl = max(occl, clamp(pen, 0.0, 1.0));',
+      's *= ratio;',
+      'return 1.0 - occl;'
+    ]) {
+      expect(terrainShadowMarchFunctions).toContain(line)
+    }
+  })
 })
 
 describe('ручки тени рельефа', () => {
