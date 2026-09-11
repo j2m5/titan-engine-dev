@@ -75,10 +75,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
   /** Проводка закатного тинта из реестра атмосфер — общая с водной оболочкой (см. SunTintBinding). */
   private readonly sunTint: SunTintBinding
 
-  /**
-   * Множитель полутени собственной тени рельефа (ручка данных) — читает
-   * syncTerrainShadow; публичное, пока единственный читатель вне класса.
-   */
+  /** Множитель полутени собственной тени рельефа (ручка данных) — читает syncTerrainShadow. */
   public shadowSoftness: number = 1
 
   public constructor(model: Actor, atmosphereRegistry?: AtmosphereRegistry, parameters?: ShaderMaterialParameters) {

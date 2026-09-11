@@ -436,7 +436,7 @@ export const PlanetShaderTemplate: ShaderProps = {
         // Окклюзия на прямом свете — ручкой: 0 — AO не гасит солнце (физика), 1 — прежний вид
         float directGain = mix(1.0, occlusion, uTerrainOcclusionDirect) * cloudShadow;
         #ifdef USE_TERRAIN_SHADOW
-          // только прямой свет; при N·L ≤ 0 mix ниже даёт directGain нулевой вес — 20 тапов не платятся
+          // только прямой свет; при N·L ≤ 0 mix ниже даёт directGain нулевой вес — марш не платится
           if (NdotLraw > 0.0) terrainShadow = mix(1.0, terrainShadowMarch(dirLocal, sunLocal), uTerrainShadowStrength);
           directGain *= terrainShadow;
         #endif

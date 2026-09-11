@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Scene, type WebGLRenderer } from 'three'
+import { Scene, Texture, type WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
+import { Planet } from '@/core/renderables/Planet'
+import type { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { syncRenderableMaterials } from '@/core/materials/materialSync'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 import { SceneObserver } from '@/core/services/SceneObserver'
 import { HeightFieldGate } from '@/core/services/HeightFieldGate'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
@@ -16,6 +20,7 @@ const MOON_ID: number = 19
 type FactoryStub = {
   upgradePlanetToTerrain: ReturnType<typeof vi.fn>
   downgradeTerrainToPlanet: ReturnType<typeof vi.fn>
+  resyncSurfaceMaterials: ReturnType<typeof vi.fn>
 }
 
 function flatMap(): HeightMapData {
@@ -78,7 +83,8 @@ function makeStand(
   const observer = new SceneObserver()
   const factory: FactoryStub = {
     upgradePlanetToTerrain: vi.fn(() => factoryOverrides?.upgrade ?? false),
-    downgradeTerrainToPlanet: vi.fn(() => factoryOverrides?.downgrade ?? false)
+    downgradeTerrainToPlanet: vi.fn(() => factoryOverrides?.downgrade ?? false),
+    resyncSurfaceMaterials: vi.fn()
   }
 
   const gate = new HeightFieldGate(observer, scene, factory as never, makeRenderer(viewportHeight))
@@ -104,6 +110,7 @@ function observeAt(
 
 afterEach(() => {
   heightFieldStorage.clear()
+  resourceStorage.deleteAllTextures()
   vi.restoreAllMocks()
 })
 
@@ -296,6 +303,65 @@ describe('HeightFieldGate: общая карта высот у нескольк�
 
     expect(factory.downgradeTerrainToPlanet).toHaveBeenCalledTimes(2)
     expect(heightFieldStorage.get(path)).toBeUndefined()
+  })
+})
+
+/**
+ * Окно «свап → release»: свап синхронизирует материал легаси-сферы, пока карта
+ * ЕЩЁ в реестре, и сажает в юниформ GL-текстуру тени рельефа, а release её
+ * диспозит. Без повторной синхронизации после release материал остаётся с
+ * мёртвой текстурой, и three перезаливает её на ближайшем кадре — до 16 МБ,
+ * которые больше никто не диспозит.
+ */
+describe('HeightFieldGate: окно даунгрейда не оставляет диспознутую карту тени', () => {
+  function seedTexture(name: string): void {
+    const texture = new Texture()
+
+    texture.name = name
+    texture.image = { width: 4, height: 2 }
+    resourceStorage.addTexture(texture)
+  }
+
+  it('после release материал легаси-сферы без USE_TERRAIN_SHADOW и без карты тени', () => {
+    const moon: Actor = Actor.find(MOON_ID)!
+    const path: string = heightPathOf(moon)!
+
+    for (const name of ['', 'default.png', 'night.jpg']) seedTexture(name)
+    seedTexture(moon.resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string)
+    heightFieldStorage['maps'].set(path, flatMap())
+
+    const scene = new Scene()
+    const node = new DynamicNode(moon)
+
+    node.name = moon.getAttribute('name', '')
+    scene.add(node)
+
+    const observer = new SceneObserver()
+    // Заглушка повторяет хвост swapSurface: поверхность подменяется на
+    // легаси-сферу, её материал синхронизируется при карте ещё в реестре.
+    const factory = {
+      upgradePlanetToTerrain: vi.fn(() => false),
+      downgradeTerrainToPlanet: vi.fn((target: DynamicNode) => {
+        target.renderable = new Planet(target.model)
+        syncRenderableMaterials(target.renderable)
+
+        return true
+      }),
+      resyncSurfaceMaterials: vi.fn((target: DynamicNode) => {
+        if (target.renderable) syncRenderableMaterials(target.renderable)
+      })
+    }
+    const gate = new HeightFieldGate(observer, scene, factory as never, makeRenderer(NOMINAL_HEIGHT))
+
+    observeAt(observer, moon, 1)
+    gate.recompute()
+
+    const material = node.renderable!.material as PlanetMaterial
+
+    expect(factory.downgradeTerrainToPlanet).toHaveBeenCalled()
+    expect(heightFieldStorage.get(path)).toBeUndefined()
+    expect(material.defines.USE_TERRAIN_SHADOW).toBeUndefined()
+    expect(material.uniforms.uShadowHeightMap.value).toBeNull()
   })
 })
 
