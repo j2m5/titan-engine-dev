@@ -7,14 +7,16 @@ describe('terrainLightParams: ручки света суши', () => {
       terrainOcclusionDirect: 0.35,
       skyAmbientStrength: 1,
       cloudShadowStrength: 0.6,
-      cloudShadowHeightKm: 6
+      cloudShadowHeightKm: 6,
+      terrainShadowStrength: 1,
+      terrainShadowSoftness: 1
     })
     expect(resolveTerrainLightParams(undefined, 'x').skyAmbientStrength).toBe(1)
   })
 
   it('значения из data доезжают', () => {
-    const p = resolveTerrainLightParams({ terrainOcclusionDirect: 1, skyAmbientStrength: 0, cloudShadowStrength: 0, cloudShadowHeightKm: 10 }, 'x')
-    expect(p).toEqual({ terrainOcclusionDirect: 1, skyAmbientStrength: 0, cloudShadowStrength: 0, cloudShadowHeightKm: 10 })
+    const p = resolveTerrainLightParams({ terrainOcclusionDirect: 1, skyAmbientStrength: 0, cloudShadowStrength: 0, cloudShadowHeightKm: 10, terrainShadowStrength: 0, terrainShadowSoftness: 2 }, 'x')
+    expect(p).toEqual({ terrainOcclusionDirect: 1, skyAmbientStrength: 0, cloudShadowStrength: 0, cloudShadowHeightKm: 10, terrainShadowStrength: 0, terrainShadowSoftness: 2 })
   })
 
   it('громкая валидация: доли вне [0,1], высота ≤ 0, не число', () => {

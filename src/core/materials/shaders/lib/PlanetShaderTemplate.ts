@@ -210,6 +210,12 @@ export const PlanetShaderTemplate: ShaderProps = {
       #include <terrainUvFunctions>
     #endif
 
+    // Тень рельефа: гейт вложен в USE_TERRAIN_UV (та же карта высот), читает uBodyRadiusUnits выше
+    #ifdef USE_TERRAIN_SHADOW
+      #include <terrainShadowMarchUniforms>
+      #include <terrainShadowMarchFunctions>
+    #endif
+
     #ifdef USE_SUN_TINT
       #include <sunTransmittanceFunctions>
     #endif
@@ -388,6 +394,9 @@ export const PlanetShaderTemplate: ShaderProps = {
       // состав бит-в-бит прежний. Терраформная ветка перезаписывает dayColor.
       vec3 dayColor = diffuseSample * albedoMul * occlusion;
 
+      // Собственная тень рельефа; 1 без гейта — блики ниже читают её всегда
+      float terrainShadow = 1.0;
+
       #ifdef USE_TERRAIN_UV
         // Ламберт суши: без него нормаль (slope-карта, детальные трипланары)
         // видна только в полосе терминатора — dayFactor ниже насыщается при
@@ -402,12 +411,13 @@ export const PlanetShaderTemplate: ShaderProps = {
           if (uSkyAmbientStrength > 0.0) skyTerm = mix(skyTerm, skyAmbientTint(muS), uSkyAmbientStrength);
         #endif
         vec3 ambient = uTerrainAmbient * skyTerm * occlusion;
+        // Единичное НА солнце в системе тела — общий вход тени облаков и марша тени рельефа
+        vec3 sunLocal = -normalize(vLocalLightDirection);
         // Тень облаков на земле — только прямой свет
         float cloudShadow = 1.0;
         #ifdef USE_CLOUD_SHADOW
           #define CLOUD_SHADOW_MIN_COS 0.15
           // облако, затеняющее точку, стоит по направлению к солнцу на h·tan θ (θ — зенитный угол)
-          vec3 sunLocal = -normalize(vLocalLightDirection);
           vec3 sunTangent = sunLocal - dirLocal * muS; // muS = dot(sunLocal, dirLocal), см. выше
           float cosZ = max(muS, CLOUD_SHADOW_MIN_COS);
           vec3 offsetUnits = sunTangent / cosZ * uCloudShadowHeightUnits;
@@ -425,6 +435,11 @@ export const PlanetShaderTemplate: ShaderProps = {
         #endif
         // Окклюзия на прямом свете — ручкой: 0 — AO не гасит солнце (физика), 1 — прежний вид
         float directGain = mix(1.0, occlusion, uTerrainOcclusionDirect) * cloudShadow;
+        #ifdef USE_TERRAIN_SHADOW
+          // только прямой свет; при N·L ≤ 0 mix ниже даёт directGain нулевой вес — 20 тапов не платятся
+          if (NdotLraw > 0.0) terrainShadow = mix(1.0, terrainShadowMarch(dirLocal, sunLocal), uTerrainShadowStrength);
+          directGain *= terrainShadow;
+        #endif
         // Та же форма mix(пол, 1, N·L), что прежде: в полдень при occlusion = 1 и без тени ровно 1
         vec3 lit = mix(ambient, vec3(directGain), max(NdotLraw, 0.0));
         dayColor = diffuseSample * albedoMul * mix(vec3(1.0), lit, uTerrainLambert);
@@ -524,13 +539,13 @@ export const PlanetShaderTemplate: ShaderProps = {
         // терминатора. HDR-глинт поверх клампа — блумит только солнечная дорожка.
         float specularIntensity = texture2D(specularMap, uv).r;
         finalColor += specularIntensity * blinnPhongGlint(normal, lightDirection, viewDir) * uSpecularStrength
-                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor;
+                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;
       #endif
 
       #ifdef USE_WATER_EDGE
         // Блеск мокрой кромки — тот же глинт без карты, силой WET_GLOSS
         finalColor += glintEdge * blinnPhongGlint(normal, lightDirection, viewDir) * WET_GLOSS
-                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor;
+                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;
       #endif
 
       // Потолок глинта: планета целиком остаётся далеко под half-float/AgX.

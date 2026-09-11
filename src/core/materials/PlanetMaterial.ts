@@ -12,6 +12,8 @@ import { detailTintNorm } from '@/core/terrain/detailTextureStats'
 import { resolveSteepZoneParams } from '@/core/terrain/steepZoneParams'
 import { midbandParamsOf } from '@/core/terrain/midbandParams'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
+import { terrainShadowMapFor } from '@/core/terrain/terrainShadowMap'
+import { resolveTerrainLightParams } from '@/core/terrain/terrainLightParams'
 import { IPlanetRenderingObject } from '@/core/models/types'
 import { readRenderingData } from '@/core/helpers/renderingData'
 import { proceduralDiffuseKey } from '@/core/services/ProceduralSurfaceGenerator'
@@ -72,6 +74,12 @@ class PlanetMaterial extends AbstractShaderMaterial {
 
   /** Проводка закатного тинта из реестра атмосфер — общая с водной оболочкой (см. SunTintBinding). */
   private readonly sunTint: SunTintBinding
+
+  /**
+   * Множитель полутени собственной тени рельефа (ручка данных) — читает
+   * syncTerrainShadow; публичное, пока единственный читатель вне класса.
+   */
+  public shadowSoftness: number = 1
 
   public constructor(model: Actor, atmosphereRegistry?: AtmosphereRegistry, parameters?: ShaderMaterialParameters) {
     super(parameters)
@@ -202,7 +210,8 @@ class PlanetMaterial extends AbstractShaderMaterial {
     // пропустил), сфера гладкая, и кратерный slope-шейдинг на ней был бы
     // враньём — тогда рельефные дефайны молчат целиком.
     const heightPath: string | undefined = heightPathOf(this.model)
-    const hasHeightField = heightPath !== undefined && Boolean(heightFieldStorage.get(heightPath))
+    const heightMap = heightPath === undefined ? undefined : heightFieldStorage.get(heightPath)
+    const hasHeightField = heightMap !== undefined
     const hasWaterShell = readWaterLevelMeters(this.model) !== undefined
 
     // slope-карта — уклоны из той же карты высот (см. slopeMapFormat): шейдит
@@ -244,6 +253,19 @@ class PlanetMaterial extends AbstractShaderMaterial {
       emission: 1
     }
     const cavityStrength = planetData.cavityStrength ?? 0
+
+    // Собственная тень рельефа: карта тени — по карте высот, не по полю (от
+    // радиуса и полосы не зависит). Сила — ручка данных, 0 держит шейдер
+    // бит-в-бит прежним; юниформ форвардится независимо от гейта.
+    const light = resolveTerrainLightParams(planetData, this.model.getAttribute?.('name', '?') ?? '?')
+    this.shadowSoftness = light.terrainShadowSoftness
+    const useTerrainShadow = hasHeightField && light.terrainShadowStrength > 0
+    const shadowMap = useTerrainShadow ? terrainShadowMapFor(heightMap) : undefined
+    this.uniforms.uTerrainShadowStrength.value = light.terrainShadowStrength
+    this.uniforms.uShadowHeightMap.value = shadowMap?.texture ?? null
+    this.uniforms.uShadowHeightMin.value = shadowMap?.heightMinUnits ?? 0
+    this.uniforms.uShadowHeightRange.value = shadowMap?.heightRangeUnits ?? 0
+    this.uniforms.uShadowTexelAngle.value = shadowMap?.texelAngle ?? 0
 
     // Терраформный детальный слой (задача 4, чанк TerrainDetail): крупная
     // нормаль — база слоя, её наличие и есть условие USE_TERRAIN_DETAIL.
@@ -375,6 +397,8 @@ class PlanetMaterial extends AbstractShaderMaterial {
       // и рельефный путь — сдвиг uv считается в ветке USE_TERRAIN_UV, у легаси-
       // сферы этого кода нет. Пара с USE_CLOUD держится тем же cloudMap.
       ...(cloudMap && hasHeightField && { USE_CLOUD_SHADOW: '1' }),
+      // Тень рельефа: карта высот есть И ручка ненулевая — при 0 шейдер бит-в-бит прежний
+      ...(useTerrainShadow && { USE_TERRAIN_SHADOW: '1' }),
       // Пересборка от снимка стирает и дефайны атмосферных LUT — они не про
       // карты и живут своей синхронизацией, поэтому восстанавливаются здесь же
       // по текущей записи реестра (иначе стриминг карт гасил бы тинт до
@@ -412,6 +436,10 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uSteepArmMap.value = null
     this.uniforms.uSteepDiffMap.value = null
     this.uniforms.uSteepGate.value = 0
+
+    this.uniforms.uShadowHeightMap.value = null
+    this.uniforms.uShadowHeightRange.value = 0
+    this.uniforms.uShadowTexelAngle.value = 0
     ;(this.uniforms.uDetailTintNorm.value as Vector2).set(1, 1)
     ;(this.uniforms.uSteepTintNorm.value as Vector2).set(1, 1)
 
