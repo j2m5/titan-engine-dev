@@ -16,6 +16,8 @@ import { resolveMacroSlopeStructureParams } from '@/core/terrain/macroSlopeStruc
 import { resolveTerrainLightParams } from '@/core/terrain/terrainLightParams'
 import { resolveWaterFoamParams } from '@/core/terrain/waterFoamParams'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
+import { config } from '@/core/framework/config'
+import { DEFAULT_SUN_ANGULAR_RADIUS } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
 
 // Нейтральные дефолты детального слоя (используются, только если данные тела
 // не задали ручку явно) — см. IPlanetRenderingObject.detail*, ручки Луны в
@@ -113,6 +115,13 @@ interface PlanetUniforms {
   uSkyAmbientStrength: number
   uCloudShadowStrength: number
   uCloudShadowHeightUnits: number
+  uShadowHeightMap: Texture | null
+  uShadowHeightMin: number
+  uShadowHeightRange: number
+  uShadowTexelAngle: number
+  uShadowMaxDistUnits: number
+  uShadowPenumbraTan: number
+  uTerrainShadowStrength: number
   shadowRingsInnerRadius: number
   shadowRingsOuterRadius: number
   shadowRingsTexture: Texture | null
@@ -249,6 +258,15 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uSkyAmbientStrength: new Uniform(light.skyAmbientStrength),
       uCloudShadowStrength: new Uniform(light.cloudShadowStrength),
       uCloudShadowHeightUnits: new Uniform(toThreeJSUnits(light.cloudShadowHeightKm)),
+      // Тень рельефа: карта и масштабы привязываются в PlanetMaterial.updateMaterial,
+      // полутень — в syncTerrainShadow; здесь дефолты до первой карты
+      uShadowHeightMap: new Uniform(null),
+      uShadowHeightMin: new Uniform(0),
+      uShadowHeightRange: new Uniform(0),
+      uShadowTexelAngle: new Uniform(0),
+      uShadowMaxDistUnits: new Uniform(toThreeJSUnits(config('terrain.shadowMaxKm'))),
+      uShadowPenumbraTan: new Uniform(Math.tan(DEFAULT_SUN_ANGULAR_RADIUS)),
+      uTerrainShadowStrength: new Uniform(light.terrainShadowStrength),
       uDetailFadeRange: new Uniform(
         new Vector4(
           detailFadeEndUnits * DETAIL_FADE_START_RATIO,

@@ -45,6 +45,8 @@ export interface TerrainConfig {
      * без рельефа именно из-за размера своей карты.
      */
     heightMapBudgetMiB: number
+    /** Длина луча марша тени рельефа к солнцу, км: на терминаторе тени десятки км, 150 с запасом при 20 шагах. */
+    shadowMaxKm: number
     lod: {
       /**
        * Бюджет на постройки патчей за кадр (TerrainPatchGroup.updateObject), мс.
@@ -77,6 +79,7 @@ export const terrain: TerrainConfig = {
     heightMapLoadPixels: 32,
     heightMapReleasePixels: 16,
     heightMapBudgetMiB: 256,
+    shadowMaxKm: 150,
     lod: {
       patchBuildBudgetMs: 6
     }
