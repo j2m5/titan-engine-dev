@@ -110,6 +110,7 @@ class TerrainSphere extends TerrainPatchGroup {
     this.getWorldPosition(this.cloudSelfWorldScratch)
     this.sharedMaterial.updateCloudOpacity(this.cloudCameraWorldScratch, this.cloudSelfWorldScratch)
     this.sharedMaterial.syncSunTint()
+    this.sharedMaterial.syncTerrainShadow(this.cloudSelfWorldScratch)
   }
 }
 

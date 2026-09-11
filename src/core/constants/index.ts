@@ -27,3 +27,9 @@ export const SpaceScale = Math.pow(10, -3.3)
  * `children.where('categoryId', …)`.
  */
 export const ATMOSPHERE_CATEGORY_ID = 5
+
+/**
+ * Категория актора-звезды (`storage/database/categories.ts`): звезда — либо
+ * корень дерева акторов, либо его прямой ребёнок (см. resolveStarRadiusKm).
+ */
+export const STAR_CATEGORY_ID = 3

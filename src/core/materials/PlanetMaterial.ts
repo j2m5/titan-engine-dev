@@ -26,6 +26,8 @@ import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { SunTintBinding } from '@/core/materials/SunTintBinding'
 import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
+import { resolveStarRadiusKm } from '@/core/terrain/starRadius'
+import { penumbraTan } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
 
 /**
  * Opacity облачного слоя от высоты камеры над поверхностью (приёмочная волна
@@ -76,7 +78,13 @@ class PlanetMaterial extends AbstractShaderMaterial {
   private readonly sunTint: SunTintBinding
 
   /** Множитель полутени собственной тени рельефа (ручка данных) — читает syncTerrainShadow. */
-  public shadowSoftness: number = 1
+  private shadowSoftness: number = 1
+
+  /** Радиус звезды системы (юниты сцены) для полутени тел без атмосферы; undefined — фолбэк. */
+  private readonly starRadiusUnits: number | undefined
+
+  /** Угловой радиус солнца из данных атмосферы тела; undefined — нет атмосферы. */
+  private readonly atmosphereSunAngularRadius: number | undefined
 
   public constructor(model: Actor, atmosphereRegistry?: AtmosphereRegistry, parameters?: ShaderMaterialParameters) {
     super(parameters)
@@ -93,6 +101,11 @@ class PlanetMaterial extends AbstractShaderMaterial {
       atmosphereActor?.getAttribute('id') as number | undefined,
       radiusKm
     )
+    const starRadiusKm = resolveStarRadiusKm(model)
+    this.starRadiusUnits = starRadiusKm === undefined ? undefined : toThreeJSUnits(starRadiusKm)
+    this.atmosphereSunAngularRadius = atmosphereActor
+      ? readRenderingData<AtmosphereConfig>(atmosphereActor)?.sunAngularRadius
+      : undefined
 
     const { uniforms, defines, vertexShader, fragmentShader } = new PlanetShader(this.model)
 
@@ -163,6 +176,16 @@ class PlanetMaterial extends AbstractShaderMaterial {
     const altitudeUnits = cameraWorldPosition.distanceTo(modelWorldPosition) - this.bodyRadiusUnits
 
     this.uniforms.uCloudOpacity.value = cloudOpacityForAltitude(altitudeUnits, this.cloudAtmosphereThicknessUnits)
+  }
+
+  /** Полутень тени рельефа: угловой размер солнца — из атмосферы или R★/дистанция; звезда в нуле сцены. */
+  public syncTerrainShadow(modelWorldPosition: Vector3): void {
+    this.uniforms.uShadowPenumbraTan.value = penumbraTan(
+      this.atmosphereSunAngularRadius,
+      this.starRadiusUnits,
+      modelWorldPosition.length(),
+      this.shadowSoftness
+    )
   }
 
   /**
