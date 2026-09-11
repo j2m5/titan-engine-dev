@@ -95,6 +95,15 @@ describe('terrainShadowMarch: уступ высотой H', () => {
     expect(terrainShadowMarch(cap, dir, sun, params)).toBe(0)
   })
 
+  it('bias: подъём рельефа меньше bias тени не даёт (защита от ряби на низкой карте)', () => {
+    const u0 = 0.3
+    const bias = R * params.texelAngle * TERRAIN_SHADOW_BIAS_SLOPE
+    const origin = terrainShadowUv(dirAt(u0, 0.5))
+    const rippled: HeightSampler = (uv) => (Math.abs(uv[0] - origin[0]) < 1e-9 && Math.abs(uv[1] - origin[1]) < 1e-9 ? 0 : 0.5 * bias)
+    expect(terrainShadowMarch(rippled, dirAt(u0, 0.5), sunTowardWest(u0, 1e-4), params)).toBe(1)
+    // без bias тот же стенд был бы в тени: (0.5·bias − ≈4.7) / (sMin·0.0093) > 1
+  })
+
   it('склон к солнцу положе луча — освещён на всей дистанции; константы', () => {
     // подъём к западу с уклоном 0.025, солнце на atan(0.04): луч уходит от рельефа, тени нет
     const gentle: HeightSampler = (uv) => (0.5 - uv[0]) * 2 * Math.PI * R * 0.025
