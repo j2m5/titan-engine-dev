@@ -8,6 +8,7 @@ import {
   type TerrainAuxData,
   type TerrainAuxPayload
 } from '@/core/terrain/terrainAuxFormat'
+import { disposeTerrainShadowMap, disposeTerrainShadowMaps } from '@/core/terrain/terrainShadowMap'
 
 /**
  * Реестр карт высот, CPU-сторона. Модульный синглтон по образцу
@@ -125,13 +126,18 @@ class HeightFieldStorage {
    */
   public release(path: string): void {
     if (this.inFlight.has(path)) return
-    if (!this.maps.delete(path)) return
+    const map = this.maps.get(path)
+    if (!map) return
 
+    this.maps.delete(path)
+    // GL-текстура тени за картой: WeakMap полей её не закроет
+    disposeTerrainShadowMap(map)
     this.registryVersion += 1
   }
 
   public clear(): void {
     this.epoch += 1
+    disposeTerrainShadowMaps()
     this.maps.clear()
     this.inFlight.clear()
     this.failedAt.clear()

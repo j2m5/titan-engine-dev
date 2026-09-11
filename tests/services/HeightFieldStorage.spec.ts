@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
-import { parseHeightMap } from '@/core/terrain/heightMapFormat'
+import { parseHeightMap, type HeightMapData } from '@/core/terrain/heightMapFormat'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { disposeTerrainShadowMaps, terrainShadowMapFor } from '@/core/terrain/terrainShadowMap'
 import { encodeHeightMap } from '../../scripts/lib/heightMapEncode'
 import { encodeTerrainAux } from '../../scripts/lib/terrainAuxEncode'
 
@@ -45,6 +46,10 @@ function mapFetchCount(): number {
 
 function validBody(): Buffer {
   return encodeHeightMap({ width: 2, height: 2, minMeters: 0, maxMeters: 100, data: new Uint16Array([0, 1, 2, 3]) })
+}
+
+function smallMap(): HeightMapData {
+  return { width: 4, height: 2, minMeters: 0, maxMeters: 100, data: new Uint16Array(8) }
 }
 
 /** Настоящий компаньон настоящей карты — через то же поле, что строит его офлайн-скрипт. */
@@ -298,5 +303,35 @@ describe('HeightFieldStorage: учёт занятой памяти', () => {
     heightFieldStorage.release(MAP_PATH)
 
     expect(heightFieldStorage.bytesOf(MAP_PATH)).toBeUndefined()
+  })
+})
+
+describe('HeightFieldStorage: карта тени уходит вместе с картой', () => {
+  afterEach(() => {
+    heightFieldStorage.clear()
+    disposeTerrainShadowMaps()
+    vi.unstubAllGlobals()
+  })
+
+  it('release(path) диспозит текстуру тени этой карты', async () => {
+    stubFetch(encodeHeightMap(smallMap()))
+    heightFieldStorage.request(MAP_PATH)
+    await vi.waitFor(() => expect(heightFieldStorage.get(MAP_PATH)).toBeDefined())
+    const map = heightFieldStorage.get(MAP_PATH)!
+    let disposed = 0
+    terrainShadowMapFor(map).texture.addEventListener('dispose', () => disposed++)
+    heightFieldStorage.release(MAP_PATH)
+    expect(disposed).toBe(1)
+    expect(heightFieldStorage.get(MAP_PATH)).toBeUndefined()
+  })
+
+  it('clear() диспозит все карты тени', async () => {
+    stubFetch(encodeHeightMap(smallMap()))
+    heightFieldStorage.request(MAP_PATH)
+    await vi.waitFor(() => expect(heightFieldStorage.get(MAP_PATH)).toBeDefined())
+    let disposed = 0
+    terrainShadowMapFor(heightFieldStorage.get(MAP_PATH)!).texture.addEventListener('dispose', () => disposed++)
+    heightFieldStorage.clear()
+    expect(disposed).toBe(1)
   })
 })
