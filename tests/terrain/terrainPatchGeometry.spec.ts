@@ -1,14 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Sphere, Vector2, Vector3, type BufferGeometry } from 'three'
+import { InstancedBufferGeometry, MeshBasicMaterial, Sphere, Vector2, Vector3, type BufferGeometry } from 'three'
 import {
   allocatePatchArrays,
   applyPatchBounds,
   buildPatchIndex,
   buildTerrainPatchArrays,
   buildTerrainPatchGeometry,
+  buildTerrainPatchInto,
   ringGridIndex,
   terrainPatchVertexCount
 } from '@/core/terrain/terrainPatchGeometry'
+import { TerrainPatchPool } from '@/core/terrain/TerrainPatchPool'
 import { cubeFaceDirection } from '@/core/terrain/cubeSphere'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { MIDBAND_DEFAULTS, type MidbandParams } from '@/core/terrain/midbandParams'
@@ -113,12 +115,27 @@ describe('buildTerrainPatchArrays: ядро без геометрии', () => {
   })
 
   it('applyPatchBounds ставит сферу без обхода вершин; fresh и into не зовут computeBoundingSphere', () => {
-    const geometry = build(bumpyField(), 0, 1, 0).geometry
-    const spy = vi.spyOn(geometry, 'computeBoundingSphere')
-    applyPatchBounds(geometry, { cx: 1, cy: 2, cz: 3, radius: 4 })
-    expect(geometry.boundingSphere!.center.toArray()).toEqual([1, 2, 3])
-    expect(geometry.boundingSphere!.radius).toBe(4)
-    expect(spy).not.toHaveBeenCalled()
+    // шпион на прототипе ДО постройки — иначе он не видит вызовы из самих
+    // обёрток (build() уже создал бы свою геометрию раньше vi.spyOn на инстансе)
+    const spy = vi.spyOn(InstancedBufferGeometry.prototype, 'computeBoundingSphere')
+    try {
+      const field = bumpyField()
+      const wrap = detailWrapFor(undefined)
+
+      const fresh = build(field, 0, 1, 0) // fresh-вариант
+
+      const pool = new TerrainPatchPool(new MeshBasicMaterial(), SEGMENTS)
+      const handle = pool.acquire()!
+      buildTerrainPatchInto(field, 0, 1, 0, DEPTH, SEGMENTS, 0.001, handle, wrap) // into-вариант
+
+      expect(spy).not.toHaveBeenCalled()
+
+      applyPatchBounds(fresh.geometry, { cx: 1, cy: 2, cz: 3, radius: 4 })
+      expect(fresh.geometry.boundingSphere!.center.toArray()).toEqual([1, 2, 3])
+      expect(fresh.geometry.boundingSphere!.radius).toBe(4)
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
 
