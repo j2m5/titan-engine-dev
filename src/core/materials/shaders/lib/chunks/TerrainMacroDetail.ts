@@ -135,7 +135,7 @@ export const terrainMacroDetailFunctions = /* glsl */ `
         vec2 d2 = d.zx;
         float l = length(d2);
         if (l > 1e-3) {
-          vec3 r = uMacroStreakChart > 0.5 ? streakChart(qs.zx, d2 / l, 17.0) : streakPlane(qs.zx, d2 / l, 17.0);
+          vec3 r = uMacroStreakChart > 0.5 ? streakChart(qs.zx, d2 / l, 101.0) : streakPlane(qs.zx, d2 / l, 101.0);
           value += w3.y * r.x;
           g += w3.y * vec3(r.z, 0.0, r.y);
         }
@@ -145,7 +145,7 @@ export const terrainMacroDetailFunctions = /* glsl */ `
         vec2 d2 = d.xy;
         float l = length(d2);
         if (l > 1e-3) {
-          vec3 r = uMacroStreakChart > 0.5 ? streakChart(qs.xy, d2 / l, 31.0) : streakPlane(qs.xy, d2 / l, 31.0);
+          vec3 r = uMacroStreakChart > 0.5 ? streakChart(qs.xy, d2 / l, 211.0) : streakPlane(qs.xy, d2 / l, 211.0);
           value += w3.z * r.x;
           g += w3.z * vec3(r.y, r.z, 0.0);
         }

@@ -223,6 +223,8 @@ export interface IPlanetRenderingObject {
   macroStructureSlopeStart?: number
   /** Уклон (tan) полной силы форм; дефолт 0.45 (≈24°). */
   macroStructureSlopeFull?: number
+  /** Чарт струй: 1 — фиксированные ориентации, 0 — прежний вращающийся; дефолт 1. */
+  macroStreakChart?: number
 
   // --- Геометрия средней полосы (арка B): слагаемое высоты под текселем карты,
   // направленное её уклоном/кривизной. midbandStrength 0 — поле = карта.

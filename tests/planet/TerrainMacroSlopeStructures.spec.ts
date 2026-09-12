@@ -84,6 +84,15 @@ describe('TerrainMacroDetail: направленные формы склона (
     expect((fn.match(/snoiseGrad\(/g) ?? []).length).toBe(2)
   })
 
+  it('сиды плоскостей струй 0/101/211 на обеих ветках тернарника; наборы {seed + 7k} не пересекаются', () => {
+    // yz/0.0 пинуется выше; здесь — оставшиеся две плоскости на обеих ветках
+    expect(fn).toContain('uMacroStreakChart > 0.5 ? streakChart(qs.zx, d2 / l, 101.0) : streakPlane(qs.zx, d2 / l, 101.0)')
+    expect(fn).toContain('uMacroStreakChart > 0.5 ? streakChart(qs.xy, d2 / l, 211.0) : streakPlane(qs.xy, d2 / l, 211.0)')
+    const sets = [0, 101, 211].map((seed) => [0, 1, 2, 3].map((k) => seed + 7 * k))
+    const flat = sets.flat()
+    expect(new Set(flat).size).toBe(flat.length)
+  })
+
   it('террасы: фаза от vHeightMeters (не от позиции), наклон модулирует slopeVec производной профиля', () => {
     const terr = fn.slice(fn.indexOf('vec2 tp = terraceProfile('), fn.indexOf('TERRACE_SHADE * k'))
     expect(terr).toContain('vHeightMeters / max(uMacroTerraceStepMeters, 1e-3) + TERRACE_WOBBLE * fbmValue')
