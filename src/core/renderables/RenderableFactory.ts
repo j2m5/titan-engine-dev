@@ -341,17 +341,42 @@ class RenderableFactory {
       return true
     }
 
+    const legacy: Object3D = lod.levels[0].object
+
     this.pendingUpgrades.set(node, surface)
     surface.whenReady((): void => {
-      // отменён даунгрейдом: сфера уже задиспожена, узел мог начать новый апгрейд
+      // отменён даунгрейдом или разборкой сценария: сфера уже задиспожена,
+      // узел мог начать новый апгрейд
       if (this.pendingUpgrades.get(node) !== surface) return
 
       this.pendingUpgrades.delete(node)
+
+      // уровень заменён мимо фабрики или карта выгружена без даунгрейда:
+      // свап попал бы в разобранный LOD
+      if (lod.levels.at(0)?.object !== legacy || !heightFieldStorage.get(heightPath)) {
+        disposeSceneTree(surface)
+
+        return
+      }
+
       this.swapSurface(node, surface)
       this.refreshObservation()
     })
 
     return false
+  }
+
+  /**
+   * Разборка ждущих апгрейдов при смене сценария. Отсоединённые сферы не входят
+   * в граф сцены, и engine.dispose() их не разбирает: слоты пула и регистрацию
+   * поля у строителя отпускает только их собственный dispose.
+   */
+  public clearPendingUpgrades(): void {
+    const surfaces: TerrainSphere[] = [...this.pendingUpgrades.values()]
+
+    this.pendingUpgrades.clear()
+
+    for (const surface of surfaces) disposeSceneTree(surface)
   }
 
   /** Узел ждёт готовности начального набора: апгрейд запрошен, свапа ещё не было. */

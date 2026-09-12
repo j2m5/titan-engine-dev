@@ -28,6 +28,7 @@ import type { TextureBudget } from '@/core/streaming/TextureBudget'
 import type { CameraCollision } from '@/core/services/CameraCollision'
 import type { HeightFieldGate } from '@/core/services/HeightFieldGate'
 import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
+import type { TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 
 export const Tokens = {
   Engine: token<Engine>('Engine'),
@@ -57,5 +58,6 @@ export const Tokens = {
   RenderableFactory: token<RenderableFactory>('RenderableFactory'),
   LeakDetector: token<LeakDetector>('LeakDetector'),
   TextureBudget: token<TextureBudget>('TextureBudget'),
-  ProceduralSurfaceGenerator: token<ProceduralSurfaceGenerator>('ProceduralSurfaceGenerator')
+  ProceduralSurfaceGenerator: token<ProceduralSurfaceGenerator>('ProceduralSurfaceGenerator'),
+  TerrainPatchBuilder: token<TerrainPatchBuilder>('TerrainPatchBuilder')
 } as const

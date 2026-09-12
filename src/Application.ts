@@ -7,6 +7,8 @@ import { Scene } from 'three'
 import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
 import type { HeightFieldGate } from '@/core/services/HeightFieldGate'
 import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
+import type { RenderableFactory } from '@/core/renderables/RenderableFactory'
+import type { TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import { SkyboxBackground } from '@/core/renderables/SkyboxBackground'
 
 class Application {
@@ -21,7 +23,11 @@ class Application {
     // Опционален: существующие тесты Application строят его без генератора —
     // тот же приём, что у остальных сценарных сервисов (AtmosphereRegistry
     // и т.п. приходят опциональными параметром там, где нет DI-контейнера).
-    private proceduralSurfaceGenerator?: ProceduralSurfaceGenerator
+    private proceduralSurfaceGenerator?: ProceduralSurfaceGenerator,
+    /** Ждущие апгрейды поверхности живут вне графа сцены — engine.dispose() их не видит. */
+    private renderableFactory?: Pick<RenderableFactory, 'clearPendingUpgrades'>,
+    /** Сессионный синглтон: при смене сценария снимаются регистрации полей, воркер не завершается. */
+    private terrainPatchBuilder?: TerrainPatchBuilder
   ) {}
 
   /**
@@ -39,12 +45,17 @@ class Application {
    */
   public teardown(): void {
     this.engine.dispose()
+    // Отсоединённые сферы — тоже граф: разбираются до текстур, и их dispose
+    // отпускает поля у строителя раньше releaseAll.
+    this.renderableFactory?.clearPendingUpgrades()
     resourceStorage.deleteAllTextures()
     heightFieldStorage.clear()
     // Иначе выброшенные узлы (и их пулы патчей TerrainPatchPool) живут в
     // куче до следующего поиска того же имени — гейт синглтон-сессии, а
     // не пересоздаётся при смене сценария.
     this.heightFieldGate.clearNodeCache()
+    // Остаток регистраций полей (request без acquire); сам воркер переживает смену сценария.
+    this.terrainPatchBuilder?.releaseAll()
     // Инвариант владения: генератор рантайм-диффуза процедурных тел — общий
     // синглтон сцены (см. AppServiceProvider), а не собственность акторов —
     // его render target'ы разбирает владелец, здесь же, а не сами тела.

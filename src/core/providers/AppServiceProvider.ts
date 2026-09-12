@@ -21,6 +21,8 @@ import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { LeakDetector } from '@/core/lifecycle/LeakDetector'
 import { TextureBudget } from '@/core/streaming/TextureBudget'
 import { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
+import { SyncTerrainPatchBuilder, type TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
+import { WorkerTerrainPatchBuilder } from '@/core/terrain/worker/WorkerTerrainPatchBuilder'
 
 class AppServiceProvider extends ServiceProvider {
   public register(): void {
@@ -53,6 +55,15 @@ class AppServiceProvider extends ServiceProvider {
       (c: Container) => new ProceduralSurfaceGenerator(c.get(Tokens.Renderer))
     )
 
+    // Один воркер на сцену: сессионный синглтон, переживает смену сценария
+    // (Application.teardown снимает только регистрации полей). Без Worker —
+    // синхронный фолбэк.
+    this.app.singleton(
+      Tokens.TerrainPatchBuilder,
+      (): TerrainPatchBuilder =>
+        typeof Worker === 'undefined' ? new SyncTerrainPatchBuilder() : new WorkerTerrainPatchBuilder()
+    )
+
     this.app.singleton(
       Tokens.RenderableFactory,
       (c: Container) =>
@@ -62,7 +73,7 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.AtmosphereRegistry),
           c.get(Tokens.DepthVolumeRegistry),
           c.get(Tokens.ProceduralSurfaceGenerator),
-          undefined,
+          c.get(Tokens.TerrainPatchBuilder),
           // свап поверхности по готовности рельефа идёт вне тика HeightFieldGate:
           // снимок наблюдения пересобирать больше некому (см. докблок параметра)
           () => c.get(Tokens.SceneObserver).refreshObservableObjects()
@@ -152,7 +163,9 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.Scene),
           c.get(Tokens.LeakDetector),
           c.get(Tokens.HeightFieldGate),
-          c.get(Tokens.ProceduralSurfaceGenerator)
+          c.get(Tokens.ProceduralSurfaceGenerator),
+          c.get(Tokens.RenderableFactory),
+          c.get(Tokens.TerrainPatchBuilder)
         )
     )
 

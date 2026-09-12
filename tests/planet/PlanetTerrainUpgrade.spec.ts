@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LOD, Object3D, Texture } from 'three'
 import '@/core/framework/TitanThree'
 import { Planet } from '@/core/renderables/Planet'
@@ -51,14 +51,15 @@ function seedHeightMap(): void {
   })
 }
 
-function makeFactory(builder: TerrainPatchBuilder): RenderableFactory {
+function makeFactory(builder: TerrainPatchBuilder, refreshObservation?: () => void): RenderableFactory {
   return new RenderableFactory(
     { domElement: { height: 1080 } } as unknown as WebGLRenderer,
     {} as unknown as ResourceObserver,
     new AtmosphereRegistry(),
     new DepthVolumeRegistry(),
     undefined,
-    builder
+    builder,
+    refreshObservation
   )
 }
 
@@ -153,5 +154,59 @@ describe('RenderableFactory: свап поверхности по готовно
     builder.flush()
 
     expect(refreshes).toBe(1)
+  })
+
+  it('clearPendingUpgrades: отсоединённая сфера разобрана, поле отпущено, поздний flush ничего не свапает', () => {
+    const builder = new FakeAsyncBuilder()
+    const factory = makeFactory(builder)
+    const node = factory.make(moon()) as DynamicNode
+
+    seedHeightMap()
+    factory.upgradePlanetToTerrain(node)
+    factory.clearPendingUpgrades()
+
+    expect(factory.hasPendingUpgrade(node)).toBe(false)
+    expect(builder.released).toHaveLength(1)
+
+    builder.flush()
+
+    expect(lodLevel0(node)).toBeInstanceOf(Planet)
+  })
+
+  it('поздняя готовность после выгрузки карты: свапа нет, сфера разобрана, снимок не пересобирается', () => {
+    const builder = new FakeAsyncBuilder()
+    const refresh = vi.fn()
+    const factory = makeFactory(builder, refresh)
+    const node = factory.make(moon()) as DynamicNode
+
+    seedHeightMap()
+    factory.upgradePlanetToTerrain(node)
+    // карта ушла, даунгрейд гейтом не дошёл
+    heightFieldStorage.clear()
+    builder.flush()
+
+    expect(lodLevel0(node)).toBeInstanceOf(Planet)
+    expect(factory.hasPendingUpgrade(node)).toBe(false)
+    expect(builder.released).toHaveLength(1)
+    expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('поздняя готовность после замены нулевого уровня: свапа нет, сфера разобрана', () => {
+    const builder = new FakeAsyncBuilder()
+    const refresh = vi.fn()
+    const factory = makeFactory(builder, refresh)
+    const node = factory.make(moon()) as DynamicNode
+    const lod = node.children.find((child): child is LOD => child instanceof LOD)!
+    const replacement = new Object3D()
+
+    seedHeightMap()
+    factory.upgradePlanetToTerrain(node)
+    lod.levels[0].object = replacement
+    builder.flush()
+
+    expect(lodLevel0(node)).toBe(replacement)
+    expect(factory.hasPendingUpgrade(node)).toBe(false)
+    expect(builder.released).toHaveLength(1)
+    expect(refresh).not.toHaveBeenCalled()
   })
 })

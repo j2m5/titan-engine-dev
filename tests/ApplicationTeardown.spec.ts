@@ -121,4 +121,35 @@ describe('Application.teardown', () => {
 
     expect(recordSpy).toHaveBeenCalledTimes(1)
   })
+
+  it('зовёт releaseAll строителя патчей, но не dispose — воркер живёт до выгрузки страницы', () => {
+    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    const observer = {} as unknown as ResourceObserver
+    vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
+    const builder = { acquire: vi.fn(), request: vi.fn(), release: vi.fn(), releaseAll: vi.fn(), dispose: vi.fn() }
+
+    new Application(engine, observer, new Scene(), leakDetector, heightFieldGate, undefined, undefined, builder).teardown()
+
+    expect(builder.releaseAll).toHaveBeenCalledTimes(1)
+    expect(builder.dispose).not.toHaveBeenCalled()
+  })
+
+  it('clearPendingUpgrades фабрики до releaseAll строителя', () => {
+    const order: string[] = []
+    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    const observer = {} as unknown as ResourceObserver
+    vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
+    const builder = {
+      acquire: vi.fn(),
+      request: vi.fn(),
+      release: vi.fn(),
+      releaseAll: vi.fn(() => order.push('releaseAll')),
+      dispose: vi.fn()
+    }
+    const factory = { clearPendingUpgrades: vi.fn(() => order.push('clearPendingUpgrades')) }
+
+    new Application(engine, observer, new Scene(), leakDetector, heightFieldGate, undefined, factory, builder).teardown()
+
+    expect(order).toEqual(['clearPendingUpgrades', 'releaseAll'])
+  })
 })
