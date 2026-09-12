@@ -20,19 +20,19 @@ describe('SlopeNormal: попиксельная нормаль из slope-кар
     expect(slopeNormalFunctions).not.toContain('(2.0 / 127.0)')
   })
 
-  it('у полюса тангенс вырожден — возвращается геометрическая нормаль, слой не декодирован (slopeOut = 0)', () => {
+  it('у полюса тангенс вырожден — возвращается геометрическая нормаль, слой не декодирован (mapSlopeOut = 0)', () => {
     expect(slopeNormalFunctions).toContain('if (len < 1e-4) {')
-    expect(slopeNormalFunctions).toContain('slopeOut = vec2(0.0);')
+    expect(slopeNormalFunctions).toContain('mapSlopeOut = vec2(0.0);')
     expect(slopeNormalFunctions).toContain('return surfNormal; // полюс: тангенс вырожден')
   })
 
-  it('ровно одна форма функции — с extraSlope и out slopeOut; обёртки без вызывающих сняты', () => {
+  it('ровно одна форма функции — с extraSlope и out mapSlopeOut; обёртки без вызывающих сняты', () => {
     const declarations = (slopeNormalFunctions.match(/vec3 perturbNormalFromSlope\(/g) ?? []).length
     expect(declarations).toBe(1)
     expect(slopeNormalFunctions).toContain(
-      'vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv, vec2 extraSlope, out vec2 slopeOut)'
+      'vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv, vec2 extraSlope, out vec2 mapSlopeOut)'
     )
-    expect(slopeNormalFunctions).toContain('slopeOut = slope;')
+    expect(slopeNormalFunctions).toContain('mapSlopeOut = decoded;')
     // ровно одна текстурная выборка на весь чанк
     const sampleCalls = (slopeNormalFunctions.match(/texture2D\(bumpMap, uv\)/g) ?? []).length
     expect(sampleCalls).toBe(1)
@@ -43,10 +43,11 @@ describe('SlopeNormal: попиксельная нормаль из slope-кар
     // терраформная ветка (USE_SLOPE) зовёт локальными аргументами — один
     // normalMatrix применяется в конце ветки (см. FragmentUv.spec); легаси
     // ветка USE_BUMP вымерла вместе с типом ресурса bump. out-параметр
-    // terrainSlopeVec — маска зон материала TerrainDetail (задача 2, фикс-раунд 1):
-    // тот же декод, что внутри чанка, без повторной выборки текстуры.
+    // terrainMapSlopeVec — маска зон материала TerrainDetail (задача 6):
+    // уклон КАРТЫ без наклона полосы B, тот же декод, что внутри чанка,
+    // без повторной выборки текстуры.
     expect(PlanetShaderTemplate.fragmentShader).toContain(
-      'perturbNormalFromSlope(nLocal, eastLocal, uv, vMidTilt, terrainSlopeVec)'
+      'perturbNormalFromSlope(nLocal, eastLocal, uv, vMidTilt, terrainMapSlopeVec)'
     )
     expect(PlanetShaderTemplate.fragmentShader).not.toContain('USE_BUMP')
   })

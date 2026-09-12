@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { terrainDetailFunctions, terrainDetailUniforms } from '@/core/materials/shaders/lib/chunks/TerrainDetail'
+import { slopeNormalFunctions } from '@/core/materials/shaders/lib/chunks/SlopeNormal'
 import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
 
 describe('TerrainDetail: зоны материала по уклону', () => {
@@ -56,7 +57,19 @@ describe('TerrainDetail: зоны материала по уклону', () => {
     const frag: string = PlanetShaderTemplate.fragmentShader
     expect(frag).toContain('float terrainSlopeTan = 0.0;')
     expect(frag).toContain('(uSlopeRange / 127.0)')
-    expect(frag).toContain('terrainSlopeTan = length(terrainSlopeVec);')
+    // маска зон — по уклону КАРТЫ: наклон полосы B открывал бы камень кляксами вдоль её гребней
+    expect(frag).toContain('vec2 terrainMapSlopeVec;')
+    expect(frag).toContain('perturbNormalFromSlope(nLocal, eastLocal, uv, vMidTilt, terrainMapSlopeVec)')
+    expect(frag).toContain('terrainSlopeTan = length(terrainMapSlopeVec);')
+    expect(frag).not.toContain('terrainSlopeVec')
+    expect(slopeNormalFunctions).toContain(
+      'vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv, vec2 extraSlope, out vec2 mapSlopeOut)'
+    )
+    expect(slopeNormalFunctions).toContain('mapSlopeOut = decoded;')
+    // bumpScale множит только декод карты; наклон полосы входит в нормаль как есть
+    expect(slopeNormalFunctions).toContain('vec2 slope = bumpScale * decoded + extraSlope;')
+    expect(slopeNormalFunctions).toContain('return normalize(surfNormal - (slope.x * T + slope.y * B));')
+    expect(slopeNormalFunctions).not.toContain('bumpScale * (slope.x')
     expect(frag).toContain(
       'applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);'
     )

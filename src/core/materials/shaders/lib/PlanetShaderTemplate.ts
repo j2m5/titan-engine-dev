@@ -331,10 +331,12 @@ export const PlanetShaderTemplate: ShaderProps = {
           // out-параметр perturbNormalFromSlope (SlopeNormal.ts) отдаёт уже
           // декодированный вектор уклона — ВТОРОЙ выборки той же текстуры
           // под тем же uv здесь больше нет (не macroSlope ниже: тот же
-          // формат байта, но отдельный путь под другим гейтом).
-          vec2 terrainSlopeVec;
-          nLocal = perturbNormalFromSlope(nLocal, eastLocal, uv, vMidTilt, terrainSlopeVec);
-          terrainSlopeTan = length(terrainSlopeVec);
+          // формат байта, но отдельный путь под другим гейтом). tan уклона
+          // КАРТЫ для маски зон (наклон полосы B открывал бы камень вдоль
+          // её гребней).
+          vec2 terrainMapSlopeVec;
+          nLocal = perturbNormalFromSlope(nLocal, eastLocal, uv, vMidTilt, terrainMapSlopeVec);
+          terrainSlopeTan = length(terrainMapSlopeVec);
         #endif
 
         #ifdef USE_CAVITY

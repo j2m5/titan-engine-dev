@@ -21,10 +21,10 @@ describe('Полоса B в затенении: наклон по вершина
   })
 
   it('перегрузка SlopeNormal складывает добавку с декодированным вектором до наклона нормали', () => {
-    expect(slopeNormalFunctions).toContain('vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv, vec2 extraSlope, out vec2 slopeOut)')
-    const body = slopeNormalFunctions.slice(slopeNormalFunctions.indexOf('vec2 extraSlope, out vec2 slopeOut)'))
+    expect(slopeNormalFunctions).toContain('vec3 perturbNormalFromSlope(vec3 surfNormal, vec3 east, vec2 uv, vec2 extraSlope, out vec2 mapSlopeOut)')
+    const body = slopeNormalFunctions.slice(slopeNormalFunctions.indexOf('vec2 extraSlope, out vec2 mapSlopeOut)'))
     expect(body).toContain('+ extraSlope')
-    expect(frag).toContain('perturbNormalFromSlope(nLocal, eastLocal, uv, vMidTilt, terrainSlopeVec)')
+    expect(frag).toContain('perturbNormalFromSlope(nLocal, eastLocal, uv, vMidTilt, terrainMapSlopeVec)')
   })
 
   it('macroSlope средней полосы несёт наклон полосы B, а гейт форм склона — только уклон карты', () => {
