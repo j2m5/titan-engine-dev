@@ -178,7 +178,7 @@ function writeTerrainPatchAttributes(
   const dir = new Vector3()
   const uv = new Vector2()
   // скретч полосы: один на всю сборку патча, аллокаций в цикле нет
-  const bandScratch: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0 }
+  const bandScratch: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0 }
 
   const centerDir = cubeFaceDirection(face, s0 + span / 2, t0 + span / 2, new Vector3())
   const center = centerDir.clone().multiplyScalar(field.surfaceRadiusUnits(centerDir))

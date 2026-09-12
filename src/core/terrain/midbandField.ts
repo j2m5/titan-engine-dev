@@ -40,6 +40,21 @@ export const MIDBAND_P99 = 0.7
  */
 export const MIDBAND_GRAD_BOUND = 7
 
+/** Найквист по шагу вершин: до LO·λ октава целиком, от HI·λ её нет; между — smoothstep. */
+export const MIDBAND_NYQUIST_LO = 0.5
+export const MIDBAND_NYQUIST_HI = 1
+
+const smoothstep = (a: number, b: number, x: number): number => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
+  return t * t * (3 - 2 * t)
+}
+
+/** Вес октавы по шагу вершин уровня; step 0 — все октавы (потребители без уровня). */
+export function midbandOctaveWeight(stepMeters: number, wavelengthMeters: number): number {
+  if (stepMeters <= 0) return 1
+  return 1 - smoothstep(MIDBAND_NYQUIST_LO, MIDBAND_NYQUIST_HI, stepMeters / wavelengthMeters)
+}
+
 export interface MidbandEnvelope {
   /** Уклон карты на текселе, tan. */
   slopeTan: number
@@ -55,6 +70,8 @@ export interface MidbandSample {
   /** Наклон полосы, tan: производная высоты по дуге вдоль востока / севера точки. */
   tiltE: number
   tiltN: number
+  /** Σwᵢ/N — доля октав, представимых шагом уровня: 1 — вся полоса, 0 — полосы нет. */
+  octaveWeightSum: number
 }
 
 const UP = new Vector3(0, 1, 0)
@@ -65,12 +82,14 @@ const UP = new Vector3(0, 1, 0)
  * Домен dir·R/λ₀ бесшовен на сфере. Все наклоны — аналитический градиент
  * (без попиксельного шума в шейдере: наклон уходит атрибутом midTilt).
  * Бонды (maxAmplitudeMeters, slopeBound) консервативны: огибающая ≤ ENVELOPE_MAX.
+ * Октавы взвешены по шагу вершин уровня (midbandOctaveWeight) и отсечены по cutoffWavelengthMeters.
  */
 export class MidbandField {
   public readonly wavelengthsMeters: ReadonlyArray<number>
   public readonly amplitudesMeters: ReadonlyArray<number>
   public readonly maxAmplitudeMeters: number
   public readonly slopeBound: number
+  public readonly octaveCount: number
   private readonly domainScale: number
   private readonly strength: number
   private readonly east = new Vector3()
@@ -81,17 +100,21 @@ export class MidbandField {
   public constructor(
     private readonly params: MidbandParams,
     private readonly baseWavelengthMeters: number,
-    radiusMeters: number
+    radiusMeters: number,
+    cutoffWavelengthMeters: number = 0
   ) {
     const wavelengths: number[] = []
     const amplitudes: number[] = []
     for (let i = 0; i < MIDBAND_OCTAVES; i++) {
       const lambda = baseWavelengthMeters / MIDBAND_LACUNARITY ** i
+      // октава короче cutoff не представима даже самым мелким уровнем — шум по ней не считается
+      if (lambda < cutoffWavelengthMeters) break
       wavelengths.push(lambda)
       amplitudes.push(MIDBAND_ASPECT * lambda) // амплитуда ∝ длине волны: A_i = ASPECT·λ_i
     }
     this.wavelengthsMeters = wavelengths
     this.amplitudesMeters = amplitudes
+    this.octaveCount = wavelengths.length
     this.strength = params.midbandStrength
     this.domainScale = radiusMeters / baseWavelengthMeters
     const scale = this.strength * MIDBAND_ENVELOPE_MAX
@@ -111,20 +134,36 @@ export class MidbandField {
   /** strength·ENVELOPE_MAX·Σ A_i·P99 по октавам короче порога (тот же множитель, что у maxAmplitudeMeters) — добавка к ε уровня, шаг которого их не представляет. */
   public p99AmplitudeBelowMeters(wavelengthMeters: number): number {
     let sum = 0
-    for (let i = 0; i < MIDBAND_OCTAVES; i++) {
+    for (let i = 0; i < this.octaveCount; i++) {
       if (this.wavelengthsMeters[i] < wavelengthMeters) sum += this.amplitudesMeters[i] * MIDBAND_P99
     }
     return this.strength * MIDBAND_ENVELOPE_MAX * sum
   }
 
-  public sample(dirX: number, dirY: number, dirZ: number, e: MidbandEnvelope, out: MidbandSample): MidbandSample {
+  /** strength·ENVELOPE_MAX·Σ(1 − wᵢ)·Aᵢ·P99 — амплитуда той части полосы, которой на шаге уровня нет: добавка к ε. */
+  public residualAmplitudeMeters(stepMeters: number): number {
+    let sum = 0
+    for (let i = 0; i < this.octaveCount; i++) {
+      sum += (1 - midbandOctaveWeight(stepMeters, this.wavelengthsMeters[i])) * this.amplitudesMeters[i] * MIDBAND_P99
+    }
+    return this.strength * MIDBAND_ENVELOPE_MAX * sum
+  }
+
+  public sample(dirX: number, dirY: number, dirZ: number, e: MidbandEnvelope, out: MidbandSample, stepMeters: number = 0): MidbandSample {
     out.heightMeters = 0
     out.tiltE = 0
     out.tiltN = 0
+
+    let weightSum = 0
+    for (let i = 0; i < this.octaveCount; i++) weightSum += midbandOctaveWeight(stepMeters, this.wavelengthsMeters[i])
+    out.octaveWeightSum = this.octaveCount > 0 ? weightSum / this.octaveCount : 0
+
     if (this.strength === 0) return out
 
     const env = this.envelope(e)
     if (env === 0) return out
+    // шаг уровня грубее всех октав — полосы на нём нет
+    if (weightSum === 0) return out
 
     // базис точки: E = normalize(UP × dir), N = dir × E; у полюса наклон не определён
     this.east.set(dirX, dirY, dirZ)
@@ -167,14 +206,17 @@ export class MidbandField {
     let tE = 0
     let tN = 0
     let frequency = 1
-    for (let i = 0; i < MIDBAND_OCTAVES; i++) {
-      const g = snoiseGrad3(px * frequency, py * frequency, pz * frequency, this.grad)
-      const sign = g.value >= 0 ? -1 : 1 // r = 1 − |n| ⇒ ∂r = −sign(n)·∂n
-      const a = this.amplitudesMeters[i]
-      height += a * (1 - Math.abs(g.value) - MIDBAND_RIDGE_MEAN)
-      // ∂r/∂s = sign · (∇n · ∂q/∂s), ∂q/∂s = frequency · ∂p/∂s
-      tE += a * sign * frequency * (g.dx * dpEx + g.dy * dpEy + g.dz * dpEz)
-      tN += a * sign * frequency * (g.dx * dpNx + g.dy * dpNy + g.dz * dpNz)
+    for (let i = 0; i < this.octaveCount; i++) {
+      const w = midbandOctaveWeight(stepMeters, this.wavelengthsMeters[i])
+      if (w > 0) {
+        const g = snoiseGrad3(px * frequency, py * frequency, pz * frequency, this.grad)
+        const sign = g.value >= 0 ? -1 : 1 // r = 1 − |n| ⇒ ∂r = −sign(n)·∂n
+        const a = w * this.amplitudesMeters[i]
+        height += a * (1 - Math.abs(g.value) - MIDBAND_RIDGE_MEAN)
+        // ∂r/∂s = sign · (∇n · ∂q/∂s), ∂q/∂s = frequency · ∂p/∂s
+        tE += a * sign * frequency * (g.dx * dpEx + g.dy * dpEy + g.dz * dpEz)
+        tN += a * sign * frequency * (g.dx * dpNx + g.dy * dpNy + g.dz * dpNz)
+      }
       frequency *= MIDBAND_LACUNARITY
     }
 

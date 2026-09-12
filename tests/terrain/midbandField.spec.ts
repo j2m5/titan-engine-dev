@@ -6,10 +6,13 @@ import {
   MIDBAND_ASPECT,
   MIDBAND_ENVELOPE_MAX,
   MIDBAND_GRAD_BOUND,
+  MIDBAND_NYQUIST_HI,
+  MIDBAND_NYQUIST_LO,
   MIDBAND_OCTAVES,
   MIDBAND_P99,
   MIDBAND_RIDGE_MEAN,
   MidbandField,
+  midbandOctaveWeight,
   type MidbandEnvelope,
   type MidbandSample
 } from '@/core/terrain/midbandField'
@@ -31,7 +34,7 @@ function dirs(n: number): Vector3[] {
 
 describe('MidbandField: амплитуды, огибающая, бонды', () => {
   const field = new MidbandField(MIDBAND_DEFAULTS, LAMBDA0, R_M)
-  const out: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0 }
+  const out: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0 }
 
   it('3 октавы, λ_i = λ₀/2^i, A_i = 0.03·λ_i', () => {
     expect(MIDBAND_OCTAVES).toBe(3)
@@ -149,5 +152,85 @@ describe('MidbandField: амплитуды, огибающая, бонды', () 
     expect(field.p99AmplitudeBelowMeters(1000)).toBeCloseTo(MIDBAND_ENVELOPE_MAX * MIDBAND_P99 * (24 + 12), 6)
     expect(field.p99AmplitudeBelowMeters(5000)).toBeCloseTo(field.maxAmplitudeMeters, 6)
     expect(field.p99AmplitudeBelowMeters(100)).toBe(0)
+  })
+})
+
+describe('MidbandField: веса октав по шагу вершин', () => {
+  const field = new MidbandField(MIDBAND_DEFAULTS, LAMBDA0, R_M)
+  const out: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0 }
+
+  it('midbandOctaveWeight: 1 до step = LO·λ, 0 от step = HI·λ, монотонно между; step 0 — 1', () => {
+    expect(MIDBAND_NYQUIST_LO).toBe(0.5)
+    expect(MIDBAND_NYQUIST_HI).toBe(1)
+    expect(midbandOctaveWeight(0, 400)).toBe(1)
+    expect(midbandOctaveWeight(200, 400)).toBe(1)
+    expect(midbandOctaveWeight(400, 400)).toBe(0)
+    expect(midbandOctaveWeight(300, 400)).toBeCloseTo(0.5, 9)
+    let prev = 1
+    for (let s = 0; s <= 500; s += 10) {
+      const w = midbandOctaveWeight(s, 400)
+      expect(w).toBeLessThanOrEqual(prev + 1e-12)
+      prev = w
+    }
+  })
+
+  it('step 0 — бит-в-бит прежние числа; step = λ₂ (третья октава = 0) меняет высоту, octaveWeightSum = 2/3', () => {
+    const d = dirs(1)[0]
+    const full = { ...field.sample(d.x, d.y, d.z, wallEnv, out) }
+    const again = { ...field.sample(d.x, d.y, d.z, wallEnv, out, 0) }
+    expect(again).toEqual(full)
+    expect(full.octaveWeightSum).toBe(1)
+    const coarse = { ...field.sample(d.x, d.y, d.z, wallEnv, out, 400) }
+    expect(coarse.octaveWeightSum).toBeCloseTo(2 / 3, 9)
+    expect(coarse.heightMeters).not.toBeCloseTo(full.heightMeters, 6)
+    // при step ≥ λ₀ все октавы гаснут — полосы нет, вес 0
+    const gone = field.sample(d.x, d.y, d.z, wallEnv, out, 1600)
+    expect(gone.heightMeters).toBe(0)
+    expect(gone.tiltE).toBe(0)
+    expect(gone.octaveWeightSum).toBe(0)
+  })
+
+  it('с шагом наклон = конечная разность высоты с тем же шагом (веса общие), допуск 2e-3 tan', () => {
+    const hArc = 0.05
+    const up = new Vector3(0, 1, 0)
+    const step = 300 // третья октава на весу 0.5
+    let worst = 0
+    for (const d of dirs(200)) {
+      const e = new Vector3().crossVectors(up, d).normalize()
+      const n = new Vector3().crossVectors(d, e)
+      const s = field.sample(d.x, d.y, d.z, wallEnv, out, step)
+      const tE = s.tiltE
+      const tN = s.tiltN
+      const dE1 = d.clone().addScaledVector(e, hArc / R_M).normalize()
+      const dE0 = d.clone().addScaledVector(e, -hArc / R_M).normalize()
+      const fdE = (field.sample(dE1.x, dE1.y, dE1.z, wallEnv, out, step).heightMeters - field.sample(dE0.x, dE0.y, dE0.z, wallEnv, out, step).heightMeters) / (2 * hArc)
+      const dN1 = d.clone().addScaledVector(n, hArc / R_M).normalize()
+      const dN0 = d.clone().addScaledVector(n, -hArc / R_M).normalize()
+      const fdN = (field.sample(dN1.x, dN1.y, dN1.z, wallEnv, out, step).heightMeters - field.sample(dN0.x, dN0.y, dN0.z, wallEnv, out, step).heightMeters) / (2 * hArc)
+      worst = Math.max(worst, Math.abs(tE - fdE), Math.abs(tN - fdN))
+    }
+    expect(worst).toBeLessThan(2e-3)
+  })
+
+  it('отсечение: октавы короче cutoff не строятся; бонды по оставшимся', () => {
+    // Земля: λ₀ 3000, шаг L8 610.8 м → cutoff 1221.6 → 750 отсекается
+    const earth = new MidbandField(MIDBAND_DEFAULTS, 3000, 6371000, 1221.6)
+    expect(earth.octaveCount).toBe(2)
+    expect(earth.wavelengthsMeters).toEqual([3000, 1500])
+    expect(earth.amplitudesMeters.map((a) => +a.toFixed(6))).toEqual([90, 45])
+    expect(earth.maxAmplitudeMeters).toBeCloseTo(MIDBAND_ENVELOPE_MAX * MIDBAND_P99 * (90 + 45), 6)
+    // Луна: cutoff 333 < 400 — все три
+    const moon = new MidbandField(MIDBAND_DEFAULTS, LAMBDA0, R_M, 2 * 166.6)
+    expect(moon.octaveCount).toBe(3)
+    // без cutoff — как прежде
+    expect(field.octaveCount).toBe(3)
+  })
+
+  it('residualAmplitudeMeters: 0 при step ≤ LO·λ_min, полный maxAmplitude при step ≥ HI·λ₀, между — часть', () => {
+    expect(field.residualAmplitudeMeters(0)).toBe(0)
+    expect(field.residualAmplitudeMeters(200)).toBe(0) // 200/400 = 0.5 → w = 1
+    expect(field.residualAmplitudeMeters(1600)).toBeCloseTo(field.maxAmplitudeMeters, 6)
+    // step 400: w₂ = 0 (400/400), w₁ = 1 (400/800 = 0.5), w₀ = 1 → остаток = A₂·P99·ENV_MAX
+    expect(field.residualAmplitudeMeters(400)).toBeCloseTo(MIDBAND_ENVELOPE_MAX * MIDBAND_P99 * 12, 6)
   })
 })
