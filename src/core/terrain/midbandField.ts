@@ -131,15 +131,6 @@ export class MidbandField {
     return Math.min(MIDBAND_ENVELOPE_MAX, Math.max(0, this.params.midbandFlat + slope + ridge))
   }
 
-  /** strength·ENVELOPE_MAX·Σ A_i·P99 по октавам короче порога (тот же множитель, что у maxAmplitudeMeters) — добавка к ε уровня, шаг которого их не представляет. */
-  public p99AmplitudeBelowMeters(wavelengthMeters: number): number {
-    let sum = 0
-    for (let i = 0; i < this.octaveCount; i++) {
-      if (this.wavelengthsMeters[i] < wavelengthMeters) sum += this.amplitudesMeters[i] * MIDBAND_P99
-    }
-    return this.strength * MIDBAND_ENVELOPE_MAX * sum
-  }
-
   /** strength·ENVELOPE_MAX·Σ(1 − wᵢ)·Aᵢ·P99 — амплитуда той части полосы, которой на шаге уровня нет: добавка к ε. */
   public residualAmplitudeMeters(stepMeters: number): number {
     let sum = 0

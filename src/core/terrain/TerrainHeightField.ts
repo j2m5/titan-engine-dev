@@ -300,10 +300,11 @@ class TerrainHeightField {
   /** Липшицев бонд |∇mid| полосы (0 без полосы) — для внешнего марча коллизии. */
   public readonly midbandSlopeBound: number
   /**
-   * ε-добавка полосы по уровням (Task 5): `midbandErrorMeters(level)` —
-   * p99 амплитуды октав полосы короче удвоенного вершинного шага уровня
-   * (`2π·R/terrainEquatorSegmentsAtLevel(level)`), то есть волн, которые
-   * сетка этого уровня физически не может представить. Считается
+   * ε-добавка полосы по уровням: `midbandErrorMeters(level)` — остаток
+   * амплитуды полосы по весам вершинного шага уровня
+   * (`2π·R/terrainEquatorSegmentsAtLevel(level)`), то есть та её часть,
+   * которую сетка этого уровня не несёт (мешер её на вершину не кладёт).
+   * Считается
    * АНАЛИТИЧЕСКИ здесь, в конструкторе, ПОСЛЕ постройки `midband` — отдельно
    * от `computeAux`/aux-пирамид (карта их не знает, см. докблок поля
    * `midband`), поэтому запечённый компаньон не зависит от ручек полосы и
@@ -350,10 +351,12 @@ class TerrainHeightField {
     this.nodeErrorMetersPyramid = aux.nodeErrorMetersPyramid
 
     if (midbandParams.midbandStrength > 0) {
+      // октава короче 2·шага самого мелкого уровня не представима ни одной сеткой отбора — не строится вовсе
       this.midband = new MidbandField(
         midbandParams,
         midbandWavelengthMeters(this.equatorTexelMeters, midbandParams),
-        radiusKm * 1000
+        radiusKm * 1000,
+        (2 * (TWO_PI * radiusKm * 1000)) / terrainEquatorSegmentsAtLevel(TERRAIN_QUADTREE_MAX_LEVEL)
       )
       this.envelopeGrid = new MidbandEnvelopeGrid(
         (u, v) => this.sampleMeters(u, v),
@@ -368,13 +371,13 @@ class TerrainHeightField {
     this.maxHeightWithMidbandMeters = map.maxMeters + (this.midband?.maxAmplitudeMeters ?? 0)
     this.midbandSlopeBound = this.midband?.slopeBound ?? 0
 
-    // ε-добавка полосы по уровням (Task 5) — см. докблок поля midbandErrorTable.
+    // ε-добавка полосы по уровням — см. докблок поля midbandErrorTable.
     // Считается ПОСЛЕ midband: без полосы (null) добавка тождественно 0 на
-    // всех уровнях, ветка p99AmplitudeBelowMeters не звана вовсе
+    // всех уровнях, ветка residualAmplitudeMeters не звана вовсе
     const midbandErrorTable = new Float64Array(TERRAIN_QUADTREE_MAX_LEVEL + 1)
     for (let level = TERRAIN_QUADTREE_MIN_LEVEL; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
       const stepMeters = (TWO_PI * radiusKm * 1000) / terrainEquatorSegmentsAtLevel(level)
-      midbandErrorTable[level] = this.midband ? this.midband.p99AmplitudeBelowMeters(2 * stepMeters) : 0
+      midbandErrorTable[level] = this.midband ? this.midband.residualAmplitudeMeters(stepMeters) : 0
     }
     this.midbandErrorTable = midbandErrorTable
   }
@@ -504,23 +507,35 @@ class TerrainHeightField {
     return minMeters + (raw / 65535) * (maxMeters - minMeters)
   }
 
+  /** Шаг вершинной сетки уровня по экватору, метры: 2πR / (4·2^L·segments); segments — сетка патча (тесты строят на 8). */
+  public vertexStepMeters(level: number, segments: number = TERRAIN_PATCH_SEGMENTS): number {
+    return (TWO_PI * this.radiusKm * 1000) / (CUBE_EQUATOR_FACES * 2 ** level * segments)
+  }
+
+  /** Полная амплитуда полосы, метры (0 без полосы). */
+  public get midbandMaxAmplitudeMeters(): number {
+    return this.midband?.maxAmplitudeMeters ?? 0
+  }
+
   /**
    * Высота И наклон полосы одним вызовом по УЖЕ посчитанному uv — единственная
    * точка входа (heightMeters/midbandTilt и мешер зовут её, второй dirToUv не
    * нужен нигде). Нули при отключённой полосе (`midband === null`).
+   * `stepMeters` — шаг вершин уровня, по нему взвешены октавы; 0 — вся полоса.
    */
-  public midbandSample(dir: Vector3, u: number, v: number, out: MidbandSample): MidbandSample {
+  public midbandSample(dir: Vector3, u: number, v: number, out: MidbandSample, stepMeters: number = 0): MidbandSample {
     if (this.midband === null || this.envelopeGrid === null) {
       out.heightMeters = 0
       out.tiltE = 0
       out.tiltN = 0
+      out.octaveWeightSum = 0
 
       return out
     }
 
     const env = this.envelopeGrid.sample(u, v, this.midbandEnvScratch)
 
-    return this.midband.sample(dir.x, dir.y, dir.z, env, out)
+    return this.midband.sample(dir.x, dir.y, dir.z, env, out, stepMeters)
   }
 
   /** Канон высоты: карта + средняя полоса (`null` — полоса выключена, бит-в-бит карта). */
@@ -549,10 +564,10 @@ class TerrainHeightField {
     return this.sampleMeters(uv.x, uv.y)
   }
 
-  /** Наклон полосы (tan) в местном базисе E/N точки; `(0, 0)` без полосы. */
-  public midbandTilt(dir: Vector3, out: Vector2): Vector2 {
+  /** Наклон полосы (tan) в местном базисе E/N точки; `(0, 0)` без полосы. `stepMeters` — шаг вершин уровня, 0 — вся полоса. */
+  public midbandTilt(dir: Vector3, out: Vector2, stepMeters: number = 0): Vector2 {
     const uv = this.dirToUv(dir, this.uvScratch)
-    const sample = this.midbandSample(dir, uv.x, uv.y, this.midbandSampleScratch)
+    const sample = this.midbandSample(dir, uv.x, uv.y, this.midbandSampleScratch, stepMeters)
 
     return out.set(sample.tiltE, sample.tiltN)
   }
@@ -1327,14 +1342,14 @@ class TerrainHeightField {
   }
 
   /**
-   * ε-добавка полосы уровня, метры (Task 5) — см. докблок поля
+   * ε-добавка полосы уровня, метры — см. докблок поля
    * `midbandErrorTable`. 0 без полосы (`midband === null`). Кламп уровня тот
    * же, что у `geometricErrorMeters`, до `TERRAIN_QUADTREE_MAX_LEVEL` включая
    * уровни глубже `TERRAIN_MODEL_LEVEL` — полоса не привязана к модели
    * провиса/клиренса и считается аналитически на каждом уровне отбора.
    *
    * Конвенция карты (`levelErrorMeters`) — РАЗМАХ (max−min по окну шага
-   * уровня), полоса же добавляет ОДНОСТОРОННИЙ бонд `Σ Aᵢ·P99` (половину
+   * уровня), полоса же добавляет ОДНОСТОРОННИЙ бонд `Σ(1−wᵢ)·Aᵢ·P99` (половину
    * размаха полосы, не полный). Несогласованность осознанная, не забытый
    * ×2: полосный вклад тонет на фоне ε карты (юбка ≫ амплитуды полосы) почти
    * везде, а место, где это неверно (глубокие уровни с малым ε карты),

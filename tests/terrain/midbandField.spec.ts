@@ -147,12 +147,6 @@ describe('MidbandField: амплитуды, огибающая, бонды', () 
     expect(Math.abs(mean)).toBeLessThan(0.05 * unitEnvelopeField.maxAmplitudeMeters)
   })
 
-  it('p99AmplitudeBelowMeters — только октавы короче порога', () => {
-    expect(field.p99AmplitudeBelowMeters(500)).toBeCloseTo(MIDBAND_ENVELOPE_MAX * MIDBAND_P99 * 12, 6)
-    expect(field.p99AmplitudeBelowMeters(1000)).toBeCloseTo(MIDBAND_ENVELOPE_MAX * MIDBAND_P99 * (24 + 12), 6)
-    expect(field.p99AmplitudeBelowMeters(5000)).toBeCloseTo(field.maxAmplitudeMeters, 6)
-    expect(field.p99AmplitudeBelowMeters(100)).toBe(0)
-  })
 })
 
 describe('MidbandField: веса октав по шагу вершин', () => {

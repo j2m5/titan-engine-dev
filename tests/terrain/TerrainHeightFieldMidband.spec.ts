@@ -84,19 +84,39 @@ describe('TerrainHeightField: геометрия средней полосы в 
 })
 
 describe('ε-пирамида с полосой B', () => {
-  it('MAX_LEVEL 8; добавка ε равна p99 октав короче 2·шага уровня; на грубых уровнях 0', () => {
+  it('MAX_LEVEL 8; добавка ε = residualAmplitudeMeters(шаг уровня); на грубых уровнях — вся полоса, на L8 — 0', () => {
     expect(TERRAIN_QUADTREE_MAX_LEVEL).toBe(8)
     const field = new TerrainHeightField(bumpyMap(), R_KM)
-    const R_M = R_KM * 1000
     for (let level = TERRAIN_QUADTREE_MIN_LEVEL; level <= TERRAIN_QUADTREE_MAX_LEVEL; level++) {
-      const step = (2 * Math.PI * R_M) / (4 * 2 ** level * 64)
-      expect(field.midbandErrorMeters(level)).toBeCloseTo(field.midband!.p99AmplitudeBelowMeters(2 * step), 9)
+      const step = (2 * Math.PI * R_KM * 1000) / (4 * 2 ** level * 64)
+      expect(field.vertexStepMeters(level)).toBeCloseTo(step, 6)
+      expect(field.midbandErrorMeters(level)).toBeCloseTo(field.midband!.residualAmplitudeMeters(step), 9)
+      if (level > TERRAIN_QUADTREE_MIN_LEVEL) expect(field.midbandErrorMeters(level)).toBeLessThanOrEqual(field.midbandErrorMeters(level - 1) + 1e-9)
     }
-    // на этой карте (64×32, R=1736 км) λ₀ клампится в потолок 3000 м (тексель ≈170 км
-    // ≫ MAX_WAVELENGTH_METERS), короткая октава — 750 м: L1 — шаг ~21 км, все волны
-    // (≤3 км) короче → добавка = полный p99; L8 — шаг 167 м → 2·шаг = 333 м < 750 м → 0
     expect(field.midbandErrorMeters(TERRAIN_QUADTREE_MAX_LEVEL)).toBe(0)
     expect(field.midbandErrorMeters(TERRAIN_QUADTREE_MIN_LEVEL)).toBeCloseTo(field.midband!.maxAmplitudeMeters, 9)
+  })
+
+  it('отсечение в конструкторе: карта с λ₀ 3000 на R Земли строит 2 октавы, на R Луны — 3', () => {
+    const earth = new TerrainHeightField(bumpyMap(), 6371)
+    expect(earth.midband!.octaveCount).toBe(2)
+    const moon = new TerrainHeightField(bumpyMap(), R_KM)
+    expect(moon.midband!.octaveCount).toBe(3)
+  })
+
+  it('midbandSample/midbandTilt с шагом уровня: на грубом уровне полоса меньше полной, на L8 совпадает', () => {
+    const field = new TerrainHeightField(bumpyMap(), R_KM)
+    const d = new Vector3(0.3, 0.5, 0.81).normalize()
+    const uv = field.dirToUv(d, new Vector2())
+    const out = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0 }
+    const full = { ...field.midbandSample(d, uv.x, uv.y, out) }
+    const fine = { ...field.midbandSample(d, uv.x, uv.y, out, field.vertexStepMeters(8)) }
+    const coarse = { ...field.midbandSample(d, uv.x, uv.y, out, field.vertexStepMeters(2)) }
+    expect(fine).toEqual(full)
+    expect(coarse.octaveWeightSum).toBeLessThan(full.octaveWeightSum)
+    const tilt = field.midbandTilt(d, new Vector2(), field.vertexStepMeters(2))
+    expect(tilt.x).toBeCloseTo(coarse.tiltE, 12)
+    expect(tilt.y).toBeCloseTo(coarse.tiltN, 12)
   })
 
   it('geometricErrorMeters(level) = ε карты + добавка; без полосы — ровно ε карты', () => {

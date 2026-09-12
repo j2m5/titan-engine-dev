@@ -42,6 +42,19 @@ function build(
   return buildTerrainPatchGeometry(field, face, i, j, DEPTH, SEGMENTS, buildPatchIndex(SEGMENTS), skirtDepthUnits, wrap)
 }
 
+/** Патч на явном уровне: при SEGMENTS = 8 уровень 11 даёт шаг ≈ 166 м — как боевой L8 на 64 сегментах (полоса полная). */
+function buildAt(
+  field: TerrainHeightField,
+  depth: number,
+  face: number,
+  i: number,
+  j: number,
+  skirtDepthUnits = 0,
+  wrap = detailWrapFor(undefined)
+) {
+  return buildTerrainPatchGeometry(field, face, i, j, depth, SEGMENTS, buildPatchIndex(SEGMENTS), skirtDepthUnits, wrap)
+}
+
 /**
  * Направление вершины k ровно так, как его восстанавливает вершинник:
  * normalize(position + patchCenter). Атрибута normal у патча больше нет —
@@ -102,7 +115,10 @@ describe('buildPatchIndex', () => {
 describe('buildTerrainPatchGeometry: RTC и паритет с коллизией', () => {
   it('позиция ноды + относительная вершина == точка поверхности surfaceRadiusUnits(dir)', () => {
     const field = bumpyField()
-    const { geometry, center } = build(field, 0, 1, 0)
+    // уровень 11: шаг ≈ 166 м, все октавы полосы представимы — мешер несёт её
+    // целиком, как и surfaceRadiusUnits (коллизия уровня не знает и видит
+    // полную полосу). На грубом уровне расхождение законно — см. тест веса полосы
+    const { geometry, center } = buildAt(field, 11, 0, 1, 0)
     const pos = geometry.getAttribute('position')
 
     // паритет — инвариант СЕТОЧНЫХ вершин; юбочные намеренно проседают под
@@ -440,7 +456,7 @@ describe('buildTerrainPatchGeometry: атрибут height', () => {
 
   it('с полосой height — высота КАРТЫ (фаза террас без бугров полосы), позиция — карта + полоса', () => {
     const field = bumpyField()
-    const { geometry, center } = build(field, 0, 1, 0)
+    const { geometry, center } = buildAt(field, 11, 0, 1, 0)
     const pos = geometry.getAttribute('position')
     const height = geometry.getAttribute('height')
     const dir = new Vector3()
@@ -459,6 +475,27 @@ describe('buildTerrainPatchGeometry: атрибут height', () => {
     expect(maxBand).toBeLessThanOrEqual(field.maxHeightWithMidbandMeters - 9000 + 2)
   })
 
+  it('позиция вершины несёт полосу, взвешенную по шагу уровня: на грубом уровне отличается от полной полосы', () => {
+    const field = bumpyField()
+    const { geometry, center } = build(field, 0, 1, 0)
+    const pos = geometry.getAttribute('position')
+    const dir = new Vector3()
+    const uv = new Vector2()
+    const out = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0 }
+    let maxLevelDiff = 0
+    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
+      dir.set(pos.getX(k) + center.x, pos.getY(k) + center.y, pos.getZ(k) + center.z)
+      const r = dir.length()
+      dir.divideScalar(r)
+      field.dirToUv(dir, uv)
+      const expected = field.sampleMeters(uv.x, uv.y) + field.midbandSample(dir, uv.x, uv.y, out, field.vertexStepMeters(DEPTH, SEGMENTS)).heightMeters
+      const metersFromPosition = (r / SpaceScale - R_KM) * 1000
+      expect(Math.abs(metersFromPosition - expected)).toBeLessThan(2)
+      maxLevelDiff = Math.max(maxLevelDiff, Math.abs(expected - field.heightMeters(dir)))
+    }
+    expect(maxLevelDiff).toBeGreaterThan(1) // на DEPTH шаг ≫ λ₀: полоса на вершине не полная
+  })
+
   it('юбочная вершина несёт высоту своей кромочной (радиальный сдвиг юбки не входит)', () => {
     const { geometry } = build(bumpyField(), 0, 1, 0, 0.001)
     const height = geometry.getAttribute('height')
@@ -474,7 +511,7 @@ describe('buildTerrainPatchGeometry: атрибут height', () => {
 describe('buildTerrainPatchGeometry: атрибут midTilt', () => {
   it('midTilt = midbandTilt поля в направлении вершины', () => {
     const field = bumpyField()
-    const { geometry, center } = build(field, 0, 1, 0)
+    const { geometry, center } = buildAt(field, 11, 0, 1, 0)
     const pos = geometry.getAttribute('position')
     const tilt = geometry.getAttribute('midTilt')
     expect(tilt.itemSize).toBe(2)
@@ -483,7 +520,7 @@ describe('buildTerrainPatchGeometry: атрибут midTilt', () => {
     let nonZero = 0
     for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
       const dir = new Vector3(pos.getX(k) + center.x, pos.getY(k) + center.y, pos.getZ(k) + center.z).normalize()
-      field.midbandTilt(dir, expected)
+      field.midbandTilt(dir, expected, field.vertexStepMeters(11, SEGMENTS))
       expect(Math.abs(tilt.getX(k) - expected.x)).toBeLessThan(1e-4)
       expect(Math.abs(tilt.getY(k) - expected.y)).toBeLessThan(1e-4)
       if (expected.lengthSq() > 0) nonZero++

@@ -152,7 +152,8 @@ function gridDirs(gridCount: number): Float32Array {
  * патча. Два набора — под два слоя детали (40 м / 7 м), каждый со своим W.
  *
  * height — метры над референсом ТОЛЬКО по карте (без полосы) — фаза террас
- * средней полосы в шейдере; позиция вершины при этом несёт карту + полосу.
+ * средней полосы в шейдере; позиция вершины при этом несёт карту + полосу,
+ * взвешенную по шагу вершин уровня (октаву короче шага сетка не несёт).
  * midTilt — наклон полосы (tan) в базисе восток/север вершины.
  */
 function writeTerrainPatchAttributes(
@@ -179,6 +180,8 @@ function writeTerrainPatchAttributes(
   const uv = new Vector2()
   // скретч полосы: один на всю сборку патча, аллокаций в цикле нет
   const bandScratch: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0 }
+  // шаг вершин этого патча — по нему взвешены октавы полосы
+  const stepMeters = field.vertexStepMeters(depth, segments)
 
   const centerDir = cubeFaceDirection(face, s0 + span / 2, t0 + span / 2, new Vector3())
   const center = centerDir.clone().multiplyScalar(field.surfaceRadiusUnits(centerDir))
@@ -207,7 +210,7 @@ function writeTerrainPatchAttributes(
       // dirToUv один раз на вершину: surfaceRadiusUnits(dir) внутри тоже звал бы
       // его повторно (heightMeters → dirToUv) — 1.62М лишних atan2+acos на сборке
       field.dirToUv(dir, uv)
-      const band = field.midbandSample(dir, uv.x, uv.y, bandScratch)
+      const band = field.midbandSample(dir, uv.x, uv.y, bandScratch, stepMeters)
       const mapMeters = field.sampleMeters(uv.x, uv.y)
       const heightMeters = mapMeters + band.heightMeters
       // Фаза террас — от высоты КАРТЫ: бугры полосы (до ~84 м при шаге 150 м)
