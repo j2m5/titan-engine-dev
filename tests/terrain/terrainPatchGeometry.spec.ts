@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest'
-import { Vector2, Vector3, type BufferGeometry } from 'three'
+import { describe, expect, it, vi } from 'vitest'
+import { Sphere, Vector2, Vector3, type BufferGeometry } from 'three'
 import {
+  allocatePatchArrays,
+  applyPatchBounds,
   buildPatchIndex,
+  buildTerrainPatchArrays,
   buildTerrainPatchGeometry,
   ringGridIndex,
   terrainPatchVertexCount
@@ -89,6 +92,35 @@ function edgeIndexForSkirt(geometry: BufferGeometry, skirt: number): number {
 
   return best
 }
+
+describe('buildTerrainPatchArrays: ядро без геометрии', () => {
+  it('массивы и центр равны fresh-варианту; сфера равна computeBoundingSphere', () => {
+    const field = bumpyField()
+    const arrays = allocatePatchArrays(SEGMENTS)
+    const { center, bounds } = buildTerrainPatchArrays(field, 0, 1, 0, DEPTH, SEGMENTS, 0.001, detailWrapFor(undefined), arrays)
+    const { geometry, center: refCenter } = build(field, 0, 1, 0, 0.001)
+    expect(center.toArray()).toEqual(refCenter.toArray())
+    for (const [name, arr] of [['position', arrays.positions], ['detailPos', arrays.detailPos], ['detailPos2', arrays.detailPos2], ['height', arrays.heights], ['midTilt', arrays.midTilts], ['midShade', arrays.midShades]] as const) {
+      expect(arr).toEqual(geometry.getAttribute(name).array)
+    }
+    const ref = new Sphere()
+    geometry.computeBoundingSphere()
+    ref.copy(geometry.boundingSphere!)
+    expect(bounds.cx).toBeCloseTo(ref.center.x, 9)
+    expect(bounds.cy).toBeCloseTo(ref.center.y, 9)
+    expect(bounds.cz).toBeCloseTo(ref.center.z, 9)
+    expect(bounds.radius).toBeCloseTo(ref.radius, 9)
+  })
+
+  it('applyPatchBounds ставит сферу без обхода вершин; fresh и into не зовут computeBoundingSphere', () => {
+    const geometry = build(bumpyField(), 0, 1, 0).geometry
+    const spy = vi.spyOn(geometry, 'computeBoundingSphere')
+    applyPatchBounds(geometry, { cx: 1, cy: 2, cz: 3, radius: 4 })
+    expect(geometry.boundingSphere!.center.toArray()).toEqual([1, 2, 3])
+    expect(geometry.boundingSphere!.radius).toBe(4)
+    expect(spy).not.toHaveBeenCalled()
+  })
+})
 
 describe('buildPatchIndex', () => {
   it('segments² квадов по два треугольника + юбочная полоса, Uint16', () => {

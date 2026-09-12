@@ -4,6 +4,7 @@ import {
   InstancedBufferAttribute,
   InstancedBufferGeometry,
   Mesh,
+  Sphere,
   Vector2,
   Vector3
 } from 'three'
@@ -124,13 +125,61 @@ function gridDirs(gridCount: number): Float32Array {
   return gridDirsScratch
 }
 
+/** Типизированные буферы вершинных атрибутов патча — вход/выход ядра мешера, без BufferGeometry (нужно воркеру). */
+export interface PatchArrays {
+  positions: Float32Array
+  detailPos: Float32Array
+  detailPos2: Float32Array
+  heights: Float32Array
+  midTilts: Float32Array
+  midShades: Float32Array
+}
+
+/** Ограничивающая сфера патча в RTC-координатах (относительно center) — как geometry.boundingSphere. */
+export interface PatchBounds {
+  cx: number
+  cy: number
+  cz: number
+  radius: number
+}
+
+/**
+ * Аллоцирует массивы под патч segments×segments нужного размера (см.
+ * terrainPatchVertexCount) — вход buildTerrainPatchArrays для fresh-сборки
+ * (main-поток эталон, воркер) без BufferGeometry.
+ */
+export function allocatePatchArrays(segments: number): PatchArrays {
+  const n = terrainPatchVertexCount(segments)
+  return {
+    positions: new Float32Array(n * 3),
+    detailPos: new Float32Array(n * 3),
+    detailPos2: new Float32Array(n * 3),
+    heights: new Float32Array(n),
+    midTilts: new Float32Array(n * 2),
+    midShades: new Float32Array(n * 2)
+  }
+}
+
+/**
+ * Ставит geometry.boundingSphere из уже посчитанного ядром PatchBounds — без
+ * обхода вершин (воркер вернёт сферу вместе с массивами, обходить их на
+ * главном потоке второй раз не нужно).
+ */
+export function applyPatchBounds(geometry: BufferGeometry, bounds: PatchBounds): void {
+  if (geometry.boundingSphere === null) geometry.boundingSphere = new Sphere()
+  geometry.boundingSphere.center.set(bounds.cx, bounds.cy, bounds.cz)
+  geometry.boundingSphere.radius = bounds.radius
+}
+
 /**
  * Ядро сборки RTC-патча (face, i, j) глубины depth: пишет вершинные атрибуты
  * в переданные массивы (уже нужного размера — вызывающий считает
- * vertexCount) и возвращает RTC-центр. Общее для fresh-варианта (аллоцирует
- * массивы сам) и into-варианта пула (переиспользует буферы существующей
- * геометрии без аллокаций). Инстансный атрибут patchCenter пишет вызывающий
- * из возвращённого center.
+ * vertexCount) и возвращает RTC-центр и ограничивающую сферу. Чистая функция
+ * над типизированными массивами — без BufferGeometry, годна для Web Worker
+ * (см. арку «Постройка патчей в воркере»). Общее для fresh-варианта
+ * (аллоцирует массивы сам) и into-варианта пула (переиспользует буферы
+ * существующей геометрии без аллокаций). Инстансный атрибут patchCenter
+ * пишет вызывающий из возвращённого center.
  *
  * Позиции хранятся ОТНОСИТЕЛЬНО центра патча (центр — в position меша),
  * больших чисел во float32 нет, катастрофическое сокращение происходит в f64
@@ -160,7 +209,7 @@ function gridDirs(gridCount: number): Float32Array {
  * (гейт пиксельного fbm: где полоса ЕСТЬ, fbm не дублирует её рельеф; у уреза
  * воды и на равнине огибающая мала — fbm остаётся).
  */
-function writeTerrainPatchAttributes(
+export function buildTerrainPatchArrays(
   field: TerrainHeightField,
   face: number,
   i: number,
@@ -168,14 +217,10 @@ function writeTerrainPatchAttributes(
   depth: number,
   segments: number,
   skirtDepthUnits: number,
-  positions: Float32Array,
-  detailPos: Float32Array,
-  detailPos2: Float32Array,
-  heights: Float32Array,
-  midTilts: Float32Array,
-  midShades: Float32Array,
-  wrap: DetailWrap
-): Vector3 {
+  wrap: DetailWrap,
+  arrays: PatchArrays
+): { center: Vector3; bounds: PatchBounds } {
+  const { positions, detailPos, detailPos2, heights, midTilts, midShades } = arrays
   const patches = 1 << depth
   const span = 2 / patches
   const s0 = -1 + i * span
@@ -290,7 +335,25 @@ function writeTerrainPatchAttributes(
     midShades[skirtIndex * 2 + 1] = midShades[edgeIndex * 2 + 1]
   }
 
-  return center
+  // сфера тем же алгоритмом, что BufferGeometry.computeBoundingSphere без
+  // morph-атрибутов: центр — центр bbox по всем вершинам, радиус — max
+  // расстояние до него (three считает Math.sqrt(maxRadiusSq))
+  let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
+  const total = gridCount + ringCount
+  for (let k = 0; k < total; k++) {
+    const x = positions[k * 3], y = positions[k * 3 + 1], z = positions[k * 3 + 2]
+    if (x < minX) minX = x; if (x > maxX) maxX = x
+    if (y < minY) minY = y; if (y > maxY) maxY = y
+    if (z < minZ) minZ = z; if (z > maxZ) maxZ = z
+  }
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2
+  let maxRadiusSq = 0
+  for (let k = 0; k < total; k++) {
+    const dx = positions[k * 3] - cx, dy = positions[k * 3 + 1] - cy, dz = positions[k * 3 + 2] - cz
+    maxRadiusSq = Math.max(maxRadiusSq, dx * dx + dy * dy + dz * dz)
+  }
+
+  return { center, bounds: { cx, cy, cz, radius: Math.sqrt(maxRadiusSq) } }
 }
 
 /**
@@ -309,30 +372,10 @@ export function buildTerrainPatchGeometry(
   skirtDepthUnits: number,
   wrap: DetailWrap
 ): { geometry: BufferGeometry; center: Vector3 } {
-  const vertexCount = terrainPatchVertexCount(segments)
-  const positions = new Float32Array(vertexCount * 3)
-  const detailPos = new Float32Array(vertexCount * 3)
-  const detailPos2 = new Float32Array(vertexCount * 3)
-  const heights = new Float32Array(vertexCount)
-  const midTilts = new Float32Array(vertexCount * 2)
-  const midShades = new Float32Array(vertexCount * 2)
+  const arrays = allocatePatchArrays(segments)
+  const { positions, detailPos, detailPos2, heights, midTilts, midShades } = arrays
 
-  const center = writeTerrainPatchAttributes(
-    field,
-    face,
-    i,
-    j,
-    depth,
-    segments,
-    skirtDepthUnits,
-    positions,
-    detailPos,
-    detailPos2,
-    heights,
-    midTilts,
-    midShades,
-    wrap
-  )
+  const { center, bounds } = buildTerrainPatchArrays(field, face, i, j, depth, segments, skirtDepthUnits, wrap, arrays)
 
   // раскладка бит-в-бит как у слота пула (см. TerrainPatchPool.createHandle):
   // InstancedBufferGeometry с одним инстансом и центром патча в инстансном атрибуте
@@ -346,7 +389,7 @@ export function buildTerrainPatchGeometry(
   geometry.setAttribute('midShade', new BufferAttribute(midShades, 2))
   geometry.setAttribute('patchCenter', new InstancedBufferAttribute(new Float32Array([center.x, center.y, center.z]), 3))
   geometry.setIndex(index)
-  geometry.computeBoundingSphere()
+  applyPatchBounds(geometry, bounds)
 
   return { geometry, center }
 }
@@ -376,22 +419,18 @@ export function buildTerrainPatchInto(
   const midTilt = geometry.getAttribute('midTilt') as BufferAttribute
   const midShade = geometry.getAttribute('midShade') as BufferAttribute
 
-  const center = writeTerrainPatchAttributes(
-    field,
-    face,
-    i,
-    j,
-    depth,
-    segments,
-    skirtDepthUnits,
-    positions.array as Float32Array,
-    detailPos.array as Float32Array,
-    detailPos2.array as Float32Array,
-    height.array as Float32Array,
-    midTilt.array as Float32Array,
-    midShade.array as Float32Array,
-    wrap
-  )
+  // объект-обёртка на вызов (шесть ссылок на уже существующие буферы слота) —
+  // ядру нужны только сами массивы, не BufferAttribute
+  const arrays: PatchArrays = {
+    positions: positions.array as Float32Array,
+    detailPos: detailPos.array as Float32Array,
+    detailPos2: detailPos2.array as Float32Array,
+    heights: height.array as Float32Array,
+    midTilts: midTilt.array as Float32Array,
+    midShades: midShade.array as Float32Array
+  }
+
+  const { center, bounds } = buildTerrainPatchArrays(field, face, i, j, depth, segments, skirtDepthUnits, wrap, arrays)
 
   // центр патча — инстансный атрибут (один элемент): его пишет вызывающий,
   // ядро сборки центр только возвращает
@@ -405,6 +444,6 @@ export function buildTerrainPatchInto(
   height.needsUpdate = true
   midTilt.needsUpdate = true
   midShade.needsUpdate = true
-  geometry.computeBoundingSphere()
+  applyPatchBounds(geometry, bounds)
   mesh.position.copy(center)
 }
