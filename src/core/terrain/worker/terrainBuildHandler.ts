@@ -29,7 +29,7 @@ export function handleWorkerMessage(
         minMeters: msg.minMeters,
         maxMeters: msg.maxMeters,
         data: new Uint16Array(msg.data),
-        aux: msg.aux ?? undefined
+        aux: msg.aux
       }
       state.fields.set(msg.fieldId, new TerrainHeightField(map, msg.radiusKm, msg.midbandParams))
       return { message: { type: 'fieldReady', fieldId: msg.fieldId }, transfer: [] }

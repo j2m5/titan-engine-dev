@@ -19,7 +19,8 @@ export type ToWorkerMessage =
       maxMeters: number
       /** Тело карты Uint16. */
       data: ArrayBuffer
-      aux: TerrainAuxPayload | null
+      /** Payload компаньона главного поля (запечённый или посчитанный) — воркер не пересчитывает. */
+      aux: TerrainAuxPayload
       radiusKm: number
       midbandParams: MidbandParams
     }
