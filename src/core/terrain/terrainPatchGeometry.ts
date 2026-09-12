@@ -156,8 +156,9 @@ function gridDirs(gridCount: number): Float32Array {
  * взвешенную по шагу вершин уровня (октаву короче шага сетка не несёт).
  * midTilt — наклон полосы (tan) в базисе восток/север вершины.
  * midShade — геометрия полосы для затенения: x — высота полосы в долях её
- * максимальной амплитуды (−1..1), y — доля октав, которые несёт уровень
- * (гейт пиксельного fbm: где полоса есть, fbm не дублирует её рельеф).
+ * максимальной амплитуды (−1..1), y — доля октав уровня, взвешенная огибающей
+ * (гейт пиксельного fbm: где полоса ЕСТЬ, fbm не дублирует её рельеф; у уреза
+ * воды и на равнине огибающая мала — fbm остаётся).
  */
 function writeTerrainPatchAttributes(
   field: TerrainHeightField,
@@ -183,7 +184,7 @@ function writeTerrainPatchAttributes(
   const dir = new Vector3()
   const uv = new Vector2()
   // скретч полосы: один на всю сборку патча, аллокаций в цикле нет
-  const bandScratch: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0 }
+  const bandScratch: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0, envelope: 0 }
   // шаг вершин этого патча — по нему взвешены октавы полосы
   const stepMeters = field.vertexStepMeters(depth, segments)
   // нормировка высоты полосы к её потолку: midShade.x безразмерен в шейдере
@@ -225,7 +226,9 @@ function writeTerrainPatchAttributes(
       midTilts[k * 2] = band.tiltE
       midTilts[k * 2 + 1] = band.tiltN
       midShades[k * 2] = maxAmplitude > 0 ? band.heightMeters / maxAmplitude : 0
-      midShades[k * 2 + 1] = band.octaveWeightSum
+      // доля октав, взвешенная огибающей: у уреза воды и на равнине (flat 0.15)
+      // пиксельный fbm остаётся, на склонах полоса вытесняет его
+      midShades[k * 2 + 1] = band.octaveWeightSum * Math.min(1, band.envelope)
       const r = toThreeJSUnits(field.radiusKm + heightMeters / 1000)
       positions[k * 3] = dir.x * r - center.x
       positions[k * 3 + 1] = dir.y * r - center.y

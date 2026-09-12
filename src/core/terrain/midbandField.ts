@@ -72,6 +72,8 @@ export interface MidbandSample {
   tiltN: number
   /** Σwᵢ/N — доля октав, представимых шагом уровня: 1 — вся полоса, 0 — полосы нет. */
   octaveWeightSum: number
+  /** Огибающая точки (уклон/кривизна карты, с водным fade), [0, ENVELOPE_MAX]; 0 — полосы здесь нет. */
+  envelope: number
 }
 
 const UP = new Vector3(0, 1, 0)
@@ -158,6 +160,8 @@ export class MidbandField {
     out.heightMeters = 0
     out.tiltE = 0
     out.tiltN = 0
+    // огибающая остаётся нулевой на всех ранних выходах: полосы в точке нет
+    out.envelope = 0
 
     let weightSum = 0
     for (let i = 0; i < this.octaveCount; i++) weightSum += midbandOctaveWeight(stepMeters, this.wavelengthsMeters[i])
@@ -169,6 +173,8 @@ export class MidbandField {
     if (env === 0) return out
     // шаг уровня грубее всех октав — полосы на нём нет
     if (weightSum === 0) return out
+
+    out.envelope = env
 
     // базис точки: E = normalize(UP × dir), N = dir × E; у полюса наклон не определён
     this.east.set(dirX, dirY, dirZ)

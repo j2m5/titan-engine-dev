@@ -88,6 +88,16 @@ describe('TerrainPatchPool', () => {
     expect((fresh.geometry as InstancedBufferGeometry).instanceCount).toBe(1)
     expect(handle.mesh.position.distanceTo(fresh.center)).toBe(0)
     expect(handle.geometry.boundingSphere!.radius).toBeCloseTo(fresh.geometry.boundingSphere!.radius, 12)
+
+    // на DEPTH шаг вершин грубее всех октав полосы — midShade/midTilt там нули,
+    // и сравнение двух нулевых массивов ничего не разделяет: паритет полосы
+    // проверяется на живом уровне (11 при SEGMENTS 8 ≈ боевой L8)
+    const deep = 11
+    buildTerrainPatchInto(field, 2, 1, 0, deep, SEGMENTS, SKIRT, handle, wrap)
+    const freshDeep = buildTerrainPatchGeometry(field, 2, 1, 0, deep, SEGMENTS, buildPatchIndex(SEGMENTS), SKIRT, wrap)
+    const deepShade = Array.from(handle.geometry.getAttribute('midShade').array)
+    expect(deepShade).toEqual(Array.from(freshDeep.geometry.getAttribute('midShade').array))
+    expect(deepShade.some((v: number): boolean => v !== 0)).toBe(true)
   })
 
   // needsUpdate у three — сеттер без геттера (пишет version++, читается как

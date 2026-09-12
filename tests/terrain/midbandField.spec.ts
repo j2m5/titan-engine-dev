@@ -34,7 +34,7 @@ function dirs(n: number): Vector3[] {
 
 describe('MidbandField: амплитуды, огибающая, бонды', () => {
   const field = new MidbandField(MIDBAND_DEFAULTS, LAMBDA0, R_M)
-  const out: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0 }
+  const out: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0, envelope: 0 }
 
   it('3 октавы, λ_i = λ₀/2^i, A_i = 0.03·λ_i', () => {
     expect(MIDBAND_OCTAVES).toBe(3)
@@ -151,7 +151,7 @@ describe('MidbandField: амплитуды, огибающая, бонды', () 
 
 describe('MidbandField: веса октав по шагу вершин', () => {
   const field = new MidbandField(MIDBAND_DEFAULTS, LAMBDA0, R_M)
-  const out: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0 }
+  const out: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0, envelope: 0 }
 
   it('midbandOctaveWeight: 1 до step = LO·λ, 0 от step = HI·λ, монотонно между; step 0 — 1', () => {
     expect(MIDBAND_NYQUIST_LO).toBe(0.5)
@@ -257,7 +257,7 @@ describe('MidbandField: веса октав по шагу вершин', () => {
 describe('MidbandField: огибающая у уровня воды', () => {
   const wet = new MidbandField({ ...MIDBAND_DEFAULTS, waterLevelMeters: 0, midbandWaterFadeMeters: null }, LAMBDA0, R_M)
   const dry = new MidbandField(MIDBAND_DEFAULTS, LAMBDA0, R_M)
-  const out: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0 }
+  const out: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0, envelope: 0 }
 
   it('W = 2·A₀ по умолчанию; на уровне огибающая 0, на W — прежняя, между — smoothstep; без уровня — бит-в-бит', () => {
     expect(wet.waterFadeMeters).toBeCloseTo(2 * 48, 9)
@@ -270,6 +270,19 @@ describe('MidbandField: огибающая у уровня воды', () => {
     const d = dirs(1)[0]
     expect(wet.sample(d.x, d.y, d.z, wallEnv, 0, out).heightMeters).toBe(0)
     expect(wet.sample(d.x, d.y, d.z, wallEnv, 500, out).heightMeters).toBeCloseTo(dry.sample(d.x, d.y, d.z, wallEnv, 500, out).heightMeters, 12)
+  })
+
+  // огибающая уходит потребителю (midShade.y): гейт пиксельного fbm читает
+  // «полоса здесь есть», а не «октавы представимы уровнем»
+  it('sample несёт огибающую точки; у уреза и без полосы — 0', () => {
+    const d = dirs(1)[0]
+    expect(dry.sample(d.x, d.y, d.z, wallEnv, 500, out).envelope).toBeCloseTo(dry.envelope(wallEnv, 500), 12)
+    expect(wet.sample(d.x, d.y, d.z, wallEnv, 96, out).envelope).toBeCloseTo(wet.envelope(wallEnv, 96), 12)
+    expect(wet.sample(d.x, d.y, d.z, wallEnv, 0, out).envelope).toBe(0)
+    const off = new MidbandField({ ...MIDBAND_DEFAULTS, midbandStrength: 0 }, LAMBDA0, R_M)
+    expect(off.sample(d.x, d.y, d.z, wallEnv, 500, out).envelope).toBe(0)
+    // шаг уровня грубее всех октав — полосы нет, огибающая не течёт наружу
+    expect(dry.sample(d.x, d.y, d.z, wallEnv, 500, out, 10 * LAMBDA0).envelope).toBe(0)
   })
 
   it('явная ширина W перекрывает 2·A₀', () => {

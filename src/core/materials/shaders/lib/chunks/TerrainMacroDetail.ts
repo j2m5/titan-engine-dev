@@ -208,7 +208,7 @@ export const terrainMacroDetailFunctions = /* glsl */ `
     vec3 g = f.xyz;
     vec3 gradTangent = g - dirLocal * dot(g, dirLocal);
     // Наклон = (амплитуда/период)·grad: домен в периодах, ∂/∂s = (1/P)·∂/∂q.
-    // Наклон и альбедо пиксельного fbm — только там, где полосы B на уровне нет (vMidShade.y — её доля)
+    // Наклон и альбедо пиксельного fbm — только там, где полосы B нет (vMidShade.y — её доля на уровне, взвешенная огибающей)
     nLocal = normalize(nLocal - (1.0 - vMidShade.y) * uMacroNormalScale * MACRO_RELIEF_ASPECT * contrast * gradTangent);
 
     albedoMul *= clamp(1.0 + uMacroStrength * contrast * h * (1.0 - vMidShade.y), 0.0, 2.0);

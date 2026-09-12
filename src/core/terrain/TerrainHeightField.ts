@@ -185,7 +185,7 @@ class TerrainHeightField {
   // скретчи полосы (Task 4): heightMeters/midbandTilt — горячий путь мешера
   // и коллизии, аллокаций там быть не должно
   private readonly midbandEnvScratch: MidbandEnvelope = { slopeTan: 0, curvature: 0, downE: 1, downN: 0 }
-  private readonly midbandSampleScratch: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0 }
+  private readonly midbandSampleScratch: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0, envelope: 0 }
   private readonly clearanceGrid: Float32Array
   private readonly clearanceGridWidth: number
   private readonly clearanceGridHeight: number
@@ -529,6 +529,7 @@ class TerrainHeightField {
       out.tiltE = 0
       out.tiltN = 0
       out.octaveWeightSum = 0
+      out.envelope = 0
 
       return out
     }

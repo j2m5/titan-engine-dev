@@ -87,7 +87,8 @@ export const PlanetShaderTemplate: ShaderProps = {
     #endif
 
     #ifdef USE_TERRAIN_MACRO_DETAIL
-      // Геометрия полосы B в вершине: x — высота полосы / maxAmplitude, y — доля октав уровня
+      // Геометрия полосы B в вершине: x — высота полосы / maxAmplitude,
+      // y — доля октав уровня, взвешенная огибающей (1 — полоса здесь есть вся)
       attribute vec2 midShade;
       varying vec2 vMidShade;
     #endif
@@ -254,7 +255,7 @@ export const PlanetShaderTemplate: ShaderProps = {
     // под текселем диффуза. Шум — только под этим гейтом (у гигантов свой).
     #ifdef USE_TERRAIN_MACRO_DETAIL
       // Геометрия полосы B в вершине (см. вершинник): x — высота полосы в долях
-      // максимальной амплитуды, y — доля октав, которые несёт уровень
+      // максимальной амплитуды, y — доля октав уровня, взвешенная огибающей
       varying vec2 vMidShade;
       #include <noiseFunctions>
       #include <terrainMacroDetailUniforms>
