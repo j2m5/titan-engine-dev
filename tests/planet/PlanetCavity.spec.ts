@@ -38,7 +38,7 @@ describe('PlanetShaderTemplate: декод cavity-канала (строковы
     expect(terrainDetailFunctions).not.toContain('albedoMul *= mix(1.0, aoNative')
     expect(terrainDetailFunctions).not.toContain('albedoMul *= mix(1.0, aoSteep')
     expect(terrainMacroDetailFunctions).toContain('occlusion *= max(1.0 - TERRACE_SHADE * k * max(tp.x, 0.0), 0.0);')
-    expect(terrainMacroDetailFunctions).toContain('albedoMul *= clamp(1.0 + uMacroStrength * contrast * h, 0.0, 2.0);')
+    expect(terrainMacroDetailFunctions).toContain('albedoMul *= clamp(1.0 + uMacroStrength * contrast * h * (1.0 - vMidShade.y), 0.0, 2.0);')
   })
 
   it('потолок окклюзии [0, 2] — после всех слоёв затенения и ДО света', () => {

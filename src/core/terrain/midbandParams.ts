@@ -16,6 +16,8 @@ export interface MidbandParams {
   midbandRidge: number
   /** Варп домена вдоль стока, в долях базовой длины волны. */
   midbandWarp: number
+  /** Сила альбедо полосы от её геометрии (гребни светлее, лощины темнее); 0 — прежний вид. */
+  midbandShade: number
   /** Уровень воды тела, метры над референсом; null — воды нет, огибающая от уровня не зависит. */
   waterLevelMeters: number | null
   /** Ширина затухания полосы у уровня воды, метры; null — 2·A₀ (две амплитуды базовой октавы). */
@@ -29,6 +31,7 @@ export const MIDBAND_DEFAULTS: MidbandParams = {
   midbandSlopeRef: 0.15,
   midbandRidge: 1,
   midbandWarp: 0.35,
+  midbandShade: 0.5,
   waterLevelMeters: null,
   midbandWaterFadeMeters: null
 }
@@ -82,6 +85,7 @@ export function resolveMidbandParams(data: unknown, context: string): MidbandPar
     midbandSlopeRef: num('midbandSlopeRef', MIDBAND_DEFAULTS.midbandSlopeRef),
     midbandRidge: num('midbandRidge', MIDBAND_DEFAULTS.midbandRidge),
     midbandWarp: num('midbandWarp', MIDBAND_DEFAULTS.midbandWarp),
+    midbandShade: num('midbandShade', MIDBAND_DEFAULTS.midbandShade),
     waterLevelMeters,
     midbandWaterFadeMeters
   }
@@ -91,6 +95,7 @@ export function resolveMidbandParams(data: unknown, context: string): MidbandPar
   if (params.midbandSlopeRef <= 0) throw new Error(`midband ${context}: midbandSlopeRef должен быть > 0: ${params.midbandSlopeRef}`)
   if (params.midbandRidge < 0) throw new Error(`midband ${context}: midbandRidge должен быть >= 0: ${params.midbandRidge}`)
   if (params.midbandWarp < 0) throw new Error(`midband ${context}: midbandWarp должен быть >= 0: ${params.midbandWarp}`)
+  if (params.midbandShade < 0) throw new Error(`midband ${context}: midbandShade должен быть >= 0: ${params.midbandShade}`)
 
   return params
 }
@@ -107,6 +112,7 @@ export function midbandWavelengthMeters(equatorTexelMeters: number, params: Midb
   return Math.min(MAX_WAVELENGTH_METERS, Math.max(MIN_WAVELENGTH_METERS, TEXEL_TO_WAVELENGTH * equatorTexelMeters))
 }
 
+/** Ключ кеша поля высот: midbandShade сюда НЕ входит — ручка пиксельная (альбедо в шейдере), геометрия от неё не зависит. */
 export function midbandCacheKey(params: MidbandParams): string {
   return [
     params.midbandStrength,

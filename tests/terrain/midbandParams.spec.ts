@@ -17,6 +17,7 @@ describe('midbandParams: ручки геометрии средней полос
       midbandSlopeRef: 0.15,
       midbandRidge: 1,
       midbandWarp: 0.35,
+      midbandShade: 0.5,
       waterLevelMeters: null,
       midbandWaterFadeMeters: null
     })
@@ -39,6 +40,14 @@ describe('midbandParams: ручки геометрии средней полос
     expect(() => resolveMidbandParams({ midbandFlat: 'x' }, 'Титания')).toThrow(/не число/)
     expect(() => resolveMidbandParams({ midbandWarp: -0.1 }, 'Титания')).toThrow(/midbandWarp/)
     expect(() => resolveMidbandParams({ midbandRidge: -1 }, 'Титания')).toThrow(/midbandRidge/)
+    expect(() => resolveMidbandParams({ midbandShade: -0.1 }, 'Титания')).toThrow(/midbandShade/)
+  })
+
+  // ручка пиксельная (альбедо в шейдере), не геометрическая: два тела с разной
+  // силой затенения обязаны делить одно кешированное поле высот
+  it('midbandShade не входит в ключ кеша поля', () => {
+    expect(midbandCacheKey({ ...MIDBAND_DEFAULTS, midbandShade: 0 })).toBe(midbandCacheKey(MIDBAND_DEFAULTS))
+    expect(resolveMidbandParams({ midbandShade: 0 }, 'x').midbandShade).toBe(0)
   })
 
   it('ключ кеша различает параметры, одинаковые параметры — один ключ', () => {

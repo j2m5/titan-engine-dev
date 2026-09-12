@@ -155,6 +155,9 @@ function gridDirs(gridCount: number): Float32Array {
  * средней полосы в шейдере; позиция вершины при этом несёт карту + полосу,
  * взвешенную по шагу вершин уровня (октаву короче шага сетка не несёт).
  * midTilt — наклон полосы (tan) в базисе восток/север вершины.
+ * midShade — геометрия полосы для затенения: x — высота полосы в долях её
+ * максимальной амплитуды (−1..1), y — доля октав, которые несёт уровень
+ * (гейт пиксельного fbm: где полоса есть, fbm не дублирует её рельеф).
  */
 function writeTerrainPatchAttributes(
   field: TerrainHeightField,
@@ -169,6 +172,7 @@ function writeTerrainPatchAttributes(
   detailPos2: Float32Array,
   heights: Float32Array,
   midTilts: Float32Array,
+  midShades: Float32Array,
   wrap: DetailWrap
 ): Vector3 {
   const patches = 1 << depth
@@ -182,6 +186,8 @@ function writeTerrainPatchAttributes(
   const bandScratch: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0 }
   // шаг вершин этого патча — по нему взвешены октавы полосы
   const stepMeters = field.vertexStepMeters(depth, segments)
+  // нормировка высоты полосы к её потолку: midShade.x безразмерен в шейдере
+  const maxAmplitude = field.midbandMaxAmplitudeMeters
 
   const centerDir = cubeFaceDirection(face, s0 + span / 2, t0 + span / 2, new Vector3())
   const center = centerDir.clone().multiplyScalar(field.surfaceRadiusUnits(centerDir))
@@ -218,6 +224,8 @@ function writeTerrainPatchAttributes(
       heights[k] = mapMeters
       midTilts[k * 2] = band.tiltE
       midTilts[k * 2 + 1] = band.tiltN
+      midShades[k * 2] = maxAmplitude > 0 ? band.heightMeters / maxAmplitude : 0
+      midShades[k * 2 + 1] = band.octaveWeightSum
       const r = toThreeJSUnits(field.radiusKm + heightMeters / 1000)
       positions[k * 3] = dir.x * r - center.x
       positions[k * 3 + 1] = dir.y * r - center.y
@@ -273,6 +281,10 @@ function writeTerrainPatchAttributes(
     // юбка несёт наклон полосы своей кромочной вершины
     midTilts[skirtIndex * 2] = midTilts[edgeIndex * 2]
     midTilts[skirtIndex * 2 + 1] = midTilts[edgeIndex * 2 + 1]
+
+    // юбка несёт геометрию полосы своей кромочной вершины
+    midShades[skirtIndex * 2] = midShades[edgeIndex * 2]
+    midShades[skirtIndex * 2 + 1] = midShades[edgeIndex * 2 + 1]
   }
 
   return center
@@ -300,6 +312,7 @@ export function buildTerrainPatchGeometry(
   const detailPos2 = new Float32Array(vertexCount * 3)
   const heights = new Float32Array(vertexCount)
   const midTilts = new Float32Array(vertexCount * 2)
+  const midShades = new Float32Array(vertexCount * 2)
 
   const center = writeTerrainPatchAttributes(
     field,
@@ -314,6 +327,7 @@ export function buildTerrainPatchGeometry(
     detailPos2,
     heights,
     midTilts,
+    midShades,
     wrap
   )
 
@@ -326,6 +340,7 @@ export function buildTerrainPatchGeometry(
   geometry.setAttribute('detailPos2', new BufferAttribute(detailPos2, 3))
   geometry.setAttribute('height', new BufferAttribute(heights, 1))
   geometry.setAttribute('midTilt', new BufferAttribute(midTilts, 2))
+  geometry.setAttribute('midShade', new BufferAttribute(midShades, 2))
   geometry.setAttribute('patchCenter', new InstancedBufferAttribute(new Float32Array([center.x, center.y, center.z]), 3))
   geometry.setIndex(index)
   geometry.computeBoundingSphere()
@@ -356,6 +371,7 @@ export function buildTerrainPatchInto(
   const detailPos2 = geometry.getAttribute('detailPos2') as BufferAttribute
   const height = geometry.getAttribute('height') as BufferAttribute
   const midTilt = geometry.getAttribute('midTilt') as BufferAttribute
+  const midShade = geometry.getAttribute('midShade') as BufferAttribute
 
   const center = writeTerrainPatchAttributes(
     field,
@@ -370,6 +386,7 @@ export function buildTerrainPatchInto(
     detailPos2.array as Float32Array,
     height.array as Float32Array,
     midTilt.array as Float32Array,
+    midShade.array as Float32Array,
     wrap
   )
 
@@ -384,6 +401,7 @@ export function buildTerrainPatchInto(
   detailPos2.needsUpdate = true
   height.needsUpdate = true
   midTilt.needsUpdate = true
+  midShade.needsUpdate = true
   geometry.computeBoundingSphere()
   mesh.position.copy(center)
 }

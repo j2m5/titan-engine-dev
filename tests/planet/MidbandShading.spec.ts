@@ -38,15 +38,28 @@ describe('Полоса B в затенении: наклон по вершина
     expect(gateFn).not.toContain('smoothstep(uMacroStructureSlope.x, uMacroStructureSlope.y, slopeLen)')
   })
 
-  it('наклон изотропного fbm под гейтом uMacroTiltGate; в чанках и шаблоне нет нового шума в пикселе', () => {
-    expect(terrainMacroDetailUniforms).toContain('uniform float uMacroTiltGate;')
-    expect(terrainMacroDetailFunctions).toContain('uMacroTiltGate * uMacroNormalScale * MACRO_RELIEF_ASPECT * contrast * gradTangent')
+  it('альбедо и наклон fbm взвешены долей октав уровня; альбедо полосы — от midShade.x; uMacroTiltGate снят', () => {
+    expect(terrainMacroDetailUniforms).not.toContain('uMacroTiltGate')
+    expect(terrainMacroDetailUniforms).toContain('uniform float uMidbandShade;')
+    expect(terrainMacroDetailFunctions).toContain('(1.0 - vMidShade.y) * uMacroNormalScale * MACRO_RELIEF_ASPECT * contrast * gradTangent')
+    expect(terrainMacroDetailFunctions).toContain('albedoMul *= clamp(1.0 + uMacroStrength * contrast * h * (1.0 - vMidShade.y), 0.0, 2.0);')
+    expect(terrainMacroDetailFunctions).toContain('albedoMul *= clamp(1.0 + uMidbandShade * distFade * vMidShade.x, 0.0, 2.0);')
     // счётчик вызовов snoiseGrad в исходнике чанка не вырос против арки A:
     // 1 в macroFbm (цикл по октавам) + 1 в streakPlane (вызывается трижды на
     // плоскости трипланара, но тело одно) = 2 текстовых вхождения
     expect((terrainMacroDetailFunctions.match(/snoiseGrad\(/g) ?? []).length).toBe(2)
     // vMidTilt никуда не подаётся как аргумент шума
     expect(frag).not.toMatch(/snoise\w*\([^;]*vMidTilt/)
+  })
+
+  it('вершинник и фрагментник: midShade под USE_TERRAIN_MACRO_DETAIL', () => {
+    expect(vert).toContain('attribute vec2 midShade;')
+    expect(vert).toContain('vMidShade = midShade;')
+    expect(frag).toContain('varying vec2 vMidShade;')
+    const decl = vert.indexOf('attribute vec2 midShade;')
+    const gate = vert.lastIndexOf('#ifdef USE_TERRAIN_MACRO_DETAIL', decl)
+    expect(gate).toBeGreaterThan(-1)
+    expect(vert.indexOf('#endif', gate)).toBeGreaterThan(decl)
   })
 })
 
@@ -77,21 +90,18 @@ function stubActor(data: Record<string, unknown>): Actor {
   } as unknown as Actor
 }
 
-describe('PlanetMaterial: гейт uMacroTiltGate из midbandParamsOf', () => {
+describe('PlanetMaterial: uMidbandShade из midbandParamsOf; дефолт атрибута midShade для легаси-сферы', () => {
   afterEach(() => resourceStorage.deleteAllTextures())
 
-  it('Луна (дефолт midbandStrength=1): гейт наклона fbm выключен — полоса B несёт наклон сама', () => {
+  it('Луна: uMidbandShade = 0.5 (дефолт); стаб с midbandShade 0 — 0', () => {
     const moon = Actor.find(19)!
     seedFor(moon)
     const material = new PlanetMaterial(moon)
-    expect(material.uniforms.uMacroTiltGate.value).toBe(0)
-  })
-
-  it('стаб-тело с midbandStrength=0 (полосы B нет): гейт наклона fbm включён — прежний вид', () => {
+    expect(material.uniforms.uMidbandShade.value).toBe(0.5)
+    expect(material.defaultAttributeValues.midShade).toEqual([0, 0])
     seedTexture('', 4, 2)
     seedTexture('default.png', 4, 2)
     seedTexture('night.jpg', 4, 2)
-    const material = new PlanetMaterial(stubActor({ midbandStrength: 0 }))
-    expect(material.uniforms.uMacroTiltGate.value).toBe(1)
+    expect(new PlanetMaterial(stubActor({ midbandShade: 0 })).uniforms.uMidbandShade.value).toBe(0)
   })
 })

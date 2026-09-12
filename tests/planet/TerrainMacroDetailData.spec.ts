@@ -53,6 +53,7 @@ describe('Данные средней полосы детали рельефа',
       'midbandSlopeRef',
       'midbandRidge',
       'midbandWarp',
+      'midbandShade',
       'midbandWaterFadeMeters'
     ]
     const withMidband = RenderingObjects.filter((row: IRenderingObject): boolean =>

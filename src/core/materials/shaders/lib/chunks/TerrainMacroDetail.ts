@@ -7,7 +7,8 @@
  * от хоста (чанк slope-карту не читает; cavity = 0 без USE_CAVITY), варп домена по
  * производной яркости диффуза вдоль меридиана. Октавы гаснут по экранному
  * следу. Требует #include <noiseFunctions> и объявления diffuseMap и
- * uBodyRadiusUnits хостом до include. CPU-зеркало: terrainMacroDetailMath.ts.
+ * uBodyRadiusUnits хостом до include. Varying vMidShade (геометрия полосы B в
+ * вершине) объявляет хост — как vHeightMeters. CPU-зеркало: terrainMacroDetailMath.ts.
  */
 export const terrainMacroDetailUniforms = /* glsl */ `
   uniform float uMacroStrength;
@@ -27,11 +28,8 @@ export const terrainMacroDetailUniforms = /* glsl */ `
   uniform float uMacroTerraceStepMeters;
   // Гейт форм по АБСОЛЮТНОМУ уклону (tan): x — начало, y — полная сила
   uniform vec2 uMacroStructureSlope;
-  // Гейт наклона изотропного fbm (арка "средняя полоса B"): 0 у тел с
-  // геометрией полосы - её рельеф уже покрывает то же место, что fbm, двойной
-  // наклон нормали иначе. Альбедо-модуляция fbm и его роль источника вобла
-  // для форм склона (applyMacroSlopeStructures) под этот гейт не подпадают.
-  uniform float uMacroTiltGate;
+  // Альбедо полосы B от её геометрии (vMidShade.x); 0 — прежний вид
+  uniform float uMidbandShade;
 `
 
 export const terrainMacroDetailFunctions = /* glsl */ `
@@ -210,11 +208,12 @@ export const terrainMacroDetailFunctions = /* glsl */ `
     vec3 g = f.xyz;
     vec3 gradTangent = g - dirLocal * dot(g, dirLocal);
     // Наклон = (амплитуда/период)·grad: домен в периодах, ∂/∂s = (1/P)·∂/∂q.
-    // uMacroTiltGate гасит только наклон нормали — альбедо и вклад в fbmValue
-    // формам склона ниже (applyMacroSlopeStructures) идут отдельно, без гейта.
-    nLocal = normalize(nLocal - uMacroTiltGate * uMacroNormalScale * MACRO_RELIEF_ASPECT * contrast * gradTangent);
+    // Наклон и альбедо пиксельного fbm — только там, где полосы B на уровне нет (vMidShade.y — её доля)
+    nLocal = normalize(nLocal - (1.0 - vMidShade.y) * uMacroNormalScale * MACRO_RELIEF_ASPECT * contrast * gradTangent);
 
-    albedoMul *= clamp(1.0 + uMacroStrength * contrast * h, 0.0, 2.0);
+    albedoMul *= clamp(1.0 + uMacroStrength * contrast * h * (1.0 - vMidShade.y), 0.0, 2.0);
+    // геометрия полосы: гребни светлее, лощины темнее — там же, где бугры
+    albedoMul *= clamp(1.0 + uMidbandShade * distFade * vMidShade.x, 0.0, 2.0);
 
     applyMacroSlopeStructures(nLocal, albedoMul, occlusion, dirLocal, eastLocal, slope, gateSlopeLen, contrast, distFade, qs, streakWeight, terraceWeight, h);
   }

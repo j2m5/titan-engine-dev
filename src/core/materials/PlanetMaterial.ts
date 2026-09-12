@@ -121,7 +121,9 @@ class PlanetMaterial extends AbstractShaderMaterial {
     // SphereGeometry нет. Без явного дефолта three не биндит ничего и значение
     // приходит из общего generic-слота GL. Ноль даёт вершиннику
     // normalize(position) — радиаль тело-центричной сферы.
-    this.defaultAttributeValues = { ...this.defaultAttributeValues, patchCenter: [0, 0, 0] }
+    // midShade: у легаси-сферы окна даунгрейда атрибута нет; y = 0 — доля октав
+    // полосы нулевая, fbm наклоняет и красит сам, как до полосы B
+    this.defaultAttributeValues = { ...this.defaultAttributeValues, patchCenter: [0, 0, 0], midShade: [0, 0] }
 
     // Steep-зона материала (Task 3, чанк TerrainDetail — GLSL-сторона уже
     // объявлена задачей 2): второй набор detail-сэмплеров и маска уклона
@@ -138,11 +140,10 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uDetailTintNorm = new Uniform(new Vector2(1, 1))
     this.uniforms.uSteepTintNorm = new Uniform(new Vector2(1, 1))
 
-    // Гейт наклона изотропного fbm средней полосы (арка "средняя полоса B"):
-    // 0 у тел с геометрией полосы — её рельеф уже покрывает то же место, что
-    // раньше давал fbm-наклон, двойной рельеф иначе. 1 — прежний вид (fbm сам
-    // наклоняет нормаль) у тел без геометрии полосы.
-    this.uniforms.uMacroTiltGate = new Uniform(midbandParamsOf(model).midbandStrength > 0 ? 0 : 1)
+    // Альбедо полосы B от её геометрии: гребни светлее, лощины темнее (ручка
+    // пиксельная, в ключ кеша поля высот не входит). Гейт наклона fbm теперь
+    // не юниформ, а доля октав уровня в атрибуте midShade.y.
+    this.uniforms.uMidbandShade = new Uniform(midbandParamsOf(model).midbandShade)
   }
 
   private static resolveCloudAtmosphereThicknessUnits(atmosphereActor: Actor | undefined): number | undefined {

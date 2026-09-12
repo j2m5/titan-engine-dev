@@ -52,7 +52,7 @@ describe('TerrainMacroDetail: направленные формы склона (
   it('след струй считается до ранних выходов, формы — после применения изотропного результата', () => {
     const streakFootprint = fn.indexOf('float streakWeight = 1.0 - smoothstep(0.5, 1.0, length(fwidth(qs)));')
     const polar = fn.indexOf('if (eastLen < 1e-4) return;')
-    const isoAlbedo = fn.indexOf('albedoMul *= clamp(1.0 + uMacroStrength * contrast * h, 0.0, 2.0);')
+    const isoAlbedo = fn.indexOf('albedoMul *= clamp(1.0 + uMacroStrength * contrast * h * (1.0 - vMidShade.y), 0.0, 2.0);')
     const call = fn.indexOf('applyMacroSlopeStructures(')
     const callSite = fn.lastIndexOf('applyMacroSlopeStructures(')
     expect(streakFootprint).toBeGreaterThan(-1)

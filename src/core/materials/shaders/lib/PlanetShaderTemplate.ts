@@ -86,6 +86,12 @@ export const PlanetShaderTemplate: ShaderProps = {
       varying float vHeightMeters;
     #endif
 
+    #ifdef USE_TERRAIN_MACRO_DETAIL
+      // Геометрия полосы B в вершине: x — высота полосы / maxAmplitude, y — доля октав уровня
+      attribute vec2 midShade;
+      varying vec2 vMidShade;
+    #endif
+
     #ifdef USE_SLOPE
       // Наклон геометрии средней полосы B (tan в базисе T/B SlopeNormal) —
       // атрибут TerrainSphere, домешивается в декод slope-карты во фрагменте
@@ -136,6 +142,10 @@ export const PlanetShaderTemplate: ShaderProps = {
 
       #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE)
         vHeightMeters = height;
+      #endif
+
+      #ifdef USE_TERRAIN_MACRO_DETAIL
+        vMidShade = midShade;
       #endif
 
       #ifdef USE_SLOPE
@@ -243,6 +253,9 @@ export const PlanetShaderTemplate: ShaderProps = {
     // Средняя полоса детали рельефа (терраформный путь): километровый fbm
     // под текселем диффуза. Шум — только под этим гейтом (у гигантов свой).
     #ifdef USE_TERRAIN_MACRO_DETAIL
+      // Геометрия полосы B в вершине (см. вершинник): x — высота полосы в долях
+      // максимальной амплитуды, y — доля октав, которые несёт уровень
+      varying vec2 vMidShade;
       #include <noiseFunctions>
       #include <terrainMacroDetailUniforms>
       #include <terrainMacroDetailFunctions>

@@ -70,7 +70,7 @@ describe('TerrainPatchPool', () => {
     buildTerrainPatchInto(field, 2, 1, 0, DEPTH, SEGMENTS, SKIRT, handle, wrap)
     const fresh = buildTerrainPatchGeometry(field, 2, 1, 0, DEPTH, SEGMENTS, buildPatchIndex(SEGMENTS), SKIRT, wrap)
 
-    for (const name of ['position', 'detailPos', 'detailPos2', 'height', 'midTilt']) {
+    for (const name of ['position', 'detailPos', 'detailPos2', 'height', 'midTilt', 'midShade']) {
       expect(Array.from(handle.geometry.getAttribute(name).array)).toEqual(
         Array.from(fresh.geometry.getAttribute(name).array)
       )
@@ -165,7 +165,8 @@ describe('TerrainPatchPool', () => {
     const attrs: Array<[string, number]> = [
       ['detailPos', 3],
       ['detailPos2', 3],
-      ['midTilt', 2]
+      ['midTilt', 2],
+      ['midShade', 2]
     ]
     for (const [name, itemSize] of attrs) {
       const attr = handle.geometry.getAttribute(name) as BufferAttribute

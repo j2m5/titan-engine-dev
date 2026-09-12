@@ -540,3 +540,44 @@ describe('buildTerrainPatchGeometry: атрибут midTilt', () => {
     }
   })
 })
+
+describe('buildTerrainPatchGeometry: атрибут midShade', () => {
+  it('midShade.x = высота полосы / maxAmplitude, .y = доля октав уровня; без полосы — нули', () => {
+    const field = bumpyField()
+    const { geometry, center } = buildAt(field, 11, 0, 1, 0)
+    const pos = geometry.getAttribute('position')
+    const shade = geometry.getAttribute('midShade')
+    expect(shade.itemSize).toBe(2)
+    expect(shade.count).toBe(pos.count)
+    const dir = new Vector3()
+    const uv = new Vector2()
+    const out = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0 }
+    let nonZero = 0
+    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
+      dir.set(pos.getX(k) + center.x, pos.getY(k) + center.y, pos.getZ(k) + center.z).normalize()
+      field.dirToUv(dir, uv)
+      const band = field.midbandSample(dir, uv.x, uv.y, field.sampleMeters(uv.x, uv.y), out, field.vertexStepMeters(11, SEGMENTS))
+      expect(shade.getX(k)).toBeCloseTo(band.heightMeters / field.midbandMaxAmplitudeMeters, 5)
+      expect(shade.getY(k)).toBeCloseTo(band.octaveWeightSum, 6)
+      expect(Math.abs(shade.getX(k))).toBeLessThanOrEqual(1 + 1e-6)
+      if (shade.getX(k) !== 0) nonZero++
+    }
+    expect(nonZero).toBeGreaterThan(GRID_VERTEX_COUNT / 4)
+    const off = buildAt(bumpyField({ ...MIDBAND_DEFAULTS, midbandStrength: 0 }), 11, 0, 1, 0).geometry.getAttribute('midShade')
+    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
+      expect(off.getX(k)).toBe(0)
+      expect(off.getY(k)).toBe(0)
+    }
+  })
+
+  it('юбочная вершина несёт midShade своей кромочной', () => {
+    const { geometry } = build(bumpyField(), 0, 1, 0, 0.001)
+    const shade = geometry.getAttribute('midShade')
+    for (let r = 0; r < SEGMENTS * 4; r++) {
+      const skirt = GRID_VERTEX_COUNT + r
+      const edge = edgeIndexForSkirt(geometry, skirt)
+      expect(shade.getX(skirt)).toBe(shade.getX(edge))
+      expect(shade.getY(skirt)).toBe(shade.getY(edge))
+    }
+  })
+})

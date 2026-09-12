@@ -23,7 +23,8 @@ describe('TerrainMacroDetail: контракт чанка', () => {
       'uniform float uMacroStreakPeriodUnits;',
       'uniform float uMacroTerraceStrength;',
       'uniform float uMacroTerraceStepMeters;',
-      'uniform vec2 uMacroStructureSlope;'
+      'uniform vec2 uMacroStructureSlope;',
+      'uniform float uMidbandShade;'
       // varying float vHeightMeters переехал в шаблон под объединённый гейт кромки
     ]) {
       expect(terrainMacroDetailUniforms).toContain(name)
@@ -94,7 +95,7 @@ describe('TerrainMacroDetail: контракт чанка', () => {
 
   it('полярный гард по длине eastLocal и кламп альбедо [0, 2]; алиаса fade нет (тень vec3 fade из noiseFunctions)', () => {
     expect(fn).toContain('if (eastLen < 1e-4) return;')
-    expect(fn).toContain('clamp(1.0 + uMacroStrength * contrast * h, 0.0, 2.0)')
+    expect(fn).toContain('clamp(1.0 + uMacroStrength * contrast * h * (1.0 - vMidShade.y), 0.0, 2.0)')
     expect(fn).not.toContain('float fade = contrast;')
   })
 })
