@@ -11,7 +11,13 @@ import {
   TerrainPatchPool,
   type PatchHandle
 } from '@/core/terrain/TerrainPatchPool'
-import { buildPatchIndex, buildTerrainPatchGeometry, buildTerrainPatchInto } from '@/core/terrain/terrainPatchGeometry'
+import {
+  applyPatchResult,
+  buildPatchIndex,
+  buildTerrainPatchGeometry,
+  buildTerrainPatchInto
+} from '@/core/terrain/terrainPatchGeometry'
+import { SyncTerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import { detailWrapFor } from '@/core/terrain/detailWrap'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
@@ -120,6 +126,61 @@ describe('TerrainPatchPool', () => {
     for (const name of ['position', 'detailPos', 'detailPos2', 'patchCenter']) {
       const attr = handle.geometry.getAttribute(name) as BufferAttribute
       expect(attr.version).toBeGreaterThan(versionsBefore[name])
+    }
+  })
+
+  /**
+   * applyPatchResult — боевой путь записи прихода строителя (синхронного и
+   * воркерного): те же атрибуты слота, что у into-варианта, но СКОПИРОВАННЫЕ
+   * из чужих массивов. Эталон тот же fresh, что и у into-паритета — иначе
+   * перепутанные местами массивы (detailPos ↔ detailPos2, midTilt ↔ midShade)
+   * проходили бы молча.
+   *
+   * Уровень 11 (≈ боевой L8 при SEGMENTS 8), а не DEPTH: на грубом уровне шаг
+   * вершин грубее всех октав полосы, midTilt/midShade там нули, и сравнение
+   * двух нулевых массивов перестановку не разделяет.
+   */
+  it('applyPatchResult: атрибуты, центр патча, сфера и позиция меша равны fresh; needsUpdate поднят на всех', () => {
+    const field = bumpyField()
+    const pool = makePool()
+    const handle = pool.acquire()!
+    const wrap = detailWrapFor(undefined)
+    const deep = 11
+    const names = ['position', 'detailPos', 'detailPos2', 'height', 'midTilt', 'midShade', 'patchCenter']
+
+    const versionsBefore: Record<string, number> = {}
+    for (const name of names) {
+      const attr = handle.geometry.getAttribute(name) as BufferAttribute
+      attr.needsUpdate = false
+      versionsBefore[name] = attr.version
+    }
+
+    let applied = 0
+    new SyncTerrainPatchBuilder().request(
+      { field, face: 2, i: 1, j: 0, level: deep, segments: SEGMENTS, skirtDepthUnits: SKIRT, wrap },
+      (result) => {
+        applyPatchResult(handle, result)
+        applied++
+      }
+    )
+    expect(applied).toBe(1) // onDone ровно один раз, синхронно внутри request
+
+    const fresh = buildTerrainPatchGeometry(field, 2, 1, 0, deep, SEGMENTS, buildPatchIndex(SEGMENTS), SKIRT, wrap)
+    for (const name of names) {
+      expect(Array.from(handle.geometry.getAttribute(name).array), name).toEqual(
+        Array.from(fresh.geometry.getAttribute(name).array)
+      )
+    }
+    // полоса на этом уровне действительно ненулевая — сравнение разделяет
+    expect(Array.from(handle.geometry.getAttribute('midShade').array).some((v: number): boolean => v !== 0)).toBe(true)
+
+    expect(handle.mesh.position.distanceTo(fresh.center)).toBe(0)
+    expect(handle.geometry.boundingSphere!.center.distanceTo(fresh.geometry.boundingSphere!.center)).toBe(0)
+    expect(handle.geometry.boundingSphere!.radius).toBe(fresh.geometry.boundingSphere!.radius)
+
+    for (const name of names) {
+      const attr = handle.geometry.getAttribute(name) as BufferAttribute
+      expect(attr.version, name).toBeGreaterThan(versionsBefore[name])
     }
   })
 

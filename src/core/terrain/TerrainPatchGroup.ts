@@ -86,21 +86,13 @@ interface PendingEntry {
  * dispose() возвращает в пул слоты живых и запрошенных патчей (после него
  * приход результата ничего не пишет), освобождает пул (свободные слоты +
  * общий индекс) и живые меши (disposeSceneTree на каждый — геометрия/материал,
- * материал общий и dispose идемпотентен). Метод и есть тот самый Disposable, которого при
- * обходе сцены дожидается disposeSceneTree родителя — двойной dispose узлов,
+ * материал общий и dispose идемпотентен). Метод и есть тот самый Disposable,
+ * которого при обходе сцены дожидается disposeSceneTree родителя — двойной dispose узлов,
  * уже освобождённых им напрямую, безвреден по тому же контракту.
  *
  * Геометрия патча несёт также detailPos/detailPos2 — домен детальных слоёв
  * (см. detailWrap.ts), периоды которого приходят сюда параметром detailWrap.
  */
-/** Запрошенный, но не пришедший патч: слот уже захвачен, меша в сцене ещё нет. */
-interface PendingEntry {
-  handle: PatchHandle
-  address: TerrainNodeAddress
-  requestId: number
-  initial: boolean
-}
-
 abstract class TerrainPatchGroup extends Group {
   private readonly field: TerrainHeightField
   private readonly pool: TerrainPatchPool

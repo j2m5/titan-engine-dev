@@ -1,7 +1,12 @@
 import { SyncTerrainPatchBuilder, type PatchBuildJob, type PatchBuildResult, type TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import type { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 
-/** Очередь заданий с ручным продвижением: flush(n) завершает n первых через синхронный строитель. */
+/**
+ * Очередь заданий с ручным продвижением: flush(n) завершает n первых через
+ * синхронный строитель. Тот отдаёт свой скретч-набор массивов, но onDone здесь
+ * тоже потребляется синхронно (внутри flush) — контракт «массивы живут только
+ * на время onDone» соблюдён, перекрытия заданий нет.
+ */
 export class FakeAsyncBuilder implements TerrainPatchBuilder {
   public readonly acquired: TerrainHeightField[] = []
   public readonly released: TerrainHeightField[] = []

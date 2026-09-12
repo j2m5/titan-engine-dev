@@ -26,6 +26,11 @@ export interface PatchBuildResult {
  * воркерный. `onDone` зовётся ровно один раз на запрос; вызывающий сам решает,
  * нужен ли результат ещё (узел мог выйти из желаемого набора, группа —
  * освободиться).
+ *
+ * Контракт результата: массивы `PatchBuildResult.arrays` живут только на время
+ * `onDone` — потребитель копирует их себе (applyPatchResult) и ссылок не
+ * держит. Синхронный строитель отдаёт свой скретч, воркерный — присланные
+ * буферы, и переиспользовать их обоим никто не мешает.
  */
 export interface TerrainPatchBuilder {
   /** Группа заявляет владение полем (конструктор); парный release — в dispose. Счётчик ссылок у воркерного строителя. */
@@ -36,12 +41,20 @@ export interface TerrainPatchBuilder {
   dispose(): void
 }
 
-/** Постройка на месте: onDone внутри request — семантика «одна постройка за кадр» прежних стендов. */
+/**
+ * Постройка на месте: onDone внутри request — семантика «одна постройка за
+ * кадр» прежних стендов. Массивы — один скретч на строителя (≈245 КиБ при
+ * segments=64): результат потребитель копирует внутри onDone (см. контракт
+ * интерфейса), аллокация на каждую постройку была бы мусором в горячем пути.
+ */
 export class SyncTerrainPatchBuilder implements TerrainPatchBuilder {
+  private scratch: PatchArrays | null = null
+  private scratchSegments = -1
+
   public acquire(): void {}
 
   public request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void): void {
-    const arrays = allocatePatchArrays(job.segments)
+    const arrays = this.arraysFor(job.segments)
     const { center, bounds } = buildTerrainPatchArrays(
       job.field,
       job.face,
@@ -60,5 +73,18 @@ export class SyncTerrainPatchBuilder implements TerrainPatchBuilder {
 
   public releaseAll(): void {}
 
-  public dispose(): void {}
+  public dispose(): void {
+    this.scratch = null
+    this.scratchSegments = -1
+  }
+
+  /** Скретч под запрошенный segments; пересоздаётся только при смене размера (в проекте он константа). */
+  private arraysFor(segments: number): PatchArrays {
+    if (this.scratch === null || this.scratchSegments !== segments) {
+      this.scratch = allocatePatchArrays(segments)
+      this.scratchSegments = segments
+    }
+
+    return this.scratch
+  }
 }

@@ -546,7 +546,7 @@ const BASELINE_VERTEX_SHADER = `
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
 
       // Нормаль воды = dir̂ (аналитическая, не из карты): патчи водной
-      // оболочки строит тот же writeTerrainPatchAttributes, что и рельеф —
+      // оболочки строит то же ядро buildTerrainPatchArrays, что и рельеф —
       // направление вершины радиально всегда и восстанавливается из
       // RTC-позиции и центра патча (см. terrainPatchGeometry.ts), волны
       // и рябь наклоняют нормаль во фрагментнике (waveNormal), не здесь.
