@@ -315,7 +315,8 @@ class TerrainHeightField {
   public constructor(
     private readonly map: HeightMapData,
     public readonly radiusKm: number,
-    midbandParams: MidbandParams = MIDBAND_DEFAULTS
+    /** Ссылка на переданные параметры — воркер строит по ним копию поля. */
+    public readonly midbandParams: MidbandParams = MIDBAND_DEFAULTS
   ) {
     // block/metersPerRaw — общий по-блочный базис клиренса и ε-пирамиды,
     // считается один раз здесь, а не дублируется в обоих билдерах.
@@ -456,6 +457,11 @@ class TerrainHeightField {
       nodeMaxHeightMetersPyramid: this.nodeMaxHeightMetersPyramid,
       nodeErrorMetersPyramid: this.nodeErrorMetersPyramid
     }
+  }
+
+  /** Ссылка на переданную карту — воркер получает её копию. */
+  public get heightMap(): HeightMapData {
+    return this.map
   }
 
   public get minMeters(): number {

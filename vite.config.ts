@@ -15,6 +15,8 @@ export default defineConfig({
       '@titanui': path.resolve(__dirname, './src/ui/TitanUI')
     }
   },
+  // воркер постройки патчей — ES-модуль (new Worker(..., { type: 'module' }))
+  worker: { format: 'es' },
   test: {
     globals: true,
     environment: 'jsdom',
