@@ -233,4 +233,29 @@ describe('MidbandField: веса октав по шагу вершин', () => {
     // step 400: w₂ = 0 (400/400), w₁ = 1 (400/800 = 0.5), w₀ = 1 → остаток = A₂·P99·ENV_MAX
     expect(field.residualAmplitudeMeters(400)).toBeCloseTo(MIDBAND_ENVELOPE_MAX * MIDBAND_P99 * 12, 6)
   })
+
+  it('octaveWeightSum считается до ранних выходов: strength 0 и нулевая огибающая всё равно отдают вес уровня', () => {
+    const d = dirs(1)[0]
+    const off = new MidbandField({ ...MIDBAND_DEFAULTS, midbandStrength: 0 }, LAMBDA0, R_M)
+    const offFull = off.sample(d.x, d.y, d.z, wallEnv, out, 0)
+    expect(offFull.heightMeters).toBe(0)
+    expect(offFull.octaveWeightSum).toBe(1)
+    const offCoarse = off.sample(d.x, d.y, d.z, wallEnv, out, 400)
+    expect(offCoarse.heightMeters).toBe(0)
+    expect(offCoarse.octaveWeightSum).toBeCloseTo(2 / 3, 9)
+
+    const noEnvelope = new MidbandField({ ...MIDBAND_DEFAULTS, midbandFlat: 0 }, LAMBDA0, R_M)
+    const zeroEnv: MidbandEnvelope = { slopeTan: 0, curvature: 0, downE: 1, downN: 0 }
+    expect(noEnvelope.envelope(zeroEnv)).toBe(0)
+    const envCoarse = noEnvelope.sample(d.x, d.y, d.z, zeroEnv, out, 400)
+    expect(envCoarse.heightMeters).toBe(0)
+    expect(envCoarse.octaveWeightSum).toBeCloseTo(2 / 3, 9)
+  })
+
+  it('отсечение: граница λ = cutoff включается (не строго меньше)', () => {
+    const boundary = new MidbandField(MIDBAND_DEFAULTS, LAMBDA0, R_M, 400)
+    expect(boundary.octaveCount).toBe(3) // λ₂ = 400 = cutoff, не короче — остаётся
+    const justOver = new MidbandField(MIDBAND_DEFAULTS, LAMBDA0, R_M, 400.0001)
+    expect(justOver.octaveCount).toBe(2) // λ₂ = 400 < 400.0001 — отсекается
+  })
 })
