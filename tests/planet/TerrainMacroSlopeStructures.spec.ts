@@ -75,9 +75,9 @@ describe('TerrainMacroDetail: направленные формы склона (
     expect((fn.match(/>= STREAK_PLANE_MIN_WEIGHT/g) ?? []).length).toBe(3)
     expect(fn).toContain('(n.y / STREAK_STRETCH) * d2 + n.z * p2')
     expect(fn).toContain('dot(uv, d2) / STREAK_STRETCH')
-    expect(fn).toContain('#define STREAK_CHART_POW 8.0')
+    expect(fn).not.toContain('STREAK_CHART_POW')
     expect(fn).toContain('vec3 streakChart(vec2 uv, vec2 d2, float seed)')
-    expect(fn).toContain('float w0 = pow(abs(dot(d2, e0)), STREAK_CHART_POW);')
+    expect(fn).toContain('float w0 = smoothstep(0.70710678, 1.0, abs(dot(d2, e0)));')
     expect(fn).toContain('uMacroStreakChart > 0.5 ? streakChart(qs.yz, d2 / l, 0.0) : streakPlane(qs.yz, d2 / l, 0.0)')
     expect(terrainMacroDetailUniforms).toContain('uniform float uMacroStreakChart;')
     // streakPlane — единственное тело шума струй: чарт зовёт его дважды с фиксированными eₖ

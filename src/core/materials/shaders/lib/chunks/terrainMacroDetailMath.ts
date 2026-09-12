@@ -137,19 +137,25 @@ export function streakGradient2D(
 }
 
 /** Фиксированные ориентации чарта струй: 4 направления через 45°; знак направления не важен. */
-export const STREAK_CHART_POW = 8
 export const STREAK_CHART_DIRS: ReadonlyArray<readonly [number, number]> = [0, 1, 2, 3].map((k) => [Math.cos((k * Math.PI) / 4), Math.sin((k * Math.PI) / 4)] as const)
 
-/** Два соседних направления чарта по углу d2 (сектор π/4) и их веса |dot|^POW, нормированные. */
+/** cos(45°): порог компактного носителя веса чарта — вес ровно 0 у дальней границы сектора. */
+const STREAK_CHART_COS45 = Math.SQRT1_2
+
+/**
+ * Два соседних направления чарта по углу d2 (сектор π/4) и их веса — компактный
+ * носитель smoothstep(cos45°, 1, |dot|): на границе сектора вес соседней пары
+ * точно 0, смена активной пары направлений бесшовна.
+ */
 export function streakChartBlend(d2: readonly [number, number]): { k0: number; k1: number; w0: number; w1: number } {
   let a = Math.atan2(d2[1], d2[0])
   if (a < 0) a += Math.PI
-  // Эпсилон против дрожания ULP ровно на границе сектора (d2 и -d2 дают чуть разный atan2)
+  // ULP-дрожание atan2 у границы сектора: d2 и −d2 обязаны дать один k0
   const k0 = Math.min(3, Math.floor((a + 1e-9) / (Math.PI / 4)))
   const k1 = k0 < 3 ? k0 + 1 : 0
   const e0 = STREAK_CHART_DIRS[k0], e1 = STREAK_CHART_DIRS[k1]
-  const w0 = Math.abs(d2[0] * e0[0] + d2[1] * e0[1]) ** STREAK_CHART_POW
-  const w1 = Math.abs(d2[0] * e1[0] + d2[1] * e1[1]) ** STREAK_CHART_POW
+  const w0 = smoothstep(STREAK_CHART_COS45, 1, Math.abs(d2[0] * e0[0] + d2[1] * e0[1]))
+  const w1 = smoothstep(STREAK_CHART_COS45, 1, Math.abs(d2[0] * e1[0] + d2[1] * e1[1]))
   const norm = Math.max(w0 + w1, 1e-6)
   return { k0, k1, w0: w0 / norm, w1: w1 / norm }
 }
