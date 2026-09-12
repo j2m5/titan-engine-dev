@@ -488,7 +488,8 @@ describe('buildTerrainPatchGeometry: атрибут height', () => {
       const r = dir.length()
       dir.divideScalar(r)
       field.dirToUv(dir, uv)
-      const expected = field.sampleMeters(uv.x, uv.y) + field.midbandSample(dir, uv.x, uv.y, out, field.vertexStepMeters(DEPTH, SEGMENTS)).heightMeters
+      const mapMeters = field.sampleMeters(uv.x, uv.y)
+      const expected = mapMeters + field.midbandSample(dir, uv.x, uv.y, mapMeters, out, field.vertexStepMeters(DEPTH, SEGMENTS)).heightMeters
       const metersFromPosition = (r / SpaceScale - R_KM) * 1000
       expect(Math.abs(metersFromPosition - expected)).toBeLessThan(2)
       maxLevelDiff = Math.max(maxLevelDiff, Math.abs(expected - field.heightMeters(dir)))

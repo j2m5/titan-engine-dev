@@ -44,17 +44,17 @@ describe('MidbandField: амплитуды, огибающая, бонды', () 
   })
 
   it('огибающая: равнина = flat, склон полной силы = flat + 1, кромка добавляет ridge·κ, кламп 2', () => {
-    expect(field.envelope(flatEnv)).toBeCloseTo(0.15, 9)
-    expect(field.envelope({ ...flatEnv, slopeTan: 0.15 })).toBeCloseTo(1.15, 9)
-    expect(field.envelope({ ...flatEnv, slopeTan: 0.15, curvature: 0.5 })).toBeCloseTo(1.65, 9)
-    expect(field.envelope({ ...flatEnv, slopeTan: 9, curvature: 9 })).toBe(MIDBAND_ENVELOPE_MAX)
-    expect(field.envelope({ ...flatEnv, curvature: -1 })).toBeCloseTo(0.15, 9) // вогнутость не усиливает
+    expect(field.envelope(flatEnv, 500)).toBeCloseTo(0.15, 9)
+    expect(field.envelope({ ...flatEnv, slopeTan: 0.15 }, 500)).toBeCloseTo(1.15, 9)
+    expect(field.envelope({ ...flatEnv, slopeTan: 0.15, curvature: 0.5 }, 500)).toBeCloseTo(1.65, 9)
+    expect(field.envelope({ ...flatEnv, slopeTan: 9, curvature: 9 }, 500)).toBe(MIDBAND_ENVELOPE_MAX)
+    expect(field.envelope({ ...flatEnv, curvature: -1 }, 500)).toBeCloseTo(0.15, 9) // вогнутость не усиливает
   })
 
   it('strength 0 — высота и наклон ровно 0', () => {
     const off = new MidbandField({ ...MIDBAND_DEFAULTS, midbandStrength: 0 }, LAMBDA0, R_M)
     for (const d of dirs(50)) {
-      const s = off.sample(d.x, d.y, d.z, wallEnv, out)
+      const s = off.sample(d.x, d.y, d.z, wallEnv, 500, out)
       expect(s.heightMeters).toBe(0)
       expect(s.tiltE).toBe(0)
       expect(s.tiltN).toBe(0)
@@ -67,9 +67,9 @@ describe('MidbandField: амплитуды, огибающая, бонды', () 
     let maxAbs = 0
     let maxTilt = 0
     for (const d of dirs(4000)) {
-      const a = field.sample(d.x, d.y, d.z, wallEnv, out).heightMeters
+      const a = field.sample(d.x, d.y, d.z, wallEnv, 500, out).heightMeters
       const t = Math.hypot(out.tiltE, out.tiltN)
-      expect(field.sample(d.x, d.y, d.z, wallEnv, out).heightMeters).toBe(a)
+      expect(field.sample(d.x, d.y, d.z, wallEnv, 500, out).heightMeters).toBe(a)
       maxAbs = Math.max(maxAbs, Math.abs(a))
       maxTilt = Math.max(maxTilt, t)
     }
@@ -86,15 +86,15 @@ describe('MidbandField: амплитуды, огибающая, бонды', () 
     for (const d of dirs(300)) {
       const e = new Vector3().crossVectors(up, d).normalize()
       const n = new Vector3().crossVectors(d, e)
-      const s = field.sample(d.x, d.y, d.z, wallEnv, out)
+      const s = field.sample(d.x, d.y, d.z, wallEnv, 500, out)
       const tE = s.tiltE
       const tN = s.tiltN
       const dE1 = d.clone().addScaledVector(e, hArc / R_M).normalize()
       const dE0 = d.clone().addScaledVector(e, -hArc / R_M).normalize()
-      const fdE = (field.sample(dE1.x, dE1.y, dE1.z, wallEnv, out).heightMeters - field.sample(dE0.x, dE0.y, dE0.z, wallEnv, out).heightMeters) / (2 * hArc)
+      const fdE = (field.sample(dE1.x, dE1.y, dE1.z, wallEnv, 500, out).heightMeters - field.sample(dE0.x, dE0.y, dE0.z, wallEnv, 500, out).heightMeters) / (2 * hArc)
       const dN1 = d.clone().addScaledVector(n, hArc / R_M).normalize()
       const dN0 = d.clone().addScaledVector(n, -hArc / R_M).normalize()
-      const fdN = (field.sample(dN1.x, dN1.y, dN1.z, wallEnv, out).heightMeters - field.sample(dN0.x, dN0.y, dN0.z, wallEnv, out).heightMeters) / (2 * hArc)
+      const fdN = (field.sample(dN1.x, dN1.y, dN1.z, wallEnv, 500, out).heightMeters - field.sample(dN0.x, dN0.y, dN0.z, wallEnv, 500, out).heightMeters) / (2 * hArc)
       worst = Math.max(worst, Math.abs(tE - fdE), Math.abs(tN - fdN))
     }
     expect(worst).toBeLessThan(2e-3)
@@ -142,7 +142,7 @@ describe('MidbandField: амплитуды, огибающая, бонды', () 
     const unitEnvelopeField = new MidbandField({ ...MIDBAND_DEFAULTS, midbandFlat: 1, midbandRidge: 0 }, LAMBDA0, R_M)
     let sum = 0
     const ds = dirs(4000)
-    for (const d of ds) sum += unitEnvelopeField.sample(d.x, d.y, d.z, flatEnv, out).heightMeters
+    for (const d of ds) sum += unitEnvelopeField.sample(d.x, d.y, d.z, flatEnv, 500, out).heightMeters
     const mean = sum / ds.length
     expect(Math.abs(mean)).toBeLessThan(0.05 * unitEnvelopeField.maxAmplitudeMeters)
   })
@@ -170,15 +170,15 @@ describe('MidbandField: веса октав по шагу вершин', () => {
 
   it('step 0 — бит-в-бит прежние числа; step = λ₂ (третья октава = 0) меняет высоту, octaveWeightSum = 2/3', () => {
     const d = dirs(1)[0]
-    const full = { ...field.sample(d.x, d.y, d.z, wallEnv, out) }
-    const again = { ...field.sample(d.x, d.y, d.z, wallEnv, out, 0) }
+    const full = { ...field.sample(d.x, d.y, d.z, wallEnv, 500, out) }
+    const again = { ...field.sample(d.x, d.y, d.z, wallEnv, 500, out, 0) }
     expect(again).toEqual(full)
     expect(full.octaveWeightSum).toBe(1)
-    const coarse = { ...field.sample(d.x, d.y, d.z, wallEnv, out, 400) }
+    const coarse = { ...field.sample(d.x, d.y, d.z, wallEnv, 500, out, 400) }
     expect(coarse.octaveWeightSum).toBeCloseTo(2 / 3, 9)
     expect(coarse.heightMeters).not.toBeCloseTo(full.heightMeters, 6)
     // при step ≥ λ₀ все октавы гаснут — полосы нет, вес 0
-    const gone = field.sample(d.x, d.y, d.z, wallEnv, out, 1600)
+    const gone = field.sample(d.x, d.y, d.z, wallEnv, 500, out, 1600)
     expect(gone.heightMeters).toBe(0)
     expect(gone.tiltE).toBe(0)
     expect(gone.octaveWeightSum).toBe(0)
@@ -192,15 +192,15 @@ describe('MidbandField: веса октав по шагу вершин', () => {
     for (const d of dirs(200)) {
       const e = new Vector3().crossVectors(up, d).normalize()
       const n = new Vector3().crossVectors(d, e)
-      const s = field.sample(d.x, d.y, d.z, wallEnv, out, step)
+      const s = field.sample(d.x, d.y, d.z, wallEnv, 500, out, step)
       const tE = s.tiltE
       const tN = s.tiltN
       const dE1 = d.clone().addScaledVector(e, hArc / R_M).normalize()
       const dE0 = d.clone().addScaledVector(e, -hArc / R_M).normalize()
-      const fdE = (field.sample(dE1.x, dE1.y, dE1.z, wallEnv, out, step).heightMeters - field.sample(dE0.x, dE0.y, dE0.z, wallEnv, out, step).heightMeters) / (2 * hArc)
+      const fdE = (field.sample(dE1.x, dE1.y, dE1.z, wallEnv, 500, out, step).heightMeters - field.sample(dE0.x, dE0.y, dE0.z, wallEnv, 500, out, step).heightMeters) / (2 * hArc)
       const dN1 = d.clone().addScaledVector(n, hArc / R_M).normalize()
       const dN0 = d.clone().addScaledVector(n, -hArc / R_M).normalize()
-      const fdN = (field.sample(dN1.x, dN1.y, dN1.z, wallEnv, out, step).heightMeters - field.sample(dN0.x, dN0.y, dN0.z, wallEnv, out, step).heightMeters) / (2 * hArc)
+      const fdN = (field.sample(dN1.x, dN1.y, dN1.z, wallEnv, 500, out, step).heightMeters - field.sample(dN0.x, dN0.y, dN0.z, wallEnv, 500, out, step).heightMeters) / (2 * hArc)
       worst = Math.max(worst, Math.abs(tE - fdE), Math.abs(tN - fdN))
     }
     expect(worst).toBeLessThan(2e-3)
@@ -231,17 +231,17 @@ describe('MidbandField: веса октав по шагу вершин', () => {
   it('octaveWeightSum считается до ранних выходов: strength 0 и нулевая огибающая всё равно отдают вес уровня', () => {
     const d = dirs(1)[0]
     const off = new MidbandField({ ...MIDBAND_DEFAULTS, midbandStrength: 0 }, LAMBDA0, R_M)
-    const offFull = off.sample(d.x, d.y, d.z, wallEnv, out, 0)
+    const offFull = off.sample(d.x, d.y, d.z, wallEnv, 500, out, 0)
     expect(offFull.heightMeters).toBe(0)
     expect(offFull.octaveWeightSum).toBe(1)
-    const offCoarse = off.sample(d.x, d.y, d.z, wallEnv, out, 400)
+    const offCoarse = off.sample(d.x, d.y, d.z, wallEnv, 500, out, 400)
     expect(offCoarse.heightMeters).toBe(0)
     expect(offCoarse.octaveWeightSum).toBeCloseTo(2 / 3, 9)
 
     const noEnvelope = new MidbandField({ ...MIDBAND_DEFAULTS, midbandFlat: 0 }, LAMBDA0, R_M)
     const zeroEnv: MidbandEnvelope = { slopeTan: 0, curvature: 0, downE: 1, downN: 0 }
-    expect(noEnvelope.envelope(zeroEnv)).toBe(0)
-    const envCoarse = noEnvelope.sample(d.x, d.y, d.z, zeroEnv, out, 400)
+    expect(noEnvelope.envelope(zeroEnv, 500)).toBe(0)
+    const envCoarse = noEnvelope.sample(d.x, d.y, d.z, zeroEnv, 500, out, 400)
     expect(envCoarse.heightMeters).toBe(0)
     expect(envCoarse.octaveWeightSum).toBeCloseTo(2 / 3, 9)
   })
@@ -251,5 +251,31 @@ describe('MidbandField: веса октав по шагу вершин', () => {
     expect(boundary.octaveCount).toBe(3) // λ₂ = 400 = cutoff, не короче — остаётся
     const justOver = new MidbandField(MIDBAND_DEFAULTS, LAMBDA0, R_M, 400.0001)
     expect(justOver.octaveCount).toBe(2) // λ₂ = 400 < 400.0001 — отсекается
+  })
+})
+
+describe('MidbandField: огибающая у уровня воды', () => {
+  const wet = new MidbandField({ ...MIDBAND_DEFAULTS, waterLevelMeters: 0, midbandWaterFadeMeters: null }, LAMBDA0, R_M)
+  const dry = new MidbandField(MIDBAND_DEFAULTS, LAMBDA0, R_M)
+  const out: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0 }
+
+  it('W = 2·A₀ по умолчанию; на уровне огибающая 0, на W — прежняя, между — smoothstep; без уровня — бит-в-бит', () => {
+    expect(wet.waterFadeMeters).toBeCloseTo(2 * 48, 9)
+    expect(dry.waterFadeMeters).toBe(0)
+    expect(wet.envelope(wallEnv, 0)).toBe(0)
+    expect(wet.envelope(wallEnv, 96)).toBeCloseTo(dry.envelope(wallEnv, 96), 12)
+    expect(wet.envelope(wallEnv, -96)).toBeCloseTo(dry.envelope(wallEnv, -96), 12)
+    expect(wet.envelope(wallEnv, 48)).toBeCloseTo(0.5 * dry.envelope(wallEnv, 48), 12)
+    expect(dry.envelope(wallEnv, 0)).toBeCloseTo(dry.envelope(wallEnv, 5000), 12)
+    const d = dirs(1)[0]
+    expect(wet.sample(d.x, d.y, d.z, wallEnv, 0, out).heightMeters).toBe(0)
+    expect(wet.sample(d.x, d.y, d.z, wallEnv, 500, out).heightMeters).toBeCloseTo(dry.sample(d.x, d.y, d.z, wallEnv, 500, out).heightMeters, 12)
+  })
+
+  it('явная ширина W перекрывает 2·A₀', () => {
+    const narrow = new MidbandField({ ...MIDBAND_DEFAULTS, waterLevelMeters: 10, midbandWaterFadeMeters: 20 }, LAMBDA0, R_M)
+    expect(narrow.waterFadeMeters).toBe(20)
+    expect(narrow.envelope(wallEnv, 10)).toBe(0)
+    expect(narrow.envelope(wallEnv, 30)).toBeCloseTo(dry.envelope(wallEnv, 30), 12)
   })
 })

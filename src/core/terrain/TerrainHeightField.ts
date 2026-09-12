@@ -523,7 +523,7 @@ class TerrainHeightField {
    * нужен нигде). Нули при отключённой полосе (`midband === null`).
    * `stepMeters` — шаг вершин уровня, по нему взвешены октавы; 0 — вся полоса.
    */
-  public midbandSample(dir: Vector3, u: number, v: number, out: MidbandSample, stepMeters: number = 0): MidbandSample {
+  public midbandSample(dir: Vector3, u: number, v: number, mapMeters: number, out: MidbandSample, stepMeters: number = 0): MidbandSample {
     if (this.midband === null || this.envelopeGrid === null) {
       out.heightMeters = 0
       out.tiltE = 0
@@ -535,14 +535,14 @@ class TerrainHeightField {
 
     const env = this.envelopeGrid.sample(u, v, this.midbandEnvScratch)
 
-    return this.midband.sample(dir.x, dir.y, dir.z, env, out, stepMeters)
+    return this.midband.sample(dir.x, dir.y, dir.z, env, mapMeters, out, stepMeters)
   }
 
   /** Канон высоты: карта + средняя полоса (`null` — полоса выключена, бит-в-бит карта). */
   public heightMeters(dir: Vector3): number {
     const uv = this.dirToUv(dir, this.uvScratch)
     const base = this.sampleMeters(uv.x, uv.y)
-    const sample = this.midbandSample(dir, uv.x, uv.y, this.midbandSampleScratch)
+    const sample = this.midbandSample(dir, uv.x, uv.y, base, this.midbandSampleScratch)
 
     return base + sample.heightMeters
   }
@@ -567,7 +567,8 @@ class TerrainHeightField {
   /** Наклон полосы (tan) в местном базисе E/N точки; `(0, 0)` без полосы. `stepMeters` — шаг вершин уровня, 0 — вся полоса. */
   public midbandTilt(dir: Vector3, out: Vector2, stepMeters: number = 0): Vector2 {
     const uv = this.dirToUv(dir, this.uvScratch)
-    const sample = this.midbandSample(dir, uv.x, uv.y, this.midbandSampleScratch, stepMeters)
+    const mapMeters = this.sampleMeters(uv.x, uv.y)
+    const sample = this.midbandSample(dir, uv.x, uv.y, mapMeters, this.midbandSampleScratch, stepMeters)
 
     return out.set(sample.tiltE, sample.tiltN)
   }

@@ -210,8 +210,8 @@ function writeTerrainPatchAttributes(
       // dirToUv один раз на вершину: surfaceRadiusUnits(dir) внутри тоже звал бы
       // его повторно (heightMeters → dirToUv) — 1.62М лишних atan2+acos на сборке
       field.dirToUv(dir, uv)
-      const band = field.midbandSample(dir, uv.x, uv.y, bandScratch, stepMeters)
       const mapMeters = field.sampleMeters(uv.x, uv.y)
+      const band = field.midbandSample(dir, uv.x, uv.y, mapMeters, bandScratch, stepMeters)
       const heightMeters = mapMeters + band.heightMeters
       // Фаза террас — от высоты КАРТЫ: бугры полосы (до ~84 м при шаге 150 м)
       // рисовали бы замкнутые горизонтали вокруг каждого бугра

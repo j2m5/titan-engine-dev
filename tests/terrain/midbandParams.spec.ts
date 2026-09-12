@@ -16,7 +16,9 @@ describe('midbandParams: ручки геометрии средней полос
       midbandFlat: 0.15,
       midbandSlopeRef: 0.15,
       midbandRidge: 1,
-      midbandWarp: 0.35
+      midbandWarp: 0.35,
+      waterLevelMeters: null,
+      midbandWaterFadeMeters: null
     })
     expect(resolveMidbandParams(undefined, 'Луна')).toEqual(MIDBAND_DEFAULTS)
     expect(resolveMidbandParams({}, 'Луна')).toEqual(MIDBAND_DEFAULTS)
@@ -47,5 +49,24 @@ describe('midbandParams: ручки геометрии средней полос
 
   it('midbandParamsOf читает data тела: у Луны (19) ручек нет — дефолты', () => {
     expect(midbandParamsOf(Actor.find(19)!)).toEqual(MIDBAND_DEFAULTS)
+  })
+
+  it('waterLevelMeters и midbandWaterFadeMeters: из data, дефолт null; входят в ключ кеша', () => {
+    const p = resolveMidbandParams({ waterLevelMeters: -667.2, midbandWaterFadeMeters: 120 }, 'x')
+    expect(p.waterLevelMeters).toBe(-667.2)
+    expect(p.midbandWaterFadeMeters).toBe(120)
+    const d = resolveMidbandParams({}, 'x')
+    expect(d.waterLevelMeters).toBeNull()
+    expect(d.midbandWaterFadeMeters).toBeNull()
+    expect(midbandCacheKey(p)).not.toBe(midbandCacheKey(d))
+    expect(midbandCacheKey(resolveMidbandParams({ waterLevelMeters: 0 }, 'x'))).not.toBe(midbandCacheKey(d))
+    expect(() => resolveMidbandParams({ midbandWaterFadeMeters: 0 }, 'x')).toThrow('> 0')
+    expect(() => resolveMidbandParams({ waterLevelMeters: 'a' }, 'x')).toThrow('не число')
+  })
+
+  it('midbandParamsOf: Земля (7) несёт уровень 0, Явин IV (83) −667.2, Луна (19) — null', () => {
+    expect(midbandParamsOf(Actor.find(7)!).waterLevelMeters).toBe(0)
+    expect(midbandParamsOf(Actor.find(83)!).waterLevelMeters).toBe(-667.2)
+    expect(midbandParamsOf(Actor.find(19)!).waterLevelMeters).toBeNull()
   })
 })

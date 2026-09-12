@@ -90,6 +90,8 @@ export class MidbandField {
   public readonly maxAmplitudeMeters: number
   public readonly slopeBound: number
   public readonly octaveCount: number
+  /** Ширина затухания огибающей у уровня воды, метры; 0 — уровня нет (огибающая от карты не зависит). */
+  public readonly waterFadeMeters: number
   private readonly domainScale: number
   private readonly strength: number
   private readonly east = new Vector3()
@@ -122,13 +124,17 @@ export class MidbandField {
     // наклон октавы i: A_i·|∇r|·2^i/λ₀ = A_i·GRAD_BOUND/λ_i; варп добавляет множитель (1 + warp·GRAD_BOUND·WARP_FREQUENCY) к производной домена
     const warpFactor = 1 + params.midbandWarp * MIDBAND_GRAD_BOUND * WARP_FREQUENCY
     this.slopeBound = scale * warpFactor * amplitudes.reduce((s, a, i) => s + (a * MIDBAND_GRAD_BOUND) / wavelengths[i], 0)
+    this.waterFadeMeters = params.waterLevelMeters === null ? 0 : (params.midbandWaterFadeMeters ?? 2 * amplitudes[0])
   }
 
-  public envelope(e: MidbandEnvelope): number {
+  public envelope(e: MidbandEnvelope, mapMeters: number): number {
     const slope = Math.min(1, Math.max(0, e.slopeTan / this.params.midbandSlopeRef))
     const ridge = this.params.midbandRidge * Math.max(0, e.curvature)
+    const base = Math.min(MIDBAND_ENVELOPE_MAX, Math.max(0, this.params.midbandFlat + slope + ridge))
+    if (this.params.waterLevelMeters === null) return base
 
-    return Math.min(MIDBAND_ENVELOPE_MAX, Math.max(0, this.params.midbandFlat + slope + ridge))
+    // у уреза полоса гаснет: кайма пены и мокрая кромка идут по карте, урез обязан совпасть с ними
+    return base * smoothstep(0, this.waterFadeMeters, Math.abs(mapMeters - this.params.waterLevelMeters))
   }
 
   /** strength·ENVELOPE_MAX·Σ(1 − wᵢ)·Aᵢ·P99 — амплитуда той части полосы, которой на шаге уровня нет: добавка к ε. */
@@ -140,7 +146,15 @@ export class MidbandField {
     return this.strength * MIDBAND_ENVELOPE_MAX * sum
   }
 
-  public sample(dirX: number, dirY: number, dirZ: number, e: MidbandEnvelope, out: MidbandSample, stepMeters: number = 0): MidbandSample {
+  public sample(
+    dirX: number,
+    dirY: number,
+    dirZ: number,
+    e: MidbandEnvelope,
+    mapMeters: number,
+    out: MidbandSample,
+    stepMeters: number = 0
+  ): MidbandSample {
     out.heightMeters = 0
     out.tiltE = 0
     out.tiltN = 0
@@ -151,7 +165,7 @@ export class MidbandField {
 
     if (this.strength === 0) return out
 
-    const env = this.envelope(e)
+    const env = this.envelope(e, mapMeters)
     if (env === 0) return out
     // шаг уровня грубее всех октав — полосы на нём нет
     if (weightSum === 0) return out

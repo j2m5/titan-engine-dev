@@ -109,9 +109,10 @@ describe('ε-пирамида с полосой B', () => {
     const d = new Vector3(0.3, 0.5, 0.81).normalize()
     const uv = field.dirToUv(d, new Vector2())
     const out = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0 }
-    const full = { ...field.midbandSample(d, uv.x, uv.y, out) }
-    const fine = { ...field.midbandSample(d, uv.x, uv.y, out, field.vertexStepMeters(8)) }
-    const coarse = { ...field.midbandSample(d, uv.x, uv.y, out, field.vertexStepMeters(2)) }
+    const mapMeters = field.sampleMeters(uv.x, uv.y)
+    const full = { ...field.midbandSample(d, uv.x, uv.y, mapMeters, out) }
+    const fine = { ...field.midbandSample(d, uv.x, uv.y, mapMeters, out, field.vertexStepMeters(8)) }
+    const coarse = { ...field.midbandSample(d, uv.x, uv.y, mapMeters, out, field.vertexStepMeters(2)) }
     expect(fine).toEqual(full)
     expect(coarse.octaveWeightSum).toBeLessThan(full.octaveWeightSum)
     const tilt = field.midbandTilt(d, new Vector2(), field.vertexStepMeters(2))
@@ -139,5 +140,32 @@ describe('ε-пирамида с полосой B', () => {
     const e6 = off.geometricErrorMeters(TERRAIN_MODEL_LEVEL)
     expect(off.geometricErrorMeters(TERRAIN_MODEL_LEVEL + 1)).toBeCloseTo(e6 / 2, 9)
     expect(off.geometricErrorMeters(TERRAIN_MODEL_LEVEL + 2)).toBeCloseTo(e6 / 4, 9)
+  })
+})
+
+describe('TerrainHeightField: огибающая у уровня воды', () => {
+  it('поле с уровнем воды: полоса на урезе гаснет, вдали от уреза — как без уровня', () => {
+    const wet = new TerrainHeightField(bumpyMap(), R_KM, { ...MIDBAND_DEFAULTS, waterLevelMeters: 4500, midbandWaterFadeMeters: 100 })
+    const dry = new TerrainHeightField(bumpyMap(), R_KM)
+    // bumpyMap не гарантирует точку с |h − 4500| < 1 м (проверено — таких нет
+    // среди 2000 направлений) — ближайшая к урезу точка ищется явно, порог < 20 м
+    let near: { dir: Vector3; h: number } | null = null
+    let far = 0
+    for (const d of dirs(2000)) {
+      const h = dry.mapHeightMeters(d)
+      const band = wet.heightMeters(d) - h
+      if (Math.abs(h - 4500) > 100) {
+        far++
+        expect(band).toBeCloseTo(dry.heightMeters(d) - h, 9)
+      }
+      if (Math.abs(h - 4500) < 20 && (near === null || Math.abs(h - 4500) < Math.abs(near.h - 4500))) {
+        near = { dir: d, h }
+      }
+    }
+    expect(far).toBeGreaterThan(100)
+    expect(near).not.toBeNull()
+    const dryBand = dry.heightMeters(near!.dir) - near!.h
+    const wetBand = wet.heightMeters(near!.dir) - near!.h
+    expect(Math.abs(wetBand)).toBeLessThan(0.2 * Math.abs(dryBand))
   })
 })
