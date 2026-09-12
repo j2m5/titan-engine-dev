@@ -36,7 +36,7 @@ describe('Данные средней полосы детали рельефа',
   })
 
   it('ручки форм склона в БД не проставлены (арка A — глобальные дефолты); 50 тел на macroStrength 0.25', () => {
-    const structureKeys = ['macroStreakStrength', 'macroStreakScaleKm', 'macroTerraceStrength', 'macroTerraceStepMeters']
+    const structureKeys = ['macroStreakStrength', 'macroStreakScaleKm', 'macroTerraceStrength', 'macroTerraceStepMeters', 'macroStreakChart']
     const withStructures = RenderingObjects.filter((row: IRenderingObject): boolean =>
       structureKeys.some((key: string): boolean => (row.data as Record<string, unknown> | undefined)?.[key] !== undefined)
     )

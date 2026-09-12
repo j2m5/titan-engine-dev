@@ -152,6 +152,7 @@ interface PlanetUniforms {
   uMacroTerraceStrength: number
   uMacroTerraceStepMeters: number
   uMacroStructureSlope: Vector2
+  uMacroStreakChart: number
   uDiffuseTexelSize: Vector2
   uBodyRadiusUnits: number
   uWaterLevelMeters: number
@@ -315,6 +316,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uMacroTerraceStrength: new Uniform(slopeStructures.macroTerraceStrength),
       uMacroTerraceStepMeters: new Uniform(slopeStructures.macroTerraceStepMeters),
       uMacroStructureSlope: new Uniform(new Vector2(slopeStructures.macroStructureSlopeStart, slopeStructures.macroStructureSlopeFull)),
+      uMacroStreakChart: new Uniform(slopeStructures.macroStreakChart),
       uDiffuseTexelSize: new Uniform(new Vector2()),
       uBodyRadiusUnits: new Uniform(toThreeJSUnits(radiusKm)),
       // Мокрая кромка берега — инертна без USE_WATER_EDGE (PlanetMaterial)

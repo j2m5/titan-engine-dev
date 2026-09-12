@@ -14,7 +14,10 @@ import {
   terraceCoverage,
   terraceProfile,
   triplanarWeights,
-  streakGradient2D
+  streakGradient2D,
+  STREAK_CHART_DIRS,
+  STREAK_CHART_POW,
+  streakChartBlend
 } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
 
 describe('terrainMacroDetailMath: конец fade от радиуса и ширины диффуза', () => {
@@ -141,5 +144,44 @@ describe('terrainMacroDetailMath: направленные формы склон
     const r = streakGradient2D([0, 1], [0.6, 0.3])
     expect(r[0]).toBeCloseTo(-0.3, 9)
     expect(r[1]).toBeCloseTo(0.6 / STREAK_STRETCH, 9)
+  })
+})
+
+describe('streakChartBlend: фиксированные ориентации чарта струй', () => {
+  it('4 направления через 45°, POW 8', () => {
+    expect(STREAK_CHART_POW).toBe(8)
+    expect(STREAK_CHART_DIRS.length).toBe(4)
+    for (let k = 0; k < 4; k++) {
+      const a = (k * Math.PI) / 4
+      expect(STREAK_CHART_DIRS[k][0]).toBeCloseTo(Math.cos(a), 12)
+      expect(STREAK_CHART_DIRS[k][1]).toBeCloseTo(Math.sin(a), 12)
+    }
+  })
+
+  it('d2 = eₖ → сектор k с весом ≈ 1; веса нормированы; знак d2 не важен', () => {
+    for (let k = 0; k < 4; k++) {
+      const e = STREAK_CHART_DIRS[k]
+      const b = streakChartBlend(e)
+      expect(b.w0 + b.w1).toBeCloseTo(1, 12)
+      const wk = b.k0 === k ? b.w0 : b.k1 === k ? b.w1 : 0
+      // потолок при 45°-разносе и POW 8: соседний dot = cos45°, вес 1/(1+cos45°⁸) = 16/17
+      expect(wk).toBeGreaterThan(0.9)
+      const bNeg = streakChartBlend([-e[0], -e[1]])
+      expect(bNeg.k0).toBe(b.k0)
+      expect(bNeg.k1).toBe(b.k1)
+      expect(bNeg.w0).toBeCloseTo(b.w0, 12)
+    }
+  })
+
+  it('непрерывность на границах секторов и на шве 0/π: веса меняются гладко при повороте d2', () => {
+    let prev = streakChartBlend([Math.cos(-0.01), Math.sin(-0.01)])
+    for (let a = 0; a <= Math.PI + 0.02; a += 0.01) {
+      const b = streakChartBlend([Math.cos(a), Math.sin(a)])
+      // на каждом из 4 направлений активная пара сменяется: третье направление входит/выходит
+      // со своим потолочным весом (1/17 ≈ 0.059) — скачок, не выше него, на шаге 0.01 рад
+      const contrib = (x: ReturnType<typeof streakChartBlend>, k: number): number => (x.k0 === k ? x.w0 : x.k1 === k ? x.w1 : 0)
+      for (let k = 0; k < 4; k++) expect(Math.abs(contrib(b, k) - contrib(prev, k))).toBeLessThan(0.07)
+      prev = b
+    }
   })
 })

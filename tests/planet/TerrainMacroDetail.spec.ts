@@ -24,6 +24,7 @@ describe('TerrainMacroDetail: контракт чанка', () => {
       'uniform float uMacroTerraceStrength;',
       'uniform float uMacroTerraceStepMeters;',
       'uniform vec2 uMacroStructureSlope;',
+      'uniform float uMacroStreakChart;',
       'uniform float uMidbandShade;'
       // varying float vHeightMeters переехал в шаблон под объединённый гейт кромки
     ]) {

@@ -12,6 +12,8 @@ export interface MacroSlopeStructureParams {
   macroStructureSlopeStart: number
   /** Уклон (tan) полной силы форм; между start и full — smoothstep. */
   macroStructureSlopeFull: number
+  /** Чарт струй: 1 — фиксированные ориентации, 0 — прежний вращающийся. */
+  macroStreakChart: number
 }
 
 const DEFAULTS: MacroSlopeStructureParams = {
@@ -21,7 +23,8 @@ const DEFAULTS: MacroSlopeStructureParams = {
   macroTerraceStepMeters: 150,
   // 0.2..0.45 tan ≈ 11°..24°: стены кратеров и каньонов, не холмистость равнин
   macroStructureSlopeStart: 0.2,
-  macroStructureSlopeFull: 0.45
+  macroStructureSlopeFull: 0.45,
+  macroStreakChart: 1
 }
 
 type Raw = { [K in keyof MacroSlopeStructureParams]?: unknown }
@@ -43,7 +46,8 @@ export function resolveMacroSlopeStructureParams(data: Raw | undefined, context:
     macroTerraceStrength: read('macroTerraceStrength'),
     macroTerraceStepMeters: read('macroTerraceStepMeters'),
     macroStructureSlopeStart: read('macroStructureSlopeStart'),
-    macroStructureSlopeFull: read('macroStructureSlopeFull')
+    macroStructureSlopeFull: read('macroStructureSlopeFull'),
+    macroStreakChart: read('macroStreakChart')
   }
 
   if (params.macroStreakStrength < 0) throw new Error(`macroSlopeStructures ${context}: macroStreakStrength должен быть >= 0: ${params.macroStreakStrength}`)
@@ -52,6 +56,7 @@ export function resolveMacroSlopeStructureParams(data: Raw | undefined, context:
   if (params.macroTerraceStepMeters <= 0) throw new Error(`macroSlopeStructures ${context}: macroTerraceStepMeters должен быть > 0: ${params.macroTerraceStepMeters}`)
   if (params.macroStructureSlopeStart < 0) throw new Error(`macroSlopeStructures ${context}: macroStructureSlopeStart должен быть >= 0: ${params.macroStructureSlopeStart}`)
   if (params.macroStructureSlopeFull <= params.macroStructureSlopeStart) throw new Error(`macroSlopeStructures ${context}: macroStructureSlopeFull должен быть > macroStructureSlopeStart: ${params.macroStructureSlopeFull} <= ${params.macroStructureSlopeStart}`)
+  if (params.macroStreakChart !== 0 && params.macroStreakChart !== 1) throw new Error(`macroSlopeStructures ${context}: macroStreakChart должен быть 0 или 1: ${params.macroStreakChart}`)
 
   return params
 }

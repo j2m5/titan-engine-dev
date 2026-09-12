@@ -9,7 +9,8 @@ describe('resolveMacroSlopeStructureParams: ручки форм склона', (
       macroTerraceStrength: 0.5,
       macroTerraceStepMeters: 150,
       macroStructureSlopeStart: 0.2,
-      macroStructureSlopeFull: 0.45
+      macroStructureSlopeFull: 0.45,
+      macroStreakChart: 1
     })
     expect(resolveMacroSlopeStructureParams(undefined, 'Луна').macroStreakStrength).toBe(0.6)
   })
@@ -29,5 +30,12 @@ describe('resolveMacroSlopeStructureParams: ручки форм склона', (
     expect(() => resolveMacroSlopeStructureParams({ macroTerraceStepMeters: -5 }, 'Титания')).toThrow(/macroTerraceStepMeters/)
     expect(() => resolveMacroSlopeStructureParams({ macroTerraceStrength: 'x' }, 'Титания')).toThrow(/не число/)
     expect(() => resolveMacroSlopeStructureParams({ macroTerraceStrength: -1 }, 'Титания')).toThrow(/macroTerraceStrength/)
+    expect(() => resolveMacroSlopeStructureParams({ macroStreakChart: 2 }, 'Титания')).toThrow(/0 или 1/)
+  })
+
+  it('macroStreakChart: дефолт 1, заданные значения 0/1 доезжают', () => {
+    expect(resolveMacroSlopeStructureParams({}, 'Луна').macroStreakChart).toBe(1)
+    expect(resolveMacroSlopeStructureParams({ macroStreakChart: 0 }, 'Луна').macroStreakChart).toBe(0)
+    expect(resolveMacroSlopeStructureParams({ macroStreakChart: 1 }, 'Луна').macroStreakChart).toBe(1)
   })
 })

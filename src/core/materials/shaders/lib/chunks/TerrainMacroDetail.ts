@@ -28,6 +28,8 @@ export const terrainMacroDetailUniforms = /* glsl */ `
   uniform float uMacroTerraceStepMeters;
   // Гейт форм по АБСОЛЮТНОМУ уклону (tan): x — начало, y — полная сила
   uniform vec2 uMacroStructureSlope;
+  // Чарт струй: 1 — фиксированные ориентации (струи не вращаются с током), 0 — прежний, повёрнутый по току
+  uniform float uMacroStreakChart;
   // Альбедо полосы B от её геометрии (vMidShade.x); 0 — прежний вид
   uniform float uMidbandShade;
 `
@@ -43,6 +45,7 @@ export const terrainMacroDetailFunctions = /* glsl */ `
   #define MACRO_RELIEF_ASPECT_STREAK 0.08
   #define STREAK_PLANE_POW 8.0
   #define STREAK_PLANE_MIN_WEIGHT 0.02
+  #define STREAK_CHART_POW 8.0
   #define TERRACE_WOBBLE 0.7
   #define TERRACE_RISER 0.3
   #define TERRACE_SHADE 0.07
@@ -62,12 +65,33 @@ export const terrainMacroDetailFunctions = /* glsl */ `
 
   // Струи одной плоскости трипланара: uv — координаты плоскости в периодах,
   // d2 — единичная проекция «вниз по склону». x — значение, yz — градиент по uv.
-  // Цепное правило при замороженном d2 (поворот базиса по склону не
-  // дифференцируется — d меняется на масштабе текселя ≥ 1.3 км против периода 0.5 км)
+  // Цепное правило при замороженном d2
   vec3 streakPlane(vec2 uv, vec2 d2, float seed) {
     vec2 p2 = vec2(-d2.y, d2.x);
     vec4 n = snoiseGrad(vec3(dot(uv, d2) / STREAK_STRETCH, dot(uv, p2), seed));
     return vec3(n.x, (n.y / STREAK_STRETCH) * d2 + n.z * p2);
+  }
+
+  vec2 streakChartDir(int k) {
+    return k == 0 ? vec2(1.0, 0.0) : k == 1 ? vec2(0.70710678, 0.70710678) : k == 2 ? vec2(0.0, 1.0) : vec2(-0.70710678, 0.70710678);
+  }
+
+  // Чарт с фиксированными ориентациями: базис шума не вращается вместе с током —
+  // при |uv| ≈ R/P поворот базиса на δθ сдвигал аргумент на |uv|·δθ, и на стене
+  // кратера радиуса r частота вдоль контура росла в R/r раз. Два соседних
+  // направления (сектор π/4), веса |dot|^POW; веса константны при дифференцировании
+  vec3 streakChart(vec2 uv, vec2 d2, float seed) {
+    float a = atan(d2.y, d2.x);
+    if (a < 0.0) a += 3.14159265;
+    // эпсилон против дрожания ровно на границе сектора (d2 и -d2 — тот же чарт)
+    int k0 = int(min(floor((a + 1e-6) / 0.78539816), 3.0));
+    int k1 = k0 < 3 ? k0 + 1 : 0;
+    vec2 e0 = streakChartDir(k0);
+    vec2 e1 = streakChartDir(k1);
+    float w0 = pow(abs(dot(d2, e0)), STREAK_CHART_POW);
+    float w1 = pow(abs(dot(d2, e1)), STREAK_CHART_POW);
+    float norm = max(w0 + w1, 1e-6);
+    return (w0 * streakPlane(uv, e0, seed + 7.0 * float(k0)) + w1 * streakPlane(uv, e1, seed + 7.0 * float(k1))) / norm;
   }
 
   // Струи (трипланар, повёрнутый по потоку) + террасы (фаза по высоте).
@@ -101,7 +125,7 @@ export const terrainMacroDetailFunctions = /* glsl */ `
         vec2 d2 = d.yz;
         float l = length(d2);
         if (l > 1e-3) {
-          vec3 r = streakPlane(qs.yz, d2 / l, 0.0);
+          vec3 r = uMacroStreakChart > 0.5 ? streakChart(qs.yz, d2 / l, 0.0) : streakPlane(qs.yz, d2 / l, 0.0);
           value += w3.x * r.x;
           g += w3.x * vec3(0.0, r.y, r.z);
         }
@@ -111,7 +135,7 @@ export const terrainMacroDetailFunctions = /* glsl */ `
         vec2 d2 = d.zx;
         float l = length(d2);
         if (l > 1e-3) {
-          vec3 r = streakPlane(qs.zx, d2 / l, 17.0);
+          vec3 r = uMacroStreakChart > 0.5 ? streakChart(qs.zx, d2 / l, 17.0) : streakPlane(qs.zx, d2 / l, 17.0);
           value += w3.y * r.x;
           g += w3.y * vec3(r.z, 0.0, r.y);
         }
@@ -121,7 +145,7 @@ export const terrainMacroDetailFunctions = /* glsl */ `
         vec2 d2 = d.xy;
         float l = length(d2);
         if (l > 1e-3) {
-          vec3 r = streakPlane(qs.xy, d2 / l, 31.0);
+          vec3 r = uMacroStreakChart > 0.5 ? streakChart(qs.xy, d2 / l, 31.0) : streakPlane(qs.xy, d2 / l, 31.0);
           value += w3.z * r.x;
           g += w3.z * vec3(r.y, r.z, 0.0);
         }
