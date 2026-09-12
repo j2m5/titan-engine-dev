@@ -61,7 +61,11 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.ResourceObserver),
           c.get(Tokens.AtmosphereRegistry),
           c.get(Tokens.DepthVolumeRegistry),
-          c.get(Tokens.ProceduralSurfaceGenerator)
+          c.get(Tokens.ProceduralSurfaceGenerator),
+          undefined,
+          // свап поверхности по готовности рельефа идёт вне тика HeightFieldGate:
+          // снимок наблюдения пересобирать больше некому (см. докблок параметра)
+          () => c.get(Tokens.SceneObserver).refreshObservableObjects()
         )
     )
 

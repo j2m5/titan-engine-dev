@@ -3,6 +3,7 @@ import { Actor } from '@/core/models/Actor'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
+import type { TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { detailWrapFor } from '@/core/terrain/detailWrap'
 import { readRenderingData } from '@/core/helpers/renderingData'
@@ -64,7 +65,9 @@ class TerrainSphere extends TerrainPatchGroup {
     atmosphereRegistry?: AtmosphereRegistry,
     proceduralSurfaceGenerator?: ProceduralSurfaceGenerator,
     // инъекция часов бюджета построек (тест) — прокидка до TerrainPatchGroup.nowMs
-    nowMs?: () => number
+    nowMs?: () => number,
+    // строитель патчей: дефолт синхронный, воркерный приходит от RenderableFactory
+    builder?: TerrainPatchBuilder
   ) {
     assertProceduralWiring(model, proceduralSurfaceGenerator)
 
@@ -80,7 +83,7 @@ class TerrainSphere extends TerrainPatchGroup {
     const sharedMaterial = new PlanetMaterial(model, atmosphereRegistry)
     const waterLevelMeters = readWaterLevelMeters(model)
     const detailWrap = detailWrapFor(readRenderingData<IPlanetRenderingObject>(model))
-    super(field, sharedMaterial, renderer, undefined, waterLevelMeters, detailWrap, nowMs)
+    super(field, sharedMaterial, renderer, undefined, waterLevelMeters, detailWrap, nowMs, builder)
     this.model = model
     this.sharedMaterial = sharedMaterial
 

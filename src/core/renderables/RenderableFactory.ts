@@ -45,6 +45,7 @@ import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfa
 import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { RenderableObject3D } from '@/core/renderables/types'
 import { syncRenderableMaterials } from '@/core/materials/materialSync'
+import { SyncTerrainPatchBuilder, type TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 
 class RenderableFactory {
   public constructor(
@@ -54,8 +55,19 @@ class RenderableFactory {
     private readonly depthVolumeRegistry: DepthVolumeRegistry,
     // Опционален: тестовые сборки фабрики без процедурных тел его не заводят
     // (см. TerrainSphere — тот же гейт по data.proceduralSurface, no-op без него).
-    private readonly proceduralSurfaceGenerator?: ProceduralSurfaceGenerator
+    private readonly proceduralSurfaceGenerator?: ProceduralSurfaceGenerator,
+    /** Строитель патчей рельефа: дефолт синхронный (прежнее поведение), воркерный — от контейнера. */
+    private readonly terrainPatchBuilder: TerrainPatchBuilder = new SyncTerrainPatchBuilder(),
+    /**
+     * Пересбор снимка наблюдения после свапа ВНЕ тика гейта (свап по
+     * готовности начального набора). Свапы внутри тика пересобирает сам
+     * HeightFieldGate по возврату true — здесь возврата нет, звать некому.
+     */
+    private readonly refreshObservation: () => void = () => {}
   ) {}
+
+  /** Узлы, чей рельеф построен не до конца: легаси-сфера на экране, свап ждёт готовности. */
+  private readonly pendingUpgrades = new Map<DynamicNode, TerrainSphere>()
 
   public make(actor: Actor): Object3D {
     switch (actor.getAttribute('categoryId', -1)) {
@@ -211,7 +223,9 @@ class RenderableFactory {
       terrainHeightFieldFor(heightMap, actor.physicalObject!.getAttribute('radius')!, midbandParamsOf(actor)),
       this.renderer,
       this.atmosphereRegistry,
-      this.proceduralSurfaceGenerator
+      this.proceduralSurfaceGenerator,
+      undefined,
+      this.terrainPatchBuilder
     )
 
     // Гейт водной оболочки: обе ручки разом — карта высот (без неё нет
@@ -299,12 +313,19 @@ class RenderableFactory {
    * buildPlanetSurface всё равно вернул бы легаси Planet (SphereGeometry
    * 256×256 + PlanetMaterial), который тут же ушёл бы в мусор проверкой
    * ниже — тяжёлая аллокация ради значения, которое немедленно выбрасывается.
+   *
+   * Возвращает true ТОЛЬКО если свап случился в этом вызове. При асинхронном
+   * строителе начальный набор патчей строится вне кадра, и до его готовности
+   * возврат false: легаси-сфера остаётся на экране (подлёт без заминки и без
+   * дыр), свап делает whenReady. Повторный вызов на ждущем узле — no-op,
+   * второй поверхности не строит.
    */
   public upgradePlanetToTerrain(node: DynamicNode): boolean {
     const lod = node.children.find((child): child is LOD => child instanceof LOD)
 
     if (!lod || !lod.levels.length) return false
     if (lod.levels[0].object instanceof TerrainSphere) return false
+    if (this.pendingUpgrades.has(node)) return false
 
     const heightPath: string | undefined = heightPathOf(node.model)
 
@@ -312,9 +333,30 @@ class RenderableFactory {
 
     // Карта в реестре подтверждена выше — buildPlanetSurface заведомо
     // вернёт TerrainSphere.
-    this.swapSurface(node, this.buildPlanetSurface(node.model))
+    const surface: RenderableObject3D = this.buildPlanetSurface(node.model)
 
-    return true
+    if (!(surface instanceof TerrainSphere) || surface.ready) {
+      this.swapSurface(node, surface)
+
+      return true
+    }
+
+    this.pendingUpgrades.set(node, surface)
+    surface.whenReady((): void => {
+      // отменён даунгрейдом: сфера уже задиспожена, узел мог начать новый апгрейд
+      if (this.pendingUpgrades.get(node) !== surface) return
+
+      this.pendingUpgrades.delete(node)
+      this.swapSurface(node, surface)
+      this.refreshObservation()
+    })
+
+    return false
+  }
+
+  /** Узел ждёт готовности начального набора: апгрейд запрошен, свапа ещё не было. */
+  public hasPendingUpgrade(node: DynamicNode): boolean {
+    return this.pendingUpgrades.has(node)
   }
 
   /**
@@ -329,8 +371,25 @@ class RenderableFactory {
     if (node.renderable) syncRenderableMaterials(node.renderable)
   }
 
-  /** Карта отпущена — тело возвращается на легаси-сферу. Идемпотентен. */
+  /**
+   * Карта отпущена — тело возвращается на легаси-сферу. Идемпотентен.
+   *
+   * Ждущий апгрейд отменяется здесь же: свапа ещё не было, легаси-сфера и так
+   * на экране, поэтому возврат false (менять в снимке наблюдения нечего).
+   * Недостроенная TerrainSphere разбирается — pending-слоты пула и ссылку на
+   * поле высот отпускает её dispose (TerrainPatchGroup), приходы патчей после
+   * него тихо отбрасываются.
+   */
   public downgradeTerrainToPlanet(node: DynamicNode): boolean {
+    const pendingSurface: TerrainSphere | undefined = this.pendingUpgrades.get(node)
+
+    if (pendingSurface) {
+      this.pendingUpgrades.delete(node)
+      disposeSceneTree(pendingSurface)
+
+      return false
+    }
+
     const lod = node.children.find((child): child is LOD => child instanceof LOD)
 
     if (!lod || !lod.levels.length) return false
