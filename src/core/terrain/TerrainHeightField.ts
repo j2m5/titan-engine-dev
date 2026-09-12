@@ -351,7 +351,7 @@ class TerrainHeightField {
     this.nodeErrorMetersPyramid = aux.nodeErrorMetersPyramid
 
     if (midbandParams.midbandStrength > 0) {
-      // октава короче 2·шага самого мелкого уровня не представима ни одной сеткой отбора — не строится вовсе
+      // λ < 2·шага L8: на самом мелком уровне вес уже < 1 — октава алиасит везде, не строится
       this.midband = new MidbandField(
         midbandParams,
         midbandWavelengthMeters(this.equatorTexelMeters, midbandParams),

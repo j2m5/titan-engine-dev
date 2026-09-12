@@ -141,7 +141,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uSteepTintNorm = new Uniform(new Vector2(1, 1))
 
     // Альбедо полосы B от её геометрии: гребни светлее, лощины темнее (ручка
-    // пиксельная, в ключ кеша поля высот не входит). Гейт наклона fbm теперь
+    // пиксельная, в ключ кеша поля высот не входит). Гейт наклона fbm —
     // не юниформ, а доля октав уровня в атрибуте midShade.y.
     this.uniforms.uMidbandShade = new Uniform(midbandParamsOf(model).midbandShade)
   }

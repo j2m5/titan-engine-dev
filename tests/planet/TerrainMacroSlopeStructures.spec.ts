@@ -84,10 +84,11 @@ describe('TerrainMacroDetail: направленные формы склона (
     expect((fn.match(/snoiseGrad\(/g) ?? []).length).toBe(2)
   })
 
-  it('сиды плоскостей струй 0/101/211 на обеих ветках тернарника; наборы {seed + 7k} не пересекаются', () => {
-    // yz/0.0 пинуется выше; здесь — оставшиеся две плоскости на обеих ветках
-    expect(fn).toContain('uMacroStreakChart > 0.5 ? streakChart(qs.zx, d2 / l, 101.0) : streakPlane(qs.zx, d2 / l, 101.0)')
-    expect(fn).toContain('uMacroStreakChart > 0.5 ? streakChart(qs.xy, d2 / l, 211.0) : streakPlane(qs.xy, d2 / l, 211.0)')
+  it('сиды плоскостей струй: чарт 0/101/211, легаси-ветка отката 0/17/31; наборы {seed + 7k} чарта не пересекаются', () => {
+    // yz/0.0 пинуется выше (общий сид на обеих ветках); здесь — оставшиеся две плоскости
+    expect(fn).toContain('uMacroStreakChart > 0.5 ? streakChart(qs.zx, d2 / l, 101.0) : streakPlane(qs.zx, d2 / l, 17.0)')
+    expect(fn).toContain('uMacroStreakChart > 0.5 ? streakChart(qs.xy, d2 / l, 211.0) : streakPlane(qs.xy, d2 / l, 31.0)')
+    // коллизия {seed + 7k} касается только ветки чарта (streakPlane шаг 7 не использует)
     const sets = [0, 101, 211].map((seed) => [0, 1, 2, 3].map((k) => seed + 7 * k))
     const flat = sets.flat()
     expect(new Set(flat).size).toBe(flat.length)
