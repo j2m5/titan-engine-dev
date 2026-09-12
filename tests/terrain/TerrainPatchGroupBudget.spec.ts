@@ -3,6 +3,7 @@ import { Frustum, Matrix4, Mesh, PerspectiveCamera, Texture, type Mesh as ThreeM
 import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { TerrainPatchGroup, effectiveSplitPixels, POOL_PRESSURE_START, POOL_PRESSURE_GAIN } from '@/core/terrain/TerrainPatchGroup'
+import type { TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { Actor } from '@/core/models/Actor'
@@ -29,9 +30,10 @@ class TestPatchGroup extends TerrainPatchGroup {
     material: PlanetMaterial,
     renderer: WebGLRenderer,
     maxLivePatches?: number,
-    nowMs?: () => number
+    nowMs?: () => number,
+    builder?: TerrainPatchBuilder
   ) {
-    super(field, material, renderer, maxLivePatches, undefined, undefined, nowMs)
+    super(field, material, renderer, maxLivePatches, undefined, undefined, nowMs, builder)
   }
 }
 

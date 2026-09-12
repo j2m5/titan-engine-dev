@@ -6,7 +6,12 @@ import type { UpdateContext } from '@/core/UpdateContext'
 import { disposeSceneTree } from '@/core/lifecycle/disposeSceneTree'
 import { CLEARANCE_MARGIN_METERS, TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { CUBE_FACES, TERRAIN_PATCH_SEGMENTS } from '@/core/terrain/cubeSphere'
-import { buildTerrainPatchInto } from '@/core/terrain/terrainPatchGeometry'
+import { applyPatchResult } from '@/core/terrain/terrainPatchGeometry'
+import {
+  SyncTerrainPatchBuilder,
+  type PatchBuildResult,
+  type TerrainPatchBuilder
+} from '@/core/terrain/terrainPatchBuilder'
 import { detailWrapFor, type DetailWrap } from '@/core/terrain/detailWrap'
 import { TerrainPatchPool, type PatchHandle } from '@/core/terrain/TerrainPatchPool'
 import {
@@ -35,6 +40,14 @@ export function effectiveSplitPixels(base: number, live: number, max: number): n
   return base * (1 + POOL_PRESSURE_GAIN * Math.max(0, (pressure - POOL_PRESSURE_START) / (1 - POOL_PRESSURE_START)))
 }
 
+/** Запрошенный, но не пришедший патч: слот уже захвачен, меша в сцене ещё нет. */
+interface PendingEntry {
+  handle: PatchHandle
+  address: TerrainNodeAddress
+  requestId: number
+  initial: boolean
+}
+
 /**
  * Общая машинерия квадродерева патчей кубосферы: пул, отбор по SSE
  * (selectTerrainNodes), гистерезис split/merge без дыр, юбки, dispose.
@@ -45,9 +58,17 @@ export function effectiveSplitPixels(base: number, live: number, max: number): n
  *
  * Каждый кадр selectTerrainNodes отбирает желаемый набор листьев по
  * экранной ошибке, updateObject доводит фактические патчи (пул, split/merge
- * без аллокаций геометрий) до этого набора с временны́м бюджетом построек за
- * кадр (terrain.lod.patchBuildBudgetMs) — минимум одна постройка происходит
- * всегда, дальше цикл идёт, пока не исчерпан бюджет.
+ * без аллокаций геометрий) до этого набора, ЗАПРАШИВАЯ постройки у строителя
+ * (TerrainPatchBuilder): синхронный строит внутри запроса (минимум одна
+ * постройка за кадр, дальше — пока не исчерпан terrain.lod.patchBuildBudgetMs),
+ * воркерный отвечает позже, и очередь правит потолок terrain.lod.buildInFlight.
+ *
+ * pending — запрошенные, но не пришедшие патчи: слот пула захвачен сразу (его
+ * видит клапан давления, и повторного запроса того же узла не будет), но меш
+ * НЕ в сцене и НЕ в live — покрытием такой узел не считается, заменяемый
+ * родитель живёт до прихода. Приход пишет результат в слот, добавляет меш
+ * скрытым (своп его покажет) и переводит узел в live; узел, успевший выйти из
+ * желаемого набора, возвращает слот в пул.
  *
  * Инвариант «без дыр»: показанный узел, переставший быть желаемым,
  * освобождается ТОЛЬКО когда его замена готова — либо все желаемые листья
@@ -62,19 +83,36 @@ export function effectiveSplitPixels(base: number, live: number, max: number): n
  * база сама его наружу не выставляет. RTC: вершины патча относительны его
  * центру, центр — в position меша.
  *
- * dispose() освобождает пул (свободные слоты + общий индекс) и живые меши
- * (disposeSceneTree на каждый — геометрия/материал, материал общий и
- * dispose идемпотентен). Метод и есть тот самый Disposable, которого при
+ * dispose() возвращает в пул слоты живых и запрошенных патчей (после него
+ * приход результата ничего не пишет), освобождает пул (свободные слоты +
+ * общий индекс) и живые меши (disposeSceneTree на каждый — геометрия/материал,
+ * материал общий и dispose идемпотентен). Метод и есть тот самый Disposable, которого при
  * обходе сцены дожидается disposeSceneTree родителя — двойной dispose узлов,
  * уже освобождённых им напрямую, безвреден по тому же контракту.
  *
  * Геометрия патча несёт также detailPos/detailPos2 — домен детальных слоёв
  * (см. detailWrap.ts), периоды которого приходят сюда параметром detailWrap.
  */
+/** Запрошенный, но не пришедший патч: слот уже захвачен, меша в сцене ещё нет. */
+interface PendingEntry {
+  handle: PatchHandle
+  address: TerrainNodeAddress
+  requestId: number
+  initial: boolean
+}
+
 abstract class TerrainPatchGroup extends Group {
   private readonly field: TerrainHeightField
   private readonly pool: TerrainPatchPool
   private readonly live = new Map<number, { handle: PatchHandle; address: TerrainNodeAddress }>()
+  private readonly pending = new Map<number, PendingEntry>()
+  // номер запроса отличает приход «своего» задания от прихода задания, чей
+  // узел уже успел уйти и вернуться (в pending лежит уже ДРУГОЙ handle)
+  private nextRequestId = 1
+  private lastWanted: ReadonlyMap<number, TerrainLeaf> = new Map()
+  private initialRemaining: number
+  private readonly readyCallbacks: Array<() => void> = []
+  private disposed = false
   private persistedSplit: ReadonlySet<number> = new Set()
   private poolExhaustedWarned = false
   // замыкание переиспользуется между кадрами — coverageReady зовётся на каждый
@@ -121,22 +159,46 @@ abstract class TerrainPatchGroup extends Group {
      * прошедших построек ЭТОГО кадра, к симуляционному ctx.elapsed отношения
      * не имеющая.
      */
-    private readonly nowMs: () => number = () => performance.now()
+    private readonly nowMs: () => number = () => performance.now(),
+    /**
+     * Строитель патчей: дефолт синхронный (постройка внутри запроса —
+     * прежнее поведение), воркерный приходит от владельца.
+     */
+    private readonly builder: TerrainPatchBuilder = new SyncTerrainPatchBuilder()
   ) {
     super()
     this.field = field
     this.pool = new TerrainPatchPool(material, TERRAIN_PATCH_SEGMENTS, maxLivePatches)
+    this.builder.acquire(field)
 
     // минимальный набор всегда есть (быстрый старт) — MIN_LEVEL всегда
     // спускается безусловно, split пуст (история гистерезиса ещё не набрана)
     const patches = 2 ** TERRAIN_QUADTREE_MIN_LEVEL
+    this.initialRemaining = CUBE_FACES * patches * patches
     for (let face = 0; face < CUBE_FACES; face++) {
       for (let j = 0; j < patches; j++) {
         for (let i = 0; i < patches; i++) {
-          this.buildInitialPatch({ face, level: TERRAIN_QUADTREE_MIN_LEVEL, i, j })
+          // слота не нашлось (пул меньше минимального набора — не должно
+          // случаться): готовности ждать больше не от кого, счётчик закрываем
+          if (!this.requestPatch({ face, level: TERRAIN_QUADTREE_MIN_LEVEL, i, j }, true)) this.initialRemaining--
         }
       }
     }
+  }
+
+  /** Начальный набор построен целиком — тело можно показывать без дыр. */
+  public get ready(): boolean {
+    return this.initialRemaining === 0
+  }
+
+  /** Запрошено и не пришло — давление на строителя, а не число патчей в сцене. */
+  public get pendingCount(): number {
+    return this.pending.size
+  }
+
+  public whenReady(cb: () => void): void {
+    if (this.ready) cb()
+    else this.readyCallbacks.push(cb)
   }
 
   public updateObject(ctx: UpdateContext): void {
@@ -180,36 +242,38 @@ abstract class TerrainPatchGroup extends Group {
 
     const wanted = new Map<number, TerrainLeaf>()
     for (const address of leaves) wanted.set(terrainNodeKey(address), address)
+    // та же Map, без копии: синхронный приход внутри requestPatch ниже уже
+    // должен видеть желаемый набор ЭТОГО кадра
+    this.lastWanted = wanted
 
     // очередь пересобирается каждый кадр: при бюджете в одну постройку
     // (ниже) порядок и решает, что появится первым — см. byBuildPriority
     const buildQueue = [...leaves].sort(byBuildPriority)
 
-    // временной бюджет вместо счётчика: минимум одна постройка гарантирована
-    // всегда (built===0 пропускает проверку), дальше цикл идёт, пока
-    // nowMs()−frameStart не достигнет бюджета — гейт СТАРТА следующей
-    // постройки, сама постройка атомарна (не прерывается серединой). Часы
-    // читаются ПОСЛЕ пропуска уже живых узлов — их пропуск дешёвый lookup,
-    // не постройка, и не должен тратить бюджет впустую.
+    // Две ветки одного цикла запросов. Синхронный строитель: запрос и есть
+    // постройка, pending после него снова пуст — правит временной бюджет,
+    // минимум одна постройка гарантирована (builtHere===0 пропускает
+    // проверку), гейт СТАРТА следующей, сама постройка атомарна. Воркерный:
+    // запрос дёшев и кадра не тратит, pending растёт — правит потолок
+    // запросов в полёте. builtHere — постройки, ЗАВЕРШЁННЫЕ на этом потоке в
+    // этом кадре (запрошено минус висящее): только они стоили миллисекунд.
+    // Часы читаются ПОСЛЕ пропуска уже живых/запрошенных узлов — их пропуск
+    // дешёвый lookup, не постройка, и не должен тратить бюджет впустую.
+    const inFlightMax = config('terrain.lod.buildInFlight')
     const budgetMs = config('terrain.lod.patchBuildBudgetMs')
     const frameStart = this.nowMs()
-    let built = 0
+    let requested = 0
     for (const address of buildQueue) {
       const key = terrainNodeKey(address)
-      if (this.live.has(key)) continue
+      if (this.live.has(key) || this.pending.has(key)) continue
+      if (this.pending.size >= inFlightMax) break
 
       const elapsedMs = this.nowMs() - frameStart
-      if (built > 0 && elapsedMs >= budgetMs) break
+      const builtHere = requested - this.pending.size
+      if (builtHere > 0 && elapsedMs >= budgetMs) break
 
-      const handle = this.pool.acquire()
-      if (!handle) {
-        this.warnPoolExhausted()
-        continue
-      }
-
-      this.writePatch(handle, address, false)
-      this.live.set(key, { handle, address })
-      built++
+      if (!this.requestPatch(address, false)) continue
+      requested++
     }
 
     // без дыр: показанный узел освобождается только когда готова его замена;
@@ -247,29 +311,40 @@ abstract class TerrainPatchGroup extends Group {
   }
 
   public dispose(): void {
-    this.pool.dispose()
-    for (const { handle } of this.live.values()) disposeSceneTree(handle.mesh)
-    this.live.clear()
-  }
-
-  private buildInitialPatch(address: TerrainNodeAddress): void {
-    const handle = this.pool.acquire()
-    if (!handle) {
-      this.warnPoolExhausted() // MAX_LIVE_PATCHES ≫ минимального набора — не должно случаться
-      return
+    this.disposed = true
+    // слоты запрошенных патчей — назад в пул: их меши в сцену не входили,
+    // разбирать (disposeSceneTree) нечего, геометрию снимет pool.dispose()
+    for (const { handle } of this.pending.values()) this.pool.release(handle)
+    this.pending.clear()
+    for (const { handle } of this.live.values()) {
+      this.pool.release(handle)
+      disposeSceneTree(handle.mesh)
     }
-
-    this.writePatch(handle, address, true)
-    this.live.set(terrainNodeKey(address), { handle, address })
+    this.live.clear()
+    this.pool.dispose()
+    this.builder.release(this.field)
   }
 
   /**
-   * `visible` — стартовая видимость патча: минимальный набор конструктора
-   * входит видимым (заменять нечего, скрытый старт был бы дырой), постройки
-   * кадра — скрытыми, до кадра освобождения заменяемого узла (атомарный своп,
-   * см. докблок класса).
+   * Запрос постройки узла. Слот захватывается СРАЗУ (давление клапана его уже
+   * считает, повторного запроса того же узла не будет), меш входит в сцену и
+   * в live только при приходе — см. onPatchBuilt.
+   *
+   * `initial` — минимальный набор конструктора: входит видимым (заменять
+   * нечего, скрытый старт был бы дырой) и нужен всегда, даже если к приходу
+   * его уже нет в желаемом наборе.
    */
-  private writePatch(handle: PatchHandle, address: TerrainNodeAddress, visible: boolean): void {
+  private requestPatch(address: TerrainNodeAddress, initial: boolean): boolean {
+    const handle = this.pool.acquire()
+    if (!handle) {
+      this.warnPoolExhausted()
+      return false
+    }
+
+    const key = terrainNodeKey(address)
+    const requestId = this.nextRequestId++
+    this.pending.set(key, { handle, address, requestId, initial })
+
     // юбка закрывает недобор ГРУБОГО соседа, не свой: фрустум-гейт допускает
     // перепад до двух уровней (сосед вне фрустума не сплитится), поэтому
     // глубина берётся по ε(level−2); на глубоких уровнях (L7–L8) ε мала,
@@ -277,21 +352,52 @@ abstract class TerrainPatchGroup extends Group {
     const skirtLevel = Math.max(TERRAIN_QUADTREE_MIN_LEVEL, address.level - 2)
     const skirtDepthUnits = toThreeJSUnits((this.field.geometricErrorMeters(skirtLevel) + CLEARANCE_MARGIN_METERS) / 1000)
 
-    buildTerrainPatchInto(
-      this.field,
-      address.face,
-      address.i,
-      address.j,
-      address.level,
-      TERRAIN_PATCH_SEGMENTS,
-      skirtDepthUnits,
-      handle,
-      this.detailWrap
+    this.builder.request(
+      {
+        field: this.field,
+        face: address.face,
+        i: address.i,
+        j: address.j,
+        level: address.level,
+        segments: TERRAIN_PATCH_SEGMENTS,
+        skirtDepthUnits,
+        wrap: this.detailWrap
+      },
+      (result) => this.onPatchBuilt(key, requestId, result)
     )
-    handle.mesh.userData.terrainAddress = address
-    this.configurePatchMesh(handle.mesh)
-    this.add(handle.mesh)
-    handle.mesh.visible = visible
+
+    return true
+  }
+
+  /**
+   * Приход результата. Чужой или устаревший requestId — слот этого запроса уже
+   * освобождён другим путём (dispose, отмена), писать некуда; узел, успевший
+   * выйти из желаемого набора, отдаёт слот назад в пул. Постройка кадра входит
+   * скрытой — до кадра освобождения заменяемого узла (атомарный своп, см.
+   * докблок класса).
+   */
+  private onPatchBuilt(key: number, requestId: number, result: PatchBuildResult): void {
+    if (this.disposed) return
+
+    const entry = this.pending.get(key)
+    if (!entry || entry.requestId !== requestId) return
+    this.pending.delete(key)
+
+    if (!entry.initial && !this.lastWanted.has(key)) {
+      this.pool.release(entry.handle)
+      return
+    }
+
+    applyPatchResult(entry.handle, result)
+    entry.handle.mesh.userData.terrainAddress = entry.address
+    this.configurePatchMesh(entry.handle.mesh)
+    this.add(entry.handle.mesh)
+    entry.handle.mesh.visible = entry.initial
+    this.live.set(key, { handle: entry.handle, address: entry.address })
+
+    if (entry.initial && --this.initialRemaining === 0) {
+      for (const cb of this.readyCallbacks.splice(0)) cb()
+    }
   }
 
   /**

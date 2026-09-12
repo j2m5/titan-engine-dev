@@ -13,6 +13,9 @@ import { cubeFaceDirection } from './cubeSphere'
 import { wrapIndex, wrappedComponent, type DetailWrap } from './detailWrap'
 import type { TerrainHeightField } from './TerrainHeightField'
 import type { MidbandSample } from './midbandField'
+// только тип: terrainPatchBuilder импортирует ядро сборки отсюда — обычный
+// import замкнул бы модули в рантайме
+import type { PatchBuildResult } from './terrainPatchBuilder'
 
 /** Вершин в регулярной сетке патча segments×segments (без юбки). */
 const gridVertexCount = (segments: number): number => (segments + 1) * (segments + 1)
@@ -446,4 +449,39 @@ export function buildTerrainPatchInto(
   midShade.needsUpdate = true
   applyPatchBounds(geometry, bounds)
   mesh.position.copy(center)
+}
+
+function writePatchAttribute(geometry: InstancedBufferGeometry, name: string, source: Float32Array): void {
+  const attribute = geometry.getAttribute(name) as BufferAttribute
+  ;(attribute.array as Float32Array).set(source)
+  attribute.needsUpdate = true
+}
+
+/**
+ * Приход готового результата (синхронный строитель или воркер) в слот пула:
+ * копирует массивы в атрибуты слота, ставит центр патча и сферу. Парная
+ * buildTerrainPatchInto ветка — та СОБИРАЕТ прямо в буферы слота, эта только
+ * копирует уже собранное (буферы результата слоту не принадлежат).
+ */
+export function applyPatchResult(
+  handle: { mesh: Mesh; geometry: InstancedBufferGeometry },
+  result: PatchBuildResult
+): void {
+  const { geometry, mesh } = handle
+  const { arrays } = result
+
+  writePatchAttribute(geometry, 'position', arrays.positions)
+  writePatchAttribute(geometry, 'detailPos', arrays.detailPos)
+  writePatchAttribute(geometry, 'detailPos2', arrays.detailPos2)
+  writePatchAttribute(geometry, 'height', arrays.heights)
+  writePatchAttribute(geometry, 'midTilt', arrays.midTilts)
+  writePatchAttribute(geometry, 'midShade', arrays.midShades)
+
+  // центр патча — инстансный атрибут (один элемент), тот же, что в into-варианте
+  const patchCenter = geometry.getAttribute('patchCenter') as BufferAttribute
+  ;(patchCenter.array as Float32Array).set(result.center)
+  patchCenter.needsUpdate = true
+
+  applyPatchBounds(geometry, result.bounds)
+  mesh.position.fromArray(result.center)
 }
