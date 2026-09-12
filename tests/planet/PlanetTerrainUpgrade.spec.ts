@@ -3,7 +3,9 @@ import { LOD, Object3D, Texture } from 'three'
 import '@/core/framework/TitanThree'
 import { Planet } from '@/core/renderables/Planet'
 import { TerrainSphere } from '@/core/renderables/TerrainSphere'
+import { WaterSphere } from '@/core/renderables/Water/WaterSphere'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
+import { heightPathOf } from '@/core/terrain/heightPath'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
@@ -17,6 +19,8 @@ import type { WebGLRenderer } from 'three'
 
 const MOON_ID = 19
 const MOON_HEIGHT_PATH = 'planets/moon/moon_height.raw'
+// Земля: waterLevelMeters в БД — водная оболочка ребёнком TerrainSphere
+const EARTH_ID = 7
 // 6 граней × 2×2 патча уровня TERRAIN_QUADTREE_MIN_LEVEL
 const INITIAL_PATCHES = 24
 
@@ -41,8 +45,9 @@ function seedPlaceholderKeys(): void {
   seedTexture(Actor.find(7)!.resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string)
 }
 
-function seedHeightMap(): void {
-  ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(MOON_HEIGHT_PATH, {
+/** Каждый вызов кладёт НОВЫЙ объект карты. */
+function seedHeightMap(path: string = MOON_HEIGHT_PATH): void {
+  ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(path, {
     width: 4,
     height: 2,
     minMeters: 0,
@@ -173,7 +178,16 @@ describe('RenderableFactory: свап поверхности по готовно
     expect(lodLevel0(node)).toBeInstanceOf(Planet)
   })
 
-  it('поздняя готовность после выгрузки карты: свапа нет, сфера разобрана, снимок не пересобирается', () => {
+  it.each([
+    ['выгрузки карты', (): void => heightFieldStorage.clear()],
+    [
+      'перезагрузки карты новым объектом',
+      (): void => {
+        heightFieldStorage.clear()
+        seedHeightMap()
+      }
+    ]
+  ])('поздняя готовность после %s: свапа нет, сфера разобрана, снимок не пересобирается', (_, unloadMap) => {
     const builder = new FakeAsyncBuilder()
     const refresh = vi.fn()
     const factory = makeFactory(builder, refresh)
@@ -181,8 +195,8 @@ describe('RenderableFactory: свап поверхности по готовно
 
     seedHeightMap()
     factory.upgradePlanetToTerrain(node)
-    // карта ушла, даунгрейд гейтом не дошёл
-    heightFieldStorage.clear()
+    // даунгрейд гейтом не дошёл
+    unloadMap()
     builder.flush()
 
     expect(lodLevel0(node)).toBeInstanceOf(Planet)
@@ -204,9 +218,28 @@ describe('RenderableFactory: свап поверхности по готовно
     lod.levels[0].object = replacement
     builder.flush()
 
-    expect(lodLevel0(node)).toBe(replacement)
+    // не toBe(replacement): дифф Object3D при провале роняет сериализацию vitest
+    expect(lodLevel0(node) === replacement).toBe(true)
     expect(factory.hasPendingUpgrade(node)).toBe(false)
     expect(builder.released).toHaveLength(1)
     expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('тело с водой: строителю уходят только 24 патча суши, вода строится синхронно и едет ребёнком при свапе', () => {
+    const builder = new FakeAsyncBuilder()
+    const factory = makeFactory(builder)
+    const earth = Actor.find(EARTH_ID)!
+    const node = factory.make(earth) as DynamicNode
+
+    seedHeightMap(heightPathOf(earth)!)
+    factory.upgradePlanetToTerrain(node)
+
+    expect(builder.queued).toBe(INITIAL_PATCHES)
+
+    builder.flush(INITIAL_PATCHES)
+
+    const surface = lodLevel0(node)
+    expect(surface).toBeInstanceOf(TerrainSphere)
+    expect(surface.children.some((child) => child instanceof WaterSphere)).toBe(true)
   })
 })

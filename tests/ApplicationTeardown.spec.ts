@@ -134,9 +134,10 @@ describe('Application.teardown', () => {
     expect(builder.dispose).not.toHaveBeenCalled()
   })
 
-  it('clearPendingUpgrades фабрики до releaseAll строителя', () => {
+  it('engine.dispose до clearPendingUpgrades фабрики, та — до releaseAll строителя', () => {
+    // releaseAll только после разборки всех групп: запоздалый release отпустил бы новую регистрацию того же поля
     const order: string[] = []
-    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    const engine = { dispose: vi.fn(() => order.push('engine')), start: vi.fn() } as unknown as Engine
     const observer = {} as unknown as ResourceObserver
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
     const builder = {
@@ -150,6 +151,6 @@ describe('Application.teardown', () => {
 
     new Application(engine, observer, new Scene(), leakDetector, heightFieldGate, undefined, factory, builder).teardown()
 
-    expect(order).toEqual(['clearPendingUpgrades', 'releaseAll'])
+    expect(order).toEqual(['engine', 'clearPendingUpgrades', 'releaseAll'])
   })
 })

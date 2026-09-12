@@ -10,6 +10,25 @@ type Wired = { terrainPatchBuilder: unknown; renderableFactory?: unknown }
 describe('AppServiceProvider: строитель патчей рельефа', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('конструктор Worker бросает (CSP, file://) — синхронный строитель и предупреждение', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    vi.stubGlobal(
+      'Worker',
+      class {
+        public constructor() {
+          throw new DOMException('воркер запрещён политикой', 'SecurityError')
+        }
+      }
+    )
+
+    const builder = createTestContainer().get(Tokens.TerrainPatchBuilder)
+
+    expect(builder).toBeInstanceOf(SyncTerrainPatchBuilder)
+    expect(warn).toHaveBeenCalledTimes(1)
   })
 
   it('без Worker (jsdom) — синхронный строитель; фабрика и приложение получают его из контейнера', () => {

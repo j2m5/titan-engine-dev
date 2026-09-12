@@ -164,6 +164,10 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     }
   }
 
+  /**
+   * Звать только после разборки всех групп: запоздалый release после
+   * releaseAll отпустил бы новую регистрацию того же поля.
+   */
   public releaseAll(): void {
     for (const { id } of this.fields.values()) this.worker.postMessage({ type: 'releaseField', fieldId: id }, [])
     this.fields.clear()
@@ -180,10 +184,12 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
   private ensureField(field: TerrainHeightField): { id: number; refs: number } {
     let entry = this.fields.get(field)
     if (!entry) {
-      entry = { id: this.nextFieldId++, refs: 0 }
-      this.fields.set(field, entry)
-      const { message, transfer } = registerFieldMessage(field, entry.id)
+      // запись — только после отправки: исключение сборки сообщения (копия карты) не оставляет фантома
+      const id = this.nextFieldId++
+      const { message, transfer } = registerFieldMessage(field, id)
       this.worker.postMessage(message, transfer)
+      entry = { id, refs: 0 }
+      this.fields.set(field, entry)
     }
 
     return entry
@@ -228,6 +234,13 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     // очистка до реплея: onDone может сразу позвать request — тот уйдёт в fallback
     const stranded = [...this.outstanding.values()]
     this.outstanding.clear()
-    for (const { job, onDone } of stranded) fallback.request(job, onDone)
+    for (const { job, onDone } of stranded) {
+      // исключение одного задания не оставляет остальные группы с вечным pending
+      try {
+        fallback.request(job, onDone)
+      } catch (error) {
+        console.error('[terrain worker] синхронная пересборка задания упала:', error)
+      }
+    }
   }
 }

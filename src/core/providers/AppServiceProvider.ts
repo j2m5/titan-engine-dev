@@ -55,14 +55,20 @@ class AppServiceProvider extends ServiceProvider {
       (c: Container) => new ProceduralSurfaceGenerator(c.get(Tokens.Renderer))
     )
 
-    // Один воркер на сцену: сессионный синглтон, переживает смену сценария
-    // (Application.teardown снимает только регистрации полей). Без Worker —
-    // синхронный фолбэк.
-    this.app.singleton(
-      Tokens.TerrainPatchBuilder,
-      (): TerrainPatchBuilder =>
-        typeof Worker === 'undefined' ? new SyncTerrainPatchBuilder() : new WorkerTerrainPatchBuilder()
-    )
+    // Один воркер на сессию: синглтон переживает смену сценария
+    // (Application.teardown снимает только регистрации полей). Без Worker или
+    // при отказе его конструктора (CSP, file://) — синхронный фолбэк.
+    this.app.singleton(Tokens.TerrainPatchBuilder, (): TerrainPatchBuilder => {
+      if (typeof Worker === 'undefined') return new SyncTerrainPatchBuilder()
+
+      try {
+        return new WorkerTerrainPatchBuilder()
+      } catch (error) {
+        console.warn('[terrain worker] воркер не создан, постройка патчей идёт на главном потоке:', error)
+
+        return new SyncTerrainPatchBuilder()
+      }
+    })
 
     this.app.singleton(
       Tokens.RenderableFactory,

@@ -1,8 +1,13 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { Texture, type WebGLRenderer } from 'three'
 import { WorkerTerrainPatchBuilder, type WorkerLike } from '@/core/terrain/worker/WorkerTerrainPatchBuilder'
 import { createWorkerState, handleWorkerMessage } from '@/core/terrain/worker/terrainBuildHandler'
 import type { FromWorkerMessage, ToWorkerMessage } from '@/core/terrain/worker/terrainBuildProtocol'
-import type { PatchBuildResult } from '@/core/terrain/terrainPatchBuilder'
+import type { PatchBuildResult, TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
+import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
+import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { Actor } from '@/core/models/Actor'
+import { resourceStorage } from '@/core/services/ResourceStorage'
 import type { PatchArrays } from '@/core/terrain/terrainPatchGeometry'
 import type { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { expectMatchesFreshBuild, makeField, patchJob, snapshotArrays } from './workerBuildHelpers'
@@ -15,8 +20,10 @@ class FakeWorker implements WorkerLike {
   public onmessage: ((ev: { data: FromWorkerMessage }) => void) | null = null
   public onerror: ((reason: string) => void) | null = null
   public onmessageerror: ((reason: string) => void) | null = null
+  /** Ответы настоящего обработчика, в порядке отправки. */
+  public readonly replies: FromWorkerMessage[] = []
+  public readonly state = createWorkerState()
   private readonly queue: ToWorkerMessage[] = []
-  private readonly state = createWorkerState()
 
   public postMessage(message: ToWorkerMessage, transfer: Transferable[]): void {
     this.sent.push(message)
@@ -27,7 +34,9 @@ class FakeWorker implements WorkerLike {
   public pump(): void {
     for (const message of this.queue.splice(0)) {
       const out = handleWorkerMessage(this.state, message)
-      if (out) this.emit(out.message)
+      if (!out) continue
+      this.replies.push(out.message)
+      this.emit(out.message)
     }
   }
 
@@ -157,5 +166,128 @@ describe('WorkerTerrainPatchBuilder: отказ воркера — откат н
     worker.pump() // registerField и оба build ещё в очереди фейка — их built приходят после отказа
     expect(a).toHaveLength(1)
     expect(b).toHaveLength(1)
+  })
+})
+
+describe('WorkerTerrainPatchBuilder: исключения на главном потоке', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('исключение при сборке регистрации не оставляет записи: следующий acquire регистрирует поле заново', () => {
+    const worker = new FakeWorker()
+    const builder = new WorkerTerrainPatchBuilder(worker)
+    const field = makeField()
+    const slice = vi.spyOn(field.heightMap.data, 'slice').mockImplementationOnce(() => {
+      throw new RangeError('нет памяти под копию карты')
+    })
+
+    expect(() => builder.acquire(field)).toThrow(RangeError)
+    expect(worker.sent).toHaveLength(0)
+
+    builder.acquire(field)
+
+    expect(slice).toHaveBeenCalledTimes(2)
+    expect(worker.sent.filter((m) => m.type === 'registerField')).toHaveLength(1)
+
+    const results: PatchBuildResult[] = []
+    builder.request(patchJob(field, 0, 1, 0), (r) => results.push(r))
+    worker.pump()
+
+    expect(worker.replies.filter((m) => m.type === 'error')).toHaveLength(0)
+    expect(results).toHaveLength(1)
+  })
+
+  it('исключение в реплее одного задания не теряет остальные: onDone второго приходит', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const worker = new FakeWorker()
+    const builder = new WorkerTerrainPatchBuilder(worker)
+    const broken = makeField()
+    const jobA = patchJob(broken, 0, 1, 0)
+    const jobB = patchJob(makeField(), 3, 0, 1)
+    const a: PatchArrays[] = []
+    const b: PatchArrays[] = []
+    builder.request(jobA, (r) => a.push(snapshotArrays(r.arrays)))
+    builder.request(jobB, (r) => b.push(snapshotArrays(r.arrays)))
+    vi.spyOn(broken, 'sampleMeters').mockImplementation(() => {
+      throw new Error('сбой выборки')
+    })
+
+    worker.fail('onerror', 'сбой')
+
+    expect(a).toHaveLength(0)
+    expect(b).toHaveLength(1)
+    expectMatchesFreshBuild(b[0], jobB)
+    expect(error).toHaveBeenCalledTimes(1)
+  })
+})
+
+/** Минимальная конкретная группа — как в TerrainPatchGroupAsync.spec. */
+class TestPatchGroup extends TerrainPatchGroup {
+  public constructor(field: TerrainHeightField, builder: TerrainPatchBuilder) {
+    const renderer = { domElement: { height: 1080 } } as unknown as WebGLRenderer
+    super(field, new PlanetMaterial(Actor.find(19)!), renderer, undefined, undefined, undefined, undefined, builder)
+  }
+}
+
+// PlanetMaterial на промахе по ключу рисует плейсхолдер на canvas 2d, которого в jsdom нет
+function seedPlaceholderKeys(): void {
+  const moonDiffuse = Actor.find(19)!.resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string
+  for (const name of ['', 'default.png', 'night.jpg', moonDiffuse]) {
+    const texture = new Texture()
+    texture.name = name
+    texture.image = { width: 4, height: 2 }
+    resourceStorage.addTexture(texture)
+  }
+}
+
+describe('WorkerTerrainPatchBuilder: releaseField идёт в очереди после уже отправленных build', () => {
+  beforeEach(() => seedPlaceholderKeys())
+
+  afterEach(() => {
+    resourceStorage.deleteAllTextures()
+    vi.restoreAllMocks()
+  })
+
+  it('разборка группы при 24 build в очереди: error и отката нет, поле снято; новая группа на том же поле — новый fieldId и ready', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const worker = new FakeWorker()
+    const builder = new WorkerTerrainPatchBuilder(worker)
+    const field = makeField()
+    const builds = (from = 0): number => worker.sent.slice(from).filter((m) => m.type === 'build').length
+    const errors = (): number => worker.replies.filter((m) => m.type === 'error').length
+    const registeredIds = (): number[] => worker.sent.flatMap((m) => (m.type === 'registerField' ? [m.fieldId] : []))
+
+    const a = new TestPatchGroup(field, builder)
+    expect(builds()).toBe(24)
+    a.dispose()
+    worker.pump()
+
+    expect(errors()).toBe(0)
+    expect(warn).not.toHaveBeenCalled()
+    expect(worker.state.fields.size).toBe(0)
+
+    const sentBefore = worker.sent.length
+    const b = new TestPatchGroup(field, builder)
+    // вторая держательница того же поля разобрана до прихода: регистрацию держит ссылка b
+    const c = new TestPatchGroup(field, builder)
+    c.dispose()
+
+    expect(builds(sentBefore)).toBe(48) // запросы уходят воркеру — отката не было
+    expect(registeredIds()).toHaveLength(2)
+    expect(registeredIds()[1]).not.toBe(registeredIds()[0])
+
+    worker.pump()
+
+    expect(b.ready).toBe(true)
+    expect(errors()).toBe(0)
+    expect(warn).not.toHaveBeenCalled()
+    expect(worker.state.fields.size).toBe(1)
+
+    b.dispose()
+    worker.pump()
+
+    expect(worker.state.fields.size).toBe(0)
   })
 })

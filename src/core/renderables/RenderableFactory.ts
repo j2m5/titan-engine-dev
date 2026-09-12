@@ -56,7 +56,7 @@ class RenderableFactory {
     // Опционален: тестовые сборки фабрики без процедурных тел его не заводят
     // (см. TerrainSphere — тот же гейт по data.proceduralSurface, no-op без него).
     private readonly proceduralSurfaceGenerator?: ProceduralSurfaceGenerator,
-    /** Строитель патчей рельефа: дефолт синхронный (прежнее поведение), воркерный — от контейнера. */
+    /** Строитель патчей рельефа: дефолт синхронный (постройка внутри запроса), воркерный — от контейнера. */
     private readonly terrainPatchBuilder: TerrainPatchBuilder = new SyncTerrainPatchBuilder(),
     /**
      * Пересбор снимка наблюдения после свапа ВНЕ тика гейта (свап по
@@ -328,8 +328,10 @@ class RenderableFactory {
     if (this.pendingUpgrades.has(node)) return false
 
     const heightPath: string | undefined = heightPathOf(node.model)
+    // идентичность, а не наличие: поздняя готовность сверяет с ней карту в реестре
+    const heightMap = heightPath ? heightFieldStorage.get(heightPath) : undefined
 
-    if (!heightPath || !heightFieldStorage.get(heightPath)) return false
+    if (!heightPath || !heightMap) return false
 
     // Карта в реестре подтверждена выше — buildPlanetSurface заведомо
     // вернёт TerrainSphere.
@@ -345,15 +347,15 @@ class RenderableFactory {
 
     this.pendingUpgrades.set(node, surface)
     surface.whenReady((): void => {
-      // отменён даунгрейдом или разборкой сценария: сфера уже задиспожена,
-      // узел мог начать новый апгрейд
+      // страховка: отменённый апгрейд (даунгрейд, разборка сценария) сюда не
+      // доходит — задиспоженная группа готовность не объявляет
       if (this.pendingUpgrades.get(node) !== surface) return
 
       this.pendingUpgrades.delete(node)
 
-      // уровень заменён мимо фабрики или карта выгружена без даунгрейда:
-      // свап попал бы в разобранный LOD
-      if (lod.levels.at(0)?.object !== legacy || !heightFieldStorage.get(heightPath)) {
+      // уровень заменён мимо фабрики или карта выгружена либо перезагружена без
+      // даунгрейда: свап попал бы в разобранный LOD или на поле чужой карты
+      if (lod.levels.at(0)?.object !== legacy || heightFieldStorage.get(heightPath) !== heightMap) {
         disposeSceneTree(surface)
 
         return
