@@ -98,8 +98,8 @@ abstract class TerrainPatchGroup extends Group {
   private readonly pool: TerrainPatchPool
   private readonly live = new Map<number, { handle: PatchHandle; address: TerrainNodeAddress }>()
   private readonly pending = new Map<number, PendingEntry>()
-  // номер запроса отличает приход «своего» задания от прихода задания, чей
-  // узел уже успел уйти и вернуться (в pending лежит уже ДРУГОЙ handle)
+  // номер запроса — страховка от чужого прихода: сегодня запись из pending
+  // снимают только приход и dispose
   private nextRequestId = 1
   private lastWanted: ReadonlyMap<number, TerrainLeaf> = new Map()
   private initialRemaining: number
@@ -153,8 +153,8 @@ abstract class TerrainPatchGroup extends Group {
      */
     private readonly nowMs: () => number = () => performance.now(),
     /**
-     * Строитель патчей: дефолт синхронный (постройка внутри запроса —
-     * прежнее поведение), воркерный приходит от владельца.
+     * Строитель патчей: дефолт синхронный (постройка внутри запроса),
+     * воркерный приходит от владельца.
      */
     private readonly builder: TerrainPatchBuilder = new SyncTerrainPatchBuilder()
   ) {
@@ -362,9 +362,9 @@ abstract class TerrainPatchGroup extends Group {
   }
 
   /**
-   * Приход результата. Чужой или устаревший requestId — слот этого запроса уже
-   * освобождён другим путём (dispose, отмена), писать некуда; узел, успевший
-   * выйти из желаемого набора, отдаёт слот назад в пул. Постройка кадра входит
+   * Приход результата. Сверка requestId — страховка от чужого прихода: сегодня
+   * запись pending снимают только приход и dispose. Узел, успевший выйти из
+   * желаемого набора, отдаёт слот назад в пул. Постройка кадра входит
    * скрытой — до кадра освобождения заменяемого узла (атомарный своп, см.
    * докблок класса).
    */

@@ -37,13 +37,17 @@ export interface TerrainPatchBuilder {
   acquire(field: TerrainHeightField): void
   request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void): void
   release(field: TerrainHeightField): void
+  /**
+   * Снимает все регистрации полей. Звать только после разборки всех групп:
+   * запоздалый release после releaseAll отпустил бы новую регистрацию того же поля.
+   */
   releaseAll(): void
   dispose(): void
 }
 
 /**
- * Постройка на месте: onDone внутри request — семантика «одна постройка за
- * кадр» прежних стендов. Массивы — один скретч на строителя (≈245 КиБ при
+ * Постройка на месте: onDone внутри request, поэтому одна постройка за кадр
+ * гарантирована. Массивы — один скретч на строителя (≈245 КиБ при
  * segments=64): результат потребитель копирует внутри onDone (см. контракт
  * интерфейса), аллокация на каждую постройку была бы мусором в горячем пути.
  */
