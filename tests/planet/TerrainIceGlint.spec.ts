@@ -82,6 +82,17 @@ describe('iceGlint: CPU-зеркало', () => {
     expect(iceGlint(1, 0.1, 0.2)).toBeGreaterThan(iceGlint(1, 1, 0.2))
     expect(iceGlint(0.9, 1, 0)).toBeLessThan(iceGlint(1, 1, 0) * 1e-10)
   })
+
+  it('вне нормали, средняя шероховатость: число сходится с формулой', () => {
+    // power = 8 + 504·0.25 = 134; fresnel = 0.018 + 0.982·0.5^5 = 0.0486875
+    expect(iceGlint(0.99, 0.5, 0.5)).toBeCloseTo(0.0178863631662164, 12)
+  })
+
+  it('верхний кламп: dot(V, halfVec) выше 1 (float32-округление) не даёт NaN', () => {
+    const overshoot = iceGlint(1, 1 + 1e-7, 0)
+    expect(Number.isFinite(overshoot)).toBe(true)
+    expect(overshoot).toBe(iceGlint(1, 1, 0))
+  })
 })
 
 describe('Шейдер: блеск льда', () => {
@@ -93,6 +104,7 @@ describe('Шейдер: блеск льда', () => {
     expect(block).toContain('uniform float uIceGlintStrength;')
     expect(block).toContain('#define ICE_GLINT_F0 0.018')
     expect(block).toContain('float power = mix(8.0, 512.0, gloss * gloss);')
+    expect(block).toContain('float fresnel = ICE_GLINT_F0 + (1.0 - ICE_GLINT_F0) * pow(1.0 - clamp(dot(viewDir, halfVec), 0.0, 1.0), 5.0);')
     expect(block).toContain('return (power + 8.0) / 25.1327412 * pow(max(dot(normal, halfVec), 0.0), power) * fresnel * gloss * gloss;')
   })
 

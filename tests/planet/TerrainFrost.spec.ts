@@ -44,6 +44,16 @@ describe('frostMath: CPU-зеркало маски инея', () => {
     expect(frostMask(on, 9000, 0, 0.7, 0)).toBe(0)
     expect(frostMask(on, 9000, 0, 0.3, 0)).toBe(1)
   })
+
+  it('переход по экспозиции и уклону — середины smoothstep', () => {
+    // facing: slopeTan 0.05 — середина порога (0, 0.1)
+    expect(frostFacing(0, -0.05, 0.5)).toBeCloseTo(0.5, 12)
+    // высота насыщена (9000), slopeTan 0.51 — середина порога (0.42, 0.6)
+    expect(frostMask(on, 9000, 0, 0.51, 0)).toBeCloseTo(0.5, 12)
+    // facing +1 (склон смотрит к полюсу) ⇒ линия 1700, высота 1700 — середина по высоте;
+    // slopeTan 0.3 < 0.42 — уклон ещё не гасит
+    expect(frostMask(on, 1700, 0, 0, -0.3)).toBeCloseTo(0.5, 12)
+  })
 })
 
 describe('Шейдер: иней', () => {
@@ -62,7 +72,12 @@ describe('Шейдер: иней', () => {
     expect(end).toBeGreaterThan(start)
     const block = frag.slice(start, end)
     expect(block).toContain('float frostPole = frostSinLat >= 0.0 ? 1.0 : -1.0;')
+    expect(block).toContain('float frostFacing = terrainSlopeTan > 1e-6 ? dot(-terrainMapSlopeVec / terrainSlopeTan, vec2(0.0, frostPole)) * smoothstep(0.0, 0.1, terrainSlopeTan) : 0.0;')
     expect(block).toContain('float frostLineH = uFrostLine.x - uFrostLine.z * abs(frostSinLat) - uFrostLine.w * max(frostFacing, 0.0);')
+    expect(block).toContain(
+      'float frostMask = uFrostStrength * smoothstep(frostLineH - 0.5 * uFrostLine.y, frostLineH + 0.5 * uFrostLine.y, vHeightMeters)\n' +
+        '                          * (1.0 - smoothstep(0.7 * uFrostSlopeMax, uFrostSlopeMax, terrainSlopeTan));'
+    )
     expect(block).toContain('surfaceAlbedo = mix(surfaceAlbedo, uFrostColor, frostMask);')
     expect(block).not.toContain('occlusion')
     expect(frag).not.toContain('dayColor = diffuseSample * albedoMul * mix(vec3(1.0), lit, uTerrainLambert);')
