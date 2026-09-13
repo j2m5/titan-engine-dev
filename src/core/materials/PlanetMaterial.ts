@@ -2,7 +2,7 @@ import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
 import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
-import { Color, Texture, Uniform, Vector2, Vector3 } from 'three'
+import { Color, Texture, Uniform, Vector2, Vector3, Vector4 } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { heightPathOf } from '@/core/terrain/heightPath'
@@ -10,6 +10,7 @@ import { SLOPE_RANGE, isValidSlopeRange } from '@/core/terrain/slopeMapFormat'
 import { STEEP_DETAIL_PATHS } from '@/core/terrain/steepDetailPaths'
 import { detailTintNorm } from '@/core/terrain/detailTextureStats'
 import { resolveSteepZoneParams } from '@/core/terrain/steepZoneParams'
+import { resolveFrostParams } from '@/core/terrain/frostParams'
 import { midbandParamsOf } from '@/core/terrain/midbandParams'
 import { terrainDataOf } from '@/core/terrain/terrainClassPresets'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
@@ -137,6 +138,11 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uSteepGate = new Uniform(0)
     this.uniforms.uSteepMask = new Uniform(new Vector3(0.35, 0.55, 0.15))
     this.uniforms.uSteepTint = new Uniform(new Color(0xe7e7e7))
+    // Иней (frostParams.ts): значения ставит updateMaterial, здесь — дефолты
+    this.uniforms.uFrostStrength = new Uniform(0)
+    this.uniforms.uFrostLine = new Uniform(new Vector4(0, 500, 0, 0))
+    this.uniforms.uFrostSlopeMax = new Uniform(0.6)
+    this.uniforms.uFrostColor = new Uniform(new Color(0xf0f2f5))
     // Нормировка детальных наборов к их средним (detailTextureStats.ts), 1 = нет
     this.uniforms.uDetailTintNorm = new Uniform(new Vector2(1, 1))
     this.uniforms.uSteepTintNorm = new Uniform(new Vector2(1, 1))
@@ -352,6 +358,14 @@ class PlanetMaterial extends AbstractShaderMaterial {
     )
     ;(this.uniforms.uSteepTint.value as Color).copy(steepZoneParams.steepTint)
 
+    // Иней (frostParams.ts): та же безусловная резолвка ручек данных, гейт
+    // ниже требует ещё slope-карту (terrainMapSlopeVec экспозиции).
+    const frost = resolveFrostParams(planetData, this.model.getAttribute?.('name', '?') ?? '?')
+    this.uniforms.uFrostStrength.value = frost.frostStrength
+    ;(this.uniforms.uFrostLine.value as Vector4).set(frost.frostLineMeters, frost.frostLineWidthMeters, frost.frostPolarDropMeters, frost.frostAspectMeters)
+    this.uniforms.uFrostSlopeMax.value = frost.frostSlopeMax
+    ;(this.uniforms.uFrostColor.value as Color).copy(frost.frostColor)
+
     // Тексель диффуза для варпа средней полосы — только у ЗАГРУЖЕННОЙ карты
     // (плейсхолдер размером не является): нули выключают варп, а не врут.
     const loadedDiffuse = resourceStorage.getTexture(this.diffuseKey())?.image as
@@ -420,6 +434,8 @@ class PlanetMaterial extends AbstractShaderMaterial {
       ...(useTerrainShadow && { USE_TERRAIN_SHADOW: '1' }),
       // Блеск льда: слой детали даёт шероховатость; на телах с водой блик суши под водой был бы вторым бликом
       ...(USE_TERRAIN_DETAIL && light.iceGlintStrength > 0 && !hasWaterShell && { USE_TERRAIN_GLINT: '1' }),
+      // Иней: нужны высота карты и её уклон (slope-карта); сила 0 держит шейдер прежним
+      ...(hasHeightField && useSlope && frost.frostStrength > 0 && { USE_TERRAIN_FROST: '1' }),
       // Пересборка от снимка стирает и дефайны атмосферных LUT — они не про
       // карты и живут своей синхронизацией, поэтому восстанавливаются здесь же
       // по текущей записи реестра (иначе стриминг карт гасил бы тинт до

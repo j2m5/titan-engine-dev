@@ -35,7 +35,7 @@ describe('PlanetShaderTemplate: ламберт суши (спайк, USE_TERRAIN
     expect(frag).toContain('uniform float uTerrainAmbient;')
     const occlusionIdx = frag.indexOf('float occlusion = 1.0;')
     const lambertIdx = frag.indexOf(
-      'dayColor = diffuseSample * albedoMul * mix(vec3(1.0), lit, uTerrainLambert);'
+      'dayColor = surfaceAlbedo * mix(vec3(1.0), lit, uTerrainLambert);'
     )
     const dayIdx = frag.indexOf('vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);')
     expect(occlusionIdx).toBeGreaterThan(-1)
@@ -50,7 +50,7 @@ describe('PlanetShaderTemplate: ламберт суши (спайк, USE_TERRAIN
   })
 
   it('множитель под гейтом USE_TERRAIN_UV — легаси-путь гигантов не тронут', () => {
-    const lambertIdx = frag.indexOf('dayColor = diffuseSample * albedoMul * mix(vec3(1.0), lit')
+    const lambertIdx = frag.indexOf('dayColor = surfaceAlbedo * mix(vec3(1.0), lit')
     const guardIdx = frag.lastIndexOf('#ifdef USE_TERRAIN_UV', lambertIdx)
     const endifIdx = frag.indexOf('#endif', lambertIdx)
     expect(guardIdx).toBeGreaterThan(-1)

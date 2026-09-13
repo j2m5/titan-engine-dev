@@ -79,9 +79,9 @@ export const PlanetShaderTemplate: ShaderProps = {
       varying vec3 vDetailPos2;
     #endif
 
-    #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE)
+    #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE) || defined(USE_TERRAIN_FROST)
       // Высота КАРТЫ в вершине (метры над референсом, без полосы B) — фаза
-      // террас и мокрая кромка берега
+      // террас, мокрая кромка берега и линия инея
       attribute float height;
       varying float vHeightMeters;
     #endif
@@ -141,7 +141,7 @@ export const PlanetShaderTemplate: ShaderProps = {
         vDetailPos2 = detailPos2;
       #endif
 
-      #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE)
+      #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE) || defined(USE_TERRAIN_FROST)
         vHeightMeters = height;
       #endif
 
@@ -239,7 +239,7 @@ export const PlanetShaderTemplate: ShaderProps = {
       #include <terrainDetailFunctions>
     #endif
 
-    #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE)
+    #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE) || defined(USE_TERRAIN_FROST)
       varying float vHeightMeters;
     #endif
 
@@ -249,6 +249,14 @@ export const PlanetShaderTemplate: ShaderProps = {
       uniform float uWetBandMeters;
       uniform float uWetDarken;
       #define WET_GLOSS 0.6
+    #endif
+
+    #ifdef USE_TERRAIN_FROST
+      // Иней: сила, линия (x — высота, y — ширина, z — понижение к полюсу, w — к полюсу на склоне), предел уклона, цвет
+      uniform float uFrostStrength;
+      uniform vec4 uFrostLine;
+      uniform float uFrostSlopeMax;
+      uniform vec3 uFrostColor;
     #endif
 
     // Средняя полоса детали рельефа (терраформный путь): километровый fbm
@@ -472,7 +480,18 @@ export const PlanetShaderTemplate: ShaderProps = {
         #endif
         // Та же форма mix(пол, 1, N·L), что прежде: в полдень при occlusion = 1 и без тени ровно 1
         vec3 lit = mix(ambient, vec3(directGain), max(NdotLraw, 0.0));
-        dayColor = diffuseSample * albedoMul * mix(vec3(1.0), lit, uTerrainLambert);
+        vec3 surfaceAlbedo = diffuseSample * albedoMul;
+        #ifdef USE_TERRAIN_FROST
+          // Иней — цвет, не затенение: линия опускается к полюсу и на склонах, обращённых к полюсу
+          float frostSinLat = dirLocal.y;
+          float frostPole = frostSinLat >= 0.0 ? 1.0 : -1.0;
+          float frostFacing = terrainSlopeTan > 1e-6 ? dot(-terrainMapSlopeVec / terrainSlopeTan, vec2(0.0, frostPole)) * smoothstep(0.0, 0.1, terrainSlopeTan) : 0.0;
+          float frostLineH = uFrostLine.x - uFrostLine.z * abs(frostSinLat) - uFrostLine.w * max(frostFacing, 0.0);
+          float frostMask = uFrostStrength * smoothstep(frostLineH - 0.5 * uFrostLine.y, frostLineH + 0.5 * uFrostLine.y, vHeightMeters)
+                          * (1.0 - smoothstep(0.7 * uFrostSlopeMax, uFrostSlopeMax, terrainSlopeTan));
+          surfaceAlbedo = mix(surfaceAlbedo, uFrostColor, frostMask);
+        #endif
+        dayColor = surfaceAlbedo * mix(vec3(1.0), lit, uTerrainLambert);
       #endif
 
       // Ночная и облачная карты есть не у всех тел. Раньше сэмплеры читались
