@@ -1,6 +1,5 @@
 import type { Actor } from '@/core/models/Actor'
-import { readRenderingData } from '@/core/helpers/renderingData'
-import type { IPlanetRenderingObject } from '@/core/models/types'
+import { terrainDataOf } from '@/core/terrain/terrainClassPresets'
 
 /** Ручки геометрии средней полосы (арка B); дефолты глобальные, БД не трогается. */
 export interface MidbandParams {
@@ -100,9 +99,9 @@ export function resolveMidbandParams(data: unknown, context: string): MidbandPar
   return params
 }
 
-/** Единая точка чтения для RenderableFactory и CameraCollision — иначе кеш полей разойдётся. */
+/** Единая точка чтения для RenderableFactory и CameraCollision — иначе кеш полей разойдётся; данные — с пресетом класса. */
 export function midbandParamsOf(model: Actor): MidbandParams {
-  return resolveMidbandParams(readRenderingData<IPlanetRenderingObject>(model), model.getAttribute?.('name', '?') ?? '?')
+  return resolveMidbandParams(terrainDataOf(model), model.getAttribute?.('name', '?') ?? '?')
 }
 
 /** Базовая длина волны, метры: под текселем карты, в коридоре 0.8..3 км; явная ручка — как есть. */

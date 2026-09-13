@@ -16,6 +16,7 @@ import { resolveMacroSlopeStructureParams } from '@/core/terrain/macroSlopeStruc
 import { resolveTerrainLightParams } from '@/core/terrain/terrainLightParams'
 import { resolveWaterFoamParams } from '@/core/terrain/waterFoamParams'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
+import { terrainDataOf } from '@/core/terrain/terrainClassPresets'
 import { config } from '@/core/framework/config'
 import { DEFAULT_SUN_ANGULAR_RADIUS } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
 
@@ -167,16 +168,8 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
     super(Shader)
     this.model = model
 
-    // `IRenderingObject.data` — `Record<string, unknown>`: схема БД не различает конфиги
-    // по категориям, поэтому форма утверждается локально там, где категория известна.
-    // detail*-поля опциональны (см. IPlanetRenderingObject) — фолбэк объекту их
-    // задавать не нужно, как и ringData ниже не перечисляет свои опциональные ручки.
-    const planetData: IPlanetRenderingObject = (this.model.renderingObject?.getAttribute('data') as
-      | IPlanetRenderingObject
-      | undefined) ?? {
-      bumpScale: 0,
-      emission: 1
-    }
+    // Данные облика: пресет класса под данными тела (terrainClassPresets.ts).
+    const planetData: IPlanetRenderingObject = terrainDataOf(this.model)
 
     const ringData: IRingRenderingObject = (this.model.children
       .where('categoryId', 6)

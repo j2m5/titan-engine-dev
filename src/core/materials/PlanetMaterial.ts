@@ -11,6 +11,7 @@ import { STEEP_DETAIL_PATHS } from '@/core/terrain/steepDetailPaths'
 import { detailTintNorm } from '@/core/terrain/detailTextureStats'
 import { resolveSteepZoneParams } from '@/core/terrain/steepZoneParams'
 import { midbandParamsOf } from '@/core/terrain/midbandParams'
+import { terrainDataOf } from '@/core/terrain/terrainClassPresets'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { terrainShadowMapFor } from '@/core/terrain/terrainShadowMap'
 import { resolveTerrainLightParams } from '@/core/terrain/terrainLightParams'
@@ -267,12 +268,8 @@ class PlanetMaterial extends AbstractShaderMaterial {
     // cavity им не печётся).
     // Юниформ форвардится из data независимо от гейта ниже: значение само по
     // себе безвредно, шейдер читает его только под USE_CAVITY.
-    const planetData: IPlanetRenderingObject = (this.model.renderingObject?.getAttribute('data') as
-      | IPlanetRenderingObject
-      | undefined) ?? {
-      bumpScale: 0,
-      emission: 1
-    }
+    // Данные облика: пресет класса под данными тела (terrainClassPresets.ts).
+    const planetData: IPlanetRenderingObject = terrainDataOf(this.model)
     const cavityStrength = planetData.cavityStrength ?? 0
 
     // Собственная тень рельефа: карта тени — по карте высот, не по полю (от
