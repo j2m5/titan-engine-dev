@@ -10,7 +10,8 @@
  * (аккумулятор occlusion), не альбедо: гасит амбиент целиком, прямой свет —
  * ручкой uTerrainOcclusionDirect; тинт остаётся цветом (albedoMul). Крупная
  * шкала также отдаёт шероховатость (канал G того же ARM-сэмпла) наружу через
- * inout roughness — хостовый блеск льда (terrainIceGlint) читает её как есть.
+ * inout roughness — applyTerrainDetail сводит её к 1 через fade1 (mix(1.0, …,
+ * fade1)), это значение читает хостовый блеск льда (terrainIceGlint).
  *
  * Проекции и whiteout-бленд — переиспользованы из чанка TriplanarDetail
  * (triplanarWeights/triplanarBlendRgb/triplanarBlendNormal). Домен адресации
@@ -330,16 +331,17 @@ export const terrainDetailFunctions = `
 
     // AO и шероховатость — один сэмпл ARM (R/G каналы): AO относительно
     // СВОЕГО среднего (norm.y), модуляция ±, кламп 2 — гард от битой
-    // статистики; шероховатость (G) — сырое [0,1], блеск льда хоста.
+    // статистики; канал G — шероховатость, сырое [0,1] (R — AO, B — металл),
+    // читает блеск льда хоста.
     aoOut = 1.0;
     roughnessOut = 1.0;
     if (uDetailLayerGates.x > 0.0) {
       vec3 armSample = triplanarArmDetiled(arm, t, w, l);
       aoOut = mix(1.0, clamp(armSample.r * norm.y, 0.0, 2.0), uDetailAoInfluence);
-      // канал G ARM — шероховатость (R — AO, B — металл): блеск льда хоста
       roughnessOut = clamp(armSample.g, 0.0, 1.0);
     }
 
+    // Диффуз тоже нормирован к своему среднему (norm.x, среднее слоя = 1).
     tintOut = vec3(1.0);
     if (uDetailLayerGates.y > 0.0) {
       vec3 diffuseDetail = clamp(triplanarAlbedoDetiled(diff, t, w, l) * norm.x, 0.0, 2.0);

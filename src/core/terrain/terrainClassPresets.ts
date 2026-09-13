@@ -22,7 +22,7 @@ export const TERRAIN_CLASS_PRESETS: Readonly<Record<TerrainClass, Readonly<Parti
   'ice-atmosphere': ICE,
   'sand-atmosphere': { terrainAmbient: 0.18, macroStreakStrength: 0.7, macroTerraceStrength: 0.3 },
   'sand-airless': { terrainAmbient: 0.12 },
-  // тёмный набор (средняя яркость 0.09): камень темнее почти не читается под AgX
+  // тёмный набор: steepTint осветляет камень, иначе он не читается
   'volcanic-atmosphere': { terrainAmbient: 0.16, steepTint: 0xf2f2f2 },
   'volcanic-airless': { terrainAmbient: 0.1, steepTint: 0xf2f2f2 }
 }
