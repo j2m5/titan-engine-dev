@@ -240,6 +240,8 @@ export interface IPlanetRenderingObject {
   midbandRidge?: number
   /** Варп домена вдоль стока, доли λ₀; дефолт 0.35. */
   midbandWarp?: number
+  /** Сила альбедо полосы от её геометрии (гребни светлее, лощины темнее); дефолт 0.5, 0 — прежний вид. */
+  midbandShade?: number
 
   /**
    * Ламберт суши (терраформный путь): 0 — выключен (дневной цвет не зависит
@@ -387,6 +389,19 @@ export interface IPlanetRenderingObject {
   skyAmbientStrength?: number
   cloudShadowStrength?: number
   cloudShadowHeightKm?: number
+
+  /** Класс облика (terrainClass.ts): переопределяет вывод из данных; 'none' — без пресета. */
+  terrainClass?: string
+  /** Сила блеска льда по шероховатости слоя детали, [0, 1]; дефолт 0. */
+  iceGlintStrength?: number
+  /** Иней (frostParams.ts): сила [0, 1], линия и ширина перехода в метрах карты, понижение к полюсу и на склонах к полюсу, предельный tan уклона, цвет (hex sRGB). */
+  frostStrength?: number
+  frostLineMeters?: number
+  frostLineWidthMeters?: number
+  frostPolarDropMeters?: number
+  frostAspectMeters?: number
+  frostSlopeMax?: number
+  frostColor?: number | string
 }
 
 export type IAtmosphereRenderingObject = AtmosphereConfig
