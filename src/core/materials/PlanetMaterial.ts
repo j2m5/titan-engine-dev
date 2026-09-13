@@ -280,6 +280,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
     const useTerrainShadow = hasHeightField && light.terrainShadowStrength > 0
     const shadowMap = useTerrainShadow ? terrainShadowMapFor(heightMap) : undefined
     this.uniforms.uTerrainShadowStrength.value = light.terrainShadowStrength
+    this.uniforms.uIceGlintStrength.value = light.iceGlintStrength
     this.uniforms.uShadowHeightMap.value = shadowMap?.texture ?? null
     this.uniforms.uShadowHeightMin.value = shadowMap?.heightMinUnits ?? 0
     this.uniforms.uShadowHeightRange.value = shadowMap?.heightRangeUnits ?? 0
@@ -417,6 +418,8 @@ class PlanetMaterial extends AbstractShaderMaterial {
       ...(cloudMap && hasHeightField && { USE_CLOUD_SHADOW: '1' }),
       // Тень рельефа: карта высот есть И ручка ненулевая — при 0 шейдер бит-в-бит прежний
       ...(useTerrainShadow && { USE_TERRAIN_SHADOW: '1' }),
+      // Блеск льда: слой детали даёт шероховатость; на телах с водой блик суши под водой был бы вторым бликом
+      ...(USE_TERRAIN_DETAIL && light.iceGlintStrength > 0 && !hasWaterShell && { USE_TERRAIN_GLINT: '1' }),
       // Пересборка от снимка стирает и дефайны атмосферных LUT — они не про
       // карты и живут своей синхронизацией, поэтому восстанавливаются здесь же
       // по текущей записи реестра (иначе стриминг карт гасил бы тинт до

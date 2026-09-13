@@ -8,7 +8,9 @@
  * высокочастотный микрорельеф не даёт выигрыша в читаемости от повторной
  * AO/diffuse-модуляции на этой частоте, только шум. AO — окклюзия
  * (аккумулятор occlusion), не альбедо: гасит амбиент целиком, прямой свет —
- * ручкой uTerrainOcclusionDirect; тинт остаётся цветом (albedoMul).
+ * ручкой uTerrainOcclusionDirect; тинт остаётся цветом (albedoMul). Крупная
+ * шкала также отдаёт шероховатость (канал G того же ARM-сэмпла) наружу через
+ * inout roughness — хостовый блеск льда (terrainIceGlint) читает её как есть.
  *
  * Проекции и whiteout-бленд — переиспользованы из чанка TriplanarDetail
  * (triplanarWeights/triplanarBlendRgb/triplanarBlendNormal). Домен адресации
@@ -322,15 +324,20 @@ export const terrainDetailFunctions = `
   // сама функция dFdx/dFdy не считает.
   void sampleDetailSet(
     sampler2D nor, sampler2D arm, sampler2D diff, vec2 norm, TriplanarUv t, vec3 w, vec3 l, vec3 nLocal,
-    out vec3 nOut, out float aoOut, out vec3 tintOut
+    out vec3 nOut, out float aoOut, out vec3 tintOut, out float roughnessOut
   ) {
     nOut = triplanarNormalDetiled(nor, t, nLocal, w, l);
 
-    // AO и диффуз — относительно СВОИХ средних (norm): среднее слоя = 1,
-    // модуляция ±; кламп 2 — гард от битой статистики
+    // AO и шероховатость — один сэмпл ARM (R/G каналы): AO относительно
+    // СВОЕГО среднего (norm.y), модуляция ±, кламп 2 — гард от битой
+    // статистики; шероховатость (G) — сырое [0,1], блеск льда хоста.
     aoOut = 1.0;
+    roughnessOut = 1.0;
     if (uDetailLayerGates.x > 0.0) {
-      aoOut = mix(1.0, clamp(triplanarArmDetiled(arm, t, w, l).r * norm.y, 0.0, 2.0), uDetailAoInfluence);
+      vec3 armSample = triplanarArmDetiled(arm, t, w, l);
+      aoOut = mix(1.0, clamp(armSample.r * norm.y, 0.0, 2.0), uDetailAoInfluence);
+      // канал G ARM — шероховатость (R — AO, B — металл): блеск льда хоста
+      roughnessOut = clamp(armSample.g, 0.0, 1.0);
     }
 
     tintOut = vec3(1.0);
@@ -341,7 +348,7 @@ export const terrainDetailFunctions = `
     }
   }
 
-  void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan) {
+  void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan, inout float roughness) {
     // Пороги фейда — ручки пер-тела в метрах дистанции, сконвертированные
     // в юниты на CPU (см. докстрока чанка и PlanetShader.uDetailFadeRange).
     float fade1 = 1.0 - smoothstep(uDetailFadeRange.x, uDetailFadeRange.y, viewDistance);
@@ -388,34 +395,38 @@ export const terrainDetailFunctions = `
         vec3 nNative, nSteep;
         float aoNative, aoSteep;
         vec3 tintNative, tintSteep;
+        float rNative, rSteep;
 
         if (m < STEEP_EPS) {
           // Вне зоны — читается ровно один (родной) набор.
-          sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, uDetailTintNorm, uvBig, w, l, nLocal, nNative, aoNative, tintNative);
+          sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, uDetailTintNorm, uvBig, w, l, nLocal, nNative, aoNative, tintNative, rNative);
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (nNative - nLocal));
           occlusion *= mix(1.0, aoNative, fade1);
           albedoMul *= mix(vec3(1.0), tintNative, fade1);
+          roughness = mix(1.0, rNative, fade1);
         } else if (m > 1.0 - STEEP_EPS) {
           // Только steep — симметрично ветке выше.
-          sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uSteepTintNorm, uvBig, w, l, nLocal, nSteep, aoSteep, tintSteep);
+          sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uSteepTintNorm, uvBig, w, l, nLocal, nSteep, aoSteep, tintSteep, rSteep);
           tintSteep *= uSteepTint;
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (nSteep - nLocal));
           occlusion *= mix(1.0, aoSteep, fade1);
           albedoMul *= mix(vec3(1.0), tintSteep, fade1);
+          roughness = mix(1.0, rSteep, fade1);
         } else {
           // Полоса перехода: оба набора (бюджет — см. докстроку чанка).
           // Нормали — whiteout, последовательно родной вес (1-m), затем
           // steep вес m (тот же паттерн, что крупная/мелкая шкала ниже).
-          // AO/tint — не направления, обычный mix(a, b, m).
-          sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, uDetailTintNorm, uvBig, w, l, nLocal, nNative, aoNative, tintNative);
+          // AO/tint/шероховатость — не направления, обычный mix(a, b, m).
+          sampleDetailSet(uDetailNorMap, uDetailArmMap, uDetailDiffMap, uDetailTintNorm, uvBig, w, l, nLocal, nNative, aoNative, tintNative, rNative);
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * (1.0 - m) * (nNative - nLocal));
 
-          sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uSteepTintNorm, uvBig, w, l, nLocal, nSteep, aoSteep, tintSteep);
+          sampleDetailSet(uSteepNorMap, uSteepArmMap, uSteepDiffMap, uSteepTintNorm, uvBig, w, l, nLocal, nSteep, aoSteep, tintSteep, rSteep);
           tintSteep *= uSteepTint;
           nLocal = normalize(nLocal + uDetailNormalScale * fade1 * m * (nSteep - nLocal));
 
           occlusion *= mix(1.0, mix(aoNative, aoSteep, m), fade1);
           albedoMul *= mix(vec3(1.0), mix(tintNative, tintSteep, m), fade1);
+          roughness = mix(1.0, mix(rNative, rSteep, m), fade1);
         }
       }
 

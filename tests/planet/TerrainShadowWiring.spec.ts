@@ -88,9 +88,10 @@ describe('PlanetShaderTemplate: тень рельефа', () => {
     expect(sun).toBeLessThan(frag.indexOf('terrainShadowMarch(dirLocal, sunLocal)'))
   })
 
-  it('блики гасятся тенью: специальный и мокрой кромки', () => {
+  it('блики гасятся тенью: специальный, мокрой кромки и льда', () => {
     expect(frag).toContain('* smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;')
-    expect(frag.split('* ringShadowFactor * terrainShadow;').length - 1).toBe(2)
+    // специальный, мокрая кромка, лёд (USE_TERRAIN_GLINT) — три блика используют один и тот же множитель тени
+    expect(frag.split('* ringShadowFactor * terrainShadow;').length - 1).toBe(3)
   })
 })
 

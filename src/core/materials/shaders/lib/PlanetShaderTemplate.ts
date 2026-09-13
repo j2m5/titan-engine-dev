@@ -283,6 +283,19 @@ export const PlanetShaderTemplate: ShaderProps = {
       return specComp * fresnel;
     }
 
+    #ifdef USE_TERRAIN_GLINT
+      // Блеск льда: нормированный Блинн–Фонг по шероховатости слоя детали, Френель льда
+      uniform float uIceGlintStrength;
+      #define ICE_GLINT_F0 0.018
+      float terrainIceGlint(vec3 normal, vec3 lightDirection, vec3 viewDir, float roughness) {
+        float gloss = 1.0 - clamp(roughness, 0.0, 1.0);
+        float power = mix(8.0, 512.0, gloss * gloss);
+        vec3 halfVec = normalize(lightDirection + viewDir);
+        float fresnel = ICE_GLINT_F0 + (1.0 - ICE_GLINT_F0) * pow(1.0 - max(dot(viewDir, halfVec), 0.0), 5.0);
+        return (power + 8.0) / 25.1327412 * pow(max(dot(normal, halfVec), 0.0), power) * fresnel * gloss * gloss;
+      }
+    #endif
+
     void main() {
       ${ShaderChunk['logdepthbuf_fragment']}
       vec3 normal = normalize(vNormal);
@@ -292,6 +305,7 @@ export const PlanetShaderTemplate: ShaderProps = {
       float occlusion = 1.0;
       float wetEdge = 0.0;
       float glintEdge = 0.0;
+      float terrainRoughness = 1.0; // шероховатость слоя детали; дальше слоя — матово
 
       #ifdef USE_TERRAIN_UV
         // UV из направления, попиксельно (общий чанк terrainUvFunctions —
@@ -377,7 +391,7 @@ export const PlanetShaderTemplate: ShaderProps = {
         #endif
 
         #ifdef USE_TERRAIN_DETAIL
-          applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);
+          applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan, terrainRoughness);
         #endif
 
         occlusion = clamp(occlusion, 0.0, 2.0); // гребни cavity × AO детали уходят выше 2 — единый потолок перед светом
@@ -561,6 +575,12 @@ export const PlanetShaderTemplate: ShaderProps = {
       #ifdef USE_WATER_EDGE
         // Блеск мокрой кромки — тот же глинт без карты, силой WET_GLOSS
         finalColor += glintEdge * blinnPhongGlint(normal, lightDirection, viewDir) * WET_GLOSS
+                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;
+      #endif
+
+      #ifdef USE_TERRAIN_GLINT
+        // лёд блестит, снег (шероховатость ≈ 1) и дальний план — нет
+        finalColor += terrainIceGlint(normal, lightDirection, viewDir, terrainRoughness) * uIceGlintStrength
                     * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;
       #endif
 

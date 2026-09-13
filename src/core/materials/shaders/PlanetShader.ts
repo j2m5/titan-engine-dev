@@ -123,6 +123,7 @@ interface PlanetUniforms {
   uShadowMaxDistUnits: number
   uShadowPenumbraTan: number
   uTerrainShadowStrength: number
+  uIceGlintStrength: number
   shadowRingsInnerRadius: number
   shadowRingsOuterRadius: number
   shadowRingsTexture: Texture | null
@@ -261,6 +262,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uShadowMaxDistUnits: new Uniform(toThreeJSUnits(config('terrain.shadowMaxKm'))),
       uShadowPenumbraTan: new Uniform(Math.tan(DEFAULT_SUN_ANGULAR_RADIUS)),
       uTerrainShadowStrength: new Uniform(light.terrainShadowStrength),
+      uIceGlintStrength: new Uniform(light.iceGlintStrength),
       uDetailFadeRange: new Uniform(
         new Vector4(
           detailFadeEndUnits * DETAIL_FADE_START_RATIO,

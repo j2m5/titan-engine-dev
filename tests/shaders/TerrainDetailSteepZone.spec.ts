@@ -71,7 +71,7 @@ describe('TerrainDetail: зоны материала по уклону', () => {
     expect(slopeNormalFunctions).toContain('return normalize(surfNormal - (slope.x * T + slope.y * B));')
     expect(slopeNormalFunctions).not.toContain('bumpScale * (slope.x')
     expect(frag).toContain(
-      'applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);'
+      'applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan, terrainRoughness);'
     )
 
     // terrainSlopeTan объявлен ДО #ifdef USE_SLOPE — имя в скоупе вызова

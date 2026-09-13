@@ -20,7 +20,7 @@ describe('TerrainDetail: нормировка diff/AO к средним набо
     expect(terrainDetailUniforms).toContain('uniform vec2 uSteepTintNorm;')
     const helper = fn.slice(fn.indexOf('void sampleDetailSet('), fn.indexOf('void applyTerrainDetail('))
     expect(helper).toContain('sampler2D diff, vec2 norm,')
-    const ao = helper.indexOf('clamp(triplanarArmDetiled(arm, t, w, l).r * norm.y, 0.0, 2.0)')
+    const ao = helper.indexOf('clamp(armSample.r * norm.y, 0.0, 2.0)')
     const diff = helper.indexOf('clamp(triplanarAlbedoDetiled(diff, t, w, l) * norm.x, 0.0, 2.0)')
     const sat = helper.indexOf('uDetailSaturation) * uDetailBrightness')
     expect(ao).toBeGreaterThan(-1)

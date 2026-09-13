@@ -37,7 +37,7 @@ describe('PlanetShaderTemplate: средняя полоса детали в те
       'applyTerrainMacroDetail(nLocal, albedoMul, occlusion, dirLocal, eastLocal, macroSlope, length(macroMapSlope), macroCavity, uv, length(vViewPosition));'
     )
     const detail = frag.indexOf(
-      'applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan);'
+      'applyTerrainDetail(nLocal, albedoMul, occlusion, vDetailPos, vDetailPos2, length(vViewPosition), terrainSlopeTan, terrainRoughness);'
     )
     const normalOut = frag.indexOf('normal = normalize(normalMatrix * nLocal);')
     expect(call).toBeGreaterThan(cavity)

@@ -9,14 +9,15 @@ describe('terrainLightParams: ручки света суши', () => {
       cloudShadowStrength: 0.6,
       cloudShadowHeightKm: 6,
       terrainShadowStrength: 1,
-      terrainShadowSoftness: 1
+      terrainShadowSoftness: 1,
+      iceGlintStrength: 0
     })
     expect(resolveTerrainLightParams(undefined, 'x').skyAmbientStrength).toBe(1)
   })
 
   it('значения из data доезжают', () => {
-    const p = resolveTerrainLightParams({ terrainOcclusionDirect: 1, skyAmbientStrength: 0, cloudShadowStrength: 0, cloudShadowHeightKm: 10, terrainShadowStrength: 0, terrainShadowSoftness: 2 }, 'x')
-    expect(p).toEqual({ terrainOcclusionDirect: 1, skyAmbientStrength: 0, cloudShadowStrength: 0, cloudShadowHeightKm: 10, terrainShadowStrength: 0, terrainShadowSoftness: 2 })
+    const p = resolveTerrainLightParams({ terrainOcclusionDirect: 1, skyAmbientStrength: 0, cloudShadowStrength: 0, cloudShadowHeightKm: 10, terrainShadowStrength: 0, terrainShadowSoftness: 2, iceGlintStrength: 0.35 }, 'x')
+    expect(p).toEqual({ terrainOcclusionDirect: 1, skyAmbientStrength: 0, cloudShadowStrength: 0, cloudShadowHeightKm: 10, terrainShadowStrength: 0, terrainShadowSoftness: 2, iceGlintStrength: 0.35 })
   })
 
   it('громкая валидация: доли вне [0,1], высота ≤ 0, не число', () => {
@@ -25,5 +26,6 @@ describe('terrainLightParams: ручки света суши', () => {
     expect(() => resolveTerrainLightParams({ cloudShadowStrength: 2 }, 'Луна')).toThrow(/cloudShadowStrength/)
     expect(() => resolveTerrainLightParams({ cloudShadowHeightKm: 0 }, 'Луна')).toThrow(/cloudShadowHeightKm/)
     expect(() => resolveTerrainLightParams({ terrainOcclusionDirect: 'x' }, 'Луна')).toThrow(/не число/)
+    expect(() => resolveTerrainLightParams({ iceGlintStrength: 1.5 }, 'Луна')).toThrow(/\[0, 1\]/)
   })
 })
