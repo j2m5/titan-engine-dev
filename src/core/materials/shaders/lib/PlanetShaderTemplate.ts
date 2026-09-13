@@ -299,7 +299,9 @@ export const PlanetShaderTemplate: ShaderProps = {
         float gloss = 1.0 - clamp(roughness, 0.0, 1.0);
         float power = mix(8.0, 512.0, gloss * gloss);
         vec3 halfVec = normalize(lightDirection + viewDir);
-        float fresnel = ICE_GLINT_F0 + (1.0 - ICE_GLINT_F0) * pow(1.0 - max(dot(viewDir, halfVec), 0.0), 5.0);
+        // dot(V, halfVec) может округлиться выше 1 (V≈L, float32) — без верхнего
+        // клампа степень 5 получает отрицательное основание, pow даёт NaN (ANGLE/D3D)
+        float fresnel = ICE_GLINT_F0 + (1.0 - ICE_GLINT_F0) * pow(1.0 - clamp(dot(viewDir, halfVec), 0.0, 1.0), 5.0);
         return (power + 8.0) / 25.1327412 * pow(max(dot(normal, halfVec), 0.0), power) * fresnel * gloss * gloss;
       }
     #endif

@@ -13,6 +13,6 @@ export function iceGlintPower(roughness: number): number {
 export function iceGlint(nDotH: number, vDotH: number, roughness: number): number {
   const gloss = 1 - clamp01(roughness)
   const power = iceGlintPower(roughness)
-  const fresnel = ICE_GLINT_F0 + (1 - ICE_GLINT_F0) * (1 - Math.max(vDotH, 0)) ** 5
+  const fresnel = ICE_GLINT_F0 + (1 - ICE_GLINT_F0) * (1 - clamp01(vDotH)) ** 5
   return ((power + 8) / (8 * Math.PI)) * Math.max(nDotH, 0) ** power * fresnel * gloss * gloss
 }
