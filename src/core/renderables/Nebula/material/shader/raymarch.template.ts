@@ -59,7 +59,10 @@ export function createNebulaUniforms(): Record<string, IUniform> {
     uScatterStrength: new Uniform(0.8),
     uAmbient: new Uniform(1.0),
     uStarLocal: new Uniform(new Vector3()),
-    uHasStar: new Uniform(0)
+    uHasStar: new Uniform(0),
+    uLightColor: new Uniform(new Color(0xffffff)),
+    uLightTint: new Uniform(0),
+    uLightFalloff: new Uniform(0)
   }
 }
 

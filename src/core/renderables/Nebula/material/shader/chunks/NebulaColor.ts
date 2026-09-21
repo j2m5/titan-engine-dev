@@ -1,8 +1,9 @@
 // GLSL chunk: multichromatic self-emissive color + secondary ionization channel
-// + cheap white directional scatter + dust absorption.
-// Lighting is WHITE only (no star color) by design: uAmbient is the self-emission
-// baseline (default 1.0 -> visible without a star); the star adds an additive
-// forward-scatter highlight for spectacle, never darkens the emission.
+// + cheap directional scatter + dust absorption.
+// uAmbient is the self-emission baseline (default 1.0 -> visible without a star);
+// the star adds an additive forward-scatter highlight, never darkens the emission.
+// Scatter is WHITE by default: it scales the palette colour. With uLightTint the
+// scatter term takes the star's hue instead; the ambient term is never tinted.
 export const nebulaColorChunk = `
   uniform vec3  uPalette0; uniform vec3 uPalette1; uniform vec3 uPalette2; uniform vec3 uPalette3;
   uniform vec4  uPaletteT;
@@ -15,6 +16,9 @@ export const nebulaColorChunk = `
   uniform float uAmbient;
   uniform vec3  uStarLocal;
   uniform float uHasStar;
+  uniform vec3  uLightColor;
+  uniform float uLightTint;
+  uniform float uLightFalloff;
   uniform float uRadialMix;
   uniform vec3  uInnerColor;
   uniform vec3  uOuterColor;
@@ -50,13 +54,30 @@ export const nebulaColorChunk = `
       float radial = clamp(length(p), 0.0, 1.0);
       base = mix(base, mix(uInnerColor, uOuterColor, radial), uRadialMix);
     }
-    // self-emission baseline (uAmbient) + optional white directional forward scatter
+    // self-emission baseline (uAmbient) + optional directional forward scatter
     float light = uAmbient;
+    vec3 tinted = vec3(0.0);
     if (uHasStar > 0.5) {
-      vec3 toStar = normalize(uStarLocal - p);
-      light += uScatterStrength * max(dot(-rd, toStar), 0.0);
+      vec3 toStarVec = uStarLocal - p;
+      vec3 toStar = normalize(toStarVec);
+      float scatter = uScatterStrength * max(dot(-rd, toStar), 0.0);
+
+      // Gated: distance falloff localises the glow around the star
+      if (uLightFalloff > 0.001) {
+        float q = length(toStarVec) / uLightFalloff;
+        scatter /= 1.0 + q * q;
+      }
+
+      // Gated: a coloured light REPLACES the hue of the scatter term (luma of the
+      // palette carries the density). Multiplying instead would muddy
+      // complementary pairs — teal times orange is brown
+      if (uLightTint > 0.5) {
+        tinted = uLightColor * dot(base, vec3(0.2126, 0.7152, 0.0722)) * scatter;
+      } else {
+        light += scatter;
+      }
     }
-    base *= light;
+    base = base * light + tinted;
     // dust absorption: darken high-dust regions toward the dust color
     float dustAmt = uDustStrength * smoothstep(uDustThreshold, 1.0, dust);
     base = mix(base, uDustColor, dustAmt);

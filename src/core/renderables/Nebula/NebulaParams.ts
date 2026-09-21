@@ -115,6 +115,10 @@ export interface NebulaParams {
     starPosition: Vector3 | null // world space
     scatterStrength: number
     ambient: number
+    /** Цвет рассеянного света звезды; null — белый (scatter красит палитру как раньше) */
+    color: Color | null
+    /** Радиус спада scatter от звезды, локальные единицы [-1,1]; 0 — спада нет */
+    falloffRadius: number
   }
 
   quality: {
@@ -156,7 +160,9 @@ function cloneNebulaParams(src: NebulaParams): NebulaParams {
     lighting: {
       starPosition: src.lighting.starPosition ? src.lighting.starPosition.clone() : null,
       scatterStrength: src.lighting.scatterStrength,
-      ambient: src.lighting.ambient
+      ambient: src.lighting.ambient,
+      color: src.lighting.color ? src.lighting.color.clone() : null,
+      falloffRadius: src.lighting.falloffRadius
     },
     quality: { ...src.quality }
   }
@@ -214,7 +220,10 @@ export function makeDefaultNebulaParams(): NebulaParams {
       // Self-emission baseline: 1.0 keeps the nebula fully visible WITHOUT a star
       // (it is self-emissive). The star's scatter is additive on top. Reflection-type
       // nebulae override this low so they read as star-lit rather than self-lit.
-      ambient: 1.0
+      ambient: 1.0,
+      // null и 0 — несущие дефолты: чанк цвета общий на все туманности
+      color: null,
+      falloffRadius: 0
     },
     quality: {
       // 64 keeps full-screen interior cost ~33% below 96; dithering hides the
@@ -300,6 +309,10 @@ export function mergeNebulaParams(
     if (overrides.lighting.scatterStrength !== undefined)
       result.lighting.scatterStrength = overrides.lighting.scatterStrength
     if (overrides.lighting.ambient !== undefined) result.lighting.ambient = overrides.lighting.ambient
+    if (overrides.lighting.color !== undefined)
+      result.lighting.color = overrides.lighting.color ? (overrides.lighting.color as Color).clone() : null
+    if (overrides.lighting.falloffRadius !== undefined)
+      result.lighting.falloffRadius = Math.max(overrides.lighting.falloffRadius, 0)
   }
   Object.assign(result.quality, overrides.quality)
 
