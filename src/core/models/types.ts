@@ -22,7 +22,8 @@ export enum AllowedCategories {
   ring,
   nebula,
   brownDwarf,
-  whiteDwarf
+  whiteDwarf,
+  giantStar
 }
 
 export type AllowedCategory = keyof typeof AllowedCategories
@@ -498,6 +499,25 @@ export interface IWhiteDwarfRenderingObject {
    * Множитель поверх откалиброванного уровня яркости
    * (WHITE_DWARF_DISPLAY_SCALE). Единица — нейтральное значение.
    */
+  exposureBias?: number
+}
+
+/**
+ * Звезда-гигант (красный гигант, сверхгигант, гипергигант — различие в данных).
+ * Цвет, яркость и лимбовое потемнение выводятся из температуры физического
+ * объекта — см. GiantStarParameters.
+ */
+export interface IGiantStarRenderingObject {
+  seed?: number
+  /** Масштаб домена ячеек: ячейка около R/3 при 5 */
+  cellCount?: number
+  /** Множитель температурного спреда ячеек */
+  cellContrast?: number
+  /** Полная протяжённость оболочки, доли радиуса */
+  atmosphereHeight?: number
+  /** Оптическая толща касательного луча; 0 гасит оболочку */
+  atmosphereDensity?: number
+  /** Множитель поверх откалиброванной яркости */
   exposureBias?: number
 }
 

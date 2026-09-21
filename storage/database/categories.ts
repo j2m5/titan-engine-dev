@@ -12,5 +12,6 @@ export const Categories: ICategory[] = [
   { id: 6, alias: "ring", name: "Ring" },
   { id: 7, alias: "nebula", name: "Nebula" },
   { id: 8, alias: "brownDwarf", name: "Brown dwarf" },
-  { id: 9, alias: "whiteDwarf", name: "White dwarf" }
+  { id: 9, alias: "whiteDwarf", name: "White dwarf" },
+  { id: 10, alias: "giantStar", name: "Giant star" }
 ]

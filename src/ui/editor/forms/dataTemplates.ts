@@ -130,5 +130,17 @@ export const renderingDataTemplates: DataTemplate[] = [
     data: {
       exposureBias: 1
     }
+  },
+  {
+    value: 'giantStar',
+    label: 'giantStar',
+    data: {
+      seed: 1,
+      cellCount: 5,
+      cellContrast: 1,
+      atmosphereHeight: 0.3,
+      atmosphereDensity: 1,
+      exposureBias: 1
+    }
   }
 ]
