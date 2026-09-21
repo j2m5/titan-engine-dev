@@ -53,7 +53,7 @@ import { WATER_SHALLOW_RANGE_METERS } from '@/core/terrain/waterLevel'
  */
 const NO_CAVITY_ACTOR_IDS: readonly number[] = [5, 6, 7, 8, 19]
 
-const EXPECTED_COVERAGE_COUNT = 50
+const EXPECTED_COVERAGE_COUNT = 54
 const TEXTURES_ROOT = 'storage/images/textures'
 const RECOMMEND_MODE = process.argv.includes('--recommend')
 
