@@ -141,7 +141,7 @@ describe('гейт в шейдерах', () => {
   })
 })
 
-describe('гейт в чанке RingDust (пылевая дымка колец — фикс-раунд 1)', () => {
+describe('гейт в чанке RingDust (пылевая дымка колец)', () => {
   const uniformsChunk: string = withoutComments(ringDustUniforms)
   const functionsChunk: string = withoutComments(ringDustFunctions)
   const raymarchFunctionsChunk: string = withoutComments(ringDustRaymarchFunctions)
@@ -179,7 +179,7 @@ describe('гейт в шейдере билборда камней (BillboardAst
   })
 })
 
-// --- Проводка материалов (Step 10) ---
+// --- Проводка материалов ---
 // Деревья акторов — минимальные стабы (тот же приём, что tree() в
 // LightSource.spec.ts): planet/water/ring под звездой-корнем с lightTint,
 // либо без родителя вовсе (гейт закрыт).
@@ -234,7 +234,9 @@ describe('проводка материалов: гейт USE_LIGHT_TINT и юн
 
   it('PlanetMaterial: без светила-подписчика — без дефайна, uLightColor белый', () => {
     const material = new PlanetMaterial(planetActor(null))
-    material.updateMaterial() // дефайн собирается в updateMaterial (рядом с USE_SUN_TINT), не в конструкторе
+    // USE_LIGHT_TINT живёт в baseDefines (конструктор) и переживает
+    // updateMaterial()/resetMaterial(); вызов здесь — проверка этого
+    material.updateMaterial()
 
     expect(material.defines.USE_LIGHT_TINT).toBeUndefined()
     expect((material.uniforms.uLightColor.value as Color).equals(new Color(1, 1, 1))).toBe(true)
