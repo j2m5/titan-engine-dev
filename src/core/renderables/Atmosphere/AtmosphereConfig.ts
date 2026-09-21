@@ -7,6 +7,7 @@
 
 import { Uniform, Vector3 } from 'three'
 import { IUniform } from 'three/src/renderers/shaders/UniformsLib'
+import { AU } from '@/core/constants'
 
 export const EMPTY_LAYER: DensityProfileLayer = {
   width: 0,
@@ -23,8 +24,12 @@ export function solarIrradiance(dAU: number): [number, number, number] {
   return [EARTH_SOLAR[0] * f, EARTH_SOLAR[1] * f, EARTH_SOLAR[2] * f]
 }
 
-export function sunAngle(dAU: number): number {
-  return Math.atan(695700 / (dAU * 149597870.7))
+/**
+ * Угловой радиус светила с орбиты тела, радианы: atan(R★ / a). Это значение
+ * вписывается в `sunAngularRadius` строки атмосферы и запекается в LUT.
+ */
+export function sunAngularRadius(starRadiusKm: number, semiMajorAxisAu: number): number {
+  return Math.atan(starRadiusKm / (semiMajorAxisAu * AU))
 }
 
 /** Scale Earth Rayleigh by a factor (preserves λ⁻⁴ wavelength ratio) */
