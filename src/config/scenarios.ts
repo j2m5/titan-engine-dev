@@ -140,8 +140,8 @@ export const Scenarios: ScenarioConfig[] = [
       'Red supergiant W26 inside the cocoon it blew for itself: a star seven astronomical units in radius lighting the inner wall of its own nebula',
     preview: 'unknown.png',
     skybox: [1, 2, 3, 4, 5, 6],
-    // Полуразмер кокона — 430 а.е.; с ~1000 а.е. он помещается в кадр целиком.
-    // Сама звезда оттуда не разглядеть — к ней ведёт навигация. Стартовое
+    // Полуразмер кокона — 430 а.е.; с ~1000 а.е. он помещается в кадр целиком,
+    // а звезда в его сердце видна небольшим диском. Позиция стартовая.
     defaultCameraPosition: [0, fromAstronomicalUnits(720), fromAstronomicalUnits(720)],
     lightSources: [117]
   }
