@@ -569,7 +569,12 @@ const BODIES: readonly BodyGeneration[] = [
     radiusMeters: 5_950_000,
     seedActorId: 88,
     actorIds: [88]
-  }
+  },
+  // Система W26: вход `procedural`, у каждого тела свои height/slope
+  { name: 'emberon', outputDir: `${TEXTURES_ROOT}/unnamed/w26`, inputKind: 'procedural', radiusMeters: 5_200_000, seedActorId: 119, actorIds: [119] },
+  { name: 'halcyra1', outputDir: `${TEXTURES_ROOT}/unnamed/w26`, inputKind: 'procedural', radiusMeters: 1_400_000, seedActorId: 121, actorIds: [121] },
+  { name: 'halcyra2', outputDir: `${TEXTURES_ROOT}/unnamed/w26`, inputKind: 'procedural', radiusMeters: 2_100_000, seedActorId: 122, actorIds: [122] },
+  { name: 'nivalis', outputDir: `${TEXTURES_ROOT}/unnamed/w26`, inputKind: 'procedural', radiusMeters: 4_100_000, seedActorId: 123, actorIds: [123] }
 ]
 
 interface ReportRow {

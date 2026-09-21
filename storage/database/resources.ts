@@ -195,5 +195,13 @@ export const Resources: IResource[] = [
   { id: 234, resourceType: "detailArm", lifecycle: "streamable", path: "terrain/sand_arm.webp", wrapS: 1e3, wrapT: 1e3 },
   { id: 235, resourceType: "detailDiffuse", lifecycle: "streamable", path: "terrain/volcanic_diff.webp", wrapS: 1e3, wrapT: 1e3, colorSpace: "srgb" },
   { id: 236, resourceType: "detailNormal", lifecycle: "streamable", path: "terrain/volcanic_nor.webp", wrapS: 1e3, wrapT: 1e3 },
-  { id: 237, resourceType: "detailArm", lifecycle: "streamable", path: "terrain/volcanic_arm.webp", wrapS: 1e3, wrapT: 1e3 }
+  { id: 237, resourceType: "detailArm", lifecycle: "streamable", path: "terrain/volcanic_arm.webp", wrapS: 1e3, wrapT: 1e3 },
+  { id: 238, resourceType: "height", lifecycle: "resident", path: "planets/unnamed/w26/emberon_height.raw" },
+  { id: 239, resourceType: "slope", lifecycle: "streamable", path: "planets/unnamed/w26/emberon_slope.webp", slopeRange: 0.25, wrapS: 1e3 },
+  { id: 240, resourceType: "height", lifecycle: "resident", path: "planets/unnamed/w26/halcyra1_height.raw" },
+  { id: 241, resourceType: "slope", lifecycle: "streamable", path: "planets/unnamed/w26/halcyra1_slope.webp", slopeRange: 0.25, wrapS: 1e3 },
+  { id: 242, resourceType: "height", lifecycle: "resident", path: "planets/unnamed/w26/halcyra2_height.raw" },
+  { id: 243, resourceType: "slope", lifecycle: "streamable", path: "planets/unnamed/w26/halcyra2_slope.webp", slopeRange: 0.25, wrapS: 1e3 },
+  { id: 244, resourceType: "height", lifecycle: "resident", path: "planets/unnamed/w26/nivalis_height.raw" },
+  { id: 245, resourceType: "slope", lifecycle: "streamable", path: "planets/unnamed/w26/nivalis_slope.webp", slopeRange: 0.25, wrapS: 1e3 }
 ]

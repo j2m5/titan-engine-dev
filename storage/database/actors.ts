@@ -121,5 +121,10 @@ export const Actors: IActor[] = [
   { id: 115, categoryId: 7, parentId: 113, name: "MyCn 18", description: "", color: "#d05a24" },
   { id: 116, categoryId: 1, parentId: null, name: "Westerlund 1-26 system", description: "", color: "#ffffff" },
   { id: 117, categoryId: 10, parentId: 116, name: "W26", description: "", color: "#ff7a3c" },
-  { id: 118, categoryId: 7, parentId: 116, name: "W26 Nebula", description: "", color: "#3fd0b0" }
+  { id: 118, categoryId: 7, parentId: 116, name: "W26 Nebula", description: "", color: "#3fd0b0" },
+  { id: 119, categoryId: 4, parentId: 116, name: "Emberon", description: "", color: "#8a4a2c" },
+  { id: 120, categoryId: 4, parentId: 116, name: "Halcyra", description: "", color: "#d7bb5f" },
+  { id: 121, categoryId: 4, parentId: 120, name: "Halcyra I", description: "", color: "#c9a64a" },
+  { id: 122, categoryId: 4, parentId: 120, name: "Halcyra II", description: "", color: "#b8bcc2" },
+  { id: 123, categoryId: 4, parentId: 116, name: "Nivalis", description: "", color: "#dfe8f2" }
 ]
