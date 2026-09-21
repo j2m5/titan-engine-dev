@@ -26,7 +26,8 @@ class RingMaterial extends AbstractShaderMaterial {
     this.uniforms.uLightColor = new Uniform(new Color(1, 1, 1))
     const lightTint = resolveLightTint(model)
     ;(this.uniforms.uLightColor.value as Color).copy(lightTint.color)
-    this.defines = { ...(lightTint.active && { USE_LIGHT_TINT: '1' }) }
+    // Спред обязателен: дефайны из parameters уже лежат в this.defines после super()
+    this.defines = { ...this.defines, ...(lightTint.active && { USE_LIGHT_TINT: '1' }) }
   }
 
   public updateMaterial(): void {}

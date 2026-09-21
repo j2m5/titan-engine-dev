@@ -363,6 +363,22 @@ describe('проводка материалов: гейт USE_LIGHT_TINT и юн
     expect((plain.uniforms.uLightColor.value as Color).equals(new Color(1, 1, 1))).toBe(true)
   })
 
+  it('RingMaterial: дефайн из parameters переживает сборку рядом с USE_LIGHT_TINT', () => {
+    const material = new RingMaterial(ringActor(planetActor(tintedStar(0.8))), { defines: { USE_STUB: '1' } })
+
+    expect(material.defines.USE_STUB).toBe('1')
+    expect(material.defines.USE_LIGHT_TINT).toBe('1')
+  })
+
+  it('InstancedAsteroidMaterial: дефайн из parameters переживает сборку рядом с USE_LIGHT_TINT', () => {
+    const material = new InstancedAsteroidMaterial(ringActor(planetActor(tintedStar(0.8))), {
+      defines: { USE_STUB: '1' }
+    })
+
+    expect(material.defines.USE_STUB).toBe('1')
+    expect(material.defines.USE_LIGHT_TINT).toBe('1')
+  })
+
   it('консистентность: под одним и тем же кольцом L0, L1, плоское кольцо и объём пыли дают ОДИН цвет', () => {
     const model = ringActor(planetActor(tintedStar(0.8)))
     const expectedColor = resolveLightTint(model).color
