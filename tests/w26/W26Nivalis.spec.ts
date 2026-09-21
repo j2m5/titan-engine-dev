@@ -60,23 +60,38 @@ describe('Nivalis — атмосфера (процедурное тело + то
 
 describe('W26 — подписка на цвет света (lightTint)', () => {
   const star = actorByCat('W26', GIANT_STAR_CATEGORY_ID)
+  // Ручка приёмки: владелец крутит её в [0, 1], 0 — откат к белому свету.
+  // Тесты держат диапазон и обе ветки гейта, а не конкретное значение.
+  const lightTint = (renderData(star.id) as { lightTint?: number }).lightTint
+  const tintedBodies = [() => planet('Emberon').id, () => actorByCat('Halcyra I', 4).id]
 
-  it('rendering-данные звезды несут lightTint 0.8 последним ключом', () => {
-    const data = renderData(star.id) as { lightTint?: number }
-
-    expect(data.lightTint).toBe(0.8)
+  it('rendering-данные звезды несут lightTint числом в [0, 1]', () => {
+    expect(typeof lightTint).toBe('number')
+    expect(lightTint!).toBeGreaterThanOrEqual(0)
+    expect(lightTint!).toBeLessThanOrEqual(1)
   })
 
-  it('resolveLightTint активен для реальных тел системы (Emberon, Halcyra I): гейт открыт, цвет тёплый', () => {
-    const emberon = planet('Emberon')
-    const halcyra1 = actorByCat('Halcyra I', 4)
+  it.runIf(lightTint! > 0)(
+    'подписка > 0: гейт открыт для реальных тел системы (Emberon, Halcyra I), цвет тёплый',
+    () => {
+      for (const idOf of tintedBodies) {
+        const actorId = idOf()
+        const tint = resolveLightTint(Actor.find(actorId)!)
 
-    for (const actorId of [emberon.id, halcyra1.id]) {
+        expect(tint.active, `actor ${actorId}`).toBe(true)
+        expect(tint.color.b, `actor ${actorId}`).toBeLessThan(tint.color.g)
+        expect(tint.color.g, `actor ${actorId}`).toBeLessThan(tint.color.r)
+      }
+    }
+  )
+
+  it.runIf(lightTint === 0)('подписка 0 (откат): гейт закрыт для тел системы, цвет строго белый', () => {
+    for (const idOf of tintedBodies) {
+      const actorId = idOf()
       const tint = resolveLightTint(Actor.find(actorId)!)
 
-      expect(tint.active, `actor ${actorId}`).toBe(true)
-      expect(tint.color.b, `actor ${actorId}`).toBeLessThan(tint.color.g)
-      expect(tint.color.g, `actor ${actorId}`).toBeLessThan(tint.color.r)
+      expect(tint.active, `actor ${actorId}`).toBe(false)
+      expect([tint.color.r, tint.color.g, tint.color.b], `actor ${actorId}`).toEqual([1, 1, 1])
     }
   })
 
@@ -93,13 +108,13 @@ describe('W26 — подписка на цвет света (lightTint)', () => 
     expect(resolveStarRadiusKm(Actor.find(planet('Emberon').id)!)).toBe(1.06e9)
   })
 
-  it('подписка одна: среди звёзд базы (категории 3 и 10) только W26 держит lightTint > 0', () => {
+  it('подписка одна: среди звёзд базы (категории 3 и 10) никто кроме W26 не держит lightTint > 0', () => {
     const stars = Actors.filter((a) => a.categoryId === STAR_CATEGORY_ID || a.categoryId === GIANT_STAR_CATEGORY_ID)
     const tinted = stars.filter((a) => {
       const data = RenderingObjects.find((r) => r.actorId === a.id)?.data as { lightTint?: number } | undefined
       return typeof data?.lightTint === 'number' && data.lightTint > 0
     })
 
-    expect(tinted.map((a) => a.name)).toEqual(['W26'])
+    expect(tinted.map((a) => a.name).filter((name) => name !== 'W26')).toEqual([])
   })
 })
