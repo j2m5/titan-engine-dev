@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { Actors, PhysicalObjects, RenderingObjects, RotationObjects, Orbits } from '@storage/database'
+import { Scenarios } from '@/config/scenarios'
+import { fromAstronomicalUnits } from '@/core/helpers/scaling'
 import { nebulaParamsFromData, type NebulaRenderingData } from '@/core/renderables/Nebula/NebulaRenderingData'
 import { IGiantStarRenderingObject } from '@/core/models/types'
 
@@ -96,5 +98,41 @@ describe('система W26 — кокон', () => {
 
     expect(lobes.length).toBeGreaterThanOrEqual(3)
     expect(Math.max(...lobes.map((lobe) => lobe.center.length()))).toBeGreaterThan(0.7)
+  })
+})
+
+describe('система W26 — сценарий', () => {
+  it('система достижима из списка сцен: сценарий указывает на её барицентр', () => {
+    const system = actorByName('Westerlund 1-26 system')
+    const scenario = Scenarios.find((s) => s.rootId === system.id)
+
+    expect(scenario).toBeDefined()
+  })
+
+  it('источник света сцены — сама звезда', () => {
+    const system = actorByName('Westerlund 1-26 system')
+    const star = actorByName('W26')
+    const scenario = Scenarios.find((s) => s.rootId === system.id)!
+
+    expect(scenario.lightSources).toEqual([star.id])
+  })
+
+  it('стартовая камера видит кокон целиком, а не сидит внутри него', () => {
+    const system = actorByName('Westerlund 1-26 system')
+    const scenario = Scenarios.find((s) => s.rootId === system.id)!
+    const nebula = RenderingObjects.find((r) => r.actorId === actorByName('W26 Nebula').id)!
+      .data as NebulaRenderingData
+
+    const [x, y, z] = scenario.defaultCameraPosition
+    const cameraDistance = Math.hypot(x, y, z)
+
+    expect(cameraDistance).toBeGreaterThan(fromAstronomicalUnits(nebula.size!))
+  })
+
+  it('id сценария уникален', () => {
+    const system = actorByName('Westerlund 1-26 system')
+    const scenario = Scenarios.find((s) => s.rootId === system.id)!
+
+    expect(Scenarios.filter((s) => s.id === scenario.id)).toHaveLength(1)
   })
 })
