@@ -16,7 +16,6 @@ import {
   wdLimb,
   wdShade,
   limbDarkeningCoefficient,
-  WD_EDDINGTON_TAU,
   WD_HDR_CEILING,
   type Vec3
 } from './whiteDwarfSurfaceMirror'
@@ -203,12 +202,7 @@ describe('planckX / visibleBandRadianceRatio — CPU-половина физик
 
 describe('чанк whiteDwarfSurface — структура', () => {
   it('числовые константы GLSL синхронизированы с зеркалом', () => {
-    expect(whiteDwarfSurface).toContain(`#define WD_EDDINGTON_TAU ${WD_EDDINGTON_TAU}`)
     expect(whiteDwarfSurface).toContain(`#define WD_HDR_CEILING ${WD_HDR_CEILING.toFixed(1)}`)
-  })
-
-  it('sOne в GLSL считается выражением, а не литералом', () => {
-    expect(whiteDwarfSurface).toContain('float sOne = pow(0.75 * (1.0 + WD_EDDINGTON_TAU), 0.25);')
   })
 
   it('на поверхности нет шума — его физически нечему создавать', () => {
@@ -218,7 +212,7 @@ describe('чанк whiteDwarfSurface — структура', () => {
     expect(whiteDwarfSurface).not.toMatch(/snoise|fbm/)
   })
 
-  it('чанк не зависит от других чанков', () => {
+  it('чанк сам ничего не включает — зависимость подключает потребитель', () => {
     expect(whiteDwarfSurface).not.toContain('#include')
   })
 })

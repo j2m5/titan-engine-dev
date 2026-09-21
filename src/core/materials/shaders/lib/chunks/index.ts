@@ -2,6 +2,7 @@ import { ringShadowFragment, ringShadowFunctions, ringShadowUniforms } from './R
 import { noiseFunctions } from './Noise'
 import { starSurface } from './StarSurface'
 import { brownDwarfSurface } from './BrownDwarfSurface'
+import { planckLimb } from './PlanckLimb'
 import { whiteDwarfSurface } from './WhiteDwarfSurface'
 import { asteroidShapeFunctions } from './AsteroidShape'
 import { asteroidSurfaceFunctions } from './AsteroidSurface'
@@ -34,6 +35,7 @@ export const AppShaderChunk: Record<string, string> = {
   noiseFunctions,
   starSurface,
   brownDwarfSurface,
+  planckLimb,
   whiteDwarfSurface,
   asteroidShapeFunctions,
   asteroidSurfaceFunctions,
