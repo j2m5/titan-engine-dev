@@ -34,9 +34,9 @@ describe('terrainClassOf', () => {
       counts.set(cls, (counts.get(cls) ?? 0) + 1)
     }
     expect(Object.fromEntries(counts)).toEqual({
-      // +4 (Task 4, система W26 — Emberon, Halcyra I/II, Nivalis): общий
-      // детальный набор rocky_trail. Nivalis (Task 6) получила атмосферу —
-      // rocky-airless минус один, rocky-atmosphere плюс один.
+      // +4 тела системы W26 (Emberon, Halcyra I/II, Nivalis): общий детальный
+      // набор rocky_trail; у Nivalis есть атмосфера — она в rocky-atmosphere,
+      // остальные три без атмосферы — в rocky-airless.
       'rocky-airless': 19, 'rocky-atmosphere': 5, 'ice-airless': 23, 'sand-atmosphere': 3,
       'sand-airless': 2, 'volcanic-atmosphere': 1, 'volcanic-airless': 1
     })

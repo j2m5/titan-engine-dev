@@ -50,9 +50,9 @@ describe('Nivalis — атмосфера (процедурное тело + то
     expect(data.terrainFloorMeters).toBeLessThanOrEqual(0)
     expect(Math.abs(data.terrainFloorMeters)).toBeLessThan(radiusKm * 1000 * 0.01)
 
-    // Пик высот (Task 4: +28700 м) не хранится в БД — метаданных ресурса дешёво
-    // не достать в этом тесте, поэтому вместо точной высоты пика сравниваем
-    // толщину оболочки с консервативным запасом: вдвое больше глубины пола.
+    // Пик высот в БД не хранится — метаданных ресурса дешёво не достать в этом
+    // тесте, поэтому вместо точной высоты пика сравниваем толщину оболочки
+    // с консервативным запасом: вдвое больше глубины пола.
     const thicknessMeters = (data.topRadius - data.bottomRadius) * 1000
     expect(thicknessMeters).toBeGreaterThan(2 * Math.abs(data.terrainFloorMeters))
   })
