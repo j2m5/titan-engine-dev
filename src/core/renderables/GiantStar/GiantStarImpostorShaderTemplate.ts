@@ -9,8 +9,11 @@ import { STAR_CORE_INTENSITY } from '@/core/materials/shaders/lib/helpers'
  * Луч параллельный: на дистанции переключения перспектива неотличима от
  * ортографии. Квад крупнее ядра в uQuadScale раз — на протяжённость оболочки.
  *
- * Своего множителя яркости нет НАМЕРЕННО. tonemapping/colorspace отсутствуют:
- * рендер идёт в линейный таргет композера.
+ * Своего множителя яркости нет НАМЕРЕННО.
+ *
+ * tonemapping_fragment/colorspace_fragment отсутствуют намеренно: рендер идёт в
+ * линейный таргет композера, тонмапом владеет пост-пайплайн (прецедент —
+ * WhiteDwarfImpostorShaderTemplate).
  */
 export const GiantStarImpostorShaderTemplate: ShaderProps = {
   uniforms: {
@@ -106,7 +109,10 @@ export const GiantStarImpostorShaderTemplate: ShaderProps = {
           uColorCool, uColorBase, uColorHot, uCellEnergy,
           uPlanckX, uCoreIntensity, uProximityExposure
         );
-        float coreAlpha = 1.0 - smoothstep(1.0 - edge * 1.5, 1.0, r);
+        // 1.5 — ширина сглаживания кромки в пикселях; нижняя граница нужна,
+        // чтобы кромки smoothstep не совпали при edge = 0 (неопределённость)
+        float aa = max(edge * 1.5, 1e-4);
+        float coreAlpha = 1.0 - smoothstep(1.0 - aa, 1.0, r);
 
         // Ядро под оболочкой: тот же порядок, что даёт блендинг двух мешей
         result = vec4(

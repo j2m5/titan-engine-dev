@@ -77,6 +77,15 @@ describe('giantStarParameters — клампы', () => {
     expect(params.spreadK).toBe(500)
   })
 
+  it('температура из данных не опускается ниже пола цветовой температуры', () => {
+    // Заглушка считает falsy-температуру отсутствующей, поэтому 200, а не 0.
+    // Ноль в данных переполнил бы exp в формуле лимба и дал бы NaN
+    const params = giantStarParameters(stubActor({}, 200))
+
+    expect(params.temperature).toBe(COLOR_TEMPERATURE_FLOOR_K)
+    expect(params.spreadK).toBe(0)
+  })
+
   it('спред масштабируется контрастом', () => {
     expect(giantStarParameters(stubActor({ cellContrast: 0.5 })).spreadK).toBe(350)
   })

@@ -101,6 +101,11 @@ describe('шаблон импостора', () => {
     expect(fragment).toContain('sqrt(max(1.0 - rCore * rCore, 0.0))')
   })
 
+  it('кромки smoothstep у кромки ядра не совпадают при нулевой производной', () => {
+    expect(fragment).toContain('float aa = max(edge * 1.5, 1e-4);')
+    expect(fragment).toContain('smoothstep(1.0 - aa, 1.0, r)')
+  })
+
   it('gl_Position идёт через modelViewMatrix', () => {
     const vertex: string = withoutComments(GiantStarImpostorShaderTemplate.vertexShader)
 

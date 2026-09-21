@@ -12,7 +12,8 @@ export const giantStarShell = `
   #define GS_SHELL_STEPS 8
   // Шкала высот как доля полной протяжённости
   #define GS_SHELL_SCALE_FRACTION 0.25
-  // Модуляция толщи шумом: амплитуда и частота по единичному направлению
+  // Модуляция толщи шумом: амплитуда и частота по единичному направлению.
+  // Значения стартовые: приёмку по картинке делает владелец
   #define GS_SHELL_WOOL_AMPLITUDE 0.35
   #define GS_SHELL_WOOL_FREQUENCY 2.0
 

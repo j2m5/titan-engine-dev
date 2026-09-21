@@ -6,8 +6,9 @@ import { STAR_CORE_INTENSITY } from '@/core/materials/shaders/lib/helpers'
  * Оболочка-атмосфера гиганта. Луч строится в ОБЪЕКТНЫХ координатах в единицах
  * радиуса: камеру переводит CPU (uCameraUnit), мировых координат в шейдере нет.
  *
- * tonemapping/colorspace отсутствуют намеренно: рендер идёт в линейный таргет
- * композера (прецедент — импосторы).
+ * tonemapping_fragment/colorspace_fragment отсутствуют намеренно: рендер идёт в
+ * линейный таргет композера, тонмапом владеет пост-пайплайн (прецедент —
+ * WhiteDwarfImpostorShaderTemplate).
  */
 export const GiantStarShellShaderTemplate: ShaderProps = {
   uniforms: {

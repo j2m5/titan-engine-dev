@@ -15,6 +15,8 @@ export const GIANT_STAR_DEFAULT_TEMPERATURE_K: number = 3700
  * сверхгиганта в видимой полосе на порядок тусклее солнечной и в кадре не
  * светится. Отношение яркостей между гигантами разных температур сохраняется:
  * планковский множитель остаётся внутри. Значение стартовое.
+ *
+ * Откалибровано по холодным гигантам: горячий «гигант» упрётся диском в потолок HDR.
  */
 export const GIANT_STAR_DISPLAY_SCALE: number = 6
 
@@ -58,9 +60,12 @@ const DEFAULTS: Required<IGiantStarRenderingObject> = {
  */
 export function giantStarParameters(actor: Actor): GiantStarParameters {
   const data: IGiantStarRenderingObject = readRenderingData<IGiantStarRenderingObject>(actor) ?? {}
-  const temperature: number =
+  // Кламп по полу: температура ниже него переполняет exp в формуле лимба (NaN)
+  const temperature: number = Math.max(
     actor.physicalObject?.getAttribute('temperature', GIANT_STAR_DEFAULT_TEMPERATURE_K) ??
-    GIANT_STAR_DEFAULT_TEMPERATURE_K
+      GIANT_STAR_DEFAULT_TEMPERATURE_K,
+    COLOR_TEMPERATURE_FLOOR_K
+  )
   const cellContrast: number = Math.max(data.cellContrast ?? DEFAULTS.cellContrast, 0)
 
   return {
