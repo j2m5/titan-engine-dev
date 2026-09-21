@@ -26,8 +26,8 @@ const foreignAtmospheres = Actors.filter(
 })
 
 describe('sunAngularRadius вымышленных атмосфер — по орбите тела и радиусу звезды', () => {
-  it('вымышленных атмосфер одиннадцать и у каждой заявлен угол', () => {
-    expect(foreignAtmospheres).toHaveLength(11)
+  it('вымышленных атмосфер двенадцать и у каждой заявлен угол', () => {
+    expect(foreignAtmospheres).toHaveLength(12)
     for (const atmosphere of foreignAtmospheres) {
       expect(typeof atmosphere.declared, atmosphere.name).toBe('number')
     }
