@@ -5,6 +5,7 @@ import { brownDwarfSurface } from './BrownDwarfSurface'
 import { planckLimb } from './PlanckLimb'
 import { whiteDwarfSurface } from './WhiteDwarfSurface'
 import { giantStarSurface } from './GiantStarSurface'
+import { giantStarShell } from './GiantStarShell'
 import { asteroidShapeFunctions } from './AsteroidShape'
 import { asteroidSurfaceFunctions } from './AsteroidSurface'
 import { asteroidBrdfFunctions } from './AsteroidBrdf'
@@ -39,6 +40,7 @@ export const AppShaderChunk: Record<string, string> = {
   planckLimb,
   whiteDwarfSurface,
   giantStarSurface,
+  giantStarShell,
   asteroidShapeFunctions,
   asteroidSurfaceFunctions,
   asteroidBrdfFunctions,
