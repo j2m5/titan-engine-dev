@@ -43,8 +43,9 @@ export function lightTintOf(star: Actor): number {
 
 /**
  * Цвет прямого света, linear-sRGB: смесь белого с цветом чёрного тела звезды.
- * Нормировка по максимальному каналу — каналы не превышают 1, поэтому свет
- * звезды темнее белого по яркости; это компенсируется ручкой emission тела.
+ * Каналы не превышают 1 — сам `colorTemperatureToRGB` клампит каждый канал в
+ * [0, 255] (см. его тело), `normalizeColor` делит на 255; свет звезды поэтому
+ * темнее белого по яркости — это компенсируется ручкой emission тела.
  */
 export function lightColorOf(star: Actor): Color {
   const tint: number = lightTintOf(star)

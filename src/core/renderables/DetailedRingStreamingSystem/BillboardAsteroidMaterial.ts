@@ -1,6 +1,8 @@
 import { ShaderMaterial, Color, ShaderChunk, Vector3 } from 'three'
 import { ringDustFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
 import { asteroidBrdfFunctions } from '@/core/materials/shaders/lib/chunks/AsteroidBrdf'
+import type { Actor } from '@/core/models/Actor'
+import { resolveLightTint } from '@/core/helpers/lightSource'
 
 /**
  * BillboardAsteroidMaterial — шейдерный материал для L1 billboard-импосторов.
@@ -19,10 +21,19 @@ import { asteroidBrdfFunctions } from '@/core/materials/shaders/lib/chunks/Aster
  * 4. Правильная day/night сторона: тёмная сторона астероида = сторона от звезды
  */
 class BillboardAsteroidMaterial extends ShaderMaterial {
-  public constructor() {
+  /**
+   * `model` — актор кольца (тот же вход, что у L0 `InstancedAsteroidMaterial`,
+   * резолвер сам поднимается к корню дерева); `undefined` — тинт выключен.
+   */
+  public constructor(model?: Actor) {
+    const lightTint = model ? resolveLightTint(model) : { active: false, color: new Color(1, 1, 1) }
+
     super({
+      defines: { ...(lightTint.active && { USE_LIGHT_TINT: '1' }) },
       uniforms: {
         uColor: { value: new Color(0.55, 0.5, 0.45) },
+        // Цвет света звезды (lightTint) — per-instance объект, не общий модульный Uniform
+        uLightColor: { value: new Color(1, 1, 1).copy(lightTint.color) },
         /** Позиция источника света в world space (по умолчанию — центр системы) */
         uLightPosition: { value: new Vector3(0, 0, 0) },
         uFade: { value: 1.0 },
@@ -178,6 +189,10 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         uniform vec3 uPlanetshineColor;
         uniform float uPlanetshineStrength;
 
+        #ifdef USE_LIGHT_TINT
+          uniform vec3 uLightColor;
+        #endif
+
         varying vec2 vUv;
         varying float vDistanceFade;
         varying vec3 vLightDirView;
@@ -259,7 +274,13 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
           vec3 base = uColor * (1.0 + uColorJitter * (vInstanceSeed - 0.5) * 2.0);
           // Тинт по цвету полосы кольца — как у L0
           base *= ringBandTint(length(vRingPos.xz));
-          vec3 color = base * lighting + base * uPlanetshineColor * (uPlanetshineStrength * shine);
+          // Planetshine — второй источник света: цвет звезды его не касается (как у L0).
+          #ifdef USE_LIGHT_TINT
+            vec3 color = base * uAmbient + base * diffuse * direct * uLightColor;
+          #else
+            vec3 color = base * lighting;
+          #endif
+          color += base * uPlanetshineColor * (uPlanetshineStrength * shine);
           // Аэроперспектива: дальние импосторы тонут в пылевой дымке
           color = ringDustApplyFog(color, vRingPos);
           gl_FragColor = vec4(color, alpha);

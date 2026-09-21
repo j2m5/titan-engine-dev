@@ -1,6 +1,8 @@
 import { AdditiveBlending, BackSide, Color, ShaderChunk, ShaderMaterial, Vector2, Vector3 } from 'three'
 import { ringDustRaymarchFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
 import { sceneDepthFunctions, sceneDepthUniforms } from '@/core/materials/shaders/lib/chunks/SceneDepth'
+import type { Actor } from '@/core/models/Actor'
+import { resolveLightTint } from '@/core/helpers/lightSource'
 
 /**
  * RingDustRaymarchMaterial — аддитивное пылевое гало кольца (реймарч).
@@ -37,10 +39,19 @@ import { sceneDepthFunctions, sceneDepthUniforms } from '@/core/materials/shader
  * менять строго синхронно.
  */
 class RingDustRaymarchMaterial extends ShaderMaterial {
-  public constructor() {
+  /**
+   * `model` — актор кольца (тот же вход, что у камней; резолвер сам
+   * поднимается к корню дерева); `undefined` — тинт выключен.
+   */
+  public constructor(model?: Actor) {
+    const lightTint = model ? resolveLightTint(model) : { active: false, color: new Color(1, 1, 1) }
+
     super({
+      defines: { ...(lightTint.active && { USE_LIGHT_TINT: '1' }) },
       uniforms: {
         uDustColor: { value: new Color(0x9b968c) },
+        // Цвет света звезды (lightTint) — per-instance объект, не общий модульный Uniform
+        uLightColor: { value: new Color(1, 1, 1).copy(lightTint.color) },
         uDustDensity: { value: 0.0 },
         uDustScaleHeight: { value: 1.0 },
         uDustRingInner: { value: 0.0 },
@@ -87,6 +98,10 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
       `,
       fragmentShader: /* glsl */ `
         ${ShaderChunk.common}
+
+        #ifdef USE_LIGHT_TINT
+          uniform vec3 uLightColor;
+        #endif
 
         ${ringDustUniforms}
         ${ringDustRaymarchFunctions}

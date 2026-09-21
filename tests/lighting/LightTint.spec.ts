@@ -11,6 +11,13 @@ import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
 import { RingMaterial } from '@/core/materials/RingMaterial'
 import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
+import { BillboardAsteroidMaterial } from '@/core/renderables/DetailedRingStreamingSystem/BillboardAsteroidMaterial'
+import { RingDustRaymarchMaterial } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustRaymarchMaterial'
+import {
+  ringDustUniforms,
+  ringDustFunctions,
+  ringDustRaymarchFunctions
+} from '@/core/materials/shaders/lib/chunks/RingDust'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { withoutComments } from '../helpers/glsl'
 
@@ -134,6 +141,44 @@ describe('гейт в шейдерах', () => {
   })
 })
 
+describe('гейт в чанке RingDust (пылевая дымка колец — фикс-раунд 1)', () => {
+  const uniformsChunk: string = withoutComments(ringDustUniforms)
+  const functionsChunk: string = withoutComments(ringDustFunctions)
+  const raymarchFunctionsChunk: string = withoutComments(ringDustRaymarchFunctions)
+
+  it('чанк НЕ объявляет uLightColor сам — потребитель обязан объявить его до include', () => {
+    expect(uniformsChunk).not.toContain('uniform vec3 uLightColor')
+    expect(functionsChunk).not.toContain('uniform vec3 uLightColor')
+    expect(raymarchFunctionsChunk).not.toContain('uniform vec3 uLightColor')
+  })
+
+  it('uLightColor встречается ТОЛЬКО под дефайном (и в закрытой форме, и в объёмном подмножестве)', () => {
+    expect(functionsChunk).toContain('#ifdef USE_LIGHT_TINT')
+    expect(withoutLightTint(functionsChunk)).not.toContain('uLightColor')
+    expect(raymarchFunctionsChunk).toContain('#ifdef USE_LIGHT_TINT')
+    expect(withoutLightTint(raymarchFunctionsChunk)).not.toContain('uLightColor')
+  })
+
+  it('ringDustHaze — единственный прямой член света на пыль — красится целиком под дефайном', () => {
+    expect(functionsChunk).toContain('return uDustColor * (0.75 + 0.45 * sun) * uLightColor;')
+    expect(functionsChunk).toContain('return uDustColor * (0.75 + 0.45 * sun);')
+  })
+})
+
+describe('гейт в шейдере билборда камней (BillboardAsteroidMaterial, L1)', () => {
+  const fragment: string = withoutComments(new BillboardAsteroidMaterial().fragmentShader)
+
+  it('uLightColor объявлен под дефайном, ambient им не домножается', () => {
+    expect(fragment).toContain('#ifdef USE_LIGHT_TINT')
+    expect(withoutLightTint(fragment)).not.toContain('uLightColor')
+    expect(fragment).not.toMatch(/uAmbient\s*\*\s*uLightColor|uLightColor\s*\*\s*uAmbient/)
+  })
+
+  it('planetshine не тонируется цветом звезды (та же ловушка, что у L0)', () => {
+    expect(fragment).not.toMatch(/uPlanetshineColor[^;]*uLightColor|uLightColor[^;]*uPlanetshineColor/)
+  })
+})
+
 // --- Проводка материалов (Step 10) ---
 // Деревья акторов — минимальные стабы (тот же приём, что tree() в
 // LightSource.spec.ts): planet/water/ring под звездой-корнем с lightTint,
@@ -203,10 +248,14 @@ describe('проводка материалов: гейт USE_LIGHT_TINT и юн
     expect((material.uniforms.uLightColor.value as Color).b).toBeLessThan(1)
   })
 
-  it('PlanetMaterial: дефайн переживает штатную пересборку updateMaterial()', () => {
+  it('PlanetMaterial: дефайн переживает повторную updateMaterial() И resetMaterial()', () => {
     const material = new PlanetMaterial(planetActor(tintedStar(0.8)))
 
     material.updateMaterial()
+    expect(material.defines.USE_LIGHT_TINT).toBe('1')
+    material.updateMaterial()
+    expect(material.defines.USE_LIGHT_TINT).toBe('1')
+    material.resetMaterial()
     expect(material.defines.USE_LIGHT_TINT).toBe('1')
   })
 
@@ -256,5 +305,76 @@ describe('проводка материалов: гейт USE_LIGHT_TINT и юн
 
     expect(material.defines.USE_LIGHT_TINT).toBe('1')
     expect((material.uniforms.uLightColor.value as Color).b).toBeLessThan(1)
+  })
+
+  it('BillboardAsteroidMaterial: без модели вовсе — без дефайна, uLightColor белый', () => {
+    const material = new BillboardAsteroidMaterial()
+
+    expect(material.defines.USE_LIGHT_TINT).toBeUndefined()
+    expect((material.uniforms.uLightColor.value as Color).equals(new Color(1, 1, 1))).toBe(true)
+  })
+
+  it('BillboardAsteroidMaterial: актор кольца без светила-подписчика — без дефайна', () => {
+    const material = new BillboardAsteroidMaterial(ringActor(planetActor(null)))
+
+    expect(material.defines.USE_LIGHT_TINT).toBeUndefined()
+  })
+
+  it('BillboardAsteroidMaterial: актор кольца под звездой с lightTint 0.8 — дефайн есть, uLightColor подкрашен', () => {
+    const material = new BillboardAsteroidMaterial(ringActor(planetActor(tintedStar(0.8))))
+
+    expect(material.defines.USE_LIGHT_TINT).toBe('1')
+    expect((material.uniforms.uLightColor.value as Color).b).toBeLessThan(1)
+  })
+
+  it('BillboardAsteroidMaterial: два инстанса не делят объект Uniform', () => {
+    const tinted = new BillboardAsteroidMaterial(ringActor(planetActor(tintedStar(0.8))))
+    const plain = new BillboardAsteroidMaterial(ringActor(planetActor(null)))
+
+    expect(tinted.uniforms.uLightColor).not.toBe(plain.uniforms.uLightColor)
+    expect((plain.uniforms.uLightColor.value as Color).equals(new Color(1, 1, 1))).toBe(true)
+  })
+
+  it('RingDustRaymarchMaterial: без модели вовсе — без дефайна, uLightColor белый', () => {
+    const material = new RingDustRaymarchMaterial()
+
+    expect(material.defines.USE_LIGHT_TINT).toBeUndefined()
+    expect((material.uniforms.uLightColor.value as Color).equals(new Color(1, 1, 1))).toBe(true)
+  })
+
+  it('RingDustRaymarchMaterial: актор кольца без светила-подписчика — без дефайна', () => {
+    const material = new RingDustRaymarchMaterial(ringActor(planetActor(null)))
+
+    expect(material.defines.USE_LIGHT_TINT).toBeUndefined()
+  })
+
+  it('RingDustRaymarchMaterial: актор кольца под звездой с lightTint 0.8 — дефайн есть, uLightColor подкрашен', () => {
+    const material = new RingDustRaymarchMaterial(ringActor(planetActor(tintedStar(0.8))))
+
+    expect(material.defines.USE_LIGHT_TINT).toBe('1')
+    expect((material.uniforms.uLightColor.value as Color).b).toBeLessThan(1)
+  })
+
+  it('RingDustRaymarchMaterial: два инстанса не делят объект Uniform', () => {
+    const tinted = new RingDustRaymarchMaterial(ringActor(planetActor(tintedStar(0.8))))
+    const plain = new RingDustRaymarchMaterial(ringActor(planetActor(null)))
+
+    expect(tinted.uniforms.uLightColor).not.toBe(plain.uniforms.uLightColor)
+    expect((plain.uniforms.uLightColor.value as Color).equals(new Color(1, 1, 1))).toBe(true)
+  })
+
+  it('консистентность: под одним и тем же кольцом L0, L1, плоское кольцо и объём пыли дают ОДИН цвет', () => {
+    const model = ringActor(planetActor(tintedStar(0.8)))
+    const expectedColor = resolveLightTint(model).color
+
+    const l0 = new InstancedAsteroidMaterial(model)
+    const l1 = new BillboardAsteroidMaterial(model)
+    const ring = new RingMaterial(model)
+    const dust = new RingDustRaymarchMaterial(model)
+
+    for (const material of [l0, l1, ring, dust]) {
+      expect(material.defines.USE_LIGHT_TINT).toBe('1')
+      expect((material.uniforms.uLightColor.value as Color).equals(expectedColor)).toBe(true)
+    }
   })
 })

@@ -158,7 +158,7 @@ class InstancePool {
 
     // --- Billboard-стрим (индекс 2·streamCount) ---
     const l1Geometry = new PlaneGeometry(billboardSize, billboardSize)
-    this.billboardMaterial = new BillboardAsteroidMaterial()
+    this.billboardMaterial = new BillboardAsteroidMaterial(model)
     this.billboardMesh = new InstancedMesh(l1Geometry, this.billboardMaterial, l1Config.maxInstances)
     this.billboardMesh.count = 0
     this.billboardMesh.frustumCulled = false

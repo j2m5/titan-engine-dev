@@ -485,6 +485,7 @@ class AsteroidRingSystem extends Group {
         nearFade: dustNearFade,
         maxSteps: cfg.dustMaxSteps,
         planetRadius: dustPlanetRadius,
+        model: this.model,
         registry: this.dustRegistry ?? undefined
       })
       this.add(this.dustVolume)

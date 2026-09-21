@@ -18,6 +18,12 @@
  * Гейт по углу и ближний рамп применяются в обоих путях одинаково — иначе
  * между дымкой и туманом на камнях виден шов.
  *
+ * Зависимость: `ringDustHaze` красит дымку цветом звезды под USE_LIGHT_TINT —
+ * потребитель обязан объявить `uniform vec3 uLightColor;` (под тем же
+ * дефайном) ДО этого чанка. Сам чанк такое объявление не несёт: программа не
+ * должна получить `uLightColor` дважды, если он уже объявлен консьюмером
+ * (InstancedAsteroidShaderTemplate — уже объявляет).
+ *
  * CPU-зеркало: tests/ringDust/tauMirror.ts — менять строго синхронно, GLSL
  * обязан повторять его один в один.
  */
@@ -146,10 +152,15 @@ const ringDustCoreGlsl = `
     return mix(vec3(1.0), tint, uBandTintStrength);
   }
 
-  // Цвет дымки: базовый + мягкий forward-scattering буст в сторону звезды
+  // Цвет дымки: базовый + мягкий forward-scattering буст в сторону звезды.
+  // Единственный прямой член света звезды на пыль — красится целиком.
   vec3 ringDustHaze(vec3 rayDir) {
     float sun = pow(max(dot(rayDir, uDustLightDirRing), 0.0), 4.0);
-    return uDustColor * (0.75 + 0.45 * sun);
+    #ifdef USE_LIGHT_TINT
+      return uDustColor * (0.75 + 0.45 * sun) * uLightColor;
+    #else
+      return uDustColor * (0.75 + 0.45 * sun);
+    #endif
   }
 
   // Тень планеты на пыль: аналитический теневой цилиндр вдоль направления на

@@ -296,8 +296,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       // в умбре фаза сама уходит в ноль
       float shine = asteroidPlanetshine(normal, normalize(vPlanetDirView), vRingPos, uDustLightDirRing, uDustPlanetRadius);
 
-      // Разбита на два слагаемых (было — одна сумма): planetshine — второй
-      // источник, не свет звезды, тинт его не должен задевать даже текстуально.
+      // Planetshine — второй источник света: цвет звезды его не касается.
       #ifdef USE_LIGHT_TINT
         vec3 finalColor = albedo * (lightIntensity * surfAO * direct * uLightColor + uSurfaceAmbient);
       #else

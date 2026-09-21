@@ -3,6 +3,7 @@ import { RingDustRaymarchMaterial } from './RingDustRaymarchMaterial'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import type { Disposable } from '@/core/lifecycle/Disposable'
 import { DEPTH_VOLUME_LAYER, type DepthVolume } from '@/core/graphic/passes/DepthVolume'
+import type { Actor } from '@/core/models/Actor'
 
 /**
  * Множитель вертикальной оболочки в единицах H — константа обрезки марша в
@@ -34,6 +35,8 @@ interface RingDustVolumeConfig {
   maxSteps: number
   /** Радиус планеты для тени, three-units (0 — тень выключена) */
   planetRadius: number
+  /** Актор кольца — вход подписки на цвет света звезды (lightTint); undefined — тинт выключен. */
+  model?: Actor
   /**
    * Реестр пасса DepthVolumePass: объём регистрируется при создании и снимается в
    * dispose(). Без реестра объём в графе есть, но не рисуется (пасс о нём не
@@ -64,7 +67,7 @@ class RingDustVolume extends Mesh implements DepthVolume, Disposable {
   public constructor(config: RingDustVolumeConfig) {
     const geometry = new SphereGeometry(config.outerRadius * RADIAL_PADDING, 32, 16)
 
-    const material = new RingDustRaymarchMaterial()
+    const material = new RingDustRaymarchMaterial(config.model)
     super(geometry, material)
 
     this.dustMaterial = material
