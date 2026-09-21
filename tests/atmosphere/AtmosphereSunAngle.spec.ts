@@ -26,8 +26,8 @@ const foreignAtmospheres = Actors.filter(
 })
 
 describe('sunAngularRadius вымышленных атмосфер — по орбите тела и радиусу звезды', () => {
-  it('вымышленных атмосфер десять и у каждой заявлен угол', () => {
-    expect(foreignAtmospheres).toHaveLength(10)
+  it('вымышленных атмосфер одиннадцать и у каждой заявлен угол', () => {
+    expect(foreignAtmospheres).toHaveLength(11)
     for (const atmosphere of foreignAtmospheres) {
       expect(typeof atmosphere.declared, atmosphere.name).toBe('number')
     }
@@ -56,5 +56,13 @@ describe('sunAngularRadius вымышленных атмосфер — по ор
 
   it('двойная система: солнце ближайшее к барицентру (Tatoo I, R = 835200 км)', () => {
     expect(sunAngularRadiusFor(62)).toBeCloseTo(Math.atan(835200 / (1.5 * 149597870)), 12)
+  })
+
+  it('звезда-гигант видна как светило: Halcyra под W26 (R = 1.06e9 км, a = 72 а.е.)', () => {
+    const expected = sunAngularRadiusFor(120) // Halcyra
+
+    expect(expected).toBeDefined()
+    expect(expected!).toBeCloseTo(Math.atan(1.06e9 / (72 * 149597870)), 12)
+    expect(expected!).toBeCloseTo(0.0981, 3)
   })
 })
