@@ -24,12 +24,16 @@ export const giantStarShell = `
     return max(exp(-(r - 1.0) / scale) - cut, 0.0) / (1.0 - cut);
   }
 
-  // Толща до нормировки. dir единичный. Камера внутри оболочки даёт t0 = 0
+  // Толща до нормировки. dir единичный. Камера внутри оболочки даёт t0 = 0.
+  // Дискриминанты — через перпендикуляр к лучу: разность b*b - (oo - R*R) в
+  // сотнях радиусов от центра теряет разряды float32 и дрожит на лимбе
   float gsShellTau(vec3 origin, vec3 dir, float height) {
     float b = dot(origin, dir);
     float oo = dot(origin, origin);
     float outer = 1.0 + height;
-    float discOuter = b * b - (oo - outer * outer);
+    vec3 perp = origin - dir * b;
+    float p2 = dot(perp, perp);
+    float discOuter = outer * outer - p2;
 
     if (discOuter <= 0.0) return 0.0;
 
@@ -37,7 +41,7 @@ export const giantStarShell = `
     float t0 = max(-b - rootOuter, 0.0);
     float t1 = -b + rootOuter;
 
-    float discCore = b * b - (oo - 1.0);
+    float discCore = 1.0 - p2;
     if (discCore > 0.0) {
       float tCore = -b - sqrt(max(discCore, 0.0));
       if (tCore > 0.0) t1 = min(t1, tCore);
@@ -56,10 +60,19 @@ export const giantStarShell = `
     return sum * dt;
   }
 
-  // Направление на точку максимального сближения луча с центром: там
-  // набирается основная толща, по нему адресуется шум «шерсти»
+  // Адрес шума «шерсти» на единичной сфере, связанный с телом. Луч, попавший
+  // в фотосферу, адресуется точкой ВХОДА в неё: точка сближения лежала бы под
+  // поверхностью, и её направление задавал бы азимут на экране. Мимо
+  // фотосферы берётся точка сближения — там набирается основная толща.
+  // На прицельном параметре 1 обе точки совпадают
   vec3 gsShellClosestDir(vec3 origin, vec3 dir) {
-    vec3 p = origin + dir * max(-dot(origin, dir), 0.0);
+    float b = dot(origin, dir);
+    vec3 perp = origin - dir * b;
+    float discCore = 1.0 - dot(perp, perp);
+    float tClosest = max(-b, 0.0);
+    float tCore = -b - sqrt(max(discCore, 0.0));
+    float t = (discCore > 0.0 && tCore > 0.0) ? tCore : tClosest;
+    vec3 p = origin + dir * t;
 
     return p / max(length(p), 1e-6);
   }

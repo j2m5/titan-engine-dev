@@ -3,6 +3,7 @@ import {
   shellDensity,
   shellOpticalDepth,
   shellDensityScale,
+  shellWoolDir,
   SHELL_STEPS,
   SHELL_SCALE_FRACTION,
   type Vec3
@@ -80,6 +81,38 @@ describe('нормировка ручки плотности', () => {
 
   it('нулевая плотность даёт нулевой масштаб — точка отката', () => {
     expect(shellDensityScale(H, 0)).toBe(0)
+  })
+})
+
+describe('адрес шума «шерсти»', () => {
+  it('луч в диск адресуется точкой входа в фотосферу, а не точкой под поверхностью', () => {
+    // Камера на +Z, луч в центр диска: подкамерная точка фотосферы
+    shellWoolDir([0, 0, FAR], [0, 0, -1]).forEach((value: number, i: number) => {
+      expect(value).toBeCloseTo([0, 0, 1][i], 12)
+    })
+  })
+
+  it('луч мимо фотосферы адресуется точкой максимального сближения', () => {
+    shellWoolDir(ray(1.2), TOWARDS).forEach((value: number, i: number) => {
+      expect(value).toBeCloseTo([0, 1, 0][i], 12)
+    })
+  })
+
+  it('на прицельном параметре 1 ветки сходятся — шва по кромке нет', () => {
+    const inside: Vec3 = shellWoolDir(ray(1 - 1e-4), TOWARDS)
+    const outside: Vec3 = shellWoolDir(ray(1 + 1e-4), TOWARDS)
+
+    inside.forEach((value: number, i: number) => {
+      expect(Math.abs(value - outside[i])).toBeLessThan(2e-2)
+    })
+  })
+
+  it('результат единичный', () => {
+    for (const b of [0, 0.5, 0.999, 1.2, 2]) {
+      const dir: Vec3 = shellWoolDir(ray(b), TOWARDS)
+
+      expect(Math.hypot(dir[0], dir[1], dir[2])).toBeCloseTo(1, 12)
+    }
   })
 })
 

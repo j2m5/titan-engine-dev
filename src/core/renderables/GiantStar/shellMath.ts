@@ -20,6 +20,7 @@ function dot(a: Vec3, b: Vec3): number {
 /**
  * Плотность на расстоянии r от центра, 1 на фотосфере. Экспонента сдвинута так,
  * чтобы на верхней границе был РОВНО ноль: иначе на краю прокси виден обрыв.
+ * Предусловие: h > 0 (вызывающий кламп держит atmosphereHeight в [0.01, 2]).
  */
 export function shellDensity(r: number, h: number): number {
   const scale: number = h * SHELL_SCALE_FRACTION
@@ -28,16 +29,25 @@ export function shellDensity(r: number, h: number): number {
   return Math.max(Math.exp(-(r - 1) / scale) - floor, 0) / (1 - floor)
 }
 
+function perpendicular(origin: Vec3, dir: Vec3, b: number): Vec3 {
+  return [origin[0] - dir[0] * b, origin[1] - dir[1] * b, origin[2] - dir[2] * b]
+}
+
 /**
  * Толща вдоль луча до нормировки. dir обязан быть единичным.
  * clipCore = false — луч идёт сквозь фотосферу; нужно только для нормировки
  * по касательному лучу, у которого пересечение с ядром вырождено.
+ *
+ * Дискриминанты — через перпендикуляр к лучу: разность b² - (oo - R²) в сотнях
+ * радиусов от центра теряет разряды float32 и дрожит на лимбе.
  */
 export function shellOpticalDepth(origin: Vec3, dir: Vec3, h: number, clipCore: boolean = true): number {
   const b: number = dot(origin, dir)
   const oo: number = dot(origin, origin)
   const outer: number = 1 + h
-  const discOuter: number = b * b - (oo - outer * outer)
+  const perp: Vec3 = perpendicular(origin, dir, b)
+  const p2: number = dot(perp, perp)
+  const discOuter: number = outer * outer - p2
 
   if (discOuter <= 0) return 0
 
@@ -46,7 +56,7 @@ export function shellOpticalDepth(origin: Vec3, dir: Vec3, h: number, clipCore: 
   let t1: number = -b + rootOuter
 
   if (clipCore) {
-    const discCore: number = b * b - (oo - 1)
+    const discCore: number = 1 - p2
 
     if (discCore > 0) {
       const tCore: number = -b - Math.sqrt(discCore)
@@ -68,6 +78,25 @@ export function shellOpticalDepth(origin: Vec3, dir: Vec3, h: number, clipCore: 
   }
 
   return sum * dt
+}
+
+/**
+ * Адрес шума «шерсти» на единичной сфере — зеркало gsShellClosestDir.
+ * Луч, попавший в фотосферу, адресуется точкой ВХОДА в неё (она связана с
+ * телом), мимо фотосферы — точкой максимального сближения. На прицельном
+ * параметре 1 обе точки совпадают.
+ */
+export function shellWoolDir(origin: Vec3, dir: Vec3): Vec3 {
+  const b: number = dot(origin, dir)
+  const perp: Vec3 = perpendicular(origin, dir, b)
+  const discCore: number = 1 - dot(perp, perp)
+  const tClosest: number = Math.max(-b, 0)
+  const tCore: number = -b - Math.sqrt(Math.max(discCore, 0))
+  const t: number = discCore > 0 && tCore > 0 ? tCore : tClosest
+  const p: Vec3 = [origin[0] + dir[0] * t, origin[1] + dir[1] * t, origin[2] + dir[2] * t]
+  const length: number = Math.max(Math.hypot(p[0], p[1], p[2]), 1e-6)
+
+  return [p[0] / length, p[1] / length, p[2] / length]
 }
 
 /** Множитель, при котором касательный луч набирает ровно tangentTau */

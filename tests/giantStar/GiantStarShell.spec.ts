@@ -36,6 +36,20 @@ describe('чанк giantStarShell — структура', () => {
     expect(code).not.toMatch(/texture|sampler/)
   })
 
+  it('дискриминанты считаются через перпендикуляр — разность b*b - (oo - R*R) теряет точность', () => {
+    expect(code).toContain('vec3 perp = origin - dir * b;')
+    expect(code).toContain('float discOuter = outer * outer - p2;')
+    expect(code).toContain('float discCore = 1.0 - p2;')
+    expect(code).not.toContain('b * b - (oo')
+  })
+
+  it('луч в диск адресует «шерсть» точкой входа в ядро, а не точкой под поверхностью', () => {
+    expect(code).toContain('float discCore = 1.0 - dot(perp, perp);')
+    expect(code).toContain('float tClosest = max(-b, 0.0);')
+    expect(code).toContain('float tCore = -b - sqrt(max(discCore, 0.0));')
+    expect(code).toContain('float t = (discCore > 0.0 && tCore > 0.0) ? tCore : tClosest;')
+  })
+
   it('подкоренные выражения защищены от отрицательных значений', () => {
     expect(code).not.toMatch(/sqrt\((?!max\()/)
   })
