@@ -16,6 +16,7 @@ const defaultUniforms = {
   // sunDir = normalize(−centerWorld)): движок не доставляет позицию светила в
   // материалы, ноль здесь корректен и согласован с терминатором планеты.
   lightPosition: new Uniform(new Vector3()),
+  uLightColor: new Uniform(new Color(1, 1, 1)),
   // Канал A slope-карты суши тела (запечённая глубина воды) — та же
   // текстура/путь, что бы читал PlanetMaterial под USE_SLOPE, здесь читается
   // только канал A. null допустим — гейт USE_WATER_DEPTH решает, читать ли.
@@ -216,10 +217,14 @@ export const WaterShaderTemplate: ShaderProps = {
       // что типичное отношение яркости зенита к горизонту ясного неба.
       const float ZENITH_DARKEN = 0.35;
 
-      // Движок не моделирует цвет светила по материалам («звезда в нуле» —
-      // тот же принцип, что lightPosition, см. докблок defaultUniforms):
-      // sunColor Water.js здесь константа, не юниформ.
-      const vec3 waterSunColor = vec3(1.0);
+      // Цвет светила приходит только при подписке лайттинта (lightTintOf) —
+      // иначе, как и раньше, белый: sunColor Water.js здесь константа по умолчанию.
+      #ifdef USE_LIGHT_TINT
+        uniform vec3 uLightColor;
+        #define waterSunColor uLightColor
+      #else
+        const vec3 waterSunColor = vec3(1.0);
+      #endif
 
       // getNoise — ДОСЛОВНО структура Water.js (three/examples/jsm/objects/
       // Water.js): 4 выборки по разным периодам/скоростям скролла, сумма,

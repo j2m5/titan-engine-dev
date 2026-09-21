@@ -1,5 +1,6 @@
 import { BufferGeometry, InstancedBufferAttribute, InstancedMesh, Object3D, PlaneGeometry } from 'three'
 import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
+import type { Actor } from '@/core/models/Actor'
 import { BillboardAsteroidMaterial } from './BillboardAsteroidMaterial'
 
 /**
@@ -101,6 +102,9 @@ class InstancePool {
    * @param nearGeometries K геометрий Near-архетипов. Длина ОБЯЗАНА совпадать с
    *   l0Geometries, иначе адресация архетипа в двух тирах разъедется.
    * @param billboardSize Сторона PlaneGeometry для billboard-стрима.
+   * @param model Актор кольца — вход подписки на цвет света звезды (lightTint,
+   *   см. resolveLightTint); резолвер сам поднимается к корню дерева.
+   *   undefined — тинт выключен (тесты пула без реального кольца).
    */
   public constructor(
     l0Config: PoolLayerConfig,
@@ -108,7 +112,8 @@ class InstancePool {
     l1Config: PoolLayerConfig,
     l0Geometries: BufferGeometry[],
     nearGeometries: BufferGeometry[],
-    billboardSize: number
+    billboardSize: number,
+    model?: Actor
   ) {
     if (l0Geometries.length !== nearGeometries.length) {
       throw new Error(
@@ -124,7 +129,7 @@ class InstancePool {
     const streamCapacity = Math.ceil((l0Config.maxInstances / streamCount) * 1.5)
     const nearStreamCapacity = Math.ceil((nearConfig.maxInstances / streamCount) * 1.5)
 
-    this.geometryMaterial = new InstancedAsteroidMaterial()
+    this.geometryMaterial = new InstancedAsteroidMaterial(model)
     this.geometryMeshes = []
     this.nearMeshes = []
     this.streams = []

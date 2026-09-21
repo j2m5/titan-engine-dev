@@ -34,7 +34,8 @@ describe('категория звезды-гиганта', () => {
       'cellContrast',
       'atmosphereHeight',
       'atmosphereDensity',
-      'exposureBias'
+      'exposureBias',
+      'lightTint'
     ])
   })
 
