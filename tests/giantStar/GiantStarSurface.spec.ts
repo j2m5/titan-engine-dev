@@ -84,7 +84,20 @@ describe('чанк giantStarSurface — структура', () => {
   })
 
   it('погашенное поле не считает шум вовсе', () => {
-    expect(code).toContain('if (fadeCells <= 0.0) return 0.5;')
+    expect(code).toContain('if (fadeLanes <= 0.0) return 0.5;')
+  })
+
+  it('прожилки гаснут по СВОЕМУ масштабу — они крупнее ячеек и уходят последними', () => {
+    expect(code).toContain('float fadeLanes = starGranulationFade(domainPerPixel * GS_LANE_SCALE);')
+    expect(code).toContain('snoise(vec4(domain * GS_LANE_SCALE + 31.0, time * 0.5))')
+  })
+
+  it('ячейки не считаются, пока живы одни прожилки', () => {
+    expect(code).toContain('if (fadeCells <= 0.0) return lanesOnly;')
+  })
+
+  it('вблизи результат — полное поле, вдали — одни прожилки', () => {
+    expect(code).toContain('return mix(lanesOnly, clamp(t, 0.0, 1.0), fadeCells);')
   })
 
   it('рябь считается только пока жива', () => {

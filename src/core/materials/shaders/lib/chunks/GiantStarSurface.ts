@@ -13,10 +13,14 @@
 export const giantStarSurface = `
   // Предохранитель half-float буфера; гигант до него не достаёт
   #define GS_HDR_CEILING 64.0
+
+  // Значения ниже стартовые: приёмку по картинке делает владелец
   // Полуширина межъячейковой прожилки в единицах низкочастотного шума
   #define GS_LANE_WIDTH 0.12
   // Насколько прожилка остужает ячейку, в долях t
   #define GS_LANE_DEPTH 0.35
+  // Частота шума прожилок относительно ячеек
+  #define GS_LANE_SCALE 0.5
   // Частота ряби относительно ячеек и её амплитуда в долях t
   #define GS_RIPPLE_SCALE 6.0
   #define GS_RIPPLE_AMPLITUDE 0.25
@@ -32,16 +36,21 @@ export const giantStarSurface = `
 
   // «Температура ячейки» t в [0..1]: 0 холодная, 0.5 база, 1 горячая.
   // domain — единичное направление в объектных координатах * cellCount + seed.
-  // Низкочастотный шум работает дважды: его нулевые изолинии замкнуты и дают
-  // контуры ячеек, а его значение слегка искажает домен.
-  // Гасится к 0.5, а не к нулю: пропадает зерно, а не яркость диска.
-  float gsCellT(vec3 domain, float time, float fadeCells, float fadeRipple) {
-    if (fadeCells <= 0.0) return 0.5;
+  // Три слоя гаснут каждый по своему экранному масштабу, к базе 0.5, а не к
+  // нулю: пропадает зерно, а не яркость диска. Прожилки — самый крупный слой
+  // (шум вдвое ниже частоты ячеек), гаснут последними; порядок затухания при
+  // удалении от камеры: рябь -> ячейки -> прожилки.
+  float gsCellT(vec3 domain, float time, float fadeLanes, float fadeCells, float fadeRipple) {
+    // Прожилки — самый крупный слой и гаснут последними: нет их — нет ничего
+    if (fadeLanes <= 0.0) return 0.5;
 
-    float n = snoise(vec4(domain * 0.5 + 31.0, time * 0.5));
-    float t = 0.5 + gsFbm3(vec4(domain + 0.35 * n, time)) * GS_CELL_GAIN;
+    float n = snoise(vec4(domain * GS_LANE_SCALE + 31.0, time * 0.5));
+    float lane = GS_LANE_DEPTH * (1.0 - smoothstep(0.0, GS_LANE_WIDTH, abs(n)));
+    float lanesOnly = mix(0.5, 0.5 - lane, fadeLanes);
 
-    t -= GS_LANE_DEPTH * (1.0 - smoothstep(0.0, GS_LANE_WIDTH, abs(n)));
+    if (fadeCells <= 0.0) return lanesOnly;
+
+    float t = 0.5 + gsFbm3(vec4(domain + 0.35 * n, time)) * GS_CELL_GAIN - lane;
 
     if (fadeRipple > 0.0) {
       t += GS_RIPPLE_AMPLITUDE * fadeRipple * gsFbm3(vec4(domain * GS_RIPPLE_SCALE + 7.0, time * 3.0));
@@ -50,7 +59,7 @@ export const giantStarSurface = `
     float spot = max(t - GS_SPOT_THRESHOLD, 0.0);
     t += GS_SPOT_GAIN * spot * spot;
 
-    return mix(0.5, clamp(t, 0.0, 1.0), fadeCells);
+    return mix(lanesOnly, clamp(t, 0.0, 1.0), fadeCells);
   }
 
   // Яркость ячейки: те же три стопа и тот же t, что у цвета
@@ -78,9 +87,10 @@ export const giantStarSurface = `
     vec3 cool, vec3 base, vec3 hot, vec3 cellEnergy,
     vec3 planckX, float intensity, float exposure
   ) {
+    float fadeLanes = starGranulationFade(domainPerPixel * GS_LANE_SCALE);
     float fadeCells = starGranulationFade(domainPerPixel);
     float fadeRipple = starGranulationFade(domainPerPixel * GS_RIPPLE_SCALE);
-    float t = gsCellT(domain, time, fadeCells, fadeRipple);
+    float t = gsCellT(domain, time, fadeLanes, fadeCells, fadeRipple);
 
     return gsCompose(t, mu, cool, base, hot, cellEnergy, planckX, intensity, exposure);
   }
