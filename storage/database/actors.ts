@@ -118,5 +118,8 @@ export const Actors: IActor[] = [
   { id: 112, categoryId: 7, parentId: 110, name: "Ring Nebula", description: "", color: "#3fe0c8" },
   { id: 113, categoryId: 1, parentId: null, name: "MyCn 18 system", description: "", color: "#ffffff" },
   { id: 114, categoryId: 9, parentId: 113, name: "MyCn 18 nucleus", description: "", color: "#97b9ff" },
-  { id: 115, categoryId: 7, parentId: 113, name: "MyCn 18", description: "", color: "#d05a24" }
+  { id: 115, categoryId: 7, parentId: 113, name: "MyCn 18", description: "", color: "#d05a24" },
+  { id: 116, categoryId: 1, parentId: null, name: "Westerlund 1-26 system", description: "", color: "#ffffff" },
+  { id: 117, categoryId: 10, parentId: 116, name: "W26", description: "", color: "#ff7a3c" },
+  { id: 118, categoryId: 7, parentId: 116, name: "W26 Nebula", description: "", color: "#3fd0b0" }
 ]

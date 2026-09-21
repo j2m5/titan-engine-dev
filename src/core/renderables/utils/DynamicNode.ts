@@ -18,8 +18,12 @@ import { UpdateContext } from '@/core/UpdateContext'
  * например применить паттерн стратегия для расчета позиции и траектории
  */
 
-/** Категории тел, к чьим мешам применяется ориентация (звезда, планета, коричневый карлик) */
-const ORIENTED_CATEGORIES: Set<number> = new Set([3, 4, 8])
+/**
+ * Категории тел, к чьим мешам применяется ориентация: звезда, планета,
+ * коричневый карлик, звезда-гигант. Белый карлик (9) не входит намеренно —
+ * его поверхность однородна и поворачивать там нечего
+ */
+const ORIENTED_CATEGORIES: Set<number> = new Set([3, 4, 8, 10])
 
 class DynamicNode extends Group implements Acceptable<IObject3DVisitor>, ShouldRenderOrbitLine {
   public model: Actor

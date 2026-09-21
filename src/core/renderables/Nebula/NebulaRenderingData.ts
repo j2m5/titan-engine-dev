@@ -52,6 +52,10 @@ export interface NebulaRenderingData {
     starPosition?: NebulaTriple | null
     scatterStrength?: number
     ambient?: number
+    /** Цвет рассеянного света, hex; без поля — белый */
+    color?: string
+    /** Радиус спада света от звезды, локальные единицы; 0 — без спада */
+    falloffRadius?: number
   }
   quality?: Partial<NebulaParams['quality']>
 }
@@ -130,7 +134,9 @@ export function nebulaParamsFromData(data: NebulaRenderingData): NebulaParams {
     overrides.lighting = {
       starPosition: data.lighting.starPosition ? toVector(data.lighting.starPosition) : data.lighting.starPosition,
       scatterStrength: data.lighting.scatterStrength,
-      ambient: data.lighting.ambient
+      ambient: data.lighting.ambient,
+      color: data.lighting.color ? new Color(data.lighting.color) : undefined,
+      falloffRadius: data.lighting.falloffRadius
     }
   }
 

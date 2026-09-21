@@ -33,6 +33,13 @@ export const BROWN_DWARF_IMPOSTOR_PIXELS: number = 12
  */
 export const WHITE_DWARF_IMPOSTOR_PIXELS: number = 6
 
+/**
+ * Видимый размер ЯДРА импостора звезды-гиганта в пикселях. По этой же константе
+ * выбирается дистанция переключения LOD; квад билборда крупнее — на
+ * протяжённость оболочки. Равна звёздной: гигант не читается мельче звезды.
+ */
+export const GIANT_STAR_IMPOSTOR_PIXELS: number = 12
+
 /** Высота кадра в мировых единицах на заданном расстоянии */
 export function frameHeightAt(distance: number, fovDegrees: number): number {
   return 2 * Math.tan(degToRad(fovDegrees) / 2) * distance

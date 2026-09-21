@@ -48,6 +48,7 @@ export const WhiteDwarfImpostorShaderTemplate: ShaderProps = {
 
     varying vec2 vUv;
 
+    #include <planckLimb>
     #include <whiteDwarfSurface>
 
     void main() {

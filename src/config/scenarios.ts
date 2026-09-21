@@ -131,5 +131,18 @@ export const Scenarios: ScenarioConfig[] = [
     // лепестки уходят за кадр раньше, чем читается сама форма
     defaultCameraPosition: [0, fromAstronomicalUnits(36000), fromAstronomicalUnits(36000)],
     lightSources: [114]
+  },
+  {
+    id: 12,
+    rootId: 116,
+    name: 'Westerlund 1-26 system',
+    description:
+      'Red supergiant W26 inside the cocoon it blew for itself: a star seven astronomical units in radius lighting the inner wall of its own nebula',
+    preview: 'unknown.png',
+    skybox: [1, 2, 3, 4, 5, 6],
+    // Полуразмер кокона — 430 а.е.; с ~1000 а.е. он помещается в кадр целиком,
+    // а звезда в его сердце видна небольшим диском. Позиция стартовая.
+    defaultCameraPosition: [0, fromAstronomicalUnits(720), fromAstronomicalUnits(720)],
+    lightSources: [117]
   }
 ]

@@ -10,23 +10,15 @@
  * воспроизводить то, что реально считает шейдер, включая точность.
  */
 
-export type Vec3 = [number, number, number]
+import { planckLimb, PLANCK_LIMB_EDDINGTON_TAU, type Vec3 } from '../helpers/planckLimbMirror'
 
-export const WD_EDDINGTON_TAU: number = 0.66666667
+export type { Vec3 }
+
+/** Прежние имена сохранены: числовые тесты карлика не меняются ни строкой */
+export const WD_EDDINGTON_TAU: number = PLANCK_LIMB_EDDINGTON_TAU
+export const wdLimb = planckLimb
+
 export const WD_HDR_CEILING: number = 32.0
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max)
-}
-
-/** Зеркало wdLimb */
-export function wdLimb(mu: number, planckX: Vec3): Vec3 {
-  const m: number = clamp(mu, 0.0, 1.0)
-  const sMu: number = Math.pow(0.75 * (m + WD_EDDINGTON_TAU), 0.25)
-  const sOne: number = Math.pow(0.75 * (1.0 + WD_EDDINGTON_TAU), 0.25)
-
-  return planckX.map((x: number) => (Math.exp(x / sOne) - 1.0) / (Math.exp(x / sMu) - 1.0)) as Vec3
-}
 
 /** Зеркало wdShade */
 export function wdShade(mu: number, baseColor: Vec3, planckX: Vec3, intensity: number, exposure: number): Vec3 {

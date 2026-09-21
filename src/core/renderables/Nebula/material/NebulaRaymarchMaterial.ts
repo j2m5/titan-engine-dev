@@ -92,6 +92,9 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
     u.uScatterStrength.value = params.lighting.scatterStrength
     u.uAmbient.value = params.lighting.ambient
     u.uHasStar.value = params.lighting.starPosition ? 1 : 0
+    u.uLightTint.value = params.lighting.color ? 1 : 0
+    if (params.lighting.color) u.uLightColor.value.copy(params.lighting.color)
+    u.uLightFalloff.value = params.lighting.falloffRadius
   }
 
   /** Bind the precomputed 3D density field (only meaningful when NEB_BAKED). */

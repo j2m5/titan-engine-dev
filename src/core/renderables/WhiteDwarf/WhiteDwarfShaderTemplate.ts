@@ -64,6 +64,7 @@ export const WhiteDwarfShaderTemplate: ShaderProps = {
     varying vec3 vViewPosition;
     varying vec3 vViewNormal;
 
+    #include <planckLimb>
     #include <whiteDwarfSurface>
 
     void main() {

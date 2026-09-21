@@ -30,7 +30,11 @@ import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { requireRenderingData } from '@/core/helpers/renderingData'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
-import { BROWN_DWARF_IMPOSTOR_PIXELS, WHITE_DWARF_IMPOSTOR_PIXELS } from '@/core/helpers/apparentSize'
+import {
+  BROWN_DWARF_IMPOSTOR_PIXELS,
+  GIANT_STAR_IMPOSTOR_PIXELS,
+  WHITE_DWARF_IMPOSTOR_PIXELS
+} from '@/core/helpers/apparentSize'
 import { Nebula } from '@/core/renderables/Nebula'
 import { nebulaParamsFromData } from '@/core/renderables/Nebula/NebulaRenderingData'
 import { PlacedNode } from '@/core/renderables/utils/PlacedNode'
@@ -38,6 +42,7 @@ import { BrownDwarf } from '@/core/renderables/BrownDwarf'
 import { BrownDwarfImpostor } from '@/core/renderables/BrownDwarf/BrownDwarfImpostor'
 import { WhiteDwarf } from '@/core/renderables/WhiteDwarf/WhiteDwarf'
 import { WhiteDwarfImpostor } from '@/core/renderables/WhiteDwarf/WhiteDwarfImpostor'
+import { GiantStar, GiantStarImpostor, GiantStarShell } from '@/core/renderables/GiantStar'
 import { INebulaRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
@@ -89,6 +94,8 @@ class RenderableFactory {
         return this.createBrownDwarf(actor)
       case 9:
         return this.createWhiteDwarf(actor)
+      case 10:
+        return this.createGiantStar(actor)
       default:
         throw new Error("Couldn't resolve actor")
     }
@@ -197,6 +204,36 @@ class RenderableFactory {
     lod.name = actor.getAttribute('name', '') + 'LOD'
     lod.addLevel(body)
     lod.addLevel(impostor, lod.switchDistance(config('camera.fov')), config('whiteDwarf.lodHysteresis'))
+
+    node.add(lod)
+
+    return node
+  }
+
+  private createGiantStar(actor: Actor): Object3D {
+    const node = new DynamicNode(actor)
+    const lod = new ApparentSizeLod(
+      actor.physicalObject!.getAttribute('radius')!,
+      this.renderer,
+      GIANT_STAR_IMPOSTOR_PIXELS
+    )
+    const body = new GiantStar(actor)
+    const shell = new GiantStarShell(body)
+    const impostor = new GiantStarImpostor(body, shell, this.renderer)
+
+    // Оболочка — дочь тела: переключается LOD'ом вместе с ним. Протуберанцев
+    // (StarOuterLayer) нет намеренно — гиганту они не свойственны
+    body.add(shell)
+
+    // Ореол на LOD, а не на теле: нужен на обоих уровнях
+    lod.add(new StarInnerLayer(actor, config('giantStar.haloScale'), config('giantStar.haloOpacity')))
+
+    node.name = actor.getAttribute('name', '')
+    node.renderable = body
+
+    lod.name = actor.getAttribute('name', '') + 'LOD'
+    lod.addLevel(body)
+    lod.addLevel(impostor, lod.switchDistance(config('camera.fov')), config('giantStar.lodHysteresis'))
 
     node.add(lod)
 
