@@ -1,13 +1,15 @@
 import { Actor } from '@/core/models/Actor'
 
-/** W26: радиус в километрах, температура в кельвинах; data — renderingObject.data */
-export function stubGiantActor(data: object = {}): Actor {
+/**
+ * W26: радиус в километрах, температура в кельвинах; data — renderingObject.data.
+ * rotation по умолчанию null: OrientationModel проверяет `!== null`.
+ */
+export function stubGiantActor(data: object = {}, rotation: object | null = null): Actor {
   return {
     // Имя отдаётся явной веткой: `'' ?? 'x'` вернул бы пустую строку
     getAttribute: (key: string, def?: unknown): unknown =>
       key === 'categoryId' ? 10 : key === 'name' ? 'W26' : def,
-    // Именно null: OrientationModel проверяет `!== null`
-    rotation: null,
+    rotation,
     renderingObject: { getAttribute: () => data },
     physicalObject: {
       getAttribute: (key: string, def?: unknown): unknown =>

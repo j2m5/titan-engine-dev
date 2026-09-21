@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { Color, PerspectiveCamera, Scene, type WebGLRenderer } from 'three'
+import { Color, PerspectiveCamera, Quaternion, Scene, type WebGLRenderer } from 'three'
 import '@/core/framework/TitanThree'
+import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
+import { OrientationModel } from '@/core/libs/OrientationModel'
 import { GiantStar } from '@/core/renderables/GiantStar/GiantStar'
 import { GiantStarShaderTemplate } from '@/core/renderables/GiantStar/GiantStarShaderTemplate'
 import {
@@ -110,5 +112,32 @@ describe('тело', () => {
     camera.updateMatrixWorld()
     body.onBeforeRender({} as WebGLRenderer, new Scene(), camera, body.geometry, body.material, null as never)
     expect(body.material.uniforms.uProximityExposure.value).toBeLessThan(1)
+  })
+})
+
+describe('ориентация гиганта (категория 10 в ORIENTED_CATEGORIES)', () => {
+  it('DynamicNode копирует кватернион ориентации на тело: у гиганта есть рисунок и полюс', () => {
+    // period: 0 замыкает угол меридиана на голый meridianAngle
+    // (OrientationModel.getMeridianAngleByEpoch): эпоха теста на результат не влияет
+    const actor = stubGiantActor(
+      {},
+      { getAttribute: (key: string, def?: unknown): unknown => (key === 'meridianAngle' ? 90 : (def ?? 0)) }
+    )
+    const node = new DynamicNode(actor)
+    const body = new GiantStar(actor)
+
+    node.renderable = body
+    node.updateObject({ epoch: 0, delta: 0, elapsed: 0, camera: new PerspectiveCamera() })
+
+    // Не жёсткое число: источник истины проверен в tests/OrientationModel.spec.ts,
+    // здесь — только то, что DynamicNode его зовёт и копирует результат
+    const expected = new OrientationModel(actor).getQuaternion(0)
+
+    // Заглушка обязана давать НЕтождественный поворот — иначе тест прошёл бы
+    // и без записи 10 в ORIENTED_CATEGORIES
+    expect(expected.equals(new Quaternion())).toBe(false)
+    expect(body.quaternion.equals(expected)).toBe(true)
+
+    body.dispose()
   })
 })
