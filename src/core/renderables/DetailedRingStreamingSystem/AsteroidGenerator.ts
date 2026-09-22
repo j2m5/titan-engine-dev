@@ -53,6 +53,11 @@ interface GeneratorConfig {
   /** Максимальный масштаб экземпляра */
   maxScale: number
   /**
+   * Показатель степени розыгрыша масштаба t = (u1·u2)^sizeExponent, u1,u2 ~ U(0,1).
+   * Не задан или 1 — прежнее t = u1·u2 (смещение к мелким, побайтно как раньше).
+   */
+  sizeExponent?: number
+  /**
    * Профиль породы — раскладка инстансов по архетипам с учётом размера (см.
    * pickArchetype): мелкие камни чаще осколки, крупные — слипшиеся формы.
    * Без профиля раскладка равновероятна по хешу (archetypeForInstance).
@@ -246,6 +251,9 @@ class AsteroidGenerator {
     // Проход 2: ровно прежний цикл генерации — rng-поток не сдвинут ни на байт.
     const rng = new SeededRandom(seed)
     const { thickness, minScale, maxScale } = this.config
+    // Не задан или 1 — прежнее t = u1·u2 побайтно; шейпинг применяется ПОСЛЕ
+    // обоих rng.next(), поэтому реплей archetypeAssignment не сдвигается
+    const sizeExponent = this.config.sizeExponent ?? 1
 
     const r1Sq = bounds.minRadius * bounds.minRadius
     const r2Sq = bounds.maxRadius * bounds.maxRadius
@@ -285,9 +293,10 @@ class AsteroidGenerator {
       const ry = rng.next() * Math.PI * 2
       const rz = rng.next() * Math.PI * 2
 
-      // Масштаб: квадратичное распределение — больше мелких
+      // Масштаб: квадратичное распределение (больше мелких) со степенным шейпингом
       const t = rng.next() * rng.next()
-      const s = minScale + t * (maxScale - minScale)
+      const shaped = sizeExponent === 1 ? t : Math.pow(t, sizeExponent)
+      const s = minScale + shaped * (maxScale - minScale)
 
       // Пер-осевая анизотропия поверх базового скаляра s: ФИКСИРОВАННО ровно
       // три вызова rng.next() — по одному на ось, строго в порядке x, y, z,

@@ -485,10 +485,12 @@ export interface IAsteroidBeltRenderingObject {
   outerRadiusAu: number
   /** Полная толщина тора, а.е. */
   thicknessAu: number
-  /** Среднее расстояние между камнями, км — источник плотности, ячейки и порогов LOD */
-  meanSpacingKm: number
-  /** Габарит отдельного астероида, км (дефолт 10, как у кольца) */
-  asteroidSizeKm?: number
+  /** Границы размеров тел, км: [мелочь, глыбы]. Верх диапазона — габарит архетипа на весь пул */
+  sizeRangeKm: [number, number]
+  /** Показатель степенного закона розыгрыша масштаба внутри класса; не задан — 1 (прежнее квадратичное смещение к мелким) */
+  sizeExponent?: number
+  /** Среднее расстояние между телами САМОГО МЕЛКОГО класса, км — источник плотности/ячеек/порогов LOD (см. deriveCascades) */
+  spacingKm: number
   /** Профиль облика камней: 'stony' | 'carbonaceous' | 'metallic' | 'icy' (дефолт 'stony') */
   profile?: string
   seed?: number
@@ -500,8 +502,8 @@ export interface IAsteroidBeltRenderingObject {
   dustColor?: number | string
   /** Целевая оптическая толща грейзинг-луча (плотность дымки) */
   dustTauGrazing?: number
-  /** Масштабная полутолщина пылевого слоя, км */
-  dustScaleHeightKm?: number
+  /** Масштабная полутолщина пылевого слоя как доля полутолщины тора; не задана — 1/3 */
+  dustScaleHeightFraction?: number
   /** Средний период вращения камней, часы; 0 гасит вращение (дефолт 0) */
   spinPeriodHours?: number
   /** Число точек дальнего слоя, штук (дефолт 60000) */

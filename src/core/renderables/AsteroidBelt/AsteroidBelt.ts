@@ -6,7 +6,7 @@ import { toThreeJSUnits, fromAstronomicalUnits } from '@/core/helpers/scaling'
 import { asteroidBeltParameters, type AsteroidBeltParameters } from './AsteroidBeltParameters'
 import { AsteroidRingSystem, type AsteroidRingConfig } from '@/core/renderables/DetailedRingStreamingSystem'
 import { shapeModelStorage } from '@/core/renderables/DetailedRingStreamingSystem/archetypes/ShapeModelStorage'
-import { deriveStreamerScale } from '@/core/renderables/DetailedRingStreamingSystem/streamerScale'
+import { deriveCascades, type CascadeSpec } from '@/core/renderables/DetailedRingStreamingSystem/cascadeScale'
 import { buildBeltDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/beltDensityProfile'
 import { distanceToTorus, nextState, BeltLodState } from '@/core/renderables/DetailedRingStreamingSystem/beltDistance'
 import { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
@@ -53,6 +53,8 @@ class AsteroidBelt extends Group {
   private readonly halfThicknessTu: number
   private readonly nearThresholdTu: number
   private readonly midThresholdTu: number = fromAstronomicalUnits(MID_THRESHOLD_AU)
+  /** Каскады классов размеров — считаются один раз, используются и порогом Near, и стримером */
+  private readonly cascades: readonly CascadeSpec[]
 
   private lodState: BeltLodState = BeltLodState.Far
   private streamer: AsteroidRingSystem | null = null
@@ -75,9 +77,15 @@ class AsteroidBelt extends Group {
     this.outerRadiusTu = toThreeJSUnits(this.params.outerRadiusKm)
     this.halfThicknessTu = toThreeJSUnits(this.params.thicknessKm) * 0.5
 
-    // Порог Near — l1MaxDistance стримера: у порога до тора меньше него пояс
-    // виден как отдельные камни, дальше — уже не имеет смысла держать пул
-    this.nearThresholdTu = toThreeJSUnits(deriveStreamerScale(this.params.meanSpacingKm).lodThresholdsKm.l1)
+    this.cascades = deriveCascades({
+      sizeRangeKm: this.params.sizeRangeKm,
+      spacingKm: this.params.spacingKm,
+      halfThicknessKm: this.params.thicknessKm * 0.5
+    })
+    // Порог Near — радиус заселения САМОГО КРУПНОГО каскада: у порога до тора
+    // меньше него пояс виден как отдельные камни, дальше — уже не имеет смысла
+    // держать пул
+    this.nearThresholdTu = toThreeJSUnits(this.cascades[this.cascades.length - 1].populationRadiusKm)
 
     this.dustVolume = this.params.dustEnabled ? this.__createDustVolume() : null
     if (this.dustVolume) this.add(this.dustVolume)
@@ -90,7 +98,8 @@ class AsteroidBelt extends Group {
 
   private __createDustVolume(): RingDustVolume {
     const p = this.params
-    const dustScaleHeight = toThreeJSUnits(p.dustScaleHeightKm)
+    // Доля полутолщины тора, а не абсолютные км — масштабно-инвариантно для пояса
+    const dustScaleHeight = p.dustScaleHeightFraction * this.halfThicknessTu
     // Та же калибровка, что у AsteroidRingSystem: tau грейзинг-луча через
     // весь тор в средней плоскости = dustTauGrazing
     const dustDensity = p.dustTauGrazing / (this.outerRadiusTu - this.innerRadiusTu)
@@ -136,7 +145,6 @@ class AsteroidBelt extends Group {
 
   private __createStreamer(): AsteroidRingSystem {
     const p = this.params
-    const scale = deriveStreamerScale(p.meanSpacingKm)
 
     const overrides: Partial<AsteroidRingConfig> = {
       innerRadiusKm: p.innerRadiusKm,
@@ -146,9 +154,13 @@ class AsteroidBelt extends Group {
       frame: 'system',
       relativeOrigin: true,
       densityProfileSource: this.densityProfile,
-      densityPerUnit: scale.densityPerUnit,
-      cellSizeKm: scale.cellSizeKm,
-      lodThresholdsKm: scale.lodThresholdsKm,
+      cascades: this.cascades as CascadeSpec[],
+      // Габарит общий на пул: геометрия архетипа и масштаб карт деталей одни на
+      // все каскады, класс задаётся окном minScale/maxScale (см. cascadeScale)
+      asteroidSizeKm: p.sizeRangeKm[1],
+      sizeExponent: p.sizeExponent,
+      // Доля полутолщины тора, как у дальнего слоя пыли (__createDustVolume) — km для конфига кольца
+      dustScaleHeightKm: p.dustScaleHeightFraction * (p.thicknessKm * 0.5),
       bleedFraction: { rocks: 0.01, dust: 0.03 },
       dustNearFadeFraction: 0.25,
       ringGapsFromTexture: false,
@@ -158,9 +170,6 @@ class AsteroidBelt extends Group {
       // Разреженный пояс: многие секторы 0 < weighted < 1 — без розыгрыша
       // теряли бы камень гарантированно (см. SectorGridConfig.stochasticCount)
       stochasticCount: true,
-      // Явно из уже резолвленных параметров пояса (this.params) — единственный
-      // источник, а не повторное чтение renderingObject.data в __modelVisualOverrides
-      asteroidSizeKm: p.asteroidSizeKm,
       profile: asteroidProfileNameOf(p.profile)
     }
     // Пыль уже посчитана дальним слоем — второй объём стримера был бы дублем

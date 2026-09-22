@@ -15,22 +15,27 @@ const DEFAULT_POINT_SCALE = 220
 /**
  * Параметры пояса после дефолтов и клампов — км и единицы данных, готовые к
  * передаче в AsteroidBelt/AsteroidRingSystem. Машинерия (LOD-пороги, пулы,
- * сетка) сюда не входит — она выводится из meanSpacingKm отдельно
- * (см. deriveStreamerScale).
+ * сетка) сюда не входит — она выводится из sizeRangeKm/spacingKm отдельно
+ * (см. deriveCascades).
  */
 export interface AsteroidBeltParameters {
   innerRadiusKm: number
   outerRadiusKm: number
   thicknessKm: number
-  meanSpacingKm: number
-  asteroidSizeKm: number
+  /** Границы размеров тел, км: [мелочь, глыбы] */
+  sizeRangeKm: [number, number]
+  /** Показатель степенного закона розыгрыша масштаба внутри класса */
+  sizeExponent: number
+  /** Среднее расстояние между телами самого мелкого класса, км */
+  spacingKm: number
   profile: string
   seed: number
   structure: BeltStructure
   dustEnabled: boolean
   dustColor: number | string
   dustTauGrazing: number
-  dustScaleHeightKm: number
+  /** Доля полутолщины тора — масштабная полутолщина пылевого слоя */
+  dustScaleHeightFraction: number
   spinPeriodHours: number
   /** Число точек дальнего слоя — целое, ≥ 0 (0 гасит слой видимостью пустого буфера) */
   pointCount: number
@@ -51,12 +56,18 @@ export function asteroidBeltParameters(actor: Actor): AsteroidBeltParameters {
   const outerRadiusAu = data.outerRadiusAu > innerRadiusAu ? data.outerRadiusAu : innerRadiusAu + 1
   const thicknessAu = data.thicknessAu > 0 ? data.thicknessAu : 0.01
 
+  const rawMin = data.sizeRangeKm?.[0]
+  const rawMax = data.sizeRangeKm?.[1]
+  const sizeMin = typeof rawMin === 'number' && rawMin > 0 ? rawMin : 1
+  const sizeMax = typeof rawMax === 'number' && rawMax > sizeMin ? rawMax : sizeMin + 1
+
   return {
     innerRadiusKm: innerRadiusAu * AU,
     outerRadiusKm: outerRadiusAu * AU,
     thicknessKm: thicknessAu * AU,
-    meanSpacingKm: Math.max(data.meanSpacingKm, 1),
-    asteroidSizeKm: data.asteroidSizeKm ?? 10,
+    sizeRangeKm: [sizeMin, sizeMax],
+    sizeExponent: Math.max(data.sizeExponent ?? 1, 0.1),
+    spacingKm: Math.max(data.spacingKm, 1),
     profile: data.profile ?? 'stony',
     seed: data.seed ?? 1,
     structure: data.structure ?? EMPTY_STRUCTURE,
@@ -64,7 +75,7 @@ export function asteroidBeltParameters(actor: Actor): AsteroidBeltParameters {
     dustEnabled: data.dustEnabled ?? true,
     dustColor: data.dustColor ?? 0x9b968c,
     dustTauGrazing: data.dustTauGrazing ?? 0.52,
-    dustScaleHeightKm: data.dustScaleHeightKm ?? 200,
+    dustScaleHeightFraction: data.dustScaleHeightFraction ?? 1 / 3,
     spinPeriodHours: data.spinPeriodHours ?? 0,
     // Целое и не отрицательное — отрицательный/дробный count ломает Float32Array(count * 3)
     pointCount: Math.max(0, Math.floor(data.pointCount ?? DEFAULT_POINT_COUNT)),

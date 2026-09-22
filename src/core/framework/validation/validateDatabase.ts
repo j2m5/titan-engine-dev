@@ -501,8 +501,8 @@ function checkNebulaShapes(
 /**
  * Форма конфига пояса астероидов. Радиусы в а.е.: inner < outer, оба
  * положительны — иначе distanceToTorus и профиль плотности делят на ноль.
- * meanSpacingKm — единственный источник плотности/ячейки/порогов LOD,
- * неположительный ломает deriveStreamerScale.
+ * spacingKm и sizeRangeKm — источник плотности/ячеек/порогов LOD (см.
+ * deriveCascades), неположительные или невпорядоченные ломают вывод каскадов.
  */
 function checkAsteroidBeltShapes(
   rows: IRenderingObject[],
@@ -539,9 +539,19 @@ function checkAsteroidBeltShapes(
       bad('thicknessAu', 'must be a positive number (astronomical units)')
     }
 
-    const spacing = data.meanSpacingKm
+    const spacing = data.spacingKm
     if (typeof spacing !== 'number' || !Number.isFinite(spacing) || spacing <= 0) {
-      bad('meanSpacingKm', 'must be a positive number (kilometers)')
+      bad('spacingKm', 'must be a positive number (kilometers)')
+    }
+
+    const sizeRange = data.sizeRangeKm
+    const sizeMin = Array.isArray(sizeRange) ? sizeRange[0] : undefined
+    const sizeMax = Array.isArray(sizeRange) ? sizeRange[1] : undefined
+    const sizeMinValid = typeof sizeMin === 'number' && Number.isFinite(sizeMin) && sizeMin > 0
+
+    if (!sizeMinValid) bad('sizeRangeKm[0]', 'must be a positive number (kilometers)')
+    if (sizeMinValid && !(typeof sizeMax === 'number' && Number.isFinite(sizeMax) && sizeMax > (sizeMin as number))) {
+      bad('sizeRangeKm[1]', 'must be greater than data.sizeRangeKm[0]')
     }
   }
 }

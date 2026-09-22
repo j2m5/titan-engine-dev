@@ -29,15 +29,16 @@ describe('категория пояса астероидов', () => {
       'innerRadiusAu',
       'outerRadiusAu',
       'thicknessAu',
-      'meanSpacingKm',
-      'asteroidSizeKm',
+      'sizeRangeKm',
+      'sizeExponent',
+      'spacingKm',
       'profile',
       'seed',
       'structure',
       'dustEnabled',
       'dustColor',
       'dustTauGrazing',
-      'dustScaleHeightKm',
+      'dustScaleHeightFraction',
       'spinPeriodHours',
       'pointCount',
       'pointScale'
@@ -73,7 +74,8 @@ const beltRow = () => ({
     innerRadiusAu: 42,
     outerRadiusAu: 58,
     thicknessAu: 0.8,
-    meanSpacingKm: 60
+    sizeRangeKm: [0.5, 60],
+    spacingKm: 60
   } as Record<string, unknown>
 })
 
@@ -141,11 +143,25 @@ describe('validateDatabase — форма конфига пояса астеро
     expect(validateDatabase(snapshotWith(row)).errors.some((e) => /data\.thicknessAu/.test(e.message))).toBe(true)
   })
 
-  it('ловит неположительный meanSpacingKm', () => {
+  it('ловит неположительный spacingKm', () => {
     const row = beltRow()
-    row.data.meanSpacingKm = 0
+    row.data.spacingKm = 0
 
-    expect(validateDatabase(snapshotWith(row)).errors.some((e) => /data\.meanSpacingKm/.test(e.message))).toBe(true)
+    expect(validateDatabase(snapshotWith(row)).errors.some((e) => /data\.spacingKm/.test(e.message))).toBe(true)
+  })
+
+  it('ловит неположительный sizeRangeKm[0]', () => {
+    const row = beltRow()
+    row.data.sizeRangeKm = [0, 60]
+
+    expect(validateDatabase(snapshotWith(row)).errors.some((e) => /data\.sizeRangeKm\[0\]/.test(e.message))).toBe(true)
+  })
+
+  it('ловит sizeRangeKm[1] не больше sizeRangeKm[0]', () => {
+    const row = beltRow()
+    row.data.sizeRangeKm = [10, 10]
+
+    expect(validateDatabase(snapshotWith(row)).errors.some((e) => /data\.sizeRangeKm\[1\]/.test(e.message))).toBe(true)
   })
 
   it('строки других категорий этой проверкой не трогаются', () => {

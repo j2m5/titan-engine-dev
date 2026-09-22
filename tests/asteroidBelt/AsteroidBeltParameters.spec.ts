@@ -11,7 +11,8 @@ const MIN_DATA: IAsteroidBeltRenderingObject = {
   innerRadiusAu: 40,
   outerRadiusAu: 60,
   thicknessAu: 0.1,
-  meanSpacingKm: 60
+  sizeRangeKm: [0.5, 60],
+  spacingKm: 60
 }
 
 describe('asteroidBeltParameters: pointCount/pointScale (дальний слой точек)', () => {

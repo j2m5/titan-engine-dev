@@ -152,11 +152,11 @@ export const renderingDataTemplates: DataTemplate[] = [
     data: {
       innerRadiusAu: 42,
       outerRadiusAu: 58,
-      // Толщина — порядка сотни тысяч км: камень в 12 км виден в пределах ~15 000 км,
-      // на более толстом поясе пул уходит на камни вне зоны видимости
-      thicknessAu: 0.0008,
-      meanSpacingKm: 100,
-      asteroidSizeKm: 12,
+      // Толщина 0.1 а.е.: спрос каскада на пул ~третья доля (см. deriveCascades)
+      thicknessAu: 0.1,
+      sizeRangeKm: [0.5, 60],
+      sizeExponent: 1,
+      spacingKm: 54,
       profile: 'stony',
       seed: 1,
       structure: {
@@ -173,7 +173,7 @@ export const renderingDataTemplates: DataTemplate[] = [
       dustEnabled: true,
       dustColor: '#9b968c',
       dustTauGrazing: 0.52,
-      dustScaleHeightKm: 20000,
+      dustScaleHeightFraction: 0.333,
       spinPeriodHours: 8,
       pointCount: 60000,
       pointScale: 220

@@ -43,7 +43,7 @@ describe('пояс Ashfall Belt — система W26', () => {
 
     expect(params.innerRadiusKm).toBeGreaterThan(0)
     expect(params.outerRadiusKm).toBeGreaterThan(params.innerRadiusKm)
-    expect(params.meanSpacingKm).toBeGreaterThan(0)
+    expect(params.spacingKm).toBeGreaterThan(0)
   })
 
   it('радиусы между орбитами Emberon и Halcyra, зазор ≥ 5 а.е. до каждой', () => {

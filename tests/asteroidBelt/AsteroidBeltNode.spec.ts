@@ -6,9 +6,11 @@ import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { PlacedNode } from '@/core/renderables/utils/PlacedNode'
 import { AsteroidBelt } from '@/core/renderables/AsteroidBelt'
 import { AsteroidRingSystem, type AsteroidRingConfig } from '@/core/renderables/DetailedRingStreamingSystem'
+import { deriveCascades } from '@/core/renderables/DetailedRingStreamingSystem/cascadeScale'
 import { Actor } from '@/core/models/Actor'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
-import { fromAstronomicalUnits } from '@/core/helpers/scaling'
+import { toThreeJSUnits, fromAstronomicalUnits } from '@/core/helpers/scaling'
+import { AU } from '@/core/constants'
 import type { IAsteroidBeltRenderingObject } from '@/core/models/types'
 import type { UpdateContext } from '@/core/UpdateContext'
 
@@ -55,12 +57,13 @@ function frameAt(belt: AsteroidBelt, x: number, y: number = 0): void {
 }
 
 // Тор 40..60 а.е., тонкий (0.1 а.е.) — высотный избыток легко перекрывает
-// малый near-порог (доли а.е. от meanSpacingKm), но не дотягивает до mid (1 а.е.)
+// малый near-порог (доли а.е. от радиуса заселения каскада), но не дотягивает до mid (1 а.е.)
 const BELT_DATA: IAsteroidBeltRenderingObject = {
   innerRadiusAu: 40,
   outerRadiusAu: 60,
   thicknessAu: 0.1,
-  meanSpacingKm: 60,
+  sizeRangeKm: [0.5, 60],
+  spacingKm: 54,
   dustEnabled: false
 }
 
@@ -142,15 +145,51 @@ describe('AsteroidBelt — состояния LOD по расстоянию до
     expect(configOf(streamer).stochasticCount).toBe(true)
   })
 
-  it('стример подхватывает asteroidSizeKm/profile из резолвленных параметров пояса, а не заново из сырых данных', () => {
-    const node = makeFactory().make(beltActor({ ...BELT_DATA, asteroidSizeKm: 12, profile: 'icy' })) as PlacedNode
+  it('стример подхватывает sizeRangeKm/profile из резолвленных параметров пояса, а не заново из сырых данных', () => {
+    const node = makeFactory().make(beltActor({ ...BELT_DATA, sizeRangeKm: [0.5, 12], profile: 'icy' })) as PlacedNode
     const belt = node.children.find((c) => c instanceof AsteroidBelt) as unknown as AsteroidBelt
     node.updateMatrixWorld(true)
 
     frameAt(belt, fromAstronomicalUnits(50))
 
     const streamer = internalsOf(belt).streamer!
+    // Габарит общий на пул — верх диапазона размеров (см. cascadeScale)
     expect(configOf(streamer).asteroidSizeKm).toBe(12)
     expect(configOf(streamer).profile).toBe('icy')
+  })
+
+  it('пояс строит три каскада: свои ячейки, пороги и доли пула', () => {
+    const node = makeFactory().make(beltActor(BELT_DATA)) as PlacedNode
+    const belt = node.children.find((c) => c instanceof AsteroidBelt) as unknown as AsteroidBelt
+    node.updateMatrixWorld(true)
+
+    frameAt(belt, fromAstronomicalUnits(100))
+    frameAt(belt, fromAstronomicalUnits(50))
+
+    const streamer = internalsOf(belt).streamer!
+    const cascades = (streamer as unknown as { cascades: { getDebugInfo(): { perCascade: unknown[] } } }).cascades
+    expect(cascades.getDebugInfo().perCascade).toHaveLength(3)
+
+    const cfg = configOf(streamer)
+    expect(cfg.cascades).toHaveLength(3)
+    // Ячейки растут от класса к классу, радиусы тоже
+    expect(cfg.cascades![1].cellSizeKm).toBeGreaterThan(cfg.cascades![0].cellSizeKm)
+    expect(cfg.cascades![2].lodThresholdsKm.l1).toBeGreaterThan(cfg.cascades![1].lodThresholdsKm.l1)
+    // Габарит общий на пул — верх диапазона размеров
+    expect(cfg.asteroidSizeKm).toBe(60)
+  })
+
+  it('порог состояния «вблизи» — радиус крупнейшего каскада', () => {
+    const node = makeFactory().make(beltActor(BELT_DATA)) as PlacedNode
+    const belt = node.children.find((c) => c instanceof AsteroidBelt) as unknown as AsteroidBelt
+    const nearTu = (belt as unknown as { nearThresholdTu: number }).nearThresholdTu
+    const cascades = deriveCascades({
+      sizeRangeKm: BELT_DATA.sizeRangeKm,
+      spacingKm: BELT_DATA.spacingKm,
+      halfThicknessKm: BELT_DATA.thicknessAu * AU * 0.5
+    })
+    const expected = toThreeJSUnits(cascades[cascades.length - 1].populationRadiusKm)
+
+    expect(nearTu).toBeCloseTo(expected, 6)
   })
 })

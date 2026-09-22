@@ -5,8 +5,9 @@ import { BeltPointsShaderTemplate } from '@/core/materials/shaders/lib/BeltPoint
 import { BILLBOARD_VERTEX_SHADER } from '@/core/renderables/DetailedRingStreamingSystem/BillboardAsteroidMaterial'
 import { buildBeltDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/beltDensityProfile'
 import { AsteroidBelt } from '@/core/renderables/AsteroidBelt'
-import { deriveStreamerScale } from '@/core/renderables/DetailedRingStreamingSystem/streamerScale'
+import { deriveCascades } from '@/core/renderables/DetailedRingStreamingSystem/cascadeScale'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { AU } from '@/core/constants'
 import type { Actor } from '@/core/models/Actor'
 import type { IAsteroidBeltRenderingObject } from '@/core/models/types'
 import { withoutComments } from '../helpers/glsl'
@@ -224,17 +225,23 @@ describe('AsteroidBelt: точки получают тот же uMaxDistance, ч
     } as unknown as Actor
   }
 
-  it('uMaxDistance точек = toThreeJSUnits(deriveStreamerScale(meanSpacingKm).lodThresholdsKm.l1)', () => {
+  it('uMaxDistance точек = toThreeJSUnits(deriveCascades(...).at(-1).populationRadiusKm) — радиус крупного каскада', () => {
     const data: IAsteroidBeltRenderingObject = {
       innerRadiusAu: 40,
       outerRadiusAu: 60,
       thicknessAu: 0.1,
-      meanSpacingKm: 60,
+      sizeRangeKm: [0.5, 60],
+      spacingKm: 60,
       dustEnabled: false
     }
     const belt = new AsteroidBelt(beltActor(data))
     const pointLayer = (belt as unknown as { pointLayer: BeltPointLayer }).pointLayer
-    const expected = toThreeJSUnits(deriveStreamerScale(data.meanSpacingKm).lodThresholdsKm.l1)
+    const cascades = deriveCascades({
+      sizeRangeKm: data.sizeRangeKm,
+      spacingKm: data.spacingKm,
+      halfThicknessKm: data.thicknessAu * AU * 0.5
+    })
+    const expected = toThreeJSUnits(cascades[cascades.length - 1].populationRadiusKm)
 
     expect(pointLayer.pointMaterial.uniforms.uMaxDistance.value).toBeCloseTo(expected, 6)
   })

@@ -15,6 +15,7 @@ import { AsteroidGenerator, GeneratorConfig } from './AsteroidGenerator'
 import { InstancePool, PoolLayerConfig } from './InstancePool'
 import { SectorManager, LODThresholds } from './SectorManager'
 import { CascadeSet } from './CascadeSet'
+import type { CascadeSpec } from './cascadeScale'
 import { FloatingOrigin } from './FloatingOrigin'
 import { assertLodInvariant } from './streamerScale'
 import { RingDustVolume } from './dust/RingDustVolume'
@@ -52,6 +53,8 @@ interface AsteroidRingConfig {
   minScale: number
   /** Максимальный масштаб экземпляра */
   maxScale: number
+  /** Показатель степенного закона розыгрыша масштаба; не задан — генератор берёт 1 (прежнее квадратичное смещение к мелким) */
+  sizeExponent?: number
   /** Макс. экземпляров для L0 (geometry) буфера */
   maxL0Instances: number
   /**
@@ -244,6 +247,13 @@ interface AsteroidRingConfig {
    * 0 < weighted < 1, и без розыгрыша они гарантированно теряли бы камень.
    */
   stochasticCount: boolean
+  /**
+   * Каскады классов размеров: по спецификации — своя сетка, генератор и доля
+   * пула (см. __setup), общий пул и билборд-материал. Не задано — один каскад
+   * из сегодняшних полей конфига (cellSizeKm/minScale/maxScale/lodThresholdsKm/
+   * densityPerUnit) — путь колец, побайтно как раньше.
+   */
+  cascades?: CascadeSpec[]
 }
 
 /**
@@ -313,8 +323,12 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
 class AsteroidRingSystem extends Group {
   public model: Actor
 
+  /** Первый каскад — совместимость с путём колец (там он единственный) */
   declare private sectorGrid: SectorGrid
   declare private generator: AsteroidGenerator
+  /** Сетки/генераторы ВСЕХ каскадов — density-профиль и debug-статистика идут по ним, не по первому */
+  declare private cascadeGrids: SectorGrid[]
+  declare private cascadeGenerators: AsteroidGenerator[]
   declare private pool: InstancePool
   declare private cascades: CascadeSet
 
@@ -424,6 +438,27 @@ class AsteroidRingSystem extends Group {
     return overrides
   }
 
+  /**
+   * Единственный каскад из сегодняшних полей конфига — путь колец без арки
+   * каскадов (cfg.cascades не задан). Сетка/генератор/пороги строятся из этой
+   * спецификации побайтно так же, как раньше строились напрямую из cfg.
+   */
+  private static __singleCascadeSpec(cfg: AsteroidRingConfig): CascadeSpec {
+    return {
+      sizeRangeKm: [cfg.asteroidSizeKm, cfg.asteroidSizeKm],
+      typicalSizeKm: cfg.asteroidSizeKm,
+      populationRadiusKm: cfg.lodThresholdsKm.l1,
+      spacingKm: 0,
+      cellSizeKm: cfg.cellSizeKm,
+      cellHeightKm: cfg.cellSizeKm,
+      lodThresholdsKm: cfg.lodThresholdsKm,
+      densityPerUnit: cfg.densityPerUnit,
+      instanceDemand: 0,
+      minScale: cfg.minScale,
+      maxScale: cfg.maxScale
+    }
+  }
+
   public __setup(): void {
     const cfg = this.config
 
@@ -431,13 +466,14 @@ class AsteroidRingSystem extends Group {
     const innerRadius = toThreeJSUnits(cfg.innerRadiusKm)
     const outerRadius = toThreeJSUnits(cfg.outerRadiusKm)
     const thickness = toThreeJSUnits(cfg.thicknessKm)
-    const cellSize = toThreeJSUnits(cfg.cellSizeKm)
     const asteroidSize = toThreeJSUnits(cfg.asteroidSizeKm)
 
-    const l0MaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l0)
-    const l1MaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l1)
-    const l0NearEnter = toThreeJSUnits(cfg.lodThresholdsKm.l0Near)
-    const l0NearExit = toThreeJSUnits(cfg.lodThresholdsKm.l0NearExit)
+    // Каскад на класс размеров; без cascades — один каскад по сегодняшним
+    // полям конфига, то есть путь колец (см. __singleCascadeSpec)
+    const specs: CascadeSpec[] = cfg.cascades ?? [AsteroidRingSystem.__singleCascadeSpec(cfg)]
+    // Порог L1 billboard — самый крупный каскад (последний, радиус заселения
+    // растёт с классом): билборд-материал один на все каскады
+    const l1MaxDist = toThreeJSUnits(specs[specs.length - 1].lodThresholdsKm.l1)
 
     // Радиусы кольца в three-units — для readback профиля (см. updateObject)
     this.ringInnerTU = innerRadius
@@ -453,48 +489,12 @@ class AsteroidRingSystem extends Group {
           }
         : { rocks: toThreeJSUnits(cfg.ringGapBleedKm), dust: toThreeJSUnits(cfg.dustBleedKm) }
 
-    // --- SectorGrid ---
-    const gridConfig: SectorGridConfig = {
-      innerRadius,
-      outerRadius,
-      cellSize,
-      ringId: cfg.ringId,
-      densityPerUnit: cfg.densityPerUnit,
-      stochasticCount: cfg.stochasticCount,
-      heightExtent: thickness,
-      // не задан — один вертикальный слой на всю толщину (прежний путь колец)
-      cellHeight: cfg.cellHeightKm !== undefined ? toThreeJSUnits(cfg.cellHeightKm) : undefined
-    }
-    this.sectorGrid = new SectorGrid(gridConfig)
-
-    // --- AsteroidGenerator ---
-    const genConfig: GeneratorConfig = {
-      thickness,
-      minScale: cfg.minScale,
-      maxScale: cfg.maxScale,
-      // Раскладка по архетипам с учётом размера камня (см. AsteroidGenerator.pickArchetype)
-      profile: cfg.profile,
-      relativeToSector: cfg.relativeOrigin,
-      // Объёмность одна на сетку и генератор: врозь они дают камни, размазанные
-      // по всей толщине вокруг центра ячейки
-      volumetric: this.sectorGrid.volumetric
-    }
-    this.generator = new AsteroidGenerator(genConfig)
-
-    // --- Процедурный профиль плотности пояса (см. densityProfileSource) ---
-    // Готовый массив вместо текстуры: строим сразу, __tryBuildDensityProfile
-    // (путь текстуры) на ready-флаге дальше не сработает.
-    if (cfg.densityProfileSource) {
-      const beltDensityProfile = new RadialDensityProfile(cfg.densityProfileSource, innerRadius, outerRadius)
-      this.sectorGrid.setDensityProfile(beltDensityProfile)
-      this.generator.setDensityProfile(beltDensityProfile)
-      this.densityProfileReady = true
-    }
-
     // --- Плавающее начало (только пояс) ---
-    // Ячейка начала — ячейка сетки секторов: переезд редок, а относительные
-    // позиции остаются в пределах нескольких ячеек.
-    this.floatingOrigin = cfg.relativeOrigin ? new FloatingOrigin(cellSize) : null
+    // Ячейка начала — ячейка САМОГО МЕЛКОГО каскада (specs[0], путь колец —
+    // единственный): переезд редок, а относительные позиции остаются в
+    // пределах нескольких ячеек даже у самой мелкой сетки.
+    const originCellSize = toThreeJSUnits(specs[0].cellSizeKm)
+    this.floatingOrigin = cfg.relativeOrigin ? new FloatingOrigin(originCellSize) : null
     this.originGroup = cfg.relativeOrigin ? new Group() : null
     if (this.originGroup) {
       this.originGroup.name = 'AsteroidOriginGroup'
@@ -577,19 +577,87 @@ class AsteroidRingSystem extends Group {
     // Установить maxDistance для billboard материала
     this.pool.billboardMaterial.uniforms.uMaxDistance.value = l1MaxDist
 
-    // --- SectorManager ---
-    assertLodInvariant(cfg.cellSizeKm, cfg.lodThresholdsKm)
-    const thresholds: LODThresholds = {
-      l0MaxDistance: l0MaxDist,
-      l1MaxDistance: l1MaxDist,
-      nearEnterDistance: l0NearEnter,
-      nearExitDistance: l0NearExit
+    // --- Каскады: сетка + генератор + менеджер на класс размеров, общий пул ---
+    // 32 на каскад: при 524 ячейках/каскад прежний бюджет 4 заселял бы поле
+    // сотнями кадров; путь колец бюджет не трогает (дефолт SectorManager — 4)
+    const activationBudget = cfg.cascades ? 32 : 4
+    // Доля пула на каскад; без арки каскадов — Infinity, путь колец не меняется
+    const capacityShare = cfg.cascades ? Math.floor(cfg.maxL1Instances / specs.length) : Infinity
+    const grids: SectorGrid[] = []
+    const generators: AsteroidGenerator[] = []
+    const managers = specs.map((spec, index) => {
+      assertLodInvariant(spec.cellSizeKm, spec.lodThresholdsKm)
+
+      const gridConfig: SectorGridConfig = {
+        innerRadius,
+        outerRadius,
+        cellSize: toThreeJSUnits(spec.cellSizeKm),
+        // Множитель разводит сиды секторов между каскадами; у одиночного
+        // каскада (кольцо) индекс всегда 0 — сид не меняется
+        ringId: cfg.cascades ? cfg.ringId * 16 + index : cfg.ringId,
+        densityPerUnit: spec.densityPerUnit,
+        stochasticCount: cfg.stochasticCount,
+        heightExtent: thickness,
+        // Каскады берут высоту ячейки из своей спецификации; путь колец —
+        // прежнее поведение из cfg.cellHeightKm (не задан — плоская сетка)
+        cellHeight: cfg.cascades
+          ? toThreeJSUnits(spec.cellHeightKm)
+          : cfg.cellHeightKm !== undefined
+            ? toThreeJSUnits(cfg.cellHeightKm)
+            : undefined
+      }
+      const grid = new SectorGrid(gridConfig)
+      grids.push(grid)
+
+      const genConfig: GeneratorConfig = {
+        thickness,
+        minScale: spec.minScale,
+        maxScale: spec.maxScale,
+        sizeExponent: cfg.sizeExponent,
+        // Раскладка по архетипам с учётом размера камня (см. AsteroidGenerator.pickArchetype)
+        profile: cfg.profile,
+        relativeToSector: cfg.relativeOrigin,
+        // Объёмность одна на сетку и генератор своего каскада: врозь они дают
+        // камни, размазанные по всей толщине вокруг центра ячейки
+        volumetric: grid.volumetric
+      }
+      const generator = new AsteroidGenerator(genConfig)
+      generators.push(generator)
+
+      const thresholds: LODThresholds = {
+        l0MaxDistance: toThreeJSUnits(spec.lodThresholdsKm.l0),
+        l1MaxDistance: toThreeJSUnits(spec.lodThresholdsKm.l1),
+        nearEnterDistance: toThreeJSUnits(spec.lodThresholdsKm.l0Near),
+        nearExitDistance: toThreeJSUnits(spec.lodThresholdsKm.l0NearExit)
+      }
+
+      return new SectorManager(
+        grid,
+        generator,
+        this.pool,
+        thresholds,
+        this.floatingOrigin?.origin ?? null,
+        capacityShare,
+        activationBudget
+      )
+    })
+
+    this.sectorGrid = grids[0]
+    this.generator = generators[0]
+    this.cascadeGrids = grids
+    this.cascadeGenerators = generators
+    this.cascades = new CascadeSet(managers)
+
+    // --- Процедурный профиль плотности пояса (см. densityProfileSource) ---
+    // Готовый массив вместо текстуры: строим сразу, __tryBuildDensityProfile
+    // (путь текстуры) на ready-флаге дальше не сработает. ТОТ ЖЕ объект — во
+    // ВСЕ каскады: щели и сгущения обязаны совпасть между классами размеров.
+    if (cfg.densityProfileSource) {
+      const beltDensityProfile = new RadialDensityProfile(cfg.densityProfileSource, innerRadius, outerRadius)
+      for (const grid of grids) grid.setDensityProfile(beltDensityProfile)
+      for (const gen of generators) gen.setDensityProfile(beltDensityProfile)
+      this.densityProfileReady = true
     }
-    // Кольцо — каскад из одного менеджера; несколько классов размеров
-    // (арка каскадов) добавят элементы в этот же список над общим пулом.
-    this.cascades = new CascadeSet([
-      new SectorManager(this.sectorGrid, this.generator, this.pool, thresholds, this.floatingOrigin?.origin ?? null)
-    ])
 
     // --- Тень планеты (умбра) — общая для камней/пыли/2D-кольца ---
     // Радиус планеты в ring-local (начало ring-local = центр планеты, тот же
@@ -862,8 +930,9 @@ class AsteroidRingSystem extends Group {
     if (profile) {
       // SectorGrid — верное КОЛИЧЕСТВО (вес по средней альфе), генератор —
       // КОНЦЕНТРАЦИЯ (радиус ∝ альфе). Вместе → плотность колечка = base.
-      this.sectorGrid.setDensityProfile(profile)
-      this.generator.setDensityProfile(profile)
+      // ТОТ ЖЕ объект — во все каскады (у колец каскад один, цикл не меняет путь)
+      for (const grid of this.cascadeGrids) grid.setDensityProfile(profile)
+      for (const gen of this.cascadeGenerators) gen.setDensityProfile(profile)
     }
 
     this.__applyDustRadialProfile(texture)
@@ -1031,7 +1100,7 @@ class AsteroidRingSystem extends Group {
     const pendingRemoval = perCascade.reduce((sum, info) => sum + info.pendingRemoval, 0)
 
     return {
-      totalSectors: this.sectorGrid.totalSectorCount,
+      totalSectors: this.cascadeGrids.reduce((sum, grid) => sum + grid.totalSectorCount, 0),
       activeSectors,
       sectorsByLod,
       instances: poolInfo,
