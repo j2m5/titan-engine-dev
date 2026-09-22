@@ -149,7 +149,8 @@ class AsteroidBelt extends Group {
       dustNearFadeFraction: 0.25,
       ringGapsFromTexture: false,
       planetshineStrength: 0,
-      layerShadowStrength: 0
+      layerShadowStrength: 0,
+      spinPeriodHours: p.spinPeriodHours
     }
     // Пыль уже посчитана дальним слоем — второй объём стримера был бы дублем
     if (this.dustVolume) overrides.dustEnabled = false

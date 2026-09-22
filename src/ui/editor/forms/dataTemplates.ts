@@ -45,7 +45,8 @@ export const renderingDataTemplates: DataTemplate[] = [
       planetshineColor: '#b8ad9c',
       planetshineStrength: 1.5,
       layerShadowStrength: 0.25,
-      bandTintStrength: 1
+      bandTintStrength: 1,
+      spinPeriodHours: 0
     }
   },
   {

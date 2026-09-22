@@ -215,6 +215,12 @@ interface AsteroidRingConfig {
    * пути не читается — у пояса нет 2D-текстуры кольца).
    */
   densityProfileSource?: Float32Array
+  /**
+   * Средний период вращения камней вокруг своей оси, часы; 0 (дефолт) — вращение
+   * выключено (uSpinPeriod 0, GLSL-ветка не исполняется — прежний вид). Конверсия
+   * в секунды сцены (×3600) — на CPU при установке юниформа (см. __setup).
+   */
+  spinPeriodHours: number
 }
 
 /**
@@ -265,7 +271,8 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   detailNormalScale: 1.0,
   detailAoInfluence: 0.8,
   detailRoughInfluence: 0.7,
-  relativeOrigin: false
+  relativeOrigin: false,
+  spinPeriodHours: 0
 }
 
 /**
@@ -382,6 +389,7 @@ class AsteroidRingSystem extends Group {
     if (data.planetshineStrength !== undefined) overrides.planetshineStrength = data.planetshineStrength
     if (data.layerShadowStrength !== undefined) overrides.layerShadowStrength = data.layerShadowStrength
     if (data.bandTintStrength !== undefined) overrides.bandTintStrength = data.bandTintStrength
+    if (data.spinPeriodHours !== undefined) overrides.spinPeriodHours = data.spinPeriodHours
     // Имя профиля приходит строкой из JSON — неизвестное тихо игнорируем
     // (останется дефолт), чтобы опечатка в редакторе данных не роняла рендер
     if (data.profile !== undefined && data.profile in ASTEROID_PROFILES) {
@@ -499,6 +507,8 @@ class AsteroidRingSystem extends Group {
     l0ShapeMaterial.uniforms.uShapeAmpMin.value = cfg.shapeAmpMin
     l0ShapeMaterial.uniforms.uShapeAmpMax.value = cfg.shapeAmpMax
     l0ShapeMaterial.uniforms.uShapeFreq.value = cfg.shapeFreq
+    // Часы данных → секунды сцены (единицы uSpinTime, см. updateObject); 0 остаётся 0
+    l0ShapeMaterial.uniforms.uSpinPeriod.value = cfg.spinPeriodHours * 3600
 
     // Реальные модели форм в хвост библиотеки — асинхронно, поверх заглушек
     this.__requestShapeModels(asteroidSize)
@@ -674,6 +684,12 @@ class AsteroidRingSystem extends Group {
    */
   public updateObject(ctx: UpdateContext): void {
     const dt = ctx.delta
+
+    // uSpinTime — секунды сцены (UpdateContext.elapsed, секунды с запуска часов
+    // рендера — см. Engine.ts). Множитель 1: единицы уже совпадают с
+    // uSpinPeriod (часы данных переведены в секунды при __setup). Отдельный от
+    // прочих юниформ времени движка (см. докблок uSpinPeriod у AsteroidRingConfig).
+    this.pool.geometryMaterial.uniforms.uSpinTime.value = ctx.elapsed
 
     // Проверить видимость parent'а
     if (!this.isEffectivelyVisible()) {

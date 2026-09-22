@@ -44,6 +44,8 @@ interface InstancedAsteroidUniforms {
   uShapeAmpMin: number
   uShapeAmpMax: number
   uShapeFreq: number
+  uSpinPeriod: number
+  uSpinTime: number
   uFreshnessBrighten: number
   uCavityShade: number
   uLunarMix: number
@@ -104,6 +106,10 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       uShapeAmpMin: new Uniform(0),
       uShapeAmpMax: new Uniform(0),
       uShapeFreq: new Uniform(1),
+      // Вращение камня: период (сек. сцены, 0 — выкл), время (сек. сцены,
+      // отдельный от прочих юниформ времени движка — см. AsteroidRingSystem)
+      uSpinPeriod: new Uniform(0),
+      uSpinTime: new Uniform(0),
       // Запечённые атрибуты породы (см. чанк AsteroidShape / ArchetypeShape.surfaceAt):
       // свежий скол разлома светлее/глаже, днища кратерных чаш затенены
       uFreshnessBrighten: new Uniform(0.15),

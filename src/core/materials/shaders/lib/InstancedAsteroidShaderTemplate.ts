@@ -62,6 +62,12 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uShapeAmpMin: new Uniform(0),
     uShapeAmpMax: new Uniform(0),
     uShapeFreq: new Uniform(1),
+    // Вращение камня вокруг оси из хеша инстанса (см. вершинник ниже). Период —
+    // секунды сцены (0 — выкл, конверсия часы→секунды на CPU, см.
+    // AsteroidRingSystem); время — отдельный от прочих юниформ движка uSpinTime,
+    // те же секунды сцены (UpdateContext.elapsed).
+    uSpinPeriod: new Uniform(0),
+    uSpinTime: new Uniform(0),
     // Запечённые атрибуты породы (см. чанк AsteroidShape / ArchetypeShape.surfaceAt):
     // свежий скол разлома светлее/глаже, днища кратерных чаш затенены
     uFreshnessBrighten: new Uniform(0.15),
@@ -78,6 +84,10 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uniform float uShapeAmpMin;
     uniform float uShapeAmpMax;
     uniform float uShapeFreq;
+    // Вращение камня: период (сек. сцены, 0 — выкл) и время (сек. сцены,
+    // отдельный от прочих юниформ времени движка — см. AsteroidRingSystem.updateObject)
+    uniform float uSpinPeriod;
+    uniform float uSpinTime;
 
     // Per-instance fade [0..1] — плавные LOD/sector-переходы (см. InstancePool.writeFade)
     attribute float instanceFade;
@@ -127,6 +137,26 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       vec3 shapedPos;
       vec3 shapedNormal;
       deformAsteroid(position, normal, shapeSeed, shapeAmp, shapedPos, shapedNormal);
+
+      // Вращение вокруг оси из того же хеша, что форма (shapeSeed — значение
+      // вершинника, НЕ варьинг: ULP-джиттер интерполяции сюда не попадает).
+      // uSpinPeriod <= 0 — блок не исполняется, всё ниже тождественно прежнему
+      // (кольца по умолчанию, см. RockSpin.spec).
+      if (uSpinPeriod > 0.0) {
+        vec3 spinAxis = normalize(vec3(
+          hashSurface11(shapeSeed + 13.13),
+          hashSurface11(shapeSeed + 17.17),
+          hashSurface11(shapeSeed + 19.19)
+        ) * 2.0 - 1.0);
+        // Период инстанса — среднее ± 50% от декоррелированного хеша
+        float spinPeriod = uSpinPeriod * (0.5 + hashSurface11(shapeSeed + 23.23));
+        float spinAngle = 2.0 * PI * uSpinTime / spinPeriod;
+        float cosA = cos(spinAngle);
+        float sinA = sin(spinAngle);
+        // Родригес: v' = v·cosA + (axis × v)·sinA + axis·(axis·v)·(1 − cosA)
+        shapedPos = shapedPos * cosA + cross(spinAxis, shapedPos) * sinA + spinAxis * dot(spinAxis, shapedPos) * (1.0 - cosA);
+        shapedNormal = shapedNormal * cosA + cross(spinAxis, shapedNormal) * sinA + spinAxis * dot(spinAxis, shapedNormal) * (1.0 - cosA);
+      }
 
       vec4 worldPosition = instanceMatrix * vec4(shapedPos, 1.0);
       // Абсолютная позиция в системе кольца: смещение сектора + локальная

@@ -468,6 +468,8 @@ export interface IRingRenderingObject {
    * цветовом проходе вообще.
    */
   depthAlphaTest?: number
+  /** Средний период вращения камней вокруг своей оси, часы; 0 (дефолт) — вращение выключено, вид как прежде */
+  spinPeriodHours?: number
 }
 
 /**
