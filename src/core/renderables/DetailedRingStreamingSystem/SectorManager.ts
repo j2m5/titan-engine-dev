@@ -34,6 +34,8 @@ interface OutgoingLOD {
   lodLevel: LODLevel
   /** Geometry: до K суб-аллокаций (по одной на непустой архетип-стрим); Billboard: одна. */
   allocations: Allocation[]
+  /** Число инстансов тира — снимок state.instanceCount на момент ухода в fade-out, для вычитания из used */
+  instanceCount: number
   fade: number
 }
 
@@ -46,6 +48,8 @@ interface SectorState {
   lodLevel: LODLevel
   /** Geometry: до K суб-аллокаций (по одной на непустой архетип-стрим); Billboard: одна. */
   allocations: Allocation[]
+  /** Число инстансов ТЕКУЩЕГО тира (state.allocations) — снимок для точного вычитания из used */
+  instanceCount: number
   /** Текущее значение fade (0 = невидим, 1 = полностью виден) */
   fade: number
   /** Целевое значение fade */
@@ -77,7 +81,14 @@ class SectorManager {
   private activeSectors: Map<string, SectorState> = new Map()
 
   /** Максимальное количество секторов, активируемых за один кадр */
-  private readonly activationBudget: number = 4
+  private readonly activationBudget: number
+
+  /** Максимум живых экземпляров каскада; Infinity — без ограничения (кольца) */
+  private readonly capacityShare: number
+  /** Сумма занятых экземпляров по активным секторам каскада (включая уходящий тир кросс-фейда) */
+  private used: number = 0
+  /** Счётчик отказов активации/смены LOD из-за упора в capacityShare */
+  private capacityFailures: number = 0
 
   /** Скорость fade (доля за секунду, 1.0 = полный fade за 1 секунду) */
   private readonly fadeSpeed: number = 4.0
@@ -115,7 +126,9 @@ class SectorManager {
     generator: AsteroidGenerator,
     pool: InstancePool,
     thresholds: LODThresholds,
-    origin: Vector3 | null = null
+    origin: Vector3 | null = null,
+    capacityShare: number = Infinity,
+    activationBudget: number = 4
   ) {
     if (thresholds.nearEnterDistance >= thresholds.nearExitDistance) {
       throw new Error(
@@ -129,6 +142,13 @@ class SectorManager {
     this.pool = pool
     this.thresholds = thresholds
     this.origin = origin
+    this.capacityShare = capacityShare
+    this.activationBudget = activationBudget
+  }
+
+  /** Сумма занятых экземпляров активных секторов каскада (для capacityShare) */
+  public get usedInstances(): number {
+    return this.used
   }
 
   /**
@@ -385,16 +405,24 @@ class SectorManager {
   private activateSector(info: SectorInfo, lodLevel: LODLevel): boolean {
     const instanceCount = Math.max(1, Math.round(info.instanceCount * this.lodDensityMultiplier[lodLevel]))
 
+    // Доля пула каскада — проверка ДО выделения, чтобы не трогать пул зря.
+    if (this.used + instanceCount > this.capacityShare) {
+      this.capacityFailures++
+      return false
+    }
+
     const allocations = this.allocateForLOD(lodLevel, info.seed, instanceCount, info.bounds)
     if (!allocations) {
       return false
     }
+    this.used += instanceCount
 
     const state: SectorState = {
       key: info.key,
       info,
       lodLevel,
       allocations,
+      instanceCount,
       fade: 0.0,
       fadeTarget: 1.0,
       pendingRemoval: false,
@@ -425,15 +453,21 @@ class SectorManager {
     // (быстрый повторный свитч) — освобождаем его целиком: держим максимум 2 тира.
     if (state.outgoing) {
       for (const a of state.outgoing.allocations) this.pool.release(a)
+      this.used -= state.outgoing.instanceCount
     }
     state.outgoing = {
       lodLevel: state.lodLevel,
       allocations: state.allocations,
+      instanceCount: state.instanceCount,
       fade: state.fade
     }
 
+    // used держит ОБА тира на время кросс-фейда: старый (перешёл в outgoing,
+    // уже учтён) не вычитается, новый прибавляется — снимется при release() outgoing.
+    this.used += instanceCount
     state.lodLevel = newLOD
     state.allocations = allocations
+    state.instanceCount = instanceCount
     // Новый тир проявляется с нуля — встречно уходящему (сумма покрытия ≈ 1).
     // fade=0 уже записан в буфер внутри allocateForLOD — повторной записи не требуется.
     state.fade = 0.0
@@ -472,14 +506,17 @@ class SectorManager {
         }
         if (out.fade <= 0.001) {
           for (const a of out.allocations) this.pool.release(a)
+          this.used -= out.instanceCount
           state.outgoing = null
         }
       }
 
       if (state.pendingRemoval && state.fade <= 0.001) {
         for (const a of state.allocations) this.pool.release(a)
+        this.used -= state.instanceCount
         if (state.outgoing) {
           for (const a of state.outgoing.allocations) this.pool.release(a)
+          this.used -= state.outgoing.instanceCount
         }
         toRemove.push(key)
       }
@@ -496,8 +533,10 @@ class SectorManager {
   public deactivateAll(): void {
     for (const [, state] of this.activeSectors) {
       for (const a of state.allocations) this.pool.release(a)
+      this.used -= state.instanceCount
       if (state.outgoing) {
         for (const a of state.outgoing.allocations) this.pool.release(a)
+        this.used -= state.outgoing.instanceCount
       }
     }
     this.activeSectors.clear()
@@ -517,6 +556,8 @@ class SectorManager {
     activeSectors: number
     byLod: { l0: number; near: number; l1: number }
     pendingRemoval: number
+    usedInstances: number
+    capacityFailures: number
   } {
     let l0 = 0,
       near = 0,
@@ -536,7 +577,13 @@ class SectorManager {
       }
       if (state.pendingRemoval) pending++
     }
-    return { activeSectors: this.activeSectors.size, byLod: { l0, near, l1 }, pendingRemoval: pending }
+    return {
+      activeSectors: this.activeSectors.size,
+      byLod: { l0, near, l1 },
+      pendingRemoval: pending,
+      usedInstances: this.used,
+      capacityFailures: this.capacityFailures
+    }
   }
 }
 
