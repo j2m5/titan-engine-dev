@@ -50,7 +50,9 @@ describe('AsteroidGenerator — матрицы относительно цент
     minRadius: fromAstronomicalUnits(49.99),
     maxRadius: fromAstronomicalUnits(50.01),
     minAngle: 0.5,
-    maxAngle: 0.5005
+    maxAngle: 0.5005,
+    minY: 0,
+    maxY: 0
   }
   const center = {
     x: Math.cos(0.50025) * fromAstronomicalUnits(50),

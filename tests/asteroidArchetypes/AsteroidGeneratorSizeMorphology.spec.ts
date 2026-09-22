@@ -2,7 +2,7 @@ import { AsteroidGenerator, pickArchetype } from '@/core/renderables/DetailedRin
 import { morphologyRanges } from '@/core/renderables/DetailedRingStreamingSystem/archetypes/ArchetypeLibrary'
 import type { SectorBounds } from '@/core/renderables/DetailedRingStreamingSystem/SectorGrid'
 
-const bounds: SectorBounds = { minRadius: 100, maxRadius: 120, minAngle: 0, maxAngle: 0.3 }
+const bounds: SectorBounds = { minRadius: 100, maxRadius: 120, minAngle: 0, maxAngle: 0.3, minY: 0, maxY: 0 }
 const K = 14
 
 /** Норма первой колонки матрицы i в плоском буфере — базовый масштаб × анизотропия x */

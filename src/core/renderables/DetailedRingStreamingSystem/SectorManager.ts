@@ -251,20 +251,23 @@ class SectorManager {
    * @param viewProjectionMatrix — camera.projectionMatrix * camera.matrixWorldInverse
    * @param localToWorldMatrix — матрица трансформации системы (local → world)
    * @param delta — время с прошлого кадра (секунды)
+   * @param cameraY — высота камеры, ring-local Y. Дефолт 0 — путь плоской сетки
+   * (кольца) не меняется без явной передачи.
    */
   public update(
     cameraAngle: number,
     cameraRadius: number,
     viewProjectionMatrix: Matrix4,
     localToWorldMatrix: Matrix4,
-    delta: number
+    delta: number,
+    cameraY: number = 0
   ): void {
     // 1. Подготовить frustum
     this._frustum.setFromProjectionMatrix(viewProjectionMatrix)
 
     // 2. Получить кандидатов из сетки
     const maxRange = this.thresholds.l1MaxDistance
-    const candidates = this.grid.getSectorsInRange(cameraAngle, cameraRadius, maxRange)
+    const candidates = this.grid.getSectorsInRange(cameraAngle, cameraRadius, cameraY, maxRange)
 
     // 3. Определить LOD и отфильтровать по frustum
     const desiredSectors = new Map<string, { info: SectorInfo; lod: LODLevel }>()
@@ -280,7 +283,9 @@ class SectorManager {
 
       const dx = info.centerX - camX
       const dz = info.centerZ - camZ
-      const dist = Math.sqrt(dx * dx + dz * dz)
+      // Высота входит только у объёмной сетки: у колец метрика двумерная, как была
+      const dy = this.grid.volumetric ? info.centerY - cameraY : 0
+      const dist = Math.sqrt(dx * dx + dz * dz + dy * dy)
       // Расстояние до БЛИЖАЙШЕЙ точки сектора, не до центра: info.boundingRadius
       // (полудиагональ ячейки) обычно уже сравним с разумным порогом входа в
       // Near — порог по dist-до-центра в такой геометрии никогда бы не
@@ -311,7 +316,7 @@ class SectorManager {
       }
 
       // Frustum culling
-      this._worldCenter.set(info.centerX, 0, info.centerZ)
+      this._worldCenter.set(info.centerX, info.centerY, info.centerZ)
       this._worldCenter.applyMatrix4(localToWorldMatrix)
       this._sphere.set(this._worldCenter, info.boundingRadius)
 

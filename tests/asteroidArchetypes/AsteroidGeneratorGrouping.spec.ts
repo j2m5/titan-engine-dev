@@ -4,7 +4,7 @@ import {
 } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidGenerator'
 import type { SectorBounds } from '@/core/renderables/DetailedRingStreamingSystem/SectorGrid'
 
-const bounds: SectorBounds = { minRadius: 100, maxRadius: 200, minAngle: 0, maxAngle: Math.PI / 8 }
+const bounds: SectorBounds = { minRadius: 100, maxRadius: 200, minAngle: 0, maxAngle: Math.PI / 8, minY: 0, maxY: 0 }
 
 describe('AsteroidGenerator: раскладка по архетипам и группированные матрицы', () => {
   const generator = new AsteroidGenerator({ thickness: 10, minScale: 0.5, maxScale: 1.5 })

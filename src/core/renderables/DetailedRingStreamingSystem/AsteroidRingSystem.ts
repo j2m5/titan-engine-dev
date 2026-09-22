@@ -450,7 +450,9 @@ class AsteroidRingSystem extends Group {
       cellSize,
       ringId: cfg.ringId,
       densityPerUnit: cfg.densityPerUnit,
-      stochasticCount: cfg.stochasticCount
+      stochasticCount: cfg.stochasticCount,
+      heightExtent: thickness
+      // cellHeight не задан — один вертикальный слой на всю толщину и у кольца, и у пояса
     }
     this.sectorGrid = new SectorGrid(gridConfig)
 
@@ -790,7 +792,7 @@ class AsteroidRingSystem extends Group {
     const localToWorld = this.matrixWorld
 
     // Обновить менеджер секторов
-    this.manager.update(cameraAngle, cameraRadius, this._viewProjMatrix, localToWorld, dt)
+    this.manager.update(cameraAngle, cameraRadius, this._viewProjMatrix, localToWorld, dt, this._localCamPos.y)
 
     // Коммит изменений в GPU
     this.pool.commitUpdates()
