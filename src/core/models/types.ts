@@ -519,6 +519,8 @@ export interface IGiantStarRenderingObject {
   atmosphereDensity?: number
   /** Множитель поверх откалиброванной яркости */
   exposureBias?: number
+  /** Доля цвета звезды в прямом свете тел системы, [0, 1]; 0 — свет белый */
+  lightTint?: number
 }
 
 export type Colorable = {

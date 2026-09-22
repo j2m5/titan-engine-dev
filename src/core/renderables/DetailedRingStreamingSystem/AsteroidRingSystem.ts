@@ -396,7 +396,8 @@ class AsteroidRingSystem extends Group {
       l1PoolConfig,
       l0Geometries,
       nearGeometries,
-      asteroidSize * 2.5
+      asteroidSize * 2.5,
+      this.model
     )
 
     // Добавить рендер-объекты (L0 + L1)
@@ -484,6 +485,7 @@ class AsteroidRingSystem extends Group {
         nearFade: dustNearFade,
         maxSteps: cfg.dustMaxSteps,
         planetRadius: dustPlanetRadius,
+        model: this.model,
         registry: this.dustRegistry ?? undefined
       })
       this.add(this.dustVolume)

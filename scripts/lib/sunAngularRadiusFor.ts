@@ -14,7 +14,7 @@
  * Чистая функция над таблицами БД: ни рендера, ни ввода-вывода.
  */
 
-import { AU } from '@/core/constants'
+import { sunAngularRadius } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { Actors } from '@storage/database/actors'
 import { Categories } from '@storage/database/categories'
 import { Orbits } from '@storage/database/orbits'
@@ -27,7 +27,9 @@ function categoryId(alias: string): number {
   return category.id
 }
 
-const STAR = categoryId('star')
+// Светило — обычная звезда ИЛИ звезда-гигант (W26): чёрные и коричневые
+// карлики сюда сознательно не входят, тело под чёрной дырой страж пропускает.
+const STARS = new Set<number>([categoryId('star'), categoryId('giantStar')])
 const PLANET = categoryId('planet')
 
 function actorById(id: number): IActor | undefined {
@@ -63,11 +65,15 @@ function orbitalHost(actor: IActor): IActor {
  * солнце среди детей. «Ближайшее» = с наименьшей своей большой полуосью:
  * у двойной Tatoo это Tatoo I.
  */
+function isStar(categoryId: number | string): boolean {
+  return typeof categoryId === 'number' && STARS.has(categoryId)
+}
+
 function primaryStar(host: IActor): IActor | undefined {
   for (let node: IActor | undefined = host; node; node = node.parentId === null ? undefined : actorById(node.parentId)) {
-    if (node !== host && node.categoryId === STAR) return node
+    if (node !== host && isStar(node.categoryId)) return node
 
-    const stars = Actors.filter((a) => a.parentId === node.id && a.categoryId === STAR)
+    const stars = Actors.filter((a) => a.parentId === node.id && isStar(a.categoryId))
     if (stars.length > 0) {
       return stars.reduce((best, star) => ((semiMajorAxisAu(star.id) ?? Infinity) < (semiMajorAxisAu(best.id) ?? Infinity) ? star : best))
     }
@@ -92,5 +98,5 @@ export function sunAngularRadiusFor(bodyActorId: number): number | undefined {
   const starRadiusKm = radiusKm(star.id)
   if (distanceAu === undefined || distanceAu <= 0 || starRadiusKm === undefined || starRadiusKm <= 0) return undefined
 
-  return Math.atan(starRadiusKm / (distanceAu * AU))
+  return sunAngularRadius(starRadiusKm, distanceAu)
 }

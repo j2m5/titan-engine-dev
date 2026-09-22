@@ -1,9 +1,10 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
-import { ShaderChunk, Uniform, UniformsUtils, Vector3 } from 'three'
+import { Color, ShaderChunk, Uniform, UniformsUtils, Vector3 } from 'three'
 import { AppUniformsChunk } from './chunks'
 
 const defaultUniforms = {
   lightPosition: new Uniform(new Vector3()),
+  uLightColor: new Uniform(new Color(1, 1, 1)),
   diffuseMap: new Uniform(null),
   nightMap: new Uniform(null),
   cloudMap: new Uniform(null),
@@ -193,6 +194,11 @@ export const PlanetShaderTemplate: ShaderProps = {
     // вершинный пролог) — юниформ общий на программу, объявление здесь просто
     // делает его видимым этому шейдеру.
     uniform mat3 normalMatrix;
+
+    #ifdef USE_LIGHT_TINT
+      // Цвет прямого света звезды, linear; амбиент и ночная сторона им не красятся
+      uniform vec3 uLightColor;
+    #endif
 
     #ifdef USE_SUN_TINT
       #include <sunTransmittanceUniforms>
@@ -481,7 +487,11 @@ export const PlanetShaderTemplate: ShaderProps = {
           directGain *= terrainShadow;
         #endif
         // Та же форма mix(пол, 1, N·L), что прежде: в полдень при occlusion = 1 и без тени ровно 1
-        vec3 lit = mix(ambient, vec3(directGain), max(NdotLraw, 0.0));
+        #ifdef USE_LIGHT_TINT
+          vec3 lit = mix(ambient, vec3(directGain) * uLightColor, max(NdotLraw, 0.0));
+        #else
+          vec3 lit = mix(ambient, vec3(directGain), max(NdotLraw, 0.0));
+        #endif
         vec3 surfaceAlbedo = diffuseSample * albedoMul;
         #ifdef USE_TERRAIN_FROST
           // Иней — цвет, не затенение: линия опускается к полюсу и на склонах, обращённых к полюсу
@@ -569,6 +579,9 @@ export const PlanetShaderTemplate: ShaderProps = {
         #ifdef USE_SUN_TINT
           day *= mix(vec3(1.0), sunTint(muS), uSunTintStrength);
         #endif
+        #ifdef USE_LIGHT_TINT
+          day *= uLightColor;
+        #endif
         vec3 finalColor = mix(night, day, dayFactor);
       #endif
       finalColor = clamp(finalColor, 0.0, 1.0);
@@ -585,6 +598,9 @@ export const PlanetShaderTemplate: ShaderProps = {
       finalColor = clamp(finalColor, 0.0, 0.99);
 
       vec3 viewDir = normalize(vViewPosition);
+      #ifdef USE_LIGHT_TINT
+        vec3 preGlint = finalColor;
+      #endif
       #ifdef USE_SPECULAR
         // Дорожка следит за камерой, вспыхивает на скользящих углах, гаснет у
         // терминатора. HDR-глинт поверх клампа — блумит только солнечная дорожка.
@@ -603,6 +619,11 @@ export const PlanetShaderTemplate: ShaderProps = {
         // лёд блестит, снег (шероховатость ≈ 1) и дальний план — нет
         finalColor += terrainIceGlint(normal, lightDirection, viewDir, terrainRoughness) * uIceGlintStrength
                     * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;
+      #endif
+
+      #ifdef USE_LIGHT_TINT
+        // Все блики выше — отражение звезды: красим их разом, диффуз не трогаем
+        finalColor = preGlint + (finalColor - preGlint) * uLightColor;
       #endif
 
       // Потолок глинта: планета целиком остаётся далеко под half-float/AgX.

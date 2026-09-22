@@ -48,7 +48,10 @@ const DEFAULTS: Required<IGiantStarRenderingObject> = {
   /** Толща касательного луча; ноль гасит оболочку */
   atmosphereDensity: 1,
   /** Поверх откалиброванного уровня; ноль гасит тело */
-  exposureBias: 1
+  exposureBias: 1,
+  // Подписка на цвет света (lightSource.ts, lightTintOf) — сюда не читается:
+  // поле только для полноты Required<IGiantStarRenderingObject>
+  lightTint: 0
 }
 
 /**

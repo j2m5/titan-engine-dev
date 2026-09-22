@@ -1,5 +1,5 @@
 import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
-import { CubeTexture, Texture } from 'three'
+import { Color, CubeTexture, Texture, Uniform } from 'three'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
 import { WaterShader } from '@/core/materials/shaders/WaterShader'
@@ -7,6 +7,7 @@ import { resourceStorage } from '@/core/services/ResourceStorage'
 import { SunTintBinding } from '@/core/materials/SunTintBinding'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
+import { resolveLightTint } from '@/core/helpers/lightSource'
 
 /**
  * Отражение фоновой кубмапы в воде — ОТКЛЮЧЕНО РЕШЕНИЕМ ВЛАДЕЛЬЦА
@@ -151,11 +152,18 @@ class WaterMaterial extends AbstractShaderMaterial {
     this.fragmentShader = fragmentShader
     this.uniforms.uSkyboxMap.value = skyboxTexture
 
+    // Цвет света звезды (lightTint) — юниформ материала (WaterShader его не
+    // несёт), резолвится один раз: тело не меняет родителя в рантайме.
+    this.uniforms.uLightColor = new Uniform(new Color(1, 1, 1))
+    const lightTint = resolveLightTint(model)
+    ;(this.uniforms.uLightColor.value as Color).copy(lightTint.color)
+
     const useWaterReflection = skyboxTexture !== null && WATER_REFLECTION_ENABLED_BY_OWNER
 
     this.baseDefines = {
       ...defines,
-      ...(useWaterReflection && { USE_WATER_REFLECTION: '1' })
+      ...(useWaterReflection && { USE_WATER_REFLECTION: '1' }),
+      ...(lightTint.active && { USE_LIGHT_TINT: '1' })
     }
     this.defines = { ...this.baseDefines }
   }

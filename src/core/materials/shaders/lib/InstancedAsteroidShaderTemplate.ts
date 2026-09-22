@@ -4,6 +4,7 @@ import { ShaderChunk, Uniform, Vector3, Color } from 'three'
 export const InstancedAsteroidShaderTemplate: ShaderProps = {
   uniforms: {
     lightPosition: new Uniform(new Vector3()),
+    uLightColor: new Uniform(new Color(1, 1, 1)),
     // Макро-облик — профиль (см. чанк AsteroidSurface / AsteroidProfiles)
     uRockColor: new Uniform(new Color(0x6b6157)),
     uColorJitter: new Uniform(0.12),
@@ -173,6 +174,10 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uniform vec3 uPlanetshineColor;
     uniform float uPlanetshineStrength;
 
+    #ifdef USE_LIGHT_TINT
+      uniform vec3 uLightColor;
+    #endif
+
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vPlanetDirView;
@@ -291,8 +296,13 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       // в умбре фаза сама уходит в ноль
       float shine = asteroidPlanetshine(normal, normalize(vPlanetDirView), vRingPos, uDustLightDirRing, uDustPlanetRadius);
 
-      vec3 finalColor = albedo * (lightIntensity * surfAO * direct + uSurfaceAmbient)
-                      + albedo * uPlanetshineColor * (uPlanetshineStrength * shine * surfAO);
+      // Planetshine — второй источник света: цвет звезды его не касается.
+      #ifdef USE_LIGHT_TINT
+        vec3 finalColor = albedo * (lightIntensity * surfAO * direct * uLightColor + uSurfaceAmbient);
+      #else
+        vec3 finalColor = albedo * (lightIntensity * surfAO * direct + uSurfaceAmbient);
+      #endif
+      finalColor += albedo * uPlanetshineColor * (uPlanetshineStrength * shine * surfAO);
 
       // Blinn-Phong блик (металл/лёд), только на освещённой стороне, со спекуляр-AA.
       vec3 halfVec = normalize(lightDirection + viewDir);
@@ -307,7 +317,11 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       float spec = pow(max(dot(normal, halfVec), 0.0), specPowerAA) * specStrength * specToksvig;
       vec3 specColor = mix(vec3(1.0), albedo, uSpecularTint);
       // Гейт блика — сырой косинус к свету, а не LS-диффуз (тот к лимбу доходит до 2)
-      finalColor += spec * specColor * max(NdotL, 0.0) * direct;
+      #ifdef USE_LIGHT_TINT
+        finalColor += spec * specColor * uLightColor * max(NdotL, 0.0) * direct;
+      #else
+        finalColor += spec * specColor * max(NdotL, 0.0) * direct;
+      #endif
 
       // Аэроперспектива: камни тонут в пылевой дымке с расстоянием
       finalColor = ringDustApplyFog(finalColor, vRingPos);

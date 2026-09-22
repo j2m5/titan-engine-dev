@@ -140,7 +140,8 @@ export const renderingDataTemplates: DataTemplate[] = [
       cellContrast: 1,
       atmosphereHeight: 0.3,
       atmosphereDensity: 1,
-      exposureBias: 1
+      exposureBias: 1,
+      lightTint: 0
     }
   }
 ]

@@ -1,5 +1,5 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
-import { ShaderChunk, Uniform, Vector3 } from 'three'
+import { Color, ShaderChunk, Uniform, Vector3 } from 'three'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 export const RingShaderTemplate: ShaderProps = {
@@ -9,6 +9,7 @@ export const RingShaderTemplate: ShaderProps = {
     outerRadius: new Uniform(0),
     alphaTest: new Uniform(0),
     lightPosition: new Uniform(new Vector3()),
+    uLightColor: new Uniform(new Color(1, 1, 1)),
     planetRadius: new Uniform(0),
     minDistance: new Uniform(toThreeJSUnits(1000)),
     maxDistance: new Uniform(toThreeJSUnits(5000)),
@@ -66,6 +67,10 @@ export const RingShaderTemplate: ShaderProps = {
     uniform float uRingForwardScattering;
     uniform float uRingOppositionSurge;
     uniform float uRingDensityExtinction;
+
+    #ifdef USE_LIGHT_TINT
+      uniform vec3 uLightColor;
+    #endif
 
     #define RING_OPPOSITION_G 0.3
 
@@ -142,6 +147,11 @@ export const RingShaderTemplate: ShaderProps = {
       float back = ringPhase(cosTheta, RING_OPPOSITION_G);
 
       vec3 finalColor = color.rgb * (transmit * forward + reflectance * uRingOppositionSurge * back);
+
+      #ifdef USE_LIGHT_TINT
+        // И отражённый, и просвечивающий свет кольца — свет звезды
+        finalColor *= uLightColor;
+      #endif
 
       gl_FragColor = vec4(finalColor * shadow, color.a);
 

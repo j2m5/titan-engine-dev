@@ -29,7 +29,18 @@ export const SpaceScale = Math.pow(10, -3.3)
 export const ATMOSPHERE_CATEGORY_ID = 5
 
 /**
- * Категория актора-звезды (`storage/database/categories.ts`): звезда — либо
- * корень дерева акторов, либо его прямой ребёнок (см. resolveStarRadiusKm).
+ * Категория актора-звезды (`storage/database/categories.ts`): звезда или
+ * звезда-гигант — либо корень дерева акторов, либо его прямой ребёнок
+ * (см. resolveStarRadiusKm).
  */
 export const STAR_CATEGORY_ID = 3
+
+/** Категория звезды-гиганта (`giantStar`) */
+export const GIANT_STAR_CATEGORY_ID = 10
+
+/**
+ * Категории, которые движок считает светилом системы, в порядке предпочтения.
+ * Карлики и чёрная дыра не входят осознанно: добавление категории меняет
+ * полутень теней рельефа у всех тел под таким объектом.
+ */
+export const LIGHT_SOURCE_CATEGORY_IDS: readonly number[] = [STAR_CATEGORY_ID, GIANT_STAR_CATEGORY_ID]

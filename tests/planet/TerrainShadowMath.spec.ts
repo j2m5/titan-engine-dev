@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_SUN_ANGULAR_RADIUS,
   TERRAIN_SHADOW_BIAS_SLOPE,
   TERRAIN_SHADOW_PENUMBRA_FLOOR,
   TERRAIN_SHADOW_STEPS,
@@ -121,5 +122,79 @@ describe('penumbraTan', () => {
     expect(penumbraTan(0.001, undefined, 1, 1)).toBe(TERRAIN_SHADOW_PENUMBRA_FLOOR)
     expect(penumbraTan(undefined, undefined, 1, 1)).toBeCloseTo(Math.tan(0.0093), 12)
     expect(penumbraTan(0.05, 2, 100, 1)).toBeCloseTo(Math.tan(0.05), 12) // атмосфера в приоритете
+  })
+})
+
+// Тело без атмосферы под звездой-гигантом: R★ = 1.06·10⁹ км с 32 а.е.
+// (геометрия Emberon у W26). Полутень выходит в ≈24 раза шире земного
+// фолбэка — ниже закреплены СООТНОШЕНИЯ марша при такой ширине, не облик.
+describe('широкая полутень: звезда-гигант с орбиты в 32 а.е.', () => {
+  const AU_KM = 149597870
+  const STAR_RADIUS_KM = 1.06e9
+  const DISTANCE_KM = 32 * AU_KM
+  /** Без атмосферы penumbraTan возвращает САМО отношение R★/d, а не atan от него. */
+  const WIDE = penumbraTan(undefined, STAR_RADIUS_KM, DISTANCE_KM, 1)
+  const NARROW = penumbraTan(undefined, undefined, 1, 1)
+
+  const RADIUS = 5200e3 // м
+  const wideParams = { radius: RADIUS, texelAngle: (2 * Math.PI) / 8192, maxDist: 400000, penumbraTan: WIDE }
+  const narrowParams = { ...wideParams, penumbraTan: NARROW }
+  const arc = (units: number): number => units / (2 * Math.PI * RADIUS)
+
+  it('полутень = R★/d ≈ 0.2214: не фолбэк Солнца и не упёрлась в пол', () => {
+    expect(WIDE).toBeCloseTo(STAR_RADIUS_KM / DISTANCE_KM, 12)
+    expect(WIDE).toBeCloseTo(0.2214, 4)
+    expect(WIDE).not.toBeCloseTo(Math.tan(DEFAULT_SUN_ANGULAR_RADIUS), 6)
+    expect(WIDE).toBeGreaterThan(TERRAIN_SHADOW_PENUMBRA_FLOOR)
+    expect(WIDE / NARROW).toBeGreaterThan(20)
+  })
+
+  it('плоская земля при солнце 3° освещена ровно на 1 — «всё в полутени» не наступает', () => {
+    const flat: HeightSampler = () => 1000
+    const elev = (3 * Math.PI) / 180
+
+    for (const u of [0.1, 0.5, 0.9]) {
+      expect(terrainShadowMarch(flat, dirAt(u, 0.5), sunTowardWest(u, elev), wideParams)).toBe(1)
+    }
+  })
+
+  // Уступ 20 км, солнце 10° над горизонтом: длина тени на плоскости ≈ 113 км.
+  const MASSIF = 20000
+  const MASSIF_ELEV = (10 * Math.PI) / 180
+  const massif: HeightSampler = (uv) => (uv[0] < 0.25 ? MASSIF : 0)
+  const litAt = (distance: number, p: typeof wideParams): number => {
+    const u = 0.25 + arc(distance)
+    return terrainShadowMarch(massif, dirAt(u, 0.5), sunTowardWest(u, MASSIF_ELEV), p)
+  }
+  const distances = [10000, 40000, 60000, 80000, 100000, 150000]
+
+  it('широкая полутень только смягчает: освещённость ≥ узкой на всех дистанциях', () => {
+    for (const d of distances) {
+      expect(litAt(d, wideParams), `дистанция ${d} м`).toBeGreaterThanOrEqual(litAt(d, narrowParams))
+    }
+  })
+
+  it('полная тень сохраняется: вплотную за массивом 0, дальше растёт монотонно', () => {
+    expect(litAt(10000, wideParams)).toBeLessThan(0.05)
+
+    for (let i = 1; i < distances.length; i++) {
+      expect(litAt(distances[i]!, wideParams), `дистанция ${distances[i]} м`).toBeGreaterThanOrEqual(
+        litAt(distances[i - 1]!, wideParams)
+      )
+    }
+
+    expect(litAt(150000, wideParams)).toBe(1)
+  })
+
+  it('результаты конечны и лежат в [0, 1]', () => {
+    for (const p of [wideParams, narrowParams]) {
+      for (const d of distances) {
+        const lit = litAt(d, p)
+
+        expect(Number.isFinite(lit)).toBe(true)
+        expect(lit).toBeGreaterThanOrEqual(0)
+        expect(lit).toBeLessThanOrEqual(1)
+      }
+    }
   })
 })

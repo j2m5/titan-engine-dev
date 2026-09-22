@@ -18,10 +18,11 @@ describe('PlanetShaderTemplate: терминатор суши без двойн�
   it('обе ветки под одним #ifdef USE_TERRAIN_UV / #else, тинт в каждой', () => {
     const start = frag.indexOf('float landGate')
     const elseIdx = frag.indexOf('#else', start)
-    // #else несёт свой вложенный #ifdef USE_SUN_TINT/#endif — первый #endif после
-    // elseIdx закрывает его, не внешний USE_TERRAIN_UV; берём второй
-    const innerEndif = frag.indexOf('#endif', elseIdx)
-    const endIdx = frag.indexOf('#endif', innerEndif + 1)
+    // #else несёт два вложенных #ifdef/#endif (USE_SUN_TINT, USE_LIGHT_TINT) —
+    // первые два #endif после elseIdx закрывают их, не внешний USE_TERRAIN_UV; берём третий
+    const innerEndif1 = frag.indexOf('#endif', elseIdx)
+    const innerEndif2 = frag.indexOf('#endif', innerEndif1 + 1)
+    const endIdx = frag.indexOf('#endif', innerEndif2 + 1)
     const terrain = frag.slice(frag.lastIndexOf('#ifdef USE_TERRAIN_UV', start), elseIdx)
     const legacy = frag.slice(elseIdx, endIdx)
     expect((terrain.match(/sunTint\(muS\)/g) ?? []).length).toBe(1)

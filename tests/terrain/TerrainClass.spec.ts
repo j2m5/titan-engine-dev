@@ -25,16 +25,19 @@ describe('terrainClassOf', () => {
     )
   })
 
-  it('распределение 50 терраформных тел', () => {
+  it('распределение 54 терраформных тел', () => {
     const bodies = terraformed()
-    expect(bodies).toHaveLength(50)
+    expect(bodies).toHaveLength(54)
     const counts = new Map<TerrainClass | null, number>()
     for (const body of bodies) {
       const cls = terrainClassOf(body)
       counts.set(cls, (counts.get(cls) ?? 0) + 1)
     }
     expect(Object.fromEntries(counts)).toEqual({
-      'rocky-airless': 16, 'rocky-atmosphere': 4, 'ice-airless': 23, 'sand-atmosphere': 3,
+      // +4 тела системы W26 (Emberon, Halcyra I/II, Nivalis): общий детальный
+      // набор rocky_trail; у Nivalis есть атмосфера — она в rocky-atmosphere,
+      // остальные три без атмосферы — в rocky-airless.
+      'rocky-airless': 19, 'rocky-atmosphere': 5, 'ice-airless': 23, 'sand-atmosphere': 3,
       'sand-airless': 2, 'volcanic-atmosphere': 1, 'volcanic-airless': 1
     })
   })

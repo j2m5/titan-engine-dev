@@ -30,6 +30,7 @@ import { SunTintBinding } from '@/core/materials/SunTintBinding'
 import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
 import { resolveStarRadiusKm } from '@/core/terrain/starRadius'
 import { penumbraTan } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
+import { resolveLightTint } from '@/core/helpers/lightSource'
 
 /**
  * Opacity облачного слоя от высоты камеры над поверхностью (приёмочная волна
@@ -88,6 +89,9 @@ class PlanetMaterial extends AbstractShaderMaterial {
   /** Угловой радиус солнца из данных атмосферы тела; undefined — нет атмосферы. */
   private readonly atmosphereSunAngularRadius: number | undefined
 
+  /** Подписка светила на цвет света (lightTint) — резолвится один раз, тело не меняет родителя в рантайме. */
+  private readonly lightTint: { active: boolean; color: Color }
+
   public constructor(model: Actor, atmosphereRegistry?: AtmosphereRegistry, parameters?: ShaderMaterialParameters) {
     super(parameters)
     this.model = model
@@ -108,14 +112,23 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.atmosphereSunAngularRadius = atmosphereActor
       ? readRenderingData<AtmosphereConfig>(atmosphereActor)?.sunAngularRadius
       : undefined
+    this.lightTint = resolveLightTint(model)
 
     const { uniforms, defines, vertexShader, fragmentShader } = new PlanetShader(this.model)
 
     this.uniforms = uniforms
     this.vertexShader = vertexShader
     this.fragmentShader = fragmentShader
-    this.defines = defines
-    this.baseDefines = { ...defines }
+    // lightTint статичен (резолвится один раз в конструкторе, актор не меняет
+    // родителя в рантайме) — живёт в baseDefines, как USE_WATER_REFLECTION у
+    // воды: переживает и updateMaterial(), и resetMaterial() без досборки.
+    this.baseDefines = { ...defines, ...(this.lightTint.active && { USE_LIGHT_TINT: '1' }) }
+    this.defines = { ...this.baseDefines }
+
+    // Цвет света звезды (lightTint) — юниформ материала (не шейдера-обёртки,
+    // тот же приём, что uSteepNorMap ниже): дефолт белый, значение копируется сюда же один раз.
+    this.uniforms.uLightColor = new Uniform(new Color(1, 1, 1))
+    ;(this.uniforms.uLightColor.value as Color).copy(this.lightTint.color)
 
     // USE_TERRAIN_UV ставится по наличию карты в реестре, а не по типу
     // геометрии: на окно даунгрейда легаси-сфера несёт рельефные дефайны (см.
@@ -443,6 +456,8 @@ class PlanetMaterial extends AbstractShaderMaterial {
       // USE_SUN_TINT / USE_SKY_AMBIENT неразрывна: обе таблицы приходят одной
       // записью реестра.
       ...(this.sunTint.active && { USE_SUN_TINT: '1', USE_SKY_AMBIENT: '1' }),
+      // USE_LIGHT_TINT сюда не добавляется: он статичен и уже сидит в
+      // baseDefines (см. конструктор) — спред ниже его наследует.
       // Процедурная деталь облаков гиганта — только легаси-сфера: у тела с
       // загруженной картой высот ветка #else шаблона вообще не компилируется
       // (UV идёт через terrainUv), а домен детали построен на body-локальном
