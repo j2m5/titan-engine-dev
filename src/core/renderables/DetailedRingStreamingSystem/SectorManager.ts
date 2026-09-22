@@ -385,14 +385,32 @@ class SectorManager {
     let activated = 0
     for (const { info, lod } of toActivate) {
       if (activated >= this.activationBudget) break
+      // Упор в долю пула — дальше по списку сектора только дальше от камеры,
+      // пробовать их бессмысленно, а счётчик отказов иначе считал бы кандидатов
+      if (this.used >= this.capacityShare) {
+        this.capacityFailures++
+        break
+      }
       if (this.activateSector(info, lod)) {
         activated++
       }
     }
 
-    // 6. Смена LOD для существующих секторов
+    // 6. Смена LOD для существующих секторов — тем же бюджетом, что активация.
+    // Каждый переход держит ОБА тира до конца кросс-фейда, поэтому массовый
+    // свитч на проходе камеры вынес бы каскад далеко за его долю пула
+    toChangeLOD.sort((a, b) => {
+      const distA = (a.info.centerX - camX) ** 2 + (a.info.centerZ - camZ) ** 2
+      const distB = (b.info.centerX - camX) ** 2 + (b.info.centerZ - camZ) ** 2
+      return distA - distB
+    })
+
+    let switched = 0
     for (const { state, newLOD, info } of toChangeLOD) {
-      this.changeSectorLOD(state, newLOD, info)
+      if (switched >= this.activationBudget) break
+      if (this.changeSectorLOD(state, newLOD, info)) {
+        switched++
+      }
     }
 
     // 7. Обновить fade и удалить завершённые fade-out
@@ -440,13 +458,22 @@ class SectorManager {
    * параллельно с проявлением нового (с нуля) — оба рендерятся через дизер
    * одновременно, давая встречный кросс-фейд без резкого «щелчка».
    */
-  private changeSectorLOD(state: SectorState, newLOD: LODLevel, info: SectorInfo): void {
+  private changeSectorLOD(state: SectorState, newLOD: LODLevel, info: SectorInfo): boolean {
     const instanceCount = Math.max(1, Math.round(info.instanceCount * this.lodDensityMultiplier[newLOD]))
+
+    // Доля пула по УСТАНОВИВШЕЙСЯ стоимости: на время кросс-фейда сектор держит
+    // оба тира, но проверять сумму нельзя — понижение тира, которое ёмкость
+    // освобождает, само себя бы и запретило
+    if (this.used - state.instanceCount + instanceCount > this.capacityShare) {
+      this.capacityFailures++
+      return false
+    }
+
     const allocations = this.allocateForLOD(newLOD, info.seed, instanceCount, info.bounds)
 
     if (!allocations) {
       // Нет места под новый тир — оставляем текущий как есть (сектор не теряем).
-      return
+      return false
     }
 
     // Текущий тир уводим в кросс-фейд-аут. Если предыдущий outgoing ещё жив
@@ -472,6 +499,8 @@ class SectorManager {
     // fade=0 уже записан в буфер внутри allocateForLOD — повторной записи не требуется.
     state.fade = 0.0
     state.fadeTarget = 1.0
+
+    return true
   }
 
   /**
@@ -533,13 +562,14 @@ class SectorManager {
   public deactivateAll(): void {
     for (const [, state] of this.activeSectors) {
       for (const a of state.allocations) this.pool.release(a)
-      this.used -= state.instanceCount
       if (state.outgoing) {
         for (const a of state.outgoing.allocations) this.pool.release(a)
-        this.used -= state.outgoing.instanceCount
       }
     }
     this.activeSectors.clear()
+    // Живых секторов не осталось — счётчик обнуляется, а не сводится вычитанием:
+    // так расхождение, если оно где-то возникнет, не переживёт сброс
+    this.used = 0
   }
 
   /**

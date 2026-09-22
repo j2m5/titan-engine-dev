@@ -129,4 +129,117 @@ describe('SectorManager: usedInstances переживает смену тира 
     manager.update(info0.centerAngle, info0.centerRadius, 0, vpMatrix, identity, 1.0)
     expect(manager.usedInstances).toBe(info0.instanceCount)
   })
+
+  it('на время кросс-фейда сектор держит оба тира — used равен их сумме', () => {
+    const grid = new SectorGrid(gridConfig)
+    const generator = new AsteroidGenerator({ thickness: 1, minScale: 0.5, maxScale: 1.0 })
+    const pool = new InstancePool(
+      { maxInstances: 300 },
+      { maxInstances: 300 },
+      { maxInstances: 100 },
+      Array.from({ length: K }, () => new BoxGeometry(1, 1, 1)),
+      Array.from({ length: K }, () => new BoxGeometry(1, 1, 1)),
+      2.5
+    )
+    const manager = new SectorManager(grid, generator, pool, thresholds, null, Infinity, 4)
+    const vpMatrix = buildAllVisibleViewProjection(1000)
+    const info0 = grid.getSectorInfo(0, 0, 0)
+
+    manager.update(info0.centerAngle, info0.centerRadius, 0, vpMatrix, identity, 1.0)
+    const settled = manager.usedInstances
+
+    // Малая delta: кросс-фейд не успевает погаснуть, уходящий тир ещё жив
+    manager.update(info0.centerAngle, info0.centerRadius + 7, 0, vpMatrix, identity, 0.001)
+    expect(manager.usedInstances).toBe(settled * 2)
+
+    // Дождаться конца фейда — уходящий тир освобождён, счёт возвращается
+    manager.update(info0.centerAngle, info0.centerRadius + 7, 0, vpMatrix, identity, 1.0)
+    expect(manager.usedInstances).toBe(settled)
+  })
+
+  it('смена тира упирается в долю пула по устоявшейся стоимости, а не по сумме двух тиров', () => {
+    const grid = new SectorGrid(gridConfig)
+    const generator = new AsteroidGenerator({ thickness: 1, minScale: 0.5, maxScale: 1.0 })
+    const pool = new InstancePool(
+      { maxInstances: 300 },
+      { maxInstances: 300 },
+      { maxInstances: 100 },
+      Array.from({ length: K }, () => new BoxGeometry(1, 1, 1)),
+      Array.from({ length: K }, () => new BoxGeometry(1, 1, 1)),
+      2.5
+    )
+    const info0 = grid.getSectorInfo(0, 0, 0)
+    // Доля ровно под один тир: сумма двух тиров её превышает, устоявшаяся — нет
+    const manager = new SectorManager(grid, generator, pool, thresholds, null, info0.instanceCount, 4)
+    const vpMatrix = buildAllVisibleViewProjection(1000)
+
+    manager.update(info0.centerAngle, info0.centerRadius, 0, vpMatrix, identity, 1.0)
+    expect(manager.usedInstances).toBe(info0.instanceCount)
+
+    // Смена тира проходит, хотя на время фейда оба тира в долю не влезают
+    manager.update(info0.centerAngle, info0.centerRadius + 7, 0, vpMatrix, identity, 1.0)
+    expect(manager.activeCount).toBe(1)
+    expect(manager.getDebugInfo().capacityFailures).toBe(0)
+  })
+
+  it('deactivateAll обнуляет счёт занятых', () => {
+    const grid = new SectorGrid(gridConfig)
+    const generator = new AsteroidGenerator({ thickness: 1, minScale: 0.5, maxScale: 1.0 })
+    const pool = new InstancePool(
+      { maxInstances: 300 },
+      { maxInstances: 300 },
+      { maxInstances: 100 },
+      Array.from({ length: K }, () => new BoxGeometry(1, 1, 1)),
+      Array.from({ length: K }, () => new BoxGeometry(1, 1, 1)),
+      2.5
+    )
+    const manager = new SectorManager(grid, generator, pool, thresholds, null, Infinity, 4)
+    const vpMatrix = buildAllVisibleViewProjection(1000)
+    const info0 = grid.getSectorInfo(0, 0, 0)
+
+    manager.update(info0.centerAngle, info0.centerRadius, 0, vpMatrix, identity, 1.0)
+    expect(manager.usedInstances).toBeGreaterThan(0)
+
+    manager.deactivateAll()
+    expect(manager.usedInstances).toBe(0)
+    expect(manager.activeCount).toBe(0)
+  })
+
+  it('смена тира ограничена тем же бюджетом: разом переключается не больше него', () => {
+    // Много секторов в кадре: сетка из 16 угловых секторов одного слоя
+    const wideConfig: SectorGridConfig = { ...gridConfig, innerRadius: 40, outerRadius: 60, cellSize: 20 }
+    const grid = new SectorGrid(wideConfig)
+    const generator = new AsteroidGenerator({ thickness: 1, minScale: 0.5, maxScale: 1.0 })
+    const pool = new InstancePool(
+      { maxInstances: 4000 },
+      { maxInstances: 4000 },
+      { maxInstances: 4000 },
+      Array.from({ length: K }, () => new BoxGeometry(1, 1, 1)),
+      Array.from({ length: K }, () => new BoxGeometry(1, 1, 1)),
+      2.5
+    )
+    const budget = 2
+    const wideThresholds: LODThresholds = {
+      l0MaxDistance: 60,
+      l1MaxDistance: 400,
+      nearEnterDistance: -1,
+      nearExitDistance: -0.5
+    }
+    const manager = new SectorManager(grid, generator, pool, wideThresholds, null, Infinity, budget)
+    const vpMatrix = buildAllVisibleViewProjection(1000)
+
+    // Набрать секторы в тире Geometry: камера в центре, много кадров
+    for (let i = 0; i < 40; i++) manager.update(0, 0, 0, vpMatrix, identity, 1.0)
+    const active = manager.activeCount
+    expect(active).toBeGreaterThan(budget)
+
+    // Резкий отъезд: все активные разом просятся в Billboard. За кадр
+    // переключиться должно не больше бюджета — иначе каскад держал бы два тира
+    // у каждого сектора сразу
+    const before = manager.usedInstances
+    manager.update(0, 300, 0, vpMatrix, identity, 0.001)
+    const switched = (manager.usedInstances - before) / grid.getSectorInfo(0, 0, 0).instanceCount
+
+    expect(switched).toBeLessThanOrEqual(budget)
+  })
 })
