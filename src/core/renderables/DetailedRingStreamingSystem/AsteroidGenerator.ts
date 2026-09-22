@@ -246,11 +246,12 @@ class AsteroidGenerator {
     const r2Sq = bounds.maxRadius * bounds.maxRadius
     const halfThickness = thickness * 0.5
 
-    // Центр сектора для относительных позиций — один раз на сектор, в double
+    // Центр сектора для относительных позиций — один раз на сектор, в double.
+    // Без флага не считаем вовсе: путь колец не платит за пару тригонометрий
     const relative = this.config.relativeToSector === true
-    const center = sectorCenter(bounds)
-    const centerX = center.x
-    const centerZ = center.z
+    const center = relative ? sectorCenter(bounds) : null
+    const centerX = center ? center.x : 0
+    const centerZ = center ? center.z : 0
 
     for (let i = 0; i < count; i++) {
       // Позиция по радиусу: с профилем — importance sampling ∝ альфе (камни

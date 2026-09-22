@@ -120,7 +120,10 @@ describe('шейдеры: instanceOrigin', () => {
     expect(v).toContain('vec4 worldPosition = instanceMatrix * vec4(shapedPos, 1.0);')
     expect(v).toContain('worldPosition.xyz += instanceOrigin;')
     expect(v.indexOf('worldPosition.xyz += instanceOrigin;')).toBeLessThan(v.indexOf('modelViewMatrix * worldPosition'))
-    expect(v).toContain('float shapeSeed = hash13(instanceMatrix[3].xyz + instanceOrigin);')
+    // Сид формы — от МЕСТНОЙ позиции (прежний текст мастера): она переезд
+    // начала переживает, сумма с instanceOrigin — нет
+    expect(v).toContain('float shapeSeed = hash13(instanceMatrix[3].xyz);')
+    expect(v).toContain('float ampSeed = hash13(instanceMatrix[3].xyz * 1.37 + 11.7);')
   })
 
   it('L1: позиция инстанса = origin + local', () => {
@@ -128,6 +131,38 @@ describe('шейдеры: instanceOrigin', () => {
 
     expect(v).toContain('attribute vec3 instanceOrigin;')
     expect(v).toContain('vec3 instancePos = instanceOrigin + vec3(')
+  })
+
+  it('сиды не зависят от instanceOrigin: переезд начала не меняет форму камней', () => {
+    // Дефект, пойманный ревью: instanceMatrix[3].xyz + instanceOrigin — это
+    // позиция от ПЛАВАЮЩЕГО НАЧАЛА, а не от центра кольца, и rebaseOrigins
+    // меняет её на каждом переезде. Сид обязан браться только из матрицы.
+    const l0: string = withoutComments(InstancedAsteroidShaderTemplate.vertexShader)
+    for (const call of l0.match(/hash13\([^;]*\)/g) ?? []) {
+      expect(call).not.toContain('instanceOrigin')
+    }
+    expect((l0.match(/hash13\(/g) ?? []).length).toBeGreaterThan(1)
+
+    const l1: string = withoutComments(billboardVertexSource())
+    const seedLine: string = l1.slice(l1.indexOf('vInstanceSeed ='), l1.indexOf(';', l1.indexOf('vInstanceSeed =')))
+    expect(seedLine).not.toContain('instanceOrigin')
+    expect(seedLine).not.toContain('instancePos')
+    expect(seedLine).toContain('instanceMatrix[3][0]')
+    expect(seedLine).toContain('instanceMatrix[3][2]')
+  })
+
+  it('vRingPos и направление на планету считаются от центра кольца через uOriginOffset', () => {
+    const l0: string = withoutComments(InstancedAsteroidShaderTemplate.vertexShader)
+    expect(l0).toContain('uniform vec3 uOriginOffset;')
+    expect(l0).toContain('vRingPos = worldPosition.xyz + uOriginOffset;')
+    expect(l0).toContain('vPlanetDirView = normalize((modelViewMatrix * vec4(-uOriginOffset, 1.0)).xyz - mvPosition.xyz);')
+
+    const l1: string = withoutComments(billboardVertexSource())
+    expect(l1).toContain('uniform vec3 uOriginOffset;')
+    expect(l1).toContain('vRingPos = instancePos + uOriginOffset;')
+    expect(l1).toContain(
+      'vPlanetDirView = normalize((modelViewMatrix * vec4(-uOriginOffset, 1.0)).xyz - mvInstancePos.xyz);'
+    )
   })
 
   it('при нулевом origin оба вершинника тождественны прежним: атрибут входит только слагаемым', () => {
@@ -224,9 +259,12 @@ describe('пояс: относительные координаты включе
 
     frameAt(system, 52)
     expect(pool.getActiveCount().total).toBeGreaterThan(0)
-    // Начало переехало к камере и группа встала на него
+    // Начало переехало к камере, группа встала на него, и оба материала
+    // получили его смещение — иначе vRingPos съехал бы с центра кольца
     expect((floatingOrigin as FloatingOrigin).origin.x).not.toBe(0)
     expect((originGroup as Group).position.x).toBe((floatingOrigin as FloatingOrigin).origin.x)
+    expect(pool.geometryMaterial.uniforms.uOriginOffset.value).toEqual((floatingOrigin as FloatingOrigin).origin)
+    expect(pool.billboardMaterial.uniforms.uOriginOffset.value).toEqual((floatingOrigin as FloatingOrigin).origin)
 
     // Хранимые позиции — местные: не радиус кольца (десятки единиц), а пределы
     // своего сектора (ячейка ≈ 1 единица)
@@ -243,6 +281,9 @@ describe('пояс: относительные координаты включе
     frameAt(system, 53.3)
     expect((originGroup as Group).position.x).not.toBe(52)
     expect((originGroup as Group).position.x).toBe((floatingOrigin as FloatingOrigin).origin.x)
+
+    expect(pool.geometryMaterial.uniforms.uOriginOffset.value).toEqual((floatingOrigin as FloatingOrigin).origin)
+    expect(pool.billboardMaterial.uniforms.uOriginOffset.value).toEqual((floatingOrigin as FloatingOrigin).origin)
 
     const after = sectorAnchors(system)
     let survived = 0
@@ -286,6 +327,11 @@ describe('кольца: относительные координаты выкл
       // Меши — прямые дети системы, без промежуточной группы начала
       expect(mesh.parent).toBe(system)
     }
+
+    // Смещение начала кольцам не пишется — выражения vRingPos и направления на
+    // планету при нуле буквально прежние
+    expect(pool.geometryMaterial.uniforms.uOriginOffset.value.toArray()).toEqual([0, 0, 0])
+    expect(pool.billboardMaterial.uniforms.uOriginOffset.value.toArray()).toEqual([0, 0, 0])
 
     expect(internalsOf(system).originGroup).toBeNull()
     expect(internalsOf(system).floatingOrigin).toBeNull()

@@ -640,8 +640,13 @@ class AsteroidRingSystem extends Group {
     if (this.floatingOrigin && this.originGroup) {
       const shift = this.floatingOrigin.update(this._localCamPos)
       if (shift) {
-        this.originGroup.position.copy(this.floatingOrigin.origin)
+        const origin = this.floatingOrigin.origin
+        this.originGroup.position.copy(origin)
         this.manager.rebaseOrigins(shift)
+        // Ring-local абсолют для пыли/тени/полос собирается в шейдере как
+        // «позиция от начала + смещение начала» (см. uOriginOffset)
+        this.pool.geometryMaterial.uniforms.uOriginOffset.value.copy(origin)
+        this.pool.billboardMaterial.uniforms.uOriginOffset.value.copy(origin)
       }
     }
 

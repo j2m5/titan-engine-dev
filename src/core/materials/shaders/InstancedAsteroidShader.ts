@@ -40,6 +40,7 @@ interface InstancedAsteroidUniforms {
   uBandTintStrength: number
   uLayerHalfThickness: number
   uLayerShadowStrength: number
+  uOriginOffset: Vector3
   uShapeAmpMin: number
   uShapeAmpMax: number
   uShapeFreq: number
@@ -97,6 +98,9 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       uBandTintStrength: new Uniform(1),
       uLayerHalfThickness: new Uniform(1),
       uLayerShadowStrength: new Uniform(0.25),
+      // Позиция плавающего начала в ring-local (см. FloatingOrigin); кольца его
+      // не пишут — 0 и все выражения вершинника тождественны прежним
+      uOriginOffset: new Uniform(new Vector3()),
       uShapeAmpMin: new Uniform(0),
       uShapeAmpMax: new Uniform(0),
       uShapeFreq: new Uniform(1),

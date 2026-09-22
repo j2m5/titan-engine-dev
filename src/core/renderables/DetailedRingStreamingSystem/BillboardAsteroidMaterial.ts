@@ -16,6 +16,9 @@ const BILLBOARD_VERTEX_SHADER = /* glsl */ `
         uniform float uMaxDistance;
         uniform vec3 uLightPosition;
         uniform float uSilhouetteScale;
+        // Смещение начала едет юниформом; float32 здесь достаточно — потребители
+        // vRingPos (пыль, тень планеты, полосы) гладкие по радиусу
+        uniform vec3 uOriginOffset;
 
         // Per-instance fade [0..1] — плавные LOD/sector-переходы (см. InstancePool.writeFade)
         attribute float instanceFade;
@@ -45,15 +48,19 @@ const BILLBOARD_VERTEX_SHADER = /* glsl */ `
             instanceMatrix[3][2]
           );
 
-          // Ring-local позиция инстанса для модели пыли
-          vRingPos = instancePos;
+          // Ring-local позиция инстанса для модели пыли — от ЦЕНТРА КОЛЬЦА,
+          // а не от плавающего начала: прибавляем его смещение
+          vRingPos = instancePos + uOriginOffset;
 
           // Позиция инстанса в view space
           vec4 mvInstancePos = modelViewMatrix * vec4(instancePos, 1.0);
 
           // Per-instance seed для уникальной формы каждого billboard — от
-          // АБСОЛЮТНОЙ позиции, иначе переезд начала менял бы силуэты
-          vInstanceSeed = fract(sin(dot(instancePos.xz, vec2(12.9898, 78.233))) * 43758.5453);
+          // МЕСТНОЙ позиции в секторе: она у камня не меняется при переезде
+          // плавающего начала (у колец начало нулевое — выражение прежнее)
+          vInstanceSeed = fract(
+            sin(dot(vec2(instanceMatrix[3][0], instanceMatrix[3][2]), vec2(12.9898, 78.233))) * 43758.5453
+          );
 
           // --- Эллипс проекции инстанса ---
           // В матрице инстанса уже лежат поворот и пер-осевой масштаб камня.
@@ -108,8 +115,10 @@ const BILLBOARD_VERTEX_SHADER = /* glsl */ `
 
           // Переводим направление света в view space для согласования с impostor normal
           vLightDirView = normalize((viewMatrix * vec4(worldLightDir, 0.0)).xyz);
-          // Направление на центр планеты (начало ring-local) во view — для planetshine
-          vPlanetDirView = normalize((modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz - mvInstancePos.xyz);
+          // Направление на центр планеты (начало ring-local) во view — для
+          // planetshine. В модельном пространстве центр кольца лежит в
+          // -uOriginOffset: модельное начало — это плавающее начало
+          vPlanetDirView = normalize((modelViewMatrix * vec4(-uOriginOffset, 1.0)).xyz - mvInstancePos.xyz);
 
           // Затухание по расстоянию
           float dist = length(mvInstancePos.xyz);
@@ -161,6 +170,12 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         uColorJitter: { value: 0.1 },
         /** Средний радиус силуэта относительно максимального радиуса камня (архетип нормирован на 1) */
         uSilhouetteScale: { value: 0.85 },
+        /**
+         * Позиция плавающего начала в ring-local (см. FloatingOrigin) —
+         * пер-инстансный объект, как uLightColor. Кольца его не пишут: 0 и все
+         * выражения тождественны прежним.
+         */
+        uOriginOffset: { value: new Vector3() },
         // Модель освещения камня (см. чанк AsteroidBrdf) — та же, что у L0
         uLunarMix: { value: 0.8 },
         uOppositionSurge: { value: 0.3 },

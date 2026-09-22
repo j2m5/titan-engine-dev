@@ -55,6 +55,10 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uLayerShadowStrength: new Uniform(0.25),
     // Деформация силуэта (см. чанк AsteroidShape). Амплитуда — per-instance из
     // диапазона [min,max]; min=max=0 → форма выключена.
+    // Позиция плавающего начала в ring-local (см. FloatingOrigin): матрицы
+    // инстансов хранятся относительно него, а ring-local абсолют нужен модели
+    // пыли/тени. Кольца его не пишут — 0 и все выражения тождественны прежним.
+    uOriginOffset: new Uniform(new Vector3()),
     uShapeAmpMin: new Uniform(0),
     uShapeAmpMax: new Uniform(0),
     uShapeFreq: new Uniform(1),
@@ -68,6 +72,9 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     ${ShaderChunk['logdepthbuf_pars_vertex']}
 
     uniform vec3 lightPosition;
+    // Смещение начала едет юниформом; float32 здесь достаточно — потребители
+    // vRingPos (пыль, тень планеты, полосы) гладкие по радиусу
+    uniform vec3 uOriginOffset;
     uniform float uShapeAmpMin;
     uniform float uShapeAmpMax;
     uniform float uShapeFreq;
@@ -107,12 +114,15 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     #include <asteroidShapeFunctions>
 
     void main() {
-      // Деформация силуэта: сид рисунка контура — хеш от АБСОЛЮТНОЙ позиции
-      // инстанса (origin + local), иначе переезд начала менял бы форму камней.
+      // Деформация силуэта: сид рисунка контура — хеш от МЕСТНОЙ позиции
+      // инстанса (в своём секторе): она у камня не меняется при переезде
+      // плавающего начала, а instanceOrigin меняется — сид от суммы
+      // перещёлкивал бы форму всех камней разом. У колец начало нулевое, и
+      // выражение то же, что было.
       // Амплитуда — второй, декоррелированный хеш той же позиции → каждый
       // камень получает свою «изрезанность» из диапазона [min,max].
-      float shapeSeed = hash13(instanceMatrix[3].xyz + instanceOrigin);
-      float ampSeed = hash13((instanceMatrix[3].xyz + instanceOrigin) * 1.37 + 11.7);
+      float shapeSeed = hash13(instanceMatrix[3].xyz);
+      float ampSeed = hash13(instanceMatrix[3].xyz * 1.37 + 11.7);
       float shapeAmp = mix(uShapeAmpMin, uShapeAmpMax, ampSeed);
       vec3 shapedPos;
       vec3 shapedNormal;
@@ -125,18 +135,19 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
       gl_Position = projectionMatrix * mvPosition;
 
-      // Ring-local позиция фрагмента для модели пыли/тени (пофрагментная).
-      // Сумма считается во float32 — для пыли, тени и полос этого хватает
-      // (все они плавные функции радиуса), в отличие от самой gl_Position.
-      vRingPos = worldPosition.xyz;
+      // Ring-local позиция фрагмента для модели пыли/тени (пофрагментная) —
+      // от ЦЕНТРА КОЛЬЦА, а не от плавающего начала: прибавляем его смещение.
+      vRingPos = worldPosition.xyz + uOriginOffset;
 
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
       mat3 instanceNormalMatrix = mat3(instanceMatrix);
 
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
-      // Направление на центр планеты (начало ring-local) во view — для planetshine
-      vPlanetDirView = normalize((modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz - mvPosition.xyz);
+      // Направление на центр планеты (начало ring-local) во view — для
+      // planetshine. В модельном пространстве центр кольца лежит в
+      // -uOriginOffset: модельное начало — это плавающее начало
+      vPlanetDirView = normalize((modelViewMatrix * vec4(-uOriginOffset, 1.0)).xyz - mvPosition.xyz);
 
       // Для макро-облика (см. чанк AsteroidSurface): объектная позиция (домен),
       // геом. нормаль объекта (нормаль больше не возмущается процедурно) и

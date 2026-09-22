@@ -93,8 +93,10 @@ describe('AsteroidBrdf GLSL: одна модель для L0 и L1', () => {
     // Блик — только на освещённой стороне по сырому косинусу, не по LS-диффузу (тот до 2)
     // direct = тень планеты × самозатенение слоя (см. RingLayerShadow.spec)
     expect(fs).toContain('spec * specColor * max(NdotL, 0.0) * direct')
-    // Направление на центр планеты — в view из вершинника (ring-local начало = планета)
-    expect(vs).toContain('vPlanetDirView = normalize((modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz - mvPosition.xyz)')
+    // Направление на центр планеты — в view из вершинника (ring-local начало =
+    // планета). В модельном пространстве это -uOriginOffset: с плавающим началом
+    // (пояс) модельное начало смещено, у колец смещение нулевое
+    expect(vs).toContain('vPlanetDirView = normalize((modelViewMatrix * vec4(-uOriginOffset, 1.0)).xyz - mvPosition.xyz)')
     for (const name of ['uLunarMix', 'uOppositionSurge', 'uPlanetshineColor', 'uPlanetshineStrength']) {
       expect(InstancedAsteroidShaderTemplate.uniforms[name], name).toBeDefined()
     }
