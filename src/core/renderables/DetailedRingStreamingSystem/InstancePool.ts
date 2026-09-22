@@ -95,6 +95,9 @@ class InstancePool {
   /** Dirty-флаги для отложенного commit origin-атрибута, по стримам */
   private dirtyOriginStreams: Set<number> = new Set()
 
+  /** Dirty-флаги для отложенного commit атрибута порога fade билборда, по стримам */
+  private dirtyMaxDistanceStreams: Set<number> = new Set()
+
   /**
    * @param l0Config Ёмкость L0 (Geometry, обычный detail).
    * @param nearConfig Ёмкость Near (Geometry, повышенный detail) — своя,
@@ -108,6 +111,9 @@ class InstancePool {
    * @param model Актор кольца — вход подписки на цвет света звезды (lightTint,
    *   см. resolveLightTint); резолвер сам поднимается к корню дерева.
    *   undefined — тинт выключен (тесты пула без реального кольца).
+   * @param useCascadeFade Билборд считает fade по инстансному порогу вместо
+   *   общего uMaxDistance (см. BillboardAsteroidMaterial); дефолт false —
+   *   путь колец и одиночного каскада не меняется.
    */
   public constructor(
     l0Config: PoolLayerConfig,
@@ -116,7 +122,8 @@ class InstancePool {
     l0Geometries: BufferGeometry[],
     nearGeometries: BufferGeometry[],
     billboardSize: number,
-    model?: Actor
+    model?: Actor,
+    useCascadeFade: boolean = false
   ) {
     if (l0Geometries.length !== nearGeometries.length) {
       throw new Error(
@@ -161,7 +168,7 @@ class InstancePool {
 
     // --- Billboard-стрим (индекс 2·streamCount) ---
     const l1Geometry = new PlaneGeometry(billboardSize, billboardSize)
-    this.billboardMaterial = new BillboardAsteroidMaterial(model)
+    this.billboardMaterial = new BillboardAsteroidMaterial(model, useCascadeFade)
     this.billboardMesh = new InstancedMesh(l1Geometry, this.billboardMaterial, l1Config.maxInstances)
     this.billboardMesh.count = 0
     this.billboardMesh.frustumCulled = false
@@ -171,6 +178,10 @@ class InstancePool {
     l1Geometry.setAttribute(
       'instanceOrigin',
       new InstancedBufferAttribute(new Float32Array(l1Config.maxInstances * 3), 3)
+    )
+    l1Geometry.setAttribute(
+      'instanceMaxDistance',
+      new InstancedBufferAttribute(new Float32Array(l1Config.maxInstances), 1)
     )
 
     this.streams.push({
@@ -207,6 +218,9 @@ class InstancePool {
     }
     streamGeometry.setAttribute('instanceFade', new InstancedBufferAttribute(new Float32Array(capacity), 1))
     streamGeometry.setAttribute('instanceOrigin', new InstancedBufferAttribute(new Float32Array(capacity * 3), 3))
+    // Пишется тем же кодом, что и instanceOrigin (см. SectorManager.writeSectorOrigins),
+    // хотя читает его только материал билборда — держим адресацию единой для всех тиров.
+    streamGeometry.setAttribute('instanceMaxDistance', new InstancedBufferAttribute(new Float32Array(capacity), 1))
 
     const mesh = new InstancedMesh(streamGeometry, material, capacity)
     mesh.count = 0
@@ -244,6 +258,7 @@ class InstancePool {
     // Смещение сектора от плавающего начала переезжает вместе с fade: оно
     // пер-инстансное состояние стрима, а не свойство формы (см. writeOrigins)
     const origin = old.getAttribute('instanceOrigin')
+    const maxDistance = old.getAttribute('instanceMaxDistance')
     const streamGeometry = new BufferGeometry()
     for (const attrName of Object.keys(source.attributes)) {
       streamGeometry.setAttribute(attrName, source.getAttribute(attrName))
@@ -251,6 +266,7 @@ class InstancePool {
     if (source.getIndex() !== null) streamGeometry.setIndex(source.getIndex())
     streamGeometry.setAttribute('instanceFade', fade)
     streamGeometry.setAttribute('instanceOrigin', origin)
+    streamGeometry.setAttribute('instanceMaxDistance', maxDistance)
     mesh.geometry = streamGeometry
     old.dispose()
   }
@@ -278,6 +294,11 @@ class InstancePool {
   /** InstancedBufferAttribute origin (смещение сектора) для заданного стрима. */
   private originAttribute(stream: number): InstancedBufferAttribute {
     return this.streams[stream].mesh.geometry.getAttribute('instanceOrigin') as InstancedBufferAttribute
+  }
+
+  /** InstancedBufferAttribute порога fade билборда СВОЕГО каскада для заданного стрима. */
+  private maxDistanceAttribute(stream: number): InstancedBufferAttribute {
+    return this.streams[stream].mesh.geometry.getAttribute('instanceMaxDistance') as InstancedBufferAttribute
   }
 
   /**
@@ -368,6 +389,18 @@ class InstancePool {
   }
 
   /**
+   * Записать порог полного затухания билборда СВОЕГО каскада (см.
+   * BillboardAsteroidMaterial, instanceMaxDistance) в диапазон
+   * [offset, offset+count) стрима. Значение общее для всего сектора — то же
+   * устройство записи, что и у writeOrigins.
+   */
+  public writeMaxDistance(stream: number, offset: number, count: number, value: number): void {
+    const dst = this.maxDistanceAttribute(stream).array as Float32Array
+    dst.fill(value, offset, offset + count)
+    this.dirtyMaxDistanceStreams.add(stream)
+  }
+
+  /**
    * Применить все накопленные изменения к GPU-буферам.
    */
   public commitUpdates(): void {
@@ -385,9 +418,14 @@ class InstancePool {
       this.originAttribute(stream).needsUpdate = true
     }
 
+    for (const stream of this.dirtyMaxDistanceStreams) {
+      this.maxDistanceAttribute(stream).needsUpdate = true
+    }
+
     this.dirtyStreams.clear()
     this.dirtyFadeStreams.clear()
     this.dirtyOriginStreams.clear()
+    this.dirtyMaxDistanceStreams.clear()
   }
 
   /**
@@ -518,6 +556,7 @@ class InstancePool {
     this.dirtyStreams.clear()
     this.dirtyFadeStreams.clear()
     this.dirtyOriginStreams.clear()
+    this.dirtyMaxDistanceStreams.clear()
   }
 }
 

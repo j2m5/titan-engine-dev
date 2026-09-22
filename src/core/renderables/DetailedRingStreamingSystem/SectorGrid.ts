@@ -356,6 +356,20 @@ class SectorGrid {
       ? Math.min(this.verticalLayerCount - 1, Math.ceil((cameraY + maxDistance + halfHeight) / this.cellHeight) + 1)
       : 0
 
+    // Окно слоёв вокруг камеры по радиусу — вместо обхода всех layerCount слоёв пояса.
+    // Не зависит от yi (высота на радиальное окно не влияет) — считаем один раз
+    // вне цикла по вертикальным слоям, а не на каждой его итерации.
+    // Надмножество (±1 слой) прежнего точного скана: если частное на границе целое,
+    // floor/ceil сами по себе отрезают соседний слой, который старый код включал
+    // (его radialDist == maxDistance проходил нестрогую проверку). Отсекает по-прежнему
+    // фильтр radialDist > maxDistance внутри цикла — запас в 2 слоя за кадр бесплатен.
+    const { innerRadius } = this.config
+    const loIndex = Math.max(0, Math.floor((cameraRadius - maxDistance - innerRadius) / this.layerThickness) - 1)
+    const hiIndex = Math.min(
+      this.layerCount - 1,
+      Math.ceil((cameraRadius + maxDistance - innerRadius) / this.layerThickness) + 1
+    )
+
     for (let yi = yLo; yi <= yHi; yi++) {
       if (this.volumetric) {
         const cellMinY = -halfHeight + yi * this.cellHeight
@@ -363,18 +377,6 @@ class SectorGrid {
         // Точный отбор по высоте — окно выше надмножество, как у радиального
         if (Math.abs(closestY - cameraY) > maxDistance) continue
       }
-
-      // Окно слоёв вокруг камеры по радиусу — вместо обхода всех layerCount слоёв пояса.
-      // Надмножество (±1 слой) прежнего точного скана: если частное на границе целое,
-      // floor/ceil сами по себе отрезают соседний слой, который старый код включал
-      // (его radialDist == maxDistance проходил нестрогую проверку). Отсекает по-прежнему
-      // фильтр radialDist > maxDistance внутри цикла — запас в 2 слоя за кадр бесплатен.
-      const { innerRadius } = this.config
-      const loIndex = Math.max(0, Math.floor((cameraRadius - maxDistance - innerRadius) / this.layerThickness) - 1)
-      const hiIndex = Math.min(
-        this.layerCount - 1,
-        Math.ceil((cameraRadius + maxDistance - innerRadius) / this.layerThickness) + 1
-      )
 
       for (let li = loIndex; li <= hiIndex; li++) {
         const layer = this.layerAt(li)

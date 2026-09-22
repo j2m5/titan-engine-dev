@@ -15,6 +15,20 @@ const MIN_DATA: IAsteroidBeltRenderingObject = {
   spacingKm: 60
 }
 
+describe('asteroidBeltParameters: spacingKm', () => {
+  it('поле отсутствует — дефолт 1, а не NaN (Math.max(undefined, 1) молча пустил бы пояс)', () => {
+    const withoutSpacing: Record<string, unknown> = { ...MIN_DATA }
+    delete withoutSpacing.spacingKm
+    const p = asteroidBeltParameters(beltActor(withoutSpacing as unknown as IAsteroidBeltRenderingObject))
+    expect(p.spacingKm).toBe(1)
+  })
+
+  it('заданное значение проходит клампом снизу в 1', () => {
+    expect(asteroidBeltParameters(beltActor({ ...MIN_DATA, spacingKm: 0.2 })).spacingKm).toBe(1)
+    expect(asteroidBeltParameters(beltActor({ ...MIN_DATA, spacingKm: 90 })).spacingKm).toBe(90)
+  })
+})
+
 describe('asteroidBeltParameters: pointCount/pointScale (дальний слой точек)', () => {
   it('дефолты — 60000 точек, масштаб спрайта 220', () => {
     const p = asteroidBeltParameters(beltActor(MIN_DATA))

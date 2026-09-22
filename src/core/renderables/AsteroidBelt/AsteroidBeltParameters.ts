@@ -67,7 +67,7 @@ export function asteroidBeltParameters(actor: Actor): AsteroidBeltParameters {
     thicknessKm: thicknessAu * AU,
     sizeRangeKm: [sizeMin, sizeMax],
     sizeExponent: Math.max(data.sizeExponent ?? 1, 0.1),
-    spacingKm: Math.max(data.spacingKm, 1),
+    spacingKm: Math.max(data.spacingKm ?? 1, 1),
     profile: data.profile ?? 'stony',
     seed: data.seed ?? 1,
     structure: data.structure ?? EMPTY_STRUCTURE,

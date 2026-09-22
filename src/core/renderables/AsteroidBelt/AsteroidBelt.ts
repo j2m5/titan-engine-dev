@@ -87,7 +87,11 @@ class AsteroidBelt extends Group {
     // держать пул
     // Порог берётся у самого дальнобойного каскада ровно тем же полем, каким
     // стример кормит билборд (uMaxDistance): через радиус заселения они совпали
-    // бы только пока порог билборда равен радиусу
+    // бы только пока порог билборда равен радиусу. Умышленно только САМЫЙ
+    // КРУПНЫЙ каскад — точки гаснут одним общим порогом на весь пояс, тогда
+    // как билборды внутри стримера теперь фейдятся каждый по порогу СВОЕГО
+    // каскада (см. BillboardAsteroidMaterial, instanceMaxDistance); порог точек
+    // с этим не связан и не меняется.
     this.nearThresholdTu = toThreeJSUnits(this.cascades[this.cascades.length - 1].lodThresholdsKm.l1)
 
     this.dustVolume = this.params.dustEnabled ? this.__createDustVolume() : null

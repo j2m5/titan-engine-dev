@@ -439,7 +439,7 @@ class AsteroidRingSystem extends Group {
   }
 
   /**
-   * Единственный каскад из сегодняшних полей конфига — путь колец без арки
+   * Единственный каскад из сегодняшних полей конфига — путь колец без набора
    * каскадов (cfg.cascades не задан). Сетка/генератор/пороги строятся из этой
    * спецификации побайтно так же, как раньше строились напрямую из cfg.
    */
@@ -490,10 +490,13 @@ class AsteroidRingSystem extends Group {
         : { rocks: toThreeJSUnits(cfg.ringGapBleedKm), dust: toThreeJSUnits(cfg.dustBleedKm) }
 
     // --- Плавающее начало (только пояс) ---
-    // Ячейка начала — ячейка САМОГО МЕЛКОГО каскада (specs[0], путь колец —
-    // единственный): переезд редок, а относительные позиции остаются в
-    // пределах нескольких ячеек даже у самой мелкой сетки.
-    const originCellSize = toThreeJSUnits(specs[0].cellSizeKm)
+    // Ячейка начала — ячейка САМОГО КРУПНОГО каскада (specs[последний]):
+    // офсеты камня от начала ограничены радиусом заселения этого же каскада
+    // (самым большим), поэтому его ячейка одинаково безопасна для float32, что
+    // и мелкая, но крупнее на порядки — переезд на порядки реже. Путь колец
+    // (единственный каскад, см. __singleCascadeSpec) даёт то же самое
+    // cfg.cellSizeKm — число не меняется.
+    const originCellSize = toThreeJSUnits(specs[specs.length - 1].cellSizeKm)
     this.floatingOrigin = cfg.relativeOrigin ? new FloatingOrigin(originCellSize) : null
     this.originGroup = cfg.relativeOrigin ? new Group() : null
     if (this.originGroup) {
@@ -524,7 +527,8 @@ class AsteroidRingSystem extends Group {
       l0Geometries,
       nearGeometries,
       asteroidSize * 2.5,
-      this.model
+      this.model,
+      cfg.cascades !== undefined
     )
 
     // Добавить рендер-объекты (L0 + L1). С плавающим началом они дети группы
@@ -581,7 +585,7 @@ class AsteroidRingSystem extends Group {
     // 32 на каскад: при 524 ячейках/каскад прежний бюджет 4 заселял бы поле
     // сотнями кадров; путь колец бюджет не трогает (дефолт SectorManager — 4)
     const activationBudget = cfg.cascades ? 32 : 4
-    // Доля пула на каскад; без арки каскадов — Infinity, путь колец не меняется
+    // Доля пула на каскад; без набора каскадов (cfg.cascades не задан) — Infinity, путь колец не меняется
     // Доля считается от ВСЕГО пула, а не от буфера билбордов: счётчик занятых у
     // каскада учитывает экземпляры любого тира. Ёмкости берём у пула — после
     // раскладки по архетипам они больше заявленных в конфиге. Свои пределы

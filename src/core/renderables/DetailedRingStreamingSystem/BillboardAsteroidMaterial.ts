@@ -26,6 +26,11 @@ const BILLBOARD_VERTEX_SHADER = /* glsl */ `
         // матрица инстанса хранит позицию ОТНОСИТЕЛЬНО центра сектора. У колец
         // начало не переезжает, атрибут нулевой — сложение ниже тождественно.
         attribute vec3 instanceOrigin;
+        // Порог полного затухания билборда СВОЕГО каскада (см. InstancePool.writeMaxDistance);
+        // без каскадов остаётся общий uMaxDistance колец — дефайн отсутствует
+        #ifdef USE_CASCADE_FADE_RADIUS
+        attribute float instanceMaxDistance;
+        #endif
 
         varying vec2 vUv;
         varying float vDistanceFade;
@@ -120,9 +125,15 @@ const BILLBOARD_VERTEX_SHADER = /* glsl */ `
           // -uOriginOffset: модельное начало — это плавающее начало
           vPlanetDirView = normalize((modelViewMatrix * vec4(-uOriginOffset, 1.0)).xyz - mvInstancePos.xyz);
 
-          // Затухание по расстоянию
+          // Затухание по расстоянию: свой каскад — по инстансному порогу (иначе
+          // каскады мельче самого крупного растягивают fade его юниформом и
+          // упираются в жёсткую кромку); без каскадов — общий uMaxDistance колец
           float dist = length(mvInstancePos.xyz);
+          #ifdef USE_CASCADE_FADE_RADIUS
+          vDistanceFade = 1.0 - smoothstep(instanceMaxDistance * 0.6, instanceMaxDistance, dist);
+          #else
           vDistanceFade = 1.0 - smoothstep(uMaxDistance * 0.6, uMaxDistance, dist);
+          #endif
 
           vFade = instanceFade;
 
@@ -150,12 +161,19 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
   /**
    * `model` — актор кольца (тот же вход, что у L0 `InstancedAsteroidMaterial`,
    * резолвер сам поднимается к корню дерева); `undefined` — тинт выключен.
+   * `useCascadeFade` — потребитель работает несколькими каскадами классов
+   * размеров с общим пулом/материалом: fade считается по инстансному порогу
+   * вместо общего uMaxDistance (см. instanceMaxDistance). false (дефолт) —
+   * путь колец и одиночного каскада, дефайн не добавляется.
    */
-  public constructor(model?: Actor) {
+  public constructor(model?: Actor, useCascadeFade: boolean = false) {
     const lightTint = model ? resolveLightTint(model) : { active: false, color: new Color(1, 1, 1) }
 
     super({
-      defines: { ...(lightTint.active && { USE_LIGHT_TINT: '1' }) },
+      defines: {
+        ...(lightTint.active && { USE_LIGHT_TINT: '1' }),
+        ...(useCascadeFade && { USE_CASCADE_FADE_RADIUS: '1' })
+      },
       uniforms: {
         uColor: { value: new Color(0.55, 0.5, 0.45) },
         // Цвет света звезды (lightTint) — per-instance объект, не общий модульный Uniform

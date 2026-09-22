@@ -49,3 +49,11 @@ export const generatorConfigOf = (generator: AsteroidGenerator): GeneratorConfig
 /** Поле `densityProfile` приватно и в SectorGrid, и в AsteroidGenerator — одна форма на оба. */
 export const densityProfileOf = (owner: SectorGrid | AsteroidGenerator): RadialDensityProfile | null =>
   (owner as unknown as { densityProfile: RadialDensityProfile | null }).densityProfile
+
+/** Поле `cellSize` приватно в FloatingOrigin (parameter property конструктора). */
+export const originCellSizeOf = (origin: FloatingOrigin): number =>
+  (origin as unknown as { cellSize: number }).cellSize
+
+/** Ключи активных секторов менеджера — поле `activeSectors` (Map) приватно. */
+export const activeSectorKeysOf = (manager: SectorManager): string[] =>
+  Array.from((manager as unknown as { activeSectors: Map<string, unknown> }).activeSectors.keys())

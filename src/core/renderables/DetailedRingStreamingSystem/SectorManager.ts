@@ -152,10 +152,18 @@ class SectorManager {
   }
 
   /**
-   * Записать смещение сектора от плавающего начала во все инстансы аллокаций.
-   * Без плавающего начала (кольца) — no-op: атрибут остаётся нулевым.
+   * Записать во все инстансы аллокаций смещение сектора от плавающего начала
+   * И порог полного затухания билборда СВОЕГО каскада (см.
+   * InstancePool.writeMaxDistance) — оба атрибута общие для сектора, второй
+   * пишется независимо от наличия плавающего начала (кольца/одиночный каскад
+   * тоже получают его, но без USE_CASCADE_FADE_RADIUS шейдер его не читает).
+   * Без плавающего начала (кольца) origin остаётся no-op: атрибут нулевой.
    */
   private writeSectorOrigins(allocations: Allocation[], bounds: SectorBounds): void {
+    for (const a of allocations) {
+      this.pool.writeMaxDistance(a.stream, a.offset, a.count, this.thresholds.l1MaxDistance)
+    }
+
     const origin = this.origin
     if (!origin) return
 
@@ -375,10 +383,13 @@ class SectorManager {
       }
     }
 
-    // 5. Активация новых секторов (с бюджетом)
+    // 5. Активация новых секторов (с бюджетом). Высота входит только у
+    // объёмной сетки — та же оговорка, что и у метрики тира выше.
     toActivate.sort((a, b) => {
-      const distA = (a.info.centerX - camX) ** 2 + (a.info.centerZ - camZ) ** 2
-      const distB = (b.info.centerX - camX) ** 2 + (b.info.centerZ - camZ) ** 2
+      const dyA = this.grid.volumetric ? a.info.centerY - cameraY : 0
+      const dyB = this.grid.volumetric ? b.info.centerY - cameraY : 0
+      const distA = (a.info.centerX - camX) ** 2 + (a.info.centerZ - camZ) ** 2 + dyA * dyA
+      const distB = (b.info.centerX - camX) ** 2 + (b.info.centerZ - camZ) ** 2 + dyB * dyB
       return distA - distB
     })
 
@@ -400,8 +411,10 @@ class SectorManager {
     // Каждый переход держит ОБА тира до конца кросс-фейда, поэтому массовый
     // свитч на проходе камеры вынес бы каскад далеко за его долю пула
     toChangeLOD.sort((a, b) => {
-      const distA = (a.info.centerX - camX) ** 2 + (a.info.centerZ - camZ) ** 2
-      const distB = (b.info.centerX - camX) ** 2 + (b.info.centerZ - camZ) ** 2
+      const dyA = this.grid.volumetric ? a.info.centerY - cameraY : 0
+      const dyB = this.grid.volumetric ? b.info.centerY - cameraY : 0
+      const distA = (a.info.centerX - camX) ** 2 + (a.info.centerZ - camZ) ** 2 + dyA * dyA
+      const distB = (b.info.centerX - camX) ** 2 + (b.info.centerZ - camZ) ** 2 + dyB * dyB
       return distA - distB
     })
 
