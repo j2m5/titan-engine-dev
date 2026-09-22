@@ -183,6 +183,29 @@ interface AsteroidRingConfig {
    * начала и с нулевым атрибутом.
    */
   relativeOrigin: boolean
+  /**
+   * Радиус планеты-хозяина в км; если задан — заменяет чтение
+   * model.parent.physicalObject.radius в __setup (пояс без родителя-планеты
+   * передаёт 0: тень планеты и planetshine гасятся существующими проверками
+   * `<= 0`). undefined — прежнее чтение родителя.
+   */
+  planetRadiusKm?: number
+  /**
+   * Плоскость системы отсчёта. 'equatorial' (дефолт) — сегодняшний поворот
+   * rotateX(90°) в экваториальную плоскость планеты-хозяина. 'system' — без
+   * поворота: орбитальная плоскость движка уже XZ Three с +Y вверх
+   * (ASTRO_TO_THREE, src/core/libs/frames.ts), пояс без родителя лежит в ней
+   * напрямую.
+   */
+  frame?: 'equatorial' | 'system'
+  /**
+   * Сигмы размытия кромок как доля ШИРИНЫ кольца (в единицах сцены) вместо
+   * ringGapBleedKm/dustBleedKm — масштабно-инвариантно для пояса любого
+   * радиуса. Считается один раз в __setup, см. bleedSigmaTu.
+   */
+  bleedFraction?: { rocks: number; dust: number }
+  /** Ближнее гашение пыли как доля ТОЛЩИНЫ кольца (единицы сцены) вместо dustNearFadeKm */
+  dustNearFadeFraction?: number
 }
 
 /**
@@ -297,6 +320,9 @@ class AsteroidRingSystem extends Group {
   private ringInnerTU = 0
   private ringOuterTU = 0
 
+  /** Сигмы размытия кромок (units сцены): из bleedFraction × ширина или из ringGapBleedKm/dustBleedKm — см. __setup */
+  private bleedSigmaTu: { rocks: number; dust: number } = { rocks: 0, dust: 0 }
+
   public constructor(
     model: Actor,
     configOverrides: Partial<AsteroidRingConfig> = {},
@@ -374,6 +400,16 @@ class AsteroidRingSystem extends Group {
     // Радиусы кольца в three-units — для readback профиля (см. updateObject)
     this.ringInnerTU = innerRadius
     this.ringOuterTU = outerRadius
+
+    // Сигмы размытия кромок: доля ширины кольца (масштабно-инвариантно для
+    // пояса) при bleedFraction, иначе прежний путь — км из конфига
+    this.bleedSigmaTu =
+      cfg.bleedFraction !== undefined
+        ? {
+            rocks: cfg.bleedFraction.rocks * (outerRadius - innerRadius),
+            dust: cfg.bleedFraction.dust * (outerRadius - innerRadius)
+          }
+        : { rocks: toThreeJSUnits(cfg.ringGapBleedKm), dust: toThreeJSUnits(cfg.dustBleedKm) }
 
     // --- SectorGrid ---
     const gridConfig: SectorGridConfig = {
@@ -500,8 +536,9 @@ class AsteroidRingSystem extends Group {
     // Радиус планеты в ring-local (начало ring-local = центр планеты, тот же
     // источник, что у RingShader). Прокидываем в материалы камней НЕЗАВИСИМО от
     // пыли: тень камней (ringDustPlanetShadow) не должна отключаться вместе с
-    // дымкой. 0 при отсутствии планеты → тень выключена.
-    const planetRadiusKm = this.model.parent?.physicalObject?.getAttribute('radius', 0) ?? 0
+    // дымкой. 0 при отсутствии планеты → тень выключена. Пояс без родителя
+    // передаёт planetRadiusKm явно (обычно 0); кольца читают родителя как раньше.
+    const planetRadiusKm = cfg.planetRadiusKm ?? (this.model.parent?.physicalObject?.getAttribute('radius', 0) ?? 0)
     const planetRadius = toThreeJSUnits(planetRadiusKm)
     const l0Mat = this.pool.geometryMaterial
     for (const uniforms of [l0Mat.uniforms, this.pool.billboardMaterial.uniforms]) {
@@ -513,7 +550,8 @@ class AsteroidRingSystem extends Group {
       const dustScaleHeight = toThreeJSUnits(cfg.dustScaleHeightKm)
       // Калибровка спеки: tau грейзинг-луча через всё кольцо в средней плоскости = dustTauGrazing
       const dustDensity = cfg.dustTauGrazing / (outerRadius - innerRadius)
-      const dustNearFade = toThreeJSUnits(cfg.dustNearFadeKm)
+      const dustNearFade =
+        cfg.dustNearFadeFraction !== undefined ? cfg.dustNearFadeFraction * thickness : toThreeJSUnits(cfg.dustNearFadeKm)
       const dustPlanetRadius = planetRadius
 
       this.dustVolume = new RingDustVolume({
@@ -561,8 +599,12 @@ class AsteroidRingSystem extends Group {
       uniforms.uBandTintStrength.value = cfg.bandTintStrength
     }
 
-    // --- Поворот ---
-    this.rotateX(degToRad(90))
+    // --- Поворот в экваториальную плоскость планеты ---
+    // 'system' (пояс без родителя): орбитальная плоскость движка уже XZ,
+    // поворот не нужен (см. докблок AsteroidRingConfig.frame)
+    if ((cfg.frame ?? 'equatorial') === 'equatorial') {
+      this.rotateX(degToRad(90))
+    }
 
     this.name = 'AsteroidRingSystem'
   }
@@ -734,7 +776,7 @@ class AsteroidRingSystem extends Group {
     const ringData = this.model.renderingObject?.getAttribute('data') as IRingRenderingObject | undefined
     const profile = readRingAlphaProfile(texture, this.ringInnerTU, this.ringOuterTU, {
       alphaTest: ringData?.alphaTest ?? 0,
-      blurRadius: toThreeJSUnits(this.config.ringGapBleedKm)
+      blurRadius: this.bleedSigmaTu.rocks
     })
     if (profile) {
       // SectorGrid — верное КОЛИЧЕСТВО (вес по средней альфе), генератор —
@@ -784,7 +826,7 @@ class AsteroidRingSystem extends Group {
    */
   private __applyRingBandProfile(texture: Texture): void {
     const bins = readRingBandBins(texture, this.ringInnerTU, this.ringOuterTU, {
-      blurRadius: toThreeJSUnits(this.config.dustBleedKm)
+      blurRadius: this.bleedSigmaTu.dust
     })
     if (!bins) return
 
@@ -810,7 +852,7 @@ class AsteroidRingSystem extends Group {
 
   private __applyDustRadialProfile(texture: Texture): void {
     const bins = readRingAlphaBins(texture, this.ringInnerTU, this.ringOuterTU, {
-      blurRadius: toThreeJSUnits(this.config.dustBleedKm)
+      blurRadius: this.bleedSigmaTu.dust
     })
     if (!bins) return
 

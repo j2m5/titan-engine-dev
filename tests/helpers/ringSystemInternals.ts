@@ -23,6 +23,8 @@ type RingSystemInternals = {
   originGroup: Group | null
   config: AsteroidRingConfig
   densityProfileReady: boolean
+  /** Сигмы размытия кромок (units сцены) — из bleedFraction или ringGapBleedKm/dustBleedKm, см. __setup */
+  bleedSigmaTu: { rocks: number; dust: number }
   __tryBuildDensityProfile(): void
 }
 
