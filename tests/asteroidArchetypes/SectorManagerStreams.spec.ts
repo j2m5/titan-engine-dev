@@ -75,7 +75,7 @@ describe('SectorManager: раскладка активных секторов п
     )
     const manager = new SectorManager(grid, generator, pool, thresholds)
 
-    const info0 = grid.getSectorInfo(0, 0)
+    const info0 = grid.getSectorInfo(0, 0, 0)
     manager.update(info0.centerAngle, info0.centerRadius, 0, vpMatrix, identity, 1.0)
 
     expect(manager.activeCount).toBe(1)
@@ -110,7 +110,7 @@ describe('SectorManager: раскладка активных секторов п
     )
     const manager = new SectorManager(grid, generator, pool, thresholds)
 
-    const info0 = grid.getSectorInfo(0, 0)
+    const info0 = grid.getSectorInfo(0, 0, 0)
     const groupCounts = computeGroupCounts(info0.seed, info0.instanceCount, K)
     // Целенаправленно НЕ стрим 0: адресация
     // Geometry-путь исключительно стримом 0, так что конфликт именно там мог
@@ -150,7 +150,7 @@ describe('SectorManager: раскладка активных секторов п
     )
     const manager = new SectorManager(grid, generator, pool, thresholds)
 
-    const info0 = grid.getSectorInfo(0, 0)
+    const info0 = grid.getSectorInfo(0, 0, 0)
 
     // 1) Активируем как Geometry, большая delta мгновенно осаживает fade к 1.
     manager.update(info0.centerAngle, info0.centerRadius, 0, vpMatrix, identity, 1.0)
@@ -182,7 +182,7 @@ describe('SectorManager: раскладка активных секторов п
     )
     const manager = new SectorManager(grid, generator, pool, thresholds)
 
-    const info0 = grid.getSectorInfo(0, 0)
+    const info0 = grid.getSectorInfo(0, 0, 0)
 
     manager.update(info0.centerAngle, info0.centerRadius, 0, vpMatrix, identity, 1.0)
     // Малая delta — переход к Billboard НЕ успевает завершиться, outgoing ещё жив.

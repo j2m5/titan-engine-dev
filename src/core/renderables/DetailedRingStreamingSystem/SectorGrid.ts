@@ -1,5 +1,6 @@
 import { hashSectorKey, hashUnitOf } from './SeededRandom'
 import { RadialDensityProfile } from './RadialDensityProfile'
+import { triangularMass } from './triangularMass'
 
 /** Размер LRU-кэша слоёв: пояс шириной 16 а.е. даёт ~1.2 млн слоёв, держать их все нельзя. */
 const LAYER_CACHE_LIMIT = 64
@@ -91,7 +92,7 @@ interface SectorGridConfig {
   /**
    * Полная толщина сетки по Y, units сцены. Не задана — толщина 0, поэтому
    * сетка не может стать объёмной случайно: verticalLayerCount всегда 1
-   * независимо от cellHeight (путь колец и старых тестов, построенных до этой оси).
+   * независимо от cellHeight — путь колец, третий индекс ключа не появляется.
    */
   heightExtent?: number
   /**
@@ -120,8 +121,10 @@ class SectorGrid {
   public readonly verticalLayerCount: number
   /** Слоёв больше одного — от этого зависят ключ сектора, метрика расстояния и bounding sphere. */
   public readonly volumetric: boolean
-  private readonly heightExtent: number
-  private readonly cellHeight: number
+  /** Эффективная толщина сетки по Y, units сцены — 0 у плоской сетки (путь колец). */
+  public readonly heightExtent: number
+  /** Эффективная высота ячейки по Y — heightExtent / verticalLayerCount, а не запрошенное значение конфига. */
+  public readonly cellHeight: number
 
   /** LRU по порядку вставки Map: старый ключ — первый в итерации, вытесняется первым. */
   private readonly layerCache = new Map<number, LayerInfo>()
@@ -141,10 +144,15 @@ class SectorGrid {
 
     this.heightExtent = config.heightExtent ?? 0
     const requestedCellHeight = config.cellHeight
-    // Слоёв больше одного только когда явно запрошена ячейка меньше толщины —
-    // иначе (в т.ч. толщина 0 у старых вызовов) ровно один слой, путь колец.
+    // Слоёв больше одного только когда явно запрошена положительная ячейка
+    // меньше толщины — иначе (в т.ч. толщина 0, cellHeight не задан или ≤ 0)
+    // ровно один слой, путь колец. Без проверки на > 0 ноль или отрицательное
+    // значение дали бы verticalLayerCount = Infinity/NaN и нулевые секторы без ошибки.
     this.verticalLayerCount =
-      this.heightExtent > 0 && requestedCellHeight !== undefined && requestedCellHeight < this.heightExtent
+      this.heightExtent > 0 &&
+      requestedCellHeight !== undefined &&
+      requestedCellHeight > 0 &&
+      requestedCellHeight < this.heightExtent
         ? Math.max(1, Math.round(this.heightExtent / requestedCellHeight))
         : 1
     this.volumetric = this.verticalLayerCount > 1
@@ -219,9 +227,10 @@ class SectorGrid {
 
   /**
    * Возвращает информацию о секторе по ключу (layerIndex, angleIndex, yIndex).
-   * yIndex по умолчанию 0 — единственный валидный индекс у плоской сетки.
+   * yIndex обязателен — у плоской сетки единственный валидный индекс 0, но
+   * дефолт-в-ноль на объёмной сетке молча подменял бы вызов нижним слоем.
    */
-  public getSectorInfo(layerIndex: number, angleIndex: number, yIndex: number = 0): SectorInfo {
+  public getSectorInfo(layerIndex: number, angleIndex: number, yIndex: number): SectorInfo {
     if (yIndex < 0 || yIndex >= this.verticalLayerCount) {
       throw new RangeError(
         `SectorGrid.getSectorInfo: индекс слоя по высоте ${yIndex} вне диапазона [0, ${this.verticalLayerCount})`
@@ -268,15 +277,26 @@ class SectorGrid {
     const weight = this.densityProfile
       ? this.densityProfile.weightForBand(layer.innerRadius, layer.outerRadius)
       : 1
-    const weighted = area * this.config.densityPerUnit * weight
+    // Доля камней колонки, приходящаяся на эту ячейку по высоте. У плоской
+    // сетки ячейка — вся колонка, вес единица: счёт колец не меняется
+    const verticalWeight = this.volumetric ? triangularMass(minY, maxY, halfHeight) : 1
+    const weighted = area * this.config.densityPerUnit * weight * verticalWeight
 
     // Ключ и сид несут третий индекс только у объёмной сетки — у плоской
     // (кольца) строка и сид побайтно те же, что до вертикальной оси.
     const key = this.volumetric
       ? `${layerIndex}_${normalizedAngleIndex}_${yIndex}`
       : `${layerIndex}_${normalizedAngleIndex}`
+    // Угловой индекс на масштабе пояса достигает ~5·10⁸ — composite-ключ
+    // normalizedAngleIndex * verticalLayerCount + yIndex вышел бы за пределы
+    // uint32, а hashSectorKey мешает байты через побитовые операции (ToInt32
+    // берёт число по модулю 2^32): разные ячейки схлопнулись бы в один seed.
+    // Угол и высота хешируются раздельно и объединяются xor — оба вклада сами
+    // по себе в пределах uint32 при любом yIndex.
     const seed = this.volumetric
-      ? hashSectorKey(this.config.ringId, layerIndex, normalizedAngleIndex * this.verticalLayerCount + yIndex)
+      ? (hashSectorKey(this.config.ringId, layerIndex, normalizedAngleIndex) ^
+          Math.imul(yIndex + 1, 0x9e3779b1)) >>>
+        0
       : hashSectorKey(this.config.ringId, layerIndex, normalizedAngleIndex)
 
     // 0.5 — прежний порог округления колец, не трогаем: выше него счёт побайтно

@@ -141,8 +141,11 @@ class SectorManager {
 
     const center = sectorCenter(bounds)
     // Вычитание — в double, до float32-записи атрибута: и центр сектора, и
-    // начало могут быть десятками а.е., а их разность мала
-    this._origin.set(center.x - origin.x, 0, center.z - origin.z)
+    // начало могут быть десятками а.е., а их разность мала. Y тоже участвует:
+    // у объёмной сетки центр ячейки не в средней плоскости, а генератор
+    // вычитает его из высоты камня (relativeToSector) — без origin.y камни
+    // осели бы к нулю независимо от реальной высоты ячейки.
+    this._origin.set(center.x - origin.x, center.y - origin.y, center.z - origin.z)
     for (const a of allocations) {
       this.pool.writeOrigins(a.stream, a.offset, a.count, this._origin)
     }

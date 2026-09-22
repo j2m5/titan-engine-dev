@@ -61,7 +61,7 @@ describe('SectorManager: паритет числа камней между ти�
    */
   it('у каждого импостора есть геометрический двойник: число камней сектора совпадает в обоих тирах', () => {
     const { manager, pool, grid } = makeManager()
-    const info0 = grid.getSectorInfo(0, 0)
+    const info0 = grid.getSectorInfo(0, 0, 0)
 
     // Дальше l0MaxDistance, но ближе l1MaxDistance → сектор поднимается как Billboard.
     manager.update(info0.centerAngle, info0.centerRadius + 7, 0, vpMatrix, identity, 1.0)
@@ -82,7 +82,7 @@ describe('SectorManager: паритет числа камней между ти�
    */
   it('множитель плотности билборда не превышает геометрический', () => {
     const { manager, pool, grid } = makeManager()
-    const info0 = grid.getSectorInfo(0, 0)
+    const info0 = grid.getSectorInfo(0, 0, 0)
 
     manager.update(info0.centerAngle, info0.centerRadius, 0, vpMatrix, identity, 1.0)
     const geometryCount = pool.getPressureInfo().l0.used

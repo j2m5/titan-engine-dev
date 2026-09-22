@@ -44,7 +44,7 @@ describe('SectorGrid — стохастический счёт под флаго
 
   // Площадь сектора (50, 0) той же сетки — общий делитель для всех densityPerUnit ниже
   const probeArea: number = (() => {
-    const info = grid(1).getSectorInfo(50, 0)
+    const info = grid(1).getSectorInfo(50, 0, 0)
     return 0.5 * (info.bounds.maxRadius ** 2 - info.bounds.minRadius ** 2) * (info.bounds.maxAngle - info.bounds.minAngle)
   })()
 
@@ -54,7 +54,7 @@ describe('SectorGrid — стохастический счёт под флаго
     let sum = 0
     const n = 4000
 
-    for (let a = 0; a < n; a++) sum += g.getSectorInfo(50, a).instanceCount
+    for (let a = 0; a < n; a++) sum += g.getSectorInfo(50, a, 0).instanceCount
 
     expect(sum / n).toBeGreaterThan(0.15)
     expect(sum / n).toBeLessThan(0.25)
@@ -63,13 +63,13 @@ describe('SectorGrid — стохастический счёт под флаго
   it('флаг включён: счёт детерминирован по ключу сектора', () => {
     const g = grid(0.2, true)
 
-    expect(g.getSectorInfo(50, 123).instanceCount).toBe(g.getSectorInfo(50, 123).instanceCount)
+    expect(g.getSectorInfo(50, 123, 0).instanceCount).toBe(g.getSectorInfo(50, 123, 0).instanceCount)
   })
 
   it('при большой плотности — прежнее округление независимо от флага', () => {
     for (const stochasticCount of [false, true]) {
       const g = grid(500, stochasticCount)
-      const info = g.getSectorInfo(50, 0)
+      const info = g.getSectorInfo(50, 0, 0)
       const area: number =
         0.5 * (info.bounds.maxRadius ** 2 - info.bounds.minRadius ** 2) * (info.bounds.maxAngle - info.bounds.minAngle)
 
@@ -81,14 +81,14 @@ describe('SectorGrid — стохастический счёт под флаго
     for (const stochasticCount of [false, true]) {
       const g = grid(0.7 / probeArea, stochasticCount)
 
-      for (let a = 0; a < 30; a++) expect(g.getSectorInfo(50, a).instanceCount).toBe(1)
+      for (let a = 0; a < 30; a++) expect(g.getSectorInfo(50, a, 0).instanceCount).toBe(1)
     }
   })
 
   it('флаг выключен (дефолт): weighted = 0.3 всегда 0 — прежний код колец', () => {
     const g = grid(0.3 / probeArea)
 
-    for (let a = 0; a < 30; a++) expect(g.getSectorInfo(50, a).instanceCount).toBe(0)
+    for (let a = 0; a < 30; a++) expect(g.getSectorInfo(50, a, 0).instanceCount).toBe(0)
   })
 
   it('флаг включён: weighted = 0.3 разыгрывается по хешу сектора — оба исхода достижимы', () => {
@@ -103,7 +103,7 @@ describe('SectorGrid — стохастический счёт под флаго
         densityPerUnit: 0.3 / probeArea,
         stochasticCount: true
       })
-      outcomes.add(g.getSectorInfo(50, 0).instanceCount)
+      outcomes.add(g.getSectorInfo(50, 0, 0).instanceCount)
     }
 
     expect(outcomes.has(0)).toBe(true)

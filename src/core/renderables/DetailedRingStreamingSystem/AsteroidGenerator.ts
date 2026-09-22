@@ -1,5 +1,4 @@
 import { SeededRandom, hashSectorKey } from './SeededRandom'
-import { triangularHeight } from './triangularHeight'
 import { sectorCenter, type SectorBounds } from './SectorGrid'
 import { RadialDensityProfile } from './RadialDensityProfile'
 import type { AsteroidProfileName } from './AsteroidProfiles'
@@ -67,6 +66,11 @@ interface GeneratorConfig {
    * километров. Кольца флаг не включают — их матрицы побайтно прежние.
    */
   relativeToSector?: boolean
+  /**
+   * Границы сектора несут собственную полосу по высоте (объёмная сетка).
+   * false — высота разыгрывается по всей толщине треугольным законом, как у колец.
+   */
+  volumetric?: boolean
 }
 
 /**
@@ -253,6 +257,8 @@ class AsteroidGenerator {
     const center = relative ? sectorCenter(bounds) : null
     const centerX = center ? center.x : 0
     const centerZ = center ? center.z : 0
+    const centerY = center ? center.y : 0
+    const volumetric = this.config.volumetric === true
 
     for (let i = 0; i < count; i++) {
       // Позиция по радиусу: с профилем — importance sampling ∝ альфе (камни
@@ -267,10 +273,12 @@ class AsteroidGenerator {
       // Относительно центра сектора: центр — в double, вычитание до float32-записи
       const px: number = relative ? x - centerX : x
       const pz: number = relative ? z - centerZ : z
-      // Вертикаль: треугольное распределение (см. triangularHeight) — пик в средней
-      // плоскости, линейный спад к краям. Равномерный слэб на высокой плотности
-      // рисовал «стенку» с плоскими гранями сверху/снизу; мягкий спад её гасит.
-      const y = triangularHeight(rng, halfThickness)
+      // Внутри ячейки высота равномерна: профиль колонки задан числом камней в
+      // ячейке (см. triangularMass). Два вызова rng в обеих ветках — поток
+      // случайных чисел у колец не сдвигается ни на вызов
+      const u = rng.next()
+      const v = rng.next()
+      const y = volumetric ? bounds.minY + u * (bounds.maxY - bounds.minY) - centerY : (u + v - 1) * halfThickness
 
       // Поворот: случайные углы Эйлера
       const rx = rng.next() * Math.PI * 2

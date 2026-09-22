@@ -80,7 +80,7 @@ function buildScene(): { grid: SectorGrid; generator: AsteroidGenerator; pool: I
 describe('SectorManager: Near-LOD по ближайшей точке сектора с гистерезисом', () => {
   it('distClosest ≤ nearEnterDistance → сектор активируется в Near (ненулевые аллокации в Near-стримах)', () => {
     const { grid, pool, manager } = buildScene()
-    const info0 = grid.getSectorInfo(0, 0)
+    const info0 = grid.getSectorInfo(0, 0, 0)
     const vpMatrix = buildTightViewProjection(info0.centerX, info0.centerZ, 1.0)
     const expectedGroupCounts = computeGroupCounts(info0.seed, info0.instanceCount, K)
 
@@ -106,7 +106,7 @@ describe('SectorManager: Near-LOD по ближайшей точке секто�
 
   it('гистерезис: distClosest осциллирует между enter и exit → сектор не флипает (остаётся Near, outgoing не возникает)', () => {
     const { grid, pool, manager } = buildScene()
-    const info0 = grid.getSectorInfo(0, 0)
+    const info0 = grid.getSectorInfo(0, 0, 0)
     const vpMatrix = buildTightViewProjection(info0.centerX, info0.centerZ, 1.0)
     const br = info0.boundingRadius
 
@@ -138,7 +138,7 @@ describe('SectorManager: Near-LOD по ближайшей точке секто�
 
   it('distClosest > nearExitDistance → кросс-фейд Near→Geometry, архетип по стримам k совпадает', () => {
     const { grid, pool, manager } = buildScene()
-    const info0 = grid.getSectorInfo(0, 0)
+    const info0 = grid.getSectorInfo(0, 0, 0)
     const vpMatrix = buildTightViewProjection(info0.centerX, info0.centerZ, 1.0)
     const br = info0.boundingRadius
     const expectedGroupCounts = computeGroupCounts(info0.seed, info0.instanceCount, K)
