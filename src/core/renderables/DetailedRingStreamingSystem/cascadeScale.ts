@@ -2,33 +2,44 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 /** Один пиксель по вертикали: поле зрения 50° на 1080 строк */
 export const PIXEL_RAD: number = 0.8726646259971648 / 1080
-/** Тело крупнее этого числа пикселей рисуется геометрией */
-const GEOMETRY_PX: number = 30
-/** Тело крупнее этого числа пикселей идёт ближним тиром */
-const NEAR_PX: number = 150
-/** Гистерезис выхода из ближнего тира — доля от порога входа */
-const NEAR_EXIT_FACTOR: number = 1.28
-/** Тел в ячейке: ячейка = шаг · ∛512 */
-const CELL_BODIES: number = 512
+/**
+ * Ячейка — доля радиуса заселения. Тир выбирается НА СЕКТОР целиком, поэтому
+ * пороги обязаны быть кратны ячейке, а не угловому размеру тела: при ячейке
+ * крупнее порога геометрии сектор не попал бы в ближний тир никогда.
+ * Пропорция взята у колец (порог билборда = 6 ячеек); 5 оставляет инварианту
+ * LOD запас в 0.09 радиуса при любом шаге.
+ */
+const CELL_PER_RADIUS: number = 5
+/** Доли радиуса заселения для порогов тиров — те же пропорции, что у колец */
+const L0_FRACTION: number = 0.5
+const NEAR_ENTER_FRACTION: number = 0.208
+const NEAR_EXIT_FRACTION: number = 0.267
 const DEFAULT_CASCADE_COUNT: number = 3
 
 /** Один класс размеров со своей сеткой, радиусом и порогами */
 interface CascadeSpec {
   /** Границы класса по размеру тела, км */
   sizeRangeKm: [number, number]
-  /** Геометрическое среднее класса, км — от него считаются радиусы и пороги */
+  /** Геометрическое среднее класса, км — от него считаются радиус и пороги */
   typicalSizeKm: number
-  /** Радиус заселения (тело даёт один пиксель), км */
+  /** Радиус заселения: дистанция, на которой типичное тело даёт один пиксель, км */
   populationRadiusKm: number
-  /** Среднее расстояние между телами класса, км */
+  /** Среднее расстояние между телами класса в средней плоскости, км */
   spacingKm: number
   cellSizeKm: number
   cellHeightKm: number
   lodThresholdsKm: { l0: number; l1: number; l0Near: number; l0NearExit: number }
+  /**
+   * Экземпляров на единицу ПЛОЩАДИ сцены: сетка множит его на площадь сектора и
+   * на долю вертикального профиля, поэтому он задаёт итог по всей колонке.
+   * Отсюда полутолщина в числителе — без неё объёмная плотность в средней
+   * плоскости вышла бы во столько раз меньше нужной, во сколько полутолщина
+   * больше шага.
+   */
   densityPerUnit: number
   /** Сколько экземпляров каскад требует при полном заселении своего радиуса */
   instanceDemand: number
-  /** Окно множителя экземпляра относительно общего габарита (sizeRangeKm[1] всего пояса) */
+  /** Окно множителя экземпляра относительно общего габарита (верх диапазона размеров) */
   minScale: number
   maxScale: number
 }
@@ -42,12 +53,15 @@ interface CascadeSpec {
 export function deriveCascades(options: {
   sizeRangeKm: [number, number]
   spacingKm: number
+  /** Полутолщина пояса, км — входит в плотность (см. CascadeSpec.densityPerUnit) */
+  halfThicknessKm: number
   cascadeCount?: number
 }): CascadeSpec[] {
   const [minKm, maxKm] = options.sizeRangeKm
   const count = options.cascadeCount ?? DEFAULT_CASCADE_COUNT
   const ratio = Math.pow(maxKm / minKm, 1 / count)
   const baseTypical = Math.sqrt(minKm * minKm * ratio)
+  const halfThicknessTu = toThreeJSUnits(options.halfThicknessKm)
 
   const specs: CascadeSpec[] = []
   for (let i = 0; i < count; i++) {
@@ -57,9 +71,8 @@ export function deriveCascades(options: {
     const populationRadiusKm = typicalSizeKm / PIXEL_RAD
     // Шаг пропорционален размеру: угловая густота класса не зависит от класса
     const spacingKm = options.spacingKm * (typicalSizeKm / baseTypical)
-    const cellSizeKm = spacingKm * Math.cbrt(CELL_BODIES)
+    const cellSizeKm = populationRadiusKm / CELL_PER_RADIUS
     const spacingTu = toThreeJSUnits(spacingKm)
-    const l0Near = typicalSizeKm / (NEAR_PX * PIXEL_RAD)
 
     specs.push({
       sizeRangeKm: [bandMin, bandMax],
@@ -69,15 +82,13 @@ export function deriveCascades(options: {
       cellSizeKm,
       cellHeightKm: cellSizeKm,
       lodThresholdsKm: {
-        l0: typicalSizeKm / (GEOMETRY_PX * PIXEL_RAD),
+        l0: populationRadiusKm * L0_FRACTION,
         l1: populationRadiusKm,
-        l0Near,
-        l0NearExit: l0Near * NEAR_EXIT_FACTOR
+        l0Near: populationRadiusKm * NEAR_ENTER_FRACTION,
+        l0NearExit: populationRadiusKm * NEAR_EXIT_FRACTION
       },
-      densityPerUnit: 1 / (spacingTu * spacingTu),
-      instanceDemand: Math.round(
-        ((4 / 3) * Math.PI * Math.pow(populationRadiusKm, 3)) / Math.pow(spacingKm, 3)
-      ),
+      densityPerUnit: halfThicknessTu / (spacingTu * spacingTu * spacingTu),
+      instanceDemand: Math.round(((4 / 3) * Math.PI * Math.pow(populationRadiusKm, 3)) / Math.pow(spacingKm, 3)),
       minScale: bandMin / maxKm,
       maxScale: bandMax / maxKm
     })
