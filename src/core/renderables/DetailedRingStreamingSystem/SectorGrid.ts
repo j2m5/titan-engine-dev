@@ -1,6 +1,9 @@
 import { hashSectorKey, hashUnitOf } from './SeededRandom'
 import { RadialDensityProfile } from './RadialDensityProfile'
 
+/** Размер LRU-кэша слоёв: пояс шириной 16 а.е. даёт ~1.2 млн слоёв, держать их все нельзя. */
+const LAYER_CACHE_LIMIT = 64
+
 /**
  * Описание границ одного сектора в полярных координатах
  */
@@ -65,8 +68,11 @@ interface SectorGridConfig {
  */
 class SectorGrid {
   public readonly config: SectorGridConfig
-  public readonly layers: LayerInfo[]
-  public readonly totalSectorCount: number
+  public readonly layerCount: number
+  private readonly layerThickness: number
+
+  /** LRU по порядку вставки Map: старый ключ — первый в итерации, вытесняется первым. */
+  private readonly layerCache = new Map<number, LayerInfo>()
 
   /**
    * Радиальный профиль плотности из альфы текстуры кольца (A-lite). null →
@@ -77,8 +83,20 @@ class SectorGrid {
 
   public constructor(config: SectorGridConfig) {
     this.config = config
-    this.layers = this.buildLayers()
-    this.totalSectorCount = this.layers.reduce((sum, l) => sum + l.angularSectorCount, 0)
+    const ringWidth = config.outerRadius - config.innerRadius
+    this.layerCount = Math.max(1, Math.round(ringWidth / config.cellSize))
+    this.layerThickness = ringWidth / this.layerCount
+  }
+
+  /**
+   * Аналитическая оценка общего числа секторов пояса (площадь / площадь ячейки),
+   * без обхода всех слоёв. Используется только диагностикой (debug stats) —
+   * не совпадает с точной суммой на малом числе слоёв, но верна асимптотически.
+   */
+  public get totalSectorCount(): number {
+    const { innerRadius, outerRadius, cellSize } = this.config
+
+    return Math.round((Math.PI * (outerRadius * outerRadius - innerRadius * innerRadius)) / (cellSize * cellSize))
   }
 
   /**
@@ -89,39 +107,47 @@ class SectorGrid {
     this.densityProfile = profile
   }
 
-  private buildLayers(): LayerInfo[] {
-    const { innerRadius, outerRadius, cellSize } = this.config
-    const ringWidth = outerRadius - innerRadius
-    const layerCount = Math.max(1, Math.round(ringWidth / cellSize))
-    const layerThickness = ringWidth / layerCount
-    const layers: LayerInfo[] = []
+  /**
+   * Слой по индексу — вычисляется на лету (те же формулы, что были в buildLayers),
+   * с LRU-кэшем на LAYER_CACHE_LIMIT слоёв: перебор окна вокруг камеры трогает
+   * только соседние индексы, кэш покрывает это без пересчёта каждый кадр.
+   */
+  public layerAt(index: number): LayerInfo {
+    const cached = this.layerCache.get(index)
+    if (cached) return cached
 
-    for (let i = 0; i < layerCount; i++) {
-      const layerInner = innerRadius + i * layerThickness
-      const layerOuter = layerInner + layerThickness
-      const centerRadius = (layerInner + layerOuter) * 0.5
-      const circumference = 2 * Math.PI * centerRadius
-      const angularSectorCount = Math.max(6, Math.round(circumference / cellSize))
-      const angularStep = (2 * Math.PI) / angularSectorCount
+    const { innerRadius, cellSize } = this.config
+    const layerInner = innerRadius + index * this.layerThickness
+    const layerOuter = layerInner + this.layerThickness
+    const centerRadius = (layerInner + layerOuter) * 0.5
+    const circumference = 2 * Math.PI * centerRadius
+    const angularSectorCount = Math.max(6, Math.round(circumference / cellSize))
+    const angularStep = (2 * Math.PI) / angularSectorCount
 
-      layers.push({
-        index: i,
-        innerRadius: layerInner,
-        outerRadius: layerOuter,
-        centerRadius,
-        angularSectorCount,
-        angularStep
-      })
+    const layer: LayerInfo = {
+      index,
+      innerRadius: layerInner,
+      outerRadius: layerOuter,
+      centerRadius,
+      angularSectorCount,
+      angularStep
     }
 
-    return layers
+    this.layerCache.set(index, layer)
+    if (this.layerCache.size > LAYER_CACHE_LIMIT) {
+      // Map хранит порядок вставки — первый ключ в итерации самый старый
+      const oldestKey = this.layerCache.keys().next().value
+      if (oldestKey !== undefined) this.layerCache.delete(oldestKey)
+    }
+
+    return layer
   }
 
   /**
    * Возвращает информацию о секторе по ключу (layerIndex, angleIndex)
    */
   public getSectorInfo(layerIndex: number, angleIndex: number): SectorInfo {
-    const layer = this.layers[layerIndex]
+    const layer = this.layerAt(layerIndex)
     const normalizedAngleIndex =
       ((angleIndex % layer.angularSectorCount) + layer.angularSectorCount) % layer.angularSectorCount
 
@@ -188,7 +214,16 @@ class SectorGrid {
     const camX = Math.cos(cameraAngle) * cameraRadius
     const camZ = Math.sin(cameraAngle) * cameraRadius
 
-    for (const layer of this.layers) {
+    // Окно слоёв вокруг камеры по радиусу — вместо обхода всех layerCount слоёв пояса
+    const { innerRadius } = this.config
+    const loIndex = Math.max(0, Math.floor((cameraRadius - maxDistance - innerRadius) / this.layerThickness))
+    const hiIndex = Math.min(
+      this.layerCount - 1,
+      Math.ceil((cameraRadius + maxDistance - innerRadius) / this.layerThickness)
+    )
+
+    for (let li = loIndex; li <= hiIndex; li++) {
+      const layer = this.layerAt(li)
       // Быстрая проверка по радиусу: может ли хоть один сектор этого слоя быть в range
       const closestRadial = Math.max(layer.innerRadius, Math.min(layer.outerRadius, cameraRadius))
       const radialDist = Math.abs(closestRadial - cameraRadius)
