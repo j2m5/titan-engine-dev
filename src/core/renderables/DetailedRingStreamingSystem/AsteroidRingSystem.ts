@@ -14,6 +14,7 @@ import { SectorGrid, SectorGridConfig } from './SectorGrid'
 import { AsteroidGenerator, GeneratorConfig } from './AsteroidGenerator'
 import { InstancePool, PoolLayerConfig } from './InstancePool'
 import { SectorManager, LODThresholds } from './SectorManager'
+import { CascadeSet } from './CascadeSet'
 import { FloatingOrigin } from './FloatingOrigin'
 import { assertLodInvariant } from './streamerScale'
 import { RingDustVolume } from './dust/RingDustVolume'
@@ -296,7 +297,7 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
  *
  * Состоит из:
  * - SectorGrid: полярная сетка секторов
- * - SectorManager: lifecycle секторов, LOD-решения
+ * - CascadeSet: список SectorManager (lifecycle секторов, LOD-решения); кольцо — набор из одного
  * - InstancePool: GPU-буферы (L0 geometry + L1 billboard)
  * - AsteroidGenerator: детерминированная процедурная генерация
  */
@@ -306,7 +307,7 @@ class AsteroidRingSystem extends Group {
   declare private sectorGrid: SectorGrid
   declare private generator: AsteroidGenerator
   declare private pool: InstancePool
-  declare private manager: SectorManager
+  declare private cascades: CascadeSet
 
   private readonly config: AsteroidRingConfig
 
@@ -571,13 +572,11 @@ class AsteroidRingSystem extends Group {
       nearEnterDistance: l0NearEnter,
       nearExitDistance: l0NearExit
     }
-    this.manager = new SectorManager(
-      this.sectorGrid,
-      this.generator,
-      this.pool,
-      thresholds,
-      this.floatingOrigin?.origin ?? null
-    )
+    // Кольцо — каскад из одного менеджера; несколько классов размеров
+    // (арка каскадов) добавят элементы в этот же список над общим пулом.
+    this.cascades = new CascadeSet([
+      new SectorManager(this.sectorGrid, this.generator, this.pool, thresholds, this.floatingOrigin?.origin ?? null)
+    ])
 
     // --- Тень планеты (умбра) — общая для камней/пыли/2D-кольца ---
     // Радиус планеты в ring-local (начало ring-local = центр планеты, тот же
@@ -721,7 +720,7 @@ class AsteroidRingSystem extends Group {
     // Проверить видимость parent'а
     if (!this.isEffectivelyVisible()) {
       if (!this.wasDeactivated) {
-        this.manager.deactivateAll()
+        this.cascades.deactivateAll()
         this.pool.commitUpdates()
         this.wasDeactivated = true
       }
@@ -752,7 +751,7 @@ class AsteroidRingSystem extends Group {
       if (shift) {
         const origin = this.floatingOrigin.origin
         this.originGroup.position.copy(origin)
-        this.manager.rebaseOrigins(shift)
+        this.cascades.rebaseOrigins(shift)
         // Ring-local абсолют для пыли/тени/полос собирается в шейдере как
         // «позиция от начала + смещение начала» (см. uOriginOffset)
         this.pool.geometryMaterial.uniforms.uOriginOffset.value.copy(origin)
@@ -792,7 +791,7 @@ class AsteroidRingSystem extends Group {
     const localToWorld = this.matrixWorld
 
     // Обновить менеджер секторов
-    this.manager.update(cameraAngle, cameraRadius, this._localCamPos.y, this._viewProjMatrix, localToWorld, dt)
+    this.cascades.update(cameraAngle, cameraRadius, this._localCamPos.y, this._viewProjMatrix, localToWorld, dt)
 
     // Коммит изменений в GPU
     this.pool.commitUpdates()
@@ -1004,15 +1003,26 @@ class AsteroidRingSystem extends Group {
     pendingRemoval: number
     poolPressure: ReturnType<InstancePool['getPressureInfo']>
   } {
-    const managerInfo = this.manager.getDebugInfo()
+    const { perCascade, activeSectors } = this.cascades.getDebugInfo()
     const poolInfo = this.pool.getActiveCount()
+
+    // Кольцо — один каскад, сумма по perCascade численно совпадает с прежним managerInfo
+    const sectorsByLod = perCascade.reduce(
+      (sum, info) => ({
+        l0: sum.l0 + info.byLod.l0,
+        near: sum.near + info.byLod.near,
+        l1: sum.l1 + info.byLod.l1
+      }),
+      { l0: 0, near: 0, l1: 0 }
+    )
+    const pendingRemoval = perCascade.reduce((sum, info) => sum + info.pendingRemoval, 0)
 
     return {
       totalSectors: this.sectorGrid.totalSectorCount,
-      activeSectors: managerInfo.activeSectors,
-      sectorsByLod: managerInfo.byLod,
+      activeSectors,
+      sectorsByLod,
       instances: poolInfo,
-      pendingRemoval: managerInfo.pendingRemoval,
+      pendingRemoval,
       poolPressure: this.pool.getPressureInfo()
     }
   }
@@ -1021,7 +1031,7 @@ class AsteroidRingSystem extends Group {
    * Полный сброс (например, при изменении параметров кольца).
    */
   public reset(): void {
-    this.manager.deactivateAll()
+    this.cascades.deactivateAll()
     this.pool.reset()
   }
 }

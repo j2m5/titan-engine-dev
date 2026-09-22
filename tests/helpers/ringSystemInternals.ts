@@ -1,6 +1,7 @@
 import { AsteroidRingSystem, AsteroidRingConfig } from '@/core/renderables/DetailedRingStreamingSystem'
 import { InstancePool } from '@/core/renderables/DetailedRingStreamingSystem/InstancePool'
 import { SectorManager, LODThresholds } from '@/core/renderables/DetailedRingStreamingSystem/SectorManager'
+import { CascadeSet } from '@/core/renderables/DetailedRingStreamingSystem/CascadeSet'
 import { AsteroidGenerator, GeneratorConfig } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidGenerator'
 import { SectorGrid } from '@/core/renderables/DetailedRingStreamingSystem/SectorGrid'
 import { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
@@ -14,7 +15,7 @@ import type { Group } from 'three'
  */
 type RingSystemInternals = {
   pool: InstancePool
-  manager: SectorManager
+  cascades: CascadeSet
   generator: AsteroidGenerator
   sectorGrid: SectorGrid
   dustVolume: RingDustVolume | null
