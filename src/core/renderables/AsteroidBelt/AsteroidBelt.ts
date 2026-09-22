@@ -34,6 +34,8 @@ class AsteroidBelt extends Group {
   // TitanThree/three-types.d.ts) — приватное поле того же имени ломает наследование
   private readonly actor: Actor
   private readonly params: AsteroidBeltParameters
+  /** Один профиль на камни стримера и на дальний слой пыли — щели и сгущения совпадают */
+  private readonly densityProfile: Float32Array
   private readonly depthVolumeRegistry: DepthVolumeRegistry | null
 
   private readonly innerRadiusTu: number
@@ -55,6 +57,7 @@ class AsteroidBelt extends Group {
     this.actor = model
     this.depthVolumeRegistry = depthVolumeRegistry
     this.params = asteroidBeltParameters(model)
+    this.densityProfile = buildBeltDensityProfile(this.params.structure)
 
     this.innerRadiusTu = toThreeJSUnits(this.params.innerRadiusKm)
     this.outerRadiusTu = toThreeJSUnits(this.params.outerRadiusKm)
@@ -89,6 +92,9 @@ class AsteroidBelt extends Group {
       maxSteps: 16,
       planetRadius: 0,
       model: this.actor,
+      // Звезда в начале координат пояса: лепесток дымки — по точке марша
+      lightAtOrigin: true,
+      radialProfile: this.densityProfile,
       registry: this.depthVolumeRegistry ?? undefined
     })
   }
@@ -104,7 +110,7 @@ class AsteroidBelt extends Group {
       planetRadiusKm: 0,
       frame: 'system',
       relativeOrigin: true,
-      densityProfileSource: buildBeltDensityProfile(p.structure),
+      densityProfileSource: this.densityProfile,
       densityPerUnit: scale.densityPerUnit,
       cellSizeKm: scale.cellSizeKm,
       lodThresholdsKm: scale.lodThresholdsKm,

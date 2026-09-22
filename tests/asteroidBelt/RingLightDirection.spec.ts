@@ -23,6 +23,7 @@ import { Actor } from '@/core/models/Actor'
 import type { IAsteroidBeltRenderingObject } from '@/core/models/types'
 import type { UpdateContext } from '@/core/UpdateContext'
 import { internalsOf, poolOf } from '../helpers/ringSystemInternals'
+import type { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
 
 const makeBeltActor = (): Actor =>
   ({
@@ -135,5 +136,29 @@ describe('AsteroidBelt: дальний слой пыли получает нап
     expect(dir.x).toBeCloseTo(-1, 6)
     expect(dir.y).toBeCloseTo(0, 6)
     expect(dir.z).toBeCloseTo(0, 6)
+  })
+
+  it('дальний слой пыли: свет из точки марша (DUST_LIGHT_AT_ORIGIN) и тот же профиль щелей, что у камней', () => {
+    const data: IAsteroidBeltRenderingObject = {
+      ...beltData,
+      structure: { edgeSoftness: 0, gaps: [{ at: 0.5, width: 0.02, depth: 0.85 }], clumps: [] }
+    }
+    const actor = {
+      placement: null,
+      renderingObject: { getAttribute: (): unknown => data },
+      getAttribute: (key: string, fallback: unknown = ''): unknown => (key === 'categoryId' ? 11 : fallback)
+    } as unknown as Actor
+    const belt = new AsteroidBelt(actor)
+    belt.updateMatrixWorld(true)
+    frameAt(belt, fromAstronomicalUnits(50), 0, 0)
+
+    type Internals = { dustVolume: RingDustVolume; streamer: AsteroidRingSystem | null }
+    const { dustVolume, streamer } = belt as unknown as Internals
+    expect(dustVolume.dustMaterial.defines.DUST_LIGHT_AT_ORIGIN).toBe('1')
+    expect(dustVolume.dustMaterial.uniforms.uDustRadialMapScale.value).toBeGreaterThan(0)
+
+    expect(streamer).not.toBeNull()
+    const rocks = poolOf(streamer!).geometryMaterial.uniforms
+    expect(rocks.uDustRadialMapScale.value).toBe(dustVolume.dustMaterial.uniforms.uDustRadialMapScale.value)
   })
 })

@@ -154,13 +154,17 @@ const ringDustCoreGlsl = `
 
   // Цвет дымки: базовый + мягкий forward-scattering буст в сторону звезды.
   // Единственный прямой член света звезды на пыль — красится целиком.
-  vec3 ringDustHaze(vec3 rayDir) {
-    float sun = pow(max(dot(rayDir, uDustLightDirRing), 0.0), 4.0);
+  // sun — доля прямого лепестка [0, 1]: pow(dot(луч, на звезду), 4)
+  vec3 ringDustHazeSun(float sun) {
     #ifdef USE_LIGHT_TINT
       return uDustColor * (0.75 + 0.45 * sun) * uLightColor;
     #else
       return uDustColor * (0.75 + 0.45 * sun);
     #endif
+  }
+
+  vec3 ringDustHaze(vec3 rayDir) {
+    return ringDustHazeSun(pow(max(dot(rayDir, uDustLightDirRing), 0.0), 4.0));
   }
 
   // Тень планеты на пыль: аналитический теневой цилиндр вдоль направления на

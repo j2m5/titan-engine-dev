@@ -38,16 +38,28 @@ import { resolveLightTint } from '@/core/helpers/lightSource'
  * CPU-зеркало цикла марша: tauMarch в tests/ringDust/tauMirror.ts —
  * менять строго синхронно.
  */
+interface RingDustRaymarchOptions {
+  /**
+   * Светило в начале ring-local (пояс вокруг звезды): прямой лепесток дымки
+   * считается по направлению на звезду из каждой точки марша, а не по
+   * uDustLightDirRing. Кольца у планеты — false: текст программы прежний.
+   */
+  lightAtOrigin?: boolean
+}
+
 class RingDustRaymarchMaterial extends ShaderMaterial {
   /**
    * `model` — актор кольца (тот же вход, что у камней; резолвер сам
    * поднимается к корню дерева); `undefined` — тинт выключен.
    */
-  public constructor(model?: Actor) {
+  public constructor(model?: Actor, options: RingDustRaymarchOptions = {}) {
     const lightTint = model ? resolveLightTint(model) : { active: false, color: new Color(1, 1, 1) }
 
     super({
-      defines: { ...(lightTint.active && { USE_LIGHT_TINT: '1' }) },
+      defines: {
+        ...(lightTint.active && { USE_LIGHT_TINT: '1' }),
+        ...(options.lightAtOrigin && { DUST_LIGHT_AT_ORIGIN: '1' })
+      },
       uniforms: {
         uDustColor: { value: new Color(0x9b968c) },
         // Цвет света звезды (lightTint) — per-instance объект, не общий модульный Uniform
@@ -175,6 +187,9 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
 
           float tau = 0.0;
           float litTau = 0.0; // τ, взвешенный тенью планеты (для цвета, не для alpha)
+          #ifdef DUST_LIGHT_AT_ORIGIN
+            float sunTau = 0.0; // τ, взвешенный прямым лепестком к звезде в начале координат
+          #endif
           float marched = 0.0;
           // 64 — жёсткий потолок GLSL-цикла (граница обязана быть константой):
           // uDustMaxSteps выше 64 молча обрезается. CPU-зеркало tauMarch потолка
@@ -188,6 +203,11 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
             tau += contrib;
             // Тень планеты и самозатенение слоя кольца — на каждом шаге
             litTau += contrib * ringDustPlanetShadow(p) * ringLayerShadow(p);
+            #ifdef DUST_LIGHT_AT_ORIGIN
+              // Звезда в начале ring-local: направление на неё своё в каждой точке марша
+              vec3 toStar = -p / max(length(p), 1e-6);
+              sunTau += contrib * pow(max(dot(rayDir, toStar), 0.0), 4.0);
+            #endif
             marched = float(i) + 1.0;
             // early-exit: насыщение непрозрачности
             if (1.0 - exp(-tau) > 0.995) break;
@@ -212,7 +232,12 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
           // Аддитивный вклад: премультиплай альфой уже делает блендер
           // (SrcAlpha, One), поэтому цвет отдаём как есть, интенсивность в alpha.
           // Тень планеты затемняет цвет (litFrac), но не непрозрачность (alpha)
-          gl_FragColor = vec4(ringDustHaze(rayDir) * litFrac, alpha);
+          #ifdef DUST_LIGHT_AT_ORIGIN
+            vec3 haze = ringDustHazeSun(tau > 0.0 ? sunTau / tau : 0.0);
+          #else
+            vec3 haze = ringDustHaze(rayDir);
+          #endif
+          gl_FragColor = vec4(haze * litFrac, alpha);
         }
       `,
       side: BackSide,
@@ -225,3 +250,4 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
 }
 
 export { RingDustRaymarchMaterial }
+export type { RingDustRaymarchOptions }

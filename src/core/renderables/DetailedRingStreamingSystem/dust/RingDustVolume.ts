@@ -1,5 +1,6 @@
 import { Color, Mesh, SphereGeometry, type Texture, type Vector2, Vector3 } from 'three'
 import { RingDustRaymarchMaterial } from './RingDustRaymarchMaterial'
+import { createDustRadialTexture } from './DustRadialProfile'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import type { Disposable } from '@/core/lifecycle/Disposable'
 import { DEPTH_VOLUME_LAYER, type DepthVolume } from '@/core/graphic/passes/DepthVolume'
@@ -37,6 +38,13 @@ interface RingDustVolumeConfig {
   planetRadius: number
   /** Актор кольца — вход подписки на цвет света звезды (lightTint); undefined — тинт выключен. */
   model?: Actor
+  /** Светило в начале ring-local (пояс): прямой лепесток по точке марша, см. RingDustRaymarchOptions */
+  lightAtOrigin?: boolean
+  /**
+   * Радиальный профиль плотности пыли (бины ≥ 0 по u = (r − inner)/(outer − inner));
+   * без него модуляция выключена. Кольцо получает его позже из альфы текстуры.
+   */
+  radialProfile?: Float32Array
   /**
    * Реестр пасса DepthVolumePass: объём регистрируется при создании и снимается в
    * dispose(). Без реестра объём в графе есть, но не рисуется (пасс о нём не
@@ -67,7 +75,7 @@ class RingDustVolume extends Mesh implements DepthVolume, Disposable {
   public constructor(config: RingDustVolumeConfig) {
     const geometry = new SphereGeometry(config.outerRadius * RADIAL_PADDING, 32, 16)
 
-    const material = new RingDustRaymarchMaterial(config.model)
+    const material = new RingDustRaymarchMaterial(config.model, { lightAtOrigin: config.lightAtOrigin ?? false })
     super(geometry, material)
 
     this.dustMaterial = material
@@ -84,6 +92,12 @@ class RingDustVolume extends Mesh implements DepthVolume, Disposable {
     this.dustMaterial.uniforms.uDustNearFade.value = config.nearFade
     this.dustMaterial.uniforms.uDustMaxSteps.value = config.maxSteps
     this.dustMaterial.uniforms.uDustPlanetRadius.value = config.planetRadius
+
+    const radial = config.radialProfile ? createDustRadialTexture(config.radialProfile) : null
+    if (radial) {
+      this.dustMaterial.uniforms.uDustRadialMap.value = radial.texture
+      this.dustMaterial.uniforms.uDustRadialMapScale.value = radial.scale
+    }
 
     // Порядок относительно 2D-текстуры кольца и камней задаёт не renderOrder,
     // а сам пасс: гало рисуется после всей сцены, поверх готового кадра
