@@ -222,6 +222,15 @@ interface AsteroidRingConfig {
    */
   densityProfileSource?: Float32Array
   /**
+   * Высота вертикального слоя сетки секторов в км; не задана или ≥ толщины —
+   * один слой на всю толщину (плоская сетка, прежний путь колец). Задана и
+   * меньше толщины — объёмная сетка (несколько слоёв по Y), и генератор
+   * обязан рисовать высоту камня ВНУТРИ своей ячейки (см. GeneratorConfig.volumetric
+   * в __setup): порознь эти два флага размазали бы камни по всей толщине
+   * вокруг центра каждой ячейки.
+   */
+  cellHeightKm?: number
+  /**
    * Средний период вращения камней вокруг своей оси, часы; 0 (дефолт) — вращение
    * выключено (uSpinPeriod 0, GLSL-ветка не исполняется — прежний вид). Конверсия
    * в секунды симуляции (×3600) — на CPU при установке юниформа (см. __setup).
@@ -452,8 +461,9 @@ class AsteroidRingSystem extends Group {
       ringId: cfg.ringId,
       densityPerUnit: cfg.densityPerUnit,
       stochasticCount: cfg.stochasticCount,
-      heightExtent: thickness
-      // cellHeight не задан — один вертикальный слой на всю толщину и у кольца, и у пояса
+      heightExtent: thickness,
+      // не задан — один вертикальный слой на всю толщину (прежний путь колец)
+      cellHeight: cfg.cellHeightKm !== undefined ? toThreeJSUnits(cfg.cellHeightKm) : undefined
     }
     this.sectorGrid = new SectorGrid(gridConfig)
 
@@ -464,7 +474,10 @@ class AsteroidRingSystem extends Group {
       maxScale: cfg.maxScale,
       // Раскладка по архетипам с учётом размера камня (см. AsteroidGenerator.pickArchetype)
       profile: cfg.profile,
-      relativeToSector: cfg.relativeOrigin
+      relativeToSector: cfg.relativeOrigin,
+      // Объёмность одна на сетку и генератор: врозь они дают камни, размазанные
+      // по всей толщине вокруг центра ячейки
+      volumetric: this.sectorGrid.volumetric
     }
     this.generator = new AsteroidGenerator(genConfig)
 

@@ -287,12 +287,8 @@ class SectorGrid {
     const key = this.volumetric
       ? `${layerIndex}_${normalizedAngleIndex}_${yIndex}`
       : `${layerIndex}_${normalizedAngleIndex}`
-    // Угловой индекс на масштабе пояса достигает ~5·10⁸ — composite-ключ
-    // normalizedAngleIndex * verticalLayerCount + yIndex вышел бы за пределы
-    // uint32, а hashSectorKey мешает байты через побитовые операции (ToInt32
-    // берёт число по модулю 2^32): разные ячейки схлопнулись бы в один seed.
-    // Угол и высота хешируются раздельно и объединяются xor — оба вклада сами
-    // по себе в пределах uint32 при любом yIndex.
+    // Угол и высота хешируются раздельно и объединяются xor — оба вклада
+    // остаются в пределах uint32 при любом yIndex.
     const seed = this.volumetric
       ? (hashSectorKey(this.config.ringId, layerIndex, normalizedAngleIndex) ^
           Math.imul(yIndex + 1, 0x9e3779b1)) >>>

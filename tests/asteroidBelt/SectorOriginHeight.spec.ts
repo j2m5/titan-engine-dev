@@ -54,7 +54,7 @@ describe('SectorManager: origin несёт высоту ячейки (объём
     expect(info.instanceCount).toBeGreaterThan(0)
 
     const generator = new AsteroidGenerator({
-      thickness: gridConfig.heightExtent as number,
+      thickness: gridConfig.heightExtent ?? 0,
       minScale: 0.5,
       maxScale: 1.0,
       relativeToSector: true,
