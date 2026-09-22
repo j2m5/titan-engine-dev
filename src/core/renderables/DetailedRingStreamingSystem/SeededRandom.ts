@@ -50,4 +50,13 @@ function hashSectorKey(ringId: number, layerIndex: number, angleIndex: number): 
   return h >>> 0
 }
 
-export { SeededRandom, hashSectorKey }
+/**
+ * Детерминированное [0,1) от seed и «соли» — для разыгрывания дробного счёта
+ * без создания отдельного SeededRandom на каждый вызов.
+ */
+function hashUnit(seed: number, salt: number): number {
+  const rng = new SeededRandom((seed ^ Math.imul(salt, 0x27d4eb2d)) | 0)
+  return rng.next()
+}
+
+export { SeededRandom, hashSectorKey, hashUnit }

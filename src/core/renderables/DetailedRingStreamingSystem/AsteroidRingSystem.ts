@@ -11,6 +11,7 @@ import { SectorGrid, SectorGridConfig } from './SectorGrid'
 import { AsteroidGenerator, GeneratorConfig } from './AsteroidGenerator'
 import { InstancePool, PoolLayerConfig } from './InstancePool'
 import { SectorManager, LODThresholds } from './SectorManager'
+import { assertLodInvariant } from './streamerScale'
 import { RingDustVolume } from './dust/RingDustVolume'
 import { installRingDustDebug, type RockDustUniforms } from './dust/RingDustDebug'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
@@ -447,6 +448,7 @@ class AsteroidRingSystem extends Group {
     this.pool.billboardMaterial.uniforms.uMaxDistance.value = l1MaxDist
 
     // --- SectorManager ---
+    assertLodInvariant(cfg.cellSizeKm, cfg.lodThresholdsKm)
     const thresholds: LODThresholds = {
       l0MaxDistance: l0MaxDist,
       l1MaxDistance: l1MaxDist,
