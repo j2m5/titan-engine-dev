@@ -42,6 +42,11 @@ export function spinAngleForRate(m: number, spinPeriodSeconds: number, t: number
   return (2 * Math.PI * t * (m / 12)) / spinPeriodSeconds
 }
 
+/** Фаза инстанса в оборотах [0, 1): без неё все камни разом проходят исходную позу на каждой волне */
+export function spinPhase(shapeSeed: number): number {
+  return hashSurface11(shapeSeed + 29.29)
+}
+
 /**
  * Свёртка времени симуляции на CPU (double): t = s − floor(s / (12P))·(12P),
  * P = uSpinPeriod (сек). См. AsteroidRingSystem.updateObject, приём —
@@ -75,14 +80,14 @@ export function rodrigues(v: Vec3, axis: Vec3, angle: number): Vec3 {
 }
 
 /**
- * Полное зеркало ветки шейдера: угол = 2π·t·(m/12)/uSpinPeriod, поворот
- * shapedPos/shapedNormal вокруг spinAxis. uSpinPeriod <= 0 — вызывающий обязан
- * не вызывать (в шейдере — гейт if).
+ * Полное зеркало ветки шейдера: угол = 2π·(t·(m/12)/uSpinPeriod + фаза),
+ * поворот shapedPos/shapedNormal вокруг spinAxis. uSpinPeriod <= 0 —
+ * вызывающий обязан не вызывать (в шейдере — гейт if).
  */
 export function rockSpin(v: Vec3, shapeSeed: number, spinPeriodSeconds: number, t: number): Vec3 {
   const axis = spinAxis(shapeSeed)
   const m = spinRateSteps(shapeSeed)
-  const angle = spinAngleForRate(m, spinPeriodSeconds, t)
+  const angle = spinAngleForRate(m, spinPeriodSeconds, t) + 2 * Math.PI * spinPhase(shapeSeed)
 
   return rodrigues(v, axis, angle)
 }

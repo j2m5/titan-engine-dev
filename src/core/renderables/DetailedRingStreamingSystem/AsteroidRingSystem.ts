@@ -3,7 +3,7 @@ import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
 import type { IRingRenderingObject } from '@/core/models/types'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
-import { J2000, DAY } from '@/core/constants'
+import { getJ2000SecondsFromJD } from '@/core/helpers/jd'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { readRingAlphaProfile, readRingAlphaBins, readRingBandBins } from './RingAlphaReadback'
 import { createDustRadialTexture } from './dust/DustRadialProfile'
@@ -695,9 +695,9 @@ class AsteroidRingSystem extends Group {
     // этой волне любой per-instance хеш (m/12, см. шейдер) даёт целое число
     // оборотов, свёртка не рвёт фазу. period <= 0 — вращение выключено гейтом
     // в шейдере, время не считаем (деление на 0 не нужно).
-    const spinPeriod = this.pool.geometryMaterial.uniforms.uSpinPeriod.value as number
+    const spinPeriod = this.pool.geometryMaterial.uniforms.uSpinPeriod.value
     if (spinPeriod > 0) {
-      const simSeconds = (ctx.epoch - J2000) * DAY
+      const simSeconds = getJ2000SecondsFromJD(ctx.epoch)
       const wrap = 12 * spinPeriod
       this.pool.geometryMaterial.uniforms.uSpinTime.value = simSeconds - Math.floor(simSeconds / wrap) * wrap
     }

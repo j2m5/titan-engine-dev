@@ -152,7 +152,8 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
         // свёртка uSpinTime (CPU) не рвёт фазу ни одному камню. min(...,18) —
         // страж на случай hash ровно 1 (floor дал бы 13, а не 12)
         float m = min(6.0 + floor(hashSurface11(shapeSeed + 23.23) * 13.0), 18.0);
-        float spinAngle = 2.0 * PI * uSpinTime * (m / 12.0) / uSpinPeriod;
+        // Фаза из хеша: без неё все камни разом проходят исходную позу на каждой волне
+        float spinAngle = 2.0 * PI * (uSpinTime * (m / 12.0) / uSpinPeriod + hashSurface11(shapeSeed + 29.29));
         float cosA = cos(spinAngle);
         float sinA = sin(spinAngle);
         // Родригес: v' = v·cosA + (axis × v)·sinA + axis·(axis·v)·(1 − cosA)

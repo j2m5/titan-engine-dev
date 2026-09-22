@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { PerspectiveCamera, Vector2, WebGLRenderer } from 'three'
-import { rockSpin, rodrigues, spinAxis, spinAngleForRate, spinRateSteps, wrapSpinTime } from './rockSpinMirror'
+import { rockSpin, rodrigues, spinAxis, spinAngleForRate, spinPhase, spinRateSteps, wrapSpinTime } from './rockSpinMirror'
 import { J2000 } from '@/core/constants'
 
 const fakeTexture = { name: 'ring.png' }
@@ -54,7 +54,9 @@ describe('GLSL: вращение камня (InstancedAsteroidShaderTemplate, L0
     expect(v).toContain('hashSurface11(shapeSeed + 19.19)')
     // Ставка вращения — m/12, m ∈ [6,18]: непрерывна через свёртку uSpinTime (12·P)
     expect(v).toContain('float m = min(6.0 + floor(hashSurface11(shapeSeed + 23.23) * 13.0), 18.0);')
-    expect(v).toContain('float spinAngle = 2.0 * PI * uSpinTime * (m / 12.0) / uSpinPeriod;')
+    expect(v).toContain(
+      'float spinAngle = 2.0 * PI * (uSpinTime * (m / 12.0) / uSpinPeriod + hashSurface11(shapeSeed + 29.29));'
+    )
     // Родригес: v' = v·cosA + (axis × v)·sinA + axis·(axis·v)·(1 − cosA) — позиция и нормаль
     expect(v).toContain(
       'shapedPos = shapedPos * cosA + cross(spinAxis, shapedPos) * sinA + spinAxis * dot(spinAxis, shapedPos) * (1.0 - cosA);'
@@ -97,9 +99,23 @@ describe('CPU-зеркало rockSpin (см. rockSpinMirror.ts)', () => {
     }
   })
 
-  it('t = 0 — тождественное преобразование', () => {
+  it('t = 0 — поза равна повороту на фазу из хеша, а не исходной; фазы сидов различны', () => {
+    const phases = new Set<number>()
     for (const seed of seeds) {
       const rotated = rockSpin(v0, seed, 8 * 3600, 0)
+      const expected = rodrigues(v0, spinAxis(seed), 2 * Math.PI * spinPhase(seed))
+      expect(rotated[0]).toBeCloseTo(expected[0], 9)
+      expect(rotated[1]).toBeCloseTo(expected[1], 9)
+      expect(rotated[2]).toBeCloseTo(expected[2], 9)
+      phases.add(Math.round(spinPhase(seed) * 1e6))
+    }
+    expect(phases.size).toBe(seeds.length)
+  })
+
+  it('t = 0 при нулевой фазе — тождественное преобразование', () => {
+    for (const seed of seeds) {
+      const angle = spinAngleForRate(spinRateSteps(seed), 8 * 3600, 0)
+      const rotated = rodrigues(v0, spinAxis(seed), angle)
       expect(rotated[0]).toBeCloseTo(v0[0], 9)
       expect(rotated[1]).toBeCloseTo(v0[1], 9)
       expect(rotated[2]).toBeCloseTo(v0[2], 9)
