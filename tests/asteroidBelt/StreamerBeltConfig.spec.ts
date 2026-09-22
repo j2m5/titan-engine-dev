@@ -16,11 +16,12 @@ vi.mock('@/core/renderables/DetailedRingStreamingSystem/RingAlphaReadback', () =
 }))
 
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
+import { buildBeltDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/beltDensityProfile'
 import { toThreeJSUnits, fromAstronomicalUnits } from '@/core/helpers/scaling'
 import { AU } from '@/core/constants'
 import { Actor } from '@/core/models/Actor'
 import type { IRingRenderingObject } from '@/core/models/types'
-import { internalsOf, poolOf } from '../helpers/ringSystemInternals'
+import { internalsOf, poolOf, densityProfileOf } from '../helpers/ringSystemInternals'
 
 /** Пояс: стаб-актор БЕЗ родителя-планеты (только renderingObject/resources) */
 const makeBeltActor = (data: Partial<IRingRenderingObject> = {}): Actor =>
@@ -126,5 +127,39 @@ describe('AsteroidRingSystem: dustNearFadeFraction — ближнее гашен
     const expected = toThreeJSUnits(internalsOf(system).config.dustNearFadeKm)
 
     expect(internalsOf(system).dustVolume!.dustMaterial.uniforms.uDustNearFade.value).toBeCloseTo(expected, 10)
+  })
+})
+
+describe('AsteroidRingSystem: densityProfileSource — процедурный профиль пояса без текстуры', () => {
+  it('профиль готов сразу после конструктора; в щели вес меньше, чем на чистом участке', () => {
+    const source = buildBeltDensityProfile({ edgeSoftness: 0, gaps: [{ at: 0.5, width: 0.02, depth: 0.85 }], clumps: [] })
+    const system = new AsteroidRingSystem(makeBeltActor(), { densityProfileSource: source })
+    const internals = internalsOf(system)
+
+    expect(internals.densityProfileReady).toBe(true)
+    const gridProfile = densityProfileOf(internals.sectorGrid)
+    expect(gridProfile).not.toBeNull()
+    expect(densityProfileOf(internals.generator)).toBe(gridProfile)
+
+    const inner = toThreeJSUnits(internals.config.innerRadiusKm)
+    const outer = toThreeJSUnits(internals.config.outerRadiusKm)
+    const width = outer - inner
+    const gapCenter = inner + 0.5 * width
+    const gapWeight = gridProfile!.weightForBand(gapCenter - 0.005 * width, gapCenter + 0.005 * width)
+    const clearWeight = gridProfile!.weightForBand(inner + 0.05 * width, inner + 0.07 * width)
+
+    expect(gapWeight).toBeLessThan(clearWeight)
+  })
+
+  it('пыль того же профиля уходит в материалы камней и объём дымки', () => {
+    const source = buildBeltDensityProfile({ edgeSoftness: 0, gaps: [], clumps: [{ at: 0.3, width: 0.05, gain: 1.6 }] })
+    const system = new AsteroidRingSystem(makeBeltActor(), { densityProfileSource: source })
+    const pool = poolOf(system)
+    const dustVolume = internalsOf(system).dustVolume
+
+    expect(pool.geometryMaterial.uniforms.uDustRadialMapScale.value).toBeGreaterThan(0)
+    expect(pool.geometryMaterial.uniforms.uDustRadialMap.value).not.toBeNull()
+    expect(pool.billboardMaterial.uniforms.uDustRadialMap.value).toBe(pool.geometryMaterial.uniforms.uDustRadialMap.value)
+    expect(dustVolume!.dustMaterial.uniforms.uDustRadialMap.value).toBe(pool.geometryMaterial.uniforms.uDustRadialMap.value)
   })
 })

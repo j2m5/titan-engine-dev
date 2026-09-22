@@ -7,6 +7,7 @@ import { resourceStorage } from '@/core/services/ResourceStorage'
 import { readRingAlphaProfile, readRingAlphaBins, readRingBandBins } from './RingAlphaReadback'
 import { createDustRadialTexture } from './dust/DustRadialProfile'
 import { createRingBandTexture } from './dust/RingBandTexture'
+import { RadialDensityProfile } from './RadialDensityProfile'
 import { SectorGrid, SectorGridConfig } from './SectorGrid'
 import { AsteroidGenerator, GeneratorConfig } from './AsteroidGenerator'
 import { InstancePool, PoolLayerConfig } from './InstancePool'
@@ -206,6 +207,13 @@ interface AsteroidRingConfig {
   bleedFraction?: { rocks: number; dust: number }
   /** Ближнее гашение пыли как доля ТОЛЩИНЫ кольца (единицы сцены) вместо dustNearFadeKm */
   dustNearFadeFraction?: number
+  /**
+   * Готовый радиальный профиль плотности пояса (см. buildBeltDensityProfile) —
+   * бины в долях ширины кольца [0, 1]. Если задан, RadialDensityProfile строится
+   * из него сразу в __setup, БЕЗ текстуры кольца (ringGapsFromTexture для этого
+   * пути не читается — у пояса нет 2D-текстуры кольца).
+   */
+  densityProfileSource?: Float32Array
 }
 
 /**
@@ -432,6 +440,16 @@ class AsteroidRingSystem extends Group {
     }
     this.generator = new AsteroidGenerator(genConfig)
 
+    // --- Процедурный профиль плотности пояса (см. densityProfileSource) ---
+    // Готовый массив вместо текстуры: строим сразу, __tryBuildDensityProfile
+    // (путь текстуры) на ready-флаге дальше не сработает.
+    if (cfg.densityProfileSource) {
+      const beltDensityProfile = new RadialDensityProfile(cfg.densityProfileSource, innerRadius, outerRadius)
+      this.sectorGrid.setDensityProfile(beltDensityProfile)
+      this.generator.setDensityProfile(beltDensityProfile)
+      this.densityProfileReady = true
+    }
+
     // --- Плавающее начало (только пояс) ---
     // Ячейка начала — ячейка сетки секторов: переезд редок, а относительные
     // позиции остаются в пределах нескольких ячеек.
@@ -597,6 +615,12 @@ class AsteroidRingSystem extends Group {
       uniforms.uLayerHalfThickness.value = thickness * 0.5
       uniforms.uLayerShadowStrength.value = cfg.layerShadowStrength
       uniforms.uBandTintStrength.value = cfg.bandTintStrength
+    }
+
+    // --- Пыль процедурного профиля пояса — тем же путём, что и профиль текстуры
+    // (см. __applyDustRadialBins), теперь когда пул и объём дымки уже собраны
+    if (cfg.densityProfileSource) {
+      this.__applyDustRadialBins(cfg.densityProfileSource)
     }
 
     // --- Поворот в экваториальную плоскость планеты ---
@@ -856,6 +880,15 @@ class AsteroidRingSystem extends Group {
     })
     if (!bins) return
 
+    this.__applyDustRadialBins(bins)
+  }
+
+  /**
+   * Общая часть текстурного и процедурного (densityProfileSource) путей: бины
+   * альфы → 1D-текстура профиля пыли → юниформы во все три материала модели
+   * RingDust (см. DustRadialProfile). Нечитаемо/вырождено — модуляция не трогается.
+   */
+  private __applyDustRadialBins(bins: Float32Array): void {
     const radial = createDustRadialTexture(bins)
     if (!radial) return
 
