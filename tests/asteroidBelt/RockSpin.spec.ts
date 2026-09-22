@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { PerspectiveCamera, Vector2, WebGLRenderer } from 'three'
-import { rockSpin, rodrigues, spinAxis, spinPeriodHash } from './rockSpinMirror'
+import { rockSpin, rodrigues, spinAxis, spinAngleForRate, spinRateSteps, wrapSpinTime } from './rockSpinMirror'
+import { J2000 } from '@/core/constants'
 
 const fakeTexture = { name: 'ring.png' }
 
@@ -51,8 +52,9 @@ describe('GLSL: вращение камня (InstancedAsteroidShaderTemplate, L0
     expect(v).toContain('hashSurface11(shapeSeed + 13.13)')
     expect(v).toContain('hashSurface11(shapeSeed + 17.17)')
     expect(v).toContain('hashSurface11(shapeSeed + 19.19)')
-    expect(v).toContain('float spinPeriod = uSpinPeriod * (0.5 + hashSurface11(shapeSeed + 23.23));')
-    expect(v).toContain('float spinAngle = 2.0 * PI * uSpinTime / spinPeriod;')
+    // Ставка вращения — m/12, m ∈ [6,18]: непрерывна через свёртку uSpinTime (12·P)
+    expect(v).toContain('float m = min(6.0 + floor(hashSurface11(shapeSeed + 23.23) * 13.0), 18.0);')
+    expect(v).toContain('float spinAngle = 2.0 * PI * uSpinTime * (m / 12.0) / uSpinPeriod;')
     // Родригес: v' = v·cosA + (axis × v)·sinA + axis·(axis·v)·(1 − cosA) — позиция и нормаль
     expect(v).toContain(
       'shapedPos = shapedPos * cosA + cross(spinAxis, shapedPos) * sinA + spinAxis * dot(spinAxis, shapedPos) * (1.0 - cosA);'
@@ -104,21 +106,49 @@ describe('CPU-зеркало rockSpin (см. rockSpinMirror.ts)', () => {
     }
   })
 
-  it('t = один период инстанса — полный оборот, тождественное преобразование', () => {
+  it('ставка вращения m ∈ [6, 18] целыми шагами при любом сиде', () => {
     for (const seed of seeds) {
-      const spinPeriodSeconds = 8 * 3600
-      const instancePeriod = spinPeriodSeconds * (0.5 + spinPeriodHash(seed))
-      const rotated = rockSpin(v0, seed, spinPeriodSeconds, instancePeriod)
-      expect(rotated[0]).toBeCloseTo(v0[0], 6)
-      expect(rotated[1]).toBeCloseTo(v0[1], 6)
-      expect(rotated[2]).toBeCloseTo(v0[2], 6)
+      const m = spinRateSteps(seed)
+      expect(m).toBeGreaterThanOrEqual(6)
+      expect(m).toBeLessThanOrEqual(18)
+      expect(Number.isInteger(m)).toBe(true)
     }
   })
 
-  it('разные сиды дают разные оси/периоды — камни не крутятся синхронно', () => {
+  it('разные сиды дают разные оси/ставки — камни не крутятся синхронно', () => {
     const a = rockSpin(v0, 0.1, 8 * 3600, 100)
     const b = rockSpin(v0, 0.9, 8 * 3600, 100)
     expect(a[0]).not.toBeCloseTo(b[0], 3)
+  })
+
+  it('непрерывность свёртки: для любого m ∈ [6, 18] угол при t = 12·P совпадает с углом при t = 0 (mod 2π)', () => {
+    const spinPeriodSeconds = 8 * 3600
+    const wrap = 12 * spinPeriodSeconds
+    for (let m = 6; m <= 18; m++) {
+      const angleAtZero = spinAngleForRate(m, spinPeriodSeconds, 0)
+      const angleAtWrap = spinAngleForRate(m, spinPeriodSeconds, wrap)
+      const twoPi = 2 * Math.PI
+      const modAtZero = ((angleAtZero % twoPi) + twoPi) % twoPi
+      const modAtWrap = ((angleAtWrap % twoPi) + twoPi) % twoPi
+      expect(modAtWrap).toBeCloseTo(modAtZero, 9)
+    }
+  })
+
+  it('свёртка времени симуляции: t = s − floor(s/12P)·12P, t=0 и t=12P дают одинаковое вращение камня', () => {
+    const seed = 0.37
+    const spinPeriodSeconds = 8 * 3600
+    const wrap = 12 * spinPeriodSeconds
+
+    const atZero = rockSpin(v0, seed, spinPeriodSeconds, wrapSpinTime(0, spinPeriodSeconds))
+    const atOneWrap = rockSpin(v0, seed, spinPeriodSeconds, wrapSpinTime(wrap, spinPeriodSeconds))
+    const atOneWrapPlusBit = rockSpin(v0, seed, spinPeriodSeconds, wrapSpinTime(wrap + 100, spinPeriodSeconds))
+    const atJustBit = rockSpin(v0, seed, spinPeriodSeconds, wrapSpinTime(100, spinPeriodSeconds))
+
+    expect(wrapSpinTime(wrap, spinPeriodSeconds)).toBeCloseTo(0, 9)
+    for (let i = 0; i < 3; i++) {
+      expect(atOneWrap[i]).toBeCloseTo(atZero[i], 9)
+      expect(atOneWrapPlusBit[i]).toBeCloseTo(atJustBit[i], 9)
+    }
   })
 })
 
@@ -139,7 +169,7 @@ describe('AsteroidRingSystem: uSpinPeriod / uSpinTime', () => {
     expect(poolOf(system).geometryMaterial.uniforms.uSpinPeriod.value).toBe(0)
   })
 
-  it('данные кольца задают spinPeriodHours — часы переводятся в секунды сцены (×3600)', () => {
+  it('данные кольца задают spinPeriodHours — часы переводятся в секунды симуляции (×3600)', () => {
     const system = new AsteroidRingSystem(makeRingActor({ spinPeriodHours: 4 }))
     expect(poolOf(system).geometryMaterial.uniforms.uSpinPeriod.value).toBeCloseTo(4 * 3600, 9)
   })
@@ -150,8 +180,8 @@ describe('AsteroidRingSystem: uSpinPeriod / uSpinTime', () => {
     expect(poolOf(system).geometryMaterial.uniforms.uSpinPeriod.value).toBeCloseTo(8 * 3600, 9)
   })
 
-  it('uSpinTime следует ctx.elapsed (секунды сцены, множитель 1 — см. AsteroidRingSystem.updateObject)', () => {
-    const system = new AsteroidRingSystem(makeRingActor(), { spinPeriodHours: 8 })
+  /** Камера в теле кольца, смотрит на центр — для updateObject достаточно валидного кадра */
+  const frameCamera = (system: AsteroidRingSystem, epoch: number): void => {
     const camera = new PerspectiveCamera(50, 1, 0.1, 5000)
     camera.position.set(52, 0, 0)
     camera.lookAt(0, 0, 0)
@@ -159,9 +189,25 @@ describe('AsteroidRingSystem: uSpinPeriod / uSpinTime', () => {
     camera.updateProjectionMatrix()
     camera.matrixWorldInverse.copy(camera.matrixWorld).invert()
 
-    system.updateObject({ delta: 0.016, epoch: 0, elapsed: 12.5, camera } as UpdateContext)
+    system.updateObject({ delta: 0.016, epoch, elapsed: 0, camera } as UpdateContext)
+  }
 
-    expect(poolOf(system).geometryMaterial.uniforms.uSpinTime.value).toBe(12.5)
+  it('uSpinTime — время СИМУЛЯЦИИ от ctx.epoch (юлианские дни), не рендер-часы: +1 сутки при P=8ч даёт 86400 с', () => {
+    const system = new AsteroidRingSystem(makeRingActor(), { spinPeriodHours: 8 })
+    frameCamera(system, J2000 + 1)
+    expect(poolOf(system).geometryMaterial.uniforms.uSpinTime.value).toBeCloseTo(86400, 6)
+  })
+
+  it('uSpinTime сворачивается по 12·P: +5 суток при P=8ч (12P=345600с) даёт 432000 mod 345600 = 86400', () => {
+    const system = new AsteroidRingSystem(makeRingActor(), { spinPeriodHours: 8 })
+    frameCamera(system, J2000 + 5)
+    expect(poolOf(system).geometryMaterial.uniforms.uSpinTime.value).toBeCloseTo(86400, 6)
+  })
+
+  it('spinPeriodHours = 0 — uSpinTime не считается (гейт в шейдере и так закрыт)', () => {
+    const system = new AsteroidRingSystem(makeRingActor())
+    frameCamera(system, J2000 + 5)
+    expect(poolOf(system).geometryMaterial.uniforms.uSpinTime.value).toBe(0)
   })
 })
 
@@ -215,7 +261,7 @@ const BELT_DATA: IAsteroidBeltRenderingObject = {
 }
 
 describe('AsteroidBelt: __createStreamer передаёт spinPeriodHours (часы) стримеру', () => {
-  it('стример пояса получает spinPeriodHours из данных, юниформ — в секундах сцены', () => {
+  it('стример пояса получает spinPeriodHours из данных, юниформ — в секундах симуляции', () => {
     const node = makeFactory().make(beltActor(BELT_DATA)) as PlacedNode
     const belt = node.children.find((c) => c instanceof AsteroidBelt) as unknown as AsteroidBelt
     node.updateMatrixWorld(true)

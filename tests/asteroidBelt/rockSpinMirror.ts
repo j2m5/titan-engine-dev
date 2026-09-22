@@ -1,10 +1,11 @@
 /**
  * CPU-зеркало вращения камня (см. GLSL-ветку `if (uSpinPeriod > 0.0)` в
- * вершиннике InstancedAsteroidShaderTemplate). Ось и хеш периода — та же
+ * вершиннике InstancedAsteroidShaderTemplate). Ось и ставка вращения — та же
  * семья `hashSurface11(shapeSeed + offset)`, что и остальные пер-инстансные
  * хеши шаблона (vTintSeed/vDomainOffset/vTriOffset); shapeSeed сам по себе —
  * не варьинг, а значение из hash13(instanceMatrix[3].xyz), посчитанное в
- * вершиннике один раз на инстанс.
+ * вершиннике один раз на инстанс. Время — время СИМУЛЯЦИИ (ctx.epoch), не
+ * рендер-часы; см. wrapSpinTime и AsteroidRingSystem.updateObject.
  */
 
 export type Vec3 = [number, number, number]
@@ -26,9 +27,29 @@ export function spinAxis(shapeSeed: number): Vec3 {
   return [raw[0] / len, raw[1] / len, raw[2] / len]
 }
 
-/** Хеш периода инстанса ([0, 1)) — период = uSpinPeriod · (0.5 + hash) */
-export function spinPeriodHash(shapeSeed: number): number {
-  return hashSurface11(shapeSeed + 23.23)
+/**
+ * Ставка вращения инстанса — целое m ∈ [6, 18] (шаг 1) из хеша, k = m / 12.
+ * На волне 12·uSpinPeriod любой инстанс делает целое число m оборотов —
+ * свёртка uSpinTime по этой же волне (см. AsteroidRingSystem.updateObject) не
+ * рвёт фазу. min(...,18) — страж на случай hash ровно 1 (floor даёт 13, а не 12).
+ */
+export function spinRateSteps(shapeSeed: number): number {
+  return Math.min(6 + Math.floor(hashSurface11(shapeSeed + 23.23) * 13), 18)
+}
+
+/** Угол поворота по конкретной ставке m (без хеша) — для проверки непрерывности свёртки */
+export function spinAngleForRate(m: number, spinPeriodSeconds: number, t: number): number {
+  return (2 * Math.PI * t * (m / 12)) / spinPeriodSeconds
+}
+
+/**
+ * Свёртка времени симуляции на CPU (double): t = s − floor(s / (12P))·(12P),
+ * P = uSpinPeriod (сек). См. AsteroidRingSystem.updateObject, приём —
+ * BlackHoleImpostor.updateObject.
+ */
+export function wrapSpinTime(simSeconds: number, spinPeriodSeconds: number): number {
+  const wrap = 12 * spinPeriodSeconds
+  return simSeconds - Math.floor(simSeconds / wrap) * wrap
 }
 
 function dot3(a: Vec3, b: Vec3): number {
@@ -54,14 +75,14 @@ export function rodrigues(v: Vec3, axis: Vec3, angle: number): Vec3 {
 }
 
 /**
- * Полное зеркало ветки шейдера: период инстанса = spinPeriodHours · (0.5 +
- * hash), угол = 2π·t/period, поворот shapedPos/shapedNormal вокруг spinAxis.
- * uSpinPeriod <= 0 — вызывающий обязан не вызывать (в шейдере — гейт if).
+ * Полное зеркало ветки шейдера: угол = 2π·t·(m/12)/uSpinPeriod, поворот
+ * shapedPos/shapedNormal вокруг spinAxis. uSpinPeriod <= 0 — вызывающий обязан
+ * не вызывать (в шейдере — гейт if).
  */
 export function rockSpin(v: Vec3, shapeSeed: number, spinPeriodSeconds: number, t: number): Vec3 {
   const axis = spinAxis(shapeSeed)
-  const period = spinPeriodSeconds * (0.5 + spinPeriodHash(shapeSeed))
-  const angle = (2 * Math.PI * t) / period
+  const m = spinRateSteps(shapeSeed)
+  const angle = spinAngleForRate(m, spinPeriodSeconds, t)
 
   return rodrigues(v, axis, angle)
 }

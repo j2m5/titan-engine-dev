@@ -62,10 +62,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uShapeAmpMin: new Uniform(0),
     uShapeAmpMax: new Uniform(0),
     uShapeFreq: new Uniform(1),
-    // Вращение камня вокруг оси из хеша инстанса (см. вершинник ниже). Период —
-    // секунды сцены (0 — выкл, конверсия часы→секунды на CPU, см.
-    // AsteroidRingSystem); время — отдельный от прочих юниформ движка uSpinTime,
-    // те же секунды сцены (UpdateContext.elapsed).
+    // Вращение камня — период/время симуляции, см. объявления в вершиннике
     uSpinPeriod: new Uniform(0),
     uSpinTime: new Uniform(0),
     // Запечённые атрибуты породы (см. чанк AsteroidShape / ArchetypeShape.surfaceAt):
@@ -84,8 +81,10 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uniform float uShapeAmpMin;
     uniform float uShapeAmpMax;
     uniform float uShapeFreq;
-    // Вращение камня: период (сек. сцены, 0 — выкл) и время (сек. сцены,
-    // отдельный от прочих юниформ времени движка — см. AsteroidRingSystem.updateObject)
+    // Вращение камня: uSpinPeriod — номинальный период в секундах СИМУЛЯЦИИ
+    // (часы данных → секунды на CPU, 0 — выкл); uSpinTime — время симуляции
+    // (ctx.epoch, не рендер-часы), свёрнутое на CPU по кратному 12·uSpinPeriod
+    // (см. AsteroidRingSystem.updateObject) — отдельный от прочих юниформ времени движка
     uniform float uSpinPeriod;
     uniform float uSpinTime;
 
@@ -141,16 +140,19 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       // Вращение вокруг оси из того же хеша, что форма (shapeSeed — значение
       // вершинника, НЕ варьинг: ULP-джиттер интерполяции сюда не попадает).
       // uSpinPeriod <= 0 — блок не исполняется, всё ниже тождественно прежнему
-      // (кольца по умолчанию, см. RockSpin.spec).
+      // (кольца по умолчанию).
       if (uSpinPeriod > 0.0) {
         vec3 spinAxis = normalize(vec3(
           hashSurface11(shapeSeed + 13.13),
           hashSurface11(shapeSeed + 17.17),
           hashSurface11(shapeSeed + 19.19)
         ) * 2.0 - 1.0);
-        // Период инстанса — среднее ± 50% от декоррелированного хеша
-        float spinPeriod = uSpinPeriod * (0.5 + hashSurface11(shapeSeed + 23.23));
-        float spinAngle = 2.0 * PI * uSpinTime / spinPeriod;
+        // Ставка вращения — m/12, m ∈ [6,18] целыми шагами: на волне
+        // 12·uSpinPeriod любой инстанс делает целое число m оборотов, поэтому
+        // свёртка uSpinTime (CPU) не рвёт фазу ни одному камню. min(...,18) —
+        // страж на случай hash ровно 1 (floor дал бы 13, а не 12)
+        float m = min(6.0 + floor(hashSurface11(shapeSeed + 23.23) * 13.0), 18.0);
+        float spinAngle = 2.0 * PI * uSpinTime * (m / 12.0) / uSpinPeriod;
         float cosA = cos(spinAngle);
         float sinA = sin(spinAngle);
         // Родригес: v' = v·cosA + (axis × v)·sinA + axis·(axis·v)·(1 − cosA)

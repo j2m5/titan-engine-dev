@@ -3,6 +3,7 @@ import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
 import type { IRingRenderingObject } from '@/core/models/types'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { J2000, DAY } from '@/core/constants'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { readRingAlphaProfile, readRingAlphaBins, readRingBandBins } from './RingAlphaReadback'
 import { createDustRadialTexture } from './dust/DustRadialProfile'
@@ -218,7 +219,8 @@ interface AsteroidRingConfig {
   /**
    * Средний период вращения камней вокруг своей оси, часы; 0 (дефолт) — вращение
    * выключено (uSpinPeriod 0, GLSL-ветка не исполняется — прежний вид). Конверсия
-   * в секунды сцены (×3600) — на CPU при установке юниформа (см. __setup).
+   * в секунды симуляции (×3600) — на CPU при установке юниформа (см. __setup).
+   * Время вращения идёт по ctx.epoch (см. updateObject), не по рендер-часам.
    */
   spinPeriodHours: number
 }
@@ -507,7 +509,7 @@ class AsteroidRingSystem extends Group {
     l0ShapeMaterial.uniforms.uShapeAmpMin.value = cfg.shapeAmpMin
     l0ShapeMaterial.uniforms.uShapeAmpMax.value = cfg.shapeAmpMax
     l0ShapeMaterial.uniforms.uShapeFreq.value = cfg.shapeFreq
-    // Часы данных → секунды сцены (единицы uSpinTime, см. updateObject); 0 остаётся 0
+    // Часы данных → секунды симуляции (единицы uSpinTime, см. updateObject); 0 остаётся 0
     l0ShapeMaterial.uniforms.uSpinPeriod.value = cfg.spinPeriodHours * 3600
 
     // Реальные модели форм в хвост библиотеки — асинхронно, поверх заглушек
@@ -685,11 +687,20 @@ class AsteroidRingSystem extends Group {
   public updateObject(ctx: UpdateContext): void {
     const dt = ctx.delta
 
-    // uSpinTime — секунды сцены (UpdateContext.elapsed, секунды с запуска часов
-    // рендера — см. Engine.ts). Множитель 1: единицы уже совпадают с
-    // uSpinPeriod (часы данных переведены в секунды при __setup). Отдельный от
-    // прочих юниформ времени движка (см. докблок uSpinPeriod у AsteroidRingConfig).
-    this.pool.geometryMaterial.uniforms.uSpinTime.value = ctx.elapsed
+    // uSpinTime — время СИМУЛЯЦИИ, не рендер-часы: ускорение времени и паузы
+    // обязаны вращать камни так же, как меридиан планет (см.
+    // OrientationModel.getMeridianAngleByEpoch). ctx.epoch — юлианские дни;
+    // переводим в секунды от J2000 и сворачиваем в double по кратному
+    // 12·uSpinPeriod (тот же приём, что BlackHoleImpostor.updateObject) — на
+    // этой волне любой per-instance хеш (m/12, см. шейдер) даёт целое число
+    // оборотов, свёртка не рвёт фазу. period <= 0 — вращение выключено гейтом
+    // в шейдере, время не считаем (деление на 0 не нужно).
+    const spinPeriod = this.pool.geometryMaterial.uniforms.uSpinPeriod.value as number
+    if (spinPeriod > 0) {
+      const simSeconds = (ctx.epoch - J2000) * DAY
+      const wrap = 12 * spinPeriod
+      this.pool.geometryMaterial.uniforms.uSpinTime.value = simSeconds - Math.floor(simSeconds / wrap) * wrap
+    }
 
     // Проверить видимость parent'а
     if (!this.isEffectivelyVisible()) {
