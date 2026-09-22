@@ -1,4 +1,4 @@
-import { BufferGeometry, InstancedBufferAttribute, InstancedMesh, Object3D, PlaneGeometry } from 'three'
+import { BufferGeometry, InstancedBufferAttribute, InstancedMesh, Object3D, PlaneGeometry, Vector3 } from 'three'
 import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
 import type { Actor } from '@/core/models/Actor'
 import { BillboardAsteroidMaterial } from './BillboardAsteroidMaterial'
@@ -92,6 +92,9 @@ class InstancePool {
   /** Dirty-флаги для отложенного commit fade-атрибута, по стримам */
   private dirtyFadeStreams: Set<number> = new Set()
 
+  /** Dirty-флаги для отложенного commit origin-атрибута, по стримам */
+  private dirtyOriginStreams: Set<number> = new Set()
+
   /**
    * @param l0Config Ёмкость L0 (Geometry, обычный detail).
    * @param nearConfig Ёмкость Near (Geometry, повышенный detail) — своя,
@@ -165,6 +168,10 @@ class InstancePool {
     this.billboardMesh.name = 'AsteroidPool_L1'
 
     l1Geometry.setAttribute('instanceFade', new InstancedBufferAttribute(new Float32Array(l1Config.maxInstances), 1))
+    l1Geometry.setAttribute(
+      'instanceOrigin',
+      new InstancedBufferAttribute(new Float32Array(l1Config.maxInstances * 3), 3)
+    )
 
     this.streams.push({
       mesh: this.billboardMesh,
@@ -181,8 +188,9 @@ class InstancePool {
    * detail — L0 и Near используют один и тот же паттерн), а instanceFade —
    * пер-инстансное состояние ЭТОГО пула. ВСЕ read-only атрибуты источника
    * (position/normal/surfaceData/…) разделяются по ссылке безопасно — GPU-буфер
-   * один и они не мутируются; instanceFade — единственный МУТИРУЕМЫЙ, пер-пульный
-   * атрибут, поэтому создаётся отдельно, ПОСЛЕ копирования (имена не пересекаются).
+   * один и они не мутируются; instanceFade и instanceOrigin — МУТИРУЕМЫЕ,
+   * пер-пульные атрибуты, поэтому создаются отдельно, ПОСЛЕ копирования (имена
+   * не пересекаются).
    */
   private __buildArchetypeStream(
     source: BufferGeometry,
@@ -198,6 +206,7 @@ class InstancePool {
       streamGeometry.setIndex(source.getIndex())
     }
     streamGeometry.setAttribute('instanceFade', new InstancedBufferAttribute(new Float32Array(capacity), 1))
+    streamGeometry.setAttribute('instanceOrigin', new InstancedBufferAttribute(new Float32Array(capacity * 3), 3))
 
     const mesh = new InstancedMesh(streamGeometry, material, capacity)
     mesh.count = 0
@@ -232,12 +241,16 @@ class InstancePool {
     if (!mesh) return
     const old = mesh.geometry
     const fade = old.getAttribute('instanceFade')
+    // Смещение сектора от плавающего начала переезжает вместе с fade: оно
+    // пер-инстансное состояние стрима, а не свойство формы (см. writeOrigins)
+    const origin = old.getAttribute('instanceOrigin')
     const streamGeometry = new BufferGeometry()
     for (const attrName of Object.keys(source.attributes)) {
       streamGeometry.setAttribute(attrName, source.getAttribute(attrName))
     }
     if (source.getIndex() !== null) streamGeometry.setIndex(source.getIndex())
     streamGeometry.setAttribute('instanceFade', fade)
+    streamGeometry.setAttribute('instanceOrigin', origin)
     mesh.geometry = streamGeometry
     old.dispose()
   }
@@ -260,6 +273,11 @@ class InstancePool {
   /** InstancedBufferAttribute fade для заданного стрима. */
   private fadeAttribute(stream: number): InstancedBufferAttribute {
     return this.streams[stream].mesh.geometry.getAttribute('instanceFade') as InstancedBufferAttribute
+  }
+
+  /** InstancedBufferAttribute origin (смещение сектора) для заданного стрима. */
+  private originAttribute(stream: number): InstancedBufferAttribute {
+    return this.streams[stream].mesh.geometry.getAttribute('instanceOrigin') as InstancedBufferAttribute
   }
 
   /**
@@ -331,6 +349,25 @@ class InstancePool {
   }
 
   /**
+   * Записать смещение сектора от плавающего начала в диапазон
+   * [offset, offset+count) стрима. Значение общее для всего сектора: матрицы
+   * инстансов хранят позицию ОТНОСИТЕЛЬНО центра сектора, абсолютная позиция
+   * собирается в вершиннике как instanceOrigin + instanceMatrix[3].xyz.
+   *
+   * Кольца этот метод не зовут вовсе — их буфер остаётся нулевым, и сложение
+   * в шейдере тождественно прежнему выражению.
+   */
+  public writeOrigins(stream: number, offset: number, count: number, origin: Vector3): void {
+    const dst = this.originAttribute(stream).array as Float32Array
+    for (let i = offset; i < offset + count; i++) {
+      dst[i * 3] = origin.x
+      dst[i * 3 + 1] = origin.y
+      dst[i * 3 + 2] = origin.z
+    }
+    this.dirtyOriginStreams.add(stream)
+  }
+
+  /**
    * Применить все накопленные изменения к GPU-буферам.
    */
   public commitUpdates(): void {
@@ -344,8 +381,13 @@ class InstancePool {
       this.fadeAttribute(stream).needsUpdate = true
     }
 
+    for (const stream of this.dirtyOriginStreams) {
+      this.originAttribute(stream).needsUpdate = true
+    }
+
     this.dirtyStreams.clear()
     this.dirtyFadeStreams.clear()
+    this.dirtyOriginStreams.clear()
   }
 
   /**
@@ -475,6 +517,7 @@ class InstancePool {
 
     this.dirtyStreams.clear()
     this.dirtyFadeStreams.clear()
+    this.dirtyOriginStreams.clear()
   }
 }
 

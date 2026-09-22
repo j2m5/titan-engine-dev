@@ -11,6 +11,7 @@ import { SectorGrid, SectorGridConfig } from './SectorGrid'
 import { AsteroidGenerator, GeneratorConfig } from './AsteroidGenerator'
 import { InstancePool, PoolLayerConfig } from './InstancePool'
 import { SectorManager, LODThresholds } from './SectorManager'
+import { FloatingOrigin } from './FloatingOrigin'
 import { assertLodInvariant } from './streamerScale'
 import { RingDustVolume } from './dust/RingDustVolume'
 import { installRingDustDebug, type RockDustUniforms } from './dust/RingDustDebug'
@@ -173,6 +174,15 @@ interface AsteroidRingConfig {
   detailAoInfluence: number
   /** Влияние rough-канала из ARM-текстуры */
   detailRoughInfluence: number
+  /**
+   * Относительные координаты камней: матрицы инстансов хранят позицию от центра
+   * сектора, а смещение сектора от ПЛАВАЮЩЕГО НАЧАЛА (квантованного по ячейке
+   * вокруг камеры, см. FloatingOrigin) едет атрибутом instanceOrigin. Нужно
+   * поясу: на десятках а.е. абсолютная позиция в float32 теряет сотни
+   * километров. Кольца оставляют false — прежний абсолютный путь без группы
+   * начала и с нулевым атрибутом.
+   */
+  relativeOrigin: boolean
 }
 
 /**
@@ -222,7 +232,8 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   detailBrightness: 1.6,
   detailNormalScale: 1.0,
   detailAoInfluence: 0.8,
-  detailRoughInfluence: 0.7
+  detailRoughInfluence: 0.7,
+  relativeOrigin: false
 }
 
 /**
@@ -247,6 +258,15 @@ class AsteroidRingSystem extends Group {
   private readonly config: AsteroidRingConfig
 
   private dustVolume: RingDustVolume | null = null
+
+  /**
+   * Плавающее начало и группа-носитель мешей пула: при relativeOrigin меши —
+   * дети группы, её position держит начало (CPU, double через иерархию), а
+   * атрибут instanceOrigin — смещение сектора от него. null — прежний путь
+   * колец: меши прямые дети системы, начала нет.
+   */
+  private floatingOrigin: FloatingOrigin | null = null
+  private originGroup: Group | null = null
 
   /** Реестр пасса пыли; null — объём в графе есть, но пасс его не рисует (тесты, автономные сцены) */
   private readonly dustRegistry: DepthVolumeRegistry | null
@@ -371,9 +391,20 @@ class AsteroidRingSystem extends Group {
       minScale: cfg.minScale,
       maxScale: cfg.maxScale,
       // Раскладка по архетипам с учётом размера камня (см. AsteroidGenerator.pickArchetype)
-      profile: cfg.profile
+      profile: cfg.profile,
+      relativeToSector: cfg.relativeOrigin
     }
     this.generator = new AsteroidGenerator(genConfig)
+
+    // --- Плавающее начало (только пояс) ---
+    // Ячейка начала — ячейка сетки секторов: переезд редок, а относительные
+    // позиции остаются в пределах нескольких ячеек.
+    this.floatingOrigin = cfg.relativeOrigin ? new FloatingOrigin(cellSize) : null
+    this.originGroup = cfg.relativeOrigin ? new Group() : null
+    if (this.originGroup) {
+      this.originGroup.name = 'AsteroidOriginGroup'
+      this.add(this.originGroup)
+    }
 
     // --- InstancePool ---
     const l0PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0Instances }
@@ -401,9 +432,11 @@ class AsteroidRingSystem extends Group {
       this.model
     )
 
-    // Добавить рендер-объекты (L0 + L1)
+    // Добавить рендер-объекты (L0 + L1). С плавающим началом они дети группы
+    // начала — её position вносит начало в modelViewMatrix на CPU, в double.
+    const renderParent: Group = this.originGroup ?? this
     for (const obj of this.pool.getRenderObjects()) {
-      this.add(obj)
+      renderParent.add(obj)
     }
 
     // Деформация силуэта — только L0 (у billboard-материала этих юниформ нет)
@@ -455,7 +488,13 @@ class AsteroidRingSystem extends Group {
       nearEnterDistance: l0NearEnter,
       nearExitDistance: l0NearExit
     }
-    this.manager = new SectorManager(this.sectorGrid, this.generator, this.pool, thresholds)
+    this.manager = new SectorManager(
+      this.sectorGrid,
+      this.generator,
+      this.pool,
+      thresholds,
+      this.floatingOrigin?.origin ?? null
+    )
 
     // --- Тень планеты (умбра) — общая для камней/пыли/2D-кольца ---
     // Радиус планеты в ring-local (начало ring-local = центр планеты, тот же
@@ -593,6 +632,18 @@ class AsteroidRingSystem extends Group {
     // Позиция камеры в local space системы
     this._localCamPos.copy(camera.getWorldPosition(this._worldPos))
     this.worldToLocal(this._localCamPos)
+
+    // Переезд плавающего начала (только пояс): группа-носитель уезжает за
+    // камерой, все живые сектора переписывают своё смещение от нового начала.
+    // Сам поиск секторов и отсечение по фрустуму остаются в АБСОЛЮТНЫХ
+    // координатах системы — относительны только хранимые матрицы.
+    if (this.floatingOrigin && this.originGroup) {
+      const shift = this.floatingOrigin.update(this._localCamPos)
+      if (shift) {
+        this.originGroup.position.copy(this.floatingOrigin.origin)
+        this.manager.rebaseOrigins(shift)
+      }
+    }
 
     // Полярные координаты камеры в local space
     const cameraAngle = Math.atan2(this._localCamPos.z, this._localCamPos.x)

@@ -1,5 +1,5 @@
 import { SeededRandom, hashSectorKey } from './SeededRandom'
-import type { SectorBounds } from './SectorGrid'
+import { sectorCenter, type SectorBounds } from './SectorGrid'
 import { RadialDensityProfile } from './RadialDensityProfile'
 import type { AsteroidProfileName } from './AsteroidProfiles'
 import { morphologyRanges, type LibraryCategory, type MorphologyRange } from './archetypes/ArchetypeLibrary'
@@ -58,6 +58,14 @@ interface GeneratorConfig {
    * Без профиля раскладка равновероятна по хешу (archetypeForInstance).
    */
   profile?: AsteroidProfileName
+  /**
+   * Позиции камней — ОТНОСИТЕЛЬНО центра сектора (см. sectorCenter), а не
+   * абсолютные в системе кольца. Абсолютную позицию восстанавливает шейдер:
+   * instanceOrigin + instanceMatrix[3].xyz (см. InstancePool.writeOrigins).
+   * Нужно поясу: на десятках а.е. абсолютная позиция теряет в float32 сотни
+   * километров. Кольца флаг не включают — их матрицы побайтно прежние.
+   */
+  relativeToSector?: boolean
 }
 
 /**
@@ -238,6 +246,12 @@ class AsteroidGenerator {
     const r2Sq = bounds.maxRadius * bounds.maxRadius
     const halfThickness = thickness * 0.5
 
+    // Центр сектора для относительных позиций — один раз на сектор, в double
+    const relative = this.config.relativeToSector === true
+    const center = sectorCenter(bounds)
+    const centerX = center.x
+    const centerZ = center.z
+
     for (let i = 0; i < count; i++) {
       // Позиция по радиусу: с профилем — importance sampling ∝ альфе (камни
       // концентрируются в колечках), иначе — равномерно по площади полосы.
@@ -248,6 +262,9 @@ class AsteroidGenerator {
       const theta = rng.range(bounds.minAngle, bounds.maxAngle)
       const x = Math.cos(theta) * r
       const z = Math.sin(theta) * r
+      // Относительно центра сектора: центр — в double, вычитание до float32-записи
+      const px: number = relative ? x - centerX : x
+      const pz: number = relative ? z - centerZ : z
       // Вертикаль: треугольное распределение (сумма двух uniform) — пик в средней
       // плоскости, линейный спад к краям. Равномерный слэб на высокой плотности
       // рисовал «стенку» с плоскими гранями сверху/снизу; мягкий спад её гасит.
@@ -280,7 +297,7 @@ class AsteroidGenerator {
       const k = archetypeOf[i]
       const offset = runningOffsets[k]
       runningOffsets[k] = offset + 16
-      this.composeMatrix(groups[k], offset, x, y, z, rx, ry, rz, sx, sy, sz)
+      this.composeMatrix(groups[k], offset, px, y, pz, rx, ry, rz, sx, sy, sz)
     }
 
     return groups

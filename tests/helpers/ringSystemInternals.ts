@@ -5,6 +5,8 @@ import { AsteroidGenerator, GeneratorConfig } from '@/core/renderables/DetailedR
 import { SectorGrid } from '@/core/renderables/DetailedRingStreamingSystem/SectorGrid'
 import { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
 import { RadialDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/RadialDensityProfile'
+import { FloatingOrigin } from '@/core/renderables/DetailedRingStreamingSystem/FloatingOrigin'
+import type { Group } from 'three'
 
 /**
  * Приватные поля системы, к которым обращаются тесты. Типы взяты с объявлений
@@ -16,6 +18,9 @@ type RingSystemInternals = {
   generator: AsteroidGenerator
   sectorGrid: SectorGrid
   dustVolume: RingDustVolume | null
+  /** Плавающее начало и его группа-носитель — null без relativeOrigin (кольца) */
+  floatingOrigin: FloatingOrigin | null
+  originGroup: Group | null
   config: AsteroidRingConfig
   densityProfileReady: boolean
   __tryBuildDensityProfile(): void

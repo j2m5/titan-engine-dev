@@ -19,8 +19,10 @@ describe('L0 вершинный шейдер: деформация формы', 
 
   it('деформирует вершину по сиду из позиции инстанса (после резолва #include)', () => {
     const shader = new InstancedAsteroidShader()
-    // #include уже раскрыты конструктором AbstractShader → тела функций на месте
-    expect(shader.vertexShader).toContain('hash13(instanceMatrix[3].xyz)')
+    // #include уже раскрыты конструктором AbstractShader → тела функций на месте.
+    // Сид — от АБСОЛЮТНОЙ позиции (смещение сектора + местная): переезд
+    // плавающего начала не должен менять форму камня (см. tests/asteroidBelt)
+    expect(shader.vertexShader).toContain('hash13(instanceMatrix[3].xyz + instanceOrigin)')
     expect(shader.vertexShader).toContain('deformAsteroid(')
     expect(shader.vertexShader).toContain('void deformAsteroid(') // чанк реально вклеен
     expect(shader.vertexShader).toContain('vec4 snoiseGrad(vec3 v)') // noiseFunctions вклеен

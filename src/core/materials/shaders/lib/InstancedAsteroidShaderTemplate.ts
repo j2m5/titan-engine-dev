@@ -74,6 +74,12 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
     // Per-instance fade [0..1] — плавные LOD/sector-переходы (см. InstancePool.writeFade)
     attribute float instanceFade;
+    // Смещение сектора камня от плавающего начала (см. InstancePool.writeOrigins):
+    // матрица инстанса хранит позицию ОТНОСИТЕЛЬНО центра сектора, абсолютная в
+    // системе кольца = instanceOrigin + instanceMatrix[3].xyz. Оба слагаемых малы,
+    // само начало внесено в modelViewMatrix на CPU в double. У колец начало не
+    // переезжает, атрибут нулевой — все выражения ниже тождественны прежним.
+    attribute vec3 instanceOrigin;
     // Запечённые атрибуты породы из библиотеки архетипов (см. ArchetypeGeometry,
     // ArchetypeShape.surfaceAt): xy = freshness (скол разлома), cavity (кратерная
     // чаша); zw — резервные каналы, не прокидываются во фрагмент. Геометрии без
@@ -101,22 +107,27 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     #include <asteroidShapeFunctions>
 
     void main() {
-      // Деформация силуэта: сид рисунка контура — хеш от позиции инстанса.
+      // Деформация силуэта: сид рисунка контура — хеш от АБСОЛЮТНОЙ позиции
+      // инстанса (origin + local), иначе переезд начала менял бы форму камней.
       // Амплитуда — второй, декоррелированный хеш той же позиции → каждый
       // камень получает свою «изрезанность» из диапазона [min,max].
-      float shapeSeed = hash13(instanceMatrix[3].xyz);
-      float ampSeed = hash13(instanceMatrix[3].xyz * 1.37 + 11.7);
+      float shapeSeed = hash13(instanceMatrix[3].xyz + instanceOrigin);
+      float ampSeed = hash13((instanceMatrix[3].xyz + instanceOrigin) * 1.37 + 11.7);
       float shapeAmp = mix(uShapeAmpMin, uShapeAmpMax, ampSeed);
       vec3 shapedPos;
       vec3 shapedNormal;
       deformAsteroid(position, normal, shapeSeed, shapeAmp, shapedPos, shapedNormal);
 
       vec4 worldPosition = instanceMatrix * vec4(shapedPos, 1.0);
+      // Абсолютная позиция в системе кольца: смещение сектора + локальная
+      worldPosition.xyz += instanceOrigin;
       vec4 mvPosition = modelViewMatrix * worldPosition;
 
       gl_Position = projectionMatrix * mvPosition;
 
-      // Ring-local позиция фрагмента для модели пыли/тени (пофрагментная)
+      // Ring-local позиция фрагмента для модели пыли/тени (пофрагментная).
+      // Сумма считается во float32 — для пыли, тени и полос этого хватает
+      // (все они плавные функции радиуса), в отличие от самой gl_Position.
       vRingPos = worldPosition.xyz;
 
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);

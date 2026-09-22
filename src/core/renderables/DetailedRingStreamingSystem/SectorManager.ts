@@ -1,5 +1,5 @@
 import { Frustum, Matrix4, Sphere, Vector3 } from 'three'
-import { SectorGrid, SectorInfo, SectorBounds } from './SectorGrid'
+import { SectorGrid, SectorInfo, SectorBounds, sectorCenter } from './SectorGrid'
 import { AsteroidGenerator, archetypeForInstance } from './AsteroidGenerator'
 import { InstancePool, LODLevel, Allocation } from './InstancePool'
 
@@ -101,8 +101,22 @@ class SectorManager {
   private readonly _frustum = new Frustum()
   private readonly _sphere = new Sphere()
   private readonly _worldCenter = new Vector3()
+  private readonly _origin = new Vector3()
 
-  public constructor(grid: SectorGrid, generator: AsteroidGenerator, pool: InstancePool, thresholds: LODThresholds) {
+  /**
+   * Плавающее начало системы (ССЫЛКА на FloatingOrigin.origin — обновляется
+   * снаружи, мы читаем текущее значение). null — относительных координат нет:
+   * матрицы абсолютны, атрибут instanceOrigin остаётся нулевым (кольца).
+   */
+  private readonly origin: Vector3 | null
+
+  public constructor(
+    grid: SectorGrid,
+    generator: AsteroidGenerator,
+    pool: InstancePool,
+    thresholds: LODThresholds,
+    origin: Vector3 | null = null
+  ) {
     if (thresholds.nearEnterDistance >= thresholds.nearExitDistance) {
       throw new Error(
         `SectorManager: nearEnterDistance (${thresholds.nearEnterDistance}) обязан быть < nearExitDistance ` +
@@ -114,6 +128,44 @@ class SectorManager {
     this.generator = generator
     this.pool = pool
     this.thresholds = thresholds
+    this.origin = origin
+  }
+
+  /**
+   * Записать смещение сектора от плавающего начала во все инстансы аллокаций.
+   * Без плавающего начала (кольца) — no-op: атрибут остаётся нулевым.
+   */
+  private writeSectorOrigins(allocations: Allocation[], bounds: SectorBounds): void {
+    const origin = this.origin
+    if (!origin) return
+
+    const center = sectorCenter(bounds)
+    // Вычитание — в double, до float32-записи атрибута: и центр сектора, и
+    // начало могут быть десятками а.е., а их разность мала
+    this._origin.set(center.x - origin.x, 0, center.z - origin.z)
+    for (const a of allocations) {
+      this.pool.writeOrigins(a.stream, a.offset, a.count, this._origin)
+    }
+  }
+
+  /**
+   * Переезд плавающего начала: у КАЖДОЙ активной аллокации (включая уходящий
+   * тир кросс-фейда — он ещё рисуется) origin пересчитывается от центра её
+   * сектора. К моменту вызова FloatingOrigin.origin уже новый, поэтому счёт
+   * идёт от абсолютного центра в double — ошибка не накапливается от переезда
+   * к переезду, в отличие от вычитания сдвига из хранимого float32.
+   *
+   * @param shift — сдвиг начала; нулевой означает, что переезда не было
+   */
+  public rebaseOrigins(shift: Vector3): void {
+    if (!this.origin || (shift.x === 0 && shift.z === 0)) return
+
+    for (const [, state] of this.activeSectors) {
+      this.writeSectorOrigins(state.allocations, state.info.bounds)
+      if (state.outgoing) {
+        this.writeSectorOrigins(state.outgoing.allocations, state.info.bounds)
+      }
+    }
   }
 
   /**
@@ -160,6 +212,8 @@ class SectorManager {
       this.pool.writeFade(allocation.stream, allocation.offset, allocation.count, 0.0)
     }
 
+    this.writeSectorOrigins(allocations, bounds)
+
     return allocations
   }
 
@@ -184,6 +238,7 @@ class SectorManager {
     const data = this.generator.generateMatrices(seed, count, bounds)
     this.pool.writeMatrices(stream, allocation.offset, data)
     this.pool.writeFade(stream, allocation.offset, allocation.count, 0.0)
+    this.writeSectorOrigins([allocation], bounds)
 
     return [allocation]
   }

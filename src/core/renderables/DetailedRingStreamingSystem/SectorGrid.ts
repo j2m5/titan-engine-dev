@@ -15,6 +15,20 @@ interface SectorBounds {
 }
 
 /**
+ * Центр сектора в декартовых координатах кольца (XZ) — ЕДИНЫЙ источник для
+ * сетки (SectorInfo.centerX/centerZ) и для генератора, который вычитает этот
+ * центр из позиций камней (relativeToSector). Обе стороны обязаны получить
+ * побитово одно и то же число, иначе origin + local разъедется с абсолютной
+ * позицией сектора.
+ */
+function sectorCenter(bounds: SectorBounds): { x: number; z: number } {
+  const centerRadius = (bounds.minRadius + bounds.maxRadius) * 0.5
+  const centerAngle = (bounds.minAngle + bounds.maxAngle) * 0.5
+
+  return { x: Math.cos(centerAngle) * centerRadius, z: Math.sin(centerAngle) * centerRadius }
+}
+
+/**
  * Метаданные сектора
  */
 interface SectorInfo {
@@ -165,8 +179,15 @@ class SectorGrid {
     const centerAngle = (minAngle + maxAngle) * 0.5
     const centerRadius = layer.centerRadius
 
-    const centerX = Math.cos(centerAngle) * centerRadius
-    const centerZ = Math.sin(centerAngle) * centerRadius
+    const bounds: SectorBounds = {
+      minRadius: layer.innerRadius,
+      maxRadius: layer.outerRadius,
+      minAngle,
+      maxAngle
+    }
+    // Тот же способ, что у генератора (см. sectorCenter): centerRadius слоя —
+    // это ровно (innerRadius + outerRadius) * 0.5 его границ
+    const center = sectorCenter(bounds)
 
     // Bounding radius: половина диагонали сектора (грубая оценка)
     const radialSpan = layer.outerRadius - layer.innerRadius
@@ -196,16 +217,11 @@ class SectorGrid {
       key,
       layerIndex,
       angleIndex: normalizedAngleIndex,
-      bounds: {
-        minRadius: layer.innerRadius,
-        maxRadius: layer.outerRadius,
-        minAngle,
-        maxAngle
-      },
+      bounds,
       centerRadius,
       centerAngle,
-      centerX,
-      centerZ,
+      centerX: center.x,
+      centerZ: center.z,
       seed,
       boundingRadius,
       instanceCount
@@ -269,5 +285,5 @@ class SectorGrid {
   }
 }
 
-export { SectorGrid }
+export { SectorGrid, sectorCenter }
 export type { SectorGridConfig, SectorBounds, SectorInfo, LayerInfo }

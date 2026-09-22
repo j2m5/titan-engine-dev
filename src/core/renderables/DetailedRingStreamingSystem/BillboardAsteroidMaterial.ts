@@ -5,73 +5,11 @@ import type { Actor } from '@/core/models/Actor'
 import { resolveLightTint } from '@/core/helpers/lightSource'
 
 /**
- * BillboardAsteroidMaterial — шейдерный материал для L1 billboard-импосторов.
- *
- * Используется с InstancedMesh + PlaneGeometry. Каждый экземпляр автоматически
- * поворачивается к камере в vertex shader.
- *
- * Ключевые свойства:
- * 1. Силуэт — эллипс проекции эллипсоида инстанса (поворот и пер-осевой масштаб
- *    из матрицы инстанса) с анизотропией архетипа по сиду: билборд наследует
- *    позу камня, при кросс-фейде силуэт L1 совпадает с ориентацией L0
- * 2. Кромка — плавные гармоники по углу с фазами от сида (лумпистый край без
- *    мерцания), AA экранными производными
- * 3. Нормаль — масштабированная сфера по осям эллипса; освещение и planetshine
- *    на общем с L0 чанке AsteroidBrdf, цвет и джиттер яркости из профиля
- * 4. Правильная day/night сторона: тёмная сторона астероида = сторона от звезды
+ * Вершинник билборда — модульная константа, а не строка внутри конструктора:
+ * структурные проверки шейдера (tests/helpers/billboardSource.ts) читают его без
+ * создания материала. Текст при выносе не менялся.
  */
-class BillboardAsteroidMaterial extends ShaderMaterial {
-  /**
-   * `model` — актор кольца (тот же вход, что у L0 `InstancedAsteroidMaterial`,
-   * резолвер сам поднимается к корню дерева); `undefined` — тинт выключен.
-   */
-  public constructor(model?: Actor) {
-    const lightTint = model ? resolveLightTint(model) : { active: false, color: new Color(1, 1, 1) }
-
-    super({
-      defines: { ...(lightTint.active && { USE_LIGHT_TINT: '1' }) },
-      uniforms: {
-        uColor: { value: new Color(0.55, 0.5, 0.45) },
-        // Цвет света звезды (lightTint) — per-instance объект, не общий модульный Uniform
-        uLightColor: { value: new Color(1, 1, 1).copy(lightTint.color) },
-        /** Позиция источника света в world space (по умолчанию — центр системы) */
-        uLightPosition: { value: new Vector3(0, 0, 0) },
-        uFade: { value: 1.0 },
-        uMaxDistance: { value: 100.0 },
-        /** Ambient свет — минимальная освещённость тёмной стороны */
-        uAmbient: { value: 0.08 },
-        /** Пер-инстансный джиттер яркости (±доля), из профиля породы */
-        uColorJitter: { value: 0.1 },
-        /** Средний радиус силуэта относительно максимального радиуса камня (архетип нормирован на 1) */
-        uSilhouetteScale: { value: 0.85 },
-        // Модель освещения камня (см. чанк AsteroidBrdf) — та же, что у L0
-        uLunarMix: { value: 0.8 },
-        uOppositionSurge: { value: 0.3 },
-        uPlanetshineColor: { value: new Color(0xb8ad9c) },
-        uPlanetshineStrength: { value: 1.5 },
-        // Пылевая дымка (см. чанк RingDust); uDustDensity = 0 — туман выключен
-        uDustColor: { value: new Color(0x9b968c) },
-        uDustDensity: { value: 0.0 },
-        uDustScaleHeight: { value: 1.0 },
-        uDustRingInner: { value: 0.0 },
-        uDustRingOuter: { value: 1e9 },
-        uDustCamRingPos: { value: new Vector3() },
-        uDustLightDirRing: { value: new Vector3(1, 0, 0) },
-        uDustAnglePower: { value: 2.0 },
-        uDustNearFade: { value: 1.0 },
-        uDustPlanetRadius: { value: 0.0 },
-        // Радиальный профиль пыли из альфы текстуры кольца; scale 0 — выключен
-        uDustRadialMap: { value: null },
-        uDustRadialMapScale: { value: 0.0 },
-        // Полосы кольца и слой (см. чанк RingDust): выключены, пока система не отдаст текстуру
-        uRingBandMap: { value: null },
-        uRingBandEnabled: { value: 0.0 },
-        uBandMeanColor: { value: new Vector3(1, 1, 1) },
-        uBandTintStrength: { value: 1.0 },
-        uLayerHalfThickness: { value: 1.0 },
-        uLayerShadowStrength: { value: 0.25 }
-      },
-      vertexShader: /* glsl */ `
+const BILLBOARD_VERTEX_SHADER = /* glsl */ `
         ${ShaderChunk.common}
         ${ShaderChunk.logdepthbuf_pars_vertex}
 
@@ -81,6 +19,10 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
 
         // Per-instance fade [0..1] — плавные LOD/sector-переходы (см. InstancePool.writeFade)
         attribute float instanceFade;
+        // Смещение сектора камня от плавающего начала (см. InstancePool.writeOrigins):
+        // матрица инстанса хранит позицию ОТНОСИТЕЛЬНО центра сектора. У колец
+        // начало не переезжает, атрибут нулевой — сложение ниже тождественно.
+        attribute vec3 instanceOrigin;
 
         varying vec2 vUv;
         varying float vDistanceFade;
@@ -95,8 +37,9 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         varying float vHalfExtent;
 
         void main() {
-          // Извлечь позицию и масштаб из instance matrix
-          vec3 instancePos = vec3(
+          // Извлечь позицию и масштаб из instance matrix; позиция — абсолютная
+          // в системе кольца: смещение сектора + локальная (обе малы)
+          vec3 instancePos = instanceOrigin + vec3(
             instanceMatrix[3][0],
             instanceMatrix[3][1],
             instanceMatrix[3][2]
@@ -108,7 +51,8 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
           // Позиция инстанса в view space
           vec4 mvInstancePos = modelViewMatrix * vec4(instancePos, 1.0);
 
-          // Per-instance seed для уникальной формы каждого billboard
+          // Per-instance seed для уникальной формы каждого billboard — от
+          // АБСОЛЮТНОЙ позиции, иначе переезд начала менял бы силуэты
           vInstanceSeed = fract(sin(dot(instancePos.xz, vec2(12.9898, 78.233))) * 43758.5453);
 
           // --- Эллипс проекции инстанса ---
@@ -175,7 +119,76 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
 
           ${ShaderChunk.logdepthbuf_vertex}
         }
-      `,
+      `
+
+/**
+ * BillboardAsteroidMaterial — шейдерный материал для L1 billboard-импосторов.
+ *
+ * Используется с InstancedMesh + PlaneGeometry. Каждый экземпляр автоматически
+ * поворачивается к камере в vertex shader.
+ *
+ * Ключевые свойства:
+ * 1. Силуэт — эллипс проекции эллипсоида инстанса (поворот и пер-осевой масштаб
+ *    из матрицы инстанса) с анизотропией архетипа по сиду: билборд наследует
+ *    позу камня, при кросс-фейде силуэт L1 совпадает с ориентацией L0
+ * 2. Кромка — плавные гармоники по углу с фазами от сида (лумпистый край без
+ *    мерцания), AA экранными производными
+ * 3. Нормаль — масштабированная сфера по осям эллипса; освещение и planetshine
+ *    на общем с L0 чанке AsteroidBrdf, цвет и джиттер яркости из профиля
+ * 4. Правильная day/night сторона: тёмная сторона астероида = сторона от звезды
+ */
+class BillboardAsteroidMaterial extends ShaderMaterial {
+  /**
+   * `model` — актор кольца (тот же вход, что у L0 `InstancedAsteroidMaterial`,
+   * резолвер сам поднимается к корню дерева); `undefined` — тинт выключен.
+   */
+  public constructor(model?: Actor) {
+    const lightTint = model ? resolveLightTint(model) : { active: false, color: new Color(1, 1, 1) }
+
+    super({
+      defines: { ...(lightTint.active && { USE_LIGHT_TINT: '1' }) },
+      uniforms: {
+        uColor: { value: new Color(0.55, 0.5, 0.45) },
+        // Цвет света звезды (lightTint) — per-instance объект, не общий модульный Uniform
+        uLightColor: { value: new Color(1, 1, 1).copy(lightTint.color) },
+        /** Позиция источника света в world space (по умолчанию — центр системы) */
+        uLightPosition: { value: new Vector3(0, 0, 0) },
+        uFade: { value: 1.0 },
+        uMaxDistance: { value: 100.0 },
+        /** Ambient свет — минимальная освещённость тёмной стороны */
+        uAmbient: { value: 0.08 },
+        /** Пер-инстансный джиттер яркости (±доля), из профиля породы */
+        uColorJitter: { value: 0.1 },
+        /** Средний радиус силуэта относительно максимального радиуса камня (архетип нормирован на 1) */
+        uSilhouetteScale: { value: 0.85 },
+        // Модель освещения камня (см. чанк AsteroidBrdf) — та же, что у L0
+        uLunarMix: { value: 0.8 },
+        uOppositionSurge: { value: 0.3 },
+        uPlanetshineColor: { value: new Color(0xb8ad9c) },
+        uPlanetshineStrength: { value: 1.5 },
+        // Пылевая дымка (см. чанк RingDust); uDustDensity = 0 — туман выключен
+        uDustColor: { value: new Color(0x9b968c) },
+        uDustDensity: { value: 0.0 },
+        uDustScaleHeight: { value: 1.0 },
+        uDustRingInner: { value: 0.0 },
+        uDustRingOuter: { value: 1e9 },
+        uDustCamRingPos: { value: new Vector3() },
+        uDustLightDirRing: { value: new Vector3(1, 0, 0) },
+        uDustAnglePower: { value: 2.0 },
+        uDustNearFade: { value: 1.0 },
+        uDustPlanetRadius: { value: 0.0 },
+        // Радиальный профиль пыли из альфы текстуры кольца; scale 0 — выключен
+        uDustRadialMap: { value: null },
+        uDustRadialMapScale: { value: 0.0 },
+        // Полосы кольца и слой (см. чанк RingDust): выключены, пока система не отдаст текстуру
+        uRingBandMap: { value: null },
+        uRingBandEnabled: { value: 0.0 },
+        uBandMeanColor: { value: new Vector3(1, 1, 1) },
+        uBandTintStrength: { value: 1.0 },
+        uLayerHalfThickness: { value: 1.0 },
+        uLayerShadowStrength: { value: 0.25 }
+      },
+      vertexShader: BILLBOARD_VERTEX_SHADER,
       fragmentShader: /* glsl */ `
         ${ShaderChunk.common}
         ${ShaderChunk.logdepthbuf_pars_fragment}
@@ -293,4 +306,4 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
   }
 }
 
-export { BillboardAsteroidMaterial }
+export { BillboardAsteroidMaterial, BILLBOARD_VERTEX_SHADER }
