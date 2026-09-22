@@ -8,6 +8,7 @@ import { readRingAlphaProfile, readRingAlphaBins, readRingBandBins } from './Rin
 import { createDustRadialTexture } from './dust/DustRadialProfile'
 import { createRingBandTexture } from './dust/RingBandTexture'
 import { RadialDensityProfile } from './RadialDensityProfile'
+import { ringLightDirection } from './ringLightDirection'
 import { SectorGrid, SectorGridConfig } from './SectorGrid'
 import { AsteroidGenerator, GeneratorConfig } from './AsteroidGenerator'
 import { InstancePool, PoolLayerConfig } from './InstancePool'
@@ -724,9 +725,10 @@ class AsteroidRingSystem extends Group {
 
     // Направление на звезду в ring-local — нужно для тени планеты на камни
     // (ringDustPlanetShadow), поэтому считаем и прокидываем НЕЗАВИСИМО от пыли.
+    // Пояс: звезда в начале ring-local — направление берётся от камеры (см. ringLightDirection)
     this._localLightDir.copy(this._lightWorldPos)
     this.worldToLocal(this._localLightDir)
-    this._localLightDir.normalize()
+    ringLightDirection(this._localLightDir, this._localCamPos, this._localLightDir)
 
     const l0Material = this.pool.geometryMaterial
     l0Material.uniforms.uDustLightDirRing.value.copy(this._localLightDir)

@@ -10,6 +10,7 @@ import { deriveStreamerScale } from '@/core/renderables/DetailedRingStreamingSys
 import { buildBeltDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/beltDensityProfile'
 import { distanceToTorus, nextState, BeltLodState } from '@/core/renderables/DetailedRingStreamingSystem/beltDistance'
 import { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
+import { ringLightDirection } from '@/core/renderables/DetailedRingStreamingSystem/ringLightDirection'
 
 /** Средняя дистанция состояния Mid — до неё стример спит, а не создаётся заново (см. спеку §4) */
 const MID_THRESHOLD_AU = 1
@@ -144,11 +145,11 @@ class AsteroidBelt extends Group {
     }
 
     if (this.dustVolume) {
-      // Звезда в нуле системы: мировая точка (0,0,0) переведённая в local даёт
-      // направление от центра пояса к светилу (см. resolveLightSource)
+      // Звезда в нуле мира (см. resolveLightSource); пояс стоит там же, поэтому
+      // направление на неё берётся от камеры — см. ringLightDirection
       this._localLightDir.set(0, 0, 0)
       this.worldToLocal(this._localLightDir)
-      this._localLightDir.normalize()
+      ringLightDirection(this._localLightDir, this._cameraLocal, this._localLightDir)
       this.dustVolume.updatePerFrame(this._cameraLocal, this._localLightDir)
     }
   }
