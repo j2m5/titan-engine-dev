@@ -113,8 +113,17 @@ class SectorGrid {
    * только соседние индексы, кэш покрывает это без пересчёта каждый кадр.
    */
   public layerAt(index: number): LayerInfo {
+    if (index < 0 || index >= this.layerCount) {
+      throw new RangeError(`SectorGrid.layerAt: индекс ${index} вне диапазона [0, ${this.layerCount})`)
+    }
+
     const cached = this.layerCache.get(index)
-    if (cached) return cached
+    if (cached) {
+      // Освежить позицию в порядке вставки — из неё LRU и вытесняет самый старый
+      this.layerCache.delete(index)
+      this.layerCache.set(index, cached)
+      return cached
+    }
 
     const { innerRadius, cellSize } = this.config
     const layerInner = innerRadius + index * this.layerThickness
@@ -214,12 +223,16 @@ class SectorGrid {
     const camX = Math.cos(cameraAngle) * cameraRadius
     const camZ = Math.sin(cameraAngle) * cameraRadius
 
-    // Окно слоёв вокруг камеры по радиусу — вместо обхода всех layerCount слоёв пояса
+    // Окно слоёв вокруг камеры по радиусу — вместо обхода всех layerCount слоёв пояса.
+    // Надмножество (±1 слой) прежнего точного скана: если частное на границе целое,
+    // floor/ceil сами по себе отрезают соседний слой, который старый код включал
+    // (его radialDist == maxDistance проходил нестрогую проверку). Отсекает по-прежнему
+    // фильтр radialDist > maxDistance внутри цикла — запас в 2 слоя за кадр бесплатен.
     const { innerRadius } = this.config
-    const loIndex = Math.max(0, Math.floor((cameraRadius - maxDistance - innerRadius) / this.layerThickness))
+    const loIndex = Math.max(0, Math.floor((cameraRadius - maxDistance - innerRadius) / this.layerThickness) - 1)
     const hiIndex = Math.min(
       this.layerCount - 1,
-      Math.ceil((cameraRadius + maxDistance - innerRadius) / this.layerThickness)
+      Math.ceil((cameraRadius + maxDistance - innerRadius) / this.layerThickness) + 1
     )
 
     for (let li = loIndex; li <= hiIndex; li++) {

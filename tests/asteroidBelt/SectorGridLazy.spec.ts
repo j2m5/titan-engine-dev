@@ -51,4 +51,41 @@ describe('SectorGrid — ленивые слои', () => {
     // Снимок ключей до правки — записан на HEAD (2d4e706) throwaway-скриптом, см. отчёт задачи
     expect(keys).toEqual(JSON.parse(readFileSync('tests/asteroidBelt/fixtures/saturnSectorKeys.json', 'utf8')))
   })
+
+  it('окно слоёв — надмножество прежнего скана на точной границе (radialDist == maxDistance)', () => {
+    // inner 0, outer 200, cell 10 → 20 слоёв по 10; камера на 100, окно 10:
+    // старый полный скан включал слой 8 (90–100, radialDist 10) и слой 11 (110–120, radialDist 10) —
+    // частное на границе целое, floor/ceil без запаса сами отрезают соседний слой
+    const grid = new SectorGrid({ innerRadius: 0, outerRadius: 200, cellSize: 10, ringId: 1, densityPerUnit: 1000 })
+    const sectors = grid.getSectorsInRange(0, 100, 10)
+    const layerIndices = new Set(sectors.map((s) => s.layerIndex))
+
+    expect(layerIndices.has(8)).toBe(true)
+    expect(layerIndices.has(11)).toBe(true)
+    for (const li of layerIndices) {
+      const layer = grid.layerAt(li)
+      const closest = Math.max(layer.innerRadius, Math.min(layer.outerRadius, 100))
+      expect(Math.abs(closest - 100)).toBeLessThanOrEqual(10)
+    }
+  })
+
+  it('слой по индексу вне диапазона — RangeError, а не тихий мусор', () => {
+    const grid = new SectorGrid({ innerRadius: 100, outerRadius: 200, cellSize: 10, ringId: 1, densityPerUnit: 1 })
+
+    expect(() => grid.layerAt(-1)).toThrow(RangeError)
+    expect(() => grid.layerAt(grid.layerCount)).toThrow(RangeError)
+  })
+
+  it('кэш слоёв — LRU: повторное обращение освежает позицию и переживает вытеснение чаще старых', () => {
+    const grid = new SectorGrid({ innerRadius: 0, outerRadius: 1000, cellSize: 1, ringId: 1, densityPerUnit: 1 })
+    const kept = grid.layerAt(0)
+
+    // Трогаем kept после каждой пачки, остальные 64 слоя проходят кэш насквозь и вытесняются
+    for (let i = 1; i <= 70; i++) {
+      grid.layerAt(i)
+      grid.layerAt(0)
+    }
+
+    expect(grid.layerAt(0)).toBe(kept)
+  })
 })
