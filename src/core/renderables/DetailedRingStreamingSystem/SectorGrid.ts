@@ -89,8 +89,9 @@ interface SectorGridConfig {
    */
   stochasticCount?: boolean
   /**
-   * Полная толщина сетки по Y, units сцены. Не задана — толщина 0, ровно один
-   * вертикальный слой (путь колец и старых тестов, построенных до этой оси).
+   * Полная толщина сетки по Y, units сцены. Не задана — толщина 0, поэтому
+   * сетка не может стать объёмной случайно: verticalLayerCount всегда 1
+   * независимо от cellHeight (путь колец и старых тестов, построенных до этой оси).
    */
   heightExtent?: number
   /**
@@ -312,30 +313,18 @@ class SectorGrid {
    * Возвращает массив SectorInfo для всех секторов в окрестности заданной точки.
    * @param cameraAngle — угол камеры в полярных координатах (radians)
    * @param cameraRadius — расстояние камеры от центра кольца
+   * @param cameraY — высота камеры, ring-local Y. У плоской сетки (volumetric
+   * false) не влияет ни на окно, ни на метрику — только у объёмной. Значение
+   * обязательно, чтобы вызывающий явно решал, средняя плоскость это или нет:
+   * дефолт-в-ноль у объёмной сетки молча выбрал бы не то окно слоёв.
    * @param maxDistance — максимальное расстояние от камеры для включения сектора
-   */
-  public getSectorsInRange(cameraAngle: number, cameraRadius: number, maxDistance: number): SectorInfo[]
-  /**
-   * @param cameraY — высота камеры, ring-local Y. У плоской сетки не влияет
-   * ни на окно, ни на метрику — участвует только когда volumetric.
    */
   public getSectorsInRange(
     cameraAngle: number,
     cameraRadius: number,
     cameraY: number,
     maxDistance: number
-  ): SectorInfo[]
-  public getSectorsInRange(
-    cameraAngle: number,
-    cameraRadius: number,
-    thirdArg: number,
-    maxDistanceArg?: number
   ): SectorInfo[] {
-    // Старый вызов о трёх числах (angle, radius, maxDistance) не несёт высоту
-    // камеры — cameraY подразумевается 0, путь плоской сетки (кольца) не меняется.
-    const cameraY = maxDistanceArg === undefined ? 0 : thirdArg
-    const maxDistance = maxDistanceArg === undefined ? thirdArg : maxDistanceArg
-
     const result: SectorInfo[] = []
     const camX = Math.cos(cameraAngle) * cameraRadius
     const camZ = Math.sin(cameraAngle) * cameraRadius

@@ -21,7 +21,7 @@ describe('SectorGrid — ленивые слои', () => {
     const grid = new SectorGrid({ innerRadius: beltInner, outerRadius: beltOuter, cellSize: cell, ringId: 11, densityPerUnit: 1 })
     const maxDistance: number = toThreeJSUnits(12000)
     const camR: number = fromAstronomicalUnits(50)
-    const sectors = grid.getSectorsInRange(0.3, camR, maxDistance)
+    const sectors = grid.getSectorsInRange(0.3, camR, 0, maxDistance)
     const layerIndices = new Set(sectors.map((s) => s.layerIndex))
 
     expect(layerIndices.size).toBeLessThanOrEqual(2 * Math.ceil(maxDistance / cell) + 3)
@@ -44,7 +44,7 @@ describe('SectorGrid — ленивые слои', () => {
   it('кольцо: тот же набор кандидатов, что и раньше (пин)', () => {
     // Сатурн: 74 500–140 220 км, ячейка 2000 км, камера на 100 000 км, окно 12 000 км
     const grid = new SectorGrid({ innerRadius: toThreeJSUnits(74500), outerRadius: toThreeJSUnits(140220), cellSize: cell, ringId: 39, densityPerUnit: 500 })
-    const sectors = grid.getSectorsInRange(1.0, toThreeJSUnits(100000), toThreeJSUnits(12000))
+    const sectors = grid.getSectorsInRange(1.0, toThreeJSUnits(100000), 0, toThreeJSUnits(12000))
     const keys = sectors.map((s) => s.key).sort()
 
     expect(keys.length).toBeGreaterThan(50)
@@ -58,7 +58,7 @@ describe('SectorGrid — ленивые слои', () => {
     // старый полный скан включал слой 8 (90–100, radialDist 10) и слой 11 (110–120, radialDist 10) —
     // частное на границе целое, floor/ceil без запаса сами отрезают соседний слой
     const grid = new SectorGrid({ innerRadius: 0, outerRadius: 200, cellSize: 10, ringId: 1, densityPerUnit: 1000 })
-    const sectors = grid.getSectorsInRange(0, 100, 10)
+    const sectors = grid.getSectorsInRange(0, 100, 0, 10)
     const layerIndices = new Set(sectors.map((s) => s.layerIndex))
 
     expect(layerIndices.has(8)).toBe(true)

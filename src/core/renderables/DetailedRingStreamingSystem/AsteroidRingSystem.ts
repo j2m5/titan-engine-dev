@@ -792,7 +792,7 @@ class AsteroidRingSystem extends Group {
     const localToWorld = this.matrixWorld
 
     // Обновить менеджер секторов
-    this.manager.update(cameraAngle, cameraRadius, this._viewProjMatrix, localToWorld, dt, this._localCamPos.y)
+    this.manager.update(cameraAngle, cameraRadius, this._localCamPos.y, this._viewProjMatrix, localToWorld, dt)
 
     // Коммит изменений в GPU
     this.pool.commitUpdates()

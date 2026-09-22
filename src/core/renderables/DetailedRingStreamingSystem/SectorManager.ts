@@ -248,19 +248,20 @@ class SectorManager {
    *
    * @param cameraAngle — угол камеры в полярных координатах (radians) в local space кольца
    * @param cameraRadius — расстояние камеры от центра кольца в local space
+   * @param cameraY — высота камеры, ring-local Y. Обязательна: у плоской сетки
+   * (volumetric false) не влияет на результат, но неявный ноль у объёмной молча
+   * подставил бы среднюю плоскость вместо реальной высоты камеры.
    * @param viewProjectionMatrix — camera.projectionMatrix * camera.matrixWorldInverse
    * @param localToWorldMatrix — матрица трансформации системы (local → world)
    * @param delta — время с прошлого кадра (секунды)
-   * @param cameraY — высота камеры, ring-local Y. Дефолт 0 — путь плоской сетки
-   * (кольца) не меняется без явной передачи.
    */
   public update(
     cameraAngle: number,
     cameraRadius: number,
+    cameraY: number,
     viewProjectionMatrix: Matrix4,
     localToWorldMatrix: Matrix4,
-    delta: number,
-    cameraY: number = 0
+    delta: number
   ): void {
     // 1. Подготовить frustum
     this._frustum.setFromProjectionMatrix(viewProjectionMatrix)
