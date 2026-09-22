@@ -1,4 +1,4 @@
-import { hashSectorKey, hashUnit } from './SeededRandom'
+import { hashSectorKey, hashUnitOf } from './SeededRandom'
 import { RadialDensityProfile } from './RadialDensityProfile'
 
 /**
@@ -151,10 +151,11 @@ class SectorGrid {
     const key = `${layerIndex}_${normalizedAngleIndex}`
     const seed = hashSectorKey(this.config.ringId, layerIndex, normalizedAngleIndex)
 
-    // Дробный ожидаемый счёт ниже единицы разыгрывается по хешу сектора:
-    // разреженное поле с < 0.5 камня на сектор иначе не существовало бы вовсе
+    // 0.5 — прежний порог округления колец, не трогаем: выше него счёт побайтно
+    // такой же, как раньше. Ниже — разреженный пояс, где < 0.5 камня на сектор
+    // раньше давало гарантированный 0; теперь разыгрывается по хешу сектора
     const instanceCount =
-      weighted >= 1 ? Math.round(weighted) : hashUnit(seed, 0x9e37) < weighted ? 1 : 0
+      weighted >= 0.5 ? Math.max(1, Math.round(weighted)) : hashUnitOf(seed, 0x9e37) < weighted ? 1 : 0
 
     return {
       key,

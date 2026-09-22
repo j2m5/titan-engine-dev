@@ -68,4 +68,16 @@ describe('SectorGrid — стохастический счёт при малой
 
     expect(info.instanceCount).toBe(Math.max(1, Math.round(area * 500)))
   })
+
+  it('порог 0.5 — старая ветка колец: weighted = 0.7 детерминирован, всегда 1', () => {
+    const probe = grid(1)
+    const probeInfo = probe.getSectorInfo(50, 0)
+    const area: number =
+      0.5 *
+      (probeInfo.bounds.maxRadius ** 2 - probeInfo.bounds.minRadius ** 2) *
+      (probeInfo.bounds.maxAngle - probeInfo.bounds.minAngle)
+    const g = grid(0.7 / area)
+
+    for (let a = 0; a < 30; a++) expect(g.getSectorInfo(50, a).instanceCount).toBe(1)
+  })
 })
