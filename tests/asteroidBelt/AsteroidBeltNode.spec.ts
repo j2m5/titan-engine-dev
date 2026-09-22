@@ -130,4 +130,27 @@ describe('AsteroidBelt — состояния LOD по расстоянию до
     const streamer = internalsOf(belt).streamer!
     expect(configOf(streamer).dustEnabled).toBe(false)
   })
+
+  it('стример пояса получает stochasticCount: true — разреженные секторы не теряют камень гарантированно', () => {
+    const node = makeFactory().make(beltActor(BELT_DATA)) as PlacedNode
+    const belt = node.children.find((c) => c instanceof AsteroidBelt) as unknown as AsteroidBelt
+    node.updateMatrixWorld(true)
+
+    frameAt(belt, fromAstronomicalUnits(50))
+
+    const streamer = internalsOf(belt).streamer!
+    expect(configOf(streamer).stochasticCount).toBe(true)
+  })
+
+  it('стример подхватывает asteroidSizeKm/profile из резолвленных параметров пояса, а не заново из сырых данных', () => {
+    const node = makeFactory().make(beltActor({ ...BELT_DATA, asteroidSizeKm: 12, profile: 'icy' })) as PlacedNode
+    const belt = node.children.find((c) => c instanceof AsteroidBelt) as unknown as AsteroidBelt
+    node.updateMatrixWorld(true)
+
+    frameAt(belt, fromAstronomicalUnits(50))
+
+    const streamer = internalsOf(belt).streamer!
+    expect(configOf(streamer).asteroidSizeKm).toBe(12)
+    expect(configOf(streamer).profile).toBe('icy')
+  })
 })

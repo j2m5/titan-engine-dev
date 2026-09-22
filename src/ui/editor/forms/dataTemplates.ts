@@ -171,7 +171,7 @@ export const renderingDataTemplates: DataTemplate[] = [
       dustEnabled: true,
       dustColor: '#9b968c',
       dustTauGrazing: 0.52,
-      dustScaleHeightKm: 200,
+      dustScaleHeightKm: 20000,
       spinPeriodHours: 8,
       pointCount: 60000,
       pointScale: 220

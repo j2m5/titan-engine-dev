@@ -134,9 +134,10 @@ describe('шейдеры: instanceOrigin', () => {
   })
 
   it('сиды не зависят от instanceOrigin: переезд начала не меняет форму камней', () => {
-    // Дефект, пойманный ревью: instanceMatrix[3].xyz + instanceOrigin — это
-    // позиция от ПЛАВАЮЩЕГО НАЧАЛА, а не от центра кольца, и rebaseOrigins
-    // меняет её на каждом переезде. Сид обязан браться только из матрицы.
+    // instanceMatrix[3].xyz + instanceOrigin — это позиция от ПЛАВАЮЩЕГО
+    // НАЧАЛА, а не от центра кольца, и rebaseOrigins меняет её на каждом
+    // переезде. Сид обязан браться только из матрицы, иначе облик камня
+    // «перещёлкивается» при каждом сдвиге начала.
     const l0: string = withoutComments(InstancedAsteroidShaderTemplate.vertexShader)
     for (const call of l0.match(/hash13\([^;]*\)/g) ?? []) {
       expect(call).not.toContain('instanceOrigin')
@@ -168,7 +169,7 @@ describe('шейдеры: instanceOrigin', () => {
   it('при нулевом origin оба вершинника тождественны прежним: атрибут входит только слагаемым', () => {
     // Пин строк выше держит ФОРМУ выражений; здесь — их СЕМАНТИКА при нуле:
     // instanceOrigin нигде не участвует иначе, чем в сложении, поэтому у колец
-    // (нулевой буфер) шейдер считает ровно то же, что до задачи.
+    // (нулевой буфер) шейдер считает ровно то же, что и до атрибута instanceOrigin.
     const additive = /(\+=?\s*instanceOrigin\b)|(\binstanceOrigin\s*\+)/
 
     for (const source of [InstancedAsteroidShaderTemplate.vertexShader, billboardVertexSource()]) {

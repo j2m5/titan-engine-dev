@@ -19,7 +19,11 @@ import { assertLodInvariant } from './streamerScale'
 import { RingDustVolume } from './dust/RingDustVolume'
 import { installRingDustDebug, type RockDustUniforms } from './dust/RingDustDebug'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
-import { ASTEROID_PROFILES, type AsteroidProfileName } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
+import {
+  ASTEROID_PROFILES,
+  asteroidProfileNameOf,
+  type AsteroidProfileName
+} from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
 import { UpdateContext } from '@/core/UpdateContext'
 import { archetypeLayout, getArchetypeGeometries } from './archetypes/ArchetypeLibrary'
 import type { ShapeModelStorage } from './archetypes/ShapeModelStorage'
@@ -223,6 +227,13 @@ interface AsteroidRingConfig {
    * Время вращения идёт по ctx.epoch (см. updateObject), не по рендер-часам.
    */
   spinPeriodHours: number
+  /**
+   * Розыгрыш Бернулли для секторов с weighted < 0.5 (см. SectorGridConfig).
+   * Дефолт false — кольца получают старый код побайтно; пояс задаёт true в
+   * configOverrides (AsteroidBelt.__createStreamer): у него много секторов с
+   * 0 < weighted < 1, и без розыгрыша они гарантированно теряли бы камень.
+   */
+  stochasticCount: boolean
 }
 
 /**
@@ -274,7 +285,8 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   detailAoInfluence: 0.8,
   detailRoughInfluence: 0.7,
   relativeOrigin: false,
-  spinPeriodHours: 0
+  spinPeriodHours: 0,
+  stochasticCount: false
 }
 
 /**
@@ -392,10 +404,11 @@ class AsteroidRingSystem extends Group {
     if (data.layerShadowStrength !== undefined) overrides.layerShadowStrength = data.layerShadowStrength
     if (data.bandTintStrength !== undefined) overrides.bandTintStrength = data.bandTintStrength
     if (data.spinPeriodHours !== undefined) overrides.spinPeriodHours = data.spinPeriodHours
-    // Имя профиля приходит строкой из JSON — неизвестное тихо игнорируем
-    // (останется дефолт), чтобы опечатка в редакторе данных не роняла рендер
-    if (data.profile !== undefined && data.profile in ASTEROID_PROFILES) {
-      overrides.profile = data.profile as AsteroidProfileName
+    // Имя профиля приходит строкой из JSON — неизвестное тихо становится
+    // 'stony' (asteroidProfileNameOf), чтобы опечатка в редакторе данных не
+    // роняла рендер; отсутствующее поле оставляет прежний дефолт нетронутым
+    if (data.profile !== undefined) {
+      overrides.profile = asteroidProfileNameOf(data.profile)
     }
 
     return overrides
@@ -436,7 +449,8 @@ class AsteroidRingSystem extends Group {
       outerRadius,
       cellSize,
       ringId: cfg.ringId,
-      densityPerUnit: cfg.densityPerUnit
+      densityPerUnit: cfg.densityPerUnit,
+      stochasticCount: cfg.stochasticCount
     }
     this.sectorGrid = new SectorGrid(gridConfig)
 

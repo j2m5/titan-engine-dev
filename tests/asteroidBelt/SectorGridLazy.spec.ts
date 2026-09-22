@@ -48,7 +48,8 @@ describe('SectorGrid — ленивые слои', () => {
     const keys = sectors.map((s) => s.key).sort()
 
     expect(keys.length).toBeGreaterThan(50)
-    // Снимок ключей до правки — записан на HEAD (2d4e706) throwaway-скриптом, см. отчёт задачи
+    // Снимок ключей до ленивых слоёв (HEAD 2d4e706) — инвариант: точный полный
+    // скан и окно вокруг камеры обязаны давать один и тот же набор секторов
     expect(keys).toEqual(JSON.parse(readFileSync('tests/asteroidBelt/fixtures/saturnSectorKeys.json', 'utf8')))
   })
 

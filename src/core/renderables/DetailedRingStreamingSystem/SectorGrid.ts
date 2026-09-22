@@ -69,6 +69,14 @@ interface SectorGridConfig {
   ringId: number
   /** Базовая плотность экземпляров на единицу площади */
   densityPerUnit: number
+  /**
+   * Ниже порога 0.5 (см. getSectorInfo) считать instanceCount розыгрышем
+   * Бернулли по хешу сектора вместо гарантированного 0. Дефолт false — старый
+   * код колец побайтно (см. git show 2df9dfe); true задаёт только пояс
+   * (AsteroidBelt.__createStreamer) — там 0 < weighted < 1 у большинства
+   * секторов, и без розыгрыша разреженный пояс терял бы почти все камни.
+   */
+  stochasticCount?: boolean
 }
 
 /**
@@ -103,9 +111,11 @@ class SectorGrid {
   }
 
   /**
-   * Аналитическая оценка общего числа секторов пояса (площадь / площадь ячейки),
-   * без обхода всех слоёв. Используется только диагностикой (debug stats) —
-   * не совпадает с точной суммой на малом числе слоёв, но верна асимптотически.
+   * Аналитическая оценка общего числа секторов пояса — эквивалент
+   * layerCount × среднее число угловых секторов на слой (площадь тора /
+   * площадь ячейки), без обхода самих слоёв. Только диагностика (debug stats,
+   * см. AsteroidRingSystem.getDebugInfo) — может слегка отличаться от точного
+   * счёта прежнего (не ленивого) прохода по всем слоям, в рендере не участвует.
    */
   public get totalSectorCount(): number {
     const { innerRadius, outerRadius, cellSize } = this.config
@@ -208,10 +218,17 @@ class SectorGrid {
     const seed = hashSectorKey(this.config.ringId, layerIndex, normalizedAngleIndex)
 
     // 0.5 — прежний порог округления колец, не трогаем: выше него счёт побайтно
-    // такой же, как раньше. Ниже — разреженный пояс, где < 0.5 камня на сектор
-    // раньше давало гарантированный 0; теперь разыгрывается по хешу сектора
+    // такой же, как раньше при любом флаге. Ниже — под stochasticCount (только
+    // пояс, см. SectorGridConfig) разыгрывается по хешу сектора вместо
+    // гарантированного 0; кольца (флаг выключен) идут прежней веткой
     const instanceCount =
-      weighted >= 0.5 ? Math.max(1, Math.round(weighted)) : hashUnitOf(seed, 0x9e37) < weighted ? 1 : 0
+      weighted >= 0.5
+        ? Math.max(1, Math.round(weighted))
+        : this.config.stochasticCount
+          ? hashUnitOf(seed, 0x9e37) < weighted
+            ? 1
+            : 0
+          : 0
 
     return {
       key,

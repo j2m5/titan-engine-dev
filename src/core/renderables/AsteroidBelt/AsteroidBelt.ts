@@ -12,7 +12,11 @@ import { distanceToTorus, nextState, BeltLodState } from '@/core/renderables/Det
 import { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
 import { ringLightDirection } from '@/core/renderables/DetailedRingStreamingSystem/ringLightDirection'
 import { BeltPointLayer } from '@/core/renderables/DetailedRingStreamingSystem/BeltPointLayer'
-import { ASTEROID_PROFILES, type AsteroidProfileName } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
+import {
+  ASTEROID_PROFILES,
+  asteroidProfileNameOf,
+  type AsteroidProfileName
+} from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
 import { resolveLightTint } from '@/core/helpers/lightSource'
 
 /** Средняя дистанция состояния Mid — до неё стример спит, а не создаётся заново (см. спеку §4) */
@@ -113,7 +117,7 @@ class AsteroidBelt extends Group {
   private __createPointLayer(): BeltPointLayer {
     const p = this.params
     // Тот же выбор профиля породы, что у стримера (см. ASTEROID_PROFILES) — цвет точек совпадает с камнями
-    const profileName: AsteroidProfileName = p.profile in ASTEROID_PROFILES ? (p.profile as AsteroidProfileName) : 'stony'
+    const profileName: AsteroidProfileName = asteroidProfileNameOf(p.profile)
 
     return new BeltPointLayer({
       innerR: this.innerRadiusTu,
@@ -150,7 +154,14 @@ class AsteroidBelt extends Group {
       ringGapsFromTexture: false,
       planetshineStrength: 0,
       layerShadowStrength: 0,
-      spinPeriodHours: p.spinPeriodHours
+      spinPeriodHours: p.spinPeriodHours,
+      // Разреженный пояс: многие секторы 0 < weighted < 1 — без розыгрыша
+      // теряли бы камень гарантированно (см. SectorGridConfig.stochasticCount)
+      stochasticCount: true,
+      // Явно из уже резолвленных параметров пояса (this.params) — единственный
+      // источник, а не повторное чтение renderingObject.data в __modelVisualOverrides
+      asteroidSizeKm: p.asteroidSizeKm,
+      profile: asteroidProfileNameOf(p.profile)
     }
     // Пыль уже посчитана дальним слоем — второй объём стримера был бы дублем
     if (this.dustVolume) overrides.dustEnabled = false
