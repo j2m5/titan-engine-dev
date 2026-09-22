@@ -38,7 +38,9 @@ describe('категория пояса астероидов', () => {
       'dustColor',
       'dustTauGrazing',
       'dustScaleHeightKm',
-      'spinPeriodHours'
+      'spinPeriodHours',
+      'pointCount',
+      'pointScale'
     ])
   })
 })

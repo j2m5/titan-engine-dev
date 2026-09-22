@@ -7,16 +7,18 @@ import { Color, Uniform } from 'three'
  * (gl_PointSize = size * (k / -mvPosition.z)), но без мерцания и текстуры
  * звезды: круглый спрайт по gl_PointCoord.
  *
- * uFade — кроссфейд с L1-биллбордами стримера (см. AsteroidBelt.updateObject,
- * beltCrossFade.pointLayerFade); uNearFade — гашение ОТДЕЛЬНОЙ точки у камеры
- * (three-units дистанции до камеры, не путать с uFade): без него точка,
- * оказавшаяся у камеры, раздулась бы спрайтом на весь экран.
+ * Кроссфейд с L1-биллбордами стримера — комплемент ИХ ЖЕ per-instance fade
+ * (см. BillboardAsteroidMaterial: vDistanceFade = 1.0 -
+ * smoothstep(uMaxDistance * 0.6, uMaxDistance, dist)) по той же метрике
+ * (view-space дистанция) и с тем же uMaxDistance (= nearThresholdTu
+ * стримера, см. AsteroidBelt). Считается ПОЛНОСТЬЮ во вершиннике, per-point
+ * — камера может быть внутри Near для одних точек тора и далеко от него для
+ * других одновременно, глобальный множитель этого не различит.
  */
 export const BeltPointsShaderTemplate: ShaderProps = {
   uniforms: {
     uPointScale: new Uniform(220),
-    uFade: new Uniform(1),
-    uNearFade: new Uniform(1),
+    uMaxDistance: new Uniform(1),
     uColor: new Uniform(new Color(1, 1, 1)),
     uLightColor: new Uniform(new Color(1, 1, 1))
   },
@@ -24,30 +26,29 @@ export const BeltPointsShaderTemplate: ShaderProps = {
     attribute float size;
 
     uniform float uPointScale;
-    uniform float uNearFade;
+    uniform float uMaxDistance;
 
-    varying float vNearGate;
+    varying float vFarGate;
 
     void main() {
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-      float camDist = -mvPosition.z;
 
-      gl_PointSize = size * (uPointScale / camDist);
+      gl_PointSize = size * (uPointScale / -mvPosition.z);
       gl_Position = projectionMatrix * mvPosition;
 
-      // Гашение отдельной точки у камеры: без него точка у камеры раздулась бы спрайтом на весь экран
-      vNearGate = smoothstep(0.0, uNearFade, camDist);
+      // Комплемент per-instance fade L1-биллборда на этой же дистанции (см. докблок выше)
+      float camDist = length(mvPosition.xyz);
+      vFarGate = smoothstep(uMaxDistance * 0.6, uMaxDistance, camDist);
     }
   `,
   fragmentShader: `
     uniform vec3 uColor;
-    uniform float uFade;
 
     #ifdef USE_LIGHT_TINT
       uniform vec3 uLightColor;
     #endif
 
-    varying float vNearGate;
+    varying float vFarGate;
 
     void main() {
       // Круглый спрайт по gl_PointCoord с мягким краем (AA без экранных производных — точка мала)
@@ -56,7 +57,7 @@ export const BeltPointsShaderTemplate: ShaderProps = {
       if (r > 1.0) discard;
 
       float edgeAlpha = 1.0 - smoothstep(0.7, 1.0, r);
-      float alpha = uFade * vNearGate * edgeAlpha;
+      float alpha = vFarGate * edgeAlpha;
       if (alpha < 0.01) discard;
 
       #ifdef USE_LIGHT_TINT

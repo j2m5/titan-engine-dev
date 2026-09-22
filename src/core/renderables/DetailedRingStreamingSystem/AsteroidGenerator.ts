@@ -1,4 +1,5 @@
 import { SeededRandom, hashSectorKey } from './SeededRandom'
+import { triangularHeight } from './triangularHeight'
 import { sectorCenter, type SectorBounds } from './SectorGrid'
 import { RadialDensityProfile } from './RadialDensityProfile'
 import type { AsteroidProfileName } from './AsteroidProfiles'
@@ -266,10 +267,10 @@ class AsteroidGenerator {
       // Относительно центра сектора: центр — в double, вычитание до float32-записи
       const px: number = relative ? x - centerX : x
       const pz: number = relative ? z - centerZ : z
-      // Вертикаль: треугольное распределение (сумма двух uniform) — пик в средней
+      // Вертикаль: треугольное распределение (см. triangularHeight) — пик в средней
       // плоскости, линейный спад к краям. Равномерный слэб на высокой плотности
       // рисовал «стенку» с плоскими гранями сверху/снизу; мягкий спад её гасит.
-      const y = (rng.next() + rng.next() - 1) * halfThickness
+      const y = triangularHeight(rng, halfThickness)
 
       // Поворот: случайные углы Эйлера
       const rx = rng.next() * Math.PI * 2

@@ -502,6 +502,10 @@ export interface IAsteroidBeltRenderingObject {
   dustScaleHeightKm?: number
   /** Средний период вращения камней, часы; 0 гасит вращение (дефолт 0) */
   spinPeriodHours?: number
+  /** Число точек дальнего слоя, штук (дефолт 60000) */
+  pointCount?: number
+  /** Базовый масштаб спрайта точки дальнего слоя, пиксель·three-unit (дефолт 220) */
+  pointScale?: number
 }
 
 export interface IBrownDwarfRenderingObject {

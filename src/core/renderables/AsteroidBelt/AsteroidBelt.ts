@@ -9,7 +9,6 @@ import { shapeModelStorage } from '@/core/renderables/DetailedRingStreamingSyste
 import { deriveStreamerScale } from '@/core/renderables/DetailedRingStreamingSystem/streamerScale'
 import { buildBeltDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/beltDensityProfile'
 import { distanceToTorus, nextState, BeltLodState } from '@/core/renderables/DetailedRingStreamingSystem/beltDistance'
-import { pointLayerFade } from '@/core/renderables/DetailedRingStreamingSystem/beltCrossFade'
 import { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
 import { ringLightDirection } from '@/core/renderables/DetailedRingStreamingSystem/ringLightDirection'
 import { BeltPointLayer } from '@/core/renderables/DetailedRingStreamingSystem/BeltPointLayer'
@@ -18,9 +17,6 @@ import { resolveLightTint } from '@/core/helpers/lightSource'
 
 /** Средняя дистанция состояния Mid — до неё стример спит, а не создаётся заново (см. спеку §4) */
 const MID_THRESHOLD_AU = 1
-
-/** Бюджет точек дальнего слоя — фиксирован, диапазон спеки §4: 50–100 тыс. на буфер */
-const FAR_POINT_COUNT = 60000
 
 /**
  * Пояс астероидов масштаба системы (категория asteroidBelt, id 11).
@@ -35,8 +31,9 @@ const FAR_POINT_COUNT = 60000
  * Дальний слой — пылевая лента (RingDustVolume) и точечная россыпь
  * (BeltPointLayer), обе поверх всего тора, видны во всех трёх состояниях; при
  * наличии пыли стример получает dustEnabled: false, чтобы не считать пыль
- * дважды. Точки кроссфейдятся с L1-биллбордами стримера у порога Near — сумма
- * fade тождественно 1 (см. beltCrossFade).
+ * дважды. Точки ВСЕГДА видимы — кроссфейд с L1-биллбордами стримера у порога
+ * Near считается per-point прямо в шейдере точек (см. BeltPointsShaderTemplate),
+ * не общим множителем на весь слой.
  */
 class AsteroidBelt extends Group {
   // Не "model": three.js уже объявляет это имя публичным на Object3D (см.
@@ -56,7 +53,7 @@ class AsteroidBelt extends Group {
   private lodState: BeltLodState = BeltLodState.Far
   private streamer: AsteroidRingSystem | null = null
   private readonly dustVolume: RingDustVolume | null
-  /** Точечная россыпь дальнего слоя — создана всегда (в отличие от стримера), кроссфейд с L1 в updateObject */
+  /** Точечная россыпь дальнего слоя — создана и видима всегда (в отличие от стримера); кроссфейд с L1 — в её шейдере */
   private readonly pointLayer: BeltPointLayer
 
   private readonly _cameraLocal = new Vector3()
@@ -122,11 +119,14 @@ class AsteroidBelt extends Group {
       innerR: this.innerRadiusTu,
       outerR: this.outerRadiusTu,
       halfThickness: this.halfThicknessTu,
-      count: FAR_POINT_COUNT,
+      count: p.pointCount,
       seed: p.seed,
       profile: this.densityProfile,
       color: new Color(ASTEROID_PROFILES[profileName].baseColor),
-      lightTint: resolveLightTint(this.actor)
+      lightTint: resolveLightTint(this.actor),
+      pointScale: p.pointScale,
+      // Тот же порог, что уходит билборду L1 как uMaxDistance — см. BeltPointsShaderTemplate
+      maxDistance: this.nearThresholdTu
     })
   }
 
@@ -180,11 +180,6 @@ class AsteroidBelt extends Group {
     if (this.streamer) {
       this.streamer.visible = this.lodState === BeltLodState.Near
     }
-
-    // Кроссфейд с L1-биллбордами стримера: точки гаснут внутрь тора, L1 —
-    // наружу (см. beltCrossFade, спека §4); L1 использует свой собственный
-    // per-instance fade (uMaxDistance билборда) — не трогается здесь.
-    this.pointLayer.setFade(pointLayerFade(distance, this.nearThresholdTu))
 
     if (this.dustVolume) {
       // Звезда в нуле мира (см. resolveLightSource); пояс стоит там же, поэтому

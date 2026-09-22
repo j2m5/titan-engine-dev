@@ -7,6 +7,11 @@ import type { BeltStructure } from '@/core/renderables/DetailedRingStreamingSyst
 /** Пояс без щелей и сгущений — единица по всей ширине (см. buildBeltDensityProfile) */
 const EMPTY_STRUCTURE: BeltStructure = { edgeSoftness: 0, gaps: [], clumps: [] }
 
+/** Дефолты дальнего слоя точек — диапазон спеки §4: 50–100 тыс. точек на буфер */
+const DEFAULT_POINT_COUNT = 60000
+/** Базовый масштаб точечного спрайта, пиксель·three-unit (см. идиому StarfieldShaderTemplate) */
+const DEFAULT_POINT_SCALE = 220
+
 /**
  * Параметры пояса после дефолтов и клампов — км и единицы данных, готовые к
  * передаче в AsteroidBelt/AsteroidRingSystem. Машинерия (LOD-пороги, пулы,
@@ -27,6 +32,9 @@ export interface AsteroidBeltParameters {
   dustTauGrazing: number
   dustScaleHeightKm: number
   spinPeriodHours: number
+  /** Число точек дальнего слоя — целое, ≥ 0 (0 гасит слой видимостью пустого буфера) */
+  pointCount: number
+  pointScale: number
 }
 
 /**
@@ -57,6 +65,9 @@ export function asteroidBeltParameters(actor: Actor): AsteroidBeltParameters {
     dustColor: data.dustColor ?? 0x9b968c,
     dustTauGrazing: data.dustTauGrazing ?? 0.52,
     dustScaleHeightKm: data.dustScaleHeightKm ?? 200,
-    spinPeriodHours: data.spinPeriodHours ?? 0
+    spinPeriodHours: data.spinPeriodHours ?? 0,
+    // Целое и не отрицательное — отрицательный/дробный count ломает Float32Array(count * 3)
+    pointCount: Math.max(0, Math.floor(data.pointCount ?? DEFAULT_POINT_COUNT)),
+    pointScale: data.pointScale ?? DEFAULT_POINT_SCALE
   }
 }

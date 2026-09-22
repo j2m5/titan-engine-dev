@@ -2,13 +2,19 @@ import { describe, it, expect } from 'vitest'
 import { Color } from 'three'
 import { BeltPointLayer } from '@/core/renderables/DetailedRingStreamingSystem/BeltPointLayer'
 import { BeltPointsShaderTemplate } from '@/core/materials/shaders/lib/BeltPointsShaderTemplate'
+import { BILLBOARD_VERTEX_SHADER } from '@/core/renderables/DetailedRingStreamingSystem/BillboardAsteroidMaterial'
 import { buildBeltDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/beltDensityProfile'
-import { pointLayerFade, streamerL1Fade } from '@/core/renderables/DetailedRingStreamingSystem/beltCrossFade'
+import { AsteroidBelt } from '@/core/renderables/AsteroidBelt'
+import { deriveStreamerScale } from '@/core/renderables/DetailedRingStreamingSystem/streamerScale'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
+import type { Actor } from '@/core/models/Actor'
+import type { IAsteroidBeltRenderingObject } from '@/core/models/types'
 import { withoutComments } from '../helpers/glsl'
 
 const INNER = 40
 const OUTER = 60
 const HALF_THICKNESS = 1
+const MAX_DISTANCE = 12000
 
 const FLAT_PROFILE = buildBeltDensityProfile({ edgeSoftness: 0, gaps: [], clumps: [] })
 
@@ -22,6 +28,8 @@ function baseParams(overrides: Partial<ConstructorParameters<typeof BeltPointLay
     profile: FLAT_PROFILE,
     color: new Color(0x6b6157),
     lightTint: { active: false, color: new Color(1, 1, 1) },
+    pointScale: 220,
+    maxDistance: MAX_DISTANCE,
     ...overrides
   }
 }
@@ -112,19 +120,26 @@ describe('BeltPointLayer: детерминизм по сиду', () => {
   })
 })
 
-describe('BeltPointLayer: setFade', () => {
-  it('setFade(0) прячет слой (visible === false)', () => {
+describe('BeltPointLayer: слой всегда видим, кроссфейд — не глобальный множитель', () => {
+  it('visible === true сразу после конструктора, без отдельного вызова', () => {
     const layer = new BeltPointLayer(baseParams())
-    layer.setFade(0)
-    expect(layer.visible).toBe(false)
+    expect(layer.visible).toBe(true)
   })
 
-  it('setFade(> 0) показывает слой и пишет юниформ uFade', () => {
+  it('глобального uFade/uNearFade в материале нет — кроссфейд считается per-point в шейдере', () => {
     const layer = new BeltPointLayer(baseParams())
-    layer.setFade(0)
-    layer.setFade(0.6)
-    expect(layer.visible).toBe(true)
-    expect(layer.pointMaterial.uniforms.uFade.value).toBe(0.6)
+    expect(layer.pointMaterial.uniforms.uFade).toBeUndefined()
+    expect(layer.pointMaterial.uniforms.uNearFade).toBeUndefined()
+  })
+
+  it('setFade у слоя больше нет (метод удалён вместе с глобальным кроссфейдом)', () => {
+    const layer = new BeltPointLayer(baseParams())
+    expect((layer as unknown as { setFade?: unknown }).setFade).toBeUndefined()
+  })
+
+  it('uMaxDistance материала — переданный maxDistance', () => {
+    const layer = new BeltPointLayer(baseParams({ maxDistance: 9000 }))
+    expect(layer.pointMaterial.uniforms.uMaxDistance.value).toBe(9000)
   })
 })
 
@@ -152,7 +167,7 @@ describe('BeltPointsShaderTemplate: пины шейдера', () => {
   })
 
   it('приём размера спрайта — тот же, что у StarfieldShaderTemplate: size * (k / -mvPosition.z)', () => {
-    expect(vertex).toMatch(/gl_PointSize\s*=\s*size\s*\*\s*\(?\s*uPointScale\s*\/\s*[\w.]+\s*\)?;/)
+    expect(vertex).toMatch(/gl_PointSize\s*=\s*size\s*\*\s*\(?\s*uPointScale\s*\/\s*[-\w.]+\s*\)?;/)
     expect(vertex).toContain('-mvPosition.z')
   })
 
@@ -165,34 +180,62 @@ describe('BeltPointsShaderTemplate: пины шейдера', () => {
     expect(fragment).not.toContain('starTexture')
     expect(vertex + fragment).not.toContain('blink')
   })
+
+  it('глобального uFade/uNearFade юниформа в шаблоне больше нет', () => {
+    expect(vertex + fragment).not.toContain('uFade')
+    expect(vertex + fragment).not.toContain('uNearFade')
+  })
 })
 
-describe('beltCrossFade: точки и L1 гаснут навстречу друг другу', () => {
-  const nearThreshold = 12000
+describe('BeltPointsShaderTemplate: кроссфейд с L1 — per-point комплемент ИХ ЖЕ формулы', () => {
+  const billboardVertex = withoutComments(BILLBOARD_VERTEX_SHADER)
+  const pointsVertex = withoutComments(BeltPointsShaderTemplate.vertexShader)
 
-  it('сумма fade точек и «противоположного» L1 тождественно 1 при любой дистанции', () => {
-    for (const distance of [0, 1000, 6000, 12000, 18000, 24000, 100000]) {
-      const sum = pointLayerFade(distance, nearThreshold) + streamerL1Fade(distance, nearThreshold)
-      expect(sum).toBeCloseTo(1, 10)
+  it('доля near-fade билборда читается из его исходника (не захардкожена в тесте)', () => {
+    const match = billboardVertex.match(/smoothstep\(uMaxDistance \* ([\d.]+), uMaxDistance, dist\)/)
+    expect(match).not.toBeNull()
+  })
+
+  it('точки используют ТУ ЖЕ долю и ТУ ЖЕ пару (uMaxDistance, uMaxDistance) в smoothstep, что и билборд', () => {
+    const match = billboardVertex.match(/smoothstep\(uMaxDistance \* ([\d.]+), uMaxDistance, dist\)/)
+    const fraction = match![1]
+    const escaped = fraction.replace('.', '\\.')
+    const expected = new RegExp(`smoothstep\\(uMaxDistance \\* ${escaped}, uMaxDistance, camDist\\)`)
+
+    expect(pointsVertex).toMatch(expected)
+  })
+
+  it('метрика — view-space дистанция точки (length(mvPosition.xyz)), как dist = length(mvInstancePos.xyz) у билборда', () => {
+    expect(billboardVertex).toContain('length(mvInstancePos.xyz)')
+    expect(pointsVertex).toContain('length(mvPosition.xyz)')
+  })
+
+  it('fade НЕ инвертирован относительно билборда: точки используют smoothstep напрямую (растёт с дистанцией), билборд — 1 минус он же', () => {
+    expect(billboardVertex).toContain('1.0 - smoothstep(uMaxDistance * 0.6, uMaxDistance, dist)')
+    expect(pointsVertex).not.toContain('1.0 - smoothstep')
+  })
+})
+
+describe('AsteroidBelt: точки получают тот же uMaxDistance, что L1-биллборды стримера', () => {
+  function beltActor(data: IAsteroidBeltRenderingObject): Actor {
+    return {
+      renderingObject: { getAttribute: (): unknown => data },
+      getAttribute: (key: string, fallback: unknown = ''): unknown => (key === 'categoryId' ? 11 : fallback)
+    } as unknown as Actor
+  }
+
+  it('uMaxDistance точек = toThreeJSUnits(deriveStreamerScale(meanSpacingKm).lodThresholdsKm.l1)', () => {
+    const data: IAsteroidBeltRenderingObject = {
+      innerRadiusAu: 40,
+      outerRadiusAu: 60,
+      thicknessAu: 0.1,
+      meanSpacingKm: 60,
+      dustEnabled: false
     }
-  })
+    const belt = new AsteroidBelt(beltActor(data))
+    const pointLayer = (belt as unknown as { pointLayer: BeltPointLayer }).pointLayer
+    const expected = toThreeJSUnits(deriveStreamerScale(data.meanSpacingKm).lodThresholdsKm.l1)
 
-  it('у самого тора (distance = 0) точки погашены, L1 — на максимуме', () => {
-    expect(pointLayerFade(0, nearThreshold)).toBe(0)
-    expect(streamerL1Fade(0, nearThreshold)).toBe(1)
-  })
-
-  it('далеко за порогом (1.5·near и дальше) точки на максимуме', () => {
-    expect(pointLayerFade(nearThreshold * 1.5, nearThreshold)).toBe(1)
-    expect(pointLayerFade(nearThreshold * 3, nearThreshold)).toBe(1)
-  })
-
-  it('монотонность: fade точек растёт с дистанцией', () => {
-    let prev = -Infinity
-    for (const distance of [0, 2000, 6000, 9000, 12000, 15000, 18000]) {
-      const fade = pointLayerFade(distance, nearThreshold)
-      expect(fade).toBeGreaterThanOrEqual(prev)
-      prev = fade
-    }
+    expect(pointLayer.pointMaterial.uniforms.uMaxDistance.value).toBeCloseTo(expected, 6)
   })
 })

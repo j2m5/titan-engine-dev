@@ -1,13 +1,8 @@
 import { BufferGeometry, Color, Float32BufferAttribute, Points, ShaderMaterial } from 'three'
 import { SeededRandom } from './SeededRandom'
 import { RadialDensityProfile } from './RadialDensityProfile'
+import { triangularHeight } from './triangularHeight'
 import { BeltPointsShaderTemplate } from '@/core/materials/shaders/lib/BeltPointsShaderTemplate'
-
-/** Гашение отдельной точки у камеры — доли полутолщины пояса (см. uNearFade в шаблоне) */
-const NEAR_FADE_HALF_THICKNESS_MULT = 8
-
-/** Базовый масштаб точечного спрайта, пиксель·three-unit (см. идиому StarfieldShaderTemplate); ручка владельца */
-const DEFAULT_POINT_SCALE = 220
 
 interface BeltPointLayerParams {
   /** Внутренний радиус тора, three-units */
@@ -16,7 +11,7 @@ interface BeltPointLayerParams {
   outerR: number
   /** Половина толщины тора, three-units */
   halfThickness: number
-  /** Число точек буфера — фиксированный бюджет дальнего слоя (спека §4: 50–100 тыс.) */
+  /** Число точек буфера (см. IAsteroidBeltRenderingObject.pointCount, дефолт 60000) */
   count: number
   seed: number
   /** Радиальный профиль плотности (доли [0,1]) — тот же, что у камней стримера (buildBeltDensityProfile) */
@@ -25,13 +20,28 @@ interface BeltPointLayerParams {
   color: Color
   /** Подписка светила на цвет света (см. resolveLightTint) */
   lightTint: { active: boolean; color: Color }
+  /** Базовый масштаб спрайта, пиксель·three-unit (см. IAsteroidBeltRenderingObject.pointScale, дефолт 220) */
+  pointScale: number
+  /**
+   * Порог кроссфейда с L1-биллбордами, three-units — тот же nearThresholdTu
+   * (= lodThresholdsKm.l1 стримера), что передаётся билборду как uMaxDistance
+   * (см. AsteroidBelt, BillboardAsteroidMaterial). Общий порог — условие
+   * того, что fade точки и fade L1 на одной дистанции взаимно дополняют друг
+   * друга (см. докблок BeltPointsShaderTemplate).
+   */
+  maxDistance: number
 }
 
 /**
  * BeltPointLayer — дальний слой пояса астероидов: облако точек по тому же
  * радиальному профилю плотности и треугольному закону высоты, что и камни
- * стримера (см. AsteroidGenerator.generateMatricesGrouped) — щели и сгущения
- * читаются одинаково что вблизи, что издалека.
+ * стримера (см. AsteroidGenerator.generateMatricesGrouped, triangularHeight)
+ * — щели и сгущения читаются одинаково что вблизи, что издалека.
+ *
+ * Слой ВСЕГДА видим (в отличие от лениво создаваемого стримера) — кроссфейд с
+ * L1-биллбордами считается per-point в вершиннике (см. BeltPointsShaderTemplate),
+ * а не общим множителем: разные точки тора могут быть у камеры внутри Near и
+ * далеко от неё одновременно.
  *
  * ПОЗИЦИИ АБСОЛЮТНЫЕ во float32 (в отличие от камней стримера, у которых
  * плавающее начало + instanceOrigin): на 50 а.е. шаг квантования ~500 км —
@@ -54,12 +64,6 @@ class BeltPointLayer extends Points {
     this.frustumCulled = false
   }
 
-  /** Кроссфейд с L1 и общая видимость (см. AsteroidBelt.updateObject, beltCrossFade.pointLayerFade) */
-  public setFade(fade: number): void {
-    this.pointMaterial.uniforms.uFade.value = fade
-    this.visible = fade > 0
-  }
-
   public dispose(): void {
     this.geometry.dispose()
     this.pointMaterial.dispose()
@@ -78,9 +82,7 @@ class BeltPointLayer extends Points {
       // (см. AsteroidGenerator.generateMatricesGrouped: this.densityProfile.sampleRadius)
       const r = density.sampleRadius(innerR, outerR, rng.next())
       const theta = rng.range(0, Math.PI * 2)
-      // Высота — треугольное распределение (сумма двух uniform), как у камней:
-      // пик в средней плоскости, линейный спад к краям
-      const y = (rng.next() + rng.next() - 1) * halfThickness
+      const y = triangularHeight(rng, halfThickness)
 
       positions[i * 3] = Math.cos(theta) * r
       positions[i * 3 + 1] = y
@@ -101,9 +103,8 @@ class BeltPointLayer extends Points {
     return new ShaderMaterial({
       defines: { ...(params.lightTint.active && { USE_LIGHT_TINT: '1' }) },
       uniforms: {
-        uPointScale: { value: DEFAULT_POINT_SCALE },
-        uFade: { value: 1 },
-        uNearFade: { value: params.halfThickness * NEAR_FADE_HALF_THICKNESS_MULT },
+        uPointScale: { value: params.pointScale },
+        uMaxDistance: { value: params.maxDistance },
         uColor: { value: new Color().copy(params.color) },
         uLightColor: { value: new Color(1, 1, 1).copy(params.lightTint.color) }
       },

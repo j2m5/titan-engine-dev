@@ -171,7 +171,9 @@ export const renderingDataTemplates: DataTemplate[] = [
       dustColor: '#9b968c',
       dustTauGrazing: 0.52,
       dustScaleHeightKm: 200,
-      spinPeriodHours: 8
+      spinPeriodHours: 8,
+      pointCount: 60000,
+      pointScale: 220
     }
   }
 ]
