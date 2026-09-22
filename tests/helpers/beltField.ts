@@ -19,6 +19,30 @@ type StreamerInternals = {
   originGroup: { position: Vector3 } | null
   config: { asteroidSizeKm: number }
   getDebugInfo(): { activeSectors: number; poolPressure: { totalFailures: number } }
+  // Доля пула — приватное состояние КАЖДОГО каскада (SectorManager), в
+  // AsteroidRingSystem.getDebugInfo() не суммируется — берём отдельно, тем же
+  // приёмом, что и остальные приватные поля этого структурного типа.
+  cascades: { getDebugInfo(): { perCascade: Array<{ capacityFailures: number }> } }
+}
+
+/**
+ * Счёт живых (не обнулённых) слотов пула — тот же критерий, что и в
+ * measureBeltField (scale < 1e-9 — пустой слот внутри high-water mark).
+ * ОБЯЗАН быть тем же определением "живой", что и там: getActiveCount()
+ * (high-water mark) — другая метрика, включающая дыры от несмежных
+ * освобождений, сравнивать её с настоявшимся total было бы нечестно.
+ */
+function countLiveInstances(streamer: StreamerInternals): number {
+  let count = 0
+  const meshes = [...streamer.pool.geometryMeshes, ...streamer.pool.nearMeshes, streamer.pool.billboardMesh]
+  for (const mesh of meshes) {
+    const m = mesh.instanceMatrix.array as Float32Array
+    for (let i = 0; i < mesh.count; i++) {
+      const scale = Math.hypot(m[i * 16], m[i * 16 + 1], m[i * 16 + 2])
+      if (scale >= 1e-9) count++
+    }
+  }
+  return count
 }
 
 interface BeltFieldMeasurement {
@@ -108,4 +132,100 @@ export function measureBeltField(belt: AsteroidBelt, cameraWorld: Vector3, frame
     activeSectors: debug?.activeSectors ?? 0,
     poolFailures: debug?.poolPressure.totalFailures ?? 0
   }
+}
+
+/** Снимок одного кадра пролёта (см. measureBeltFieldFlythrough) */
+export interface BeltFlythroughFrameSample {
+  frame: number
+  /** Пройдено от старта пути, км */
+  traveledKm: number
+  /** Живых (не обнулённых) экземпляров пула — то же определение, что и measureBeltField.total */
+  liveInstances: number
+  /** Накопленные отказы аллокации пула (см. InstancePool.getPressureInfo) */
+  poolFailures: number
+  /** Накопленные отказы по доле пула каскада, сумма по всем каскадам (см. SectorManager.capacityFailures) */
+  capacityFailures: number
+}
+
+export interface BeltFlythroughMeasurement {
+  samples: BeltFlythroughFrameSample[]
+  /** Сколько раз плавающее начало переехало за весь пролёт (см. FloatingOrigin.update) */
+  rebaseCount: number
+}
+
+/**
+ * Пролёт камеры сквозь пояс с фиксированной скоростью по прямой: на каждом
+ * кадре снимает живые инстансы, отказы пула/доли и считает переезды
+ * плавающего начала (по смене originGroup.position между кадрами). В отличие
+ * от measureBeltField (осевшая статичная камера, снимок один раз после
+ * устаканивания), тут сектора активируются и гаснут НА ХОДУ — то, чего
+ * статичный замер в принципе не проверяет.
+ *
+ * @param belt Пояс
+ * @param startWorld Точка старта пути, three-units
+ * @param stepWorldPerFrame Смещение камеры за кадр, three-units — направление
+ *   и длина постоянны весь пролёт (фиксированная скорость)
+ * @param frames Число кадров пролёта
+ * @param frameDelta Шаг времени симуляции на кадр, секунды — влияет только на
+ *   fade/спин камней, не на скорость камеры (её задаёт stepWorldPerFrame)
+ */
+export function measureBeltFieldFlythrough(
+  belt: AsteroidBelt,
+  startWorld: Vector3,
+  stepWorldPerFrame: Vector3,
+  frames: number,
+  frameDelta: number = 0.05
+): BeltFlythroughMeasurement {
+  const camera = new PerspectiveCamera(50, 1920 / 1080, 0.1, 1e12)
+  const position = startWorld.clone()
+  const samples: BeltFlythroughFrameSample[] = []
+  let rebaseCount = 0
+  let lastOriginX: number | null = null
+  let lastOriginZ: number | null = null
+
+  for (let i = 0; i < frames; i++) {
+    camera.position.copy(position)
+    camera.lookAt(0, 0, 0)
+    camera.updateMatrixWorld(true)
+    camera.updateProjectionMatrix()
+    camera.matrixWorldInverse.copy(camera.matrixWorld).invert()
+
+    belt.updateMatrixWorld(true)
+    belt.traverse((object) =>
+      object.updateObject({ delta: frameDelta, epoch: 2451545, elapsed: i * frameDelta, camera } as UpdateContext)
+    )
+
+    const streamer = (belt as unknown as { streamer: AsteroidRingSystem | null }).streamer as StreamerInternals | null
+
+    let liveInstances = 0
+    let poolFailures = 0
+    let capacityFailures = 0
+
+    if (streamer) {
+      liveInstances = countLiveInstances(streamer)
+      poolFailures = streamer.getDebugInfo().poolPressure.totalFailures
+      capacityFailures = streamer.cascades.getDebugInfo().perCascade.reduce((sum, c) => sum + c.capacityFailures, 0)
+
+      const origin = streamer.originGroup?.position
+      if (origin) {
+        if (lastOriginX !== null && (origin.x !== lastOriginX || origin.z !== lastOriginZ)) {
+          rebaseCount++
+        }
+        lastOriginX = origin.x
+        lastOriginZ = origin.z
+      }
+    }
+
+    samples.push({
+      frame: i,
+      traveledKm: km(position.distanceTo(startWorld)),
+      liveInstances,
+      poolFailures,
+      capacityFailures
+    })
+
+    position.add(stepWorldPerFrame)
+  }
+
+  return { samples, rebaseCount }
 }
