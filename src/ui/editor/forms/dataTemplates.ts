@@ -152,8 +152,10 @@ export const renderingDataTemplates: DataTemplate[] = [
     data: {
       innerRadiusAu: 42,
       outerRadiusAu: 58,
-      thicknessAu: 0.8,
-      meanSpacingKm: 60,
+      // Толщина — порядка сотни тысяч км: камень в 12 км виден в пределах ~15 000 км,
+      // на более толстом поясе пул уходит на камни вне зоны видимости
+      thicknessAu: 0.0008,
+      meanSpacingKm: 100,
       asteroidSizeKm: 12,
       profile: 'stony',
       seed: 1,
