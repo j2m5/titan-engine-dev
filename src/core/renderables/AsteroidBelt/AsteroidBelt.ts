@@ -85,7 +85,10 @@ class AsteroidBelt extends Group {
     // Порог Near — радиус заселения САМОГО КРУПНОГО каскада: у порога до тора
     // меньше него пояс виден как отдельные камни, дальше — уже не имеет смысла
     // держать пул
-    this.nearThresholdTu = toThreeJSUnits(this.cascades[this.cascades.length - 1].populationRadiusKm)
+    // Порог берётся у самого дальнобойного каскада ровно тем же полем, каким
+    // стример кормит билборд (uMaxDistance): через радиус заселения они совпали
+    // бы только пока порог билборда равен радиусу
+    this.nearThresholdTu = toThreeJSUnits(this.cascades[this.cascades.length - 1].lodThresholdsKm.l1)
 
     this.dustVolume = this.params.dustEnabled ? this.__createDustVolume() : null
     if (this.dustVolume) this.add(this.dustVolume)

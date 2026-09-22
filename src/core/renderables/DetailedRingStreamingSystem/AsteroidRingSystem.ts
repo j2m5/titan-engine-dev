@@ -582,7 +582,13 @@ class AsteroidRingSystem extends Group {
     // сотнями кадров; путь колец бюджет не трогает (дефолт SectorManager — 4)
     const activationBudget = cfg.cascades ? 32 : 4
     // Доля пула на каскад; без арки каскадов — Infinity, путь колец не меняется
-    const capacityShare = cfg.cascades ? Math.floor(cfg.maxL1Instances / specs.length) : Infinity
+    // Доля считается от ВСЕГО пула, а не от буфера билбордов: счётчик занятых у
+    // каскада учитывает экземпляры любого тира. Ёмкости берём у пула — после
+    // раскладки по архетипам они больше заявленных в конфиге. Свои пределы
+    // каждый буфер держит сам: переполнение тира даёт отказ выделения.
+    const pressure = this.pool.getPressureInfo()
+    const poolCapacity = pressure.l0.capacity + pressure.near.capacity + pressure.l1.capacity
+    const capacityShare = cfg.cascades ? Math.floor(poolCapacity / specs.length) : Infinity
     const grids: SectorGrid[] = []
     const generators: AsteroidGenerator[] = []
     const managers = specs.map((spec, index) => {

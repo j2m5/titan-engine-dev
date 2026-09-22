@@ -225,7 +225,7 @@ describe('AsteroidBelt: точки получают тот же uMaxDistance, ч
     } as unknown as Actor
   }
 
-  it('uMaxDistance точек = toThreeJSUnits(deriveCascades(...).at(-1).populationRadiusKm) — радиус крупного каскада', () => {
+  it('uMaxDistance точек = порог билборда крупного каскада (lodThresholdsKm.l1)', () => {
     const data: IAsteroidBeltRenderingObject = {
       innerRadiusAu: 40,
       outerRadiusAu: 60,
@@ -241,7 +241,7 @@ describe('AsteroidBelt: точки получают тот же uMaxDistance, ч
       spacingKm: data.spacingKm,
       halfThicknessKm: data.thicknessAu * AU * 0.5
     })
-    const expected = toThreeJSUnits(cascades[cascades.length - 1].populationRadiusKm)
+    const expected = toThreeJSUnits(cascades[cascades.length - 1].lodThresholdsKm.l1)
 
     expect(pointLayer.pointMaterial.uniforms.uMaxDistance.value).toBeCloseTo(expected, 6)
   })

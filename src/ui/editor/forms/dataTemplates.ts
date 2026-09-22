@@ -152,7 +152,7 @@ export const renderingDataTemplates: DataTemplate[] = [
     data: {
       innerRadiusAu: 42,
       outerRadiusAu: 58,
-      // Толщина 0.1 а.е.: спрос каскада на пул ~третья доля (см. deriveCascades)
+      // Толщина задаёт только объём ленты: на плотность и спрос она не влияет
       thicknessAu: 0.1,
       sizeRangeKm: [0.5, 60],
       sizeExponent: 1,
