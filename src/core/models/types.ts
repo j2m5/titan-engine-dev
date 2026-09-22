@@ -10,6 +10,7 @@ import type {
 import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { NebulaRenderingData } from '@/core/renderables/Nebula/NebulaRenderingData'
 import type { ProceduralSurfaceParams } from '@/core/terrain/proceduralSurfaceParams'
+import type { BeltStructure } from '@/core/renderables/DetailedRingStreamingSystem/beltDensityProfile'
 
 export type ValueOf<T> = T[keyof T]
 
@@ -23,7 +24,8 @@ export enum AllowedCategories {
   nebula,
   brownDwarf,
   whiteDwarf,
-  giantStar
+  giantStar,
+  asteroidBelt
 }
 
 export type AllowedCategory = keyof typeof AllowedCategories
@@ -466,6 +468,40 @@ export interface IRingRenderingObject {
    * цветовом проходе вообще.
    */
   depthAlphaTest?: number
+}
+
+/**
+ * Пояс астероидов масштаба системы (`asteroidBelt`, id 11). Радиусы и
+ * толщина — в АСТРОНОМИЧЕСКИХ ЕДИНИЦАХ (в отличие от кольца, где км), потому
+ * что пояс живёт на десятках а.е.; остальное — как у кольца, в км.
+ * planetRadius в данных нет: у пояса он всегда 0 (см. AsteroidBeltParameters).
+ */
+export interface IAsteroidBeltRenderingObject {
+  /** Внутренняя граница тора, а.е. */
+  innerRadiusAu: number
+  /** Внешняя граница тора, а.е. */
+  outerRadiusAu: number
+  /** Полная толщина тора, а.е. */
+  thicknessAu: number
+  /** Среднее расстояние между камнями, км — источник плотности, ячейки и порогов LOD */
+  meanSpacingKm: number
+  /** Габарит отдельного астероида, км (дефолт 10, как у кольца) */
+  asteroidSizeKm?: number
+  /** Профиль облика камней: 'stony' | 'carbonaceous' | 'metallic' | 'icy' (дефолт 'stony') */
+  profile?: string
+  seed?: number
+  /** Щели и сгущения радиального профиля плотности (доли ширины); отсутствие — единица по всей ширине */
+  structure?: BeltStructure
+  /** Включена ли пылевая дымка дальнего слоя (дефолт true) */
+  dustEnabled?: boolean
+  /** Цвет дымки: число 0xRRGGBB или строка '#rrggbb' */
+  dustColor?: number | string
+  /** Целевая оптическая толща грейзинг-луча (плотность дымки) */
+  dustTauGrazing?: number
+  /** Масштабная полутолщина пылевого слоя, км */
+  dustScaleHeightKm?: number
+  /** Средний период вращения камней, часы; 0 гасит вращение (дефолт 0) */
+  spinPeriodHours?: number
 }
 
 export interface IBrownDwarfRenderingObject {

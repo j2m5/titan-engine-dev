@@ -53,7 +53,7 @@ function snapshotWithTemplate(alias: string, categoryId: number, data: unknown):
 describe('шаблоны data редактора', () => {
   it('покрывают все категории с конфигом рендеринга', () => {
     expect(renderingDataTemplates.map((t) => t.value).sort()).toEqual(
-      ['atmosphere', 'brownDwarf', 'giantStar', 'nebula', 'planet', 'ring', 'whiteDwarf'].sort()
+      ['asteroidBelt', 'atmosphere', 'brownDwarf', 'giantStar', 'nebula', 'planet', 'ring', 'whiteDwarf'].sort()
     )
   })
 
@@ -67,7 +67,8 @@ describe('шаблоны data редактора', () => {
   const cases: Array<[string, number]> = [
     ['nebula', 7],
     ['atmosphere', 5],
-    ['ring', 6]
+    ['ring', 6],
+    ['asteroidBelt', 11]
   ]
 
   it.each(cases)('шаблон %s проходит валидатор без ошибок', (alias, categoryId) => {

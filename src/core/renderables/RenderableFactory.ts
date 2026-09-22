@@ -37,6 +37,7 @@ import {
 } from '@/core/helpers/apparentSize'
 import { Nebula } from '@/core/renderables/Nebula'
 import { nebulaParamsFromData } from '@/core/renderables/Nebula/NebulaRenderingData'
+import { AsteroidBelt } from '@/core/renderables/AsteroidBelt'
 import { PlacedNode } from '@/core/renderables/utils/PlacedNode'
 import { BrownDwarf } from '@/core/renderables/BrownDwarf'
 import { BrownDwarfImpostor } from '@/core/renderables/BrownDwarf/BrownDwarfImpostor'
@@ -96,6 +97,8 @@ class RenderableFactory {
         return this.createWhiteDwarf(actor)
       case 10:
         return this.createGiantStar(actor)
+      case 11:
+        return this.createAsteroidBelt(actor)
       default:
         throw new Error("Couldn't resolve actor")
     }
@@ -544,6 +547,17 @@ class RenderableFactory {
     // geometry/material, а RenderableObject3D требует оба. Следствие —
     // у туманности нет маркера и прицела, она не навигационное тело.
     node.add(new Nebula(this.renderer, nebulaParamsFromData(data), this.depthVolumeRegistry))
+
+    return node
+  }
+
+  private createAsteroidBelt(actor: Actor): Object3D {
+    const node = new PlacedNode(actor)
+
+    node.name = actor.getAttribute('name', '')
+    // renderable намеренно null: как у туманности, пояс — Group-контейнер без
+    // собственных geometry/material, маркера и прицела у него нет
+    node.add(new AsteroidBelt(actor, this.depthVolumeRegistry))
 
     return node
   }

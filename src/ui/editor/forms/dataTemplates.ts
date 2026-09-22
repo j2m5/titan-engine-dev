@@ -143,5 +143,35 @@ export const renderingDataTemplates: DataTemplate[] = [
       exposureBias: 1,
       lightTint: 0
     }
+  },
+  {
+    value: 'asteroidBelt',
+    label: 'asteroidBelt',
+    // Заготовка по масштабу пояса W26 (Emberon 32 а.е. — Halcyra 72 а.е.)
+    data: {
+      innerRadiusAu: 42,
+      outerRadiusAu: 58,
+      thicknessAu: 0.8,
+      meanSpacingKm: 60,
+      asteroidSizeKm: 12,
+      profile: 'stony',
+      seed: 1,
+      structure: {
+        edgeSoftness: 0.08,
+        gaps: [
+          { at: 0.35, width: 0.04, depth: 0.85 },
+          { at: 0.62, width: 0.025, depth: 0.7 }
+        ],
+        clumps: [
+          { at: 0.2, width: 0.06, gain: 1.6 },
+          { at: 0.8, width: 0.1, gain: 1.4 }
+        ]
+      },
+      dustEnabled: true,
+      dustColor: '#9b968c',
+      dustTauGrazing: 0.52,
+      dustScaleHeightKm: 200,
+      spinPeriodHours: 8
+    }
   }
 ]
