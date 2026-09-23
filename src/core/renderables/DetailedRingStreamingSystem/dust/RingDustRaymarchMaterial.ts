@@ -43,6 +43,13 @@ import { resolveLightTint } from '@/core/helpers/lightSource'
  * замкнутая форма тумана на камнях (ringDustTauRay) шум не видит, поэтому
  * система и с объёмом, и с туманом камней разом дала бы шов на границе —
  * у пояса туман камней выключен, у колец клочья не используются.
+ *
+ * Фазовый свет (DUST_PHASE_HG) — форвард-скаттеринг: дымка ярче, если луч
+ * смотрит сквозь неё на звезду, и темнее, если от звезды. Фаза Хеньи-Гринштейна
+ * взята БЕЗ множителя 1/(4π): среднее по всем направлениям сферы равно 1 по
+ * построению, поэтому средняя яркость дымки не смещается — меняется только
+ * распределение по направлению луча. При дефолте uDustPhaseG = 0.55 отношение
+ * вперёд/назад к среднему ≈ 7.65 / 0.19.
  */
 interface RingDustRaymarchOptions {
   /**
@@ -56,6 +63,11 @@ interface RingDustRaymarchOptions {
    * программы колец оставался байт-в-байт прежним без флага.
    */
   clumps?: boolean
+  /**
+   * Фазовая функция Хеньи-Гринштейна («фазовый свет»): под дефайном, чтобы
+   * текст программы без флага оставался байт-в-байт прежним.
+   */
+  phaseHG?: boolean
 }
 
 class RingDustRaymarchMaterial extends ShaderMaterial {
@@ -96,11 +108,63 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
             #endif`
       : ''
 
+    // Фазовый свет вставляется тем же приёмом: без options.phaseHG текст
+    // фрагментного шейдера остаётся байт-в-байт прежним.
+    const phaseDeclChunk = options.phaseHG
+      ? `
+        uniform float uDustPhaseG;
+        uniform float uDustPhaseStrength;
+        uniform vec3 uDustColorForward;
+
+        // HG без 1/(4π): среднее по сфере ровно 1, средняя яркость дымки не меняется
+        float ringDustPhaseHG(float cosTheta) {
+          float g = uDustPhaseG;
+          float g2 = g * g;
+          return (1.0 - g2) / pow(max(1.0 + g2 - 2.0 * g * cosTheta, 1e-4), 1.5);
+        }`
+      : ''
+    const phaseTauDeclChunk = options.phaseHG
+      ? `
+          #ifdef DUST_PHASE_HG
+            float phaseTau = 0.0; // τ, взвешенный фазой HG (среднее по сфере = 1 по построению)
+          #endif`
+      : ''
+    // Вычисляется рядом с клочьями (contrib уже несёт их множитель) и до
+    // tau/litTau — направление на звезду своё в каждой точке марша при
+    // DUST_LIGHT_AT_ORIGIN, тот же смысл что toStar ниже по коду (не тот же
+    // токен: та переменная объявлена позже своего ifdef-блока)
+    const phaseContribChunk = options.phaseHG
+      ? `
+            #ifdef DUST_PHASE_HG
+              #ifdef DUST_LIGHT_AT_ORIGIN
+                float cosTheta = dot(rayDir, -p / max(length(p), 1e-6));
+              #else
+                float cosTheta = dot(rayDir, uDustLightDirRing);
+              #endif
+              phaseTau += contrib * ringDustPhaseHG(cosTheta);
+            #endif`
+      : ''
+    // Переопределяет haze поверх существующей ветки DUST_LIGHT_AT_ORIGIN/else:
+    // тон дымки смещается к uDustColorForward, яркость — к среднему HG вдоль луча
+    const phaseHazeOverrideChunk = options.phaseHG
+      ? `
+          #ifdef DUST_PHASE_HG
+            // Среднее HG по лучу: 1 нейтрально, >1 форвард (к звезде), <1 назад
+            float phaseMean = tau > 0.0 ? phaseTau / tau : 1.0;
+            float forward = clamp((phaseMean - 1.0) / 3.0, 0.0, 1.0);
+            haze = mix(uDustColor, uDustColorForward, forward) * mix(1.0, phaseMean, uDustPhaseStrength);
+            #ifdef USE_LIGHT_TINT
+              haze *= uLightColor;
+            #endif
+          #endif`
+      : ''
+
     super({
       defines: {
         ...(lightTint.active && { USE_LIGHT_TINT: '1' }),
         ...(options.lightAtOrigin && { DUST_LIGHT_AT_ORIGIN: '1' }),
-        ...(options.clumps && { DUST_CLUMPS: '1' })
+        ...(options.clumps && { DUST_CLUMPS: '1' }),
+        ...(options.phaseHG && { DUST_PHASE_HG: '1' })
       },
       uniforms: {
         uDustColor: { value: new Color(0x9b968c) },
@@ -137,6 +201,12 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
         uDustClumpStrength: { value: 0.0 },
         /** Масштаб шума клочьев, three-units; p/scale ~1e4 — вне алиасинга */
         uDustClumpScale: { value: 1.0 },
+        /** Асимметрия фазы HG, [-1, 1) (нейтрально при DUST_PHASE_HG выключенном) */
+        uDustPhaseG: { value: 0.55 },
+        /** Сила подмеса фазы 0..1; 0 — эффект на яркость выключен */
+        uDustPhaseStrength: { value: 0.0 },
+        /** Цвет дымки при взгляде на звезду (форвард-пик фазы) */
+        uDustColorForward: { value: new Color(0x9b968c) },
         // Глубина сцены (чанк SceneDepth): привязывает DepthVolumePass перед рендером
         uSceneDepth: { value: null },
         uResolution: { value: new Vector2(1, 1) },
@@ -166,7 +236,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
 
         uniform int uDustMaxSteps;
         uniform int uDustDebugMode;
-        ${sceneDepthUniforms}${clumpDeclChunk}
+        ${sceneDepthUniforms}${clumpDeclChunk}${phaseDeclChunk}
 
         // Во фрагментном префиксе three modelViewMatrix не объявлен, но рендерер
         // грузит его по имени в любой стадии. Берём именно его, а не
@@ -235,7 +305,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
           float litTau = 0.0; // τ, взвешенный тенью планеты (для цвета, не для alpha)
           #ifdef DUST_LIGHT_AT_ORIGIN
             float sunTau = 0.0; // τ, взвешенный прямым лепестком к звезде в начале координат
-          #endif
+          #endif${phaseTauDeclChunk}
           float marched = 0.0;
           // 64 — жёсткий потолок GLSL-цикла (граница обязана быть константой):
           // uDustMaxSteps выше 64 молча обрезается. CPU-зеркало tauMarch потолка
@@ -245,7 +315,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
             float s = (float(i) + jitter) * dt;
             float t = s < lenA ? segA.x + s : segB.x + (s - lenA);
             vec3 p = uDustCamRingPos + rayDir * t;
-            float contrib = ringDustDensityAt(p) * ringDustNearRamp(t) * dt;${clumpContribChunk}
+            float contrib = ringDustDensityAt(p) * ringDustNearRamp(t) * dt;${clumpContribChunk}${phaseContribChunk}
             tau += contrib;
             // Тень планеты и самозатенение слоя кольца — на каждом шаге
             litTau += contrib * ringDustPlanetShadow(p) * ringLayerShadow(p);
@@ -282,7 +352,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
             vec3 haze = ringDustHazeSun(tau > 0.0 ? sunTau / tau : 0.0);
           #else
             vec3 haze = ringDustHaze(rayDir);
-          #endif
+          #endif${phaseHazeOverrideChunk}
           gl_FragColor = vec4(haze * litFrac, alpha);
         }
       `,
