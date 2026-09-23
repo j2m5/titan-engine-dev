@@ -52,6 +52,8 @@ export interface AsteroidBeltParameters {
   dustPhaseStrength: number
   /** Цвет дымки на просвет к звезде */
   dustColorForward: number | string
+  /** Поглощение света за дымкой 0..1; 0 — дымка только добавляет свет */
+  dustExtinction: number
   /** Дистанция 63% тумана на камнях, км; 0 — выключен */
   rockFogRangeKm: number
   /** Доля ледяных тел среди камней стримера, 0..1; 0 — примесь выключена */
@@ -110,6 +112,7 @@ export function asteroidBeltParameters(actor: Actor): AsteroidBeltParameters {
     dustPhaseG: Math.min(0.95, Math.max(0, data.dustPhaseG ?? 0.55)),
     dustPhaseStrength: Math.min(1, Math.max(0, data.dustPhaseStrength ?? 1)),
     dustColorForward: data.dustColorForward ?? '#c8a98a',
+    dustExtinction: Math.min(1, Math.max(0, data.dustExtinction ?? 1)),
     rockFogRangeKm: Math.max(0, data.rockFogRangeKm ?? 40000),
     iceFraction: Math.min(1, Math.max(0, data.iceFraction ?? 0.15)),
     // Незнакомое имя — 'icy', а не 'stony': примесь базового профиля была бы невидимой

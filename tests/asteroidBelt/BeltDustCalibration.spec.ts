@@ -20,7 +20,7 @@ import { Actor } from '@/core/models/Actor'
 import type { IAsteroidBeltRenderingObject } from '@/core/models/types'
 import type { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
 import type { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
-import { Color, PerspectiveCamera, Vector3 } from 'three'
+import { AdditiveBlending, Color, CustomBlending, PerspectiveCamera, Vector3 } from 'three'
 import type { UpdateContext } from '@/core/UpdateContext'
 import { internalsOf, poolOf } from '../helpers/ringSystemInternals'
 
@@ -180,6 +180,31 @@ describe('AsteroidBelt: фазовый свет дымки доходит до �
   it('сила 0 — прежняя яркость с любого угла, дефайна нет', () => {
     const belt = new AsteroidBelt(actorOf({ ...DATA, dustPhaseStrength: 0 }))
     expect(dustOf(belt).dustMaterial.defines.DUST_PHASE_HG).toBeUndefined()
+  })
+})
+
+describe('AsteroidBelt: поглощение дымки — звезда и фон за ней гаснут', () => {
+  it('дефолт 1 (полное пропускание по τ), клампы в [0, 1]', () => {
+    expect(asteroidBeltParameters(actorOf(DATA)).dustExtinction).toBe(1)
+    expect(asteroidBeltParameters(actorOf({ ...DATA, dustExtinction: 2 })).dustExtinction).toBe(1)
+    expect(asteroidBeltParameters(actorOf({ ...DATA, dustExtinction: -1 })).dustExtinction).toBe(0)
+    expect(asteroidBeltParameters(actorOf({ ...DATA, dustExtinction: 0.5 })).dustExtinction).toBe(0.5)
+  })
+
+  it('сила из данных — в юниформе объёма, блендинг over', () => {
+    const belt = new AsteroidBelt(actorOf({ ...DATA, dustExtinction: 0.5 }))
+    const material = dustOf(belt).dustMaterial
+
+    expect(material.uniforms.uDustExtinction.value).toBe(0.5)
+    expect(material.blending).toBe(CustomBlending)
+    expect(material.fragmentShader).toContain('gl_FragColor = vec4(haze * litFrac * alpha, alphaExt);')
+  })
+
+  it('сила 0 — прежняя аддитивная дымка, юниформа в тексте нет', () => {
+    const material = dustOf(new AsteroidBelt(actorOf({ ...DATA, dustExtinction: 0 }))).dustMaterial
+
+    expect(material.blending).toBe(AdditiveBlending)
+    expect(material.fragmentShader).not.toContain('uDustExtinction')
   })
 })
 

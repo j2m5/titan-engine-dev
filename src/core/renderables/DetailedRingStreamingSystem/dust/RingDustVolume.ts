@@ -50,6 +50,8 @@ interface RingDustVolumeConfig {
   phaseStrength?: number
   /** Цвет дымки на форвард-пике (взгляд на звезду); по умолчанию = dustColor */
   colorForward?: Color
+  /** Доля τ, гасящая фон за дымкой, 0..1; 0 или не задано — аддитивная дымка без поглощения (опция не ставится) */
+  extinction?: number
   /**
    * Радиальный профиль плотности пыли (бины ≥ 0 по u = (r − inner)/(outer − inner));
    * без него модуляция выключена. Кольцо получает его позже из альфы текстуры.
@@ -85,6 +87,8 @@ interface RingDustVolumeConfig {
  */
 class RingDustVolume extends Mesh implements DepthVolume, Disposable {
   public readonly dustMaterial: RingDustRaymarchMaterial
+  /** Радиус описанной сферы прокси (см. DepthVolume.boundingRadius) */
+  public readonly boundingRadius: number
 
   private registry: DepthVolumeRegistry | null
 
@@ -93,15 +97,21 @@ class RingDustVolume extends Mesh implements DepthVolume, Disposable {
 
     const clumps = (config.clumpStrength ?? 0) > 0
     const phaseHG = (config.phaseStrength ?? 0) > 0
+    // Кламп [0, 1]: при k ≤ 1 гашение не превышает добавленный свет, ранний
+    // выход по alpha < 0.003 остаётся безопасным
+    const extinctionStrength = Math.min(1, Math.max(0, config.extinction ?? 0))
+    const extinction = extinctionStrength > 0
     // Текстура дуг строится до материала: вырожденный профиль (null) не ставит дефайн
     const angular = config.angularProfile ? createDustAngularTexture(config.angularProfile) : null
     const material = new RingDustRaymarchMaterial(config.model, {
       lightAtOrigin: config.lightAtOrigin ?? false,
       clumps,
       phaseHG,
+      extinction,
       arcs: angular !== null
     })
     super(geometry, material)
+    this.boundingRadius = config.outerRadius * RADIAL_PADDING
 
     this.dustMaterial = material
     this.layers.set(DEPTH_VOLUME_LAYER)
@@ -122,6 +132,7 @@ class RingDustVolume extends Mesh implements DepthVolume, Disposable {
     this.dustMaterial.uniforms.uDustPhaseG.value = config.phaseG ?? 0.55
     this.dustMaterial.uniforms.uDustPhaseStrength.value = config.phaseStrength ?? 0
     this.dustMaterial.uniforms.uDustColorForward.value.copy(config.colorForward ?? config.dustColor)
+    this.dustMaterial.uniforms.uDustExtinction.value = extinctionStrength
 
     const radial = config.radialProfile ? createDustRadialTexture(config.radialProfile) : null
     if (radial) {

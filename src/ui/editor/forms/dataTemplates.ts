@@ -184,6 +184,7 @@ export const renderingDataTemplates: DataTemplate[] = [
       dustPhaseG: 0.55,
       dustPhaseStrength: 1,
       dustColorForward: '#c8a98a',
+      dustExtinction: 1,
       rockFogRangeKm: 40000,
       iceFraction: 0.15,
       iceProfile: 'icy',
