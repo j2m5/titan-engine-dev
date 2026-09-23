@@ -353,8 +353,10 @@ class InstancePool {
    * Записать матрицы экземпляров в буфер стрима.
    */
   public writeMatrices(stream: number, offset: number, matrices: Float32Array): void {
-    const dst = this.streams[stream].mesh.instanceMatrix.array as Float32Array
+    const attr = this.streams[stream].mesh.instanceMatrix
+    const dst = attr.array as Float32Array
     dst.set(matrices, offset * 16)
+    attr.addUpdateRange(offset * 16, matrices.length)
     this.dirtyStreams.add(stream)
   }
 
@@ -366,6 +368,7 @@ class InstancePool {
     const attr = this.fadeAttribute(stream)
     const dst = attr.array as Float32Array
     dst.fill(fade, offset, offset + count)
+    attr.addUpdateRange(offset, count)
     this.dirtyFadeStreams.add(stream)
   }
 
@@ -379,12 +382,14 @@ class InstancePool {
    * в шейдере тождественно прежнему выражению.
    */
   public writeOrigins(stream: number, offset: number, count: number, origin: Vector3): void {
-    const dst = this.originAttribute(stream).array as Float32Array
+    const attr = this.originAttribute(stream)
+    const dst = attr.array as Float32Array
     for (let i = offset; i < offset + count; i++) {
       dst[i * 3] = origin.x
       dst[i * 3 + 1] = origin.y
       dst[i * 3 + 2] = origin.z
     }
+    attr.addUpdateRange(offset * 3, count * 3)
     this.dirtyOriginStreams.add(stream)
   }
 
@@ -395,13 +400,22 @@ class InstancePool {
    * устройство записи, что и у writeOrigins.
    */
   public writeMaxDistance(stream: number, offset: number, count: number, value: number): void {
-    const dst = this.maxDistanceAttribute(stream).array as Float32Array
+    const attr = this.maxDistanceAttribute(stream)
+    const dst = attr.array as Float32Array
     dst.fill(value, offset, offset + count)
+    attr.addUpdateRange(offset, count)
     this.dirtyMaxDistanceStreams.add(stream)
   }
 
   /**
    * Применить все накопленные изменения к GPU-буферам.
+   *
+   * Каждая запись в массив атрибута регистрирует свой диапазон
+   * (addUpdateRange): рендерер заливает только их, сливая соседние, и сам
+   * очищает список после заливки. Без диапазонов флаг обновления лил бы
+   * атрибут целиком — при каскадах за кадр грязнятся все потоки, это порядка
+   * 16 МБ на кадр. Инвариант: любой путь записи в массив обязан добавить
+   * диапазон, иначе при непустом списке слот на GPU останется прежним.
    */
   public commitUpdates(): void {
     for (const stream of this.dirtyStreams) {
@@ -501,11 +515,14 @@ class InstancePool {
     for (let i = 0; i < count; i++) {
       dst.set(InstancePool.ZERO_MATRIX, (offset + i) * 16)
     }
+    mesh.instanceMatrix.addUpdateRange(offset * 16, count * 16)
 
     // Обнулить fade освобождённого диапазона — чтобы переиспользуемый слот не
     // унаследовал остаточную видимость до первой записи менеджером.
-    const fade = this.fadeAttribute(stream).array as Float32Array
+    const fadeAttr = this.fadeAttribute(stream)
+    const fade = fadeAttr.array as Float32Array
     fade.fill(0, offset, offset + count)
+    fadeAttr.addUpdateRange(offset, count)
     this.dirtyFadeStreams.add(stream)
   }
 
