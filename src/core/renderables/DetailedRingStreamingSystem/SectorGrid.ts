@@ -1,5 +1,6 @@
 import { hashSectorKey, hashUnitOf } from './SeededRandom'
 import { RadialDensityProfile } from './RadialDensityProfile'
+import { AngularDensityProfile } from './AngularDensityProfile'
 import { triangularMass } from './triangularMass'
 
 /** Размер LRU-кэша слоёв: пояс шириной 16 а.е. даёт ~1.2 млн слоёв, держать их все нельзя. */
@@ -135,6 +136,8 @@ class SectorGrid {
    * (см. AsteroidRingSystem), поэтому мутабельный.
    */
   private densityProfile: RadialDensityProfile | null = null
+  /** Азимутальный профиль (дуги пояса, см. buildBeltAngularProfile). null → ровно по углу; кольца его не задают. */
+  private angularProfile: AngularDensityProfile | null = null
 
   public constructor(config: SectorGridConfig) {
     this.config = config
@@ -178,6 +181,15 @@ class SectorGrid {
    */
   public setDensityProfile(profile: RadialDensityProfile | null): void {
     this.densityProfile = profile
+  }
+
+  /**
+   * Задать азимутальный профиль плотности: instanceCount сектора умножается
+   * на средний вес его углового интервала. Внутри сектора угол камня
+   * по-прежнему равномерен (см. AsteroidGenerator) — сектор много уже дуги.
+   */
+  public setAngularProfile(profile: AngularDensityProfile | null): void {
+    this.angularProfile = profile
   }
 
   /**
@@ -280,7 +292,9 @@ class SectorGrid {
     // Доля камней колонки, приходящаяся на эту ячейку по высоте. У плоской
     // сетки ячейка — вся колонка, вес единица: счёт колец не меняется
     const verticalWeight = this.volumetric ? triangularMass(minY, maxY, halfHeight) : 1
-    const weighted = area * this.config.densityPerUnit * weight * verticalWeight
+    // Дуги пояса: средний вес углового интервала сектора (без профиля — 1)
+    const angularWeight = this.angularProfile ? this.angularProfile.weightForRange(minAngle, maxAngle) : 1
+    const weighted = area * this.config.densityPerUnit * weight * verticalWeight * angularWeight
 
     // Ключ и сид несут третий индекс только у объёмной сетки — у плоской
     // (кольца) строка и сид побайтно те же, что до вертикальной оси.

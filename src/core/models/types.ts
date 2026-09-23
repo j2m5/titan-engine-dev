@@ -494,7 +494,7 @@ export interface IAsteroidBeltRenderingObject {
   /** Профиль облика камней: 'stony' | 'carbonaceous' | 'metallic' | 'icy' (дефолт 'stony') */
   profile?: string
   seed?: number
-  /** Щели и сгущения радиального профиля плотности (доли ширины); отсутствие — единица по всей ширине */
+  /** Щели и сгущения радиального профиля (доли ширины) и дуги по азимуту (доли оборота); отсутствие — единица всюду */
   structure?: BeltStructure
   /** Включена ли пылевая дымка дальнего слоя (дефолт true) */
   dustEnabled?: boolean
