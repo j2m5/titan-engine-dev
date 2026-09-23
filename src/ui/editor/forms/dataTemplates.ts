@@ -179,6 +179,7 @@ export const renderingDataTemplates: DataTemplate[] = [
       dustPhaseG: 0.55,
       dustPhaseStrength: 1,
       dustColorForward: '#c8a98a',
+      dustExtinction: 1,
       rockFogRangeKm: 40000,
       spinPeriodHours: 8,
       pointCount: 60000,

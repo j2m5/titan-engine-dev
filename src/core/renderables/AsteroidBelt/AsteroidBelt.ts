@@ -139,6 +139,9 @@ class AsteroidBelt extends Group {
       phaseG: p.dustPhaseG,
       phaseStrength: p.dustPhaseStrength,
       colorForward: new Color(p.dustColorForward),
+      // Поглощение: звезда, гало и фон за дымкой гаснут по пропусканию e^(−τ·k);
+      // 0 — прежняя аддитивная дымка
+      extinction: p.dustExtinction,
       registry: this.depthVolumeRegistry ?? undefined
     })
   }
