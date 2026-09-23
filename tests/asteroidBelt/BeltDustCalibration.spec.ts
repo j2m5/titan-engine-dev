@@ -41,9 +41,9 @@ const actorOf = (data: IAsteroidBeltRenderingObject): Actor =>
 const dustOf = (belt: AsteroidBelt): RingDustVolume => (belt as unknown as { dustVolume: RingDustVolume }).dustVolume
 
 describe('asteroidBeltParameters: пыль пояса — толща по вертикали и клочья', () => {
-  it('дефолты: толща 0.12 (лента едва заметна: ~11% сверху), клочья 0.7 силы и 0.6 а.е.', () => {
+  it('дефолты: толща 0.06 (лента едва заметна: ~6% сверху), клочья 0.7 силы и 0.6 а.е.', () => {
     const p = asteroidBeltParameters(actorOf({ ...DATA, dustTauVertical: undefined, dustScaleHeightFraction: undefined }))
-    expect(p.dustTauVertical).toBe(0.12)
+    expect(p.dustTauVertical).toBe(0.06)
     expect(p.dustClumpStrength).toBe(0.7)
     expect(p.dustClumpScaleKm).toBeCloseTo(0.6 * AU, 6)
   })

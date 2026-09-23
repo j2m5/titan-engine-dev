@@ -85,7 +85,7 @@ export function asteroidBeltParameters(actor: Actor): AsteroidBeltParameters {
     dustEnabled: data.dustEnabled ?? true,
     dustColor: data.dustColor ?? 0x9b968c,
     // Толща по вертикали, не на просвет через ширину (см. IAsteroidBeltRenderingObject)
-    dustTauVertical: Math.max(0, data.dustTauVertical ?? 0.12),
+    dustTauVertical: Math.max(0, data.dustTauVertical ?? 0.06),
     dustScaleHeightFraction: data.dustScaleHeightFraction ?? 1 / 3,
     dustClumpStrength: Math.min(1, Math.max(0, data.dustClumpStrength ?? 0.7)),
     // Пол ~100 единиц сцены (200 000 км): мельче шум по float32-координатам алиасит
