@@ -228,6 +228,13 @@ interface AsteroidRingConfig {
   /** Ближнее гашение пыли как доля ТОЛЩИНЫ кольца (единицы сцены) вместо dustNearFadeKm */
   dustNearFadeFraction?: number
   /**
+   * Туман на камнях БЕЗ объёма пыли (пояс: объём живёт у узла, а камням нужна
+   * воздушная перспектива). rangeKm — дистанция, на которой туман набирает
+   * 1 − e⁻¹ ≈ 63%; nearFadeFraction — ближнее гашение как доля этой дистанции.
+   * Не задан — как сегодня: без dustEnabled туман на камнях выключен.
+   */
+  rockFog?: { rangeKm: number; nearFadeFraction: number }
+  /**
    * Готовый радиальный профиль плотности пояса (см. buildBeltDensityProfile) —
    * бины в долях ширины кольца [0, 1]. Если задан, RadialDensityProfile строится
    * из него сразу в __setup, БЕЗ текстуры кольца (ringGapsFromTexture для этого
@@ -755,6 +762,14 @@ class AsteroidRingSystem extends Group {
           rockUniforms: [l0Material.uniforms, this.pool.billboardMaterial.uniforms] as unknown as RockDustUniforms[]
         })
       }
+    } else if (cfg.rockFog) {
+      // Туман на камнях без объёма пыли: тот же закрытый вид тумана
+      // (ringDustApplyFog), но объём не создаём — у пояса он свой на узле.
+      // scaleHeight = вся толщина (units сцены) — вертикальная экспонента
+      // почти плоская по полю, туман работает только по дистанции.
+      const rockFogDensity = 1 / toThreeJSUnits(cfg.rockFog.rangeKm)
+      const rockFogNearFade = cfg.rockFog.nearFadeFraction * toThreeJSUnits(cfg.rockFog.rangeKm)
+      this.__applyDustStaticUniforms(thickness, rockFogDensity, rockFogNearFade, innerRadius, outerRadius, planetRadius)
     }
 
     // --- Слой кольца (чанк RingDust): полутолщина слоя для самозатенения и
