@@ -41,7 +41,9 @@ describe('категория пояса астероидов', () => {
       'dustScaleHeightFraction',
       'spinPeriodHours',
       'pointCount',
-      'pointScale'
+      'pointScale',
+      'cullFovScale',
+      'fadeSeconds'
     ])
   })
 })

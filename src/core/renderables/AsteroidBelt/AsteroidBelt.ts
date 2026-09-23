@@ -177,7 +177,13 @@ class AsteroidBelt extends Group {
       // Разреженный пояс: многие секторы 0 < weighted < 1 — без розыгрыша
       // теряли бы камень гарантированно (см. SectorGridConfig.stochasticCount)
       stochasticCount: true,
-      profile: asteroidProfileNameOf(p.profile)
+      profile: asteroidProfileNameOf(p.profile),
+      // Ручки взгляда владельца (стартовые значения 1.35/0.8, тюнятся из данных):
+      // cullFovScale расширяет конус отсечения — секторы вокруг кадра готовы
+      // заранее, поворот камеры не встречает пустоту; fadeSeconds растягивает
+      // проявление сектора — тело в 25 км не всплывает за 0.25 с.
+      cullFovScale: p.cullFovScale,
+      fadeSeconds: p.fadeSeconds
     }
     // Пыль уже посчитана дальним слоем — второй объём стримера был бы дублем
     if (this.dustVolume) overrides.dustEnabled = false

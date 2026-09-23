@@ -57,3 +57,6 @@ export const originCellSizeOf = (origin: FloatingOrigin): number =>
 /** Ключи активных секторов менеджера — поле `activeSectors` (Map) приватно. */
 export const activeSectorKeysOf = (manager: SectorManager): string[] =>
   Array.from((manager as unknown as { activeSectors: Map<string, unknown> }).activeSectors.keys())
+
+/** Поле `fadeSpeed` приватно в SectorManager — 1/fadeSeconds конструктора (см. AsteroidRingConfig.fadeSeconds). */
+export const fadeSpeedOf = (manager: SectorManager): number => (manager as unknown as { fadeSpeed: number }).fadeSpeed

@@ -90,8 +90,8 @@ class SectorManager {
   /** Счётчик отказов активации/смены LOD из-за упора в capacityShare */
   private capacityFailures: number = 0
 
-  /** Скорость fade (доля за секунду, 1.0 = полный fade за 1 секунду) */
-  private readonly fadeSpeed: number = 4.0
+  /** Скорость fade (доля за секунду) — обратная величина fadeSeconds конструктора */
+  private readonly fadeSpeed: number
 
   /**
    * Множитель плотности инстансов на сектор для каждого LOD.
@@ -128,7 +128,9 @@ class SectorManager {
     thresholds: LODThresholds,
     origin: Vector3 | null = null,
     capacityShare: number = Infinity,
-    activationBudget: number = 4
+    activationBudget: number = 4,
+    /** Длительность проявления сектора, секунды; 0.25 (дефолт) — прежнее поведение (fadeSpeed 4.0) */
+    fadeSeconds: number = 0.25
   ) {
     if (thresholds.nearEnterDistance >= thresholds.nearExitDistance) {
       throw new Error(
@@ -144,6 +146,7 @@ class SectorManager {
     this.origin = origin
     this.capacityShare = capacityShare
     this.activationBudget = activationBudget
+    this.fadeSpeed = 1 / fadeSeconds
   }
 
   /** Сумма занятых экземпляров активных секторов каскада (для capacityShare) */

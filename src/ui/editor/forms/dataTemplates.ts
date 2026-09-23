@@ -176,7 +176,9 @@ export const renderingDataTemplates: DataTemplate[] = [
       dustScaleHeightFraction: 0.333,
       spinPeriodHours: 8,
       pointCount: 60000,
-      pointScale: 220
+      pointScale: 220,
+      cullFovScale: 1.35,
+      fadeSeconds: 0.8
     }
   }
 ]

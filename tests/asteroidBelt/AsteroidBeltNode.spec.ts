@@ -192,4 +192,30 @@ describe('AsteroidBelt — состояния LOD по расстоянию до
 
     expect(nearTu).toBeCloseTo(expected, 6)
   })
+
+  it('стример получает cullFovScale/fadeSeconds — дефолты пояса 1.35/0.8', () => {
+    const node = makeFactory().make(beltActor(BELT_DATA)) as PlacedNode
+    const belt = node.children.find((c) => c instanceof AsteroidBelt) as unknown as AsteroidBelt
+    node.updateMatrixWorld(true)
+
+    frameAt(belt, fromAstronomicalUnits(50))
+
+    const cfg = configOf(internalsOf(belt).streamer!)
+    expect(cfg.cullFovScale).toBe(1.35)
+    expect(cfg.fadeSeconds).toBe(0.8)
+  })
+
+  it('строка данных переопределяет cullFovScale/fadeSeconds', () => {
+    const node = makeFactory().make(
+      beltActor({ ...BELT_DATA, cullFovScale: 1.6, fadeSeconds: 0.5 })
+    ) as PlacedNode
+    const belt = node.children.find((c) => c instanceof AsteroidBelt) as unknown as AsteroidBelt
+    node.updateMatrixWorld(true)
+
+    frameAt(belt, fromAstronomicalUnits(50))
+
+    const cfg = configOf(internalsOf(belt).streamer!)
+    expect(cfg.cullFovScale).toBe(1.6)
+    expect(cfg.fadeSeconds).toBe(0.5)
+  })
 })

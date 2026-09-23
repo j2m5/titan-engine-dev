@@ -40,6 +40,10 @@ export interface AsteroidBeltParameters {
   /** Число точек дальнего слоя — целое, ≥ 0 (0 гасит слой видимостью пустого буфера) */
   pointCount: number
   pointScale: number
+  /** Запас отсечения секторов вокруг кадра — множитель fov камеры отсечения стримера */
+  cullFovScale: number
+  /** Длительность проявления сектора стримера, секунды */
+  fadeSeconds: number
 }
 
 /**
@@ -79,6 +83,9 @@ export function asteroidBeltParameters(actor: Actor): AsteroidBeltParameters {
     spinPeriodHours: data.spinPeriodHours ?? 0,
     // Целое и не отрицательное — отрицательный/дробный count ломает Float32Array(count * 3)
     pointCount: Math.max(0, Math.floor(data.pointCount ?? DEFAULT_POINT_COUNT)),
-    pointScale: data.pointScale ?? DEFAULT_POINT_SCALE
+    pointScale: data.pointScale ?? DEFAULT_POINT_SCALE,
+    // Стартовые ручки взгляда владельца — см. AsteroidBelt.__createStreamer
+    cullFovScale: data.cullFovScale ?? 1.35,
+    fadeSeconds: data.fadeSeconds ?? 0.8
   }
 }

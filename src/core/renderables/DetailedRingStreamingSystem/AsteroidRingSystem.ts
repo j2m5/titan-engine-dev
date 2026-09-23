@@ -1,4 +1,14 @@
-import { Color, Group, Matrix4, Object3D, RepeatWrapping, Vector3, type IUniform, type Texture } from 'three'
+import {
+  Color,
+  Group,
+  Matrix4,
+  Object3D,
+  PerspectiveCamera,
+  RepeatWrapping,
+  Vector3,
+  type IUniform,
+  type Texture
+} from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
 import type { IRingRenderingObject } from '@/core/models/types'
@@ -254,6 +264,19 @@ interface AsteroidRingConfig {
    * densityPerUnit) — путь колец, побайтно как раньше.
    */
   cascades?: CascadeSpec[]
+  /**
+   * Запас отсечения секторов вокруг видимого конуса: множитель fov камеры
+   * отсечения (см. updateObject) — секторы вокруг кадра населяются заранее, и
+   * поворот камеры находит их уже готовыми вместо резкого появления за 0.25 с.
+   * Цена — больше активных секторов, примерно пропорционально телесному углу
+   * (кв. масштаба). Не задан или 1 — путь БЕЗ отдельной камеры отсечения:
+   * матрица берётся из camera.projectionMatrix как раньше (кольца остаются
+   * бит-в-бит — реальная камера сцены может нести настройки проекции, которых
+   * у пересобранной камеры отсечения не будет).
+   */
+  cullFovScale?: number
+  /** Длительность проявления сектора, секунды; не задана — 0.25 (прежнее поведение) */
+  fadeSeconds?: number
 }
 
 /**
@@ -360,6 +383,12 @@ class AsteroidRingSystem extends Group {
   private readonly _viewProjMatrix = new Matrix4()
   private readonly _lightWorldPos = new Vector3()
   private readonly _localLightDir = new Vector3()
+
+  /**
+   * Камера отсечения — используется ТОЛЬКО для построения расширенной
+   * view-projection при cullFovScale (см. updateObject); никогда не рендерит.
+   */
+  private readonly _cullCamera = new PerspectiveCamera()
 
   /** Флаг: система была деактивирована (parent invisible) */
   private wasDeactivated = false
@@ -648,7 +677,8 @@ class AsteroidRingSystem extends Group {
         thresholds,
         this.floatingOrigin?.origin ?? null,
         capacityShare,
-        activationBudget
+        activationBudget,
+        cfg.fadeSeconds
       )
     })
 
@@ -874,8 +904,21 @@ class AsteroidRingSystem extends Group {
       this.pool.billboardMaterial.uniforms.uDustCamRingPos.value.copy(this._localCamPos)
     }
 
-    // View-projection matrix для frustum culling
-    this._viewProjMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    // View-projection matrix для frustum culling. cullFovScale не задан или
+    // равен 1 — прежний путь БЕЗ пересборки: матрица берётся из
+    // camera.projectionMatrix напрямую (кольца остаются бит-в-бит).
+    const cullFovScale = this.config.cullFovScale
+    if (cullFovScale !== undefined && cullFovScale !== 1) {
+      const cull = this._cullCamera
+      cull.fov = Math.min(camera.fov * cullFovScale, 179)
+      cull.aspect = camera.aspect
+      cull.near = camera.near
+      cull.far = camera.far
+      cull.updateProjectionMatrix()
+      this._viewProjMatrix.multiplyMatrices(cull.projectionMatrix, camera.matrixWorldInverse)
+    } else {
+      this._viewProjMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    }
 
     // Local-to-world matrix системы
     this.updateWorldMatrix(true, false)

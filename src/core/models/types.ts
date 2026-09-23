@@ -510,6 +510,10 @@ export interface IAsteroidBeltRenderingObject {
   pointCount?: number
   /** Базовый масштаб спрайта точки дальнего слоя, пиксель·three-unit (дефолт 220) */
   pointScale?: number
+  /** Запас отсечения секторов вокруг кадра — множитель fov камеры отсечения (см. AsteroidRingConfig.cullFovScale); дефолт 1.35 */
+  cullFovScale?: number
+  /** Длительность проявления сектора, секунды (см. AsteroidRingConfig.fadeSeconds); дефолт 0.8 */
+  fadeSeconds?: number
 }
 
 export interface IBrownDwarfRenderingObject {
