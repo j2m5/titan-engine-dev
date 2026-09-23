@@ -40,6 +40,10 @@ interface RingDustVolumeConfig {
   model?: Actor
   /** Светило в начале ring-local (пояс): прямой лепесток по точке марша, см. RingDustRaymarchOptions */
   lightAtOrigin?: boolean
+  /** Сила клочьев 0..1; 0 или не задано — модуляция выключена (дефайн не ставится) */
+  clumpStrength?: number
+  /** Масштаб шума клочьев, three-units (см. precision-заметку в RingDustRaymarchMaterial) */
+  clumpScale?: number
   /**
    * Радиальный профиль плотности пыли (бины ≥ 0 по u = (r − inner)/(outer − inner));
    * без него модуляция выключена. Кольцо получает его позже из альфы текстуры.
@@ -75,7 +79,11 @@ class RingDustVolume extends Mesh implements DepthVolume, Disposable {
   public constructor(config: RingDustVolumeConfig) {
     const geometry = new SphereGeometry(config.outerRadius * RADIAL_PADDING, 32, 16)
 
-    const material = new RingDustRaymarchMaterial(config.model, { lightAtOrigin: config.lightAtOrigin ?? false })
+    const clumps = (config.clumpStrength ?? 0) > 0
+    const material = new RingDustRaymarchMaterial(config.model, {
+      lightAtOrigin: config.lightAtOrigin ?? false,
+      clumps
+    })
     super(geometry, material)
 
     this.dustMaterial = material
@@ -92,6 +100,8 @@ class RingDustVolume extends Mesh implements DepthVolume, Disposable {
     this.dustMaterial.uniforms.uDustNearFade.value = config.nearFade
     this.dustMaterial.uniforms.uDustMaxSteps.value = config.maxSteps
     this.dustMaterial.uniforms.uDustPlanetRadius.value = config.planetRadius
+    this.dustMaterial.uniforms.uDustClumpStrength.value = config.clumpStrength ?? 0
+    this.dustMaterial.uniforms.uDustClumpScale.value = config.clumpScale ?? 1
 
     const radial = config.radialProfile ? createDustRadialTexture(config.radialProfile) : null
     if (radial) {
