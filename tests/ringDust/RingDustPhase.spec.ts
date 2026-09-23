@@ -28,8 +28,6 @@ describe('RingDustPhase', () => {
     expect(m.defines.DUST_PHASE_HG).toBeUndefined()
     expect(m.fragmentShader).not.toContain('ringDustPhaseHG(')
     expect(m.fragmentShader).not.toContain('uDustColorForward')
-    // Байт-в-байт со снимком RingDustClumps (без clumps И без phaseHG — общий эталон)
-    expect(m.fragmentShader).toBe(new RingDustRaymarchMaterial(undefined, {}).fragmentShader)
   })
 
   it('phaseHG: true — дефайн стоит, вызов фазы внутри марша до litTau += и есть финальный mix', () => {
@@ -38,7 +36,8 @@ describe('RingDustPhase', () => {
     const fs = m.fragmentShader
     expect(fs).toContain('ringDustPhaseHG(')
     expect(fs).toContain('phaseTau += contrib * ringDustPhaseHG(cosTheta);')
-    expect(fs).toContain('mix(uDustColor, uDustColorForward, forward)')
+    expect(fs).toContain('vec3 phaseHaze = mix(uDustColor, uDustColorForward, forward) * (phaseMean * RING_DUST_PHASE_BASE);')
+    expect(fs).toContain('haze = mix(haze, phaseHaze, uDustPhaseStrength);')
 
     const contribIdx = fs.indexOf('phaseTau += contrib * ringDustPhaseHG(cosTheta);')
     const litTauIdx = fs.indexOf('litTau +=')
@@ -86,6 +85,24 @@ describe('RingDustPhase', () => {
       const mean = sum / samples
       expect(mean).toBeCloseTo(1, 3)
     }
+  })
+
+  it('RING_DUST_PHASE_BASE = среднее по сфере прежней дымки 0.75 + 0.45·max(cosθ,0)^4', () => {
+    const fs = new RingDustRaymarchMaterial(undefined, { phaseHG: true }).fragmentShader
+    const match = /const float RING_DUST_PHASE_BASE = ([0-9.]+);/.exec(fs)
+    expect(match).not.toBeNull()
+    const base = Number(match?.[1])
+
+    // Лепесток sunTau/ringDustHaze: pow(max(cosθ, 0), 4), uniform cosθ ∈ [-1, 1]
+    const samples = 2000
+    let sum = 0
+    for (let i = 0; i < samples; i++) {
+      const cosTheta = -1 + (2 * (i + 0.5)) / samples
+      sum += 0.75 + 0.45 * Math.pow(Math.max(cosTheta, 0), 4)
+    }
+    const mean = sum / samples // аналитически 0.75 + 0.45 · 0.1 = 0.795
+    expect(Math.abs(base - mean)).toBeLessThan(1e-2)
+    expect(base).toBeCloseTo(0.795, 3)
   })
 
   it('CPU-зеркало HG: при g = 0.55 вперёд/назад относительно среднего ≈ 7.65 / 0.187', () => {

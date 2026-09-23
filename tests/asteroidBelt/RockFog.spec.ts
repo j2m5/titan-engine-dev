@@ -1,4 +1,5 @@
 import { vi } from 'vitest'
+import { Vector3 } from 'three'
 
 const fakeTexture = { name: 'ring.png' }
 
@@ -16,10 +17,12 @@ vi.mock('@/core/renderables/DetailedRingStreamingSystem/RingAlphaReadback', () =
 }))
 
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
+import { ROCK_FOG_SCALE_HEIGHT_FACTOR } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidRingSystem'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { Actor } from '@/core/models/Actor'
 import type { IRingRenderingObject } from '@/core/models/types'
 import { internalsOf, poolOf } from '../helpers/ringSystemInternals'
+import { tauRay, type DustParams } from '../ringDust/tauMirror'
 
 /** Пояс: стаб-актор БЕЗ родителя-планеты (только renderingObject/resources) */
 const makeBeltActor = (data: Partial<IRingRenderingObject> = {}): Actor =>
@@ -56,7 +59,7 @@ describe('AsteroidRingSystem: rockFog — туман на камнях без о
 
     const expectedDensity = 1 / toThreeJSUnits(rangeKm)
     const expectedNearFade = nearFadeFraction * toThreeJSUnits(rangeKm)
-    const expectedScaleHeight = toThreeJSUnits(thicknessKm)
+    const expectedScaleHeight = toThreeJSUnits(thicknessKm) * ROCK_FOG_SCALE_HEIGHT_FACTOR
 
     for (const uniforms of [pool.geometryMaterial.uniforms, pool.billboardMaterial.uniforms]) {
       expect(uniforms.uDustDensity.value).toBeCloseTo(expectedDensity, 10)
@@ -80,19 +83,54 @@ describe('AsteroidRingSystem: rockFog — туман на камнях без о
     expect(internalsOf(system).dustVolume).not.toBeNull()
   })
 
-  it('замкнутая форма τ = density × distance: на rangeKm туман набирает 1 − e⁻¹ ≈ 0.632', () => {
+  describe('замкнутая форма (tauRay — зеркало ringDustTauRay) на луче длиной rangeKm', () => {
     const rangeKm = 40000
     const system = new AsteroidRingSystem(makeBeltActor(), {
       dustEnabled: false,
       planetRadiusKm: 0,
       rockFog: { rangeKm, nearFadeFraction: 0.05 }
     })
-    const density = poolOf(system).geometryMaterial.uniforms.uDustDensity.value
-    const distance = toThreeJSUnits(rangeKm)
+    const uniforms = poolOf(system).geometryMaterial.uniforms
+    // Юниформы, подключённые в rockFog-ветке, без профиля (readRingAlphaBins → null,
+    // densityProfileSource не задан) — пыль по радиусу равномерная
+    const params: DustParams = {
+      rho0: uniforms.uDustDensity.value,
+      H: uniforms.uDustScaleHeight.value,
+      rIn: uniforms.uDustRingInner.value,
+      rOut: uniforms.uDustRingOuter.value
+    }
+    const thickness = toThreeJSUnits(internalsOf(system).config.thicknessKm)
+    const range = toThreeJSUnits(rangeKm)
 
-    const tau = density * distance
-    const fogFraction = 1 - Math.exp(-tau)
+    // Луч касательный от среднего радиуса: весь путь лежит в плоской зоне
+    // маски кромок (smoothstep занимает 12% ширины у каждой кромки), маска
+    // ровно 1 — τ определяется только плотностью и вертикальной экспонентой.
+    // Ближний рамп (uDustNearFade) в tauRay не входит — он множитель fogAmount.
+    const rMid = (params.rIn + params.rOut) / 2
+    const origin = new Vector3(rMid, 0, 0)
+    const dir = new Vector3(0, 0, 1)
+    const edge = (params.rOut - params.rIn) * 0.12
+    const rEnd = Math.hypot(rMid, range)
 
-    expect(fogFraction).toBeCloseTo(1 - Math.exp(-1), 10)
+    it('луч целиком в плоской зоне маски кромок', () => {
+      expect(rMid).toBeGreaterThan(params.rIn + edge)
+      expect(rEnd).toBeLessThan(params.rOut - edge)
+    })
+
+    it('в средней плоскости τ = 1 → туман набирает 1 − e⁻¹ ≈ 0.632', () => {
+      const { tau } = tauRay(origin.clone(), dir.clone(), range, params)
+
+      expect(tau).toBeCloseTo(1, 3)
+      expect(1 - Math.exp(-tau)).toBeCloseTo(1 - Math.exp(-1), 3)
+    })
+
+    it('на верхней кромке ленты (|y| = толщина/2) τ ≥ 0.9 — масштабная высота держит туман по всей высоте', () => {
+      const top = origin.clone().setY(thickness / 2)
+      const { tau } = tauRay(top, dir.clone(), range, params)
+
+      expect(tau).toBeGreaterThanOrEqual(0.9)
+      // Точное значение: exp(−(толщина/2) / (толщина · фактор))
+      expect(tau).toBeCloseTo(Math.exp(-1 / (2 * ROCK_FOG_SCALE_HEIGHT_FACTOR)), 6)
+    })
   })
 })

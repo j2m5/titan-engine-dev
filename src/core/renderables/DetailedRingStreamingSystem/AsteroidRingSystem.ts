@@ -42,6 +42,14 @@ import type { ShapeModelStorage } from './archetypes/ShapeModelStorage'
 import { shapeModelGeometry } from './archetypes/ShapeModelFormat'
 
 /**
+ * Масштабная высота тумана на камнях (rockFog) в долях ТОЛЩИНЫ ленты.
+ * Замкнутая форма взвешивает плотность exp(−|y|/H); при H = 8·толщина на
+ * верхней кромке (|y| = толщина/2) множитель exp(−1/16) ≈ 0.94 — «63% на
+ * rangeKm» держится по всей высоте ленты в пределах ~6%.
+ */
+const ROCK_FOG_SCALE_HEIGHT_FACTOR = 8
+
+/**
  * Конфигурация системы астероидного кольца
  */
 interface AsteroidRingConfig {
@@ -230,8 +238,9 @@ interface AsteroidRingConfig {
   /**
    * Туман на камнях БЕЗ объёма пыли (пояс: объём живёт у узла, а камням нужна
    * воздушная перспектива). rangeKm — дистанция, на которой туман набирает
-   * 1 − e⁻¹ ≈ 63%; nearFadeFraction — ближнее гашение как доля этой дистанции.
-   * Не задан — как сегодня: без dustEnabled туман на камнях выключен.
+   * 1 − e⁻¹ ≈ 63% в средней плоскости ленты (на кромке ≈ 0.94 от этого,
+   * см. ROCK_FOG_SCALE_HEIGHT_FACTOR); nearFadeFraction — ближнее гашение
+   * как доля этой дистанции. Не задан — без dustEnabled тумана на камнях нет.
    */
   rockFog?: { rangeKm: number; nearFadeFraction: number }
   /**
@@ -765,11 +774,19 @@ class AsteroidRingSystem extends Group {
     } else if (cfg.rockFog) {
       // Туман на камнях без объёма пыли: тот же закрытый вид тумана
       // (ringDustApplyFog), но объём не создаём — у пояса он свой на узле.
-      // scaleHeight = вся толщина (units сцены) — вертикальная экспонента
-      // почти плоская по полю, туман работает только по дистанции.
-      const rockFogDensity = 1 / toThreeJSUnits(cfg.rockFog.rangeKm)
-      const rockFogNearFade = cfg.rockFog.nearFadeFraction * toThreeJSUnits(cfg.rockFog.rangeKm)
-      this.__applyDustStaticUniforms(thickness, rockFogDensity, rockFogNearFade, innerRadius, outerRadius, planetRadius)
+      // scaleHeight = 8·толщина: на кромке ленты вертикальный множитель
+      // exp(−1/16) ≈ 0.94, туман работает практически только по дистанции.
+      const rockFogRange = toThreeJSUnits(cfg.rockFog.rangeKm)
+      const rockFogDensity = 1 / rockFogRange
+      const rockFogNearFade = cfg.rockFog.nearFadeFraction * rockFogRange
+      this.__applyDustStaticUniforms(
+        thickness * ROCK_FOG_SCALE_HEIGHT_FACTOR,
+        rockFogDensity,
+        rockFogNearFade,
+        innerRadius,
+        outerRadius,
+        planetRadius
+      )
     }
 
     // --- Слой кольца (чанк RingDust): полутолщина слоя для самозатенения и
@@ -1188,5 +1205,5 @@ class AsteroidRingSystem extends Group {
   }
 }
 
-export { AsteroidRingSystem }
+export { AsteroidRingSystem, ROCK_FOG_SCALE_HEIGHT_FACTOR }
 export type { AsteroidRingConfig }

@@ -161,7 +161,9 @@ describe('AsteroidBelt: фазовый свет дымки доходит до �
 
   it('клампы: g не выше 0.95, сила в [0, 1], дальность тумана не отрицательна', () => {
     expect(asteroidBeltParameters(actorOf({ ...DATA, dustPhaseG: 1 })).dustPhaseG).toBe(0.95)
+    expect(asteroidBeltParameters(actorOf({ ...DATA, dustPhaseG: -1 })).dustPhaseG).toBe(0)
     expect(asteroidBeltParameters(actorOf({ ...DATA, dustPhaseStrength: 4 })).dustPhaseStrength).toBe(1)
+    expect(asteroidBeltParameters(actorOf({ ...DATA, dustPhaseStrength: -1 })).dustPhaseStrength).toBe(0)
     expect(asteroidBeltParameters(actorOf({ ...DATA, rockFogRangeKm: -5 })).rockFogRangeKm).toBe(0)
   })
 

@@ -39,17 +39,20 @@ import { resolveLightTint } from '@/core/helpers/lightSource'
  * CPU-зеркало цикла марша: tauMarch в tests/ringDust/tauMirror.ts —
  * менять строго синхронно.
  *
- * Клочья (DUST_CLUMPS) — низкочастотный шум плотности только в марше объёма;
- * замкнутая форма тумана на камнях (ringDustTauRay) шум не видит, поэтому
- * система и с объёмом, и с туманом камней разом дала бы шов на границе —
- * у пояса туман камней выключен, у колец клочья не используются.
+ * Клочья (DUST_CLUMPS) — низкочастотный шум плотности только в марше объёма.
+ * Замкнутая форма тумана на камнях (ringDustTauRay) не видит ни клочьев, ни
+ * фазы: у пояса туман камней — отдельный художественный туман по дистанции,
+ * а не τ объёма, и согласованности между ними нет по замыслу; у колец клочья
+ * не используются.
  *
  * Фазовый свет (DUST_PHASE_HG) — форвард-скаттеринг: дымка ярче, если луч
  * смотрит сквозь неё на звезду, и темнее, если от звезды. Фаза Хеньи-Гринштейна
- * взята БЕЗ множителя 1/(4π): среднее по всем направлениям сферы равно 1 по
- * построению, поэтому средняя яркость дымки не смещается — меняется только
- * распределение по направлению луча. При дефолте uDustPhaseG = 0.55 отношение
- * вперёд/назад к среднему ≈ 7.65 / 0.19.
+ * взята БЕЗ множителя 1/(4π): среднее по сфере равно 1 по построению.
+ * uDustPhaseStrength смешивает прежнюю дымку (ringDustHazeSun) с фазовой
+ * моделью; средняя по сфере яркость обеих одна (константа RING_DUST_PHASE_BASE
+ * = среднее прежней модели), меняется только распределение по направлению
+ * луча. При дефолте uDustPhaseG = 0.55 отношение вперёд/назад к среднему
+ * ≈ 7.65 / 0.19.
  */
 interface RingDustRaymarchOptions {
   /**
@@ -144,18 +147,23 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
               phaseTau += contrib * ringDustPhaseHG(cosTheta);
             #endif`
       : ''
-    // Переопределяет haze поверх существующей ветки DUST_LIGHT_AT_ORIGIN/else:
-    // тон дымки смещается к uDustColorForward, яркость — к среднему HG вдоль луча
+    // Подмешивает фазовую модель к haze из ветки DUST_LIGHT_AT_ORIGIN/else по
+    // uDustPhaseStrength: 0 — прежняя дымка, 1 — тон к uDustColorForward,
+    // яркость по среднему HG вдоль луча. Средняя по сфере яркость обеих
+    // моделей одна (RING_DUST_PHASE_BASE), сила меняет только распределение
     const phaseHazeOverrideChunk = options.phaseHG
       ? `
           #ifdef DUST_PHASE_HG
+            // Среднее по сфере прежней модели 0.75 + 0.45·⟨sun⟩, ⟨sun⟩ = ⟨max(cosθ,0)^4⟩ = 0.1
+            const float RING_DUST_PHASE_BASE = 0.795;
             // Среднее HG по лучу: 1 нейтрально, >1 форвард (к звезде), <1 назад
             float phaseMean = tau > 0.0 ? phaseTau / tau : 1.0;
             float forward = clamp((phaseMean - 1.0) / 3.0, 0.0, 1.0);
-            haze = mix(uDustColor, uDustColorForward, forward) * mix(1.0, phaseMean, uDustPhaseStrength);
+            vec3 phaseHaze = mix(uDustColor, uDustColorForward, forward) * (phaseMean * RING_DUST_PHASE_BASE);
             #ifdef USE_LIGHT_TINT
-              haze *= uLightColor;
+              phaseHaze *= uLightColor;
             #endif
+            haze = mix(haze, phaseHaze, uDustPhaseStrength);
           #endif`
       : ''
 

@@ -245,15 +245,17 @@ L1-билбордами (`maxDistance` точек, `uMaxDistance` билборд
 байт-в-байт прежняя, стражи: снимок в `tests/ringDust/RingDustClumps.spec.ts`
 и `tests/ringDust/RingDustPhase.spec.ts`) марш копит `phaseTau` — τ,
 взвешенный фазой Хеньи-Гринштейна БЕЗ множителя 1/(4π): среднее по сфере
-направлений ровно 1, средняя яркость ленты не смещается, меняется только
-распределение по углу. При `g = 0.55` на просвет к звезде ≈ 7.65× среднего,
+направлений ровно 1. При `g = 0.55` на просвет к звезде ≈ 7.65× среднего,
 спиной ≈ 0.19×. Косинус — по направлению на звезду из точки марша
-(`DUST_LIGHT_AT_ORIGIN`). Итог: `haze = mix(dustColor, dustColorForward,
-forward) · mix(1, phaseMean, strength)`, где `phaseMean = phaseTau / tau`,
-`forward = clamp((phaseMean − 1)/3, 0, 1)` — на полном просвете тон целиком
-уходит в `dustColorForward`. Ручки `dustPhaseG` / `dustPhaseStrength` /
-`dustColorForward` (§2). Проверено CPU-зеркалом фазы (среднее 1, пик 7.654),
-не на GPU.
+(`DUST_LIGHT_AT_ORIGIN`). Итог: `phaseHaze = mix(dustColor, dustColorForward,
+forward) · phaseMean · 0.795`, `haze = mix(haze, phaseHaze, strength)` (haze —
+прежняя дымка), где `phaseMean = phaseTau / tau`, `forward = clamp((phaseMean − 1)/3, 0, 1)` —
+на полном просвете тон целиком уходит в `dustColorForward`. База 0.795 —
+среднее по сфере прежней дымки `0.75 + 0.45·max(cosθ,0)⁴` (⟨…⁴⟩ = 0.1): при
+любой силе средняя по направлениям яркость ленты та же, что до ветки, меняется
+только распределение по углу. Ручки `dustPhaseG` / `dustPhaseStrength` /
+`dustColorForward` (§2). Проверено CPU-зеркалом фазы (среднее 1, пик 7.654,
+база 0.795), не на GPU.
 
 **Туман на камнях.** Объём дымки живёт на узле пояса, стример шёл с
 `dustEnabled false` — камни внутри пояса не имели воздушной перспективы
@@ -261,10 +263,12 @@ forward) · mix(1, phaseMean, strength)`, где `phaseMean = phaseTau / tau`,
 { rangeKm, nearFadeFraction }` (`AsteroidRingSystem.__setup`, ветка `else if
 (cfg.rockFog)` — только без объёма пыли) пишет в материалы L0/билбордов те же
 статические юниформы тумана (`__applyDustStaticUniforms`): `density =
-1/rangeKm`, `nearFade = nearFadeFraction · rangeKm`, `scaleHeight` = вся
-толщина (вертикальная экспонента почти плоская — туман работает по
-дистанции); на `rangeKm` набирает 1 − e⁻¹ ≈ 63%
-(`tests/asteroidBelt/RockFog.spec.ts`), объём не создаётся. Пояс
+1/rangeKm`, `nearFade = nearFadeFraction · rangeKm`, `scaleHeight` = 8 ×
+толщина (`ROCK_FOG_SCALE_HEIGHT_FACTOR`: у кромки ленты вертикальная
+экспонента даёт 0.94 от средней плоскости — туман работает по дистанции); в
+средней плоскости на `rangeKm` набирает 1 − e⁻¹ ≈ 63%, у кромки ≈ 61%
+(`tests/asteroidBelt/RockFog.spec.ts`, CPU-зеркало `tauRay`), объём не
+создаётся. Пояс
 (`AsteroidBelt.__createStreamer`) при `rockFogRangeKm > 0` отдаёт `rockFog` с
 `nearFadeFraction 0.05` (константа кода), цвет тумана = `dustColor`, угловой
 гейт снят (`dustAnglePower 1e-6`). Кольца (`dustEnabled true`, `rockFog` не
@@ -595,7 +599,8 @@ Near `⌈20000/14·1.5⌉·14 = 30 002`, L1 `100 000` → всего **205 014**
     перепад режет — `dustPhaseG` вниз или `dustPhaseStrength` ниже 1; если не
     читается — `dustPhaseG` вверх; `dustPhaseStrength 0` — прежний ровный облик.
 15. **Средняя яркость ленты с обзора системы.** Фаза нормирована на среднее 1
-    по сфере — с обзора системы лента в среднем той же яркости, что до ветки,
+    по сфере и подогнана к средней яркости прежней дымки (база 0.795) — с
+    обзора системы лента в среднем той же яркости, что до ветки,
     перераспределяется только по углу (сторона к звезде ярче, от неё темнее).
     Если лента в целом стала ярче или темнее — регресс нормировки, не ручка.
 16. **Туман на камнях внутри пояса.** Внутри поля дальние камни должны тонуть
