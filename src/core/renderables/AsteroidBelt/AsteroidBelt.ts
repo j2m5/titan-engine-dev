@@ -7,7 +7,10 @@ import { asteroidBeltParameters, type AsteroidBeltParameters } from './AsteroidB
 import { AsteroidRingSystem, type AsteroidRingConfig } from '@/core/renderables/DetailedRingStreamingSystem'
 import { shapeModelStorage } from '@/core/renderables/DetailedRingStreamingSystem/archetypes/ShapeModelStorage'
 import { deriveCascades, PIXEL_RAD, type CascadeSpec } from '@/core/renderables/DetailedRingStreamingSystem/cascadeScale'
-import { buildBeltDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/beltDensityProfile'
+import {
+  buildBeltAngularProfile,
+  buildBeltDensityProfile
+} from '@/core/renderables/DetailedRingStreamingSystem/beltDensityProfile'
 import { distanceToTorus, nextState, BeltLodState } from '@/core/renderables/DetailedRingStreamingSystem/beltDistance'
 import { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
 import { ringLightDirection } from '@/core/renderables/DetailedRingStreamingSystem/ringLightDirection'
@@ -46,6 +49,8 @@ class AsteroidBelt extends Group {
   private readonly params: AsteroidBeltParameters
   /** Один профиль на камни стримера и на дальний слой пыли — щели и сгущения совпадают */
   private readonly densityProfile: Float32Array
+  /** Азимутальный профиль (дуги) — тоже один на все три слоя; null без дуг в данных */
+  private readonly angularProfile: Float32Array | null
   private readonly depthVolumeRegistry: DepthVolumeRegistry | null
 
   private readonly innerRadiusTu: number
@@ -72,6 +77,7 @@ class AsteroidBelt extends Group {
     this.depthVolumeRegistry = depthVolumeRegistry
     this.params = asteroidBeltParameters(model)
     this.densityProfile = buildBeltDensityProfile(this.params.structure)
+    this.angularProfile = buildBeltAngularProfile(this.params.structure)
 
     this.innerRadiusTu = toThreeJSUnits(this.params.innerRadiusKm)
     this.outerRadiusTu = toThreeJSUnits(this.params.outerRadiusKm)
@@ -130,6 +136,8 @@ class AsteroidBelt extends Group {
       // Звезда в начале координат пояса: лепесток дымки — по точке марша
       lightAtOrigin: true,
       radialProfile: this.densityProfile,
+      // Дуги — тот же азимутальный профиль, что у секторов стримера и точек
+      angularProfile: this.angularProfile ?? undefined,
       // Клочья: низкочастотный шум плотности — лента мятая, с просветами и
       // сгустками, а не ровный градиент; 0 — ровная лента и прежний шейдер
       clumpStrength: p.dustClumpStrength,
@@ -155,6 +163,7 @@ class AsteroidBelt extends Group {
       count: p.pointCount,
       seed: p.seed,
       profile: this.densityProfile,
+      angularProfile: this.angularProfile,
       color: new Color(ASTEROID_PROFILES[profileName].baseColor),
       lightTint: resolveLightTint(this.actor),
       // Размер точки — физический: типичное тело крупнейшего класса в единицах
@@ -177,6 +186,7 @@ class AsteroidBelt extends Group {
       frame: 'system',
       relativeOrigin: true,
       densityProfileSource: this.densityProfile,
+      angularProfileSource: this.angularProfile ?? undefined,
       cascades: this.cascades as CascadeSpec[],
       // Габарит общий на пул: геометрия архетипа и масштаб карт деталей одни на
       // все каскады, класс задаётся окном minScale/maxScale (см. cascadeScale)
