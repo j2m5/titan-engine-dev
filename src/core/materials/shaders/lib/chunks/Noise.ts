@@ -1,3 +1,12 @@
+/**
+ * float→float хеш пер-инстансных сидов — отдельной строкой: шейдеры без
+ * всего чанка шумов (билборд камней, см. чанк AsteroidIce) берут только его.
+ * CPU-зеркало: tests/asteroidBelt/rockSpinMirror.ts.
+ */
+export const hashSurface11Function = `float hashSurface11(float x) {
+    return fract(sin(x * 91.3458) * 47453.5453);
+  }`
+
 export const noiseFunctions = `
   // Страж двойного включения: чанк подключают несколько взаимоисключающих
   // гейтов одного шейдера (USE_GIANT_DETAIL, USE_TERRAIN_MACRO_DETAIL) — при
@@ -9,9 +18,7 @@ export const noiseFunctions = `
   // только от значений, стабильных в пределах примитива (вершинный шейдер /
   // юниформы). От ИНТЕРПОЛИРОВАННОГО varying'а — запрещено: ULP-джиттер
   // интерполяции усиливается градиентом хеша (~4e6) до пиксельного шума.
-  float hashSurface11(float x) {
-    return fract(sin(x * 91.3458) * 47453.5453);
-  }
+  ${hashSurface11Function}
 
   vec4 mod289(vec4 x) {
     return x - floor(x * (1.0 / 289.0)) * 289.0;

@@ -1,0 +1,2379 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Кольцо: программы камней без ледяной примеси — побайтно прежние > L0/Near и билборд кольца: тексты вершинника и фрагментника совпадают со снимком, дефайна нет > billboard-fragment 1`] = `
+"
+        #define PI 3.141592653589793
+#define PI2 6.283185307179586
+#define PI_HALF 1.5707963267948966
+#define RECIPROCAL_PI 0.3183098861837907
+#define RECIPROCAL_PI2 0.15915494309189535
+#define EPSILON 1e-6
+#ifndef saturate
+#define saturate( a ) clamp( a, 0.0, 1.0 )
+#endif
+#define whiteComplement( a ) ( 1.0 - saturate( a ) )
+float pow2( const in float x ) { return x*x; }
+vec3 pow2( const in vec3 x ) { return x*x; }
+float pow3( const in float x ) { return x*x*x; }
+float pow4( const in float x ) { float x2 = x*x; return x2*x2; }
+float max3( const in vec3 v ) { return max( max( v.x, v.y ), v.z ); }
+float average( const in vec3 v ) { return dot( v, vec3( 0.3333333 ) ); }
+highp float rand( const in vec2 uv ) {
+	const highp float a = 12.9898, b = 78.233, c = 43758.5453;
+	highp float dt = dot( uv.xy, vec2( a,b ) ), sn = mod( dt, PI );
+	return fract( sin( sn ) * c );
+}
+#ifdef HIGH_PRECISION
+	float precisionSafeLength( vec3 v ) { return length( v ); }
+#else
+	float precisionSafeLength( vec3 v ) {
+		float maxComponent = max3( abs( v ) );
+		return length( v / maxComponent ) * maxComponent;
+	}
+#endif
+struct IncidentLight {
+	vec3 color;
+	vec3 direction;
+	bool visible;
+};
+struct ReflectedLight {
+	vec3 directDiffuse;
+	vec3 directSpecular;
+	vec3 indirectDiffuse;
+	vec3 indirectSpecular;
+};
+#ifdef USE_ALPHAHASH
+	varying vec3 vPosition;
+#endif
+vec3 transformDirection( in vec3 dir, in mat4 matrix ) {
+	return normalize( ( matrix * vec4( dir, 0.0 ) ).xyz );
+}
+vec3 inverseTransformDirection( in vec3 dir, in mat4 matrix ) {
+	return normalize( ( vec4( dir, 0.0 ) * matrix ).xyz );
+}
+bool isPerspectiveMatrix( mat4 m ) {
+	return m[ 2 ][ 3 ] == - 1.0;
+}
+vec2 equirectUv( in vec3 dir ) {
+	float u = atan( dir.z, dir.x ) * RECIPROCAL_PI2 + 0.5;
+	float v = asin( clamp( dir.y, - 1.0, 1.0 ) ) * RECIPROCAL_PI + 0.5;
+	return vec2( u, v );
+}
+vec3 BRDF_Lambert( const in vec3 diffuseColor ) {
+	return RECIPROCAL_PI * diffuseColor;
+}
+vec3 F_Schlick( const in vec3 f0, const in float f90, const in float dotVH ) {
+	float fresnel = exp2( ( - 5.55473 * dotVH - 6.98316 ) * dotVH );
+	return f0 * ( 1.0 - fresnel ) + ( f90 * fresnel );
+}
+float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
+	float fresnel = exp2( ( - 5.55473 * dotVH - 6.98316 ) * dotVH );
+	return f0 * ( 1.0 - fresnel ) + ( f90 * fresnel );
+} // validated
+        #if defined( USE_LOGARITHMIC_DEPTH_BUFFER )
+	uniform float logDepthBufFC;
+	varying float vFragDepth;
+	varying float vIsPerspective;
+#endif
+
+        uniform vec3 uColor;
+        uniform float uFade;
+        uniform float uAmbient;
+        uniform float uColorJitter;
+        uniform float uLunarMix;
+        uniform float uOppositionSurge;
+        uniform vec3 uPlanetshineColor;
+        uniform float uPlanetshineStrength;
+
+        #ifdef USE_LIGHT_TINT
+          uniform vec3 uLightColor;
+        #endif
+
+        varying vec2 vUv;
+        varying float vDistanceFade;
+        varying vec3 vLightDirView;
+        varying vec3 vPlanetDirView;
+        varying float vInstanceSeed;
+        varying vec3 vRingPos;
+        varying float vFade;
+        varying vec4 vEllipse;
+        varying float vHalfExtent;
+
+        
+  uniform vec3 uDustColor;
+  uniform float uDustDensity;
+  uniform float uDustScaleHeight;
+  uniform float uDustRingInner;
+  uniform float uDustRingOuter;
+  uniform vec3 uDustCamRingPos;
+  uniform vec3 uDustLightDirRing;
+  uniform float uDustAnglePower;
+  uniform float uDustNearFade;
+  uniform float uDustPlanetRadius;
+  uniform sampler2D uDustRadialMap;
+  uniform float uDustRadialMapScale;
+  // Полосы кольца (RGB — цвет, A — альфа; см. RingBandTexture): 0 — текстуры нет,
+  // тинт и самозатенение слоя выключены
+  uniform sampler2D uRingBandMap;
+  uniform float uRingBandEnabled;
+  uniform vec3 uBandMeanColor;
+  uniform float uBandTintStrength;
+  // Слой кольца: полутолщина (ring-local) и сила самозатенения (множитель τ)
+  uniform float uLayerHalfThickness;
+  uniform float uLayerShadowStrength;
+
+        
+  // Маска кромок кольца × радиальный профиль из альфы текстуры кольца.
+  // Профиль (uDustRadialMap, R-канал; тот же маппинг u, что у RingShader)
+  // согласует пыль с субкольцами; нормирован на среднее 1 через
+  // uDustRadialMapScale, чтобы калибровка tau грейзинг-луча не поплыла.
+  // Scale 0 → профиль выключен (равномерная пыль, поведение до A-lite).
+  // CPU-зеркало: radialMask в tests/ringDust/tauMirror.ts — менять синхронно.
+  float ringDustRadialMask(float r) {
+    float edge = (uDustRingOuter - uDustRingInner) * 0.12;
+    float mask = smoothstep(uDustRingInner, uDustRingInner + edge, r)
+               * (1.0 - smoothstep(uDustRingOuter - edge, uDustRingOuter, r));
+    if (uDustRadialMapScale > 0.0) {
+      float u = clamp((r - uDustRingInner) / (uDustRingOuter - uDustRingInner), 0.0, 1.0);
+      mask *= texture2D(uDustRadialMap, vec2(u, 0.5)).r * uDustRadialMapScale;
+    }
+    return mask;
+  }
+
+  // Плотность пыли в точке ring-local space (сэмплируется маршем объёма)
+  float ringDustDensityAt(vec3 p) {
+    float safeH = max(uDustScaleHeight, 1e-6);
+    return uDustDensity * ringDustRadialMask(length(p.xz)) * exp(-abs(p.y) / safeH);
+  }
+
+  // Гейт по углу луча к плоскости кольца: 1 на скользящем, строго 0 при 90°.
+  // Нефизичный, осознанный: лечит «тусклую пелену сверху» (см. спеку v2)
+  float ringDustAngleGate(vec3 dir) {
+    return pow(max(1.0 - abs(dir.y), 0.0), uDustAnglePower);
+  }
+
+  // Рамп ближней дистанции: вблизи камеры пыль не проявляется
+  float ringDustNearRamp(float t) {
+    return smoothstep(0.0, max(uDustNearFade, 1e-6), t);
+  }
+
+  // Интервал t, где луч (в проекции XZ) внутри цилиндра радиуса R.
+  // Пустой интервал кодируется как vec2(1.0, 0.0)
+  vec2 ringDustCircleInterval(vec3 o, vec3 d, float R) {
+    float a = dot(d.xz, d.xz);
+    if (a < 1e-12) {
+      // Вертикальный луч: внутри цилиндра целиком либо никогда
+      return length(o.xz) <= R ? vec2(-1.0e9, 1.0e9) : vec2(1.0, 0.0);
+    }
+    float b = dot(o.xz, d.xz);
+    float c = dot(o.xz, o.xz) - R * R;
+    float disc = b * b - a * c;
+    if (disc <= 0.0) return vec2(1.0, 0.0);
+    float sq = sqrt(disc);
+    return vec2((-b - sq) / a, (-b + sq) / a);
+  }
+
+  // --- Слой кольца: самозатенение и тинт по полосам (общее для камней и марша) ---
+  // CPU-зеркало: layerTau/columnFraction/layerShadow/bandTint в tests/ringDust/tauMirror.ts
+
+  // Выборка полос по радиусу (тот же маппинг u, что у RingShader)
+  vec4 ringBandAt(float r) {
+    float u = clamp((r - uDustRingInner) / (uDustRingOuter - uDustRingInner), 0.0, 1.0);
+    return texture2D(uRingBandMap, vec2(u, 0.5));
+  }
+
+  // Оптическая толща слоя по нормали на радиусе: пропускание = 1 − α
+  float ringLayerTau(float r) {
+    if (uRingBandEnabled < 0.5) return 0.0;
+    float a = ringBandAt(r).a;
+    return -log(1.0 - min(a, 0.98));
+  }
+
+  // Доля столба слоя НАД точкой в сторону солнца при треугольном вертикальном
+  // распределении камней (пик в средней плоскости, ноль на ±half)
+  float ringLayerColumnFraction(float ySun) {
+    float u = clamp(ySun / max(uLayerHalfThickness, 1e-9), -1.0, 1.0);
+    return u >= 0.0 ? (1.0 - u) * (1.0 - u) * 0.5 : 1.0 - (1.0 + u) * (1.0 + u) * 0.5;
+  }
+
+  // Самозатенение слоя: камни и пыль над точкой вдоль направления на звезду.
+  // Путь через слой делится на синус высоты звезды над плоскостью (пол 0.2).
+  // Физическая экспонента СМЕШИВАЕТСЯ с единицей по uLayerShadowStrength, а не
+  // множит толщу: рендер показывает и глубокие камни, которых в оптически
+  // плотном слое не видно, и честная толща Сатурна (α ≈ 1, солнце ≤ 27° над
+  // плоскостью) красила их в чёрное. При силе s худший случай — (1 − s)
+  float ringLayerShadow(vec3 p) {
+    float tau = ringLayerTau(length(p.xz));
+    if (tau <= 0.0 || uLayerShadowStrength <= 0.0) return 1.0;
+    float ySun = uDustLightDirRing.y >= 0.0 ? p.y : -p.y;
+    float sinE = max(abs(uDustLightDirRing.y), 0.2);
+    float physical = exp(-tau * ringLayerColumnFraction(ySun) / sinE);
+    return mix(1.0, physical, uLayerShadowStrength);
+  }
+
+  // Тинт альбедо по цвету полосы относительно среднего цвета кольца:
+  // светлые ледяные полосы — светлые камни, тёмные пыльные — тёмные
+  vec3 ringBandTint(float r) {
+    if (uRingBandEnabled < 0.5) return vec3(1.0);
+    vec3 band = ringBandAt(r).rgb;
+    vec3 tint = clamp(band / max(uBandMeanColor, vec3(0.05)), 0.5, 1.5);
+    return mix(vec3(1.0), tint, uBandTintStrength);
+  }
+
+  // Цвет дымки: базовый + мягкий forward-scattering буст в сторону звезды.
+  // Единственный прямой член света звезды на пыль — красится целиком.
+  // sun — доля прямого лепестка [0, 1]: pow(dot(луч, на звезду), 4)
+  vec3 ringDustHazeSun(float sun) {
+    #ifdef USE_LIGHT_TINT
+      return uDustColor * (0.75 + 0.45 * sun) * uLightColor;
+    #else
+      return uDustColor * (0.75 + 0.45 * sun);
+    #endif
+  }
+
+  vec3 ringDustHaze(vec3 rayDir) {
+    return ringDustHazeSun(pow(max(dot(rayDir, uDustLightDirRing), 0.0), 4.0));
+  }
+
+  // Тень планеты на пыль: аналитический теневой цилиндр вдоль направления на
+  // звезду. uDustLightDirRing — от центра планеты (= начало ring-local) к звезде,
+  // планета в начале координат. Зеркалит getShadowFromSphere из RingShaderTemplate,
+  // чтобы тень пыли совпадала с тенью 2D-кольца; мягкая кромка полутени вместо
+  // жёсткой. Возвращает множитель яркости: 0.04 в умбре → 1.0 вне тени.
+  float ringDustPlanetShadow(vec3 p) {
+    if (uDustPlanetRadius <= 0.0) return 1.0;
+    float pDotS = dot(p, uDustLightDirRing);
+    if (pDotS >= 0.0) return 1.0; // солнечная сторона — не в тени
+    float perp = sqrt(max(dot(p, p) - pDotS * pDotS, 0.0));
+    float penumbra = uDustPlanetRadius * 0.08;
+    float shade = smoothstep(uDustPlanetRadius, uDustPlanetRadius + penumbra, perp);
+    return mix(0.04, 1.0, shade);
+  }
+
+  float ringDustMaskAtT(vec3 o, vec3 d, float t) {
+    return ringDustRadialMask(length(o.xz + d.xz * t));
+  }
+
+  // Нечётная первообразная exp(-|u|/H): F(u) = sign(u) * H * (1 - exp(-|u|/H))
+  float ringDustF(float u) {
+    // защита от деления на ноль
+    float safeH = max(uDustScaleHeight, 1e-6);
+    float f = safeH * (1.0 - exp(-abs(u) / safeH));
+    return u >= 0.0 ? f : -f;
+  }
+
+  // Замкнутая форма интеграла exp(-|y(t)|/H) dt по [t0, t1], y(t) = oy + dy*t
+  float ringDustVerticalIntegral(float oy, float dy, float t0, float t1) {
+    if (t1 <= t0) return 0.0;
+    if (abs(dy) < 1e-8) {
+      float safeH = max(uDustScaleHeight, 1e-6);
+      return exp(-abs(oy) / safeH) * (t1 - t0);
+    }
+    float ya = oy + dy * t0;
+    float yb = oy + dy * t1;
+    return (ringDustF(max(ya, yb)) - ringDustF(min(ya, yb))) / abs(dy);
+  }
+
+  // Средняя маска кромок по куску с монотонным |y(t)|: тапы по квантилям
+  // экспоненциальной массы (важностная выборка — маска сэмплируется там,
+  // где сосредоточен вклад в интеграл)
+  float ringDustPieceMask(vec3 o, vec3 d, float t0, float t1) {
+    float L = t1 - t0;
+    float absDy = abs(d.y);
+    if (absDy < 1e-8) {
+      return 0.25 * (ringDustMaskAtT(o, d, t0 + L * 0.125)
+                   + ringDustMaskAtT(o, d, t0 + L * 0.375)
+                   + ringDustMaskAtT(o, d, t0 + L * 0.625)
+                   + ringDustMaskAtT(o, d, t0 + L * 0.875));
+    }
+    float ya = abs(o.y + d.y * t0);
+    float yb = abs(o.y + d.y * t1);
+    // Масса концентрируется у конца с меньшим |y|
+    float tNear = ya <= yb ? t0 : t1;
+    float dirSign = ya <= yb ? 1.0 : -1.0;
+    float safeH = max(uDustScaleHeight, 1e-6);
+    float lambda = safeH / absDy;
+    float A = max(1.0 - exp(-L / lambda), 1e-6);
+    vec4 dist = -lambda * log(vec4(1.0) - vec4(0.125, 0.375, 0.625, 0.875) * A);
+    vec4 tq = vec4(tNear) + dirSign * min(dist, vec4(L));
+    return 0.25 * (ringDustMaskAtT(o, d, tq.x) + ringDustMaskAtT(o, d, tq.y)
+                 + ringDustMaskAtT(o, d, tq.z) + ringDustMaskAtT(o, d, tq.w));
+  }
+
+  // Вклад одного радиального интервала: разрез по пересечению средней плоскости,
+  // в каждом куске |y| монотонно
+  float ringDustIntervalTau(vec3 o, vec3 d, float t0, float t1) {
+    if (t1 <= t0) return 0.0;
+    float tCross = -1.0;
+    if (abs(d.y) >= 1e-8) tCross = -o.y / d.y;
+    if (tCross > t0 && tCross < t1) {
+      return uDustDensity * (
+        ringDustPieceMask(o, d, t0, tCross) * ringDustVerticalIntegral(o.y, d.y, t0, tCross) +
+        ringDustPieceMask(o, d, tCross, t1) * ringDustVerticalIntegral(o.y, d.y, tCross, t1));
+    }
+    return uDustDensity * ringDustPieceMask(o, d, t0, t1) * ringDustVerticalIntegral(o.y, d.y, t0, t1);
+  }
+
+  // Оптическая толща вдоль луча origin + dir*t, t in [0, tMax]; dir нормирован.
+  // Фрагмент прокси задаёт ТОЛЬКО направление луча — tau зависит лишь от
+  // (камера, направление), поэтому разрывов на гранях прокси-оболочки быть
+  // не может, а дыра кольца учитывается вычитанием интервала внутреннего
+  // цилиндра (пыль на дальней стороне не теряется).
+  // dustSpan — объединённый диапазон пыли вдоль луча (якоря для шума).
+  float ringDustTauRay(vec3 origin, vec3 dir, float tMax, out vec2 dustSpan) {
+    dustSpan = vec2(0.0);
+    vec2 outer = ringDustCircleInterval(origin, dir, uDustRingOuter);
+    float o0 = max(outer.x, 0.0);
+    float o1 = min(outer.y, tMax);
+    if (o1 <= o0) return 0.0;
+
+    // Дыра кольца вычитается
+    vec2 inner = ringDustCircleInterval(origin, dir, uDustRingInner);
+    float h0 = max(inner.x, o0);
+    float h1 = min(inner.y, o1);
+
+    dustSpan = vec2(o0, o1);
+    if (h1 <= h0) {
+      return ringDustIntervalTau(origin, dir, o0, o1);
+    }
+    return ringDustIntervalTau(origin, dir, o0, h0) + ringDustIntervalTau(origin, dir, h1, o1);
+  }
+
+  // Аэроперспектива для непрозрачной геометрии (камни L0/L1)
+  vec3 ringDustApplyFog(vec3 baseColor, vec3 fragRingPos) {
+    vec3 delta = fragRingPos - uDustCamRingPos;
+    float dist = length(delta);
+    if (dist < 1e-6) return baseColor;
+    vec3 rayDir = delta / dist;
+    vec2 span;
+    float tau = ringDustTauRay(uDustCamRingPos, rayDir, dist, span);
+    if (tau <= 0.0) return baseColor;
+    float fogAmount = (1.0 - exp(-tau)) * ringDustAngleGate(rayDir) * ringDustNearRamp(dist);
+    // Тень планеты затемняет дымку в позиции камня (совпадает с тенью 2D-кольца)
+    vec3 haze = ringDustHaze(rayDir) * ringDustPlanetShadow(fragRingPos);
+    return mix(baseColor, haze, fogAmount);
+  }
+
+        
+  // Диффуз реголита: NdotL/NdotV — косинусы к свету и к камере, cosPhase = dot(L, V)
+  float asteroidRegolithDiffuse(float NdotL, float NdotV, float cosPhase, float lunarMix, float surge) {
+    float nl = max(NdotL, 0.0);
+    float nv = max(NdotV, 0.0);
+    float lambert = nl;
+    float lommel = 2.0 * nl / max(nl + nv, 1e-4);
+    float diffuse = mix(lambert, lommel, lunarMix);
+    float g = acos(clamp(cosPhase, -1.0, 1.0));
+    float opposition = 1.0 + surge * exp(-g / 0.1);
+    return diffuse * opposition;
+  }
+
+  // Planetshine: N и dirPlanet — в одном пространстве (view), ringPos и
+  // lightDirRing — в ring-local (планета в начале координат), planetRadius —
+  // в единицах ringPos. Возвращает множитель альбедо
+  float asteroidPlanetshine(vec3 N, vec3 dirPlanet, vec3 ringPos, vec3 lightDirRing, float planetRadius) {
+    float d = length(ringPos);
+    if (planetRadius <= 0.0 || d <= planetRadius) return 0.0;
+    vec3 pHat = ringPos / d;
+    float phase = 0.5 * (1.0 + dot(pHat, lightDirRing));
+    float angR = planetRadius / d;
+    float solid = angR * angR;
+    float wrap = angR;
+    float wrapped = max(dot(N, dirPlanet) + wrap, 0.0) / (1.0 + wrap);
+    return phase * solid * wrapped;
+  }
+
+
+        // Радиус силуэта в долях эллипса по углу φ: две плавные гармоники с
+        // фазами от сида — лумпистый край, как у rubble-архетипов, без мерцания
+        // белого шума. CPU-зеркало: silhouetteRadius в billboardMirror.ts
+        float billboardSilhouette(float phi, float seed) {
+          float p1 = seed * 6.2831853;
+          float p2 = seed * 12.566371 + 1.7;
+          float h2 = 0.5 + 0.5 * sin(2.0 * phi + p1);
+          float h3 = 0.5 + 0.5 * sin(3.0 * phi + p2);
+          return 1.0 - 0.12 * (0.6 * h2 + 0.4 * h3);
+        }
+
+        void main() {
+          #if defined( USE_LOGARITHMIC_DEPTH_BUFFER )
+	gl_FragDepth = vIsPerspective == 0.0 ? gl_FragCoord.z : log2( vFragDepth ) * logDepthBufFC * 0.5;
+#endif
+
+          // Центрированные UV: (0,0) = центр, (-1,1) = края плейна
+          vec2 centered = vUv * 2.0 - 1.0;
+
+          // --- Эллипс проекции (см. вершинник) ---
+          // Плейн-координаты → повернуть на -θ → нормировать на полуоси: единичный
+          // диск u, в котором и силуэт, и нормаль
+          vec2 p = centered * vHalfExtent;
+          float cs = vEllipse.z;
+          float sn = vEllipse.w;
+          vec2 q = vec2(cs * p.x + sn * p.y, -sn * p.x + cs * p.y);
+          vec2 u = q / vEllipse.xy;
+          float r = length(u);
+
+          // Кромка: гармоники по углу, AA — экранными производными
+          float phi = atan(u.y, u.x);
+          float edge = billboardSilhouette(phi, vInstanceSeed);
+          if (r > edge) discard;
+          float aa = fwidth(r);
+          float edgeAlpha = 1.0 - smoothstep(edge - 1.5 * aa, edge, r);
+
+          // Нормаль масштабированной сферы: силуэт растянут до единичного диска
+          // (un), z по полусфере, компоненты делятся на полуоси (нормаль сферы
+          // после масштаба ∝ обратному масштабу), затем поворот обратно на +θ
+          vec2 un = u / edge;
+          float z = sqrt(max(1.0 - dot(un, un), 0.0));
+          float rm = sqrt(vEllipse.x * vEllipse.y);
+          vec3 nl = normalize(vec3(un.x / vEllipse.x, un.y / vEllipse.y, z / rm));
+          vec3 normal = vec3(cs * nl.x - sn * nl.y, sn * nl.x + cs * nl.y, nl.z);
+
+          // --- Освещение: та же модель, что у L0 (чанк AsteroidBrdf) ---
+          // Билборд смотрит на камеру: view-направление ≈ +Z, поэтому NdotV = normal.z,
+          // cosPhase = L.z
+          float NdotL = dot(normal, vLightDirView);
+          float diffuse = asteroidRegolithDiffuse(NdotL, normal.z, vLightDirView.z, uLunarMix, uOppositionSurge);
+          // Тень планеты (умбра) — та же модель, что у пыли/2D-кольца/L0. Гасит
+          // прямой свет; uAmbient остаётся (не в глухой ноль).
+          float planetShadow = ringDustPlanetShadow(vRingPos);
+          // Самозатенение слоя кольца — как у L0: прямой свет = тень планеты × тень слоя
+          float direct = planetShadow * ringLayerShadow(vRingPos);
+          // Planetshine планеты-хозяина — как у L0, ложится на цвет
+          float shine = asteroidPlanetshine(normal, normalize(vPlanetDirView), vRingPos, uDustLightDirRing, uDustPlanetRadius);
+          float lighting = uAmbient + diffuse * direct;
+
+          // --- Итоговый цвет ---
+          // vFade — плавный fade-in/out сектора; abs, т.к. знак кодирует лишь
+          // направление кросс-фейда (для дизера L0), билборду важна величина.
+          float alpha = edgeAlpha * uFade * vDistanceFade * abs(vFade);
+          if (alpha < 0.01) discard;
+
+          // Идентичность камня: пер-инстансный джиттер яркости, как у L0
+          vec3 base = uColor * (1.0 + uColorJitter * (vInstanceSeed - 0.5) * 2.0);
+          // Тинт по цвету полосы кольца — как у L0
+          base *= ringBandTint(length(vRingPos.xz));
+          // Planetshine — второй источник света: цвет звезды его не касается (как у L0).
+          #ifdef USE_LIGHT_TINT
+            vec3 color = base * uAmbient + base * diffuse * direct * uLightColor;
+          #else
+            vec3 color = base * lighting;
+          #endif
+          color += base * uPlanetshineColor * (uPlanetshineStrength * shine);
+          // Аэроперспектива: дальние импосторы тонут в пылевой дымке
+          color = ringDustApplyFog(color, vRingPos);
+          gl_FragColor = vec4(color, alpha);
+        }
+      "
+`;
+
+exports[`Кольцо: программы камней без ледяной примеси — побайтно прежние > L0/Near и билборд кольца: тексты вершинника и фрагментника совпадают со снимком, дефайна нет > billboard-vertex 1`] = `
+"
+        #define PI 3.141592653589793
+#define PI2 6.283185307179586
+#define PI_HALF 1.5707963267948966
+#define RECIPROCAL_PI 0.3183098861837907
+#define RECIPROCAL_PI2 0.15915494309189535
+#define EPSILON 1e-6
+#ifndef saturate
+#define saturate( a ) clamp( a, 0.0, 1.0 )
+#endif
+#define whiteComplement( a ) ( 1.0 - saturate( a ) )
+float pow2( const in float x ) { return x*x; }
+vec3 pow2( const in vec3 x ) { return x*x; }
+float pow3( const in float x ) { return x*x*x; }
+float pow4( const in float x ) { float x2 = x*x; return x2*x2; }
+float max3( const in vec3 v ) { return max( max( v.x, v.y ), v.z ); }
+float average( const in vec3 v ) { return dot( v, vec3( 0.3333333 ) ); }
+highp float rand( const in vec2 uv ) {
+	const highp float a = 12.9898, b = 78.233, c = 43758.5453;
+	highp float dt = dot( uv.xy, vec2( a,b ) ), sn = mod( dt, PI );
+	return fract( sin( sn ) * c );
+}
+#ifdef HIGH_PRECISION
+	float precisionSafeLength( vec3 v ) { return length( v ); }
+#else
+	float precisionSafeLength( vec3 v ) {
+		float maxComponent = max3( abs( v ) );
+		return length( v / maxComponent ) * maxComponent;
+	}
+#endif
+struct IncidentLight {
+	vec3 color;
+	vec3 direction;
+	bool visible;
+};
+struct ReflectedLight {
+	vec3 directDiffuse;
+	vec3 directSpecular;
+	vec3 indirectDiffuse;
+	vec3 indirectSpecular;
+};
+#ifdef USE_ALPHAHASH
+	varying vec3 vPosition;
+#endif
+vec3 transformDirection( in vec3 dir, in mat4 matrix ) {
+	return normalize( ( matrix * vec4( dir, 0.0 ) ).xyz );
+}
+vec3 inverseTransformDirection( in vec3 dir, in mat4 matrix ) {
+	return normalize( ( vec4( dir, 0.0 ) * matrix ).xyz );
+}
+bool isPerspectiveMatrix( mat4 m ) {
+	return m[ 2 ][ 3 ] == - 1.0;
+}
+vec2 equirectUv( in vec3 dir ) {
+	float u = atan( dir.z, dir.x ) * RECIPROCAL_PI2 + 0.5;
+	float v = asin( clamp( dir.y, - 1.0, 1.0 ) ) * RECIPROCAL_PI + 0.5;
+	return vec2( u, v );
+}
+vec3 BRDF_Lambert( const in vec3 diffuseColor ) {
+	return RECIPROCAL_PI * diffuseColor;
+}
+vec3 F_Schlick( const in vec3 f0, const in float f90, const in float dotVH ) {
+	float fresnel = exp2( ( - 5.55473 * dotVH - 6.98316 ) * dotVH );
+	return f0 * ( 1.0 - fresnel ) + ( f90 * fresnel );
+}
+float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
+	float fresnel = exp2( ( - 5.55473 * dotVH - 6.98316 ) * dotVH );
+	return f0 * ( 1.0 - fresnel ) + ( f90 * fresnel );
+} // validated
+        #ifdef USE_LOGARITHMIC_DEPTH_BUFFER
+	varying float vFragDepth;
+	varying float vIsPerspective;
+#endif
+
+        uniform float uMaxDistance;
+        uniform vec3 uLightPosition;
+        uniform float uSilhouetteScale;
+        // Смещение начала едет юниформом; float32 здесь достаточно — потребители
+        // vRingPos (пыль, тень планеты, полосы) гладкие по радиусу
+        uniform vec3 uOriginOffset;
+
+        // Per-instance fade [0..1] — плавные LOD/sector-переходы (см. InstancePool.writeFade)
+        attribute float instanceFade;
+        // Смещение сектора камня от плавающего начала (см. InstancePool.writeOrigins):
+        // матрица инстанса хранит позицию ОТНОСИТЕЛЬНО центра сектора. У колец
+        // начало не переезжает, атрибут нулевой — сложение ниже тождественно.
+        attribute vec3 instanceOrigin;
+        // Порог полного затухания билборда СВОЕГО каскада (см. InstancePool.writeMaxDistance);
+        // без каскадов остаётся общий uMaxDistance колец — дефайн отсутствует
+        #ifdef USE_CASCADE_FADE_RADIUS
+        attribute float instanceMaxDistance;
+        #endif
+
+        varying vec2 vUv;
+        varying float vDistanceFade;
+        varying vec3 vLightDirView;
+        varying vec3 vPlanetDirView;
+        varying float vInstanceSeed;
+        varying vec3 vRingPos;
+        varying float vFade;
+        // Эллипс проекции: полуоси (в единицах asteroidSize) и cos/sin угла большой оси
+        varying vec4 vEllipse;
+        // Полуразмер плейна в тех же единицах: centered → плейн-координаты
+        varying float vHalfExtent;
+
+        void main() {
+          // Извлечь позицию и масштаб из instance matrix; позиция — абсолютная
+          // в системе кольца: смещение сектора + локальная (обе малы)
+          vec3 instancePos = instanceOrigin + vec3(
+            instanceMatrix[3][0],
+            instanceMatrix[3][1],
+            instanceMatrix[3][2]
+          );
+
+          // Ring-local позиция инстанса для модели пыли — от ЦЕНТРА КОЛЬЦА,
+          // а не от плавающего начала: прибавляем его смещение
+          vRingPos = instancePos + uOriginOffset;
+
+          // Позиция инстанса в view space
+          vec4 mvInstancePos = modelViewMatrix * vec4(instancePos, 1.0);
+
+          // Per-instance seed для уникальной формы каждого billboard — от
+          // МЕСТНОЙ позиции в секторе: она у камня не меняется при переезде
+          // плавающего начала (у колец начало нулевое — выражение прежнее)
+          vInstanceSeed = fract(
+            sin(dot(vec2(instanceMatrix[3][0], instanceMatrix[3][2]), vec2(12.9898, 78.233))) * 43758.5453
+          );
+
+          // --- Эллипс проекции инстанса ---
+          // В матрице инстанса уже лежат поворот и пер-осевой масштаб камня.
+          // Эллипсоид инстанса во view: A · единичная сфера; его ортопроекция на
+          // экран — эллипс с ковариацией (A·Aᵀ) по осям x, y. Из неё угол большой
+          // оси и полуоси (корни собственных значений) — билборд наследует позу
+          // камня, и при кросс-фейде силуэт L1 совпадает с ориентацией L0.
+          // CPU-зеркало: ellipseFromCovariance в tests/asteroidSurface/billboardMirror.ts
+          mat3 A = mat3(modelViewMatrix) * mat3(instanceMatrix);
+          vec3 row0 = vec3(A[0][0], A[1][0], A[2][0]);
+          vec3 row1 = vec3(A[0][1], A[1][1], A[2][1]);
+          float qa = dot(row0, row0);
+          float qb = dot(row0, row1);
+          float qc = dot(row1, row1);
+          float theta = 0.5 * atan(2.0 * qb, qa - qc);
+          float qMean = (qa + qc) * 0.5;
+          float qDev = sqrt((qa - qc) * (qa - qc) * 0.25 + qb * qb);
+          float ra = sqrt(max(qMean + qDev, 0.0));
+          float rb = sqrt(max(qMean - qDev, 1e-8));
+
+          // Анизотропия самого архетипа билборду недоступна — добираем её по сиду
+          // в диапазоне осей архетипов; uSilhouetteScale — средний радиус силуэта
+          // относительно максимального радиуса камня (архетип нормирован на 1)
+          float archK = mix(0.85, 1.3, fract(sin(vInstanceSeed * 12.9898) * 43758.5453));
+          ra *= archK * uSilhouetteScale;
+          rb *= uSilhouetteScale / archK;
+          vEllipse = vec4(ra, rb, cos(theta), sin(theta));
+
+          // Плейн ужат до описанного квадрата эллипса (в единицах asteroidSize —
+          // геометрия плейна ±1.25·asteroidSize, см. InstancePool)
+          float halfExtent = max(ra, rb) * 1.1;
+          vHalfExtent = halfExtent;
+
+          // Камерные оси В VIEW SPACE
+          vec3 right = vec3(1.0, 0.0, 0.0);
+          vec3 up    = vec3(0.0, 1.0, 0.0);
+
+          // Смещение вершины плейна
+          vec3 vertexOffset = (right * position.x + up * position.y) * (halfExtent / 1.25);
+
+          // Финальная позиция
+          vec4 mvPosition = vec4(mvInstancePos.xyz + vertexOffset, 1.0);
+          gl_Position = projectionMatrix * mvPosition;
+
+          // UV для sphere impostor (PlaneGeometry UV идёт от 0 до 1)
+          vUv = uv;
+
+          // Направление к свету: от world position экземпляра к источнику света
+          // Трансформируем в world space через modelMatrix, затем вычисляем направление
+          vec4 worldInstancePos = modelMatrix * vec4(instancePos, 1.0);
+          vec3 worldLightDir = normalize(uLightPosition - worldInstancePos.xyz);
+
+          // Переводим направление света в view space для согласования с impostor normal
+          vLightDirView = normalize((viewMatrix * vec4(worldLightDir, 0.0)).xyz);
+          // Направление на центр планеты (начало ring-local) во view — для
+          // planetshine. В модельном пространстве центр кольца лежит в
+          // -uOriginOffset: модельное начало — это плавающее начало
+          vPlanetDirView = normalize((modelViewMatrix * vec4(-uOriginOffset, 1.0)).xyz - mvInstancePos.xyz);
+
+          // Затухание по расстоянию: свой каскад — по инстансному порогу (иначе
+          // каскады мельче самого крупного растягивают fade его юниформом и
+          // упираются в жёсткую кромку); без каскадов — общий uMaxDistance колец
+          float dist = length(mvInstancePos.xyz);
+          #ifdef USE_CASCADE_FADE_RADIUS
+          vDistanceFade = 1.0 - smoothstep(instanceMaxDistance * 0.6, instanceMaxDistance, dist);
+          #else
+          vDistanceFade = 1.0 - smoothstep(uMaxDistance * 0.6, uMaxDistance, dist);
+          #endif
+
+          vFade = instanceFade;
+
+          #ifdef USE_LOGARITHMIC_DEPTH_BUFFER
+	vFragDepth = 1.0 + gl_Position.w;
+	vIsPerspective = float( isPerspectiveMatrix( projectionMatrix ) );
+#endif
+        }
+      "
+`;
+
+exports[`Кольцо: программы камней без ледяной примеси — побайтно прежние > L0/Near и билборд кольца: тексты вершинника и фрагментника совпадают со снимком, дефайна нет > l0-fragment 1`] = `
+"
+    #define PI 3.141592653589793
+#define PI2 6.283185307179586
+#define PI_HALF 1.5707963267948966
+#define RECIPROCAL_PI 0.3183098861837907
+#define RECIPROCAL_PI2 0.15915494309189535
+#define EPSILON 1e-6
+#ifndef saturate
+#define saturate( a ) clamp( a, 0.0, 1.0 )
+#endif
+#define whiteComplement( a ) ( 1.0 - saturate( a ) )
+float pow2( const in float x ) { return x*x; }
+vec3 pow2( const in vec3 x ) { return x*x; }
+float pow3( const in float x ) { return x*x*x; }
+float pow4( const in float x ) { float x2 = x*x; return x2*x2; }
+float max3( const in vec3 v ) { return max( max( v.x, v.y ), v.z ); }
+float average( const in vec3 v ) { return dot( v, vec3( 0.3333333 ) ); }
+highp float rand( const in vec2 uv ) {
+	const highp float a = 12.9898, b = 78.233, c = 43758.5453;
+	highp float dt = dot( uv.xy, vec2( a,b ) ), sn = mod( dt, PI );
+	return fract( sin( sn ) * c );
+}
+#ifdef HIGH_PRECISION
+	float precisionSafeLength( vec3 v ) { return length( v ); }
+#else
+	float precisionSafeLength( vec3 v ) {
+		float maxComponent = max3( abs( v ) );
+		return length( v / maxComponent ) * maxComponent;
+	}
+#endif
+struct IncidentLight {
+	vec3 color;
+	vec3 direction;
+	bool visible;
+};
+struct ReflectedLight {
+	vec3 directDiffuse;
+	vec3 directSpecular;
+	vec3 indirectDiffuse;
+	vec3 indirectSpecular;
+};
+#ifdef USE_ALPHAHASH
+	varying vec3 vPosition;
+#endif
+vec3 transformDirection( in vec3 dir, in mat4 matrix ) {
+	return normalize( ( matrix * vec4( dir, 0.0 ) ).xyz );
+}
+vec3 inverseTransformDirection( in vec3 dir, in mat4 matrix ) {
+	return normalize( ( vec4( dir, 0.0 ) * matrix ).xyz );
+}
+bool isPerspectiveMatrix( mat4 m ) {
+	return m[ 2 ][ 3 ] == - 1.0;
+}
+vec2 equirectUv( in vec3 dir ) {
+	float u = atan( dir.z, dir.x ) * RECIPROCAL_PI2 + 0.5;
+	float v = asin( clamp( dir.y, - 1.0, 1.0 ) ) * RECIPROCAL_PI + 0.5;
+	return vec2( u, v );
+}
+vec3 BRDF_Lambert( const in vec3 diffuseColor ) {
+	return RECIPROCAL_PI * diffuseColor;
+}
+vec3 F_Schlick( const in vec3 f0, const in float f90, const in float dotVH ) {
+	float fresnel = exp2( ( - 5.55473 * dotVH - 6.98316 ) * dotVH );
+	return f0 * ( 1.0 - fresnel ) + ( f90 * fresnel );
+}
+float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
+	float fresnel = exp2( ( - 5.55473 * dotVH - 6.98316 ) * dotVH );
+	return f0 * ( 1.0 - fresnel ) + ( f90 * fresnel );
+} // validated
+    #if defined( USE_LOGARITHMIC_DEPTH_BUFFER )
+	uniform float logDepthBufFC;
+	varying float vFragDepth;
+	varying float vIsPerspective;
+#endif
+
+    uniform vec3 uRockColor;
+    uniform float uColorJitter;
+    uniform float uTintStrength;
+    uniform float uMariaStrength;
+    uniform float uSurfaceAmbient;
+    uniform float uSpecularStrength;
+    uniform float uSpecularPower;
+    uniform float uSpecularTint;
+    uniform float uFreshnessBrighten;
+    uniform float uCavityShade;
+    uniform float uLunarMix;
+    uniform float uOppositionSurge;
+    uniform vec3 uPlanetshineColor;
+    uniform float uPlanetshineStrength;
+
+    #ifdef USE_LIGHT_TINT
+      uniform vec3 uLightColor;
+    #endif
+
+    varying vec3 vViewLightDirection;
+    varying vec3 vViewPosition;
+    varying vec3 vPlanetDirView;
+    varying vec3 vRingPos;
+    varying vec3 vObjectPos;
+    varying vec3 vObjectNormal;
+    varying mat3 vObjToView;
+    varying float vFade;
+    varying vec2 vSurfaceData;
+    // Готовые пер-инстансные хеши из вершинника (анти-ULP-джиттер, см. вершинник)
+    varying float vTintSeed;
+    varying vec3 vDomainOffset;
+    varying vec2 vTriOffset;
+
+    
+  // Страж двойного включения: чанк подключают несколько взаимоисключающих
+  // гейтов одного шейдера (USE_GIANT_DETAIL, USE_TERRAIN_MACRO_DETAIL) — при
+  // совпадении гейтов GLSL иначе падает на переопределении функций.
+  #ifndef TITAN_NOISE_INCLUDED
+  #define TITAN_NOISE_INCLUDED
+
+  // float→float хеш для декоррелированных пер-инстансных сидов. ВАЖНО: вызывать
+  // только от значений, стабильных в пределах примитива (вершинный шейдер /
+  // юниформы). От ИНТЕРПОЛИРОВАННОГО varying'а — запрещено: ULP-джиттер
+  // интерполяции усиливается градиентом хеша (~4e6) до пиксельного шума.
+  float hashSurface11(float x) {
+    return fract(sin(x * 91.3458) * 47453.5453);
+  }
+
+  vec4 mod289(vec4 x) {
+    return x - floor(x * (1.0 / 289.0)) * 289.0;
+  }
+
+  vec3 mod289(vec3 x) {
+    return x - floor(x * (1.0 / 289.0)) * 289.0;
+  }
+
+  float mod289(float x) {
+    return x - floor(x * (1.0 / 289.0)) * 289.0;
+  }
+
+  vec4 permute(vec4 x) {
+    return mod289(((x * 34.0) + 1.0) * x);
+  }
+
+  float permute(float x) {
+    return mod289(((x * 34.0) + 1.0) * x);
+  }
+
+  vec4 taylorInvSqrt(vec4 r) {
+    return 1.79284291400159 - 0.85373472095314 * r;
+  }
+
+  float taylorInvSqrt(float r) {
+    return 1.79284291400159 - 0.85373472095314 * r;
+  }
+
+  vec4 grad4(float j, vec4 ip) {
+    const vec4 ones = vec4(1.0, 1.0, 1.0, -1.0);
+    vec4 p, s;
+
+    p.xyz = floor(fract(vec3(j) * ip.xyz) * 7.0) * ip.z - 1.0;
+    p.w = 1.5 - dot(abs(p.xyz), ones.xyz);
+    s = vec4(lessThan(p, vec4(0.0)));
+    p.xyz = p.xyz + (s.xyz * 2.0 - 1.0) * s.www;
+
+    return p;
+  }
+
+  vec3 fade(vec3 t) {
+    return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+  }
+
+  float snoise(vec4 v) {
+    const vec4 C = vec4(0.138196601125011, 0.276393202250021, 0.414589803375032, -0.447213595499958);
+
+    // First corner
+    vec4 i = floor(v + dot(v, vec4(0.309016994374947451)));
+    vec4 x0 = v - i + dot(i, C.xxxx);
+
+    // Other corners
+
+    // Rank sorting originally contributed by Bill Licea-Kane, AMD (formerly ATI)
+    vec4 i0;
+    vec3 isX = step(x0.yzw, x0.xxx);
+    vec3 isYZ = step(x0.zww, x0.yyz);
+    i0.x = isX.x + isX.y + isX.z;
+    i0.yzw = 1.0 - isX;
+    i0.y += isYZ.x + isYZ.y;
+    i0.zw += 1.0 - isYZ.xy;
+    i0.z += isYZ.z;
+    i0.w += 1.0 - isYZ.z;
+
+    // i0 now contains the unique values 0,1,2,3 in each channel
+    vec4 i3 = clamp(i0, 0.0, 1.0);
+    vec4 i2 = clamp(i0-1.0, 0.0, 1.0);
+    vec4 i1 = clamp(i0-2.0, 0.0, 1.0);
+
+    vec4 x1 = x0 - i1 + C.xxxx;
+    vec4 x2 = x0 - i2 + C.yyyy;
+    vec4 x3 = x0 - i3 + C.zzzz;
+    vec4 x4 = x0 + C.wwww;
+
+    // Permutations
+    i = mod289(i);
+    float j0 = permute(permute(permute(permute(i.w) + i.z) + i.y) + i.x);
+    vec4 j1 = permute(permute(permute(permute (i.w + vec4(i1.w, i2.w, i3.w, 1.0)) + i.z + vec4(i1.z, i2.z, i3.z, 1.0 )) + i.y + vec4(i1.y, i2.y, i3.y, 1.0 )) + i.x + vec4(i1.x, i2.x, i3.x, 1.0 ));
+
+    // Gradients: 7x7x6 points over a cube, mapped onto a 4-cross polytope
+    // 7*7*6 = 294, which is close to the ring size 17*17 = 289.
+    vec4 ip = vec4(1.0/294.0, 1.0/49.0, 1.0/7.0, 0.0) ;
+
+    vec4 p0 = grad4(j0, ip);
+    vec4 p1 = grad4(j1.x, ip);
+    vec4 p2 = grad4(j1.y, ip);
+    vec4 p3 = grad4(j1.z, ip);
+    vec4 p4 = grad4(j1.w, ip);
+
+    // Normalise gradients
+    vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+    p0 *= norm.x;
+    p1 *= norm.y;
+    p2 *= norm.z;
+    p3 *= norm.w;
+    p4 *= taylorInvSqrt(dot(p4, p4));
+
+    // Mix contributions from the five corners
+    vec3 m0 = max(0.6 - vec3(dot(x0, x0), dot(x1, x1), dot(x2, x2)), 0.0);
+    vec2 m1 = max(0.6 - vec2(dot(x3,x3), dot(x4,x4)), 0.0);
+    m0 = m0 * m0;
+    m1 = m1 * m1;
+
+    return 49.0 * (dot(m0 * m0, vec3(dot(p0, x0), dot(p1, x1), dot(p2, x2))) + dot(m1 * m1, vec2(dot(p3, x3), dot(p4, x4)))) ;
+  }
+
+    // ВНИМАНИЕ: у snoise(vec3) есть CPU-зеркало src/core/terrain/simplexNoise3.ts
+    // (паритет процедурных поверхностей) — править только синхронно.
+    float snoise(vec3 v){
+      const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+      const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+
+      // First corner
+        vec3 i  = floor(v + dot(v, C.yyy) );
+        vec3 x0 =   v - i + dot(i, C.xxx) ;
+
+      // Other corners
+        vec3 g = step(x0.yzx, x0.xyz);
+        vec3 l = 1.0 - g;
+        vec3 i1 = min( g.xyz, l.zxy );
+        vec3 i2 = max( g.xyz, l.zxy );
+
+        //  x0 = x0 - 0. + 0.0 * C
+        vec3 x1 = x0 - i1 + 1.0 * C.xxx;
+        vec3 x2 = x0 - i2 + 2.0 * C.xxx;
+        vec3 x3 = x0 - 1. + 3.0 * C.xxx;
+
+      // Permutations
+        i = mod(i, 289.0 );
+        vec4 p = permute( permute( permute(
+                   i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+                 + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
+                 + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+
+      // Gradients
+      // ( N*N points uniformly over a square, mapped onto an octahedron.)
+        float n_ = 1.0/7.0; // N=7
+        vec3  ns = n_ * D.wyz - D.xzx;
+
+        vec4 j = p - 49.0 * floor(p * ns.z *ns.z);  //  mod(p,N*N)
+
+        vec4 x_ = floor(j * ns.z);
+        vec4 y_ = floor(j - 7.0 * x_ );    // mod(j,N)
+
+        vec4 x = x_ *ns.x + ns.yyyy;
+        vec4 y = y_ *ns.x + ns.yyyy;
+        vec4 h = 1.0 - abs(x) - abs(y);
+
+        vec4 b0 = vec4( x.xy, y.xy );
+        vec4 b1 = vec4( x.zw, y.zw );
+
+        vec4 s0 = floor(b0)*2.0 + 1.0;
+        vec4 s1 = floor(b1)*2.0 + 1.0;
+        vec4 sh = -step(h, vec4(0.0));
+
+        vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+        vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+
+        vec3 p0 = vec3(a0.xy,h.x);
+        vec3 p1 = vec3(a0.zw,h.y);
+        vec3 p2 = vec3(a1.xy,h.z);
+        vec3 p3 = vec3(a1.zw,h.w);
+
+      //Normalise gradients
+        vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+        p0 *= norm.x;
+        p1 *= norm.y;
+        p2 *= norm.z;
+        p3 *= norm.w;
+
+      // Mix final noise value
+        vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+        m = m * m;
+        return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1),
+                                      dot(p2,x2), dot(p3,x3) ) );
+  }
+
+  float perlin3dPeriodic(vec3 P, vec3 rep) {
+    vec3 Pi0 = mod(floor(P), rep); // Integer part, modulo period
+    vec3 Pi1 = mod(Pi0 + vec3(1.0), rep); // Integer part + 1, mod period
+    Pi0 = mod289(Pi0);
+    Pi1 = mod289(Pi1);
+    vec3 Pf0 = fract(P); // Fractional part for interpolation
+    vec3 Pf1 = Pf0 - vec3(1.0); // Fractional part - 1.0
+    vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
+    vec4 iy = vec4(Pi0.yy, Pi1.yy);
+    vec4 iz0 = Pi0.zzzz;
+    vec4 iz1 = Pi1.zzzz;
+
+    vec4 ixy = permute(permute(ix) + iy);
+    vec4 ixy0 = permute(ixy + iz0);
+    vec4 ixy1 = permute(ixy + iz1);
+
+    vec4 gx0 = ixy0 * (1.0 / 7.0);
+    vec4 gy0 = fract(floor(gx0) * (1.0 / 7.0)) - 0.5;
+    gx0 = fract(gx0);
+    vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
+    vec4 sz0 = step(gz0, vec4(0.0));
+    gx0 -= sz0 * (step(0.0, gx0) - 0.5);
+    gy0 -= sz0 * (step(0.0, gy0) - 0.5);
+
+    vec4 gx1 = ixy1 * (1.0 / 7.0);
+    vec4 gy1 = fract(floor(gx1) * (1.0 / 7.0)) - 0.5;
+    gx1 = fract(gx1);
+    vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
+    vec4 sz1 = step(gz1, vec4(0.0));
+    gx1 -= sz1 * (step(0.0, gx1) - 0.5);
+    gy1 -= sz1 * (step(0.0, gy1) - 0.5);
+
+    vec3 g000 = vec3(gx0.x,gy0.x,gz0.x);
+    vec3 g100 = vec3(gx0.y,gy0.y,gz0.y);
+    vec3 g010 = vec3(gx0.z,gy0.z,gz0.z);
+    vec3 g110 = vec3(gx0.w,gy0.w,gz0.w);
+    vec3 g001 = vec3(gx1.x,gy1.x,gz1.x);
+    vec3 g101 = vec3(gx1.y,gy1.y,gz1.y);
+    vec3 g011 = vec3(gx1.z,gy1.z,gz1.z);
+    vec3 g111 = vec3(gx1.w,gy1.w,gz1.w);
+
+    vec4 norm0 = taylorInvSqrt(vec4(dot(g000, g000), dot(g010, g010), dot(g100, g100), dot(g110, g110)));
+    g000 *= norm0.x;
+    g010 *= norm0.y;
+    g100 *= norm0.z;
+    g110 *= norm0.w;
+    vec4 norm1 = taylorInvSqrt(vec4(dot(g001, g001), dot(g011, g011), dot(g101, g101), dot(g111, g111)));
+    g001 *= norm1.x;
+    g011 *= norm1.y;
+    g101 *= norm1.z;
+    g111 *= norm1.w;
+
+    float n000 = dot(g000, Pf0);
+    float n100 = dot(g100, vec3(Pf1.x, Pf0.yz));
+    float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
+    float n110 = dot(g110, vec3(Pf1.xy, Pf0.z));
+    float n001 = dot(g001, vec3(Pf0.xy, Pf1.z));
+    float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
+    float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
+    float n111 = dot(g111, Pf1);
+
+    vec3 fade_xyz = fade(Pf0);
+    vec4 n_z = mix(vec4(n000, n100, n010, n110), vec4(n001, n101, n011, n111), fade_xyz.z);
+    vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
+    float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x);
+
+    return 2.2 * n_xyz;
+  }
+
+  // Cellular / Worley noise (Stefan Gustavson style, 3x3x3 search).
+  // Returns vec2(F1, F2): nearest and second-nearest feature point distances.
+  vec3 cellular_mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+  vec3 cellular_permute(vec3 x) { return cellular_mod289((34.0 * x + 1.0) * x); }
+
+  vec2 cellular3d(vec3 P) {
+    const float K = 0.142857142857;   // 1/7
+    const float Ko = 0.428571428571;  // 3/7
+    const float jitter = 1.0;
+    vec3 Pi = cellular_mod289(floor(P));
+    vec3 Pf = fract(P);
+    vec3 oi = vec3(-1.0, 0.0, 1.0);
+    vec3 of = vec3(-0.5, 0.5, 1.5);
+    vec3 px = cellular_permute(Pi.x + oi);
+    float F1 = 1e6; float F2 = 1e6;
+    for (int i = 0; i < 3; i++) {
+      vec3 p = cellular_permute(px[i] + Pi.y + oi);
+      for (int j = 0; j < 3; j++) {
+        vec3 pp = cellular_permute(p[j] + Pi.z + oi);
+        vec3 ox = fract(pp * K) - Ko;
+        vec3 oy = mod(floor(pp * K), 7.0) * K - Ko;
+        vec3 pz = cellular_permute(pp);
+        vec3 oz = fract(pz * K) - Ko;
+        vec3 dx = Pf.x - of[i] + jitter * ox;
+        vec3 dy = Pf.y - of[j] + jitter * oy;
+        for (int k = 0; k < 3; k++) {
+          float dz = Pf.z - of[k] + jitter * oz[k];
+          float d = dx[k] * dx[k] + dy[k] * dy[k] + dz * dz;
+          if (d < F1) { F2 = F1; F1 = d; }
+          else if (d < F2) { F2 = d; }
+        }
+      }
+    }
+    return sqrt(vec2(F1, F2));
+  }
+
+  // Расширенный Worley: F1/F2 + направление от центра ближайшей ячейки к точке
+  // (для аналитической нормали кратера ∝ ∇F1) + псевдослучайный хеш ячейки
+  // (для per-crater разброса: наличие/радиус). cellular3d НЕ трогаем — от неё
+  // зависит NebulaDensity. Небольшое дублирование поиска оправдано (ср. snoiseGrad).
+  vec4 worleyCell(vec3 P, out vec3 toNearest) {
+    const float K = 0.142857142857;   // 1/7
+    const float Ko = 0.428571428571;  // 3/7
+    const float jitter = 1.0;
+    vec3 Pi = cellular_mod289(floor(P));
+    vec3 Pf = fract(P);
+    vec3 oi = vec3(-1.0, 0.0, 1.0);
+    vec3 of = vec3(-0.5, 0.5, 1.5);
+    vec3 px = cellular_permute(Pi.x + oi);
+    float F1 = 1e6; float F2 = 1e6;
+    vec3 bestD = vec3(0.0, 0.0, 1.0);
+    float bestHash = 0.0;
+    for (int i = 0; i < 3; i++) {
+      vec3 p = cellular_permute(px[i] + Pi.y + oi);
+      for (int j = 0; j < 3; j++) {
+        vec3 pp = cellular_permute(p[j] + Pi.z + oi);
+        vec3 ox = fract(pp * K) - Ko;
+        vec3 oy = mod(floor(pp * K), 7.0) * K - Ko;
+        vec3 pz = cellular_permute(pp);
+        vec3 oz = fract(pz * K) - Ko;
+        vec3 dx = Pf.x - of[i] + jitter * ox;
+        vec3 dy = Pf.y - of[j] + jitter * oy;
+        for (int k = 0; k < 3; k++) {
+          float dz = Pf.z - of[k] + jitter * oz[k];
+          float d = dx[k] * dx[k] + dy[k] * dy[k] + dz * dz;
+          if (d < F1) {
+            F2 = F1; F1 = d;
+            bestD = vec3(dx[k], dy[k], dz);
+            bestHash = pz[k] * (1.0 / 289.0);
+          } else if (d < F2) {
+            F2 = d;
+          }
+        }
+      }
+    }
+    toNearest = normalize(bestD + vec3(1e-6, 0.0, 0.0));
+    return vec4(sqrt(F1), sqrt(F2), bestHash, 0.0);
+  }
+
+  // Производный 3D симплекс-шум: возвращает vec4(value, gradient).
+  // Значение в том же масштабе, что snoise(vec3); градиент — аналитическая
+  // производная simplex-noise (Gustavson): d/dv 42·Σ m^4·(p·x).
+  vec4 snoiseGrad(vec3 v) {
+    const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+    const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+
+    vec3 i  = floor(v + dot(v, C.yyy));
+    vec3 x0 = v - i + dot(i, C.xxx);
+
+    vec3 g = step(x0.yzx, x0.xyz);
+    vec3 l = 1.0 - g;
+    vec3 i1 = min(g.xyz, l.zxy);
+    vec3 i2 = max(g.xyz, l.zxy);
+
+    vec3 x1 = x0 - i1 + 1.0 * C.xxx;
+    vec3 x2 = x0 - i2 + 2.0 * C.xxx;
+    vec3 x3 = x0 - 1.0 + 3.0 * C.xxx;
+
+    i = mod(i, 289.0);
+    vec4 p = permute(permute(permute(
+               i.z + vec4(0.0, i1.z, i2.z, 1.0))
+             + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+             + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+
+    float n_ = 1.0/7.0;
+    vec3 ns = n_ * D.wyz - D.xzx;
+
+    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+
+    vec4 x_ = floor(j * ns.z);
+    vec4 y_ = floor(j - 7.0 * x_);
+
+    vec4 x = x_ * ns.x + ns.yyyy;
+    vec4 y = y_ * ns.x + ns.yyyy;
+    vec4 h = 1.0 - abs(x) - abs(y);
+
+    vec4 b0 = vec4(x.xy, y.xy);
+    vec4 b1 = vec4(x.zw, y.zw);
+
+    vec4 s0 = floor(b0) * 2.0 + 1.0;
+    vec4 s1 = floor(b1) * 2.0 + 1.0;
+    vec4 sh = -step(h, vec4(0.0));
+
+    vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+    vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+
+    vec3 p0 = vec3(a0.xy, h.x);
+    vec3 p1 = vec3(a0.zw, h.y);
+    vec3 p2 = vec3(a1.xy, h.z);
+    vec3 p3 = vec3(a1.zw, h.w);
+
+    vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+    p0 *= norm.x;
+    p1 *= norm.y;
+    p2 *= norm.z;
+    p3 *= norm.w;
+
+    vec4 m  = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
+    vec4 m2 = m * m;
+    vec4 m4 = m2 * m2;
+    vec4 pdotx = vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3));
+
+    float value = 42.0 * dot(m4, pdotx);
+
+    // grad = 42·Σ [ -8·m^3·(p·x)·x  +  m^4·p ]
+    vec4 temp = m2 * m * pdotx; // m^3 · (p·x)
+    vec3 grad = -8.0 * (temp.x * x0 + temp.y * x1 + temp.z * x2 + temp.w * x3);
+    grad += m4.x * p0 + m4.y * p1 + m4.z * p2 + m4.w * p3;
+    grad *= 42.0;
+
+    return vec4(value, grad);
+  }
+
+  #endif
+
+    
+  // Композит облика: макро-альбедо (джиттер + мотл + maria). dir — нормали-
+  // зованная объектная позиция (домен); tintSeed/domainOffset — пер-инстансные
+  // хеши, вычисленные в ВЕРШИННИКЕ (см. докблок модуля про ULP-джиттер).
+  vec3 applyAsteroidSurface(vec3 dir, float tintSeed, vec3 domainOffset, vec3 baseColor, float colorJitter, float tintStrength, float mariaStrength) {
+    // База профиля + тонкий per-instance джиттер яркости + внутриповерхностный мотл
+    vec3 base = baseColor * (1.0 + colorJitter * (tintSeed - 0.5) * 2.0);
+    float mottle = snoise(dir * 2.0 + domainOffset);
+    base *= 1.0 + tintStrength * mottle * 0.5;
+
+    // Крупномасштабное альбедо (maria/highlands): НЧ-маска делит поверхность на
+    // тёмные базальтовые равнины (maria) и светлые возвышенности → макро-
+    // композиция, поверхность перестаёт читаться как равномерный шум. Частоты
+    // низкие, поэтому маска стабильна на расстоянии (не мельтешит). Модулирует
+    // ТОЛЬКО базовый цвет — PBR-микрослой ложится поверх.
+    float mariaField = 0.7 * snoise(dir * 1.2 + domainOffset * 0.7)
+                     + 0.3 * snoise(dir * 2.6 + domainOffset * 1.9);
+    float maria = smoothstep(-0.15, 0.35, mariaField);   // мягкие «берега» регионов
+    base *= 1.0 - mariaStrength * maria;                 // равнины темнее
+
+    return base;
+  }
+
+    
+  // Диффуз реголита: NdotL/NdotV — косинусы к свету и к камере, cosPhase = dot(L, V)
+  float asteroidRegolithDiffuse(float NdotL, float NdotV, float cosPhase, float lunarMix, float surge) {
+    float nl = max(NdotL, 0.0);
+    float nv = max(NdotV, 0.0);
+    float lambert = nl;
+    float lommel = 2.0 * nl / max(nl + nv, 1e-4);
+    float diffuse = mix(lambert, lommel, lunarMix);
+    float g = acos(clamp(cosPhase, -1.0, 1.0));
+    float opposition = 1.0 + surge * exp(-g / 0.1);
+    return diffuse * opposition;
+  }
+
+  // Planetshine: N и dirPlanet — в одном пространстве (view), ringPos и
+  // lightDirRing — в ring-local (планета в начале координат), planetRadius —
+  // в единицах ringPos. Возвращает множитель альбедо
+  float asteroidPlanetshine(vec3 N, vec3 dirPlanet, vec3 ringPos, vec3 lightDirRing, float planetRadius) {
+    float d = length(ringPos);
+    if (planetRadius <= 0.0 || d <= planetRadius) return 0.0;
+    vec3 pHat = ringPos / d;
+    float phase = 0.5 * (1.0 + dot(pHat, lightDirRing));
+    float angR = planetRadius / d;
+    float solid = angR * angR;
+    float wrap = angR;
+    float wrapped = max(dot(N, dirPlanet) + wrap, 0.0) / (1.0 + wrap);
+    return phase * solid * wrapped;
+  }
+
+    
+  uniform sampler2D uRockDiffMap;
+  uniform sampler2D uRockNorMap;
+  uniform sampler2D uRockArmMap;
+  uniform float uDetailMapsEnabled;
+  uniform float uDetailScale;
+  uniform float uDetailSaturation;
+  uniform float uDetailBrightness;
+  uniform float uDetailNormalScale;
+  uniform float uDetailAoInfluence;
+  uniform float uDetailRoughInfluence;
+
+    
+  // Веса проекций: степень 4 прижимает бленд к доминирующей оси — меньше
+  // «двоения» текстуры на диагональных нормалях
+  vec3 triplanarWeights(vec3 objNormal) {
+    vec3 w = pow(abs(objNormal), vec3(4.0));
+    return w / (w.x + w.y + w.z);
+  }
+
+  // Ядро бленда albedo/ARM: одинаковая математика для обеих карт (взвешенная
+  // сумма трёх проекций), поэтому одна функция на двоих — вызывающая сторона
+  // сама решает, что читать (albedo или ARM).
+  vec3 triplanarBlendRgb(vec3 cx, vec3 cy, vec3 cz, vec3 w) {
+    return cx * w.x + cy * w.y + cz * w.z;
+  }
+
+  // Whiteout-бленд нормалей: тангенциальные компоненты суммируются с геом.
+  // нормалью по осям проекции, z-компоненты перемножаются — швов между
+  // проекциями нет, «плоского» усреднения тоже. tx/ty/tz — уже распакованные
+  // ([-1,1]) значения проекций, выбор способа их получить (обычная выборка
+  // или стохастическая) — забота вызывающей стороны.
+  vec3 triplanarBlendNormal(vec3 tx, vec3 ty, vec3 tz, vec3 n, vec3 w) {
+    tx = vec3(tx.xy + n.zy, abs(tx.z) * n.x);
+    ty = vec3(ty.xy + n.xz, abs(ty.z) * n.y);
+    tz = vec3(tz.xy + n.xy, abs(tz.z) * n.z);
+    return normalize(tx.zyx * w.x + ty.xzy * w.y + tz.xyz * w.z);
+  }
+
+  vec3 triplanarAlbedo(sampler2D map, vec3 p, vec3 w, vec2 offset) {
+    vec3 cx = texture2D(map, p.zy * uDetailScale + offset).rgb;
+    vec3 cy = texture2D(map, p.xz * uDetailScale + offset).rgb;
+    vec3 cz = texture2D(map, p.xy * uDetailScale + offset).rgb;
+    return triplanarBlendRgb(cx, cy, cz, w);
+  }
+
+  vec3 triplanarArm(sampler2D map, vec3 p, vec3 w, vec2 offset) {
+    vec3 ax = texture2D(map, p.zy * uDetailScale + offset).rgb;
+    vec3 ay = texture2D(map, p.xz * uDetailScale + offset).rgb;
+    vec3 az = texture2D(map, p.xy * uDetailScale + offset).rgb;
+    return triplanarBlendRgb(ax, ay, az, w);
+  }
+
+  vec3 triplanarNormal(sampler2D map, vec3 p, vec3 n, vec3 w, vec2 offset) {
+    vec3 tx = texture2D(map, p.zy * uDetailScale + offset).xyz * 2.0 - 1.0;
+    vec3 ty = texture2D(map, p.xz * uDetailScale + offset).xyz * 2.0 - 1.0;
+    vec3 tz = texture2D(map, p.xy * uDetailScale + offset).xyz * 2.0 - 1.0;
+    return triplanarBlendNormal(tx, ty, tz, n, w);
+  }
+
+    
+  uniform vec3 uDustColor;
+  uniform float uDustDensity;
+  uniform float uDustScaleHeight;
+  uniform float uDustRingInner;
+  uniform float uDustRingOuter;
+  uniform vec3 uDustCamRingPos;
+  uniform vec3 uDustLightDirRing;
+  uniform float uDustAnglePower;
+  uniform float uDustNearFade;
+  uniform float uDustPlanetRadius;
+  uniform sampler2D uDustRadialMap;
+  uniform float uDustRadialMapScale;
+  // Полосы кольца (RGB — цвет, A — альфа; см. RingBandTexture): 0 — текстуры нет,
+  // тинт и самозатенение слоя выключены
+  uniform sampler2D uRingBandMap;
+  uniform float uRingBandEnabled;
+  uniform vec3 uBandMeanColor;
+  uniform float uBandTintStrength;
+  // Слой кольца: полутолщина (ring-local) и сила самозатенения (множитель τ)
+  uniform float uLayerHalfThickness;
+  uniform float uLayerShadowStrength;
+
+    
+  // Маска кромок кольца × радиальный профиль из альфы текстуры кольца.
+  // Профиль (uDustRadialMap, R-канал; тот же маппинг u, что у RingShader)
+  // согласует пыль с субкольцами; нормирован на среднее 1 через
+  // uDustRadialMapScale, чтобы калибровка tau грейзинг-луча не поплыла.
+  // Scale 0 → профиль выключен (равномерная пыль, поведение до A-lite).
+  // CPU-зеркало: radialMask в tests/ringDust/tauMirror.ts — менять синхронно.
+  float ringDustRadialMask(float r) {
+    float edge = (uDustRingOuter - uDustRingInner) * 0.12;
+    float mask = smoothstep(uDustRingInner, uDustRingInner + edge, r)
+               * (1.0 - smoothstep(uDustRingOuter - edge, uDustRingOuter, r));
+    if (uDustRadialMapScale > 0.0) {
+      float u = clamp((r - uDustRingInner) / (uDustRingOuter - uDustRingInner), 0.0, 1.0);
+      mask *= texture2D(uDustRadialMap, vec2(u, 0.5)).r * uDustRadialMapScale;
+    }
+    return mask;
+  }
+
+  // Плотность пыли в точке ring-local space (сэмплируется маршем объёма)
+  float ringDustDensityAt(vec3 p) {
+    float safeH = max(uDustScaleHeight, 1e-6);
+    return uDustDensity * ringDustRadialMask(length(p.xz)) * exp(-abs(p.y) / safeH);
+  }
+
+  // Гейт по углу луча к плоскости кольца: 1 на скользящем, строго 0 при 90°.
+  // Нефизичный, осознанный: лечит «тусклую пелену сверху» (см. спеку v2)
+  float ringDustAngleGate(vec3 dir) {
+    return pow(max(1.0 - abs(dir.y), 0.0), uDustAnglePower);
+  }
+
+  // Рамп ближней дистанции: вблизи камеры пыль не проявляется
+  float ringDustNearRamp(float t) {
+    return smoothstep(0.0, max(uDustNearFade, 1e-6), t);
+  }
+
+  // Интервал t, где луч (в проекции XZ) внутри цилиндра радиуса R.
+  // Пустой интервал кодируется как vec2(1.0, 0.0)
+  vec2 ringDustCircleInterval(vec3 o, vec3 d, float R) {
+    float a = dot(d.xz, d.xz);
+    if (a < 1e-12) {
+      // Вертикальный луч: внутри цилиндра целиком либо никогда
+      return length(o.xz) <= R ? vec2(-1.0e9, 1.0e9) : vec2(1.0, 0.0);
+    }
+    float b = dot(o.xz, d.xz);
+    float c = dot(o.xz, o.xz) - R * R;
+    float disc = b * b - a * c;
+    if (disc <= 0.0) return vec2(1.0, 0.0);
+    float sq = sqrt(disc);
+    return vec2((-b - sq) / a, (-b + sq) / a);
+  }
+
+  // --- Слой кольца: самозатенение и тинт по полосам (общее для камней и марша) ---
+  // CPU-зеркало: layerTau/columnFraction/layerShadow/bandTint в tests/ringDust/tauMirror.ts
+
+  // Выборка полос по радиусу (тот же маппинг u, что у RingShader)
+  vec4 ringBandAt(float r) {
+    float u = clamp((r - uDustRingInner) / (uDustRingOuter - uDustRingInner), 0.0, 1.0);
+    return texture2D(uRingBandMap, vec2(u, 0.5));
+  }
+
+  // Оптическая толща слоя по нормали на радиусе: пропускание = 1 − α
+  float ringLayerTau(float r) {
+    if (uRingBandEnabled < 0.5) return 0.0;
+    float a = ringBandAt(r).a;
+    return -log(1.0 - min(a, 0.98));
+  }
+
+  // Доля столба слоя НАД точкой в сторону солнца при треугольном вертикальном
+  // распределении камней (пик в средней плоскости, ноль на ±half)
+  float ringLayerColumnFraction(float ySun) {
+    float u = clamp(ySun / max(uLayerHalfThickness, 1e-9), -1.0, 1.0);
+    return u >= 0.0 ? (1.0 - u) * (1.0 - u) * 0.5 : 1.0 - (1.0 + u) * (1.0 + u) * 0.5;
+  }
+
+  // Самозатенение слоя: камни и пыль над точкой вдоль направления на звезду.
+  // Путь через слой делится на синус высоты звезды над плоскостью (пол 0.2).
+  // Физическая экспонента СМЕШИВАЕТСЯ с единицей по uLayerShadowStrength, а не
+  // множит толщу: рендер показывает и глубокие камни, которых в оптически
+  // плотном слое не видно, и честная толща Сатурна (α ≈ 1, солнце ≤ 27° над
+  // плоскостью) красила их в чёрное. При силе s худший случай — (1 − s)
+  float ringLayerShadow(vec3 p) {
+    float tau = ringLayerTau(length(p.xz));
+    if (tau <= 0.0 || uLayerShadowStrength <= 0.0) return 1.0;
+    float ySun = uDustLightDirRing.y >= 0.0 ? p.y : -p.y;
+    float sinE = max(abs(uDustLightDirRing.y), 0.2);
+    float physical = exp(-tau * ringLayerColumnFraction(ySun) / sinE);
+    return mix(1.0, physical, uLayerShadowStrength);
+  }
+
+  // Тинт альбедо по цвету полосы относительно среднего цвета кольца:
+  // светлые ледяные полосы — светлые камни, тёмные пыльные — тёмные
+  vec3 ringBandTint(float r) {
+    if (uRingBandEnabled < 0.5) return vec3(1.0);
+    vec3 band = ringBandAt(r).rgb;
+    vec3 tint = clamp(band / max(uBandMeanColor, vec3(0.05)), 0.5, 1.5);
+    return mix(vec3(1.0), tint, uBandTintStrength);
+  }
+
+  // Цвет дымки: базовый + мягкий forward-scattering буст в сторону звезды.
+  // Единственный прямой член света звезды на пыль — красится целиком.
+  // sun — доля прямого лепестка [0, 1]: pow(dot(луч, на звезду), 4)
+  vec3 ringDustHazeSun(float sun) {
+    #ifdef USE_LIGHT_TINT
+      return uDustColor * (0.75 + 0.45 * sun) * uLightColor;
+    #else
+      return uDustColor * (0.75 + 0.45 * sun);
+    #endif
+  }
+
+  vec3 ringDustHaze(vec3 rayDir) {
+    return ringDustHazeSun(pow(max(dot(rayDir, uDustLightDirRing), 0.0), 4.0));
+  }
+
+  // Тень планеты на пыль: аналитический теневой цилиндр вдоль направления на
+  // звезду. uDustLightDirRing — от центра планеты (= начало ring-local) к звезде,
+  // планета в начале координат. Зеркалит getShadowFromSphere из RingShaderTemplate,
+  // чтобы тень пыли совпадала с тенью 2D-кольца; мягкая кромка полутени вместо
+  // жёсткой. Возвращает множитель яркости: 0.04 в умбре → 1.0 вне тени.
+  float ringDustPlanetShadow(vec3 p) {
+    if (uDustPlanetRadius <= 0.0) return 1.0;
+    float pDotS = dot(p, uDustLightDirRing);
+    if (pDotS >= 0.0) return 1.0; // солнечная сторона — не в тени
+    float perp = sqrt(max(dot(p, p) - pDotS * pDotS, 0.0));
+    float penumbra = uDustPlanetRadius * 0.08;
+    float shade = smoothstep(uDustPlanetRadius, uDustPlanetRadius + penumbra, perp);
+    return mix(0.04, 1.0, shade);
+  }
+
+  float ringDustMaskAtT(vec3 o, vec3 d, float t) {
+    return ringDustRadialMask(length(o.xz + d.xz * t));
+  }
+
+  // Нечётная первообразная exp(-|u|/H): F(u) = sign(u) * H * (1 - exp(-|u|/H))
+  float ringDustF(float u) {
+    // защита от деления на ноль
+    float safeH = max(uDustScaleHeight, 1e-6);
+    float f = safeH * (1.0 - exp(-abs(u) / safeH));
+    return u >= 0.0 ? f : -f;
+  }
+
+  // Замкнутая форма интеграла exp(-|y(t)|/H) dt по [t0, t1], y(t) = oy + dy*t
+  float ringDustVerticalIntegral(float oy, float dy, float t0, float t1) {
+    if (t1 <= t0) return 0.0;
+    if (abs(dy) < 1e-8) {
+      float safeH = max(uDustScaleHeight, 1e-6);
+      return exp(-abs(oy) / safeH) * (t1 - t0);
+    }
+    float ya = oy + dy * t0;
+    float yb = oy + dy * t1;
+    return (ringDustF(max(ya, yb)) - ringDustF(min(ya, yb))) / abs(dy);
+  }
+
+  // Средняя маска кромок по куску с монотонным |y(t)|: тапы по квантилям
+  // экспоненциальной массы (важностная выборка — маска сэмплируется там,
+  // где сосредоточен вклад в интеграл)
+  float ringDustPieceMask(vec3 o, vec3 d, float t0, float t1) {
+    float L = t1 - t0;
+    float absDy = abs(d.y);
+    if (absDy < 1e-8) {
+      return 0.25 * (ringDustMaskAtT(o, d, t0 + L * 0.125)
+                   + ringDustMaskAtT(o, d, t0 + L * 0.375)
+                   + ringDustMaskAtT(o, d, t0 + L * 0.625)
+                   + ringDustMaskAtT(o, d, t0 + L * 0.875));
+    }
+    float ya = abs(o.y + d.y * t0);
+    float yb = abs(o.y + d.y * t1);
+    // Масса концентрируется у конца с меньшим |y|
+    float tNear = ya <= yb ? t0 : t1;
+    float dirSign = ya <= yb ? 1.0 : -1.0;
+    float safeH = max(uDustScaleHeight, 1e-6);
+    float lambda = safeH / absDy;
+    float A = max(1.0 - exp(-L / lambda), 1e-6);
+    vec4 dist = -lambda * log(vec4(1.0) - vec4(0.125, 0.375, 0.625, 0.875) * A);
+    vec4 tq = vec4(tNear) + dirSign * min(dist, vec4(L));
+    return 0.25 * (ringDustMaskAtT(o, d, tq.x) + ringDustMaskAtT(o, d, tq.y)
+                 + ringDustMaskAtT(o, d, tq.z) + ringDustMaskAtT(o, d, tq.w));
+  }
+
+  // Вклад одного радиального интервала: разрез по пересечению средней плоскости,
+  // в каждом куске |y| монотонно
+  float ringDustIntervalTau(vec3 o, vec3 d, float t0, float t1) {
+    if (t1 <= t0) return 0.0;
+    float tCross = -1.0;
+    if (abs(d.y) >= 1e-8) tCross = -o.y / d.y;
+    if (tCross > t0 && tCross < t1) {
+      return uDustDensity * (
+        ringDustPieceMask(o, d, t0, tCross) * ringDustVerticalIntegral(o.y, d.y, t0, tCross) +
+        ringDustPieceMask(o, d, tCross, t1) * ringDustVerticalIntegral(o.y, d.y, tCross, t1));
+    }
+    return uDustDensity * ringDustPieceMask(o, d, t0, t1) * ringDustVerticalIntegral(o.y, d.y, t0, t1);
+  }
+
+  // Оптическая толща вдоль луча origin + dir*t, t in [0, tMax]; dir нормирован.
+  // Фрагмент прокси задаёт ТОЛЬКО направление луча — tau зависит лишь от
+  // (камера, направление), поэтому разрывов на гранях прокси-оболочки быть
+  // не может, а дыра кольца учитывается вычитанием интервала внутреннего
+  // цилиндра (пыль на дальней стороне не теряется).
+  // dustSpan — объединённый диапазон пыли вдоль луча (якоря для шума).
+  float ringDustTauRay(vec3 origin, vec3 dir, float tMax, out vec2 dustSpan) {
+    dustSpan = vec2(0.0);
+    vec2 outer = ringDustCircleInterval(origin, dir, uDustRingOuter);
+    float o0 = max(outer.x, 0.0);
+    float o1 = min(outer.y, tMax);
+    if (o1 <= o0) return 0.0;
+
+    // Дыра кольца вычитается
+    vec2 inner = ringDustCircleInterval(origin, dir, uDustRingInner);
+    float h0 = max(inner.x, o0);
+    float h1 = min(inner.y, o1);
+
+    dustSpan = vec2(o0, o1);
+    if (h1 <= h0) {
+      return ringDustIntervalTau(origin, dir, o0, o1);
+    }
+    return ringDustIntervalTau(origin, dir, o0, h0) + ringDustIntervalTau(origin, dir, h1, o1);
+  }
+
+  // Аэроперспектива для непрозрачной геометрии (камни L0/L1)
+  vec3 ringDustApplyFog(vec3 baseColor, vec3 fragRingPos) {
+    vec3 delta = fragRingPos - uDustCamRingPos;
+    float dist = length(delta);
+    if (dist < 1e-6) return baseColor;
+    vec3 rayDir = delta / dist;
+    vec2 span;
+    float tau = ringDustTauRay(uDustCamRingPos, rayDir, dist, span);
+    if (tau <= 0.0) return baseColor;
+    float fogAmount = (1.0 - exp(-tau)) * ringDustAngleGate(rayDir) * ringDustNearRamp(dist);
+    // Тень планеты затемняет дымку в позиции камня (совпадает с тенью 2D-кольца)
+    vec3 haze = ringDustHaze(rayDir) * ringDustPlanetShadow(fragRingPos);
+    return mix(baseColor, haze, fogAmount);
+  }
+
+
+    // Interleaved gradient noise (Jimenez) — экранный дизер для fade-переходов.
+    float fadeDither(vec2 fragCoord) {
+      return fract(52.9829189 * fract(dot(fragCoord, vec2(0.06711056, 0.00583715))));
+    }
+
+    void main() {
+      #if defined( USE_LOGARITHMIC_DEPTH_BUFFER )
+	gl_FragDepth = vIsPerspective == 0.0 ? gl_FragCoord.z : log2( vFragDepth ) * logDepthBufFC * 0.5;
+#endif
+
+      // Screen-door fade: непрозрачная геометрия гаснет упорядоченным дизером —
+      // без сортировки, с сохранением depthWrite. Знак vFade кодирует направление
+      // кросс-фейда: уходящий тир (vFade<0) берёт ИНВЕРТИРОВАННЫЙ порог, поэтому
+      // его покрытие комплементарно входящему (vFade>0) — сумма ≈ полный камень
+      // без «дыр» на середине перехода. |vFade|>=1 → порог не срабатывает.
+      float fadeMag = abs(vFade);
+      float fadeThresh = fadeDither(gl_FragCoord.xy);
+      if (vFade < 0.0) fadeThresh = 1.0 - fadeThresh;
+      if (fadeMag < fadeThresh) discard;
+
+      vec3 surfDir = normalize(vObjectPos);
+
+      // Макро-облик: альбедо (джиттер/мотл/maria), рельеф больше не возмущает
+      // нормаль процедурно — нормаль геометрическая, деталь несёт PBR-микрослой.
+      vec3 albedo = applyAsteroidSurface(surfDir, vTintSeed, vDomainOffset, uRockColor, uColorJitter, uTintStrength, uMariaStrength);
+      // Тинт по цвету полосы кольца на радиусе камня (см. чанк RingDust): вблизи
+      // камни несут ту же палитру, что кольцо издали. До микрослоя — тот ложится сверху
+      albedo *= ringBandTint(length(vRingPos.xz));
+
+      // Геометрическая объектная нормаль; трипланарная дельта нормали (ниже)
+      // применяется к ней. AO — единственный источник теперь ARM-карта микрослоя.
+      vec3 objN = normalize(vObjectNormal);
+      float surfAO = 1.0;
+
+      // --- Фотограмметрический PBR-микрослой (трипланар, см. чанк TriplanarDetail) ---
+      // Текстура = структура (яркость/нормаль/шероховатость), цвет = грейдинг
+      // профиля. Пер-инстансный сдвиг проекции — против повторов пятен на соседях.
+      float specStrength = uSpecularStrength;
+      float specPower = uSpecularPower;
+      if (uDetailMapsEnabled > 0.5) {
+        vec3 geomN = normalize(vObjectNormal);
+        vec3 triW = triplanarWeights(geomN);
+        // Сдвиг проекции — готовый хеш из вершинника (анти-ULP-джиттер)
+        vec2 triOffset = vTriOffset;
+
+        // Альбедо: десатурированная структура текстуры × грейд профиля.
+        // uDetailBrightness компенсирует среднюю яркость диффуза (< 1.0)
+        vec3 detail = triplanarAlbedo(uRockDiffMap, vObjectPos, triW, triOffset);
+        float detailLum = dot(detail, vec3(0.299, 0.587, 0.114));
+        vec3 structureTint = mix(vec3(detailLum), detail, uDetailSaturation);
+        albedo *= structureTint * uDetailBrightness;
+
+        // Нормаль: тангенциальная дельта whiteout-нормали поверх геометрической —
+        // микрорельеф ложится на форму, не искажая крупный силуэт
+        vec3 nDetail = triplanarNormal(uRockNorMap, vObjectPos, geomN, triW, triOffset);
+        objN = normalize(objN + uDetailNormalScale * (nDetail - geomN));
+
+        // ARM: r=AO (умножается в каверн-AO), g=roughness (глушит блик)
+        vec3 arm = triplanarArm(uRockArmMap, vObjectPos, triW, triOffset);
+        surfAO *= mix(1.0, arm.r, uDetailAoInfluence);
+        float gloss = 1.0 - arm.g * uDetailRoughInfluence;
+        specStrength *= gloss;
+        specPower = max(specPower * gloss, 2.0);
+      }
+
+      // Запечённые атрибуты породы: свежий скол разлома светлее и глаже
+      // (меньше реголита), днища кратеров затенены (см. ArchetypeShape.surfaceAt)
+      albedo *= 1.0 + uFreshnessBrighten * vSurfaceData.x;
+      specStrength *= 1.0 + 0.5 * vSurfaceData.x;
+      surfAO *= 1.0 - uCavityShade * vSurfaceData.y;
+
+      // Объектная нормаль → view; учёт ориентации грани
+      vec3 normal = normalize(vObjToView * objN);
+      if (!gl_FrontFacing) normal = -normal;
+
+      vec3 lightDirection = normalize(vViewLightDirection);
+      vec3 viewDir = normalize(vViewPosition);
+      float NdotL = dot(normal, lightDirection);
+      float NdotV = dot(normal, viewDir);
+      float cosPhase = dot(lightDirection, viewDir);
+
+      // Диффуз реголита (см. чанк AsteroidBrdf): Ламберт/Ломмель-Зелигер по
+      // профилю + оппозиционный пик — камень ровный по диску, с резким лимбом
+      float lightIntensity = asteroidRegolithDiffuse(NdotL, NdotV, cosPhase, uLunarMix, uOppositionSurge);
+
+      // Тень планеты (умбра): та же аналитическая модель, что у пыли и 2D-кольца
+      // (ringDustPlanetShadow), поэтому граница тени совпадает между слоями. Гасит
+      // ТОЛЬКО прямой свет звезды (диффуз + блик ниже); эмбиент остаётся → камень
+      // в тени не проваливается в глухой ноль (floor 0.04, как у прочих слоёв).
+      float planetShadow = ringDustPlanetShadow(vRingPos);
+      // Самозатенение слоя кольца: камни и пыль над точкой вдоль луча звезды
+      // (ringLayerShadow). Прямой свет = тень планеты × тень слоя
+      float direct = planetShadow * ringLayerShadow(vRingPos);
+
+      // Planetshine: второй источник — планета рядом; ложится на альбедо с AO,
+      // в умбре фаза сама уходит в ноль
+      float shine = asteroidPlanetshine(normal, normalize(vPlanetDirView), vRingPos, uDustLightDirRing, uDustPlanetRadius);
+
+      // Planetshine — второй источник света: цвет звезды его не касается.
+      #ifdef USE_LIGHT_TINT
+        vec3 finalColor = albedo * (lightIntensity * surfAO * direct * uLightColor + uSurfaceAmbient);
+      #else
+        vec3 finalColor = albedo * (lightIntensity * surfAO * direct + uSurfaceAmbient);
+      #endif
+      finalColor += albedo * uPlanetshineColor * (uPlanetshineStrength * shine * surfAO);
+
+      // Blinn-Phong блик (металл/лёд), только на освещённой стороне, со спекуляр-AA.
+      vec3 halfVec = normalize(lightDirection + viewDir);
+      // Спекуляр-AA (B4): на дальних/мелких камнях нормаль сильно меняется в
+      // пределах пикселя → узкий блик «фейерит». Разброс нормали оцениваем
+      // экранными производными и по нему (Toksvig-подобно) расширяем блик:
+      // снижаем эффективную жёсткость И силу, гася подпиксельные вспышки.
+      // var→0 (близко/гладко): множитель 1, блик как есть.
+      float specNormalVar = dot(dFdx(normal), dFdx(normal)) + dot(dFdy(normal), dFdy(normal));
+      float specToksvig = 1.0 / (1.0 + specPower * specNormalVar);
+      float specPowerAA = specPower * specToksvig;
+      float spec = pow(max(dot(normal, halfVec), 0.0), specPowerAA) * specStrength * specToksvig;
+      vec3 specColor = mix(vec3(1.0), albedo, uSpecularTint);
+      // Гейт блика — сырой косинус к свету, а не LS-диффуз (тот к лимбу доходит до 2)
+      #ifdef USE_LIGHT_TINT
+        finalColor += spec * specColor * uLightColor * max(NdotL, 0.0) * direct;
+      #else
+        finalColor += spec * specColor * max(NdotL, 0.0) * direct;
+      #endif
+
+      // Аэроперспектива: камни тонут в пылевой дымке с расстоянием
+      finalColor = ringDustApplyFog(finalColor, vRingPos);
+
+      gl_FragColor = vec4(finalColor, 1.0);
+
+      #if defined( TONE_MAPPING )
+	gl_FragColor.rgb = toneMapping( gl_FragColor.rgb );
+#endif
+      gl_FragColor = linearToOutputTexel( gl_FragColor );
+    }
+  "
+`;
+
+exports[`Кольцо: программы камней без ледяной примеси — побайтно прежние > L0/Near и билборд кольца: тексты вершинника и фрагментника совпадают со снимком, дефайна нет > l0-vertex 1`] = `
+"
+    #define PI 3.141592653589793
+#define PI2 6.283185307179586
+#define PI_HALF 1.5707963267948966
+#define RECIPROCAL_PI 0.3183098861837907
+#define RECIPROCAL_PI2 0.15915494309189535
+#define EPSILON 1e-6
+#ifndef saturate
+#define saturate( a ) clamp( a, 0.0, 1.0 )
+#endif
+#define whiteComplement( a ) ( 1.0 - saturate( a ) )
+float pow2( const in float x ) { return x*x; }
+vec3 pow2( const in vec3 x ) { return x*x; }
+float pow3( const in float x ) { return x*x*x; }
+float pow4( const in float x ) { float x2 = x*x; return x2*x2; }
+float max3( const in vec3 v ) { return max( max( v.x, v.y ), v.z ); }
+float average( const in vec3 v ) { return dot( v, vec3( 0.3333333 ) ); }
+highp float rand( const in vec2 uv ) {
+	const highp float a = 12.9898, b = 78.233, c = 43758.5453;
+	highp float dt = dot( uv.xy, vec2( a,b ) ), sn = mod( dt, PI );
+	return fract( sin( sn ) * c );
+}
+#ifdef HIGH_PRECISION
+	float precisionSafeLength( vec3 v ) { return length( v ); }
+#else
+	float precisionSafeLength( vec3 v ) {
+		float maxComponent = max3( abs( v ) );
+		return length( v / maxComponent ) * maxComponent;
+	}
+#endif
+struct IncidentLight {
+	vec3 color;
+	vec3 direction;
+	bool visible;
+};
+struct ReflectedLight {
+	vec3 directDiffuse;
+	vec3 directSpecular;
+	vec3 indirectDiffuse;
+	vec3 indirectSpecular;
+};
+#ifdef USE_ALPHAHASH
+	varying vec3 vPosition;
+#endif
+vec3 transformDirection( in vec3 dir, in mat4 matrix ) {
+	return normalize( ( matrix * vec4( dir, 0.0 ) ).xyz );
+}
+vec3 inverseTransformDirection( in vec3 dir, in mat4 matrix ) {
+	return normalize( ( vec4( dir, 0.0 ) * matrix ).xyz );
+}
+bool isPerspectiveMatrix( mat4 m ) {
+	return m[ 2 ][ 3 ] == - 1.0;
+}
+vec2 equirectUv( in vec3 dir ) {
+	float u = atan( dir.z, dir.x ) * RECIPROCAL_PI2 + 0.5;
+	float v = asin( clamp( dir.y, - 1.0, 1.0 ) ) * RECIPROCAL_PI + 0.5;
+	return vec2( u, v );
+}
+vec3 BRDF_Lambert( const in vec3 diffuseColor ) {
+	return RECIPROCAL_PI * diffuseColor;
+}
+vec3 F_Schlick( const in vec3 f0, const in float f90, const in float dotVH ) {
+	float fresnel = exp2( ( - 5.55473 * dotVH - 6.98316 ) * dotVH );
+	return f0 * ( 1.0 - fresnel ) + ( f90 * fresnel );
+}
+float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
+	float fresnel = exp2( ( - 5.55473 * dotVH - 6.98316 ) * dotVH );
+	return f0 * ( 1.0 - fresnel ) + ( f90 * fresnel );
+} // validated
+    #ifdef USE_LOGARITHMIC_DEPTH_BUFFER
+	varying float vFragDepth;
+	varying float vIsPerspective;
+#endif
+
+    uniform vec3 lightPosition;
+    // Смещение начала едет юниформом; float32 здесь достаточно — потребители
+    // vRingPos (пыль, тень планеты, полосы) гладкие по радиусу
+    uniform vec3 uOriginOffset;
+    uniform float uShapeAmpMin;
+    uniform float uShapeAmpMax;
+    uniform float uShapeFreq;
+    // Вращение камня: uSpinPeriod — номинальный период в секундах СИМУЛЯЦИИ
+    // (часы данных → секунды на CPU, 0 — выкл); uSpinTime — время симуляции
+    // (ctx.epoch, не рендер-часы), свёрнутое на CPU по кратному 12·uSpinPeriod
+    // (см. AsteroidRingSystem.updateObject) — отдельный от прочих юниформ времени движка
+    uniform float uSpinPeriod;
+    uniform float uSpinTime;
+
+    // Per-instance fade [0..1] — плавные LOD/sector-переходы (см. InstancePool.writeFade)
+    attribute float instanceFade;
+    // Смещение сектора камня от плавающего начала (см. InstancePool.writeOrigins):
+    // матрица инстанса хранит позицию ОТНОСИТЕЛЬНО центра сектора, абсолютная в
+    // системе кольца = instanceOrigin + instanceMatrix[3].xyz. Оба слагаемых малы,
+    // само начало внесено в modelViewMatrix на CPU в double. У колец начало не
+    // переезжает, атрибут нулевой — все выражения ниже тождественны прежним.
+    attribute vec3 instanceOrigin;
+    // Запечённые атрибуты породы из библиотеки архетипов (см. ArchetypeGeometry,
+    // ArchetypeShape.surfaceAt): xy = freshness (скол разлома), cavity (кратерная
+    // чаша); zw — резервные каналы, не прокидываются во фрагмент. Геометрии без
+    // этого атрибута (WebGL default) дают (0,0,0,0) → модуляция ниже тихо нейтральна.
+    attribute vec4 surfaceData;
+
+    varying vec3 vViewLightDirection;
+    varying vec3 vViewPosition;
+    varying vec3 vPlanetDirView;
+    varying vec3 vRingPos;
+    varying vec3 vObjectPos;
+    varying vec3 vObjectNormal;
+    varying mat3 vObjToView;
+    varying float vFade;
+    varying vec2 vSurfaceData;
+    // Пер-инстансные хеши сида считаются ЗДЕСЬ и едут во фрагмент готовыми:
+    // сырой сид через хеш во фрагментнике превращает ULP-джиттер интерполяции
+    // в пиксельный шум («сетка» по фасетам). Джиттер самих значений (≤1e-6 без
+    // хеш-усиления) визуально нулевой.
+    varying float vTintSeed;
+    varying vec3 vDomainOffset;
+    varying vec2 vTriOffset;
+
+    
+  // Страж двойного включения: чанк подключают несколько взаимоисключающих
+  // гейтов одного шейдера (USE_GIANT_DETAIL, USE_TERRAIN_MACRO_DETAIL) — при
+  // совпадении гейтов GLSL иначе падает на переопределении функций.
+  #ifndef TITAN_NOISE_INCLUDED
+  #define TITAN_NOISE_INCLUDED
+
+  // float→float хеш для декоррелированных пер-инстансных сидов. ВАЖНО: вызывать
+  // только от значений, стабильных в пределах примитива (вершинный шейдер /
+  // юниформы). От ИНТЕРПОЛИРОВАННОГО varying'а — запрещено: ULP-джиттер
+  // интерполяции усиливается градиентом хеша (~4e6) до пиксельного шума.
+  float hashSurface11(float x) {
+    return fract(sin(x * 91.3458) * 47453.5453);
+  }
+
+  vec4 mod289(vec4 x) {
+    return x - floor(x * (1.0 / 289.0)) * 289.0;
+  }
+
+  vec3 mod289(vec3 x) {
+    return x - floor(x * (1.0 / 289.0)) * 289.0;
+  }
+
+  float mod289(float x) {
+    return x - floor(x * (1.0 / 289.0)) * 289.0;
+  }
+
+  vec4 permute(vec4 x) {
+    return mod289(((x * 34.0) + 1.0) * x);
+  }
+
+  float permute(float x) {
+    return mod289(((x * 34.0) + 1.0) * x);
+  }
+
+  vec4 taylorInvSqrt(vec4 r) {
+    return 1.79284291400159 - 0.85373472095314 * r;
+  }
+
+  float taylorInvSqrt(float r) {
+    return 1.79284291400159 - 0.85373472095314 * r;
+  }
+
+  vec4 grad4(float j, vec4 ip) {
+    const vec4 ones = vec4(1.0, 1.0, 1.0, -1.0);
+    vec4 p, s;
+
+    p.xyz = floor(fract(vec3(j) * ip.xyz) * 7.0) * ip.z - 1.0;
+    p.w = 1.5 - dot(abs(p.xyz), ones.xyz);
+    s = vec4(lessThan(p, vec4(0.0)));
+    p.xyz = p.xyz + (s.xyz * 2.0 - 1.0) * s.www;
+
+    return p;
+  }
+
+  vec3 fade(vec3 t) {
+    return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+  }
+
+  float snoise(vec4 v) {
+    const vec4 C = vec4(0.138196601125011, 0.276393202250021, 0.414589803375032, -0.447213595499958);
+
+    // First corner
+    vec4 i = floor(v + dot(v, vec4(0.309016994374947451)));
+    vec4 x0 = v - i + dot(i, C.xxxx);
+
+    // Other corners
+
+    // Rank sorting originally contributed by Bill Licea-Kane, AMD (formerly ATI)
+    vec4 i0;
+    vec3 isX = step(x0.yzw, x0.xxx);
+    vec3 isYZ = step(x0.zww, x0.yyz);
+    i0.x = isX.x + isX.y + isX.z;
+    i0.yzw = 1.0 - isX;
+    i0.y += isYZ.x + isYZ.y;
+    i0.zw += 1.0 - isYZ.xy;
+    i0.z += isYZ.z;
+    i0.w += 1.0 - isYZ.z;
+
+    // i0 now contains the unique values 0,1,2,3 in each channel
+    vec4 i3 = clamp(i0, 0.0, 1.0);
+    vec4 i2 = clamp(i0-1.0, 0.0, 1.0);
+    vec4 i1 = clamp(i0-2.0, 0.0, 1.0);
+
+    vec4 x1 = x0 - i1 + C.xxxx;
+    vec4 x2 = x0 - i2 + C.yyyy;
+    vec4 x3 = x0 - i3 + C.zzzz;
+    vec4 x4 = x0 + C.wwww;
+
+    // Permutations
+    i = mod289(i);
+    float j0 = permute(permute(permute(permute(i.w) + i.z) + i.y) + i.x);
+    vec4 j1 = permute(permute(permute(permute (i.w + vec4(i1.w, i2.w, i3.w, 1.0)) + i.z + vec4(i1.z, i2.z, i3.z, 1.0 )) + i.y + vec4(i1.y, i2.y, i3.y, 1.0 )) + i.x + vec4(i1.x, i2.x, i3.x, 1.0 ));
+
+    // Gradients: 7x7x6 points over a cube, mapped onto a 4-cross polytope
+    // 7*7*6 = 294, which is close to the ring size 17*17 = 289.
+    vec4 ip = vec4(1.0/294.0, 1.0/49.0, 1.0/7.0, 0.0) ;
+
+    vec4 p0 = grad4(j0, ip);
+    vec4 p1 = grad4(j1.x, ip);
+    vec4 p2 = grad4(j1.y, ip);
+    vec4 p3 = grad4(j1.z, ip);
+    vec4 p4 = grad4(j1.w, ip);
+
+    // Normalise gradients
+    vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+    p0 *= norm.x;
+    p1 *= norm.y;
+    p2 *= norm.z;
+    p3 *= norm.w;
+    p4 *= taylorInvSqrt(dot(p4, p4));
+
+    // Mix contributions from the five corners
+    vec3 m0 = max(0.6 - vec3(dot(x0, x0), dot(x1, x1), dot(x2, x2)), 0.0);
+    vec2 m1 = max(0.6 - vec2(dot(x3,x3), dot(x4,x4)), 0.0);
+    m0 = m0 * m0;
+    m1 = m1 * m1;
+
+    return 49.0 * (dot(m0 * m0, vec3(dot(p0, x0), dot(p1, x1), dot(p2, x2))) + dot(m1 * m1, vec2(dot(p3, x3), dot(p4, x4)))) ;
+  }
+
+    // ВНИМАНИЕ: у snoise(vec3) есть CPU-зеркало src/core/terrain/simplexNoise3.ts
+    // (паритет процедурных поверхностей) — править только синхронно.
+    float snoise(vec3 v){
+      const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+      const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+
+      // First corner
+        vec3 i  = floor(v + dot(v, C.yyy) );
+        vec3 x0 =   v - i + dot(i, C.xxx) ;
+
+      // Other corners
+        vec3 g = step(x0.yzx, x0.xyz);
+        vec3 l = 1.0 - g;
+        vec3 i1 = min( g.xyz, l.zxy );
+        vec3 i2 = max( g.xyz, l.zxy );
+
+        //  x0 = x0 - 0. + 0.0 * C
+        vec3 x1 = x0 - i1 + 1.0 * C.xxx;
+        vec3 x2 = x0 - i2 + 2.0 * C.xxx;
+        vec3 x3 = x0 - 1. + 3.0 * C.xxx;
+
+      // Permutations
+        i = mod(i, 289.0 );
+        vec4 p = permute( permute( permute(
+                   i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+                 + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
+                 + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+
+      // Gradients
+      // ( N*N points uniformly over a square, mapped onto an octahedron.)
+        float n_ = 1.0/7.0; // N=7
+        vec3  ns = n_ * D.wyz - D.xzx;
+
+        vec4 j = p - 49.0 * floor(p * ns.z *ns.z);  //  mod(p,N*N)
+
+        vec4 x_ = floor(j * ns.z);
+        vec4 y_ = floor(j - 7.0 * x_ );    // mod(j,N)
+
+        vec4 x = x_ *ns.x + ns.yyyy;
+        vec4 y = y_ *ns.x + ns.yyyy;
+        vec4 h = 1.0 - abs(x) - abs(y);
+
+        vec4 b0 = vec4( x.xy, y.xy );
+        vec4 b1 = vec4( x.zw, y.zw );
+
+        vec4 s0 = floor(b0)*2.0 + 1.0;
+        vec4 s1 = floor(b1)*2.0 + 1.0;
+        vec4 sh = -step(h, vec4(0.0));
+
+        vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+        vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+
+        vec3 p0 = vec3(a0.xy,h.x);
+        vec3 p1 = vec3(a0.zw,h.y);
+        vec3 p2 = vec3(a1.xy,h.z);
+        vec3 p3 = vec3(a1.zw,h.w);
+
+      //Normalise gradients
+        vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+        p0 *= norm.x;
+        p1 *= norm.y;
+        p2 *= norm.z;
+        p3 *= norm.w;
+
+      // Mix final noise value
+        vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+        m = m * m;
+        return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1),
+                                      dot(p2,x2), dot(p3,x3) ) );
+  }
+
+  float perlin3dPeriodic(vec3 P, vec3 rep) {
+    vec3 Pi0 = mod(floor(P), rep); // Integer part, modulo period
+    vec3 Pi1 = mod(Pi0 + vec3(1.0), rep); // Integer part + 1, mod period
+    Pi0 = mod289(Pi0);
+    Pi1 = mod289(Pi1);
+    vec3 Pf0 = fract(P); // Fractional part for interpolation
+    vec3 Pf1 = Pf0 - vec3(1.0); // Fractional part - 1.0
+    vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
+    vec4 iy = vec4(Pi0.yy, Pi1.yy);
+    vec4 iz0 = Pi0.zzzz;
+    vec4 iz1 = Pi1.zzzz;
+
+    vec4 ixy = permute(permute(ix) + iy);
+    vec4 ixy0 = permute(ixy + iz0);
+    vec4 ixy1 = permute(ixy + iz1);
+
+    vec4 gx0 = ixy0 * (1.0 / 7.0);
+    vec4 gy0 = fract(floor(gx0) * (1.0 / 7.0)) - 0.5;
+    gx0 = fract(gx0);
+    vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
+    vec4 sz0 = step(gz0, vec4(0.0));
+    gx0 -= sz0 * (step(0.0, gx0) - 0.5);
+    gy0 -= sz0 * (step(0.0, gy0) - 0.5);
+
+    vec4 gx1 = ixy1 * (1.0 / 7.0);
+    vec4 gy1 = fract(floor(gx1) * (1.0 / 7.0)) - 0.5;
+    gx1 = fract(gx1);
+    vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
+    vec4 sz1 = step(gz1, vec4(0.0));
+    gx1 -= sz1 * (step(0.0, gx1) - 0.5);
+    gy1 -= sz1 * (step(0.0, gy1) - 0.5);
+
+    vec3 g000 = vec3(gx0.x,gy0.x,gz0.x);
+    vec3 g100 = vec3(gx0.y,gy0.y,gz0.y);
+    vec3 g010 = vec3(gx0.z,gy0.z,gz0.z);
+    vec3 g110 = vec3(gx0.w,gy0.w,gz0.w);
+    vec3 g001 = vec3(gx1.x,gy1.x,gz1.x);
+    vec3 g101 = vec3(gx1.y,gy1.y,gz1.y);
+    vec3 g011 = vec3(gx1.z,gy1.z,gz1.z);
+    vec3 g111 = vec3(gx1.w,gy1.w,gz1.w);
+
+    vec4 norm0 = taylorInvSqrt(vec4(dot(g000, g000), dot(g010, g010), dot(g100, g100), dot(g110, g110)));
+    g000 *= norm0.x;
+    g010 *= norm0.y;
+    g100 *= norm0.z;
+    g110 *= norm0.w;
+    vec4 norm1 = taylorInvSqrt(vec4(dot(g001, g001), dot(g011, g011), dot(g101, g101), dot(g111, g111)));
+    g001 *= norm1.x;
+    g011 *= norm1.y;
+    g101 *= norm1.z;
+    g111 *= norm1.w;
+
+    float n000 = dot(g000, Pf0);
+    float n100 = dot(g100, vec3(Pf1.x, Pf0.yz));
+    float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
+    float n110 = dot(g110, vec3(Pf1.xy, Pf0.z));
+    float n001 = dot(g001, vec3(Pf0.xy, Pf1.z));
+    float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
+    float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
+    float n111 = dot(g111, Pf1);
+
+    vec3 fade_xyz = fade(Pf0);
+    vec4 n_z = mix(vec4(n000, n100, n010, n110), vec4(n001, n101, n011, n111), fade_xyz.z);
+    vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
+    float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x);
+
+    return 2.2 * n_xyz;
+  }
+
+  // Cellular / Worley noise (Stefan Gustavson style, 3x3x3 search).
+  // Returns vec2(F1, F2): nearest and second-nearest feature point distances.
+  vec3 cellular_mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+  vec3 cellular_permute(vec3 x) { return cellular_mod289((34.0 * x + 1.0) * x); }
+
+  vec2 cellular3d(vec3 P) {
+    const float K = 0.142857142857;   // 1/7
+    const float Ko = 0.428571428571;  // 3/7
+    const float jitter = 1.0;
+    vec3 Pi = cellular_mod289(floor(P));
+    vec3 Pf = fract(P);
+    vec3 oi = vec3(-1.0, 0.0, 1.0);
+    vec3 of = vec3(-0.5, 0.5, 1.5);
+    vec3 px = cellular_permute(Pi.x + oi);
+    float F1 = 1e6; float F2 = 1e6;
+    for (int i = 0; i < 3; i++) {
+      vec3 p = cellular_permute(px[i] + Pi.y + oi);
+      for (int j = 0; j < 3; j++) {
+        vec3 pp = cellular_permute(p[j] + Pi.z + oi);
+        vec3 ox = fract(pp * K) - Ko;
+        vec3 oy = mod(floor(pp * K), 7.0) * K - Ko;
+        vec3 pz = cellular_permute(pp);
+        vec3 oz = fract(pz * K) - Ko;
+        vec3 dx = Pf.x - of[i] + jitter * ox;
+        vec3 dy = Pf.y - of[j] + jitter * oy;
+        for (int k = 0; k < 3; k++) {
+          float dz = Pf.z - of[k] + jitter * oz[k];
+          float d = dx[k] * dx[k] + dy[k] * dy[k] + dz * dz;
+          if (d < F1) { F2 = F1; F1 = d; }
+          else if (d < F2) { F2 = d; }
+        }
+      }
+    }
+    return sqrt(vec2(F1, F2));
+  }
+
+  // Расширенный Worley: F1/F2 + направление от центра ближайшей ячейки к точке
+  // (для аналитической нормали кратера ∝ ∇F1) + псевдослучайный хеш ячейки
+  // (для per-crater разброса: наличие/радиус). cellular3d НЕ трогаем — от неё
+  // зависит NebulaDensity. Небольшое дублирование поиска оправдано (ср. snoiseGrad).
+  vec4 worleyCell(vec3 P, out vec3 toNearest) {
+    const float K = 0.142857142857;   // 1/7
+    const float Ko = 0.428571428571;  // 3/7
+    const float jitter = 1.0;
+    vec3 Pi = cellular_mod289(floor(P));
+    vec3 Pf = fract(P);
+    vec3 oi = vec3(-1.0, 0.0, 1.0);
+    vec3 of = vec3(-0.5, 0.5, 1.5);
+    vec3 px = cellular_permute(Pi.x + oi);
+    float F1 = 1e6; float F2 = 1e6;
+    vec3 bestD = vec3(0.0, 0.0, 1.0);
+    float bestHash = 0.0;
+    for (int i = 0; i < 3; i++) {
+      vec3 p = cellular_permute(px[i] + Pi.y + oi);
+      for (int j = 0; j < 3; j++) {
+        vec3 pp = cellular_permute(p[j] + Pi.z + oi);
+        vec3 ox = fract(pp * K) - Ko;
+        vec3 oy = mod(floor(pp * K), 7.0) * K - Ko;
+        vec3 pz = cellular_permute(pp);
+        vec3 oz = fract(pz * K) - Ko;
+        vec3 dx = Pf.x - of[i] + jitter * ox;
+        vec3 dy = Pf.y - of[j] + jitter * oy;
+        for (int k = 0; k < 3; k++) {
+          float dz = Pf.z - of[k] + jitter * oz[k];
+          float d = dx[k] * dx[k] + dy[k] * dy[k] + dz * dz;
+          if (d < F1) {
+            F2 = F1; F1 = d;
+            bestD = vec3(dx[k], dy[k], dz);
+            bestHash = pz[k] * (1.0 / 289.0);
+          } else if (d < F2) {
+            F2 = d;
+          }
+        }
+      }
+    }
+    toNearest = normalize(bestD + vec3(1e-6, 0.0, 0.0));
+    return vec4(sqrt(F1), sqrt(F2), bestHash, 0.0);
+  }
+
+  // Производный 3D симплекс-шум: возвращает vec4(value, gradient).
+  // Значение в том же масштабе, что snoise(vec3); градиент — аналитическая
+  // производная simplex-noise (Gustavson): d/dv 42·Σ m^4·(p·x).
+  vec4 snoiseGrad(vec3 v) {
+    const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+    const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+
+    vec3 i  = floor(v + dot(v, C.yyy));
+    vec3 x0 = v - i + dot(i, C.xxx);
+
+    vec3 g = step(x0.yzx, x0.xyz);
+    vec3 l = 1.0 - g;
+    vec3 i1 = min(g.xyz, l.zxy);
+    vec3 i2 = max(g.xyz, l.zxy);
+
+    vec3 x1 = x0 - i1 + 1.0 * C.xxx;
+    vec3 x2 = x0 - i2 + 2.0 * C.xxx;
+    vec3 x3 = x0 - 1.0 + 3.0 * C.xxx;
+
+    i = mod(i, 289.0);
+    vec4 p = permute(permute(permute(
+               i.z + vec4(0.0, i1.z, i2.z, 1.0))
+             + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+             + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+
+    float n_ = 1.0/7.0;
+    vec3 ns = n_ * D.wyz - D.xzx;
+
+    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+
+    vec4 x_ = floor(j * ns.z);
+    vec4 y_ = floor(j - 7.0 * x_);
+
+    vec4 x = x_ * ns.x + ns.yyyy;
+    vec4 y = y_ * ns.x + ns.yyyy;
+    vec4 h = 1.0 - abs(x) - abs(y);
+
+    vec4 b0 = vec4(x.xy, y.xy);
+    vec4 b1 = vec4(x.zw, y.zw);
+
+    vec4 s0 = floor(b0) * 2.0 + 1.0;
+    vec4 s1 = floor(b1) * 2.0 + 1.0;
+    vec4 sh = -step(h, vec4(0.0));
+
+    vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+    vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+
+    vec3 p0 = vec3(a0.xy, h.x);
+    vec3 p1 = vec3(a0.zw, h.y);
+    vec3 p2 = vec3(a1.xy, h.z);
+    vec3 p3 = vec3(a1.zw, h.w);
+
+    vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+    p0 *= norm.x;
+    p1 *= norm.y;
+    p2 *= norm.z;
+    p3 *= norm.w;
+
+    vec4 m  = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
+    vec4 m2 = m * m;
+    vec4 m4 = m2 * m2;
+    vec4 pdotx = vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3));
+
+    float value = 42.0 * dot(m4, pdotx);
+
+    // grad = 42·Σ [ -8·m^3·(p·x)·x  +  m^4·p ]
+    vec4 temp = m2 * m * pdotx; // m^3 · (p·x)
+    vec3 grad = -8.0 * (temp.x * x0 + temp.y * x1 + temp.z * x2 + temp.w * x3);
+    grad += m4.x * p0 + m4.y * p1 + m4.z * p2 + m4.w * p3;
+    grad *= 42.0;
+
+    return vec4(value, grad);
+  }
+
+  #endif
+
+    
+  #define ASTEROID_SHAPE_OCTAVES 2
+
+  // Хеш vec3 → float (Dave Hoskins). Стабильный сид формы из позиции инстанса.
+  float hash13(vec3 p3) {
+    p3 = fract(p3 * 0.1031);
+    p3 += dot(p3, p3.zyx + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+  }
+
+  // fbm производного шума: vec4(value, gradient). Градиент домена учитывает
+  // частоту октавы (цепное правило d/dp snoiseGrad(p·freq)).
+  vec4 fbmGrad(vec3 p) {
+    vec4 sum = vec4(0.0);
+    float amp = 0.5;
+    float freq = 1.0;
+    for (int o = 0; o < ASTEROID_SHAPE_OCTAVES; o++) {
+      vec4 nv = snoiseGrad(p * freq);
+      sum.x += amp * nv.x;
+      sum.yzw += amp * freq * nv.yzw;
+      amp *= 0.5;
+      freq *= 2.0;
+    }
+    return sum;
+  }
+
+  // Остаточная деформация: НЕ формообразование (силуэт несёт запечённый
+  // архетип), а лёгкая пер-инстансная рябь — декоррелирует повторы K мешей.
+  // Смещение вдоль направления (сохраняет звёздность запечённой формы),
+  // нормаль — тангенциальное возмущение ЗАПЕЧЁННОЙ нормали с мягким клампом.
+  void deformAsteroid(vec3 pos, vec3 normal, float seed, float amp, out vec3 displacedPos, out vec3 newNormal) {
+    float R = length(pos);
+    vec3 dir = pos / max(R, 1e-6);
+
+    vec3 domain = dir * uShapeFreq + vec3(seed * 17.13, seed * 5.71, seed * 9.37);
+    vec4 nv = fbmGrad(domain);
+
+    displacedPos = dir * (R * (1.0 + amp * nv.x));
+
+    vec3 gdisp = amp * nv.yzw;
+    vec3 gTangent = gdisp - dot(gdisp, normal) * normal;
+    gTangent /= 1.0 + length(gTangent);
+    newNormal = normalize(normal - gTangent);
+  }
+
+
+    void main() {
+      // Деформация силуэта: сид рисунка контура — хеш от МЕСТНОЙ позиции
+      // инстанса (в своём секторе): она у камня не меняется при переезде
+      // плавающего начала, а instanceOrigin меняется — сид от суммы
+      // перещёлкивал бы форму всех камней разом. У колец начало нулевое, и
+      // выражение то же, что было.
+      // Амплитуда — второй, декоррелированный хеш той же позиции → каждый
+      // камень получает свою «изрезанность» из диапазона [min,max].
+      float shapeSeed = hash13(instanceMatrix[3].xyz);
+      float ampSeed = hash13(instanceMatrix[3].xyz * 1.37 + 11.7);
+      float shapeAmp = mix(uShapeAmpMin, uShapeAmpMax, ampSeed);
+      vec3 shapedPos;
+      vec3 shapedNormal;
+      deformAsteroid(position, normal, shapeSeed, shapeAmp, shapedPos, shapedNormal);
+
+      // Вращение вокруг оси из того же хеша, что форма (shapeSeed — значение
+      // вершинника, НЕ варьинг: ULP-джиттер интерполяции сюда не попадает).
+      // uSpinPeriod <= 0 — блок не исполняется, всё ниже тождественно прежнему
+      // (кольца по умолчанию).
+      if (uSpinPeriod > 0.0) {
+        vec3 spinAxis = normalize(vec3(
+          hashSurface11(shapeSeed + 13.13),
+          hashSurface11(shapeSeed + 17.17),
+          hashSurface11(shapeSeed + 19.19)
+        ) * 2.0 - 1.0);
+        // Ставка вращения — m/12, m ∈ [6,18] целыми шагами: на волне
+        // 12·uSpinPeriod любой инстанс делает целое число m оборотов, поэтому
+        // свёртка uSpinTime (CPU) не рвёт фазу ни одному камню. min(...,18) —
+        // страж на случай hash ровно 1 (floor дал бы 13, а не 12)
+        float m = min(6.0 + floor(hashSurface11(shapeSeed + 23.23) * 13.0), 18.0);
+        // Фаза из хеша: без неё все камни разом проходят исходную позу на каждой волне
+        float spinAngle = 2.0 * PI * (uSpinTime * (m / 12.0) / uSpinPeriod + hashSurface11(shapeSeed + 29.29));
+        float cosA = cos(spinAngle);
+        float sinA = sin(spinAngle);
+        // Родригес: v' = v·cosA + (axis × v)·sinA + axis·(axis·v)·(1 − cosA)
+        shapedPos = shapedPos * cosA + cross(spinAxis, shapedPos) * sinA + spinAxis * dot(spinAxis, shapedPos) * (1.0 - cosA);
+        shapedNormal = shapedNormal * cosA + cross(spinAxis, shapedNormal) * sinA + spinAxis * dot(spinAxis, shapedNormal) * (1.0 - cosA);
+      }
+
+      vec4 worldPosition = instanceMatrix * vec4(shapedPos, 1.0);
+      // Абсолютная позиция в системе кольца: смещение сектора + локальная
+      worldPosition.xyz += instanceOrigin;
+      vec4 mvPosition = modelViewMatrix * worldPosition;
+
+      gl_Position = projectionMatrix * mvPosition;
+
+      // Ring-local позиция фрагмента для модели пыли/тени (пофрагментная) —
+      // от ЦЕНТРА КОЛЬЦА, а не от плавающего начала: прибавляем его смещение.
+      vRingPos = worldPosition.xyz + uOriginOffset;
+
+      vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
+      mat3 instanceNormalMatrix = mat3(instanceMatrix);
+
+      vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
+      vViewPosition = -mvPosition.xyz;
+      // Направление на центр планеты (начало ring-local) во view — для
+      // planetshine. В модельном пространстве центр кольца лежит в
+      // -uOriginOffset: модельное начало — это плавающее начало
+      vPlanetDirView = normalize((modelViewMatrix * vec4(-uOriginOffset, 1.0)).xyz - mvPosition.xyz);
+
+      // Для макро-облика (см. чанк AsteroidSurface): объектная позиция (домен),
+      // геом. нормаль объекта (нормаль больше не возмущается процедурно) и
+      // матрица объект→view — трипланарная деталь (см. чанк TriplanarDetail)
+      // применяется к геометрической нормали во фрагменте.
+      vObjectPos = shapedPos;
+      vObjectNormal = shapedNormal;
+      vObjToView = normalMatrix * instanceNormalMatrix;
+      vFade = instanceFade;
+      // Freshness фасет разлома + cavity кратерных чаш из запекания (см. attribute
+      // выше); резервные каналы zw не прокидываем
+      vSurfaceData = surfaceData.xy;
+
+      // Пер-инстансные хеши (см. комментарий у varyings): тинт, сдвиг домена
+      // макро-шумов, сдвиг трипланарной проекции — из сида формы
+      vTintSeed = hashSurface11(shapeSeed + 3.17);
+      vDomainOffset = vec3(
+        hashSurface11(shapeSeed + 1.1),
+        hashSurface11(shapeSeed + 2.2),
+        hashSurface11(shapeSeed + 3.3)
+      ) * 40.0;
+      vTriOffset = vec2(
+        hashSurface11(shapeSeed + 7.7),
+        hashSurface11(shapeSeed + 9.9)
+      ) * 8.0;
+
+      #ifdef USE_LOGARITHMIC_DEPTH_BUFFER
+	vFragDepth = 1.0 + gl_Position.w;
+	vIsPerspective = float( isPerspectiveMatrix( projectionMatrix ) );
+#endif
+    }
+  "
+`;

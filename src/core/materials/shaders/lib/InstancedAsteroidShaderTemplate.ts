@@ -1,5 +1,40 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { ShaderChunk, Uniform, Vector3, Color } from 'three'
+import {
+  asteroidIceFragmentDecl,
+  asteroidIceFragmentLocals,
+  asteroidIceVertexDecl,
+  asteroidIceVertexSelect
+} from '@/core/materials/shaders/lib/chunks/AsteroidIce'
+
+export interface InstancedAsteroidShaderOptions {
+  /**
+   * Ледяная примесь (см. чанк AsteroidIce): доля инстансов берёт ручки
+   * ледяного профиля. Вставляется строковой композицией — без опции текст
+   * программы колец остаётся байт-в-байт прежним.
+   */
+  iceVariety?: boolean
+}
+
+/** Имена ручек профиля в теле фрагментника: юниформы, а под льдом — локалы-смеси по vIce */
+const PROFILE_KNOBS = {
+  base: {
+    rockColor: 'uRockColor',
+    specularStrength: 'uSpecularStrength',
+    specularPower: 'uSpecularPower',
+    specularTint: 'uSpecularTint',
+    lunarMix: 'uLunarMix',
+    surfaceAmbient: 'uSurfaceAmbient'
+  },
+  ice: {
+    rockColor: 'rockColor',
+    specularStrength: 'specularStrength',
+    specularPower: 'specularPower',
+    specularTint: 'specularTint',
+    lunarMix: 'lunarMix',
+    surfaceAmbient: 'surfaceAmbient'
+  }
+}
 
 export const InstancedAsteroidShaderTemplate: ShaderProps = {
   uniforms: {
@@ -68,8 +103,35 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     // Запечённые атрибуты породы (см. чанк AsteroidShape / ArchetypeShape.surfaceAt):
     // свежий скол разлома светлее/глаже, днища кратерных чаш затенены
     uFreshnessBrighten: new Uniform(0.15),
-    uCavityShade: new Uniform(0.5)
+    uCavityShade: new Uniform(0.5),
+    // Ледяная примесь (см. чанк AsteroidIce): доля 0 — все тела базового
+    // профиля; ручки заполняет AsteroidRingSystem из ледяного профиля
+    uIceFraction: new Uniform(0),
+    uIceRockColor: new Uniform(new Color(0xc4d2dc)),
+    uIceSpecularStrength: new Uniform(0.5),
+    uIceSpecularPower: new Uniform(12.0),
+    uIceSpecularTint: new Uniform(0.0),
+    uIceLunarMix: new Uniform(0.5),
+    uIceSurfaceAmbient: new Uniform(0.06)
   },
+  ...instancedAsteroidShaderSource()
+}
+
+/**
+ * Тексты вершинника и фрагментника по опциям. Без опций — прежний текст
+ * колец побайтно: куски льда пустые строки, ручки профиля — сами юниформы.
+ */
+export function instancedAsteroidShaderSource(
+  options: InstancedAsteroidShaderOptions = {}
+): Pick<ShaderProps, 'vertexShader' | 'fragmentShader'> {
+  const ice = options.iceVariety === true
+  const iceVertexDecl = ice ? asteroidIceVertexDecl : ''
+  const iceVertexSelect = ice ? asteroidIceVertexSelect : ''
+  const iceFragmentDecl = ice ? asteroidIceFragmentDecl : ''
+  const iceFragmentLocals = ice ? asteroidIceFragmentLocals : ''
+  const knob = ice ? PROFILE_KNOBS.ice : PROFILE_KNOBS.base
+
+  return {
   vertexShader: `
     ${ShaderChunk['common']}
     ${ShaderChunk['logdepthbuf_pars_vertex']}
@@ -86,7 +148,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     // (ctx.epoch, не рендер-часы), свёрнутое на CPU по кратному 12·uSpinPeriod
     // (см. AsteroidRingSystem.updateObject) — отдельный от прочих юниформ времени движка
     uniform float uSpinPeriod;
-    uniform float uSpinTime;
+    uniform float uSpinTime;${iceVertexDecl}
 
     // Per-instance fade [0..1] — плавные LOD/sector-переходы (см. InstancePool.writeFade)
     attribute float instanceFade;
@@ -205,7 +267,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       vTriOffset = vec2(
         hashSurface11(shapeSeed + 7.7),
         hashSurface11(shapeSeed + 9.9)
-      ) * 8.0;
+      ) * 8.0;${iceVertexSelect}
 
       ${ShaderChunk['logdepthbuf_vertex']}
     }
@@ -227,7 +289,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uniform float uLunarMix;
     uniform float uOppositionSurge;
     uniform vec3 uPlanetshineColor;
-    uniform float uPlanetshineStrength;
+    uniform float uPlanetshineStrength;${iceFragmentDecl}
 
     #ifdef USE_LIGHT_TINT
       uniform vec3 uLightColor;
@@ -273,11 +335,11 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       if (vFade < 0.0) fadeThresh = 1.0 - fadeThresh;
       if (fadeMag < fadeThresh) discard;
 
-      vec3 surfDir = normalize(vObjectPos);
+      vec3 surfDir = normalize(vObjectPos);${iceFragmentLocals}
 
       // Макро-облик: альбедо (джиттер/мотл/maria), рельеф больше не возмущает
       // нормаль процедурно — нормаль геометрическая, деталь несёт PBR-микрослой.
-      vec3 albedo = applyAsteroidSurface(surfDir, vTintSeed, vDomainOffset, uRockColor, uColorJitter, uTintStrength, uMariaStrength);
+      vec3 albedo = applyAsteroidSurface(surfDir, vTintSeed, vDomainOffset, ${knob.rockColor}, uColorJitter, uTintStrength, uMariaStrength);
       // Тинт по цвету полосы кольца на радиусе камня (см. чанк RingDust): вблизи
       // камни несут ту же палитру, что кольцо издали. До микрослоя — тот ложится сверху
       albedo *= ringBandTint(length(vRingPos.xz));
@@ -290,8 +352,8 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       // --- Фотограмметрический PBR-микрослой (трипланар, см. чанк TriplanarDetail) ---
       // Текстура = структура (яркость/нормаль/шероховатость), цвет = грейдинг
       // профиля. Пер-инстансный сдвиг проекции — против повторов пятен на соседях.
-      float specStrength = uSpecularStrength;
-      float specPower = uSpecularPower;
+      float specStrength = ${knob.specularStrength};
+      float specPower = ${knob.specularPower};
       if (uDetailMapsEnabled > 0.5) {
         vec3 geomN = normalize(vObjectNormal);
         vec3 triW = triplanarWeights(geomN);
@@ -336,7 +398,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
       // Диффуз реголита (см. чанк AsteroidBrdf): Ламберт/Ломмель-Зелигер по
       // профилю + оппозиционный пик — камень ровный по диску, с резким лимбом
-      float lightIntensity = asteroidRegolithDiffuse(NdotL, NdotV, cosPhase, uLunarMix, uOppositionSurge);
+      float lightIntensity = asteroidRegolithDiffuse(NdotL, NdotV, cosPhase, ${knob.lunarMix}, uOppositionSurge);
 
       // Тень планеты (умбра): та же аналитическая модель, что у пыли и 2D-кольца
       // (ringDustPlanetShadow), поэтому граница тени совпадает между слоями. Гасит
@@ -353,9 +415,9 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
 
       // Planetshine — второй источник света: цвет звезды его не касается.
       #ifdef USE_LIGHT_TINT
-        vec3 finalColor = albedo * (lightIntensity * surfAO * direct * uLightColor + uSurfaceAmbient);
+        vec3 finalColor = albedo * (lightIntensity * surfAO * direct * uLightColor + ${knob.surfaceAmbient});
       #else
-        vec3 finalColor = albedo * (lightIntensity * surfAO * direct + uSurfaceAmbient);
+        vec3 finalColor = albedo * (lightIntensity * surfAO * direct + ${knob.surfaceAmbient});
       #endif
       finalColor += albedo * uPlanetshineColor * (uPlanetshineStrength * shine * surfAO);
 
@@ -370,7 +432,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       float specToksvig = 1.0 / (1.0 + specPower * specNormalVar);
       float specPowerAA = specPower * specToksvig;
       float spec = pow(max(dot(normal, halfVec), 0.0), specPowerAA) * specStrength * specToksvig;
-      vec3 specColor = mix(vec3(1.0), albedo, uSpecularTint);
+      vec3 specColor = mix(vec3(1.0), albedo, ${knob.specularTint});
       // Гейт блика — сырой косинус к свету, а не LS-диффуз (тот к лимбу доходит до 2)
       #ifdef USE_LIGHT_TINT
         finalColor += spec * specColor * uLightColor * max(NdotL, 0.0) * direct;
@@ -387,4 +449,5 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       ${ShaderChunk['colorspace_fragment']}
     }
   `
+  }
 }

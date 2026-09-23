@@ -52,6 +52,25 @@ describe('asteroidBeltParameters: pointCount/pointScale (дальний слой
   })
 })
 
+describe('asteroidBeltParameters: iceFraction/iceProfile (ледяная примесь)', () => {
+  it('дефолты — доля 0.15, профиль icy', () => {
+    const p = asteroidBeltParameters(beltActor(MIN_DATA))
+    expect(p.iceFraction).toBe(0.15)
+    expect(p.iceProfile).toBe('icy')
+  })
+
+  it('доля клампится в [0, 1]', () => {
+    expect(asteroidBeltParameters(beltActor({ ...MIN_DATA, iceFraction: -1 })).iceFraction).toBe(0)
+    expect(asteroidBeltParameters(beltActor({ ...MIN_DATA, iceFraction: 2 })).iceFraction).toBe(1)
+    expect(asteroidBeltParameters(beltActor({ ...MIN_DATA, iceFraction: 0.4 })).iceFraction).toBe(0.4)
+  })
+
+  it('незнакомое имя профиля — icy, а не stony: примесь базового профиля невидима', () => {
+    expect(asteroidBeltParameters(beltActor({ ...MIN_DATA, iceProfile: 'frozen' })).iceProfile).toBe('icy')
+    expect(asteroidBeltParameters(beltActor({ ...MIN_DATA, iceProfile: 'metallic' })).iceProfile).toBe('metallic')
+  })
+})
+
 describe('asteroidBeltParameters: cullFovScale/fadeSeconds (появление секторов)', () => {
   it('дефолты 1.35 и 0.8', () => {
     const p = asteroidBeltParameters(beltActor(MIN_DATA))
