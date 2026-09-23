@@ -19,9 +19,9 @@ interface BeltPointLayerParams {
   profile: Float32Array
   /**
    * Азимутальный профиль (дуги, buildBeltAngularProfile) — тот же, что у
-   * секторов стримера и пыли; не задан или null — угол равномерен
+   * секторов стримера и пыли; не задан — угол равномерен
    */
-  angularProfile?: Float32Array | null
+  angularProfile?: Float32Array
   /** Базовый цвет породы (см. ASTEROID_PROFILES) */
   color: Color
   /** Подписка светила на цвет света (см. resolveLightTint) */

@@ -37,6 +37,15 @@ describe('AngularDensityProfile.weightForRange', () => {
     expect(a).toBeGreaterThan(1.5)
   })
 
+  it('a1 < a0 больше чем на оборот назад — дуга вперёд от a0 по кругу, не вес в точке', () => {
+    const bins = buildBeltAngularProfile({ ...flat, arcs: [{ at: 0.98, width: 0.03, gain: 3 }] })!
+    const p = new AngularDensityProfile(bins)
+
+    // 10 → 0 по кругу вперёд = интервал [10, 4π] длиной 2.57 рад, он захватывает дугу у 0.98 оборота
+    expect(p.weightForRange(10, 0)).toBeCloseTo(p.weightForRange(10, 4 * Math.PI), 6)
+    expect(p.weightForRange(10, 0)).toBeGreaterThan(p.weightForRange(10, 10))
+  })
+
   it('ровный профиль — единица на любом интервале', () => {
     const p = new AngularDensityProfile(new Float32Array(16).fill(1))
     expect(p.weightForRange(0.3, 0.31)).toBeCloseTo(1, 6)

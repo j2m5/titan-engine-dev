@@ -163,7 +163,7 @@ class AsteroidBelt extends Group {
       count: p.pointCount,
       seed: p.seed,
       profile: this.densityProfile,
-      angularProfile: this.angularProfile,
+      angularProfile: this.angularProfile ?? undefined,
       color: new Color(ASTEROID_PROFILES[profileName].baseColor),
       lightTint: resolveLightTint(this.actor),
       // Размер точки — физический: типичное тело крупнейшего класса в единицах

@@ -76,14 +76,12 @@ describe('BeltPointLayer: дуги — распределение по углу 
 })
 
 describe('BeltPointLayer: без дуг поток rng и позиции прежние', () => {
-  it('angularProfile не задан, undefined и null — побитово одни позиции и размеры', () => {
+  it('angularProfile не задан и undefined — побитово одни позиции и размеры', () => {
     const plain = new BeltPointLayer(baseParams({ count: 400, seed: 42 }))
     const undefinedProfile = new BeltPointLayer(baseParams({ count: 400, seed: 42, angularProfile: undefined }))
-    const nullProfile = new BeltPointLayer(baseParams({ count: 400, seed: 42, angularProfile: null }))
 
     expect(positionsOf(undefinedProfile)).toEqual(positionsOf(plain))
-    expect(positionsOf(nullProfile)).toEqual(positionsOf(plain))
-    expect(nullProfile.geometry.getAttribute('size').array).toEqual(plain.geometry.getAttribute('size').array)
+    expect(undefinedProfile.geometry.getAttribute('size').array).toEqual(plain.geometry.getAttribute('size').array)
   })
 
   it('с дугой тратится ровно один rng на угол: радиусы, высоты и размеры точек те же, что без дуги', () => {

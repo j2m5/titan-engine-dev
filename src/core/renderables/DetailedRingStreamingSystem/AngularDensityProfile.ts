@@ -38,13 +38,14 @@ class AngularDensityProfile {
 
   /**
    * Средний вес интервала углов [a0, a1] (радианы, любой отсчёт: интервал
-   * через 0/2π и отрицательные углы допустимы). Интервал длиннее оборота
-   * даёт среднее по обороту; вырожденный — вес в точке a0.
+   * через 0/2π и отрицательные углы допустимы, a1 < a0 читается как дуга
+   * вперёд от a0 по кругу). Интервал длиннее оборота даёт среднее по
+   * обороту; вырожденный — вес в точке a0.
    */
   public weightForRange(a0: number, a1: number): number {
     let span = a1 - a0
-    if (span < 0) span += TWO_PI
     if (span >= TWO_PI) return this.total / TWO_PI
+    if (span < 0) span = ((span % TWO_PI) + TWO_PI) % TWO_PI
     if (span <= 0) return this.weights[this.binOf(a0)]
 
     return (this.massUpTo(a0 + span) - this.massUpTo(a0)) / span

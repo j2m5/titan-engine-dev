@@ -724,7 +724,7 @@ class AsteroidRingSystem extends Group {
     }
 
     // --- Дуги пояса (см. angularProfileSource): один профиль во все каскады.
-    // Генератор не трогаем — угол внутри сектора равномерен, сектор уже дуги
+    // Генератор без профиля: угол внутри сектора равномерен, сектор много уже дуги
     if (cfg.angularProfileSource) {
       const beltAngularProfile = new AngularDensityProfile(cfg.angularProfileSource)
       for (const grid of grids) grid.setAngularProfile(beltAngularProfile)
