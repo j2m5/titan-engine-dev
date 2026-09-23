@@ -180,6 +180,8 @@ export const renderingDataTemplates: DataTemplate[] = [
       dustPhaseStrength: 1,
       dustColorForward: '#c8a98a',
       rockFogRangeKm: 40000,
+      iceFraction: 0.15,
+      iceProfile: 'icy',
       spinPeriodHours: 8,
       pointCount: 60000,
       pointScale: 1,

@@ -45,6 +45,8 @@ describe('категория пояса астероидов', () => {
       'dustPhaseStrength',
       'dustColorForward',
       'rockFogRangeKm',
+      'iceFraction',
+      'iceProfile',
       'spinPeriodHours',
       'pointCount',
       'pointScale',

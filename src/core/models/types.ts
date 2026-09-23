@@ -521,6 +521,10 @@ export interface IAsteroidBeltRenderingObject {
   dustColorForward?: number | string
   /** Художественный туман на камнях по дистанции (независим от dustTauVertical): км, на которых он набирает 63% в средней плоскости ленты; 0 — выключен (дефолт 40000) */
   rockFogRangeKm?: number
+  /** Доля ледяных тел среди камней стримера, 0..1; 0 — все тела базового профиля (дефолт 0.15) */
+  iceFraction?: number
+  /** Профиль облика ледяных тел: имя из AsteroidProfiles (дефолт 'icy') */
+  iceProfile?: string
   /** Средний период вращения камней, часы; 0 гасит вращение (дефолт 0) */
   spinPeriodHours?: number
   /** Число точек дальнего слоя, штук (дефолт 60000) */
