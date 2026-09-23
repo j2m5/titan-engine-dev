@@ -420,20 +420,27 @@ class InstancePool {
   public commitUpdates(): void {
     for (const stream of this.dirtyStreams) {
       const s = this.streams[stream]
+      InstancePool.coalesceRanges(s.mesh.instanceMatrix)
       s.mesh.instanceMatrix.needsUpdate = true
       s.mesh.count = s.hwm
     }
 
     for (const stream of this.dirtyFadeStreams) {
-      this.fadeAttribute(stream).needsUpdate = true
+      const attr = this.fadeAttribute(stream)
+      InstancePool.coalesceRanges(attr)
+      attr.needsUpdate = true
     }
 
     for (const stream of this.dirtyOriginStreams) {
-      this.originAttribute(stream).needsUpdate = true
+      const attr = this.originAttribute(stream)
+      InstancePool.coalesceRanges(attr)
+      attr.needsUpdate = true
     }
 
     for (const stream of this.dirtyMaxDistanceStreams) {
-      this.maxDistanceAttribute(stream).needsUpdate = true
+      const attr = this.maxDistanceAttribute(stream)
+      InstancePool.coalesceRanges(attr)
+      attr.needsUpdate = true
     }
 
     this.dirtyStreams.clear()
@@ -508,6 +515,39 @@ class InstancePool {
   }
 
   // === Private ===
+
+  /**
+   * Зазор между диапазонами (в инстансах), внутри которого их выгоднее слить в
+   * один вызов заливки, чем звать драйвер дважды: слак в 512 инстансов —
+   * 32 КБ матриц, а вызовов за кадр вместо полутора тысяч остаются десятки.
+   */
+  private static readonly COALESCE_GAP_INSTANCES = 512
+
+  /**
+   * Слить диапазоны заливки атрибута, отстоящие не дальше зазора. Рендерер
+   * сливает только соприкасающиеся, а сектора лежат в буфере вразброс.
+   * Список правится на месте — это тот же массив, который читает рендерер.
+   */
+  private static coalesceRanges(attr: InstancedBufferAttribute): void {
+    const ranges = attr.updateRanges
+    if (ranges.length < 2) return
+
+    ranges.sort((a, b) => a.start - b.start)
+    const gap = InstancePool.COALESCE_GAP_INSTANCES * attr.itemSize
+    let write = 0
+    for (let read = 1; read < ranges.length; read++) {
+      const kept = ranges[write]
+      const next = ranges[read]
+      const keptEnd = kept.start + kept.count
+      if (next.start <= keptEnd + gap) {
+        kept.count = Math.max(keptEnd, next.start + next.count) - kept.start
+      } else {
+        write++
+        ranges[write] = next
+      }
+    }
+    ranges.length = write + 1
+  }
 
   private clearInstances(stream: number, offset: number, count: number): void {
     const mesh = this.streams[stream].mesh

@@ -90,4 +90,22 @@ describe('InstancePool: заливка на GPU только тронутыми 
     pool.commitUpdates()
     expect(ranges(matrixAttr(pool, stream))).toEqual([])
   })
+
+  it('разбросанные слоты сливаются в немногие вызовы, далёкие остаются отдельными', () => {
+    const pool = makePool()
+    const stream = pool.billboardStream
+    // Десять секторов по 5 инстансов через каждые 20 слотов — зазоры меньше допуска
+    for (let i = 0; i < 10; i++) pool.writeMatrices(stream, i * 20, new Float32Array(5 * 16).fill(1))
+    // И один далеко — дальше допуска в 512 инстансов
+    pool.writeMatrices(stream, 780, new Float32Array(5 * 16).fill(1))
+    pool.commitUpdates()
+
+    const rs = ranges(matrixAttr(pool, stream))
+    expect(rs.length).toBe(2)
+    expect(covers(rs.filter((r) => r.start < 780 * 16), 0, (9 * 20 + 5) * 16)).toBe(true)
+    expect(covers(rs.filter((r) => r.start >= 780 * 16), 780 * 16, 785 * 16)).toBe(true)
+    // Слак ограничен: первый диапазон не тянется до второго
+    const first = [...rs].sort((a, b) => a.start - b.start)[0]
+    expect(first.start + first.count).toBeLessThanOrEqual((9 * 20 + 5) * 16)
+  })
 })
