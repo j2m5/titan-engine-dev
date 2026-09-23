@@ -10,7 +10,8 @@ const EMPTY_STRUCTURE: BeltStructure = { edgeSoftness: 0, gaps: [], clumps: [] }
 /** Дефолты дальнего слоя точек — диапазон спеки §4: 50–100 тыс. точек на буфер */
 const DEFAULT_POINT_COUNT = 60000
 /** Базовый масштаб точечного спрайта, пиксель·three-unit (см. идиому StarfieldShaderTemplate) */
-const DEFAULT_POINT_SCALE = 220
+/** Множитель поверх физического размера точки (типичное тело крупнейшего класса на пиксель) */
+const DEFAULT_POINT_SCALE = 1
 
 /**
  * Параметры пояса после дефолтов и клампов — км и единицы данных, готовые к
@@ -87,8 +88,8 @@ export function asteroidBeltParameters(actor: Actor): AsteroidBeltParameters {
     dustTauVertical: Math.max(0, data.dustTauVertical ?? 0.35),
     dustScaleHeightFraction: data.dustScaleHeightFraction ?? 1 / 3,
     dustClumpStrength: Math.min(1, Math.max(0, data.dustClumpStrength ?? 0.7)),
-    // Масштаб не меньше 1 а.е./150 000: мельче ~100 единиц сцены шум в float32 алиасит
-    dustClumpScaleKm: Math.max(1e-5, data.dustClumpScaleAu ?? 0.6) * AU,
+    // Пол ~100 единиц сцены (200 000 км): мельче шум по float32-координатам алиасит
+    dustClumpScaleKm: Math.max(1.3e-3, data.dustClumpScaleAu ?? 0.6) * AU,
     spinPeriodHours: data.spinPeriodHours ?? 0,
     // Целое и не отрицательное — отрицательный/дробный count ломает Float32Array(count * 3)
     pointCount: Math.max(0, Math.floor(data.pointCount ?? DEFAULT_POINT_COUNT)),

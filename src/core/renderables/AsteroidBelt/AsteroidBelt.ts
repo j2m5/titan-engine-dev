@@ -6,7 +6,7 @@ import { toThreeJSUnits, fromAstronomicalUnits } from '@/core/helpers/scaling'
 import { asteroidBeltParameters, type AsteroidBeltParameters } from './AsteroidBeltParameters'
 import { AsteroidRingSystem, type AsteroidRingConfig } from '@/core/renderables/DetailedRingStreamingSystem'
 import { shapeModelStorage } from '@/core/renderables/DetailedRingStreamingSystem/archetypes/ShapeModelStorage'
-import { deriveCascades, type CascadeSpec } from '@/core/renderables/DetailedRingStreamingSystem/cascadeScale'
+import { deriveCascades, PIXEL_RAD, type CascadeSpec } from '@/core/renderables/DetailedRingStreamingSystem/cascadeScale'
 import { buildBeltDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/beltDensityProfile'
 import { distanceToTorus, nextState, BeltLodState } from '@/core/renderables/DetailedRingStreamingSystem/beltDistance'
 import { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
@@ -119,8 +119,9 @@ class AsteroidBelt extends Group {
       dustDensity,
       dustColor: new Color(p.dustColor),
       // Угловой гейт колец (дымка только на просвет с ребра) поясу не нужен:
-      // толстый слой обязан читаться и сверху — степень 0 даёт единицу
-      anglePower: 0,
+      // толстый слой обязан читаться и сверху. Не ровно 0: pow(0, 0) в GLSL
+      // не определён для луча строго в надир; 1e-6 даёт единицу всюду
+      anglePower: 1e-6,
       // Ближнее гашение — доля толщины пояса, как у стримера (dustNearFadeFraction)
       nearFade: 0.25 * toThreeJSUnits(p.thicknessKm),
       maxSteps: 16,
@@ -151,7 +152,10 @@ class AsteroidBelt extends Group {
       profile: this.densityProfile,
       color: new Color(ASTEROID_PROFILES[profileName].baseColor),
       lightTint: resolveLightTint(this.actor),
-      pointScale: p.pointScale,
+      // Размер точки — физический: типичное тело крупнейшего класса в единицах
+      // сцены на один пиксель. Так точка продолжает билборд ровно с одного
+      // пикселя на его пороге и честно тает дальше; ручка — множитель поверх
+      pointScale: (toThreeJSUnits(this.cascades[this.cascades.length - 1].typicalSizeKm) / PIXEL_RAD) * p.pointScale,
       // Тот же порог, что уходит билборду L1 как uMaxDistance — см. BeltPointsShaderTemplate
       maxDistance: this.nearThresholdTu
     })

@@ -78,13 +78,21 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
     const clumpContribChunk = options.clumps
       ? `
             #ifdef DUST_CLUMPS
-              // p — float32 ring-local до ~4e6 units; при uDustClumpScale
-              // ~1e4 units аргумент шума в разумном диапазоне. Масштабы
-              // ниже ~100 units начнут алиасить.
-              vec3 clumpP = p / uDustClumpScale;
-              float clumpNoise = snoise(clumpP) + 0.5 * snoise(clumpP * 2.0);
-              float n = clumpNoise * 0.5 + 0.5;
-              contrib *= mix(1.0 - uDustClumpStrength, 1.0 + uDustClumpStrength, n);
+              // Шаг марша крупнее половины клочка — клочья не сэмплируются и
+              // вырождались бы в пиксельную крупу; гасим их силу до ровной
+              // дымки (среднее шума единица) и не считаем шум вовсе. Вдоль
+              // ленты шаг в единицы а.е., сверху — сотые доли: клочья видны там,
+              // где их можно разрешить
+              float clumpGain = uDustClumpStrength * clamp(uDustClumpScale / (2.0 * dt), 0.0, 1.0);
+              if (clumpGain > 0.001) {
+                // p — float32 ring-local до ~4e6 units; при масштабе клочьев
+                // в десятки тысяч units аргумент шума порядка сотни. Масштабы
+                // ниже ~100 units начнут алиасить
+                vec3 clumpP = p / uDustClumpScale;
+                float clumpNoise = snoise(clumpP) + 0.5 * snoise(clumpP * 2.0);
+                float n = clumpNoise * 0.5 + 0.5;
+                contrib *= mix(1.0 - clumpGain, 1.0 + clumpGain, n);
+              }
             #endif`
       : ''
 

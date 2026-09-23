@@ -516,7 +516,7 @@ export interface IAsteroidBeltRenderingObject {
   spinPeriodHours?: number
   /** Число точек дальнего слоя, штук (дефолт 60000) */
   pointCount?: number
-  /** Базовый масштаб спрайта точки дальнего слоя, пиксель·three-unit (дефолт 220) */
+  /** Множитель размера точки дальнего слоя поверх физического (типичное тело крупнейшего класса на пиксель); дефолт 1 */
   pointScale?: number
   /** Запас отсечения секторов вокруг кадра — множитель fov камеры отсечения (см. AsteroidRingConfig.cullFovScale); дефолт 1.35 */
   cullFovScale?: number

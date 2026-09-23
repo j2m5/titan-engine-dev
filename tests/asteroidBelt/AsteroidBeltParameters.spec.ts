@@ -30,10 +30,10 @@ describe('asteroidBeltParameters: spacingKm', () => {
 })
 
 describe('asteroidBeltParameters: pointCount/pointScale (дальний слой точек)', () => {
-  it('дефолты — 60000 точек, масштаб спрайта 220', () => {
+  it('дефолты — 60000 точек, множитель размера точки 1', () => {
     const p = asteroidBeltParameters(beltActor(MIN_DATA))
     expect(p.pointCount).toBe(60000)
-    expect(p.pointScale).toBe(220)
+    expect(p.pointScale).toBe(1)
   })
 
   it('pointCount клампится к неотрицательному', () => {

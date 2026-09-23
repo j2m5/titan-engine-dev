@@ -28,8 +28,8 @@ describe('RingDustClumps', () => {
     expect(m.defines.DUST_CLUMPS).toBe('1')
     const fs = m.fragmentShader
     expect(fs).toContain('snoise(')
-    expect(fs).toContain('mix(1.0 - uDustClumpStrength, 1.0 + uDustClumpStrength,')
-    const mixIdx = fs.indexOf('mix(1.0 - uDustClumpStrength, 1.0 + uDustClumpStrength,')
+    expect(fs).toContain('mix(1.0 - clumpGain, 1.0 + clumpGain,')
+    const mixIdx = fs.indexOf('mix(1.0 - clumpGain, 1.0 + clumpGain,')
     const litTauIdx = fs.indexOf('litTau +=')
     expect(mixIdx).toBeGreaterThan(-1)
     expect(mixIdx).toBeLessThan(litTauIdx)
@@ -57,5 +57,11 @@ describe('RingDustClumps', () => {
     expect(u.uDustClumpStrength.value).toBe(0)
     expect(u.uDustClumpScale.value).toBe(1)
     expect(volume.dustMaterial.defines.DUST_CLUMPS).toBeUndefined()
+  })
+
+  it('сила клочьев гасится там, где шаг марша крупнее половины их масштаба', () => {
+    const fs = new RingDustRaymarchMaterial(undefined, { clumps: true }).fragmentShader
+    expect(fs).toContain('float clumpGain = uDustClumpStrength * clamp(uDustClumpScale / (2.0 * dt), 0.0, 1.0);')
+    expect(fs).toContain('if (clumpGain > 0.001) {')
   })
 })

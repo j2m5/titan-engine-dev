@@ -13,6 +13,8 @@ vi.mock('@/core/renderables/DetailedRingStreamingSystem/RingAlphaReadback', () =
 import { AsteroidBelt } from '@/core/renderables/AsteroidBelt'
 import { asteroidBeltParameters } from '@/core/renderables/AsteroidBelt/AsteroidBeltParameters'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { deriveCascades, PIXEL_RAD } from '@/core/renderables/DetailedRingStreamingSystem/cascadeScale'
+import type { BeltPointLayer } from '@/core/renderables/DetailedRingStreamingSystem/BeltPointLayer'
 import { AU } from '@/core/constants'
 import { Actor } from '@/core/models/Actor'
 import type { IAsteroidBeltRenderingObject } from '@/core/models/types'
@@ -82,9 +84,13 @@ describe('AsteroidBelt: калибровка дымки по вертикали,
     expect(scaleHeight).toBeCloseTo(halfThickness / 3, 6)
   })
 
-  it('угловой гейт выключен: степень 0 даёт единицу с любого угла', () => {
+  it('угловой гейт выключен: степень почти 0 даёт единицу с любого угла, но не ровно 0 — pow(0, 0) не определён', () => {
     const belt = new AsteroidBelt(actorOf(DATA))
-    expect(dustOf(belt).dustMaterial.uniforms.uDustAnglePower.value).toBe(0)
+    const power = dustOf(belt).dustMaterial.uniforms.uDustAnglePower.value as number
+    expect(power).toBeGreaterThan(0)
+    expect(power).toBeLessThan(1e-3)
+    // Гейт колец: pow(1 − |dir.y|, power) — под углом 60° над плоскостью почти единица
+    expect(Math.pow(0.5, power)).toBeGreaterThan(0.99999)
   })
 
   it('толща 0 в данных — плотность 0, лента невидима', () => {
@@ -106,5 +112,36 @@ describe('AsteroidBelt: клочья дымки доходят до объёма
   it('сила 0 — ровная лента, дефайна нет', () => {
     const belt = new AsteroidBelt(actorOf({ ...DATA, dustClumpStrength: 0 }))
     expect(dustOf(belt).dustMaterial.defines.DUST_CLUMPS).toBeUndefined()
+  })
+})
+
+describe('AsteroidBelt: размер точки дальнего слоя — физический', () => {
+  const pointsOf = (belt: AsteroidBelt): BeltPointLayer => (belt as unknown as { pointLayer: BeltPointLayer }).pointLayer
+
+  it('масштаб спрайта = типичное тело крупнейшего класса в единицах сцены на пиксель', () => {
+    const belt = new AsteroidBelt(actorOf(DATA))
+    const largest = deriveCascades({ sizeRangeKm: [0.5, 60], spacingKm: 54, halfThicknessKm: 0.05 * AU }).at(-1)!
+    const expected = toThreeJSUnits(largest.typicalSizeKm) / PIXEL_RAD
+
+    expect(pointsOf(belt).pointMaterial.uniforms.uPointScale.value).toBeCloseTo(expected, 9)
+  })
+
+  it('на пороге билборда крупнейшего класса точка ровно один пиксель — продолжает билборд без скачка', () => {
+    const belt = new AsteroidBelt(actorOf(DATA))
+    const scale = pointsOf(belt).pointMaterial.uniforms.uPointScale.value as number
+    const largest = deriveCascades({ sizeRangeKm: [0.5, 60], spacingKm: 54, halfThicknessKm: 0.05 * AU }).at(-1)!
+    const l1 = toThreeJSUnits(largest.lodThresholdsKm.l1)
+
+    // trueSize = size · (uPointScale / z) при size 1 и z = порог билборда
+    expect(scale / l1).toBeCloseTo(1, 9)
+  })
+
+  it('ручка pointScale — множитель поверх физики', () => {
+    const belt = new AsteroidBelt(actorOf({ ...DATA, pointScale: 3 }))
+    const plain = new AsteroidBelt(actorOf(DATA))
+    const scaled = pointsOf(belt).pointMaterial.uniforms.uPointScale.value as number
+    const base = pointsOf(plain).pointMaterial.uniforms.uPointScale.value as number
+
+    expect(scaled / base).toBeCloseTo(3, 9)
   })
 })
