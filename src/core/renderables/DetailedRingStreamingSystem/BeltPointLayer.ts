@@ -1,6 +1,7 @@
 import { BufferGeometry, Color, Float32BufferAttribute, Points, ShaderMaterial } from 'three'
 import { SeededRandom } from './SeededRandom'
 import { RadialDensityProfile } from './RadialDensityProfile'
+import { AngularDensityProfile } from './AngularDensityProfile'
 import { triangularHeight } from './triangularHeight'
 import { BeltPointsShaderTemplate } from '@/core/materials/shaders/lib/BeltPointsShaderTemplate'
 
@@ -16,6 +17,11 @@ interface BeltPointLayerParams {
   seed: number
   /** Радиальный профиль плотности (доли [0,1]) — тот же, что у камней стримера (buildBeltDensityProfile) */
   profile: Float32Array
+  /**
+   * Азимутальный профиль (дуги, buildBeltAngularProfile) — тот же, что у
+   * секторов стримера и пыли; не задан или null — угол равномерен
+   */
+  angularProfile?: Float32Array | null
   /** Базовый цвет породы (см. ASTEROID_PROFILES) */
   color: Color
   /** Подписка светила на цвет света (см. resolveLightTint) */
@@ -40,7 +46,9 @@ interface BeltPointLayerParams {
  * BeltPointLayer — дальний слой пояса астероидов: облако точек по тому же
  * радиальному профилю плотности и треугольному закону высоты, что и камни
  * стримера (см. AsteroidGenerator.generateMatricesGrouped, triangularHeight)
- * — щели и сгущения читаются одинаково что вблизи, что издалека.
+ * — щели и сгущения читаются одинаково что вблизи, что издалека; угол —
+ * по азимутальному профилю дуг (AngularDensityProfile), тому же, что
+ * взвешивает секторы стримера и пыль.
  *
  * Слой ВСЕГДА видим (в отличие от лениво создаваемого стримера) — кроссфейд с
  * L1-биллбордами считается per-point в вершиннике (см. BeltPointsShaderTemplate),
@@ -76,6 +84,7 @@ class BeltPointLayer extends Points {
   private static __buildGeometry(params: BeltPointLayerParams): BufferGeometry {
     const { innerR, outerR, halfThickness, count, seed, profile } = params
     const density = new RadialDensityProfile(profile, innerR, outerR)
+    const angular = params.angularProfile ? new AngularDensityProfile(params.angularProfile) : null
     const rng = new SeededRandom(seed)
 
     const positions = new Float32Array(count * 3)
@@ -85,7 +94,8 @@ class BeltPointLayer extends Points {
       // Радиус — importance sampling по профилю плотности, как у камней стримера
       // (см. AsteroidGenerator.generateMatricesGrouped: this.densityProfile.sampleRadius)
       const r = density.sampleRadius(innerR, outerR, rng.next())
-      const theta = rng.range(0, Math.PI * 2)
+      // Угол — inverse-CDF по дугам; оба пути тратят ровно один rng.next()
+      const theta = angular ? angular.sampleAngle(rng.next()) : rng.range(0, Math.PI * 2)
       const y = triangularHeight(rng, halfThickness)
 
       positions[i * 3] = Math.cos(theta) * r
