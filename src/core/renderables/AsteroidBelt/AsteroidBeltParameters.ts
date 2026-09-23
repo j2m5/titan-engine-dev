@@ -33,9 +33,14 @@ export interface AsteroidBeltParameters {
   structure: BeltStructure
   dustEnabled: boolean
   dustColor: number | string
-  dustTauGrazing: number
+  /** Оптическая толща дымки по вертикали сквозь слой в средней плоскости */
+  dustTauVertical: number
   /** Доля полутолщины тора — масштабная полутолщина пылевого слоя */
   dustScaleHeightFraction: number
+  /** Сила клочьев дымки 0..1; 0 — ровная лента */
+  dustClumpStrength: number
+  /** Масштаб клочьев дымки, км */
+  dustClumpScaleKm: number
   spinPeriodHours: number
   /** Число точек дальнего слоя — целое, ≥ 0 (0 гасит слой видимостью пустого буфера) */
   pointCount: number
@@ -78,8 +83,12 @@ export function asteroidBeltParameters(actor: Actor): AsteroidBeltParameters {
     // Пыль как у колец: те же дефолты, что DEFAULT_CONFIG в AsteroidRingSystem
     dustEnabled: data.dustEnabled ?? true,
     dustColor: data.dustColor ?? 0x9b968c,
-    dustTauGrazing: data.dustTauGrazing ?? 0.52,
+    // Толща по вертикали, не на просвет через ширину (см. IAsteroidBeltRenderingObject)
+    dustTauVertical: Math.max(0, data.dustTauVertical ?? 0.35),
     dustScaleHeightFraction: data.dustScaleHeightFraction ?? 1 / 3,
+    dustClumpStrength: Math.min(1, Math.max(0, data.dustClumpStrength ?? 0.7)),
+    // Масштаб не меньше 1 а.е./150 000: мельче ~100 единиц сцены шум в float32 алиасит
+    dustClumpScaleKm: Math.max(1e-5, data.dustClumpScaleAu ?? 0.6) * AU,
     spinPeriodHours: data.spinPeriodHours ?? 0,
     // Целое и не отрицательное — отрицательный/дробный count ломает Float32Array(count * 3)
     pointCount: Math.max(0, Math.floor(data.pointCount ?? DEFAULT_POINT_COUNT)),

@@ -107,9 +107,10 @@ class AsteroidBelt extends Group {
     const p = this.params
     // Доля полутолщины тора, а не абсолютные км — масштабно-инвариантно для пояса
     const dustScaleHeight = p.dustScaleHeightFraction * this.halfThicknessTu
-    // Та же калибровка, что у AsteroidRingSystem: tau грейзинг-луча через
-    // весь тор в средней плоскости = dustTauGrazing
-    const dustDensity = p.dustTauGrazing / (this.outerRadiusTu - this.innerRadiusTu)
+    // Калибровка ПО ВЕРТИКАЛИ: ∫exp(−|y|/H)dy = 2H, так что толща сквозь слой
+    // сверху в средней плоскости равна плотность·2H. Кольцевая калибровка на
+    // просвет через ширину (десятки а.е.) делала бы ленту невидимой сверху
+    const dustDensity = p.dustTauVertical / (2 * dustScaleHeight)
 
     return new RingDustVolume({
       innerRadius: this.innerRadiusTu,
@@ -117,7 +118,9 @@ class AsteroidBelt extends Group {
       dustScaleHeight,
       dustDensity,
       dustColor: new Color(p.dustColor),
-      anglePower: 2,
+      // Угловой гейт колец (дымка только на просвет с ребра) поясу не нужен:
+      // толстый слой обязан читаться и сверху — степень 0 даёт единицу
+      anglePower: 0,
       // Ближнее гашение — доля толщины пояса, как у стримера (dustNearFadeFraction)
       nearFade: 0.25 * toThreeJSUnits(p.thicknessKm),
       maxSteps: 16,
