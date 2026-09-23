@@ -1,7 +1,7 @@
 import { AsteroidGenerator } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidGenerator'
 import type { SectorBounds } from '@/core/renderables/DetailedRingStreamingSystem/SectorGrid'
 
-const bounds: SectorBounds = { minRadius: 100, maxRadius: 200, minAngle: 0, maxAngle: Math.PI / 8 }
+const bounds: SectorBounds = { minRadius: 100, maxRadius: 200, minAngle: 0, maxAngle: Math.PI / 8, minY: 0, maxY: 0 }
 
 /** Извлечь Y-компоненты позиций из упакованных матриц (translation.y = элемент 13) */
 const extractY = (data: Float32Array): number[] => {

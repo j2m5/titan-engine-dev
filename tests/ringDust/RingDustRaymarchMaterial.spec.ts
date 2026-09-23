@@ -95,4 +95,21 @@ describe('RingDustRaymarchMaterial', () => {
     expect(fs).not.toContain(ShaderChunk.logdepthbuf_fragment)
     expect(fs).not.toContain('gl_FragDepth')
   })
+
+  it('без lightAtOrigin: дефайна DUST_LIGHT_AT_ORIGIN нет, лепесток — по uDustLightDirRing', () => {
+    const m = make()
+    expect(m.defines.DUST_LIGHT_AT_ORIGIN).toBeUndefined()
+    // ветка есть в тексте только под дефайном — без него препроцессор её выбросит
+    expect(m.fragmentShader).toContain('#ifdef DUST_LIGHT_AT_ORIGIN')
+    expect(m.fragmentShader).toContain('ringDustHaze(rayDir)')
+  })
+
+  it('lightAtOrigin: дефайн стоит, лепесток накапливается по направлению на начало из точки марша', () => {
+    const m = new RingDustRaymarchMaterial(undefined, { lightAtOrigin: true })
+    expect(m.defines.DUST_LIGHT_AT_ORIGIN).toBe('1')
+    const fs = m.fragmentShader
+    expect(fs).toContain('vec3 toStar = -p / max(length(p), 1e-6);')
+    expect(fs).toContain('sunTau += contrib * pow(max(dot(rayDir, toStar), 0.0), 4.0);')
+    expect(fs).toContain('ringDustHazeSun(tau > 0.0 ? sunTau / tau : 0.0)')
+  })
 })

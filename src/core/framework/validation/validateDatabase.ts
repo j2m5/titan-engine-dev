@@ -114,7 +114,8 @@ const CATEGORY_RULES: Record<string, CategoryRules> = {
   atmosphere: ATTACHED,
   ring: ATTACHED,
 
-  nebula: { positioning: 'placed', expects: { physical: false, rendering: true, orbit: false } }
+  nebula: { positioning: 'placed', expects: { physical: false, rendering: true, orbit: false } },
+  asteroidBelt: { positioning: 'placed', expects: { physical: false, rendering: true, orbit: false } }
 }
 
 /** Неизвестная категория трактуется строго: кеплерова и обязана иметь всё */
@@ -497,6 +498,64 @@ function checkNebulaShapes(
   }
 }
 
+/**
+ * Форма конфига пояса астероидов. Радиусы в а.е.: inner < outer, оба
+ * положительны — иначе distanceToTorus и профиль плотности делят на ноль.
+ * spacingKm и sizeRangeKm — источник плотности/ячеек/порогов LOD (см.
+ * deriveCascades), неположительные или невпорядоченные ломают вывод каскадов.
+ */
+function checkAsteroidBeltShapes(
+  rows: IRenderingObject[],
+  aliasByActor: Map<number, string>,
+  issues: ValidationIssue[]
+): void {
+  for (const row of rows) {
+    if (aliasByActor.get(row.actorId) !== 'asteroidBelt') continue
+
+    const data: Record<string, unknown> = asRecord(row.data) ?? {}
+
+    const bad = (field: string, reason: string): void => {
+      issues.push({
+        level: 'error',
+        collection: 'renderingObjects',
+        entity: row.id,
+        message: `renderingObjects#${row.id} (actor ${row.actorId}) asteroidBelt data.${field} ${reason}`
+      })
+    }
+
+    const inner = data.innerRadiusAu
+    const outer = data.outerRadiusAu
+    const innerValid = typeof inner === 'number' && Number.isFinite(inner) && inner > 0
+    const outerValid = typeof outer === 'number' && Number.isFinite(outer) && outer > 0
+
+    if (!innerValid) bad('innerRadiusAu', 'must be a positive number (astronomical units)')
+    if (!outerValid) bad('outerRadiusAu', 'must be a positive number (astronomical units)')
+    if (innerValid && outerValid && !((inner as number) < (outer as number))) {
+      bad('outerRadiusAu', 'must be greater than data.innerRadiusAu')
+    }
+
+    const thickness = data.thicknessAu
+    if (typeof thickness !== 'number' || !Number.isFinite(thickness) || thickness <= 0) {
+      bad('thicknessAu', 'must be a positive number (astronomical units)')
+    }
+
+    const spacing = data.spacingKm
+    if (typeof spacing !== 'number' || !Number.isFinite(spacing) || spacing <= 0) {
+      bad('spacingKm', 'must be a positive number (kilometers)')
+    }
+
+    const sizeRange = data.sizeRangeKm
+    const sizeMin = Array.isArray(sizeRange) ? sizeRange[0] : undefined
+    const sizeMax = Array.isArray(sizeRange) ? sizeRange[1] : undefined
+    const sizeMinValid = typeof sizeMin === 'number' && Number.isFinite(sizeMin) && sizeMin > 0
+
+    if (!sizeMinValid) bad('sizeRangeKm[0]', 'must be a positive number (kilometers)')
+    if (sizeMinValid && !(typeof sizeMax === 'number' && Number.isFinite(sizeMax) && sizeMax > (sizeMin as number))) {
+      bad('sizeRangeKm[1]', 'must be greater than data.sizeRangeKm[0]')
+    }
+  }
+}
+
 function buildIdSet<T extends { id: number }>(rows: T[]): Set<number> {
   const set = new Set<number>()
   for (const row of rows) set.add(row.id)
@@ -796,6 +855,9 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
 
   // --- 6f. Форма конфига туманностей ---
   checkNebulaShapes(db.renderingObjects, aliasByActor, issues)
+
+  // --- 6h. Форма конфига пояса астероидов ---
+  checkAsteroidBeltShapes(db.renderingObjects, aliasByActor, issues)
 
   // --- 6e. Режимы позиционирования: несочетаемые строки placements/orbits ---
   checkPositioning(db, aliasByActor, issues)

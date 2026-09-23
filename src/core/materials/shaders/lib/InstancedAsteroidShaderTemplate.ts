@@ -55,9 +55,16 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uLayerShadowStrength: new Uniform(0.25),
     // Деформация силуэта (см. чанк AsteroidShape). Амплитуда — per-instance из
     // диапазона [min,max]; min=max=0 → форма выключена.
+    // Позиция плавающего начала в ring-local (см. FloatingOrigin): матрицы
+    // инстансов хранятся относительно него, а ring-local абсолют нужен модели
+    // пыли/тени. Кольца его не пишут — 0 и все выражения тождественны прежним.
+    uOriginOffset: new Uniform(new Vector3()),
     uShapeAmpMin: new Uniform(0),
     uShapeAmpMax: new Uniform(0),
     uShapeFreq: new Uniform(1),
+    // Вращение камня — период/время симуляции, см. объявления в вершиннике
+    uSpinPeriod: new Uniform(0),
+    uSpinTime: new Uniform(0),
     // Запечённые атрибуты породы (см. чанк AsteroidShape / ArchetypeShape.surfaceAt):
     // свежий скол разлома светлее/глаже, днища кратерных чаш затенены
     uFreshnessBrighten: new Uniform(0.15),
@@ -68,12 +75,27 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     ${ShaderChunk['logdepthbuf_pars_vertex']}
 
     uniform vec3 lightPosition;
+    // Смещение начала едет юниформом; float32 здесь достаточно — потребители
+    // vRingPos (пыль, тень планеты, полосы) гладкие по радиусу
+    uniform vec3 uOriginOffset;
     uniform float uShapeAmpMin;
     uniform float uShapeAmpMax;
     uniform float uShapeFreq;
+    // Вращение камня: uSpinPeriod — номинальный период в секундах СИМУЛЯЦИИ
+    // (часы данных → секунды на CPU, 0 — выкл); uSpinTime — время симуляции
+    // (ctx.epoch, не рендер-часы), свёрнутое на CPU по кратному 12·uSpinPeriod
+    // (см. AsteroidRingSystem.updateObject) — отдельный от прочих юниформ времени движка
+    uniform float uSpinPeriod;
+    uniform float uSpinTime;
 
     // Per-instance fade [0..1] — плавные LOD/sector-переходы (см. InstancePool.writeFade)
     attribute float instanceFade;
+    // Смещение сектора камня от плавающего начала (см. InstancePool.writeOrigins):
+    // матрица инстанса хранит позицию ОТНОСИТЕЛЬНО центра сектора, абсолютная в
+    // системе кольца = instanceOrigin + instanceMatrix[3].xyz. Оба слагаемых малы,
+    // само начало внесено в modelViewMatrix на CPU в double. У колец начало не
+    // переезжает, атрибут нулевой — все выражения ниже тождественны прежним.
+    attribute vec3 instanceOrigin;
     // Запечённые атрибуты породы из библиотеки архетипов (см. ArchetypeGeometry,
     // ArchetypeShape.surfaceAt): xy = freshness (скол разлома), cavity (кратерная
     // чаша); zw — резервные каналы, не прокидываются во фрагмент. Геометрии без
@@ -101,7 +123,11 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     #include <asteroidShapeFunctions>
 
     void main() {
-      // Деформация силуэта: сид рисунка контура — хеш от позиции инстанса.
+      // Деформация силуэта: сид рисунка контура — хеш от МЕСТНОЙ позиции
+      // инстанса (в своём секторе): она у камня не меняется при переезде
+      // плавающего начала, а instanceOrigin меняется — сид от суммы
+      // перещёлкивал бы форму всех камней разом. У колец начало нулевое, и
+      // выражение то же, что было.
       // Амплитуда — второй, декоррелированный хеш той же позиции → каждый
       // камень получает свою «изрезанность» из диапазона [min,max].
       float shapeSeed = hash13(instanceMatrix[3].xyz);
@@ -111,21 +137,50 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
       vec3 shapedNormal;
       deformAsteroid(position, normal, shapeSeed, shapeAmp, shapedPos, shapedNormal);
 
+      // Вращение вокруг оси из того же хеша, что форма (shapeSeed — значение
+      // вершинника, НЕ варьинг: ULP-джиттер интерполяции сюда не попадает).
+      // uSpinPeriod <= 0 — блок не исполняется, всё ниже тождественно прежнему
+      // (кольца по умолчанию).
+      if (uSpinPeriod > 0.0) {
+        vec3 spinAxis = normalize(vec3(
+          hashSurface11(shapeSeed + 13.13),
+          hashSurface11(shapeSeed + 17.17),
+          hashSurface11(shapeSeed + 19.19)
+        ) * 2.0 - 1.0);
+        // Ставка вращения — m/12, m ∈ [6,18] целыми шагами: на волне
+        // 12·uSpinPeriod любой инстанс делает целое число m оборотов, поэтому
+        // свёртка uSpinTime (CPU) не рвёт фазу ни одному камню. min(...,18) —
+        // страж на случай hash ровно 1 (floor дал бы 13, а не 12)
+        float m = min(6.0 + floor(hashSurface11(shapeSeed + 23.23) * 13.0), 18.0);
+        // Фаза из хеша: без неё все камни разом проходят исходную позу на каждой волне
+        float spinAngle = 2.0 * PI * (uSpinTime * (m / 12.0) / uSpinPeriod + hashSurface11(shapeSeed + 29.29));
+        float cosA = cos(spinAngle);
+        float sinA = sin(spinAngle);
+        // Родригес: v' = v·cosA + (axis × v)·sinA + axis·(axis·v)·(1 − cosA)
+        shapedPos = shapedPos * cosA + cross(spinAxis, shapedPos) * sinA + spinAxis * dot(spinAxis, shapedPos) * (1.0 - cosA);
+        shapedNormal = shapedNormal * cosA + cross(spinAxis, shapedNormal) * sinA + spinAxis * dot(spinAxis, shapedNormal) * (1.0 - cosA);
+      }
+
       vec4 worldPosition = instanceMatrix * vec4(shapedPos, 1.0);
+      // Абсолютная позиция в системе кольца: смещение сектора + локальная
+      worldPosition.xyz += instanceOrigin;
       vec4 mvPosition = modelViewMatrix * worldPosition;
 
       gl_Position = projectionMatrix * mvPosition;
 
-      // Ring-local позиция фрагмента для модели пыли/тени (пофрагментная)
-      vRingPos = worldPosition.xyz;
+      // Ring-local позиция фрагмента для модели пыли/тени (пофрагментная) —
+      // от ЦЕНТРА КОЛЬЦА, а не от плавающего начала: прибавляем его смещение.
+      vRingPos = worldPosition.xyz + uOriginOffset;
 
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
       mat3 instanceNormalMatrix = mat3(instanceMatrix);
 
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
-      // Направление на центр планеты (начало ring-local) во view — для planetshine
-      vPlanetDirView = normalize((modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz - mvPosition.xyz);
+      // Направление на центр планеты (начало ring-local) во view — для
+      // planetshine. В модельном пространстве центр кольца лежит в
+      // -uOriginOffset: модельное начало — это плавающее начало
+      vPlanetDirView = normalize((modelViewMatrix * vec4(-uOriginOffset, 1.0)).xyz - mvPosition.xyz);
 
       // Для макро-облика (см. чанк AsteroidSurface): объектная позиция (домен),
       // геом. нормаль объекта (нормаль больше не возмущается процедурно) и

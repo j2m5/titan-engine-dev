@@ -10,6 +10,7 @@ import type {
 import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { NebulaRenderingData } from '@/core/renderables/Nebula/NebulaRenderingData'
 import type { ProceduralSurfaceParams } from '@/core/terrain/proceduralSurfaceParams'
+import type { BeltStructure } from '@/core/renderables/DetailedRingStreamingSystem/beltDensityProfile'
 
 export type ValueOf<T> = T[keyof T]
 
@@ -23,7 +24,8 @@ export enum AllowedCategories {
   nebula,
   brownDwarf,
   whiteDwarf,
-  giantStar
+  giantStar,
+  asteroidBelt
 }
 
 export type AllowedCategory = keyof typeof AllowedCategories
@@ -466,6 +468,52 @@ export interface IRingRenderingObject {
    * цветовом проходе вообще.
    */
   depthAlphaTest?: number
+  /** Средний период вращения камней вокруг своей оси, часы; 0 (дефолт) — вращение выключено, вид как прежде */
+  spinPeriodHours?: number
+}
+
+/**
+ * Пояс астероидов масштаба системы (`asteroidBelt`, id 11). Радиусы и
+ * толщина — в АСТРОНОМИЧЕСКИХ ЕДИНИЦАХ (в отличие от кольца, где км), потому
+ * что пояс живёт на десятках а.е.; остальное — как у кольца, в км.
+ * planetRadius в данных нет: у пояса он всегда 0 (см. AsteroidBeltParameters).
+ */
+export interface IAsteroidBeltRenderingObject {
+  /** Внутренняя граница тора, а.е. */
+  innerRadiusAu: number
+  /** Внешняя граница тора, а.е. */
+  outerRadiusAu: number
+  /** Полная толщина тора, а.е. */
+  thicknessAu: number
+  /** Границы размеров тел, км: [мелочь, глыбы]. Верх диапазона — габарит архетипа на весь пул */
+  sizeRangeKm: [number, number]
+  /** Показатель степенного закона розыгрыша масштаба внутри класса; не задан — 1 (прежнее квадратичное смещение к мелким) */
+  sizeExponent?: number
+  /** Среднее расстояние между телами САМОГО МЕЛКОГО класса, км — источник плотности/ячеек/порогов LOD (см. deriveCascades) */
+  spacingKm: number
+  /** Профиль облика камней: 'stony' | 'carbonaceous' | 'metallic' | 'icy' (дефолт 'stony') */
+  profile?: string
+  seed?: number
+  /** Щели и сгущения радиального профиля плотности (доли ширины); отсутствие — единица по всей ширине */
+  structure?: BeltStructure
+  /** Включена ли пылевая дымка дальнего слоя (дефолт true) */
+  dustEnabled?: boolean
+  /** Цвет дымки: число 0xRRGGBB или строка '#rrggbb' */
+  dustColor?: number | string
+  /** Целевая оптическая толща грейзинг-луча (плотность дымки) */
+  dustTauGrazing?: number
+  /** Масштабная полутолщина пылевого слоя как доля полутолщины тора; не задана — 1/3 */
+  dustScaleHeightFraction?: number
+  /** Средний период вращения камней, часы; 0 гасит вращение (дефолт 0) */
+  spinPeriodHours?: number
+  /** Число точек дальнего слоя, штук (дефолт 60000) */
+  pointCount?: number
+  /** Базовый масштаб спрайта точки дальнего слоя, пиксель·three-unit (дефолт 220) */
+  pointScale?: number
+  /** Запас отсечения секторов вокруг кадра — множитель fov камеры отсечения (см. AsteroidRingConfig.cullFovScale); дефолт 1.35 */
+  cullFovScale?: number
+  /** Длительность проявления сектора, секунды (см. AsteroidRingConfig.fadeSeconds); дефолт 0.8 */
+  fadeSeconds?: number
 }
 
 export interface IBrownDwarfRenderingObject {

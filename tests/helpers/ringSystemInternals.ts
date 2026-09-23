@@ -1,10 +1,13 @@
 import { AsteroidRingSystem, AsteroidRingConfig } from '@/core/renderables/DetailedRingStreamingSystem'
 import { InstancePool } from '@/core/renderables/DetailedRingStreamingSystem/InstancePool'
 import { SectorManager, LODThresholds } from '@/core/renderables/DetailedRingStreamingSystem/SectorManager'
+import { CascadeSet } from '@/core/renderables/DetailedRingStreamingSystem/CascadeSet'
 import { AsteroidGenerator, GeneratorConfig } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidGenerator'
 import { SectorGrid } from '@/core/renderables/DetailedRingStreamingSystem/SectorGrid'
 import { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
 import { RadialDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/RadialDensityProfile'
+import { FloatingOrigin } from '@/core/renderables/DetailedRingStreamingSystem/FloatingOrigin'
+import type { Group } from 'three'
 
 /**
  * Приватные поля системы, к которым обращаются тесты. Типы взяты с объявлений
@@ -12,12 +15,17 @@ import { RadialDensityProfile } from '@/core/renderables/DetailedRingStreamingSy
  */
 type RingSystemInternals = {
   pool: InstancePool
-  manager: SectorManager
+  cascades: CascadeSet
   generator: AsteroidGenerator
   sectorGrid: SectorGrid
   dustVolume: RingDustVolume | null
+  /** Плавающее начало и его группа-носитель — null без relativeOrigin (кольца) */
+  floatingOrigin: FloatingOrigin | null
+  originGroup: Group | null
   config: AsteroidRingConfig
   densityProfileReady: boolean
+  /** Сигмы размытия кромок (units сцены) — из bleedFraction или ringGapBleedKm/dustBleedKm, см. __setup */
+  bleedSigmaTu: { rocks: number; dust: number }
   __tryBuildDensityProfile(): void
 }
 
@@ -41,3 +49,14 @@ export const generatorConfigOf = (generator: AsteroidGenerator): GeneratorConfig
 /** Поле `densityProfile` приватно и в SectorGrid, и в AsteroidGenerator — одна форма на оба. */
 export const densityProfileOf = (owner: SectorGrid | AsteroidGenerator): RadialDensityProfile | null =>
   (owner as unknown as { densityProfile: RadialDensityProfile | null }).densityProfile
+
+/** Поле `cellSize` приватно в FloatingOrigin (parameter property конструктора). */
+export const originCellSizeOf = (origin: FloatingOrigin): number =>
+  (origin as unknown as { cellSize: number }).cellSize
+
+/** Ключи активных секторов менеджера — поле `activeSectors` (Map) приватно. */
+export const activeSectorKeysOf = (manager: SectorManager): string[] =>
+  Array.from((manager as unknown as { activeSectors: Map<string, unknown> }).activeSectors.keys())
+
+/** Поле `fadeSpeed` приватно в SectorManager — 1/fadeSeconds конструктора (см. AsteroidRingConfig.fadeSeconds). */
+export const fadeSpeedOf = (manager: SectorManager): number => (manager as unknown as { fadeSpeed: number }).fadeSpeed

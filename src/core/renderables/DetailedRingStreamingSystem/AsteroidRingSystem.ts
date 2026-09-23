@@ -1,20 +1,41 @@
-import { Color, Group, Matrix4, Object3D, RepeatWrapping, Vector3, type IUniform, type Texture } from 'three'
+import {
+  Color,
+  Group,
+  Matrix4,
+  Object3D,
+  PerspectiveCamera,
+  RepeatWrapping,
+  Vector3,
+  type IUniform,
+  type Texture
+} from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
 import type { IRingRenderingObject } from '@/core/models/types'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { getJ2000SecondsFromJD } from '@/core/helpers/jd'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { readRingAlphaProfile, readRingAlphaBins, readRingBandBins } from './RingAlphaReadback'
 import { createDustRadialTexture } from './dust/DustRadialProfile'
 import { createRingBandTexture } from './dust/RingBandTexture'
+import { RadialDensityProfile } from './RadialDensityProfile'
+import { ringLightDirection } from './ringLightDirection'
 import { SectorGrid, SectorGridConfig } from './SectorGrid'
 import { AsteroidGenerator, GeneratorConfig } from './AsteroidGenerator'
 import { InstancePool, PoolLayerConfig } from './InstancePool'
 import { SectorManager, LODThresholds } from './SectorManager'
+import { CascadeSet } from './CascadeSet'
+import type { CascadeSpec } from './cascadeScale'
+import { FloatingOrigin } from './FloatingOrigin'
+import { assertLodInvariant } from './streamerScale'
 import { RingDustVolume } from './dust/RingDustVolume'
 import { installRingDustDebug, type RockDustUniforms } from './dust/RingDustDebug'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
-import { ASTEROID_PROFILES, type AsteroidProfileName } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
+import {
+  ASTEROID_PROFILES,
+  asteroidProfileNameOf,
+  type AsteroidProfileName
+} from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
 import { UpdateContext } from '@/core/UpdateContext'
 import { archetypeLayout, getArchetypeGeometries } from './archetypes/ArchetypeLibrary'
 import type { ShapeModelStorage } from './archetypes/ShapeModelStorage'
@@ -42,6 +63,8 @@ interface AsteroidRingConfig {
   minScale: number
   /** Максимальный масштаб экземпляра */
   maxScale: number
+  /** Показатель степенного закона розыгрыша масштаба; не задан — генератор берёт 1 (прежнее квадратичное смещение к мелким) */
+  sizeExponent?: number
   /** Макс. экземпляров для L0 (geometry) буфера */
   maxL0Instances: number
   /**
@@ -172,6 +195,88 @@ interface AsteroidRingConfig {
   detailAoInfluence: number
   /** Влияние rough-канала из ARM-текстуры */
   detailRoughInfluence: number
+  /**
+   * Относительные координаты камней: матрицы инстансов хранят позицию от центра
+   * сектора, а смещение сектора от ПЛАВАЮЩЕГО НАЧАЛА (квантованного по ячейке
+   * вокруг камеры, см. FloatingOrigin) едет атрибутом instanceOrigin. Нужно
+   * поясу: на десятках а.е. абсолютная позиция в float32 теряет сотни
+   * километров. Кольца оставляют false — прежний абсолютный путь без группы
+   * начала и с нулевым атрибутом.
+   */
+  relativeOrigin: boolean
+  /**
+   * Радиус планеты-хозяина в км; если задан — заменяет чтение
+   * model.parent.physicalObject.radius в __setup (пояс без родителя-планеты
+   * передаёт 0: тень планеты и planetshine гасятся существующими проверками
+   * `<= 0`). undefined — прежнее чтение родителя.
+   */
+  planetRadiusKm?: number
+  /**
+   * Плоскость системы отсчёта. 'equatorial' (дефолт) — сегодняшний поворот
+   * rotateX(90°) в экваториальную плоскость планеты-хозяина. 'system' — без
+   * поворота: орбитальная плоскость движка уже XZ Three с +Y вверх
+   * (ASTRO_TO_THREE, src/core/libs/frames.ts), пояс без родителя лежит в ней
+   * напрямую.
+   */
+  frame?: 'equatorial' | 'system'
+  /**
+   * Сигмы размытия кромок как доля ШИРИНЫ кольца (в единицах сцены) вместо
+   * ringGapBleedKm/dustBleedKm — масштабно-инвариантно для пояса любого
+   * радиуса. Считается один раз в __setup, см. bleedSigmaTu.
+   */
+  bleedFraction?: { rocks: number; dust: number }
+  /** Ближнее гашение пыли как доля ТОЛЩИНЫ кольца (единицы сцены) вместо dustNearFadeKm */
+  dustNearFadeFraction?: number
+  /**
+   * Готовый радиальный профиль плотности пояса (см. buildBeltDensityProfile) —
+   * бины в долях ширины кольца [0, 1]. Если задан, RadialDensityProfile строится
+   * из него сразу в __setup, БЕЗ текстуры кольца (ringGapsFromTexture для этого
+   * пути не читается — у пояса нет 2D-текстуры кольца).
+   */
+  densityProfileSource?: Float32Array
+  /**
+   * Высота вертикального слоя сетки секторов в км; не задана или ≥ толщины —
+   * один слой на всю толщину (плоская сетка, прежний путь колец). Задана и
+   * меньше толщины — объёмная сетка (несколько слоёв по Y), и генератор
+   * обязан рисовать высоту камня ВНУТРИ своей ячейки (см. GeneratorConfig.volumetric
+   * в __setup): порознь эти два флага размазали бы камни по всей толщине
+   * вокруг центра каждой ячейки.
+   */
+  cellHeightKm?: number
+  /**
+   * Средний период вращения камней вокруг своей оси, часы; 0 (дефолт) — вращение
+   * выключено (uSpinPeriod 0, GLSL-ветка не исполняется — прежний вид). Конверсия
+   * в секунды симуляции (×3600) — на CPU при установке юниформа (см. __setup).
+   * Время вращения идёт по ctx.epoch (см. updateObject), не по рендер-часам.
+   */
+  spinPeriodHours: number
+  /**
+   * Розыгрыш Бернулли для секторов с weighted < 0.5 (см. SectorGridConfig).
+   * Дефолт false — кольца получают старый код побайтно; пояс задаёт true в
+   * configOverrides (AsteroidBelt.__createStreamer): у него много секторов с
+   * 0 < weighted < 1, и без розыгрыша они гарантированно теряли бы камень.
+   */
+  stochasticCount: boolean
+  /**
+   * Каскады классов размеров: по спецификации — своя сетка, генератор и доля
+   * пула (см. __setup), общий пул и билборд-материал. Не задано — один каскад
+   * из сегодняшних полей конфига (cellSizeKm/minScale/maxScale/lodThresholdsKm/
+   * densityPerUnit) — путь колец, побайтно как раньше.
+   */
+  cascades?: CascadeSpec[]
+  /**
+   * Запас отсечения секторов вокруг видимого конуса: множитель fov камеры
+   * отсечения (см. updateObject) — секторы вокруг кадра населяются заранее, и
+   * поворот камеры находит их уже готовыми вместо резкого появления за 0.25 с.
+   * Цена — больше активных секторов, примерно пропорционально телесному углу
+   * (кв. масштаба). Не задан или 1 — путь БЕЗ отдельной камеры отсечения:
+   * матрица берётся из camera.projectionMatrix как раньше (кольца остаются
+   * бит-в-бит — реальная камера сцены может нести настройки проекции, которых
+   * у пересобранной камеры отсечения не будет).
+   */
+  cullFovScale?: number
+  /** Длительность проявления сектора, секунды; не задана — 0.25 (прежнее поведение) */
+  fadeSeconds?: number
 }
 
 /**
@@ -221,7 +326,10 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   detailBrightness: 1.6,
   detailNormalScale: 1.0,
   detailAoInfluence: 0.8,
-  detailRoughInfluence: 0.7
+  detailRoughInfluence: 0.7,
+  relativeOrigin: false,
+  spinPeriodHours: 0,
+  stochasticCount: false
 }
 
 /**
@@ -231,21 +339,34 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
  *
  * Состоит из:
  * - SectorGrid: полярная сетка секторов
- * - SectorManager: lifecycle секторов, LOD-решения
+ * - CascadeSet: список SectorManager (lifecycle секторов, LOD-решения); кольцо — набор из одного
  * - InstancePool: GPU-буферы (L0 geometry + L1 billboard)
  * - AsteroidGenerator: детерминированная процедурная генерация
  */
 class AsteroidRingSystem extends Group {
   public model: Actor
 
+  /** Первый каскад — совместимость с путём колец (там он единственный) */
   declare private sectorGrid: SectorGrid
   declare private generator: AsteroidGenerator
+  /** Сетки/генераторы ВСЕХ каскадов — density-профиль и debug-статистика идут по ним, не по первому */
+  declare private cascadeGrids: SectorGrid[]
+  declare private cascadeGenerators: AsteroidGenerator[]
   declare private pool: InstancePool
-  declare private manager: SectorManager
+  declare private cascades: CascadeSet
 
   private readonly config: AsteroidRingConfig
 
   private dustVolume: RingDustVolume | null = null
+
+  /**
+   * Плавающее начало и группа-носитель мешей пула: при relativeOrigin меши —
+   * дети группы, её position держит начало (CPU, double через иерархию), а
+   * атрибут instanceOrigin — смещение сектора от него. null — прежний путь
+   * колец: меши прямые дети системы, начала нет.
+   */
+  private floatingOrigin: FloatingOrigin | null = null
+  private originGroup: Group | null = null
 
   /** Реестр пасса пыли; null — объём в графе есть, но пасс его не рисует (тесты, автономные сцены) */
   private readonly dustRegistry: DepthVolumeRegistry | null
@@ -263,6 +384,12 @@ class AsteroidRingSystem extends Group {
   private readonly _lightWorldPos = new Vector3()
   private readonly _localLightDir = new Vector3()
 
+  /**
+   * Камера отсечения — используется ТОЛЬКО для построения расширенной
+   * view-projection при cullFovScale (см. updateObject); никогда не рендерит.
+   */
+  private readonly _cullCamera = new PerspectiveCamera()
+
   /** Флаг: система была деактивирована (parent invisible) */
   private wasDeactivated = false
 
@@ -275,6 +402,9 @@ class AsteroidRingSystem extends Group {
   private densityProfileReady = false
   private ringInnerTU = 0
   private ringOuterTU = 0
+
+  /** Сигмы размытия кромок (units сцены): из bleedFraction × ширина или из ringGapBleedKm/dustBleedKm — см. __setup */
+  private bleedSigmaTu: { rocks: number; dust: number } = { rocks: 0, dust: 0 }
 
   public constructor(
     model: Actor,
@@ -326,13 +456,36 @@ class AsteroidRingSystem extends Group {
     if (data.planetshineStrength !== undefined) overrides.planetshineStrength = data.planetshineStrength
     if (data.layerShadowStrength !== undefined) overrides.layerShadowStrength = data.layerShadowStrength
     if (data.bandTintStrength !== undefined) overrides.bandTintStrength = data.bandTintStrength
-    // Имя профиля приходит строкой из JSON — неизвестное тихо игнорируем
-    // (останется дефолт), чтобы опечатка в редакторе данных не роняла рендер
-    if (data.profile !== undefined && data.profile in ASTEROID_PROFILES) {
-      overrides.profile = data.profile as AsteroidProfileName
+    if (data.spinPeriodHours !== undefined) overrides.spinPeriodHours = data.spinPeriodHours
+    // Имя профиля приходит строкой из JSON — неизвестное тихо становится
+    // 'stony' (asteroidProfileNameOf), чтобы опечатка в редакторе данных не
+    // роняла рендер; отсутствующее поле оставляет прежний дефолт нетронутым
+    if (data.profile !== undefined) {
+      overrides.profile = asteroidProfileNameOf(data.profile)
     }
 
     return overrides
+  }
+
+  /**
+   * Единственный каскад из сегодняшних полей конфига — путь колец без набора
+   * каскадов (cfg.cascades не задан). Сетка/генератор/пороги строятся из этой
+   * спецификации побайтно так же, как раньше строились напрямую из cfg.
+   */
+  private static __singleCascadeSpec(cfg: AsteroidRingConfig): CascadeSpec {
+    return {
+      sizeRangeKm: [cfg.asteroidSizeKm, cfg.asteroidSizeKm],
+      typicalSizeKm: cfg.asteroidSizeKm,
+      populationRadiusKm: cfg.lodThresholdsKm.l1,
+      spacingKm: 0,
+      cellSizeKm: cfg.cellSizeKm,
+      cellHeightKm: cfg.cellSizeKm,
+      lodThresholdsKm: cfg.lodThresholdsKm,
+      densityPerUnit: cfg.densityPerUnit,
+      instanceDemand: 0,
+      minScale: cfg.minScale,
+      maxScale: cfg.maxScale
+    }
   }
 
   public __setup(): void {
@@ -342,37 +495,43 @@ class AsteroidRingSystem extends Group {
     const innerRadius = toThreeJSUnits(cfg.innerRadiusKm)
     const outerRadius = toThreeJSUnits(cfg.outerRadiusKm)
     const thickness = toThreeJSUnits(cfg.thicknessKm)
-    const cellSize = toThreeJSUnits(cfg.cellSizeKm)
     const asteroidSize = toThreeJSUnits(cfg.asteroidSizeKm)
 
-    const l0MaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l0)
-    const l1MaxDist = toThreeJSUnits(cfg.lodThresholdsKm.l1)
-    const l0NearEnter = toThreeJSUnits(cfg.lodThresholdsKm.l0Near)
-    const l0NearExit = toThreeJSUnits(cfg.lodThresholdsKm.l0NearExit)
+    // Каскад на класс размеров; без cascades — один каскад по сегодняшним
+    // полям конфига, то есть путь колец (см. __singleCascadeSpec)
+    const specs: CascadeSpec[] = cfg.cascades ?? [AsteroidRingSystem.__singleCascadeSpec(cfg)]
+    // Порог L1 billboard — самый крупный каскад (последний, радиус заселения
+    // растёт с классом): билборд-материал один на все каскады
+    const l1MaxDist = toThreeJSUnits(specs[specs.length - 1].lodThresholdsKm.l1)
 
     // Радиусы кольца в three-units — для readback профиля (см. updateObject)
     this.ringInnerTU = innerRadius
     this.ringOuterTU = outerRadius
 
-    // --- SectorGrid ---
-    const gridConfig: SectorGridConfig = {
-      innerRadius,
-      outerRadius,
-      cellSize,
-      ringId: cfg.ringId,
-      densityPerUnit: cfg.densityPerUnit
-    }
-    this.sectorGrid = new SectorGrid(gridConfig)
+    // Сигмы размытия кромок: доля ширины кольца (масштабно-инвариантно для
+    // пояса) при bleedFraction, иначе прежний путь — км из конфига
+    this.bleedSigmaTu =
+      cfg.bleedFraction !== undefined
+        ? {
+            rocks: cfg.bleedFraction.rocks * (outerRadius - innerRadius),
+            dust: cfg.bleedFraction.dust * (outerRadius - innerRadius)
+          }
+        : { rocks: toThreeJSUnits(cfg.ringGapBleedKm), dust: toThreeJSUnits(cfg.dustBleedKm) }
 
-    // --- AsteroidGenerator ---
-    const genConfig: GeneratorConfig = {
-      thickness,
-      minScale: cfg.minScale,
-      maxScale: cfg.maxScale,
-      // Раскладка по архетипам с учётом размера камня (см. AsteroidGenerator.pickArchetype)
-      profile: cfg.profile
+    // --- Плавающее начало (только пояс) ---
+    // Ячейка начала — ячейка САМОГО КРУПНОГО каскада (specs[последний]):
+    // офсеты камня от начала ограничены радиусом заселения этого же каскада
+    // (самым большим), поэтому его ячейка одинаково безопасна для float32, что
+    // и мелкая, но крупнее на порядки — переезд на порядки реже. Путь колец
+    // (единственный каскад, см. __singleCascadeSpec) даёт то же самое
+    // cfg.cellSizeKm — число не меняется.
+    const originCellSize = toThreeJSUnits(specs[specs.length - 1].cellSizeKm)
+    this.floatingOrigin = cfg.relativeOrigin ? new FloatingOrigin(originCellSize) : null
+    this.originGroup = cfg.relativeOrigin ? new Group() : null
+    if (this.originGroup) {
+      this.originGroup.name = 'AsteroidOriginGroup'
+      this.add(this.originGroup)
     }
-    this.generator = new AsteroidGenerator(genConfig)
 
     // --- InstancePool ---
     const l0PoolConfig: PoolLayerConfig = { maxInstances: cfg.maxL0Instances }
@@ -397,12 +556,15 @@ class AsteroidRingSystem extends Group {
       l0Geometries,
       nearGeometries,
       asteroidSize * 2.5,
-      this.model
+      this.model,
+      cfg.cascades !== undefined
     )
 
-    // Добавить рендер-объекты (L0 + L1)
+    // Добавить рендер-объекты (L0 + L1). С плавающим началом они дети группы
+    // начала — её position вносит начало в modelViewMatrix на CPU, в double.
+    const renderParent: Group = this.originGroup ?? this
     for (const obj of this.pool.getRenderObjects()) {
-      this.add(obj)
+      renderParent.add(obj)
     }
 
     // Деформация силуэта — только L0 (у billboard-материала этих юниформ нет)
@@ -410,6 +572,8 @@ class AsteroidRingSystem extends Group {
     l0ShapeMaterial.uniforms.uShapeAmpMin.value = cfg.shapeAmpMin
     l0ShapeMaterial.uniforms.uShapeAmpMax.value = cfg.shapeAmpMax
     l0ShapeMaterial.uniforms.uShapeFreq.value = cfg.shapeFreq
+    // Часы данных → секунды симуляции (единицы uSpinTime, см. updateObject); 0 остаётся 0
+    l0ShapeMaterial.uniforms.uSpinPeriod.value = cfg.spinPeriodHours * 3600
 
     // Реальные модели форм в хвост библиотеки — асинхронно, поверх заглушек
     this.__requestShapeModels(asteroidSize)
@@ -446,21 +610,102 @@ class AsteroidRingSystem extends Group {
     // Установить maxDistance для billboard материала
     this.pool.billboardMaterial.uniforms.uMaxDistance.value = l1MaxDist
 
-    // --- SectorManager ---
-    const thresholds: LODThresholds = {
-      l0MaxDistance: l0MaxDist,
-      l1MaxDistance: l1MaxDist,
-      nearEnterDistance: l0NearEnter,
-      nearExitDistance: l0NearExit
+    // --- Каскады: сетка + генератор + менеджер на класс размеров, общий пул ---
+    // 32 на каскад: при 524 ячейках/каскад прежний бюджет 4 заселял бы поле
+    // сотнями кадров; путь колец бюджет не трогает (дефолт SectorManager — 4)
+    const activationBudget = cfg.cascades ? 32 : 4
+    // Доля пула на каскад; без набора каскадов (cfg.cascades не задан) — Infinity, путь колец не меняется
+    // Доля считается от ВСЕГО пула, а не от буфера билбордов: счётчик занятых у
+    // каскада учитывает экземпляры любого тира. Ёмкости берём у пула — после
+    // раскладки по архетипам они больше заявленных в конфиге. Свои пределы
+    // каждый буфер держит сам: переполнение тира даёт отказ выделения.
+    const pressure = this.pool.getPressureInfo()
+    const poolCapacity = pressure.l0.capacity + pressure.near.capacity + pressure.l1.capacity
+    const capacityShare = cfg.cascades ? Math.floor(poolCapacity / specs.length) : Infinity
+    const grids: SectorGrid[] = []
+    const generators: AsteroidGenerator[] = []
+    const managers = specs.map((spec, index) => {
+      assertLodInvariant(spec.cellSizeKm, spec.lodThresholdsKm)
+
+      const gridConfig: SectorGridConfig = {
+        innerRadius,
+        outerRadius,
+        cellSize: toThreeJSUnits(spec.cellSizeKm),
+        // Множитель разводит сиды секторов между каскадами; у одиночного
+        // каскада (кольцо) индекс всегда 0 — сид не меняется
+        ringId: cfg.cascades ? cfg.ringId * 16 + index : cfg.ringId,
+        densityPerUnit: spec.densityPerUnit,
+        stochasticCount: cfg.stochasticCount,
+        heightExtent: thickness,
+        // Каскады берут высоту ячейки из своей спецификации; путь колец —
+        // прежнее поведение из cfg.cellHeightKm (не задан — плоская сетка)
+        cellHeight: cfg.cascades
+          ? toThreeJSUnits(spec.cellHeightKm)
+          : cfg.cellHeightKm !== undefined
+            ? toThreeJSUnits(cfg.cellHeightKm)
+            : undefined
+      }
+      const grid = new SectorGrid(gridConfig)
+      grids.push(grid)
+
+      const genConfig: GeneratorConfig = {
+        thickness,
+        minScale: spec.minScale,
+        maxScale: spec.maxScale,
+        sizeExponent: cfg.sizeExponent,
+        // Раскладка по архетипам с учётом размера камня (см. AsteroidGenerator.pickArchetype)
+        profile: cfg.profile,
+        relativeToSector: cfg.relativeOrigin,
+        // Объёмность одна на сетку и генератор своего каскада: врозь они дают
+        // камни, размазанные по всей толщине вокруг центра ячейки
+        volumetric: grid.volumetric
+      }
+      const generator = new AsteroidGenerator(genConfig)
+      generators.push(generator)
+
+      const thresholds: LODThresholds = {
+        l0MaxDistance: toThreeJSUnits(spec.lodThresholdsKm.l0),
+        l1MaxDistance: toThreeJSUnits(spec.lodThresholdsKm.l1),
+        nearEnterDistance: toThreeJSUnits(spec.lodThresholdsKm.l0Near),
+        nearExitDistance: toThreeJSUnits(spec.lodThresholdsKm.l0NearExit)
+      }
+
+      return new SectorManager(
+        grid,
+        generator,
+        this.pool,
+        thresholds,
+        this.floatingOrigin?.origin ?? null,
+        capacityShare,
+        activationBudget,
+        cfg.fadeSeconds
+      )
+    })
+
+    this.sectorGrid = grids[0]
+    this.generator = generators[0]
+    this.cascadeGrids = grids
+    this.cascadeGenerators = generators
+    this.cascades = new CascadeSet(managers)
+
+    // --- Процедурный профиль плотности пояса (см. densityProfileSource) ---
+    // Готовый массив вместо текстуры: строим сразу, __tryBuildDensityProfile
+    // (путь текстуры) на ready-флаге дальше не сработает. ТОТ ЖЕ объект — во
+    // ВСЕ каскады: щели и сгущения обязаны совпасть между классами размеров.
+    if (cfg.densityProfileSource) {
+      const beltDensityProfile = new RadialDensityProfile(cfg.densityProfileSource, innerRadius, outerRadius)
+      for (const grid of grids) grid.setDensityProfile(beltDensityProfile)
+      for (const gen of generators) gen.setDensityProfile(beltDensityProfile)
+      this.densityProfileReady = true
     }
-    this.manager = new SectorManager(this.sectorGrid, this.generator, this.pool, thresholds)
 
     // --- Тень планеты (умбра) — общая для камней/пыли/2D-кольца ---
     // Радиус планеты в ring-local (начало ring-local = центр планеты, тот же
     // источник, что у RingShader). Прокидываем в материалы камней НЕЗАВИСИМО от
     // пыли: тень камней (ringDustPlanetShadow) не должна отключаться вместе с
-    // дымкой. 0 при отсутствии планеты → тень выключена.
-    const planetRadiusKm = this.model.parent?.physicalObject?.getAttribute('radius', 0) ?? 0
+    // дымкой. 0 при отсутствии планеты → тень выключена. Пояс без родителя
+    // передаёт planetRadiusKm явно (обычно 0); кольца читают родителя как раньше.
+    const planetRadiusKm = cfg.planetRadiusKm ?? (this.model.parent?.physicalObject?.getAttribute('radius', 0) ?? 0)
     const planetRadius = toThreeJSUnits(planetRadiusKm)
     const l0Mat = this.pool.geometryMaterial
     for (const uniforms of [l0Mat.uniforms, this.pool.billboardMaterial.uniforms]) {
@@ -472,7 +717,8 @@ class AsteroidRingSystem extends Group {
       const dustScaleHeight = toThreeJSUnits(cfg.dustScaleHeightKm)
       // Калибровка спеки: tau грейзинг-луча через всё кольцо в средней плоскости = dustTauGrazing
       const dustDensity = cfg.dustTauGrazing / (outerRadius - innerRadius)
-      const dustNearFade = toThreeJSUnits(cfg.dustNearFadeKm)
+      const dustNearFade =
+        cfg.dustNearFadeFraction !== undefined ? cfg.dustNearFadeFraction * thickness : toThreeJSUnits(cfg.dustNearFadeKm)
       const dustPlanetRadius = planetRadius
 
       this.dustVolume = new RingDustVolume({
@@ -520,8 +766,18 @@ class AsteroidRingSystem extends Group {
       uniforms.uBandTintStrength.value = cfg.bandTintStrength
     }
 
-    // --- Поворот ---
-    this.rotateX(degToRad(90))
+    // --- Пыль процедурного профиля пояса — тем же путём, что и профиль текстуры
+    // (см. __applyDustRadialBins), теперь когда пул и объём дымки уже собраны
+    if (cfg.densityProfileSource) {
+      this.__applyDustRadialBins(cfg.densityProfileSource)
+    }
+
+    // --- Поворот в экваториальную плоскость планеты ---
+    // 'system' (пояс без родителя): орбитальная плоскость движка уже XZ,
+    // поворот не нужен (см. докблок AsteroidRingConfig.frame)
+    if ((cfg.frame ?? 'equatorial') === 'equatorial') {
+      this.rotateX(degToRad(90))
+    }
 
     this.name = 'AsteroidRingSystem'
   }
@@ -567,10 +823,25 @@ class AsteroidRingSystem extends Group {
   public updateObject(ctx: UpdateContext): void {
     const dt = ctx.delta
 
+    // uSpinTime — время СИМУЛЯЦИИ, не рендер-часы: ускорение времени и паузы
+    // обязаны вращать камни так же, как меридиан планет (см.
+    // OrientationModel.getMeridianAngleByEpoch). ctx.epoch — юлианские дни;
+    // переводим в секунды от J2000 и сворачиваем в double по кратному
+    // 12·uSpinPeriod (тот же приём, что BlackHoleImpostor.updateObject) — на
+    // этой волне любой per-instance хеш (m/12, см. шейдер) даёт целое число
+    // оборотов, свёртка не рвёт фазу. period <= 0 — вращение выключено гейтом
+    // в шейдере, время не считаем (деление на 0 не нужно).
+    const spinPeriod = this.pool.geometryMaterial.uniforms.uSpinPeriod.value
+    if (spinPeriod > 0) {
+      const simSeconds = getJ2000SecondsFromJD(ctx.epoch)
+      const wrap = 12 * spinPeriod
+      this.pool.geometryMaterial.uniforms.uSpinTime.value = simSeconds - Math.floor(simSeconds / wrap) * wrap
+    }
+
     // Проверить видимость parent'а
     if (!this.isEffectivelyVisible()) {
       if (!this.wasDeactivated) {
-        this.manager.deactivateAll()
+        this.cascades.deactivateAll()
         this.pool.commitUpdates()
         this.wasDeactivated = true
       }
@@ -592,6 +863,23 @@ class AsteroidRingSystem extends Group {
     this._localCamPos.copy(camera.getWorldPosition(this._worldPos))
     this.worldToLocal(this._localCamPos)
 
+    // Переезд плавающего начала (только пояс): группа-носитель уезжает за
+    // камерой, все живые сектора переписывают своё смещение от нового начала.
+    // Сам поиск секторов и отсечение по фрустуму остаются в АБСОЛЮТНЫХ
+    // координатах системы — относительны только хранимые матрицы.
+    if (this.floatingOrigin && this.originGroup) {
+      const shift = this.floatingOrigin.update(this._localCamPos)
+      if (shift) {
+        const origin = this.floatingOrigin.origin
+        this.originGroup.position.copy(origin)
+        this.cascades.rebaseOrigins(shift)
+        // Ring-local абсолют для пыли/тени/полос собирается в шейдере как
+        // «позиция от начала + смещение начала» (см. uOriginOffset)
+        this.pool.geometryMaterial.uniforms.uOriginOffset.value.copy(origin)
+        this.pool.billboardMaterial.uniforms.uOriginOffset.value.copy(origin)
+      }
+    }
+
     // Полярные координаты камеры в local space
     const cameraAngle = Math.atan2(this._localCamPos.z, this._localCamPos.x)
     const cameraRadius = Math.sqrt(
@@ -600,9 +888,10 @@ class AsteroidRingSystem extends Group {
 
     // Направление на звезду в ring-local — нужно для тени планеты на камни
     // (ringDustPlanetShadow), поэтому считаем и прокидываем НЕЗАВИСИМО от пыли.
+    // Пояс: звезда в начале ring-local — направление берётся от камеры (см. ringLightDirection)
     this._localLightDir.copy(this._lightWorldPos)
     this.worldToLocal(this._localLightDir)
-    this._localLightDir.normalize()
+    ringLightDirection(this._localLightDir, this._localCamPos, this._localLightDir)
 
     const l0Material = this.pool.geometryMaterial
     l0Material.uniforms.uDustLightDirRing.value.copy(this._localLightDir)
@@ -615,15 +904,30 @@ class AsteroidRingSystem extends Group {
       this.pool.billboardMaterial.uniforms.uDustCamRingPos.value.copy(this._localCamPos)
     }
 
-    // View-projection matrix для frustum culling
-    this._viewProjMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    // View-projection matrix для frustum culling. cullFovScale не задан или
+    // равен 1 — прежний путь БЕЗ пересборки: матрица берётся из
+    // camera.projectionMatrix напрямую (кольца остаются бит-в-бит).
+    const cullFovScale = this.config.cullFovScale
+    if (cullFovScale !== undefined && cullFovScale !== 1) {
+      const cull = this._cullCamera
+      cull.fov = Math.min(camera.fov * cullFovScale, 179)
+      cull.aspect = camera.aspect
+      cull.near = camera.near
+      cull.far = camera.far
+      // zoom тоже входит в проекцию — иначе конус отсечения разошёлся бы с кадром
+      cull.zoom = camera.zoom
+      cull.updateProjectionMatrix()
+      this._viewProjMatrix.multiplyMatrices(cull.projectionMatrix, camera.matrixWorldInverse)
+    } else {
+      this._viewProjMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    }
 
     // Local-to-world matrix системы
     this.updateWorldMatrix(true, false)
     const localToWorld = this.matrixWorld
 
     // Обновить менеджер секторов
-    this.manager.update(cameraAngle, cameraRadius, this._viewProjMatrix, localToWorld, dt)
+    this.cascades.update(cameraAngle, cameraRadius, this._localCamPos.y, this._viewProjMatrix, localToWorld, dt)
 
     // Коммит изменений в GPU
     this.pool.commitUpdates()
@@ -676,13 +980,14 @@ class AsteroidRingSystem extends Group {
     const ringData = this.model.renderingObject?.getAttribute('data') as IRingRenderingObject | undefined
     const profile = readRingAlphaProfile(texture, this.ringInnerTU, this.ringOuterTU, {
       alphaTest: ringData?.alphaTest ?? 0,
-      blurRadius: toThreeJSUnits(this.config.ringGapBleedKm)
+      blurRadius: this.bleedSigmaTu.rocks
     })
     if (profile) {
       // SectorGrid — верное КОЛИЧЕСТВО (вес по средней альфе), генератор —
       // КОНЦЕНТРАЦИЯ (радиус ∝ альфе). Вместе → плотность колечка = base.
-      this.sectorGrid.setDensityProfile(profile)
-      this.generator.setDensityProfile(profile)
+      // ТОТ ЖЕ объект — во все каскады (у колец каскад один, цикл не меняет путь)
+      for (const grid of this.cascadeGrids) grid.setDensityProfile(profile)
+      for (const gen of this.cascadeGenerators) gen.setDensityProfile(profile)
     }
 
     this.__applyDustRadialProfile(texture)
@@ -726,7 +1031,7 @@ class AsteroidRingSystem extends Group {
    */
   private __applyRingBandProfile(texture: Texture): void {
     const bins = readRingBandBins(texture, this.ringInnerTU, this.ringOuterTU, {
-      blurRadius: toThreeJSUnits(this.config.dustBleedKm)
+      blurRadius: this.bleedSigmaTu.dust
     })
     if (!bins) return
 
@@ -752,10 +1057,19 @@ class AsteroidRingSystem extends Group {
 
   private __applyDustRadialProfile(texture: Texture): void {
     const bins = readRingAlphaBins(texture, this.ringInnerTU, this.ringOuterTU, {
-      blurRadius: toThreeJSUnits(this.config.dustBleedKm)
+      blurRadius: this.bleedSigmaTu.dust
     })
     if (!bins) return
 
+    this.__applyDustRadialBins(bins)
+  }
+
+  /**
+   * Общая часть текстурного и процедурного (densityProfileSource) путей: бины
+   * альфы → 1D-текстура профиля пыли → юниформы во все три материала модели
+   * RingDust (см. DustRadialProfile). Нечитаемо/вырождено — модуляция не трогается.
+   */
+  private __applyDustRadialBins(bins: Float32Array): void {
     const radial = createDustRadialTexture(bins)
     if (!radial) return
 
@@ -826,15 +1140,26 @@ class AsteroidRingSystem extends Group {
     pendingRemoval: number
     poolPressure: ReturnType<InstancePool['getPressureInfo']>
   } {
-    const managerInfo = this.manager.getDebugInfo()
+    const { perCascade, activeSectors } = this.cascades.getDebugInfo()
     const poolInfo = this.pool.getActiveCount()
 
+    // Кольцо — один каскад, сумма по perCascade численно совпадает с прежним managerInfo
+    const sectorsByLod = perCascade.reduce(
+      (sum, info) => ({
+        l0: sum.l0 + info.byLod.l0,
+        near: sum.near + info.byLod.near,
+        l1: sum.l1 + info.byLod.l1
+      }),
+      { l0: 0, near: 0, l1: 0 }
+    )
+    const pendingRemoval = perCascade.reduce((sum, info) => sum + info.pendingRemoval, 0)
+
     return {
-      totalSectors: this.sectorGrid.totalSectorCount,
-      activeSectors: managerInfo.activeSectors,
-      sectorsByLod: managerInfo.byLod,
+      totalSectors: this.cascadeGrids.reduce((sum, grid) => sum + grid.totalSectorCount, 0),
+      activeSectors,
+      sectorsByLod,
       instances: poolInfo,
-      pendingRemoval: managerInfo.pendingRemoval,
+      pendingRemoval,
       poolPressure: this.pool.getPressureInfo()
     }
   }
@@ -843,7 +1168,7 @@ class AsteroidRingSystem extends Group {
    * Полный сброс (например, при изменении параметров кольца).
    */
   public reset(): void {
-    this.manager.deactivateAll()
+    this.cascades.deactivateAll()
     this.pool.reset()
   }
 }

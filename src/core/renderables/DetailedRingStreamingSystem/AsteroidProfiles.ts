@@ -129,3 +129,12 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
     detailSet: 'rocks_ground_04'
   }
 }
+
+/**
+ * Валидирует имя профиля, пришедшее строкой из данных (JSON редактора) —
+ * незнакомое имя тихо становится 'stony', чтобы опечатка не роняла рендер.
+ * Общий гейт для колец (AsteroidRingSystem) и пояса (AsteroidBelt).
+ */
+export function asteroidProfileNameOf(name: string): AsteroidProfileName {
+  return name in ASTEROID_PROFILES ? (name as AsteroidProfileName) : 'stony'
+}

@@ -80,12 +80,12 @@ function buildScene(): { grid: SectorGrid; generator: AsteroidGenerator; pool: I
 describe('SectorManager: Near-LOD по ближайшей точке сектора с гистерезисом', () => {
   it('distClosest ≤ nearEnterDistance → сектор активируется в Near (ненулевые аллокации в Near-стримах)', () => {
     const { grid, pool, manager } = buildScene()
-    const info0 = grid.getSectorInfo(0, 0)
+    const info0 = grid.getSectorInfo(0, 0, 0)
     const vpMatrix = buildTightViewProjection(info0.centerX, info0.centerZ, 1.0)
     const expectedGroupCounts = computeGroupCounts(info0.seed, info0.instanceCount, K)
 
     // Камера ровно в центре сектора: distClosest = max(0, 0 - boundingRadius) = 0.
-    manager.update(info0.centerAngle, info0.centerRadius, vpMatrix, identity, 1.0)
+    manager.update(info0.centerAngle, info0.centerRadius, 0, vpMatrix, identity, 1.0)
 
     expect(manager.activeCount).toBe(1)
     pool.commitUpdates()
@@ -106,12 +106,12 @@ describe('SectorManager: Near-LOD по ближайшей точке секто�
 
   it('гистерезис: distClosest осциллирует между enter и exit → сектор не флипает (остаётся Near, outgoing не возникает)', () => {
     const { grid, pool, manager } = buildScene()
-    const info0 = grid.getSectorInfo(0, 0)
+    const info0 = grid.getSectorInfo(0, 0, 0)
     const vpMatrix = buildTightViewProjection(info0.centerX, info0.centerZ, 1.0)
     const br = info0.boundingRadius
 
     // Активировать в Near.
-    manager.update(info0.centerAngle, info0.centerRadius, vpMatrix, identity, 1.0)
+    manager.update(info0.centerAngle, info0.centerRadius, 0, vpMatrix, identity, 1.0)
     expect(pool.getPressureInfo().near.used).toBe(info0.instanceCount)
 
     // distClosest = 5 и 7 — ОБА между enter(3) и exit(8). Стейтлес-порог по
@@ -126,7 +126,7 @@ describe('SectorManager: Near-LOD по ближайшей точке секто�
     // остался бы виден в pressure (частичная аллокация Geometry-стрима).
     for (let i = 0; i < 6; i++) {
       const offset = i % 2 === 0 ? offsetA : offsetB
-      manager.update(info0.centerAngle, info0.centerRadius + offset, vpMatrix, identity, 0.001)
+      manager.update(info0.centerAngle, info0.centerRadius + offset, 0, vpMatrix, identity, 0.001)
     }
 
     const pressure = pool.getPressureInfo()
@@ -138,20 +138,20 @@ describe('SectorManager: Near-LOD по ближайшей точке секто�
 
   it('distClosest > nearExitDistance → кросс-фейд Near→Geometry, архетип по стримам k совпадает', () => {
     const { grid, pool, manager } = buildScene()
-    const info0 = grid.getSectorInfo(0, 0)
+    const info0 = grid.getSectorInfo(0, 0, 0)
     const vpMatrix = buildTightViewProjection(info0.centerX, info0.centerZ, 1.0)
     const br = info0.boundingRadius
     const expectedGroupCounts = computeGroupCounts(info0.seed, info0.instanceCount, K)
 
     // 1) Активируем Near, большая delta мгновенно осаживает fade к 1.
-    manager.update(info0.centerAngle, info0.centerRadius, vpMatrix, identity, 1.0)
+    manager.update(info0.centerAngle, info0.centerRadius, 0, vpMatrix, identity, 1.0)
     pool.commitUpdates()
     expect(pool.nearMeshes.map((m) => m.count)).toEqual(expectedGroupCounts)
 
     // 2) Уводим камеру так, что distClosest(15) > nearExitDistance(8), но
     // dist по-прежнему <= l0MaxDistance(40) — переход Near → Geometry (не Billboard).
     const offsetExit = br + 15
-    manager.update(info0.centerAngle, info0.centerRadius + offsetExit, vpMatrix, identity, 1.0)
+    manager.update(info0.centerAngle, info0.centerRadius + offsetExit, 0, vpMatrix, identity, 1.0)
     pool.commitUpdates()
 
     expect(manager.activeCount).toBe(1)

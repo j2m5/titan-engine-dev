@@ -106,4 +106,44 @@ describe('RingDustVolume', () => {
   it('без реестра живёт автономно: dispose не падает', () => {
     expect(() => makeVolume().dispose()).not.toThrow()
   })
+
+  it('без radialProfile модуляция выключена; radialProfile даёт текстуру и масштаб > 0', () => {
+    const plain = makeVolume().dustMaterial.uniforms
+    expect(plain.uDustRadialMap.value).toBeNull()
+    expect(plain.uDustRadialMapScale.value).toBe(0)
+
+    const bins = new Float32Array([1, 1, 0.2, 1, 1, 1, 1, 1])
+    const volume = new RingDustVolume({
+      innerRadius: 70,
+      outerRadius: 140,
+      dustScaleHeight: 0.5,
+      dustDensity: 0.01,
+      dustColor: new Color(0x9b968c),
+      anglePower: 2,
+      nearFade: 20,
+      maxSteps: 16,
+      planetRadius: 0,
+      radialProfile: bins
+    })
+    const u = volume.dustMaterial.uniforms
+    expect(u.uDustRadialMap.value).not.toBeNull()
+    expect(u.uDustRadialMapScale.value).toBeGreaterThan(0)
+  })
+
+  it('lightAtOrigin прокидывается в дефайн материала; по умолчанию его нет', () => {
+    expect(makeVolume().dustMaterial.defines.DUST_LIGHT_AT_ORIGIN).toBeUndefined()
+    const volume = new RingDustVolume({
+      innerRadius: 70,
+      outerRadius: 140,
+      dustScaleHeight: 0.5,
+      dustDensity: 0.01,
+      dustColor: new Color(0x9b968c),
+      anglePower: 2,
+      nearFade: 20,
+      maxSteps: 16,
+      planetRadius: 0,
+      lightAtOrigin: true
+    })
+    expect(volume.dustMaterial.defines.DUST_LIGHT_AT_ORIGIN).toBe('1')
+  })
 })

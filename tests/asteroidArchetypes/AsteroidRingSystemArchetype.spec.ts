@@ -49,7 +49,7 @@ describe('AsteroidRingSystem: запечённый архетип в L0', () => 
   it('LOD-пороги Near-тира из конфига доходят в SectorManager', () => {
     const system = new AsteroidRingSystem(makeFakeActor())
     // Приватный доступ к менеджеру и его thresholds (паттерн соседних спек)
-    const manager = internalsOf(system).manager
+    const manager = internalsOf(system).cascades.first
     const thresholds = thresholdsOf(manager)
 
     // Дефолты: l0Near=2500, l0NearExit=3200 км
@@ -71,7 +71,7 @@ describe('AsteroidRingSystem: запечённый архетип в L0', () => 
       }
     })
 
-    const manager = internalsOf(system).manager
+    const manager = internalsOf(system).cascades.first
     const thresholds = thresholdsOf(manager)
 
     expect(thresholds.nearEnterDistance).toBeCloseTo(toThreeJSUnits(100), 5)

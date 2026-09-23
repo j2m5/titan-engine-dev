@@ -1,5 +1,5 @@
 import { SeededRandom, hashSectorKey } from './SeededRandom'
-import type { SectorBounds } from './SectorGrid'
+import { sectorCenter, type SectorBounds } from './SectorGrid'
 import { RadialDensityProfile } from './RadialDensityProfile'
 import type { AsteroidProfileName } from './AsteroidProfiles'
 import { morphologyRanges, type LibraryCategory, type MorphologyRange } from './archetypes/ArchetypeLibrary'
@@ -53,11 +53,29 @@ interface GeneratorConfig {
   /** Максимальный масштаб экземпляра */
   maxScale: number
   /**
+   * Показатель степени розыгрыша масштаба t = (u1·u2)^sizeExponent, u1,u2 ~ U(0,1).
+   * Не задан или 1 — прежнее t = u1·u2 (смещение к мелким, побайтно как раньше).
+   */
+  sizeExponent?: number
+  /**
    * Профиль породы — раскладка инстансов по архетипам с учётом размера (см.
    * pickArchetype): мелкие камни чаще осколки, крупные — слипшиеся формы.
    * Без профиля раскладка равновероятна по хешу (archetypeForInstance).
    */
   profile?: AsteroidProfileName
+  /**
+   * Позиции камней — ОТНОСИТЕЛЬНО центра сектора (см. sectorCenter), а не
+   * абсолютные в системе кольца. Абсолютную позицию восстанавливает шейдер:
+   * instanceOrigin + instanceMatrix[3].xyz (см. InstancePool.writeOrigins).
+   * Нужно поясу: на десятках а.е. абсолютная позиция теряет в float32 сотни
+   * километров. Кольца флаг не включают — их матрицы побайтно прежние.
+   */
+  relativeToSector?: boolean
+  /**
+   * Границы сектора несут собственную полосу по высоте (объёмная сетка).
+   * false — высота разыгрывается по всей толщине треугольным законом, как у колец.
+   */
+  volumetric?: boolean
 }
 
 /**
@@ -233,10 +251,22 @@ class AsteroidGenerator {
     // Проход 2: ровно прежний цикл генерации — rng-поток не сдвинут ни на байт.
     const rng = new SeededRandom(seed)
     const { thickness, minScale, maxScale } = this.config
+    // Не задан или 1 — прежнее t = u1·u2 побайтно; шейпинг применяется ПОСЛЕ
+    // обоих rng.next(), поэтому реплей archetypeAssignment не сдвигается
+    const sizeExponent = this.config.sizeExponent ?? 1
 
     const r1Sq = bounds.minRadius * bounds.minRadius
     const r2Sq = bounds.maxRadius * bounds.maxRadius
     const halfThickness = thickness * 0.5
+
+    // Центр сектора для относительных позиций — один раз на сектор, в double.
+    // Без флага не считаем вовсе: путь колец не платит за пару тригонометрий
+    const relative = this.config.relativeToSector === true
+    const center = relative ? sectorCenter(bounds) : null
+    const centerX = center ? center.x : 0
+    const centerZ = center ? center.z : 0
+    const centerY = center ? center.y : 0
+    const volumetric = this.config.volumetric === true
 
     for (let i = 0; i < count; i++) {
       // Позиция по радиусу: с профилем — importance sampling ∝ альфе (камни
@@ -248,19 +278,25 @@ class AsteroidGenerator {
       const theta = rng.range(bounds.minAngle, bounds.maxAngle)
       const x = Math.cos(theta) * r
       const z = Math.sin(theta) * r
-      // Вертикаль: треугольное распределение (сумма двух uniform) — пик в средней
-      // плоскости, линейный спад к краям. Равномерный слэб на высокой плотности
-      // рисовал «стенку» с плоскими гранями сверху/снизу; мягкий спад её гасит.
-      const y = (rng.next() + rng.next() - 1) * halfThickness
+      // Относительно центра сектора: центр — в double, вычитание до float32-записи
+      const px: number = relative ? x - centerX : x
+      const pz: number = relative ? z - centerZ : z
+      // Внутри ячейки высота равномерна: профиль колонки задан числом камней в
+      // ячейке (см. triangularMass). Два вызова rng в обеих ветках — поток
+      // случайных чисел у колец не сдвигается ни на вызов
+      const u = rng.next()
+      const v = rng.next()
+      const y = volumetric ? bounds.minY + u * (bounds.maxY - bounds.minY) - centerY : (u + v - 1) * halfThickness
 
       // Поворот: случайные углы Эйлера
       const rx = rng.next() * Math.PI * 2
       const ry = rng.next() * Math.PI * 2
       const rz = rng.next() * Math.PI * 2
 
-      // Масштаб: квадратичное распределение — больше мелких
+      // Масштаб: квадратичное распределение (больше мелких) со степенным шейпингом
       const t = rng.next() * rng.next()
-      const s = minScale + t * (maxScale - minScale)
+      const shaped = sizeExponent === 1 ? t : Math.pow(t, sizeExponent)
+      const s = minScale + shaped * (maxScale - minScale)
 
       // Пер-осевая анизотропия поверх базового скаляра s: ФИКСИРОВАННО ровно
       // три вызова rng.next() — по одному на ось, строго в порядке x, y, z,
@@ -280,7 +316,7 @@ class AsteroidGenerator {
       const k = archetypeOf[i]
       const offset = runningOffsets[k]
       runningOffsets[k] = offset + 16
-      this.composeMatrix(groups[k], offset, x, y, z, rx, ry, rz, sx, sy, sz)
+      this.composeMatrix(groups[k], offset, px, y, pz, rx, ry, rz, sx, sy, sz)
     }
 
     return groups

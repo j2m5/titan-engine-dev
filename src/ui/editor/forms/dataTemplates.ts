@@ -45,7 +45,8 @@ export const renderingDataTemplates: DataTemplate[] = [
       planetshineColor: '#b8ad9c',
       planetshineStrength: 1.5,
       layerShadowStrength: 0.25,
-      bandTintStrength: 1
+      bandTintStrength: 1,
+      spinPeriodHours: 0
     }
   },
   {
@@ -142,6 +143,42 @@ export const renderingDataTemplates: DataTemplate[] = [
       atmosphereDensity: 1,
       exposureBias: 1,
       lightTint: 0
+    }
+  },
+  {
+    value: 'asteroidBelt',
+    label: 'asteroidBelt',
+    // Заготовка по масштабу пояса W26 (Emberon 32 а.е. — Halcyra 72 а.е.)
+    data: {
+      innerRadiusAu: 42,
+      outerRadiusAu: 58,
+      // Толщина задаёт только объём ленты: на плотность и спрос она не влияет
+      thicknessAu: 0.1,
+      sizeRangeKm: [0.5, 60],
+      sizeExponent: 1,
+      spacingKm: 54,
+      profile: 'stony',
+      seed: 1,
+      structure: {
+        edgeSoftness: 0.08,
+        gaps: [
+          { at: 0.35, width: 0.04, depth: 0.85 },
+          { at: 0.62, width: 0.025, depth: 0.7 }
+        ],
+        clumps: [
+          { at: 0.2, width: 0.06, gain: 1.6 },
+          { at: 0.8, width: 0.1, gain: 1.4 }
+        ]
+      },
+      dustEnabled: true,
+      dustColor: '#9b968c',
+      dustTauGrazing: 0.52,
+      dustScaleHeightFraction: 0.333,
+      spinPeriodHours: 8,
+      pointCount: 60000,
+      pointScale: 220,
+      cullFovScale: 1.35,
+      fadeSeconds: 0.8
     }
   }
 ]

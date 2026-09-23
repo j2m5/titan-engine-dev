@@ -1,5 +1,5 @@
 import { Frustum, Matrix4, Sphere, Vector3 } from 'three'
-import { SectorGrid, SectorInfo, SectorBounds } from './SectorGrid'
+import { SectorGrid, SectorInfo, SectorBounds, sectorCenter } from './SectorGrid'
 import { AsteroidGenerator, archetypeForInstance } from './AsteroidGenerator'
 import { InstancePool, LODLevel, Allocation } from './InstancePool'
 
@@ -34,6 +34,8 @@ interface OutgoingLOD {
   lodLevel: LODLevel
   /** Geometry: до K суб-аллокаций (по одной на непустой архетип-стрим); Billboard: одна. */
   allocations: Allocation[]
+  /** Число инстансов тира — снимок state.instanceCount на момент ухода в fade-out, для вычитания из used */
+  instanceCount: number
   fade: number
 }
 
@@ -46,6 +48,8 @@ interface SectorState {
   lodLevel: LODLevel
   /** Geometry: до K суб-аллокаций (по одной на непустой архетип-стрим); Billboard: одна. */
   allocations: Allocation[]
+  /** Число инстансов ТЕКУЩЕГО тира (state.allocations) — снимок для точного вычитания из used */
+  instanceCount: number
   /** Текущее значение fade (0 = невидим, 1 = полностью виден) */
   fade: number
   /** Целевое значение fade */
@@ -77,10 +81,17 @@ class SectorManager {
   private activeSectors: Map<string, SectorState> = new Map()
 
   /** Максимальное количество секторов, активируемых за один кадр */
-  private readonly activationBudget: number = 4
+  private readonly activationBudget: number
 
-  /** Скорость fade (доля за секунду, 1.0 = полный fade за 1 секунду) */
-  private readonly fadeSpeed: number = 4.0
+  /** Максимум живых экземпляров каскада; Infinity — без ограничения (кольца) */
+  private readonly capacityShare: number
+  /** Сумма занятых экземпляров по активным секторам каскада (включая уходящий тир кросс-фейда) */
+  private used: number = 0
+  /** Счётчик отказов активации/смены LOD из-за упора в capacityShare */
+  private capacityFailures: number = 0
+
+  /** Скорость fade (доля за секунду) — обратная величина fadeSeconds конструктора */
+  private readonly fadeSpeed: number
 
   /**
    * Множитель плотности инстансов на сектор для каждого LOD.
@@ -101,8 +112,26 @@ class SectorManager {
   private readonly _frustum = new Frustum()
   private readonly _sphere = new Sphere()
   private readonly _worldCenter = new Vector3()
+  private readonly _origin = new Vector3()
 
-  public constructor(grid: SectorGrid, generator: AsteroidGenerator, pool: InstancePool, thresholds: LODThresholds) {
+  /**
+   * Плавающее начало системы (ССЫЛКА на FloatingOrigin.origin — обновляется
+   * снаружи, мы читаем текущее значение). null — относительных координат нет:
+   * матрицы абсолютны, атрибут instanceOrigin остаётся нулевым (кольца).
+   */
+  private readonly origin: Vector3 | null
+
+  public constructor(
+    grid: SectorGrid,
+    generator: AsteroidGenerator,
+    pool: InstancePool,
+    thresholds: LODThresholds,
+    origin: Vector3 | null = null,
+    capacityShare: number = Infinity,
+    activationBudget: number = 4,
+    /** Длительность проявления сектора, секунды; 0.25 (дефолт) — прежнее поведение (fadeSpeed 4.0) */
+    fadeSeconds: number = 0.25
+  ) {
     if (thresholds.nearEnterDistance >= thresholds.nearExitDistance) {
       throw new Error(
         `SectorManager: nearEnterDistance (${thresholds.nearEnterDistance}) обязан быть < nearExitDistance ` +
@@ -114,6 +143,63 @@ class SectorManager {
     this.generator = generator
     this.pool = pool
     this.thresholds = thresholds
+    this.origin = origin
+    this.capacityShare = capacityShare
+    this.activationBudget = activationBudget
+    this.fadeSpeed = 1 / fadeSeconds
+  }
+
+  /** Сумма занятых экземпляров активных секторов каскада (для capacityShare) */
+  public get usedInstances(): number {
+    return this.used
+  }
+
+  /**
+   * Записать во все инстансы аллокаций смещение сектора от плавающего начала
+   * И порог полного затухания билборда СВОЕГО каскада (см.
+   * InstancePool.writeMaxDistance) — оба атрибута общие для сектора, второй
+   * пишется независимо от наличия плавающего начала (кольца/одиночный каскад
+   * тоже получают его, но без USE_CASCADE_FADE_RADIUS шейдер его не читает).
+   * Без плавающего начала (кольца) origin остаётся no-op: атрибут нулевой.
+   */
+  private writeSectorOrigins(allocations: Allocation[], bounds: SectorBounds): void {
+    for (const a of allocations) {
+      this.pool.writeMaxDistance(a.stream, a.offset, a.count, this.thresholds.l1MaxDistance)
+    }
+
+    const origin = this.origin
+    if (!origin) return
+
+    const center = sectorCenter(bounds)
+    // Вычитание — в double, до float32-записи атрибута: и центр сектора, и
+    // начало могут быть десятками а.е., а их разность мала. Y тоже участвует:
+    // у объёмной сетки центр ячейки не в средней плоскости, а генератор
+    // вычитает его из высоты камня (relativeToSector) — без origin.y камни
+    // осели бы к нулю независимо от реальной высоты ячейки.
+    this._origin.set(center.x - origin.x, center.y - origin.y, center.z - origin.z)
+    for (const a of allocations) {
+      this.pool.writeOrigins(a.stream, a.offset, a.count, this._origin)
+    }
+  }
+
+  /**
+   * Переезд плавающего начала: у КАЖДОЙ активной аллокации (включая уходящий
+   * тир кросс-фейда — он ещё рисуется) origin пересчитывается от центра её
+   * сектора. К моменту вызова FloatingOrigin.origin уже новый, поэтому счёт
+   * идёт от абсолютного центра в double — ошибка не накапливается от переезда
+   * к переезду, в отличие от вычитания сдвига из хранимого float32.
+   *
+   * @param shift — сдвиг начала; нулевой означает, что переезда не было
+   */
+  public rebaseOrigins(shift: Vector3): void {
+    if (!this.origin || (shift.x === 0 && shift.z === 0)) return
+
+    for (const [, state] of this.activeSectors) {
+      this.writeSectorOrigins(state.allocations, state.info.bounds)
+      if (state.outgoing) {
+        this.writeSectorOrigins(state.outgoing.allocations, state.info.bounds)
+      }
+    }
   }
 
   /**
@@ -160,6 +246,8 @@ class SectorManager {
       this.pool.writeFade(allocation.stream, allocation.offset, allocation.count, 0.0)
     }
 
+    this.writeSectorOrigins(allocations, bounds)
+
     return allocations
   }
 
@@ -184,6 +272,7 @@ class SectorManager {
     const data = this.generator.generateMatrices(seed, count, bounds)
     this.pool.writeMatrices(stream, allocation.offset, data)
     this.pool.writeFade(stream, allocation.offset, allocation.count, 0.0)
+    this.writeSectorOrigins([allocation], bounds)
 
     return [allocation]
   }
@@ -193,6 +282,9 @@ class SectorManager {
    *
    * @param cameraAngle — угол камеры в полярных координатах (radians) в local space кольца
    * @param cameraRadius — расстояние камеры от центра кольца в local space
+   * @param cameraY — высота камеры, ring-local Y. Обязательна: у плоской сетки
+   * (volumetric false) не влияет на результат, но неявный ноль у объёмной молча
+   * подставил бы среднюю плоскость вместо реальной высоты камеры.
    * @param viewProjectionMatrix — camera.projectionMatrix * camera.matrixWorldInverse
    * @param localToWorldMatrix — матрица трансформации системы (local → world)
    * @param delta — время с прошлого кадра (секунды)
@@ -200,6 +292,7 @@ class SectorManager {
   public update(
     cameraAngle: number,
     cameraRadius: number,
+    cameraY: number,
     viewProjectionMatrix: Matrix4,
     localToWorldMatrix: Matrix4,
     delta: number
@@ -209,7 +302,7 @@ class SectorManager {
 
     // 2. Получить кандидатов из сетки
     const maxRange = this.thresholds.l1MaxDistance
-    const candidates = this.grid.getSectorsInRange(cameraAngle, cameraRadius, maxRange)
+    const candidates = this.grid.getSectorsInRange(cameraAngle, cameraRadius, cameraY, maxRange)
 
     // 3. Определить LOD и отфильтровать по frustum
     const desiredSectors = new Map<string, { info: SectorInfo; lod: LODLevel }>()
@@ -225,7 +318,9 @@ class SectorManager {
 
       const dx = info.centerX - camX
       const dz = info.centerZ - camZ
-      const dist = Math.sqrt(dx * dx + dz * dz)
+      // Высота входит только у объёмной сетки: у колец метрика двумерная, как была
+      const dy = this.grid.volumetric ? info.centerY - cameraY : 0
+      const dist = Math.sqrt(dx * dx + dz * dz + dy * dy)
       // Расстояние до БЛИЖАЙШЕЙ точки сектора, не до центра: info.boundingRadius
       // (полудиагональ ячейки) обычно уже сравним с разумным порогом входа в
       // Near — порог по dist-до-центра в такой геометрии никогда бы не
@@ -256,7 +351,7 @@ class SectorManager {
       }
 
       // Frustum culling
-      this._worldCenter.set(info.centerX, 0, info.centerZ)
+      this._worldCenter.set(info.centerX, info.centerY, info.centerZ)
       this._worldCenter.applyMatrix4(localToWorldMatrix)
       this._sphere.set(this._worldCenter, info.boundingRadius)
 
@@ -291,24 +386,47 @@ class SectorManager {
       }
     }
 
-    // 5. Активация новых секторов (с бюджетом)
+    // 5. Активация новых секторов (с бюджетом). Высота входит только у
+    // объёмной сетки — та же оговорка, что и у метрики тира выше.
     toActivate.sort((a, b) => {
-      const distA = (a.info.centerX - camX) ** 2 + (a.info.centerZ - camZ) ** 2
-      const distB = (b.info.centerX - camX) ** 2 + (b.info.centerZ - camZ) ** 2
+      const dyA = this.grid.volumetric ? a.info.centerY - cameraY : 0
+      const dyB = this.grid.volumetric ? b.info.centerY - cameraY : 0
+      const distA = (a.info.centerX - camX) ** 2 + (a.info.centerZ - camZ) ** 2 + dyA * dyA
+      const distB = (b.info.centerX - camX) ** 2 + (b.info.centerZ - camZ) ** 2 + dyB * dyB
       return distA - distB
     })
 
     let activated = 0
     for (const { info, lod } of toActivate) {
       if (activated >= this.activationBudget) break
+      // Упор в долю пула — дальше по списку сектора только дальше от камеры,
+      // пробовать их бессмысленно, а счётчик отказов иначе считал бы кандидатов
+      if (this.used >= this.capacityShare) {
+        this.capacityFailures++
+        break
+      }
       if (this.activateSector(info, lod)) {
         activated++
       }
     }
 
-    // 6. Смена LOD для существующих секторов
+    // 6. Смена LOD для существующих секторов — тем же бюджетом, что активация.
+    // Каждый переход держит ОБА тира до конца кросс-фейда, поэтому массовый
+    // свитч на проходе камеры вынес бы каскад далеко за его долю пула
+    toChangeLOD.sort((a, b) => {
+      const dyA = this.grid.volumetric ? a.info.centerY - cameraY : 0
+      const dyB = this.grid.volumetric ? b.info.centerY - cameraY : 0
+      const distA = (a.info.centerX - camX) ** 2 + (a.info.centerZ - camZ) ** 2 + dyA * dyA
+      const distB = (b.info.centerX - camX) ** 2 + (b.info.centerZ - camZ) ** 2 + dyB * dyB
+      return distA - distB
+    })
+
+    let switched = 0
     for (const { state, newLOD, info } of toChangeLOD) {
-      this.changeSectorLOD(state, newLOD, info)
+      if (switched >= this.activationBudget) break
+      if (this.changeSectorLOD(state, newLOD, info)) {
+        switched++
+      }
     }
 
     // 7. Обновить fade и удалить завершённые fade-out
@@ -321,16 +439,24 @@ class SectorManager {
   private activateSector(info: SectorInfo, lodLevel: LODLevel): boolean {
     const instanceCount = Math.max(1, Math.round(info.instanceCount * this.lodDensityMultiplier[lodLevel]))
 
+    // Доля пула каскада — проверка ДО выделения, чтобы не трогать пул зря.
+    if (this.used + instanceCount > this.capacityShare) {
+      this.capacityFailures++
+      return false
+    }
+
     const allocations = this.allocateForLOD(lodLevel, info.seed, instanceCount, info.bounds)
     if (!allocations) {
       return false
     }
+    this.used += instanceCount
 
     const state: SectorState = {
       key: info.key,
       info,
       lodLevel,
       allocations,
+      instanceCount,
       fade: 0.0,
       fadeTarget: 1.0,
       pendingRemoval: false,
@@ -348,32 +474,49 @@ class SectorManager {
    * параллельно с проявлением нового (с нуля) — оба рендерятся через дизер
    * одновременно, давая встречный кросс-фейд без резкого «щелчка».
    */
-  private changeSectorLOD(state: SectorState, newLOD: LODLevel, info: SectorInfo): void {
+  private changeSectorLOD(state: SectorState, newLOD: LODLevel, info: SectorInfo): boolean {
     const instanceCount = Math.max(1, Math.round(info.instanceCount * this.lodDensityMultiplier[newLOD]))
+
+    // Доля пула по УСТАНОВИВШЕЙСЯ стоимости: на время кросс-фейда сектор держит
+    // оба тира, но проверять сумму нельзя — понижение тира, которое ёмкость
+    // освобождает, само себя бы и запретило
+    if (this.used - state.instanceCount + instanceCount > this.capacityShare) {
+      this.capacityFailures++
+      return false
+    }
+
     const allocations = this.allocateForLOD(newLOD, info.seed, instanceCount, info.bounds)
 
     if (!allocations) {
       // Нет места под новый тир — оставляем текущий как есть (сектор не теряем).
-      return
+      return false
     }
 
     // Текущий тир уводим в кросс-фейд-аут. Если предыдущий outgoing ещё жив
     // (быстрый повторный свитч) — освобождаем его целиком: держим максимум 2 тира.
     if (state.outgoing) {
       for (const a of state.outgoing.allocations) this.pool.release(a)
+      this.used -= state.outgoing.instanceCount
     }
     state.outgoing = {
       lodLevel: state.lodLevel,
       allocations: state.allocations,
+      instanceCount: state.instanceCount,
       fade: state.fade
     }
 
+    // used держит ОБА тира на время кросс-фейда: старый (перешёл в outgoing,
+    // уже учтён) не вычитается, новый прибавляется — снимется при release() outgoing.
+    this.used += instanceCount
     state.lodLevel = newLOD
     state.allocations = allocations
+    state.instanceCount = instanceCount
     // Новый тир проявляется с нуля — встречно уходящему (сумма покрытия ≈ 1).
     // fade=0 уже записан в буфер внутри allocateForLOD — повторной записи не требуется.
     state.fade = 0.0
     state.fadeTarget = 1.0
+
+    return true
   }
 
   /**
@@ -408,14 +551,17 @@ class SectorManager {
         }
         if (out.fade <= 0.001) {
           for (const a of out.allocations) this.pool.release(a)
+          this.used -= out.instanceCount
           state.outgoing = null
         }
       }
 
       if (state.pendingRemoval && state.fade <= 0.001) {
         for (const a of state.allocations) this.pool.release(a)
+        this.used -= state.instanceCount
         if (state.outgoing) {
           for (const a of state.outgoing.allocations) this.pool.release(a)
+          this.used -= state.outgoing.instanceCount
         }
         toRemove.push(key)
       }
@@ -437,6 +583,9 @@ class SectorManager {
       }
     }
     this.activeSectors.clear()
+    // Живых секторов не осталось — счётчик обнуляется, а не сводится вычитанием:
+    // так расхождение, если оно где-то возникнет, не переживёт сброс
+    this.used = 0
   }
 
   /**
@@ -453,6 +602,8 @@ class SectorManager {
     activeSectors: number
     byLod: { l0: number; near: number; l1: number }
     pendingRemoval: number
+    usedInstances: number
+    capacityFailures: number
   } {
     let l0 = 0,
       near = 0,
@@ -472,7 +623,13 @@ class SectorManager {
       }
       if (state.pendingRemoval) pending++
     }
-    return { activeSectors: this.activeSectors.size, byLod: { l0, near, l1 }, pendingRemoval: pending }
+    return {
+      activeSectors: this.activeSectors.size,
+      byLod: { l0, near, l1 },
+      pendingRemoval: pending,
+      usedInstances: this.used,
+      capacityFailures: this.capacityFailures
+    }
   }
 }
 

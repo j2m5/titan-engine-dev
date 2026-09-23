@@ -75,8 +75,8 @@ describe('SectorManager: раскладка активных секторов п
     )
     const manager = new SectorManager(grid, generator, pool, thresholds)
 
-    const info0 = grid.getSectorInfo(0, 0)
-    manager.update(info0.centerAngle, info0.centerRadius, vpMatrix, identity, 1.0)
+    const info0 = grid.getSectorInfo(0, 0, 0)
+    manager.update(info0.centerAngle, info0.centerRadius, 0, vpMatrix, identity, 1.0)
 
     expect(manager.activeCount).toBe(1)
 
@@ -110,7 +110,7 @@ describe('SectorManager: раскладка активных секторов п
     )
     const manager = new SectorManager(grid, generator, pool, thresholds)
 
-    const info0 = grid.getSectorInfo(0, 0)
+    const info0 = grid.getSectorInfo(0, 0, 0)
     const groupCounts = computeGroupCounts(info0.seed, info0.instanceCount, K)
     // Целенаправленно НЕ стрим 0: адресация
     // Geometry-путь исключительно стримом 0, так что конфликт именно там мог
@@ -128,7 +128,7 @@ describe('SectorManager: раскладка активных секторов п
     const prefill = perStreamCapacity - (need - 1)
     expect(pool.allocate(targetStream, prefill)).not.toBeNull()
 
-    manager.update(info0.centerAngle, info0.centerRadius, vpMatrix, identity, 1.0)
+    manager.update(info0.centerAngle, info0.centerRadius, 0, vpMatrix, identity, 1.0)
 
     expect(manager.activeCount).toBe(0)
     const pressure = pool.getPressureInfo()
@@ -150,16 +150,16 @@ describe('SectorManager: раскладка активных секторов п
     )
     const manager = new SectorManager(grid, generator, pool, thresholds)
 
-    const info0 = grid.getSectorInfo(0, 0)
+    const info0 = grid.getSectorInfo(0, 0, 0)
 
     // 1) Активируем как Geometry, большая delta мгновенно осаживает fade к 1.
-    manager.update(info0.centerAngle, info0.centerRadius, vpMatrix, identity, 1.0)
+    manager.update(info0.centerAngle, info0.centerRadius, 0, vpMatrix, identity, 1.0)
     expect(pool.getPressureInfo().l0.used).toBe(info0.instanceCount)
 
     // 2) Отодвигаем камеру радиально за l0MaxDistance, но в пределах l1MaxDistance:
     // сектор переключается на Billboard, старый Geometry-тир уходит в outgoing и
     // (с той же большой delta) успевает полностью догаснуть и освободиться.
-    manager.update(info0.centerAngle, info0.centerRadius + 7, vpMatrix, identity, 1.0)
+    manager.update(info0.centerAngle, info0.centerRadius + 7, 0, vpMatrix, identity, 1.0)
 
     expect(manager.activeCount).toBe(1)
     const pressure = pool.getPressureInfo()
@@ -182,11 +182,11 @@ describe('SectorManager: раскладка активных секторов п
     )
     const manager = new SectorManager(grid, generator, pool, thresholds)
 
-    const info0 = grid.getSectorInfo(0, 0)
+    const info0 = grid.getSectorInfo(0, 0, 0)
 
-    manager.update(info0.centerAngle, info0.centerRadius, vpMatrix, identity, 1.0)
+    manager.update(info0.centerAngle, info0.centerRadius, 0, vpMatrix, identity, 1.0)
     // Малая delta — переход к Billboard НЕ успевает завершиться, outgoing ещё жив.
-    manager.update(info0.centerAngle, info0.centerRadius + 7, vpMatrix, identity, 0.01)
+    manager.update(info0.centerAngle, info0.centerRadius + 7, 0, vpMatrix, identity, 0.01)
 
     manager.deactivateAll()
 
