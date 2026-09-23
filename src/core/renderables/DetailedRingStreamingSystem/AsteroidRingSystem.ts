@@ -19,6 +19,7 @@ import { readRingAlphaProfile, readRingAlphaBins, readRingBandBins } from './Rin
 import { createDustRadialTexture } from './dust/DustRadialProfile'
 import { createRingBandTexture } from './dust/RingBandTexture'
 import { RadialDensityProfile } from './RadialDensityProfile'
+import { AngularDensityProfile } from './AngularDensityProfile'
 import { ringLightDirection } from './ringLightDirection'
 import { SectorGrid, SectorGridConfig } from './SectorGrid'
 import { AsteroidGenerator, GeneratorConfig } from './AsteroidGenerator'
@@ -173,6 +174,13 @@ interface AsteroidRingConfig {
   /** Профиль облика астероидов (см. AsteroidProfiles). Задаёт цвет/блик/etc. */
   profile: AsteroidProfileName
   /**
+   * Ледяная примесь (см. чанк AsteroidIce): доля тел 0..1 с ручками профиля
+   * `profile` вместо базового; выбор детерминирован позицией и един для
+   * всех тиров. Задаёт только пояс; у колец не задано — тексты программ
+   * прежние.
+   */
+  iceVariety?: { fraction: number; profile: AsteroidProfileName }
+  /**
    * Распределение камней и пыли следует альфе текстуры 2D-кольца (радиальный
    * профиль плотности + профиль пыли). Тот же радиальный маппинг, что у
    * RingShader → щели/субкольца 3D совпадают с 2D. false → равномерно.
@@ -250,6 +258,13 @@ interface AsteroidRingConfig {
    * пути не читается — у пояса нет 2D-текстуры кольца).
    */
   densityProfileSource?: Float32Array
+  /**
+   * Азимутальный профиль плотности пояса (дуги, см. buildBeltAngularProfile) —
+   * бины по долям оборота [0, 1) от atan2(z, x). Взвешивает счёт камней
+   * секторов (SectorGrid.setAngularProfile) и пыль объёма стримера. Кольца
+   * его не задают — их путь не меняется.
+   */
+  angularProfileSource?: Float32Array
   /**
    * Высота вертикального слоя сетки секторов в км; не задана или ≥ толщины —
    * один слой на всю толщину (плоская сетка, прежний путь колец). Задана и
@@ -573,7 +588,8 @@ class AsteroidRingSystem extends Group {
       nearGeometries,
       asteroidSize * 2.5,
       this.model,
-      cfg.cascades !== undefined
+      cfg.cascades !== undefined,
+      cfg.iceVariety !== undefined
     )
 
     // Добавить рендер-объекты (L0 + L1). С плавающим началом они дети группы
@@ -618,6 +634,23 @@ class AsteroidRingSystem extends Group {
       uniforms.uOppositionSurge.value = profile.oppositionSurge
       uniforms.uPlanetshineColor.value.set(cfg.planetshineColor)
       uniforms.uPlanetshineStrength.value = cfg.planetshineStrength
+    }
+
+    // Ледяная примесь: ручки ледяного профиля в оба материала, доля — гейт
+    // (без опции остаётся 0 и юниформы нейтральны). Цвет и реголитная модель
+    // — в оба тира (см. правило выше), блик и амбиент — только L0; детальные
+    // карты у льда остаются базовыми
+    if (cfg.iceVariety) {
+      const ice = ASTEROID_PROFILES[cfg.iceVariety.profile]
+      l0ShapeMaterial.uniforms.uIceSpecularStrength.value = ice.specularStrength
+      l0ShapeMaterial.uniforms.uIceSpecularPower.value = ice.specularPower
+      l0ShapeMaterial.uniforms.uIceSpecularTint.value = ice.specularTint
+      l0ShapeMaterial.uniforms.uIceSurfaceAmbient.value = ice.surfaceAmbient
+      for (const uniforms of [l0ShapeMaterial.uniforms, billboardMaterial.uniforms]) {
+        uniforms.uIceFraction.value = cfg.iceVariety.fraction
+        uniforms.uIceRockColor.value.set(ice.baseColor)
+        uniforms.uIceLunarMix.value = ice.lunarMix
+      }
     }
 
     // PBR-микрослой (фотограмметрические текстуры) — поверх макро-профиля
@@ -715,6 +748,13 @@ class AsteroidRingSystem extends Group {
       this.densityProfileReady = true
     }
 
+    // --- Дуги пояса (см. angularProfileSource): один профиль во все каскады.
+    // Генератор без профиля: угол внутри сектора равномерен, сектор много уже дуги
+    if (cfg.angularProfileSource) {
+      const beltAngularProfile = new AngularDensityProfile(cfg.angularProfileSource)
+      for (const grid of grids) grid.setAngularProfile(beltAngularProfile)
+    }
+
     // --- Тень планеты (умбра) — общая для камней/пыли/2D-кольца ---
     // Радиус планеты в ring-local (начало ring-local = центр планеты, тот же
     // источник, что у RingShader). Прокидываем в материалы камней НЕЗАВИСИМО от
@@ -748,6 +788,8 @@ class AsteroidRingSystem extends Group {
         maxSteps: cfg.dustMaxSteps,
         planetRadius: dustPlanetRadius,
         model: this.model,
+        // Дуги пояса (у колец не задано — программа прежняя)
+        angularProfile: cfg.angularProfileSource,
         registry: this.dustRegistry ?? undefined
       })
       this.add(this.dustVolume)

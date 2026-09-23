@@ -114,6 +114,9 @@ class InstancePool {
    * @param useCascadeFade Билборд считает fade по инстансному порогу вместо
    *   общего uMaxDistance (см. BillboardAsteroidMaterial); дефолт false —
    *   путь колец и одиночного каскада не меняется.
+   * @param useIceVariety Ледяная примесь (см. чанк AsteroidIce) в обоих
+   *   материалах — доля тел берёт ручки ледяного профиля; дефолт false —
+   *   тексты программ колец не меняются.
    */
   public constructor(
     l0Config: PoolLayerConfig,
@@ -123,7 +126,8 @@ class InstancePool {
     nearGeometries: BufferGeometry[],
     billboardSize: number,
     model?: Actor,
-    useCascadeFade: boolean = false
+    useCascadeFade: boolean = false,
+    useIceVariety: boolean = false
   ) {
     if (l0Geometries.length !== nearGeometries.length) {
       throw new Error(
@@ -139,7 +143,7 @@ class InstancePool {
     const streamCapacity = Math.ceil((l0Config.maxInstances / streamCount) * 1.5)
     const nearStreamCapacity = Math.ceil((nearConfig.maxInstances / streamCount) * 1.5)
 
-    this.geometryMaterial = new InstancedAsteroidMaterial(model)
+    this.geometryMaterial = new InstancedAsteroidMaterial(model, undefined, useIceVariety)
     this.geometryMeshes = []
     this.nearMeshes = []
     this.streams = []
@@ -168,7 +172,7 @@ class InstancePool {
 
     // --- Billboard-стрим (индекс 2·streamCount) ---
     const l1Geometry = new PlaneGeometry(billboardSize, billboardSize)
-    this.billboardMaterial = new BillboardAsteroidMaterial(model, useCascadeFade)
+    this.billboardMaterial = new BillboardAsteroidMaterial(model, useCascadeFade, useIceVariety)
     this.billboardMesh = new InstancedMesh(l1Geometry, this.billboardMaterial, l1Config.maxInstances)
     this.billboardMesh.count = 0
     this.billboardMesh.frustumCulled = false

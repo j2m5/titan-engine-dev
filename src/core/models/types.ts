@@ -494,7 +494,7 @@ export interface IAsteroidBeltRenderingObject {
   /** Профиль облика камней: 'stony' | 'carbonaceous' | 'metallic' | 'icy' (дефолт 'stony') */
   profile?: string
   seed?: number
-  /** Щели и сгущения радиального профиля плотности (доли ширины); отсутствие — единица по всей ширине */
+  /** Щели и сгущения радиального профиля (доли ширины) и дуги по азимуту (доли оборота); отсутствие — единица всюду */
   structure?: BeltStructure
   /** Включена ли пылевая дымка дальнего слоя (дефолт true) */
   dustEnabled?: boolean
@@ -528,6 +528,10 @@ export interface IAsteroidBeltRenderingObject {
   dustExtinction?: number
   /** Художественный туман на камнях по дистанции (независим от dustTauVertical): км, на которых он набирает 63% в средней плоскости ленты; 0 — выключен (дефолт 40000) */
   rockFogRangeKm?: number
+  /** Доля ледяных тел среди камней стримера, 0..1; 0 — все тела базового профиля (дефолт 0.15) */
+  iceFraction?: number
+  /** Профиль облика ледяных тел: имя из AsteroidProfiles (дефолт 'icy') */
+  iceProfile?: string
   /** Средний период вращения камней, часы; 0 гасит вращение (дефолт 0) */
   spinPeriodHours?: number
   /** Число точек дальнего слоя, штук (дефолт 60000) */

@@ -132,9 +132,10 @@ export const ASTEROID_PROFILES: Record<AsteroidProfileName, AsteroidProfile> = {
 
 /**
  * Валидирует имя профиля, пришедшее строкой из данных (JSON редактора) —
- * незнакомое имя тихо становится 'stony', чтобы опечатка не роняла рендер.
- * Общий гейт для колец (AsteroidRingSystem) и пояса (AsteroidBelt).
+ * незнакомое имя тихо становится fallback (по умолчанию 'stony'), чтобы
+ * опечатка не роняла рендер. Общий гейт для колец (AsteroidRingSystem) и
+ * пояса (AsteroidBelt); ледяная примесь пояса подставляет свой fallback.
  */
-export function asteroidProfileNameOf(name: string): AsteroidProfileName {
-  return name in ASTEROID_PROFILES ? (name as AsteroidProfileName) : 'stony'
+export function asteroidProfileNameOf(name: string, fallback: AsteroidProfileName = 'stony'): AsteroidProfileName {
+  return name in ASTEROID_PROFILES ? (name as AsteroidProfileName) : fallback
 }

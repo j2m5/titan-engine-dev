@@ -3,6 +3,10 @@ import { Actor } from '@/core/models/Actor'
 import { requireRenderingData } from '@/core/helpers/renderingData'
 import type { IAsteroidBeltRenderingObject } from '@/core/models/types'
 import type { BeltStructure } from '@/core/renderables/DetailedRingStreamingSystem/beltDensityProfile'
+import {
+  asteroidProfileNameOf,
+  type AsteroidProfileName
+} from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
 
 /** Пояс без щелей и сгущений — единица по всей ширине (см. buildBeltDensityProfile) */
 const EMPTY_STRUCTURE: BeltStructure = { edgeSoftness: 0, gaps: [], clumps: [] }
@@ -52,6 +56,10 @@ export interface AsteroidBeltParameters {
   dustExtinction: number
   /** Дистанция 63% тумана на камнях, км; 0 — выключен */
   rockFogRangeKm: number
+  /** Доля ледяных тел среди камней стримера, 0..1; 0 — примесь выключена */
+  iceFraction: number
+  /** Профиль облика ледяных тел — уже проверенное имя */
+  iceProfile: AsteroidProfileName
   spinPeriodHours: number
   /** Число точек дальнего слоя — целое, ≥ 0 (0 гасит слой видимостью пустого буфера) */
   pointCount: number
@@ -106,6 +114,9 @@ export function asteroidBeltParameters(actor: Actor): AsteroidBeltParameters {
     dustColorForward: data.dustColorForward ?? '#c8a98a',
     dustExtinction: Math.min(1, Math.max(0, data.dustExtinction ?? 1)),
     rockFogRangeKm: Math.max(0, data.rockFogRangeKm ?? 40000),
+    iceFraction: Math.min(1, Math.max(0, data.iceFraction ?? 0.15)),
+    // Незнакомое имя — 'icy', а не 'stony': примесь базового профиля была бы невидимой
+    iceProfile: asteroidProfileNameOf(data.iceProfile ?? 'icy', 'icy'),
     spinPeriodHours: data.spinPeriodHours ?? 0,
     // Целое и не отрицательное — отрицательный/дробный count ломает Float32Array(count * 3)
     pointCount: Math.max(0, Math.floor(data.pointCount ?? DEFAULT_POINT_COUNT)),

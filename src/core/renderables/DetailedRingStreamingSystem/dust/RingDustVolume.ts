@@ -1,6 +1,6 @@
 import { Color, Mesh, SphereGeometry, type Texture, type Vector2, Vector3 } from 'three'
 import { RingDustRaymarchMaterial } from './RingDustRaymarchMaterial'
-import { createDustRadialTexture } from './DustRadialProfile'
+import { createDustAngularTexture, createDustRadialTexture } from './DustRadialProfile'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import type { Disposable } from '@/core/lifecycle/Disposable'
 import { DEPTH_VOLUME_LAYER, type DepthVolume } from '@/core/graphic/passes/DepthVolume'
@@ -58,6 +58,12 @@ interface RingDustVolumeConfig {
    */
   radialProfile?: Float32Array
   /**
+   * Азимутальный профиль плотности (дуги пояса, buildBeltAngularProfile: бины
+   * по долям оборота от atan2(z, x)); без него модуляция по углу выключена
+   * (дефайн не ставится). Кольца его не задают.
+   */
+  angularProfile?: Float32Array
+  /**
    * Реестр пасса DepthVolumePass: объём регистрируется при создании и снимается в
    * dispose(). Без реестра объём в графе есть, но не рисуется (пасс о нём не
    * знает) — режим тестов и автономных сцен.
@@ -95,11 +101,14 @@ class RingDustVolume extends Mesh implements DepthVolume, Disposable {
     // выход по alpha < 0.003 остаётся безопасным
     const extinctionStrength = Math.min(1, Math.max(0, config.extinction ?? 0))
     const extinction = extinctionStrength > 0
+    // Текстура дуг строится до материала: вырожденный профиль (null) не ставит дефайн
+    const angular = config.angularProfile ? createDustAngularTexture(config.angularProfile) : null
     const material = new RingDustRaymarchMaterial(config.model, {
       lightAtOrigin: config.lightAtOrigin ?? false,
       clumps,
       phaseHG,
-      extinction
+      extinction,
+      arcs: angular !== null
     })
     super(geometry, material)
     this.boundingRadius = config.outerRadius * RADIAL_PADDING
@@ -129,6 +138,10 @@ class RingDustVolume extends Mesh implements DepthVolume, Disposable {
     if (radial) {
       this.dustMaterial.uniforms.uDustRadialMap.value = radial.texture
       this.dustMaterial.uniforms.uDustRadialMapScale.value = radial.scale
+    }
+    if (angular) {
+      this.dustMaterial.uniforms.uDustAngularMap.value = angular.texture
+      this.dustMaterial.uniforms.uDustAngularMapScale.value = angular.scale
     }
 
     // Порядок относительно 2D-текстуры кольца и камней задаёт не renderOrder,

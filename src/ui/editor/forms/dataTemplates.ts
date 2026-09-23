@@ -168,6 +168,11 @@ export const renderingDataTemplates: DataTemplate[] = [
         clumps: [
           { at: 0.2, width: 0.06, gain: 1.6 },
           { at: 0.8, width: 0.1, gain: 1.4 }
+        ],
+        // Дуги по азимуту: центр и σ в долях оборота
+        arcs: [
+          { at: 0.12, width: 0.08, gain: 1.6 },
+          { at: 0.58, width: 0.12, gain: 1.4 }
         ]
       },
       dustEnabled: true,
@@ -181,6 +186,8 @@ export const renderingDataTemplates: DataTemplate[] = [
       dustColorForward: '#c8a98a',
       dustExtinction: 1,
       rockFogRangeKm: 40000,
+      iceFraction: 0.15,
+      iceProfile: 'icy',
       spinPeriodHours: 8,
       pointCount: 60000,
       pointScale: 1,

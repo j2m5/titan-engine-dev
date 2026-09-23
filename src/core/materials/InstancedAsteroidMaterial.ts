@@ -12,11 +12,14 @@ class InstancedAsteroidMaterial extends AbstractShaderMaterial {
    * корню дерева. `undefined` — легаси-конструкторы без модели
    * (InstancedAsteroid/AsteroidCluster, сейчас не используются) — тинт
    * остаётся выключенным, как раньше.
+   * `useIceVariety` — ледяная примесь пояса (см. чанк AsteroidIce): текст
+   * программы собирается с её кусками, дефайн USE_ICE_VARIETY помечает режим.
+   * false (дефолт) — путь колец, текст прежний.
    */
-  public constructor(model?: Actor, parameters?: ShaderMaterialParameters) {
+  public constructor(model?: Actor, parameters?: ShaderMaterialParameters, useIceVariety: boolean = false) {
     super(parameters)
 
-    const { uniforms, vertexShader, fragmentShader } = new InstancedAsteroidShader()
+    const { uniforms, vertexShader, fragmentShader } = new InstancedAsteroidShader({ iceVariety: useIceVariety })
 
     this.uniforms = uniforms
     this.vertexShader = vertexShader
@@ -26,7 +29,11 @@ class InstancedAsteroidMaterial extends AbstractShaderMaterial {
     const lightTint = model ? resolveLightTint(model) : { active: false, color: new Color(1, 1, 1) }
     ;(this.uniforms.uLightColor.value as Color).copy(lightTint.color)
     // Спред обязателен: дефайны из parameters уже лежат в this.defines после super()
-    this.defines = { ...this.defines, ...(lightTint.active && { USE_LIGHT_TINT: '1' }) }
+    this.defines = {
+      ...this.defines,
+      ...(lightTint.active && { USE_LIGHT_TINT: '1' }),
+      ...(useIceVariety && { USE_ICE_VARIETY: '1' })
+    }
   }
 
   public updateMaterial(): void {}
