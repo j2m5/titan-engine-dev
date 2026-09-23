@@ -1,6 +1,7 @@
 import { AdditiveBlending, BackSide, Color, ShaderChunk, ShaderMaterial, Vector2, Vector3 } from 'three'
 import { ringDustRaymarchFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
 import { sceneDepthFunctions, sceneDepthUniforms } from '@/core/materials/shaders/lib/chunks/SceneDepth'
+import { noiseFunctions } from '@/core/materials/shaders/lib/chunks/Noise'
 import type { Actor } from '@/core/models/Actor'
 import { resolveLightTint } from '@/core/helpers/lightSource'
 
@@ -37,6 +38,11 @@ import { resolveLightTint } from '@/core/helpers/lightSource'
  *
  * CPU-зеркало цикла марша: tauMarch в tests/ringDust/tauMirror.ts —
  * менять строго синхронно.
+ *
+ * Клочья (DUST_CLUMPS) — низкочастотный шум плотности только в марше объёма;
+ * замкнутая форма тумана на камнях (ringDustTauRay) шум не видит, поэтому
+ * система и с объёмом, и с туманом камней разом дала бы шов на границе —
+ * у пояса туман камней выключен, у колец клочья не используются.
  */
 interface RingDustRaymarchOptions {
   /**
@@ -45,6 +51,11 @@ interface RingDustRaymarchOptions {
    * uDustLightDirRing. Кольца у планеты — false: текст программы прежний.
    */
   lightAtOrigin?: boolean
+  /**
+   * Низкочастотная модуляция плотности («клочья»): под дефайном, чтобы текст
+   * программы колец оставался байт-в-байт прежним без флага.
+   */
+  clumps?: boolean
 }
 
 class RingDustRaymarchMaterial extends ShaderMaterial {
@@ -55,10 +66,41 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
   public constructor(model?: Actor, options: RingDustRaymarchOptions = {}) {
     const lightTint = model ? resolveLightTint(model) : { active: false, color: new Color(1, 1, 1) }
 
+    // Клочья вставляются строковой композицией (не голым #ifdef в базовом
+    // тексте): без options.clumps текст фрагментного шейдера остаётся
+    // байт-в-байт прежним — кольца программу не меняют.
+    const clumpDeclChunk = options.clumps
+      ? `
+        uniform float uDustClumpStrength;
+        uniform float uDustClumpScale;
+        ${noiseFunctions}`
+      : ''
+    const clumpContribChunk = options.clumps
+      ? `
+            #ifdef DUST_CLUMPS
+              // Шаг марша крупнее половины клочка — клочья не сэмплируются и
+              // вырождались бы в пиксельную крупу; гасим их силу до ровной
+              // дымки (среднее шума единица) и не считаем шум вовсе. Вдоль
+              // ленты шаг в единицы а.е., сверху — сотые доли: клочья видны там,
+              // где их можно разрешить
+              float clumpGain = uDustClumpStrength * clamp(uDustClumpScale / (2.0 * dt), 0.0, 1.0);
+              if (clumpGain > 0.001) {
+                // p — float32 ring-local до ~4e6 units; при масштабе клочьев
+                // в десятки тысяч units аргумент шума порядка сотни. Масштабы
+                // ниже ~100 units начнут алиасить
+                vec3 clumpP = p / uDustClumpScale;
+                float clumpNoise = snoise(clumpP) + 0.5 * snoise(clumpP * 2.0);
+                float n = clumpNoise * 0.5 + 0.5;
+                contrib *= mix(1.0 - clumpGain, 1.0 + clumpGain, n);
+              }
+            #endif`
+      : ''
+
     super({
       defines: {
         ...(lightTint.active && { USE_LIGHT_TINT: '1' }),
-        ...(options.lightAtOrigin && { DUST_LIGHT_AT_ORIGIN: '1' })
+        ...(options.lightAtOrigin && { DUST_LIGHT_AT_ORIGIN: '1' }),
+        ...(options.clumps && { DUST_CLUMPS: '1' })
       },
       uniforms: {
         uDustColor: { value: new Color(0x9b968c) },
@@ -91,6 +133,10 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
         uLayerShadowStrength: { value: 0.25 },
         /** Диагностика: 0 выкл, 1 τ, 2 alpha, 3 гейт, 4 теплокарта шагов */
         uDustDebugMode: { value: 0 },
+        /** Сила клочьев 0..1 (нейтрально при DUST_CLUMPS выключенном) */
+        uDustClumpStrength: { value: 0.0 },
+        /** Масштаб шума клочьев, three-units; p/scale ~1e4 — вне алиасинга */
+        uDustClumpScale: { value: 1.0 },
         // Глубина сцены (чанк SceneDepth): привязывает DepthVolumePass перед рендером
         uSceneDepth: { value: null },
         uResolution: { value: new Vector2(1, 1) },
@@ -120,7 +166,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
 
         uniform int uDustMaxSteps;
         uniform int uDustDebugMode;
-        ${sceneDepthUniforms}
+        ${sceneDepthUniforms}${clumpDeclChunk}
 
         // Во фрагментном префиксе three modelViewMatrix не объявлен, но рендерер
         // грузит его по имени в любой стадии. Берём именно его, а не
@@ -199,7 +245,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
             float s = (float(i) + jitter) * dt;
             float t = s < lenA ? segA.x + s : segB.x + (s - lenA);
             vec3 p = uDustCamRingPos + rayDir * t;
-            float contrib = ringDustDensityAt(p) * ringDustNearRamp(t) * dt;
+            float contrib = ringDustDensityAt(p) * ringDustNearRamp(t) * dt;${clumpContribChunk}
             tau += contrib;
             // Тень планеты и самозатенение слоя кольца — на каждом шаге
             litTau += contrib * ringDustPlanetShadow(p) * ringLayerShadow(p);

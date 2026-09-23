@@ -172,11 +172,13 @@ export const renderingDataTemplates: DataTemplate[] = [
       },
       dustEnabled: true,
       dustColor: '#9b968c',
-      dustTauGrazing: 0.52,
+      dustTauVertical: 0.06,
       dustScaleHeightFraction: 0.333,
+      dustClumpStrength: 0.7,
+      dustClumpScaleAu: 0.6,
       spinPeriodHours: 8,
       pointCount: 60000,
-      pointScale: 220,
+      pointScale: 1,
       cullFovScale: 1.35,
       fadeSeconds: 0.8
     }

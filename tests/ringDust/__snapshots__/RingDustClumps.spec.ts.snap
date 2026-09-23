@@ -1,0 +1,371 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`RingDustClumps > без clumps текст фрагментного шейдера не меняется (снимок с ветки до фичи), дефайна нет 1`] = `
+"
+        #define PI 3.141592653589793
+#define PI2 6.283185307179586
+#define PI_HALF 1.5707963267948966
+#define RECIPROCAL_PI 0.3183098861837907
+#define RECIPROCAL_PI2 0.15915494309189535
+#define EPSILON 1e-6
+#ifndef saturate
+#define saturate( a ) clamp( a, 0.0, 1.0 )
+#endif
+#define whiteComplement( a ) ( 1.0 - saturate( a ) )
+float pow2( const in float x ) { return x*x; }
+vec3 pow2( const in vec3 x ) { return x*x; }
+float pow3( const in float x ) { return x*x*x; }
+float pow4( const in float x ) { float x2 = x*x; return x2*x2; }
+float max3( const in vec3 v ) { return max( max( v.x, v.y ), v.z ); }
+float average( const in vec3 v ) { return dot( v, vec3( 0.3333333 ) ); }
+highp float rand( const in vec2 uv ) {
+	const highp float a = 12.9898, b = 78.233, c = 43758.5453;
+	highp float dt = dot( uv.xy, vec2( a,b ) ), sn = mod( dt, PI );
+	return fract( sin( sn ) * c );
+}
+#ifdef HIGH_PRECISION
+	float precisionSafeLength( vec3 v ) { return length( v ); }
+#else
+	float precisionSafeLength( vec3 v ) {
+		float maxComponent = max3( abs( v ) );
+		return length( v / maxComponent ) * maxComponent;
+	}
+#endif
+struct IncidentLight {
+	vec3 color;
+	vec3 direction;
+	bool visible;
+};
+struct ReflectedLight {
+	vec3 directDiffuse;
+	vec3 directSpecular;
+	vec3 indirectDiffuse;
+	vec3 indirectSpecular;
+};
+#ifdef USE_ALPHAHASH
+	varying vec3 vPosition;
+#endif
+vec3 transformDirection( in vec3 dir, in mat4 matrix ) {
+	return normalize( ( matrix * vec4( dir, 0.0 ) ).xyz );
+}
+vec3 inverseTransformDirection( in vec3 dir, in mat4 matrix ) {
+	return normalize( ( vec4( dir, 0.0 ) * matrix ).xyz );
+}
+bool isPerspectiveMatrix( mat4 m ) {
+	return m[ 2 ][ 3 ] == - 1.0;
+}
+vec2 equirectUv( in vec3 dir ) {
+	float u = atan( dir.z, dir.x ) * RECIPROCAL_PI2 + 0.5;
+	float v = asin( clamp( dir.y, - 1.0, 1.0 ) ) * RECIPROCAL_PI + 0.5;
+	return vec2( u, v );
+}
+vec3 BRDF_Lambert( const in vec3 diffuseColor ) {
+	return RECIPROCAL_PI * diffuseColor;
+}
+vec3 F_Schlick( const in vec3 f0, const in float f90, const in float dotVH ) {
+	float fresnel = exp2( ( - 5.55473 * dotVH - 6.98316 ) * dotVH );
+	return f0 * ( 1.0 - fresnel ) + ( f90 * fresnel );
+}
+float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
+	float fresnel = exp2( ( - 5.55473 * dotVH - 6.98316 ) * dotVH );
+	return f0 * ( 1.0 - fresnel ) + ( f90 * fresnel );
+} // validated
+
+        #ifdef USE_LIGHT_TINT
+          uniform vec3 uLightColor;
+        #endif
+
+        
+  uniform vec3 uDustColor;
+  uniform float uDustDensity;
+  uniform float uDustScaleHeight;
+  uniform float uDustRingInner;
+  uniform float uDustRingOuter;
+  uniform vec3 uDustCamRingPos;
+  uniform vec3 uDustLightDirRing;
+  uniform float uDustAnglePower;
+  uniform float uDustNearFade;
+  uniform float uDustPlanetRadius;
+  uniform sampler2D uDustRadialMap;
+  uniform float uDustRadialMapScale;
+  // Полосы кольца (RGB — цвет, A — альфа; см. RingBandTexture): 0 — текстуры нет,
+  // тинт и самозатенение слоя выключены
+  uniform sampler2D uRingBandMap;
+  uniform float uRingBandEnabled;
+  uniform vec3 uBandMeanColor;
+  uniform float uBandTintStrength;
+  // Слой кольца: полутолщина (ring-local) и сила самозатенения (множитель τ)
+  uniform float uLayerHalfThickness;
+  uniform float uLayerShadowStrength;
+
+        
+  // Маска кромок кольца × радиальный профиль из альфы текстуры кольца.
+  // Профиль (uDustRadialMap, R-канал; тот же маппинг u, что у RingShader)
+  // согласует пыль с субкольцами; нормирован на среднее 1 через
+  // uDustRadialMapScale, чтобы калибровка tau грейзинг-луча не поплыла.
+  // Scale 0 → профиль выключен (равномерная пыль, поведение до A-lite).
+  // CPU-зеркало: radialMask в tests/ringDust/tauMirror.ts — менять синхронно.
+  float ringDustRadialMask(float r) {
+    float edge = (uDustRingOuter - uDustRingInner) * 0.12;
+    float mask = smoothstep(uDustRingInner, uDustRingInner + edge, r)
+               * (1.0 - smoothstep(uDustRingOuter - edge, uDustRingOuter, r));
+    if (uDustRadialMapScale > 0.0) {
+      float u = clamp((r - uDustRingInner) / (uDustRingOuter - uDustRingInner), 0.0, 1.0);
+      mask *= texture2D(uDustRadialMap, vec2(u, 0.5)).r * uDustRadialMapScale;
+    }
+    return mask;
+  }
+
+  // Плотность пыли в точке ring-local space (сэмплируется маршем объёма)
+  float ringDustDensityAt(vec3 p) {
+    float safeH = max(uDustScaleHeight, 1e-6);
+    return uDustDensity * ringDustRadialMask(length(p.xz)) * exp(-abs(p.y) / safeH);
+  }
+
+  // Гейт по углу луча к плоскости кольца: 1 на скользящем, строго 0 при 90°.
+  // Нефизичный, осознанный: лечит «тусклую пелену сверху» (см. спеку v2)
+  float ringDustAngleGate(vec3 dir) {
+    return pow(max(1.0 - abs(dir.y), 0.0), uDustAnglePower);
+  }
+
+  // Рамп ближней дистанции: вблизи камеры пыль не проявляется
+  float ringDustNearRamp(float t) {
+    return smoothstep(0.0, max(uDustNearFade, 1e-6), t);
+  }
+
+  // Интервал t, где луч (в проекции XZ) внутри цилиндра радиуса R.
+  // Пустой интервал кодируется как vec2(1.0, 0.0)
+  vec2 ringDustCircleInterval(vec3 o, vec3 d, float R) {
+    float a = dot(d.xz, d.xz);
+    if (a < 1e-12) {
+      // Вертикальный луч: внутри цилиндра целиком либо никогда
+      return length(o.xz) <= R ? vec2(-1.0e9, 1.0e9) : vec2(1.0, 0.0);
+    }
+    float b = dot(o.xz, d.xz);
+    float c = dot(o.xz, o.xz) - R * R;
+    float disc = b * b - a * c;
+    if (disc <= 0.0) return vec2(1.0, 0.0);
+    float sq = sqrt(disc);
+    return vec2((-b - sq) / a, (-b + sq) / a);
+  }
+
+  // --- Слой кольца: самозатенение и тинт по полосам (общее для камней и марша) ---
+  // CPU-зеркало: layerTau/columnFraction/layerShadow/bandTint в tests/ringDust/tauMirror.ts
+
+  // Выборка полос по радиусу (тот же маппинг u, что у RingShader)
+  vec4 ringBandAt(float r) {
+    float u = clamp((r - uDustRingInner) / (uDustRingOuter - uDustRingInner), 0.0, 1.0);
+    return texture2D(uRingBandMap, vec2(u, 0.5));
+  }
+
+  // Оптическая толща слоя по нормали на радиусе: пропускание = 1 − α
+  float ringLayerTau(float r) {
+    if (uRingBandEnabled < 0.5) return 0.0;
+    float a = ringBandAt(r).a;
+    return -log(1.0 - min(a, 0.98));
+  }
+
+  // Доля столба слоя НАД точкой в сторону солнца при треугольном вертикальном
+  // распределении камней (пик в средней плоскости, ноль на ±half)
+  float ringLayerColumnFraction(float ySun) {
+    float u = clamp(ySun / max(uLayerHalfThickness, 1e-9), -1.0, 1.0);
+    return u >= 0.0 ? (1.0 - u) * (1.0 - u) * 0.5 : 1.0 - (1.0 + u) * (1.0 + u) * 0.5;
+  }
+
+  // Самозатенение слоя: камни и пыль над точкой вдоль направления на звезду.
+  // Путь через слой делится на синус высоты звезды над плоскостью (пол 0.2).
+  // Физическая экспонента СМЕШИВАЕТСЯ с единицей по uLayerShadowStrength, а не
+  // множит толщу: рендер показывает и глубокие камни, которых в оптически
+  // плотном слое не видно, и честная толща Сатурна (α ≈ 1, солнце ≤ 27° над
+  // плоскостью) красила их в чёрное. При силе s худший случай — (1 − s)
+  float ringLayerShadow(vec3 p) {
+    float tau = ringLayerTau(length(p.xz));
+    if (tau <= 0.0 || uLayerShadowStrength <= 0.0) return 1.0;
+    float ySun = uDustLightDirRing.y >= 0.0 ? p.y : -p.y;
+    float sinE = max(abs(uDustLightDirRing.y), 0.2);
+    float physical = exp(-tau * ringLayerColumnFraction(ySun) / sinE);
+    return mix(1.0, physical, uLayerShadowStrength);
+  }
+
+  // Тинт альбедо по цвету полосы относительно среднего цвета кольца:
+  // светлые ледяные полосы — светлые камни, тёмные пыльные — тёмные
+  vec3 ringBandTint(float r) {
+    if (uRingBandEnabled < 0.5) return vec3(1.0);
+    vec3 band = ringBandAt(r).rgb;
+    vec3 tint = clamp(band / max(uBandMeanColor, vec3(0.05)), 0.5, 1.5);
+    return mix(vec3(1.0), tint, uBandTintStrength);
+  }
+
+  // Цвет дымки: базовый + мягкий forward-scattering буст в сторону звезды.
+  // Единственный прямой член света звезды на пыль — красится целиком.
+  // sun — доля прямого лепестка [0, 1]: pow(dot(луч, на звезду), 4)
+  vec3 ringDustHazeSun(float sun) {
+    #ifdef USE_LIGHT_TINT
+      return uDustColor * (0.75 + 0.45 * sun) * uLightColor;
+    #else
+      return uDustColor * (0.75 + 0.45 * sun);
+    #endif
+  }
+
+  vec3 ringDustHaze(vec3 rayDir) {
+    return ringDustHazeSun(pow(max(dot(rayDir, uDustLightDirRing), 0.0), 4.0));
+  }
+
+  // Тень планеты на пыль: аналитический теневой цилиндр вдоль направления на
+  // звезду. uDustLightDirRing — от центра планеты (= начало ring-local) к звезде,
+  // планета в начале координат. Зеркалит getShadowFromSphere из RingShaderTemplate,
+  // чтобы тень пыли совпадала с тенью 2D-кольца; мягкая кромка полутени вместо
+  // жёсткой. Возвращает множитель яркости: 0.04 в умбре → 1.0 вне тени.
+  float ringDustPlanetShadow(vec3 p) {
+    if (uDustPlanetRadius <= 0.0) return 1.0;
+    float pDotS = dot(p, uDustLightDirRing);
+    if (pDotS >= 0.0) return 1.0; // солнечная сторона — не в тени
+    float perp = sqrt(max(dot(p, p) - pDotS * pDotS, 0.0));
+    float penumbra = uDustPlanetRadius * 0.08;
+    float shade = smoothstep(uDustPlanetRadius, uDustPlanetRadius + penumbra, perp);
+    return mix(0.04, 1.0, shade);
+  }
+
+
+        uniform int uDustMaxSteps;
+        uniform int uDustDebugMode;
+        
+  uniform sampler2D uSceneDepth;
+  uniform vec2 uResolution;
+  uniform float uLogFarFactor;
+  uniform float uSceneDepthEnabled;
+
+
+        // Во фрагментном префиксе three modelViewMatrix не объявлен, но рендерер
+        // грузит его по имени в любой стадии. Берём именно его, а не
+        // viewMatrix * modelMatrix: он camera-relative и не теряет точность
+        // на межпланетных координатах.
+        uniform mat4 modelViewMatrix;
+
+        
+  // Параметр луча (в единицах dirView), на котором луч упирается в сцену.
+  // Небо (z = 1) и выключенная обрезка ничего не режут.
+  float sceneDepthRayT(vec3 dirView) {
+    if (uSceneDepthEnabled < 0.5) return 1.0e30;
+    float z = texture2D(uSceneDepth, gl_FragCoord.xy / uResolution).r;
+    if (z < 1.0 - 1e-6) {
+      // Лог-глубина three: z = log2(1 + w)/log2(far + 1), w = -viewZ
+      float w = exp2(z * uLogFarFactor) - 1.0;
+      // Камера — начало view-пространства: -viewZ(t) = t * (-dirView.z)
+      return w / max(-dirView.z, 1e-6);
+    }
+    return 1.0e30;
+  }
+
+
+        varying vec3 vRingPos;
+
+        // Теплокарта для диагностических режимов: синий → зелёный → красный
+        vec3 dustDebugHeat(float x) {
+          x = clamp(x, 0.0, 1.0);
+          vec3 cold = mix(vec3(0.0, 0.1, 0.9), vec3(0.0, 0.9, 0.2), smoothstep(0.0, 0.5, x));
+          return mix(cold, vec3(0.95, 0.15, 0.05), smoothstep(0.5, 1.0, x));
+        }
+
+        void main() {
+          // Фрагмент прокси задаёт только направление луча
+          vec3 rayDir = normalize(vRingPos - uDustCamRingPos);
+          float gate = ringDustAngleGate(rayDir);
+          if (uDustDebugMode == 0 && gate <= 0.0005) discard;
+
+          // Пыльные интервалы: внешний цилиндр минус дыра кольца
+          vec2 outerIv = ringDustCircleInterval(uDustCamRingPos, rayDir, uDustRingOuter);
+          float o0 = max(outerIv.x, 0.0);
+          float o1 = outerIv.y;
+          if (o1 <= o0) discard;
+          vec2 innerIv = ringDustCircleInterval(uDustCamRingPos, rayDir, uDustRingInner);
+          float h0 = max(innerIv.x, o0);
+          float h1 = min(innerIv.y, o1);
+          bool hasHole = h1 > h0;
+          vec2 segA = hasHole ? vec2(o0, h0) : vec2(o0, o1);
+          vec2 segB = hasHole ? vec2(h1, o1) : vec2(0.0, -1.0);
+
+          // Обрезка по вертикальной оболочке |y| <= 12H (за ней плотность пренебрежима)
+          float slabHalf = uDustScaleHeight * 12.0;
+          if (abs(rayDir.y) > 1e-8) {
+            float tA = (-slabHalf - uDustCamRingPos.y) / rayDir.y;
+            float tB = ( slabHalf - uDustCamRingPos.y) / rayDir.y;
+            float s0 = min(tA, tB);
+            float s1 = max(tA, tB);
+            segA = vec2(max(segA.x, s0), min(segA.y, s1));
+            segB = vec2(max(segB.x, s0), min(segB.y, s1));
+          }
+
+          // Обрыв по глубине сцены: пыль за камнем, планетой и плотным текселем
+          // кольца в τ не попадает. Луч, упёршийся в поверхность до входа в слой,
+          // схлопывает оба интервала и уходит в discard ниже.
+          float tScene = sceneDepthRayT(mat3(modelViewMatrix) * rayDir);
+          segA.y = min(segA.y, tScene);
+          segB.y = min(segB.y, tScene);
+
+          float lenA = max(segA.y - segA.x, 0.0);
+          float lenB = max(segB.y - segB.x, 0.0);
+          float total = lenA + lenB;
+          if (total <= 0.0) discard;
+
+          float steps = float(uDustMaxSteps);
+          float dt = total / steps;
+          // Interleaved Gradient Noise — пер-пиксельный джиттер против бандинга
+          float jitter = fract(52.9829189 * fract(0.06711056 * gl_FragCoord.x + 0.00583715 * gl_FragCoord.y));
+
+          float tau = 0.0;
+          float litTau = 0.0; // τ, взвешенный тенью планеты (для цвета, не для alpha)
+          #ifdef DUST_LIGHT_AT_ORIGIN
+            float sunTau = 0.0; // τ, взвешенный прямым лепестком к звезде в начале координат
+          #endif
+          float marched = 0.0;
+          // 64 — жёсткий потолок GLSL-цикла (граница обязана быть константой):
+          // uDustMaxSteps выше 64 молча обрезается. CPU-зеркало tauMarch потолка
+          // не имеет — при сверке держать steps <= 64.
+          for (int i = 0; i < 64; i++) {
+            if (float(i) >= steps) break;
+            float s = (float(i) + jitter) * dt;
+            float t = s < lenA ? segA.x + s : segB.x + (s - lenA);
+            vec3 p = uDustCamRingPos + rayDir * t;
+            float contrib = ringDustDensityAt(p) * ringDustNearRamp(t) * dt;
+            tau += contrib;
+            // Тень планеты и самозатенение слоя кольца — на каждом шаге
+            litTau += contrib * ringDustPlanetShadow(p) * ringLayerShadow(p);
+            #ifdef DUST_LIGHT_AT_ORIGIN
+              // Звезда в начале ring-local: направление на неё своё в каждой точке марша
+              vec3 toStar = -p / max(length(p), 1e-6);
+              sunTau += contrib * pow(max(dot(rayDir, toStar), 0.0), 4.0);
+            #endif
+            marched = float(i) + 1.0;
+            // early-exit: насыщение непрозрачности
+            if (1.0 - exp(-tau) > 0.995) break;
+          }
+
+          float alpha = (1.0 - exp(-tau)) * gate;
+          // Освещённая доля τ: средняя тень планеты, взвешенная плотностью вдоль луча
+          float litFrac = tau > 0.0 ? litTau / tau : 1.0;
+
+          if (uDustDebugMode != 0) {
+            // Диагностика рисуется непрозрачно, поверх всего содержимого объёма
+            vec3 dbg = vec3(0.0);
+            if (uDustDebugMode == 1) dbg = dustDebugHeat(1.0 - exp(-tau));
+            else if (uDustDebugMode == 2) dbg = dustDebugHeat(alpha);
+            else if (uDustDebugMode == 3) dbg = dustDebugHeat(gate);
+            else if (uDustDebugMode == 4) dbg = dustDebugHeat(marched / steps);
+            gl_FragColor = vec4(dbg, 1.0);
+            return;
+          }
+
+          if (alpha < 0.003) discard;
+          // Аддитивный вклад: премультиплай альфой уже делает блендер
+          // (SrcAlpha, One), поэтому цвет отдаём как есть, интенсивность в alpha.
+          // Тень планеты затемняет цвет (litFrac), но не непрозрачность (alpha)
+          #ifdef DUST_LIGHT_AT_ORIGIN
+            vec3 haze = ringDustHazeSun(tau > 0.0 ? sunTau / tau : 0.0);
+          #else
+            vec3 haze = ringDustHaze(rayDir);
+          #endif
+          gl_FragColor = vec4(haze * litFrac, alpha);
+        }
+      "
+`;

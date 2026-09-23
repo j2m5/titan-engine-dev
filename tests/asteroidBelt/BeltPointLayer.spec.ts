@@ -167,9 +167,10 @@ describe('BeltPointsShaderTemplate: пины шейдера', () => {
     expect(vertex).not.toContain('gl_Position = projectionMatrix * viewMatrix')
   })
 
-  it('приём размера спрайта — тот же, что у StarfieldShaderTemplate: size * (k / -mvPosition.z)', () => {
-    expect(vertex).toMatch(/gl_PointSize\s*=\s*size\s*\*\s*\(?\s*uPointScale\s*\/\s*[-\w.]+\s*\)?;/)
+  it('приём размера спрайта — тот же, что у StarfieldShaderTemplate: size * (k / -mvPosition.z); спрайт зажат снизу к пикселю', () => {
+    expect(vertex).toMatch(/float trueSize\s*=\s*size\s*\*\s*\(?\s*uPointScale\s*\/\s*[-\w.]+\s*\)?;/)
     expect(vertex).toContain('-mvPosition.z')
+    expect(vertex).toContain('gl_PointSize = max(trueSize, 1.0);')
   })
 
   it('uLightColor объявлен и используется ТОЛЬКО под #ifdef USE_LIGHT_TINT', () => {

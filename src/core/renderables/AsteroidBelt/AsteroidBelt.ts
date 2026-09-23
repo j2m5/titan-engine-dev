@@ -6,7 +6,7 @@ import { toThreeJSUnits, fromAstronomicalUnits } from '@/core/helpers/scaling'
 import { asteroidBeltParameters, type AsteroidBeltParameters } from './AsteroidBeltParameters'
 import { AsteroidRingSystem, type AsteroidRingConfig } from '@/core/renderables/DetailedRingStreamingSystem'
 import { shapeModelStorage } from '@/core/renderables/DetailedRingStreamingSystem/archetypes/ShapeModelStorage'
-import { deriveCascades, type CascadeSpec } from '@/core/renderables/DetailedRingStreamingSystem/cascadeScale'
+import { deriveCascades, PIXEL_RAD, type CascadeSpec } from '@/core/renderables/DetailedRingStreamingSystem/cascadeScale'
 import { buildBeltDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/beltDensityProfile'
 import { distanceToTorus, nextState, BeltLodState } from '@/core/renderables/DetailedRingStreamingSystem/beltDistance'
 import { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
@@ -107,9 +107,10 @@ class AsteroidBelt extends Group {
     const p = this.params
     // Доля полутолщины тора, а не абсолютные км — масштабно-инвариантно для пояса
     const dustScaleHeight = p.dustScaleHeightFraction * this.halfThicknessTu
-    // Та же калибровка, что у AsteroidRingSystem: tau грейзинг-луча через
-    // весь тор в средней плоскости = dustTauGrazing
-    const dustDensity = p.dustTauGrazing / (this.outerRadiusTu - this.innerRadiusTu)
+    // Калибровка ПО ВЕРТИКАЛИ: ∫exp(−|y|/H)dy = 2H, так что толща сквозь слой
+    // сверху в средней плоскости равна плотность·2H. Кольцевая калибровка на
+    // просвет через ширину (десятки а.е.) делала бы ленту невидимой сверху
+    const dustDensity = p.dustTauVertical / (2 * dustScaleHeight)
 
     return new RingDustVolume({
       innerRadius: this.innerRadiusTu,
@@ -117,7 +118,10 @@ class AsteroidBelt extends Group {
       dustScaleHeight,
       dustDensity,
       dustColor: new Color(p.dustColor),
-      anglePower: 2,
+      // Угловой гейт колец (дымка только на просвет с ребра) поясу не нужен:
+      // толстый слой обязан читаться и сверху. Не ровно 0: pow(0, 0) в GLSL
+      // не определён для луча строго в надир; 1e-6 даёт единицу всюду
+      anglePower: 1e-6,
       // Ближнее гашение — доля толщины пояса, как у стримера (dustNearFadeFraction)
       nearFade: 0.25 * toThreeJSUnits(p.thicknessKm),
       maxSteps: 16,
@@ -126,6 +130,10 @@ class AsteroidBelt extends Group {
       // Звезда в начале координат пояса: лепесток дымки — по точке марша
       lightAtOrigin: true,
       radialProfile: this.densityProfile,
+      // Клочья: низкочастотный шум плотности — лента мятая, с просветами и
+      // сгустками, а не ровный градиент; 0 — ровная лента и прежний шейдер
+      clumpStrength: p.dustClumpStrength,
+      clumpScale: toThreeJSUnits(p.dustClumpScaleKm),
       registry: this.depthVolumeRegistry ?? undefined
     })
   }
@@ -144,7 +152,10 @@ class AsteroidBelt extends Group {
       profile: this.densityProfile,
       color: new Color(ASTEROID_PROFILES[profileName].baseColor),
       lightTint: resolveLightTint(this.actor),
-      pointScale: p.pointScale,
+      // Размер точки — физический: типичное тело крупнейшего класса в единицах
+      // сцены на один пиксель. Так точка продолжает билборд ровно с одного
+      // пикселя на его пороге и честно тает дальше; ручка — множитель поверх
+      pointScale: (toThreeJSUnits(this.cascades[this.cascades.length - 1].typicalSizeKm) / PIXEL_RAD) * p.pointScale,
       // Тот же порог, что уходит билборду L1 как uMaxDistance — см. BeltPointsShaderTemplate
       maxDistance: this.nearThresholdTu
     })
