@@ -1,4 +1,16 @@
-import { AdditiveBlending, BackSide, Color, ShaderChunk, ShaderMaterial, Vector2, Vector3 } from 'three'
+import {
+  AddEquation,
+  AdditiveBlending,
+  BackSide,
+  Color,
+  CustomBlending,
+  OneFactor,
+  OneMinusSrcAlphaFactor,
+  ShaderChunk,
+  ShaderMaterial,
+  Vector2,
+  Vector3
+} from 'three'
 import { ringDustRaymarchFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
 import { sceneDepthFunctions, sceneDepthUniforms } from '@/core/materials/shaders/lib/chunks/SceneDepth'
 import { noiseFunctions } from '@/core/materials/shaders/lib/chunks/Noise'
@@ -53,6 +65,16 @@ import { resolveLightTint } from '@/core/helpers/lightSource'
  * = среднее прежней модели), меняется только распределение по направлению
  * луча. При дефолте uDustPhaseG = 0.55 отношение вперёд/назад к среднему
  * ≈ 7.65 / 0.19.
+ *
+ * Поглощение (extinction) — дымка не только добавляет свет, но и гасит то,
+ * что за ней: звезду, её гало и фон (а через них — блик и блум hdr-пасса).
+ * Блендинг переключается на премультиплированный over (One, OneMinusSrcAlpha):
+ * цвет выдаётся уже умноженным на прежний вес alpha, так что добавленный свет
+ * равен haze·litFrac·alpha — байт-в-байт тот же, что у аддитивной модели, — а
+ * фон умножается на пропускание 1 − alphaExt, где alphaExt считается по
+ * τ·uDustExtinction под тем же гейтом (угол, ближнее гашение). При
+ * uDustExtinction = 0 результат равен аддитивному. Кольца опцию не ставят и
+ * остаются аддитивными с прежним текстом программы.
  */
 interface RingDustRaymarchOptions {
   /**
@@ -71,6 +93,11 @@ interface RingDustRaymarchOptions {
    * текст программы без флага оставался байт-в-байт прежним.
    */
   phaseHG?: boolean
+  /**
+   * Поглощение света за дымкой (пояс): блендинг over вместо аддитивного,
+   * пропускание по uDustExtinction. Без флага текст программы и блендинг прежние.
+   */
+  extinction?: boolean
 }
 
 class RingDustRaymarchMaterial extends ShaderMaterial {
@@ -167,6 +194,19 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
           #endif`
       : ''
 
+    // Поглощение — тем же приёмом: без options.extinction выход и объявления
+    // остаются байт-в-байт прежними (аддитивный блендинг, alpha как вес вклада)
+    const extinctionDeclChunk = options.extinction
+      ? `
+        uniform float uDustExtinction;`
+      : ''
+    const outputChunk = options.extinction
+      ? `// Over (One, OneMinusSrcAlpha): цвет премультиплирован прежним весом alpha,
+          // вклад света тот же haze·litFrac·alpha; фон умножается на 1 − alphaExt
+          float alphaExt = (1.0 - exp(-tau * uDustExtinction)) * gate;
+          gl_FragColor = vec4(haze * litFrac * alpha, alphaExt);`
+      : 'gl_FragColor = vec4(haze * litFrac, alpha);'
+
     super({
       defines: {
         ...(lightTint.active && { USE_LIGHT_TINT: '1' }),
@@ -215,6 +255,8 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
         uDustPhaseStrength: { value: 0.0 },
         /** Цвет дымки при взгляде на звезду (форвард-пик фазы) */
         uDustColorForward: { value: new Color(0x9b968c) },
+        /** Доля τ, идущая в поглощение фона, 0..1; 0 — только добавляет свет (нейтрально без опции extinction) */
+        uDustExtinction: { value: 0.0 },
         // Глубина сцены (чанк SceneDepth): привязывает DepthVolumePass перед рендером
         uSceneDepth: { value: null },
         uResolution: { value: new Vector2(1, 1) },
@@ -244,7 +286,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
 
         uniform int uDustMaxSteps;
         uniform int uDustDebugMode;
-        ${sceneDepthUniforms}${clumpDeclChunk}${phaseDeclChunk}
+        ${sceneDepthUniforms}${clumpDeclChunk}${phaseDeclChunk}${extinctionDeclChunk}
 
         // Во фрагментном префиксе three modelViewMatrix не объявлен, но рендерер
         // грузит его по имени в любой стадии. Берём именно его, а не
@@ -361,14 +403,26 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
           #else
             vec3 haze = ringDustHaze(rayDir);
           #endif${phaseHazeOverrideChunk}
-          gl_FragColor = vec4(haze * litFrac, alpha);
+          ${outputChunk}
         }
       `,
       side: BackSide,
       transparent: true,
       depthWrite: false,
       depthTest: false,
-      blending: AdditiveBlending
+      // Over премультиплированный: RGB и альфа одними множителями, чтобы
+      // альфа-канал HDR-буфера не расходился с цветом (непрозрачный фон остаётся 1)
+      ...(options.extinction
+        ? {
+            blending: CustomBlending,
+            blendEquation: AddEquation,
+            blendEquationAlpha: AddEquation,
+            blendSrc: OneFactor,
+            blendDst: OneMinusSrcAlphaFactor,
+            blendSrcAlpha: OneFactor,
+            blendDstAlpha: OneMinusSrcAlphaFactor
+          }
+        : { blending: AdditiveBlending })
     })
   }
 }

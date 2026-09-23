@@ -50,6 +50,8 @@ interface RingDustVolumeConfig {
   phaseStrength?: number
   /** Цвет дымки на форвард-пике (взгляд на звезду); по умолчанию = dustColor */
   colorForward?: Color
+  /** Доля τ, гасящая фон за дымкой, 0..1; 0 или не задано — аддитивная дымка без поглощения (опция не ставится) */
+  extinction?: number
   /**
    * Радиальный профиль плотности пыли (бины ≥ 0 по u = (r − inner)/(outer − inner));
    * без него модуляция выключена. Кольцо получает его позже из альфы текстуры.
@@ -87,10 +89,12 @@ class RingDustVolume extends Mesh implements DepthVolume, Disposable {
 
     const clumps = (config.clumpStrength ?? 0) > 0
     const phaseHG = (config.phaseStrength ?? 0) > 0
+    const extinction = (config.extinction ?? 0) > 0
     const material = new RingDustRaymarchMaterial(config.model, {
       lightAtOrigin: config.lightAtOrigin ?? false,
       clumps,
-      phaseHG
+      phaseHG,
+      extinction
     })
     super(geometry, material)
 
@@ -113,6 +117,7 @@ class RingDustVolume extends Mesh implements DepthVolume, Disposable {
     this.dustMaterial.uniforms.uDustPhaseG.value = config.phaseG ?? 0.55
     this.dustMaterial.uniforms.uDustPhaseStrength.value = config.phaseStrength ?? 0
     this.dustMaterial.uniforms.uDustColorForward.value.copy(config.colorForward ?? config.dustColor)
+    this.dustMaterial.uniforms.uDustExtinction.value = config.extinction ?? 0
 
     const radial = config.radialProfile ? createDustRadialTexture(config.radialProfile) : null
     if (radial) {
