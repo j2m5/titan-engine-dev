@@ -17,7 +17,8 @@ import { Color, Uniform } from 'three'
  */
 export const BeltPointsShaderTemplate: ShaderProps = {
   uniforms: {
-    uPointScale: new Uniform(220),
+    // Заглушка: слой всегда задаёт физический масштаб (см. BeltPointLayer.pointScale)
+    uPointScale: new Uniform(1),
     uMaxDistance: new Uniform(1),
     uColor: new Uniform(new Color(1, 1, 1)),
     uLightColor: new Uniform(new Color(1, 1, 1))

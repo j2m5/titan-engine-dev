@@ -20,7 +20,11 @@ interface BeltPointLayerParams {
   color: Color
   /** Подписка светила на цвет света (см. resolveLightTint) */
   lightTint: { active: boolean; color: Color }
-  /** Базовый масштаб спрайта, пиксель·three-unit (см. IAsteroidBeltRenderingObject.pointScale, дефолт 220) */
+  /**
+   * Масштаб спрайта, пиксель·three-unit: физический размер тела на один пиксель
+   * (см. AsteroidBelt.__createPointLayer), точка size 1 занимает пиксель на
+   * дистанции, численно равной этому масштабу в единицах сцены
+   */
   pointScale: number
   /**
    * Порог кроссфейда с L1-биллбордами, three-units — тот же nearThresholdTu
