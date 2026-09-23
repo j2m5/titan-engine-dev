@@ -29,11 +29,18 @@ export const BeltPointsShaderTemplate: ShaderProps = {
     uniform float uMaxDistance;
 
     varying float vFarGate;
+    varying float vFlux;
 
     void main() {
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
 
-      gl_PointSize = size * (uPointScale / -mvPosition.z);
+      // GPU не рисует спрайт меньше пикселя, а яркость от этого не падала: тело в
+      // десятую пикселя светило полноценной точкой — издалека пояс читался как
+      // россыпь. Доля площади честного диска в пикселе гасит его квадратично
+      float trueSize = size * (uPointScale / -mvPosition.z);
+      gl_PointSize = max(trueSize, 1.0);
+      float fluxSide = clamp(trueSize, 0.0, 1.0);
+      vFlux = fluxSide * fluxSide;
       gl_Position = projectionMatrix * mvPosition;
 
       // Комплемент per-instance fade L1-биллборда на этой же дистанции (см. докблок выше)
@@ -49,6 +56,7 @@ export const BeltPointsShaderTemplate: ShaderProps = {
     #endif
 
     varying float vFarGate;
+    varying float vFlux;
 
     void main() {
       // Круглый спрайт по gl_PointCoord с мягким краем (AA без экранных производных — точка мала)
@@ -57,7 +65,7 @@ export const BeltPointsShaderTemplate: ShaderProps = {
       if (r > 1.0) discard;
 
       float edgeAlpha = 1.0 - smoothstep(0.7, 1.0, r);
-      float alpha = vFarGate * edgeAlpha;
+      float alpha = vFarGate * edgeAlpha * vFlux;
       if (alpha < 0.01) discard;
 
       #ifdef USE_LIGHT_TINT
