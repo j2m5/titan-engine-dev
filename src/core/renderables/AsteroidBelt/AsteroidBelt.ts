@@ -211,6 +211,11 @@ class AsteroidBelt extends Group {
       overrides.dustColor = p.dustColor
       overrides.dustAnglePower = 1e-6
     }
+    // Ледяная примесь (см. чанк AsteroidIce): доля 0 — опция не задаётся,
+    // тексты программ прежние
+    if (p.iceFraction > 0) {
+      overrides.iceVariety = { fraction: p.iceFraction, profile: p.iceProfile }
+    }
 
     return new AsteroidRingSystem(this.actor, overrides, this.depthVolumeRegistry, shapeModelStorage)
   }

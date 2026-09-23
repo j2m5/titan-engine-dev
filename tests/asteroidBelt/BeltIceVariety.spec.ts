@@ -15,7 +15,13 @@ vi.mock('@/core/renderables/DetailedRingStreamingSystem/RingAlphaReadback', () =
   readRingBandBins: vi.fn(() => null)
 }))
 
+import '@/core/framework/TitanThree'
 import { AsteroidRingSystem, type AsteroidRingConfig } from '@/core/renderables/DetailedRingStreamingSystem'
+import { AsteroidBelt } from '@/core/renderables/AsteroidBelt'
+import { fromAstronomicalUnits } from '@/core/helpers/scaling'
+import type { IAsteroidBeltRenderingObject } from '@/core/models/types'
+import type { UpdateContext } from '@/core/UpdateContext'
+import { PerspectiveCamera } from 'three'
 import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
 import { BillboardAsteroidMaterial } from '@/core/renderables/DetailedRingStreamingSystem/BillboardAsteroidMaterial'
 import { ASTEROID_ICE_SELECT } from '@/core/materials/shaders/lib/chunks/AsteroidIce'
@@ -214,5 +220,68 @@ describe('CPU-зеркало выбора льда: хеш распределя�
     // Два соседа на расстоянии 1 единицы: хеш различает их
     const a = Array.from({ length: 64 }, (_, i) => iceSelect(0.5, i * 1.0, 0, 0))
     expect(new Set(a).size).toBe(2)
+  })
+})
+
+// --- Пояс: AsteroidBelt.__createStreamer передаёт примесь стримеру ---
+
+const BELT_DATA: IAsteroidBeltRenderingObject = {
+  innerRadiusAu: 40,
+  outerRadiusAu: 60,
+  thicknessAu: 0.1,
+  sizeRangeKm: [0.5, 60],
+  spacingKm: 54,
+  dustEnabled: false
+}
+
+const beltActorOf = (data: IAsteroidBeltRenderingObject): Actor =>
+  ({
+    placement: null,
+    renderingObject: { getAttribute: (): unknown => data },
+    getAttribute: (k: string, f: unknown = ''): unknown => (k === 'categoryId' ? 11 : f)
+  }) as unknown as Actor
+
+/** Стример рождается при первом кадре внутри тора; обход — как у движка */
+const streamerOf = (belt: AsteroidBelt): AsteroidRingSystem => {
+  const camera = new PerspectiveCamera(50, 1, 0.1, 1e12)
+  camera.position.set(fromAstronomicalUnits(50), 0, 0)
+  camera.updateMatrixWorld(true)
+  camera.updateProjectionMatrix()
+  camera.matrixWorldInverse.copy(camera.matrixWorld).invert()
+  belt.updateMatrixWorld(true)
+  belt.traverse((o) => o.updateObject({ delta: 0.016, epoch: 2451545, elapsed: 0, camera } as UpdateContext))
+  return (belt as unknown as { streamer: AsteroidRingSystem }).streamer
+}
+
+describe('AsteroidBelt: ледяная примесь доходит до стримера', () => {
+  it('доля 0.15 из данных — дефайн в обоих материалах пула, доля и цвет icy в юниформах', () => {
+    const pool = poolOf(streamerOf(new AsteroidBelt(beltActorOf({ ...BELT_DATA, iceFraction: 0.15 }))))
+
+    for (const material of [pool.geometryMaterial, pool.billboardMaterial]) {
+      expect(material.defines.USE_ICE_VARIETY).toBe('1')
+      expect(material.uniforms.uIceFraction.value).toBe(0.15)
+      expect((material.uniforms.uIceRockColor.value as Color).getHex()).toBe(ASTEROID_PROFILES.icy.baseColor)
+    }
+  })
+
+  it('дефолт данных без поля — та же примесь 0.15', () => {
+    const pool = poolOf(streamerOf(new AsteroidBelt(beltActorOf(BELT_DATA))))
+    expect(pool.geometryMaterial.uniforms.uIceFraction.value).toBe(0.15)
+  })
+
+  it('доля 0 — опции нет: дефайн отсутствует, доля в юниформе 0', () => {
+    const pool = poolOf(streamerOf(new AsteroidBelt(beltActorOf({ ...BELT_DATA, iceFraction: 0 }))))
+
+    for (const material of [pool.geometryMaterial, pool.billboardMaterial]) {
+      expect(material.defines).not.toHaveProperty('USE_ICE_VARIETY')
+      expect(material.uniforms.uIceFraction.value).toBe(0)
+    }
+  })
+
+  it('iceProfile из данных выбирает профиль примеси', () => {
+    const pool = poolOf(streamerOf(new AsteroidBelt(beltActorOf({ ...BELT_DATA, iceProfile: 'metallic' }))))
+    const rocks = pool.geometryMaterial.uniforms
+    expect((rocks.uIceRockColor.value as Color).getHex()).toBe(ASTEROID_PROFILES.metallic.baseColor)
+    expect(rocks.uIceSpecularPower.value).toBe(ASTEROID_PROFILES.metallic.specularPower)
   })
 })
