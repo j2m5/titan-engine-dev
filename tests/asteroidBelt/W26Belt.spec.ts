@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { Actors, Orbits, RenderingObjects } from '@storage/database'
+import { Actors, Orbits, RenderingObjects, RotationObjects } from '@storage/database'
 import { asteroidBeltParameters } from '@/core/renderables/AsteroidBelt/AsteroidBeltParameters'
 import type { NebulaRenderingData } from '@/core/renderables/Nebula/NebulaRenderingData'
 import type { Actor } from '@/core/models/Actor'
@@ -36,6 +36,15 @@ describe('пояс Ashfall Belt — система W26', () => {
     expect(belts).toHaveLength(1)
     expect(belts[0].parentId).toBe(actorByName('Westerlund 1-26 system').id)
     expect(belts[0].name).toBe('Ashfall Belt')
+  })
+
+  it('наклонён к плоскости системы строкой rotation (несколько градусов, без суточного вращения)', () => {
+    const row = RotationObjects.find((r) => r.actorId === actorByName('Ashfall Belt').id)
+
+    expect(row).toBeDefined()
+    expect(row!.inclination).toBeGreaterThan(0)
+    expect(row!.inclination).toBeLessThan(10)
+    expect(row!.period).toBe(0)
   })
 
   it('рендер-данные валидны через asteroidBeltParameters', () => {
