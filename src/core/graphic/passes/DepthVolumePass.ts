@@ -46,7 +46,8 @@ export class DepthVolumePass extends Pass {
   private readonly visibleVolumes: DepthVolume[] = []
   private readonly cameraWorld = new Vector3()
   private readonly volumeWorld = new Vector3()
-  private readonly distanceSq = new WeakMap<DepthVolume, number>()
+  private readonly volumeScale = new Vector3()
+  private readonly farExtent = new WeakMap<DepthVolume, number>()
 
   public constructor(camera: PerspectiveCamera, registry: DepthVolumeRegistry) {
     super('DepthVolumePass')
@@ -109,7 +110,11 @@ export class DepthVolumePass extends Pass {
 
   /**
    * Объёмы, у которых видна вся цепочка предков (рендер корня предков не
-   * проверяет), от дальнего к ближнему по расстоянию центра до камеры.
+   * проверяет), от дальнего к ближнему по дальней кромке: расстояние центра
+   * до камеры + радиус описанной сферы (boundingRadius в мировом масштабе).
+   * Объёмы с общим центром (кокон туманности и пояс вокруг одной звезды)
+   * так упорядочиваются по охвату, а не по порядку регистрации — блендинг
+   * «поверх» у обоих зависит от порядка.
    */
   private collectVisibleFarToNear(): DepthVolume[] {
     const out = this.visibleVolumes
@@ -118,10 +123,13 @@ export class DepthVolumePass extends Pass {
     for (const volume of this.registry.volumes()) {
       if (!isVisibleInTree(volume)) continue
       volume.getWorldPosition(this.volumeWorld)
-      this.distanceSq.set(volume, this.volumeWorld.distanceToSquared(this.cameraWorld))
+      volume.getWorldScale(this.volumeScale)
+      const worldRadius =
+        (volume.boundingRadius ?? 0) * Math.max(this.volumeScale.x, this.volumeScale.y, this.volumeScale.z)
+      this.farExtent.set(volume, this.volumeWorld.distanceTo(this.cameraWorld) + worldRadius)
       out.push(volume)
     }
-    out.sort((a, b) => this.distanceSq.get(b)! - this.distanceSq.get(a)!)
+    out.sort((a, b) => this.farExtent.get(b)! - this.farExtent.get(a)!)
     return out
   }
 }

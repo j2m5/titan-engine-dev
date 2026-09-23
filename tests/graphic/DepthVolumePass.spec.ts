@@ -6,6 +6,8 @@ import { DepthVolumePass } from '@/core/graphic/passes/DepthVolumePass'
 import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
 import { DEPTH_VOLUME_LAYER } from '@/core/graphic/passes/DepthVolume'
+import { NebulaVolume } from '@/core/renderables/Nebula/volume/NebulaVolume'
+import { makeDefaultNebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 
 // Таргет копии глубины в типах библиотеки не объявлен, сцена — protected; в рантайме есть оба
 const copyTargetOf = (pass: DepthVolumePass): WebGLRenderTarget =>
@@ -146,6 +148,22 @@ describe('DepthVolumePass', () => {
     new DepthVolumePass(cam, registry).render(renderer, inputBuffer, outputBuffer)
 
     expect(log.scenes.slice(1)).toEqual([far, mid, near])
+  })
+
+  it('общий центр: охватывающий объём (кокон) рисуется раньше вложенного (пояс) независимо от порядка регистрации', () => {
+    const registry = new DepthVolumeRegistry()
+    const belt = makeVolume(registry)
+    const cocoon = new NebulaVolume(makeDefaultNebulaParams(), registry)
+    // Куб [-1,1]³ масштабом 5000 охватывает пояс радиусом 147; центры совпадают
+    cocoon.scale.setScalar(5000)
+    for (const v of [belt, cocoon]) v.updateMatrixWorld()
+    const cam = new PerspectiveCamera(50, 1, 1e-6, 1e6)
+    cam.position.set(100, 0, 0)
+    const { renderer, log } = makeRenderer(cam)
+
+    new DepthVolumePass(cam, registry).render(renderer, inputBuffer, outputBuffer)
+
+    expect(log.scenes.slice(1)).toEqual([cocoon, belt])
   })
 
   it('включает обрезку по глубине только на время своего рендера', () => {

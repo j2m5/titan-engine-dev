@@ -19,6 +19,9 @@ import type { Disposable } from '@/core/lifecycle/Disposable'
 class NebulaVolume extends Mesh implements DepthVolume, Disposable {
   declare public material: NebulaRaymarchMaterial
 
+  /** Описанная сфера единичного куба [-1, 1]³ (масштаб мира — у пасса) */
+  public readonly boundingRadius = Math.sqrt(3)
+
   private static readonly _cameraWorld = new Vector3()
   private static readonly _starLocal = new Vector3()
 

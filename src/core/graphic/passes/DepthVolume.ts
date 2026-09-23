@@ -17,6 +17,13 @@ export const DEPTH_VOLUME_LAYER = 30
  */
 export interface DepthVolume extends Object3D {
   /**
+   * Радиус описанной сферы прокси в ЛОКАЛЬНЫХ единицах объёма (масштаб мира
+   * пасс применяет сам). Порядок рисования — по дальней кромке
+   * (расстояние до центра + радиус): объём, охватывающий камеру и остальные,
+   * ложится первым, а не по совпадающему центру. Не задан — по центру.
+   */
+  readonly boundingRadius?: number
+  /**
    * @param sceneDepth копия depth-текстуры сцены, лог-глубина three в .r
    * @param resolution размер таргета в пикселях: gl_FragCoord → uv копии
    * @param logFarFactor log2(far + 1) камеры — знаменатель лог-глубины three
