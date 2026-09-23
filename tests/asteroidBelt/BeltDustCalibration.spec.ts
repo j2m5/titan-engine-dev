@@ -92,3 +92,19 @@ describe('AsteroidBelt: калибровка дымки по вертикали,
     expect(dustOf(belt).dustMaterial.uniforms.uDustDensity.value).toBe(0)
   })
 })
+
+describe('AsteroidBelt: клочья дымки доходят до объёма', () => {
+  it('сила и масштаб из данных — в юниформах, дефайн клочьев стоит', () => {
+    const belt = new AsteroidBelt(actorOf({ ...DATA, dustClumpStrength: 0.7, dustClumpScaleAu: 0.6 }))
+    const material = dustOf(belt).dustMaterial
+
+    expect(material.uniforms.uDustClumpStrength.value).toBe(0.7)
+    expect(material.uniforms.uDustClumpScale.value).toBeCloseTo(toThreeJSUnits(0.6 * AU), 6)
+    expect(material.defines.DUST_CLUMPS).toBe('1')
+  })
+
+  it('сила 0 — ровная лента, дефайна нет', () => {
+    const belt = new AsteroidBelt(actorOf({ ...DATA, dustClumpStrength: 0 }))
+    expect(dustOf(belt).dustMaterial.defines.DUST_CLUMPS).toBeUndefined()
+  })
+})

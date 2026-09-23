@@ -129,6 +129,10 @@ class AsteroidBelt extends Group {
       // Звезда в начале координат пояса: лепесток дымки — по точке марша
       lightAtOrigin: true,
       radialProfile: this.densityProfile,
+      // Клочья: низкочастотный шум плотности — лента мятая, с просветами и
+      // сгустками, а не ровный градиент; 0 — ровная лента и прежний шейдер
+      clumpStrength: p.dustClumpStrength,
+      clumpScale: toThreeJSUnits(p.dustClumpScaleKm),
       registry: this.depthVolumeRegistry ?? undefined
     })
   }
