@@ -5,7 +5,8 @@ import { Actor } from '@/core/models/Actor'
 import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
 import { OrientationModel } from '@/core/libs/OrientationModel'
 import { Quaternion, Vector3 } from 'three'
-import { radToDeg } from 'three/src/math/MathUtils'
+import { degToRad, radToDeg } from 'three/src/math/MathUtils'
+import { ASTRO_TO_THREE } from '@/core/libs/frames'
 
 /**
  * Минимальный стаб актора: PlacedNode читает только name и placement.
@@ -76,6 +77,16 @@ describe('PlacedNode — ориентация', () => {
     // Локальная ось Y (плоскость XZ узла) отклонилась от мировой ровно на наклон
     const up = new Vector3(0, 1, 0).applyQuaternion(node.quaternion)
     expect(radToDeg(up.angleTo(new Vector3(0, 1, 0)))).toBeCloseTo(4, 6)
+  })
+
+  it('наклон и узел означают то же, что у орбит: полюс = ASTRO_TO_THREE · Rz(узел)·Rx(наклон) · ẑ', () => {
+    const node = new PlacedNode(actorStub(null, 'Belt', { ascendingNode: 75, inclination: 4 }))
+    const qNode = new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), degToRad(75))
+    const qInc = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), degToRad(4))
+    const expectedUp = new Vector3(0, 0, 1).applyQuaternion(qInc).applyQuaternion(qNode).applyQuaternion(ASTRO_TO_THREE)
+
+    const up = new Vector3(0, 1, 0).applyQuaternion(node.quaternion)
+    expect(up.distanceTo(expectedUp)).toBeCloseTo(0, 9)
   })
 
   it('поворот не сдвигает начало координат: точка (0,0,0) остаётся в нуле', () => {
