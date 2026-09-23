@@ -914,6 +914,8 @@ class AsteroidRingSystem extends Group {
       cull.aspect = camera.aspect
       cull.near = camera.near
       cull.far = camera.far
+      // zoom тоже входит в проекцию — иначе конус отсечения разошёлся бы с кадром
+      cull.zoom = camera.zoom
       cull.updateProjectionMatrix()
       this._viewProjMatrix.multiplyMatrices(cull.projectionMatrix, camera.matrixWorldInverse)
     } else {

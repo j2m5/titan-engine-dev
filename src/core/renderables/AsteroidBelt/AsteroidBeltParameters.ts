@@ -84,8 +84,10 @@ export function asteroidBeltParameters(actor: Actor): AsteroidBeltParameters {
     // Целое и не отрицательное — отрицательный/дробный count ломает Float32Array(count * 3)
     pointCount: Math.max(0, Math.floor(data.pointCount ?? DEFAULT_POINT_COUNT)),
     pointScale: data.pointScale ?? DEFAULT_POINT_SCALE,
-    // Стартовые ручки взгляда владельца — см. AsteroidBelt.__createStreamer
-    cullFovScale: data.cullFovScale ?? 1.35,
-    fadeSeconds: data.fadeSeconds ?? 0.8
+    // Стартовые ручки взгляда владельца — см. AsteroidBelt.__createStreamer.
+    // Масштаб меньше единицы СУЖАЛ бы конус отсечения — секторы внутри кадра
+    // отсекались бы, в кадре дыры; неположительная длительность — деление на ноль
+    cullFovScale: Math.max(1, data.cullFovScale ?? 1.35),
+    fadeSeconds: Math.max(0.001, data.fadeSeconds ?? 0.8)
   }
 }

@@ -51,3 +51,22 @@ describe('asteroidBeltParameters: pointCount/pointScale (дальний слой
     expect(p.pointScale).toBe(500)
   })
 })
+
+describe('asteroidBeltParameters: cullFovScale/fadeSeconds (появление секторов)', () => {
+  it('дефолты 1.35 и 0.8', () => {
+    const p = asteroidBeltParameters(beltActor(MIN_DATA))
+    expect(p.cullFovScale).toBe(1.35)
+    expect(p.fadeSeconds).toBe(0.8)
+  })
+
+  it('масштаб отсечения не опускается ниже единицы — узкий конус давал бы дыры в кадре', () => {
+    expect(asteroidBeltParameters(beltActor({ ...MIN_DATA, cullFovScale: 0.5 })).cullFovScale).toBe(1)
+    expect(asteroidBeltParameters(beltActor({ ...MIN_DATA, cullFovScale: 1.6 })).cullFovScale).toBe(1.6)
+  })
+
+  it('длительность проявления строго положительна — ноль делил бы на ноль', () => {
+    expect(asteroidBeltParameters(beltActor({ ...MIN_DATA, fadeSeconds: 0 })).fadeSeconds).toBe(0.001)
+    expect(asteroidBeltParameters(beltActor({ ...MIN_DATA, fadeSeconds: -3 })).fadeSeconds).toBe(0.001)
+    expect(asteroidBeltParameters(beltActor({ ...MIN_DATA, fadeSeconds: 0.5 })).fadeSeconds).toBe(0.5)
+  })
+})
