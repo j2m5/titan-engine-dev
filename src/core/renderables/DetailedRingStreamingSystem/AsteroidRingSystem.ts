@@ -173,6 +173,13 @@ interface AsteroidRingConfig {
   /** Профиль облика астероидов (см. AsteroidProfiles). Задаёт цвет/блик/etc. */
   profile: AsteroidProfileName
   /**
+   * Ледяная примесь (см. чанк AsteroidIce): доля тел 0..1 с ручками профиля
+   * `profile` вместо базового; выбор детерминирован позицией и един для
+   * всех тиров. Задаёт только пояс; у колец не задано — тексты программ
+   * прежние.
+   */
+  iceVariety?: { fraction: number; profile: AsteroidProfileName }
+  /**
    * Распределение камней и пыли следует альфе текстуры 2D-кольца (радиальный
    * профиль плотности + профиль пыли). Тот же радиальный маппинг, что у
    * RingShader → щели/субкольца 3D совпадают с 2D. false → равномерно.
@@ -573,7 +580,8 @@ class AsteroidRingSystem extends Group {
       nearGeometries,
       asteroidSize * 2.5,
       this.model,
-      cfg.cascades !== undefined
+      cfg.cascades !== undefined,
+      cfg.iceVariety !== undefined
     )
 
     // Добавить рендер-объекты (L0 + L1). С плавающим началом они дети группы
@@ -618,6 +626,22 @@ class AsteroidRingSystem extends Group {
       uniforms.uOppositionSurge.value = profile.oppositionSurge
       uniforms.uPlanetshineColor.value.set(cfg.planetshineColor)
       uniforms.uPlanetshineStrength.value = cfg.planetshineStrength
+    }
+
+    // Ледяная примесь: ручки ледяного профиля в оба материала, доля — гейт
+    // (без опции остаётся 0 и юниформы нейтральны). Детальные карты у льда
+    // остаются базовыми — второй сет текстур в общий материал не подмешать
+    if (cfg.iceVariety) {
+      const ice = ASTEROID_PROFILES[cfg.iceVariety.profile]
+      l0ShapeMaterial.uniforms.uIceSpecularStrength.value = ice.specularStrength
+      l0ShapeMaterial.uniforms.uIceSpecularPower.value = ice.specularPower
+      l0ShapeMaterial.uniforms.uIceSpecularTint.value = ice.specularTint
+      l0ShapeMaterial.uniforms.uIceLunarMix.value = ice.lunarMix
+      l0ShapeMaterial.uniforms.uIceSurfaceAmbient.value = ice.surfaceAmbient
+      for (const uniforms of [l0ShapeMaterial.uniforms, billboardMaterial.uniforms]) {
+        uniforms.uIceFraction.value = cfg.iceVariety.fraction
+        uniforms.uIceRockColor.value.set(ice.baseColor)
+      }
     }
 
     // PBR-микрослой (фотограмметрические текстуры) — поверх макро-профиля

@@ -15,15 +15,22 @@
  * Юниформ uShapeFreq объявляет включающий шейдер (см. L0-шаблон); амплитуда
  * приходит аргументом amp — включающий шейдер задаёт её per-instance.
  */
+/**
+ * Хеш vec3 → float (Dave Hoskins) — отдельной строкой: билборд камней берёт
+ * его без остального чанка формы (см. чанк AsteroidIce), выражение выбора
+ * обязано совпадать с L0 буквально.
+ */
+export const hash13Function = `float hash13(vec3 p3) {
+    p3 = fract(p3 * 0.1031);
+    p3 += dot(p3, p3.zyx + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+  }`
+
 export const asteroidShapeFunctions = `
   #define ASTEROID_SHAPE_OCTAVES 2
 
   // Хеш vec3 → float (Dave Hoskins). Стабильный сид формы из позиции инстанса.
-  float hash13(vec3 p3) {
-    p3 = fract(p3 * 0.1031);
-    p3 += dot(p3, p3.zyx + 31.32);
-    return fract((p3.x + p3.y) * p3.z);
-  }
+  ${hash13Function}
 
   // fbm производного шума: vec4(value, gradient). Градиент домена учитывает
   // частоту октавы (цепное правило d/dp snoiseGrad(p·freq)).

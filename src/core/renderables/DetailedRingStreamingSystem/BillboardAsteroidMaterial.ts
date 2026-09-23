@@ -1,15 +1,24 @@
 import { ShaderMaterial, Color, ShaderChunk, Vector3 } from 'three'
 import { ringDustFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
 import { asteroidBrdfFunctions } from '@/core/materials/shaders/lib/chunks/AsteroidBrdf'
+import {
+  ASTEROID_ICE_BILLBOARD_COLOR,
+  asteroidIceBillboardFragmentDecl,
+  asteroidIceBillboardVertexDecl,
+  asteroidIceVertexSelect
+} from '@/core/materials/shaders/lib/chunks/AsteroidIce'
 import type { Actor } from '@/core/models/Actor'
 import { resolveLightTint } from '@/core/helpers/lightSource'
 
 /**
- * Вершинник билборда — модульная константа, а не строка внутри конструктора:
- * структурные проверки шейдера (tests/helpers/billboardSource.ts) читают его без
- * создания материала. Текст при выносе не менялся.
+ * Вершинник билборда по опции ледяной примеси (см. чанк AsteroidIce):
+ * куски льда вставляются строковой композицией, без опции текст прежний.
  */
-const BILLBOARD_VERTEX_SHADER = /* glsl */ `
+function billboardVertexShader(useIceVariety: boolean): string {
+  const iceDecl = useIceVariety ? asteroidIceBillboardVertexDecl : ''
+  const iceSelect = useIceVariety ? asteroidIceVertexSelect : ''
+
+  return /* glsl */ `
         ${ShaderChunk.common}
         ${ShaderChunk.logdepthbuf_pars_vertex}
 
@@ -18,7 +27,7 @@ const BILLBOARD_VERTEX_SHADER = /* glsl */ `
         uniform float uSilhouetteScale;
         // Смещение начала едет юниформом; float32 здесь достаточно — потребители
         // vRingPos (пыль, тень планеты, полосы) гладкие по радиусу
-        uniform vec3 uOriginOffset;
+        uniform vec3 uOriginOffset;${iceDecl}
 
         // Per-instance fade [0..1] — плавные LOD/sector-переходы (см. InstancePool.writeFade)
         attribute float instanceFade;
@@ -135,11 +144,18 @@ const BILLBOARD_VERTEX_SHADER = /* glsl */ `
           vDistanceFade = 1.0 - smoothstep(uMaxDistance * 0.6, uMaxDistance, dist);
           #endif
 
-          vFade = instanceFade;
+          vFade = instanceFade;${iceSelect}
 
           ${ShaderChunk.logdepthbuf_vertex}
         }
       `
+}
+
+/**
+ * Вершинник без опций — модульная константа: структурные проверки шейдера
+ * (tests/helpers/billboardSource.ts) читают его без создания материала.
+ */
+const BILLBOARD_VERTEX_SHADER = billboardVertexShader(false)
 
 /**
  * BillboardAsteroidMaterial — шейдерный материал для L1 billboard-импосторов.
@@ -165,14 +181,21 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
    * размеров с общим пулом/материалом: fade считается по инстансному порогу
    * вместо общего uMaxDistance (см. instanceMaxDistance). false (дефолт) —
    * путь колец и одиночного каскада, дефайн не добавляется.
+   * `useIceVariety` — ледяная примесь (см. чанк AsteroidIce): доля тел берёт
+   * цвет ледяного профиля, выбор тот же, что у L0. false (дефолт) — путь
+   * колец, текст программы прежний.
    */
-  public constructor(model?: Actor, useCascadeFade: boolean = false) {
+  public constructor(model?: Actor, useCascadeFade: boolean = false, useIceVariety: boolean = false) {
     const lightTint = model ? resolveLightTint(model) : { active: false, color: new Color(1, 1, 1) }
+    // Лёд — строковой композицией, как и в вершиннике: без опции текст прежний
+    const iceFragmentDecl = useIceVariety ? asteroidIceBillboardFragmentDecl : ''
+    const baseColor = useIceVariety ? ASTEROID_ICE_BILLBOARD_COLOR : 'uColor'
 
     super({
       defines: {
         ...(lightTint.active && { USE_LIGHT_TINT: '1' }),
-        ...(useCascadeFade && { USE_CASCADE_FADE_RADIUS: '1' })
+        ...(useCascadeFade && { USE_CASCADE_FADE_RADIUS: '1' }),
+        ...(useIceVariety && { USE_ICE_VARIETY: '1' })
       },
       uniforms: {
         uColor: { value: new Color(0.55, 0.5, 0.45) },
@@ -219,9 +242,13 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         uBandMeanColor: { value: new Vector3(1, 1, 1) },
         uBandTintStrength: { value: 1.0 },
         uLayerHalfThickness: { value: 1.0 },
-        uLayerShadowStrength: { value: 0.25 }
+        uLayerShadowStrength: { value: 0.25 },
+        // Ледяная примесь (см. чанк AsteroidIce): доля 0 — все тела базового
+        // цвета; заполняет AsteroidRingSystem из ледяного профиля
+        uIceFraction: { value: 0.0 },
+        uIceRockColor: { value: new Color(0xc4d2dc) }
       },
-      vertexShader: BILLBOARD_VERTEX_SHADER,
+      vertexShader: billboardVertexShader(useIceVariety),
       fragmentShader: /* glsl */ `
         ${ShaderChunk.common}
         ${ShaderChunk.logdepthbuf_pars_fragment}
@@ -233,7 +260,7 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         uniform float uLunarMix;
         uniform float uOppositionSurge;
         uniform vec3 uPlanetshineColor;
-        uniform float uPlanetshineStrength;
+        uniform float uPlanetshineStrength;${iceFragmentDecl}
 
         #ifdef USE_LIGHT_TINT
           uniform vec3 uLightColor;
@@ -317,7 +344,7 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
           if (alpha < 0.01) discard;
 
           // Идентичность камня: пер-инстансный джиттер яркости, как у L0
-          vec3 base = uColor * (1.0 + uColorJitter * (vInstanceSeed - 0.5) * 2.0);
+          vec3 base = ${baseColor} * (1.0 + uColorJitter * (vInstanceSeed - 0.5) * 2.0);
           // Тинт по цвету полосы кольца — как у L0
           base *= ringBandTint(length(vRingPos.xz));
           // Planetshine — второй источник света: цвет звезды его не касается (как у L0).

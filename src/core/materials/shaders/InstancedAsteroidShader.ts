@@ -1,6 +1,10 @@
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { Color, Texture, Uniform, Vector3 } from 'three'
-import { InstancedAsteroidShaderTemplate as Shader } from '@/core/materials/shaders/lib/InstancedAsteroidShaderTemplate'
+import {
+  InstancedAsteroidShaderTemplate as Shader,
+  instancedAsteroidShaderSource,
+  type InstancedAsteroidShaderOptions
+} from '@/core/materials/shaders/lib/InstancedAsteroidShaderTemplate'
 
 interface InstancedAsteroidUniforms {
   lightPosition: Vector3
@@ -52,11 +56,18 @@ interface InstancedAsteroidUniforms {
   uOppositionSurge: number
   uPlanetshineColor: Color
   uPlanetshineStrength: number
+  uIceFraction: number
+  uIceRockColor: Color
+  uIceSpecularStrength: number
+  uIceSpecularPower: number
+  uIceSpecularTint: number
+  uIceLunarMix: number
+  uIceSurfaceAmbient: number
 }
 
 class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUniforms> {
-  public constructor() {
-    super(Shader)
+  public constructor(options: InstancedAsteroidShaderOptions = {}) {
+    super({ ...Shader, ...instancedAsteroidShaderSource(options) })
 
     this.uniforms = {
       lightPosition: new Uniform(new Vector3()),
@@ -118,7 +129,16 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       uLunarMix: new Uniform(0.8),
       uOppositionSurge: new Uniform(0.3),
       uPlanetshineColor: new Uniform(new Color(0xb8ad9c)),
-      uPlanetshineStrength: new Uniform(1.5)
+      uPlanetshineStrength: new Uniform(1.5),
+      // Ледяная примесь (см. чанк AsteroidIce): доля 0 — все тела базового
+      // профиля; ручки заполняет AsteroidRingSystem из ледяного профиля
+      uIceFraction: new Uniform(0),
+      uIceRockColor: new Uniform(new Color(0xc4d2dc)),
+      uIceSpecularStrength: new Uniform(0.5),
+      uIceSpecularPower: new Uniform(12.0),
+      uIceSpecularTint: new Uniform(0.0),
+      uIceLunarMix: new Uniform(0.5),
+      uIceSurfaceAmbient: new Uniform(0.06)
     }
     this.name = 'InstancedAsteroidShader'
   }
