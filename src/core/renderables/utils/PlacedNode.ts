@@ -2,6 +2,7 @@ import { Actor } from '@/core/models/Actor'
 import { StaticNode } from '@/core/renderables/utils/StaticNode'
 import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
 import { fromAstronomicalUnits } from '@/core/helpers/scaling'
+import { OrientationModel } from '@/core/libs/OrientationModel'
 
 /**
  * Узел актора с СОБСТВЕННОЙ, но статической позицией — третий режим рядом
@@ -27,6 +28,13 @@ class PlacedNode extends StaticNode {
         fromAstronomicalUnits(placement.getAttribute('y', 0)),
         fromAstronomicalUnits(placement.getAttribute('z', 0))
       )
+    }
+
+    // Строка rotation задаёт наклон плоскости узла (узел + наклон), без
+    // суточного вращения: пояс лежит в наклонённой плоскости, но не крутится
+    // как тело. Без строки — плоскость системы
+    if (model.rotation) {
+      this.quaternion.copy(new OrientationModel(model).getPoleQuaternion())
     }
   }
 
