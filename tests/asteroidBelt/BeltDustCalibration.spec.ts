@@ -12,13 +12,17 @@ vi.mock('@/core/renderables/DetailedRingStreamingSystem/RingAlphaReadback', () =
 
 import { AsteroidBelt } from '@/core/renderables/AsteroidBelt'
 import { asteroidBeltParameters } from '@/core/renderables/AsteroidBelt/AsteroidBeltParameters'
-import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { toThreeJSUnits, fromAstronomicalUnits } from '@/core/helpers/scaling'
 import { deriveCascades, PIXEL_RAD } from '@/core/renderables/DetailedRingStreamingSystem/cascadeScale'
 import type { BeltPointLayer } from '@/core/renderables/DetailedRingStreamingSystem/BeltPointLayer'
 import { AU } from '@/core/constants'
 import { Actor } from '@/core/models/Actor'
 import type { IAsteroidBeltRenderingObject } from '@/core/models/types'
 import type { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
+import type { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
+import { Color, PerspectiveCamera } from 'three'
+import type { UpdateContext } from '@/core/UpdateContext'
+import { internalsOf, poolOf } from '../helpers/ringSystemInternals'
 
 const DATA: IAsteroidBeltRenderingObject = {
   innerRadiusAu: 40,
@@ -143,5 +147,67 @@ describe('AsteroidBelt: размер точки дальнего слоя — ф
     const base = pointsOf(plain).pointMaterial.uniforms.uPointScale.value as number
 
     expect(scaled / base).toBeCloseTo(3, 9)
+  })
+})
+
+describe('AsteroidBelt: фазовый свет дымки доходит до объёма', () => {
+  it('дефолты параметров: g 0.55, сила 1, тёплый прямой цвет, туман камней 40 000 км', () => {
+    const p = asteroidBeltParameters(actorOf(DATA))
+    expect(p.dustPhaseG).toBe(0.55)
+    expect(p.dustPhaseStrength).toBe(1)
+    expect(p.dustColorForward).toBe('#c8a98a')
+    expect(p.rockFogRangeKm).toBe(40000)
+  })
+
+  it('клампы: g не выше 0.95, сила в [0, 1], дальность тумана не отрицательна', () => {
+    expect(asteroidBeltParameters(actorOf({ ...DATA, dustPhaseG: 1 })).dustPhaseG).toBe(0.95)
+    expect(asteroidBeltParameters(actorOf({ ...DATA, dustPhaseStrength: 4 })).dustPhaseStrength).toBe(1)
+    expect(asteroidBeltParameters(actorOf({ ...DATA, rockFogRangeKm: -5 })).rockFogRangeKm).toBe(0)
+  })
+
+  it('g, сила и прямой цвет — в юниформах объёма, дефайн фазы стоит', () => {
+    const belt = new AsteroidBelt(actorOf({ ...DATA, dustPhaseG: 0.6, dustPhaseStrength: 0.8, dustColorForward: '#ff8000' }))
+    const material = dustOf(belt).dustMaterial
+
+    expect(material.uniforms.uDustPhaseG.value).toBe(0.6)
+    expect(material.uniforms.uDustPhaseStrength.value).toBe(0.8)
+    expect((material.uniforms.uDustColorForward.value as Color).getHex()).toBe(0xff8000)
+    expect(material.defines.DUST_PHASE_HG).toBe('1')
+  })
+
+  it('сила 0 — прежняя яркость с любого угла, дефайна нет', () => {
+    const belt = new AsteroidBelt(actorOf({ ...DATA, dustPhaseStrength: 0 }))
+    expect(dustOf(belt).dustMaterial.defines.DUST_PHASE_HG).toBeUndefined()
+  })
+})
+
+describe('AsteroidBelt: туман на камнях внутри пояса', () => {
+  /** Стример рождается при первом кадре внутри тора; обход — как у движка */
+  const streamerOf = (belt: AsteroidBelt): AsteroidRingSystem => {
+    const camera = new PerspectiveCamera(50, 1, 0.1, 1e12)
+    camera.position.set(fromAstronomicalUnits(50), 0, 0)
+    camera.updateMatrixWorld(true)
+    camera.updateProjectionMatrix()
+    camera.matrixWorldInverse.copy(camera.matrixWorld).invert()
+    belt.updateMatrixWorld(true)
+    belt.traverse((o) => o.updateObject({ delta: 0.016, epoch: 2451545, elapsed: 0, camera } as UpdateContext))
+    return (belt as unknown as { streamer: AsteroidRingSystem }).streamer
+  }
+
+  it('камни получают плотность тумана от дальности 63%, объёма у стримера нет', () => {
+    const belt = new AsteroidBelt(actorOf({ ...DATA, rockFogRangeKm: 40000 }))
+    const streamer = streamerOf(belt)
+    const rocks = poolOf(streamer).geometryMaterial.uniforms
+
+    expect(rocks.uDustDensity.value).toBeCloseTo(1 / toThreeJSUnits(40000), 9)
+    expect(rocks.uDustNearFade.value).toBeCloseTo(0.05 * toThreeJSUnits(40000), 9)
+    expect(rocks.uDustAnglePower.value).toBeLessThan(1e-3)
+    expect(internalsOf(streamer).dustVolume).toBeNull()
+  })
+
+  it('дальность 0 — тумана на камнях нет', () => {
+    const belt = new AsteroidBelt(actorOf({ ...DATA, rockFogRangeKm: 0 }))
+    const rocks = poolOf(streamerOf(belt)).geometryMaterial.uniforms
+    expect(rocks.uDustDensity.value).toBe(0)
   })
 })
