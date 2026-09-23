@@ -44,6 +44,12 @@ interface RingDustVolumeConfig {
   clumpStrength?: number
   /** Масштаб шума клочьев, three-units (см. precision-заметку в RingDustRaymarchMaterial) */
   clumpScale?: number
+  /** Асимметрия фазы HG, [-1, 1); по умолчанию 0.55 */
+  phaseG?: number
+  /** Сила подмеса фазы 0..1; 0 или не задано — эффект выключен (дефайн не ставится) */
+  phaseStrength?: number
+  /** Цвет дымки на форвард-пике (взгляд на звезду); по умолчанию = dustColor */
+  colorForward?: Color
   /**
    * Радиальный профиль плотности пыли (бины ≥ 0 по u = (r − inner)/(outer − inner));
    * без него модуляция выключена. Кольцо получает его позже из альфы текстуры.
@@ -80,9 +86,11 @@ class RingDustVolume extends Mesh implements DepthVolume, Disposable {
     const geometry = new SphereGeometry(config.outerRadius * RADIAL_PADDING, 32, 16)
 
     const clumps = (config.clumpStrength ?? 0) > 0
+    const phaseHG = (config.phaseStrength ?? 0) > 0
     const material = new RingDustRaymarchMaterial(config.model, {
       lightAtOrigin: config.lightAtOrigin ?? false,
-      clumps
+      clumps,
+      phaseHG
     })
     super(geometry, material)
 
@@ -102,6 +110,9 @@ class RingDustVolume extends Mesh implements DepthVolume, Disposable {
     this.dustMaterial.uniforms.uDustPlanetRadius.value = config.planetRadius
     this.dustMaterial.uniforms.uDustClumpStrength.value = config.clumpStrength ?? 0
     this.dustMaterial.uniforms.uDustClumpScale.value = config.clumpScale ?? 1
+    this.dustMaterial.uniforms.uDustPhaseG.value = config.phaseG ?? 0.55
+    this.dustMaterial.uniforms.uDustPhaseStrength.value = config.phaseStrength ?? 0
+    this.dustMaterial.uniforms.uDustColorForward.value.copy(config.colorForward ?? config.dustColor)
 
     const radial = config.radialProfile ? createDustRadialTexture(config.radialProfile) : null
     if (radial) {

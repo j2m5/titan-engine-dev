@@ -42,6 +42,14 @@ export interface AsteroidBeltParameters {
   dustClumpStrength: number
   /** Масштаб клочьев дымки, км */
   dustClumpScaleKm: number
+  /** Асимметрия фазовой функции дымки, 0..0.95 */
+  dustPhaseG: number
+  /** Сила фазового света 0..1 */
+  dustPhaseStrength: number
+  /** Цвет дымки на просвет к звезде */
+  dustColorForward: number | string
+  /** Дистанция 63% тумана на камнях, км; 0 — выключен */
+  rockFogRangeKm: number
   spinPeriodHours: number
   /** Число точек дальнего слоя — целое, ≥ 0 (0 гасит слой видимостью пустого буфера) */
   pointCount: number
@@ -90,6 +98,11 @@ export function asteroidBeltParameters(actor: Actor): AsteroidBeltParameters {
     dustClumpStrength: Math.min(1, Math.max(0, data.dustClumpStrength ?? 0.7)),
     // Пол ~100 единиц сцены (200 000 км): мельче шум по float32-координатам алиасит
     dustClumpScaleKm: Math.max(1.3e-3, data.dustClumpScaleAu ?? 0.6) * AU,
+    // g < 0.95: у единицы функция Хеньи-Гринштейна вырождается в дельту, на просвет уходит в бесконечность
+    dustPhaseG: Math.min(0.95, Math.max(0, data.dustPhaseG ?? 0.55)),
+    dustPhaseStrength: Math.min(1, Math.max(0, data.dustPhaseStrength ?? 1)),
+    dustColorForward: data.dustColorForward ?? '#c8a98a',
+    rockFogRangeKm: Math.max(0, data.rockFogRangeKm ?? 40000),
     spinPeriodHours: data.spinPeriodHours ?? 0,
     // Целое и не отрицательное — отрицательный/дробный count ломает Float32Array(count * 3)
     pointCount: Math.max(0, Math.floor(data.pointCount ?? DEFAULT_POINT_COUNT)),

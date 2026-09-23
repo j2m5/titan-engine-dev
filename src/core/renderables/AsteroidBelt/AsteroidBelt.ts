@@ -134,6 +134,11 @@ class AsteroidBelt extends Group {
       // сгустками, а не ровный градиент; 0 — ровная лента и прежний шейдер
       clumpStrength: p.dustClumpStrength,
       clumpScale: toThreeJSUnits(p.dustClumpScaleKm),
+      // Фазовый свет: на просвет к звезде дымка ярче и теплее, спиной — тусклее;
+      // среднее по углам не меняется
+      phaseG: p.dustPhaseG,
+      phaseStrength: p.dustPhaseStrength,
+      colorForward: new Color(p.dustColorForward),
       registry: this.depthVolumeRegistry ?? undefined
     })
   }
@@ -198,6 +203,14 @@ class AsteroidBelt extends Group {
     }
     // Пыль уже посчитана дальним слоем — второй объём стримера был бы дублем
     if (this.dustVolume) overrides.dustEnabled = false
+    // Воздушная перспектива на камнях без объёма: художественная ручка, при
+    // толще ленты в сотые доли честная дымка внутри ничтожна. Цвет пыли и
+    // выключенный угловой гейт — те же, что у объёма
+    if (p.rockFogRangeKm > 0) {
+      overrides.rockFog = { rangeKm: p.rockFogRangeKm, nearFadeFraction: 0.05 }
+      overrides.dustColor = p.dustColor
+      overrides.dustAnglePower = 1e-6
+    }
 
     return new AsteroidRingSystem(this.actor, overrides, this.depthVolumeRegistry, shapeModelStorage)
   }
