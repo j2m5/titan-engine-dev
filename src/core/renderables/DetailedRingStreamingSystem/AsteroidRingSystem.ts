@@ -763,6 +763,8 @@ class AsteroidRingSystem extends Group {
         maxSteps: cfg.dustMaxSteps,
         planetRadius: dustPlanetRadius,
         model: this.model,
+        // Дуги пояса (у колец не задано — программа прежняя)
+        angularProfile: cfg.angularProfileSource,
         registry: this.dustRegistry ?? undefined
       })
       this.add(this.dustVolume)
