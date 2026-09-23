@@ -929,9 +929,13 @@ class AsteroidRingSystem extends Group {
     l0Material.uniforms.uDustLightDirRing.value.copy(this._localLightDir)
     this.pool.billboardMaterial.uniforms.uDustLightDirRing.value.copy(this._localLightDir)
 
-    // Пер-кадровые юниформы дымки: позиция камеры в ring-local (для аэроперспективы)
+    // Пер-кадровые юниформы дымки: позиция камеры в ring-local (для аэроперспективы).
+    // Туман камней без объёма (rockFog) тоже строит луч от камеры — без
+    // обновления луч шёл бы от центра кольца сквозь всю ленту
     if (this.dustVolume) {
       this.dustVolume.updatePerFrame(this._localCamPos, this._localLightDir)
+    }
+    if (this.dustVolume || this.config.rockFog) {
       l0Material.uniforms.uDustCamRingPos.value.copy(this._localCamPos)
       this.pool.billboardMaterial.uniforms.uDustCamRingPos.value.copy(this._localCamPos)
     }

@@ -268,7 +268,10 @@ forward) · phaseMean · 0.795`, `haze = mix(haze, phaseHaze, strength)` (haze �
 экспонента даёт 0.94 от средней плоскости — туман работает по дистанции); в
 средней плоскости на `rangeKm` набирает 1 − e⁻¹ ≈ 63%, у кромки ≈ 61%
 (`tests/asteroidBelt/RockFog.spec.ts`, CPU-зеркало `tauRay`), объём не
-создаётся. Пояс
+создаётся. Луч тумана идёт от камеры: `uDustCamRingPos` обновляется покадрово
+и при `rockFog`, не только при объёме (иначе луч шёл бы от центра кольца
+сквозь всю ленту и камни заливались бы плоским цветом дымки — страж в
+`tests/asteroidBelt/BeltDustCalibration.spec.ts`). Пояс
 (`AsteroidBelt.__createStreamer`) при `rockFogRangeKm > 0` отдаёт `rockFog` с
 `nearFadeFraction 0.05` (константа кода), цвет тумана = `dustColor`, угловой
 гейт снят (`dustAnglePower 1e-6`). Кольца (`dustEnabled true`, `rockFog` не

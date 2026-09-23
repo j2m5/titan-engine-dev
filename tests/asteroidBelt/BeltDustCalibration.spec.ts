@@ -20,7 +20,7 @@ import { Actor } from '@/core/models/Actor'
 import type { IAsteroidBeltRenderingObject } from '@/core/models/types'
 import type { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
 import type { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
-import { Color, PerspectiveCamera } from 'three'
+import { Color, PerspectiveCamera, Vector3 } from 'three'
 import type { UpdateContext } from '@/core/UpdateContext'
 import { internalsOf, poolOf } from '../helpers/ringSystemInternals'
 
@@ -205,6 +205,18 @@ describe('AsteroidBelt: туман на камнях внутри пояса', (
     expect(rocks.uDustNearFade.value).toBeCloseTo(0.05 * toThreeJSUnits(40000), 9)
     expect(rocks.uDustAnglePower.value).toBeLessThan(1e-3)
     expect(internalsOf(streamer).dustVolume).toBeNull()
+  })
+
+  it('позиция камеры для тумана обновляется покадрово и без объёма пыли — иначе луч идёт от звезды сквозь всю ленту', () => {
+    const belt = new AsteroidBelt(actorOf({ ...DATA, rockFogRangeKm: 40000 }))
+    const pool = poolOf(streamerOf(belt))
+
+    for (const uniforms of [pool.geometryMaterial.uniforms, pool.billboardMaterial.uniforms]) {
+      const cam = uniforms.uDustCamRingPos.value as Vector3
+      expect(cam.x).toBeCloseTo(fromAstronomicalUnits(50), 3)
+      expect(cam.y).toBeCloseTo(0, 6)
+      expect(cam.z).toBeCloseTo(0, 6)
+    }
   })
 
   it('дальность 0 — тумана на камнях нет', () => {
