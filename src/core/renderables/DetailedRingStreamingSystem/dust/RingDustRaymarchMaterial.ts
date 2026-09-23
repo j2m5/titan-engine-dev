@@ -45,6 +45,12 @@ import { resolveLightTint } from '@/core/helpers/lightSource'
  * а не τ объёма, и согласованности между ними нет по замыслу; у колец клочья
  * не используются.
  *
+ * Дуги (DUST_ARCS) — азимутальный профиль плотности пояса из 1D-текстуры
+ * (см. DustRadialProfile.createDustAngularTexture): u = atan(p.z, p.x) / 2π,
+ * тот же отсчёт угла, что у секторов стримера и точек дальнего слоя. Как и
+ * клочья, дуги видит только марш объёма — туман камней (ringDustTauRay) их
+ * не знает.
+ *
  * Фазовый свет (DUST_PHASE_HG) — форвард-скаттеринг: дымка ярче, если луч
  * смотрит сквозь неё на звезду, и темнее, если от звезды. Фаза Хеньи-Гринштейна
  * взята БЕЗ множителя 1/(4π): среднее по сфере равно 1 по построению.
@@ -71,6 +77,11 @@ interface RingDustRaymarchOptions {
    * текст программы без флага оставался байт-в-байт прежним.
    */
   phaseHG?: boolean
+  /**
+   * Азимутальный профиль плотности («дуги» пояса): под дефайном, чтобы текст
+   * программы колец без флага оставался байт-в-байт прежним.
+   */
+  arcs?: boolean
 }
 
 class RingDustRaymarchMaterial extends ShaderMaterial {
@@ -108,6 +119,24 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
                 float n = clumpNoise * 0.5 + 0.5;
                 contrib *= mix(1.0 - clumpGain, 1.0 + clumpGain, n);
               }
+            #endif`
+      : ''
+
+    // Дуги вставляются тем же приёмом: без options.arcs текст фрагментного
+    // шейдера остаётся байт-в-байт прежним.
+    const arcsDeclChunk = options.arcs
+      ? `
+        uniform sampler2D uDustAngularMap;
+        uniform float uDustAngularMapScale;`
+      : ''
+    // Сразу после клочьев, до фазы и накопления tau/litTau: contrib несёт дуги
+    // во все взвешенные суммы. u = θ/2π по atan(z, x) — бин i текстуры отвечает
+    // углу 2π·i/bins, как у AngularDensityProfile; отрицательный u замыкает
+    // оборот через wrap Repeat (см. createDustAngularTexture)
+    const arcsContribChunk = options.arcs
+      ? `
+            #ifdef DUST_ARCS
+              contrib *= texture2D(uDustAngularMap, vec2(atan(p.z, p.x) / PI2, 0.5)).r * uDustAngularMapScale;
             #endif`
       : ''
 
@@ -172,7 +201,8 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
         ...(lightTint.active && { USE_LIGHT_TINT: '1' }),
         ...(options.lightAtOrigin && { DUST_LIGHT_AT_ORIGIN: '1' }),
         ...(options.clumps && { DUST_CLUMPS: '1' }),
-        ...(options.phaseHG && { DUST_PHASE_HG: '1' })
+        ...(options.phaseHG && { DUST_PHASE_HG: '1' }),
+        ...(options.arcs && { DUST_ARCS: '1' })
       },
       uniforms: {
         uDustColor: { value: new Color(0x9b968c) },
@@ -196,6 +226,10 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
         uDustRadialMap: { value: null },
         /** Множитель профиля (среднее модуляции ≈ 1); 0 — профиль выключен */
         uDustRadialMapScale: { value: 0.0 },
+        /** Азимутальный профиль пыли — дуги пояса (см. createDustAngularTexture); читается только под DUST_ARCS */
+        uDustAngularMap: { value: null },
+        /** Множитель азимутального профиля (среднее модуляции ≈ 1) */
+        uDustAngularMapScale: { value: 0.0 },
         // Полосы кольца и слой (см. чанк RingDust): самозатенение марша
         uRingBandMap: { value: null },
         uRingBandEnabled: { value: 0.0 },
@@ -244,7 +278,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
 
         uniform int uDustMaxSteps;
         uniform int uDustDebugMode;
-        ${sceneDepthUniforms}${clumpDeclChunk}${phaseDeclChunk}
+        ${sceneDepthUniforms}${clumpDeclChunk}${arcsDeclChunk}${phaseDeclChunk}
 
         // Во фрагментном префиксе three modelViewMatrix не объявлен, но рендерер
         // грузит его по имени в любой стадии. Берём именно его, а не
@@ -323,7 +357,7 @@ class RingDustRaymarchMaterial extends ShaderMaterial {
             float s = (float(i) + jitter) * dt;
             float t = s < lenA ? segA.x + s : segB.x + (s - lenA);
             vec3 p = uDustCamRingPos + rayDir * t;
-            float contrib = ringDustDensityAt(p) * ringDustNearRamp(t) * dt;${clumpContribChunk}${phaseContribChunk}
+            float contrib = ringDustDensityAt(p) * ringDustNearRamp(t) * dt;${clumpContribChunk}${arcsContribChunk}${phaseContribChunk}
             tau += contrib;
             // Тень планеты и самозатенение слоя кольца — на каждом шаге
             litTau += contrib * ringDustPlanetShadow(p) * ringLayerShadow(p);

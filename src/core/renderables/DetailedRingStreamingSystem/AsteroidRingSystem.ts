@@ -19,6 +19,7 @@ import { readRingAlphaProfile, readRingAlphaBins, readRingBandBins } from './Rin
 import { createDustRadialTexture } from './dust/DustRadialProfile'
 import { createRingBandTexture } from './dust/RingBandTexture'
 import { RadialDensityProfile } from './RadialDensityProfile'
+import { AngularDensityProfile } from './AngularDensityProfile'
 import { ringLightDirection } from './ringLightDirection'
 import { SectorGrid, SectorGridConfig } from './SectorGrid'
 import { AsteroidGenerator, GeneratorConfig } from './AsteroidGenerator'
@@ -257,6 +258,13 @@ interface AsteroidRingConfig {
    * пути не читается — у пояса нет 2D-текстуры кольца).
    */
   densityProfileSource?: Float32Array
+  /**
+   * Азимутальный профиль плотности пояса (дуги, см. buildBeltAngularProfile) —
+   * бины по долям оборота [0, 1) от atan2(z, x). Взвешивает счёт камней
+   * секторов (SectorGrid.setAngularProfile) и пыль объёма стримера. Кольца
+   * его не задают — их путь не меняется.
+   */
+  angularProfileSource?: Float32Array
   /**
    * Высота вертикального слоя сетки секторов в км; не задана или ≥ толщины —
    * один слой на всю толщину (плоская сетка, прежний путь колец). Задана и
@@ -740,6 +748,13 @@ class AsteroidRingSystem extends Group {
       this.densityProfileReady = true
     }
 
+    // --- Дуги пояса (см. angularProfileSource): один профиль во все каскады.
+    // Генератор без профиля: угол внутри сектора равномерен, сектор много уже дуги
+    if (cfg.angularProfileSource) {
+      const beltAngularProfile = new AngularDensityProfile(cfg.angularProfileSource)
+      for (const grid of grids) grid.setAngularProfile(beltAngularProfile)
+    }
+
     // --- Тень планеты (умбра) — общая для камней/пыли/2D-кольца ---
     // Радиус планеты в ring-local (начало ring-local = центр планеты, тот же
     // источник, что у RingShader). Прокидываем в материалы камней НЕЗАВИСИМО от
@@ -773,6 +788,8 @@ class AsteroidRingSystem extends Group {
         maxSteps: cfg.dustMaxSteps,
         planetRadius: dustPlanetRadius,
         model: this.model,
+        // Дуги пояса (у колец не задано — программа прежняя)
+        angularProfile: cfg.angularProfileSource,
         registry: this.dustRegistry ?? undefined
       })
       this.add(this.dustVolume)

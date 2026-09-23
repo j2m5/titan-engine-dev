@@ -1,4 +1,4 @@
-import { ClampToEdgeWrapping, DataTexture, LinearFilter, RedFormat, UnsignedByteType } from 'three'
+import { ClampToEdgeWrapping, DataTexture, LinearFilter, RedFormat, RepeatWrapping, UnsignedByteType } from 'three'
 
 /**
  * Нормированный радиальный профиль пыли: байты для 1D-текстуры + множитель.
@@ -59,5 +59,28 @@ const createDustRadialTexture = (bins: Float32Array): { texture: DataTexture; sc
   return { texture, scale: normalized.scale }
 }
 
-export { normalizeDustBins, createDustRadialTexture }
+/**
+ * Собрать 1D-текстуру азимутального профиля пыли (дуги пояса, см.
+ * buildBeltAngularProfile): та же нормировка, но wrap Repeat — бин i отвечает
+ * углу 2π·i/bins по atan2(z, x), и оборот замыкается без шва: выборка у
+ * u → 1 линейно смешивается с бином 0. Маппинг u в шейдере —
+ * atan(p.z, p.x) / 2π (см. RingDustRaymarchMaterial, DUST_ARCS).
+ */
+const createDustAngularTexture = (bins: Float32Array): { texture: DataTexture; scale: number } | null => {
+  const normalized = normalizeDustBins(bins)
+  if (!normalized) return null
+
+  const texture = new DataTexture(normalized.bytes, normalized.bytes.length, 1, RedFormat, UnsignedByteType)
+  texture.magFilter = LinearFilter
+  texture.minFilter = LinearFilter
+  texture.wrapS = RepeatWrapping
+  texture.wrapT = ClampToEdgeWrapping
+  texture.generateMipmaps = false
+  texture.needsUpdate = true
+  texture.name = 'DustAngularProfile'
+
+  return { texture, scale: normalized.scale }
+}
+
+export { normalizeDustBins, createDustRadialTexture, createDustAngularTexture }
 export type { DustRadialProfileData }

@@ -6,6 +6,7 @@ import { AsteroidGenerator, GeneratorConfig } from '@/core/renderables/DetailedR
 import { SectorGrid } from '@/core/renderables/DetailedRingStreamingSystem/SectorGrid'
 import { RingDustVolume } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustVolume'
 import { RadialDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/RadialDensityProfile'
+import { AngularDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/AngularDensityProfile'
 import { FloatingOrigin } from '@/core/renderables/DetailedRingStreamingSystem/FloatingOrigin'
 import type { Group } from 'three'
 
@@ -49,6 +50,10 @@ export const generatorConfigOf = (generator: AsteroidGenerator): GeneratorConfig
 /** Поле `densityProfile` приватно и в SectorGrid, и в AsteroidGenerator — одна форма на оба. */
 export const densityProfileOf = (owner: SectorGrid | AsteroidGenerator): RadialDensityProfile | null =>
   (owner as unknown as { densityProfile: RadialDensityProfile | null }).densityProfile
+
+/** Поле `angularProfile` приватно в SectorGrid — дуги пояса (см. SectorGrid.setAngularProfile). */
+export const angularProfileOf = (grid: SectorGrid): AngularDensityProfile | null =>
+  (grid as unknown as { angularProfile: AngularDensityProfile | null }).angularProfile
 
 /** Поле `cellSize` приватно в FloatingOrigin (parameter property конструктора). */
 export const originCellSizeOf = (origin: FloatingOrigin): number =>
