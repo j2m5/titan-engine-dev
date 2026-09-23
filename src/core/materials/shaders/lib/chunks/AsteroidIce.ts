@@ -10,8 +10,10 @@ import { hash13Function } from './AsteroidShape'
  * билборд считают одно и то же выражение — тир не меняет выбор.
  *
  * Все куски вставляются строковой композицией: без опции тексты программ
- * колец остаются байт-в-байт прежними. Детальные карты у ледяных тел
- * остаются базовыми — второй сет текстур в общий материал не подмешать.
+ * колец остаются байт-в-байт прежними. У ледяных тел меняются цвет, блик,
+ * реголитная модель и амбиент; детальные карты, джиттер цвета, моря,
+ * freshness и cavity остаются базовыми — второй сет текстур в общий
+ * материал не подмешать, остальное на льду не читается.
  */
 
 /** Выражение выбора — одно на оба материала, иначе тиры разойдутся во льде */
@@ -22,7 +24,11 @@ export const asteroidIceVertexDecl = `
     uniform float uIceFraction;
     varying float vIce;`
 
-/** Вершинник билборда: чанков формы/шумов у него нет — оба хеша приходят сюда */
+/**
+ * Вершинник билборда: чанков формы/шумов у него нет — оба хеша приходят сюда
+ * без стража TITAN_NOISE_INCLUDED; появится #include <noiseFunctions> —
+ * функции задвоятся
+ */
 export const asteroidIceBillboardVertexDecl = `
         uniform float uIceFraction;
         varying float vIce;
@@ -53,7 +59,10 @@ export const asteroidIceFragmentLocals = `
 
 export const asteroidIceBillboardFragmentDecl = `
         uniform vec3 uIceRockColor;
+        uniform float uIceLunarMix;
         varying float vIce;`
 
-/** Билборд без блика: ледяное тело отличается только цветом породы */
+/** Билборд без блика: ледяное тело отличается цветом породы и реголитной моделью */
 export const ASTEROID_ICE_BILLBOARD_COLOR = 'mix(uColor, uIceRockColor, vIce)'
+/** Модель освещения одна на L0 и билборд, иначе шов при смене тира */
+export const ASTEROID_ICE_BILLBOARD_LUNAR_MIX = 'mix(uLunarMix, uIceLunarMix, vIce)'

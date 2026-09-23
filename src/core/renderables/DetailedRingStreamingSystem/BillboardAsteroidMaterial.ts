@@ -3,6 +3,7 @@ import { ringDustFunctions, ringDustUniforms } from '@/core/materials/shaders/li
 import { asteroidBrdfFunctions } from '@/core/materials/shaders/lib/chunks/AsteroidBrdf'
 import {
   ASTEROID_ICE_BILLBOARD_COLOR,
+  ASTEROID_ICE_BILLBOARD_LUNAR_MIX,
   asteroidIceBillboardFragmentDecl,
   asteroidIceBillboardVertexDecl,
   asteroidIceVertexSelect
@@ -190,6 +191,7 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
     // Лёд — строковой композицией, как и в вершиннике: без опции текст прежний
     const iceFragmentDecl = useIceVariety ? asteroidIceBillboardFragmentDecl : ''
     const baseColor = useIceVariety ? ASTEROID_ICE_BILLBOARD_COLOR : 'uColor'
+    const lunarMix = useIceVariety ? ASTEROID_ICE_BILLBOARD_LUNAR_MIX : 'uLunarMix'
 
     super({
       defines: {
@@ -246,7 +248,8 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         // Ледяная примесь (см. чанк AsteroidIce): доля 0 — все тела базового
         // цвета; заполняет AsteroidRingSystem из ледяного профиля
         uIceFraction: { value: 0.0 },
-        uIceRockColor: { value: new Color(0xc4d2dc) }
+        uIceRockColor: { value: new Color(0xc4d2dc) },
+        uIceLunarMix: { value: 0.5 }
       },
       vertexShader: billboardVertexShader(useIceVariety),
       fragmentShader: /* glsl */ `
@@ -327,7 +330,7 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
           // Билборд смотрит на камеру: view-направление ≈ +Z, поэтому NdotV = normal.z,
           // cosPhase = L.z
           float NdotL = dot(normal, vLightDirView);
-          float diffuse = asteroidRegolithDiffuse(NdotL, normal.z, vLightDirView.z, uLunarMix, uOppositionSurge);
+          float diffuse = asteroidRegolithDiffuse(NdotL, normal.z, vLightDirView.z, ${lunarMix}, uOppositionSurge);
           // Тень планеты (умбра) — та же модель, что у пыли/2D-кольца/L0. Гасит
           // прямой свет; uAmbient остаётся (не в глухой ноль).
           float planetShadow = ringDustPlanetShadow(vRingPos);

@@ -120,6 +120,13 @@ describe('Материалы с ледяной примесью: дефайн, �
       'vec3 base = mix(uColor, uIceRockColor, vIce) * (1.0 + uColorJitter * (vInstanceSeed - 0.5) * 2.0);'
     )
   })
+
+  it('билборд: реголитная модель по той же смеси, что у L0 — тир не меняет освещение льда', () => {
+    expect(withoutComments(billboard.fragmentShader)).toContain(
+      'asteroidRegolithDiffuse(NdotL, normal.z, vLightDirView.z, mix(uLunarMix, uIceLunarMix, vIce), uOppositionSurge)'
+    )
+    expect(billboard.uniforms.uIceLunarMix).toBeDefined()
+  })
 })
 
 describe('AsteroidRingSystem: iceVariety заполняет юниформы из ледяного профиля', () => {
@@ -138,6 +145,7 @@ describe('AsteroidRingSystem: iceVariety заполняет юниформы и�
     expect(sprites.uIceFraction.value).toBe(0.15)
     expect((rocks.uIceRockColor.value as Color).getHex()).toBe(0xc4d2dc)
     expect((sprites.uIceRockColor.value as Color).getHex()).toBe(0xc4d2dc)
+    expect(sprites.uIceLunarMix.value).toBe(0.5)
     expect(rocks.uIceSpecularStrength.value).toBe(0.5)
     expect(rocks.uIceSpecularPower.value).toBe(12)
     expect(rocks.uIceSpecularTint.value).toBe(icy.specularTint)

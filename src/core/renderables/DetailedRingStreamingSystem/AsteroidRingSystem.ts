@@ -629,18 +629,19 @@ class AsteroidRingSystem extends Group {
     }
 
     // Ледяная примесь: ручки ледяного профиля в оба материала, доля — гейт
-    // (без опции остаётся 0 и юниформы нейтральны). Детальные карты у льда
-    // остаются базовыми — второй сет текстур в общий материал не подмешать
+    // (без опции остаётся 0 и юниформы нейтральны). Цвет и реголитная модель
+    // — в оба тира (см. правило выше), блик и амбиент — только L0; детальные
+    // карты у льда остаются базовыми
     if (cfg.iceVariety) {
       const ice = ASTEROID_PROFILES[cfg.iceVariety.profile]
       l0ShapeMaterial.uniforms.uIceSpecularStrength.value = ice.specularStrength
       l0ShapeMaterial.uniforms.uIceSpecularPower.value = ice.specularPower
       l0ShapeMaterial.uniforms.uIceSpecularTint.value = ice.specularTint
-      l0ShapeMaterial.uniforms.uIceLunarMix.value = ice.lunarMix
       l0ShapeMaterial.uniforms.uIceSurfaceAmbient.value = ice.surfaceAmbient
       for (const uniforms of [l0ShapeMaterial.uniforms, billboardMaterial.uniforms]) {
         uniforms.uIceFraction.value = cfg.iceVariety.fraction
         uniforms.uIceRockColor.value.set(ice.baseColor)
+        uniforms.uIceLunarMix.value = ice.lunarMix
       }
     }
 
