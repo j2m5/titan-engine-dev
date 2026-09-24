@@ -35,13 +35,13 @@ describe('Данные средней полосы детали рельефа',
     expect(withoutSlope).toEqual([])
   })
 
-  it('ручки форм склона в БД не проставлены (арка A — глобальные дефолты); 54 тела на macroStrength 0.25', () => {
+  it('ручки форм склона в БД не проставлены (арка A — глобальные дефолты); 55 тел на macroStrength 0.25', () => {
     const structureKeys = ['macroStreakStrength', 'macroStreakScaleKm', 'macroTerraceStrength', 'macroTerraceStepMeters', 'macroStreakChart']
     const withStructures = RenderingObjects.filter((row: IRenderingObject): boolean =>
       structureKeys.some((key: string): boolean => (row.data as Record<string, unknown> | undefined)?.[key] !== undefined)
     )
     expect(withStructures).toEqual([])
-    expect(withMacro.length).toBe(54)
+    expect(withMacro.length).toBe(55)
     expect(withMacro.every((row: IRenderingObject): boolean => (row.data as { macroStrength: number }).macroStrength === 0.25)).toBe(true)
   })
 

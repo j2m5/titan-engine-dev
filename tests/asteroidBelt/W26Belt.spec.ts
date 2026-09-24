@@ -30,12 +30,18 @@ function beltData(): IAsteroidBeltRenderingObject {
 }
 
 describe('пояс Ashfall Belt — система W26', () => {
-  it('единственный актор категории 11 в базе, под барицентром системы', () => {
-    const belts = Actors.filter((a) => a.categoryId === 11)
+  it('в системе W26 ровно один пояс — Ashfall Belt под барицентром (второй пояс живёт в сцене Алькаид)', () => {
+    const system = actorByName('Westerlund 1-26 system')
+    const belts = Actors.filter((a) => a.categoryId === 11 && a.parentId === system.id)
 
     expect(belts).toHaveLength(1)
-    expect(belts[0].parentId).toBe(actorByName('Westerlund 1-26 system').id)
     expect(belts[0].name).toBe('Ashfall Belt')
+  })
+
+  it('у каждого пояса в базе — свой барицентр: по одному на систему', () => {
+    const parents = Actors.filter((a) => a.categoryId === 11).map((a) => a.parentId)
+
+    expect(new Set(parents).size).toBe(parents.length)
   })
 
   it('наклонён к плоскости системы строкой rotation (несколько градусов, без суточного вращения)', () => {

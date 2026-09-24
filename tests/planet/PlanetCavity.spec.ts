@@ -260,9 +260,9 @@ describe('PlanetMaterial: проводка cavity (гейт USE_CAVITY, юниф
 // выводится ПРОГРАММНО из БД — акторы с height-ресурсом (путь заканчивается
 // на _height.raw), минус фотомозаичные {5, 6, 8, 19, 7} (Меркурий, Венера,
 // Марс, Луна, Земля — реальные снимки/DEM, cavity им не полагается).
-// Ожидание — ровно 49 тел (45 прежних + 4 процедурных тела системы W26:
+// Ожидание — ровно 50 тел (45 прежних + 4 процедурных тела системы W26:
 // Emberon, Halcyra I/II, Nivalis).
-describe('Счётный инвариант: cavityStrength у 49 терраформных тел (Task 3 + Task 6)', () => {
+describe('Счётный инвариант: cavityStrength у 50 терраформных тел (Task 3 + Task 6)', () => {
   const PHOTOMOSAIC_ACTOR_IDS: readonly number[] = [5, 6, 8, 19, 7]
 
   const heightActorIds = new Set(
@@ -275,8 +275,8 @@ describe('Счётный инвариант: cavityStrength у 49 террафо
 
   const coverageActorIds = [...heightActorIds].filter((id) => !PHOTOMOSAIC_ACTOR_IDS.includes(id))
 
-  it('охват — ровно 49 тел', () => {
-    expect(coverageActorIds.length).toBe(49)
+  it('охват — ровно 50 тел', () => {
+    expect(coverageActorIds.length).toBe(50)
   })
 
   it('у всех 49 тел охвата data.cavityStrength > 0', () => {
@@ -319,6 +319,6 @@ describe('Счётный инвариант: cavityStrength у 49 террафо
       return typeof data.cavityStrength === 'number' && data.cavityStrength > 0
     })
 
-    expect(withCavity.length).toBe(49)
+    expect(withCavity.length).toBe(50)
   })
 })

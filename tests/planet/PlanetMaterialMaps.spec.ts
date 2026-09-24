@@ -1383,7 +1383,7 @@ describe('PlanetMaterial: у каждого терраформного тела 
   // Раскладка спеки архетипов (2026-08-24) после раската ice (2026-08-30): 23 ледяных тела —
   // ледяные луны Юпитера/Сатурна/Урана/Нептуна, Плутон/Харон, КБО, Оханн II (тёмно-серый диффуз);
   // Оханн I (бурый диффуз) остался камнем. Япет/Каллисто — тёмный лёд, откат на камень = строка пивота.
-  const ICE_ACTOR_IDS = [14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 69] as const
+  const ICE_ACTOR_IDS = [14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 69, 133] as const
 
   const archetype = (actorId: number): string | null =>
     archetypeOf(Actor.find(actorId)!.resources.where('resourceType', 'detailDiffuse').first()!.getAttribute('path') as string)
