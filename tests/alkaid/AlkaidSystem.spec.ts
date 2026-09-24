@@ -140,4 +140,55 @@ describe('сцена Алькаид: гигант Thalorn с атмосферо�
   })
 })
 
+describe('сцена Алькаид: ледяная планета Isvara', () => {
+  it('планета 3800 км на 48 а.е., физика под звездой', () => {
+    const isvara = actorByName('Isvara')
+
+    expect(isvara.categoryId).toBe(4)
+    expect(isvara.parentId).toBe(actorByName('Alkaid system').id)
+    expect(physicalOf(isvara.id).radius).toBe(3800)
+    expect(physicalOf(isvara.id).parentId).toBe(physicalOf(actorByName('Alkaid').id).id)
+    expect(orbitOf(isvara.id).semiMajorAxis).toBe(48)
+  })
+
+  it('ресурсы: одна карта высот (resident) и одна склонов по конвенции, ледяной детальный набор', () => {
+    const paths = resourcesOf(actorByName('Isvara').id)
+    const height = paths.filter((r) => r.resourceType === 'height')
+    const slope = paths.filter((r) => r.resourceType === 'slope')
+
+    expect(height).toHaveLength(1)
+    expect(height[0].path).toBe('planets/unnamed/alkaid/isvara_height.raw')
+    expect(height[0].lifecycle).toBe('resident')
+    expect(slope).toHaveLength(1)
+    expect(slope[0].path).toBe('planets/unnamed/alkaid/isvara_slope.webp')
+    expect(paths.find((r) => r.resourceType === 'detailDiffuse')!.path).toBe('terrain/ice_diff.webp')
+    expect(paths.some((r) => r.resourceType === 'detailNormal2')).toBe(true)
+  })
+
+  it('процедурная поверхность с холодной палитрой, cavityStrength > 0', () => {
+    const data = renderingOf(actorByName('Isvara').id).data as {
+      proceduralSurface: { palette: string[]; seed: number }
+      cavityStrength: number
+    }
+
+    expect(data.proceduralSurface.palette).toHaveLength(4)
+    expect(data.proceduralSurface.palette[0]).toBe('#0b1a22')
+    expect(data.cavityStrength).toBeGreaterThan(0)
+  })
+
+  it('атмосфера: дно = радиус, облучение и угловой радиус по формулам, muSMin не мельче погружения горизонта', () => {
+    const isvara = actorByName('Isvara')
+    const atm = Actors.find((a) => a.categoryId === 5 && a.parentId === isvara.id)
+    expect(atm).toBeDefined()
+    const data = atmosphereData(atm!.id)
+    const star = physicalOf(actorByName('Alkaid').id)
+    const dip = Math.asin(Math.sqrt(1 - (data.bottomRadius / data.topRadius) ** 2))
+
+    expect(data.bottomRadius).toBe(3800)
+    expectedIrradiance().forEach((v, i) => expect(data.solarIrradiance[i]).toBeCloseTo(v, 3))
+    expect(data.sunAngularRadius).toBeCloseTo(sunAngularRadius(star.radius, orbitOf(isvara.id).semiMajorAxis), 6)
+    expect(data.muSMin).toBeLessThanOrEqual(-Math.sin(1.6 * dip + (5 * Math.PI) / 180) + 1e-3)
+  })
+})
+
 export { actorByName, physicalOf, orbitOf, renderingOf, atmosphereData, expectedIrradiance, resourcesOf }

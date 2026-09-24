@@ -574,7 +574,8 @@ const BODIES: readonly BodyGeneration[] = [
   { name: 'emberon', outputDir: `${TEXTURES_ROOT}/unnamed/w26`, inputKind: 'procedural', radiusMeters: 5_200_000, seedActorId: 119, actorIds: [119] },
   { name: 'halcyra1', outputDir: `${TEXTURES_ROOT}/unnamed/w26`, inputKind: 'procedural', radiusMeters: 1_400_000, seedActorId: 121, actorIds: [121] },
   { name: 'halcyra2', outputDir: `${TEXTURES_ROOT}/unnamed/w26`, inputKind: 'procedural', radiusMeters: 2_100_000, seedActorId: 122, actorIds: [122] },
-  { name: 'nivalis', outputDir: `${TEXTURES_ROOT}/unnamed/w26`, inputKind: 'procedural', radiusMeters: 4_100_000, seedActorId: 123, actorIds: [123] }
+  { name: 'nivalis', outputDir: `${TEXTURES_ROOT}/unnamed/w26`, inputKind: 'procedural', radiusMeters: 4_100_000, seedActorId: 123, actorIds: [123] },
+  { name: 'isvara', outputDir: `${TEXTURES_ROOT}/unnamed/alkaid`, inputKind: 'procedural', radiusMeters: 3_800_000, seedActorId: 133, actorIds: [133] }
 ]
 
 interface ReportRow {
