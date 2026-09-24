@@ -46,6 +46,9 @@ export class PulsarBeamsMaterial extends ShaderMaterial {
         uniform vec3 uColor;
         uniform float uIntensity;
         ${sceneDepthUniforms}
+        // Во фрагментном префиксе three modelViewMatrix не объявлен; рендерер
+        // грузит его по имени в любой стадии
+        uniform mat4 modelViewMatrix;
         varying vec3 vLocal;
         ${sceneDepthFunctions}
 

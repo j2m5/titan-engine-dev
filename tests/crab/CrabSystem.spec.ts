@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { Vector3 } from 'three'
 import { Actors, PhysicalObjects, RenderingObjects, RotationObjects } from '@storage/database'
 import { Scenarios } from '@/config/scenarios'
+import { three } from '@/config/three'
+import { fromAstronomicalUnits } from '@/core/helpers/scaling'
 import { Actor } from '@/core/models/Actor'
 import { shapeRotationMatrix } from '@/core/renderables/Nebula/fields/NebulaField'
 import { OrientationModel } from '@/core/libs/OrientationModel'
@@ -57,14 +59,14 @@ describe('сцена Краб: пульсар и остаток', () => {
     expect(data.beamPeriodSeconds).toBeGreaterThanOrEqual(1)
   })
 
-  it('оболочка — shell 700 а.е., вмещает тор (180) и джеты (350); лучи короче оболочки', () => {
+  it('оболочка — shell 450 а.е., вмещает тор (115) и джеты (225); лучи короче оболочки', () => {
     const shell = nebulaOf('Crab shell')
     const torus = nebulaOf('Crab wind torus')
     const jets = nebulaOf('Crab jets')
     const psr = renderingOf(byName('PSR B0531+21').id) as IPulsarRenderingObject
 
     expect(shell.shape).toBe('shell')
-    expect(shell.size).toBe(700)
+    expect(shell.size).toBe(450)
     expect(torus.shape).toBe('torus')
     expect(jets.shape).toBe('ellipsoid')
     expect(torus.size!).toBeLessThan(shell.size! * (1 - shell.shapeThickness!))
@@ -89,6 +91,17 @@ describe('сцена Краб: пульсар и остаток', () => {
       const axis = new Vector3(0, 1, 0).applyMatrix3(toShape.clone().transpose())
 
       expect(axis.angleTo(pole), name).toBeLessThan(0.5 * deg)
+    }
+  })
+
+  it('куб-прокси каждой туманности остаётся внутри far при обзоре с запасом 1.3× на отъезд в любой ориентации', () => {
+    const scenario = Scenarios.find((s) => s.id === 14)!
+    const cameraDistance = new Vector3(...scenario.defaultCameraPosition).length()
+
+    for (const name of ['Crab shell', 'Crab wind torus', 'Crab jets']) {
+      // Прокси объёма — куб, клипится far по глубине; худший случай — камера на диагонали куба
+      const cubeDiagonal = fromAstronomicalUnits(nebulaOf(name).size!) * Math.sqrt(3)
+      expect(cameraDistance * 1.3 + cubeDiagonal, name).toBeLessThan(three.camera.far)
     }
   })
 

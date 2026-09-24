@@ -88,4 +88,10 @@ describe('PulsarBeams: объём в проходе глубины', () => {
     expect(frag).toContain('abs(dot(p, uAxis))')
     expect(frag).toContain('max(-b - s, 0.0)')
   })
+
+  it('GLSL: фрагментник сам объявляет modelViewMatrix — во фрагментном префиксе three его нет', () => {
+    const frag = new PulsarBeams(params(), null).material.fragmentShader
+
+    expect(frag).toMatch(/uniform mat4 modelViewMatrix;/)
+  })
 })
