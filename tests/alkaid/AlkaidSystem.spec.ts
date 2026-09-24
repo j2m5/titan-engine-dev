@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { ActorResource, Actors, Orbits, PhysicalObjects, RenderingObjects, Resources, RotationObjects } from '@storage/database'
+import { ActorResource, Actors, Orbits, PhysicalObjects, Placements, RenderingObjects, Resources, RotationObjects } from '@storage/database'
+import { AU } from '@/core/constants'
 import { Scenarios } from '@/config/scenarios'
 import { colorTemperatureToRGB } from '@/core/materials/shaders/lib/helpers'
 import { EARTH_SOLAR, sunAngularRadius } from '@/core/renderables/Atmosphere/AtmosphereConfig'
@@ -232,6 +233,44 @@ describe('сцена Алькаид: пояс Frostwake Belt', () => {
     expect(p.dustEnabled).toBe(true)
     expect(p.dustExtinction).toBe(1)
     expect(beltData().structure?.arcs?.length).toBeGreaterThan(0)
+  })
+})
+
+describe('сцена Алькаид: лагранжевы облака Thalorn (L4/L5)', () => {
+  const children = () => Actors.filter((a) => a.parentId === actorByName('Thalorn').id)
+
+  it('у Thalorn две туманности и два роя, размещённые в L4 и L5 (по одной паре на точку)', () => {
+    const clouds = children().filter((a) => a.categoryId === 7)
+    const swarms = children().filter((a) => a.categoryId === 11)
+
+    expect(clouds).toHaveLength(2)
+    expect(swarms).toHaveLength(2)
+    for (const point of [4, 5]) {
+      const at = (a: { id: number }) => Placements.find((p) => p.actorId === a.id)?.lagrange === point
+      expect(clouds.filter(at)).toHaveLength(1)
+      expect(swarms.filter(at)).toHaveLength(1)
+    }
+  })
+
+  it('рой — диск вокруг точки, а не кольцо вокруг звезды: радиусы в долях а.е., своя дымка выключена', () => {
+    for (const swarm of children().filter((a) => a.categoryId === 11)) {
+      const p = asteroidBeltParameters(beltActorStub(renderingOf(swarm.id).data as unknown as IAsteroidBeltRenderingObject))
+
+      expect(p.outerRadiusKm / AU).toBeLessThan(1)
+      expect(p.dustEnabled).toBe(false)
+      expect(p.rockFogRangeKm).toBeGreaterThan(0)
+      expect(RotationObjects.find((r) => r.actorId === swarm.id)?.inclination).toBe(orbitOf(actorByName('Thalorn').id).inclination)
+    }
+  })
+
+  it('облако — эмиссионная туманность меньше 0.5 а.е. со светом от звезды в нуле мира', () => {
+    for (const cloud of children().filter((a) => a.categoryId === 7)) {
+      const data = renderingOf(cloud.id).data as unknown as NebulaRenderingData
+
+      expect(data.preset).toBe('emission')
+      expect(data.size).toBeLessThan(0.5)
+      expect(data.lighting?.starPosition).toEqual([0, 0, 0])
+    }
   })
 })
 

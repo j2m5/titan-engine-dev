@@ -31,5 +31,7 @@ export const RotationObjects: IRotationObject[] = [
   { id: 25, actorId: 127, meridianAngle: 0, ascendingNode: 75, inclination: 4, period: 0, direction: 1 },
   { id: 26, actorId: 129, meridianAngle: 0, ascendingNode: 30, inclination: 10, period: 27.5, direction: 1 },
   { id: 27, actorId: 130, meridianAngle: 0, ascendingNode: 40, inclination: 14, period: 10.5, direction: 1 },
-  { id: 28, actorId: 135, meridianAngle: 0, ascendingNode: 110, inclination: 3, period: 0, direction: 1 }
+  { id: 28, actorId: 135, meridianAngle: 0, ascendingNode: 110, inclination: 3, period: 0, direction: 1 },
+  { id: 29, actorId: 139, meridianAngle: 0, ascendingNode: 40, inclination: 1.2, period: 0, direction: 1 },
+  { id: 30, actorId: 140, meridianAngle: 0, ascendingNode: 40, inclination: 1.2, period: 0, direction: 1 }
 ]
