@@ -49,7 +49,7 @@ describe('StarShaderTemplate: зерно гаснет с расстоянием'
     // Один домен на измерение и на сэмпл: разойдясь, они дали бы фейд не от
     // того масштаба, что рисуется
     expect(frag).toContain('vec3 noiseDomain = vPosition * 0.05;')
-    expect(frag).toContain('starGranulationFade(starDomainPerPixel(noiseDomain))')
+    expect(frag).toContain('starGranulationFade(starDomainPerPixel(noiseDomain)) * uGranulation')
     expect(frag).toContain('starGranulationT(vec4(noiseDomain, time), fade)')
   })
 

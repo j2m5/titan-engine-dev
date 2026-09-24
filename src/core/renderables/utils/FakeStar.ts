@@ -18,6 +18,7 @@ import {
   StarPalette
 } from '@/core/materials/shaders/lib/helpers'
 import { FakeStarShaderTemplate } from '@/core/materials/shaders/lib/FakeStarShaderTemplate'
+import { starActivityFor, starLimbCoeffFor } from '@/core/renderables/utils/starActivity'
 import { UpdateContext } from '@/core/UpdateContext'
 
 /**
@@ -72,6 +73,10 @@ class FakeStar extends Mesh {
     this.material.uniforms.uColorBase.value.setRGB(palette.base.r, palette.base.g, palette.base.b)
     this.material.uniforms.uColorHot.value.setRGB(palette.hot.r, palette.hot.g, palette.hot.b)
     this.material.uniforms.uRadius.value = radius
+    // Та же активность, что у диска L1 — на стыке LOD зерно и лимб совпадают
+    const activity: number = starActivityFor(this.model)
+    this.material.uniforms.uGranulation.value = activity
+    this.material.uniforms.uLimbCoeff.value.set(...starLimbCoeffFor(this.model))
   }
 
   public updateObject(ctx: UpdateContext): void {

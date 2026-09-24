@@ -9,6 +9,7 @@ export const StarShaderTemplate: ShaderProps = {
     uColorHot: new Uniform(new Color()),
     uCoreIntensity: new Uniform(STAR_CORE_INTENSITY),
     uLimbCoeff: new Uniform(new Vector3(...STAR_LIMB_COEFF)),
+    uGranulation: new Uniform(1),
     time: new Uniform(0)
   },
   vertexShader: `
@@ -40,6 +41,7 @@ export const StarShaderTemplate: ShaderProps = {
     uniform vec3 uColorHot;
     uniform float uCoreIntensity;
     uniform vec3 uLimbCoeff;
+    uniform float uGranulation;
     uniform float time;
 
     varying vec3 vPositionW;
@@ -60,7 +62,9 @@ export const StarShaderTemplate: ShaderProps = {
       // камеры: мера общая с импостором (чанк starSurface), поэтому на
       // переключении LOD погасшая поверхность стыкуется сама собой. Побочно
       // домен сжат ракурсом у кромки — грануляция тускнеет к лимбу, как у Солнца
-      float fade = starGranulationFade(starDomainPerPixel(noiseDomain));
+      // uGranulation — конвективная активность: у горячих звёзд зерна нет,
+      // fade 0 ещё и не считает шесть октав шума
+      float fade = starGranulationFade(starDomainPerPixel(noiseDomain)) * uGranulation;
       float t = starGranulationT(vec4(noiseDomain, time), fade);
 
       vec3 granule = starGranuleColor(t, uColorCool, spectralColor, uColorHot);

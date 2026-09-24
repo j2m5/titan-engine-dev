@@ -1,4 +1,5 @@
-import { DoubleSide, Mesh, NormalBlending, ShaderMaterial, UniformsUtils, type BufferGeometry } from 'three'
+import { BufferGeometry, DoubleSide, Mesh, NormalBlending, ShaderMaterial, UniformsUtils } from 'three'
+import { starActivityFor } from '@/core/renderables/utils/starActivity'
 import { Actor } from '@/core/models/Actor'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { StarOuterLayerShaderTemplate } from '@/core/materials/shaders/lib/StarOuterLayerShaderTemplate'
@@ -28,6 +29,16 @@ class StarOuterLayer extends Mesh {
   }
 
   __setup(): void {
+    // Протуберанцы — конвективная активность: у горячих звёзд (лучистая
+    // оболочка) слоя нет — ни лент, ни рисования
+    if (starActivityFor(this.model) <= 0) {
+      this.geometry = new BufferGeometry()
+      // Юниформы шаблона на месте: включение слоя извне не уронит кадр
+      this.material = new ShaderMaterial({ uniforms: UniformsUtils.clone(StarOuterLayerShaderTemplate.uniforms) })
+      this.visible = false
+      return
+    }
+
     // Ленты строятся на единичной сфере — мировой размер даёт scale ниже
     this.geometry = buildProminenceGeometry()
 
@@ -57,6 +68,8 @@ class StarOuterLayer extends Mesh {
   }
 
   public updateObject(ctx: UpdateContext): void {
+    // Слой без лент (горячая звезда) — материал пустой, времени у него нет
+    if (!this.visible) return
     this.material.uniforms.uTime.value = ctx.elapsed * 0.009
   }
 }

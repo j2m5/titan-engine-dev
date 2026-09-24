@@ -34,6 +34,7 @@ export const FakeStarShaderTemplate: ShaderProps = {
     uColorHot: new Uniform(new Color()),
     uCoreIntensity: new Uniform(STAR_CORE_INTENSITY),
     uLimbCoeff: new Uniform(new Vector3(...STAR_LIMB_COEFF)),
+    uGranulation: new Uniform(1),
     uRadius: new Uniform(1),
     uTime: new Uniform(0)
   },
@@ -58,6 +59,7 @@ export const FakeStarShaderTemplate: ShaderProps = {
     uniform vec3 uColorHot;
     uniform float uCoreIntensity;
     uniform vec3 uLimbCoeff;
+    uniform float uGranulation;
     uniform float uRadius;
     uniform float uTime;
 
@@ -84,7 +86,7 @@ export const FakeStarShaderTemplate: ShaderProps = {
       // Билборд живёт на STAR_IMPOSTOR_PIXELS, поэтому fade тут по факту
       // ноль — и диск на дистанции переключения приходит к тому же нулю
       float alpha = 1.0 - smoothstep(1.0 - fwidth(r) * 1.5, 1.0, r);
-      float fade = starGranulationFade(starDomainPerPixel(noiseDomain));
+      float fade = starGranulationFade(starDomainPerPixel(noiseDomain)) * uGranulation;
 
       if (alpha <= 0.0) {
         gl_FragColor = vec4(0.0);
