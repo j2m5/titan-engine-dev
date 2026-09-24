@@ -67,6 +67,8 @@ class StarOuterLayer extends Mesh {
   }
 
   public updateObject(ctx: UpdateContext): void {
+    // Слой без лент (горячая звезда) — материал пустой, времени у него нет
+    if (!this.visible) return
     this.material.uniforms.uTime.value = ctx.elapsed * 0.009
   }
 }

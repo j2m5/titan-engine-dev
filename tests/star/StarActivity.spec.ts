@@ -82,9 +82,10 @@ describe('StarOuterLayer: протуберанцы только у активн�
     expect(layer.geometry.getAttribute('position') ?? layer.geometry.index).toBeTruthy()
   })
 
-  it('Алькаид — слой невидим и без лент', () => {
+  it('Алькаид — слой невидим и без лент, покадровое обновление не падает', () => {
     const layer = new StarOuterLayer(starActor(15540))
 
     expect(layer.visible).toBe(false)
+    expect(() => layer.updateObject({ elapsed: 1, delta: 0.016 } as never)).not.toThrow()
   })
 })
