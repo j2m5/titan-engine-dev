@@ -5,9 +5,9 @@ import {
   buildStarPalette,
   DEFAULT_STAR_TEMPERATURE_K,
   STAR_CORE_INTENSITY,
-  STAR_GRANULATION_TIME_SCALE,
-  STAR_LIMB_COEFF
+  STAR_GRANULATION_TIME_SCALE
 } from '@/core/materials/shaders/lib/helpers'
+import { starActivityOf, starLimbCoeffFor } from '@/core/renderables/utils/starActivity'
 import { starSurface } from '@/core/materials/shaders/lib/chunks/StarSurface'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { Actor } from '@/core/models/Actor'
@@ -87,11 +87,12 @@ describe('FakeStar: контракт материала', () => {
     expect(star.material.uniforms.uColorBase.value).toEqual(colorFrom(palette.base))
   })
 
-  it('яркость и лимб — общие константы диска, крутить нечего', () => {
+  it('яркость — общая константа диска, лимб — та же функция активности, что у диска (9 500 К — лучистая оболочка)', () => {
     const star = new FakeStar(stubActor(TEMPERATURE_K), stubRenderer())
 
     expect(star.material.uniforms.uCoreIntensity.value).toBe(STAR_CORE_INTENSITY)
-    expect(star.material.uniforms.uLimbCoeff.value).toEqual(new Vector3(...STAR_LIMB_COEFF))
+    expect(star.material.uniforms.uLimbCoeff.value).toEqual(new Vector3(...starLimbCoeffFor(starActivityOf(TEMPERATURE_K))))
+    expect(star.material.uniforms.uGranulation.value).toBe(starActivityOf(TEMPERATURE_K))
   })
 
   it('масштаб ячеек грануляции — от радиуса звезды, как у диска', () => {

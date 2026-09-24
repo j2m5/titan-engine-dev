@@ -6,9 +6,9 @@ import {
   buildStarPalette,
   DEFAULT_STAR_TEMPERATURE_K,
   STAR_CORE_INTENSITY,
-  STAR_LIMB_COEFF,
   StarPalette
 } from '@/core/materials/shaders/lib/helpers'
+import { starActivityFor, starLimbCoeffFor } from '@/core/renderables/utils/starActivity'
 import { Colorable } from '@/core/models/types'
 
 interface StarUniforms {
@@ -17,6 +17,8 @@ interface StarUniforms {
   uColorHot: Colorable
   uCoreIntensity: number
   uLimbCoeff: Vector3
+  /** Доля грануляции 0..1 — конвективная активность по температуре (см. starActivity) */
+  uGranulation: number
   time: number
 }
 
@@ -30,13 +32,15 @@ class StarShader extends AbstractShader<keyof StarUniforms> {
     const temperature: number =
       this.model.physicalObject?.getAttribute('temperature', DEFAULT_STAR_TEMPERATURE_K) ?? DEFAULT_STAR_TEMPERATURE_K
     const palette: StarPalette = buildStarPalette(temperature)
+    const activity: number = starActivityFor(this.model)
 
     this.uniforms = {
       spectralColor: new Uniform(palette.base),
       uColorCool: new Uniform(palette.cool),
       uColorHot: new Uniform(palette.hot),
       uCoreIntensity: new Uniform(STAR_CORE_INTENSITY),
-      uLimbCoeff: new Uniform(new Vector3(...STAR_LIMB_COEFF)),
+      uLimbCoeff: new Uniform(new Vector3(...starLimbCoeffFor(activity))),
+      uGranulation: new Uniform(activity),
       time: new Uniform(0)
     }
     this.name = 'StarShader'

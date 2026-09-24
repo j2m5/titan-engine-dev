@@ -583,6 +583,17 @@ export interface IWhiteDwarfRenderingObject {
  * Цвет, яркость и лимбовое потемнение выводятся из температуры физического
  * объекта — см. GiantStarParameters.
  */
+/**
+ * Строка rendering звезды главной последовательности (категория 3) — по
+ * желанию: без строки всё выводится из температуры физики.
+ */
+export interface IStarRenderingObject {
+  /** Доля цвета звезды в прямом свете тел системы, [0, 1]; 0 — свет белый */
+  lightTint?: number
+  /** Конвективная активность 0..1 (грануляция, протуберанцы, сила лимба); не задана — по температуре */
+  activity?: number
+}
+
 export interface IGiantStarRenderingObject {
   seed?: number
   /** Масштаб домена ячеек: ячейка около R/3 при 5 */
