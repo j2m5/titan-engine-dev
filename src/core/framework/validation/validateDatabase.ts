@@ -149,10 +149,12 @@ function checkPositioning(db: DatabaseSnapshot, aliasByActor: Map<number, string
           `placements#${placement.id} (actor ${placement.actorId}, ${alias}) will never be applied: ` +
           `the category is positioned as "${positioning}", not "placed"`
       })
+      continue
     }
 
-    // Точка Лагранжа считается по орбите РОДИТЕЛЯ: без неё узел стоит в нуле
-    if (placement.lagrange !== undefined) {
+    // Точка Лагранжа считается по орбите РОДИТЕЛЯ: без неё узел стоит в нуле.
+    // null — очищенное поле редактора, то же, что отсутствие
+    if (placement.lagrange != null) {
       const actor = db.actors.find((a) => a.id === placement.actorId)
       const parentHasOrbit = actor?.parentId != null && db.orbits.some((o) => o.actorId === actor.parentId)
       if (placement.lagrange !== 4 && placement.lagrange !== 5) {

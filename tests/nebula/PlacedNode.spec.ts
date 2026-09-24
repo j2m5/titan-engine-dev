@@ -8,6 +8,7 @@ import { Quaternion, Vector3 } from 'three'
 import { degToRad, radToDeg } from 'three/src/math/MathUtils'
 import { ASTRO_TO_THREE } from '@/core/libs/frames'
 import { KeplerianModel } from '@/core/libs/KeplerianModel'
+import type { UpdateContext } from '@/core/UpdateContext'
 import { AU, SpaceScale } from '@/core/constants'
 
 /**
@@ -122,7 +123,7 @@ const lagrangeStub = (lagrange: number, parent: Actor | null = planetStub()): Ac
   return actor
 }
 
-const ctxAt = (epoch: number) => ({ epoch, delta: 0.016, elapsed: 0 }) as never
+const ctxAt = (epoch: number) => ({ epoch, delta: 0.016, elapsed: 0 }) as unknown as UpdateContext
 
 describe('PlacedNode — точка Лагранжа родителя', () => {
   it.each([

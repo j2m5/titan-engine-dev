@@ -58,4 +58,8 @@ describe('validateDatabase — размещение в точке Лагранж
   it('обычное размещение без lagrange проверкой не трогается', () => {
     expect(lagrangeErrors(snapshot({ x: 1, y: 0, z: 2 }))).toEqual([])
   })
+
+  it('lagrange: null (очищенное поле редактора) — то же, что отсутствие, ошибок нет', () => {
+    expect(lagrangeErrors(snapshot({ lagrange: null }))).toEqual([])
+  })
 })
