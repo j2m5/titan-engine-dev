@@ -144,5 +144,17 @@ export const Scenarios: ScenarioConfig[] = [
     // а звезда в его сердце видна небольшим диском. Позиция стартовая.
     defaultCameraPosition: [0, fromAstronomicalUnits(720), fromAstronomicalUnits(720)],
     lightSources: [117]
+  },
+  {
+    id: 13,
+    rootId: 128,
+    name: 'Alkaid system',
+    description:
+      'B-star Alkaid inside a blue reflection nebula: a ringed gas giant, an icy world and a belt of dark rock and ice in cold light',
+    preview: 'unknown.png',
+    skybox: [1, 2, 3, 4, 5, 6],
+    // Полуразмер кокона — 190 а.е.; с ~450 а.е. он в кадре целиком. Позиция стартовая.
+    defaultCameraPosition: [0, fromAstronomicalUnits(320), fromAstronomicalUnits(320)],
+    lightSources: [129]
   }
 ]

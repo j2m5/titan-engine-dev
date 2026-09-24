@@ -108,13 +108,14 @@ describe('W26 — подписка на цвет света (lightTint)', () => 
     expect(resolveStarRadiusKm(Actor.find(planet('Emberon').id)!)).toBe(1.06e9)
   })
 
-  it('подписка одна: среди звёзд базы (категории 3 и 10) никто кроме W26 не держит lightTint > 0', () => {
+  it('подписка на цвет света — только у светил цветных сцен: W26 и Алькаид, по одному на систему', () => {
     const stars = Actors.filter((a) => a.categoryId === STAR_CATEGORY_ID || a.categoryId === GIANT_STAR_CATEGORY_ID)
     const tinted = stars.filter((a) => {
       const data = RenderingObjects.find((r) => r.actorId === a.id)?.data as { lightTint?: number } | undefined
       return typeof data?.lightTint === 'number' && data.lightTint > 0
     })
 
-    expect(tinted.map((a) => a.name).filter((name) => name !== 'W26')).toEqual([])
+    expect(tinted.map((a) => a.name).sort()).toEqual(['Alkaid', 'W26'])
+    expect(new Set(tinted.map((a) => a.parentId)).size).toBe(tinted.length)
   })
 })
