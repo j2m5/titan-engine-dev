@@ -25,6 +25,13 @@
 | Frostwake Belt (25–34 а.е.) | 135 | asteroidBelt (11) | — | — | 28 (3°/110°) | 107 (carbonaceous + 45% icy, пыль #8fa6b4) | — |
 | Alkaid Veil (кокон, 190 а.е.) | 136 | nebula (7) | — | — | — | 108 (preset reflection, полость 0.42) | — |
 
+Отступления от спеки без эффекта на картинку: `orbitalPeriod` звезды 1 (как у
+всех звёзд и барицентров базы, спека писала 0); у кольца не выписаны
+`layerShadowStrength 0.25`, `bandTintStrength 1`, `spinPeriodHours 0` — это
+дефолты кода, смена дефолтов молча сменит и это кольцо; у Isvara `axialTilt
+24` и `rotationPeriod 31` (спека не задавала), масса 4.5e23 кг (≈ 2.1 г/см³,
+ледяная плотность; масса влияет только на приоритет подписей).
+
 Сценарий `src/config/scenarios.ts` id 13 «Alkaid system», корень 128, свет 129,
 камера [0, 320, 320] а.е. Запись запечки `isvara` в
 `scripts/batch-synth-heightmaps.ts` (procedural, 3 800 000 м).

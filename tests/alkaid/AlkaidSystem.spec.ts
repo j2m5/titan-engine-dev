@@ -267,4 +267,3 @@ describe('сцена Алькаид: кокон Alkaid Veil', () => {
   })
 })
 
-export { actorByName, physicalOf, orbitOf, renderingOf, atmosphereData, expectedIrradiance, resourcesOf }
