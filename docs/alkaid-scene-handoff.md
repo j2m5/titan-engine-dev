@@ -122,8 +122,11 @@ Tatoo I/II, Явин, TOI-519 — активность 1: юниформы и с
 
 **Данные (все дети Thalorn 130).** Туманности 137 «Thalorn L4 Cloud» /
 138 «Thalorn L5 Cloud» (rendering 109/110: пресет emission, полуразмер 0.35
-а.е., палитра `#4fd8ff → #2a4fb8`, `emissiveIntensity 1.6`, свет от звезды в
-нуле мира); рои 139/140 «Thalorn Trojans L4/L5» (rendering 111/112: диск
+а.е., палитра `#4fd8ff → #2a4fb8`, `emissiveIntensity 1.3`, свет от звезды в
+нуле мира; по слову владельца «рванее и прозрачнее»: `density 0.15`,
+`contrast 3.2`, `ridged 0.85`, `worleyStrength 0.7`, `warpStrength 0.75`,
+`frequency 3.0`, `edgeFalloff 0.6` — см. `src/core/renderables/Nebula/README.md`,
+«ватность ↔ воздушность» крутится `density` и `contrast`); рои 139/140 «Thalorn Trojans L4/L5» (rendering 111/112: диск
 вокруг точки — `innerRadiusAu 0.02`, `outerRadiusAu 0.45`, `thicknessAu 0.15`,
 тела 0.3–20 км, `spacingKm 40`, carbonaceous + 45% льда, своя дымка
 ВЫКЛЮЧЕНА (светится туманность), туман на камнях 30 000 км, 20 000 точек);
