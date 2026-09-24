@@ -38,10 +38,15 @@ describe('пояс Ashfall Belt — система W26', () => {
     expect(belts[0].name).toBe('Ashfall Belt')
   })
 
-  it('у каждого пояса в базе — свой барицентр: по одному на систему', () => {
-    const parents = Actors.filter((a) => a.categoryId === 11).map((a) => a.parentId)
+  it('под каждым барицентром не больше одного пояса; троянские рои живут под планетой', () => {
+    const belts = Actors.filter((a) => a.categoryId === 11)
+    const underBarycenter = belts.filter((b) => Actors.find((a) => a.id === b.parentId)?.categoryId === 1)
+    const parents = underBarycenter.map((a) => a.parentId)
 
     expect(new Set(parents).size).toBe(parents.length)
+    for (const belt of belts.filter((b) => !underBarycenter.includes(b))) {
+      expect(Actors.find((a) => a.id === belt.parentId)?.categoryId, belt.name).toBe(4)
+    }
   })
 
   it('наклонён к плоскости системы строкой rotation (несколько градусов, без суточного вращения)', () => {

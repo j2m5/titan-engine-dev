@@ -145,6 +145,8 @@ export interface IPlacement {
   x: number
   y: number
   z: number
+  /** Точка Лагранжа орбиты родителя (L4 — впереди планеты, L5 — позади); координаты тогда не читаются */
+  lagrange?: 4 | 5
 }
 
 export interface IResource extends ResourceParameters {

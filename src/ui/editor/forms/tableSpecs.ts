@@ -115,7 +115,17 @@ export const placementsSpec: TableSpec = {
     actorFk,
     { key: 'x', label: 'X (AU)', kind: 'number', step: 0.001 },
     { key: 'y', label: 'Y (AU)', kind: 'number', step: 0.001 },
-    { key: 'z', label: 'Z (AU)', kind: 'number', step: 0.001 }
+    { key: 'z', label: 'Z (AU)', kind: 'number', step: 0.001 },
+    {
+      key: 'lagrange',
+      label: 'Lagrange point of parent orbit (empty = XYZ)',
+      kind: 'select-enum',
+      nullable: true,
+      options: [
+        { value: '4', label: 'L4 (ahead of the planet)' },
+        { value: '5', label: 'L5 (behind the planet)' }
+      ]
+    }
   ],
   listLabel: (row, ctx) => `#${row.id} → ${ctx.actorName(row.actorId as number)}`,
   defaults: () => ({ actorId: null, x: 0, y: 0, z: 0 })
