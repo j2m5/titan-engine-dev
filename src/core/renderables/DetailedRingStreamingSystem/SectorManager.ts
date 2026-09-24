@@ -1,6 +1,6 @@
 import { Frustum, Matrix4, Sphere, Vector3 } from 'three'
 import { SectorGrid, SectorInfo, SectorBounds, sectorCenter } from './SectorGrid'
-import { AsteroidGenerator, archetypeForInstance } from './AsteroidGenerator'
+import { AsteroidGenerator } from './AsteroidGenerator'
 import { InstancePool, LODLevel, Allocation } from './InstancePool'
 
 /**
@@ -221,9 +221,14 @@ class SectorManager {
     bounds: SectorBounds
   ): Allocation[] | null {
     const archetypeCount = this.pool.geometryStreamCount
+    // Размер группы — по раскладке САМОГО генератора (с профилем породы она
+    // идёт по морфологиям, не по равновероятному хешу): иначе группа длиннее
+    // сгенерированного хвостом единичных матриц (тело масштаба 1 в начале
+    // сектора), а короче — записью матриц в чужие слоты
+    const assignment = this.generator.archetypeAssignment(seed, count, archetypeCount)
     const groupCounts = new Array<number>(archetypeCount).fill(0)
     for (let i = 0; i < count; i++) {
-      groupCounts[archetypeForInstance(seed, i, archetypeCount)]++
+      groupCounts[assignment[i]]++
     }
 
     const allocations: Allocation[] = []
