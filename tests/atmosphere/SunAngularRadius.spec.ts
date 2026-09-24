@@ -13,7 +13,7 @@ describe('sunAngularRadius', () => {
 
   it('Алькаид с орбит Thalorn и Isvara', () => {
     expect(sunAngularRadius(2365380, 18)).toBeCloseTo(0.000878, 6)
-    expect(sunAngularRadius(2365380, 48)).toBeCloseTo(0.000329, 6)
+    expect(sunAngularRadius(2365380, 48)).toBeCloseTo(0.0003294, 7)
   })
 
   it('W26 с орбит новых тел', () => {

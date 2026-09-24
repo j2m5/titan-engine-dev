@@ -260,8 +260,8 @@ describe('PlanetMaterial: проводка cavity (гейт USE_CAVITY, юниф
 // выводится ПРОГРАММНО из БД — акторы с height-ресурсом (путь заканчивается
 // на _height.raw), минус фотомозаичные {5, 6, 8, 19, 7} (Меркурий, Венера,
 // Марс, Луна, Земля — реальные снимки/DEM, cavity им не полагается).
-// Ожидание — ровно 50 тел (45 прежних + 4 процедурных тела системы W26:
-// Emberon, Halcyra I/II, Nivalis).
+// Ожидание — ровно 50 тел (45 прежних + 4 процедурных тела системы W26 —
+// Emberon, Halcyra I/II, Nivalis — + 1 Isvara системы Алькаид).
 describe('Счётный инвариант: cavityStrength у 50 терраформных тел (Task 3 + Task 6)', () => {
   const PHOTOMOSAIC_ACTOR_IDS: readonly number[] = [5, 6, 8, 19, 7]
 
@@ -279,7 +279,7 @@ describe('Счётный инвариант: cavityStrength у 50 террафо
     expect(coverageActorIds.length).toBe(50)
   })
 
-  it('у всех 49 тел охвата data.cavityStrength > 0', () => {
+  it('у всех 50 тел охвата data.cavityStrength > 0', () => {
     for (const actorId of coverageActorIds) {
       const renderingObject = RenderingObjects.find((ro) => ro.actorId === actorId)
 
@@ -312,7 +312,7 @@ describe('Счётный инвариант: cavityStrength у 50 террафо
   // Дискриминация подтверждена мутацией (руками, не в этом файле): временная
   // строка cavityStrength: 0.35 у Нептуна (renderingObjects id 4, actorId 13,
   // легаси-bump гигант) дала RED только на этом тесте, была отменена.
-  it('ровно 49 строк RenderingObjects несут cavityStrength (не только заявленный охват)', () => {
+  it('ровно 50 строк RenderingObjects несут cavityStrength (не только заявленный охват)', () => {
     const withCavity = RenderingObjects.filter((ro) => {
       const data = ro.data as { cavityStrength?: number }
 
