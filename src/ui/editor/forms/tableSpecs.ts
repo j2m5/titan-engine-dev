@@ -115,7 +115,8 @@ export const placementsSpec: TableSpec = {
     actorFk,
     { key: 'x', label: 'X (AU)', kind: 'number', step: 0.001 },
     { key: 'y', label: 'Y (AU)', kind: 'number', step: 0.001 },
-    { key: 'z', label: 'Z (AU)', kind: 'number', step: 0.001 }
+    { key: 'z', label: 'Z (AU)', kind: 'number', step: 0.001 },
+    { key: 'lagrange', label: 'Lagrange point of parent (4 / 5, empty = XYZ)', kind: 'number', step: 1 }
   ],
   listLabel: (row, ctx) => `#${row.id} → ${ctx.actorName(row.actorId as number)}`,
   defaults: () => ({ actorId: null, x: 0, y: 0, z: 0 })

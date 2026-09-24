@@ -7,6 +7,8 @@ import { OrientationModel } from '@/core/libs/OrientationModel'
 import { Quaternion, Vector3 } from 'three'
 import { degToRad, radToDeg } from 'three/src/math/MathUtils'
 import { ASTRO_TO_THREE } from '@/core/libs/frames'
+import { KeplerianModel } from '@/core/libs/KeplerianModel'
+import { AU, SpaceScale } from '@/core/constants'
 
 /**
  * Минимальный стаб актора: PlacedNode читает только name и placement.
@@ -94,6 +96,71 @@ describe('PlacedNode — ориентация', () => {
     node.updateMatrixWorld(true)
 
     expect(node.localToWorld(new Vector3()).length()).toBe(0)
+  })
+})
+
+/** Планета на круговой орбите 18 а.е. с периодом из данных: кеплеровой модели массы не нужны */
+const planetStub = (): Actor =>
+  ({
+    orbit: {
+      getAttribute: (key: string, fallback = 0): number =>
+        ({ semiMajorAxis: 18, eccentricity: 0, inclination: 0, argOfPeriapsis: 0, ascendingNode: 0, meanAnomalyAtEpoch: 0, epoch: 2451545, period: 11294 })[
+          key
+        ] ?? fallback
+    },
+    physicalObject: { getAttribute: (): number => 1.9e27 },
+    parent: { physicalObject: { getAttribute: (): number => 1.213e31 } },
+    getAttribute: (key: string, fallback: unknown = ''): unknown => (key === 'name' ? 'Planet' : fallback)
+  }) as unknown as Actor
+
+const lagrangeStub = (lagrange: number, parent: Actor | null = planetStub()): Actor => {
+  const actor = actorStub(null, 'L cloud')
+  ;(actor as unknown as { placement: unknown }).placement = {
+    getAttribute: (key: string, fallback = 0): number => (key === 'lagrange' ? lagrange : fallback)
+  }
+  ;(actor as unknown as { parent: Actor | null }).parent = parent
+  return actor
+}
+
+const ctxAt = (epoch: number) => ({ epoch, delta: 0.016, elapsed: 0 }) as never
+
+describe('PlacedNode — точка Лагранжа родителя', () => {
+  it.each([
+    [4, 1],
+    [5, -1]
+  ])('lagrange %i: узел на орбите планеты, на 60° %s по движению, на расстоянии радиуса орбиты от неё', (point, sign) => {
+    const parent = planetStub()
+    const node = new PlacedNode(lagrangeStub(point, parent))
+    const orbit = new KeplerianModel(parent)
+
+    for (const epoch of [2451545, 2451545 + 11294 * 0.37, 2451545 + 11294 * 0.8]) {
+      node.updateObject(ctxAt(epoch))
+      const { position: p, velocity: v } = orbit.getStateByEpoch(epoch)
+      // Смещение узла — в кадре родителя, единицы сцены → а.е.
+      const offset = node.position.clone().divideScalar(AU * SpaceScale)
+      const point3 = p.clone().add(offset)
+
+      expect(offset.length()).toBeCloseTo(p.length(), 6)
+      expect(point3.length()).toBeCloseTo(p.length(), 6)
+      expect(Math.sign(point3.dot(v.clone().normalize()))).toBe(sign)
+      expect(radToDeg(p.angleTo(point3))).toBeCloseTo(60, 6)
+    }
+  })
+
+  it('без lagrange updateObject ничего не двигает — позиция из placement', () => {
+    const node = new PlacedNode(actorStub({ x: 1, y: 0, z: -2 }))
+    const before = node.position.clone()
+
+    node.updateObject(ctxAt(2451545 + 100))
+
+    expect(node.position.equals(before)).toBe(true)
+  })
+
+  it('lagrange без орбиты у родителя — узел стоит в нуле и не падает', () => {
+    const node = new PlacedNode(lagrangeStub(4, null))
+
+    expect(() => node.updateObject(ctxAt(2451545))).not.toThrow()
+    expect(node.position.length()).toBe(0)
   })
 })
 

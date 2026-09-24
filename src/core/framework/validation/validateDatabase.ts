@@ -150,6 +150,29 @@ function checkPositioning(db: DatabaseSnapshot, aliasByActor: Map<number, string
           `the category is positioned as "${positioning}", not "placed"`
       })
     }
+
+    // Точка Лагранжа считается по орбите РОДИТЕЛЯ: без неё узел стоит в нуле
+    if (placement.lagrange !== undefined) {
+      const actor = db.actors.find((a) => a.id === placement.actorId)
+      const parentHasOrbit = actor?.parentId != null && db.orbits.some((o) => o.actorId === actor.parentId)
+      if (placement.lagrange !== 4 && placement.lagrange !== 5) {
+        issues.push({
+          level: 'error',
+          collection: 'placements',
+          entity: placement.id,
+          message: `placements#${placement.id} (actor ${placement.actorId}) lagrange must be 4 or 5, got ${placement.lagrange}`
+        })
+      } else if (!parentHasOrbit) {
+        issues.push({
+          level: 'error',
+          collection: 'placements',
+          entity: placement.id,
+          message:
+            `placements#${placement.id} (actor ${placement.actorId}) lagrange ${placement.lagrange} needs a parent with an orbit ` +
+            `— the node would stay at the parent's origin`
+        })
+      }
+    }
   }
 
   for (const orbit of db.orbits) {
