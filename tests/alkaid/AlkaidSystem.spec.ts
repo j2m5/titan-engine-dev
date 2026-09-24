@@ -6,6 +6,7 @@ import { EARTH_SOLAR, sunAngularRadius } from '@/core/renderables/Atmosphere/Atm
 import { asteroidBeltParameters } from '@/core/renderables/AsteroidBelt/AsteroidBeltParameters'
 import type { Actor } from '@/core/models/Actor'
 import type { IAsteroidBeltRenderingObject } from '@/core/models/types'
+import type { NebulaRenderingData } from '@/core/renderables/Nebula/NebulaRenderingData'
 
 /** Актор по имени; имена сцены Алькаид уникальны в базе */
 const actorByName = (name: string) => {
@@ -231,6 +232,38 @@ describe('сцена Алькаид: пояс Frostwake Belt', () => {
     expect(p.dustEnabled).toBe(true)
     expect(p.dustExtinction).toBe(1)
     expect(beltData().structure?.arcs?.length).toBeGreaterThan(0)
+  })
+})
+
+describe('сцена Алькаид: кокон Alkaid Veil', () => {
+  const veil = () => renderingOf(actorByName('Alkaid Veil').id).data as unknown as NebulaRenderingData
+
+  it('отражательная туманность под барицентром без орбиты, свет — в нуле, в центре системы', () => {
+    const actor = actorByName('Alkaid Veil')
+
+    expect(actor.categoryId).toBe(7)
+    expect(actor.parentId).toBe(actorByName('Alkaid system').id)
+    expect(Orbits.find((o) => o.actorId === actor.id)).toBeUndefined()
+    expect(veil().preset).toBe('reflection')
+    expect(veil().lighting?.starPosition).toEqual([0, 0, 0])
+  })
+
+  it('полость кокона вмещает пояс и обе орбиты с запасом', () => {
+    const data = veil()
+    const cavityAu = data.size! * data.cavities![0].radius!
+    const belt = renderingOf(actorByName('Frostwake Belt').id).data as unknown as IAsteroidBeltRenderingObject
+    const isvara = orbitOf(actorByName('Isvara').id)
+
+    expect(cavityAu).toBeGreaterThan(belt.outerRadiusAu)
+    expect(cavityAu).toBeGreaterThan(isvara.semiMajorAxis * (1 + isvara.eccentricity))
+  })
+
+  it('палитра холодная: у внутреннего и внешнего цвета синий канал больше красного', () => {
+    const hexChannel = (hex: string, i: number) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16)
+    const { innerColor, outerColor } = veil().palette!
+
+    expect(hexChannel(innerColor!, 2)).toBeGreaterThan(hexChannel(innerColor!, 0))
+    expect(hexChannel(outerColor!, 2)).toBeGreaterThan(hexChannel(outerColor!, 0))
   })
 })
 
