@@ -9,6 +9,7 @@ export const StarShaderTemplate: ShaderProps = {
     uColorHot: new Uniform(new Color()),
     uCoreIntensity: new Uniform(STAR_CORE_INTENSITY),
     uLimbCoeff: new Uniform(new Vector3(...STAR_LIMB_COEFF)),
+    uGranulation: new Uniform(1),
     time: new Uniform(0)
   },
   vertexShader: `

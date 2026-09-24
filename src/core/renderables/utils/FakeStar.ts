@@ -76,7 +76,7 @@ class FakeStar extends Mesh {
     // Та же активность, что у диска L1 — на стыке LOD зерно и лимб совпадают
     const activity: number = starActivityFor(this.model)
     this.material.uniforms.uGranulation.value = activity
-    this.material.uniforms.uLimbCoeff.value.set(...starLimbCoeffFor(activity))
+    this.material.uniforms.uLimbCoeff.value.set(...starLimbCoeffFor(this.model))
   }
 
   public updateObject(ctx: UpdateContext): void {

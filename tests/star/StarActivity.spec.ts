@@ -54,10 +54,12 @@ describe('Star: грануляция и лимб по активности', () 
     expect((u.uLimbCoeff.value as Vector3).toArray()).toEqual(STAR_LIMB_COEFF.map((c) => c * 0.5))
   })
 
-  it('ручка activity в строке rendering перекрывает температуру', () => {
+  it('ручка activity в строке rendering перекрывает температуру для зерна, но не для лимба', () => {
     const star = new Star(starActor(15540, { lightTint: 0.8, activity: 1 }))
+    const u = star.material.uniforms
 
-    expect(star.material.uniforms.uGranulation.value).toBe(1)
+    expect(u.uGranulation.value).toBe(1)
+    expect((u.uLimbCoeff.value as Vector3).toArray()).toEqual(STAR_LIMB_COEFF.map((c) => c * 0.5))
   })
 })
 

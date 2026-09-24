@@ -1,5 +1,6 @@
 import { Actor } from '@/core/models/Actor'
 import { DEFAULT_STAR_TEMPERATURE_K, STAR_LIMB_COEFF } from '@/core/materials/shaders/lib/helpers'
+import { readRenderingData } from '@/core/helpers/renderingData'
 import type { IStarRenderingObject } from '@/core/models/types'
 
 /** Ниже — конвективная оболочка в полную силу (F5 и холоднее), выше — лучистая */
@@ -16,18 +17,25 @@ export function starActivityOf(temperatureK: number): number {
   return 1 - x * x * (3 - 2 * x)
 }
 
-/** Активность актора: ручка `activity` строки rendering перекрывает температуру */
-export function starActivityFor(model: Actor): number {
-  const override = (model.renderingObject?.getAttribute('data') as IStarRenderingObject | undefined)?.activity
-  if (typeof override === 'number') return Math.min(1, Math.max(0, override))
-
-  const temperature: number =
-    model.physicalObject?.getAttribute('temperature', DEFAULT_STAR_TEMPERATURE_K) ?? DEFAULT_STAR_TEMPERATURE_K
-  return starActivityOf(temperature)
+/** Температура фотосферы актора; без физики — дефолт солнечного типа */
+export function starTemperatureOf(model: Actor): number {
+  return model.physicalObject?.getAttribute('temperature', DEFAULT_STAR_TEMPERATURE_K) ?? DEFAULT_STAR_TEMPERATURE_K
 }
 
-/** Потемнение к лимбу: у лучистых оболочек вдвое слабее солнечного */
-export function starLimbCoeffFor(activity: number): [number, number, number] {
-  const k = 0.5 + 0.5 * activity
+/** Активность актора: ручка `activity` строки rendering перекрывает температуру */
+export function starActivityFor(model: Actor): number {
+  const override = readRenderingData<IStarRenderingObject>(model)?.activity
+  if (typeof override === 'number') return Math.min(1, Math.max(0, override))
+
+  return starActivityOf(starTemperatureOf(model))
+}
+
+/**
+ * Потемнение к лимбу по температуре: у лучистых оболочек вдвое слабее
+ * солнечного. Ручка `activity` сюда не входит — лимб свойство фотосферы, а не
+ * зерна на ней
+ */
+export function starLimbCoeffFor(model: Actor): [number, number, number] {
+  const k = 0.5 + 0.5 * starActivityOf(starTemperatureOf(model))
   return [STAR_LIMB_COEFF[0] * k, STAR_LIMB_COEFF[1] * k, STAR_LIMB_COEFF[2] * k]
 }

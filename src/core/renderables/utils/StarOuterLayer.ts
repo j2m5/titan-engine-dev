@@ -33,7 +33,8 @@ class StarOuterLayer extends Mesh {
     // оболочка) слоя нет — ни лент, ни рисования
     if (starActivityFor(this.model) <= 0) {
       this.geometry = new BufferGeometry()
-      this.material = new ShaderMaterial()
+      // Юниформы шаблона на месте: включение слоя извне не уронит кадр
+      this.material = new ShaderMaterial({ uniforms: UniformsUtils.clone(StarOuterLayerShaderTemplate.uniforms) })
       this.visible = false
       return
     }

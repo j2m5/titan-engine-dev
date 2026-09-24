@@ -91,7 +91,7 @@ describe('FakeStar: контракт материала', () => {
     const star = new FakeStar(stubActor(TEMPERATURE_K), stubRenderer())
 
     expect(star.material.uniforms.uCoreIntensity.value).toBe(STAR_CORE_INTENSITY)
-    expect(star.material.uniforms.uLimbCoeff.value).toEqual(new Vector3(...starLimbCoeffFor(starActivityOf(TEMPERATURE_K))))
+    expect(star.material.uniforms.uLimbCoeff.value).toEqual(new Vector3(...starLimbCoeffFor(stubActor(TEMPERATURE_K))))
     expect(star.material.uniforms.uGranulation.value).toBe(starActivityOf(TEMPERATURE_K))
   })
 

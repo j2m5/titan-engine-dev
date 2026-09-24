@@ -39,7 +39,7 @@ class StarShader extends AbstractShader<keyof StarUniforms> {
       uColorCool: new Uniform(palette.cool),
       uColorHot: new Uniform(palette.hot),
       uCoreIntensity: new Uniform(STAR_CORE_INTENSITY),
-      uLimbCoeff: new Uniform(new Vector3(...starLimbCoeffFor(activity))),
+      uLimbCoeff: new Uniform(new Vector3(...starLimbCoeffFor(this.model))),
       uGranulation: new Uniform(activity),
       time: new Uniform(0)
     }
