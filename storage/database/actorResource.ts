@@ -388,5 +388,7 @@ export const ActorResource: IActorResource[] = [
   { id: 437, actorId: 123, resourceId: 128 },
   { id: 438, actorId: 123, resourceId: 129 },
   { id: 439, actorId: 120, resourceId: 95 },
-  { id: 440, actorId: 125, resourceId: 108 }
+  { id: 440, actorId: 125, resourceId: 108 },
+  { id: 441, actorId: 130, resourceId: 96 },
+  { id: 442, actorId: 132, resourceId: 116 }
 ]

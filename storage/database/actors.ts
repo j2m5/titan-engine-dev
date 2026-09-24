@@ -132,5 +132,8 @@ export const Actors: IActor[] = [
   { id: 126, categoryId: 5, parentId: 123, name: "Nivalis", description: "", color: "#ffffff" },
   { id: 127, categoryId: 11, parentId: 116, name: "Ashfall Belt", description: "", color: "#8a7f72" },
   { id: 128, categoryId: 1, parentId: null, name: "Alkaid system", description: "", color: "#ffffff" },
-  { id: 129, categoryId: 3, parentId: 128, name: "Alkaid", description: "", color: "#b4ccff" }
+  { id: 129, categoryId: 3, parentId: 128, name: "Alkaid", description: "", color: "#b4ccff" },
+  { id: 130, categoryId: 4, parentId: 128, name: "Thalorn", description: "", color: "#4f7fb0" },
+  { id: 131, categoryId: 5, parentId: 130, name: "Thalorn", description: "", color: "#ffffff" },
+  { id: 132, categoryId: 6, parentId: 130, name: "Thalorn", description: "", color: "#ffffff" }
 ]

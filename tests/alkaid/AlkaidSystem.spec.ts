@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { Actors, Orbits, PhysicalObjects, RenderingObjects, RotationObjects } from '@storage/database'
+import { ActorResource, Actors, Orbits, PhysicalObjects, RenderingObjects, Resources, RotationObjects } from '@storage/database'
 import { Scenarios } from '@/config/scenarios'
 import { colorTemperatureToRGB } from '@/core/materials/shaders/lib/helpers'
+import { EARTH_SOLAR, sunAngularRadius } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 
 /** Актор по имени; имена сцены Алькаид уникальны в базе */
 const actorByName = (name: string) => {
@@ -70,4 +71,73 @@ describe('сцена Алькаид: система и звезда', () => {
   })
 })
 
-export { actorByName, physicalOf, orbitOf, renderingOf }
+/** Линейное значение sRGB-канала 0..255 */
+const linear = (v: number) => {
+  const c = v / 255
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+}
+/** Тройка облучения атмосферы по правилу W26: земная тройка × линейный цвет звезды */
+const expectedIrradiance = () => {
+  const c = colorTemperatureToRGB(physicalOf(actorByName('Alkaid').id).temperature)
+  return [EARTH_SOLAR[0] * linear(c.r), EARTH_SOLAR[1] * linear(c.g), EARTH_SOLAR[2] * linear(c.b)]
+}
+const atmosphereData = (actorId: number) =>
+  renderingOf(actorId).data as {
+    solarIrradiance: number[]
+    sunAngularRadius: number
+    bottomRadius: number
+    topRadius: number
+    muSMin: number
+  }
+const resourcesOf = (actorId: number) =>
+  ActorResource.filter((r) => r.actorId === actorId).map((r) => Resources.find((x) => x.id === r.resourceId)!)
+
+describe('сцена Алькаид: гигант Thalorn с атмосферой и кольцом', () => {
+  it('планета под барицентром, физика под звездой, орбита 18 а.е. с периодом 0 (движок считает сам)', () => {
+    const thalorn = actorByName('Thalorn')
+
+    expect(thalorn.categoryId).toBe(4)
+    expect(thalorn.parentId).toBe(actorByName('Alkaid system').id)
+    expect(physicalOf(thalorn.id).parentId).toBe(physicalOf(actorByName('Alkaid').id).id)
+    expect(physicalOf(thalorn.id).radius).toBe(60000)
+    expect(orbitOf(thalorn.id).semiMajorAxis).toBe(18)
+    expect(orbitOf(thalorn.id).period).toBe(0)
+  })
+
+  it('диффуз — Adriana (экзопланета), giantDetail включён', () => {
+    const thalorn = actorByName('Thalorn')
+
+    expect(resourcesOf(thalorn.id).map((r) => r.path)).toEqual(['planets/StarWars/adriana/adriana.png'])
+    expect((renderingOf(thalorn.id).data as { giantDetail?: boolean }).giantDetail).toBe(true)
+  })
+
+  it('атмосфера: дочерний актор категории 5, дно = радиус планеты, облучение и угловой радиус по формулам', () => {
+    const thalorn = actorByName('Thalorn')
+    const atm = Actors.find((a) => a.categoryId === 5 && a.parentId === thalorn.id)
+    expect(atm).toBeDefined()
+    const data = atmosphereData(atm!.id)
+    const star = physicalOf(actorByName('Alkaid').id)
+
+    expect(data.bottomRadius).toBe(physicalOf(thalorn.id).radius)
+    expect(data.topRadius).toBeGreaterThan(data.bottomRadius)
+    expectedIrradiance().forEach((v, i) => expect(data.solarIrradiance[i]).toBeCloseTo(v, 3))
+    expect(data.sunAngularRadius).toBeCloseTo(sunAngularRadius(star.radius, orbitOf(thalorn.id).semiMajorAxis), 6)
+  })
+
+  it('кольцо: дочерний актор категории 6 на текстуре колец Darkness, радиусы 1.25–2.1 R планеты, наклон — строкой вращения планеты', () => {
+    const thalorn = actorByName('Thalorn')
+    const ring = Actors.find((a) => a.categoryId === 6 && a.parentId === thalorn.id)
+    expect(ring).toBeDefined()
+    const data = renderingOf(ring!.id).data as { innerRadius: number; outerRadius: number; profile: string }
+    const R = physicalOf(thalorn.id).radius
+
+    expect(resourcesOf(ring!.id).map((r) => r.path)).toEqual(['planets/StarWars/darkness/darkness_rings.png'])
+    expect(data.innerRadius).toBeGreaterThanOrEqual(1.25 * R)
+    expect(data.outerRadius).toBeLessThanOrEqual(2.1 * R)
+    expect(data.innerRadius).toBeLessThan(data.outerRadius)
+    expect(data.profile).toBe('icy')
+    expect(RotationObjects.find((r) => r.actorId === thalorn.id)).toBeDefined()
+  })
+})
+
+export { actorByName, physicalOf, orbitOf, renderingOf, atmosphereData, expectedIrradiance, resourcesOf }
