@@ -133,6 +133,20 @@ export const renderingDataTemplates: DataTemplate[] = [
     }
   },
   {
+    value: 'pulsar',
+    label: 'pulsar',
+    data: {
+      exposureBias: 1,
+      beamPeriodSeconds: 4,
+      beamTiltDeg: 30,
+      beamHalfAngleDeg: 6,
+      beamLengthAu: 500,
+      beamColor: '#bcd4ff',
+      beamIntensity: 6,
+      beamPhaseDeg: 0
+    }
+  },
+  {
     value: 'giantStar',
     label: 'giantStar',
     data: {

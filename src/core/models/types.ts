@@ -25,7 +25,8 @@ export enum AllowedCategories {
   brownDwarf,
   whiteDwarf,
   giantStar,
-  asteroidBelt
+  asteroidBelt,
+  pulsar
 }
 
 export type AllowedCategory = keyof typeof AllowedCategories
@@ -572,6 +573,29 @@ export interface IBrownDwarfRenderingObject {
  * нечего. Яркость и лимбовое потемнение выводятся из температуры физического
  * объекта, а не задаются здесь — см. WhiteDwarfParameters.
  */
+/**
+ * Пульсар: точка с гало (как белый карлик) и два луча-маяка. Углы в градусах,
+ * длина в а.е.; период — секунды симуляционного времени (художественный, не
+ * реальные миллисекунды).
+ */
+export interface IPulsarRenderingObject {
+  /** Множитель яркости точки и гало (как у белого карлика) */
+  exposureBias?: number
+  /** Период оборота маяка, с (дефолт 4) */
+  beamPeriodSeconds?: number
+  /** Угол магнитной оси к оси вращения, ° (0 — луч вдоль оси, маяка нет) */
+  beamTiltDeg?: number
+  /** Полуугол конуса луча по уровню e⁻¹, ° */
+  beamHalfAngleDeg?: number
+  /** Длина луча, а.е.; за ней плотность 0 */
+  beamLengthAu?: number
+  beamColor?: number | string
+  /** Яркость на оси у основания (HDR); 0 — лучей нет */
+  beamIntensity?: number
+  /** Фаза маяка на эпоху J2000, ° */
+  beamPhaseDeg?: number
+}
+
 export interface IWhiteDwarfRenderingObject {
   /**
    * Множитель поверх откалиброванного уровня яркости

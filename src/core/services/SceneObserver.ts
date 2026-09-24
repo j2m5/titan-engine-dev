@@ -23,7 +23,7 @@ export type SceneObserverRecord = {
  * списке, но неизвестная здесь, даёт мёртвую кнопку «лететь к» — поэтому
  * список один на обоих потребителей, и новый тип дописывается сюда однажды.
  */
-export const OBSERVED_TYPES: readonly string[] = ['planet', 'star', 'blackHole', 'brownDwarf', 'whiteDwarf', 'giantStar']
+export const OBSERVED_TYPES: readonly string[] = ['planet', 'star', 'blackHole', 'brownDwarf', 'whiteDwarf', 'giantStar', 'pulsar']
 
 /**
  * Потолок дельты, которую накопитель тика впитывает за один кадр, с.

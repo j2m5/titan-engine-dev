@@ -10,6 +10,7 @@ import { star } from '@/config/star'
 import { grading } from '@/config/grading'
 import { brownDwarf } from '@/config/brownDwarf'
 import { whiteDwarf } from '@/config/whiteDwarf'
+import { pulsar } from '@/config/pulsar'
 import { giantStar } from '@/config/giantStar'
 import { terrain } from '@/config/terrain'
 import { streaming } from '@/config/streaming'
@@ -51,6 +52,7 @@ export const config = createConfig({
   ...grading,
   ...brownDwarf,
   ...whiteDwarf,
+  ...pulsar,
   ...giantStar,
   ...terrain,
   ...streaming,
