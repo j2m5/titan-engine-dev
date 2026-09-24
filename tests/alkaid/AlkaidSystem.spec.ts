@@ -3,6 +3,9 @@ import { ActorResource, Actors, Orbits, PhysicalObjects, RenderingObjects, Resou
 import { Scenarios } from '@/config/scenarios'
 import { colorTemperatureToRGB } from '@/core/materials/shaders/lib/helpers'
 import { EARTH_SOLAR, sunAngularRadius } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+import { asteroidBeltParameters } from '@/core/renderables/AsteroidBelt/AsteroidBeltParameters'
+import type { Actor } from '@/core/models/Actor'
+import type { IAsteroidBeltRenderingObject } from '@/core/models/types'
 
 /** Актор по имени; имена сцены Алькаид уникальны в базе */
 const actorByName = (name: string) => {
@@ -188,6 +191,46 @@ describe('сцена Алькаид: ледяная планета Isvara', () =
     expectedIrradiance().forEach((v, i) => expect(data.solarIrradiance[i]).toBeCloseTo(v, 3))
     expect(data.sunAngularRadius).toBeCloseTo(sunAngularRadius(star.radius, orbitOf(isvara.id).semiMajorAxis), 6)
     expect(data.muSMin).toBeLessThanOrEqual(-Math.sin(1.6 * dip + (5 * Math.PI) / 180) + 1e-3)
+  })
+})
+
+const beltActorStub = (data: IAsteroidBeltRenderingObject): Actor =>
+  ({
+    placement: null,
+    renderingObject: { getAttribute: (): unknown => data },
+    getAttribute: (k: string, f: unknown = ''): unknown => (k === 'categoryId' ? 11 : f)
+  }) as unknown as Actor
+
+describe('сцена Алькаид: пояс Frostwake Belt', () => {
+  const beltData = () => renderingOf(actorByName('Frostwake Belt').id).data as unknown as IAsteroidBeltRenderingObject
+
+  it('единственный пояс системы, под барицентром, со строкой вращения (наклон к плоскости системы)', () => {
+    const system = actorByName('Alkaid system')
+    const belts = Actors.filter((a) => a.categoryId === 11 && a.parentId === system.id)
+
+    expect(belts).toHaveLength(1)
+    expect(belts[0].name).toBe('Frostwake Belt')
+    expect(RotationObjects.find((r) => r.actorId === belts[0].id)?.period).toBe(0)
+  })
+
+  it('лента 25–34 а.е. лежит между орбитами гиганта и ледяной планеты — ни одна орбита её не пересекает', () => {
+    const { innerRadiusAu, outerRadiusAu } = beltData()
+    const thalorn = orbitOf(actorByName('Thalorn').id)
+    const isvara = orbitOf(actorByName('Isvara').id)
+
+    expect(thalorn.semiMajorAxis * (1 + thalorn.eccentricity)).toBeLessThan(innerRadiusAu)
+    expect(isvara.semiMajorAxis * (1 - isvara.eccentricity)).toBeGreaterThan(outerRadiusAu)
+  })
+
+  it('данные проходят через asteroidBeltParameters: тёмная порода с ледяной примесью, холодная пыль', () => {
+    const p = asteroidBeltParameters(beltActorStub(beltData()))
+
+    expect(p.profile).toBe('carbonaceous')
+    expect(p.iceFraction).toBeGreaterThan(0.3)
+    expect(p.iceProfile).toBe('icy')
+    expect(p.dustEnabled).toBe(true)
+    expect(p.dustExtinction).toBe(1)
+    expect(beltData().structure?.arcs?.length).toBeGreaterThan(0)
   })
 })
 
