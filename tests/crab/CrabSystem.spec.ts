@@ -4,9 +4,6 @@ import { Actors, PhysicalObjects, RenderingObjects, RotationObjects } from '@sto
 import { Scenarios } from '@/config/scenarios'
 import { three } from '@/config/three'
 import { fromAstronomicalUnits } from '@/core/helpers/scaling'
-import { Actor } from '@/core/models/Actor'
-import { shapeRotationMatrix } from '@/core/renderables/Nebula/fields/NebulaField'
-import { OrientationModel } from '@/core/libs/OrientationModel'
 import type { NebulaRenderingData } from '@/core/renderables/Nebula/NebulaRenderingData'
 import type { IPulsarRenderingObject } from '@/core/models/types'
 
@@ -19,17 +16,17 @@ const renderingOf = (id: number) => RenderingObjects.find((r) => r.actorId === i
 const nebulaOf = (name: string) => renderingOf(byName(name).id) as unknown as NebulaRenderingData
 
 describe('сцена Краб: пульсар и остаток', () => {
-  it('корень — барицентр; пульсар категории 12 под ним; три туманности под корнем', () => {
+  it('корень — барицентр; под ним ровно два актора: пульсар категории 12 и оболочка категории 7', () => {
     const root = byName('Crab Nebula system')
     const psr = byName('PSR B0531+21')
+    const shell = byName('Crab shell')
+    const children = Actors.filter((a) => a.parentId === root.id)
 
     expect(root.categoryId).toBe(1)
     expect(psr.categoryId).toBe(12)
-    expect(psr.parentId).toBe(root.id)
-    for (const n of ['Crab shell', 'Crab wind torus', 'Crab jets']) {
-      expect(byName(n).categoryId).toBe(7)
-      expect(byName(n).parentId).toBe(root.id)
-    }
+    expect(shell.categoryId).toBe(7)
+    expect(children.map((a) => a.id).sort()).toEqual([psr.id, shell.id].sort())
+    expect(RenderingObjects.filter((r) => r.actorId === psr.id || r.actorId === shell.id)).toHaveLength(2)
   })
 
   it('физика пульсара: 10 км, 1e6 К, 1.4 M☉; строка вращения есть', () => {
@@ -59,50 +56,25 @@ describe('сцена Краб: пульсар и остаток', () => {
     expect(data.beamPeriodSeconds).toBeGreaterThanOrEqual(1)
   })
 
-  it('оболочка — shell 450 а.е., вмещает тор (115) и джеты (225); лучи короче оболочки', () => {
+  it('оболочка — shell 450 а.е. с запечкой на потолке 256 и маршем 96 шагов; лучи короче оболочки', () => {
     const shell = nebulaOf('Crab shell')
-    const torus = nebulaOf('Crab wind torus')
-    const jets = nebulaOf('Crab jets')
     const psr = renderingOf(byName('PSR B0531+21').id) as IPulsarRenderingObject
 
     expect(shell.shape).toBe('shell')
     expect(shell.size).toBe(450)
-    expect(torus.shape).toBe('torus')
-    expect(jets.shape).toBe('ellipsoid')
-    expect(torus.size!).toBeLessThan(shell.size! * (1 - shell.shapeThickness!))
-    expect(jets.size!).toBeLessThan(shell.size! * (1 - shell.shapeThickness!))
+    expect(shell.quality?.bakeResolution).toBe(256)
+    expect(shell.quality?.maxSteps).toBe(96)
+    expect(shell.noise?.octaves).toBe(6)
     expect(psr.beamLengthAu!).toBeLessThan(shell.size!)
   })
 
-  it('ось тора и джетов совпадает с полюсом пульсара (допуск 0.5°)', () => {
-    const psr = byName('PSR B0531+21')
-    const rotation = RotationObjects.find((r) => r.actorId === psr.id) as unknown as Record<string, number>
-    const model = {
-      rotation: { getAttribute: (k: string, f = 0): number => rotation[k] ?? f },
-      physicalObject: null
-    } as unknown as Actor
-    const pole = new Vector3(0, 1, 0).applyQuaternion(new OrientationModel(model).getPoleQuaternion())
-    const deg = Math.PI / 180
-
-    for (const name of ['Crab wind torus', 'Crab jets']) {
-      const [x, y, z] = nebulaOf(name).shapeRotation!
-      // Поле туманности: s = toShape · p, toShape = R(e)ᵀ — ось формы в кадре прокси = R(e)·Y
-      const toShape = shapeRotationMatrix(new Vector3(x * deg, y * deg, z * deg))
-      const axis = new Vector3(0, 1, 0).applyMatrix3(toShape.clone().transpose())
-
-      expect(axis.angleTo(pole), name).toBeLessThan(0.5 * deg)
-    }
-  })
-
-  it('куб-прокси каждой туманности остаётся внутри far при обзоре с запасом 1.3× на отъезд в любой ориентации', () => {
+  it('куб-прокси оболочки остаётся внутри far при обзоре с запасом 1.3× на отъезд в любой ориентации', () => {
     const scenario = Scenarios.find((s) => s.id === 14)!
     const cameraDistance = new Vector3(...scenario.defaultCameraPosition).length()
+    // Прокси объёма — куб, клипится far по глубине; худший случай — камера на диагонали куба
+    const cubeDiagonal = fromAstronomicalUnits(nebulaOf('Crab shell').size!) * Math.sqrt(3)
 
-    for (const name of ['Crab shell', 'Crab wind torus', 'Crab jets']) {
-      // Прокси объёма — куб, клипится far по глубине; худший случай — камера на диагонали куба
-      const cubeDiagonal = fromAstronomicalUnits(nebulaOf(name).size!) * Math.sqrt(3)
-      expect(cameraDistance * 1.3 + cubeDiagonal, name).toBeLessThan(three.camera.far)
-    }
+    expect(cameraDistance * 1.3 + cubeDiagonal).toBeLessThan(three.camera.far)
   })
 
   it('сценарий 14: корень — система Краба, светил нет, скайбокс общий', () => {
