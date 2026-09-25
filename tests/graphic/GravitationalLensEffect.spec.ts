@@ -63,6 +63,28 @@ describe('GravitationalLensEffect: экранный проход дальнег�
     expect(effect.uniforms.get('uCount')!.value).toBe(0)
   })
 
+  it('кадр без линз сбрасывает кубмапу: юниформ не держит текстуру разобранного сценария', () => {
+    const registry = new LensRegistry()
+    const marker = { name: 'bg' } as never
+    const lens = lensAt(new Vector3(0, 0, -1000), { background: () => marker })
+    registry.register(lens)
+    const effect = new GravitationalLensEffect(cameraAtOrigin(), registry)
+
+    effect.update(noRenderer, noBuffer)
+    expect(effect.uniforms.get('skybox')!.value).toBe(marker)
+
+    registry.unregister(lens)
+    effect.update(noRenderer, noBuffer)
+    expect(effect.uniforms.get('skybox')!.value).toBeNull()
+  })
+
+  it('GLSL: сдвинутая выборка, попавшая на объект перед плоскостью сближения, берёт кубмапу, а не копирует объект', () => {
+    const frag = new GravitationalLensEffect(cameraAtOrigin(), new LensRegistry()).getFragmentShader()!
+
+    expect(frag).toContain('texture2D(depthBuffer, uv2)')
+    expect(frag).toMatch(/sceneT2 < tMid2/)
+  })
+
   it('не больше LENS_SLOTS линз; кубмапа берётся у первой', () => {
     const registry = new LensRegistry()
     const marker = { name: 'bg' } as never

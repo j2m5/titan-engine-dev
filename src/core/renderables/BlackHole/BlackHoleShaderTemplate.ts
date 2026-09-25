@@ -399,6 +399,10 @@ export const BlackHoleShaderTemplate = {
 
       bool cameraInside = dot(cameraRs, cameraRs) < simulationRs * simulationRs;
 
+      // Меш описан вокруг сферы (MESH_MARGIN): границу зоны задаёт аналитический
+      // b, а не грани — снаружи кадр сдвигает GravitationalLensEffect с b > R
+      if (!cameraInside && b > simulationRs) discard;
+
       // дистанция входа луча в зону симуляции (0 — камера внутри)
       float tEnter = cameraInside
         ? 0.0
@@ -428,9 +432,9 @@ export const BlackHoleShaderTemplate = {
         float t = (b - WEAK_FIELD_B) / (simulationRs - WEAK_FIELD_B);
         // Сетка LUT лежит на краях домена: узел i стоит в t = i/255, а тексель
         // i центрирован в (i + 0.5)/256 — коррекция ниже совмещает их, чтобы
-        // t = 0 читал ровно узел b = WEAK_FIELD_B (стык с живым интегратором),
-        // а t = 1 — ровно нулевой узел на краю зоны (стык с нелензированным
-        // фоном вне меша). 255.0/256.0 — это (SIZE-1)/SIZE при SIZE = 256
+        // t = 0 читал ровно узел b = WEAK_FIELD_B (стык с геодезической веткой),
+        // а t = 1 — ровно узел на краю зоны, где полное отклонение продолжает
+        // ряд дальнего поля экранного прохода. 255.0/256.0 — это (SIZE-1)/SIZE
         float alphaIn = texture(deflectionLut, vec2((0.5 + t * 255.0) / 256.0, 0.5)).r;
         vec3 inward = -normalize(cameraRs + tMid * rayDir);
         color = sampleSkybox(cos(alphaIn) * rayDir + sin(alphaIn) * inward);

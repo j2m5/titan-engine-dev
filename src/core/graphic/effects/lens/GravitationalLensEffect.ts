@@ -62,6 +62,9 @@ export class GravitationalLensEffect extends Effect {
     const rs = this.uniforms.get('uRs')!.value as number[]
     const radii = this.uniforms.get('uSimRadius')!.value as number[]
     let count = 0
+    // Кадр без линз не держит кубмапу: после смены сценария она разобрана,
+    // и живая ссылка заставила бы three заново грузить её каждый кадр
+    this.uniforms.get('skybox')!.value = null
 
     for (const entry of this.registry.entries()) {
       if (count >= LENS_SLOTS) break

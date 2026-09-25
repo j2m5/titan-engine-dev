@@ -30,6 +30,14 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
  * scene.background: собственный фоновый проход (SkyboxBackground) снял
  * присвоение scene.background, и оно теперь всегда null
  */
+/**
+ * Меш описан вокруг аналитической сферы зоны: многогранник 64×32 лежит внутри
+ * неё до 0.5 % радиуса, и без запаса между гранями и сферой оставалась бы
+ * полоска фона без сдвига (снаружи проход сдвигает только при b > R).
+ * Лишнее фрагментник режет discard по b > simulationRs
+ */
+export const MESH_MARGIN: number = 1.008
+
 class BlackHole extends Mesh {
   public model: Actor
   declare public geometry: BufferGeometry
@@ -42,7 +50,7 @@ class BlackHole extends Mesh {
 
   private _epoch: number = 0
 
-  /** Запись в реестре линз: снимается в dispose */
+/** Запись в реестре линз: снимается в dispose */
   private lensEntry: LensEntry | null = null
 
   public constructor(
@@ -80,7 +88,7 @@ class BlackHole extends Mesh {
   __setup(): void {
     // сфера — лишь проекционная оболочка для фрагментного шейдера,
     // сегментация влияет только на гладкость силуэта зоны
-    this.geometry = new SphereGeometry(this.parameters.simulationRadiusUnits, 64, 32)
+    this.geometry = new SphereGeometry(this.parameters.simulationRadiusUnits * MESH_MARGIN, 64, 32)
     this.material = new BlackHoleMaterial(this.parameters)
 
     this.name = this.model.getAttribute('name', '') + 'BlackHole'

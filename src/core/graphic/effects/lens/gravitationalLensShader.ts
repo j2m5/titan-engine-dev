@@ -67,13 +67,20 @@ export function buildGravitationalLensFragment(): string {
       vec3 inward = perp / b;
       vec3 d2 = normalize(cos(alpha) * d + sin(alpha) * inward);
 
-      // Куда попала сдвинутая выборка: в диск меша или за экран — кубмапа
+      // Куда попала сдвинутая выборка: в диск меша, за экран или на объект
+      // перед плоскостью сближения (он не за линзой и копироваться не должен) — кубмапа
       float tMid2 = dot(c, d2);
       float b2 = length(c - tMid2 * d2);
       vec4 p = uProjection * vec4(d2, 0.0);
       vec2 uv2 = p.xy / p.w * 0.5 + 0.5;
       bool onScreen = p.w > 0.0 && all(greaterThanEqual(uv2, vec2(0.0))) && all(lessThanEqual(uv2, vec2(1.0)));
-      if (onScreen && b2 > R) {
+      bool behindLens = false;
+      if (onScreen) {
+        float z2 = texture2D(depthBuffer, uv2).r;
+        float sceneT2 = z2 >= 1.0 - 1e-6 ? 1e30 : (exp2(z2 * uLogFarFactor) - 1.0) / max(-d2.z, 1e-6);
+        behindLens = !(sceneT2 < tMid2);
+      }
+      if (onScreen && b2 > R && behindLens) {
         color = texture2D(inputBuffer, uv2).rgb;
       } else {
         vec3 world = normalize(mat3(uCameraWorldMatrix) * d2);

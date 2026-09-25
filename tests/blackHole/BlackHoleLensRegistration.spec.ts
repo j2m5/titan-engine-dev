@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { BlackHole } from '@/core/renderables/BlackHole/BlackHole'
+import { SphereGeometry } from 'three'
+import { BlackHole, MESH_MARGIN } from '@/core/renderables/BlackHole/BlackHole'
+import { BlackHoleShaderTemplate } from '@/core/renderables/BlackHole/BlackHoleShaderTemplate'
 import { LensRegistry } from '@/core/services/LensRegistry'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -33,6 +35,16 @@ describe('BlackHole: регистрация линзы', () => {
     hole.dispose()
     hole.dispose()
     expect(registry.size).toBe(0)
+  })
+
+  it('меш описан вокруг аналитической сферы, а лишнее режет discard: между гранями и сферой нет кольца без сдвига', () => {
+    const hole = new BlackHole(stubActor(), observer)
+    const geometry = hole.geometry as SphereGeometry
+
+    // Многогранник с 64×32 сегментами лежит внутри сферы до 0.5 % радиуса — поднимаем его над ней
+    expect(geometry.parameters.radius / hole.parameters.simulationRadiusUnits).toBeCloseTo(MESH_MARGIN, 9)
+    expect(MESH_MARGIN).toBeGreaterThan(1 / (Math.cos(Math.PI / 64) * Math.cos(Math.PI / 32)))
+    expect(BlackHoleShaderTemplate.fragmentShader).toContain('if (!cameraInside && b > simulationRs) discard;')
   })
 
   it('без реестра (тестовые сборки) дыра строится и dispose безвреден', () => {
