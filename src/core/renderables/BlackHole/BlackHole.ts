@@ -15,6 +15,8 @@ import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParam
 import { BlackHoleMaterial } from '@/core/renderables/BlackHole/BlackHoleMaterial'
 import { UpdateContext } from '@/core/UpdateContext'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
+import type { LensEntry, LensRegistry } from '@/core/services/LensRegistry'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 /**
  * Чёрная дыра (уровень L0): bounding-сфера зоны симуляции лензирования
@@ -28,6 +30,14 @@ import { ResourceObserver } from '@/core/services/ResourceObserver'
  * scene.background: собственный фоновый проход (SkyboxBackground) снял
  * присвоение scene.background, и оно теперь всегда null
  */
+/**
+ * Меш описан вокруг аналитической сферы зоны: многогранник 64×32 лежит внутри
+ * неё до 0.5 % радиуса, и без запаса между гранями и сферой оставалась бы
+ * полоска фона без сдвига (снаружи проход сдвигает только при b > R).
+ * Лишнее фрагментник режет discard по b > simulationRs
+ */
+export const MESH_MARGIN: number = 1.008
+
 class BlackHole extends Mesh {
   public model: Actor
   declare public geometry: BufferGeometry
@@ -40,21 +50,45 @@ class BlackHole extends Mesh {
 
   private _epoch: number = 0
 
+/** Запись в реестре линз: снимается в dispose */
+  private lensEntry: LensEntry | null = null
+
   public constructor(
     model: Actor,
-    private readonly resourceObserver: ResourceObserver
+    private readonly resourceObserver: ResourceObserver,
+    private readonly lensRegistry: LensRegistry | null = null
   ) {
     super()
     this.model = model
     this.parameters = new BlackHoleParameters(model)
 
     this.__setup()
+
+    // Дальнее поле снаружи меша рисует экранный проход по этой записи;
+    // видимость меша (LOD) он читает сам
+    if (this.lensRegistry) {
+      this.lensEntry = {
+        object: this,
+        rsUnits: toThreeJSUnits(this.parameters.rsVisual),
+        simulationRadiusUnits: this.parameters.simulationRadiusUnits,
+        background: () => this.resourceObserver.sceneBackground
+      }
+      this.lensRegistry.register(this.lensEntry)
+    }
+  }
+
+  /** Снятие с реестра линз; геометрию и материал освобождает обход графа */
+  public dispose(): void {
+    if (this.lensEntry) {
+      this.lensRegistry?.unregister(this.lensEntry)
+      this.lensEntry = null
+    }
   }
 
   __setup(): void {
     // сфера — лишь проекционная оболочка для фрагментного шейдера,
     // сегментация влияет только на гладкость силуэта зоны
-    this.geometry = new SphereGeometry(this.parameters.simulationRadiusUnits, 64, 32)
+    this.geometry = new SphereGeometry(this.parameters.simulationRadiusUnits * MESH_MARGIN, 64, 32)
     this.material = new BlackHoleMaterial(this.parameters)
 
     this.name = this.model.getAttribute('name', '') + 'BlackHole'

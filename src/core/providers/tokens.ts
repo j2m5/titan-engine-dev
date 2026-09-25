@@ -12,6 +12,7 @@ import type { ResourceObserver } from '@/core/services/ResourceObserver'
 import type { SceneObserver } from '@/core/services/SceneObserver'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
+import type { LensRegistry } from '@/core/services/LensRegistry'
 import type { SimulationClock } from '@/core/time/SimulationClock'
 import type { CameraController } from '@/core/camera/CameraController'
 import type { Settings } from '@/core/ports/Settings'
@@ -40,6 +41,7 @@ export const Tokens = {
   SceneObserver: token<SceneObserver>('SceneObserver'),
   AtmosphereRegistry: token<AtmosphereRegistry>('AtmosphereRegistry'),
   DepthVolumeRegistry: token<DepthVolumeRegistry>('DepthVolumeRegistry'),
+  LensRegistry: token<LensRegistry>('LensRegistry'),
   CameraCollision: token<CameraCollision>('CameraCollision'),
   HeightFieldGate: token<HeightFieldGate>('HeightFieldGate'),
   SimulationClock: token<SimulationClock>('SimulationClock'),

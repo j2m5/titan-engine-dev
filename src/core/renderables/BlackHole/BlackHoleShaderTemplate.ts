@@ -67,8 +67,10 @@ export function createBlackHoleUniforms(parameters: BlackHoleParameters): Record
     uNoiseOffset: new Uniform(new Vector2()),
     noiseMap: new Uniform<Texture | null>(null),
 
-    /** LUT угла отклонения для дальних лучей (этап 4, см. deflectionLut.ts) */
+    /** LUT полного отклонения для дальних лучей (см. deflectionLut.ts) */
     deflectionLut: new Uniform<Texture | null>(null),
+    /** LUT наружной добавки δ(b) для лучей геодезической ветки, вошедших снаружи */
+    outsideLut: new Uniform<Texture | null>(null),
 
     /** Время симуляции в днях (свёрнутое на CPU, см. BlackHoleMaterial.update) */
     uTime: new Uniform(0),
@@ -147,6 +149,7 @@ export const BlackHoleShaderTemplate = {
     uniform vec2 uNoiseOffset;
     uniform sampler2D noiseMap;
     uniform highp sampler2D deflectionLut;
+    uniform highp sampler2D outsideLut;
 
     uniform float uTime;
     uniform float uRotationPeriod;
@@ -188,11 +191,10 @@ export const BlackHoleShaderTemplate = {
     // пробовали — картинка не изменилась (дело было не в намотке, а в
     // грубости углового шага у фотонной сферы, см. MAX_STEPS выше)
     const float PHI_MAX = 9.42477796;
-    // Граница LUT-ветки (этап 4 выполнен): дальше отклонение берётся из
-    // deflectionLut — таблицы, запечённой ТЕМ ЖЕ интегратором и тем же dphi
-    // (см. deflectionLut.ts). Обе ветки считает одна схема, поэтому стык
-    // жёсткий, без кроссфейда и окон: прежний полином слабого поля
-    // занижал отклонение на ~0.5° у стыка
+    // Граница LUT-ветки: дальше полное отклонение берётся из deflectionLut.
+    // Геодезическая ветка даёт хорду + δ(b) из outsideLut, где δ печётся как
+    // «полное − хорда этого же интегратора» — стык жёсткий, без кроссфейда
+    // (см. deflectionLut.ts)
     const float WEAK_FIELD_B = 8.0;
 
     vec3 sampleSkybox(vec3 direction) {
@@ -293,7 +295,7 @@ export const BlackHoleShaderTemplate = {
 
     // Честное интегрирование уравнения Бине в плоскости геодезической
     // с накоплением пересечений диска front-to-back
-    vec3 traceGeodesic(vec3 cameraRs, vec3 rayDir, float tEnter, out int crossings) {
+    vec3 traceGeodesic(vec3 cameraRs, vec3 rayDir, float tEnter, float b, out int crossings) {
       crossings = 0;
 
       vec3 p0 = cameraRs + tEnter * rayDir;
@@ -312,9 +314,17 @@ export const BlackHoleShaderTemplate = {
 
       vec3 e2 = e2v / tangential;
 
-      // начальные условия Бине: u = 1/r, u' = du/dφ
+      // начальные условия Бине: u = 1/r, u' = du/dφ.
+      // Вход снаружи (tEnter > 0): плоское направление отрезка «камера → сфера»
+      // перецеливается в локальное направление луча с тем же b:
+      // sin θ_loc = (b/r)·√(1 − rs/r), u' = cot θ_loc·√(1 − rs/r)/r — иначе
+      // трассируется луч с b на 1.9 % больше (зеркало: deflectionLut.entryState).
+      // Камера внутри сферы: направление пикселя и есть локальное, условие прежнее
+      bool enteredFromOutside = tEnter > 0.0;
       float u = 1.0 / r0;
-      float du = -radial / (r0 * tangential);
+      float du = enteredFromOutside
+        ? sqrt(max(1.0 - tangential * tangential * (1.0 - 1.0 / r0), 0.0)) / (tangential * r0)
+        : -radial / (r0 * tangential);
       float phi = 0.0;
       vec3 prev = p0;
 
@@ -354,9 +364,21 @@ export const BlackHoleShaderTemplate = {
         }
 
         // побег из зоны симуляции: финальное направление → кубмапа.
-        // ренормализация шва автоматическая: интегрирование шло только внутри сферы
+        // Луч, вошедший снаружи, доворачивается к центру на δ(b) из OutsideLut —
+        // наружную часть отклонения (полное − хорда), которую прямые отрезки
+        // вне сферы не набирают; на границе с LUT-веткой суммы совпадают
         if (r > simulationRs && dot(pos, pos) > dot(prev, prev)) {
-          return accumulated + (1.0 - opacity) * sampleSkybox(normalize(pos - prev));
+          vec3 escape = normalize(pos - prev);
+          if (enteredFromOutside) {
+            float delta = texture(outsideLut, vec2((0.5 + (b / simulationRs) * 255.0) / 256.0, 0.5)).r;
+            vec3 toCenter = -pos - dot(-pos, escape) * escape;
+            float side = length(toCenter);
+            if (side > 1e-6) {
+              vec3 inward = toCenter / side;
+              escape = normalize(cos(delta) * escape + sin(delta) * inward);
+            }
+          }
+          return accumulated + (1.0 - opacity) * sampleSkybox(escape);
         }
 
         prev = pos;
@@ -377,6 +399,10 @@ export const BlackHoleShaderTemplate = {
 
       bool cameraInside = dot(cameraRs, cameraRs) < simulationRs * simulationRs;
 
+      // Меш описан вокруг сферы (MESH_MARGIN): границу зоны задаёт аналитический
+      // b, а не грани — снаружи кадр сдвигает GravitationalLensEffect с b > R
+      if (!cameraInside && b > simulationRs) discard;
+
       // дистанция входа луча в зону симуляции (0 — камера внутри)
       float tEnter = cameraInside
         ? 0.0
@@ -396,24 +422,24 @@ export const BlackHoleShaderTemplate = {
         // дебаг-режим этапа 1: неизогнутый passthrough (эталон бесшовности)
         color = sampleSkybox(rayDir);
       } else if (!cameraInside && b > weakFieldB) {
-        // LUT-ветка: угол отклонения, накопленный внутри зоны, из таблицы,
-        // запечённой тем же интегратором (deflectionLut.ts). На краю зоны
-        // хорда нулевая и α = 0 — бесшовность с нелензированным фоном вне
-        // меша автоматическая, окно края больше не нужно.
+        // LUT-ветка: ПОЛНОЕ отклонение луча из таблицы (deflectionLut.ts,
+        // старт интегратора далеко за зоной). На краю зоны α = 2/R и далее,
+        // снаружи меша ту же величину по ряду дальнего поля даёт экранный
+        // проход GravitationalLensEffect — поле сдвига через кромку гладкое.
         // Домен таблицы [WEAK_FIELD_B, simulationRs]; при диске ветка
         // включается позже (weakFieldB отодвинут за диск) — просто читаем
         // таблицу с большего t
         float t = (b - WEAK_FIELD_B) / (simulationRs - WEAK_FIELD_B);
         // Сетка LUT лежит на краях домена: узел i стоит в t = i/255, а тексель
         // i центрирован в (i + 0.5)/256 — коррекция ниже совмещает их, чтобы
-        // t = 0 читал ровно узел b = WEAK_FIELD_B (стык с живым интегратором),
-        // а t = 1 — ровно нулевой узел на краю зоны (стык с нелензированным
-        // фоном вне меша). 255.0/256.0 — это (SIZE-1)/SIZE при SIZE = 256
+        // t = 0 читал ровно узел b = WEAK_FIELD_B (стык с геодезической веткой),
+        // а t = 1 — ровно узел на краю зоны, где полное отклонение продолжает
+        // ряд дальнего поля экранного прохода. 255.0/256.0 — это (SIZE-1)/SIZE
         float alphaIn = texture(deflectionLut, vec2((0.5 + t * 255.0) / 256.0, 0.5)).r;
         vec3 inward = -normalize(cameraRs + tMid * rayDir);
         color = sampleSkybox(cos(alphaIn) * rayDir + sin(alphaIn) * inward);
       } else {
-        color = traceGeodesic(cameraRs, rayDir, tEnter, crossings);
+        color = traceGeodesic(cameraRs, rayDir, tEnter, b, crossings);
       }
 
       // дебаг-визуализация пересечений кольца диска: 1 — красный, 2 — зелёный, 3+ — синий
