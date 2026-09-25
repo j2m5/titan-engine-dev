@@ -3,7 +3,12 @@ import {
   DEFLECTION_LUT_B_MIN,
   DEFLECTION_LUT_SIZE,
   bakeDeflectionAngles,
-  createDeflectionLutTexture
+  bakeOutsideAngles,
+  chordDeflectionAngle,
+  createDeflectionLutTexture,
+  createOutsideLutTexture,
+  farFieldDeflection,
+  outsideDeflection
 } from '@/core/renderables/BlackHole/deflectionLut'
 import { BlackHoleShaderTemplate } from '@/core/renderables/BlackHole/BlackHoleShaderTemplate'
 import { BlackHoleMaterial } from '@/core/renderables/BlackHole/BlackHoleMaterial'
@@ -51,22 +56,63 @@ describe('bakeDeflectionAngles: печка угла отклонения', () =>
     }
   })
 
-  it('на краю зоны отклонение сходит в ноль — бесшовность с фоном вне меша', () => {
-    // Последний узел принудительно 0 — предел нулевой хорды, шов силуэта
-    expect(angles[DEFLECTION_LUT_SIZE - 1]).toBe(0)
+  it('LUT — ПОЛНОЕ отклонение: на краю зоны совпадает с рядом дальнего поля (стык с экранным проходом < 0.5 px)', () => {
+    // Снаружи меша кадр сдвигает GravitationalLensEffect по ряду farFieldDeflection;
+    // последний узел LUT читается ровно на b = simulationRs
+    expect(Math.abs(angles[DEFLECTION_LUT_SIZE - 1] - farFieldDeflection(SIMULATION_RS))).toBeLessThan(2e-4)
   })
 
-  it('санити против прежней аналитики: тот же порядок величины при b ≈ 12', () => {
-    // Полная старая форма: полином слабого поля × окно хорды (edgeWindow при
-    // таком b равен 1). НЕ пин равенства — LUT честнее аналитики; допуск
-    // широкий и ловит только грубую поломку печки (знак, единицы, домен)
+  it('ряд дальнего поля: b = 26.92 rs → 0.07863 рад (эталон интегратора Бине со старта 2e4 rs)', () => {
+    expect(farFieldDeflection(26.92)).toBeCloseTo(0.07863, 4)
+    expect(farFieldDeflection(1000)).toBeCloseTo(2 / 1000, 5)
+  })
+
+  it('паритет на b = 8: LUT ≈ хорда живого интегратора (старт с кромки) + наружная добавка δ(8)', () => {
+    // Геодезическая ветка шейдера интегрирует от кромки сферы и прибавляет δ(b);
+    // LUT-ветка читает полное отклонение — на общей границе они обязаны сойтись
+    // с точностью секущей последнего шага живого интегратора (~2e-4)
+    const chord = chordDeflectionAngle(DEFLECTION_LUT_B_MIN, SIMULATION_RS, DPHI)
+    const total = chord + outsideDeflection(DEFLECTION_LUT_B_MIN, SIMULATION_RS, DPHI)
+
+    expect(chord).toBeGreaterThan(0.25)
+    expect(Math.abs(angles[0] - total)).toBeLessThan(1e-5)
+  })
+
+  it('перецеливание на входе: хорда — почти всё полное отклонение (b = 8: наружная часть < 1 %)', () => {
+    const chord = chordDeflectionAngle(DEFLECTION_LUT_B_MIN, SIMULATION_RS, DPHI)
+    expect(Math.abs(angles[0] - chord) / angles[0]).toBeLessThan(0.01)
+  })
+
+  it('наружная добавка δ(b) на области геодезической ветки (b ≤ diskOuter + 1.5 ≈ 17): мала, ниже захвата — 0', () => {
+    const outside = bakeOutsideAngles(SIMULATION_RS, DPHI)
+
+    expect(outside.length).toBe(DEFLECTION_LUT_SIZE)
+    expect(outsideDeflection(0, SIMULATION_RS, DPHI)).toBe(0)
+    expect(outsideDeflection(2.5, SIMULATION_RS, DPHI)).toBe(0)
+    for (const b of [3, 4, 6, 8, 12, 17]) {
+      // δ компенсирует и наружную часть, и погрешность секущей живого интегратора — поэтому знак любой
+      expect(Math.abs(outsideDeflection(b, SIMULATION_RS, DPHI))).toBeLessThan(0.01)
+    }
+    expect(outsideDeflection(8, SIMULATION_RS, DPHI)).toBeGreaterThan(0)
+  })
+
+  it('текстура δ(b): тот же формат, что у основной LUT', () => {
+    const texture = createOutsideLutTexture(SIMULATION_RS, DPHI)
+
+    expect(texture.image.width).toBe(DEFLECTION_LUT_SIZE)
+    expect(texture.type).toBe(HalfFloatType)
+    expect(texture.minFilter).toBe(LinearFilter)
+    expect(texture.name).toBe('BlackHole.OutsideLut')
+    texture.dispose()
+  })
+
+  it('санити против аналитики слабого поля при b ≈ 12: полное отклонение в пределах 15 %', () => {
     let index = 0
     for (let i = 0; i < DEFLECTION_LUT_SIZE; i++) {
       if (Math.abs(lutB(i) - 12) < Math.abs(lutB(index) - 12)) index = i
     }
     const b = lutB(index)
-    const x = b / SIMULATION_RS
-    const legacy = (2 / b + 2.945243 / (b * b)) * Math.sqrt(1 - x * x)
+    const legacy = 2 / b + 2.945243 / (b * b)
 
     expect(Math.abs(angles[index] - legacy) / legacy).toBeLessThan(0.15)
   })
