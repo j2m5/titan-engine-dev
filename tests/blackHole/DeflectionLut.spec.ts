@@ -166,6 +166,18 @@ describe('шейдер ЧД: аналитика слабого поля заме
     expect(match).not.toBeNull()
     expect(Number(match![1])).toBe(DEFLECTION_LUT_B_MIN)
   })
+
+  it('вход снаружи перецеливается в локальное направление: u′ = √(1 − t²(1 − 1/r0)) / (t·r0); камера внутри — прежнее условие', () => {
+    expect(frag).toContain('sqrt(max(1.0 - tangential * tangential * (1.0 - 1.0 / r0), 0.0)) / (tangential * r0)')
+    expect(frag).toContain('-radial / (r0 * tangential)')
+  })
+
+  it('при побеге снаружи-вошедшего луча направление доворачивается на δ(b) из OutsideLut', () => {
+    expect(frag).toContain('uniform highp sampler2D outsideLut;')
+    expect(frag).toContain('texture(outsideLut, vec2((0.5 + (b / simulationRs) * 255.0) / 256.0, 0.5)).r')
+    expect(frag).toMatch(/cos\(delta\) \* escape \+ sin\(delta\) \* inward/)
+    expect(frag).toContain('traceGeodesic(cameraRs, rayDir, tEnter, b, crossings)')
+  })
 })
 
 describe('BlackHoleMaterial: проводка LUT', () => {
@@ -181,6 +193,20 @@ describe('BlackHoleMaterial: проводка LUT', () => {
     const onDispose = vi.fn()
     lut.addEventListener('dispose', onDispose)
 
+    material.dispose()
+
+    expect(onDispose).toHaveBeenCalledOnce()
+  })
+
+  it('вторая таблица δ(b) создана и освобождается вместе с первой', () => {
+    const material = new BlackHoleMaterial(new BlackHoleParameters(stubActor()))
+    const outside = material.uniforms.outsideLut.value
+
+    expect(outside).not.toBeNull()
+    expect(outside.name).toBe('BlackHole.OutsideLut')
+
+    const onDispose = vi.fn()
+    outside.addEventListener('dispose', onDispose)
     material.dispose()
 
     expect(onDispose).toHaveBeenCalledOnce()

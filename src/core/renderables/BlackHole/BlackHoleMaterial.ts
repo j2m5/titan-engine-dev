@@ -15,7 +15,7 @@ import { config } from '@/core/framework/config'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
 import { BlackHoleNoiseTexture } from '@/core/renderables/BlackHole/BlackHoleNoiseTexture'
 import { BlackHoleShaderTemplate, createBlackHoleUniforms } from '@/core/renderables/BlackHole/BlackHoleShaderTemplate'
-import { createDeflectionLutTexture } from '@/core/renderables/BlackHole/deflectionLut'
+import { createDeflectionLutTexture, createOutsideLutTexture } from '@/core/renderables/BlackHole/deflectionLut'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 
 /**
@@ -77,10 +77,14 @@ class BlackHoleMaterial extends RawShaderMaterial {
       seed * 0.5698402909 - Math.floor(seed * 0.5698402909)
     )
 
-    // LUT угла отклонения (этап 4): своя на материал — у каждой дыры свой
-    // simulationRs. Печётся тем же dphi, что живой интегратор: это несущий
-    // инвариант стыка ветвей (см. deflectionLut.ts)
+    // Таблицы отклонения: свои на материал — у каждой дыры свой simulationRs.
+    // δ(b) печётся против хорды с тем же dphi, что живой интегратор: это
+    // несущий инвариант стыка ветвей (см. deflectionLut.ts)
     this.uniforms.deflectionLut.value = createDeflectionLutTexture(
+      parameters.simulationRs,
+      config('blackHole.integrationDphi')
+    )
+    this.uniforms.outsideLut.value = createOutsideLutTexture(
       parameters.simulationRs,
       config('blackHole.integrationDphi')
     )
@@ -152,6 +156,7 @@ class BlackHoleMaterial extends RawShaderMaterial {
    */
   public override dispose(): void {
     this.uniforms.deflectionLut.value?.dispose()
+    this.uniforms.outsideLut.value?.dispose()
     super.dispose()
   }
 }
