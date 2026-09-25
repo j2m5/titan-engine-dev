@@ -52,6 +52,7 @@ import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
 import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
+import type { LensRegistry } from '@/core/services/LensRegistry'
 import { RenderableObject3D } from '@/core/renderables/types'
 import { syncRenderableMaterials } from '@/core/materials/materialSync'
 import { SyncTerrainPatchBuilder, type TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
@@ -72,7 +73,9 @@ class RenderableFactory {
      * готовности начального набора). Свапы внутри тика пересобирает сам
      * HeightFieldGate по возврату true — здесь возврата нет, звать некому.
      */
-    private readonly refreshObservation: () => void = () => {}
+    private readonly refreshObservation: () => void = () => {},
+    /** Реестр гравитационных линз для экранного прохода дальнего поля; без него дыра лензирует только внутри меша */
+    private readonly lensRegistry: LensRegistry | null = null
   ) {}
 
   /** Узлы, чей рельеф построен не до конца: легаси-сфера на экране, свап ждёт готовности. */
@@ -115,7 +118,7 @@ class RenderableFactory {
 
   private createBlackHole(actor: Actor): Object3D {
     const node = new DynamicNode(actor)
-    const lodl1 = new BlackHole(actor, this.resourceObserver)
+    const lodl1 = new BlackHole(actor, this.resourceObserver, this.lensRegistry)
     const lodl2 = new BlackHoleImpostor(actor, lodl1.parameters, this.renderer)
     const lod = new BlackHoleLod(lodl1.parameters.simulationRadius, this.renderer)
 

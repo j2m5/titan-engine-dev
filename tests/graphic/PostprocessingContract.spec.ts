@@ -7,6 +7,7 @@ import { buildSlotGlsl } from '@/core/graphic/effects/atmosphere/atmosphereSlotS
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { DepthVolumePass } from '@/core/graphic/passes/DepthVolumePass'
+import { GravitationalLensEffect } from '@/core/graphic/effects/lens/GravitationalLensEffect'
 
 describe('Postprocessing: контракт цветового конвейера', () => {
   it('тонмаппинг реально применяется: NORMAL-бленд, не DST-заглушка', () => {
@@ -100,12 +101,14 @@ describe('Postprocessing: пасс атмосферы', () => {
       new DepthVolumeRegistry()
     ).buildPasses()
 
-    expect(passes).toHaveLength(5)
+    expect(passes).toHaveLength(6)
     expect(passes[0]).toBeInstanceOf(RenderPass)
     expect(passes[1]).toBeInstanceOf(DepthVolumePass)
-    expect((passes[2] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(AtmosphereEffect)
-    expect(passes[3]).toBeInstanceOf(EffectPass)
+    // Линза — сразу за объёмами (сдвигает и их) и до атмосферы
+    expect((passes[2] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(GravitationalLensEffect)
+    expect((passes[3] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(AtmosphereEffect)
     expect(passes[4]).toBeInstanceOf(EffectPass)
+    expect(passes[5]).toBeInstanceOf(EffectPass)
   })
 })
 
