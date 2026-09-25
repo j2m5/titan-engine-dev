@@ -165,9 +165,9 @@ export const Scenarios: ScenarioConfig[] = [
       'Supernova remnant compressed to system scale: a torn filamentary shell, the pulsar wind torus with twin jets, and the lighthouse beams of PSR B0531+21',
     preview: 'unknown.png',
     skybox: [1, 2, 3, 4, 5, 6],
-    // Оболочка 450 а.е. с ~900 а.е. Куб-прокси объёма клипится far (2000 а.е.) по глубине:
-    // дистанция·1.3 + 450·√3 < 2000 оставляет запас на отъезд в любой ориентации
-    defaultCameraPosition: [0, fromAstronomicalUnits(640), fromAstronomicalUnits(640)],
+    // Оболочка 900 а.е. с ~1800 а.е. Куб-прокси объёма клипится far (5000 а.е.) по глубине:
+    // дистанция·1.3 + 900·√3 < 5000 оставляет запас на отъезд в любой ориентации
+    defaultCameraPosition: [0, fromAstronomicalUnits(1280), fromAstronomicalUnits(1280)],
     lightSources: []
   }
 ]

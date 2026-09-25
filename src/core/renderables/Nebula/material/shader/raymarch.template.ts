@@ -23,6 +23,7 @@ export function createNebulaUniforms(): Record<string, IUniform> {
     uLacunarity: new Uniform(2.0),
     uGain: new Uniform(0.5),
     uWarpStrength: new Uniform(0.35),
+    uBoundaryWarp: new Uniform(0),
     uRidged: new Uniform(0.4),
     uContrast: new Uniform(1.6),
     uEmissiveIntensity: new Uniform(1.6),

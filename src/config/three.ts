@@ -39,7 +39,10 @@ export const three: ThreeConfig = {
     fov: 50,
     aspect: window.innerWidth / window.innerHeight,
     near: 0.000001,
-    far: fromAstronomicalUnits(2000)
+    // Куб-прокси объёмной туманности клипится far по глубине вида: нужно
+    // дистанция камеры + size·√3 < far. Лог-глубина: цена шага far 2000 → 5000 а.е.
+    // около 5 % разрешения буфера
+    far: fromAstronomicalUnits(5000)
   },
   renderer: {
     logarithmicDepthBuffer: true,

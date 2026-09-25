@@ -26,6 +26,7 @@ export function applyDensityUniforms(u: Record<string, IUniform>, params: Nebula
   u.uLacunarity.value = params.noise.lacunarity
   u.uGain.value = params.noise.gain
   u.uWarpStrength.value = params.noise.warpStrength
+  u.uBoundaryWarp.value = params.noise.boundaryWarp
   u.uRidged.value = params.noise.ridged
   u.uContrast.value = params.noise.contrast
   u.uWorleyStrength.value = params.noise.worleyStrength

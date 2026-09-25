@@ -35,6 +35,7 @@ export class NebulaField {
   private readonly invAxis: Vector3
   private readonly toShape: Matrix3
   private readonly rotated: Vector3 = new Vector3()
+  private readonly warped: Vector3 = new Vector3()
 
   public constructor(params: NebulaParams) {
     this.p = params
@@ -94,16 +95,32 @@ export class NebulaField {
     return 1 - smoothstep(1 - edge, 1, r)
   }
 
-  private noiseField(p: Vector3): number {
+  /**
+   * Вектор домен-варпа (2 октавы — низкочастотное искажение; зеркало GPU
+   * nebWarpVector, третья октава визуально ничего не даёт, а стоит на каждом шаге).
+   */
+  private warpVector(p: Vector3): { x: number; y: number; z: number } {
     const n = this.p.noise
-    // domain warp (2 octaves — low-frequency distortion; mirrors GPU nebDomainWarp,
-    // where the third octave is a visually-negligible per-step cost)
-    const wx = fbm3({ x: p.x + 11.3, y: p.y, z: p.z }, this.p.seed + 101, 2, n.lacunarity, n.gain)
-    const wy = fbm3({ x: p.x, y: p.y + 7.7, z: p.z }, this.p.seed + 202, 2, n.lacunarity, n.gain)
-    const wz = fbm3({ x: p.x, y: p.y, z: p.z + 19.1 }, this.p.seed + 303, 2, n.lacunarity, n.gain)
-    const qx = p.x + n.warpStrength * wx
-    const qy = p.y + n.warpStrength * wy
-    const qz = p.z + n.warpStrength * wz
+    return {
+      x: fbm3({ x: p.x + 11.3, y: p.y, z: p.z }, this.p.seed + 101, 2, n.lacunarity, n.gain),
+      y: fbm3({ x: p.x, y: p.y + 7.7, z: p.z }, this.p.seed + 202, 2, n.lacunarity, n.gain),
+      z: fbm3({ x: p.x, y: p.y, z: p.z + 19.1 }, this.p.seed + 303, 2, n.lacunarity, n.gain)
+    }
+  }
+
+  /** Граница формы с варпом контура (boundaryWarp); при 0 — ровно boundary(p) */
+  public boundaryAt(p: Vector3): number {
+    const bw = this.p.noise.boundaryWarp
+    if (bw <= 0) return this.boundary(p)
+    const w = this.warpVector(p)
+    return this.boundary(this.warped.set(p.x + bw * w.x, p.y + bw * w.y, p.z + bw * w.z))
+  }
+
+  private noiseField(p: Vector3, w: { x: number; y: number; z: number }): number {
+    const n = this.p.noise
+    const qx = p.x + n.warpStrength * w.x
+    const qy = p.y + n.warpStrength * w.y
+    const qz = p.z + n.warpStrength * w.z
 
     let base = fbm3({ x: qx * n.frequency, y: qy * n.frequency, z: qz * n.frequency }, this.p.seed, n.octaves, n.lacunarity, n.gain)
     // billow <-> ridged mix
@@ -150,9 +167,21 @@ export class NebulaField {
 
   /** Full density pipeline. Extended by later tasks. Returns [0,1]. */
   public sampleDensity(p: Vector3): number {
-    const b = this.boundary(p)
-    if (b <= 0) return 0
-    const noise = this.noiseField(p)
+    // Порядок как в GLSL: при boundaryWarp 0 сначала граница и ранний выход, варп
+    // после; при > 0 вектор варпа нужен уже для границы
+    const bw = this.p.noise.boundaryWarp
+    let w: { x: number; y: number; z: number }
+    let b: number
+    if (bw > 0) {
+      w = this.warpVector(p)
+      b = this.boundary(this.warped.set(p.x + bw * w.x, p.y + bw * w.y, p.z + bw * w.z))
+      if (b <= 0) return 0
+    } else {
+      b = this.boundary(p)
+      if (b <= 0) return 0
+      w = this.warpVector(p)
+    }
+    const noise = this.noiseField(p, w)
     let d = b * (noise + this.lobeContribution(p))
     d *= this.cavityCarve(p)
     d = Math.pow(Math.min(1, Math.max(0, d)), this.p.noise.contrast)

@@ -78,6 +78,12 @@ export interface NebulaParams {
     lacunarity: number
     gain: number
     warpStrength: number
+    /**
+     * Варп самого контура формы, 0..1: граница считается в точке p + boundaryWarp·w,
+     * где w — тот же двухоктавный вектор домен-варпа, что и у шума. 0 — контур
+     * аналитический (сфера/эллипсоид), как раньше.
+     */
+    boundaryWarp: number
     ridged: number // 0..1 billow<->ridged mix
     contrast: number
     worleyStrength: number // 0..1 Worley cell-wall carving (GPU-only filaments)
@@ -186,6 +192,7 @@ export function makeDefaultNebulaParams(): NebulaParams {
       lacunarity: 2.0,
       gain: 0.5,
       warpStrength: 0.35,
+      boundaryWarp: 0,
       ridged: 0.4,
       contrast: 1.6,
       worleyStrength: 0.4
@@ -278,6 +285,7 @@ export function mergeNebulaParams(
   }
 
   Object.assign(result.noise, overrides.noise)
+  result.noise.boundaryWarp = clamp(result.noise.boundaryWarp, 0, 1)
   if (overrides.palette) {
     if (overrides.palette.stops)
       result.palette.stops = (overrides.palette.stops as Array<Partial<ColorStop>>).map((s) => ({
