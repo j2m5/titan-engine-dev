@@ -95,12 +95,12 @@ describe('сцена Краб: пульсар и остаток', () => {
     expect(data.beamPeriodSeconds).toBeGreaterThanOrEqual(1)
   })
 
-  it('оболочка — shell 450 а.е. с запечкой на потолке 256 и маршем 96 шагов; лучи короче оболочки', () => {
+  it('оболочка — shell 900 а.е. с запечкой на потолке 256 и маршем 96 шагов; лучи короче оболочки', () => {
     const shell = nebulaOf('Crab shell')
     const psr = renderingOf(byName('PSR B0531+21').id) as IPulsarRenderingObject
 
     expect(shell.shape).toBe('shell')
-    expect(shell.size).toBe(450)
+    expect(shell.size).toBe(900)
     expect(shell.quality?.bakeResolution).toBe(256)
     expect(shell.quality?.maxSteps).toBe(96)
     expect(shell.noise?.octaves).toBe(6)
