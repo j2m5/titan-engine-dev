@@ -8,6 +8,7 @@ import {
   OrthographicCamera,
   PerspectiveCamera,
   RawShaderMaterial,
+  Texture,
   Vector3
 } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
@@ -147,6 +148,20 @@ class BlackHoleMaterial extends RawShaderMaterial {
     // не теряют точность в f32; диск ускоряется вместе со временем симуляции
     const wrap: number = this.parameters.rotationPeriod * 16384
     this.uniforms.uTime.value = epoch - Math.floor(epoch / wrap) * wrap
+  }
+
+  /** Копия кадра от BlackHolePass (см. uSceneEnabled в шаблоне) */
+  public bindSceneFrame(sceneColor: Texture, sceneDepth: Texture, logFarFactor: number): void {
+    this.uniforms.uSceneColor.value = sceneColor
+    this.uniforms.uSceneDepth.value = sceneDepth
+    this.uniforms.uSceneLogFarFactor.value = logFarFactor
+    this.uniforms.uSceneEnabled.value = 1
+  }
+
+  public unbindSceneFrame(): void {
+    this.uniforms.uSceneColor.value = null
+    this.uniforms.uSceneDepth.value = null
+    this.uniforms.uSceneEnabled.value = 0
   }
 
   /**

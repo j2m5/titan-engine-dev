@@ -9,6 +9,27 @@ import type { Object3D, Texture, Vector2 } from 'three'
 export const DEPTH_VOLUME_LAYER = 30
 
 /**
+ * Слой меша сильной зоны чёрной дыры: рисует BlackHolePass после объёмов,
+ * сэмплируя копию кадра. Основной проход слой не видит; кликовый рейкастер
+ * включает его у себя (Engine)
+ */
+export const BLACK_HOLE_LAYER = 29
+
+/**
+ * Потребитель копии кадра (BlackHolePass): перед рендером получает цвет и
+ * глубину сцены, после — отвязывается, чтобы рендер вне пасса шёл без них
+ */
+export interface SceneFrameConsumer extends Object3D {
+  bindSceneFrame(sceneColor: Texture, sceneDepth: Texture, logFarFactor: number): void
+  unbindSceneFrame(): void
+}
+
+export function isSceneFrameConsumer(object: Object3D): object is SceneFrameConsumer {
+  const candidate = object as Partial<SceneFrameConsumer>
+  return typeof candidate.bindSceneFrame === 'function' && typeof candidate.unbindSceneFrame === 'function'
+}
+
+/**
  * Объём, чей марш режется по глубине сцены (см. DepthVolumePass).
  *
  * Живёт в графе сцены (матрицы считает основной проход), но рисуется пассом

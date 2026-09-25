@@ -16,6 +16,7 @@ import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { LensRegistry } from '@/core/services/LensRegistry'
 import { createGravitationalLensPass } from '@/core/graphic/effects/lens/GravitationalLensEffect'
 import { DepthVolumePass } from '@/core/graphic/passes/DepthVolumePass'
+import { BlackHolePass } from '@/core/graphic/passes/BlackHolePass'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { ExposureEffect } from '@/core/graphic/effects/grading/ExposureEffect'
 import { ColorGradeEffect } from '@/core/graphic/effects/grading/ColorGradeEffect'
@@ -174,8 +175,11 @@ class Postprocessing {
    * Пыль колец — сразу за сценой, в тот же буфер (без swap): её марш режется
    * по глубине сцены, а глубина готова только после RenderPass.
    *
-   * Линза — свой пасс сразу за объёмами: сдвигает готовый кадр (сцена и
-   * объёмы) снаружи меша чёрной дыры, читает соседей и глубину.
+   * Меш чёрной дыры — свой пасс за объёмами: сэмплирует копию кадра (сцена и
+   * объёмы за дырой лензируются сильным полем), пишет свою глубину.
+   *
+   * Линза — следом: сдвигает готовый кадр снаружи меша чёрной дыры, читает
+   * соседей и глубину.
    *
    * Атмосфера — СВОЙ пасс между линзой и HDR-проходом: она тонирует и гало
    * пыли, а блум считает яркость по входу своего пасса, значит должен видеть
@@ -187,6 +191,7 @@ class Postprocessing {
     return [
       new RenderPass(this.scene, this.camera),
       new DepthVolumePass(this.camera, this.depthVolumeRegistry),
+      new BlackHolePass(this.camera, this.lensRegistry),
       createGravitationalLensPass(this.camera, this.lensRegistry),
       createAtmospherePass(this.camera, this.atmosphereRegistry, readAtmosphereDebugView()),
       hdrPass,

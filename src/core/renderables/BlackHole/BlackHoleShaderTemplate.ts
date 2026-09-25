@@ -81,6 +81,17 @@ export function createBlackHoleUniforms(parameters: BlackHoleParameters): Record
     uDphi: new Uniform(config('blackHole.integrationDphi')),
     /** Дебаг: 0 — лензирование выключено (passthrough этапа 1), 1 — включено */
     uLensing: new Uniform(1),
+
+    /**
+     * Копия кадра от BlackHolePass: побег луча читает пиксель кадра по
+     * спроецированному направлению (тела, лучи и туманности за дырой), кубмапа —
+     * подстраховка за экраном и для объектов перед плоскостью сближения.
+     * uSceneEnabled 0 (рендер вне пасса) — только кубмапа
+     */
+    uSceneColor: new Uniform<Texture | null>(null),
+    uSceneDepth: new Uniform<Texture | null>(null),
+    uSceneLogFarFactor: new Uniform(1),
+    uSceneEnabled: new Uniform(0),
     /** Дебаг: подкраска пикселей по числу пересечений плоскости диска */
     uDebugCrossings: new Uniform(0),
 
@@ -159,6 +170,12 @@ export const BlackHoleShaderTemplate = {
     uniform float uDebugCrossings;
 
     uniform samplerCube skybox;
+    // Копия кадра от BlackHolePass (см. sampleBackground)
+    uniform sampler2D uSceneColor;
+    uniform sampler2D uSceneDepth;
+    uniform float uSceneLogFarFactor;
+    uniform float uSceneEnabled;
+    uniform mat4 crProjectionMatrix;
 
     #include <skyboxSampleUniforms>
     #include <skyboxSampleFunctions>
@@ -206,6 +223,25 @@ export const BlackHoleShaderTemplate = {
       // направления (меш ЧД никогда не вращается), поэтому ориентация ОБЯЗАНА
       // совпадать, а не может отличаться.
       return sampleSkyboxHdr(skybox, direction, uSkyFlipX);
+    }
+
+    // Фон побега луча: пиксель КАДРА по спроецированному направлению — тела,
+    // лучи и туманности за дырой лензируются сильным полем. Кубмапа — вне
+    // BlackHolePass, за экраном (и при p.w ≤ 0) и для объекта перед плоскостью
+    // наибольшего сближения: он не за линзой и копироваться не должен
+    vec3 sampleBackground(vec3 direction) {
+      if (uSceneEnabled < 0.5) return sampleSkybox(direction);
+      vec3 dirView = normalize(mat3(crModelViewMatrix) * direction);
+      vec4 p = crProjectionMatrix * vec4(dirView, 0.0);
+      vec2 uv = p.xy / max(p.w, 1e-6) * 0.5 + 0.5;
+      if (p.w <= 0.0 || any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return sampleSkybox(direction);
+      // crModelViewMatrix camera-relative: столбец переноса — центр дыры в виде
+      vec3 centerView = crModelViewMatrix[3].xyz;
+      float tMid = dot(centerView, dirView);
+      float z = texture(uSceneDepth, uv).r;
+      float sceneT = z >= 1.0 - 1e-6 ? 1e30 : (exp2(z * uSceneLogFarFactor) - 1.0) / max(-dirView.z, 1e-6);
+      if (sceneT < tMid) return sampleSkybox(direction);
+      return texture(uSceneColor, uv).rgb;
     }
 
     // Аналитический планковский blackbody: CIE-аппроксимация локуса → XYZ → linear sRGB,
@@ -309,7 +345,7 @@ export const BlackHoleShaderTemplate = {
 
       // вырожденный луч точно в центр / из центра
       if (tangential < 1e-4) {
-        return radial > 0.0 ? sampleSkybox(rayDir) : vec3(0.0);
+        return radial > 0.0 ? sampleBackground(rayDir) : vec3(0.0);
       }
 
       vec3 e2 = e2v / tangential;
@@ -378,7 +414,7 @@ export const BlackHoleShaderTemplate = {
               escape = normalize(cos(delta) * escape + sin(delta) * inward);
             }
           }
-          return accumulated + (1.0 - opacity) * sampleSkybox(escape);
+          return accumulated + (1.0 - opacity) * sampleBackground(escape);
         }
 
         prev = pos;
@@ -420,7 +456,7 @@ export const BlackHoleShaderTemplate = {
 
       if (uLensing < 0.5) {
         // дебаг-режим этапа 1: неизогнутый passthrough (эталон бесшовности)
-        color = sampleSkybox(rayDir);
+        color = sampleBackground(rayDir);
       } else if (!cameraInside && b > weakFieldB) {
         // LUT-ветка: ПОЛНОЕ отклонение луча из таблицы (deflectionLut.ts,
         // старт интегратора далеко за зоной). На краю зоны α = 2/R и далее,
@@ -437,7 +473,7 @@ export const BlackHoleShaderTemplate = {
         // ряд дальнего поля экранного прохода. 255.0/256.0 — это (SIZE-1)/SIZE
         float alphaIn = texture(deflectionLut, vec2((0.5 + t * 255.0) / 256.0, 0.5)).r;
         vec3 inward = -normalize(cameraRs + tMid * rayDir);
-        color = sampleSkybox(cos(alphaIn) * rayDir + sin(alphaIn) * inward);
+        color = sampleBackground(cos(alphaIn) * rayDir + sin(alphaIn) * inward);
       } else {
         color = traceGeodesic(cameraRs, rayDir, tEnter, b, crossings);
       }

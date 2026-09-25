@@ -134,7 +134,7 @@ export class DepthVolumePass extends Pass {
   }
 }
 
-function isVisibleInTree(object: Object3D): boolean {
+export function isVisibleInTree(object: Object3D): boolean {
   for (let node: Object3D | null = object; node !== null; node = node.parent) {
     if (!node.visible) return false
   }
