@@ -15,6 +15,7 @@ export const nebulaDensityChunk = `
   uniform float uLacunarity;
   uniform float uGain;
   uniform float uWarpStrength;
+  uniform float uBoundaryWarp;  // 0..1 варп самого контура формы тем же вектором варпа
   uniform float uRidged;
   uniform float uContrast;
 
@@ -134,9 +135,21 @@ export const nebulaDensityChunk = `
   #ifdef NEB_BAKED
     return texture(uDensityTex, p * 0.5 + 0.5).r;
   #else
-    float b = nebBoundary(p);
-    if (b <= 0.0) return 0.0;
-    vec3 q = nebDomainWarp(p, uWarpStrength, uLacunarity, uGain) * uFrequency;
+    // Порядок ветвей — как в NebulaField.sampleDensity: при uBoundaryWarp 0 сначала
+    // граница и ранний выход (варп не считается впустую), при > 0 вектор варпа
+    // нужен уже для границы: контур перестаёт быть аналитической сферой/эллипсоидом
+    vec3 w;
+    float b;
+    if (uBoundaryWarp > 0.0) {
+      w = nebWarpVector(p, uLacunarity, uGain);
+      b = nebBoundary(p + uBoundaryWarp * w);
+      if (b <= 0.0) return 0.0;
+    } else {
+      b = nebBoundary(p);
+      if (b <= 0.0) return 0.0;
+      w = nebWarpVector(p, uLacunarity, uGain);
+    }
+    vec3 q = (p + uWarpStrength * w) * uFrequency;
     float base = nebFbm(q, uOctaves, uLacunarity, uGain);
     float billow = abs(base);
     float ridged = 1.0 - abs(base);
