@@ -4,6 +4,7 @@ import { KeplerianModel } from '@/core/libs/KeplerianModel'
 import { AU, SpaceScale } from '@/core/constants'
 import { Acceptable } from '@/core/services/visitors/Acceptable'
 import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
+import { OVERLAY_LAYER } from '@/core/graphic/passes/DepthVolume'
 
 class OrbitLine extends Line implements Acceptable<IObject3DVisitor> {
   public model: Actor
@@ -23,6 +24,8 @@ class OrbitLine extends Line implements Acceptable<IObject3DVisitor> {
     this.material = new LineBasicMaterial({ color: this.model.getAttribute('color', '#ffffff'), depthTest: false })
 
     this.userData.type = 'orbit'
+    // Поверх лензированного кадра (OverlayPass): линии орбит линзы не искривляют
+    this.layers.set(OVERLAY_LAYER)
     this.scale.multiplyScalar(AU * SpaceScale)
   }
 
