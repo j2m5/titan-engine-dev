@@ -7,6 +7,8 @@ import {
   Scene,
   Sphere,
   SphereGeometry,
+  Texture,
+  Vector2,
   Vector3,
   WebGLRenderer
 } from 'three'
@@ -17,6 +19,7 @@ import { UpdateContext } from '@/core/UpdateContext'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import type { LensEntry, LensRegistry } from '@/core/services/LensRegistry'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { BLACK_HOLE_LAYER, type SceneFrameConsumer } from '@/core/graphic/passes/DepthVolume'
 
 /**
  * Чёрная дыра (уровень L0): bounding-сфера зоны симуляции лензирования
@@ -38,7 +41,7 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
  */
 export const MESH_MARGIN: number = 1.008
 
-class BlackHole extends Mesh {
+class BlackHole extends Mesh implements SceneFrameConsumer {
   public model: Actor
   declare public geometry: BufferGeometry
   declare public material: BlackHoleMaterial
@@ -77,6 +80,15 @@ class BlackHole extends Mesh {
     }
   }
 
+  /** Копия кадра от BlackHolePass: побег луча читает кадр, а не только кубмапу */
+  public bindSceneFrame(sceneColor: Texture, sceneDepth: Texture, resolution: Vector2, logFarFactor: number): void {
+    this.material.bindSceneFrame(sceneColor, sceneDepth, resolution, logFarFactor)
+  }
+
+  public unbindSceneFrame(): void {
+    this.material.unbindSceneFrame()
+  }
+
   /** Снятие с реестра линз; геометрию и материал освобождает обход графа */
   public dispose(): void {
     if (this.lensEntry) {
@@ -93,6 +105,9 @@ class BlackHole extends Mesh {
 
     this.name = this.model.getAttribute('name', '') + 'BlackHole'
     this.userData.type = 'blackHole'
+    // Рисует BlackHolePass после сцены и объёмов по копии кадра; основной
+    // проход слой не видит, кликовый рейкастер включает его сам
+    this.layers.set(BLACK_HOLE_LAYER)
     // клик-таргет — сфера зоны симуляции, не горизонт (спецификация §9)
     this.userData.clickable = true
 

@@ -8,6 +8,7 @@ import { SimulationClock } from '@/core/time/SimulationClock'
 import { CameraController } from '@/core/camera/CameraController'
 import { UpdateContext } from '@/core/UpdateContext'
 import { Clock, PerspectiveCamera, Raycaster, Scene, Vector2, WebGLRenderer } from 'three'
+import { BLACK_HOLE_LAYER } from '@/core/graphic/passes/DepthVolume'
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { AstroControls } from '@/core/libs/AstroControls'
 import Stats from 'three/examples/jsm/libs/stats.module'
@@ -26,7 +27,14 @@ class Engine {
   private readonly boundOnClick: (event: MouseEvent) => void
   private readonly boundOnWheel: (event: WheelEvent) => void
 
-  private readonly raycaster: Raycaster = new Raycaster()
+  private readonly raycaster: Raycaster = Engine.createRaycaster()
+
+  private static createRaycaster(): Raycaster {
+    const raycaster = new Raycaster()
+    // Меш чёрной дыры живёт на своём слое (рисует BlackHolePass), а кликается по-прежнему
+    raycaster.layers.enable(BLACK_HOLE_LAYER)
+    return raycaster
+  }
   /**
    * Панель статистики создаётся только когда её показывают: её конструктор
    * строит канвас и берёт 2D-контекст, чего в среде без канваса нет.

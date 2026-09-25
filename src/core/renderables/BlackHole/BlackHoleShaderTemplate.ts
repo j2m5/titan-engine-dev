@@ -81,6 +81,18 @@ export function createBlackHoleUniforms(parameters: BlackHoleParameters): Record
     uDphi: new Uniform(config('blackHole.integrationDphi')),
     /** Дебаг: 0 — лензирование выключено (passthrough этапа 1), 1 — включено */
     uLensing: new Uniform(1),
+
+    /**
+     * Копия кадра от BlackHolePass: побег луча читает пиксель кадра по
+     * спроецированному направлению (тела, лучи и туманности за дырой), кубмапа —
+     * подстраховка за экраном и для объектов перед плоскостью сближения.
+     * uSceneEnabled 0 (рендер вне пасса) — только кубмапа
+     */
+    uSceneColor: new Uniform<Texture | null>(null),
+    uSceneDepth: new Uniform<Texture | null>(null),
+    uSceneResolution: new Uniform(new Vector2(1, 1)),
+    uSceneLogFarFactor: new Uniform(1),
+    uSceneEnabled: new Uniform(0),
     /** Дебаг: подкраска пикселей по числу пересечений плоскости диска */
     uDebugCrossings: new Uniform(0),
 

@@ -8,6 +8,8 @@ import {
   OrthographicCamera,
   PerspectiveCamera,
   RawShaderMaterial,
+  Texture,
+  Vector2,
   Vector3
 } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
@@ -154,6 +156,21 @@ class BlackHoleMaterial extends RawShaderMaterial {
    * RawShaderMaterial текстуры юниформов не разбирает, без override она
    * утекала бы на каждой пересборке сцены
    */
+  /** Копия кадра от BlackHolePass (см. uSceneEnabled в шаблоне) */
+  public bindSceneFrame(sceneColor: Texture, sceneDepth: Texture, resolution: Vector2, logFarFactor: number): void {
+    this.uniforms.uSceneColor.value = sceneColor
+    this.uniforms.uSceneDepth.value = sceneDepth
+    ;(this.uniforms.uSceneResolution.value as Vector2).copy(resolution)
+    this.uniforms.uSceneLogFarFactor.value = logFarFactor
+    this.uniforms.uSceneEnabled.value = 1
+  }
+
+  public unbindSceneFrame(): void {
+    this.uniforms.uSceneColor.value = null
+    this.uniforms.uSceneDepth.value = null
+    this.uniforms.uSceneEnabled.value = 0
+  }
+
   public override dispose(): void {
     this.uniforms.deflectionLut.value?.dispose()
     this.uniforms.outsideLut.value?.dispose()
