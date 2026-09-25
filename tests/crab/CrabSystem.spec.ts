@@ -42,8 +42,8 @@ describe('сцена Краб: пульсар и остаток', () => {
     expect(glow.size!).toBeLessThan(shell.size!)
     expect(glow.noise?.ridged ?? 0).toBe(0)
     expect(glow.noise?.worleyStrength ?? 0).toBe(0)
-    expect(glow.noise?.contrast!).toBeLessThanOrEqual(1.5)
-    expect(glow.noise?.octaves!).toBeLessThanOrEqual(3)
+    expect(glow.noise!.contrast).toBeLessThanOrEqual(1.5)
+    expect(glow.noise!.octaves).toBeLessThanOrEqual(3)
   })
 
   it('оболочка и свечение вытянуты 3:2 вдоль полюса пульсара: axisRatios [0.75, 1, 0.75], ось формы = полюс (0.5°)', () => {
