@@ -80,9 +80,12 @@ export class PulsarBeamsMaterial extends ShaderMaterial {
           if (t1 <= t0) discard;
 
           float dt = (t1 - t0) / float(${STEPS});
+          // Джиттер старта по gl_FragCoord (не по varying — тот даёт сетку): у
+          // основания конус уже шага, без джиттера шаги его перескакивают полосами
+          float jitter = fract(52.9829189 * fract(0.06711056 * gl_FragCoord.x + 0.00583715 * gl_FragCoord.y));
           vec3 accum = vec3(0.0);
           for (int i = 0; i < ${STEPS}; i++) {
-            float t = t0 + (float(i) + 0.5) * dt;
+            float t = t0 + (float(i) + jitter) * dt;
             accum += uColor * beamDensity(uCameraLocal + rayDir * t) * dt / uLength;
           }
           gl_FragColor = vec4(min(accum, vec3(${HDR_CEILING}.0)), 1.0);

@@ -47,6 +47,24 @@ describe('magneticAxisAt: магнитная ось вокруг оси вращ
   })
 })
 
+describe('beamDensity: сумма марша по оси', () => {
+  it('24 шага середин по [0, L] с нормировкой dt/L дают ≈ intensity/3 (аналитический ∫(1−d/L)² = L/3), ±5 %', () => {
+    const axis = new Vector3(0, 1, 0)
+    const L = 1000
+    const intensity = 6
+    const steps = 24
+    const dt = L / steps
+    let sum = 0
+    for (let i = 0; i < steps; i++) {
+      const t = (i + 0.5) * dt
+      sum += (beamDensity(axis.clone().multiplyScalar(t), axis, 0.1, L, intensity) * dt) / L
+    }
+
+    expect(sum).toBeGreaterThan((intensity / 3) * 0.95)
+    expect(sum).toBeLessThan((intensity / 3) * 1.05)
+  })
+})
+
 describe('beamDensity: гауссов конус со спадом по длине, оба знака оси', () => {
   const axis = new Vector3(0, 1, 0)
   const half = (6 * Math.PI) / 180

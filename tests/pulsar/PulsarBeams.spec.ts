@@ -94,4 +94,12 @@ describe('PulsarBeams: объём в проходе глубины', () => {
 
     expect(frag).toMatch(/uniform mat4 modelViewMatrix;/)
   })
+
+  it('GLSL: старт марша джиттерится по gl_FragCoord (не по varying) — у основания конус уже шага', () => {
+    const frag = new PulsarBeams(params(), null).material.fragmentShader
+
+    expect(frag).toContain('gl_FragCoord')
+    expect(frag).toContain('52.9829189')
+    expect(frag).toMatch(/\(float\(i\) \+ jitter\) \* dt/)
+  })
 })
