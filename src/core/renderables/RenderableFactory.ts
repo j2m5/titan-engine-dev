@@ -43,6 +43,9 @@ import { BrownDwarf } from '@/core/renderables/BrownDwarf'
 import { BrownDwarfImpostor } from '@/core/renderables/BrownDwarf/BrownDwarfImpostor'
 import { WhiteDwarf } from '@/core/renderables/WhiteDwarf/WhiteDwarf'
 import { WhiteDwarfImpostor } from '@/core/renderables/WhiteDwarf/WhiteDwarfImpostor'
+import { pulsarParameters } from '@/core/renderables/Pulsar/PulsarParameters'
+import { PulsarBeams } from '@/core/renderables/Pulsar/PulsarBeams'
+import { OrientationModel } from '@/core/libs/OrientationModel'
 import { GiantStar, GiantStarImpostor, GiantStarShell } from '@/core/renderables/GiantStar'
 import { INebulaRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
@@ -99,6 +102,8 @@ class RenderableFactory {
         return this.createGiantStar(actor)
       case 11:
         return this.createAsteroidBelt(actor)
+      case 12:
+        return this.createPulsar(actor)
       default:
         throw new Error("Couldn't resolve actor")
     }
@@ -209,6 +214,39 @@ class RenderableFactory {
     lod.addLevel(impostor, lod.switchDistance(config('camera.fov')), config('whiteDwarf.lodHysteresis'))
 
     node.add(lod)
+
+    return node
+  }
+
+  /**
+   * Пульсар: точка с гало — те же тело и импостор, что у белого карлика
+   * (сотни тысяч кельвинов дают тот же бело-голубой цвет, радиус 10 км —
+   * всегда точка); поверх — объём лучей-маяка, ребёнок узла, не LOD: лучи
+   * видны на любой дистанции. Кватернион лучей — полюс оси вращения.
+   */
+  private createPulsar(actor: Actor): Object3D {
+    const node = new DynamicNode(actor)
+    const lod = new ApparentSizeLod(actor.physicalObject!.getAttribute('radius')!, this.renderer, WHITE_DWARF_IMPOSTOR_PIXELS)
+    const body = new WhiteDwarf(actor)
+    const impostor = new WhiteDwarfImpostor(body, this.renderer)
+
+    lod.add(new StarInnerLayer(actor, config('pulsar.haloScale'), config('pulsar.haloOpacity')))
+
+    node.name = actor.getAttribute('name', '')
+    node.renderable = body
+
+    lod.name = actor.getAttribute('name', '') + 'LOD'
+    lod.addLevel(body)
+    lod.addLevel(impostor, lod.switchDistance(config('camera.fov')), config('pulsar.lodHysteresis'))
+    node.add(lod)
+
+    const params = pulsarParameters(actor)
+    if (params.beamIntensity > 0) {
+      const beams = new PulsarBeams(params, this.depthVolumeRegistry)
+      beams.name = actor.getAttribute('name', '') + 'Beams'
+      beams.quaternion.copy(new OrientationModel(actor).getPoleQuaternion())
+      node.add(beams)
+    }
 
     return node
   }
