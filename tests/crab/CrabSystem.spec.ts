@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { Vector3 } from 'three'
+import { Color, Vector3 } from 'three'
 import { Actors, PhysicalObjects, RenderingObjects, RotationObjects } from '@storage/database'
 import { Scenarios } from '@/config/scenarios'
 import { three } from '@/config/three'
@@ -105,6 +105,20 @@ describe('сцена Краб: пульсар и остаток', () => {
     expect(shell.quality?.maxSteps).toBe(96)
     expect(shell.noise?.octaves).toBe(6)
     expect(psr.beamLengthAu!).toBeLessThan(shell.size!)
+  })
+
+  it('облик оболочки: цвет по радиусу (красная кромка, зелёно-голубой центр), тонкие волокна, тёмные пылевые жилы', () => {
+    const shell = nebulaOf('Crab shell')
+    const { r: ir, g: ig, b: ib } = new Color(shell.palette!.innerColor!)
+    const { r: or, g: og, b: ob } = new Color(shell.palette!.outerColor!)
+
+    expect(shell.palette!.radialMix!).toBeGreaterThanOrEqual(0.4)
+    expect(or).toBeGreaterThan(og + ob) // кромка — красная
+    expect(ig + ib).toBeGreaterThan(2 * ir) // центр — зелёно-голубой
+    expect(shell.noise!.frequency!).toBeGreaterThanOrEqual(3)
+    expect(shell.noise!.contrast!).toBeGreaterThanOrEqual(3)
+    expect(shell.dust!.strength!).toBeGreaterThanOrEqual(0.6)
+    expect(shell.dust!.threshold!).toBeLessThanOrEqual(0.5)
   })
 
   it('куб-прокси оболочки остаётся внутри far при обзоре с запасом 1.3× на отъезд в любой ориентации', () => {
