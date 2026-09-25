@@ -17,6 +17,7 @@ import { LensRegistry } from '@/core/services/LensRegistry'
 import { createGravitationalLensPass } from '@/core/graphic/effects/lens/GravitationalLensEffect'
 import { DepthVolumePass } from '@/core/graphic/passes/DepthVolumePass'
 import { BlackHolePass } from '@/core/graphic/passes/BlackHolePass'
+import { OverlayPass } from '@/core/graphic/passes/OverlayPass'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { ExposureEffect } from '@/core/graphic/effects/grading/ExposureEffect'
 import { ColorGradeEffect } from '@/core/graphic/effects/grading/ColorGradeEffect'
@@ -181,6 +182,9 @@ class Postprocessing {
    * Линза — следом: сдвигает готовый кадр снаружи меша чёрной дыры, читает
    * соседей и глубину.
    *
+   * Оверлеи (линии орбит) — после линз: схематичные линии не искривляются,
+   * атмосфера следом тонирует их как прежде.
+   *
    * Атмосфера — СВОЙ пасс между линзой и HDR-проходом: она тонирует и гало
    * пыли, а блум считает яркость по входу своего пасса, значит должен видеть
    * уже затуманенный кадр.
@@ -193,6 +197,7 @@ class Postprocessing {
       new DepthVolumePass(this.camera, this.depthVolumeRegistry),
       new BlackHolePass(this.camera, this.lensRegistry),
       createGravitationalLensPass(this.camera, this.lensRegistry),
+      new OverlayPass(this.scene, this.camera),
       createAtmospherePass(this.camera, this.atmosphereRegistry, readAtmosphereDebugView()),
       hdrPass,
       ldrPass

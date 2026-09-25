@@ -9,6 +9,7 @@ import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { DepthVolumePass } from '@/core/graphic/passes/DepthVolumePass'
 import { GravitationalLensEffect } from '@/core/graphic/effects/lens/GravitationalLensEffect'
 import { BlackHolePass } from '@/core/graphic/passes/BlackHolePass'
+import { OverlayPass } from '@/core/graphic/passes/OverlayPass'
 
 describe('Postprocessing: контракт цветового конвейера', () => {
   it('тонмаппинг реально применяется: NORMAL-бленд, не DST-заглушка', () => {
@@ -102,15 +103,17 @@ describe('Postprocessing: пасс атмосферы', () => {
       new DepthVolumeRegistry()
     ).buildPasses()
 
-    expect(passes).toHaveLength(7)
+    expect(passes).toHaveLength(8)
     expect(passes[0]).toBeInstanceOf(RenderPass)
     expect(passes[1]).toBeInstanceOf(DepthVolumePass)
-    // Меш дыры — за объёмами (сэмплирует кадр с ними), линза — следом, до атмосферы
+    // Меш дыры — за объёмами (сэмплирует кадр с ними), линза — следом; оверлеи
+    // (линии орбит) — поверх лензированного кадра, до атмосферы
     expect(passes[2]).toBeInstanceOf(BlackHolePass)
     expect((passes[3] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(GravitationalLensEffect)
-    expect((passes[4] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(AtmosphereEffect)
-    expect(passes[5]).toBeInstanceOf(EffectPass)
+    expect(passes[4]).toBeInstanceOf(OverlayPass)
+    expect((passes[5] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(AtmosphereEffect)
     expect(passes[6]).toBeInstanceOf(EffectPass)
+    expect(passes[7]).toBeInstanceOf(EffectPass)
   })
 })
 
