@@ -90,7 +90,6 @@ export function createBlackHoleUniforms(parameters: BlackHoleParameters): Record
      */
     uSceneColor: new Uniform<Texture | null>(null),
     uSceneDepth: new Uniform<Texture | null>(null),
-    uSceneResolution: new Uniform(new Vector2(1, 1)),
     uSceneLogFarFactor: new Uniform(1),
     uSceneEnabled: new Uniform(0),
     /** Дебаг: подкраска пикселей по числу пересечений плоскости диска */

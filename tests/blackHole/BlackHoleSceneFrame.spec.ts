@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { Texture, Vector2 } from 'three'
+import { Texture } from 'three'
 import { BlackHoleShaderTemplate } from '@/core/renderables/BlackHole/BlackHoleShaderTemplate'
 import { BlackHoleMaterial } from '@/core/renderables/BlackHole/BlackHoleMaterial'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
@@ -43,10 +43,10 @@ describe('BlackHoleMaterial: привязка копии кадра', () => {
     const color = new Texture()
     const depth = new Texture()
 
-    material.bindSceneFrame(color, depth, new Vector2(640, 360), 27.5)
+    material.bindSceneFrame(color, depth, 27.5)
     expect(material.uniforms.uSceneColor.value).toBe(color)
     expect(material.uniforms.uSceneDepth.value).toBe(depth)
-    expect((material.uniforms.uSceneResolution.value as Vector2).x).toBe(640)
+    expect(material.uniforms.uSceneResolution).toBeUndefined()
     expect(material.uniforms.uSceneLogFarFactor.value).toBe(27.5)
     expect(material.uniforms.uSceneEnabled.value).toBe(1)
 

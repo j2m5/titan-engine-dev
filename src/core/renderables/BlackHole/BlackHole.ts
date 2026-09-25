@@ -8,7 +8,6 @@ import {
   Sphere,
   SphereGeometry,
   Texture,
-  Vector2,
   Vector3,
   WebGLRenderer
 } from 'three'
@@ -81,8 +80,8 @@ class BlackHole extends Mesh implements SceneFrameConsumer {
   }
 
   /** Копия кадра от BlackHolePass: побег луча читает кадр, а не только кубмапу */
-  public bindSceneFrame(sceneColor: Texture, sceneDepth: Texture, resolution: Vector2, logFarFactor: number): void {
-    this.material.bindSceneFrame(sceneColor, sceneDepth, resolution, logFarFactor)
+  public bindSceneFrame(sceneColor: Texture, sceneDepth: Texture, logFarFactor: number): void {
+    this.material.bindSceneFrame(sceneColor, sceneDepth, logFarFactor)
   }
 
   public unbindSceneFrame(): void {

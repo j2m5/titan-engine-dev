@@ -3,7 +3,6 @@ import {
   HalfFloatType,
   type PerspectiveCamera,
   type Texture,
-  Vector2,
   type WebGLRenderer,
   WebGLRenderTarget
 } from 'three'
@@ -35,7 +34,6 @@ export class BlackHolePass extends Pass {
   public readonly colorCopy: CopyPass
   private readonly sceneCamera: PerspectiveCamera
   private readonly registry: LensRegistry
-  private readonly resolution = new Vector2(1, 1)
   private readonly visible: SceneFrameConsumer[] = []
 
   public constructor(camera: PerspectiveCamera, registry: LensRegistry) {
@@ -60,7 +58,6 @@ export class BlackHolePass extends Pass {
   public override setSize(width: number, height: number): void {
     this.depthCopy.setSize(width, height)
     this.colorCopy.setSize(width, height)
-    this.resolution.set(width, height)
   }
 
   public override render(
@@ -86,7 +83,7 @@ export class BlackHolePass extends Pass {
     renderer.setRenderTarget(this.renderToScreen ? null : inputBuffer)
 
     for (const mesh of meshes) {
-      mesh.bindSceneFrame(this.colorCopy.texture, this.depthCopy.texture, this.resolution, logFarFactor)
+      mesh.bindSceneFrame(this.colorCopy.texture, this.depthCopy.texture, logFarFactor)
       renderer.render(mesh, camera)
       mesh.unbindSceneFrame()
     }

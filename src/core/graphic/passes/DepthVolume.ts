@@ -20,7 +20,7 @@ export const BLACK_HOLE_LAYER = 29
  * глубину сцены, после — отвязывается, чтобы рендер вне пасса шёл без них
  */
 export interface SceneFrameConsumer extends Object3D {
-  bindSceneFrame(sceneColor: Texture, sceneDepth: Texture, resolution: Vector2, logFarFactor: number): void
+  bindSceneFrame(sceneColor: Texture, sceneDepth: Texture, logFarFactor: number): void
   unbindSceneFrame(): void
 }
 

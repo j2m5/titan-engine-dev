@@ -100,7 +100,7 @@ describe('BlackHolePass', () => {
     expect(log.scenes).toEqual([hole])
     expect(log.masks).toEqual([1 << BLACK_HOLE_LAYER])
     expect(log.targets).toEqual([inputBuffer])
-    expect(bind).toHaveBeenCalledWith(pass.colorCopy.texture, pass.depthCopy.texture, expect.anything(), Math.log2(camera.far + 1))
+    expect(bind).toHaveBeenCalledWith(pass.colorCopy.texture, pass.depthCopy.texture, Math.log2(camera.far + 1))
     expect(unbind).toHaveBeenCalledOnce()
     expect(camera.layers.mask).toBe(maskBefore)
     expect(hole.layers.mask).toBe(1 << BLACK_HOLE_LAYER)
