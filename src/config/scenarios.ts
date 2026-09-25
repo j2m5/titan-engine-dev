@@ -169,5 +169,18 @@ export const Scenarios: ScenarioConfig[] = [
     // дистанция·1.3 + 900·√3 < 5000 оставляет запас на отъезд в любой ориентации
     defaultCameraPosition: [0, fromAstronomicalUnits(1280), fromAstronomicalUnits(1280)],
     lightSources: []
+  },
+  {
+    id: 15,
+    rootId: 147,
+    name: 'NGC 1851E system',
+    description:
+      'Millisecond pulsar PSR J0514-4002E and its mass-gap companion, drawn as a stellar-mass black hole: a 7.44-day eccentric orbit and no accretion disk',
+    preview: 'unknown.png',
+    skybox: [1, 2, 3, 4, 5, 6],
+    // Апоцентр пульсара 0.124 а.е.; с 0.35 а.е. эллипс в кадре целиком. Горизонт дыры
+    // (7 км) отсюда невидим — к нему летят навигацией, как к Сириусу B
+    defaultCameraPosition: [0, fromAstronomicalUnits(0.25), fromAstronomicalUnits(0.25)],
+    lightSources: []
   }
 ]

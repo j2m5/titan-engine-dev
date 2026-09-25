@@ -79,5 +79,7 @@ export const Orbits: IOrbit[] = [
   { id: 73, actorId: 122, semiMajorAxis: 0.004278, eccentricity: 0.04, inclination: 21.9, argOfPeriapsis: 250, ascendingNode: 180, meanAnomalyAtEpoch: 300, epoch: 2451545, period: 0 },
   { id: 74, actorId: 123, semiMajorAxis: 115, eccentricity: 0.08, inclination: 3.4, argOfPeriapsis: 190, ascendingNode: 260, meanAnomalyAtEpoch: 132, epoch: 2451545, period: 0 },
   { id: 75, actorId: 130, semiMajorAxis: 18, eccentricity: 0.02, inclination: 1.2, argOfPeriapsis: 95, ascendingNode: 40, meanAnomalyAtEpoch: 210, epoch: 2451545, period: 0 },
-  { id: 76, actorId: 133, semiMajorAxis: 48, eccentricity: 0.05, inclination: 2.6, argOfPeriapsis: 250, ascendingNode: 210, meanAnomalyAtEpoch: 120, epoch: 2451545, period: 0 }
+  { id: 76, actorId: 133, semiMajorAxis: 48, eccentricity: 0.05, inclination: 2.6, argOfPeriapsis: 250, ascendingNode: 210, meanAnomalyAtEpoch: 120, epoch: 2451545, period: 0 },
+  { id: 77, actorId: 148, semiMajorAxis: 0.0724, eccentricity: 0.708, inclination: 60, argOfPeriapsis: 0, ascendingNode: 40, meanAnomalyAtEpoch: 0, epoch: 2451545, period: 7.44 },
+  { id: 78, actorId: 149, semiMajorAxis: 0.0449, eccentricity: 0.708, inclination: 60, argOfPeriapsis: 180, ascendingNode: 40, meanAnomalyAtEpoch: 0, epoch: 2451545, period: 7.44 }
 ]

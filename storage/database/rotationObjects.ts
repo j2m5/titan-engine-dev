@@ -34,5 +34,6 @@ export const RotationObjects: IRotationObject[] = [
   { id: 28, actorId: 135, meridianAngle: 0, ascendingNode: 110, inclination: 3, period: 0, direction: 1 },
   { id: 29, actorId: 139, meridianAngle: 0, ascendingNode: 40, inclination: 1.2, period: 0, direction: 1 },
   { id: 30, actorId: 140, meridianAngle: 0, ascendingNode: 40, inclination: 1.2, period: 0, direction: 1 },
-  { id: 31, actorId: 142, meridianAngle: 0, ascendingNode: 125, inclination: 62, period: 0.0000092, direction: 1 }
+  { id: 31, actorId: 142, meridianAngle: 0, ascendingNode: 125, inclination: 62, period: 0.0000092, direction: 1 },
+  { id: 32, actorId: 148, meridianAngle: 0, ascendingNode: 60, inclination: 30, period: 0.0000000647, direction: 1 }
 ]

@@ -147,5 +147,8 @@ export const Actors: IActor[] = [
   { id: 141, categoryId: 1, parentId: null, name: "Crab Nebula system", description: "", color: "#ffffff" },
   { id: 142, categoryId: 12, parentId: 141, name: "PSR B0531+21", description: "", color: "#bcd4ff" },
   { id: 143, categoryId: 7, parentId: 141, name: "Crab shell", description: "", color: "#d8552a" },
-  { id: 146, categoryId: 7, parentId: 141, name: "Crab synchrotron glow", description: "", color: "#9fc4ff" }
+  { id: 146, categoryId: 7, parentId: 141, name: "Crab synchrotron glow", description: "", color: "#9fc4ff" },
+  { id: 147, categoryId: 1, parentId: null, name: "NGC 1851E system", description: "", color: "#ffffff" },
+  { id: 148, categoryId: 12, parentId: 147, name: "PSR J0514-4002E", description: "", color: "#bcd4ff" },
+  { id: 149, categoryId: 2, parentId: 147, name: "NGC 1851E companion", description: "", color: "#ffffff" }
 ]
