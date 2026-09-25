@@ -146,5 +146,6 @@ export const Actors: IActor[] = [
   { id: 140, categoryId: 11, parentId: 130, name: "Thalorn Trojans L5", description: "", color: "#8fa6b4" },
   { id: 141, categoryId: 1, parentId: null, name: "Crab Nebula system", description: "", color: "#ffffff" },
   { id: 142, categoryId: 12, parentId: 141, name: "PSR B0531+21", description: "", color: "#bcd4ff" },
-  { id: 143, categoryId: 7, parentId: 141, name: "Crab shell", description: "", color: "#d8552a" }
+  { id: 143, categoryId: 7, parentId: 141, name: "Crab shell", description: "", color: "#d8552a" },
+  { id: 146, categoryId: 7, parentId: 141, name: "Crab synchrotron glow", description: "", color: "#9fc4ff" }
 ]
