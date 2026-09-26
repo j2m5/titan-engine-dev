@@ -124,7 +124,7 @@ describe('гейт в шейдерах', () => {
   it('планета: тинт на прямом члене, амбиент без него', () => {
     const fragment: string = withoutComments(PlanetShaderTemplate.fragmentShader)
 
-    expect(fragment).toContain('vec3 lit = mix(ambient, vec3(directGain) * uLightColor, max(NdotLraw, 0.0));')
+    expect(fragment).toContain('vec3 lit = mix(ambient, vec3(directGain) * uLightColor * sunTintMix, max(NdotLraw, 0.0));')
     expect(fragment).not.toMatch(/ambient\s*\*\s*uLightColor|uLightColor\s*\*\s*ambient/)
   })
 

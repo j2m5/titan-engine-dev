@@ -4,6 +4,7 @@ import {
   composeLegacy,
   composeTerrain,
   terrainLit,
+  terrainSkyTerm,
   type Vec3
 } from '@/core/materials/shaders/lib/chunks/terrainLightMath'
 
@@ -40,6 +41,35 @@ describe('terrainLit: CPU-зеркало lit = mix(ambient·occ, directGain, max
     const shade = terrainLit({ ndotl: 0, ambient: 0.15, skyTerm: grey(1), occlusion: 1, kDirect: 0.35, cloudShadow: 0.4, lambert: 1 })
     expect(noon).toEqual(grey(0.4))
     expect(shade).toEqual(grey(0.15))
+  })
+})
+
+describe('закатный тинт суши: пропускание к солнцу применяется один раз', () => {
+  // Земля на μs ≈ 0.1: T(μs)/T(1) порядка (0.6, 0.3, 0.1)
+  const tint: Vec3 = [0.6, 0.3, 0.1]
+  const skyLut: Vec3 = [0.2, 0.3, 0.5]
+
+  it('небо из irradiance-LUT не множится на тинт — пропускание в нём уже учтено', () => {
+    expect(terrainSkyTerm(0.4, tint, skyLut, 1)).toEqual(skyLut)
+  })
+
+  it('серый пол без неба — отражённое солнце, тинт на нём', () => {
+    const sky = terrainSkyTerm(0.4, tint, skyLut, 0)
+    for (const c of [0, 1, 2]) expect(sky[c]).toBeCloseTo(0.4 * tint[c], 12)
+  })
+
+  it('в тени (N·L ≤ 0) суша видит только небо — без второго тинта', () => {
+    const lit = terrainLit({ ndotl: 0, ambient: 0.15, skyTerm: skyLut, occlusion: 1, kDirect: 0.35, cloudShadow: 1, lambert: 1, sunTint: tint })
+    for (const c of [0, 1, 2]) expect(lit[c]).toBeCloseTo(0.15 * skyLut[c], 12)
+  })
+
+  it('прямой свет несёт тинт', () => {
+    const lit = terrainLit({ ndotl: 1, ambient: 0.15, skyTerm: skyLut, occlusion: 1, kDirect: 0.35, cloudShadow: 1, lambert: 1, sunTint: tint })
+    for (const c of [0, 1, 2]) expect(lit[c]).toBeCloseTo(tint[c], 12)
+  })
+
+  it('lambert = 0 — прежний вид: тинт на всём диффузе', () => {
+    expect(terrainLit({ ndotl: 0.3, ambient: 0.15, skyTerm: skyLut, occlusion: 0.1, kDirect: 0.35, cloudShadow: 0.2, lambert: 0, sunTint: tint })).toEqual(tint)
   })
 })
 

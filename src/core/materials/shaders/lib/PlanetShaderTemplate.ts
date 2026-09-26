@@ -436,6 +436,15 @@ export const PlanetShaderTemplate: ShaderProps = {
       // направлен ОТ солнца к точке (см. вершинник) — минус даёт +1 в зените.
       float muS = dot(normalize(vLocalDir), -normalize(vLocalLightDirection));
 
+      #ifdef USE_TERRAIN_UV
+        // Цвет солнца сквозь атмосферу: только на прямом свете суши, сером поле и облаках.
+        // Небо из irradiance-LUT пропускание уже несёт — второй раз его не множить
+        vec3 sunTintMix = vec3(1.0);
+        #ifdef USE_SUN_TINT
+          sunTintMix = mix(vec3(1.0), sunTint(muS), uSunTintStrength);
+        #endif
+      #endif
+
       // Легаси-значение (гиганты): окклюзия там никем не трогается и ≡ 1 —
       // состав бит-в-бит прежний. Терраформная ветка перезаписывает dayColor.
       vec3 dayColor = diffuseSample * albedoMul * occlusion;
@@ -451,7 +460,7 @@ export const PlanetShaderTemplate: ShaderProps = {
         // множитель ≡ 1 (прежний вид).
         // Амбиент — свет от неба/соседнего грунта: серый пол ∝ солнцу над геометрическим
         // горизонтом (безвоздушные тела); у тел с атмосферой — цвет и спад из irradiance-LUT
-        vec3 skyTerm = vec3(clamp(sunElevation / max(uTerrainAmbientSunRef, 1e-3), 0.0, 1.0));
+        vec3 skyTerm = vec3(clamp(sunElevation / max(uTerrainAmbientSunRef, 1e-3), 0.0, 1.0)) * sunTintMix;
         #if defined(USE_SKY_AMBIENT) && defined(USE_SUN_TINT)
           // ветка юниформная (без производных внутри): при 0 два тапа LUT не платятся
           if (uSkyAmbientStrength > 0.0) skyTerm = mix(skyTerm, skyAmbientTint(muS), uSkyAmbientStrength);
@@ -488,9 +497,9 @@ export const PlanetShaderTemplate: ShaderProps = {
         #endif
         // Та же форма mix(пол, 1, N·L), что прежде: в полдень при occlusion = 1 и без тени ровно 1
         #ifdef USE_LIGHT_TINT
-          vec3 lit = mix(ambient, vec3(directGain) * uLightColor, max(NdotLraw, 0.0));
+          vec3 lit = mix(ambient, vec3(directGain) * uLightColor * sunTintMix, max(NdotLraw, 0.0));
         #else
-          vec3 lit = mix(ambient, vec3(directGain), max(NdotLraw, 0.0));
+          vec3 lit = mix(ambient, vec3(directGain) * sunTintMix, max(NdotLraw, 0.0));
         #endif
         vec3 surfaceAlbedo = diffuseSample * albedoMul;
         #ifdef USE_TERRAIN_FROST
@@ -503,7 +512,8 @@ export const PlanetShaderTemplate: ShaderProps = {
                           * (1.0 - smoothstep(0.7 * uFrostSlopeMax, uFrostSlopeMax, terrainSlopeTan));
           surfaceAlbedo = mix(surfaceAlbedo, uFrostColor, frostMask);
         #endif
-        dayColor = surfaceAlbedo * mix(vec3(1.0), lit, uTerrainLambert);
+        // lambert = 0 — прежний вид: тинт на всём диффузе
+        dayColor = surfaceAlbedo * mix(sunTintMix, lit, uTerrainLambert);
       #endif
 
       // Ночная и облачная карты есть не у всех тел. Раньше сэмплеры читались
@@ -566,13 +576,8 @@ export const PlanetShaderTemplate: ShaderProps = {
         // Суша под ламбертом самогасится (пол → 0 за горизонтом, освещённые вершины за
         // терминатором остаются освещёнными); dayFactor гейтит облака и ночь
         float landGate = mix(dayFactor, 1.0, uTerrainLambert);
-        vec3 day = cloudColor * dayFactor + dayColor * (1.0 - cloudAlpha) * landGate;
-        // Цвет солнца сквозь атмосферу (LUT пропускания): палуба и облака у
-        // терминатора теплеют и темнеют синхронно с небом; в зените тинт ≡ 1.
-        // muS — по радиальному направлению сферы, не по нормали рельефа (см. выше).
-        #ifdef USE_SUN_TINT
-          day *= mix(vec3(1.0), sunTint(muS), uSunTintStrength);
-        #endif
+        // Тинт солнца (sunTintMix) уже внутри dayColor; облака получают его здесь
+        vec3 day = cloudColor * sunTintMix * dayFactor + dayColor * (1.0 - cloudAlpha) * landGate;
         vec3 finalColor = night * (1.0 - dayFactor) + day;
       #else
         vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);

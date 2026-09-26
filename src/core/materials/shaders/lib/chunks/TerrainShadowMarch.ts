@@ -34,11 +34,9 @@ export const terrainShadowMarchFunctions = /* glsl */ `
     return uShadowHeightMin + texture2D(uShadowHeightMap, terrainShadowUv(dirLocal)).r * uShadowHeightRange;
   }
 
-  // 1 — освещено, 0 — в тени; dir — радиаль фрагмента, sunLocal — единичное НА солнце, система тела
+  // 1 — освещено, 0 — в тени; dir — радиаль фрагмента, sunLocal — единичное НА солнце, система тела.
+  // Солнце под горизонтом не пропускается: ночь склону к солнцу даёт только марш
   float terrainShadowMarch(vec3 dir, vec3 sunLocal) {
-    float cosSun = dot(dir, sunLocal);
-    if (cosSun <= 0.0) return 1.0;
-
     float R = uBodyRadiusUnits;
     vec3 p0 = dir * (R + terrainShadowHeight(dir));
     // дуга текселя — первый шаг и смещение: короче неё карта ничего не знает
@@ -55,7 +53,7 @@ export const terrainShadowMarchFunctions = /* glsl */ `
       vec3 p = p0 + sunLocal * s;
       float r = length(p);
       vec3 d = p / r;
-      // |p| растёт по s монотонно при cosSun > 0: за горизонт луч уводит только рельеф
+      // солнце под горизонтом: луч сразу уходит под грунт — pen > 0, это тень самого тела
       float hRay = r - R;
       // полутень: заглубление луча в долях углового размера солнца на этой дистанции
       float pen = (terrainShadowHeight(d) - hRay - bias) / max(s * uShadowPenumbraTan, 1e-6);
