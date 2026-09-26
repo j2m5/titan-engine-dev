@@ -1,29 +1,32 @@
 import { ClampToEdgeWrapping, DataTexture, DataUtils, HalfFloatType, LinearFilter, RedFormat, RepeatWrapping } from 'three'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
+import type { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import type { TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
-
-/**
- * Потолок ширины низкой карты тени: 4096×2048 R16F = 16 МБ видеопамяти на
- * тело; при 2048 тексель 10 км на Марсе разваливает тени каньонов в ступени.
- */
-export const SHADOW_MAP_MAX_WIDTH = 4096
-
-/** Целый множитель — дробный дал бы неравные блоки и муар на шве. */
-export function shadowMapDownsampleFactor(width: number): number {
-  return Math.max(1, Math.ceil(width / SHADOW_MAP_MAX_WIDTH))
-}
+import { shadowMapDownsampleFactor, type ShadowHeightBits } from '@/core/terrain/terrainShadowBits'
 
 /** Низкая карта высот и её масштабы — ровно вход чанка terrainShadowMarch. */
 export interface TerrainShadowMap {
+  /** До готовности — заглушка 1×1: ровная сфера на датуме. Объект меняется при установке. */
   texture: DataTexture
+  /** Готова ли полная карта; до этого марш видит только тень самой сферы. */
+  ready: boolean
   /** Нижняя граница карты, юниты сцены (высота над датумом, может быть < 0). */
   heightMinUnits: number
   /** Размах карты (max − min), юниты сцены: h = min + texel·range. */
   heightRangeUnits: number
-  /** Угловой размер текселя по долготе, радианы: 2π / ширина. */
+  /** Угловой размер текселя по долготе полной карты, радианы: 2π / ширина. */
   texelAngle: number
   width: number
   height: number
+}
+
+type ReadyListener = (shadow: TerrainShadowMap) => void
+
+interface Entry {
+  shadow: TerrainShadowMap
+  listeners: Set<ReadyListener>
+  requested: boolean
 }
 
 /**
@@ -31,57 +34,89 @@ export interface TerrainShadowMap {
  * по (карта, радиус, полоса) и могут существовать в нескольких экземплярах на
  * одну карту — текстура от радиуса не зависит, поэтому живёт здесь, по карте.
  * GL-ресурс не умирает со сборщиком: диспоз — из HeightFieldStorage.release/clear.
+ * Постройка — через строитель патчей (воркер держит копию карты), см.
+ * requestTerrainShadowMap; масштабы известны из заголовка сразу.
  */
-const shadowMaps = new Map<HeightMapData, TerrainShadowMap>()
+const entries = new Map<HeightMapData, Entry>()
 
 export function terrainShadowMapFor(map: HeightMapData): TerrainShadowMap {
-  let shadow = shadowMaps.get(map)
-  if (!shadow) {
-    shadow = buildTerrainShadowMap(map)
-    shadowMaps.set(map, shadow)
-  }
-  return shadow
+  return entryFor(map).shadow
+}
+
+/** Подписка на готовность полной карты; возвращает отписку. Готовая карта подписчика не зовёт. */
+export function onTerrainShadowMapReady(map: HeightMapData, listener: ReadyListener): () => void {
+  const entry = entryFor(map)
+  if (entry.shadow.ready) return (): void => {}
+
+  entry.listeners.add(listener)
+  return (): void => void entry.listeners.delete(listener)
+}
+
+/** Постройка полной карты у строителя — один запрос на карту, сколько бы полей её ни делили. */
+export function requestTerrainShadowMap(field: TerrainHeightField, builder: TerrainPatchBuilder): void {
+  const map = field.heightMap
+  const entry = entryFor(map)
+  if (entry.requested || entry.shadow.ready) return
+
+  entry.requested = true
+  builder.requestShadow(field, (bits: ShadowHeightBits): void => void installTerrainShadowBits(map, bits))
+}
+
+/** Ставит полную карту вместо заглушки. false — запись уже готова или снята (карта отпущена). */
+export function installTerrainShadowBits(map: HeightMapData, bits: ShadowHeightBits): boolean {
+  const entry = entries.get(map)
+  if (!entry || entry.shadow.ready) return false
+
+  entry.shadow.texture.dispose()
+  entry.shadow.texture = makeTexture(bits.bits, bits.width, bits.height)
+  entry.shadow.ready = true
+  for (const listener of [...entry.listeners]) listener(entry.shadow)
+  entry.listeners.clear()
+
+  return true
 }
 
 export function disposeTerrainShadowMap(map: HeightMapData): boolean {
-  const shadow = shadowMaps.get(map)
-  if (!shadow) return false
-  shadow.texture.dispose()
-  shadowMaps.delete(map)
+  const entry = entries.get(map)
+  if (!entry) return false
+  entry.shadow.texture.dispose()
+  entries.delete(map)
   return true
 }
 
 export function disposeTerrainShadowMaps(): void {
-  for (const shadow of shadowMaps.values()) shadow.texture.dispose()
-  shadowMaps.clear()
+  for (const entry of entries.values()) entry.shadow.texture.dispose()
+  entries.clear()
 }
 
-/**
- * Коробочное среднее блока factor×factor в нормированную высоту raw/65535 —
- * та же нормировка, что в файле, множители уезжают юниформами. Среднее, не
- * максимум: максимум раздувает вершины в плато и кладёт ложную тень на равнину.
- * Хвост, не кратный множителю, отбрасывается (≤ factor текселей на краю).
- */
-function buildTerrainShadowMap(map: HeightMapData): TerrainShadowMap {
+function entryFor(map: HeightMapData): Entry {
+  let entry = entries.get(map)
+  if (!entry) {
+    entry = { shadow: placeholderShadow(map), listeners: new Set(), requested: false }
+    entries.set(map, entry)
+  }
+  return entry
+}
+
+/** Заглушка — ровная сфера на датуме (h = 0): марш даёт тень самого тела за терминатором. */
+function placeholderShadow(map: HeightMapData): TerrainShadowMap {
   const factor = shadowMapDownsampleFactor(map.width)
   const width = Math.floor(map.width / factor)
-  const height = Math.floor(map.height / factor)
-  const bits = new Uint16Array(width * height)
-  const blockTexels = factor * factor
+  const range = map.maxMeters - map.minMeters
+  const datum = range > 0 ? Math.min(Math.max(-map.minMeters / range, 0), 1) : 0
 
-  for (let y = 0; y < height; y++) {
-    const srcY = y * factor
-    for (let x = 0; x < width; x++) {
-      const srcX = x * factor
-      let sum = 0
-      for (let dy = 0; dy < factor; dy++) {
-        const row = (srcY + dy) * map.width
-        for (let dx = 0; dx < factor; dx++) sum += map.data[row + srcX + dx]
-      }
-      bits[y * width + x] = DataUtils.toHalfFloat(sum / (blockTexels * 65535))
-    }
+  return {
+    texture: makeTexture(new Uint16Array([DataUtils.toHalfFloat(datum)]), 1, 1),
+    ready: false,
+    heightMinUnits: toThreeJSUnits(map.minMeters / 1000),
+    heightRangeUnits: toThreeJSUnits(range / 1000),
+    texelAngle: (2 * Math.PI) / width,
+    width,
+    height: Math.floor(map.height / factor)
   }
+}
 
+function makeTexture(bits: Uint16Array, width: number, height: number): DataTexture {
   const texture = new DataTexture(bits, width, height, RedFormat, HalfFloatType)
   texture.wrapS = RepeatWrapping
   texture.wrapT = ClampToEdgeWrapping
@@ -89,13 +124,5 @@ function buildTerrainShadowMap(map: HeightMapData): TerrainShadowMap {
   texture.magFilter = LinearFilter
   texture.generateMipmaps = false
   texture.needsUpdate = true
-
-  return {
-    texture,
-    heightMinUnits: toThreeJSUnits(map.minMeters / 1000),
-    heightRangeUnits: toThreeJSUnits((map.maxMeters - map.minMeters) / 1000),
-    texelAngle: (2 * Math.PI) / width,
-    width,
-    height
-  }
+  return texture
 }

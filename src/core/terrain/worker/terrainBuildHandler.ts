@@ -1,6 +1,7 @@
 import type { HeightMapData } from '../heightMapFormat'
 import { TerrainHeightField } from '../TerrainHeightField'
 import { allocatePatchArrays, buildTerrainPatchArrays } from '../terrainPatchGeometry'
+import { buildShadowHeightBits } from '../terrainShadowBits'
 import type { FromWorkerMessage, ToWorkerMessage } from './terrainBuildProtocol'
 
 /** Состояние воркера: поля высот по fieldId главного потока. */
@@ -38,6 +39,21 @@ export function handleWorkerMessage(
     case 'releaseField':
       state.fields.delete(msg.fieldId)
       return null
+
+    case 'buildShadow': {
+      const field = state.fields.get(msg.fieldId)
+      if (!field) {
+        return {
+          message: { type: 'error', requestId: msg.requestId, message: `поле ${msg.fieldId} не зарегистрировано` },
+          transfer: []
+        }
+      }
+
+      const { bits, width, height } = buildShadowHeightBits(field.heightMap)
+      const buffer = bits.buffer as ArrayBuffer
+
+      return { message: { type: 'shadowBuilt', requestId: msg.requestId, bits: buffer, width, height }, transfer: [buffer] }
+    }
 
     case 'build': {
       const field = state.fields.get(msg.fieldId)

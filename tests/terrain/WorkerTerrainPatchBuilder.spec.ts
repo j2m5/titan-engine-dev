@@ -3,7 +3,8 @@ import { Texture, type WebGLRenderer } from 'three'
 import { WorkerTerrainPatchBuilder, type WorkerLike } from '@/core/terrain/worker/WorkerTerrainPatchBuilder'
 import { createWorkerState, handleWorkerMessage } from '@/core/terrain/worker/terrainBuildHandler'
 import type { FromWorkerMessage, ToWorkerMessage } from '@/core/terrain/worker/terrainBuildProtocol'
-import type { PatchBuildResult, TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
+import { SyncTerrainPatchBuilder, type PatchBuildResult, type TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
+import { buildShadowHeightBits, type ShadowHeightBits } from '@/core/terrain/terrainShadowBits'
 import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { Actor } from '@/core/models/Actor'
@@ -158,6 +159,48 @@ describe('WorkerTerrainPatchBuilder: отказ воркера — откат н
     expectMatchesFreshBuild(a[0], jobA)
     expectMatchesFreshBuild(b[0], jobB)
     expect(warn).toHaveBeenCalledTimes(1)
+  })
+
+  it('карта тени: запрос уходит после регистрации поля, ответ отдаёт биты низкой карты', () => {
+    const worker = new FakeWorker()
+    const builder = new WorkerTerrainPatchBuilder(worker)
+    const field = makeField()
+    const got: ShadowHeightBits[] = []
+    builder.requestShadow(field, (bits) => got.push(bits))
+    const types = worker.sent.map((m) => m.type)
+    expect(types.indexOf('registerField')).toBeLessThan(types.indexOf('buildShadow'))
+    expect(got).toHaveLength(0)
+    worker.pump()
+    expect(got).toHaveLength(1)
+    const expected = buildShadowHeightBits(field.heightMap)
+    expect(got[0].width).toBe(expected.width)
+    expect(Array.from(got[0].bits)).toEqual(Array.from(expected.bits))
+    builder.dispose()
+  })
+
+  it('карта тени: отказ воркера строит её на главном потоке, поздний ответ не зовёт onDone второй раз', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const worker = new FakeWorker()
+    const builder = new WorkerTerrainPatchBuilder(worker)
+    const field = makeField()
+    const got: ShadowHeightBits[] = []
+    builder.requestShadow(field, (bits) => got.push(bits))
+    worker.fail('onerror', 'сбой')
+    expect(got).toHaveLength(1)
+    worker.pump()
+    expect(got).toHaveLength(1)
+    // после отказа — сразу синхронно
+    builder.requestShadow(field, (bits) => got.push(bits))
+    expect(got).toHaveLength(2)
+    vi.restoreAllMocks()
+  })
+
+  it('синхронный строитель отдаёт карту тени внутри запроса', () => {
+    const field = makeField()
+    const got: ShadowHeightBits[] = []
+    new SyncTerrainPatchBuilder().requestShadow(field, (bits) => got.push(bits))
+    expect(got).toHaveLength(1)
+    expect(Array.from(got[0].bits)).toEqual(Array.from(buildShadowHeightBits(field.heightMap).bits))
   })
 
   it('built старого воркера после отказа не зовёт onDone второй раз', () => {

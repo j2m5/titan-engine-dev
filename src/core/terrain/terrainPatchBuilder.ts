@@ -1,6 +1,7 @@
 import type { TerrainHeightField } from './TerrainHeightField'
 import type { DetailWrap } from './detailWrap'
 import { allocatePatchArrays, buildTerrainPatchArrays, type PatchArrays, type PatchBounds } from './terrainPatchGeometry'
+import { buildShadowHeightBits, type ShadowHeightBits } from './terrainShadowBits'
 
 /** Задание на сборку одного патча — всё, что нужно ядру мешера (см. buildTerrainPatchArrays). */
 export interface PatchBuildJob {
@@ -36,6 +37,8 @@ export interface TerrainPatchBuilder {
   /** Группа заявляет владение полем (конструктор); парный release — в dispose. Счётчик ссылок у воркерного строителя. */
   acquire(field: TerrainHeightField): void
   request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void): void
+  /** Низкая карта тени по карте поля; onDone ровно один раз, биты — во владение потребителю. */
+  requestShadow(field: TerrainHeightField, onDone: (bits: ShadowHeightBits) => void): void
   release(field: TerrainHeightField): void
   /**
    * Снимает все регистрации полей. Звать только после разборки всех групп:
@@ -71,6 +74,10 @@ export class SyncTerrainPatchBuilder implements TerrainPatchBuilder {
       arrays
     )
     onDone({ arrays, center: [center.x, center.y, center.z], bounds })
+  }
+
+  public requestShadow(field: TerrainHeightField, onDone: (bits: ShadowHeightBits) => void): void {
+    onDone(buildShadowHeightBits(field.heightMap))
   }
 
   public release(): void {}

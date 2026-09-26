@@ -1,6 +1,7 @@
 import type { TerrainHeightField } from '../TerrainHeightField'
 import type { TerrainAuxPayload } from '../terrainAuxFormat'
 import { SyncTerrainPatchBuilder, type PatchBuildJob, type PatchBuildResult, type TerrainPatchBuilder } from '../terrainPatchBuilder'
+import type { ShadowHeightBits } from '../terrainShadowBits'
 import type { FromWorkerMessage, ToWorkerMessage } from './terrainBuildProtocol'
 
 /** Минимум Worker, нужный строителю: подменяется фейком в тестах (в jsdom Worker нет). */
@@ -89,6 +90,7 @@ export function createTerrainBuildWorker(): WorkerLike {
 }
 
 type Outstanding = { job: PatchBuildJob; onDone: (result: PatchBuildResult) => void }
+type OutstandingShadow = { field: TerrainHeightField; onDone: (bits: ShadowHeightBits) => void }
 
 /**
  * Строитель поверх воркера. Поле регистрируется в воркере при первом acquire
@@ -109,6 +111,7 @@ type Outstanding = { job: PatchBuildJob; onDone: (result: PatchBuildResult) => v
 export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
   private readonly fields = new Map<TerrainHeightField, { id: number; refs: number }>()
   private readonly outstanding = new Map<number, Outstanding>()
+  private readonly outstandingShadows = new Map<number, OutstandingShadow>()
   private nextFieldId = 1
   private nextRequestId = 1
   private disposed = false
@@ -152,6 +155,19 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     )
   }
 
+  /** Карта тени строится из копии карты, уже лежащей в воркере: главный поток не платит ни счётом, ни копией. */
+  public requestShadow(field: TerrainHeightField, onDone: (bits: ShadowHeightBits) => void): void {
+    if (this.fallback) {
+      this.fallback.requestShadow(field, onDone)
+      return
+    }
+
+    const { id } = this.ensureField(field)
+    const requestId = this.nextRequestId++
+    this.outstandingShadows.set(requestId, { field, onDone })
+    this.worker.postMessage({ type: 'buildShadow', requestId, fieldId: id }, [])
+  }
+
   public release(field: TerrainHeightField): void {
     // после отказа fields пуст — выход здесь
     const entry = this.fields.get(field)
@@ -176,6 +192,7 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
   public dispose(): void {
     this.disposed = true
     this.outstanding.clear()
+    this.outstandingShadows.clear()
     this.fields.clear()
     this.worker.terminate()
     this.fallback?.dispose()
@@ -215,6 +232,12 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
         center: msg.center,
         bounds: msg.bounds
       })
+    } else if (msg.type === 'shadowBuilt') {
+      const entry = this.outstandingShadows.get(msg.requestId)
+      if (!entry) return
+
+      this.outstandingShadows.delete(msg.requestId)
+      entry.onDone({ bits: new Uint16Array(msg.bits), width: msg.width, height: msg.height })
     } else if (msg.type === 'error') {
       // штатно не приходит (регистрация раньше build по FIFO) — тот же класс отказа, что onerror
       this.fail(msg.message)
@@ -240,6 +263,16 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
         fallback.request(job, onDone)
       } catch (error) {
         console.error('[terrain worker] синхронная пересборка задания упала:', error)
+      }
+    }
+
+    const strandedShadows = [...this.outstandingShadows.values()]
+    this.outstandingShadows.clear()
+    for (const { field, onDone } of strandedShadows) {
+      try {
+        fallback.requestShadow(field, onDone)
+      } catch (error) {
+        console.error('[terrain worker] синхронная постройка карты тени упала:', error)
       }
     }
   }
