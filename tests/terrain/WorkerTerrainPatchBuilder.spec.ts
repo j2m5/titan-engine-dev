@@ -13,6 +13,11 @@ import type { PatchArrays } from '@/core/terrain/terrainPatchGeometry'
 import type { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { expectMatchesFreshBuild, makeField, patchJob, snapshotArrays } from './workerBuildHelpers'
 
+/** onError в тестах без сбоя — провал теста, а не тишина. */
+const unexpectedError = (error: unknown): never => {
+  throw error
+}
+
 /** Воркер в том же потоке: сообщения копятся, pump() прогоняет их через настоящий обработчик (переносы не нужны). */
 class FakeWorker implements WorkerLike {
   public readonly sent: ToWorkerMessage[] = []
@@ -62,8 +67,8 @@ describe('WorkerTerrainPatchBuilder: строитель поверх ворке�
     const results: PatchBuildResult[] = []
     const job = patchJob(field, 0, 1, 0)
     const job2 = { ...job, i: 0 }
-    builder.request(job, (r) => results.push(r))
-    builder.request(job2, (r) => results.push(r))
+    builder.request(job, (r) => results.push(r), unexpectedError)
+    builder.request(job2, (r) => results.push(r), unexpectedError)
     expect(worker.sent.filter((m) => m.type === 'registerField')).toHaveLength(1)
     expect(worker.sent.filter((m) => m.type === 'build')).toHaveLength(2)
     expect(worker.transferLengths[worker.sent.findIndex((m) => m.type === 'registerField')]).toBeGreaterThanOrEqual(1)
@@ -90,8 +95,8 @@ describe('WorkerTerrainPatchBuilder: строитель поверх ворке�
     builder.acquire(a)
     builder.acquire(b)
     let calls = 0
-    builder.request(job(a), () => calls++)
-    builder.request(job(b), () => calls++)
+    builder.request(job(a), () => calls++, unexpectedError)
+    builder.request(job(b), () => calls++, unexpectedError)
     const types = worker.sent.map((m) => m.type)
     expect(types.indexOf('registerField')).toBeLessThan(types.indexOf('build'))
     builder.releaseAll()
@@ -117,8 +122,8 @@ describe('WorkerTerrainPatchBuilder: отказ воркера — откат н
     const jobB = patchJob(field, 3, 0, 1)
     const a: PatchArrays[] = []
     const b: PatchArrays[] = []
-    builder.request(jobA, (r) => a.push(snapshotArrays(r.arrays)))
-    builder.request(jobB, (r) => b.push(snapshotArrays(r.arrays)))
+    builder.request(jobA, (r) => a.push(snapshotArrays(r.arrays)), unexpectedError)
+    builder.request(jobB, (r) => b.push(snapshotArrays(r.arrays)), unexpectedError)
     return { warn, worker, builder, field, jobA, jobB, a, b }
   }
 
@@ -136,7 +141,7 @@ describe('WorkerTerrainPatchBuilder: отказ воркера — откат н
       const sentBefore = worker.sent.length
       const jobC = patchJob(field, 5, 1, 1)
       const c: PatchArrays[] = []
-      builder.request(jobC, (r) => c.push(snapshotArrays(r.arrays)))
+      builder.request(jobC, (r) => c.push(snapshotArrays(r.arrays)), unexpectedError)
       expect(c).toHaveLength(1) // синхронно, внутри request
       expectMatchesFreshBuild(c[0], jobC)
       builder.acquire(field)
@@ -234,14 +239,14 @@ describe('WorkerTerrainPatchBuilder: исключения на главном п
     expect(worker.sent.filter((m) => m.type === 'registerField')).toHaveLength(1)
 
     const results: PatchBuildResult[] = []
-    builder.request(patchJob(field, 0, 1, 0), (r) => results.push(r))
+    builder.request(patchJob(field, 0, 1, 0), (r) => results.push(r), unexpectedError)
     worker.pump()
 
     expect(worker.replies.filter((m) => m.type === 'error')).toHaveLength(0)
     expect(results).toHaveLength(1)
   })
 
-  it('исключение в реплее одного задания не теряет остальные: onDone второго приходит', () => {
+  it('исключение в реплее одного задания не теряет остальные: у сломанного onError, у второго onDone', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     const worker = new FakeWorker()
@@ -251,8 +256,9 @@ describe('WorkerTerrainPatchBuilder: исключения на главном п
     const jobB = patchJob(makeField(), 3, 0, 1)
     const a: PatchArrays[] = []
     const b: PatchArrays[] = []
-    builder.request(jobA, (r) => a.push(snapshotArrays(r.arrays)))
-    builder.request(jobB, (r) => b.push(snapshotArrays(r.arrays)))
+    const aErrors: unknown[] = []
+    builder.request(jobA, (r) => a.push(snapshotArrays(r.arrays)), (e) => aErrors.push(e))
+    builder.request(jobB, (r) => b.push(snapshotArrays(r.arrays)), unexpectedError)
     vi.spyOn(broken, 'sampleMeters').mockImplementation(() => {
       throw new Error('сбой выборки')
     })
@@ -260,9 +266,22 @@ describe('WorkerTerrainPatchBuilder: исключения на главном п
     worker.fail('onerror', 'сбой')
 
     expect(a).toHaveLength(0)
+    expect(aErrors).toHaveLength(1)
     expect(b).toHaveLength(1)
     expectMatchesFreshBuild(b[0], jobB)
-    expect(error).toHaveBeenCalledTimes(1)
+    expect(error).not.toHaveBeenCalled()
+  })
+
+  it('синхронный строитель: исключение постройки — onError ровно один раз, onDone нет', () => {
+    const field = makeField()
+    vi.spyOn(field, 'sampleMeters').mockImplementation(() => {
+      throw new Error('сбой выборки')
+    })
+    const done = vi.fn()
+    const failed = vi.fn()
+    new SyncTerrainPatchBuilder().request(patchJob(field, 0, 0, 0), done, failed)
+    expect(done).not.toHaveBeenCalled()
+    expect(failed).toHaveBeenCalledTimes(1)
   })
 })
 
