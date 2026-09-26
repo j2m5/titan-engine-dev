@@ -81,7 +81,7 @@ class TerrainSphere extends TerrainPatchGroup {
       proceduralSurfaceGenerator.ensureDiffuse(model)
     }
 
-    const sharedMaterial = new PlanetMaterial(model, atmosphereRegistry)
+    const sharedMaterial = new PlanetMaterial(model, atmosphereRegistry, { terrainPatches: true })
     const waterLevelMeters = readWaterLevelMeters(model)
     const detailWrap = detailWrapFor(readRenderingData<IPlanetRenderingObject>(model))
     super(field, sharedMaterial, renderer, undefined, waterLevelMeters, detailWrap, nowMs, builder)

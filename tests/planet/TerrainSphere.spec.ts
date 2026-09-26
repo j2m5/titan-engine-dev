@@ -86,6 +86,12 @@ describe('TerrainSphere: динамическое квадродерево па�
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
 
+  it('материал патчей держит USE_TERRAIN_UV и после resetMaterial (вытеснение диффуза)', () => {
+    const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
+    sphere.material.resetMaterial()
+    expect(sphere.material.defines.USE_TERRAIN_UV).toBe('1')
+  })
+
   it('конструктор строит минимальный набор уровня 1 (24 меша)', () => {
     const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
     expect(sphere.children.filter((c) => c instanceof Mesh)).toHaveLength(24)
