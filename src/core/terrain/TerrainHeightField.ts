@@ -121,6 +121,14 @@ export function terrainHurst(p99Wide: number, p99Narrow: number): number {
 
 const TWO_PI = 2 * Math.PI
 
+/** Среднее raw строки карты — общая высота кольца у полюса. */
+function rowMeanRaw(map: HeightMapData, row: number): number {
+  let sum = 0
+  for (let x = 0; x < map.width; x++) sum += map.data[row * map.width + x]
+
+  return sum / map.width
+}
+
 /**
  * Канонический владелец высот тела: единственный ответ на вопрос «какова
  * высота поверхности в направлении dir̂». Мешер (buildTerrainPatchGeometry) и
@@ -196,6 +204,9 @@ class TerrainHeightField {
   /** Показатель самоподобия карты (`terrainHurst`), из ℓ1/ℓ2 компаньона — общий якорь для экстраполяции ниже `TERRAIN_MODEL_LEVEL`. */
   private readonly hurst: number
   private readonly metersPerRaw: number
+  /** Среднее raw крайних строк — высота в самой точке полюса (см. sampleMeters). */
+  private readonly poleNorthRaw: number
+  private readonly poleSouthRaw: number
   private readonly equatorStepTexels: number
   private readonly spanCap: number
   /**
@@ -324,6 +335,8 @@ class TerrainHeightField {
     // делится сеткой (buildClearanceGrid) и поточечным sagMeters ниже
     const block = terrainBlockTexels(map.width)
     this.metersPerRaw = (map.maxMeters - map.minMeters) / 65535
+    this.poleNorthRaw = rowMeanRaw(map, 0)
+    this.poleSouthRaw = rowMeanRaw(map, map.height - 1)
     this.equatorStepTexels = map.width / TERRAIN_MAX_LEVEL_EQUATOR_SEGMENTS
     this.spanCap = Math.max(1, Math.floor(map.width / 4))
     // единственное, что зависит от РАДИУСА, а не от карты — потому и весь
@@ -487,7 +500,12 @@ class TerrainHeightField {
     return out
   }
 
-  /** Билинейка на полутекселях: wrap долготы (шов меридиана), кламп широты (полюса). */
+  /**
+   * Билинейка на полутекселях: wrap долготы (шов меридиана), кламп широты (полюса).
+   * Ближе полутекселя к полюсу крайняя строка сводится к её среднему линейно по
+   * расстоянию до полюса: высота в точке полюса одна, наклонная плоскость через
+   * полюс (h ∝ r·cos φ на кольце) воспроизводится точно.
+   */
   public sampleMeters(u: number, v: number): number {
     const { width, height, minMeters, maxMeters, data } = this.map
 
@@ -498,7 +516,8 @@ class TerrainHeightField {
     const x1 = (x0 + 1) % width
     const fx = x - x0
 
-    const y = Math.min(Math.max(Math.min(Math.max(v, 0), 1) * height - 0.5, 0), height - 1)
+    const texelsFromNorth = Math.min(Math.max(v, 0), 1) * height
+    const y = Math.min(Math.max(texelsFromNorth - 0.5, 0), height - 1)
     const y0 = Math.floor(y)
     const y1 = Math.min(y0 + 1, height - 1)
     const fy = y - y0
@@ -508,7 +527,11 @@ class TerrainHeightField {
     const h01 = data[y1 * width + x0]
     const h11 = data[y1 * width + x1]
 
-    const raw = (h00 * (1 - fx) + h10 * fx) * (1 - fy) + (h01 * (1 - fx) + h11 * fx) * fy
+    let raw = (h00 * (1 - fx) + h10 * fx) * (1 - fy) + (h01 * (1 - fx) + h11 * fx) * fy
+
+    const texelsFromSouth = height - texelsFromNorth
+    if (texelsFromNorth < 0.5) raw = this.poleNorthRaw + (raw - this.poleNorthRaw) * 2 * texelsFromNorth
+    else if (texelsFromSouth < 0.5) raw = this.poleSouthRaw + (raw - this.poleSouthRaw) * 2 * texelsFromSouth
 
     return minMeters + (raw / 65535) * (maxMeters - minMeters)
   }
