@@ -39,14 +39,14 @@ export type TerrainAuxPayload = {
  * Отпечаток карты, под которую посчитан компаньон. Ловит пару «компаньон от
  * прошлой версии карты» — единственный способ получить тихо неверный рельеф.
  *
- * Контрольная сумма — по РАЗРЕЖЁННОЙ выборке (~4096 отсчётов с постоянным
- * шагом), а не по всем текселям: полный проход по 33.5 млн значений стоил бы
- * десятки миллисекунд на загрузке — ровно того класса расхода, который этот
- * файл и убирает. Шаг выводится из длины, нечётный и взаимно простой с
- * шириной: шаг с общим делителем d с шириной обходит только каждый d-й
- * столбец (формат 2 читал на 8192×4096 ровно столбец 0 — такие файлы
- * отбрасываются по версии). Локальная правка карты вне выборки по-прежнему
- * невидима: отпечаток ловит пересборки, а не точечные правки.
+ * Контрольная сумма — по РАЗРЕЖЁННОЙ выборке, а не по всем текселям: полный
+ * проход по 33.5 млн значений стоил бы десятки миллисекунд на загрузке —
+ * ровно того класса расхода, который этот файл и убирает. Выборка —
+ * двумерная сетка CHECKSUM_GRID × CHECKSUM_GRID (не больше размеров карты),
+ * столбцы каждой строки сдвинуты на дробную часть k·φ: правка блока
+ * ⌈W/сетка⌉ × ⌈H/сетка⌉ текселей в любом месте карты задевает отсчёт.
+ * Точечная правка мельче блока может остаться невидимой: отпечаток ловит
+ * пересборки, а не одиночные тексели.
  */
 export type TerrainAuxFingerprint = {
   width: number
@@ -90,7 +90,7 @@ export type TerrainAuxData = TerrainAuxPayload & {
 
 /** Байты 'T','E','H','A' как u32 LE — компаньон карты 'TEHM'. */
 export const TERRAIN_AUX_MAGIC = 0x41484554
-export const TERRAIN_AUX_VERSION = 3
+export const TERRAIN_AUX_VERSION = 4
 
 /**
  * Раскладка заголовка (little-endian). Смещения зафиксированы здесь и в
@@ -113,17 +113,10 @@ export const TERRAIN_AUX_VERSION = 3
  */
 export const TERRAIN_AUX_HEADER_BYTES = 80
 
-/** Отсчётов контрольной суммы: сумма считается по выборке, не по всей карте (см. докблок отпечатка). */
-const CHECKSUM_SAMPLES = 4096
-
-function gcd(a: number, b: number): number {
-  while (b) {
-    const t = a % b
-    a = b
-    b = t
-  }
-  return a
-}
+/** Сторона сетки выборки контрольной суммы (см. докблок отпечатка). */
+const CHECKSUM_GRID = 256
+/** Дробная часть золотого сечения — сдвиг столбцов строки, без регулярных совпадений. */
+const GOLDEN_FRACTION = 0.6180339887498949
 
 /**
  * Путь компаньона выводится из пути карты, а не хранится отдельной строкой
@@ -138,19 +131,19 @@ export function terrainAuxPathFor(heightPath: string): string {
 
 /** Отпечаток карты — см. докблок типа. */
 export function heightMapFingerprint(map: HeightMapData): TerrainAuxFingerprint {
-  const { data } = map
-  // Шаг нечётный и взаимно простой с шириной: чётный шаг, кратный ширине,
-  // читал бы один столбец (8192×4096 давал ровно столбец 0), а общий
-  // делитель с шириной — только каждый d-й столбец (ширины 8000 и 3072 —
-  // не степени двойки). Цикл делает единицы итераций.
-  let stride = Math.max(1, Math.floor(data.length / CHECKSUM_SAMPLES)) | 1
-  while (stride > 1 && gcd(stride, map.width) !== 1) stride += 2
+  const { data, width, height } = map
+  const rows = Math.min(CHECKSUM_GRID, height)
+  const cols = Math.min(CHECKSUM_GRID, width)
 
   // FNV-1a по выборке: дешёвая свёртка без зависимостей, разрядность держится
   // Math.imul (обычное умножение ушло бы в f64 и потеряло младшие биты)
   let checksum = 0x811c9dc5
-  for (let i = 0; i < data.length; i += stride) {
-    checksum = Math.imul(checksum ^ data[i], 0x01000193)
+  for (let k = 0; k < rows; k++) {
+    const rowStart = Math.floor(((k + 0.5) * height) / rows) * width
+    const offset = (k * GOLDEN_FRACTION) % 1
+    for (let j = 0; j < cols; j++) {
+      checksum = Math.imul(checksum ^ data[rowStart + Math.floor(((j + offset) * width) / cols)], 0x01000193)
+    }
   }
   checksum = Math.imul(checksum ^ data.length, 0x01000193)
 
