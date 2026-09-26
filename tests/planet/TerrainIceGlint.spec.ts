@@ -74,24 +74,31 @@ describe('iceGlint: CPU-зеркало', () => {
   })
 
   it('шероховатый (1) — ноль; гладкий в зеркальном направлении — (p+8)/8π·F0', () => {
-    expect(iceGlint(1, 1, 1)).toBe(0)
-    expect(iceGlint(1, 1, 0)).toBeCloseTo(((512 + 8) / (8 * Math.PI)) * ICE_GLINT_F0, 9)
+    expect(iceGlint(1, 1, 1, 1)).toBe(0)
+    expect(iceGlint(1, 1, 0, 1)).toBeCloseTo(((512 + 8) / (8 * Math.PI)) * ICE_GLINT_F0, 9)
   })
 
   it('растёт к скользящему взгляду (Френель) и гаснет вне зеркального направления', () => {
-    expect(iceGlint(1, 0.1, 0.2)).toBeGreaterThan(iceGlint(1, 1, 0.2))
-    expect(iceGlint(0.9, 1, 0)).toBeLessThan(iceGlint(1, 1, 0) * 1e-10)
+    expect(iceGlint(1, 0.1, 0.2, 1)).toBeGreaterThan(iceGlint(1, 1, 0.2, 1))
+    expect(iceGlint(0.9, 1, 0, 1)).toBeLessThan(iceGlint(1, 1, 0, 1) * 1e-10)
+  })
+
+  // Нормировка (p+8)/8π рассчитана на домножение на N·L: без него у терминатора
+  // лепесток ярче физичного в 1/N·L раз и выбивает пятна в белое
+  it('пропорционален N·L: при N·L = 0.2 ровно пятая часть полного; за терминатором склона ноль', () => {
+    expect(iceGlint(1, 0.3, 0.1, 0.2)).toBeCloseTo(0.2 * iceGlint(1, 0.3, 0.1, 1), 12)
+    expect(iceGlint(1, 0.3, 0.1, -0.1)).toBe(0)
   })
 
   it('вне нормали, средняя шероховатость: число сходится с формулой', () => {
     // power = 8 + 504·0.25 = 134; fresnel = 0.018 + 0.982·0.5^5 = 0.0486875
-    expect(iceGlint(0.99, 0.5, 0.5)).toBeCloseTo(0.0178863631662164, 12)
+    expect(iceGlint(0.99, 0.5, 0.5, 1)).toBeCloseTo(0.0178863631662164, 12)
   })
 
   it('верхний кламп: dot(V, halfVec) выше 1 (float32-округление) не даёт NaN', () => {
-    const overshoot = iceGlint(1, 1 + 1e-7, 0)
+    const overshoot = iceGlint(1, 1 + 1e-7, 0, 1)
     expect(Number.isFinite(overshoot)).toBe(true)
-    expect(overshoot).toBe(iceGlint(1, 1, 0))
+    expect(overshoot).toBe(iceGlint(1, 1, 0, 1))
   })
 })
 
@@ -105,7 +112,9 @@ describe('Шейдер: блеск льда', () => {
     expect(block).toContain('#define ICE_GLINT_F0 0.018')
     expect(block).toContain('float power = mix(8.0, 512.0, gloss * gloss);')
     expect(block).toContain('float fresnel = ICE_GLINT_F0 + (1.0 - ICE_GLINT_F0) * pow(1.0 - clamp(dot(viewDir, halfVec), 0.0, 1.0), 5.0);')
-    expect(block).toContain('return (power + 8.0) / 25.1327412 * pow(max(dot(normal, halfVec), 0.0), power) * fresnel * gloss * gloss;')
+    expect(block).toContain(
+      'return (power + 8.0) / 25.1327412 * pow(max(dot(normal, halfVec), 0.0), power) * fresnel * gloss * gloss * max(dot(normal, lightDirection), 0.0);'
+    )
   })
 
   it('добавка после ограничителя bloom и до потолка, с тенью рельефа и колец', () => {

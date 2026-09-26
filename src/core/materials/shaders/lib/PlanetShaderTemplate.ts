@@ -308,7 +308,8 @@ export const PlanetShaderTemplate: ShaderProps = {
         // dot(V, halfVec) может округлиться выше 1 (V≈L, float32) — без верхнего
         // клампа степень 5 получает отрицательное основание, pow даёт NaN (ANGLE/D3D)
         float fresnel = ICE_GLINT_F0 + (1.0 - ICE_GLINT_F0) * pow(1.0 - clamp(dot(viewDir, halfVec), 0.0, 1.0), 5.0);
-        return (power + 8.0) / 25.1327412 * pow(max(dot(normal, halfVec), 0.0), power) * fresnel * gloss * gloss;
+        // нормировка (p+8)/8π рассчитана на домножение на N·L
+        return (power + 8.0) / 25.1327412 * pow(max(dot(normal, halfVec), 0.0), power) * fresnel * gloss * gloss * max(dot(normal, lightDirection), 0.0);
       }
     #endif
 
