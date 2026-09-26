@@ -62,6 +62,12 @@ export interface StreamingConfig {
      * достаточно мало, чтобы пользователь не успел счесть дыру постоянной.
      */
     retryBackoffMs: number
+    /**
+     * Потолок загрузки карты высот с компаньоном, мс, включая скачивание тела.
+     * Зависший запрос иначе пинит путь в полёте навсегда. 120 с — карта 64 МиБ
+     * доезжает и на медленном канале; дальше обычный бэкофф.
+     */
+    heightMapTimeoutMs: number
   }
 }
 
@@ -70,6 +76,7 @@ export const streaming: StreamingConfig = {
     textureBudgetMiB: 2048,
     minBodyPixels: 4,
     recomputeIntervalMs: 500,
-    retryBackoffMs: 30_000
+    retryBackoffMs: 30_000,
+    heightMapTimeoutMs: 120_000
   }
 }
