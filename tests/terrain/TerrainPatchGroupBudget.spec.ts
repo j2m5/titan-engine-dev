@@ -107,13 +107,38 @@ function makeGroup(nowMs?: () => number, maxLivePatches?: number): TestPatchGrou
   return new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), maxLivePatches, nowMs)
 }
 
+/** Отказывает первому узлу глубже L1 — детерминированный сбой постройки. */
+class FailingBuilder extends SyncTerrainPatchBuilder {
+  public failedKey = -1
+  public readonly requestsByKey = new Map<number, number>()
+
+  public override request(
+    job: PatchBuildJob,
+    onDone: (result: PatchBuildResult) => void,
+    onError: (error: unknown) => void
+  ): void {
+    const key = terrainNodeKey({ face: job.face, i: job.i, j: job.j, level: job.level })
+    this.requestsByKey.set(key, (this.requestsByKey.get(key) ?? 0) + 1)
+    if (this.failedKey === -1 && job.level > TERRAIN_QUADTREE_MIN_LEVEL) this.failedKey = key
+    if (key === this.failedKey) {
+      onError(new Error('сбой постройки'))
+      return
+    }
+    super.request(job, onDone, onError)
+  }
+}
+
 /** Синхронный строитель со счётчиком запросов — мерило пересборок. */
 class CountingBuilder extends SyncTerrainPatchBuilder {
   public requests = 0
 
-  public override request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void): void {
+  public override request(
+    job: PatchBuildJob,
+    onDone: (result: PatchBuildResult) => void,
+    onError: (error: unknown) => void
+  ): void {
     this.requests++
-    super.request(job, onDone)
+    super.request(job, onDone, onError)
   }
 }
 
@@ -209,6 +234,31 @@ describe('TerrainPatchGroup: бюджет построек патчей по в�
     expect(exhaustedAtFrame).toBeGreaterThanOrEqual(0) // пул действительно исчерпан — режим достигнут
     expect(maxHidden).toBeGreaterThan(0) // и скрытые (недопоказанные) патчи действительно были
     expect(meshCount(group)).toBe(30) // все слоты заняты, дерево застыло
+  })
+})
+
+describe('сбой постройки патча', () => {
+  beforeEach(() => seedPlaceholderKeys())
+  afterEach(() => resourceStorage.deleteAllTextures())
+
+  it('слот возвращается, узел больше не запрашивается, покрытие без дыр, ошибка в логе один раз', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const clock = makeFrameClock()
+    const builder = new FailingBuilder()
+    const group = new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), undefined, clock.nowMs, builder)
+    for (let f = 0; f < 60; f++) {
+      clock.startFrame()
+      group.updateObject(makeCtx(600))
+      expect(unbackedHiddenAddresses(group)).toEqual([])
+      expect(fullyCovered(group)).toBe(true)
+    }
+    const internals = group as unknown as { pending: Map<number, unknown>; pool: { liveCount: number } }
+    expect(builder.failedKey).not.toBe(-1)
+    expect(builder.requestsByKey.get(builder.failedKey)).toBe(1)
+    expect(internals.pending.has(builder.failedKey)).toBe(false)
+    expect(internals.pool.liveCount).toBe(meshCount(group) + internals.pending.size)
+    expect(error).toHaveBeenCalledTimes(1)
+    error.mockRestore()
   })
 })
 

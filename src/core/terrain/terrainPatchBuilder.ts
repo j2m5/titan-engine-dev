@@ -24,7 +24,8 @@ export interface PatchBuildResult {
 
 /**
  * Строитель патчей: синхронный (тесты, вода, фолбэк без Worker) или
- * воркерный. `onDone` зовётся ровно один раз на запрос; вызывающий сам решает,
+ * воркерный. На запрос ровно один раз зовётся либо `onDone`, либо `onError`
+ * (исключение постройки); вызывающий сам решает,
  * нужен ли результат ещё (узел мог выйти из желаемого набора, группа —
  * освободиться).
  *
@@ -36,7 +37,7 @@ export interface PatchBuildResult {
 export interface TerrainPatchBuilder {
   /** Группа заявляет владение полем (конструктор); парный release — в dispose. Счётчик ссылок у воркерного строителя. */
   acquire(field: TerrainHeightField): void
-  request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void): void
+  request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void, onError: (error: unknown) => void): void
   /** Низкая карта тени по карте поля; onDone ровно один раз, биты — во владение потребителю. */
   requestShadow(field: TerrainHeightField, onDone: (bits: ShadowHeightBits) => void): void
   release(field: TerrainHeightField): void
@@ -60,20 +61,27 @@ export class SyncTerrainPatchBuilder implements TerrainPatchBuilder {
 
   public acquire(): void {}
 
-  public request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void): void {
+  public request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void, onError: (error: unknown) => void): void {
     const arrays = this.arraysFor(job.segments)
-    const { center, bounds } = buildTerrainPatchArrays(
-      job.field,
-      job.face,
-      job.i,
-      job.j,
-      job.level,
-      job.segments,
-      job.skirtDepthUnits,
-      job.wrap,
-      arrays
-    )
-    onDone({ arrays, center: [center.x, center.y, center.z], bounds })
+    let built: ReturnType<typeof buildTerrainPatchArrays>
+    // ловится только постройка: исключение внутри onDone — дефект потребителя, не сбой задания
+    try {
+      built = buildTerrainPatchArrays(
+        job.field,
+        job.face,
+        job.i,
+        job.j,
+        job.level,
+        job.segments,
+        job.skirtDepthUnits,
+        job.wrap,
+        arrays
+      )
+    } catch (error) {
+      onError(error)
+      return
+    }
+    onDone({ arrays, center: [built.center.x, built.center.y, built.center.z], bounds: built.bounds })
   }
 
   public requestShadow(field: TerrainHeightField, onDone: (bits: ShadowHeightBits) => void): void {

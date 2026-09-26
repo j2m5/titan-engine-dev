@@ -161,6 +161,9 @@ describe('TerrainPatchPool', () => {
       (result) => {
         applyPatchResult(handle, result)
         applied++
+      },
+      (error) => {
+        throw error
       }
     )
     expect(applied).toBe(1) // onDone ровно один раз, синхронно внутри request

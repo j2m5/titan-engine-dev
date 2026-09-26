@@ -11,15 +11,15 @@ import type { ShadowHeightBits } from '@/core/terrain/terrainShadowBits'
 export class FakeAsyncBuilder implements TerrainPatchBuilder {
   public readonly acquired: TerrainHeightField[] = []
   public readonly released: TerrainHeightField[] = []
-  private readonly queue: Array<{ job: PatchBuildJob; onDone: (r: PatchBuildResult) => void }> = []
+  private readonly queue: Array<{ job: PatchBuildJob; onDone: (r: PatchBuildResult) => void; onError: (e: unknown) => void }> = []
   private readonly sync = new SyncTerrainPatchBuilder()
 
   public acquire(field: TerrainHeightField): void {
     this.acquired.push(field)
   }
 
-  public request(job: PatchBuildJob, onDone: (r: PatchBuildResult) => void): void {
-    this.queue.push({ job, onDone })
+  public request(job: PatchBuildJob, onDone: (r: PatchBuildResult) => void, onError: (e: unknown) => void): void {
+    this.queue.push({ job, onDone, onError })
   }
 
   /** Карта тени — синхронно: очередь моделирует только постройку патчей. */
@@ -28,7 +28,7 @@ export class FakeAsyncBuilder implements TerrainPatchBuilder {
   }
 
   public flush(n: number = Infinity): void {
-    for (const { job, onDone } of this.queue.splice(0, n)) this.sync.request(job, onDone)
+    for (const { job, onDone, onError } of this.queue.splice(0, n)) this.sync.request(job, onDone, onError)
   }
 
   public get queued(): number {

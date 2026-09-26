@@ -23,7 +23,7 @@ const RADIUS_KM = 1737.4
 /** Очередь как у воркера: постройки приходят пачками по flush(n) между кадрами. */
 class QueuedBuilder implements TerrainPatchBuilder {
   public built = 0
-  private readonly queue: Array<[PatchBuildJob, (result: PatchBuildResult) => void]> = []
+  private readonly queue: Array<[PatchBuildJob, (result: PatchBuildResult) => void, (error: unknown) => void]> = []
   private readonly sync = new SyncTerrainPatchBuilder()
 
   public acquire(): void {}
@@ -31,16 +31,16 @@ class QueuedBuilder implements TerrainPatchBuilder {
   public releaseAll(): void {}
   public dispose(): void {}
 
-  public request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void): void {
-    this.queue.push([job, onDone])
+  public request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void, onError: (error: unknown) => void): void {
+    this.queue.push([job, onDone, onError])
   }
 
   public requestShadow(): void {}
 
   public flush(count: number): void {
-    for (const [job, onDone] of this.queue.splice(0, count)) {
+    for (const [job, onDone, onError] of this.queue.splice(0, count)) {
       this.built++
-      this.sync.request(job, onDone)
+      this.sync.request(job, onDone, onError)
     }
   }
 }

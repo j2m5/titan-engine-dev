@@ -119,6 +119,8 @@ abstract class TerrainPatchGroup extends Group {
   private readonly pool: TerrainPatchPool
   private readonly live = new Map<number, { handle: PatchHandle; address: TerrainNodeAddress }>()
   private readonly pending = new Map<number, PendingEntry>()
+  /** Узлы, чья постройка упала: больше не запрашиваются (см. onPatchFailed). */
+  private readonly failed = new Set<number>()
   // номер запроса — страховка от чужого прихода: сегодня запись из pending
   // снимают только приход и dispose
   private nextRequestId = 1
@@ -278,7 +280,7 @@ abstract class TerrainPatchGroup extends Group {
     let requested = 0
     for (const address of buildQueue) {
       const key = terrainNodeKey(address)
-      if (this.live.has(key) || this.pending.has(key)) continue
+      if (this.live.has(key) || this.pending.has(key) || this.failed.has(key)) continue
       if (this.pending.size >= inFlightMax) break
 
       const elapsedMs = this.nowMs() - frameStart
@@ -376,10 +378,27 @@ abstract class TerrainPatchGroup extends Group {
         skirtDepthUnits,
         wrap: this.detailWrap
       },
-      (result) => this.onPatchBuilt(key, requestId, result)
+      (result) => this.onPatchBuilt(key, requestId, result),
+      (error) => this.onPatchFailed(key, requestId, error)
     )
 
     return true
+  }
+
+  /**
+   * Сбой постройки: слот назад в пул, узел больше не запрашивается — ядро мешера
+   * детерминировано, повтор упал бы так же. Регион остаётся под живым родителем
+   * (дыры нет, только грубее); сбой начального узла оставляет группу неготовой.
+   */
+  private onPatchFailed(key: number, requestId: number, error: unknown): void {
+    if (this.disposed) return
+
+    const entry = this.pending.get(key)
+    if (!entry || entry.requestId !== requestId) return
+    this.pending.delete(key)
+    this.pool.release(entry.handle)
+    this.failed.add(key)
+    console.error(`[terrain] постройка патча упала, узел ${key} больше не запрашивается:`, error)
   }
 
   /**

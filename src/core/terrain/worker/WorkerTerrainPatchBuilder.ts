@@ -89,7 +89,11 @@ export function createTerrainBuildWorker(): WorkerLike {
   return like
 }
 
-type Outstanding = { job: PatchBuildJob; onDone: (result: PatchBuildResult) => void }
+type Outstanding = {
+  job: PatchBuildJob
+  onDone: (result: PatchBuildResult) => void
+  onError: (error: unknown) => void
+}
 type OutstandingShadow = { field: TerrainHeightField; onDone: (bits: ShadowHeightBits) => void }
 
 /**
@@ -129,15 +133,15 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     this.ensureField(field).refs++
   }
 
-  public request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void): void {
+  public request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void, onError: (error: unknown) => void): void {
     if (this.fallback) {
-      this.fallback.request(job, onDone)
+      this.fallback.request(job, onDone, onError)
       return
     }
 
     const { id } = this.ensureField(job.field)
     const requestId = this.nextRequestId++
-    this.outstanding.set(requestId, { job, onDone })
+    this.outstanding.set(requestId, { job, onDone, onError })
     this.worker.postMessage(
       {
         type: 'build',
@@ -257,12 +261,12 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     // очистка до реплея: onDone может сразу позвать request — тот уйдёт в fallback
     const stranded = [...this.outstanding.values()]
     this.outstanding.clear()
-    for (const { job, onDone } of stranded) {
-      // исключение одного задания не оставляет остальные группы с вечным pending
+    for (const { job, onDone, onError } of stranded) {
+      // сбой постройки строитель отдаёт в onError; здесь ловится только исключение потребителя
       try {
-        fallback.request(job, onDone)
+        fallback.request(job, onDone, onError)
       } catch (error) {
-        console.error('[terrain worker] синхронная пересборка задания упала:', error)
+        console.error('[terrain worker] обработчик пересобранного задания упал:', error)
       }
     }
 
