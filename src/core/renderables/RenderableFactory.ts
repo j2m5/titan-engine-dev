@@ -14,7 +14,7 @@ import { FakeStar } from '@/core/renderables/utils/FakeStar'
 import { StarLod } from '@/core/renderables/utils/StarLod'
 import { ApparentSizeLod } from '@/core/renderables/utils/ApparentSizeLod'
 import { Planet } from '@/core/renderables/Planet'
-import { TerrainSphere } from '@/core/renderables/TerrainSphere'
+import { TerrainSphere, assertProceduralWiring } from '@/core/renderables/TerrainSphere'
 import { WaterSphere } from '@/core/renderables/Water/WaterSphere'
 import { FakePlanet } from '@/core/renderables/utils/FakePlanet'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
@@ -28,7 +28,7 @@ import { shapeModelStorage } from '@/core/renderables/DetailedRingStreamingSyste
 import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
-import { requireRenderingData } from '@/core/helpers/renderingData'
+import { readRenderingData, requireRenderingData } from '@/core/helpers/renderingData'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import {
   BROWN_DWARF_IMPOSTOR_PIXELS,
@@ -47,7 +47,7 @@ import { pulsarParameters } from '@/core/renderables/Pulsar/PulsarParameters'
 import { PulsarBeams } from '@/core/renderables/Pulsar/PulsarBeams'
 import { OrientationModel } from '@/core/libs/OrientationModel'
 import { GiantStar, GiantStarImpostor, GiantStarShell } from '@/core/renderables/GiantStar'
-import { INebulaRenderingObject, IRingRenderingObject } from '@/core/models/types'
+import { INebulaRenderingObject, IPlanetRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
@@ -294,7 +294,16 @@ class RenderableFactory {
     const heightPath: string | undefined = heightPathOf(actor)
     const heightMap = heightPath ? heightFieldStorage.get(heightPath) : undefined
 
-    if (!heightMap) return new Planet(actor, this.atmosphereRegistry)
+    if (!heightMap) {
+      // легаси-сфера живёт до прихода карты высот (и навсегда, если карта не пришла):
+      // процедурный диффуз нужен ей так же, как TerrainSphere
+      assertProceduralWiring(actor, this.proceduralSurfaceGenerator)
+      if (this.proceduralSurfaceGenerator && readRenderingData<IPlanetRenderingObject>(actor)?.proceduralSurface) {
+        this.proceduralSurfaceGenerator.ensureDiffuse(actor)
+      }
+
+      return new Planet(actor, this.atmosphereRegistry)
+    }
 
     const terrain = new TerrainSphere(
       actor,
