@@ -65,11 +65,20 @@ describe('terrainShadowMarch: уступ высотой H', () => {
     }
   })
 
-  it('ночь (солнце под горизонтом) — 1 без марша', () => {
-    let calls = 0
-    const counting: HeightSampler = () => (calls++, H)
-    expect(terrainShadowMarch(counting, dirAt(0.3, 0.5), sunTowardWest(0.3, -0.1), params)).toBe(1)
-    expect(calls).toBe(0)
+  // Ламберт суши за терминатором не гасится (landGate ≡ 1), склон к солнцу даёт N·L > 0:
+  // ночь для таких склонов гасит только марш
+  it('солнце под горизонтом на ровной карте — тень самого тела', () => {
+    const flat: HeightSampler = () => 1000
+    for (const u of [0.1, 0.5, 0.9]) {
+      expect(terrainShadowMarch(flat, dirAt(u, 0.5), sunTowardWest(u, -0.1), params)).toBe(0)
+    }
+  })
+
+  it('вершина над окружением ловит солнце за геометрическим терминатором', () => {
+    // провал горизонта с высоты H: √(2H/R) = 0.1 рад — солнце на −0.02 ещё видно
+    const u0 = 0.3
+    const peak: HeightSampler = (uv) => (Math.abs(uv[0] - u0) < arcU(500) ? H : 0)
+    expect(terrainShadowMarch(peak, dirAt(u0, 0.5), sunTowardWest(u0, -0.02), params)).toBe(1)
   })
 
   it('шов долготы: плато за u = 0 даёт ту же тень, что без шва', () => {

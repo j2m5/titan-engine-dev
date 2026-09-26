@@ -29,11 +29,12 @@ export function terrainShadowUv(dir: Vec3): [number, number] {
   return [phi / TWO_PI, Math.acos(Math.max(-1, Math.min(1, dir[1]))) / Math.PI]
 }
 
-/** 1 — освещено, 0 — в тени. dir — радиаль точки, sun — единичное направление НА солнце, обе в системе тела. */
+/**
+ * 1 — освещено, 0 — в тени. dir — радиаль точки, sun — единичное направление НА солнце, обе в системе тела.
+ * Солнце под горизонтом не пропускается: склон к солнцу за терминатором ламберт не гасит,
+ * луч уходит под грунт — тень от тела и рельефа даёт сам марш.
+ */
 export function terrainShadowMarch(sample: HeightSampler, dir: Vec3, sun: Vec3, p: ShadowMarchParams): number {
-  const cosSun = dir[0] * sun[0] + dir[1] * sun[1] + dir[2] * sun[2]
-  if (cosSun <= 0) return 1
-
   const R = p.radius
   const h0 = sample(terrainShadowUv(dir))
   const p0 = [dir[0] * (R + h0), dir[1] * (R + h0), dir[2] * (R + h0)]

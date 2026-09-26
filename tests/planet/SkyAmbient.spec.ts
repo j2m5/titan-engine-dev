@@ -45,6 +45,19 @@ describe('Небесный амбиент: irradiance-LUT в чанке SunTrans
     expect(frag.lastIndexOf('#if defined(USE_SKY_AMBIENT) && defined(USE_SUN_TINT)', idx)).toBeGreaterThan(frag.lastIndexOf('vec3 skyTerm = vec3(clamp(', idx))
   })
 
+  it('суша: тинт солнца только на прямом свете и сером поле, не на небе и не на всём day', () => {
+    const frag = PlanetShaderTemplate.fragmentShader
+    expect(frag).toContain('vec3 skyTerm = vec3(clamp(sunElevation / max(uTerrainAmbientSunRef, 1e-3), 0.0, 1.0)) * sunTintMix;')
+    expect(frag).toContain('vec3 lit = mix(ambient, vec3(directGain) * uLightColor * sunTintMix, max(NdotLraw, 0.0));')
+    expect(frag).toContain('vec3 lit = mix(ambient, vec3(directGain) * sunTintMix, max(NdotLraw, 0.0));')
+    expect(frag).toContain('dayColor = surfaceAlbedo * mix(sunTintMix, lit, uTerrainLambert);')
+    expect(frag).toContain('vec3 day = cloudColor * sunTintMix * dayFactor + dayColor * (1.0 - cloudAlpha) * landGate;')
+    // терраформная ветка day целиком не тонирует: единственный такой множитель — у легаси (#else)
+    const terrainDay = frag.indexOf('vec3 day = cloudColor * sunTintMix * dayFactor')
+    const legacyDay = frag.indexOf('vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);')
+    expect(frag.slice(terrainDay, legacyDay)).not.toContain('sunTint(muS)')
+  })
+
   it('порт формулы x_mu_s не разъехался с ядром Брунетона', () => {
     expect(coreLine(/Number x_mu_s = mu_s \* 0\.5 \+ 0\.5;/)).toBe('Number x_mu_s = mu_s * 0.5 + 0.5;')
     expect(sunTransmittanceFunctions).toContain('float xMuS = muS * 0.5 + 0.5;')

@@ -41,7 +41,8 @@ describe('TerrainShadowMarch: чанк', () => {
     expect(terrainShadowMarchFunctions).not.toContain('fwidth')
     expect(terrainShadowMarchFunctions).not.toContain('dFdx')
     expect(terrainShadowMarchFunctions).toContain('acos(clamp(dirLocal.y, -1.0, 1.0)) / 3.14159265358979323846')
-    expect(terrainShadowMarchFunctions).toContain('if (cosSun <= 0.0) return 1.0;')
+    // за терминатором марш обязателен: склон к солнцу ламберт не гасит
+    expect(terrainShadowMarchFunctions).not.toContain('cosSun')
     expect(terrainShadowMarchFunctions).toContain('if (occl >= 1.0) break;')
   })
 
