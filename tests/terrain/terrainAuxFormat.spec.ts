@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   TERRAIN_AUX_HEADER_BYTES,
+  TERRAIN_AUX_VERSION,
   currentTerrainAuxCalibration,
   heightMapFingerprint,
   parseTerrainAux,
@@ -129,6 +130,10 @@ describe('terrainAuxPathFor: путь компаньона выводится и
 })
 
 describe('heightMapFingerprint: отпечаток карты', () => {
+  it('формат 4 — двумерная выборка; компаньоны формата 3 отбрасываются по версии', () => {
+    expect(TERRAIN_AUX_VERSION).toBe(4)
+  })
+
   it('одна и та же карта — один и тот же отпечаток', () => {
     expect(heightMapFingerprint(map())).toEqual(heightMapFingerprint(map()))
   })
@@ -140,30 +145,33 @@ describe('heightMapFingerprint: отпечаток карты', () => {
     expect(heightMapFingerprint(changed).checksum).not.toBe(heightMapFingerprint(map()).checksum)
   })
 
-  it('на карте 8192×4096 выборка не вырождается в один столбец: правка текселя вне столбца 0 меняет сумму', () => {
-    // len/4096 = 8192 = width: старый чётный шаг, кратный ширине, читал бы только столбец 0.
-    // Нечётный шаг здесь = width+1 = 8193; первый ненулевой отсчёт выборки лежит
-    // в (строка 1, столбец 1) — правка ровно туда ловится новым шагом и не ловится
-    // старым (8193 не кратно 8192), это и есть регресс-проверка формы шага.
+  // Выборка — сетка 256×256 со сдвигом строк: блок (W/256)×(H/256) текселей
+  // где угодно обязан задеть отсчёт. Прежний шаг width+1 шёл одной диагональю
+  // и на 8192×4096 не видел восточную половину карты вовсе.
+  it('на карте 8192×4096 правка блока 32×16 в любом месте меняет сумму, включая восточное полушарие', () => {
     const width = 8192
     const height = 4096
     const base: HeightMapData = { width, height, minMeters: 0, maxMeters: 1000, data: new Uint16Array(width * height) }
-    const changed: HeightMapData = { ...base, data: new Uint16Array(base.data) }
-    const stride = 8193 // шаг 8192 | 1 = 8193, gcd(8193, 8192) = 1 — первая выборка после нуля
-    changed.data[stride] = 777 // строка 1, столбец 1
+    const baseChecksum = heightMapFingerprint(base).checksum
+    for (const [x0, y0] of [[6000, 3000], [8160, 10], [4096, 2048], [7000, 100], [33, 4080], [5120, 1500]]) {
+      const changed: HeightMapData = { ...base, data: new Uint16Array(base.data) }
+      for (let y = y0; y < y0 + 16; y++) changed.data.fill(777, y * width + x0, y * width + x0 + 32)
 
-    expect(heightMapFingerprint(changed).checksum).not.toBe(heightMapFingerprint(base).checksum)
+      expect(heightMapFingerprint(changed).checksum, `блок в (${x0}, ${y0})`).not.toBe(baseChecksum)
+    }
   })
 
-  it('шаг взаимно прост с шириной, не только нечётный: ширина 6000 при шаге 15 читала бы каждый 15-й столбец', () => {
-    // len 60000 → floor(60000/4096) = 14 → |1 = 15, gcd(15, 6000) = 15; следующий взаимно простой — 17
+  it('карта уже 256 текселей: каждая строка в выборке, правка одного текселя ловится', () => {
     const width = 6000
     const height = 10
     const base: HeightMapData = { width, height, minMeters: 0, maxMeters: 1000, data: new Uint16Array(width * height) }
-    const changed: HeightMapData = { ...base, data: new Uint16Array(base.data) }
-    changed.data[17] = 777 // строка 0, столбец 17: в выборке шага 17, вне выборки шага 15
+    const baseChecksum = heightMapFingerprint(base).checksum
+    for (let y = 0; y < height; y++) {
+      const changed: HeightMapData = { ...base, data: new Uint16Array(base.data) }
+      changed.data.fill(777, y * width + 4000, y * width + 4000 + Math.ceil(width / 256))
 
-    expect(heightMapFingerprint(changed).checksum).not.toBe(heightMapFingerprint(base).checksum)
+      expect(heightMapFingerprint(changed).checksum).not.toBe(baseChecksum)
+    }
   })
 
   it('изменение границ диапазона меняет отпечаток', () => {
