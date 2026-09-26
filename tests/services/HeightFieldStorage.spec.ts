@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
+import { config } from '@/core/framework/config'
 import { parseHeightMap, type HeightMapData } from '@/core/terrain/heightMapFormat'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { disposeTerrainShadowMaps, terrainShadowMapFor } from '@/core/terrain/terrainShadowMap'
@@ -182,6 +183,75 @@ describe('HeightFieldStorage: спросовый режим', () => {
 
     expect(mapFetchCount()).toBe(2)
     nowSpy.mockRestore()
+    warn.mockRestore()
+  })
+})
+
+/** fetch, который никогда не отвечает сам, но честно отклоняется по сигналу отмены. */
+function stubHangingFetch(): AbortSignal[] {
+  const signals: AbortSignal[] = []
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          const signal = init?.signal
+          if (!signal) return
+          signals.push(signal)
+          signal.addEventListener('abort', () => reject(signal.reason ?? new Error('aborted')))
+        })
+    )
+  )
+  return signals
+}
+
+describe('HeightFieldStorage: отмена и таймаут загрузки', () => {
+  it('clear() обрывает загрузки прошлого сценария — и карту, и компаньон, без предупреждений', async () => {
+    const signals = stubHangingFetch()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    heightFieldStorage.request(MAP_PATH)
+    expect(signals).toHaveLength(2)
+    heightFieldStorage.clear()
+    await settle()
+
+    expect(signals.every((signal) => signal.aborted)).toBe(true)
+    expect(warn).not.toHaveBeenCalled()
+    // новый сценарий запрашивает тот же путь заново — сеть не заблокирована старым полётом
+    heightFieldStorage.request(MAP_PATH)
+    expect(mapFetchCount()).toBe(2)
+    warn.mockRestore()
+  })
+
+  it('зависшая загрузка снимается по таймауту: путь не пинится, дальше обычный бэкофф', async () => {
+    vi.useFakeTimers()
+    try {
+      const signals = stubHangingFetch()
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      heightFieldStorage.request(MAP_PATH)
+      expect(heightFieldStorage.heldPaths()).toEqual([MAP_PATH])
+      await vi.advanceTimersByTimeAsync(config('streaming.heightMapTimeoutMs'))
+
+      expect(signals.every((signal) => signal.aborted)).toBe(true)
+      expect(heightFieldStorage.heldPaths()).toEqual([])
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(String(warn.mock.calls[0][0])).toContain('карта высот не загружена')
+      warn.mockRestore()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('карта не пришла — одно предупреждение о карте, о компаньоне молчим', async () => {
+    stubFetch(null, 404, null)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    heightFieldStorage.request(MAP_PATH)
+    await settle()
+
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0][0])).toContain('карта высот не загружена')
     warn.mockRestore()
   })
 })

@@ -31,6 +31,12 @@ import { disposeTerrainShadowMap, disposeTerrainShadowMaps } from '@/core/terrai
  * сотые доли миллисекунды. Компаньон — ускорение, а не данные: его отсутствие
  * или расхождение с картой роняет скорость, но не корректность (см. fetchAuxData/acceptAux).
  */
+/** Итог загрузки компаньона: данные либо причина, по которой их нет. */
+interface AuxFetch {
+  aux: TerrainAuxData | null
+  failure?: unknown
+}
+
 class HeightFieldStorage {
   private maps: Map<string, HeightMapData> = new Map()
 
@@ -46,6 +52,9 @@ class HeightFieldStorage {
    * под ним уже может лежать запись новой эпохи.
    */
   private epoch: number = 0
+
+  /** Отмена загрузок текущей эпохи: clear() обрывает их вместо докачки в пустоту. */
+  private epochAbort: AbortController = new AbortController()
 
   private registryVersion: number = 0
 
@@ -137,6 +146,8 @@ class HeightFieldStorage {
 
   public clear(): void {
     this.epoch += 1
+    this.epochAbort.abort()
+    this.epochAbort = new AbortController()
     disposeTerrainShadowMaps()
     this.maps.clear()
     this.inFlight.clear()
@@ -146,23 +157,36 @@ class HeightFieldStorage {
 
   private async fetchInto(path: string, epoch: number): Promise<void> {
     const auxPath: string = terrainAuxPathFor(path)
+    // один сигнал на карту и компаньон: смена сценария, таймаут или провал карты обрывают оба
+    const request = new AbortController()
+    const epochSignal: AbortSignal = this.epochAbort.signal
+    const onEpochAbort = (): void => request.abort(new Error('смена сценария'))
+    epochSignal.addEventListener('abort', onEpochAbort, { once: true })
+    const timer: ReturnType<typeof setTimeout> = setTimeout(
+      () => request.abort(new Error(`таймаут ${config('streaming.heightMapTimeoutMs')} мс`)),
+      config('streaming.heightMapTimeoutMs')
+    )
 
     try {
       // Оба запроса стартуют РАЗОМ: компаньон не нужен для разбора карты, и
       // последовательные ожидания добавили бы к появлению рельефа лишний
       // round-trip. Карта первой — порядок обращений остаётся читаемым в
       // сетевой панели и закреплён тестом.
-      const mapPending: Promise<Response> = fetch(Storage.url(path))
-      const auxPending: Promise<TerrainAuxData | null> = this.fetchAuxData(auxPath)
+      const mapPending: Promise<Response> = fetch(Storage.url(path), { signal: request.signal })
+      const auxPending: Promise<AuxFetch> = this.fetchAuxData(auxPath, request.signal)
 
       const response = await mapPending
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
       const map: HeightMapData = parseHeightMap(await response.arrayBuffer())
-      const aux: TerrainAuxPayload | undefined = this.acceptAux(await auxPending, map, auxPath)
+      const auxFetch: AuxFetch = await auxPending
 
       if (epoch !== this.epoch) return
+
+      // о компаньоне говорим только при пришедшей карте: без неё его судьба не важна
+      if (auxFetch.failure !== undefined) this.warnAuxUnused(auxPath, auxFetch.failure)
+      const aux: TerrainAuxPayload | undefined = this.acceptAux(auxFetch.aux, map, auxPath)
 
       // Карта публикуется ОДНОЙ записью, уже с компаньоном: поле высот
       // кешируется по ссылке на карту (terrainHeightFieldFor), и публикация
@@ -172,10 +196,16 @@ class HeightFieldStorage {
       this.maps.set(path, aux ? { ...map, aux } : map)
       this.registryVersion += 1
     } catch (cause) {
-      console.warn(`[HeightFieldStorage] карта высот не загружена: ${path}`, cause)
+      // оборванное сменой сценария — не сбой: молча
+      if (epoch !== this.epoch) return
 
-      if (epoch === this.epoch) this.failedAt.set(path, Date.now())
+      console.warn(`[HeightFieldStorage] карта высот не загружена: ${path}`, cause)
+      this.failedAt.set(path, Date.now())
     } finally {
+      clearTimeout(timer)
+      epochSignal.removeEventListener('abort', onEpochAbort)
+      // провал карты обрывает и ещё летящий компаньон; после успеха — no-op
+      request.abort()
       // Только своя эпоха: после clear() под этим ключом уже может лежать
       // запись новой эпохи, и удалить её значило бы разрешить дубль-fetch.
       if (epoch === this.epoch) this.inFlight.delete(path)
@@ -189,22 +219,20 @@ class HeightFieldStorage {
    * считает их сам — порядка секунды на карте 8192×4096, синхронно, в кадре.
    *
    * НИКОГДА не бросает: компаньон — ускорение, а не данные. Любая беда с ним
-   * (нет файла, битый контейнер, отпечаток или калибровка не сошлись) даёт
-   * `undefined` и предупреждение, карта доезжает и работает как раньше.
-   * Молчать здесь нельзя: тихий фолбэк вернул бы секунду счёта в кадр, и
-   * единственным следом остался бы подлагивающий подлёт.
+   * (нет файла, битый контейнер) отдаётся причиной, и fetchInto предупреждает
+   * о ней, если сама карта доехала: карта работает как раньше. Молчать нельзя:
+   * тихий фолбэк вернул бы секунду счёта в кадр, и единственным следом
+   * остался бы подлагивающий подлёт.
    */
-  private async fetchAuxData(auxPath: string): Promise<TerrainAuxData | null> {
+  private async fetchAuxData(auxPath: string, signal: AbortSignal): Promise<AuxFetch> {
     try {
-      const response = await fetch(Storage.url(auxPath))
+      const response = await fetch(Storage.url(auxPath), { signal })
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
-      return parseTerrainAux(await response.arrayBuffer())
+      return { aux: parseTerrainAux(await response.arrayBuffer()) }
     } catch (cause) {
-      this.warnAuxUnused(auxPath, cause)
-
-      return null
+      return { aux: null, failure: cause }
     }
   }
 
