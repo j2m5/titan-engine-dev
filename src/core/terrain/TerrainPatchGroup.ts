@@ -26,18 +26,39 @@ import {
   type TerrainNodeAddress
 } from '@/core/terrain/terrainQuadtreeSelect'
 
-export const POOL_PRESSURE_START = 0.85
-export const POOL_PRESSURE_GAIN = 3
+/** Мёртвая зона клапана: доли пула, в которых держится желаемый набор. */
+export const VALVE_HIGH = 0.9
+export const VALVE_LOW = 0.75
+/** Шаг масштаба порога за кадр: вверх быстро, вниз медленно — оба мельче зоны. */
+export const VALVE_RISE = 1.05
+export const VALVE_FALL = 1.01
+export const VALVE_MAX_SCALE = 8
+/** Аварийный пол масштаба при полном пуле — рост от VALVE_LOW линейно до него. */
+export const VALVE_EMERGENCY_SCALE = 4
 
 /**
- * Порог сплита с учётом заполнения пула: ниже POOL_PRESSURE_START — базовый,
- * при полном пуле ×(1 + GAIN) — набор коарсится, родители становятся
- * желаемыми, слоты возвращаются. Без клапана acquire()→null при полном пуле
- * и освобождение по coverageReady замыкались в тупик.
+ * Клапан пула — интегральный регулятор масштаба порога сплита. Мерило —
+ * размер желаемого набора, а не живые слоты: те включают переходные
+ * (родитель и дети до свопа, pending), и мгновенная формула от них
+ * замыкала петлю в предельный цикл с вечными пересборками. Без клапана
+ * acquire()→null при полном пуле и освобождение по coverageReady
+ * замыкались в тупик.
+ *
+ * Живые слоты дают аварийный пол, пока спрос выше зоны: пул заполняется
+ * быстрее, чем масштаб растёт шагами. Пол поднимает масштаб сразу, вниз он
+ * уходит лишь шагом VALVE_FALL; в зоне пола нет — мгновенного сброса, а с
+ * ним и цикла, нет.
  */
-export function effectiveSplitPixels(base: number, live: number, max: number): number {
-  const pressure = max > 0 ? live / max : 0
-  return base * (1 + POOL_PRESSURE_GAIN * Math.max(0, (pressure - POOL_PRESSURE_START) / (1 - POOL_PRESSURE_START)))
+export function nextValveScale(scale: number, wantedCount: number, maxLive: number, liveCount = 0): number {
+  const overDemand = wantedCount > VALVE_HIGH * maxLive
+  let next = scale
+  if (overDemand) next = scale * VALVE_RISE
+  else if (wantedCount < VALVE_LOW * maxLive) next = scale / VALVE_FALL
+
+  const overfill = overDemand && maxLive > 0 ? (liveCount / maxLive - VALVE_LOW) / (1 - VALVE_LOW) : 0
+  const floor = 1 + (VALVE_EMERGENCY_SCALE - 1) * Math.min(Math.max(overfill, 0), 1)
+
+  return Math.min(Math.max(next, floor, 1), VALVE_MAX_SCALE)
 }
 
 /** Запрошенный, но не пришедший патч: слот уже захвачен, меша в сцене ещё нет. */
@@ -106,6 +127,8 @@ abstract class TerrainPatchGroup extends Group {
   private readonly readyCallbacks: Array<() => void> = []
   private disposed = false
   private persistedSplit: ReadonlySet<number> = new Set()
+  /** Масштаб порога сплита от клапана пула, см. nextValveScale. */
+  private valveScale = 1
   private poolExhaustedWarned = false
   // замыкание переиспользуется между кадрами — coverageReady зовётся на каждый
   // освобождаемый узел, аллокация лямбды на вызов была бы мусором в горячем пути
@@ -222,15 +245,13 @@ abstract class TerrainPatchGroup extends Group {
       frustumLocal: this.frustumScratch,
       screenHeight: this.renderer.domElement.height,
       fovYRadians: degToRad(ctx.camera.fov),
-      // liveCount читается ДО построек этого кадра — давление отстаёт на
-      // один кадр от факта (после-release состояние прошлого кадра), но
-      // консервативно: потолок acquire() всё равно держит жёсткий кламп
-      splitPixels: effectiveSplitPixels(config('terrain.sseSplitPixels'), this.pool.liveCount, this.pool.maxLivePatches),
+      splitPixels: config('terrain.sseSplitPixels') * this.valveScale,
       mergeFactor: config('terrain.sseMergeFactor'),
       currentlySplit: this.persistedSplit,
       waterLevelMeters: this.waterLevelMeters
     })
     this.persistedSplit = split
+    this.valveScale = nextValveScale(this.valveScale, leaves.length, this.pool.maxLivePatches, this.pool.liveCount)
 
     const wanted = new Map<number, TerrainLeaf>()
     for (const address of leaves) wanted.set(terrainNodeKey(address), address)

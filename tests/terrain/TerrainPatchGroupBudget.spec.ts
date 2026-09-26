@@ -2,8 +2,22 @@ import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { Frustum, Matrix4, Mesh, PerspectiveCamera, Texture, type Mesh as ThreeMesh, type WebGLRenderer } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
-import { TerrainPatchGroup, effectiveSplitPixels, POOL_PRESSURE_START, POOL_PRESSURE_GAIN } from '@/core/terrain/TerrainPatchGroup'
-import type { TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
+import {
+  TerrainPatchGroup,
+  nextValveScale,
+  VALVE_EMERGENCY_SCALE,
+  VALVE_FALL,
+  VALVE_HIGH,
+  VALVE_LOW,
+  VALVE_MAX_SCALE,
+  VALVE_RISE
+} from '@/core/terrain/TerrainPatchGroup'
+import {
+  SyncTerrainPatchBuilder,
+  type PatchBuildJob,
+  type PatchBuildResult,
+  type TerrainPatchBuilder
+} from '@/core/terrain/terrainPatchBuilder'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { Actor } from '@/core/models/Actor'
@@ -91,6 +105,16 @@ function sequence(values: number[]): () => number {
 
 function makeGroup(nowMs?: () => number, maxLivePatches?: number): TestPatchGroup {
   return new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), maxLivePatches, nowMs)
+}
+
+/** Синхронный строитель со счётчиком запросов — мерило пересборок. */
+class CountingBuilder extends SyncTerrainPatchBuilder {
+  public requests = 0
+
+  public override request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void): void {
+    this.requests++
+    super.request(job, onDone)
+  }
 }
 
 function meshCount(group: TestPatchGroup): number {
@@ -192,12 +216,27 @@ describe('клапан пула', () => {
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
 
-  it('ниже 85 % — базовый порог; при полном пуле ×(1+GAIN) = ×4; между — линейно', () => {
-    expect(effectiveSplitPixels(6, 0, 1024)).toBe(6)
-    expect(effectiveSplitPixels(6, Math.floor(1024 * POOL_PRESSURE_START), 1024)).toBeCloseTo(6, 6)
-    expect(effectiveSplitPixels(6, 1024, 1024)).toBeCloseTo(6 * (1 + POOL_PRESSURE_GAIN), 12)
-    expect(effectiveSplitPixels(6, 973, 1024)).toBeGreaterThan(6)
-    expect(effectiveSplitPixels(6, 973, 1024)).toBeLessThan(24)
+  it('регулятор: выше верхней границы масштаб растёт, ниже нижней — падает, в мёртвой зоне стоит', () => {
+    const max = 1000
+    expect(nextValveScale(1, VALVE_HIGH * max + 1, max)).toBeCloseTo(VALVE_RISE, 12)
+    expect(nextValveScale(2, VALVE_LOW * max - 1, max)).toBeCloseTo(2 / VALVE_FALL, 12)
+    expect(nextValveScale(2, ((VALVE_LOW + VALVE_HIGH) / 2) * max, max)).toBe(2)
+    // зона держит устойчивость: шаг вниз мельче шага вверх
+    expect(VALVE_FALL).toBeLessThan(VALVE_RISE)
+  })
+
+  it('аварийный пол: при спросе выше зоны почти полный пул поднимает масштаб сразу; в зоне пола нет', () => {
+    const max = 1000
+    expect(nextValveScale(1, 1200, max, max)).toBe(VALVE_EMERGENCY_SCALE)
+    expect(nextValveScale(1, 1200, max, VALVE_LOW * max)).toBeCloseTo(VALVE_RISE, 12)
+    // спрос в зоне — живые слоты масштаб не держат, падения нет, роста нет
+    expect(nextValveScale(3, 800, max, max)).toBe(3)
+    expect(nextValveScale(3, 700, max, max)).toBeCloseTo(3 / VALVE_FALL, 12)
+  })
+
+  it('регулятор: масштаб зажат в [1, VALVE_MAX_SCALE]', () => {
+    expect(nextValveScale(1, 0, 1000)).toBe(1)
+    expect(nextValveScale(VALVE_MAX_SCALE, 5000, 1000)).toBe(VALVE_MAX_SCALE)
   })
 
   // Высота 600 км: желаемый набор пробивает потолок пула, и клапан коарсит его
@@ -222,9 +261,6 @@ describe('клапан пула', () => {
     }
     expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('пул патчей исчерпан'))
     expect(Math.max(...tail)).toBeLessThanOrEqual(32)
-    // на кадровых часах режим выходит на предельный цикл периода 8 (24 → 31 → 24):
-    // клапан доводит набор до коарсенного пола, а не упирается в потолок
-    expect(tail).toContain(24)
     // после отлёта набор возвращается к 24 — слоты освобождены, не заморожены
     for (let f = 0; f < 200; f++) {
       clock.startFrame()
@@ -233,6 +269,31 @@ describe('клапан пула', () => {
       expect(fullyCovered(group)).toBe(true)
     }
     expect(meshCount(group)).toBe(24)
+    warn.mockRestore()
+  })
+
+  // Неподвижная камера под давлением: регулятор обязан сойтись, а не выйти на
+  // предельный цикл — иначе пул крутит пересборки вечно, а видимый набор мигает
+  it('неподвижная камера под давлением: набор сходится, пересборки прекращаются', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const clock = makeFrameClock()
+    const builder = new CountingBuilder()
+    const group = new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), 32, clock.nowMs, builder)
+    for (let f = 0; f < 400; f++) {
+      clock.startFrame()
+      group.updateObject(makeCtx(600))
+    }
+    const buildsBefore = builder.requests
+    const counts: number[] = []
+    for (let f = 0; f < 200; f++) {
+      clock.startFrame()
+      group.updateObject(makeCtx(600))
+      expect(unbackedHiddenAddresses(group)).toEqual([])
+      expect(fullyCovered(group)).toBe(true)
+      counts.push(meshCount(group))
+    }
+    expect(builder.requests - buildsBefore).toBe(0)
+    expect(Math.min(...counts)).toBe(Math.max(...counts))
     warn.mockRestore()
   })
 
