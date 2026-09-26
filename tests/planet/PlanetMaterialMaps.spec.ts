@@ -322,7 +322,20 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     expect(noCloud.defines.USE_CLOUD_SHADOW).toBeUndefined()
   })
 
-  it('resetMaterial снимает USE_TERRAIN_UV', () => {
+  // Патчи рельефа несут только position/patchCenter — без USE_TERRAIN_UV вершинник
+  // читает несуществующий normal (NaN, тело чёрное), а сброс зовётся на вытеснении диффуза
+  it('материал патчей рельефа: USE_TERRAIN_UV — контракт геометрии, resetMaterial его не снимает', () => {
+    const material = new PlanetMaterial(moon(), undefined, { terrainPatches: true })
+    expect(material.defines.USE_TERRAIN_UV).toBe('1')
+
+    material.resetMaterial()
+    expect(material.defines.USE_TERRAIN_UV).toBe('1')
+
+    material.updateMaterial() // карты высот в реестре нет — дефайн всё равно на месте
+    expect(material.defines.USE_TERRAIN_UV).toBe('1')
+  })
+
+  it('легаси-материал: resetMaterial снимает USE_TERRAIN_UV', () => {
     seedMoonHeightMap()
 
     const material = new PlanetMaterial(moon())

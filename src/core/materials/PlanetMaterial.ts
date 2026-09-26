@@ -1,4 +1,3 @@
-import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
 import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
@@ -45,6 +44,11 @@ export function cloudOpacityForAltitude(altitudeUnits: number, atmosphereThickne
   const half = 0.5 * Math.max(atmosphereThicknessUnits, 1e-6) // гард от деления на 0/отрицательной толщины (битые данные)
 
   return Math.max(0, Math.min(1, (altitudeUnits - half) / half))
+}
+
+export interface PlanetMaterialOptions {
+  /** Геометрия — патчи рельефа (TerrainSphere): USE_TERRAIN_UV постоянно, см. baseDefines. */
+  terrainPatches?: boolean
 }
 
 class PlanetMaterial extends AbstractShaderMaterial {
@@ -95,8 +99,8 @@ class PlanetMaterial extends AbstractShaderMaterial {
   /** Подписка светила на цвет света (lightTint) — резолвится один раз, тело не меняет родителя в рантайме. */
   private readonly lightTint: { active: boolean; color: Color }
 
-  public constructor(model: Actor, atmosphereRegistry?: AtmosphereRegistry, parameters?: ShaderMaterialParameters) {
-    super(parameters)
+  public constructor(model: Actor, atmosphereRegistry?: AtmosphereRegistry, options: PlanetMaterialOptions = {}) {
+    super()
     this.model = model
     // Дочерняя атмосфера резолвится ОДИН раз — толщина и actorId читаются из
     // одного и того же актора, а не двух отдельных обходов ORM.
@@ -125,7 +129,14 @@ class PlanetMaterial extends AbstractShaderMaterial {
     // lightTint статичен (резолвится один раз в конструкторе, актор не меняет
     // родителя в рантайме) — живёт в baseDefines, как USE_WATER_REFLECTION у
     // воды: переживает и updateMaterial(), и resetMaterial() без досборки.
-    this.baseDefines = { ...defines, ...(this.lightTint.active && { USE_LIGHT_TINT: '1' }) }
+    // Патчи рельефа несут только position/patchCenter: USE_TERRAIN_UV для них —
+    // контракт геометрии, а не признак загруженной карты; без него вершинник
+    // читает несуществующий normal. В baseDefines он переживает resetMaterial.
+    this.baseDefines = {
+      ...defines,
+      ...(this.lightTint.active && { USE_LIGHT_TINT: '1' }),
+      ...(options.terrainPatches && { USE_TERRAIN_UV: '1' })
+    }
     this.defines = { ...this.baseDefines }
 
     // Цвет света звезды (lightTint) — юниформ материала (не шейдера-обёртки,
