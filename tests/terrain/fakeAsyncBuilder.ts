@@ -1,5 +1,6 @@
 import { SyncTerrainPatchBuilder, type PatchBuildJob, type PatchBuildResult, type TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import type { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import type { ShadowHeightBits } from '@/core/terrain/terrainShadowBits'
 
 /**
  * Очередь заданий с ручным продвижением: flush(n) завершает n первых через
@@ -19,6 +20,11 @@ export class FakeAsyncBuilder implements TerrainPatchBuilder {
 
   public request(job: PatchBuildJob, onDone: (r: PatchBuildResult) => void): void {
     this.queue.push({ job, onDone })
+  }
+
+  /** Карта тени — синхронно: очередь моделирует только постройку патчей. */
+  public requestShadow(field: TerrainHeightField, onDone: (bits: ShadowHeightBits) => void): void {
+    this.sync.requestShadow(field, onDone)
   }
 
   public flush(n: number = Infinity): void {

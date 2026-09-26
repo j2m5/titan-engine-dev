@@ -179,7 +179,7 @@ abstract class TerrainPatchGroup extends Group {
      * Строитель патчей: дефолт синхронный (постройка внутри запроса),
      * воркерный приходит от владельца.
      */
-    private readonly builder: TerrainPatchBuilder = new SyncTerrainPatchBuilder()
+    protected readonly builder: TerrainPatchBuilder = new SyncTerrainPatchBuilder()
   ) {
     super()
     this.field = field

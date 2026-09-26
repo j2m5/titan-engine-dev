@@ -11,6 +11,7 @@ import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
 import type { IPlanetRenderingObject } from '@/core/models/types'
 import type { UpdateContext } from '@/core/UpdateContext'
+import { requestTerrainShadowMap } from '@/core/terrain/terrainShadowMap'
 
 /**
  * Fail-fast на разрыв DI-цепочки (стиль сообщения — как `requireRenderingData`):
@@ -86,6 +87,9 @@ class TerrainSphere extends TerrainPatchGroup {
     super(field, sharedMaterial, renderer, undefined, waterLevelMeters, detailWrap, nowMs, builder)
     this.model = model
     this.sharedMaterial = sharedMaterial
+    // карта тени строится у строителя (воркер держит копию карты); до прихода
+    // материал держит заглушку — ровную сферу на датуме
+    requestTerrainShadowMap(field, this.builder)
 
     this.name = this.model.getAttribute('name', '') + 'Planet'
     this.userData.type = 'planet'

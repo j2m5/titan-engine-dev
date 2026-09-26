@@ -14,7 +14,7 @@ import { resolveFrostParams } from '@/core/terrain/frostParams'
 import { midbandParamsOf } from '@/core/terrain/midbandParams'
 import { terrainDataOf } from '@/core/terrain/terrainClassPresets'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
-import { terrainShadowMapFor } from '@/core/terrain/terrainShadowMap'
+import { onTerrainShadowMapReady, terrainShadowMapFor, type TerrainShadowMap } from '@/core/terrain/terrainShadowMap'
 import { resolveTerrainLightParams } from '@/core/terrain/terrainLightParams'
 import { IPlanetRenderingObject } from '@/core/models/types'
 import { readRenderingData } from '@/core/helpers/renderingData'
@@ -82,6 +82,9 @@ class PlanetMaterial extends AbstractShaderMaterial {
 
   /** Множитель полутени собственной тени рельефа (ручка данных) — читает syncTerrainShadow. */
   private shadowSoftness: number = 1
+
+  /** Отписка от готовности карты тени: до неё привязана заглушка, см. terrainShadowMapFor. */
+  private unsubscribeShadowReady: (() => void) | null = null
 
   /** Радиус звезды системы (юниты сцены) для полутени тел без атмосферы; undefined — фолбэк. */
   private readonly starRadiusUnits: number | undefined
@@ -301,10 +304,12 @@ class PlanetMaterial extends AbstractShaderMaterial {
     const shadowMap = useTerrainShadow ? terrainShadowMapFor(heightMap) : undefined
     this.uniforms.uTerrainShadowStrength.value = light.terrainShadowStrength
     this.uniforms.uIceGlintStrength.value = light.iceGlintStrength
-    this.uniforms.uShadowHeightMap.value = shadowMap?.texture ?? null
-    this.uniforms.uShadowHeightMin.value = shadowMap?.heightMinUnits ?? 0
-    this.uniforms.uShadowHeightRange.value = shadowMap?.heightRangeUnits ?? 0
-    this.uniforms.uShadowTexelAngle.value = shadowMap?.texelAngle ?? 0
+    this.bindShadowMap(shadowMap)
+    this.unsubscribeShadowReady?.()
+    this.unsubscribeShadowReady =
+      shadowMap && heightMap && !shadowMap.ready
+        ? onTerrainShadowMapReady(heightMap, (ready) => this.bindShadowMap(ready))
+        : null
 
     // Терраформный детальный слой (задача 4, чанк TerrainDetail): крупная
     // нормаль — база слоя, её наличие и есть условие USE_TERRAIN_DETAIL.
@@ -469,6 +474,19 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.needsUpdate = true
   }
 
+  public override dispose(): void {
+    this.unsubscribeShadowReady?.()
+    this.unsubscribeShadowReady = null
+    super.dispose()
+  }
+
+  private bindShadowMap(shadowMap: TerrainShadowMap | undefined): void {
+    this.uniforms.uShadowHeightMap.value = shadowMap?.texture ?? null
+    this.uniforms.uShadowHeightMin.value = shadowMap?.heightMinUnits ?? 0
+    this.uniforms.uShadowHeightRange.value = shadowMap?.heightRangeUnits ?? 0
+    this.uniforms.uShadowTexelAngle.value = shadowMap?.texelAngle ?? 0
+  }
+
   public resetMaterial(): void {
     this.uniforms.diffuseMap.value = resourceStorage.getTextureOrMake('default.png')
     this.uniforms.nightMap.value = resourceStorage.getTextureOrMake('night.jpg')
@@ -490,10 +508,9 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.uniforms.uSteepDiffMap.value = null
     this.uniforms.uSteepGate.value = 0
 
-    this.uniforms.uShadowHeightMap.value = null
-    this.uniforms.uShadowHeightMin.value = 0
-    this.uniforms.uShadowHeightRange.value = 0
-    this.uniforms.uShadowTexelAngle.value = 0
+    this.unsubscribeShadowReady?.()
+    this.unsubscribeShadowReady = null
+    this.bindShadowMap(undefined)
     ;(this.uniforms.uDetailTintNorm.value as Vector2).set(1, 1)
     ;(this.uniforms.uSteepTintNorm.value as Vector2).set(1, 1)
 

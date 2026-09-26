@@ -6,7 +6,11 @@ import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
-import { disposeTerrainShadowMaps } from '@/core/terrain/terrainShadowMap'
+import { disposeTerrainShadowMaps, installTerrainShadowBits, terrainShadowMapFor } from '@/core/terrain/terrainShadowMap'
+import { buildShadowHeightBits } from '@/core/terrain/terrainShadowBits'
+import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import { TerrainSphere } from '@/core/renderables/TerrainSphere'
+import type { WebGLRenderer } from 'three'
 
 // Ручка силы живёт в renderingObject.data Луны, а ORM отдаёт НОВЫЙ экземпляр
 // связи на каждое обращение — spy на модели не доживает до материала. Подмена
@@ -120,6 +124,34 @@ describe('PlanetMaterial: гейт тени рельефа', () => {
     expect(material.uniforms.uShadowHeightMin.value).toBe(0)
     expect(material.uniforms.uShadowHeightRange.value).toBe(0)
     expect(material.uniforms.uShadowTexelAngle.value).toBe(0)
+  })
+
+  it('до готовности — заглушка; готовая карта перепривязывается сама; после resetMaterial — нет', () => {
+    const map = heightFieldStorage.get(MOON_HEIGHT_PATH)!
+    const material = new PlanetMaterial(moon())
+    material.updateMaterial()
+    const placeholder = material.uniforms.uShadowHeightMap.value
+    expect(placeholder.image.width).toBe(1)
+    installTerrainShadowBits(map, buildShadowHeightBits(map))
+    expect(material.uniforms.uShadowHeightMap.value).toBe(terrainShadowMapFor(map).texture)
+    expect(material.uniforms.uShadowHeightMap.value.image.width).toBe(4)
+
+    disposeTerrainShadowMaps()
+    const second = new PlanetMaterial(moon())
+    second.updateMaterial()
+    second.resetMaterial()
+    installTerrainShadowBits(map, buildShadowHeightBits(map))
+    expect(second.uniforms.uShadowHeightMap.value).toBeNull()
+  })
+
+  it('TerrainSphere запрашивает карту тени у строителя: синхронный ставит её в конструкторе', () => {
+    const map = heightFieldStorage.get(MOON_HEIGHT_PATH)!
+    const sphere = new TerrainSphere(moon(), new TerrainHeightField(map, 1737.4), { domElement: { height: 1080 } } as unknown as WebGLRenderer)
+    const material = sphere.material as PlanetMaterial
+    expect(terrainShadowMapFor(map).ready).toBe(true)
+    material.updateMaterial()
+    expect(material.uniforms.uShadowHeightMap.value).toBe(terrainShadowMapFor(map).texture)
+    sphere.dispose()
   })
 
   it('без карты высот дефайна нет', () => {

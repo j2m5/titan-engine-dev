@@ -5,6 +5,7 @@ import { registerFieldMessage } from '@/core/terrain/worker/WorkerTerrainPatchBu
 import { buildTerrainPatchGeometry, buildPatchIndex } from '@/core/terrain/terrainPatchGeometry'
 import { detailWrapFor } from '@/core/terrain/detailWrap'
 import type { TerrainAuxPayload } from '@/core/terrain/terrainAuxFormat'
+import { buildShadowHeightBits } from '@/core/terrain/terrainShadowBits'
 import { buildMessageFor, builtArrays, expectMatchesFreshBuild, makeField, patchJob } from './workerBuildHelpers'
 
 type BuiltMessage = Extract<FromWorkerMessage, { type: 'built' }>
@@ -62,6 +63,22 @@ describe('terrainBuildHandler: чистый обработчик сообщен�
     const job = patchJob(field, 2, 1, 1, 0)
     const built = handleWorkerMessage(state, buildMessageFor(job, 2, 3))
     expectMatchesFreshBuild(builtArrays(built!.message as BuiltMessage), job)
+  })
+
+  it('buildShadow по зарегистрированному полю — биты низкой карты из копии, буфер уходит переносом', () => {
+    const field = makeField()
+    const state = createWorkerState()
+    handleWorkerMessage(state, registerFieldMessage(field, 4).message)
+    const res = handleWorkerMessage(state, { type: 'buildShadow', requestId: 9, fieldId: 4 })
+    const message = res!.message as Extract<FromWorkerMessage, { type: 'shadowBuilt' }>
+    const expected = buildShadowHeightBits(field.heightMap)
+    expect(message).toMatchObject({ type: 'shadowBuilt', requestId: 9, width: expected.width, height: expected.height })
+    expect(Array.from(new Uint16Array(message.bits))).toEqual(Array.from(expected.bits))
+    expect(res!.transfer).toEqual([message.bits])
+    expect(handleWorkerMessage(state, { type: 'buildShadow', requestId: 10, fieldId: 99 })?.message).toMatchObject({
+      type: 'error',
+      requestId: 10
+    })
   })
 
   it('build по неизвестному полю — сообщение error, не исключение; releaseField забывает поле', () => {

@@ -25,6 +25,7 @@ export type ToWorkerMessage =
       midbandParams: MidbandParams
     }
   | { type: 'releaseField'; fieldId: number }
+  | { type: 'buildShadow'; requestId: number; fieldId: number }
   | {
       type: 'build'
       requestId: number
@@ -51,6 +52,14 @@ export type FromWorkerMessage =
       midShades: ArrayBuffer
       center: [number, number, number]
       bounds: PatchBounds
+    }
+  | {
+      type: 'shadowBuilt'
+      requestId: number
+      /** Uint16 half-float биты низкой карты тени (terrainShadowBits). */
+      bits: ArrayBuffer
+      width: number
+      height: number
     }
   | { type: 'fieldReady'; fieldId: number }
   | { type: 'error'; requestId: number | null; message: string }
