@@ -67,6 +67,41 @@ describe('TerrainHeightField: полутексельная билинейка', 
   })
 })
 
+describe('TerrainHeightField: полюс', () => {
+  // Крайняя строка равнопрямоугольной карты — кольцо на полутекселе от полюса;
+  // ближе него высота обязана сходиться к одной точке, а не зависеть от долготы
+  const W = 16
+  const H = 8
+  const A = 3000
+  const C = 20000
+  // наклонная плоскость через полюс: на малом кольце h = C ± A·cos(φ), φ — долгота центра текселя
+  const values = new Array<number>(W * H).fill(C)
+  for (let x = 0; x < W; x++) {
+    const phi = ((x + 0.5) / W) * 2 * Math.PI
+    values[x] = Math.round(C + A * Math.cos(phi))
+    values[(H - 1) * W + x] = Math.round(C - A * Math.cos(phi))
+  }
+  const rowMean = (row: number): number => values.slice(row * W, (row + 1) * W).reduce((sum, h) => sum + h, 0) / W
+  const field = new TerrainHeightField(makeMap(W, H, values), R_KM, MIDBAND_OFF)
+
+  it('в самой точке полюса высота не зависит от долготы и равна среднему крайней строки', () => {
+    for (const u of [0, 0.13, 0.5, 0.77]) {
+      expect(field.sampleMeters(u, 0)).toBeCloseTo(rowMean(0), 6)
+      expect(field.sampleMeters(u, 1)).toBeCloseTo(rowMean(H - 1), 6)
+    }
+  })
+
+  it('на кольце полутекселя — прежняя билинейка крайней строки (шва нет)', () => {
+    expect(field.sampleMeters(0.5 / W, 0.5 / H)).toBeCloseTo(values[0], 6)
+    expect(field.sampleMeters(0.5 / W, 1 - 0.5 / H)).toBeCloseTo(values[(H - 1) * W], 6)
+  })
+
+  it('внутри полутекселя наклонная плоскость сохраняется: отклонение от среднего ∝ расстоянию до полюса', () => {
+    expect(field.sampleMeters(0.5 / W, 0.25 / H)).toBeCloseTo(rowMean(0) + 0.5 * (values[0] - rowMean(0)), 6)
+    expect(field.sampleMeters(0.5 / W, 1 - 0.1 / H)).toBeCloseTo(rowMean(H - 1) + 0.2 * (values[(H - 1) * W] - rowMean(H - 1)), 6)
+  })
+})
+
 describe('TerrainHeightField: шов x=width при f64-округлении', () => {
   it('u на 1 ULP левее центра текселя 0 не даёт NaN и совпадает с sampleMeters(0.125, 0.5)', () => {
     // width=4: x = frac(u)·4 − 0.5 даёт крошечный минус, x += width округляется
