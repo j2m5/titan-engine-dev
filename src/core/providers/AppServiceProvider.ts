@@ -50,7 +50,7 @@ class AppServiceProvider extends ServiceProvider {
 
     // Один генератор на сцену (владение рендерером — по прецеденту
     // BrunetonAtmosphere, см. докблок ProceduralSurfaceGenerator): его
-    // ensureDiffuse доезжает до TerrainSphere через RenderableFactory, а
+    // ensureDiffuse зовёт RenderableFactory (легаси-сфера и TerrainSphere), а
     // dispose() — до Application.teardown() тем же путём, синглтон общий.
     this.app.singleton(
       Tokens.ProceduralSurfaceGenerator,

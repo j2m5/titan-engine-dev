@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Texture } from 'three'
 import '@/core/framework/TitanThree'
 import { Planet } from '@/core/renderables/Planet'
@@ -11,6 +11,9 @@ import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import type { ResourceObserver } from '@/core/services/ResourceObserver'
+import { proceduralDiffuseKey, type ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
+import { readRenderingData } from '@/core/helpers/renderingData'
+import type { IPlanetRenderingObject } from '@/core/models/types'
 import type { WebGLRenderer } from 'three'
 
 const MOON_ID = 19
@@ -75,6 +78,33 @@ describe('RenderableFactory: ветка рельефа', () => {
     const node = makeFactory().make(moon()) as unknown as { renderable: unknown }
 
     expect(node.renderable).toBeInstanceOf(Planet)
+  })
+
+  it('процедурное тело без карты: легаси Planet получает процедурный диффуз, а не плейсхолдер', () => {
+    let actor: Actor | undefined
+    for (let id = 1; id < 1000 && !actor; id++) {
+      const candidate = Actor.find(id)
+      if (candidate && readRenderingData<IPlanetRenderingObject>(candidate)?.proceduralSurface) actor = candidate
+    }
+    expect(actor).toBeDefined()
+    const key = proceduralDiffuseKey(actor!.getAttribute('id', -1) as number)
+    // генератор рендерит на GPU — здесь только регистрирует текстуру под ключом, как настоящий
+    const ensureDiffuse = vi.fn((): string => (seedTexture(key), key))
+    const factory = new RenderableFactory(
+      { domElement: { height: 1080 } } as unknown as WebGLRenderer,
+      {} as unknown as ResourceObserver,
+      new AtmosphereRegistry(),
+      new DepthVolumeRegistry(),
+      { ensureDiffuse } as unknown as ProceduralSurfaceGenerator
+    )
+
+    const node = factory.make(actor!) as unknown as { renderable: Planet }
+
+    expect(node.renderable).toBeInstanceOf(Planet)
+    expect(ensureDiffuse).toHaveBeenCalledWith(actor)
+    const material = node.renderable.material as PlanetMaterial
+    material.updateMaterial()
+    expect(material.uniforms.diffuseMap.value.name).toBe(key)
   })
 
   it('тело без height-ресурса (Земля) — легаси Planet всегда', () => {

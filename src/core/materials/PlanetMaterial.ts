@@ -222,7 +222,8 @@ class PlanetMaterial extends AbstractShaderMaterial {
    * Ключ диффуза тела: у процедурного (`data.proceduralSurface`) — синтетический
    * ключ рантайм-генератора (`ProceduralSurfaceGenerator.ensureDiffuse` уже
    * зарегистрировал под ним текстуру в resourceStorage к моменту постройки
-   * материала — см. TerrainSphere), у обычного — путь ресурса из БД.
+   * материала — см. RenderableFactory.buildPlanetSurface и TerrainSphere), у
+   * обычного — путь ресурса из БД.
    * Отсутствие ресурса — пустая строка: getTextureOrMake находит по ней
    * плейсхолдер, прежнее поведение тел без диффуза.
    */
