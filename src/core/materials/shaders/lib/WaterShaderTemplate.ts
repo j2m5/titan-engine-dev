@@ -42,6 +42,9 @@ const defaultUniforms = {
   uWaterRippleStrength: new Uniform(1),
   uWaterDepthRangeMeters: new Uniform(200),
   uWaterPixelAngle: new Uniform(WATER_DEFAULT_PIXEL_ANGLE),
+  // облачный слой над водой — карта и высотный fade материала рельефа (WaterMaterial.syncClouds)
+  uWaterCloudMap: new Uniform(null),
+  uWaterCloudOpacity: new Uniform(1),
   // Ряд волн (арка water-shader, Task 1) — все четыре инертны без
   // USE_WATER_WAVES (гейт по наличию waterNormal-текстуры, см. WaterMaterial):
   // сэмплер null, uTime/scale нулевые заглушки — реальные значения
@@ -172,6 +175,14 @@ export const WaterShaderTemplate: ShaderProps = {
       // поглощение по каналам, 1/м; глубина при depthA = 1, м
       uniform vec3 uWaterAbsorption;
       uniform float uWaterDepthRangeMeters;
+    #endif
+
+    #ifdef USE_WATER_CLOUD
+      #ifndef USE_WATER_DEPTH
+        #include <terrainUvFunctions>
+      #endif
+      uniform sampler2D uWaterCloudMap;
+      uniform float uWaterCloudOpacity;
     #endif
 
     #ifdef USE_SUN_TINT
@@ -738,6 +749,24 @@ export const WaterShaderTemplate: ShaderProps = {
         #endif
         // потолок: искры блумят, кляксы — нет; под пеной блика нет
         color += min(glint, WATER_GLINT_CEILING) * waveFade * (1.0 - foam);
+      #endif
+
+      #ifdef USE_WATER_CLOUD
+        // Облака над морем — тем же законом, что на суше (PlanetShaderTemplate). Альфа воды не
+        // меняется: рельеф под водой несёт те же облака, и после смешивания выходит ровно
+        // «облако поверх (вода поверх суши)»
+        vec3 cloudColor = texture2D(uWaterCloudMap, terrainUv(normalize(vLocalDir))).rgb;
+        float cloudAlpha = pow(dot(cloudColor, vec3(1.0)) / 3.0, 0.5);
+        float cloudLight = max(dot(normalize(vNormal), lightDirection), 0.0);
+        cloudColor *= pow(max(0.5 * cloudLight + 0.1, 0.0), 0.5);
+        cloudColor *= uWaterCloudOpacity;
+        cloudAlpha *= uWaterCloudOpacity;
+        #ifdef USE_SUN_TINT
+          vec3 cloudTerm = cloudColor * sunTintFactor * dayFactor;
+        #else
+          vec3 cloudTerm = cloudColor * dayFactor;
+        #endif
+        color = color * (1.0 - cloudAlpha) + cloudTerm;
       #endif
 
       gl_FragColor = vec4(color, alpha);

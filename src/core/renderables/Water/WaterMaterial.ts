@@ -84,6 +84,9 @@ class WaterMaterial extends AbstractShaderMaterial {
   /** Последний известный гейт USE_WATER_WAVES — тот же приём, что hasWaterDepth (needsUpdate только на фактической смене). */
   private hasWaterWaves = false
 
+  /** Есть ли облачный слой у рельефа-родителя (USE_WATER_CLOUD), см. syncClouds. */
+  private hasWaterCloud = false
+
   /**
    * Проводка закатного тинта из реестра атмосфер — ТА ЖЕ, что у палубы
    * (SunTintBinding): вода и суша тела красятся одной LUT и одной ручкой
@@ -259,10 +262,32 @@ class WaterMaterial extends AbstractShaderMaterial {
 
     this.hasWaterDepth = useWaterDepth
     this.hasWaterWaves = useWaterWaves
+    this.rebuildDefines()
+  }
+
+  /**
+   * Облачный слой над водой — карта и высотный fade материала рельефа-родителя,
+   * каждый видимый кадр (WaterSphere.onVisibleUpdate): облака рисует шейдер
+   * рельефа под водой, без своего слоя вода закрывала бы их над океаном.
+   * Перекомпиляция — только на появлении или уходе карты.
+   */
+  public syncClouds(cloudMap: Texture | null, opacity: number): void {
+    this.uniforms.uWaterCloudMap.value = cloudMap
+    this.uniforms.uWaterCloudOpacity.value = opacity
+
+    const useWaterCloud = cloudMap !== null
+    if (useWaterCloud === this.hasWaterCloud) return
+
+    this.hasWaterCloud = useWaterCloud
+    this.rebuildDefines()
+  }
+
+  private rebuildDefines(): void {
     this.defines = {
       ...this.baseDefines,
-      ...(useWaterDepth && { USE_WATER_DEPTH: '1' }),
-      ...(useWaterWaves && { USE_WATER_WAVES: '1' }),
+      ...(this.hasWaterDepth && { USE_WATER_DEPTH: '1' }),
+      ...(this.hasWaterWaves && { USE_WATER_WAVES: '1' }),
+      ...(this.hasWaterCloud && { USE_WATER_CLOUD: '1' }),
       // Пересборка от снимка стирает и дефайн тинта — он не про карты и живёт
       // своей синхронизацией (см. syncSunTint), поэтому восстанавливается
       // здесь же по текущей записи реестра.
@@ -297,6 +322,9 @@ class WaterMaterial extends AbstractShaderMaterial {
     this.uniforms.uWaterNormalMap.value = null
     this.hasWaterDepth = false
     this.hasWaterWaves = false
+    // облака вернёт ближайший syncClouds
+    this.hasWaterCloud = false
+    this.uniforms.uWaterCloudMap.value = null
     this.defines = { ...this.baseDefines }
     // Снимок конструирования тинта не знает — проводка забывает запись, чтобы
     // ближайший syncSunTint увидел смену и вернул дефайн одним рекомпилом.

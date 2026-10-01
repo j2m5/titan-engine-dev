@@ -74,6 +74,8 @@ interface WaterUniforms {
   uWaterRippleStrength: number
   uWaterDepthRangeMeters: number
   uWaterPixelAngle: number
+  uWaterCloudMap: Texture | null
+  uWaterCloudOpacity: number
   uSkyHighlightThreshold: number
   uSkyHighlightBoost: number
   uSkyFloor: number
@@ -215,6 +217,9 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
       uWaterDepthRangeMeters: new Uniform(WATER_SHALLOW_RANGE_METERS),
       // угол пикселя, рад: ставит материал по размеру вьюпорта и fov; до того — номинал 50°/1080p
       uWaterPixelAngle: new Uniform(WATER_DEFAULT_PIXEL_ANGLE),
+      // облачный слой — от материала рельефа каждый кадр (WaterMaterial.syncClouds)
+      uWaterCloudMap: new Uniform(null),
+      uWaterCloudOpacity: new Uniform(1),
       uSkyboxMap: new Uniform(null),
       uSkyHighlightThreshold: skySampleUniforms.uSkyHighlightThreshold,
       uSkyHighlightBoost: skySampleUniforms.uSkyHighlightBoost,

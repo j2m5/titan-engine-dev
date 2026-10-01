@@ -475,7 +475,8 @@ describe('Паритет: без USE_WATER_REFLECTION компилируемый
     // паритетного контракта Task 2, не дублирует, а подтверждает вложенность.
     // USE_SUN_TINT снимается вторым (арка «тинт солнца для воды») — весь её
     // вклад во фрагментник под своим гейтом, вне гейта только варьинг.
-    const stripped = stripGuardedBlock(stripGuardedBlock(frag, 'USE_WATER_WAVES'), 'USE_SUN_TINT')
+    // USE_WATER_CLOUD (облачный слой над водой) — весь под своим гейтом, снимается до тинта.
+    const stripped = stripGuardedBlock(stripGuardedBlock(stripGuardedBlock(frag, 'USE_WATER_WAVES'), 'USE_WATER_CLOUD'), 'USE_SUN_TINT')
 
     expect(normalizeIndent(normalizeBlankLines(stripped))).toBe(normalizeIndent(normalizeBlankLines(BASELINE_FRAGMENT_SHADER)))
   })
