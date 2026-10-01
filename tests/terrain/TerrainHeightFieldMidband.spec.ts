@@ -169,3 +169,65 @@ describe('TerrainHeightField: огибающая у уровня воды', () =
     expect(Math.abs(wetBand)).toBeLessThan(0.2 * Math.abs(dryBand))
   })
 })
+
+// Наклон полосы — производная ПОЛНОЙ высоты полосы strength·env·B: член ∂env·B
+// обязателен там, где огибающая меняется (урез с водным затуханием, перегиб склона)
+describe('TerrainHeightField: наклон полосы сходится с её высотой при переменной огибающей', () => {
+  const W = 2048
+  const H = 1024
+  const RADIUS_KM = 1000
+  const MIN_M = -40000
+  const MAX_M = 40000
+
+  /** Карта h(широта): зональная, одна строка на широту. */
+  function zonalMap(heightOfLatMeters: (latMeters: number) => number): HeightMapData {
+    const data = new Uint16Array(W * H)
+    for (let y = 0; y < H; y++) {
+      const lat = Math.PI / 2 - ((y + 0.5) / H) * Math.PI
+      const h = Math.max(MIN_M, Math.min(MAX_M, heightOfLatMeters(lat * RADIUS_KM * 1000)))
+      data.fill(Math.round(((h - MIN_M) / (MAX_M - MIN_M)) * 65535), y * W, (y + 1) * W)
+    }
+    return { width: W, height: H, minMeters: MIN_M, maxMeters: MAX_M, data }
+  }
+
+  function dirAt(latMeters: number, lon: number): Vector3 {
+    const lat = latMeters / (RADIUS_KM * 1000)
+    return new Vector3(-Math.cos(lon) * Math.cos(lat), Math.sin(lat), Math.sin(lon) * Math.cos(lat))
+  }
+
+  /** |наклон − конечная разность высоты полосы| по северу вдоль профиля; p90. */
+  function tiltErrorP90(field: TerrainHeightField, fromMeters: number, toMeters: number): number {
+    const band = (d: Vector3): number => field.heightMeters(d) - field.mapHeightMeters(d)
+    const tilt = new Vector2()
+    const errors: number[] = []
+    const n = 400
+    for (let k = 0; k < n; k++) {
+      const latM = fromMeters + ((toMeters - fromMeters) * k) / (n - 1)
+      const lon = 0.3 + k * 1e-4
+      field.midbandTilt(dirAt(latM, lon), tilt, 0)
+      const ds = 0.05
+      const fd = (band(dirAt(latM + ds, lon)) - band(dirAt(latM - ds, lon))) / (2 * ds)
+      errors.push(Math.abs(fd - tilt.y))
+    }
+    errors.sort((a, b) => a - b)
+    return errors[Math.floor(0.9 * n)]
+  }
+
+  it('берег с уклоном 0.3: у уреза затухание полосы входит в наклон', () => {
+    const field = new TerrainHeightField(zonalMap((lat) => 0.3 * lat), RADIUS_KM, {
+      ...MIDBAND_DEFAULTS,
+      midbandRidge: 0,
+      waterLevelMeters: 0
+    })
+    expect(tiltErrorP90(field, -600, 600)).toBeLessThan(0.005)
+  })
+
+  it('перегиб склона без воды: изменение огибающей по сетке входит в наклон', () => {
+    // равнина севернее экватора, склон 0.3 южнее: огибающая растёт через ячейку сетки
+    const field = new TerrainHeightField(zonalMap((lat) => (lat > 0 ? 0 : 0.3 * lat)), RADIUS_KM, {
+      ...MIDBAND_DEFAULTS,
+      midbandRidge: 0
+    })
+    expect(tiltErrorP90(field, -8000, 8000)).toBeLessThan(0.005)
+  })
+})

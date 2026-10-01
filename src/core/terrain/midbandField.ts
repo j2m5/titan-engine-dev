@@ -155,7 +155,10 @@ export class MidbandField {
     e: MidbandEnvelope,
     mapMeters: number,
     out: MidbandSample,
-    stepMeters: number = 0
+    stepMeters: number = 0,
+    /** Производная огибающей по дуге вдоль E/N, 1/м: член ∂env·B наклона (переменная огибающая). */
+    envGradE: number = 0,
+    envGradN: number = 0
   ): MidbandSample {
     out.heightMeters = 0
     out.tiltE = 0
@@ -233,8 +236,9 @@ export class MidbandField {
 
     const scale = this.strength * env
     out.heightMeters = scale * height
-    out.tiltE = polar ? 0 : scale * tE
-    out.tiltN = polar ? 0 : scale * tN
+    // полная производная strength·env·B: env·∂B + ∂env·B
+    out.tiltE = polar ? 0 : scale * tE + this.strength * height * envGradE
+    out.tiltN = polar ? 0 : scale * tN + this.strength * height * envGradN
 
     return out
   }

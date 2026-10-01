@@ -122,6 +122,13 @@ export function terrainHurst(p99Wide: number, p99Narrow: number): number {
 const TWO_PI = 2 * Math.PI
 
 /** Среднее raw строки карты — общая высота кольца у полюса. */
+/**
+ * Шаг разности огибающей, метры. Карта и сетка билинейны — внутри ячейки
+ * разность точна при любом малом шаге; крупный шаг размывал бы водное
+ * затухание (сотни метров по горизонтали у крутого берега).
+ */
+const ENVELOPE_GRAD_STEP_METERS = 1
+
 function rowMeanRaw(map: HeightMapData, row: number): number {
   let sum = 0
   for (let x = 0; x < map.width; x++) sum += map.data[row * map.width + x]
@@ -193,6 +200,7 @@ class TerrainHeightField {
   // скретчи полосы (Task 4): heightMeters/midbandTilt — горячий путь мешера
   // и коллизии, аллокаций там быть не должно
   private readonly midbandEnvScratch: MidbandEnvelope = { slopeTan: 0, curvature: 0, downE: 1, downN: 0 }
+  private readonly envGradScratch: MidbandEnvelope = { slopeTan: 0, curvature: 0, downE: 1, downN: 0 }
   private readonly midbandSampleScratch: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0, envelope: 0 }
   private readonly clearanceGrid: Float32Array
   private readonly clearanceGridWidth: number
@@ -551,8 +559,18 @@ class TerrainHeightField {
    * точка входа (heightMeters/midbandTilt и мешер зовут её, второй dirToUv не
    * нужен нигде). Нули при отключённой полосе (`midband === null`).
    * `stepMeters` — шаг вершин уровня, по нему взвешены октавы; 0 — вся полоса.
+   * `withTilt` — нужен ли наклон: производная огибающей стоит четырёх выборок
+   * сетки и карты, высоте (коллизия) она не нужна.
    */
-  public midbandSample(dir: Vector3, u: number, v: number, mapMeters: number, out: MidbandSample, stepMeters: number = 0): MidbandSample {
+  public midbandSample(
+    dir: Vector3,
+    u: number,
+    v: number,
+    mapMeters: number,
+    out: MidbandSample,
+    stepMeters: number = 0,
+    withTilt: boolean = true
+  ): MidbandSample {
     if (this.midband === null || this.envelopeGrid === null) {
       out.heightMeters = 0
       out.tiltE = 0
@@ -564,15 +582,35 @@ class TerrainHeightField {
     }
 
     const env = this.envelopeGrid.sample(u, v, this.midbandEnvScratch)
+    let gradE = 0
+    let gradN = 0
 
-    return this.midband.sample(dir.x, dir.y, dir.z, env, mapMeters, out, stepMeters)
+    if (withTilt) {
+      const cosLat = Math.hypot(dir.z, dir.x) // |UP × dir| — у полюса базиса нет
+      if (cosLat > 1e-4) {
+        // разность вперёд по u (восток) и −v (север) от огибающей точки: карта и
+        // сетка билинейны, внутри ячейки шаг 1 м даёт точную производную
+        const radiusMeters = this.radiusKm * 1000
+        const env0 = this.midband.envelope(env, mapMeters)
+        const du = ENVELOPE_GRAD_STEP_METERS / (2 * Math.PI * radiusMeters * cosLat)
+        const dv = ENVELOPE_GRAD_STEP_METERS / (Math.PI * radiusMeters)
+        gradE = (this.envelopeAt(u + du, v) - env0) / ENVELOPE_GRAD_STEP_METERS
+        gradN = (this.envelopeAt(u, v - dv) - env0) / ENVELOPE_GRAD_STEP_METERS
+      }
+    }
+
+    return this.midband.sample(dir.x, dir.y, dir.z, env, mapMeters, out, stepMeters, gradE, gradN)
+  }
+
+  private envelopeAt(u: number, v: number): number {
+    return this.midband!.envelope(this.envelopeGrid!.sample(u, v, this.envGradScratch), this.sampleMeters(u, v))
   }
 
   /** Канон высоты: карта + средняя полоса (`null` — полоса выключена, бит-в-бит карта). */
   public heightMeters(dir: Vector3): number {
     const uv = this.dirToUv(dir, this.uvScratch)
     const base = this.sampleMeters(uv.x, uv.y)
-    const sample = this.midbandSample(dir, uv.x, uv.y, base, this.midbandSampleScratch)
+    const sample = this.midbandSample(dir, uv.x, uv.y, base, this.midbandSampleScratch, 0, false)
 
     return base + sample.heightMeters
   }
