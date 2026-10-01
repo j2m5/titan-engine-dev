@@ -29,12 +29,12 @@ describe('WaterShaderTemplate: строковые ассерты (Френель
     expect(frag).not.toContain('SLOPE_RANGE')
   })
 
-  it('мелководье: mix(shallow -> deep) по каналу A', () => {
-    expect(frag).toContain('mix(uWaterShallowColor, uWaterColor, depthA)')
+  it('мелководье: поглощение по каналу A (Бер–Ламберт, см. WaterAbsorption.spec.ts)', () => {
+    expect(frag).toContain('float depthMeters = depthA * uWaterDepthRangeMeters;')
   })
 
-  it('альфа урезается к нулю на урезе: uWaterAlphaDeep * depthA', () => {
-    expect(frag).toContain('uWaterAlphaDeep * depthA')
+  it('альфа урезается к нулю на урезе: 1 − luma(T), при d = 0 T = 1', () => {
+    expect(frag).toContain('float depthAlpha = 1.0 - dot(transmittance, vec3(0.2126, 0.7152, 0.0722));')
   })
 
   it('без карты — константный режим: единый цвет uWaterColor, базовая альфа uWaterAlphaDeep (до grazing-подъёма)', () => {
@@ -154,6 +154,17 @@ describe('WaterMaterial: проводка ручек data (дефолты чес
     expect(material.uniforms.uWaterAlphaDeep.value).toBe(0.85)
     expect(material.uniforms.uWaterFresnelTint.value.getHex()).toBe(0x4a8ac4) // приёмочная волна 4, №1 — насыщеннее/синее (был 0x87b8d8, читался серовато)
     expect(material.uniforms.uWaterNightFloor.value).toBe(0.08)
+  })
+
+  it('data пуст — ручки поверхности воды на дефолтах', () => {
+    const material = new WaterMaterial(stubActor({ data: {} }))
+
+    expect(material.uniforms.uWaterRoughness.value).toBe(0.02)
+    expect(material.uniforms.uWaterAbsorption.value).toEqual(new Vector3(0.45, 0.07, 0.03))
+    expect(material.uniforms.uWaterRippleStrength.value).toBe(1)
+    expect(material.uniforms.uWaterDepthRangeMeters.value).toBe(200)
+    // номинальный кадр 50°/1080p до первого setPixelAngle
+    expect(material.uniforms.uWaterPixelAngle.value).toBeCloseTo((2 * Math.tan((50 * Math.PI) / 360)) / 1080, 15)
   })
 
   it('ручки data перекрывают дефолты — число и строка цвета обе конвенции (как dustColor кольца)', () => {

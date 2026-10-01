@@ -15,6 +15,7 @@ import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { UpdateContext } from '@/core/UpdateContext'
 import type { ResourceObserver } from '@/core/services/ResourceObserver'
+import { WATER_DETAIL_WRAP, type DetailWrap, wrapIndex, wrappedComponent } from '@/core/terrain/detailWrap'
 
 const MOON_ID = 19
 const MOON_RADIUS_KM = 1735.97 // physicalObjects: actorId 19 (id 16)
@@ -113,6 +114,23 @@ describe('WaterSphere: оболочка без смещения', { timeout: 300
     for (let f = 0; f < 60; f++) sphere.updateObject(makeCtx(0.05))
 
     expect(sphere.children.filter((c) => c instanceof Mesh)).toHaveLength(24)
+  })
+
+  it('патчи строятся с обёрткой WATER_DETAIL_WRAP: detailPos = позиция − k·W, W = w1 воды', () => {
+    const sphere = new WaterSphere(moon(), -667.2, makeRenderer())
+    const geometry = (sphere.children[0] as Mesh).geometry
+    const pos = geometry.getAttribute('position')
+    const center = geometry.getAttribute('patchCenter')
+    const d1 = geometry.getAttribute('detailPos')
+    const { w1 } = WATER_DETAIL_WRAP
+    const c = [center.getX(0), center.getY(0), center.getZ(0)]
+    const p = [pos.getX(0) + c[0], pos.getY(0) + c[1], pos.getZ(0) + c[2]]
+    expect((sphere as unknown as { detailWrap: DetailWrap }).detailWrap).toBe(WATER_DETAIL_WRAP)
+    const ks = c.map((v) => wrapIndex(v, w1))
+    expect(ks.some((k) => k !== 0)).toBe(true) // k = 0 сделал бы проверку пустой
+    for (let i = 0; i < 3; i++) {
+      expect(d1.array[i]).toBeCloseTo(wrappedComponent(p[i], ks[i], w1), 6)
+    }
   })
 
   it('материал патчей: transparent, depthWrite=false, depthTest=true', () => {
@@ -224,6 +242,24 @@ describe('WaterSphere: оболочка без смещения', { timeout: 300
       sphere.updateObject(makeCtx(500000))
 
       expect(sphere.material.defines.USE_WATER_DEPTH).toBeUndefined()
+    })
+  })
+
+  describe('угол пикселя для веса октав', () => {
+    it('setPixelAngle(50, 1080) ставит 2·tan(25°)/1080 рад', () => {
+      const sphere = new WaterSphere(moon(), -667.2, makeRenderer())
+      sphere.material.setPixelAngle(50, 1080)
+      expect(sphere.material.uniforms.uWaterPixelAngle.value).toBeCloseTo((2 * Math.tan((25 * Math.PI) / 180)) / 1080, 15)
+    })
+
+    it('onVisibleUpdate зовёт setPixelAngle(fov камеры, высота буфера рендерера)', () => {
+      const sphere = new WaterSphere(moon(), -667.2, makeRenderer(2160))
+      const spy = vi.spyOn(sphere.material, 'setPixelAngle')
+      const ctx = makeCtx(500000)
+      ctx.camera.fov = 42
+      sphere.updateObject(ctx)
+      expect(spy).toHaveBeenCalledWith(42, 2160)
+      expect(sphere.material.uniforms.uWaterPixelAngle.value).toBeCloseTo((2 * Math.tan((21 * Math.PI) / 180)) / 2160, 15)
     })
   })
 })

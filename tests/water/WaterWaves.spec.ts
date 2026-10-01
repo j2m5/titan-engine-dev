@@ -2,10 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { ShaderChunk } from 'three'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
 import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { WATER_DETAIL_WRAP, wrapUnitsFor } from '@/core/terrain/detailWrap'
+import {
+  WATER_DETAIL_PERIOD_METERS,
+  WATER_GLINT_CEILING,
+  WATER_WAVE_PERIODS_METERS,
+  footprintMeters,
+  octaveWeight
+} from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 import { WaterShader, WATER_WAVE_SMALLEST_PERIOD_METERS } from '@/core/materials/shaders/WaterShader'
 import { Actor } from '@/core/models/Actor'
-import { distanceForApparentSize } from '@/core/helpers/apparentSize'
-import { toThreeJSUnits } from '@/core/helpers/scaling'
 import {
   OCTANT_DIRECTIONS,
   angleDeg,
@@ -19,7 +25,10 @@ import {
   dirFromLatLon,
   foundationAlpha,
   foundationColor,
+  glintFromVectors,
   waveAlpha as waveAlphaMirror,
+  waveFadeFromWeights,
+  type WaveWeights,
   wavesColor,
   type Vec3
 } from './waterColorMirror'
@@ -28,21 +37,31 @@ import {
 // кванта по фактическому ассету, №2 whiteout-реориентация трипланара, №4
 // анизотропные октавы 2/3; финальное whole-branch ревью учтено — БЛОКЕР №1:
 // несущая компонента трипланара теряла знак оси проекции, см. describe ниже
-// «CPU-зеркало waterWaveNormal»): getNoise/sunLight/albedo дословно Water.js
-// (three/examples/jsm/objects/Water.js) там, где спека не требует адаптации;
-// трипланарный whiteout-бленд в body-локальном XYZ, fade по дистанции, гейт
+// «CPU-зеркало waterWaveNormal»): getNoise/albedo — Water.js
+// (three/examples/jsm/objects/Water.js) там, где спека не требует адаптации
+// (getNoiseWeighted — веса октав по футпринту пикселя, sunLight — только диффуз);
+// трипланарный whiteout-бленд в body-локальном XYZ, гейт
 // USE_WATER_WAVES не тронул ни одного символа Task 4 без карты (см. ниже).
 const frag: string = WaterShaderTemplate.fragmentShader
 const vert: string = WaterShaderTemplate.vertexShader
 
-describe('WaterShaderTemplate: getNoise — дословная структура Water.js, свой ряд периодов', () => {
-  it('4 выборки по разным периодам, сумма, *0.5-1.0 (та же форма, что Water.js)', () => {
-    expect(frag).toContain('vec4 getNoise(vec2 uv) {')
-    expect(frag).toContain('vec4 noise = texture2D(uWaterNormalMap, uv0) +')
-    expect(frag).toContain('texture2D(uWaterNormalMap, uv1) +')
-    expect(frag).toContain('texture2D(uWaterNormalMap, uv2) +')
-    expect(frag).toContain('texture2D(uWaterNormalMap, uv3);')
-    expect(frag).toContain('return noise * 0.5 - 1.0;')
+describe('WaterShaderTemplate: getNoiseWeighted — структура Water.js, свой ряд периодов, вес на октаву', () => {
+  it('4 выборки, декод 2t − 1, взвешенное среднее Σ wₖ·(2tₖ − 1) / max(Σ wₖ, 1e-4)', () => {
+    expect(frag).not.toContain('vec4 getNoise(vec2 uv)')
+    expect(frag).toContain('vec4 getNoiseWeighted(vec2 uv, vec4 w) {')
+    expect(frag).toContain('vec4 noise = w.x * (2.0 * texture2D(uWaterNormalMap, uv0) - 1.0) +')
+    expect(frag).toContain('w.y * (2.0 * texture2D(uWaterNormalMap, uv1) - 1.0) +')
+    expect(frag).toContain('w.z * (2.0 * texture2D(uWaterNormalMap, uv2) - 1.0) +')
+    expect(frag).toContain('w.w * (2.0 * texture2D(uWaterNormalMap, uv3) - 1.0);')
+    expect(frag).toContain('float wSum = w.x + w.y + w.z + w.w;')
+    // все веса 0 ⇒ плоская несущая (0,0,1), не 0/0 и не нулевой вектор под normalize
+    expect(frag).toContain('return (noise + vec4(0.0, 0.0, max(1e-4 - wSum, 0.0), 0.0)) / max(wSum, 1e-4);')
+  })
+
+  it('все веса 1 ⇒ прежнее среднее Water.js: Σ(2t − 1)/4 ≡ Σt·0.5 − 1', () => {
+    const taps = [0.1, 0.55, 0.9, 0.3]
+    const weighted = taps.reduce((a, t) => a + (2 * t - 1), 0) / Math.max(4, 1e-4)
+    expect(weighted).toBeCloseTo(taps.reduce((a, t) => a + t, 0) * 0.5 - 1, 12)
   })
 
   it('ряд периодов 3000/9000 м (октавы 0/1, скаляр) — честно поднят дважды (страж ниже читает фактический ассет)', () => {
@@ -77,7 +96,8 @@ describe('WaterShaderTemplate: getNoise — дословная структур�
     expect(frag).toContain('float t = uTime * uWaterWaveSpeed;')
   })
 
-  it('нет Grad-выборок (мипы решают фильтрацию сами, тайлящаяся карта без стохастики Task 4 террейна)', () => {
+  it('крупные октавы без Grad-выборок (мипы решают сами); Grad и производные — только в чанке мелких октав', () => {
+    expect(frag).toContain('#include <waterOctavesFunctions>')
     expect(frag).not.toContain('texture2DGradEXT')
     expect(frag).not.toContain('dFdx')
     expect(frag).not.toContain('dFdy')
@@ -157,18 +177,12 @@ describe('CPU-страж кванта домена: quant(R) = R_метры · 2
 })
 
 describe('WaterShaderTemplate: sunLight/albedo — дословно Water.js (getShadowMask опущен, теней нет)', () => {
-  it('sunLight: сигнатура и коэффициенты вызова 100/2/0.5 (дословно)', () => {
-    expect(frag).toContain(
-      'void sunLight(const vec3 surfaceNormal, const vec3 eyeDirection, float shiny, float spec, float diffuse, inout vec3 diffuseColor, inout vec3 specularColor) {'
-    )
-    expect(frag).toContain('sunLight(waveNormal, viewDir, 100.0, 2.0, 0.5, waveDiffuseLight, waveSpecularLight);')
-  })
-
-  it('sunLight: формулы diffuse/specular не тронуты (единственная адаптация — источник sunDirection)', () => {
-    expect(frag).toContain('vec3 reflection = normalize(reflect(-waterSunDirection, surfaceNormal));')
-    expect(frag).toContain('float direction = max(0.0, dot(eyeDirection, reflection));')
-    expect(frag).toContain('specularColor += pow(direction, shiny) * waterSunColor * spec;')
+  it('sunLight: только диффузная часть Water.js, коэффициент 0.5 (блик — waterGlintGlsl, WaterGlint.spec.ts)', () => {
+    expect(frag).toContain('void sunLight(const vec3 surfaceNormal, float diffuse, inout vec3 diffuseColor) {')
+    expect(frag).toContain('sunLight(waveNormal, 0.5, waveDiffuseLight);')
     expect(frag).toContain('diffuseColor += max(dot(waterSunDirection, surfaceNormal), 0.0) * waterSunColor * diffuse;')
+    expect(frag).not.toContain('specularColor')
+    expect(frag).not.toContain('pow(direction, shiny)')
   })
 
   it('reflectance по Шлику: rf0 = 0.3 (дословно)', () => {
@@ -187,11 +201,9 @@ describe('WaterShaderTemplate: sunLight/albedo — дословно Water.js (ge
     // Приёмочная волна 4, №1: Water.js vec3(0.1) — вклад ambient ЗЕРКАЛЬНОЙ
     // сцены, у нас зеркала нет — адаптация тонирует тот же вклад градиентным
     // skyColor (0.1·skyColor), не плоской серой константой.
-    // Блик — белый waterSunColor, не тинт неба: у Water.js reflectionSample —
-    // честное небо с солнцем в нём, у нас константный голубой градиент, и
-    // глинт выходил голубым (пик 1.1 в синем, 0.14 в красном).
-    expect(frag).toContain('0.1 * skyColor + waveReflectionSample * 0.9 + waterSunColor * waveSpecularLight,')
-    expect(frag).not.toContain('waveReflectionSample * waveSpecularLight')
+    // Солнечного спекуляра в смеси нет: блик добавляется после пены (WaterGlint.spec.ts)
+    expect(frag).toContain('0.1 * skyColor + waveReflectionSample * 0.9,')
+    expect(frag).not.toContain('waveSpecularLight')
     expect(frag).toContain('waveReflectance')
   })
 
@@ -220,16 +232,16 @@ describe('WaterShaderTemplate: трипланарный whiteout-бленд — 
   })
 
   it('каждая проекция реориентирована СВОИМ свизлом ДО суммирования — X→.zyx, Y→.xzy, Z→.xyz (порядок triplanarBlendNormal)', () => {
-    expect(frag).toContain('vec3 fromX = getNoise(p.zy).zyx * vec3(1.0, 1.5, 1.5) * vec3(axisSign.x, 1.0, 1.0);')
-    expect(frag).toContain('vec3 fromY = getNoise(p.xz).xzy * vec3(1.5, 1.0, 1.5) * vec3(1.0, axisSign.y, 1.0);')
-    expect(frag).toContain('vec3 fromZ = getNoise(p.xy).xyz * vec3(1.5, 1.5, 1.0) * vec3(1.0, 1.0, axisSign.z);')
+    expect(frag).toContain('vec3 fromX = getNoiseWeighted(p.zy, waveWeights).zyx * vec3(1.0, 1.5, 1.5) * vec3(axisSign.x, 1.0, 1.0);')
+    expect(frag).toContain('vec3 fromY = getNoiseWeighted(p.xz, waveWeights).xzy * vec3(1.5, 1.0, 1.5) * vec3(1.0, axisSign.y, 1.0);')
+    expect(frag).toContain('vec3 fromZ = getNoiseWeighted(p.xy, waveWeights).xyz * vec3(1.5, 1.5, 1.0) * vec3(1.0, 1.0, axisSign.z);')
   })
 
   it('Y-проекция (.xzy) — дословно одноплоскостная формула Water.js (world.xz + up=world.y), знаковая поправка отдельным множителем', () => {
     // Water.js: surfaceNormal = normalize(noise.xzy * vec3(1.5,1.0,1.5)) — тот
     // же множитель на ТОЙ ЖЕ свизл-схеме, ноль адаптации для этой проекции;
     // sign(dirLocal.y) — отдельный сомножитель ПОВЕРХ (см. describe ниже).
-    expect(frag).toContain('getNoise(p.xz).xzy * vec3(1.5, 1.0, 1.5)')
+    expect(frag).toContain('getNoiseWeighted(p.xz, waveWeights).xzy * vec3(1.5, 1.0, 1.5)')
   })
 
   it('БЛОКЕР финального ревью №1: несущая компонента каждой проекции домножена на sign(dirLocal.ось), не только на абс. вес', () => {
@@ -243,8 +255,22 @@ describe('WaterShaderTemplate: трипланарный whiteout-бленд — 
     expect(frag).toContain('vec3 perturbed = normalize(fromX * w.x + fromY * w.y + fromZ * w.z);')
   })
 
-  it('fade — mix к чистому dir̂ (амплитуда 1→0)', () => {
-    expect(frag).toContain('return normalize(mix(dirLocal, perturbed, fade));')
+  it('fade — mix к чистому dir̂ (амплитуда 1→0); рябь мелких октав добавлена к perturbed ДО mix', () => {
+    const add = frag.indexOf('perturbed = normalize(perturbed + ripple);')
+    const mixLine = frag.indexOf('return normalize(mix(dirLocal, perturbed, fade));')
+    expect(add).toBeGreaterThan(frag.indexOf('vec3 perturbed = normalize(fromX * w.x + fromY * w.y + fromZ * w.z);'))
+    expect(mixLine).toBeGreaterThan(add)
+  })
+
+  it('отклонение ряби считается до полюсного гарда — производные чанка в однородном потоке', () => {
+    const fn = frag.indexOf('vec3 waterWaveNormal(')
+    const ripple = frag.indexOf('vec3 ripple = waterRippleDeviation(posM, dirLocal, footprint, rippleVariance);', fn)
+    const guard = frag.indexOf('if (eastLen < 1e-4) return dirLocal;', fn)
+    expect(ripple).toBeGreaterThan(fn)
+    expect(ripple).toBeLessThan(guard)
+    expect(frag).toContain(
+      'vec3 waterWaveNormal(vec3 dirLocal, vec3 posM, float footprint, vec4 waveWeights, float fade, out float rippleVariance) {'
+    )
   })
 
   it('единственный normalMatrix-переход — пертурбация целиком тело-локальна', () => {
@@ -298,10 +324,32 @@ describe('CPU-зеркало waterWaveNormal: знак несущей компо
   })
 })
 
-describe('WaterShaderTemplate: fade по дистанции — юниформ uWaterWaveFadeMeters, начало 0.4×конец', () => {
-  it('формула fade пином (та же схема начала, что uDetailFadeRange террейна)', () => {
+describe('WaterShaderTemplate: затухание по октавам — вес по футпринту пикселя', () => {
+  it('домен мелких октав — vDetailPos в метрах', () => {
+    expect(frag).toContain('vec3 posM = vDetailPos * WATER_METERS_PER_UNIT;')
+  })
+
+  it('футпринт: дистанция в метрах · угол пикселя / max(μv, 0.2)', () => {
     expect(frag).toContain('float waveDist = length(vViewPosition);')
-    expect(frag).toContain('float waveFade = 1.0 - smoothstep(0.4 * uWaterWaveFadeMeters, uWaterWaveFadeMeters, waveDist);')
+    expect(frag).toContain(
+      'float waveFootprint = waterFootprintMeters(waveDist * WATER_METERS_PER_UNIT, uWaterPixelAngle, max(dot(viewDir, normal), 0.0));'
+    )
+  })
+
+  it('веса четырёх крупных октав по их эффективным периодам; waveFade — вес октавы 3000 м (не крупнейшей: с орбиты — фундамент)', () => {
+    expect(frag).toContain(
+      'vec4 waveWeights = vec4(waterOctaveWeight(WATER_WAVE_PERIOD_0, waveFootprint), waterOctaveWeight(WATER_WAVE_PERIOD_1, waveFootprint), waterOctaveWeight(WATER_WAVE_PERIOD_2, waveFootprint), waterOctaveWeight(WATER_WAVE_PERIOD_3, waveFootprint));'
+    )
+    expect(frag).toContain('float waveFade = waveWeights.x;')
+    expect(frag).not.toMatch(/waveFade = waveWeights\.[yzw]/)
+    expect(frag).not.toContain('uWaterWaveFadeMeters')
+  })
+
+  it('нормаль волн получает домен, футпринт и веса; дисперсия погасших мелких октав — в rippleVariance', () => {
+    expect(frag).toContain('float rippleVariance = 0.0;')
+    expect(frag).toContain(
+      'vec3 waveLocalNormal = waterWaveNormal(waveDirLocal, posM, waveFootprint, waveWeights, waveFade, rippleVariance);'
+    )
   })
 })
 
@@ -364,7 +412,14 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
     [0.05, 0.05, 0.08]
   ]
 
-  it('критерий 1: fadeFactor == 0 → blendedColor ЧИСЛЕННО (===) равен foundationColor, независимо от waves-входов', () => {
+  it('критерий 1: вес октавы 3000 м 0 → blendedColor ЧИСЛЕННО (===) равен foundationColor, даже когда 90 км ещё видна', () => {
+    // 2000 км при 50°/1080p — футпринт ≈ 1.7 км: 3000 м погасла (≤ 2f), 90 км целиком (≥ 4f)
+    const footprint = footprintMeters(2e6, (2 * Math.tan((25 * Math.PI) / 180)) / 1080, 1)
+    const weights = WATER_WAVE_PERIODS_METERS.map((p) => octaveWeight(p, footprint)) as unknown as WaveWeights
+    expect(weights[0]).toBe(0)
+    expect(weights[3]).toBe(1)
+    const waveFade = waveFadeFromWeights(weights)
+    expect(waveFade).toBe(0)
     let samples = 0
 
     for (const normal of normals) {
@@ -375,8 +430,8 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
               for (const reflectionSample of foreignReflectionSamples) {
                 const foundation = foundationColor(bc, fresnelTint, normal, viewDir, lightDir, nightFloor)
                 const blended = blendedColor(
-                  { baseColor: bc, fresnelTint, reflectionSample, skyColor, normal, waveNormal, viewDir, lightDir, sunColor, nightFloor },
-                  0
+                  { baseColor: bc, fresnelTint, reflectionSample, skyColor, normal, waveNormal, viewDir, lightDir, sunColor, nightFloor, alpha2: 1e-4 },
+                  waveFade
                 )
 
                 expect(blended[0]).toBe(foundation[0])
@@ -418,7 +473,8 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
       viewDir: viewDirs[0],
       lightDir: lightDirs[0],
       sunColor,
-      nightFloor
+      nightFloor,
+      alpha2: 0.02 ** 2
     }
 
     // mix — линейная функция fade по построению (см. blendedColor): шаг по
@@ -440,32 +496,33 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
     }
   })
 
-  it('критерий 3: вклад waves (спекуляр/reflectance-надбавка) растёт СТРОГО от fade — линейно, ноль на пороге', () => {
+  it('критерий 3: вклад waves (блик/reflectance-надбавка) растёт СТРОГО от fade — линейно, ноль на пороге', () => {
     const inputs = {
       baseColor,
       fresnelTint,
       reflectionSample: [1, 1, 1] as Vec3, // максимально яркий — контрастная проверка
       skyColor,
       normal: normals[1],
-      waveNormal: normals[1], // специально совпадает с normal — специулярный пик виден
+      waveNormal: normals[1],
       viewDir: viewDirs[0],
       lightDir: lightDirs[0],
       sunColor,
-      nightFloor
+      nightFloor,
+      alpha2: 0.3 // широкий лепесток: блик в этой геометрии ненулевой
     }
 
     const foundation = foundationColor(inputs.baseColor, inputs.fresnelTint, inputs.normal, inputs.viewDir, inputs.lightDir, inputs.nightFloor)
     const waves = wavesColor(inputs.baseColor, inputs.reflectionSample, inputs.skyColor, inputs.waveNormal, inputs.viewDir, inputs.lightDir, inputs.sunColor, inputs.nightFloor)
+    const glint = glintFromVectors(inputs.waveNormal, inputs.lightDir, inputs.viewDir, inputs.alpha2)
+    expect(glint).toBeGreaterThan(0)
 
-    // mix — линейная функция: blended(fade) === foundation + fade*(waves-foundation)
-    // покомпонентно. Проверяем ЭТУ ТОЧНУЮ линейность на нескольких fade —
-    // она же доказывает «рост строго от fade, ноль на пороге» аналитически,
-    // не приближённо.
+    // blended(fade) === foundation + fade·(waves − foundation) + fade·min(glint, 4)
+    // покомпонентно — линейно по fade, ноль на пороге.
     for (const fade of [0, 0.25, 0.5, 0.75, 1]) {
       const blended = blendedColor(inputs, fade)
 
       for (let c = 0; c < 3; c++) {
-        const expected = foundation[c] + fade * (waves[c] - foundation[c])
+        const expected = foundation[c] + fade * (waves[c] - foundation[c]) + fade * Math.min(sunColor[c] * glint, WATER_GLINT_CEILING)
 
         expect(blended[c]).toBeCloseTo(expected, 12)
       }
@@ -480,7 +537,7 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
 // viewDir, waves-путь по waveNormal/waveTheta с вычетом пола waveRf0.
 describe('WaterShaderTemplate: alpha поднимается к 1.0 на скользящем взгляде (приёмочная волна 4, №2)', () => {
   it('фундаментный путь пином: depthAlpha → alpha = mix(depthAlpha, 1.0, fresnel)', () => {
-    expect(frag).toContain('float depthAlpha = uWaterAlphaDeep * depthA;')
+    expect(frag).toContain('float depthAlpha = 1.0 - dot(transmittance, vec3(0.2126, 0.7152, 0.0722));')
     expect(frag).toContain('float depthAlpha = uWaterAlphaDeep;')
     expect(frag).toContain('float alpha = mix(depthAlpha, 1.0, fresnel);')
   })
@@ -676,9 +733,13 @@ const BASELINE_FRAGMENT_SHADER = `
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
+    varying vec3 vDetailPos;
 
     #ifdef USE_WATER_DEPTH
       #include <terrainUvFunctions>
+      // поглощение по каналам, 1/м; глубина при depthA = 1, м
+      uniform vec3 uWaterAbsorption;
+      uniform float uWaterDepthRangeMeters;
     #endif
 
     void main() {
@@ -696,12 +757,18 @@ const BASELINE_FRAGMENT_SHADER = `
         vec3 dirLocal = normalize(vLocalDir);
         vec2 uv = terrainUv(dirLocal);
         float depthA = texture2D(uSlopeMap, uv).a;
-        vec3 baseColor = mix(uWaterShallowColor, uWaterColor, depthA);
-        // depthAlpha → 0 на урезе: закрывает z-fighting стыка воды и берега
-        // без масок (см. WaterMaterial докблок depthWrite=false). Финальная
-        // alpha (ниже, после fresnel) поднимает ЭТОТ пол к 1.0 на скользящем
-        // взгляде — здесь только базовая непрозрачность по глубине.
-        float depthAlpha = uWaterAlphaDeep * depthA;
+        // Бер–Ламберт по каналам: путь вниз и обратно вверх по столбу;
+        // μv — по аналитической нормали: длину пути задаёт геометрия, не рябь.
+        float depthMeters = depthA * uWaterDepthRangeMeters;
+        float muV = max(dot(viewDir, normal), 0.1);
+        vec3 transmittance = exp(-uWaterAbsorption * depthMeters * (1.0 + 1.0 / muV));
+        // Пропускание одно на все каналы (одно альфа-смешивание): альфа по
+        // яркости 1 − T (Rec.709), цвет делён на неё — вклад слоя (до клампа)
+        // uWaterColor·(1 − T). На урезе d = 0 ⇒ alpha = 0: закрывает
+        // z-fighting стыка без масок (см. WaterMaterial, depthWrite=false).
+        // Финальная alpha (ниже) поднимает этот пол к 1.0 по Френелю.
+        float depthAlpha = 1.0 - dot(transmittance, vec3(0.2126, 0.7152, 0.0722));
+        vec3 baseColor = min(uWaterColor * (1.0 - transmittance) / max(depthAlpha, 1e-3), vec3(1.0));
       #else
         // Без запечённой глубины (карты нет / тело не готово Task 6) —
         // константный режим: единая непрозрачность, единый глубокий цвет.
@@ -747,7 +814,7 @@ describe('Паритет: без USE_WATER_WAVES компилируемый фр
   // во фрагментник живёт под своим гейтом, вне гейта прибавилось только
   // объявление варьинга vLocalLightDirection — оно в снимке выше.
   it('вырезав все блоки #ifdef USE_WATER_WAVES...#endif, получаем ровно снимок ДО Task 1', () => {
-    const stripped = stripGuardedBlock(stripGuardedBlock(frag, 'USE_WATER_WAVES'), 'USE_SUN_TINT')
+    const stripped = stripGuardedBlock(stripGuardedBlock(stripGuardedBlock(frag, 'USE_WATER_WAVES'), 'USE_WATER_CLOUD'), 'USE_SUN_TINT')
 
     expect(normalizeIndent(normalizeBlankLines(stripped))).toBe(normalizeIndent(normalizeBlankLines(BASELINE_FRAGMENT_SHADER)))
   })
@@ -781,53 +848,31 @@ describe('WaterShader: uWaterWaveScale — радиус тела (метры) ×
   })
 })
 
-describe('WaterShader: uWaterWaveFadeMeters — дефолт по видимому размеру мельчайшей октавы (fov 50°/1080p, 1.5px)', () => {
-  function stubActor(data: Record<string, unknown> = {}): Actor {
-    return {
-      renderingObject: { getAttribute: () => data },
+describe('WaterShader: дистанционного fade больше нет — его роль у веса октавы 3000 м', () => {
+  it('юниформа uWaterWaveFadeMeters нет ни у шейдера, ни у шаблона; ручка данных не читается', () => {
+    const shader = new WaterShader({
+      renderingObject: { getAttribute: () => ({ waterWaveFadeMeters: 5000 }) },
       resources: { where: () => ({ first: () => undefined }) },
       physicalObject: { getAttribute: () => 6360 }
-    } as unknown as Actor
-  }
+    } as unknown as Actor)
 
-  it('дефолт = distanceForApparentSize(мельчайший период, 1.5px, 50°, 1080) в юнитах сцены', () => {
-    const shader = new WaterShader(stubActor())
-    const expectedUnits = distanceForApparentSize(
-      toThreeJSUnits(WATER_WAVE_SMALLEST_PERIOD_METERS / 1000),
-      1.5,
-      50,
-      1080
-    )
+    expect(shader.uniforms).not.toHaveProperty('uWaterWaveFadeMeters')
+    expect(WaterShaderTemplate.uniforms).not.toHaveProperty('uWaterWaveFadeMeters')
+    // номинальный кадр 50°/1080p до первого setPixelAngle: с 0 все веса были бы 1 с орбиты
+    expect(shader.uniforms.uWaterPixelAngle.value).toBeCloseTo((2 * Math.tan((50 * Math.PI) / 360)) / 1080, 15)
+    expect(WaterShaderTemplate.uniforms.uWaterPixelAngle.value).toBeCloseTo((2 * Math.tan((50 * Math.PI) / 360)) / 1080, 15)
+  })
+})
 
-    expect(shader.uniforms.uWaterWaveFadeMeters.value).toBeCloseTo(expectedUnits, 10)
+describe('домен мелкой ряби: WATER_DETAIL_WRAP и vDetailPos', () => {
+  it('w1 обёртки = wrapUnitsFor(период мелкой ряби)', () => {
+    expect(WATER_DETAIL_WRAP.w1).toBe(wrapUnitsFor(WATER_DETAIL_PERIOD_METERS))
   })
 
-  it('ручка waterWaveFadeMeters (метры) перекрывает дефолт, конвертируется в юниты сцены на CPU', () => {
-    const shader = new WaterShader(stubActor({ waterWaveFadeMeters: 5000 }))
-
-    expect(shader.uniforms.uWaterWaveFadeMeters.value).toBeCloseTo(toThreeJSUnits(5), 10)
-  })
-
-  // Финальное whole-branch ревью, №4: waterWaveScale не входил ни в дефолт
-  // fade, ни в квант-страж — scale=2 сжимает эффективный мельчайший период
-  // (period/scale = 1500 м) без предупреждения, мерцание возвращается.
-  it('scale=2 → дефолт fade РОВНО вдвое ближе (эффективный период вдвое мельче)', () => {
-    const base = new WaterShader(stubActor())
-    const scaled = new WaterShader(stubActor({ waterWaveScale: 2 }))
-
-    expect(scaled.uniforms.uWaterWaveFadeMeters.value).toBeCloseTo(
-      (base.uniforms.uWaterWaveFadeMeters.value as number) / 2,
-      10
-    )
-  })
-
-  it('явная ручка waterWaveFadeMeters НЕ делится на scale — автор данных берёт число метров на свою ответственность', () => {
-    const withoutScale = new WaterShader(stubActor({ waterWaveFadeMeters: 5000 }))
-    const withScale = new WaterShader(stubActor({ waterWaveFadeMeters: 5000, waterWaveScale: 2 }))
-
-    expect(withScale.uniforms.uWaterWaveFadeMeters.value).toBeCloseTo(
-      withoutScale.uniforms.uWaterWaveFadeMeters.value as number,
-      10
-    )
+  it('вершинник читает атрибут detailPos и отдаёт vDetailPos; фрагментник объявляет varying', () => {
+    expect(vert).toContain('attribute vec3 detailPos;')
+    expect(vert).toContain('varying vec3 vDetailPos;')
+    expect(vert).toContain('vDetailPos = detailPos;')
+    expect(frag).toContain('varying vec3 vDetailPos;')
   })
 })

@@ -89,7 +89,7 @@ describe('WaterShaderTemplate: пена прибоя из градиента к�
     expect(frag).toContain('#define FOAM_TEAR 0.5')
     expect(frag).toContain('foam *= mix(1.0 - FOAM_TEAR, 1.0, smoothstep(0.3, 0.7, noise + 0.3 * foam));')
     // шум пены — из той же текстуры нормалей волн, других сэмплеров в шаблоне нет
-    expect((frag.match(/uniform sampler2D /g) ?? []).length).toBe(2) // uSlopeMap + uWaterNormalMap
+    expect((frag.match(/uniform sampler2D /g) ?? []).length).toBe(3) // uSlopeMap + uWaterNormalMap + uWaterCloudMap (облачный слой)
     expect(frag).toContain('float foamNoise(vec3 dirLocal, vec3 p) {')
   })
 

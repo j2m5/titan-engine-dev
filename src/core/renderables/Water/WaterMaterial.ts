@@ -84,6 +84,9 @@ class WaterMaterial extends AbstractShaderMaterial {
   /** Последний известный гейт USE_WATER_WAVES — тот же приём, что hasWaterDepth (needsUpdate только на фактической смене). */
   private hasWaterWaves = false
 
+  /** Есть ли облачный слой у рельефа-родителя (USE_WATER_CLOUD), см. syncClouds. */
+  private hasWaterCloud = false
+
   /**
    * Проводка закатного тинта из реестра атмосфер — ТА ЖЕ, что у палубы
    * (SunTintBinding): вода и суша тела красятся одной LUT и одной ручкой
@@ -195,9 +198,9 @@ class WaterMaterial extends AbstractShaderMaterial {
    * пересобрана с флагом --water-level-meters (Task 1), несёт 3-канальную
    * (RGB) текстуру — GPU-сэмплер `.a` такой текстуры отдаёт 1.0 по спеке
    * WebGL (нет альфа-плейна = непрозрачно), а не «канала нет». Гейт по факту
-   * ставится (текстура ЕСТЬ в реестре), но depthA≡1.0 везде — визуально это
-   * совпадает с константным режимом (mix(shallow,deep,1)=deep), однако кодовый
-   * путь другой (USE_WATER_DEPTH=1, не #else) — если понадобится отличать
+   * ставится (текстура ЕСТЬ в реестре), но depthA≡1.0 везде — вода почти
+   * непрозрачна (поглощение на пределе глубины), плотнее константного режима
+   * (потолок 0.85); кодовый путь другой (USE_WATER_DEPTH=1, не #else) — если понадобится отличать
    * «карты нет» от «карта старого формата», нужен отдельный маркер не отсюда.
    *
    * `elapsed` — секунды с запуска часов рендера (`UpdateContext.elapsed`,
@@ -211,7 +214,7 @@ class WaterMaterial extends AbstractShaderMaterial {
    * Без сворачивания (`epoch - floor(epoch/wrap)*wrap`, как у
    * BlackHoleMaterial): там wrap кратен РЕАЛЬНОМУ периоду вращения диска —
    * физически осмысленная граница. Здесь делители времени — авторские
-   * художественные константы (см. WaterShaderTemplate.getNoise), их НОК на
+   * художественные константы (см. WaterShaderTemplate.getNoiseWeighted), их НОК на
    * порядки больше любой разумной длины сессии, и общий делитель нашёлся бы
    * только у 3 из 8 — сворачивание на такой границе давало бы фазовый скачок
    * у 5 октав из 8, а не «честную» точку. Float32 на реальных длинах сессий
@@ -259,10 +262,32 @@ class WaterMaterial extends AbstractShaderMaterial {
 
     this.hasWaterDepth = useWaterDepth
     this.hasWaterWaves = useWaterWaves
+    this.rebuildDefines()
+  }
+
+  /**
+   * Облачный слой над водой — карта и высотный fade материала рельефа-родителя,
+   * каждый видимый кадр (WaterSphere.onVisibleUpdate): облака рисует шейдер
+   * рельефа под водой, без своего слоя вода закрывала бы их над океаном.
+   * Перекомпиляция — только на появлении или уходе карты.
+   */
+  public syncClouds(cloudMap: Texture | null, opacity: number): void {
+    this.uniforms.uWaterCloudMap.value = cloudMap
+    this.uniforms.uWaterCloudOpacity.value = opacity
+
+    const useWaterCloud = cloudMap !== null
+    if (useWaterCloud === this.hasWaterCloud) return
+
+    this.hasWaterCloud = useWaterCloud
+    this.rebuildDefines()
+  }
+
+  private rebuildDefines(): void {
     this.defines = {
       ...this.baseDefines,
-      ...(useWaterDepth && { USE_WATER_DEPTH: '1' }),
-      ...(useWaterWaves && { USE_WATER_WAVES: '1' }),
+      ...(this.hasWaterDepth && { USE_WATER_DEPTH: '1' }),
+      ...(this.hasWaterWaves && { USE_WATER_WAVES: '1' }),
+      ...(this.hasWaterCloud && { USE_WATER_CLOUD: '1' }),
       // Пересборка от снимка стирает и дефайн тинта — он не про карты и живёт
       // своей синхронизацией (см. syncSunTint), поэтому восстанавливается
       // здесь же по текущей записи реестра.
@@ -283,6 +308,11 @@ class WaterMaterial extends AbstractShaderMaterial {
     this.sunTint.sync()
   }
 
+  /** Угол пикселя, рад: 2·tan(fov/2)/высота буфера — вход футпринта весов октав волн; буфер 0 px не даёт ∞. */
+  public setPixelAngle(fovDegrees: number, viewportHeight: number): void {
+    this.uniforms.uWaterPixelAngle.value = (2 * Math.tan((fovDegrees * Math.PI) / 360)) / Math.max(viewportHeight, 1)
+  }
+
   public resetMaterial(): void {
     this.slopePath = WaterMaterial.resolveSlopePath(this.model)
     this.waterNormalPath = WaterMaterial.resolveWaterNormalPath(this.model)
@@ -292,6 +322,9 @@ class WaterMaterial extends AbstractShaderMaterial {
     this.uniforms.uWaterNormalMap.value = null
     this.hasWaterDepth = false
     this.hasWaterWaves = false
+    // облака вернёт ближайший syncClouds
+    this.hasWaterCloud = false
+    this.uniforms.uWaterCloudMap.value = null
     this.defines = { ...this.baseDefines }
     // Снимок конструирования тинта не знает — проводка забывает запись, чтобы
     // ближайший syncSunTint увидел смену и вернул дефайн одним рекомпилом.

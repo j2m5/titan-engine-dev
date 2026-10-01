@@ -51,7 +51,7 @@ export enum ResourceTypes {
   detailArm,
   detailNormal2,
   // Normal-карта ряби воды (арка water-shader, Task 1) — тайлящийся сет,
-  // трипланарный getNoise сэмплирует её 3×4 раза (см. WaterShaderTemplate).
+  // трипланарный getNoiseWeighted сэмплирует её 3×4 раза (см. WaterShaderTemplate).
   // resident, wrapS+wrapT Repeat (спека Task 1) — как height/slope, не стрим.
   waterNormal
 }
@@ -291,27 +291,19 @@ export interface IPlanetRenderingObject {
   // включённые волны.
 
   /**
-   * Множитель домена getNoise (см. WaterShaderTemplate) — 1 = периоды ряда
+   * Множитель домена getNoiseWeighted (см. WaterShaderTemplate) — 1 = периоды ряда
    * как есть, без искусственного зума. Безопасный диапазон: ≤1 для тел
    * радиусом ≤8192 км (тот же потолок, что у CPU-стража кванта,
    * WATER_WAVE_SMALLEST_PERIOD_METERS в WaterShader.ts) — scale>1 сжимает
    * ЭФФЕКТИВНЫЙ мельчайший период (period/scale) точно так же, как рост
    * радиуса тела растягивает quant(R): страж кванта считает по TS-константе
    * периода БЕЗ этой ручки и не заметит превышение на рантайме (финальное
-   * whole-branch ревью, №4) — дефолт `waterWaveFadeMeters` компенсирует
-   * автоматически (делится на scale), но явную ручку fade при scale>1
-   * придётся уменьшать самостоятельно на тот же множитель.
+   * whole-branch ревью, №4); веса октав по футпринту считают номинальные
+   * периоды и scale не учитывают.
    */
   waterWaveScale?: number
-  /** Множитель скорости прокрутки uTime в getNoise. 1 = как есть. */
+  /** Множитель скорости прокрутки uTime в getNoiseWeighted. 1 = как есть. */
   waterWaveSpeed?: number
-  /**
-   * Дистанция затухания амплитуды нормали волн до чистого dir̂, метры камеры
-   * до поверхности. Без ручки — дефолт: дистанция, где период мельчайшей
-   * октавы (см. WaterShaderTemplate) опускается ниже ~1.5 экранного пикселя
-   * (fov 50°/1080p, см. WaterShader).
-   */
-  waterWaveFadeMeters?: number
 
   /**
    * Дисторсия выборки отражения фоновой кубмапы (арка water-shader, Task 2,
@@ -323,6 +315,15 @@ export interface IPlanetRenderingObject {
    * явной записью (фикс-раунд 1, находка №7), реализована здесь.
    */
   waterDistortion?: number
+
+  // --- Ручки поверхности воды (арка «Вода 2»). Дефолты — waterSurfaceParams.ts.
+
+  /** Базовая шероховатость блика, (0, 1]. Дефолт 0.02. */
+  waterRoughness?: number
+  /** Поглощение толщи по RGB, 1/м, каждый > 0. Дефолт [0.45, 0.07, 0.03]. */
+  waterAbsorption?: [number, number, number]
+  /** Сила мелких октав ряби 2560–10 м; 0 — только крупные. Дефолт 1. */
+  waterRippleStrength?: number
 
   // --- Ручки пены прибоя и мокрой кромки берега (арка surf-foam). Все
   // опциональны: отсутствие → дефолты waterFoamParams.ts. Активны только у

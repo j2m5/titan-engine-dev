@@ -2,12 +2,13 @@ import { Color, CubeTexture, Texture, Uniform, Vector2, Vector3 } from 'three'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { WaterShaderTemplate as Shader } from '@/core/materials/shaders/lib/WaterShaderTemplate'
 import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
+import { WATER_DEFAULT_PIXEL_ANGLE } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 import { Actor } from '@/core/models/Actor'
 import { IPlanetRenderingObject } from '@/core/models/types'
-import { distanceForApparentSize } from '@/core/helpers/apparentSize'
 import { clampSunTintStrength } from '@/core/materials/SunTintBinding'
-import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { resolveWaterFoamParams } from '@/core/terrain/waterFoamParams'
+import { resolveWaterSurfaceParams } from '@/core/terrain/waterSurfaceParams'
+import { WATER_SHALLOW_RANGE_METERS } from '@/core/terrain/waterLevel'
 
 // Дефолты ручек воды — честно помеченные заглушки (см. IPlanetRenderingObject),
 // приёмка по виду за владельцем (см. память «Flare Visual Checks Are Owner's»).
@@ -34,7 +35,7 @@ const DEFAULT_WATER_WAVE_SCALE = 1
 const DEFAULT_WATER_WAVE_SPEED = 1
 
 /**
- * Мельчайший период ряда getNoise, метры — ОБЯЗАН совпадать с первым
+ * Мельчайший период ряда getNoiseWeighted, метры — ОБЯЗАН совпадать с первым
  * делителем в WaterShaderTemplate.ts (`uv / 3000.0`, октава 0). Дублирование
  * неизбежно (GLSL-строка не импортирует TS-константы) — WaterWaves.spec.ts
  * пиннует обе стороны и ловит расхождение.
@@ -50,30 +51,6 @@ const DEFAULT_WATER_WAVE_SPEED = 1
  */
 export const WATER_WAVE_SMALLEST_PERIOD_METERS = 3000
 
-/** Целевой видимый размер мельчайшей октавы для дефолта fade — см. IPlanetRenderingObject.waterWaveFadeMeters. */
-const WATER_WAVE_FADE_TARGET_PIXELS = 1.5
-const WATER_WAVE_FADE_FOV_DEGREES = 50
-const WATER_WAVE_FADE_VIEWPORT_HEIGHT = 1080
-
-/**
- * Базовый дефолт uWaterWaveFadeMeters при waveScaleHandle=1 — юниты сцены
- * (не метры, несмотря на имя ручки в data, см. её докблок): дистанция, на
- * которой мельчайший период getNoise (WATER_WAVE_SMALLEST_PERIOD_METERS)
- * опускается ниже WATER_WAVE_FADE_TARGET_PIXELS при номинале fov/viewport.
- * Та же формула, что starLodSwitchDistance (apparentSize.ts). При
- * waveScaleHandle≠1 фактический дефолт (см. конструктор WaterShader ниже)
- * делится на handle — увеличение ручки сжимает домен getNoise, эффективный
- * мельчайший период = период/scale, fade обязан подступать пропорционально
- * ближе, иначе мерцание возвращается на дистанциях, где страж кванта уже
- * не проверял этот масштаб (финальное whole-branch ревью, №4).
- */
-const DEFAULT_WATER_WAVE_FADE_UNITS = distanceForApparentSize(
-  toThreeJSUnits(WATER_WAVE_SMALLEST_PERIOD_METERS / 1000),
-  WATER_WAVE_FADE_TARGET_PIXELS,
-  WATER_WAVE_FADE_FOV_DEGREES,
-  WATER_WAVE_FADE_VIEWPORT_HEIGHT
-)
-
 interface WaterUniforms {
   lightPosition: Vector3
   uSlopeMap: Texture | null
@@ -86,13 +63,19 @@ interface WaterUniforms {
   uTime: number
   uWaterWaveScale: number
   uWaterWaveSpeed: number
-  uWaterWaveFadeMeters: number
   // Отражение фоновой кубмапы (арка water-shader, Task 2). uSkyboxMap — сама
   // текстура, доставляется WaterMaterial конструктором (не data-ручка, см.
   // её докблок), здесь только null-заглушка. Набор общей выборки фона —
   // createSkyboxSampleUniforms, ЖЕЛЕЗНЫЙ констрейнт (см. SkyboxSample chunk).
   uSkyboxMap: CubeTexture | null
   uWaterDistortion: number
+  uWaterRoughness: number
+  uWaterAbsorption: Vector3
+  uWaterRippleStrength: number
+  uWaterDepthRangeMeters: number
+  uWaterPixelAngle: number
+  uWaterCloudMap: Texture | null
+  uWaterCloudOpacity: number
   uSkyHighlightThreshold: number
   uSkyHighlightBoost: number
   uSkyFloor: number
@@ -142,8 +125,10 @@ type WaterRenderingData = Pick<
   | 'waterNightFloor'
   | 'waterWaveScale'
   | 'waterWaveSpeed'
-  | 'waterWaveFadeMeters'
   | 'waterDistortion'
+  | 'waterRoughness'
+  | 'waterAbsorption'
+  | 'waterRippleStrength'
   | 'sunTintStrength'
   | 'waterFoamStrength'
   | 'waterFoamShoreMeters'
@@ -182,10 +167,10 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
     // масштаб 0 безвреден.
     const radiusMeters = (this.model.physicalObject?.getAttribute('radius') ?? 0) * 1000
     const waveScaleHandle = waterData.waterWaveScale ?? DEFAULT_WATER_WAVE_SCALE
-    const waveFadeMetersHandle = waterData.waterWaveFadeMeters
 
     // Пена прибоя — тот же приём именования тела в ошибках, что PlanetShader.ts:198.
     const foam = resolveWaterFoamParams(waterData, this.model.getAttribute?.('name', '?') ?? '?')
+    const surface = resolveWaterSurfaceParams(waterData, this.model.getAttribute?.('name', '?') ?? '?')
 
     // Общий набор ручек выборки фона (highlight/floor/gain/flip) — та же
     // фабрика, что SkyboxBackground/BlackHole (ЖЕЛЕЗНЫЙ констрейнт, см.
@@ -208,19 +193,6 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
       uTime: new Uniform(0),
       uWaterWaveScale: new Uniform(waveScaleHandle * radiusMeters),
       uWaterWaveSpeed: new Uniform(waterData.waterWaveSpeed ?? DEFAULT_WATER_WAVE_SPEED),
-      // Дефолт делится на waveScaleHandle (финальное whole-branch ревью, №4):
-      // uWaterWaveScale = radiusMeters·waveScaleHandle — увеличение ручки
-      // сжимает ДОМЕН getNoise пропорционально (эффективный мельчайший
-      // период = WATER_WAVE_SMALLEST_PERIOD_METERS/scale), а страж кванта
-      // (WaterWaves.spec.ts) слеп к ручке — считает по TS-константе периода
-      // без масштаба. Явную ручку `waterWaveFadeMeters` (метры) НЕ делим —
-      // автор данных берёт её как честное число метров на свою
-      // ответственность, деление касается только САМОВЫЧИСЛЕННОГО дефолта.
-      uWaterWaveFadeMeters: new Uniform(
-        waveFadeMetersHandle !== undefined
-          ? toThreeJSUnits(waveFadeMetersHandle / 1000)
-          : DEFAULT_WATER_WAVE_FADE_UNITS / waveScaleHandle
-      ),
       // Пена прибоя — ручки из резолвера (глобальные дефолты); тексель карты —
       // заглушки до прихода slope-карты (WaterMaterial.updateMaterial).
       uFoamStrength: new Uniform(foam.waterFoamStrength),
@@ -239,6 +211,15 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
       // текстуры сюда не приходят). Остальной набор — общая выборка фона,
       // тот же `createSkyboxSampleUniforms`, что SkyboxBackground/BlackHole.
       uWaterDistortion: new Uniform(waterData.waterDistortion ?? DEFAULT_WATER_DISTORTION),
+      uWaterRoughness: new Uniform(surface.waterRoughness),
+      uWaterAbsorption: new Uniform(new Vector3(...surface.waterAbsorption)),
+      uWaterRippleStrength: new Uniform(surface.waterRippleStrength),
+      uWaterDepthRangeMeters: new Uniform(WATER_SHALLOW_RANGE_METERS),
+      // угол пикселя, рад: ставит материал по размеру вьюпорта и fov; до того — номинал 50°/1080p
+      uWaterPixelAngle: new Uniform(WATER_DEFAULT_PIXEL_ANGLE),
+      // облачный слой — от материала рельефа каждый кадр (WaterMaterial.syncClouds)
+      uWaterCloudMap: new Uniform(null),
+      uWaterCloudOpacity: new Uniform(1),
       uSkyboxMap: new Uniform(null),
       uSkyHighlightThreshold: skySampleUniforms.uSkyHighlightThreshold,
       uSkyHighlightBoost: skySampleUniforms.uSkyHighlightBoost,

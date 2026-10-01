@@ -7,11 +7,15 @@
  * часть main(), не зависит от USE_WATER_WAVES) и wavesColor (полная формула
  * Water.js, включая СОБСТВЕННЫЙ ночной пол) — плюс их смешивание по
  * waveFade, буквально повторяющее `color = mix(color, wavesColor, waveFade)`
- * в шейдере.
+ * в шейдере; waveFade — вес октавы 3000 м (`waveWeights.x`). Блик — аддитивно
+ * после смешивания и пены (addGlint): при waveFade = 0 его вклад ровно 0.
+ * Режим с картой глубины — baseColor/depthAlpha из depthLayer (Бер–Ламберт).
  *
  * ВАЖНО: менять строго синхронно с main() в
  * src/core/materials/shaders/lib/WaterShaderTemplate.ts.
  */
+
+import { WATER_GLINT_CEILING, absorptionLayer, waterGlint, waterTransmittance } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 
 export type Vec3 = readonly [number, number, number]
 
@@ -21,10 +25,6 @@ function dot3(a: Vec3, b: Vec3): number {
 
 function add3(a: Vec3, b: Vec3): Vec3 {
   return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
-}
-
-function sub3(a: Vec3, b: Vec3): Vec3 {
-  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 }
 
 function scale3(a: Vec3, s: number): Vec3 {
@@ -59,9 +59,22 @@ function normalize3(v: Vec3): Vec3 {
   return len < 1e-9 ? [0, 0, 0] : [v[0] / len, v[1] / len, v[2] / len]
 }
 
-/** GLSL reflect(I, N) = I - 2*dot(N,I)*N */
-function reflectVec(i: Vec3, n: Vec3): Vec3 {
-  return sub3(i, scale3(n, 2 * dot3(n, i)))
+/** Входы ветки USE_WATER_DEPTH: канал A slope-карты [0,1], его диапазон, м; σ, 1/м. */
+export interface DepthInputs {
+  depthA: number
+  rangeMeters: number
+  absorption: Vec3
+}
+
+/**
+ * Ветка USE_WATER_DEPTH: d = depthA·range, μv = max(N·V, 0.1) по аналитической
+ * нормали, слой — absorptionLayer(T, uWaterColor).
+ */
+export function depthLayer(deepColor: Vec3, normal: Vec3, viewDir: Vec3, depth: DepthInputs): { baseColor: Vec3; depthAlpha: number } {
+  const muV = Math.max(dot3(viewDir, normal), 0.1)
+  const layer = absorptionLayer(waterTransmittance(depth.depthA * depth.rangeMeters, muV, [...depth.absorption]), [...deepColor])
+
+  return { baseColor: layer.color, depthAlpha: layer.alpha }
 }
 
 /**
@@ -81,35 +94,47 @@ export function foundationColor(
 ): Vec3 {
   const fresnel = Math.pow(clamp01(1 - Math.max(dot3(viewDir, normal), 0)), 5)
   const color = mix3(baseColor, fresnelTint, fresnel)
-  const ndotl = dot3(normal, lightDir)
-  const dayFactor = smoothstep(-0.08, 0.25, ndotl)
 
-  return scale3(color, mixScalar(nightFloor, 1, dayFactor))
+  return scale3(color, mixScalar(nightFloor, 1, geometricDayFactor(normal, lightDir)))
 }
 
-/** sunLight — дословно Water.js: reflection = reflect(-lightDir, normal), coefficients через аргументы. */
-function sunLight(
-  surfaceNormal: Vec3,
-  eyeDirection: Vec3,
-  shiny: number,
-  spec: number,
-  diffuse: number,
-  sunColor: Vec3,
-  lightDir: Vec3
-): { diffuseColor: Vec3; specularColor: Vec3 } {
-  const reflection = normalize3(reflectVec(scale3(lightDir, -1), surfaceNormal))
-  const direction = Math.max(0, dot3(eyeDirection, reflection))
-  const specularColor = scale3(sunColor, Math.pow(direction, shiny) * spec)
-  const diffuseColor = scale3(sunColor, Math.max(dot3(lightDir, surfaceNormal), 0) * diffuse)
+/** `float dayFactor = smoothstep(-0.08, 0.25, NdotL)` — терминатор аналитической нормали (фундамент и блик). */
+export function geometricDayFactor(normal: Vec3, lightDir: Vec3): number {
+  return smoothstep(-0.08, 0.25, dot3(normal, lightDir))
+}
 
-  return { diffuseColor, specularColor }
+/** sunLight — диффузная часть Water.js; блик — отдельно, waterGlintGlsl. */
+function sunLight(surfaceNormal: Vec3, diffuse: number, sunColor: Vec3, lightDir: Vec3): Vec3 {
+  return scale3(sunColor, Math.max(dot3(lightDir, surfaceNormal), 0) * diffuse)
 }
 
 /**
- * Полная waves-формула Water.js (albedo mix, rf0=0.3, getShadowMask опущен)
- * ПЛЮС собственный ночной пол (waveNdotL/waveDayFactor, НЕ фундаментный
- * dayFactor) — то, во что main() кладёт wavesColor непосредственно перед
- * финальным `color = mix(color, wavesColor, waveFade)`.
+ * GLSL waterGlintGlsl(n, l, v, alpha2): h = (l + v)/max(|l + v|, 1e-6),
+ * скалярное ядро — waterGlint из waterOctavesMath.
+ */
+export function glintFromVectors(n: Vec3, l: Vec3, v: Vec3, alpha2: number): number {
+  const sum = add3(l, v)
+  const h = scale3(sum, 1 / Math.max(Math.hypot(sum[0], sum[1], sum[2]), 1e-6))
+
+  return waterGlint(dot3(n, h), dot3(v, h), dot3(n, l), alpha2)
+}
+
+/** `color += min(glint, WATER_GLINT_CEILING) * waveFade * (1.0 - foam)` — после пены. */
+export function addGlint(color: Vec3, glint: Vec3, waveFade: number, foam: number): Vec3 {
+  const k = waveFade * (1 - foam)
+
+  return [
+    color[0] + Math.min(glint[0], WATER_GLINT_CEILING) * k,
+    color[1] + Math.min(glint[1], WATER_GLINT_CEILING) * k,
+    color[2] + Math.min(glint[2], WATER_GLINT_CEILING) * k
+  ]
+}
+
+/**
+ * Waves-формула Water.js (albedo mix, rf0=0.3, getShadowMask опущен) без
+ * солнечного спекуляра (блик — addGlint) ПЛЮС собственный ночной пол
+ * (waveNdotL/waveDayFactor, НЕ фундаментный dayFactor) — то, во что main()
+ * кладёт wavesColor непосредственно перед `color = mix(color, wavesColor, waveFade)`.
  *
  * `skyColor` — приёмочная волна 4, №1: Water.js слагаемое vec3(0.1) было
  * вкладом ЗЕРКАЛЬНОЙ сцены (ambient окружения демо), у нас зеркала нет —
@@ -126,14 +151,14 @@ export function wavesColor(
   sunColor: Vec3,
   nightFloor: number
 ): Vec3 {
-  const { diffuseColor, specularColor } = sunLight(waveNormal, viewDir, 100, 2, 0.5, sunColor, lightDir)
+  const diffuseColor = sunLight(waveNormal, 0.5, sunColor, lightDir)
   const theta = Math.max(dot3(viewDir, waveNormal), 0)
   const rf0 = 0.3
   const reflectance = rf0 + (1 - rf0) * Math.pow(1 - theta, 5)
   const scatter = scale3(baseColor, Math.max(0, dot3(waveNormal, viewDir)))
 
   const term1 = add3(scale3(mulVec3(sunColor, diffuseColor), 0.3), scatter)
-  const term2 = add3(add3(scale3(skyColor, 0.1), scale3(reflectionSample, 0.9)), mulVec3(reflectionSample, specularColor))
+  const term2 = add3(scale3(skyColor, 0.1), scale3(reflectionSample, 0.9))
   const raw = mix3(term1, term2, reflectance)
 
   const waveNdotL = dot3(waveNormal, lightDir)
@@ -180,12 +205,30 @@ export interface BlendInputs {
   lightDir: Vec3
   sunColor: Vec3
   nightFloor: number
+  /** α² блика (glintAlpha2). */
+  alpha2: number
+  /** Есть — режим с картой глубины: baseColor здесь = uWaterColor, слой — depthLayer. */
+  depth?: DepthInputs
 }
 
-/** color = mix(foundationColor(...), wavesColor(...), waveFade) — буквально итоговая строка main(). */
+/** Веса крупных октав (3, 9, 27, 90 км) — порядок vec4 waveWeights в main(). */
+export type WaveWeights = readonly [number, number, number, number]
+
+/** `float waveFade = waveWeights.x;` — вес октавы 3000 м: с орбиты формула волн не действует. */
+export function waveFadeFromWeights(waveWeights: WaveWeights): number {
+  return waveWeights[0]
+}
+
+/** `color = mix(color, wavesColor, waveFade)`: при весе октавы 3000 м 0 — ровно фундамент. */
+export function mixWithFoundation(foundation: Vec3, waves: Vec3, waveFade: number): Vec3 {
+  return mix3(foundation, waves, waveFade)
+}
+
+/** color = mix(foundationColor(...), wavesColor(...), waveFade) + блик × dayFactor (ветка без пены: foam = 0, без USE_SUN_TINT). */
 export function blendedColor(inputs: BlendInputs, waveFade: number): Vec3 {
+  const baseColor = inputs.depth ? depthLayer(inputs.baseColor, inputs.normal, inputs.viewDir, inputs.depth).baseColor : inputs.baseColor
   const foundation = foundationColor(
-    inputs.baseColor,
+    baseColor,
     inputs.fresnelTint,
     inputs.normal,
     inputs.viewDir,
@@ -193,7 +236,7 @@ export function blendedColor(inputs: BlendInputs, waveFade: number): Vec3 {
     inputs.nightFloor
   )
   const waves = wavesColor(
-    inputs.baseColor,
+    baseColor,
     inputs.reflectionSample,
     inputs.skyColor,
     inputs.waveNormal,
@@ -203,7 +246,13 @@ export function blendedColor(inputs: BlendInputs, waveFade: number): Vec3 {
     inputs.nightFloor
   )
 
-  return mix3(foundation, waves, waveFade)
+  // × dayFactor аналитической нормали: на ночной стороне искр нет
+  const glint = scale3(
+    inputs.sunColor,
+    glintFromVectors(inputs.waveNormal, inputs.lightDir, inputs.viewDir, inputs.alpha2) * geometricDayFactor(inputs.normal, inputs.lightDir)
+  )
+
+  return addGlint(mixWithFoundation(foundation, waves, waveFade), glint, waveFade, 0)
 }
 
 export function dirFromLatLon(latDeg: number, lonDeg: number): Vec3 {
