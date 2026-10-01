@@ -1,4 +1,5 @@
 import { Camera, EventDispatcher, Quaternion, Sphere, Spherical, Vector2, Vector3 } from 'three'
+import { freeLookRotate, isFreeLook, orbitAngleScale, type SurfaceProbe } from '@/core/libs/surfaceCamera'
 
 type AstroControlsEventMap = {
   change: { data: Vector3 }
@@ -32,6 +33,14 @@ class AstroControls extends EventDispatcher<AstroControlsEventMap> {
   public movementSpeed: number
   public rollSpeed: number
   public enabled: boolean
+  /** Ниже этой доли радиуса тела правая кнопка мыши — осмотр на месте. */
+  public freeLookAltitudeRatio: number = 0.02
+
+  /** Ближайшая поверхность под камерой — от коллизии, каждый кадр; null — тел нет. */
+  private surface: SurfaceProbe | null = null
+  /** Режим текущего перетаскивания, выбран на нажатии. */
+  private freeLooking: boolean = false
+  private readonly localUp: Vector3 = new Vector3()
 
   private spherical: Spherical = new Spherical()
   private tmpQuaternion: Quaternion = new Quaternion()
@@ -98,6 +107,8 @@ class AstroControls extends EventDispatcher<AstroControlsEventMap> {
 
     if (event.button === 2) {
       this.isRotating = true
+      this.freeLooking =
+        this.surface !== null && isFreeLook(this.surface.altitude, this.surface.surfaceRadius, this.freeLookAltitudeRatio)
       this.rotateStart.set(event.clientX, event.clientY)
       this.spherical.setFromVector3(this.object.position.clone().sub(this.target))
     }
@@ -110,7 +121,12 @@ class AstroControls extends EventDispatcher<AstroControlsEventMap> {
       this.rotateEnd.set(event.clientX, event.clientY)
       this.rotateDelta.subVectors(this.rotateEnd, this.rotateStart)
 
-      this.rotateCamera(this.rotateDelta.x, this.rotateDelta.y)
+      if (this.freeLooking && this.surface) {
+        this.localUp.copy(this.object.position).sub(this.surface.center).normalize()
+        freeLookRotate(this.object.quaternion, this.localUp, this.rotateDelta.x, this.rotateDelta.y, window.innerWidth, window.innerHeight)
+      } else {
+        this.rotateCamera(this.rotateDelta.x, this.rotateDelta.y)
+      }
 
       this.rotateStart.copy(this.rotateEnd)
     }
@@ -123,7 +139,8 @@ class AstroControls extends EventDispatcher<AstroControlsEventMap> {
   }
 
   private rotateCamera(deltaX: number, deltaY: number): void {
-    const rotationSpeed: number = 1.0
+    // у поверхности угол на пиксель падает с высотой, см. orbitAngleScale
+    const rotationSpeed: number = this.surface ? orbitAngleScale(this.surface.altitude, this.surface.surfaceRadius) : 1.0
     const theta: number = 2 * Math.PI * (deltaX / window.innerWidth) * rotationSpeed
     const phi: number = 2 * Math.PI * (deltaY / window.innerHeight) * rotationSpeed
 
@@ -265,6 +282,11 @@ class AstroControls extends EventDispatcher<AstroControlsEventMap> {
     if (!this.enabled) return
 
     event.preventDefault()
+  }
+
+  /** Поверхность под камерой — от CameraCollision после разрешения кадра. */
+  public setSurface(surface: SurfaceProbe | null): void {
+    this.surface = surface
   }
 
   public setTarget(target: Vector3 | null): void {

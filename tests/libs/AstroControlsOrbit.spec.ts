@@ -63,3 +63,55 @@ describe('AstroControls: орбитальный поворот и внешнее
     expect(controls.isOrbiting).toBe(false)
   })
 })
+
+describe('AstroControls: у поверхности', () => {
+  it('ниже порога ПКМ поворачивает взгляд на месте: позиция не меняется, ориентация меняется', () => {
+    const { controls, camera, dom } = makeControls()
+    const center = new Vector3(0, 0, 0)
+    controls.setTarget(center)
+    camera.position.set(1000.01, 0, 0)
+    camera.lookAt(center)
+    controls.setSurface({ center, altitude: 0.01, surfaceRadius: 1000 })
+    const before = camera.quaternion.clone()
+
+    mouse(dom, 'mousedown', 100, 100)
+    mouse(dom, 'mousemove', 140, 60)
+
+    expect(camera.position.x).toBe(1000.01)
+    expect(camera.position.y).toBe(0)
+    expect(camera.position.z).toBe(0)
+    expect(camera.quaternion.angleTo(before)).toBeGreaterThan(0.01)
+  })
+
+  it('выше порога — орбита, но угол на пиксель уменьшен в h/(h+R)', () => {
+    const near = makeControls()
+    const far = makeControls()
+    for (const { controls, camera } of [near, far]) {
+      controls.setTarget(new Vector3())
+      camera.position.set(1100, 0, 0)
+    }
+    near.controls.setSurface({ center: new Vector3(), altitude: 100, surfaceRadius: 1000 })
+
+    for (const { dom } of [near, far]) {
+      mouse(dom, 'mousedown', 100, 100)
+      mouse(dom, 'mousemove', 110, 100)
+    }
+
+    const angle = (p: Vector3): number => Math.atan2(p.z, p.x)
+    expect(angle(near.camera.position)).toBeCloseTo(angle(far.camera.position) * (100 / 1100), 9)
+  })
+
+  it('режим выбирается на нажатии: подъём над порогом посреди перетаскивания его не меняет', () => {
+    const { controls, camera, dom } = makeControls()
+    const center = new Vector3()
+    controls.setTarget(center)
+    camera.position.set(1000.01, 0, 0)
+    controls.setSurface({ center, altitude: 0.01, surfaceRadius: 1000 })
+
+    mouse(dom, 'mousedown', 100, 100)
+    controls.setSurface({ center, altitude: 500, surfaceRadius: 1000 })
+    mouse(dom, 'mousemove', 140, 100)
+
+    expect(camera.position.x).toBe(1000.01)
+  })
+})

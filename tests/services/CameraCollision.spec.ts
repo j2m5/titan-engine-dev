@@ -1369,3 +1369,46 @@ describe('CameraCollision: приход карты высот в середин�
     expect(internals.colliders).toBe(before)
   })
 })
+
+describe('CameraCollision.nearestSurface: высота камеры над ближайшей поверхностью', () => {
+  afterEach(() => heightFieldStorage.clear())
+
+  it('сферическое тело: высота над сферой коллизии, центр — мировой центр тела', () => {
+    const center = new Vector3(5 * R, 0, 0)
+    const body = makeBody('planet', EARTH_RADIUS_KM, center)
+    const { collision } = makeCollision([body], new Vector3(5 * R + R * 1.5, 0, 0))
+    collision.resolve()
+
+    const surface = collision.nearestSurface()!
+    expect(surface.center.distanceTo(center)).toBeCloseTo(0, 9)
+    expect(surface.surfaceRadius).toBeCloseTo(R, 9)
+    expect(surface.altitude).toBeCloseTo(R * 0.5, 9)
+  })
+
+  it('из двух тел — то, над чьей поверхностью камера ниже', () => {
+    const big = makeBody('planet', EARTH_RADIUS_KM, new Vector3(0, 0, 0))
+    const small = makeBody('planet', EARTH_RADIUS_KM / 100, new Vector3(R * 3, 0, 0))
+    const { collision } = makeCollision([big, small], new Vector3(R * 3 - R * 0.02, 0, 0))
+    collision.resolve()
+
+    expect(collision.nearestSurface()!.surfaceRadius).toBeCloseTo(R / 100, 9)
+  })
+
+  it('терраформное тело: высота над рельефом под камерой, а не над сферой широкой фазы', () => {
+    seedHeightMap(new Array(8).fill(65535), 4, 2, 0, 10000)
+    const body = makeBody('planet', 1736, new Vector3(), undefined, MOON_HEIGHT_PATH, undefined, 0)
+    const surfaceUnits = toThreeJSUnits(1736 + 10)
+    const { collision } = makeCollision([body], new Vector3(surfaceUnits + toThreeJSUnits(2), 0, 0))
+    collision.resolve()
+
+    const surface = collision.nearestSurface()!
+    expect(surface.surfaceRadius).toBeCloseTo(surfaceUnits, 9)
+    expect(surface.altitude).toBeCloseTo(toThreeJSUnits(2), 9)
+  })
+
+  it('тел нет — null', () => {
+    const { collision } = makeCollision([], new Vector3(1, 0, 0))
+    collision.resolve()
+    expect(collision.nearestSurface()).toBeNull()
+  })
+})

@@ -187,6 +187,8 @@ class Engine {
     }
 
     this.cameraCollision.resolve()
+    // после коллизии: высота над рельефом — по уже вытолкнутой позиции
+    this.astroControls.setSurface(this.cameraCollision.nearestSurface())
     this.labelRenderer.render(this.scene, this.renderCamera)
     this.sceneManager.updateMarkers()
     this.postprocessing.render(delta)
