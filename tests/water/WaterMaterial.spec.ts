@@ -163,7 +163,8 @@ describe('WaterMaterial: проводка ручек data (дефолты чес
     expect(material.uniforms.uWaterAbsorption.value).toEqual(new Vector3(0.45, 0.07, 0.03))
     expect(material.uniforms.uWaterRippleStrength.value).toBe(1)
     expect(material.uniforms.uWaterDepthRangeMeters.value).toBe(200)
-    expect(material.uniforms.uWaterPixelAngle.value).toBe(0)
+    // номинальный кадр 50°/1080p до первого setPixelAngle
+    expect(material.uniforms.uWaterPixelAngle.value).toBeCloseTo((2 * Math.tan((50 * Math.PI) / 360)) / 1080, 15)
   })
 
   it('ручки data перекрывают дефолты — число и строка цвета обе конвенции (как dustColor кольца)', () => {

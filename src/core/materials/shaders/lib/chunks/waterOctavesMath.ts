@@ -10,8 +10,8 @@ const smoothstep = (a: number, b: number, x: number): number => {
 
 /** Период самой мелкой октавы ряби, м. */
 export const WATER_DETAIL_PERIOD_METERS = 40
-/** Обёртка домена мелких октав, м: каждый период обязан её делить, иначе шов на границе патчей. */
-export const WATER_DETAIL_WRAP_METERS = 40960
+/** Обёртка домена мелких октав, м: 1024 (= WRAP_TILES, detailWrap.ts) периодов; каждый период обязан её делить. */
+export const WATER_DETAIL_WRAP_METERS = WATER_DETAIL_PERIOD_METERS * 1024
 /** Периоды октав ряби, м. */
 export const WATER_RIPPLE_PERIODS_METERS: readonly number[] = [2560, 640, 160, 40, 10]
 /** Эффективные периоды волн, м — только для весов (пары анизотропии — геометрическое среднее). */
@@ -26,6 +26,13 @@ export const WATER_GLINT_CEILING = 4
 export const WATER_OCTAVE_SLOPE_VARIANCE = 0.06427
 /** Квадрат тангенциального усиления 1.5 трипланарной реориентации: дисперсия наклона октавы в нормали — 2.25·V. */
 export const WATER_TRIPLANAR_SLOPE_GAIN2 = 2.25
+/**
+ * Амплитуда одной мелкой октавы: 1/√(4·5) — сумма дисперсий 5 мелких октав равна
+ * дисперсии среднего 4 крупных (каждая крупная — 1/4 доля среднего, V/16).
+ */
+export const WATER_RIPPLE_OCTAVE_GAIN = 1 / Math.sqrt(20)
+/** Угол пикселя до первого кадра, рад: номинал 50°/1080p (0 включил бы все октавы с орбиты). */
+export const WATER_DEFAULT_PIXEL_ANGLE = (2 * Math.tan((50 * Math.PI) / 360)) / 1080
 /** Пол α²: держит степень лепестка конечной. */
 export const WATER_MIN_ALPHA2 = 1e-4
 /** Потолок α²: степень лепестка p = 2/α² − 2 не уходит в минус. */
@@ -46,10 +53,20 @@ export function footprintMeters(distanceMeters: number, pixelAngle: number, muV:
   return (distanceMeters * pixelAngle) / Math.max(muV, 0.2)
 }
 
-/** α² блика: r² + 2.25·Σ(1 − wᵢ)·s²·V погасших октав; weights — веса всех учитываемых октав. */
-export function glintAlpha2(baseRoughness: number, weights: readonly number[], strength: number): number {
+/**
+ * α² блика: r² + 2.25·(Σ(1 − wᵢ)·(s·gain)²·V мелких + Σ(1 − wₖ)·V/16 крупных) погасших октав.
+ * Сила ряби s — только на мелкие; крупные входят долей 1/4 среднего.
+ */
+export function glintAlpha2(
+  baseRoughness: number,
+  rippleWeights: readonly number[],
+  bigWeights: readonly number[],
+  rippleStrength: number
+): number {
+  const amp = rippleStrength * WATER_RIPPLE_OCTAVE_GAIN
   let faded = 0
-  for (const w of weights) faded += (1 - w) * strength * strength * WATER_OCTAVE_SLOPE_VARIANCE
+  for (const w of rippleWeights) faded += (1 - w) * amp * amp * WATER_OCTAVE_SLOPE_VARIANCE
+  for (const w of bigWeights) faded += ((1 - w) * WATER_OCTAVE_SLOPE_VARIANCE) / 16
   const alpha2 = baseRoughness * baseRoughness + WATER_TRIPLANAR_SLOPE_GAIN2 * faded
   return Math.min(Math.max(alpha2, WATER_MIN_ALPHA2), WATER_MAX_ALPHA2)
 }

@@ -94,10 +94,13 @@ export function foundationColor(
 ): Vec3 {
   const fresnel = Math.pow(clamp01(1 - Math.max(dot3(viewDir, normal), 0)), 5)
   const color = mix3(baseColor, fresnelTint, fresnel)
-  const ndotl = dot3(normal, lightDir)
-  const dayFactor = smoothstep(-0.08, 0.25, ndotl)
 
-  return scale3(color, mixScalar(nightFloor, 1, dayFactor))
+  return scale3(color, mixScalar(nightFloor, 1, geometricDayFactor(normal, lightDir)))
+}
+
+/** `float dayFactor = smoothstep(-0.08, 0.25, NdotL)` — терминатор аналитической нормали (фундамент и блик). */
+export function geometricDayFactor(normal: Vec3, lightDir: Vec3): number {
+  return smoothstep(-0.08, 0.25, dot3(normal, lightDir))
 }
 
 /** sunLight — диффузная часть Water.js; блик — отдельно, waterGlintGlsl. */
@@ -221,7 +224,7 @@ export function mixWithFoundation(foundation: Vec3, waves: Vec3, waveFade: numbe
   return mix3(foundation, waves, waveFade)
 }
 
-/** color = mix(foundationColor(...), wavesColor(...), waveFade) + блик (ветка без пены: foam = 0). */
+/** color = mix(foundationColor(...), wavesColor(...), waveFade) + блик × dayFactor (ветка без пены: foam = 0, без USE_SUN_TINT). */
 export function blendedColor(inputs: BlendInputs, waveFade: number): Vec3 {
   const baseColor = inputs.depth ? depthLayer(inputs.baseColor, inputs.normal, inputs.viewDir, inputs.depth).baseColor : inputs.baseColor
   const foundation = foundationColor(
@@ -243,7 +246,11 @@ export function blendedColor(inputs: BlendInputs, waveFade: number): Vec3 {
     inputs.nightFloor
   )
 
-  const glint = scale3(inputs.sunColor, glintFromVectors(inputs.waveNormal, inputs.lightDir, inputs.viewDir, inputs.alpha2))
+  // × dayFactor аналитической нормали: на ночной стороне искр нет
+  const glint = scale3(
+    inputs.sunColor,
+    glintFromVectors(inputs.waveNormal, inputs.lightDir, inputs.viewDir, inputs.alpha2) * geometricDayFactor(inputs.normal, inputs.lightDir)
+  )
 
   return addGlint(mixWithFoundation(foundation, waves, waveFade), glint, waveFade, 0)
 }

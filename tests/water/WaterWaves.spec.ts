@@ -858,7 +858,9 @@ describe('WaterShader: дистанционного fade больше нет —
 
     expect(shader.uniforms).not.toHaveProperty('uWaterWaveFadeMeters')
     expect(WaterShaderTemplate.uniforms).not.toHaveProperty('uWaterWaveFadeMeters')
-    expect(shader.uniforms.uWaterPixelAngle.value).toBe(0)
+    // номинальный кадр 50°/1080p до первого setPixelAngle: с 0 все веса были бы 1 с орбиты
+    expect(shader.uniforms.uWaterPixelAngle.value).toBeCloseTo((2 * Math.tan((50 * Math.PI) / 360)) / 1080, 15)
+    expect(WaterShaderTemplate.uniforms.uWaterPixelAngle.value).toBeCloseTo((2 * Math.tan((50 * Math.PI) / 360)) / 1080, 15)
   })
 })
 

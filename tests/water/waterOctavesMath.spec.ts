@@ -1,13 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import {
-  WATER_DETAIL_WRAP_METERS, WATER_GLINT_CEILING, WATER_OCTAVE_SLOPE_VARIANCE, WATER_RIPPLE_PERIODS_METERS,
-  WATER_TRIPLANAR_SLOPE_GAIN2,
+  WATER_DEFAULT_PIXEL_ANGLE, WATER_DETAIL_PERIOD_METERS, WATER_DETAIL_WRAP_METERS, WATER_GLINT_CEILING,
+  WATER_OCTAVE_SLOPE_VARIANCE, WATER_RIPPLE_OCTAVE_GAIN, WATER_RIPPLE_PERIODS_METERS, WATER_TRIPLANAR_SLOPE_GAIN2,
   absorptionLayer, footprintMeters, glintAlpha2, octaveWeight, rippleSpeedMps, waterGlint, waterTransmittance
 } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
+import { WRAP_TILES } from '@/core/terrain/detailWrap'
+
+const RIPPLE_ONES = [1, 1, 1, 1, 1]
+const BIG_ONES = [1, 1, 1, 1]
 
 describe('waterOctavesMath: октавы', () => {
   it('каждый период мелкой октавы делит обёртку домена — иначе шов на границе патчей', () => {
     for (const p of WATER_RIPPLE_PERIODS_METERS) expect(WATER_DETAIL_WRAP_METERS % p).toBe(0)
+  })
+  it('обёртка домена воды — WRAP_TILES периодов мелкой ряби, как у кодировщика detailPos', () => {
+    expect(WATER_DETAIL_WRAP_METERS).toBe(WATER_DETAIL_PERIOD_METERS * WRAP_TILES)
+  })
+  it('угол пикселя по умолчанию — номинальный кадр 50°/1080p, не 0 (0 — все веса 1 с орбиты)', () => {
+    expect(WATER_DEFAULT_PIXEL_ANGLE).toBeCloseTo((2 * Math.tan((50 * Math.PI) / 360)) / 1080, 15)
   })
   it('скорость растёт как √λ, у 3000 м — 6 м/с', () => {
     expect(rippleSpeedMps(3000)).toBeCloseTo(6, 12)
@@ -30,19 +40,39 @@ describe('waterOctavesMath: октавы', () => {
 })
 
 describe('waterOctavesMath: блик', () => {
-  it('шероховатость растёт ровно на дисперсию погасших октав с трипланарным усилением 1.5²', () => {
-    const a = glintAlpha2(0.02, [1, 1, 1], 1)
-    const b = glintAlpha2(0.02, [1, 0, 0.5], 1)
+  it('калибровка ряби: сумма дисперсий 5 мелких октав = дисперсии среднего 4 крупных', () => {
+    expect(WATER_RIPPLE_OCTAVE_GAIN).toBeCloseTo(1 / Math.sqrt(20), 15)
+    const V = WATER_TRIPLANAR_SLOPE_GAIN2 * WATER_OCTAVE_SLOPE_VARIANCE
+    const rippleSum = WATER_RIPPLE_PERIODS_METERS.length * WATER_RIPPLE_OCTAVE_GAIN ** 2 * V
+    expect(Math.abs(rippleSum - V / 4)).toBeLessThan(1e-12)
+    // то же через α²: все мелкие погасли ≡ все крупные погасли
+    const allRipple = glintAlpha2(0, [0, 0, 0, 0, 0], BIG_ONES, 1)
+    const allBig = glintAlpha2(0, RIPPLE_ONES, [0, 0, 0, 0], 1)
+    expect(Math.abs(allRipple - allBig)).toBeLessThan(1e-12)
+    expect(allRipple).toBeCloseTo(0.036151875, 12)
+  })
+  it('шероховатость: мелкие — Σ(1 − w)·(s·gain)²·2.25·V, крупные — Σ(1 − w)·2.25·V/16 (доля среднего)', () => {
+    const a = glintAlpha2(0.02, RIPPLE_ONES, BIG_ONES, 1)
     expect(a).toBeCloseTo(0.02 ** 2, 12)
     expect(WATER_TRIPLANAR_SLOPE_GAIN2).toBe(2.25)
-    expect(b - a).toBeCloseTo(1.5 * 2.25 * WATER_OCTAVE_SLOPE_VARIANCE, 12)
+    // 1.5 погасшей мелкой октавы: 2.25·1.5·V/20
+    expect(glintAlpha2(0.02, [1, 0, 0.5, 1, 1], BIG_ONES, 1) - a).toBeCloseTo(0.0108455625, 12)
+    // 1.5 погасшей крупной октавы: 2.25·1.5·V/16
+    expect(glintAlpha2(0.02, RIPPLE_ONES, [0, 1, 0.5, 1], 1) - a).toBeCloseTo(0.013556953125, 12)
+  })
+  it('сила ряби — только на мелкие октавы', () => {
+    const a = glintAlpha2(0.02, RIPPLE_ONES, BIG_ONES, 2)
+    // 2.25·2²·V/20
+    expect(glintAlpha2(0.02, [0, 1, 1, 1, 1], BIG_ONES, 2) - a).toBeCloseTo(0.0289215, 12)
+    // крупная от силы не зависит: 2.25·V/16
+    expect(glintAlpha2(0.02, RIPPLE_ONES, [0, 1, 1, 1], 2) - a).toBeCloseTo(0.009037968750, 12)
   })
   it('α² не ниже пола — степень конечна, блик без NaN', () => {
-    expect(glintAlpha2(1e-6, [1], 1)).toBe(1e-4)
+    expect(glintAlpha2(1e-6, RIPPLE_ONES, BIG_ONES, 1)).toBe(1e-4)
     expect(Number.isFinite(waterGlint(1, 1, 1, 1e-4))).toBe(true)
   })
   it('α² не выше 1 — степень лепестка неотрицательна', () => {
-    expect(glintAlpha2(1, [0, 0, 0], 10)).toBe(1)
+    expect(glintAlpha2(1, [0, 0, 0, 0, 0], [0, 0, 0, 0], 10)).toBe(1)
     expect(Number.isFinite(waterGlint(0, 1, 1, 5))).toBe(true)
   })
   it('потолок, ∝ N·L, ноль при N·L ≤ 0', () => {

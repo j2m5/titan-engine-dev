@@ -4,6 +4,7 @@ import {
   WATER_MAX_ALPHA2,
   WATER_MIN_ALPHA2,
   WATER_OCTAVE_SLOPE_VARIANCE,
+  WATER_RIPPLE_OCTAVE_GAIN,
   WATER_RIPPLE_PERIODS_METERS,
   WATER_TRIPLANAR_SLOPE_GAIN2,
   WATER_WAVE_PERIODS_METERS,
@@ -79,6 +80,8 @@ ${waveDefines}
   #define WATER_OCTAVE_SLOPE_VARIANCE ${glslFloat(WATER_OCTAVE_SLOPE_VARIANCE)}
   // трипланар усиливает тангенциальный наклон в 1.5: дисперсия в нормали — 1.5²·V
   #define WATER_TRIPLANAR_SLOPE_GAIN2 ${glslFloat(WATER_TRIPLANAR_SLOPE_GAIN2)}
+  // амплитуда мелкой октавы: Σ дисперсий 5 мелких = дисперсия среднего 4 крупных
+  #define WATER_RIPPLE_OCTAVE_GAIN ${glslFloat(WATER_RIPPLE_OCTAVE_GAIN)}
   #define WATER_GLINT_F0 ${glslFloat(WATER_GLINT_F0)}
   #define WATER_GLINT_CEILING ${glslFloat(WATER_GLINT_CEILING)}
   #define WATER_MIN_ALPHA2 ${glslFloat(WATER_MIN_ALPHA2)}
@@ -109,7 +112,7 @@ ${waveDefines}
     return n - dirLocal * dot(n, dirLocal);
   }
 
-  // Отклонение нормали от мелких октав (тело-локальные XYZ) и Σ(1 − wᵢ)·s²·V погасших.
+  // Отклонение нормали от мелких октав (тело-локальные XYZ) и Σ(1 − wᵢ)·(s·gain)²·V погасших.
   // Звать в однородном потоке: внутри dFdx/dFdy
   vec3 waterRippleDeviation(vec3 posM, vec3 dirLocal, float footprint, out float fadedVariance) {
     vec3 tw = abs(dirLocal);
@@ -119,9 +122,10 @@ ${waveDefines}
 ${rippleDomains}
     vec3 dev = vec3(0.0);
     fadedVariance = 0.0;
-    float s2V = uWaterRippleStrength * uWaterRippleStrength * WATER_OCTAVE_SLOPE_VARIANCE;
+    float rippleAmp = uWaterRippleStrength * WATER_RIPPLE_OCTAVE_GAIN;
+    float s2V = rippleAmp * rippleAmp * WATER_OCTAVE_SLOPE_VARIANCE;
 ${rippleBranches}
-    return dev * uWaterRippleStrength;
+    return dev * rippleAmp;
   }
 
   // Блик: нормированный Блинн–Фонг (p+8)/(8π)·(N·H)^p, p = 2/α² − 2, × N·L × Шлик (F0 воды),

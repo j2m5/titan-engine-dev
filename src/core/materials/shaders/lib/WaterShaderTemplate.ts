@@ -1,6 +1,7 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { Color, ShaderChunk, Uniform, UniformsUtils, Vector2, Vector3 } from 'three'
 import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
+import { WATER_DEFAULT_PIXEL_ANGLE } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 import { SpaceScale } from '@/core/constants'
 
 // Юниты сцены → метры (арка water-shader, Task 2, находка ревью фикс-раунда
@@ -40,7 +41,7 @@ const defaultUniforms = {
   uWaterAbsorption: new Uniform(new Vector3(0.45, 0.07, 0.03)),
   uWaterRippleStrength: new Uniform(1),
   uWaterDepthRangeMeters: new Uniform(200),
-  uWaterPixelAngle: new Uniform(0),
+  uWaterPixelAngle: new Uniform(WATER_DEFAULT_PIXEL_ANGLE),
   // Ряд волн (арка water-shader, Task 1) — все четыре инертны без
   // USE_WATER_WAVES (гейт по наличию waterNormal-текстуры, см. WaterMaterial):
   // сэмплер null, uTime/scale нулевые заглушки — реальные значения
@@ -344,7 +345,7 @@ export const WaterShaderTemplate: ShaderProps = {
       //
       // Рябь мелких октав (posM — домен патча, м; footprint — м) считается
       // ДО полюсного гарда: внутри экранные производные, им нужен
-      // однородный поток; rippleVariance — Σ(1 − wᵢ)·s²·V погасших мелких октав. waveWeights —
+      // однородный поток; rippleVariance — Σ(1 − wᵢ)·(s·gain)²·V погасших мелких октав. waveWeights —
       // веса крупных октав (3, 9, 27, 90 км), fade — вес октавы 3 км.
       vec3 waterWaveNormal(vec3 dirLocal, vec3 posM, float footprint, vec4 waveWeights, float fade, out float rippleVariance) {
         vec3 ripple = waterRippleDeviation(posM, dirLocal, footprint, rippleVariance);
@@ -481,7 +482,7 @@ export const WaterShaderTemplate: ShaderProps = {
         // Затухание по октавам: вес каждой — по футпринту пикселя на
         // поверхности (дистанция, угол пикселя, косинус взгляда), не по
         // экранной производной — домен патча прыгает на k·W. waveFade — вес
-        // октавы 3000 м (≈1900 км при 50°/1080p): с орбиты формула волн не
+        // октавы 3000 м (0 с ≈1737 км в надир при 50°/1080p, вне надира раньше): с орбиты формула волн не
         // действует (молочный океан из космоса отвергнут), при 0 цвет === фундаменту.
         // Веса октав 9–90 км равны 1, пока waveFade > 0, — их затухание по
         // октавам неактивно; взвешивание оставлено для общности и защиты от NaN.
@@ -490,7 +491,7 @@ export const WaterShaderTemplate: ShaderProps = {
         float waveFootprint = waterFootprintMeters(waveDist * WATER_METERS_PER_UNIT, uWaterPixelAngle, max(dot(viewDir, normal), 0.0));
         vec4 waveWeights = vec4(waterOctaveWeight(WATER_WAVE_PERIOD_0, waveFootprint), waterOctaveWeight(WATER_WAVE_PERIOD_1, waveFootprint), waterOctaveWeight(WATER_WAVE_PERIOD_2, waveFootprint), waterOctaveWeight(WATER_WAVE_PERIOD_3, waveFootprint));
         float waveFade = waveWeights.x;
-        // Σ(1 − wᵢ)·s²·V погасших мелких октав — вход шероховатости блика
+        // Σ(1 − wᵢ)·(s·gain)²·V погасших мелких октав — вход шероховатости блика
         float rippleVariance = 0.0;
         vec3 waveDirLocal = normalize(vLocalDir);
         vec3 waveLocalNormal = waterWaveNormal(waveDirLocal, posM, waveFootprint, waveWeights, waveFade, rippleVariance);
@@ -726,11 +727,12 @@ export const WaterShaderTemplate: ShaderProps = {
 
         // Блик по шероховатости: α² = r² + 1.5²·Σ(1 − wᵢ)·σ² погасших октав (Токсвиг) —
         // вблизи искры на гребнях видимой ряби, издалека широкая тусклая дорожка.
-        // Крупные октавы — сила 1; × waveFade: за порогом октавы 3000 м цвет === фундаменту.
-        float bigVariance = dot(1.0 - waveWeights, vec4(WATER_OCTAVE_SLOPE_VARIANCE));
+        // Крупная октава — 1/4 доля среднего getNoiseWeighted: V/16; × waveFade: за порогом октавы 3000 м цвет === фундаменту.
+        float bigVariance = dot(1.0 - waveWeights, vec4(WATER_OCTAVE_SLOPE_VARIANCE / 16.0));
         float alpha2 = clamp(uWaterRoughness * uWaterRoughness + WATER_TRIPLANAR_SLOPE_GAIN2 * (rippleVariance + bigVariance), WATER_MIN_ALPHA2, WATER_MAX_ALPHA2);
-        // waterSunColor под USE_LIGHT_TINT — uLightColor
-        vec3 glint = waterGlintGlsl(waveNormal, lightDirection, viewDir, alpha2) * waterSunColor;
+        // waterSunColor под USE_LIGHT_TINT — uLightColor; dayFactor — терминатор аналитической нормали
+        // (как у фундамента): волновая нормаль на ночной стороне не даёт искр
+        vec3 glint = waterGlintGlsl(waveNormal, lightDirection, viewDir, alpha2) * waterSunColor * dayFactor;
         #ifdef USE_SUN_TINT
           glint *= sunTintFactor * waveDayFactor;
         #endif

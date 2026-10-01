@@ -5,13 +5,16 @@ import {
   waterOctavesFunctions
 } from '@/core/materials/shaders/lib/chunks/WaterOctaves'
 import {
+  WATER_DETAIL_PERIOD_METERS,
   WATER_DETAIL_WRAP_METERS,
   WATER_OCTAVE_SLOPE_VARIANCE,
+  WATER_RIPPLE_OCTAVE_GAIN,
   WATER_RIPPLE_PERIODS_METERS,
   WATER_WAVE_PERIODS_METERS,
   rippleSpeedMps
 } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
+import { WRAP_TILES } from '@/core/terrain/detailWrap'
 
 const chunk = waterOctavesFunctions
 
@@ -59,6 +62,7 @@ describe('WaterOctaves: чанк мелких октав', () => {
   })
 
   it('каждый период мелкой октавы делит обёртку домена (иначе шов на границе патчей)', () => {
+    expect(WATER_DETAIL_WRAP_METERS).toBe(WATER_DETAIL_PERIOD_METERS * WRAP_TILES)
     for (const p of WATER_RIPPLE_PERIODS_METERS) expect(WATER_DETAIL_WRAP_METERS % p).toBe(0)
   })
 
@@ -137,16 +141,18 @@ describe('WaterOctaves: чанк мелких октав', () => {
     expect(chunk).toContain('vec3 axisSign = sign(dirLocal);')
   })
 
-  it('отклонение — тангенциальная часть нормали октавы; сумма w·s·dev; дисперсия Σ(1 − w)·s²·V', () => {
+  it('отклонение — тангенциальная часть нормали октавы; сумма w·(s·gain)·dev; дисперсия Σ(1 − w)·(s·gain)²·V', () => {
     expect(chunk).toContain('return n - dirLocal * dot(n, dirLocal);')
+    expect(chunk).toContain(`#define WATER_RIPPLE_OCTAVE_GAIN ${WATER_RIPPLE_OCTAVE_GAIN}`)
     const body = functionBody(chunk, 'vec3 waterRippleDeviation(')
     expect(body).toContain('fadedVariance = 0.0;')
-    expect(body).toContain('float s2V = uWaterRippleStrength * uWaterRippleStrength * WATER_OCTAVE_SLOPE_VARIANCE;')
+    expect(body).toContain('float rippleAmp = uWaterRippleStrength * WATER_RIPPLE_OCTAVE_GAIN;')
+    expect(body).toContain('float s2V = rippleAmp * rippleAmp * WATER_OCTAVE_SLOPE_VARIANCE;')
     WATER_RIPPLE_PERIODS_METERS.forEach((_p, i) => {
       expect(body).toContain(`float w${i} = waterOctaveWeight(WATER_RIPPLE_PERIOD_${i}, footprint);`)
       expect(body).toContain(`fadedVariance += (1.0 - w${i}) * s2V;`)
     })
-    expect(body).toContain('return dev * uWaterRippleStrength;')
+    expect(body).toContain('return dev * rippleAmp;')
   })
 
   it('в домен не входит ничего непериодичного по W (ни хешей, ни поворотов)', () => {

@@ -2,6 +2,7 @@ import { Color, CubeTexture, Texture, Uniform, Vector2, Vector3 } from 'three'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { WaterShaderTemplate as Shader } from '@/core/materials/shaders/lib/WaterShaderTemplate'
 import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
+import { WATER_DEFAULT_PIXEL_ANGLE } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 import { Actor } from '@/core/models/Actor'
 import { IPlanetRenderingObject } from '@/core/models/types'
 import { clampSunTintStrength } from '@/core/materials/SunTintBinding'
@@ -212,8 +213,8 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
       uWaterAbsorption: new Uniform(new Vector3(...surface.waterAbsorption)),
       uWaterRippleStrength: new Uniform(surface.waterRippleStrength),
       uWaterDepthRangeMeters: new Uniform(WATER_SHALLOW_RANGE_METERS),
-      // угол пикселя, рад: ставит материал по размеру вьюпорта и fov
-      uWaterPixelAngle: new Uniform(0),
+      // угол пикселя, рад: ставит материал по размеру вьюпорта и fov; до того — номинал 50°/1080p
+      uWaterPixelAngle: new Uniform(WATER_DEFAULT_PIXEL_ANGLE),
       uSkyboxMap: new Uniform(null),
       uSkyHighlightThreshold: skySampleUniforms.uSkyHighlightThreshold,
       uSkyHighlightBoost: skySampleUniforms.uSkyHighlightBoost,

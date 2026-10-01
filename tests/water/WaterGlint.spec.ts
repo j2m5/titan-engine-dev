@@ -9,7 +9,17 @@ import {
   waterGlint
 } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
-import { addGlint, dirFromLatLon, glintFromVectors, type Vec3 } from './waterColorMirror'
+import {
+  addGlint,
+  blendedColor,
+  dirFromLatLon,
+  foundationColor,
+  glintFromVectors,
+  mixWithFoundation,
+  wavesColor,
+  type BlendInputs,
+  type Vec3
+} from './waterColorMirror'
 
 const frag: string = WaterShaderTemplate.fragmentShader
 const chunk = waterOctavesFunctions
@@ -60,8 +70,8 @@ describe('WaterShaderTemplate: блик по шероховатости', () => 
     expect(frag).not.toContain('100.0, 2.0, 0.5')
   })
 
-  it('α² = r² + 1.5²·(дисперсия погасших мелких + крупных октав), в [MIN, MAX]', () => {
-    expect(frag).toContain('float bigVariance = dot(1.0 - waveWeights, vec4(WATER_OCTAVE_SLOPE_VARIANCE));')
+  it('α² = r² + 1.5²·(дисперсия погасших мелких + крупных октав), в [MIN, MAX]; крупная — доля среднего, V/16', () => {
+    expect(frag).toContain('float bigVariance = dot(1.0 - waveWeights, vec4(WATER_OCTAVE_SLOPE_VARIANCE / 16.0));')
     expect(frag).toContain(
       'float alpha2 = clamp(uWaterRoughness * uWaterRoughness + WATER_TRIPLANAR_SLOPE_GAIN2 * (rippleVariance + bigVariance), WATER_MIN_ALPHA2, WATER_MAX_ALPHA2);'
     )
@@ -73,7 +83,7 @@ describe('WaterShaderTemplate: блик по шероховатости', () => 
 
   it('цвет блика: waterSunColor (под USE_LIGHT_TINT это uLightColor), закатный тинт × waveDayFactor', () => {
     expect(frag).toContain('#define waterSunColor uLightColor')
-    expect(frag).toContain('vec3 glint = waterGlintGlsl(waveNormal, lightDirection, viewDir, alpha2) * waterSunColor;')
+    expect(frag).toContain('vec3 glint = waterGlintGlsl(waveNormal, lightDirection, viewDir, alpha2) * waterSunColor * dayFactor;')
     const main = frag.indexOf('void main()')
     const glintDecl = indexAfter(frag, 'vec3 glint = waterGlintGlsl(', main)
     const glintAdd = indexAfter(frag, 'color += min(glint, WATER_GLINT_CEILING) * waveFade * (1.0 - foam);', glintDecl)
@@ -84,6 +94,23 @@ describe('WaterShaderTemplate: блик по шероховатости', () => 
     expect(indexAfter(frag, 'float waveDayFactor =', main)).toBeLessThan(glintDecl)
     expect(indexAfter(frag, 'vec3 waveNormal =', main)).toBeLessThan(glintDecl)
     expect(indexAfter(frag, 'vec3 lightDirection =', main)).toBeLessThan(glintDecl)
+  })
+
+  it('блик гасит геометрический терминатор (dayFactor фундамента) в обоих путях USE_SUN_TINT', () => {
+    const main = frag.indexOf('void main()')
+    const dayDecl = indexAfter(frag, 'float dayFactor = smoothstep(-0.08, 0.25, NdotL);', main)
+    const wavesOpen = indexAfter(frag, '#ifdef USE_WATER_WAVES', main)
+    const glintDecl = indexAfter(frag, 'vec3 glint = waterGlintGlsl(', main)
+    // объявлен в main() вне любого #ifdef и до блока волн — виден при любой комбинации дефайнов
+    expect(dayDecl).toBeLessThan(wavesOpen)
+    const beforeDay = frag.slice(main, dayDecl)
+    const opens = (beforeDay.match(/#ifdef|#ifndef|#if /g) ?? []).length
+    const closes = (beforeDay.match(/#endif/g) ?? []).length
+    expect(opens).toBe(closes)
+    // множитель — в безусловной строке, не внутри ветки USE_SUN_TINT
+    expect(frag.slice(glintDecl, frag.indexOf(';', glintDecl))).toMatch(/\* dayFactor$/)
+    const branch = frag.slice(main, glintDecl)
+    expect(branch.lastIndexOf('#ifdef USE_SUN_TINT')).toBeLessThan(branch.lastIndexOf('#endif'))
   })
 
   it('блик после пены, foam объявлена до ветки пены — строка компилируется без USE_WATER_DEPTH', () => {
@@ -126,6 +153,48 @@ describe('CPU-зеркало блика (waterColorMirror.ts)', () => {
       expect(energy / WATER_GLINT_F0).toBeGreaterThan(0.95)
       expect(energy / WATER_GLINT_F0).toBeLessThan(1.1)
     }
+  })
+
+  it('за геометрическим терминатором блика нет, даже если волновая нормаль смотрит на солнце', () => {
+    const normal: Vec3 = [0, 1, 0]
+    const norm = (v: Vec3): Vec3 => {
+      const l = Math.hypot(v[0], v[1], v[2])
+      return [v[0] / l, v[1] / l, v[2] / l]
+    }
+    // аналитический N·L = −0.1: ниже полосы терминатора (−0.08)
+    const lightDir = norm([1, -0.1 / Math.sqrt(1 - 0.01), 0])
+    const viewDir = norm([-1, 1, 0])
+    // волна наклонена точно в h: лепесток в пике
+    const waveNormal = norm([lightDir[0] + viewDir[0], lightDir[1] + viewDir[1], lightDir[2] + viewDir[2]])
+    expect(glintFromVectors(waveNormal, lightDir, viewDir, 0.01)).toBeGreaterThan(0.1)
+    const inputs: BlendInputs = {
+      baseColor: [0.04, 0.24, 0.4],
+      fresnelTint: [0.29, 0.54, 0.77],
+      reflectionSample: [0.2, 0.3, 0.4],
+      skyColor: [0.2, 0.3, 0.4],
+      normal,
+      waveNormal,
+      viewDir,
+      lightDir,
+      sunColor: [1, 1, 1],
+      nightFloor: 0.08,
+      alpha2: 0.01
+    }
+    const noGlint = mixWithFoundation(
+      foundationColor(inputs.baseColor, inputs.fresnelTint, normal, viewDir, lightDir, inputs.nightFloor),
+      wavesColor(inputs.baseColor, inputs.reflectionSample, inputs.skyColor, waveNormal, viewDir, lightDir, inputs.sunColor, inputs.nightFloor),
+      1
+    )
+    expect(blendedColor(inputs, 1)).toEqual(noGlint)
+    // днём тот же лепесток виден
+    const day = { ...inputs, normal: norm([0.3, 1, 0]) }
+    expect(blendedColor(day, 1)[0]).toBeGreaterThan(
+      mixWithFoundation(
+        foundationColor(day.baseColor, day.fresnelTint, day.normal, viewDir, lightDir, day.nightFloor),
+        wavesColor(day.baseColor, day.reflectionSample, day.skyColor, waveNormal, viewDir, lightDir, day.sunColor, day.nightFloor),
+        1
+      )[0]
+    )
   })
 
   it('waveFade = 0 или пена 1 ⇒ цвет ровно без блика; потолок покомпонентно', () => {
