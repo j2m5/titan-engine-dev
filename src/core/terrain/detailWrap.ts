@@ -1,4 +1,5 @@
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { WATER_DETAIL_PERIOD_METERS } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 
 /**
  * Обёртка домена детальных слоёв: патч несёт тело-локальную позицию вершины
@@ -36,6 +37,12 @@ export function detailWrapFor(data: { detailScaleMeters?: number; detailScale2Me
     w2: wrapUnitsFor(validPeriodMeters(data?.detailScale2Meters, DEFAULT_DETAIL_SCALE2_METERS))
   }
 }
+
+/** Обёртка воды: период мелкой ряби (WATER_DETAIL_PERIOD_METERS) и мелкий слой суши по умолчанию. */
+export const WATER_DETAIL_WRAP: DetailWrap = detailWrapFor({
+  detailScaleMeters: WATER_DETAIL_PERIOD_METERS,
+  detailScale2Meters: DEFAULT_DETAIL_SCALE2_METERS
+})
 
 /** Число периодов до центра патча — один k на патч, иначе обёртка рвала бы треугольники. */
 export function wrapIndex(centerComponent: number, w: number): number {

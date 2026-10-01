@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { ShaderChunk } from 'three'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
 import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { WATER_DETAIL_WRAP, wrapUnitsFor } from '@/core/terrain/detailWrap'
+import { WATER_DETAIL_PERIOD_METERS } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 import { WaterShader, WATER_WAVE_SMALLEST_PERIOD_METERS } from '@/core/materials/shaders/WaterShader'
 import { Actor } from '@/core/models/Actor'
 import { distanceForApparentSize } from '@/core/helpers/apparentSize'
@@ -676,6 +678,7 @@ const BASELINE_FRAGMENT_SHADER = `
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
+    varying vec3 vDetailPos;
 
     #ifdef USE_WATER_DEPTH
       #include <terrainUvFunctions>
@@ -829,5 +832,18 @@ describe('WaterShader: uWaterWaveFadeMeters — дефолт по видимом
       withoutScale.uniforms.uWaterWaveFadeMeters.value as number,
       10
     )
+  })
+})
+
+describe('домен мелкой ряби: WATER_DETAIL_WRAP и vDetailPos', () => {
+  it('w1 обёртки = wrapUnitsFor(период мелкой ряби)', () => {
+    expect(WATER_DETAIL_WRAP.w1).toBe(wrapUnitsFor(WATER_DETAIL_PERIOD_METERS))
+  })
+
+  it('вершинник читает атрибут detailPos и отдаёт vDetailPos; фрагментник объявляет varying', () => {
+    expect(vert).toContain('attribute vec3 detailPos;')
+    expect(vert).toContain('varying vec3 vDetailPos;')
+    expect(vert).toContain('vDetailPos = detailPos;')
+    expect(frag).toContain('varying vec3 vDetailPos;')
   })
 })

@@ -391,6 +391,7 @@ const BASELINE_FRAGMENT_SHADER = `
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
+    varying vec3 vDetailPos;
 
     #ifdef USE_WATER_DEPTH
       #include <terrainUvFunctions>
@@ -527,11 +528,14 @@ const BASELINE_VERTEX_SHADER = `
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
+    varying vec3 vDetailPos;
 
     // Водная оболочка — всегда патчи кубосферы (тот же TerrainPatchPool, что и
     // у рельефа): атрибут normal снят, центр патча приходит инстансным
     // атрибутом (один элемент на патч), гейта не нужно.
     attribute vec3 patchCenter;
+    // Тело-локальная позиция минус k·W (WATER_DETAIL_WRAP), юниты сцены — домен мелкой ряби.
+    attribute vec3 detailPos;
 
     void main() {
       vec4 worldPosition = modelMatrix * vec4(position, 1.0);
@@ -559,6 +563,7 @@ const BASELINE_VERTEX_SHADER = `
 
       vNormal = normalize(normalMatrix * vertexDir);
       vLocalDir = vertexDir;
+      vDetailPos = detailPos;
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
       vViewPosition = -mvPosition.xyz;

@@ -1,6 +1,7 @@
 import { CubeTexture, Mesh, type WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
+import { WATER_DETAIL_WRAP } from '@/core/terrain/detailWrap'
 import { constantHeightField } from '@/core/terrain/constantHeightField'
 import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
 import type { UpdateContext } from '@/core/UpdateContext'
@@ -89,7 +90,7 @@ class WaterSphere extends TerrainPatchGroup {
     const field = constantHeightField(radiusKm, waterLevelMeters)
     const sharedMaterial = new WaterMaterial(model, skyboxTexture, atmosphereRegistry)
 
-    super(field, sharedMaterial, renderer, WATER_MAX_LIVE_PATCHES)
+    super(field, sharedMaterial, renderer, WATER_MAX_LIVE_PATCHES, undefined, WATER_DETAIL_WRAP)
     this.model = model
     this.sharedMaterial = sharedMaterial
 
