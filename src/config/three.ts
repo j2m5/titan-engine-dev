@@ -19,6 +19,8 @@ export type ClockParameters = {
 export type AstroControlsParameters = {
   rollSpeed: number
   autoForward: boolean
+  /** Ниже этой доли радиуса тела правая кнопка мыши — осмотр на месте с ровным горизонтом. */
+  freeLookAltitudeRatio: number
 }
 
 export interface ThreeConfig {
@@ -56,7 +58,8 @@ export const three: ThreeConfig = {
   },
   astroControls: {
     rollSpeed: 0.1,
-    autoForward: false
+    autoForward: false,
+    freeLookAltitudeRatio: 0.02
   },
   cameraPosition: [0, 0, fromAstronomicalUnits(0.01)]
 }

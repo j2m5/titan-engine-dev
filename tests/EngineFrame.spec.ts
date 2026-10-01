@@ -53,15 +53,18 @@ function makeEngine() {
     }),
     stopFollowing: vi.fn()
   }
+  const surface = { center: new Vector3(), altitude: 1, surfaceRadius: 2 }
   const astroControls = {
     update: vi.fn(),
     setTarget: vi.fn(),
+    setSurface: vi.fn((): void => void order.push('surface')),
     enabled: true,
     movementSpeed: 0
   }
   const cameraCollision = {
     translateReferenceFrame: vi.fn((): void => void order.push('translate')),
     resolve: vi.fn((): void => void order.push('collision')),
+    nearestSurface: vi.fn(() => surface),
     reset: vi.fn()
   }
   const labelRenderer = {
@@ -95,6 +98,7 @@ function makeEngine() {
     cameraCollision,
     labelRenderer,
     renderCamera,
+    surface,
     order
   }
 }
@@ -141,9 +145,18 @@ describe('Engine: подключение периодического перес
       'follow',
       'translate',
       'collision',
+      'surface',
       'labels',
       'markers',
       'render'
     ])
+  })
+
+  it('поверхность под камерой после коллизии уходит в контролы — от неё чувствительность и осмотр на месте', () => {
+    const { engine, astroControls, surface } = makeEngine()
+
+    engine.start()
+
+    expect(astroControls.setSurface).toHaveBeenCalledWith(surface)
   })
 })

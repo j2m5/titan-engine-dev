@@ -7,6 +7,7 @@ import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 import { heightPathOf } from '@/core/terrain/heightPath'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { midbandParamsOf } from '@/core/terrain/midbandParams'
+import type { SurfaceProbe } from '@/core/libs/surfaceCamera'
 
 export type Collider = {
   object: Object3D
@@ -207,6 +208,8 @@ class CameraCollision {
   private readonly bestContact = new Vector3()
   private readonly bestNormal = new Vector3()
 
+  private readonly probe: SurfaceProbe = { center: new Vector3(), altitude: 0, surfaceRadius: 0 }
+
   public constructor(
     private camera: PerspectiveCamera,
     private sceneObserver: SceneObserver
@@ -228,6 +231,44 @@ class CameraCollision {
    */
   public translateReferenceFrame(displacement: Vector3): void {
     this.lastPosition?.add(displacement)
+  }
+
+  /**
+   * Ближайшая поверхность под камерой — по высоте над ней, не по расстоянию до
+   * центра: малая луна у камеры важнее большой планеты дальше. Рельеф —
+   * поточечно под камерой (с водой) в пределах двух радиусов широкой фазы;
+   * дальше — сфера широкой фазы. Звать после resolve(): коллайдеры свежие. Объект
+   * переиспользуется между вызовами.
+   */
+  public nearestSurface(): SurfaceProbe | null {
+    const position = this.camera.position
+    let best: SurfaceProbe | null = null
+
+    for (const collider of this.colliders) {
+      collider.object.getWorldPosition(this.center)
+      const distance = position.distanceTo(this.center)
+      let surfaceRadius = collider.radius
+
+      if (collider.heightField && distance < 2 * collider.radius && distance > 0) {
+        collider.object.updateWorldMatrix(true, false)
+        this.inverseMatrix.copy(collider.object.matrixWorld).invert()
+        this.localDir.copy(position).applyMatrix4(this.inverseMatrix).normalize()
+        surfaceRadius = collider.heightField.surfaceRadiusUnits(this.localDir)
+        if (collider.waterLevelMeters !== undefined) {
+          surfaceRadius = Math.max(surfaceRadius, collider.heightField.waterSurfaceRadiusUnits(collider.waterLevelMeters))
+        }
+      }
+
+      const altitude = distance - surfaceRadius
+      if (best !== null && altitude >= best.altitude) continue
+
+      best = this.probe
+      best.center.copy(this.center)
+      best.altitude = altitude
+      best.surfaceRadius = surfaceRadius
+    }
+
+    return best
   }
 
   public resolve(): void {

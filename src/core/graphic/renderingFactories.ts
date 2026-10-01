@@ -2,6 +2,7 @@ import { Clock, NoToneMapping, PerspectiveCamera, Scene, Sphere, SRGBColorSpace,
 import type { WebGLRendererParameters } from 'three'
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { AstroControls } from '@/core/libs/AstroControls'
+import type { AstroControlsParameters } from '@/config/three'
 
 /**
  * Кламп devicePixelRatio: на 4K/Retina честные 2-3x пикселей поверх MSAA 8x
@@ -48,12 +49,13 @@ export function createCamera(cfg: { fov: number; aspect: number; near: number; f
 export function createAstroControls(
   camera: PerspectiveCamera,
   renderer: WebGLRenderer,
-  cfg: { rollSpeed: number; autoForward: boolean }
+  cfg: AstroControlsParameters
 ): AstroControls {
   const sphere: Sphere = new Sphere(camera.position.clone(), 0.000001)
   const controls: AstroControls = new AstroControls(camera, sphere, renderer.domElement)
   controls.rollSpeed = cfg.rollSpeed
   controls.autoForward = cfg.autoForward
+  controls.freeLookAltitudeRatio = cfg.freeLookAltitudeRatio
 
   return controls
 }
