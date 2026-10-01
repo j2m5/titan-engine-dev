@@ -34,6 +34,12 @@ const defaultUniforms = {
   // Task 4, находка №5 финального ревью: было зашито константой без ручки,
   // теперь пятая ручка воды по той же конвенции, что и остальные четыре.
   uWaterNightFloor: new Uniform(0.08),
+  // Поверхность воды (арка «Вода 2»): значения per-body приходят из WaterShader
+  uWaterRoughness: new Uniform(0.02),
+  uWaterAbsorption: new Uniform(new Vector3(0.45, 0.07, 0.03)),
+  uWaterRippleStrength: new Uniform(1),
+  uWaterDepthRangeMeters: new Uniform(200),
+  uWaterPixelAngle: new Uniform(0),
   // Ряд волн (арка water-shader, Task 1) — все пять инертны без
   // USE_WATER_WAVES (гейт по наличию waterNormal-текстуры, см. WaterMaterial):
   // сэмплер null, uTime/scale/fade нулевые заглушки — реальные значения
@@ -169,6 +175,11 @@ export const WaterShaderTemplate: ShaderProps = {
       uniform float uWaterWaveScale;
       uniform float uWaterWaveSpeed;
       uniform float uWaterWaveFadeMeters;
+      uniform float uWaterRoughness;
+      uniform vec3 uWaterAbsorption;
+      uniform float uWaterRippleStrength;
+      uniform float uWaterDepthRangeMeters;
+      uniform float uWaterPixelAngle;
       // Пена прибоя (внутри USE_WATER_WAVES: время, шум и fade — общие с волнами)
       uniform float uFoamStrength;
       uniform float uFoamShoreMeters;

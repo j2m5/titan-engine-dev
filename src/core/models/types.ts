@@ -324,6 +324,15 @@ export interface IPlanetRenderingObject {
    */
   waterDistortion?: number
 
+  // --- Ручки поверхности воды (арка «Вода 2»). Дефолты — waterSurfaceParams.ts.
+
+  /** Базовая шероховатость блика, (0, 1]. Дефолт 0.02. */
+  waterRoughness?: number
+  /** Поглощение толщи по RGB, 1/м, каждый > 0. Дефолт [0.45, 0.07, 0.03]. */
+  waterAbsorption?: [number, number, number]
+  /** Сила мелких октав ряби 2560–10 м; 0 — только крупные. Дефолт 1. */
+  waterRippleStrength?: number
+
   // --- Ручки пены прибоя и мокрой кромки берега (арка surf-foam). Все
   // опциональны: отсутствие → дефолты waterFoamParams.ts. Активны только у
   // тел с waterLevelMeters (гейты ставят WaterMaterial/PlanetMaterial).

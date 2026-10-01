@@ -156,6 +156,16 @@ describe('WaterMaterial: проводка ручек data (дефолты чес
     expect(material.uniforms.uWaterNightFloor.value).toBe(0.08)
   })
 
+  it('data пуст — ручки поверхности воды на дефолтах', () => {
+    const material = new WaterMaterial(stubActor({ data: {} }))
+
+    expect(material.uniforms.uWaterRoughness.value).toBe(0.02)
+    expect(material.uniforms.uWaterAbsorption.value).toEqual(new Vector3(0.45, 0.07, 0.03))
+    expect(material.uniforms.uWaterRippleStrength.value).toBe(1)
+    expect(material.uniforms.uWaterDepthRangeMeters.value).toBe(200)
+    expect(material.uniforms.uWaterPixelAngle.value).toBe(0)
+  })
+
   it('ручки data перекрывают дефолты — число и строка цвета обе конвенции (как dustColor кольца)', () => {
     const material = new WaterMaterial(
       stubActor({

@@ -8,6 +8,8 @@ import { distanceForApparentSize } from '@/core/helpers/apparentSize'
 import { clampSunTintStrength } from '@/core/materials/SunTintBinding'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { resolveWaterFoamParams } from '@/core/terrain/waterFoamParams'
+import { resolveWaterSurfaceParams } from '@/core/terrain/waterSurfaceParams'
+import { WATER_SHALLOW_RANGE_METERS } from '@/core/terrain/waterLevel'
 
 // Дефолты ручек воды — честно помеченные заглушки (см. IPlanetRenderingObject),
 // приёмка по виду за владельцем (см. память «Flare Visual Checks Are Owner's»).
@@ -93,6 +95,11 @@ interface WaterUniforms {
   // createSkyboxSampleUniforms, ЖЕЛЕЗНЫЙ констрейнт (см. SkyboxSample chunk).
   uSkyboxMap: CubeTexture | null
   uWaterDistortion: number
+  uWaterRoughness: number
+  uWaterAbsorption: Vector3
+  uWaterRippleStrength: number
+  uWaterDepthRangeMeters: number
+  uWaterPixelAngle: number
   uSkyHighlightThreshold: number
   uSkyHighlightBoost: number
   uSkyFloor: number
@@ -144,6 +151,9 @@ type WaterRenderingData = Pick<
   | 'waterWaveSpeed'
   | 'waterWaveFadeMeters'
   | 'waterDistortion'
+  | 'waterRoughness'
+  | 'waterAbsorption'
+  | 'waterRippleStrength'
   | 'sunTintStrength'
   | 'waterFoamStrength'
   | 'waterFoamShoreMeters'
@@ -186,6 +196,7 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
 
     // Пена прибоя — тот же приём именования тела в ошибках, что PlanetShader.ts:198.
     const foam = resolveWaterFoamParams(waterData, this.model.getAttribute?.('name', '?') ?? '?')
+    const surface = resolveWaterSurfaceParams(waterData, this.model.getAttribute?.('name', '?') ?? '?')
 
     // Общий набор ручек выборки фона (highlight/floor/gain/flip) — та же
     // фабрика, что SkyboxBackground/BlackHole (ЖЕЛЕЗНЫЙ констрейнт, см.
@@ -239,6 +250,12 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
       // текстуры сюда не приходят). Остальной набор — общая выборка фона,
       // тот же `createSkyboxSampleUniforms`, что SkyboxBackground/BlackHole.
       uWaterDistortion: new Uniform(waterData.waterDistortion ?? DEFAULT_WATER_DISTORTION),
+      uWaterRoughness: new Uniform(surface.waterRoughness),
+      uWaterAbsorption: new Uniform(new Vector3(...surface.waterAbsorption)),
+      uWaterRippleStrength: new Uniform(surface.waterRippleStrength),
+      uWaterDepthRangeMeters: new Uniform(WATER_SHALLOW_RANGE_METERS),
+      // угол пикселя, рад: ставит материал по размеру вьюпорта и fov
+      uWaterPixelAngle: new Uniform(0),
       uSkyboxMap: new Uniform(null),
       uSkyHighlightThreshold: skySampleUniforms.uSkyHighlightThreshold,
       uSkyHighlightBoost: skySampleUniforms.uSkyHighlightBoost,
