@@ -26,6 +26,8 @@ export const WATER_GLINT_CEILING = 4
 export const WATER_OCTAVE_SLOPE_VARIANCE = 0.06427
 /** Пол α²: держит степень лепестка конечной. */
 export const WATER_MIN_ALPHA2 = 1e-4
+/** Потолок α²: степень лепестка p = 2/α² − 2 не уходит в минус. */
+export const WATER_MAX_ALPHA2 = 1
 
 /** Скорость ряби ∝ √λ, м/с. */
 export function rippleSpeedMps(periodMeters: number): number {
@@ -46,21 +48,21 @@ export function footprintMeters(distanceMeters: number, pixelAngle: number, muV:
 export function glintAlpha2(baseRoughness: number, weights: readonly number[], strength: number): number {
   let faded = 0
   for (const w of weights) faded += (1 - w) * strength * strength * WATER_OCTAVE_SLOPE_VARIANCE
-  return Math.max(baseRoughness * baseRoughness + faded, WATER_MIN_ALPHA2)
+  return Math.min(Math.max(baseRoughness * baseRoughness + faded, WATER_MIN_ALPHA2), WATER_MAX_ALPHA2)
 }
 
 /** Блик Блинна-Фонга с нормировкой лепестка и Шликом; зажат потолком, 0 при N·L ≤ 0. */
 export function waterGlint(nDotH: number, vDotH: number, nDotL: number, alpha2: number): number {
   if (nDotL <= 0) return 0
-  const p = 2 / Math.max(alpha2, WATER_MIN_ALPHA2) - 2
+  const p = 2 / Math.min(Math.max(alpha2, WATER_MIN_ALPHA2), WATER_MAX_ALPHA2) - 2
   const fresnel = WATER_GLINT_F0 + (1 - WATER_GLINT_F0) * (1 - Math.min(Math.max(vDotH, 0), 1)) ** 5
   const lobe = ((p + 8) / (8 * Math.PI)) * Math.max(nDotH, 0) ** p
   return Math.min(lobe * nDotL * fresnel, WATER_GLINT_CEILING)
 }
 
-/** Пропускание столба воды по каналам: exp(−σ·глубина/μv), μv ≥ 0.2. */
+/** Пропускание по каналам: T = exp(−σL), L = d·(1 + 1/max(μv, 0.1)) — вниз и обратно вверх по столбу. */
 export function waterTransmittance(depthMeters: number, muV: number, sigma: Vec3): Vec3 {
-  const path = depthMeters / Math.max(muV, 0.2)
+  const path = depthMeters * (1 + 1 / Math.max(muV, 0.1))
   return [Math.exp(-sigma[0] * path), Math.exp(-sigma[1] * path), Math.exp(-sigma[2] * path)]
 }
 

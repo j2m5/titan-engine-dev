@@ -39,6 +39,10 @@ describe('waterOctavesMath: блик', () => {
     expect(glintAlpha2(1e-6, [1], 1)).toBe(1e-4)
     expect(Number.isFinite(waterGlint(1, 1, 1, 1e-4))).toBe(true)
   })
+  it('α² не выше 1 — степень лепестка неотрицательна', () => {
+    expect(glintAlpha2(1, [0, 0, 0], 10)).toBe(1)
+    expect(Number.isFinite(waterGlint(0, 1, 1, 5))).toBe(true)
+  })
   it('потолок, ∝ N·L, ноль при N·L ≤ 0', () => {
     expect(waterGlint(1, 1, 1, 1e-4)).toBe(WATER_GLINT_CEILING)
     expect(waterGlint(0.999, 1, 0.5, 0.01)).toBeCloseTo(0.5 * waterGlint(0.999, 1, 1, 0.01), 9)
@@ -60,6 +64,14 @@ describe('waterOctavesMath: поглощение', () => {
   it('красный гаснет раньше синего', () => {
     const t = waterTransmittance(5, 1, sigma)
     expect(t[0]).toBeLessThan(t[2])
+  })
+  it('точная формула: L = d·(1 + 1/max(μv, 0.1))', () => {
+    const t1 = waterTransmittance(1, 1, sigma)
+    const t0 = waterTransmittance(1, 0, sigma)
+    for (let i = 0; i < 3; i++) {
+      expect(t1[i]).toBeCloseTo(Math.exp(-2 * sigma[i]), 12)
+      expect(t0[i]).toBeCloseTo(Math.exp(-11 * sigma[i]), 12)
+    }
   })
   it('скользящий взгляд плотнее', () => {
     expect(waterTransmittance(5, 0.2, sigma)[2]).toBeLessThan(waterTransmittance(5, 1, sigma)[2])
