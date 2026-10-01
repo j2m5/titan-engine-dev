@@ -341,11 +341,12 @@ describe('WaterShaderTemplate: затухание по октавам — вес
     )
   })
 
-  it('веса четырёх крупных октав по их эффективным периодам; waveFade — вес крупнейшей (90 км)', () => {
+  it('веса четырёх крупных октав по их эффективным периодам; waveFade — вес октавы 3000 м (не крупнейшей: с орбиты — фундамент)', () => {
     expect(frag).toContain(
       'vec4 waveWeights = vec4(waterOctaveWeight(WATER_WAVE_PERIOD_0, waveFootprint), waterOctaveWeight(WATER_WAVE_PERIOD_1, waveFootprint), waterOctaveWeight(WATER_WAVE_PERIOD_2, waveFootprint), waterOctaveWeight(WATER_WAVE_PERIOD_3, waveFootprint));'
     )
-    expect(frag).toContain('float waveFade = waveWeights.w;')
+    expect(frag).toContain('float waveFade = waveWeights.x;')
+    expect(frag).not.toMatch(/waveFade = waveWeights\.[yzw]/)
     expect(frag).not.toContain('uWaterWaveFadeMeters')
   })
 
@@ -416,10 +417,12 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
     [0.05, 0.05, 0.08]
   ]
 
-  it('критерий 1: вес крупнейшей октавы 0 → blendedColor ЧИСЛЕННО (===) равен foundationColor, независимо от waves-входов', () => {
-    // 100 000 км при 50°/1080p — футпринт ≈ 86 км ≥ 90 км / 2: погасла и крупнейшая октава
-    const footprint = footprintMeters(100e6, (2 * Math.tan((25 * Math.PI) / 180)) / 1080, 1)
+  it('критерий 1: вес октавы 3000 м 0 → blendedColor ЧИСЛЕННО (===) равен foundationColor, даже когда 90 км ещё видна', () => {
+    // 2000 км при 50°/1080p — футпринт ≈ 1.7 км: 3000 м погасла (≤ 2f), 90 км целиком (≥ 4f)
+    const footprint = footprintMeters(2e6, (2 * Math.tan((25 * Math.PI) / 180)) / 1080, 1)
     const weights = WATER_WAVE_PERIODS_METERS.map((p) => octaveWeight(p, footprint)) as unknown as WaveWeights
+    expect(weights[0]).toBe(0)
+    expect(weights[3]).toBe(1)
     const waveFade = waveFadeFromWeights(weights)
     expect(waveFade).toBe(0)
     let samples = 0
@@ -839,7 +842,7 @@ describe('WaterShader: uWaterWaveScale — радиус тела (метры) ×
   })
 })
 
-describe('WaterShader: дистанционного fade больше нет — его роль у веса крупнейшей октавы', () => {
+describe('WaterShader: дистанционного fade больше нет — его роль у веса октавы 3000 м', () => {
   it('юниформа uWaterWaveFadeMeters нет ни у шейдера, ни у шаблона; ручка данных не читается', () => {
     const shader = new WaterShader({
       renderingObject: { getAttribute: () => ({ waterWaveFadeMeters: 5000 }) },

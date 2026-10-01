@@ -348,7 +348,7 @@ export const WaterShaderTemplate: ShaderProps = {
       // Рябь мелких октав (posM — домен патча, м; footprint — м) считается
       // ДО полюсного гарда: внутри экранные производные, им нужен
       // однородный поток; rippleVariance — Σ(1 − wᵢ)·s²·V погасших мелких октав. waveWeights —
-      // веса крупных октав (3, 9, 27, 90 км), fade — вес крупнейшей.
+      // веса крупных октав (3, 9, 27, 90 км), fade — вес октавы 3 км.
       vec3 waterWaveNormal(vec3 dirLocal, vec3 posM, float footprint, vec4 waveWeights, float fade, out float rippleVariance) {
         vec3 ripple = waterRippleDeviation(posM, dirLocal, footprint, rippleVariance);
 
@@ -478,12 +478,14 @@ export const WaterShaderTemplate: ShaderProps = {
         // Затухание по октавам: вес каждой — по футпринту пикселя на
         // поверхности (дистанция, угол пикселя, косинус взгляда), не по
         // экранной производной — домен патча прыгает на k·W. waveFade — вес
-        // крупнейшей октавы: она гаснет последней, при 0 цвет === фундаменту.
+        // октавы 3000 м (≈1900 км при 50°/1080p): с орбиты формула волн не
+        // действует (молочный океан из космоса отвергнут), при 0 цвет === фундаменту.
+        // Октавы 9–90 км дальше гаснут только внутри нормали.
         vec3 posM = vDetailPos * WATER_METERS_PER_UNIT;
         float waveDist = length(vViewPosition);
         float waveFootprint = waterFootprintMeters(waveDist * WATER_METERS_PER_UNIT, uWaterPixelAngle, max(dot(viewDir, normal), 0.0));
         vec4 waveWeights = vec4(waterOctaveWeight(WATER_WAVE_PERIOD_0, waveFootprint), waterOctaveWeight(WATER_WAVE_PERIOD_1, waveFootprint), waterOctaveWeight(WATER_WAVE_PERIOD_2, waveFootprint), waterOctaveWeight(WATER_WAVE_PERIOD_3, waveFootprint));
-        float waveFade = waveWeights.w;
+        float waveFade = waveWeights.x;
         // Σ(1 − wᵢ)·s²·V погасших мелких октав — вход шероховатости блика
         float rippleVariance = 0.0;
         vec3 waveDirLocal = normalize(vLocalDir);

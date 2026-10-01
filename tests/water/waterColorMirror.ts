@@ -7,7 +7,7 @@
  * часть main(), не зависит от USE_WATER_WAVES) и wavesColor (полная формула
  * Water.js, включая СОБСТВЕННЫЙ ночной пол) — плюс их смешивание по
  * waveFade, буквально повторяющее `color = mix(color, wavesColor, waveFade)`
- * в шейдере; waveFade — вес крупнейшей октавы (`waveWeights.w`).
+ * в шейдере; waveFade — вес октавы 3000 м (`waveWeights.x`).
  *
  * ВАЖНО: менять строго синхронно с main() в
  * src/core/materials/shaders/lib/WaterShaderTemplate.ts.
@@ -185,14 +185,14 @@ export interface BlendInputs {
 /** Веса крупных октав (3, 9, 27, 90 км) — порядок vec4 waveWeights в main(). */
 export type WaveWeights = readonly [number, number, number, number]
 
-/** `float waveFade = waveWeights.w;` — вес крупнейшей октавы. */
+/** `float waveFade = waveWeights.x;` — вес октавы 3000 м: с орбиты формула волн не действует. */
 export function waveFadeFromWeights(waveWeights: WaveWeights): number {
-  return waveWeights[3]
+  return waveWeights[0]
 }
 
-/** `color = mix(color, wavesColor, waveFade)`: при весе крупнейшей 0 — ровно фундамент. */
-export function mixWithFoundation(foundation: Vec3, waves: Vec3, wLargest: number): Vec3 {
-  return mix3(foundation, waves, wLargest)
+/** `color = mix(color, wavesColor, waveFade)`: при весе октавы 3000 м 0 — ровно фундамент. */
+export function mixWithFoundation(foundation: Vec3, waves: Vec3, waveFade: number): Vec3 {
+  return mix3(foundation, waves, waveFade)
 }
 
 /** color = mix(foundationColor(...), wavesColor(...), waveFade) — буквально итоговая строка main(). */
