@@ -37,9 +37,10 @@ import {
 // кванта по фактическому ассету, №2 whiteout-реориентация трипланара, №4
 // анизотропные октавы 2/3; финальное whole-branch ревью учтено — БЛОКЕР №1:
 // несущая компонента трипланара теряла знак оси проекции, см. describe ниже
-// «CPU-зеркало waterWaveNormal»): getNoise/sunLight/albedo дословно Water.js
-// (three/examples/jsm/objects/Water.js) там, где спека не требует адаптации;
-// трипланарный whiteout-бленд в body-локальном XYZ, fade по дистанции, гейт
+// «CPU-зеркало waterWaveNormal»): getNoise/albedo — Water.js
+// (three/examples/jsm/objects/Water.js) там, где спека не требует адаптации
+// (getNoiseWeighted — веса октав по футпринту пикселя, sunLight — только диффуз);
+// трипланарный whiteout-бленд в body-локальном XYZ, гейт
 // USE_WATER_WAVES не тронул ни одного символа Task 4 без карты (см. ниже).
 const frag: string = WaterShaderTemplate.fragmentShader
 const vert: string = WaterShaderTemplate.vertexShader

@@ -22,6 +22,7 @@ const defaultUniforms = {
   // только канал A. null допустим — гейт USE_WATER_DEPTH решает, читать ли.
   uSlopeMap: new Uniform(null),
   uWaterColor: new Uniform(new Color(0x0b3d66)),
+  // Для совместимости данных: в режиме глубины не читается (роль у поглощения)
   uWaterShallowColor: new Uniform(new Color(0x2e8b9e)),
   uWaterAlphaDeep: new Uniform(0.85),
   // 0x4a8ac4 — приёмочная волна 4, №1: прежний 0x87b8d8 (приёмочная волна 2)
@@ -482,7 +483,8 @@ export const WaterShaderTemplate: ShaderProps = {
         // экранной производной — домен патча прыгает на k·W. waveFade — вес
         // октавы 3000 м (≈1900 км при 50°/1080p): с орбиты формула волн не
         // действует (молочный океан из космоса отвергнут), при 0 цвет === фундаменту.
-        // Октавы 9–90 км дальше гаснут только внутри нормали.
+        // Веса октав 9–90 км равны 1, пока waveFade > 0, — их затухание по
+        // октавам неактивно; взвешивание оставлено для общности и защиты от NaN.
         vec3 posM = vDetailPos * WATER_METERS_PER_UNIT;
         float waveDist = length(vViewPosition);
         float waveFootprint = waterFootprintMeters(waveDist * WATER_METERS_PER_UNIT, uWaterPixelAngle, max(dot(viewDir, normal), 0.0));
