@@ -15,7 +15,7 @@ import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { UpdateContext } from '@/core/UpdateContext'
 import type { ResourceObserver } from '@/core/services/ResourceObserver'
-import { WATER_DETAIL_WRAP, wrapIndex, wrappedComponent } from '@/core/terrain/detailWrap'
+import { WATER_DETAIL_WRAP, type DetailWrap, wrapIndex, wrappedComponent } from '@/core/terrain/detailWrap'
 
 const MOON_ID = 19
 const MOON_RADIUS_KM = 1735.97 // physicalObjects: actorId 19 (id 16)
@@ -125,8 +125,11 @@ describe('WaterSphere: оболочка без смещения', { timeout: 300
     const { w1 } = WATER_DETAIL_WRAP
     const c = [center.getX(0), center.getY(0), center.getZ(0)]
     const p = [pos.getX(0) + c[0], pos.getY(0) + c[1], pos.getZ(0) + c[2]]
+    expect((sphere as unknown as { detailWrap: DetailWrap }).detailWrap).toBe(WATER_DETAIL_WRAP)
+    const ks = c.map((v) => wrapIndex(v, w1))
+    expect(ks.some((k) => k !== 0)).toBe(true) // k = 0 сделал бы проверку пустой
     for (let i = 0; i < 3; i++) {
-      expect(d1.array[i]).toBeCloseTo(wrappedComponent(p[i], wrapIndex(c[i], w1), w1), 6)
+      expect(d1.array[i]).toBeCloseTo(wrappedComponent(p[i], ks[i], w1), 6)
     }
   })
 
