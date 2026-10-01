@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   WATER_DETAIL_WRAP_METERS, WATER_GLINT_CEILING, WATER_OCTAVE_SLOPE_VARIANCE, WATER_RIPPLE_PERIODS_METERS,
+  WATER_TRIPLANAR_SLOPE_GAIN2,
   absorptionLayer, footprintMeters, glintAlpha2, octaveWeight, rippleSpeedMps, waterGlint, waterTransmittance
 } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 
@@ -29,11 +30,12 @@ describe('waterOctavesMath: октавы', () => {
 })
 
 describe('waterOctavesMath: блик', () => {
-  it('шероховатость растёт ровно на дисперсию погасших октав', () => {
+  it('шероховатость растёт ровно на дисперсию погасших октав с трипланарным усилением 1.5²', () => {
     const a = glintAlpha2(0.02, [1, 1, 1], 1)
     const b = glintAlpha2(0.02, [1, 0, 0.5], 1)
     expect(a).toBeCloseTo(0.02 ** 2, 12)
-    expect(b - a).toBeCloseTo(1.5 * WATER_OCTAVE_SLOPE_VARIANCE, 12)
+    expect(WATER_TRIPLANAR_SLOPE_GAIN2).toBe(2.25)
+    expect(b - a).toBeCloseTo(1.5 * 2.25 * WATER_OCTAVE_SLOPE_VARIANCE, 12)
   })
   it('α² не ниже пола — степень конечна, блик без NaN', () => {
     expect(glintAlpha2(1e-6, [1], 1)).toBe(1e-4)

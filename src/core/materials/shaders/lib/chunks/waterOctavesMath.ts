@@ -24,6 +24,8 @@ export const WATER_GLINT_F0 = 0.02
 export const WATER_GLINT_CEILING = 4
 /** Средняя дисперсия наклона одной октавы (замер waternormals.jpg: (nx²+ny²)/max(nz,0.05)²). */
 export const WATER_OCTAVE_SLOPE_VARIANCE = 0.06427
+/** Квадрат тангенциального усиления 1.5 трипланарной реориентации: дисперсия наклона октавы в нормали — 2.25·V. */
+export const WATER_TRIPLANAR_SLOPE_GAIN2 = 2.25
 /** Пол α²: держит степень лепестка конечной. */
 export const WATER_MIN_ALPHA2 = 1e-4
 /** Потолок α²: степень лепестка p = 2/α² − 2 не уходит в минус. */
@@ -44,11 +46,12 @@ export function footprintMeters(distanceMeters: number, pixelAngle: number, muV:
   return (distanceMeters * pixelAngle) / Math.max(muV, 0.2)
 }
 
-/** α² блика: базовая шероховатость плюс дисперсия погасших октав; weights — веса всех учитываемых октав. */
+/** α² блика: r² + 2.25·Σ(1 − wᵢ)·s²·V погасших октав; weights — веса всех учитываемых октав. */
 export function glintAlpha2(baseRoughness: number, weights: readonly number[], strength: number): number {
   let faded = 0
   for (const w of weights) faded += (1 - w) * strength * strength * WATER_OCTAVE_SLOPE_VARIANCE
-  return Math.min(Math.max(baseRoughness * baseRoughness + faded, WATER_MIN_ALPHA2), WATER_MAX_ALPHA2)
+  const alpha2 = baseRoughness * baseRoughness + WATER_TRIPLANAR_SLOPE_GAIN2 * faded
+  return Math.min(Math.max(alpha2, WATER_MIN_ALPHA2), WATER_MAX_ALPHA2)
 }
 
 /** Блик Блинна-Фонга с нормировкой лепестка и Шликом; зажат потолком, 0 при N·L ≤ 0. */

@@ -5,6 +5,7 @@ import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderT
 import { WATER_DETAIL_WRAP, wrapUnitsFor } from '@/core/terrain/detailWrap'
 import {
   WATER_DETAIL_PERIOD_METERS,
+  WATER_GLINT_CEILING,
   WATER_WAVE_PERIODS_METERS,
   footprintMeters,
   octaveWeight
@@ -24,6 +25,7 @@ import {
   dirFromLatLon,
   foundationAlpha,
   foundationColor,
+  glintFromVectors,
   waveAlpha as waveAlphaMirror,
   waveFadeFromWeights,
   type WaveWeights,
@@ -174,18 +176,12 @@ describe('CPU-страж кванта домена: quant(R) = R_метры · 2
 })
 
 describe('WaterShaderTemplate: sunLight/albedo — дословно Water.js (getShadowMask опущен, теней нет)', () => {
-  it('sunLight: сигнатура и коэффициенты вызова 100/2/0.5 (дословно)', () => {
-    expect(frag).toContain(
-      'void sunLight(const vec3 surfaceNormal, const vec3 eyeDirection, float shiny, float spec, float diffuse, inout vec3 diffuseColor, inout vec3 specularColor) {'
-    )
-    expect(frag).toContain('sunLight(waveNormal, viewDir, 100.0, 2.0, 0.5, waveDiffuseLight, waveSpecularLight);')
-  })
-
-  it('sunLight: формулы diffuse/specular не тронуты (единственная адаптация — источник sunDirection)', () => {
-    expect(frag).toContain('vec3 reflection = normalize(reflect(-waterSunDirection, surfaceNormal));')
-    expect(frag).toContain('float direction = max(0.0, dot(eyeDirection, reflection));')
-    expect(frag).toContain('specularColor += pow(direction, shiny) * waterSunColor * spec;')
+  it('sunLight: только диффузная часть Water.js, коэффициент 0.5 (блик — waterGlintGlsl, WaterGlint.spec.ts)', () => {
+    expect(frag).toContain('void sunLight(const vec3 surfaceNormal, float diffuse, inout vec3 diffuseColor) {')
+    expect(frag).toContain('sunLight(waveNormal, 0.5, waveDiffuseLight);')
     expect(frag).toContain('diffuseColor += max(dot(waterSunDirection, surfaceNormal), 0.0) * waterSunColor * diffuse;')
+    expect(frag).not.toContain('specularColor')
+    expect(frag).not.toContain('pow(direction, shiny)')
   })
 
   it('reflectance по Шлику: rf0 = 0.3 (дословно)', () => {
@@ -204,11 +200,9 @@ describe('WaterShaderTemplate: sunLight/albedo — дословно Water.js (ge
     // Приёмочная волна 4, №1: Water.js vec3(0.1) — вклад ambient ЗЕРКАЛЬНОЙ
     // сцены, у нас зеркала нет — адаптация тонирует тот же вклад градиентным
     // skyColor (0.1·skyColor), не плоской серой константой.
-    // Блик — белый waterSunColor, не тинт неба: у Water.js reflectionSample —
-    // честное небо с солнцем в нём, у нас константный голубой градиент, и
-    // глинт выходил голубым (пик 1.1 в синем, 0.14 в красном).
-    expect(frag).toContain('0.1 * skyColor + waveReflectionSample * 0.9 + waterSunColor * waveSpecularLight,')
-    expect(frag).not.toContain('waveReflectionSample * waveSpecularLight')
+    // Солнечного спекуляра в смеси нет: блик добавляется после пены (WaterGlint.spec.ts)
+    expect(frag).toContain('0.1 * skyColor + waveReflectionSample * 0.9,')
+    expect(frag).not.toContain('waveSpecularLight')
     expect(frag).toContain('waveReflectance')
   })
 
@@ -435,7 +429,7 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
               for (const reflectionSample of foreignReflectionSamples) {
                 const foundation = foundationColor(bc, fresnelTint, normal, viewDir, lightDir, nightFloor)
                 const blended = blendedColor(
-                  { baseColor: bc, fresnelTint, reflectionSample, skyColor, normal, waveNormal, viewDir, lightDir, sunColor, nightFloor },
+                  { baseColor: bc, fresnelTint, reflectionSample, skyColor, normal, waveNormal, viewDir, lightDir, sunColor, nightFloor, alpha2: 1e-4 },
                   waveFade
                 )
 
@@ -478,7 +472,8 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
       viewDir: viewDirs[0],
       lightDir: lightDirs[0],
       sunColor,
-      nightFloor
+      nightFloor,
+      alpha2: 0.02 ** 2
     }
 
     // mix — линейная функция fade по построению (см. blendedColor): шаг по
@@ -500,32 +495,33 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
     }
   })
 
-  it('критерий 3: вклад waves (спекуляр/reflectance-надбавка) растёт СТРОГО от fade — линейно, ноль на пороге', () => {
+  it('критерий 3: вклад waves (блик/reflectance-надбавка) растёт СТРОГО от fade — линейно, ноль на пороге', () => {
     const inputs = {
       baseColor,
       fresnelTint,
       reflectionSample: [1, 1, 1] as Vec3, // максимально яркий — контрастная проверка
       skyColor,
       normal: normals[1],
-      waveNormal: normals[1], // специально совпадает с normal — специулярный пик виден
+      waveNormal: normals[1],
       viewDir: viewDirs[0],
       lightDir: lightDirs[0],
       sunColor,
-      nightFloor
+      nightFloor,
+      alpha2: 0.3 // широкий лепесток: блик в этой геометрии ненулевой
     }
 
     const foundation = foundationColor(inputs.baseColor, inputs.fresnelTint, inputs.normal, inputs.viewDir, inputs.lightDir, inputs.nightFloor)
     const waves = wavesColor(inputs.baseColor, inputs.reflectionSample, inputs.skyColor, inputs.waveNormal, inputs.viewDir, inputs.lightDir, inputs.sunColor, inputs.nightFloor)
+    const glint = glintFromVectors(inputs.waveNormal, inputs.lightDir, inputs.viewDir, inputs.alpha2)
+    expect(glint).toBeGreaterThan(0)
 
-    // mix — линейная функция: blended(fade) === foundation + fade*(waves-foundation)
-    // покомпонентно. Проверяем ЭТУ ТОЧНУЮ линейность на нескольких fade —
-    // она же доказывает «рост строго от fade, ноль на пороге» аналитически,
-    // не приближённо.
+    // blended(fade) === foundation + fade·(waves − foundation) + fade·min(glint, 4)
+    // покомпонентно — линейно по fade, ноль на пороге.
     for (const fade of [0, 0.25, 0.5, 0.75, 1]) {
       const blended = blendedColor(inputs, fade)
 
       for (let c = 0; c < 3; c++) {
-        const expected = foundation[c] + fade * (waves[c] - foundation[c])
+        const expected = foundation[c] + fade * (waves[c] - foundation[c]) + fade * Math.min(sunColor[c] * glint, WATER_GLINT_CEILING)
 
         expect(blended[c]).toBeCloseTo(expected, 12)
       }

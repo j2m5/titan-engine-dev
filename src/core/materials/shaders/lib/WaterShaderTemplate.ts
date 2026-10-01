@@ -284,16 +284,11 @@ export const WaterShaderTemplate: ShaderProps = {
         return (noise + vec4(0.0, 0.0, max(1e-4 - wSum, 0.0), 0.0)) / max(wSum, 1e-4);
       }
 
-      // sunLight — ДОСЛОВНО Water.js (коэффициенты 100/2/0.5 у вызывающей
-      // стороны). sunDirection Water.js — отдельный uniform; здесь читаем
-      // vViewLightDirection (общий конвейер света движка, тот же varying,
-      // что и остальной WaterShaderTemplate) — единственная адаптация,
-      // формула diffuse/specular не тронута.
-      void sunLight(const vec3 surfaceNormal, const vec3 eyeDirection, float shiny, float spec, float diffuse, inout vec3 diffuseColor, inout vec3 specularColor) {
+      // sunLight — диффузная часть Water.js (коэффициент 0.5 у вызывающей
+      // стороны); sunDirection — vViewLightDirection, общий конвейер света
+      // движка. Блик — waterGlintGlsl (чанк waterOctavesFunctions), после пены.
+      void sunLight(const vec3 surfaceNormal, float diffuse, inout vec3 diffuseColor) {
         vec3 waterSunDirection = normalize(vViewLightDirection);
-        vec3 reflection = normalize(reflect(-waterSunDirection, surfaceNormal));
-        float direction = max(0.0, dot(eyeDirection, reflection));
-        specularColor += pow(direction, shiny) * waterSunColor * spec;
         diffuseColor += max(dot(waterSunDirection, surfaceNormal), 0.0) * waterSunColor * diffuse;
       }
 
@@ -514,8 +509,7 @@ export const WaterShaderTemplate: ShaderProps = {
         // выше), reflectionSample — градиентное небо зенит/горизонт (кубмапа
         // отключена рулингом, см. USE_WATER_REFLECTION).
         vec3 waveDiffuseLight = vec3(0.0);
-        vec3 waveSpecularLight = vec3(0.0);
-        sunLight(waveNormal, viewDir, 100.0, 2.0, 0.5, waveDiffuseLight, waveSpecularLight);
+        sunLight(waveNormal, 0.5, waveDiffuseLight);
 
         float waveTheta = max(dot(viewDir, waveNormal), 0.0);
         float waveRf0 = 0.3;
@@ -622,10 +616,8 @@ export const WaterShaderTemplate: ShaderProps = {
         // что и у reflection) — 0.1·skyColor, не vec3(0.1).
         vec3 wavesColor = mix(
           waterSunColor * waveDiffuseLight * 0.3 + waveScatter,
-          // Блик — белый waterSunColor, не отражённое небо: у Water.js
-          // reflectionSample несёт солнце, у нас это константный голубой
-          // градиент, и глинт выходил голубым.
-          0.1 * skyColor + waveReflectionSample * 0.9 + waterSunColor * waveSpecularLight,
+          // Солнечного спекуляра здесь нет: блик — отдельно, после пены
+          0.1 * skyColor + waveReflectionSample * 0.9,
           waveReflectance
         );
         // Свой ночной пол waves-цвета (waveDayFactor, НЕ общий dayFactor
@@ -660,20 +652,19 @@ export const WaterShaderTemplate: ShaderProps = {
         // паритетный тест), wavesColor — полная формула Water.js. При
         // waveFade=0.0 mix(color, wavesColor, 0.0) РОВНО равен
         // фундаментному color (IEEE mix: a·(1−0)+b·0=a), НЕЗАВИСИМО от
-        // wavesColor — спекуляр/reflectance-надбавка растут строго от fade
+        // wavesColor — reflectance-надбавка растёт строго от fade
         // (за порогом — нулевой вклад в смеси по построению самого mix, не
         // по случайному совпадению). Непрерывность по fade — color,
         // wavesColor и сам waveFade непрерывны каждый по отдельности
         // (smoothstep/mix/dot/pow — гладкие функции, дублирующихся веток
         // нет), значит непрерывен и итог, разрыва ни на пороге, ни в
         // середине. Двойного счёта тинта нет: mix — ВЫПУКЛАЯ комбинация
-        // (не сумма) двух самодостаточных цветов; waveReflectionSample
-        // дважды входит В ПРЕДЕЛАХ ОДНОЙ формулы Water.js (база отражения +
-        // тон спекуляра) — так задумано оригиналом, это не удвоение с
-        // фундаментным Френель-тинтом снаружи (тот в wavesColor не входит
-        // вовсе, живёт только в color-ветке до этого mix).
+        // (не сумма) двух самодостаточных цветов; фундаментный Френель-тинт
+        // в wavesColor не входит вовсе.
         color = mix(color, wavesColor, waveFade);
 
+        // Плотность пены; без USE_WATER_DEPTH (и с выключенной пеной) — 0
+        float foam = 0.0;
         #ifdef USE_WATER_DEPTH
           // Гейт юниформный (однородный поток: fwidth и выборки ниже определены);
           // тела с выключенной пеной и до прихода карты не платят ни одной выборки
@@ -708,7 +699,7 @@ export const WaterShaderTemplate: ShaderProps = {
             float noiseWeight = 1.0 - smoothstep(0.5, 1.0, length(fwidth(pNoise)));
             float noise = mix(0.5, foamNoise(dirLocal, pNoise), noiseWeight);
             noise = clamp((noise - 0.5) * FOAM_NOISE_CONTRAST + 0.5, 0.0, 1.0); // канал .x нормалей узкий вокруг 0.5
-            float foam = clamp(shore + surf, 0.0, 1.0);
+            foam = clamp(shore + surf, 0.0, 1.0);
             // рвань: плотность каймы гуляет в [1 − FOAM_TEAR, 1]; сплошная кайма рвётся меньше гребней
             foam *= mix(1.0 - FOAM_TEAR, 1.0, smoothstep(0.3, 0.7, noise + 0.3 * foam));
             foam *= uFoamStrength * foamWeight;
@@ -718,11 +709,24 @@ export const WaterShaderTemplate: ShaderProps = {
             #else
               vec3 foamLit = uFoamColor * mix(uWaterNightFloor, 1.0, waveDayFactor);
             #endif
-            // после готового цвета волн: спекуляр и отражение под пеной гаснут самим mix
+            // после готового цвета волн: отражение под пеной гаснет самим mix, блик — множителем (1 − foam) ниже
             color = mix(color, foamLit, foam);
             alpha = max(alpha, foam);
           }
         #endif
+
+        // Блик по шероховатости: α² = r² + 1.5²·Σ(1 − wᵢ)·σ² погасших октав (Токсвиг) —
+        // вблизи искры на гребнях видимой ряби, издалека широкая тусклая дорожка.
+        // Крупные октавы — сила 1; × waveFade: за порогом октавы 3000 м цвет === фундаменту.
+        float bigVariance = dot(1.0 - waveWeights, vec4(WATER_OCTAVE_SLOPE_VARIANCE));
+        float alpha2 = clamp(uWaterRoughness * uWaterRoughness + WATER_TRIPLANAR_SLOPE_GAIN2 * (rippleVariance + bigVariance), WATER_MIN_ALPHA2, WATER_MAX_ALPHA2);
+        // waterSunColor под USE_LIGHT_TINT — uLightColor
+        vec3 glint = waterGlintGlsl(waveNormal, lightDirection, viewDir, alpha2) * waterSunColor;
+        #ifdef USE_SUN_TINT
+          glint *= sunTintFactor * waveDayFactor;
+        #endif
+        // потолок: искры блумят, кляксы — нет; под пеной блика нет
+        color += min(glint, WATER_GLINT_CEILING) * waveFade * (1.0 - foam);
       #endif
 
       gl_FragColor = vec4(color, alpha);

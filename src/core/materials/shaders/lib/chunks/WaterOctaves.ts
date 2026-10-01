@@ -1,6 +1,11 @@
 import {
+  WATER_GLINT_CEILING,
+  WATER_GLINT_F0,
+  WATER_MAX_ALPHA2,
+  WATER_MIN_ALPHA2,
   WATER_OCTAVE_SLOPE_VARIANCE,
   WATER_RIPPLE_PERIODS_METERS,
+  WATER_TRIPLANAR_SLOPE_GAIN2,
   WATER_WAVE_PERIODS_METERS,
   rippleSpeedMps
 } from './waterOctavesMath'
@@ -56,7 +61,7 @@ const rippleBranches = WATER_RIPPLE_PERIODS_METERS.map((_period, i) =>
 ).join('\n')
 
 /**
- * Мелкие октавы ряби воды (2560…10 м) и вес октав по футпринту пикселя.
+ * Мелкие октавы ряби воды (2560…10 м), вес октав по футпринту пикселя и блик по шероховатости.
  * CPU-зеркало и константы — waterOctavesMath.ts.
  *
  * Домен posM — тело-локальная позиция минус k·W (WATER_DETAIL_WRAP), метры:
@@ -72,6 +77,13 @@ ${rippleDefines}
 ${waveDefines}
   // средняя дисперсия наклона одной октавы ассета (замер waternormals.jpg)
   #define WATER_OCTAVE_SLOPE_VARIANCE ${glslFloat(WATER_OCTAVE_SLOPE_VARIANCE)}
+  // трипланар усиливает тангенциальный наклон в 1.5: дисперсия в нормали — 1.5²·V
+  #define WATER_TRIPLANAR_SLOPE_GAIN2 ${glslFloat(WATER_TRIPLANAR_SLOPE_GAIN2)}
+  #define WATER_GLINT_F0 ${glslFloat(WATER_GLINT_F0)}
+  #define WATER_GLINT_CEILING ${glslFloat(WATER_GLINT_CEILING)}
+  #define WATER_MIN_ALPHA2 ${glslFloat(WATER_MIN_ALPHA2)}
+  #define WATER_MAX_ALPHA2 ${glslFloat(WATER_MAX_ALPHA2)}
+  #define WATER_PI 3.141592653589793
 
   // 1 при period ≥ 4f, 0 при period ≤ 2f; f — футпринт пикселя, м (пол — края smoothstep не совпадают)
   float waterOctaveWeight(float period, float footprint) {
@@ -110,5 +122,19 @@ ${rippleDomains}
     float s2V = uWaterRippleStrength * uWaterRippleStrength * WATER_OCTAVE_SLOPE_VARIANCE;
 ${rippleBranches}
     return dev * uWaterRippleStrength;
+  }
+
+  // Блик: нормированный Блинн–Фонг (p+8)/(8π)·(N·H)^p, p = 2/α² − 2, × N·L × Шлик (F0 воды),
+  // потолок WATER_GLINT_CEILING; n, l, v — единичные, одна система координат
+  float waterGlintGlsl(vec3 n, vec3 l, vec3 v, float alpha2) {
+    float nDotL = dot(n, l);
+    if (nDotL <= 0.0) return 0.0;
+    vec3 hSum = l + v;
+    vec3 h = hSum / max(length(hSum), 1e-6);
+    float p = 2.0 / clamp(alpha2, WATER_MIN_ALPHA2, WATER_MAX_ALPHA2) - 2.0;
+    float fresnel = WATER_GLINT_F0 + (1.0 - WATER_GLINT_F0) * pow(1.0 - clamp(dot(v, h), 0.0, 1.0), 5.0);
+    // основание pow > 0: pow(0, 0) в GLSL не определён
+    float lobe = (p + 8.0) / (8.0 * WATER_PI) * pow(max(dot(n, h), 1e-8), p);
+    return min(lobe * nDotL * fresnel, WATER_GLINT_CEILING);
   }
 `
