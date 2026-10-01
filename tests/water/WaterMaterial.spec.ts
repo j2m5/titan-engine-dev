@@ -29,12 +29,12 @@ describe('WaterShaderTemplate: строковые ассерты (Френель
     expect(frag).not.toContain('SLOPE_RANGE')
   })
 
-  it('мелководье: mix(shallow -> deep) по каналу A', () => {
-    expect(frag).toContain('mix(uWaterShallowColor, uWaterColor, depthA)')
+  it('мелководье: поглощение по каналу A (Бер–Ламберт, см. WaterAbsorption.spec.ts)', () => {
+    expect(frag).toContain('float depthMeters = depthA * uWaterDepthRangeMeters;')
   })
 
-  it('альфа урезается к нулю на урезе: uWaterAlphaDeep * depthA', () => {
-    expect(frag).toContain('uWaterAlphaDeep * depthA')
+  it('альфа урезается к нулю на урезе: 1 − luma(T), при d = 0 T = 1', () => {
+    expect(frag).toContain('float depthAlpha = 1.0 - dot(transmittance, vec3(0.2126, 0.7152, 0.0722));')
   })
 
   it('без карты — константный режим: единый цвет uWaterColor, базовая альфа uWaterAlphaDeep (до grazing-подъёма)', () => {

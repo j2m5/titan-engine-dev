@@ -167,6 +167,9 @@ export const WaterShaderTemplate: ShaderProps = {
 
     #ifdef USE_WATER_DEPTH
       #include <terrainUvFunctions>
+      // поглощение по каналам, 1/м; глубина при depthA = 1, м
+      uniform vec3 uWaterAbsorption;
+      uniform float uWaterDepthRangeMeters;
     #endif
 
     #ifdef USE_SUN_TINT
@@ -179,9 +182,7 @@ export const WaterShaderTemplate: ShaderProps = {
       uniform float uWaterWaveScale;
       uniform float uWaterWaveSpeed;
       uniform float uWaterRoughness;
-      uniform vec3 uWaterAbsorption;
       uniform float uWaterRippleStrength;
-      uniform float uWaterDepthRangeMeters;
       // угол пикселя, рад (2·tan(fov/2)/высота кадра) — вход футпринта весов октав
       uniform float uWaterPixelAngle;
       // Пена прибоя (внутри USE_WATER_WAVES: время, шум и fade — общие с волнами)
@@ -414,12 +415,18 @@ export const WaterShaderTemplate: ShaderProps = {
         vec3 dirLocal = normalize(vLocalDir);
         vec2 uv = terrainUv(dirLocal);
         float depthA = texture2D(uSlopeMap, uv).a;
-        vec3 baseColor = mix(uWaterShallowColor, uWaterColor, depthA);
-        // depthAlpha → 0 на урезе: закрывает z-fighting стыка воды и берега
-        // без масок (см. WaterMaterial докблок depthWrite=false). Финальная
-        // alpha (ниже, после fresnel) поднимает ЭТОТ пол к 1.0 на скользящем
-        // взгляде — здесь только базовая непрозрачность по глубине.
-        float depthAlpha = uWaterAlphaDeep * depthA;
+        // Бер–Ламберт по каналам: путь вниз и обратно вверх по столбу;
+        // μv — по аналитической нормали: длину пути задаёт геометрия, не рябь.
+        float depthMeters = depthA * uWaterDepthRangeMeters;
+        float muV = max(dot(viewDir, normal), 0.1);
+        vec3 transmittance = exp(-uWaterAbsorption * depthMeters * (1.0 + 1.0 / muV));
+        // Пропускание одно на все каналы (одно альфа-смешивание): альфа по
+        // яркости 1 − T (Rec.709), цвет делён на неё — вклад слоя (до клампа)
+        // uWaterColor·(1 − T). На урезе d = 0 ⇒ alpha = 0: закрывает
+        // z-fighting стыка без масок (см. WaterMaterial, depthWrite=false).
+        // Финальная alpha (ниже) поднимает этот пол к 1.0 по Френелю.
+        float depthAlpha = 1.0 - dot(transmittance, vec3(0.2126, 0.7152, 0.0722));
+        vec3 baseColor = min(uWaterColor * (1.0 - transmittance) / max(depthAlpha, 1e-3), vec3(1.0));
       #else
         // Без запечённой глубины (карты нет / тело не готово Task 6) —
         // константный режим: единая непрозрачность, единый глубокий цвет.

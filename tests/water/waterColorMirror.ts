@@ -9,12 +9,13 @@
  * waveFade, буквально повторяющее `color = mix(color, wavesColor, waveFade)`
  * в шейдере; waveFade — вес октавы 3000 м (`waveWeights.x`). Блик — аддитивно
  * после смешивания и пены (addGlint): при waveFade = 0 его вклад ровно 0.
+ * Режим с картой глубины — baseColor/depthAlpha из depthLayer (Бер–Ламберт).
  *
  * ВАЖНО: менять строго синхронно с main() в
  * src/core/materials/shaders/lib/WaterShaderTemplate.ts.
  */
 
-import { WATER_GLINT_CEILING, waterGlint } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
+import { WATER_GLINT_CEILING, absorptionLayer, waterGlint, waterTransmittance } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 
 export type Vec3 = readonly [number, number, number]
 
@@ -56,6 +57,24 @@ function normalize3(v: Vec3): Vec3 {
   const len = Math.hypot(v[0], v[1], v[2])
 
   return len < 1e-9 ? [0, 0, 0] : [v[0] / len, v[1] / len, v[2] / len]
+}
+
+/** Входы ветки USE_WATER_DEPTH: канал A slope-карты [0,1], его диапазон, м; σ, 1/м. */
+export interface DepthInputs {
+  depthA: number
+  rangeMeters: number
+  absorption: Vec3
+}
+
+/**
+ * Ветка USE_WATER_DEPTH: d = depthA·range, μv = max(N·V, 0.1) по аналитической
+ * нормали, слой — absorptionLayer(T, uWaterColor).
+ */
+export function depthLayer(deepColor: Vec3, normal: Vec3, viewDir: Vec3, depth: DepthInputs): { baseColor: Vec3; depthAlpha: number } {
+  const muV = Math.max(dot3(viewDir, normal), 0.1)
+  const layer = absorptionLayer(waterTransmittance(depth.depthA * depth.rangeMeters, muV, [...depth.absorption]), [...deepColor])
+
+  return { baseColor: layer.color, depthAlpha: layer.alpha }
 }
 
 /**
@@ -185,6 +204,8 @@ export interface BlendInputs {
   nightFloor: number
   /** α² блика (glintAlpha2). */
   alpha2: number
+  /** Есть — режим с картой глубины: baseColor здесь = uWaterColor, слой — depthLayer. */
+  depth?: DepthInputs
 }
 
 /** Веса крупных октав (3, 9, 27, 90 км) — порядок vec4 waveWeights в main(). */
@@ -202,8 +223,9 @@ export function mixWithFoundation(foundation: Vec3, waves: Vec3, waveFade: numbe
 
 /** color = mix(foundationColor(...), wavesColor(...), waveFade) + блик (ветка без пены: foam = 0). */
 export function blendedColor(inputs: BlendInputs, waveFade: number): Vec3 {
+  const baseColor = inputs.depth ? depthLayer(inputs.baseColor, inputs.normal, inputs.viewDir, inputs.depth).baseColor : inputs.baseColor
   const foundation = foundationColor(
-    inputs.baseColor,
+    baseColor,
     inputs.fresnelTint,
     inputs.normal,
     inputs.viewDir,
@@ -211,7 +233,7 @@ export function blendedColor(inputs: BlendInputs, waveFade: number): Vec3 {
     inputs.nightFloor
   )
   const waves = wavesColor(
-    inputs.baseColor,
+    baseColor,
     inputs.reflectionSample,
     inputs.skyColor,
     inputs.waveNormal,
