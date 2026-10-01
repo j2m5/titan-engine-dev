@@ -211,7 +211,7 @@ class WaterMaterial extends AbstractShaderMaterial {
    * Без сворачивания (`epoch - floor(epoch/wrap)*wrap`, как у
    * BlackHoleMaterial): там wrap кратен РЕАЛЬНОМУ периоду вращения диска —
    * физически осмысленная граница. Здесь делители времени — авторские
-   * художественные константы (см. WaterShaderTemplate.getNoise), их НОК на
+   * художественные константы (см. WaterShaderTemplate.getNoiseWeighted), их НОК на
    * порядки больше любой разумной длины сессии, и общий делитель нашёлся бы
    * только у 3 из 8 — сворачивание на такой границе давало бы фазовый скачок
    * у 5 октав из 8, а не «честную» точку. Float32 на реальных длинах сессий
@@ -281,6 +281,11 @@ class WaterMaterial extends AbstractShaderMaterial {
    */
   public syncSunTint(): void {
     this.sunTint.sync()
+  }
+
+  /** Угол пикселя, рад: 2·tan(fov/2)/высота буфера — вход футпринта весов октав волн; буфер 0 px не даёт ∞. */
+  public setPixelAngle(fovDegrees: number, viewportHeight: number): void {
+    this.uniforms.uWaterPixelAngle.value = (2 * Math.tan((fovDegrees * Math.PI) / 360)) / Math.max(viewportHeight, 1)
   }
 
   public resetMaterial(): void {

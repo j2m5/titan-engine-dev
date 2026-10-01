@@ -130,6 +130,8 @@ class WaterSphere extends TerrainPatchGroup {
   protected onVisibleUpdate(ctx: UpdateContext): void {
     this.sharedMaterial.updateMaterial(ctx.elapsed)
     this.sharedMaterial.syncSunTint()
+    // высота буфера, не CSS: футпринт считается в пикселях рендера
+    this.sharedMaterial.setPixelAngle(ctx.camera.fov, this.renderer.domElement.height)
   }
 }
 

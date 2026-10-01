@@ -40,15 +40,14 @@ const defaultUniforms = {
   uWaterRippleStrength: new Uniform(1),
   uWaterDepthRangeMeters: new Uniform(200),
   uWaterPixelAngle: new Uniform(0),
-  // Ряд волн (арка water-shader, Task 1) — все пять инертны без
+  // Ряд волн (арка water-shader, Task 1) — все четыре инертны без
   // USE_WATER_WAVES (гейт по наличию waterNormal-текстуры, см. WaterMaterial):
-  // сэмплер null, uTime/scale/fade нулевые заглушки — реальные значения
+  // сэмплер null, uTime/scale нулевые заглушки — реальные значения
   // приходят из WaterShader (per-body) и WaterMaterial (per-frame uTime).
   uWaterNormalMap: new Uniform(null),
   uTime: new Uniform(0),
   uWaterWaveScale: new Uniform(0),
   uWaterWaveSpeed: new Uniform(1),
-  uWaterWaveFadeMeters: new Uniform(0),
   // Пена прибоя — инертна без USE_WATER_WAVES && USE_WATER_DEPTH: strength 0,
   // ширины — положительные заглушки (знаменатели), тексель карты и радиус —
   // от материала при приходе slope-карты (WaterMaterial.updateMaterial).
@@ -179,11 +178,11 @@ export const WaterShaderTemplate: ShaderProps = {
       uniform float uTime;
       uniform float uWaterWaveScale;
       uniform float uWaterWaveSpeed;
-      uniform float uWaterWaveFadeMeters;
       uniform float uWaterRoughness;
       uniform vec3 uWaterAbsorption;
       uniform float uWaterRippleStrength;
       uniform float uWaterDepthRangeMeters;
+      // угол пикселя, рад (2·tan(fov/2)/высота кадра) — вход футпринта весов октав
       uniform float uWaterPixelAngle;
       // Пена прибоя (внутри USE_WATER_WAVES: время, шум и fade — общие с волнами)
       uniform float uFoamStrength;
@@ -242,10 +241,15 @@ export const WaterShaderTemplate: ShaderProps = {
         const vec3 waterSunColor = vec3(1.0);
       #endif
 
-      // getNoise — ДОСЛОВНО структура Water.js (three/examples/jsm/objects/
-      // Water.js): 4 выборки по разным периодам/скоростям скролла, сумма,
-      // *0.5-1.0 в [-1,1]. Октавы 2/3 АНИЗОТРОПНЫ (vec2 на ось), как и у
-      // Water.js (vec2(8907,9803)/vec2(1091,1027)) — фикс-раунд 1, №4:
+      // Мелкие октавы ряби (2560…10 м) и веса октав по футпринту пикселя
+      #include <waterOctavesFunctions>
+
+      // getNoiseWeighted — структура Water.js (three/examples/jsm/objects/
+      // Water.js): 4 выборки по разным периодам/скоростям скролла, декод
+      // 2t − 1, среднее — взвешенное весами октав w (вес по футпринту
+      // пикселя, см. main()); при всех w = 1 — ровно прежнее sum·0.5 − 1.
+      // Все w = 0 ⇒ плоская несущая (0, 0, 1), не 0/0.
+      // Октавы 2/3 АНИЗОТРОПНЫ (vec2 на ось), как и у Water.js (vec2(8907,9803)/vec2(1091,1027)) — фикс-раунд 1, №4:
       // скаляр ломает пропорцию читаемой плитки, часть структуры оригинала.
       // Ряд периодов и коэффициенты времени — СВОИ (домен water-shader,
       // метры реальной поверхности, а не абстрактные юниты плоского
@@ -266,17 +270,18 @@ export const WaterShaderTemplate: ShaderProps = {
       // величины, что у Water.js (мелкие октавы ~3-6, крупная ~85-100,
       // средняя ~9-10 доменных единиц/сек) — см. таблицу в task-1-report.md
       // (знаки октав 1/3 у нас ЗЕРКАЛЬНЫ Water.js, не совпадают — там же).
-      vec4 getNoise(vec2 uv) {
+      vec4 getNoiseWeighted(vec2 uv, vec4 w) {
         float t = uTime * uWaterWaveSpeed;
         vec2 uv0 = uv / 3000.0 + vec2(t / 500.0, t / 860.0);
         vec2 uv1 = uv / 9000.0 + vec2(t / -1600.0, t / 2600.0);
         vec2 uv2 = uv / vec2(25736.53, 28325.50) + vec2(t / 300.0, t / 280.0);
         vec2 uv3 = uv / vec2(92761.91, 87320.33) + vec2(t / 9000.0, t / -10000.0);
-        vec4 noise = texture2D(uWaterNormalMap, uv0) +
-          texture2D(uWaterNormalMap, uv1) +
-          texture2D(uWaterNormalMap, uv2) +
-          texture2D(uWaterNormalMap, uv3);
-        return noise * 0.5 - 1.0;
+        vec4 noise = w.x * (2.0 * texture2D(uWaterNormalMap, uv0) - 1.0) +
+          w.y * (2.0 * texture2D(uWaterNormalMap, uv1) - 1.0) +
+          w.z * (2.0 * texture2D(uWaterNormalMap, uv2) - 1.0) +
+          w.w * (2.0 * texture2D(uWaterNormalMap, uv3) - 1.0);
+        float wSum = w.x + w.y + w.z + w.w;
+        return (noise + vec4(0.0, 0.0, max(1e-4 - wSum, 0.0), 0.0)) / max(wSum, 1e-4);
       }
 
       // sunLight — ДОСЛОВНО Water.js (коэффициенты 100/2/0.5 у вызывающей
@@ -306,13 +311,10 @@ export const WaterShaderTemplate: ShaderProps = {
       // triplanarBlendNormal.return (tx.zyx*w.x+ty.xzy*w.y+tz.xyz*w.z), уже
       // в body-локальном XYZ (той же системе, что dirLocal).
       //
-      // getNoise — ДЕКОД усреднённой карты нормалей, не «сырой шумовой
-      // сигнал» (фикс финального whole-branch ревью, №2 — прежняя
-      // формулировка здесь была ложной): sum(4 выборки)·0.5−1.0 ≡
-      // mean(2·выборка_i−1) — алгебраически то же самое, что декодировать
-      // КАЖДУЮ из 4 выборок стандартной формулой tex·2−1 и усреднить
-      // результат. Ассет (waternormals.jpg) — настоящая тангенциальная
-      // карта нормалей, её B-канал (несущая «почти вверх» z-компонента)
+      // getNoiseWeighted — ДЕКОД усреднённой карты нормалей, не «сырой
+      // шумовой сигнал»: взвешенное среднее 2·выборка_i−1 (при равных весах
+      // ≡ sum(4 выборки)·0.5−1.0). Ассет (waternormals.jpg) — настоящая
+      // тангенциальная карта нормалей, её B-канал (несущая «почти вверх» z-компонента)
       // статистически смещён к сильно положительному: замер mean(R,G,B)/255
       // = (0.498, 0.498, 0.983) → decoded mean ≈ (−0.004, −0.004, +0.965).
       //
@@ -342,7 +344,14 @@ export const WaterShaderTemplate: ShaderProps = {
       // SlopeNormal. T/B полюсного фрейма сам больше не нужен
       // (реориентация теперь в XYZ, не TBN), но порог остаётся — дешёвый
       // ранний выход у полюса, поведение принято как есть.
-      vec3 waterWaveNormal(vec3 dirLocal, float fade) {
+      //
+      // Рябь мелких октав (posM — домен патча, м; footprint — м) считается
+      // ДО полюсного гарда: внутри экранные производные, им нужен
+      // однородный поток; rippleVariance — Σ(1 − wᵢ)·s²·V погасших мелких октав. waveWeights —
+      // веса крупных октав (3, 9, 27, 90 км), fade — вес крупнейшей.
+      vec3 waterWaveNormal(vec3 dirLocal, vec3 posM, float footprint, vec4 waveWeights, float fade, out float rippleVariance) {
+        vec3 ripple = waterRippleDeviation(posM, dirLocal, footprint, rippleVariance);
+
         vec3 eastRaw = cross(vec3(0.0, 1.0, 0.0), dirLocal);
         float eastLen = length(eastRaw);
         if (eastLen < 1e-4) return dirLocal; // полюс: тангенс вырожден
@@ -352,11 +361,13 @@ export const WaterShaderTemplate: ShaderProps = {
 
         vec3 p = dirLocal * uWaterWaveScale;
         vec3 axisSign = sign(dirLocal);
-        vec3 fromX = getNoise(p.zy).zyx * vec3(1.0, 1.5, 1.5) * vec3(axisSign.x, 1.0, 1.0);
-        vec3 fromY = getNoise(p.xz).xzy * vec3(1.5, 1.0, 1.5) * vec3(1.0, axisSign.y, 1.0);
-        vec3 fromZ = getNoise(p.xy).xyz * vec3(1.5, 1.5, 1.0) * vec3(1.0, 1.0, axisSign.z);
+        vec3 fromX = getNoiseWeighted(p.zy, waveWeights).zyx * vec3(1.0, 1.5, 1.5) * vec3(axisSign.x, 1.0, 1.0);
+        vec3 fromY = getNoiseWeighted(p.xz, waveWeights).xzy * vec3(1.5, 1.0, 1.5) * vec3(1.0, axisSign.y, 1.0);
+        vec3 fromZ = getNoiseWeighted(p.xy, waveWeights).xyz * vec3(1.5, 1.5, 1.0) * vec3(1.0, 1.0, axisSign.z);
 
         vec3 perturbed = normalize(fromX * w.x + fromY * w.y + fromZ * w.z);
+        // рябь тангенциальна, perturbed почти радиален — сумма не вырождается
+        perturbed = normalize(perturbed + ripple);
 
         return normalize(mix(dirLocal, perturbed, fade));
       }
@@ -464,15 +475,19 @@ export const WaterShaderTemplate: ShaderProps = {
         // выше ни разу не тронуты этой правкой, только точка, где им дают
         // говорить последнее слово, сдвинута сюда.
         //
-        // Fade по дистанции камера-поверхность: 1 у поверхности, 0 дальше
-        // uWaterWaveFadeMeters (CPU уже перевёл ручку из метров в юниты сцены,
-        // см. WaterShader) — та же схема начала fade (0.4×конец), что
-        // uDetailFadeRange террейна (TerrainDetail.ts), здесь без отдельного
-        // юниформа старта: только конец — ручка, начало зашито.
+        // Затухание по октавам: вес каждой — по футпринту пикселя на
+        // поверхности (дистанция, угол пикселя, косинус взгляда), не по
+        // экранной производной — домен патча прыгает на k·W. waveFade — вес
+        // крупнейшей октавы: она гаснет последней, при 0 цвет === фундаменту.
+        vec3 posM = vDetailPos * WATER_METERS_PER_UNIT;
         float waveDist = length(vViewPosition);
-        float waveFade = 1.0 - smoothstep(0.4 * uWaterWaveFadeMeters, uWaterWaveFadeMeters, waveDist);
+        float waveFootprint = waterFootprintMeters(waveDist * WATER_METERS_PER_UNIT, uWaterPixelAngle, max(dot(viewDir, normal), 0.0));
+        vec4 waveWeights = vec4(waterOctaveWeight(WATER_WAVE_PERIOD_0, waveFootprint), waterOctaveWeight(WATER_WAVE_PERIOD_1, waveFootprint), waterOctaveWeight(WATER_WAVE_PERIOD_2, waveFootprint), waterOctaveWeight(WATER_WAVE_PERIOD_3, waveFootprint));
+        float waveFade = waveWeights.w;
+        // Σ(1 − wᵢ)·s²·V погасших мелких октав — вход шероховатости блика
+        float rippleVariance = 0.0;
         vec3 waveDirLocal = normalize(vLocalDir);
-        vec3 waveLocalNormal = waterWaveNormal(waveDirLocal, waveFade);
+        vec3 waveLocalNormal = waterWaveNormal(waveDirLocal, posM, waveFootprint, waveWeights, waveFade, rippleVariance);
         // СВОЙ вектор waveNormal, не общий normal (приёмочный фикс —
         // владелец: молочный океан по всему диску + яркое пятно в центре +
         // голубое гало за лимбом на скрине из космоса, см. докблок ниже).

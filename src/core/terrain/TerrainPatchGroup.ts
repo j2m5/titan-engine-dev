@@ -154,7 +154,7 @@ abstract class TerrainPatchGroup extends Group {
   protected constructor(
     field: TerrainHeightField,
     material: Material,
-    private readonly renderer: WebGLRenderer,
+    protected readonly renderer: WebGLRenderer,
     maxLivePatches?: number,
     /**
      * Уровень воды тела, метры (Task 5, water-foundation) — ручка актора, не

@@ -4,9 +4,7 @@ import { WaterShaderTemplate as Shader } from '@/core/materials/shaders/lib/Wate
 import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
 import { Actor } from '@/core/models/Actor'
 import { IPlanetRenderingObject } from '@/core/models/types'
-import { distanceForApparentSize } from '@/core/helpers/apparentSize'
 import { clampSunTintStrength } from '@/core/materials/SunTintBinding'
-import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { resolveWaterFoamParams } from '@/core/terrain/waterFoamParams'
 import { resolveWaterSurfaceParams } from '@/core/terrain/waterSurfaceParams'
 import { WATER_SHALLOW_RANGE_METERS } from '@/core/terrain/waterLevel'
@@ -36,7 +34,7 @@ const DEFAULT_WATER_WAVE_SCALE = 1
 const DEFAULT_WATER_WAVE_SPEED = 1
 
 /**
- * Мельчайший период ряда getNoise, метры — ОБЯЗАН совпадать с первым
+ * Мельчайший период ряда getNoiseWeighted, метры — ОБЯЗАН совпадать с первым
  * делителем в WaterShaderTemplate.ts (`uv / 3000.0`, октава 0). Дублирование
  * неизбежно (GLSL-строка не импортирует TS-константы) — WaterWaves.spec.ts
  * пиннует обе стороны и ловит расхождение.
@@ -52,30 +50,6 @@ const DEFAULT_WATER_WAVE_SPEED = 1
  */
 export const WATER_WAVE_SMALLEST_PERIOD_METERS = 3000
 
-/** Целевой видимый размер мельчайшей октавы для дефолта fade — см. IPlanetRenderingObject.waterWaveFadeMeters. */
-const WATER_WAVE_FADE_TARGET_PIXELS = 1.5
-const WATER_WAVE_FADE_FOV_DEGREES = 50
-const WATER_WAVE_FADE_VIEWPORT_HEIGHT = 1080
-
-/**
- * Базовый дефолт uWaterWaveFadeMeters при waveScaleHandle=1 — юниты сцены
- * (не метры, несмотря на имя ручки в data, см. её докблок): дистанция, на
- * которой мельчайший период getNoise (WATER_WAVE_SMALLEST_PERIOD_METERS)
- * опускается ниже WATER_WAVE_FADE_TARGET_PIXELS при номинале fov/viewport.
- * Та же формула, что starLodSwitchDistance (apparentSize.ts). При
- * waveScaleHandle≠1 фактический дефолт (см. конструктор WaterShader ниже)
- * делится на handle — увеличение ручки сжимает домен getNoise, эффективный
- * мельчайший период = период/scale, fade обязан подступать пропорционально
- * ближе, иначе мерцание возвращается на дистанциях, где страж кванта уже
- * не проверял этот масштаб (финальное whole-branch ревью, №4).
- */
-const DEFAULT_WATER_WAVE_FADE_UNITS = distanceForApparentSize(
-  toThreeJSUnits(WATER_WAVE_SMALLEST_PERIOD_METERS / 1000),
-  WATER_WAVE_FADE_TARGET_PIXELS,
-  WATER_WAVE_FADE_FOV_DEGREES,
-  WATER_WAVE_FADE_VIEWPORT_HEIGHT
-)
-
 interface WaterUniforms {
   lightPosition: Vector3
   uSlopeMap: Texture | null
@@ -88,7 +62,6 @@ interface WaterUniforms {
   uTime: number
   uWaterWaveScale: number
   uWaterWaveSpeed: number
-  uWaterWaveFadeMeters: number
   // Отражение фоновой кубмапы (арка water-shader, Task 2). uSkyboxMap — сама
   // текстура, доставляется WaterMaterial конструктором (не data-ручка, см.
   // её докблок), здесь только null-заглушка. Набор общей выборки фона —
@@ -149,7 +122,6 @@ type WaterRenderingData = Pick<
   | 'waterNightFloor'
   | 'waterWaveScale'
   | 'waterWaveSpeed'
-  | 'waterWaveFadeMeters'
   | 'waterDistortion'
   | 'waterRoughness'
   | 'waterAbsorption'
@@ -192,7 +164,6 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
     // масштаб 0 безвреден.
     const radiusMeters = (this.model.physicalObject?.getAttribute('radius') ?? 0) * 1000
     const waveScaleHandle = waterData.waterWaveScale ?? DEFAULT_WATER_WAVE_SCALE
-    const waveFadeMetersHandle = waterData.waterWaveFadeMeters
 
     // Пена прибоя — тот же приём именования тела в ошибках, что PlanetShader.ts:198.
     const foam = resolveWaterFoamParams(waterData, this.model.getAttribute?.('name', '?') ?? '?')
@@ -219,19 +190,6 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
       uTime: new Uniform(0),
       uWaterWaveScale: new Uniform(waveScaleHandle * radiusMeters),
       uWaterWaveSpeed: new Uniform(waterData.waterWaveSpeed ?? DEFAULT_WATER_WAVE_SPEED),
-      // Дефолт делится на waveScaleHandle (финальное whole-branch ревью, №4):
-      // uWaterWaveScale = radiusMeters·waveScaleHandle — увеличение ручки
-      // сжимает ДОМЕН getNoise пропорционально (эффективный мельчайший
-      // период = WATER_WAVE_SMALLEST_PERIOD_METERS/scale), а страж кванта
-      // (WaterWaves.spec.ts) слеп к ручке — считает по TS-константе периода
-      // без масштаба. Явную ручку `waterWaveFadeMeters` (метры) НЕ делим —
-      // автор данных берёт её как честное число метров на свою
-      // ответственность, деление касается только САМОВЫЧИСЛЕННОГО дефолта.
-      uWaterWaveFadeMeters: new Uniform(
-        waveFadeMetersHandle !== undefined
-          ? toThreeJSUnits(waveFadeMetersHandle / 1000)
-          : DEFAULT_WATER_WAVE_FADE_UNITS / waveScaleHandle
-      ),
       // Пена прибоя — ручки из резолвера (глобальные дефолты); тексель карты —
       // заглушки до прихода slope-карты (WaterMaterial.updateMaterial).
       uFoamStrength: new Uniform(foam.waterFoamStrength),

@@ -1,0 +1,114 @@
+import {
+  WATER_OCTAVE_SLOPE_VARIANCE,
+  WATER_RIPPLE_PERIODS_METERS,
+  WATER_WAVE_PERIODS_METERS,
+  rippleSpeedMps
+} from './waterOctavesMath'
+
+/** Направления скролла мелких октав (единичные, по порядку периодов) — чередуются, чтобы слои не ехали вместе. */
+export const WATER_RIPPLE_DIRECTIONS: readonly (readonly [number, number])[] = (
+  [
+    [1, 0.6],
+    [-0.7, 1],
+    [0.4, -1],
+    [-1, -0.3],
+    [0.8, 0.8]
+  ] as const
+).map(([x, y]) => {
+  const len = Math.hypot(x, y)
+  return [x / len, y / len] as const
+})
+
+// GLSL float-литерал: целое без точки дало бы int в float-выражении
+function glslFloat(value: number): string {
+  return Number.isInteger(value) ? value.toFixed(1) : String(value)
+}
+
+const rippleDefines = WATER_RIPPLE_PERIODS_METERS.map((period, i) => {
+  const [dx, dy] = WATER_RIPPLE_DIRECTIONS[i]
+  const tilesPerSecond = rippleSpeedMps(period) / period
+  return [
+    `  #define WATER_RIPPLE_PERIOD_${i} ${glslFloat(period)}`,
+    `  #define WATER_RIPPLE_SCROLL_${i} vec2(${glslFloat(dx * tilesPerSecond)}, ${glslFloat(dy * tilesPerSecond)})`
+  ].join('\n')
+}).join('\n')
+
+const waveDefines = WATER_WAVE_PERIODS_METERS.map((period, i) => `  #define WATER_WAVE_PERIOD_${i} ${glslFloat(period)}`).join(
+  '\n'
+)
+
+// Домены и производные всех октав — до любого ветвления по весу
+const rippleDomains = WATER_RIPPLE_PERIODS_METERS.map((_period, i) =>
+  [
+    `    vec3 q${i} = posM / WATER_RIPPLE_PERIOD_${i};`,
+    `    q${i}.xy += WATER_RIPPLE_SCROLL_${i} * t;`,
+    `    vec3 q${i}Dx = dFdx(q${i});`,
+    `    vec3 q${i}Dy = dFdy(q${i});`
+  ].join('\n')
+).join('\n')
+
+const rippleBranches = WATER_RIPPLE_PERIODS_METERS.map((_period, i) =>
+  [
+    `    float w${i} = waterOctaveWeight(WATER_RIPPLE_PERIOD_${i}, footprint);`,
+    `    fadedVariance += (1.0 - w${i}) * s2V;`,
+    `    if (w${i} > 0.0) dev += w${i} * waterRippleOctave(q${i}, q${i}Dx, q${i}Dy, dirLocal, tw, axisSign);`
+  ].join('\n')
+).join('\n')
+
+/**
+ * Мелкие октавы ряби воды (2560…10 м) и вес октав по футпринту пикселя.
+ * CPU-зеркало и константы — waterOctavesMath.ts.
+ *
+ * Домен posM — тело-локальная позиция минус k·W (WATER_DETAIL_WRAP), метры:
+ * каждый период делит W, скролл — сдвиг тайла, поэтому домен W-периодичен
+ * и шва на границе патчей нет. Ничего непериодичного по W сюда не входит.
+ *
+ * Выборки — только texture2DGradEXT: ветка по весу неоднородна, неявные
+ * производные внутри неё не определены; dFdx/dFdy считаются до ветвления.
+ * Нужны объявленные выше uWaterNormalMap, uTime, uWaterWaveSpeed, uWaterRippleStrength.
+ */
+export const waterOctavesFunctions = /* glsl */ `
+${rippleDefines}
+${waveDefines}
+  // средняя дисперсия наклона одной октавы ассета (замер waternormals.jpg)
+  #define WATER_OCTAVE_SLOPE_VARIANCE ${glslFloat(WATER_OCTAVE_SLOPE_VARIANCE)}
+
+  // 1 при period ≥ 4f, 0 при period ≤ 2f; f — футпринт пикселя, м (пол — края smoothstep не совпадают)
+  float waterOctaveWeight(float period, float footprint) {
+    float f = max(footprint, 1e-6);
+    return smoothstep(2.0 * f, 4.0 * f, period);
+  }
+
+  // Футпринт пикселя на поверхности, м; μv клампится к 0.2 — скользящий взгляд конечен
+  float waterFootprintMeters(float distanceMeters, float pixelAngle, float muV) {
+    return distanceMeters * pixelAngle / max(muV, 0.2);
+  }
+
+  // Тангенциальная часть нормали одной октавы в тело-локальных XYZ. Свизлы, веса 1.5/1.0
+  // и axisSign — как у waterWaveNormal (несущая компонента со знаком своей оси)
+  vec3 waterRippleOctave(vec3 q, vec3 qDx, vec3 qDy, vec3 dirLocal, vec3 tw, vec3 axisSign) {
+    vec3 nX = 2.0 * texture2DGradEXT(uWaterNormalMap, q.zy, qDx.zy, qDy.zy).xyz - 1.0;
+    vec3 nY = 2.0 * texture2DGradEXT(uWaterNormalMap, q.xz, qDx.xz, qDy.xz).xyz - 1.0;
+    vec3 nZ = 2.0 * texture2DGradEXT(uWaterNormalMap, q.xy, qDx.xy, qDy.xy).xyz - 1.0;
+    vec3 fromX = nX.zyx * vec3(1.0, 1.5, 1.5) * vec3(axisSign.x, 1.0, 1.0);
+    vec3 fromY = nY.xzy * vec3(1.5, 1.0, 1.5) * vec3(1.0, axisSign.y, 1.0);
+    vec3 fromZ = nZ.xyz * vec3(1.5, 1.5, 1.0) * vec3(1.0, 1.0, axisSign.z);
+    vec3 n = fromX * tw.x + fromY * tw.y + fromZ * tw.z;
+    return n - dirLocal * dot(n, dirLocal);
+  }
+
+  // Отклонение нормали от мелких октав (тело-локальные XYZ) и Σ(1 − wᵢ)·s²·V погасших.
+  // Звать в однородном потоке: внутри dFdx/dFdy
+  vec3 waterRippleDeviation(vec3 posM, vec3 dirLocal, float footprint, out float fadedVariance) {
+    vec3 tw = abs(dirLocal);
+    tw /= max(tw.x + tw.y + tw.z, 1e-6);
+    vec3 axisSign = sign(dirLocal);
+    float t = uTime * uWaterWaveSpeed;
+${rippleDomains}
+    vec3 dev = vec3(0.0);
+    fadedVariance = 0.0;
+    float s2V = uWaterRippleStrength * uWaterRippleStrength * WATER_OCTAVE_SLOPE_VARIANCE;
+${rippleBranches}
+    return dev * uWaterRippleStrength;
+  }
+`
