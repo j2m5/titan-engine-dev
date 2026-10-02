@@ -41,6 +41,20 @@ describe('CPU-зеркало закона реголита (brdfMirror.regolithD
   })
 })
 
+describe('μ реголита: пол от геометрической нормали', () => {
+  const mu = (nvRelief: number, nvGeom: number): number => Math.max(nvRelief, 0.5 * nvGeom)
+
+  it('грань, отвёрнутая от камеры рельефом, не прыгает к весу 2', () => {
+    const w = regolithDiffuse(0.01, mu(-0.2, 0.4), 0.3, 1, 0)
+    expect(w).toBeLessThanOrEqual((2 * 0.01) / (0.01 + 0.2) + 1e-12)
+    expect(w).toBeLessThan(0.1)
+  })
+
+  it('лицевая грань в полной фазе — вес ровно 1 (пол неактивен)', () => {
+    expect(regolithDiffuse(0.6, mu(0.6, 0.8), 1, 1, 0)).toBeCloseTo(1, 12)
+  })
+})
+
 describe('сборка lit: избыток веса реголита не уводит тень ниже пола', () => {
   const mixv = (a: number, d: number, t: number): number => a * (1 - t) + d * t
   const lit = (a: number, d: number, w: number): number => mixv(a, d, Math.min(w, 1)) + Math.max(w - 1, 0) * d
@@ -60,7 +74,7 @@ describe('сборка lit: избыток веса реголита не уво
 describe('PlanetShaderTemplate: вес прямого света', () => {
   it('ламберт по умолчанию, реголит под USE_REGOLITH, обе строки lit читают directWeight', () => {
     expect(main).toContain('float directWeight = max(NdotLraw, 0.0);')
-    expect(main).toMatch(/#ifdef USE_REGOLITH\s+directWeight = asteroidRegolithDiffuse\(NdotLraw, dot\(normal, viewDir\), dot\(lightDirection, viewDir\), uRegolithMix, uOppositionSurge\);\s+#endif/)
+    expect(main).toMatch(/#ifdef USE_REGOLITH\s+(?:\/\/[^\n]*\s+)*float regolithMu = max\(dot\(normal, viewDir\), 0\.5 \* dot\(normalize\(vNormal\), viewDir\)\);\s+directWeight = asteroidRegolithDiffuse\(NdotLraw, regolithMu, dot\(lightDirection, viewDir\), uRegolithMix, uOppositionSurge\);\s+#endif/)
     expect(main).toContain('vec3 litDirect = vec3(directGain) * uLightColor * sunTintMix;')
     expect(main).toContain('vec3 litDirect = vec3(directGain) * sunTintMix;')
     expect(main).toContain('vec3 lit = mix(ambient, litDirect, min(directWeight, 1.0)) + max(directWeight - 1.0, 0.0) * litDirect;')

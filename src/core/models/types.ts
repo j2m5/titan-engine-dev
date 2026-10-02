@@ -403,7 +403,7 @@ export interface IPlanetRenderingObject {
   cloudLightSoftness?: number
   /** Доля закона реголита (Lommel–Seeliger) против ламберта, [0, 1]; дефолт — 1 без атмосферы, 0 с ней */
   regolithMix?: number
-  /** Сила оппозиционного всплеска реголита; дефолт 0.3 */
+  /** Сила оппозиционного всплеска реголита; дефолт 0.3; при regolithMix = 0 не действует */
   oppositionSurge?: number
 
   /** Класс облика (terrainClass.ts): переопределяет вывод из данных; 'none' — без пресета. */

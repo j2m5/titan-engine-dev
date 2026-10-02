@@ -3,6 +3,7 @@ import { Color, Vector3 } from 'three'
 import {
   IMPOSTOR_MAX_CHANNEL,
   IMPOSTOR_REFERENCE_HEX,
+  OPPOSITION_WIDTH,
   impostorColorFromActor,
   impostorPhaseAngle,
   lambertPhase,
@@ -10,6 +11,7 @@ import {
   regolithPhase
 } from '@/core/renderables/utils/planetImpostorMath'
 import { config } from '@/core/framework/config'
+import { asteroidBrdfFunctions } from '@/core/materials/shaders/lib/chunks/AsteroidBrdf'
 
 const luma = (c: Color): number => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
 const reference = new Color(IMPOSTOR_REFERENCE_HEX)
@@ -129,5 +131,9 @@ describe('regolithPhase — фаза точки безатмосферного �
   it('в противостоянии 1 + surge, вдали от него всплеск гаснет', () => {
     expect(regolithPhase(0, 1, 0.3)).toBeCloseTo(1.3, 12)
     expect(regolithPhase(1, 1, 0.3)).toBeCloseTo(lommelSeeligerPhase(1) * (1 + 0.3 * Math.exp(-10)), 12)
+  })
+
+  it('ширина всплеска совпадает с литералом в GLSL-чанке AsteroidBrdf', () => {
+    expect(asteroidBrdfFunctions).toContain(`exp(-g / ${OPPOSITION_WIDTH})`)
   })
 })

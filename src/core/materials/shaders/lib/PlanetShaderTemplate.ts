@@ -480,7 +480,7 @@ export const PlanetShaderTemplate: ShaderProps = {
       float terrainShadow = 1.0;
 
       // Освещение ОБЩЕЕ для обеих веток: легаси-сфера (гиганты всегда, твёрдые
-      // тела до прихода карты высот) получает тот же ламберт с полом, что рельеф, —
+      // тела до прихода карты высот) получает тот же ламберт с полом, что рельеф (безатмосферные тела — закон реголита, USE_REGOLITH), —
       // на гейте карты высот вид не прыгает. В легаси occlusion ≡ 1, normal — радиальная.
       // Амбиент — свет от неба/соседнего грунта: серый пол ∝ солнцу над геометрическим
       // горизонтом (безвоздушные тела); у тел с атмосферой — цвет и спад из irradiance-LUT
@@ -513,10 +513,13 @@ export const PlanetShaderTemplate: ShaderProps = {
       // (ровный диск в полнолуние, вспышка в противостоянии, нормаль — рельефная)
       float directWeight = max(NdotLraw, 0.0);
       #ifdef USE_REGOLITH
-        directWeight = asteroidRegolithDiffuse(NdotLraw, dot(normal, viewDir), dot(lightDirection, viewDir), uRegolithMix, uOppositionSurge);
+        // μ — по нормали рельефа, но не меньше половины геометрического: грань, отвёрнутая от камеры
+        // нормальной картой, иначе прыгала бы к весу 2 (крапинки на серпе, чёрные провалы в тени)
+        float regolithMu = max(dot(normal, viewDir), 0.5 * dot(normalize(vNormal), viewDir));
+        directWeight = asteroidRegolithDiffuse(NdotLraw, regolithMu, dot(lightDirection, viewDir), uRegolithMix, uOppositionSurge);
       #endif
-      // Та же форма mix(пол, 1, N·L), что прежде: в полдень при occlusion = 1 и без тени ровно 1;
-      // вес — directWeight (ламберт или реголит)
+      // Форма mix(пол, прямой, вес) до веса 1, сверх него — избыток только на прямом свете (см. lit ниже);
+      // в полдень при occlusion = 1 и без тени ровно 1; вес — directWeight (ламберт или реголит)
       #ifdef USE_LIGHT_TINT
         vec3 litDirect = vec3(directGain) * uLightColor * sunTintMix;
       #else
