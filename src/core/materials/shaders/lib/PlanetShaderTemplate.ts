@@ -250,6 +250,7 @@ export const PlanetShaderTemplate: ShaderProps = {
     #ifdef USE_TERRAIN_SHADOW
       #include <terrainShadowMarchUniforms>
       #include <terrainShadowMarchFunctions>
+      #include <terrainNearShadowFunctions>
     #endif
 
     #ifdef USE_SUN_TINT
@@ -516,6 +517,11 @@ export const PlanetShaderTemplate: ShaderProps = {
         #ifdef USE_TERRAIN_SHADOW
           // только прямой свет; при N·L ≤ 0 mix ниже даёт directGain нулевой вес — марш не платится
           if (NdotLraw > 0.0) terrainShadow = mix(1.0, terrainShadowMarch(dirLocal, sunLocal), uTerrainShadowStrength);
+          // ближний слой (плитка у камеры): ветка по юниформу однородна, при весе 0 terrainShadow прежний
+          if (NdotLraw > 0.0 && uNearTileWeight > 0.0) {
+            float nearWeight = terrainNearShadowWeight(dirLocal);
+            if (nearWeight > 0.0) terrainShadow = min(terrainShadow, mix(1.0, terrainNearShadowMarch(dirLocal, sunLocal), nearWeight));
+          }
           directGain *= terrainShadow;
         #endif
       #endif
