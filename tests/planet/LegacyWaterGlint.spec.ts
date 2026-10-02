@@ -22,6 +22,7 @@ describe('PlanetShaderTemplate: легаси-блик воды тем же за�
     expect(block).toContain('waterGlintGlsl(normal, lightDirection, viewDir, uWaterFarAlpha2)')
     expect(block).toContain('* uWaterGlintGain')
     expect(block).toContain('smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow')
+    expect(block).toContain('* (1.0 - cloudAlpha) * sunTintMix')
     expect(block).not.toContain('blinnPhongGlint')
     expect(frag).not.toContain('uSpecularStrength')
   })

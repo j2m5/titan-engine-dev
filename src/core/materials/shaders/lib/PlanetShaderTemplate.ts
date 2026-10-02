@@ -292,8 +292,9 @@ export const PlanetShaderTemplate: ShaderProps = {
     #endif
 
     #ifdef USE_SPECULAR
-      // Блик воды легаси-сферы: тот же чанк и та же дальняя шероховатость, что у
-      // водной оболочки — на гейте карты высот дорожка не меняется
+      // Блик воды легаси-сферы: тот же лепесток и та же дальняя шероховатость, что у
+      // водной оболочки, под облаками гаснет и тонируется солнцем, как у неё;
+      // терминаторный гейт чуть иной (smoothstep по N·L против dayFactor воды)
       uniform float uWaterFarAlpha2;
       uniform float uWaterGlintGain;
       #include <waterGlintFunctions>
@@ -600,9 +601,11 @@ export const PlanetShaderTemplate: ShaderProps = {
       #endif
       #ifdef USE_SPECULAR
         // Дорожка океана с орбиты: широкий лепесток по шероховатости погасших
-        // октав, маска — specular-карта; гаснет у терминатора и в тени кольца.
+        // октав, маска — specular-карта; гаснет у терминатора, в тени кольца и под
+        // облаками, тонируется закатным солнцем (как у водной оболочки).
         float specularIntensity = texture2D(specularMap, uv).r;
         finalColor += specularIntensity * waterGlintGlsl(normal, lightDirection, viewDir, uWaterFarAlpha2) * uWaterGlintGain
+                    * (1.0 - cloudAlpha) * sunTintMix
                     * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;
       #endif
 
@@ -624,7 +627,8 @@ export const PlanetShaderTemplate: ShaderProps = {
       #endif
 
       // Потолок глинта: планета целиком остаётся далеко под half-float/AgX.
-      // При текущих дефолтах пик ~3.0 — потолок рассчитан на подъём uWaterGlintGain.
+      // Потолок 4.0 оставляет запас под блики (пик глинта воды ≈ 0.027·uWaterGlintGain;
+      // у льда и мокрой кромки свои пики).
       gl_FragColor = vec4(min(finalColor, vec3(4.0)), 1.0);
 
       ${ShaderChunk['tonemapping_fragment']}
