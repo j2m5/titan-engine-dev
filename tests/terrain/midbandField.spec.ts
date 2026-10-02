@@ -292,3 +292,55 @@ describe('MidbandField: огибающая у уровня воды', () => {
     expect(narrow.envelope(wallEnv, 30)).toBeCloseTo(dry.envelope(wallEnv, 30), 12)
   })
 })
+
+describe('MidbandField: parentOut — вторая сумма октав за один проход', () => {
+  const field = new MidbandField(MIDBAND_DEFAULTS, LAMBDA0, R_M)
+  const fresh = (): MidbandSample => ({ heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0, envelope: 0 })
+  const cases: Array<[number, number]> = [[150, 300], [600, 1200], [1500, 3000], [0, 50]]
+
+  for (const dir of [...dirs(6), new Vector3(0.01, 0.99995, 0).normalize(), new Vector3(1e-5, 1, 0).normalize()]) {
+    for (const [step, parentStep] of cases) {
+      it(`равна отдельному вызову: шаг ${step}→${parentStep}, dir ${dir.toArray().map((x) => x.toFixed(2))}`, () => {
+        const own = fresh(), parent = fresh(), ref = fresh(), ownRef = fresh()
+        field.sample(dir.x, dir.y, dir.z, wallEnv, 500, own, step, 1e-4, -2e-4, parentStep, parent)
+        field.sample(dir.x, dir.y, dir.z, wallEnv, 500, ref, parentStep, 1e-4, -2e-4)
+        field.sample(dir.x, dir.y, dir.z, wallEnv, 500, ownRef, step, 1e-4, -2e-4)
+        expect(parent).toEqual(ref)
+        expect(own).toEqual(ownRef)
+      })
+    }
+  }
+
+  it('ранний выход (огибающая 0) — parentOut как у отдельного вызова', () => {
+    const noFlat = new MidbandField({ ...MIDBAND_DEFAULTS, midbandFlat: 0 }, LAMBDA0, R_M)
+    const parent = fresh(), ref = fresh()
+    noFlat.sample(0.3, 0.8, 0.52, flatEnv, 500, fresh(), 150, 0, 0, 300, parent)
+    noFlat.sample(0.3, 0.8, 0.52, flatEnv, 500, ref, 300)
+    expect(parent).toEqual(ref)
+  })
+
+  it('ранний выход (strength 0) — parentOut как у отдельного вызова', () => {
+    const off = new MidbandField({ ...MIDBAND_DEFAULTS, midbandStrength: 0 }, LAMBDA0, R_M)
+    const parent = fresh(), ref = fresh()
+    off.sample(0.3, 0.8, 0.52, wallEnv, 500, fresh(), 150, 0, 0, 300, parent)
+    off.sample(0.3, 0.8, 0.52, wallEnv, 500, ref, 300)
+    expect(parent).toEqual(ref)
+  })
+
+  it('ранний выход (ребёнок грубее всех октав) — parentOut как у отдельного вызова', () => {
+    const parent = fresh(), ref = fresh(), own = fresh(), ownRef = fresh()
+    field.sample(0.3, 0.8, 0.52, wallEnv, 500, own, 1e6, 0, 0, 2e6, parent)
+    field.sample(0.3, 0.8, 0.52, wallEnv, 500, ref, 2e6)
+    field.sample(0.3, 0.8, 0.52, wallEnv, 500, ownRef, 1e6)
+    expect(parent).toEqual(ref)
+    expect(own).toEqual(ownRef)
+  })
+
+  it('родительский шаг грубее всех октав — нули и доля 0, своя сумма не тронута', () => {
+    const parent = fresh(), own = fresh(), ownRef = fresh()
+    field.sample(0.3, 0.8, 0.52, wallEnv, 500, own, 150, 0, 0, 1e6, parent)
+    field.sample(0.3, 0.8, 0.52, wallEnv, 500, ownRef, 150)
+    expect(parent).toEqual(fresh())
+    expect(own).toEqual(ownRef)
+  })
+})

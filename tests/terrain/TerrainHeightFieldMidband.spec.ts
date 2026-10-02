@@ -3,6 +3,7 @@ import { Vector2, Vector3 } from 'three'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
 import { TERRAIN_MODEL_LEVEL, TERRAIN_QUADTREE_MAX_LEVEL, TERRAIN_QUADTREE_MIN_LEVEL } from '@/core/terrain/terrainQuadtreeSelect'
+import type { MidbandSample } from '@/core/terrain/midbandField'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 
 function makeMap(width: number, height: number, values: number[], minMeters = 0, maxMeters = 65535): HeightMapData {
@@ -229,5 +230,30 @@ describe('TerrainHeightField: наклон полосы сходится с её
       midbandRidge: 0
     })
     expect(tiltErrorP90(field, -8000, 8000)).toBeLessThan(0.005)
+  })
+})
+
+describe('TerrainHeightField.midbandSample: parentOut', () => {
+  const fresh = (): MidbandSample => ({ heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0, envelope: 0 })
+
+  it('родительская сумма равна отдельному вызову с шагом родителя', () => {
+    const field = new TerrainHeightField(bumpyMap(), R_KM)
+    for (const d of dirs(40)) {
+      const uv = field.dirToUv(d, new Vector2())
+      const map = field.sampleMeters(uv.x, uv.y)
+      const own = fresh(), parent = fresh(), ref = fresh(), ownRef = fresh()
+      field.midbandSample(d, uv.x, uv.y, map, own, 150, true, 300, parent)
+      field.midbandSample(d, uv.x, uv.y, map, ref, 300)
+      field.midbandSample(d, uv.x, uv.y, map, ownRef, 150)
+      expect(parent).toEqual(ref)
+      expect(own).toEqual(ownRef)
+    }
+  })
+
+  it('без полосы parentOut — нули', () => {
+    const off = new TerrainHeightField(bumpyMap(), R_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 })
+    const parent: MidbandSample = { heightMeters: 1, tiltE: 2, tiltN: 3, octaveWeightSum: 4, envelope: 5 }
+    off.midbandSample(new Vector3(0, 0, 1), 0.5, 0.5, 0, fresh(), 150, true, 300, parent)
+    expect(parent).toEqual(fresh())
   })
 })

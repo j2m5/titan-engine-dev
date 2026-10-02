@@ -93,6 +93,12 @@ export interface TerrainConfig {
        * → 6 в полёте ≈ 50 мс латентности сплита.
        */
       buildInFlight: number
+      /**
+       * Длительность геоморфа патча, с реального времени кадра: дети сплита
+       * спадают из родительской формы в свою, дети мержа растут в родительскую
+       * до свопа. 0 — морф выключен, своп мгновенный.
+       */
+      morphSeconds: number
     }
   }
 }
@@ -115,7 +121,8 @@ export const terrain: TerrainConfig = {
     },
     lod: {
       patchBuildBudgetMs: 6,
-      buildInFlight: 6
+      buildInFlight: 6,
+      morphSeconds: 0.4
     }
   }
 }

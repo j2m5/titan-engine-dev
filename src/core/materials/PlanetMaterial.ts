@@ -156,7 +156,17 @@ class PlanetMaterial extends AbstractShaderMaterial {
     // normalize(position) — радиаль тело-центричной сферы.
     // midShade: у легаси-сферы окна даунгрейда атрибута нет; y = 0 — доля октав
     // полосы нулевая, fbm наклоняет и красит сам, как до полосы B
-    this.defaultAttributeValues = { ...this.defaultAttributeValues, patchCenter: [0, 0, 0], midShade: [0, 0] }
+    // Морф-атрибуты (morphDelta, patchMorph, *Parent) заданы только у морф-пула
+    // рельефа; нули = своя форма, вывод прежний
+    this.defaultAttributeValues = {
+      ...this.defaultAttributeValues,
+      patchCenter: [0, 0, 0],
+      midShade: [0, 0],
+      morphDelta: [0, 0, 0],
+      patchMorph: [0],
+      midShadeParent: [0, 0],
+      midTiltParent: [0, 0]
+    }
 
     // Steep-зона материала (Task 3, чанк TerrainDetail — GLSL-сторона уже
     // объявлена задачей 2): второй набор detail-сэмплеров и маска уклона

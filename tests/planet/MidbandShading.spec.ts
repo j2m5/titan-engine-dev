@@ -99,6 +99,11 @@ describe('PlanetMaterial: uMidbandShade из midbandParamsOf; дефолт ат�
     const material = new PlanetMaterial(moon)
     expect(material.uniforms.uMidbandShade.value).toBe(0.5)
     expect(material.defaultAttributeValues.midShade).toEqual([0, 0])
+    // морф-атрибуты рельефа: без дефолта читается общий generic-слот GL
+    expect(material.defaultAttributeValues.morphDelta).toEqual([0, 0, 0])
+    expect(material.defaultAttributeValues.patchMorph).toEqual([0])
+    expect(material.defaultAttributeValues.midShadeParent).toEqual([0, 0])
+    expect(material.defaultAttributeValues.midTiltParent).toEqual([0, 0])
     seedTexture('', 4, 2)
     seedTexture('default.png', 4, 2)
     seedTexture('night.jpg', 4, 2)

@@ -158,13 +158,28 @@ export class MidbandField {
     stepMeters: number = 0,
     /** Производная огибающей по дуге вдоль E/N, 1/м: член ∂env·B наклона (переменная огибающая). */
     envGradE: number = 0,
-    envGradN: number = 0
+    envGradN: number = 0,
+    /** Шаг родительского уровня (≥ stepMeters) и приёмник его суммы октав: тот же шум, один проход; < 0 / null — не нужна. */
+    parentStepMeters: number = -1,
+    parentOut: MidbandSample | null = null
   ): MidbandSample {
     out.heightMeters = 0
     out.tiltE = 0
     out.tiltN = 0
     // огибающая остаётся нулевой на всех ранних выходах: полосы в точке нет
     out.envelope = 0
+
+    // родитель грубее ребёнка ⇒ wₚ ≤ w для каждой октавы: шум ребёнка покрывает родительский
+    const wantParent = parentOut !== null && parentStepMeters >= 0
+    let parentWeightSum = 0
+    if (wantParent) {
+      parentOut.heightMeters = 0
+      parentOut.tiltE = 0
+      parentOut.tiltN = 0
+      parentOut.envelope = 0
+      for (let i = 0; i < this.octaveCount; i++) parentWeightSum += midbandOctaveWeight(parentStepMeters, this.wavelengthsMeters[i])
+      parentOut.octaveWeightSum = this.octaveCount > 0 ? parentWeightSum / this.octaveCount : 0
+    }
 
     let weightSum = 0
     for (let i = 0; i < this.octaveCount; i++) weightSum += midbandOctaveWeight(stepMeters, this.wavelengthsMeters[i])
@@ -178,6 +193,7 @@ export class MidbandField {
     if (weightSum === 0) return out
 
     out.envelope = env
+    if (wantParent && parentWeightSum > 0) parentOut.envelope = env
 
     // базис точки: E = normalize(UP × dir), N = dir × E; у полюса наклон не определён
     this.east.set(dirX, dirY, dirZ)
@@ -219,9 +235,13 @@ export class MidbandField {
     let height = 0
     let tE = 0
     let tN = 0
+    let hP = 0
+    let tEP = 0
+    let tNP = 0
     let frequency = 1
     for (let i = 0; i < this.octaveCount; i++) {
       const w = midbandOctaveWeight(stepMeters, this.wavelengthsMeters[i])
+      const wp = wantParent ? midbandOctaveWeight(parentStepMeters, this.wavelengthsMeters[i]) : 0
       if (w > 0) {
         const g = snoiseGrad3(px * frequency, py * frequency, pz * frequency, this.grad)
         const sign = g.value >= 0 ? -1 : 1 // r = 1 − |n| ⇒ ∂r = −sign(n)·∂n
@@ -230,6 +250,12 @@ export class MidbandField {
         // ∂r/∂s = sign · (∇n · ∂q/∂s), ∂q/∂s = frequency · ∂p/∂s
         tE += a * sign * frequency * (g.dx * dpEx + g.dy * dpEy + g.dz * dpEz)
         tN += a * sign * frequency * (g.dx * dpNx + g.dy * dpNy + g.dz * dpNz)
+        if (wp > 0) {
+          const ap = wp * this.amplitudesMeters[i]
+          hP += ap * (1 - Math.abs(g.value) - MIDBAND_RIDGE_MEAN)
+          tEP += ap * sign * frequency * (g.dx * dpEx + g.dy * dpEy + g.dz * dpEz)
+          tNP += ap * sign * frequency * (g.dx * dpNx + g.dy * dpNy + g.dz * dpNz)
+        }
       }
       frequency *= MIDBAND_LACUNARITY
     }
@@ -239,6 +265,12 @@ export class MidbandField {
     // полная производная strength·env·B: env·∂B + ∂env·B
     out.tiltE = polar ? 0 : scale * tE + this.strength * height * envGradE
     out.tiltN = polar ? 0 : scale * tN + this.strength * height * envGradN
+
+    if (wantParent && parentWeightSum > 0) {
+      parentOut.heightMeters = scale * hP
+      parentOut.tiltE = polar ? 0 : scale * tEP + this.strength * hP * envGradE
+      parentOut.tiltN = polar ? 0 : scale * tNP + this.strength * hP * envGradN
+    }
 
     return out
   }

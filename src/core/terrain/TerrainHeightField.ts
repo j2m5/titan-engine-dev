@@ -561,6 +561,8 @@ class TerrainHeightField {
    * `stepMeters` — шаг вершин уровня, по нему взвешены октавы; 0 — вся полоса.
    * `withTilt` — нужен ли наклон: производная огибающей стоит четырёх выборок
    * сетки и карты, высоте (коллизия) она не нужна.
+   * `parentOut` (при `parentStepMeters >= 0`) — та же полоса на шаге родителя, что дал бы
+   * отдельный вызов, но тем же проходом шума.
    */
   public midbandSample(
     dir: Vector3,
@@ -569,9 +571,19 @@ class TerrainHeightField {
     mapMeters: number,
     out: MidbandSample,
     stepMeters: number = 0,
-    withTilt: boolean = true
+    withTilt: boolean = true,
+    parentStepMeters: number = -1,
+    parentOut: MidbandSample | null = null
   ): MidbandSample {
     if (this.midband === null || this.envelopeGrid === null) {
+      if (parentOut !== null) {
+        parentOut.heightMeters = 0
+        parentOut.tiltE = 0
+        parentOut.tiltN = 0
+        parentOut.octaveWeightSum = 0
+        parentOut.envelope = 0
+      }
+
       out.heightMeters = 0
       out.tiltE = 0
       out.tiltN = 0
@@ -599,7 +611,7 @@ class TerrainHeightField {
       }
     }
 
-    return this.midband.sample(dir.x, dir.y, dir.z, env, mapMeters, out, stepMeters, gradE, gradN)
+    return this.midband.sample(dir.x, dir.y, dir.z, env, mapMeters, out, stepMeters, gradE, gradN, parentStepMeters, parentOut)
   }
 
   private envelopeAt(u: number, v: number): number {

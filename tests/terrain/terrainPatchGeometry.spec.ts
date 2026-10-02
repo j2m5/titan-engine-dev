@@ -99,7 +99,7 @@ describe('buildTerrainPatchArrays: ядро без геометрии', () => {
   it('массивы и центр равны fresh-варианту; сфера равна computeBoundingSphere', () => {
     const field = bumpyField()
     const arrays = allocatePatchArrays(SEGMENTS)
-    const { center, bounds } = buildTerrainPatchArrays(field, 0, 1, 0, DEPTH, SEGMENTS, 0.001, detailWrapFor(undefined), arrays)
+    const { center, bounds } = buildTerrainPatchArrays(field, 0, 1, 0, DEPTH, SEGMENTS, 0.001, detailWrapFor(undefined), arrays, false)
     const { geometry, center: refCenter } = build(field, 0, 1, 0, 0.001)
     expect(center.toArray()).toEqual(refCenter.toArray())
     for (const [name, arr] of [['position', arrays.positions], ['detailPos', arrays.detailPos], ['detailPos2', arrays.detailPos2], ['height', arrays.heights], ['midTilt', arrays.midTilts], ['midShade', arrays.midShades]] as const) {
@@ -653,5 +653,102 @@ describe('buildTerrainPatchGeometry: атрибут midShade', () => {
       if (shade.getX(skirt) !== 0 || shade.getY(skirt) !== 0) nonZero++
     }
     expect(nonZero).toBeGreaterThan(0)
+  })
+})
+
+function buildMorph(field: TerrainHeightField, depth: number, face: number, i: number, j: number, skirt = 0) {
+  return buildTerrainPatchGeometry(field, face, i, j, depth, SEGMENTS, buildPatchIndex(SEGMENTS), skirt, detailWrapFor(undefined), true)
+}
+
+describe('родительская форма (геоморф)', () => {
+  const field = bumpyField()
+  const DEPTH_CHILD = 11
+  // ребёнок (face 2, i 5, j 6) — правый верхний квадрант родителя (2, 2, 3) на уровне 10
+  const child = buildMorph(field, DEPTH_CHILD, 2, 5, 6)
+  const parent = buildAt(field, DEPTH_CHILD - 1, 2, 2, 3)
+  const half = SEGMENTS / 2
+  const offA = (5 & 1) * half
+  const offB = (6 & 1) * half
+
+  function bodyPos(g: BufferGeometry, center: Vector3, k: number, withDelta: boolean): Vector3 {
+    const p = g.getAttribute('position')
+    const d = g.getAttribute('morphDelta')
+    const v = new Vector3(p.getX(k), p.getY(k), p.getZ(k)).add(center)
+    if (withDelta) v.add(new Vector3(d.getX(k), d.getY(k), d.getZ(k)))
+    return v
+  }
+
+  it('чётная вершина: позиция + сдвиг = вершина родителя', () => {
+    for (let b = 0; b <= SEGMENTS; b += 2) {
+      for (let a = 0; a <= SEGMENTS; a += 2) {
+        const kc = b * (SEGMENTS + 1) + a
+        const kp = (b / 2 + offB) * (SEGMENTS + 1) + (a / 2 + offA)
+        const got = bodyPos(child.geometry, child.center, kc, true)
+        const want = bodyPos(parent.geometry, parent.center, kp, false)
+        expect(got.distanceTo(want)).toBeLessThan(1e-6 * want.length())
+        expect(child.geometry.getAttribute('midTiltParent').getX(kc)).toBeCloseTo(parent.geometry.getAttribute('midTilt').getX(kp), 6)
+        expect(child.geometry.getAttribute('midShadeParent').getY(kc)).toBeCloseTo(parent.geometry.getAttribute('midShade').getY(kp), 6)
+      }
+    }
+  })
+
+  it('нечётная вершина: середина ребра родителя, центр квада — по диагонали v00→v11', () => {
+    const at = (a: number, b: number) => bodyPos(child.geometry, child.center, b * (SEGMENTS + 1) + a, true)
+    const P = (a: number, b: number) => bodyPos(parent.geometry, parent.center, (b + offB) * (SEGMENTS + 1) + (a + offA), false)
+    // ребро по a
+    expect(at(1, 0).distanceTo(P(0, 0).add(P(1, 0)).multiplyScalar(0.5))).toBeLessThan(1e-6 * P(0, 0).length())
+    // ребро по b
+    expect(at(0, 1).distanceTo(P(0, 0).add(P(0, 1)).multiplyScalar(0.5))).toBeLessThan(1e-6 * P(0, 0).length())
+    // центр квада: диагональ (0,0)–(1,1), НЕ (1,0)–(0,1)
+    const diag = P(0, 0).add(P(1, 1)).multiplyScalar(0.5)
+    const anti = P(1, 0).add(P(0, 1)).multiplyScalar(0.5)
+    expect(at(1, 1).distanceTo(diag)).toBeLessThan(1e-6 * diag.length())
+    expect(diag.distanceTo(anti)).toBeGreaterThan(1e-6 * diag.length()) // тест различает диагонали на этом рельефе
+  })
+
+  it('своя форма с морфом бит-в-бит как без него', () => {
+    const plain = buildAt(field, DEPTH_CHILD, 2, 5, 6).geometry
+    for (const name of ['position', 'detailPos', 'detailPos2', 'height', 'midTilt', 'midShade']) {
+      expect(child.geometry.getAttribute(name).array).toEqual(plain.getAttribute(name).array)
+    }
+  })
+
+  it('без морфа у геометрии нет морф-атрибутов', () => {
+    expect(buildAt(field, DEPTH_CHILD, 2, 5, 6).geometry.getAttribute('morphDelta')).toBeUndefined()
+  })
+
+  it('morph = false при морф-массивах: сдвиг нулевой, родительские атрибуты = свои', () => {
+    const arrays = allocatePatchArrays(SEGMENTS, true)
+    buildTerrainPatchArrays(field, 2, 5, 6, DEPTH_CHILD, SEGMENTS, 0, detailWrapFor(undefined), arrays, false)
+    expect(Array.from(arrays.morph!.deltas).every((x) => x === 0)).toBe(true)
+    expect(Array.from(arrays.morph!.midTilts)).toEqual(Array.from(arrays.midTilts))
+    expect(Array.from(arrays.morph!.midShades)).toEqual(Array.from(arrays.midShades))
+  })
+
+  it('юбка копирует сдвиг и родительские атрибуты кромки', () => {
+    const g = buildMorph(field, DEPTH_CHILD, 2, 5, 6, 0.001).geometry
+    const grid = (SEGMENTS + 1) ** 2
+    for (let ring = 0; ring < 4 * SEGMENTS; ring++) {
+      const edge = ringGridIndex(ring, SEGMENTS)
+      for (const name of ['morphDelta', 'midTiltParent', 'midShadeParent']) {
+        const attr = g.getAttribute(name)
+        for (let c = 0; c < attr.itemSize; c++) {
+          expect(attr.array[(grid + ring) * attr.itemSize + c]).toBe(attr.array[edge * attr.itemSize + c])
+        }
+      }
+    }
+  })
+
+  it('сфера охватывает и свою, и родительскую форму', () => {
+    const g = child.geometry
+    const s = g.boundingSphere!
+    const pos = g.getAttribute('position')
+    const d = g.getAttribute('morphDelta')
+    for (let k = 0; k < pos.count; k++) {
+      const own = new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k))
+      const par = own.clone().add(new Vector3(d.getX(k), d.getY(k), d.getZ(k)))
+      expect(own.distanceTo(s.center)).toBeLessThanOrEqual(s.radius * (1 + 1e-6))
+      expect(par.distanceTo(s.center)).toBeLessThanOrEqual(s.radius * (1 + 1e-6))
+    }
   })
 })

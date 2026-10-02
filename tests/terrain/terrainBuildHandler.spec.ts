@@ -12,7 +12,7 @@ import { buildMessageFor, builtArrays, expectMatchesFreshBuild, makeField, nearP
 type BuiltMessage = Extract<FromWorkerMessage, { type: 'built' }>
 
 describe('terrainBuildHandler: чистый обработчик сообщений воркера', () => {
-  it('registerField из копии карты + build → все шесть массивов бит-в-бит с постройкой на главном поле', () => {
+  it('registerField из копии карты + build → все массивы (с морф-тройкой) бит-в-бит с постройкой на главном поле', () => {
     const field = makeField()
     const state = createWorkerState()
     const reg = registerFieldMessage(field, 7)
@@ -24,16 +24,44 @@ describe('terrainBuildHandler: чистый обработчик сообщен�
     const job = patchJob(field, 0, 1, 0)
     const built = handleWorkerMessage(state, buildMessageFor(job, 1, 7))
     expect(built?.message.type).toBe('built')
-    expect(built?.transfer).toHaveLength(6)
+    expect(built?.transfer).toHaveLength(9)
     const m = built!.message as BuiltMessage
     const arrays = builtArrays(m)
     expectMatchesFreshBuild(arrays, job)
     expect(arrays.detailPos).not.toEqual(arrays.detailPos2) // стенд различает слои детали
 
-    const ref = buildTerrainPatchGeometry(field, 0, 1, 0, 1, 8, buildPatchIndex(8), 0.001, job.wrap)
+    const ref = buildTerrainPatchGeometry(field, 0, 1, 0, 1, 8, buildPatchIndex(8), 0.001, job.wrap, true)
     expect(m.center).toEqual(ref.center.toArray())
-    ref.geometry.computeBoundingSphere()
+    // сфера fresh-сборки уже выставлена applyPatchBounds (с учётом родительской формы)
     expect(m.bounds.radius).toBeCloseTo(ref.geometry.boundingSphere!.radius, 9)
+  })
+
+  it('build с morph: true несёт три морф-буфера в transfer (9), с null — null и 6 буферов; false — нулевые дельты', () => {
+    const field = makeField()
+    const state = createWorkerState()
+    handleWorkerMessage(state, registerFieldMessage(field, 7).message)
+
+    // глубже корня: родительская форма отличается от своей
+    const deep = { ...patchJob(field, 0, 1, 0, 0.001, true), level: 4 }
+    const withMorph = handleWorkerMessage(state, buildMessageFor(deep, 1, 7))
+    expect(withMorph?.transfer).toHaveLength(9)
+    const m = withMorph!.message as BuiltMessage
+    expect(m.morph).not.toBeNull()
+    for (const buffer of [m.morph!.deltas, m.morph!.midTilts, m.morph!.midShades]) expect(withMorph!.transfer).toContain(buffer)
+    const arrays = builtArrays(m)
+    expectMatchesFreshBuild(arrays, deep)
+    expect(arrays.morph!.deltas.some((v) => v !== 0)).toBe(true)
+
+    const none = handleWorkerMessage(state, buildMessageFor({ ...deep, morph: null }, 2, 7))
+    expect(none?.transfer).toHaveLength(6)
+    expect((none!.message as BuiltMessage).morph).toBeNull()
+
+    const off = { ...deep, morph: false }
+    const flat = handleWorkerMessage(state, buildMessageFor(off, 3, 7))
+    expect(flat?.transfer).toHaveLength(9)
+    const flatArrays = builtArrays(flat!.message as BuiltMessage)
+    expectMatchesFreshBuild(flatArrays, off)
+    expect(flatArrays.morph!.deltas.every((v) => v === 0)).toBe(true)
   })
 
   it('компаньон всегда из exportAux: поле без запечённого aux шлёт копии, исходные массивы переживают перенос; воркер не пересчитывает', () => {
@@ -94,7 +122,8 @@ describe('terrainBuildHandler: чистый обработчик сообщен�
       level: 1,
       segments: 8,
       skirtDepthUnits: 0,
-      wrap: detailWrapFor(undefined)
+      wrap: detailWrapFor(undefined),
+      morph: null
     })
     expect(res?.message).toMatchObject({ type: 'error', requestId: 5 })
     const field = makeField()

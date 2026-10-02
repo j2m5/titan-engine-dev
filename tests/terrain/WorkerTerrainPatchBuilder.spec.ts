@@ -87,6 +87,25 @@ describe('WorkerTerrainPatchBuilder: строитель поверх ворке�
     expect(worker.sent.filter((m) => m.type === 'registerField')).toHaveLength(1) // повторной регистрации не было
   })
 
+  it('флаг morph уходит в build, приход несёт морф-массивы; null — без них', () => {
+    const worker = new FakeWorker()
+    const builder = new WorkerTerrainPatchBuilder(worker)
+    const field = makeField()
+    const results: PatchBuildResult[] = []
+    const jobs = [true, false, null].map((morph) => ({ ...patchJob(field, 0, 1, 0, 0.001, morph), level: 4 }))
+    for (const job of jobs) builder.request(job, (r) => results.push(r), unexpectedError)
+    expect(worker.sent.filter((m) => m.type === 'build').map((m) => (m as { morph: boolean | null }).morph)).toEqual([
+      true,
+      false,
+      null
+    ])
+    worker.pump()
+    expect(results).toHaveLength(3)
+    jobs.forEach((job, k) => expectMatchesFreshBuild(results[k].arrays, job))
+    expect(results[2].arrays.morph).toBeNull()
+    expect(results[0].arrays.morph!.deltas.some((v) => v !== 0)).toBe(true)
+  })
+
   it('регистрация уходит раньше первого build; releaseAll снимает все поля; dispose завершает воркер, поздний приход не зовёт onDone', () => {
     const worker = new FakeWorker()
     const builder = new WorkerTerrainPatchBuilder(worker)

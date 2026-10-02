@@ -90,7 +90,7 @@ class TerrainSphere extends TerrainPatchGroup {
     const sharedMaterial = new PlanetMaterial(model, atmosphereRegistry, { terrainPatches: true })
     const waterLevelMeters = readWaterLevelMeters(model)
     const detailWrap = detailWrapFor(readRenderingData<IPlanetRenderingObject>(model))
-    super(field, sharedMaterial, renderer, undefined, waterLevelMeters, detailWrap, nowMs, builder)
+    super(field, sharedMaterial, renderer, undefined, waterLevelMeters, detailWrap, nowMs, builder, true)
     this.model = model
     this.sharedMaterial = sharedMaterial
     // карта тени строится у строителя (воркер держит копию карты); до прихода

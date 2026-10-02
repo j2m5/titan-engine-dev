@@ -2,7 +2,13 @@ import { expect } from 'vitest'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { detailWrapFor } from '@/core/terrain/detailWrap'
-import { buildPatchIndex, buildTerrainPatchGeometry, type PatchArrays } from '@/core/terrain/terrainPatchGeometry'
+import {
+  allocatePatchArrays,
+  buildPatchIndex,
+  buildTerrainPatchArrays,
+  buildTerrainPatchGeometry,
+  type PatchArrays
+} from '@/core/terrain/terrainPatchGeometry'
 import type { NearTileParams } from '@/core/terrain/nearTileBake'
 import { nearTileBasis, type Vec3 } from '@/core/terrain/terrainNearShadowMath'
 import type { PatchBuildJob } from '@/core/terrain/terrainPatchBuilder'
@@ -22,13 +28,20 @@ export function makeField(): TerrainHeightField {
 /** w1 ≠ w2, оба не дефолт: перестановка detailPos/detailPos2 или порча wrap видна в массивах. */
 export const ASYMMETRIC_WRAP = detailWrapFor({ detailScaleMeters: 37, detailScale2Meters: 5 })
 
-export function patchJob(field: TerrainHeightField, face: number, i: number, j: number, skirtDepthUnits = 0.001): PatchBuildJob {
-  return { field, face, i, j, level: 1, segments: 8, skirtDepthUnits, wrap: ASYMMETRIC_WRAP }
+export function patchJob(
+  field: TerrainHeightField,
+  face: number,
+  i: number,
+  j: number,
+  skirtDepthUnits = 0.001,
+  morph: boolean | null = true
+): PatchBuildJob {
+  return { field, face, i, j, level: 1, segments: 8, skirtDepthUnits, wrap: ASYMMETRIC_WRAP, morph }
 }
 
 export function buildMessageFor(job: PatchBuildJob, requestId: number, fieldId: number): ToWorkerMessage {
-  const { face, i, j, level, segments, skirtDepthUnits, wrap } = job
-  return { type: 'build', requestId, fieldId, face, i, j, level, segments, skirtDepthUnits, wrap }
+  const { face, i, j, level, segments, skirtDepthUnits, wrap, morph } = job
+  return { type: 'build', requestId, fieldId, face, i, j, level, segments, skirtDepthUnits, wrap, morph }
 }
 
 export function builtArrays(m: Extract<FromWorkerMessage, { type: 'built' }>): PatchArrays {
@@ -38,7 +51,15 @@ export function builtArrays(m: Extract<FromWorkerMessage, { type: 'built' }>): P
     detailPos2: new Float32Array(m.detailPos2),
     heights: new Float32Array(m.heights),
     midTilts: new Float32Array(m.midTilts),
-    midShades: new Float32Array(m.midShades)
+    midShades: new Float32Array(m.midShades),
+    morph:
+      m.morph === null
+        ? null
+        : {
+            deltas: new Float32Array(m.morph.deltas),
+            midTilts: new Float32Array(m.morph.midTilts),
+            midShades: new Float32Array(m.morph.midShades)
+          }
   }
 }
 
@@ -50,11 +71,15 @@ export function snapshotArrays(a: PatchArrays): PatchArrays {
     detailPos2: a.detailPos2.slice(),
     heights: a.heights.slice(),
     midTilts: a.midTilts.slice(),
-    midShades: a.midShades.slice()
+    midShades: a.midShades.slice(),
+    morph:
+      a.morph === null
+        ? null
+        : { deltas: a.morph.deltas.slice(), midTilts: a.morph.midTilts.slice(), midShades: a.morph.midShades.slice() }
   }
 }
 
-/** Все шесть массивов бит-в-бит с fresh-постройкой того же задания на главном поле. */
+/** Все шесть массивов (и морф-тройка, если есть) бит-в-бит с fresh-постройкой того же задания на главном поле. */
 export function expectMatchesFreshBuild(arrays: PatchArrays, job: PatchBuildJob): void {
   const { geometry } = buildTerrainPatchGeometry(
     job.field,
@@ -73,6 +98,18 @@ export function expectMatchesFreshBuild(arrays: PatchArrays, job: PatchBuildJob)
   expect(arrays.heights).toEqual(geometry.getAttribute('height').array)
   expect(arrays.midTilts).toEqual(geometry.getAttribute('midTilt').array)
   expect(arrays.midShades).toEqual(geometry.getAttribute('midShade').array)
+
+  // морф-массивы — тот же ядровый вызов с тем же флагом, бит-в-бит
+  const ref = allocatePatchArrays(job.segments, job.morph !== null)
+  buildTerrainPatchArrays(job.field, job.face, job.i, job.j, job.level, job.segments, job.skirtDepthUnits, job.wrap, ref, job.morph === true)
+  if (ref.morph === null) {
+    expect(arrays.morph).toBeNull()
+  } else {
+    expect(arrays.morph).not.toBeNull()
+    expect(arrays.morph!.deltas).toEqual(ref.morph.deltas)
+    expect(arrays.morph!.midTilts).toEqual(ref.morph.midTilts)
+    expect(arrays.morph!.midShades).toEqual(ref.morph.midShades)
+  }
 }
 
 /** Плитка ближней тени вокруг направления center (нормируется). */

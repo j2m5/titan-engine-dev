@@ -13,14 +13,17 @@ import {
   type TerrainPatchBuilder
 } from '@/core/terrain/terrainPatchBuilder'
 import { detailWrapFor, type DetailWrap } from '@/core/terrain/detailWrap'
-import { TerrainPatchPool, type PatchHandle } from '@/core/terrain/TerrainPatchPool'
+import { setPatchMorph, TerrainPatchPool, type PatchHandle } from '@/core/terrain/TerrainPatchPool'
+import { stepMorph } from '@/core/terrain/terrainMorph'
 import {
   byBuildPriority,
   coverageReady,
   forEachWantedDescendant,
   liveAncestorKey,
+  nodeKeyOf,
   selectTerrainNodes,
   terrainNodeKey,
+  TERRAIN_QUADTREE_MAX_LEVEL,
   TERRAIN_QUADTREE_MIN_LEVEL,
   type TerrainLeaf,
   type TerrainNodeAddress
@@ -69,6 +72,14 @@ interface PendingEntry {
   initial: boolean
 }
 
+/** Живой патч в сцене: m — прогресс геоморфа (0 своя форма, 1 родительская), target — куда идёт. */
+interface LiveEntry {
+  handle: PatchHandle
+  address: TerrainNodeAddress
+  morph: number
+  target: 0 | 1
+}
+
 /**
  * Общая машинерия квадродерева патчей кубосферы: пул, отбор по SSE
  * (selectTerrainNodes), гистерезис split/merge без дыр, юбки, dispose.
@@ -99,6 +110,11 @@ interface PendingEntry {
  * узла — перекрытия старого и нового больше нет, z-fight между двумя уровнями
  * не возникает.
  *
+ * Геоморф (флаг morph, terrain.lod.morphSeconds) поверх свопа: дети сплита
+ * видимого узла ровно на уровень входят с m = 1 и спадают к своей форме;
+ * дети мержа ровно на уровень растут к родительской до m = 1, лишь затем
+ * своп. Патч в морфе не заменяется; через уровень — своп мгновенный, m = 0.
+ *
  * patches делят один материал (аргумент конструктора) — контракт
  * ResourceObserver (.material на TerrainSphere) остаётся за наследником, эта
  * база сама его наружу не выставляет. RTC: вершины патча относительны его
@@ -117,7 +133,8 @@ interface PendingEntry {
 abstract class TerrainPatchGroup extends Group {
   private readonly field: TerrainHeightField
   private readonly pool: TerrainPatchPool
-  private readonly live = new Map<number, { handle: PatchHandle; address: TerrainNodeAddress }>()
+  private readonly morphEnabled: boolean
+  private readonly live = new Map<number, LiveEntry>()
   private readonly pending = new Map<number, PendingEntry>()
   /** Узлы, чья постройка упала: больше не запрашиваются (см. onPatchFailed). */
   private readonly failed = new Set<number>()
@@ -135,15 +152,33 @@ abstract class TerrainPatchGroup extends Group {
   // замыкание переиспользуется между кадрами — coverageReady зовётся на каждый
   // освобождаемый узел, аллокация лямбды на вызов была бы мусором в горячем пути
   private readonly isLive = (key: number): boolean => this.live.has(key)
-  // тот же приём, что isLive: колбэк forEachWantedDescendant зовётся на каждый
+  // тот же приём, что isLive: колбэки forEachWantedDescendant зовутся на каждый
   // желаемый лист внутри освобождаемого узла — лямбда на вызов была бы мусором.
-  // revealedDescendant — флаг «спуск что-то показал» вместо локальной переменной
-  // по той же причине (замыкание на витке цикла освобождения было бы аллокацией)
-  private revealedDescendant = false
+  // Флаги и параметры обхода — поля, а не локальные переменные, по той же
+  // причине (замыкание на витке цикла освобождения было бы аллокацией).
+  // descendantSeen — спуск нашёл желаемых потомков (узел дробится);
+  // allDirect — все они прямые дети узла уровня inspectLevel
+  private descendantSeen = false
+  private allDirect = true
+  private inspectLevel = 0
+  private readonly inspectDescendant = (key: number): void => {
+    this.descendantSeen = true
+    if (this.lastWanted.get(key)?.level !== this.inspectLevel + 1) this.allDirect = false
+  }
+  /** m, с которым входит патч, ставший видимым в свопе. */
+  private revealMorph = 0
+  /**
+   * Уровень скрытого освобождаемого узла, либо -1. Потомок под видимым живым
+   * промежуточным узлом не показывается: тот ещё закрывает место и дробится
+   * сам (в морфе — дождавшись m = 0), иначе — двойное покрытие.
+   */
+  private revealCoveredBelow = -1
   private readonly showLive = (key: number): void => {
-    this.revealedDescendant = true
     const entry = this.live.get(key)
-    if (entry) entry.handle.mesh.visible = true
+    if (!entry || entry.handle.mesh.visible) return
+    if (this.revealCoveredBelow >= 0 && this.visibleBetween(entry.address, this.revealCoveredBelow)) return
+    entry.handle.mesh.visible = true
+    this.resetMorph(entry, this.revealMorph)
   }
 
   // скретчи кадра: updateObject зовётся каждый кадр, аллокаций быть не должно
@@ -181,11 +216,17 @@ abstract class TerrainPatchGroup extends Group {
      * Строитель патчей: дефолт синхронный (постройка внутри запроса),
      * воркерный приходит от владельца.
      */
-    protected readonly builder: TerrainPatchBuilder = new SyncTerrainPatchBuilder()
+    protected readonly builder: TerrainPatchBuilder = new SyncTerrainPatchBuilder(),
+    /**
+     * Геоморф патчей (terrain.lod.morphSeconds): рельеф — да, вода — нет
+     * (её пул без морф-атрибутов, задания с morph: null).
+     */
+    morph: boolean = false
   ) {
     super()
     this.field = field
-    this.pool = new TerrainPatchPool(material, TERRAIN_PATCH_SEGMENTS, maxLivePatches)
+    this.morphEnabled = morph
+    this.pool = new TerrainPatchPool(material, TERRAIN_PATCH_SEGMENTS, maxLivePatches, morph)
     this.builder.acquire(field)
 
     // минимальный набор всегда есть (быстрый старт) — MIN_LEVEL всегда
@@ -291,21 +332,45 @@ abstract class TerrainPatchGroup extends Group {
       requested++
     }
 
+    // геоморф: шаг к цели прошлого кадра (желаемому — сразу к 0, иначе отмена
+    // мержа лишний кадр росла бы); цели остальных ставит цикл освобождения
+    const seconds = this.morphEnabled ? config('terrain.lod.morphSeconds') : 0
+    for (const [key, entry] of this.live) {
+      if (wanted.has(key)) entry.target = 0
+      entry.morph = stepMorph(entry.morph, entry.target, ctx.delta, seconds)
+      setPatchMorph(entry.handle, entry.morph)
+    }
+
     // без дыр: показанный узел освобождается только когда готова его замена;
     // замена показывается в тот же кадр (атомарный своп): все живые потомки при
-    // дроблении, живой предок — при схлопывании
+    // дроблении, живой предок — при схлопывании. Патч в морфе не заменяется:
+    // сплит ждёт m = 0 у заменяемого, мерж — m = 1 у всех детей
     for (const [key, entry] of this.live) {
       if (wanted.has(key)) continue
+      entry.target = 0
       if (!coverageReady(entry.address, wanted, this.isLive)) continue
 
-      // ветки coverageReady взаимоисключающи: спуск что-то показал ⇒ узел
-      // дробился (все желаемые листья внутри него живы), предок в этом случае
-      // не при чём — подъём не считается вовсе
-      this.revealedDescendant = false
-      forEachWantedDescendant(entry.address, wanted, this.showLive)
-      if (!this.revealedDescendant) {
+      // ветки coverageReady взаимоисключающи: есть желаемые потомки ⇒ узел
+      // дробится (все они живы), предок в этом случае не при чём
+      this.descendantSeen = false
+      this.allDirect = true
+      this.inspectLevel = entry.address.level
+      forEachWantedDescendant(entry.address, wanted, this.inspectDescendant)
+      if (this.descendantSeen) {
+        // морф — только сплит видимого узла ровно на уровень
+        const morphSplit = seconds > 0 && entry.handle.mesh.visible && this.allDirect
+        if (morphSplit && entry.morph > 0) continue // досматривает к своей форме
+        this.revealMorph = morphSplit ? 1 : 0
+        this.revealCoveredBelow = entry.handle.mesh.visible ? -1 : entry.address.level
+        forEachWantedDescendant(entry.address, wanted, this.showLive)
+        this.revealCoveredBelow = -1
+      } else {
         const ancestor = liveAncestorKey(entry.address, this.isLive)
-        if (ancestor !== -1 && wanted.has(ancestor)) this.showLive(ancestor)
+        if (ancestor !== -1 && wanted.has(ancestor)) {
+          if (seconds > 0 && this.mergeWaits(entry, ancestor)) continue
+          this.revealMorph = 0
+          this.showLive(ancestor)
+        }
       }
 
       this.remove(entry.handle.mesh)
@@ -319,7 +384,10 @@ abstract class TerrainPatchGroup extends Group {
     for (const entry of this.live.values()) {
       if (entry.handle.mesh.visible) continue
       if (liveAncestorKey(entry.address, this.isLive) !== -1) continue
+      // предок мержа ждёт роста детей: его место закрыто четырьмя видимыми
+      if (seconds > 0 && this.childrenVisible(entry.address)) continue
       entry.handle.mesh.visible = true
+      this.resetMorph(entry, 0)
     }
 
     this.pool.trimFree(Math.ceil(this.pool.liveCount / 4) + 16)
@@ -376,7 +444,9 @@ abstract class TerrainPatchGroup extends Group {
         level: address.level,
         segments: TERRAIN_PATCH_SEGMENTS,
         skirtDepthUnits,
-        wrap: this.detailWrap
+        wrap: this.detailWrap,
+        // корень без родителя: нулевые дельты
+        morph: this.morphEnabled ? address.level > TERRAIN_QUADTREE_MIN_LEVEL : null
       },
       (result) => this.onPatchBuilt(key, requestId, result),
       (error) => this.onPatchFailed(key, requestId, error)
@@ -425,7 +495,10 @@ abstract class TerrainPatchGroup extends Group {
     this.configurePatchMesh(entry.handle.mesh)
     this.add(entry.handle.mesh)
     entry.handle.mesh.visible = entry.initial
-    this.live.set(key, { handle: entry.handle, address: entry.address })
+    const live: LiveEntry = { handle: entry.handle, address: entry.address, morph: 0, target: 0 }
+    // слот из пула несёт m прошлого владельца
+    this.resetMorph(live, 0)
+    this.live.set(key, live)
 
     if (entry.initial && --this.initialRemaining === 0) {
       for (const cb of this.readyCallbacks.splice(0)) cb()
@@ -438,6 +511,57 @@ abstract class TerrainPatchGroup extends Group {
    * WaterSphere здесь ставит renderOrder и снимает clickable.
    */
   protected configurePatchMesh(_mesh: Mesh): void {}
+
+  /** Новое начало морфа: m и спад к своей форме. */
+  private resetMorph(entry: LiveEntry, m: number): void {
+    entry.morph = m
+    entry.target = 0
+    setPatchMorph(entry.handle, m)
+  }
+
+  /**
+   * Мерж ровно на уровень в скрытого готового предка: все четыре его ребёнка
+   * живы и видимы — растут к родительской форме (цель 1), своп ждёт, пока
+   * хоть один не дорос. Иначе (предок видим, через уровень, ребёнок скрыт
+   * или раздроблен) — мгновенный своп, как без морфа.
+   */
+  private mergeWaits(entry: LiveEntry, ancestorKey: number): boolean {
+    const ancestor = this.live.get(ancestorKey)
+    if (!ancestor || ancestor.handle.mesh.visible || ancestor.address.level !== entry.address.level - 1) return false
+    if (!this.childrenVisible(ancestor.address)) return false
+
+    entry.target = 1
+    const { face, level, i, j } = ancestor.address
+    for (let di = 0; di < 2; di++) {
+      for (let dj = 0; dj < 2; dj++) {
+        if (this.live.get(nodeKeyOf(face, level + 1, 2 * i + di, 2 * j + dj))!.morph < 1) return true
+      }
+    }
+    return false
+  }
+
+  /** Между узлом и уровнем topLevel (не включая) есть живой видимый предок. */
+  private visibleBetween(address: TerrainNodeAddress, topLevel: number): boolean {
+    for (let level = address.level - 1; level > topLevel; level--) {
+      const delta = address.level - level
+      const entry = this.live.get(nodeKeyOf(address.face, level, address.i >> delta, address.j >> delta))
+      if (entry?.handle.mesh.visible) return true
+    }
+    return false
+  }
+
+  /** Все четыре прямых ребёнка узла живы и видимы. */
+  private childrenVisible(address: TerrainNodeAddress): boolean {
+    const { face, level, i, j } = address
+    if (level >= TERRAIN_QUADTREE_MAX_LEVEL) return false
+    for (let di = 0; di < 2; di++) {
+      for (let dj = 0; dj < 2; dj++) {
+        const child = this.live.get(nodeKeyOf(face, level + 1, 2 * i + di, 2 * j + dj))
+        if (!child || !child.handle.mesh.visible) return false
+      }
+    }
+    return true
+  }
 
   /**
    * Хук наследника: вызывается РОВНО когда дерево фактически проснётся в

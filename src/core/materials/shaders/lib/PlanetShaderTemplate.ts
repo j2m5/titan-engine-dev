@@ -87,6 +87,11 @@ export const PlanetShaderTemplate: ShaderProps = {
       // направление вершины восстанавливается из RTC-позиции и центра патча.
       // Инстансный атрибут: один элемент на патч (см. TerrainPatchPool).
       attribute vec3 patchCenter;
+      // Геоморф (TerrainPatchGroup): смещение вершины к форме родителя (RTC) и
+      // инстансная доля 0..1; без морф-пула их значения — defaultAttributeValues
+      // PlanetMaterial (нули), иначе three читает общий generic-слот GL
+      attribute vec3 morphDelta;
+      attribute float patchMorph;
     #endif
 
     #ifdef USE_TERRAIN_DETAIL
@@ -112,6 +117,10 @@ export const PlanetShaderTemplate: ShaderProps = {
       varying vec2 vMidShade;
     #endif
 
+    #if defined(USE_TERRAIN_UV) && defined(USE_TERRAIN_MACRO_DETAIL)
+      attribute vec2 midShadeParent;
+    #endif
+
     #ifdef USE_SLOPE
       // Наклон геометрии средней полосы B (tan в базисе T/B SlopeNormal) —
       // атрибут TerrainSphere, домешивается в декод slope-карты во фрагменте
@@ -119,9 +128,21 @@ export const PlanetShaderTemplate: ShaderProps = {
       varying vec2 vMidTilt;
     #endif
 
+    #if defined(USE_TERRAIN_UV) && defined(USE_SLOPE)
+      attribute vec2 midTiltParent;
+    #endif
+
     void main() {
-      vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+      #ifdef USE_TERRAIN_UV
+        // геоморф: 0 — своя форма, 1 — форма родителя (TerrainPatchGroup)
+        float morphT = smoothstep(0.0, 1.0, patchMorph);
+        vec3 morphedPosition = position + morphDelta * morphT;
+      #else
+        vec3 morphedPosition = position;
+      #endif
+
+      vec4 worldPosition = modelMatrix * vec4(morphedPosition, 1.0);
+      vec4 mvPosition = modelViewMatrix * vec4(morphedPosition, 1.0);
 
       gl_Position = projectionMatrix * mvPosition;
 
@@ -136,7 +157,7 @@ export const PlanetShaderTemplate: ShaderProps = {
       // готовый атрибут normal. vUv жив только на легаси-пути: у патчей
       // атрибута uv нет, а терраформный фрагментник считает uv сам.
       #ifdef USE_TERRAIN_UV
-        vec3 vertexDir = normalize(position + patchCenter);
+        vec3 vertexDir = normalize(morphedPosition + patchCenter);
       #else
         vec3 vertexDir = normal;
         vUv = uv;
@@ -147,7 +168,7 @@ export const PlanetShaderTemplate: ShaderProps = {
       // центра тела; USE_RING (RingShadow) сегодня безвредно её использует
       // только для тел без колец-детей — терраформное тело с кольцом даст
       // неверную тень (чинить при первом таком теле).
-      vPosition = position;
+      vPosition = morphedPosition;
       // Тот же вектор — во фрагментник: попиксельный UV терраформных тел
       // (USE_TERRAIN_UV) считается из него без матриц.
       vLocalDir = vertexDir;
@@ -168,11 +189,19 @@ export const PlanetShaderTemplate: ShaderProps = {
       #endif
 
       #ifdef USE_TERRAIN_MACRO_DETAIL
-        vMidShade = midShade;
+        #ifdef USE_TERRAIN_UV
+          vMidShade = mix(midShade, midShadeParent, morphT);
+        #else
+          vMidShade = midShade;
+        #endif
       #endif
 
       #ifdef USE_SLOPE
-        vMidTilt = midTilt;
+        #ifdef USE_TERRAIN_UV
+          vMidTilt = mix(midTilt, midTiltParent, morphT);
+        #else
+          vMidTilt = midTilt;
+        #endif
       #endif
 
       ${ShaderChunk['logdepthbuf_vertex']}
