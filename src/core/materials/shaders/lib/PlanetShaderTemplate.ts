@@ -48,7 +48,17 @@ const defaultUniforms = {
   uCloudOpacity: new Uniform(1),
   // Закон реголита (USE_REGOLITH): доля Ломмеля–Зелигера и всплеск — ставит PlanetShader по телу
   uRegolithMix: new Uniform(0),
-  uOppositionSurge: new Uniform(0.3)
+  uOppositionSurge: new Uniform(0.3),
+  // Ближний слой тени рельефа (USE_TERRAIN_SHADOW): вес 0 — плитки нет, вывод прежний
+  uNearTile: new Uniform(null),
+  uNearTileCenter: new Uniform(new Vector3(1, 0, 0)),
+  uNearTileEast: new Uniform(new Vector3(0, 0, -1)),
+  uNearTileNorth: new Uniform(new Vector3(0, 1, 0)),
+  uNearTileTexelMeters: new Uniform(64),
+  uNearTileTexels: new Uniform(512),
+  uNearTileWeight: new Uniform(0),
+  uNearShadowMaxDistMeters: new Uniform(8000),
+  uBodyRadiusMeters: new Uniform(0)
 }
 const ringShadowUniforms = AppUniformsChunk.ringShadowUniforms
 
@@ -240,6 +250,7 @@ export const PlanetShaderTemplate: ShaderProps = {
     #ifdef USE_TERRAIN_SHADOW
       #include <terrainShadowMarchUniforms>
       #include <terrainShadowMarchFunctions>
+      #include <terrainNearShadowFunctions>
     #endif
 
     #ifdef USE_SUN_TINT
@@ -506,6 +517,11 @@ export const PlanetShaderTemplate: ShaderProps = {
         #ifdef USE_TERRAIN_SHADOW
           // только прямой свет; при N·L ≤ 0 mix ниже даёт directGain нулевой вес — марш не платится
           if (NdotLraw > 0.0) terrainShadow = mix(1.0, terrainShadowMarch(dirLocal, sunLocal), uTerrainShadowStrength);
+          // ближний слой (плитка у камеры): ветка по юниформу однородна, при весе 0 terrainShadow прежний
+          if (NdotLraw > 0.0 && uNearTileWeight > 0.0) {
+            float nearWeight = terrainNearShadowWeight(dirLocal);
+            if (nearWeight > 0.0) terrainShadow = min(terrainShadow, mix(1.0, terrainNearShadowMarch(dirLocal, sunLocal), nearWeight));
+          }
           directGain *= terrainShadow;
         #endif
       #endif

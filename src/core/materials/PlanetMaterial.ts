@@ -15,6 +15,7 @@ import { terrainDataOf } from '@/core/terrain/terrainClassPresets'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { onTerrainShadowMapReady, terrainShadowMapFor, type TerrainShadowMap } from '@/core/terrain/terrainShadowMap'
 import { resolveTerrainLightParams } from '@/core/terrain/terrainLightParams'
+import type { NearTileState } from '@/core/terrain/NearShadowTile'
 import { IPlanetRenderingObject } from '@/core/models/types'
 import { readRenderingData } from '@/core/helpers/renderingData'
 import { proceduralDiffuseKey } from '@/core/services/ProceduralSurfaceGenerator'
@@ -86,6 +87,9 @@ class PlanetMaterial extends AbstractShaderMaterial {
 
   /** Множитель полутени собственной тени рельефа (ручка данных) — читает syncTerrainShadow. */
   private shadowSoftness: number = 1
+
+  /** Сила ближнего слоя тени (ручка данных) — множитель веса в setNearTile. */
+  private nearShadowStrength: number = 1
 
   /** Отписка от готовности карты тени: до неё привязана заглушка, см. terrainShadowMapFor. */
   private unsubscribeShadowReady: (() => void) | null = null
@@ -223,6 +227,29 @@ class PlanetMaterial extends AbstractShaderMaterial {
     )
   }
 
+  /** Нужна ли плитка ближней тени: слой живёт внутри USE_TERRAIN_SHADOW и гаснет при силе 0. */
+  public get nearShadowActive(): boolean {
+    return this.defines.USE_TERRAIN_SHADOW !== undefined && this.nearShadowStrength > 0
+  }
+
+  /** Плитка ближней тени (NearShadowTile); null — вес 0, вывод шейдера прежний. Текстурой владеет плитка. */
+  public setNearTile(state: NearTileState | null): void {
+    const u = this.uniforms
+    if (!state) {
+      u.uNearTile.value = null
+      u.uNearTileWeight.value = 0
+
+      return
+    }
+    u.uNearTile.value = state.texture
+    ;(u.uNearTileCenter.value as Vector3).fromArray(state.center)
+    ;(u.uNearTileEast.value as Vector3).fromArray(state.east)
+    ;(u.uNearTileNorth.value as Vector3).fromArray(state.north)
+    u.uNearTileTexelMeters.value = state.texelMeters
+    u.uNearTileTexels.value = state.texels
+    u.uNearTileWeight.value = state.altitudeWeight * this.nearShadowStrength
+  }
+
   /**
    * Тинт солнца у терминатора — вызывается КАЖДЫЙ видимый кадр (Planet.
    * updateObject, TerrainSphere.onVisibleUpdate); вся механика в SunTintBinding
@@ -311,6 +338,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
     // бит-в-бит прежним; юниформ форвардится независимо от гейта.
     const light = resolveTerrainLightParams(planetData, this.model.getAttribute?.('name', '?') ?? '?')
     this.shadowSoftness = light.terrainShadowSoftness
+    this.nearShadowStrength = light.nearShadowStrength
     const useTerrainShadow = hasHeightField && light.terrainShadowStrength > 0
     const shadowMap = useTerrainShadow ? terrainShadowMapFor(heightMap) : undefined
     this.uniforms.uTerrainShadowStrength.value = light.terrainShadowStrength
@@ -522,6 +550,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
     this.unsubscribeShadowReady?.()
     this.unsubscribeShadowReady = null
     this.bindShadowMap(undefined)
+    this.setNearTile(null)
     ;(this.uniforms.uDetailTintNorm.value as Vector2).set(1, 1)
     ;(this.uniforms.uSteepTintNorm.value as Vector2).set(1, 1)
 

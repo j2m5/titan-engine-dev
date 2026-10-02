@@ -1,6 +1,7 @@
 import type { DetailWrap } from '../detailWrap'
 import type { MidbandParams } from '../midbandParams'
 import type { TerrainAuxPayload } from '../terrainAuxFormat'
+import type { NearTileParams } from '../nearTileBake'
 import type { PatchBounds } from '../terrainPatchGeometry'
 
 /**
@@ -26,6 +27,7 @@ export type ToWorkerMessage =
     }
   | { type: 'releaseField'; fieldId: number }
   | { type: 'buildShadow'; requestId: number; fieldId: number }
+  | { type: 'buildNearTile'; requestId: number; fieldId: number; params: NearTileParams }
   | {
       type: 'build'
       requestId: number
@@ -60,6 +62,12 @@ export type FromWorkerMessage =
       bits: ArrayBuffer
       width: number
       height: number
+    }
+  | {
+      type: 'nearTileBuilt'
+      requestId: number
+      /** Float32 texels², метры относительно центра плитки (nearTileBake). */
+      heights: ArrayBuffer
     }
   | { type: 'fieldReady'; fieldId: number }
   | { type: 'error'; requestId: number | null; message: string }

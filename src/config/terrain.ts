@@ -47,6 +47,21 @@ export interface TerrainConfig {
     heightMapBudgetMiB: number
     /** Длина луча марша тени рельефа к солнцу, км: на терминаторе тени десятки км, 150 с запасом при 20 шагах. */
     shadowMaxKm: number
+    /** Ближний слой тени: плитка высот вокруг подспутниковой точки камеры. */
+    nearShadow: {
+      /** Текселей по стороне плитки (R32F). */
+      tileTexels: number
+      /** Тексель плитки, м; окно = tileTexels · texelMeters. */
+      texelMeters: number
+      /** Длина луча ближнего марша к солнцу, м. */
+      maxDistanceMeters: number
+      /** Высота камеры над поверхностью, м: выше — плитки нет. */
+      maxAltitudeMeters: number
+      /** Высота камеры, м, с которой вес слоя спадает к нулю на maxAltitudeMeters. */
+      fadeAltitudeMeters: number
+      /** Перепечка при сдвиге подспутниковой точки дальше этой доли стороны плитки. */
+      rebakeFraction: number
+    }
     lod: {
       /**
        * Бюджет на постройки патчей за кадр (TerrainPatchGroup.updateObject), мс.
@@ -90,6 +105,14 @@ export const terrain: TerrainConfig = {
     heightMapReleasePixels: 16,
     heightMapBudgetMiB: 256,
     shadowMaxKm: 150,
+    nearShadow: {
+      tileTexels: 512,
+      texelMeters: 64,
+      maxDistanceMeters: 8000,
+      maxAltitudeMeters: 50000,
+      fadeAltitudeMeters: 30000,
+      rebakeFraction: 0.25
+    },
     lod: {
       patchBuildBudgetMs: 6,
       buildInFlight: 6

@@ -12,6 +12,8 @@ import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfa
 import type { IPlanetRenderingObject } from '@/core/models/types'
 import type { UpdateContext } from '@/core/UpdateContext'
 import { requestTerrainShadowMap } from '@/core/terrain/terrainShadowMap'
+import { NearShadowTile } from '@/core/terrain/NearShadowTile'
+import { config } from '@/core/framework/config'
 
 /**
  * Fail-fast на разрыв DI-цепочки (стиль сообщения — как `requireRenderingData`):
@@ -58,6 +60,10 @@ class TerrainSphere extends TerrainPatchGroup {
   // повторное использование читало бы позицию камеры прошлого кадра).
   private readonly cloudCameraWorldScratch = new Vector3()
   private readonly cloudSelfWorldScratch = new Vector3()
+  private readonly cameraLocalScratch = new Vector3()
+
+  /** Плитка ближней тени у камеры: владеет текстурой, материал только читает. */
+  private readonly nearTile: NearShadowTile
 
   public constructor(
     model: Actor,
@@ -90,6 +96,7 @@ class TerrainSphere extends TerrainPatchGroup {
     // карта тени строится у строителя (воркер держит копию карты); до прихода
     // материал держит заглушку — ровную сферу на датуме
     requestTerrainShadowMap(field, this.builder)
+    this.nearTile = new NearShadowTile(field, this.builder, config('terrain.nearShadow'))
 
     this.name = this.model.getAttribute('name', '') + 'Planet'
     this.userData.type = 'planet'
@@ -118,6 +125,25 @@ class TerrainSphere extends TerrainPatchGroup {
     this.sharedMaterial.updateCloudOpacity(this.cloudCameraWorldScratch, this.cloudSelfWorldScratch)
     this.sharedMaterial.syncSunTint()
     this.sharedMaterial.syncTerrainShadow(this.cloudSelfWorldScratch)
+    this.syncNearTile()
+  }
+
+  public override dispose(): void {
+    this.nearTile.dispose()
+    this.sharedMaterial.setNearTile(null)
+    super.dispose()
+  }
+
+  /** Камера в системе тела (тело вращается); matrixWorld свеж — getWorldPosition выше его обновил. */
+  private syncNearTile(): void {
+    if (!this.sharedMaterial.nearShadowActive) {
+      this.nearTile.release()
+      this.sharedMaterial.setNearTile(null)
+
+      return
+    }
+    const cameraLocal = this.worldToLocal(this.cameraLocalScratch.copy(this.cloudCameraWorldScratch))
+    this.sharedMaterial.setNearTile(this.nearTile.update(cameraLocal))
   }
 }
 

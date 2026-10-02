@@ -20,6 +20,7 @@ import { sunTransmittanceFunctions, sunTransmittanceUniforms } from '@/core/mate
 import { giantDetailFunctions, giantDetailUniforms } from '@/core/materials/shaders/lib/chunks/GiantDetail'
 import { terrainMacroDetailFunctions, terrainMacroDetailUniforms } from '@/core/materials/shaders/lib/chunks/TerrainMacroDetail'
 import { terrainShadowMarchFunctions, terrainShadowMarchUniforms } from '@/core/materials/shaders/lib/chunks/TerrainShadowMarch'
+import { terrainNearShadowFunctions } from '@/core/materials/shaders/lib/chunks/TerrainNearShadow'
 import { waterOctavesFunctions } from '@/core/materials/shaders/lib/chunks/WaterOctaves'
 import { waterGlintFunctions } from '@/core/materials/shaders/lib/chunks/WaterGlint'
 import { cloudLayerFunctions, cloudLayerUniforms } from '@/core/materials/shaders/lib/chunks/CloudLayer'
@@ -68,6 +69,7 @@ export const AppShaderChunk: Record<string, string> = {
   terrainMacroDetailFunctions,
   terrainShadowMarchUniforms,
   terrainShadowMarchFunctions,
+  terrainNearShadowFunctions,
   waterOctavesFunctions,
   waterGlintFunctions,
   cloudLayerUniforms,

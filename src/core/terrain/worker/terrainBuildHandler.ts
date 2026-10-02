@@ -1,6 +1,7 @@
 import type { HeightMapData } from '../heightMapFormat'
 import { TerrainHeightField } from '../TerrainHeightField'
 import { allocatePatchArrays, buildTerrainPatchArrays } from '../terrainPatchGeometry'
+import { buildNearTileHeights } from '../nearTileBake'
 import { buildShadowHeightBits } from '../terrainShadowBits'
 import type { FromWorkerMessage, ToWorkerMessage } from './terrainBuildProtocol'
 
@@ -53,6 +54,20 @@ export function handleWorkerMessage(
       const buffer = bits.buffer as ArrayBuffer
 
       return { message: { type: 'shadowBuilt', requestId: msg.requestId, bits: buffer, width, height }, transfer: [buffer] }
+    }
+
+    case 'buildNearTile': {
+      const field = state.fields.get(msg.fieldId)
+      if (!field) {
+        return {
+          message: { type: 'error', requestId: msg.requestId, message: `поле ${msg.fieldId} не зарегистрировано` },
+          transfer: []
+        }
+      }
+
+      const buffer = buildNearTileHeights(field, msg.params).buffer as ArrayBuffer
+
+      return { message: { type: 'nearTileBuilt', requestId: msg.requestId, heights: buffer }, transfer: [buffer] }
     }
 
     case 'build': {

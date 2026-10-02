@@ -11,7 +11,8 @@ import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import type { PatchArrays } from '@/core/terrain/terrainPatchGeometry'
 import type { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
-import { expectMatchesFreshBuild, makeField, patchJob, snapshotArrays } from './workerBuildHelpers'
+import { buildNearTileHeights } from '@/core/terrain/nearTileBake'
+import { expectMatchesFreshBuild, makeField, nearParams, patchJob, snapshotArrays } from './workerBuildHelpers'
 
 /** onError в тестах без сбоя — провал теста, а не тишина. */
 const unexpectedError = (error: unknown): never => {
@@ -206,6 +207,89 @@ describe('WorkerTerrainPatchBuilder: отказ воркера — откат н
     new SyncTerrainPatchBuilder().requestShadow(field, (bits) => got.push(bits))
     expect(got).toHaveLength(1)
     expect(Array.from(got[0].bits)).toEqual(Array.from(buildShadowHeightBits(field.heightMap).bits))
+  })
+
+  it('плитка ближней тени: запрос после регистрации, ответ воркера — те же числа, что у прямого бейка', () => {
+    const worker = new FakeWorker()
+    const builder = new WorkerTerrainPatchBuilder(worker)
+    const field = makeField()
+    const params = nearParams([0.3, 0.5, 0.8])
+    const got: Float32Array[] = []
+    builder.requestNearTile(field, params, (h) => got.push(h), unexpectedError)
+    const types = worker.sent.map((m) => m.type)
+    expect(types.indexOf('registerField')).toBeLessThan(types.indexOf('buildNearTile'))
+    expect(got).toHaveLength(0)
+    worker.pump()
+    expect(got).toHaveLength(1)
+    expect(Array.from(got[0])).toEqual(Array.from(buildNearTileHeights(field, params)))
+    builder.dispose()
+  })
+
+  it('плитка ближней тени: отказ воркера — реплей на главном потоке, поздний ответ не зовёт onDone второй раз', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const worker = new FakeWorker()
+    const builder = new WorkerTerrainPatchBuilder(worker)
+    const field = makeField()
+    const params = nearParams([0.3, 0.5, 0.8])
+    const got: Float32Array[] = []
+    builder.requestNearTile(field, params, (h) => got.push(h), unexpectedError)
+    worker.fail('onerror', 'сбой')
+    expect(got).toHaveLength(1)
+    worker.pump()
+    expect(got).toHaveLength(1)
+    builder.requestNearTile(field, params, (h) => got.push(h), unexpectedError)
+    expect(got).toHaveLength(2)
+    vi.restoreAllMocks()
+  })
+
+  it('плитка ближней тени: error-ответ воркера по её requestId — тот же путь отказа, реплей', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const worker = new FakeWorker()
+    const builder = new WorkerTerrainPatchBuilder(worker)
+    const field = makeField()
+    const got: Float32Array[] = []
+    builder.requestNearTile(field, nearParams([0.3, 0.5, 0.8]), (h) => got.push(h), unexpectedError)
+    const sent = worker.sent.find((m) => m.type === 'buildNearTile')!
+    worker.emit({ type: 'error', requestId: (sent as { requestId: number }).requestId, message: 'сбой' })
+    expect(got).toHaveLength(1)
+    vi.restoreAllMocks()
+  })
+
+  it('плитка ближней тени: исключение бейка на главном потоке — onError ровно один раз, onDone не зовётся', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const worker = new FakeWorker()
+    const builder = new WorkerTerrainPatchBuilder(worker)
+    const field = makeField()
+    const boom = new Error('бейк')
+    vi.spyOn(field, 'heightMeters').mockImplementation(() => {
+      throw boom
+    })
+    const errors: unknown[] = []
+    const done: Float32Array[] = []
+    builder.requestNearTile(field, nearParams([0.3, 0.5, 0.8]), (h) => done.push(h), (e) => errors.push(e))
+    worker.fail('onerror', 'сбой')
+    expect(errors).toEqual([boom])
+    expect(done).toHaveLength(0)
+    vi.restoreAllMocks()
+  })
+
+  it('синхронный строитель отдаёт плитку внутри запроса, исключение бейка — в onError', () => {
+    const field = makeField()
+    const params = nearParams([0.3, 0.5, 0.8])
+    const got: Float32Array[] = []
+    new SyncTerrainPatchBuilder().requestNearTile(field, params, (h) => got.push(h), unexpectedError)
+    expect(got).toHaveLength(1)
+    expect(Array.from(got[0])).toEqual(Array.from(buildNearTileHeights(field, params)))
+
+    const boom = new Error('бейк')
+    vi.spyOn(field, 'heightMeters').mockImplementation(() => {
+      throw boom
+    })
+    const errors: unknown[] = []
+    new SyncTerrainPatchBuilder().requestNearTile(field, params, (h) => got.push(h), (e) => errors.push(e))
+    expect(errors).toEqual([boom])
+    expect(got).toHaveLength(1)
+    vi.restoreAllMocks()
   })
 
   it('built старого воркера после отказа не зовёт onDone второй раз', () => {

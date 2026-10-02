@@ -3,6 +3,8 @@ import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { detailWrapFor } from '@/core/terrain/detailWrap'
 import { buildPatchIndex, buildTerrainPatchGeometry, type PatchArrays } from '@/core/terrain/terrainPatchGeometry'
+import type { NearTileParams } from '@/core/terrain/nearTileBake'
+import { nearTileBasis, type Vec3 } from '@/core/terrain/terrainNearShadowMath'
 import type { PatchBuildJob } from '@/core/terrain/terrainPatchBuilder'
 import type { FromWorkerMessage, ToWorkerMessage } from '@/core/terrain/worker/terrainBuildProtocol'
 
@@ -71,4 +73,12 @@ export function expectMatchesFreshBuild(arrays: PatchArrays, job: PatchBuildJob)
   expect(arrays.heights).toEqual(geometry.getAttribute('height').array)
   expect(arrays.midTilts).toEqual(geometry.getAttribute('midTilt').array)
   expect(arrays.midShades).toEqual(geometry.getAttribute('midShade').array)
+}
+
+/** Плитка ближней тени вокруг направления center (нормируется). */
+export function nearParams(center: Vec3, texels = 8, texelMeters = 5000): NearTileParams {
+  const len = Math.hypot(...center)
+  const c = center.map((v) => v / len) as Vec3
+  const { east, north } = nearTileBasis(c)
+  return { center: c, east, north, texels, texelMeters }
 }

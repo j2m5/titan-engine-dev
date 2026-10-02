@@ -1,4 +1,5 @@
 import type { TerrainHeightField } from '../TerrainHeightField'
+import type { NearTileParams } from '../nearTileBake'
 import type { TerrainAuxPayload } from '../terrainAuxFormat'
 import { SyncTerrainPatchBuilder, type PatchBuildJob, type PatchBuildResult, type TerrainPatchBuilder } from '../terrainPatchBuilder'
 import type { ShadowHeightBits } from '../terrainShadowBits'
@@ -95,6 +96,12 @@ type Outstanding = {
   onError: (error: unknown) => void
 }
 type OutstandingShadow = { field: TerrainHeightField; onDone: (bits: ShadowHeightBits) => void }
+type OutstandingNearTile = {
+  field: TerrainHeightField
+  params: NearTileParams
+  onDone: (heights: Float32Array) => void
+  onError: (error: unknown) => void
+}
 
 /**
  * Строитель поверх воркера. Поле регистрируется в воркере при первом acquire
@@ -116,6 +123,7 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
   private readonly fields = new Map<TerrainHeightField, { id: number; refs: number }>()
   private readonly outstanding = new Map<number, Outstanding>()
   private readonly outstandingShadows = new Map<number, OutstandingShadow>()
+  private readonly outstandingNearTiles = new Map<number, OutstandingNearTile>()
   private nextFieldId = 1
   private nextRequestId = 1
   private disposed = false
@@ -172,6 +180,24 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     this.worker.postMessage({ type: 'buildShadow', requestId, fieldId: id }, [])
   }
 
+  /** Плитка ближней тени бейкается в воркере из копии карты; отказ воркера — реплей на главном потоке. */
+  public requestNearTile(
+    field: TerrainHeightField,
+    params: NearTileParams,
+    onDone: (heights: Float32Array) => void,
+    onError: (error: unknown) => void
+  ): void {
+    if (this.fallback) {
+      this.fallback.requestNearTile(field, params, onDone, onError)
+      return
+    }
+
+    const { id } = this.ensureField(field)
+    const requestId = this.nextRequestId++
+    this.outstandingNearTiles.set(requestId, { field, params, onDone, onError })
+    this.worker.postMessage({ type: 'buildNearTile', requestId, fieldId: id, params }, [])
+  }
+
   public release(field: TerrainHeightField): void {
     // после отказа fields пуст — выход здесь
     const entry = this.fields.get(field)
@@ -197,6 +223,7 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     this.disposed = true
     this.outstanding.clear()
     this.outstandingShadows.clear()
+    this.outstandingNearTiles.clear()
     this.fields.clear()
     this.worker.terminate()
     this.fallback?.dispose()
@@ -242,6 +269,12 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
 
       this.outstandingShadows.delete(msg.requestId)
       entry.onDone({ bits: new Uint16Array(msg.bits), width: msg.width, height: msg.height })
+    } else if (msg.type === 'nearTileBuilt') {
+      const entry = this.outstandingNearTiles.get(msg.requestId)
+      if (!entry) return
+
+      this.outstandingNearTiles.delete(msg.requestId)
+      entry.onDone(new Float32Array(msg.heights))
     } else if (msg.type === 'error') {
       // штатно не приходит (регистрация раньше build по FIFO) — тот же класс отказа, что onerror
       this.fail(msg.message)
@@ -277,6 +310,16 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
         fallback.requestShadow(field, onDone)
       } catch (error) {
         console.error('[terrain worker] синхронная постройка карты тени упала:', error)
+      }
+    }
+
+    const strandedTiles = [...this.outstandingNearTiles.values()]
+    this.outstandingNearTiles.clear()
+    for (const { field, params, onDone, onError } of strandedTiles) {
+      try {
+        fallback.requestNearTile(field, params, onDone, onError)
+      } catch (error) {
+        console.error('[terrain worker] обработчик пересобранной плитки упал:', error)
       }
     }
   }

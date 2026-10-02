@@ -1,5 +1,6 @@
 import { SyncTerrainPatchBuilder, type PatchBuildJob, type PatchBuildResult, type TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import type { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
+import type { NearTileParams } from '@/core/terrain/nearTileBake'
 import type { ShadowHeightBits } from '@/core/terrain/terrainShadowBits'
 
 /**
@@ -25,6 +26,16 @@ export class FakeAsyncBuilder implements TerrainPatchBuilder {
   /** Карта тени — синхронно: очередь моделирует только постройку патчей. */
   public requestShadow(field: TerrainHeightField, onDone: (bits: ShadowHeightBits) => void): void {
     this.sync.requestShadow(field, onDone)
+  }
+
+  /** Плитка — синхронно, как карта тени. */
+  public requestNearTile(
+    field: TerrainHeightField,
+    params: NearTileParams,
+    onDone: (heights: Float32Array) => void,
+    onError: (e: unknown) => void
+  ): void {
+    this.sync.requestNearTile(field, params, onDone, onError)
   }
 
   public flush(n: number = Infinity): void {
