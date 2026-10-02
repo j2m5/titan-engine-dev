@@ -9,17 +9,16 @@ describe('PlanetShaderTemplate: блик, терминатор, ночные о�
   })
 
   it('Blinn-Phong + френель Шлика с гейтом освещённой стороны', () => {
-    expect(frag).toContain('uniform float uSpecularStrength;')
     expect(frag).toContain('halfVec')
     expect(frag).toContain('pow(max(dot(normal, halfVec), 0.0), 64.0)')
     expect(frag).toContain('fresnel')
-    expect(frag).toContain('uSpecularStrength')
+    expect(frag).toContain('* uWaterGlintGain')
     expect(frag).toContain('smoothstep(0.0, 0.15, NdotLraw)')
   })
 
   it('bloom-guard: диффуз-кламп 0.99 ДО блика, потолок глинта 4.0 после', () => {
     const clampIdx: number = frag.indexOf('clamp(finalColor, 0.0, 0.99)')
-    const specIdx: number = frag.indexOf('* uSpecularStrength')
+    const specIdx: number = frag.indexOf('* uWaterGlintGain')
     const ceilIdx: number = frag.indexOf('min(finalColor, vec3(4.0))')
     expect(clampIdx).toBeGreaterThan(-1)
     expect(specIdx).toBeGreaterThan(clampIdx)
@@ -48,7 +47,8 @@ describe('PlanetShaderTemplate: блик, терминатор, ночные о�
     expect(frag).not.toContain('USE_ATMOSPHERE')
   })
 
-  it('юниформ uSpecularStrength объявлен с дефолтом 2.0', () => {
-    expect(PlanetShaderTemplate.uniforms.uSpecularStrength.value).toBe(2.0)
+  it('uSpecularStrength удалён: силу блика держит uWaterGlintGain (дефолт 1)', () => {
+    expect(PlanetShaderTemplate.uniforms.uSpecularStrength).toBeUndefined()
+    expect(PlanetShaderTemplate.uniforms.uWaterGlintGain.value).toBe(1)
   })
 })

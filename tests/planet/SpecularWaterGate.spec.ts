@@ -35,7 +35,7 @@ function stubActor(data: Record<string, unknown>): Actor {
  * (uWaterAlphaDeep 0.85 → 15 % дна видно) просачивался вторым, белым бликом
  * поверх голубого водного.
  */
-describe('PlanetMaterial: USE_SPECULAR гасится у тел с водной оболочкой', () => {
+describe('PlanetMaterial: USE_SPECULAR у тел с водой — только пока нет карты высот (оболочки)', () => {
   beforeEach(() => {
     seedTexture('')
     seedTexture('default.png')
@@ -52,14 +52,14 @@ describe('PlanetMaterial: USE_SPECULAR гасится у тел с водной 
     expect(material.defines.USE_SPECULAR).toBe('1')
   })
 
-  it('с waterLevelMeters блик суши выключен — им владеет вода', () => {
+  it('с waterLevelMeters, но без карты высот блик рисует легаси-сфера (оболочки ещё нет)', () => {
     const material = new PlanetMaterial(stubActor({ waterLevelMeters: 0 }))
     material.updateMaterial()
 
-    expect(material.defines.USE_SPECULAR).toBeUndefined()
+    expect(material.defines.USE_SPECULAR).toBe('1')
   })
 
-  it('Земля (actorId 7): водная оболочка есть, specular-ресурс есть — дефайн молчит', () => {
+  it('Земля (actorId 7): карты высот нет, оболочки нет — легаси-блик включён', () => {
     const earth = Actor.find(7)!
     const specularPath = earth.resources.where('resourceType', 'specular').first()!.getAttribute('path') as string
     const diffusePath = earth.resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string
@@ -69,6 +69,6 @@ describe('PlanetMaterial: USE_SPECULAR гасится у тел с водной 
     const material = new PlanetMaterial(earth)
     material.updateMaterial()
 
-    expect(material.defines.USE_SPECULAR).toBeUndefined()
+    expect(material.defines.USE_SPECULAR).toBe('1')
   })
 })

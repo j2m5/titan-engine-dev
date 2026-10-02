@@ -1,6 +1,7 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { Color, ShaderChunk, Uniform, UniformsUtils, Vector3 } from 'three'
 import { AppUniformsChunk } from './chunks'
+import { WATER_FAR_ALPHA2 } from './chunks/waterOctavesMath'
 
 const defaultUniforms = {
   lightPosition: new Uniform(new Vector3()),
@@ -12,7 +13,10 @@ const defaultUniforms = {
   bumpMap: new Uniform(null),
   bumpScale: new Uniform(0),
   emission: new Uniform(1),
-  uSpecularStrength: new Uniform(2.0),
+  // Блик легаси-сферы тела с водой — тот же закон, что у водной оболочки (waterGlintFunctions):
+  // α² при всех погасших октавах и множитель; значения ставит PlanetShader по данным тела
+  uWaterFarAlpha2: new Uniform(WATER_FAR_ALPHA2),
+  uWaterGlintGain: new Uniform(1),
   uNightThreshold: new Uniform(0.06),
   uNightSoftness: new Uniform(0.18),
   uDetailDiffMap: new Uniform(null),
@@ -172,7 +176,6 @@ export const PlanetShaderTemplate: ShaderProps = {
     uniform sampler2D bumpMap;
     uniform float bumpScale;
     uniform float emission;
-    uniform float uSpecularStrength;
     uniform float uNightThreshold;
     uniform float uNightSoftness;
     uniform float uCavityStrength;
@@ -288,8 +291,15 @@ export const PlanetShaderTemplate: ShaderProps = {
       #include <giantDetailFunctions>
     #endif
 
-    // Блинн-Фонг + френель Шлика (F0 воды 0.02): солнечная дорожка воды и
-    // блеск мокрой кромки берега считаются одним телом
+    #ifdef USE_SPECULAR
+      // Блик воды легаси-сферы: тот же чанк и та же дальняя шероховатость, что у
+      // водной оболочки — на гейте карты высот дорожка не меняется
+      uniform float uWaterFarAlpha2;
+      uniform float uWaterGlintGain;
+      #include <waterGlintFunctions>
+    #endif
+
+    // Блинн-Фонг + френель Шлика (F0 воды 0.02): блеск мокрой кромки берега
     float blinnPhongGlint(vec3 normal, vec3 lightDirection, vec3 viewDir) {
       vec3 halfVec = normalize(lightDirection + viewDir);
       float specComp = pow(max(dot(normal, halfVec), 0.0), 64.0);
@@ -589,10 +599,10 @@ export const PlanetShaderTemplate: ShaderProps = {
         vec3 preGlint = finalColor;
       #endif
       #ifdef USE_SPECULAR
-        // Дорожка следит за камерой, вспыхивает на скользящих углах, гаснет у
-        // терминатора. HDR-глинт поверх клампа — блумит только солнечная дорожка.
+        // Дорожка океана с орбиты: широкий лепесток по шероховатости погасших
+        // октав, маска — specular-карта; гаснет у терминатора и в тени кольца.
         float specularIntensity = texture2D(specularMap, uv).r;
-        finalColor += specularIntensity * blinnPhongGlint(normal, lightDirection, viewDir) * uSpecularStrength
+        finalColor += specularIntensity * waterGlintGlsl(normal, lightDirection, viewDir, uWaterFarAlpha2) * uWaterGlintGain
                     * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;
       #endif
 
@@ -614,7 +624,7 @@ export const PlanetShaderTemplate: ShaderProps = {
       #endif
 
       // Потолок глинта: планета целиком остаётся далеко под half-float/AgX.
-      // При текущих дефолтах пик ~3.0 — потолок рассчитан на подъём uSpecularStrength.
+      // При текущих дефолтах пик ~3.0 — потолок рассчитан на подъём uWaterGlintGain.
       gl_FragColor = vec4(min(finalColor, vec3(4.0)), 1.0);
 
       ${ShaderChunk['tonemapping_fragment']}

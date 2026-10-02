@@ -291,6 +291,21 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     expect(material.defines.USE_TERRAIN_UV).toBeUndefined()
   })
 
+  it('USE_SPECULAR у легаси-сферы Земли (карты высот нет), снят при карте высот — блик за водной оболочкой', () => {
+    seedTexture(pathOf('specular'))
+
+    const legacy = new PlanetMaterial(earth())
+    legacy.updateMaterial()
+    expect(legacy.defines.USE_TERRAIN_UV).toBeUndefined()
+    expect(legacy.defines.USE_SPECULAR).toBe('1')
+
+    seedEarthHeightMap()
+    const terrain = new PlanetMaterial(earth())
+    terrain.updateMaterial()
+    expect(terrain.defines.USE_TERRAIN_UV).toBe('1')
+    expect(terrain.defines.USE_SPECULAR).toBeUndefined()
+  })
+
   it('USE_CLOUD_SHADOW — только при cloudMap И загруженной карте высот (через updateMaterial)', () => {
     seedTexture(pathOf('cloud'))
     seedEarthHeightMap()
@@ -1136,7 +1151,7 @@ describe('PlanetMaterial: паритет юниформов шаблон↔ра�
   it('рантайм-дефолты юниформов совпадают с шаблоном', () => {
     const material = new PlanetMaterial(earth())
 
-    const keys = ['uNightThreshold', 'uNightSoftness', 'uSpecularStrength', 'uCavityStrength'] as const
+    const keys = ['uNightThreshold', 'uNightSoftness', 'uWaterGlintGain', 'uCavityStrength'] as const
 
     for (const key of keys) {
       expect(material.uniforms[key].value).toBe(PlanetShaderTemplate.uniforms[key].value)
