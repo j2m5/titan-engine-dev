@@ -45,7 +45,10 @@ const defaultUniforms = {
   // cloudOpacityForAltitude в PlanetMaterial.ts). Дефолт 1 — до первого
   // updateCloudOpacity (или у тела без атмосферы, где юниформ так и
   // остаётся 1 навсегда) слой виден целиком, как раньше.
-  uCloudOpacity: new Uniform(1)
+  uCloudOpacity: new Uniform(1),
+  // Закон реголита (USE_REGOLITH): доля Ломмеля–Зелигера и всплеск — ставит PlanetShader по телу
+  uRegolithMix: new Uniform(0),
+  uOppositionSurge: new Uniform(0.3)
 }
 const ringShadowUniforms = AppUniformsChunk.ringShadowUniforms
 
@@ -249,6 +252,13 @@ export const PlanetShaderTemplate: ShaderProps = {
       #include <cloudLayerFunctions>
     #endif
 
+    // Закон реголита безатмосферных тел (Lommel–Seeliger + оппозиционный всплеск) — функция чанка AsteroidBrdf
+    #ifdef USE_REGOLITH
+      uniform float uRegolithMix;
+      uniform float uOppositionSurge;
+      #include <asteroidBrdfFunctions>
+    #endif
+
     #ifdef USE_TERRAIN_DETAIL
       varying vec3 vDetailPos;
       varying vec3 vDetailPos2;
@@ -449,6 +459,8 @@ export const PlanetShaderTemplate: ShaderProps = {
 
       vec3 lightDirection = normalize(vViewLightDirection);
       float NdotLraw = dot(normal, lightDirection);
+      // Направление на камеру (view-space) — вход закона реголита и бликов
+      vec3 viewDir = normalize(vViewPosition);
       // Угол солнца над геометрическим горизонтом (радиальная нормаль сферы) —
       // терминатор и масштаб пола ламберта; рельеф сюда не входит.
       float sunElevation = dot(normalize(vNormal), lightDirection);
@@ -497,11 +509,18 @@ export const PlanetShaderTemplate: ShaderProps = {
           directGain *= terrainShadow;
         #endif
       #endif
-      // Та же форма mix(пол, 1, N·L), что прежде: в полдень при occlusion = 1 и без тени ровно 1
+      // Вес прямого света: ламберт; у безатмосферных тел — закон реголита
+      // (ровный диск в полнолуние, вспышка в противостоянии, нормаль — рельефная)
+      float directWeight = max(NdotLraw, 0.0);
+      #ifdef USE_REGOLITH
+        directWeight = asteroidRegolithDiffuse(NdotLraw, dot(normal, viewDir), dot(lightDirection, viewDir), uRegolithMix, uOppositionSurge);
+      #endif
+      // Та же форма mix(пол, 1, N·L), что прежде: в полдень при occlusion = 1 и без тени ровно 1;
+      // вес — directWeight (ламберт или реголит)
       #ifdef USE_LIGHT_TINT
-        vec3 lit = mix(ambient, vec3(directGain) * uLightColor * sunTintMix, max(NdotLraw, 0.0));
+        vec3 lit = mix(ambient, vec3(directGain) * uLightColor * sunTintMix, directWeight);
       #else
-        vec3 lit = mix(ambient, vec3(directGain) * sunTintMix, max(NdotLraw, 0.0));
+        vec3 lit = mix(ambient, vec3(directGain) * sunTintMix, directWeight);
       #endif
       vec3 surfaceAlbedo = diffuseSample * albedoMul;
       #ifdef USE_TERRAIN_UV
@@ -582,7 +601,6 @@ export const PlanetShaderTemplate: ShaderProps = {
       // bloom (0.99 < 1.0) — планета не блумит. Блик добавляется ПОСЛЕ.
       finalColor = clamp(finalColor, 0.0, 0.99);
 
-      vec3 viewDir = normalize(vViewPosition);
       #ifdef USE_LIGHT_TINT
         vec3 preGlint = finalColor;
       #endif

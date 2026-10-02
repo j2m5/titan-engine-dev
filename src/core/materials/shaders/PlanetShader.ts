@@ -13,6 +13,7 @@ import {
 } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
 import { DEFAULT_DETAIL_SCALE2_METERS, DEFAULT_DETAIL_SCALE_METERS, validPeriodMeters } from '@/core/terrain/detailWrap'
 import { resolveMacroSlopeStructureParams } from '@/core/terrain/macroSlopeStructureParams'
+import { regolithParamsOf } from '@/core/terrain/regolithParams'
 import { resolveTerrainLightParams } from '@/core/terrain/terrainLightParams'
 import { resolveWaterFoamParams } from '@/core/terrain/waterFoamParams'
 import { resolveWaterSurfaceParams } from '@/core/terrain/waterSurfaceParams'
@@ -90,6 +91,8 @@ interface PlanetUniforms {
   nightMap: Texture | null
   cloudMap: Texture | null
   uCloudOpacity: number
+  uRegolithMix: number
+  uOppositionSurge: number
   specularMap: Texture | null
   bumpMap: Texture | null
   bumpScale: number
@@ -218,6 +221,8 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
 
     const slopeStructures = resolveMacroSlopeStructureParams(planetData, this.model.getAttribute?.('name', '?') ?? '?')
     const light = resolveTerrainLightParams(planetData, this.model.getAttribute?.('name', '?') ?? '?')
+    // Закон реголита: доля по атмосфере (ручка данных перекрывает), всплеск — общий резолвер с точкой-импостором
+    const regolith = regolithParamsOf(this.model)
     const foam = resolveWaterFoamParams(planetData, this.model.getAttribute?.('name', '?') ?? '?')
     const waterLevelMeters = readWaterLevelMeters(this.model) ?? 0
     // Блик легаси-сферы тела с водой — те же ручки и тот же расчёт, что у WaterShader
@@ -231,6 +236,8 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       // Высотный fade (приёмочная волна 4, №3) — дефолт 1 (виден целиком),
       // per-frame значение считает PlanetMaterial.updateCloudOpacity.
       uCloudOpacity: new Uniform(1),
+      uRegolithMix: new Uniform(regolith.regolithMix),
+      uOppositionSurge: new Uniform(regolith.oppositionSurge),
       specularMap: new Uniform(null),
       bumpMap: new Uniform(null),
       bumpScale: new Uniform(planetData.bumpScale ?? 0),
@@ -331,7 +338,8 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uWetDarken: new Uniform(foam.terrainWetDarken)
     }
     this.defines = {
-      ...(USE_RING && { USE_RING: '1' })
+      ...(USE_RING && { USE_RING: '1' }),
+      ...(regolith.regolithMix > 0 && { USE_REGOLITH: '1' })
     }
     this.name = 'PlanetShader'
   }

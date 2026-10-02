@@ -24,7 +24,7 @@ describe('PlanetShaderTemplate: терминатор суши по геомет�
   it('dayFactor и nightGate используют terminatorNdotL, ламберт рельефа — NdotLraw', () => {
     expect(frag).toContain('float dayFactor = smoothstep(-0.08, 0.25, terminatorNdotL);')
     expect(frag).toContain('float nightGate = 1.0 - smoothstep(-0.05, 0.12, terminatorNdotL);')
-    expect(frag).toContain('vec3 lit = mix(ambient, vec3(directGain) * sunTintMix, max(NdotLraw, 0.0));')
+    expect(frag).toContain('vec3 lit = mix(ambient, vec3(directGain) * sunTintMix, directWeight);')
   })
 
   it('пол ламберта ∝ солнцу над геометрическим горизонтом: полный при sunElevation ≥ uTerrainAmbientSunRef, ноль на терминаторе', () => {
