@@ -56,6 +56,7 @@ export function footprintMeters(distanceMeters: number, pixelAngle: number, muV:
 /**
  * α² блика: r² + 2.25·(Σ(1 − wᵢ)·(s·gain)²·V мелких + Σ(1 − wₖ)·V/16 крупных) погасших октав.
  * Сила ряби s — только на мелкие; крупные входят долей 1/4 среднего.
+ * bigWeights вызывающий передаёт уже умноженными на waveFade (шейдер: waveWeights * waveFade).
  */
 export function glintAlpha2(
   baseRoughness: number,

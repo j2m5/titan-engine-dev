@@ -72,7 +72,7 @@ describe('WaterShaderTemplate: блик по шероховатости', () => 
   })
 
   it('α² = r² + 1.5²·(дисперсия погасших мелких + крупных октав), в [MIN, MAX]; крупная — доля среднего, V/16', () => {
-    expect(frag).toContain('float bigVariance = dot(1.0 - waveWeights, vec4(WATER_OCTAVE_SLOPE_VARIANCE / 16.0));')
+    expect(frag).toContain('float bigVariance = dot(1.0 - waveWeights * waveFade, vec4(WATER_OCTAVE_SLOPE_VARIANCE / 16.0));')
     expect(frag).toContain(
       'float alpha2 = clamp(uWaterRoughness * uWaterRoughness + WATER_TRIPLANAR_SLOPE_GAIN2 * (rippleVariance + bigVariance), WATER_MIN_ALPHA2, WATER_MAX_ALPHA2);'
     )

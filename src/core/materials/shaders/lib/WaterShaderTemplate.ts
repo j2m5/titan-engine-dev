@@ -512,7 +512,7 @@ export const WaterShaderTemplate: ShaderProps = {
         // поверхности (дистанция, угол пикселя, косинус взгляда), не по
         // экранной производной — домен патча прыгает на k·W. waveFade — вес
         // октавы 3000 м (0 с ≈1737 км в надир при 50°/1080p, вне надира раньше): с орбиты формула волн не
-        // действует (молочный океан из космоса отвергнут), при 0 цвет === фундаменту.
+        // действует (молочный океан из космоса отвергнут), при 0 цвет === фундамент + дальний блик.
         // Веса октав 9–90 км равны 1, пока waveFade > 0, — их затухание по
         // октавам неактивно; взвешивание оставлено для общности и защиты от NaN.
         vec3 posM = vDetailPos * WATER_METERS_PER_UNIT;
@@ -755,7 +755,9 @@ export const WaterShaderTemplate: ShaderProps = {
         // Блик по шероховатости: α² = r² + 1.5²·Σ(1 − wᵢ)·σ² погасших октав (Токсвиг) —
         // вблизи искры на гребнях видимой ряби, издалека широкая тусклая дорожка.
         // Крупная октава — 1/4 доля среднего getNoiseWeighted: V/16.
-        float bigVariance = dot(1.0 - waveWeights, vec4(WATER_OCTAVE_SLOPE_VARIANCE / 16.0));
+        // Октава «погасла», если вышла из нормали: либо упал её вес, либо вся волновая
+        // нормаль растворилась по waveFade (при 1 как раньше, при 0 α² = uWaterFarAlpha2).
+        float bigVariance = dot(1.0 - waveWeights * waveFade, vec4(WATER_OCTAVE_SLOPE_VARIANCE / 16.0));
         float alpha2 = clamp(uWaterRoughness * uWaterRoughness + WATER_TRIPLANAR_SLOPE_GAIN2 * (rippleVariance + bigVariance), WATER_MIN_ALPHA2, WATER_MAX_ALPHA2);
         glintNormal = waveNormal;
         glintAlpha2 = alpha2;

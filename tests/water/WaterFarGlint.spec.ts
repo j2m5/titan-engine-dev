@@ -32,6 +32,20 @@ describe('farGlintAlpha2 — шероховатость блика, когда �
     expect(waterGlint(1, 1, 1, WATER_FAR_ALPHA2)).toBeCloseTo(0.0267, 3)
   })
 
+  it('крупные веса × waveFade = 0 → α² равна дальней, пик блика ≈ 0.0267', () => {
+    const waveFade = 0
+    const big = [0, 1, 1, 1].map(w => w * waveFade)
+    const alpha2 = glintAlpha2(0.02, WATER_RIPPLE_PERIODS_METERS.map(() => 0), big, 1)
+    expect(alpha2).toBe(WATER_FAR_ALPHA2)
+    expect(waterGlint(1, 1, 1, alpha2)).toBeCloseTo(0.0267, 3)
+  })
+
+  it('при waveFade = 1 произведение весов совпадает с исходными (вблизи без изменений)', () => {
+    const raw = [0.3, 1, 1, 1]
+    const zeros = WATER_RIPPLE_PERIODS_METERS.map(() => 0)
+    expect(glintAlpha2(0.02, zeros, raw.map(w => w * 1), 1)).toBe(glintAlpha2(0.02, zeros, raw, 1))
+  })
+
   it('растёт с шероховатостью и силой ряби', () => {
     expect(farGlintAlpha2(0.1, 1)).toBeGreaterThan(farGlintAlpha2(0.02, 1))
     expect(farGlintAlpha2(0.02, 2)).toBeGreaterThan(farGlintAlpha2(0.02, 1))
@@ -92,6 +106,11 @@ describe('WaterShaderTemplate: блик живёт и с орбиты', () => {
     expect(main).toContain('glintAlpha2 = alpha2;')
     expect(main).toContain('glintDayFactor = waveDayFactor;')
     expect(main).toContain('vec3 glint = waterGlintGlsl(glintNormal, lightDirection, viewDir, glintAlpha2) * waterSunColor * dayFactor;')
+  })
+
+  it('крупная дисперсия считает октавы, выведенные из нормали по waveFade', () => {
+    expect(main).toContain('dot(1.0 - waveWeights * waveFade, vec4(WATER_OCTAVE_SLOPE_VARIANCE / 16.0))')
+    expect(main).not.toContain('dot(1.0 - waveWeights, vec4(')
   })
 
   it('пена объявлена один раз, до блока волн', () => {
