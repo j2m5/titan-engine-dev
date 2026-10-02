@@ -53,10 +53,21 @@ export function dirToTile(d: Vec3, c: Vec3, e: Vec3, n: Vec3, radiusMeters: numb
   return [dot(d, e) * k, dot(d, n) * k]
 }
 
+/** d = normalize(c + (x·E + y·N)/R), результат в out (без аллокаций; горячий цикл бейка). */
+export function tileToDirInto(x: number, y: number, c: Vec3, e: Vec3, n: Vec3, radiusMeters: number, out: Vec3): Vec3 {
+  const u = x / radiusMeters, v = y / radiusMeters
+  const dx = c[0] + e[0] * u + n[0] * v, dy = c[1] + e[1] * u + n[1] * v, dz = c[2] + e[2] * u + n[2] * v
+  const l = Math.sqrt(dx * dx + dy * dy + dz * dz)
+  out[0] = dx / l
+  out[1] = dy / l
+  out[2] = dz / l
+
+  return out
+}
+
 /** d = normalize(c + (x·E + y·N)/R). */
 export function tileToDir(x: number, y: number, c: Vec3, e: Vec3, n: Vec3, radiusMeters: number): Vec3 {
-  const u = x / radiusMeters, v = y / radiusMeters
-  return normalize([c[0] + e[0] * u + n[0] * v, c[1] + e[1] * u + n[1] * v, c[2] + e[2] * u + n[2] * v])
+  return tileToDirInto(x, y, c, e, n, radiusMeters, [0, 0, 0])
 }
 
 /** Координата центра тексела i вдоль оси, метры: столбец/строка 0 — запад/юг. */
