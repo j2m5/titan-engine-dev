@@ -126,7 +126,7 @@ describe('Application.teardown', () => {
     const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
     const observer = {} as unknown as ResourceObserver
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
-    const builder = { acquire: vi.fn(), request: vi.fn(), requestShadow: vi.fn(), release: vi.fn(), releaseAll: vi.fn(), dispose: vi.fn() }
+    const builder = { acquire: vi.fn(), request: vi.fn(), requestShadow: vi.fn(), requestNearTile: vi.fn(), release: vi.fn(), releaseAll: vi.fn(), dispose: vi.fn() }
 
     new Application(engine, observer, new Scene(), leakDetector, heightFieldGate, undefined, undefined, builder).teardown()
 
@@ -144,6 +144,7 @@ describe('Application.teardown', () => {
       acquire: vi.fn(),
       request: vi.fn(),
       requestShadow: vi.fn(),
+      requestNearTile: vi.fn(),
       release: vi.fn(),
       releaseAll: vi.fn(() => order.push('releaseAll')),
       dispose: vi.fn()

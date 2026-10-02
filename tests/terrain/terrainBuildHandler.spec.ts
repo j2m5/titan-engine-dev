@@ -6,7 +6,8 @@ import { buildTerrainPatchGeometry, buildPatchIndex } from '@/core/terrain/terra
 import { detailWrapFor } from '@/core/terrain/detailWrap'
 import type { TerrainAuxPayload } from '@/core/terrain/terrainAuxFormat'
 import { buildShadowHeightBits } from '@/core/terrain/terrainShadowBits'
-import { buildMessageFor, builtArrays, expectMatchesFreshBuild, makeField, patchJob } from './workerBuildHelpers'
+import { buildNearTileHeights } from '@/core/terrain/nearTileBake'
+import { buildMessageFor, builtArrays, expectMatchesFreshBuild, makeField, nearParams, patchJob } from './workerBuildHelpers'
 
 type BuiltMessage = Extract<FromWorkerMessage, { type: 'built' }>
 
@@ -101,5 +102,25 @@ describe('terrainBuildHandler: чистый обработчик сообщен�
     expect(state.fields.size).toBe(1)
     expect(handleWorkerMessage(state, { type: 'releaseField', fieldId: 1 })).toBeNull()
     expect(state.fields.size).toBe(0)
+  })
+})
+
+describe('terrainBuildHandler: плитка ближней тени', () => {
+  it('buildNearTile — те же числа, что у прямого бейка; буфер уходит переносом; неизвестное поле — error', () => {
+    const field = makeField()
+    const state = createWorkerState()
+    handleWorkerMessage(state, registerFieldMessage(field, 4).message)
+    const params = nearParams([0.3, 0.5, 0.8])
+    const res = handleWorkerMessage(state, { type: 'buildNearTile', requestId: 9, fieldId: 4, params })
+    const message = res!.message as Extract<FromWorkerMessage, { type: 'nearTileBuilt' }>
+
+    expect(message.type).toBe('nearTileBuilt')
+    expect(message.requestId).toBe(9)
+    expect(Array.from(new Float32Array(message.heights))).toEqual(Array.from(buildNearTileHeights(field, params)))
+    expect(res!.transfer).toEqual([message.heights])
+    expect(handleWorkerMessage(state, { type: 'buildNearTile', requestId: 10, fieldId: 99, params })?.message).toMatchObject({
+      type: 'error',
+      requestId: 10
+    })
   })
 })

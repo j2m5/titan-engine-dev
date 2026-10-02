@@ -37,6 +37,8 @@ class QueuedBuilder implements TerrainPatchBuilder {
 
   public requestShadow(): void {}
 
+  public requestNearTile(): void {}
+
   public flush(count: number): void {
     for (const [job, onDone, onError] of this.queue.splice(0, count)) {
       this.built++
