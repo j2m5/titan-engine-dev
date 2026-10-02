@@ -36,7 +36,8 @@ describe('FragmentUv: попиксельные UV терраформных те�
   // (инстансный атрибут). Легаси-путь (SphereGeometry у Planet) остаётся на
   // normal/uv, поэтому оба присвоения — по разные стороны гейта USE_TERRAIN_UV.
   it('терраформный путь: направление из position + patchCenter, легаси-путь — из normal, vUv жив только в #else', () => {
-    const terrainBranch = vert.slice(vert.indexOf('#ifdef USE_TERRAIN_UV', vert.indexOf('void main()')))
+    const dirAt = vert.indexOf('vec3 vertexDir')
+    const terrainBranch = vert.slice(vert.lastIndexOf('#ifdef USE_TERRAIN_UV', dirAt))
     const [gated, legacy] = terrainBranch.split('#else')
 
     // объявление атрибута — внутри своего гейта, а не «где-то после него»
@@ -44,7 +45,7 @@ describe('FragmentUv: попиксельные UV терраформных те�
     const [gatedDecls] = declBlock.split('#endif')
     expect(gatedDecls).toContain('attribute vec3 patchCenter;')
 
-    expect(gated).toContain('vec3 vertexDir = normalize(position + patchCenter);')
+    expect(gated).toContain('vec3 vertexDir = normalize(morphedPosition + patchCenter);')
     expect(gated).not.toContain('vUv = uv;')
     expect(legacy.slice(0, legacy.indexOf('#endif'))).toContain('vec3 vertexDir = normal;')
     expect(legacy.slice(0, legacy.indexOf('#endif'))).toContain('vUv = uv;')
