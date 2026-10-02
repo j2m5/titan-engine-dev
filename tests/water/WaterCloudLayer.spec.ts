@@ -3,6 +3,7 @@ import { Texture } from 'three'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
 import { WaterShader } from '@/core/materials/shaders/WaterShader'
 import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
@@ -72,6 +73,7 @@ function seedPlaceholderKeys(): void {
 function stubBodyActor(data: Record<string, unknown>): Actor {
   return {
     renderingObject: { getAttribute: () => data },
+    physicalObject: { getAttribute: (k: string, d?: unknown) => (k === 'radius' ? 6371 : d) },
     children: { where: () => ({ first: () => undefined, isNotEmpty: () => false }) },
     resources: { where: () => ({ first: () => undefined }) }
   } as unknown as Actor
@@ -89,5 +91,7 @@ describe('паритет ручек облаков у воды и суши од�
       expect((water.uniforms as Record<string, { value: unknown }>)[u].value, u).toBe((planet.uniforms as Record<string, { value: unknown }>)[u].value)
     }
     expect((water.uniforms as Record<string, { value: unknown }>).uCloudHeightKm.value).toBe(9)
+    expect(water.uniforms.uBodyRadiusUnits.value).toBe(planet.uniforms.uBodyRadiusUnits.value)
+    expect(planet.uniforms.uBodyRadiusUnits.value).toBe(toThreeJSUnits(6371))
   })
 })
