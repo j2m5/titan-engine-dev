@@ -8,7 +8,7 @@
  * Water.js, включая СОБСТВЕННЫЙ ночной пол) — плюс их смешивание по
  * waveFade, буквально повторяющее `color = mix(color, wavesColor, waveFade)`
  * в шейдере; waveFade — вес октавы 3000 м (`waveWeights.x`). Блик — аддитивно
- * после смешивания и пены (addGlint): при waveFade = 0 его вклад ровно 0.
+ * после смешивания и пены (addGlint), от waveFade не зависит: с орбиты остаётся широкое пятно по дальней шероховатости.
  * Режим с картой глубины — baseColor/depthAlpha из depthLayer (Бер–Ламберт).
  *
  * ВАЖНО: менять строго синхронно с main() в
@@ -119,9 +119,9 @@ export function glintFromVectors(n: Vec3, l: Vec3, v: Vec3, alpha2: number): num
   return waterGlint(dot3(n, h), dot3(v, h), dot3(n, l), alpha2)
 }
 
-/** `color += min(glint, WATER_GLINT_CEILING) * waveFade * (1.0 - foam)` — после пены. */
-export function addGlint(color: Vec3, glint: Vec3, waveFade: number, foam: number): Vec3 {
-  const k = waveFade * (1 - foam)
+/** `color += min(glint, WATER_GLINT_CEILING) * uWaterGlintGain * (1.0 - foam)` — после пены; gain по умолчанию 1. */
+export function addGlint(color: Vec3, glint: Vec3, foam: number, gain = 1): Vec3 {
+  const k = gain * (1 - foam)
 
   return [
     color[0] + Math.min(glint[0], WATER_GLINT_CEILING) * k,
@@ -224,6 +224,14 @@ export function mixWithFoundation(foundation: Vec3, waves: Vec3, waveFade: numbe
   return mix3(foundation, waves, waveFade)
 }
 
+/** Цвет блика: waterGlintGlsl(…) · sunColor · dayFactor аналитической нормали (на ночной стороне искр нет). */
+export function glintColor(inputs: BlendInputs): Vec3 {
+  return scale3(
+    inputs.sunColor,
+    glintFromVectors(inputs.waveNormal, inputs.lightDir, inputs.viewDir, inputs.alpha2) * geometricDayFactor(inputs.normal, inputs.lightDir)
+  )
+}
+
 /** color = mix(foundationColor(...), wavesColor(...), waveFade) + блик × dayFactor (ветка без пены: foam = 0, без USE_SUN_TINT). */
 export function blendedColor(inputs: BlendInputs, waveFade: number): Vec3 {
   const baseColor = inputs.depth ? depthLayer(inputs.baseColor, inputs.normal, inputs.viewDir, inputs.depth).baseColor : inputs.baseColor
@@ -246,13 +254,7 @@ export function blendedColor(inputs: BlendInputs, waveFade: number): Vec3 {
     inputs.nightFloor
   )
 
-  // × dayFactor аналитической нормали: на ночной стороне искр нет
-  const glint = scale3(
-    inputs.sunColor,
-    glintFromVectors(inputs.waveNormal, inputs.lightDir, inputs.viewDir, inputs.alpha2) * geometricDayFactor(inputs.normal, inputs.lightDir)
-  )
-
-  return addGlint(mixWithFoundation(foundation, waves, waveFade), glint, waveFade, 0)
+  return addGlint(mixWithFoundation(foundation, waves, waveFade), glintColor(inputs), 0)
 }
 
 export function dirFromLatLon(latDeg: number, lonDeg: number): Vec3 {

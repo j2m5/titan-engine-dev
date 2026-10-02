@@ -11,6 +11,8 @@ import {
   waterGlint
 } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 import { WATER_SURFACE_DEFAULTS, resolveWaterSurfaceParams } from '@/core/terrain/waterSurfaceParams'
+import { WaterShader } from '@/core/materials/shaders/WaterShader'
+import type { Actor } from '@/core/models/Actor'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
 
 describe('farGlintAlpha2 — шероховатость блика, когда все октавы погасли (орбита)', () => {
@@ -67,5 +69,61 @@ describe('waterSurfaceParams.waterGlintGain', () => {
     expect(resolveWaterSurfaceParams({ waterGlintGain: Math.PI }, 'T').waterGlintGain).toBe(Math.PI)
     expect(() => resolveWaterSurfaceParams({ waterGlintGain: -1 }, 'T')).toThrow(/waterGlintGain/)
     expect(() => resolveWaterSurfaceParams({ waterGlintGain: 'x' }, 'T')).toThrow(/waterGlintGain/)
+  })
+})
+
+describe('WaterShaderTemplate: блик живёт и с орбиты', () => {
+  const frag = WaterShaderTemplate.fragmentShader
+  const main = frag.slice(frag.indexOf('void main()'))
+
+  it('блик не умножается на waveFade и прибавляется вне USE_WATER_WAVES', () => {
+    expect(main).not.toMatch(/glint[^;]*\* waveFade/)
+    const add = frag.indexOf('color += min(glint, WATER_GLINT_CEILING) * uWaterGlintGain * (1.0 - foam);')
+    expect(add).toBeGreaterThan(-1)
+    const before = frag.slice(frag.indexOf('void main()'), add).replace(/\/\/.*$/gm, '') // без комментариев: в них упоминается #ifdef
+    expect((before.match(/#endif/g) ?? []).length).toBe((before.match(/#if/g) ?? []).length)
+  })
+
+  it('без волн — аналитическая нормаль и дальняя шероховатость; волны их перезаписывают', () => {
+    expect(main).toContain('vec3 glintNormal = normal;')
+    expect(main).toContain('float glintAlpha2 = uWaterFarAlpha2;')
+    expect(main).toContain('float glintDayFactor = dayFactor;')
+    expect(main).toContain('glintNormal = waveNormal;')
+    expect(main).toContain('glintAlpha2 = alpha2;')
+    expect(main).toContain('glintDayFactor = waveDayFactor;')
+    expect(main).toContain('vec3 glint = waterGlintGlsl(glintNormal, lightDirection, viewDir, glintAlpha2) * waterSunColor * dayFactor;')
+  })
+
+  it('пена объявлена один раз, до блока волн', () => {
+    expect(main.match(/float foam\b/g)).toHaveLength(1)
+    expect(main.indexOf('float foam = 0.0;')).toBeLessThan(main.indexOf('#ifdef USE_WATER_WAVES'))
+  })
+
+  it('дефолты юниформов шаблона', () => {
+    expect(WaterShaderTemplate.uniforms.uWaterFarAlpha2.value).toBe(WATER_FAR_ALPHA2)
+    expect(WaterShaderTemplate.uniforms.uWaterGlintGain.value).toBe(1)
+  })
+})
+
+describe('WaterShader: uWaterFarAlpha2 и uWaterGlintGain из данных тела', () => {
+  // Тот же стаб, что stubActor в tests/water/WaterMaterial.spec.ts: только то, что читает WaterShader
+  function stubWaterActor(data: Record<string, unknown>): Actor {
+    return {
+      renderingObject: { getAttribute: () => data },
+      children: { where: () => ({ first: () => undefined, isNotEmpty: () => false }) },
+      resources: { where: () => ({ first: () => undefined }) }
+    } as unknown as Actor
+  }
+
+  it('дефолты при пустых данных', () => {
+    const shader = new WaterShader(stubWaterActor({ waterLevelMeters: 0 }))
+    expect(shader.uniforms.uWaterFarAlpha2.value).toBe(WATER_FAR_ALPHA2)
+    expect(shader.uniforms.uWaterGlintGain.value).toBe(1)
+  })
+
+  it('заданные шероховатость, рябь и gain', () => {
+    const shader = new WaterShader(stubWaterActor({ waterLevelMeters: 0, waterRoughness: 0.1, waterRippleStrength: 0.5, waterGlintGain: 3 }))
+    expect(shader.uniforms.uWaterFarAlpha2.value).toBe(farGlintAlpha2(0.1, 0.5))
+    expect(shader.uniforms.uWaterGlintGain.value).toBe(3)
   })
 })
