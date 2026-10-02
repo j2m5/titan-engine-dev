@@ -393,6 +393,7 @@ const BASELINE_FRAGMENT_SHADER = `
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
+    varying vec3 vLocalViewDir;
     varying vec3 vDetailPos;
     // Блик воды — общий чанк (и с легаси-сферой тела): нужен и без USE_WATER_WAVES
     #include <waterGlintFunctions>
@@ -471,7 +472,9 @@ const BASELINE_FRAGMENT_SHADER = `
       vec3 lightDirection = normalize(vViewLightDirection);
       float NdotL = dot(normal, lightDirection);
       float dayFactor = smoothstep(-0.08, 0.25, NdotL);
-      color *= mix(uWaterNightFloor, 1.0, dayFactor);
+      // Тень облаков на воде (чанк CloudLayer, тот же закон, что на суше) — только прямой свет
+      float cloudShadow = 1.0;
+      color *= mix(uWaterNightFloor, cloudShadow, dayFactor);
 
       // Блик: без волн и с орбиты — аналитическая нормаль и шероховатость всех
       // погасших октав (широкое тусклое пятно, не точка); блок волн ниже
@@ -486,6 +489,8 @@ const BASELINE_FRAGMENT_SHADER = `
       // waterSunColor под USE_LIGHT_TINT — uLightColor; dayFactor — терминатор аналитической нормали
       // (как у фундамента): волновая нормаль на ночной стороне не даёт искр
       vec3 glint = waterGlintGlsl(glintNormal, lightDirection, viewDir, glintAlpha2) * waterSunColor * dayFactor;
+      // тени облаков рвут солнечную дорожку
+      glint *= cloudShadow;
       // потолок: искры блумят, кляксы — нет; под пеной блика нет; gain 1 — прежний ближний вид
       color += min(glint, WATER_GLINT_CEILING) * uWaterGlintGain * (1.0 - foam);
 
@@ -536,7 +541,7 @@ describe('Паритет: без USE_WATER_REFLECTION компилируемый
     expect(stripped).toContain('vec3 skyColor = mix(uWaterFresnelTint, uWaterFresnelTint * ZENITH_DARKEN, upFactor);')
     // Остальная структура волновой ветки Task 1 не тронута (albedo-mix цел)
     expect(stripped).toContain('color = mix(')
-    expect(stripped).toContain('waterSunColor * waveDiffuseLight * 0.3 + waveScatter,')
+    expect(stripped).toContain('waterSunColor * waveDiffuseLight * 0.3 * cloudShadow + waveScatter,')
   })
 })
 
@@ -567,6 +572,7 @@ const BASELINE_VERTEX_SHADER = `
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
+    varying vec3 vLocalViewDir;
     varying vec3 vDetailPos;
 
     // Водная оболочка — всегда патчи кубосферы (тот же TerrainPatchPool, что и
@@ -605,6 +611,8 @@ const BASELINE_VERTEX_SHADER = `
       vDetailPos = detailPos;
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
+      // Взгляд в системе тела (облачный слой) — из view-space, как у суши (PlanetShaderTemplate)
+      vLocalViewDir = transpose(mat3(modelMatrix)) * (transpose(mat3(viewMatrix)) * mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
 
       ${ShaderChunk['logdepthbuf_vertex']}

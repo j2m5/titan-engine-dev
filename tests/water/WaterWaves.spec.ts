@@ -200,7 +200,7 @@ describe('WaterShaderTemplate: sunLight/albedo — дословно Water.js (ge
   it('albedo — mix дословно Water.js БЕЗ getShadowMask (комментарий-оговорка обязателен), результат в свою переменную wavesColor', () => {
     expect(frag).toContain('getShadowMask опущен')
     expect(frag).toContain('vec3 wavesColor = mix(')
-    expect(frag).toContain('waterSunColor * waveDiffuseLight * 0.3 + waveScatter,')
+    expect(frag).toContain('waterSunColor * waveDiffuseLight * 0.3 * cloudShadow + waveScatter,')
     // Приёмочная волна 4, №1: Water.js vec3(0.1) — вклад ambient ЗЕРКАЛЬНОЙ
     // сцены, у нас зеркала нет — адаптация тонирует тот же вклад градиентным
     // skyColor (0.1·skyColor), не плоской серой константой.
@@ -375,7 +375,7 @@ describe('WaterShaderTemplate: приёмочный фикс — fade смеши
   it('фундаментный color посчитан ДО #ifdef USE_WATER_WAVES (byte-в-byte тем же путём, что и без волн)', () => {
     const waveBlockStart = frag.indexOf('#ifdef USE_WATER_WAVES', frag.indexOf('void main()'))
     const foundationColorLine = frag.indexOf('vec3 color = mix(baseColor, uWaterFresnelTint, fresnel);')
-    const nightFloorLine = frag.indexOf('color *= mix(uWaterNightFloor, 1.0, dayFactor);')
+    const nightFloorLine = frag.indexOf('color *= mix(uWaterNightFloor, cloudShadow, dayFactor);')
 
     expect(foundationColorLine).toBeGreaterThan(-1)
     expect(nightFloorLine).toBeGreaterThan(foundationColorLine)
@@ -749,6 +749,7 @@ const BASELINE_FRAGMENT_SHADER = `
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
+    varying vec3 vLocalViewDir;
     varying vec3 vDetailPos;
     // Блик воды — общий чанк (и с легаси-сферой тела): нужен и без USE_WATER_WAVES
     #include <waterGlintFunctions>
@@ -827,7 +828,9 @@ const BASELINE_FRAGMENT_SHADER = `
       vec3 lightDirection = normalize(vViewLightDirection);
       float NdotL = dot(normal, lightDirection);
       float dayFactor = smoothstep(-0.08, 0.25, NdotL);
-      color *= mix(uWaterNightFloor, 1.0, dayFactor);
+      // Тень облаков на воде (чанк CloudLayer, тот же закон, что на суше) — только прямой свет
+      float cloudShadow = 1.0;
+      color *= mix(uWaterNightFloor, cloudShadow, dayFactor);
 
       // Блик: без волн и с орбиты — аналитическая нормаль и шероховатость всех
       // погасших октав (широкое тусклое пятно, не точка); блок волн ниже
@@ -842,6 +845,8 @@ const BASELINE_FRAGMENT_SHADER = `
       // waterSunColor под USE_LIGHT_TINT — uLightColor; dayFactor — терминатор аналитической нормали
       // (как у фундамента): волновая нормаль на ночной стороне не даёт искр
       vec3 glint = waterGlintGlsl(glintNormal, lightDirection, viewDir, glintAlpha2) * waterSunColor * dayFactor;
+      // тени облаков рвут солнечную дорожку
+      glint *= cloudShadow;
       // потолок: искры блумят, кляксы — нет; под пеной блика нет; gain 1 — прежний ближний вид
       color += min(glint, WATER_GLINT_CEILING) * uWaterGlintGain * (1.0 - foam);
 
