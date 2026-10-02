@@ -21,6 +21,8 @@ export interface TerrainLightParams {
   terrainShadowSoftness: number
   /** Сила блеска льда по шероховатости слоя детали; 0 — выключено. */
   iceGlintStrength: number
+  /** Сила ближнего слоя тени рельефа (плитка у камеры) на ПРЯМОМ свете; 0 — выключено. */
+  nearShadowStrength: number
 }
 
 const DEFAULTS: TerrainLightParams = {
@@ -31,7 +33,8 @@ const DEFAULTS: TerrainLightParams = {
   cloudLightSoftness: 0.1,
   terrainShadowStrength: 1,
   terrainShadowSoftness: 1,
-  iceGlintStrength: 0
+  iceGlintStrength: 0,
+  nearShadowStrength: 1
 }
 
 type Raw = { [K in keyof TerrainLightParams]?: unknown }
@@ -55,10 +58,11 @@ export function resolveTerrainLightParams(data: Raw | undefined, context: string
     cloudLightSoftness: read('cloudLightSoftness'),
     terrainShadowStrength: read('terrainShadowStrength'),
     terrainShadowSoftness: read('terrainShadowSoftness'),
-    iceGlintStrength: read('iceGlintStrength')
+    iceGlintStrength: read('iceGlintStrength'),
+    nearShadowStrength: read('nearShadowStrength')
   }
 
-  for (const field of ['terrainOcclusionDirect', 'skyAmbientStrength', 'cloudShadowStrength', 'terrainShadowStrength', 'iceGlintStrength'] as const) {
+  for (const field of ['terrainOcclusionDirect', 'skyAmbientStrength', 'cloudShadowStrength', 'terrainShadowStrength', 'iceGlintStrength', 'nearShadowStrength'] as const) {
     if (params[field] < 0 || params[field] > 1) throw new Error(`terrainLight ${context}: ${field} должен быть в [0, 1]: ${params[field]}`)
   }
   if (params.cloudHeightKm <= 0) throw new Error(`terrainLight ${context}: cloudHeightKm должен быть > 0: ${params.cloudHeightKm}`)

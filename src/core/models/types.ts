@@ -410,6 +410,8 @@ export interface IPlanetRenderingObject {
   terrainClass?: string
   /** Сила блеска льда по шероховатости слоя детали, [0, 1]; дефолт 0. */
   iceGlintStrength?: number
+  /** Сила ближнего слоя тени рельефа (плитка у камеры), [0, 1]; дефолт 1. */
+  nearShadowStrength?: number
   /** Иней (frostParams.ts): сила [0, 1], линия и ширина перехода в метрах карты, понижение к полюсу и на склонах к полюсу, предельный tan уклона, цвет (hex sRGB). */
   frostStrength?: number
   frostLineMeters?: number
