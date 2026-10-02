@@ -15,13 +15,15 @@ import { buildPatchIndex, terrainPatchVertexCount } from './terrainPatchGeometry
  * «без дыр» в TerrainSphere) — 640 пробивается. 1024 слота = ~257 МБ
  * атрибутов (14 float на вершину: position 3 + detailPos 3 + detailPos2 3 +
  * height 1 + midTilt 2 + midShade 2; patchCenter — 3 float на ПАТЧ, TERRAIN_PATCH_SEGMENTS=64
- * → 4481 вершина на патч) при ленивой аллокации (createHandle зовётся по факту, не
+ * → 4481 вершина на патч); пул с морфом (рельеф) несёт ещё 7 float на вершину
+ * (morphDelta 3 + midTiltParent 2 + midShadeParent 2) и patchMorph 1 float на
+ * патч — 21 float, ~385 МБ на 1024 слота. Ленивая аллокация (createHandle зовётся по факту, не
  * заранее) — платит только дошедший до этой глубины набор. Потолок страхует
  * от неограниченного роста при патологическом отборе (камера в стене,
  * дребезг), не отражает штатный размер набора.
  *
- * Водный пул (WATER_MAX_LIVE_PATCHES, см. WaterSphere, 256 слотов) платит тот
- * же бюджет на слот — detailPos/detailPos2, height, midTilt и midShade заведены пулом
+ * Водный пул (WATER_MAX_LIVE_PATCHES, см. WaterSphere, 256 слотов) без морфа
+ * платит базовые 14 float на вершину — detailPos/detailPos2, height, midTilt и midShade заведены пулом
  * безусловно (общая TerrainPatchPool), хотя WaterMaterial их не читает;
  * осознанная цена общего пула, та же, что у detailPos.
  */
