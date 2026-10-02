@@ -88,7 +88,8 @@ export const PlanetShaderTemplate: ShaderProps = {
       // Инстансный атрибут: один элемент на патч (см. TerrainPatchPool).
       attribute vec3 patchCenter;
       // Геоморф (TerrainPatchGroup): смещение вершины к форме родителя (RTC) и
-      // инстансная доля 0..1; без морф-пула атрибуты не заданы — 0, вывод прежний
+      // инстансная доля 0..1; без морф-пула их значения — defaultAttributeValues
+      // PlanetMaterial (нули), иначе three читает общий generic-слот GL
       attribute vec3 morphDelta;
       attribute float patchMorph;
     #endif

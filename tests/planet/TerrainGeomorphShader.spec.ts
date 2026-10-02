@@ -79,6 +79,8 @@ describe('TerrainGeomorph: вершинник рельефа', () => {
     expect(vert).toContain('vPosition = morphedPosition;')
 
     const main = mainBody(vert)
+    const lines = main.split('\n').filter(l => /\bposition\b/.test(l.replace(/\/\/.*$/, '')))
+    expect(lines.map(l => l.trim())).toEqual(['vec3 morphedPosition = position + morphDelta * morphT;', 'vec3 morphedPosition = position;'])
     expect(main).not.toContain('vec4(position, 1.0)')
     expect(main).not.toContain('normalize(position + patchCenter)')
     expect(main).not.toContain('vPosition = position;')
