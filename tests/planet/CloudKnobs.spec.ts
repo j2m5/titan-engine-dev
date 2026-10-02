@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Texture } from 'three'
 import { resolveTerrainLightParams } from '@/core/terrain/terrainLightParams'
 import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
+import { cloudLayerUniforms } from '@/core/materials/shaders/lib/chunks/CloudLayer'
 import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
 import { sunTransmittanceFunctions } from '@/core/materials/shaders/lib/chunks/SunTransmittance'
 import { Actor } from '@/core/models/Actor'
@@ -56,7 +57,8 @@ describe('PlanetShader: юниформы облачного слоя', () => {
 
   it('шаблон читает uCloudHeightUnits, не uCloudShadowHeightUnits', () => {
     expect(PlanetShaderTemplate.fragmentShader).not.toContain('uCloudShadowHeightUnits')
-    expect(PlanetShaderTemplate.fragmentShader).toContain('uCloudHeightUnits')
+    // юниформ объявляет чанк облачного слоя, не шаблон планеты
+    expect(cloudLayerUniforms).toContain('uniform float uCloudHeightUnits;')
   })
 })
 

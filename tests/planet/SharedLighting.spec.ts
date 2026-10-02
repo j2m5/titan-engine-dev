@@ -50,8 +50,8 @@ describe('PlanetShaderTemplate: одно освещение на обе ветк
     expect(main).not.toMatch(/\bday \*=/)
     expect(main.match(/vec3 day = /g)).toHaveLength(1)
     expect(main.match(/vec3 finalColor = /g)).toHaveLength(1)
-    expect(main).toContain('vec3 day = cloudColor * sunTintMix * dayFactor + dayColor * (1.0 - cloudAlpha) * landGate;')
-    expect(main).toContain('vec3 finalColor = night * (1.0 - dayFactor) + day;')
+    expect(main).toContain('vec3 day = cloudRadiance + dayColor * (1.0 - cloudAlphaSlant) * landGate;')
+    expect(main).toContain('vec3 finalColor = night * (1.0 - dayFactor) * (1.0 - cloudAlphaSlant) + day;')
   })
 
   it('тинт солнца считается один раз, вне USE_TERRAIN_UV', () => {
@@ -68,7 +68,7 @@ describe('PlanetShaderTemplate: одно освещение на обе ветк
 
   it('рельефные слагаемые остаются под USE_TERRAIN_UV', () => {
     expect(guardsAt('vec3 sunLocal = ')).toContain('USE_TERRAIN_UV')
-    expect(guardsAt('cloudShadow = 1.0 - uCloudShadowStrength')).toEqual(expect.arrayContaining(['USE_TERRAIN_UV', 'USE_CLOUD_SHADOW']))
+    expect(guardsAt('cloudShadow = cloudShadowAt(')).toEqual(expect.arrayContaining(['USE_TERRAIN_UV', 'USE_CLOUD_SHADOW']))
     expect(guardsAt('terrainShadow = mix(1.0, terrainShadowMarch(')).toEqual(expect.arrayContaining(['USE_TERRAIN_UV', 'USE_TERRAIN_SHADOW']))
     expect(guardsAt('surfaceAlbedo = mix(surfaceAlbedo, uFrostColor, frostMask);')).toEqual(expect.arrayContaining(['USE_TERRAIN_UV', 'USE_TERRAIN_FROST']))
   })

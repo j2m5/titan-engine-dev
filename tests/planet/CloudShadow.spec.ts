@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { cloudLayerFunctions } from '@/core/materials/shaders/lib/chunks/CloudLayer'
 import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
 
 describe('PlanetShaderTemplate: тени облаков на земле', () => {
@@ -8,17 +9,19 @@ describe('PlanetShaderTemplate: тени облаков на земле', () => 
 
   it('блок под USE_CLOUD_SHADOW: вторая выборка cloudMap по сдвинутому uv, кап косинуса, гашение к терминатору', () => {
     expect(start).toBeGreaterThan(-1)
-    expect(block).toContain('#define CLOUD_SHADOW_MIN_COS 0.15')
-    expect(block).toContain('texture2D(cloudMap, uvShadow)')
-    expect(block).toContain('cloudShadow = 1.0 - uCloudShadowStrength * alphaShadow * smoothstep(0.0, 0.2, muS) * step(1e-4, length(eastLocal));')
-    expect(block).toContain('float cosZ = max(muS, CLOUD_SHADOW_MIN_COS);')
+    // тело тени живёт в чанке CloudLayer (общий закон с водой); здесь — вызов
+    expect(block).toContain('cloudShadow = cloudShadowAt(dirLocal, sunLocal, muS);')
+    expect(block).not.toContain('#define CLOUD_SHADOW_MIN_COS')
+    expect(cloudLayerFunctions).toContain('#define CLOUD_SHADOW_MIN_COS 0.15')
+    expect(cloudLayerFunctions).toContain('texture2D(cloudMap, uvShadow)')
+    expect(cloudLayerFunctions).toContain('float cosZ = max(muS, CLOUD_SHADOW_MIN_COS);')
     expect(block).not.toContain('dFdx')
   })
 
   it('сдвиг uv — восточно-северный базис: u по 2πR cos φ, v по πR', () => {
-    expect(block).toContain('vec3 northUnit = normalize(cross(dirLocal, eastUnit));')
-    expect(block).toContain('vec2 uvShadow = uv + vec2(dot(offsetUnits, eastUnit) / (6.2831853 * uBodyRadiusUnits * cosLat),')
-    expect(block).toContain('dot(offsetUnits, northUnit) / (3.1415927 * uBodyRadiusUnits));')
+    expect(cloudLayerFunctions).toContain('vec3 northUnit = normalize(cross(dirLocal, eastUnit));')
+    expect(cloudLayerFunctions).toContain('vec2 uvShadow = uv + vec2(dot(offsetUnits, eastUnit) / (6.2831853 * uBodyRadiusUnits * cosLat),')
+    expect(cloudLayerFunctions).toContain('dot(offsetUnits, northUnit) / (3.1415927 * uBodyRadiusUnits));')
   })
 
   it('тень множит только прямой свет: входит в directGain, не в ambient', () => {

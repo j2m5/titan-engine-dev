@@ -71,7 +71,7 @@ describe('PlanetShaderTemplate: тень рельефа', () => {
     const start = frag.indexOf('#ifdef USE_TERRAIN_SHADOW')
     expect(start).toBeGreaterThan(-1)
     expect(frag.slice(start, frag.indexOf('#endif', start))).toContain('#include <terrainShadowMarchFunctions>')
-    expect(frag.indexOf('#ifdef USE_TERRAIN_UV')).toBeLessThan(start)
+    expect(frag.indexOf('#if defined(USE_TERRAIN_UV) || defined(USE_CLOUD)')).toBeLessThan(start)
   })
 
   it('множит только прямой свет, после строки directGain арки 3; амбиент не тронут', () => {

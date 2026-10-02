@@ -37,7 +37,7 @@ describe('PlanetShaderTemplate: ламберт (общий для легаси-�
     const lambertIdx = frag.indexOf(
       'dayColor = surfaceAlbedo * mix(sunTintMix, lit, uTerrainLambert);'
     )
-    const dayIdx = frag.indexOf('vec3 day = cloudColor * sunTintMix * dayFactor + dayColor * (1.0 - cloudAlpha) * landGate;')
+    const dayIdx = frag.indexOf('vec3 day = cloudRadiance + dayColor * (1.0 - cloudAlphaSlant) * landGate;')
     expect(occlusionIdx).toBeGreaterThan(-1)
     expect(lambertIdx).toBeGreaterThan(occlusionIdx)
     expect(dayIdx).toBeGreaterThan(lambertIdx)

@@ -41,6 +41,7 @@ export function terrainSkyTerm(greyFloor: number, sunTint: Vec3, skyAmbient: Vec
 
 export interface ComposeInput {
   night: Vec3
+  /** радиация облака (премультиплирована, освещена) */
   cloudColor: Vec3
   cloudAlpha: number
   dayColor: Vec3
@@ -48,11 +49,11 @@ export interface ComposeInput {
   lambert: number
 }
 
-/** Композиция кадра суши: облака под dayFactor, суша под landGate, ночь под (1 − dayFactor). */
+/** Композиция: облака своим светом слоя (cloudColor — уже cloudRadiance), огни гаснут под облаками, суша под landGate. */
 export function composeTerrain(i: ComposeInput): Vec3 {
   const landGate = mix(i.dayFactor, 1, i.lambert)
   return i.night.map((n: number, c: number): number =>
-    n * (1 - i.dayFactor) + i.cloudColor[c] * i.dayFactor + i.dayColor[c] * (1 - i.cloudAlpha) * landGate
+    n * (1 - i.dayFactor) * (1 - i.cloudAlpha) + i.cloudColor[c] + i.dayColor[c] * (1 - i.cloudAlpha) * landGate
   ) as Vec3
 }
 
