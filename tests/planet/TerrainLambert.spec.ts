@@ -27,7 +27,7 @@ function terrainShade(ndotl: number, lambert: number, ambient: number): number {
   return 1 + (lit - 1) * lambert
 }
 
-describe('PlanetShaderTemplate: ламберт суши (спайк, USE_TERRAIN_UV)', () => {
+describe('PlanetShaderTemplate: ламберт (общий для легаси-сферы и рельефа)', () => {
   const frag: string = PlanetShaderTemplate.fragmentShader
 
   it('юниформы объявлены, множитель стоит на dayColor — ДО состава с облаками', () => {
