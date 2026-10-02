@@ -5,7 +5,9 @@ import {
   IMPOSTOR_REFERENCE_HEX,
   impostorColorFromActor,
   impostorPhaseAngle,
-  lambertPhase
+  lambertPhase,
+  lommelSeeligerPhase,
+  regolithPhase
 } from '@/core/renderables/utils/planetImpostorMath'
 import { config } from '@/core/framework/config'
 
@@ -88,5 +90,44 @@ describe('config planetImpostor', () => {
   it('дефолты спеки', () => {
     expect(config('planetImpostor.saturation')).toBe(0.4)
     expect(config('planetImpostor.phaseFloor')).toBe(0.05)
+  })
+})
+
+describe('lommelSeeligerPhase — фаза сферы Ломмеля–Зелигера', () => {
+  it('края конечны: Φ(0) = 1, Φ(π) = 0, клампы', () => {
+    expect(lommelSeeligerPhase(0)).toBe(1)
+    expect(lommelSeeligerPhase(Math.PI)).toBe(0)
+    expect(lommelSeeligerPhase(1e-9)).toBe(1)
+    expect(lommelSeeligerPhase(-1)).toBe(1)
+    expect(lommelSeeligerPhase(5)).toBe(0)
+    expect(Number.isFinite(lommelSeeligerPhase(Math.PI - 1e-5))).toBe(true)
+  })
+
+  it('опорные значения и сравнение с ламбертом', () => {
+    expect(lommelSeeligerPhase(Math.PI / 2)).toBeCloseTo(0.3768, 4)
+    expect(lommelSeeligerPhase(0.5)).toBeCloseTo(0.869, 3)
+    expect(lommelSeeligerPhase(0.5)).toBeLessThan(lambertPhase(0.5))
+    expect(lommelSeeligerPhase(2.5)).toBeCloseTo(0.0677, 4)
+    expect(lommelSeeligerPhase(2.5)).toBeGreaterThan(lambertPhase(2.5))
+  })
+
+  it('монотонно убывает', () => {
+    let prev = Infinity
+    for (let a = 0; a <= Math.PI; a += Math.PI / 64) {
+      const p = lommelSeeligerPhase(a)
+      expect(p).toBeLessThanOrEqual(prev)
+      prev = p
+    }
+  })
+})
+
+describe('regolithPhase — фаза точки безатмосферного тела', () => {
+  it('доля 0 и всплеск 0 — ровно ламберт', () => {
+    for (const a of [0, 0.3, 1, 2, Math.PI]) expect(regolithPhase(a, 0, 0)).toBe(lambertPhase(a))
+  })
+
+  it('в противостоянии 1 + surge, вдали от него всплеск гаснет', () => {
+    expect(regolithPhase(0, 1, 0.3)).toBeCloseTo(1.3, 12)
+    expect(regolithPhase(1, 1, 0.3)).toBeCloseTo(lommelSeeligerPhase(1) * (1 + 0.3 * Math.exp(-10)), 12)
   })
 })

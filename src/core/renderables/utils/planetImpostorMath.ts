@@ -47,6 +47,27 @@ export function lambertPhase(alpha: number): number {
   return (Math.sin(a) + (Math.PI - a) * Math.cos(a)) / Math.PI
 }
 
+/** Ширина оппозиционного пика, рад — та же, что у диска (чанк AsteroidBrdf). */
+export const OPPOSITION_WIDTH = 0.1
+
+/** Фазовая функция сферы Ломмеля–Зелигера, Φ(0) = 1: 1 − sin(α/2)·tan(α/2)·ln(cot(α/4)); края — пределы. */
+export function lommelSeeligerPhase(alpha: number): number {
+  const a = Math.min(Math.max(alpha, 0), Math.PI)
+  if (a < 1e-6) return 1
+  if (a > Math.PI - 1e-6) return 0
+
+  return 1 - Math.sin(a / 2) * Math.tan(a / 2) * Math.log(1 / Math.tan(a / 4))
+}
+
+/** Фаза точки: mix(ламберт, Ломмель–Зелигер, regolithMix) × (1 + surge·exp(−α/0.1)). */
+export function regolithPhase(alpha: number, regolithMix: number, surge: number): number {
+  const a = Math.min(Math.max(alpha, 0), Math.PI)
+  const lambert = lambertPhase(a)
+  const base = lambert + (lommelSeeligerPhase(a) - lambert) * regolithMix
+
+  return base * (1 + surge * Math.exp(-a / OPPOSITION_WIDTH))
+}
+
 const toStar = new Vector3()
 const toCamera = new Vector3()
 
