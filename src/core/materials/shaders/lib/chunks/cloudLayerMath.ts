@@ -5,6 +5,9 @@ export type Vec3 = [number, number, number]
 
 /** Кламп косинуса взгляда в утолщении: у самого лимба путь сквозь слой конечен. */
 export const CLOUD_SLANT_MIN_MU = 0.1
+/** Гейт утолщения по покрытию: ниже LO (шум JPEG в пустом небе) не утолщаем, выше HI — полностью. */
+export const CLOUD_SLANT_GATE_LO = 0.05
+export const CLOUD_SLANT_GATE_HI = 0.15
 /** Кап косинуса зенитного угла в сдвиге тени облаков: без разлёта у терминатора. */
 export const CLOUD_SHADOW_MIN_COS = 0.15
 
@@ -30,6 +33,17 @@ export function cloudLayerPoint(dir: Vec3, view: Vec3, radius: number, height: n
 /** Покрытие с утолщением у края: 1 − (1 − α)^(1/max(μv, 0.1)); 0 и 1 — неподвижные точки. */
 export function cloudSlantAlpha(alpha: number, muV: number): number {
   return 1 - Math.pow(Math.max(1 - alpha, 0), 1 / Math.max(muV, CLOUD_SLANT_MIN_MU))
+}
+
+function smoothstep(e0: number, e1: number, x: number): number {
+  const t = Math.min(Math.max((x - e0) / (e1 - e0), 0), 1)
+  return t * t * (3 - 2 * t)
+}
+
+/** Покрытие в пикселе: утолщение с гейтом по α — mix(α, slant(α, μv), smoothstep(LO, HI, α)). */
+export function cloudCoverage(alpha: number, muV: number): number {
+  const gate = smoothstep(CLOUD_SLANT_GATE_LO, CLOUD_SLANT_GATE_HI, alpha)
+  return alpha + (cloudSlantAlpha(alpha, muV) - alpha) * gate
 }
 
 /** Понижение горизонта для облака на высоте h: sin угла, на который солнце видно дольше земли. */

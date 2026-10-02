@@ -4,7 +4,7 @@
  *
  * Хост до include обязан: объявить sampler2D cloudMap, float uCloudOpacity,
  * float uBodyRadiusUnits; подключить terrainUvFunctions; под USE_SUN_TINT —
- * sunTransmittanceFunctions; под USE_LIGHT_TINT — uniform vec3 uLightColor.
+ * sunTransmittanceUniforms + sunTransmittanceFunctions (uAtmoDatumRadius, uSunTintStrength, sunTintAt); под USE_LIGHT_TINT — uniform vec3 uLightColor.
  * Все векторы — тело-локальные единичные; длины — юниты сцены.
  */
 export const cloudLayerUniforms = /* glsl */ `
@@ -16,6 +16,8 @@ export const cloudLayerUniforms = /* glsl */ `
 
 export const cloudLayerFunctions = /* glsl */ `
   #define CLOUD_SLANT_MIN_MU 0.1
+  #define CLOUD_SLANT_GATE_LO 0.05
+  #define CLOUD_SLANT_GATE_HI 0.15
   #define CLOUD_SHADOW_MIN_COS 0.15
 
   // Точка слоя на луче взгляда: от P = R·d назад к камере до сферы R + h.
@@ -53,11 +55,15 @@ export const cloudLayerFunctions = /* glsl */ `
     float alpha = pow(dot(cloudTex, vec3(1.0)) / 3.0, 0.5);
     vec3 albedo = min(cloudTex / max(alpha, 1e-4), vec3(1.0));
     float muV = abs(dot(cloudDir, -viewLocal));
-    cloudAlphaSlant = cloudSlantAlpha(alpha, muV) * uCloudOpacity;
+    // утолщение только у настоящих облаков: шум JPEG в пустом небе (α ≲ 0.05) у лимба дал бы тёмное кольцо
+    float slantGate = smoothstep(CLOUD_SLANT_GATE_LO, CLOUD_SLANT_GATE_HI, alpha);
+    cloudAlphaSlant = mix(alpha, cloudSlantAlpha(alpha, muV), slantGate) * uCloudOpacity;
     cloudPremul = albedo * cloudAlphaSlant;
   }
 
-  // Радиация облака: альбедо × свет слоя × солнце на высоте облака × цвет звезды
+  // Радиация облака: альбедо × свет слоя × солнце на высоте облака × цвет звезды.
+  // Под USE_SUN_TINT световой хвост за геометрическим горизонтом (−dip) срезается горизонтом пропускания,
+  // поэтому cloudLightSoftness виден полностью только на телах без солнечного тинта.
   vec3 cloudLitRadiance(vec3 cloudPremul, vec3 cloudDir, vec3 sunLocal) {
     vec3 radiance = cloudPremul * cloudSunLight(cloudDir, sunLocal);
     #ifdef USE_SUN_TINT

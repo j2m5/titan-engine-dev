@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   CLOUD_SLANT_MIN_MU,
+  CLOUD_SLANT_GATE_HI,
+  CLOUD_SLANT_GATE_LO,
+  cloudCoverage,
   cloudDip,
   cloudLayerPoint,
   cloudShadowUvOffset,
@@ -123,5 +126,32 @@ describe('чанк CloudLayer', () => {
     expect(f).toContain('float cosZ = max(muS, CLOUD_SHADOW_MIN_COS);')
     expect(f).toContain('vec3 offsetUnits = sunTangent / cosZ * uCloudHeightUnits;')
     expect(f).toContain('return 1.0 - uCloudShadowStrength * alphaShadow * smoothstep(0.0, 0.2, muS) * step(1e-4, length(eastLocal));')
+  })
+})
+
+describe('cloudCoverage — утолщение только у настоящих облаков', () => {
+  it('неподвижные точки и нулевой наклон', () => {
+    for (const mu of [1, 0.1, 0]) {
+      expect(cloudCoverage(0, mu)).toBe(0)
+      expect(cloudCoverage(1, mu)).toBe(1)
+    }
+    for (const a of [0.02, 0.1, 0.5]) expect(Math.abs(cloudCoverage(a, 1) - a)).toBeLessThan(1e-12)
+  })
+
+  it('шум JPEG не утолщается', () => {
+    expect(cloudCoverage(0.04, 0.05)).toBe(0.04)
+  })
+
+  it('настоящие облака утолщаются', () => {
+    expect(Math.abs(cloudCoverage(0.3, 0.1) - cloudSlantAlpha(0.3, 0.1))).toBeLessThan(1e-12)
+    expect(cloudCoverage(0.3, 0.1)).toBeGreaterThan(0.3)
+  })
+
+  it('GLSL-чанк: гейт и дефайны', () => {
+    expect(CLOUD_SLANT_GATE_LO).toBe(0.05)
+    expect(CLOUD_SLANT_GATE_HI).toBe(0.15)
+    expect(cloudLayerFunctions).toContain('cloudAlphaSlant = mix(alpha, cloudSlantAlpha(alpha, muV), slantGate) * uCloudOpacity;')
+    expect(cloudLayerFunctions).toContain('#define CLOUD_SLANT_GATE_LO 0.05')
+    expect(cloudLayerFunctions).toContain('#define CLOUD_SLANT_GATE_HI 0.15')
   })
 })

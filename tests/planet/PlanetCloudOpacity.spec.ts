@@ -61,7 +61,7 @@ describe('PlanetShaderTemplate: uCloudOpacity — высотный fade обла
     const block = frag.slice(cloudBlockStart, cloudBlockEnd)
 
     expect(block).toContain('cloudLayerSample(')
-    expect(cloudLayerFunctions).toContain('cloudAlphaSlant = cloudSlantAlpha(alpha, muV) * uCloudOpacity;')
+    expect(cloudLayerFunctions).toContain('cloudAlphaSlant = mix(alpha, cloudSlantAlpha(alpha, muV), slantGate) * uCloudOpacity;')
   })
 })
 
