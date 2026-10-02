@@ -9,11 +9,11 @@ const frag: string = PlanetShaderTemplate.fragmentShader
  * уходил в ветку «ночь» = ровно 0, и terrainAmbient до него не доезжал.
  */
 describe('PlanetShaderTemplate: терминатор суши по геометрической нормали', () => {
-  it('в терраформной ветке угол солнца для терминатора берётся из vNormal, не из рельефной normal', () => {
+  it('терминатор в обеих ветках берётся из vNormal, не из рельефной normal', () => {
     const block = frag.slice(frag.indexOf('float terminatorNdotL'), frag.indexOf('float dayFactor'))
 
-    expect(block).toContain('#ifdef USE_TERRAIN_UV')
-    expect(block).toContain('terminatorNdotL = sunElevation;')
+    expect(block).not.toContain('#ifdef USE_TERRAIN_UV')
+    expect(block).toContain('float terminatorNdotL = sunElevation;')
     // sunElevation — геометрический угол солнца, объявлен до ламберта и до терминатора
     const sunIdx = frag.indexOf('float sunElevation = dot(normalize(vNormal), lightDirection);')
     expect(sunIdx).toBeGreaterThan(-1)

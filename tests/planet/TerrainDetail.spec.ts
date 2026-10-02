@@ -226,9 +226,9 @@ describe('TerrainDetail: хук в терраформной ветке шабл�
 
   it('albedoMul применяется на месте выборки dayColor', () => {
     // Выборка диффуза живёт в ветках UV (по одной на ветку), dayColor берёт
-    // готовый diffuseSample — и уже он домножается на albedoMul (и на
-    // occlusion: в легаси-ветке та ≡ 1, терраформная перезаписывает dayColor).
-    const dayColorIdx = frag.indexOf('vec3 dayColor = diffuseSample * albedoMul * occlusion;')
+    // готовый diffuseSample — и уже он домножается на albedoMul (альбедо
+    // поверхности общее для обеих веток; окклюзия входит в ламберт).
+    const dayColorIdx = frag.indexOf('vec3 surfaceAlbedo = diffuseSample * albedoMul;')
     const sampleIdx = frag.indexOf('vec3 diffuseSample = texture2D(diffuseMap, uv).rgb;')
     expect(sampleIdx).toBeGreaterThan(-1)
     expect(dayColorIdx).toBeGreaterThan(sampleIdx)
