@@ -1,5 +1,5 @@
 /**
- * CPU-зеркало композиции света суши (PlanetShaderTemplate, ветка USE_TERRAIN_UV):
+ * CPU-зеркало композиции света суши (PlanetShaderTemplate — общая для легаси-сферы и рельефа):
  *   skyTerm    = mix(серый пол · sunTint, skyAmbientTint, uSkyAmbientStrength)
  *   ambient    = uTerrainAmbient · skyTerm · occlusion
  *   directGain = mix(1, occlusion, uTerrainOcclusionDirect) · cloudShadow
@@ -76,11 +76,4 @@ export function cloudShadowUvOffset(
     du: (sunTangentEN[0] * scale) / (2 * Math.PI * radiusUnits * Math.max(cosLat, 1e-3)),
     dv: (sunTangentEN[1] * scale) / (Math.PI * radiusUnits)
   }
-}
-
-/** Легаси-композиция: mix(night, cloud + day·(1−α), dayFactor). */
-export function composeLegacy(i: ComposeInput): Vec3 {
-  return i.night.map((n: number, c: number): number =>
-    mix(n, i.cloudColor[c] + i.dayColor[c] * (1 - i.cloudAlpha), i.dayFactor)
-  ) as Vec3
 }

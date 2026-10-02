@@ -15,6 +15,8 @@ import { DEFAULT_DETAIL_SCALE2_METERS, DEFAULT_DETAIL_SCALE_METERS, validPeriodM
 import { resolveMacroSlopeStructureParams } from '@/core/terrain/macroSlopeStructureParams'
 import { resolveTerrainLightParams } from '@/core/terrain/terrainLightParams'
 import { resolveWaterFoamParams } from '@/core/terrain/waterFoamParams'
+import { resolveWaterSurfaceParams } from '@/core/terrain/waterSurfaceParams'
+import { farGlintAlpha2 } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { terrainDataOf } from '@/core/terrain/terrainClassPresets'
 import { config } from '@/core/framework/config'
@@ -92,7 +94,8 @@ interface PlanetUniforms {
   bumpMap: Texture | null
   bumpScale: number
   emission: number
-  uSpecularStrength: number
+  uWaterFarAlpha2: number
+  uWaterGlintGain: number
   uNightThreshold: number
   uNightSoftness: number
   uDetailDiffMap: Texture | null
@@ -215,6 +218,8 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
     const light = resolveTerrainLightParams(planetData, this.model.getAttribute?.('name', '?') ?? '?')
     const foam = resolveWaterFoamParams(planetData, this.model.getAttribute?.('name', '?') ?? '?')
     const waterLevelMeters = readWaterLevelMeters(this.model) ?? 0
+    // Блик легаси-сферы тела с водой — те же ручки и тот же расчёт, что у WaterShader
+    const waterSurface = resolveWaterSurfaceParams(planetData, this.model.getAttribute?.('name', '?') ?? '?')
 
     this.uniforms = {
       lightPosition: new Uniform(new Vector3()),
@@ -228,7 +233,8 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       bumpMap: new Uniform(null),
       bumpScale: new Uniform(planetData.bumpScale ?? 0),
       emission: new Uniform(planetData.emission),
-      uSpecularStrength: new Uniform(2.0),
+      uWaterFarAlpha2: new Uniform(farGlintAlpha2(waterSurface.waterRoughness, waterSurface.waterRippleStrength)),
+      uWaterGlintGain: new Uniform(waterSurface.waterGlintGain),
       uNightThreshold: new Uniform(0.06),
       uNightSoftness: new Uniform(0.18),
       uDetailDiffMap: new Uniform(null),

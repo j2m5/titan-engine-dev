@@ -6,12 +6,15 @@ export interface WaterSurfaceParams {
   waterAbsorption: [number, number, number]
   /** Сила мелких октав 2560–10 м; 0 — только крупные. */
   waterRippleStrength: number
+  /** Множитель блика воды (и легаси-блика тела с водой); 1 — одобренный ближний вид бит-в-бит. */
+  waterGlintGain: number
 }
 
 export const WATER_SURFACE_DEFAULTS: WaterSurfaceParams = {
   waterRoughness: 0.02,
   waterAbsorption: [0.45, 0.07, 0.03],
-  waterRippleStrength: 1
+  waterRippleStrength: 1,
+  waterGlintGain: 1
 }
 
 type Raw = { [K in keyof WaterSurfaceParams]?: unknown }
@@ -21,7 +24,7 @@ export function resolveWaterSurfaceParams(data: Raw | undefined, context: string
   const fail = (message: string): never => {
     throw new Error(`waterSurface ${context}: ${message}`)
   }
-  const readNumber = (field: 'waterRoughness' | 'waterRippleStrength'): number => {
+  const readNumber = (field: 'waterRoughness' | 'waterRippleStrength' | 'waterGlintGain'): number => {
     const raw = data?.[field]
     if (raw === undefined) return WATER_SURFACE_DEFAULTS[field]
     if (typeof raw !== 'number' || !Number.isFinite(raw)) return fail(`${field} — не число: ${String(raw)}`)
@@ -33,6 +36,8 @@ export function resolveWaterSurfaceParams(data: Raw | undefined, context: string
   if (roughness <= 0 || roughness > 1) fail(`waterRoughness должен быть в (0, 1]: ${roughness}`)
   const ripple = readNumber('waterRippleStrength')
   if (ripple < 0) fail(`waterRippleStrength должен быть >= 0: ${ripple}`)
+  const glintGain = readNumber('waterGlintGain')
+  if (glintGain < 0) fail(`waterGlintGain должен быть >= 0: ${glintGain}`)
 
   const rawAbsorption = data?.waterAbsorption
   let absorption = WATER_SURFACE_DEFAULTS.waterAbsorption
@@ -46,5 +51,5 @@ export function resolveWaterSurfaceParams(data: Raw | undefined, context: string
     absorption = [values[0] as number, values[1] as number, values[2] as number]
   }
 
-  return { waterRoughness: roughness, waterAbsorption: absorption, waterRippleStrength: ripple }
+  return { waterRoughness: roughness, waterAbsorption: absorption, waterRippleStrength: ripple, waterGlintGain: glintGain }
 }

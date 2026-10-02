@@ -125,7 +125,7 @@ describe('Шейдер: блеск льда', () => {
     expect(glintAt).toBeGreaterThan(clampAt)
     expect(ceilingAt).toBeGreaterThan(glintAt)
     expect(frag.slice(glintAt, ceilingAt)).toContain('* smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;')
-    expect((frag.match(/blinnPhongGlint\(/g) ?? []).length).toBe(3) // определение + два вызова, как прежде
+    expect((frag.match(/blinnPhongGlint\(/g) ?? []).length).toBe(2) // определение + вызов кромки (USE_SPECULAR теперь на waterGlintGlsl)
   })
 
   it('шероховатость: хост объявляет 1.0 до детали и передаёт в applyTerrainDetail', () => {

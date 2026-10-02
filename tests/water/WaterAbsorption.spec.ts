@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
 import { absorptionLayer, waterTransmittance } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
-import { blendedColor, depthLayer, dirFromLatLon, foundationColor, type DepthInputs, type Vec3 } from './waterColorMirror'
+import { addGlint, blendedColor, depthLayer, dirFromLatLon, foundationColor, glintColor, type DepthInputs, type Vec3 } from './waterColorMirror'
 
 const frag: string = WaterShaderTemplate.fragmentShader
 
@@ -173,7 +173,7 @@ describe('CPU-зеркало поглощения (waterColorMirror.ts)', () => 
     expect(shallow.depthAlpha).toBeLessThan(slanted.depthAlpha)
   })
 
-  it('инвариант владельца: waveFade = 0 ⇒ цвет === фундаменту с поглощением', () => {
+  it('инвариант: waveFade = 0 ⇒ цвет === фундамент с поглощением + блик', () => {
     const lightDirs: Vec3[] = [dirFromLatLon(60, 0), dirFromLatLon(-10, 130)]
     const views: Vec3[] = [nadir, grazing, dirFromLatLon(30, -20)]
     let samples = 0
@@ -184,27 +184,26 @@ describe('CPU-зеркало поглощения (waterColorMirror.ts)', () => 
           const depth: DepthInputs = { depthA, rangeMeters: 200, absorption: sigma }
           const base = depthLayer(deep, normal, viewDir, depth).baseColor
           const foundation = foundationColor(base, [0.749, 0.914, 1], normal, viewDir, lightDir, 0.08)
-          const blended = blendedColor(
-            {
-              baseColor: deep,
-              fresnelTint: [0.749, 0.914, 1],
-              reflectionSample: [0.9, 0.9, 0.95],
-              skyColor: [0.6, 0.75, 0.85],
-              normal,
-              waveNormal: dirFromLatLon(-70, 150),
-              viewDir,
-              lightDir,
-              sunColor: [1, 1, 1],
-              nightFloor: 0.08,
-              alpha2: 1e-4,
-              depth
-            },
-            0
-          )
+          const inputs = {
+            baseColor: deep,
+            fresnelTint: [0.749, 0.914, 1] as Vec3,
+            reflectionSample: [0.9, 0.9, 0.95] as Vec3,
+            skyColor: [0.6, 0.75, 0.85] as Vec3,
+            normal,
+            waveNormal: dirFromLatLon(-70, 150),
+            viewDir,
+            lightDir,
+            sunColor: [1, 1, 1] as Vec3,
+            nightFloor: 0.08,
+            alpha2: 1e-4,
+            depth
+          }
+          const blended = blendedColor(inputs, 0)
+          const expected = addGlint(foundation, glintColor(inputs), 0)
 
-          expect(blended[0]).toBe(foundation[0])
-          expect(blended[1]).toBe(foundation[1])
-          expect(blended[2]).toBe(foundation[2])
+          expect(blended[0]).toBe(expected[0])
+          expect(blended[1]).toBe(expected[1])
+          expect(blended[2]).toBe(expected[2])
           samples++
         }
       }

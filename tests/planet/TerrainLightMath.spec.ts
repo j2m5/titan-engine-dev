@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   cloudShadowUvOffset,
-  composeLegacy,
   composeTerrain,
   terrainLit,
   terrainSkyTerm,
@@ -75,17 +74,6 @@ describe('закатный тинт суши: пропускание к солн
 
 describe('composeTerrain: терминатор гейтит облака и ночь, суша под ламбертом самогасится', () => {
   const base = { night: [0.1, 0.1, 0.1] as Vec3, cloudColor: [0.3, 0.3, 0.3] as Vec3, cloudAlpha: 0.5, dayColor: [0.6, 0.6, 0.6] as Vec3 }
-
-  it('lambert = 0 — тождественна легаси mix(night, day, dayFactor)', () => {
-    // toBeCloseTo, не toEqual: a·c + b·c ≠ (a+b)·c в float64 ни при каком порядке
-    // множителей (см. terrainLit выше) — формулы алгебраически тождественны,
-    // бит-в-бит не обязаны
-    for (const dayFactor of [0, 0.3, 0.7, 1]) {
-      const terrain = composeTerrain({ ...base, dayFactor, lambert: 0 })
-      const legacy = composeLegacy({ ...base, dayFactor, lambert: 0 })
-      for (const c of [0, 1, 2]) expect(terrain[c]).toBeCloseTo(legacy[c], 12)
-    }
-  })
 
   it('lambert = 1 — суша не множится на dayFactor, облака и ночь — множатся', () => {
     const out = composeTerrain({ ...base, dayFactor: 0.5, lambert: 1 })

@@ -89,8 +89,8 @@ describe('PlanetShaderTemplate: деталь гиганта в легаси-ве
     const call = frag.indexOf(
       'applyGiantDetail(albedoMul, normalize(vPosition), uv, dot(diffuseSample, vec3(0.2126, 0.7152, 0.0722)), length(vViewPosition));'
     )
-    // occlusion в легаси-ветке никем не трогается (≡ 1) — состав бит-в-бит прежний
-    const mul = frag.indexOf('vec3 dayColor = diffuseSample * albedoMul * occlusion;')
+    // albedoMul входит в альбедо поверхности — общую для обеих веток сборку освещения
+    const mul = frag.indexOf('vec3 surfaceAlbedo = diffuseSample * albedoMul;')
     expect(call).toBeGreaterThan(elseBranch)
     expect(mul).toBeGreaterThan(call)
     expect(frag).toContain('vec3 diffuseSample = texture2D(diffuseMap, uv).rgb;')

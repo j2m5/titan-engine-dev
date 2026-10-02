@@ -27,7 +27,7 @@ function terrainShade(ndotl: number, lambert: number, ambient: number): number {
   return 1 + (lit - 1) * lambert
 }
 
-describe('PlanetShaderTemplate: ламберт суши (спайк, USE_TERRAIN_UV)', () => {
+describe('PlanetShaderTemplate: ламберт (общий для легаси-сферы и рельефа)', () => {
   const frag: string = PlanetShaderTemplate.fragmentShader
 
   it('юниформы объявлены, множитель стоит на dayColor — ДО состава с облаками', () => {
@@ -37,7 +37,7 @@ describe('PlanetShaderTemplate: ламберт суши (спайк, USE_TERRAIN
     const lambertIdx = frag.indexOf(
       'dayColor = surfaceAlbedo * mix(sunTintMix, lit, uTerrainLambert);'
     )
-    const dayIdx = frag.indexOf('vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);')
+    const dayIdx = frag.indexOf('vec3 day = cloudColor * sunTintMix * dayFactor + dayColor * (1.0 - cloudAlpha) * landGate;')
     expect(occlusionIdx).toBeGreaterThan(-1)
     expect(lambertIdx).toBeGreaterThan(occlusionIdx)
     expect(dayIdx).toBeGreaterThan(lambertIdx)
@@ -49,16 +49,12 @@ describe('PlanetShaderTemplate: ламберт суши (спайк, USE_TERRAIN
     expect(frag).not.toContain('day *= mix(vec3(1.0), lit')
   })
 
-  it('множитель под гейтом USE_TERRAIN_UV — легаси-путь гигантов не тронут', () => {
+  it('множитель вне гейта USE_TERRAIN_UV — легаси-сфера (гиганты) под тем же ламбертом', () => {
     const lambertIdx = frag.indexOf('dayColor = surfaceAlbedo * mix(sunTintMix, lit')
-    const guardIdx = frag.lastIndexOf('#ifdef USE_TERRAIN_UV', lambertIdx)
-    const endifIdx = frag.indexOf('#endif', lambertIdx)
-    expect(guardIdx).toBeGreaterThan(-1)
-    expect(endifIdx).toBeGreaterThan(lambertIdx)
-    // препроцессор между гардом и множителем сбалансирован: вложенный
-    // #ifdef USE_SKY_AMBIENT закрывает сам себя, гард USE_TERRAIN_UV — открыт
-    const inner = frag.slice(guardIdx + '#ifdef USE_TERRAIN_UV'.length, lambertIdx)
-    expect((inner.match(/#endif/g) ?? []).length).toBe((inner.match(/#if/g) ?? []).length)
+    const main = frag.indexOf('void main()')
+    const before = frag.slice(main, lambertIdx)
+    // все #if* до множителя закрыты: он стоит на верхнем уровне main()
+    expect((before.match(/#endif/g) ?? []).length).toBe((before.match(/#if/g) ?? []).length)
   })
 })
 

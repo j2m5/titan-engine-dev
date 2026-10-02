@@ -1,7 +1,7 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { Color, ShaderChunk, Uniform, UniformsUtils, Vector2, Vector3 } from 'three'
 import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
-import { WATER_DEFAULT_PIXEL_ANGLE } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
+import { WATER_DEFAULT_PIXEL_ANGLE, WATER_FAR_ALPHA2 } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 import { SpaceScale } from '@/core/constants'
 
 // Юниты сцены → метры (арка water-shader, Task 2, находка ревью фикс-раунда
@@ -38,6 +38,10 @@ const defaultUniforms = {
   uWaterNightFloor: new Uniform(0.08),
   // Поверхность воды (арка «Вода 2»): значения per-body приходят из WaterShader
   uWaterRoughness: new Uniform(0.02),
+  // α² блика при всех погасших октавах (орбита, путь без волн) — ставит WaterShader по данным тела
+  uWaterFarAlpha2: new Uniform(WATER_FAR_ALPHA2),
+  // множитель блика; 1 — одобренный ближний вид бит-в-бит
+  uWaterGlintGain: new Uniform(1),
   uWaterAbsorption: new Uniform(new Vector3(0.45, 0.07, 0.03)),
   uWaterRippleStrength: new Uniform(1),
   uWaterDepthRangeMeters: new Uniform(200),
@@ -158,6 +162,8 @@ export const WaterShaderTemplate: ShaderProps = {
     uniform float uWaterAlphaDeep;
     uniform vec3 uWaterFresnelTint;
     uniform float uWaterNightFloor;
+    uniform float uWaterFarAlpha2;
+    uniform float uWaterGlintGain;
 
     #ifdef USE_SUN_TINT
       #include <sunTransmittanceUniforms>
@@ -169,6 +175,17 @@ export const WaterShaderTemplate: ShaderProps = {
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
     varying vec3 vDetailPos;
+    // Блик воды — общий чанк (и с легаси-сферой тела): нужен и без USE_WATER_WAVES
+    #include <waterGlintFunctions>
+
+    // Цвет светила приходит только при подписке лайттинта (lightTintOf) —
+    // иначе, как и раньше, белый: sunColor Water.js здесь константа по умолчанию.
+    #ifdef USE_LIGHT_TINT
+      uniform vec3 uLightColor;
+      #define waterSunColor uLightColor
+    #else
+      const vec3 waterSunColor = vec3(1.0);
+    #endif
 
     #ifdef USE_WATER_DEPTH
       #include <terrainUvFunctions>
@@ -246,15 +263,6 @@ export const WaterShaderTemplate: ShaderProps = {
       // что типичное отношение яркости зенита к горизонту ясного неба.
       const float ZENITH_DARKEN = 0.35;
 
-      // Цвет светила приходит только при подписке лайттинта (lightTintOf) —
-      // иначе, как и раньше, белый: sunColor Water.js здесь константа по умолчанию.
-      #ifdef USE_LIGHT_TINT
-        uniform vec3 uLightColor;
-        #define waterSunColor uLightColor
-      #else
-        const vec3 waterSunColor = vec3(1.0);
-      #endif
-
       // Мелкие октавы ряби (2560…10 м) и веса октав по футпринту пикселя
       #include <waterOctavesFunctions>
 
@@ -300,7 +308,7 @@ export const WaterShaderTemplate: ShaderProps = {
 
       // sunLight — диффузная часть Water.js (коэффициент 0.5 у вызывающей
       // стороны); sunDirection — vViewLightDirection, общий конвейер света
-      // движка. Блик — waterGlintGlsl (чанк waterOctavesFunctions), после пены.
+      // движка. Блик — waterGlintGlsl (чанк waterGlintFunctions), после пены.
       void sunLight(const vec3 surfaceNormal, float diffuse, inout vec3 diffuseColor) {
         vec3 waterSunDirection = normalize(vViewLightDirection);
         diffuseColor += max(dot(waterSunDirection, surfaceNormal), 0.0) * waterSunColor * diffuse;
@@ -483,6 +491,16 @@ export const WaterShaderTemplate: ShaderProps = {
         color *= mix(uWaterNightFloor, 1.0, dayFactor);
       #endif
 
+      // Блик: без волн и с орбиты — аналитическая нормаль и шероховатость всех
+      // погасших октав (широкое тусклое пятно, не точка); блок волн ниже
+      // перезаписывает их своими. При waveFade → 0 волновая нормаль сама → dir̂,
+      // α² растёт с погасшими октавами — блик непрерывен.
+      vec3 glintNormal = normal;
+      float glintAlpha2 = uWaterFarAlpha2;
+      float glintDayFactor = dayFactor;
+      // Плотность пены; без USE_WATER_DEPTH (и с выключенной пеной) — 0
+      float foam = 0.0;
+
       #ifdef USE_WATER_WAVES
         // На этом месте (снаружи этого #ifdef) color — ПОЛНОСТЬЮ готовый
         // фундаментный цвет (Task 4, byte-в-byte тот же, что и без
@@ -494,7 +512,7 @@ export const WaterShaderTemplate: ShaderProps = {
         // поверхности (дистанция, угол пикселя, косинус взгляда), не по
         // экранной производной — домен патча прыгает на k·W. waveFade — вес
         // октавы 3000 м (0 с ≈1737 км в надир при 50°/1080p, вне надира раньше): с орбиты формула волн не
-        // действует (молочный океан из космоса отвергнут), при 0 цвет === фундаменту.
+        // действует (молочный океан из космоса отвергнут), при 0 цвет === фундамент + дальний блик.
         // Веса октав 9–90 км равны 1, пока waveFade > 0, — их затухание по
         // октавам неактивно; взвешивание оставлено для общности и защиты от NaN.
         vec3 posM = vDetailPos * WATER_METERS_PER_UNIT;
@@ -684,8 +702,6 @@ export const WaterShaderTemplate: ShaderProps = {
         // в wavesColor не входит вовсе.
         color = mix(color, wavesColor, waveFade);
 
-        // Плотность пены; без USE_WATER_DEPTH (и с выключенной пеной) — 0
-        float foam = 0.0;
         #ifdef USE_WATER_DEPTH
           // Гейт юниформный (однородный поток: fwidth и выборки ниже определены);
           // тела с выключенной пеной и до прихода карты не платят ни одной выборки
@@ -738,18 +754,24 @@ export const WaterShaderTemplate: ShaderProps = {
 
         // Блик по шероховатости: α² = r² + 1.5²·Σ(1 − wᵢ)·σ² погасших октав (Токсвиг) —
         // вблизи искры на гребнях видимой ряби, издалека широкая тусклая дорожка.
-        // Крупная октава — 1/4 доля среднего getNoiseWeighted: V/16; × waveFade: за порогом октавы 3000 м цвет === фундаменту.
-        float bigVariance = dot(1.0 - waveWeights, vec4(WATER_OCTAVE_SLOPE_VARIANCE / 16.0));
+        // Крупная октава — 1/4 доля среднего getNoiseWeighted: V/16.
+        // Октава «погасла», если вышла из нормали: либо упал её вес, либо вся волновая
+        // нормаль растворилась по waveFade (при 1 как раньше, при 0 α² = uWaterFarAlpha2).
+        float bigVariance = dot(1.0 - waveWeights * waveFade, vec4(WATER_OCTAVE_SLOPE_VARIANCE / 16.0));
         float alpha2 = clamp(uWaterRoughness * uWaterRoughness + WATER_TRIPLANAR_SLOPE_GAIN2 * (rippleVariance + bigVariance), WATER_MIN_ALPHA2, WATER_MAX_ALPHA2);
-        // waterSunColor под USE_LIGHT_TINT — uLightColor; dayFactor — терминатор аналитической нормали
-        // (как у фундамента): волновая нормаль на ночной стороне не даёт искр
-        vec3 glint = waterGlintGlsl(waveNormal, lightDirection, viewDir, alpha2) * waterSunColor * dayFactor;
-        #ifdef USE_SUN_TINT
-          glint *= sunTintFactor * waveDayFactor;
-        #endif
-        // потолок: искры блумят, кляксы — нет; под пеной блика нет
-        color += min(glint, WATER_GLINT_CEILING) * waveFade * (1.0 - foam);
+        glintNormal = waveNormal;
+        glintAlpha2 = alpha2;
+        glintDayFactor = waveDayFactor;
       #endif
+
+      // waterSunColor под USE_LIGHT_TINT — uLightColor; dayFactor — терминатор аналитической нормали
+      // (как у фундамента): волновая нормаль на ночной стороне не даёт искр
+      vec3 glint = waterGlintGlsl(glintNormal, lightDirection, viewDir, glintAlpha2) * waterSunColor * dayFactor;
+      #ifdef USE_SUN_TINT
+        glint *= sunTintFactor * glintDayFactor;
+      #endif
+      // потолок: искры блумят, кляксы — нет; под пеной блика нет; gain 1 — прежний ближний вид
+      color += min(glint, WATER_GLINT_CEILING) * uWaterGlintGain * (1.0 - foam);
 
       #ifdef USE_WATER_CLOUD
         // Облака над морем — тем же законом, что на суше (PlanetShaderTemplate). Альфа воды не

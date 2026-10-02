@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { waterGlintFunctions } from '@/core/materials/shaders/lib/chunks/WaterGlint'
 import { waterOctavesFunctions } from '@/core/materials/shaders/lib/chunks/WaterOctaves'
 import {
   WATER_GLINT_CEILING,
@@ -22,7 +23,7 @@ import {
 } from './waterColorMirror'
 
 const frag: string = WaterShaderTemplate.fragmentShader
-const chunk = waterOctavesFunctions
+const chunk = waterGlintFunctions
 
 function functionBody(source: string, signature: string): string {
   const start = source.indexOf(signature)
@@ -37,7 +38,7 @@ function indexAfter(source: string, needle: string, from: number): number {
   return at
 }
 
-describe('WaterOctaves: GLSL-двойник waterGlint', () => {
+describe('WaterGlint: GLSL-двойник waterGlint', () => {
   it('константы блика — из CPU-зеркала, float-литералами', () => {
     expect(chunk).toContain(`#define WATER_GLINT_F0 ${WATER_GLINT_F0}`)
     expect(chunk).toContain('#define WATER_GLINT_F0 0.02')
@@ -45,8 +46,8 @@ describe('WaterOctaves: GLSL-двойник waterGlint', () => {
     expect(chunk).toContain(`#define WATER_MIN_ALPHA2 ${WATER_MIN_ALPHA2}`)
     expect(chunk).toContain('#define WATER_MIN_ALPHA2 0.0001')
     expect(chunk).toContain(`#define WATER_MAX_ALPHA2 ${WATER_MAX_ALPHA2}.0`)
-    expect(chunk).toContain(`#define WATER_TRIPLANAR_SLOPE_GAIN2 ${WATER_TRIPLANAR_SLOPE_GAIN2}`)
-    expect(chunk).toContain('#define WATER_TRIPLANAR_SLOPE_GAIN2 2.25')
+    expect(waterOctavesFunctions).toContain(`#define WATER_TRIPLANAR_SLOPE_GAIN2 ${WATER_TRIPLANAR_SLOPE_GAIN2}`)
+    expect(waterOctavesFunctions).toContain('#define WATER_TRIPLANAR_SLOPE_GAIN2 2.25')
   })
 
   it('формула — та же, что waterGlint: нормировка (p+8)/(8π), Шлик F0, × N·L, потолок, ноль при N·L ≤ 0', () => {
@@ -71,7 +72,7 @@ describe('WaterShaderTemplate: блик по шероховатости', () => 
   })
 
   it('α² = r² + 1.5²·(дисперсия погасших мелких + крупных октав), в [MIN, MAX]; крупная — доля среднего, V/16', () => {
-    expect(frag).toContain('float bigVariance = dot(1.0 - waveWeights, vec4(WATER_OCTAVE_SLOPE_VARIANCE / 16.0));')
+    expect(frag).toContain('float bigVariance = dot(1.0 - waveWeights * waveFade, vec4(WATER_OCTAVE_SLOPE_VARIANCE / 16.0));')
     expect(frag).toContain(
       'float alpha2 = clamp(uWaterRoughness * uWaterRoughness + WATER_TRIPLANAR_SLOPE_GAIN2 * (rippleVariance + bigVariance), WATER_MIN_ALPHA2, WATER_MAX_ALPHA2);'
     )
@@ -83,16 +84,16 @@ describe('WaterShaderTemplate: блик по шероховатости', () => 
 
   it('цвет блика: waterSunColor (под USE_LIGHT_TINT это uLightColor), закатный тинт × waveDayFactor', () => {
     expect(frag).toContain('#define waterSunColor uLightColor')
-    expect(frag).toContain('vec3 glint = waterGlintGlsl(waveNormal, lightDirection, viewDir, alpha2) * waterSunColor * dayFactor;')
+    expect(frag).toContain('vec3 glint = waterGlintGlsl(glintNormal, lightDirection, viewDir, glintAlpha2) * waterSunColor * dayFactor;')
     const main = frag.indexOf('void main()')
     const glintDecl = indexAfter(frag, 'vec3 glint = waterGlintGlsl(', main)
-    const glintAdd = indexAfter(frag, 'color += min(glint, WATER_GLINT_CEILING) * waveFade * (1.0 - foam);', glintDecl)
+    const glintAdd = indexAfter(frag, 'color += min(glint, WATER_GLINT_CEILING) * uWaterGlintGain * (1.0 - foam);', glintDecl)
     const between = frag.slice(glintDecl, glintAdd)
-    expect(between).toMatch(/#ifdef USE_SUN_TINT\s+glint \*= sunTintFactor \* waveDayFactor;\s+#endif/)
+    expect(between).toMatch(/#ifdef USE_SUN_TINT\s+glint \*= sunTintFactor \* glintDayFactor;\s+#endif/)
     // идентификаторы видны в точке использования
     expect(indexAfter(frag, 'vec3 sunTintFactor =', main)).toBeLessThan(glintDecl)
     expect(indexAfter(frag, 'float waveDayFactor =', main)).toBeLessThan(glintDecl)
-    expect(indexAfter(frag, 'vec3 waveNormal =', main)).toBeLessThan(glintDecl)
+    expect(indexAfter(frag, 'vec3 glintNormal = normal;', main)).toBeLessThan(glintDecl)
     expect(indexAfter(frag, 'vec3 lightDirection =', main)).toBeLessThan(glintDecl)
   })
 
@@ -113,18 +114,16 @@ describe('WaterShaderTemplate: блик по шероховатости', () => 
     expect(branch.lastIndexOf('#ifdef USE_SUN_TINT')).toBeLessThan(branch.lastIndexOf('#endif'))
   })
 
-  it('блик после пены, foam объявлена до ветки пены — строка компилируется без USE_WATER_DEPTH', () => {
+  it('блик после пены и вне веток волн/глубины; foam объявлена один раз до блока волн', () => {
     const main = frag.indexOf('void main()')
-    const blend = indexAfter(frag, 'color = mix(color, wavesColor, waveFade);', main)
-    const foamDecl = indexAfter(frag, 'float foam = 0.0;', blend)
-    const depthBranch = indexAfter(frag, '#ifdef USE_WATER_DEPTH', foamDecl)
-    const foamAssign = indexAfter(frag, 'foam = clamp(shore + surf, 0.0, 1.0);', depthBranch)
-    const foamMix = indexAfter(frag, 'color = mix(color, foamLit, foam);', foamAssign)
-    const glintAdd = indexAfter(frag, 'color += min(glint, WATER_GLINT_CEILING) * waveFade * (1.0 - foam);', foamMix)
-    const depthEnd = indexAfter(frag, '#endif', foamMix)
-    expect(glintAdd).toBeGreaterThan(depthEnd) // вне ветки USE_WATER_DEPTH
+    const foamDecl = indexAfter(frag, 'float foam = 0.0;', main)
+    const wavesOpen = indexAfter(frag, '#ifdef USE_WATER_WAVES', main)
+    expect(foamDecl).toBeLessThan(wavesOpen)
+    const foamMix = indexAfter(frag, 'color = mix(color, foamLit, foam);', wavesOpen)
+    const glintAdd = indexAfter(frag, 'color += min(glint, WATER_GLINT_CEILING) * uWaterGlintGain * (1.0 - foam);', foamMix)
+    const before = frag.slice(main, glintAdd).replace(/\/\/.*$/gm, '') // без комментариев: в них упоминается #ifdef
+    expect((before.match(/#endif/g) ?? []).length).toBe((before.match(/#if/g) ?? []).length)
     expect(glintAdd).toBeLessThan(frag.indexOf('gl_FragColor = vec4(color, alpha);'))
-    // одна декларация foam в main — без затенения внутри ветки
     expect(frag.slice(main).match(/float foam\b/g)).toHaveLength(1)
   })
 })
@@ -197,14 +196,14 @@ describe('CPU-зеркало блика (waterColorMirror.ts)', () => {
     )
   })
 
-  it('waveFade = 0 или пена 1 ⇒ цвет ровно без блика; потолок покомпонентно', () => {
+  it('пена 1 ⇒ без блика; gain множит; потолок покомпонентно', () => {
     const color: Vec3 = [0.1, 0.2, 0.3]
     const glint: Vec3 = [10, 2, 0]
-    expect(addGlint(color, glint, 0, 0)).toEqual(color)
-    expect(addGlint(color, glint, 1, 1)).toEqual(color)
-    const lit = addGlint(color, glint, 1, 0)
+    expect(addGlint(color, glint, 1)).toEqual(color)
+    const lit = addGlint(color, glint, 0)
     expect(lit[0]).toBeCloseTo(0.1 + WATER_GLINT_CEILING, 12)
     expect(lit[1]).toBeCloseTo(2.2, 12)
     expect(lit[2]).toBe(0.3)
+    expect(addGlint(color, glint, 0, 2)[1]).toBeCloseTo(0.2 + 4, 12)
   })
 })

@@ -324,6 +324,8 @@ export interface IPlanetRenderingObject {
   waterAbsorption?: [number, number, number]
   /** Сила мелких октав ряби 2560–10 м; 0 — только крупные. Дефолт 1. */
   waterRippleStrength?: number
+  /** Множитель блика воды; дефолт 1 (см. waterSurfaceParams) */
+  waterGlintGain?: number
 
   // --- Ручки пены прибоя и мокрой кромки берега (арка surf-foam). Все
   // опциональны: отсутствие → дефолты waterFoamParams.ts. Активны только у

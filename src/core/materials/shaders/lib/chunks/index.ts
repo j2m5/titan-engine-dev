@@ -21,6 +21,7 @@ import { giantDetailFunctions, giantDetailUniforms } from '@/core/materials/shad
 import { terrainMacroDetailFunctions, terrainMacroDetailUniforms } from '@/core/materials/shaders/lib/chunks/TerrainMacroDetail'
 import { terrainShadowMarchFunctions, terrainShadowMarchUniforms } from '@/core/materials/shaders/lib/chunks/TerrainShadowMarch'
 import { waterOctavesFunctions } from '@/core/materials/shaders/lib/chunks/WaterOctaves'
+import { waterGlintFunctions } from '@/core/materials/shaders/lib/chunks/WaterGlint'
 import { IUniform, Uniform } from 'three'
 
 export const AppUniformsChunk: Record<string, Record<string, IUniform>> = {
@@ -66,5 +67,6 @@ export const AppShaderChunk: Record<string, string> = {
   terrainMacroDetailFunctions,
   terrainShadowMarchUniforms,
   terrainShadowMarchFunctions,
-  waterOctavesFunctions
+  waterOctavesFunctions,
+  waterGlintFunctions
 }

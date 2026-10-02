@@ -2,7 +2,7 @@ import { Color, CubeTexture, Texture, Uniform, Vector2, Vector3 } from 'three'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { WaterShaderTemplate as Shader } from '@/core/materials/shaders/lib/WaterShaderTemplate'
 import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
-import { WATER_DEFAULT_PIXEL_ANGLE } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
+import { WATER_DEFAULT_PIXEL_ANGLE, farGlintAlpha2 } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 import { Actor } from '@/core/models/Actor'
 import { IPlanetRenderingObject } from '@/core/models/types'
 import { clampSunTintStrength } from '@/core/materials/SunTintBinding'
@@ -72,6 +72,8 @@ interface WaterUniforms {
   uWaterRoughness: number
   uWaterAbsorption: Vector3
   uWaterRippleStrength: number
+  uWaterFarAlpha2: number
+  uWaterGlintGain: number
   uWaterDepthRangeMeters: number
   uWaterPixelAngle: number
   uWaterCloudMap: Texture | null
@@ -214,6 +216,9 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
       uWaterRoughness: new Uniform(surface.waterRoughness),
       uWaterAbsorption: new Uniform(new Vector3(...surface.waterAbsorption)),
       uWaterRippleStrength: new Uniform(surface.waterRippleStrength),
+      // α² блика при всех погасших октавах — тот же расчёт ставит PlanetShader легаси-сфере (паритет на гейте карты высот)
+      uWaterFarAlpha2: new Uniform(farGlintAlpha2(surface.waterRoughness, surface.waterRippleStrength)),
+      uWaterGlintGain: new Uniform(surface.waterGlintGain),
       uWaterDepthRangeMeters: new Uniform(WATER_SHALLOW_RANGE_METERS),
       // угол пикселя, рад: ставит материал по размеру вьюпорта и fov; до того — номинал 50°/1080p
       uWaterPixelAngle: new Uniform(WATER_DEFAULT_PIXEL_ANGLE),

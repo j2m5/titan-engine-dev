@@ -20,14 +20,17 @@ import {
   waterWaveNormalWithoutSignFix
 } from './waterWaveNormalMirror'
 import {
+  addGlint,
   blendedAlpha,
   blendedColor,
   dirFromLatLon,
   foundationAlpha,
   foundationColor,
+  glintColor,
   glintFromVectors,
   waveAlpha as waveAlphaMirror,
   waveFadeFromWeights,
+  type BlendInputs,
   type WaveWeights,
   wavesColor,
   type Vec3
@@ -412,7 +415,7 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
     [0.05, 0.05, 0.08]
   ]
 
-  it('критерий 1: вес октавы 3000 м 0 → blendedColor ЧИСЛЕННО (===) равен foundationColor, даже когда 90 км ещё видна', () => {
+  it('критерий 1: вес октавы 3000 м 0 → blendedColor ЧИСЛЕННО (===) равен фундаменту + блик, даже когда 90 км ещё видна', () => {
     // 2000 км при 50°/1080p — футпринт ≈ 1.7 км: 3000 м погасла (≤ 2f), 90 км целиком (≥ 4f)
     const footprint = footprintMeters(2e6, (2 * Math.tan((25 * Math.PI) / 180)) / 1080, 1)
     const weights = WATER_WAVE_PERIODS_METERS.map((p) => octaveWeight(p, footprint)) as unknown as WaveWeights
@@ -429,14 +432,25 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
             for (const waveNormal of foreignWaveNormals) {
               for (const reflectionSample of foreignReflectionSamples) {
                 const foundation = foundationColor(bc, fresnelTint, normal, viewDir, lightDir, nightFloor)
-                const blended = blendedColor(
-                  { baseColor: bc, fresnelTint, reflectionSample, skyColor, normal, waveNormal, viewDir, lightDir, sunColor, nightFloor, alpha2: 1e-4 },
-                  waveFade
-                )
+                const inputs: BlendInputs = {
+                  baseColor: bc,
+                  fresnelTint,
+                  reflectionSample,
+                  skyColor,
+                  normal,
+                  waveNormal,
+                  viewDir,
+                  lightDir,
+                  sunColor,
+                  nightFloor,
+                  alpha2: 1e-4
+                }
+                const blended = blendedColor(inputs, waveFade)
+                const expected = addGlint(foundation, glintColor(inputs), 0)
 
-                expect(blended[0]).toBe(foundation[0])
-                expect(blended[1]).toBe(foundation[1])
-                expect(blended[2]).toBe(foundation[2])
+                expect(blended[0]).toBe(expected[0])
+                expect(blended[1]).toBe(expected[1])
+                expect(blended[2]).toBe(expected[2])
                 samples++
               }
             }
@@ -496,7 +510,7 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
     }
   })
 
-  it('критерий 3: вклад waves (блик/reflectance-надбавка) растёт СТРОГО от fade — линейно, ноль на пороге', () => {
+  it('критерий 3: вклад waves (reflectance-надбавка) растёт СТРОГО от fade — линейно, ноль на пороге; блик от fade не зависит', () => {
     const inputs = {
       baseColor,
       fresnelTint,
@@ -516,13 +530,13 @@ describe('CPU-зеркало цвета (waterColorMirror.ts): приёмочн�
     const glint = glintFromVectors(inputs.waveNormal, inputs.lightDir, inputs.viewDir, inputs.alpha2)
     expect(glint).toBeGreaterThan(0)
 
-    // blended(fade) === foundation + fade·(waves − foundation) + fade·min(glint, 4)
-    // покомпонентно — линейно по fade, ноль на пороге.
+    // blended(fade) === foundation + fade·(waves − foundation) + min(glint, 4)
+    // покомпонентно — waves-часть линейна по fade, блик от fade не зависит.
     for (const fade of [0, 0.25, 0.5, 0.75, 1]) {
       const blended = blendedColor(inputs, fade)
 
       for (let c = 0; c < 3; c++) {
-        const expected = foundation[c] + fade * (waves[c] - foundation[c]) + fade * Math.min(sunColor[c] * glint, WATER_GLINT_CEILING)
+        const expected = foundation[c] + fade * (waves[c] - foundation[c]) + Math.min(sunColor[c] * glint, WATER_GLINT_CEILING)
 
         expect(blended[c]).toBeCloseTo(expected, 12)
       }
@@ -727,6 +741,8 @@ const BASELINE_FRAGMENT_SHADER = `
     uniform float uWaterAlphaDeep;
     uniform vec3 uWaterFresnelTint;
     uniform float uWaterNightFloor;
+    uniform float uWaterFarAlpha2;
+    uniform float uWaterGlintGain;
 
     varying vec3 vNormal;
     varying vec3 vViewLightDirection;
@@ -734,6 +750,17 @@ const BASELINE_FRAGMENT_SHADER = `
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
     varying vec3 vDetailPos;
+    // Блик воды — общий чанк (и с легаси-сферой тела): нужен и без USE_WATER_WAVES
+    #include <waterGlintFunctions>
+
+    // Цвет светила приходит только при подписке лайттинта (lightTintOf) —
+    // иначе, как и раньше, белый: sunColor Water.js здесь константа по умолчанию.
+    #ifdef USE_LIGHT_TINT
+      uniform vec3 uLightColor;
+      #define waterSunColor uLightColor
+    #else
+      const vec3 waterSunColor = vec3(1.0);
+    #endif
 
     #ifdef USE_WATER_DEPTH
       #include <terrainUvFunctions>
@@ -801,6 +828,22 @@ const BASELINE_FRAGMENT_SHADER = `
       float NdotL = dot(normal, lightDirection);
       float dayFactor = smoothstep(-0.08, 0.25, NdotL);
       color *= mix(uWaterNightFloor, 1.0, dayFactor);
+
+      // Блик: без волн и с орбиты — аналитическая нормаль и шероховатость всех
+      // погасших октав (широкое тусклое пятно, не точка); блок волн ниже
+      // перезаписывает их своими. При waveFade → 0 волновая нормаль сама → dir̂,
+      // α² растёт с погасшими октавами — блик непрерывен.
+      vec3 glintNormal = normal;
+      float glintAlpha2 = uWaterFarAlpha2;
+      float glintDayFactor = dayFactor;
+      // Плотность пены; без USE_WATER_DEPTH (и с выключенной пеной) — 0
+      float foam = 0.0;
+
+      // waterSunColor под USE_LIGHT_TINT — uLightColor; dayFactor — терминатор аналитической нормали
+      // (как у фундамента): волновая нормаль на ночной стороне не даёт искр
+      vec3 glint = waterGlintGlsl(glintNormal, lightDirection, viewDir, glintAlpha2) * waterSunColor * dayFactor;
+      // потолок: искры блумят, кляксы — нет; под пеной блика нет; gain 1 — прежний ближний вид
+      color += min(glint, WATER_GLINT_CEILING) * uWaterGlintGain * (1.0 - foam);
 
       gl_FragColor = vec4(color, alpha);
 

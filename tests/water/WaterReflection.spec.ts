@@ -385,6 +385,8 @@ const BASELINE_FRAGMENT_SHADER = `
     uniform float uWaterAlphaDeep;
     uniform vec3 uWaterFresnelTint;
     uniform float uWaterNightFloor;
+    uniform float uWaterFarAlpha2;
+    uniform float uWaterGlintGain;
 
     varying vec3 vNormal;
     varying vec3 vViewLightDirection;
@@ -392,6 +394,17 @@ const BASELINE_FRAGMENT_SHADER = `
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
     varying vec3 vDetailPos;
+    // Блик воды — общий чанк (и с легаси-сферой тела): нужен и без USE_WATER_WAVES
+    #include <waterGlintFunctions>
+
+    // Цвет светила приходит только при подписке лайттинта (lightTintOf) —
+    // иначе, как и раньше, белый: sunColor Water.js здесь константа по умолчанию.
+    #ifdef USE_LIGHT_TINT
+      uniform vec3 uLightColor;
+      #define waterSunColor uLightColor
+    #else
+      const vec3 waterSunColor = vec3(1.0);
+    #endif
 
     #ifdef USE_WATER_DEPTH
       #include <terrainUvFunctions>
@@ -459,6 +472,22 @@ const BASELINE_FRAGMENT_SHADER = `
       float NdotL = dot(normal, lightDirection);
       float dayFactor = smoothstep(-0.08, 0.25, NdotL);
       color *= mix(uWaterNightFloor, 1.0, dayFactor);
+
+      // Блик: без волн и с орбиты — аналитическая нормаль и шероховатость всех
+      // погасших октав (широкое тусклое пятно, не точка); блок волн ниже
+      // перезаписывает их своими. При waveFade → 0 волновая нормаль сама → dir̂,
+      // α² растёт с погасшими октавами — блик непрерывен.
+      vec3 glintNormal = normal;
+      float glintAlpha2 = uWaterFarAlpha2;
+      float glintDayFactor = dayFactor;
+      // Плотность пены; без USE_WATER_DEPTH (и с выключенной пеной) — 0
+      float foam = 0.0;
+
+      // waterSunColor под USE_LIGHT_TINT — uLightColor; dayFactor — терминатор аналитической нормали
+      // (как у фундамента): волновая нормаль на ночной стороне не даёт искр
+      vec3 glint = waterGlintGlsl(glintNormal, lightDirection, viewDir, glintAlpha2) * waterSunColor * dayFactor;
+      // потолок: искры блумят, кляксы — нет; под пеной блика нет; gain 1 — прежний ближний вид
+      color += min(glint, WATER_GLINT_CEILING) * uWaterGlintGain * (1.0 - foam);
 
       gl_FragColor = vec4(color, alpha);
 

@@ -102,14 +102,13 @@ describe('PlanetShaderTemplate: тинт солнца под USE_SUN_TINT', () =
     expect(frag.indexOf('#include <sunTransmittanceFunctions>')).toBeGreaterThan(gate)
   })
 
-  it('day умножается на тинт ПОСЛЕ облаков и ДО микса с ночью, mu_s — из vLocalDir', () => {
-    // легаси-строки (#else): terrain-ветка держит свой tint/day/finalColor раньше в файле
-    const dayLine = frag.indexOf('vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);')
-    const tint = frag.indexOf('day *= mix(vec3(1.0), sunTint(muS), uSunTintStrength);', dayLine)
-    const night = frag.indexOf('vec3 finalColor = mix(night, day, dayFactor);')
-    expect(dayLine).toBeGreaterThan(-1)
-    expect(tint).toBeGreaterThan(dayLine)
-    expect(night).toBeGreaterThan(tint)
+  it('тинт — один sunTintMix до освещения: им красятся прямой свет, пол и облака', () => {
+    const tint = frag.indexOf('sunTintMix = mix(vec3(1.0), sunTint(muS), uSunTintStrength);')
+    const lit = frag.indexOf('vec3 lit = mix(ambient')
+    const day = frag.indexOf('vec3 day = cloudColor * sunTintMix * dayFactor')
+    expect(tint).toBeGreaterThan(-1)
+    expect(lit).toBeGreaterThan(tint)
+    expect(day).toBeGreaterThan(lit)
   })
 
   it('tint не берёт нормаль рельефа и не берёт vPosition', () => {

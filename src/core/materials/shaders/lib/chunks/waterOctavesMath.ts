@@ -56,6 +56,7 @@ export function footprintMeters(distanceMeters: number, pixelAngle: number, muV:
 /**
  * α² блика: r² + 2.25·(Σ(1 − wᵢ)·(s·gain)²·V мелких + Σ(1 − wₖ)·V/16 крупных) погасших октав.
  * Сила ряби s — только на мелкие; крупные входят долей 1/4 среднего.
+ * bigWeights вызывающий передаёт уже умноженными на waveFade (шейдер: waveWeights * waveFade).
  */
 export function glintAlpha2(
   baseRoughness: number,
@@ -100,3 +101,16 @@ export function absorptionLayer(transmittance: Vec3, deepColor: Vec3): { color: 
     alpha
   }
 }
+
+/** α² блика, когда все октавы погасли (вид с орбиты): та же формула glintAlpha2 при нулевых весах. */
+export function farGlintAlpha2(roughness: number, rippleStrength: number): number {
+  return glintAlpha2(
+    roughness,
+    WATER_RIPPLE_PERIODS_METERS.map(() => 0),
+    WATER_WAVE_PERIODS_METERS.map(() => 0),
+    rippleStrength
+  )
+}
+
+/** farGlintAlpha2 при глобальных дефолтах воды (waterSurfaceParams: 0.02, 1) — опора тестов и дефолт юниформов шаблонов. */
+export const WATER_FAR_ALPHA2 = farGlintAlpha2(0.02, 1)

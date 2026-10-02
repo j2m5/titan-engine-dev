@@ -1,6 +1,7 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { Color, ShaderChunk, Uniform, UniformsUtils, Vector3 } from 'three'
 import { AppUniformsChunk } from './chunks'
+import { WATER_FAR_ALPHA2 } from './chunks/waterOctavesMath'
 
 const defaultUniforms = {
   lightPosition: new Uniform(new Vector3()),
@@ -12,7 +13,10 @@ const defaultUniforms = {
   bumpMap: new Uniform(null),
   bumpScale: new Uniform(0),
   emission: new Uniform(1),
-  uSpecularStrength: new Uniform(2.0),
+  // Блик легаси-сферы тела с водой — тот же закон, что у водной оболочки (waterGlintFunctions):
+  // α² при всех погасших октавах и множитель; значения ставит PlanetShader по данным тела
+  uWaterFarAlpha2: new Uniform(WATER_FAR_ALPHA2),
+  uWaterGlintGain: new Uniform(1),
   uNightThreshold: new Uniform(0.06),
   uNightSoftness: new Uniform(0.18),
   uDetailDiffMap: new Uniform(null),
@@ -172,7 +176,6 @@ export const PlanetShaderTemplate: ShaderProps = {
     uniform sampler2D bumpMap;
     uniform float bumpScale;
     uniform float emission;
-    uniform float uSpecularStrength;
     uniform float uNightThreshold;
     uniform float uNightSoftness;
     uniform float uCavityStrength;
@@ -288,8 +291,16 @@ export const PlanetShaderTemplate: ShaderProps = {
       #include <giantDetailFunctions>
     #endif
 
-    // Блинн-Фонг + френель Шлика (F0 воды 0.02): солнечная дорожка воды и
-    // блеск мокрой кромки берега считаются одним телом
+    #ifdef USE_SPECULAR
+      // Блик воды легаси-сферы: тот же лепесток и та же дальняя шероховатость, что у
+      // водной оболочки, под облаками гаснет и тонируется солнцем, как у неё;
+      // терминаторный гейт чуть иной (smoothstep по N·L против dayFactor воды)
+      uniform float uWaterFarAlpha2;
+      uniform float uWaterGlintGain;
+      #include <waterGlintFunctions>
+    #endif
+
+    // Блинн-Фонг + френель Шлика (F0 воды 0.02): блеск мокрой кромки берега
     float blinnPhongGlint(vec3 normal, vec3 lightDirection, vec3 viewDir) {
       vec3 halfVec = normalize(lightDirection + viewDir);
       float specComp = pow(max(dot(normal, halfVec), 0.0), 64.0);
@@ -430,47 +441,39 @@ export const PlanetShaderTemplate: ShaderProps = {
       vec3 lightDirection = normalize(vViewLightDirection);
       float NdotLraw = dot(normal, lightDirection);
       // Угол солнца над геометрическим горизонтом (радиальная нормаль сферы) —
-      // терминатор суши и масштаб пола ламберта; рельеф сюда не входит.
+      // терминатор и масштаб пола ламберта; рельеф сюда не входит.
       float sunElevation = dot(normalize(vNormal), lightDirection);
       // Косинус солнца по радиальному направлению тела: общий вход амбиента
-      // суши (ниже) и тинта солнца (в самом конце). vLocalLightDirection
-      // направлен ОТ солнца к точке (см. вершинник) — минус даёт +1 в зените.
+      // и тинта солнца. vLocalLightDirection направлен ОТ солнца к точке
+      // (см. вершинник) — минус даёт +1 в зените.
       float muS = dot(normalize(vLocalDir), -normalize(vLocalLightDirection));
 
-      #ifdef USE_TERRAIN_UV
-        // Цвет солнца сквозь атмосферу: только на прямом свете суши, сером поле и облаках.
-        // Небо из irradiance-LUT пропускание уже несёт — второй раз его не множить
-        vec3 sunTintMix = vec3(1.0);
-        #ifdef USE_SUN_TINT
-          sunTintMix = mix(vec3(1.0), sunTint(muS), uSunTintStrength);
-        #endif
+      // Цвет солнца сквозь атмосферу: прямой свет поверхности, серый пол и облака.
+      // Небо из irradiance-LUT пропускание уже несёт — второй раз его не множить
+      vec3 sunTintMix = vec3(1.0);
+      #ifdef USE_SUN_TINT
+        sunTintMix = mix(vec3(1.0), sunTint(muS), uSunTintStrength);
       #endif
-
-      // Легаси-значение (гиганты): окклюзия там никем не трогается и ≡ 1 —
-      // состав бит-в-бит прежний. Терраформная ветка перезаписывает dayColor.
-      vec3 dayColor = diffuseSample * albedoMul * occlusion;
 
       // Собственная тень рельефа; 1 без гейта — блики ниже читают её всегда
       float terrainShadow = 1.0;
 
+      // Освещение ОБЩЕЕ для обеих веток: легаси-сфера (гиганты всегда, твёрдые
+      // тела до прихода карты высот) получает тот же ламберт с полом, что рельеф, —
+      // на гейте карты высот вид не прыгает. В легаси occlusion ≡ 1, normal — радиальная.
+      // Амбиент — свет от неба/соседнего грунта: серый пол ∝ солнцу над геометрическим
+      // горизонтом (безвоздушные тела); у тел с атмосферой — цвет и спад из irradiance-LUT
+      vec3 skyTerm = vec3(clamp(sunElevation / max(uTerrainAmbientSunRef, 1e-3), 0.0, 1.0)) * sunTintMix;
+      #if defined(USE_SKY_AMBIENT) && defined(USE_SUN_TINT)
+        // ветка юниформная (без производных внутри): при 0 два тапа LUT не платятся
+        if (uSkyAmbientStrength > 0.0) skyTerm = mix(skyTerm, skyAmbientTint(muS), uSkyAmbientStrength);
+      #endif
+      vec3 ambient = uTerrainAmbient * skyTerm * occlusion;
+      // Тень облаков на земле — только прямой свет и только у рельефа (базис east/north)
+      float cloudShadow = 1.0;
       #ifdef USE_TERRAIN_UV
-        // Ламберт суши: без него нормаль (slope-карта, детальные трипланары)
-        // видна только в полосе терминатора — dayFactor ниже насыщается при
-        // N·L > 0.25. Только на dayColor: облака ниже шейдятся своим законом,
-        // нормаль рельефа к ним отношения не имеет. При uTerrainLambert = 0
-        // множитель ≡ 1 (прежний вид).
-        // Амбиент — свет от неба/соседнего грунта: серый пол ∝ солнцу над геометрическим
-        // горизонтом (безвоздушные тела); у тел с атмосферой — цвет и спад из irradiance-LUT
-        vec3 skyTerm = vec3(clamp(sunElevation / max(uTerrainAmbientSunRef, 1e-3), 0.0, 1.0)) * sunTintMix;
-        #if defined(USE_SKY_AMBIENT) && defined(USE_SUN_TINT)
-          // ветка юниформная (без производных внутри): при 0 два тапа LUT не платятся
-          if (uSkyAmbientStrength > 0.0) skyTerm = mix(skyTerm, skyAmbientTint(muS), uSkyAmbientStrength);
-        #endif
-        vec3 ambient = uTerrainAmbient * skyTerm * occlusion;
         // Единичное НА солнце в системе тела — общий вход тени облаков и марша тени рельефа
         vec3 sunLocal = -normalize(vLocalLightDirection);
-        // Тень облаков на земле — только прямой свет
-        float cloudShadow = 1.0;
         #ifdef USE_CLOUD_SHADOW
           #define CLOUD_SHADOW_MIN_COS 0.15
           // облако, затеняющее точку, стоит по направлению к солнцу на h·tan θ (θ — зенитный угол)
@@ -489,20 +492,24 @@ export const PlanetShaderTemplate: ShaderProps = {
           // ровно в полюсе eastLocal = 0 → базис вырожден: тень гасится, NaN не рождается
           cloudShadow = 1.0 - uCloudShadowStrength * alphaShadow * smoothstep(0.0, 0.2, muS) * step(1e-4, length(eastLocal));
         #endif
-        // Окклюзия на прямом свете — ручкой: 0 — AO не гасит солнце (физика), 1 — прежний вид
-        float directGain = mix(1.0, occlusion, uTerrainOcclusionDirect) * cloudShadow;
+      #endif
+      // Окклюзия на прямом свете — ручкой: 0 — AO не гасит солнце (физика), 1 — прежний вид
+      float directGain = mix(1.0, occlusion, uTerrainOcclusionDirect) * cloudShadow;
+      #ifdef USE_TERRAIN_UV
         #ifdef USE_TERRAIN_SHADOW
           // только прямой свет; при N·L ≤ 0 mix ниже даёт directGain нулевой вес — марш не платится
           if (NdotLraw > 0.0) terrainShadow = mix(1.0, terrainShadowMarch(dirLocal, sunLocal), uTerrainShadowStrength);
           directGain *= terrainShadow;
         #endif
-        // Та же форма mix(пол, 1, N·L), что прежде: в полдень при occlusion = 1 и без тени ровно 1
-        #ifdef USE_LIGHT_TINT
-          vec3 lit = mix(ambient, vec3(directGain) * uLightColor * sunTintMix, max(NdotLraw, 0.0));
-        #else
-          vec3 lit = mix(ambient, vec3(directGain) * sunTintMix, max(NdotLraw, 0.0));
-        #endif
-        vec3 surfaceAlbedo = diffuseSample * albedoMul;
+      #endif
+      // Та же форма mix(пол, 1, N·L), что прежде: в полдень при occlusion = 1 и без тени ровно 1
+      #ifdef USE_LIGHT_TINT
+        vec3 lit = mix(ambient, vec3(directGain) * uLightColor * sunTintMix, max(NdotLraw, 0.0));
+      #else
+        vec3 lit = mix(ambient, vec3(directGain) * sunTintMix, max(NdotLraw, 0.0));
+      #endif
+      vec3 surfaceAlbedo = diffuseSample * albedoMul;
+      #ifdef USE_TERRAIN_UV
         #ifdef USE_TERRAIN_FROST
           // Иней — цвет, не затенение: линия опускается к полюсу и на склонах, обращённых к полюсу
           float frostSinLat = dirLocal.y;
@@ -513,9 +520,9 @@ export const PlanetShaderTemplate: ShaderProps = {
                           * (1.0 - smoothstep(0.7 * uFrostSlopeMax, uFrostSlopeMax, terrainSlopeTan));
           surfaceAlbedo = mix(surfaceAlbedo, uFrostColor, frostMask);
         #endif
-        // lambert = 0 — прежний вид: тинт на всём диффузе
-        dayColor = surfaceAlbedo * mix(sunTintMix, lit, uTerrainLambert);
       #endif
+      // lambert = 0 — прежний вид: тинт на всём диффузе
+      vec3 dayColor = surfaceAlbedo * mix(sunTintMix, lit, uTerrainLambert);
 
       // Ночная и облачная карты есть не у всех тел. Раньше сэмплеры читались
       // безусловно, и корректность держалась на правиле GL «непривязанная
@@ -554,14 +561,10 @@ export const PlanetShaderTemplate: ShaderProps = {
       vec3 nightTint = mix(vec3(1.0, 0.78, 0.45), vec3(1.0, 0.97, 0.92), smoothstep(0.15, 0.6, nightLum));
       vec3 night = nightColor * nightTint * nightMask * emission;
 
-      // Угол солнца для терминатора. У суши — по геометрической (радиальной)
-      // нормали сферы, как у облаков: рельефная normal здесь уводила обратные
-      // склоны дневной стороны в ветку «ночь» (ровно 0, пол ламберта не
-      // доезжал). Форма рельефа — только в ламберте выше (NdotLraw).
-      float terminatorNdotL = NdotLraw;
-      #ifdef USE_TERRAIN_UV
-        terminatorNdotL = sunElevation;
-      #endif
+      // Угол солнца для терминатора — по геометрической (радиальной) нормали
+      // сферы, как у облаков: рельефная normal уводила обратные склоны дневной
+      // стороны в ветку «ночь». В легаси-ветке normal и так радиальная.
+      float terminatorNdotL = sunElevation;
 
       // Терминатор: компактная smoothstep-зона вместо линейного mix по всей
       // полусфере; края зоны — ручки приёмки. Цвет НЕ подкрашивается:
@@ -573,23 +576,12 @@ export const PlanetShaderTemplate: ShaderProps = {
       float nightGate = 1.0 - smoothstep(-0.05, 0.12, terminatorNdotL);
       night *= nightGate;
 
-      #ifdef USE_TERRAIN_UV
-        // Суша под ламбертом самогасится (пол → 0 за горизонтом, освещённые вершины за
-        // терминатором остаются освещёнными); dayFactor гейтит облака и ночь
-        float landGate = mix(dayFactor, 1.0, uTerrainLambert);
-        // Тинт солнца (sunTintMix) уже внутри dayColor; облака получают его здесь
-        vec3 day = cloudColor * sunTintMix * dayFactor + dayColor * (1.0 - cloudAlpha) * landGate;
-        vec3 finalColor = night * (1.0 - dayFactor) + day;
-      #else
-        vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);
-        #ifdef USE_SUN_TINT
-          day *= mix(vec3(1.0), sunTint(muS), uSunTintStrength);
-        #endif
-        #ifdef USE_LIGHT_TINT
-          day *= uLightColor;
-        #endif
-        vec3 finalColor = mix(night, day, dayFactor);
-      #endif
+      // Поверхность под ламбертом самогасится (пол → 0 за горизонтом); dayFactor
+      // гейтит облака и ночь. Одна сборка на обе ветки — у гигантов тоже.
+      float landGate = mix(dayFactor, 1.0, uTerrainLambert);
+      // Тинт солнца (sunTintMix) уже внутри dayColor; облака получают его здесь
+      vec3 day = cloudColor * sunTintMix * dayFactor + dayColor * (1.0 - cloudAlpha) * landGate;
+      vec3 finalColor = night * (1.0 - dayFactor) + day;
       finalColor = clamp(finalColor, 0.0, 1.0);
 
       // Единый теневой множитель кольца: гасит и диффуз, и блик ниже
@@ -608,10 +600,12 @@ export const PlanetShaderTemplate: ShaderProps = {
         vec3 preGlint = finalColor;
       #endif
       #ifdef USE_SPECULAR
-        // Дорожка следит за камерой, вспыхивает на скользящих углах, гаснет у
-        // терминатора. HDR-глинт поверх клампа — блумит только солнечная дорожка.
+        // Дорожка океана с орбиты: широкий лепесток по шероховатости погасших
+        // октав, маска — specular-карта; гаснет у терминатора, в тени кольца и под
+        // облаками, тонируется закатным солнцем (как у водной оболочки).
         float specularIntensity = texture2D(specularMap, uv).r;
-        finalColor += specularIntensity * blinnPhongGlint(normal, lightDirection, viewDir) * uSpecularStrength
+        finalColor += specularIntensity * waterGlintGlsl(normal, lightDirection, viewDir, uWaterFarAlpha2) * uWaterGlintGain
+                    * (1.0 - cloudAlpha) * sunTintMix
                     * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;
       #endif
 
@@ -633,7 +627,8 @@ export const PlanetShaderTemplate: ShaderProps = {
       #endif
 
       // Потолок глинта: планета целиком остаётся далеко под half-float/AgX.
-      // При текущих дефолтах пик ~3.0 — потолок рассчитан на подъём uSpecularStrength.
+      // Потолок 4.0 оставляет запас под блики (пик глинта воды ≈ 0.027·uWaterGlintGain;
+      // у льда и мокрой кромки свои пики).
       gl_FragColor = vec4(min(finalColor, vec3(4.0)), 1.0);
 
       ${ShaderChunk['tonemapping_fragment']}

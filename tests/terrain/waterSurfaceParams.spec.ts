@@ -4,11 +4,11 @@ import { WATER_SURFACE_DEFAULTS, resolveWaterSurfaceParams } from '@/core/terrai
 describe('resolveWaterSurfaceParams', () => {
   it('дефолты без data', () => {
     expect(resolveWaterSurfaceParams(undefined, 'x')).toEqual(WATER_SURFACE_DEFAULTS)
-    expect(WATER_SURFACE_DEFAULTS).toEqual({ waterRoughness: 0.02, waterAbsorption: [0.45, 0.07, 0.03], waterRippleStrength: 1 })
+    expect(WATER_SURFACE_DEFAULTS).toEqual({ waterRoughness: 0.02, waterAbsorption: [0.45, 0.07, 0.03], waterRippleStrength: 1, waterGlintGain: 1 })
   })
   it('заданные значения проходят', () => {
     expect(resolveWaterSurfaceParams({ waterRoughness: 0.1, waterAbsorption: [1, 0.5, 0.2], waterRippleStrength: 0 }, 'x')).toEqual({
-      waterRoughness: 0.1, waterAbsorption: [1, 0.5, 0.2], waterRippleStrength: 0
+      waterRoughness: 0.1, waterAbsorption: [1, 0.5, 0.2], waterRippleStrength: 0, waterGlintGain: 1
     })
   })
   it('валидация громкая, с именем тела', () => {

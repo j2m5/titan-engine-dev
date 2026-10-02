@@ -39,9 +39,9 @@ describe('PlanetShaderTemplate: мокрая кромка берега (USE_WATE
     expect(frag.indexOf('float glintEdge = 0.0;')).toBeLessThan(frag.indexOf('#ifdef USE_TERRAIN_UV', frag.indexOf('void main()')))
   })
 
-  it('глинт: общая функция для USE_SPECULAR и кромки, одно тело', () => {
+  it('глинт кромки: blinnPhongGlint, одно определение, один вызов', () => {
     expect((frag.match(/float blinnPhongGlint\(vec3 normal, vec3 lightDirection, vec3 viewDir\) \{/g) ?? []).length).toBe(1)
-    expect((frag.match(/blinnPhongGlint\(normal, lightDirection, viewDir\)/g) ?? []).length).toBe(2)
+    expect((frag.match(/blinnPhongGlint\(normal, lightDirection, viewDir\)/g) ?? []).length).toBe(1)
     expect(frag).toContain('#define WET_GLOSS 0.6')
     const wetGlint = frag.indexOf('finalColor += glintEdge * blinnPhongGlint(normal, lightDirection, viewDir) * WET_GLOSS')
     const clampLine = frag.indexOf('finalColor = clamp(finalColor, 0.0, 0.99);')
