@@ -734,6 +734,8 @@ const BASELINE_FRAGMENT_SHADER = `
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
     varying vec3 vDetailPos;
+    // Блик воды — общий чанк (и с легаси-сферой тела): нужен и без USE_WATER_WAVES
+    #include <waterGlintFunctions>
 
     #ifdef USE_WATER_DEPTH
       #include <terrainUvFunctions>

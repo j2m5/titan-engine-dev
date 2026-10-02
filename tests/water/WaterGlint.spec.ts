@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { waterGlintFunctions } from '@/core/materials/shaders/lib/chunks/WaterGlint'
 import { waterOctavesFunctions } from '@/core/materials/shaders/lib/chunks/WaterOctaves'
 import {
   WATER_GLINT_CEILING,
@@ -22,7 +23,7 @@ import {
 } from './waterColorMirror'
 
 const frag: string = WaterShaderTemplate.fragmentShader
-const chunk = waterOctavesFunctions
+const chunk = waterGlintFunctions
 
 function functionBody(source: string, signature: string): string {
   const start = source.indexOf(signature)
@@ -45,8 +46,8 @@ describe('WaterOctaves: GLSL-двойник waterGlint', () => {
     expect(chunk).toContain(`#define WATER_MIN_ALPHA2 ${WATER_MIN_ALPHA2}`)
     expect(chunk).toContain('#define WATER_MIN_ALPHA2 0.0001')
     expect(chunk).toContain(`#define WATER_MAX_ALPHA2 ${WATER_MAX_ALPHA2}.0`)
-    expect(chunk).toContain(`#define WATER_TRIPLANAR_SLOPE_GAIN2 ${WATER_TRIPLANAR_SLOPE_GAIN2}`)
-    expect(chunk).toContain('#define WATER_TRIPLANAR_SLOPE_GAIN2 2.25')
+    expect(waterOctavesFunctions).toContain(`#define WATER_TRIPLANAR_SLOPE_GAIN2 ${WATER_TRIPLANAR_SLOPE_GAIN2}`)
+    expect(waterOctavesFunctions).toContain('#define WATER_TRIPLANAR_SLOPE_GAIN2 2.25')
   })
 
   it('формула — та же, что waterGlint: нормировка (p+8)/(8π), Шлик F0, × N·L, потолок, ноль при N·L ≤ 0', () => {

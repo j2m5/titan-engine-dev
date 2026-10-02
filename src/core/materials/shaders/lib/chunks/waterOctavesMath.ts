@@ -100,3 +100,16 @@ export function absorptionLayer(transmittance: Vec3, deepColor: Vec3): { color: 
     alpha
   }
 }
+
+/** α² блика, когда все октавы погасли (вид с орбиты): та же формула glintAlpha2 при нулевых весах. */
+export function farGlintAlpha2(roughness: number, rippleStrength: number): number {
+  return glintAlpha2(
+    roughness,
+    WATER_RIPPLE_PERIODS_METERS.map(() => 0),
+    WATER_WAVE_PERIODS_METERS.map(() => 0),
+    rippleStrength
+  )
+}
+
+/** farGlintAlpha2 при глобальных дефолтах воды (waterSurfaceParams: 0.02, 1) — опора тестов и дефолт юниформов шаблонов. */
+export const WATER_FAR_ALPHA2 = farGlintAlpha2(0.02, 1)
