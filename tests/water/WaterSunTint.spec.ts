@@ -24,7 +24,7 @@ const FACTOR_LINE =
 // в ноль, и общий множитель обнулил бы пол на всей ночной стороне.
 const DAY_TINT_LINE = 'color *= mix(vec3(uWaterNightFloor), sunTintFactor * cloudShadow, dayFactor);'
 const WAVES_TINT_LINE = 'wavesColor *= mix(vec3(uWaterNightFloor), sunTintFactor, waveDayFactor);'
-// Ветки «дефайна нет» — дословный master (страж: без гейта картинка прежняя).
+// Ветки «дефайна нет» несут cloudShadow (≡ 1 без USE_WATER_CLOUD); страж: без гейта картинка прежняя.
 const DAY_PLAIN_LINE = 'color *= mix(uWaterNightFloor, cloudShadow, dayFactor);'
 const WAVES_PLAIN_LINE = 'wavesColor *= mix(uWaterNightFloor, 1.0, waveDayFactor);'
 
@@ -104,7 +104,7 @@ describe('WaterShaderTemplate: тинт солнца — контракт шей
     expect(frag).not.toContain('color *= mix(vec3(1.0), sunTint(')
   })
 
-  it('ветка без дефайна — дословный master: тинт не трогает картинку тел без атмосферы', () => {
+  it('ветка без дефайна — прежняя картинка (cloudShadow ≡ 1 без USE_WATER_CLOUD): тинт не трогает картинку тел без атмосферы', () => {
     expect(frag).toContain(DAY_PLAIN_LINE)
     expect(frag).toContain(WAVES_PLAIN_LINE)
   })

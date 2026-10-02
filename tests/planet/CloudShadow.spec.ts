@@ -7,7 +7,7 @@ describe('PlanetShaderTemplate: тени облаков на земле', () => 
   const start = frag.indexOf('#ifdef USE_CLOUD_SHADOW')
   const block = frag.slice(start, frag.indexOf('#endif', start))
 
-  it('блок под USE_CLOUD_SHADOW: вторая выборка cloudMap по сдвинутому uv, кап косинуса, гашение к терминатору', () => {
+  it('вызов cloudShadowAt под USE_CLOUD_SHADOW; тело (сдвинутая выборка, кап косинуса, гашение) живёт в чанке CloudLayer', () => {
     expect(start).toBeGreaterThan(-1)
     // тело тени живёт в чанке CloudLayer (общий закон с водой); здесь — вызов
     expect(block).toContain('cloudShadow = cloudShadowAt(dirLocal, sunLocal, muS);')

@@ -187,7 +187,7 @@ export const PlanetShaderTemplate: ShaderProps = {
     uniform float uTerrainAmbient;
     uniform float uTerrainAmbientSunRef;
     // Радиус тела в единицах сцены: домен средней полосы детали И длина дуги uv
-    // в тени облаков — обоим нужен БЕЗ гейта USE_TERRAIN_MACRO_DETAIL (тень
+    // в тени облаков, параллаксе и dip облачного слоя — всем нужен БЕЗ гейта USE_TERRAIN_MACRO_DETAIL (тень
     // облаков работает и при macroStrength 0), поэтому объявление живёт здесь,
     // а не в чанке terrainMacroDetailUniforms.
     uniform float uBodyRadiusUnits;
@@ -457,7 +457,7 @@ export const PlanetShaderTemplate: ShaderProps = {
       // (см. вершинник) — минус даёт +1 в зените.
       float muS = dot(normalize(vLocalDir), -normalize(vLocalLightDirection));
 
-      // Цвет солнца сквозь атмосферу: прямой свет поверхности, серый пол и облака.
+      // Цвет солнца сквозь атмосферу: прямой свет поверхности и серый пол; облака берут sunTintAt на своей высоте (чанк CloudLayer).
       // Небо из irradiance-LUT пропускание уже несёт — второй раз его не множить
       vec3 sunTintMix = vec3(1.0);
       #ifdef USE_SUN_TINT
@@ -549,7 +549,7 @@ export const PlanetShaderTemplate: ShaderProps = {
       vec3 night = nightColor * nightTint * nightMask * emission;
 
       // Угол солнца для терминатора — по геометрической (радиальной) нормали
-      // сферы, как у облаков: рельефная normal уводила обратные склоны дневной
+      // сферы: рельефная normal уводила обратные склоны дневной
       // стороны в ветку «ночь». В легаси-ветке normal и так радиальная.
       float terminatorNdotL = sunElevation;
 

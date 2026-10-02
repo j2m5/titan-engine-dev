@@ -11,7 +11,6 @@ describe('PlanetShaderTemplate: терминатор суши без двойн�
   })
 
   it('легаси-формулы нет: одна сборка на обе ветки', () => {
-    expect(frag).not.toContain('vec3 day = cloudColor + dayColor * (1.0 - cloudAlphaSlant);')
     expect(frag).not.toContain('mix(night, day, dayFactor)')
   })
 

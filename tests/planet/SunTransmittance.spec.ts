@@ -103,7 +103,7 @@ describe('PlanetShaderTemplate: тинт солнца под USE_SUN_TINT', () =
     expect(frag.indexOf('#include <sunTransmittanceFunctions>')).toBeGreaterThan(gate)
   })
 
-  it('тинт — один sunTintMix до освещения: им красятся прямой свет, пол и облака', () => {
+  it('тинт — один sunTintMix до освещения: им красятся прямой свет и пол; облака — sunTintAt на высоте слоя', () => {
     const tint = frag.indexOf('sunTintMix = mix(vec3(1.0), sunTint(muS), uSunTintStrength);')
     const lit = frag.indexOf('vec3 lit = mix(ambient')
     const day = frag.indexOf('vec3 day = cloudRadiance + dayColor')
