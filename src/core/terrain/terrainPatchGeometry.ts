@@ -128,6 +128,25 @@ function gridDirs(gridCount: number): Float32Array {
   return gridDirsScratch
 }
 
+/** Скретч родительских RTC-позиций сеточных вершин (f64 — сдвиг считается до квантования); как gridDirs. */
+let parentPosScratch = new Float64Array(0)
+
+function parentPositions(gridCount: number): Float64Array {
+  if (parentPosScratch.length < gridCount * 3) parentPosScratch = new Float64Array(gridCount * 3)
+
+  return parentPosScratch
+}
+
+/** Родительская форма вершин (геоморф): цель, к которой вершинник ведёт патч перед слиянием. */
+export interface PatchMorphArrays {
+  /** Родительская позиция минус своя, RTC-юниты патча, vec3 на вершину. */
+  deltas: Float32Array
+  /** Родительский midTilt, vec2. */
+  midTilts: Float32Array
+  /** Родительский midShade, vec2. */
+  midShades: Float32Array
+}
+
 /** Типизированные буферы вершинных атрибутов патча — вход/выход ядра мешера, без BufferGeometry (нужно воркеру). */
 export interface PatchArrays {
   positions: Float32Array
@@ -136,6 +155,8 @@ export interface PatchArrays {
   heights: Float32Array
   midTilts: Float32Array
   midShades: Float32Array
+  /** null — у потребителя нет морф-атрибутов, ядро их не пишет. */
+  morph: PatchMorphArrays | null
 }
 
 /** Ограничивающая сфера патча в RTC-координатах (относительно center) — как geometry.boundingSphere. */
@@ -151,7 +172,7 @@ export interface PatchBounds {
  * terrainPatchVertexCount) — вход buildTerrainPatchArrays для fresh-сборки
  * (main-поток эталон, воркер) без BufferGeometry.
  */
-export function allocatePatchArrays(segments: number): PatchArrays {
+export function allocatePatchArrays(segments: number, withMorph = false): PatchArrays {
   const n = terrainPatchVertexCount(segments)
   return {
     positions: new Float32Array(n * 3),
@@ -159,7 +180,10 @@ export function allocatePatchArrays(segments: number): PatchArrays {
     detailPos2: new Float32Array(n * 3),
     heights: new Float32Array(n),
     midTilts: new Float32Array(n * 2),
-    midShades: new Float32Array(n * 2)
+    midShades: new Float32Array(n * 2),
+    morph: withMorph
+      ? { deltas: new Float32Array(n * 3), midTilts: new Float32Array(n * 2), midShades: new Float32Array(n * 2) }
+      : null
   }
 }
 
@@ -211,6 +235,13 @@ export function applyPatchBounds(geometry: BufferGeometry, bounds: PatchBounds):
  * максимальной амплитуды (−1..1), y — доля октав уровня, взвешенная огибающей
  * (гейт пиксельного fbm: где полоса ЕСТЬ, fbm не дублирует её рельеф; у уреза
  * воды и на равнине огибающая мала — fbm остаётся).
+ *
+ * Родительская форма (при arrays.morph !== null): morph = true — форма
+ * уровня depth − 1 в каждой вершине. Чётная вершина (a, b) совпадает с
+ * вершиной родителя — карта та же, полоса взвешена шагом родителя; нечётная —
+ * середина ребра родителя, центр квада — по диагонали индекса v00→v11 (так
+ * режет квад buildPatchIndex). Юбка копирует цель кромки. morph = false —
+ * сдвиг нулевой, родительские атрибуты = свои. Сфера охватывает обе формы.
  */
 export function buildTerrainPatchArrays(
   field: TerrainHeightField,
@@ -221,9 +252,14 @@ export function buildTerrainPatchArrays(
   segments: number,
   skirtDepthUnits: number,
   wrap: DetailWrap,
-  arrays: PatchArrays
+  arrays: PatchArrays,
+  morph: boolean
 ): { center: Vector3; bounds: PatchBounds } {
   const { positions, detailPos, detailPos2, heights, midTilts, midShades } = arrays
+  const morphArrays = arrays.morph
+  const withParent = morph && morphArrays !== null
+  // сетка ребёнка вложена в родительскую только при чётном segments
+  if (withParent && segments % 2 !== 0) throw new Error(`геоморф требует чётного segments, получено ${segments}`)
   const patches = 1 << depth
   const span = 2 / patches
   const s0 = -1 + i * span
@@ -233,8 +269,10 @@ export function buildTerrainPatchArrays(
   const uv = new Vector2()
   // скретч полосы: один на всю сборку патча, аллокаций в цикле нет
   const bandScratch: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0, envelope: 0 }
+  const parentScratch: MidbandSample = { heightMeters: 0, tiltE: 0, tiltN: 0, octaveWeightSum: 0, envelope: 0 }
   // шаг вершин этого патча — по нему взвешены октавы полосы
   const stepMeters = field.vertexStepMeters(depth, segments)
+  const parentStep = withParent ? field.vertexStepMeters(depth - 1, segments) : -1
   // нормировка высоты полосы к её потолку: midShade.x безразмерен в шейдере
   const maxAmplitude = field.midbandMaxAmplitudeMeters
 
@@ -256,6 +294,7 @@ export function buildTerrainPatchArrays(
   const ringCount = ringVertexCount(segments)
 
   const dirs = gridDirs(gridCount)
+  const parentPos = withParent ? parentPositions(gridCount) : null
 
   let k = 0
   for (let b = 0; b <= segments; b++) {
@@ -266,7 +305,12 @@ export function buildTerrainPatchArrays(
       // его повторно (heightMeters → dirToUv) — 1.62М лишних atan2+acos на сборке
       field.dirToUv(dir, uv)
       const mapMeters = field.sampleMeters(uv.x, uv.y)
-      const band = field.midbandSample(dir, uv.x, uv.y, mapMeters, bandScratch, stepMeters)
+      // родитель — только в чётных вершинах (совпадают с его сеткой), нечётные
+      // берут середины рёбер во втором проходе: цена полосы почти не растёт
+      const even = parentPos !== null && a % 2 === 0 && b % 2 === 0
+      const band = even
+        ? field.midbandSample(dir, uv.x, uv.y, mapMeters, bandScratch, stepMeters, true, parentStep, parentScratch)
+        : field.midbandSample(dir, uv.x, uv.y, mapMeters, bandScratch, stepMeters)
       const heightMeters = mapMeters + band.heightMeters
       // Фаза террас — от высоты КАРТЫ: бугры полосы (до ~84 м при шаге 150 м)
       // рисовали бы замкнутые горизонтали вокруг каждого бугра
@@ -282,6 +326,18 @@ export function buildTerrainPatchArrays(
       positions[k * 3 + 1] = dir.y * r - center.y
       positions[k * 3 + 2] = dir.z * r - center.z
 
+      if (even && parentPos !== null && morphArrays !== null) {
+        // та же формула, что у своей позиции и у сборки родителя — f64 до сдвига
+        const rP = toThreeJSUnits(field.radiusKm + (mapMeters + parentScratch.heightMeters) / 1000)
+        parentPos[k * 3] = dir.x * rP - center.x
+        parentPos[k * 3 + 1] = dir.y * rP - center.y
+        parentPos[k * 3 + 2] = dir.z * rP - center.z
+        morphArrays.midTilts[k * 2] = parentScratch.tiltE
+        morphArrays.midTilts[k * 2 + 1] = parentScratch.tiltN
+        morphArrays.midShades[k * 2] = maxAmplitude > 0 ? parentScratch.heightMeters / maxAmplitude : 0
+        morphArrays.midShades[k * 2 + 1] = parentScratch.octaveWeightSum * Math.min(1, parentScratch.envelope)
+      }
+
       // домен детали: точная позиция минус k·W (double → float32), см. detailWrap.ts
       detailPos[k * 3] = wrappedComponent(dir.x * r, wrapK1[0], wrap.w1)
       detailPos[k * 3 + 1] = wrappedComponent(dir.y * r, wrapK1[1], wrap.w1)
@@ -295,6 +351,33 @@ export function buildTerrainPatchArrays(
       dirs[k * 3 + 2] = dir.z
 
       k++
+    }
+  }
+
+  if (parentPos !== null && morphArrays !== null) {
+    const { deltas, midTilts: tiltsP, midShades: shadesP } = morphArrays
+    const row = segments + 1
+    k = 0
+    for (let b = 0; b <= segments; b++) {
+      for (let a = 0; a <= segments; a++) {
+        if (a % 2 === 0 && b % 2 === 0) {
+          deltas[k * 3] = parentPos[k * 3] - positions[k * 3]
+          deltas[k * 3 + 1] = parentPos[k * 3 + 1] - positions[k * 3 + 1]
+          deltas[k * 3 + 2] = parentPos[k * 3 + 2] - positions[k * 3 + 2]
+        } else {
+          // соседи на сетке родителя: ребро по a, ребро по b или диагональ v00→v11
+          const n1 = k - (b % 2) * row - (a % 2)
+          const n2 = k + (b % 2) * row + (a % 2)
+          deltas[k * 3] = (parentPos[n1 * 3] + parentPos[n2 * 3]) / 2 - positions[k * 3]
+          deltas[k * 3 + 1] = (parentPos[n1 * 3 + 1] + parentPos[n2 * 3 + 1]) / 2 - positions[k * 3 + 1]
+          deltas[k * 3 + 2] = (parentPos[n1 * 3 + 2] + parentPos[n2 * 3 + 2]) / 2 - positions[k * 3 + 2]
+          tiltsP[k * 2] = (tiltsP[n1 * 2] + tiltsP[n2 * 2]) / 2
+          tiltsP[k * 2 + 1] = (tiltsP[n1 * 2 + 1] + tiltsP[n2 * 2 + 1]) / 2
+          shadesP[k * 2] = (shadesP[n1 * 2] + shadesP[n2 * 2]) / 2
+          shadesP[k * 2 + 1] = (shadesP[n1 * 2 + 1] + shadesP[n2 * 2 + 1]) / 2
+        }
+        k++
+      }
     }
   }
 
@@ -336,24 +419,57 @@ export function buildTerrainPatchArrays(
     // юбка несёт геометрию полосы своей кромочной вершины
     midShades[skirtIndex * 2] = midShades[edgeIndex * 2]
     midShades[skirtIndex * 2 + 1] = midShades[edgeIndex * 2 + 1]
+
+    // стенка сдвигается вместе с кромкой: иначе в морфе щель между ними
+    if (withParent && morphArrays !== null) {
+      const { deltas, midTilts: tiltsP, midShades: shadesP } = morphArrays
+      deltas[skirtIndex * 3] = deltas[edgeIndex * 3]
+      deltas[skirtIndex * 3 + 1] = deltas[edgeIndex * 3 + 1]
+      deltas[skirtIndex * 3 + 2] = deltas[edgeIndex * 3 + 2]
+      tiltsP[skirtIndex * 2] = tiltsP[edgeIndex * 2]
+      tiltsP[skirtIndex * 2 + 1] = tiltsP[edgeIndex * 2 + 1]
+      shadesP[skirtIndex * 2] = shadesP[edgeIndex * 2]
+      shadesP[skirtIndex * 2 + 1] = shadesP[edgeIndex * 2 + 1]
+    }
+  }
+
+  // без родителя форма одна: сдвиг ноль, родительские атрибуты — свои
+  if (!withParent && morphArrays !== null) {
+    morphArrays.deltas.fill(0)
+    morphArrays.midTilts.set(midTilts)
+    morphArrays.midShades.set(midShades)
   }
 
   // сфера тем же алгоритмом, что BufferGeometry.computeBoundingSphere без
   // morph-атрибутов: центр — центр bbox по всем вершинам, радиус — max
-  // расстояние до него (three считает Math.sqrt(maxRadiusSq))
+  // расстояние до него (three считает Math.sqrt(maxRadiusSq)). С морф-массивами
+  // — по объединению своей и родительской формы (position + morphDelta)
   let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
   const total = gridCount + ringCount
+  const morphDeltas = morphArrays === null ? null : morphArrays.deltas
   for (let k = 0; k < total; k++) {
     const x = positions[k * 3], y = positions[k * 3 + 1], z = positions[k * 3 + 2]
     if (x < minX) minX = x; if (x > maxX) maxX = x
     if (y < minY) minY = y; if (y > maxY) maxY = y
     if (z < minZ) minZ = z; if (z > maxZ) maxZ = z
+    if (morphDeltas !== null) {
+      const px = x + morphDeltas[k * 3], py = y + morphDeltas[k * 3 + 1], pz = z + morphDeltas[k * 3 + 2]
+      if (px < minX) minX = px; if (px > maxX) maxX = px
+      if (py < minY) minY = py; if (py > maxY) maxY = py
+      if (pz < minZ) minZ = pz; if (pz > maxZ) maxZ = pz
+    }
   }
   const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2
   let maxRadiusSq = 0
   for (let k = 0; k < total; k++) {
     const dx = positions[k * 3] - cx, dy = positions[k * 3 + 1] - cy, dz = positions[k * 3 + 2] - cz
     maxRadiusSq = Math.max(maxRadiusSq, dx * dx + dy * dy + dz * dz)
+    if (morphDeltas !== null) {
+      const ex = positions[k * 3] + morphDeltas[k * 3] - cx
+      const ey = positions[k * 3 + 1] + morphDeltas[k * 3 + 1] - cy
+      const ez = positions[k * 3 + 2] + morphDeltas[k * 3 + 2] - cz
+      maxRadiusSq = Math.max(maxRadiusSq, ex * ex + ey * ey + ez * ez)
+    }
   }
 
   return { center, bounds: { cx, cy, cz, radius: Math.sqrt(maxRadiusSq) } }
@@ -373,12 +489,13 @@ export function buildTerrainPatchGeometry(
   segments: number,
   index: BufferAttribute,
   skirtDepthUnits: number,
-  wrap: DetailWrap
+  wrap: DetailWrap,
+  morph = false
 ): { geometry: BufferGeometry; center: Vector3 } {
-  const arrays = allocatePatchArrays(segments)
+  const arrays = allocatePatchArrays(segments, morph)
   const { positions, detailPos, detailPos2, heights, midTilts, midShades } = arrays
 
-  const { center, bounds } = buildTerrainPatchArrays(field, face, i, j, depth, segments, skirtDepthUnits, wrap, arrays)
+  const { center, bounds } = buildTerrainPatchArrays(field, face, i, j, depth, segments, skirtDepthUnits, wrap, arrays, morph)
 
   // раскладка бит-в-бит как у слота пула (см. TerrainPatchPool.createHandle):
   // InstancedBufferGeometry с одним инстансом и центром патча в инстансном атрибуте
@@ -390,6 +507,11 @@ export function buildTerrainPatchGeometry(
   geometry.setAttribute('height', new BufferAttribute(heights, 1))
   geometry.setAttribute('midTilt', new BufferAttribute(midTilts, 2))
   geometry.setAttribute('midShade', new BufferAttribute(midShades, 2))
+  if (arrays.morph !== null) {
+    geometry.setAttribute('morphDelta', new BufferAttribute(arrays.morph.deltas, 3))
+    geometry.setAttribute('midTiltParent', new BufferAttribute(arrays.morph.midTilts, 2))
+    geometry.setAttribute('midShadeParent', new BufferAttribute(arrays.morph.midShades, 2))
+  }
   geometry.setAttribute('patchCenter', new InstancedBufferAttribute(new Float32Array([center.x, center.y, center.z]), 3))
   geometry.setIndex(index)
   applyPatchBounds(geometry, bounds)
@@ -412,7 +534,8 @@ export function buildTerrainPatchInto(
   segments: number,
   skirtDepthUnits: number,
   handle: { mesh: Mesh; geometry: InstancedBufferGeometry },
-  wrap: DetailWrap
+  wrap: DetailWrap,
+  morph = false
 ): void {
   const { geometry, mesh } = handle
   const positions = geometry.getAttribute('position') as BufferAttribute
@@ -421,8 +544,12 @@ export function buildTerrainPatchInto(
   const height = geometry.getAttribute('height') as BufferAttribute
   const midTilt = geometry.getAttribute('midTilt') as BufferAttribute
   const midShade = geometry.getAttribute('midShade') as BufferAttribute
+  // морф-атрибуты есть только у пулов рельефа (у воды их нет)
+  const morphDelta = geometry.getAttribute('morphDelta') as BufferAttribute | undefined
+  const midTiltParent = geometry.getAttribute('midTiltParent') as BufferAttribute | undefined
+  const midShadeParent = geometry.getAttribute('midShadeParent') as BufferAttribute | undefined
 
-  // объект-обёртка на вызов (шесть ссылок на уже существующие буферы слота) —
+  // объект-обёртка на вызов (ссылки на уже существующие буферы слота) —
   // ядру нужны только сами массивы, не BufferAttribute
   const arrays: PatchArrays = {
     positions: positions.array as Float32Array,
@@ -430,10 +557,18 @@ export function buildTerrainPatchInto(
     detailPos2: detailPos2.array as Float32Array,
     heights: height.array as Float32Array,
     midTilts: midTilt.array as Float32Array,
-    midShades: midShade.array as Float32Array
+    midShades: midShade.array as Float32Array,
+    morph:
+      morphDelta !== undefined && midTiltParent !== undefined && midShadeParent !== undefined
+        ? {
+            deltas: morphDelta.array as Float32Array,
+            midTilts: midTiltParent.array as Float32Array,
+            midShades: midShadeParent.array as Float32Array
+          }
+        : null
   }
 
-  const { center, bounds } = buildTerrainPatchArrays(field, face, i, j, depth, segments, skirtDepthUnits, wrap, arrays)
+  const { center, bounds } = buildTerrainPatchArrays(field, face, i, j, depth, segments, skirtDepthUnits, wrap, arrays, morph)
 
   // центр патча — инстансный атрибут (один элемент): его пишет вызывающий,
   // ядро сборки центр только возвращает
@@ -447,6 +582,11 @@ export function buildTerrainPatchInto(
   height.needsUpdate = true
   midTilt.needsUpdate = true
   midShade.needsUpdate = true
+  if (morphDelta !== undefined && midTiltParent !== undefined && midShadeParent !== undefined) {
+    morphDelta.needsUpdate = true
+    midTiltParent.needsUpdate = true
+    midShadeParent.needsUpdate = true
+  }
   applyPatchBounds(geometry, bounds)
   mesh.position.copy(center)
 }
@@ -476,6 +616,11 @@ export function applyPatchResult(
   writePatchAttribute(geometry, 'height', arrays.heights)
   writePatchAttribute(geometry, 'midTilt', arrays.midTilts)
   writePatchAttribute(geometry, 'midShade', arrays.midShades)
+  if (arrays.morph !== null && geometry.getAttribute('morphDelta') !== undefined) {
+    writePatchAttribute(geometry, 'morphDelta', arrays.morph.deltas)
+    writePatchAttribute(geometry, 'midTiltParent', arrays.morph.midTilts)
+    writePatchAttribute(geometry, 'midShadeParent', arrays.morph.midShades)
+  }
 
   // центр патча — инстансный атрибут (один элемент), тот же, что в into-варианте
   const patchCenter = geometry.getAttribute('patchCenter') as BufferAttribute

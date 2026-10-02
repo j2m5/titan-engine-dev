@@ -23,7 +23,7 @@ export function makeField(): TerrainHeightField {
 export const ASYMMETRIC_WRAP = detailWrapFor({ detailScaleMeters: 37, detailScale2Meters: 5 })
 
 export function patchJob(field: TerrainHeightField, face: number, i: number, j: number, skirtDepthUnits = 0.001): PatchBuildJob {
-  return { field, face, i, j, level: 1, segments: 8, skirtDepthUnits, wrap: ASYMMETRIC_WRAP }
+  return { field, face, i, j, level: 1, segments: 8, skirtDepthUnits, wrap: ASYMMETRIC_WRAP, morph: null }
 }
 
 export function buildMessageFor(job: PatchBuildJob, requestId: number, fieldId: number): ToWorkerMessage {
@@ -38,7 +38,8 @@ export function builtArrays(m: Extract<FromWorkerMessage, { type: 'built' }>): P
     detailPos2: new Float32Array(m.detailPos2),
     heights: new Float32Array(m.heights),
     midTilts: new Float32Array(m.midTilts),
-    midShades: new Float32Array(m.midShades)
+    midShades: new Float32Array(m.midShades),
+    morph: null
   }
 }
 
@@ -50,7 +51,11 @@ export function snapshotArrays(a: PatchArrays): PatchArrays {
     detailPos2: a.detailPos2.slice(),
     heights: a.heights.slice(),
     midTilts: a.midTilts.slice(),
-    midShades: a.midShades.slice()
+    midShades: a.midShades.slice(),
+    morph:
+      a.morph === null
+        ? null
+        : { deltas: a.morph.deltas.slice(), midTilts: a.morph.midTilts.slice(), midShades: a.morph.midShades.slice() }
   }
 }
 

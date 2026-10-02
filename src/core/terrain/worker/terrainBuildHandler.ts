@@ -90,7 +90,8 @@ export function handleWorkerMessage(
         msg.segments,
         msg.skirtDepthUnits,
         msg.wrap,
-        arrays
+        arrays,
+        false
       )
       const positions = arrays.positions.buffer as ArrayBuffer
       const detailPos = arrays.detailPos.buffer as ArrayBuffer

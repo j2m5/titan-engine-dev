@@ -376,7 +376,8 @@ abstract class TerrainPatchGroup extends Group {
         level: address.level,
         segments: TERRAIN_PATCH_SEGMENTS,
         skirtDepthUnits,
-        wrap: this.detailWrap
+        wrap: this.detailWrap,
+        morph: null
       },
       (result) => this.onPatchBuilt(key, requestId, result),
       (error) => this.onPatchFailed(key, requestId, error)

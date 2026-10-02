@@ -258,7 +258,8 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
           detailPos2: new Float32Array(msg.detailPos2),
           heights: new Float32Array(msg.heights),
           midTilts: new Float32Array(msg.midTilts),
-          midShades: new Float32Array(msg.midShades)
+          midShades: new Float32Array(msg.midShades),
+          morph: null
         },
         center: msg.center,
         bounds: msg.bounds

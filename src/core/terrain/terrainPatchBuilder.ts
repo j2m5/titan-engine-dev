@@ -14,6 +14,8 @@ export interface PatchBuildJob {
   segments: number
   skirtDepthUnits: number
   wrap: DetailWrap
+  /** Геоморф: null — у пула нет морф-атрибутов (массивы не выделяются); true — считать родителя; false — сдвиг 0. */
+  morph: boolean | null
 }
 
 /** Результат сборки: массивы атрибутов, RTC-центр патча (тройка, не Vector3 — переживает structured clone) и сфера. */
@@ -65,12 +67,13 @@ export interface TerrainPatchBuilder {
  */
 export class SyncTerrainPatchBuilder implements TerrainPatchBuilder {
   private scratch: PatchArrays | null = null
+  private scratchMorph: PatchArrays | null = null
   private scratchSegments = -1
 
   public acquire(): void {}
 
   public request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void, onError: (error: unknown) => void): void {
-    const arrays = this.arraysFor(job.segments)
+    const arrays = this.arraysFor(job.segments, job.morph !== null)
     let built: ReturnType<typeof buildTerrainPatchArrays>
     // ловится только постройка: исключение внутри onDone — дефект потребителя, не сбой задания
     try {
@@ -83,7 +86,8 @@ export class SyncTerrainPatchBuilder implements TerrainPatchBuilder {
         job.segments,
         job.skirtDepthUnits,
         job.wrap,
-        arrays
+        arrays,
+        job.morph === true
       )
     } catch (error) {
       onError(error)
@@ -119,15 +123,22 @@ export class SyncTerrainPatchBuilder implements TerrainPatchBuilder {
 
   public dispose(): void {
     this.scratch = null
+    this.scratchMorph = null
     this.scratchSegments = -1
   }
 
-  /** Скретч под запрошенный segments; пересоздаётся только при смене размера (в проекте он константа). */
-  private arraysFor(segments: number): PatchArrays {
-    if (this.scratch === null || this.scratchSegments !== segments) {
-      this.scratch = allocatePatchArrays(segments)
+  /** Скретч под запрошенный segments и вариант (с морф-массивами или без); пересоздаётся только при смене размера (в проекте он константа). */
+  private arraysFor(segments: number, withMorph: boolean): PatchArrays {
+    if (this.scratchSegments !== segments) {
+      this.scratch = null
+      this.scratchMorph = null
       this.scratchSegments = segments
     }
+    if (withMorph) {
+      this.scratchMorph ??= allocatePatchArrays(segments, true)
+      return this.scratchMorph
+    }
+    this.scratch ??= allocatePatchArrays(segments)
 
     return this.scratch
   }

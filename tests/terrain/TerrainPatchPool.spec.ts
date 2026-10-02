@@ -157,7 +157,7 @@ describe('TerrainPatchPool', () => {
 
     let applied = 0
     new SyncTerrainPatchBuilder().request(
-      { field, face: 2, i: 1, j: 0, level: deep, segments: SEGMENTS, skirtDepthUnits: SKIRT, wrap },
+      { field, face: 2, i: 1, j: 0, level: deep, segments: SEGMENTS, skirtDepthUnits: SKIRT, wrap, morph: null },
       (result) => {
         applyPatchResult(handle, result)
         applied++
