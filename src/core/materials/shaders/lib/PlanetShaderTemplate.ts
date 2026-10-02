@@ -192,7 +192,7 @@ export const PlanetShaderTemplate: ShaderProps = {
     uniform float uTerrainOcclusionDirect;
     // Тень облаков на земле (читает блок USE_CLOUD_SHADOW ниже)
     uniform float uCloudShadowStrength;
-    uniform float uCloudShadowHeightUnits;
+    uniform float uCloudHeightUnits;
     // three не биндит normalMatrix во фрагментник автоматически (только в
     // вершинный пролог) — юниформ общий на программу, объявление здесь просто
     // делает его видимым этому шейдеру.
@@ -479,7 +479,7 @@ export const PlanetShaderTemplate: ShaderProps = {
           // облако, затеняющее точку, стоит по направлению к солнцу на h·tan θ (θ — зенитный угол)
           vec3 sunTangent = sunLocal - dirLocal * muS; // muS = dot(sunLocal, dirLocal), см. выше
           float cosZ = max(muS, CLOUD_SHADOW_MIN_COS);
-          vec3 offsetUnits = sunTangent / cosZ * uCloudShadowHeightUnits;
+          vec3 offsetUnits = sunTangent / cosZ * uCloudHeightUnits;
           // eastLocal = cross(up, dir): длина = cos φ; north = cross(dir, east)
           float cosLat = max(length(eastLocal), 1e-3);
           vec3 eastUnit = eastLocal / cosLat;

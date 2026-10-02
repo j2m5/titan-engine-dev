@@ -85,8 +85,9 @@ describe('чанк SunTransmittance — порт ядра Брунетона', (
 
   it('sunTint нормирован зенитом и клампится к 1', () => {
     expect(sunTransmittanceFunctions).toContain('vec3 sunTint(float muS)')
-    expect(sunTransmittanceFunctions).toContain('atmoTransmittanceToSun(uAtmoDatumRadius, muS)')
-    expect(sunTransmittanceFunctions).toContain('max(atmoTransmittanceToSun(uAtmoDatumRadius, 1.0), vec3(1e-3))')
+    expect(sunTransmittanceFunctions).toContain('return sunTintAt(uAtmoDatumRadius, muS);')
+    expect(sunTransmittanceFunctions).toContain('atmoTransmittanceToSun(r, muS)')
+    expect(sunTransmittanceFunctions).toContain('max(atmoTransmittanceToSun(r, 1.0), vec3(1e-3))')
     expect(sunTransmittanceFunctions).toContain('clamp(')
   })
 })

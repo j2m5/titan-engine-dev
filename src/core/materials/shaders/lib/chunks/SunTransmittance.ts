@@ -63,10 +63,15 @@ export const sunTransmittanceFunctions = /* glsl */ `
       smoothstep(-sin_theta_h * uAtmoSunAngularRadius, sin_theta_h * uAtmoSunAngularRadius, muS - cos_theta_h);
   }
 
-  // tint = T(r, muS) / T(r, 1): в зените 1, к терминатору теплее и темнее, как небо
+  // tint = T(r, muS) / T(r, 1) на радиусе r (км): в зените 1, к терминатору теплее и темнее, как небо
+  vec3 sunTintAt(float r, float muS) {
+    vec3 zenith = max(atmoTransmittanceToSun(r, 1.0), vec3(1e-3));
+    return clamp(atmoTransmittanceToSun(r, muS) / zenith, 0.0, 1.0);
+  }
+
+  // палуба и вода — на радиусе датума
   vec3 sunTint(float muS) {
-    vec3 zenith = max(atmoTransmittanceToSun(uAtmoDatumRadius, 1.0), vec3(1e-3));
-    return clamp(atmoTransmittanceToSun(uAtmoDatumRadius, muS) / zenith, 0.0, 1.0);
+    return sunTintAt(uAtmoDatumRadius, muS);
   }
 
   const int ATMO_IRRADIANCE_W = ${IRRADIANCE_W};
