@@ -56,24 +56,5 @@ export function composeTerrain(i: ComposeInput): Vec3 {
   ) as Vec3
 }
 
-export const CLOUD_SHADOW_MIN_COS = 0.15
-
-/**
- * Сдвиг uv тени облака: облако, затеняющее точку, стоит по направлению к солнцу на h·tan θ;
- * sunTangent — касательная проекция направления на солнце в базисе (east, north) (длины в единицах),
- * u делится на 2πR·cos φ, v — на πR. cos θ клампится снизу — без разлёта у терминатора.
- */
-export function cloudShadowUvOffset(
-  sunTangentEN: [number, number],
-  muS: number,
-  heightUnits: number,
-  radiusUnits: number,
-  cosLat: number
-): { du: number; dv: number } {
-  const cosZ = Math.max(muS, CLOUD_SHADOW_MIN_COS)
-  const scale = heightUnits / cosZ
-  return {
-    du: (sunTangentEN[0] * scale) / (2 * Math.PI * radiusUnits * Math.max(cosLat, 1e-3)),
-    dv: (sunTangentEN[1] * scale) / (Math.PI * radiusUnits)
-  }
-}
+// Тень облаков переехала в зеркало облачного слоя; реэкспорт для прежних импортов
+export { CLOUD_SHADOW_MIN_COS, cloudShadowUvOffset } from './cloudLayerMath'
