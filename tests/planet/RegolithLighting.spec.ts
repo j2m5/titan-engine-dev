@@ -41,12 +41,29 @@ describe('CPU-зеркало закона реголита (brdfMirror.regolithD
   })
 })
 
+describe('сборка lit: избыток веса реголита не уводит тень ниже пола', () => {
+  const mixv = (a: number, d: number, t: number): number => a * (1 - t) + d * t
+  const lit = (a: number, d: number, w: number): number => mixv(a, d, Math.min(w, 1)) + Math.max(w - 1, 0) * d
+
+  it('в тени (direct 0) lit неотрицателен и равен полу·(1 − min(w, 1))', () => {
+    for (const w of [0.5, 1, 1.3, 2]) {
+      expect(lit(0.15, 0, w)).toBeGreaterThanOrEqual(0)
+      expect(lit(0.15, 0, w)).toBeCloseTo(0.15 * (1 - Math.min(w, 1)), 12)
+    }
+  })
+
+  it('на свету (direct 1, w = 1.3) lit = 1.3', () => {
+    expect(lit(0.15, 1, 1.3)).toBeCloseTo(1.3, 12)
+  })
+})
+
 describe('PlanetShaderTemplate: вес прямого света', () => {
   it('ламберт по умолчанию, реголит под USE_REGOLITH, обе строки lit читают directWeight', () => {
     expect(main).toContain('float directWeight = max(NdotLraw, 0.0);')
     expect(main).toMatch(/#ifdef USE_REGOLITH\s+directWeight = asteroidRegolithDiffuse\(NdotLraw, dot\(normal, viewDir\), dot\(lightDirection, viewDir\), uRegolithMix, uOppositionSurge\);\s+#endif/)
-    expect(main).toContain('vec3 lit = mix(ambient, vec3(directGain) * uLightColor * sunTintMix, directWeight);')
-    expect(main).toContain('vec3 lit = mix(ambient, vec3(directGain) * sunTintMix, directWeight);')
+    expect(main).toContain('vec3 litDirect = vec3(directGain) * uLightColor * sunTintMix;')
+    expect(main).toContain('vec3 litDirect = vec3(directGain) * sunTintMix;')
+    expect(main).toContain('vec3 lit = mix(ambient, litDirect, min(directWeight, 1.0)) + max(directWeight - 1.0, 0.0) * litDirect;')
     expect(main).not.toContain('max(NdotLraw, 0.0));')
   })
 

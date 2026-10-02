@@ -518,10 +518,13 @@ export const PlanetShaderTemplate: ShaderProps = {
       // Та же форма mix(пол, 1, N·L), что прежде: в полдень при occlusion = 1 и без тени ровно 1;
       // вес — directWeight (ламберт или реголит)
       #ifdef USE_LIGHT_TINT
-        vec3 lit = mix(ambient, vec3(directGain) * uLightColor * sunTintMix, directWeight);
+        vec3 litDirect = vec3(directGain) * uLightColor * sunTintMix;
       #else
-        vec3 lit = mix(ambient, vec3(directGain) * sunTintMix, directWeight);
+        vec3 litDirect = vec3(directGain) * sunTintMix;
       #endif
+      // вес до 1 — прежний mix(пол, прямой); избыток реголита сверх 1 добавляет только прямой свет:
+      // экстраполяция mix увела бы тень (directGain ≈ 0) ниже пола, в минус
+      vec3 lit = mix(ambient, litDirect, min(directWeight, 1.0)) + max(directWeight - 1.0, 0.0) * litDirect;
       vec3 surfaceAlbedo = diffuseSample * albedoMul;
       #ifdef USE_TERRAIN_UV
         #ifdef USE_TERRAIN_FROST

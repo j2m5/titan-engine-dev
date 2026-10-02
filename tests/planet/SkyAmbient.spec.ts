@@ -48,8 +48,9 @@ describe('Небесный амбиент: irradiance-LUT в чанке SunTrans
   it('суша: тинт солнца только на прямом свете и сером поле, не на небе и не на всём day', () => {
     const frag = PlanetShaderTemplate.fragmentShader
     expect(frag).toContain('vec3 skyTerm = vec3(clamp(sunElevation / max(uTerrainAmbientSunRef, 1e-3), 0.0, 1.0)) * sunTintMix;')
-    expect(frag).toContain('vec3 lit = mix(ambient, vec3(directGain) * uLightColor * sunTintMix, directWeight);')
-    expect(frag).toContain('vec3 lit = mix(ambient, vec3(directGain) * sunTintMix, directWeight);')
+    expect(frag).toContain('vec3 litDirect = vec3(directGain) * uLightColor * sunTintMix;')
+    expect(frag).toContain('vec3 lit = mix(ambient, litDirect, min(directWeight, 1.0)) + max(directWeight - 1.0, 0.0) * litDirect;')
+    expect(frag).toContain('vec3 litDirect = vec3(directGain) * sunTintMix;')
     expect(frag).toContain('dayColor = surfaceAlbedo * mix(sunTintMix, lit, uTerrainLambert);')
     expect(frag).toContain('vec3 day = cloudRadiance + dayColor * (1.0 - cloudAlphaSlant) * landGate;')
     // терраформная ветка day целиком не тонирует: единственный такой множитель — у легаси (#else)
