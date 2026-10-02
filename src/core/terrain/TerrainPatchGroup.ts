@@ -167,9 +167,16 @@ abstract class TerrainPatchGroup extends Group {
   }
   /** m, с которым входит патч, ставший видимым в свопе. */
   private revealMorph = 0
+  /**
+   * Уровень скрытого освобождаемого узла, либо -1. Потомок под видимым живым
+   * промежуточным узлом не показывается: тот ещё закрывает место и дробится
+   * сам (в морфе — дождавшись m = 0), иначе — двойное покрытие.
+   */
+  private revealCoveredBelow = -1
   private readonly showLive = (key: number): void => {
     const entry = this.live.get(key)
     if (!entry || entry.handle.mesh.visible) return
+    if (this.revealCoveredBelow >= 0 && this.visibleBetween(entry.address, this.revealCoveredBelow)) return
     entry.handle.mesh.visible = true
     this.resetMorph(entry, this.revealMorph)
   }
@@ -354,7 +361,9 @@ abstract class TerrainPatchGroup extends Group {
         const morphSplit = seconds > 0 && entry.handle.mesh.visible && this.allDirect
         if (morphSplit && entry.morph > 0) continue // досматривает к своей форме
         this.revealMorph = morphSplit ? 1 : 0
+        this.revealCoveredBelow = entry.handle.mesh.visible ? -1 : entry.address.level
         forEachWantedDescendant(entry.address, wanted, this.showLive)
+        this.revealCoveredBelow = -1
       } else {
         const ancestor = liveAncestorKey(entry.address, this.isLive)
         if (ancestor !== -1 && wanted.has(ancestor)) {
@@ -527,6 +536,16 @@ abstract class TerrainPatchGroup extends Group {
       for (let dj = 0; dj < 2; dj++) {
         if (this.live.get(nodeKeyOf(face, level + 1, 2 * i + di, 2 * j + dj))!.morph < 1) return true
       }
+    }
+    return false
+  }
+
+  /** Между узлом и уровнем topLevel (не включая) есть живой видимый предок. */
+  private visibleBetween(address: TerrainNodeAddress, topLevel: number): boolean {
+    for (let level = address.level - 1; level > topLevel; level--) {
+      const delta = address.level - level
+      const entry = this.live.get(nodeKeyOf(address.face, level, address.i >> delta, address.j >> delta))
+      if (entry?.handle.mesh.visible) return true
     }
     return false
   }

@@ -10,8 +10,8 @@ import { resourceStorage } from '@/core/services/ResourceStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { UpdateContext } from '@/core/UpdateContext'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
-import { nodeKeyOf, terrainNodeKey, type TerrainNodeAddress } from '@/core/terrain/terrainQuadtreeSelect'
-import { addressOf, fullyCovered, patchMeshes, unbackedHiddenAddresses } from './coverageHelpers'
+import { liveAncestorKey, nodeKeyOf, terrainNodeKey, type TerrainNodeAddress } from '@/core/terrain/terrainQuadtreeSelect'
+import { addressOf, fullyCovered, patchMeshes, unbackedHiddenAddresses, visibleAddressKeys } from './coverageHelpers'
 import { FakeAsyncBuilder } from './fakeAsyncBuilder'
 
 // Харнесс — копия TerrainPatchGroupAsync.spec.ts, плюс флаг морфа группы.
@@ -361,6 +361,33 @@ describe('TerrainPatchGroup: геоморф поверх атомарного с
     settle(group, builder, NEAR)
     expect(builder.jobs.length).toBeGreaterThan(24)
     for (const job of builder.jobs) expect(job.morph).toBe(job.level > 1)
+  })
+
+  it('мерж, перебитый спуском на два уровня: скрытый предок уходит, не показывая внуков поверх видимого родителя в морфе', () => {
+    const { group, builder } = makeAsync()
+    settle(group, builder, NEAR)
+    for (let f = 0; f < 5; f++) frame(group, builder, FAR) // мерж начат: дети растят m
+
+    let revealedUnderVisible = 0
+    let prev = snapshot(group)
+    for (let f = 0; f < 40; f++) {
+      frame(group, builder, NEARER)
+      const cur = snapshot(group)
+      expect(fullyCovered(group)).toBe(true)
+      // нет пары «видимый предок + видимый потомок»
+      const visible = visibleAddressKeys(group)
+      for (const s of cur.values()) {
+        if (s.visible) expect(liveAncestorKey(s.address, (k) => visible.has(k))).toBe(-1)
+      }
+      for (const [key, s] of cur) {
+        if (!s.visible || prev.get(key)?.visible || s.address.level !== 3) continue
+        if (!prev.get(parentKey(s.address))?.visible) continue
+        revealedUnderVisible++
+        expect(s.morph).toBe(1)
+      }
+      prev = cur
+    }
+    expect(revealedUnderVisible).toBe(8)
   })
 
   it('вода: группа без флага — атрибута patchMorph нет, morph задания null', () => {
