@@ -31,21 +31,17 @@ describe('Шейдер воды: облачный слой поверх воды
     )
   })
 
-  it('облако — тем же законом, что на суше: покрытие, освещение по геометрической нормали, высотный fade, терминатор', () => {
+  it('облако — тем же чанком, что на суше: параллакс, утолщение, свет слоя', () => {
     for (const line of [
-      'vec3 cloudColor = texture2D(uWaterCloudMap, terrainUv(normalize(vLocalDir))).rgb;',
-      'float cloudAlpha = pow(dot(cloudColor, vec3(1.0)) / 3.0, 0.5);',
-      'float cloudLight = max(dot(normalize(vNormal), lightDirection), 0.0);',
-      'cloudColor *= pow(max(0.5 * cloudLight + 0.1, 0.0), 0.5);',
-      'cloudColor *= uWaterCloudOpacity;',
-      'cloudAlpha *= uWaterCloudOpacity;'
+      'cloudLayerSample(normalize(vLocalDir), normalize(vLocalViewDir), cloudPremul, cloudAlphaSlant, cloudDir);',
+      'vec3 cloudRadiance = cloudLitRadiance(cloudPremul, cloudDir, -normalize(vLocalLightDirection));'
     ]) {
       expect(frag).toContain(line)
     }
   })
 
   it('слой подмешивается в цвет воды после блика и пены, альфа воды не меняется', () => {
-    const composite = frag.indexOf('color = color * (1.0 - cloudAlpha) + cloudTerm;')
+    const composite = frag.indexOf('color = color * (1.0 - cloudAlphaSlant) + cloudRadiance;')
     expect(composite).toBeGreaterThan(frag.indexOf('color += min(glint'))
     expect(composite).toBeLessThan(frag.indexOf('gl_FragColor = vec4(color, alpha);'))
     expect(frag.slice(composite, frag.indexOf('gl_FragColor'))).not.toMatch(/alpha\s*=/)

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Texture, Vector3 } from 'three'
 import { cloudOpacityForAltitude, PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { cloudLayerFunctions } from '@/core/materials/shaders/lib/chunks/CloudLayer'
 import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
 import { Actor } from '@/core/models/Actor'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -50,16 +51,17 @@ function actorWithoutAtmosphere(radiusKm?: number): Actor {
 }
 
 describe('PlanetShaderTemplate: uCloudOpacity — высотный fade облаков (приёмочная волна 4, №3)', () => {
-  it('юниформ uCloudOpacity объявлен и домножает cloudColor/cloudAlpha ВНУТРИ USE_CLOUD', () => {
+  it('юниформ uCloudOpacity объявлен; домножает слой чанк (cloudAlphaSlant) ВНУТРИ USE_CLOUD', () => {
     expect(frag).toContain('uniform float uCloudOpacity;')
 
     // '\n' обязателен: USE_CLOUD_SHADOW стоит выше и матчился бы префиксом
-    const cloudBlockStart = frag.indexOf('#ifdef USE_CLOUD\n')
+    // (ищем в main(): выше такой же гейт у подключения чанка)
+    const cloudBlockStart = frag.indexOf('#ifdef USE_CLOUD\n', frag.indexOf('void main()'))
     const cloudBlockEnd = frag.indexOf('#endif', cloudBlockStart)
     const block = frag.slice(cloudBlockStart, cloudBlockEnd)
 
-    expect(block).toContain('cloudColor *= uCloudOpacity;')
-    expect(block).toContain('cloudAlpha *= uCloudOpacity;')
+    expect(block).toContain('cloudLayerSample(')
+    expect(cloudLayerFunctions).toContain('cloudAlphaSlant = mix(alpha, cloudSlantAlpha(alpha, muV), slantGate) * uCloudOpacity;')
   })
 })
 

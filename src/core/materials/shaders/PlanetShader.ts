@@ -118,7 +118,9 @@ interface PlanetUniforms {
   uTerrainOcclusionDirect: number
   uSkyAmbientStrength: number
   uCloudShadowStrength: number
-  uCloudShadowHeightUnits: number
+  uCloudHeightUnits: number
+  uCloudHeightKm: number
+  uCloudLightSoftness: number
   uShadowHeightMap: Texture | null
   uShadowHeightMin: number
   uShadowHeightRange: number
@@ -258,7 +260,10 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uTerrainOcclusionDirect: new Uniform(light.terrainOcclusionDirect),
       uSkyAmbientStrength: new Uniform(light.skyAmbientStrength),
       uCloudShadowStrength: new Uniform(light.cloudShadowStrength),
-      uCloudShadowHeightUnits: new Uniform(toThreeJSUnits(light.cloudShadowHeightKm)),
+      // Высота облачного слоя — тень облаков и параллакс слоя (чанк CloudLayer); км — для LUT атмосферы
+      uCloudHeightUnits: new Uniform(toThreeJSUnits(light.cloudHeightKm)),
+      uCloudHeightKm: new Uniform(light.cloudHeightKm),
+      uCloudLightSoftness: new Uniform(light.cloudLightSoftness),
       // Тень рельефа: карта и масштабы привязываются в PlanetMaterial.updateMaterial,
       // полутень — в syncTerrainShadow; здесь дефолты до первой карты
       uShadowHeightMap: new Uniform(null),

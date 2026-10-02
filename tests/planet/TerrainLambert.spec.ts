@@ -37,14 +37,14 @@ describe('PlanetShaderTemplate: ламберт (общий для легаси-�
     const lambertIdx = frag.indexOf(
       'dayColor = surfaceAlbedo * mix(sunTintMix, lit, uTerrainLambert);'
     )
-    const dayIdx = frag.indexOf('vec3 day = cloudColor * sunTintMix * dayFactor + dayColor * (1.0 - cloudAlpha) * landGate;')
+    const dayIdx = frag.indexOf('vec3 day = cloudRadiance + dayColor * (1.0 - cloudAlphaSlant) * landGate;')
     expect(occlusionIdx).toBeGreaterThan(-1)
     expect(lambertIdx).toBeGreaterThan(occlusionIdx)
     expect(dayIdx).toBeGreaterThan(lambertIdx)
   })
 
   it('облака ламбертом суши не затеняются: множителя на составленном day нет', () => {
-    // Облака живут по своему закону (pow(0.5·cloudLight + 0.1, 0.5)):
+    // Облака освещает собственный закон облачного слоя (чанк CloudLayer):
     // затенять их нормалью РЕЛЬЕФА — двойной учёт и наклон не по их высоте.
     expect(frag).not.toContain('day *= mix(vec3(1.0), lit')
   })
@@ -115,7 +115,7 @@ describe('PlanetShader: ручки terrainLambert/terrainAmbient', () => {
     expect(shader.uniforms.uTerrainOcclusionDirect.value).toBe(0.35)
     expect(shader.uniforms.uSkyAmbientStrength.value).toBe(1)
     expect(shader.uniforms.uCloudShadowStrength.value).toBe(0.6)
-    expect(shader.uniforms.uCloudShadowHeightUnits.value).toBeCloseTo(toThreeJSUnits(6), 12)
+    expect(shader.uniforms.uCloudHeightUnits.value).toBeCloseTo(toThreeJSUnits(6), 12)
     expect(shader.uniforms.uAtmoIrradiance.value).toBeNull()
     const tuned = new PlanetShader(stubActor({ terrainOcclusionDirect: 1, skyAmbientStrength: 0 }))
     expect(tuned.uniforms.uTerrainOcclusionDirect.value).toBe(1)

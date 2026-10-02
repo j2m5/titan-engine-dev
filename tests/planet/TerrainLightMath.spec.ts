@@ -72,12 +72,12 @@ describe('закатный тинт суши: пропускание к солн
   })
 })
 
-describe('composeTerrain: терминатор гейтит облака и ночь, суша под ламбертом самогасится', () => {
+describe('composeTerrain: облака своим светом, огни гаснут под облаками, суша под ламбертом самогасится', () => {
   const base = { night: [0.1, 0.1, 0.1] as Vec3, cloudColor: [0.3, 0.3, 0.3] as Vec3, cloudAlpha: 0.5, dayColor: [0.6, 0.6, 0.6] as Vec3 }
 
-  it('lambert = 1 — суша не множится на dayFactor, облака и ночь — множатся', () => {
+  it('lambert = 1 — суша не множится на dayFactor, облако не гейтится им, огни гаснут под облаком', () => {
     const out = composeTerrain({ ...base, dayFactor: 0.5, lambert: 1 })
-    expect(out[0]).toBeCloseTo(0.1 * 0.5 + 0.3 * 0.5 + 0.6 * 0.5 * 1, 12)
+    expect(out[0]).toBeCloseTo(0.1 * 0.5 * 0.5 + 0.3 + 0.6 * 0.5 * 1, 12)
   })
 })
 

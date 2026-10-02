@@ -32,7 +32,7 @@ export const Resources: IResource[] = [
   { id: 33, resourceType: "diffuse", lifecycle: "streamable", path: "planets/saturn/saturn.jpg", colorSpace: "srgb" },
   { id: 35, resourceType: "diffuse", lifecycle: "streamable", path: "planets/uranus/uranus.png", colorSpace: "srgb" },
   { id: 36, resourceType: "diffuse", lifecycle: "streamable", path: "planets/neptune/neptune.jpg", colorSpace: "srgb" },
-  { id: 37, resourceType: "cloud", lifecycle: "streamable", path: "planets/neptune/neptune_clouds.jpg", colorSpace: "srgb" },
+  { id: 37, resourceType: "cloud", lifecycle: "streamable", path: "planets/neptune/neptune_clouds.jpg", colorSpace: "srgb", wrapS: 1e3 },
   { id: 38, resourceType: "diffuse", lifecycle: "streamable", path: "planets/pluto/pluto.jpg", colorSpace: "srgb", wrapS: 1e3 },
   { id: 40, resourceType: "diffuse", lifecycle: "streamable", path: "planets/haumea/haumea.jpg", colorSpace: "srgb", wrapS: 1e3 },
   { id: 41, resourceType: "diffuse", lifecycle: "streamable", path: "planets/makemake/makemake.jpg", colorSpace: "srgb", wrapS: 1e3 },

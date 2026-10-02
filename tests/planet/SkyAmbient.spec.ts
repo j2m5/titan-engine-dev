@@ -51,10 +51,10 @@ describe('Небесный амбиент: irradiance-LUT в чанке SunTrans
     expect(frag).toContain('vec3 lit = mix(ambient, vec3(directGain) * uLightColor * sunTintMix, max(NdotLraw, 0.0));')
     expect(frag).toContain('vec3 lit = mix(ambient, vec3(directGain) * sunTintMix, max(NdotLraw, 0.0));')
     expect(frag).toContain('dayColor = surfaceAlbedo * mix(sunTintMix, lit, uTerrainLambert);')
-    expect(frag).toContain('vec3 day = cloudColor * sunTintMix * dayFactor + dayColor * (1.0 - cloudAlpha) * landGate;')
+    expect(frag).toContain('vec3 day = cloudRadiance + dayColor * (1.0 - cloudAlphaSlant) * landGate;')
     // терраформная ветка day целиком не тонирует: единственный такой множитель — у легаси (#else)
-    const terrainDay = frag.indexOf('vec3 day = cloudColor * sunTintMix * dayFactor')
-    const legacyDay = frag.indexOf('vec3 day = cloudColor + dayColor * (1.0 - cloudAlpha);')
+    const terrainDay = frag.indexOf('vec3 day = cloudRadiance + dayColor')
+    const legacyDay = frag.indexOf('vec3 day = cloudColor + dayColor * (1.0 - cloudAlphaSlant);')
     expect(frag.slice(terrainDay, legacyDay)).not.toContain('sunTint(muS)')
   })
 

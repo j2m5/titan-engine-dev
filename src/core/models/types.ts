@@ -397,7 +397,10 @@ export interface IPlanetRenderingObject {
   terrainOcclusionDirect?: number
   skyAmbientStrength?: number
   cloudShadowStrength?: number
-  cloudShadowHeightKm?: number
+  /** Высота облачного слоя, км (тень и параллакс); дефолт 6 */
+  cloudHeightKm?: number
+  /** Мягкость терминатора облаков; дефолт 0.1 */
+  cloudLightSoftness?: number
 
   /** Класс облика (terrainClass.ts): переопределяет вывод из данных; 'none' — без пресета. */
   terrainClass?: string

@@ -85,8 +85,9 @@ describe('чанк SunTransmittance — порт ядра Брунетона', (
 
   it('sunTint нормирован зенитом и клампится к 1', () => {
     expect(sunTransmittanceFunctions).toContain('vec3 sunTint(float muS)')
-    expect(sunTransmittanceFunctions).toContain('atmoTransmittanceToSun(uAtmoDatumRadius, muS)')
-    expect(sunTransmittanceFunctions).toContain('max(atmoTransmittanceToSun(uAtmoDatumRadius, 1.0), vec3(1e-3))')
+    expect(sunTransmittanceFunctions).toContain('return sunTintAt(uAtmoDatumRadius, muS);')
+    expect(sunTransmittanceFunctions).toContain('atmoTransmittanceToSun(r, muS)')
+    expect(sunTransmittanceFunctions).toContain('max(atmoTransmittanceToSun(r, 1.0), vec3(1e-3))')
     expect(sunTransmittanceFunctions).toContain('clamp(')
   })
 })
@@ -102,10 +103,10 @@ describe('PlanetShaderTemplate: тинт солнца под USE_SUN_TINT', () =
     expect(frag.indexOf('#include <sunTransmittanceFunctions>')).toBeGreaterThan(gate)
   })
 
-  it('тинт — один sunTintMix до освещения: им красятся прямой свет, пол и облака', () => {
+  it('тинт — один sunTintMix до освещения: им красятся прямой свет и пол; облака — sunTintAt на высоте слоя', () => {
     const tint = frag.indexOf('sunTintMix = mix(vec3(1.0), sunTint(muS), uSunTintStrength);')
     const lit = frag.indexOf('vec3 lit = mix(ambient')
-    const day = frag.indexOf('vec3 day = cloudColor * sunTintMix * dayFactor')
+    const day = frag.indexOf('vec3 day = cloudRadiance + dayColor')
     expect(tint).toBeGreaterThan(-1)
     expect(lit).toBeGreaterThan(tint)
     expect(day).toBeGreaterThan(lit)

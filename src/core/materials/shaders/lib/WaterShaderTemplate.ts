@@ -49,6 +49,12 @@ const defaultUniforms = {
   // облачный слой над водой — карта и высотный fade материала рельефа (WaterMaterial.syncClouds)
   uWaterCloudMap: new Uniform(null),
   uWaterCloudOpacity: new Uniform(1),
+  // Облачный слой (чанк CloudLayer): радиус тела и ручки слоя — ставит WaterShader по данным тела
+  uBodyRadiusUnits: new Uniform(0),
+  uCloudHeightUnits: new Uniform(0),
+  uCloudHeightKm: new Uniform(0),
+  uCloudLightSoftness: new Uniform(0.1),
+  uCloudShadowStrength: new Uniform(0),
   // Ряд волн (арка water-shader, Task 1) — все четыре инертны без
   // USE_WATER_WAVES (гейт по наличию waterNormal-текстуры, см. WaterMaterial):
   // сэмплер null, uTime/scale нулевые заглушки — реальные значения
@@ -107,6 +113,7 @@ export const WaterShaderTemplate: ShaderProps = {
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
+    varying vec3 vLocalViewDir;
     varying vec3 vDetailPos;
 
     // Водная оболочка — всегда патчи кубосферы (тот же TerrainPatchPool, что и
@@ -145,6 +152,8 @@ export const WaterShaderTemplate: ShaderProps = {
       vDetailPos = detailPos;
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
+      // Взгляд в системе тела (облачный слой) — из view-space, как у суши (PlanetShaderTemplate)
+      vLocalViewDir = transpose(mat3(modelMatrix)) * (transpose(mat3(viewMatrix)) * mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
 
       ${ShaderChunk['logdepthbuf_vertex']}
@@ -174,6 +183,7 @@ export const WaterShaderTemplate: ShaderProps = {
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
+    varying vec3 vLocalViewDir;
     varying vec3 vDetailPos;
     // Блик воды — общий чанк (и с легаси-сферой тела): нужен и без USE_WATER_WAVES
     #include <waterGlintFunctions>
@@ -204,6 +214,15 @@ export const WaterShaderTemplate: ShaderProps = {
 
     #ifdef USE_SUN_TINT
       #include <sunTransmittanceFunctions>
+    #endif
+
+    #ifdef USE_WATER_CLOUD
+      // Облачный слой (чанк CloudLayer) — тот же, что у суши; имена суши — макросами на юниформы воды
+      #define cloudMap uWaterCloudMap
+      #define uCloudOpacity uWaterCloudOpacity
+      uniform float uBodyRadiusUnits;
+      #include <cloudLayerUniforms>
+      #include <cloudLayerFunctions>
     #endif
 
     #ifdef USE_WATER_WAVES
@@ -485,10 +504,17 @@ export const WaterShaderTemplate: ShaderProps = {
       vec3 lightDirection = normalize(vViewLightDirection);
       float NdotL = dot(normal, lightDirection);
       float dayFactor = smoothstep(-0.08, 0.25, NdotL);
+      // Тень облаков на воде (чанк CloudLayer, тот же закон, что на суше) — только прямой свет
+      float cloudShadow = 1.0;
+      #ifdef USE_WATER_CLOUD
+        vec3 cloudShadowDir = normalize(vLocalDir);
+        vec3 cloudShadowSun = -normalize(vLocalLightDirection);
+        cloudShadow = cloudShadowAt(cloudShadowDir, cloudShadowSun, dot(cloudShadowDir, cloudShadowSun));
+      #endif
       #ifdef USE_SUN_TINT
-        color *= mix(vec3(uWaterNightFloor), sunTintFactor, dayFactor);
+        color *= mix(vec3(uWaterNightFloor), sunTintFactor * cloudShadow, dayFactor);
       #else
-        color *= mix(uWaterNightFloor, 1.0, dayFactor);
+        color *= mix(uWaterNightFloor, cloudShadow, dayFactor);
       #endif
 
       // Блик: без волн и с орбиты — аналитическая нормаль и шероховатость всех
@@ -654,7 +680,7 @@ export const WaterShaderTemplate: ShaderProps = {
         // градиентным skyColor (уже посчитан выше, тот же зенит/горизонт,
         // что и у reflection) — 0.1·skyColor, не vec3(0.1).
         vec3 wavesColor = mix(
-          waterSunColor * waveDiffuseLight * 0.3 + waveScatter,
+          waterSunColor * waveDiffuseLight * 0.3 * cloudShadow + waveScatter,
           // Солнечного спекуляра здесь нет: блик — отдельно, после пены
           0.1 * skyColor + waveReflectionSample * 0.9,
           waveReflectance
@@ -770,25 +796,21 @@ export const WaterShaderTemplate: ShaderProps = {
       #ifdef USE_SUN_TINT
         glint *= sunTintFactor * glintDayFactor;
       #endif
+      // тени облаков рвут солнечную дорожку
+      glint *= cloudShadow;
       // потолок: искры блумят, кляксы — нет; под пеной блика нет; gain 1 — прежний ближний вид
       color += min(glint, WATER_GLINT_CEILING) * uWaterGlintGain * (1.0 - foam);
 
       #ifdef USE_WATER_CLOUD
-        // Облака над морем — тем же законом, что на суше (PlanetShaderTemplate). Альфа воды не
+        // Облака над морем — тот же чанк, что на суше: параллакс, утолщение, свет слоя. Альфа воды не
         // меняется: рельеф под водой несёт те же облака, и после смешивания выходит ровно
         // «облако поверх (вода поверх суши)»
-        vec3 cloudColor = texture2D(uWaterCloudMap, terrainUv(normalize(vLocalDir))).rgb;
-        float cloudAlpha = pow(dot(cloudColor, vec3(1.0)) / 3.0, 0.5);
-        float cloudLight = max(dot(normalize(vNormal), lightDirection), 0.0);
-        cloudColor *= pow(max(0.5 * cloudLight + 0.1, 0.0), 0.5);
-        cloudColor *= uWaterCloudOpacity;
-        cloudAlpha *= uWaterCloudOpacity;
-        #ifdef USE_SUN_TINT
-          vec3 cloudTerm = cloudColor * sunTintFactor * dayFactor;
-        #else
-          vec3 cloudTerm = cloudColor * dayFactor;
-        #endif
-        color = color * (1.0 - cloudAlpha) + cloudTerm;
+        vec3 cloudPremul;
+        vec3 cloudDir;
+        float cloudAlphaSlant;
+        cloudLayerSample(normalize(vLocalDir), normalize(vLocalViewDir), cloudPremul, cloudAlphaSlant, cloudDir);
+        vec3 cloudRadiance = cloudLitRadiance(cloudPremul, cloudDir, -normalize(vLocalLightDirection));
+        color = color * (1.0 - cloudAlphaSlant) + cloudRadiance;
       #endif
 
       gl_FragColor = vec4(color, alpha);
