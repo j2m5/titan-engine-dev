@@ -131,6 +131,15 @@ interface PlanetUniforms {
   uShadowMaxDistUnits: number
   uShadowPenumbraTan: number
   uTerrainShadowStrength: number
+  uNearTile: Texture | null
+  uNearTileCenter: Vector3
+  uNearTileEast: Vector3
+  uNearTileNorth: Vector3
+  uNearTileTexelMeters: number
+  uNearTileTexels: number
+  uNearTileWeight: number
+  uNearShadowMaxDistMeters: number
+  uBodyRadiusMeters: number
   uIceGlintStrength: number
   shadowRingsInnerRadius: number
   shadowRingsOuterRadius: number
@@ -280,6 +289,16 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uShadowMaxDistUnits: new Uniform(toThreeJSUnits(config('terrain.shadowMaxKm'))),
       uShadowPenumbraTan: new Uniform(Math.tan(DEFAULT_SUN_ANGULAR_RADIUS)),
       uTerrainShadowStrength: new Uniform(light.terrainShadowStrength),
+      // Ближний слой тени: плитку ставит PlanetMaterial.setNearTile; вес 0 — слоя нет
+      uNearTile: new Uniform(null),
+      uNearTileCenter: new Uniform(new Vector3(1, 0, 0)),
+      uNearTileEast: new Uniform(new Vector3(0, 0, -1)),
+      uNearTileNorth: new Uniform(new Vector3(0, 1, 0)),
+      uNearTileTexelMeters: new Uniform(config('terrain.nearShadow').texelMeters),
+      uNearTileTexels: new Uniform(config('terrain.nearShadow').tileTexels),
+      uNearTileWeight: new Uniform(0),
+      uNearShadowMaxDistMeters: new Uniform(config('terrain.nearShadow').maxDistanceMeters),
+      uBodyRadiusMeters: new Uniform(radiusKm * 1000),
       uIceGlintStrength: new Uniform(light.iceGlintStrength),
       uDetailFadeRange: new Uniform(
         new Vector4(
