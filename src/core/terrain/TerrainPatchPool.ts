@@ -53,9 +53,16 @@ class TerrainPatchPool {
   private readonly free: PatchHandle[] = []
   private readonly occupied = new Set<PatchHandle>()
   private readonly maxLivePatchesLimit: number
+  private readonly morph: boolean
 
-  public constructor(material: Material, segments: number, maxLivePatches: number = MAX_LIVE_PATCHES) {
+  public constructor(
+    material: Material,
+    segments: number,
+    maxLivePatches: number = MAX_LIVE_PATCHES,
+    morph = false
+  ) {
     this.material = material
+    this.morph = morph
     this.segments = segments
     this.index = buildPatchIndex(segments)
     this.maxLivePatchesLimit = maxLivePatches
@@ -156,6 +163,20 @@ class TerrainPatchPool {
     geometry.setAttribute('midTilt', midTilt)
     geometry.setAttribute('midShade', midShade)
     geometry.setAttribute('patchCenter', patchCenter)
+    if (this.morph) {
+      // родительская форма для геоморфинга (см. buildTerrainPatchArrays) + прогресс перехода патча
+      const morphDelta = new BufferAttribute(new Float32Array(vertexCount * 3), 3)
+      const midTiltParent = new BufferAttribute(new Float32Array(vertexCount * 2), 2)
+      const midShadeParent = new BufferAttribute(new Float32Array(vertexCount * 2), 2)
+      const patchMorph = new InstancedBufferAttribute(new Float32Array(1), 1)
+      for (const attribute of [morphDelta, midTiltParent, midShadeParent, patchMorph]) {
+        attribute.setUsage(DynamicDrawUsage)
+      }
+      geometry.setAttribute('morphDelta', morphDelta)
+      geometry.setAttribute('midTiltParent', midTiltParent)
+      geometry.setAttribute('midShadeParent', midShadeParent)
+      geometry.setAttribute('patchMorph', patchMorph)
+    }
     geometry.setIndex(this.index)
 
     const mesh = new Mesh(geometry, this.material)
@@ -164,6 +185,15 @@ class TerrainPatchPool {
 
     return { mesh, geometry }
   }
+}
+
+/** Прогресс геоморфинга патча 0..1; version растёт только при изменении. Слот без морфа — no-op. */
+export function setPatchMorph(handle: PatchHandle, m: number): void {
+  const attribute = handle.geometry.getAttribute('patchMorph') as InstancedBufferAttribute | undefined
+  if (attribute === undefined || attribute.array[0] === m) return
+
+  ;(attribute.array as Float32Array)[0] = m
+  attribute.needsUpdate = true
 }
 
 export { TerrainPatchPool }

@@ -80,7 +80,7 @@ export function handleWorkerMessage(
       }
 
       // свежие массивы на каждый патч: их буферы уходят переносом и здесь больше не живут
-      const arrays = allocatePatchArrays(msg.segments)
+      const arrays = allocatePatchArrays(msg.segments, msg.morph !== null)
       const { center, bounds } = buildTerrainPatchArrays(
         field,
         msg.face,
@@ -91,7 +91,7 @@ export function handleWorkerMessage(
         msg.skirtDepthUnits,
         msg.wrap,
         arrays,
-        false
+        msg.morph === true
       )
       const positions = arrays.positions.buffer as ArrayBuffer
       const detailPos = arrays.detailPos.buffer as ArrayBuffer
@@ -99,6 +99,14 @@ export function handleWorkerMessage(
       const heights = arrays.heights.buffer as ArrayBuffer
       const midTilts = arrays.midTilts.buffer as ArrayBuffer
       const midShades = arrays.midShades.buffer as ArrayBuffer
+      const morph =
+        arrays.morph === null
+          ? null
+          : {
+              deltas: arrays.morph.deltas.buffer as ArrayBuffer,
+              midTilts: arrays.morph.midTilts.buffer as ArrayBuffer,
+              midShades: arrays.morph.midShades.buffer as ArrayBuffer
+            }
 
       return {
         message: {
@@ -110,10 +118,19 @@ export function handleWorkerMessage(
           heights,
           midTilts,
           midShades,
+          morph,
           center: [center.x, center.y, center.z],
           bounds
         },
-        transfer: [positions, detailPos, detailPos2, heights, midTilts, midShades]
+        transfer: [
+          positions,
+          detailPos,
+          detailPos2,
+          heights,
+          midTilts,
+          midShades,
+          ...(morph === null ? [] : [morph.deltas, morph.midTilts, morph.midShades])
+        ]
       }
     }
   }

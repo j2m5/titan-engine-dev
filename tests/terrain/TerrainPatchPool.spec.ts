@@ -8,12 +8,15 @@ import {
 } from 'three'
 import {
   MAX_LIVE_PATCHES,
+  setPatchMorph,
   TerrainPatchPool,
   type PatchHandle
 } from '@/core/terrain/TerrainPatchPool'
 import {
+  allocatePatchArrays,
   applyPatchResult,
   buildPatchIndex,
+  terrainPatchVertexCount,
   buildTerrainPatchGeometry,
   buildTerrainPatchInto
 } from '@/core/terrain/terrainPatchGeometry'
@@ -185,6 +188,68 @@ describe('TerrainPatchPool', () => {
       const attr = handle.geometry.getAttribute(name) as BufferAttribute
       expect(attr.version, name).toBeGreaterThan(versionsBefore[name])
     }
+  })
+
+  it('morph-пул: слот несёт morphDelta/midTiltParent/midShadeParent и инстансный patchMorph; без флага — нет', () => {
+    const handle = new TerrainPatchPool(new PlanetMaterial(moon()), SEGMENTS, 4, true).acquire()!
+    const count = terrainPatchVertexCount(SEGMENTS)
+    for (const [name, itemSize] of [['morphDelta', 3], ['midTiltParent', 2], ['midShadeParent', 2]] as const) {
+      const attr = handle.geometry.getAttribute(name) as BufferAttribute
+      expect(attr.itemSize).toBe(itemSize)
+      expect(attr.count).toBe(count)
+      expect(attr.usage).toBe(DynamicDrawUsage)
+    }
+    const patchMorph = handle.geometry.getAttribute('patchMorph') as InstancedBufferAttribute
+    expect(patchMorph.isInstancedBufferAttribute).toBe(true)
+    expect(patchMorph.count).toBe(1)
+    expect(patchMorph.meshPerAttribute).toBe(1)
+    expect(patchMorph.usage).toBe(DynamicDrawUsage)
+
+    const plain = makePool().acquire()!
+    for (const name of ['morphDelta', 'midTiltParent', 'midShadeParent', 'patchMorph']) {
+      expect(plain.geometry.getAttribute(name)).toBeUndefined()
+    }
+  })
+
+  it('setPatchMorph пишет значение и поднимает version только при изменении; без атрибута — no-op', () => {
+    const handle = new TerrainPatchPool(new PlanetMaterial(moon()), SEGMENTS, 4, true).acquire()!
+    const patchMorph = handle.geometry.getAttribute('patchMorph') as InstancedBufferAttribute
+    const before = patchMorph.version
+    setPatchMorph(handle, 0.5)
+    expect(patchMorph.array[0]).toBe(0.5)
+    expect(patchMorph.version).toBe(before + 1)
+    setPatchMorph(handle, 0.5)
+    expect(patchMorph.version).toBe(before + 1)
+
+    expect(() => setPatchMorph(makePool().acquire()!, 0.5)).not.toThrow()
+  })
+
+  it('applyPatchResult: результат без морфа в морф-слот обнуляет дельты и копирует свои midTilt/midShade в parent', () => {
+    const field = bumpyField()
+    const handle = new TerrainPatchPool(new PlanetMaterial(moon()), SEGMENTS, 4, true).acquire()!
+    const wrap = detailWrapFor(undefined)
+    const deep = 11
+    const job = { field, face: 2, i: 1, j: 0, level: deep, segments: SEGMENTS, skirtDepthUnits: SKIRT, wrap }
+    const apply = (morph: boolean | null): void => {
+      new SyncTerrainPatchBuilder().request(
+        { ...job, morph },
+        (result) => applyPatchResult(handle, result),
+        (error) => {
+          throw error
+        }
+      )
+    }
+    const attr = (name: string): number[] => Array.from(handle.geometry.getAttribute(name).array)
+
+    apply(true)
+    expect(attr('morphDelta').some((v) => v !== 0)).toBe(true)
+
+    apply(null)
+    expect(attr('morphDelta').every((v) => v === 0)).toBe(true)
+    expect(attr('midTiltParent')).toEqual(attr('midTilt'))
+    expect(attr('midShadeParent')).toEqual(attr('midShade'))
+    expect(attr('midShade').some((v) => v !== 0)).toBe(true)
+    expect(allocatePatchArrays(SEGMENTS).morph).toBeNull()
   })
 
   it('повторное использование не создаёт новых геометрий', () => {

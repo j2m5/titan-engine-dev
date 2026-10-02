@@ -616,10 +616,19 @@ export function applyPatchResult(
   writePatchAttribute(geometry, 'height', arrays.heights)
   writePatchAttribute(geometry, 'midTilt', arrays.midTilts)
   writePatchAttribute(geometry, 'midShade', arrays.midShades)
-  if (arrays.morph !== null && geometry.getAttribute('morphDelta') !== undefined) {
-    writePatchAttribute(geometry, 'morphDelta', arrays.morph.deltas)
-    writePatchAttribute(geometry, 'midTiltParent', arrays.morph.midTilts)
-    writePatchAttribute(geometry, 'midShadeParent', arrays.morph.midShades)
+  if (geometry.getAttribute('morphDelta') !== undefined) {
+    if (arrays.morph !== null) {
+      writePatchAttribute(geometry, 'morphDelta', arrays.morph.deltas)
+      writePatchAttribute(geometry, 'midTiltParent', arrays.morph.midTilts)
+      writePatchAttribute(geometry, 'midShadeParent', arrays.morph.midShades)
+    } else {
+      // результат без морфа в морф-слот: дельты прежнего патча не оставляем, родитель = своя форма
+      const deltas = geometry.getAttribute('morphDelta') as BufferAttribute
+      ;(deltas.array as Float32Array).fill(0)
+      deltas.needsUpdate = true
+      writePatchAttribute(geometry, 'midTiltParent', arrays.midTilts)
+      writePatchAttribute(geometry, 'midShadeParent', arrays.midShades)
+    }
   }
 
   // центр патча — инстансный атрибут (один элемент), тот же, что в into-варианте

@@ -161,7 +161,8 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
         level: job.level,
         segments: job.segments,
         skirtDepthUnits: job.skirtDepthUnits,
-        wrap: job.wrap
+        wrap: job.wrap,
+        morph: job.morph
       },
       []
     )
@@ -259,7 +260,14 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
           heights: new Float32Array(msg.heights),
           midTilts: new Float32Array(msg.midTilts),
           midShades: new Float32Array(msg.midShades),
-          morph: null
+          morph:
+            msg.morph === null
+              ? null
+              : {
+                  deltas: new Float32Array(msg.morph.deltas),
+                  midTilts: new Float32Array(msg.morph.midTilts),
+                  midShades: new Float32Array(msg.morph.midShades)
+                }
         },
         center: msg.center,
         bounds: msg.bounds
