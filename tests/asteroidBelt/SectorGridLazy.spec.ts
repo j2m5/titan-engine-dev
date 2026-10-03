@@ -2,17 +2,23 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { SectorGrid } from '@/core/renderables/DetailedRingStreamingSystem/SectorGrid'
 import { fromAstronomicalUnits, toThreeJSUnits } from '@/core/helpers/scaling'
+import { itPerf } from '../perfGate'
 
 describe('SectorGrid — ленивые слои', () => {
   const beltInner: number = fromAstronomicalUnits(42)
   const beltOuter: number = fromAstronomicalUnits(58)
   const cell: number = toThreeJSUnits(2000)
 
-  it('пояс шириной 16 а.е. создаётся мгновенно и не аллоцирует слои', () => {
+  itPerf('пояс шириной 16 а.е. создаётся мгновенно', () => {
     const t0: number = performance.now()
-    const grid = new SectorGrid({ innerRadius: beltInner, outerRadius: beltOuter, cellSize: cell, ringId: 11, densityPerUnit: 1 })
+    new SectorGrid({ innerRadius: beltInner, outerRadius: beltOuter, cellSize: cell, ringId: 11, densityPerUnit: 1 })
 
     expect(performance.now() - t0).toBeLessThan(50)
+  })
+
+  it('пояс шириной 16 а.е. не аллоцирует слои', () => {
+    const grid = new SectorGrid({ innerRadius: beltInner, outerRadius: beltOuter, cellSize: cell, ringId: 11, densityPerUnit: 1 })
+
     expect(grid.layerCount).toBeGreaterThan(1_000_000)
     expect((grid as unknown as { layers?: unknown }).layers).toBeUndefined()
   })

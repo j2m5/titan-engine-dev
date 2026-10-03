@@ -28,7 +28,8 @@
     "measure:water-level": "vite-node scripts/measure-water-level.ts --",
     "measure:detail-stats": "vite-node scripts/measure-detail-stats.ts --",
     "preview": "vite preview",
-    "test": "npm run typecheck && vitest"
+    "test": "npm run typecheck && vitest",
+    "test:perf": "vitest run --mode perf --no-file-parallelism tests/terrain/midbandBuildBudget.spec.ts tests/asteroidBelt/SectorGridLazy.spec.ts"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
