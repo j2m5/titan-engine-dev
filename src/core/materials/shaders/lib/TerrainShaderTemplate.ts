@@ -45,7 +45,7 @@ const terrainUniforms = {
   uNearTileWeight: new Uniform(0),
   uNearShadowMaxDistMeters: new Uniform(8000),
   uNearCameraXY: new Uniform(new Vector2(0, 0)),
-  uNearCameraFadeMeters: new Uniform(new Vector2(7000, 9500)),
+  uNearCameraFadeMeters: new Uniform(new Vector2(6500, 9000)),
   uBodyRadiusMeters: new Uniform(0)
 }
 

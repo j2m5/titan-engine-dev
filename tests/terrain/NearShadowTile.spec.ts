@@ -145,6 +145,21 @@ describe('NearShadowTile: порог высоты и первый запрос',
     expect(xy[0]).toBeGreaterThan(2999)
     tile.dispose()
   })
+
+  it('порог перепечки — rebakeFraction конфига по умолчанию (не четверть окна SMALL)', () => {
+    const field = makeField()
+    const builder = new QueuedNearBuilder()
+    const c = config('terrain.nearShadow')
+    const tile = new NearShadowTile(field, builder, c)
+    tile.update(cameraAt(field, 2000))
+    builder.reply()
+    const threshold = c.rebakeFraction * c.tileTexels * c.texelMeters
+    tile.update(cameraAt(field, 2000, threshold - 20))
+    expect(builder.requests).toBe(1)
+    tile.update(cameraAt(field, 2000, threshold + 20))
+    expect(builder.requests).toBe(2)
+    tile.dispose()
+  })
 })
 
 describe('NearShadowTile: перепечка и запросы в полёте', () => {

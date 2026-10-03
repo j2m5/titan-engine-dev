@@ -66,7 +66,8 @@ export interface TerrainConfig {
       /**
        * Перепечка при сдвиге подспутниковой точки дальше этой доли стороны плитки.
        * Инвариант: fadeEndMeters + rebakeFraction · сторона ≤ 0.8 · полуширины —
-       * окно камеры не доходит до страховки края, пока центр плитки отстаёт.
+       * окно камеры не доходит до страховки края, пока центр плитки отстаёт;
+       * сверху запас ≥ 800 м на путь камеры, пока перепечка в полёте.
        */
       rebakeFraction: number
       /**
@@ -133,8 +134,8 @@ export const terrain: TerrainConfig = {
       maxAltitudeMeters: 50000,
       fadeAltitudeMeters: 30000,
       rebakeFraction: 0.1,
-      fadeStartMeters: 7000,
-      fadeEndMeters: 9500
+      fadeStartMeters: 6500,
+      fadeEndMeters: 9000
     },
     lod: {
       patchBuildBudgetMs: 6,

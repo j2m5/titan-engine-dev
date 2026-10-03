@@ -200,6 +200,9 @@ describe('terrainNearShadowMath: веса и сложение', () => {
   })
 })
 
+// путь камеры, пока перепечка в полёте (бейк ≈0.4 с + очередь воркера), м
+const NEAR_IN_FLIGHT_SLACK_METERS = 800
+
 describe('конфиг terrain.nearShadow', () => {
   it('значения Global Constraints', () => {
     expect(config('terrain.nearShadow')).toEqual({
@@ -209,8 +212,8 @@ describe('конфиг terrain.nearShadow', () => {
       maxAltitudeMeters: 50000,
       fadeAltitudeMeters: 30000,
       rebakeFraction: 0.1,
-      fadeStartMeters: 7000,
-      fadeEndMeters: 9500
+      fadeStartMeters: 6500,
+      fadeEndMeters: 9000
     })
   })
 
@@ -218,7 +221,7 @@ describe('конфиг terrain.nearShadow', () => {
     const c = config('terrain.nearShadow')
     const side = c.tileTexels * c.texelMeters
     expect(c.fadeStartMeters).toBeLessThan(c.fadeEndMeters)
-    expect(c.fadeEndMeters + c.rebakeFraction * side).toBeLessThanOrEqual(0.8 * (side / 2))
+    expect(0.8 * (side / 2) - c.rebakeFraction * side - c.fadeEndMeters).toBeGreaterThanOrEqual(NEAR_IN_FLIGHT_SLACK_METERS)
   })
 })
 
