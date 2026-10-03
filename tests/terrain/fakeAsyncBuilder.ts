@@ -20,6 +20,8 @@ export class FakeAsyncBuilder implements TerrainPatchBuilder {
     return true
   }
 
+  public readonly mapCopies = 2
+
   public acquire(field: TerrainHeightField): void {
     this.acquired.push(field)
   }

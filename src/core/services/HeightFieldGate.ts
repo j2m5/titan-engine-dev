@@ -9,6 +9,7 @@ import { heightPathOf } from '@/core/terrain/heightPath'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import type { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import type { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
+import type { TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 
 /** Защита от деления на ноль, когда камера стоит ровно в центре тела. */
 const MIN_DISTANCE: number = 1e-9
@@ -34,7 +35,8 @@ export class HeightFieldGate {
     private sceneObserver: SceneObserver,
     private scene: Scene,
     private factory: RenderableFactory,
-    private renderer: WebGLRenderer
+    private renderer: WebGLRenderer,
+    private builder: TerrainPatchBuilder
   ) {
     this.sceneObserver.subscribe('ClosestChange', this.onClosestChange)
   }
@@ -109,7 +111,8 @@ export class HeightFieldGate {
       minBodyPixelsToPriorityThreshold(config('terrain.heightMapLoadPixels'), fovDegrees, viewportHeight),
       minBodyPixelsToPriorityThreshold(config('terrain.heightMapReleasePixels'), fovDegrees, viewportHeight),
       (path: string): number | undefined => heightFieldStorage.bytesOf(path),
-      config('terrain.heightMapBudgetMiB') * 1024 * 1024
+      config('terrain.heightMapBudgetMiB') * 1024 * 1024,
+      this.builder.mapCopies
     )
 
     for (const path of decision.request) heightFieldStorage.request(path)

@@ -23,6 +23,7 @@ const RADIUS_KM = 1737.4
 /** Очередь как у воркера: постройки приходят пачками по flush(n) между кадрами. */
 class QueuedBuilder implements TerrainPatchBuilder {
   public readonly offThread = true
+  public readonly mapCopies = 2
   public built = 0
   private readonly queue: Array<[PatchBuildJob, (result: PatchBuildResult) => void, (error: unknown) => void]> = []
   private readonly sync = new SyncTerrainPatchBuilder()

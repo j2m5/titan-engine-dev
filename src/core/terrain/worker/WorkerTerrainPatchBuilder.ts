@@ -139,6 +139,10 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     return this.fallback === null && !this.disposed
   }
 
+  public get mapCopies(): number {
+    return this.offThread ? 2 : 1
+  }
+
   public acquire(field: TerrainHeightField): void {
     if (this.fallback) return
 

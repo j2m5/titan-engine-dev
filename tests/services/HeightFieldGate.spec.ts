@@ -7,6 +7,7 @@ import { syncRenderableMaterials } from '@/core/materials/materialSync'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { SceneObserver } from '@/core/services/SceneObserver'
 import { HeightFieldGate } from '@/core/services/HeightFieldGate'
+import { SyncTerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { heightPathOf } from '@/core/terrain/heightPath'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
@@ -16,6 +17,13 @@ import { config } from '@/core/framework/config'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 
 const MOON_ID: number = 19
+
+/** Как живой воркер: две копии карты — бюджет 512 МиБ значит прежние 256 по картам. */
+class WorkerLikeBuilder extends SyncTerrainPatchBuilder {
+  public override get mapCopies(): number {
+    return 2
+  }
+}
 
 type FactoryStub = {
   upgradePlanetToTerrain: ReturnType<typeof vi.fn>
@@ -87,7 +95,7 @@ function makeStand(
     resyncSurfaceMaterials: vi.fn()
   }
 
-  const gate = new HeightFieldGate(observer, scene, factory as never, makeRenderer(viewportHeight))
+  const gate = new HeightFieldGate(observer, scene, factory as never, makeRenderer(viewportHeight), new WorkerLikeBuilder())
 
   return { gate, observer, factory }
 }
@@ -368,7 +376,7 @@ describe('HeightFieldGate: окно даунгрейда не оставляет
         if (target.renderable) syncRenderableMaterials(target.renderable)
       })
     }
-    const gate = new HeightFieldGate(observer, scene, factory as never, makeRenderer(NOMINAL_HEIGHT))
+    const gate = new HeightFieldGate(observer, scene, factory as never, makeRenderer(NOMINAL_HEIGHT), new WorkerLikeBuilder())
 
     return { gate, observer, node, moon, path }
   }

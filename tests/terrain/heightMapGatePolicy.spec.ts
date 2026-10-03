@@ -167,3 +167,39 @@ describe('decideHeightMaps: бюджет резидентных карт', () =>
     expect(decision.release.sort()).toEqual(['far.raw', 'orphan.raw'])
   })
 })
+
+describe('decideHeightMaps: множитель копий карты', () => {
+  const MiB: number = 1024 * 1024
+  const sizes = (bytes: Record<string, number>) => (path: string): number | undefined => bytes[path]
+  const SET = [candidate('a.raw', 30), candidate('b.raw', 20), candidate('c.raw', 15)]
+  const BYTES = sizes({ 'a.raw': 60 * MiB, 'b.raw': 60 * MiB, 'c.raw': 60 * MiB })
+
+  it('множитель 2 при бюджете 512 решает так же, как множитель 1 при 256', () => {
+    const single = decideHeightMaps(SET, ['c.raw'], LOAD, RELEASE, BYTES, 256 * MiB, 1)
+    const doubled = decideHeightMaps(SET, ['c.raw'], LOAD, RELEASE, BYTES, 512 * MiB, 2)
+
+    expect(doubled).toEqual(single)
+  })
+
+  it('множитель реально сужает набор: при том же бюджете две копии вытесняют карту', () => {
+    const single = decideHeightMaps(SET, [], LOAD, RELEASE, BYTES, 150 * MiB, 1)
+    const doubled = decideHeightMaps(SET, [], LOAD, RELEASE, BYTES, 150 * MiB, 2)
+
+    expect(single.request).toEqual(['a.raw', 'b.raw'])
+    expect(doubled.request).toEqual(['a.raw'])
+  })
+
+  it('неизмеренный путь тоже множится: предполагаемые 64 МиБ × 2 копии', () => {
+    const wide = (copies: number) =>
+      decideHeightMaps([candidate('a.raw', 30), candidate('b.raw', 20)], [], LOAD, RELEASE, () => undefined, 130 * MiB, copies)
+
+    expect(wide(1).request).toEqual(['a.raw', 'b.raw'])
+    expect(wide(2).request).toEqual(['a.raw'])
+  })
+
+  it('пол при множителе 2: одна карта, чья стоимость × копии дороже бюджета, всё равно резидентна', () => {
+    const decision = decideHeightMaps([candidate('huge.raw', 30)], [], LOAD, RELEASE, sizes({ 'huge.raw': 300 * MiB }), 100 * MiB, 2)
+
+    expect(decision.request).toEqual(['huge.raw'])
+  })
+})
