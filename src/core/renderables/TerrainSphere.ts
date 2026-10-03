@@ -128,17 +128,27 @@ class TerrainSphere extends TerrainPatchGroup {
     this.syncNearTile()
   }
 
+  /** Скрытое тело плитку не держит: текстура освобождена, ответ в полёте устареет. */
+  protected override onHiddenUpdate(): void {
+    this.releaseNearTile()
+  }
+
   public override dispose(): void {
     this.nearTile.dispose()
     this.sharedMaterial.setNearTile(null)
     super.dispose()
   }
 
+  private releaseNearTile(): void {
+    this.nearTile.release()
+    this.sharedMaterial.setNearTile(null)
+  }
+
   /** Камера в системе тела (тело вращается); matrixWorld свеж — getWorldPosition выше его обновил. */
   private syncNearTile(): void {
-    if (!this.sharedMaterial.nearShadowActive) {
-      this.nearTile.release()
-      this.sharedMaterial.setNearTile(null)
+    // без воркера слой выключен: синхронный бейк 512² фризит главный поток
+    if (!this.sharedMaterial.nearShadowActive || !this.builder.offThread) {
+      this.releaseNearTile()
 
       return
     }

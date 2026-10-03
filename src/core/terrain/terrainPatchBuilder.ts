@@ -38,6 +38,8 @@ export interface PatchBuildResult {
  * буферы, и переиспользовать их обоим никто не мешает.
  */
 export interface TerrainPatchBuilder {
+  /** Работа идёт вне главного потока (живой воркер): только такому строителю доверяется тяжёлый бейк плитки ближней тени. */
+  readonly offThread: boolean
   /** Группа заявляет владение полем (конструктор); парный release — в dispose. Счётчик ссылок у воркерного строителя. */
   acquire(field: TerrainHeightField): void
   request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void, onError: (error: unknown) => void): void
@@ -69,6 +71,10 @@ export class SyncTerrainPatchBuilder implements TerrainPatchBuilder {
   private scratch: PatchArrays | null = null
   private scratchMorph: PatchArrays | null = null
   private scratchSegments = -1
+
+  public get offThread(): boolean {
+    return false
+  }
 
   public acquire(): void {}
 
