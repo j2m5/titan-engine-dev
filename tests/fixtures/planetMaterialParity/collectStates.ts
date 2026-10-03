@@ -199,7 +199,7 @@ function seedHeightMap(path: string): void {
   })
 }
 
-function resetRegistries(): void {
+export function resetRegistries(): void {
   resourceStorage.deleteAllTextures()
   heightFieldStorage.clear()
 }
@@ -225,7 +225,7 @@ function diffuseKeyOf(actor: Actor): string {
  * PlaceholderTexture на канвасе, которого в jsdom нет. Кольца — туда же
  * (текстура тени колец в конструкторе шейдера).
  */
-function seedPlaceholderKeys(actor: Actor): void {
+export function seedPlaceholderKeys(actor: Actor): void {
   const keys = new Set<string>(['', 'default.png', 'night.jpg', diffuseKeyOf(actor)])
   const diffuse = actor.resources.where('resourceType', 'diffuse').first()?.getAttribute('path')
   if (typeof diffuse === 'string') keys.add(diffuse)
@@ -236,7 +236,7 @@ function seedPlaceholderKeys(actor: Actor): void {
   for (const key of keys) seedTexture(key)
 }
 
-function seedFull(actor: Actor, withSteep: boolean): void {
+export function seedFull(actor: Actor, withSteep: boolean): void {
   const keys = new Set<string>([...pathsOf(actor), ...ringsOf(actor).flatMap(pathsOf)])
   if (withSteep) for (const p of Object.values(STEEP_DETAIL_PATHS)) keys.add(p)
   for (const key of keys) if (!resourceStorage.isExistsTexture(key)) seedTexture(key)

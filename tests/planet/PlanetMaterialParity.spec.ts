@@ -2,13 +2,20 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { Texture, Vector3 } from 'three'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
-import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
+import { AbstractShader, type ShaderProps } from '@/core/materials/shaders/AbstractShader'
+import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
+import { SphereSurfaceShader } from '@/core/materials/shaders/SphereSurfaceShader'
+import { TerrainShader } from '@/core/materials/shaders/TerrainShader'
 import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
 import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { Actor } from '@/core/models/Actor'
+import { heightPathOf } from '@/core/terrain/heightPath'
 import { normalizeGlsl, preprocessGlsl, withoutComments } from '../helpers/glsl'
 import {
   collectParityStates,
+  resetRegistries,
+  seedFull,
+  seedPlaceholderKeys,
   serializeField,
   serializeUniforms,
   tintRegistryFor,
@@ -248,6 +255,98 @@ describe.skipIf(SNAPSHOT_RUN)('паритет материала планет', 
         expect(f.reset.uniforms).toStrictEqual(s.reset.uniforms)
         expect(f.reset.material).toStrictEqual(s.reset.material)
       })
+    }
+  })
+})
+
+describe.skipIf(SNAPSHOT_RUN)('паритет юниформов шейдера', () => {
+  const category4Actors = (): Actor[] =>
+    Actor.where({ categoryId: 4 })
+      .all()
+      .sort((a, b) => (a.getAttribute('id') as number) - (b.getAttribute('id') as number))
+
+  const pick = <T>(record: Record<string, T>, keys: string[]): Record<string, T> =>
+    Object.fromEntries(keys.filter((k) => k in record).map((k) => [k, record[k]]))
+
+  // Объявлены в шаблоне, но ставит их не шейдер: встроенные three и юниформы материала
+  const NOT_SHADER_KEYS = new Set([
+    'normalMatrix',
+    'logDepthBufFC',
+    'uLightColor',
+    'uDetailTintNorm',
+    'uSteepTintNorm',
+    'uSteepNorMap',
+    'uSteepArmMap',
+    'uSteepDiffMap',
+    'uSteepGate',
+    'uSteepMask',
+    'uSteepTint',
+    'uFrostStrength',
+    'uFrostLine',
+    'uFrostSlopeMax',
+    'uFrostColor',
+    'uMidbandShade'
+  ])
+
+  /** Имена `uniform` в раскрытом шаблоне (все ветки дефайнов) без юниформов не-шейдера. */
+  const keysDeclaredIn = (template: ShaderProps): string[] => {
+    const code = withoutComments(AbstractShader.prepareSource(template.vertexShader) + '\n' + AbstractShader.prepareSource(template.fragmentShader))
+    const names = [...code.matchAll(/\buniform\s+(?:(?:lowp|mediump|highp)\s+)?\w+\s+(\w+)/g)].map((m) => m[1])
+
+    return [...new Set(names)].filter((k) => !NOT_SHADER_KEYS.has(k)).sort()
+  }
+
+  // Контракт «шаблон ↔ рантайм»: каждому дефолту шаблона шейдер ставит значение
+  const defaultsCovered = (template: ShaderProps, keys: string[]): void => {
+    const missing = Object.keys(template.uniforms).filter((k) => !NOT_SHADER_KEYS.has(k) && !keys.includes(k))
+    expect(missing).toEqual([])
+  }
+
+  const seeds: Record<'bare' | 'full', (actor: Actor) => void> = {
+    bare: (actor) => seedPlaceholderKeys(actor),
+    full: (actor) => {
+      seedPlaceholderKeys(actor)
+      seedFull(actor, false)
+    }
+  }
+
+  for (const actor of category4Actors()) {
+    for (const seed of ['bare', 'full'] as const) {
+      it(`${actor.getAttribute('id')} ${seed}`, () => {
+        resetRegistries()
+        seeds[seed](actor)
+        try {
+          const old = new PlanetShader(actor).uniforms
+          const sphere = new SphereSurfaceShader(actor).uniforms
+          expect(serializeUniforms(sphere)).toEqual(pick(serializeUniforms(old), Object.keys(sphere)))
+          expect(Object.keys(sphere).sort()).toEqual(keysDeclaredIn(SphereSurfaceShaderTemplate))
+          defaultsCovered(SphereSurfaceShaderTemplate, Object.keys(sphere))
+          if (heightPathOf(actor)) {
+            const terrain = new TerrainShader(actor).uniforms
+            expect(serializeUniforms(terrain)).toEqual(pick(serializeUniforms(old), Object.keys(terrain)))
+            expect(Object.keys(terrain).sort()).toEqual(keysDeclaredIn(TerrainShaderTemplate))
+            defaultsCovered(TerrainShaderTemplate, Object.keys(terrain))
+            // объединение ключей двух путей = ключи старого шейдера
+            expect([...new Set([...Object.keys(sphere), ...Object.keys(terrain)])].sort()).toEqual(Object.keys(old).sort())
+          }
+        } finally {
+          resetRegistries()
+        }
+      })
+    }
+  }
+
+  it('дефайны шейдера: общие USE_RING и USE_REGOLITH, как у старого', () => {
+    for (const actor of category4Actors()) {
+      resetRegistries()
+      seedPlaceholderKeys(actor)
+      try {
+        const old = new PlanetShader(actor).defines
+        expect(new SphereSurfaceShader(actor).defines, `${actor.getAttribute('id')}`).toStrictEqual(old)
+        if (heightPathOf(actor)) expect(new TerrainShader(actor).defines, `${actor.getAttribute('id')}`).toStrictEqual(old)
+      } finally {
+        resetRegistries()
+      }
     }
   })
 })
