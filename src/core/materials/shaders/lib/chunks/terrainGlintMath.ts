@@ -1,4 +1,4 @@
-/** CPU-зеркало блика льда (PlanetShaderTemplate, USE_TERRAIN_GLINT). Держать синхронно с GLSL. */
+/** CPU-зеркало блика льда (TerrainShaderTemplate, USE_TERRAIN_GLINT). Держать синхронно с GLSL. */
 export const ICE_GLINT_F0 = 0.018
 
 const clamp01 = (x: number): number => Math.min(1, Math.max(0, x))

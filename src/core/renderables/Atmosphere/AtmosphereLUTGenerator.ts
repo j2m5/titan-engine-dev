@@ -208,7 +208,7 @@ const MULTIPLE_SCATTERING_FRAG =
       // u_ms_night_floor = 1.0 отключает спад (чистая физика).
       // Куб smoothstep прижимает хвост вуали к терминатору: без него вуаль
       // тянулась серо-зелёной полосой далеко за гашение поверхности
-      // (smoothstep(-0.08, 0.25, NdotL) в PlanetShaderTemplate) — та самая
+      // (smoothstep(-0.08, 0.25, NdotL) в PlanetSurfaceCommon) — та самая
       // «полоса рассогласования терминаторов». День (mu_s >= 0, twilight = 1)
       // куб математически не меняет. Закреплено tests/atmosphere/MultiScatterTwilight.
       Length ms_r;

@@ -2,62 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { AppShaderChunk } from '@/core/materials/shaders/lib/chunks'
 import { terrainNearShadowFunctions } from '@/core/materials/shaders/lib/chunks/TerrainNearShadow'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { combineTerrainShadow, NEAR_SHADOW_BIAS_SLOPE, NEAR_SHADOW_STEPS } from '@/core/terrain/terrainNearShadowMath'
+import { preprocessGlsl } from '../helpers/glsl'
 
 const chunk = terrainNearShadowFunctions
-const frag: string = PlanetShaderTemplate.fragmentShader
+const frag: string = TerrainShaderTemplate.fragmentShader
 
 const FAR_LINE = 'if (NdotLraw > 0.0) terrainShadow = mix(1.0, terrainShadowMarch(dirLocal, sunLocal), uTerrainShadowStrength);'
 const NEAR_GATE = 'if (NdotLraw > 0.0 && uNearTileWeight > 0.0) {'
 const NEAR_COMBINE = 'if (nearWeight > 0.0) terrainShadow = min(terrainShadow, mix(1.0, terrainNearShadowMarch(dirLocal, sunLocal), nearWeight));'
-
-/**
- * Мини-препроцессор: #ifdef/#ifndef/#if/#elif/#else/#endif по набору define
- * (как в tests/water/WaterAbsorption.spec.ts). Условие #if — только `defined(X)`
- * с && || ! и скобками; прочее считается ложью.
- */
-function preprocess(source: string, defines: ReadonlySet<string>): string {
-  const evalCondition = (expr: string): boolean => {
-    const replaced = expr
-      .replace(/defined\s*\(\s*(\w+)\s*\)/g, (_m, name: string) => (defines.has(name) ? '1' : '0'))
-      .replace(/defined\s+(\w+)/g, (_m, name: string) => (defines.has(name) ? '1' : '0'))
-
-    if (!/^[01\s&|!()]*$/.test(replaced)) return false
-
-    return Boolean(new Function(`return (${replaced})`)())
-  }
-
-  const stack: { parent: boolean; active: boolean; taken: boolean }[] = []
-  const out: string[] = []
-  const isActive = (): boolean => (stack.length === 0 ? true : stack[stack.length - 1].active)
-
-  for (const line of source.split('\n')) {
-    const t = line.trim()
-    let m: RegExpMatchArray | null
-
-    if ((m = t.match(/^#ifdef\s+(\w+)/)) || (m = t.match(/^#ifndef\s+(\w+)/)) || (m = t.match(/^#if\s+(.*)$/))) {
-      const parent = isActive()
-      const cond = t.startsWith('#ifdef') ? defines.has(m[1]) : t.startsWith('#ifndef') ? !defines.has(m[1]) : evalCondition(m[1])
-      stack.push({ parent, active: parent && cond, taken: cond })
-    } else if ((m = t.match(/^#elif\s+(.*)$/))) {
-      const top = stack[stack.length - 1]
-      const cond = !top.taken && evalCondition(m[1])
-      top.active = top.parent && cond
-      top.taken = top.taken || cond
-    } else if (t === '#else') {
-      const top = stack[stack.length - 1]
-      top.active = top.parent && !top.taken
-      top.taken = true
-    } else if (t.startsWith('#endif')) {
-      stack.pop()
-    } else if (isActive()) {
-      out.push(line)
-    }
-  }
-
-  return out.join('\n')
-}
 
 /** Индекс имени в его объявлении (переменная, параметр, юниформ, функция) или -1. */
 function declarationAt(src: string, name: string): number {
@@ -165,7 +120,7 @@ describe('TerrainNearShadow: чанк', () => {
   })
 })
 
-describe('PlanetShaderTemplate: сложение слоёв тени', () => {
+describe('TerrainShaderTemplate: сложение слоёв тени', () => {
   it('чанк включён под USE_TERRAIN_SHADOW, после дальнего марша', () => {
     const start = frag.indexOf('#ifdef USE_TERRAIN_SHADOW')
     const block = frag.slice(start, frag.indexOf('#endif', start))
@@ -195,11 +150,12 @@ describe('PlanetShaderTemplate: сложение слоёв тени', () => {
     expect(combineTerrainShadow(0.7, 0.2, 1)).toBe(0.2)
   })
 
-  const combos: [string, string[]][] = [
-    ['ничего', []],
-    ['только UV', ['USE_TERRAIN_UV']],
-    ['только тень', ['USE_TERRAIN_SHADOW']],
-    ['UV + тень', ['USE_TERRAIN_UV', 'USE_TERRAIN_SHADOW']]
+  // путь задаёт шаблон: у сферы слоя тени нет ни при каком дефайне
+  const combos: [string, string, string[]][] = [
+    ['рельеф', 'ничего', []],
+    ['рельеф', 'тень', ['USE_TERRAIN_SHADOW']],
+    ['сфера', 'ничего', []],
+    ['сфера', 'тень', ['USE_TERRAIN_SHADOW']]
   ]
 
   const GLOBALS = [
@@ -210,10 +166,12 @@ describe('PlanetShaderTemplate: сложение слоёв тени', () => {
   ]
   const MAIN_LOCALS = ['dirLocal', 'sunLocal', 'terrainShadow', 'NdotLraw', 'nearWeight', 'directGain']
 
-  it.each(combos)('объявления до использования: %s', (_name, defs) => {
-    const src = preprocess(AbstractShader.prepareSource(frag), new Set(defs))
-    const shadow = defs.includes('USE_TERRAIN_SHADOW')
-    const both = shadow && defs.includes('USE_TERRAIN_UV')
+  it.each(combos)('объявления до использования: %s, %s', (path, _name, defs) => {
+    const terrain = path === 'рельеф'
+    const source = terrain ? frag : SphereSurfaceShaderTemplate.fragmentShader
+    const src = preprocessGlsl(AbstractShader.prepareSource(source), new Set(defs))
+    const shadow = terrain && defs.includes('USE_TERRAIN_SHADOW')
+    const both = shadow
 
     for (const name of GLOBALS) {
       const use = firstUseAt(src, name)

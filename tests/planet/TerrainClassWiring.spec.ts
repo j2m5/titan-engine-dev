@@ -1,7 +1,7 @@
 import { Color } from 'three'
 import { Texture } from 'three'
 import { Actor } from '@/core/models/Actor'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { midbandCacheKey, midbandParamsOf, resolveMidbandParams } from '@/core/terrain/midbandParams'
 import { readRenderingData } from '@/core/helpers/renderingData'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -37,10 +37,10 @@ function stubActor(data: Record<string, unknown>): Actor {
 describe('Пресеты классов доезжают до юниформ', () => {
   afterEach(() => resourceStorage.deleteAllTextures())
 
-  function materialOf(id: number): PlanetMaterial {
+  function materialOf(id: number): TerrainMaterial {
     const actor = Actor.find(id)!
     seedFor(actor)
-    const material = new PlanetMaterial(actor)
+    const material = new TerrainMaterial(actor)
     material.updateMaterial()
     return material
   }
@@ -74,8 +74,8 @@ describe('Пресеты классов доезжают до юниформ', (
 
   it('переопределение: стаб с terrainClass ice-airless — амбиент 0.22; с явным амбиентом — значение тела', () => {
     seedTexture(''); seedTexture('default.png'); seedTexture('night.jpg')
-    expect(new PlanetMaterial(stubActor({ terrainClass: 'ice-airless' })).uniforms.uTerrainAmbient.value).toBe(0.22)
-    expect(new PlanetMaterial(stubActor({ terrainClass: 'ice-airless', terrainAmbient: 0.05 })).uniforms.uTerrainAmbient.value).toBe(0.05)
+    expect(new TerrainMaterial(stubActor({ terrainClass: 'ice-airless' })).uniforms.uTerrainAmbient.value).toBe(0.22)
+    expect(new TerrainMaterial(stubActor({ terrainClass: 'ice-airless', terrainAmbient: 0.05 })).uniforms.uTerrainAmbient.value).toBe(0.05)
   })
 
   it('ключ кеша полей высот не зависит от пресета', () => {

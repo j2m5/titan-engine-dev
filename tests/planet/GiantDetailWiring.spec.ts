@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Texture } from 'three'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
-import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
+import { SphereSurfaceShader } from '@/core/materials/shaders/SphereSurfaceShader'
+import { TerrainShader } from '@/core/materials/shaders/TerrainShader'
+import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
@@ -20,7 +23,7 @@ function seedTexture(name: string, width: number = 4, height: number = 2): void 
 }
 
 /**
- * Конструктор PlanetShader ходит через getTextureOrMake за 'default.png',
+ * Конструктор шейдера поверхности ходит через getTextureOrMake за 'default.png',
  * 'night.jpg' и '' (заглушка кольца) — промах строит PlaceholderTexture на
  * канвасе, которого в jsdom нет (образец: TerrainLambert.spec.ts).
  */
@@ -72,8 +75,9 @@ function stubTerraformActor(data: Record<string, unknown>): Actor {
   })
 }
 
-describe('PlanetShaderTemplate: деталь гиганта в легаси-ветке', () => {
-  const frag: string = PlanetShaderTemplate.fragmentShader
+describe('SphereSurfaceShaderTemplate: деталь гиганта только на сфере', () => {
+  const frag: string = SphereSurfaceShaderTemplate.fragmentShader
+  const terrainFrag: string = TerrainShaderTemplate.fragmentShader
 
   it('чанки включены под гейтом, после noiseFunctions и объявления diffuseMap', () => {
     expect(frag).toContain('#include <giantDetailUniforms>')
@@ -84,7 +88,7 @@ describe('PlanetShaderTemplate: деталь гиганта в легаси-ве
     expect(gate).toBeGreaterThan(-1)
   })
 
-  it('вызов в ветке #else (легаси), до состава dayColor, с одной выборкой диффуза', () => {
+  it('вызов после uv = vUv, до состава dayColor, с одной выборкой диффуза', () => {
     const elseBranch = frag.indexOf('vec2 uv = vUv;')
     const call = frag.indexOf(
       'applyGiantDetail(albedoMul, normalize(vPosition), uv, dot(diffuseSample, vec3(0.2126, 0.7152, 0.0722)), length(vViewPosition));'
@@ -94,17 +98,24 @@ describe('PlanetShaderTemplate: деталь гиганта в легаси-ве
     expect(call).toBeGreaterThan(elseBranch)
     expect(mul).toBeGreaterThan(call)
     expect(frag).toContain('vec3 diffuseSample = texture2D(diffuseMap, uv).rgb;')
-    // по одной выборке диффуза на ветку UV (терраформ / легаси); выборки dLum живут в чанке, не в шаблоне
-    expect(frag.match(/texture2D\(diffuseMap, uv\)/g)).toHaveLength(2)
+    // одна выборка диффуза на путь; выборки dLum живут в чанке, не в шаблоне
+    expect(frag.match(/texture2D\(diffuseMap, uv\)/g)).toHaveLength(1)
+    expect(terrainFrag.match(/texture2D\(diffuseMap, uv\)/g)).toHaveLength(1)
+  })
+
+  it('в шаблоне рельефа чанка гиганта нет: ни гейта, ни include, ни вызова', () => {
+    expect(terrainFrag).not.toContain('USE_GIANT_DETAIL')
+    expect(terrainFrag).not.toContain('giantDetail')
+    expect(terrainFrag).not.toContain('applyGiantDetail(')
   })
 })
 
-describe('PlanetShader: ручки детали гиганта', () => {
+describe('SphereSurfaceShader: ручки детали гиганта', () => {
   beforeEach(seedPlaceholderKeys)
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('дефолты: strength 0.35, scale 300, stretch 6, warp 0.6, textureWarp 2, fade 1.5·R в юнитах, радиус из physicalObject', () => {
-    const shader = new PlanetShader(stubActor({ radius: 69911 }, {}))
+    const shader = new SphereSurfaceShader(stubActor({ radius: 69911 }, {}))
     expect(shader.uniforms.uGiantRadiusKm.value).toBe(69911)
     expect(shader.uniforms.uGiantDetailStrength.value).toBe(0.35)
     expect(shader.uniforms.uGiantDetailScaleKm.value).toBe(300)
@@ -114,13 +125,19 @@ describe('PlanetShader: ручки детали гиганта', () => {
     expect(shader.uniforms.uGiantDetailFadeUnits.value).toBeCloseTo(toThreeJSUnits(1.5 * 69911), 12)
   })
 
-  it('строка без bumpScale (мёртвая ручка) — юниформ 0, а не undefined', () => {
-    const shader = new PlanetShader(stubActor({ radius: 69911 }, { giantDetail: true }))
-    expect(shader.uniforms.bumpScale.value).toBe(0)
+  it('строка без bumpScale (мёртвая ручка) — юниформ 0, а не undefined (оба пути)', () => {
+    const actor = stubActor({ radius: 69911 }, { giantDetail: true })
+    expect(new SphereSurfaceShader(actor).uniforms.bumpScale.value).toBe(0)
+    expect(new TerrainShader(actor).uniforms.bumpScale.value).toBe(0)
+  })
+
+  it('у шейдера рельефа юниформов детали гиганта нет', () => {
+    const uniforms = new TerrainShader(stubActor({ radius: 69911 }, { giantDetail: true })).uniforms
+    expect(Object.keys(uniforms).filter((key) => key.startsWith('uGiant'))).toEqual([])
   })
 
   it('ручки из data', () => {
-    const shader = new PlanetShader(
+    const shader = new SphereSurfaceShader(
       stubActor(
         { radius: 1000 },
         {
@@ -142,7 +159,7 @@ describe('PlanetShader: ручки детали гиганта', () => {
   })
 
   it('кламп: giantDetailScaleKm/giantDetailStretch 0 → 1e-3 (деление на ноль в giantDomain)', () => {
-    const shader = new PlanetShader(
+    const shader = new SphereSurfaceShader(
       stubActor({ radius: 1000 }, { giantDetailScaleKm: 0, giantDetailStretch: 0 })
     )
     expect(shader.uniforms.uGiantDetailScaleKm.value).toBe(1e-3)
@@ -150,7 +167,7 @@ describe('PlanetShader: ручки детали гиганта', () => {
   })
 })
 
-describe('PlanetMaterial: дефайн USE_GIANT_DETAIL', () => {
+describe('материалы поверхности: дефайн USE_GIANT_DETAIL', () => {
   beforeEach(() => {
     seedPlaceholderKeys()
     // Диффуз тела и текстура колец идут через getTextureOrMake — их тоже сеем
@@ -165,23 +182,31 @@ describe('PlanetMaterial: дефайн USE_GIANT_DETAIL', () => {
   })
 
   it('Сатурн (actor 11): giantDetail в данных, карты высот нет → дефайн', () => {
-    const m = new PlanetMaterial(Actor.find(11)!)
+    const m = new SphereSurfaceMaterial(Actor.find(11)!)
     m.updateMaterial()
     expect(m.defines.USE_GIANT_DETAIL).toBe('1')
   })
 
   it('без ручки — дефайна нет (Луна, actor 19)', () => {
-    const m = new PlanetMaterial(Actor.find(19)!)
+    const m = new SphereSurfaceMaterial(Actor.find(19)!)
     m.updateMaterial()
     expect(m.defines.USE_GIANT_DETAIL).toBeUndefined()
   })
 
-  it('терраформное тело с giantDetail: true и загруженной картой высот — дефайна нет', () => {
+  it('TerrainMaterial с giantDetail: true и загруженной картой высот — дефайна нет', () => {
     seedHeightField(TERRAFORM_HEIGHT_PATH)
 
-    const m = new PlanetMaterial(stubTerraformActor({ giantDetail: true }))
+    const m = new TerrainMaterial(stubTerraformActor({ giantDetail: true }))
     m.updateMaterial()
     expect(m.defines.USE_GIANT_DETAIL).toBeUndefined()
+  })
+
+  it('сфера ставит дефайн по одной ручке giantDetail — реестр карт высот не спрашивает', () => {
+    seedHeightField(TERRAFORM_HEIGHT_PATH)
+
+    const m = new SphereSurfaceMaterial(stubTerraformActor({ giantDetail: true }))
+    m.updateMaterial()
+    expect(m.defines.USE_GIANT_DETAIL).toBe('1')
   })
 })
 

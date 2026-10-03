@@ -2,9 +2,9 @@ import { afterEach, beforeEach, vi } from 'vitest'
 import { Texture } from 'three'
 import '@/core/framework/TitanThree'
 import { ICE_GLINT_F0, iceGlint, iceGlintPower } from '@/core/materials/shaders/lib/chunks/terrainGlintMath'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { terrainDetailFunctions } from '@/core/materials/shaders/lib/chunks/TerrainDetail'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { ResourceType } from '@/core/models/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -103,7 +103,7 @@ describe('iceGlint: CPU-зеркало', () => {
 })
 
 describe('Шейдер: блеск льда', () => {
-  const frag = PlanetShaderTemplate.fragmentShader
+  const frag = TerrainShaderTemplate.fragmentShader
 
   it('функция под гейтом, формула как у зеркала', () => {
     const start = frag.indexOf('#ifdef USE_TERRAIN_GLINT')
@@ -147,7 +147,7 @@ describe('Шейдер: блеск льда', () => {
   })
 })
 
-describe('PlanetMaterial: гейт блеска льда', () => {
+describe('TerrainMaterial: гейт блеска льда', () => {
   beforeEach(() => {
     seedHeightMap(europa())
     seedPlaceholderKeys(europa())
@@ -161,7 +161,7 @@ describe('PlanetMaterial: гейт блеска льда', () => {
   })
 
   it('Европа (ice-airless, без воды): USE_TERRAIN_GLINT и uIceGlintStrength 0.35', () => {
-    const material = new PlanetMaterial(europa())
+    const material = new TerrainMaterial(europa())
     material.updateMaterial()
 
     expect(material.defines.USE_TERRAIN_GLINT).toBe('1')
@@ -175,7 +175,7 @@ describe('PlanetMaterial: гейт блеска льда', () => {
     seedPlaceholderKeys(moon())
     seedTexture(pathOf(moon(), 'detailNormal'), 8, 4)
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
     expect(material.defines.USE_TERRAIN_GLINT).toBeUndefined()
@@ -185,7 +185,7 @@ describe('PlanetMaterial: гейт блеска льда', () => {
   it('Европа с водной оболочкой: дефайна нет — блик суши под водой был бы вторым бликом', () => {
     waterLevelOverride.value = 0
 
-    const material = new PlanetMaterial(europa())
+    const material = new TerrainMaterial(europa())
     material.updateMaterial()
 
     expect(material.defines.USE_TERRAIN_GLINT).toBeUndefined()

@@ -3,7 +3,7 @@ import {
   terrainMacroDetailFunctions,
   terrainMacroDetailUniforms
 } from '@/core/materials/shaders/lib/chunks/TerrainMacroDetail'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import {
   MACRO_RELIEF_ASPECT_STREAK,
   STREAK_PLANE_MIN_WEIGHT,
@@ -120,7 +120,7 @@ describe('TerrainMacroDetail: направленные формы склона (
   })
 
   it('вершинник: атрибут height и varying под объединённым гейтом полосы/кромки', () => {
-    const vert: string = PlanetShaderTemplate.vertexShader
+    const vert: string = TerrainShaderTemplate.vertexShader
     // гейт объединён с USE_WATER_EDGE (Task 5, мокрая кромка берега)
     const gate = vert.indexOf('#if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE)')
     expect(gate).toBeGreaterThan(-1)

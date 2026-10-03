@@ -3,7 +3,7 @@ import {
   terrainMacroDetailFunctions,
   terrainMacroDetailUniforms
 } from '@/core/materials/shaders/lib/chunks/TerrainMacroDetail'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 
 describe('TerrainMacroDetail: контракт чанка', () => {
   const fn: string = terrainMacroDetailFunctions
@@ -36,7 +36,7 @@ describe('TerrainMacroDetail: контракт чанка', () => {
     // Тень облаков (USE_CLOUD_SHADOW) считает длину дуги uv по тому же радиусу и
     // компилируется при macroStrength 0, когда чанк в шейдер не включён вовсе.
     expect(terrainMacroDetailUniforms).not.toContain('uniform float uBodyRadiusUnits;')
-    expect(PlanetShaderTemplate.fragmentShader).toContain('uniform float uBodyRadiusUnits;')
+    expect(TerrainShaderTemplate.fragmentShader).toContain('uniform float uBodyRadiusUnits;')
   })
 
   it('нормаль из аналитического градиента snoiseGrad, без dFdx/dFdy по шуму', () => {

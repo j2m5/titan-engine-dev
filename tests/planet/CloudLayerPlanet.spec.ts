@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { RepeatWrapping } from 'three'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { composeTerrain } from '@/core/materials/shaders/lib/chunks/terrainLightMath'
 import { Resources } from '@storage/database'
 import type { IResource } from '@/core/models/types'
 
-const vert: string = PlanetShaderTemplate.vertexShader
-const frag: string = PlanetShaderTemplate.fragmentShader
-const main: string = frag.slice(frag.indexOf('void main()'))
+const templates = [
+  ['сфера', SphereSurfaceShaderTemplate],
+  ['рельеф', TerrainShaderTemplate]
+] as const
+const mainOf = (frag: string): string => frag.slice(frag.indexOf('void main()'))
 const strip = (s: string): string => s.replace(/\/\/[^\n]*/g, '')
 
 function openGuards(source: string, at: number): string[] {
@@ -24,18 +27,21 @@ function openGuards(source: string, at: number): string[] {
   return stack
 }
 
-describe('PlanetShaderTemplate: облачный слой из чанка', () => {
+describe.each(templates)('%s: облачный слой из чанка', (_path, template) => {
+  const vert: string = template.vertexShader
+  const frag: string = template.fragmentShader
+  const main: string = mainOf(frag)
+
   it('вершинник: взгляд в системе тела из view-space, не из worldPosition', () => {
     expect(vert).toContain('varying vec3 vLocalViewDir;')
     expect(vert).toContain('vLocalViewDir = transpose(mat3(modelMatrix)) * (transpose(mat3(viewMatrix)) * mvPosition.xyz);')
     expect(frag).toContain('varying vec3 vLocalViewDir;')
   })
 
-  it('чанк подключён под USE_CLOUD после тинта солнца; terrainUv — и для легаси-облаков, одним include', () => {
+  it('чанк подключён под USE_CLOUD после тинта солнца; terrainUv — одним include', () => {
     const inc = frag.indexOf('#include <cloudLayerFunctions>')
     expect(inc).toBeGreaterThan(frag.indexOf('#include <sunTransmittanceFunctions>'))
     expect(openGuards(frag, inc)).toContain('USE_CLOUD')
-    expect(frag).toMatch(/#if defined\(USE_TERRAIN_UV\) \|\| defined\(USE_CLOUD\)\s+#include <terrainUvFunctions>\s+#endif/)
     expect(frag.match(/#include <terrainUvFunctions>/g)).toHaveLength(1)
     expect(frag).not.toContain('uniform float uCloudShadowStrength;')
     expect(frag).not.toContain('uniform float uCloudHeightUnits;')
@@ -48,19 +54,33 @@ describe('PlanetShaderTemplate: облачный слой из чанка', () =
     expect(main).not.toContain('texture2D(cloudMap, uv)')
   })
 
-  it('сборка: облака своим светом, огни гаснут под облаками, блик под облаками', () => {
+  it('сборка: облака своим светом, огни гаснут под облаками', () => {
     expect(main).toContain('vec3 day = cloudRadiance + dayColor * (1.0 - cloudAlphaSlant) * landGate;')
     expect(main).toContain('vec3 finalColor = night * (1.0 - dayFactor) * (1.0 - cloudAlphaSlant) + day;')
-    expect(main).toContain('* (1.0 - cloudAlphaSlant) * sunTintMix')
     expect(main).not.toMatch(/\bcloudAlpha\b/)
     expect(main).not.toMatch(/\bcloudColor\b/)
   })
+})
 
-  it('тень облаков на суше — вызов чанка, под USE_TERRAIN_UV и USE_CLOUD_SHADOW', () => {
-    const call = frag.indexOf('cloudShadow = cloudShadowAt(dirLocal, sunLocal, muS);')
+describe('облачный слой: различия путей', () => {
+  const sphereFrag: string = SphereSurfaceShaderTemplate.fragmentShader
+  const terrainFrag: string = TerrainShaderTemplate.fragmentShader
+
+  it('сфера: terrainUv только под USE_CLOUD (диффуз по vUv); рельеф: без гейта', () => {
+    expect(sphereFrag).toMatch(/#ifdef USE_CLOUD\s+#include <terrainUvFunctions>\s+#endif/)
+    expect(openGuards(terrainFrag, terrainFrag.indexOf('#include <terrainUvFunctions>'))).toEqual([])
+  })
+
+  it('блик воды на сфере гаснет под облаками', () => {
+    expect(mainOf(sphereFrag)).toContain('* (1.0 - cloudAlphaSlant) * sunTintMix')
+  })
+
+  it('тень облаков на суше — вызов чанка только у рельефа, под USE_CLOUD_SHADOW', () => {
+    const call = terrainFrag.indexOf('cloudShadow = cloudShadowAt(dirLocal, sunLocal, muS);')
     expect(call).toBeGreaterThan(-1)
-    expect(openGuards(frag, call)).toEqual(expect.arrayContaining(['USE_TERRAIN_UV', 'USE_CLOUD_SHADOW']))
-    expect(main).not.toContain('vec2 uvShadow')
+    expect(openGuards(terrainFrag, call)).toEqual(['USE_CLOUD_SHADOW'])
+    expect(sphereFrag).not.toContain('cloudShadowAt(')
+    expect(mainOf(terrainFrag)).not.toContain('vec2 uvShadow')
   })
 })
 

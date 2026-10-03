@@ -1,6 +1,6 @@
 import type { FrostParams } from '@/core/terrain/frostParams'
 
-/** CPU-зеркало маски инея (PlanetShaderTemplate, USE_TERRAIN_FROST). Держать синхронно с GLSL. */
+/** CPU-зеркало маски инея (TerrainShaderTemplate, USE_TERRAIN_FROST). Держать синхронно с GLSL. */
 const smoothstep = (a: number, b: number, x: number): number => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
   return t * t * (3 - 2 * t)

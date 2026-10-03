@@ -1,7 +1,8 @@
 import { PerspectiveCamera } from 'three'
 import { BLOOM_OPTIONS, Postprocessing, readAtmosphereDebugView, TONE_MAPPING_OPTIONS } from '@/core/graphic/Postprocessing'
 import { BlendFunction, Effect, EffectPass, RenderPass, ToneMappingMode } from 'postprocessing'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { AtmosphereEffect, createAtmospherePass } from '@/core/graphic/effects/atmosphere/AtmosphereEffect'
 import { buildSlotGlsl } from '@/core/graphic/effects/atmosphere/atmosphereSlotShader'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
@@ -25,9 +26,11 @@ describe('Postprocessing: контракт цветового конвейера
   it('bloom-guard: кламп планеты 0.99 остаётся НИЖЕ порога bloom', () => {
     // Диффуз-композит < порога bloom; HDR-глинт добавляется после клампа
     // и ограничен потолком 4.0 (блумит только солнечная дорожка)
-    // Порядок (кламп до блика) закреплён индексным тестом в tests/planet/PlanetShaderTemplate.spec.ts
-    expect(PlanetShaderTemplate.fragmentShader).toContain('clamp(finalColor, 0.0, 0.99)')
-    expect(PlanetShaderTemplate.fragmentShader).toContain('min(finalColor, vec3(4.0))')
+    // Порядок (кламп до блика) закреплён индексным тестом в tests/planet/PlanetSurfaceTemplates.spec.ts
+    for (const template of [SphereSurfaceShaderTemplate, TerrainShaderTemplate]) {
+      expect(template.fragmentShader).toContain('clamp(finalColor, 0.0, 0.99)')
+      expect(template.fragmentShader).toContain('min(finalColor, vec3(4.0))')
+    }
     expect(BLOOM_OPTIONS.luminanceThreshold).toBeGreaterThan(0.99)
   })
 

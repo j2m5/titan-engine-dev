@@ -6,8 +6,8 @@ export function glslFloat(value: number): string {
 }
 
 /**
- * Блик воды — общий для водной оболочки (WaterShaderTemplate) и легаси-сферы
- * тела с водой (PlanetShaderTemplate, USE_SPECULAR): на гейте карты высот блик
+ * Блик воды — общий для водной оболочки (WaterShaderTemplate) и сферы
+ * тела с водой (SphereSurfaceShaderTemplate, USE_SPECULAR): на гейте карты высот блик
  * один и тот же. CPU-зеркало — waterGlint в waterOctavesMath.ts.
  */
 export const waterGlintFunctions = /* glsl */ `

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { cloudLayerFunctions } from '@/core/materials/shaders/lib/chunks/CloudLayer'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 
 function cloudBlock(frag: string): string {
   // '\n' обязателен: USE_CLOUD_SHADOW (тень облаков на земле) стоит в шейдере
@@ -18,8 +19,11 @@ function cloudBlock(frag: string): string {
  * Покрытие облаков — свойство текстуры, не освещения: альфа от уже
  * освещённого цвета истончала облака к терминатору (×0.56 при N·L = 0).
  */
-describe('PlanetShaderTemplate: облака шейдятся геометрией сферы, покрытие — из текстуры', () => {
-  const block = cloudBlock(PlanetShaderTemplate.fragmentShader)
+describe.each([
+  ['сфера', SphereSurfaceShaderTemplate],
+  ['рельеф', TerrainShaderTemplate]
+])('%s: облака шейдятся геометрией сферы, покрытие — из текстуры', (_path, template) => {
+  const block = cloudBlock(template.fragmentShader)
 
   it('свет облаков — в точке слоя по её радиусу (cloudDir), не от нормали рельефа', () => {
     expect(block).toContain('cloudLitRadiance(cloudPremul, cloudDir, -normalize(vLocalLightDirection))')

@@ -1,22 +1,24 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Texture } from 'three'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { slopeNormalFunctions } from '@/core/materials/shaders/lib/chunks/SlopeNormal'
 import { terrainMacroDetailFunctions, terrainMacroDetailUniforms } from '@/core/materials/shaders/lib/chunks/TerrainMacroDetail'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { STEEP_DETAIL_PATHS } from '@/core/terrain/steepDetailPaths'
 
-const frag: string = PlanetShaderTemplate.fragmentShader
-const vert: string = PlanetShaderTemplate.vertexShader
+const frag: string = TerrainShaderTemplate.fragmentShader
+const vert: string = TerrainShaderTemplate.vertexShader
 
 describe('Полоса B в затенении: наклон по вершинам, без шума в пикселе', () => {
   it('атрибут и varying под USE_SLOPE в обоих стадиях', () => {
     const gateV = vert.indexOf('#ifdef USE_SLOPE')
     expect(gateV).toBeGreaterThan(-1)
     expect(vert.indexOf('attribute vec2 midTilt;')).toBeGreaterThan(gateV)
-    expect(vert).toContain('vMidTilt = midTilt;')
+    expect(vert).toContain('vMidTilt = mix(midTilt, midTiltParent, morphT);')
     expect(frag).toContain('varying vec2 vMidTilt;')
   })
 
@@ -54,7 +56,7 @@ describe('Полоса B в затенении: наклон по вершина
 
   it('вершинник и фрагментник: midShade под USE_TERRAIN_MACRO_DETAIL', () => {
     expect(vert).toContain('attribute vec2 midShade;')
-    expect(vert).toContain('vMidShade = midShade;')
+    expect(vert).toContain('vMidShade = mix(midShade, midShadeParent, morphT);')
     expect(frag).toContain('varying vec2 vMidShade;')
     const decl = vert.indexOf('attribute vec2 midShade;')
     const gate = vert.lastIndexOf('#ifdef USE_TERRAIN_MACRO_DETAIL', decl)
@@ -90,14 +92,15 @@ function stubActor(data: Record<string, unknown>): Actor {
   } as unknown as Actor
 }
 
-describe('PlanetMaterial: uMidbandShade из midbandParamsOf; дефолт атрибута midShade для легаси-сферы', () => {
+describe('TerrainMaterial: uMidbandShade из midbandParamsOf; дефолты атрибутов патча', () => {
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('Луна: uMidbandShade = 0.5 (дефолт); стаб с midbandShade 0 — 0', () => {
     const moon = Actor.find(19)!
     seedFor(moon)
-    const material = new PlanetMaterial(moon)
+    const material = new TerrainMaterial(moon)
     expect(material.uniforms.uMidbandShade.value).toBe(0.5)
+    expect(material.defaultAttributeValues.patchCenter).toEqual([0, 0, 0])
     expect(material.defaultAttributeValues.midShade).toEqual([0, 0])
     // морф-атрибуты рельефа: без дефолта читается общий generic-слот GL
     expect(material.defaultAttributeValues.morphDelta).toEqual([0, 0, 0])
@@ -107,6 +110,21 @@ describe('PlanetMaterial: uMidbandShade из midbandParamsOf; дефолт ат�
     seedTexture('', 4, 2)
     seedTexture('default.png', 4, 2)
     seedTexture('night.jpg', 4, 2)
-    expect(new PlanetMaterial(stubActor({ midbandShade: 0 })).uniforms.uMidbandShade.value).toBe(0)
+    expect(new TerrainMaterial(stubActor({ midbandShade: 0 })).uniforms.uMidbandShade.value).toBe(0)
+  })
+
+  it('у SphereSurfaceMaterial нет атрибутов патча в defaultAttributeValues и нет uMidbandShade', () => {
+    const moon = Actor.find(19)!
+    seedFor(moon)
+    const material = new SphereSurfaceMaterial(moon)
+    for (const name of ['patchCenter', 'midShade', 'morphDelta', 'patchMorph', 'midShadeParent', 'midTiltParent']) {
+      expect(material.defaultAttributeValues, name).not.toHaveProperty(name)
+    }
+    expect(material.uniforms.uMidbandShade).toBeUndefined()
+  })
+
+  it('сферический вершинник не объявляет атрибутов полосы и морфа', () => {
+    const sphereVert: string = SphereSurfaceShaderTemplate.vertexShader
+    for (const name of ['midShade', 'midTilt', 'morphDelta', 'patchMorph']) expect(sphereVert, name).not.toContain(name)
   })
 })

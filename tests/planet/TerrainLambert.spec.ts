@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Texture } from 'three'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
-import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
+import { SphereSurfaceShader } from '@/core/materials/shaders/SphereSurfaceShader'
+import { TerrainShader } from '@/core/materials/shaders/TerrainShader'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 
 /**
- * Конструктор PlanetShader читает 'default.png'/'night.jpg' (diffuse/night
+ * Конструктор шейдера поверхности читает 'default.png'/'night.jpg' (diffuse/night
  * заглушки) и '' (ringMap-заглушка) через getTextureOrMake — промах строит
  * PlaceholderTexture (canvas 2d, недоступен в jsdom). Тот же приём, что
  * seedPlaceholderKeys в PlanetCloudOpacity.spec.ts.
@@ -27,8 +29,11 @@ function terrainShade(ndotl: number, lambert: number, ambient: number): number {
   return 1 + (lit - 1) * lambert
 }
 
-describe('PlanetShaderTemplate: ламберт (общий для легаси-сферы и рельефа)', () => {
-  const frag: string = PlanetShaderTemplate.fragmentShader
+describe.each([
+  ['сфера', SphereSurfaceShaderTemplate],
+  ['рельеф', TerrainShaderTemplate]
+])('%s: ламберт (общий для сферы и рельефа)', (_path, template) => {
+  const frag: string = template.fragmentShader
 
   it('юниформы объявлены, множитель стоит на dayColor — ДО состава с облаками', () => {
     expect(frag).toContain('uniform float uTerrainLambert;')
@@ -49,7 +54,7 @@ describe('PlanetShaderTemplate: ламберт (общий для легаси-�
     expect(frag).not.toContain('day *= mix(vec3(1.0), lit')
   })
 
-  it('множитель вне гейта USE_TERRAIN_UV — легаси-сфера (гиганты) под тем же ламбертом', () => {
+  it('множитель вне любых гейтов — сфера (гиганты) под тем же ламбертом', () => {
     const lambertIdx = frag.indexOf('dayColor = surfaceAlbedo * mix(sunTintMix, lit')
     const main = frag.indexOf('void main()')
     const before = frag.slice(main, lambertIdx)
@@ -80,7 +85,10 @@ describe('CPU-зеркало множителя суши', () => {
   })
 })
 
-describe('PlanetShader: ручки terrainLambert/terrainAmbient', () => {
+describe.each([
+  ['сфера', (actor: Actor) => new SphereSurfaceShader(actor)],
+  ['рельеф', (actor: Actor) => new TerrainShader(actor)]
+])('шейдер (%s): ручки terrainLambert/terrainAmbient', (_path, make) => {
   function stubActor(data: Record<string, unknown>): Actor {
     return {
       renderingObject: { getAttribute: () => ({ emission: 1, bumpScale: 1, ...data }) },
@@ -93,31 +101,31 @@ describe('PlanetShader: ручки terrainLambert/terrainAmbient', () => {
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('дефолт lambert 1 — окклюзия внутри ламберта; ambient 0.15', () => {
-    const shader = new PlanetShader(stubActor({}))
+    const shader = make(stubActor({}))
     expect(shader.uniforms.uTerrainLambert.value).toBe(1)
     expect(shader.uniforms.uTerrainAmbient.value).toBe(0.15)
   })
 
   it('ручки из данных тела доезжают в юниформы', () => {
-    const shader = new PlanetShader(stubActor({ terrainLambert: 1, terrainAmbient: 0.06, terrainAmbientSunRef: 0.5 }))
+    const shader = make(stubActor({ terrainLambert: 1, terrainAmbient: 0.06, terrainAmbientSunRef: 0.5 }))
     expect(shader.uniforms.uTerrainLambert.value).toBe(1)
     expect(shader.uniforms.uTerrainAmbient.value).toBe(0.06)
     expect(shader.uniforms.uTerrainAmbientSunRef.value).toBe(0.5)
   })
 
   it('дефолт terrainAmbientSunRef 0.3; ноль клампится гардом от деления', () => {
-    expect(new PlanetShader(stubActor({})).uniforms.uTerrainAmbientSunRef.value).toBe(0.3)
-    expect(new PlanetShader(stubActor({ terrainAmbientSunRef: 0 })).uniforms.uTerrainAmbientSunRef.value).toBe(1e-3)
+    expect(make(stubActor({})).uniforms.uTerrainAmbientSunRef.value).toBe(0.3)
+    expect(make(stubActor({ terrainAmbientSunRef: 0 })).uniforms.uTerrainAmbientSunRef.value).toBe(1e-3)
   })
 
   it('ручки света: дефолты 0.35 / 1 / 0.6 / 6 км в юнитах; из data доезжают', () => {
-    const shader = new PlanetShader(stubActor({}))
+    const shader = make(stubActor({}))
     expect(shader.uniforms.uTerrainOcclusionDirect.value).toBe(0.35)
     expect(shader.uniforms.uSkyAmbientStrength.value).toBe(1)
     expect(shader.uniforms.uCloudShadowStrength.value).toBe(0.6)
     expect(shader.uniforms.uCloudHeightUnits.value).toBeCloseTo(toThreeJSUnits(6), 12)
     expect(shader.uniforms.uAtmoIrradiance.value).toBeNull()
-    const tuned = new PlanetShader(stubActor({ terrainOcclusionDirect: 1, skyAmbientStrength: 0 }))
+    const tuned = make(stubActor({ terrainOcclusionDirect: 1, skyAmbientStrength: 0 }))
     expect(tuned.uniforms.uTerrainOcclusionDirect.value).toBe(1)
     expect(tuned.uniforms.uSkyAmbientStrength.value).toBe(0)
   })

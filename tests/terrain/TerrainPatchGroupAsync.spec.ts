@@ -3,7 +3,7 @@ import { Mesh, PerspectiveCamera, Texture, type WebGLRenderer } from 'three'
 import { config } from '@/core/framework/config'
 import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
 import { SyncTerrainPatchBuilder, type TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -20,7 +20,7 @@ import { FakeAsyncBuilder } from './fakeAsyncBuilder'
 class TestPatchGroup extends TerrainPatchGroup {
   public constructor(
     field: TerrainHeightField,
-    material: PlanetMaterial,
+    material: TerrainMaterial,
     renderer: WebGLRenderer,
     builder: TerrainPatchBuilder,
     maxLivePatches?: number,
@@ -84,7 +84,7 @@ function makeAsync(maxLivePatches?: number): {
 } {
   const builder = new FakeAsyncBuilder()
   const clock = makeFrameClock()
-  const group = new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), builder, maxLivePatches, clock.nowMs)
+  const group = new TestPatchGroup(makeField(), new TerrainMaterial(moon()), makeRenderer(), builder, maxLivePatches, clock.nowMs)
   return { group, builder, clock }
 }
 
@@ -112,7 +112,7 @@ describe('TerrainPatchGroup с асинхронным строителем', () 
   })
 
   it('синхронный строитель: ready в конструкторе, 24 меша сразу', () => {
-    const group = new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), new SyncTerrainPatchBuilder())
+    const group = new TestPatchGroup(makeField(), new TerrainMaterial(moon()), makeRenderer(), new SyncTerrainPatchBuilder())
     expect(group.ready).toBe(true)
     expect(meshCount(group)).toBe(24)
   })

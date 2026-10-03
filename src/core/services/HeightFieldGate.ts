@@ -129,10 +129,8 @@ export class HeightFieldGate {
 
       heightFieldStorage.release(path)
 
-      // Ресинк ВСЕХ узлов пути, а не только даунгрейднутых: карту тени сажает
-      // updateMaterial по наличию карты в реестре, тип поверхности ему
-      // безразличен — легаси-сфера, которую свап не трогал (её мог обновить
-      // ResourceObserver), держала бы диспознутую release'ом текстуру.
+      // Ресинк ВСЕХ узлов пути, а не только даунгрейднутых: материалы видят
+      // реестр уже без карты (см. RenderableFactory.resyncSurfaceMaterials).
       for (const node of nodes) this.factory.resyncSurfaceMaterials(node)
     }
 

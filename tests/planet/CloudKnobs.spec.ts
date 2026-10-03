@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Texture } from 'three'
 import { resolveTerrainLightParams } from '@/core/terrain/terrainLightParams'
-import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
+import { SphereSurfaceShader } from '@/core/materials/shaders/SphereSurfaceShader'
+import { TerrainShader } from '@/core/materials/shaders/TerrainShader'
 import { cloudLayerUniforms } from '@/core/materials/shaders/lib/chunks/CloudLayer'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { sunTransmittanceFunctions } from '@/core/materials/shaders/lib/chunks/SunTransmittance'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -43,12 +45,15 @@ describe('ручки облаков: cloudHeightKm и cloudLightSoftness', () =>
   })
 })
 
-describe('PlanetShader: юниформы облачного слоя', () => {
+describe('шейдеры поверхности: юниформы облачного слоя', () => {
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
 
-  it('высота в юнитах и в км, мягкость; старый юниформ снят', () => {
-    const shader = new PlanetShader(stubActor({ cloudHeightKm: 12, cloudLightSoftness: 0.2 }))
+  it.each([
+    ['сфера', (actor: Actor) => new SphereSurfaceShader(actor)],
+    ['рельеф', (actor: Actor) => new TerrainShader(actor)]
+  ])('%s: высота в юнитах и в км, мягкость; старый юниформ снят', (_path, make) => {
+    const shader = make(stubActor({ cloudHeightKm: 12, cloudLightSoftness: 0.2 }))
     expect(shader.uniforms.uCloudHeightUnits.value).toBe(toThreeJSUnits(12))
     expect(shader.uniforms.uCloudHeightKm.value).toBe(12)
     expect(shader.uniforms.uCloudLightSoftness.value).toBe(0.2)
@@ -56,7 +61,8 @@ describe('PlanetShader: юниформы облачного слоя', () => {
   })
 
   it('шаблон читает uCloudHeightUnits, не uCloudShadowHeightUnits', () => {
-    expect(PlanetShaderTemplate.fragmentShader).not.toContain('uCloudShadowHeightUnits')
+    expect(SphereSurfaceShaderTemplate.fragmentShader).not.toContain('uCloudShadowHeightUnits')
+    expect(TerrainShaderTemplate.fragmentShader).not.toContain('uCloudShadowHeightUnits')
     // юниформ объявляет чанк облачного слоя, не шаблон планеты
     expect(cloudLayerUniforms).toContain('uniform float uCloudHeightUnits;')
   })

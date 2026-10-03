@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Texture, Vector2 } from 'three'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { terrainDetailFunctions, terrainDetailUniforms } from '@/core/materials/shaders/lib/chunks/TerrainDetail'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -51,13 +51,13 @@ function seedFor(actor: Actor): void {
   for (const path of Object.values(STEEP_DETAIL_PATHS)) seedTexture(path)
 }
 
-describe('PlanetMaterial: uDetailTintNorm/uSteepTintNorm из путей ресурсов', () => {
+describe('TerrainMaterial: uDetailTintNorm/uSteepTintNorm из путей ресурсов', () => {
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('Луна (rocky_trail родной): родная норма = steep-норма = 1/средние rocky', () => {
     const moon = Actor.find(19)!
     seedFor(moon)
-    const material = new PlanetMaterial(moon)
+    const material = new TerrainMaterial(moon)
     material.updateMaterial()
     const native = material.uniforms.uDetailTintNorm.value as Vector2
     const steep = material.uniforms.uSteepTintNorm.value as Vector2
@@ -70,7 +70,7 @@ describe('PlanetMaterial: uDetailTintNorm/uSteepTintNorm из путей рес�
   it('Энцелад (ice родной): родная норма — ice, steep — rocky; resetMaterial возвращает 1', () => {
     const enceladus = Actor.find(25)!
     seedFor(enceladus)
-    const material = new PlanetMaterial(enceladus)
+    const material = new TerrainMaterial(enceladus)
     material.updateMaterial()
     const native = material.uniforms.uDetailTintNorm.value as Vector2
     const steep = material.uniforms.uSteepTintNorm.value as Vector2

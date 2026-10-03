@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Texture } from 'three'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
 import { WaterShader } from '@/core/materials/shaders/WaterShader'
-import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
+import { TerrainShader } from '@/core/materials/shaders/TerrainShader'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -85,7 +85,7 @@ describe('паритет ручек облаков у воды и суши од�
 
   it('заданные в данных высота, мягкость и сила тени совпадают', () => {
     const actor = stubBodyActor({ emission: 1, bumpScale: 1, waterLevelMeters: 0, cloudHeightKm: 9, cloudLightSoftness: 0.25, cloudShadowStrength: 0.4 })
-    const planet = new PlanetShader(actor)
+    const planet = new TerrainShader(actor)
     const water = new WaterShader(actor)
     for (const u of ['uCloudHeightUnits', 'uCloudHeightKm', 'uCloudLightSoftness', 'uCloudShadowStrength'] as const) {
       expect((water.uniforms as Record<string, { value: unknown }>)[u].value, u).toBe((planet.uniforms as Record<string, { value: unknown }>)[u].value)

@@ -3,8 +3,8 @@ import { Color, Texture } from 'three'
 import '@/core/framework/TitanThree'
 import { frostFacing, frostLine, frostMask } from '@/core/materials/shaders/lib/chunks/frostMath'
 import { resolveFrostParams } from '@/core/terrain/frostParams'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { ResourceType } from '@/core/models/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -57,8 +57,8 @@ describe('frostMath: CPU-зеркало маски инея', () => {
 })
 
 describe('Шейдер: иней', () => {
-  const frag = PlanetShaderTemplate.fragmentShader
-  const vert = PlanetShaderTemplate.vertexShader
+  const frag = TerrainShaderTemplate.fragmentShader
+  const vert = TerrainShaderTemplate.vertexShader
 
   it('высота карты доступна под USE_TERRAIN_FROST в обоих шейдерах', () => {
     expect((vert.match(/defined\(USE_TERRAIN_MACRO_DETAIL\) \|\| defined\(USE_WATER_EDGE\) \|\| defined\(USE_TERRAIN_FROST\)/g) ?? []).length).toBe(2)
@@ -74,9 +74,10 @@ describe('Шейдер: иней', () => {
     expect(block).toContain('float frostPole = frostSinLat >= 0.0 ? 1.0 : -1.0;')
     expect(block).toContain('float frostFacing = terrainSlopeTan > 1e-6 ? dot(-terrainMapSlopeVec / terrainSlopeTan, vec2(0.0, frostPole)) * smoothstep(0.0, 0.1, terrainSlopeTan) : 0.0;')
     expect(block).toContain('float frostLineH = uFrostLine.x - uFrostLine.z * abs(frostSinLat) - uFrostLine.w * max(frostFacing, 0.0);')
-    expect(block).toContain(
-      'float frostMask = uFrostStrength * smoothstep(frostLineH - 0.5 * uFrostLine.y, frostLineH + 0.5 * uFrostLine.y, vHeightMeters)\n' +
-        '                          * (1.0 - smoothstep(0.7 * uFrostSlopeMax, uFrostSlopeMax, terrainSlopeTan));'
+    // перенос строки внутри выражения — с любым отступом
+    expect(block.replace(/\s+/g, ' ')).toContain(
+      'float frostMask = uFrostStrength * smoothstep(frostLineH - 0.5 * uFrostLine.y, frostLineH + 0.5 * uFrostLine.y, vHeightMeters)' +
+        ' * (1.0 - smoothstep(0.7 * uFrostSlopeMax, uFrostSlopeMax, terrainSlopeTan));'
     )
     expect(block).toContain('surfaceAlbedo = mix(surfaceAlbedo, uFrostColor, frostMask);')
     expect(block).not.toContain('occlusion')
@@ -139,7 +140,7 @@ function seedHeightMap(): void {
   })
 }
 
-describe('PlanetMaterial: гейт инея', () => {
+describe('TerrainMaterial: гейт инея', () => {
   beforeEach(() => {
     seedPlaceholderKeys()
     seedHeightMap()
@@ -153,7 +154,7 @@ describe('PlanetMaterial: гейт инея', () => {
   })
 
   it('Луна по умолчанию: frostStrength 0 — дефайна нет', () => {
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
     expect(material.defines.USE_TERRAIN_FROST).toBeUndefined()
@@ -168,7 +169,7 @@ describe('PlanetMaterial: гейт инея', () => {
       frostAspectMeters: 300
     }
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
     expect(material.defines.USE_TERRAIN_FROST).toBe('1')
@@ -181,7 +182,7 @@ describe('PlanetMaterial: гейт инея', () => {
     resourceStorage.deleteTexture(moonPathOf('slope'))
     frostOverride.params = { frostStrength: 0.8 }
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
     expect(material.defines.USE_TERRAIN_FROST).toBeUndefined()

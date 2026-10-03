@@ -9,7 +9,7 @@ import { resourceStorage } from '@/core/services/ResourceStorage'
 // Строковые ассерты шаблона — контракт брифа Task 4: Френель, декод канала A
 // напрямую [0,1] (Task 1, без множителя SLOPE_RANGE и без знаковой byte-128
 // перекодировки R/G/B), гейт USE_WATER_DEPTH, переиспользование общего чанка
-// terrainUvFunctions (не копия PlanetShaderTemplate).
+// terrainUvFunctions (не копия TerrainShaderTemplate).
 describe('WaterShaderTemplate: строковые ассерты (Френель, декод канала A, гейт мелководья)', () => {
   const frag: string = WaterShaderTemplate.fragmentShader
   const vert: string = WaterShaderTemplate.vertexShader
@@ -50,7 +50,7 @@ describe('WaterShaderTemplate: строковые ассерты (Френель
     expect(frag).toContain('mix(baseColor, uWaterFresnelTint, fresnel)')
   })
 
-  it('ночная сторона темнее по N·L, не гасится в ноль (терминатор тот же, что у PlanetShaderTemplate)', () => {
+  it('ночная сторона темнее по N·L, не гасится в ноль (терминатор тот же, что у TerrainShaderTemplate)', () => {
     expect(frag).toContain('smoothstep(-0.08, 0.25, NdotL)')
   })
 

@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Texture, Vector2 } from 'three'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
-import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
+import { TerrainShader } from '@/core/materials/shaders/TerrainShader'
+import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
@@ -13,8 +14,8 @@ import {
 } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
 import { noiseFunctions } from '@/core/materials/shaders/lib/chunks/Noise'
 
-describe('PlanetShaderTemplate: средняя полоса детали в терраформной ветке', () => {
-  const frag: string = PlanetShaderTemplate.fragmentShader
+describe('TerrainShaderTemplate: средняя полоса детали в терраформной ветке', () => {
+  const frag: string = TerrainShaderTemplate.fragmentShader
 
   it('чанки под гейтом USE_TERRAIN_MACRO_DETAIL, после noiseFunctions и объявлений diffuseMap/bumpMap', () => {
     const gate = frag.indexOf('#ifdef USE_TERRAIN_MACRO_DETAIL')
@@ -95,7 +96,7 @@ function stubActor(radiusKm: number, data: Record<string, unknown>, diffusePath:
   } as unknown as Actor
 }
 
-describe('PlanetShader: ручки средней полосы', () => {
+describe('TerrainShader: ручки средней полосы', () => {
   beforeEach(() => {
     seedPlaceholderKeys()
     seedTexture(DIFFUSE_PATH, 8192, 4096)
@@ -103,7 +104,7 @@ describe('PlanetShader: ручки средней полосы', () => {
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('дефолты: strength 0, period 3 км, normalScale 1, slope 0.6, cavity 0.5, warp 1.5; радиус тела в юнитах', () => {
-    const shader = new PlanetShader(stubActor(6371, {}))
+    const shader = new TerrainShader(stubActor(6371, {}))
     expect(shader.uniforms.uMacroStrength.value).toBe(0)
     expect(shader.uniforms.uMacroPeriodUnits.value).toBeCloseTo(toThreeJSUnits(3), 12)
     expect(shader.uniforms.uMacroNormalScale.value).toBe(1)
@@ -115,7 +116,7 @@ describe('PlanetShader: ручки средней полосы', () => {
   })
 
   it('fade по умолчанию — от радиуса и ширины загруженного диффуза, начало 0.4 × конца', () => {
-    const shader = new PlanetShader(stubActor(6371, {}))
+    const shader = new TerrainShader(stubActor(6371, {}))
     const end = toThreeJSUnits(macroFadeMetersFor(6371, 8192) / 1000)
     const range = shader.uniforms.uMacroFadeRange.value as Vector2
     expect(range.y).toBeCloseTo(end, 12)
@@ -123,20 +124,20 @@ describe('PlanetShader: ручки средней полосы', () => {
   })
 
   it('явный macroFadeMeters перекрывает расчёт', () => {
-    const shader = new PlanetShader(stubActor(6371, { macroFadeMeters: 2e6 }))
+    const shader = new TerrainShader(stubActor(6371, { macroFadeMeters: 2e6 }))
     const range = shader.uniforms.uMacroFadeRange.value as Vector2
     expect(range.y).toBeCloseTo(toThreeJSUnits(2000), 12)
   })
 
   it('диффуз не загружен или радиус 0 — fade положительный минимум (нет деления на 0 в smoothstep)', () => {
-    const shader = new PlanetShader(stubActor(0, {}, 'stub/macro/missing.png'))
+    const shader = new TerrainShader(stubActor(0, {}, 'stub/macro/missing.png'))
     const range = shader.uniforms.uMacroFadeRange.value as Vector2
     expect(range.y).toBeGreaterThan(0)
     expect(range.x).toBeLessThan(range.y)
   })
 
   it('ручки из data доезжают; macroScaleKm — в юниты; uDiffuseTexelSize стартует нулями (ставит материал)', () => {
-    const shader = new PlanetShader(stubActor(1737, { macroStrength: 0.25, macroScaleKm: 5, macroTextureWarp: 2 }))
+    const shader = new TerrainShader(stubActor(1737, { macroStrength: 0.25, macroScaleKm: 5, macroTextureWarp: 2 }))
     expect(shader.uniforms.uMacroStrength.value).toBe(0.25)
     expect(shader.uniforms.uMacroPeriodUnits.value).toBeCloseTo(toThreeJSUnits(5), 12)
     expect(shader.uniforms.uMacroTextureWarp.value).toBe(2)
@@ -146,12 +147,12 @@ describe('PlanetShader: ручки средней полосы', () => {
   })
 
   it('macroSlopeRef из data доезжает и клампится положительным минимумом', () => {
-    expect(new PlanetShader(stubActor(1737, { macroSlopeRef: 0.4 })).uniforms.uMacroSlopeRef.value).toBe(0.4)
-    expect(new PlanetShader(stubActor(1737, { macroSlopeRef: 0 })).uniforms.uMacroSlopeRef.value).toBe(1e-3)
+    expect(new TerrainShader(stubActor(1737, { macroSlopeRef: 0.4 })).uniforms.uMacroSlopeRef.value).toBe(0.4)
+    expect(new TerrainShader(stubActor(1737, { macroSlopeRef: 0 })).uniforms.uMacroSlopeRef.value).toBe(1e-3)
   })
 
   it('юниформы форм склона: дефолты у тела без ручек', () => {
-    const shader = new PlanetShader(Actor.find(19)!) // Луна: ручек форм в data нет
+    const shader = new TerrainShader(Actor.find(19)!) // Луна: ручек форм в data нет
     expect(shader.uniforms.uMacroStreakStrength.value).toBe(0.6)
     expect(shader.uniforms.uMacroStreakPeriodUnits.value).toBeCloseTo(toThreeJSUnits(0.8), 12)
     expect(shader.uniforms.uMacroStructureSlope.value.x).toBe(0.2)
@@ -161,7 +162,7 @@ describe('PlanetShader: ручки средней полосы', () => {
   })
 
   it('юниформы форм склона: ручки тела доезжают, незаданные остаются дефолтом', () => {
-    const shader = new PlanetShader(stubActor(6371, { macroStreakStrength: 0.25, macroTerraceStepMeters: 300 }))
+    const shader = new TerrainShader(stubActor(6371, { macroStreakStrength: 0.25, macroTerraceStepMeters: 300 }))
     expect(shader.uniforms.uMacroStreakStrength.value).toBe(0.25)
     expect(shader.uniforms.uMacroTerraceStepMeters.value).toBe(300)
     expect(shader.uniforms.uMacroTerraceStrength.value).toBe(0.5)
@@ -202,7 +203,7 @@ function stubTerraformActor(data: Record<string, unknown>, slopeResource: boolea
   } as unknown as Actor
 }
 
-describe('PlanetMaterial: гейт USE_TERRAIN_MACRO_DETAIL и тексель диффуза', () => {
+describe('TerrainMaterial: гейт USE_TERRAIN_MACRO_DETAIL и тексель диффуза', () => {
   beforeEach(() => {
     seedPlaceholderKeys()
     seedTexture(DIFFUSE_PATH, 8192, 4096)
@@ -215,7 +216,7 @@ describe('PlanetMaterial: гейт USE_TERRAIN_MACRO_DETAIL и тексель д
   it('slope готова, macroStrength>0 — дефайн ставится', () => {
     seedHeightField()
     seedTexture(SLOPE_PATH, 8, 4)
-    const material = new PlanetMaterial(stubTerraformActor({ macroStrength: 0.25 }))
+    const material = new TerrainMaterial(stubTerraformActor({ macroStrength: 0.25 }))
     material.updateMaterial()
     expect(material.defines.USE_TERRAIN_MACRO_DETAIL).toBe('1')
   })
@@ -223,9 +224,9 @@ describe('PlanetMaterial: гейт USE_TERRAIN_MACRO_DETAIL и тексель д
   it('macroStrength отсутствует или 0 — дефайна нет, набор defines идентичен телу без ручки', () => {
     seedHeightField()
     seedTexture(SLOPE_PATH, 8, 4)
-    const without = new PlanetMaterial(stubTerraformActor({}))
+    const without = new TerrainMaterial(stubTerraformActor({}))
     without.updateMaterial()
-    const zero = new PlanetMaterial(stubTerraformActor({ macroStrength: 0 }))
+    const zero = new TerrainMaterial(stubTerraformActor({ macroStrength: 0 }))
     zero.updateMaterial()
     expect(without.defines.USE_TERRAIN_MACRO_DETAIL).toBeUndefined()
     expect(zero.defines).toEqual(without.defines)
@@ -233,23 +234,28 @@ describe('PlanetMaterial: гейт USE_TERRAIN_MACRO_DETAIL и тексель д
 
   it('без slope-карты дефайн не ставится даже при macroStrength>0', () => {
     seedHeightField()
-    const material = new PlanetMaterial(stubTerraformActor({ macroStrength: 0.25 }, false))
+    const material = new TerrainMaterial(stubTerraformActor({ macroStrength: 0.25 }, false))
     material.updateMaterial()
     expect(material.defines.USE_TERRAIN_MACRO_DETAIL).toBeUndefined()
   })
 
-  it('карта высот не загружена — дефайна нет (гигантский и терраформный гейты взаимоисключающи)', () => {
+  it('карта высот не загружена — дефайна нет; гигантский и терраформный гейты разведены по путям', () => {
     seedTexture(SLOPE_PATH, 8, 4)
-    const material = new PlanetMaterial(stubTerraformActor({ macroStrength: 0.25, giantDetail: true }))
+    const material = new TerrainMaterial(stubTerraformActor({ macroStrength: 0.25, giantDetail: true }))
     material.updateMaterial()
     expect(material.defines.USE_TERRAIN_MACRO_DETAIL).toBeUndefined()
-    expect(material.defines.USE_GIANT_DETAIL).toBe('1')
+    expect(material.defines.USE_GIANT_DETAIL).toBeUndefined()
+
+    const sphere = new SphereSurfaceMaterial(stubTerraformActor({ macroStrength: 0.25, giantDetail: true }))
+    sphere.updateMaterial()
+    expect(sphere.defines.USE_TERRAIN_MACRO_DETAIL).toBeUndefined()
+    expect(sphere.defines.USE_GIANT_DETAIL).toBe('1')
   })
 
   it('uDiffuseTexelSize — из размера загруженного диффуза; после reset — нули', () => {
     seedHeightField()
     seedTexture(SLOPE_PATH, 8, 4)
-    const material = new PlanetMaterial(stubTerraformActor({ macroStrength: 0.25 }))
+    const material = new TerrainMaterial(stubTerraformActor({ macroStrength: 0.25 }))
     material.updateMaterial()
     const texel = material.uniforms.uDiffuseTexelSize.value as Vector2
     expect(texel.x).toBeCloseTo(1 / 8192, 15)
@@ -270,7 +276,7 @@ describe('PlanetMaterial: гейт USE_TERRAIN_MACRO_DETAIL и тексель д
     resourceStorage.addTexture(placeholderSizedTexture)
     seedHeightField()
     seedTexture(SLOPE_PATH, 8, 4)
-    const material = new PlanetMaterial(stubTerraformActor({ macroStrength: 0.25 }))
+    const material = new TerrainMaterial(stubTerraformActor({ macroStrength: 0.25 }))
     material.updateMaterial()
     const texel = material.uniforms.uDiffuseTexelSize.value as Vector2
     expect(texel.x).toBe(0)
@@ -289,7 +295,7 @@ describe('PlanetMaterial: гейт USE_TERRAIN_MACRO_DETAIL и тексель д
     seedHeightField()
     seedTexture(SLOPE_PATH, 8, 4)
 
-    const material = new PlanetMaterial(stubTerraformActor({ macroStrength: 0.25 }))
+    const material = new TerrainMaterial(stubTerraformActor({ macroStrength: 0.25 }))
     const range = material.uniforms.uMacroFadeRange.value as Vector2
     expect(range.y).toBeLessThanOrEqual(1.01e-6)
 
@@ -305,7 +311,7 @@ describe('PlanetMaterial: гейт USE_TERRAIN_MACRO_DETAIL и тексель д
   it('явный macroFadeMeters переживает updateMaterial без изменений', () => {
     seedHeightField()
     seedTexture(SLOPE_PATH, 8, 4)
-    const material = new PlanetMaterial(stubTerraformActor({ macroStrength: 0.25, macroFadeMeters: 2e6 }))
+    const material = new TerrainMaterial(stubTerraformActor({ macroStrength: 0.25, macroFadeMeters: 2e6 }))
     material.updateMaterial()
     const range = material.uniforms.uMacroFadeRange.value as Vector2
     expect(range.y).toBeCloseTo(toThreeJSUnits(2000), 12)

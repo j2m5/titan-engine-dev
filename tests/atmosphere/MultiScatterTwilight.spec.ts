@@ -5,7 +5,7 @@ describe('AtmosphereLUTGenerator: сумеречный спад multi-scatter в
 
   it('кривая спада — куб smoothstep, прижимающий вуаль к терминатору', () => {
     // Без куба вуаль порядков 2+ тянулась серо-зелёной полосой далеко за
-    // гашение поверхности (smoothstep(-0.08, 0.25, NdotL) в PlanetShaderTemplate) —
+    // гашение поверхности (smoothstep(-0.08, 0.25, NdotL) в PlanetSurfaceCommon) —
     // «полоса рассогласования терминаторов» (расследование 2026-07-31).
     // Куб глушит хвост в ночи (s^3 << s при s -> 0), не трогая день (1^3 = 1).
     expect(frag).toContain('float twilight = pow(smoothstep(u_mu_s_min * 0.6, 0.0, ms_mu_s), 3.0);')

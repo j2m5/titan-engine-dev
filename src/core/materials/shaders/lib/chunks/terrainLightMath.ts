@@ -1,5 +1,5 @@
 /**
- * CPU-зеркало композиции света суши (PlanetShaderTemplate — общая для легаси-сферы и рельефа):
+ * CPU-зеркало композиции света суши (PlanetSurfaceCommon — общая для сферы и рельефа):
  *   skyTerm    = mix(серый пол · sunTint, skyAmbientTint, uSkyAmbientStrength)
  *   ambient    = uTerrainAmbient · skyTerm · occlusion
  *   directGain = mix(1, occlusion, uTerrainOcclusionDirect) · cloudShadow

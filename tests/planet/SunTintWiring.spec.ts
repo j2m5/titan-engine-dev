@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Object3D, Texture } from 'three'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { AtmosphereRegistry, AtmosphereEntry } from '@/core/services/AtmosphereRegistry'
 import { Actor } from '@/core/models/Actor'
 import { ResourceType } from '@/core/models/types'
@@ -101,12 +102,15 @@ function entry(): AtmosphereEntry {
   }
 }
 
-describe('PlanetMaterial.syncSunTint: запись реестра → дефайн и юниформы', () => {
+describe.each([
+  ['SphereSurfaceMaterial', (actor: Actor, registry?: AtmosphereRegistry) => new SphereSurfaceMaterial(actor, registry)],
+  ['TerrainMaterial', (actor: Actor, registry?: AtmosphereRegistry) => new TerrainMaterial(actor, registry)]
+])('%s.syncSunTint: запись реестра → дефайн и юниформы', (_name, make) => {
   beforeEach(seedPlaceholderKeys)
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('без записи дефайна нет', () => {
-    const m = new PlanetMaterial(earth(), new AtmosphereRegistry())
+    const m = make(earth(), new AtmosphereRegistry())
 
     m.updateMaterial()
     m.syncSunTint()
@@ -118,7 +122,7 @@ describe('PlanetMaterial.syncSunTint: запись реестра → дефай
     const registry = new AtmosphereRegistry()
     const e = entry()
     registry.register(e)
-    const m = new PlanetMaterial(earth(), registry)
+    const m = make(earth(), registry)
 
     m.updateMaterial()
     // needsUpdate у three — сеттер без геттера (пишет version++), поэтому
@@ -138,7 +142,7 @@ describe('PlanetMaterial.syncSunTint: запись реестра → дефай
   it('та же запись повторно — рекомпила нет', () => {
     const registry = new AtmosphereRegistry()
     registry.register(entry())
-    const m = new PlanetMaterial(earth(), registry)
+    const m = make(earth(), registry)
 
     m.updateMaterial()
     m.syncSunTint()
@@ -152,7 +156,7 @@ describe('PlanetMaterial.syncSunTint: запись реестра → дефай
   it('запись снята → дефайн ушёл, сэмплер null', () => {
     const registry = new AtmosphereRegistry()
     registry.register(entry())
-    const m = new PlanetMaterial(earth(), registry)
+    const m = make(earth(), registry)
 
     m.updateMaterial()
     m.syncSunTint()
@@ -166,7 +170,7 @@ describe('PlanetMaterial.syncSunTint: запись реестра → дефай
   it('updateMaterial (стриминг карт) не теряет дефайн тинта', () => {
     const registry = new AtmosphereRegistry()
     registry.register(entry())
-    const m = new PlanetMaterial(earth(), registry)
+    const m = make(earth(), registry)
 
     m.updateMaterial()
     m.syncSunTint()
@@ -178,7 +182,7 @@ describe('PlanetMaterial.syncSunTint: запись реестра → дефай
   it('resetMaterial сбрасывает дефайн, следующий syncSunTint возвращает его', () => {
     const registry = new AtmosphereRegistry()
     registry.register(entry())
-    const m = new PlanetMaterial(earth(), registry)
+    const m = make(earth(), registry)
 
     m.updateMaterial()
     m.syncSunTint()
@@ -195,7 +199,7 @@ describe('PlanetMaterial.syncSunTint: запись реестра → дефай
   it('тело без атмосферы (Луна, actor 19) — no-op', () => {
     const registry = new AtmosphereRegistry()
     registry.register(entry())
-    const m = new PlanetMaterial(Actor.find(MOON_ACTOR_ID)!, registry)
+    const m = make(Actor.find(MOON_ACTOR_ID)!, registry)
 
     m.updateMaterial()
     m.syncSunTint()
@@ -206,7 +210,7 @@ describe('PlanetMaterial.syncSunTint: запись реестра → дефай
     const registry = new AtmosphereRegistry()
     const e = entry()
     registry.register(e)
-    const m = new PlanetMaterial(stubActorWithZeroRadiusAtmosphere(e.actorId), registry)
+    const m = make(stubActorWithZeroRadiusAtmosphere(e.actorId), registry)
 
     m.updateMaterial()
     m.syncSunTint()
@@ -214,7 +218,7 @@ describe('PlanetMaterial.syncSunTint: запись реестра → дефай
   })
 
   it('без реестра (легаси-вызов) — no-op', () => {
-    const m = new PlanetMaterial(earth())
+    const m = make(earth())
 
     m.updateMaterial()
     m.syncSunTint()

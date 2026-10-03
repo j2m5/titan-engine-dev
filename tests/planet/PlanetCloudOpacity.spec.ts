@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Texture, Vector3 } from 'three'
-import { cloudOpacityForAltitude, PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { cloudOpacityForAltitude } from '@/core/materials/PlanetSurfaceMaterial'
+import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { cloudLayerFunctions } from '@/core/materials/shaders/lib/chunks/CloudLayer'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { Actor } from '@/core/models/Actor'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -13,7 +16,6 @@ function earth(): Actor {
   return Actor.find(7)!
 }
 
-const frag: string = PlanetShaderTemplate.fragmentShader
 
 function seedTexture(name: string): void {
   const texture = new Texture()
@@ -28,7 +30,7 @@ function seedTexture(name: string): void {
  * seedPlaceholderKeys. Тесты этого файла конструктор материала не идут
  * дальше конструктора (updateMaterial() не зовут — за него отвечают другие
  * файлы), поэтому по фактическому стеку падения нужны только конструкторные
- * ключи: 'default.png'/'night.jpg' (PlanetShader), '' (ringMap-заглушка).
+ * ключи: 'default.png'/'night.jpg' (шейдер поверхности), '' (ringMap-заглушка).
  */
 function seedPlaceholderKeys(): void {
   seedTexture('')
@@ -50,7 +52,10 @@ function actorWithoutAtmosphere(radiusKm?: number): Actor {
   } as unknown as Actor
 }
 
-describe('PlanetShaderTemplate: uCloudOpacity — высотный fade облаков (приёмочная волна 4, №3)', () => {
+describe.each([
+  ['сфера', SphereSurfaceShaderTemplate.fragmentShader],
+  ['рельеф', TerrainShaderTemplate.fragmentShader]
+])('%s: uCloudOpacity — высотный fade облаков (приёмочная волна 4, №3)', (_path, frag) => {
   it('юниформ uCloudOpacity объявлен; домножает слой чанк (cloudAlphaSlant) ВНУТРИ USE_CLOUD', () => {
     expect(frag).toContain('uniform float uCloudOpacity;')
 
@@ -99,12 +104,15 @@ describe('cloudOpacityForAltitude: чистая формула (границы +
   })
 })
 
-describe('PlanetMaterial.updateCloudOpacity: резолв толщины атмосферы по дочернему актору (разовый, конструктор)', () => {
+describe.each([
+  ['SphereSurfaceMaterial', (actor: Actor) => new SphereSurfaceMaterial(actor)],
+  ['TerrainMaterial', (actor: Actor) => new TerrainMaterial(actor)]
+])('%s.updateCloudOpacity: резолв толщины атмосферы по дочернему актору (разовый, конструктор)', (_name, make) => {
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('тело БЕЗ атмосферы (нет actor.children с categoryId=5) — uCloudOpacity держится константой 1 независимо от позиции камеры', () => {
-    const material = new PlanetMaterial(actorWithoutAtmosphere(1000))
+    const material = make(actorWithoutAtmosphere(1000))
 
     material.updateCloudOpacity(new Vector3(0, 0, 0), new Vector3(0, 0, 0)) // altitude = -radius, вплотную к телу
     expect(material.uniforms.uCloudOpacity.value).toBe(1)
@@ -114,7 +122,7 @@ describe('PlanetMaterial.updateCloudOpacity: резолв толщины атм�
   })
 
   it('Земля (реальные данные БД: bottomRadius=6360, topRadius=6420, H=60 км) — opacity падает по мере снижения камеры к поверхности', () => {
-    const material = new PlanetMaterial(earth())
+    const material = make(earth())
     const bodyRadiusUnits = toThreeJSUnits(6360)
     const hUnits = toThreeJSUnits(60)
     const modelWorld = new Vector3(0, 0, 0)

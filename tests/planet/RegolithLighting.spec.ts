@@ -1,13 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Texture } from 'three'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
-import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
+import { SphereSurfaceShader } from '@/core/materials/shaders/SphereSurfaceShader'
+import { TerrainShader } from '@/core/materials/shaders/TerrainShader'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { regolithDiffuse } from '../asteroidSurface/brdfMirror'
-
-const frag: string = PlanetShaderTemplate.fragmentShader
-const main: string = frag.slice(frag.indexOf('void main()'))
 
 function seedPlaceholderKeys(): void {
   for (const name of ['', 'default.png', 'night.jpg']) {
@@ -71,7 +70,13 @@ describe('сборка lit: избыток веса реголита не уво
   })
 })
 
-describe('PlanetShaderTemplate: вес прямого света', () => {
+describe.each([
+  ['сфера', SphereSurfaceShaderTemplate],
+  ['рельеф', TerrainShaderTemplate]
+])('%s: вес прямого света', (_path, template) => {
+  const frag: string = template.fragmentShader
+  const main: string = frag.slice(frag.indexOf('void main()'))
+
   it('ламберт по умолчанию, реголит под USE_REGOLITH, обе строки lit читают directWeight', () => {
     expect(main).toContain('float directWeight = max(NdotLraw, 0.0);')
     expect(main).toMatch(/#ifdef USE_REGOLITH\s+(?:\/\/[^\n]*\s+)*float regolithMu = max\(dot\(normal, viewDir\), 0\.5 \* dot\(normalize\(vNormal\), viewDir\)\);\s+directWeight = asteroidRegolithDiffuse\(NdotLraw, regolithMu, dot\(lightDirection, viewDir\), uRegolithMix, uOppositionSurge\);\s+#endif/)
@@ -93,16 +98,19 @@ describe('PlanetShaderTemplate: вес прямого света', () => {
   })
 })
 
-describe('PlanetShader: гейт по телу', () => {
+describe.each([
+  ['сфера', (actor: Actor) => new SphereSurfaceShader(actor)],
+  ['рельеф', (actor: Actor) => new TerrainShader(actor)]
+])('шейдер (%s): гейт по телу', (_path, make) => {
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('Луна — реголит с юниформами; Земля — без дефайна', () => {
-    const moon = new PlanetShader(Actor.find(19)!)
+    const moon = make(Actor.find(19)!)
     expect(moon.defines.USE_REGOLITH).toBe('1')
     expect(moon.uniforms.uRegolithMix.value).toBe(1)
     expect(moon.uniforms.uOppositionSurge.value).toBe(0.3)
-    const earth = new PlanetShader(Actor.find(7)!)
+    const earth = make(Actor.find(7)!)
     expect(earth.defines.USE_REGOLITH).toBeUndefined()
     expect(earth.uniforms.uRegolithMix.value).toBe(0)
   })
@@ -113,6 +121,6 @@ describe('PlanetShader: гейт по телу', () => {
       children: { where: () => ({ first: () => undefined, isNotEmpty: () => false }) },
       resources: { where: () => ({ first: () => undefined }) }
     } as unknown as Actor
-    expect(new PlanetShader(stub).defines.USE_REGOLITH).toBeUndefined()
+    expect(make(stub).defines.USE_REGOLITH).toBeUndefined()
   })
 })

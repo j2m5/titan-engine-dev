@@ -3,11 +3,13 @@ import { Color, Texture } from 'three'
 import type { Actor } from '@/core/models/Actor'
 import { lightColorOf, lightTintOf, resolveLightTint } from '@/core/helpers/lightSource'
 import { buildStarPalette } from '@/core/materials/shaders/lib/helpers'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
 import { RingShaderTemplate } from '@/core/materials/shaders/lib/RingShaderTemplate'
 import { InstancedAsteroidShaderTemplate } from '@/core/materials/shaders/lib/InstancedAsteroidShaderTemplate'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
 import { RingMaterial } from '@/core/materials/RingMaterial'
 import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
@@ -103,7 +105,8 @@ describe('resolveLightTint', () => {
 
 describe('гейт в шейдерах', () => {
   const templates = {
-    planet: PlanetShaderTemplate,
+    'planet-sphere': SphereSurfaceShaderTemplate,
+    'planet-terrain': TerrainShaderTemplate,
     water: WaterShaderTemplate,
     ring: RingShaderTemplate,
     asteroid: InstancedAsteroidShaderTemplate
@@ -121,16 +124,22 @@ describe('гейт в шейдерах', () => {
     expect(withoutLightTint(fragment)).not.toContain('uLightColor')
   })
 
-  it('планета: тинт на прямом члене, амбиент без него', () => {
-    const fragment: string = withoutComments(PlanetShaderTemplate.fragmentShader)
+  it.each([
+    ['сфера', SphereSurfaceShaderTemplate],
+    ['рельеф', TerrainShaderTemplate]
+  ])('планета (%s): тинт на прямом члене, амбиент без него', (_path, template) => {
+    const fragment: string = withoutComments(template.fragmentShader)
 
     expect(fragment).toContain('vec3 litDirect = vec3(directGain) * uLightColor * sunTintMix;')
     expect(fragment).toContain('vec3 lit = mix(ambient, litDirect, min(directWeight, 1.0)) + max(directWeight - 1.0, 0.0) * litDirect;')
     expect(fragment).not.toMatch(/ambient\s*\*\s*uLightColor|uLightColor\s*\*\s*ambient/)
   })
 
-  it('планета: тень колец остаётся бесцветным множителем', () => {
-    expect(withoutComments(PlanetShaderTemplate.fragmentShader)).toContain(
+  it.each([
+    ['сфера', SphereSurfaceShaderTemplate],
+    ['рельеф', TerrainShaderTemplate]
+  ])('планета (%s): тень колец остаётся бесцветным множителем', (_path, template) => {
+    expect(withoutComments(template.fragmentShader)).toContain(
       'getShadowFromRings(vec3(1.0), normalize(vLocalLightDirection))'
     )
   })
@@ -233,8 +242,11 @@ describe('проводка материалов: гейт USE_LIGHT_TINT и юн
   beforeEach(seedPlaceholderKeys)
   afterEach(() => resourceStorage.deleteAllTextures())
 
-  it('PlanetMaterial: без светила-подписчика — без дефайна, uLightColor белый', () => {
-    const material = new PlanetMaterial(planetActor(null))
+  it.each([
+    ['SphereSurfaceMaterial', (actor: Actor) => new SphereSurfaceMaterial(actor)],
+    ['TerrainMaterial', (actor: Actor) => new TerrainMaterial(actor)]
+  ])('%s: без светила-подписчика — без дефайна, uLightColor белый', (_name, make) => {
+    const material = make(planetActor(null))
     // USE_LIGHT_TINT живёт в baseDefines (конструктор) и переживает
     // updateMaterial()/resetMaterial(); вызов здесь — проверка этого
     material.updateMaterial()
@@ -243,16 +255,22 @@ describe('проводка материалов: гейт USE_LIGHT_TINT и юн
     expect((material.uniforms.uLightColor.value as Color).equals(new Color(1, 1, 1))).toBe(true)
   })
 
-  it('PlanetMaterial: под звездой с lightTint 0.8 — дефайн есть, uLightColor подкрашен', () => {
-    const material = new PlanetMaterial(planetActor(tintedStar(0.8)))
+  it.each([
+    ['SphereSurfaceMaterial', (actor: Actor) => new SphereSurfaceMaterial(actor)],
+    ['TerrainMaterial', (actor: Actor) => new TerrainMaterial(actor)]
+  ])('%s: под звездой с lightTint 0.8 — дефайн есть, uLightColor подкрашен', (_name, make) => {
+    const material = make(planetActor(tintedStar(0.8)))
     material.updateMaterial()
 
     expect(material.defines.USE_LIGHT_TINT).toBe('1')
     expect((material.uniforms.uLightColor.value as Color).b).toBeLessThan(1)
   })
 
-  it('PlanetMaterial: дефайн переживает повторную updateMaterial() И resetMaterial()', () => {
-    const material = new PlanetMaterial(planetActor(tintedStar(0.8)))
+  it.each([
+    ['SphereSurfaceMaterial', (actor: Actor) => new SphereSurfaceMaterial(actor)],
+    ['TerrainMaterial', (actor: Actor) => new TerrainMaterial(actor)]
+  ])('%s: дефайн переживает повторную updateMaterial() И resetMaterial()', (_name, make) => {
+    const material = make(planetActor(tintedStar(0.8)))
 
     material.updateMaterial()
     expect(material.defines.USE_LIGHT_TINT).toBe('1')

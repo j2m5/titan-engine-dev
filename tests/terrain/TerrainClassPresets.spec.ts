@@ -56,7 +56,7 @@ describe('terrainDataOf', () => {
     expect(() => terrainDataOf(stubActor({ terrainClass: 'gas' }))).toThrow('стаб')
   })
 
-  it('тело без класса и без данных — фолбэк как у PlanetShader', () => {
+  it('тело без класса и без данных — фолбэк как у шейдеров поверхности', () => {
     const bare = { renderingObject: undefined, getAttribute: () => 'стаб', children: { where: () => ({ first: () => undefined }) }, resources: { where: () => ({ first: () => undefined }) } } as unknown as Actor
     expect(terrainDataOf(bare)).toEqual({ bumpScale: 0, emission: 1 })
   })

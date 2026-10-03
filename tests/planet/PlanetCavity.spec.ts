@@ -1,5 +1,6 @@
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
 import { terrainDetailFunctions } from '@/core/materials/shaders/lib/chunks/TerrainDetail'
 import { terrainMacroDetailFunctions } from '@/core/materials/shaders/lib/chunks/TerrainMacroDetail'
 import { Actor } from '@/core/models/Actor'
@@ -13,8 +14,8 @@ import { RenderingObjects } from '@storage/database/renderingObjects'
 // Строковые ассерты терраформной ветки шаблона — контракт Task 1 (report):
 // канал B декодится (byte-128)/127 БЕЗ множителя SLOPE_RANGE, знак «плюс —
 // гребень, светлит».
-describe('PlanetShaderTemplate: декод cavity-канала (строковые ассерты)', () => {
-  const frag: string = PlanetShaderTemplate.fragmentShader
+describe('TerrainShaderTemplate: декод cavity-канала (строковые ассерты)', () => {
+  const frag: string = TerrainShaderTemplate.fragmentShader
 
   it('юниформ uCavityStrength объявлен', () => {
     expect(frag).toContain('uniform float uCavityStrength;')
@@ -61,6 +62,10 @@ describe('PlanetShaderTemplate: декод cavity-канала (строковы
     expect(cavityIdx).toBeGreaterThan(slopeIdx)
     expect(detailIdx).toBeGreaterThan(cavityIdx)
   })
+
+  it('сфера cavity не декодирует: гейта нет в её шаблоне', () => {
+    expect(SphereSurfaceShaderTemplate.fragmentShader).not.toContain('USE_CAVITY')
+  })
 })
 
 // Страж знака: JS-зеркало формулы декода, зафиксированной строкой в тесте
@@ -100,7 +105,7 @@ describe('Cavity decode: числовой страж знака', () => {
   })
 })
 
-// Проводка PlanetMaterial: гейт USE_CAVITY и юниформ uCavityStrength.
+// Проводка TerrainMaterial: гейт USE_CAVITY и юниформ uCavityStrength.
 // Тела БД (Луна и т.п.) не несут ручку cavityStrength (Task 3) — для
 // сценариев с ненулевой ручкой актор стабится локально (образец —
 // AtmosphereKneeWiring.spec.ts / TerrainFloorWiring.spec.ts).
@@ -159,7 +164,7 @@ function stubActor({ data, slopeResource = true }: StubOptions): Actor {
   } as unknown as Actor
 }
 
-describe('PlanetMaterial: проводка cavity (гейт USE_CAVITY, юниформ uCavityStrength)', () => {
+describe('TerrainMaterial: проводка cavity (гейт USE_CAVITY, юниформ uCavityStrength)', () => {
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => {
     resourceStorage.deleteAllTextures()
@@ -170,7 +175,7 @@ describe('PlanetMaterial: проводка cavity (гейт USE_CAVITY, юниф
     seedHeightField()
     seedTexture(SLOPE_PATH, 8, 4)
 
-    const material = new PlanetMaterial(stubActor({ data: {} }))
+    const material = new TerrainMaterial(stubActor({ data: {} }))
     material.updateMaterial()
 
     expect(material.defines.USE_CAVITY).toBeUndefined()
@@ -181,7 +186,7 @@ describe('PlanetMaterial: проводка cavity (гейт USE_CAVITY, юниф
     seedHeightField()
     seedTexture(SLOPE_PATH, 8, 4)
 
-    const material = new PlanetMaterial(stubActor({ data: { cavityStrength: 0 } }))
+    const material = new TerrainMaterial(stubActor({ data: { cavityStrength: 0 } }))
     material.updateMaterial()
 
     expect(material.defines.USE_CAVITY).toBeUndefined()
@@ -192,7 +197,7 @@ describe('PlanetMaterial: проводка cavity (гейт USE_CAVITY, юниф
     seedHeightField()
     seedTexture(SLOPE_PATH, 8, 4)
 
-    const material = new PlanetMaterial(stubActor({ data: { cavityStrength: 0.6 } }))
+    const material = new TerrainMaterial(stubActor({ data: { cavityStrength: 0.6 } }))
     material.updateMaterial()
 
     expect(material.defines.USE_CAVITY).toBe('1')
@@ -202,7 +207,7 @@ describe('PlanetMaterial: проводка cavity (гейт USE_CAVITY, юниф
   it('карта высот не загружена — USE_CAVITY не ставится даже при cavityStrength>0 (slope-путь недоступен)', () => {
     seedTexture(SLOPE_PATH, 8, 4) // heightField НЕ сеется
 
-    const material = new PlanetMaterial(stubActor({ data: { cavityStrength: 0.6 } }))
+    const material = new TerrainMaterial(stubActor({ data: { cavityStrength: 0.6 } }))
     material.updateMaterial()
 
     expect(material.defines.USE_CAVITY).toBeUndefined()
@@ -213,7 +218,7 @@ describe('PlanetMaterial: проводка cavity (гейт USE_CAVITY, юниф
   it('slope-текстура ещё не пришла из стримера — USE_CAVITY не ставится даже при cavityStrength>0', () => {
     seedHeightField() // slope-текстура НЕ сеется (ресурс есть, стример не догрузил)
 
-    const material = new PlanetMaterial(stubActor({ data: { cavityStrength: 0.6 } }))
+    const material = new TerrainMaterial(stubActor({ data: { cavityStrength: 0.6 } }))
     material.updateMaterial()
 
     expect(material.defines.USE_CAVITY).toBeUndefined()
@@ -222,7 +227,7 @@ describe('PlanetMaterial: проводка cavity (гейт USE_CAVITY, юниф
   it('slope-ресурса у тела нет вовсе — USE_CAVITY не ставится даже при cavityStrength>0', () => {
     seedHeightField()
 
-    const material = new PlanetMaterial(stubActor({ data: { cavityStrength: 0.6 }, slopeResource: false }))
+    const material = new TerrainMaterial(stubActor({ data: { cavityStrength: 0.6 }, slopeResource: false }))
     material.updateMaterial()
 
     expect(material.defines.USE_CAVITY).toBeUndefined()
@@ -232,7 +237,7 @@ describe('PlanetMaterial: проводка cavity (гейт USE_CAVITY, юниф
     seedHeightField()
     seedTexture(SLOPE_PATH, 8, 4)
 
-    const material = new PlanetMaterial(stubActor({ data: { cavityStrength: 0.6 } }))
+    const material = new TerrainMaterial(stubActor({ data: { cavityStrength: 0.6 } }))
     material.updateMaterial()
     expect(material.defines.USE_CAVITY).toBe('1')
 
@@ -246,10 +251,10 @@ describe('PlanetMaterial: проводка cavity (гейт USE_CAVITY, юниф
     seedHeightField()
     seedTexture(SLOPE_PATH, 8, 4)
 
-    const withoutField = new PlanetMaterial(stubActor({ data: {} }))
+    const withoutField = new TerrainMaterial(stubActor({ data: {} }))
     withoutField.updateMaterial()
 
-    const withZero = new PlanetMaterial(stubActor({ data: { cavityStrength: 0 } }))
+    const withZero = new TerrainMaterial(stubActor({ data: { cavityStrength: 0 } }))
     withZero.updateMaterial()
 
     expect(withoutField.defines).toEqual(withZero.defines)

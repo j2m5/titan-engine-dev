@@ -1,7 +1,7 @@
 import { AppShaderChunk } from '@/core/materials/shaders/lib/chunks'
 import { terrainDetailFunctions, terrainDetailUniforms } from '@/core/materials/shaders/lib/chunks/TerrainDetail'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { Actor } from '@/core/models/Actor'
 import { ResourceType } from '@/core/models/types'
@@ -206,7 +206,7 @@ describe('TerrainDetail: чанк — регистрация и структур
 })
 
 describe('TerrainDetail: хук в терраформной ветке шаблона', () => {
-  const frag: string = PlanetShaderTemplate.fragmentShader
+  const frag: string = TerrainShaderTemplate.fragmentShader
 
   it('ветка USE_TERRAIN_DETAIL подключает чанк', () => {
     expect(frag).toContain('#ifdef USE_TERRAIN_DETAIL')
@@ -235,7 +235,7 @@ describe('TerrainDetail: хук в терраформной ветке шабл�
   })
 })
 
-describe('PlanetMaterial: терраформный детальный слой', () => {
+describe('TerrainMaterial: терраформный детальный слой', () => {
   beforeEach(() => {
     seedPlaceholderKeys()
   })
@@ -248,7 +248,7 @@ describe('PlanetMaterial: терраформный детальный слой',
     seedMoonHeightMap()
     seedTexture(moonPathOf('detailNormal'), 8, 4)
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
     expect(material.defines.USE_TERRAIN_DETAIL).toBe('1')
@@ -260,7 +260,7 @@ describe('PlanetMaterial: терраформный детальный слой',
     seedTexture(moonPathOf('detailArm'), 8, 4)
     seedTexture(moonPathOf('detailNormal2'), 8, 4)
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
     expect(material.defines.USE_TERRAIN_DETAIL).toBeUndefined()
@@ -269,7 +269,7 @@ describe('PlanetMaterial: терраформный детальный слой',
   it('без карты высот дефайн молчит, даже если detailNormal загружен', () => {
     seedTexture(moonPathOf('detailNormal'), 8, 4)
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
     expect(material.defines.USE_TERRAIN_DETAIL).toBeUndefined()
@@ -281,7 +281,7 @@ describe('PlanetMaterial: терраформный детальный слой',
     seedTexture(moonPathOf('detailArm'), 8, 4)
     // detailDiffuse и detailNormal2 намеренно не загружены
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
     expect(material.uniforms.uDetailLayerGates.value.x).toBe(1) // ao
@@ -296,7 +296,7 @@ describe('PlanetMaterial: терраформный детальный слой',
     seedTexture(moonPathOf('detailArm'), 8, 4)
     seedTexture(moonPathOf('detailNormal2'), 8, 4)
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
     expect((material.uniforms.uDetailNorMap.value as Texture).name).toBe(moonPathOf('detailNormal'))
@@ -309,7 +309,7 @@ describe('PlanetMaterial: терраформный детальный слой',
     seedMoonHeightMap()
     seedTexture(moonPathOf('detailNormal'), 8, 4)
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
     // Ручки Луны (storage/database/renderingObjects.ts): 40м / 7м период
@@ -325,7 +325,7 @@ describe('PlanetMaterial: терраформный детальный слой',
     seedMoonHeightMap()
     seedTexture(moonPathOf('detailNormal'), 8, 4)
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
     const end1 = toThreeJSUnits(30000 / 1000)
@@ -338,9 +338,9 @@ describe('PlanetMaterial: терраформный детальный слой',
   })
 
   it('без detail-полей в data юниформы получают дефолты (Земля, actorId 7 — bumpScale задан, детали нет)', () => {
-    const material = new PlanetMaterial(Actor.find(7)!)
+    const material = new TerrainMaterial(Actor.find(7)!)
 
-    // Дефолты PlanetShader.ts (DEFAULT_DETAIL_*) — совпадают с ручками Луны по значению,
+    // Дефолты TerrainShader.ts (DEFAULT_DETAIL_*) — совпадают с ручками Луны по значению,
     // но здесь их источник другой: у Земли detail*-полей в data нет вовсе (id 43 в
     // storage/database/renderingObjects.ts), значения приходят только из фолбэка `?? DEFAULT_DETAIL_*`.
     expect(material.uniforms.uDetailScale.value).toBeCloseTo(1 / toThreeJSUnits(40 / 1000), 10)
@@ -361,7 +361,7 @@ describe('PlanetMaterial: терраформный детальный слой',
     expect(range.w).toBeCloseTo(end2, 10)
   })
 
-  it('detailScaleMeters: 0 (мусорная ручка) — тот же uDetailScale, что и дефолт (validPeriodMeters в PlanetShader)', () => {
+  it('detailScaleMeters: 0 (мусорная ручка) — тот же uDetailScale, что и дефолт (validPeriodMeters в TerrainShader)', () => {
     const stub = {
       renderingObject: { getAttribute: () => ({ emission: 1, bumpScale: 0, detailScaleMeters: 0, detailScale2Meters: 0 }) },
       physicalObject: { getAttribute: () => 1737 },
@@ -369,7 +369,7 @@ describe('PlanetMaterial: терраформный детальный слой',
       resources: { where: () => ({ first: () => undefined }) }
     } as unknown as Actor
 
-    const material = new PlanetMaterial(stub)
+    const material = new TerrainMaterial(stub)
 
     expect(material.uniforms.uDetailScale.value).toBeCloseTo(1 / toThreeJSUnits(40 / 1000), 10)
     expect(material.uniforms.uDetailScale2.value).toBeCloseTo(1 / toThreeJSUnits(7 / 1000), 10)
@@ -382,7 +382,7 @@ describe('PlanetMaterial: терраформный детальный слой',
     seedTexture(moonPathOf('detailArm'), 8, 4)
     seedTexture(moonPathOf('detailNormal2'), 8, 4)
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
     expect(material.defines.USE_TERRAIN_DETAIL).toBe('1')
 

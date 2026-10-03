@@ -18,7 +18,7 @@ import {
   type PatchBuildResult,
   type TerrainPatchBuilder
 } from '@/core/terrain/terrainPatchBuilder'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -41,7 +41,7 @@ import { makeFrameClock } from './frameClock'
 class TestPatchGroup extends TerrainPatchGroup {
   public constructor(
     field: TerrainHeightField,
-    material: PlanetMaterial,
+    material: TerrainMaterial,
     renderer: WebGLRenderer,
     maxLivePatches?: number,
     nowMs?: () => number,
@@ -63,7 +63,7 @@ function seedTexture(name: string): void {
   resourceStorage.addTexture(texture)
 }
 
-// PlanetMaterial в конструкторе ходит за плейсхолдерами (см. TerrainPatchPool.spec.ts)
+// TerrainMaterial в конструкторе ходит за плейсхолдерами (см. TerrainPatchPool.spec.ts)
 function seedPlaceholderKeys(): void {
   seedTexture('')
   seedTexture('default.png')
@@ -104,7 +104,7 @@ function sequence(values: number[]): () => number {
 }
 
 function makeGroup(nowMs?: () => number, maxLivePatches?: number): TestPatchGroup {
-  return new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), maxLivePatches, nowMs)
+  return new TestPatchGroup(makeField(), new TerrainMaterial(moon()), makeRenderer(), maxLivePatches, nowMs)
 }
 
 /** Отказывает первому узлу глубже L1 — детерминированный сбой постройки. */
@@ -174,7 +174,7 @@ describe('TerrainPatchGroup: бюджет построек патчей по в�
 
   it('при бюджете «одна постройка» первым строится видимый узел с наибольшей SSE, не грубый за спиной', () => {
     const field = makeField()
-    const group = new TestPatchGroup(field, new PlanetMaterial(moon()), makeRenderer(), undefined, sequence([0, 0, 7, 7]))
+    const group = new TestPatchGroup(field, new TerrainMaterial(moon()), makeRenderer(), undefined, sequence([0, 0, 7, 7]))
     const ctx = makeCtx(2)
     const before = new Set(group.children.map((c) => (c as ThreeMesh).userData.terrainAddress).filter(Boolean).map(terrainNodeKey))
 
@@ -245,7 +245,7 @@ describe('сбой постройки патча', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     const clock = makeFrameClock()
     const builder = new FailingBuilder()
-    const group = new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), undefined, clock.nowMs, builder)
+    const group = new TestPatchGroup(makeField(), new TerrainMaterial(moon()), makeRenderer(), undefined, clock.nowMs, builder)
     for (let f = 0; f < 60; f++) {
       clock.startFrame()
       group.updateObject(makeCtx(600))
@@ -297,7 +297,7 @@ describe('клапан пула', () => {
   it('малый пул (32 слота, 600 км): при давлении набор реально коарсится, «пул исчерпан» не печатается, слоты не замерзают', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const clock = makeFrameClock()
-    const group = new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), 32, clock.nowMs)
+    const group = new TestPatchGroup(makeField(), new TerrainMaterial(moon()), makeRenderer(), 32, clock.nowMs)
     const tail: number[] = []
     for (let f = 0; f < 300; f++) {
       clock.startFrame()
@@ -328,7 +328,7 @@ describe('клапан пула', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const clock = makeFrameClock()
     const builder = new CountingBuilder()
-    const group = new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), 32, clock.nowMs, builder)
+    const group = new TestPatchGroup(makeField(), new TerrainMaterial(moon()), makeRenderer(), 32, clock.nowMs, builder)
     for (let f = 0; f < 400; f++) {
       clock.startFrame()
       group.updateObject(makeCtx(600))
@@ -354,7 +354,7 @@ describe('клапан пула', () => {
   // набор откатывается — минимум ПОСЛЕ пика строго меньше самого пика.
   it('клапан подключён к updateObject: набор откатывается вниз после пика, не застывает на потолке', () => {
     const clock = makeFrameClock()
-    const group = new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), 32, clock.nowMs)
+    const group = new TestPatchGroup(makeField(), new TerrainMaterial(moon()), makeRenderer(), 32, clock.nowMs)
     const counts: number[] = []
     for (let f = 0; f < 300; f++) {
       clock.startFrame()
@@ -374,7 +374,7 @@ describe('клапан пула', () => {
   // одновременно, чего стенд 32/600 км не даёт
   it('клапан × атомарный своп: под давлением с завершёнными сплитами «без дыр» держится каждый кадр', () => {
     const clock = makeFrameClock()
-    const group = new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), 44, clock.nowMs)
+    const group = new TestPatchGroup(makeField(), new TerrainMaterial(moon()), makeRenderer(), 44, clock.nowMs)
     for (let f = 0; f < 800; f++) {
       clock.startFrame()
       group.updateObject(makeCtx(2 + 1500 * (0.5 + 0.5 * Math.sin(f / 41))))

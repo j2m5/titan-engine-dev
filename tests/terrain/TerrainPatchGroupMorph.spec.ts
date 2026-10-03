@@ -3,7 +3,7 @@ import { PerspectiveCamera, Texture, type Mesh, type WebGLRenderer } from 'three
 import { terrain as terrainConfig } from '@/config/terrain'
 import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
 import type { PatchBuildJob, PatchBuildResult, TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -21,7 +21,7 @@ import { FakeAsyncBuilder } from './fakeAsyncBuilder'
 class TestPatchGroup extends TerrainPatchGroup {
   public constructor(
     field: TerrainHeightField,
-    material: PlanetMaterial,
+    material: TerrainMaterial,
     renderer: WebGLRenderer,
     builder: TerrainPatchBuilder,
     morph?: boolean
@@ -87,7 +87,7 @@ function makeAsync(morph = true, builder: FakeAsyncBuilder = new FakeAsyncBuilde
   group: TestPatchGroup
   builder: FakeAsyncBuilder
 } {
-  const group = new TestPatchGroup(makeField(), new PlanetMaterial(moon()), makeRenderer(), builder, morph)
+  const group = new TestPatchGroup(makeField(), new TerrainMaterial(moon()), makeRenderer(), builder, morph)
   return { group, builder }
 }
 

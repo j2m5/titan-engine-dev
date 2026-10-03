@@ -50,3 +50,58 @@ export function withoutDefine(source: string, name: string): string {
 
   return out.join('\n')
 }
+
+/**
+ * Мини-препроцессор: #ifdef/#ifndef/#if/#elif/#else/#endif по набору define.
+ * Условие #if — только `defined(X)` с && || ! и скобками; прочее считается ложью.
+ */
+export function preprocessGlsl(source: string, defines: ReadonlySet<string>): string {
+  const evalCondition = (expr: string): boolean => {
+    const replaced = expr
+      .replace(/defined\s*\(\s*(\w+)\s*\)/g, (_m, name: string) => (defines.has(name) ? '1' : '0'))
+      .replace(/defined\s+(\w+)/g, (_m, name: string) => (defines.has(name) ? '1' : '0'))
+
+    if (!/^[01\s&|!()]*$/.test(replaced)) return false
+
+    return Boolean(new Function(`return (${replaced})`)())
+  }
+
+  const stack: { parent: boolean; active: boolean; taken: boolean }[] = []
+  const out: string[] = []
+  const isActive = (): boolean => (stack.length === 0 ? true : stack[stack.length - 1].active)
+
+  for (const line of source.split('\n')) {
+    const t = line.trim()
+    let m: RegExpMatchArray | null
+
+    if ((m = t.match(/^#ifdef\s+(\w+)/)) || (m = t.match(/^#ifndef\s+(\w+)/)) || (m = t.match(/^#if\s+(.*)$/))) {
+      const parent = isActive()
+      const cond = t.startsWith('#ifdef') ? defines.has(m[1]) : t.startsWith('#ifndef') ? !defines.has(m[1]) : evalCondition(m[1])
+      stack.push({ parent, active: parent && cond, taken: cond })
+    } else if ((m = t.match(/^#elif\s+(.*)$/))) {
+      const top = stack[stack.length - 1]
+      const cond = !top.taken && evalCondition(m[1])
+      top.active = top.parent && cond
+      top.taken = top.taken || cond
+    } else if (t === '#else') {
+      const top = stack[stack.length - 1]
+      top.active = top.parent && !top.taken
+      top.taken = true
+    } else if (t.startsWith('#endif')) {
+      stack.pop()
+    } else if (isActive()) {
+      out.push(line)
+    }
+  }
+
+  return out.join('\n')
+}
+
+/** Сравнимая форма GLSL: без комментариев, пробелы схлопнуты, пустых строк нет. */
+export function normalizeGlsl(source: string): string {
+  return withoutComments(source)
+    .split('\n')
+    .map((line) => line.trim().replace(/\s+/g, ' '))
+    .filter((line) => line.length > 0)
+    .join('\n')
+}

@@ -5,7 +5,8 @@ import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { Planet } from '@/core/renderables/Planet'
-import type { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { TerrainSphere } from '@/core/renderables/TerrainSphere'
 import { WaterSphere } from '@/core/renderables/Water/WaterSphere'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
@@ -19,7 +20,7 @@ import type { ResourceType } from '@/core/models/types'
 const MOON_ID: number = 19
 
 /**
- * PlanetMaterial (её держат и Planet, и TerrainSphere) на промахе по ключу
+ * Материал поверхности (сферы у Planet, рельефа у TerrainSphere) на промахе по ключу
  * текстуры зовёт PlaceholderTexture — она рисует на canvas 2d, которого в
  * jsdom нет («canvas» npm-пакет не установлен). Приём и набор ключей — из
  * `tests/planet/PlanetTerrain.spec.ts`: те же тела (Луна, Земля), тот же
@@ -166,7 +167,7 @@ describe('RenderableFactory: подмена нулевого уровня LOD', 
 })
 
 /**
- * Находка №1 финального ревью ветки: конструктор PlanetMaterial текстуры не
+ * Находка №1 финального ревью ветки: конструктор материала поверхности текстуры не
  * читает (в юниформах плейсхолдеры default.png/night.jpg), а ResourceObserver
  * зовёт updateMaterial только по своим поводам — свап поверхности ни одним из
  * них не является. Без синхронизации в swapSurface апгрейднутое тело теряло
@@ -181,12 +182,14 @@ describe('RenderableFactory: свап поверхности подтягива�
     // Легаси-сфера построена на плейсхолдере: реальную карту ей отдаёт
     // ResourceObserver, которого в этом стенде нет — исходное состояние теста
     const legacy = lodOf(node).levels[0].object as Planet
-    expect((legacy.material as PlanetMaterial).uniforms.diffuseMap.value.name).toBe('default.png')
+    expect(legacy.material).toBeInstanceOf(SphereSurfaceMaterial)
+    expect((legacy.material as SphereSurfaceMaterial).uniforms.diffuseMap.value.name).toBe('default.png')
 
     heightFieldStorage['maps'].set(heightPathOf(moon)!, flatMap())
     factory.upgradePlanetToTerrain(node)
 
     const terrain = lodOf(node).levels[0].object as TerrainSphere
+    expect(terrain.material).toBeInstanceOf(TerrainMaterial)
     expect(terrain.material.uniforms.diffuseMap.value.name).toBe(pathOf(moon, 'diffuse'))
   })
 
@@ -198,7 +201,8 @@ describe('RenderableFactory: свап поверхности подтягива�
     factory.downgradeTerrainToPlanet(node)
 
     const planet = lodOf(node).levels[0].object as Planet
-    expect((planet.material as PlanetMaterial).uniforms.diffuseMap.value.name).toBe(pathOf(moon, 'diffuse'))
+    expect(planet.material).toBeInstanceOf(SphereSurfaceMaterial)
+    expect((planet.material as SphereSurfaceMaterial).uniforms.diffuseMap.value.name).toBe(pathOf(moon, 'diffuse'))
   })
 
   it('водная оболочка получает slope-карту прямо на свапе, не ожидая первого кадра', () => {

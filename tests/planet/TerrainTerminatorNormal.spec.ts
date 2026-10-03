@@ -1,18 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
-
-const frag: string = PlanetShaderTemplate.fragmentShader
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 
 /**
  * Терминатор суши считается по геометрической (радиальной) нормали сферы,
  * рельеф — только ламбертом с полом. Иначе обратный склон на дневной стороне
  * уходил в ветку «ночь» = ровно 0, и terrainAmbient до него не доезжал.
  */
-describe('PlanetShaderTemplate: терминатор суши по геометрической нормали', () => {
-  it('терминатор в обеих ветках берётся из vNormal, не из рельефной normal', () => {
+describe.each([
+  ['сфера', SphereSurfaceShaderTemplate],
+  ['рельеф', TerrainShaderTemplate]
+])('%s: терминатор суши по геометрической нормали', (_path, template) => {
+  const frag: string = template.fragmentShader
+
+  it('терминатор берётся из vNormal, не из рельефной normal', () => {
     const block = frag.slice(frag.indexOf('float terminatorNdotL'), frag.indexOf('float dayFactor'))
 
-    expect(block).not.toContain('#ifdef USE_TERRAIN_UV')
+    expect(block).not.toMatch(/#if/)
     expect(block).toContain('float terminatorNdotL = sunElevation;')
     // sunElevation — геометрический угол солнца, объявлен до ламберта и до терминатора
     const sunIdx = frag.indexOf('float sunElevation = dot(normalize(vNormal), lightDirection);')
@@ -33,11 +37,11 @@ describe('PlanetShaderTemplate: терминатор суши по геомет�
       'vec3 skyTerm = vec3(clamp(sunElevation / max(uTerrainAmbientSunRef, 1e-3), 0.0, 1.0)) * sunTintMix;'
     )
     expect(frag).toContain('uniform float uTerrainAmbientSunRef;')
-    expect(PlanetShaderTemplate.uniforms.uTerrainAmbientSunRef.value).toBe(0.3)
+    expect(template.uniforms.uTerrainAmbientSunRef.value).toBe(0.3)
   })
 
-  // Дефолт PlanetShader пинит tests/planet/TerrainLambert.spec.ts (со стабом текстур)
+  // Дефолт шейдеров пинит tests/planet/TerrainLambert.spec.ts (со стабом текстур)
   it('дефолт пола ламберта 0.15 в шаблоне', () => {
-    expect(PlanetShaderTemplate.uniforms.uTerrainAmbient.value).toBe(0.15)
+    expect(template.uniforms.uTerrainAmbient.value).toBe(0.15)
   })
 })

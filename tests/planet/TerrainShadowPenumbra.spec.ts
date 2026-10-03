@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Texture, Vector3 } from 'three'
 import '@/core/framework/TitanThree'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { resolveStarRadiusKm } from '@/core/terrain/starRadius'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -53,18 +53,18 @@ describe('resolveStarRadiusKm', () => {
   })
 })
 
-describe('PlanetMaterial.syncTerrainShadow', () => {
+describe('TerrainMaterial.syncTerrainShadow', () => {
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('Луна без атмосферы: R★/dist на дистанции, где пол не доминирует', () => {
-    const material = new PlanetMaterial(Actor.find(19)!)
+    const material = new TerrainMaterial(Actor.find(19)!)
     material.syncTerrainShadow(new Vector3(toThreeJSUnits(1e8), 0, 0))
     expect(material.uniforms.uShadowPenumbraTan.value).toBeCloseTo(Math.max(696000 / 1e8, TERRAIN_SHADOW_PENUMBRA_FLOOR), 12)
   })
 
   it('Луна без атмосферы: на большей дистанции побеждает пол полутени', () => {
-    const material = new PlanetMaterial(Actor.find(19)!)
+    const material = new TerrainMaterial(Actor.find(19)!)
     material.syncTerrainShadow(new Vector3(toThreeJSUnits(1.5e8), 0, 0))
     expect(material.uniforms.uShadowPenumbraTan.value).toBe(TERRAIN_SHADOW_PENUMBRA_FLOOR)
   })
@@ -72,7 +72,7 @@ describe('PlanetMaterial.syncTerrainShadow', () => {
   it('softness множит итог', () => {
     softnessOverride.value = 2
     try {
-      const material = new PlanetMaterial(Actor.find(19)!)
+      const material = new TerrainMaterial(Actor.find(19)!)
       material.updateMaterial()
       material.syncTerrainShadow(new Vector3(toThreeJSUnits(1e8), 0, 0))
       expect(material.uniforms.uShadowPenumbraTan.value).toBeCloseTo(2 * (696000 / 1e8), 12)
@@ -82,7 +82,7 @@ describe('PlanetMaterial.syncTerrainShadow', () => {
   })
 
   it('Земля с атмосферой: tan(sunAngularRadius) из данных атмосферы, дистанция не при чём', () => {
-    const material = new PlanetMaterial(Actor.find(7)!)
+    const material = new TerrainMaterial(Actor.find(7)!)
     material.syncTerrainShadow(new Vector3(toThreeJSUnits(1), 0, 0))
     const expected = Math.max(Math.tan(0.00465043373641781), TERRAIN_SHADOW_PENUMBRA_FLOOR)
     expect(material.uniforms.uShadowPenumbraTan.value).toBeCloseTo(expected, 12)

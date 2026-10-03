@@ -1,6 +1,7 @@
 import { AppShaderChunk } from '@/core/materials/shaders/lib/chunks'
 import { slopeNormalFunctions, slopeNormalUniforms } from '@/core/materials/shaders/lib/chunks/SlopeNormal'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 
 describe('SlopeNormal: попиксельная нормаль из slope-карты', () => {
   it('чанк зарегистрирован — иначе include молча раскроется в пустоту', () => {
@@ -39,16 +40,22 @@ describe('SlopeNormal: попиксельная нормаль из slope-кар
   })
 
   it('шаблон зовёт perturbNormalFromSlope локальными аргументами под USE_SLOPE, out-параметром (без второй выборки bumpMap)', () => {
-    expect(PlanetShaderTemplate.fragmentShader).toContain('#ifdef USE_SLOPE')
+    expect(TerrainShaderTemplate.fragmentShader).toContain('#ifdef USE_SLOPE')
     // терраформная ветка (USE_SLOPE) зовёт локальными аргументами — один
     // normalMatrix применяется в конце ветки (см. FragmentUv.spec); легаси
     // ветка USE_BUMP вымерла вместе с типом ресурса bump. out-параметр
     // terrainMapSlopeVec — маска зон материала TerrainDetail (задача 6):
     // уклон КАРТЫ без наклона полосы B, тот же декод, что внутри чанка,
     // без повторной выборки текстуры.
-    expect(PlanetShaderTemplate.fragmentShader).toContain(
+    expect(TerrainShaderTemplate.fragmentShader).toContain(
       'perturbNormalFromSlope(nLocal, eastLocal, uv, vMidTilt, terrainMapSlopeVec)'
     )
-    expect(PlanetShaderTemplate.fragmentShader).not.toContain('USE_BUMP')
+    expect(TerrainShaderTemplate.fragmentShader).not.toContain('USE_BUMP')
+  })
+
+  it('сфера slope-карту не читает: ни гейта, ни вызова', () => {
+    expect(SphereSurfaceShaderTemplate.fragmentShader).not.toContain('USE_SLOPE')
+    expect(SphereSurfaceShaderTemplate.fragmentShader).not.toContain('perturbNormalFromSlope')
+    expect(SphereSurfaceShaderTemplate.fragmentShader).not.toContain('USE_BUMP')
   })
 })
