@@ -53,7 +53,7 @@ function dot3(a: Vec3, b: Vec3): number {
 
 /**
  * CPU-зеркало GLSL-выражения `dot(normalize(vLocalDir), -normalize(vLocalLightDirection))`
- * (PlanetShaderTemplate.ts) — muS для sunTint. `lightDirFromSun` направлен ОТ солнца
+ * (PlanetSurfaceCommon.ts) — muS для sunTint. `lightDirFromSun` направлен ОТ солнца
  * К точке (см. вершинник), поэтому знак минус: подсолнечная точка (dir совпадает с
  * направлением НА солнце) даёт muS = +1.
  */

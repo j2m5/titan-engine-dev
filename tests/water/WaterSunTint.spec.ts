@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Object3D, Texture } from 'three'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { WaterShader } from '@/core/materials/shaders/WaterShader'
-import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
+import { SphereSurfaceShader } from '@/core/materials/shaders/SphereSurfaceShader'
+import { TerrainShader } from '@/core/materials/shaders/TerrainShader'
 import { clampSunTintStrength, SUN_TINT_STRENGTH_DEFAULT } from '@/core/materials/SunTintBinding'
 import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
 import { Actor } from '@/core/models/Actor'
@@ -83,7 +84,7 @@ function stubActor(data: Record<string, unknown>): Actor {
 
 describe('WaterShaderTemplate: тинт солнца — контракт шейдера', () => {
   it('вершинник считает vLocalLightDirection ТЕМИ ЖЕ строками, что палуба', () => {
-    const planetVert: string = PlanetShaderTemplate.vertexShader
+    const planetVert: string = TerrainShaderTemplate.vertexShader
     const worldLightLine = /vec3 worldLightDirection = [^;]+;/.exec(planetVert)?.[0]
     const localLightLine = /vec3 localLightDirection = [^;]+;/.exec(planetVert)?.[0]
 
@@ -158,7 +159,7 @@ describe('WaterShader: юниформы тинта (дефолты и кламп
   // Дефолт и кламп у палубы и воды — ОДНА функция (clampSunTintStrength):
   // разъехавшись, они дали бы тональный шов на берегу у терминатора.
   it('палуба и вода клампят одинаково — общий clampSunTintStrength, не две копии', () => {
-    // PlanetShader ходит в хранилище через getTextureOrMake, а тот в jsdom
+    // Шейдеры поверхности ходят в хранилище через getTextureOrMake, а тот в jsdom
     // строит канвас-текстуру (канвас 2d недоступен) — сеем все три ключа
     // заранее, тот же приём, что seedPlaceholderKeys в
     // tests/planet/SunTintWiring.spec.ts.
@@ -174,7 +175,10 @@ describe('WaterShader: юниформы тинта (дефолты и кламп
       const data = value === undefined ? {} : { sunTintStrength: value }
 
       expect(new WaterShader(stubActor(data)).uniforms.uSunTintStrength.value).toBe(
-        new PlanetShader(stubActor(data)).uniforms.uSunTintStrength.value
+        new TerrainShader(stubActor(data)).uniforms.uSunTintStrength.value
+      )
+      expect(new WaterShader(stubActor(data)).uniforms.uSunTintStrength.value).toBe(
+        new SphereSurfaceShader(stubActor(data)).uniforms.uSunTintStrength.value
       )
     }
 

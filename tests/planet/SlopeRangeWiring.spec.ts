@@ -1,6 +1,7 @@
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
-import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
+import { TerrainShader } from '@/core/materials/shaders/TerrainShader'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
@@ -66,11 +67,13 @@ function stubActor({ data, slopeResource = true, slopeRange }: StubOptions): Act
 
 describe('uSlopeRange из slope-ресурса', () => {
   it('шаблон включает slopeNormalUniforms под USE_SLOPE до функций', () => {
-    const frag = PlanetShaderTemplate.fragmentShader
+    const frag = TerrainShaderTemplate.fragmentShader
     const u = frag.indexOf('#include <slopeNormalUniforms>')
     const f = frag.indexOf('#include <slopeNormalFunctions>')
     expect(u).toBeGreaterThan(-1)
     expect(u).toBeLessThan(f)
+    // сфера slope-карту не декодирует
+    expect(SphereSurfaceShaderTemplate.fragmentShader).not.toContain('slopeNormal')
   })
 
   describe('конструктор', () => {
@@ -78,7 +81,7 @@ describe('uSlopeRange из slope-ресурса', () => {
     afterEach(() => resourceStorage.deleteAllTextures())
 
     it('дефолт SLOPE_RANGE', () => {
-      expect(new PlanetShader(stubActor({ data: {} })).uniforms.uSlopeRange.value).toBe(SLOPE_RANGE)
+      expect(new TerrainShader(stubActor({ data: {} })).uniforms.uSlopeRange.value).toBe(SLOPE_RANGE)
     })
   })
 
@@ -94,19 +97,19 @@ describe('uSlopeRange из slope-ресурса', () => {
     })
 
     it('значение из ресурса (0.5)', () => {
-      const material = new PlanetMaterial(stubActor({ data: {}, slopeRange: 0.5 }))
+      const material = new TerrainMaterial(stubActor({ data: {}, slopeRange: 0.5 }))
       material.updateMaterial()
       expect(material.uniforms.uSlopeRange.value).toBe(0.5)
     })
 
     it('без поля slopeRange — SLOPE_RANGE', () => {
-      const material = new PlanetMaterial(stubActor({ data: {} }))
+      const material = new TerrainMaterial(stubActor({ data: {} }))
       material.updateMaterial()
       expect(material.uniforms.uSlopeRange.value).toBe(SLOPE_RANGE)
     })
 
     it('resetMaterial возвращает SLOPE_RANGE', () => {
-      const material = new PlanetMaterial(stubActor({ data: {}, slopeRange: 0.5 }))
+      const material = new TerrainMaterial(stubActor({ data: {}, slopeRange: 0.5 }))
       material.updateMaterial()
       expect(material.uniforms.uSlopeRange.value).toBe(0.5)
 

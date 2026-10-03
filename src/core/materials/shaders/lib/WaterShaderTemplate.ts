@@ -19,7 +19,7 @@ const defaultUniforms = {
   lightPosition: new Uniform(new Vector3()),
   uLightColor: new Uniform(new Color(1, 1, 1)),
   // Канал A slope-карты суши тела (запечённая глубина воды) — та же
-  // текстура/путь, что бы читал PlanetMaterial под USE_SLOPE, здесь читается
+  // текстура/путь, что читает TerrainMaterial под USE_SLOPE, здесь читается
   // только канал A. null допустим — гейт USE_WATER_DEPTH решает, читать ли.
   uSlopeMap: new Uniform(null),
   uWaterColor: new Uniform(new Color(0x0b3d66)),
@@ -93,8 +93,8 @@ const defaultUniforms = {
 }
 
 export const WaterShaderTemplate: ShaderProps = {
-  // UniformsUtils.merge (не {...defaultUniforms}) — та же конвенция, что
-  // PlanetShaderTemplate: клонирует значения (Vector3/Color — новыми
+  // UniformsUtils.merge (не {...defaultUniforms}) — та же конвенция, что у
+  // шаблонов поверхности: клонирует значения (Vector3/Color — новыми
   // экземплярами), не только сам объект-контейнер. Мелкий spread оставлял бы
   // ОДНИ И ТЕ ЖЕ Color/Vector3 инстансы у каждого потребителя шаблона —
   // будущий второй экземпляр WaterShader получил бы алиасинг на юниформы
@@ -130,7 +130,7 @@ export const WaterShaderTemplate: ShaderProps = {
 
       // Направление ОТ солнца к фрагменту в body-локальных осях — вход μ_s
       // тинта заката (см. фрагментник): те же строки, что у палубы
-      // (PlanetShaderTemplate), парный строковый страж в тестах.
+      // (TerrainShaderTemplate), парный строковый страж в тестах.
       vec3 worldLightDirection = normalize(worldPosition.xyz - lightPosition);
       vec3 localLightDirection = transpose(mat3(modelMatrix)) * worldLightDirection;
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
@@ -144,7 +144,7 @@ export const WaterShaderTemplate: ShaderProps = {
       //
       // Body-локальное радиальное направление — отдельно, для терраформного
       // UV (канал A той же slope-карты, что и суша): та же конвенция vLocalDir,
-      // что у PlanetShaderTemplate — без матриц, тот же vertexDir.
+      // что у TerrainShaderTemplate — без матриц, тот же vertexDir.
       vec3 vertexDir = normalize(position + patchCenter);
 
       vNormal = normalize(normalMatrix * vertexDir);
@@ -152,7 +152,7 @@ export const WaterShaderTemplate: ShaderProps = {
       vDetailPos = detailPos;
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
-      // Взгляд в системе тела (облачный слой) — из view-space, как у суши (PlanetShaderTemplate)
+      // Взгляд в системе тела (облачный слой) — из view-space, как у суши (TerrainShaderTemplate)
       vLocalViewDir = transpose(mat3(modelMatrix)) * (transpose(mat3(viewMatrix)) * mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
 
@@ -255,7 +255,7 @@ export const WaterShaderTemplate: ShaderProps = {
       // на текселе 5–9 км дыры в каймe читались как клочья, а не как пена
       #define FOAM_TEAR 0.5
       // three не биндит normalMatrix во фрагментник автоматически (см. тот же
-      // приём в PlanetShaderTemplate) — юниформ общий на программу, объявление
+      // приём в TerrainShaderTemplate) — юниформ общий на программу, объявление
       // здесь просто делает его видимым этому шейдеру.
       uniform mat3 normalMatrix;
 
@@ -498,7 +498,7 @@ export const WaterShaderTemplate: ShaderProps = {
 
       // Ночная сторона темнее, не чёрная: вода не светится сама, но полный
       // ноль на терминаторе неправдоподобен (рассеянный свет неба/атмосферы).
-      // Терминатор — та же зона, что у PlanetShaderTemplate (эстетическая
+      // Терминатор — та же зона, что у TerrainShaderTemplate (эстетическая
       // консистентность суши/воды); ночной пол — ручка uWaterNightFloor
       // (дефолт 0.08, честно помеченный), приёмка вида — за владельцем.
       vec3 lightDirection = normalize(vViewLightDirection);

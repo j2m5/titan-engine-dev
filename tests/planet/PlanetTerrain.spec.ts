@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Texture } from 'three'
 import '@/core/framework/TitanThree'
 import { Planet } from '@/core/renderables/Planet'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
 import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { heightPathOf } from '@/core/terrain/heightPath'
@@ -137,21 +136,23 @@ describe('Planet: легаси-сфера', () => {
     expect(parameters.widthSegments).toBe(256)
   })
 
-  // Окно даунгрейда (см. докблок RenderableFactory.swapSurface): сфера на тик
-  // несёт USE_TERRAIN_UV, а вершинник под этим дефайном читает patchCenter,
-  // которого у SphereGeometry нет. Без дефолта значение приходит из общего
-  // generic-слота GL; ноль даёт normalize(position) — радиаль сферы.
-  it('материал несёт дефолт атрибута patchCenter — нули', () => {
-    const material = new PlanetMaterial(moon())
+  // Вершинник сферы patchCenter не читает (атрибуты патча — только у рельефа),
+  // поэтому и дефолтов атрибутов патча у материала сферы нет
+  it('у SphereSurfaceMaterial нет атрибутов патча в defaultAttributeValues', () => {
+    seedHeightMap()
 
-    expect(material.defaultAttributeValues.patchCenter).toEqual([0, 0, 0])
+    const material = new Planet(moon()).material as SphereSurfaceMaterial
+
+    expect(material).toBeInstanceOf(SphereSurfaceMaterial)
+    expect(material.defaultAttributeValues).not.toHaveProperty('patchCenter')
+    expect(material.vertexShader).not.toContain('patchCenter')
     // дефолты three (color/uv/uv1) не затёрты
     expect(material.defaultAttributeValues.uv).toEqual([0, 0])
   })
 })
 
 describe('материалы путей', () => {
-  // Дефайны, которые знает только шаблон рельефа (USE_TERRAIN_UV — контракт патчей старого материала)
+  // Дефайны, которые знает только шаблон рельефа (USE_TERRAIN_UV — снятый путевой дефайн)
   const TERRAIN_DEFINES = [
     'USE_TERRAIN_UV',
     'USE_SLOPE',
@@ -199,13 +200,13 @@ describe('материалы путей', () => {
     for (const actor of terrainBodies()) {
       const id = actor.getAttribute('id')
       seedBody(actor)
-      // контроль посева: старый материал на том же реестре дефайны рельефа ставил
-      const legacy = new PlanetMaterial(actor)
+      // контроль посева: материал рельефа на том же реестре дефайны рельефа ставит
+      const terrain = new TerrainMaterial(actor)
       const sphere = new SphereSurfaceMaterial(actor)
       dropEmptyKey()
-      legacy.updateMaterial()
-      expect(Object.keys(legacy.defines).filter((d) => TERRAIN_DEFINES.includes(d)), `${id} старый`).toContain('USE_TERRAIN_UV')
-      legacy.dispose()
+      terrain.updateMaterial()
+      expect(Object.keys(terrain.defines).filter((d) => TERRAIN_DEFINES.includes(d)), `${id} рельеф`).not.toEqual([])
+      terrain.dispose()
 
       sphere.updateMaterial()
       expect(Object.keys(sphere.defines).filter((d) => TERRAIN_DEFINES.includes(d)), `${id}`).toEqual([])

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { ShaderChunk } from 'three'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { WATER_DETAIL_WRAP, wrapUnitsFor } from '@/core/terrain/detailWrap'
 import {
   WATER_DETAIL_PERIOD_METERS,
@@ -636,8 +637,9 @@ describe('Парный страж терминатора: одна и та же 
     expect(frag).toContain('smoothstep(-0.08, 0.25, waveNdotL)')
   })
 
-  it('PlanetShaderTemplate использует ТУ ЖЕ форму (её terminatorNdotL — по геометрической нормали, как NdotL фундамента воды)', () => {
-    expect(PlanetShaderTemplate.fragmentShader).toContain('smoothstep(-0.08, 0.25, terminatorNdotL)')
+  it('шаблоны суши используют ТУ ЖЕ форму (их terminatorNdotL — по геометрической нормали, как NdotL фундамента воды)', () => {
+    expect(TerrainShaderTemplate.fragmentShader).toContain('smoothstep(-0.08, 0.25, terminatorNdotL)')
+    expect(SphereSurfaceShaderTemplate.fragmentShader).toContain('smoothstep(-0.08, 0.25, terminatorNdotL)')
   })
 })
 
@@ -822,7 +824,7 @@ const BASELINE_FRAGMENT_SHADER = `
 
       // Ночная сторона темнее, не чёрная: вода не светится сама, но полный
       // ноль на терминаторе неправдоподобен (рассеянный свет неба/атмосферы).
-      // Терминатор — та же зона, что у PlanetShaderTemplate (эстетическая
+      // Терминатор — та же зона, что у TerrainShaderTemplate (эстетическая
       // консистентность суши/воды); ночной пол — ручка uWaterNightFloor
       // (дефолт 0.08, честно помеченный), приёмка вида — за владельцем.
       vec3 lightDirection = normalize(vViewLightDirection);

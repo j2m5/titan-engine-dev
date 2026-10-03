@@ -8,7 +8,7 @@ import {
   type PatchBuildResult,
   type TerrainPatchBuilder
 } from '@/core/terrain/terrainPatchBuilder'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { MIDBAND_DEFAULTS } from '@/core/terrain/midbandParams'
 import { parseHeightMap } from '@/core/terrain/heightMapFormat'
@@ -50,7 +50,7 @@ class QueuedBuilder implements TerrainPatchBuilder {
 }
 
 class TestPatchGroup extends TerrainPatchGroup {
-  public constructor(field: TerrainHeightField, material: PlanetMaterial, renderer: WebGLRenderer, builder: TerrainPatchBuilder) {
+  public constructor(field: TerrainHeightField, material: TerrainMaterial, renderer: WebGLRenderer, builder: TerrainPatchBuilder) {
     super(field, material, renderer, undefined, undefined, undefined, () => 0, builder)
   }
 
@@ -80,7 +80,7 @@ describe.skipIf(!existsSync(MOON_HEIGHT_PATH))('Клапан пула на ка�
     const builder = new QueuedBuilder()
     const group = new TestPatchGroup(
       new TerrainHeightField(map, RADIUS_KM, { ...MIDBAND_DEFAULTS, midbandStrength: 0 }),
-      new PlanetMaterial(moon),
+      new TerrainMaterial(moon),
       { domElement: { height: 2160 } } as unknown as WebGLRenderer,
       builder
     )

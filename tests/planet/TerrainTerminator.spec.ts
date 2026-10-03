@@ -1,16 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 
-describe('PlanetShaderTemplate: терминатор суши без двойного гашения', () => {
-  const frag: string = PlanetShaderTemplate.fragmentShader
+describe.each([
+  ['сфера', SphereSurfaceShaderTemplate],
+  ['рельеф', TerrainShaderTemplate]
+])('%s: терминатор суши без двойного гашения', (_path, template) => {
+  const frag: string = template.fragmentShader
 
-  it('терраформная ветка: суша под landGate, облака своим светом слоя, огни гаснут под облаками, ночь под (1 − dayFactor)', () => {
+  it('суша под landGate, облака своим светом слоя, огни гаснут под облаками, ночь под (1 − dayFactor)', () => {
     expect(frag).toContain('float landGate = mix(dayFactor, 1.0, uTerrainLambert);')
     expect(frag).toContain('vec3 day = cloudRadiance + dayColor * (1.0 - cloudAlphaSlant) * landGate;')
     expect(frag).toContain('vec3 finalColor = night * (1.0 - dayFactor) * (1.0 - cloudAlphaSlant) + day;')
   })
 
-  it('легаси-формулы нет: одна сборка на обе ветки', () => {
+  it('легаси-формулы нет: одна сборка на оба пути', () => {
     expect(frag).not.toContain('mix(night, day, dayFactor)')
   })
 

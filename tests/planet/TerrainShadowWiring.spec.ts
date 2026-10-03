@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Texture } from 'three'
 import '@/core/framework/TitanThree'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
@@ -64,14 +65,18 @@ function seedHeightMap(): void {
   })
 }
 
-const frag: string = PlanetShaderTemplate.fragmentShader
+const frag: string = TerrainShaderTemplate.fragmentShader
 
-describe('PlanetShaderTemplate: тень рельефа', () => {
-  it('чанк включён только под USE_TERRAIN_SHADOW, внутри USE_TERRAIN_UV', () => {
+describe('TerrainShaderTemplate: тень рельефа', () => {
+  it('чанк включён только под USE_TERRAIN_SHADOW, после развёртки рельефа; у сферы его нет', () => {
     const start = frag.indexOf('#ifdef USE_TERRAIN_SHADOW')
     expect(start).toBeGreaterThan(-1)
     expect(frag.slice(start, frag.indexOf('#endif', start))).toContain('#include <terrainShadowMarchFunctions>')
-    expect(frag.indexOf('#if defined(USE_TERRAIN_UV) || defined(USE_CLOUD)')).toBeLessThan(start)
+    const uv = frag.indexOf('#include <terrainUvFunctions>')
+    expect(uv).toBeGreaterThan(-1)
+    expect(uv).toBeLessThan(start)
+    expect(SphereSurfaceShaderTemplate.fragmentShader).not.toContain('USE_TERRAIN_SHADOW')
+    expect(SphereSurfaceShaderTemplate.fragmentShader).not.toContain('terrainShadowMarch')
   })
 
   it('множит только прямой свет, после строки directGain арки 3; амбиент не тронут', () => {
@@ -92,14 +97,16 @@ describe('PlanetShaderTemplate: тень рельефа', () => {
     expect(sun).toBeLessThan(frag.indexOf('terrainShadowMarch(dirLocal, sunLocal)'))
   })
 
-  it('блики гасятся тенью: специальный, мокрой кромки и льда', () => {
-    expect(frag).toContain('* smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;')
-    // специальный, мокрая кромка, лёд (USE_TERRAIN_GLINT) — три блика используют один и тот же множитель тени
-    expect(frag.split('* ringShadowFactor * terrainShadow;').length - 1).toBe(3)
+  it('блики гасятся тенью: специальный (сфера), мокрой кромки и льда (рельеф)', () => {
+    const sphere = SphereSurfaceShaderTemplate.fragmentShader
+    for (const source of [frag, sphere]) expect(source).toContain('* smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;')
+    // мокрая кромка и лёд (USE_TERRAIN_GLINT) у рельефа, specular-блик у сферы — один множитель тени
+    expect(frag.split('* ringShadowFactor * terrainShadow;').length - 1).toBe(2)
+    expect(sphere.split('* ringShadowFactor * terrainShadow;').length - 1).toBe(1)
   })
 })
 
-describe('PlanetMaterial: гейт тени рельефа', () => {
+describe('TerrainMaterial: гейт тени рельефа', () => {
   beforeEach(() => {
     seedPlaceholderKeys()
     seedHeightMap()
@@ -112,7 +119,7 @@ describe('PlanetMaterial: гейт тени рельефа', () => {
   })
 
   it('с картой высот и strength 1 — дефайн и текстура; resetMaterial снимает', () => {
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
     expect(material.defines.USE_TERRAIN_SHADOW).toBe('1')
     expect(material.uniforms.uShadowHeightMap.value).not.toBeNull()
@@ -128,7 +135,7 @@ describe('PlanetMaterial: гейт тени рельефа', () => {
 
   it('до готовности — заглушка; готовая карта перепривязывается сама; после resetMaterial — нет', () => {
     const map = heightFieldStorage.get(MOON_HEIGHT_PATH)!
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
     const placeholder = material.uniforms.uShadowHeightMap.value
     expect(placeholder.image.width).toBe(1)
@@ -137,7 +144,7 @@ describe('PlanetMaterial: гейт тени рельефа', () => {
     expect(material.uniforms.uShadowHeightMap.value.image.width).toBe(4)
 
     disposeTerrainShadowMaps()
-    const second = new PlanetMaterial(moon())
+    const second = new TerrainMaterial(moon())
     second.updateMaterial()
     second.resetMaterial()
     installTerrainShadowBits(map, buildShadowHeightBits(map))
@@ -156,7 +163,7 @@ describe('PlanetMaterial: гейт тени рельефа', () => {
 
   it('без карты высот дефайна нет', () => {
     heightFieldStorage.clear()
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
     expect(material.defines.USE_TERRAIN_SHADOW).toBeUndefined()
     expect(material.uniforms.uShadowHeightMap.value).toBeNull()
@@ -165,7 +172,7 @@ describe('PlanetMaterial: гейт тени рельефа', () => {
   it('strength 0 — дефайна нет, карта тени не строится', () => {
     shadowOverride.strength = 0
     try {
-      const material = new PlanetMaterial(moon())
+      const material = new TerrainMaterial(moon())
       material.updateMaterial()
       expect(material.defines.USE_TERRAIN_SHADOW).toBeUndefined()
       expect(material.uniforms.uShadowHeightMap.value).toBeNull()

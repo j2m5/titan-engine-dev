@@ -28,7 +28,7 @@ import { config } from '@/core/framework/config'
 // (tests/graphic/PostprocessingContract.spec.ts)
 
 // Инвариант bloom-guard: luminanceThreshold (1.0) обязан оставаться ВЫШЕ
-// LDR-клампа планеты (0.99, PlanetShaderTemplate) — её диффуз не блумит.
+// LDR-клампа планеты (0.99, PlanetSurfaceCommon) — её диффуз не блумит.
 // HDR-глинт океана добавляется ПОСЛЕ клампа и блумит намеренно. Честные
 // HDR-источники: звёзды, диск ЧД, туманности, глинт
 

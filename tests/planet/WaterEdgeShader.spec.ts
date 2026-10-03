@@ -1,16 +1,16 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Texture } from 'three'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { STEEP_DETAIL_PATHS } from '@/core/terrain/steepDetailPaths'
 
-const frag: string = PlanetShaderTemplate.fragmentShader
-const vert: string = PlanetShaderTemplate.vertexShader
+const frag: string = TerrainShaderTemplate.fragmentShader
+const vert: string = TerrainShaderTemplate.vertexShader
 
-describe('PlanetShaderTemplate: мокрая кромка берега (USE_WATER_EDGE)', () => {
+describe('TerrainShaderTemplate: мокрая кромка берега (USE_WATER_EDGE)', () => {
   it('атрибут height и varying объявлены под объединённым гейтом полосы/кромки', () => {
     expect(vert).toContain('#if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE)')
     expect(vert).toContain('attribute float height;')
@@ -28,15 +28,19 @@ describe('PlanetShaderTemplate: мокрая кромка берега (USE_WATE
     expect(frag).toContain('float hAbove = vHeightMeters - uWaterLevelMeters;')
     expect(frag).toContain('wetEdge = (1.0 - smoothstep(0.0, uWetBandMeters, hAbove)) * (1.0 - smoothstep(uMacroFadeRange.x, uMacroFadeRange.y, length(vViewPosition)));')
     expect(frag).toContain('albedoMul *= 1.0 - uWetDarken * wetEdge;')
-    // wetEdge объявлен до терраформной ветки (виден блоку глинта после композита)
-    expect(frag.indexOf('float wetEdge = 0.0;')).toBeLessThan(frag.indexOf('#ifdef USE_TERRAIN_UV', frag.indexOf('void main()')))
+    // wetEdge объявлен в прологе main, до ветки рельефа (виден блоку глинта после композита)
+    const terrainBranch = frag.indexOf('vec2 uv = terrainUv(dirLocal);')
+    expect(terrainBranch).toBeGreaterThan(frag.indexOf('void main()'))
+    expect(frag.indexOf('float wetEdge = 0.0;')).toBeGreaterThan(frag.indexOf('void main()'))
+    expect(frag.indexOf('float wetEdge = 0.0;')).toBeLessThan(terrainBranch)
   })
 
   it('glintEdge — глинт только в полосе ±W у уреза, темнение шире (весь мелкий шельф)', () => {
     expect(frag).toContain('float glintEdge = 0.0;')
     expect(frag).toContain('glintEdge = wetEdge * smoothstep(-uWetBandMeters, 0.0, hAbove);')
-    // glintEdge объявлен рядом с wetEdge, до терраформной ветки
-    expect(frag.indexOf('float glintEdge = 0.0;')).toBeLessThan(frag.indexOf('#ifdef USE_TERRAIN_UV', frag.indexOf('void main()')))
+    // glintEdge объявлен рядом с wetEdge, до ветки рельефа
+    expect(frag.indexOf('float glintEdge = 0.0;')).toBeGreaterThan(frag.indexOf('void main()'))
+    expect(frag.indexOf('float glintEdge = 0.0;')).toBeLessThan(frag.indexOf('vec2 uv = terrainUv(dirLocal);'))
   })
 
   it('глинт кромки: blinnPhongGlint, одно определение, один вызов', () => {
@@ -78,7 +82,7 @@ function seedHeightFieldFor(actor: Actor): void {
   })
 }
 
-describe('PlanetMaterial: дефайн USE_WATER_EDGE и юниформы кромки', () => {
+describe('TerrainMaterial: дефайн USE_WATER_EDGE и юниформы кромки', () => {
   afterEach(() => {
     resourceStorage.deleteAllTextures()
     heightFieldStorage.clear()
@@ -87,7 +91,7 @@ describe('PlanetMaterial: дефайн USE_WATER_EDGE и юниформы кро
   it('Луна (без уровня воды): дефайна нет, uWaterLevelMeters = 0', () => {
     const moon = Actor.find(19)!
     seedFor(moon)
-    const material = new PlanetMaterial(moon)
+    const material = new TerrainMaterial(moon)
     expect(material.defines.USE_WATER_EDGE).toBeUndefined()
     expect(material.uniforms.uWaterLevelMeters.value).toBe(0)
     expect(material.uniforms.uWetBandMeters.value).toBe(3)
@@ -98,7 +102,7 @@ describe('PlanetMaterial: дефайн USE_WATER_EDGE и юниформы кро
     const earth = Actor.find(7)!
     seedFor(earth)
     seedHeightFieldFor(earth)
-    const material = new PlanetMaterial(earth)
+    const material = new TerrainMaterial(earth)
     material.updateMaterial()
     expect(material.defines.USE_TERRAIN_MACRO_DETAIL).toBe('1')
     expect(material.defines.USE_WATER_EDGE).toBe('1')
@@ -109,7 +113,7 @@ describe('PlanetMaterial: дефайн USE_WATER_EDGE и юниформы кро
     const moon = Actor.find(19)!
     seedFor(moon)
     seedHeightFieldFor(moon)
-    const material = new PlanetMaterial(moon)
+    const material = new TerrainMaterial(moon)
     material.updateMaterial()
     expect(material.defines.USE_TERRAIN_MACRO_DETAIL).toBe('1')
     expect(material.defines.USE_WATER_EDGE).toBeUndefined()
@@ -118,7 +122,7 @@ describe('PlanetMaterial: дефайн USE_WATER_EDGE и юниформы кро
   it('Явин IV: уровень −667.2 доезжает до юниформа', () => {
     const yavin = Actor.find(83)!
     seedFor(yavin)
-    const material = new PlanetMaterial(yavin)
+    const material = new TerrainMaterial(yavin)
     expect(material.uniforms.uWaterLevelMeters.value).toBeCloseTo(-667.2, 6)
   })
 })

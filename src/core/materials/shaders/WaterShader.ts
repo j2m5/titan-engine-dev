@@ -121,7 +121,7 @@ interface WaterUniforms {
  * Подмножество IPlanetRenderingObject, которое реально читает WaterShader —
  * все пять полей опциональны в самом интерфейсе, поэтому пустой объект `{}`
  * — честный фолбэк без чужих (планетных) полей. Раньше фолбэк тащил
- * `{ bumpScale: 0, emission: 1 }`, скопированные у PlanetShader, — Water их
+ * `{ bumpScale: 0, emission: 1 }`, скопированные у шейдера планеты, — Water их
  * не читает никогда, поле было мёртвым и вводящим в заблуждение (находка
  * ревью Task 4, фикс-раунд 1, №8).
  */
@@ -161,7 +161,7 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
     super(Shader)
     this.model = model
 
-    // Ручки data — то же поле renderingObject.data, что у PlanetShader
+    // Ручки data — то же поле renderingObject.data, что у TerrainShader
     // (schema БД не различает конфиги по категориям, форма утверждается
     // локально); отсутствие data целиком (актор без ручек) — нейтральный
     // фолбэк на дефолты движка, ноль ручек не должен ронять конструктор.
@@ -178,12 +178,12 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
     // physicalObject: волны там всё равно выключены (нет waterNormal-текстуры),
     // масштаб 0 безвреден.
     const radiusMeters = (this.model.physicalObject?.getAttribute('radius') ?? 0) * 1000
-    // Ручки облачного слоя — тот же резолвер и те же данные тела, что у PlanetShader: облака
+    // Ручки облачного слоя — тот же резолвер и те же данные тела, что у TerrainShader: облака
     // над водой и над сушей одного тела совпадают на береговой линии
     const cloudLight = resolveTerrainLightParams(waterData, this.model.getAttribute?.('name', '?') ?? '?')
     const waveScaleHandle = waterData.waterWaveScale ?? DEFAULT_WATER_WAVE_SCALE
 
-    // Пена прибоя — тот же приём именования тела в ошибках, что PlanetShader.ts:198.
+    // Пена прибоя — тот же приём именования тела в ошибках, что у шейдеров поверхности.
     const foam = resolveWaterFoamParams(waterData, this.model.getAttribute?.('name', '?') ?? '?')
     const surface = resolveWaterSurfaceParams(waterData, this.model.getAttribute?.('name', '?') ?? '?')
 
@@ -229,7 +229,7 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
       uWaterRoughness: new Uniform(surface.waterRoughness),
       uWaterAbsorption: new Uniform(new Vector3(...surface.waterAbsorption)),
       uWaterRippleStrength: new Uniform(surface.waterRippleStrength),
-      // α² блика при всех погасших октавах — тот же расчёт ставит PlanetShader легаси-сфере (паритет на гейте карты высот)
+      // α² блика при всех погасших октавах — тот же расчёт ставит SphereSurfaceShader сфере (паритет на гейте карты высот)
       uWaterFarAlpha2: new Uniform(farGlintAlpha2(surface.waterRoughness, surface.waterRippleStrength)),
       uWaterGlintGain: new Uniform(surface.waterGlintGain),
       uWaterDepthRangeMeters: new Uniform(WATER_SHALLOW_RANGE_METERS),

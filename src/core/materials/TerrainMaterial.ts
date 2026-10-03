@@ -261,6 +261,7 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
 
     const macroStrength = planetData.macroStrength ?? 0
 
+    // USE_SPECULAR (блик воды по specular-карте) — только у сферы: у рельефа блик даёт водная оболочка
     return {
       ...(useSlope && { USE_SLOPE: '1' }),
       ...(USE_TERRAIN_DETAIL && { USE_TERRAIN_DETAIL: '1' }),

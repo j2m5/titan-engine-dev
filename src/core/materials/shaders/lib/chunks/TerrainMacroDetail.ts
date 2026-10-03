@@ -20,7 +20,7 @@ export const terrainMacroDetailUniforms = /* glsl */ `
   uniform float uMacroTextureWarp;
   uniform vec2 uMacroFadeRange;
   uniform vec2 uDiffuseTexelSize;
-  // uBodyRadiusUnits объявлен ХОСТОМ безусловно (PlanetShaderTemplate): его же
+  // uBodyRadiusUnits объявлен ХОСТОМ безусловно (PlanetSurfaceCommon): его же
   // читает тень облаков, живущая вне гейта USE_TERRAIN_MACRO_DETAIL
   uniform float uMacroStreakStrength;
   uniform float uMacroStreakPeriodUnits;

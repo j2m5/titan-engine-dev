@@ -23,7 +23,7 @@ import {
 import { SyncTerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import { detailWrapFor } from '@/core/terrain/detailWrap'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
@@ -40,7 +40,7 @@ function seedTexture(name: string): void {
   resourceStorage.addTexture(texture)
 }
 
-// PlanetMaterial в конструкторе ходит за плейсхолдерами (см. PlanetMaterialMaps.spec, TerrainSphere.spec)
+// TerrainMaterial в конструкторе ходит за плейсхолдерами (см. PlanetMaterialMaps.spec, TerrainSphere.spec)
 function seedPlaceholderKeys(): void {
   seedTexture('')
   seedTexture('default.png')
@@ -64,7 +64,7 @@ const DEPTH = 1
 const SKIRT = 0.001
 
 function makePool(): TerrainPatchPool {
-  return new TerrainPatchPool(new PlanetMaterial(moon()), SEGMENTS)
+  return new TerrainPatchPool(new TerrainMaterial(moon()), SEGMENTS)
 }
 
 describe('TerrainPatchPool', () => {
@@ -191,7 +191,7 @@ describe('TerrainPatchPool', () => {
   })
 
   it('morph-пул: слот несёт morphDelta/midTiltParent/midShadeParent и инстансный patchMorph; без флага — нет', () => {
-    const handle = new TerrainPatchPool(new PlanetMaterial(moon()), SEGMENTS, 4, true).acquire()!
+    const handle = new TerrainPatchPool(new TerrainMaterial(moon()), SEGMENTS, 4, true).acquire()!
     const count = terrainPatchVertexCount(SEGMENTS)
     for (const [name, itemSize] of [['morphDelta', 3], ['midTiltParent', 2], ['midShadeParent', 2]] as const) {
       const attr = handle.geometry.getAttribute(name) as BufferAttribute
@@ -212,7 +212,7 @@ describe('TerrainPatchPool', () => {
   })
 
   it('setPatchMorph пишет значение и поднимает version только при изменении; без атрибута — no-op', () => {
-    const handle = new TerrainPatchPool(new PlanetMaterial(moon()), SEGMENTS, 4, true).acquire()!
+    const handle = new TerrainPatchPool(new TerrainMaterial(moon()), SEGMENTS, 4, true).acquire()!
     const patchMorph = handle.geometry.getAttribute('patchMorph') as InstancedBufferAttribute
     const before = patchMorph.version
     setPatchMorph(handle, 0.5)
@@ -226,7 +226,7 @@ describe('TerrainPatchPool', () => {
 
   it('applyPatchResult: результат без морфа в морф-слот обнуляет дельты и копирует свои midTilt/midShade в parent', () => {
     const field = bumpyField()
-    const handle = new TerrainPatchPool(new PlanetMaterial(moon()), SEGMENTS, 4, true).acquire()!
+    const handle = new TerrainPatchPool(new TerrainMaterial(moon()), SEGMENTS, 4, true).acquire()!
     const wrap = detailWrapFor(undefined)
     const deep = 11
     const job = { field, face: 2, i: 1, j: 0, level: deep, segments: SEGMENTS, skirtDepthUnits: SKIRT, wrap }

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { irradianceUv } from '@/core/materials/shaders/lib/chunks/sunTransmittanceMath'
 import { sunTransmittanceFunctions, sunTransmittanceUniforms } from '@/core/materials/shaders/lib/chunks/SunTransmittance'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { atmosphereShader } from '@/core/renderables/Atmosphere/atmosphere'
 
 /** Ключевые строки ядра — берутся из источника, чтобы порт не разъехался. */
@@ -36,8 +37,11 @@ describe('Небесный амбиент: irradiance-LUT в чанке SunTrans
     expect(sunTransmittanceFunctions).toContain('return clamp(e / lum, 0.0, 4.0);')
   })
 
-  it('шаблон смешивает серый пол с небом под USE_SKY_AMBIENT весом uSkyAmbientStrength', () => {
-    const frag = PlanetShaderTemplate.fragmentShader
+  it.each([
+    ['сфера', SphereSurfaceShaderTemplate],
+    ['рельеф', TerrainShaderTemplate]
+  ])('%s: шаблон смешивает серый пол с небом под USE_SKY_AMBIENT весом uSkyAmbientStrength', (_path, template) => {
+    const frag = template.fragmentShader
     // юниформный гейт: при 0 два тапа LUT не платятся
     expect(frag).toContain('if (uSkyAmbientStrength > 0.0) skyTerm = mix(skyTerm, skyAmbientTint(muS), uSkyAmbientStrength);')
     const idx = frag.indexOf('skyTerm = mix(skyTerm, skyAmbientTint')
@@ -45,18 +49,21 @@ describe('Небесный амбиент: irradiance-LUT в чанке SunTrans
     expect(frag.lastIndexOf('#if defined(USE_SKY_AMBIENT) && defined(USE_SUN_TINT)', idx)).toBeGreaterThan(frag.lastIndexOf('vec3 skyTerm = vec3(clamp(', idx))
   })
 
-  it('суша: тинт солнца только на прямом свете и сером поле, не на небе и не на всём day', () => {
-    const frag = PlanetShaderTemplate.fragmentShader
+  it.each([
+    ['сфера', SphereSurfaceShaderTemplate],
+    ['рельеф', TerrainShaderTemplate]
+  ])('%s: тинт солнца только на прямом свете и сером поле, не на небе и не на всём day', (_path, template) => {
+    const frag = template.fragmentShader
     expect(frag).toContain('vec3 skyTerm = vec3(clamp(sunElevation / max(uTerrainAmbientSunRef, 1e-3), 0.0, 1.0)) * sunTintMix;')
     expect(frag).toContain('vec3 litDirect = vec3(directGain) * uLightColor * sunTintMix;')
     expect(frag).toContain('vec3 lit = mix(ambient, litDirect, min(directWeight, 1.0)) + max(directWeight - 1.0, 0.0) * litDirect;')
     expect(frag).toContain('vec3 litDirect = vec3(directGain) * sunTintMix;')
     expect(frag).toContain('dayColor = surfaceAlbedo * mix(sunTintMix, lit, uTerrainLambert);')
     expect(frag).toContain('vec3 day = cloudRadiance + dayColor * (1.0 - cloudAlphaSlant) * landGate;')
-    // терраформная ветка day целиком не тонирует: единственный такой множитель — у легаси (#else)
-    const terrainDay = frag.indexOf('vec3 day = cloudRadiance + dayColor')
-    const legacyDay = frag.indexOf('vec3 day = cloudColor + dayColor * (1.0 - cloudAlphaSlant);')
-    expect(frag.slice(terrainDay, legacyDay)).not.toContain('sunTint(muS)')
+    // day целиком не тонируется: после сборки day тинта солнца нет
+    const day = frag.indexOf('vec3 day = cloudRadiance + dayColor')
+    expect(day).toBeGreaterThan(-1)
+    expect(frag.slice(day)).not.toContain('sunTint(muS)')
   })
 
   it('порт формулы x_mu_s не разъехался с ядром Брунетона', () => {

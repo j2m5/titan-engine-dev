@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Texture } from 'three'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { proceduralDiffuseKey } from '@/core/services/ProceduralSurfaceGenerator'
 import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
 import { assertProceduralWiring } from '@/core/renderables/TerrainSphere'
@@ -28,7 +29,7 @@ function seedTexture(name: string, width: number = 4, height: number = 2): void 
 }
 
 /**
- * Конструктор PlanetShader ходит через getTextureOrMake за 'default.png',
+ * Конструктор шейдера поверхности ходит через getTextureOrMake за 'default.png',
  * 'night.jpg' и '' (заглушка кольца) — промах строит PlaceholderTexture на
  * канвасе, которого в jsdom нет (тот же приём, что GiantDetailWiring.spec.ts).
  */
@@ -79,7 +80,10 @@ function moonPathOf(kind: ResourceType): string {
   return moon().resources.where('resourceType', kind).first()!.getAttribute('path') as string
 }
 
-describe('PlanetMaterial: диффуз процедурного тела', () => {
+describe.each([
+  ['SphereSurfaceMaterial', (actor: Actor) => new SphereSurfaceMaterial(actor)],
+  ['TerrainMaterial', (actor: Actor) => new TerrainMaterial(actor)]
+])('%s: диффуз процедурного тела', (_name, make) => {
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('тело с data.proceduralSurface резолвит диффуз по proceduralDiffuseKey, а не по ресурсу', () => {
@@ -90,7 +94,7 @@ describe('PlanetMaterial: диффуз процедурного тела', () =>
     seedTexture(key)
 
     const actor = stubActor(93, 1740, { proceduralSurface: VALID_PARAMS })
-    const material = new PlanetMaterial(actor)
+    const material = make(actor)
     material.updateMaterial()
 
     expect(material.uniforms.diffuseMap.value.name).toBe(key)
@@ -100,7 +104,7 @@ describe('PlanetMaterial: диффуз процедурного тела', () =>
     seedPlaceholderKeys()
     seedTexture(moonPathOf('diffuse'))
 
-    const material = new PlanetMaterial(moon())
+    const material = make(moon())
     material.updateMaterial()
 
     expect(material.uniforms.diffuseMap.value.name).toBe(moonPathOf('diffuse'))

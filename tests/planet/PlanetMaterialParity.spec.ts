@@ -1,11 +1,9 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { Texture, Vector3 } from 'three'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
 import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { AbstractShader, type ShaderProps } from '@/core/materials/shaders/AbstractShader'
-import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
 import { SphereSurfaceShader } from '@/core/materials/shaders/SphereSurfaceShader'
 import { TerrainShader } from '@/core/materials/shaders/TerrainShader'
 import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
@@ -17,11 +15,11 @@ import {
   collectParityStates,
   resetRegistries,
   seedFull,
+  seedHeightMap,
   seedPlaceholderKeys,
   serializeField,
   serializeUniforms,
   tintRegistryFor,
-  withoutShader,
   type CollectedState,
   type MakeParityMaterial,
   type ParityPath,
@@ -34,20 +32,16 @@ import {
  * старого материала (дефайны, юниформы, поля материала — живые и после
  * resetMaterial — по всем телам категории 4) и его шейдер, замороженный уже
  * раскрытым (`#include` и чанки three подставлены). Новый код обязан совпасть
- * с ними побайтно. Снимок пересобирается только `npm run parity:snapshot`.
+ * с ними побайтно. Снимок заморожен: старого материала в коде больше нет.
  */
 
 const SNAPSHOT_PATH = 'tests/fixtures/planetMaterialParity/snapshot.json'
 const PREPARED_PATH = 'tests/fixtures/planetMaterialParity/legacyPrepared.json'
-const SNAPSHOT_RUN = import.meta.env.MODE === 'parity-snapshot'
 
 type Stage = 'vertexShader' | 'fragmentShader'
 type PreparedShader = Record<Stage, string>
 const STAGES: readonly Stage[] = ['vertexShader', 'fragmentShader']
 
-// снимок пишет старый материал, сверяются материалы путей
-const makeLegacy: MakeParityMaterial = (actor, path, registry) =>
-  new PlanetMaterial(actor, registry, { terrainPatches: path === 'terrain' })
 const makeMaterial: MakeParityMaterial = (actor, path, registry) =>
   path === 'terrain' ? new TerrainMaterial(actor, registry) : new SphereSurfaceMaterial(actor, registry)
 
@@ -84,21 +78,7 @@ const COMMA_UNIFORM = /\buniform\s+(?:(?:lowp|mediump|highp)\s+)?\w+\s+\w+\s*(?:
 /** Имена `uniform` в коде (все ветки дефайнов). */
 const uniformNamesIn = (code: string): string[] => [...new Set([...code.matchAll(UNIFORM_NAME)].map((m) => m[1]))].sort()
 
-describe.runIf(SNAPSHOT_RUN)('снимок', () => {
-  it('пишет snapshot.json и legacyPrepared.json', () => {
-    const states = collectParityStates(makeLegacy)
-    const prepared: PreparedShader = states[0].shader
-    // старый материал — один шаблон на все состояния: иначе замороженный шейдер был бы неоднозначен
-    for (const s of states) expect(s.shader, `${s.actorId} ${s.state}`).toStrictEqual(prepared)
-
-    writeFileSync(SNAPSHOT_PATH, JSON.stringify(states.map(withoutShader), null, 1) + '\n')
-    // концы строк исходников зависят от autocrlf рабочей копии — в фикстуру только \n
-    const lf = (src: string): string => src.replace(/\r\n/g, '\n')
-    writeFileSync(PREPARED_PATH, JSON.stringify({ vertexShader: lf(prepared.vertexShader), fragmentShader: lf(prepared.fragmentShader) }, null, 1) + '\n')
-  })
-})
-
-describe.skipIf(SNAPSHOT_RUN)('паритет материала планет', () => {
+describe('паритет материала планет', () => {
   const states = existsSync(SNAPSHOT_PATH) ? (JSON.parse(readFileSync(SNAPSHOT_PATH, 'utf8')) as ParityState[]) : []
   const frozen = existsSync(PREPARED_PATH)
     ? (JSON.parse(readFileSync(PREPARED_PATH, 'utf8')) as PreparedShader)
@@ -357,14 +337,10 @@ describe.skipIf(SNAPSHOT_RUN)('паритет материала планет', 
   })
 })
 
-describe.skipIf(SNAPSHOT_RUN)('паритет юниформов шейдера', () => {
-  const category4Actors = (): Actor[] =>
-    Actor.where({ categoryId: 4 })
-      .all()
-      .sort((a, b) => (a.getAttribute('id') as number) - (b.getAttribute('id') as number))
-
-  const pick = <T>(record: Record<string, T>, keys: string[]): Record<string, T> =>
-    Object.fromEntries(keys.filter((k) => k in record).map((k) => [k, record[k]]))
+describe('паритет юниформов шейдера против снимка', () => {
+  const states = (existsSync(SNAPSHOT_PATH) ? (JSON.parse(readFileSync(SNAPSHOT_PATH, 'utf8')) as ParityState[]) : []).filter(
+    (s) => !s.state.endsWith('-tint')
+  )
 
   /** Имена `uniform` в раскрытом шаблоне (все ветки дефайнов) без юниформов не-шейдера. */
   const keysDeclaredIn = (template: ShaderProps): string[] => uniformNamesIn(preparedCode(template)).filter((k) => !NOT_SHADER_KEYS.has(k))
@@ -375,48 +351,79 @@ describe.skipIf(SNAPSHOT_RUN)('паритет юниформов шейдера'
     expect(missing).toEqual([])
   }
 
-  const seeds: Record<'bare' | 'full', (actor: Actor) => void> = {
-    bare: (actor) => seedPlaceholderKeys(actor),
-    full: (actor) => {
-      seedPlaceholderKeys(actor)
-      seedFull(actor, false)
-    }
+  // Ключи, которые updateMaterial переписывает картами и данными: значение
+  // конструктора у них совпадает со снимком после resetMaterial, у прочих — с живым
+  const UPDATED_KEYS = new Set([
+    'diffuseMap',
+    'nightMap',
+    'cloudMap',
+    'specularMap',
+    'bumpMap',
+    'uCavityStrength',
+    'uSlopeRange',
+    'uDiffuseTexelSize',
+    'uShadowHeightMap',
+    'uShadowHeightRange',
+    'uShadowTexelAngle',
+    'uDetailNorMap',
+    'uDetailDiffMap',
+    'uDetailArmMap',
+    'uDetailNor2Map',
+    'uDetailLayerGates'
+  ])
+
+  // Сид — тот же, что у состояния снимка (collectParityStates)
+  const shaderOf = (s: ParityState): SphereSurfaceShader | TerrainShader => {
+    const actor = Actor.find(s.actorId)!
+    seedPlaceholderKeys(actor)
+    if (s.path === 'terrain') seedHeightMap(heightPathOf(actor)!)
+    if (s.state.endsWith('-full')) seedFull(actor, s.path === 'terrain')
+
+    return s.path === 'terrain' ? new TerrainShader(actor) : new SphereSurfaceShader(actor)
   }
 
-  for (const actor of category4Actors()) {
-    for (const seed of ['bare', 'full'] as const) {
-      it(`${actor.getAttribute('id')} ${seed}`, () => {
-        resetRegistries()
-        seeds[seed](actor)
-        try {
-          const old = new PlanetShader(actor).uniforms
-          const sphere = new SphereSurfaceShader(actor).uniforms
-          expect(serializeUniforms(sphere)).toEqual(pick(serializeUniforms(old), Object.keys(sphere)))
-          expect(Object.keys(sphere).sort()).toEqual(keysDeclaredIn(SphereSurfaceShaderTemplate))
-          defaultsCovered(SphereSurfaceShaderTemplate, Object.keys(sphere))
-          if (heightPathOf(actor)) {
-            const terrain = new TerrainShader(actor).uniforms
-            expect(serializeUniforms(terrain)).toEqual(pick(serializeUniforms(old), Object.keys(terrain)))
-            expect(Object.keys(terrain).sort()).toEqual(keysDeclaredIn(TerrainShaderTemplate))
-            defaultsCovered(TerrainShaderTemplate, Object.keys(terrain))
-            // объединение ключей двух путей = ключи старого шейдера
-            expect([...new Set([...Object.keys(sphere), ...Object.keys(terrain)])].sort()).toEqual(Object.keys(old).sort())
-          }
-        } finally {
-          resetRegistries()
-        }
-      })
-    }
-  }
+  // Шейдер не ставит цвет света и путевой USE_TERRAIN_UV старого материала
+  const shaderDefinesOf = (s: ParityState): ParityState['defines'] =>
+    Object.fromEntries(Object.entries(s.reset.defines).filter(([k]) => k !== 'USE_LIGHT_TINT' && k !== 'USE_TERRAIN_UV'))
 
-  it('дефайны шейдера: общие USE_RING и USE_REGOLITH, как у старого', () => {
-    for (const actor of category4Actors()) {
+  it('снимок несёт состояния обоих путей', () => {
+    expect(states.some((s) => s.path === 'sphere')).toBe(true)
+    expect(states.some((s) => s.path === 'terrain')).toBe(true)
+  })
+
+  for (const s of states) {
+    it(`${s.actorId} ${s.state}`, () => {
       resetRegistries()
-      seedPlaceholderKeys(actor)
       try {
-        const old = new PlanetShader(actor).defines
-        expect(new SphereSurfaceShader(actor).defines, `${actor.getAttribute('id')}`).toStrictEqual(old)
-        if (heightPathOf(actor)) expect(new TerrainShader(actor).defines, `${actor.getAttribute('id')}`).toStrictEqual(old)
+        const shader = shaderOf(s)
+        const template = templateOf(s.path)
+        const got = serializeUniforms(shader.uniforms)
+        // каждый ключ — значение снимка: живое, у переписываемых картами — после reset
+        for (const key of Object.keys(got)) {
+          expect(key in s.uniforms, key).toBe(true)
+          expect(got[key], key).toStrictEqual(UPDATED_KEYS.has(key) ? s.reset.uniforms[key] : s.uniforms[key])
+        }
+        expect(Object.keys(got).sort()).toEqual(keysDeclaredIn(template))
+        defaultsCovered(template, Object.keys(got))
+        expect(shader.defines).toStrictEqual(shaderDefinesOf(s))
+      } finally {
+        resetRegistries()
+      }
+    })
+  }
+
+  it('объединение ключей двух путей = ключи шейдера снимка (без юниформов материала)', () => {
+    const terrainIds = [...new Set(states.filter((s) => s.path === 'terrain').map((s) => s.actorId))]
+    expect(terrainIds.length).toBeGreaterThan(0)
+    for (const id of terrainIds) {
+      const snapshot = states.find((s) => s.actorId === id && s.state === 'terrain-full')!
+      resetRegistries()
+      try {
+        const actor = Actor.find(id)!
+        seedPlaceholderKeys(actor)
+        const union = new Set([...Object.keys(new SphereSurfaceShader(actor).uniforms), ...Object.keys(new TerrainShader(actor).uniforms)])
+        const legacyShaderKeys = Object.keys(snapshot.uniforms).filter((k) => !NOT_SHADER_KEYS.has(k))
+        expect([...union].sort(), String(id)).toEqual(legacyShaderKeys.sort())
       } finally {
         resetRegistries()
       }

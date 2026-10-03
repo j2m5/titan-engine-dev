@@ -3,7 +3,7 @@ import { TERRAIN_SHADOW_BIAS_SLOPE, TERRAIN_SHADOW_STEPS } from './terrainShadow
 /**
  * Собственная тень рельефа: марш по низкой карте высот (terrainShadowMap) к
  * солнцу в системе тела. Множит ТОЛЬКО прямой свет (directGain в
- * PlanetShaderTemplate). CPU-зеркало и константы — terrainShadowMath.ts.
+ * TerrainShaderTemplate). CPU-зеркало и константы — terrainShadowMath.ts.
  *
  * Своя развёртка, не terrainUv: карта — DataTexture без flipY (строка 0 =
  * север, v = acos(y)/π без переворота), а выбор домена по fwidth внутри

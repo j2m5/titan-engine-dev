@@ -2,7 +2,7 @@
  * TerrainDetail — терраформный детальный слой (фрагмент, USE_TERRAIN_DETAIL).
  *
  * Две трипланарные шкалы поверх body-локальной нормали терраформного пути
- * (см. PlanetShaderTemplate — хук сразу после slope-пертурбации, перед
+ * (см. TerrainShaderTemplate — хук сразу после slope-пертурбации, перед
  * единственным normalMatrix). Крупная шкала (период uDetailScale) несёт
  * нормаль + AO + diffuse-модуляцию, мелкая (uDetailScale2) — только нормаль:
  * высокочастотный микрорельеф не даёт выигрыша в читаемости от повторной
@@ -16,7 +16,7 @@
  * Проекции и whiteout-бленд — переиспользованы из чанка TriplanarDetail
  * (triplanarWeights/triplanarBlendRgb/triplanarBlendNormal). Домен адресации
  * текстур — атрибуты detailPos/detailPos2 (varying vDetailPos/vDetailPos2,
- * см. PlanetShaderTemplate): точная тело-локальная позиция вершины минус
+ * см. TerrainShaderTemplate): точная тело-локальная позиция вершины минус
  * k·W патча (k общий на патч, W = WRAP_TILES периодов слоя, см.
  * detailWrap.ts) — не единичный dirLocal, чей float32 не различает соседние
  * тексели 40/7-метровых тайлов на теле планетного радиуса. Период честный
@@ -80,13 +80,13 @@
  * по факту наличия текстуры (материал), не #ifdef: опциональные слои можно
  * долить без перекомпиляции программы. Базовая крупная нормаль (uDetailNorMap)
  * гейта не имеет — её наличие и есть условие самого USE_TERRAIN_DETAIL
- * (hasHeightField && detailNormalTexture, см. PlanetMaterial).
+ * (hasHeightField && detailNormalTexture, см. TerrainMaterial).
  *
  * Fade по дистанции — не только косметика: без него трипланар (см. БЮДЖЕТ
  * выше) считался бы на каждом пикселе планеты независимо от удаления камеры.
  * Пороги — ручки пер-тела в метрах дистанции камеры (detailFadeMeters/
  * detailFade2Meters, конец fade каждой шкалы; начало — 0.4 × конца, зашито
- * в PlanetShader), CPU переводит их в юниты и кладёт в uDetailFadeRange
+ * в TerrainShader), CPU переводит их в юниты и кладёт в uDetailFadeRange
  * (vec4: start1, end1, start2, end2). Дефолты 30000/5000 м — дистанция, на
  * которой период соответствующей шкалы (40 м / 7 м) опускается ниже ~1
  * экранного пикселя (1080p, fov ~50°). uDetailLayerGates — по-слойные
@@ -117,7 +117,7 @@
  * читается тем же доменом адресации, что родной (тот же detailPos/scale/w/l —
  * зона меняет ТЕКСТУРЫ, не проекцию и не индекс варианта sampleDetiled).
  * Маска m ∈ [0,1] — smoothstep по tan уклона (slopeTan, аргумент функции;
- * приходит из PlanetShaderTemplate — декод той же slope-карты, что и
+ * приходит из TerrainShaderTemplate — декод той же slope-карты, что и
  * perturbNormalFromSlope, см. её докстроку) с рваной границей: к порогам
  * uSteepMask.xy прибавлен uSteepMask.z·(l.z/8.0 − 0.5) — домен и ось те же,
  * что у l.z (detailPos.xy·uDetailScale, та же W-периодичность 1024, что у l
@@ -352,7 +352,7 @@ export const terrainDetailFunctions = `
 
   void applyTerrainDetail(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, vec3 detailPos, vec3 detailPos2, float viewDistance, float slopeTan, inout float roughness) {
     // Пороги фейда — ручки пер-тела в метрах дистанции, сконвертированные
-    // в юниты на CPU (см. докстрока чанка и PlanetShader.uDetailFadeRange).
+    // в юниты на CPU (см. докстрока чанка и TerrainShader.uDetailFadeRange).
     float fade1 = 1.0 - smoothstep(uDetailFadeRange.x, uDetailFadeRange.y, viewDistance);
     float fade2 = uDetailLayerGates.z * (1.0 - smoothstep(uDetailFadeRange.z, uDetailFadeRange.w, viewDistance));
 
@@ -391,7 +391,7 @@ export const terrainDetailFunctions = `
         // (рулинг): выключенный/неполный steep-набор даёт m ≡ 0 и код ниже
         // сваливается в единственную ветку m < STEEP_EPS — родной набор,
         // как до этой задачи. Без slope-карты slopeTan = 0 (см. вызывающую
-        // сторону, PlanetShaderTemplate) — тот же эффект.
+        // сторону, TerrainShaderTemplate) — тот же эффект.
         float m = uSteepGate * smoothstep(uSteepMask.x, uSteepMask.y, slopeTan + uSteepMask.z * (l.z / 8.0 - 0.5));
 
         vec3 nNative, nSteep;

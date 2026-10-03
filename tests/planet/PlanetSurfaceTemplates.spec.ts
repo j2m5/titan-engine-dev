@@ -1,12 +1,13 @@
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 
-describe('PlanetShaderTemplate: блик, терминатор, ночные огни', () => {
-  const frag: string = PlanetShaderTemplate.fragmentShader
-  const vert: string = PlanetShaderTemplate.vertexShader
+const templates = [
+  ['сфера', SphereSurfaceShaderTemplate],
+  ['рельеф', TerrainShaderTemplate]
+] as const
 
-  it('старый камеро-независимый блик удалён', () => {
-    expect(frag).not.toContain('pow(specComp, 32.0)')
-  })
+describe('SphereSurfaceShaderTemplate: блик воды на сфере', () => {
+  const frag: string = SphereSurfaceShaderTemplate.fragmentShader
 
   it('Blinn-Phong + френель Шлика с гейтом освещённой стороны', () => {
     expect(frag).toContain('halfVec')
@@ -23,6 +24,27 @@ describe('PlanetShaderTemplate: блик, терминатор, ночные о�
     expect(clampIdx).toBeGreaterThan(-1)
     expect(specIdx).toBeGreaterThan(clampIdx)
     expect(ceilIdx).toBeGreaterThan(specIdx)
+  })
+
+  it('uSpecularStrength удалён: силу блика держит uWaterGlintGain (дефолт 1)', () => {
+    expect(SphereSurfaceShaderTemplate.uniforms.uSpecularStrength).toBeUndefined()
+    expect(SphereSurfaceShaderTemplate.uniforms.uWaterGlintGain.value).toBe(1)
+  })
+})
+
+describe.each(templates)('%s: блики, терминатор, ночные огни', (_path, template) => {
+  const frag: string = template.fragmentShader
+  const vert: string = template.vertexShader
+
+  it('старый камеро-независимый блик удалён', () => {
+    expect(frag).not.toContain('pow(specComp, 32.0)')
+  })
+
+  it('bloom-guard: диффуз-кламп 0.99 до потолка глинта 4.0', () => {
+    const clampIdx: number = frag.indexOf('clamp(finalColor, 0.0, 0.99)')
+    const ceilIdx: number = frag.indexOf('min(finalColor, vec3(4.0))')
+    expect(clampIdx).toBeGreaterThan(-1)
+    expect(ceilIdx).toBeGreaterThan(clampIdx)
   })
 
   it('терминатор: smoothstep-зона и гейт ночных огней; закатный тинт удалён', () => {
@@ -47,8 +69,7 @@ describe('PlanetShaderTemplate: блик, терминатор, ночные о�
     expect(frag).not.toContain('USE_ATMOSPHERE')
   })
 
-  it('uSpecularStrength удалён: силу блика держит uWaterGlintGain (дефолт 1)', () => {
-    expect(PlanetShaderTemplate.uniforms.uSpecularStrength).toBeUndefined()
-    expect(PlanetShaderTemplate.uniforms.uWaterGlintGain.value).toBe(1)
+  it('uSpecularStrength в шаблоне нет', () => {
+    expect(template.uniforms.uSpecularStrength).toBeUndefined()
   })
 })

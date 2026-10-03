@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { terrainDetailFunctions, terrainDetailUniforms } from '@/core/materials/shaders/lib/chunks/TerrainDetail'
 import { slopeNormalFunctions } from '@/core/materials/shaders/lib/chunks/SlopeNormal'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 
 describe('TerrainDetail: зоны материала по уклону', () => {
   it('юниформы steep-набора и маски объявлены', () => {
@@ -54,7 +54,7 @@ describe('TerrainDetail: зоны материала по уклону', () => {
   })
 
   it('шаблон декодирует tan уклона из основного slope-декода (не macroSlope) и передаёт его в applyTerrainDetail', () => {
-    const frag: string = PlanetShaderTemplate.fragmentShader
+    const frag: string = TerrainShaderTemplate.fragmentShader
     expect(frag).toContain('float terrainSlopeTan = 0.0;')
     expect(frag).toContain('(uSlopeRange / 127.0)')
     // маска зон — по уклону КАРТЫ: наклон полосы B открывал бы камень кляксами вдоль её гребней

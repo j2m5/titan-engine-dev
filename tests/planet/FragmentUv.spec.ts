@@ -1,17 +1,25 @@
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 
+const mainOf = (source: string): string => source.slice(source.indexOf('void main()'))
+
 describe('FragmentUv: попиксельные UV терраформных тел (полюс без сингулярности вершинной развёртки)', () => {
-  const frag: string = PlanetShaderTemplate.fragmentShader
-  const vert: string = PlanetShaderTemplate.vertexShader
+  const frag: string = TerrainShaderTemplate.fragmentShader
+  const vert: string = TerrainShaderTemplate.vertexShader
+  const sphereFrag: string = SphereSurfaceShaderTemplate.fragmentShader
+  const sphereVert: string = SphereSurfaceShaderTemplate.vertexShader
   // Сам расчёт uv из направления вынесен в общий чанк terrainUvFunctions
   // (WaterShaderTemplate переиспользует его же — см. TerrainUv.ts), поэтому
   // конкретные строки формулы живут в РАЗВЁРНУТОМ источнике (#include
   // подставлен), не в сыром шаблоне.
   const resolvedFrag: string = AbstractShader.prepareSource(frag)
 
-  it('гейт USE_TERRAIN_UV переключает попиксельный расчёт uv из направления', () => {
-    expect(frag).toContain('#ifdef USE_TERRAIN_UV')
+  it('рельеф считает uv из направления без гейта; сфера — по vUv, гейта USE_TERRAIN_UV нет ни у кого', () => {
+    expect(mainOf(frag)).toContain('vec2 uv = terrainUv(dirLocal);')
+    expect(mainOf(sphereFrag)).toContain('vec2 uv = vUv;')
+    expect(mainOf(sphereFrag)).not.toContain('terrainUv(dirLocal)')
+    for (const source of [frag, vert, sphereFrag, sphereVert]) expect(source).not.toContain('USE_TERRAIN_UV')
   })
 
   it('конвенция совпадает с CPU-каноном TerrainHeightField.dirToUv: phi = atan(z, -x), u = phi/2π', () => {
@@ -25,40 +33,41 @@ describe('FragmentUv: попиксельные UV терраформных те�
     expect(resolvedFrag).toContain('acos(clamp(dirLocal.y')
   })
 
-  it('вершинник передаёт body-локальное радиальное направление без матриц', () => {
-    expect(vert).toContain('vLocalDir = vertexDir;')
-    expect(vert).toContain('vNormal = normalize(normalMatrix * vertexDir);')
-    expect(vert).not.toContain('vLocalDir = normal;')
+  it('вершинник передаёт body-локальное радиальное направление без матриц (оба пути)', () => {
+    for (const source of [vert, sphereVert]) {
+      expect(source).toContain('vLocalDir = vertexDir;')
+      expect(source).toContain('vNormal = normalize(normalMatrix * vertexDir);')
+      expect(source).not.toContain('vLocalDir = normal;')
+    }
   })
 
   // Диета атрибутов патча (L5): у патчей кубосферы normal и uv сняты с
   // геометрии — направление вершины считается из RTC-позиции и центра патча
-  // (инстансный атрибут). Легаси-путь (SphereGeometry у Planet) остаётся на
-  // normal/uv, поэтому оба присвоения — по разные стороны гейта USE_TERRAIN_UV.
-  it('терраформный путь: направление из position + patchCenter, легаси-путь — из normal, vUv жив только в #else', () => {
-    const dirAt = vert.indexOf('vec3 vertexDir')
-    const terrainBranch = vert.slice(vert.lastIndexOf('#ifdef USE_TERRAIN_UV', dirAt))
-    const [gated, legacy] = terrainBranch.split('#else')
+  // (инстансный атрибут). Сфера (SphereGeometry у Planet) остаётся на normal/uv.
+  it('рельеф: направление из position + patchCenter без vUv; сфера — из normal, vUv = uv', () => {
+    // атрибут патча объявлен безусловно, до main
+    const decls = vert.slice(0, vert.indexOf('void main()'))
+    expect(decls).toContain('attribute vec3 patchCenter;')
+    expect(mainOf(vert)).toContain('vec3 vertexDir = normalize(morphedPosition + patchCenter);')
+    expect(vert).not.toContain('vUv = uv;')
+    expect(vert).not.toContain('vec3 vertexDir = normal;')
 
-    // объявление атрибута — внутри своего гейта, а не «где-то после него»
-    const declBlock = vert.slice(vert.indexOf('#ifdef USE_TERRAIN_UV'), vert.indexOf('void main()'))
-    const [gatedDecls] = declBlock.split('#endif')
-    expect(gatedDecls).toContain('attribute vec3 patchCenter;')
-
-    expect(gated).toContain('vec3 vertexDir = normalize(morphedPosition + patchCenter);')
-    expect(gated).not.toContain('vUv = uv;')
-    expect(legacy.slice(0, legacy.indexOf('#endif'))).toContain('vec3 vertexDir = normal;')
-    expect(legacy.slice(0, legacy.indexOf('#endif'))).toContain('vUv = uv;')
+    expect(mainOf(sphereVert)).toContain('vec3 vertexDir = normal;')
+    expect(mainOf(sphereVert)).toContain('vUv = uv;')
+    expect(sphereVert).not.toContain('patchCenter')
   })
 
-  it('выборки текстур фрагментника переведены на попиксельный uv — vUv остаётся только легаси-присвоением', () => {
-    expect(frag).not.toContain('texture2D(diffuseMap, vUv)')
-    expect(frag).not.toContain('texture2D(nightMap, vUv)')
-    expect(frag).not.toContain('texture2D(cloudMap, vUv)')
-    expect(frag).not.toContain('texture2D(specularMap, vUv)')
-    expect(frag).not.toContain('perturbNormalFromSlope(normal, vEast, vUv)')
-    // легаси-ветка (#else) — единственное оставшееся использование vUv
-    expect(frag).toContain('vec2 uv = vUv;')
+  it('выборки текстур на попиксельном uv — vUv читает только сфера', () => {
+    for (const source of [frag, sphereFrag]) {
+      expect(source).not.toContain('texture2D(diffuseMap, vUv)')
+      expect(source).not.toContain('texture2D(nightMap, vUv)')
+      expect(source).not.toContain('texture2D(cloudMap, vUv)')
+      expect(source).not.toContain('texture2D(specularMap, vUv)')
+      expect(source).not.toContain('perturbNormalFromSlope(normal, vEast, vUv)')
+    }
+    // у рельефа vUv лишь объявлен общим списком varying'ов — main его не читает
+    expect(mainOf(frag)).not.toMatch(/\bvUv\b/)
+    expect(sphereFrag).toContain('vec2 uv = vUv;')
   })
 
   it('двухдоменный выбор u вместо fract-скачка на шве меридиана', () => {

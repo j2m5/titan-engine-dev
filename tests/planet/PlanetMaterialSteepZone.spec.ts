@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Texture } from 'three'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { ResourceType } from '@/core/models/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -14,9 +14,9 @@ function seedTexture(name: string, width: number = 4, height: number = 2): void 
 }
 
 /**
- * Конструктор PlanetShader ходит через getTextureOrMake за 'default.png',
+ * Конструктор шейдера поверхности ходит через getTextureOrMake за 'default.png',
  * 'night.jpg' и '' (заглушка кольца) — промах строит PlaceholderTexture на
- * канвасе, которого в jsdom нет (тот же приём, что в остальных PlanetMaterial-спеках).
+ * канвасе, которого в jsdom нет (тот же приём, что в остальных спеках материала).
  */
 function seedPlaceholderKeys(): void {
   for (const name of ['', 'default.png', 'night.jpg']) seedTexture(name)
@@ -44,7 +44,7 @@ function pathOf(actor: Actor, kind: ResourceType): string {
 
 /**
  * Стаб-актор с невалидными ручками steep-зон (steepFull <= steepStart) —
- * образец stubActor других PlanetMaterial-спеков (PlanetMaterialProcedural.spec.ts,
+ * образец stubActor других спеков материала (PlanetMaterialProcedural.spec.ts,
  * PlanetCavity.spec.ts): подменяем геттеры-связи плоским объектом.
  */
 function stubActorWithInvalidSteepHandles(): Actor {
@@ -66,7 +66,7 @@ function stubActorWithInvalidSteepHandles(): Actor {
   } as unknown as Actor
 }
 
-describe('PlanetMaterial: steep-зоны материала (гейт и юниформы, Task 3)', () => {
+describe('TerrainMaterial: steep-зоны материала (гейт и юниформы, Task 3)', () => {
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('гейт=1 у Энцелада при всех трёх steep-текстурах в resourceStorage — маска дефолтная', () => {
@@ -74,7 +74,7 @@ describe('PlanetMaterial: steep-зоны материала (гейт и юни�
     seedTexture(pathOf(enceladus(), 'diffuse'))
     seedSteepTextures()
 
-    const material = new PlanetMaterial(enceladus())
+    const material = new TerrainMaterial(enceladus())
     material.updateMaterial()
 
     expect(material.uniforms.uSteepGate.value).toBe(1)
@@ -88,7 +88,7 @@ describe('PlanetMaterial: steep-зоны материала (гейт и юни�
     seedTexture(pathOf(moon(), 'diffuse'))
     seedSteepTextures()
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
     expect(material.uniforms.uSteepGate.value).toBe(0)
@@ -101,7 +101,7 @@ describe('PlanetMaterial: steep-зоны материала (гейт и юни�
     seedTexture(STEEP_DETAIL_PATHS.normal)
     // STEEP_DETAIL_PATHS.arm намеренно не сеется — набор неполный
 
-    const material = new PlanetMaterial(enceladus())
+    const material = new TerrainMaterial(enceladus())
     material.updateMaterial()
 
     expect(material.uniforms.uSteepGate.value).toBe(0)
@@ -110,7 +110,7 @@ describe('PlanetMaterial: steep-зоны материала (гейт и юни�
   it('невалидные ручки (steepFull <= steepStart) — updateMaterial бросает громко, с полем steepFull', () => {
     seedPlaceholderKeys()
 
-    const material = new PlanetMaterial(stubActorWithInvalidSteepHandles())
+    const material = new TerrainMaterial(stubActorWithInvalidSteepHandles())
 
     expect(() => material.updateMaterial()).toThrow(/steepFull/)
   })
@@ -120,7 +120,7 @@ describe('PlanetMaterial: steep-зоны материала (гейт и юни�
     seedTexture(pathOf(enceladus(), 'diffuse'))
     seedSteepTextures()
 
-    const material = new PlanetMaterial(enceladus())
+    const material = new TerrainMaterial(enceladus())
     material.updateMaterial()
     expect(material.uniforms.uSteepGate.value).toBe(1)
 

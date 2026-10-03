@@ -39,7 +39,7 @@ export type PatchHandle = { mesh: Mesh; geometry: InstancedBufferGeometry }
  * этапа 3а). Свободные слоты держат геометрию живой между acquire —
  * освобождаются вместе с индексом только в dispose.
  *
- * Материал типизирован общим `Material`, не `PlanetMaterial` — пул сам с
+ * Материал типизирован общим `Material`, не `TerrainMaterial` — пул сам с
  * материалом не взаимодействует (только держит ссылку для `new Mesh`), а
  * TerrainPatchGroup (общая база TerrainSphere/WaterSphere) передаёт сюда
  * конкретный класс своего потребителя.

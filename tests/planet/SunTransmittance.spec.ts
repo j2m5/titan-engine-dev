@@ -4,8 +4,10 @@ import { subsolarMuS, transmittanceUv } from '@/core/materials/shaders/lib/chunk
 import { TRANSMITTANCE_H, TRANSMITTANCE_W } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
 import { sunTransmittanceFunctions, sunTransmittanceUniforms } from '@/core/materials/shaders/lib/chunks/SunTransmittance'
 import { atmosphereShader } from '@/core/renderables/Atmosphere/atmosphere'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
-import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
+import { SphereSurfaceShader } from '@/core/materials/shaders/SphereSurfaceShader'
+import { TerrainShader } from '@/core/materials/shaders/TerrainShader'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
@@ -92,8 +94,11 @@ describe('чанк SunTransmittance — порт ядра Брунетона', (
   })
 })
 
-describe('PlanetShaderTemplate: тинт солнца под USE_SUN_TINT', () => {
-  const frag = PlanetShaderTemplate.fragmentShader
+describe.each([
+  ['сфера', SphereSurfaceShaderTemplate],
+  ['рельеф', TerrainShaderTemplate]
+])('%s: тинт солнца под USE_SUN_TINT', (_path, template) => {
+  const frag = template.fragmentShader
 
   it('чанки включены под гейтом', () => {
     expect(frag).toContain('#include <sunTransmittanceUniforms>')
@@ -137,7 +142,10 @@ describe('subsolarMuS — CPU-зеркало знака GLSL-выражения 
   })
 })
 
-describe('PlanetShader: ручка uSunTintStrength', () => {
+describe.each([
+  ['сфера', (actor: Actor) => new SphereSurfaceShader(actor)],
+  ['рельеф', (actor: Actor) => new TerrainShader(actor)]
+])('шейдер (%s): ручка uSunTintStrength', (_path, make) => {
   function seedPlaceholderKeys(): void {
     for (const name of ['', 'default.png', 'night.jpg']) {
       const texture = new Texture()
@@ -159,17 +167,17 @@ describe('PlanetShader: ручка uSunTintStrength', () => {
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('ручка из данных тела доезжает в юниформ', () => {
-    const shader = new PlanetShader(stubActor({ sunTintStrength: 0.4 }))
+    const shader = make(stubActor({ sunTintStrength: 0.4 }))
     expect(shader.uniforms.uSunTintStrength.value).toBe(0.4)
   })
 
   it('без поля — дефолт 1', () => {
-    const shader = new PlanetShader(stubActor({}))
+    const shader = make(stubActor({}))
     expect(shader.uniforms.uSunTintStrength.value).toBe(1)
   })
 
   it('ручка клампится к [0,1]: 2 → 1, -1 → 0', () => {
-    expect(new PlanetShader(stubActor({ sunTintStrength: 2 })).uniforms.uSunTintStrength.value).toBe(1)
-    expect(new PlanetShader(stubActor({ sunTintStrength: -1 })).uniforms.uSunTintStrength.value).toBe(0)
+    expect(make(stubActor({ sunTintStrength: 2 })).uniforms.uSunTintStrength.value).toBe(1)
+    expect(make(stubActor({ sunTintStrength: -1 })).uniforms.uSunTintStrength.value).toBe(0)
   })
 })

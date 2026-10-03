@@ -6,12 +6,12 @@ import { terrainShadowMarchFunctions, terrainShadowMarchUniforms } from '@/core/
 import { TERRAIN_SHADOW_BIAS_SLOPE, TERRAIN_SHADOW_STEPS } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
 import { resolveTerrainLightParams } from '@/core/terrain/terrainLightParams'
 import { config } from '@/core/framework/config'
-import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
+import { TerrainShader } from '@/core/materials/shaders/TerrainShader'
 import { Actor } from '@/core/models/Actor'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
-// Конструктор PlanetShader читает 'default.png'/'night.jpg'/'' заглушками через
+// Конструктор TerrainShader читает 'default.png'/'night.jpg'/'' заглушками через
 // getTextureOrMake — промах строит PlaceholderTexture (canvas 2d, недоступен в jsdom).
 function seedPlaceholderKeys(): void {
   for (const name of ['', 'default.png', 'night.jpg']) {
@@ -88,8 +88,8 @@ describe('ручки тени рельефа', () => {
     expect(config('terrain.shadowMaxKm')).toBe(150)
   })
 
-  it('PlanetShader заводит юниформы тени с дефолтами', () => {
-    const { uniforms } = new PlanetShader(Actor.find(19)!)
+  it('TerrainShader заводит юниформы тени с дефолтами', () => {
+    const { uniforms } = new TerrainShader(Actor.find(19)!)
     expect(uniforms.uShadowHeightMap.value).toBeNull()
     expect(uniforms.uShadowHeightMin.value).toBe(0)
     expect(uniforms.uShadowHeightRange.value).toBe(0)

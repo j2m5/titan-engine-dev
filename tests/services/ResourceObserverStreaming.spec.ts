@@ -228,7 +228,7 @@ describe('ResourceObserver: стриминг', () => {
 
 // Финальное ревью water-foundation, находка №2: вода висит ребёнком
 // TerrainSphere (WaterSphere), не самим .renderable узла — фан-аут
-// вытеснения раньше видел только node.renderable.material (PlanetMaterial) и
+// вытеснения раньше видел только node.renderable.material (материал поверхности) и
 // не трогал водный материал вовсе. Вода узнавала о диспоузе своей slope-карты
 // лишь на следующем кадре (WaterSphere.onVisibleUpdate), а рендер ТЕКУЩЕГО
 // кадра успевал перезалить уже диспоузнутую resourceStorage.deleteTexture

@@ -342,8 +342,3 @@ export function collectParityStates(makeMaterial: MakeParityMaterial): Collected
 
   return states
 }
-
-/** Форма для записи в снимок: без шейдера (он один на все состояния и лежит отдельно). */
-export function withoutShader({ shader: _shader, ...state }: CollectedState): ParityState {
-  return state
-}

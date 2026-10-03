@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { cloudLayerFunctions } from '@/core/materials/shaders/lib/chunks/CloudLayer'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 
-describe('PlanetShaderTemplate: тени облаков на земле', () => {
-  const frag: string = PlanetShaderTemplate.fragmentShader
+describe('TerrainShaderTemplate: тени облаков на земле', () => {
+  const frag: string = TerrainShaderTemplate.fragmentShader
   const start = frag.indexOf('#ifdef USE_CLOUD_SHADOW')
   const block = frag.slice(start, frag.indexOf('#endif', start))
 
@@ -24,8 +25,14 @@ describe('PlanetShaderTemplate: тени облаков на земле', () => 
     expect(cloudLayerFunctions).toContain('dot(offsetUnits, northUnit) / (3.1415927 * uBodyRadiusUnits));')
   })
 
-  it('тень множит только прямой свет: входит в directGain, не в ambient', () => {
-    expect(frag).toContain('float directGain = mix(1.0, occlusion, uTerrainOcclusionDirect) * cloudShadow;')
-    expect(frag).toContain('vec3 ambient = uTerrainAmbient * skyTerm * occlusion;')
+  it('тень множит только прямой свет: входит в directGain, не в ambient (оба пути)', () => {
+    for (const source of [frag, SphereSurfaceShaderTemplate.fragmentShader]) {
+      expect(source).toContain('float directGain = mix(1.0, occlusion, uTerrainOcclusionDirect) * cloudShadow;')
+      expect(source).toContain('vec3 ambient = uTerrainAmbient * skyTerm * occlusion;')
+    }
+  })
+
+  it('на сфере тени облаков нет: дефайн не читается', () => {
+    expect(SphereSurfaceShaderTemplate.fragmentShader).not.toContain('USE_CLOUD_SHADOW')
   })
 })

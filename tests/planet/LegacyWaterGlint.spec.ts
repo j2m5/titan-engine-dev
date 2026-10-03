@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Texture } from 'three'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
-import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
+import { SphereSurfaceShader } from '@/core/materials/shaders/SphereSurfaceShader'
 import { WaterShader } from '@/core/materials/shaders/WaterShader'
 import { WATER_FAR_ALPHA2, farGlintAlpha2 } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
-const frag: string = PlanetShaderTemplate.fragmentShader
+const frag: string = SphereSurfaceShaderTemplate.fragmentShader
 
 function specularBlock(): string {
   const main = frag.indexOf('void main()')
@@ -16,7 +17,7 @@ function specularBlock(): string {
   return frag.slice(open, frag.indexOf('#endif', open))
 }
 
-describe('PlanetShaderTemplate: легаси-блик воды тем же законом, что водная оболочка', () => {
+describe('SphereSurfaceShaderTemplate: блик воды на сфере тем же законом, что водная оболочка', () => {
   it('USE_SPECULAR — waterGlintGlsl по дальней шероховатости × gain, без pow64 и uSpecularStrength', () => {
     const block = specularBlock()
     expect(block).toContain('waterGlintGlsl(normal, lightDirection, viewDir, uWaterFarAlpha2)')
@@ -46,13 +47,20 @@ describe('PlanetShaderTemplate: легаси-блик воды тем же за�
   })
 
   it('дефолты юниформов шаблона', () => {
-    expect(PlanetShaderTemplate.uniforms.uWaterFarAlpha2.value).toBe(WATER_FAR_ALPHA2)
-    expect(PlanetShaderTemplate.uniforms.uWaterGlintGain.value).toBe(1)
-    expect(PlanetShaderTemplate.uniforms.uSpecularStrength).toBeUndefined()
+    expect(SphereSurfaceShaderTemplate.uniforms.uWaterFarAlpha2.value).toBe(WATER_FAR_ALPHA2)
+    expect(SphereSurfaceShaderTemplate.uniforms.uWaterGlintGain.value).toBe(1)
+    expect(SphereSurfaceShaderTemplate.uniforms.uSpecularStrength).toBeUndefined()
+  })
+
+  it('рельеф блика воды не рисует: блик даёт водная оболочка', () => {
+    const terrainFrag: string = TerrainShaderTemplate.fragmentShader
+    expect(terrainFrag).not.toContain('USE_SPECULAR')
+    expect(terrainFrag).not.toContain('waterGlintGlsl(')
+    expect(TerrainShaderTemplate.uniforms.uWaterFarAlpha2).toBeUndefined()
   })
 })
 
-// Конструктор PlanetShader ходит в getTextureOrMake('' | 'default.png' | 'night.jpg') —
+// Конструктор SphereSurfaceShader ходит в getTextureOrMake('' | 'default.png' | 'night.jpg') —
 // промах строит PlaceholderTexture на canvas, которого в jsdom нет (как в TerrainLambert.spec.ts)
 function seedPlaceholderKeys(): void {
   for (const name of ['', 'default.png', 'night.jpg']) {
@@ -76,10 +84,10 @@ describe('паритет дальней шероховатости на гейт
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
 
-  it('тело с заданной waterRoughness: uWaterFarAlpha2 и gain у PlanetShader и WaterShader совпадают', () => {
+  it('тело с заданной waterRoughness: uWaterFarAlpha2 и gain у SphereSurfaceShader и WaterShader совпадают', () => {
     const data = { emission: 1, bumpScale: 1, waterLevelMeters: 0, waterRoughness: 0.08, waterRippleStrength: 0.6, waterGlintGain: 2 }
     const actor = stubBodyActor(data)
-    const planet = new PlanetShader(actor)
+    const planet = new SphereSurfaceShader(actor)
     const water = new WaterShader(actor)
     expect(planet.uniforms.uWaterFarAlpha2.value).toBe(farGlintAlpha2(0.08, 0.6))
     expect(water.uniforms.uWaterFarAlpha2.value).toBe(planet.uniforms.uWaterFarAlpha2.value)

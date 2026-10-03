@@ -1,5 +1,5 @@
 /**
- * Облачный слой на высоте h над датумом — общий для суши (PlanetShaderTemplate, обе ветки)
+ * Облачный слой на высоте h над датумом — общий для суши (PlanetSurfaceCommon, оба пути)
  * и воды (WaterShaderTemplate). CPU-зеркало — cloudLayerMath.ts.
  *
  * Хост до include обязан: объявить sampler2D cloudMap, float uCloudOpacity,

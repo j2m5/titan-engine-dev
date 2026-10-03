@@ -89,12 +89,20 @@ describe('TerrainSphere: динамическое квадродерево па�
 
   // Шаблон рельефа читает атрибуты патча без дефайна-гейта: снимок дефайнов после
   // resetMaterial вершинник патча не выключает
-  it('материал патчей и после resetMaterial (вытеснение диффуза) читает patchCenter', () => {
+  it('материал патчей и после resetMaterial (вытеснение диффуза) читает patchCenter, который несут патчи', () => {
     const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
     sphere.material.resetMaterial()
     const defines = new Set(Object.keys(sphere.material.defines))
-    expect(preprocessGlsl(sphere.material.vertexShader, defines)).toMatch(/\bpatchCenter\b/)
+    // вершинник при дефайнах после reset берёт направление из центра патча
+    expect(preprocessGlsl(sphere.material.vertexShader, defines)).toContain('vec3 vertexDir = normalize(morphedPosition + patchCenter);')
     expect(sphere.material.vertexShader).not.toMatch(/USE_TERRAIN_UV/)
+    // атрибут, который он читает, есть у каждого меша патча
+    const meshes = sphere.children.filter((c): c is Mesh => c instanceof Mesh)
+    expect(meshes.length).toBeGreaterThan(0)
+    for (const mesh of meshes) expect(mesh.geometry.getAttribute('patchCenter'), mesh.name).toBeDefined()
+    // страховочные дефолты атрибутов патча reset не снимает
+    expect(sphere.material.defaultAttributeValues.patchCenter).toEqual([0, 0, 0])
+    expect(sphere.material.defaultAttributeValues.morphDelta).toEqual([0, 0, 0])
   })
 
   it('конструктор строит минимальный набор уровня 1 (24 меша)', () => {

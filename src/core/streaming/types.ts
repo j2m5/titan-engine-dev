@@ -43,7 +43,7 @@ export interface StreamDecision {
  * diffuse > slope > detail* > cloud > night > specular.
  *
  * Внутри detail-слоя (2.0–2.3) суб-ранги идут по гейт-значимости, не по
- * алфавиту: материал (см. PlanetMaterial) гейтит ВЕСЬ detail-набор по
+ * алфавиту: материал (см. TerrainMaterial) гейтит ВЕСЬ detail-набор по
  * наличию detailNormal — без него detailDiffuse в бюджете мёртв (видимого
  * эффекта ноль), поэтому detailNormal ранжирован первым внутри слоя и при
  * тесном бюджете влезает раньше diffuse-компаньона детейла.

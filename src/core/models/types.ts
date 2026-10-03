@@ -42,6 +42,7 @@ export enum ResourceTypes {
   diffuse,
   cloud,
   night,
+  // Маска «океан/суша» блика воды — читает только сфера (USE_SPECULAR); у рельефа блик даёт водная оболочка
   specular,
   cube,
   height,
@@ -181,8 +182,8 @@ export interface IPlanetRenderingObject {
   bumpScale?: number
 
   // --- Ручки терраформного детального слоя (задача 4, TerrainDetail). ---
-  // Все опциональны: отсутствие → нейтральные дефолты движка (PlanetShader).
-  // Периоды — в МЕТРАХ, пересчёт в юниты (1/период) — на CPU в PlanetShader.
+  // Все опциональны: отсутствие → нейтральные дефолты движка (TerrainShader).
+  // Периоды — в МЕТРАХ, пересчёт в юниты (1/период) — на CPU в TerrainShader.
   detailScaleMeters?: number
   detailScale2Meters?: number
   detailNormalScale?: number
@@ -191,12 +192,12 @@ export interface IPlanetRenderingObject {
   detailAoInfluence?: number
 
   // Дальность fade — метры дистанции камеры до конца fade каждой шкалы.
-  // Начало fade = 0.4 × конца, зашито в PlanetShader (не отдельная ручка).
+  // Начало fade = 0.4 × конца, зашито в TerrainShader (не отдельная ручка).
   detailFadeMeters?: number
   detailFade2Meters?: number
 
   // Cavity-затемнение альбедо из канала B slope-карты (арка slope-cavity,
-  // Task 2/3). Отсутствие поля = 0 — путь бит-в-бит прежним (PlanetMaterial).
+  // Task 2/3). Отсутствие поля = 0 — путь бит-в-бит прежним (TerrainMaterial).
   cavityStrength?: number
 
   // --- Средняя полоса детали рельефа (TerrainMacroDetail): километровый
@@ -329,7 +330,7 @@ export interface IPlanetRenderingObject {
 
   // --- Ручки пены прибоя и мокрой кромки берега (арка surf-foam). Все
   // опциональны: отсутствие → дефолты waterFoamParams.ts. Активны только у
-  // тел с waterLevelMeters (гейты ставят WaterMaterial/PlanetMaterial).
+  // тел с waterLevelMeters (гейты ставят WaterMaterial/TerrainMaterial).
 
   /** Сила пены; 0 — выключено. Дефолт 1. */
   waterFoamStrength?: number
@@ -362,10 +363,10 @@ export interface IPlanetRenderingObject {
   sunTintStrength?: number
 
   // --- Ручки процедурной детали облаков гиганта (чанк GiantDetail). Все
-  // опциональны: отсутствие → дефолты движка (PlanetShader). Гейт
-  // USE_GIANT_DETAIL — по giantDetail И отсутствию карты высот (PlanetMaterial).
+  // опциональны: отсутствие → дефолты движка (SphereSurfaceShader). Гейт
+  // USE_GIANT_DETAIL — по одной giantDetail: дефайн ставит только материал сферы.
 
-  /** Процедурная деталь облаков гиганта под текселем (легаси-сфера без карты высот). */
+  /** Процедурная деталь облаков гиганта под текселем (только сфера). */
   giantDetail?: boolean
   /** Сила детали 0..1 (дефолт 0.35). */
   giantDetailStrength?: number

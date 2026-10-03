@@ -1,5 +1,7 @@
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { Actor } from '@/core/models/Actor'
 import { ResourceType } from '@/core/models/types'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -74,7 +76,7 @@ function seedEarthHeightMap(): void {
   })
 }
 
-describe('PlanetMaterial: slope-карта у тел с честным рельефом', () => {
+describe('TerrainMaterial: slope-карта у тел с честным рельефом', () => {
   beforeEach(() => {
     seedPlaceholderKeys()
     seedTexture(moonPathOf('diffuse'))
@@ -88,7 +90,7 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     seedMoonHeightMap()
     seedTexture(moonPathOf('slope'), 8192, 4096)
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
     expect(material.defines.USE_SLOPE).toBe('1')
@@ -104,7 +106,7 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     seedMoonHeightMap()
     seedTexture(moonPathOf('slope'), 8192, 4096)
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
 
     expect(() => material.updateMaterial()).not.toThrow()
 
@@ -123,7 +125,7 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
   it('пока slope-текстура не пришла из стримера, дефайны рельефа молчат', () => {
     seedMoonHeightMap()
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
     expect(material.defines.USE_SLOPE).toBeUndefined()
@@ -135,7 +137,7 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     // реестром): USE_SLOPE рисовал бы рельеф, которого нет в силуэте
     seedTexture(moonPathOf('slope'), 8192, 4096)
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
     expect(material.defines.USE_SLOPE).toBeUndefined()
@@ -146,7 +148,7 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     seedMoonHeightMap()
     seedTexture(moonPathOf('slope'), 8192, 4096)
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
     expect(material.defines.USE_SLOPE).toBe('1')
 
@@ -166,7 +168,7 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     seedMoonHeightMap()
     seedTexture(moonPathOf('slope'), 8192, 4096)
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
     expect(material.defines.USE_SLOPE).toBe('1')
 
@@ -182,7 +184,7 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     seedTexture(moonPathOf('slope'), 8192, 4096)
     seedTexture(moonPathOf('detailNormal'), 2048, 2048)
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
     expect(material.defines.USE_TERRAIN_DETAIL).toBe('1')
 
@@ -200,7 +202,7 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     // сеем текстуру с дефолтным ClampToEdge — как её отдал бы загрузчик БЕЗ параметров строки
     seedTexture(moonPathOf('slope'), 8192, 4096)
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
     // материал больше НЕ переписывает wrap (раньше ставил RepeatWrapping принудительно)
@@ -209,7 +211,7 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
 
   it('конструкторные дефайны переживают пересборку: USE_RING жив после update и reset', () => {
     // Дефайны собираются с нуля из снимка конструктора, а не накапливаются
-    // поверх прошлых. Снимок обязан нести то, что поставил PlanetShader
+    // поверх прошлых. Снимок обязан нести то, что поставил шейдер
     // (тень колец), иначе Сатурн терял бы кольца на первом обновлении карт.
     const saturn = Actor.find(11)!
     seedTexture(saturn.resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string)
@@ -217,7 +219,7 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     // полезет рисовать на канвасе, которого в jsdom нет (см. seedPlaceholderKeys)
     seedTexture(saturn.children.where('categoryId', 6).first()!.resources.first()!.getAttribute('path') as string)
 
-    const material = new PlanetMaterial(saturn)
+    const material = new SphereSurfaceMaterial(saturn)
     expect(material.defines.USE_RING).toBe('1')
 
     material.updateMaterial()
@@ -248,7 +250,7 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     seedMoonHeightMap()
     seedTexture(moonPathOf('detailNormal'), 8, 4)
 
-    const material = new PlanetMaterial(moon())
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
 
     expect((material.uniforms.uDetailNorMap.value as Texture).wrapS).toBe(ClampToEdgeWrapping)
@@ -269,63 +271,78 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
       }
     } as unknown as Actor
 
-    const material = new PlanetMaterial(stub)
+    const material = new SphereSurfaceMaterial(stub)
     material.updateMaterial()
 
     expect((material.uniforms.diffuseMap.value as Texture).wrapS).toBe(ClampToEdgeWrapping)
   })
 
-  it('USE_TERRAIN_UV ставится по факту загруженной карты высот — независимо от slope-текстуры', () => {
+  it('сфера с загруженной картой высот рельефных дефайнов не включает — путь задан классом материала', () => {
     seedMoonHeightMap()
+    seedTexture(moonPathOf('slope'), 8192, 4096)
+    seedTexture(moonPathOf('detailNormal'), 2048, 2048)
 
-    const material = new PlanetMaterial(moon())
+    const material = new SphereSurfaceMaterial(moon())
     material.updateMaterial()
 
-    expect(material.defines.USE_TERRAIN_UV).toBe('1')
+    for (const define of ['USE_TERRAIN_UV', 'USE_SLOPE', 'USE_TERRAIN_DETAIL', 'USE_TERRAIN_SHADOW', 'USE_CLOUD_SHADOW']) {
+      expect(material.defines[define], define).toBeUndefined()
+    }
+    expect(material.uniforms.bumpMap.value).toBeUndefined()
   })
 
-  it('у тела без карты высот USE_TERRAIN_UV не ставится', () => {
-    const material = new PlanetMaterial(earth())
-    material.updateMaterial()
+  it('USE_TERRAIN_UV не ставит ни один материал: развёртку выбирает шаблон пути', () => {
+    const sphere = new SphereSurfaceMaterial(earth())
+    sphere.updateMaterial()
+    expect(sphere.defines.USE_TERRAIN_UV).toBeUndefined()
 
-    expect(material.defines.USE_TERRAIN_UV).toBeUndefined()
+    seedMoonHeightMap()
+    const terrain = new TerrainMaterial(moon())
+    terrain.updateMaterial()
+    expect(terrain.defines.USE_TERRAIN_UV).toBeUndefined()
   })
 
-  it('USE_SPECULAR у легаси-сферы Земли (карты высот нет), снят при карте высот — блик за водной оболочкой', () => {
+  it('USE_SPECULAR у сферы Земли, у рельефа его нет — блик за водной оболочкой', () => {
     seedTexture(pathOf('specular'))
 
-    const legacy = new PlanetMaterial(earth())
-    legacy.updateMaterial()
-    expect(legacy.defines.USE_TERRAIN_UV).toBeUndefined()
-    expect(legacy.defines.USE_SPECULAR).toBe('1')
+    const sphere = new SphereSurfaceMaterial(earth())
+    sphere.updateMaterial()
+    expect(sphere.defines.USE_SPECULAR).toBe('1')
 
     seedEarthHeightMap()
-    const terrain = new PlanetMaterial(earth())
+    const terrain = new TerrainMaterial(earth())
     terrain.updateMaterial()
-    expect(terrain.defines.USE_TERRAIN_UV).toBe('1')
     expect(terrain.defines.USE_SPECULAR).toBeUndefined()
+    // загруженная карта высот рельефный путь действительно включила
+    expect(terrain.defines.USE_TERRAIN_SHADOW).toBe('1')
   })
 
   it('USE_CLOUD_SHADOW — только при cloudMap И загруженной карте высот (через updateMaterial)', () => {
     seedTexture(pathOf('cloud'))
     seedEarthHeightMap()
 
-    const material = new PlanetMaterial(earth())
+    const material = new TerrainMaterial(earth())
     material.updateMaterial()
 
     expect(material.defines.USE_CLOUD).toBe('1')
     expect(material.defines.USE_CLOUD_SHADOW).toBe('1')
+
+    // сфера тени облаков не рисует вовсе
+    const sphere = new SphereSurfaceMaterial(earth())
+    sphere.updateMaterial()
+    expect(sphere.defines.USE_CLOUD).toBe('1')
+    expect(sphere.defines.USE_CLOUD_SHADOW).toBeUndefined()
   })
 
   it('без карты высот тень облаков молчит даже при cloudMap; без cloudMap — при карте высот', () => {
     seedTexture(pathOf('cloud'))
-    const noHeight = new PlanetMaterial(earth())
+    const noHeight = new TerrainMaterial(earth())
     noHeight.updateMaterial()
     expect(noHeight.defines.USE_CLOUD).toBe('1')
     expect(noHeight.defines.USE_CLOUD_SHADOW).toBeUndefined()
 
     seedMoonHeightMap()
-    const noCloud = new PlanetMaterial(moon())
+    const noCloud = new TerrainMaterial(moon())
     // Только фикстура: у тела без облачной строки путь падает в `?? ''`, а
     // заглушку с пустым именем сеет seedPlaceholderKeys (нужна конструктору —
     // кольца). В рантайме под '' в реестре ничего нет (getTextureOrMake
@@ -333,33 +350,37 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     // заглушку после постройки материала, чтобы гейт мерился по данным.
     resourceStorage.deleteTexture('')
     noCloud.updateMaterial()
-    expect(noCloud.defines.USE_TERRAIN_UV).toBe('1')
+    // карта высот увидена (тень рельефа включилась), облаков нет — тени облаков нет
+    expect(noCloud.defines.USE_TERRAIN_SHADOW).toBe('1')
     expect(noCloud.defines.USE_CLOUD_SHADOW).toBeUndefined()
   })
 
-  // Патчи рельефа несут только position/patchCenter — без USE_TERRAIN_UV вершинник
-  // читает несуществующий normal (NaN, тело чёрное), а сброс зовётся на вытеснении диффуза
-  it('материал патчей рельефа: USE_TERRAIN_UV — контракт геометрии, resetMaterial его не снимает', () => {
-    const material = new PlanetMaterial(moon(), undefined, { terrainPatches: true })
-    expect(material.defines.USE_TERRAIN_UV).toBe('1')
+  // Патчи рельефа несут только position/patchCenter: вершинник рельефа берёт
+  // направление из них при любом состоянии карт (сброс зовётся на вытеснении диффуза)
+  it('TerrainMaterial: вершинник патчей — контракт геометрии, ни reset, ни update его не меняют', () => {
+    const material = new TerrainMaterial(moon())
+    const patchDir = 'vec3 vertexDir = normalize(morphedPosition + patchCenter);'
+    expect(material.vertexShader).toContain(patchDir)
 
     material.resetMaterial()
-    expect(material.defines.USE_TERRAIN_UV).toBe('1')
+    expect(material.vertexShader).toContain(patchDir)
 
-    material.updateMaterial() // карты высот в реестре нет — дефайн всё равно на месте
-    expect(material.defines.USE_TERRAIN_UV).toBe('1')
+    material.updateMaterial() // карты высот в реестре нет — вершинник прежний
+    expect(material.vertexShader).toContain(patchDir)
+    expect(material.vertexShader).not.toContain('vec3 vertexDir = normal;')
   })
 
-  it('легаси-материал: resetMaterial снимает USE_TERRAIN_UV', () => {
+  it('SphereSurfaceMaterial: вершинник сферы (normal/uv) при карте высот и после reset', () => {
     seedMoonHeightMap()
 
-    const material = new PlanetMaterial(moon())
+    const material = new SphereSurfaceMaterial(moon())
     material.updateMaterial()
-    expect(material.defines.USE_TERRAIN_UV).toBe('1')
+    expect(material.vertexShader).toContain('vec3 vertexDir = normal;')
+    expect(material.vertexShader).not.toContain('patchCenter')
 
     material.resetMaterial()
 
-    expect(material.defines.USE_TERRAIN_UV).toBeUndefined()
+    expect(material.vertexShader).toContain('vec3 vertexDir = normal;')
   })
 })
 
@@ -393,7 +414,7 @@ function callisto(): Actor {
   return Actor.find(23)!
 }
 
-describe('PlanetMaterial: данные Каллисто — height/slope/detail-связки и ручки детального слоя', () => {
+describe('поверхность планеты: данные Каллисто — height/slope/detail-связки и ручки детального слоя', () => {
   it('height-строка Каллисто: верный путь и резидентный lifecycle', () => {
     const row = callisto().resources.where('resourceType', 'height').first()
 
@@ -443,7 +464,7 @@ function europa(): Actor {
   return Actor.find(21)!
 }
 
-describe('PlanetMaterial: данные Европы — height/slope/detail-связки и ручки детального слоя', () => {
+describe('поверхность планеты: данные Европы — height/slope/detail-связки и ручки детального слоя', () => {
   it('height-строка Европы: верный путь и резидентный lifecycle', () => {
     const row = europa().resources.where('resourceType', 'height').first()
 
@@ -492,7 +513,7 @@ function rhea(): Actor {
   return Actor.find(28)!
 }
 
-describe('PlanetMaterial: данные Реи — height/slope/detail-связки и ручки детального слоя', () => {
+describe('поверхность планеты: данные Реи — height/slope/detail-связки и ручки детального слоя', () => {
   it('height-строка Реи: верный путь и резидентный lifecycle', () => {
     const row = rhea().resources.where('resourceType', 'height').first()
 
@@ -541,7 +562,7 @@ function io(): Actor {
   return Actor.find(20)!
 }
 
-describe('PlanetMaterial: данные Ио — height/slope/detail-связки и ручки детального слоя', () => {
+describe('поверхность планеты: данные Ио — height/slope/detail-связки и ручки детального слоя', () => {
   it('height-строка Ио: верный путь и резидентный lifecycle', () => {
     const row = io().resources.where('resourceType', 'height').first()
 
@@ -596,7 +617,7 @@ describe('PlanetMaterial: данные Ио — height/slope/detail-связки
 const BATCH_ACTOR_IDS = [20, 22, 28, 29, 30, 36, 37, 38, 73, 83] as const
 const TERRAFORM_RESOURCE_TYPES = ['height', 'slope', 'detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const
 
-describe(`PlanetMaterial: счётные инварианты батча ${BATCH_ACTOR_IDS.length} спутников`, () => {
+describe(`поверхность планеты: счётные инварианты батча ${BATCH_ACTOR_IDS.length} спутников`, () => {
   it.each(BATCH_ACTOR_IDS)('actorId %i: пара height+slope, wrapS у slope и диффуза, bumpScale 1, ровно 6 терраформных связок', (actorId) => {
     const actor = Actor.find(actorId)!
     const height = actor.resources.where('resourceType', 'height').first()
@@ -636,7 +657,7 @@ describe(`PlanetMaterial: счётные инварианты батча ${BATCH
 // арки), общий шаренный диффуз (ресурс 117) снят вместе со связками.
 const PROCEDURAL_ACTOR_IDS = [65, 66, 67, 68, 69, 70, 71, 72, 74, 93, 94, 95, 96, 97, 98, 99] as const
 
-describe('PlanetMaterial: процедурные тела (луны Коррибана)', () => {
+describe('поверхность планеты: процедурные тела (луны Коррибана)', () => {
   it.each(PROCEDURAL_ACTOR_IDS)('actorId %i: proceduralSurface валиден, diffuse-ресурса нет, height+slope есть, slope repeat, bumpScale 1, ровно 4 детальные связки', (actorId) => {
     const actor = Actor.find(actorId)!
     const data = actor.renderingObject!.getAttribute('data') as Record<string, unknown>
@@ -670,7 +691,7 @@ function mars(): Actor {
   return Actor.find(8)!
 }
 
-describe('PlanetMaterial: данные Марса — height/slope/detail-связки и ручки детального слоя (DEM)', () => {
+describe('поверхность планеты: данные Марса — height/slope/detail-связки и ручки детального слоя (DEM)', () => {
   it('height-строка Марса: верный путь и резидентный lifecycle', () => {
     const row = mars().resources.where('resourceType', 'height').first()
 
@@ -719,7 +740,7 @@ function pluto(): Actor {
   return Actor.find(14)!
 }
 
-describe('PlanetMaterial: данные Плутона — height/slope/detail-связки и ручки детального слоя (synth)', () => {
+describe('поверхность планеты: данные Плутона — height/slope/detail-связки и ручки детального слоя (synth)', () => {
   it('height-строка Плутона: верный путь и резидентный lifecycle', () => {
     const row = pluto().resources.where('resourceType', 'height').first()
 
@@ -786,7 +807,7 @@ describe('PlanetMaterial: данные Плутона — height/slope/detail-с
 // одинаковы для всех, как у батча спутников выше
 const NINE_BODIES_ACTOR_IDS = [5, 6, 8, 9, 14, 15, 16, 17, 18] as const
 
-describe('PlanetMaterial: счётные инварианты девяти твёрдых тел (планеты + карликовые)', () => {
+describe('поверхность планеты: счётные инварианты девяти твёрдых тел (планеты + карликовые)', () => {
   it.each(NINE_BODIES_ACTOR_IDS)('actorId %i: пара height+slope, wrapS у slope и диффуза, bumpScale 1, ровно 6 терраформных связок', (actorId) => {
     const actor = Actor.find(actorId)!
     const height = actor.resources.where('resourceType', 'height').first()
@@ -813,7 +834,7 @@ function dione(): Actor {
   return Actor.find(27)!
 }
 
-describe('PlanetMaterial: данные Дионы — height/slope/detail-связки и ручки детального слоя', () => {
+describe('поверхность планеты: данные Дионы — height/slope/detail-связки и ручки детального слоя', () => {
   it('height-строка Дионы: верный путь и резидентный lifecycle', () => {
     const row = dione().resources.where('resourceType', 'height').first()
 
@@ -864,7 +885,7 @@ function ohann1(): Actor {
   return Actor.find(68)!
 }
 
-describe('PlanetMaterial: данные Ohann I — height/slope/detail-связки (диффуз процедурный)', () => {
+describe('поверхность планеты: данные Ohann I — height/slope/detail-связки (диффуз процедурный)', () => {
   it('height-строка Ohann I: верный путь и резидентный lifecycle', () => {
     const row = ohann1().resources.where('resourceType', 'height').first()
 
@@ -920,7 +941,7 @@ function korriban(): Actor {
   return Actor.find(88)!
 }
 
-describe('PlanetMaterial: данные Коррибана — height/slope/detail-связки, атмосфера и облака не тронуты', () => {
+describe('поверхность планеты: данные Коррибана — height/slope/detail-связки, атмосфера и облака не тронуты', () => {
   it('height-строка Коррибана: верный путь и резидентный lifecycle', () => {
     const row = korriban().resources.where('resourceType', 'height').first()
 
@@ -984,7 +1005,7 @@ describe('PlanetMaterial: данные Коррибана — height/slope/detai
 // одинаковы для всех, тот же паритет, что у батча 18 спутников и девяти тел выше
 const TASK2_19_ACTOR_IDS = [24, 25, 26, 27, 31, 32, 33, 34, 35, 62, 88] as const
 
-describe('PlanetMaterial: счётные инварианты 19 тел Task 2 стандартизации', () => {
+describe('поверхность планеты: счётные инварианты 19 тел Task 2 стандартизации', () => {
   it.each(TASK2_19_ACTOR_IDS)('actorId %i: пара height+slope, wrapS у slope и диффуза, bumpScale 1, ровно 6 терраформных связок', (actorId) => {
     const actor = Actor.find(actorId)!
     const height = actor.resources.where('resourceType', 'height').first()
@@ -1037,7 +1058,7 @@ function dirOf(resourcePath: string): string {
   return resourcePath.slice(0, resourcePath.lastIndexOf('/'))
 }
 
-describe('PlanetMaterial: 19 тел Task 2 — пути не перепутаны и не подменены', () => {
+describe('поверхность планеты: 19 тел Task 2 — пути не перепутаны и не подменены', () => {
   it('все 19 height-путей уникальны, все 19 slope-путей уникальны — ни одна карта не шарится между телами', () => {
     const heightPaths = TASK2_19_ACTOR_IDS.map(
       (actorId) => Actor.find(actorId)!.resources.where('resourceType', 'height').first()!.getAttribute('path')
@@ -1071,7 +1092,7 @@ describe('PlanetMaterial: 19 тел Task 2 — пути не перепутан�
   )
 })
 
-describe('PlanetMaterial: зачистка облаков Титана и Венеры', () => {
+describe('поверхность планеты: зачистка облаков Титана и Венеры', () => {
   it('у Титана и Венеры облачной строки больше нет', () => {
     const titan = Actor.find(29)!
     const venus = Actor.find(6)!
@@ -1089,12 +1110,12 @@ describe('PlanetMaterial: зачистка облаков Титана и Вен
   })
 })
 
-describe('PlanetMaterial: гейты ночной и облачной карт', () => {
+describe('SphereSurfaceMaterial: гейты ночной и облачной карт', () => {
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('без ночной и облачной карт дефайны не ставятся', () => {
-    const material = new PlanetMaterial(earth())
+    const material = new SphereSurfaceMaterial(earth())
     material.updateMaterial()
 
     expect(material.defines.USE_NIGHT).toBeUndefined()
@@ -1112,7 +1133,7 @@ describe('PlanetMaterial: гейты ночной и облачной карт',
     seedTexture(nightPath, 4096, 2048)
     seedTexture(cloudPath, 8192, 4096)
 
-    const material = new PlanetMaterial(earth())
+    const material = new SphereSurfaceMaterial(earth())
     material.updateMaterial()
 
     expect(material.defines.USE_NIGHT).toBe('1')
@@ -1125,7 +1146,7 @@ describe('PlanetMaterial: гейты ночной и облачной карт',
     seedTexture(nightPath, 4096, 2048)
     seedTexture(cloudPath, 8192, 4096)
 
-    const material = new PlanetMaterial(earth())
+    const material = new SphereSurfaceMaterial(earth())
     material.updateMaterial()
     expect(material.defines.USE_NIGHT).toBe('1')
     expect(material.defines.USE_CLOUD).toBe('1')
@@ -1137,24 +1158,26 @@ describe('PlanetMaterial: гейты ночной и облачной карт',
   })
 })
 
-describe('PlanetMaterial: паритет юниформов шаблон↔рантайм', () => {
+describe('материалы поверхности: паритет юниформов шаблон↔рантайм', () => {
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
 
   /**
-   * `PlanetShader.ts` дублирует дефолты юниформов из `PlanetShaderTemplate.ts`
-   * (см. PlanetShader.ts) вместо того, чтобы читать их оттуда. Ничто раньше не
+   * Шейдеры поверхности дублируют дефолты юниформов из шаблонов своего пути
+   * вместо того, чтобы читать их оттуда. Ничто раньше не
    * сверяло рантайм с шаблоном — оба места молча могли разойтись. Этот тест
    * ловит именно расхождение: конструирует материал и сравнивает фактические
    * значения юниформов с дефолтами шаблона.
    */
-  it('рантайм-дефолты юниформов совпадают с шаблоном', () => {
-    const material = new PlanetMaterial(earth())
+  it('рантайм-дефолты юниформов совпадают с шаблоном своего пути', () => {
+    const sphere = new SphereSurfaceMaterial(earth())
+    for (const key of ['uNightThreshold', 'uNightSoftness', 'uWaterGlintGain'] as const) {
+      expect(sphere.uniforms[key].value, key).toBe(SphereSurfaceShaderTemplate.uniforms[key].value)
+    }
 
-    const keys = ['uNightThreshold', 'uNightSoftness', 'uWaterGlintGain', 'uCavityStrength'] as const
-
-    for (const key of keys) {
-      expect(material.uniforms[key].value).toBe(PlanetShaderTemplate.uniforms[key].value)
+    const terrain = new TerrainMaterial(earth())
+    for (const key of ['uNightThreshold', 'uNightSoftness', 'uCavityStrength'] as const) {
+      expect(terrain.uniforms[key].value, key).toBe(TerrainShaderTemplate.uniforms[key].value)
     }
   })
 })
@@ -1165,7 +1188,7 @@ describe('PlanetMaterial: паритет юниформов шаблон↔ра�
 // slope-картой, см. 30999f3). Фотомозаика (реальный снимок, не синтетическая
 // генерация) — cavityStrength ей не полагается, тот же прецедент, что у
 // Меркурия/Венеры/Марса/Луны.
-describe('PlanetMaterial: данные Земли — полный набор карт, вода, легаси-bump снят', () => {
+describe('поверхность планеты: данные Земли — полный набор карт, вода, легаси-bump снят', () => {
   it('height-строка Земли: верный путь и резидентный lifecycle', () => {
     const row = earth().resources.where('resourceType', 'height').first()
 
@@ -1227,7 +1250,7 @@ function yavinIV(): Actor {
   return Actor.find(83)!
 }
 
-describe('PlanetMaterial: данные Явина IV — height/slope/detail-связки возвращены, вода', () => {
+describe('поверхность планеты: данные Явина IV — height/slope/detail-связки возвращены, вода', () => {
   it('height-строка Явина IV: верный путь и резидентный lifecycle', () => {
     const row = yavinIV().resources.where('resourceType', 'height').first()
 
@@ -1287,7 +1310,7 @@ describe('PlanetMaterial: данные Явина IV — height/slope/detail-с�
  * дуги вместо облаков. Инвариант общий: ЛЮБАЯ карта, которую фрагмент читает
  * по терраформному uv, обязана иметь wrapS.
  */
-describe('PlanetMaterial: карты терраформных тел, читаемые по общему uv, заворачиваются по долготе', () => {
+describe('поверхность планеты: карты терраформных тел, читаемые по общему uv, заворачиваются по долготе', () => {
   const SAMPLED_BY_TERRAIN_UV: readonly ResourceType[] = ['diffuse', 'cloud', 'night', 'specular']
 
   const terraformActors = Actor.all()
@@ -1320,7 +1343,7 @@ describe('PlanetMaterial: карты терраформных тел, читае
 // одна копия в VRAM, см. task-3-brief.md), resident lifecycle, wrapS+wrapT
 // Repeat (трипланарный getNoise, WaterShaderTemplate). Любое тело без
 // waterLevelMeters — waterNormal-связок ноль.
-describe('PlanetMaterial: данные waterNormal-ассета (Task 3 арки water-shader)', () => {
+describe('поверхность планеты: данные waterNormal-ассета (Task 3 арки water-shader)', () => {
   const WATER_ACTOR_IDS = [7, 83] as const
   const WATER_ACTOR_ID_SET = new Set<number>(WATER_ACTOR_IDS)
 
@@ -1380,7 +1403,7 @@ function archetypeOf(path: string): string | null {
   return match ? match[1] : null
 }
 
-describe('PlanetMaterial: у каждого терраформного тела полный комплект детали одного архетипа', () => {
+describe('поверхность планеты: у каждого терраформного тела полный комплект детали одного архетипа', () => {
   const terraformActors = Actor.all()
     .filter((actor) => actor.resources.where('resourceType', 'height').first() !== undefined)
     .all()

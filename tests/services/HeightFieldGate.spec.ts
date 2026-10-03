@@ -382,12 +382,11 @@ describe('HeightFieldGate: окно даунгрейда не оставляет
   }
 
   // У материала сферы юниформа карты тени нет вовсе: держать её нечем
-  function shadowStateOf(node: DynamicNode): { define: unknown; map: unknown } {
+  function shadowStateOf(node: DynamicNode): { define: unknown; shadowUniform: boolean } {
     const material = node.renderable!.material as SphereSurfaceMaterial
     expect(material).toBeInstanceOf(SphereSurfaceMaterial)
-    const map = 'uShadowHeightMap' in material.uniforms ? material.uniforms.uShadowHeightMap.value : null
 
-    return { define: material.defines.USE_TERRAIN_SHADOW, map }
+    return { define: material.defines.USE_TERRAIN_SHADOW, shadowUniform: 'uShadowHeightMap' in material.uniforms }
   }
 
   it('даунгрейднутый узел: после release без USE_TERRAIN_SHADOW и без карты тени', () => {
@@ -397,7 +396,7 @@ describe('HeightFieldGate: окно даунгрейда не оставляет
     gate.recompute()
 
     expect(heightFieldStorage.get(path)).toBeUndefined()
-    expect(shadowStateOf(node)).toEqual({ define: undefined, map: null })
+    expect(shadowStateOf(node)).toEqual({ define: undefined, shadowUniform: false })
   })
 
   // Узел уже на легаси-сфере — даунгрейд отвечает false; материал сферы карту
@@ -407,13 +406,13 @@ describe('HeightFieldGate: окно даунгрейда не оставляет
 
     // предусловие: карта высот в реестре, материал синхронизирован при ней
     expect(heightFieldStorage.get(path)).toBeDefined()
-    expect(shadowStateOf(node)).toEqual({ define: undefined, map: null })
+    expect(shadowStateOf(node)).toEqual({ define: undefined, shadowUniform: false })
 
     observeAt(observer, moon, 1)
     gate.recompute()
 
     expect(heightFieldStorage.get(path)).toBeUndefined()
-    expect(shadowStateOf(node)).toEqual({ define: undefined, map: null })
+    expect(shadowStateOf(node)).toEqual({ define: undefined, shadowUniform: false })
   })
 })
 

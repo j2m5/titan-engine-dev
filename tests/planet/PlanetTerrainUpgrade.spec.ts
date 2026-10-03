@@ -28,7 +28,7 @@ function moon(): Actor {
   return Actor.find(MOON_ID)!
 }
 
-// Набор ключей — как в PlanetTerrain.spec: PlanetMaterial на промахе идёт в
+// Набор ключей — как в PlanetTerrain.spec: материал поверхности на промахе идёт в
 // PlaceholderTexture, а canvas 2d в jsdom нет
 function seedTexture(name: string): void {
   const texture = new Texture()

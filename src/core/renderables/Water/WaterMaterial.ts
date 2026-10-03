@@ -41,7 +41,7 @@ const WATER_REFLECTION_ENABLED_BY_OWNER: boolean = false
 class WaterMaterial extends AbstractShaderMaterial {
   public model: Actor
 
-  /** Снимок дефайнов конструирования — см. PlanetMaterial.baseDefines, тот же приём. */
+  /** Снимок дефайнов конструирования — см. PlanetSurfaceMaterial.baseDefines, тот же приём. */
   private readonly baseDefines: Record<string, unknown>
 
   /**
@@ -140,7 +140,7 @@ class WaterMaterial extends AbstractShaderMaterial {
     this.slopePath = WaterMaterial.resolveSlopePath(model)
     this.waterNormalPath = WaterMaterial.resolveWaterNormalPath(model)
     // Дочерняя атмосфера и радиус датума — разовый резолв ORM, тот же паттерн,
-    // что у PlanetMaterial (строки БД статичны, а sync зовётся каждый кадр).
+    // что у PlanetSurfaceMaterial (строки БД статичны, а sync зовётся каждый кадр).
     this.sunTint = new SunTintBinding(
       this,
       atmosphereRegistry,
@@ -185,12 +185,12 @@ class WaterMaterial extends AbstractShaderMaterial {
 
   /**
    * Перечитывает slope-текстуру актора из resourceStorage по закешированному
-   * пути (см. slopePath) — тот же реестр, что PlanetMaterial берёт под
+   * пути (см. slopePath) — тот же реестр, что TerrainMaterial берёт под
    * bumpMap, но без повторного ORM-джойна на каждый кадр. Текстура может
    * быть ещё не догружена (streamable) — тогда сэмплер остаётся null и
    * USE_WATER_DEPTH не ставится (константный режим шаблона, см.
    * WaterShaderTemplate). Гейт не переспрашивает hasHeightField (в отличие
-   * от PlanetMaterial.useSlope) — WaterSphere существует только когда
+   * от useSlope у TerrainMaterial) — WaterSphere существует только когда
    * RenderableFactory.createPlanet уже проверил обе ручки разом (высота И
    * waterLevelMeters, см. её докблок), дублировать проверку тут незачем.
    *

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
 import { RingShaderTemplate } from '@/core/materials/shaders/lib/RingShaderTemplate'
 
@@ -10,7 +11,8 @@ const LOCAL_LIGHT = 'vec3 localLightDirection = transpose(mat3(modelMatrix)) * w
 
 describe('вершинники без inverse(modelMatrix)', () => {
   it.each([
-    ['палуба', PlanetShaderTemplate.vertexShader],
+    ['палуба (сфера)', SphereSurfaceShaderTemplate.vertexShader],
+    ['палуба (рельеф)', TerrainShaderTemplate.vertexShader],
     ['вода', WaterShaderTemplate.vertexShader],
     ['кольцо', RingShaderTemplate.vertexShader]
   ])('%s: inverse() не вызывается', (_name, vertex) => {
@@ -18,7 +20,8 @@ describe('вершинники без inverse(modelMatrix)', () => {
   })
 
   it('палуба и вода считают локальное направление света одной строкой', () => {
-    expect(PlanetShaderTemplate.vertexShader).toContain(LOCAL_LIGHT)
+    expect(SphereSurfaceShaderTemplate.vertexShader).toContain(LOCAL_LIGHT)
+    expect(TerrainShaderTemplate.vertexShader).toContain(LOCAL_LIGHT)
     expect(WaterShaderTemplate.vertexShader).toContain(LOCAL_LIGHT)
   })
 

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { terrainDetailFunctions } from '@/core/materials/shaders/lib/chunks/TerrainDetail'
 
 describe('TerrainDetail: домен из точной позиции патча', () => {
-  const vert: string = PlanetShaderTemplate.vertexShader
-  const frag: string = PlanetShaderTemplate.fragmentShader
+  const vert: string = TerrainShaderTemplate.vertexShader
+  const frag: string = TerrainShaderTemplate.fragmentShader
   const fn: string = terrainDetailFunctions
 
   it('вершинник объявляет атрибуты и varying под USE_TERRAIN_DETAIL и передаёт их', () => {

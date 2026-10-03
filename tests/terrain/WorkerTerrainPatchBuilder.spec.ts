@@ -6,7 +6,7 @@ import type { FromWorkerMessage, ToWorkerMessage } from '@/core/terrain/worker/t
 import { SyncTerrainPatchBuilder, type PatchBuildResult, type TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import { buildShadowHeightBits, type ShadowHeightBits } from '@/core/terrain/terrainShadowBits'
 import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import type { PatchArrays } from '@/core/terrain/terrainPatchGeometry'
@@ -428,11 +428,11 @@ describe('WorkerTerrainPatchBuilder: исключения на главном п
 class TestPatchGroup extends TerrainPatchGroup {
   public constructor(field: TerrainHeightField, builder: TerrainPatchBuilder) {
     const renderer = { domElement: { height: 1080 } } as unknown as WebGLRenderer
-    super(field, new PlanetMaterial(Actor.find(19)!), renderer, undefined, undefined, undefined, undefined, builder)
+    super(field, new TerrainMaterial(Actor.find(19)!), renderer, undefined, undefined, undefined, undefined, builder)
   }
 }
 
-// PlanetMaterial на промахе по ключу рисует плейсхолдер на canvas 2d, которого в jsdom нет
+// TerrainMaterial на промахе по ключу рисует плейсхолдер на canvas 2d, которого в jsdom нет
 function seedPlaceholderKeys(): void {
   const moonDiffuse = Actor.find(19)!.resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string
   for (const name of ['', 'default.png', 'night.jpg', moonDiffuse]) {

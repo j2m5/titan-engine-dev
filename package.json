@@ -29,7 +29,6 @@
     "measure:detail-stats": "vite-node scripts/measure-detail-stats.ts --",
     "preview": "vite preview",
     "test": "npm run typecheck && vitest",
-    "parity:snapshot": "vitest run --mode parity-snapshot tests/planet/PlanetMaterialParity.spec.ts",
     "test:perf": "vitest run --mode perf --no-file-parallelism tests/terrain/midbandBuildBudget.spec.ts tests/asteroidBelt/SectorGridLazy.spec.ts"
   },
   "dependencies": {

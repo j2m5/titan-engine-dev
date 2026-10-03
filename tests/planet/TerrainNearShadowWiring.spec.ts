@@ -3,9 +3,8 @@ import { DataTexture, Group, PerspectiveCamera, Texture, Vector3, type WebGLRend
 import '@/core/framework/TitanThree'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { terrainShadowMarchUniforms } from '@/core/materials/shaders/lib/chunks/TerrainShadowMarch'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -114,23 +113,23 @@ const NEAR_UNIFORMS: Array<[string, string]> = [
   ['float', 'uBodyRadiusMeters']
 ]
 
-describe('PlanetShaderTemplate: юниформы ближней тени', () => {
+describe('TerrainShaderTemplate: юниформы ближней тени', () => {
   it('объявлены в чанке юниформ марша — он включён только под USE_TERRAIN_SHADOW', () => {
     for (const [type, name] of NEAR_UNIFORMS) expect(terrainShadowMarchUniforms).toContain(`uniform ${type} ${name};`)
-    const frag: string = PlanetShaderTemplate.fragmentShader
+    const frag: string = TerrainShaderTemplate.fragmentShader
     const start = frag.indexOf('#ifdef USE_TERRAIN_SHADOW')
     expect(frag.slice(start, frag.indexOf('#endif', start))).toContain('#include <terrainShadowMarchUniforms>')
   })
 
   it('дефолты шаблона: плитки нет, вес 0', () => {
-    const u = PlanetShaderTemplate.uniforms!
+    const u = TerrainShaderTemplate.uniforms!
     expect(u.uNearTile.value).toBeNull()
     expect(u.uNearTileWeight.value).toBe(0)
     for (const [, name] of NEAR_UNIFORMS) expect(u[name]).toBeDefined()
   })
 })
 
-describe('PlanetMaterial.setNearTile', () => {
+describe('TerrainMaterial.setNearTile', () => {
   beforeEach(() => {
     seedPlaceholderKeys()
     seedHeightMap()
@@ -144,7 +143,7 @@ describe('PlanetMaterial.setNearTile', () => {
   })
 
   it('дефолты материала: вес 0, текстуры нет, дальность и радиус из конфига и тела', () => {
-    const material = new PlanetMaterial(moon(), undefined, { terrainPatches: true })
+    const material = new TerrainMaterial(moon())
     for (const [, name] of NEAR_UNIFORMS) expect(material.uniforms[name]).toBeDefined()
     expect(material.uniforms.uNearTileWeight.value).toBe(0)
     expect(material.uniforms.uNearTile.value).toBeNull()
@@ -155,7 +154,7 @@ describe('PlanetMaterial.setNearTile', () => {
 
   it('со state — все юниформы, вес = altitudeWeight · nearShadowStrength; null — вес 0 и текстура null', () => {
     lightOverride.near = 0.5
-    const material = new PlanetMaterial(moon(), undefined, { terrainPatches: true })
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
     const state = makeState()
     material.setNearTile(state)
@@ -174,7 +173,7 @@ describe('PlanetMaterial.setNearTile', () => {
   })
 
   it('nearShadowActive — только при USE_TERRAIN_SHADOW и nearShadowStrength > 0', () => {
-    const material = new PlanetMaterial(moon(), undefined, { terrainPatches: true })
+    const material = new TerrainMaterial(moon())
     expect(material.nearShadowActive).toBe(false)
     material.updateMaterial()
     expect(material.nearShadowActive).toBe(true)
@@ -184,7 +183,7 @@ describe('PlanetMaterial.setNearTile', () => {
   })
 
   it('resetMaterial снимает плитку', () => {
-    const material = new PlanetMaterial(moon(), undefined, { terrainPatches: true })
+    const material = new TerrainMaterial(moon())
     material.updateMaterial()
     material.setNearTile(makeState())
     material.resetMaterial()

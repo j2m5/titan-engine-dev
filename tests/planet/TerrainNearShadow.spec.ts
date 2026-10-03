@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { AppShaderChunk } from '@/core/materials/shaders/lib/chunks'
 import { terrainNearShadowFunctions } from '@/core/materials/shaders/lib/chunks/TerrainNearShadow'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { combineTerrainShadow, NEAR_SHADOW_BIAS_SLOPE, NEAR_SHADOW_STEPS } from '@/core/terrain/terrainNearShadowMath'
 import { preprocessGlsl } from '../helpers/glsl'
 
 const chunk = terrainNearShadowFunctions
-const frag: string = PlanetShaderTemplate.fragmentShader
+const frag: string = TerrainShaderTemplate.fragmentShader
 
 const FAR_LINE = 'if (NdotLraw > 0.0) terrainShadow = mix(1.0, terrainShadowMarch(dirLocal, sunLocal), uTerrainShadowStrength);'
 const NEAR_GATE = 'if (NdotLraw > 0.0 && uNearTileWeight > 0.0) {'
@@ -119,7 +120,7 @@ describe('TerrainNearShadow: чанк', () => {
   })
 })
 
-describe('PlanetShaderTemplate: сложение слоёв тени', () => {
+describe('TerrainShaderTemplate: сложение слоёв тени', () => {
   it('чанк включён под USE_TERRAIN_SHADOW, после дальнего марша', () => {
     const start = frag.indexOf('#ifdef USE_TERRAIN_SHADOW')
     const block = frag.slice(start, frag.indexOf('#endif', start))
@@ -149,11 +150,12 @@ describe('PlanetShaderTemplate: сложение слоёв тени', () => {
     expect(combineTerrainShadow(0.7, 0.2, 1)).toBe(0.2)
   })
 
-  const combos: [string, string[]][] = [
-    ['ничего', []],
-    ['только UV', ['USE_TERRAIN_UV']],
-    ['только тень', ['USE_TERRAIN_SHADOW']],
-    ['UV + тень', ['USE_TERRAIN_UV', 'USE_TERRAIN_SHADOW']]
+  // путь задаёт шаблон: у сферы слоя тени нет ни при каком дефайне
+  const combos: [string, string, string[]][] = [
+    ['рельеф', 'ничего', []],
+    ['рельеф', 'тень', ['USE_TERRAIN_SHADOW']],
+    ['сфера', 'ничего', []],
+    ['сфера', 'тень', ['USE_TERRAIN_SHADOW']]
   ]
 
   const GLOBALS = [
@@ -164,10 +166,12 @@ describe('PlanetShaderTemplate: сложение слоёв тени', () => {
   ]
   const MAIN_LOCALS = ['dirLocal', 'sunLocal', 'terrainShadow', 'NdotLraw', 'nearWeight', 'directGain']
 
-  it.each(combos)('объявления до использования: %s', (_name, defs) => {
-    const src = preprocessGlsl(AbstractShader.prepareSource(frag), new Set(defs))
-    const shadow = defs.includes('USE_TERRAIN_SHADOW')
-    const both = shadow && defs.includes('USE_TERRAIN_UV')
+  it.each(combos)('объявления до использования: %s, %s', (path, _name, defs) => {
+    const terrain = path === 'рельеф'
+    const source = terrain ? frag : SphereSurfaceShaderTemplate.fragmentShader
+    const src = preprocessGlsl(AbstractShader.prepareSource(source), new Set(defs))
+    const shadow = terrain && defs.includes('USE_TERRAIN_SHADOW')
+    const both = shadow
 
     for (const name of GLOBALS) {
       const use = firstUseAt(src, name)

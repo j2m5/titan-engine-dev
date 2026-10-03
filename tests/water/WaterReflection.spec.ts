@@ -466,7 +466,7 @@ const BASELINE_FRAGMENT_SHADER = `
 
       // Ночная сторона темнее, не чёрная: вода не светится сама, но полный
       // ноль на терминаторе неправдоподобен (рассеянный свет неба/атмосферы).
-      // Терминатор — та же зона, что у PlanetShaderTemplate (эстетическая
+      // Терминатор — та же зона, что у TerrainShaderTemplate (эстетическая
       // консистентность суши/воды); ночной пол — ручка uWaterNightFloor
       // (дефолт 0.08, честно помеченный), приёмка вида — за владельцем.
       vec3 lightDirection = normalize(vViewLightDirection);
@@ -553,7 +553,7 @@ describe('Паритет: без USE_WATER_REFLECTION компилируемый
 // будущая правка вершинника не проскочила молча.
 //
 // Снимок ОБНОВЛЁН аркой «тинт солнца для воды»: vLocalLightDirection считается
-// БЕЗУСЛОВНО (те же строки, что у палубы — PlanetShaderTemplate; гейтить
+// БЕЗУСЛОВНО (те же строки, что у палубы — TerrainShaderTemplate; гейтить
 // вершинник отдельно от палубы значило бы развести два одинаковых по смыслу
 // шейдера). Это осознанная правка вершинника, страж её и поймал.
 //
@@ -589,7 +589,7 @@ const BASELINE_VERTEX_SHADER = `
 
       // Направление ОТ солнца к фрагменту в body-локальных осях — вход μ_s
       // тинта заката (см. фрагментник): те же строки, что у палубы
-      // (PlanetShaderTemplate), парный строковый страж в тестах.
+      // (TerrainShaderTemplate), парный строковый страж в тестах.
       vec3 worldLightDirection = normalize(worldPosition.xyz - lightPosition);
       vec3 localLightDirection = transpose(mat3(modelMatrix)) * worldLightDirection;
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
@@ -603,7 +603,7 @@ const BASELINE_VERTEX_SHADER = `
       //
       // Body-локальное радиальное направление — отдельно, для терраформного
       // UV (канал A той же slope-карты, что и суша): та же конвенция vLocalDir,
-      // что у PlanetShaderTemplate — без матриц, тот же vertexDir.
+      // что у TerrainShaderTemplate — без матриц, тот же vertexDir.
       vec3 vertexDir = normalize(position + patchCenter);
 
       vNormal = normalize(normalMatrix * vertexDir);
@@ -611,7 +611,7 @@ const BASELINE_VERTEX_SHADER = `
       vDetailPos = detailPos;
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
-      // Взгляд в системе тела (облачный слой) — из view-space, как у суши (PlanetShaderTemplate)
+      // Взгляд в системе тела (облачный слой) — из view-space, как у суши (TerrainShaderTemplate)
       vLocalViewDir = transpose(mat3(modelMatrix)) * (transpose(mat3(viewMatrix)) * mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
 

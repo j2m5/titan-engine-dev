@@ -1,4 +1,5 @@
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { Texture } from 'three'
@@ -36,7 +37,7 @@ function stubActor(data: Record<string, unknown>): Actor {
  * (uWaterAlphaDeep 0.85 → 15 % дна видно) просачивался вторым, белым бликом
  * поверх голубого водного.
  */
-describe('PlanetMaterial: USE_SPECULAR у тел с водой — только пока нет карты высот (оболочки)', () => {
+describe('USE_SPECULAR — блик воды по specular-карте только на сфере; у рельефа блик за водной оболочкой', () => {
   beforeEach(() => {
     seedTexture('')
     seedTexture('default.png')
@@ -47,29 +48,37 @@ describe('PlanetMaterial: USE_SPECULAR у тел с водой — только 
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('без воды specular-карта включает блик', () => {
-    const material = new PlanetMaterial(stubActor({}))
+    const material = new SphereSurfaceMaterial(stubActor({}))
     material.updateMaterial()
 
     expect(material.defines.USE_SPECULAR).toBe('1')
   })
 
-  it('с waterLevelMeters, но без карты высот блик рисует легаси-сфера (оболочки ещё нет)', () => {
-    const material = new PlanetMaterial(stubActor({ waterLevelMeters: 0 }))
+  it('с waterLevelMeters блик рисует сфера (оболочка есть только у рельефа)', () => {
+    const material = new SphereSurfaceMaterial(stubActor({ waterLevelMeters: 0 }))
     material.updateMaterial()
 
     expect(material.defines.USE_SPECULAR).toBe('1')
   })
 
-  it('Земля (actorId 7): карты высот нет, оболочки нет — легаси-блик включён', () => {
+  it('Земля (actorId 7) на сфере — блик включён', () => {
     const earth = Actor.find(7)!
     const specularPath = earth.resources.where('resourceType', 'specular').first()!.getAttribute('path') as string
     const diffusePath = earth.resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string
     seedTexture(specularPath)
     seedTexture(diffusePath)
 
-    const material = new PlanetMaterial(earth)
+    const material = new SphereSurfaceMaterial(earth)
     material.updateMaterial()
 
     expect(material.defines.USE_SPECULAR).toBe('1')
+  })
+
+  it('TerrainMaterial блик по specular-карте не ставит — ни с водой, ни без', () => {
+    for (const data of [{}, { waterLevelMeters: 0 }]) {
+      const material = new TerrainMaterial(stubActor(data))
+      material.updateMaterial()
+      expect(material.defines.USE_SPECULAR).toBeUndefined()
+    }
   })
 })
