@@ -269,7 +269,11 @@ abstract class TerrainPatchGroup extends Group {
     // updateObject независимо от видимости предков. Один уровень вверх
     // достаточен (родитель WaterSphere — ровно тот объект, чей visible LOD
     // переключает); общего обхода до корня сцены здесь не требуется.
-    if (!this.visible || this.parent?.visible === false) return
+    if (!this.visible || this.parent?.visible === false) {
+      this.onHiddenUpdate()
+
+      return
+    }
 
     this.onVisibleUpdate(ctx)
 
@@ -583,6 +587,9 @@ abstract class TerrainPatchGroup extends Group {
    * переопределяющим потомкам типобезопасно.
    */
   protected onVisibleUpdate(_ctx: UpdateContext): void {}
+
+  /** Зовётся каждый кадр, пока группа или её родитель скрыты: потомок освобождает то, что нужно только видимому телу. Без аллокаций. */
+  protected onHiddenUpdate(): void {}
 
   private warnPoolExhausted(): void {
     if (this.poolExhaustedWarned) return

@@ -15,6 +15,11 @@ export class FakeAsyncBuilder implements TerrainPatchBuilder {
   private readonly queue: Array<{ job: PatchBuildJob; onDone: (r: PatchBuildResult) => void; onError: (e: unknown) => void }> = []
   private readonly sync = new SyncTerrainPatchBuilder()
 
+  /** Моделирует воркер: плитка ближней тени у такого строителя разрешена. */
+  public get offThread(): boolean {
+    return true
+  }
+
   public acquire(field: TerrainHeightField): void {
     this.acquired.push(field)
   }

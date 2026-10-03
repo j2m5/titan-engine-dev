@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DataTexture, PerspectiveCamera, Texture, Vector3, type WebGLRenderer } from 'three'
+import { DataTexture, Group, PerspectiveCamera, Texture, Vector3, type WebGLRenderer } from 'three'
 import '@/core/framework/TitanThree'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -13,6 +13,8 @@ import { disposeTerrainShadowMaps } from '@/core/terrain/terrainShadowMap'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { NearShadowTile, type NearTileState } from '@/core/terrain/NearShadowTile'
 import { TerrainSphere } from '@/core/renderables/TerrainSphere'
+import { SyncTerrainPatchBuilder, type TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
+import type { NearTileParams } from '@/core/terrain/nearTileBake'
 import type { UpdateContext } from '@/core/UpdateContext'
 
 // ORM отдаёт новый экземпляр связи на каждое обращение — подмена на уровне резолвера (см. TerrainShadowWiring.spec)
@@ -61,6 +63,22 @@ function seedHeightMap(): void {
     maxMeters: 1000,
     data: new Uint16Array(8)
   })
+}
+
+/** Синхронный строитель, притворяющийся воркерным: плитка бейкается внутри запроса. */
+class OffThreadBuilder extends SyncTerrainPatchBuilder {
+  public override get offThread(): boolean {
+    return true
+  }
+}
+
+/** Воркерный строитель с отложенным ответом плитки: onDone копится в pending. */
+class DeferredNearBuilder extends OffThreadBuilder {
+  public readonly pending: Array<(heights: Float32Array) => void> = []
+
+  public override requestNearTile(_field: TerrainHeightField, _params: NearTileParams, onDone: (heights: Float32Array) => void): void {
+    this.pending.push(onDone)
+  }
 }
 
 function makeState(): NearTileState {
@@ -187,9 +205,17 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
     disposeTerrainShadowMaps()
   })
 
-  function makeSphere(): TerrainSphere {
+  function makeSphere(builder: TerrainPatchBuilder = new OffThreadBuilder()): TerrainSphere {
     const map = heightFieldStorage.get(MOON_HEIGHT_PATH)!
-    const sphere = new TerrainSphere(moon(), new TerrainHeightField(map, RADIUS_KM), { domElement: { height: 1080 } } as unknown as WebGLRenderer)
+    const sphere = new TerrainSphere(
+      moon(),
+      new TerrainHeightField(map, RADIUS_KM),
+      { domElement: { height: 1080 } } as unknown as WebGLRenderer,
+      undefined,
+      undefined,
+      undefined,
+      builder
+    )
     sphere.material.updateMaterial()
 
     return sphere
@@ -241,6 +267,79 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
     } finally {
       lightOverride.near = undefined
     }
+  })
+
+  it('строитель без воркера (offThread=false) — плитка не запрашивается и не создаётся', () => {
+    const builder = new SyncTerrainPatchBuilder()
+    const request = vi.spyOn(builder, 'requestNearTile')
+    const sphere = makeSphere(builder)
+    sphere.updateObject(makeCtx(2))
+    expect(request).not.toHaveBeenCalled()
+    expect(sphere.material.uniforms.uNearTile.value).toBeNull()
+    expect(sphere.material.uniforms.uNearTileWeight.value).toBe(0)
+    sphere.dispose()
+  })
+
+  it('строитель с воркером (offThread=true) — плитка запрашивается и приходит', () => {
+    const builder = new OffThreadBuilder()
+    const request = vi.spyOn(builder, 'requestNearTile')
+    const sphere = makeSphere(builder)
+    sphere.updateObject(makeCtx(2))
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(sphere.material.uniforms.uNearTile.value).toBeInstanceOf(DataTexture)
+    sphere.dispose()
+  })
+
+  it('слой выключен в живую (strength → 0) — текстура плитки освобождена, материал её не держит', () => {
+    const sphere = makeSphere()
+    sphere.updateObject(makeCtx(2))
+    const texture = sphere.material.uniforms.uNearTile.value as DataTexture
+    let disposed = 0
+    texture.addEventListener('dispose', () => disposed++)
+    lightOverride.near = 0
+    try {
+      sphere.material.updateMaterial()
+      sphere.updateObject(makeCtx(2))
+    } finally {
+      lightOverride.near = undefined
+    }
+    expect(disposed).toBe(1)
+    expect(sphere.material.uniforms.uNearTile.value).toBeNull()
+    sphere.dispose()
+  })
+
+  it.each(['сама сфера', 'родитель'])('скрытое тело (%s) освобождает плитку', (who) => {
+    const sphere = makeSphere()
+    const parent = new Group()
+    parent.add(sphere)
+    sphere.updateObject(makeCtx(2))
+    const texture = sphere.material.uniforms.uNearTile.value as DataTexture
+    let disposed = 0
+    texture.addEventListener('dispose', () => disposed++)
+    if (who === 'сама сфера') sphere.visible = false
+    else parent.visible = false
+    sphere.updateObject(makeCtx(2))
+    expect(disposed).toBe(1)
+    expect(sphere.material.uniforms.uNearTile.value).toBeNull()
+    // повторный скрытый кадр — без повторного dispose
+    sphere.updateObject(makeCtx(2))
+    expect(disposed).toBe(1)
+    sphere.dispose()
+  })
+
+  it('ответ плитки в полёте после скрытия не создаёт текстуру', () => {
+    const builder = new DeferredNearBuilder()
+    const sphere = makeSphere(builder)
+    sphere.updateObject(makeCtx(2))
+    expect(builder.pending).toHaveLength(1)
+    sphere.visible = false
+    sphere.updateObject(makeCtx(2))
+    const textureDispose = vi.spyOn(DataTexture.prototype, 'dispose')
+    builder.pending[0](new Float32Array(512 * 512))
+    expect((sphere as unknown as { nearTile: { state: unknown } }).nearTile.state).toBeNull()
+    expect(sphere.material.uniforms.uNearTile.value).toBeNull()
+    expect(textureDispose).not.toHaveBeenCalled()
+    sphere.dispose()
   })
 
   it('dispose сферы диспозит текстуру плитки и снимает её с материала', () => {

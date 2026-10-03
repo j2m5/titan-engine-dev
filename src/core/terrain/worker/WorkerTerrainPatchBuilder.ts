@@ -112,7 +112,7 @@ type OutstandingNearTile = {
  * воркере до releaseAll/dispose. Map, а не WeakMap: releaseAll итерирует.
  *
  * Отказ воркера (onerror, onmessageerror, error-ответ) необратим: задания в
- * полёте пересобираются синхронным строителем, дальше вся постройка идёт через
+ * полёте (кроме плиток ближней тени — те получают onError) пересобираются синхронным строителем, дальше вся постройка идёт через
  * него, поздние built старого воркера игнорируются. Так «onDone ровно один
  * раз» держится и при сбое — группа не остаётся с вечным pending.
  *
@@ -133,6 +133,10 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     worker.onmessage = (ev) => this.onMessage(ev.data)
     worker.onerror = (reason) => this.fail(reason)
     worker.onmessageerror = (reason) => this.fail(reason)
+  }
+
+  public get offThread(): boolean {
+    return this.fallback === null && !this.disposed
   }
 
   public acquire(field: TerrainHeightField): void {
@@ -181,7 +185,7 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     this.worker.postMessage({ type: 'buildShadow', requestId, fieldId: id }, [])
   }
 
-  /** Плитка ближней тени бейкается в воркере из копии карты; отказ воркера — реплей на главном потоке. */
+  /** Плитка ближней тени бейкается в воркере из копии карты; без воркера — onError (синхронный бейк 512² фризит кадр). */
   public requestNearTile(
     field: TerrainHeightField,
     params: NearTileParams,
@@ -189,7 +193,7 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
     onError: (error: unknown) => void
   ): void {
     if (this.fallback) {
-      this.fallback.requestNearTile(field, params, onDone, onError)
+      onError(new Error('воркер отказал: плитка ближней тени без воркера не строится'))
       return
     }
 
@@ -322,13 +326,14 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
       }
     }
 
+    // плитки не переигрываются: синхронный бейк 512² — фриз главного потока
     const strandedTiles = [...this.outstandingNearTiles.values()]
     this.outstandingNearTiles.clear()
-    for (const { field, params, onDone, onError } of strandedTiles) {
+    for (const { onError } of strandedTiles) {
       try {
-        fallback.requestNearTile(field, params, onDone, onError)
+        onError(new Error('воркер отказал: плитка ближней тени не построена'))
       } catch (error) {
-        console.error('[terrain worker] обработчик пересобранной плитки упал:', error)
+        console.error('[terrain worker] обработчик отказа плитки упал:', error)
       }
     }
   }
