@@ -64,11 +64,18 @@ describe('TerrainNearShadow: чанк', () => {
     expect(chunk).toContain('float halfMeters = 0.5 * uNearTileTexels * uNearTileTexelMeters;')
     expect(chunk).toContain('return 1.0 - smoothstep(0.8 * halfMeters, halfMeters, max(abs(xy.x), abs(xy.y)));')
     // вес высоты уже включает силу ручки — второй раз не множится
-    expect(chunk).toContain('return uNearTileWeight * terrainNearEdgeWeight(terrainNearTileXY(dir));')
+    expect(chunk).toContain('vec2 xy = terrainNearTileXY(dir);')
+    expect(chunk).toContain('return uNearTileWeight * (terrainNearCameraWeight(xy) * terrainNearEdgeWeight(xy));')
     expect(chunk).not.toContain('nearShadowStrength')
     expect(chunk).not.toContain('uNearShadowStrength')
     // задняя полусфера: проекция не определена — вес 0
     expect(chunk).toContain('if (dot(dir, uNearTileCenter) <= 0.0) return 0.0;')
+  })
+
+  it('вес камеры: круг вокруг подкамерной точки, как nearCameraWeight в CPU-зеркале', () => {
+    expect(chunk).toContain('float terrainNearCameraWeight(vec2 xy) {')
+    expect(chunk).toContain('return 1.0 - smoothstep(uNearCameraFadeMeters.x, uNearCameraFadeMeters.y, length(xy - uNearCameraXY));')
+    expect(chunk.indexOf('float terrainNearCameraWeight(')).toBeLessThan(chunk.indexOf('float terrainNearShadowWeight('))
   })
 
   it('тело марша — построчно как nearShadowMarch в CPU-зеркале', () => {
@@ -161,6 +168,7 @@ describe('TerrainShaderTemplate: сложение слоёв тени', () => {
   const GLOBALS = [
     'uNearTile', 'uNearTileCenter', 'uNearTileEast', 'uNearTileNorth', 'uNearTileTexelMeters', 'uNearTileTexels',
     'uNearTileWeight', 'uNearShadowMaxDistMeters', 'uBodyRadiusMeters', 'uShadowPenumbraTan',
+    'uNearCameraXY', 'uNearCameraFadeMeters', 'terrainNearCameraWeight',
     'terrainNearTileXY', 'terrainNearTileUv', 'terrainNearTileHeight', 'terrainNearEdgeWeight',
     'terrainNearShadowWeight', 'terrainNearShadowMarch', 'terrainShadowMarch'
   ]

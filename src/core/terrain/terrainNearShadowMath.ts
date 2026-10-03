@@ -130,6 +130,46 @@ export function nearEdgeWeight(x: number, y: number, halfMeters: number): number
   return 1 - smoothstep(0.8 * halfMeters, halfMeters, Math.max(Math.abs(x), Math.abs(y)))
 }
 
+/** Подкамерная точка за задней полусферой плитки: дальше любого fadeEnd, конечна для float32. */
+export const NEAR_CAMERA_FAR_METERS = 1e9
+
+/**
+ * dirToTile в out без аллокаций (кадр); d в задней полусфере c — NEAR_CAMERA_FAR_METERS,
+ * чтобы вес камеры стал 0 без NaN.
+ */
+export function nearCameraXYInto(d: Vec3, c: Vec3, e: Vec3, n: Vec3, radiusMeters: number, out: [number, number]): [number, number] {
+  const dc = dot(d, c)
+  if (dc <= 0) {
+    out[0] = NEAR_CAMERA_FAR_METERS
+    out[1] = NEAR_CAMERA_FAR_METERS
+
+    return out
+  }
+  const k = radiusMeters / dc
+  out[0] = dot(d, e) * k
+  out[1] = dot(d, n) * k
+
+  return out
+}
+
+/** 1 ближе fadeStart к подкамерной точке, 0 дальше fadeEnd; круг в метрах плитки. */
+export function nearCameraWeight(x: number, y: number, camX: number, camY: number, fadeStart: number, fadeEnd: number): number {
+  return 1 - smoothstep(fadeStart, fadeEnd, Math.hypot(x - camX, y - camY))
+}
+
+/** Вес окна без высоты: камера × страховка края; порядок как в GLSL. */
+export function nearWindowWeight(
+  x: number,
+  y: number,
+  camX: number,
+  camY: number,
+  halfMeters: number,
+  fadeStart: number,
+  fadeEnd: number
+): number {
+  return nearCameraWeight(x, y, camX, camY, fadeStart, fadeEnd) * nearEdgeWeight(x, y, halfMeters)
+}
+
 /** min(far, mix(1, near, weight)); порядок как у GLSL mix — при weight = 0 ровно far, при 1 ровно min(far, near). */
 export function combineTerrainShadow(far: number, near: number, weight: number): number {
   return Math.min(far, (1 - weight) + near * weight)

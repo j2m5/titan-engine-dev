@@ -63,8 +63,19 @@ export interface TerrainConfig {
       maxAltitudeMeters: number
       /** Высота камеры, м, с которой вес слоя спадает к нулю на maxAltitudeMeters. */
       fadeAltitudeMeters: number
-      /** Перепечка при сдвиге подспутниковой точки дальше этой доли стороны плитки. */
+      /**
+       * Перепечка при сдвиге подспутниковой точки дальше этой доли стороны плитки.
+       * Инвариант: fadeEndMeters + rebakeFraction · сторона ≤ 0.8 · полуширины —
+       * окно камеры не доходит до страховки края, пока центр плитки отстаёт.
+       */
       rebakeFraction: number
+      /**
+       * Вес слоя по расстоянию от текущей подкамерной точки, м: 1 ближе fadeStart,
+       * 0 дальше fadeEnd. Окно едет с камерой, а не прыгает с центром плитки на
+       * перепечке — иначе полоса теней моргает.
+       */
+      fadeStartMeters: number
+      fadeEndMeters: number
     }
     lod: {
       /**
@@ -121,7 +132,9 @@ export const terrain: TerrainConfig = {
       maxDistanceMeters: 8000,
       maxAltitudeMeters: 50000,
       fadeAltitudeMeters: 30000,
-      rebakeFraction: 0.25
+      rebakeFraction: 0.1,
+      fadeStartMeters: 7000,
+      fadeEndMeters: 9500
     },
     lod: {
       patchBuildBudgetMs: 6,

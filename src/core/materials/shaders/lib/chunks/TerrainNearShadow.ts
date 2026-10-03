@@ -35,11 +35,18 @@ export const terrainNearShadowFunctions = /* glsl */ `
     return 1.0 - smoothstep(0.8 * halfMeters, halfMeters, max(abs(xy.x), abs(xy.y)));
   }
 
-  // вес ближнего слоя во фрагменте; uNearTileWeight уже несёт высоту камеры и силу ручки
+  // 1 ближе начала спада к подкамерной точке, 0 дальше конца; круг — окно едет с камерой
+  float terrainNearCameraWeight(vec2 xy) {
+    return 1.0 - smoothstep(uNearCameraFadeMeters.x, uNearCameraFadeMeters.y, length(xy - uNearCameraXY));
+  }
+
+  // вес ближнего слоя во фрагменте; uNearTileWeight уже несёт высоту камеры и силу ручки,
+  // край плитки — страховка, когда камера обогнала перепечку
   float terrainNearShadowWeight(vec3 dir) {
     // задняя полусфера: проекция не определена
     if (dot(dir, uNearTileCenter) <= 0.0) return 0.0;
-    return uNearTileWeight * terrainNearEdgeWeight(terrainNearTileXY(dir));
+    vec2 xy = terrainNearTileXY(dir);
+    return uNearTileWeight * (terrainNearCameraWeight(xy) * terrainNearEdgeWeight(xy));
   }
 
   // 1 — освещено, 0 — в тени; dir — радиаль фрагмента, sunLocal — единичное НА солнце.

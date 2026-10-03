@@ -6,7 +6,7 @@ import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { NearShadowTile, type NearShadowTileConfig } from '@/core/terrain/NearShadowTile'
 import type { NearTileParams } from '@/core/terrain/nearTileBake'
-import { nearAltitudeWeight, nearTileBasis } from '@/core/terrain/terrainNearShadowMath'
+import { dirToTile, nearAltitudeWeight, nearTileBasis, type Vec3 } from '@/core/terrain/terrainNearShadowMath'
 import { SyncTerrainPatchBuilder, type TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 
 const RADIUS_KM = 1737.4
@@ -22,8 +22,8 @@ function makeField(): TerrainHeightField {
   return new TerrainHeightField(map, RADIUS_KM)
 }
 
-// малая плитка — тесты владения не платят за 512² бейк
-const SMALL: NearShadowTileConfig = { ...config('terrain.nearShadow'), tileTexels: 8, texelMeters: 4096 }
+// малая плитка — тесты владения не платят за 512² бейк; порог перепечки — четверть окна (8192 м)
+const SMALL: NearShadowTileConfig = { ...config('terrain.nearShadow'), tileTexels: 8, texelMeters: 4096, rebakeFraction: 0.25 }
 
 type Pending = { params: NearTileParams; onDone: (h: Float32Array) => void; onError: (e: unknown) => void }
 
@@ -119,6 +119,30 @@ describe('NearShadowTile: порог высоты и первый запрос',
     const tile = new NearShadowTile(field, new CountingSyncBuilder(), SMALL)
     expect(tile.update(cameraAt(field, 40000))!.altitudeWeight).toBeCloseTo(nearAltitudeWeight(40000, 30000, 50000), 6)
     expect(tile.update(cameraAt(field, 10000))!.altitudeWeight).toBe(1)
+    tile.dispose()
+  })
+
+  it('cameraXY — подкамерная точка в координатах плитки, каждый кадр, без перепечки и без новой ссылки', () => {
+    const field = makeField()
+    const builder = new QueuedNearBuilder()
+    const tile = new NearShadowTile(field, builder, SMALL)
+    tile.update(cameraAt(field, 2000))
+    builder.reply()
+    const state = tile.update(cameraAt(field, 2000))!
+    const xy = state.cameraXY
+    expect(xy[0]).toBeCloseTo(0, 6)
+    expect(xy[1]).toBeCloseTo(0, 6)
+
+    const moved = tile.update(cameraAt(field, 2000, 3000))!
+    expect(builder.requests).toBe(1)
+    expect(moved.cameraXY).toBe(xy)
+    const R = RADIUS_KM * 1000
+    const d: Vec3 = [Math.cos(3000 / R), 0, -Math.sin(3000 / R)]
+    const [ex, ey] = dirToTile(d, state.center, state.east, state.north, R)
+    expect(xy[0]).toBeCloseTo(ex, 6)
+    expect(xy[1]).toBeCloseTo(ey, 6)
+    // восток от +X — вдоль E плитки
+    expect(xy[0]).toBeGreaterThan(2999)
     tile.dispose()
   })
 })
