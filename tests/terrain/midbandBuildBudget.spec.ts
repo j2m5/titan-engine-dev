@@ -11,6 +11,7 @@ import { selectTerrainNodes, type SelectParams } from '@/core/terrain/terrainQua
 import { MAX_LIVE_PATCHES } from '@/core/terrain/TerrainPatchPool'
 import { terrain as terrainConfig } from '@/config/terrain'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
+import { itPerf } from '../perfGate'
 
 const MOON_HEIGHT_PATH = 'storage/images/textures/planets/moon/moon_height.raw'
 const RADIUS_KM = 1737.4
@@ -60,7 +61,7 @@ describe.skipIf(!existsSync(MOON_HEIGHT_PATH))('Бюджет полосы B на
     constructOffMs = performance.now() - start
   })
 
-  it('постройка TerrainHeightField с полосой не дороже той же карты без полосы больше чем на 500 мс (огибающая ≈ 50 мс)', () => {
+  itPerf('постройка TerrainHeightField с полосой не дороже той же карты без полосы больше чем на 500 мс (огибающая ≈ 50 мс)', () => {
     expect(
       constructOnMs,
       `постройка поля: с полосой ${constructOnMs.toFixed(1)} мс, без полосы (strength 0) ${constructOffMs.toFixed(1)} мс`
@@ -82,7 +83,7 @@ describe.skipIf(!existsSync(MOON_HEIGHT_PATH))('Бюджет полосы B на
    * поля выше; потолок 10 мс — с запасом над измеренными 4.3-7.9 мс дельты
    * (13 прогонов на этой машине).
    */
-  it('buildTerrainPatchGeometry у поверхности: полоса добавляет к патчу без неё не больше 10 мс (медиана, чередующиеся замеры)', () => {
+  itPerf('buildTerrainPatchGeometry у поверхности: полоса добавляет к патчу без неё не больше 10 мс (медиана, чередующиеся замеры)', () => {
     const index = buildPatchIndex(64)
     const wrap = detailWrapFor(undefined)
     const build = (field: TerrainHeightField): number => {
