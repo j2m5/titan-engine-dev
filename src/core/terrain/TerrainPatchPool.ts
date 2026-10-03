@@ -29,6 +29,13 @@ import { buildPatchIndex, terrainPatchVertexCount } from './terrainPatchGeometry
  */
 export const MAX_LIVE_PATCHES = 1024
 
+/** float на вершину: базовые атрибуты пула / плюс морф-атрибуты (см. докблок выше). */
+export const PATCH_FLOATS_PER_VERTEX = 14
+export const PATCH_MORPH_FLOATS_PER_VERTEX = 7
+/** float на патч: patchCenter 3 / плюс patchMorph 1. */
+const PATCH_FLOATS_PER_INSTANCE = 3
+const PATCH_MORPH_FLOATS_PER_INSTANCE = 1
+
 export type PatchHandle = { mesh: Mesh; geometry: InstancedBufferGeometry }
 
 /**
@@ -72,6 +79,18 @@ class TerrainPatchPool {
 
   public get liveCount(): number {
     return this.occupied.size
+  }
+
+  /** Выделенные, но свободные слоты: держат видеопамять до trimFree/dispose. */
+  public get freeCount(): number {
+    return this.free.length
+  }
+
+  /** Байт атрибутов одного слота (вершинные + инстансные) — по тем же константам, что createHandle. */
+  public get bytesPerSlot(): number {
+    const perVertex = PATCH_FLOATS_PER_VERTEX + (this.morph ? PATCH_MORPH_FLOATS_PER_VERTEX : 0)
+    const perInstance = PATCH_FLOATS_PER_INSTANCE + (this.morph ? PATCH_MORPH_FLOATS_PER_INSTANCE : 0)
+    return (terrainPatchVertexCount(this.segments) * perVertex + perInstance) * Float32Array.BYTES_PER_ELEMENT
   }
 
   public get maxLivePatches(): number {
