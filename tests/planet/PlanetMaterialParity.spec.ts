@@ -2,6 +2,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { Texture, Vector3 } from 'three'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { AbstractShader, type ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
 import { SphereSurfaceShader } from '@/core/materials/shaders/SphereSurfaceShader'
@@ -23,7 +25,8 @@ import {
   type CollectedState,
   type MakeParityMaterial,
   type ParityPath,
-  type ParityState
+  type ParityState,
+  type SerializedField
 } from '../fixtures/planetMaterialParity/collectStates'
 
 /**
@@ -42,12 +45,48 @@ type Stage = 'vertexShader' | 'fragmentShader'
 type PreparedShader = Record<Stage, string>
 const STAGES: readonly Stage[] = ['vertexShader', 'fragmentShader']
 
-const makeMaterial: MakeParityMaterial = (actor, path, registry) =>
+// снимок пишет старый материал, сверяются материалы путей
+const makeLegacy: MakeParityMaterial = (actor, path, registry) =>
   new PlanetMaterial(actor, registry, { terrainPatches: path === 'terrain' })
+const makeMaterial: MakeParityMaterial = (actor, path, registry) =>
+  path === 'terrain' ? new TerrainMaterial(actor, registry) : new SphereSurfaceMaterial(actor, registry)
+
+const templateOf = (p: ParityPath): ShaderProps => (p === 'terrain' ? TerrainShaderTemplate : SphereSurfaceShaderTemplate)
+
+// Объявлены в шаблоне, но ставит их не шейдер: встроенные three и юниформы материала
+const BUILTIN_UNIFORMS = ['normalMatrix', 'logDepthBufFC']
+const MATERIAL_UNIFORMS = [
+  'uLightColor',
+  'uDetailTintNorm',
+  'uSteepTintNorm',
+  'uSteepNorMap',
+  'uSteepArmMap',
+  'uSteepDiffMap',
+  'uSteepGate',
+  'uSteepMask',
+  'uSteepTint',
+  'uFrostStrength',
+  'uFrostLine',
+  'uFrostSlopeMax',
+  'uFrostColor',
+  'uMidbandShade'
+]
+const NOT_SHADER_KEYS = new Set([...BUILTIN_UNIFORMS, ...MATERIAL_UNIFORMS])
+
+/** Раскрытый код шаблона: вершинник и фрагментник, без комментариев. */
+const preparedCode = (template: ShaderProps): string =>
+  withoutComments(AbstractShader.prepareSource(template.vertexShader) + '\n' + AbstractShader.prepareSource(template.fragmentShader))
+
+// одно имя на объявление: `uniform float a, b;` регэксп ниже прочёл бы только a (страж — в тесте)
+const UNIFORM_NAME = /\buniform\s+(?:(?:lowp|mediump|highp)\s+)?\w+\s+(\w+)/g
+const COMMA_UNIFORM = /\buniform\s+(?:(?:lowp|mediump|highp)\s+)?\w+\s+\w+\s*(?:\[[^\]]*\])?\s*,/
+
+/** Имена `uniform` в коде (все ветки дефайнов). */
+const uniformNamesIn = (code: string): string[] => [...new Set([...code.matchAll(UNIFORM_NAME)].map((m) => m[1]))].sort()
 
 describe.runIf(SNAPSHOT_RUN)('снимок', () => {
   it('пишет snapshot.json и legacyPrepared.json', () => {
-    const states = collectParityStates(makeMaterial)
+    const states = collectParityStates(makeLegacy)
     const prepared: PreparedShader = states[0].shader
     // старый материал — один шаблон на все состояния: иначе замороженный шейдер был бы неоднозначен
     for (const s of states) expect(s.shader, `${s.actorId} ${s.state}`).toStrictEqual(prepared)
@@ -166,39 +205,74 @@ describe.skipIf(SNAPSHOT_RUN)('паритет материала планет', 
         expect(frozen[stage], stage).not.toMatch(/#include\s*</)
       }
     })
+
+    it('объявлений юниформов через запятую нет — ни в замороженном, ни в шаблонах путей', () => {
+      const sources = {
+        frozen: withoutComments(frozen.vertexShader + '\n' + frozen.fragmentShader),
+        sphere: preparedCode(SphereSurfaceShaderTemplate),
+        terrain: preparedCode(TerrainShaderTemplate)
+      }
+      for (const [name, code] of Object.entries(sources)) expect(code, name).not.toMatch(COMMA_UNIFORM)
+      // страж сам ловит запятую
+      expect('uniform float a, b;').toMatch(COMMA_UNIFORM)
+      expect('uniform highp vec2 a[2] , b;').toMatch(COMMA_UNIFORM)
+    })
   })
 
+  // Разрешённые расхождения — только во фрагментнике (вершинник lightPosition читает);
+  // name — объявленный идентификатор: во фрагментнике нового шаблона его быть не должно
+  const ALLOWED_REMOVED = [{ name: 'lightPosition', line: /^uniform vec3 lightPosition;$/ }]
+
+  const legacyUnder = (stage: Stage, defines: Set<string>): string => {
+    const out = frozenUnder(stage, defines)
+    if (stage === 'vertexShader') return out
+
+    return out
+      .split('\n')
+      .filter((line) => !ALLOWED_REMOVED.some(({ line: re }) => re.test(line)))
+      .join('\n')
+  }
+
+  /** Раскрытый шейдер пути против замороженного на дефайнах состояния (и дополнительных наборах). */
+  const expectPathShaderParity = (s: ParityState, prepared: (stage: Stage) => string): void => {
+    for (const extra of extrasOf(s)) {
+      // старый: дефайны снимка (у рельефа там и USE_TERRAIN_UV); новый — те же без него:
+      // шаблону пути дефайн не нужен
+      const defines = definesOf(s, extra)
+      expect(defines.has('USE_TERRAIN_UV')).toBe(s.path === 'terrain')
+      const own = new Set([...defines].filter((d) => d !== 'USE_TERRAIN_UV'))
+      for (const stage of STAGES) {
+        const got = normalizeGlsl(preprocessGlsl(prepared(stage), own))
+        expect(got, `${stage} +[${extra.join(' ')}]`).toBe(legacyUnder(stage, defines))
+      }
+      // снятое объявление не должно оставить обращений (GLSL в CI не компилируется)
+      const fragment = withoutComments(preprocessGlsl(prepared('fragmentShader'), own))
+      for (const { name } of ALLOWED_REMOVED) {
+        expect(fragment, `${name} во фрагментнике +[${extra.join(' ')}]`).not.toMatch(new RegExp(`\\b${name}\\b`))
+      }
+    }
+  }
+
   describe('паритет шейдера материала против замороженного', () => {
+    it('материал пути держит шейдер своего шаблона', () => {
+      for (const s of states) {
+        const f = freshOf(s)
+        for (const stage of STAGES) {
+          expect(f.shader[stage], `${s.actorId} ${s.state} ${stage}`).toBe(AbstractShader.prepareSource(templateOf(s.path)[stage]))
+        }
+      }
+    })
+
     for (const s of states) {
       it(`${s.actorId} ${s.state}`, () => {
         const f = freshOf(s)
-        for (const extra of extrasOf(s)) {
-          const defines = definesOf(s, extra)
-          for (const stage of STAGES) {
-            const got = normalizeGlsl(preprocessGlsl(f.shader[stage], defines))
-            expect(got, `${stage} +[${extra.join(' ')}]`).toBe(frozenUnder(stage, defines))
-          }
-        }
+        expectPathShaderParity(s, (stage) => f.shader[stage])
       })
     }
   })
 
   describe('паритет шаблона пути против замороженного', () => {
-    // Разрешённые расхождения — только во фрагментнике (вершинник lightPosition читает);
-    // name — объявленный идентификатор: во фрагментнике нового шаблона его быть не должно
-    const ALLOWED_REMOVED = [{ name: 'lightPosition', line: /^uniform vec3 lightPosition;$/ }]
-    const templateOf = (p: ParityPath) => (p === 'terrain' ? TerrainShaderTemplate : SphereSurfaceShaderTemplate)
     const preparedOf = (p: ParityPath, stage: Stage): string => AbstractShader.prepareSource(templateOf(p)[stage])
-
-    const legacyUnder = (stage: Stage, defines: Set<string>): string => {
-      const out = frozenUnder(stage, defines)
-      if (stage === 'vertexShader') return out
-
-      return out
-        .split('\n')
-        .filter((line) => !ALLOWED_REMOVED.some(({ line: re }) => re.test(line)))
-        .join('\n')
-    }
 
     it('USE_TERRAIN_UV шаблоны не ветвит — ни сам шаблон, ни подключённые чанки', () => {
       for (const p of ['sphere', 'terrain'] as const) {
@@ -215,45 +289,69 @@ describe.skipIf(SNAPSHOT_RUN)('паритет материала планет', 
 
     for (const s of states) {
       it(`${s.actorId} ${s.state}`, () => {
-        for (const extra of extrasOf(s)) {
-          // старый: дефайны снимка (у рельефа там и USE_TERRAIN_UV); новый — те же без него:
-          // шаблону пути дефайн не нужен
-          const defines = definesOf(s, extra)
-          expect(defines.has('USE_TERRAIN_UV')).toBe(s.path === 'terrain')
-          const own = new Set([...defines].filter((d) => d !== 'USE_TERRAIN_UV'))
-          for (const stage of STAGES) {
-            const got = normalizeGlsl(preprocessGlsl(preparedOf(s.path, stage), own))
-            expect(got, `${stage} +[${extra.join(' ')}]`).toBe(legacyUnder(stage, defines))
-          }
-          // снятое объявление не должно оставить обращений (GLSL в CI не компилируется)
-          const fragment = withoutComments(preprocessGlsl(preparedOf(s.path, 'fragmentShader'), own))
-          for (const { name } of ALLOWED_REMOVED) {
-            expect(fragment, `${name} во фрагментнике +[${extra.join(' ')}]`).not.toMatch(new RegExp(`\\b${name}\\b`))
-          }
-        }
+        expectPathShaderParity(s, (stage) => preparedOf(s.path, stage))
       })
     }
   })
 
   describe('паритет юниформов, дефайнов и полей материала против снимка', () => {
+    // Атрибуты патча: их дефолты держит только материал рельефа
+    const PATCH_ATTRIBUTES = ['patchCenter', 'midShade', 'morphDelta', 'patchMorph', 'midShadeParent', 'midTiltParent']
+
+    // У старого USE_TERRAIN_UV стоял на патчах всегда; материалу рельефа он не нужен
+    const definesWithoutUv = (defines: ParityState['defines']): ParityState['defines'] =>
+      Object.fromEntries(Object.entries(defines).filter(([k]) => k !== 'USE_TERRAIN_UV'))
+
+    // Ключи материала = юниформы, объявленные шаблоном его пути (кроме встроенных three):
+    // ключи шейдера пути плюс юниформы материала, которые этот шаблон читает
+    const expectedKeysOf = (p: ParityPath): string[] =>
+      uniformNamesIn(preparedCode(templateOf(p))).filter((k) => !BUILTIN_UNIFORMS.includes(k))
+
+    // Юниформы чужого пути отсутствуют (разрешено); каждый свой ключ равен снимку
+    const expectUniformParity = (got: ParityState['uniforms'], snapshot: ParityState['uniforms'], p: ParityPath): void => {
+      expect(Object.keys(got).sort()).toEqual(expectedKeysOf(p))
+      for (const key of Object.keys(got)) expect(key in snapshot, key).toBe(true)
+      expect(got).toStrictEqual(Object.fromEntries(Object.keys(got).map((k) => [k, snapshot[k]])))
+    }
+
+    // Сфера: поля как у старого, кроме дефолтов атрибутов патча
+    const expectFieldParity = (got: ParityState['material'], snapshot: ParityState['material'], p: ParityPath): void => {
+      if (p === 'terrain') {
+        expect(got).toStrictEqual(snapshot)
+
+        return
+      }
+      const attributes = got.defaultAttributeValues as Record<string, SerializedField>
+      for (const name of PATCH_ATTRIBUTES) expect(attributes, name).not.toHaveProperty(name)
+      const legacyAttributes = Object.fromEntries(
+        Object.entries(snapshot.defaultAttributeValues as Record<string, SerializedField>).filter(([k]) => !PATCH_ATTRIBUTES.includes(k))
+      )
+      expect(got).toStrictEqual({ ...snapshot, defaultAttributeValues: legacyAttributes })
+    }
+
     it('набор состояний совпадает со снимком', () => {
       const key = (x: ParityState): string => `${x.actorId} ${x.state}`
       expect(fresh.map(key)).toEqual(states.map(key))
     })
 
+    it('юниформы материала по путям: сфере нужен только цвет света, рельефу — все', () => {
+      expect(MATERIAL_UNIFORMS.filter((k) => expectedKeysOf('sphere').includes(k))).toEqual(['uLightColor'])
+      expect(MATERIAL_UNIFORMS.filter((k) => !expectedKeysOf('terrain').includes(k))).toEqual([])
+    })
+
     for (const s of states) {
       it(`${s.actorId} ${s.state}`, () => {
         const f = freshOf(s)
-        expect(f.defines).toStrictEqual(s.defines)
-        expect(f.uniforms).toStrictEqual(s.uniforms)
-        expect(f.material).toStrictEqual(s.material)
+        expect(f.defines).toStrictEqual(definesWithoutUv(s.defines))
+        expectUniformParity(f.uniforms, s.uniforms, s.path)
+        expectFieldParity(f.material, s.material, s.path)
       })
 
       it(`${s.actorId} ${s.state} после resetMaterial`, () => {
         const f = freshOf(s)
-        expect(f.reset.defines).toStrictEqual(s.reset.defines)
-        expect(f.reset.uniforms).toStrictEqual(s.reset.uniforms)
-        expect(f.reset.material).toStrictEqual(s.reset.material)
+        expect(f.reset.defines).toStrictEqual(definesWithoutUv(s.reset.defines))
+        expectUniformParity(f.reset.uniforms, s.reset.uniforms, s.path)
+        expectFieldParity(f.reset.material, s.reset.material, s.path)
       })
     }
   })
@@ -268,33 +366,8 @@ describe.skipIf(SNAPSHOT_RUN)('паритет юниформов шейдера'
   const pick = <T>(record: Record<string, T>, keys: string[]): Record<string, T> =>
     Object.fromEntries(keys.filter((k) => k in record).map((k) => [k, record[k]]))
 
-  // Объявлены в шаблоне, но ставит их не шейдер: встроенные three и юниформы материала
-  const NOT_SHADER_KEYS = new Set([
-    'normalMatrix',
-    'logDepthBufFC',
-    'uLightColor',
-    'uDetailTintNorm',
-    'uSteepTintNorm',
-    'uSteepNorMap',
-    'uSteepArmMap',
-    'uSteepDiffMap',
-    'uSteepGate',
-    'uSteepMask',
-    'uSteepTint',
-    'uFrostStrength',
-    'uFrostLine',
-    'uFrostSlopeMax',
-    'uFrostColor',
-    'uMidbandShade'
-  ])
-
   /** Имена `uniform` в раскрытом шаблоне (все ветки дефайнов) без юниформов не-шейдера. */
-  const keysDeclaredIn = (template: ShaderProps): string[] => {
-    const code = withoutComments(AbstractShader.prepareSource(template.vertexShader) + '\n' + AbstractShader.prepareSource(template.fragmentShader))
-    const names = [...code.matchAll(/\buniform\s+(?:(?:lowp|mediump|highp)\s+)?\w+\s+(\w+)/g)].map((m) => m[1])
-
-    return [...new Set(names)].filter((k) => !NOT_SHADER_KEYS.has(k)).sort()
-  }
+  const keysDeclaredIn = (template: ShaderProps): string[] => uniformNamesIn(preparedCode(template)).filter((k) => !NOT_SHADER_KEYS.has(k))
 
   // Контракт «шаблон ↔ рантайм»: каждому дефолту шаблона шейдер ставит значение
   const defaultsCovered = (template: ShaderProps, keys: string[]): void => {

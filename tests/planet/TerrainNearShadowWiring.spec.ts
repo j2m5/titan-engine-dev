@@ -6,6 +6,7 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
 import { terrainShadowMarchUniforms } from '@/core/materials/shaders/lib/chunks/TerrainShadowMarch'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
@@ -224,7 +225,7 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
   it('onVisibleUpdate зовёт update плитки и setNearTile; у поверхности плитка в материале', () => {
     const sphere = makeSphere()
     const update = vi.spyOn(NearShadowTile.prototype, 'update')
-    const setNearTile = vi.spyOn(PlanetMaterial.prototype, 'setNearTile')
+    const setNearTile = vi.spyOn(TerrainMaterial.prototype, 'setNearTile')
     sphere.updateObject(makeCtx(2))
     expect(update).toHaveBeenCalledTimes(1)
     const local = update.mock.calls[0][0]

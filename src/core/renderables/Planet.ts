@@ -1,7 +1,7 @@
 import { BufferGeometry, Mesh, SphereGeometry } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import type { UpdateContext } from '@/core/UpdateContext'
@@ -13,7 +13,7 @@ class Planet extends Mesh {
   declare public material: AbstractShaderMaterial
 
   /** Тот же материал, что this.material — типизированная ссылка для пер-кадрового хука. */
-  private planetMaterial!: PlanetMaterial
+  private planetMaterial!: SphereSurfaceMaterial
 
   public constructor(model: Actor, atmosphereRegistry?: AtmosphereRegistry) {
     super()
@@ -28,7 +28,7 @@ class Planet extends Mesh {
     const circumscribe: number = 1 / (Math.cos(Math.PI / 256) * Math.cos(Math.PI / 512))
 
     this.geometry = new SphereGeometry(radius * circumscribe, 256, 256)
-    this.planetMaterial = new PlanetMaterial(this.model, atmosphereRegistry)
+    this.planetMaterial = new SphereSurfaceMaterial(this.model, atmosphereRegistry)
     this.material = this.planetMaterial
     this.name = this.model.getAttribute('name', '') + 'Planet'
     this.userData.type = 'planet'

@@ -3,7 +3,7 @@ import { Group, PerspectiveCamera, Texture, type WebGLRenderer } from 'three'
 import '@/core/framework/TitanThree'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
 import { WaterSphere } from '@/core/renderables/Water/WaterSphere'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -94,9 +94,9 @@ describe('WaterMaterial: облака берутся у материала ре�
     expect(material.uniforms.uWaterCloudMap.value).toBeNull()
   })
 
-  it('кадр WaterSphere берёт облака и их fade у PlanetMaterial родителя-рельефа', () => {
-    const parent = new Group() as Group & { material: PlanetMaterial }
-    const planet = new PlanetMaterial(moon())
+  it('кадр WaterSphere берёт облака и их fade у TerrainMaterial родителя-рельефа', () => {
+    const parent = new Group() as Group & { material: TerrainMaterial }
+    const planet = new TerrainMaterial(moon())
     const cloud = new Texture()
     planet.uniforms.cloudMap.value = cloud
     planet.defines = { ...planet.defines, USE_CLOUD: '1' }

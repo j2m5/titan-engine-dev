@@ -1,6 +1,6 @@
 import { type WebGLRenderer, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { TerrainPatchGroup } from '@/core/terrain/TerrainPatchGroup'
 import type { TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
@@ -18,7 +18,7 @@ import { config } from '@/core/framework/config'
 /**
  * Fail-fast на разрыв DI-цепочки (стиль сообщения — как `requireRenderingData`):
  * тело с `data.proceduralSurface` обязано получить `ProceduralSurfaceGenerator`,
- * иначе `PlanetMaterial.diffuseKey()` молча отдаёт `procedural://`-ключ, под
+ * иначе `diffuseKey()` материала молча отдаёт `procedural://`-ключ, под
  * который никто не зарегистрировал текстуру, и `getTextureOrMake` тихо
  * садится на плейсхолдер — тело было бы неверным без единого сигнала.
  * Тело БЕЗ `proceduralSurface` генератора не требует — легаси-тесты и тела
@@ -40,9 +40,9 @@ export function assertProceduralWiring(model: Actor, generator: ProceduralSurfac
 /**
  * Рельеф тела кубосферой из патчей ПЕРЕМЕННОЙ глубины — квадродерево/пул/юбки
  * общие с WaterSphere, вынесены в TerrainPatchGroup (см. её докблок); эта
- * специализация добавляет то, что относится к рельефу конкретно: PlanetMaterial
+ * специализация добавляет то, что относится к рельефу конкретно: TerrainMaterial
  * из Actor и контракт снапшота/ResourceObserver (model/type/clickable на
- * группе, .material — PlanetMaterial, единственный на все патчи).
+ * группе, .material — TerrainMaterial, единственный на все патчи).
  *
  * Уровень воды (Task 5, water-foundation) читается здесь же и передаётся
  * TerrainPatchGroup только как гейт SSE-потолка подводных патчей —
@@ -51,7 +51,7 @@ export function assertProceduralWiring(model: Actor, generator: ProceduralSurfac
  */
 class TerrainSphere extends TerrainPatchGroup {
   public model: Actor
-  private readonly sharedMaterial: PlanetMaterial
+  private readonly sharedMaterial: TerrainMaterial
 
   // Скретчи кадра (см. TerrainPatchGroup.cameraWorldScratch — тот же приём,
   // приватный там, недоступен подклассу): облачный высотный fade нужен
@@ -79,15 +79,15 @@ class TerrainSphere extends TerrainPatchGroup {
     assertProceduralWiring(model, proceduralSurfaceGenerator)
 
     // Диффуз процедурного тела обязан лежать в resourceStorage ДО постройки
-    // PlanetMaterial: конструктор материала сажает диффуз в юниформ уже в
-    // updateMaterial/резолве PlanetShader (см. PlanetMaterial.diffuseKey) —
-    // без этого шага тело схлопывается на плейсхолдер. Тела без ручки — no-op
-    // здесь и в самом ensureDiffuse (гейт по data.proceduralSurface совпадает).
+    // материала: диффуз в юниформ сажает updateMaterial (см. diffuseKey в
+    // PlanetSurfaceMaterial) — без этого шага тело схлопывается на плейсхолдер.
+    // Тела без ручки — no-op здесь и в самом ensureDiffuse (гейт по
+    // data.proceduralSurface совпадает).
     if (proceduralSurfaceGenerator && readRenderingData<IPlanetRenderingObject>(model)?.proceduralSurface) {
       proceduralSurfaceGenerator.ensureDiffuse(model)
     }
 
-    const sharedMaterial = new PlanetMaterial(model, atmosphereRegistry, { terrainPatches: true })
+    const sharedMaterial = new TerrainMaterial(model, atmosphereRegistry)
     const waterLevelMeters = readWaterLevelMeters(model)
     const detailWrap = detailWrapFor(readRenderingData<IPlanetRenderingObject>(model))
     super(field, sharedMaterial, renderer, undefined, waterLevelMeters, detailWrap, nowMs, builder, true)
@@ -104,7 +104,7 @@ class TerrainSphere extends TerrainPatchGroup {
   }
 
   /** Контракт ResourceObserver: у renderable один материал на все патчи. */
-  public get material(): PlanetMaterial {
+  public get material(): TerrainMaterial {
     return this.sharedMaterial
   }
 
@@ -112,7 +112,7 @@ class TerrainSphere extends TerrainPatchGroup {
    * Высотный fade облаков (приёмочная волна 4, №3) — каждый активный кадр
    * (тот же паттерн, что WaterSphere.onVisibleUpdate/uTime): дистанция
    * камера-тело меняется с каждым кадром, а формула/резолв толщины
-   * атмосферы живут в PlanetMaterial (см. её докблок) — здесь только мировые
+   * атмосферы живут в PlanetSurfaceMaterial (см. её докблок) — здесь только мировые
    * позиции, дешёвые и без аллокаций (скретчи выше).
    *
    * Тинт солнца синхронизируется здесь же: узел атмосферы мог появиться или

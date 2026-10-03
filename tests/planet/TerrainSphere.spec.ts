@@ -2,7 +2,8 @@ import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { Mesh, PerspectiveCamera, Texture, Vector3, type WebGLRenderer } from 'three'
 import { TerrainSphere } from '@/core/renderables/TerrainSphere'
 import { config } from '@/core/framework/config'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
+import { preprocessGlsl } from '../helpers/glsl'
 import { CLEARANCE_MARGIN_METERS, TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { TERRAIN_PATCH_SEGMENTS } from '@/core/terrain/cubeSphere'
 import { TerrainPatchPool } from '@/core/terrain/TerrainPatchPool'
@@ -48,7 +49,7 @@ function seedTexture(name: string): void {
   resourceStorage.addTexture(texture)
 }
 
-// PlanetMaterial в конструкторе ходит за плейсхолдерами (см. PlanetMaterialMaps.spec)
+// материал в конструкторе ходит за плейсхолдерами (см. PlanetMaterialMaps.spec)
 function seedPlaceholderKeys(): void {
   seedTexture('')
   seedTexture('default.png')
@@ -86,10 +87,14 @@ describe('TerrainSphere: динамическое квадродерево па�
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
 
-  it('материал патчей держит USE_TERRAIN_UV и после resetMaterial (вытеснение диффуза)', () => {
+  // Шаблон рельефа читает атрибуты патча без дефайна-гейта: снимок дефайнов после
+  // resetMaterial вершинник патча не выключает
+  it('материал патчей и после resetMaterial (вытеснение диффуза) читает patchCenter', () => {
     const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
     sphere.material.resetMaterial()
-    expect(sphere.material.defines.USE_TERRAIN_UV).toBe('1')
+    const defines = new Set(Object.keys(sphere.material.defines))
+    expect(preprocessGlsl(sphere.material.vertexShader, defines)).toMatch(/\bpatchCenter\b/)
+    expect(sphere.material.vertexShader).not.toMatch(/USE_TERRAIN_UV/)
   })
 
   it('конструктор строит минимальный набор уровня 1 (24 меша)', () => {
@@ -97,14 +102,15 @@ describe('TerrainSphere: динамическое квадродерево па�
     expect(sphere.children.filter((c) => c instanceof Mesh)).toHaveLength(24)
   })
 
-  it('контракты снапшота и стриминга: model/type/clickable на группе, .material — PlanetMaterial', () => {
+  it('контракты снапшота и стриминга: model/type/clickable на группе, .material — TerrainMaterial', () => {
     const actor = moon()
     const sphere = new TerrainSphere(actor, makeField(), makeRenderer(1080))
 
     expect(sphere.model).toBe(actor)
     expect(sphere.userData.type).toBe('planet')
     expect(sphere.userData.clickable).toBe(true)
-    expect(sphere.material.constructor.name).toBe('PlanetMaterial')
+    expect(sphere.material).toBeInstanceOf(TerrainMaterial)
+    expect(sphere.material.constructor.name).toBe('TerrainMaterial')
 
     const patch = sphere.children[0] as Mesh
     expect(patch.material).toBe(sphere.material)
@@ -346,7 +352,7 @@ describe('TerrainSphere: динамическое квадродерево па�
   // ежекадрово, а не только при (пере)конструировании материала.
   it('onVisibleUpdate зовёт sharedMaterial.updateCloudOpacity с мировыми позициями камеры и себя, каждый активный кадр', () => {
     const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
-    const spy = vi.spyOn(PlanetMaterial.prototype, 'updateCloudOpacity')
+    const spy = vi.spyOn(TerrainMaterial.prototype, 'updateCloudOpacity')
 
     sphere.updateObject(makeCtx(2))
 
@@ -367,7 +373,7 @@ describe('TerrainSphere: динамическое квадродерево па�
 
   it('невидимый (LOD → FakePlanet) — updateCloudOpacity НЕ зовётся (заморожено вместе с деревом)', () => {
     const sphere = new TerrainSphere(moon(), makeField(), makeRenderer(1080))
-    const spy = vi.spyOn(PlanetMaterial.prototype, 'updateCloudOpacity')
+    const spy = vi.spyOn(TerrainMaterial.prototype, 'updateCloudOpacity')
 
     sphere.visible = false
     sphere.updateObject(makeCtx(2))

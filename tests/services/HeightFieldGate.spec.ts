@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Scene, Texture, type WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { Planet } from '@/core/renderables/Planet'
-import type { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
 import { syncRenderableMaterials } from '@/core/materials/materialSync'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { SceneObserver } from '@/core/services/SceneObserver'
@@ -381,10 +381,13 @@ describe('HeightFieldGate: окно даунгрейда не оставляет
     return { gate, observer, node, moon, path }
   }
 
+  // У материала сферы юниформа карты тени нет вовсе: держать её нечем
   function shadowStateOf(node: DynamicNode): { define: unknown; map: unknown } {
-    const material = node.renderable!.material as PlanetMaterial
+    const material = node.renderable!.material as SphereSurfaceMaterial
+    expect(material).toBeInstanceOf(SphereSurfaceMaterial)
+    const map = 'uShadowHeightMap' in material.uniforms ? material.uniforms.uShadowHeightMap.value : null
 
-    return { define: material.defines.USE_TERRAIN_SHADOW, map: material.uniforms.uShadowHeightMap.value }
+    return { define: material.defines.USE_TERRAIN_SHADOW, map }
   }
 
   it('даунгрейднутый узел: после release без USE_TERRAIN_SHADOW и без карты тени', () => {
@@ -397,13 +400,14 @@ describe('HeightFieldGate: окно даунгрейда не оставляет
     expect(shadowStateOf(node)).toEqual({ define: undefined, map: null })
   })
 
-  // Узел уже на легаси-сфере — даунгрейд отвечает false, но карту тени его
-  // материал держит: updateMaterial гейтится наличием карты, не типом поверхности.
-  it('узел без свапа: ресинк всё равно снимает дефайн и карту тени', () => {
+  // Узел уже на легаси-сфере — даунгрейд отвечает false; материал сферы карту
+  // высот не спрашивает, поэтому карты тени не берёт и при карте в реестре.
+  it('узел без свапа: материал сферы карту тени не держит ни до, ни после release', () => {
     const { gate, observer, node, moon, path } = makeShadowStand(false)
 
-    // предусловие: до тика материал действительно держит карту тени
-    expect(shadowStateOf(node).define).toBe('1')
+    // предусловие: карта высот в реестре, материал синхронизирован при ней
+    expect(heightFieldStorage.get(path)).toBeDefined()
+    expect(shadowStateOf(node)).toEqual({ define: undefined, map: null })
 
     observeAt(observer, moon, 1)
     gate.recompute()

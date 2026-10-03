@@ -30,22 +30,10 @@ import { SunTintBinding } from '@/core/materials/SunTintBinding'
 import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
 import { resolveStarRadiusKm } from '@/core/terrain/starRadius'
 import { penumbraTan } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
+import { cloudOpacityForAltitude } from '@/core/materials/PlanetSurfaceMaterial'
 import { resolveLightTint } from '@/core/helpers/lightSource'
 
-/**
- * Opacity облачного слоя от высоты камеры над поверхностью (приёмочная волна
- * 4, №3 — идея владельца): 1.0 из космоса (alt ≥ H, вся толщина атмосферы над
- * камерой), линейно к 0 на середине толщины (alt = 0.5·H), 0 ниже. Чистая
- * функция от alt/H — юнит-независима (числитель и знаменатель в ОДНИХ и тех
- * же юнитах сокращаются), тестируется напрямую без CPU-зеркала шейдера (сама
- * формула считается в TS/JS, не в GLSL — уходит в юниформ уже готовым числом,
- * как uWaterNightFloor и прочие ручки).
- */
-export function cloudOpacityForAltitude(altitudeUnits: number, atmosphereThicknessUnits: number): number {
-  const half = 0.5 * Math.max(atmosphereThicknessUnits, 1e-6) // гард от деления на 0/отрицательной толщины (битые данные)
-
-  return Math.max(0, Math.min(1, (altitudeUnits - half) / half))
-}
+export { cloudOpacityForAltitude }
 
 export interface PlanetMaterialOptions {
   /** Геометрия — патчи рельефа (TerrainSphere): USE_TERRAIN_UV постоянно, см. baseDefines. */

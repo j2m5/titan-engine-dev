@@ -189,7 +189,7 @@ function seedTexture(name: string): void {
 }
 
 // содержимое не важно: материал спрашивает только факт наличия карты в реестре
-function seedHeightMap(path: string): void {
+export function seedHeightMap(path: string): void {
   ;(heightFieldStorage as unknown as { maps: Map<string, unknown> }).maps.set(path, {
     width: 4,
     height: 2,
