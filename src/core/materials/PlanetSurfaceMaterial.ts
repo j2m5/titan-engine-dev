@@ -182,10 +182,6 @@ abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
     this.uniforms.diffuseMap.value = diffuseMap
     this.uniforms.nightMap.value = nightMap
     this.uniforms.cloudMap.value = cloudMap
-    this.uniforms.specularMap.value = specularMap
-    // Cavity-затемнение (канал B slope-карты) — ручка тела, отсутствие поля = 0.
-    // Форвардится без гейта: шейдер читает её только под USE_CAVITY.
-    this.uniforms.uCavityStrength.value = planetData.cavityStrength ?? 0
 
     const pathDefines = this.updatePath({ planetData, cloudMap, specularMap })
 
@@ -214,9 +210,6 @@ abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
     this.uniforms.diffuseMap.value = resourceStorage.getTextureOrMake('default.png')
     this.uniforms.nightMap.value = resourceStorage.getTextureOrMake('night.jpg')
     this.uniforms.cloudMap.value = null
-    this.uniforms.specularMap.value = null
-    this.uniforms.bumpMap.value = null
-    this.uniforms.uCavityStrength.value = 0
 
     this.resetPath()
 

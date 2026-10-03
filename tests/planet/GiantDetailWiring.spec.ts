@@ -125,9 +125,9 @@ describe('SphereSurfaceShader: ручки детали гиганта', () => {
     expect(shader.uniforms.uGiantDetailFadeUnits.value).toBeCloseTo(toThreeJSUnits(1.5 * 69911), 12)
   })
 
-  it('строка без bumpScale (мёртвая ручка) — юниформ 0, а не undefined (оба пути)', () => {
+  it('строка без bumpScale (мёртвая ручка) — юниформ рельефа 0, а не undefined; у сферы юниформа нет', () => {
     const actor = stubActor({ radius: 69911 }, { giantDetail: true })
-    expect(new SphereSurfaceShader(actor).uniforms.bumpScale.value).toBe(0)
+    expect(new SphereSurfaceShader(actor).uniforms).not.toHaveProperty('bumpScale')
     expect(new TerrainShader(actor).uniforms.bumpScale.value).toBe(0)
   })
 

@@ -1,3 +1,4 @@
+import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
 import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 
@@ -9,12 +10,21 @@ const templates = [
 describe('SphereSurfaceShaderTemplate: блик воды на сфере', () => {
   const frag: string = SphereSurfaceShaderTemplate.fragmentShader
 
-  it('Blinn-Phong + френель Шлика с гейтом освещённой стороны', () => {
-    expect(frag).toContain('halfVec')
-    expect(frag).toContain('pow(max(dot(normal, halfVec), 0.0), 64.0)')
-    expect(frag).toContain('fresnel')
-    expect(frag).toContain('* uWaterGlintGain')
+  it('нормированный Блинн–Фонг + френель Шлика (waterGlintGlsl) с гейтом освещённой стороны', () => {
+    const resolved: string = AbstractShader.prepareSource(frag)
+    expect(resolved).toContain('float waterGlintGlsl(vec3 n, vec3 l, vec3 v, float alpha2) {')
+    expect(resolved).toContain('float fresnel = WATER_GLINT_F0 + (1.0 - WATER_GLINT_F0) * pow(1.0 - clamp(dot(v, h), 0.0, 1.0), 5.0);')
+    expect(frag).toContain('waterGlintGlsl(normal, lightDirection, viewDir, uWaterFarAlpha2) * uWaterGlintGain')
     expect(frag).toContain('smoothstep(0.0, 0.15, NdotLraw)')
+    // Блинн–Фонг мокрой кромки — только у рельефа
+    expect(frag).not.toContain('blinnPhongGlint')
+  })
+
+  it('Блинн–Фонг мокрой кромки (F0 воды 0.02) — в шаблоне рельефа', () => {
+    const terrainFrag: string = TerrainShaderTemplate.fragmentShader
+    expect(terrainFrag).toContain('float blinnPhongGlint(vec3 normal, vec3 lightDirection, vec3 viewDir) {')
+    expect(terrainFrag).toContain('pow(max(dot(normal, halfVec), 0.0), 64.0)')
+    expect(terrainFrag).toContain('float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(normal, viewDir), 0.0), 5.0);')
   })
 
   it('bloom-guard: диффуз-кламп 0.99 ДО блика, потолок глинта 4.0 после', () => {

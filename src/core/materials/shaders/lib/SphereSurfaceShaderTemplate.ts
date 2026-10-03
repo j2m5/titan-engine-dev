@@ -11,7 +11,6 @@ import {
   planetSurfaceFragmentOutput,
   planetSurfaceFragmentPars,
   planetSurfaceFragmentPrologue,
-  planetSurfaceGlintFunctions,
   planetSurfaceLightBegin,
   planetSurfaceRingShadowPars,
   planetSurfaceVaryings,
@@ -37,6 +36,9 @@ export const SphereSurfaceShaderTemplate: ShaderProps = {
   vertexShader: `
     ${planetSurfaceVertexPars}
 
+    // Вершинная развёртка — только у сферы: рельеф считает uv из направления
+    varying vec2 vUv;
+
     void main() {
       vec3 morphedPosition = position;
 
@@ -54,11 +56,15 @@ export const SphereSurfaceShaderTemplate: ShaderProps = {
   fragmentShader: `
     ${planetSurfaceFragmentPars}
 
+    // Маска «океан/суша» блика воды (USE_SPECULAR)
+    uniform sampler2D specularMap;
+
     #ifdef USE_GIANT_DETAIL
       #include <giantDetailUniforms>
     #endif
 
     ${planetSurfaceVaryings}
+    varying vec2 vUv;
 
     // Развёртка из направления — точка облачного слоя не вершина, vUv ей не годится
     #ifdef USE_CLOUD
@@ -83,8 +89,6 @@ export const SphereSurfaceShaderTemplate: ShaderProps = {
       uniform float uWaterGlintGain;
       #include <waterGlintFunctions>
     #endif
-
-    ${planetSurfaceGlintFunctions}
 
     void main() {
       ${planetSurfaceFragmentPrologue}

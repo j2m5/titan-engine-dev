@@ -15,8 +15,7 @@ class SphereSurfaceMaterial extends PlanetSurfaceMaterial {
   }
 
   protected updatePath({ planetData, specularMap }: SurfaceMaps): Record<string, string> {
-    // slope-карту сфера не сэмплит: сэмплер общего пролога пуст
-    this.uniforms.bumpMap.value = undefined
+    this.uniforms.specularMap.value = specularMap
 
     return {
       // Specular-карта — маска «океан/суша»: на сфере блик рисует сама
@@ -28,7 +27,9 @@ class SphereSurfaceMaterial extends PlanetSurfaceMaterial {
     }
   }
 
-  protected resetPath(): void {}
+  protected resetPath(): void {
+    this.uniforms.specularMap.value = null
+  }
 }
 
 export { SphereSurfaceMaterial }
