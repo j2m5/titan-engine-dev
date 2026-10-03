@@ -8,13 +8,15 @@ import { Color, ShaderChunk, Uniform, Vector3 } from 'three'
  * месте — порядок операторов пути не меняется.
  */
 
-/** Дефолты юниформов, которые читают оба пути. */
+/** Дефолты юниформов, общих для обоих шаблонов (объявлены в общем прологе или читаются обоими путями). */
 export const planetSurfaceDefaultUniforms = {
   lightPosition: new Uniform(new Vector3()),
   uLightColor: new Uniform(new Color(1, 1, 1)),
   diffuseMap: new Uniform(null),
   nightMap: new Uniform(null),
   cloudMap: new Uniform(null),
+  // Множитель декода slope-карты (чанк SlopeNormal)
+  bumpScale: new Uniform(0),
   emission: new Uniform(1),
   uNightThreshold: new Uniform(0.06),
   uNightSoftness: new Uniform(0.18),
@@ -96,8 +98,11 @@ export const planetSurfaceFragmentPars = `
     uniform sampler2D nightMap;
     uniform sampler2D cloudMap;
     uniform float uCloudOpacity;
+    // specularMap (сфера), bumpMap, bumpScale и uCavityStrength (рельеф) объявлены в обоих
+    // путях ради паритета с шейдером до разделения
     uniform sampler2D specularMap;
     uniform sampler2D bumpMap;
+    uniform float bumpScale;
     uniform float emission;
     uniform float uNightThreshold;
     uniform float uNightSoftness;

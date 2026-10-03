@@ -177,8 +177,9 @@ describe.skipIf(SNAPSHOT_RUN)('паритет материала планет', 
   })
 
   describe('паритет шаблона пути против замороженного', () => {
-    // Разрешённые расхождения — только во фрагментнике (вершинник lightPosition читает)
-    const ALLOWED_REMOVED = [/^uniform float bumpScale;$/, /^uniform vec3 lightPosition;$/]
+    // Разрешённые расхождения — только во фрагментнике (вершинник lightPosition читает);
+    // name — объявленный идентификатор: во фрагментнике нового шаблона его быть не должно
+    const ALLOWED_REMOVED = [{ name: 'lightPosition', line: /^uniform vec3 lightPosition;$/ }]
     const templateOf = (p: ParityPath) => (p === 'terrain' ? TerrainShaderTemplate : SphereSurfaceShaderTemplate)
     const preparedOf = (p: ParityPath, stage: Stage): string => AbstractShader.prepareSource(templateOf(p)[stage])
 
@@ -188,7 +189,7 @@ describe.skipIf(SNAPSHOT_RUN)('паритет материала планет', 
 
       return out
         .split('\n')
-        .filter((line) => !ALLOWED_REMOVED.some((re) => re.test(line)))
+        .filter((line) => !ALLOWED_REMOVED.some(({ line: re }) => re.test(line)))
         .join('\n')
     }
 
@@ -216,6 +217,11 @@ describe.skipIf(SNAPSHOT_RUN)('паритет материала планет', 
           for (const stage of STAGES) {
             const got = normalizeGlsl(preprocessGlsl(preparedOf(s.path, stage), own))
             expect(got, `${stage} +[${extra.join(' ')}]`).toBe(legacyUnder(stage, defines))
+          }
+          // снятое объявление не должно оставить обращений (GLSL в CI не компилируется)
+          const fragment = withoutComments(preprocessGlsl(preparedOf(s.path, 'fragmentShader'), own))
+          for (const { name } of ALLOWED_REMOVED) {
+            expect(fragment, `${name} во фрагментнике +[${extra.join(' ')}]`).not.toMatch(new RegExp(`\\b${name}\\b`))
           }
         }
       })
