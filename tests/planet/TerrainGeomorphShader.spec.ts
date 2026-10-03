@@ -1,54 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { preprocessGlsl } from '../helpers/glsl'
 
 const vert: string = PlanetShaderTemplate.vertexShader
-
-/**
- * Мини-препроцессор: #ifdef/#ifndef/#if/#elif/#else/#endif по набору define
- * (как в tests/planet/TerrainNearShadow.spec.ts).
- */
-function preprocess(source: string, defines: ReadonlySet<string>): string {
-  const evalCondition = (expr: string): boolean => {
-    const replaced = expr
-      .replace(/defined\s*\(\s*(\w+)\s*\)/g, (_m, name: string) => (defines.has(name) ? '1' : '0'))
-      .replace(/defined\s+(\w+)/g, (_m, name: string) => (defines.has(name) ? '1' : '0'))
-
-    if (!/^[01\s&|!()]*$/.test(replaced)) return false
-
-    return Boolean(new Function(`return (${replaced})`)())
-  }
-
-  const stack: { parent: boolean; active: boolean; taken: boolean }[] = []
-  const out: string[] = []
-  const isActive = (): boolean => (stack.length === 0 ? true : stack[stack.length - 1].active)
-
-  for (const line of source.split('\n')) {
-    const t = line.trim()
-    let m: RegExpMatchArray | null
-
-    if ((m = t.match(/^#ifdef\s+(\w+)/)) || (m = t.match(/^#ifndef\s+(\w+)/)) || (m = t.match(/^#if\s+(.*)$/))) {
-      const parent = isActive()
-      const cond = t.startsWith('#ifdef') ? defines.has(m[1]) : t.startsWith('#ifndef') ? !defines.has(m[1]) : evalCondition(m[1])
-      stack.push({ parent, active: parent && cond, taken: cond })
-    } else if ((m = t.match(/^#elif\s+(.*)$/))) {
-      const top = stack[stack.length - 1]
-      const cond = !top.taken && evalCondition(m[1])
-      top.active = top.parent && cond
-      top.taken = top.taken || cond
-    } else if (t === '#else') {
-      const top = stack[stack.length - 1]
-      top.active = top.parent && !top.taken
-      top.taken = true
-    } else if (t.startsWith('#endif')) {
-      stack.pop()
-    } else if (isActive()) {
-      out.push(line)
-    }
-  }
-
-  return out.join('\n')
-}
 
 /** Индекс объявления имени (attribute/переменная) или -1. */
 function declarationAt(src: string, name: string): number {
@@ -98,7 +53,7 @@ describe('TerrainGeomorph: вершинник рельефа', () => {
     const label = defines.size ? [...defines].join(' + ') : 'без дефайнов'
 
     it(`препроцессор: ${label}`, () => {
-      const src = preprocess(AbstractShader.prepareSource(vert), defines)
+      const src = preprocessGlsl(AbstractShader.prepareSource(vert), defines)
       const terrain = defines.has('USE_TERRAIN_UV')
       const expected: Record<string, boolean> = {
         morphT: terrain,
