@@ -2,8 +2,11 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { Texture, Vector3 } from 'three'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { Actor } from '@/core/models/Actor'
-import { normalizeGlsl, preprocessGlsl } from '../helpers/glsl'
+import { normalizeGlsl, preprocessGlsl, withoutComments } from '../helpers/glsl'
 import {
   collectParityStates,
   serializeField,
@@ -12,6 +15,7 @@ import {
   withoutShader,
   type CollectedState,
   type MakeParityMaterial,
+  type ParityPath,
   type ParityState
 } from '../fixtures/planetMaterialParity/collectStates'
 
@@ -166,6 +170,52 @@ describe.skipIf(SNAPSHOT_RUN)('паритет материала планет', 
           for (const stage of STAGES) {
             const got = normalizeGlsl(preprocessGlsl(f.shader[stage], defines))
             expect(got, `${stage} +[${extra.join(' ')}]`).toBe(frozenUnder(stage, defines))
+          }
+        }
+      })
+    }
+  })
+
+  describe('паритет шаблона пути против замороженного', () => {
+    // Разрешённые расхождения — только во фрагментнике (вершинник lightPosition читает)
+    const ALLOWED_REMOVED = [/^uniform float bumpScale;$/, /^uniform vec3 lightPosition;$/]
+    const templateOf = (p: ParityPath) => (p === 'terrain' ? TerrainShaderTemplate : SphereSurfaceShaderTemplate)
+    const preparedOf = (p: ParityPath, stage: Stage): string => AbstractShader.prepareSource(templateOf(p)[stage])
+
+    const legacyUnder = (stage: Stage, defines: Set<string>): string => {
+      const out = frozenUnder(stage, defines)
+      if (stage === 'vertexShader') return out
+
+      return out
+        .split('\n')
+        .filter((line) => !ALLOWED_REMOVED.some((re) => re.test(line)))
+        .join('\n')
+    }
+
+    it('USE_TERRAIN_UV шаблоны не ветвит — ни сам шаблон, ни подключённые чанки', () => {
+      for (const p of ['sphere', 'terrain'] as const) {
+        for (const stage of STAGES) expect(preparedOf(p, stage), `${p} ${stage}`).not.toMatch(/USE_TERRAIN_UV/)
+      }
+    })
+
+    it('в каждом шаблоне нет кода чужого пути', () => {
+      const code = (p: ParityPath): string => withoutComments(preparedOf(p, 'vertexShader') + '\n' + preparedOf(p, 'fragmentShader'))
+      for (const name of ['patchCenter', 'morphDelta', 'vDetailPos']) expect(code('sphere')).not.toContain(name)
+      expect(code('terrain')).not.toMatch(/vUv\s*=\s*uv/)
+      expect(code('terrain')).not.toContain('applyGiantDetail')
+    })
+
+    for (const s of states) {
+      it(`${s.actorId} ${s.state}`, () => {
+        for (const extra of extrasOf(s)) {
+          // старый: дефайны снимка (у рельефа там и USE_TERRAIN_UV); новый — те же без него:
+          // шаблону пути дефайн не нужен
+          const defines = definesOf(s, extra)
+          expect(defines.has('USE_TERRAIN_UV')).toBe(s.path === 'terrain')
+          const own = new Set([...defines].filter((d) => d !== 'USE_TERRAIN_UV'))
+          for (const stage of STAGES) {
+            const got = normalizeGlsl(preprocessGlsl(preparedOf(s.path, stage), own))
+            expect(got, `${stage} +[${extra.join(' ')}]`).toBe(legacyUnder(stage, defines))
           }
         }
       })
