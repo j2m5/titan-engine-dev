@@ -43,9 +43,11 @@ export interface TerrainPatchStats {
   valveScale: number
   /** Максимум live с создания или с последнего resetPeak(). */
   peakLive: number
+  /** Байт вершинных и инстансных атрибутов слота; общий индекс не считается. */
   bytesPerSlot: number
   /** (live + free) × bytesPerSlot — видеопамять атрибутов пула. */
   liveBytes: number
+  /** peakLive × bytesPerSlot: свободные слоты в пике не входят (в отличие от liveBytes). */
   peakBytes: number
 }
 

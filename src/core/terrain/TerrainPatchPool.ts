@@ -29,13 +29,6 @@ import { buildPatchIndex, terrainPatchVertexCount } from './terrainPatchGeometry
  */
 export const MAX_LIVE_PATCHES = 1024
 
-/** float на вершину: базовые атрибуты пула / плюс морф-атрибуты (см. докблок выше). */
-export const PATCH_FLOATS_PER_VERTEX = 14
-export const PATCH_MORPH_FLOATS_PER_VERTEX = 7
-/** float на патч: patchCenter 3 / плюс patchMorph 1. */
-const PATCH_FLOATS_PER_INSTANCE = 3
-const PATCH_MORPH_FLOATS_PER_INSTANCE = 1
-
 export type PatchHandle = { mesh: Mesh; geometry: InstancedBufferGeometry }
 
 /**
@@ -63,6 +56,7 @@ class TerrainPatchPool {
   private readonly occupied = new Set<PatchHandle>()
   private readonly maxLivePatchesLimit: number
   private readonly morph: boolean
+  private slotBytes = -1
 
   public constructor(
     material: Material,
@@ -86,11 +80,22 @@ class TerrainPatchPool {
     return this.free.length
   }
 
-  /** Байт атрибутов одного слота (вершинные + инстансные) — по тем же константам, что createHandle. */
+  /**
+   * Байт атрибутов одного слота (вершинные + инстансные, без общего индекса):
+   * сумма byteLength реальных массивов, замер на пробном слоте один раз —
+   * новый атрибут в createHandle попадает сюда сам.
+   */
   public get bytesPerSlot(): number {
-    const perVertex = PATCH_FLOATS_PER_VERTEX + (this.morph ? PATCH_MORPH_FLOATS_PER_VERTEX : 0)
-    const perInstance = PATCH_FLOATS_PER_INSTANCE + (this.morph ? PATCH_MORPH_FLOATS_PER_INSTANCE : 0)
-    return (terrainPatchVertexCount(this.segments) * perVertex + perInstance) * Float32Array.BYTES_PER_ELEMENT
+    if (this.slotBytes < 0) {
+      const probe = this.createHandle()
+      this.slotBytes = 0
+      for (const name of Object.keys(probe.geometry.attributes)) {
+        this.slotBytes += probe.geometry.getAttribute(name).array.byteLength
+      }
+      probe.geometry.setIndex(null)
+      probe.geometry.dispose()
+    }
+    return this.slotBytes
   }
 
   public get maxLivePatches(): number {
