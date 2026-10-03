@@ -56,6 +56,7 @@ class TerrainPatchPool {
   private readonly occupied = new Set<PatchHandle>()
   private readonly maxLivePatchesLimit: number
   private readonly morph: boolean
+  private slotBytes = -1
 
   public constructor(
     material: Material,
@@ -72,6 +73,29 @@ class TerrainPatchPool {
 
   public get liveCount(): number {
     return this.occupied.size
+  }
+
+  /** Выделенные, но свободные слоты: держат видеопамять до trimFree/dispose. */
+  public get freeCount(): number {
+    return this.free.length
+  }
+
+  /**
+   * Байт атрибутов одного слота (вершинные + инстансные, без общего индекса):
+   * сумма byteLength реальных массивов, замер на пробном слоте один раз —
+   * новый атрибут в createHandle попадает сюда сам.
+   */
+  public get bytesPerSlot(): number {
+    if (this.slotBytes < 0) {
+      const probe = this.createHandle()
+      this.slotBytes = 0
+      for (const name of Object.keys(probe.geometry.attributes)) {
+        this.slotBytes += probe.geometry.getAttribute(name).array.byteLength
+      }
+      probe.geometry.setIndex(null)
+      probe.geometry.dispose()
+    }
+    return this.slotBytes
   }
 
   public get maxLivePatches(): number {

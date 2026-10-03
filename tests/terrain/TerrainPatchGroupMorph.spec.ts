@@ -12,6 +12,9 @@ import type { UpdateContext } from '@/core/UpdateContext'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { liveAncestorKey, nodeKeyOf, terrainNodeKey, type TerrainNodeAddress } from '@/core/terrain/terrainQuadtreeSelect'
 import { addressOf, fullyCovered, patchMeshes, unbackedHiddenAddresses, visibleAddressKeys } from './coverageHelpers'
+import { registeredTerrainGroups } from '@/core/terrain/terrainDebug'
+import { terrainPatchVertexCount } from '@/core/terrain/terrainPatchGeometry'
+import { TERRAIN_PATCH_SEGMENTS } from '@/core/terrain/cubeSphere'
 import { FakeAsyncBuilder } from './fakeAsyncBuilder'
 
 // Харнесс — копия TerrainPatchGroupAsync.spec.ts, плюс флаг морфа группы.
@@ -135,6 +138,8 @@ const NEAR = 600
 const NEARER = 500
 const FAR = 20000
 const DEEP = 50
+// 700 км: L3 у двух L2 уже не нужны, а гистерезис не держит — мерж L3 → L2 стартует
+const MERGE_START = 700
 
 describe('TerrainPatchGroup: геоморф поверх атомарного свопа', () => {
   beforeEach(() => seedPlaceholderKeys())
@@ -397,5 +402,120 @@ describe('TerrainPatchGroup: геоморф поверх атомарного с
     expect(builder.jobs.length).toBeGreaterThan(24)
     for (const job of builder.jobs) expect(job.morph).toBeNull()
     for (const mesh of patchMeshes(group)) expect(mesh.geometry.getAttribute('patchMorph')).toBeUndefined()
+  })
+})
+
+describe('TerrainPatchGroup: мерж, затем приход предка выше', () => {
+  beforeEach(() => seedPlaceholderKeys())
+  afterEach(() => resourceStorage.deleteAllTextures())
+
+  it('скрытый P ждёт m = 1 детей, камера уходит выше: дыр и пар предок–потомок нет, G видим, P и дети освобождены', () => {
+    const { group, builder } = makeAsync()
+    settle(group, builder, NEARER)
+    const level = (s: Snap): number => s.address.level
+
+    // мерж L3 → L2 начат: скрытый P (L2) при видимых растущих детях
+    let hiddenP: Snap[] = []
+    for (let f = 0; f < 10 && hiddenP.length === 0; f++) {
+      frame(group, builder, MERGE_START)
+      hiddenP = [...snapshot(group).values()].filter(
+        (s) => level(s) === 2 && !s.visible && childKeys(s.address).every((c) => snapshot(group).get(c)?.visible)
+      )
+    }
+    expect(hiddenP.length).toBeGreaterThan(0)
+    const pKeys = hiddenP.map((s) => terrainNodeKey(s.address))
+    const kidKeys = hiddenP.flatMap((s) => childKeys(s.address))
+
+    const gKeys = new Set(hiddenP.map((s) => parentKey(s.address)))
+    for (const key of gKeys) expect(group.liveKeys.has(key)).toBe(false)
+
+    // камера уходит: желаемый предок G (L1) выше P приходит во время мержа
+    let prev = snapshot(group)
+    for (let f = 0; f < 40; f++) {
+      frame(group, builder, FAR)
+      const cur = snapshot(group)
+      expect(fullyCovered(group)).toBe(true)
+      const visible = visibleAddressKeys(group)
+      for (const s of cur.values()) {
+        if (s.visible) expect(liveAncestorKey(s.address, (k) => visible.has(k))).toBe(-1)
+      }
+      prev = cur
+    }
+
+    for (const key of [...pKeys, ...kidKeys]) {
+      expect(group.liveKeys.has(key)).toBe(false)
+      expect(prev.has(key)).toBe(false)
+    }
+    for (const key of gKeys) expect(prev.get(key)?.visible).toBe(true)
+    expect(group.pendingCount).toBe(0)
+  })
+})
+
+describe('TerrainPatchGroup: сводка пула и реестр', () => {
+  beforeEach(() => seedPlaceholderKeys())
+  afterEach(() => resourceStorage.deleteAllTextures())
+
+  it('live/visible/pending/maxLive совпадают с фактом после постройки', () => {
+    const { group, builder } = makeAsync()
+    settle(group, builder, NEAR)
+
+    const meshes = patchMeshes(group)
+    const s = group.stats()
+    expect(s.live).toBe(group.liveKeys.size)
+    expect(s.live).toBe(meshes.length)
+    expect(s.visible).toBe(meshes.filter((m) => m.visible).length)
+    expect(s.pending).toBe(0)
+    expect(s.maxLive).toBe(1024)
+    expect(s.valveScale).toBeGreaterThan(0)
+    expect(s.liveBytes).toBe((s.live + s.free) * s.bytesPerSlot)
+  })
+
+  it('peakLive не убывает при мерже и сбрасывается resetPeak()', () => {
+    const { group, builder } = makeAsync()
+    settle(group, builder, NEAR)
+    const peak = group.stats().peakLive
+    expect(peak).toBeGreaterThanOrEqual(group.stats().live)
+
+    let last = peak
+    for (let f = 0; f < 30; f++) {
+      frame(group, builder, FAR)
+      const p = group.stats().peakLive
+      expect(p).toBeGreaterThanOrEqual(last)
+      last = p
+    }
+    // на мерже родитель и дети живут вместе — пик мог вырасти, но не упасть
+    const after = group.stats()
+    expect(after.live).toBeLessThan(after.peakLive)
+    expect(after.peakBytes).toBe(after.peakLive * after.bytesPerSlot)
+
+    group.resetPeak()
+    expect(group.stats().peakLive).toBe(group.stats().live)
+  })
+
+  it('bytesPerSlot: 21 float на вершину у морф-пула, 14 у воды, плюс инстансные', () => {
+    const vertices = terrainPatchVertexCount(TERRAIN_PATCH_SEGMENTS)
+    expect(vertices).toBe(4481)
+    const terrain = makeAsync(true)
+    const water = makeAsync(false)
+    expect(terrain.group.stats().bytesPerSlot).toBe((vertices * 21 + 4) * 4)
+    expect(water.group.stats().bytesPerSlot).toBe((vertices * 14 + 3) * 4)
+    expect(terrain.group.debugKind).toBe('terrain')
+    expect(water.group.debugKind).toBe('water')
+  })
+
+  it('bytesPerSlot совпадает с фактическими атрибутами слота', () => {
+    const { group, builder } = makeAsync()
+    settle(group, builder, FAR)
+    const geometry = patchMeshes(group)[0].geometry
+    let bytes = 0
+    for (const name of Object.keys(geometry.attributes)) bytes += (geometry.getAttribute(name).array as Float32Array).byteLength
+    expect(group.stats().bytesPerSlot).toBe(bytes)
+  })
+
+  it('реестр: группа есть после конструирования и пропадает после dispose', () => {
+    const { group } = makeAsync()
+    expect(registeredTerrainGroups().has(group)).toBe(true)
+    group.dispose()
+    expect(registeredTerrainGroups().has(group)).toBe(false)
   })
 })

@@ -15,6 +15,7 @@ import {
 import { detailWrapFor, type DetailWrap } from '@/core/terrain/detailWrap'
 import { setPatchMorph, TerrainPatchPool, type PatchHandle } from '@/core/terrain/TerrainPatchPool'
 import { stepMorph } from '@/core/terrain/terrainMorph'
+import { registerTerrainGroup, unregisterTerrainGroup } from '@/core/terrain/terrainDebug'
 import {
   byBuildPriority,
   coverageReady,
@@ -28,6 +29,27 @@ import {
   type TerrainLeaf,
   type TerrainNodeAddress
 } from '@/core/terrain/terrainQuadtreeSelect'
+
+/** Сводка пула патчей группы (dev-замер при спуске, см. __titanTerrain). */
+export interface TerrainPatchStats {
+  /** Занятые слоты пула (живые + запрошенные). */
+  live: number
+  /** Видимые меши. */
+  visible: number
+  pending: number
+  /** Выделенные, но свободные слоты: видеопамять держат. */
+  free: number
+  maxLive: number
+  valveScale: number
+  /** Максимум live с создания или с последнего resetPeak(). */
+  peakLive: number
+  /** Байт вершинных и инстансных атрибутов слота; общий индекс не считается. */
+  bytesPerSlot: number
+  /** (live + free) × bytesPerSlot — видеопамять атрибутов пула. */
+  liveBytes: number
+  /** peakLive × bytesPerSlot: свободные слоты в пике не входят (в отличие от liveBytes). */
+  peakBytes: number
+}
 
 /** Мёртвая зона клапана: доли пула, в которых держится желаемый набор. */
 export const VALVE_HIGH = 0.9
@@ -149,6 +171,7 @@ abstract class TerrainPatchGroup extends Group {
   /** Масштаб порога сплита от клапана пула, см. nextValveScale. */
   private valveScale = 1
   private poolExhaustedWarned = false
+  private peakLive = 0
   // замыкание переиспользуется между кадрами — coverageReady зовётся на каждый
   // освобождаемый узел, аллокация лямбды на вызов была бы мусором в горячем пути
   private readonly isLive = (key: number): boolean => this.live.has(key)
@@ -228,6 +251,7 @@ abstract class TerrainPatchGroup extends Group {
     this.morphEnabled = morph
     this.pool = new TerrainPatchPool(material, TERRAIN_PATCH_SEGMENTS, maxLivePatches, morph)
     this.builder.acquire(field)
+    registerTerrainGroup(this)
 
     // минимальный набор всегда есть (быстрый старт) — MIN_LEVEL всегда
     // спускается безусловно, split пуст (история гистерезиса ещё не набрана)
@@ -252,6 +276,38 @@ abstract class TerrainPatchGroup extends Group {
   /** Запрошено и не пришло — давление на строителя, а не число патчей в сцене. */
   public get pendingCount(): number {
     return this.pending.size
+  }
+
+  /** Тип группы для dev-хендла: рельеф несёт морф-атрибуты, вода — нет. */
+  public get debugKind(): 'terrain' | 'water' {
+    return this.morphEnabled ? 'terrain' : 'water'
+  }
+
+  /** Сводка пула; зовётся редко (консоль), аллоцирует результат. */
+  public stats(): TerrainPatchStats {
+    let visible = 0
+    for (const { handle } of this.live.values()) if (handle.mesh.visible) visible++
+
+    const live = this.pool.liveCount
+    const free = this.pool.freeCount
+    const bytesPerSlot = this.pool.bytesPerSlot
+    const peakLive = Math.max(this.peakLive, live)
+    return {
+      live,
+      visible,
+      pending: this.pending.size,
+      free,
+      maxLive: this.pool.maxLivePatches,
+      valveScale: this.valveScale,
+      peakLive,
+      bytesPerSlot,
+      liveBytes: (live + free) * bytesPerSlot,
+      peakBytes: peakLive * bytesPerSlot
+    }
+  }
+
+  public resetPeak(): void {
+    this.peakLive = this.pool.liveCount
   }
 
   public whenReady(cb: () => void): void {
@@ -394,11 +450,13 @@ abstract class TerrainPatchGroup extends Group {
       this.resetMorph(entry, 0)
     }
 
+    if (this.pool.liveCount > this.peakLive) this.peakLive = this.pool.liveCount
     this.pool.trimFree(Math.ceil(this.pool.liveCount / 4) + 16)
   }
 
   public dispose(): void {
     this.disposed = true
+    unregisterTerrainGroup(this)
     // слоты запрошенных патчей — назад в пул: их меши в сцену не входили,
     // разбирать (disposeSceneTree) нечего, геометрию снимет pool.dispose()
     for (const { handle } of this.pending.values()) this.pool.release(handle)
