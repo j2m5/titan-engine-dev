@@ -477,7 +477,8 @@ class RenderableFactory {
    * её на узлах пути сразу ПОСЛЕ heightFieldStorage.release: материалы видят
    * реестр уже без карты. Рельефный материал держал бы в юниформе GL-текстуру
    * тени, которую release диспозит; материал легаси-сферы карту высот не
-   * читает, и для него проход холостой. Повторных загрузок не вызывает.
+   * читает: для него проход лишь перезовёт updateMaterial и выставит needsUpdate
+   * (программа берётся из кэша). Повторных загрузок не вызывает.
    */
   public resyncSurfaceMaterials(node: DynamicNode): void {
     if (node.renderable) syncRenderableMaterials(node.renderable)

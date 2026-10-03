@@ -50,7 +50,7 @@ function detailPeriodToScale(periodMeters: number): number {
   return periodUnits > 0 ? 1 / periodUnits : 0
 }
 
-export interface TerrainUniforms extends PlanetSurfaceUniforms {
+interface TerrainUniforms extends PlanetSurfaceUniforms {
   uDetailDiffMap: Texture | null
   uDetailNorMap: Texture | null
   uDetailArmMap: Texture | null
@@ -101,7 +101,7 @@ export interface TerrainUniforms extends PlanetSurfaceUniforms {
   uWetDarken: number
 }
 
-export type TerrainUniformKey = keyof TerrainUniforms
+type TerrainUniformKey = keyof TerrainUniforms
 
 /** Юниформы патчей рельефа: общие плюс деталь, средняя полоса, тени, мокрая кромка. */
 class TerrainShader extends PlanetSurfaceShader<TerrainUniformKey> {

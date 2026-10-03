@@ -57,7 +57,7 @@ export interface PlanetSurfaceUniforms {
   uBodyRadiusUnits: number
 }
 
-export type PlanetSurfaceUniformKey = keyof PlanetSurfaceUniforms
+type PlanetSurfaceUniformKey = keyof PlanetSurfaceUniforms
 
 /**
  * Юниформы поверхности планеты, общие для сферы и патчей рельефа: свет,

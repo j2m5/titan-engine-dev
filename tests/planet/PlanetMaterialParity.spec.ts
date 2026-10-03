@@ -10,13 +10,10 @@ import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/Sphere
 import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { Actor } from '@/core/models/Actor'
 import { heightPathOf } from '@/core/terrain/heightPath'
+import { resetRegistries, seedFull, seedHeightMap, seedPlaceholderKeys } from '../helpers/planetSeeds'
 import { normalizeGlsl, preprocessGlsl, withoutComments } from '../helpers/glsl'
 import {
   collectParityStates,
-  resetRegistries,
-  seedFull,
-  seedHeightMap,
-  seedPlaceholderKeys,
   serializeField,
   serializeUniforms,
   tintRegistryFor,

@@ -17,7 +17,7 @@ const DEFAULT_GIANT_DETAIL_WARP = 0.6
 const DEFAULT_GIANT_DETAIL_TEXTURE_WARP = 2
 const DEFAULT_GIANT_DETAIL_FADE_RADII = 1.5
 
-export interface SphereSurfaceUniforms extends PlanetSurfaceUniforms {
+interface SphereSurfaceUniforms extends PlanetSurfaceUniforms {
   uWaterFarAlpha2: number
   uWaterGlintGain: number
   uGiantRadiusKm: number
@@ -29,7 +29,7 @@ export interface SphereSurfaceUniforms extends PlanetSurfaceUniforms {
   uGiantDetailFadeUnits: number
 }
 
-export type SphereSurfaceUniformKey = keyof SphereSurfaceUniforms
+type SphereSurfaceUniformKey = keyof SphereSurfaceUniforms
 
 /** Юниформы поверхности на SphereGeometry: общие плюс деталь гиганта и блик воды на сфере. */
 class SphereSurfaceShader extends PlanetSurfaceShader<SphereSurfaceUniformKey> {

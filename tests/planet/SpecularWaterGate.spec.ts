@@ -2,6 +2,8 @@ import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
 import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
+import { seedHeightMap } from '../helpers/planetSeeds'
 import { Texture } from 'three'
 
 function seedTexture(name: string): void {
@@ -13,9 +15,10 @@ function seedTexture(name: string): void {
 
 const DIFFUSE_PATH = 'stub/specular-gate/diffuse.png'
 const SPECULAR_PATH = 'stub/specular-gate/specular.jpg'
+const HEIGHT_PATH = 'stub/specular-gate/height.raw'
 
 function stubActor(data: Record<string, unknown>): Actor {
-  const pathByType: Record<string, string> = { diffuse: DIFFUSE_PATH, specular: SPECULAR_PATH }
+  const pathByType: Record<string, string> = { diffuse: DIFFUSE_PATH, specular: SPECULAR_PATH, height: HEIGHT_PATH }
 
   return {
     renderingObject: { getAttribute: () => ({ bumpScale: 1, emission: 1, ...data }) },
@@ -45,7 +48,10 @@ describe('USE_SPECULAR — блик воды по specular-карте тольк
     seedTexture(DIFFUSE_PATH)
     seedTexture(SPECULAR_PATH)
   })
-  afterEach(() => resourceStorage.deleteAllTextures())
+  afterEach(() => {
+    resourceStorage.deleteAllTextures()
+    heightFieldStorage.clear()
+  })
 
   it('без воды specular-карта включает блик', () => {
     const material = new SphereSurfaceMaterial(stubActor({}))
@@ -75,6 +81,8 @@ describe('USE_SPECULAR — блик воды по specular-карте тольк
   })
 
   it('TerrainMaterial блик по specular-карте не ставит — ни с водой, ни без', () => {
+    // реальный случай: карта высот и specular-карта есть, воды нет
+    seedHeightMap(HEIGHT_PATH)
     for (const data of [{}, { waterLevelMeters: 0 }]) {
       const material = new TerrainMaterial(stubActor(data))
       material.updateMaterial()

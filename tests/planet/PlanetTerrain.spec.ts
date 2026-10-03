@@ -10,7 +10,7 @@ import {
   seedFull,
   seedHeightMap as seedBodyHeightMap,
   seedPlaceholderKeys as seedBodyPlaceholderKeys
-} from '../fixtures/planetMaterialParity/collectStates'
+} from '../helpers/planetSeeds'
 import { TerrainSphere } from '@/core/renderables/TerrainSphere'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'

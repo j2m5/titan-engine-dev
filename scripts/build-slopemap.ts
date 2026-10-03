@@ -10,7 +10,7 @@ import { isValidSlopeRange, SLOPE_RANGE_GRID } from '@/core/terrain/slopeMapForm
 /**
  * Slope-карта тела из готовой карты высот: TEHM → изображение с уклонами
  * (R — восток, G — север, знаковая кодировка 128±127, диапазон ±slopeRange карты (--slope-range)).
- * Потребитель — slope-путь PlanetMaterial (USE_SLOPE): попиксельный рельеф
+ * Потребитель — slope-путь TerrainMaterial (USE_SLOPE): попиксельный рельеф
  * с мип-фильтрацией поверх геометрии с радиальными нормалями.
  *
  * Формат выхода — по расширению: .webp пишется лоссы без потерь (у карты Луны
