@@ -15,8 +15,6 @@ export const planetSurfaceDefaultUniforms = {
   diffuseMap: new Uniform(null),
   nightMap: new Uniform(null),
   cloudMap: new Uniform(null),
-  // Множитель декода slope-карты (чанк SlopeNormal)
-  bumpScale: new Uniform(0),
   emission: new Uniform(1),
   uNightThreshold: new Uniform(0.06),
   uNightSoftness: new Uniform(0.18),
@@ -35,7 +33,6 @@ export const planetSurfaceDefaultUniforms = {
 
 /** Varying'и, общие для вершинника и фрагментника обоих путей. */
 export const planetSurfaceVaryings = `
-    varying vec2 vUv;
     varying vec3 vNormal;
     varying vec3 vPosition;
     varying vec3 vViewLightDirection;
@@ -98,15 +95,9 @@ export const planetSurfaceFragmentPars = `
     uniform sampler2D nightMap;
     uniform sampler2D cloudMap;
     uniform float uCloudOpacity;
-    // specularMap (сфера), bumpMap, bumpScale и uCavityStrength (рельеф) объявлены в обоих
-    // путях ради паритета с шейдером до разделения
-    uniform sampler2D specularMap;
-    uniform sampler2D bumpMap;
-    uniform float bumpScale;
     uniform float emission;
     uniform float uNightThreshold;
     uniform float uNightSoftness;
-    uniform float uCavityStrength;
     uniform float uTerrainLambert;
     uniform float uTerrainAmbient;
     uniform float uTerrainAmbientSunRef;
@@ -158,16 +149,6 @@ export const planetSurfaceRingShadowPars = `
     #endif
 `
 
-/** Блинн-Фонг + френель Шлика (F0 воды 0.02): блеск мокрой кромки берега. */
-export const planetSurfaceGlintFunctions = `
-    float blinnPhongGlint(vec3 normal, vec3 lightDirection, vec3 viewDir) {
-      vec3 halfVec = normalize(lightDirection + viewDir);
-      float specComp = pow(max(dot(normal, halfVec), 0.0), 64.0);
-      float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(normal, viewDir), 0.0), 5.0);
-      return specComp * fresnel;
-    }
-`
-
 /** Начало main фрагментника: множители, которые наполняет ветка пути. */
 export const planetSurfaceFragmentPrologue = `
       ${ShaderChunk['logdepthbuf_fragment']}
@@ -176,9 +157,6 @@ export const planetSurfaceFragmentPrologue = `
       // occlusion — ЗАТЕНЕНИЕ (cavity, AO детали, уступы): амбиент целиком, прямой свет ручкой
       vec3 albedoMul = vec3(1.0);
       float occlusion = 1.0;
-      float wetEdge = 0.0;
-      float glintEdge = 0.0;
-      float terrainRoughness = 1.0; // шероховатость слоя детали; дальше слоя — матово
 `
 
 /** Свет: направления, тинт солнца, амбиент; кончается заготовкой тени облаков. */

@@ -10,7 +10,6 @@ import {
   planetSurfaceFragmentOutput,
   planetSurfaceFragmentPars,
   planetSurfaceFragmentPrologue,
-  planetSurfaceGlintFunctions,
   planetSurfaceLightBegin,
   planetSurfaceRingShadowPars,
   planetSurfaceVaryings,
@@ -22,6 +21,8 @@ import {
 const terrainUniforms = {
   // slope-карта: R/G — уклон, B — полость
   bumpMap: new Uniform(null),
+  // Множитель декода slope-карты (чанк SlopeNormal)
+  bumpScale: new Uniform(0),
   uDetailDiffMap: new Uniform(null),
   uDetailNorMap: new Uniform(null),
   uDetailArmMap: new Uniform(null),
@@ -133,6 +134,11 @@ export const TerrainShaderTemplate: ShaderProps = {
   fragmentShader: `
     ${planetSurfaceFragmentPars}
 
+    // slope-карта (R/G — уклон, B — полость), множитель декода (чанк SlopeNormal), сила полости
+    uniform sampler2D bumpMap;
+    uniform float bumpScale;
+    uniform float uCavityStrength;
+
     ${planetSurfaceVaryings}
 
     #ifdef USE_SLOPE
@@ -194,7 +200,13 @@ export const TerrainShaderTemplate: ShaderProps = {
 
     ${planetSurfaceRingShadowPars}
 
-    ${planetSurfaceGlintFunctions}
+    // Блинн-Фонг + френель Шлика (F0 воды 0.02): блеск мокрой кромки берега
+    float blinnPhongGlint(vec3 normal, vec3 lightDirection, vec3 viewDir) {
+      vec3 halfVec = normalize(lightDirection + viewDir);
+      float specComp = pow(max(dot(normal, halfVec), 0.0), 64.0);
+      float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(normal, viewDir), 0.0), 5.0);
+      return specComp * fresnel;
+    }
 
     #ifdef USE_TERRAIN_GLINT
       // Блеск льда: нормированный Блинн–Фонг по шероховатости слоя детали, Френель льда
@@ -214,6 +226,9 @@ export const TerrainShaderTemplate: ShaderProps = {
 
     void main() {
       ${planetSurfaceFragmentPrologue}
+      float wetEdge = 0.0;
+      float glintEdge = 0.0;
+      float terrainRoughness = 1.0; // шероховатость слоя детали; дальше слоя — матово
 
       // UV из направления, попиксельно: вершинная развёртка равнопромежуточной
       // текстуры на кубосфере вырождается у полюсов. Чанк общий с водой —

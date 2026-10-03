@@ -288,7 +288,8 @@ describe('TerrainMaterial: slope-карта у тел с честным рель
     for (const define of ['USE_TERRAIN_UV', 'USE_SLOPE', 'USE_TERRAIN_DETAIL', 'USE_TERRAIN_SHADOW', 'USE_CLOUD_SHADOW']) {
       expect(material.defines[define], define).toBeUndefined()
     }
-    expect(material.uniforms.bumpMap.value).toBeUndefined()
+    // slope-сэмплера у сферы нет вовсе
+    expect(material.uniforms).not.toHaveProperty('bumpMap')
   })
 
   it('USE_TERRAIN_UV не ставит ни один материал: развёртку выбирает шаблон пути', () => {

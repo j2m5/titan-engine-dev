@@ -26,12 +26,6 @@ export interface PlanetSurfaceUniforms {
   uCloudOpacity: number
   uRegolithMix: number
   uOppositionSurge: number
-  // specularMap (сфера), bumpMap, bumpScale, uCavityStrength (рельеф) объявлены
-  // общим прологом обоих путей ради паритета, читает их один путь
-  specularMap: Texture | null
-  bumpMap: Texture | null
-  bumpScale: number
-  uCavityStrength: number
   emission: number
   uNightThreshold: number
   uNightSoftness: number
@@ -112,10 +106,6 @@ abstract class PlanetSurfaceShader<K extends string> extends AbstractShader<K> {
       uCloudOpacity: new Uniform(1),
       uRegolithMix: new Uniform(regolith.regolithMix),
       uOppositionSurge: new Uniform(regolith.oppositionSurge),
-      specularMap: new Uniform(null),
-      bumpMap: new Uniform(null),
-      bumpScale: new Uniform(planetData.bumpScale ?? 0),
-      uCavityStrength: new Uniform(0),
       emission: new Uniform(planetData.emission),
       uNightThreshold: new Uniform(0.06),
       uNightSoftness: new Uniform(0.18),

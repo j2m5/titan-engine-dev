@@ -149,7 +149,7 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     const slopeResource = this.model.resources.where('resourceType', 'slope').first()
     const slopePath = slopeResource?.getAttribute('path')
     const slopeMap = typeof slopePath === 'string' ? resourceStorage.getTexture(slopePath) : undefined
-    // Сэмплер bumpMap исторически общий: под USE_SLOPE в него кладётся slope-карта
+    // Под USE_SLOPE в сэмплер bumpMap кладётся slope-карта
     const bumpMap: Texture | undefined = hasHeightField ? slopeMap : undefined
     const useSlope = hasHeightField && Boolean(slopeMap)
 
@@ -158,7 +158,10 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     const slopeRange = slopeResource?.getAttribute('slopeRange')
     this.uniforms.uSlopeRange.value = isValidSlopeRange(slopeRange) ? slopeRange : SLOPE_RANGE
 
+    // Cavity-затемнение (канал B slope-карты) — ручка тела, отсутствие поля = 0.
+    // Форвардится без гейта: шейдер читает её только под USE_CAVITY.
     const cavityStrength = planetData.cavityStrength ?? 0
+    this.uniforms.uCavityStrength.value = cavityStrength
 
     // Собственная тень рельефа: карта тени — по карте высот, не по полю (от
     // радиуса и полосы не зависит). Сила — ручка данных, 0 держит шейдер
@@ -299,6 +302,8 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
   }
 
   protected resetPath(): void {
+    this.uniforms.bumpMap.value = null
+    this.uniforms.uCavityStrength.value = 0
     this.uniforms.uDiffuseTexelSize.value.set(0, 0)
     this.uniforms.uSlopeRange.value = SLOPE_RANGE
 

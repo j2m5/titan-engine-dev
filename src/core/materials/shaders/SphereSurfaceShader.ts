@@ -1,5 +1,5 @@
 import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
-import { Uniform } from 'three'
+import { Texture, Uniform } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { resolveWaterSurfaceParams } from '@/core/terrain/waterSurfaceParams'
@@ -18,6 +18,7 @@ const DEFAULT_GIANT_DETAIL_TEXTURE_WARP = 2
 const DEFAULT_GIANT_DETAIL_FADE_RADII = 1.5
 
 interface SphereSurfaceUniforms extends PlanetSurfaceUniforms {
+  specularMap: Texture | null
   uWaterFarAlpha2: number
   uWaterGlintGain: number
   uGiantRadiusKm: number
@@ -43,6 +44,8 @@ class SphereSurfaceShader extends PlanetSurfaceShader<SphereSurfaceUniformKey> {
 
     this.uniforms = {
       ...this.surfaceUniforms,
+      // Маска «океан/суша» блика воды (USE_SPECULAR) — ставит материал
+      specularMap: new Uniform(null),
       uWaterFarAlpha2: new Uniform(farGlintAlpha2(waterSurface.waterRoughness, waterSurface.waterRippleStrength)),
       uWaterGlintGain: new Uniform(waterSurface.waterGlintGain),
       // Домен шума гиганта задан в км поверхности: клетка не зависит от размера тела

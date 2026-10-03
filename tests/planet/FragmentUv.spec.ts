@@ -65,8 +65,9 @@ describe('FragmentUv: попиксельные UV терраформных те�
       expect(source).not.toContain('texture2D(specularMap, vUv)')
       expect(source).not.toContain('perturbNormalFromSlope(normal, vEast, vUv)')
     }
-    // у рельефа vUv лишь объявлен общим списком varying'ов — main его не читает
-    expect(mainOf(frag)).not.toMatch(/\bvUv\b/)
+    // у рельефа vUv нет вовсе: varying объявляет только шаблон сферы
+    expect(frag).not.toMatch(/\bvUv\b/)
+    expect(vert).not.toMatch(/\bvUv\b/)
     expect(sphereFrag).toContain('vec2 uv = vUv;')
   })
 

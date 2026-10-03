@@ -51,6 +51,9 @@ function detailPeriodToScale(periodMeters: number): number {
 }
 
 interface TerrainUniforms extends PlanetSurfaceUniforms {
+  bumpMap: Texture | null
+  bumpScale: number
+  uCavityStrength: number
   uDetailDiffMap: Texture | null
   uDetailNorMap: Texture | null
   uDetailArmMap: Texture | null
@@ -134,6 +137,10 @@ class TerrainShader extends PlanetSurfaceShader<TerrainUniformKey> {
 
     this.uniforms = {
       ...this.surfaceUniforms,
+      // slope-карта (ставит материал), множитель её декода, сила полости (USE_CAVITY)
+      bumpMap: new Uniform(null),
+      bumpScale: new Uniform(planetData.bumpScale ?? 0),
+      uCavityStrength: new Uniform(0),
       uDetailDiffMap: new Uniform(null),
       uDetailNorMap: new Uniform(null),
       uDetailArmMap: new Uniform(null),
