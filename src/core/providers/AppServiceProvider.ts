@@ -160,7 +160,8 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.SceneObserver),
           c.get(Tokens.Scene),
           c.get(Tokens.RenderableFactory),
-          c.get(Tokens.Renderer)
+          c.get(Tokens.Renderer),
+          c.get(Tokens.TerrainPatchBuilder)
         )
     )
 

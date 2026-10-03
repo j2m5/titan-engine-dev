@@ -40,6 +40,8 @@ export interface PatchBuildResult {
 export interface TerrainPatchBuilder {
   /** Работа идёт вне главного потока (живой воркер): только такому строителю доверяется тяжёлый бейк плитки ближней тени. */
   readonly offThread: boolean
+  /** Сколько резидентных копий карты высот держит строитель вместе с главным потоком: синхронный — 1, живой воркер — 2 (своя копия карты и aux). */
+  readonly mapCopies: number
   /** Группа заявляет владение полем (конструктор); парный release — в dispose. Счётчик ссылок у воркерного строителя. */
   acquire(field: TerrainHeightField): void
   request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void, onError: (error: unknown) => void): void
@@ -74,6 +76,10 @@ export class SyncTerrainPatchBuilder implements TerrainPatchBuilder {
 
   public get offThread(): boolean {
     return false
+  }
+
+  public get mapCopies(): number {
+    return 1
   }
 
   public acquire(): void {}

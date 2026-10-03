@@ -3,7 +3,8 @@
  * в полёте): столько же, сколько самая большая реальная карта — 8192×4096
  * текселей по два байта. Наверх, а не в среднее: недооценка неизмеренного
  * пути и есть способ пробить бюджет, который он же и должен держать. Тот же
- * приём, что ASSUMED_TEXTURE_BYTES у стримера текстур.
+ * приём, что ASSUMED_TEXTURE_BYTES у стримера текстур. Множитель копий
+ * применяется и к нему (см. `copies` у decideHeightMaps).
  */
 const ASSUMED_HEIGHT_MAP_BYTES: number = 8192 * 4096 * 2
 
@@ -36,6 +37,10 @@ export type HeightMapGateDecision = {
  * Дубли пути схлопываются по максимуму приоритета: путь так же значим, как
  * его ближайший владелец.
  *
+ * `copies` — сколько резидентных копий карты держит строитель патчей вместе
+ * с главным потоком (воркер хранит свою): стоимость пути, и известная, и
+ * предполагаемая, умножается на него в одном месте.
+ *
  * Про путь в полёте политика не знает и знать не должна — она может назвать
  * его в `release`, а реестр такой вызов проигнорирует (пин в
  * HeightFieldStorage.release). Отпустится на следующем пересчёте.
@@ -46,7 +51,8 @@ export function decideHeightMaps(
   loadThreshold: number,
   releaseThreshold: number,
   sizeOf: (path: string) => number | undefined,
-  budgetBytes: number
+  budgetBytes: number,
+  copies: number = 1
 ): HeightMapGateDecision {
   const priorityByPath: Map<string, number> = new Map()
 
@@ -71,7 +77,7 @@ export function decideHeightMaps(
   let used: number = 0
 
   for (const [index, [path]] of contenders.entries()) {
-    const cost: number = sizeOf(path) ?? ASSUMED_HEIGHT_MAP_BYTES
+    const cost: number = (sizeOf(path) ?? ASSUMED_HEIGHT_MAP_BYTES) * copies
 
     // Пол: самый приоритетный претендент резидентен всегда, даже если один
     // дороже всего бюджета. Иначе тело, к которому подлетели, осталось бы без

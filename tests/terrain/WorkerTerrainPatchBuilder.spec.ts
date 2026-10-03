@@ -255,6 +255,23 @@ describe('WorkerTerrainPatchBuilder: отказ воркера — откат н
     vi.restoreAllMocks()
   })
 
+  it('mapCopies: синхронный — 1; воркерный — 2 до отказа, после fail() — 1', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(new SyncTerrainPatchBuilder().mapCopies).toBe(1)
+    const worker = new FakeWorker()
+    const builder = new WorkerTerrainPatchBuilder(worker)
+    expect(builder.mapCopies).toBe(2)
+    worker.fail('onerror', 'сбой')
+    expect(builder.mapCopies).toBe(1)
+    vi.restoreAllMocks()
+  })
+
+  it('mapCopies: после dispose — 1', () => {
+    const builder = new WorkerTerrainPatchBuilder(new FakeWorker())
+    builder.dispose()
+    expect(builder.mapCopies).toBe(1)
+  })
+
   it('offThread: после dispose — false', () => {
     const builder = new WorkerTerrainPatchBuilder(new FakeWorker())
     builder.dispose()
