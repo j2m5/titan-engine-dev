@@ -96,23 +96,38 @@ export function forEachSlope(
     const northSpanArc = (ySouth - yNorth) * northArc
     const row = y * width
 
-    // База восточной разности расширяется до метрической длины пары
-    // экваториальных текселей: сжатые cos-широтой дуги у полюсов иначе
-    // усиливают 16-битное квантование высот в сатурированный шум уклона
-    // (0.3 м шага квантования на дугу 0.5 м — уже уклон 0.6). Кламп width/4 —
-    // защита от вырождения разности на всю окружность у самого полюса.
-    const eastSpan = Math.max(1, Math.min(Math.floor(width / 4), Math.round(1 / Math.cos(latitude))))
+    // Дробная база 1/cos φ с линейной интерполяцией — метрическая длина пары
+    // экваториальных текселей на любой широте, без ступеней: сжатые у полюсов
+    // дуги иначе усиливают 16-битное квантование высот в шум уклона. Кламп
+    // width/4 — защита от разности на всю окружность у самого полюса.
+    // На экваторе s ≈ 1, f ≈ 0 — разность соседей.
+    const eastSpan = Math.max(1, Math.min(Math.floor(width / 4), 1 / Math.cos(latitude)))
+    const whole = Math.floor(eastSpan)
+    const frac = eastSpan - whole
+    const near = 1 - frac
+    const eastDivisor = 2 * eastSpan * eastArc
+
+    // кольцевые индексы тапов x±whole и x±(whole+1), сдвигаются вместе с x
+    let east0 = whole % width
+    let east1 = (whole + 1) % width
+    let west0 = ((-whole % width) + width) % width
+    let west1 = (((-whole - 1) % width) + width) % width
 
     for (let x = 0; x < width; x++) {
-      const west = row + ((x - eastSpan + width) % width)
-      const east = row + ((x + eastSpan) % width)
+      const eastSample = data[row + east0] * near + data[row + east1] * frac
+      const westSample = data[row + west0] * near + data[row + west1] * frac
 
-      const slopeEast = ((data[east] - data[west]) * metersPerRaw) / (2 * eastSpan * eastArc)
+      const slopeEast = ((eastSample - westSample) * metersPerRaw) / eastDivisor
       // карта в одну строку вырождает пролёт в ноль — уклона к северу нет
       const slopeNorth =
         northSpanArc === 0 ? 0 : ((data[yNorth * width + x] - data[ySouth * width + x]) * metersPerRaw) / northSpanArc
 
       visit(x, y, slopeEast, slopeNorth)
+
+      if (++east0 === width) east0 = 0
+      if (++east1 === width) east1 = 0
+      if (++west0 === width) west0 = 0
+      if (++west1 === width) west1 = 0
     }
   }
 }

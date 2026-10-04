@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildSlopeMap, countClampedTexels, SLOPE_RANGE } from '../../scripts/lib/slopeMapEncode'
+import { buildSlopeMap, countClampedTexels, forEachSlope, SLOPE_RANGE } from '../../scripts/lib/slopeMapEncode'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 
 // min 0, max 65535 → метры численно равны raw-значению
@@ -117,7 +117,8 @@ describe('buildSlopeMap: честные уклоны из карты высот'
   })
 
   it('у полюсов базис восточной разности расширяется до метрической длины экватора', () => {
-    // строка 0 (широта 78.75°): 1/cos ≈ 5.1 → пролёт ±4 текселя (кламп width/4).
+    // строка 0 (широта 78.75°): 1/cos ≈ 5.13 > кламп width/4 = 4 → база ровно
+    // ±4 текселя, дробной части нет (дробная база — в тесте ниже).
     // Без расширения одиночный пик в 1000 м на дуге 77 м сатурировал бы кламп —
     // ровно тот полярный шум, который увидел бы игрок над полюсом.
     const width = 16
@@ -136,6 +137,31 @@ describe('buildSlopeMap: честные уклоны из карты высот'
       expect(rgb[x * 3]).not.toBe(255)
       expect(rgb[x * 3]).not.toBe(1)
     }
+  })
+
+  it('у полюса без клампа база дробная: пик делится между тапами ⌊s⌋ и ⌊s⌋+1', () => {
+    // та же строка 78.75°, но width 64 (кламп 16): s = 1/cos ≈ 5.126, f ≈ 0.126.
+    // Пик в x0 виден восточным тапом из x0−5 с весом 1−f и из x0−6 с весом f;
+    // целая база 5 отдала бы x0−5 весь пик, а x0−6 — ноль.
+    const width = 64
+    const height = 8
+    const x0 = 32
+    const values = new Array(width * height).fill(0)
+    values[x0] = 1000
+
+    const s = 1 / Math.cos(rowLatitude(0, height))
+    const f = s - Math.floor(s)
+    const eastArc = (2 * Math.PI * R * Math.cos(rowLatitude(0, height))) / width
+    const slopes = new Map<number, number>()
+    forEachSlope(makeMap(width, height, values), R, (x, y, slopeEast) => {
+      if (y === 0) slopes.set(x, slopeEast)
+    })
+
+    expect(slopes.get(x0 - 5)).toBeCloseTo((1000 * (1 - f)) / (2 * s * eastArc), 9)
+    expect(slopes.get(x0 - 6)).toBeCloseTo((1000 * f) / (2 * s * eastArc), 9)
+    expect(slopes.get(x0 + 5)).toBeCloseTo((-1000 * (1 - f)) / (2 * s * eastArc), 9)
+    expect(slopes.get(x0 + 6)).toBeCloseTo((-1000 * f) / (2 * s * eastArc), 9)
+    expect(slopes.get(x0 - 7)).toBe(0)
   })
 
   it('уклон круче диапазона клампится в крайние байты, без переполнения', () => {
@@ -162,6 +188,8 @@ describe('паритет { cavity: false } с реализацией ДО поя
   // тот момент buildSlopeMap на рукодельной карте 6×4 с неоднородным рельефом
   // (data[i] = round(5000 + 1000·sin(0.7x + 1.3y) + 500y + 200x)), радиус
   // 4000 м — байты скопированы из фактического вывода один в один.
+  // Дробная база EW-разности эталон не трогает: при width 6 кламп
+  // floor(width/4) = 1 держит s = 1 во всех строках.
   const width = 6
   const height = 4
   const data = [
@@ -196,7 +224,8 @@ describe('паритет { cavity: false } с реализацией ДО поя
 })
 
 describe('дизер квантования: субквантовый сигнал не теряется целиком', () => {
-  // широта 22.5° (rowY=2 из 4) — eastSpan=1, как в «арки честные» выше;
+  // широта 22.5° (rowY=2 из 4): дробная база s = 1/cos ≈ 1.082 — линейная
+  // интерполяция на линейной рампе даёт тот же уклон Δh/eastArc, что база 1;
   // R и шаг высоты подобраны так, чтобы сырой уклон был меньше 0.5 МЗР —
   // до дизера round() дал бы 128 НА КАЖДОМ текселе константного поля
   const width = 2000
@@ -211,12 +240,13 @@ describe('дизер квантования: субквантовый сигна
     return makeMap(width, height, values)
   }
 
-  // интерьер без крайних столбцов: у x=0 и x=width−1 сосед через шов долготы
-  // рвёт линейную рампу скачком на всю высоту поля — не о дизере тест
+  // интерьер без ⌈s⌉ = 2 крайних столбцов: их база тянется через шов долготы,
+  // где линейная рампа рвётся скачком на всю высоту поля — не о дизере тест
+  const edge = 2
   function meanDecodedEastSlope(rgb: Uint8Array): number {
     let sum = 0
     let count = 0
-    for (let x = 1; x < width - 1; x++) {
+    for (let x = edge; x < width - edge; x++) {
       sum += decode(rgb[(rowY * width + x) * 3])
       count++
     }
@@ -250,7 +280,7 @@ describe('дизер квантования: субквантовый сигна
     const rgb = buildSlopeMap(makeMap(width, height, values), bodyRadius)
     let sum = 0
     let count = 0
-    for (let x = 1; x < width - 1; x++) {
+    for (let x = edge; x < width - edge; x++) {
       sum += decode(rgb[(rowY * width + x) * 3])
       count++
     }
@@ -509,5 +539,142 @@ describe('buildSlopeMap: per-map диапазон slopeRange', () => {
     const narrow = countClampedTexels(map, R, 0.25)
     expect(narrow.total).toBe(8)
     expect(narrow.clamped).toBeGreaterThan(0)
+  })
+})
+
+describe('дробная база EW-разности: без ступеней по широте', () => {
+  // Пороги, где прежняя целая база round(1/cos φ) прыгала 1→2→3→4.
+  const THRESHOLDS_DEG = [48.19, 66.42, 73.4]
+  const DEG = Math.PI / 180
+
+  it('плоскость с постоянным EW-уклоном: k во всех строках с точностью квантования высот', () => {
+    const width = 1024
+    const height = 512
+    const R = 100000
+    const k = 0.05
+    const values = new Array<number>(width * height)
+    for (let y = 0; y < height; y++) {
+      const eastArc = (2 * Math.PI * R * Math.cos(rowLatitude(y, height))) / width
+      for (let x = 0; x < width; x++) values[y * width + x] = Math.round(1000 + k * eastArc * x)
+    }
+
+    let checked = 0
+    let worst = 0
+    forEachSlope(makeMap(width, height, values), R, (x, y, slopeEast) => {
+      const latitude = rowLatitude(y, height)
+      if (Math.abs(latitude) > 85 * DEG) return
+      // столбцы, чья база не задевает шов долготы (там рампа рвётся)
+      const reach = Math.ceil(1 / Math.cos(latitude)) + 1
+      if (x < reach || x >= width - reach) return
+      const eastArc = (2 * Math.PI * R * Math.cos(latitude)) / width
+      // округление высот ≤ 0.5 м на выборку, база не короче floor(1/cos)
+      const tolerance = 1 / (2 * Math.floor(1 / Math.cos(latitude)) * eastArc)
+      worst = Math.max(worst, Math.abs(slopeEast - k) / tolerance)
+      checked++
+    })
+    expect(worst).toBeLessThanOrEqual(1.001)
+    expect(checked).toBeGreaterThan(width * height * 0.8)
+  })
+
+  it('импульс в строке: энергия отклика непрерывна по широте (без шума, точная)', () => {
+    // Одиночный пик A в каждой строке. Σ slopeEast² по строке = 2A²·g/(2s·eastArc)²,
+    // g = (1−f)² + f², f = frac(s). При s·cos φ = 1 нормированный отклик
+    // M = √(Σ/2)·2·eqArc/A = √g ∈ [1/√2, 1] и меняется плавно; целая база
+    // давала M = 1/(round(1/cos)·cos) — скачок ×½ на 48.19°.
+    const width = 1024
+    const height = 2048
+    const R = 100000
+    const A = 1000
+    const values = new Array<number>(width * height).fill(0)
+    for (let y = 0; y < height; y++) values[y * width + 512] = A
+
+    const energy = new Float64Array(height)
+    forEachSlope(makeMap(width, height, values), R, (_x, y, slopeEast) => {
+      energy[y] += slopeEast * slopeEast
+    })
+    const eqArc = (2 * Math.PI * R) / width
+    const response = (y: number): number => (Math.sqrt(energy[y] / 2) * 2 * eqArc) / A
+
+    // выше 76° дробь базы бежит быстрее 0.03 на строку — честная рябь
+    // интерполяции, не ступень; пороги 48–73° внутри охвата
+    let previous: number | null = null
+    let checked = 0
+    for (let y = 0; y < height / 2; y++) {
+      const latitude = rowLatitude(y, height)
+      if (latitude > 76 * DEG) continue
+      const m = response(y)
+      expect(m).toBeGreaterThanOrEqual(Math.SQRT1_2 - 1e-9)
+      expect(m).toBeLessThanOrEqual(1 + 1e-9)
+      if (previous !== null) expect(Math.abs(m - previous)).toBeLessThan(0.05)
+      previous = m
+      checked++
+    }
+    expect(checked).toBeGreaterThan(800)
+
+    // точное значение на пороге 48.19°: s = 1.5, f = 0.5 → M = √0.5
+    const yAt = Math.round(((90 - 48.19) / 180) * height - 0.5)
+    const s = 1 / Math.cos(rowLatitude(yAt, height))
+    const f = s - Math.floor(s)
+    expect(response(yAt)).toBeCloseTo(Math.sqrt((1 - f) ** 2 + f ** 2), 9)
+  })
+
+  it('изотропный шум: RMS slopeEast по обе стороны бывших порогов совпадает', () => {
+    // Белый шум: RMS = σ·√(2g)/(2s·eastArc), s·eastArc = eqArc — без
+    // нормировки на широту. Целая база: отношение «над/под» 1/2, 2/3, 3/4.
+    const width = 2048
+    const height = 1024
+    const R = 100000
+    const values = new Array<number>(width * height)
+    let seed = 0x9e3779b9
+    for (let i = 0; i < values.length; i++) {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+      values[i] = seed >>> 16
+    }
+
+    const sumSquares = new Float64Array(height)
+    forEachSlope(makeMap(width, height, values), R, (_x, y, slopeEast) => {
+      sumSquares[y] += slopeEast * slopeEast
+    })
+    const rowLatDeg = (y: number): number => rowLatitude(y, height) / DEG
+    const bandRms = (fromDeg: number, toDeg: number): number => {
+      let sum = 0
+      let count = 0
+      for (let y = 0; y < height / 2; y++) {
+        const lat = rowLatDeg(y)
+        if (lat > fromDeg && lat <= toDeg) {
+          sum += sumSquares[y]
+          count += width
+        }
+      }
+      return Math.sqrt(sum / count)
+    }
+
+    const band = 6 * (180 / height)
+    for (const threshold of THRESHOLDS_DEG) {
+      const ratio = bandRms(threshold, threshold + band) / bandRms(threshold - band, threshold)
+      expect(ratio, `порог ${threshold}°`).toBeGreaterThan(0.9)
+      expect(ratio, `порог ${threshold}°`).toBeLessThan(1.1)
+    }
+  })
+
+  it('экватор (s = 1 ровно, нечётная высота): байт-в-байт эталон целой базы', () => {
+    // Эталон снят прежним энкодером (база round(1/cos φ)) до перехода на
+    // дробную: строка 2 из 5 — широта ровно 0, s = 1, f = 0.
+    const width = 12
+    const height = 5
+    const data = [
+      20700, 22034, 23143, 22303, 18590, 18156, 18813, 20454, 24211, 24066, 22363, 20968, 23620, 21470, 18904, 18279,
+      17535, 20574, 23557, 23318, 23165, 20335, 18056, 19863, 19721, 17451, 17096, 20592, 22207, 23543, 23290, 19592,
+      18653, 19072, 20318, 24223, 17476, 19629, 21359, 24030, 22487, 19778, 18961, 17808, 20355, 23683, 23811, 23960,
+      21462, 23650, 21810, 20613, 18292, 17266, 20479, 22328, 23849, 24197, 20643, 19235
+    ]
+    const expectedEquatorRgb = [
+      114, 139, 0, 123, 131, 0, 134, 124, 0, 139, 119, 0, 134, 120, 0, 131, 129, 0, 120, 136, 0, 119, 137, 0, 127, 132,
+      0, 131, 122, 0, 138, 118, 0, 126, 122, 0
+    ]
+
+    const rgb = buildSlopeMap(makeMap(width, height, data), 30000, { cavity: false })
+
+    expect(Array.from(rgb.slice(2 * width * 3, 3 * width * 3))).toEqual(expectedEquatorRgb)
   })
 })

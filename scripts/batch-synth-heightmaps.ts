@@ -1,7 +1,7 @@
 import process from 'node:process'
 import path from 'node:path'
 import { Buffer } from 'node:buffer'
-import { writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import sharp from 'sharp'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { encodeHeightMap } from './lib/heightMapEncode'
@@ -76,17 +76,20 @@ import { Resources } from '@storage/database/resources'
  * установленный sharp box-кернел не экспонирует, а `resampleDem.ts` заточен
  * под float DEM-числа другого конвейера — переиспользовать нечего).
  *
- * Пути вывода — `<каталог входного файла>/<имя>_height.raw` и `<имя>_slope.webp`
- * (имя — колонка «Генерация» списка ниже); у Корribана каталог входного
+ * Пути вывода — `<живой каталог входа>/<имя>_height.raw` и `<имя>_slope.webp`
+ * (имя — колонка «Генерация» списка ниже; вход из `storage/local` пишет в тот
+ * же относительный каталог под `storage/images`, см. `liveDirFor`); у Коррибана каталог входного
  * файла общий на семь генераций (входная текстура одна), но КАЖДАЯ из
  * korriban1..korriban7 пишет СВОИ height/slope — общий физический ресурс
- * Корribана в БД был ошибкой (радиус I откалиброван на VII дал 577% его
+ * Коррибана в БД был ошибкой (радиус I откалиброван на VII дал 577% его
  * бюджета высоты), поэтому этот батч больше не производит общую карту.
  *
  * Запуск (все генерации списка):
  *   npm run build:moon-heightmaps
  * Перегенерировать одно тело:
  *   npm run build:moon-heightmaps -- --only rhea
+ * В сторонний каталог (сверка, живые карты не трогаются):
+ *   npm run build:moon-heightmaps -- --only rhea --out-dir <каталог>
  *
  * Энцелад в списке НЕ значится — он DEM-тело, как Церера (DEM Cassini,
  * Schenk 2024; см. `docs/terrain-handoff.md`).
@@ -132,11 +135,13 @@ interface BodyGeneration {
 type BodyInputKind = 'bump' | 'diffuse' | 'elevation' | 'procedural'
 
 const TEXTURES_ROOT = 'storage/images/textures/planets'
+/** Входы конвейера вне манифеста бакета; вывод — в тот же относительный каталог под `TEXTURES_ROOT`. */
+const LOCAL_TEXTURES_ROOT = 'storage/local/textures/planets'
 
 /**
  * Список генераций — изначально см. «Список генераций (12 уникальных карт →
  * 18 тел)» в плане арки (`docs/superpowers/plans/2026-08-16-terrain-moons-batch.md`);
- * фикс-раунд 1 (находка 2, рулинг контроллера) развёл общую карту Корribана
+ * фикс-раунд 1 (находка 2, рулинг контроллера) развёл общую карту Коррибана
  * на семь ПЕР-ТЕЛО генераций — общий бюджет 0.7% радиуса I (1740 км),
  * откалиброванный под неё height/slope, давал VII (175 км) 577% ЕЁ бюджета.
  * Пути и радиусы — константы из инвентаризации/resources.ts, БД не читается.
@@ -147,7 +152,7 @@ const BODIES: readonly BodyGeneration[] = [
   {
     // Настоящая карта высот владельца (16384×8192, яркость = высота) — путь elevation вместо синтеза из диффуза; блочность JPEG-происхождения — σ 2.0, 41% дисперсии шире 560 км — highPassKm 600.
     name: 'io',
-    inputPath: `${TEXTURES_ROOT}/io/io_elevation_16k.png`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/io/io_elevation_16k.png`,
     inputKind: 'elevation',
     radiusMeters: 1_821_500,
     seedActorId: 20,
@@ -159,7 +164,7 @@ const BODIES: readonly BodyGeneration[] = [
   {
     // Настоящая карта высот (= ganymede_bump, корреляция 0.999) — путь elevation вместо синтеза из диффуза; пик занижен до 6000 м (реальный рельеф Ганимеда ±1-2 км, бюджет 18.4 км неправдоподобен); highPassKm 800 — половина дисперсии карты на масштабах шире 800 км (широкие светлые/тёмные пятна), без фильтра съедала бы бюджет высоты у кратеров/борозд; peakPercentile 0.999 — верхние 0.1% текселей задавали половину амплитуды нормировки, не типичный рельеф.
     name: 'ganymede',
-    inputPath: `${TEXTURES_ROOT}/ganymede/ganymede_elevation_11k.png`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/ganymede/ganymede_elevation_11k.png`,
     inputKind: 'elevation',
     radiusMeters: 2_631_200,
     seedActorId: 22,
@@ -171,7 +176,7 @@ const BODIES: readonly BodyGeneration[] = [
   },
   {
     name: 'rhea',
-    inputPath: `${TEXTURES_ROOT}/rhea/rhea_bump.jpg`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/rhea/rhea_bump.jpg`,
     inputKind: 'elevation',
     radiusMeters: 764_500,
     seedActorId: 28,
@@ -182,7 +187,7 @@ const BODIES: readonly BodyGeneration[] = [
   },
   {
     name: 'titan',
-    inputPath: `${TEXTURES_ROOT}/titan/titan_bump.jpg`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/titan/titan_bump.jpg`,
     inputKind: 'bump',
     radiusMeters: 2_575_000,
     seedActorId: 29,
@@ -190,7 +195,7 @@ const BODIES: readonly BodyGeneration[] = [
   },
   {
     name: 'iapetus',
-    inputPath: `${TEXTURES_ROOT}/iapetus/iapetus_bump.jpg`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/iapetus/iapetus_bump.jpg`,
     inputKind: 'elevation',
     radiusMeters: 734_500,
     seedActorId: 30,
@@ -204,7 +209,7 @@ const BODIES: readonly BodyGeneration[] = [
   {
     // Настоящая карта высот (= triton_bump, корреляция 1.0) — путь elevation вместо синтеза; сильно альбедная (80% дисперсии шире ~415 км) — highPassKm 400; пик занижен до 4000 м (реальный рельеф Тритона < 1 км, бюджет 9.5 км неправдоподобен).
     name: 'triton',
-    inputPath: `${TEXTURES_ROOT}/triton/triton_elevation_16k.png`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/triton/triton_elevation_16k.png`,
     inputKind: 'elevation',
     radiusMeters: 1_352_600,
     seedActorId: 36,
@@ -218,7 +223,7 @@ const BODIES: readonly BodyGeneration[] = [
   {
     // Настоящая карта высот (= charon_bump_16k, корреляция 1.0) — путь elevation вместо синтеза; 111 уровней яркости, ступени вдвое грубее обычного.
     name: 'charon',
-    inputPath: `${TEXTURES_ROOT}/charon/charon_elevation_16k.png`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/charon/charon_elevation_16k.png`,
     inputKind: 'elevation',
     radiusMeters: 606_000,
     seedActorId: 37,
@@ -229,7 +234,7 @@ const BODIES: readonly BodyGeneration[] = [
   {
     // Та же карта, что была bump-входом, — путь elevation вместо синтеза; вход зернистый (44% энергии мельче 8 px).
     name: 'dysnomia',
-    inputPath: `${TEXTURES_ROOT}/dysnomia/dysnomia_elevation_16k.png`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/dysnomia/dysnomia_elevation_16k.png`,
     inputKind: 'elevation',
     radiusMeters: 320_000,
     seedActorId: 38,
@@ -239,7 +244,7 @@ const BODIES: readonly BodyGeneration[] = [
   },
   {
     name: 'adriana3',
-    inputPath: `${TEXTURES_ROOT}/StarWars/adriana3/adriana3_bump.jpg`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/StarWars/adriana3/adriana3_bump.jpg`,
     inputKind: 'bump',
     radiusMeters: 2_256_760,
     seedActorId: 73,
@@ -323,7 +328,7 @@ const BODIES: readonly BodyGeneration[] = [
     // высота): ни подложки, ни полосы — и потолок поднят до 8192 вместо 4096
     // по радиусу, вход это оправдывает. Файл локальный, в git не хранится.
     name: 'pluto',
-    inputPath: `${TEXTURES_ROOT}/pluto/pluto_elevation_16k.png`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/pluto/pluto_elevation_16k.png`,
     inputKind: 'elevation',
     radiusMeters: 1_188_300,
     seedActorId: 14,
@@ -334,7 +339,7 @@ const BODIES: readonly BodyGeneration[] = [
     // Вход — обработанная мозаика 20k владельца (яркость = высота); пик занижен
     // относительно бюджета осознанно (рельеф Европы — сотни метров).
     name: 'europa',
-    inputPath: `${TEXTURES_ROOT}/europa/europa_elevation_20k.png`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/europa/europa_elevation_20k.png`,
     inputKind: 'elevation',
     radiusMeters: 1_561_000,
     seedActorId: 21,
@@ -353,7 +358,7 @@ const BODIES: readonly BodyGeneration[] = [
   {
     // Настоящая карта высот владельца (16384×8192, яркость = высота) — путь elevation вместо синтеза из диффуза; независимый зернистый вход (32% энергии мельче 8 px) — σ 2.0, highPassKm 300 против крупномасштабного тренда (40% дисперсии шире ~230 км).
     name: 'makemake',
-    inputPath: `${TEXTURES_ROOT}/makemake/makemake_elevation_16k.png`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/makemake/makemake_elevation_16k.png`,
     inputKind: 'elevation',
     radiusMeters: 739_000,
     seedActorId: 16,
@@ -365,7 +370,7 @@ const BODIES: readonly BodyGeneration[] = [
   {
     // Вход зернистый (35% энергии мельче 4 px) — σ 1.5 против зерна, сильнее дефолта.
     name: 'eris',
-    inputPath: `${TEXTURES_ROOT}/eris/eris_elevation_16k.png`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/eris/eris_elevation_16k.png`,
     inputKind: 'elevation',
     radiusMeters: 1_163_000,
     seedActorId: 17,
@@ -376,7 +381,7 @@ const BODIES: readonly BodyGeneration[] = [
   {
     // Настоящая карта высот владельца (16384×8192, яркость = высота) — путь elevation вместо синтеза из диффуза; зернистый вход (51% энергии мельче 8 px) — σ 2.0 против зерна.
     name: 'sedna',
-    inputPath: `${TEXTURES_ROOT}/sedna/sedna_elevation_16k.png`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/sedna/sedna_elevation_16k.png`,
     inputKind: 'elevation',
     radiusMeters: 800_000,
     seedActorId: 18,
@@ -392,7 +397,7 @@ const BODIES: readonly BodyGeneration[] = [
   // (обобщён под area-average с дробным перекрытием, см. `batchBodyRules.ts`).
   {
     name: 'mimas',
-    inputPath: `${TEXTURES_ROOT}/mimas/mimas_bump.jpg`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/mimas/mimas_bump.jpg`,
     inputKind: 'elevation',
     radiusMeters: 198_800,
     seedActorId: 24,
@@ -406,7 +411,7 @@ const BODIES: readonly BodyGeneration[] = [
   },
   {
     name: 'tethys',
-    inputPath: `${TEXTURES_ROOT}/tethys/tethys_bump.jpg`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/tethys/tethys_bump.jpg`,
     inputKind: 'elevation',
     radiusMeters: 536_300,
     seedActorId: 26,
@@ -418,7 +423,7 @@ const BODIES: readonly BodyGeneration[] = [
   {
     // Настоящая карта высот владельца (18928×9464, яркость = высота) — путь elevation вместо синтеза из диффуза.
     name: 'dione',
-    inputPath: `${TEXTURES_ROOT}/dione/dione_elevation_18k.png`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/dione/dione_elevation_18k.png`,
     inputKind: 'elevation',
     radiusMeters: 562_500,
     seedActorId: 27,
@@ -427,7 +432,7 @@ const BODIES: readonly BodyGeneration[] = [
   },
   {
     name: 'miranda',
-    inputPath: `${TEXTURES_ROOT}/miranda/miranda_bump.jpg`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/miranda/miranda_bump.jpg`,
     inputKind: 'elevation',
     radiusMeters: 240_000,
     seedActorId: 31,
@@ -439,7 +444,7 @@ const BODIES: readonly BodyGeneration[] = [
   },
   {
     name: 'ariel',
-    inputPath: `${TEXTURES_ROOT}/ariel/ariel_bump.jpg`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/ariel/ariel_bump.jpg`,
     inputKind: 'elevation',
     radiusMeters: 577_900,
     seedActorId: 32,
@@ -450,7 +455,7 @@ const BODIES: readonly BodyGeneration[] = [
   },
   {
     name: 'umbriel',
-    inputPath: `${TEXTURES_ROOT}/umbriel/umbriel_bump.jpg`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/umbriel/umbriel_bump.jpg`,
     inputKind: 'elevation',
     radiusMeters: 585_000,
     seedActorId: 33,
@@ -461,7 +466,7 @@ const BODIES: readonly BodyGeneration[] = [
   },
   {
     name: 'titania',
-    inputPath: `${TEXTURES_ROOT}/titania/titania_bump.jpg`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/titania/titania_bump.jpg`,
     inputKind: 'elevation',
     radiusMeters: 788_900,
     seedActorId: 34,
@@ -472,7 +477,7 @@ const BODIES: readonly BodyGeneration[] = [
   },
   {
     name: 'oberon',
-    inputPath: `${TEXTURES_ROOT}/oberon/oberon_bump.jpg`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/oberon/oberon_bump.jpg`,
     inputKind: 'elevation',
     radiusMeters: 761_500,
     seedActorId: 35,
@@ -564,7 +569,7 @@ const BODIES: readonly BodyGeneration[] = [
     // Источник 4096×2048 меньше потолка 8192 — разрешение ограничится
     // исходным (штатно, потолок не форсируется).
     name: 'korriban',
-    inputPath: `${TEXTURES_ROOT}/StarWars/korriban/korriban_bump.png`,
+    inputPath: `${LOCAL_TEXTURES_ROOT}/StarWars/korriban/korriban_bump.png`,
     inputKind: 'bump',
     radiusMeters: 5_950_000,
     seedActorId: 88,
@@ -893,7 +898,14 @@ function proceduralGreyscale(
   return { width, height, luminance: proceduralLuminance(body.seedActorId, width, height), dir: body.outputDir }
 }
 
-/** Растр входов `bump`/`diffuse`/`elevation` — читает и даунсемплит файл `body.inputPath`, каталог вывода = его директория. */
+/** Живой каталог карт для входа: `LOCAL_TEXTURES_ROOT/x` → `TEXTURES_ROOT/x`, иначе директория входа. */
+function liveDirFor(inputPath: string): string {
+  const dir = path.posix.dirname(inputPath)
+
+  return dir.startsWith(`${LOCAL_TEXTURES_ROOT}/`) ? `${TEXTURES_ROOT}/${dir.slice(LOCAL_TEXTURES_ROOT.length + 1)}` : dir
+}
+
+/** Растр входов `bump`/`diffuse`/`elevation` — читает и даунсемплит файл `body.inputPath`, каталог вывода — `liveDirFor`. */
 async function fileGreyscale(
   body: BodyGeneration,
   ceilingWidth: number
@@ -902,11 +914,11 @@ async function fileGreyscale(
 
   const loaded = await loadDownsampledGreyscale(body.inputPath, ceilingWidth)
 
-  return { ...loaded, dir: path.dirname(body.inputPath) }
+  return { ...loaded, dir: liveDirFor(body.inputPath) }
 }
 
 /** Полная генерация одного тела: вход → поле высот → запись height+slope → строка отчёта. */
-async function generateBody(body: BodyGeneration): Promise<ReportRow> {
+async function generateBody(body: BodyGeneration, outDir: string | undefined): Promise<ReportRow> {
   const ceilingWidth = resolutionCeiling(body.radiusMeters, body.ceilingWidth)
   const { width, height, luminance, dir } =
     body.inputKind === 'procedural' ? proceduralGreyscale(body, ceilingWidth) : await fileGreyscale(body, ceilingWidth)
@@ -923,13 +935,15 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
   // сознательно считали R/G без cavity — здесь собираем финальную slope-карту
   // ОДИН раз с cavity: true, на уже готовой карте высот field.map — без
   // повторного синтеза поля.
-  const heightPath = path.join(dir, `${body.name}_height.raw`)
-  const slopePath = path.join(dir, `${body.name}_slope.webp`)
+  // --out-dir: запись в сторонний каталог (сверка без замены живых карт), slopeRange — по живому пути
+  const heightPath = path.join(outDir ?? dir, `${body.name}_height.raw`)
+  const slopePath = path.join(outDir ?? dir, `${body.name}_slope.webp`)
+  if (outDir !== undefined) await mkdir(outDir, { recursive: true })
 
   // финальная карта кодируется диапазоном своей строки ресурса — иначе байты
   // на диске разойдутся с uSlopeRange шейдера; прогоны выше намеренно
   // остаются на дефолте (measureRmsTan декодирует им же).
-  const dbSlopePath = dbPathFor(slopePath, path.dirname(TEXTURES_ROOT))
+  const dbSlopePath = dbPathFor(path.join(dir, `${body.name}_slope.webp`), path.dirname(TEXTURES_ROOT))
   const slopeRgb = buildSlopeMap(field.map, body.radiusMeters, {
     slopeRange: slopeRangeForPath(dbSlopePath, Resources)
   })
@@ -965,6 +979,7 @@ async function generateBody(body: BodyGeneration): Promise<ReportRow> {
 
 async function run(): Promise<void> {
   const onlyName = argument('only')
+  const outDir = argument('out-dir')
   const selected = onlyName ? BODIES.filter((body) => body.name === onlyName) : BODIES
 
   if (onlyName && selected.length === 0) {
@@ -976,7 +991,7 @@ async function run(): Promise<void> {
 
   for (const body of selected) {
     console.log(`Генерация ${body.name} (${body.inputKind}: ${inputLabel(body)})…`)
-    const row = await generateBody(body)
+    const row = await generateBody(body, outDir)
     rows.push(row)
 
     console.log(
