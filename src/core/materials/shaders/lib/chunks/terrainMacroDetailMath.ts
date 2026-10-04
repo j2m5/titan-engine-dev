@@ -70,8 +70,10 @@ export const MACRO_RELIEF_ASPECT_STREAK = 0.08
 export const STREAK_PLANE_POW = 8
 export const STREAK_PLANE_MIN_WEIGHT = 0.02
 export const TERRACE_WOBBLE = 0.7
-/** Доля периода под уступом; остальное — площадка. */
-export const TERRACE_RISER = 0.3
+/** Доля периода под уступом; остальное — площадка. Пиковая производная профиля 1.5/RISER − 1 = 2. */
+export const TERRACE_RISER = 0.5
+/** Потолок множителя собственного уклона на уступе: не круче 2.5× — иначе низкое солнце даёт чёрную линию. */
+export const TERRACE_SLOPE_MUL_MAX = 2.5
 export const TERRACE_SHADE = 0.07
 /** Маска покрытия террас по значению fbm: ниже LO — нет полок, выше HI — полная. */
 export const TERRACE_COVER_LO = 0.1
@@ -106,6 +108,20 @@ export function terraceProfile(phase: number): { value: number; derivative: numb
   const dRise = t < TERRACE_RISER ? (6 * r * (1 - r)) / TERRACE_RISER : 0
 
   return { value: rise - t, derivative: dRise - 1 }
+}
+
+/** Множитель собственного уклона 1 + m, m = clamp(k·derivative, −1, MUL_MAX − 1) — строка нормали террас в чанке. */
+export function terraceSlopeMultiplier(k: number, derivative: number): number {
+  return 1 + Math.max(-1, Math.min(TERRACE_SLOPE_MUL_MAX - 1, k * derivative))
+}
+
+/**
+ * Вес ступенчатости по ширине уступа: phasePerPixel = fwidth(h)/step,
+ * ширина уступа в px = RISER/phasePerPixel. 1 при ≥ 2 px, 0 при ≤ 1 px;
+ * при 0 модуляция нормали и тень уступа гаснут — остаётся средний уклон.
+ */
+export function terraceRiserWeight(phasePerPixel: number): number {
+  return 1 - smoothstep(0.5, 1, phasePerPixel / TERRACE_RISER)
 }
 
 /** Веса плоскостей трипланара по единичному направлению: |dir|^POW, нормированные на сумму. */

@@ -10,6 +10,7 @@ import {
   STREAK_PLANE_POW,
   STREAK_STRETCH,
   TERRACE_RISER,
+  TERRACE_SLOPE_MUL_MAX,
   TERRACE_COVER_HI,
   TERRACE_COVER_LO,
   TERRACE_SHADE,
@@ -26,6 +27,7 @@ describe('TerrainMacroDetail: направленные формы склона (
     expect(fn).toContain(`#define STREAK_PLANE_MIN_WEIGHT ${STREAK_PLANE_MIN_WEIGHT}\n`)
     expect(fn).toContain(`#define TERRACE_WOBBLE ${TERRACE_WOBBLE}\n`)
     expect(fn).toContain(`#define TERRACE_RISER ${TERRACE_RISER}\n`)
+    expect(fn).toContain(`#define TERRACE_SLOPE_MUL_MAX ${TERRACE_SLOPE_MUL_MAX}\n`)
     expect(fn).toContain(`#define TERRACE_SHADE ${TERRACE_SHADE}\n`)
     expect(fn).toContain(`#define TERRACE_COVER_LO ${TERRACE_COVER_LO}\n`)
     expect(fn).toContain(`#define TERRACE_COVER_HI ${TERRACE_COVER_HI}\n`)
@@ -97,13 +99,16 @@ describe('TerrainMacroDetail: направленные формы склона (
   it('террасы: фаза от vHeightMeters (не от позиции), наклон модулирует slopeVec производной профиля', () => {
     const terr = fn.slice(fn.indexOf('vec2 tp = terraceProfile('), fn.indexOf('TERRACE_SHADE * k'))
     expect(terr).toContain('vHeightMeters / max(uMacroTerraceStepMeters, 1e-3) + TERRACE_WOBBLE * fbmValue')
-    expect(terr).toContain('tp.y * slopeVec')
+    // потолок: множитель уклона 1 + m в [0, TERRACE_SLOPE_MUL_MAX]
+    expect(terr).toContain('float m = clamp(k * tp.y, -1.0, TERRACE_SLOPE_MUL_MAX - 1.0);')
+    expect(terr).toContain('nLocal = normalize(nLocal - m * slopeVec);')
     expect(terr).toContain('* terraceWeight')
     expect(terr).not.toContain('vPosition')
   })
 
-  it('гейт террас по экранному следу: считается до полярного выхода, входит в k террас', () => {
-    const line = 'float terraceWeight = 1.0 - smoothstep(0.5, 1.0, fwidth(vHeightMeters) / max(uMacroTerraceStepMeters, 1e-3));'
+  it('гейт террас по следу УСТУПА: считается до полярного выхода, входит в k террас', () => {
+    // шаг фазы на пиксель / RISER: уступ уже ~2 px гасит ступенчатость (вес по периоду — мягче)
+    const line = 'float terraceWeight = 1.0 - smoothstep(0.5, 1.0, fwidth(vHeightMeters) / (max(uMacroTerraceStepMeters, 1e-3) * TERRACE_RISER));'
     const terraceWeightDecl = fn.indexOf(line)
     const polar = fn.indexOf('if (eastLen < 1e-4) return;')
     expect(terraceWeightDecl).toBeGreaterThan(-1)

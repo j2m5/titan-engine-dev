@@ -46,7 +46,9 @@ export const terrainMacroDetailFunctions = /* glsl */ `
   #define STREAK_PLANE_POW 8.0
   #define STREAK_PLANE_MIN_WEIGHT 0.02
   #define TERRACE_WOBBLE 0.7
-  #define TERRACE_RISER 0.3
+  #define TERRACE_RISER 0.5
+  // Потолок множителя уклона на уступе (1 + k·tp.y ≤ 2.5)
+  #define TERRACE_SLOPE_MUL_MAX 2.5
   #define TERRACE_SHADE 0.07
   // Покрытие террас маской fbm: полки пятнами на стене, не сплошной изогипсой
   #define TERRACE_COVER_LO 0.1
@@ -162,8 +164,10 @@ export const terrainMacroDetailFunctions = /* glsl */ `
       vec2 tp = terraceProfile(vHeightMeters / max(uMacroTerraceStepMeters, 1e-3) + TERRACE_WOBBLE * fbmValue);
       float cover = smoothstep(TERRACE_COVER_LO, TERRACE_COVER_HI, fbmValue);
       float k = uMacroTerraceStrength * gate * distFade * terraceWeight * cover;
-      // площадка (tp.y = −1) положе, уступ круче — модуляция собственного уклона
-      nLocal = normalize(nLocal - k * tp.y * slopeVec);
+      // площадка (tp.y = −1) положе, уступ круче — модуляция собственного уклона;
+      // множитель 1 + m в [0, TERRACE_SLOPE_MUL_MAX]
+      float m = clamp(k * tp.y, -1.0, TERRACE_SLOPE_MUL_MAX - 1.0);
+      nLocal = normalize(nLocal - m * slopeVec);
       // тень уступа — окклюзия формы, не цвет
       occlusion *= max(1.0 - TERRACE_SHADE * k * max(tp.x, 0.0), 0.0);
     }
@@ -201,8 +205,9 @@ export const terrainMacroDetailFunctions = /* glsl */ `
     vec3 qs = dirLocal * (uBodyRadiusUnits / max(uMacroStreakPeriodUnits, 1e-9));
     float streakWeight = 1.0 - smoothstep(0.5, 1.0, length(fwidth(qs)));
 
-    // След террас: шаг фазы на пиксель = fwidth(высоты)/step; полоса тоньше ~2 px гаснет
-    float terraceWeight = 1.0 - smoothstep(0.5, 1.0, fwidth(vHeightMeters) / max(uMacroTerraceStepMeters, 1e-3));
+    // След террас по УСТУПУ: шаг фазы на пиксель / RISER; уступ уже ~2 px гасит
+    // ступенчатость (модуляцию нормали и тень) — остаётся средний уклон
+    float terraceWeight = 1.0 - smoothstep(0.5, 1.0, fwidth(vHeightMeters) / (max(uMacroTerraceStepMeters, 1e-3) * TERRACE_RISER));
 
     float eastLen = length(eastLocal);
     if (eastLen < 1e-4) return; // полюс: тангенс вырожден
