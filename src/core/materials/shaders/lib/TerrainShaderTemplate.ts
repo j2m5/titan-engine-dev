@@ -1,5 +1,5 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
-import { ShaderChunk, Uniform, UniformsUtils, Vector3 } from 'three'
+import { ShaderChunk, Uniform, UniformsUtils, Vector2, Vector3 } from 'three'
 import { AppUniformsChunk } from './chunks'
 import {
   planetSurfaceComposite,
@@ -44,6 +44,8 @@ const terrainUniforms = {
   uNearTileTexels: new Uniform(512),
   uNearTileWeight: new Uniform(0),
   uNearShadowMaxDistMeters: new Uniform(8000),
+  uNearCameraXY: new Uniform(new Vector2(0, 0)),
+  uNearCameraFadeMeters: new Uniform(new Vector2(6500, 9000)),
   uBodyRadiusMeters: new Uniform(0)
 }
 

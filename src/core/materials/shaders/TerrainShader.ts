@@ -82,6 +82,8 @@ interface TerrainUniforms extends PlanetSurfaceUniforms {
   uNearTileTexels: number
   uNearTileWeight: number
   uNearShadowMaxDistMeters: number
+  uNearCameraXY: Vector2
+  uNearCameraFadeMeters: Vector2
   uBodyRadiusMeters: number
   uIceGlintStrength: number
   uMacroStrength: number
@@ -180,6 +182,8 @@ class TerrainShader extends PlanetSurfaceShader<TerrainUniformKey> {
       uNearTileTexels: new Uniform(config('terrain.nearShadow').tileTexels),
       uNearTileWeight: new Uniform(0),
       uNearShadowMaxDistMeters: new Uniform(config('terrain.nearShadow').maxDistanceMeters),
+      uNearCameraXY: new Uniform(new Vector2(0, 0)),
+      uNearCameraFadeMeters: new Uniform(new Vector2(config('terrain.nearShadow').fadeStartMeters, config('terrain.nearShadow').fadeEndMeters)),
       uBodyRadiusMeters: new Uniform(radiusKm * 1000),
       uIceGlintStrength: new Uniform(light.iceGlintStrength),
       uMacroStrength: new Uniform(planetData.macroStrength ?? DEFAULT_MACRO_STRENGTH),

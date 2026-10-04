@@ -114,6 +114,7 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     if (!state) {
       u.uNearTile.value = null
       u.uNearTileWeight.value = 0
+      ;(u.uNearCameraXY.value as Vector2).set(0, 0)
 
       return
     }
@@ -124,6 +125,8 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     u.uNearTileTexelMeters.value = state.texelMeters
     u.uNearTileTexels.value = state.texels
     u.uNearTileWeight.value = state.altitudeWeight * this.nearShadowStrength
+    // каждый кадр: окно веса едет с камерой между перепечками
+    ;(u.uNearCameraXY.value as Vector2).fromArray(state.cameraXY)
   }
 
   protected updatePath({ planetData, cloudMap }: SurfaceMaps): Record<string, string> {

@@ -5,7 +5,10 @@ import {
   combineTerrainShadow,
   dirToTile,
   nearAltitudeWeight,
+  nearCameraWeight,
+  nearCameraXYInto,
   nearEdgeWeight,
+  nearWindowWeight,
   nearShadowMarch,
   nearTileBasis,
   texelCenter,
@@ -197,6 +200,9 @@ describe('terrainNearShadowMath: веса и сложение', () => {
   })
 })
 
+// путь камеры, пока перепечка в полёте (бейк ≈0.4 с + очередь воркера), м
+const NEAR_IN_FLIGHT_SLACK_METERS = 800
+
 describe('конфиг terrain.nearShadow', () => {
   it('значения Global Constraints', () => {
     expect(config('terrain.nearShadow')).toEqual({
@@ -205,7 +211,103 @@ describe('конфиг terrain.nearShadow', () => {
       maxDistanceMeters: 8000,
       maxAltitudeMeters: 50000,
       fadeAltitudeMeters: 30000,
-      rebakeFraction: 0.25
+      rebakeFraction: 0.1,
+      fadeStartMeters: 6500,
+      fadeEndMeters: 9000
     })
+  })
+
+  it('инвариант: окно камеры плюс сдвиг до перепечки — внутри плато краевого веса', () => {
+    const c = config('terrain.nearShadow')
+    const side = c.tileTexels * c.texelMeters
+    expect(c.fadeStartMeters).toBeLessThan(c.fadeEndMeters)
+    expect(0.8 * (side / 2) - c.rebakeFraction * side - c.fadeEndMeters).toBeGreaterThanOrEqual(NEAR_IN_FLIGHT_SLACK_METERS)
+  })
+})
+
+describe('terrainNearShadowMath: окно вокруг камеры', () => {
+  const C = config('terrain.nearShadow')
+  const HALF = 0.5 * C.tileTexels * C.texelMeters
+  const FS = C.fadeStartMeters
+  const FE = C.fadeEndMeters
+  const RM = R
+
+  /** Точка на экваторе в arc метрах к востоку от +X (как cameraAt в NearShadowTile.spec). */
+  const dirAt = (arc: number): Vec3 => [Math.cos(arc / RM), 0, -Math.sin(arc / RM)]
+
+  /** Вес окна у земной точки pArc при камере camArc и центре плитки centerArc. */
+  function windowAt(pArc: number, camArc: number, centerArc: number): { full: number; edge: number } {
+    const c = dirAt(centerArc)
+    const { east, north } = nearTileBasis(c)
+    const [x, y] = dirToTile(dirAt(pArc), c, east, north, RM)
+    const cam: [number, number] = [0, 0]
+    nearCameraXYInto(dirAt(camArc), c, east, north, RM, cam)
+
+    return { full: nearWindowWeight(x, y, cam[0], cam[1], HALF, FS, FE), edge: nearEdgeWeight(x, y, HALF) }
+  }
+
+  it('вес камеры: 1 внутри fadeStart, 0 за fadeEnd, круг, непрерывен и монотонен', () => {
+    expect(nearCameraWeight(100, 200, 100, 200, FS, FE)).toBe(1)
+    expect(nearCameraWeight(FS, 0, 0, 0, FS, FE)).toBe(1)
+    expect(nearCameraWeight(0, -FE, 0, 0, FS, FE)).toBe(0)
+    expect(nearCameraWeight(FE + 1, 0, 0, 0, FS, FE)).toBe(0)
+    // круг: диагональ на том же расстоянии — тот же вес
+    const r = 0.5 * (FS + FE)
+    expect(nearCameraWeight(r / Math.SQRT2, r / Math.SQRT2, 0, 0, FS, FE)).toBeCloseTo(nearCameraWeight(r, 0, 0, 0, FS, FE), 12)
+    expect(nearCameraWeight(r, 0, 0, 0, FS, FE)).toBeCloseTo(0.5, 12)
+
+    let prev = 1
+    for (let s = 0; s <= 12000; s += 50) {
+      const w = nearCameraWeight(1000 + s, -500, 1000, -500, FS, FE)
+      expect(w).toBeLessThanOrEqual(prev)
+      expect(prev - w).toBeLessThan(0.05)
+      prev = w
+    }
+  })
+
+  it('вес окна = вес камеры × краевой вес', () => {
+    for (const [x, y, cx, cy] of [[0, 0, 0, 0], [8000, 0, 0, 0], [14000, 0, 9000, 0], [-15000, 3000, -7000, 0]]) {
+      expect(nearWindowWeight(x, y, cx, cy, HALF, FS, FE)).toBe(nearCameraWeight(x, y, cx, cy, FS, FE) * nearEdgeWeight(x, y, HALF))
+    }
+  })
+
+  it('страховка: точка за краем плитки — 0 при любой камере', () => {
+    for (const [x, y] of [[HALF, 0], [0, -HALF - 10], [HALF + 500, HALF + 500]]) {
+      for (const [cx, cy] of [[0, 0], [x, y], [x * 0.9, y * 0.9], [1e9, 1e9]]) {
+        expect(nearWindowWeight(x, y, cx, cy, HALF, FS, FE)).toBe(0)
+      }
+    }
+  })
+
+  it('камера в задней полусфере плитки — вес камеры 0 везде, без NaN', () => {
+    const c: Vec3 = [1, 0, 0]
+    const { east, north } = nearTileBasis(c)
+    const cam: [number, number] = [0, 0]
+    nearCameraXYInto([-1, 0, 0], c, east, north, RM, cam)
+    expect(Number.isFinite(cam[0]) && Number.isFinite(cam[1])).toBe(true)
+    for (const [x, y] of [[0, 0], [5000, -5000], [-HALF, HALF]]) {
+      expect(nearWindowWeight(x, y, cam[0], cam[1], HALF, FS, FE)).toBe(0)
+    }
+  })
+
+  it('перепечка (центр плитки прыгает к камере) не меняет вес у земной точки скачком', () => {
+    const threshold = C.rebakeFraction * 2 * HALF
+    const eps = 1
+    // до перепечки центр стоит у 0, после — под камерой
+    for (let off = -16000; off <= 16000; off += 250) {
+      // та же земная точка, камера сдвинулась на 2 м через порог
+      const before = windowAt(threshold - eps + off, threshold - eps, 0).full
+      const after = windowAt(threshold - eps + off, threshold + eps, threshold + eps).full
+      expect(Math.abs(after - before), `off ${off}`).toBeLessThan(0.01)
+    }
+  })
+
+  it('прежний квадрат по центру плитки на том же скачке давал разрыв (контраст)', () => {
+    // прежний порог — четверть стороны; точка 8 км впереди камеры
+    const threshold = 0.25 * 2 * HALF
+    const p = threshold + 8000
+    const before = windowAt(p, threshold - 1, 0).edge
+    const after = windowAt(p, threshold + 1, threshold + 1).edge
+    expect(after - before).toBeGreaterThan(0.5)
   })
 })

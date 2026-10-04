@@ -27,6 +27,9 @@ export const terrainShadowMarchUniforms = /* glsl */ `
   uniform float uNearTileTexels;
   uniform float uNearTileWeight;
   uniform float uNearShadowMaxDistMeters;
+  // подкамерная точка в метрах плитки (каждый кадр) и окно веса вокруг неё (начало, конец спада), м
+  uniform vec2 uNearCameraXY;
+  uniform vec2 uNearCameraFadeMeters;
   uniform float uBodyRadiusMeters;
 `
 

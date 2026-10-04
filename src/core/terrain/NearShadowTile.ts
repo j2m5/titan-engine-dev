@@ -3,11 +3,11 @@ import type { TerrainConfig } from '@/config/terrain'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { TerrainHeightField } from './TerrainHeightField'
 import type { TerrainPatchBuilder } from './terrainPatchBuilder'
-import { nearAltitudeWeight, nearTileBasis, type Vec3 } from './terrainNearShadowMath'
+import { nearAltitudeWeight, nearCameraXYInto, nearTileBasis, type Vec3 } from './terrainNearShadowMath'
 
 export type NearShadowTileConfig = TerrainConfig['terrain']['nearShadow']
 
-/** Плитка для материала: центр/базис/текстура меняются вместе, только на приходе новой плитки. */
+/** Плитка для материала: центр/базис/текстура меняются вместе, только на приходе новой плитки; веса и cameraXY — каждый кадр. */
 export interface NearTileState {
   /** R32F texels², метры относительно центра; строка 0 — юг, столбец 0 — запад. */
   texture: DataTexture
@@ -18,6 +18,8 @@ export interface NearTileState {
   texels: number
   /** Вес по высоте камеры, [0, 1]; пересчитывается каждый кадр. */
   altitudeWeight: number
+  /** Подкамерная точка в метрах плитки (dirToTile), пишется на месте каждый кадр. */
+  cameraXY: [number, number]
 }
 
 /**
@@ -36,6 +38,7 @@ export class NearShadowTile {
   private disposed = false
   private warned = false
   private readonly dirScratch = new Vector3()
+  private readonly dirTuple: Vec3 = [0, 0, 0]
   private readonly metersPerUnit = 1000 / toThreeJSUnits(1)
 
   public constructor(
@@ -61,7 +64,13 @@ export class NearShadowTile {
     if (!this.inFlight && this.needsRebake(dir)) this.request([dir.x, dir.y, dir.z])
 
     if (this.state) {
-      this.state.altitudeWeight = nearAltitudeWeight(altitudeMeters, this.config.fadeAltitudeMeters, this.config.maxAltitudeMeters)
+      const s = this.state
+      s.altitudeWeight = nearAltitudeWeight(altitudeMeters, this.config.fadeAltitudeMeters, this.config.maxAltitudeMeters)
+      const d = this.dirTuple
+      d[0] = dir.x
+      d[1] = dir.y
+      d[2] = dir.z
+      nearCameraXYInto(d, s.center, s.east, s.north, this.field.radiusKm * 1000, s.cameraXY)
     }
 
     return this.state
@@ -130,6 +139,6 @@ export class NearShadowTile {
     texture.needsUpdate = true
 
     this.state?.texture.dispose()
-    this.state = { texture, center, east, north, texelMeters, texels, altitudeWeight: 0 }
+    this.state = { texture, center, east, north, texelMeters, texels, altitudeWeight: 0, cameraXY: [0, 0] }
   }
 }

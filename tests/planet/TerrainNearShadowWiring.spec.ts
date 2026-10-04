@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DataTexture, Group, PerspectiveCamera, Texture, Vector3, type WebGLRenderer } from 'three'
+import { DataTexture, Group, PerspectiveCamera, Texture, Vector2, Vector3, type WebGLRenderer } from 'three'
 import '@/core/framework/TitanThree'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -89,13 +89,16 @@ function makeState(): NearTileState {
     north: [0, 1, 0],
     texelMeters: 64,
     texels: 512,
-    altitudeWeight: 0.8
+    altitudeWeight: 0.8,
+    cameraXY: [1200, -340]
   }
 }
 
-function makeCtx(altKm: number): UpdateContext {
+/** Камера на altKm над датумом; eastMeters — дуга к востоку от +X (−Z). */
+function makeCtx(altKm: number, eastMeters: number = 0): UpdateContext {
   const camera = new PerspectiveCamera(50, 1, 1e-6, 1e9)
-  camera.position.set(toThreeJSUnits(RADIUS_KM + altKm), 0, 0)
+  const angle = eastMeters / (RADIUS_KM * 1000)
+  camera.position.set(Math.cos(angle), 0, -Math.sin(angle)).multiplyScalar(toThreeJSUnits(RADIUS_KM + altKm))
   camera.updateMatrixWorld(true)
 
   return { delta: 0.016, epoch: 0, elapsed: 0, camera } as UpdateContext
@@ -110,7 +113,9 @@ const NEAR_UNIFORMS: Array<[string, string]> = [
   ['float', 'uNearTileTexels'],
   ['float', 'uNearTileWeight'],
   ['float', 'uNearShadowMaxDistMeters'],
-  ['float', 'uBodyRadiusMeters']
+  ['float', 'uBodyRadiusMeters'],
+  ['vec2', 'uNearCameraXY'],
+  ['vec2', 'uNearCameraFadeMeters']
 ]
 
 describe('TerrainShaderTemplate: юниформы ближней тени', () => {
@@ -148,6 +153,9 @@ describe('TerrainMaterial.setNearTile', () => {
     expect(material.uniforms.uNearTileWeight.value).toBe(0)
     expect(material.uniforms.uNearTile.value).toBeNull()
     expect(material.uniforms.uNearShadowMaxDistMeters.value).toBe(config('terrain.nearShadow').maxDistanceMeters)
+    const { fadeStartMeters, fadeEndMeters } = config('terrain.nearShadow')
+    expect((material.uniforms.uNearCameraFadeMeters.value as Vector2).toArray()).toEqual([fadeStartMeters, fadeEndMeters])
+    expect((material.uniforms.uNearCameraXY.value as Vector2).toArray()).toEqual([0, 0])
     const radiusKm = moon().physicalObject!.getAttribute('radius') as number
     expect(material.uniforms.uBodyRadiusMeters.value).toBe(radiusKm * 1000)
   })
@@ -166,9 +174,11 @@ describe('TerrainMaterial.setNearTile', () => {
     expect(u.uNearTileTexelMeters.value).toBe(64)
     expect(u.uNearTileTexels.value).toBe(512)
     expect(u.uNearTileWeight.value).toBeCloseTo(0.4, 12)
+    expect((u.uNearCameraXY.value as Vector2).toArray()).toEqual([1200, -340])
 
     material.setNearTile(null)
     expect(u.uNearTileWeight.value).toBe(0)
+    expect((u.uNearCameraXY.value as Vector2).toArray()).toEqual([0, 0])
     expect(u.uNearTile.value).toBeNull()
   })
 
@@ -232,6 +242,25 @@ describe('TerrainSphere: кадр ведёт плитку ближней тен�
     expect(setNearTile).toHaveBeenCalledTimes(1)
     expect(sphere.material.uniforms.uNearTile.value).toBeInstanceOf(DataTexture)
     expect(sphere.material.uniforms.uNearTileWeight.value).toBe(1)
+    sphere.dispose()
+  })
+
+  it('uNearCameraXY пишется каждый кадр: камера сдвинулась — юниформ сменился без перепечки; освобождение — сброс', () => {
+    const builder = new OffThreadBuilder()
+    const request = vi.spyOn(builder, 'requestNearTile')
+    const sphere = makeSphere(builder)
+    sphere.updateObject(makeCtx(2))
+    const xy = sphere.material.uniforms.uNearCameraXY.value as Vector2
+    expect(xy.x).toBeCloseTo(0, 3)
+    expect(xy.y).toBeCloseTo(0, 3)
+    sphere.updateObject(makeCtx(2, 1500))
+    expect(request).toHaveBeenCalledTimes(1)
+    // восток от +X — ось E плитки; гномоническая проекция чуть длиннее дуги
+    expect(xy.x).toBeGreaterThan(1499)
+    expect(xy.x).toBeLessThan(1501)
+    expect(xy.y).toBeCloseTo(0, 3)
+    sphere.updateObject(makeCtx(500))
+    expect(xy.toArray()).toEqual([0, 0])
     sphere.dispose()
   })
 
