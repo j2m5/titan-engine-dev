@@ -100,7 +100,7 @@ export function forEachSlope(
     // экваториальных текселей на любой широте, без ступеней: сжатые у полюсов
     // дуги иначе усиливают 16-битное квантование высот в шум уклона. Кламп
     // width/4 — защита от разности на всю окружность у самого полюса.
-    // На экваторе s = 1, f = 0 — ровно прежняя разность соседей.
+    // На экваторе s ≈ 1, f ≈ 0 — разность соседей.
     const eastSpan = Math.max(1, Math.min(Math.floor(width / 4), 1 / Math.cos(latitude)))
     const whole = Math.floor(eastSpan)
     const frac = eastSpan - whole

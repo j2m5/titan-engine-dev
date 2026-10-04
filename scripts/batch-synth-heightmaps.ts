@@ -1,7 +1,7 @@
 import process from 'node:process'
 import path from 'node:path'
 import { Buffer } from 'node:buffer'
-import { writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import sharp from 'sharp'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { encodeHeightMap } from './lib/heightMapEncode'
@@ -78,10 +78,10 @@ import { Resources } from '@storage/database/resources'
  *
  * Пути вывода — `<живой каталог входа>/<имя>_height.raw` и `<имя>_slope.webp`
  * (имя — колонка «Генерация» списка ниже; вход из `storage/local` пишет в тот
- * же относительный каталог под `storage/images`, см. `liveDirFor`); у Корribана каталог входного
+ * же относительный каталог под `storage/images`, см. `liveDirFor`); у Коррибана каталог входного
  * файла общий на семь генераций (входная текстура одна), но КАЖДАЯ из
  * korriban1..korriban7 пишет СВОИ height/slope — общий физический ресурс
- * Корribана в БД был ошибкой (радиус I откалиброван на VII дал 577% его
+ * Коррибана в БД был ошибкой (радиус I откалиброван на VII дал 577% его
  * бюджета высоты), поэтому этот батч больше не производит общую карту.
  *
  * Запуск (все генерации списка):
@@ -141,7 +141,7 @@ const LOCAL_TEXTURES_ROOT = 'storage/local/textures/planets'
 /**
  * Список генераций — изначально см. «Список генераций (12 уникальных карт →
  * 18 тел)» в плане арки (`docs/superpowers/plans/2026-08-16-terrain-moons-batch.md`);
- * фикс-раунд 1 (находка 2, рулинг контроллера) развёл общую карту Корribана
+ * фикс-раунд 1 (находка 2, рулинг контроллера) развёл общую карту Коррибана
  * на семь ПЕР-ТЕЛО генераций — общий бюджет 0.7% радиуса I (1740 км),
  * откалиброванный под неё height/slope, давал VII (175 км) 577% ЕЁ бюджета.
  * Пути и радиусы — константы из инвентаризации/resources.ts, БД не читается.
@@ -938,6 +938,7 @@ async function generateBody(body: BodyGeneration, outDir: string | undefined): P
   // --out-dir: запись в сторонний каталог (сверка без замены живых карт), slopeRange — по живому пути
   const heightPath = path.join(outDir ?? dir, `${body.name}_height.raw`)
   const slopePath = path.join(outDir ?? dir, `${body.name}_slope.webp`)
+  if (outDir !== undefined) await mkdir(outDir, { recursive: true })
 
   // финальная карта кодируется диапазоном своей строки ресурса — иначе байты
   // на диске разойдутся с uSlopeRange шейдера; прогоны выше намеренно
