@@ -40,6 +40,16 @@ export function extendedBoxParams(sigmaTexels: number, maxRadius: number): { m: 
   // в единицах 3·дисперсии: q = σ² = 3s, m(m+1) = 3·v_m
   const q = sigmaTexels * sigmaTexels
   let m = Math.floor((Math.sqrt(1 + 4 * q) - 1) / 2)
+
+  // σ = ∞ или m за пределом точной целой арифметики — поиск m не сойдётся, только потолок
+  if (!Number.isFinite(q) || m >= MAX_EXACT_BOX_RADIUS) {
+    if (!Number.isFinite(maxRadius))
+      throw new Error(`extendedBoxParams: σ=${sigmaTexels} без конечного потолка радиуса`)
+    return { m: Math.max(0, Math.floor(maxRadius)), alpha: 0 }
+  }
+  // оценка m точна до ±1: заведомо выше потолка — сразу потолок
+  if (m > maxRadius + 1) return { m: Math.max(0, Math.floor(maxRadius)), alpha: 0 }
+
   while (m > 0 && m * (m + 1) > q) m--
   while ((m + 1) * (m + 2) <= q) m++
 
@@ -54,44 +64,71 @@ export function extendedBoxParams(sigmaTexels: number, maxRadius: number): { m: 
   return { m, alpha }
 }
 
-/** Один проход расширенного бокса по кольцевому (заворачивающемуся) массиву — скользящее окно, O(n). */
-function boxBlurWrap(a: Float64Array, m: number, alpha: number): Float64Array {
-  const n = a.length
-  if (m <= 0 && alpha <= 0) return a.slice()
+/** Радиус, выше которого m·(m+1) уже не точен в double (2^50 < 2^53). */
+const MAX_EXACT_BOX_RADIUS = 2 ** 25
 
-  const wrap = (i: number): number => ((i % n) + n) % n
+/**
+ * Проход расширенного бокса по кольцу src → dst длины n, O(n). Требует
+ * m + 1 ≤ n (потолок width/4 это гарантирует): индексы выходят за кольцо
+ * не дальше чем на n, поэтому заворот — одна поправка ±n.
+ */
+function boxPassWrap(src: Float64Array, dst: Float64Array, n: number, m: number, alpha: number): void {
   const norm = 2 * m + 1 + 2 * alpha
-  const out = new Float64Array(n)
 
   let sum = 0
-  for (let k = -m; k <= m; k++) sum += a[wrap(k)]
+  for (let k = -m; k <= m; k++) sum += src[k < 0 ? k + n : k >= n ? k - n : k]
 
   for (let i = 0; i < n; i++) {
-    if (i > 0) sum += a[wrap(i + m)] - a[wrap(i - m - 1)]
-    out[i] = (sum + alpha * (a[wrap(i - m - 1)] + a[wrap(i + m + 1)])) / norm
-  }
+    let left = i - m - 1 // выбывает из окна и левый крайний тап
+    if (left < 0) left += n
+    let right = i + m + 1 // правый крайний тап
+    if (right >= n) right -= n
 
-  return out
+    if (i > 0) {
+      let add = i + m
+      if (add >= n) add -= n
+      sum += src[add] - src[left]
+    }
+    dst[i] = alpha > 0 ? (sum + alpha * (src[left] + src[right])) / norm : sum / norm
+  }
 }
 
-/** Один проход расширенного бокса с клампом индексов на краях (полюса не заворачиваются), O(n). */
-function boxBlurClamp(a: Float64Array, m: number, alpha: number): Float64Array {
-  const n = a.length
-  if (m <= 0 && alpha <= 0) return a.slice()
-
-  const clamp = (i: number): number => Math.max(0, Math.min(n - 1, i))
+/** Проход расширенного бокса src → dst длины n с клампом индексов на краях (полюса не заворачиваются), O(n). */
+function boxPassClamp(src: Float64Array, dst: Float64Array, n: number, m: number, alpha: number): void {
+  const last = n - 1
   const norm = 2 * m + 1 + 2 * alpha
-  const out = new Float64Array(n)
 
   let sum = 0
-  for (let k = -m; k <= m; k++) sum += a[clamp(k)]
+  for (let k = -m; k <= m; k++) sum += src[k < 0 ? 0 : k > last ? last : k]
 
   for (let i = 0; i < n; i++) {
-    if (i > 0) sum += a[clamp(i + m)] - a[clamp(i - m - 1)]
-    out[i] = (sum + alpha * (a[clamp(i - m - 1)] + a[clamp(i + m + 1)])) / norm
-  }
+    const leftRaw = i - m - 1
+    const left = leftRaw < 0 ? 0 : leftRaw
+    const rightRaw = i + m + 1
+    const right = rightRaw > last ? last : rightRaw
 
-  return out
+    if (i > 0) {
+      const add = i + m
+      sum += src[add > last ? last : add] - src[left]
+    }
+    dst[i] = alpha > 0 ? (sum + alpha * (src[left] + src[right])) / norm : sum / norm
+  }
+}
+
+/** Три прохода расширенного бокса над buf (на месте), tmp — рабочий буфер той же длины. */
+function tripleBox(
+  buf: Float64Array,
+  tmp: Float64Array,
+  m: number,
+  alpha: number,
+  pass: (src: Float64Array, dst: Float64Array, n: number, m: number, alpha: number) => void
+): void {
+  if (m <= 0 && alpha <= 0) return
+  const n = buf.length
+  pass(buf, tmp, n, m, alpha)
+  pass(tmp, buf, n, m, alpha)
+  pass(buf, tmp, n, m, alpha)
+  buf.set(tmp)
 }
 
 /**
@@ -119,39 +156,31 @@ export function blurSpherical(src: Float64Array, width: number, height: number, 
 
   const maxRadius = Math.max(0, Math.floor(width / 4))
 
-  // EW: параметры строки (m, α) зависят от широты — считаем один раз, три прохода переиспользуют их
-  let ew = src.slice()
-  const rowParams = new Float64Array(2 * height)
+  // EW: три прохода на строку подряд — параметры (m, α) зависят от широты
+  const out = src.slice()
+  const row = new Float64Array(width)
+  const rowTmp = new Float64Array(width)
   for (let y = 0; y < height; y++) {
     const cosLat = Math.cos(rowLatitude(y, height))
     const { m, alpha } = extendedBoxParams(sigmaTexels / cosLat, maxRadius)
-    rowParams[2 * y] = m
-    rowParams[2 * y + 1] = alpha
-  }
-  for (let pass = 0; pass < 3; pass++) {
-    const next = new Float64Array(width * height)
-    for (let y = 0; y < height; y++) {
-      const row = ew.subarray(y * width, y * width + width)
-      next.set(boxBlurWrap(row, rowParams[2 * y], rowParams[2 * y + 1]), y * width)
-    }
-    ew = next
+    if (m <= 0 && alpha <= 0) continue
+    row.set(out.subarray(y * width, y * width + width))
+    tripleBox(row, rowTmp, m, alpha, boxPassWrap)
+    out.set(row, y * width)
   }
 
   // NS: параметры константные (строки уже равномерны по углу), кламп индексов у полюсов
   const nsBox = extendedBoxParams(sigmaTexels, Number.POSITIVE_INFINITY)
-  let ns = ew
-  for (let pass = 0; pass < 3; pass++) {
-    const next = new Float64Array(width * height)
-    const col = new Float64Array(height)
-    for (let x = 0; x < width; x++) {
-      for (let y = 0; y < height; y++) col[y] = ns[y * width + x]
-      const blurred = boxBlurClamp(col, nsBox.m, nsBox.alpha)
-      for (let y = 0; y < height; y++) next[y * width + x] = blurred[y]
-    }
-    ns = next
+  if (nsBox.m <= 0 && nsBox.alpha <= 0) return out
+  const col = new Float64Array(height)
+  const colTmp = new Float64Array(height)
+  for (let x = 0; x < width; x++) {
+    for (let y = 0; y < height; y++) col[y] = out[y * width + x]
+    tripleBox(col, colTmp, nsBox.m, nsBox.alpha, boxPassClamp)
+    for (let y = 0; y < height; y++) out[y * width + x] = col[y]
   }
 
-  return ns
+  return out
 }
 
 /** Опора дискретного гауссова ядра — ±3σ (хвост за ней < 0.3% массы). */

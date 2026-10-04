@@ -296,4 +296,46 @@ describe('blurSpherical: нет широтного шва', () => {
     const median = sorted[Math.floor(sorted.length / 2)]
     expect(Math.max(...steps)).toBeLessThan(3 * median + 0.02)
   })
+
+  it('профиль ядра без шума: энергия EW-разности отклика на импульс гладка по широте до 85°', () => {
+    // Импульс в x=0 каждой строки — по NS поле постоянно, отклик строки = само EW-ядро.
+    // Σ(Δk)² ∝ σx⁻³ = (σ/cos φ)⁻³, деление на cos³ φ даёт плоский профиль.
+    const w = 2048,
+      h = 256
+    const src = new Float64Array(w * h)
+    for (let y = 0; y < h; y++) src[y * w] = 1
+
+    for (const sigma of [0.7, 1.5]) {
+      const out = blurSpherical(src, w, h, sigma)
+      const v = (y: number): number => {
+        let acc = 0
+        for (let x = 0; x < w; x++) {
+          const d = out[y * w + ((x + 1) % w)] - out[y * w + x]
+          acc += d * d
+        }
+        return acc / Math.cos(rowLatitude(y, h)) ** 3
+      }
+      const limit = (85 * Math.PI) / 180
+      let worst = 0
+      for (let y = 1; y < h; y++) {
+        if (Math.abs(rowLatitude(y, h)) >= limit || Math.abs(rowLatitude(y - 1, h)) >= limit) continue
+        worst = Math.max(worst, Math.abs(Math.log(v(y) / v(y - 1))))
+      }
+      expect(worst, `σ=${sigma}`).toBeLessThan(0.05)
+    }
+  })
+})
+
+describe('extendedBoxParams: нечисловые σ', () => {
+  it('σ ≤ 0 и NaN — тождество', () => {
+    expect(extendedBoxParams(0, 10)).toEqual({ m: 0, alpha: 0 })
+    expect(extendedBoxParams(-1, 10)).toEqual({ m: 0, alpha: 0 })
+    expect(extendedBoxParams(Number.NaN, 10)).toEqual({ m: 0, alpha: 0 })
+  })
+
+  it('σ = ∞ и σ² = ∞ — потолок, без конечного потолка — ошибка', () => {
+    expect(extendedBoxParams(Number.POSITIVE_INFINITY, 7)).toEqual({ m: 7, alpha: 0 })
+    expect(extendedBoxParams(1e200, 7)).toEqual({ m: 7, alpha: 0 })
+    expect(() => extendedBoxParams(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY)).toThrow(/потолка/)
+  })
 })
