@@ -4,6 +4,7 @@ import {
   MACRO_RELIEF_ASPECT,
   STREAK_STRETCH,
   TERRACE_RISER,
+  TERRACE_SLOPE_MUL_MAX,
   cavityGain,
   distFade,
   macroFadeMetersFor,
@@ -13,6 +14,8 @@ import {
   structureGate,
   terraceCoverage,
   terraceProfile,
+  terraceRiserWeight,
+  terraceSlopeMultiplier,
   triplanarWeights,
   streakGradient2D,
   STREAK_CHART_DIRS,
@@ -111,6 +114,54 @@ describe('terrainMacroDetailMath: направленные формы склон
     expect(terraceProfile(0.6).derivative).toBeCloseTo(-1, 9)
     // уступ: производная положительна в середине подъёма
     expect(terraceProfile(TERRACE_RISER / 2).derivative).toBeGreaterThan(0)
+  })
+
+  it('пиковая производная профиля по фазе ≤ 2.05: уступ не уводит склон в тень', () => {
+    let peak = -Infinity
+    for (let i = 0; i <= 20000; i++) peak = Math.max(peak, terraceProfile(i / 20000).derivative)
+    expect(peak).toBeLessThanOrEqual(2.05)
+    expect(peak).toBeGreaterThan(1.9)
+  })
+
+  it('средняя по периоду производная профиля ≈ 0: средний уклон не сдвигается', () => {
+    const n = 20000
+    let sum = 0
+    for (let i = 0; i < n; i++) sum += terraceProfile((i + 0.5) / n).derivative
+    expect(Math.abs(sum / n)).toBeLessThan(1e-3)
+  })
+
+  it('множитель уклона 1 + k·tp.y в [0, 2.5] при k ∈ [0, 1] (и выше); средняя модуляция ≈ 0 до порога потолка', () => {
+    expect(TERRACE_SLOPE_MUL_MAX).toBe(2.5)
+    for (const k of [0, 0.25, 0.5, 0.75, 1, 2]) {
+      const n = 4000
+      let sum = 0
+      for (let i = 0; i < n; i++) {
+        const m = terraceSlopeMultiplier(k, terraceProfile((i + 0.5) / n).derivative)
+        expect(m).toBeGreaterThanOrEqual(0)
+        expect(m).toBeLessThanOrEqual(2.5)
+        sum += m - 1
+      }
+      // потолок не включается при k·max(tp.y) = 2k ≤ 1.5; при k = 1 срезает пик уступа: −0.068 (вывод в отчёте)
+      if (k <= 0.75) expect(Math.abs(sum / n)).toBeLessThan(1e-3)
+      if (k === 1) expect(Math.abs(sum / n)).toBeLessThan(0.07)
+    }
+    expect(terraceSlopeMultiplier(0.5, 2)).toBeCloseTo(2, 12)
+    expect(terraceSlopeMultiplier(1, 2)).toBeCloseTo(2.5, 12)
+    expect(terraceSlopeMultiplier(1, -1)).toBeCloseTo(0, 12)
+  })
+
+  it('вес ступенчатости по уступу: 1 при уступе ≥ 2 px, 0 при ≤ 1 px, монотонен', () => {
+    // аргумент — шаг фазы на пиксель (fwidth(h)/step); ширина уступа в px = RISER / шаг
+    expect(terraceRiserWeight(TERRACE_RISER / 2)).toBe(1)
+    expect(terraceRiserWeight(TERRACE_RISER / 4)).toBe(1)
+    expect(terraceRiserWeight(TERRACE_RISER)).toBe(0)
+    expect(terraceRiserWeight(TERRACE_RISER * 3)).toBe(0)
+    let prev = 1
+    for (let px = 2; px >= 1; px -= 0.01) {
+      const w = terraceRiserWeight(TERRACE_RISER / px)
+      expect(w).toBeLessThanOrEqual(prev + 1e-12)
+      prev = w
+    }
   })
 
   it('фаза отрицательная — эквивалент fract (period 1): значение и производная совпадают со смещённой на период', () => {
