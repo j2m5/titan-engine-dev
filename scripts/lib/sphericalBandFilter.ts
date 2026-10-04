@@ -13,64 +13,82 @@
  * (по широте) — радиус константный: строки уже равномерны по углу, — и
  * клампит индексы у полюсов (без заворота: полюс не сшивается сам с собой).
  *
- * Размытие — гауссиана, приближённая тремя проходами скользящего box-blur
- * (каждый проход — O(n) на любой радиус через префиксную сумму окна).
- * Радиус одного box-окна для тройного прохода: три независимых box-блюра
- * ширины w=2r+1 суммируют дисперсии, σ² = 3·(w²−1)/12 = (w²−1)/4, откуда
- * w = √(4σ²+1), r = round((w−1)/2). При σ ≤ 0 радиус 0 — проход тождество.
+ * Размытие — гауссиана, приближённая тремя проходами скользящего
+ * РАСШИРЕННОГО box-blur (каждый проход O(n) на любой радиус). Три прохода
+ * суммируют дисперсии, так что целевая дисперсия одного прохода s = σ²/3.
+ * Целый бокс радиуса m имеет дисперсию v_m = m(m+1)/3; берём m с
+ * v_m ≤ s < v_{m+1} и добавляем крайние тапы ±(m+1) с весом
+ * α = (2m+1)(s−v_m) / (2((m+1)²−s)) ∈ [0, 1) — дисперсия ядра ровно s,
+ * ширина 2m+1+2α непрерывна по σ. Округление радиуса до целого давало
+ * скачки ширины, а на карте — широтные швы там, где σ/cos φ пересекает
+ * порог. Целый случай s = v_m даёт α = 0 — ровно целый бокс радиуса m.
+ * При σ ≤ 0 проход — тождество.
  *
  * Отдельный экспорт `gaussianBlurSpherical` — то же размытие ТОЧНЫМ ядром,
- * для суб-текселных σ, на которых box-триплет вырождается в тождество
+ * для суб-текселных σ, где box-триплет — лишь грубое приближение гауссианы
  * (докблок функции).
  */
 
-/** Радиус box-окна тройного прохода, приближающего гауссиану со std=σ (формула в докблоке модуля). */
-function boxRadius(sigmaTexels: number): number {
-  if (sigmaTexels <= 0) return 0
+/**
+ * Параметры одного прохода тройного расширенного бокса для std=σ: целый
+ * радиус m и вес α крайних тапов ±(m+1) (формула в докблоке модуля).
+ * Потолок: при m+α > maxRadius — целый бокс радиуса maxRadius.
+ */
+export function extendedBoxParams(sigmaTexels: number, maxRadius: number): { m: number; alpha: number } {
+  if (!(sigmaTexels > 0)) return { m: 0, alpha: 0 }
 
-  const w = Math.sqrt(4 * sigmaTexels * sigmaTexels + 1)
+  // в единицах 3·дисперсии: q = σ² = 3s, m(m+1) = 3·v_m
+  const q = sigmaTexels * sigmaTexels
+  let m = Math.floor((Math.sqrt(1 + 4 * q) - 1) / 2)
+  while (m > 0 && m * (m + 1) > q) m--
+  while ((m + 1) * (m + 2) <= q) m++
 
-  return Math.max(0, Math.round((w - 1) / 2))
+  // σ = √(m(m+1)) теряет ulp при возведении в квадрат — прилипаем к целому боксу
+  const eps = 1e-12 * Math.max(1, q)
+  let alpha = 0
+  if ((m + 1) * (m + 2) - q <= eps) m++
+  else if (q - m * (m + 1) > eps) alpha = ((2 * m + 1) * (q - m * (m + 1))) / (2 * (3 * (m + 1) * (m + 1) - q))
+
+  if (m + alpha > maxRadius) return { m: Math.max(0, Math.floor(maxRadius)), alpha: 0 }
+
+  return { m, alpha }
 }
 
-/** Один box-проход по кольцевому (заворачивающемуся) массиву — скользящее окно, O(n). */
-function boxBlurWrap(a: Float64Array, radius: number): Float64Array {
+/** Один проход расширенного бокса по кольцевому (заворачивающемуся) массиву — скользящее окно, O(n). */
+function boxBlurWrap(a: Float64Array, m: number, alpha: number): Float64Array {
   const n = a.length
-  if (radius <= 0) return a.slice()
+  if (m <= 0 && alpha <= 0) return a.slice()
 
-  const windowSize = 2 * radius + 1
+  const wrap = (i: number): number => ((i % n) + n) % n
+  const norm = 2 * m + 1 + 2 * alpha
   const out = new Float64Array(n)
 
   let sum = 0
-  for (let k = -radius; k <= radius; k++) sum += a[(k + n) % n]
-  out[0] = sum / windowSize
+  for (let k = -m; k <= m; k++) sum += a[wrap(k)]
 
-  for (let i = 1; i < n; i++) {
-    const addIdx = (i + radius) % n
-    const removeIdx = (i - radius - 1 + n) % n
-    sum += a[addIdx] - a[removeIdx]
-    out[i] = sum / windowSize
+  for (let i = 0; i < n; i++) {
+    if (i > 0) sum += a[wrap(i + m)] - a[wrap(i - m - 1)]
+    out[i] = (sum + alpha * (a[wrap(i - m - 1)] + a[wrap(i + m + 1)])) / norm
   }
 
   return out
 }
 
-/** Один box-проход по массиву с клампом индексов на краях (полюса не заворачиваются), O(n). */
-function boxBlurClamp(a: Float64Array, radius: number): Float64Array {
+/** Один проход расширенного бокса с клампом индексов на краях (полюса не заворачиваются), O(n). */
+function boxBlurClamp(a: Float64Array, m: number, alpha: number): Float64Array {
   const n = a.length
-  if (radius <= 0) return a.slice()
+  if (m <= 0 && alpha <= 0) return a.slice()
 
   const clamp = (i: number): number => Math.max(0, Math.min(n - 1, i))
-  const windowSize = 2 * radius + 1
+  const norm = 2 * m + 1 + 2 * alpha
   const out = new Float64Array(n)
 
   let sum = 0
-  for (let k = -radius; k <= radius; k++) sum += a[clamp(k)]
-  out[0] = sum / windowSize
+  for (let k = -m; k <= m; k++) sum += a[clamp(k)]
 
-  for (let i = 1; i < n; i++) {
-    sum += a[clamp(i + radius)] - a[clamp(i - radius - 1)]
-    out[i] = sum / windowSize
+  for (let i = 0; i < n; i++) {
+    if (i > 0) sum += a[clamp(i + m)] - a[clamp(i - m - 1)]
+    out[i] = (sum + alpha * (a[clamp(i - m - 1)] + a[clamp(i + m + 1)])) / norm
   }
 
   return out
@@ -101,32 +119,33 @@ export function blurSpherical(src: Float64Array, width: number, height: number, 
 
   const maxRadius = Math.max(0, Math.floor(width / 4))
 
-  // EW: радиус строки зависит от широты — считаем один раз на строку, три прохода переиспользуют его
+  // EW: параметры строки (m, α) зависят от широты — считаем один раз, три прохода переиспользуют их
   let ew = src.slice()
-  const rowRadius = new Int32Array(height)
+  const rowParams = new Float64Array(2 * height)
   for (let y = 0; y < height; y++) {
     const cosLat = Math.cos(rowLatitude(y, height))
-    const effectiveSigma = sigmaTexels / cosLat
-    rowRadius[y] = Math.min(maxRadius, boxRadius(effectiveSigma))
+    const { m, alpha } = extendedBoxParams(sigmaTexels / cosLat, maxRadius)
+    rowParams[2 * y] = m
+    rowParams[2 * y + 1] = alpha
   }
   for (let pass = 0; pass < 3; pass++) {
     const next = new Float64Array(width * height)
     for (let y = 0; y < height; y++) {
       const row = ew.subarray(y * width, y * width + width)
-      next.set(boxBlurWrap(row, rowRadius[y]), y * width)
+      next.set(boxBlurWrap(row, rowParams[2 * y], rowParams[2 * y + 1]), y * width)
     }
     ew = next
   }
 
-  // NS: радиус константный (строки уже равномерны по углу), кламп индексов у полюсов
-  const nsRadius = boxRadius(sigmaTexels)
+  // NS: параметры константные (строки уже равномерны по углу), кламп индексов у полюсов
+  const nsBox = extendedBoxParams(sigmaTexels, Number.POSITIVE_INFINITY)
   let ns = ew
   for (let pass = 0; pass < 3; pass++) {
     const next = new Float64Array(width * height)
     const col = new Float64Array(height)
     for (let x = 0; x < width; x++) {
       for (let y = 0; y < height; y++) col[y] = ns[y * width + x]
-      const blurred = boxBlurClamp(col, nsRadius)
+      const blurred = boxBlurClamp(col, nsBox.m, nsBox.alpha)
       for (let y = 0; y < height; y++) next[y * width + x] = blurred[y]
     }
     ns = next
@@ -190,11 +209,9 @@ function convolveClamp(a: Float64Array, kernel: Float64Array): Float64Array {
  * EW-радиус строки растёт как 1/cos(широты) (кламп ≤ width/4), долгота
  * заворачивается по шву; NS-радиус константный, индексы клампятся у полюсов.
  *
- * Почему не переиспользован box-триплет `blurSpherical`: его радиус
- * `round((√(4σ²+1)−1)/2)` обнуляется при σ < 0.866 текселя, то есть на
- * суб-текселных σ (наш случай — срез 8-битных ступенек честной карты высот,
- * σ≈0.7) размытие вырождается в тождество на экваторе и включается только
- * выше ~36° широты, где 1/cos(широты) вытягивает радиус до единицы. Прямая
+ * Почему не переиспользован box-триплет `blurSpherical`: на суб-текселных σ
+ * (наш случай — срез 8-битных ступенек честной карты высот, σ≈0.7) его ядро —
+ * три тапа на проход, совпадающее с гауссианой только по дисперсии. Прямая
  * свёртка стоит O(n·σ) — на суб-текселных σ это 7 отсчётов на ось, дешевле
  * трёх box-проходов; для КРУПНЫХ σ (полоса рельефа) остаётся box-триплет.
  */
