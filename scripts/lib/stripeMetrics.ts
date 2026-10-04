@@ -1,35 +1,52 @@
+export interface StripeCheck {
+  /** Запрошенная широта. */
+  latDeg: number
+  /** Максимум шва в строках |y − y0| ≤ window; NaN — широта вне полосы. */
+  seam: number
+  /** Широта, где достигнут максимум; NaN — вне полосы. */
+  peakLatDeg: number
+}
+
 export interface StripeReport {
   maxSeam: number
   maxSeamLatDeg: number
   medianSeam: number
-  atLat: Array<{ latDeg: number; seam: number }>
+  maxLatDeg: number
+  atLat: StripeCheck[]
 }
 
-/**
- * Широта, севернее/южнее которой строки не участвуют: у полюсов оверсэмпл по
- * долготе и мало независимых отсчётов в строке — статистика шумная.
- */
-export const STRIPE_MAX_LAT_DEG = 70
+/** Число текселей строки, ниже которого статистика строки шумная. */
+export const STRIPE_MIN_ROW_TEXELS = 800
+
+/** Наибольшая |широта|, где в строке ≥ STRIPE_MIN_ROW_TEXELS текселей по долготе. */
+export function defaultMaxLatDeg(width: number): number {
+  if (width <= STRIPE_MIN_ROW_TEXELS) return 0
+
+  return (Math.acos(STRIPE_MIN_ROW_TEXELS / width) * 180) / Math.PI
+}
 
 /**
  * Поле на эквиректангулярной сетке → профиль анизотропии и широтные швы.
  * A(y) = rmsNS(y) / rmsEW(y); EW-разность делится на cos φ (метрика), поэтому
  * для изотропного гладкого поля A ≈ const. Шов — скачок ln A между соседними
- * окнами по `window` строк; плавный тренд даёт малый шов, ступень — большой.
+ * окнами по `window` строк (у ступени он треугольник шириной 2·window, поэтому
+ * для проверяемой широты берётся пик в ±window строк). Строки севернее
+ * `maxLatDeg` и строки с нулевой EW-разностью не участвуют.
  */
 export function stripeReport(
   field: Float64Array,
   width: number,
   height: number,
   checkLatDeg: number[],
-  window = 6
+  window = 6,
+  maxLatDeg = defaultMaxLatDeg(width)
 ): StripeReport {
   const rowLat = (y: number): number => 90 - ((y + 0.5) / height) * 180
+  const edgeLat = (y: number): number => 90 - (y / height) * 180
   const aRow = new Float64Array(height).fill(NaN)
 
   for (let y = 0; y < height - 1; y++) {
-    const cosLat = Math.cos((rowLat(y) * Math.PI) / 180)
-    if (Math.abs(rowLat(y)) > STRIPE_MAX_LAT_DEG || Math.abs(rowLat(y + 1)) > STRIPE_MAX_LAT_DEG) continue
+    if (Math.abs(rowLat(y)) > maxLatDeg || Math.abs(rowLat(y + 1)) > maxLatDeg) continue
 
     let ew = 0
     let ns = 0
@@ -41,9 +58,9 @@ export function stripeReport(
       ns += dy * dy
     }
 
-    const rmsEw = Math.sqrt(ew / width) / cosLat
-    const rmsNs = Math.sqrt(ns / width)
-    aRow[y] = (rmsNs + 1e-12) / (rmsEw + 1e-12)
+    const rmsEw = Math.sqrt(ew / width) / Math.cos((rowLat(y) * Math.PI) / 180)
+    if (!(rmsEw > 1e-12)) continue
+    aRow[y] = Math.sqrt(ns / width) / rmsEw
   }
 
   const meanA = (from: number, to: number): number => {
@@ -63,10 +80,16 @@ export function stripeReport(
     valid.push(y)
   }
 
-  if (valid.length === 0) return { maxSeam: NaN, maxSeamLatDeg: NaN, medianSeam: NaN, atLat: [] }
+  if (valid.length === 0) {
+    return {
+      maxSeam: NaN,
+      maxSeamLatDeg: NaN,
+      medianSeam: NaN,
+      maxLatDeg,
+      atLat: checkLatDeg.map((latDeg) => ({ latDeg, seam: NaN, peakLatDeg: NaN })),
+    }
+  }
 
-  // Шов у верхней кромки строки y — граница между окнами.
-  const edgeLat = (y: number): number => 90 - (y / height) * 180
   let best = valid[0]
   for (const y of valid) if (seams[y] > seams[best]) best = y
 
@@ -74,12 +97,18 @@ export function stripeReport(
   const mid = sorted.length >> 1
   const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
 
-  const atLat = checkLatDeg.map((latDeg) => {
-    let nearest = valid[0]
-    for (const y of valid) if (Math.abs(edgeLat(y) - latDeg) < Math.abs(edgeLat(nearest) - latDeg)) nearest = y
+  const atLat = checkLatDeg.map((latDeg): StripeCheck => {
+    const y0 = Math.round(((90 - latDeg) / 180) * height)
+    let peak = -1
+    for (let y = y0 - window; y <= y0 + window; y++) {
+      if (y >= 0 && y < height && Number.isFinite(seams[y]) && (peak < 0 || seams[y] > seams[peak])) peak = y
+    }
 
-    return { latDeg: edgeLat(nearest), seam: seams[nearest] }
+    // Вне полосы окна с валидными швами нет — не подменяем ближайшей строкой.
+    if (Math.abs(latDeg) > maxLatDeg || peak < 0) return { latDeg, seam: NaN, peakLatDeg: NaN }
+
+    return { latDeg, seam: seams[peak], peakLatDeg: edgeLat(peak) }
   })
 
-  return { maxSeam: seams[best], maxSeamLatDeg: edgeLat(best), medianSeam: median, atLat }
+  return { maxSeam: seams[best], maxSeamLatDeg: edgeLat(best), medianSeam: median, maxLatDeg, atLat }
 }

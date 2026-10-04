@@ -4,7 +4,7 @@ import sharp from 'sharp'
 import { parseHeightMap } from '@/core/terrain/heightMapFormat'
 import { SLOPE_RANGE } from '@/core/terrain/slopeMapFormat'
 import { argument } from './lib/cliArguments'
-import { STRIPE_MAX_LAT_DEG, stripeReport, type StripeReport } from './lib/stripeMetrics'
+import { defaultMaxLatDeg, stripeReport, type StripeReport } from './lib/stripeMetrics'
 
 /**
  * Замер широтных швов карты: профиль анизотропии строки и скачок ln A между
@@ -14,13 +14,18 @@ import { STRIPE_MAX_LAT_DEG, stripeReport, type StripeReport } from './lib/strip
  * отношение A от масштаба не зависит, `--slope-range` нужен только для единиц.
  *
  * Запуск: npm run measure:stripes -- --height <.raw> [--before <.raw>]
- *   [--slope <.webp> [--slope-range 2]] [--check-lat 27.4,39.2] [--window 6]
+ *   [--slope <.webp> [--slope-range 2]] [--check-lat 27.4,39.2] [--window 6] [--max-lat <град>]
+ *
+ * Полоса широт по умолчанию — где в строке ≥ 800 текселей (acos(800/ширина));
+ * проверяемая широта вне полосы печатается как «вне полосы», не подменяется.
  */
 
 const heightPath = argument('height')
 const beforePath = argument('before')
 const slopePath = argument('slope')
 const checkLat = (argument('check-lat') ?? '').split(',').filter(Boolean).map(Number)
+const maxLatArg = argument('max-lat')
+const maxLat = (width: number): number => (maxLatArg === undefined ? defaultMaxLatDeg(width) : Number(maxLatArg))
 const window = Number(argument('window') ?? 6)
 const slopeRange = Number(argument('slope-range') ?? SLOPE_RANGE)
 
@@ -29,7 +34,7 @@ if (!heightPath && !slopePath) {
   process.exit(1)
 }
 
-if (checkLat.some((v) => !Number.isFinite(v)) || !Number.isInteger(window) || window < 1 || !Number.isFinite(slopeRange)) {
+if (checkLat.some((v) => !Number.isFinite(v)) || !Number.isInteger(window) || window < 1 || !Number.isFinite(slopeRange) || !Number.isFinite(maxLat(1e9))) {
   console.error('Флаги --check-lat (числа через запятую), --window (целое ≥ 1), --slope-range — числа')
   process.exit(1)
 }
@@ -46,12 +51,15 @@ async function readHeightMeters(file: string): Promise<{ meters: Float64Array; w
 
 function print(title: string, r: StripeReport): void {
   console.log(`\n${title}`)
-  console.log(`  шов max ${r.maxSeam.toFixed(4)} на ${r.maxSeamLatDeg.toFixed(2)}°, медиана ${r.medianSeam.toFixed(4)}`)
-  for (const a of r.atLat) console.log(`  у ${a.latDeg.toFixed(2)}°: шов ${a.seam.toFixed(4)} (${(a.seam / r.medianSeam).toFixed(1)}× медианы)`)
+  console.log(`  шов max ${r.maxSeam.toFixed(4)} на ${r.maxSeamLatDeg.toFixed(2)}°, медиана ${r.medianSeam.toFixed(4)}, полоса ±${r.maxLatDeg.toFixed(1)}°`)
+  for (const a of r.atLat) {
+    if (Number.isNaN(a.seam)) console.log(`  у ${a.latDeg}°: ВНЕ ПОЛОСЫ`)
+    else console.log(`  у ${a.latDeg}°: пик шва ${a.seam.toFixed(4)} на ${a.peakLatDeg.toFixed(2)}° (${(a.seam / r.medianSeam).toFixed(1)}× медианы)`)
+  }
 }
 
 async function main(): Promise<void> {
-  console.log(`Окно ${window} строк, широты до ±${STRIPE_MAX_LAT_DEG}°`)
+  console.log(`Окно ${window} строк; пик шва ищется в ±окно от проверяемой широты`)
 
   if (heightPath) {
     const after = await readHeightMeters(heightPath)
@@ -68,7 +76,7 @@ async function main(): Promise<void> {
       title = `Высота after − before, м: ${heightPath} − ${beforePath}`
     }
 
-    print(title, stripeReport(field, after.width, after.height, checkLat, window))
+    print(title, stripeReport(field, after.width, after.height, checkLat, window, maxLat(after.width)))
   }
 
   if (slopePath) {
@@ -78,7 +86,7 @@ async function main(): Promise<void> {
     for (const [name, channel] of [['R (восток)', 0], ['G (север)', 1]] as const) {
       const field = new Float64Array(count)
       for (let i = 0; i < count; i++) field[i] = ((data[i * info.channels + channel] - 128) / 127) * slopeRange
-      print(`Уклон ${name}: ${slopePath}`, stripeReport(field, info.width, info.height, checkLat, window))
+      print(`Уклон ${name}: ${slopePath}`, stripeReport(field, info.width, info.height, checkLat, window, maxLat(info.width)))
     }
   }
 }
