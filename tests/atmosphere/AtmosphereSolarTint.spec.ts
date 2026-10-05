@@ -101,8 +101,9 @@ describe('BrunetonAtmosphere: излучение окрашено цветом �
 
   it('красная звезда с подпиской — EARTH_SOLAR ⊙ lightColorOf, одно значение в LUT и в реестре', () => {
     const star = starStub(3700, 0.8)
+    const config = stubConfig()
     const registry = new AtmosphereRegistry()
-    new BrunetonAtmosphere(atmosphereStub(stubConfig(), star), {} as WebGLRenderer, registry)
+    new BrunetonAtmosphere(atmosphereStub(config, star), {} as WebGLRenderer, registry)
 
     const c = lightColorOf(star)
     const expected = [EARTH_SOLAR[0] * c.r, EARTH_SOLAR[1] * c.g, EARTH_SOLAR[2] * c.b]
@@ -111,7 +112,8 @@ describe('BrunetonAtmosphere: излучение окрашено цветом �
     expected.forEach((v, i) => expect(entry.config.solarIrradiance[i]).toBeCloseTo(v, 12))
     expect(generateSpy.mock.calls[0][0].solarIrradiance).toEqual(entry.config.solarIrradiance)
     // данные не мутированы: окраска — в копии конфига
-    expect(stubConfig().solarIrradiance).toEqual(EARTH_SOLAR)
+    expect(config.solarIrradiance).toEqual(EARTH_SOLAR)
+    expect(entry.config).not.toBe(config)
   })
 })
 
