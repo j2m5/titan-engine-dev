@@ -116,20 +116,18 @@ describe('WaterSphere: оболочка без смещения', { timeout: 300
     expect(sphere.children.filter((c) => c instanceof Mesh)).toHaveLength(24)
   })
 
-  it('патчи строятся с обёрткой WATER_DETAIL_WRAP: detailPos = позиция − k·W, W = w1 воды', () => {
+  it('патчи строятся с обёрткой WATER_DETAIL_WRAP: detailOrigin = центр − k·W, W = w1 воды', () => {
     const sphere = new WaterSphere(moon(), -667.2, makeRenderer())
     const geometry = (sphere.children[0] as Mesh).geometry
-    const pos = geometry.getAttribute('position')
     const center = geometry.getAttribute('patchCenter')
-    const d1 = geometry.getAttribute('detailPos')
+    const origin = geometry.getAttribute('detailOrigin')
     const { w1 } = WATER_DETAIL_WRAP
     const c = [center.getX(0), center.getY(0), center.getZ(0)]
-    const p = [pos.getX(0) + c[0], pos.getY(0) + c[1], pos.getZ(0) + c[2]]
     expect((sphere as unknown as { detailWrap: DetailWrap }).detailWrap).toBe(WATER_DETAIL_WRAP)
     const ks = c.map((v) => wrapIndex(v, w1))
     expect(ks.some((k) => k !== 0)).toBe(true) // k = 0 сделал бы проверку пустой
     for (let i = 0; i < 3; i++) {
-      expect(d1.array[i]).toBeCloseTo(wrappedComponent(p[i], ks[i], w1), 6)
+      expect(origin.array[i]).toBeCloseTo(wrappedComponent(c[i], ks[i], w1), 6)
     }
   })
 

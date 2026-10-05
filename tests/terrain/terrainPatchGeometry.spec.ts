@@ -14,7 +14,7 @@ import { TerrainPatchPool } from '@/core/terrain/TerrainPatchPool'
 import { cubeFaceDirection } from '@/core/terrain/cubeSphere'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { MIDBAND_DEFAULTS, type MidbandParams } from '@/core/terrain/midbandParams'
-import { detailWrapFor, wrapIndex, wrappedComponent } from '@/core/terrain/detailWrap'
+import { detailWrapFor } from '@/core/terrain/detailWrap'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { SpaceScale } from '@/core/constants'
 
@@ -99,10 +99,12 @@ describe('buildTerrainPatchArrays: ядро без геометрии', () => {
   it('массивы и центр равны fresh-варианту; сфера равна computeBoundingSphere', () => {
     const field = bumpyField()
     const arrays = allocatePatchArrays(SEGMENTS)
-    const { center, bounds } = buildTerrainPatchArrays(field, 0, 1, 0, DEPTH, SEGMENTS, 0.001, detailWrapFor(undefined), arrays, false)
+    const { center, bounds, detailOrigin, detailOrigin2 } = buildTerrainPatchArrays(field, 0, 1, 0, DEPTH, SEGMENTS, 0.001, detailWrapFor(undefined), arrays, false)
     const { geometry, center: refCenter } = build(field, 0, 1, 0, 0.001)
     expect(center.toArray()).toEqual(refCenter.toArray())
-    for (const [name, arr] of [['position', arrays.positions], ['detailPos', arrays.detailPos], ['detailPos2', arrays.detailPos2], ['height', arrays.heights], ['midTilt', arrays.midTilts], ['midShade', arrays.midShades]] as const) {
+    expect(detailOrigin.map(Math.fround)).toEqual(Array.from(geometry.getAttribute('detailOrigin').array))
+    expect(detailOrigin2.map(Math.fround)).toEqual(Array.from(geometry.getAttribute('detailOrigin2').array))
+    for (const [name, arr] of [['position', arrays.positions], ['height', arrays.heights], ['midTilt', arrays.midTilts], ['midShade', arrays.midShades]] as const) {
       expect(arr).toEqual(geometry.getAttribute(name).array)
     }
     const ref = new Sphere()
@@ -395,96 +397,6 @@ describe('юбка патча', () => {
   })
 })
 
-describe('buildTerrainPatchGeometry: атрибуты домена детали', () => {
-  const wrap = detailWrapFor(undefined)
-
-  it('detailPos = тело-локальная позиция − k·W, k общий на патч (от центра)', () => {
-    const field = bumpyField()
-    const { geometry, center } = build(field, 0, 1, 0)
-    const pos = geometry.getAttribute('position')
-    const d1 = geometry.getAttribute('detailPos')
-    const d2 = geometry.getAttribute('detailPos2')
-    expect(d1.itemSize).toBe(3)
-    expect(d2.count).toBe(pos.count)
-    const k1 = [wrapIndex(center.x, wrap.w1), wrapIndex(center.y, wrap.w1), wrapIndex(center.z, wrap.w1)]
-    const k2 = [wrapIndex(center.x, wrap.w2), wrapIndex(center.y, wrap.w2), wrapIndex(center.z, wrap.w2)]
-    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
-      const p = [pos.getX(k) + center.x, pos.getY(k) + center.y, pos.getZ(k) + center.z]
-      for (let c = 0; c < 3; c++) {
-        expect(d1.array[k * 3 + c]).toBeCloseTo(wrappedComponent(p[c], k1[c], wrap.w1), 6)
-        expect(d2.array[k * 3 + c]).toBeCloseTo(wrappedComponent(p[c], k2[c], wrap.w2), 6)
-      }
-    }
-  })
-
-  it('юбочная вершина несёт позицию своей кромочной (радиальный сдвиг юбки не входит)', () => {
-    const { geometry } = build(bumpyField(), 0, 1, 0, 0.001)
-    const d1 = geometry.getAttribute('detailPos')
-    const ring = SEGMENTS * 4
-    for (let r = 0; r < ring; r++) {
-      const skirt = GRID_VERTEX_COUNT + r
-      // кромочный индекс — тот же обход, что у юбки (ringGridIndex); ищем
-      // кромку по совпадению направления (юбка сдвинута строго радиально)
-      const edge = edgeIndexForSkirt(geometry, skirt)
-      for (let c = 0; c < 3; c++) expect(d1.array[skirt * 3 + c]).toBe(d1.array[edge * 3 + c])
-    }
-  })
-
-  it('общая точка двух соседних патчей: значения отличаются на кратное W по каждой оси', () => {
-    const field = bumpyField()
-    const a = build(field, 0, 0, 0)
-    const b = build(field, 0, 1, 0)
-    const da = a.geometry.getAttribute('detailPos')
-    const db = b.geometry.getAttribute('detailPos')
-    // правое ребро a (a = SEGMENTS) и левое ребро b (a = 0), та же строка b=0
-    const ia = SEGMENTS, ib = 0
-    const q: number[] = []
-    for (let c = 0; c < 3; c++) {
-      q[c] = (da.array[ia * 3 + c] - db.array[ib * 3 + c]) / wrap.w1
-      expect(Math.abs(q[c] - Math.round(q[c]))).toBeLessThan(1e-3)
-    }
-    // k общий НА ПАТЧ (от центра), не на вершину — иначе q было бы кратным W
-    // тривиально (тождественно 0) на любых соседях, тест ничего бы не ловил
-    expect(q.some((v) => Math.round(v) !== 0)).toBe(true)
-  })
-
-  it('|detailPos| ≤ W/2 + радиус патча на глубине 8 (round() гарантирует полупериод) — float32 держит миллиметры', () => {
-    const field = bumpyField()
-    const DEEP_DEPTH = 8
-    const { geometry } = buildTerrainPatchGeometry(
-      field,
-      0,
-      100,
-      100,
-      DEEP_DEPTH,
-      SEGMENTS,
-      buildPatchIndex(SEGMENTS),
-      0,
-      wrap
-    )
-    const pos = geometry.getAttribute('position')
-    const d1 = geometry.getAttribute('detailPos')
-    const d2 = geometry.getAttribute('detailPos2')
-
-    let patchRadius = 0
-    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
-      patchRadius = Math.max(patchRadius, new Vector3(pos.getX(k), pos.getY(k), pos.getZ(k)).length())
-    }
-
-    let maxD1 = 0
-    let maxD2 = 0
-    for (let k = 0; k < GRID_VERTEX_COUNT; k++) {
-      for (let c = 0; c < 3; c++) {
-        maxD1 = Math.max(maxD1, Math.abs(d1.array[k * 3 + c]))
-        maxD2 = Math.max(maxD2, Math.abs(d2.array[k * 3 + c]))
-      }
-    }
-
-    expect(maxD1).toBeLessThan(wrap.w1 / 2 + patchRadius)
-    expect(maxD2).toBeLessThan(wrap.w2 / 2 + patchRadius)
-  })
-})
-
 describe('buildTerrainPatchGeometry: атрибут height', () => {
   it('height = метры над референсом той же вершины, что и позиция (полоса выключена)', () => {
     const { geometry, center } = build(bumpyField({ ...MIDBAND_DEFAULTS, midbandStrength: 0 }), 0, 1, 0)
@@ -708,7 +620,7 @@ describe('родительская форма (геоморф)', () => {
 
   it('своя форма с морфом бит-в-бит как без него', () => {
     const plain = buildAt(field, DEPTH_CHILD, 2, 5, 6).geometry
-    for (const name of ['position', 'detailPos', 'detailPos2', 'height', 'midTilt', 'midShade']) {
+    for (const name of ['position', 'height', 'midTilt', 'midShade']) {
       expect(child.geometry.getAttribute(name).array).toEqual(plain.getAttribute(name).array)
     }
   })

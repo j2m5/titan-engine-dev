@@ -49,14 +49,15 @@ export type FromWorkerMessage =
       requestId: number
       /** Буферы PatchArrays (Float32), раскладка как у allocatePatchArrays. */
       positions: ArrayBuffer
-      detailPos: ArrayBuffer
-      detailPos2: ArrayBuffer
       heights: ArrayBuffer
       midTilts: ArrayBuffer
       midShades: ArrayBuffer
       /** Морф-тройка (deltas vec3, midTilts vec2, midShades vec2); null — задание без морфа. */
       morph: { deltas: ArrayBuffer; midTilts: ArrayBuffer; midShades: ArrayBuffer } | null
       center: [number, number, number]
+      /** Смещения домена детали на патч (center − k·W), double. */
+      detailOrigin: [number, number, number]
+      detailOrigin2: [number, number, number]
       bounds: PatchBounds
     }
   | {

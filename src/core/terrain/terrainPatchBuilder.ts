@@ -18,11 +18,13 @@ export interface PatchBuildJob {
   morph: boolean | null
 }
 
-/** Результат сборки: массивы атрибутов, RTC-центр патча (тройка, не Vector3 — переживает structured clone) и сфера. */
+/** Результат сборки: массивы атрибутов, RTC-центр патча и смещения домена детали (тройки — переживают structured clone) и сфера. */
 export interface PatchBuildResult {
   arrays: PatchArrays
   center: [number, number, number]
   bounds: PatchBounds
+  detailOrigin: [number, number, number]
+  detailOrigin2: [number, number, number]
 }
 
 /**
@@ -66,7 +68,7 @@ export interface TerrainPatchBuilder {
 /**
  * Постройка на месте: onDone внутри request, поэтому одна постройка за кадр
  * гарантирована. Массивы — два скретча на строителя, без морфа и с морфом
- * (≈245 и ≈368 КиБ при segments=64): результат потребитель копирует внутри onDone (см. контракт
+ * (≈140 и ≈263 КиБ при segments=64): результат потребитель копирует внутри onDone (см. контракт
  * интерфейса), аллокация на каждую постройку была бы мусором в горячем пути.
  */
 export class SyncTerrainPatchBuilder implements TerrainPatchBuilder {
@@ -105,7 +107,13 @@ export class SyncTerrainPatchBuilder implements TerrainPatchBuilder {
       onError(error)
       return
     }
-    onDone({ arrays, center: [built.center.x, built.center.y, built.center.z], bounds: built.bounds })
+    onDone({
+      arrays,
+      center: [built.center.x, built.center.y, built.center.z],
+      bounds: built.bounds,
+      detailOrigin: built.detailOrigin,
+      detailOrigin2: built.detailOrigin2
+    })
   }
 
   public requestShadow(field: TerrainHeightField, onDone: (bits: ShadowHeightBits) => void): void {

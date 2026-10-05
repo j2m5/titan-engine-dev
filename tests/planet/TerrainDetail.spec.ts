@@ -248,7 +248,7 @@ describe('PlanetMaterial: терраформный детальный слой',
     seedMoonHeightMap()
     seedTexture(moonPathOf('detailNormal'), 8, 4)
 
-    const material = new PlanetMaterial(moon())
+    const material = new PlanetMaterial(moon(), undefined, { terrainPatches: true })
     material.updateMaterial()
 
     expect(material.defines.USE_TERRAIN_DETAIL).toBe('1')
@@ -260,7 +260,7 @@ describe('PlanetMaterial: терраформный детальный слой',
     seedTexture(moonPathOf('detailArm'), 8, 4)
     seedTexture(moonPathOf('detailNormal2'), 8, 4)
 
-    const material = new PlanetMaterial(moon())
+    const material = new PlanetMaterial(moon(), undefined, { terrainPatches: true })
     material.updateMaterial()
 
     expect(material.defines.USE_TERRAIN_DETAIL).toBeUndefined()
@@ -269,7 +269,7 @@ describe('PlanetMaterial: терраформный детальный слой',
   it('без карты высот дефайн молчит, даже если detailNormal загружен', () => {
     seedTexture(moonPathOf('detailNormal'), 8, 4)
 
-    const material = new PlanetMaterial(moon())
+    const material = new PlanetMaterial(moon(), undefined, { terrainPatches: true })
     material.updateMaterial()
 
     expect(material.defines.USE_TERRAIN_DETAIL).toBeUndefined()
@@ -382,7 +382,7 @@ describe('PlanetMaterial: терраформный детальный слой',
     seedTexture(moonPathOf('detailArm'), 8, 4)
     seedTexture(moonPathOf('detailNormal2'), 8, 4)
 
-    const material = new PlanetMaterial(moon())
+    const material = new PlanetMaterial(moon(), undefined, { terrainPatches: true })
     material.updateMaterial()
     expect(material.defines.USE_TERRAIN_DETAIL).toBe('1')
 

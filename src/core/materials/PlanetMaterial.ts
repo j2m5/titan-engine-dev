@@ -80,6 +80,9 @@ class PlanetMaterial extends AbstractShaderMaterial {
    */
   private readonly cloudAtmosphereThicknessUnits: number | undefined
 
+  /** Геометрия — патчи кубосферы (TerrainSphere): только у них есть инстансные атрибуты патча (detailOrigin и др.). */
+  private readonly terrainPatches: boolean
+
   /** Радиус тела (юниты сцены) — та же экономия ORM/аллокаций, что и толщина атмосферы выше; 0 у стаб-акторов тестов без physicalObject. */
   private readonly bodyRadiusUnits: number
 
@@ -107,6 +110,7 @@ class PlanetMaterial extends AbstractShaderMaterial {
   public constructor(model: Actor, atmosphereRegistry?: AtmosphereRegistry, options: PlanetMaterialOptions = {}) {
     super()
     this.model = model
+    this.terrainPatches = options.terrainPatches === true
     // Дочерняя атмосфера резолвится ОДИН раз — толщина и actorId читаются из
     // одного и того же актора, а не двух отдельных обходов ORM.
     const atmosphereActor = model.children.where('categoryId', ATMOSPHERE_CATEGORY_ID).first()
@@ -374,7 +378,9 @@ class PlanetMaterial extends AbstractShaderMaterial {
     const detailDiffMap = textureOf('detailDiffuse')
     const detailArmMap = textureOf('detailArm')
     const detailNor2Map = textureOf('detailNormal2')
-    const USE_TERRAIN_DETAIL = hasHeightField && Boolean(detailNorMap)
+    // Домен детали собирается из инстансного смещения патча (position +
+    // detailOrigin): у старой сферы его нет, и домен стал бы позицией сферы
+    const USE_TERRAIN_DETAIL = this.terrainPatches && hasHeightField && Boolean(detailNorMap)
 
     this.uniforms.diffuseMap.value = diffuseMap
     this.uniforms.nightMap.value = nightMap

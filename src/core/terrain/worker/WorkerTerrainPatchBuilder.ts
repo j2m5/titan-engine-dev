@@ -263,8 +263,6 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
       entry.onDone({
         arrays: {
           positions: new Float32Array(msg.positions),
-          detailPos: new Float32Array(msg.detailPos),
-          detailPos2: new Float32Array(msg.detailPos2),
           heights: new Float32Array(msg.heights),
           midTilts: new Float32Array(msg.midTilts),
           midShades: new Float32Array(msg.midShades),
@@ -278,7 +276,9 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
                 }
         },
         center: msg.center,
-        bounds: msg.bounds
+        bounds: msg.bounds,
+        detailOrigin: msg.detailOrigin,
+        detailOrigin2: msg.detailOrigin2
       })
     } else if (msg.type === 'shadowBuilt') {
       const entry = this.outstandingShadows.get(msg.requestId)

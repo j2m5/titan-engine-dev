@@ -79,7 +79,7 @@ describe('TerrainPatchPool', () => {
     buildTerrainPatchInto(field, 2, 1, 0, DEPTH, SEGMENTS, SKIRT, handle, wrap)
     const fresh = buildTerrainPatchGeometry(field, 2, 1, 0, DEPTH, SEGMENTS, buildPatchIndex(SEGMENTS), SKIRT, wrap)
 
-    for (const name of ['position', 'detailPos', 'detailPos2', 'height', 'midTilt', 'midShade']) {
+    for (const name of ['position', 'detailOrigin', 'detailOrigin2', 'height', 'midTilt', 'midShade']) {
       expect(Array.from(handle.geometry.getAttribute(name).array)).toEqual(
         Array.from(fresh.geometry.getAttribute(name).array)
       )
@@ -111,14 +111,14 @@ describe('TerrainPatchPool', () => {
 
   // needsUpdate у three — сеттер без геттера (пишет version++, читается как
   // undefined всегда), поэтому наблюдаем через .version (см. WaterMaterial.spec.ts)
-  it('into выставляет needsUpdate на всех перезаписанных атрибутах, включая detailPos/detailPos2 и patchCenter', () => {
+  it('into выставляет needsUpdate на всех перезаписанных атрибутах, включая detailOrigin/detailOrigin2 и patchCenter', () => {
     const field = bumpyField()
     const pool = makePool()
     const handle = pool.acquire()!
     const wrap = detailWrapFor(undefined)
 
     const versionsBefore: Record<string, number> = {}
-    for (const name of ['position', 'detailPos', 'detailPos2', 'patchCenter']) {
+    for (const name of ['position', 'detailOrigin', 'detailOrigin2', 'patchCenter']) {
       const attr = handle.geometry.getAttribute(name) as BufferAttribute
       attr.needsUpdate = false
       versionsBefore[name] = attr.version
@@ -126,7 +126,7 @@ describe('TerrainPatchPool', () => {
 
     buildTerrainPatchInto(field, 2, 1, 0, DEPTH, SEGMENTS, SKIRT, handle, wrap)
 
-    for (const name of ['position', 'detailPos', 'detailPos2', 'patchCenter']) {
+    for (const name of ['position', 'detailOrigin', 'detailOrigin2', 'patchCenter']) {
       const attr = handle.geometry.getAttribute(name) as BufferAttribute
       expect(attr.version).toBeGreaterThan(versionsBefore[name])
     }
@@ -136,7 +136,7 @@ describe('TerrainPatchPool', () => {
    * applyPatchResult — боевой путь записи прихода строителя (синхронного и
    * воркерного): те же атрибуты слота, что у into-варианта, но СКОПИРОВАННЫЕ
    * из чужих массивов. Эталон тот же fresh, что и у into-паритета — иначе
-   * перепутанные местами массивы (detailPos ↔ detailPos2, midTilt ↔ midShade)
+   * перепутанные местами массивы (detailOrigin ↔ detailOrigin2, midTilt ↔ midShade)
    * проходили бы молча.
    *
    * Уровень 11 (≈ боевой L8 при SEGMENTS 8), а не DEPTH: на грубом уровне шаг
@@ -149,7 +149,7 @@ describe('TerrainPatchPool', () => {
     const handle = pool.acquire()!
     const wrap = detailWrapFor(undefined)
     const deep = 11
-    const names = ['position', 'detailPos', 'detailPos2', 'height', 'midTilt', 'midShade', 'patchCenter']
+    const names = ['position', 'detailOrigin', 'detailOrigin2', 'height', 'midTilt', 'midShade', 'patchCenter']
 
     const versionsBefore: Record<string, number> = {}
     for (const name of names) {
@@ -298,12 +298,10 @@ describe('TerrainPatchPool', () => {
   // acquire (см. докблок класса), pool.dispose() освобождает их и общий
   // индекс, но НЕ трогает слоты, которые вызывающий не release'нул —
   // это его ответственность (см. TerrainSphere.dispose)
-  it('геометрия слота несёт атрибуты detailPos/detailPos2 (vec3) и midTilt (vec2), все DynamicDrawUsage', () => {
+  it('геометрия слота несёт midTilt/midShade (vec2), все DynamicDrawUsage', () => {
     const pool = makePool()
     const handle = pool.acquire()!
     const attrs: Array<[string, number]> = [
-      ['detailPos', 3],
-      ['detailPos2', 3],
       ['midTilt', 2],
       ['midShade', 2]
     ]
@@ -321,6 +319,14 @@ describe('TerrainPatchPool', () => {
     expect(patchCenter.usage).toBe(DynamicDrawUsage)
     // делитель инстанса: он же идёт в _maxInstanceCount = meshPerAttribute × count
     expect(patchCenter.meshPerAttribute).toBe(1)
+    for (const name of ['detailOrigin', 'detailOrigin2']) {
+      const origin = handle.geometry.getAttribute(name) as InstancedBufferAttribute
+      expect(origin.isInstancedBufferAttribute).toBe(true)
+      expect(origin.count).toBe(1)
+      expect(origin.itemSize).toBe(3)
+      expect(origin.usage).toBe(DynamicDrawUsage)
+    }
+    expect(handle.geometry.getAttribute('detailPos')).toBeUndefined()
   })
 
   it('dispose освобождает геометрии свободных слотов и общий индекс; живые слоты не трогает', () => {

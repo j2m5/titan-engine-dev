@@ -925,10 +925,10 @@ describe('домен мелкой ряби: WATER_DETAIL_WRAP и vDetailPos', ()
     expect(WATER_DETAIL_WRAP.w1).toBe(wrapUnitsFor(WATER_DETAIL_PERIOD_METERS))
   })
 
-  it('вершинник читает атрибут detailPos и отдаёт vDetailPos; фрагментник объявляет varying', () => {
-    expect(vert).toContain('attribute vec3 detailPos;')
+  it('вершинник собирает vDetailPos из position + detailOrigin; фрагментник объявляет varying', () => {
+    expect(vert).toContain('attribute vec3 detailOrigin;')
     expect(vert).toContain('varying vec3 vDetailPos;')
-    expect(vert).toContain('vDetailPos = detailPos;')
+    expect(vert).toContain('vDetailPos = position + detailOrigin;')
     expect(frag).toContain('varying vec3 vDetailPos;')
   })
 })

@@ -12,20 +12,22 @@ import { buildPatchIndex, terrainPatchVertexCount } from './terrainPatchGeometry
  * Потолок одновременно живых патчей квадродерева. Замер: на HiDPI (H=2160)
  * при τ≈2 желаемый набор SSE-отбора уже 552+ листьев, а живых на переходах
  * split/merge больше (старый и новый узел видны одновременно, см. инвариант
- * «без дыр» в TerrainSphere) — 640 пробивается. 1024 слота = ~257 МБ
- * атрибутов (14 float на вершину: position 3 + detailPos 3 + detailPos2 3 +
- * height 1 + midTilt 2 + midShade 2; patchCenter — 3 float на ПАТЧ, TERRAIN_PATCH_SEGMENTS=64
- * → 4481 вершина на патч); пул с морфом (рельеф) несёт ещё 7 float на вершину
- * (morphDelta 3 + midTiltParent 2 + midShadeParent 2) и patchMorph 1 float на
- * патч — 21 float, ~385 МБ на 1024 слота. Ленивая аллокация (createHandle зовётся по факту, не
- * заранее) — платит только дошедший до этой глубины набор. Потолок страхует
- * от неограниченного роста при патологическом отборе (камера в стене,
- * дребезг), не отражает штатный размер набора.
+ * «без дыр» в TerrainSphere) — 640 пробивается. Пул рельефа: 15 float на
+ * вершину (position 3 + height 1 + midTilt 2 + midShade 2 + morphDelta 3 +
+ * midTiltParent 2 + midShadeParent 2) и 10 float на патч (patchCenter 3 +
+ * patchMorph 1 + detailOrigin 3 + detailOrigin2 3), TERRAIN_PATCH_SEGMENTS=64
+ * → 4481 вершина, 268 900 Б на слот, ~275 МБ на 1024 слота. Домен детали —
+ * смещение на патч, вершинник собирает position + detailOrigin. Ленивая
+ * аллокация (createHandle зовётся по факту, не заранее) — платит только
+ * дошедший до этой глубины набор. Потолок страхует от неограниченного роста
+ * при патологическом отборе (камера в стене, дребезг), не отражает штатный
+ * размер набора.
  *
  * Водный пул (WATER_MAX_LIVE_PATCHES, см. WaterSphere, 256 слотов) без морфа
- * платит базовые 14 float на вершину — detailPos/detailPos2, height, midTilt и midShade заведены пулом
- * безусловно (общая TerrainPatchPool), хотя WaterMaterial их не читает;
- * осознанная цена общего пула, та же, что у detailPos.
+ * платит 8 float на вершину (position 3 + height 1 + midTilt 2 + midShade 2)
+ * и 9 на патч (patchCenter 3 + detailOrigin 3 + detailOrigin2 3): height,
+ * midTilt, midShade и оба смещения заведены пулом безусловно (общая
+ * TerrainPatchPool), хотя WaterMaterial читает из них только detailOrigin.
  */
 export const MAX_LIVE_PATCHES = 1024
 
@@ -166,8 +168,6 @@ class TerrainPatchPool {
     const geometry = new InstancedBufferGeometry()
     geometry.instanceCount = 1
     const position = new BufferAttribute(new Float32Array(vertexCount * 3), 3)
-    const detailPos = new BufferAttribute(new Float32Array(vertexCount * 3), 3)
-    const detailPos2 = new BufferAttribute(new Float32Array(vertexCount * 3), 3)
     const height = new BufferAttribute(new Float32Array(vertexCount), 1)
     const midTilt = new BufferAttribute(new Float32Array(vertexCount * 2), 2)
     const midShade = new BufferAttribute(new Float32Array(vertexCount * 2), 2)
@@ -176,19 +176,22 @@ class TerrainPatchPool {
     // patchCenter), а атрибуты normal (= то же направление) и uv (мёртв для
     // рендера — фрагментник считает uv сам) сняты.
     const patchCenter = new InstancedBufferAttribute(new Float32Array(3), 3)
+    // домен детали — смещение на патч: вершинник собирает position + detailOrigin
+    const detailOrigin = new InstancedBufferAttribute(new Float32Array(3), 3)
+    const detailOrigin2 = new InstancedBufferAttribute(new Float32Array(3), 3)
     // DynamicDrawUsage: split/merge перезаписывает эти атрибуты на месте
     // каждый раз, когда слот переиспользуется (buildTerrainPatchInto) — не
     // однократная запись, которую предполагает дефолтный StaticDrawUsage.
-    for (const attribute of [position, detailPos, detailPos2, height, midTilt, midShade, patchCenter]) {
+    for (const attribute of [position, height, midTilt, midShade, patchCenter, detailOrigin, detailOrigin2]) {
       attribute.setUsage(DynamicDrawUsage)
     }
     geometry.setAttribute('position', position)
-    geometry.setAttribute('detailPos', detailPos)
-    geometry.setAttribute('detailPos2', detailPos2)
     geometry.setAttribute('height', height)
     geometry.setAttribute('midTilt', midTilt)
     geometry.setAttribute('midShade', midShade)
     geometry.setAttribute('patchCenter', patchCenter)
+    geometry.setAttribute('detailOrigin', detailOrigin)
+    geometry.setAttribute('detailOrigin2', detailOrigin2)
     if (this.morph) {
       // родительская форма для геоморфинга (см. buildTerrainPatchArrays) + прогресс перехода патча
       const morphDelta = new BufferAttribute(new Float32Array(vertexCount * 3), 3)

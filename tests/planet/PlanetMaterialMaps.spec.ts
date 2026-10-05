@@ -104,7 +104,7 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     seedMoonHeightMap()
     seedTexture(moonPathOf('slope'), 8192, 4096)
 
-    const material = new PlanetMaterial(moon())
+    const material = new PlanetMaterial(moon(), undefined, { terrainPatches: true })
 
     expect(() => material.updateMaterial()).not.toThrow()
 
@@ -182,7 +182,7 @@ describe('PlanetMaterial: slope-карта у тел с честным рель�
     seedTexture(moonPathOf('slope'), 8192, 4096)
     seedTexture(moonPathOf('detailNormal'), 2048, 2048)
 
-    const material = new PlanetMaterial(moon())
+    const material = new PlanetMaterial(moon(), undefined, { terrainPatches: true })
     material.updateMaterial()
     expect(material.defines.USE_TERRAIN_DETAIL).toBe('1')
 

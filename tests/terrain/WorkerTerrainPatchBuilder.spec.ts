@@ -12,7 +12,14 @@ import { resourceStorage } from '@/core/services/ResourceStorage'
 import type { PatchArrays } from '@/core/terrain/terrainPatchGeometry'
 import type { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { buildNearTileHeights } from '@/core/terrain/nearTileBake'
-import { expectMatchesFreshBuild, makeField, nearParams, patchJob, snapshotArrays } from './workerBuildHelpers'
+import {
+  expectMatchesFreshBuild,
+  expectOriginsMatchFresh,
+  makeField,
+  nearParams,
+  patchJob,
+  snapshotArrays
+} from './workerBuildHelpers'
 
 /** onError в тестах без сбоя — провал теста, а не тишина. */
 const unexpectedError = (error: unknown): never => {
@@ -77,6 +84,8 @@ describe('WorkerTerrainPatchBuilder: строитель поверх ворке�
     expect(results).toHaveLength(2)
     expectMatchesFreshBuild(results[0].arrays, job)
     expectMatchesFreshBuild(results[1].arrays, job2)
+    expectOriginsMatchFresh(results[0], job)
+    expectOriginsMatchFresh(results[1], job2)
     // две группы на одно поле: acquire×2 → release×2, releaseField ровно один раз, при нуле ссылок
     builder.acquire(field)
     builder.acquire(field)
@@ -102,6 +111,7 @@ describe('WorkerTerrainPatchBuilder: строитель поверх ворке�
     worker.pump()
     expect(results).toHaveLength(3)
     jobs.forEach((job, k) => expectMatchesFreshBuild(results[k].arrays, job))
+    jobs.forEach((job, k) => expectOriginsMatchFresh(results[k], job))
     expect(results[2].arrays.morph).toBeNull()
     expect(results[0].arrays.morph!.deltas.some((v) => v !== 0)).toBe(true)
   })
@@ -161,7 +171,14 @@ describe('WorkerTerrainPatchBuilder: отказ воркера — откат н
       const sentBefore = worker.sent.length
       const jobC = patchJob(field, 5, 1, 1)
       const c: PatchArrays[] = []
-      builder.request(jobC, (r) => c.push(snapshotArrays(r.arrays)), unexpectedError)
+      builder.request(
+        jobC,
+        (r) => {
+          c.push(snapshotArrays(r.arrays))
+          expectOriginsMatchFresh(r, jobC)
+        },
+        unexpectedError
+      )
       expect(c).toHaveLength(1) // синхронно, внутри request
       expectMatchesFreshBuild(c[0], jobC)
       builder.acquire(field)

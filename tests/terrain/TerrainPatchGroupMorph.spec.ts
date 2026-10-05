@@ -492,13 +492,13 @@ describe('TerrainPatchGroup: сводка пула и реестр', () => {
     expect(group.stats().peakLive).toBe(group.stats().live)
   })
 
-  it('bytesPerSlot: 21 float на вершину у морф-пула, 14 у воды, плюс инстансные', () => {
+  it('bytesPerSlot: 15 float на вершину и 10 на патч у морф-пула, 8 и 9 у воды', () => {
     const vertices = terrainPatchVertexCount(TERRAIN_PATCH_SEGMENTS)
     expect(vertices).toBe(4481)
     const terrain = makeAsync(true)
     const water = makeAsync(false)
-    expect(terrain.group.stats().bytesPerSlot).toBe((vertices * 21 + 4) * 4)
-    expect(water.group.stats().bytesPerSlot).toBe((vertices * 14 + 3) * 4)
+    expect(terrain.group.stats().bytesPerSlot).toBe((vertices * 15 + 10) * 4)
+    expect(water.group.stats().bytesPerSlot).toBe((vertices * 8 + 9) * 4)
     expect(terrain.group.debugKind).toBe('terrain')
     expect(water.group.debugKind).toBe('water')
   })

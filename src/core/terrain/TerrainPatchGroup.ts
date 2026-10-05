@@ -149,8 +149,9 @@ interface LiveEntry {
  * которого при обходе сцены дожидается disposeSceneTree родителя — двойной dispose узлов,
  * уже освобождённых им напрямую, безвреден по тому же контракту.
  *
- * Геометрия патча несёт также detailPos/detailPos2 — домен детальных слоёв
- * (см. detailWrap.ts), периоды которого приходят сюда параметром detailWrap.
+ * Геометрия патча несёт также инстансные detailOrigin/detailOrigin2 —
+ * смещения домена детальных слоёв (см. detailWrap.ts), периоды которого
+ * приходят сюда параметром detailWrap.
  */
 abstract class TerrainPatchGroup extends Group {
   private readonly field: TerrainHeightField
