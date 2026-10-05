@@ -97,10 +97,11 @@ export const PlanetShaderTemplate: ShaderProps = {
     #endif
 
     #ifdef USE_TERRAIN_DETAIL
-      // Точная тело-локальная позиция минус k·W (detailWrap.ts): домен
-      // детальных текстур без квантования float32 единичного направления.
-      attribute vec3 detailPos;
-      attribute vec3 detailPos2;
+      // Домен детальных текстур: тело-локальная позиция минус k·W
+      // (detailWrap.ts) = position + смещение патча center − k·W — без
+      // квантования float32 единичного направления.
+      attribute vec3 detailOrigin;
+      attribute vec3 detailOrigin2;
       varying vec3 vDetailPos;
       varying vec3 vDetailPos2;
     #endif
@@ -182,8 +183,8 @@ export const PlanetShaderTemplate: ShaderProps = {
       vViewPosition = -mvPosition.xyz;
 
       #ifdef USE_TERRAIN_DETAIL
-        vDetailPos = detailPos;
-        vDetailPos2 = detailPos2;
+        vDetailPos = position + detailOrigin;
+        vDetailPos2 = position + detailOrigin2;
       #endif
 
       #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE) || defined(USE_TERRAIN_FROST)

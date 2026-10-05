@@ -39,6 +39,8 @@ export class HeightFieldGate {
     private builder: TerrainPatchBuilder
   ) {
     this.sceneObserver.subscribe('ClosestChange', this.onClosestChange)
+    // опциональный вызов: заглушки рендерера в тестах отдают domElement без addEventListener
+    this.renderer.domElement.addEventListener?.('webglcontextrestored', this.onContextRestored)
   }
 
   /**
@@ -55,6 +57,7 @@ export class HeightFieldGate {
    */
   public dispose(): void {
     this.sceneObserver.unsubscribe('ClosestChange', this.onClosestChange)
+    this.renderer.domElement.removeEventListener?.('webglcontextrestored', this.onContextRestored)
   }
 
   /** Сброс кеша узлов при разборке сценария — иначе выброшенные узлы (и их пулы патчей) живут в куче до следующего поиска того же имени. */
@@ -159,6 +162,48 @@ export class HeightFieldGate {
   }
 
   private onClosestChange = (): void => {
+    this.recompute()
+  }
+
+  /**
+   * Контекст WebGL восстановлен — рельеф откатывается на легаси-сферу и
+   * перестраивается со свежими пулами. WebGLRenderer.onContextLost зовёт
+   * preventDefault(), поэтому браузер контекст восстанавливает, а
+   * onContextRestore (initGLContext) пересоздаёт все GL-ресурсы и перезаливает
+   * каждый буфер из `attribute.array`. Слоты пулов рельефа после заливки держат
+   * в куче только position (см. докблок TerrainPatchPool), остальные массивы
+   * отпущены: перезаливка дала бы нулевые буферы — дыры в рельефе, а следующий
+   * приход в такой слот уронил бы кадр («Resizing buffer attributes is not
+   * supported» внутри render).
+   *
+   * Слушатель three регистрирует первым (конструктор WebGLRenderer), наш — позже
+   * (синглтон строится после рендерера), поэтому к первому кадру нового
+   * контекста поверхности уже подменены. Даунгрейд идемпотентен и отменяет
+   * ждущий апгрейд; водные оболочки уходят вместе со свапом (swapSurface).
+   * Затем обычный пересчёт: тела с загруженными картами апгрейдятся заново —
+   * новая TerrainSphere строится вне сцены, свап делает готовность её
+   * начального набора.
+   */
+  private readonly onContextRestored = (): void => {
+    // сначала сбор, потом свап: swapSurface правит детей узла, а обход живёт по дереву сцены
+    const nodes: DynamicNode[] = []
+
+    this.scene.traverse((object: Object3D): void => {
+      if (object instanceof DynamicNode) nodes.push(object)
+    })
+
+    let surfaceSwapped: boolean = false
+
+    for (const node of nodes) {
+      if (!this.factory.downgradeTerrainToPlanet(node)) continue
+
+      surfaceSwapped = true
+      this.factory.resyncSurfaceMaterials(node)
+    }
+
+    // тот же пересбор снимка, что в хвосте recompute (причины — в его комментарии)
+    if (surfaceSwapped) this.sceneObserver.refreshObservableObjects()
+
     this.recompute()
   }
 

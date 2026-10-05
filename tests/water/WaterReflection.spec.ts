@@ -587,8 +587,8 @@ const BASELINE_VERTEX_SHADER = `
     // у рельефа): атрибут normal снят, центр патча приходит инстансным
     // атрибутом (один элемент на патч), гейта не нужно.
     attribute vec3 patchCenter;
-    // Тело-локальная позиция минус k·W (WATER_DETAIL_WRAP), юниты сцены — домен мелкой ряби.
-    attribute vec3 detailPos;
+    // Смещение патча center − k·W (WATER_DETAIL_WRAP), юниты сцены: домен мелкой ряби — position + detailOrigin.
+    attribute vec3 detailOrigin;
 
     void main() {
       vec4 worldPosition = modelMatrix * vec4(position, 1.0);
@@ -616,7 +616,7 @@ const BASELINE_VERTEX_SHADER = `
 
       vNormal = normalize(normalMatrix * vertexDir);
       vLocalDir = vertexDir;
-      vDetailPos = detailPos;
+      vDetailPos = position + detailOrigin;
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
       // Взгляд в системе тела (облачный слой) — из view-space, как у суши (PlanetShaderTemplate)

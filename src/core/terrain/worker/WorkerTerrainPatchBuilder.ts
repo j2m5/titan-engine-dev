@@ -116,8 +116,11 @@ type OutstandingNearTile = {
  * него, поздние built старого воркера игнорируются. Так «onDone ровно один
  * раз» держится и при сбое — группа не остаётся с вечным pending.
  *
- * Массивы результата — свежие виды на присланные буферы, контракт
- * «живут только на время onDone» соблюдён с запасом.
+ * Массивы результата — свежие виды на присланные из воркера (переданные, а не
+ * скопированные) буферы: на каждое задание свои, ссылок на них строитель не
+ * держит. Контракт тот же, что у TerrainPatchBuilder: массивы переходят к
+ * потребителю (слот пула подставляет их в атрибуты без копии и отпускает после
+ * заливки), а не живут только на время onDone.
  */
 export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
   private readonly fields = new Map<TerrainHeightField, { id: number; refs: number }>()
@@ -263,11 +266,9 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
       entry.onDone({
         arrays: {
           positions: new Float32Array(msg.positions),
-          detailPos: new Float32Array(msg.detailPos),
-          detailPos2: new Float32Array(msg.detailPos2),
-          heights: new Float32Array(msg.heights),
-          midTilts: new Float32Array(msg.midTilts),
-          midShades: new Float32Array(msg.midShades),
+          heights: msg.heights === null ? null : new Float32Array(msg.heights),
+          midTilts: msg.midTilts === null ? null : new Float32Array(msg.midTilts),
+          midShades: msg.midShades === null ? null : new Float32Array(msg.midShades),
           morph:
             msg.morph === null
               ? null
@@ -278,7 +279,9 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
                 }
         },
         center: msg.center,
-        bounds: msg.bounds
+        bounds: msg.bounds,
+        detailOrigin: msg.detailOrigin,
+        detailOrigin2: msg.detailOrigin2
       })
     } else if (msg.type === 'shadowBuilt') {
       const entry = this.outstandingShadows.get(msg.requestId)

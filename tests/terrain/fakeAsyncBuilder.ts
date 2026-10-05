@@ -5,9 +5,8 @@ import type { ShadowHeightBits } from '@/core/terrain/terrainShadowBits'
 
 /**
  * Очередь заданий с ручным продвижением: flush(n) завершает n первых через
- * синхронный строитель. Тот отдаёт свой скретч-набор массивов, но onDone здесь
- * тоже потребляется синхронно (внутри flush) — контракт «массивы живут только
- * на время onDone» соблюдён, перекрытия заданий нет.
+ * синхронный строитель (свежие массивы на задание — владение переходит к
+ * потребителю).
  */
 export class FakeAsyncBuilder implements TerrainPatchBuilder {
   public readonly acquired: TerrainHeightField[] = []

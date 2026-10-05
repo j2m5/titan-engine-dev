@@ -13,7 +13,7 @@ describe('waterOctavesMath: октавы', () => {
   it('каждый период мелкой октавы делит обёртку домена — иначе шов на границе патчей', () => {
     for (const p of WATER_RIPPLE_PERIODS_METERS) expect(WATER_DETAIL_WRAP_METERS % p).toBe(0)
   })
-  it('обёртка домена воды — WRAP_TILES периодов мелкой ряби, как у кодировщика detailPos', () => {
+  it('обёртка домена воды — WRAP_TILES периодов мелкой ряби, как у смещения detailOrigin', () => {
     expect(WATER_DETAIL_WRAP_METERS).toBe(WATER_DETAIL_PERIOD_METERS * WRAP_TILES)
   })
   it('угол пикселя по умолчанию — номинальный кадр 50°/1080p, не 0 (0 — все веса 1 с орбиты)', () => {

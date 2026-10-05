@@ -54,11 +54,13 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
     },
     table() {
       console.table(
-        collectStats().map(({ bytesPerSlot, liveBytes, peakBytes, ...rest }) => ({
+        collectStats().map(({ bytesPerSlot, liveBytes, peakBytes, heapBytesPerSlot, heapBytes, ...rest }) => ({
           ...rest,
           bytesPerSlotKiB: Math.round(bytesPerSlot / 1024),
           liveMiB: +(liveBytes / MIB).toFixed(1),
-          peakMiB: +(peakBytes / MIB).toFixed(1)
+          peakMiB: +(peakBytes / MIB).toFixed(1),
+          heapBytesPerSlotKiB: Math.round(heapBytesPerSlot / 1024),
+          heapMiB: +(heapBytes / MIB).toFixed(1)
         }))
       )
     }

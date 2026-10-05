@@ -197,7 +197,8 @@ export const terrainMacroDetailFunctions = /* glsl */ `
 
     // Домен и след струй — тоже до всех ранних выходов (однородный поток в кваде).
     // Домен через единичный dir: квант float32 ≈ 0.2 м при периоде 0.5 км;
-    // период ниже ~0.2 км вернёт артефакт класса tile-jitter (см. detailPos)
+    // период ниже ~0.2 км вернёт артефакт класса tile-jitter (см. vDetailPos и
+    // detailOrigin: TerrainDetail.ts, terrainPatchGeometry.ts)
     vec3 qs = dirLocal * (uBodyRadiusUnits / max(uMacroStreakPeriodUnits, 1e-9));
     float streakWeight = 1.0 - smoothstep(0.5, 1.0, length(fwidth(qs)));
 

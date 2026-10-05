@@ -161,7 +161,7 @@ describe('PlanetMaterial: гейт блеска льда', () => {
   })
 
   it('Европа (ice-airless, без воды): USE_TERRAIN_GLINT и uIceGlintStrength 0.35', () => {
-    const material = new PlanetMaterial(europa())
+    const material = new PlanetMaterial(europa(), undefined, { terrainPatches: true })
     material.updateMaterial()
 
     expect(material.defines.USE_TERRAIN_GLINT).toBe('1')
@@ -175,7 +175,7 @@ describe('PlanetMaterial: гейт блеска льда', () => {
     seedPlaceholderKeys(moon())
     seedTexture(pathOf(moon(), 'detailNormal'), 8, 4)
 
-    const material = new PlanetMaterial(moon())
+    const material = new PlanetMaterial(moon(), undefined, { terrainPatches: true })
     material.updateMaterial()
 
     expect(material.defines.USE_TERRAIN_GLINT).toBeUndefined()
@@ -185,7 +185,7 @@ describe('PlanetMaterial: гейт блеска льда', () => {
   it('Европа с водной оболочкой: дефайна нет — блик суши под водой был бы вторым бликом', () => {
     waterLevelOverride.value = 0
 
-    const material = new PlanetMaterial(europa())
+    const material = new PlanetMaterial(europa(), undefined, { terrainPatches: true })
     material.updateMaterial()
 
     expect(material.defines.USE_TERRAIN_GLINT).toBeUndefined()
