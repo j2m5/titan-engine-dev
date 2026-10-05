@@ -68,8 +68,21 @@ export type PatchHandle = { mesh: Mesh; geometry: InstancedBufferGeometry }
  * (onUploadCallback) — в куче живут position (клик-рейкаст) и инстансные
  * атрибуты, patchSlotHeapBytes. Патч вне кадра three не заливает, поэтому
  * до первой заливки position он рисуется без фрустум-каллинга. Скрытый меш
- * держит массивы до показа (транзиент). Отпущенные массивы не восстановить
- * после потери WebGL-контекста — её приложение не обрабатывает.
+ * держит массивы до показа (транзиент).
+ *
+ * Контекст WebGL: three на onContextLost зовёт preventDefault(), браузер
+ * контекст восстанавливает, и three перезаливает каждый буфер из
+ * `attribute.array` — слоты с отпущенными массивами дали бы нулевые буферы
+ * (дыры), а следующий приход в такой слот уронил бы рендер. Поэтому на
+ * `webglcontextrestored` HeightFieldGate сбрасывает поверхности-рельеф на
+ * легаси-сферу (пулы уходят вместе с ними), а следующий пересчёт гейта
+ * апгрейдит тела с загруженными картами заново — со свежими пулами.
+ *
+ * Порядок обращения со слотом (нарушение любого пункта даёт WebGLAttributes
+ * нулевой буфер или исключение внутри render): меш слота входит в сцену только
+ * после первого applyPatchResult и покидает её до release; задиспоженная
+ * геометрия слота больше не рисуется; version upload-only атрибутов поднимает
+ * только applyPatchResult — и всегда после записи свежего массива.
  *
  * Материал типизирован общим `Material`, не `PlanetMaterial` — пул сам с
  * материалом не взаимодействует (только держит ссылку для `new Mesh`), а
@@ -148,7 +161,8 @@ class TerrainPatchPool {
     if (!this.occupied.delete(handle)) return
 
     this.free.push(handle)
-    // слот в свободном списке кучу не держит; version не поднимается —
+    // слот в свободном списке держит только резидентную часть (position и
+    // инстансные атрибуты, patchSlotHeapBytes); version не поднимается —
     // следующая запись прихода поставит массив раньше needsUpdate
     for (const name of UPLOAD_ONLY[this.layout]) (handle.geometry.getAttribute(name) as BufferAttribute).array = RELEASED
   }

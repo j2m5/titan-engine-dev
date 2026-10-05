@@ -533,10 +533,17 @@ function writeInstanceAttribute(geometry: InstancedBufferGeometry, name: string,
   attribute.needsUpdate = true
 }
 
-
-/** Вершинный атрибут слота берёт массив результата во владение (без копии) и ставит заливку. */
+/**
+ * Вершинный атрибут слота берёт массив результата во владение (без копии) и ставит заливку.
+ * Длина сверяется на приходе: прежний `.set()` падал именно здесь, а неверный
+ * массив без охраны всплыл бы уже внутри рендера (заливка буфера не того размера).
+ */
 function takeVertexArray(geometry: InstancedBufferGeometry, name: string, source: Float32Array): void {
   const attribute = geometry.getAttribute(name) as BufferAttribute
+  const expected = attribute.count * attribute.itemSize
+  if (source.length !== expected) {
+    throw new Error(`атрибут ${name}: длина массива результата ${source.length}, слот ждёт ${expected}`)
+  }
   attribute.array = source
   attribute.needsUpdate = true
 }

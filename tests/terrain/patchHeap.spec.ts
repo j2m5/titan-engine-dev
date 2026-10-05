@@ -101,6 +101,16 @@ describe('куча слота: массив живёт только до зал�
     expect(attr(again, 'midTiltParent').array).toEqual(result.arrays.midTilts)
   })
 
+  it('массив неверной длины отвергается при приходе, а не внутри рендера (охрана takeVertexArray)', () => {
+    const { handle } = terrainSlot()
+    const result = build()
+    result.arrays.positions = result.arrays.positions.slice(0, result.arrays.positions.length - 3)
+
+    const expected = terrainPatchVertexCount(SEGMENTS) * 3
+
+    expect(() => applyPatchResult(handle, result)).toThrow(new RegExp(`position.*${expected - 3}.*${expected}`))
+  })
+
   it('клик-рейкаст по патчу после заливки попадает', () => {
     const { handle } = terrainSlot()
     const result = build()
