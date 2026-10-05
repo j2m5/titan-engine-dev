@@ -30,7 +30,7 @@ import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { SunTintBinding } from '@/core/materials/SunTintBinding'
 import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
 import { resolveStarRadiusKm } from '@/core/terrain/starRadius'
-import { penumbraTan } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
+import { sunTangent, TERRAIN_SHADOW_PENUMBRA_FLOOR } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
 import { resolveLightTint } from '@/core/helpers/lightSource'
 
 /**
@@ -235,14 +235,11 @@ class PlanetMaterial extends AbstractShaderMaterial {
 
   /** Полутень тени рельефа: угловой размер солнца — из атмосферы или R★/дистанция; звезда в нуле сцены. */
   public syncTerrainShadow(modelWorldPosition: Vector3): void {
-    this.uniforms.uShadowPenumbraTan.value = penumbraTan(
-      this.atmosphereSunAngularRadius,
-      this.starRadiusUnits,
-      modelWorldPosition.length(),
-      this.shadowSoftness
-    )
-    // Полутень тени колец — честный угловой радиус солнца (без ручки мягкости рельефа)
-    this.uniforms.uRingSunTan.value = penumbraTan(this.atmosphereSunAngularRadius, this.starRadiusUnits, modelWorldPosition.length(), 1)
+    const tan = sunTangent(this.atmosphereSunAngularRadius, this.starRadiusUnits, modelWorldPosition.length())
+
+    this.uniforms.uShadowPenumbraTan.value = Math.max(tan, TERRAIN_SHADOW_PENUMBRA_FLOOR) * this.shadowSoftness
+    // Полутень тени колец — честный тангенс углового радиуса солнца: без пола и без ручки мягкости рельефа
+    this.uniforms.uRingSunTan.value = tan
   }
 
   /** Нужна ли плитка ближней тени: слой живёт внутри USE_TERRAIN_SHADOW и гаснет при силе 0. */
