@@ -31,7 +31,8 @@ export const AppUniformsChunk: Record<string, Record<string, IUniform>> = {
   ringShadowUniforms: {
     shadowRingsInnerRadius: new Uniform(0),
     shadowRingsOuterRadius: new Uniform(0),
-    shadowRingsTexture: new Uniform(null)
+    shadowRingsTexture: new Uniform(null),
+    uRingSunTan: new Uniform(0)
   }
 }
 

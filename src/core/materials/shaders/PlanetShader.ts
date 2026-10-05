@@ -150,6 +150,7 @@ interface PlanetUniforms {
   shadowRingsInnerRadius: number
   shadowRingsOuterRadius: number
   shadowRingsTexture: Texture | null
+  uRingSunTan: number
   uAtmoTransmittance: Texture | null
   uAtmoIrradiance: Texture | null
   uAtmoBottomRadius: number
@@ -318,6 +319,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       shadowRingsInnerRadius: new Uniform(toThreeJSUnits(ringData.innerRadius)),
       shadowRingsOuterRadius: new Uniform(toThreeJSUnits(ringData.outerRadius)),
       shadowRingsTexture: new Uniform(ringMap),
+      uRingSunTan: new Uniform(0),
       uAtmoTransmittance: new Uniform(null),
       uAtmoIrradiance: new Uniform(null),
       uAtmoBottomRadius: new Uniform(0),

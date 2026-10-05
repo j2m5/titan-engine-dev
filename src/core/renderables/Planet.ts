@@ -1,4 +1,4 @@
-import { BufferGeometry, Mesh, SphereGeometry } from 'three'
+import { BufferGeometry, Mesh, SphereGeometry, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
@@ -14,6 +14,8 @@ class Planet extends Mesh {
 
   /** Тот же материал, что this.material — типизированная ссылка для пер-кадрового хука. */
   private planetMaterial!: PlanetMaterial
+
+  private readonly worldScratch = new Vector3()
 
   public constructor(model: Actor, atmosphereRegistry?: AtmosphereRegistry) {
     super()
@@ -36,12 +38,13 @@ class Planet extends Mesh {
   }
 
   /**
-   * Тинт солнца: запись реестра резолвится каждый кадр (порядок создания узлов
+   * Тинт солнца и полутень тени колец: запись реестра резолвится каждый кадр (порядок создания узлов
    * не важен, снятие атмосферы гасит эффект). Вызов пустой, пока запись та же —
    * тот же хук, что TerrainSphere.onVisibleUpdate у рельефных тел.
    */
   public updateObject(_ctx: UpdateContext): void {
     this.planetMaterial.syncSunTint()
+    this.planetMaterial.syncTerrainShadow(this.getWorldPosition(this.worldScratch))
   }
 }
 

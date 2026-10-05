@@ -241,6 +241,8 @@ class PlanetMaterial extends AbstractShaderMaterial {
       modelWorldPosition.length(),
       this.shadowSoftness
     )
+    // Полутень тени колец — честный угловой радиус солнца (без ручки мягкости рельефа)
+    this.uniforms.uRingSunTan.value = penumbraTan(this.atmosphereSunAngularRadius, this.starRadiusUnits, modelWorldPosition.length(), 1)
   }
 
   /** Нужна ли плитка ближней тени: слой живёт внутри USE_TERRAIN_SHADOW и гаснет при силе 0. */
