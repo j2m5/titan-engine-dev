@@ -200,7 +200,7 @@ describe('WaterShaderTemplate: sunLight/albedo — дословно Water.js (ge
   it('albedo — mix дословно Water.js БЕЗ getShadowMask (комментарий-оговорка обязателен), результат в свою переменную wavesColor', () => {
     expect(frag).toContain('getShadowMask опущен')
     expect(frag).toContain('vec3 wavesColor = mix(')
-    expect(frag).toContain('waterSunColor * waveDiffuseLight * 0.3 * cloudShadow * eclipse + waveScatter,')
+    expect(frag).toContain('waterSunColor * waveDiffuseLight * 0.3 * cloudShadow + waveScatter,')
     // Приёмочная волна 4, №1: Water.js vec3(0.1) — вклад ambient ЗЕРКАЛЬНОЙ
     // сцены, у нас зеркала нет — адаптация тонирует тот же вклад градиентным
     // skyColor (0.1·skyColor), не плоской серой константой.
@@ -383,7 +383,7 @@ describe('WaterShaderTemplate: приёмочный фикс — fade смеши
   })
 
   it('wavesColor несёт СВОЙ ночной пол (waveDayFactor, не общий dayFactor) — иначе fade=0 не был бы численно равен фундаменту', () => {
-    expect(frag).toContain('wavesColor *= mix(uWaterNightFloor, 1.0, waveDayFactor);')
+    expect(frag).toContain('wavesColor *= mix(vec3(uWaterNightFloor), eclipse, waveDayFactor);')
   })
 })
 

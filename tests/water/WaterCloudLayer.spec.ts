@@ -56,7 +56,7 @@ describe('WaterShaderTemplate: облачный слой из чанка', () =>
     expect(frag.indexOf('cloudShadow = cloudShadowAt(')).toBeGreaterThan(decl)
     expect(main).toContain('color *= mix(vec3(uWaterNightFloor), sunTintFactor * cloudShadow * eclipse, dayFactor);')
     expect(main).toContain('color *= mix(vec3(uWaterNightFloor), vec3(cloudShadow) * eclipse, dayFactor);')
-    expect(main).toContain('waterSunColor * waveDiffuseLight * 0.3 * cloudShadow * eclipse + waveScatter')
+    expect(main).toContain('waterSunColor * waveDiffuseLight * 0.3 * cloudShadow + waveScatter')
     expect(main).toContain('glint *= cloudShadow * eclipse;')
     expect(main.indexOf('glint *= cloudShadow * eclipse;')).toBeLessThan(main.indexOf('color += min(glint'))
   })

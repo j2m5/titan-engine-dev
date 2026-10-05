@@ -23,10 +23,10 @@ const FACTOR_LINE =
 // uWaterNightFloor остаётся ручкой владельца: sunTint у терминатора уходит
 // в ноль, и общий множитель обнулил бы пол на всей ночной стороне.
 const DAY_TINT_LINE = 'color *= mix(vec3(uWaterNightFloor), sunTintFactor * cloudShadow * eclipse, dayFactor);'
-const WAVES_TINT_LINE = 'wavesColor *= mix(vec3(uWaterNightFloor), sunTintFactor, waveDayFactor);'
+const WAVES_TINT_LINE = 'wavesColor *= mix(vec3(uWaterNightFloor), sunTintFactor * eclipse, waveDayFactor);'
 // Ветки «дефайна нет» несут cloudShadow (≡ 1 без USE_WATER_CLOUD); страж: без гейта картинка прежняя.
 const DAY_PLAIN_LINE = 'color *= mix(vec3(uWaterNightFloor), vec3(cloudShadow) * eclipse, dayFactor);'
-const WAVES_PLAIN_LINE = 'wavesColor *= mix(uWaterNightFloor, 1.0, waveDayFactor);'
+const WAVES_PLAIN_LINE = 'wavesColor *= mix(vec3(uWaterNightFloor), eclipse, waveDayFactor);'
 
 const frag: string = WaterShaderTemplate.fragmentShader
 const vert: string = WaterShaderTemplate.vertexShader

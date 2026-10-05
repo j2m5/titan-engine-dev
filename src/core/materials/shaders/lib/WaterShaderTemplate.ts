@@ -689,7 +689,7 @@ export const WaterShaderTemplate: ShaderProps = {
         // градиентным skyColor (уже посчитан выше, тот же зенит/горизонт,
         // что и у reflection) — 0.1·skyColor, не vec3(0.1).
         vec3 wavesColor = mix(
-          waterSunColor * waveDiffuseLight * 0.3 * cloudShadow * eclipse + waveScatter,
+          waterSunColor * waveDiffuseLight * 0.3 * cloudShadow + waveScatter,
           // Солнечного спекуляра здесь нет: блик — отдельно, после пены
           0.1 * skyColor + waveReflectionSample * 0.9,
           waveReflectance
@@ -700,9 +700,9 @@ export const WaterShaderTemplate: ShaderProps = {
         // при waveFade=0 равенство фундаменту держалось бы только на
         // спекуляре/reflectance, а не на цвете целиком.
         #ifdef USE_SUN_TINT
-          wavesColor *= mix(vec3(uWaterNightFloor), sunTintFactor, waveDayFactor);
+          wavesColor *= mix(vec3(uWaterNightFloor), sunTintFactor * eclipse, waveDayFactor);
         #else
-          wavesColor *= mix(uWaterNightFloor, 1.0, waveDayFactor);
+          wavesColor *= mix(vec3(uWaterNightFloor), eclipse, waveDayFactor);
         #endif
 
         // ПРИЁМОЧНЫЙ ФИКС (владелец: молочный океан по всему диску + яркое
@@ -777,9 +777,9 @@ export const WaterShaderTemplate: ShaderProps = {
             foam *= uFoamStrength * foamWeight;
             // пена освещена так же, как wavesColor (её ночной пол/тинт) — не сырой цвет поверх темноты
             #ifdef USE_SUN_TINT
-              vec3 foamLit = uFoamColor * mix(vec3(uWaterNightFloor), sunTintFactor, waveDayFactor);
+              vec3 foamLit = uFoamColor * mix(vec3(uWaterNightFloor), sunTintFactor * eclipse, waveDayFactor);
             #else
-              vec3 foamLit = uFoamColor * mix(uWaterNightFloor, 1.0, waveDayFactor);
+              vec3 foamLit = uFoamColor * mix(vec3(uWaterNightFloor), eclipse, waveDayFactor);
             #endif
             // после готового цвета волн: отражение под пеной гаснет самим mix, блик — множителем (1 − foam) ниже
             color = mix(color, foamLit, foam);

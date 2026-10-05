@@ -549,7 +549,7 @@ describe('Паритет: без USE_WATER_REFLECTION компилируемый
     expect(stripped).toContain('vec3 skyColor = mix(uWaterFresnelTint, uWaterFresnelTint * ZENITH_DARKEN, upFactor);')
     // Остальная структура волновой ветки Task 1 не тронута (albedo-mix цел)
     expect(stripped).toContain('color = mix(')
-    expect(stripped).toContain('waterSunColor * waveDiffuseLight * 0.3 * cloudShadow * eclipse + waveScatter,')
+    expect(stripped).toContain('waterSunColor * waveDiffuseLight * 0.3 * cloudShadow + waveScatter,')
   })
 })
 

@@ -3,6 +3,7 @@ import { Color, Texture, Vector2, Vector3 } from 'three'
 import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
+import { emptyEclipseData } from '@/core/eclipse/eclipseUniforms'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
@@ -144,6 +145,25 @@ function seedWaterNormalTexture(): void {
   texture.image = { width: 4, height: 2 }
   resourceStorage.addTexture(texture)
 }
+
+describe('WaterMaterial.setEclipse', () => {
+  it('копирует значения в существующие объекты uniform', () => {
+    const material = new WaterMaterial(stubActor({ data: {} }))
+    expect(material.uniforms.uEclipseCount.value).toBe(0)
+    const occ0 = material.uniforms.uEclipseOccluders.value[0]
+    const data = emptyEclipseData()
+    data.count = 1
+    data.occluders[0].set(1, 2, 3, 0.5)
+    data.star.set(-100, 0, 0)
+    data.starRadius = 2
+    material.setEclipse(data)
+    expect(material.uniforms.uEclipseCount.value).toBe(1)
+    expect(material.uniforms.uEclipseOccluders.value[0]).toBe(occ0)
+    expect(material.uniforms.uEclipseOccluders.value[0].toArray()).toEqual([1, 2, 3, 0.5])
+    expect(material.uniforms.uEclipseStar.value.toArray()).toEqual([-100, 0, 0])
+    expect(material.uniforms.uEclipseStarRadius.value).toBe(2)
+  })
+})
 
 describe('WaterMaterial: проводка ручек data (дефолты честно помечены, приёмка вида — за владельцем)', () => {
   it('data пуст — применяются дефолты движка', () => {

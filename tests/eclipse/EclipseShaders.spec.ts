@@ -37,7 +37,12 @@ describe('WaterShaderTemplate: затмение', () => {
   it('дневной член фундамента, волны, блик и облака', () => {
     expect(wmain).toContain('color *= mix(vec3(uWaterNightFloor), sunTintFactor * cloudShadow * eclipse, dayFactor);')
     expect(wmain).toContain('color *= mix(vec3(uWaterNightFloor), vec3(cloudShadow) * eclipse, dayFactor);')
-    expect(wmain).toContain('waterSunColor * waveDiffuseLight * 0.3 * cloudShadow * eclipse + waveScatter')
+    expect(wmain).toContain('waterSunColor * waveDiffuseLight * 0.3 * cloudShadow + waveScatter')
+    expect(wmain).not.toContain('cloudShadow * eclipse + waveScatter')
+    expect(wmain).toContain('wavesColor *= mix(vec3(uWaterNightFloor), sunTintFactor * eclipse, waveDayFactor);')
+    expect(wmain).toContain('wavesColor *= mix(vec3(uWaterNightFloor), eclipse, waveDayFactor);')
+    expect(wmain).toContain('uFoamColor * mix(vec3(uWaterNightFloor), sunTintFactor * eclipse, waveDayFactor);')
+    expect(wmain).toContain('uFoamColor * mix(vec3(uWaterNightFloor), eclipse, waveDayFactor);')
     expect(wmain).toContain('glint *= cloudShadow * eclipse;')
     expect(wmain).toContain('cloudRadiance *= eclipseLight(cloudDir * (uBodyRadiusUnits + uCloudHeightUnits));')
   })
