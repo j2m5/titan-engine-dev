@@ -24,6 +24,7 @@ import { terrainNearShadowFunctions } from '@/core/materials/shaders/lib/chunks/
 import { waterOctavesFunctions } from '@/core/materials/shaders/lib/chunks/WaterOctaves'
 import { waterGlintFunctions } from '@/core/materials/shaders/lib/chunks/WaterGlint'
 import { cloudLayerFunctions, cloudLayerUniforms } from '@/core/materials/shaders/lib/chunks/CloudLayer'
+import { eclipseFunctions, eclipseHostFunctions } from '@/core/materials/shaders/lib/chunks/Eclipse'
 import { IUniform, Uniform } from 'three'
 
 export const AppUniformsChunk: Record<string, Record<string, IUniform>> = {
@@ -73,5 +74,7 @@ export const AppShaderChunk: Record<string, string> = {
   waterOctavesFunctions,
   waterGlintFunctions,
   cloudLayerUniforms,
-  cloudLayerFunctions
+  cloudLayerFunctions,
+  eclipseFunctions,
+  eclipseHostFunctions
 }
