@@ -116,8 +116,8 @@ export function buildPatchIndex(segments: number): BufferAttribute {
 /**
  * Скретч направлений сеточных вершин: НЕ атрибут — направление живёт в
  * геометрии как position + patchCenter, а здесь нужно только юбке (радиальный
- * сдвиг кромки). Один буфер на модуль, а не аллокация на сборку: into-вариант
- * существует ровно ради отсутствия аллокаций в split/merge. Мешер
+ * сдвиг кромки). Один буфер на модуль, а не аллокация на сборку: временный
+ * массив на каждую постройку был бы мусором в горячем пути. Мешер
  * синхронный и не реентерабельный — перекрытия сборок не бывает.
  */
 let gridDirsScratch = new Float32Array(0)
@@ -208,8 +208,8 @@ export function applyPatchBounds(geometry: BufferGeometry, bounds: PatchBounds):
  * vertexCount) и возвращает RTC-центр и ограничивающую сферу. Чистая функция
  * над типизированными массивами — без BufferGeometry, годна для Web Worker.
  * Общее для fresh-варианта
- * (аллоцирует массивы сам) и into-варианта пула (переиспользует буферы
- * существующей геометрии без аллокаций). Инстансный атрибут patchCenter
+ * (аллоцирует массивы сам) и строителей (terrainPatchBuilder: свежие массивы
+ * на задание, во владение потребителю). Инстансный атрибут patchCenter
  * пишет вызывающий из возвращённого center.
  *
  * Позиции хранятся ОТНОСИТЕЛЬНО центра патча (центр — в position меша),
@@ -478,8 +478,8 @@ export function buildTerrainPatchArrays(
 
 /**
  * Fresh-вариант: аллоцирует новые типизированные массивы и геометрию —
- * эталон паритета для into-варианта (buildTerrainPatchInto) и его тестов;
- * продакшн-вызовов нет — TerrainSphere зовёт только into-вариант через пул.
+ * эталон паритета для прихода строителя (applyPatchResult) и его тестов;
+ * продакшн-вызовов нет.
  */
 export function buildTerrainPatchGeometry(
   field: TerrainHeightField,
@@ -526,80 +526,6 @@ export function buildTerrainPatchGeometry(
   return { geometry, center }
 }
 
-/**
- * into-вариант для TerrainPatchPool: перезаписывает атрибуты уже
- * существующей геометрии handle на месте (split/merge квадродерева без
- * аллокаций типизированных массивов и BufferGeometry). Атрибуты и их размер
- * заведены пулом при acquire под тот же segments — здесь только запись.
- */
-export function buildTerrainPatchInto(
-  field: TerrainHeightField,
-  face: number,
-  i: number,
-  j: number,
-  depth: number,
-  segments: number,
-  skirtDepthUnits: number,
-  handle: { mesh: Mesh; geometry: InstancedBufferGeometry },
-  wrap: DetailWrap,
-  morph = false
-): void {
-  const { geometry, mesh } = handle
-  const positions = geometry.getAttribute('position') as BufferAttribute
-  // полоса и морф-атрибуты есть только у слотов раскладки рельефа (у воды их нет)
-  const height = geometry.getAttribute('height') as BufferAttribute | undefined
-  const midTilt = geometry.getAttribute('midTilt') as BufferAttribute | undefined
-  const midShade = geometry.getAttribute('midShade') as BufferAttribute | undefined
-  const morphDelta = geometry.getAttribute('morphDelta') as BufferAttribute | undefined
-  const midTiltParent = geometry.getAttribute('midTiltParent') as BufferAttribute | undefined
-  const midShadeParent = geometry.getAttribute('midShadeParent') as BufferAttribute | undefined
-
-  // объект-обёртка на вызов (ссылки на уже существующие буферы слота) —
-  // ядру нужны только сами массивы, не BufferAttribute
-  const arrays: PatchArrays = {
-    positions: positions.array as Float32Array,
-    heights: height === undefined ? null : (height.array as Float32Array),
-    midTilts: midTilt === undefined ? null : (midTilt.array as Float32Array),
-    midShades: midShade === undefined ? null : (midShade.array as Float32Array),
-    morph:
-      morphDelta !== undefined && midTiltParent !== undefined && midShadeParent !== undefined
-        ? {
-            deltas: morphDelta.array as Float32Array,
-            midTilts: midTiltParent.array as Float32Array,
-            midShades: midShadeParent.array as Float32Array
-          }
-        : null
-  }
-
-  const { center, bounds, detailOrigin, detailOrigin2 } = buildTerrainPatchArrays(
-    field, face, i, j, depth, segments, skirtDepthUnits, wrap, arrays, morph
-  )
-
-  // центр патча и смещения домена детали — инстансные атрибуты (один элемент):
-  // их пишет вызывающий, ядро сборки только возвращает значения
-  writeInstanceAttribute(geometry, 'patchCenter', [center.x, center.y, center.z])
-  writeInstanceAttribute(geometry, 'detailOrigin', detailOrigin)
-  if (geometry.getAttribute('detailOrigin2') !== undefined) writeInstanceAttribute(geometry, 'detailOrigin2', detailOrigin2)
-
-  positions.needsUpdate = true
-  if (height !== undefined) height.needsUpdate = true
-  if (midTilt !== undefined) midTilt.needsUpdate = true
-  if (midShade !== undefined) midShade.needsUpdate = true
-  if (morphDelta !== undefined && midTiltParent !== undefined && midShadeParent !== undefined) {
-    morphDelta.needsUpdate = true
-    midTiltParent.needsUpdate = true
-    midShadeParent.needsUpdate = true
-  }
-  applyPatchBounds(geometry, bounds)
-  mesh.position.copy(center)
-}
-
-function writePatchAttribute(geometry: InstancedBufferGeometry, name: string, source: Float32Array): void {
-  const attribute = geometry.getAttribute(name) as BufferAttribute
-  ;(attribute.array as Float32Array).set(source)
-  attribute.needsUpdate = true
-}
-
 /** Инстансный атрибут слота (один элемент на патч) — запись на месте. */
 function writeInstanceAttribute(geometry: InstancedBufferGeometry, name: string, values: readonly number[]): void {
   const attribute = geometry.getAttribute(name) as BufferAttribute
@@ -607,53 +533,53 @@ function writeInstanceAttribute(geometry: InstancedBufferGeometry, name: string,
   attribute.needsUpdate = true
 }
 
+
+/** Вершинный атрибут слота берёт массив результата во владение (без копии) и ставит заливку. */
+function takeVertexArray(geometry: InstancedBufferGeometry, name: string, source: Float32Array): void {
+  const attribute = geometry.getAttribute(name) as BufferAttribute
+  attribute.array = source
+  attribute.needsUpdate = true
+}
+
 /**
- * Приход готового результата (синхронный строитель или воркер) в слот пула:
- * копирует массивы в атрибуты слота, ставит центр патча и сферу. Парная
- * buildTerrainPatchInto ветка — та СОБИРАЕТ прямо в буферы слота, эта только
- * копирует уже собранное (буферы результата слоту не принадлежат).
+ * Приход результата строителя в слот: вершинные массивы переходят к слоту без
+ * копии (контракт TerrainPatchBuilder), инстансные — пишутся на месте; до
+ * заливки position патч рисуется без фрустум-каллинга (см. TerrainPatchPool).
  */
-export function applyPatchResult(
-  handle: { mesh: Mesh; geometry: InstancedBufferGeometry },
-  result: PatchBuildResult
-): void {
+export function applyPatchResult(handle: { mesh: Mesh; geometry: InstancedBufferGeometry }, result: PatchBuildResult): void {
   const { geometry, mesh } = handle
   const { arrays } = result
-  const { heights, midTilts, midShades } = arrays
-
-  // раскладка результата обязана совпадать с раскладкой слота: рельеф несёт полосу, вода — нет
   const terrainSlot = geometry.getAttribute('height') !== undefined
-  const terrainResult = heights !== null && midTilts !== null && midShades !== null
+  const terrainResult = arrays.heights !== null
   if (terrainSlot !== terrainResult) {
     throw new Error(`раскладка результата (${terrainResult ? 'рельеф' : 'вода'}) не совпадает со слотом (${terrainSlot ? 'рельеф' : 'вода'})`)
   }
 
-  writePatchAttribute(geometry, 'position', arrays.positions)
-  if (terrainResult) {
-    writePatchAttribute(geometry, 'height', heights)
-    writePatchAttribute(geometry, 'midTilt', midTilts)
-    writePatchAttribute(geometry, 'midShade', midShades)
+  takeVertexArray(geometry, 'position', arrays.positions)
+  if (terrainSlot) {
+    takeVertexArray(geometry, 'height', arrays.heights!)
+    takeVertexArray(geometry, 'midTilt', arrays.midTilts!)
+    takeVertexArray(geometry, 'midShade', arrays.midShades!)
     if (geometry.getAttribute('morphDelta') !== undefined) {
       if (arrays.morph !== null) {
-        writePatchAttribute(geometry, 'morphDelta', arrays.morph.deltas)
-        writePatchAttribute(geometry, 'midTiltParent', arrays.morph.midTilts)
-        writePatchAttribute(geometry, 'midShadeParent', arrays.morph.midShades)
+        takeVertexArray(geometry, 'morphDelta', arrays.morph.deltas)
+        takeVertexArray(geometry, 'midTiltParent', arrays.morph.midTilts)
+        takeVertexArray(geometry, 'midShadeParent', arrays.morph.midShades)
       } else {
-        // результат без морфа в морф-слот: дельты прежнего патча не оставляем, родитель = своя форма
-        const deltas = geometry.getAttribute('morphDelta') as BufferAttribute
-        ;(deltas.array as Float32Array).fill(0)
-        deltas.needsUpdate = true
-        writePatchAttribute(geometry, 'midTiltParent', midTilts)
-        writePatchAttribute(geometry, 'midShadeParent', midShades)
+        // результат без морфа в морф-слот: дельты прошлого владельца не оставляем, родитель = своя форма
+        takeVertexArray(geometry, 'morphDelta', new Float32Array(arrays.positions.length))
+        takeVertexArray(geometry, 'midTiltParent', arrays.midTilts!.slice())
+        takeVertexArray(geometry, 'midShadeParent', arrays.midShades!.slice())
       }
     }
   }
 
-  // центр патча и смещения домена детали — инстансные атрибуты, те же, что в into-варианте
   writeInstanceAttribute(geometry, 'patchCenter', result.center)
   writeInstanceAttribute(geometry, 'detailOrigin', result.detailOrigin)
   if (geometry.getAttribute('detailOrigin2') !== undefined) writeInstanceAttribute(geometry, 'detailOrigin2', result.detailOrigin2)
 
   applyPatchBounds(geometry, result.bounds)
   mesh.position.fromArray(result.center)
+  // патч вне кадра three не заливает: первый кадр — без каллинга, заливка position его вернёт
+  mesh.frustumCulled = false
 }

@@ -468,6 +468,7 @@ describe('TerrainPatchGroup: сводка пула и реестр', () => {
     expect(s.maxLive).toBe(1024)
     expect(s.valveScale).toBeGreaterThan(0)
     expect(s.liveBytes).toBe((s.live + s.free) * s.bytesPerSlot)
+    expect(s.heapBytes).toBe((s.live + s.free) * s.heapBytesPerSlot)
   })
 
   it('peakLive не убывает при мерже и сбрасывается resetPeak()', () => {
@@ -499,6 +500,9 @@ describe('TerrainPatchGroup: сводка пула и реестр', () => {
     const water = makeAsync(false)
     expect(terrain.group.stats().bytesPerSlot).toBe((vertices * 15 + 10) * 4)
     expect(water.group.stats().bytesPerSlot).toBe((vertices * 3 + 6) * 4)
+    // резидентная куча слота: position + инстансные (остальное отпущено после заливки)
+    expect(terrain.group.stats().heapBytesPerSlot).toBe(53812)
+    expect(water.group.stats().heapBytesPerSlot).toBe(53796)
     expect(terrain.group.debugKind).toBe('terrain')
     expect(water.group.debugKind).toBe('water')
   })

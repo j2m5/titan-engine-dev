@@ -40,15 +40,36 @@ export function patchSlotBytes(segments: number, layout: PatchLayout): number {
   return (terrainPatchVertexCount(segments) * VERTEX_FLOATS[layout] + INSTANCE_FLOATS[layout]) * Float32Array.BYTES_PER_ELEMENT
 }
 
+/** Общий пустой массив отпущенных атрибутов: count атрибута задан раскладкой, не длиной массива. */
+const RELEASED: Float32Array = new Float32Array(0)
+
+/** Вершинные атрибуты, которые после заливки в куче не нужны (position резидентна — её читает клик-рейкаст). */
+const UPLOAD_ONLY: Record<PatchLayout, readonly string[]> = {
+  terrain: ['height', 'midTilt', 'midShade', 'morphDelta', 'midTiltParent', 'midShadeParent'],
+  water: []
+}
+
+/** Резидентная куча слота: position + инстансные атрибуты, байт. */
+export function patchSlotHeapBytes(segments: number, layout: PatchLayout): number {
+  return (terrainPatchVertexCount(segments) * 3 + INSTANCE_FLOATS[layout]) * Float32Array.BYTES_PER_ELEMENT
+}
+
 export type PatchHandle = { mesh: Mesh; geometry: InstancedBufferGeometry }
 
 /**
- * Пул патчей квадродерева: split/merge переиспользует геометрии слотов без
- * аллокаций типизированных массивов и BufferGeometry — buildTerrainPatchInto
- * перезаписывает атрибуты на месте (см. terrainPatchGeometry). Один общий
- * index-атрибут на все геометрии пула (та же экономия, что у TerrainSphere
- * этапа 3а). Свободные слоты держат геометрию живой между acquire —
- * освобождаются вместе с индексом только в dispose.
+ * Пул патчей квадродерева: split/merge переиспользует геометрии слотов
+ * (BufferGeometry и GL-буферы); массивы приходят из результата строителя.
+ * Один общий index-атрибут на все геометрии пула (та же экономия, что у
+ * TerrainSphere этапа 3а). Свободные слоты держат геометрию живой между
+ * acquire — освобождаются вместе с индексом только в dispose.
+ *
+ * Куча: вершинные массивы слота приходят из результата строителя без копии
+ * (applyPatchResult) и, кроме position, отпускаются после заливки
+ * (onUploadCallback) — в куче живут position (клик-рейкаст) и инстансные
+ * атрибуты, patchSlotHeapBytes. Патч вне кадра three не заливает, поэтому
+ * до первой заливки position он рисуется без фрустум-каллинга. Скрытый меш
+ * держит массивы до показа (транзиент). Отпущенные массивы не восстановить
+ * после потери WebGL-контекста — её приложение не обрабатывает.
  *
  * Материал типизирован общим `Material`, не `PlanetMaterial` — пул сам с
  * материалом не взаимодействует (только держит ссылку для `new Mesh`), а
@@ -99,6 +120,11 @@ class TerrainPatchPool {
     return patchSlotBytes(this.segments, this.layout)
   }
 
+  /** Резидентная куча одного слота (position + инстансные), байт — см. patchSlotHeapBytes. */
+  public get heapBytesPerSlot(): number {
+    return patchSlotHeapBytes(this.segments, this.layout)
+  }
+
   public get maxLivePatches(): number {
     return this.maxLivePatchesLimit
   }
@@ -122,6 +148,9 @@ class TerrainPatchPool {
     if (!this.occupied.delete(handle)) return
 
     this.free.push(handle)
+    // слот в свободном списке кучу не держит; version не поднимается —
+    // следующая запись прихода поставит массив раньше needsUpdate
+    for (const name of UPLOAD_ONLY[this.layout]) (handle.geometry.getAttribute(name) as BufferAttribute).array = RELEASED
   }
 
   /**
@@ -166,7 +195,14 @@ class TerrainPatchPool {
     // isInstancedBufferGeometry); рейкаст и фрустум-каллинг — как у BufferGeometry.
     const geometry = new InstancedBufferGeometry()
     geometry.instanceCount = 1
-    const position = new BufferAttribute(new Float32Array(vertexCount * 3), 3)
+    const vertexAttribute = (itemSize: number): BufferAttribute => {
+      // массив приходит из результата строителя (applyPatchResult, без копии);
+      // count — по раскладке, не по длине пустого массива
+      const attribute = new BufferAttribute(RELEASED, itemSize)
+      ;(attribute as unknown as { count: number }).count = vertexCount
+      return attribute
+    }
+    const position = vertexAttribute(3)
     // Центр патча — один на весь патч (инстансный атрибут, делитель 1):
     // вершинник восстанавливает радиальное направление normalize(position +
     // patchCenter), а атрибуты normal (= то же направление) и uv (мёртв для
@@ -175,7 +211,7 @@ class TerrainPatchPool {
     // домен детали — смещение на патч: вершинник собирает position + detailOrigin
     const detailOrigin = new InstancedBufferAttribute(new Float32Array(3), 3)
     // DynamicDrawUsage: split/merge перезаписывает эти атрибуты на месте
-    // каждый раз, когда слот переиспользуется (buildTerrainPatchInto) — не
+    // каждый раз, когда слот переиспользуется (applyPatchResult) — не
     // однократная запись, которую предполагает дефолтный StaticDrawUsage.
     for (const attribute of [position, patchCenter, detailOrigin]) {
       attribute.setUsage(DynamicDrawUsage)
@@ -184,14 +220,14 @@ class TerrainPatchPool {
     geometry.setAttribute('patchCenter', patchCenter)
     geometry.setAttribute('detailOrigin', detailOrigin)
     if (this.layout === 'terrain') {
-      const height = new BufferAttribute(new Float32Array(vertexCount), 1)
-      const midTilt = new BufferAttribute(new Float32Array(vertexCount * 2), 2)
-      const midShade = new BufferAttribute(new Float32Array(vertexCount * 2), 2)
+      const height = vertexAttribute(1)
+      const midTilt = vertexAttribute(2)
+      const midShade = vertexAttribute(2)
       const detailOrigin2 = new InstancedBufferAttribute(new Float32Array(3), 3)
       // родительская форма для геоморфинга (см. buildTerrainPatchArrays) + прогресс перехода патча
-      const morphDelta = new BufferAttribute(new Float32Array(vertexCount * 3), 3)
-      const midTiltParent = new BufferAttribute(new Float32Array(vertexCount * 2), 2)
-      const midShadeParent = new BufferAttribute(new Float32Array(vertexCount * 2), 2)
+      const morphDelta = vertexAttribute(3)
+      const midTiltParent = vertexAttribute(2)
+      const midShadeParent = vertexAttribute(2)
       const patchMorph = new InstancedBufferAttribute(new Float32Array(1), 1)
       for (const attribute of [height, midTilt, midShade, detailOrigin2, morphDelta, midTiltParent, midShadeParent, patchMorph]) {
         attribute.setUsage(DynamicDrawUsage)
@@ -210,6 +246,17 @@ class TerrainPatchPool {
     const mesh = new Mesh(geometry, this.material)
     mesh.userData.clickable = true
     mesh.frustumCulled = true
+    // залитая position возвращает каллинг: до первой заливки патч рисуется
+    // без него (applyPatchResult), иначе патч вне кадра держал бы массивы
+    position.onUploadCallback = (): void => {
+      mesh.frustumCulled = true
+    }
+    for (const name of UPLOAD_ONLY[this.layout]) {
+      const attribute = geometry.getAttribute(name) as BufferAttribute
+      attribute.onUploadCallback = (): void => {
+        attribute.array = RELEASED
+      }
+    }
 
     return { mesh, geometry }
   }

@@ -61,7 +61,7 @@ export function builtArrays(m: Extract<FromWorkerMessage, { type: 'built' }>): P
   }
 }
 
-/** Копия массивов результата: синхронный строитель отдаёт скретч, живущий только на время onDone. */
+/** Копия массивов результата — слот забирает их во владение и отпускает после заливки. */
 export function snapshotArrays(a: PatchArrays): PatchArrays {
   return {
     positions: a.positions.slice(),

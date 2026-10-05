@@ -19,8 +19,7 @@ import {
   buildPatchIndex,
   buildTerrainPatchArrays,
   terrainPatchVertexCount,
-  buildTerrainPatchGeometry,
-  buildTerrainPatchInto
+  buildTerrainPatchGeometry
 } from '@/core/terrain/terrainPatchGeometry'
 import { SyncTerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import { detailWrapFor } from '@/core/terrain/detailWrap'
@@ -69,17 +68,29 @@ function makePool(layout: PatchLayout = 'terrain'): TerrainPatchPool {
   return new TerrainPatchPool(new PlanetMaterial(moon()), SEGMENTS, layout)
 }
 
+/** Постройка в слот боевым путём: синхронный строитель + приход (into-варианта больше нет). */
+function buildInto(field: TerrainHeightField, depth: number, handle: PatchHandle, wrap = detailWrapFor(undefined)): void {
+  new SyncTerrainPatchBuilder().request(
+    { field, face: 2, i: 1, j: 0, level: depth, segments: SEGMENTS, skirtDepthUnits: SKIRT, wrap, morph: true },
+    (result) => applyPatchResult(handle, result),
+    (error) => {
+      throw error
+    }
+  )
+}
+
 describe('TerrainPatchPool', () => {
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
 
-  it('into даёт побайтно те же атрибуты и bounding-сферу, что fresh', () => {
+  it('приход даёт побайтно те же атрибуты и bounding-сферу, что fresh', () => {
     const field = bumpyField()
     const pool = makePool()
     const handle = pool.acquire()!
     const wrap = detailWrapFor(undefined)
-    buildTerrainPatchInto(field, 2, 1, 0, DEPTH, SEGMENTS, SKIRT, handle, wrap)
-    const fresh = buildTerrainPatchGeometry(field, 2, 1, 0, DEPTH, SEGMENTS, buildPatchIndex(SEGMENTS), SKIRT, wrap)
+    buildInto(field, DEPTH, handle, wrap)
+    // слот морф-раскладки: сфера охватывает обе формы — эталон тоже с морфом
+    const fresh = buildTerrainPatchGeometry(field, 2, 1, 0, DEPTH, SEGMENTS, buildPatchIndex(SEGMENTS), SKIRT, wrap, true)
 
     for (const name of ['position', 'detailOrigin', 'detailOrigin2', 'height', 'midTilt', 'midShade']) {
       expect(Array.from(handle.geometry.getAttribute(name).array)).toEqual(
@@ -104,8 +115,8 @@ describe('TerrainPatchPool', () => {
     // и сравнение двух нулевых массивов ничего не разделяет: паритет полосы
     // проверяется на живом уровне (11 при SEGMENTS 8 ≈ боевой L8)
     const deep = 11
-    buildTerrainPatchInto(field, 2, 1, 0, deep, SEGMENTS, SKIRT, handle, wrap)
-    const freshDeep = buildTerrainPatchGeometry(field, 2, 1, 0, deep, SEGMENTS, buildPatchIndex(SEGMENTS), SKIRT, wrap)
+    buildInto(field, deep, handle, wrap)
+    const freshDeep = buildTerrainPatchGeometry(field, 2, 1, 0, deep, SEGMENTS, buildPatchIndex(SEGMENTS), SKIRT, wrap, true)
     const deepShade = Array.from(handle.geometry.getAttribute('midShade').array)
     expect(deepShade).toEqual(Array.from(freshDeep.geometry.getAttribute('midShade').array))
     expect(deepShade.some((v: number): boolean => v !== 0)).toBe(true)
@@ -113,7 +124,7 @@ describe('TerrainPatchPool', () => {
 
   // needsUpdate у three — сеттер без геттера (пишет version++, читается как
   // undefined всегда), поэтому наблюдаем через .version (см. WaterMaterial.spec.ts)
-  it('into выставляет needsUpdate на всех перезаписанных атрибутах, включая detailOrigin/detailOrigin2 и patchCenter', () => {
+  it('приход выставляет needsUpdate на всех перезаписанных атрибутах, включая detailOrigin/detailOrigin2 и patchCenter', () => {
     const field = bumpyField()
     const pool = makePool()
     const handle = pool.acquire()!
@@ -126,7 +137,7 @@ describe('TerrainPatchPool', () => {
       versionsBefore[name] = attr.version
     }
 
-    buildTerrainPatchInto(field, 2, 1, 0, DEPTH, SEGMENTS, SKIRT, handle, wrap)
+    buildInto(field, DEPTH, handle, wrap)
 
     for (const name of ['position', 'detailOrigin', 'detailOrigin2', 'patchCenter']) {
       const attr = handle.geometry.getAttribute(name) as BufferAttribute
@@ -136,8 +147,8 @@ describe('TerrainPatchPool', () => {
 
   /**
    * applyPatchResult — боевой путь записи прихода строителя (синхронного и
-   * воркерного): те же атрибуты слота, что у into-варианта, но СКОПИРОВАННЫЕ
-   * из чужих массивов. Эталон тот же fresh, что и у into-паритета — иначе
+   * воркерного): вершинные массивы слот берёт из результата без копии.
+   * Эталон тот же fresh, что и у паритета прихода выше — иначе
    * перепутанные местами массивы (detailOrigin ↔ detailOrigin2, midTilt ↔ midShade)
    * проходили бы молча.
    *

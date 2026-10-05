@@ -5,12 +5,13 @@ import {
   applyPatchBounds,
   buildPatchIndex,
   buildTerrainPatchArrays,
+  applyPatchResult,
   buildTerrainPatchGeometry,
-  buildTerrainPatchInto,
   ringGridIndex,
   terrainPatchVertexCount
 } from '@/core/terrain/terrainPatchGeometry'
 import { TerrainPatchPool } from '@/core/terrain/TerrainPatchPool'
+import { SyncTerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import { cubeFaceDirection } from '@/core/terrain/cubeSphere'
 import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import { MIDBAND_DEFAULTS, type MidbandParams } from '@/core/terrain/midbandParams'
@@ -116,7 +117,7 @@ describe('buildTerrainPatchArrays: ядро без геометрии', () => {
     expect(bounds.radius).toBeCloseTo(ref.radius, 9)
   })
 
-  it('applyPatchBounds ставит сферу без обхода вершин; fresh и into не зовут computeBoundingSphere', () => {
+  it('applyPatchBounds ставит сферу без обхода вершин; fresh и приход строителя не зовут computeBoundingSphere', () => {
     // шпион на прототипе ДО постройки — иначе он не видит вызовы из самих
     // обёрток (build() уже создал бы свою геометрию раньше vi.spyOn на инстансе)
     const spy = vi.spyOn(InstancedBufferGeometry.prototype, 'computeBoundingSphere')
@@ -128,7 +129,14 @@ describe('buildTerrainPatchArrays: ядро без геометрии', () => {
 
       const pool = new TerrainPatchPool(new MeshBasicMaterial(), SEGMENTS, 'terrain')
       const handle = pool.acquire()!
-      buildTerrainPatchInto(field, 0, 1, 0, DEPTH, SEGMENTS, 0.001, handle, wrap) // into-вариант
+      // приход строителя: синхронный строитель + applyPatchResult в слот
+      new SyncTerrainPatchBuilder().request(
+        { field, face: 0, i: 1, j: 0, level: DEPTH, segments: SEGMENTS, skirtDepthUnits: 0.001, wrap, morph: false },
+        (result) => applyPatchResult(handle, result),
+        (error) => {
+          throw error
+        }
+      )
 
       expect(spy).not.toHaveBeenCalled()
 

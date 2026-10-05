@@ -49,6 +49,10 @@ export interface TerrainPatchStats {
   liveBytes: number
   /** peakLive × bytesPerSlot: свободные слоты в пике не входят (в отличие от liveBytes). */
   peakBytes: number
+  /** Резидентная куча слота: position + инстансные (patchSlotHeapBytes). */
+  heapBytesPerSlot: number
+  /** (live + free) × heapBytesPerSlot; незалитые массивы прихода (транзиент) не входят. */
+  heapBytes: number
 }
 
 /** Мёртвая зона клапана: доли пула, в которых держится желаемый набор. */
@@ -293,6 +297,7 @@ abstract class TerrainPatchGroup extends Group {
     const live = this.pool.liveCount
     const free = this.pool.freeCount
     const bytesPerSlot = this.pool.bytesPerSlot
+    const heapBytesPerSlot = this.pool.heapBytesPerSlot
     const peakLive = Math.max(this.peakLive, live)
     return {
       live,
@@ -304,7 +309,9 @@ abstract class TerrainPatchGroup extends Group {
       peakLive,
       bytesPerSlot,
       liveBytes: (live + free) * bytesPerSlot,
-      peakBytes: peakLive * bytesPerSlot
+      peakBytes: peakLive * bytesPerSlot,
+      heapBytesPerSlot,
+      heapBytes: (live + free) * heapBytesPerSlot
     }
   }
 

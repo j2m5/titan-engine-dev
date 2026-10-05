@@ -34,10 +34,10 @@ export interface PatchBuildResult {
  * нужен ли результат ещё (узел мог выйти из желаемого набора, группа —
  * освободиться).
  *
- * Контракт результата: массивы `PatchBuildResult.arrays` живут только на время
- * `onDone` — потребитель копирует их себе (applyPatchResult) и ссылок не
- * держит. Синхронный строитель отдаёт свой скретч, воркерный — присланные
- * буферы, и переиспользовать их обоим никто не мешает.
+ * Контракт результата: массивы `PatchBuildResult.arrays` переходят к
+ * потребителю — слот подставляет их в атрибуты без копии (applyPatchResult)
+ * и отпускает после заливки. Строитель отдаёт свежие массивы на каждое
+ * задание и ссылок на них не держит.
  */
 export interface TerrainPatchBuilder {
   /** Работа идёт вне главного потока (живой воркер): только такому строителю доверяется тяжёлый бейк плитки ближней тени. */
@@ -67,16 +67,9 @@ export interface TerrainPatchBuilder {
 
 /**
  * Постройка на месте: onDone внутри request, поэтому одна постройка за кадр
- * гарантирована. Массивы — два скретча на строителя: раскладка рельефа
- * (≈263 КиБ при segments=64) и воды (≈53 КиБ): результат потребитель копирует
- * внутри onDone (см. контракт интерфейса), аллокация на каждую постройку
- * была бы мусором в горячем пути.
+ * гарантирована. Массивы — свежие на каждое задание (контракт владения).
  */
 export class SyncTerrainPatchBuilder implements TerrainPatchBuilder {
-  private scratchWater: PatchArrays | null = null
-  private scratchMorph: PatchArrays | null = null
-  private scratchSegments = -1
-
   public get offThread(): boolean {
     return false
   }
@@ -88,7 +81,7 @@ export class SyncTerrainPatchBuilder implements TerrainPatchBuilder {
   public acquire(): void {}
 
   public request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void, onError: (error: unknown) => void): void {
-    const arrays = this.arraysFor(job.segments, job.morph)
+    const arrays = allocateJobPatchArrays(job.segments, job.morph)
     let built: ReturnType<typeof buildTerrainPatchArrays>
     // ловится только постройка: исключение внутри onDone — дефект потребителя, не сбой задания
     try {
@@ -142,29 +135,5 @@ export class SyncTerrainPatchBuilder implements TerrainPatchBuilder {
 
   public releaseAll(): void {}
 
-  public dispose(): void {
-    this.scratchWater = null
-    this.scratchMorph = null
-    this.scratchSegments = -1
-  }
-
-  /**
-   * Скретч под запрошенный segments и раскладку задания (morph null — вода: только
-   * positions; иначе рельеф с полосой и морф-массивами); пересоздаётся только при
-   * смене размера (в проекте он константа).
-   */
-  private arraysFor(segments: number, morph: boolean | null): PatchArrays {
-    if (this.scratchSegments !== segments) {
-      this.scratchWater = null
-      this.scratchMorph = null
-      this.scratchSegments = segments
-    }
-    if (morph === null) {
-      this.scratchWater ??= allocateJobPatchArrays(segments, null)
-      return this.scratchWater
-    }
-    this.scratchMorph ??= allocateJobPatchArrays(segments, morph)
-
-    return this.scratchMorph
-  }
+  public dispose(): void {}
 }
