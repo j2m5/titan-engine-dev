@@ -36,10 +36,13 @@ export const LUT_FAR_START_RS: number = 1e4
 /** Прицельный параметр захвата, rs: √27/2. Ниже луч не выходит, δ = 0 */
 const CAPTURE_B: number = Math.sqrt(27) / 2
 
-/** Потолок шагов живого интегратора шейдера (MAX_STEPS) — для зеркала хорды */
-const CHORD_MAX_STEPS: number = 256
-/** Предел навивки живого интегратора — тот же, что PHI_MAX шейдера (3π) */
-const PHI_MAX: number = 9.42477796
+/**
+ * Потолок шагов живого интегратора шейдера (MAX_STEPS) — для зеркала хорды.
+ * Равенство с шейдером стережёт tests/blackHole/DeflectionLut.spec.ts
+ */
+export const CHORD_MAX_STEPS: number = 256
+/** Предел навивки живого интегратора — тот же, что PHI_MAX шейдера (3π); стережёт тот же тест */
+export const PHI_MAX: number = 9.42477796
 /** Печка полного отклонения: шаг мельче живого в BAKE_DPHI_DIVISOR раз, путь длиннее */
 const BAKE_DPHI_DIVISOR: number = 10
 const TOTAL_MAX_STEPS: number = 4096 * BAKE_DPHI_DIVISOR

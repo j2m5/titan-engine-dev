@@ -4,7 +4,6 @@ import { Actor } from '@/core/models/Actor'
 import { Barycenter } from '@/core/renderables/Barycenter'
 import { BlackHole } from '@/core/renderables/BlackHole'
 import { BlackHoleImpostor } from '@/core/renderables/BlackHole/BlackHoleImpostor'
-import { BlackHoleLod } from '@/core/renderables/utils/BlackHoleLod'
 import { StaticNode } from '@/core/renderables/utils/StaticNode'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import { Star } from '@/core/renderables/Star'
@@ -25,7 +24,6 @@ import { BrunetonAtmosphere } from '@/core/renderables/Atmosphere/BrunetonAtmosp
 import { Ring } from '@/core/renderables/Ring'
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
 import { shapeModelStorage } from '@/core/renderables/DetailedRingStreamingSystem/archetypes/ShapeModelStorage'
-import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { readRenderingData, requireRenderingData } from '@/core/helpers/renderingData'
@@ -126,14 +124,14 @@ class RenderableFactory {
     const node = new DynamicNode(actor)
     const lodl1 = new BlackHole(actor, this.resourceObserver, this.lensRegistry)
     const lodl2 = new BlackHoleImpostor(actor, lodl1.parameters, this.renderer)
-    const lod = new BlackHoleLod(lodl1.parameters.simulationRadius, this.renderer)
+    const lod = new ApparentSizeLod(lodl1.parameters.simulationRadius, this.renderer, config('blackHole.lodPixels'))
 
     node.name = actor.getAttribute('name', '')
     node.renderable = lodl1
 
     lod.name = actor.getAttribute('name', '') + 'LOD'
 
-    // Стартовое значение: дальше BlackHoleLod пересчитывает дистанцию каждый
+    // Стартовое значение: дальше ApparentSizeLod пересчитывает дистанцию каждый
     // кадр — порог задан в пикселях и обязан переживать ресайз и смену fov
     lod.addLevel(lodl1)
     lod.addLevel(lodl2, lod.switchDistance(config('camera.fov')), config('blackHole.lodHysteresis'))
@@ -525,21 +523,12 @@ class RenderableFactory {
 
   private createPlanet(actor: Actor): Object3D {
     const node = new DynamicNode(actor)
-    const lod = new LOD()
+    // Порог в пикселях (planetImpostor.lodPixels — прежний фактический порог):
+    // дистанцию ApparentSizeLod пересчитывает каждый кадр по живым fov и
+    // высоте вьюпорта
+    const lod = new ApparentSizeLod(actor.physicalObject!.getAttribute('radius')!, this.renderer, config('planetImpostor.lodPixels'))
     const lodl1: RenderableObject3D = this.buildPlanetSurface(actor)
     const lodl2 = new FakePlanet(actor)
-
-    // Известно-неверная высота кадра: tan(fov) вместо 2*tan(fov/2), поэтому
-    // переключение происходит на 3.8 px вместо номинальных 3. Не тронута
-    // намеренно — честная правка отодвинула бы переключение на 28% дальше и
-    // требует замера кадра. У ЧД это уже вылечено (BlackHoleLod + пересчёт
-    // lodPixels под фактический порог) — тот же приём применим и здесь
-    const distanceLod = (pixels: number): number => {
-      const radius: number = actor.physicalObject!.getAttribute('radius')!
-      const fov: number = degToRad(config('camera.fov'))
-
-      return toThreeJSUnits((2 * radius * this.renderer.domElement.height) / (Math.tan(fov) * pixels))
-    }
 
     node.name = actor.getAttribute('name', '')
     node.renderable = lodl1
@@ -547,7 +536,7 @@ class RenderableFactory {
     lod.name = actor.getAttribute('name', '') + 'LOD'
 
     lod.addLevel(lodl1)
-    lod.addLevel(lodl2, distanceLod(3))
+    lod.addLevel(lodl2, lod.switchDistance(config('camera.fov')))
 
     node.add(lod)
     this.eclipses.register(node)
