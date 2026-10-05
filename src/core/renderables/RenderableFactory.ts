@@ -55,9 +55,13 @@ import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import type { LensRegistry } from '@/core/services/LensRegistry'
 import { RenderableObject3D } from '@/core/renderables/types'
 import { syncRenderableMaterials } from '@/core/materials/materialSync'
+import { EclipseSystem } from '@/core/eclipse/EclipseSystem'
 import { SyncTerrainPatchBuilder, type TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 
 class RenderableFactory {
+  /** Затмения: тела регистрируются в createPlanet, раздача — SceneManager.update */
+  public readonly eclipses: EclipseSystem
+
   public constructor(
     private readonly renderer: WebGLRenderer,
     private readonly resourceObserver: ResourceObserver,
@@ -76,7 +80,9 @@ class RenderableFactory {
     private readonly refreshObservation: () => void = () => {},
     /** Реестр гравитационных линз для экранного прохода дальнего поля; без него дыра лензирует только внутри меша */
     private readonly lensRegistry: LensRegistry | null = null
-  ) {}
+  ) {
+    this.eclipses = new EclipseSystem(this.atmosphereRegistry)
+  }
 
   /** Узлы, чей рельеф построен не до конца: легаси-сфера на экране, свап ждёт готовности. */
   private readonly pendingUpgrades = new Map<DynamicNode, TerrainSphere>()
@@ -544,6 +550,7 @@ class RenderableFactory {
     lod.addLevel(lodl2, distanceLod(3))
 
     node.add(lod)
+    this.eclipses.register(node)
 
     return node
   }

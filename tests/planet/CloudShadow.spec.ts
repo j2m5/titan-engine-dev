@@ -26,6 +26,6 @@ describe('PlanetShaderTemplate: тени облаков на земле', () => 
 
   it('тень множит только прямой свет: входит в directGain, не в ambient', () => {
     expect(frag).toContain('float directGain = mix(1.0, occlusion, uTerrainOcclusionDirect) * cloudShadow;')
-    expect(frag).toContain('vec3 ambient = uTerrainAmbient * skyTerm * occlusion;')
+    expect(frag).toContain('vec3 ambient = uTerrainAmbient * skyTerm * occlusion * eclipse;')
   })
 })

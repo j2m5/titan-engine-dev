@@ -94,7 +94,7 @@ describe('WaterShaderTemplate: пена прибоя из градиента к�
   })
 
   it('пена освещена так же, как wavesColor — не сырой цвет поверх ночной тьмы', () => {
-    const sunTintBlock = frag.match(/#ifdef USE_SUN_TINT\s*\n\s*vec3 foamLit = uFoamColor \* mix\(vec3\(uWaterNightFloor\), sunTintFactor, waveDayFactor\);\s*\n\s*#else\s*\n\s*vec3 foamLit = uFoamColor \* mix\(uWaterNightFloor, 1\.0, waveDayFactor\);\s*\n\s*#endif/)
+    const sunTintBlock = frag.match(/#ifdef USE_SUN_TINT\s*\n\s*vec3 foamLit = uFoamColor \* mix\(vec3\(uWaterNightFloor\), sunTintFactor \* eclipse, waveDayFactor\);\s*\n\s*#else\s*\n\s*vec3 foamLit = uFoamColor \* mix\(vec3\(uWaterNightFloor\), eclipse, waveDayFactor\);\s*\n\s*#endif/)
     expect(sunTintBlock).not.toBeNull()
     expect(frag).toContain('color = mix(color, foamLit, foam);')
   })

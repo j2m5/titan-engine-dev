@@ -1,9 +1,11 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { Color, ShaderChunk, Uniform, UniformsUtils, Vector3 } from 'three'
 import { AppUniformsChunk } from './chunks'
+import { createEclipseUniforms } from '@/core/eclipse/eclipseUniforms'
 import { WATER_FAR_ALPHA2 } from './chunks/waterOctavesMath'
 
 const defaultUniforms = {
+  ...createEclipseUniforms(),
   lightPosition: new Uniform(new Vector3()),
   uLightColor: new Uniform(new Color(1, 1, 1)),
   diffuseMap: new Uniform(null),
@@ -299,6 +301,10 @@ export const PlanetShaderTemplate: ShaderProps = {
       #include <asteroidBrdfFunctions>
     #endif
 
+    // Затмения: доля видимого диска звезды при перекрытии телами-соседями (чанк Eclipse); без тел — 1
+    #include <eclipseFunctions>
+    #include <eclipseHostFunctions>
+
     #ifdef USE_TERRAIN_DETAIL
       varying vec3 vDetailPos;
       varying vec3 vDetailPos2;
@@ -516,6 +522,9 @@ export const PlanetShaderTemplate: ShaderProps = {
         sunTintMix = mix(vec3(1.0), sunTint(muS), uSunTintStrength);
       #endif
 
+      // Затмение: свет звезды в точке датума с учётом тел-соседей (1 — без затмения)
+      vec3 eclipse = eclipseLight(normalize(vLocalDir) * uBodyRadiusUnits);
+
       // Собственная тень рельефа; 1 без гейта — блики ниже читают её всегда
       float terrainShadow = 1.0;
 
@@ -529,7 +538,7 @@ export const PlanetShaderTemplate: ShaderProps = {
         // ветка юниформная (без производных внутри): при 0 два тапа LUT не платятся
         if (uSkyAmbientStrength > 0.0) skyTerm = mix(skyTerm, skyAmbientTint(muS), uSkyAmbientStrength);
       #endif
-      vec3 ambient = uTerrainAmbient * skyTerm * occlusion;
+      vec3 ambient = uTerrainAmbient * skyTerm * occlusion * eclipse;
       // Тень облаков на земле — только прямой свет и только у рельефа (базис east/north)
       float cloudShadow = 1.0;
       #ifdef USE_TERRAIN_UV
@@ -570,6 +579,7 @@ export const PlanetShaderTemplate: ShaderProps = {
       #else
         vec3 litDirect = vec3(directGain) * sunTintMix;
       #endif
+      litDirect *= eclipse;
       // вес до 1 — прежний mix(пол, прямой); избыток реголита сверх 1 добавляет только прямой свет:
       // экстраполяция mix увела бы тень (directGain ≈ 0) ниже пола, в минус
       vec3 lit = mix(ambient, litDirect, min(directWeight, 1.0)) + max(directWeight - 1.0, 0.0) * litDirect;
@@ -587,7 +597,7 @@ export const PlanetShaderTemplate: ShaderProps = {
         #endif
       #endif
       // lambert = 0 — прежний вид: тинт на всём диффузе
-      vec3 dayColor = surfaceAlbedo * mix(sunTintMix, lit, uTerrainLambert);
+      vec3 dayColor = surfaceAlbedo * mix(sunTintMix * eclipse, lit, uTerrainLambert);
 
       // Ночная и облачная карты есть не у всех тел. Раньше сэмплеры читались
       // безусловно, и корректность держалась на правиле GL «непривязанная
@@ -606,6 +616,7 @@ export const PlanetShaderTemplate: ShaderProps = {
         vec3 cloudDir;
         cloudLayerSample(normalize(vLocalDir), normalize(vLocalViewDir), cloudPremul, cloudAlphaSlant, cloudDir);
         cloudRadiance = cloudLitRadiance(cloudPremul, cloudDir, -normalize(vLocalLightDirection));
+        cloudRadiance *= eclipseLight(cloudDir * (uBodyRadiusUnits + uCloudHeightUnits));
       #endif
 
       // Огни городов: порог с мягкостью вместо квадрата. Квадрат душил
@@ -662,19 +673,19 @@ export const PlanetShaderTemplate: ShaderProps = {
         float specularIntensity = texture2D(specularMap, uv).r;
         finalColor += specularIntensity * waterGlintGlsl(normal, lightDirection, viewDir, uWaterFarAlpha2) * uWaterGlintGain
                     * (1.0 - cloudAlphaSlant) * sunTintMix
-                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;
+                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * eclipse;
       #endif
 
       #ifdef USE_WATER_EDGE
         // Блеск мокрой кромки — тот же глинт без карты, силой WET_GLOSS
         finalColor += glintEdge * blinnPhongGlint(normal, lightDirection, viewDir) * WET_GLOSS
-                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;
+                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * eclipse;
       #endif
 
       #ifdef USE_TERRAIN_GLINT
         // лёд блестит, снег (шероховатость ≈ 1) и дальний план — нет
         finalColor += terrainIceGlint(normal, lightDirection, viewDir, terrainRoughness) * uIceGlintStrength
-                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;
+                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * eclipse;
       #endif
 
       #ifdef USE_LIGHT_TINT

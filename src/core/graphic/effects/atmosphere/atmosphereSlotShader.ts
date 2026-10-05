@@ -6,6 +6,7 @@
  * по слоту на оболочку в кадре. Модуль только строит строки, GPU не трогает.
  */
 
+import { eclipseFunctions } from '@/core/materials/shaders/lib/chunks/Eclipse'
 import { atmosphereShader } from '@/core/renderables/Atmosphere/atmosphere'
 
 /** Слотов оболочек в кадре: Сатурн + Титан — худший реальный случай, третий — запас. */
@@ -104,6 +105,12 @@ export function buildSlotGlsl(i: number): string {
   uniform vec3 ${u('sunDir')};
   uniform float ${u('exposure')};
   uniform float ${u('hdrKnee')};
+  // Затмение оболочки: центры тел и звезда — относительно центра тела, мировые оси, км (EclipseSystem)
+  uniform int ${u('eclipseCount')};
+  uniform vec4 ${u('eclipseOcc')}[4];
+  uniform vec3 ${u('eclipseStar')};
+  uniform float ${u('eclipseStarRadius')};
+  uniform vec4 ${u('eclipseUmbra')}[4];
 
   AtmosphereParameters buildSlot${i}() {
     return AtmosphereParameters(
@@ -204,6 +211,9 @@ export function buildSlotGlsl(i: number): string {
     // Линейный HDR-выход; колено сжимает только избыток над 1.0; потолок 64
     // держит half-float буфер от переполнения у лимба вблизи солнца
     vec3 scatter = radiance * ${u('exposure')};
+    // Затмение: рассеяние гаснет в тени тел-соседей — точка поверхности или ближайшая к центру точка луча
+    vec3 eclipseQ = hitSurface ? (dir * t1 - center) : (dir * clamp(b, t0, t1) - center);
+    scatter *= eclipseLightAt(eclipseQ, ${u('eclipseCount')}, ${u('eclipseOcc')}, ${u('eclipseStar')}, ${u('eclipseStarRadius')}, ${u('eclipseUmbra')});
     vec3 excess = max(scatter - vec3(1.0), vec3(0.0));
     scatter = min(scatter, vec3(1.0)) + excess * ${u('hdrKnee')};
     scatter = min(scatter, vec3(64.0));
@@ -243,6 +253,7 @@ export function buildAtmosphereEffectFragment(): string {
 
   ${buildAtmosphereCoreGlsl()}
   ${SLOT_HELPERS_GLSL}
+  ${eclipseFunctions}
   ${slots}
 
   void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {

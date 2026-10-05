@@ -179,6 +179,8 @@ export interface IPlanetRenderingObject {
   emission: number
   /** Множитель наклона нормали из slope-карты (чанк SlopeNormal, USE_SLOPE): 1 = физически честно. Отсутствие поля = 0 → плоско. */
   bumpScale?: number
+  /** Сила красной подсветки умбры тела с атмосферой; дефолт 0.02 */
+  umbraGlow?: number
 
   // --- Ручки терраформного детального слоя (задача 4, TerrainDetail). ---
   // Все опциональны: отсутствие → нейтральные дефолты движка (PlanetShader).

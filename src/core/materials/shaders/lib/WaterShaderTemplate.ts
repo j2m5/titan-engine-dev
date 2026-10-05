@@ -3,6 +3,7 @@ import { Color, ShaderChunk, Uniform, UniformsUtils, Vector2, Vector3 } from 'th
 import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
 import { WATER_DEFAULT_PIXEL_ANGLE, WATER_FAR_ALPHA2 } from '@/core/materials/shaders/lib/chunks/waterOctavesMath'
 import { SpaceScale } from '@/core/constants'
+import { createEclipseUniforms } from '@/core/eclipse/eclipseUniforms'
 
 // Юниты сцены → метры (арка water-shader, Task 2, находка ревью фикс-раунда
 // 1 №1): дисторсия Water.js писана для сцены В МЕТРАХ (0.001 + 1/distance,
@@ -13,6 +14,7 @@ import { SpaceScale } from '@/core/constants'
 const WATER_METERS_PER_UNIT = 1000 / SpaceScale
 
 const defaultUniforms = {
+  ...createEclipseUniforms(),
   // «Звезда в нуле» — общедвижковая конвенция (см. AtmosphereEffect.fillSlot:
   // sunDir = normalize(−centerWorld)): движок не доставляет позицию светила в
   // материалы, ноль здесь корректен и согласован с терминатором планеты.
@@ -197,6 +199,12 @@ export const WaterShaderTemplate: ShaderProps = {
       const vec3 waterSunColor = vec3(1.0);
     #endif
 
+    // Радиус тела (юниты): точка датума для затмения и облачного слоя
+    uniform float uBodyRadiusUnits;
+    // Затмения (чанк Eclipse); без тел — 1
+    #include <eclipseFunctions>
+    #include <eclipseHostFunctions>
+
     #ifdef USE_WATER_DEPTH
       #include <terrainUvFunctions>
       // поглощение по каналам, 1/м; глубина при depthA = 1, м
@@ -220,7 +228,6 @@ export const WaterShaderTemplate: ShaderProps = {
       // Облачный слой (чанк CloudLayer) — тот же, что у суши; имена суши — макросами на юниформы воды
       #define cloudMap uWaterCloudMap
       #define uCloudOpacity uWaterCloudOpacity
-      uniform float uBodyRadiusUnits;
       #include <cloudLayerUniforms>
       #include <cloudLayerFunctions>
     #endif
@@ -504,6 +511,8 @@ export const WaterShaderTemplate: ShaderProps = {
       vec3 lightDirection = normalize(vViewLightDirection);
       float NdotL = dot(normal, lightDirection);
       float dayFactor = smoothstep(-0.08, 0.25, NdotL);
+      // Затмение: свет звезды в точке датума с учётом тел-соседей (1 — без затмения)
+      vec3 eclipse = eclipseLight(normalize(vLocalDir) * uBodyRadiusUnits);
       // Тень облаков на воде (чанк CloudLayer, тот же закон, что на суше) — только прямой свет
       float cloudShadow = 1.0;
       #ifdef USE_WATER_CLOUD
@@ -512,9 +521,9 @@ export const WaterShaderTemplate: ShaderProps = {
         cloudShadow = cloudShadowAt(cloudShadowDir, cloudShadowSun, dot(cloudShadowDir, cloudShadowSun));
       #endif
       #ifdef USE_SUN_TINT
-        color *= mix(vec3(uWaterNightFloor), sunTintFactor * cloudShadow, dayFactor);
+        color *= mix(vec3(uWaterNightFloor), sunTintFactor * cloudShadow * eclipse, dayFactor);
       #else
-        color *= mix(uWaterNightFloor, cloudShadow, dayFactor);
+        color *= mix(vec3(uWaterNightFloor), vec3(cloudShadow) * eclipse, dayFactor);
       #endif
 
       // Блик: без волн и с орбиты — аналитическая нормаль и шероховатость всех
@@ -691,9 +700,9 @@ export const WaterShaderTemplate: ShaderProps = {
         // при waveFade=0 равенство фундаменту держалось бы только на
         // спекуляре/reflectance, а не на цвете целиком.
         #ifdef USE_SUN_TINT
-          wavesColor *= mix(vec3(uWaterNightFloor), sunTintFactor, waveDayFactor);
+          wavesColor *= mix(vec3(uWaterNightFloor), sunTintFactor * eclipse, waveDayFactor);
         #else
-          wavesColor *= mix(uWaterNightFloor, 1.0, waveDayFactor);
+          wavesColor *= mix(vec3(uWaterNightFloor), eclipse, waveDayFactor);
         #endif
 
         // ПРИЁМОЧНЫЙ ФИКС (владелец: молочный океан по всему диску + яркое
@@ -768,9 +777,9 @@ export const WaterShaderTemplate: ShaderProps = {
             foam *= uFoamStrength * foamWeight;
             // пена освещена так же, как wavesColor (её ночной пол/тинт) — не сырой цвет поверх темноты
             #ifdef USE_SUN_TINT
-              vec3 foamLit = uFoamColor * mix(vec3(uWaterNightFloor), sunTintFactor, waveDayFactor);
+              vec3 foamLit = uFoamColor * mix(vec3(uWaterNightFloor), sunTintFactor * eclipse, waveDayFactor);
             #else
-              vec3 foamLit = uFoamColor * mix(uWaterNightFloor, 1.0, waveDayFactor);
+              vec3 foamLit = uFoamColor * mix(vec3(uWaterNightFloor), eclipse, waveDayFactor);
             #endif
             // после готового цвета волн: отражение под пеной гаснет самим mix, блик — множителем (1 − foam) ниже
             color = mix(color, foamLit, foam);
@@ -797,7 +806,7 @@ export const WaterShaderTemplate: ShaderProps = {
         glint *= sunTintFactor * glintDayFactor;
       #endif
       // тени облаков рвут солнечную дорожку
-      glint *= cloudShadow;
+      glint *= cloudShadow * eclipse;
       // потолок: искры блумят, кляксы — нет; под пеной блика нет; gain 1 — прежний ближний вид
       color += min(glint, WATER_GLINT_CEILING) * uWaterGlintGain * (1.0 - foam);
 
@@ -810,6 +819,7 @@ export const WaterShaderTemplate: ShaderProps = {
         float cloudAlphaSlant;
         cloudLayerSample(normalize(vLocalDir), normalize(vLocalViewDir), cloudPremul, cloudAlphaSlant, cloudDir);
         vec3 cloudRadiance = cloudLitRadiance(cloudPremul, cloudDir, -normalize(vLocalLightDirection));
+        cloudRadiance *= eclipseLight(cloudDir * (uBodyRadiusUnits + uCloudHeightUnits));
         color = color * (1.0 - cloudAlphaSlant) + cloudRadiance;
       #endif
 

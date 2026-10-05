@@ -3,6 +3,7 @@ import { Actor } from '@/core/models/Actor'
 import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
 import { Color, Texture, Uniform, Vector2, Vector3, Vector4 } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+import { applyEclipseUniforms, type EclipseUniformData } from '@/core/eclipse/eclipseUniforms'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { heightPathOf } from '@/core/terrain/heightPath'
 import { SLOPE_RANGE, isValidSlopeRange } from '@/core/terrain/slopeMapFormat'
@@ -29,7 +30,7 @@ import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { SunTintBinding } from '@/core/materials/SunTintBinding'
 import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
 import { resolveStarRadiusKm } from '@/core/terrain/starRadius'
-import { penumbraTan } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
+import { sunTangent, TERRAIN_SHADOW_PENUMBRA_FLOOR } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
 import { resolveLightTint } from '@/core/helpers/lightSource'
 
 /**
@@ -204,6 +205,11 @@ class PlanetMaterial extends AbstractShaderMaterial {
     return toThreeJSUnits(config.topRadius - config.bottomRadius)
   }
 
+  /** Затмение: данные кладёт EclipseSystem каждый кадр (центры тел и звезда — в системе тела, юниты). */
+  public setEclipse(data: EclipseUniformData): void {
+    applyEclipseUniforms(this.uniforms, data)
+  }
+
   /**
    * Высотный fade облаков (приёмочная волна 4, №3) — вызывается КАЖДЫЙ
    * активный кадр (см. TerrainSphere.onVisibleUpdate, тот же паттерн, что
@@ -229,12 +235,11 @@ class PlanetMaterial extends AbstractShaderMaterial {
 
   /** Полутень тени рельефа: угловой размер солнца — из атмосферы или R★/дистанция; звезда в нуле сцены. */
   public syncTerrainShadow(modelWorldPosition: Vector3): void {
-    this.uniforms.uShadowPenumbraTan.value = penumbraTan(
-      this.atmosphereSunAngularRadius,
-      this.starRadiusUnits,
-      modelWorldPosition.length(),
-      this.shadowSoftness
-    )
+    const tan = sunTangent(this.atmosphereSunAngularRadius, this.starRadiusUnits, modelWorldPosition.length())
+
+    this.uniforms.uShadowPenumbraTan.value = Math.max(tan, TERRAIN_SHADOW_PENUMBRA_FLOOR) * this.shadowSoftness
+    // Полутень тени колец — честный тангенс углового радиуса солнца: без пола и без ручки мягкости рельефа
+    this.uniforms.uRingSunTan.value = tan
   }
 
   /** Нужна ли плитка ближней тени: слой живёт внутри USE_TERRAIN_SHADOW и гаснет при силе 0. */

@@ -79,7 +79,7 @@ describe('PlanetShaderTemplate: тень рельефа', () => {
     const mul = frag.indexOf('directGain *= terrainShadow;')
     expect(gain).toBeGreaterThan(-1)
     expect(mul).toBeGreaterThan(gain)
-    expect(frag).toContain('vec3 ambient = uTerrainAmbient * skyTerm * occlusion;')
+    expect(frag).toContain('vec3 ambient = uTerrainAmbient * skyTerm * occlusion * eclipse;')
     expect(frag).toContain('float terrainShadow = 1.0;')
     // марш не платится в амбиенте
     expect(frag).toContain('if (NdotLraw > 0.0) terrainShadow = mix(1.0, terrainShadowMarch(dirLocal, sunLocal), uTerrainShadowStrength);')
@@ -93,9 +93,9 @@ describe('PlanetShaderTemplate: тень рельефа', () => {
   })
 
   it('блики гасятся тенью: специальный, мокрой кромки и льда', () => {
-    expect(frag).toContain('* smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;')
+    expect(frag).toContain('* smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * eclipse;')
     // специальный, мокрая кромка, лёд (USE_TERRAIN_GLINT) — три блика используют один и тот же множитель тени
-    expect(frag.split('* ringShadowFactor * terrainShadow;').length - 1).toBe(3)
+    expect(frag.split('* ringShadowFactor * terrainShadow * eclipse;').length - 1).toBe(3)
   })
 })
 

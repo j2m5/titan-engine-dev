@@ -59,18 +59,23 @@ export function terrainShadowMarch(sample: HeightSampler, dir: Vec3, sun: Vec3, 
   return 1 - occl
 }
 
-/** Атмосфера — её угловой радиус; иначе R★/dist; иначе фолбэк. Пол и softness — поверх. */
+/** Честный тангенс углового радиуса солнца: атмосфера; иначе R★/dist; иначе фолбэк. Без пола и softness. */
+export function sunTangent(
+  sunAngularRadius: number | undefined,
+  starRadiusUnits: number | undefined,
+  distanceUnits: number
+): number {
+  if (sunAngularRadius !== undefined) return Math.tan(sunAngularRadius)
+  if (starRadiusUnits !== undefined && starRadiusUnits > 0 && distanceUnits > 0) return starRadiusUnits / distanceUnits
+  return Math.tan(DEFAULT_SUN_ANGULAR_RADIUS)
+}
+
+/** sunTangent; пол и softness — поверх. */
 export function penumbraTan(
   sunAngularRadius: number | undefined,
   starRadiusUnits: number | undefined,
   distanceUnits: number,
   softness: number
 ): number {
-  const raw =
-    sunAngularRadius !== undefined
-      ? Math.tan(sunAngularRadius)
-      : starRadiusUnits !== undefined && distanceUnits > 0
-        ? starRadiusUnits / distanceUnits
-        : Math.tan(DEFAULT_SUN_ANGULAR_RADIUS)
-  return Math.max(raw, TERRAIN_SHADOW_PENUMBRA_FLOOR) * softness
+  return Math.max(sunTangent(sunAngularRadius, starRadiusUnits, distanceUnits), TERRAIN_SHADOW_PENUMBRA_FLOOR) * softness
 }
