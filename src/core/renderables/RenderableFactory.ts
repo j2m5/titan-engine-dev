@@ -139,7 +139,6 @@ class RenderableFactory {
     lod.addLevel(lodl2, lod.switchDistance(config('camera.fov')), config('blackHole.lodHysteresis'))
 
     node.add(lod)
-    this.eclipses.register(node)
 
     return node
   }
@@ -551,6 +550,7 @@ class RenderableFactory {
     lod.addLevel(lodl2, distanceLod(3))
 
     node.add(lod)
+    this.eclipses.register(node)
 
     return node
   }
