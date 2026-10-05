@@ -243,14 +243,15 @@ abstract class TerrainPatchGroup extends Group {
     protected readonly builder: TerrainPatchBuilder = new SyncTerrainPatchBuilder(),
     /**
      * Геоморф патчей (terrain.lod.morphSeconds): рельеф — да, вода — нет
-     * (её пул без морф-атрибутов, задания с morph: null).
+     * (её пул — раскладка water: только position, без полосы и морфа;
+     * задания с morph: null).
      */
     morph: boolean = false
   ) {
     super()
     this.field = field
     this.morphEnabled = morph
-    this.pool = new TerrainPatchPool(material, TERRAIN_PATCH_SEGMENTS, maxLivePatches, morph)
+    this.pool = new TerrainPatchPool(material, TERRAIN_PATCH_SEGMENTS, morph ? 'terrain' : 'water', maxLivePatches)
     this.builder.acquire(field)
     registerTerrainGroup(this)
 
@@ -279,9 +280,9 @@ abstract class TerrainPatchGroup extends Group {
     return this.pending.size
   }
 
-  /** Тип группы для dev-хендла: рельеф несёт морф-атрибуты, вода — нет. */
+  /** Тип группы для dev-хендла — раскладка слота её пула: рельеф несёт полосу и морф, вода — только position. */
   public get debugKind(): 'terrain' | 'water' {
-    return this.morphEnabled ? 'terrain' : 'water'
+    return this.pool.layout
   }
 
   /** Сводка пула; зовётся редко (консоль), аллоцирует результат. */

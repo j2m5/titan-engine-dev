@@ -492,13 +492,13 @@ describe('TerrainPatchGroup: сводка пула и реестр', () => {
     expect(group.stats().peakLive).toBe(group.stats().live)
   })
 
-  it('bytesPerSlot: 15 float на вершину и 10 на патч у морф-пула, 8 и 9 у воды', () => {
+  it('bytesPerSlot по раскладке: рельеф 268 900, вода 53 796', () => {
     const vertices = terrainPatchVertexCount(TERRAIN_PATCH_SEGMENTS)
     expect(vertices).toBe(4481)
     const terrain = makeAsync(true)
     const water = makeAsync(false)
     expect(terrain.group.stats().bytesPerSlot).toBe((vertices * 15 + 10) * 4)
-    expect(water.group.stats().bytesPerSlot).toBe((vertices * 8 + 9) * 4)
+    expect(water.group.stats().bytesPerSlot).toBe((vertices * 3 + 6) * 4)
     expect(terrain.group.debugKind).toBe('terrain')
     expect(water.group.debugKind).toBe('water')
   })
@@ -508,7 +508,11 @@ describe('TerrainPatchGroup: сводка пула и реестр', () => {
     settle(group, builder, FAR)
     const geometry = patchMeshes(group)[0].geometry
     let bytes = 0
-    for (const name of Object.keys(geometry.attributes)) bytes += (geometry.getAttribute(name).array as Float32Array).byteLength
+    // count·itemSize·4, а не array.byteLength: после заливки массивы слота могут быть пусты
+    for (const name of Object.keys(geometry.attributes)) {
+      const attribute = geometry.getAttribute(name)
+      bytes += attribute.count * attribute.itemSize * Float32Array.BYTES_PER_ELEMENT
+    }
     expect(group.stats().bytesPerSlot).toBe(bytes)
   })
 

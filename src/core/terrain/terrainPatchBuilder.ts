@@ -1,6 +1,6 @@
 import type { TerrainHeightField } from './TerrainHeightField'
 import type { DetailWrap } from './detailWrap'
-import { allocatePatchArrays, buildTerrainPatchArrays, type PatchArrays, type PatchBounds } from './terrainPatchGeometry'
+import { allocateJobPatchArrays, buildTerrainPatchArrays, type PatchArrays, type PatchBounds } from './terrainPatchGeometry'
 import { buildNearTileHeights, type NearTileParams } from './nearTileBake'
 import { buildShadowHeightBits, type ShadowHeightBits } from './terrainShadowBits'
 
@@ -14,7 +14,7 @@ export interface PatchBuildJob {
   segments: number
   skirtDepthUnits: number
   wrap: DetailWrap
-  /** Геоморф: null — у пула нет морф-атрибутов (массивы не выделяются); true — считать родителя; false — сдвиг 0. */
+  /** Раскладка и геоморф: null — пул воды (только positions: ни полосы, ни морфа); true — рельеф, считать родителя; false — рельеф, сдвиг 0. */
   morph: boolean | null
 }
 
@@ -67,12 +67,13 @@ export interface TerrainPatchBuilder {
 
 /**
  * Постройка на месте: onDone внутри request, поэтому одна постройка за кадр
- * гарантирована. Массивы — два скретча на строителя, без морфа и с морфом
- * (≈140 и ≈263 КиБ при segments=64): результат потребитель копирует внутри onDone (см. контракт
- * интерфейса), аллокация на каждую постройку была бы мусором в горячем пути.
+ * гарантирована. Массивы — два скретча на строителя: раскладка рельефа
+ * (≈263 КиБ при segments=64) и воды (≈53 КиБ): результат потребитель копирует
+ * внутри onDone (см. контракт интерфейса), аллокация на каждую постройку
+ * была бы мусором в горячем пути.
  */
 export class SyncTerrainPatchBuilder implements TerrainPatchBuilder {
-  private scratch: PatchArrays | null = null
+  private scratchWater: PatchArrays | null = null
   private scratchMorph: PatchArrays | null = null
   private scratchSegments = -1
 
@@ -87,7 +88,7 @@ export class SyncTerrainPatchBuilder implements TerrainPatchBuilder {
   public acquire(): void {}
 
   public request(job: PatchBuildJob, onDone: (result: PatchBuildResult) => void, onError: (error: unknown) => void): void {
-    const arrays = this.arraysFor(job.segments, job.morph !== null)
+    const arrays = this.arraysFor(job.segments, job.morph)
     let built: ReturnType<typeof buildTerrainPatchArrays>
     // ловится только постройка: исключение внутри onDone — дефект потребителя, не сбой задания
     try {
@@ -142,24 +143,28 @@ export class SyncTerrainPatchBuilder implements TerrainPatchBuilder {
   public releaseAll(): void {}
 
   public dispose(): void {
-    this.scratch = null
+    this.scratchWater = null
     this.scratchMorph = null
     this.scratchSegments = -1
   }
 
-  /** Скретч под запрошенный segments и вариант (с морф-массивами или без); пересоздаётся только при смене размера (в проекте он константа). */
-  private arraysFor(segments: number, withMorph: boolean): PatchArrays {
+  /**
+   * Скретч под запрошенный segments и раскладку задания (morph null — вода: только
+   * positions; иначе рельеф с полосой и морф-массивами); пересоздаётся только при
+   * смене размера (в проекте он константа).
+   */
+  private arraysFor(segments: number, morph: boolean | null): PatchArrays {
     if (this.scratchSegments !== segments) {
-      this.scratch = null
+      this.scratchWater = null
       this.scratchMorph = null
       this.scratchSegments = segments
     }
-    if (withMorph) {
-      this.scratchMorph ??= allocatePatchArrays(segments, true)
-      return this.scratchMorph
+    if (morph === null) {
+      this.scratchWater ??= allocateJobPatchArrays(segments, null)
+      return this.scratchWater
     }
-    this.scratch ??= allocatePatchArrays(segments)
+    this.scratchMorph ??= allocateJobPatchArrays(segments, morph)
 
-    return this.scratch
+    return this.scratchMorph
   }
 }

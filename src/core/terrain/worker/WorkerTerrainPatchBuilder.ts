@@ -263,9 +263,9 @@ export class WorkerTerrainPatchBuilder implements TerrainPatchBuilder {
       entry.onDone({
         arrays: {
           positions: new Float32Array(msg.positions),
-          heights: new Float32Array(msg.heights),
-          midTilts: new Float32Array(msg.midTilts),
-          midShades: new Float32Array(msg.midShades),
+          heights: msg.heights === null ? null : new Float32Array(msg.heights),
+          midTilts: msg.midTilts === null ? null : new Float32Array(msg.midTilts),
+          midShades: msg.midShades === null ? null : new Float32Array(msg.midShades),
           morph:
             msg.morph === null
               ? null

@@ -150,9 +150,10 @@ export interface PatchMorphArrays {
 /** Типизированные буферы вершинных атрибутов патча — вход/выход ядра мешера, без BufferGeometry (нужно воркеру). */
 export interface PatchArrays {
   positions: Float32Array
-  heights: Float32Array
-  midTilts: Float32Array
-  midShades: Float32Array
+  /** null — раскладка воды: полосы у потребителя нет, ядро её не пишет. */
+  heights: Float32Array | null
+  midTilts: Float32Array | null
+  midShades: Float32Array | null
   /** null — у потребителя нет морф-атрибутов, ядро их не пишет. */
   morph: PatchMorphArrays | null
 }
@@ -168,19 +169,26 @@ export interface PatchBounds {
 /**
  * Аллоцирует массивы под патч segments×segments нужного размера (см.
  * terrainPatchVertexCount) — вход buildTerrainPatchArrays для fresh-сборки
- * (main-поток эталон, воркер) без BufferGeometry.
+ * (main-поток эталон, воркер) без BufferGeometry. withBand = false — раскладка
+ * воды: только positions (геоморф без полосы невозможен).
  */
-export function allocatePatchArrays(segments: number, withMorph = false): PatchArrays {
+export function allocatePatchArrays(segments: number, withMorph = false, withBand = true): PatchArrays {
+  if (withMorph && !withBand) throw new Error('геоморф без атрибутов полосы: такой раскладки нет')
   const n = terrainPatchVertexCount(segments)
   return {
     positions: new Float32Array(n * 3),
-    heights: new Float32Array(n),
-    midTilts: new Float32Array(n * 2),
-    midShades: new Float32Array(n * 2),
+    heights: withBand ? new Float32Array(n) : null,
+    midTilts: withBand ? new Float32Array(n * 2) : null,
+    midShades: withBand ? new Float32Array(n * 2) : null,
     morph: withMorph
       ? { deltas: new Float32Array(n * 3), midTilts: new Float32Array(n * 2), midShades: new Float32Array(n * 2) }
       : null
   }
+}
+
+/** Массивы под задание: morph === null — пул воды (только positions), иначе рельеф (полоса + морф). */
+export function allocateJobPatchArrays(segments: number, morph: boolean | null): PatchArrays {
+  return morph === null ? allocatePatchArrays(segments, false, false) : allocatePatchArrays(segments, true)
 }
 
 /**
@@ -259,6 +267,9 @@ export function buildTerrainPatchArrays(
 } {
   const { positions, heights, midTilts, midShades } = arrays
   const morphArrays = arrays.morph
+  // полоса пишется только у раскладки рельефа; у воды (null) ядро её не трогает
+  const hasBand = heights !== null && midTilts !== null && midShades !== null
+  if (morphArrays !== null && !hasBand) throw new Error('геоморф без атрибутов полосы: такой раскладки нет')
   const withParent = morph && morphArrays !== null
   // сетка ребёнка вложена в родительскую только при чётном segments
   if (withParent && segments % 2 !== 0) throw new Error(`геоморф требует чётного segments, получено ${segments}`)
@@ -315,15 +326,17 @@ export function buildTerrainPatchArrays(
         ? field.midbandSample(dir, uv.x, uv.y, mapMeters, bandScratch, stepMeters, true, parentStep, parentScratch)
         : field.midbandSample(dir, uv.x, uv.y, mapMeters, bandScratch, stepMeters)
       const heightMeters = mapMeters + band.heightMeters
-      // Фаза террас — от высоты КАРТЫ: бугры полосы (до ~84 м при шаге 150 м)
-      // рисовали бы замкнутые горизонтали вокруг каждого бугра
-      heights[k] = mapMeters
-      midTilts[k * 2] = band.tiltE
-      midTilts[k * 2 + 1] = band.tiltN
-      midShades[k * 2] = maxAmplitude > 0 ? band.heightMeters / maxAmplitude : 0
-      // доля октав, взвешенная огибающей: у уреза воды и на равнине (flat 0.15)
-      // пиксельный fbm остаётся, на склонах полоса вытесняет его
-      midShades[k * 2 + 1] = band.octaveWeightSum * Math.min(1, band.envelope)
+      if (hasBand) {
+        // Фаза террас — от высоты КАРТЫ: бугры полосы (до ~84 м при шаге 150 м)
+        // рисовали бы замкнутые горизонтали вокруг каждого бугра
+        heights[k] = mapMeters
+        midTilts[k * 2] = band.tiltE
+        midTilts[k * 2 + 1] = band.tiltN
+        midShades[k * 2] = maxAmplitude > 0 ? band.heightMeters / maxAmplitude : 0
+        // доля октав, взвешенная огибающей: у уреза воды и на равнине (flat 0.15)
+        // пиксельный fbm остаётся, на склонах полоса вытесняет его
+        midShades[k * 2 + 1] = band.octaveWeightSum * Math.min(1, band.envelope)
+      }
       const r = toThreeJSUnits(field.radiusKm + heightMeters / 1000)
       positions[k * 3] = dir.x * r - center.x
       positions[k * 3 + 1] = dir.y * r - center.y
@@ -395,16 +408,18 @@ export function buildTerrainPatchArrays(
     positions[skirtIndex * 3 + 1] = positions[edgeIndex * 3 + 1] - ny * skirtDepthUnits
     positions[skirtIndex * 3 + 2] = positions[edgeIndex * 3 + 2] - nz * skirtDepthUnits
 
-    // юбка несёт высоту кромки — радиальный сдвиг юбки не рельеф
-    heights[skirtIndex] = heights[edgeIndex]
+    if (hasBand) {
+      // юбка несёт высоту кромки — радиальный сдвиг юбки не рельеф
+      heights[skirtIndex] = heights[edgeIndex]
 
-    // юбка несёт наклон полосы своей кромочной вершины
-    midTilts[skirtIndex * 2] = midTilts[edgeIndex * 2]
-    midTilts[skirtIndex * 2 + 1] = midTilts[edgeIndex * 2 + 1]
+      // юбка несёт наклон полосы своей кромочной вершины
+      midTilts[skirtIndex * 2] = midTilts[edgeIndex * 2]
+      midTilts[skirtIndex * 2 + 1] = midTilts[edgeIndex * 2 + 1]
 
-    // юбка несёт геометрию полосы своей кромочной вершины
-    midShades[skirtIndex * 2] = midShades[edgeIndex * 2]
-    midShades[skirtIndex * 2 + 1] = midShades[edgeIndex * 2 + 1]
+      // юбка несёт геометрию полосы своей кромочной вершины
+      midShades[skirtIndex * 2] = midShades[edgeIndex * 2]
+      midShades[skirtIndex * 2 + 1] = midShades[edgeIndex * 2 + 1]
+    }
 
     // стенка сдвигается вместе с кромкой: иначе в морфе щель между ними
     if (withParent && morphArrays !== null) {
@@ -420,7 +435,7 @@ export function buildTerrainPatchArrays(
   }
 
   // без родителя форма одна: сдвиг ноль, родительские атрибуты — свои
-  if (!withParent && morphArrays !== null) {
+  if (!withParent && morphArrays !== null && hasBand) {
     morphArrays.deltas.fill(0)
     morphArrays.midTilts.set(midTilts)
     morphArrays.midShades.set(midShades)
@@ -478,8 +493,12 @@ export function buildTerrainPatchGeometry(
   wrap: DetailWrap,
   morph = false
 ): { geometry: BufferGeometry; center: Vector3 } {
+  // эталон — раскладка рельефа: полоса выделена всегда (allocatePatchArrays с withBand по умолчанию)
   const arrays = allocatePatchArrays(segments, morph)
-  const { positions, heights, midTilts, midShades } = arrays
+  const { positions } = arrays
+  const heights = arrays.heights!
+  const midTilts = arrays.midTilts!
+  const midShades = arrays.midShades!
 
   const { center, bounds, detailOrigin, detailOrigin2 } = buildTerrainPatchArrays(
     field, face, i, j, depth, segments, skirtDepthUnits, wrap, arrays, morph
@@ -527,10 +546,10 @@ export function buildTerrainPatchInto(
 ): void {
   const { geometry, mesh } = handle
   const positions = geometry.getAttribute('position') as BufferAttribute
-  const height = geometry.getAttribute('height') as BufferAttribute
-  const midTilt = geometry.getAttribute('midTilt') as BufferAttribute
-  const midShade = geometry.getAttribute('midShade') as BufferAttribute
-  // морф-атрибуты есть только у пулов рельефа (у воды их нет)
+  // полоса и морф-атрибуты есть только у слотов раскладки рельефа (у воды их нет)
+  const height = geometry.getAttribute('height') as BufferAttribute | undefined
+  const midTilt = geometry.getAttribute('midTilt') as BufferAttribute | undefined
+  const midShade = geometry.getAttribute('midShade') as BufferAttribute | undefined
   const morphDelta = geometry.getAttribute('morphDelta') as BufferAttribute | undefined
   const midTiltParent = geometry.getAttribute('midTiltParent') as BufferAttribute | undefined
   const midShadeParent = geometry.getAttribute('midShadeParent') as BufferAttribute | undefined
@@ -539,9 +558,9 @@ export function buildTerrainPatchInto(
   // ядру нужны только сами массивы, не BufferAttribute
   const arrays: PatchArrays = {
     positions: positions.array as Float32Array,
-    heights: height.array as Float32Array,
-    midTilts: midTilt.array as Float32Array,
-    midShades: midShade.array as Float32Array,
+    heights: height === undefined ? null : (height.array as Float32Array),
+    midTilts: midTilt === undefined ? null : (midTilt.array as Float32Array),
+    midShades: midShade === undefined ? null : (midShade.array as Float32Array),
     morph:
       morphDelta !== undefined && midTiltParent !== undefined && midShadeParent !== undefined
         ? {
@@ -560,12 +579,12 @@ export function buildTerrainPatchInto(
   // их пишет вызывающий, ядро сборки только возвращает значения
   writeInstanceAttribute(geometry, 'patchCenter', [center.x, center.y, center.z])
   writeInstanceAttribute(geometry, 'detailOrigin', detailOrigin)
-  writeInstanceAttribute(geometry, 'detailOrigin2', detailOrigin2)
+  if (geometry.getAttribute('detailOrigin2') !== undefined) writeInstanceAttribute(geometry, 'detailOrigin2', detailOrigin2)
 
   positions.needsUpdate = true
-  height.needsUpdate = true
-  midTilt.needsUpdate = true
-  midShade.needsUpdate = true
+  if (height !== undefined) height.needsUpdate = true
+  if (midTilt !== undefined) midTilt.needsUpdate = true
+  if (midShade !== undefined) midShade.needsUpdate = true
   if (morphDelta !== undefined && midTiltParent !== undefined && midShadeParent !== undefined) {
     morphDelta.needsUpdate = true
     midTiltParent.needsUpdate = true
@@ -600,30 +619,40 @@ export function applyPatchResult(
 ): void {
   const { geometry, mesh } = handle
   const { arrays } = result
+  const { heights, midTilts, midShades } = arrays
+
+  // раскладка результата обязана совпадать с раскладкой слота: рельеф несёт полосу, вода — нет
+  const terrainSlot = geometry.getAttribute('height') !== undefined
+  const terrainResult = heights !== null && midTilts !== null && midShades !== null
+  if (terrainSlot !== terrainResult) {
+    throw new Error(`раскладка результата (${terrainResult ? 'рельеф' : 'вода'}) не совпадает со слотом (${terrainSlot ? 'рельеф' : 'вода'})`)
+  }
 
   writePatchAttribute(geometry, 'position', arrays.positions)
-  writePatchAttribute(geometry, 'height', arrays.heights)
-  writePatchAttribute(geometry, 'midTilt', arrays.midTilts)
-  writePatchAttribute(geometry, 'midShade', arrays.midShades)
-  if (geometry.getAttribute('morphDelta') !== undefined) {
-    if (arrays.morph !== null) {
-      writePatchAttribute(geometry, 'morphDelta', arrays.morph.deltas)
-      writePatchAttribute(geometry, 'midTiltParent', arrays.morph.midTilts)
-      writePatchAttribute(geometry, 'midShadeParent', arrays.morph.midShades)
-    } else {
-      // результат без морфа в морф-слот: дельты прежнего патча не оставляем, родитель = своя форма
-      const deltas = geometry.getAttribute('morphDelta') as BufferAttribute
-      ;(deltas.array as Float32Array).fill(0)
-      deltas.needsUpdate = true
-      writePatchAttribute(geometry, 'midTiltParent', arrays.midTilts)
-      writePatchAttribute(geometry, 'midShadeParent', arrays.midShades)
+  if (terrainResult) {
+    writePatchAttribute(geometry, 'height', heights)
+    writePatchAttribute(geometry, 'midTilt', midTilts)
+    writePatchAttribute(geometry, 'midShade', midShades)
+    if (geometry.getAttribute('morphDelta') !== undefined) {
+      if (arrays.morph !== null) {
+        writePatchAttribute(geometry, 'morphDelta', arrays.morph.deltas)
+        writePatchAttribute(geometry, 'midTiltParent', arrays.morph.midTilts)
+        writePatchAttribute(geometry, 'midShadeParent', arrays.morph.midShades)
+      } else {
+        // результат без морфа в морф-слот: дельты прежнего патча не оставляем, родитель = своя форма
+        const deltas = geometry.getAttribute('morphDelta') as BufferAttribute
+        ;(deltas.array as Float32Array).fill(0)
+        deltas.needsUpdate = true
+        writePatchAttribute(geometry, 'midTiltParent', midTilts)
+        writePatchAttribute(geometry, 'midShadeParent', midShades)
+      }
     }
   }
 
   // центр патча и смещения домена детали — инстансные атрибуты, те же, что в into-варианте
   writeInstanceAttribute(geometry, 'patchCenter', result.center)
   writeInstanceAttribute(geometry, 'detailOrigin', result.detailOrigin)
-  writeInstanceAttribute(geometry, 'detailOrigin2', result.detailOrigin2)
+  if (geometry.getAttribute('detailOrigin2') !== undefined) writeInstanceAttribute(geometry, 'detailOrigin2', result.detailOrigin2)
 
   applyPatchBounds(geometry, result.bounds)
   mesh.position.fromArray(result.center)

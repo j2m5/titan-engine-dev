@@ -45,7 +45,7 @@ describe('terrainBuildHandler: чистый обработчик сообщен�
     expect(m.bounds.radius).toBeCloseTo(ref.geometry.boundingSphere!.radius, 9)
   })
 
-  it('build с morph: true несёт три морф-буфера в transfer (7), с null — null и 4 буфера; false — нулевые дельты', () => {
+  it('build с morph: true несёт три морф-буфера в transfer (7), с null (вода) — null и 1 буфер, без полосы; false — нулевые дельты', () => {
     const field = makeField()
     const state = createWorkerState()
     handleWorkerMessage(state, registerFieldMessage(field, 7).message)
@@ -61,9 +61,17 @@ describe('terrainBuildHandler: чистый обработчик сообщен�
     expectMatchesFreshBuild(arrays, deep)
     expect(arrays.morph!.deltas.some((v) => v !== 0)).toBe(true)
 
-    const none = handleWorkerMessage(state, buildMessageFor({ ...deep, morph: null }, 2, 7))
-    expect(none?.transfer).toHaveLength(4)
-    expect((none!.message as BuiltMessage).morph).toBeNull()
+    // задание воды: по сети идут только positions, полоса и морф — null
+    const waterJob = { ...deep, morph: null }
+    const none = handleWorkerMessage(state, buildMessageFor(waterJob, 2, 7))
+    expect(none?.transfer).toHaveLength(1)
+    const noneMessage = none!.message as BuiltMessage
+    expect(none!.transfer[0]).toBe(noneMessage.positions)
+    expect(noneMessage.morph).toBeNull()
+    expect(noneMessage.heights).toBeNull()
+    expect(noneMessage.midTilts).toBeNull()
+    expect(noneMessage.midShades).toBeNull()
+    expectMatchesFreshBuild(builtArrays(noneMessage), waterJob)
 
     const off = { ...deep, morph: false }
     const flat = handleWorkerMessage(state, buildMessageFor(off, 3, 7))

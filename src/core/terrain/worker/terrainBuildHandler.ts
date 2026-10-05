@@ -1,6 +1,6 @@
 import type { HeightMapData } from '../heightMapFormat'
 import { TerrainHeightField } from '../TerrainHeightField'
-import { allocatePatchArrays, buildTerrainPatchArrays } from '../terrainPatchGeometry'
+import { allocateJobPatchArrays, buildTerrainPatchArrays } from '../terrainPatchGeometry'
 import { buildNearTileHeights } from '../nearTileBake'
 import { buildShadowHeightBits } from '../terrainShadowBits'
 import type { FromWorkerMessage, ToWorkerMessage } from './terrainBuildProtocol'
@@ -80,7 +80,7 @@ export function handleWorkerMessage(
       }
 
       // свежие массивы на каждый патч: их буферы уходят переносом и здесь больше не живут
-      const arrays = allocatePatchArrays(msg.segments, msg.morph !== null)
+      const arrays = allocateJobPatchArrays(msg.segments, msg.morph)
       const { center, bounds, detailOrigin, detailOrigin2 } = buildTerrainPatchArrays(
         field,
         msg.face,
@@ -94,9 +94,10 @@ export function handleWorkerMessage(
         msg.morph === true
       )
       const positions = arrays.positions.buffer as ArrayBuffer
-      const heights = arrays.heights.buffer as ArrayBuffer
-      const midTilts = arrays.midTilts.buffer as ArrayBuffer
-      const midShades = arrays.midShades.buffer as ArrayBuffer
+      // полоса — только у задания рельефа; у воды (morph null) её нет и по сети не идёт
+      const heights = arrays.heights === null ? null : (arrays.heights.buffer as ArrayBuffer)
+      const midTilts = arrays.midTilts === null ? null : (arrays.midTilts.buffer as ArrayBuffer)
+      const midShades = arrays.midShades === null ? null : (arrays.midShades.buffer as ArrayBuffer)
       const morph =
         arrays.morph === null
           ? null
@@ -122,9 +123,7 @@ export function handleWorkerMessage(
         },
         transfer: [
           positions,
-          heights,
-          midTilts,
-          midShades,
+          ...[heights, midTilts, midShades].filter((buffer): buffer is ArrayBuffer => buffer !== null),
           ...(morph === null ? [] : [morph.deltas, morph.midTilts, morph.midShades])
         ]
       }

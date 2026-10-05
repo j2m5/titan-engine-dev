@@ -10,12 +10,14 @@ import {
   MAX_LIVE_PATCHES,
   setPatchMorph,
   TerrainPatchPool,
-  type PatchHandle
+  type PatchHandle,
+  type PatchLayout
 } from '@/core/terrain/TerrainPatchPool'
 import {
   allocatePatchArrays,
   applyPatchResult,
   buildPatchIndex,
+  buildTerrainPatchArrays,
   terrainPatchVertexCount,
   buildTerrainPatchGeometry,
   buildTerrainPatchInto
@@ -63,8 +65,8 @@ const SEGMENTS = 8
 const DEPTH = 1
 const SKIRT = 0.001
 
-function makePool(): TerrainPatchPool {
-  return new TerrainPatchPool(new PlanetMaterial(moon()), SEGMENTS)
+function makePool(layout: PatchLayout = 'terrain'): TerrainPatchPool {
+  return new TerrainPatchPool(new PlanetMaterial(moon()), SEGMENTS, layout)
 }
 
 describe('TerrainPatchPool', () => {
@@ -160,7 +162,7 @@ describe('TerrainPatchPool', () => {
 
     let applied = 0
     new SyncTerrainPatchBuilder().request(
-      { field, face: 2, i: 1, j: 0, level: deep, segments: SEGMENTS, skirtDepthUnits: SKIRT, wrap, morph: null },
+      { field, face: 2, i: 1, j: 0, level: deep, segments: SEGMENTS, skirtDepthUnits: SKIRT, wrap, morph: false },
       (result) => {
         applyPatchResult(handle, result)
         applied++
@@ -190,8 +192,8 @@ describe('TerrainPatchPool', () => {
     }
   })
 
-  it('morph-пул: слот несёт morphDelta/midTiltParent/midShadeParent и инстансный patchMorph; без флага — нет', () => {
-    const handle = new TerrainPatchPool(new PlanetMaterial(moon()), SEGMENTS, 4, true).acquire()!
+  it('слот рельефа несёт morphDelta/midTiltParent/midShadeParent и инстансный patchMorph; слот воды — нет', () => {
+    const handle = new TerrainPatchPool(new PlanetMaterial(moon()), SEGMENTS, 'terrain', 4).acquire()!
     const count = terrainPatchVertexCount(SEGMENTS)
     for (const [name, itemSize] of [['morphDelta', 3], ['midTiltParent', 2], ['midShadeParent', 2]] as const) {
       const attr = handle.geometry.getAttribute(name) as BufferAttribute
@@ -205,14 +207,14 @@ describe('TerrainPatchPool', () => {
     expect(patchMorph.meshPerAttribute).toBe(1)
     expect(patchMorph.usage).toBe(DynamicDrawUsage)
 
-    const plain = makePool().acquire()!
+    const water = makePool('water').acquire()!
     for (const name of ['morphDelta', 'midTiltParent', 'midShadeParent', 'patchMorph']) {
-      expect(plain.geometry.getAttribute(name)).toBeUndefined()
+      expect(water.geometry.getAttribute(name)).toBeUndefined()
     }
   })
 
   it('setPatchMorph пишет значение и поднимает version только при изменении; без атрибута — no-op', () => {
-    const handle = new TerrainPatchPool(new PlanetMaterial(moon()), SEGMENTS, 4, true).acquire()!
+    const handle = new TerrainPatchPool(new PlanetMaterial(moon()), SEGMENTS, 'terrain', 4).acquire()!
     const patchMorph = handle.geometry.getAttribute('patchMorph') as InstancedBufferAttribute
     const before = patchMorph.version
     setPatchMorph(handle, 0.5)
@@ -221,30 +223,44 @@ describe('TerrainPatchPool', () => {
     setPatchMorph(handle, 0.5)
     expect(patchMorph.version).toBe(before + 1)
 
-    expect(() => setPatchMorph(makePool().acquire()!, 0.5)).not.toThrow()
+    expect(() => setPatchMorph(makePool('water').acquire()!, 0.5)).not.toThrow()
   })
 
   it('applyPatchResult: результат без морфа в морф-слот обнуляет дельты и копирует свои midTilt/midShade в parent', () => {
     const field = bumpyField()
-    const handle = new TerrainPatchPool(new PlanetMaterial(moon()), SEGMENTS, 4, true).acquire()!
+    const handle = new TerrainPatchPool(new PlanetMaterial(moon()), SEGMENTS, 'terrain', 4).acquire()!
     const wrap = detailWrapFor(undefined)
     const deep = 11
     const job = { field, face: 2, i: 1, j: 0, level: deep, segments: SEGMENTS, skirtDepthUnits: SKIRT, wrap }
-    const apply = (morph: boolean | null): void => {
+    const apply = (): void => {
       new SyncTerrainPatchBuilder().request(
-        { ...job, morph },
+        { ...job, morph: true },
         (result) => applyPatchResult(handle, result),
         (error) => {
           throw error
         }
       )
     }
+    // Рельеф без морф-массивов (полоса есть, morph null): строитель такого результата
+    // больше не отдаёт (задание рельефа всегда с морфом, воды — без полосы), но
+    // applyPatchResult обязан его принять — собираем ядром вручную.
+    const applyBandOnly = (): void => {
+      const arrays = allocatePatchArrays(SEGMENTS)
+      const built = buildTerrainPatchArrays(field, 2, 1, 0, deep, SEGMENTS, SKIRT, wrap, arrays, false)
+      applyPatchResult(handle, {
+        arrays,
+        center: built.center.toArray(),
+        bounds: built.bounds,
+        detailOrigin: built.detailOrigin,
+        detailOrigin2: built.detailOrigin2
+      })
+    }
     const attr = (name: string): number[] => Array.from(handle.geometry.getAttribute(name).array)
 
-    apply(true)
+    apply()
     expect(attr('morphDelta').some((v) => v !== 0)).toBe(true)
 
-    apply(null)
+    applyBandOnly()
     expect(attr('morphDelta').every((v) => v === 0)).toBe(true)
     expect(attr('midTiltParent')).toEqual(attr('midTilt'))
     expect(attr('midShadeParent')).toEqual(attr('midShade'))

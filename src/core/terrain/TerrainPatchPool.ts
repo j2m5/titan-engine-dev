@@ -23,13 +23,22 @@ import { buildPatchIndex, terrainPatchVertexCount } from './terrainPatchGeometry
  * при патологическом отборе (камера в стене, дребезг), не отражает штатный
  * размер набора.
  *
- * Водный пул (WATER_MAX_LIVE_PATCHES, см. WaterSphere, 256 слотов) без морфа
- * платит 8 float на вершину (position 3 + height 1 + midTilt 2 + midShade 2)
- * и 9 на патч (patchCenter 3 + detailOrigin 3 + detailOrigin2 3): height,
- * midTilt, midShade и оба смещения заведены пулом безусловно (общая
- * TerrainPatchPool), хотя WaterMaterial читает из них только detailOrigin.
+ * Водный пул (WATER_MAX_LIVE_PATCHES, 256 слотов) — раскладка `water`: position 3
+ * на вершину, patchCenter и detailOrigin на патч, 53 796 Б на слот.
  */
 export const MAX_LIVE_PATCHES = 1024
+
+/** Раскладка слота: рельеф — полоса и геоморф; вода — только позиция (WaterMaterial читает position, patchCenter, detailOrigin). */
+export type PatchLayout = 'terrain' | 'water'
+
+/** float на вершину и на патч по раскладке — сверяется с фактическими атрибутами слота в тестах. */
+const VERTEX_FLOATS: Record<PatchLayout, number> = { terrain: 15, water: 3 }
+const INSTANCE_FLOATS: Record<PatchLayout, number> = { terrain: 10, water: 6 }
+
+/** Видеопамять атрибутов одного слота (без общего индекса), байт. */
+export function patchSlotBytes(segments: number, layout: PatchLayout): number {
+  return (terrainPatchVertexCount(segments) * VERTEX_FLOATS[layout] + INSTANCE_FLOATS[layout]) * Float32Array.BYTES_PER_ELEMENT
+}
 
 export type PatchHandle = { mesh: Mesh; geometry: InstancedBufferGeometry }
 
@@ -57,17 +66,16 @@ class TerrainPatchPool {
   private readonly free: PatchHandle[] = []
   private readonly occupied = new Set<PatchHandle>()
   private readonly maxLivePatchesLimit: number
-  private readonly morph: boolean
-  private slotBytes = -1
+  public readonly layout: PatchLayout
 
   public constructor(
     material: Material,
     segments: number,
-    maxLivePatches: number = MAX_LIVE_PATCHES,
-    morph = false
+    layout: PatchLayout,
+    maxLivePatches: number = MAX_LIVE_PATCHES
   ) {
     this.material = material
-    this.morph = morph
+    this.layout = layout
     this.segments = segments
     this.index = buildPatchIndex(segments)
     this.maxLivePatchesLimit = maxLivePatches
@@ -83,21 +91,12 @@ class TerrainPatchPool {
   }
 
   /**
-   * Байт атрибутов одного слота (вершинные + инстансные, без общего индекса):
-   * сумма byteLength реальных массивов, замер на пробном слоте один раз —
-   * новый атрибут в createHandle попадает сюда сам.
+   * Байт атрибутов одного слота (вершинные + инстансные, без общего индекса)
+   * по раскладке, см. patchSlotBytes; совпадение с фактическими атрибутами —
+   * tests/terrain/patchLayout.spec.ts.
    */
   public get bytesPerSlot(): number {
-    if (this.slotBytes < 0) {
-      const probe = this.createHandle()
-      this.slotBytes = 0
-      for (const name of Object.keys(probe.geometry.attributes)) {
-        this.slotBytes += probe.geometry.getAttribute(name).array.byteLength
-      }
-      probe.geometry.setIndex(null)
-      probe.geometry.dispose()
-    }
-    return this.slotBytes
+    return patchSlotBytes(this.segments, this.layout)
   }
 
   public get maxLivePatches(): number {
@@ -168,9 +167,6 @@ class TerrainPatchPool {
     const geometry = new InstancedBufferGeometry()
     geometry.instanceCount = 1
     const position = new BufferAttribute(new Float32Array(vertexCount * 3), 3)
-    const height = new BufferAttribute(new Float32Array(vertexCount), 1)
-    const midTilt = new BufferAttribute(new Float32Array(vertexCount * 2), 2)
-    const midShade = new BufferAttribute(new Float32Array(vertexCount * 2), 2)
     // Центр патча — один на весь патч (инстансный атрибут, делитель 1):
     // вершинник восстанавливает радиальное направление normalize(position +
     // patchCenter), а атрибуты normal (= то же направление) и uv (мёртв для
@@ -178,29 +174,32 @@ class TerrainPatchPool {
     const patchCenter = new InstancedBufferAttribute(new Float32Array(3), 3)
     // домен детали — смещение на патч: вершинник собирает position + detailOrigin
     const detailOrigin = new InstancedBufferAttribute(new Float32Array(3), 3)
-    const detailOrigin2 = new InstancedBufferAttribute(new Float32Array(3), 3)
     // DynamicDrawUsage: split/merge перезаписывает эти атрибуты на месте
     // каждый раз, когда слот переиспользуется (buildTerrainPatchInto) — не
     // однократная запись, которую предполагает дефолтный StaticDrawUsage.
-    for (const attribute of [position, height, midTilt, midShade, patchCenter, detailOrigin, detailOrigin2]) {
+    for (const attribute of [position, patchCenter, detailOrigin]) {
       attribute.setUsage(DynamicDrawUsage)
     }
     geometry.setAttribute('position', position)
-    geometry.setAttribute('height', height)
-    geometry.setAttribute('midTilt', midTilt)
-    geometry.setAttribute('midShade', midShade)
     geometry.setAttribute('patchCenter', patchCenter)
     geometry.setAttribute('detailOrigin', detailOrigin)
-    geometry.setAttribute('detailOrigin2', detailOrigin2)
-    if (this.morph) {
+    if (this.layout === 'terrain') {
+      const height = new BufferAttribute(new Float32Array(vertexCount), 1)
+      const midTilt = new BufferAttribute(new Float32Array(vertexCount * 2), 2)
+      const midShade = new BufferAttribute(new Float32Array(vertexCount * 2), 2)
+      const detailOrigin2 = new InstancedBufferAttribute(new Float32Array(3), 3)
       // родительская форма для геоморфинга (см. buildTerrainPatchArrays) + прогресс перехода патча
       const morphDelta = new BufferAttribute(new Float32Array(vertexCount * 3), 3)
       const midTiltParent = new BufferAttribute(new Float32Array(vertexCount * 2), 2)
       const midShadeParent = new BufferAttribute(new Float32Array(vertexCount * 2), 2)
       const patchMorph = new InstancedBufferAttribute(new Float32Array(1), 1)
-      for (const attribute of [morphDelta, midTiltParent, midShadeParent, patchMorph]) {
+      for (const attribute of [height, midTilt, midShade, detailOrigin2, morphDelta, midTiltParent, midShadeParent, patchMorph]) {
         attribute.setUsage(DynamicDrawUsage)
       }
+      geometry.setAttribute('height', height)
+      geometry.setAttribute('midTilt', midTilt)
+      geometry.setAttribute('midShade', midShade)
+      geometry.setAttribute('detailOrigin2', detailOrigin2)
       geometry.setAttribute('morphDelta', morphDelta)
       geometry.setAttribute('midTiltParent', midTiltParent)
       geometry.setAttribute('midShadeParent', midShadeParent)

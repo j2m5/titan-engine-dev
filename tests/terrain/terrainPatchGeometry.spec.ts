@@ -126,7 +126,7 @@ describe('buildTerrainPatchArrays: ядро без геометрии', () => {
 
       const fresh = build(field, 0, 1, 0) // fresh-вариант
 
-      const pool = new TerrainPatchPool(new MeshBasicMaterial(), SEGMENTS)
+      const pool = new TerrainPatchPool(new MeshBasicMaterial(), SEGMENTS, 'terrain')
       const handle = pool.acquire()!
       buildTerrainPatchInto(field, 0, 1, 0, DEPTH, SEGMENTS, 0.001, handle, wrap) // into-вариант
 
@@ -633,8 +633,8 @@ describe('родительская форма (геоморф)', () => {
     const arrays = allocatePatchArrays(SEGMENTS, true)
     buildTerrainPatchArrays(field, 2, 5, 6, DEPTH_CHILD, SEGMENTS, 0, detailWrapFor(undefined), arrays, false)
     expect(Array.from(arrays.morph!.deltas).every((x) => x === 0)).toBe(true)
-    expect(Array.from(arrays.morph!.midTilts)).toEqual(Array.from(arrays.midTilts))
-    expect(Array.from(arrays.morph!.midShades)).toEqual(Array.from(arrays.midShades))
+    expect(Array.from(arrays.morph!.midTilts)).toEqual(Array.from(arrays.midTilts!))
+    expect(Array.from(arrays.morph!.midShades)).toEqual(Array.from(arrays.midShades!))
   })
 
   it('юбка копирует сдвиг и родительские атрибуты кромки', () => {
