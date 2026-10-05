@@ -56,7 +56,7 @@ describe('WaterShaderTemplate: строковые ассерты (Френель
 
   it('ночной пол — ручка uWaterNightFloor, не зашитая константа (находка №5 финального ревью)', () => {
     expect(frag).toContain('uniform float uWaterNightFloor;')
-    expect(frag).toContain('color *= mix(uWaterNightFloor, cloudShadow, dayFactor);')
+    expect(frag).toContain('color *= mix(vec3(uWaterNightFloor), vec3(cloudShadow) * eclipse, dayFactor);')
   })
 
   it('лог-депт подключён на обоих концах (та же логарифмическая глубина, что у патчей суши) — ${ShaderChunk[...]} разворачивается на этапе шаблонной строки JS, не #include', () => {

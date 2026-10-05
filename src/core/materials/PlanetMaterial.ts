@@ -3,6 +3,7 @@ import { Actor } from '@/core/models/Actor'
 import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
 import { Color, Texture, Uniform, Vector2, Vector3, Vector4 } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+import { applyEclipseUniforms, type EclipseUniformData } from '@/core/eclipse/eclipseUniforms'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { heightPathOf } from '@/core/terrain/heightPath'
 import { SLOPE_RANGE, isValidSlopeRange } from '@/core/terrain/slopeMapFormat'
@@ -202,6 +203,11 @@ class PlanetMaterial extends AbstractShaderMaterial {
     if (!config) return undefined
 
     return toThreeJSUnits(config.topRadius - config.bottomRadius)
+  }
+
+  /** Затмение: данные кладёт EclipseSystem каждый кадр (центры тел и звезда — в системе тела, юниты). */
+  public setEclipse(data: EclipseUniformData): void {
+    applyEclipseUniforms(this.uniforms, data)
   }
 
   /**

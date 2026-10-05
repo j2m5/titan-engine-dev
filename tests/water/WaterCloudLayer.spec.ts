@@ -39,7 +39,8 @@ describe('WaterShaderTemplate: облачный слой из чанка', () =>
     const before = frag.slice(frag.lastIndexOf('#ifdef USE_WATER_CLOUD', inc), inc)
     expect(before).toContain('#define cloudMap uWaterCloudMap')
     expect(before).toContain('#define uCloudOpacity uWaterCloudOpacity')
-    expect(before).toContain('uniform float uBodyRadiusUnits;')
+    // радиус тела объявлен на верхнем уровне (нужен и затмению), здесь не дублируется
+    expect(before).not.toContain('uniform float uBodyRadiusUnits;')
     expect(before).toContain('#include <cloudLayerUniforms>')
   })
 
@@ -53,11 +54,11 @@ describe('WaterShaderTemplate: облачный слой из чанка', () =>
     const decl = frag.indexOf('float cloudShadow = 1.0;')
     expect(decl).toBeGreaterThan(-1)
     expect(frag.indexOf('cloudShadow = cloudShadowAt(')).toBeGreaterThan(decl)
-    expect(main).toContain('color *= mix(vec3(uWaterNightFloor), sunTintFactor * cloudShadow, dayFactor);')
-    expect(main).toContain('color *= mix(uWaterNightFloor, cloudShadow, dayFactor);')
-    expect(main).toContain('waterSunColor * waveDiffuseLight * 0.3 * cloudShadow + waveScatter')
-    expect(main).toContain('glint *= cloudShadow;')
-    expect(main.indexOf('glint *= cloudShadow;')).toBeLessThan(main.indexOf('color += min(glint'))
+    expect(main).toContain('color *= mix(vec3(uWaterNightFloor), sunTintFactor * cloudShadow * eclipse, dayFactor);')
+    expect(main).toContain('color *= mix(vec3(uWaterNightFloor), vec3(cloudShadow) * eclipse, dayFactor);')
+    expect(main).toContain('waterSunColor * waveDiffuseLight * 0.3 * cloudShadow * eclipse + waveScatter')
+    expect(main).toContain('glint *= cloudShadow * eclipse;')
+    expect(main.indexOf('glint *= cloudShadow * eclipse;')).toBeLessThan(main.indexOf('color += min(glint'))
   })
 })
 

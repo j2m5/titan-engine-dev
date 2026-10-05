@@ -1,4 +1,4 @@
-import { Color, CubeTexture, Texture, Uniform, Vector2, Vector3 } from 'three'
+import { Color, CubeTexture, Texture, Uniform, Vector2, Vector3, Vector4 } from 'three'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { WaterShaderTemplate as Shader } from '@/core/materials/shaders/lib/WaterShaderTemplate'
 import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
@@ -11,6 +11,7 @@ import { resolveWaterSurfaceParams } from '@/core/terrain/waterSurfaceParams'
 import { WATER_SHALLOW_RANGE_METERS } from '@/core/terrain/waterLevel'
 import { resolveTerrainLightParams } from '@/core/terrain/terrainLightParams'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { createEclipseUniforms } from '@/core/eclipse/eclipseUniforms'
 
 // Дефолты ручек воды — честно помеченные заглушки (см. IPlanetRenderingObject),
 // приёмка по виду за владельцем (см. память «Flare Visual Checks Are Owner's»).
@@ -82,6 +83,11 @@ interface WaterUniforms {
   uWaterCloudOpacity: number
   uBodyRadiusUnits: number
   uCloudHeightUnits: number
+  uEclipseCount: number
+  uEclipseOccluders: Vector4[]
+  uEclipseStar: Vector3
+  uEclipseStarRadius: number
+  uEclipseUmbra: Vector4[]
   uCloudHeightKm: number
   uCloudLightSoftness: number
   uCloudShadowStrength: number
@@ -195,6 +201,7 @@ class WaterShader extends AbstractShader<keyof WaterUniforms> {
     const skySampleUniforms = createSkyboxSampleUniforms()
 
     this.uniforms = {
+      ...createEclipseUniforms(),
       lightPosition: new Uniform(new Vector3()),
       uSlopeMap: new Uniform(null),
       uWaterColor: new Uniform(new Color(waterData.waterColor ?? DEFAULT_WATER_COLOR)),

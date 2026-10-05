@@ -1,6 +1,7 @@
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { PlanetShaderTemplate as Shader } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
 import { Texture, Uniform, Vector2, Vector3, Vector4 } from 'three'
+import { createEclipseUniforms } from '@/core/eclipse/eclipseUniforms'
 import { Actor } from '@/core/models/Actor'
 import { IPlanetRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -93,6 +94,11 @@ interface PlanetUniforms {
   uCloudOpacity: number
   uRegolithMix: number
   uOppositionSurge: number
+  uEclipseCount: number
+  uEclipseOccluders: Vector4[]
+  uEclipseStar: Vector3
+  uEclipseStarRadius: number
+  uEclipseUmbra: Vector4[]
   specularMap: Texture | null
   bumpMap: Texture | null
   bumpScale: number
@@ -247,6 +253,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       uCloudOpacity: new Uniform(1),
       uRegolithMix: new Uniform(regolith.regolithMix),
       uOppositionSurge: new Uniform(regolith.oppositionSurge),
+      ...createEclipseUniforms(),
       specularMap: new Uniform(null),
       bumpMap: new Uniform(null),
       bumpScale: new Uniform(planetData.bumpScale ?? 0),
