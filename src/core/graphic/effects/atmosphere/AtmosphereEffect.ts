@@ -1,5 +1,5 @@
 import { BlendFunction, Effect, EffectAttribute, EffectPass } from 'postprocessing'
-import { PerspectiveCamera, Uniform, Vector3, WebGLRenderer, WebGLRenderTarget } from 'three'
+import { PerspectiveCamera, Uniform, Vector3, Vector4, WebGLRenderer, WebGLRenderTarget } from 'three'
 import { SpaceScale } from '@/core/constants'
 import { AtmosphereRegistry, AtmosphereEntry } from '@/core/services/AtmosphereRegistry'
 import { orderSlots } from '@/core/graphic/effects/atmosphere/atmosphereDepthMath'
@@ -88,6 +88,11 @@ export class AtmosphereEffect extends Effect {
       uniforms.set(slotUniformName(i, 'sunDir'), new Uniform(new Vector3(0, 0, 1)))
       uniforms.set(slotUniformName(i, 'exposure'), new Uniform(1))
       uniforms.set(slotUniformName(i, 'hdrKnee'), new Uniform(1))
+      uniforms.set(slotUniformName(i, 'eclipseCount'), new Uniform(0))
+      uniforms.set(slotUniformName(i, 'eclipseOcc'), new Uniform(Array.from({ length: 4 }, () => new Vector4())))
+      uniforms.set(slotUniformName(i, 'eclipseStar'), new Uniform(new Vector3()))
+      uniforms.set(slotUniformName(i, 'eclipseStarRadius'), new Uniform(0))
+      uniforms.set(slotUniformName(i, 'eclipseUmbra'), new Uniform(Array.from({ length: 4 }, () => new Vector4())))
     }
 
     super('AtmosphereEffect', buildAtmosphereEffectFragment(), {
@@ -193,6 +198,25 @@ export class AtmosphereEffect extends Effect {
     u('exposure').value = c.exposure ?? 10
     // Колено ниже нуля инвертировало бы избыток над 1.0 (потемнение вместо сжатия)
     u('hdrKnee').value = Math.max(0, c.hdrKnee ?? 1)
+
+    // Затмение оболочки: пишет EclipseSystem; нет данных — без затмения
+    const eclipse = entry.eclipse
+    u('eclipseCount').value = eclipse ? Math.min(eclipse.count, 4) : 0
+    const occ = u('eclipseOcc').value as Vector4[]
+    const umbra = u('eclipseUmbra').value as Vector4[]
+    for (let k = 0; k < 4; k++) {
+      if (eclipse) {
+        occ[k].copy(eclipse.occluders[k])
+        umbra[k].copy(eclipse.umbra[k])
+      } else {
+        occ[k].set(0, 0, 0, 0)
+        umbra[k].set(0, 0, 0, 0)
+      }
+    }
+    const starU = u('eclipseStar').value as Vector3
+    if (eclipse) starU.copy(eclipse.star)
+    else starU.set(0, 0, 0)
+    u('eclipseStarRadius').value = eclipse ? eclipse.starRadius : 0
   }
 }
 
