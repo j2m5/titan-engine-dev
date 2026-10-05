@@ -25,6 +25,18 @@ export function solarIrradiance(dAU: number): [number, number, number] {
 }
 
 /**
+ * Излучение, окрашенное цветом прямого света светила (`lightColorOf`,
+ * linear-sRGB, каналы ≤ 1): покомпонентное произведение. Белый свет —
+ * тождество, поэтому атмосферы у звёзд без `lightTint` бит-в-бит прежние.
+ */
+export function tintSolarIrradiance(
+  irradiance: [number, number, number],
+  light: { r: number; g: number; b: number }
+): [number, number, number] {
+  return [irradiance[0] * light.r, irradiance[1] * light.g, irradiance[2] * light.b]
+}
+
+/**
  * Угловой радиус светила с орбиты тела, радианы: atan(R★ / a). Это значение
  * вписывается в `sunAngularRadius` строки атмосферы и запекается в LUT.
  */
