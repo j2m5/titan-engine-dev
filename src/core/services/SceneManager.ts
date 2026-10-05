@@ -99,6 +99,8 @@ class SceneManager {
       disposeSceneTree(child)
     }
 
+    this.factory.eclipses.clear()
+
     this.orbitLines = []
     this.buffer.clear()
     this.markerManager.dispose()
@@ -110,6 +112,7 @@ class SceneManager {
     }
 
     this.scene.traverse((object: Object3D): void => object.updateObject(ctx))
+    this.factory.eclipses.update()
   }
 
   public updateMarkers(): void {

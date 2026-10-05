@@ -23,6 +23,11 @@ class FakePlanet extends Sprite {
   /** Закон реголита тела — тот же резолвер, что у шейдера диска. */
   private readonly regolith: RegolithParams
 
+  /** Маркер для EclipseSystem: точка-импостор тела */
+  public readonly isFakePlanet = true
+  /** Затмение: множитель цвета точки (свет звезды в центре тела) — пишет EclipseSystem */
+  public readonly eclipseLight = new Color(1, 1, 1)
+
   private readonly scaleFactor: number
   private readonly bodyWorld = new Vector3()
   private readonly cameraWorld = new Vector3()
@@ -61,6 +66,7 @@ class FakePlanet extends Sprite {
     const surge = regolithMix > 0 ? oppositionSurge : 0
     const phase = Math.max(regolithPhase(alpha, regolithMix, surge), config('planetImpostor.phaseFloor'))
     const color = this.material.color.copy(this.baseColor).multiplyScalar(phase)
+    color.multiply(this.eclipseLight)
 
     // всплеск не уводит точку в блум: масштаб цвета целиком, оттенок сохраняется
     const peak = Math.max(color.r, color.g, color.b)

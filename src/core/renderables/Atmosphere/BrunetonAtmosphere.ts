@@ -53,7 +53,8 @@ class BrunetonAtmosphere extends Object3D implements Acceptable<IObject3DVisitor
       name: this.name,
       object: this,
       config: adjusted,
-      lut
+      lut,
+      bodyActorId: this.model.getAttribute('parentId', -1) as number
     })
   }
 
