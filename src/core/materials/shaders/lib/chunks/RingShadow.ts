@@ -12,12 +12,12 @@ export const ringShadowFunctions = `
   vec3 getShadowFromRings(vec3 lightColor, vec3 lightDir) {
     vec3 ringNormal = vec3(0.0, 1.0, 0.0);
     float d = dot(vPosition, ringNormal) / dot(lightDir, ringNormal);
-    if (d <= 0.0) return lightColor;
+    if (!(d > 0.0)) return lightColor;
     vec3 pointOnRingPlane = -d * lightDir + vPosition;
     float distanceOnPlane = length(pointOnRingPlane - dot(pointOnRingPlane, ringNormal) * ringNormal);
     float span = shadowRingsOuterRadius - shadowRingsInnerRadius;
     float u = (distanceOnPlane - shadowRingsInnerRadius) / span;
-    float du = d * uRingSunTan / span;
+    float du = min(d * uRingSunTan / span, 4.0);
     float opacity = 0.0;
     for (int k = 0; k < 5; k++) {
       float weight = k == 2 ? 3.0 : (k == 1 || k == 3 ? 2.0 : 1.0);

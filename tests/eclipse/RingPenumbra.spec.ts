@@ -28,7 +28,7 @@ describe('ringShadowTransmission — CPU-зеркало полутени', () =>
 describe('RingShadow GLSL', () => {
   it('юниформ полутени и пять выборок с маской вместо ветвления', () => {
     expect(ringShadowUniforms).toContain('uniform float uRingSunTan;')
-    expect(ringShadowFunctions).toContain('float du = d * uRingSunTan / span;')
+    expect(ringShadowFunctions).toContain('float du = min(d * uRingSunTan / span, 4.0);')
     expect(ringShadowFunctions).toContain('float a = texture2D(shadowRingsTexture, vec2(uk, 0.0)).a * step(0.0, uk) * step(uk, 1.0);')
     expect(ringShadowFunctions).toContain('return lightColor * (1.0 - opacity / 9.0);')
     expect(AppUniformsChunk.ringShadowUniforms.uRingSunTan.value).toBe(0)

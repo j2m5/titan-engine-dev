@@ -34,7 +34,7 @@ describe('PlanetShaderTemplate: одно освещение на обе ветк
       'vec3 ambient = ',
       'float directGain = ',
       'vec3 lit = mix(ambient',
-      'vec3 dayColor = surfaceAlbedo * mix(sunTintMix, lit, uTerrainLambert);',
+      'vec3 dayColor = surfaceAlbedo * mix(sunTintMix * eclipse, lit, uTerrainLambert);',
       'float landGate = ',
       'vec3 day = ',
       'vec3 finalColor = '

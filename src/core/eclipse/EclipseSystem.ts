@@ -94,9 +94,14 @@ export class EclipseSystem {
     if (surface) {
       surface.getWorldQuaternion(this.rotation).invert()
       this.fill(this.local, occluders, starRel, starRadius, (v) => v.applyQuaternion(this.rotation))
-      ;(surface as unknown as { material?: { setEclipse?: (d: EclipseUniformData) => void } }).material?.setEclipse?.(this.local)
+      type EclipseMaterial = { setEclipse?: (d: EclipseUniformData) => void }
+      const surfaceMaterial = (surface as unknown as { material?: EclipseMaterial }).material
+      surfaceMaterial?.setEclipse?.(this.local)
       for (const child of surface.children) {
-        ;(child as unknown as { material?: { setEclipse?: (d: EclipseUniformData) => void } }).material?.setEclipse?.(this.local)
+        const material = (child as unknown as { material?: EclipseMaterial }).material
+        // Патчи TerrainSphere делят материал с поверхностью — один вызов на материал
+        if (material === surfaceMaterial) continue
+        material?.setEclipse?.(this.local)
       }
     }
 

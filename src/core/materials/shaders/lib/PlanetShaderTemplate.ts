@@ -597,7 +597,7 @@ export const PlanetShaderTemplate: ShaderProps = {
         #endif
       #endif
       // lambert = 0 — прежний вид: тинт на всём диффузе
-      vec3 dayColor = surfaceAlbedo * mix(sunTintMix, lit, uTerrainLambert);
+      vec3 dayColor = surfaceAlbedo * mix(sunTintMix * eclipse, lit, uTerrainLambert);
 
       // Ночная и облачная карты есть не у всех тел. Раньше сэмплеры читались
       // безусловно, и корректность держалась на правиле GL «непривязанная

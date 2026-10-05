@@ -33,7 +33,7 @@ export function umbraTintFromAtmosphere(c: AtmosphereConfig): Vec3 {
       tau[ch] += (c.rayleighScattering[ch] * rR + c.mieExtinction[ch] * rM + c.absorptionExtinction[ch] * rA) * ds
     }
   }
-  const t: Vec3 = [Math.exp(-tau[0]), Math.exp(-tau[1]), Math.exp(-tau[2])]
-  const m = Math.max(t[0], t[1], t[2])
-  return [t[0] / m, t[1] / m, t[2] / m]
+  // Нормировка в лог-пространстве: max-канал ровно 1, без underflow при большой τ
+  const tauMin = Math.min(tau[0], tau[1], tau[2])
+  return [Math.exp(-(tau[0] - tauMin)), Math.exp(-(tau[1] - tauMin)), Math.exp(-(tau[2] - tauMin))]
 }

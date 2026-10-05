@@ -32,10 +32,35 @@ describe('resolveUmbraGlow', () => {
     expect(resolveUmbraGlow(undefined, 'T')).toBe(0.02)
     expect(resolveUmbraGlow({ umbraGlow: 0.1 }, 'T')).toBe(0.1)
     expect(() => resolveUmbraGlow({ umbraGlow: -1 }, 'T')).toThrow(/umbraGlow/)
+    expect(() => resolveUmbraGlow({ umbraGlow: 1.5 }, 'T')).toThrow(/umbraGlow/)
+    expect(resolveUmbraGlow({ umbraGlow: 1 }, 'T')).toBe(1)
+    expect(resolveUmbraGlow({ umbraGlow: 0 }, 'T')).toBe(0)
   })
 })
 
 describe('EclipseSystem', () => {
+  it('дети с материалом поверхности не дублируют setEclipse; вода — отдельный вызов', () => {
+    const sys = new EclipseSystem(undefined, () => 696000)
+    const earth = body(7, 6371, [75000, 0, 0])
+    const moon = body(19, 1737, [74800, 0, 0])
+    const surface = earth.node.renderable as Mesh
+    const shared = (surface as unknown as { material: unknown }).material
+    for (let i = 0; i < 3; i++) {
+      const patch = new Mesh()
+      ;(patch as unknown as { material: unknown }).material = shared
+      surface.add(patch)
+    }
+    const waterCalls: number[] = []
+    const water = new Mesh()
+    ;(water as unknown as { material: unknown }).material = { setEclipse: () => waterCalls.push(1) }
+    surface.add(water)
+    sys.register(earth.node)
+    sys.register(moon.node)
+    sys.update()
+    expect(earth.calls.length).toBe(1)
+    expect(waterCalls.length).toBe(1)
+  })
+
   it('без звезды у тела — count 0', () => {
     const sys = new EclipseSystem(undefined, () => undefined)
     const a = body(7, 6371, [75000, 0, 0])

@@ -97,6 +97,19 @@ describe('umbraTintFromAtmosphere', () => {
     expect(tint[1]).toBeLessThan(tint[0])
     expect(tint[2]).toBeLessThan(tint[1])
   })
+
+  it('огромная τ: значения конечны, максимум ровно 1 (нет underflow)', () => {
+    const atm = Actor.find(7)!.children.where('categoryId', 5).first()!
+    const c = structuredClone(readRenderingData<AtmosphereConfig>(atm)!)
+    const k = 1e4
+    c.rayleighScattering = c.rayleighScattering.map((v) => v * k) as typeof c.rayleighScattering
+    c.mieExtinction = c.mieExtinction.map((v) => v * k) as typeof c.mieExtinction
+    c.absorptionExtinction = c.absorptionExtinction.map((v) => v * k) as typeof c.absorptionExtinction
+    const tint = umbraTintFromAtmosphere(c)
+    for (const v of tint) expect(Number.isFinite(v)).toBe(true)
+    expect(Math.max(...tint)).toBe(1)
+    expect(Math.min(...tint)).toBeGreaterThanOrEqual(0)
+  })
 })
 
 describe('чанк Eclipse', () => {
