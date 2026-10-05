@@ -4,7 +4,6 @@ import { Actor } from '@/core/models/Actor'
 import { Barycenter } from '@/core/renderables/Barycenter'
 import { BlackHole } from '@/core/renderables/BlackHole'
 import { BlackHoleImpostor } from '@/core/renderables/BlackHole/BlackHoleImpostor'
-import { BlackHoleLod } from '@/core/renderables/utils/BlackHoleLod'
 import { StaticNode } from '@/core/renderables/utils/StaticNode'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import { Star } from '@/core/renderables/Star'
@@ -126,14 +125,14 @@ class RenderableFactory {
     const node = new DynamicNode(actor)
     const lodl1 = new BlackHole(actor, this.resourceObserver, this.lensRegistry)
     const lodl2 = new BlackHoleImpostor(actor, lodl1.parameters, this.renderer)
-    const lod = new BlackHoleLod(lodl1.parameters.simulationRadius, this.renderer)
+    const lod = new ApparentSizeLod(lodl1.parameters.simulationRadius, this.renderer, config('blackHole.lodPixels'))
 
     node.name = actor.getAttribute('name', '')
     node.renderable = lodl1
 
     lod.name = actor.getAttribute('name', '') + 'LOD'
 
-    // Стартовое значение: дальше BlackHoleLod пересчитывает дистанцию каждый
+    // Стартовое значение: дальше ApparentSizeLod пересчитывает дистанцию каждый
     // кадр — порог задан в пикселях и обязан переживать ресайз и смену fov
     lod.addLevel(lodl1)
     lod.addLevel(lodl2, lod.switchDistance(config('camera.fov')), config('blackHole.lodHysteresis'))

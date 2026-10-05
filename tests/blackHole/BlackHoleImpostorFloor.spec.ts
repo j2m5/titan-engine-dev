@@ -2,7 +2,7 @@ import { PerspectiveCamera } from 'three'
 import type { WebGLRenderer } from 'three'
 import { BlackHoleImpostor } from '@/core/renderables/BlackHole/BlackHoleImpostor'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
-import { BlackHoleLod } from '@/core/renderables/utils/BlackHoleLod'
+import { ApparentSizeLod } from '@/core/renderables/utils/ApparentSizeLod'
 import { apparentSizeAtDistance } from '@/core/helpers/apparentSize'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { config } from '@/core/framework/config'
@@ -50,7 +50,7 @@ function setup(temperature: number, height: number = VIEWPORT_HEIGHT): Setup {
     impostor,
     parameters,
     camera: new PerspectiveCamera(FOV),
-    switchDistance: new BlackHoleLod(parameters.simulationRadius, renderer).switchDistance(FOV)
+    switchDistance: new ApparentSizeLod(parameters.simulationRadius, renderer, config('blackHole.lodPixels')).switchDistance(FOV)
   }
 }
 
