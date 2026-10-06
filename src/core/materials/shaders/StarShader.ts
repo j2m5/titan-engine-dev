@@ -19,6 +19,8 @@ interface StarUniforms {
   uLimbCoeff: Vector3
   /** Доля грануляции 0..1 — конвективная активность по температуре (см. starActivity) */
   uGranulation: number
+  /** Свечение издалека; объект Uniform подменяет StarLod.glowGain (см. Star) */
+  uGlowGain: number
   time: number
 }
 
@@ -41,6 +43,7 @@ class StarShader extends AbstractShader<keyof StarUniforms> {
       uCoreIntensity: new Uniform(STAR_CORE_INTENSITY),
       uLimbCoeff: new Uniform(new Vector3(...starLimbCoeffFor(this.model))),
       uGranulation: new Uniform(activity),
+      uGlowGain: new Uniform(1),
       time: new Uniform(0)
     }
     this.name = 'StarShader'

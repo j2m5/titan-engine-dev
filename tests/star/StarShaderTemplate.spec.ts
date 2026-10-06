@@ -20,7 +20,7 @@ describe('StarShaderTemplate: HDR-поверхность с чёрнотельн
   })
 
   it('потолок HDR — тот же инвариант, что у атмосферы', () => {
-    expect(frag).toContain('min(granule * energy * limb, vec3(64.0))')
+    expect(frag).toContain('min(granule * energy * limb * uGlowGain, vec3(64.0))')
   })
 
   it('лимбовое потемнение: uLimbCoeff в фрагменте, vCenterW из вершинника', () => {
@@ -53,9 +53,11 @@ describe('StarShaderTemplate: зерно гаснет с расстоянием'
     expect(frag).toContain('starGranulationT(vec4(noiseDomain, time), fade)')
   })
 
-  it('яркость от дистанции не вернулась: гаснет только зерно', () => {
-    // Прежний хак поднимал цвет с расстоянием и выжигал диск в белое
+  it('прежний хак яркости от дистанции не вернулся: от размера зависит только uGlowGain', () => {
+    // Прежний хак поднимал цвет с расстоянием на любом диске и выжигал его в
+    // белое. uGlowGain — другое: общий с билбордом объект StarLod, у диска
+    // крупнее star.farGlowFadePixels ровно 1 (tests/star/StarFarGlow.spec.ts)
     expect(frag).not.toContain('noiseIntensity')
-    expect(frag).toContain('min(granule * energy * limb, vec3(64.0))')
+    expect(frag).toContain('min(granule * energy * limb * uGlowGain, vec3(64.0))')
   })
 })

@@ -144,12 +144,13 @@ class RenderableFactory {
   private createStar(actor: Actor): Object3D {
     const node = new DynamicNode(actor)
     const lod = new StarLod(actor.physicalObject!.getAttribute('radius')!, this.renderer)
-    const lodl1 = new Star(actor)
-    const lodl2 = new FakeStar(actor, this.renderer)
-    const starInnerLayer = new StarInnerLayer(actor)
+    // Один объект усиления на оба уровня: стык LOD по яркости сведён
+    const lodl1 = new Star(actor, lod.glowGain)
+    const lodl2 = new FakeStar(actor, this.renderer, lod.glowGain)
     const starOuterLayer = new StarOuterLayer(actor)
+    const haloOpacity: number = config('star.haloOpacity')
 
-    lod.add(starInnerLayer)
+    if (haloOpacity > 0) lod.add(new StarInnerLayer(actor, 0.8, haloOpacity))
     lodl1.add(starOuterLayer)
 
     node.name = actor.getAttribute('name', '')

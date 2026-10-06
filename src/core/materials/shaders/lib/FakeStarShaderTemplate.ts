@@ -35,6 +35,7 @@ export const FakeStarShaderTemplate: ShaderProps = {
     uCoreIntensity: new Uniform(STAR_CORE_INTENSITY),
     uLimbCoeff: new Uniform(new Vector3(...STAR_LIMB_COEFF)),
     uGranulation: new Uniform(1),
+    uGlowGain: new Uniform(1),
     uRadius: new Uniform(1),
     uTime: new Uniform(0)
   },
@@ -60,6 +61,7 @@ export const FakeStarShaderTemplate: ShaderProps = {
     uniform float uCoreIntensity;
     uniform vec3 uLimbCoeff;
     uniform float uGranulation;
+    uniform float uGlowGain;
     uniform float uRadius;
     uniform float uTime;
 
@@ -98,8 +100,9 @@ export const FakeStarShaderTemplate: ShaderProps = {
       float energy = starEnergy(t, uCoreIntensity);
       vec3 limb = starLimb(mu, uLimbCoeff);
 
+      // uGlowGain — свечение издалека, общий объект с диском (StarLod).
       // Потолок HDR — тот же, что у диска и атмосферы
-      vec3 color = min(granule * energy * limb, vec3(64.0));
+      vec3 color = min(granule * energy * limb * uGlowGain, vec3(64.0));
 
       gl_FragColor = vec4(color, alpha);
     }
