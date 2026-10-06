@@ -1,10 +1,9 @@
-import { vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/core/services/ResourceStorage', () => ({
   resourceStorage: { getTexture: () => null }
 }))
 
-import { describe, expect, it } from 'vitest'
 import { ringshine } from './brdfMirror'
 import { asteroidBrdfFunctions } from '@/core/materials/shaders/lib/chunks/AsteroidBrdf'
 import { InstancedAsteroidShaderTemplate } from '@/core/materials/shaders/lib/InstancedAsteroidShaderTemplate'

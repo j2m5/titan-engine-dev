@@ -8,7 +8,8 @@ export const ringShadowUniforms = `
 export const ringShadowFunctions = `
   // Тень кольца с полутенью: ширина по радиусу кольца растёт с расстоянием d до плоскости
   // вдоль луча к солнцу (d·tg углового радиуса солнца); 5 выборок треугольным ядром
-  // (CPU-зеркало — src/core/eclipse/ringPenumbraMath.ts); вне кольца — прозрачно
+  // (CPU-зеркало — src/core/eclipse/ringPenumbraMath.ts; щелей лунок оно не моделирует —
+  // маска ringGapMask тапа есть только здесь); вне кольца — прозрачно
   vec3 getShadowFromRings(vec3 lightColor, vec3 lightDir) {
     vec3 ringNormal = vec3(0.0, 1.0, 0.0);
     float d = dot(vPosition, ringNormal) / dot(lightDir, ringNormal);

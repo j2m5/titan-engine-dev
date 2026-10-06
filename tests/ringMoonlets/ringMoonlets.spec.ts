@@ -12,6 +12,8 @@ import {
   ringGapMaskAA,
   ringGapsOf,
   ringMoonletProblems,
+  moonletProblems,
+  ringshineProblems,
   type RingGap
 } from '@/core/renderables/DetailedRingStreamingSystem/ringMoonlets'
 import { RadialDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/RadialDensityProfile'
@@ -159,6 +161,24 @@ describe('резолверы и проблемы данных лунок', () =>
   it('ringshineStrength < 0 или не число — ошибка', () => {
     expect(() => resolveRingshineStrength({ ...ring, ringshineStrength: -1 }, 'Thalorn')).toThrow(/ringshineStrength/)
     expect(ringMoonletProblems({ ...ring, ringshineStrength: 'x' }).join(' ')).toMatch(/ringshineStrength/)
+  })
+
+  it('резолверы проверяют только своё поле: битая подсветка не валит лунки, битая лунка — подсветку', () => {
+    const badShine = { ...ring, ringshineStrength: -1, moonlets: [moonlet] }
+    expect(resolveRingMoonlets(badShine, 'Thalorn')).toEqual([moonlet])
+    expect(moonletProblems(badShine)).toEqual([])
+    expect(ringshineProblems(badShine).join(' ')).toMatch(/ringshineStrength/)
+
+    const badMoonlet = { ...ring, ringshineStrength: 0.5, moonlets: [{ ...moonlet, gapKm: 0 }] }
+    expect(resolveRingshineStrength(badMoonlet, 'Thalorn')).toBe(0.5)
+    expect(ringshineProblems(badMoonlet)).toEqual([])
+    expect(moonletProblems(badMoonlet).join(' ')).toMatch(/gapKm/)
+  })
+
+  it('ringMoonletProblems (для валидатора БД) — обе группы', () => {
+    const both = { ...ring, ringshineStrength: -1, moonlets: [{ ...moonlet, gapKm: 0 }] }
+    expect(ringMoonletProblems(both)).toEqual([...ringshineProblems(both), ...moonletProblems(both)])
+    expect(ringMoonletProblems(both)).toHaveLength(2)
   })
 
   it('каждая модель из списка лежит в репозитории (оба яруса)', () => {

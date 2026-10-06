@@ -22,7 +22,7 @@ import { readRingAlphaProfile, readRingAlphaBins, readRingBandBins } from './Rin
 import { createDustRadialTexture } from './dust/DustRadialProfile'
 import { createRingBandTexture } from './dust/RingBandTexture'
 import { RadialDensityProfile } from './RadialDensityProfile'
-import { resolveRingMoonlets, resolveRingshineStrength,ringGapsOf, applyRingGapsToBins, type RingGap } from './ringMoonlets'
+import { resolveRingMoonlets, resolveRingshineStrength, ringGapsOf, applyRingGapsToBins, type RingGap } from './ringMoonlets'
 import { AngularDensityProfile } from './AngularDensityProfile'
 import { ringLightDirection } from './ringLightDirection'
 import { SectorGrid, SectorGridConfig } from './SectorGrid'

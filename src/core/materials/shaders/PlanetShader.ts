@@ -210,7 +210,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       asteroidDensityScale: 1
     }
     const ringName: string = this.model.children.where('categoryId', 6).first()?.getAttribute('name', '') ?? ''
-    const ringMap: Texture =resourceStorage.getTextureOrMake(
+    const ringMap: Texture = resourceStorage.getTextureOrMake(
       this.model.children.where('categoryId', 6).first()?.resources.first()?.getAttribute('path') ?? ''
     )
 

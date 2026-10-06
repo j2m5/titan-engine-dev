@@ -29,17 +29,20 @@ export interface RingGap {
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 const positive = (v: unknown): v is number => finite(v) && v > 0
 
-/** Проблемы лунок и ringshineStrength в данных кольца; пусто — данные годны. Общий источник резолвера и валидатора БД. */
-export function ringMoonletProblems(data: Record<string, unknown>): string[] {
-  const problems: string[] = []
+/** Проблемы ringshineStrength в данных кольца; пусто — поле годно (или отсутствует). */
+export function ringshineProblems(data: Record<string, unknown>): string[] {
   const strength = data.ringshineStrength
-  if (strength !== undefined && !(finite(strength) && strength >= 0)) {
-    problems.push('ringshineStrength must be a non-negative number')
-  }
+  return strength !== undefined && !(finite(strength) && strength >= 0)
+    ? ['ringshineStrength must be a non-negative number']
+    : []
+}
 
+/** Проблемы лунок в данных кольца; пусто — лунки годны (или отсутствуют). */
+export function moonletProblems(data: Record<string, unknown>): string[] {
+  const problems: string[] = []
   const moonlets = data.moonlets
   if (moonlets === undefined) return problems
-  if (!Array.isArray(moonlets)) return [...problems, 'moonlets must be an array']
+  if (!Array.isArray(moonlets)) return ['moonlets must be an array']
   if (moonlets.length > RING_MOONLETS_MAX) problems.push(`moonlets: at most ${RING_MOONLETS_MAX}, got ${moonlets.length}`)
 
   const inner = data.innerRadius
@@ -61,20 +64,29 @@ export function ringMoonletProblems(data: Record<string, unknown>): string[] {
   return problems
 }
 
-function failOnProblems(data: Partial<IRingRenderingObject> | undefined, context: string): void {
-  const problems = ringMoonletProblems((data ?? {}) as Record<string, unknown>)
+/** Проблемы лунок и ringshineStrength в данных кольца; пусто — данные годны. Источник валидатора БД. */
+export function ringMoonletProblems(data: Record<string, unknown>): string[] {
+  return [...ringshineProblems(data), ...moonletProblems(data)]
+}
+
+function failOnProblems(
+  check: (data: Record<string, unknown>) => string[],
+  data: Partial<IRingRenderingObject> | undefined,
+  context: string
+): void {
+  const problems = check((data ?? {}) as Record<string, unknown>)
   if (problems.length > 0) throw new Error(`[ring] ${context}: ${problems.join('; ')}`)
 }
 
-/** Лунки кольца из данных; громкая ошибка с именем кольца на битых данных. */
+/** Лунки кольца из данных; громкая ошибка с именем кольца на битых лунках (другие поля не проверяет). */
 export function resolveRingMoonlets(data: Partial<IRingRenderingObject> | undefined, context: string): RingMoonlet[] {
-  failOnProblems(data, context)
+  failOnProblems(moonletProblems, data, context)
   return (data?.moonlets ?? []).map((m) => ({ ...m }))
 }
 
-/** Сила подсветки камней светом листа кольца; дефолт 1. */
+/** Сила подсветки камней светом листа кольца; дефолт 1. Громкая ошибка только на битом ringshineStrength. */
 export function resolveRingshineStrength(data: Partial<IRingRenderingObject> | undefined, context: string): number {
-  failOnProblems(data, context)
+  failOnProblems(ringshineProblems, data, context)
   return data?.ringshineStrength ?? 1
 }
 
