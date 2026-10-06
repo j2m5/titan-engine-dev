@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Texture } from 'three'
+import { PerspectiveCamera, Texture } from 'three'
 import '@/core/framework/TitanThree'
 import { Planet } from '@/core/renderables/Planet'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
@@ -13,6 +13,7 @@ import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import type { ResourceObserver } from '@/core/services/ResourceObserver'
 import { proceduralDiffuseKey, type ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
 import { readRenderingData } from '@/core/helpers/renderingData'
+import { toThreeJSUnits } from '@/core/helpers/scaling'
 import type { IPlanetRenderingObject } from '@/core/models/types'
 import type { WebGLRenderer } from 'three'
 
@@ -117,13 +118,24 @@ describe('RenderableFactory: ветка рельефа', () => {
 })
 
 describe('Planet: легаси-сфера', () => {
-  it('всегда 256×256 c circumscribe — ветки рельефа больше нет', () => {
+  it('грубая сфера вдали, вблизи — плотная 256 с прежним описанным радиусом; ветки рельефа больше нет', () => {
     seedHeightMap()
 
     const planet = new Planet(moon())
-    const parameters = (planet.geometry as unknown as { parameters: { widthSegments: number } }).parameters
+    const radius: number = toThreeJSUnits(moon().physicalObject!.getAttribute('radius')!)
 
-    expect(parameters.widthSegments).toBe(256)
+    expect(planet.geometry.getAttribute('position').count).toBe(65 * 65)
+
+    const camera = new PerspectiveCamera(50, 1, 0.01, 1e9)
+
+    camera.position.set(0, 0, radius * 3)
+    planet.updateObject({ camera, delta: 0, epoch: 0, elapsed: 0 })
+
+    expect(planet.geometry.getAttribute('position').count).toBe(257 * 257)
+    // Тот же радиус, что у прежней SphereGeometry(r / (cos(π/256)·cos(π/512)), 256, 256)
+    const previousRadius: number = radius / (Math.cos(Math.PI / 256) * Math.cos(Math.PI / 512))
+
+    expect(planet.geometry.boundingSphere!.radius / previousRadius).toBeCloseTo(1, 12)
   })
 
   // Окно даунгрейда (см. докблок RenderableFactory.swapSurface): сфера на тик

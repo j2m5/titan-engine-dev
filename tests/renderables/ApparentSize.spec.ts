@@ -1,4 +1,4 @@
-import { Object3D, PerspectiveCamera, SphereGeometry } from 'three'
+import { Object3D, PerspectiveCamera } from 'three'
 import type { WebGLRenderer } from 'three'
 import {
   STAR_IMPOSTOR_PIXELS,
@@ -88,7 +88,7 @@ function makeJunction(renderer: WebGLRenderer): Junction {
 
 /** Мировой диаметр диска — из геометрии самой звезды, а не из формулы теста */
 function diskWorldSize(disk: Star): number {
-  return 2 * (disk.geometry as SphereGeometry).parameters.radius * disk.scale.x
+  return 2 * disk.geometry.boundingSphere!.radius * disk.scale.x
 }
 
 describe('стык LOD звезды', () => {

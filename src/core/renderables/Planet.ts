@@ -1,8 +1,9 @@
-import { BufferGeometry, Mesh, SphereGeometry, Vector3 } from 'three'
+import { BufferGeometry, Mesh, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { SphereDetail } from '@/core/renderables/utils/SphereDetail'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import type { UpdateContext } from '@/core/UpdateContext'
 
@@ -14,6 +15,9 @@ class Planet extends Mesh {
 
   /** Тот же материал, что this.material — типизированная ссылка для пер-кадрового хука. */
   private planetMaterial!: PlanetMaterial
+
+  /** Грубая сфера вдали, плотная 256 — пока тело крупно в кадре. */
+  private sphereDetail!: SphereDetail
 
   private readonly worldScratch = new Vector3()
 
@@ -27,9 +31,10 @@ class Planet extends Mesh {
   __setup(atmosphereRegistry?: AtmosphereRegistry): void {
     const radiusKm: number = this.model.physicalObject!.getAttribute('radius')!
     const radius: number = toThreeJSUnits(radiusKm)
-    const circumscribe: number = 1 / (Math.cos(Math.PI / 256) * Math.cos(Math.PI / 512))
 
-    this.geometry = new SphereGeometry(radius * circumscribe, 256, 256)
+    // Многогранник описан вокруг истинной сферы под сегментацию каждого уровня:
+    // силуэт не проваливается внутрь неё
+    this.sphereDetail = new SphereDetail(this, radius, { denseSegments: 256, circumscribe: true })
     this.planetMaterial = new PlanetMaterial(this.model, atmosphereRegistry)
     this.material = this.planetMaterial
     this.name = this.model.getAttribute('name', '') + 'Planet'
@@ -38,11 +43,14 @@ class Planet extends Mesh {
   }
 
   /**
-   * Тинт солнца и полутень тени колец: запись реестра резолвится каждый кадр (порядок создания узлов
-   * не важен, снятие атмосферы гасит эффект). Вызов пустой, пока запись та же —
-   * тот же хук, что TerrainSphere.onVisibleUpdate у рельефных тел.
+   * Детализация сферы, тинт солнца и полутень тени колец. Детализация — первой:
+   * свап геометрии допустим только здесь, до рендера (см. SphereDetail).
+   * Запись реестра резолвится каждый кадр (порядок создания узлов не важен,
+   * снятие атмосферы гасит эффект). Вызов пустой, пока запись та же — тот же
+   * хук, что TerrainSphere.onVisibleUpdate у рельефных тел.
    */
-  public updateObject(_ctx: UpdateContext): void {
+  public updateObject(ctx: UpdateContext): void {
+    this.sphereDetail.update(ctx.camera)
     this.planetMaterial.syncSunTint()
     this.planetMaterial.syncTerrainShadow(this.getWorldPosition(this.worldScratch))
   }
