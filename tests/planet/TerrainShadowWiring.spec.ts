@@ -84,7 +84,7 @@ describe('TerrainShaderTemplate: тень рельефа', () => {
     const mul = frag.indexOf('directGain *= terrainShadow;')
     expect(gain).toBeGreaterThan(-1)
     expect(mul).toBeGreaterThan(gain)
-    expect(frag).toContain('vec3 ambient = uTerrainAmbient * skyTerm * occlusion;')
+    expect(frag).toContain('vec3 ambient = uTerrainAmbient * skyTerm * occlusion * eclipse;')
     expect(frag).toContain('float terrainShadow = 1.0;')
     // марш не платится в амбиенте
     expect(frag).toContain('if (NdotLraw > 0.0) terrainShadow = mix(1.0, terrainShadowMarch(dirLocal, sunLocal), uTerrainShadowStrength);')
@@ -99,10 +99,10 @@ describe('TerrainShaderTemplate: тень рельефа', () => {
 
   it('блики гасятся тенью: специальный (сфера), мокрой кромки и льда (рельеф)', () => {
     const sphere = SphereSurfaceShaderTemplate.fragmentShader
-    for (const source of [frag, sphere]) expect(source).toContain('* smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;')
+    for (const source of [frag, sphere]) expect(source).toContain('* smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * eclipse;')
     // мокрая кромка и лёд (USE_TERRAIN_GLINT) у рельефа, specular-блик у сферы — один множитель тени
-    expect(frag.split('* ringShadowFactor * terrainShadow;').length - 1).toBe(2)
-    expect(sphere.split('* ringShadowFactor * terrainShadow;').length - 1).toBe(1)
+    expect(frag.split('* ringShadowFactor * terrainShadow * eclipse;').length - 1).toBe(2)
+    expect(sphere.split('* ringShadowFactor * terrainShadow * eclipse;').length - 1).toBe(1)
   })
 })
 

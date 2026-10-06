@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Texture, Vector3 } from 'three'
+import { PerspectiveCamera, Texture, Vector3 } from 'three'
 import '@/core/framework/TitanThree'
 import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
+import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
+import { Planet } from '@/core/renderables/Planet'
 import { Actor } from '@/core/models/Actor'
 import { resolveStarRadiusKm } from '@/core/terrain/starRadius'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -43,7 +45,13 @@ function seedPlaceholderKeys(): void {
   seedTexture('night.jpg')
   seedTexture(Actor.find(19)!.resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string)
   seedTexture(Actor.find(7)!.resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string)
+  const saturn = Actor.find(SATURN_ID)!
+  seedTexture(saturn.resources.where('resourceType', 'diffuse').first()!.getAttribute('path') as string)
+  seedTexture(saturn.children.where('categoryId', 6).first()!.resources.first()!.getAttribute('path') as string)
 }
+
+/** Сатурн — сфера Planet с кольцом */
+const SATURN_ID = 11
 
 describe('resolveStarRadiusKm', () => {
   it('Луна → Солнце (категория 3 у корня дерева) → 696000 км', () => {
@@ -52,6 +60,31 @@ describe('resolveStarRadiusKm', () => {
 
   it('стаб без parent/children → undefined', () => {
     expect(resolveStarRadiusKm({} as unknown as Actor)).toBeUndefined()
+  })
+})
+
+describe('SphereSurfaceMaterial.syncRingShadow', () => {
+  beforeEach(() => seedPlaceholderKeys())
+  afterEach(() => resourceStorage.deleteAllTextures())
+
+  /** Угловой радиус солнца из атмосферы Сатурна — честный тангенс кольцу, без пола */
+  function saturnSunTan(): number {
+    const atm = Actor.find(SATURN_ID)!.children.where('categoryId', 5).first()!
+    return Math.tan(readRenderingData<AtmosphereConfig>(atm)!.sunAngularRadius!)
+  }
+
+  it('сфера с кольцом: uRingSunTan — tan(sunAngularRadius) атмосферы, ниже пола полутени рельефа', () => {
+    const material = new SphereSurfaceMaterial(Actor.find(SATURN_ID)!)
+    material.syncRingShadow(new Vector3(toThreeJSUnits(1.43e9), 0, 0))
+    expect(material.uniforms.uRingSunTan.value).toBeCloseTo(saturnSunTan(), 12)
+    expect(material.uniforms.uRingSunTan.value).toBeLessThan(TERRAIN_SHADOW_PENUMBRA_FLOOR)
+  })
+
+  it('Planet.updateObject пишет полутень кольца своему материалу', () => {
+    const planet = new Planet(Actor.find(SATURN_ID)!)
+    planet.position.set(toThreeJSUnits(1.43e9), 0, 0)
+    planet.updateObject({ camera: new PerspectiveCamera(), delta: 0, epoch: 0, elapsed: 0 })
+    expect(planet.material.uniforms.uRingSunTan.value).toBeCloseTo(saturnSunTan(), 12)
   })
 })
 
@@ -75,14 +108,14 @@ describe('TerrainMaterial.syncTerrainShadow', () => {
     const earth = Actor.find(7)!
     const atm = earth.children.where('categoryId', 5).first()!
     const ang = readRenderingData<AtmosphereConfig>(atm)!.sunAngularRadius
-    const material = new PlanetMaterial(earth)
+    const material = new TerrainMaterial(earth)
     material.syncTerrainShadow(new Vector3(toThreeJSUnits(1.5e8), 0, 0))
     expect(material.uniforms.uRingSunTan.value).toBeCloseTo(Math.tan(ang), 12)
     expect(material.uniforms.uShadowPenumbraTan.value).toBeGreaterThanOrEqual(TERRAIN_SHADOW_PENUMBRA_FLOOR)
   })
 
   it('Луна: uRingSunTan без пола (R★/dist ниже пола остаётся как есть)', () => {
-    const material = new PlanetMaterial(Actor.find(19)!)
+    const material = new TerrainMaterial(Actor.find(19)!)
     material.syncTerrainShadow(new Vector3(toThreeJSUnits(1.5e8), 0, 0))
     expect(material.uniforms.uRingSunTan.value).toBeCloseTo(696000 / 1.5e8, 12)
     expect(material.uniforms.uRingSunTan.value).toBeLessThan(TERRAIN_SHADOW_PENUMBRA_FLOOR)

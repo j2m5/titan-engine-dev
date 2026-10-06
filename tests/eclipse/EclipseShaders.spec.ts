@@ -1,18 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Texture, Vector3, Vector4 } from 'three'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { WaterShaderTemplate } from '@/core/materials/shaders/lib/WaterShaderTemplate'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { Actor } from '@/core/models/Actor'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { emptyEclipseData } from '@/core/eclipse/eclipseUniforms'
 
-const pf = PlanetShaderTemplate.fragmentShader
-const pmain = pf.slice(pf.indexOf('void main()'))
 const wf = WaterShaderTemplate.fragmentShader
 const wmain = wf.slice(wf.indexOf('void main()'))
 
-describe('PlanetShaderTemplate: затмение', () => {
+// Блики: у сферы — океан (USE_SPECULAR), у рельефа — мокрая кромка и лёд
+const surfaces = [
+  ['сфера', SphereSurfaceShaderTemplate.fragmentShader, 1],
+  ['рельеф', TerrainShaderTemplate.fragmentShader, 2]
+] as const
+
+describe.each(surfaces)('поверхность планеты (%s): затмение', (_path, pf, glints) => {
+  const pmain = pf.slice(pf.indexOf('void main()'))
+
   it('чанки подключены безусловно, свет в точке датума', () => {
     expect(pf).toContain('#include <eclipseFunctions>')
     expect(pf).toContain('#include <eclipseHostFunctions>')
@@ -22,7 +30,7 @@ describe('PlanetShaderTemplate: затмение', () => {
     expect(pmain).toContain('vec3 ambient = uTerrainAmbient * skyTerm * occlusion * eclipse;')
     expect(pmain).toContain('litDirect *= eclipse;')
     expect(pmain).toContain('cloudRadiance *= eclipseLight(cloudDir * (uBodyRadiusUnits + uCloudHeightUnits));')
-    expect(pmain.match(/ringShadowFactor \* terrainShadow \* eclipse;/g)?.length).toBe(3)
+    expect(pmain.match(/ringShadowFactor \* terrainShadow \* eclipse;/g)?.length).toBe(glints)
     expect(pmain).not.toMatch(/night[^;\n]*eclipse/)
   })
 })
@@ -48,7 +56,10 @@ describe('WaterShaderTemplate: затмение', () => {
   })
 })
 
-describe('PlanetMaterial.setEclipse', () => {
+describe.each([
+  ['SphereSurfaceMaterial', (actor: Actor) => new SphereSurfaceMaterial(actor)],
+  ['TerrainMaterial', (actor: Actor) => new TerrainMaterial(actor)]
+] as const)('%s.setEclipse', (_name, make) => {
   beforeEach(() => {
     for (const name of ['', 'default.png', 'night.jpg']) {
       const t = new Texture()
@@ -65,7 +76,7 @@ describe('PlanetMaterial.setEclipse', () => {
   afterEach(() => resourceStorage.deleteAllTextures())
 
   it('по умолчанию затмений нет; setEclipse копирует значения, не подменяя объекты', () => {
-    const m = new PlanetMaterial(Actor.find(19)!)
+    const m = make(Actor.find(19)!)
     expect(m.uniforms.uEclipseCount.value).toBe(0)
     const occ0 = m.uniforms.uEclipseOccluders.value[0]
     const data = emptyEclipseData()

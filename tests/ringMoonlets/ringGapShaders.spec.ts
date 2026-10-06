@@ -4,12 +4,14 @@ import { ringGapFunctions, ringGapUniforms, ringGapUniformValues } from '@/core/
 import { RingShaderTemplate } from '@/core/materials/shaders/lib/RingShaderTemplate'
 import { RingDepthMaterial } from '@/core/materials/RingDepthMaterial'
 import { ringShadowFunctions } from '@/core/materials/shaders/lib/chunks/RingShadow'
-import { PlanetShaderTemplate } from '@/core/materials/shaders/lib/PlanetShaderTemplate'
+import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/SphereSurfaceShaderTemplate'
+import { TerrainShaderTemplate } from '@/core/materials/shaders/lib/TerrainShaderTemplate'
 import { AppShaderChunk } from '@/core/materials/shaders/lib/chunks'
 import { RING_MOONLETS_MAX, type RingGap } from '@/core/renderables/DetailedRingStreamingSystem/ringMoonlets'
 import { Actor } from '@/core/models/Actor'
 import { RingShader } from '@/core/materials/shaders/RingShader'
-import { PlanetShader } from '@/core/materials/shaders/PlanetShader'
+import { SphereSurfaceShader } from '@/core/materials/shaders/SphereSurfaceShader'
+import { TerrainShader } from '@/core/materials/shaders/TerrainShader'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
@@ -83,9 +85,11 @@ describe('потребители альфы кольца умножают её �
     expect(meshFrag.split(MASK_LINE).length - 1).toBe(1)
   })
 
-  it('тень на планете: каждый из 5 тапов — альфа × маска радиуса тапа; чанк подключён под USE_RING до функций тени', () => {
+  it.each([
+    ['сфера', SphereSurfaceShaderTemplate.fragmentShader],
+    ['рельеф', TerrainShaderTemplate.fragmentShader]
+  ])('тень на планете (%s): каждый из 5 тапов — альфа × маска радиуса тапа; чанк подключён под USE_RING до функций тени', (_path, frag) => {
     expect(ringShadowFunctions).toContain('* ringGapMask(shadowRingsInnerRadius + uk * span)')
-    const frag = PlanetShaderTemplate.fragmentShader
     const ringBlock = frag.indexOf('#ifdef USE_RING')
     expect(frag.indexOf('#include <ringGapUniforms>')).toBeGreaterThan(ringBlock)
     expect(frag.indexOf('#include <ringGapFunctions>')).toBeLessThan(frag.indexOf('#include <ringShadowFunctions>'))
@@ -120,8 +124,11 @@ describe('проводка щелей из данных кольца', () => {
     expect(g.z).toBeCloseTo(0.15 * toThreeJSUnits(180), 12)
   })
 
-  it('PlanetShader Thalorn (actor 130): тень кольца с той же щелью; Сатурн (actor 11) — без щелей (Review Focus 5)', () => {
-    expect(new PlanetShader(Actor.find(130)!).uniforms.uRingGapCount.value).toBe(1)
-    expect(new PlanetShader(Actor.find(11)!).uniforms.uRingGapCount.value).toBe(0)
+  it.each([
+    ['SphereSurfaceShader', (actor: Actor) => new SphereSurfaceShader(actor)],
+    ['TerrainShader', (actor: Actor) => new TerrainShader(actor)]
+  ] as const)('%s Thalorn (actor 130): тень кольца с той же щелью; Сатурн (actor 11) — без щелей (Review Focus 5)', (_name, make) => {
+    expect(make(Actor.find(130)!).uniforms.uRingGapCount.value).toBe(1)
+    expect(make(Actor.find(11)!).uniforms.uRingGapCount.value).toBe(0)
   })
 })

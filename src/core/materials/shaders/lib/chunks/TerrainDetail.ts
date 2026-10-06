@@ -15,9 +15,9 @@
  *
  * Проекции и whiteout-бленд — переиспользованы из чанка TriplanarDetail
  * (triplanarWeights/triplanarBlendRgb/triplanarBlendNormal). Домен адресации
- * текстур — атрибуты detailPos/detailPos2 (varying vDetailPos/vDetailPos2,
- * см. TerrainShaderTemplate): точная тело-локальная позиция вершины минус
- * k·W патча (k общий на патч, W = WRAP_TILES периодов слоя, см.
+ * текстур — varying vDetailPos/vDetailPos2 (вершинник: position + инстансные
+ * detailOrigin/detailOrigin2, см. TerrainShaderTemplate): тело-локальная
+ * позиция вершины минус k·W патча (k общий на патч, W = WRAP_TILES периодов слоя, см.
  * detailWrap.ts) — не единичный dirLocal, чей float32 не различает соседние
  * тексели 40/7-метровых тайлов на теле планетного радиуса. Период честный
  * в метрах, без поправки на радиус. Веса трипланара (triplanarWeights)

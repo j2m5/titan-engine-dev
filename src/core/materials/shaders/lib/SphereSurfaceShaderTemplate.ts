@@ -117,7 +117,7 @@ export const SphereSurfaceShaderTemplate: ShaderProps = {
         float specularIntensity = texture2D(specularMap, uv).r;
         finalColor += specularIntensity * waterGlintGlsl(normal, lightDirection, viewDir, uWaterFarAlpha2) * uWaterGlintGain
                     * (1.0 - cloudAlphaSlant) * sunTintMix
-                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;
+                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * eclipse;
       #endif
 
       ${planetSurfaceFragmentOutput}

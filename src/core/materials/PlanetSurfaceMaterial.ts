@@ -13,6 +13,9 @@ import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { SunTintBinding } from '@/core/materials/SunTintBinding'
 import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
 import { resolveLightTint } from '@/core/helpers/lightSource'
+import { applyEclipseUniforms, type EclipseUniformData } from '@/core/eclipse/eclipseUniforms'
+import { resolveStarRadiusKm } from '@/core/terrain/starRadius'
+import { sunTangent } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
 
 /**
  * Opacity облачного слоя от высоты камеры над поверхностью: 1.0 из космоса
@@ -73,6 +76,12 @@ abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
   /** Подписка светила на цвет света (lightTint) — резолвится один раз, тело не меняет родителя в рантайме. */
   private readonly lightTint: { active: boolean; color: Color }
 
+  /** Радиус звезды системы (юниты сцены) для полутени тел без атмосферы; undefined — фолбэк. */
+  private readonly starRadiusUnits: number | undefined
+
+  /** Угловой радиус солнца из данных атмосферы тела; undefined — нет атмосферы. */
+  private readonly atmosphereSunAngularRadius: number | undefined
+
   protected constructor(model: Actor, atmosphereRegistry: AtmosphereRegistry | undefined, shader: PlanetSurfaceShader<string>) {
     super()
     this.model = model
@@ -88,6 +97,11 @@ abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
       radiusKm
     )
     this.lightTint = resolveLightTint(model)
+    const starRadiusKm = resolveStarRadiusKm(model)
+    this.starRadiusUnits = starRadiusKm === undefined ? undefined : toThreeJSUnits(starRadiusKm)
+    this.atmosphereSunAngularRadius = this.atmosphereActor
+      ? readRenderingData<AtmosphereConfig>(this.atmosphereActor)?.sunAngularRadius
+      : undefined
 
     const { uniforms, defines, vertexShader, fragmentShader } = shader
 
@@ -141,6 +155,21 @@ abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
    */
   public syncSunTint(): void {
     this.sunTint.sync()
+  }
+
+  /** Затмение: данные кладёт EclipseSystem каждый кадр (центры тел и звезда — в системе тела, юниты). */
+  public setEclipse(data: EclipseUniformData): void {
+    applyEclipseUniforms(this.uniforms, data)
+  }
+
+  /** Тангенс углового радиуса солнца: из атмосферы или R★/дистанция; звезда в нуле сцены. Без пола и мягкости. */
+  protected sunTangentAt(modelWorldPosition: Vector3): number {
+    return sunTangent(this.atmosphereSunAngularRadius, this.starRadiusUnits, modelWorldPosition.length())
+  }
+
+  /** Полутень тени кольца — честный тангенс солнца: без пола и без ручки мягкости рельефа. */
+  public syncRingShadow(modelWorldPosition: Vector3): void {
+    this.uniforms.uRingSunTan.value = this.sunTangentAt(modelWorldPosition)
   }
 
   /**

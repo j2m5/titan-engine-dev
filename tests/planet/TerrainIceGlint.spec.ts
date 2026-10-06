@@ -124,7 +124,7 @@ describe('Шейдер: блеск льда', () => {
     expect(clampAt).toBeGreaterThan(-1)
     expect(glintAt).toBeGreaterThan(clampAt)
     expect(ceilingAt).toBeGreaterThan(glintAt)
-    expect(frag.slice(glintAt, ceilingAt)).toContain('* smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;')
+    expect(frag.slice(glintAt, ceilingAt)).toContain('* smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * eclipse;')
     expect((frag.match(/blinnPhongGlint\(/g) ?? []).length).toBe(2) // определение + вызов кромки (USE_SPECULAR теперь на waterGlintGlsl)
   })
 
