@@ -9,6 +9,7 @@ import type { HeightFieldGate } from '@/core/services/HeightFieldGate'
 import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
 import type { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import type { TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
+import type { CameraCollision } from '@/core/services/CameraCollision'
 import { SkyboxBackground } from '@/core/renderables/SkyboxBackground'
 
 class Application {
@@ -27,7 +28,9 @@ class Application {
     /** Ждущие апгрейды поверхности живут вне графа сцены — engine.dispose() их не видит. */
     private renderableFactory?: Pick<RenderableFactory, 'clearPendingUpgrades'>,
     /** Сессионный синглтон: при смене сценария снимаются регистрации полей, воркер не завершается. */
-    private terrainPatchBuilder?: TerrainPatchBuilder
+    private terrainPatchBuilder?: TerrainPatchBuilder,
+    /** Сессионный синглтон: кэш коллайдеров держит разобранные тела до первого кадра нового сценария. */
+    private cameraCollision?: Pick<CameraCollision, 'clear'>
   ) {}
 
   /**
@@ -45,6 +48,8 @@ class Application {
    */
   public teardown(): void {
     this.engine.dispose()
+    // Коллайдеры ссылаются на только что разобранные узлы и карты высот
+    this.cameraCollision?.clear()
     // Отсоединённые сферы — тоже граф: разбираются до текстур, и их dispose
     // отпускает поля у строителя раньше releaseAll.
     this.renderableFactory?.clearPendingUpgrades()
