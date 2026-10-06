@@ -1,6 +1,7 @@
 import { DoubleSide, ShaderChunk, Uniform } from 'three'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import type { RingMaterial } from '@/core/materials/RingMaterial'
+import { ringGapFunctions, ringGapUniforms } from '@/core/materials/shaders/lib/chunks/RingGap'
 
 /**
  * Порог ВИДИМОЙ альфы кольца (альфа текстуры после затуханий по дистанции и по
@@ -75,6 +76,8 @@ class RingDepthMaterial extends AbstractShaderMaterial {
       ringEdgeOpacity: source.uniforms.ringEdgeOpacity,
       ringAngleCurve: source.uniforms.ringAngleCurve,
       alphaTest: source.uniforms.alphaTest,
+      uRingGaps: source.uniforms.uRingGaps,
+      uRingGapCount: source.uniforms.uRingGapCount,
       uDepthAlphaTest: new Uniform(depthAlphaTest)
     }
 
@@ -134,6 +137,8 @@ class RingDepthMaterial extends AbstractShaderMaterial {
     uniform float ringAngleCurve;
     uniform float alphaTest;
     uniform float uDepthAlphaTest;
+    ${ringGapUniforms}
+    ${ringGapFunctions}
 
     varying vec3 vPosition;
     varying vec3 vLocalCameraPosition;
@@ -146,6 +151,8 @@ class RingDepthMaterial extends AbstractShaderMaterial {
       uv.y = 0.0;
 
       vec4 color = texture2D(diffuseMap, uv);
+      // Щели лунок — дословно как в цветовом проходе: пре-пасс — его подмножество
+      color.a *= ringGapMask(length(vPosition));
 
       // Ранний гейт цветового прохода дословно: пре-пасс обязан быть его
       // подмножеством, иначе тексель невидимый цветом продолжает писать глубину

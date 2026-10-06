@@ -22,6 +22,8 @@ import { farGlintAlpha2 } from '@/core/materials/shaders/lib/chunks/waterOctaves
 import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { terrainDataOf } from '@/core/terrain/terrainClassPresets'
 import { config } from '@/core/framework/config'
+import { ringGapUniformValues } from '@/core/materials/shaders/lib/chunks/RingGap'
+import { resolveRingMoonlets, ringGapsOf } from '@/core/renderables/DetailedRingStreamingSystem/ringMoonlets'
 import { DEFAULT_SUN_ANGULAR_RADIUS } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
 
 // Нейтральные дефолты детального слоя (используются, только если данные тела
@@ -151,6 +153,8 @@ interface PlanetUniforms {
   shadowRingsOuterRadius: number
   shadowRingsTexture: Texture | null
   uRingSunTan: number
+  uRingGaps: Vector3[]
+  uRingGapCount: number
   uAtmoTransmittance: Texture | null
   uAtmoIrradiance: Texture | null
   uAtmoBottomRadius: number
@@ -205,7 +209,8 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       alphaTest: 0,
       asteroidDensityScale: 1
     }
-    const ringMap: Texture = resourceStorage.getTextureOrMake(
+    const ringName: string = this.model.children.where('categoryId', 6).first()?.getAttribute('name', '') ?? ''
+    const ringMap: Texture =resourceStorage.getTextureOrMake(
       this.model.children.where('categoryId', 6).first()?.resources.first()?.getAttribute('path') ?? ''
     )
 
@@ -320,6 +325,7 @@ class PlanetShader extends AbstractShader<keyof PlanetUniforms> {
       shadowRingsOuterRadius: new Uniform(toThreeJSUnits(ringData.outerRadius)),
       shadowRingsTexture: new Uniform(ringMap),
       uRingSunTan: new Uniform(0),
+      ...ringGapUniformValues(ringGapsOf(resolveRingMoonlets(ringData, ringName), toThreeJSUnits)),
       uAtmoTransmittance: new Uniform(null),
       uAtmoIrradiance: new Uniform(null),
       uAtmoBottomRadius: new Uniform(0),

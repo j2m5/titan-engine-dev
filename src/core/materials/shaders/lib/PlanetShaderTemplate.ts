@@ -347,6 +347,8 @@ export const PlanetShaderTemplate: ShaderProps = {
 
     #ifdef USE_RING
       #include <ringShadowUniforms>
+      #include <ringGapUniforms>
+      #include <ringGapFunctions>
       #include <ringShadowFunctions>
     #endif
 

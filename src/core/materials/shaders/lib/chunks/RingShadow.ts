@@ -22,8 +22,9 @@ export const ringShadowFunctions = `
     for (int k = 0; k < 5; k++) {
       float weight = k == 2 ? 3.0 : (k == 1 || k == 3 ? 2.0 : 1.0);
       float uk = u + (float(k) - 2.0) * 0.5 * du;
-      // маска вместо ветвления: выборка в однородном потоке
-      float a = texture2D(shadowRingsTexture, vec2(uk, 0.0)).a * step(0.0, uk) * step(uk, 1.0);
+      // маска вместо ветвления: выборка в однородном потоке;
+      // щели лунок — маска радиуса тапа, чанк RingGap
+      float a = texture2D(shadowRingsTexture, vec2(uk, 0.0)).a * step(0.0, uk) * step(uk, 1.0) * ringGapMask(shadowRingsInnerRadius + uk * span);
       opacity += weight * a;
     }
     return lightColor * (1.0 - opacity / 9.0);
