@@ -10,7 +10,8 @@ import {
   GiantStarParameters,
   GIANT_STAR_TIME_SCALE
 } from '@/core/renderables/GiantStar/GiantStarParameters'
-import { frameCoverage, proximityExposure } from '@/core/renderables/WhiteDwarf/proximityExposure'
+import { frameCoverage } from '@/core/helpers/apparentSize'
+import { proximityExposure } from '@/core/renderables/WhiteDwarf/proximityExposure'
 
 /**
  * Фотосфера звезды-гиганта. Оболочка-атмосфера — дочерний меш (GiantStarShell),

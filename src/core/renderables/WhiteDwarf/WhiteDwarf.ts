@@ -5,7 +5,8 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { config } from '@/core/framework/config'
 import { WhiteDwarfMaterial } from '@/core/renderables/WhiteDwarf/WhiteDwarfMaterial'
 import { whiteDwarfParameters, WhiteDwarfParameters } from '@/core/renderables/WhiteDwarf/WhiteDwarfParameters'
-import { frameCoverage, proximityExposure } from '@/core/renderables/WhiteDwarf/proximityExposure'
+import { frameCoverage } from '@/core/helpers/apparentSize'
+import { proximityExposure } from '@/core/renderables/WhiteDwarf/proximityExposure'
 
 /**
  * Диск белого карлика.

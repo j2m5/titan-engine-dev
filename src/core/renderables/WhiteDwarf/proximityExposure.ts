@@ -1,14 +1,4 @@
 import { smoothstep } from 'three/src/math/MathUtils'
-import { frameHeightAt } from '@/core/helpers/apparentSize'
-
-/**
- * Доля высоты кадра, занятая диском тела: 2R к высоте кадра на дистанции до
- * центра. Валюта нарочно безразмерная (не пиксели): адаптация экспозиции
- * зависит от доли поля зрения, а не от разрешения монитора.
- */
-export function frameCoverage(radiusUnits: number, distanceUnits: number, fovDegrees: number): number {
-  return (2 * radiusUnits) / frameHeightAt(Math.max(distanceUnits, Number.EPSILON), fovDegrees)
-}
 
 /**
  * Экспозиция камеры возле слепящего тела: единица, пока диск мельче start,

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { PerspectiveCamera, Scene, WebGLRenderer, Group } from 'three'
-import { frameCoverage, proximityExposure } from '@/core/renderables/WhiteDwarf/proximityExposure'
+import { frameCoverage } from '@/core/helpers/apparentSize'
+import { proximityExposure } from '@/core/renderables/WhiteDwarf/proximityExposure'
 import { wdShade, WD_HDR_CEILING } from './whiteDwarfSurfaceMirror'
 import { planckX } from '@/core/materials/shaders/lib/helpers'
 import { WhiteDwarfShaderTemplate } from '@/core/renderables/WhiteDwarf/WhiteDwarfShaderTemplate'
