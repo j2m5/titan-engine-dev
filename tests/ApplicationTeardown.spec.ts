@@ -28,6 +28,18 @@ describe('Application.teardown', () => {
     expect(order).toEqual(['engine', 'textures'])
   })
 
+  it('отпускает кэш коллизии камеры после разборки графа', () => {
+    const order: string[] = []
+    const engine = { dispose: vi.fn(() => order.push('engine')), start: vi.fn() } as unknown as Engine
+    const observer = {} as unknown as ResourceObserver
+    vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
+    const cameraCollision = { clear: vi.fn(() => order.push('collision')) }
+
+    new Application(engine, observer, new Scene(), leakDetector, heightFieldGate, undefined, undefined, undefined, cameraCollision).teardown()
+
+    expect(order).toEqual(['engine', 'collision'])
+  })
+
   it('сбрасывает кеш узлов гейта карт высот', () => {
     const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
     const observer = {} as unknown as ResourceObserver

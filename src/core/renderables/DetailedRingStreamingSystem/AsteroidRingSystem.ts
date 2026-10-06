@@ -449,6 +449,17 @@ class AsteroidRingSystem extends Group {
   /** Меши лунок (по приходу модели), см. __buildMoonlets */
   private readonly moonletMeshes: InstancedMesh[] = []
 
+  /**
+   * Текстуры, созданные системой (полосы кольца и радиальный профиль пыли):
+   * живут только в юниформах, а обход графа юниформы не трогает — их
+   * освобождает dispose() системы
+   */
+  private bandTexture: Texture | null = null
+  private dustRadialTexture: Texture | null = null
+
+  /** Система разобрана: асинхронные приходы (модели форм, лунки) ничего не делают */
+  private disposed = false
+
   /** Сигмы размытия кромок (units сцены): из bleedFraction × ширина или из ringGapBleedKm/dustBleedKm — см. __setup */
   private bleedSigmaTu: { rocks: number; dust: number } = { rocks: 0, dust: 0 }
 
@@ -1127,7 +1138,7 @@ class AsteroidRingSystem extends Group {
     layout.realModels.forEach((name, i) => {
       const k = layout.proceduralCount + i
       void Promise.all([storage.load(name, 'l0'), storage.load(name, 'near')]).then(([l0, near]) => {
-        if (!l0 || !near) return
+        if (this.disposed || !l0 || !near) return
         pool.replaceArchetypeGeometry(k, shapeModelGeometry(l0, asteroidSize), shapeModelGeometry(near, asteroidSize))
       })
     })
@@ -1154,6 +1165,7 @@ class AsteroidRingSystem extends Group {
         continue
       }
       void this.shapeModels.load(moonlet.model, 'near').then((data) => {
+        if (this.disposed) return
         add(data ? shapeModelGeometry(data, asteroidSize) : placeholder)
       })
     }
@@ -1175,6 +1187,8 @@ class AsteroidRingSystem extends Group {
     const band = createRingBandTexture(bins.color, bins.alpha)
     if (!band) return
 
+    this.bandTexture?.dispose()
+    this.bandTexture = band.texture
     for (const uniforms of this.__ringDustUniformSets()) {
       uniforms.uRingBandMap.value = band.texture
       uniforms.uBandMeanColor.value.set(band.meanColor[0], band.meanColor[1], band.meanColor[2])
@@ -1186,6 +1200,28 @@ class AsteroidRingSystem extends Group {
     const bandSrgb = texture.colorSpace === SRGBColorSpace ? 1 : 0
     this.pool.geometryMaterial.uniforms.uRingBandSrgb.value = bandSrgb
     this.pool.billboardMaterial.uniforms.uRingBandSrgb.value = bandSrgb
+  }
+
+  /**
+   * Разборка сценария. Меши пула, лунки и объём пыли — дети системы: их
+   * геометрии, материалы и регистрацию объёма освобождает обход графа
+   * (disposeSceneTree), он же зовёт этот метод. Здесь — то, до чего обход не
+   * доходит: текстуры полос и профиля пыли лежат только в юниформах. Флаг
+   * отключает асинхронные приходы (модели форм, лунки) после разборки.
+   */
+  public dispose(): void {
+    if (this.disposed) return
+    this.disposed = true
+
+    this.bandTexture?.dispose()
+    this.bandTexture = null
+    this.dustRadialTexture?.dispose()
+    this.dustRadialTexture = null
+    for (const uniforms of this.__ringDustUniformSets()) {
+      uniforms.uRingBandEnabled.value = 0
+      uniforms.uRingBandMap.value = null
+      uniforms.uDustRadialMap.value = null
+    }
   }
 
   /** Юниформы всех материалов модели RingDust: камни L0/L1 и, если есть, объём дымки */
@@ -1217,6 +1253,8 @@ class AsteroidRingSystem extends Group {
     const radial = createDustRadialTexture(bins)
     if (!radial) return
 
+    this.dustRadialTexture?.dispose()
+    this.dustRadialTexture = radial.texture
     const l0Material = this.pool.geometryMaterial
     const uniformSets = [l0Material.uniforms, this.pool.billboardMaterial.uniforms]
     if (this.dustVolume) uniformSets.push(this.dustVolume.dustMaterial.uniforms)
