@@ -5,6 +5,7 @@ import {
   TERRAIN_SHADOW_PENUMBRA_FLOOR,
   TERRAIN_SHADOW_STEPS,
   penumbraTan,
+  sunTangent,
   terrainShadowMarch,
   terrainShadowUv,
   type HeightSampler,
@@ -120,6 +121,19 @@ describe('terrainShadowMarch: уступ высотой H', () => {
     expect(terrainShadowMarch(gentle, dirAt(0.3, 0.5), sunTowardWest(0.3, Math.atan(0.04)), params)).toBe(1)
     expect(TERRAIN_SHADOW_STEPS).toBe(20)
     expect(TERRAIN_SHADOW_BIAS_SLOPE).toBe(0.05)
+  })
+})
+
+describe('sunTangent', () => {
+  it('атмосфера → tan; R★/dist; фолбэк; без пола и softness', () => {
+    expect(sunTangent(0.05, undefined, 1)).toBeCloseTo(Math.tan(0.05), 12)
+    expect(sunTangent(0.001, undefined, 1)).toBeCloseTo(Math.tan(0.001), 12) // ниже пола — не поднимается
+    expect(sunTangent(undefined, 2, 100)).toBeCloseTo(0.02, 12)
+    expect(sunTangent(undefined, 2, 1e9)).toBeCloseTo(2e-9, 18)
+    expect(sunTangent(undefined, undefined, 1)).toBeCloseTo(Math.tan(DEFAULT_SUN_ANGULAR_RADIUS), 12)
+    expect(sunTangent(undefined, 0, 100)).toBeCloseTo(Math.tan(DEFAULT_SUN_ANGULAR_RADIUS), 12)
+    expect(sunTangent(undefined, 2, 0)).toBeCloseTo(Math.tan(DEFAULT_SUN_ANGULAR_RADIUS), 12)
+    expect(sunTangent(0.05, 2, 100)).toBeCloseTo(Math.tan(0.05), 12)
   })
 })
 

@@ -58,7 +58,7 @@ describe('Небесный амбиент: irradiance-LUT в чанке SunTrans
     expect(frag).toContain('vec3 litDirect = vec3(directGain) * uLightColor * sunTintMix;')
     expect(frag).toContain('vec3 lit = mix(ambient, litDirect, min(directWeight, 1.0)) + max(directWeight - 1.0, 0.0) * litDirect;')
     expect(frag).toContain('vec3 litDirect = vec3(directGain) * sunTintMix;')
-    expect(frag).toContain('dayColor = surfaceAlbedo * mix(sunTintMix, lit, uTerrainLambert);')
+    expect(frag).toContain('dayColor = surfaceAlbedo * mix(sunTintMix * eclipse, lit, uTerrainLambert);')
     expect(frag).toContain('vec3 day = cloudRadiance + dayColor * (1.0 - cloudAlphaSlant) * landGate;')
     // day целиком не тонируется: после сборки day тинта солнца нет
     const day = frag.indexOf('vec3 day = cloudRadiance + dayColor')

@@ -6,6 +6,8 @@ import { Actor } from '@/core/models/Actor'
 import { resolveStarRadiusKm } from '@/core/terrain/starRadius'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { TERRAIN_SHADOW_PENUMBRA_FLOOR } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
+import { readRenderingData } from '@/core/helpers/renderingData'
+import type { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 
 // Ручка мягкости живёт в renderingObject.data — подмена резолвера, тот же
@@ -67,6 +69,23 @@ describe('TerrainMaterial.syncTerrainShadow', () => {
     const material = new TerrainMaterial(Actor.find(19)!)
     material.syncTerrainShadow(new Vector3(toThreeJSUnits(1.5e8), 0, 0))
     expect(material.uniforms.uShadowPenumbraTan.value).toBe(TERRAIN_SHADOW_PENUMBRA_FLOOR)
+  })
+
+  it('uRingSunTan — честный tan(sunAngularRadius) атмосферы, без пола полутени', () => {
+    const earth = Actor.find(7)!
+    const atm = earth.children.where('categoryId', 5).first()!
+    const ang = readRenderingData<AtmosphereConfig>(atm)!.sunAngularRadius
+    const material = new PlanetMaterial(earth)
+    material.syncTerrainShadow(new Vector3(toThreeJSUnits(1.5e8), 0, 0))
+    expect(material.uniforms.uRingSunTan.value).toBeCloseTo(Math.tan(ang), 12)
+    expect(material.uniforms.uShadowPenumbraTan.value).toBeGreaterThanOrEqual(TERRAIN_SHADOW_PENUMBRA_FLOOR)
+  })
+
+  it('Луна: uRingSunTan без пола (R★/dist ниже пола остаётся как есть)', () => {
+    const material = new PlanetMaterial(Actor.find(19)!)
+    material.syncTerrainShadow(new Vector3(toThreeJSUnits(1.5e8), 0, 0))
+    expect(material.uniforms.uRingSunTan.value).toBeCloseTo(696000 / 1.5e8, 12)
+    expect(material.uniforms.uRingSunTan.value).toBeLessThan(TERRAIN_SHADOW_PENUMBRA_FLOOR)
   })
 
   it('softness множит итог', () => {

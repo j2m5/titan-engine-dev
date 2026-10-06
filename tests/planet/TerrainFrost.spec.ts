@@ -67,7 +67,7 @@ describe('Шейдер: иней', () => {
 
   it('маска как у зеркала; альбедо смешивается с цветом инея до света; окклюзия не тронута', () => {
     const start = frag.indexOf('vec3 surfaceAlbedo = diffuseSample * albedoMul;')
-    const end = frag.indexOf('dayColor = surfaceAlbedo * mix(sunTintMix, lit, uTerrainLambert);')
+    const end = frag.indexOf('dayColor = surfaceAlbedo * mix(sunTintMix * eclipse, lit, uTerrainLambert);')
     expect(start).toBeGreaterThan(-1)
     expect(end).toBeGreaterThan(start)
     const block = frag.slice(start, end)

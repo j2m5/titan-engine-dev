@@ -728,6 +728,32 @@ describe('validateDatabase — форма конфига туманности', 
  * warnings не проверяем на ноль — в реальных данных могут быть осознанные
  * пропуски (анкоры и т.п. уже отфильтрованы, но контент дополняется).
  */
+describe('validateDatabase — лунки колец', () => {
+  const moonlet = { radiusKm: 106620, azimuthDeg: 40, sizeKm: 60, gapKm: 360, model: 'pandora' }
+
+  function ringSnapshot(m: Record<string, unknown>): DatabaseSnapshot {
+    const db = baseSnapshot()
+    db.categories.push({ id: 6, alias: 'ring', name: 'Ring' })
+    db.actors.push(planet(11, 10), { id: 12, categoryId: 6, parentId: 11, name: 'Ring', description: '', color: '#fff' })
+    db.renderingObjects.push({ id: 1, actorId: 12, data: { innerRadius: 75000, outerRadius: 126000, moonlets: [m] } })
+    return db
+  }
+
+  it('годная лунка — без ошибок у строки кольца', () => {
+    const errors = validateDatabase(ringSnapshot(moonlet)).errors.filter((e) => e.collection === 'renderingObjects')
+
+    expect(errors).toEqual([])
+  })
+
+  it('радиус лунки вне кольца — ошибка с именем поля moonlets[0].radiusKm', () => {
+    const errors = validateDatabase(ringSnapshot({ ...moonlet, radiusKm: 130000 })).errors
+
+    expect(
+      errors.some((e) => e.collection === 'renderingObjects' && e.entity === 1 && e.message.includes('moonlets[0].radiusKm'))
+    ).toBe(true)
+  })
+})
+
 describe('validateDatabase — реальный database (базлайн)', () => {
   it('текущие данные приложения валидны (0 errors)', async () => {
     const { Scenarios } = await import('@/config/scenarios')

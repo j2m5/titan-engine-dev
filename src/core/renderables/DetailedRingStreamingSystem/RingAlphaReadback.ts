@@ -1,5 +1,7 @@
 import type { Texture } from 'three'
 import { RadialDensityProfile } from './RadialDensityProfile'
+import type { RingGap } from './ringMoonlets'
+import { ringBandBinsFromPixels, thresholdBlurAndMask } from './ringProfileBins'
 
 /**
  * Максимум радиальных бинов профиля. Больше не нужно: сектора шириной в сотни
@@ -21,40 +23,12 @@ interface RingAlphaProfileOptions {
    * (против «астероидных заборов» на высокой плотности). 0 — резкие кромки.
    */
   blurRadius?: number
-}
-
-/**
- * Порог, затем гауссово размытие (в этом порядке: хвост тянется от УЖЕ
- * отсечённой кромки, слабое гало ниже порога его не подпитывает).
- * За границами профиля пустота — масса у краёв кольца частично «выдувается»
- * наружу и теряется, как и у физической кромки.
- */
-const thresholdAndBlur = (alpha: Float32Array, alphaTest: number, sigmaBins: number): Float32Array => {
-  const thresholded = alpha.map((a) => (a > alphaTest ? a : 0))
-  if (sigmaBins <= 0) return thresholded
-
-  // Ядро гаусса, обрезанное на 3σ, нормированное на единицу
-  const kernelRadius = Math.max(1, Math.ceil(sigmaBins * 3))
-  const kernel = new Float64Array(kernelRadius + 1)
-  let kernelSum = 0
-  for (let d = 0; d <= kernelRadius; d++) {
-    kernel[d] = Math.exp(-(d * d) / (2 * sigmaBins * sigmaBins))
-    kernelSum += d === 0 ? kernel[d] : 2 * kernel[d]
-  }
-
-  const blurred = new Float32Array(thresholded.length)
-  for (let i = 0; i < thresholded.length; i++) {
-    let sum = thresholded[i] * kernel[0]
-    for (let d = 1; d <= kernelRadius; d++) {
-      const left = i - d
-      const right = i + d
-      if (left >= 0) sum += thresholded[left] * kernel[d]
-      if (right < thresholded.length) sum += thresholded[right] * kernel[d]
-    }
-    blurred[i] = sum / kernelSum
-  }
-
-  return blurred
+  /**
+   * Щели лунок (в единицах radius): альфа бинов × маска щели до порога и
+   * после размытия — щель пустеет в камнях, пыли и полосах (RGB полос не
+   * маскируется; см. ringProfileBins.ts и ringMoonlets.ts).
+   */
+  gaps?: readonly RingGap[]
 }
 
 /** Изображение, которое можно нарисовать в 2D-canvas и прочитать обратно */
@@ -74,8 +48,8 @@ const isReadableImage = (image: unknown): image is CanvasImageSource & { width: 
  * колонок становится бинами профиля. Текстуры без альфы (jpg) дают α ≡ 1 —
  * профиль равномерный, поведение не меняется.
  *
- * Постобработка (см. RingAlphaProfileOptions): отсечка по alphaTest, затем
- * гауссово размытие кромок субколец.
+ * Постобработка (см. RingAlphaProfileOptions, ringProfileBins.ts): маска щелей,
+ * отсечка по alphaTest, гауссово размытие кромок субколец, снова маска щелей.
  *
  * Возвращает null, если изображение нечитаемо (compressed-текстура, отсутствие
  * 2D-контекста, CORS-tainted canvas) — вызывающий остаётся на равномерной
@@ -130,7 +104,8 @@ function readRingAlphaBins(
     alpha[i] = read.pixels[i * 4 + 3] / 255
   }
 
-  return thresholdAndBlur(alpha, options.alphaTest ?? 0, sigmaInBins(options.blurRadius, innerRadius, outerRadius, read.bins))
+  const sigma = sigmaInBins(options.blurRadius, innerRadius, outerRadius, read.bins)
+  return thresholdBlurAndMask(alpha, options.alphaTest ?? 0, sigma, innerRadius, outerRadius, options.gaps ?? [])
 }
 
 /** Цвет и альфа полос кольца по бинам (см. readRingBandBins) */
@@ -145,35 +120,20 @@ interface RingBandBins {
  * Прочитать цвет и альфу полос кольца по бинам — источник 1D-текстуры полос
  * (см. RingBandTexture): тинт камней по цвету полосы и оптическая толща слоя
  * для самозатенения. Без порога alphaTest (тусклые полосы — тусклая толща);
- * размытие одной сигмой и для цвета, и для альфы, чтобы кромки совпадали.
+ * размытие одной сигмой и для цвета, и для альфы, чтобы кромки совпадали;
+ * щели лунок гасят только альфу (см. ringBandBinsFromPixels).
  */
 function readRingBandBins(
   texture: Texture,
   innerRadius: number,
   outerRadius: number,
-  options: Pick<RingAlphaProfileOptions, 'blurRadius'> = {}
+  options: Pick<RingAlphaProfileOptions, 'blurRadius' | 'gaps'> = {}
 ): RingBandBins | null {
   const read = readRingPixels(texture, innerRadius, outerRadius)
   if (!read) return null
 
   const sigma = sigmaInBins(options.blurRadius, innerRadius, outerRadius, read.bins)
-  const channel = (k: number): Float32Array => {
-    const values = new Float32Array(read.bins)
-    for (let i = 0; i < read.bins; i++) values[i] = read.pixels[i * 4 + k] / 255
-    return thresholdAndBlur(values, 0, sigma)
-  }
-
-  const r = channel(0)
-  const g = channel(1)
-  const b = channel(2)
-  const color = new Float32Array(read.bins * 3)
-  for (let i = 0; i < read.bins; i++) {
-    color[i * 3] = r[i]
-    color[i * 3 + 1] = g[i]
-    color[i * 3 + 2] = b[i]
-  }
-
-  return { color, alpha: channel(3) }
+  return ringBandBinsFromPixels(read.pixels, read.bins, sigma, innerRadius, outerRadius, options.gaps ?? [])
 }
 
 /**

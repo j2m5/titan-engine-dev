@@ -10,11 +10,12 @@ describe('TerrainDetail: домен из точной позиции патча'
   it('вершинник объявляет атрибуты и varying под USE_TERRAIN_DETAIL и передаёт их', () => {
     const gate = vert.indexOf('#ifdef USE_TERRAIN_DETAIL')
     expect(gate).toBeGreaterThan(-1)
-    expect(vert).toContain('attribute vec3 detailPos;')
-    expect(vert).toContain('attribute vec3 detailPos2;')
+    expect(vert).toContain('attribute vec3 detailOrigin;')
+    expect(vert).toContain('attribute vec3 detailOrigin2;')
     expect(vert).toContain('varying vec3 vDetailPos;')
-    expect(vert).toContain('vDetailPos = detailPos;')
-    expect(vert).toContain('vDetailPos2 = detailPos2;')
+    expect(vert).toContain('vDetailPos = position + detailOrigin;')
+    expect(vert).toContain('vDetailPos2 = position + detailOrigin2;')
+    expect(vert).not.toContain('attribute vec3 detailPos;')
   })
 
   it('фрагментник зовёт чанк с varying-позициями', () => {

@@ -376,7 +376,7 @@ describe('WaterShaderTemplate: приёмочный фикс — fade смеши
   it('фундаментный color посчитан ДО #ifdef USE_WATER_WAVES (byte-в-byte тем же путём, что и без волн)', () => {
     const waveBlockStart = frag.indexOf('#ifdef USE_WATER_WAVES', frag.indexOf('void main()'))
     const foundationColorLine = frag.indexOf('vec3 color = mix(baseColor, uWaterFresnelTint, fresnel);')
-    const nightFloorLine = frag.indexOf('color *= mix(uWaterNightFloor, cloudShadow, dayFactor);')
+    const nightFloorLine = frag.indexOf('color *= mix(vec3(uWaterNightFloor), vec3(cloudShadow) * eclipse, dayFactor);')
 
     expect(foundationColorLine).toBeGreaterThan(-1)
     expect(nightFloorLine).toBeGreaterThan(foundationColorLine)
@@ -384,7 +384,7 @@ describe('WaterShaderTemplate: приёмочный фикс — fade смеши
   })
 
   it('wavesColor несёт СВОЙ ночной пол (waveDayFactor, не общий dayFactor) — иначе fade=0 не был бы численно равен фундаменту', () => {
-    expect(frag).toContain('wavesColor *= mix(uWaterNightFloor, 1.0, waveDayFactor);')
+    expect(frag).toContain('wavesColor *= mix(vec3(uWaterNightFloor), eclipse, waveDayFactor);')
   })
 })
 
@@ -765,6 +765,12 @@ const BASELINE_FRAGMENT_SHADER = `
       const vec3 waterSunColor = vec3(1.0);
     #endif
 
+    // Радиус тела (юниты): точка датума для затмения и облачного слоя
+    uniform float uBodyRadiusUnits;
+    // Затмения (чанк Eclipse); без тел — 1
+    #include <eclipseFunctions>
+    #include <eclipseHostFunctions>
+
     #ifdef USE_WATER_DEPTH
       #include <terrainUvFunctions>
       // поглощение по каналам, 1/м; глубина при depthA = 1, м
@@ -830,9 +836,11 @@ const BASELINE_FRAGMENT_SHADER = `
       vec3 lightDirection = normalize(vViewLightDirection);
       float NdotL = dot(normal, lightDirection);
       float dayFactor = smoothstep(-0.08, 0.25, NdotL);
+      // Затмение: свет звезды в точке датума с учётом тел-соседей (1 — без затмения)
+      vec3 eclipse = eclipseLight(normalize(vLocalDir) * uBodyRadiusUnits);
       // Тень облаков на воде (чанк CloudLayer, тот же закон, что на суше) — только прямой свет
       float cloudShadow = 1.0;
-      color *= mix(uWaterNightFloor, cloudShadow, dayFactor);
+      color *= mix(vec3(uWaterNightFloor), vec3(cloudShadow) * eclipse, dayFactor);
 
       // Блик: без волн и с орбиты — аналитическая нормаль и шероховатость всех
       // погасших октав (широкое тусклое пятно, не точка); блок волн ниже
@@ -848,7 +856,7 @@ const BASELINE_FRAGMENT_SHADER = `
       // (как у фундамента): волновая нормаль на ночной стороне не даёт искр
       vec3 glint = waterGlintGlsl(glintNormal, lightDirection, viewDir, glintAlpha2) * waterSunColor * dayFactor;
       // тени облаков рвут солнечную дорожку
-      glint *= cloudShadow;
+      glint *= cloudShadow * eclipse;
       // потолок: искры блумят, кляксы — нет; под пеной блика нет; gain 1 — прежний ближний вид
       color += min(glint, WATER_GLINT_CEILING) * uWaterGlintGain * (1.0 - foam);
 
@@ -919,10 +927,10 @@ describe('домен мелкой ряби: WATER_DETAIL_WRAP и vDetailPos', ()
     expect(WATER_DETAIL_WRAP.w1).toBe(wrapUnitsFor(WATER_DETAIL_PERIOD_METERS))
   })
 
-  it('вершинник читает атрибут detailPos и отдаёт vDetailPos; фрагментник объявляет varying', () => {
-    expect(vert).toContain('attribute vec3 detailPos;')
+  it('вершинник собирает vDetailPos из position + detailOrigin; фрагментник объявляет varying', () => {
+    expect(vert).toContain('attribute vec3 detailOrigin;')
     expect(vert).toContain('varying vec3 vDetailPos;')
-    expect(vert).toContain('vDetailPos = detailPos;')
+    expect(vert).toContain('vDetailPos = position + detailOrigin;')
     expect(frag).toContain('varying vec3 vDetailPos;')
   })
 })

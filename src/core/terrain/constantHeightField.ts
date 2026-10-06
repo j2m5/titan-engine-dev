@@ -68,7 +68,7 @@ class ConstantHeightField extends TerrainHeightField {
  * Поле высот тела без рельефа — вся карта на одном уровне. Настоящий
  * `TerrainHeightField` (точнее, `ConstantHeightField` — её специализация с
  * ε по кривизне сферы, см. докблок класса) на синтетической карте, не
- * отдельная реализация интерфейса: билинейка, buildTerrainPatchInto и
+ * отдельная реализация интерфейса: билинейка, приход строителя и
  * selectTerrainNodes продолжают работать без изменений. `heightMeters` ≡
  * levelMeters, `surfaceRadiusUnits` = radiusKm + levelMeters/1000 —
  * оболочка радиуса «R + уровень», уровень может быть отрицательным.

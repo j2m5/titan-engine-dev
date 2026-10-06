@@ -3,7 +3,7 @@ import { TerrainHeightField } from '@/core/terrain/TerrainHeightField'
 import type { HeightMapData } from '@/core/terrain/heightMapFormat'
 import { detailWrapFor } from '@/core/terrain/detailWrap'
 import {
-  allocatePatchArrays,
+  allocateJobPatchArrays,
   buildPatchIndex,
   buildTerrainPatchArrays,
   buildTerrainPatchGeometry,
@@ -25,7 +25,7 @@ export function makeField(): TerrainHeightField {
   return new TerrainHeightField(map, 1737.4)
 }
 
-/** w1 ≠ w2, оба не дефолт: перестановка detailPos/detailPos2 или порча wrap видна в массивах. */
+/** w1 ≠ w2, оба не дефолт: перестановка detailOrigin/detailOrigin2 или порча wrap видна в смещениях. */
 export const ASYMMETRIC_WRAP = detailWrapFor({ detailScaleMeters: 37, detailScale2Meters: 5 })
 
 export function patchJob(
@@ -47,11 +47,9 @@ export function buildMessageFor(job: PatchBuildJob, requestId: number, fieldId: 
 export function builtArrays(m: Extract<FromWorkerMessage, { type: 'built' }>): PatchArrays {
   return {
     positions: new Float32Array(m.positions),
-    detailPos: new Float32Array(m.detailPos),
-    detailPos2: new Float32Array(m.detailPos2),
-    heights: new Float32Array(m.heights),
-    midTilts: new Float32Array(m.midTilts),
-    midShades: new Float32Array(m.midShades),
+    heights: m.heights === null ? null : new Float32Array(m.heights),
+    midTilts: m.midTilts === null ? null : new Float32Array(m.midTilts),
+    midShades: m.midShades === null ? null : new Float32Array(m.midShades),
     morph:
       m.morph === null
         ? null
@@ -63,15 +61,13 @@ export function builtArrays(m: Extract<FromWorkerMessage, { type: 'built' }>): P
   }
 }
 
-/** Копия массивов результата: синхронный строитель отдаёт скретч, живущий только на время onDone. */
+/** Копия массивов результата — слот забирает их во владение и отпускает после заливки. */
 export function snapshotArrays(a: PatchArrays): PatchArrays {
   return {
     positions: a.positions.slice(),
-    detailPos: a.detailPos.slice(),
-    detailPos2: a.detailPos2.slice(),
-    heights: a.heights.slice(),
-    midTilts: a.midTilts.slice(),
-    midShades: a.midShades.slice(),
+    heights: a.heights?.slice() ?? null,
+    midTilts: a.midTilts?.slice() ?? null,
+    midShades: a.midShades?.slice() ?? null,
     morph:
       a.morph === null
         ? null
@@ -79,7 +75,7 @@ export function snapshotArrays(a: PatchArrays): PatchArrays {
   }
 }
 
-/** Все шесть массивов (и морф-тройка, если есть) бит-в-бит с fresh-постройкой того же задания на главном поле. */
+/** Все четыре массива (и морф-тройка, если есть) бит-в-бит с fresh-постройкой того же задания на главном поле; у задания воды (morph null) полосы нет. */
 export function expectMatchesFreshBuild(arrays: PatchArrays, job: PatchBuildJob): void {
   const { geometry } = buildTerrainPatchGeometry(
     job.field,
@@ -93,14 +89,18 @@ export function expectMatchesFreshBuild(arrays: PatchArrays, job: PatchBuildJob)
     job.wrap
   )
   expect(arrays.positions).toEqual(geometry.getAttribute('position').array)
-  expect(arrays.detailPos).toEqual(geometry.getAttribute('detailPos').array)
-  expect(arrays.detailPos2).toEqual(geometry.getAttribute('detailPos2').array)
-  expect(arrays.heights).toEqual(geometry.getAttribute('height').array)
-  expect(arrays.midTilts).toEqual(geometry.getAttribute('midTilt').array)
-  expect(arrays.midShades).toEqual(geometry.getAttribute('midShade').array)
+  if (job.morph === null) {
+    expect(arrays.heights).toBeNull()
+    expect(arrays.midTilts).toBeNull()
+    expect(arrays.midShades).toBeNull()
+  } else {
+    expect(arrays.heights).toEqual(geometry.getAttribute('height').array)
+    expect(arrays.midTilts).toEqual(geometry.getAttribute('midTilt').array)
+    expect(arrays.midShades).toEqual(geometry.getAttribute('midShade').array)
+  }
 
   // морф-массивы — тот же ядровый вызов с тем же флагом, бит-в-бит
-  const ref = allocatePatchArrays(job.segments, job.morph !== null)
+  const ref = allocateJobPatchArrays(job.segments, job.morph)
   buildTerrainPatchArrays(job.field, job.face, job.i, job.j, job.level, job.segments, job.skirtDepthUnits, job.wrap, ref, job.morph === true)
   if (ref.morph === null) {
     expect(arrays.morph).toBeNull()
@@ -110,6 +110,18 @@ export function expectMatchesFreshBuild(arrays: PatchArrays, job: PatchBuildJob)
     expect(arrays.morph!.midTilts).toEqual(ref.morph.midTilts)
     expect(arrays.morph!.midShades).toEqual(ref.morph.midShades)
   }
+}
+
+/** Смещения домена детали прихода совпадают с инстансными атрибутами fresh-постройки того же задания. */
+export function expectOriginsMatchFresh(
+  result: { detailOrigin: [number, number, number]; detailOrigin2: [number, number, number] },
+  job: PatchBuildJob
+): void {
+  const { geometry } = buildTerrainPatchGeometry(
+    job.field, job.face, job.i, job.j, job.level, job.segments, buildPatchIndex(job.segments), job.skirtDepthUnits, job.wrap
+  )
+  expect(result.detailOrigin.map(Math.fround)).toEqual(Array.from(geometry.getAttribute('detailOrigin').array))
+  expect(result.detailOrigin2.map(Math.fround)).toEqual(Array.from(geometry.getAttribute('detailOrigin2').array))
 }
 
 /** Плитка ближней тени вокруг направления center (нормируется). */

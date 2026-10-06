@@ -1412,3 +1412,27 @@ describe('CameraCollision.nearestSurface: высота камеры над бл�
     expect(collision.nearestSurface()).toBeNull()
   })
 })
+
+describe('CameraCollision.clear: разборка сценария', () => {
+  type Internals = { colliders: unknown[]; snapshot: unknown; mapsVersion: number; lastPosition: unknown }
+
+  it('отпускает коллайдеры, снимок сцены и последнюю позицию; следующий resolve пересобирает кэш', () => {
+    const body = makeBody('planet', EARTH_RADIUS_KM)
+    const { collision, camera } = makeCollision([body], new Vector3(R * 3, 0, 0))
+    collision.resolve()
+    const internals = collision as unknown as Internals
+    expect(internals.colliders.length).toBeGreaterThan(0)
+    expect(internals.snapshot).not.toBeNull()
+
+    collision.clear()
+
+    expect(internals.colliders).toEqual([])
+    expect(internals.snapshot).toBeNull()
+    expect(internals.mapsVersion).toBe(-1)
+    expect(internals.lastPosition).toBeNull()
+
+    camera.position.set(R * 0.5, 0, 0)
+    collision.resolve()
+    expect(camera.position.x).toBeCloseTo(R, 10)
+  })
+})

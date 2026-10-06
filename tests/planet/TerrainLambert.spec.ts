@@ -40,7 +40,7 @@ describe.each([
     expect(frag).toContain('uniform float uTerrainAmbient;')
     const occlusionIdx = frag.indexOf('float occlusion = 1.0;')
     const lambertIdx = frag.indexOf(
-      'dayColor = surfaceAlbedo * mix(sunTintMix, lit, uTerrainLambert);'
+      'dayColor = surfaceAlbedo * mix(sunTintMix * eclipse, lit, uTerrainLambert);'
     )
     const dayIdx = frag.indexOf('vec3 day = cloudRadiance + dayColor * (1.0 - cloudAlphaSlant) * landGate;')
     expect(occlusionIdx).toBeGreaterThan(-1)

@@ -1,5 +1,6 @@
 import type { Object3D } from 'three'
 import type { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+import type { EclipseUniformData } from '@/core/eclipse/eclipseUniforms'
 import type { AtmosphereLUTs } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
 
 /** Запись атмосферы для полноэкранного эффекта. LUT принадлежат узлу. */
@@ -11,6 +12,10 @@ export interface AtmosphereEntry {
   /** Подогнанный конфиг — тот же, из которого считались LUT (см. terrainFloorAdjust) */
   config: AtmosphereConfig
   lut: AtmosphereLUTs
+  /** actorId тела-хозяина оболочки (родитель актора атмосферы) — по нему EclipseSystem находит запись */
+  bodyActorId?: number
+  /** Затмение оболочки: центры тел и звезда — относительно центра тела, мировые оси, км (пишет EclipseSystem) */
+  eclipse?: EclipseUniformData
 }
 
 /**

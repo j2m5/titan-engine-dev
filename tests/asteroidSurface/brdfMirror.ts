@@ -50,3 +50,26 @@ export function planetshine(
   const wrapped = Math.max(nDotP + wrap, 0) / (1 + wrap)
   return phase * solid * wrapped
 }
+
+type V3 = [number, number, number]
+const dot3 = (a: V3, b: V3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+const clamp = (x: number, a: number, b: number): number => Math.min(Math.max(x, a), b)
+const smooth = (a: number, b: number, x: number): number => {
+  const t = clamp((x - a) / (b - a), 0, 1)
+  return t * t * (3 - 2 * t)
+}
+
+/** Зеркало asteroidRingshine (чанк AsteroidBrdf) — менять синхронно. */
+export function ringshine(N: V3, ringNormal: V3, ringPos: V3, L: V3, tau: number, sheetColor: V3, halfThickness: number): V3 {
+  const mu0 = Math.abs(L[1])
+  if (mu0 < 1e-3 || tau <= 0) return [0, 0, 0]
+  const eps = Math.max(0.05 * halfThickness, 1e-9)
+  const lit = mu0 * (1 - Math.exp(-tau / mu0))
+  const through = tau * Math.exp(-tau / mu0)
+  const sunSide = smooth(-eps, eps, ringPos[1] * Math.sign(L[1]))
+  const sheet = through + (lit - through) * sunSide
+  const k = -clamp(ringPos[1] / eps, -1, 1)
+  const toSheet: V3 = [k * ringNormal[0], k * ringNormal[1], k * ringNormal[2]]
+  const facing = 0.5 * (1 + dot3(N, toSheet))
+  return [sheetColor[0] * sheet * facing, sheetColor[1] * sheet * facing, sheetColor[2] * sheet * facing]
+}

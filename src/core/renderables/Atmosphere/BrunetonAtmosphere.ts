@@ -4,7 +4,8 @@ import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
 import { Actor } from '@/core/models/Actor'
 import { requireRenderingData } from '@/core/helpers/renderingData'
 import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
-import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+import { AtmosphereConfig, tintSolarIrradiance } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+import { resolveLightTint } from '@/core/helpers/lightSource'
 import { adjustAtmosphereForTerrainFloor } from '@/core/renderables/Atmosphere/terrainFloorAdjust'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 
@@ -41,7 +42,15 @@ class BrunetonAtmosphere extends Object3D implements Acceptable<IObject3DVisitor
     // Пол берётся из САМОГО конфига (ручка данных), а не из реестра карт
     // высот: карта с гейтом приезжает только на подлёте, здесь её нет
     // НИКОГДА. См. докблок terrainFloorMeters.
-    const adjusted: AtmosphereConfig = adjustAtmosphereForTerrainFloor(config, config.terrainFloorMeters ?? 0)
+    const floorAdjusted: AtmosphereConfig = adjustAtmosphereForTerrainFloor(config, config.terrainFloorMeters ?? 0)
+
+    // Цвет излучения — из звезды, тем же правилом, что прямой свет поверхности
+    // (lightColorOf): в данных у всех EARTH_SOLAR, окраску даёт подписка
+    // светила lightTint. Нет светила или подписки — множитель ровно белый.
+    const adjusted: AtmosphereConfig = {
+      ...floorAdjusted,
+      solarIrradiance: tintSolarIrradiance(floorAdjusted.solarIrradiance, resolveLightTint(this.model).color)
+    }
 
     this.lutGenerator = new AtmosphereLUTGenerator(this.renderer)
     const lut = this.lutGenerator.generate(adjusted)
@@ -53,7 +62,8 @@ class BrunetonAtmosphere extends Object3D implements Acceptable<IObject3DVisitor
       name: this.name,
       object: this,
       config: adjusted,
-      lut
+      lut,
+      bodyActorId: this.model.getAttribute('parentId', -1) as number
     })
   }
 

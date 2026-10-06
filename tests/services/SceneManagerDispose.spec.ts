@@ -8,7 +8,7 @@ import type { Settings } from '@/core/ports/Settings'
 function makeManager(scene: Scene, markerDispose = vi.fn()): SceneManager {
   const markers = { add: vi.fn(), update: vi.fn(), dispose: markerDispose } as unknown as MarkerManager
   const settings = { showOrbitLines: true, showMarkers: true } as unknown as Settings
-  const factory = { make: vi.fn() } as unknown as RenderableFactory
+  const factory = { make: vi.fn(), eclipses: { update() {}, clear() {} } } as unknown as RenderableFactory
 
   return new SceneManager(markers, settings, scene, factory)
 }

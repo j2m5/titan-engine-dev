@@ -76,16 +76,12 @@ describe('сцена Алькаид: система и звезда', () => {
   })
 })
 
-/** Линейное значение sRGB-канала 0..255 */
-const linear = (v: number) => {
-  const c = v / 255
-  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
-}
-/** Тройка облучения атмосферы по правилу W26: земная тройка × линейный цвет звезды */
-const expectedIrradiance = () => {
-  const c = colorTemperatureToRGB(physicalOf(actorByName('Alkaid').id).temperature)
-  return [EARTH_SOLAR[0] * linear(c.r), EARTH_SOLAR[1] * linear(c.g), EARTH_SOLAR[2] * linear(c.b)]
-}
+/**
+ * Тройка облучения атмосферы в данных: земная. Окраску цветом Алькаида даёт
+ * подписка звезды lightTint в BrunetonAtmosphere (см. AtmosphereSolarTint.spec),
+ * а не ручная тройка в строке.
+ */
+const expectedIrradiance = () => [...EARTH_SOLAR]
 const atmosphereData = (actorId: number) =>
   renderingOf(actorId).data as {
     solarIrradiance: number[]

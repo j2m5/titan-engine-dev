@@ -2,16 +2,19 @@ import {
   Color,
   Group,
   Matrix4,
+  type BufferGeometry,
+  type InstancedMesh,
   Object3D,
   PerspectiveCamera,
   RepeatWrapping,
+  SRGBColorSpace,
   Vector3,
   type IUniform,
   type Texture
 } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
-import type { IRingRenderingObject } from '@/core/models/types'
+import type { IRingRenderingObject, RingMoonlet } from '@/core/models/types'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { getJ2000SecondsFromJD } from '@/core/helpers/jd'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -19,6 +22,7 @@ import { readRingAlphaProfile, readRingAlphaBins, readRingBandBins } from './Rin
 import { createDustRadialTexture } from './dust/DustRadialProfile'
 import { createRingBandTexture } from './dust/RingBandTexture'
 import { RadialDensityProfile } from './RadialDensityProfile'
+import { resolveRingMoonlets, resolveRingshineStrength, ringGapsOf, applyRingGapsToBins, type RingGap } from './ringMoonlets'
 import { AngularDensityProfile } from './AngularDensityProfile'
 import { ringLightDirection } from './ringLightDirection'
 import { SectorGrid, SectorGridConfig } from './SectorGrid'
@@ -41,6 +45,7 @@ import { UpdateContext } from '@/core/UpdateContext'
 import { archetypeLayout, getArchetypeGeometries } from './archetypes/ArchetypeLibrary'
 import type { ShapeModelStorage } from './archetypes/ShapeModelStorage'
 import { shapeModelGeometry } from './archetypes/ShapeModelFormat'
+import { createMoonletMesh } from './moonletMesh'
 
 /**
  * Масштабная высота тумана на камнях (rockFog) в долях ТОЛЩИНЫ ленты.
@@ -131,6 +136,8 @@ interface AsteroidRingConfig {
   planetshineColor: number | string
   /** Сила planetshine; при 1.5 на середине кольца вклад до четверти альбедо */
   planetshineStrength: number
+  /** Сила подсветки от листа кольца, данные кольца ringshineStrength, дефолт 1 */
+  ringshineStrength: number
   /**
    * Сила самозатенения слоя кольца (чанк RingDust, ringLayerShadow): смесь
    * между единицей и физической экспонентой по толще слоя, худший случай
@@ -338,6 +345,7 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   dustNearFadeKm: 3000,
   planetshineColor: 0xb8ad9c,
   planetshineStrength: 1.5,
+  ringshineStrength: 1,
   layerShadowStrength: 0.25,
   bandTintStrength: 1,
   dustAnglePower: 2,
@@ -434,6 +442,24 @@ class AsteroidRingSystem extends Group {
   private ringInnerTU = 0
   private ringOuterTU = 0
 
+  /** Лунки кольца из данных (у пояса — пусто), см. ringMoonlets.ts и __buildMoonlets */
+  private moonlets: RingMoonlet[] = []
+  /** Щели лунок в юнитах сцены — для readback-профилей (камни, пыль, полосы) */
+  private ringGapsTu: RingGap[] = []
+  /** Меши лунок (по приходу модели), см. __buildMoonlets */
+  private readonly moonletMeshes: InstancedMesh[] = []
+
+  /**
+   * Текстуры, созданные системой (полосы кольца и радиальный профиль пыли):
+   * живут только в юниформах, а обход графа юниформы не трогает — их
+   * освобождает dispose() системы
+   */
+  private bandTexture: Texture | null = null
+  private dustRadialTexture: Texture | null = null
+
+  /** Система разобрана: асинхронные приходы (модели форм, лунки) ничего не делают */
+  private disposed = false
+
   /** Сигмы размытия кромок (units сцены): из bleedFraction × ширина или из ringGapBleedKm/dustBleedKm — см. __setup */
   private bleedSigmaTu: { rocks: number; dust: number } = { rocks: 0, dust: 0 }
 
@@ -455,12 +481,15 @@ class AsteroidRingSystem extends Group {
       innerRadiusKm: renderData?.innerRadius ?? 70000,
       outerRadiusKm: renderData?.outerRadius ?? 140000,
       ringId: model.getAttribute('id') ?? 1,
+      ringshineStrength: resolveRingshineStrength(renderData, model.getAttribute('name', '') as string),
       // Пер-кольцевая плотность: базовая × множитель из модели (1 при отсутствии).
       // Явный override в configOverrides имеет приоритет (спред ниже).
       densityPerUnit: (DEFAULT_CONFIG.densityPerUnit ?? 500) * (renderData?.asteroidDensityScale ?? 1),
       ...AsteroidRingSystem.__modelVisualOverrides(renderData),
       ...configOverrides
     } as AsteroidRingConfig
+    this.moonlets = resolveRingMoonlets(renderData, model.getAttribute('name', '') as string)
+    this.ringGapsTu = ringGapsOf(this.moonlets, toThreeJSUnits)
 
     this.__setup()
   }
@@ -609,6 +638,7 @@ class AsteroidRingSystem extends Group {
 
     // Реальные модели форм в хвост библиотеки — асинхронно, поверх заглушек
     this.__requestShapeModels(asteroidSize)
+    this.__buildMoonlets(nearGeometries[0], asteroidSize)
 
     // Макро-облик — профиль, тоже только L0
     const profile = ASTEROID_PROFILES[cfg.profile]
@@ -634,6 +664,7 @@ class AsteroidRingSystem extends Group {
       uniforms.uOppositionSurge.value = profile.oppositionSurge
       uniforms.uPlanetshineColor.value.set(cfg.planetshineColor)
       uniforms.uPlanetshineStrength.value = cfg.planetshineStrength
+      uniforms.uRingshineStrength.value = cfg.ringshineStrength
     }
 
     // Ледяная примесь: ручки ледяного профиля в оба материала, доля — гейт
@@ -1058,14 +1089,26 @@ class AsteroidRingSystem extends Group {
     const ringData = this.model.renderingObject?.getAttribute('data') as IRingRenderingObject | undefined
     const profile = readRingAlphaProfile(texture, this.ringInnerTU, this.ringOuterTU, {
       alphaTest: ringData?.alphaTest ?? 0,
-      blurRadius: this.bleedSigmaTu.rocks
+      blurRadius: this.bleedSigmaTu.rocks,
+      gaps: this.ringGapsTu
     })
-    if (profile) {
+    // Текстура нечитаема (сжатая, tainted), а щели есть — камни всё равно
+    // обходят лунки: равномерная альфа × маска щелей
+    const fallback =
+      profile ??
+      (this.ringGapsTu.length > 0
+        ? new RadialDensityProfile(
+            applyRingGapsToBins(new Float32Array(1024).fill(1), this.ringInnerTU, this.ringOuterTU, this.ringGapsTu),
+            this.ringInnerTU,
+            this.ringOuterTU
+          )
+        : null)
+    if (fallback) {
       // SectorGrid — верное КОЛИЧЕСТВО (вес по средней альфе), генератор —
       // КОНЦЕНТРАЦИЯ (радиус ∝ альфе). Вместе → плотность колечка = base.
       // ТОТ ЖЕ объект — во все каскады (у колец каскад один, цикл не меняет путь)
-      for (const grid of this.cascadeGrids) grid.setDensityProfile(profile)
-      for (const gen of this.cascadeGenerators) gen.setDensityProfile(profile)
+      for (const grid of this.cascadeGrids) grid.setDensityProfile(fallback)
+      for (const gen of this.cascadeGenerators) gen.setDensityProfile(fallback)
     }
 
     this.__applyDustRadialProfile(texture)
@@ -1095,10 +1138,37 @@ class AsteroidRingSystem extends Group {
     layout.realModels.forEach((name, i) => {
       const k = layout.proceduralCount + i
       void Promise.all([storage.load(name, 'l0'), storage.load(name, 'near')]).then(([l0, near]) => {
-        if (!l0 || !near) return
+        if (this.disposed || !l0 || !near) return
         pool.replaceArchetypeGeometry(k, shapeModelGeometry(l0, asteroidSize), shapeModelGeometry(near, asteroidSize))
       })
     })
+  }
+
+  /**
+   * Лунки (см. ringMoonlets.ts): по одному инстансу материала ближних камней
+   * на лунку, видимы всё время, пока видна система (вне стриминга секторов;
+   * камней в щели нет — профиль). Геометрия — near-ярус реальной модели;
+   * ставится один раз, по приходу: сбой загрузки — процедурный архетип
+   * (placeholder), без хранилища (тесты, автономные сцены) — сразу он же.
+   */
+  private __buildMoonlets(placeholder: BufferGeometry, asteroidSize: number): void {
+    const parent: Group = this.originGroup ?? this
+    const material = this.pool.geometryMaterial
+    for (const moonlet of this.moonlets) {
+      const add = (source: BufferGeometry): void => {
+        const mesh = createMoonletMesh(source, material, moonlet, asteroidSize)
+        this.moonletMeshes.push(mesh)
+        parent.add(mesh)
+      }
+      if (!this.shapeModels) {
+        add(placeholder)
+        continue
+      }
+      void this.shapeModels.load(moonlet.model, 'near').then((data) => {
+        if (this.disposed) return
+        add(data ? shapeModelGeometry(data, asteroidSize) : placeholder)
+      })
+    }
   }
 
   /**
@@ -1109,17 +1179,48 @@ class AsteroidRingSystem extends Group {
    */
   private __applyRingBandProfile(texture: Texture): void {
     const bins = readRingBandBins(texture, this.ringInnerTU, this.ringOuterTU, {
-      blurRadius: this.bleedSigmaTu.dust
+      blurRadius: this.bleedSigmaTu.dust,
+      gaps: this.ringGapsTu
     })
     if (!bins) return
 
     const band = createRingBandTexture(bins.color, bins.alpha)
     if (!band) return
 
+    this.bandTexture?.dispose()
+    this.bandTexture = band.texture
     for (const uniforms of this.__ringDustUniformSets()) {
       uniforms.uRingBandMap.value = band.texture
       uniforms.uBandMeanColor.value.set(band.meanColor[0], band.meanColor[1], band.meanColor[2])
       uniforms.uRingBandEnabled.value = 1
+    }
+
+    // Цвет листа для ring-shine (L0/L1): байты полос — те же, что видит меш
+    // кольца; декодировать из sRGB только у sRGB-текстуры, иначе они линейные
+    const bandSrgb = texture.colorSpace === SRGBColorSpace ? 1 : 0
+    this.pool.geometryMaterial.uniforms.uRingBandSrgb.value = bandSrgb
+    this.pool.billboardMaterial.uniforms.uRingBandSrgb.value = bandSrgb
+  }
+
+  /**
+   * Разборка сценария. Меши пула, лунки и объём пыли — дети системы: их
+   * геометрии, материалы и регистрацию объёма освобождает обход графа
+   * (disposeSceneTree), он же зовёт этот метод. Здесь — то, до чего обход не
+   * доходит: текстуры полос и профиля пыли лежат только в юниформах. Флаг
+   * отключает асинхронные приходы (модели форм, лунки) после разборки.
+   */
+  public dispose(): void {
+    if (this.disposed) return
+    this.disposed = true
+
+    this.bandTexture?.dispose()
+    this.bandTexture = null
+    this.dustRadialTexture?.dispose()
+    this.dustRadialTexture = null
+    for (const uniforms of this.__ringDustUniformSets()) {
+      uniforms.uRingBandEnabled.value = 0
+      uniforms.uRingBandMap.value = null
+      uniforms.uDustRadialMap.value = null
     }
   }
 
@@ -1135,7 +1236,8 @@ class AsteroidRingSystem extends Group {
 
   private __applyDustRadialProfile(texture: Texture): void {
     const bins = readRingAlphaBins(texture, this.ringInnerTU, this.ringOuterTU, {
-      blurRadius: this.bleedSigmaTu.dust
+      blurRadius: this.bleedSigmaTu.dust,
+      gaps: this.ringGapsTu
     })
     if (!bins) return
 
@@ -1151,6 +1253,8 @@ class AsteroidRingSystem extends Group {
     const radial = createDustRadialTexture(bins)
     if (!radial) return
 
+    this.dustRadialTexture?.dispose()
+    this.dustRadialTexture = radial.texture
     const l0Material = this.pool.geometryMaterial
     const uniformSets = [l0Material.uniforms, this.pool.billboardMaterial.uniforms]
     if (this.dustVolume) uniformSets.push(this.dustVolume.dustMaterial.uniforms)

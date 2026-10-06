@@ -84,6 +84,8 @@ float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
         uniform float uOppositionSurge;
         uniform vec3 uPlanetshineColor;
         uniform float uPlanetshineStrength;
+        uniform float uRingshineStrength;
+        uniform float uRingBandSrgb;
 
         #ifdef USE_LIGHT_TINT
           uniform vec3 uLightColor;
@@ -93,6 +95,7 @@ float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
         varying float vDistanceFade;
         varying vec3 vLightDirView;
         varying vec3 vPlanetDirView;
+        varying vec3 vRingNormalView;
         varying float vInstanceSeed;
         varying vec3 vRingPos;
         varying float vFade;
@@ -382,6 +385,22 @@ float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
     return phase * solid * wrapped;
   }
 
+  // Подсветка от листа кольца: N и ringNormalView — view, ringPos и lightDirRing —
+  // ring-local (лист — плоскость y = 0), tau/sheetColor — по радиусу камня,
+  // halfThickness — полутолщина слоя. Возвращает RGB-множитель альбедо
+  vec3 asteroidRingshine(vec3 N, vec3 ringNormalView, vec3 ringPos, vec3 lightDirRing, float tau, vec3 sheetColor, float halfThickness) {
+    float mu0 = abs(lightDirRing.y);
+    if (mu0 < 1e-3 || tau <= 0.0) return vec3(0.0);
+    float eps = max(0.05 * halfThickness, 1e-9);
+    float lit = mu0 * (1.0 - exp(-tau / mu0));
+    float through = tau * exp(-tau / mu0);
+    float sunSide = smoothstep(-eps, eps, ringPos.y * sign(lightDirRing.y));
+    float sheet = mix(through, lit, sunSide);
+    vec3 toSheet = -clamp(ringPos.y / eps, -1.0, 1.0) * ringNormalView;
+    float facing = 0.5 * (1.0 + dot(N, toSheet));
+    return sheetColor * (sheet * facing);
+  }
+
 
         // Радиус силуэта в долях эллипса по углу φ: две плавные гармоники с
         // фазами от сида — лумпистый край, как у rubble-архетипов, без мерцания
@@ -459,6 +478,18 @@ float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
             vec3 color = base * lighting;
           #endif
           color += base * uPlanetshineColor * (uPlanetshineStrength * shine);
+          // Подсветка от листа кольца — как у L0
+          if (uRingBandEnabled > 0.5 && uRingshineStrength > 0.0) {
+            float ringR = length(vRingPos.xz);
+            vec3 band = ringBandAt(ringR).rgb;
+            vec3 sheetColor = mix(band, pow(band, vec3(2.2)), uRingBandSrgb);
+            vec3 ringshine = asteroidRingshine(normal, normalize(vRingNormalView), vRingPos, uDustLightDirRing, ringLayerTau(ringR), sheetColor, uLayerHalfThickness);
+            #ifdef USE_LIGHT_TINT
+              color += base * ringshine * (uRingshineStrength * planetShadow) * uLightColor;
+            #else
+              color += base * ringshine * (uRingshineStrength * planetShadow);
+            #endif
+          }
           // Аэроперспектива: дальние импосторы тонут в пылевой дымке
           color = ringDustApplyFog(color, vRingPos);
           gl_FragColor = vec4(color, alpha);
@@ -564,6 +595,7 @@ float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
         varying float vDistanceFade;
         varying vec3 vLightDirView;
         varying vec3 vPlanetDirView;
+        varying vec3 vRingNormalView;
         varying float vInstanceSeed;
         varying vec3 vRingPos;
         varying float vFade;
@@ -652,6 +684,8 @@ float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
           // planetshine. В модельном пространстве центр кольца лежит в
           // -uOriginOffset: модельное начало — это плавающее начало
           vPlanetDirView = normalize((modelViewMatrix * vec4(-uOriginOffset, 1.0)).xyz - mvInstancePos.xyz);
+          // Нормаль листа кольца в view: ring-local Y (лист — плоскость XZ)
+          vRingNormalView = normalize(mat3(modelViewMatrix) * vec3(0.0, 1.0, 0.0));
 
           // Затухание по расстоянию: свой каскад — по инстансному порогу (иначе
           // каскады мельче самого крупного растягивают fade его юниформом и
@@ -763,6 +797,8 @@ float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
     uniform float uOppositionSurge;
     uniform vec3 uPlanetshineColor;
     uniform float uPlanetshineStrength;
+    uniform float uRingshineStrength;
+    uniform float uRingBandSrgb;
 
     #ifdef USE_LIGHT_TINT
       uniform vec3 uLightColor;
@@ -771,6 +807,7 @@ float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vPlanetDirView;
+    varying vec3 vRingNormalView;
     varying vec3 vRingPos;
     varying vec3 vObjectPos;
     varying vec3 vObjectNormal;
@@ -1249,6 +1286,22 @@ float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
     return phase * solid * wrapped;
   }
 
+  // Подсветка от листа кольца: N и ringNormalView — view, ringPos и lightDirRing —
+  // ring-local (лист — плоскость y = 0), tau/sheetColor — по радиусу камня,
+  // halfThickness — полутолщина слоя. Возвращает RGB-множитель альбедо
+  vec3 asteroidRingshine(vec3 N, vec3 ringNormalView, vec3 ringPos, vec3 lightDirRing, float tau, vec3 sheetColor, float halfThickness) {
+    float mu0 = abs(lightDirRing.y);
+    if (mu0 < 1e-3 || tau <= 0.0) return vec3(0.0);
+    float eps = max(0.05 * halfThickness, 1e-9);
+    float lit = mu0 * (1.0 - exp(-tau / mu0));
+    float through = tau * exp(-tau / mu0);
+    float sunSide = smoothstep(-eps, eps, ringPos.y * sign(lightDirRing.y));
+    float sheet = mix(through, lit, sunSide);
+    vec3 toSheet = -clamp(ringPos.y / eps, -1.0, 1.0) * ringNormalView;
+    float facing = 0.5 * (1.0 + dot(N, toSheet));
+    return sheetColor * (sheet * facing);
+  }
+
     
   uniform sampler2D uRockDiffMap;
   uniform sampler2D uRockNorMap;
@@ -1671,6 +1724,22 @@ float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
       #endif
       finalColor += albedo * uPlanetshineColor * (uPlanetshineStrength * shine * surfAO);
 
+      // Подсветка от листа кольца (см. AsteroidBrdf): свет звезды, рассеянный
+      // освещённым листом; тень планеты гасит её вместе с листом, тень слоя — нет
+      // (лист и есть источник). Цвет листа — полоса в линейном: байты sRGB-текстуры
+      // декодируются, NoColorSpace — как есть (так их показывает меш кольца)
+      if (uRingBandEnabled > 0.5 && uRingshineStrength > 0.0) {
+        float ringR = length(vRingPos.xz);
+        vec3 band = ringBandAt(ringR).rgb;
+        vec3 sheetColor = mix(band, pow(band, vec3(2.2)), uRingBandSrgb);
+        vec3 ringshine = asteroidRingshine(normal, normalize(vRingNormalView), vRingPos, uDustLightDirRing, ringLayerTau(ringR), sheetColor, uLayerHalfThickness);
+        #ifdef USE_LIGHT_TINT
+          finalColor += albedo * ringshine * (uRingshineStrength * planetShadow * surfAO) * uLightColor;
+        #else
+          finalColor += albedo * ringshine * (uRingshineStrength * planetShadow * surfAO);
+        #endif
+      }
+
       // Blinn-Phong блик (металл/лёд), только на освещённой стороне, со спекуляр-AA.
       vec3 halfVec = normalize(lightDirection + viewDir);
       // Спекуляр-AA (B4): на дальних/мелких камнях нормаль сильно меняется в
@@ -1809,6 +1878,7 @@ float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vPlanetDirView;
+    varying vec3 vRingNormalView;
     varying vec3 vRingPos;
     varying vec3 vObjectPos;
     varying vec3 vObjectNormal;
@@ -2344,6 +2414,8 @@ float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
       // planetshine. В модельном пространстве центр кольца лежит в
       // -uOriginOffset: модельное начало — это плавающее начало
       vPlanetDirView = normalize((modelViewMatrix * vec4(-uOriginOffset, 1.0)).xyz - mvPosition.xyz);
+      // Нормаль листа кольца в view: ring-local Y (лист — плоскость XZ)
+      vRingNormalView = normalize(mat3(modelViewMatrix) * vec3(0.0, 1.0, 0.0));
 
       // Для макро-облика (см. чанк AsteroidSurface): объектная позиция (домен),
       // геом. нормаль объекта (нормаль больше не возмущается процедурно) и

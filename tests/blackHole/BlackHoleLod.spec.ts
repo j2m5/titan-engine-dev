@@ -1,7 +1,7 @@
 import { Object3D, PerspectiveCamera } from 'three'
 import type { WebGLRenderer } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
-import { BlackHoleLod } from '@/core/renderables/utils/BlackHoleLod'
+import { ApparentSizeLod } from '@/core/renderables/utils/ApparentSizeLod'
 import { blackHole } from '@/config/blackHole'
 import { config } from '@/core/framework/config'
 import { apparentSizeAtDistance, distanceForApparentSize } from '@/core/helpers/apparentSize'
@@ -11,14 +11,14 @@ import { UpdateContext } from '@/core/UpdateContext'
 const SIMULATION_RADIUS_KM = 319000000
 const FOV = 50
 
-// BlackHoleLod читает у рендерера только domElement.height — тот же приём,
+// ApparentSizeLod читает у рендерера только domElement.height — тот же приём,
 // что в tests/renderables/ApparentSize.spec.ts
 function stubRenderer(height: number): WebGLRenderer {
   return { domElement: { height } } as unknown as WebGLRenderer
 }
 
-function makeLod(renderer: WebGLRenderer): BlackHoleLod {
-  const lod = new BlackHoleLod(SIMULATION_RADIUS_KM, renderer)
+function makeLod(renderer: WebGLRenderer): ApparentSizeLod {
+  const lod = new ApparentSizeLod(SIMULATION_RADIUS_KM, renderer, config('blackHole.lodPixels'))
 
   lod.addLevel(new Object3D())
   lod.addLevel(new Object3D(), lod.switchDistance(FOV), config('blackHole.lodHysteresis'))
@@ -26,9 +26,9 @@ function makeLod(renderer: WebGLRenderer): BlackHoleLod {
   return lod
 }
 
-describe('BlackHoleLod: живой порог переключения', () => {
+describe('LOD чёрной дыры (ApparentSizeLod с blackHole.lodPixels): живой порог переключения', () => {
   it('дистанция считается честной формулой по живой высоте вьюпорта', () => {
-    const lod = new BlackHoleLod(SIMULATION_RADIUS_KM, stubRenderer(1080))
+    const lod = new ApparentSizeLod(SIMULATION_RADIUS_KM, stubRenderer(1080), config('blackHole.lodPixels'))
 
     expect(lod.switchDistance(FOV)).toBe(
       distanceForApparentSize(
@@ -41,7 +41,7 @@ describe('BlackHoleLod: живой порог переключения', () => {
   })
 
   it('на дистанции переключения диаметр зоны занимает ровно lodPixels', () => {
-    const lod = new BlackHoleLod(SIMULATION_RADIUS_KM, stubRenderer(1080))
+    const lod = new ApparentSizeLod(SIMULATION_RADIUS_KM, stubRenderer(1080), config('blackHole.lodPixels'))
 
     expect(
       apparentSizeAtDistance(toThreeJSUnits(2 * SIMULATION_RADIUS_KM), lod.switchDistance(FOV), FOV, 1080)
@@ -77,7 +77,7 @@ describe('BlackHoleLod: живой порог переключения', () => {
     const legacy: number = toThreeJSUnits(
       (2 * SIMULATION_RADIUS_KM * 1080) / (Math.tan(degToRad(FOV)) * 35)
     )
-    const lod = new BlackHoleLod(SIMULATION_RADIUS_KM, stubRenderer(1080))
+    const lod = new ApparentSizeLod(SIMULATION_RADIUS_KM, stubRenderer(1080), config('blackHole.lodPixels'))
 
     expect(Math.abs(lod.switchDistance(FOV) / legacy - 1)).toBeLessThan(0.01)
   })

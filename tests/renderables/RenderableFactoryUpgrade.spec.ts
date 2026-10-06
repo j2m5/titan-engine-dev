@@ -84,6 +84,17 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+describe('RenderableFactory: затмения', () => {
+  it('планета регистрируется в EclipseSystem своим узлом', () => {
+    const spy = vi.spyOn(factory.eclipses, 'register')
+
+    const node = factory.make(moon)
+
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy).toHaveBeenCalledWith(node)
+  })
+})
+
 describe('RenderableFactory: подмена нулевого уровня LOD', () => {
   it('апгрейд ставит TerrainSphere вместо Planet и переводит renderable', () => {
     const node = factory.make(moon) as DynamicNode

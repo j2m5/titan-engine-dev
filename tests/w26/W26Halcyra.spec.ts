@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { Actors, PhysicalObjects, Orbits, RenderingObjects, Resources, ActorResource } from '@storage/database'
-import { EARTH_SOLAR, sunAngularRadius } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+import { EARTH_SOLAR, sunAngularRadius, tintSolarIrradiance } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+import { Actor } from '@/core/models/Actor'
+import { resolveLightTint } from '@/core/helpers/lightSource'
 
 const AU_KM: number = 149597870.7
 
@@ -57,13 +59,16 @@ describe('Halcyra — гигант, атмосфера, кольцо', () => {
     expect(Math.abs(data.sunAngularRadius - expected) / expected).toBeLessThan(0.01)
   })
 
-  it('солнечная тройка атмосферы «оранжевая»: r/b минимум втрое ярче земного, каналы не ярче земных', () => {
+  it('излучение атмосферы: в данных земное, оранжевым его делает звезда (lightColorOf W26) — r/b вдвое выше земного, каналы не ярче земных', () => {
     const atmosphereActor = actorByCat('Halcyra', 5)
     const data = renderData(atmosphereActor.id) as { solarIrradiance: [number, number, number] }
-    const [r, g, b] = data.solarIrradiance
+
+    expect(data.solarIrradiance).toEqual(EARTH_SOLAR)
+
+    const [r, g, b] = tintSolarIrradiance(EARTH_SOLAR, resolveLightTint(Actor.find(atmosphereActor.id)!).color)
     const earthRatio = EARTH_SOLAR[0] / EARTH_SOLAR[2]
 
-    expect(r / b).toBeGreaterThan(earthRatio * 3)
+    expect(r / b).toBeGreaterThan(earthRatio * 2)
     expect(r).toBeLessThanOrEqual(EARTH_SOLAR[0])
     expect(g).toBeLessThanOrEqual(EARTH_SOLAR[1])
     expect(b).toBeLessThanOrEqual(EARTH_SOLAR[2])

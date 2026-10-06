@@ -4,6 +4,7 @@ import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
 import { WaterShader } from '@/core/materials/shaders/WaterShader'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+import { applyEclipseUniforms, type EclipseUniformData } from '@/core/eclipse/eclipseUniforms'
 import { SunTintBinding } from '@/core/materials/SunTintBinding'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
@@ -296,6 +297,11 @@ class WaterMaterial extends AbstractShaderMaterial {
       ...(this.sunTint.active && { USE_SUN_TINT: '1', USE_SKY_AMBIENT: '1' })
     }
     this.needsUpdate = true
+  }
+
+  /** Затмение: данные кладёт EclipseSystem каждый кадр (центры тел и звезда — в системе тела, юниты). */
+  public setEclipse(data: EclipseUniformData): void {
+    applyEclipseUniforms(this.uniforms, data)
   }
 
   /**

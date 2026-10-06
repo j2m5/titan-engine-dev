@@ -39,7 +39,7 @@ export type ToWorkerMessage =
       segments: number
       skirtDepthUnits: number
       wrap: DetailWrap
-      /** null — без морф-массивов; true — родительская форма; false — нулевые дельты и копии (корень). */
+      /** null — раскладка воды (только positions); true — рельеф, родительская форма; false — рельеф, нулевые дельты и копии (корень). */
       morph: boolean | null
     }
 
@@ -47,16 +47,18 @@ export type FromWorkerMessage =
   | {
       type: 'built'
       requestId: number
-      /** Буферы PatchArrays (Float32), раскладка как у allocatePatchArrays. */
+      /** Буферы PatchArrays (Float32), раскладка как у allocateJobPatchArrays. */
       positions: ArrayBuffer
-      detailPos: ArrayBuffer
-      detailPos2: ArrayBuffer
-      heights: ArrayBuffer
-      midTilts: ArrayBuffer
-      midShades: ArrayBuffer
+      /** Полоса (heights, midTilts, midShades): null — задание воды (morph null). */
+      heights: ArrayBuffer | null
+      midTilts: ArrayBuffer | null
+      midShades: ArrayBuffer | null
       /** Морф-тройка (deltas vec3, midTilts vec2, midShades vec2); null — задание без морфа. */
       morph: { deltas: ArrayBuffer; midTilts: ArrayBuffer; midShades: ArrayBuffer } | null
       center: [number, number, number]
+      /** Смещения домена детали на патч (center − k·W), double. */
+      detailOrigin: [number, number, number]
+      detailOrigin2: [number, number, number]
       bounds: PatchBounds
     }
   | {

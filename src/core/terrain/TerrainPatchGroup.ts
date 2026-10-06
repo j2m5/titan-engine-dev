@@ -49,6 +49,10 @@ export interface TerrainPatchStats {
   liveBytes: number
   /** peakLive × bytesPerSlot: свободные слоты в пике не входят (в отличие от liveBytes). */
   peakBytes: number
+  /** Резидентная куча слота: position + инстансные (patchSlotHeapBytes). */
+  heapBytesPerSlot: number
+  /** (live + free) × heapBytesPerSlot; незалитые массивы прихода (транзиент) не входят. */
+  heapBytes: number
 }
 
 /** Мёртвая зона клапана: доли пула, в которых держится желаемый набор. */
@@ -149,8 +153,9 @@ interface LiveEntry {
  * которого при обходе сцены дожидается disposeSceneTree родителя — двойной dispose узлов,
  * уже освобождённых им напрямую, безвреден по тому же контракту.
  *
- * Геометрия патча несёт также detailPos/detailPos2 — домен детальных слоёв
- * (см. detailWrap.ts), периоды которого приходят сюда параметром detailWrap.
+ * Геометрия патча несёт также инстансные detailOrigin/detailOrigin2 —
+ * смещения домена детальных слоёв (см. detailWrap.ts), периоды которого
+ * приходят сюда параметром detailWrap.
  */
 abstract class TerrainPatchGroup extends Group {
   private readonly field: TerrainHeightField
@@ -242,14 +247,15 @@ abstract class TerrainPatchGroup extends Group {
     protected readonly builder: TerrainPatchBuilder = new SyncTerrainPatchBuilder(),
     /**
      * Геоморф патчей (terrain.lod.morphSeconds): рельеф — да, вода — нет
-     * (её пул без морф-атрибутов, задания с morph: null).
+     * (её пул — раскладка water: только position, без полосы и морфа;
+     * задания с morph: null).
      */
     morph: boolean = false
   ) {
     super()
     this.field = field
     this.morphEnabled = morph
-    this.pool = new TerrainPatchPool(material, TERRAIN_PATCH_SEGMENTS, maxLivePatches, morph)
+    this.pool = new TerrainPatchPool(material, TERRAIN_PATCH_SEGMENTS, morph ? 'terrain' : 'water', maxLivePatches)
     this.builder.acquire(field)
     registerTerrainGroup(this)
 
@@ -278,9 +284,9 @@ abstract class TerrainPatchGroup extends Group {
     return this.pending.size
   }
 
-  /** Тип группы для dev-хендла: рельеф несёт морф-атрибуты, вода — нет. */
+  /** Тип группы для dev-хендла — раскладка слота её пула: рельеф несёт полосу и морф, вода — только position. */
   public get debugKind(): 'terrain' | 'water' {
-    return this.morphEnabled ? 'terrain' : 'water'
+    return this.pool.layout
   }
 
   /** Сводка пула; зовётся редко (консоль), аллоцирует результат. */
@@ -291,6 +297,7 @@ abstract class TerrainPatchGroup extends Group {
     const live = this.pool.liveCount
     const free = this.pool.freeCount
     const bytesPerSlot = this.pool.bytesPerSlot
+    const heapBytesPerSlot = this.pool.heapBytesPerSlot
     const peakLive = Math.max(this.peakLive, live)
     return {
       live,
@@ -302,7 +309,9 @@ abstract class TerrainPatchGroup extends Group {
       peakLive,
       bytesPerSlot,
       liveBytes: (live + free) * bytesPerSlot,
-      peakBytes: peakLive * bytesPerSlot
+      peakBytes: peakLive * bytesPerSlot,
+      heapBytesPerSlot,
+      heapBytes: (live + free) * heapBytesPerSlot
     }
   }
 

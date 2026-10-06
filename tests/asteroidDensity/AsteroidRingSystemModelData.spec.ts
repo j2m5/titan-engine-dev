@@ -47,10 +47,12 @@ describe('AsteroidRingSystem: визуальные ручки из модель�
 
     expect(readRingAlphaProfile).toHaveBeenCalledWith(fakeTexture, expect.any(Number), expect.any(Number), {
       alphaTest: 0.1,
-      blurRadius: toThreeJSUnits(777)
+      blurRadius: toThreeJSUnits(777),
+      gaps: []
     })
     expect(readRingAlphaBins).toHaveBeenCalledWith(fakeTexture, expect.any(Number), expect.any(Number), {
-      blurRadius: toThreeJSUnits(1234)
+      blurRadius: toThreeJSUnits(1234),
+      gaps: []
     })
   })
 

@@ -10,6 +10,7 @@ import {
   IActorResource
 } from '@/core/models/types'
 import { NEBULA_SHAPE_IDS } from '@/core/renderables/Nebula/NebulaParams'
+import { ringMoonletProblems } from '@/core/renderables/DetailedRingStreamingSystem/ringMoonlets'
 
 /**
  * Валидатор целостности данных приложения.
@@ -525,6 +526,25 @@ function checkNebulaShapes(
 }
 
 /**
+ * Лунки колец и сила подсветки от кольца (ringMoonletProblems — тот же
+ * источник, что у резолвера кольца): радиус орбиты внутри кольца,
+ * положительные размер и щель, известная модель формы, не больше 4 лунок.
+ */
+function checkRingMoonlets(rows: IRenderingObject[], aliasByActor: Map<number, string>, issues: ValidationIssue[]): void {
+  for (const row of rows) {
+    if (aliasByActor.get(row.actorId) !== 'ring') continue
+    for (const problem of ringMoonletProblems(asRecord(row.data) ?? {})) {
+      issues.push({
+        level: 'error',
+        collection: 'renderingObjects',
+        entity: row.id,
+        message: `renderingObjects#${row.id} (actor ${row.actorId}) ring data.${problem}`
+      })
+    }
+  }
+}
+
+/**
  * Форма конфига пояса астероидов. Радиусы в а.е.: inner < outer, оба
  * положительны — иначе distanceToTorus и профиль плотности делят на ноль.
  * spacingKm и sizeRangeKm — источник плотности/ячеек/порогов LOD (см.
@@ -884,6 +904,7 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
 
   // --- 6h. Форма конфига пояса астероидов ---
   checkAsteroidBeltShapes(db.renderingObjects, aliasByActor, issues)
+  checkRingMoonlets(db.renderingObjects, aliasByActor, issues)
 
   // --- 6e. Режимы позиционирования: несочетаемые строки placements/orbits ---
   checkPositioning(db, aliasByActor, issues)

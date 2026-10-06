@@ -22,7 +22,7 @@ export interface TerrainConfig {
     /**
      * Видимый диаметр тела в пикселях, при котором запрашивается его карта
      * высот. Много выше порога, на котором LOD меняет билборд на настоящий
-     * меш (distanceLod(3) в RenderableFactory, ~3–4 px): карта успевает
+     * меш (planetImpostor.lodPixels, ~3.8 px): карта успевает
      * доехать до того, как тело станет мешем.
      */
     heightMapLoadPixels: number

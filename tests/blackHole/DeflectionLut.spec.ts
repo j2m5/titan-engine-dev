@@ -1,5 +1,6 @@
 import { HalfFloatType, LinearFilter } from 'three'
 import {
+  CHORD_MAX_STEPS,
   DEFLECTION_LUT_B_MIN,
   DEFLECTION_LUT_SIZE,
   bakeDeflectionAngles,
@@ -8,7 +9,8 @@ import {
   createDeflectionLutTexture,
   createOutsideLutTexture,
   farFieldDeflection,
-  outsideDeflection
+  outsideDeflection,
+  PHI_MAX
 } from '@/core/renderables/BlackHole/deflectionLut'
 import { BlackHoleShaderTemplate } from '@/core/renderables/BlackHole/BlackHoleShaderTemplate'
 import { BlackHoleMaterial } from '@/core/renderables/BlackHole/BlackHoleMaterial'
@@ -165,6 +167,23 @@ describe('шейдер ЧД: аналитика слабого поля заме
 
     expect(match).not.toBeNull()
     expect(Number(match![1])).toBe(DEFLECTION_LUT_B_MIN)
+  })
+
+  // Зеркало хорды (chordDeflectionAngle) повторяет живой интегратор, а печка
+  // δ(b) = полное − хорда: разъехавшийся потолок шагов или навивки молча
+  // сдвинет δ на стыке ветвей. Константы разбираются из текста шейдера
+  it('потолок шагов зеркала хорды равен MAX_STEPS шейдера', () => {
+    const match = frag.match(/const\s+int\s+MAX_STEPS\s*=\s*([0-9]+)/)
+
+    expect(match).not.toBeNull()
+    expect(Number(match![1])).toBe(CHORD_MAX_STEPS)
+  })
+
+  it('предел навивки зеркала хорды равен PHI_MAX шейдера', () => {
+    const match = frag.match(/const\s+float\s+PHI_MAX\s*=\s*([0-9.]+)/)
+
+    expect(match).not.toBeNull()
+    expect(Number(match![1])).toBe(PHI_MAX)
   })
 
   it('вход снаружи перецеливается в локальное направление: u′ = √(1 − t²(1 − 1/r0)) / (t·r0); камера внутри — прежнее условие', () => {

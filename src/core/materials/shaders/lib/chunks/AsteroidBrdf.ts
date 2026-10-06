@@ -18,6 +18,13 @@
  * в ноль, отдельный гейт не нужен. Цвет и силу умножает вызывающий; результат
  * ложится на альбедо, не на блик.
  *
+ * Подсветка от листа кольца. Камень видит лист кольца (плоскость y = 0 в
+ * ring-local): со своей стороны от средней плоскости — солнечную сторону
+ * листа, если звезда с той же стороны, иначе — просвет. Однократное
+ * рассеяние: солнечная сторона μ0·(1 − e^(−τ/μ0)), просвет τ·e^(−τ/μ0),
+ * μ0 — синус высоты звезды над плоскостью; грань получает долю полусферы
+ * листа (1 + N·d)/2. Цвет листа, силу и тень планеты умножает вызывающий.
+ *
  * CPU-зеркало: tests/asteroidSurface/brdfMirror.ts — менять строго синхронно.
  */
 export const asteroidBrdfFunctions = `
@@ -46,5 +53,21 @@ export const asteroidBrdfFunctions = `
     float wrap = angR;
     float wrapped = max(dot(N, dirPlanet) + wrap, 0.0) / (1.0 + wrap);
     return phase * solid * wrapped;
+  }
+
+  // Подсветка от листа кольца: N и ringNormalView — view, ringPos и lightDirRing —
+  // ring-local (лист — плоскость y = 0), tau/sheetColor — по радиусу камня,
+  // halfThickness — полутолщина слоя. Возвращает RGB-множитель альбедо
+  vec3 asteroidRingshine(vec3 N, vec3 ringNormalView, vec3 ringPos, vec3 lightDirRing, float tau, vec3 sheetColor, float halfThickness) {
+    float mu0 = abs(lightDirRing.y);
+    if (mu0 < 1e-3 || tau <= 0.0) return vec3(0.0);
+    float eps = max(0.05 * halfThickness, 1e-9);
+    float lit = mu0 * (1.0 - exp(-tau / mu0));
+    float through = tau * exp(-tau / mu0);
+    float sunSide = smoothstep(-eps, eps, ringPos.y * sign(lightDirRing.y));
+    float sheet = mix(through, lit, sunSide);
+    vec3 toSheet = -clamp(ringPos.y / eps, -1.0, 1.0) * ringNormalView;
+    float facing = 0.5 * (1.0 + dot(N, toSheet));
+    return sheetColor * (sheet * facing);
   }
 `
