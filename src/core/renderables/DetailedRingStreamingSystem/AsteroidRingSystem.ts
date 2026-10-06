@@ -11,7 +11,7 @@ import {
 } from 'three'
 import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
-import type { IRingRenderingObject } from '@/core/models/types'
+import type { IRingRenderingObject, RingMoonlet } from '@/core/models/types'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { getJ2000SecondsFromJD } from '@/core/helpers/jd'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -19,6 +19,7 @@ import { readRingAlphaProfile, readRingAlphaBins, readRingBandBins } from './Rin
 import { createDustRadialTexture } from './dust/DustRadialProfile'
 import { createRingBandTexture } from './dust/RingBandTexture'
 import { RadialDensityProfile } from './RadialDensityProfile'
+import { resolveRingMoonlets, ringGapsOf, applyRingGapsToBins, type RingGap } from './ringMoonlets'
 import { AngularDensityProfile } from './AngularDensityProfile'
 import { ringLightDirection } from './ringLightDirection'
 import { SectorGrid, SectorGridConfig } from './SectorGrid'
@@ -434,6 +435,11 @@ class AsteroidRingSystem extends Group {
   private ringInnerTU = 0
   private ringOuterTU = 0
 
+  /** Лунки кольца из данных (у пояса — пусто), см. ringMoonlets.ts и __buildMoonlets */
+  private moonlets: RingMoonlet[] = []
+  /** Щели лунок в юнитах сцены — для readback-профилей (камни, пыль, полосы) */
+  private ringGapsTu: RingGap[] = []
+
   /** Сигмы размытия кромок (units сцены): из bleedFraction × ширина или из ringGapBleedKm/dustBleedKm — см. __setup */
   private bleedSigmaTu: { rocks: number; dust: number } = { rocks: 0, dust: 0 }
 
@@ -461,6 +467,8 @@ class AsteroidRingSystem extends Group {
       ...AsteroidRingSystem.__modelVisualOverrides(renderData),
       ...configOverrides
     } as AsteroidRingConfig
+    this.moonlets = resolveRingMoonlets(renderData, model.getAttribute('name', '') as string)
+    this.ringGapsTu = ringGapsOf(this.moonlets, toThreeJSUnits)
 
     this.__setup()
   }
@@ -1058,14 +1066,26 @@ class AsteroidRingSystem extends Group {
     const ringData = this.model.renderingObject?.getAttribute('data') as IRingRenderingObject | undefined
     const profile = readRingAlphaProfile(texture, this.ringInnerTU, this.ringOuterTU, {
       alphaTest: ringData?.alphaTest ?? 0,
-      blurRadius: this.bleedSigmaTu.rocks
+      blurRadius: this.bleedSigmaTu.rocks,
+      gaps: this.ringGapsTu
     })
-    if (profile) {
+    // Текстура нечитаема (сжатая, tainted), а щели есть — камни всё равно
+    // обходят лунки: равномерная альфа × маска щелей
+    const fallback =
+      profile ??
+      (this.ringGapsTu.length > 0
+        ? new RadialDensityProfile(
+            applyRingGapsToBins(new Float32Array(1024).fill(1), this.ringInnerTU, this.ringOuterTU, this.ringGapsTu),
+            this.ringInnerTU,
+            this.ringOuterTU
+          )
+        : null)
+    if (fallback) {
       // SectorGrid — верное КОЛИЧЕСТВО (вес по средней альфе), генератор —
       // КОНЦЕНТРАЦИЯ (радиус ∝ альфе). Вместе → плотность колечка = base.
       // ТОТ ЖЕ объект — во все каскады (у колец каскад один, цикл не меняет путь)
-      for (const grid of this.cascadeGrids) grid.setDensityProfile(profile)
-      for (const gen of this.cascadeGenerators) gen.setDensityProfile(profile)
+      for (const grid of this.cascadeGrids) grid.setDensityProfile(fallback)
+      for (const gen of this.cascadeGenerators) gen.setDensityProfile(fallback)
     }
 
     this.__applyDustRadialProfile(texture)
@@ -1109,7 +1129,8 @@ class AsteroidRingSystem extends Group {
    */
   private __applyRingBandProfile(texture: Texture): void {
     const bins = readRingBandBins(texture, this.ringInnerTU, this.ringOuterTU, {
-      blurRadius: this.bleedSigmaTu.dust
+      blurRadius: this.bleedSigmaTu.dust,
+      gaps: this.ringGapsTu
     })
     if (!bins) return
 
@@ -1135,7 +1156,8 @@ class AsteroidRingSystem extends Group {
 
   private __applyDustRadialProfile(texture: Texture): void {
     const bins = readRingAlphaBins(texture, this.ringInnerTU, this.ringOuterTU, {
-      blurRadius: this.bleedSigmaTu.dust
+      blurRadius: this.bleedSigmaTu.dust,
+      gaps: this.ringGapsTu
     })
     if (!bins) return
 

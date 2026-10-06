@@ -1,5 +1,6 @@
 import type { Texture } from 'three'
 import { RadialDensityProfile } from './RadialDensityProfile'
+import { applyRingGapsToBins, type RingGap } from './ringMoonlets'
 
 /**
  * Максимум радиальных бинов профиля. Больше не нужно: сектора шириной в сотни
@@ -21,6 +22,11 @@ interface RingAlphaProfileOptions {
    * (против «астероидных заборов» на высокой плотности). 0 — резкие кромки.
    */
   blurRadius?: number
+  /**
+   * Щели лунок (в единицах radius): альфа бинов × маска щели до порога и
+   * размытия — щель пустеет в камнях, пыли и полосах (см. ringMoonlets.ts).
+   */
+  gaps?: readonly RingGap[]
 }
 
 /**
@@ -129,6 +135,7 @@ function readRingAlphaBins(
   for (let i = 0; i < read.bins; i++) {
     alpha[i] = read.pixels[i * 4 + 3] / 255
   }
+  applyRingGapsToBins(alpha, innerRadius, outerRadius, options.gaps ?? [])
 
   return thresholdAndBlur(alpha, options.alphaTest ?? 0, sigmaInBins(options.blurRadius, innerRadius, outerRadius, read.bins))
 }
@@ -151,7 +158,7 @@ function readRingBandBins(
   texture: Texture,
   innerRadius: number,
   outerRadius: number,
-  options: Pick<RingAlphaProfileOptions, 'blurRadius'> = {}
+  options: Pick<RingAlphaProfileOptions, 'blurRadius' | 'gaps'> = {}
 ): RingBandBins | null {
   const read = readRingPixels(texture, innerRadius, outerRadius)
   if (!read) return null
@@ -160,6 +167,7 @@ function readRingBandBins(
   const channel = (k: number): Float32Array => {
     const values = new Float32Array(read.bins)
     for (let i = 0; i < read.bins; i++) values[i] = read.pixels[i * 4 + k] / 255
+    if (k === 3) applyRingGapsToBins(values, innerRadius, outerRadius, options.gaps ?? [])
     return thresholdAndBlur(values, 0, sigma)
   }
 

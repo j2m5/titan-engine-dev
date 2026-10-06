@@ -204,7 +204,8 @@ describe('AsteroidRingSystem: проводка слоя и полос', () => {
     expect(l0.uBandMeanColor.value.z).toBeCloseTo(2 / 3, 6)
     // Тот же размытый readback, что у пыли (без порога alphaTest)
     expect(readRingBandBins).toHaveBeenCalledWith(fakeTexture, expect.any(Number), expect.any(Number), {
-      blurRadius: toThreeJSUnits(600)
+      blurRadius: toThreeJSUnits(600),
+      gaps: []
     })
   })
 })

@@ -53,7 +53,8 @@ describe('AsteroidRingSystem: применение радиального про
     // Опции readback: alphaTest кольца и размытие кромок из конфига (в TU)
     expect(readRingAlphaProfile).toHaveBeenCalledWith(fakeTexture, expect.any(Number), expect.any(Number), {
       alphaTest: 0.2,
-      blurRadius: toThreeJSUnits(300)
+      blurRadius: toThreeJSUnits(300),
+      gaps: []
     })
   })
 
@@ -91,7 +92,8 @@ describe('AsteroidRingSystem: применение радиального про
 
     // Свой blur (dustBleedKm), БЕЗ порога alphaTest (тусклые полосы — тусклая пыль)
     expect(readRingAlphaBins).toHaveBeenCalledWith(fakeTexture, expect.any(Number), expect.any(Number), {
-      blurRadius: toThreeJSUnits(600)
+      blurRadius: toThreeJSUnits(600),
+      gaps: []
     })
   })
 
@@ -115,7 +117,8 @@ describe('AsteroidRingSystem: применение радиального про
 
     expect(readRingAlphaProfile).toHaveBeenCalledWith(fakeTexture, expect.any(Number), expect.any(Number), {
       alphaTest: 0.2,
-      blurRadius: toThreeJSUnits(1000)
+      blurRadius: toThreeJSUnits(1000),
+      gaps: []
     })
   })
 })
