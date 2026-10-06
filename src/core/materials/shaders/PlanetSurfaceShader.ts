@@ -1,5 +1,6 @@
 import { AbstractShader, ShaderProps } from '@/core/materials/shaders/AbstractShader'
-import { IUniform, Texture, Uniform, Vector3 } from 'three'
+import { IUniform, Texture, Uniform, Vector3, Vector4 } from 'three'
+import { createEclipseUniforms } from '@/core/eclipse/eclipseUniforms'
 import { Actor } from '@/core/models/Actor'
 import { IPlanetRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
@@ -8,6 +9,8 @@ import { clampSunTintStrength } from '@/core/materials/SunTintBinding'
 import { regolithParamsOf } from '@/core/terrain/regolithParams'
 import { resolveTerrainLightParams, TerrainLightParams } from '@/core/terrain/terrainLightParams'
 import { terrainDataOf } from '@/core/terrain/terrainClassPresets'
+import { ringGapUniformValues } from '@/core/materials/shaders/lib/chunks/RingGap'
+import { resolveRingMoonlets, ringGapsOf } from '@/core/renderables/DetailedRingStreamingSystem/ringMoonlets'
 
 // Ламберт суши: 1 — окклюзия (cavity/AO) живёт внутри mix(…, uTerrainLambert),
 // при 0 она исчезла бы; все терраформные тела БД несут 1. 0.15 — пол
@@ -26,6 +29,11 @@ export interface PlanetSurfaceUniforms {
   uCloudOpacity: number
   uRegolithMix: number
   uOppositionSurge: number
+  uEclipseCount: number
+  uEclipseOccluders: Vector4[]
+  uEclipseStar: Vector3
+  uEclipseStarRadius: number
+  uEclipseUmbra: Vector4[]
   emission: number
   uNightThreshold: number
   uNightSoftness: number
@@ -41,6 +49,9 @@ export interface PlanetSurfaceUniforms {
   shadowRingsInnerRadius: number
   shadowRingsOuterRadius: number
   shadowRingsTexture: Texture | null
+  uRingSunTan: number
+  uRingGaps: Vector3[]
+  uRingGapCount: number
   uAtmoTransmittance: Texture | null
   uAtmoIrradiance: Texture | null
   uAtmoBottomRadius: number
@@ -85,6 +96,7 @@ abstract class PlanetSurfaceShader<K extends string> extends AbstractShader<K> {
       alphaTest: 0,
       asteroidDensityScale: 1
     }
+    const ringName: string = this.model.children.where('categoryId', 6).first()?.getAttribute('name', '') ?? ''
     const ringMap: Texture = resourceStorage.getTextureOrMake(
       this.model.children.where('categoryId', 6).first()?.resources.first()?.getAttribute('path') ?? ''
     )
@@ -106,6 +118,8 @@ abstract class PlanetSurfaceShader<K extends string> extends AbstractShader<K> {
       uCloudOpacity: new Uniform(1),
       uRegolithMix: new Uniform(regolith.regolithMix),
       uOppositionSurge: new Uniform(regolith.oppositionSurge),
+      // Затмения: без тел — 0, данные кладёт EclipseSystem (setEclipse материала)
+      ...createEclipseUniforms(),
       emission: new Uniform(planetData.emission),
       uNightThreshold: new Uniform(0.06),
       uNightSoftness: new Uniform(0.18),
@@ -122,6 +136,10 @@ abstract class PlanetSurfaceShader<K extends string> extends AbstractShader<K> {
       shadowRingsInnerRadius: new Uniform(toThreeJSUnits(ringData.innerRadius)),
       shadowRingsOuterRadius: new Uniform(toThreeJSUnits(ringData.outerRadius)),
       shadowRingsTexture: new Uniform(ringMap),
+      // Полутень тени кольца: кадровое значение ставит материал (syncRingShadow)
+      uRingSunTan: new Uniform(0),
+      // Щели лунок в тени кольца — те же, что у меша кольца (RingShader)
+      ...ringGapUniformValues(ringGapsOf(resolveRingMoonlets(ringData, ringName), toThreeJSUnits)),
       uAtmoTransmittance: new Uniform(null),
       uAtmoIrradiance: new Uniform(null),
       uAtmoBottomRadius: new Uniform(0),

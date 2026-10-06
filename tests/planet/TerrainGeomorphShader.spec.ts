@@ -37,7 +37,13 @@ describe('TerrainGeomorph: вершинник рельефа', () => {
 
     const main = mainBody(vert)
     const lines = main.split('\n').filter(l => /\bposition\b/.test(l.replace(/\/\/.*$/, '')))
-    expect(lines.map(l => l.trim())).toEqual(['vec3 morphedPosition = position + morphDelta * morphT;'])
+    // vDetailPos/vDetailPos2 намеренно от собственной формы патча (position, не morphedPosition):
+    // домен детали привязан к собственной форме патча, как до смещения на патч
+    expect(lines.map(l => l.trim())).toEqual([
+      'vec3 morphedPosition = position + morphDelta * morphT;',
+      'vDetailPos = position + detailOrigin;',
+      'vDetailPos2 = position + detailOrigin2;'
+    ])
     // у сферы морфа нет: та же общая геометрия от немодифицированной позиции
     const sphereLines = mainBody(sphereVert).split('\n').filter(l => /\bposition\b/.test(l.replace(/\/\/.*$/, '')))
     expect(sphereLines.map(l => l.trim())).toEqual(['vec3 morphedPosition = position;'])

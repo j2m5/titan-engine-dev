@@ -10,15 +10,16 @@ import {
   MAX_LIVE_PATCHES,
   setPatchMorph,
   TerrainPatchPool,
-  type PatchHandle
+  type PatchHandle,
+  type PatchLayout
 } from '@/core/terrain/TerrainPatchPool'
 import {
   allocatePatchArrays,
   applyPatchResult,
   buildPatchIndex,
+  buildTerrainPatchArrays,
   terrainPatchVertexCount,
-  buildTerrainPatchGeometry,
-  buildTerrainPatchInto
+  buildTerrainPatchGeometry
 } from '@/core/terrain/terrainPatchGeometry'
 import { SyncTerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import { detailWrapFor } from '@/core/terrain/detailWrap'
@@ -63,23 +64,35 @@ const SEGMENTS = 8
 const DEPTH = 1
 const SKIRT = 0.001
 
-function makePool(): TerrainPatchPool {
-  return new TerrainPatchPool(new TerrainMaterial(moon()), SEGMENTS)
+function makePool(layout: PatchLayout = 'terrain'): TerrainPatchPool {
+  return new TerrainPatchPool(new TerrainMaterial(moon()), SEGMENTS, layout)
+}
+
+/** Постройка в слот боевым путём: синхронный строитель + приход (into-варианта больше нет). */
+function buildInto(field: TerrainHeightField, depth: number, handle: PatchHandle, wrap = detailWrapFor(undefined)): void {
+  new SyncTerrainPatchBuilder().request(
+    { field, face: 2, i: 1, j: 0, level: depth, segments: SEGMENTS, skirtDepthUnits: SKIRT, wrap, morph: true },
+    (result) => applyPatchResult(handle, result),
+    (error) => {
+      throw error
+    }
+  )
 }
 
 describe('TerrainPatchPool', () => {
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
 
-  it('into даёт побайтно те же атрибуты и bounding-сферу, что fresh', () => {
+  it('приход даёт побайтно те же атрибуты и bounding-сферу, что fresh', () => {
     const field = bumpyField()
     const pool = makePool()
     const handle = pool.acquire()!
     const wrap = detailWrapFor(undefined)
-    buildTerrainPatchInto(field, 2, 1, 0, DEPTH, SEGMENTS, SKIRT, handle, wrap)
-    const fresh = buildTerrainPatchGeometry(field, 2, 1, 0, DEPTH, SEGMENTS, buildPatchIndex(SEGMENTS), SKIRT, wrap)
+    buildInto(field, DEPTH, handle, wrap)
+    // слот морф-раскладки: сфера охватывает обе формы — эталон тоже с морфом
+    const fresh = buildTerrainPatchGeometry(field, 2, 1, 0, DEPTH, SEGMENTS, buildPatchIndex(SEGMENTS), SKIRT, wrap, true)
 
-    for (const name of ['position', 'detailPos', 'detailPos2', 'height', 'midTilt', 'midShade']) {
+    for (const name of ['position', 'detailOrigin', 'detailOrigin2', 'height', 'midTilt', 'midShade']) {
       expect(Array.from(handle.geometry.getAttribute(name).array)).toEqual(
         Array.from(fresh.geometry.getAttribute(name).array)
       )
@@ -102,8 +115,8 @@ describe('TerrainPatchPool', () => {
     // и сравнение двух нулевых массивов ничего не разделяет: паритет полосы
     // проверяется на живом уровне (11 при SEGMENTS 8 ≈ боевой L8)
     const deep = 11
-    buildTerrainPatchInto(field, 2, 1, 0, deep, SEGMENTS, SKIRT, handle, wrap)
-    const freshDeep = buildTerrainPatchGeometry(field, 2, 1, 0, deep, SEGMENTS, buildPatchIndex(SEGMENTS), SKIRT, wrap)
+    buildInto(field, deep, handle, wrap)
+    const freshDeep = buildTerrainPatchGeometry(field, 2, 1, 0, deep, SEGMENTS, buildPatchIndex(SEGMENTS), SKIRT, wrap, true)
     const deepShade = Array.from(handle.geometry.getAttribute('midShade').array)
     expect(deepShade).toEqual(Array.from(freshDeep.geometry.getAttribute('midShade').array))
     expect(deepShade.some((v: number): boolean => v !== 0)).toBe(true)
@@ -111,22 +124,22 @@ describe('TerrainPatchPool', () => {
 
   // needsUpdate у three — сеттер без геттера (пишет version++, читается как
   // undefined всегда), поэтому наблюдаем через .version (см. WaterMaterial.spec.ts)
-  it('into выставляет needsUpdate на всех перезаписанных атрибутах, включая detailPos/detailPos2 и patchCenter', () => {
+  it('приход выставляет needsUpdate на всех перезаписанных атрибутах, включая detailOrigin/detailOrigin2 и patchCenter', () => {
     const field = bumpyField()
     const pool = makePool()
     const handle = pool.acquire()!
     const wrap = detailWrapFor(undefined)
 
     const versionsBefore: Record<string, number> = {}
-    for (const name of ['position', 'detailPos', 'detailPos2', 'patchCenter']) {
+    for (const name of ['position', 'detailOrigin', 'detailOrigin2', 'patchCenter']) {
       const attr = handle.geometry.getAttribute(name) as BufferAttribute
       attr.needsUpdate = false
       versionsBefore[name] = attr.version
     }
 
-    buildTerrainPatchInto(field, 2, 1, 0, DEPTH, SEGMENTS, SKIRT, handle, wrap)
+    buildInto(field, DEPTH, handle, wrap)
 
-    for (const name of ['position', 'detailPos', 'detailPos2', 'patchCenter']) {
+    for (const name of ['position', 'detailOrigin', 'detailOrigin2', 'patchCenter']) {
       const attr = handle.geometry.getAttribute(name) as BufferAttribute
       expect(attr.version).toBeGreaterThan(versionsBefore[name])
     }
@@ -134,9 +147,9 @@ describe('TerrainPatchPool', () => {
 
   /**
    * applyPatchResult — боевой путь записи прихода строителя (синхронного и
-   * воркерного): те же атрибуты слота, что у into-варианта, но СКОПИРОВАННЫЕ
-   * из чужих массивов. Эталон тот же fresh, что и у into-паритета — иначе
-   * перепутанные местами массивы (detailPos ↔ detailPos2, midTilt ↔ midShade)
+   * воркерного): вершинные массивы слот берёт из результата без копии.
+   * Эталон тот же fresh, что и у паритета прихода выше — иначе
+   * перепутанные местами массивы (detailOrigin ↔ detailOrigin2, midTilt ↔ midShade)
    * проходили бы молча.
    *
    * Уровень 11 (≈ боевой L8 при SEGMENTS 8), а не DEPTH: на грубом уровне шаг
@@ -149,7 +162,7 @@ describe('TerrainPatchPool', () => {
     const handle = pool.acquire()!
     const wrap = detailWrapFor(undefined)
     const deep = 11
-    const names = ['position', 'detailPos', 'detailPos2', 'height', 'midTilt', 'midShade', 'patchCenter']
+    const names = ['position', 'detailOrigin', 'detailOrigin2', 'height', 'midTilt', 'midShade', 'patchCenter']
 
     const versionsBefore: Record<string, number> = {}
     for (const name of names) {
@@ -160,7 +173,7 @@ describe('TerrainPatchPool', () => {
 
     let applied = 0
     new SyncTerrainPatchBuilder().request(
-      { field, face: 2, i: 1, j: 0, level: deep, segments: SEGMENTS, skirtDepthUnits: SKIRT, wrap, morph: null },
+      { field, face: 2, i: 1, j: 0, level: deep, segments: SEGMENTS, skirtDepthUnits: SKIRT, wrap, morph: false },
       (result) => {
         applyPatchResult(handle, result)
         applied++
@@ -190,8 +203,8 @@ describe('TerrainPatchPool', () => {
     }
   })
 
-  it('morph-пул: слот несёт morphDelta/midTiltParent/midShadeParent и инстансный patchMorph; без флага — нет', () => {
-    const handle = new TerrainPatchPool(new TerrainMaterial(moon()), SEGMENTS, 4, true).acquire()!
+  it('слот рельефа несёт morphDelta/midTiltParent/midShadeParent и инстансный patchMorph; слот воды — нет', () => {
+    const handle = new TerrainPatchPool(new TerrainMaterial(moon()), SEGMENTS, 'terrain', 4).acquire()!
     const count = terrainPatchVertexCount(SEGMENTS)
     for (const [name, itemSize] of [['morphDelta', 3], ['midTiltParent', 2], ['midShadeParent', 2]] as const) {
       const attr = handle.geometry.getAttribute(name) as BufferAttribute
@@ -205,14 +218,14 @@ describe('TerrainPatchPool', () => {
     expect(patchMorph.meshPerAttribute).toBe(1)
     expect(patchMorph.usage).toBe(DynamicDrawUsage)
 
-    const plain = makePool().acquire()!
+    const water = makePool('water').acquire()!
     for (const name of ['morphDelta', 'midTiltParent', 'midShadeParent', 'patchMorph']) {
-      expect(plain.geometry.getAttribute(name)).toBeUndefined()
+      expect(water.geometry.getAttribute(name)).toBeUndefined()
     }
   })
 
   it('setPatchMorph пишет значение и поднимает version только при изменении; без атрибута — no-op', () => {
-    const handle = new TerrainPatchPool(new TerrainMaterial(moon()), SEGMENTS, 4, true).acquire()!
+    const handle = new TerrainPatchPool(new TerrainMaterial(moon()), SEGMENTS, 'terrain', 4).acquire()!
     const patchMorph = handle.geometry.getAttribute('patchMorph') as InstancedBufferAttribute
     const before = patchMorph.version
     setPatchMorph(handle, 0.5)
@@ -221,30 +234,44 @@ describe('TerrainPatchPool', () => {
     setPatchMorph(handle, 0.5)
     expect(patchMorph.version).toBe(before + 1)
 
-    expect(() => setPatchMorph(makePool().acquire()!, 0.5)).not.toThrow()
+    expect(() => setPatchMorph(makePool('water').acquire()!, 0.5)).not.toThrow()
   })
 
   it('applyPatchResult: результат без морфа в морф-слот обнуляет дельты и копирует свои midTilt/midShade в parent', () => {
     const field = bumpyField()
-    const handle = new TerrainPatchPool(new TerrainMaterial(moon()), SEGMENTS, 4, true).acquire()!
+    const handle = new TerrainPatchPool(new TerrainMaterial(moon()), SEGMENTS, 'terrain', 4).acquire()!
     const wrap = detailWrapFor(undefined)
     const deep = 11
     const job = { field, face: 2, i: 1, j: 0, level: deep, segments: SEGMENTS, skirtDepthUnits: SKIRT, wrap }
-    const apply = (morph: boolean | null): void => {
+    const apply = (): void => {
       new SyncTerrainPatchBuilder().request(
-        { ...job, morph },
+        { ...job, morph: true },
         (result) => applyPatchResult(handle, result),
         (error) => {
           throw error
         }
       )
     }
+    // Рельеф без морф-массивов (полоса есть, morph null): строитель такого результата
+    // больше не отдаёт (задание рельефа всегда с морфом, воды — без полосы), но
+    // applyPatchResult обязан его принять — собираем ядром вручную.
+    const applyBandOnly = (): void => {
+      const arrays = allocatePatchArrays(SEGMENTS)
+      const built = buildTerrainPatchArrays(field, 2, 1, 0, deep, SEGMENTS, SKIRT, wrap, arrays, false)
+      applyPatchResult(handle, {
+        arrays,
+        center: built.center.toArray(),
+        bounds: built.bounds,
+        detailOrigin: built.detailOrigin,
+        detailOrigin2: built.detailOrigin2
+      })
+    }
     const attr = (name: string): number[] => Array.from(handle.geometry.getAttribute(name).array)
 
-    apply(true)
+    apply()
     expect(attr('morphDelta').some((v) => v !== 0)).toBe(true)
 
-    apply(null)
+    applyBandOnly()
     expect(attr('morphDelta').every((v) => v === 0)).toBe(true)
     expect(attr('midTiltParent')).toEqual(attr('midTilt'))
     expect(attr('midShadeParent')).toEqual(attr('midShade'))
@@ -298,12 +325,10 @@ describe('TerrainPatchPool', () => {
   // acquire (см. докблок класса), pool.dispose() освобождает их и общий
   // индекс, но НЕ трогает слоты, которые вызывающий не release'нул —
   // это его ответственность (см. TerrainSphere.dispose)
-  it('геометрия слота несёт атрибуты detailPos/detailPos2 (vec3) и midTilt (vec2), все DynamicDrawUsage', () => {
+  it('геометрия слота несёт midTilt/midShade (vec2), все DynamicDrawUsage', () => {
     const pool = makePool()
     const handle = pool.acquire()!
     const attrs: Array<[string, number]> = [
-      ['detailPos', 3],
-      ['detailPos2', 3],
       ['midTilt', 2],
       ['midShade', 2]
     ]
@@ -321,6 +346,14 @@ describe('TerrainPatchPool', () => {
     expect(patchCenter.usage).toBe(DynamicDrawUsage)
     // делитель инстанса: он же идёт в _maxInstanceCount = meshPerAttribute × count
     expect(patchCenter.meshPerAttribute).toBe(1)
+    for (const name of ['detailOrigin', 'detailOrigin2']) {
+      const origin = handle.geometry.getAttribute(name) as InstancedBufferAttribute
+      expect(origin.isInstancedBufferAttribute).toBe(true)
+      expect(origin.count).toBe(1)
+      expect(origin.itemSize).toBe(3)
+      expect(origin.usage).toBe(DynamicDrawUsage)
+    }
+    expect(handle.geometry.getAttribute('detailPos')).toBeUndefined()
   })
 
   it('dispose освобождает геометрии свободных слотов и общий индекс; живые слоты не трогает', () => {

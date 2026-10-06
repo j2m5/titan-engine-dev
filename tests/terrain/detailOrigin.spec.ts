@@ -6,7 +6,8 @@ import { buildPatchIndex, buildTerrainPatchGeometry } from '@/core/terrain/terra
 import { DEFAULT_DETAIL_SCALE2_METERS, detailWrapFor, wrapIndex, wrappedComponent } from '@/core/terrain/detailWrap'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { Actor } from '@/core/models/Actor'
-import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
+import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { heightPathOf } from '@/core/terrain/heightPath'
@@ -118,7 +119,7 @@ describe('USE_TERRAIN_DETAIL — только у материала патчей
 
   it('старая сфера Planet с загруженной картой не получает домен детали: атрибутов патча у неё нет', () => {
     const moon = Actor.find(MOON_ID)!
-    // PlanetMaterial на промахе зовёт PlaceholderTexture (canvas 2d нет в jsdom):
+    // Материалы на промахе зовут PlaceholderTexture (canvas 2d нет в jsdom):
     // ключи-плейсхолдеры + диффуз; детальная нормаль — условие USE_TERRAIN_DETAIL
     for (const name of ['', 'default.png', 'night.jpg']) seed(name)
     for (const type of ['diffuse', 'detailNormal'] as const) {
@@ -127,8 +128,8 @@ describe('USE_TERRAIN_DETAIL — только у материала патчей
     const map: HeightMapData = { width: 4, height: 2, minMeters: 0, maxMeters: 1000, data: new Uint16Array(8).fill(32768) }
     ;(heightFieldStorage as unknown as { maps: Map<string, HeightMapData> }).maps.set(heightPathOf(moon)!, map)
 
-    const sphere = new PlanetMaterial(moon)
-    const patches = new PlanetMaterial(moon, undefined, { terrainPatches: true })
+    const sphere = new SphereSurfaceMaterial(moon)
+    const patches = new TerrainMaterial(moon)
     // дефайны карт собирает updateMaterial, конструктор их не трогает
     sphere.updateMaterial()
     patches.updateMaterial()

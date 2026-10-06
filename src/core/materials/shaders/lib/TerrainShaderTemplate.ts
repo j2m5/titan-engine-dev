@@ -70,10 +70,11 @@ export const TerrainShaderTemplate: ShaderProps = {
     attribute float patchMorph;
 
     #ifdef USE_TERRAIN_DETAIL
-      // Точная тело-локальная позиция минус k·W (detailWrap.ts): домен
-      // детальных текстур без квантования float32 единичного направления.
-      attribute vec3 detailPos;
-      attribute vec3 detailPos2;
+      // Домен детальных текстур: тело-локальная позиция минус k·W
+      // (detailWrap.ts) = position + смещение патча center − k·W — без
+      // квантования float32 единичного направления.
+      attribute vec3 detailOrigin;
+      attribute vec3 detailOrigin2;
       varying vec3 vDetailPos;
       varying vec3 vDetailPos2;
     #endif
@@ -114,8 +115,8 @@ export const TerrainShaderTemplate: ShaderProps = {
       ${planetSurfaceVertexOutputs}
 
       #ifdef USE_TERRAIN_DETAIL
-        vDetailPos = detailPos;
-        vDetailPos2 = detailPos2;
+        vDetailPos = position + detailOrigin;
+        vDetailPos2 = position + detailOrigin2;
       #endif
 
       #if defined(USE_TERRAIN_MACRO_DETAIL) || defined(USE_WATER_EDGE) || defined(USE_TERRAIN_FROST)
@@ -338,13 +339,13 @@ export const TerrainShaderTemplate: ShaderProps = {
       #ifdef USE_WATER_EDGE
         // Блеск мокрой кромки — тот же глинт без карты, силой WET_GLOSS
         finalColor += glintEdge * blinnPhongGlint(normal, lightDirection, viewDir) * WET_GLOSS
-                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;
+                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * eclipse;
       #endif
 
       #ifdef USE_TERRAIN_GLINT
         // лёд блестит, снег (шероховатость ≈ 1) и дальний план — нет
         finalColor += terrainIceGlint(normal, lightDirection, viewDir, terrainRoughness) * uIceGlintStrength
-                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow;
+                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * eclipse;
       #endif
 
       ${planetSurfaceFragmentOutput}

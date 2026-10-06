@@ -15,16 +15,13 @@ import { readWaterLevelMeters } from '@/core/terrain/waterLevel'
 import { onTerrainShadowMapReady, terrainShadowMapFor, type TerrainShadowMap } from '@/core/terrain/terrainShadowMap'
 import { resolveTerrainLightParams } from '@/core/terrain/terrainLightParams'
 import type { NearTileState } from '@/core/terrain/NearShadowTile'
-import { readRenderingData } from '@/core/helpers/renderingData'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import {
   DETAIL_FADE_START_RATIO,
   macroFadeMetersFor
 } from '@/core/materials/shaders/lib/chunks/terrainMacroDetailMath'
-import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
-import { resolveStarRadiusKm } from '@/core/terrain/starRadius'
-import { penumbraTan } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
+import { TERRAIN_SHADOW_PENUMBRA_FLOOR } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
 
 /**
  * Материал патчей рельефа (TerrainSphere): slope/cavity, детальный слой и
@@ -41,19 +38,8 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
   /** Отписка от готовности карты тени: до неё привязана заглушка, см. terrainShadowMapFor. */
   private unsubscribeShadowReady: (() => void) | null = null
 
-  /** Радиус звезды системы (юниты сцены) для полутени тел без атмосферы; undefined — фолбэк. */
-  private readonly starRadiusUnits: number | undefined
-
-  /** Угловой радиус солнца из данных атмосферы тела; undefined — нет атмосферы. */
-  private readonly atmosphereSunAngularRadius: number | undefined
-
   public constructor(model: Actor, atmosphereRegistry?: AtmosphereRegistry) {
     super(model, atmosphereRegistry, new TerrainShader(model))
-    const starRadiusKm = resolveStarRadiusKm(model)
-    this.starRadiusUnits = starRadiusKm === undefined ? undefined : toThreeJSUnits(starRadiusKm)
-    this.atmosphereSunAngularRadius = this.atmosphereActor
-      ? readRenderingData<AtmosphereConfig>(this.atmosphereActor)?.sunAngularRadius
-      : undefined
 
     // Страховка атрибутов патча: без явного дефолта three не биндит ничего, и
     // значение приходит из общего generic-слота GL. Нули — своя форма патча:
@@ -93,14 +79,12 @@ class TerrainMaterial extends PlanetSurfaceMaterial {
     this.uniforms.uMidbandShade = new Uniform(midbandParamsOf(model).midbandShade)
   }
 
-  /** Полутень тени рельефа: угловой размер солнца — из атмосферы или R★/дистанция; звезда в нуле сцены. */
+  /** Полутень тени рельефа (пол и ручка мягкости) и тени кольца (честный тангенс) — один тангенс солнца. */
   public syncTerrainShadow(modelWorldPosition: Vector3): void {
-    this.uniforms.uShadowPenumbraTan.value = penumbraTan(
-      this.atmosphereSunAngularRadius,
-      this.starRadiusUnits,
-      modelWorldPosition.length(),
-      this.shadowSoftness
-    )
+    const tan = this.sunTangentAt(modelWorldPosition)
+
+    this.uniforms.uShadowPenumbraTan.value = Math.max(tan, TERRAIN_SHADOW_PENUMBRA_FLOOR) * this.shadowSoftness
+    this.uniforms.uRingSunTan.value = tan
   }
 
   /** Нужна ли плитка ближней тени: слой живёт внутри USE_TERRAIN_SHADOW и гаснет при силе 0. */

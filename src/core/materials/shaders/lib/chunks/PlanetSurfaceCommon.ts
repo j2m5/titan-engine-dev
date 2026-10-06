@@ -1,4 +1,5 @@
 import { Color, ShaderChunk, Uniform, Vector3 } from 'three'
+import { createEclipseUniforms } from '@/core/eclipse/eclipseUniforms'
 
 /**
  * Общие куски шаблонов поверхности планет: сфера (SphereSurfaceShaderTemplate)
@@ -10,6 +11,7 @@ import { Color, ShaderChunk, Uniform, Vector3 } from 'three'
 
 /** Дефолты юниформов, общих для обоих шаблонов (объявлены в общем прологе или читаются обоими путями). */
 export const planetSurfaceDefaultUniforms = {
+  ...createEclipseUniforms(),
   lightPosition: new Uniform(new Vector3()),
   uLightColor: new Uniform(new Color(1, 1, 1)),
   diffuseMap: new Uniform(null),
@@ -139,12 +141,18 @@ export const planetSurfaceFragmentFunctions = `
       uniform float uOppositionSurge;
       #include <asteroidBrdfFunctions>
     #endif
+
+    // Затмения: доля видимого диска звезды при перекрытии телами-соседями (чанк Eclipse); без тел — 1
+    #include <eclipseFunctions>
+    #include <eclipseHostFunctions>
 `
 
-/** Тень кольца. */
+/** Тень кольца; щели лунок (ringGapMask) — до функций тени, они её зовут. */
 export const planetSurfaceRingShadowPars = `
     #ifdef USE_RING
       #include <ringShadowUniforms>
+      #include <ringGapUniforms>
+      #include <ringGapFunctions>
       #include <ringShadowFunctions>
     #endif
 `
@@ -180,6 +188,9 @@ export const planetSurfaceLightBegin = `
         sunTintMix = mix(vec3(1.0), sunTint(muS), uSunTintStrength);
       #endif
 
+      // Затмение: свет звезды в точке датума с учётом тел-соседей (1 — без затмения)
+      vec3 eclipse = eclipseLight(normalize(vLocalDir) * uBodyRadiusUnits);
+
       // Собственная тень рельефа; 1 без гейта — блики ниже читают её всегда
       float terrainShadow = 1.0;
 
@@ -194,7 +205,7 @@ export const planetSurfaceLightBegin = `
         // ветка юниформная (без производных внутри): при 0 два тапа LUT не платятся
         if (uSkyAmbientStrength > 0.0) skyTerm = mix(skyTerm, skyAmbientTint(muS), uSkyAmbientStrength);
       #endif
-      vec3 ambient = uTerrainAmbient * skyTerm * occlusion;
+      vec3 ambient = uTerrainAmbient * skyTerm * occlusion * eclipse;
       // Тень облаков на земле — только прямой свет и только у рельефа (базис east/north)
       float cloudShadow = 1.0;
 `
@@ -222,6 +233,7 @@ export const planetSurfaceDirectLight = `
       #else
         vec3 litDirect = vec3(directGain) * sunTintMix;
       #endif
+      litDirect *= eclipse;
       // вес до 1 — mix(пол, прямой); избыток реголита сверх 1 добавляет только прямой свет:
       // экстраполяция mix увела бы тень (directGain ≈ 0) ниже пола, в минус
       vec3 lit = mix(ambient, litDirect, min(directWeight, 1.0)) + max(directWeight - 1.0, 0.0) * litDirect;
@@ -231,7 +243,7 @@ export const planetSurfaceDirectLight = `
 /** Сборка: день, ночь, облака, терминатор, тень кольца, кламп блума; кончается заготовкой бликов. */
 export const planetSurfaceComposite = `
       // lambert = 0 — тинт на всём диффузе
-      vec3 dayColor = surfaceAlbedo * mix(sunTintMix, lit, uTerrainLambert);
+      vec3 dayColor = surfaceAlbedo * mix(sunTintMix * eclipse, lit, uTerrainLambert);
 
       // Ночная и облачная карты есть не у всех тел: без гейта корректность
       // держалась бы на правиле GL «непривязанная текстура читается чёрной».
@@ -249,6 +261,7 @@ export const planetSurfaceComposite = `
         vec3 cloudDir;
         cloudLayerSample(normalize(vLocalDir), normalize(vLocalViewDir), cloudPremul, cloudAlphaSlant, cloudDir);
         cloudRadiance = cloudLitRadiance(cloudPremul, cloudDir, -normalize(vLocalLightDirection));
+        cloudRadiance *= eclipseLight(cloudDir * (uBodyRadiusUnits + uCloudHeightUnits));
       #endif
 
       // Огни городов: порог с мягкостью (квадрат душил середину и оставлял

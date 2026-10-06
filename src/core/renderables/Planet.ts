@@ -44,7 +44,7 @@ class Planet extends Mesh {
    */
   public updateObject(_ctx: UpdateContext): void {
     this.planetMaterial.syncSunTint()
-    this.planetMaterial.syncTerrainShadow(this.getWorldPosition(this.worldScratch))
+    this.planetMaterial.syncRingShadow(this.getWorldPosition(this.worldScratch))
   }
 }
 
