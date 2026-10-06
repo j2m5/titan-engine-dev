@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { ringshine } from './brdfMirror'
 import { asteroidBrdfFunctions } from '@/core/materials/shaders/lib/chunks/AsteroidBrdf'
 import { InstancedAsteroidShaderTemplate } from '@/core/materials/shaders/lib/InstancedAsteroidShaderTemplate'
+import { InstancedAsteroidShader } from '@/core/materials/shaders/InstancedAsteroidShader'
 import { BillboardAsteroidMaterial } from '@/core/renderables/DetailedRingStreamingSystem/BillboardAsteroidMaterial'
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
 import { Actor } from '@/core/models/Actor'
@@ -69,13 +70,18 @@ describe('asteroidRingshine — шейдеры', () => {
     expect(asteroidBrdfFunctions).toContain('float through = tau * exp(-tau / mu0);')
   })
 
-  it('L0 и L1: вызов под uRingBandEnabled, сила uRingshineStrength, тень планеты, цвет листа линейный', () => {
+  it('L0 и L1: вызов под uRingBandEnabled, сила uRingshineStrength, тень планеты, цвет листа по пространству текстуры', () => {
     const l0 = InstancedAsteroidShaderTemplate.fragmentShader
     const l1 = new BillboardAsteroidMaterial().fragmentShader
     for (const frag of [l0, l1]) {
       expect(frag).toContain('uniform float uRingshineStrength;')
+      expect(frag).toContain('uniform float uRingBandSrgb;')
       expect(frag).toContain('if (uRingBandEnabled > 0.5 && uRingshineStrength > 0.0) {')
-      expect(frag).toContain('pow(ringBandAt(ringR).rgb, vec3(2.2))')
+      // Байты полос декодируются из sRGB только у sRGB-текстуры кольца (меш кольца
+      // показывает NoColorSpace-текстуру как линейную)
+      expect(frag).toContain('vec3 band = ringBandAt(ringR).rgb;')
+      expect(frag).toContain('vec3 sheetColor = mix(band, pow(band, vec3(2.2)), uRingBandSrgb);')
+      expect(frag).not.toContain('pow(ringBandAt(ringR).rgb, vec3(2.2))')
       expect(frag).toContain(
         'asteroidRingshine(normal, normalize(vRingNormalView), vRingPos, uDustLightDirRing, ringLayerTau(ringR), sheetColor, uLayerHalfThickness)'
       )
@@ -85,6 +91,15 @@ describe('asteroidRingshine — шейдеры', () => {
     for (const vs of vertices) {
       expect(vs).toContain('vRingNormalView = normalize(mat3(modelViewMatrix) * vec3(0.0, 1.0, 0.0));')
     }
+  })
+
+  it('uRingBandSrgb по умолчанию 0 (линейные байты) в L0 (шаблон и шейдер) и L1', () => {
+    const uniforms = [
+      InstancedAsteroidShaderTemplate.uniforms,
+      new InstancedAsteroidShader().uniforms,
+      new BillboardAsteroidMaterial().uniforms
+    ]
+    for (const u of uniforms) expect(u.uRingBandSrgb.value).toBe(0)
   })
 })
 

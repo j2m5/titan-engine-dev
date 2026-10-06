@@ -1,7 +1,7 @@
 import { vi, type Mock } from 'vitest'
-import { Vector3 } from 'three'
+import { NoColorSpace, SRGBColorSpace, Vector3 } from 'three'
 
-const fakeTexture = { name: 'ring.png' }
+const fakeTexture: { name: string; colorSpace?: string } = { name: 'ring.png' }
 
 vi.mock('@/core/services/ResourceStorage', () => ({
   resourceStorage: {
@@ -206,6 +206,30 @@ describe('AsteroidRingSystem: проводка слоя и полос', () => {
     expect(readRingBandBins).toHaveBeenCalledWith(fakeTexture, expect.any(Number), expect.any(Number), {
       blurRadius: toThreeJSUnits(600),
       gaps: []
+    })
+  })
+
+  describe('пространство цвета текстуры кольца → декодирование листа для ring-shine', () => {
+    afterEach(() => {
+      delete fakeTexture.colorSpace
+    })
+
+    it.each([
+      [SRGBColorSpace, 1],
+      [NoColorSpace, 0]
+    ])('colorSpace %j — uRingBandSrgb %i в L0 и L1', (colorSpace, expected) => {
+      fakeTexture.colorSpace = colorSpace
+      ;(readRingBandBins as Mock).mockReturnValue({
+        color: new Float32Array([1, 0, 0, 0, 0, 1]),
+        alpha: new Float32Array([0.5, 1])
+      })
+      const system = new AsteroidRingSystem(makeFakeActor())
+      internalsOf(system).__tryBuildDensityProfile()
+
+      for (const u of [poolOf(system).geometryMaterial.uniforms, poolOf(system).billboardMaterial.uniforms]) {
+        expect(u.uRingBandEnabled.value).toBe(1)
+        expect(u.uRingBandSrgb.value).toBe(expected)
+      }
     })
   })
 })

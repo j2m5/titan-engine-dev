@@ -57,6 +57,7 @@ interface InstancedAsteroidUniforms {
   uPlanetshineColor: Color
   uPlanetshineStrength: number
   uRingshineStrength: number
+  uRingBandSrgb: number
   uIceFraction: number
   uIceRockColor: Color
   uIceSpecularStrength: number
@@ -132,6 +133,7 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       uPlanetshineColor: new Uniform(new Color(0xb8ad9c)),
       uPlanetshineStrength: new Uniform(1.5),
       uRingshineStrength: new Uniform(0),
+      uRingBandSrgb: new Uniform(0),
       // Ледяная примесь (см. чанк AsteroidIce): доля 0 — все тела базового
       // профиля; ручки заполняет AsteroidRingSystem из ледяного профиля
       uIceFraction: new Uniform(0),

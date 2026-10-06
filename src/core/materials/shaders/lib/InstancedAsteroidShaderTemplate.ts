@@ -79,6 +79,8 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uPlanetshineColor: new Uniform(new Color(0xb8ad9c)),
     uPlanetshineStrength: new Uniform(1.5),
     uRingshineStrength: new Uniform(0),
+    // 1 — байты полос в sRGB (текстура кольца SRGBColorSpace), 0 — линейные
+    uRingBandSrgb: new Uniform(0),
     // Радиальный профиль пыли из альфы текстуры кольца; scale 0 — выключен
     uDustRadialMap: new Uniform(null),
     uDustRadialMapScale: new Uniform(0),
@@ -294,7 +296,8 @@ export function instancedAsteroidShaderSource(
     uniform float uOppositionSurge;
     uniform vec3 uPlanetshineColor;
     uniform float uPlanetshineStrength;
-    uniform float uRingshineStrength;${iceFragmentDecl}
+    uniform float uRingshineStrength;
+    uniform float uRingBandSrgb;${iceFragmentDecl}
 
     #ifdef USE_LIGHT_TINT
       uniform vec3 uLightColor;
@@ -429,10 +432,12 @@ export function instancedAsteroidShaderSource(
 
       // Подсветка от листа кольца (см. AsteroidBrdf): свет звезды, рассеянный
       // освещённым листом; тень планеты гасит её вместе с листом, тень слоя — нет
-      // (лист и есть источник). Цвет листа — полоса, переведённая в линейный
+      // (лист и есть источник). Цвет листа — полоса в линейном: байты sRGB-текстуры
+      // декодируются, NoColorSpace — как есть (так их показывает меш кольца)
       if (uRingBandEnabled > 0.5 && uRingshineStrength > 0.0) {
         float ringR = length(vRingPos.xz);
-        vec3 sheetColor = pow(ringBandAt(ringR).rgb, vec3(2.2));
+        vec3 band = ringBandAt(ringR).rgb;
+        vec3 sheetColor = mix(band, pow(band, vec3(2.2)), uRingBandSrgb);
         vec3 ringshine = asteroidRingshine(normal, normalize(vRingNormalView), vRingPos, uDustLightDirRing, ringLayerTau(ringR), sheetColor, uLayerHalfThickness);
         #ifdef USE_LIGHT_TINT
           finalColor += albedo * ringshine * (uRingshineStrength * planetShadow * surfAO) * uLightColor;

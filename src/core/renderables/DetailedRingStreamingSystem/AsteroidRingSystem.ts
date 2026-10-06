@@ -7,6 +7,7 @@ import {
   Object3D,
   PerspectiveCamera,
   RepeatWrapping,
+  SRGBColorSpace,
   Vector3,
   type IUniform,
   type Texture
@@ -1179,6 +1180,12 @@ class AsteroidRingSystem extends Group {
       uniforms.uBandMeanColor.value.set(band.meanColor[0], band.meanColor[1], band.meanColor[2])
       uniforms.uRingBandEnabled.value = 1
     }
+
+    // Цвет листа для ring-shine (L0/L1): байты полос — те же, что видит меш
+    // кольца; декодировать из sRGB только у sRGB-текстуры, иначе они линейные
+    const bandSrgb = texture.colorSpace === SRGBColorSpace ? 1 : 0
+    this.pool.geometryMaterial.uniforms.uRingBandSrgb.value = bandSrgb
+    this.pool.billboardMaterial.uniforms.uRingBandSrgb.value = bandSrgb
   }
 
   /** Юниформы всех материалов модели RingDust: камни L0/L1 и, если есть, объём дымки */

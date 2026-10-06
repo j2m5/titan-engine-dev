@@ -228,6 +228,7 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         uPlanetshineColor: { value: new Color(0xb8ad9c) },
         uPlanetshineStrength: { value: 1.5 },
         uRingshineStrength: { value: 0 },
+        uRingBandSrgb: { value: 0 },
         // Пылевая дымка (см. чанк RingDust); uDustDensity = 0 — туман выключен
         uDustColor: { value: new Color(0x9b968c) },
         uDustDensity: { value: 0.0 },
@@ -268,7 +269,8 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         uniform float uOppositionSurge;
         uniform vec3 uPlanetshineColor;
         uniform float uPlanetshineStrength;
-        uniform float uRingshineStrength;${iceFragmentDecl}
+        uniform float uRingshineStrength;
+        uniform float uRingBandSrgb;${iceFragmentDecl}
 
         #ifdef USE_LIGHT_TINT
           uniform vec3 uLightColor;
@@ -366,7 +368,8 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
           // Подсветка от листа кольца — как у L0
           if (uRingBandEnabled > 0.5 && uRingshineStrength > 0.0) {
             float ringR = length(vRingPos.xz);
-            vec3 sheetColor = pow(ringBandAt(ringR).rgb, vec3(2.2));
+            vec3 band = ringBandAt(ringR).rgb;
+            vec3 sheetColor = mix(band, pow(band, vec3(2.2)), uRingBandSrgb);
             vec3 ringshine = asteroidRingshine(normal, normalize(vRingNormalView), vRingPos, uDustLightDirRing, ringLayerTau(ringR), sheetColor, uLayerHalfThickness);
             #ifdef USE_LIGHT_TINT
               color += base * ringshine * (uRingshineStrength * planetShadow) * uLightColor;
