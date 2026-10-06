@@ -428,6 +428,20 @@ export type IAtmosphereRenderingObject = AtmosphereConfig
 
 export type INebulaRenderingObject = NebulaRenderingData
 
+/** Лунка: малое тело в плоскости кольца с расчищенной вокруг орбиты щелью (см. ringMoonlets.ts). */
+export interface RingMoonlet {
+  /** Радиус орбиты от центра планеты, км; внутри [innerRadius, outerRadius]. */
+  radiusKm: number
+  /** Положение по азимуту в плоскости кольца, градусы. */
+  azimuthDeg: number
+  /** Диаметр тела, км. */
+  sizeKm: number
+  /** Полная ширина щели по радиусу, км. */
+  gapKm: number
+  /** Имя реальной модели формы (RING_MOONLET_MODELS). */
+  model: string
+}
+
 export interface IRingRenderingObject {
   innerRadius: number
   outerRadius: number
@@ -466,6 +480,10 @@ export interface IRingRenderingObject {
   planetshineColor?: number | string
   /** Сила planetshine (дефолт 1.5) */
   planetshineStrength?: number
+  /** Лунки со щелями, не больше RING_MOONLETS_MAX; нет — кольцо без лунок. */
+  moonlets?: RingMoonlet[]
+  /** Сила подсветки камней светом листа кольца, ≥ 0; дефолт 1. */
+  ringshineStrength?: number
   /**
    * Сила самозатенения слоя кольца на камнях и пыли 0..1: смесь с физической
    * экспонентой по толще слоя, худший случай (1 − сила). Дефолт 0.25

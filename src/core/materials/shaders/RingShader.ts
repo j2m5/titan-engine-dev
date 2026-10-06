@@ -7,6 +7,8 @@ import { resourceStorage } from '@/core/services/ResourceStorage'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { requireRenderingData } from '@/core/helpers/renderingData'
 import { config } from '@/core/framework/config'
+import { ringGapUniformValues } from '@/core/materials/shaders/lib/chunks/RingGap'
+import { resolveRingMoonlets, ringGapsOf } from '@/core/renderables/DetailedRingStreamingSystem/ringMoonlets'
 
 interface RingUniforms {
   diffuseMap: Texture | null
@@ -24,6 +26,8 @@ interface RingUniforms {
   uRingForwardScattering: number
   uRingOppositionSurge: number
   uRingDensityExtinction: number
+  uRingGaps: Vector3[]
+  uRingGapCount: number
 }
 
 class RingShader extends AbstractShader<keyof RingUniforms> {
@@ -55,7 +59,8 @@ class RingShader extends AbstractShader<keyof RingUniforms> {
       ringAngleCurve: new Uniform(1.5),
       uRingForwardScattering: new Uniform(config('ring.forwardScattering')),
       uRingOppositionSurge: new Uniform(config('ring.oppositionSurge')),
-      uRingDensityExtinction: new Uniform(config('ring.densityExtinction'))
+      uRingDensityExtinction: new Uniform(config('ring.densityExtinction')),
+      ...ringGapUniformValues(ringGapsOf(resolveRingMoonlets(ringData, this.model.getAttribute('name', '')), toThreeJSUnits))
     }
     this.name = 'RingShader'
   }

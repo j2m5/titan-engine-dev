@@ -46,6 +46,7 @@ function billboardVertexShader(useIceVariety: boolean): string {
         varying float vDistanceFade;
         varying vec3 vLightDirView;
         varying vec3 vPlanetDirView;
+        varying vec3 vRingNormalView;
         varying float vInstanceSeed;
         varying vec3 vRingPos;
         varying float vFade;
@@ -134,6 +135,8 @@ function billboardVertexShader(useIceVariety: boolean): string {
           // planetshine. В модельном пространстве центр кольца лежит в
           // -uOriginOffset: модельное начало — это плавающее начало
           vPlanetDirView = normalize((modelViewMatrix * vec4(-uOriginOffset, 1.0)).xyz - mvInstancePos.xyz);
+          // Нормаль листа кольца в view: ring-local Y (лист — плоскость XZ)
+          vRingNormalView = normalize(mat3(modelViewMatrix) * vec3(0.0, 1.0, 0.0));
 
           // Затухание по расстоянию: свой каскад — по инстансному порогу (иначе
           // каскады мельче самого крупного растягивают fade его юниформом и
@@ -224,6 +227,8 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         uOppositionSurge: { value: 0.3 },
         uPlanetshineColor: { value: new Color(0xb8ad9c) },
         uPlanetshineStrength: { value: 1.5 },
+        uRingshineStrength: { value: 0 },
+        uRingBandSrgb: { value: 0 },
         // Пылевая дымка (см. чанк RingDust); uDustDensity = 0 — туман выключен
         uDustColor: { value: new Color(0x9b968c) },
         uDustDensity: { value: 0.0 },
@@ -263,7 +268,9 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         uniform float uLunarMix;
         uniform float uOppositionSurge;
         uniform vec3 uPlanetshineColor;
-        uniform float uPlanetshineStrength;${iceFragmentDecl}
+        uniform float uPlanetshineStrength;
+        uniform float uRingshineStrength;
+        uniform float uRingBandSrgb;${iceFragmentDecl}
 
         #ifdef USE_LIGHT_TINT
           uniform vec3 uLightColor;
@@ -273,6 +280,7 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
         varying float vDistanceFade;
         varying vec3 vLightDirView;
         varying vec3 vPlanetDirView;
+        varying vec3 vRingNormalView;
         varying float vInstanceSeed;
         varying vec3 vRingPos;
         varying float vFade;
@@ -357,6 +365,18 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
             vec3 color = base * lighting;
           #endif
           color += base * uPlanetshineColor * (uPlanetshineStrength * shine);
+          // Подсветка от листа кольца — как у L0
+          if (uRingBandEnabled > 0.5 && uRingshineStrength > 0.0) {
+            float ringR = length(vRingPos.xz);
+            vec3 band = ringBandAt(ringR).rgb;
+            vec3 sheetColor = mix(band, pow(band, vec3(2.2)), uRingBandSrgb);
+            vec3 ringshine = asteroidRingshine(normal, normalize(vRingNormalView), vRingPos, uDustLightDirRing, ringLayerTau(ringR), sheetColor, uLayerHalfThickness);
+            #ifdef USE_LIGHT_TINT
+              color += base * ringshine * (uRingshineStrength * planetShadow) * uLightColor;
+            #else
+              color += base * ringshine * (uRingshineStrength * planetShadow);
+            #endif
+          }
           // Аэроперспектива: дальние импосторы тонут в пылевой дымке
           color = ringDustApplyFog(color, vRingPos);
           gl_FragColor = vec4(color, alpha);

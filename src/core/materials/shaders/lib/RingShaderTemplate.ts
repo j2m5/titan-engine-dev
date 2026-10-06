@@ -1,6 +1,7 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { Color, ShaderChunk, Uniform, Vector3 } from 'three'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { ringGapFunctions, ringGapUniforms, ringGapUniformValues } from '@/core/materials/shaders/lib/chunks/RingGap'
 
 export const RingShaderTemplate: ShaderProps = {
   uniforms: {
@@ -17,7 +18,8 @@ export const RingShaderTemplate: ShaderProps = {
     ringAngleCurve: new Uniform(1.5),
     uRingForwardScattering: new Uniform(0),
     uRingOppositionSurge: new Uniform(0),
-    uRingDensityExtinction: new Uniform(0)
+    uRingDensityExtinction: new Uniform(0),
+    ...ringGapUniformValues([])
   },
   vertexShader: `
     precision highp float;
@@ -59,6 +61,8 @@ export const RingShaderTemplate: ShaderProps = {
     uniform float innerRadius;
     uniform float outerRadius;
     uniform float alphaTest;
+    ${ringGapUniforms}
+    ${ringGapFunctions}
     uniform float planetRadius;
     uniform float minDistance;
     uniform float maxDistance;
@@ -98,6 +102,10 @@ export const RingShaderTemplate: ShaderProps = {
     }
 
     void main() {
+      // Радиус и его экранная производная — первыми, в однородном потоке: после
+      // раннего выхода по радиусу (return/discard) fwidth не определена в GLSL
+      float ringR = length(vPosition);
+      float ringFw = fwidth(ringR);
       ${ShaderChunk['logdepthbuf_fragment']}
       vec2 uv;
       uv.x = (length(vPosition) - innerRadius) / (outerRadius - innerRadius);
@@ -109,6 +117,9 @@ export const RingShaderTemplate: ShaderProps = {
       uv.y = 0.0;
 
       vec4 color = texture2D(diffuseMap, uv);
+      // Щели лунок (чанк RingGap): кольцо в щели пустое — до гейта и всех производных альфы;
+      // сглаживание по экранному футпринту радиуса — издали щель тает, а не мерцает
+      color.a *= ringGapMaskAA(ringR, ringFw);
 
       if (color.a <= 0.0 || color.a <= alphaTest) discard;
 
