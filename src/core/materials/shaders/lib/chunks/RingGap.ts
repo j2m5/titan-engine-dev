@@ -2,10 +2,11 @@ import { Uniform, Vector3 } from 'three'
 import { RING_MOONLETS_MAX, type RingGap } from '@/core/renderables/DetailedRingStreamingSystem/ringMoonlets'
 
 /**
- * Щели лунок колец: альфа кольца × ringGapMask(r) у каждого потребителя,
- * читающего текстуру кольца (меш, проход глубины, тень на планете).
+ * Щели лунок колец: альфа кольца × маска щели у каждого потребителя,
+ * читающего текстуру кольца: меш и проход глубины — ringGapMaskAA(r, fwidth(r))
+ * (экранное сглаживание), тень на планете — ringGapMask(r).
  * x — радиус орбиты, y — полуширина щели, z — мягкий край, в единицах
- * радиуса потребителя. CPU-зеркало — ringGapMask в ringMoonlets.ts.
+ * радиуса потребителя. CPU-зеркала — ringGapMask/ringGapMaskAA в ringMoonlets.ts.
  */
 export const ringGapUniforms = `
   uniform vec3 uRingGaps[${RING_MOONLETS_MAX}];
@@ -20,6 +21,21 @@ export const ringGapFunctions = `
       if (i >= uRingGapCount) break;
       vec3 g = uRingGaps[i];
       mask *= smoothstep(g.y - g.z, g.y, abs(r - g.x));
+    }
+    return mask;
+  }
+
+  // То же с радиальным футпринтом пикселя fw = fwidth(r): край не уже пикселя,
+  // глубина щели — доля её покрытия пикселем. Издали субпиксельная щель тает,
+  // а не мерцает discard'ом; при fw <= z совпадает с ringGapMask
+  float ringGapMaskAA(float r, float fw) {
+    float mask = 1.0;
+    for (int i = 0; i < ${RING_MOONLETS_MAX}; i++) {
+      if (i >= uRingGapCount) break;
+      vec3 g = uRingGaps[i];
+      float e = max(g.z, fw);
+      float depth = clamp(2.0 * g.y / max(fw, 1e-9), 0.0, 1.0);
+      mask *= 1.0 - depth * (1.0 - smoothstep(g.y - e, g.y, abs(r - g.x)));
     }
     return mask;
   }

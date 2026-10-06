@@ -152,7 +152,8 @@ class RingDepthMaterial extends AbstractShaderMaterial {
 
       vec4 color = texture2D(diffuseMap, uv);
       // Щели лунок — дословно как в цветовом проходе: пре-пасс — его подмножество
-      color.a *= ringGapMask(length(vPosition));
+      float ringR = length(vPosition);
+      color.a *= ringGapMaskAA(ringR, fwidth(ringR));
 
       // Ранний гейт цветового прохода дословно: пре-пасс обязан быть его
       // подмножеством, иначе тексель невидимый цветом продолжает писать глубину

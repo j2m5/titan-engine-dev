@@ -9,6 +9,7 @@ import {
   resolveRingMoonlets,
   resolveRingshineStrength,
   ringGapMask,
+  ringGapMaskAA,
   ringGapsOf,
   ringMoonletProblems,
   type RingGap
@@ -49,6 +50,57 @@ describe('ringGapMask', () => {
       expect(Math.abs(m - prev)).toBeLessThan(0.1)
       prev = m
     }
+  })
+})
+
+describe('ringGapMaskAA — щель с учётом футпринта пикселя', () => {
+  const gap: RingGap = ringGapsOf([moonlet], km)[0]
+  const sweep = (fn: (r: number) => void): void => {
+    for (let r = 106620 - 400; r <= 106620 + 400; r += 0.5) fn(r)
+  }
+
+  it('fw = 0 и fw ≤ края — ровно ringGapMask', () => {
+    for (const fw of [0, gap.edge / 2, gap.edge]) {
+      sweep((r) => expect(ringGapMaskAA(r, fw, [gap])).toBeCloseTo(ringGapMask(r, [gap]), 12))
+    }
+  })
+
+  it('fw ≫ ширины щели — маска почти 1 везде (щель тает, а не мерцает)', () => {
+    const fw = 100 * 2 * gap.halfWidth
+    sweep((r) => {
+      const m = ringGapMaskAA(r, fw, [gap])
+      expect(m).toBeGreaterThan(0.99)
+      expect(m).toBeLessThanOrEqual(1)
+    })
+    expect(ringGapMaskAA(106620, fw, [gap])).toBeLessThan(1)
+  })
+
+  it('непрерывна по радиусу при любом fw и по fw в любой точке; в центре не убывает с fw', () => {
+    for (const fw of [0, 10, 27, 100, 180, 360, 1000, 5000]) {
+      let prev = ringGapMaskAA(106620 - 400, fw, [gap])
+      sweep((r) => {
+        const m = ringGapMaskAA(r, fw, [gap])
+        expect(Math.abs(m - prev)).toBeLessThan(0.05)
+        prev = m
+      })
+    }
+    for (const r of [106620, 106620 + 100, 106620 + 160, 106620 + 179, 106620 + 250]) {
+      let prev = ringGapMaskAA(r, 0, [gap])
+      for (let fw = 0.1; fw <= 3000; fw += 0.1) {
+        const m = ringGapMaskAA(r, fw, [gap])
+        expect(Math.abs(m - prev)).toBeLessThan(0.01)
+        if (r === 106620) expect(m).toBeGreaterThanOrEqual(prev - 1e-12)
+        prev = m
+      }
+    }
+  })
+
+  it('без щелей — 1; две щели — произведение', () => {
+    expect(ringGapMaskAA(100000, 50, [])).toBe(1)
+    const gaps = ringGapsOf([moonlet, { ...moonlet, radiusKm: 106620 + 200 }], km)
+    sweep((r) =>
+      expect(ringGapMaskAA(r, 60, gaps)).toBeCloseTo(ringGapMaskAA(r, 60, [gaps[0]]) * ringGapMaskAA(r, 60, [gaps[1]]), 12)
+    )
   })
 })
 

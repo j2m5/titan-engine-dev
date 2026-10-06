@@ -98,6 +98,22 @@ export function ringGapMask(r: number, gaps: readonly RingGap[]): number {
   return mask
 }
 
+/**
+ * Маска щелей с учётом радиального футпринта пикселя fw (fwidth радиуса).
+ * Край не уже fw, а глубина щели — её покрытие пикселя (2·halfWidth / fw,
+ * не больше 1): издали субпиксельная щель тает к 1 вместо мерцания discard.
+ * При fw ≤ edge совпадает с ringGapMask. Зеркало GLSL ringGapMaskAA (чанк RingGap).
+ */
+export function ringGapMaskAA(r: number, fw: number, gaps: readonly RingGap[]): number {
+  let mask = 1
+  for (const g of gaps) {
+    const e = Math.max(g.edge, fw)
+    const depth = Math.min(Math.max((2 * g.halfWidth) / Math.max(fw, 1e-9), 0), 1)
+    mask *= 1 - depth * (1 - smoothstep(g.halfWidth - e, g.halfWidth, Math.abs(r - g.radius)))
+  }
+  return mask
+}
+
 /** Маска на радиальные бины профиля (центр бина i — inner + (i + 0.5)/n·(outer − inner)); на месте. */
 export function applyRingGapsToBins(values: Float32Array, inner: number, outer: number, gaps: readonly RingGap[]): Float32Array {
   if (gaps.length === 0) return values

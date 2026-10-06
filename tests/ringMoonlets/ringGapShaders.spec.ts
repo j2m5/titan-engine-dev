@@ -20,6 +20,11 @@ describe('чанк RingGap', () => {
     expect(ringGapFunctions).toContain('float ringGapMask(float r)')
     expect(ringGapFunctions).toContain('if (i >= uRingGapCount) break;')
     expect(ringGapFunctions).toContain('mask *= smoothstep(g.y - g.z, g.y, abs(r - g.x));')
+    // Сглаживание издали: край не уже пикселя, глубина щели — доля покрытия пикселя
+    expect(ringGapFunctions).toContain('float ringGapMaskAA(float r, float fw)')
+    expect(ringGapFunctions).toContain('float e = max(g.z, fw);')
+    expect(ringGapFunctions).toContain('float depth = clamp(2.0 * g.y / max(fw, 1e-9), 0.0, 1.0);')
+    expect(ringGapFunctions).toContain('mask *= 1.0 - depth * (1.0 - smoothstep(g.y - e, g.y, abs(r - g.x)));')
     expect(AppShaderChunk.ringGapUniforms).toBe(ringGapUniforms)
     expect(AppShaderChunk.ringGapFunctions).toBe(ringGapFunctions)
   })
@@ -35,18 +40,30 @@ describe('чанк RingGap', () => {
 })
 
 describe('потребители альфы кольца умножают её на маску щели', () => {
-  it('меш кольца: до гейта alphaTest', () => {
-    const frag = RingShaderTemplate.fragmentShader
-    const masked = frag.indexOf('color.a *= ringGapMask(length(vPosition));')
-    expect(masked).toBeGreaterThan(-1)
-    expect(masked).toBeLessThan(frag.indexOf('if (color.a <= 0.0 || color.a <= alphaTest) discard;'))
+  const MASK_LINES = ['float ringR = length(vPosition);', 'color.a *= ringGapMaskAA(ringR, fwidth(ringR));']
+  const gate = 'if (color.a <= 0.0 || color.a <= alphaTest) discard;'
+  const maskBlock = (frag: string): string => {
+    const start = frag.indexOf(MASK_LINES[0])
+    return frag.slice(start, frag.indexOf(MASK_LINES[1], start) + MASK_LINES[1].length)
+  }
+  const meshFrag = RingShaderTemplate.fragmentShader
+  const depthFrag = (RingDepthMaterial as unknown as { fragmentSource: string }).fragmentSource
+
+  it('меш кольца: маска со сглаживанием по fwidth радиуса до гейта alphaTest', () => {
+    for (const line of MASK_LINES) {
+      expect(meshFrag.indexOf(line)).toBeGreaterThan(-1)
+      expect(meshFrag.indexOf(line)).toBeLessThan(meshFrag.indexOf(gate))
+    }
+    expect(meshFrag).not.toContain('ringGapMask(length(vPosition))')
   })
 
-  it('проход глубины: та же строка до того же гейта', () => {
-    const frag = (RingDepthMaterial as unknown as { fragmentSource: string }).fragmentSource
-    const masked = frag.indexOf('color.a *= ringGapMask(length(vPosition));')
-    expect(masked).toBeGreaterThan(-1)
-    expect(masked).toBeLessThan(frag.indexOf('if (color.a <= 0.0 || color.a <= alphaTest) discard;'))
+  it('проход глубины: тот же текст маски до того же гейта (пре-пасс — подмножество меша)', () => {
+    for (const line of MASK_LINES) {
+      expect(depthFrag.indexOf(line)).toBeGreaterThan(-1)
+      expect(depthFrag.indexOf(line)).toBeLessThan(depthFrag.indexOf(gate))
+    }
+    expect(depthFrag).not.toContain('ringGapMask(length(vPosition))')
+    expect(maskBlock(depthFrag)).toBe(maskBlock(meshFrag))
   })
 
   it('тень на планете: каждый из 5 тапов — альфа × маска радиуса тапа; чанк подключён под USE_RING до функций тени', () => {
