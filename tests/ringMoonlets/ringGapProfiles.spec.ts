@@ -20,6 +20,10 @@ import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSyst
 import type { RadialDensityProfile } from '@/core/renderables/DetailedRingStreamingSystem/RadialDensityProfile'
 import { ringGapsOf } from '@/core/renderables/DetailedRingStreamingSystem/ringMoonlets'
 import {
+  ringBandBinsFromPixels,
+  thresholdBlurAndMask
+} from '@/core/renderables/DetailedRingStreamingSystem/ringProfileBins'
+import {
   readRingAlphaProfile,
   readRingAlphaBins,
   readRingBandBins
@@ -81,12 +85,64 @@ describe('щели лунок в CPU-профилях кольца', () => {
     }
   })
 
-  it('маска щелей применяется к альфе до порога и размытия', () => {
+})
+
+describe('постобработка бинов профиля: размытие не заливает щель', () => {
+  // Масштаб Thalorn: 1024 бина на 51 000 км, щель 360 км, σ = 6 бинов (~300 км, как у камней)
+  const inner = 75000
+  const outer = 126000
+  const n = 1024
+  const binKm = (outer - inner) / n
+  const sigma = 6
+  const gaps = ringGapsOf([moonlet], (km) => km)
+  const center = (i: number): number => inner + ((i + 0.5) / n) * (outer - inner)
+  const g = gaps[0]
+  // Далеко от щели и от краёв кольца — за пределом ядра 3σ
+  const far = (i: number): boolean =>
+    Math.abs(center(i) - g.radius) > g.halfWidth + (3 * sigma + 1) * binKm && i > 3 * sigma + 1 && i < n - 3 * sigma - 2
+
+  it('thresholdBlurAndMask: бины внутри (h − e) от центра щели — ровно 0, вдали — без изменений', () => {
+    const values = new Float32Array(n).fill(0.8)
+    const out = thresholdBlurAndMask(values, 0.01, sigma, inner, outer, gaps)
+    let inside = 0
+    for (let i = 0; i < n; i++) {
+      if (Math.abs(center(i) - g.radius) <= g.halfWidth - g.edge) {
+        inside++
+        expect(out[i]).toBe(0)
+      }
+      if (far(i)) expect(out[i]).toBeCloseTo(0.8, 5)
+    }
+    expect(inside).toBeGreaterThan(0)
+    expect(values.every((v) => v === Math.fround(0.8))).toBe(true)
+  })
+
+  it('без щелей — только порог и размытие', () => {
+    const values = new Float32Array(n).fill(0.8)
+    values[500] = 0.005
+    const out = thresholdBlurAndMask(values, 0.01, 0, inner, outer, [])
+    expect(out[500]).toBe(0)
+    expect(out[499]).toBeCloseTo(0.8, 6)
+  })
+
+  it('полосы: щель гасит только альфу, RGB листа в щели прежний', () => {
+    const pixels = new Uint8ClampedArray(n * 4)
+    for (let i = 0; i < n; i++) pixels.set([200, 150, 100, 255], i * 4)
+    const { color, alpha } = ringBandBinsFromPixels(pixels, n, sigma, inner, outer, gaps)
+    for (let i = 0; i < n; i++) {
+      const inGap = Math.abs(center(i) - g.radius) <= g.halfWidth - g.edge
+      if (inGap) expect(alpha[i]).toBe(0)
+      if (inGap || far(i)) {
+        expect(color[i * 3]).toBeCloseTo(200 / 255, 5)
+        expect(color[i * 3 + 1]).toBeCloseTo(150 / 255, 5)
+        expect(color[i * 3 + 2]).toBeCloseTo(100 / 255, 5)
+      }
+      if (far(i)) expect(alpha[i]).toBeCloseTo(1, 5)
+    }
+  })
+
+  it('readback строит бины через общий помощник', () => {
     const src = readFileSync('src/core/renderables/DetailedRingStreamingSystem/RingAlphaReadback.ts', 'utf8')
-    const bins = src.slice(src.indexOf('function readRingAlphaBins'))
-    expect(bins.indexOf('applyRingGapsToBins(alpha')).toBeGreaterThan(-1)
-    expect(bins.indexOf('applyRingGapsToBins(alpha')).toBeLessThan(bins.indexOf('thresholdAndBlur('))
-    const band = src.slice(src.indexOf('function readRingBandBins'))
-    expect(band).toContain('applyRingGapsToBins(')
+    expect(src.slice(src.indexOf('function readRingAlphaBins'))).toContain('thresholdBlurAndMask(')
+    expect(src.slice(src.indexOf('function readRingBandBins'))).toContain('ringBandBinsFromPixels(')
   })
 })
