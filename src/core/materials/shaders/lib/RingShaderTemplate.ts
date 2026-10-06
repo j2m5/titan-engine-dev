@@ -102,6 +102,10 @@ export const RingShaderTemplate: ShaderProps = {
     }
 
     void main() {
+      // Радиус и его экранная производная — первыми, в однородном потоке: после
+      // раннего выхода по радиусу (return/discard) fwidth не определена в GLSL
+      float ringR = length(vPosition);
+      float ringFw = fwidth(ringR);
       ${ShaderChunk['logdepthbuf_fragment']}
       vec2 uv;
       uv.x = (length(vPosition) - innerRadius) / (outerRadius - innerRadius);
@@ -115,8 +119,7 @@ export const RingShaderTemplate: ShaderProps = {
       vec4 color = texture2D(diffuseMap, uv);
       // Щели лунок (чанк RingGap): кольцо в щели пустое — до гейта и всех производных альфы;
       // сглаживание по экранному футпринту радиуса — издали щель тает, а не мерцает
-      float ringR = length(vPosition);
-      color.a *= ringGapMaskAA(ringR, fwidth(ringR));
+      color.a *= ringGapMaskAA(ringR, ringFw);
 
       if (color.a <= 0.0 || color.a <= alphaTest) discard;
 

@@ -40,30 +40,47 @@ describe('чанк RingGap', () => {
 })
 
 describe('потребители альфы кольца умножают её на маску щели', () => {
-  const MASK_LINES = ['float ringR = length(vPosition);', 'color.a *= ringGapMaskAA(ringR, fwidth(ringR));']
+  // Радиус и fwidth — первыми в main(), в однородном потоке (до раннего выхода по радиусу)
+  const RADIUS_LINE = 'float ringR = length(vPosition);'
+  const FWIDTH_LINE = 'float ringFw = fwidth(ringR);'
+  const MASK_LINE = 'color.a *= ringGapMaskAA(ringR, ringFw);'
   const gate = 'if (color.a <= 0.0 || color.a <= alphaTest) discard;'
-  const maskBlock = (frag: string): string => {
-    const start = frag.indexOf(MASK_LINES[0])
-    return frag.slice(start, frag.indexOf(MASK_LINES[1], start) + MASK_LINES[1].length)
-  }
   const meshFrag = RingShaderTemplate.fragmentShader
   const depthFrag = (RingDepthMaterial as unknown as { fragmentSource: string }).fragmentSource
+  const cases: Array<[string, string, string]> = [
+    ['меш кольца', meshFrag, 'if (uv.x < 0.0 || uv.x > 1.0) {'],
+    ['проход глубины', depthFrag, 'if (uv.x < 0.0 || uv.x > 1.0) discard;']
+  ]
+  /** Блок от начала main() до строки fwidth включительно */
+  const headBlock = (frag: string): string => {
+    const start = frag.indexOf('void main() {')
+    return frag.slice(start, frag.indexOf(FWIDTH_LINE, start) + FWIDTH_LINE.length)
+  }
 
-  it('меш кольца: маска со сглаживанием по fwidth радиуса до гейта alphaTest', () => {
-    for (const line of MASK_LINES) {
-      expect(meshFrag.indexOf(line)).toBeGreaterThan(-1)
-      expect(meshFrag.indexOf(line)).toBeLessThan(meshFrag.indexOf(gate))
-    }
-    expect(meshFrag).not.toContain('ringGapMask(length(vPosition))')
+  it.each(cases)('%s: радиус и fwidth в начале main() — до раннего выхода по радиусу и выборки текстуры', (_name, frag, earlyExit) => {
+    const main = frag.indexOf('void main() {')
+    const radius = frag.indexOf(RADIUS_LINE)
+    const fw = frag.indexOf(FWIDTH_LINE)
+    expect(main).toBeGreaterThan(-1)
+    expect(radius).toBeGreaterThan(main)
+    expect(fw).toBeGreaterThan(radius)
+    expect(frag.indexOf(earlyExit)).toBeGreaterThan(fw)
+    expect(frag.indexOf('texture2D(diffuseMap, uv)')).toBeGreaterThan(fw)
+    // В main() производная радиуса — одна, и только в однородном потоке
+    expect(frag.slice(main).split('fwidth(').length - 1).toBe(1)
   })
 
-  it('проход глубины: тот же текст маски до того же гейта (пре-пасс — подмножество меша)', () => {
-    for (const line of MASK_LINES) {
-      expect(depthFrag.indexOf(line)).toBeGreaterThan(-1)
-      expect(depthFrag.indexOf(line)).toBeLessThan(depthFrag.indexOf(gate))
-    }
-    expect(depthFrag).not.toContain('ringGapMask(length(vPosition))')
-    expect(maskBlock(depthFrag)).toBe(maskBlock(meshFrag))
+  it.each(cases)('%s: маска со сглаживанием до гейта alphaTest, после раннего выхода', (_name, frag, earlyExit) => {
+    const masked = frag.indexOf(MASK_LINE)
+    expect(masked).toBeGreaterThan(frag.indexOf(earlyExit))
+    expect(masked).toBeLessThan(frag.indexOf(gate))
+    expect(frag).not.toContain('ringGapMask(length(vPosition))')
+  })
+
+  it('пре-пасс — подмножество меша: начало main() и строка маски дословно одинаковы', () => {
+    expect(headBlock(depthFrag)).toBe(headBlock(meshFrag))
+    expect(depthFrag.split(MASK_LINE).length - 1).toBe(1)
+    expect(meshFrag.split(MASK_LINE).length - 1).toBe(1)
   })
 
   it('тень на планете: каждый из 5 тапов — альфа × маска радиуса тапа; чанк подключён под USE_RING до функций тени', () => {

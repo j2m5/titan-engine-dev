@@ -144,6 +144,10 @@ class RingDepthMaterial extends AbstractShaderMaterial {
     varying vec3 vLocalCameraPosition;
 
     void main() {
+      // Радиус и его экранная производная — первыми, в однородном потоке: после
+      // раннего выхода по радиусу (return/discard) fwidth не определена в GLSL
+      float ringR = length(vPosition);
+      float ringFw = fwidth(ringR);
       vec2 uv;
       uv.x = (length(vPosition) - innerRadius) / (outerRadius - innerRadius);
 
@@ -152,8 +156,7 @@ class RingDepthMaterial extends AbstractShaderMaterial {
 
       vec4 color = texture2D(diffuseMap, uv);
       // Щели лунок — дословно как в цветовом проходе: пре-пасс — его подмножество
-      float ringR = length(vPosition);
-      color.a *= ringGapMaskAA(ringR, fwidth(ringR));
+      color.a *= ringGapMaskAA(ringR, ringFw);
 
       // Ранний гейт цветового прохода дословно: пре-пасс обязан быть его
       // подмножеством, иначе тексель невидимый цветом продолжает писать глубину
