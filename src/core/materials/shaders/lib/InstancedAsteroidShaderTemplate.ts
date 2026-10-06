@@ -78,6 +78,7 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uOppositionSurge: new Uniform(0.3),
     uPlanetshineColor: new Uniform(new Color(0xb8ad9c)),
     uPlanetshineStrength: new Uniform(1.5),
+    uRingshineStrength: new Uniform(0),
     // Радиальный профиль пыли из альфы текстуры кольца; scale 0 — выключен
     uDustRadialMap: new Uniform(null),
     uDustRadialMapScale: new Uniform(0),
@@ -167,6 +168,7 @@ export function instancedAsteroidShaderSource(
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vPlanetDirView;
+    varying vec3 vRingNormalView;
     varying vec3 vRingPos;
     varying vec3 vObjectPos;
     varying vec3 vObjectNormal;
@@ -243,6 +245,8 @@ export function instancedAsteroidShaderSource(
       // planetshine. В модельном пространстве центр кольца лежит в
       // -uOriginOffset: модельное начало — это плавающее начало
       vPlanetDirView = normalize((modelViewMatrix * vec4(-uOriginOffset, 1.0)).xyz - mvPosition.xyz);
+      // Нормаль листа кольца в view: ring-local Y (лист — плоскость XZ)
+      vRingNormalView = normalize(mat3(modelViewMatrix) * vec3(0.0, 1.0, 0.0));
 
       // Для макро-облика (см. чанк AsteroidSurface): объектная позиция (домен),
       // геом. нормаль объекта (нормаль больше не возмущается процедурно) и
@@ -289,7 +293,8 @@ export function instancedAsteroidShaderSource(
     uniform float uLunarMix;
     uniform float uOppositionSurge;
     uniform vec3 uPlanetshineColor;
-    uniform float uPlanetshineStrength;${iceFragmentDecl}
+    uniform float uPlanetshineStrength;
+    uniform float uRingshineStrength;${iceFragmentDecl}
 
     #ifdef USE_LIGHT_TINT
       uniform vec3 uLightColor;
@@ -298,6 +303,7 @@ export function instancedAsteroidShaderSource(
     varying vec3 vViewLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vPlanetDirView;
+    varying vec3 vRingNormalView;
     varying vec3 vRingPos;
     varying vec3 vObjectPos;
     varying vec3 vObjectNormal;
@@ -420,6 +426,20 @@ export function instancedAsteroidShaderSource(
         vec3 finalColor = albedo * (lightIntensity * surfAO * direct + ${knob.surfaceAmbient});
       #endif
       finalColor += albedo * uPlanetshineColor * (uPlanetshineStrength * shine * surfAO);
+
+      // Подсветка от листа кольца (см. AsteroidBrdf): свет звезды, рассеянный
+      // освещённым листом; тень планеты гасит её вместе с листом, тень слоя — нет
+      // (лист и есть источник). Цвет листа — полоса, переведённая в линейный
+      if (uRingBandEnabled > 0.5 && uRingshineStrength > 0.0) {
+        float ringR = length(vRingPos.xz);
+        vec3 sheetColor = pow(ringBandAt(ringR).rgb, vec3(2.2));
+        vec3 ringshine = asteroidRingshine(normal, normalize(vRingNormalView), vRingPos, uDustLightDirRing, ringLayerTau(ringR), sheetColor, uLayerHalfThickness);
+        #ifdef USE_LIGHT_TINT
+          finalColor += albedo * ringshine * (uRingshineStrength * planetShadow * surfAO) * uLightColor;
+        #else
+          finalColor += albedo * ringshine * (uRingshineStrength * planetShadow * surfAO);
+        #endif
+      }
 
       // Blinn-Phong блик (металл/лёд), только на освещённой стороне, со спекуляр-AA.
       vec3 halfVec = normalize(lightDirection + viewDir);

@@ -21,7 +21,7 @@ import { readRingAlphaProfile, readRingAlphaBins, readRingBandBins } from './Rin
 import { createDustRadialTexture } from './dust/DustRadialProfile'
 import { createRingBandTexture } from './dust/RingBandTexture'
 import { RadialDensityProfile } from './RadialDensityProfile'
-import { resolveRingMoonlets, ringGapsOf, applyRingGapsToBins, type RingGap } from './ringMoonlets'
+import { resolveRingMoonlets, resolveRingshineStrength,ringGapsOf, applyRingGapsToBins, type RingGap } from './ringMoonlets'
 import { AngularDensityProfile } from './AngularDensityProfile'
 import { ringLightDirection } from './ringLightDirection'
 import { SectorGrid, SectorGridConfig } from './SectorGrid'
@@ -135,6 +135,8 @@ interface AsteroidRingConfig {
   planetshineColor: number | string
   /** Сила planetshine; при 1.5 на середине кольца вклад до четверти альбедо */
   planetshineStrength: number
+  /** Сила подсветки от листа кольца, данные кольца ringshineStrength, дефолт 1 */
+  ringshineStrength: number
   /**
    * Сила самозатенения слоя кольца (чанк RingDust, ringLayerShadow): смесь
    * между единицей и физической экспонентой по толще слоя, худший случай
@@ -342,6 +344,7 @@ const DEFAULT_CONFIG: Partial<AsteroidRingConfig> = {
   dustNearFadeKm: 3000,
   planetshineColor: 0xb8ad9c,
   planetshineStrength: 1.5,
+  ringshineStrength: 1,
   layerShadowStrength: 0.25,
   bandTintStrength: 1,
   dustAnglePower: 2,
@@ -466,6 +469,7 @@ class AsteroidRingSystem extends Group {
       innerRadiusKm: renderData?.innerRadius ?? 70000,
       outerRadiusKm: renderData?.outerRadius ?? 140000,
       ringId: model.getAttribute('id') ?? 1,
+      ringshineStrength: resolveRingshineStrength(renderData, model.getAttribute('name', '') as string),
       // Пер-кольцевая плотность: базовая × множитель из модели (1 при отсутствии).
       // Явный override в configOverrides имеет приоритет (спред ниже).
       densityPerUnit: (DEFAULT_CONFIG.densityPerUnit ?? 500) * (renderData?.asteroidDensityScale ?? 1),
@@ -648,6 +652,7 @@ class AsteroidRingSystem extends Group {
       uniforms.uOppositionSurge.value = profile.oppositionSurge
       uniforms.uPlanetshineColor.value.set(cfg.planetshineColor)
       uniforms.uPlanetshineStrength.value = cfg.planetshineStrength
+      uniforms.uRingshineStrength.value = cfg.ringshineStrength
     }
 
     // Ледяная примесь: ручки ледяного профиля в оба материала, доля — гейт
