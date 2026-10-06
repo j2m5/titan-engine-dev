@@ -181,7 +181,7 @@ describe('стартовые лунки в данных', () => {
     [45, 'ida', 115246]
   ])('кольцо actor %i: одна лунка %s на %i км, данные годны', (actorId, model, radiusKm) => {
     const data = rowOf(actorId).data
-    expect(data.moonlets).toEqual([{ radiusKm, azimuthDeg: 40, sizeKm: 30, gapKm: 360, model }])
+    expect(data.moonlets).toEqual([{ radiusKm, azimuthDeg: 40, sizeKm: 60, gapKm: 360, model }])
     expect(ringMoonletProblems(data)).toEqual([])
   })
 
