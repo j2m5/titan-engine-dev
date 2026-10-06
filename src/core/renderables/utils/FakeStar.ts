@@ -4,6 +4,7 @@ import {
   NormalBlending,
   PlaneGeometry,
   ShaderMaterial,
+  Uniform,
   UniformsUtils,
   Vector3,
   WebGLRenderer
@@ -39,9 +40,14 @@ class FakeStar extends Mesh {
   private readonly worldPosition: Vector3 = new Vector3()
   private readonly cameraPosition: Vector3 = new Vector3()
 
+  /**
+   * @param glowGain свечение издалека — объект StarLod.glowGain, общий с
+   *   диском; без LOD — свой нейтральный
+   */
   public constructor(
     model: Actor,
-    private readonly renderer: WebGLRenderer
+    private readonly renderer: WebGLRenderer,
+    private readonly glowGain: Uniform<number> = new Uniform(1)
   ) {
     super()
     this.model = model
@@ -77,6 +83,7 @@ class FakeStar extends Mesh {
     const activity: number = starActivityFor(this.model)
     this.material.uniforms.uGranulation.value = activity
     this.material.uniforms.uLimbCoeff.value.set(...starLimbCoeffFor(this.model))
+    this.material.uniforms.uGlowGain = this.glowGain
   }
 
   public updateObject(ctx: UpdateContext): void {

@@ -1,4 +1,4 @@
-import { BufferGeometry, Mesh, SphereGeometry } from 'three'
+import { BufferGeometry, Mesh, SphereGeometry, Uniform } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { StarMaterial } from '@/core/materials/StarMaterial'
@@ -13,7 +13,14 @@ class Star extends Mesh {
 
   private readonly radius: number
 
-  public constructor(model: Actor) {
+  /**
+   * @param glowGain свечение издалека — объект StarLod.glowGain, общий с
+   *   билбордом; без LOD — свой нейтральный
+   */
+  public constructor(
+    model: Actor,
+    private readonly glowGain: Uniform<number> = new Uniform(1)
+  ) {
     super()
     this.model = model
     this.radius = toThreeJSUnits(this.model.physicalObject?.getAttribute('radius') ?? 0)
@@ -24,6 +31,7 @@ class Star extends Mesh {
   __setup(): void {
     this.geometry = new SphereGeometry(this.radius, 256, 256)
     this.material = new StarMaterial(this.model)
+    this.material.uniforms.uGlowGain = this.glowGain
 
     this.name = this.model.getAttribute('name', '') + 'Star'
     this.userData.type = 'star'

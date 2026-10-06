@@ -10,6 +10,7 @@ export const StarShaderTemplate: ShaderProps = {
     uCoreIntensity: new Uniform(STAR_CORE_INTENSITY),
     uLimbCoeff: new Uniform(new Vector3(...STAR_LIMB_COEFF)),
     uGranulation: new Uniform(1),
+    uGlowGain: new Uniform(1),
     time: new Uniform(0)
   },
   vertexShader: `
@@ -42,6 +43,7 @@ export const StarShaderTemplate: ShaderProps = {
     uniform float uCoreIntensity;
     uniform vec3 uLimbCoeff;
     uniform float uGranulation;
+    uniform float uGlowGain;
     uniform float time;
 
     varying vec3 vPositionW;
@@ -76,9 +78,11 @@ export const StarShaderTemplate: ShaderProps = {
       float mu = clamp(dot(normalW, viewW), 0.0, 1.0);
       vec3 limb = starLimb(mu, uLimbCoeff);
 
+      // uGlowGain — свечение издалека (StarLod), общий объект с билбордом;
+      // у крупного диска ровно 1.
       // Потолок HDR — тот же, что у атмосферы (half-float буфер, AgX-плечо);
-      // при текущих дефолтах пик ~12 — потолок срабатывает только при uCoreIntensity ≈ 21+ (защитный предел)
-      vec3 color = min(granule * energy * limb, vec3(64.0));
+      // без усиления пик ~12 — потолок срабатывает только при uCoreIntensity ≈ 21+ (защитный предел)
+      vec3 color = min(granule * energy * limb * uGlowGain, vec3(64.0));
 
       gl_FragColor = vec4(color, 1.0);
 

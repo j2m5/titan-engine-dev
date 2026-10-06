@@ -10,7 +10,7 @@ export interface GiantStarConfig {
     lodHysteresis: number
     /** Масштаб спрайта-ореола (StarInnerLayer). Стартовое, звёздное */
     haloScale: number
-    /** Прозрачность спрайта-ореола. Стартовое, звёздное. Ноль гасит слой */
+    /** Прозрачность спрайта-ореола. Стартовое, штатное значение слоя. Ноль гасит слой */
     haloOpacity: number
     /** Пол прокси-экспозиции вплотную к телу; 1 — спада нет */
     proximityExposureFloor: number
