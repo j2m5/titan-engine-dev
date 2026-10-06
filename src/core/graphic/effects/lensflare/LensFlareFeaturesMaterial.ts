@@ -1,5 +1,45 @@
 import { NoBlending, ShaderMaterial, Uniform, Vector2, type ShaderMaterialParameters, type Texture } from 'three'
 
+/**
+ * Призраки — копии ярких пикселей, отражённые через центр кадра c: призрак
+ * источника в s рисуется в c + (s − c)·m, m = 1/(offset − 1). |m| < 1 —
+ * уменьшенная копия, |m| > 1 — увеличенная. offset = 1 вырожден (m = ∞:
+ * каждый пиксель кадра читает центр экрана) и заливал кадр источником в центре.
+ */
+export const LENS_FLARE_GHOSTS: readonly { weight: number; offset: number }[] = [
+  { weight: 0.9, offset: -5.0 },
+  { weight: 0.8, offset: -1.5 },
+  { weight: 0.9, offset: -0.4 },
+  { weight: 0.8, offset: -0.2 },
+  { weight: 0.75, offset: -0.1 },
+  { weight: 0.65, offset: 0.7 },
+  { weight: 0.85, offset: 2.5 },
+  { weight: 0.8, offset: 10.0 }
+]
+
+/**
+ * Множитель энергии призрака: копия, увеличенная в |m| раз, растекается по
+ * площади m² и тускнеет в m² раз. Уменьшенная не ярче источника: настоящий
+ * призрак точечного источника расфокусирован, а копия этого не умеет —
+ * буквальная m² дала бы offset −5 яркость ×36.
+ */
+export function ghostEnergy(offset: number): number {
+  const inverseMagnification = offset - 1
+
+  return Math.min(1, inverseMagnification * inverseMagnification)
+}
+
+/** Литерал float для GLSL: у целого обязана быть точка */
+function glslFloat(value: number): string {
+  const rounded = Number(value.toPrecision(6))
+
+  return Number.isInteger(rounded) ? rounded.toFixed(1) : String(rounded)
+}
+
+const ghostCalls: string = LENS_FLARE_GHOSTS.map(
+  ({ weight, offset }) => `color += sampleGhost(direction, ${glslFloat(weight * ghostEnergy(offset))}, ${glslFloat(offset)});`
+).join('\n    ')
+
 const vertexShader: string = `
   uniform vec2 texelSize;
 
@@ -71,15 +111,8 @@ const fragmentShader: string = `
   vec4 sampleGhosts(float amount) {
     vec3 color = vec3(0.0);
     vec2 direction = vUv - 0.5;
-    color += sampleGhost(direction, 0.9, -5.0);
-    color += sampleGhost(direction, 0.8, -1.5);
-    color += sampleGhost(direction, 0.9, -0.4);
-    color += sampleGhost(direction, 0.8, -0.2);
-    color += sampleGhost(direction, 0.75, -0.1);
-    color += sampleGhost(direction, 0.65, 0.7);
-    color += sampleGhost(direction, 0.5, 1.0);
-    color += sampleGhost(direction, 0.85, 2.5);
-    color += sampleGhost(direction, 0.8, 10.0);
+    // Таблица LENS_FLARE_GHOSTS: вес уже умножен на энергию призрака
+    ${ghostCalls}
     return vec4(color * amount, 1.0);
   }
 
