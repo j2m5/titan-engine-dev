@@ -2,6 +2,8 @@ import {
   Color,
   Group,
   Matrix4,
+  type BufferGeometry,
+  type InstancedMesh,
   Object3D,
   PerspectiveCamera,
   RepeatWrapping,
@@ -42,6 +44,7 @@ import { UpdateContext } from '@/core/UpdateContext'
 import { archetypeLayout, getArchetypeGeometries } from './archetypes/ArchetypeLibrary'
 import type { ShapeModelStorage } from './archetypes/ShapeModelStorage'
 import { shapeModelGeometry } from './archetypes/ShapeModelFormat'
+import { createMoonletMesh } from './moonletMesh'
 
 /**
  * Масштабная высота тумана на камнях (rockFog) в долях ТОЛЩИНЫ ленты.
@@ -439,6 +442,8 @@ class AsteroidRingSystem extends Group {
   private moonlets: RingMoonlet[] = []
   /** Щели лунок в юнитах сцены — для readback-профилей (камни, пыль, полосы) */
   private ringGapsTu: RingGap[] = []
+  /** Меши лунок (по приходу модели), см. __buildMoonlets */
+  private readonly moonletMeshes: InstancedMesh[] = []
 
   /** Сигмы размытия кромок (units сцены): из bleedFraction × ширина или из ringGapBleedKm/dustBleedKm — см. __setup */
   private bleedSigmaTu: { rocks: number; dust: number } = { rocks: 0, dust: 0 }
@@ -617,6 +622,7 @@ class AsteroidRingSystem extends Group {
 
     // Реальные модели форм в хвост библиотеки — асинхронно, поверх заглушек
     this.__requestShapeModels(asteroidSize)
+    this.__buildMoonlets(nearGeometries[0], asteroidSize)
 
     // Макро-облик — профиль, тоже только L0
     const profile = ASTEROID_PROFILES[cfg.profile]
@@ -1119,6 +1125,32 @@ class AsteroidRingSystem extends Group {
         pool.replaceArchetypeGeometry(k, shapeModelGeometry(l0, asteroidSize), shapeModelGeometry(near, asteroidSize))
       })
     })
+  }
+
+  /**
+   * Лунки (см. ringMoonlets.ts): по одному инстансу материала ближних камней
+   * на лунку, видимы всё время, пока видна система (вне стриминга секторов;
+   * камней в щели нет — профиль). Геометрия — near-ярус реальной модели;
+   * ставится один раз, по приходу: сбой загрузки — процедурный архетип
+   * (placeholder), без хранилища (тесты, автономные сцены) — сразу он же.
+   */
+  private __buildMoonlets(placeholder: BufferGeometry, asteroidSize: number): void {
+    const parent: Group = this.originGroup ?? this
+    const material = this.pool.geometryMaterial
+    for (const moonlet of this.moonlets) {
+      const add = (source: BufferGeometry): void => {
+        const mesh = createMoonletMesh(source, material, moonlet, asteroidSize)
+        this.moonletMeshes.push(mesh)
+        parent.add(mesh)
+      }
+      if (!this.shapeModels) {
+        add(placeholder)
+        continue
+      }
+      void this.shapeModels.load(moonlet.model, 'near').then((data) => {
+        add(data ? shapeModelGeometry(data, asteroidSize) : placeholder)
+      })
+    }
   }
 
   /**
