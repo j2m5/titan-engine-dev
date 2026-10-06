@@ -87,7 +87,7 @@ export interface LensFlareConfig {
  */
 export const lensFlare: LensFlareConfig = {
   lensFlare: {
-    intensity: 0.15,
+    intensity: 0.1,
     ghostAmount: 0.3,
     haloAmount: 0.04,
     chromaticAberration: 10,
