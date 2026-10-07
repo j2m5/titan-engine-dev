@@ -37,13 +37,14 @@ const App = observer(() => {
         keepMounted={true}
         onClose={() => modalWindowStore.setAudioPlayerWindowState(false)}
       >
+        {/* Без key: пересоздание всего плеера на каждый трек сбрасывало повтор
+            и громкость. Новый трек перезагружает только <audio> (key внутри) */}
         <AudioPlayer
-          key={currentTrackIndex}
           currentTrack={currentTrack}
           trackIndex={currentTrackIndex}
           trackCount={audioPlayerStore.tracks.length}
           onPlay={setCurrentTrackIndex}
-          onNext={() => setCurrentTrackIndex((i: number) => i + 1)}
+          onNext={() => setCurrentTrackIndex((i: number) => Math.min(i + 1, audioPlayerStore.tracks.length - 1))}
           onPrev={() => setCurrentTrackIndex((i: number) => i - 1)}
         />
       </ModalWindow>

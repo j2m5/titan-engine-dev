@@ -20,9 +20,14 @@ const AudioProgressBar: FC<AudioProgressBarProps> = (props: AudioProgressBarProp
     onProgressChanged(value)
   }
 
+  // Таймеры одной ширины: слайдер между ними не ездит, пока идут секунды
+  const timerStyle = { minWidth: '3.5em', textAlign: 'center', fontVariantNumeric: 'tabular-nums' } as const
+
   return (
     <>
-      <TitanLabel>{elapsedDisplay}</TitanLabel>
+      <span style={timerStyle}>
+        <TitanLabel>{elapsedDisplay}</TitanLabel>
+      </span>
       <TitanSlider
         value={currentProgress}
         buffer={buffered}
@@ -32,7 +37,9 @@ const AudioProgressBar: FC<AudioProgressBarProps> = (props: AudioProgressBarProp
         style={{ width: '70%' }}
         onChange={(event: ChangeEvent<HTMLInputElement>) => handleCurrentProgress(event.target.valueAsNumber)}
       />
-      <TitanLabel>{durationDisplay}</TitanLabel>
+      <span style={timerStyle}>
+        <TitanLabel>{durationDisplay}</TitanLabel>
+      </span>
     </>
   )
 }

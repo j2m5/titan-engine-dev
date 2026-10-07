@@ -102,8 +102,11 @@
   align-items: stretch;
 }
 
+// Потолок — не ниже экрана: список объектов висит с top 80 в контейнере с
+// рамками (22) и отступом снизу (10). Прежние фиксированные 732px на 768/720
+// уводили последние строки за край. TitanSimpleList задаёт свой maxHeight
 .titan-list {
-  max-height: 732px;
+  max-height: min(732px, calc(100vh - 112px));
   min-width: 230px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -215,19 +218,41 @@
   background-color: #bbbbbb;
 }
 
+// Обёртка на весь экран центрует окно флексом: прежние absolute + left:50% +
+// translate давали окну лишь половину ширины экрана под shrink-to-fit и не
+// ограничивали высоту — высокое окно уводило заголовок и кнопки за край.
+// Клики сквозь обёртку проходят: сцена за окном живёт как раньше.
+// z-index выше верхней панели (999999), тосты — над всем
 .titan-modal {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 999999;
+  align-items: center;
+  inset: 0;
+  justify-content: center;
+  pointer-events: none;
+  position: fixed;
+  z-index: 1000000;
 
   &.open {
-    display: block;
+    display: flex;
   }
 
   &.closed {
     display: none;
+  }
+
+  > .titan-container {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100% - 32px);
+    max-width: calc(100% - 32px);
+    pointer-events: auto;
+  }
+
+  // Прокручивается только содержимое: заголовок и кнопки всегда на экране
+  .titan-modal-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
   }
 
   .titan-modal-header {
@@ -388,6 +413,28 @@
   }
 }
 
+// Стопка тостов: высота каждого — по его тексту, старый внизу. Внутри стопки
+// тост в потоке, а не fixed. Клики проходят мимо пустого места стопки
+.titan-toast-stack {
+  bottom: 24px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  max-width: calc(100vw - 48px);
+  pointer-events: none;
+  position: fixed;
+  right: 24px;
+  z-index: 2147483647;
+
+  .titan-toast {
+    position: static;
+  }
+
+  .titan-alert {
+    margin: 0;
+  }
+}
+
 .titan-alert {
   align-items: center;
   background: rgba(0, 0, 0, 0.2);
@@ -399,7 +446,17 @@
   padding: 15px 12px;
   gap: 10px;
   line-height: 1.4;
-  width: 400px;
+  // Прежняя внешняя ширина (400 + паддинги + рамка), но не шире экрана
+  box-sizing: border-box;
+  max-width: 100%;
+  width: 426px;
+
+  // Текст — свой флекс-элемент с min-width 0: длинный URL в ошибке
+  // переносится, а не режется overflow: hidden
+  .titan-alert-message {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
 
   &.info {
     border-color: #7a7a7a;

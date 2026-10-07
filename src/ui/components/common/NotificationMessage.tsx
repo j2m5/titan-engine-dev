@@ -3,29 +3,26 @@ import TitanToast from '@titanui/components/TitanToast'
 import TitanAlert from '@titanui/components/TitanAlert'
 import { notificationStore } from '@/ui/mobx/NotificationStore'
 
-const calculateBottomOffset = (index: number, spacing: number) => {
-  if (index === 0) return spacing
-
-  return spacing + index * (spacing + 48)
-}
-
+/**
+ * Тосты — одной стопкой (titan-toast-stack): старый внизу, новые выше. Прежний
+ * ручной шаг 72px налезал на соседа, как только текст переносился на вторую строку.
+ */
 const NotificationMessage = observer(() => {
   const ntfStore = notificationStore
 
   return (
-    <>
-      {ntfStore.notifications.map((notification, index) => (
+    <div className="titan-toast-stack">
+      {ntfStore.notifications.map((notification) => (
         <TitanToast
           key={notification.id}
           visible={true}
           duration={ntfStore.delay}
-          style={{ bottom: `${calculateBottomOffset(index, 24)}px` }}
           onClose={() => ntfStore.release(notification.id)}
         >
           <TitanAlert type={notification.type} message={notification.message} showIcon />
         </TitanToast>
       ))}
-    </>
+    </div>
   )
 })
 
