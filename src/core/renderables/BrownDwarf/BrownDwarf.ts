@@ -1,9 +1,10 @@
-import { BufferGeometry, Camera, Matrix4, Mesh, Scene, SphereGeometry, Vector3, type WebGLRenderer } from 'three'
+import { BufferGeometry, Camera, Matrix4, Mesh, Scene, Vector3, type WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { UpdateContext } from '@/core/UpdateContext'
 import { BrownDwarfMaterial } from '@/core/renderables/BrownDwarf/BrownDwarfMaterial'
 import { brownDwarfParameters, BrownDwarfParameters } from '@/core/renderables/BrownDwarf/BrownDwarfParameters'
+import { SphereDetail } from '@/core/renderables/utils/SphereDetail'
 
 /**
  * Диск коричневого карлика.
@@ -18,6 +19,8 @@ class BrownDwarf extends Mesh {
   declare public material: BrownDwarfMaterial
 
   private readonly radius: number
+  /** Грубая сфера вдали, плотная 256 — пока диск крупно в кадре */
+  private readonly sphereDetail: SphereDetail
   /** Переиспользуемые буферы перевода камеры в объектные координаты */
   private readonly cameraWorld: Vector3 = new Vector3()
   private readonly inverseModel: Matrix4 = new Matrix4()
@@ -29,7 +32,7 @@ class BrownDwarf extends Mesh {
 
     const params: BrownDwarfParameters = brownDwarfParameters(model)
 
-    this.geometry = new SphereGeometry(this.radius, 256, 256)
+    this.sphereDetail = new SphereDetail(this, this.radius, { denseSegments: 256, circumscribeDense: false })
     this.material = new BrownDwarfMaterial(params)
 
     this.name = this.model.getAttribute('name', '') + 'BrownDwarf'
@@ -47,6 +50,8 @@ class BrownDwarf extends Mesh {
     // (Postprocessing.renderToScreenshot со своей камерой). Прецедент —
     // BlackHole.onBeforeRender.
     this.onBeforeRender = (_renderer: WebGLRenderer, _scene: Scene, camera: Camera): void => {
+      this.sphereDetail.observe(camera)
+
       camera.getWorldPosition(this.cameraWorld)
 
       this.material.uniforms.uCameraObject.value
@@ -56,6 +61,7 @@ class BrownDwarf extends Mesh {
   }
 
   public updateObject(ctx: UpdateContext): void {
+    this.sphereDetail.update(ctx.camera)
     // Время идёт в дыхание яркости и НИКУДА больше: форма от него не зависит.
     // Позиция камеры живёт в onBeforeRender — см. причину в конструкторе
     this.material.uniforms.time.value = ctx.elapsed

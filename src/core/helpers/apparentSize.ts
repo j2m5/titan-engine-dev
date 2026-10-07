@@ -45,6 +45,16 @@ export function frameHeightAt(distance: number, fovDegrees: number): number {
   return 2 * Math.tan(degToRad(fovDegrees) / 2) * distance
 }
 
+/**
+ * Доля высоты кадра, занятая диском тела: 2R к высоте кадра на дистанции до
+ * центра. Валюта нарочно безразмерная (не пиксели): решения по ней не зависят
+ * от разрешения монитора — адаптация экспозиции у карликов и гиганта,
+ * детализация сфер (SphereDetail), скриншот 4096×2048 выбирает то же, что экран.
+ */
+export function frameCoverage(radiusUnits: number, distanceUnits: number, fovDegrees: number): number {
+  return (2 * radiusUnits) / frameHeightAt(Math.max(distanceUnits, Number.EPSILON), fovDegrees)
+}
+
 /** Сколько пикселей занимает объект заданного мирового размера */
 export function apparentSizeAtDistance(
   worldSize: number,

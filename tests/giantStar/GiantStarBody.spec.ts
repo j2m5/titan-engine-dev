@@ -92,7 +92,7 @@ describe('тело', () => {
   it('время поверхности идёт со своим множителем', () => {
     const body = new GiantStar(stubGiantActor())
 
-    body.updateObject({ elapsed: 100 } as unknown as UpdateContext)
+    body.updateObject({ elapsed: 100, camera: new PerspectiveCamera() } as unknown as UpdateContext)
 
     expect(body.material.uniforms.time.value).toBeCloseTo(100 * GIANT_STAR_TIME_SCALE, 12)
   })

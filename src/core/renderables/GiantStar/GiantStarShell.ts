@@ -10,7 +10,6 @@ import {
   NormalBlending,
   Scene,
   ShaderMaterial,
-  SphereGeometry,
   UniformsUtils,
   Vector3,
   type WebGLRenderer
@@ -19,6 +18,8 @@ import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
 import { GiantStar } from '@/core/renderables/GiantStar/GiantStar'
 import { GiantStarShellShaderTemplate } from '@/core/renderables/GiantStar/GiantStarShellShaderTemplate'
 import { shellDensityScale } from '@/core/renderables/GiantStar/shellMath'
+import { SphereDetail } from '@/core/renderables/utils/SphereDetail'
+import type { UpdateContext } from '@/core/UpdateContext'
 
 /** Объекты Uniform тела, разделяемые целиком: снапшот скаляра разъехался бы молча */
 const SHELL_SHARED_UNIFORMS: readonly string[] = [
@@ -43,6 +44,8 @@ class GiantStarShell extends Mesh {
   declare public material: ShaderMaterial
 
   private readonly outerRadius: number
+  /** Грубая сфера вдали, плотная 128 — пока оболочка крупно в кадре */
+  private readonly sphereDetail: SphereDetail
   private readonly cameraWorld: Vector3 = new Vector3()
   private readonly inverseModel: Matrix4 = new Matrix4()
 
@@ -52,7 +55,7 @@ class GiantStarShell extends Mesh {
     const height: number = body.parameters.atmosphereHeight
 
     this.outerRadius = body.radius * (1 + height)
-    this.geometry = new SphereGeometry(this.outerRadius, 128, 128)
+    this.sphereDetail = new SphereDetail(this, this.outerRadius, { denseSegments: 128, circumscribeDense: false })
 
     this.material = new ShaderMaterial({
       vertexShader: AbstractShader.prepareSource(GiantStarShellShaderTemplate.vertexShader),
@@ -81,6 +84,8 @@ class GiantStarShell extends Mesh {
     const invRadius: number = this.material.uniforms.uInvRadius.value
 
     this.onBeforeRender = (_renderer: WebGLRenderer, _scene: Scene, camera: Camera): void => {
+      this.sphereDetail.observe(camera)
+
       camera.getWorldPosition(this.cameraWorld)
       this.cameraWorld.applyMatrix4(this.inverseModel.copy(this.matrixWorld).invert())
 
@@ -94,6 +99,19 @@ class GiantStarShell extends Mesh {
 
       this.material.uniforms.uCameraUnit.value.copy(this.cameraWorld).multiplyScalar(invRadius)
     }
+  }
+
+  /**
+   * Детализация прокси-сферы по доле кадра её внешнего радиуса — своя, не
+   * ядра. Погашенная оболочка (visible = false с конструктора) не должна стоить
+   * ни одного фрагмента — и ни одной плотной сферы.
+   * visible фиксируется в конструкторе (решает только плотность атмосферы): если
+   * он когда-нибудь начнёт переключаться в рантайме, защиту надо пересмотреть.
+   */
+  public updateObject(ctx: UpdateContext): void {
+    if (!this.visible) return
+
+    this.sphereDetail.update(ctx.camera)
   }
 
   public dispose(): void {
