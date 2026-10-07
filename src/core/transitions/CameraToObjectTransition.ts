@@ -15,8 +15,45 @@ export interface CameraToObjectTransitionArgs {
   model: Actor
 }
 
+/** Камера «уже у объекта»: расстояние до точки прилёта в пределах этой доли */
+const ARRIVAL_DISTANCE_TOLERANCE: number = 0.01
+/** …и взгляд на объект не дальше 1° */
+const ARRIVAL_AIM_COS: number = Math.cos((1 * Math.PI) / 180)
+
+export type FlightDecision = 'start' | 'ignore' | 'redirect' | 'arrived'
+
+/**
+ * Что делать с кликом «лететь»: повтор по тому же объекту в полёте —
+ * игнорировать, по другому — развернуть полёт, если камера уже в точке прилёта
+ * и смотрит на объект — не лететь вовсе. aimCos — косинус угла между взглядом
+ * камеры и направлением на объект.
+ */
+export function decideFlight(
+  activeTarget: string | null,
+  target: string,
+  distance: number,
+  arrivalDistance: number,
+  aimCos: number
+): FlightDecision {
+  if (activeTarget !== null) return activeTarget === target ? 'ignore' : 'redirect'
+
+  const atArrival: boolean = Math.abs(distance - arrivalDistance) <= arrivalDistance * ARRIVAL_DISTANCE_TOLERANCE
+
+  return atArrival && aimCos >= ARRIVAL_AIM_COS ? 'arrived' : 'start'
+}
+
+/** Идущий полёт: команды transient, поэтому он живёт в статике класса */
+interface ActiveFlight {
+  target: string
+  timeline: anime.AnimeTimelineInstance
+  /** Скорость камеры до ПЕРВОГО клика цепочки: анимация её разгоняет */
+  speedBefore: number
+}
+
 class CameraToObjectTransition extends Command {
   declare public model: Actor
+
+  private static active: ActiveFlight | null = null
 
   public constructor(
     private sceneObserver: SceneObserver,
@@ -47,12 +84,39 @@ class CameraToObjectTransition extends Command {
       offset = radius * 3
     }
 
-    const alpha: number = (data.distance - offset) / data.distance
-    const destination: Vector3 = new Vector3().lerpVectors(this.sceneObserver.cameraPosition, data.position, alpha)
-    const currentSpeed: number = this.camera.speed
+    const cameraPosition: Vector3 = this.sceneObserver.cameraPosition
+    const forward: Vector3 = new Vector3(0, 0, -1).applyQuaternion(this.renderCamera.quaternion)
+    const toTarget: Vector3 = data.position.clone().sub(cameraPosition).normalize()
+    const active: ActiveFlight | null = CameraToObjectTransition.active
+    const decision: FlightDecision = decideFlight(
+      active?.target ?? null,
+      data.name,
+      data.distance,
+      offset,
+      forward.dot(toTarget)
+    )
 
-    let lastValue: number,
-      lastTime: number,
+    if (decision === 'ignore') return
+
+    if (decision === 'arrived') {
+      this.notifications.dispatch({ type: 'success', message: `Target acquired: ${data.name}` })
+
+      return
+    }
+
+    // Разворот: прежний полёт стоит, а скорость после прилёта — та, что была до
+    // первого клика цепочки, а не разогнанная анимацией в момент разворота
+    if (decision === 'redirect' && active) active.timeline.pause()
+
+    const speedBefore: number = active ? active.speedBefore : this.camera.speed
+
+    const alpha: number = (data.distance - offset) / data.distance
+    const destination: Vector3 = new Vector3().lerpVectors(cameraPosition, data.position, alpha)
+
+    // Нули, а не undefined: проверка ниже пропускает первый кадр только для
+    // нулей, с undefined скорость первого кадра выходила NaN
+    let lastValue: number = 0,
+      lastTime: number = 0,
       speed: number = 0
 
     const startRotation: Quaternion = this.renderCamera.quaternion.clone()
@@ -99,13 +163,20 @@ class CameraToObjectTransition extends Command {
         this.camera.setSpeed(fromKilometers(Math.abs(speed)))
       },
       complete: (): void => {
+        // Прерванный разворотом полёт не возвращает управление и скорость:
+        // это делает только последний
+        if (CameraToObjectTransition.active?.timeline !== timeline) return
+
+        CameraToObjectTransition.active = null
         this.astroControls.enabled = true
         this.notifications.dispatch({ type: 'success', message: `Target acquired: ${data.name}` })
-        this.camera.setSpeed(currentSpeed)
+        this.camera.setSpeed(speedBefore)
       }
     }
 
     const timeline: anime.AnimeTimelineInstance = anime.timeline()
+
+    CameraToObjectTransition.active = { target: data.name, timeline, speedBefore }
 
     timeline.add(lookAt)
     timeline.add(path)
