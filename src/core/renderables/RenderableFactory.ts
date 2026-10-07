@@ -7,7 +7,6 @@ import { BlackHoleImpostor } from '@/core/renderables/BlackHole/BlackHoleImposto
 import { StaticNode } from '@/core/renderables/utils/StaticNode'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import { Star } from '@/core/renderables/Star'
-import { StarInnerLayer } from '@/core/renderables/utils/StarInnerLayer'
 import { StarOuterLayer } from '@/core/renderables/utils/StarOuterLayer'
 import { FakeStar } from '@/core/renderables/utils/FakeStar'
 import { StarLod } from '@/core/renderables/utils/StarLod'
@@ -148,9 +147,7 @@ class RenderableFactory {
     const lodl1 = new Star(actor, lod.glowGain)
     const lodl2 = new FakeStar(actor, this.renderer, lod.glowGain)
     const starOuterLayer = new StarOuterLayer(actor)
-    const haloOpacity: number = config('star.haloOpacity')
 
-    if (haloOpacity > 0) lod.add(new StarInnerLayer(actor, 0.8, haloOpacity))
     lodl1.add(starOuterLayer)
 
     node.name = actor.getAttribute('name', '')
@@ -180,11 +177,6 @@ class RenderableFactory {
     const body = new BrownDwarf(actor)
     const impostor = new BrownDwarfImpostor(body, this.renderer)
 
-    // Ореол висит на LOD, а не на теле: он нужен на обоих уровнях, и
-    // сильнее всего именно на дальнем, где тело меньше пикселя.
-    // Приглушён против звёздного — карлик тлеет, а не сияет
-    lod.add(new StarInnerLayer(actor, 0.8, config('brownDwarf.haloOpacity')))
-
     node.name = actor.getAttribute('name', '')
     node.renderable = body
 
@@ -207,13 +199,6 @@ class RenderableFactory {
     const body = new WhiteDwarf(actor)
     const impostor = new WhiteDwarfImpostor(body, this.renderer)
 
-    // Ореол висит на LOD, а не на теле: он нужен на обоих уровнях, и сильнее
-    // всего на дальнем. У карлика это не украшение — при угловом размере в
-    // сотню раз меньше солнечного тело почти всегда мельче пикселя, и весь
-    // его вид несёт ореол. Отсюда opacity выше звёздной при меньшем масштабе:
-    // жёсткая искра, а не раздутая корона, которой у карлика нет физически
-    lod.add(new StarInnerLayer(actor, config('whiteDwarf.haloScale'), config('whiteDwarf.haloOpacity')))
-
     node.name = actor.getAttribute('name', '')
     node.renderable = body
 
@@ -227,7 +212,7 @@ class RenderableFactory {
   }
 
   /**
-   * Пульсар: точка с гало — те же тело и импостор, что у белого карлика
+   * Пульсар: точка — те же тело и импостор, что у белого карлика
    * (сотни тысяч кельвинов дают тот же бело-голубой цвет, радиус 10 км —
    * всегда точка); поверх — объём лучей-маяка, ребёнок узла, не LOD: лучи
    * видны на любой дистанции. Кватернион лучей — полюс оси вращения.
@@ -237,8 +222,6 @@ class RenderableFactory {
     const lod = new ApparentSizeLod(actor.physicalObject!.getAttribute('radius')!, this.renderer, WHITE_DWARF_IMPOSTOR_PIXELS)
     const body = new WhiteDwarf(actor)
     const impostor = new WhiteDwarfImpostor(body, this.renderer)
-
-    lod.add(new StarInnerLayer(actor, config('pulsar.haloScale'), config('pulsar.haloOpacity')))
 
     node.name = actor.getAttribute('name', '')
     node.renderable = body
@@ -273,9 +256,6 @@ class RenderableFactory {
     // Оболочка — дочь тела: переключается LOD'ом вместе с ним. Протуберанцев
     // (StarOuterLayer) нет намеренно — гиганту они не свойственны
     body.add(shell)
-
-    // Ореол на LOD, а не на теле: нужен на обоих уровнях
-    lod.add(new StarInnerLayer(actor, config('giantStar.haloScale'), config('giantStar.haloOpacity')))
 
     node.name = actor.getAttribute('name', '')
     node.renderable = body

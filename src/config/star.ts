@@ -1,5 +1,5 @@
 /**
- * Звезда: переключение LOD диск ↔ билборд-импостор, свечение издалека, ореол.
+ * Звезда: переключение LOD диск ↔ билборд-импостор, свечение издалека.
  *
  * Яркость импостора ручки не имеет НАМЕРЕННО: билборд считает поверхность
  * формулами диска (общий чанк starSurface, общие константы в helpers), и
@@ -35,11 +35,6 @@ export interface StarConfig {
      * Обязан быть больше 12, иначе спада нет, только ступенька.
      */
     farGlowFadePixels: number
-    /**
-     * Прозрачность спрайта-ореола с лучами (StarInnerLayer, sun.png). 0 —
-     * слой не создаётся; 0.03 — штатный ореол слоя.
-     */
-    haloOpacity: number
   }
 }
 
@@ -48,7 +43,6 @@ export const star: StarConfig = {
   star: {
     lodHysteresis: 0.05,
     farGlowGain: 3,
-    farGlowFadePixels: 48,
-    haloOpacity: 0
+    farGlowFadePixels: 48
   }
 }

@@ -35,9 +35,7 @@ describe('категория пульсара', () => {
     ])
   })
 
-  it('конфиг гало и LOD — дефолты белого карлика', () => {
-    expect(config('pulsar.haloScale')).toBe(0.45)
-    expect(config('pulsar.haloOpacity')).toBe(0.05)
+  it('конфиг LOD — дефолт белого карлика', () => {
     expect(config('pulsar.lodHysteresis')).toBe(0.05)
   })
 
