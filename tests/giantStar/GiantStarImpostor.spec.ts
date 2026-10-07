@@ -1,14 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { PerspectiveCamera, Texture, WebGLRenderer } from 'three'
+import { describe, it, expect } from 'vitest'
+import { PerspectiveCamera, Sprite, WebGLRenderer } from 'three'
 import '@/core/framework/TitanThree'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
-import { resourceStorage } from '@/core/services/ResourceStorage'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
 import { ApparentSizeLod } from '@/core/renderables/utils/ApparentSizeLod'
-import { StarInnerLayer } from '@/core/renderables/utils/StarInnerLayer'
 import { GiantStar } from '@/core/renderables/GiantStar/GiantStar'
 import { GiantStarShell } from '@/core/renderables/GiantStar/GiantStarShell'
 import {
@@ -173,16 +171,6 @@ describe('импостор', () => {
 })
 
 describe('сборка узла звезды-гиганта', () => {
-  beforeEach(() => {
-    const map = new Texture()
-    map.name = 'sun.png'
-    resourceStorage.addTexture(map)
-  })
-
-  afterEach(() => {
-    resourceStorage.deleteTexture('sun.png')
-  })
-
   function make(): DynamicNode {
     const factory = new RenderableFactory(
       fakeRenderer,
@@ -202,22 +190,22 @@ describe('сборка узла звезды-гиганта', () => {
     expect(node.name).toBe('W26')
   })
 
-  it('оболочка — дочь тела, гало — на LOD, импостор — второй уровень', () => {
+  it('оболочка — дочь тела, импостор — второй уровень, спрайта-ореола нет (свечение даёт блум)', () => {
     const node = make()
     let body: GiantStar | undefined
     let shell: GiantStarShell | undefined
     let impostor: GiantStarImpostor | undefined
-    let halo: StarInnerLayer | undefined
+    let sprites = 0
 
     node.traverse((child) => {
       if (child instanceof GiantStar) body = child
       if (child instanceof GiantStarShell) shell = child
       if (child instanceof GiantStarImpostor) impostor = child
-      if (child instanceof StarInnerLayer) halo = child
+      if (child instanceof Sprite) sprites++
     })
 
     expect(shell!.parent).toBe(body)
-    expect(halo!.parent).toBeInstanceOf(ApparentSizeLod)
+    expect(sprites).toBe(0)
     expect(impostor!.parent).toBeInstanceOf(ApparentSizeLod)
     expect(body!.userData.type).toBe('giantStar')
   })

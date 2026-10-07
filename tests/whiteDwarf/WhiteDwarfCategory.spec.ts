@@ -39,15 +39,8 @@ describe('конфиг белого карлика', () => {
     expect(config('whiteDwarf.lodHysteresis')).toBe(0.05)
   })
 
-  it('ореол ярче звёздного, но туже', () => {
-    // Тело почти всегда мельче пикселя — весь вид объекта несёт ореол. При
-    // этом он обязан читаться жёсткой искрой: короны у карлика нет физически
-    expect(config('whiteDwarf.haloOpacity')).toBeGreaterThan(0.03)
-    expect(config('whiteDwarf.haloScale')).toBeLessThan(0.8)
-  })
-
   it('дефолты соседних типов не сдвинуты', () => {
     expect(config('star.lodHysteresis')).toBe(0.05)
-    expect(config('brownDwarf.haloOpacity')).toBe(0.015)
+    expect(config('brownDwarf.lodHysteresis')).toBe(0.05)
   })
 })

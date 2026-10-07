@@ -1,20 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { PerspectiveCamera, ShaderMaterial, Texture, Uniform, WebGLRenderer } from 'three'
+import { describe, it, expect } from 'vitest'
+import { PerspectiveCamera, ShaderMaterial, Sprite, Uniform, WebGLRenderer } from 'three'
 import { starFarGlowGain } from '@/core/renderables/utils/starFarGlow'
 import { StarLod } from '@/core/renderables/utils/StarLod'
 import { Star } from '@/core/renderables/Star'
 import { FakeStar } from '@/core/renderables/utils/FakeStar'
-import { StarInnerLayer } from '@/core/renderables/utils/StarInnerLayer'
 import { StarShaderTemplate } from '@/core/materials/shaders/lib/StarShaderTemplate'
 import { FakeStarShaderTemplate } from '@/core/materials/shaders/lib/FakeStarShaderTemplate'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
-import { resourceStorage } from '@/core/services/ResourceStorage'
 import { STAR_IMPOSTOR_PIXELS } from '@/core/helpers/apparentSize'
 import { config } from '@/core/framework/config'
-import { star as starConfig } from '@/config/star'
 import { Actor } from '@/core/models/Actor'
 import { UpdateContext } from '@/core/UpdateContext'
 
@@ -144,20 +141,6 @@ describe('RenderableFactory: звезда', () => {
 
   const lodOf = (node: { children: unknown[] }): StarLod => node.children.find((c) => c instanceof StarLod) as StarLod
 
-  let haloOpacity: number
-
-  beforeEach(() => {
-    haloOpacity = starConfig.star.haloOpacity
-    const map = new Texture()
-    map.name = 'sun.png'
-    resourceStorage.addTexture(map)
-  })
-
-  afterEach(() => {
-    starConfig.star.haloOpacity = haloOpacity
-    resourceStorage.deleteTexture('sun.png')
-  })
-
   it('оба уровня LOD держат юниформ усиления самого LOD', () => {
     const lod = lodOf(makeFactory().make(starActor()))
 
@@ -166,29 +149,22 @@ describe('RenderableFactory: звезда', () => {
     expect(glowOf(lod.levels[1].object)).toBe(lod.glowGain)
   })
 
-  it('haloOpacity 0 — спрайта-ореола нет вовсе', () => {
-    starConfig.star.haloOpacity = 0
-
+  it('спрайта-ореола нет: свечение звезды даёт блум', () => {
     const lod = lodOf(makeFactory().make(starActor()))
+    let sprites = 0
 
-    expect(lod.children.some((c) => c instanceof StarInnerLayer)).toBe(false)
-  })
+    lod.traverse((child) => {
+      if (child instanceof Sprite) sprites++
+    })
 
-  it('haloOpacity выше нуля — ореол на LOD с этой прозрачностью', () => {
-    starConfig.star.haloOpacity = 0.05
-
-    const lod = lodOf(makeFactory().make(starActor()))
-    const halo = lod.children.find((c) => c instanceof StarInnerLayer) as StarInnerLayer | undefined
-
-    expect(halo?.material.opacity).toBeCloseTo(0.05)
+    expect(sprites).toBe(0)
   })
 })
 
-describe('star config: свечение издалека и ореол', () => {
+describe('star config: свечение издалека', () => {
   it('стартовые значения', () => {
     expect(config('star.farGlowGain')).toBe(3)
     expect(config('star.farGlowFadePixels')).toBe(48)
-    expect(config('star.haloOpacity')).toBe(0)
   })
 
   it('порог затухания крупнее импостора: иначе спада нет, только ступенька', () => {

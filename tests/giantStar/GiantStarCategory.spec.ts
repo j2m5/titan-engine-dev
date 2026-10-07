@@ -57,6 +57,6 @@ describe('конфиг звезды-гиганта', () => {
 
   it('дефолты соседних типов не сдвинуты', () => {
     expect(config('star.lodHysteresis')).toBe(0.05)
-    expect(config('whiteDwarf.haloOpacity')).toBe(0.05)
+    expect(config('whiteDwarf.lodHysteresis')).toBe(0.05)
   })
 })

@@ -121,3 +121,28 @@ describe('buildProminenceGeometry: содержимое атрибутов', () 
     }
   })
 })
+
+describe('buildProminenceGeometry: границы параметров', () => {
+  it('два сегмента на ленту — минимум, дающий треугольники', () => {
+    const geometry = buildProminenceGeometry({ ribbonCount: 3, segmentsPerRibbon: 2 })
+
+    expect(geometry.getIndex()!.count).toBe(3 * (2 - 1) * 6)
+  })
+
+  it('один сегмент на ленту — внятная ошибка, а не ленты без единого треугольника', () => {
+    expect(() => buildProminenceGeometry({ segmentsPerRibbon: 1 })).toThrow(RangeError)
+    expect(() => buildProminenceGeometry({ segmentsPerRibbon: 1 })).toThrow(/segmentsPerRibbon/)
+  })
+
+  it('ноль сегментов — та же внятная ошибка вместо «Invalid typed array length»', () => {
+    expect(() => buildProminenceGeometry({ segmentsPerRibbon: 0 })).toThrow(/segmentsPerRibbon/)
+  })
+
+  it('дробное число сегментов — ошибка: индексы считаются по целым', () => {
+    expect(() => buildProminenceGeometry({ segmentsPerRibbon: 2.5 })).toThrow(/segmentsPerRibbon/)
+  })
+
+  it('ноль лент — ошибка', () => {
+    expect(() => buildProminenceGeometry({ ribbonCount: 0 })).toThrow(/ribbonCount/)
+  })
+})

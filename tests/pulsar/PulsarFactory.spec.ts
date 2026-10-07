@@ -1,12 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { Texture, Vector3, WebGLRenderer } from 'three'
+import { describe, it, expect } from 'vitest'
+import { Sprite, Vector3, WebGLRenderer } from 'three'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
-import { resourceStorage } from '@/core/services/ResourceStorage'
 import { PulsarBeams } from '@/core/renderables/Pulsar/PulsarBeams'
-import { StarInnerLayer } from '@/core/renderables/utils/StarInnerLayer'
 import { ApparentSizeLod } from '@/core/renderables/utils/ApparentSizeLod'
 import { OrientationModel } from '@/core/libs/OrientationModel'
 import { Actor } from '@/core/models/Actor'
@@ -38,26 +36,16 @@ function pulsarActor(data: IPulsarRenderingObject, rotation: { ascendingNode: nu
 }
 
 describe('RenderableFactory: пульсар', () => {
-  beforeEach(() => {
-    const map = new Texture()
-    map.name = 'sun.png'
-    resourceStorage.addTexture(map)
-  })
-
-  afterEach(() => {
-    resourceStorage.deleteTexture('sun.png')
-  })
-
-  it('узел несёт LOD с телом и импостором, гало и лучи с кватернионом полюса', () => {
+  it('узел несёт LOD с телом и импостором и лучи с кватернионом полюса; спрайта-ореола нет', () => {
     const actor = pulsarActor({ beamIntensity: 6 }, { ascendingNode: 125, inclination: 62 })
     const node = makeFactory().make(actor)
 
     const lod = node.children.find((c) => c instanceof ApparentSizeLod)
-    const halo = lod?.children.find((c) => c instanceof StarInnerLayer)
+    const sprites = lod?.children.filter((c) => c instanceof Sprite) ?? []
     const beams = node.children.find((c) => c instanceof PulsarBeams) as PulsarBeams | undefined
 
     expect(lod).toBeDefined()
-    expect(halo).toBeDefined()
+    expect(sprites).toHaveLength(0)
     expect(beams).toBeDefined()
     expect(beams!.quaternion.angleTo(new OrientationModel(actor).getPoleQuaternion())).toBeCloseTo(0, 6)
   })

@@ -45,6 +45,19 @@ export function buildProminenceGeometry(options?: ProminenceGeometryOptions): Bu
     segmentsPerRibbon = PROMINENCE_SEGMENTS_PER_RIBBON
   } = { ...options }
 
+  // Внятная ошибка на входе: лента из одного сегмента не даёт ни одного
+  // треугольника (молча пустой слой), ноль — «Invalid typed array length» из
+  // глубины, дробное число ломает счёт индексов
+  if (!Number.isInteger(ribbonCount) || ribbonCount < 1) {
+    throw new RangeError(`buildProminenceGeometry: ribbonCount должен быть целым ≥ 1, получено ${ribbonCount}`)
+  }
+
+  if (!Number.isInteger(segmentsPerRibbon) || segmentsPerRibbon < 2) {
+    throw new RangeError(
+      `buildProminenceGeometry: segmentsPerRibbon должен быть целым ≥ 2, получено ${segmentsPerRibbon}`
+    )
+  }
+
   const vertexCount: number = ribbonCount * segmentsPerRibbon * 2
 
   const ribbon = new Float32Array(vertexCount * 2)

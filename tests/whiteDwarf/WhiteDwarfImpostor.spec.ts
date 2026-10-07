@@ -19,8 +19,6 @@ import {
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { withoutComments } from '../helpers/glsl'
-import { resourceStorage } from '@/core/services/ResourceStorage'
-import { Texture } from 'three'
 
 const fakeRenderer = {
   domElement: { height: 1080 },
@@ -183,16 +181,6 @@ describe('LOD белого карлика', () => {
 })
 
 describe('сборка узла белого карлика', () => {
-  beforeEach(() => {
-    const map = new Texture()
-    map.name = 'sun.png'
-    resourceStorage.addTexture(map)
-  })
-
-  afterEach(() => {
-    resourceStorage.deleteTexture('sun.png')
-  })
-
   it('тело остаётся под DynamicNode, а не подменяет его собой', () => {
     const factory = new RenderableFactory(fakeRenderer, {} as unknown as ResourceObserver, new AtmosphereRegistry(), new DepthVolumeRegistry())
     const node = factory.make(stubActor())
