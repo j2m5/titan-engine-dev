@@ -33,25 +33,30 @@ const TimeSpeed = observer(() => {
         <span style={{ minWidth: '110px', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
           {timeStore.currentDate}
         </span>
-        <TitanIconButton onClick={() => timeStore.setSpeedOfTime(1)}>
+        <TitanIconButton title="Real time (1x)" onClick={() => timeStore.setSpeedOfTime(1)}>
           <ArrowsClockwiseIcon size={22} />
         </TitanIconButton>
         <TitanIconButton
+          title="Slower"
           disabled={timeStore.speedOfTime === timeStore.timeSteps[0]}
           onClick={() => timeStore.setSpeedBackward()}
         >
           <RewindIcon size={24} />
         </TitanIconButton>
-        <TitanIconButton onClick={() => timeStore.togglePause()}>
+        <TitanIconButton
+          title={timeStore.speedOfTime === 0 ? 'Resume' : 'Pause'}
+          onClick={() => timeStore.togglePause()}
+        >
           {timeStore.speedOfTime === 0 ? <PlayIcon size={20} /> : <PauseIcon size={20} />}
         </TitanIconButton>
         <TitanIconButton
+          title="Faster"
           disabled={timeStore.speedOfTime === timeStore.timeSteps[timeStore.timeSteps.length - 1]}
           onClick={() => timeStore.setSpeedForward()}
         >
           <FastForwardIcon size={24} />
         </TitanIconButton>
-        <TitanIconButton onClick={handleResetTime}>
+        <TitanIconButton title="Reset date to now" onClick={handleResetTime}>
           <ClockClockwiseIcon size={22} />
         </TitanIconButton>
         <span style={{ minWidth: '75px', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>

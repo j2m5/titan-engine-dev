@@ -38,8 +38,13 @@ const HomePage = observer(() => {
             key={scenario.id}
             header={scenario.name}
             content={scenario.description}
-            footer={<TitanButton onClick={() => engineStore.setScenario(scenario)}>Run</TitanButton>}
-            media={<img src={getFullURL(scenario.preview)} alt={scenario.name} style={{ width: '100%' }} />}
+            footer={
+              <TitanButton ariaLabel={`Run ${scenario.name}`} onClick={() => engineStore.setScenario(scenario)}>
+                Run
+              </TitanButton>
+            }
+            // alt пустой: название сценария уже есть в заголовке карточки
+            media={<img src={getFullURL(scenario.preview)} alt="" style={{ width: '100%' }} />}
           />
         ))}
       </TitanGrid>

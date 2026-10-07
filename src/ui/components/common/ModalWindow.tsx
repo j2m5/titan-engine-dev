@@ -11,6 +11,7 @@ const ModalWindow: FC<Omit<TitanModalProps, 'actions'> & Closable> = observer(
         visible={visible}
         title={title}
         actions={<TitanButton onClick={onClose}>Close</TitanButton>}
+        onClose={onClose}
         keepMounted={keepMounted}
         height={height}
         width={width}

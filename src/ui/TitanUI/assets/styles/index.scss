@@ -105,8 +105,11 @@
   border: none;
   color: #f0f0f0;
   cursor: pointer;
-  display: inline-block;
-  align-content: center;
+  // Иконка ровно по центру кнопки: у строчной иконки в inline-block её
+  // сдвигала базовая линия
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
 
   &:hover {
     color: #bbbbbb;
@@ -257,6 +260,12 @@
   pointer-events: none;
   position: fixed;
   z-index: 1000000;
+
+  // Фокус встаёт на обёртку при открытии (Tab оттуда идёт по кругу внутри) —
+  // рамка вокруг всего экрана не нужна
+  &:focus {
+    outline: none;
+  }
 
   &.open {
     display: flex;

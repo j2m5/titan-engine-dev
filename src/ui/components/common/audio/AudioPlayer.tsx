@@ -161,8 +161,12 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
     <div style={{ width: '500px', maxWidth: '100%' }}>
       <TitanFlex justify="center" width="100%" style={{ margin: '10px 0' }}>
         {currentTrack && (
+          // src прямо на элементе, без <source type="audio/mpeg">: формат браузер
+          // определяет по содержимому — OGG и WAV не выдаются за MP3 (Firefox по
+          // чужому type отказывался играть)
           <audio
             key={currentTrack.src}
+            src={currentTrack.src}
             ref={audioRef}
             preload="metadata"
             loop={loop}
@@ -182,7 +186,6 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
             onVolumeChange={(event) => setVolume(event.currentTarget.volume)}
           >
             Your browser does not support the audio element
-            <source type="audio/mpeg" src={currentTrack.src} />
           </audio>
         )}
       </TitanFlex>
@@ -204,21 +207,21 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
         />
       </TitanFlex>
       <TitanFlex justify="center" width="100%" style={{ margin: '10px 0 0' }}>
-        <TitanIconButton disabled={!isReady || trackIndex === 0} onClick={handlePrev}>
+        <TitanIconButton title="Previous track" disabled={!isReady || trackIndex === 0} onClick={handlePrev}>
           <SkipBackIcon size={20} />
         </TitanIconButton>
-        <TitanIconButton disabled={!isReady} onClick={togglePlayPause}>
+        <TitanIconButton title={isPlaying ? 'Pause' : 'Play'} disabled={!isReady} onClick={togglePlayPause}>
           {isPlaying ? <PauseIcon size={20} /> : <PlayIcon size={20} />}
         </TitanIconButton>
-        <TitanIconButton disabled={!isReady || trackIndex === trackCount - 1} onClick={handleNext}>
+        <TitanIconButton title="Next track" disabled={!isReady || trackIndex === trackCount - 1} onClick={handleNext}>
           <SkipForwardIcon size={20} />
         </TitanIconButton>
-        <TitanIconButton disabled={!isReady || trackIndex === -1} onClick={handleLoop}>
+        <TitanIconButton title="Repeat" disabled={!isReady || trackIndex === -1} onClick={handleLoop}>
           <ArrowsClockwiseIcon color={loop ? '#f0f0f0' : '#888888'} size={20} />
         </TitanIconButton>
       </TitanFlex>
       <TitanFlex justify="center" align="center" width="100%" style={{ margin: '0 0 10px' }}>
-        <TitanIconButton onClick={() => handleVolumeChange(0)}>
+        <TitanIconButton title="Mute" onClick={() => handleVolumeChange(0)}>
           <SpeakerSimpleLowIcon size={20} />
         </TitanIconButton>
         <TitanSlider
@@ -229,7 +232,7 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
           style={{ width: '150px' }}
           onChange={(event: ChangeEvent<HTMLInputElement>) => handleVolumeChange(event.target.valueAsNumber)}
         />
-        <TitanIconButton onClick={() => handleVolumeChange(1)}>
+        <TitanIconButton title="Full volume" onClick={() => handleVolumeChange(1)}>
           <SpeakerSimpleHighIcon size={20} />
         </TitanIconButton>
       </TitanFlex>

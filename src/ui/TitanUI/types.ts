@@ -37,6 +37,10 @@ export interface TitanLabelProps extends HasChildren {
 
 export interface TitanButtonProps extends HasChildren, Resizable, Clickable {
   disabled?: boolean
+  /** Всплывающая подсказка; у кнопки-иконки это и её имя для экранного диктора */
+  title?: string
+  /** Имя для экранного диктора, когда видимой надписи мало (десять одинаковых «Run») */
+  ariaLabel?: string
 }
 
 export interface TitanTopbarProps extends HasChildren, Customizable {}
@@ -64,6 +68,8 @@ export interface TitanModalProps extends HasChildren, Resizable {
   keepMounted?: boolean
   className?: string
   dimScene?: boolean
+  /** Escape закрывает верхнее открытое окно этим обработчиком; без него Escape окно не трогает */
+  onClose?: () => void
 }
 
 export interface TitanDividerProps {

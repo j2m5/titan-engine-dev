@@ -46,27 +46,27 @@ const MainAppBar = observer(() => {
       </TitanFlex>
       <TitanFlex align="center" style={{ justifySelf: 'end' }}>
         <TitanFlex>
-          <TitanIconButton onClick={() => modalWindowStore.setTutorialWindowState(true)}>
+          <TitanIconButton title="Help" onClick={() => modalWindowStore.setTutorialWindowState(true)}>
             <QuestionIcon size={24} />
           </TitanIconButton>
         </TitanFlex>
         <TitanFlex>
-          <TitanIconButton onClick={() => modalWindowStore.setAudioPlayerWindowState(true)}>
+          <TitanIconButton title="Audio player" onClick={() => modalWindowStore.setAudioPlayerWindowState(true)}>
             <SpeakerSimpleHighIcon size={24} />
           </TitanIconButton>
         </TitanFlex>
         <TitanFlex>
-          <TitanIconButton onClick={() => modalWindowStore.setSettingsWindowState(true)}>
+          <TitanIconButton title="Settings" onClick={() => modalWindowStore.setSettingsWindowState(true)}>
             <GearIcon size={24} />
           </TitanIconButton>
         </TitanFlex>
         <TitanFlex>
-          <TitanIconButton onClick={() => void TakeScreenshot.execute({})}>
+          <TitanIconButton title="Save 4K screenshot" onClick={() => void TakeScreenshot.execute({})}>
             <ImageIcon size={24} />
           </TitanIconButton>
         </TitanFlex>
         <TitanFlex>
-          <TitanIconButton onClick={() => engineStore.setScenario(null)}>
+          <TitanIconButton title="Back to scenarios" onClick={() => engineStore.setScenario(null)}>
             <SignOutIcon size={24} />
           </TitanIconButton>
         </TitanFlex>

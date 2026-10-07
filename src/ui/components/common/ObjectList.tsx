@@ -62,10 +62,15 @@ const ObjectList = observer(() => {
           <TitanFlex align="center" justify="between" width="100%">
             <div>{actor.attributes.name!}</div>
             <div style={{ justifySelf: 'start' }}>
-              <TitanIconButton height="auto" width="auto" onClick={() => handleFollow(actor)}>
+              <TitanIconButton
+                title={isFollowing(actor) ? 'Stop following' : 'Follow'}
+                height="auto"
+                width="auto"
+                onClick={() => handleFollow(actor)}
+              >
                 <CrosshairIcon size={20} weight={isFollowing(actor) ? 'fill' : 'regular'} />
               </TitanIconButton>
-              <TitanIconButton height="auto" width="auto" onClick={() => handleMove(actor)}>
+              <TitanIconButton title="Fly to" height="auto" width="auto" onClick={() => handleMove(actor)}>
                 <RocketLaunchIcon size={20} />
               </TitanIconButton>
             </div>

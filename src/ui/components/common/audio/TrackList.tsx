@@ -35,7 +35,10 @@ const TrackList: FC<TrackListProps> = (props: TrackListProps) => {
       {data.map((item: ITrack, index: number) => (
         <TitanListItem key={item.src} style={{ padding: '2px', background: 'none' }}>
           <TitanFlex align="center" style={{ gap: '10px' }}>
-            <TitanIconButton onClick={() => handleClick(index)}>
+            <TitanIconButton
+              title={isPlaying && currentTrackIndex === index ? 'Pause' : 'Play'}
+              onClick={() => handleClick(index)}
+            >
               {isPlaying && currentTrackIndex === index ? <PauseIcon size={20} /> : <PlayIcon size={20} />}
             </TitanIconButton>
             {/* min-width 0 и перенос: имя файла без пробелов не режется краем списка */}

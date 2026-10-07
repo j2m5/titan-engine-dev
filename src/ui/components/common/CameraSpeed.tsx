@@ -59,6 +59,7 @@ const CameraSpeed = observer(() => {
     <div className={`camera-speed ${hiding ? 'hiding' : ''} ${!visible ? 'hidden' : ''}`}>
       <TitanFlex align="center">
         <TitanIconButton
+          title="Minimum speed"
           disabled={cameraStore.speed === cameraStore.minSpeed}
           onClick={() => cameraStore.setSpeed(cameraStore.minSpeed)}
         >
@@ -70,6 +71,7 @@ const CameraSpeed = observer(() => {
           {formattedSpeed}
         </span>
         <TitanIconButton
+          title="Maximum speed"
           disabled={cameraStore.speed === cameraStore.maxSpeed}
           onClick={() => cameraStore.setSpeed(cameraStore.maxSpeed)}
         >
