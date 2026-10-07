@@ -29,6 +29,12 @@ describe('glslFloat', () => {
     expect(glslFloat(Math.cos(Math.PI / 2))).toBe('0.0')
     expect(glslFloat(1e-7)).toBe('1e-7')
   })
+
+  it('не конечное число — RangeError, а не битый GLSL', () => {
+    expect(() => glslFloat(NaN)).toThrow(RangeError)
+    expect(() => glslFloat(Infinity)).toThrow(RangeError)
+    expect(() => glslFloat(-Infinity)).toThrow(RangeError)
+  })
 })
 
 describe('createSpriteQuad', () => {
@@ -86,8 +92,12 @@ describe('FlareGhostMaterial: формулы', () => {
   })
 
   it('каёмка: красный снаружи, синий внутри', () => {
-    expect(frag).toContain('ghostProfile(rho / (1.0 + ghostChromatic))')
-    expect(frag).toContain('ghostProfile(rho / (1.0 - ghostChromatic))')
+    expect(frag).toContain(
+      'ghostProfile(rho / (1.0 + ghostChromatic)) / ((1.0 + ghostChromatic) * (1.0 + ghostChromatic))'
+    )
+    expect(frag).toContain(
+      'ghostProfile(rho / (1.0 - ghostChromatic)) / ((1.0 - ghostChromatic) * (1.0 - ghostChromatic))'
+    )
   })
 
   it('потолок half-float', () => {
@@ -122,6 +132,10 @@ describe('FlareGhostMaterial: проводка', () => {
     material.ghostChromatic = 0.05
 
     expect(material.uniforms.ghostVignette.value).toBe(3)
+    material.ghostVignette = -1
+    expect(material.uniforms.ghostVignette.value).toBe(0)
+    material.ghostVignette = 3
+    expect(material.ghostVignette).toBe(3)
     expect(material.ghostChromatic).toBe(0.05)
   })
 

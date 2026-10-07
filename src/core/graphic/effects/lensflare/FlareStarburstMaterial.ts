@@ -6,6 +6,7 @@ import {
   STARBURST_EPSILON,
   STARBURST_KAPPA,
   STARBURST_MAX_LENGTH,
+  STARBURST_TAPER_START,
   STARBURST_WIDTH
 } from './flareStarburst'
 import { FLUX_REFERENCE_HEIGHT } from './flareGrid'
@@ -34,8 +35,9 @@ const vertexShader: string = `
 
   out vec2 vOffset;
   flat out vec3 vI0;
+  flat out float vHalfSize;
 
-  // Rec. 709 weights — используем flareLuma, встроенная функция доступна только во фрагменте
+  // Rec. 709 — те же веса, что у lumaNormalized; встроенная яркость three есть только во фрагментном прологе
   float flareLuma(vec3 c) {
     return dot(vec3(0.2126, 0.7152, 0.0722), c);
   }
@@ -64,6 +66,7 @@ const vertexShader: string = `
 
     vOffset = position.xy * halfSize;
     vI0 = i0;
+    vHalfSize = halfSize;
     gl_Position = vec4(2.0 * frame.x / aspect, 2.0 * frame.y, 0.0, 1.0);
   }
 `
@@ -71,12 +74,14 @@ const vertexShader: string = `
 const fragmentShader: string = `
   #define STARBURST_CORE ${glslFloat(STARBURST_CORE)}
   #define STARBURST_WIDTH ${glslFloat(STARBURST_WIDTH)}
+  #define STARBURST_TAPER_START ${glslFloat(STARBURST_TAPER_START)}
 
   const vec3 DISPERSION = vec3(${STARBURST_DISPERSION.map(glslFloat).join(', ')});
   const vec2 SPIKE_DIRECTIONS[3] = vec2[3](${directions.join(', ')});
 
   in vec2 vOffset;
   flat in vec3 vI0;
+  flat in float vHalfSize;
 
   void main() {
     vec3 color = vec3(0.0);
@@ -86,7 +91,9 @@ const fragmentShader: string = `
       float across = dot(vOffset, vec2(-dir.y, dir.x)) / STARBURST_WIDTH;
       // Зеркало — spikeIntensity (flareStarburst.ts); k по каналам растягивает картину
       vec3 falloff = 1.0 + along * DISPERSION / STARBURST_CORE;
-      color += vI0 * DISPERSION / (falloff * falloff) * exp(-across * across);
+      // Зеркало — starburstWindow: все три линии кончаются на полуразмере квада
+      float taper = 1.0 - smoothstep(STARBURST_TAPER_START * vHalfSize, vHalfSize, along);
+      color += vI0 * DISPERSION / (falloff * falloff) * exp(-across * across) * taper;
     }
     gl_FragColor = vec4(min(color, vec3(60000.0)), 1.0);
   }

@@ -19,6 +19,8 @@ export const STARBURST_DISPERSION = [0.83, 1.0, 1.22] as const
 export const STARBURST_EPSILON = 1e-3
 /** Потолок длины луча, доля высоты кадра */
 export const STARBURST_MAX_LENGTH = 0.6
+/** Спад луча к краю квада: доля 0.7 полуразмера — без изменений, у края — ноль; все три линии кончаются на h */
+export const STARBURST_TAPER_START = 0.7
 /** Экранная яркость, с которой луч читается после AgX — мера видимой длины */
 export const STARBURST_VISIBLE_LEVEL = 0.02
 /** Калибровка (расчёт, не замер): звезда 12 px (поток 3400) при intensity 0.1 — видимая длина 0.25 */
@@ -53,6 +55,12 @@ export function spikeReach(i0Screen: number, k: number, level: number): number {
 export function starburstQuadHalfSize(i0Screen: number): number {
   const reach = spikeReach(i0Screen, STARBURST_DISPERSION[0], STARBURST_EPSILON)
   return Math.min(Math.max(reach, STARBURST_CORE), STARBURST_MAX_LENGTH)
+}
+
+/** Окно луча по расстоянию вдоль него: 1 до 0.7·h, 0 на h — зеркало GLSL FlareStarburstMaterial */
+export function starburstWindow(along: number, halfSize: number): number {
+  const t = Math.min(Math.max((along - STARBURST_TAPER_START * halfSize) / ((1 - STARBURST_TAPER_START) * halfSize), 0), 1)
+  return 1 - t * t * (3 - 2 * t)
 }
 
 /** Видимая длина: зелёный канал до STARBURST_VISIBLE_LEVEL — для отчётов и тестов */

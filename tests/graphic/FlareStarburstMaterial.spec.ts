@@ -7,6 +7,7 @@ import {
   STARBURST_CORE,
   STARBURST_DISPERSION,
   STARBURST_KAPPA,
+  STARBURST_TAPER_START,
   STARBURST_WIDTH
 } from '@/core/graphic/effects/lensflare/flareStarburst'
 
@@ -56,7 +57,15 @@ describe('FlareStarburstMaterial: формулы и константы', () => {
 
   it('профиль: I₀·k / (1 + r·k/r₀)², поперёк гаусс', () => {
     expect(frag).toContain('vec3 falloff = 1.0 + along * DISPERSION / STARBURST_CORE;')
-    expect(frag).toContain('color += vI0 * DISPERSION / (falloff * falloff) * exp(-across * across);')
+    expect(frag).toContain('color += vI0 * DISPERSION / (falloff * falloff) * exp(-across * across) * taper;')
+  })
+
+  it('спад луча к краю квада: полуразмер уходит varying-ом', () => {
+    expect(vert).toContain('flat out float vHalfSize;')
+    expect(vert).toContain('vHalfSize = halfSize;')
+    expect(frag).toContain('flat in float vHalfSize;')
+    expect(frag).toContain(`#define STARBURST_TAPER_START ${glslFloat(STARBURST_TAPER_START)}`)
+    expect(frag).toContain('float taper = 1.0 - smoothstep(STARBURST_TAPER_START * vHalfSize, vHalfSize, along);')
   })
 
   it('вершинник без luminance(): у three она есть только во фрагментном прологе', () => {

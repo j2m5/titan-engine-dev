@@ -110,11 +110,12 @@ const fragmentShader: string = `
 
   void main() {
     float rho = length(vLocal);
-    // Каёмка: радиус по каналам R·(1 ± χ) — красный снаружи, синий внутри
+    // Каёмка: радиус по каналам R·(1 ± χ) — красный снаружи, синий внутри;
+    // энергия канала сохраняется: площадь масштабируется как (1 ± χ)²
     vec3 profile = vec3(
-      ghostProfile(rho / (1.0 + ghostChromatic)),
+      ghostProfile(rho / (1.0 + ghostChromatic)) / ((1.0 + ghostChromatic) * (1.0 + ghostChromatic)),
       ghostProfile(rho),
-      ghostProfile(rho / (1.0 - ghostChromatic))
+      ghostProfile(rho / (1.0 - ghostChromatic)) / ((1.0 - ghostChromatic) * (1.0 - ghostChromatic))
     );
     gl_FragColor = vec4(min(vColor * profile, vec3(60000.0)), 1.0);
   }
@@ -163,7 +164,8 @@ export class FlareGhostMaterial extends ShaderMaterial {
   }
 
   set ghostVignette(value: number) {
-    this.uniforms.ghostVignette.value = value
+    // показатель ≥ 0; 0 — без виньетирования (отрицательный раздул бы угол до 1e6)
+    this.uniforms.ghostVignette.value = Math.max(value, 0)
   }
 
   get ghostChromatic(): number {

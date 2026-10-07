@@ -1,7 +1,7 @@
 import { HalfFloatType, PerspectiveCamera, TextureLoader, UnsignedByteType, WebGLRenderTarget, type WebGLRenderer } from 'three'
 import type { Mock } from 'vitest'
 import { BLOOM_OPTIONS, createEffectPasses } from '@/core/graphic/Postprocessing'
-import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
+import { LensFlareEffect, lensFlareEffectOptionsDefaults } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { FLARE_GHOSTS } from '@/core/graphic/effects/lensflare/flareGhosts'
 import { lensFlare } from '@/config/lensFlare'
 
@@ -49,6 +49,10 @@ describe('LensFlareEffect: контракт блика объектива', () =
 
     expect(effect.getFragmentShader()).not.toContain('bloomBuffer')
     expect('blurPass' in effect).toBe(false)
+  })
+
+  it('дефолт яркости — значение конфига: калибровки спрайтов рассчитаны на него', () => {
+    expect(lensFlareEffectOptionsDefaults.intensity).toBe(lensFlare.lensFlare.intensity)
   })
 
   it('порог берётся у bloom, а не своей копией числа', () => {

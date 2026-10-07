@@ -5,9 +5,11 @@ import {
   STARBURST_DISPERSION,
   STARBURST_EPSILON,
   STARBURST_MAX_LENGTH,
+  STARBURST_TAPER_START,
   spikeIntensity,
   starburstQuadHalfSize,
   starburstVisibleLength,
+  starburstWindow,
   starburstWeight
 } from '@/core/graphic/effects/lensflare/flareStarburst'
 
@@ -63,5 +65,21 @@ describe('starburst: длина и энергия', () => {
 
   it('фоновая звезда (поток 3) лучей не получает', () => {
     expect(starburstWeight(3, 200)).toBe(0)
+  })
+
+  it('окно луча: 1 до 0.7·h, 0 на h и дальше, 0.5 посередине, монотонно', () => {
+    const h = 0.4
+    expect(STARBURST_TAPER_START).toBe(0.7)
+    expect(starburstWindow(0, h)).toBe(1)
+    expect(starburstWindow(0.7 * h, h)).toBe(1)
+    expect(starburstWindow(h, h)).toBe(0)
+    expect(starburstWindow(1.2 * h, h)).toBe(0)
+    expect(starburstWindow(0.85 * h, h)).toBeCloseTo(0.5, 10)
+    let previous = 1
+    for (let i = 0; i <= 20; i++) {
+      const value = starburstWindow((0.7 + 0.015 * i) * h, h)
+      expect(value).toBeLessThanOrEqual(previous + 1e-12)
+      previous = value
+    }
   })
 })
