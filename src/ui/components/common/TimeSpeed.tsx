@@ -55,7 +55,7 @@ const TimeSpeed = observer(() => {
           <RewindIcon size={24} />
         </TitanIconButton>
         <TitanIconButton onClick={handleStopContinue}>
-          {timeStore.speedOfTime === 0 ? <PauseIcon size={20} /> : <PlayIcon size={20} />}
+          {timeStore.speedOfTime === 0 ? <PlayIcon size={20} /> : <PauseIcon size={20} />}
         </TitanIconButton>
         <TitanIconButton
           disabled={timeStore.speedOfTime === timeStore.timeSteps[timeStore.timeSteps.length - 1]}
