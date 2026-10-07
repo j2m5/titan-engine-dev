@@ -23,7 +23,6 @@ const App = observer(() => {
     <>
       <MainAppBar />
       <ObjectList />
-      <NotificationMessage />
       <CameraSpeed />
       <ModalWindow
         title="Tutorial"
@@ -61,15 +60,22 @@ const App = observer(() => {
   const homePage = <HomePage />
   const whenAppIsNotLoaded = <LoadingScreen />
 
+  let screen = whenAppIsLoaded
+
   if (!engineStore.scenario) {
-    return homePage
-  } else {
-    if (engineStore.appLoadingStatus) {
-      return whenAppIsNotLoaded
-    } else {
-      return whenAppIsLoaded
-    }
+    screen = homePage
+  } else if (engineStore.appLoadingStatus) {
+    screen = whenAppIsNotLoaded
   }
+
+  // Уведомления — на любом экране: ошибки загрузки видны сразу, а не копятся
+  // до конца загрузки; провал сценария показывается уже на главной
+  return (
+    <>
+      {screen}
+      <NotificationMessage />
+    </>
+  )
 })
 
 export default App

@@ -1,6 +1,9 @@
 import { observer } from 'mobx-react-lite'
 import { engineStore } from '@/ui/mobx/EngineStore'
 
+/** Только имя файла: полный URL бакета длинный и ничего не говорит пользователю */
+const fileName = (url: string): string => url.split('/').pop() ?? url
+
 const LoadingScreen = observer(() => {
   return (
     <div className="loading-screen">
@@ -9,7 +12,7 @@ const LoadingScreen = observer(() => {
         <div className="progressbar">
           <span className="progress" style={{ width: engineStore.loadingPercentage + '%' }}></span>
         </div>
-        <div className="file">{engineStore.appLoadingAsset}</div>
+        <div className="file">{fileName(engineStore.appLoadingAsset)}</div>
       </div>
     </div>
   )
