@@ -3,9 +3,21 @@
   src: url("@titanui/assets/fonts/GoogleSans-Regular.ttf") format("truetype");
   font-weight: normal;
   font-style: normal;
+  // Текст сразу виден системным шрифтом, пока грузится Google Sans
+  font-display: swap;
 }
 
+// Общая рамка фокуса с клавиатуры: :focus-visible не срабатывает на клик мышью
+@mixin titan-focus-ring {
+  outline: 1px solid #f0f0f0;
+  outline-offset: 2px;
+}
+
+// border-box: заданные width/height — внешний размер, а не «+ паддинг и рамка».
+// Глобальный сброс не делается намеренно: он задел бы DOM вне библиотеки
+// (подписи и маркеры CSS2D, прицел, панель статистики)
 .titan-container {
+  box-sizing: border-box;
   background: rgba(0, 0, 0, 0.2);
   backdrop-filter: blur(2px);
   border: 1px solid #444444;
@@ -70,10 +82,20 @@
   outline: none;
   text-transform: uppercase;
 
-  &:hover {
+  &:hover:not(:disabled) {
     border: 1px solid #bbbbbb;
     background-color: #bbbbbb;
     color: #444444;
+  }
+
+  &:focus-visible {
+    @include titan-focus-ring;
+  }
+
+  &:disabled {
+    border-color: #444444;
+    color: #888888;
+    cursor: default;
   }
 }
 
@@ -83,15 +105,20 @@
   border: none;
   color: #f0f0f0;
   cursor: pointer;
-  display: inline-block;;
+  display: inline-block;
   align-content: center;
 
   &:hover {
     color: #bbbbbb;
   }
 
+  &:focus-visible {
+    @include titan-focus-ring;
+  }
+
   &:disabled {
     color: #888888;
+    cursor: default;
   }
 }
 
@@ -368,11 +395,12 @@
   position: relative;
   z-index: 2;
 
-  &::before {
-    content: "";
-    inset: 0;
-    position: absolute;
-    z-index: 1;
+  &:focus-visible {
+    @include titan-focus-ring;
+  }
+
+  &:disabled {
+    cursor: default;
   }
 
   &::-webkit-slider-thumb {
@@ -406,7 +434,8 @@
   bottom: 24px;
   right: 24px;
   user-select: none;
-  z-index: 999999999999;
+  // Максимум int32: прежние 999999999999 браузер всё равно зажимал до него
+  z-index: 2147483647;
 
   &.hiding {
     animation: toast-out 160ms cubic-bezier(.4, 0, 1, 1) forwards;
@@ -639,6 +668,10 @@
       color: #bbbbbb;
     }
 
+    &:focus-visible {
+      @include titan-focus-ring;
+    }
+
     &.active {
       color: #f0f0f0;
       border-bottom-color: #f0f0f0;
@@ -695,6 +728,9 @@
   cursor: pointer;
   display: inline-flex;
   gap: 10px;
+  // Опора для скрытого инпута: без неё он позиционировался от дальнего
+  // предка, и фокус прокручивал окно к чужому месту
+  position: relative;
   user-select: none;
 
   .titan-toggle-input {
@@ -702,6 +738,11 @@
     opacity: 0;
     width: 0;
     height: 0;
+  }
+
+  // Инпут невидим — фокус с клавиатуры показывает дорожка
+  .titan-toggle-input:focus-visible + .titan-toggle-track {
+    @include titan-focus-ring;
   }
 
   .titan-toggle-track {
