@@ -1,5 +1,6 @@
 import { FC } from 'react'
 import { TitanSliderProps } from '@titanui/types'
+import { sliderFill } from '@titanui/utils/helpers'
 
 const TitanSlider: FC<TitanSliderProps> = ({
   value = 0,
@@ -11,8 +12,7 @@ const TitanSlider: FC<TitanSliderProps> = ({
   style = {},
   onChange
 }) => {
-  const percent = ((value - min) / (max - min)) * 100
-  const bufferPercent = ((buffer - min) / (max - min)) * 100
+  const { percent, bufferPercent } = sliderFill(value, min, max, buffer)
 
   return (
     <input

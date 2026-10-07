@@ -18,6 +18,7 @@ const TitanTabs: FC<TitanTabsProps> = ({ tabs, active, onChange, style = {} }) =
     <div className="titan-tabs" style={style}>
       {tabs.map((tab) => (
         <button
+          type="button"
           key={tab.key}
           className={`titan-tab ${tab.key === active ? 'active' : ''}`}
           onClick={() => onChange(tab.key)}

@@ -35,7 +35,9 @@ export interface TitanLabelProps extends HasChildren {
   size?: number
 }
 
-export interface TitanButtonProps extends HasChildren, Resizable, Clickable {}
+export interface TitanButtonProps extends HasChildren, Resizable, Clickable {
+  disabled?: boolean
+}
 
 export interface TitanTopbarProps extends HasChildren, Customizable {}
 
