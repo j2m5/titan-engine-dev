@@ -7,6 +7,7 @@ import { GearIcon, ImageIcon, QuestionIcon, SignOutIcon, SpeakerSimpleHighIcon }
 import { modalWindowStore } from '@/ui/mobx/ModalWindowStore'
 import { engineStore } from '@/ui/mobx/EngineStore'
 import { getFullURL } from '@/core/helpers'
+import { TakeScreenshot } from '@/core/commands/TakeScreenshot'
 
 const MainAppBar = observer(() => {
   return (
@@ -37,7 +38,7 @@ const MainAppBar = observer(() => {
           </TitanIconButton>
         </TitanFlex>
         <TitanFlex>
-          <TitanIconButton>
+          <TitanIconButton onClick={() => void TakeScreenshot.execute({})}>
             <ImageIcon size={24} />
           </TitanIconButton>
         </TitanFlex>

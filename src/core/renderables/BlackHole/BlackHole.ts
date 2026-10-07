@@ -153,7 +153,7 @@ class BlackHole extends Mesh implements SceneFrameConsumer {
     // только эпоху кадра (updateObject вызывается до рендера). Камера — не
     // ctx.camera, а аргумент самого onBeforeRender: three передаёт туда
     // камеру АКТУАЛЬНОГО render-прохода, что важно и для сценариев вне
-    // главного цикла (напр. Postprocessing.renderToScreenshot со своей камерой)
+    // главного цикла (напр. Postprocessing.captureScreenshot рендерит вне цикла кадра)
     this._epoch = ctx.epoch
   }
 }

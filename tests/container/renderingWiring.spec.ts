@@ -5,6 +5,7 @@ import { RenderingServiceProvider } from '@/core/providers/RenderingServiceProvi
 import { Tokens } from '@/core/providers/tokens'
 import { config } from '@/core/framework/config'
 import { createTestContainer } from '../helpers/createTestContainer'
+import { TakeScreenshot } from '@/core/commands/TakeScreenshot'
 
 /**
  * Привязки рендер-слоя ленивые, поэтому get() по-настоящему зовёт фабрику,
@@ -101,5 +102,11 @@ describe('RenderingServiceProvider — проводка рендер-токен�
     const container: Container = createTestContainer()
 
     expect(() => container.get(Tokens.Application)).not.toThrow()
+  })
+
+  it('команда снимка зарегистрирована: кнопка MainAppBar резолвит её через контейнер', () => {
+    const container: Container = createTestContainer()
+
+    expect(container.get(TakeScreenshot)).toBeInstanceOf(TakeScreenshot)
   })
 })

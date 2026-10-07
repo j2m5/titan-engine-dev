@@ -17,6 +17,7 @@ import { HeightFieldGate } from '@/core/services/HeightFieldGate'
 import { SimulationClock } from '@/core/time/SimulationClock'
 import { CameraController } from '@/core/camera/CameraController'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
+import { TakeScreenshot } from '@/core/commands/TakeScreenshot'
 import { Postprocessing } from '@/core/graphic/Postprocessing'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { LeakDetector } from '@/core/lifecycle/LeakDetector'
@@ -195,6 +196,11 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.AstroControls),
           c.get(Tokens.Clock)
         )
+    )
+
+    this.app.bind(
+      TakeScreenshot,
+      (c: Container) => new TakeScreenshot(c.get(Tokens.Postprocessing), c.get(Tokens.NotificationSink))
     )
   }
 }
