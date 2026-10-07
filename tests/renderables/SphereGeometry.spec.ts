@@ -54,8 +54,12 @@ describe('buildSphereGeometry — копия единичной заготовк
     // normalize(r·a) против a — то же округление
     expect(maxAbsDifference(attributeArray(built, 'normal'), attributeArray(reference, 'normal'))).toBeLessThan(1e-6)
     // uv и индекс от радиуса не зависят — равны точно; тип индекса тот же (Uint16 до 65 535 вершин)
-    expect(attributeArray(built, 'uv')).toEqual(attributeArray(reference, 'uv'))
-    expect(built.index!.array).toEqual(reference.index!.array)
+    // Точное равенство циклом, а не toEqual: глубокое сравнение сотен тысяч
+    // элементов на N = 256 шло секунды и под нагрузкой прогона выбивало таймаут
+    expect(attributeArray(built, 'uv').length).toBe(attributeArray(reference, 'uv').length)
+    expect(maxAbsDifference(attributeArray(built, 'uv'), attributeArray(reference, 'uv'))).toBe(0)
+    expect(built.index!.array.length).toBe(reference.index!.array.length)
+    expect(maxAbsDifference(built.index!.array, reference.index!.array)).toBe(0)
     expect(built.index!.array.constructor).toBe(reference.index!.array.constructor)
   })
 
@@ -90,7 +94,7 @@ describe('buildSphereGeometry — копия единичной заготовк
     const reference = new SphereGeometry(1, 64, 64)
 
     expect(maxAbsDifference(attributeArray(second, 'normal'), attributeArray(reference, 'normal'))).toBeLessThan(1e-6)
-    expect(second.index!.array).toEqual(reference.index!.array)
+    expect(maxAbsDifference(second.index!.array, reference.index!.array)).toBe(0)
   })
 
   it('прогрев идемпотентен и не меняет результат постройки', () => {

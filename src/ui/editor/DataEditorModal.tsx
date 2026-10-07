@@ -55,7 +55,7 @@ const DataEditorModal: FC<Closable & { visible: boolean }> = ({ visible, onClose
   )
 
   return (
-    <ModalWindowWide visible={visible} title="Data Editor" actions={actions}>
+    <ModalWindowWide visible={visible} title="Data Editor" actions={actions} onClose={onClose}>
       <TitanTabs tabs={tabs} active={activeTable} onChange={setActiveTable} />
 
       <div style={{ height: '14px' }} />
@@ -82,16 +82,18 @@ const DataEditorModal: FC<Closable & { visible: boolean }> = ({ visible, onClose
   )
 }
 
-const ModalWindowWide: FC<{ visible: boolean; title: string; actions: ReactNode; children: ReactNode }> = ({
-  visible,
-  title,
-  actions,
-  children
-}) => (
+const ModalWindowWide: FC<{
+  visible: boolean
+  title: string
+  actions: ReactNode
+  children: ReactNode
+  onClose?: () => void
+}> = ({ visible, title, actions, children, onClose }) => (
   <TitanModal
     visible={visible}
     title={title}
     actions={actions}
+    onClose={onClose}
     width={920}
     height="auto"
     className="titan-modal-solid"
