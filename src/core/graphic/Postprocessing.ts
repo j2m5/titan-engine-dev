@@ -23,6 +23,7 @@ import { ExposureEffect } from '@/core/graphic/effects/grading/ExposureEffect'
 import { ColorGradeEffect } from '@/core/graphic/effects/grading/ColorGradeEffect'
 import { DitheringEffect } from '@/core/graphic/effects/dithering/DitheringEffect'
 import { config } from '@/core/framework/config'
+import { screenshotSize, type ScreenshotSize } from '@/core/graphic/screenshot'
 
 // Опции эффектов вынесены в константы под контракт-тесты
 // (tests/graphic/PostprocessingContract.spec.ts)
@@ -227,33 +228,48 @@ class Postprocessing {
     this.composer?.setSize(width, height)
   }
 
-  public renderToScreenshot(): void {
-    const [screenshotWidth, screenshotHeight] = [4096, 2048]
-
-    // pixelRatio=1: композер меряет таргеты в drawing-buffer-пикселях,
-    // иначе на Retina получится 8192×4096
-    const prevPixelRatio = this.renderer.getPixelRatio()
-    this.renderer.setPixelRatio(1)
-    this.setSize(screenshotWidth, screenshotHeight)
-
+  /**
+   * Снимок текущего кадра в 4K «как на экране» (screenshotSize): высота 2160,
+   * ширина по пропорции окна. Aspect камеры тот же, поэтому её не трогаем.
+   * Рендер — вне цикла кадра, состояние сцены (LOD, размеры импосторов) из
+   * последнего кадра: снимок — тот же вид, только крупнее. DOM-оверлеи
+   * (подписи, маркеры, UI) в канвас не входят.
+   *
+   * Порядок несущий:
+   * - pixelRatio 1 ДО ресайза: композер меряет таргеты в drawing-buffer-пикселях;
+   * - ресайз без updateStyle: CSS-размер канваса не меняется, страница не дёргается;
+   * - toBlob копирует битмап в момент вызова, кодирование асинхронное — возврат
+   *   размера сразу следом снимок не портит;
+   * - при возврате CSS-размер ДО pixelRatio: setPixelRatio сам пересчитывает
+   *   канвас от текущего размера и на миг раздул бы его до 7680×4320;
+   * - возврат в finally: исключение рендера не оставляет окно в 4K.
+   */
+  public captureScreenshot(): Promise<Blob | null> {
+    const cssSize: Vector2 = this.renderer.getSize(new Vector2())
+    const pixelRatio: number = this.renderer.getPixelRatio()
+    const gl: WebGL2RenderingContext = this.renderer.getContext() as WebGL2RenderingContext
+    // MSAA-таргеты композера — renderbuffer'ы: их предел бывает ниже текстурного
+    const maxSize: number = Math.min(
+      this.renderer.capabilities.maxTextureSize,
+      gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) as number
+    )
+    const size: ScreenshotSize = screenshotSize(cssSize.width, cssSize.height, maxSize)
     const canvas: HTMLCanvasElement = this.renderer.domElement
+    let blob: Promise<Blob | null>
 
-    this.render()
+    this.renderer.setPixelRatio(1)
 
-    canvas.toBlob(async (blob: Blob | null): Promise<void> => {
-      if (blob) {
-        const a: HTMLAnchorElement = document.createElement('a')
-        document.body.appendChild(a!)
-        a.style.display = 'none'
-        a.href = window.URL.createObjectURL(blob)
-        a.download = `screenshot-${Date.now()}.png`
-        a.click()
-        document.body.removeChild(a)
-      }
-    })
+    try {
+      this.composer?.setSize(size.width, size.height, false)
+      this.render()
+      blob = new Promise((resolve: (value: Blob | null) => void): void => canvas.toBlob(resolve, 'image/png'))
+    } finally {
+      this.renderer.setSize(cssSize.width, cssSize.height, false)
+      this.renderer.setPixelRatio(pixelRatio)
+      this.composer?.setSize(cssSize.width, cssSize.height, false)
+    }
 
-    this.renderer.setPixelRatio(prevPixelRatio)
-    this.setSize(window.innerWidth, window.innerHeight)
+    return blob
   }
 
   public dispose(): void {

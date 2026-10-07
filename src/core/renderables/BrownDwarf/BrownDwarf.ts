@@ -47,7 +47,7 @@ class BrownDwarf extends Mesh {
     //
     // Камера берётся из аргумента, а НЕ из ctx.camera: three передаёт сюда
     // камеру текущего прохода, что важно для проходов вне главного цикла
-    // (Postprocessing.renderToScreenshot со своей камерой). Прецедент —
+    // (Postprocessing.captureScreenshot рендерит вне цикла кадра). Прецедент —
     // BlackHole.onBeforeRender.
     this.onBeforeRender = (_renderer: WebGLRenderer, _scene: Scene, camera: Camera): void => {
       this.sphereDetail.observe(camera)
