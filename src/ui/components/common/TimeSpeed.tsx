@@ -40,7 +40,11 @@ const TimeSpeed = observer(() => {
   return (
     <div>
       <TitanFlex justify="center" align="center" width="inherit" style={{ gap: '5px' }}>
-        <span style={{ width: '110px' }}>{timeStore.currentDate}</span>
+        {/* Цифры одной ширины и минимум вместо width: дата на пределе 110px,
+            а на большом ускорении год растёт — текст не налезает на кнопку */}
+        <span style={{ minWidth: '110px', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+          {timeStore.currentDate}
+        </span>
         <TitanIconButton onClick={() => timeStore.setSpeedOfTime(1)}>
           <ArrowsClockwiseIcon size={22} />
         </TitanIconButton>
@@ -62,10 +66,14 @@ const TimeSpeed = observer(() => {
         <TitanIconButton onClick={handleResetTime}>
           <ClockClockwiseIcon size={22} />
         </TitanIconButton>
-        <span style={{ width: '75px' }}>{timeStore.currentTime}</span>
+        <span style={{ minWidth: '75px', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+          {timeStore.currentTime}
+        </span>
         <TitanFlex width={125}>
           {icon(timeStore.speedOfTime)}
-          <span style={{ marginLeft: '5px' }}>{timeStore.speedOfTime}x</span>
+          <span style={{ marginLeft: '5px', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+            {timeStore.speedOfTime}x
+          </span>
         </TitanFlex>
       </TitanFlex>
     </div>

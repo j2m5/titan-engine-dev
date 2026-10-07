@@ -19,7 +19,8 @@ const icon = (type: AlertType) => {
 const TitanAlert: FC<TitanAlertProps> = ({ type = 'info', message = '', showIcon = false }) => {
   return (
     <div className={`titan-alert ${type}`}>
-      {showIcon && <div className={`titan-alert-icon ${type}`}>{icon(type)}</div>} {message}
+      {showIcon && <div className={`titan-alert-icon ${type}`}>{icon(type)}</div>}
+      <span className="titan-alert-message">{message}</span>
     </div>
   )
 }

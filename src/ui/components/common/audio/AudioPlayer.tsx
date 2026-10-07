@@ -22,6 +22,7 @@ import { ITrack } from '@/ui/types'
 import { AudioPlayerProps } from '@/ui/types'
 import { audioPlayerStore } from '@/ui/mobx/AudioPlayerStore'
 import { notificationStore } from '@/ui/mobx/NotificationStore'
+import { hasNextTrack, trackLabel } from '@/ui/components/common/audio/trackHelpers'
 
 const AudioPlayer = observer((props: AudioPlayerProps) => {
   const { currentTrack, trackIndex, trackCount, onPlay, onNext, onPrev } = props
@@ -40,6 +41,24 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
   const [isReady, setIsReady] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [loop, setLoop] = useState(false)
+  const [shownTrackIndex, setShownTrackIndex] = useState(trackIndex)
+
+  /**
+   * Смена трека: плеер больше не пересоздаётся целиком (key живёт на <audio>),
+   * поэтому повтор и громкость переживают переключение, а прогресс нового
+   * трека сбрасывается здесь. Правка состояния в рендере — штатный приём React
+   * на смену пропса (тот же, что в TitanToast): кадра со старым прогрессом нет.
+   */
+  if (trackIndex !== shownTrackIndex) {
+    setShownTrackIndex(trackIndex)
+    setDuration(0)
+    setCurrentProgress(0)
+    setBuffered(0)
+    setIsReady(false)
+    // Прежний <audio> снимается без события pause до обработчиков React —
+    // состояние «играет» сбрасываем сами, новое придёт с onPlaying
+    setIsPlaying(false)
+  }
 
   useEffect(() => {
     audioRef.current?.pause()
@@ -59,6 +78,12 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
 
   const handleNext = (): void => {
     onNext()
+  }
+
+  // Конец трека: дальше по списку, а на последнем — стоп на нём же, а не уход
+  // за конец списка в «Select a track» с выключенными кнопками
+  const handleEnded = (): void => {
+    if (hasNextTrack(trackIndex, trackCount)) onNext()
   }
 
   const handlePrev = (): void => {
@@ -133,17 +158,18 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
   }
 
   return (
-    <div style={{ width: '500px' }}>
+    <div style={{ width: '500px', maxWidth: '100%' }}>
       <TitanFlex justify="center" width="100%" style={{ margin: '10px 0' }}>
         {currentTrack && (
           <audio
+            key={currentTrack.src}
             ref={audioRef}
             preload="metadata"
             loop={loop}
             onDurationChange={(event) => setDuration(event.currentTarget.duration)}
             onPlaying={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
-            onEnded={handleNext}
+            onEnded={handleEnded}
             onCanPlay={(event) => {
               event.currentTarget.volume = volume
               setIsReady(true)
@@ -161,10 +187,7 @@ const AudioPlayer = observer((props: AudioPlayerProps) => {
         )}
       </TitanFlex>
       <TitanFlex justify="center" width="100%" style={{ margin: '0 0 30px', textAlign: 'center' }}>
-        <TitanLabel>
-          {currentTrack?.metadata?.title ?? currentTrack?.title ?? 'Select a track'}
-          {currentTrack && ` - ${currentTrack.metadata?.artist}`}
-        </TitanLabel>
+        <TitanLabel>{currentTrack ? trackLabel(currentTrack) : 'Select a track'}</TitanLabel>
       </TitanFlex>
       <TitanFlex justify="center" align="center" width="100%" style={{ gap: '10px' }}>
         <AudioProgressBar

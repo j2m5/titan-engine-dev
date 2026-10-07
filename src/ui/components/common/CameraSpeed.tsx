@@ -64,7 +64,11 @@ const CameraSpeed = observer(() => {
         >
           <SkipBackIcon size={20} />
         </TitanIconButton>
-        {formattedSpeed}
+        {/* Свой блок фиксированной ширины: кнопки по бокам не ездят, пока
+            колесо меняет «299,792 km/s» → «1.5 c» → «40 au/s» */}
+        <span style={{ width: '9em', textAlign: 'center', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+          {formattedSpeed}
+        </span>
         <TitanIconButton
           disabled={cameraStore.speed === cameraStore.maxSpeed}
           onClick={() => cameraStore.setSpeed(cameraStore.maxSpeed)}
