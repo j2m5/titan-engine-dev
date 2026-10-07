@@ -76,8 +76,13 @@ describe('FlareGhostMaterial: формулы', () => {
   })
 
   it('отсечка по экранной яркости с ghostAmount и intensity', () => {
-    expect(vert).toContain('float peak = luminance(color) * GHOST_PEAK[ghost] * ghostAmount * intensity;')
+    expect(vert).toContain('float peak = flareLuma(color) * GHOST_PEAK[ghost] * ghostAmount * intensity;')
     expect(vert).toContain('if (flux.a <= 0.0 || peak < GHOST_CUTOFF)')
+  })
+
+  it('вершинник без luminance() — вычисляет локально', () => {
+    expect(vert).toContain('float flareLuma(vec3 c)')
+    expect(vert).not.toContain('luminance(')
   })
 
   it('каёмка: красный снаружи, синий внутри', () => {
@@ -117,6 +122,17 @@ describe('FlareGhostMaterial: проводка', () => {
     material.ghostChromatic = 0.05
 
     expect(material.uniforms.ghostVignette.value).toBe(3)
+    expect(material.ghostChromatic).toBe(0.05)
+  })
+
+  it('каёмка: зажата в [0, 0.5]', () => {
+    material.ghostChromatic = 2
+    expect(material.ghostChromatic).toBe(0.5)
+
+    material.ghostChromatic = -1
+    expect(material.ghostChromatic).toBe(0)
+
+    material.ghostChromatic = 0.05
     expect(material.ghostChromatic).toBe(0.05)
   })
 })

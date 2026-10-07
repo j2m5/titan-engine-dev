@@ -30,7 +30,6 @@ const ghostTable: string = `
 `
 
 const vertexShader: string = `
-  #include <common>
   ${ghostTable}
   #define GHOST_SQUEEZE ${glslFloat(GHOST_SQUEEZE)}
   #define GHOST_CUTOFF ${glslFloat(GHOST_CUTOFF)}
@@ -48,6 +47,11 @@ const vertexShader: string = `
   flat out vec3 vColor;
   flat out float vRing;
 
+  // Rec. 709 — те же веса, что у lumaNormalized (flareGhosts.ts); встроенная функция есть только во фрагменте
+  float flareLuma(vec3 c) {
+    return dot(vec3(0.2126, 0.7152, 0.0722), c);
+  }
+
   void main() {
     int ghost = gl_InstanceID % GHOST_COUNT;
     int cellIndex = gl_InstanceID / GHOST_COUNT;
@@ -61,7 +65,7 @@ const vertexShader: string = `
     float r = min(length(source) / corner, 1.0);
     float vignette = exp2(ghostVignette * log2(max(1.0 - r * r, 1e-6)));
     vec3 color = flux.rgb * GHOST_COLOR[ghost] * vignette;
-    float peak = luminance(color) * GHOST_PEAK[ghost] * ghostAmount * intensity;
+    float peak = flareLuma(color) * GHOST_PEAK[ghost] * ghostAmount * intensity;
 
     // Невыбранная ячейка или призрак тусклее отсечки — квад за пределами клипа
     if (flux.a <= 0.0 || peak < GHOST_CUTOFF) {
@@ -167,6 +171,7 @@ export class FlareGhostMaterial extends ShaderMaterial {
   }
 
   set ghostChromatic(value: number) {
-    this.uniforms.ghostChromatic.value = value
+    // доля радиуса; 1 − χ — делитель синего канала, держим вдали от нуля
+    this.uniforms.ghostChromatic.value = Math.min(Math.max(value, 0), 0.5)
   }
 }
