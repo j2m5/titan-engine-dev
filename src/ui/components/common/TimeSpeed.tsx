@@ -1,4 +1,3 @@
-import { useRef } from 'react'
 import { observer } from 'mobx-react-lite'
 import TitanFlex from '@titanui/components/TitanFlex'
 import TitanIconButton from '@titanui/components/TitanIconButton'
@@ -21,17 +20,6 @@ const icon = (speed: number) => {
 }
 
 const TimeSpeed = observer(() => {
-  const previousSpeed = useRef<number>(0)
-
-  const handleStopContinue = () => {
-    if (timeStore.speedOfTime > 0) {
-      previousSpeed.current = timeStore.speedOfTime
-      timeStore.setSpeedOfTime(0)
-    } else {
-      timeStore.setSpeedOfTime(previousSpeed.current)
-    }
-  }
-
   const handleResetTime = () => {
     timeStore.setSpeedOfTime(1)
     timeStore.setToDefaults()
@@ -54,7 +42,7 @@ const TimeSpeed = observer(() => {
         >
           <RewindIcon size={24} />
         </TitanIconButton>
-        <TitanIconButton onClick={handleStopContinue}>
+        <TitanIconButton onClick={() => timeStore.togglePause()}>
           {timeStore.speedOfTime === 0 ? <PlayIcon size={20} /> : <PauseIcon size={20} />}
         </TitanIconButton>
         <TitanIconButton
