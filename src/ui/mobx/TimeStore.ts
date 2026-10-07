@@ -10,6 +10,14 @@ class TimeStore {
 
   private _clock: SimulationClock | null = null
 
+  /**
+   * Последняя ненулевая скорость — к ней возвращает Play с паузы. Запоминается
+   * при любой смене скорости (зеркало часов), а не только кнопкой паузы: иначе
+   * Rewind до паузы оставлял Play без истории, и время так и стояло. Живёт в
+   * сторе, а не в ref компонента: тот обнулялся при каждом выходе в меню.
+   */
+  private lastRunningSpeed: number = 1
+
   public constructor() {
     makeAutoObservable<TimeStore, '_clock'>(this, { _clock: false })
   }
@@ -25,7 +33,14 @@ class TimeStore {
     runInAction((): void => {
       this.epoch = this._clock!.epoch
       this.speedOfTime = this._clock!.speedOfTime
+
+      if (this.speedOfTime > 0) this.lastRunningSpeed = this.speedOfTime
     })
+  }
+
+  /** Пауза ↔ продолжение: Play возвращает последнюю ненулевую скорость (без истории — 1x) */
+  public togglePause(): void {
+    this.setSpeedOfTime(this.speedOfTime > 0 ? 0 : this.lastRunningSpeed)
   }
 
   public setToDefaults(): void {
@@ -42,7 +57,9 @@ class TimeStore {
 
   public setSpeedForward(): void {
     const index = this.timeSteps.indexOf(this.speedOfTime)
-    if (index <= 0 || index + 1 >= this.timeSteps.length) return
+    // < 0, а не <= 0: пауза (индекс 0) — законный шаг, с неё вперёд идёт 1x.
+    // Скорость не из списка шагов (−1) кнопки по-прежнему не двигают
+    if (index < 0 || index + 1 >= this.timeSteps.length) return
     this.setSpeedOfTime(this.timeSteps[index + 1])
   }
 
@@ -58,3 +75,5 @@ class TimeStore {
 }
 
 export const timeStore: TimeStore = new TimeStore()
+
+export { TimeStore }
