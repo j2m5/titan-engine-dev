@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { Group, Mesh, PerspectiveCamera } from 'three'
+import { Group, Mesh, OrthographicCamera, PerspectiveCamera } from 'three'
 import { config } from '@/core/framework/config'
 import { frameCoverage, frameHeightAt } from '@/core/helpers/apparentSize'
 import { nextSphereLevel, SphereDetail } from '@/core/renderables/utils/SphereDetail'
@@ -30,12 +30,12 @@ function vertexCount(mesh: Mesh): number {
 
 function detailOf(
   denseSegments: number = 256,
-  circumscribe: boolean = false,
+  circumscribeDense: boolean = false,
   radius: number = RADIUS
 ): { mesh: Mesh; detail: SphereDetail } {
   const mesh = new Mesh()
 
-  return { mesh, detail: new SphereDetail(mesh, radius, { denseSegments, circumscribe }) }
+  return { mesh, detail: new SphereDetail(mesh, radius, { denseSegments, circumscribeDense }) }
 }
 
 describe('nextSphereLevel — гистерезис', () => {
@@ -138,7 +138,7 @@ describe('SphereDetail', () => {
     parent.position.set(1000, 0, 0)
     parent.add(mesh)
 
-    const detail = new SphereDetail(mesh, RADIUS, { denseSegments: 256, circumscribe: false })
+    const detail = new SphereDetail(mesh, RADIUS, { denseSegments: 256, circumscribeDense: false })
 
     // Камера рядом с фактической позицией тела: matrixWorld не обновлялась, и
     // если бы её не обновил getWorldPosition, тело «стояло» бы в начале координат
@@ -154,22 +154,91 @@ describe('SphereDetail', () => {
     parent.position.set(1000, 0, 0)
     parent.add(mesh)
 
-    const detail = new SphereDetail(mesh, RADIUS, { denseSegments: 256, circumscribe: false })
+    const detail = new SphereDetail(mesh, RADIUS, { denseSegments: 256, circumscribeDense: false })
 
     detail.update(cameraAt(distanceFor(0.5)))
 
     expect(detail.level).toBe('coarse')
   })
 
-  it('circumscribe: радиус описанный под сегментацию каждого уровня', () => {
+  it('circumscribeDense: грубая вписана (радиус точный), плотная описана под 256', () => {
     const { mesh, detail } = detailOf(256, true)
 
-    expect(mesh.geometry.boundingSphere!.radius).toBeCloseTo(RADIUS * circumscribeFactor(64), 12)
+    expect(mesh.geometry.boundingSphere!.radius).toBe(RADIUS)
 
     detail.update(cameraAt(distanceFor(0.5)))
 
     expect(mesh.geometry.boundingSphere!.radius).toBeCloseTo(RADIUS * circumscribeFactor(256), 12)
   })
+
+  describe('observe — кадр рендера важнее устаревшего update', () => {
+    function ready(far: PerspectiveCamera, near: PerspectiveCamera): { mesh: Mesh; detail: SphereDetail } {
+      const made = detailOf()
+
+      far.updateMatrixWorld()
+      near.updateMatrixWorld()
+      made.mesh.updateMatrixWorld()
+
+      return made
+    }
+
+    it('update по устаревшей камере, но отрисовано вблизи — на следующем update плотная', () => {
+      const far = cameraAt(distanceFor(0.01))
+      const near = cameraAt(distanceFor(0.5))
+      const { mesh, detail } = ready(far, near)
+
+      detail.update(far)
+      expect(detail.level).toBe('coarse')
+
+      detail.observe(near)
+      detail.update(far)
+
+      expect(detail.level).toBe('dense')
+      expect(vertexCount(mesh)).toBe(257 * 257)
+    })
+
+    it('observe сам геометрию не трогает', () => {
+      const far = cameraAt(distanceFor(0.01))
+      const near = cameraAt(distanceFor(0.5))
+      const { mesh, detail } = ready(far, near)
+      const coarse = mesh.geometry
+
+      detail.observe(near)
+
+      expect(mesh.geometry).toBe(coarse)
+      expect(detail.level).toBe('coarse')
+    })
+
+    it('одноразово: без нового observe следующий update опирается на свой замер', () => {
+      const far = cameraAt(distanceFor(0.01))
+      const near = cameraAt(distanceFor(0.5))
+      const { detail } = ready(far, near)
+
+      detail.observe(near)
+      detail.update(far)
+      expect(detail.level).toBe('dense')
+
+      detail.update(far)
+
+      expect(detail.level).toBe('coarse')
+    })
+
+    it('ортографическая камера в observe игнорируется', () => {
+      const far = cameraAt(distanceFor(0.01))
+      const near = cameraAt(distanceFor(0.5))
+      const { detail } = ready(far, near)
+      const ortho = new OrthographicCamera(-1, 1, 1, -1, 0.01, 1e9)
+
+      ortho.position.set(0, 0, distanceFor(0.5))
+      ortho.updateMatrixWorld()
+
+      detail.observe(ortho)
+      detail.update(far)
+
+      expect(detail.level).toBe('coarse')
+    })
+  })
+
 
   it('невидимый меш (импостор LOD, телепорт) тоже освобождает плотную', () => {
     const { mesh, detail } = detailOf()

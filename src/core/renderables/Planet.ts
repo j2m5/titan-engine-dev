@@ -1,4 +1,4 @@
-import { BufferGeometry, Mesh, Vector3 } from 'three'
+import { BufferGeometry, Mesh, Vector3, type Camera, type Scene, type WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { PlanetMaterial } from '@/core/materials/PlanetMaterial'
@@ -32,9 +32,13 @@ class Planet extends Mesh {
     const radiusKm: number = this.model.physicalObject!.getAttribute('radius')!
     const radius: number = toThreeJSUnits(radiusKm)
 
-    // Многогранник описан вокруг истинной сферы под сегментацию каждого уровня:
-    // силуэт не проваливается внутрь неё
-    this.sphereDetail = new SphereDetail(this, radius, { denseSegments: 256, circumscribe: true })
+    // Плотный уровень описан вокруг истинной сферы: силуэт вблизи не проваливается
+    // внутрь неё. Грубый вписан намеренно: глубина меша для атмосферы (см. SphereDetail)
+    this.sphereDetail = new SphereDetail(this, radius, { denseSegments: 256, circumscribeDense: true })
+    // Кадр рендера — в SphereDetail: слежение сдвигает камеру после SceneManager.update
+    this.onBeforeRender = (_renderer: WebGLRenderer, _scene: Scene, camera: Camera): void => {
+      this.sphereDetail.observe(camera)
+    }
     this.planetMaterial = new PlanetMaterial(this.model, atmosphereRegistry)
     this.material = this.planetMaterial
     this.name = this.model.getAttribute('name', '') + 'Planet'

@@ -1,4 +1,4 @@
-import { BufferGeometry, Mesh } from 'three'
+import { BufferGeometry, Mesh, type Camera, type Scene, type WebGLRenderer } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { StarMaterial } from '@/core/materials/StarMaterial'
@@ -25,7 +25,11 @@ class Star extends Mesh {
   }
 
   __setup(): void {
-    this.sphereDetail = new SphereDetail(this, this.radius, { denseSegments: 256, circumscribe: false })
+    this.sphereDetail = new SphereDetail(this, this.radius, { denseSegments: 256, circumscribeDense: false })
+    // Кадр рендера — в SphereDetail: слежение сдвигает камеру после SceneManager.update
+    this.onBeforeRender = (_renderer: WebGLRenderer, _scene: Scene, camera: Camera): void => {
+      this.sphereDetail.observe(camera)
+    }
     this.material = new StarMaterial(this.model)
 
     this.name = this.model.getAttribute('name', '') + 'Star'

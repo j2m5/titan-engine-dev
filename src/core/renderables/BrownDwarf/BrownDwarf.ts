@@ -32,7 +32,7 @@ class BrownDwarf extends Mesh {
 
     const params: BrownDwarfParameters = brownDwarfParameters(model)
 
-    this.sphereDetail = new SphereDetail(this, this.radius, { denseSegments: 256, circumscribe: false })
+    this.sphereDetail = new SphereDetail(this, this.radius, { denseSegments: 256, circumscribeDense: false })
     this.material = new BrownDwarfMaterial(params)
 
     this.name = this.model.getAttribute('name', '') + 'BrownDwarf'
@@ -50,6 +50,8 @@ class BrownDwarf extends Mesh {
     // (Postprocessing.renderToScreenshot со своей камерой). Прецедент —
     // BlackHole.onBeforeRender.
     this.onBeforeRender = (_renderer: WebGLRenderer, _scene: Scene, camera: Camera): void => {
+      this.sphereDetail.observe(camera)
+
       camera.getWorldPosition(this.cameraWorld)
 
       this.material.uniforms.uCameraObject.value

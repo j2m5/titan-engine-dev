@@ -50,7 +50,7 @@ class WhiteDwarf extends Mesh {
 
     const params: WhiteDwarfParameters = whiteDwarfParameters(model)
 
-    this.sphereDetail = new SphereDetail(this, this.radius, { denseSegments: 256, circumscribe: false })
+    this.sphereDetail = new SphereDetail(this, this.radius, { denseSegments: 256, circumscribeDense: false })
     this.material = new WhiteDwarfMaterial(params)
 
     this.name = this.model.getAttribute('name', '') + 'WhiteDwarf'
@@ -66,6 +66,8 @@ class WhiteDwarf extends Mesh {
     // зовёт onBeforeRender с актуальными матрицами и камерой ТЕКУЩЕГО прохода
     // (прецедент — BrownDwarf). Не-перспективные проходы юниформ не трогают.
     this.onBeforeRender = (_renderer: WebGLRenderer, _scene: Scene, camera: Camera): void => {
+      this.sphereDetail.observe(camera)
+
       const perspective = camera as PerspectiveCamera
 
       if (!perspective.isPerspectiveCamera) return

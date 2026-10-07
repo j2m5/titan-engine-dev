@@ -110,6 +110,25 @@ describe.each(CASES)('$name: детализация сферы', ({ make, dense 
     expect(body.geometry).toBe(coarse)
   })
 
+  it('onBeforeRender вблизи записывает кадр — следующий updateObject по устаревшей камере плотный', () => {
+    const body = make()
+    const { camera } = ctxAt(radiusOf(body) * 3)
+
+    camera.updateMatrixWorld()
+    body.updateMatrixWorld()
+    body.onBeforeRender(
+      {} as WebGLRenderer,
+      new Scene(),
+      camera,
+      body.geometry,
+      body.material as Material,
+      null as unknown as Group
+    )
+    body.updateObject(ctxAt(radiusOf(body) * 1000))
+
+    expect(vertexCount(body)).toBe((dense + 1) ** 2)
+  })
+
   it('разборка в плотном уровне освобождает плотную геометрию', () => {
     const body = make()
 

@@ -55,7 +55,7 @@ class GiantStarShell extends Mesh {
     const height: number = body.parameters.atmosphereHeight
 
     this.outerRadius = body.radius * (1 + height)
-    this.sphereDetail = new SphereDetail(this, this.outerRadius, { denseSegments: 128, circumscribe: false })
+    this.sphereDetail = new SphereDetail(this, this.outerRadius, { denseSegments: 128, circumscribeDense: false })
 
     this.material = new ShaderMaterial({
       vertexShader: AbstractShader.prepareSource(GiantStarShellShaderTemplate.vertexShader),
@@ -84,6 +84,8 @@ class GiantStarShell extends Mesh {
     const invRadius: number = this.material.uniforms.uInvRadius.value
 
     this.onBeforeRender = (_renderer: WebGLRenderer, _scene: Scene, camera: Camera): void => {
+      this.sphereDetail.observe(camera)
+
       camera.getWorldPosition(this.cameraWorld)
       this.cameraWorld.applyMatrix4(this.inverseModel.copy(this.matrixWorld).invert())
 
@@ -103,6 +105,8 @@ class GiantStarShell extends Mesh {
    * Детализация прокси-сферы по доле кадра её внешнего радиуса — своя, не
    * ядра. Погашенная оболочка (visible = false с конструктора) не должна стоить
    * ни одного фрагмента — и ни одной плотной сферы.
+   * visible фиксируется в конструкторе (решает только плотность атмосферы): если
+   * он когда-нибудь начнёт переключаться в рантайме, защиту надо пересмотреть.
    */
   public updateObject(ctx: UpdateContext): void {
     if (!this.visible) return

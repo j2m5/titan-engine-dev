@@ -125,6 +125,8 @@ describe('Planet: легаси-сфера', () => {
     const radius: number = toThreeJSUnits(moon().physicalObject!.getAttribute('radius')!)
 
     expect(planet.geometry.getAttribute('position').count).toBe(65 * 65)
+    // Грубая вписана: проход атмосферы прижимает луч к аналитическому дну, только если меш ниже дна
+    expect(planet.geometry.boundingSphere!.radius).toBe(radius)
 
     const camera = new PerspectiveCamera(50, 1, 0.01, 1e9)
 
@@ -136,6 +138,31 @@ describe('Planet: легаси-сфера', () => {
     const previousRadius: number = radius / (Math.cos(Math.PI / 256) * Math.cos(Math.PI / 512))
 
     expect(planet.geometry.boundingSphere!.radius / previousRadius).toBeCloseTo(1, 12)
+  })
+
+  it('onBeforeRender вблизи записывает кадр — updateObject по устаревшей камере даёт плотную', () => {
+    seedHeightMap()
+
+    const planet = new Planet(moon())
+    const radius: number = toThreeJSUnits(moon().physicalObject!.getAttribute('radius')!)
+    const near = new PerspectiveCamera(50, 1, 0.01, 1e9)
+    const far = new PerspectiveCamera(50, 1, 0.01, 1e9)
+
+    near.position.set(0, 0, radius * 3)
+    far.position.set(0, 0, radius * 1000)
+    near.updateMatrixWorld()
+    planet.updateMatrixWorld()
+    planet.onBeforeRender(
+      {} as never,
+      {} as never,
+      near,
+      planet.geometry,
+      planet.material,
+      {} as never
+    )
+    planet.updateObject({ camera: far, delta: 0, epoch: 0, elapsed: 0 })
+
+    expect(planet.geometry.getAttribute('position').count).toBe(257 * 257)
   })
 
   // Окно даунгрейда (см. докблок RenderableFactory.swapSurface): сфера на тик

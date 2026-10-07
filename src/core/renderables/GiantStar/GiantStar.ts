@@ -38,7 +38,7 @@ class GiantStar extends Mesh {
     this.radius = toThreeJSUnits(this.model.physicalObject?.getAttribute('radius') ?? 0)
     this.parameters = giantStarParameters(model)
 
-    this.sphereDetail = new SphereDetail(this, this.radius, { denseSegments: 256, circumscribe: false })
+    this.sphereDetail = new SphereDetail(this, this.radius, { denseSegments: 256, circumscribeDense: false })
     this.material = new GiantStarMaterial(this.parameters)
 
     this.name = this.model.getAttribute('name', '') + 'GiantStar'
@@ -52,6 +52,8 @@ class GiantStar extends Mesh {
     // onBeforeRender, а не updateObject: там matrixWorld отстаёт на кадр, а
     // three зовёт этот хук с актуальными матрицами и камерой текущего прохода
     this.onBeforeRender = (_renderer: WebGLRenderer, _scene: Scene, camera: Camera): void => {
+      this.sphereDetail.observe(camera)
+
       const perspective = camera as PerspectiveCamera
 
       if (!perspective.isPerspectiveCamera) return
