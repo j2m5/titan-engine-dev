@@ -16,7 +16,7 @@ const HomePage = observer(() => {
   const [editorOpen, setEditorOpen] = useState(false)
 
   return (
-    <div className="loading-screen">
+    <div className="home-page">
       <TitanTopbar>
         <TitanFlex align="center">
           <TitanFlex>

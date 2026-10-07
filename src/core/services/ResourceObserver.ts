@@ -208,29 +208,58 @@ class ResourceObserver {
    * отдаёт текстуру, размещение — здесь.
    */
   public async loadPrimaryTextures(): Promise<void> {
-    this.setLoadingProgress()
+    this.reportLoadErrors()
 
-    const background = this.cube.length ? await this.tryLoad(cubeTextureRequest(this.cube)) : null
+    // Прогресс экрана загрузки считается здесь, а не счётчиком three:
+    // DefaultLoadingManager копит файлы за всю сессию, и полоса шла назад
+    // (6/6 → 6/7 → 7/23), а при повторной загрузке держалась у 100%.
+    // Шаг — файл: кубмапа весит числом граней. Провал — тоже шаг, иначе
+    // полоса не дошла бы до конца.
+    let loaded: number = 0
+    const advance = (name: string, files: number): void => {
+      loaded += files
+      this.loadingProgress.setAsset(name)
+      this.loadingProgress.setProgress(loaded)
+    }
 
-    if (background?.ok) {
-      this._sceneBackground = background.texture as CubeTexture
-      resourceStorage.addTexture(background.texture)
+    this.loadingProgress.setAsset('')
+    this.loadingProgress.setTotal(this.cube.length + this.resident.length)
+    this.loadingProgress.setProgress(0)
+
+    if (this.cube.length) {
+      const request: TextureRequest = cubeTextureRequest(this.cube)
+      const background = await this.tryLoad(request)
+
+      advance(request.name, this.cube.length)
+
+      if (background?.ok) {
+        this._sceneBackground = background.texture as CubeTexture
+        resourceStorage.addTexture(background.texture)
+      } else {
+        this._sceneBackground = null
+      }
     } else {
       this._sceneBackground = null
     }
 
-    await this.loadInto(this.resident)
+    await this.loadInto(this.resident, (name: string): void => advance(name, 1))
+
+    this.loadingProgress.setAsset('')
   }
 
   /**
    * Загружает пачку ресурсов и размещает удавшиеся в реестре. Провалившиеся
    * молча пропускаются: провайдер уже вернул заглушку, а сообщение
-   * пользователю шлёт DefaultLoadingManager.onError.
+   * пользователю шлёт DefaultLoadingManager.onError. onSettled зовётся по
+   * завершении каждого ресурса — и удачного, и провалившегося.
    */
-  private async loadInto(resources: IResource[]): Promise<void> {
+  private async loadInto(resources: IResource[], onSettled: (name: string) => void): Promise<void> {
     await Promise.all(
       resources.map(async (resource: IResource): Promise<void> => {
-        const result = await this.tryLoad(textureRequestFrom(resource))
+        const request: TextureRequest = textureRequestFrom(resource)
+        const result = await this.tryLoad(request)
+
+        onSettled(request.name)
 
         if (!result || !result.ok || !result.texture) return
 
@@ -309,25 +338,11 @@ class ResourceObserver {
   }
 
   /**
-   * Устанавливает прогресс загрузки текстур
+   * Сообщения об ошибках загрузки — от DefaultLoadingManager: он видит каждый
+   * файл, в том числе грани кубмапы и стриминг по ходу игры. Прогресс экрана
+   * загрузки считает loadPrimaryTextures сам (см. там).
    */
-  private setLoadingProgress(): void {
-    DefaultLoadingManager.onStart = (url: string, loaded: number, total: number): void => {
-      this.loadingProgress.setAsset(url)
-      this.loadingProgress.setProgress(loaded)
-      this.loadingProgress.setTotal(total)
-    }
-
-    DefaultLoadingManager.onProgress = (url: string, loaded: number, total: number): void => {
-      this.loadingProgress.setAsset(url)
-      this.loadingProgress.setProgress(loaded)
-      this.loadingProgress.setTotal(total)
-    }
-
-    DefaultLoadingManager.onLoad = (): void => {
-      this.loadingProgress.setAsset('')
-    }
-
+  private reportLoadErrors(): void {
     DefaultLoadingManager.onError = (url: string): void => {
       this.notifications.dispatch({ type: 'error', message: `The error occurred while loading: ${url}` })
     }

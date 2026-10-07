@@ -2,6 +2,7 @@ import { makeAutoObservable, runInAction } from 'mobx'
 import { Application } from '@/Application'
 import { ScenarioConfig } from '@/config/scenarios'
 import { timeStore } from '@/ui/mobx/TimeStore'
+import { notificationStore } from '@/ui/mobx/NotificationStore'
 import { PerspectiveCamera, Vector3 } from 'three'
 import { scenarioContext } from '@/core/scenario/ScenarioContext'
 import { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
@@ -63,9 +64,16 @@ class EngineStore implements LoadingProgressReporter {
       // Телепорт: без сброса свип коллизий протянет отрезок от старой позиции
       this.cameraCollision?.reset()
 
-      await this.app.run(payload)
-
-      this.setAppLoadingStatus(false)
+      try {
+        await this.app.run(payload)
+      } catch (error) {
+        // Без этого экран загрузки висел бы навсегда: назад в меню с сообщением
+        console.error('[EngineStore] Сценарий не загрузился', error)
+        notificationStore.dispatch({ type: 'error', message: `Scenario failed to load: ${payload.name}` })
+        await this.setScenario(null)
+      } finally {
+        this.setAppLoadingStatus(false)
+      }
     }
   }
 
@@ -86,11 +94,10 @@ class EngineStore implements LoadingProgressReporter {
   }
 
   public get loadingPercentage(): number {
-    if (this.appLoadingProgress > 0 || this.appLoadingTotal > 0) {
-      return Math.ceil((this.appLoadingProgress / this.appLoadingTotal) * 100)
-    } else {
-      return 0
-    }
+    // Пока «всего» неизвестно, доля не определена: 0, а не NaN или Infinity
+    if (this.appLoadingTotal <= 0) return 0
+
+    return Math.min(100, Math.max(0, Math.ceil((this.appLoadingProgress / this.appLoadingTotal) * 100)))
   }
 }
 

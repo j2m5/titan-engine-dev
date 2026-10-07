@@ -1,5 +1,12 @@
 @use "@titanui/assets/styles/index.scss";
 
+// Чёрный под всем: до прихода фоновой картинки (и вовсе без неё) страница не
+// вспыхивает белым, а светлый текст не оказывается на белом
+html,
+body {
+  background: #000;
+}
+
 body {
   color: #f0f0f0;
   font-family: "Google Sans", sans-serif;
@@ -8,14 +15,39 @@ body {
   padding: 0;
 }
 
-.loading-screen {
-  /* ассет живёт в public/images (канонический дом UI-статики) — vite сам подставит base */
-  background: url('/images/loading-screen.jpg') no-repeat;
-  background-size: cover;
+// Фон главной и экрана загрузки: одна картинка, сдвинута к планете — в узком
+// окне cover режет бока, и при позиции по умолчанию (левый край) планета
+// уходила за кадр. Ассет живёт в public/images (канонический дом UI-статики) —
+// vite сам подставит base
+%screen-background {
+  background: #000 url('/images/loading-screen.jpg') 65% center / cover no-repeat;
+}
+
+// Главная — свой слой на весь экран со своей прокруткой. Документ не
+// скроллится: фон неподвижен и есть под всеми рядами карточек, а канвас
+// (ширина innerWidth) не даёт горизонтальной полосы после выхода в меню
+.home-page {
+  @extend %screen-background;
+  box-sizing: border-box;
   color: #fff;
-  position: absolute;
-  height: 100%;
-  width: 100%;
+  inset: 0;
+  overflow-y: auto;
+  padding-bottom: 20px;
+  position: fixed;
+  z-index: 999999;
+
+  // Карточки темнее игровых окон: светлый текст читается и поверх
+  // освещённого края планеты
+  .titan-grid > .titan-container {
+    background: rgba(0, 0, 0, 0.5);
+  }
+}
+
+.loading-screen {
+  @extend %screen-background;
+  color: #fff;
+  inset: 0;
+  position: fixed;
   z-index: 999999;
   .loading-screen-data {
     display: flex;
@@ -26,11 +58,23 @@ body {
     right: 0;
     margin: 0 auto 50px;
     height: 100px;
-    width: 1000px;
+    // Не шире окна: при узком окне или зуме 150% фиксированные 1000px уезжали
+    // влево и давали горизонтальный скролл
+    width: min(1000px, calc(100% - 32px));
     overflow: hidden;
     .counter,
     .file {
       margin: 5px auto;
+    }
+    .counter {
+      // Цифры одной ширины: процент не дрожит на каждом шаге
+      font-variant-numeric: tabular-nums;
+    }
+    .file {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .progressbar {
       position: relative;

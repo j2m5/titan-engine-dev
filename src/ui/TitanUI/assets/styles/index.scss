@@ -95,9 +95,11 @@
   }
 }
 
+// stretch: элементы ряда одной высоты — по самому высокому. Колонки
+// прижаты к левому краю (решение владельца: центровка раздувала боковые отступы)
 .titan-grid {
   display: grid;
-  align-items: start;
+  align-items: stretch;
 }
 
 .titan-list {
@@ -294,22 +296,35 @@
   }
 }
 
+// Карточка растёт по тексту: 300px — нижняя граница, а не размер. Фиксированные
+// высоты (шапка 25, контент 180) роняли длинные описания под кнопку и за рамку
 .titan-card {
-  height: 300px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 300px;
   width: 250px;
 
   .titan-card-header {
-    height: 25px;
+    min-height: 25px;
+    overflow-wrap: anywhere;
     text-transform: uppercase;
   }
 
   .titan-card-content {
-    height: 180px;
+    flex: 1;
 
     img {
-      object-fit: contain;
+      // Блок, а не строка: строчная картинка добавляла зазор под базовую линию
+      display: block;
       height: 123px;
+      object-fit: contain;
+      width: 100%;
     }
+  }
+
+  .titan-card-text {
+    overflow-wrap: anywhere;
   }
 
   .titan-card-footer {
