@@ -35,6 +35,21 @@ describe('StarOuterLayer: имена атрибутов геометрии и ш
     expect(declared.length).toBeGreaterThan(0)
     expect(new Set(declared)).toEqual(new Set(Object.keys(geometry.attributes)))
   })
+
+  it('размерность каждого атрибута совпадает с типом в шейдере', () => {
+    // Имена совпадают, а itemSize разошёлся (vec3 в шейдере, 2 в геометрии) —
+    // WebGL молча читает соседние компоненты, ленты рвутся без единой ошибки
+    const geometry = buildProminenceGeometry({ ribbonCount: 2, segmentsPerRibbon: 2 })
+    const sizeOf: Record<string, number> = { float: 1, vec2: 2, vec3: 3, vec4: 4 }
+    const declared: [string, string][] = [
+      ...StarOuterLayerShaderTemplate.vertexShader.matchAll(/attribute\s+(\w+)\s+(\w+)\s*;/g)
+    ].map((match): [string, string] => [match[2], match[1]])
+
+    for (const [name, type] of declared) {
+      expect(sizeOf[type], `тип ${type} атрибута ${name}`).toBeDefined()
+      expect(geometry.getAttribute(name).itemSize, name).toBe(sizeOf[type])
+    }
+  })
 })
 
 describe('StarOuterLayer: масштаб меша — мировой радиус звезды', () => {
