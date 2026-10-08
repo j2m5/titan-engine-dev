@@ -10,7 +10,7 @@ describe('L0 вершинный шейдер: varyings облика', () => {
   it('объявляет и заполняет vObjectPos; пер-инстансные хеши считаются в вершиннике', () => {
     const shader = new InstancedAsteroidShader()
     expect(shader.vertexShader).toContain('varying vec3 vObjectPos')
-    expect(shader.vertexShader).toContain('vObjectPos = shapedPos')
+    expect(shader.vertexShader).toContain('vObjectPos = restPos')
     // Анти-ULP-джиттер: во фрагмент едут ГОТОВЫЕ хеши (tintSeed/domainOffset/
     // triOffset), а не сырой сид — интерполяционный шум varying'а не должен
     // проходить через хеш-усиление (fract(sin·47453) ≈ ×4e6)
@@ -30,7 +30,7 @@ describe('L0 вершинный шейдер: varyings облика', () => {
     const shader = new InstancedAsteroidShader()
     expect(shader.vertexShader).toContain('varying vec3 vObjectNormal')
     expect(shader.vertexShader).toContain('varying mat3 vObjToView')
-    expect(shader.vertexShader).toContain('vObjectNormal = shapedNormal')
-    expect(shader.vertexShader).toContain('vObjToView = normalMatrix * instanceNormalMatrix')
+    expect(shader.vertexShader).toContain('vObjectNormal = restNormal')
+    expect(shader.vertexShader).toContain('vObjToView = normalMatrix * instanceNormalMatrix * spin')
   })
 })

@@ -6,6 +6,7 @@ import { Scenarios } from '@/config/scenarios'
 import type { Engine } from '@/core/Engine'
 import type { ResourceObserver } from '@/core/services/ResourceObserver'
 import type { LeakDetector } from '@/core/lifecycle/LeakDetector'
+import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
 
 const leakDetector = { record: () => null } as unknown as LeakDetector
 const heightFieldGate = { recompute: vi.fn(), dispose: vi.fn(), clearNodeCache: vi.fn() } as never
@@ -26,6 +27,16 @@ describe('Application.teardown', () => {
     new Application(engine, observer, new Scene(), leakDetector, heightFieldGate).teardown()
 
     expect(order).toEqual(['engine', 'textures'])
+  })
+
+  it('отменяет идущий полёт к объекту: иначе анимация утащит камеру нового сценария', () => {
+    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
+    const cancel = vi.spyOn(CameraToObjectTransition, 'cancelActive')
+
+    new Application(engine, {} as unknown as ResourceObserver, new Scene(), leakDetector, heightFieldGate).teardown()
+
+    expect(cancel).toHaveBeenCalledTimes(1)
   })
 
   it('отпускает кэш коллизии камеры после разборки графа', () => {

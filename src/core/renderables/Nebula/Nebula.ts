@@ -84,6 +84,7 @@ class Nebula extends Object3D {
       this.volume.visible = true
       this.volume.material.uniforms.uOpacityScale.value = 1
       this.impostor.setTexture(this.baker.bake(this.volume, camera, this._center, this.boundingRadius))
+      this.impostor.setOrientation(this.baker.orientation)
       this.volume.visible = prevVisible
     }
 

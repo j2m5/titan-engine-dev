@@ -207,7 +207,7 @@ export const TerrainShaderTemplate: ShaderProps = {
     float blinnPhongGlint(vec3 normal, vec3 lightDirection, vec3 viewDir) {
       vec3 halfVec = normalize(lightDirection + viewDir);
       float specComp = pow(max(dot(normal, halfVec), 0.0), 64.0);
-      float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(normal, viewDir), 0.0), 5.0);
+      float fresnel = 0.02 + 0.98 * pow(1.0 - clamp(dot(normal, viewDir), 0.0, 1.0), 5.0);
       return specComp * fresnel;
     }
 

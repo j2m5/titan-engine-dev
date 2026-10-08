@@ -11,6 +11,7 @@ import type { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import type { TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import type { CameraCollision } from '@/core/services/CameraCollision'
 import { SkyboxBackground } from '@/core/renderables/SkyboxBackground'
+import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
 
 class Application {
   private everLoaded: boolean = false
@@ -47,6 +48,9 @@ class Application {
    * долгоживущих ресурсов — как эталон он объявил бы утечкой всё подряд.
    */
   public teardown(): void {
+    // Полёт к объекту — до всего остального: anime пишет позицию камеры
+    // каждый кадр и иначе утащил бы её в новом сценарии к цели старого
+    CameraToObjectTransition.cancelActive()
     this.engine.dispose()
     // Коллайдеры ссылаются на только что разобранные узлы и карты высот
     this.cameraCollision?.clear()

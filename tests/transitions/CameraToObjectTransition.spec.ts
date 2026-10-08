@@ -28,7 +28,7 @@ vi.mock('animejs', () => {
   return { default: Object.assign(vi.fn(), { timeline }) }
 })
 
-import { Clock, PerspectiveCamera, Vector3 } from 'three'
+import { PerspectiveCamera, Vector3 } from 'three'
 import { CameraToObjectTransition, decideFlight } from '@/core/transitions/CameraToObjectTransition'
 import type { SceneObserver, ObservableRecord } from '@/core/services/SceneObserver'
 import type { CameraController } from '@/core/camera/CameraController'
@@ -73,6 +73,7 @@ interface Rig {
   notifications: SystemNotification[]
   renderCamera: PerspectiveCamera
   records: Map<string, ObservableRecord>
+  controls: { enabled: boolean }
 }
 
 /** Тело радиуса 100 км → точка прилёта в 3 радиусах; позиции — в юнитах сцены фейка */
@@ -93,6 +94,7 @@ function rig(): Rig {
     }
   } as unknown as SceneObserver
   const sink: NotificationSink = { dispatch: (n: SystemNotification): void => void notifications.push(n) }
+  const controls = { enabled: true }
   const command = (): CameraToObjectTransition =>
     new CameraToObjectTransition(
       sceneObserver,
@@ -100,8 +102,7 @@ function rig(): Rig {
       sink,
       { close: vi.fn() } as unknown as MenuController,
       renderCamera,
-      { enabled: true } as unknown as AstroControls,
-      new Clock()
+      controls as unknown as AstroControls
     )
   const run = async (name: string): Promise<void> => {
     const instance = command()
@@ -110,7 +111,7 @@ function rig(): Rig {
     await instance.handle()
   }
 
-  return { run, camera, notifications, renderCamera, records }
+  return { run, camera, notifications, renderCamera, records, controls }
 }
 
 function actor(name: string): Actor {
@@ -214,5 +215,54 @@ describe('CameraToObjectTransition — полёт к объекту идемпо
     update({ animations: [{ currentValue: '5' }] })
 
     expect(r.camera.setSpeed).not.toHaveBeenCalledWith(NaN)
+  })
+
+  it('скорость полёта — пройденный за кадр путь в км/с по своему замеру времени, общих часов нет', async () => {
+    const r = rig()
+    const now = vi.spyOn(performance, 'now')
+
+    record(r, 'Mars', new Vector3(0, 0, -1e6))
+    await r.run('Mars')
+
+    const update = timelines[0].steps[1].update as (anim: unknown) => void
+
+    now.mockReturnValue(1000)
+    update({})
+    // за 0.5 с камера прошла 500 км по диагонали — не по одной оси X
+    r.renderCamera.position.set(toThreeJSUnits(300), 0, -toThreeJSUnits(400))
+    now.mockReturnValue(1500)
+    update({})
+
+    expect(r.camera.setSpeed.mock.calls.at(-1)![0]).toBeCloseTo(1000, 6)
+    now.mockRestore()
+  })
+
+  it('выход в меню посреди полёта: полёт остановлен, управление и скорость возвращены', async () => {
+    const r = rig()
+    record(r, 'Mars', new Vector3(0, 0, -1e6))
+
+    await r.run('Mars')
+    // begin анимации выключил управление, полёт разогнал камеру
+    r.controls.enabled = false
+    r.camera.speed = 999
+
+    CameraToObjectTransition.cancelActive()
+
+    expect(timelines[0].pause).toHaveBeenCalled()
+    expect(r.controls.enabled).toBe(true)
+    expect(r.camera.speed).toBe(10)
+
+    // запоздалый complete отменённого полёта ничего не трогает
+    r.camera.setSpeed.mockClear()
+    complete(timelines[0])
+    expect(r.camera.setSpeed).not.toHaveBeenCalled()
+
+    // и следующий клик снова летит
+    await r.run('Mars')
+    expect(timelines).toHaveLength(2)
+  })
+
+  it('cancelActive без полёта ничего не делает', () => {
+    expect(() => CameraToObjectTransition.cancelActive()).not.toThrow()
   })
 })

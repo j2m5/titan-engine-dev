@@ -8,6 +8,9 @@ import { AstroControls } from '@/core/libs/AstroControls'
 function makeControls(): { controls: AstroControls; camera: PerspectiveCamera; dom: HTMLElement } {
   const camera = new PerspectiveCamera(50, 1, 1e-6, 1e9)
   const dom = document.createElement('div')
+  // Канвас в документе, как в приложении: отпускание ПКМ слушается на window
+  // и доходит туда всплытием
+  document.body.appendChild(dom)
   const controls = new AstroControls(camera, new Sphere(new Vector3(), 1), dom)
   return { controls, camera, dom }
 }

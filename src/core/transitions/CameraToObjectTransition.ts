@@ -1,6 +1,6 @@
 import { Command } from '@/core/framework/commands/Command'
 import { Actor } from '@/core/models/Actor'
-import { Clock, PerspectiveCamera, Quaternion, Vector3 } from 'three'
+import { PerspectiveCamera, Quaternion, Vector3 } from 'three'
 import { ObservableRecord, SceneObserver } from '@/core/services/SceneObserver'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole'
 import { fromKilometers, toThreeJSUnits } from '@/core/helpers/scaling'
@@ -48,6 +48,8 @@ interface ActiveFlight {
   timeline: anime.AnimeTimelineInstance
   /** Скорость камеры до ПЕРВОГО клика цепочки: анимация её разгоняет */
   speedBefore: number
+  /** Вернуть управление и скорость — для отмены полёта при разборке сценария */
+  restore: () => void
 }
 
 class CameraToObjectTransition extends Command {
@@ -55,14 +57,30 @@ class CameraToObjectTransition extends Command {
 
   private static active: ActiveFlight | null = null
 
+  /**
+   * Отмена идущего полёта (разборка сценария, выход в меню): таймлайн на
+   * паузе, управление и скорость возвращены. Без неё anime ещё несколько
+   * секунд писал позицию камеры — уже телепортированной в новый сценарий — и
+   * тащил её к цели старого. Запоздалый complete отменённого полёта ничего
+   * не трогает: active уже не он.
+   */
+  public static cancelActive(): void {
+    const active: ActiveFlight | null = CameraToObjectTransition.active
+
+    if (!active) return
+
+    CameraToObjectTransition.active = null
+    active.timeline.pause()
+    active.restore()
+  }
+
   public constructor(
     private sceneObserver: SceneObserver,
     private camera: CameraController,
     private notifications: NotificationSink,
     private menu: MenuController,
     private renderCamera: PerspectiveCamera,
-    private astroControls: AstroControls,
-    private clock: Clock
+    private astroControls: AstroControls
   ) {
     super()
   }
@@ -113,11 +131,11 @@ class CameraToObjectTransition extends Command {
     const alpha: number = (data.distance - offset) / data.distance
     const destination: Vector3 = new Vector3().lerpVectors(cameraPosition, data.position, alpha)
 
-    // Нули, а не undefined: проверка ниже пропускает первый кадр только для
-    // нулей, с undefined скорость первого кадра выходила NaN
-    let lastValue: number = 0,
-      lastTime: number = 0,
-      speed: number = 0
+    // Скорость на виджете — пройденный за кадр путь в км/с по СВОЕМУ замеру
+    // времени. Общие часы движка (getDelta) трогать нельзя: каждый вызов крал
+    // дельту у кадра, и симуляция, управление и постпроцессинг шли рывками
+    const lastPosition: Vector3 = new Vector3()
+    let lastTime: number | null = null
 
     const startRotation: Quaternion = this.renderCamera.quaternion.clone()
     this.renderCamera.lookAt(data.position)
@@ -149,18 +167,18 @@ class CameraToObjectTransition extends Command {
         this.astroControls.enabled = false
         this.menu.close()
       },
-      update: (anim: anime.AnimeInstance): void => {
-        const currentTime: number = +new Date()
-        const currentValue: string = anim.animations[0].currentValue
+      update: (): void => {
+        const now: number = performance.now()
 
-        if (lastValue !== 0 && lastTime !== 0) {
-          speed = (Number(currentValue) - lastValue) / (currentTime - lastTime) / this.clock.getDelta()
+        // Первый кадр — только опорная точка: скорости ещё не из чего считать
+        if (lastTime !== null && now > lastTime) {
+          const unitsPerSecond: number = this.renderCamera.position.distanceTo(lastPosition) / ((now - lastTime) / 1000)
+
+          this.camera.setSpeed(fromKilometers(unitsPerSecond))
         }
 
-        lastValue = Number(currentValue)
-        lastTime = currentTime
-
-        this.camera.setSpeed(fromKilometers(Math.abs(speed)))
+        lastPosition.copy(this.renderCamera.position)
+        lastTime = now
       },
       complete: (): void => {
         // Прерванный разворотом полёт не возвращает управление и скорость:
@@ -176,7 +194,15 @@ class CameraToObjectTransition extends Command {
 
     const timeline: anime.AnimeTimelineInstance = anime.timeline()
 
-    CameraToObjectTransition.active = { target: data.name, timeline, speedBefore }
+    CameraToObjectTransition.active = {
+      target: data.name,
+      timeline,
+      speedBefore,
+      restore: (): void => {
+        this.astroControls.enabled = true
+        this.camera.setSpeed(speedBefore)
+      }
+    }
 
     timeline.add(lookAt)
     timeline.add(path)

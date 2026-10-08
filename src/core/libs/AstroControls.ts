@@ -71,6 +71,8 @@ class AstroControls extends EventDispatcher<AstroControlsEventMap> {
   private $mousedown = this.mousedown.bind(this)
   private $mousemove = this.mousemove.bind(this)
   private $mouseup = this.mouseup.bind(this)
+  private $resetInput = this.resetInput.bind(this)
+  private $visibilityChange = this.visibilityChange.bind(this)
 
   public constructor(object: Camera, sphere: Sphere, domElement: HTMLElement) {
     super()
@@ -91,7 +93,12 @@ class AstroControls extends EventDispatcher<AstroControlsEventMap> {
     window.addEventListener('keyup', this.$keyup)
     this.domElement.addEventListener('mousedown', this.$mousedown)
     this.domElement.addEventListener('mousemove', this.$mousemove)
-    this.domElement.addEventListener('mouseup', this.$mouseup)
+    // Отпускание — на окне, а не на канвасе: ПКМ, отпущенная над списком
+    // объектов или верхней панелью, иначе оставляла камеру вращаться
+    window.addEventListener('mouseup', this.$mouseup)
+    // Alt-Tab или скрытая вкладка с зажатой клавишей: keyup уже не придёт
+    window.addEventListener('blur', this.$resetInput)
+    document.addEventListener('visibilitychange', this.$visibilityChange)
 
     this.updateMovementVector()
     this.updateRotationVector()
@@ -132,10 +139,22 @@ class AstroControls extends EventDispatcher<AstroControlsEventMap> {
     }
   }
 
+  /** Отпускание сбрасывает всегда, даже при выключенном управлении (полёт к объекту) */
   private mouseup(): void {
-    if (!this.enabled) return
+    this.isRotating = false
+  }
+
+  /** Сброс всего зажатого: окно потеряло фокус, отпусканий уже не будет */
+  private resetInput(): void {
+    for (const key of Object.keys(this.moveState) as (keyof MoveState)[]) this.moveState[key] = 0
 
     this.isRotating = false
+    this.updateMovementVector()
+    this.updateRotationVector()
+  }
+
+  private visibilityChange(): void {
+    if (document.hidden) this.resetInput()
   }
 
   private rotateCamera(deltaX: number, deltaY: number): void {
@@ -213,9 +232,8 @@ class AstroControls extends EventDispatcher<AstroControlsEventMap> {
     this.updateRotationVector()
   }
 
+  /** Отпускание клавиши сбрасывает всегда: W, отпущенная во время полёта, иначе залипала */
   private keyup(event: KeyboardEvent): void {
-    if (!this.enabled) return
-
     switch (event.code) {
       case 'KeyW':
         this.moveState.forward = 0
@@ -329,7 +347,9 @@ class AstroControls extends EventDispatcher<AstroControlsEventMap> {
     window.removeEventListener('keyup', this.$keyup)
     this.domElement.removeEventListener('mousedown', this.$mousedown)
     this.domElement.removeEventListener('mousemove', this.$mousemove)
-    this.domElement.removeEventListener('mouseup', this.$mouseup)
+    window.removeEventListener('mouseup', this.$mouseup)
+    window.removeEventListener('blur', this.$resetInput)
+    document.removeEventListener('visibilitychange', this.$visibilityChange)
   }
 }
 

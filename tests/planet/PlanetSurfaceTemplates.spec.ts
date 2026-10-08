@@ -24,7 +24,7 @@ describe('SphereSurfaceShaderTemplate: блик воды на сфере', () =>
     const terrainFrag: string = TerrainShaderTemplate.fragmentShader
     expect(terrainFrag).toContain('float blinnPhongGlint(vec3 normal, vec3 lightDirection, vec3 viewDir) {')
     expect(terrainFrag).toContain('pow(max(dot(normal, halfVec), 0.0), 64.0)')
-    expect(terrainFrag).toContain('float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(normal, viewDir), 0.0), 5.0);')
+    expect(terrainFrag).toContain('float fresnel = 0.02 + 0.98 * pow(1.0 - clamp(dot(normal, viewDir), 0.0, 1.0), 5.0);')
   })
 
   it('bloom-guard: диффуз-кламп 0.99 ДО блика, потолок глинта 4.0 после', () => {
