@@ -106,6 +106,10 @@ class AsteroidBelt extends Group {
     this.pointLayer = this.__createPointLayer()
     this.add(this.pointLayer)
 
+    // Стример строится лениво, на первом подлёте; формы камней печём сейчас,
+    // под экраном загрузки, а не в кадре подлёта (см. prewarmArchetypes)
+    AsteroidRingSystem.prewarmArchetypes(this.actor, this.__streamerOverrides())
+
     this.name = 'AsteroidBelt'
   }
 
@@ -179,6 +183,11 @@ class AsteroidBelt extends Group {
   }
 
   private __createStreamer(): AsteroidRingSystem {
+    return new AsteroidRingSystem(this.actor, this.__streamerOverrides(), this.depthVolumeRegistry, shapeModelStorage)
+  }
+
+  /** Конфиг стримера поверх данных кольца — общий для прогрева и самой постройки */
+  private __streamerOverrides(): Partial<AsteroidRingConfig> {
     const p = this.params
 
     const overrides: Partial<AsteroidRingConfig> = {
@@ -230,7 +239,7 @@ class AsteroidBelt extends Group {
       overrides.iceVariety = { fraction: p.iceFraction, profile: p.iceProfile }
     }
 
-    return new AsteroidRingSystem(this.actor, overrides, this.depthVolumeRegistry, shapeModelStorage)
+    return overrides
   }
 
   public updateObject(ctx: UpdateContext): void {
