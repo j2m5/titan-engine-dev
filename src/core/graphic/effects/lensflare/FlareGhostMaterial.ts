@@ -1,13 +1,15 @@
 import { AddEquation, CustomBlending, OneFactor, ShaderMaterial, Uniform, Vector2, type Texture } from 'three'
 import {
   FLARE_GHOSTS,
+  GHOST_COPIES_FADE,
   GHOST_CUTOFF,
-  GHOST_FADE_PIXELS,
+  GHOST_FLUX_GAMMA,
+  GHOST_FLUX_KNEE_PIXELS,
   GHOST_SQUEEZE,
-  SOURCE_DIAMETER_GAIN,
   ghostEnergy,
   lumaNormalized
 } from './flareGhosts'
+import { FLUX_REFERENCE_HEIGHT } from './flareGrid'
 import { glslFloat } from './glslLiteral'
 
 const count = FLARE_GHOSTS.length
@@ -30,16 +32,18 @@ const vertexShader: string = `
   ${ghostTable}
   #define GHOST_SQUEEZE ${glslFloat(GHOST_SQUEEZE)}
   #define GHOST_CUTOFF ${glslFloat(GHOST_CUTOFF)}
-  #define GHOST_FADE_START ${glslFloat(GHOST_FADE_PIXELS.start)}
-  #define GHOST_FADE_END ${glslFloat(GHOST_FADE_PIXELS.end)}
-  #define SOURCE_DIAMETER_GAIN ${glslFloat(SOURCE_DIAMETER_GAIN)}
+  // Колено сжатия потока, доли высоты кадра²
+  #define GHOST_FLUX_KNEE ${glslFloat(GHOST_FLUX_KNEE_PIXELS / FLUX_REFERENCE_HEIGHT ** 2)}
+  #define GHOST_FLUX_GAMMA ${glslFloat(GHOST_FLUX_GAMMA)}
+  #define GHOST_COPIES_FADE_START ${glslFloat(GHOST_COPIES_FADE.start)}
+  #define GHOST_COPIES_FADE_END ${glslFloat(GHOST_COPIES_FADE.end)}
 
   uniform sampler2D sourceFlux;
   uniform sampler2D sourceCentroid;
+  // Окно источников: поток (x) и сумма квадратов (y), FlareWindowMaterial
+  uniform sampler2D sourceWindow;
   uniform vec2 gridSize;
   uniform float aspect;
-  // Радиус локального контраста в пикселях 1080p: мера размера источника
-  uniform float contrastPixels;
   uniform float ghostAmount;
   uniform float intensity;
   uniform float ghostVignette;
@@ -64,19 +68,24 @@ const vertexShader: string = `
     int cols = int(gridSize.x);
     ivec2 cell = ivec2(cellIndex % cols, cellIndex / cols);
     vec4 flux = texelFetch(sourceFlux, cell, 0);
-    vec4 sourceData = texelFetch(sourceCentroid, cell, 0);
-    vec2 source = sourceData.xy;
+    vec2 source = texelFetch(sourceCentroid, cell, 0).xy;
 
     // Виньетирование: источник у угла кадра гасит призраков; показатель 0 — единица
     float corner = 0.5 * sqrt(aspect * aspect + 1.0);
     float r = min(length(source) / corner, 1.0);
     float vignette = exp2(ghostVignette * log2(max(1.0 - r * r, 1e-6)));
-    // Крупный диск отбор дробит на копии — его призраки гаснут.
-    // Зеркала — sourceDiameterPixels и ghostSizeFade (flareGhosts.ts)
-    float diameter = SOURCE_DIAMETER_GAIN * contrastPixels * sourceData.z / max(flux.a, 1e-30);
-    float sizeFade = 1.0 - smoothstep(GHOST_FADE_START, GHOST_FADE_END, diameter);
-    vec3 color = flux.rgb * GHOST_COLOR[ghost] * vignette * sizeFade;
-    float peak = flareLuma(color) * ghostAmount * intensity;
+    // Копии раздробленного диска делят сжатый поток окна — вместе как один
+    // источник — и гаснут, когда их много. Зеркала — fluxResponse, sourceGain,
+    // effectiveCopies и ghostCopiesFade (flareGhosts.ts)
+    vec4 neighbourhood = texelFetch(sourceWindow, cell, 0);
+    float total = max(neighbourhood.x, flux.a);
+    float response = total <= GHOST_FLUX_KNEE ? total : GHOST_FLUX_KNEE * pow(total / GHOST_FLUX_KNEE, GHOST_FLUX_GAMMA);
+    float gain = response / max(total, 1e-30);
+    float copies = neighbourhood.x * neighbourhood.x / max(neighbourhood.y, 1e-30);
+    float copiesFade = 1.0 - smoothstep(GHOST_COPIES_FADE_START, GHOST_COPIES_FADE_END, copies);
+    vec3 color = flux.rgb * GHOST_COLOR[ghost] * vignette * gain * copiesFade;
+    // Отсечка по суммарной яркости копий: каждая несёт лишь 1/N
+    float peak = flareLuma(color) * ghostAmount * intensity * max(copies, 1.0);
 
     // Невыбранная ячейка или призрак тусклее отсечки — квад за пределами клипа
     if (flux.a <= 0.0 || peak < GHOST_CUTOFF) {
@@ -138,7 +147,7 @@ export interface FlareGhostShared {
 
 /** Спрайты призраков: инстанс на пару «ячейка сетки × призрак таблицы», сложением */
 export class FlareGhostMaterial extends ShaderMaterial {
-  constructor(shared: FlareGhostShared, sourceFlux: Texture, sourceCentroid: Texture) {
+  constructor(shared: FlareGhostShared, sourceFlux: Texture, sourceCentroid: Texture, sourceWindow: Texture) {
     super({
       name: 'FlareGhostMaterial',
       vertexShader,
@@ -146,9 +155,9 @@ export class FlareGhostMaterial extends ShaderMaterial {
       uniforms: {
         sourceFlux: new Uniform(sourceFlux),
         sourceCentroid: new Uniform(sourceCentroid),
+        sourceWindow: new Uniform(sourceWindow),
         gridSize: new Uniform(new Vector2(1, 1)),
         aspect: new Uniform(1),
-        contrastPixels: new Uniform(1),
         ghostAmount: shared.ghostAmount,
         intensity: shared.intensity,
         ghostVignette: new Uniform(2),
@@ -164,11 +173,9 @@ export class FlareGhostMaterial extends ShaderMaterial {
     })
   }
 
-  /** contrastPixels — радиус локального контраста в пикселях 1080p (contrastRadiusPixels) */
-  setGrid(cols: number, rows: number, aspect: number, contrastPixels: number): void {
+  setGrid(cols: number, rows: number, aspect: number): void {
     ;(this.uniforms.gridSize.value as Vector2).set(cols, rows)
     this.uniforms.aspect.value = aspect
-    this.uniforms.contrastPixels.value = contrastPixels
   }
 
   get ghostVignette(): number {

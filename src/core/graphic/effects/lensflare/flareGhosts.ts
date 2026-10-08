@@ -98,54 +98,68 @@ export function ghostVignette(source: readonly [number, number], aspect: number,
 }
 
 /**
- * Гашение призраков крупного источника по диаметру, пиксели 1080p: до start
- * призраки полные, к end гаснут. От диска крупнее ячейки сетки локальный
- * контраст оставляет кольцо, и отбор дробит его на несколько максимумов —
- * копии призраков. Сетка 36 строк дробит диски от ~60 px: end держать ниже.
+ * Сжатие потока источника: до колена яркость призраков линейна, выше —
+ * степень GHOST_FLUX_GAMMA. Колено — поток импостора звезды (замер на Солнце
+ * 2026-10-08: ~500 px·яркость); диск вблизи даёт 1500–2000, кольцо крупного
+ * диска растёт с размером — без сжатия импостор в 4 раза тусклее облика вблизи
  */
-export const GHOST_FADE_PIXELS = { start: 35, end: 50 } as const
+export const GHOST_FLUX_KNEE_PIXELS = 500
+export const GHOST_FLUX_GAMMA = 0.2
 
-/**
- * Поправка оценки диаметра на предразмытие: Kawase смягчает кромку диска,
- * доля потока после контраста падает, и без поправки диск D px оценивается
- * в ≈1.33·D. Замер на GPU (буферы 540 и 1080 строк) — в тестах.
- */
-export const SOURCE_DIAMETER_GAIN = 0.75
+const FLUX_KNEE: number = GHOST_FLUX_KNEE_PIXELS / FLUX_REFERENCE_HEIGHT ** 2
 
-/**
- * Оценка диаметра источника, пиксели 1080p. От диска локальный контраст
- * оставляет кольцо шириной в свой радиус: доля потока ≈ радиус / диаметр.
- * Источник мельче радиуса контраста оценивается не меньше чем в сам радиус.
- */
-export function sourceDiameterPixels(flux: number, rawFlux: number, contrastPixels: number): number {
-  return flux > 0 ? (SOURCE_DIAMETER_GAIN * contrastPixels * rawFlux) / flux : 0
+/** Сжатый поток, доли высоты кадра² */
+export function fluxResponse(fluxFrame: number): number {
+  return fluxFrame <= FLUX_KNEE ? fluxFrame : FLUX_KNEE * Math.pow(fluxFrame / FLUX_KNEE, GHOST_FLUX_GAMMA)
 }
 
-/** Множитель призраков по диаметру источника: smoothstep от 1 до 0 на [start, end] */
-export function ghostSizeFade(diameterPixels: number): number {
-  const { start, end } = GHOST_FADE_PIXELS
-  const t = Math.min(Math.max((diameterPixels - start) / (end - start), 0), 1)
+/**
+ * Множитель потока копии: сжатый поток окна / поток окна. Копии
+ * раздробленного диска делят его так, что вместе дают яркость одного
+ * источника с общим потоком; одиночный источник — сжатие своего потока
+ */
+export function sourceGain(windowFlux: number): number {
+  return windowFlux > 0 ? fluxResponse(windowFlux) / windowFlux : 0
+}
+
+/** Эффективное число копий в окне: (ΣF)² / ΣF²; тусклые источники почти не весят */
+export function effectiveCopies(windowFlux: number, windowFluxSquared: number): number {
+  return windowFluxSquared > 0 ? (windowFlux * windowFlux) / windowFluxSquared : 0
+}
+
+/**
+ * Гашение по числу копий: мягкие копии сливаются, пока диск меньше ~400 px;
+ * дальше мелкий призрак рассыпается в кольцо пятен. Замер GPU: 200 px — до 7
+ * копий, 550–900 px — не меньше 11.7 у любой копии (окно видит часть кольца)
+ */
+export const GHOST_COPIES_FADE = { start: 7, end: 11 } as const
+
+/** Множитель призраков по числу копий: smoothstep от 1 до 0 на [start, end] */
+export function ghostCopiesFade(copies: number): number {
+  const { start, end } = GHOST_COPIES_FADE
+  const t = Math.min(Math.max((copies - start) / (end - start), 0), 1)
   return 1 - t * t * (3 - 2 * t)
 }
 
 /**
- * Калибровка (расчёт, не замер): звезда 12 px при farGlowGain 3 (поток 3400)
- * в центре кадра при intensity 0.1 даёт самый яркий призрак 0.05 до AgX.
+ * Калибровка — облик, принятый владельцем 2026-10-08: Солнце диском 25–30 px
+ * (замер потока ≈1800) в центре кадра при intensity 0.1 даёт самый яркий
+ * призрак 0.0265 до AgX
  */
-export const GHOST_REFERENCE = { fluxPixels: 3400, peak: 0.05, intensity: 0.1 } as const
+export const GHOST_REFERENCE = { fluxPixels: 1800, peak: 0.0265, intensity: 0.1 } as const
 
 export const GHOST_SCALE: number = (() => {
-  const fluxFrame = GHOST_REFERENCE.fluxPixels / FLUX_REFERENCE_HEIGHT ** 2
+  const response = fluxResponse(GHOST_REFERENCE.fluxPixels / FLUX_REFERENCE_HEIGHT ** 2)
   const brightest = Math.max(...FLARE_GHOSTS.map((g) => g.peak))
-  return GHOST_REFERENCE.peak / (GHOST_REFERENCE.intensity * fluxFrame * brightest)
+  return GHOST_REFERENCE.peak / (GHOST_REFERENCE.intensity * response * brightest)
 })()
 
-/** Яркость пика профиля на единицу потока (доли высоты кадра²), с калибровкой */
+/** Яркость пика профиля на единицу сжатого потока (доли высоты кадра²), с калибровкой */
 export function ghostEnergy(ghost: FlareGhost): number {
   return GHOST_SCALE * ghost.peak
 }
 
-/** Пиковая экранная яркость призрака белого источника */
+/** Пиковая экранная яркость призрака одиночного белого источника */
 export function ghostPeakOnScreen(
   ghost: FlareGhost,
   fluxFrame: number,
@@ -153,5 +167,5 @@ export function ghostPeakOnScreen(
   ghostAmount: number,
   intensity: number
 ): number {
-  return ghostEnergy(ghost) * fluxFrame * vignette * ghostAmount * intensity
+  return ghostEnergy(ghost) * fluxResponse(fluxFrame) * vignette * ghostAmount * intensity
 }

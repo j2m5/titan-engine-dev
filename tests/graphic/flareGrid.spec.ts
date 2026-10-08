@@ -3,13 +3,15 @@ import {
   FLARE_GRID_ROWS,
   LOCAL_CONTRAST_RADIUS,
   MAX_CELL_TEXELS,
-  contrastRadiusPixels,
+  SOURCE_WINDOW_CELLS,
   flareGridSize,
   fluxToPixels,
   frameCoord,
   gatherGrid,
   localContrast,
   selectMaxima,
+  sourceWindows,
+  type FlareSource,
   type GatheredGrid
 } from '@/core/graphic/effects/lensflare/flareGrid'
 
@@ -99,10 +101,6 @@ describe('локальный контраст: зеркало', () => {
     expect(lc.every((v) => v === 0)).toBe(true)
   })
 
-  it('радиус контраста в пикселях 1080p: тексели буфера → высота кадра', () => {
-    expect(contrastRadiusPixels(1080)).toBe(LOCAL_CONTRAST_RADIUS)
-    expect(contrastRadiusPixels(540)).toBe(2 * LOCAL_CONTRAST_RADIUS)
-  })
 })
 
 describe('сетка источников: отбор максимумов', () => {
@@ -167,29 +165,12 @@ describe('сетка источников: отбор максимумов', () 
     const flux = new Float64Array(12)
     flux[5] = 1
     flux[6] = 1
-    const grid: GatheredGrid = { size: { cols: 4, rows: 3 }, flux, rawFlux: flux, centroid: new Float64Array(24) }
+    const grid: GatheredGrid = { size: { cols: 4, rows: 3 }, flux, centroid: new Float64Array(24) }
     const sources = selectMaxima(grid)
 
     expect(sources).toHaveLength(1)
     expect(sources[0].cell).toBe(5)
     expect(sources[0].flux).toBe(2)
-  })
-
-  it('выбор несёт сырой поток блока — сумму входа до локального контраста', () => {
-    // Пятно с хвостом 5σ = 15 текселей в центре ячейки целиком внутри блока 3×3
-    const raw = blobTexels(960, 540, 307.5, 202.5, 3, 10)
-    const lc = localContrast(raw, 960, 540)
-    const [source] = selectMaxima(gatherGrid(lc, 960, 540, raw))
-
-    expect(source.rawFlux / totalFlux(raw, 540)).toBeCloseTo(1, 6)
-    expect(source.flux).toBeLessThan(source.rawFlux)
-  })
-
-  it('без сырого буфера сырой поток равен потоку', () => {
-    const texels = blobTexels(960, 540, 300, 200, 2, 10)
-    const [source] = selectMaxima(gatherGrid(texels, 960, 540))
-
-    expect(source.rawFlux).toBe(source.flux)
   })
 
   it('плато: равномерная полоса даёт конечные выборы без NaN', () => {
@@ -202,5 +183,32 @@ describe('сетка источников: отбор максимумов', () 
       expect(Number.isFinite(s.flux)).toBe(true)
       expect(Number.isFinite(s.centroid[0]) && Number.isFinite(s.centroid[1])).toBe(true)
     }
+  })
+})
+
+describe('окно источников: копии раздробленного диска', () => {
+  const size = { cols: 64, rows: 36 }
+  const at = (x: number, y: number, flux: number): FlareSource => ({ cell: y * size.cols + x, flux, centroid: [0, 0] })
+
+  it('одиночный источник: окно — его поток и квадрат', () => {
+    const [window] = sourceWindows([at(30, 18, 2)], size)
+
+    expect(window).toEqual({ flux: 2, fluxSquared: 4 })
+  })
+
+  it('источники в окне видят друг друга, за его краем — нет', () => {
+    const near = at(10 + SOURCE_WINDOW_CELLS, 5, 3)
+    const far = at(10 + SOURCE_WINDOW_CELLS + 1, 15, 5)
+    const windows = sourceWindows([at(10, 5, 1), near, far], size)
+
+    expect(windows[0]).toEqual({ flux: 4, fluxSquared: 10 })
+    expect(windows[1]).toEqual({ flux: 9, fluxSquared: 35 })
+    expect(windows[2]).toEqual({ flux: 8, fluxSquared: 34 })
+  })
+
+  it('окно — квадрат ±SOURCE_WINDOW_CELLS ячеек: по диагонали на границе ещё внутри', () => {
+    const windows = sourceWindows([at(5, 5, 1), at(5 + SOURCE_WINDOW_CELLS, 5 + SOURCE_WINDOW_CELLS, 1)], size)
+
+    expect(windows[0].flux).toBe(2)
   })
 })

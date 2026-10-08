@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { Texture, Vector2 } from 'three'
 import { FlareGridMaterial } from '@/core/graphic/effects/lensflare/FlareGridMaterial'
 import { FlareSelectMaterial } from '@/core/graphic/effects/lensflare/FlareSelectMaterial'
-import { MAX_CELL_TEXELS } from '@/core/graphic/effects/lensflare/flareGrid'
+import { FlareWindowMaterial } from '@/core/graphic/effects/lensflare/FlareWindowMaterial'
+import { MAX_CELL_TEXELS, SOURCE_WINDOW_CELLS } from '@/core/graphic/effects/lensflare/flareGrid'
 
 describe('FlareGridMaterial: сбор сетки', () => {
   const frag = new FlareGridMaterial('flux').fragmentShader
@@ -22,17 +23,6 @@ describe('FlareGridMaterial: сбор сетки', () => {
 
   it('пустая ячейка не делит на ноль', () => {
     expect(frag).toContain('fluxLum > 0.0 ? moment / fluxLum : vec2(0.0)')
-  })
-
-  it('центр несёт в z сырой поток — вход локального контраста, как rawFlux у gatherGrid', () => {
-    expect(frag).toContain('rawLum += luminance(texelFetch(rawBuffer, ivec2(x, y), 0).rgb);')
-    expect(frag).toContain('gl_FragColor = vec4(fluxLum > 0.0 ? moment / fluxLum : vec2(0.0), rawLum * areaPerTexel, 1.0);')
-  })
-
-  it('сырой буфер подключается снаружи', () => {
-    const raw = new Texture()
-
-    expect(new FlareGridMaterial('centroid', raw).uniforms.rawBuffer.value).toBe(raw)
   })
 
   it('координаты кадра — те же, что frameCoord: ((u − 0.5)·a, v − 0.5)', () => {
@@ -66,11 +56,6 @@ describe('FlareSelectMaterial: отбор максимумов', () => {
     expect(frag).toContain('moment / sumFlux.a')
   })
 
-  it('центр блока несёт в z сырой поток блока, как rawFlux у selectMaxima', () => {
-    expect(frag).toContain('rawSum += nc.z;')
-    expect(frag).toContain('gl_FragColor = vec4(moment / sumFlux.a, rawSum, 1.0);')
-  })
-
   it('соседи за краем сетки пропускаются', () => {
     expect(frag).toContain('if (n.x < 0 || n.y < 0 || n.x >= grid.x || n.y >= grid.y) continue;')
   })
@@ -86,6 +71,36 @@ describe('FlareSelectMaterial: отбор максимумов', () => {
 
   it('setGrid: размер сетки', () => {
     const material = new FlareSelectMaterial('flux', new Texture())
+    material.setGrid(86, 36)
+
+    expect(material.uniforms.gridSize.value).toEqual(new Vector2(86, 36))
+  })
+})
+
+describe('FlareWindowMaterial: окно источников', () => {
+  const frag = new FlareWindowMaterial().fragmentShader
+
+  it('полуширина окна — константа из TS', () => {
+    expect(frag).toContain(`#define SOURCE_WINDOW_CELLS ${SOURCE_WINDOW_CELLS}`)
+  })
+
+  it('невыбранная ячейка — нули без обхода окна', () => {
+    expect(frag).toContain('if (self <= 0.0) {')
+    expect(frag).toContain('gl_FragColor = vec4(0.0);')
+  })
+
+  it('сумма потоков и их квадратов выбранных ячеек окна, как sourceWindows', () => {
+    expect(frag).toContain('flux += f;')
+    expect(frag).toContain('fluxSquared += f * f;')
+    expect(frag).toContain('gl_FragColor = vec4(flux, fluxSquared, 0.0, 1.0);')
+  })
+
+  it('ячейки за краем сетки пропускаются', () => {
+    expect(frag).toContain('if (n.x < 0 || n.y < 0 || n.x >= grid.x || n.y >= grid.y) continue;')
+  })
+
+  it('setGrid: размер сетки', () => {
+    const material = new FlareWindowMaterial()
     material.setGrid(86, 36)
 
     expect(material.uniforms.gridSize.value).toEqual(new Vector2(86, 36))

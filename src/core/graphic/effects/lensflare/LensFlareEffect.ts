@@ -21,8 +21,9 @@ import { LocalContrastMaterial } from './LocalContrastMaterial'
 import { FlareGridMaterial } from './FlareGridMaterial'
 import { FlareSelectMaterial } from './FlareSelectMaterial'
 import { FlareGhostMaterial } from './FlareGhostMaterial'
+import { FlareWindowMaterial } from './FlareWindowMaterial'
 import { createSpriteQuad } from './flareSprites'
-import { contrastRadiusPixels, flareGridSize, type FlareGridSize } from './flareGrid'
+import { flareGridSize, type FlareGridSize } from './flareGrid'
 import { FLARE_GHOSTS } from './flareGhosts'
 
 const fragmentShader: string = `
@@ -143,6 +144,10 @@ export class LensFlareEffect extends Effect {
   readonly selectCentroidMaterial: FlareSelectMaterial
   readonly selectFluxPass: ShaderPass
   readonly selectCentroidPass: ShaderPass
+  // Окно источников: поток и сумма квадратов соседей — копии раздробленного диска
+  readonly sourceWindowTarget: WebGLRenderTarget
+  readonly windowMaterial: FlareWindowMaterial
+  readonly windowPass: ShaderPass
 
   // Спрайты призраков — четверть разрешения.
   // Поля верхнего уровня: Effect.dispose() обходит Object.keys(this)
@@ -221,21 +226,24 @@ export class LensFlareEffect extends Effect {
     this.sourceFluxTarget = createGridTarget('LensFlare.SourceFlux')
     this.sourceCentroidTarget = createGridTarget('LensFlare.SourceCentroid')
     this.gridFluxMaterial = new FlareGridMaterial('flux')
-    // Сырой поток для оценки размера источника — вход локального контраста
-    this.gridCentroidMaterial = new FlareGridMaterial('centroid', this.renderTarget2.texture)
+    this.gridCentroidMaterial = new FlareGridMaterial('centroid')
     this.gridFluxPass = new ShaderPass(this.gridFluxMaterial)
     this.gridCentroidPass = new ShaderPass(this.gridCentroidMaterial)
     this.selectFluxMaterial = new FlareSelectMaterial('flux', this.gridCentroidTarget.texture)
     this.selectCentroidMaterial = new FlareSelectMaterial('centroid', this.gridCentroidTarget.texture)
     this.selectFluxPass = new ShaderPass(this.selectFluxMaterial)
     this.selectCentroidPass = new ShaderPass(this.selectCentroidMaterial)
+    this.sourceWindowTarget = createGridTarget('LensFlare.SourceWindow')
+    this.windowMaterial = new FlareWindowMaterial()
+    this.windowPass = new ShaderPass(this.windowMaterial)
 
     this.ghostTarget = createHalfFloatTarget('LensFlare.Ghosts')
     this.ghostGeometry = createSpriteQuad()
     this.ghostMaterial = new FlareGhostMaterial(
       { ghostAmount: shared.ghostAmount, intensity: shared.intensity },
       this.sourceFluxTarget.texture,
-      this.sourceCentroidTarget.texture
+      this.sourceCentroidTarget.texture,
+      this.sourceWindowTarget.texture
     )
     const ghostMesh = new Mesh(this.ghostGeometry, this.ghostMaterial)
     ghostMesh.frustumCulled = false
@@ -270,7 +278,8 @@ export class LensFlareEffect extends Effect {
       this.gridFluxPass,
       this.gridCentroidPass,
       this.selectFluxPass,
-      this.selectCentroidPass
+      this.selectCentroidPass,
+      this.windowPass
     ]) {
       pass.initialize(renderer, alpha, frameBufferType)
     }
@@ -294,6 +303,7 @@ export class LensFlareEffect extends Effect {
     this.gridCentroidPass.render(renderer, this.renderTarget1, this.gridCentroidTarget)
     this.selectFluxPass.render(renderer, this.gridFluxTarget, this.sourceFluxTarget)
     this.selectCentroidPass.render(renderer, this.gridFluxTarget, this.sourceCentroidTarget)
+    this.windowPass.render(renderer, this.sourceFluxTarget, this.sourceWindowTarget)
 
     this.renderSprites(renderer, this.ghostScene, this.ghostTarget)
   }
@@ -337,16 +347,23 @@ export class LensFlareEffect extends Effect {
     // Сетка: строки фиксированы, столбцы — по аспекту кадра
     this.gridSize = flareGridSize(width, height)
     const { cols, rows } = this.gridSize
-    for (const target of [this.gridFluxTarget, this.gridCentroidTarget, this.sourceFluxTarget, this.sourceCentroidTarget]) {
+    for (const target of [
+      this.gridFluxTarget,
+      this.gridCentroidTarget,
+      this.sourceFluxTarget,
+      this.sourceCentroidTarget,
+      this.sourceWindowTarget
+    ]) {
       target.setSize(cols, rows)
     }
     this.gridFluxMaterial.setSize(width, height, cols, rows)
     this.gridCentroidMaterial.setSize(width, height, cols, rows)
     this.selectFluxMaterial.setGrid(cols, rows)
     this.selectCentroidMaterial.setGrid(cols, rows)
+    this.windowMaterial.setGrid(cols, rows)
 
     const aspect = width > 0 && height > 0 ? width / height : 1
-    this.ghostMaterial.setGrid(cols, rows, aspect, contrastRadiusPixels(height))
+    this.ghostMaterial.setGrid(cols, rows, aspect)
     this.ghostGeometry.instanceCount = cols * rows * FLARE_GHOSTS.length
   }
 

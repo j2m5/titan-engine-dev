@@ -5,11 +5,13 @@ import { createSpriteQuad } from '@/core/graphic/effects/lensflare/flareSprites'
 import { glslFloat } from '@/core/graphic/effects/lensflare/glslLiteral'
 import {
   FLARE_GHOSTS,
-  GHOST_FADE_PIXELS,
-  SOURCE_DIAMETER_GAIN,
+  GHOST_COPIES_FADE,
+  GHOST_FLUX_GAMMA,
+  GHOST_FLUX_KNEE_PIXELS,
   ghostEnergy,
   lumaNormalized
 } from '@/core/graphic/effects/lensflare/flareGhosts'
+import { FLUX_REFERENCE_HEIGHT } from '@/core/graphic/effects/lensflare/flareGrid'
 
 function floatArray(source: string, name: string): number[] {
   const match = source.match(new RegExp(`const float ${name}\\[\\d+\\] = float\\[\\d+\\]\\(([^)]*)\\);`))
@@ -24,7 +26,8 @@ function vec3Array(source: string, name: string): number[][] {
 }
 
 const shared = { ghostAmount: new Uniform(1), intensity: new Uniform(0.1) }
-const material = new FlareGhostMaterial(shared, new Texture(), new Texture())
+const sourceWindow = new Texture()
+const material = new FlareGhostMaterial(shared, new Texture(), new Texture(), sourceWindow)
 const vert = material.vertexShader
 const frag = material.fragmentShader
 
@@ -94,19 +97,26 @@ describe('FlareGhostMaterial: формулы', () => {
     expect(vert).toContain('vec2 halfSize = radius + abs(delta);')
   })
 
-  it('отсечка по экранной яркости с ghostAmount и intensity: пик профиля 1', () => {
-    expect(vert).toContain('float peak = flareLuma(color) * ghostAmount * intensity;')
+  it('отсечка по суммарной экранной яркости копий с ghostAmount и intensity: пик профиля 1', () => {
+    expect(vert).toContain('float peak = flareLuma(color) * ghostAmount * intensity * max(copies, 1.0);')
     expect(vert).toContain('if (flux.a <= 0.0 || peak < GHOST_CUTOFF)')
   })
 
-  it('крупный источник гасится: оценка диаметра и пороги — из TS', () => {
-    expect(vert).toContain(`#define GHOST_FADE_START ${glslFloat(GHOST_FADE_PIXELS.start)}`)
-    expect(vert).toContain(`#define GHOST_FADE_END ${glslFloat(GHOST_FADE_PIXELS.end)}`)
-    // Зеркала — sourceDiameterPixels и ghostSizeFade
-    expect(vert).toContain(`#define SOURCE_DIAMETER_GAIN ${glslFloat(SOURCE_DIAMETER_GAIN)}`)
-    expect(vert).toContain('float diameter = SOURCE_DIAMETER_GAIN * contrastPixels * sourceData.z / max(flux.a, 1e-30);')
-    expect(vert).toContain('float sizeFade = 1.0 - smoothstep(GHOST_FADE_START, GHOST_FADE_END, diameter);')
-    expect(vert).toContain('vec3 color = flux.rgb * GHOST_COLOR[ghost] * vignette * sizeFade;')
+  it('копии делят сжатый поток окна; колено, степень и пороги — из TS', () => {
+    expect(vert).toContain(`#define GHOST_FLUX_KNEE ${glslFloat(GHOST_FLUX_KNEE_PIXELS / FLUX_REFERENCE_HEIGHT ** 2)}`)
+    expect(vert).toContain(`#define GHOST_FLUX_GAMMA ${glslFloat(GHOST_FLUX_GAMMA)}`)
+    expect(vert).toContain(`#define GHOST_COPIES_FADE_START ${glslFloat(GHOST_COPIES_FADE.start)}`)
+    expect(vert).toContain(`#define GHOST_COPIES_FADE_END ${glslFloat(GHOST_COPIES_FADE.end)}`)
+    // Зеркала — fluxResponse, sourceGain, effectiveCopies и ghostCopiesFade
+    expect(vert).toContain('vec4 neighbourhood = texelFetch(sourceWindow, cell, 0);')
+    expect(vert).toContain('float total = max(neighbourhood.x, flux.a);')
+    expect(vert).toContain(
+      'float response = total <= GHOST_FLUX_KNEE ? total : GHOST_FLUX_KNEE * pow(total / GHOST_FLUX_KNEE, GHOST_FLUX_GAMMA);'
+    )
+    expect(vert).toContain('float gain = response / max(total, 1e-30);')
+    expect(vert).toContain('float copies = neighbourhood.x * neighbourhood.x / max(neighbourhood.y, 1e-30);')
+    expect(vert).toContain('float copiesFade = 1.0 - smoothstep(GHOST_COPIES_FADE_START, GHOST_COPIES_FADE_END, copies);')
+    expect(vert).toContain('vec3 color = flux.rgb * GHOST_COLOR[ghost] * vignette * gain * copiesFade;')
   })
 
   it('без зарезервированного слова centroid: в GLSL ES 3.00 это квалификатор, шейдер не соберётся', () => {
@@ -152,12 +162,15 @@ describe('FlareGhostMaterial: проводка', () => {
     expect(material.depthWrite).toBe(false)
   })
 
-  it('setGrid: размер сетки, аспект и радиус контраста в пикселях 1080p', () => {
-    material.setGrid(64, 36, 16 / 9, 16)
+  it('setGrid: размер сетки и аспект', () => {
+    material.setGrid(64, 36, 16 / 9)
 
     expect(material.uniforms.gridSize.value).toEqual(new Vector2(64, 36))
     expect(material.uniforms.aspect.value).toBeCloseTo(16 / 9, 12)
-    expect(material.uniforms.contrastPixels.value).toBe(16)
+  })
+
+  it('окно источников подключается снаружи', () => {
+    expect(material.uniforms.sourceWindow.value).toBe(sourceWindow)
   })
 
   it('ручки виньетирования и разноса каналов', () => {

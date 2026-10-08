@@ -1,28 +1,32 @@
 import { describe, expect, it } from 'vitest'
 import {
   FLARE_GHOSTS,
+  GHOST_COPIES_FADE,
   GHOST_CUTOFF,
-  GHOST_FADE_PIXELS,
+  GHOST_FLUX_GAMMA,
+  GHOST_FLUX_KNEE_PIXELS,
   GHOST_REFERENCE,
   GHOST_SQUEEZE,
-  SOURCE_DIAMETER_GAIN,
+  effectiveCopies,
+  fluxResponse,
   ghostChannelCenters,
+  ghostCopiesFade,
   ghostEnergy,
   ghostPeakOnScreen,
   ghostProfile,
-  ghostSizeFade,
   ghostVignette,
   lumaNormalized,
   profileIntegral,
-  sourceDiameterPixels,
+  sourceGain,
   type GhostProfile
 } from '@/core/graphic/effects/lensflare/flareGhosts'
 import {
   FLUX_REFERENCE_HEIGHT,
-  contrastRadiusPixels,
+  flareGridSize,
   gatherGrid,
   localContrast,
   selectMaxima,
+  sourceWindows,
   type FlareSource
 } from '@/core/graphic/effects/lensflare/flareGrid'
 
@@ -42,14 +46,11 @@ function diskTexels(width: number, height: number, cx: number, cy: number, diame
   return texels
 }
 
-/** Конвейер блика на CPU: локальный контраст → сетка с сырым потоком → отбор */
+/** Конвейер блика на CPU без предразмытия: локальный контраст → сетка → отбор */
 function diskSources(width: number, height: number, u: number, v: number, diameterPixels: number): FlareSource[] {
   const raw = diskTexels(width, height, u * width, v * height, (diameterPixels * height) / FLUX_REFERENCE_HEIGHT)
-  return selectMaxima(gatherGrid(localContrast(raw, width, height), width, height, raw))
+  return selectMaxima(gatherGrid(localContrast(raw, width, height), width, height))
 }
-
-const fadeOf = (source: FlareSource, height: number): number =>
-  ghostSizeFade(sourceDiameterPixels(source.flux, source.rawFlux, contrastRadiusPixels(height)))
 
 /** Буферы блика (половина кадра) на экранах 1080p и 4K */
 const BUFFERS = [
@@ -59,15 +60,13 @@ const BUFFERS = [
 
 /**
  * Замер GPU 2026-10-08: штатный конвейер (порог 1, Kawase SMALL, контраст)
- * на диске яркости 10 с потемнением 0.6, вход в полном разрешении кадра.
- * Оценка диаметра БЕЗ поправки, пиксели 1080p, по высоте буфера; ключ — диаметр
+ * на диске яркости 10 с потемнением 0.6, два положения. Эффективное число
+ * копий в окне источников [min, max] по высоте буфера; ключ — диаметр, px 1080p
  */
-const GPU_ESTIMATES: Record<number, Record<number, number>> = {
-  540: { 12: 25, 20: 30, 30: 40, 35: 46, 40: 52, 45: 58, 50: 65, 55: 71, 60: 78 },
-  1080: { 12: 17, 20: 26, 30: 39, 35: 47, 40: 54, 45: 62, 50: 70, 55: 78, 60: 86 }
+const GPU_COPIES: Record<number, Record<number, readonly [number, number]>> = {
+  540: { 142: [3, 4], 200: [5, 7], 280: [6.9, 8.9], 400: [9.9, 11.9], 550: [13.9, 15.8], 700: [14, 19.8], 900: [12.4, 25.6] },
+  1080: { 142: [4, 4], 200: [5, 6], 280: [6, 8.9], 400: [9.8, 10.9], 550: [16.8, 16.8], 700: [14.9, 20.9], 900: [11.7, 26.4] }
 }
-/** Тот же замер: наименьшая оценка источника раздробленного диска */
-const GPU_SPLIT_MIN_ESTIMATE = 129
 
 describe('призраки: таблица', () => {
   it('четыре семейства референса: острое пятно, купол, большой плоский диск, ореол', () => {
@@ -160,12 +159,22 @@ describe('призраки: хроматика сдвигом по оси', () =
 })
 
 describe('призраки: энергия', () => {
-  it('калибровка: звезда 12 px в центре даёт самый яркий призрак 0.05', () => {
+  const halo = FLARE_GHOSTS.find((g) => g.profile.kind === 'halo')!
+
+  it('калибровка — облик, принятый владельцем: Солнце диском 25–30 px (поток 1800) даёт ореол 0.0265', () => {
     const peaks = FLARE_GHOSTS.map((g) =>
       ghostPeakOnScreen(g, frameFlux(GHOST_REFERENCE.fluxPixels), 1, 1, GHOST_REFERENCE.intensity)
     )
 
-    expect(Math.max(...peaks)).toBeCloseTo(0.05, 10)
+    expect(GHOST_REFERENCE).toEqual({ fluxPixels: 1800, peak: 0.0265, intensity: 0.1 })
+    expect(Math.max(...peaks)).toBeCloseTo(GHOST_REFERENCE.peak, 10)
+  })
+
+  it('импостор (поток 500) — около 0.77 принятого облика, а не 0.28', () => {
+    const ratio = ghostPeakOnScreen(halo, frameFlux(500), 1, 1, 0.1) / ghostPeakOnScreen(halo, frameFlux(1800), 1, 1, 0.1)
+
+    expect(ratio).toBeCloseTo((500 / 1800) ** GHOST_FLUX_GAMMA, 10)
+    expect(ratio).toBeGreaterThan(0.75)
   })
 
   it('пики соотносятся как в референсе', () => {
@@ -177,8 +186,8 @@ describe('призраки: энергия', () => {
     for (const g of FLARE_GHOSTS) expect(ghostPeakOnScreen(g, frameFlux(3), 1, 1, 0.1)).toBeLessThan(GHOST_CUTOFF)
   })
 
-  it('звезда сцены рисует призраков', () => {
-    expect(FLARE_GHOSTS.some((g) => ghostPeakOnScreen(g, frameFlux(3400), 1, 1, 0.1) > GHOST_CUTOFF)).toBe(true)
+  it('импостор рисует все призраки над отсечкой', () => {
+    for (const g of FLARE_GHOSTS) expect(ghostPeakOnScreen(g, frameFlux(500), 1, 1, 0.1)).toBeGreaterThan(GHOST_CUTOFF)
   })
 })
 
@@ -201,77 +210,102 @@ describe('призраки: виньетирование', () => {
   })
 })
 
-describe('призраки: крупный источник гаснет', () => {
-  it('множитель: 1 до start, 0 от end, монотонный спад между', () => {
-    const { start, end } = GHOST_FADE_PIXELS
-    expect(ghostSizeFade(0)).toBe(1)
-    expect(ghostSizeFade(start)).toBe(1)
-    expect(ghostSizeFade(end)).toBe(0)
-    expect(ghostSizeFade(1000)).toBe(0)
+describe('призраки: сжатие потока', () => {
+  const knee = frameFlux(GHOST_FLUX_KNEE_PIXELS)
+
+  it('колено — поток импостора звезды (замер на Солнце 2026-10-08: ~500)', () => {
+    expect(GHOST_FLUX_KNEE_PIXELS).toBe(500)
+  })
+
+  it('ниже колена — линейно, выше — степень, на колене непрерывно', () => {
+    expect(fluxResponse(knee / 4)).toBeCloseTo(knee / 4, 15)
+    expect(fluxResponse(knee)).toBeCloseTo(knee, 15)
+    expect(fluxResponse(knee * 32)).toBeCloseTo(knee * 32 ** GHOST_FLUX_GAMMA, 15)
+    let previous = 0
+    for (let k = 0.01; k < 100; k *= 1.3) {
+      const value = fluxResponse(knee * k)
+      expect(value).toBeGreaterThan(previous)
+      previous = value
+    }
+  })
+
+  it('поток кольца вдвое меньше на 4K, чем на 1080p: после сжатия разница ~15 %', () => {
+    expect(fluxResponse(knee * 8) / fluxResponse(knee * 4)).toBeCloseTo(2 ** GHOST_FLUX_GAMMA, 12)
+    expect(2 ** GHOST_FLUX_GAMMA).toBeLessThan(1.16)
+  })
+})
+
+describe('призраки: копии раздробленного диска', () => {
+  it('копии делят сжатый общий поток окна: вместе — как один источник', () => {
+    const copies = [700, 900, 800, 600].map(frameFlux)
+    const total = copies.reduce((a, b) => a + b, 0)
+    const together = copies.reduce((sum, flux) => sum + flux * sourceGain(total), 0)
+
+    expect(together).toBeCloseTo(fluxResponse(total), 15)
+  })
+
+  it('одиночный источник: коэффициент — сжатие его собственного потока', () => {
+    for (const pixels of [3, 500, 1800, 20000]) {
+      const flux = frameFlux(pixels)
+      expect(flux * sourceGain(flux)).toBeCloseTo(fluxResponse(flux), 15)
+    }
+  })
+
+  it('эффективное число копий: N равных — N, тусклые фоновые звёзды почти не весят', () => {
+    expect(effectiveCopies(4, 4)).toBe(4)
+    const fluxes = [1000, 1000, 1000, 2, 1, 3]
+    const sum = fluxes.reduce((a, b) => a + b, 0)
+    const squares = fluxes.reduce((a, b) => a + b * b, 0)
+    expect(effectiveCopies(sum, squares)).toBeCloseTo(3, 1)
+  })
+
+  it('гашение по копиям: до start — 1, от end — 0, монотонно', () => {
+    const { start, end } = GHOST_COPIES_FADE
+    expect(ghostCopiesFade(1)).toBe(1)
+    expect(ghostCopiesFade(start)).toBe(1)
+    expect(ghostCopiesFade(end)).toBe(0)
     let previous = 1
-    for (let d = start; d <= end; d += 0.5) {
-      const fade = ghostSizeFade(d)
-      expect(fade).toBeLessThanOrEqual(previous)
-      previous = fade
+    for (let n = start; n <= end; n += 0.25) {
+      expect(ghostCopiesFade(n)).toBeLessThanOrEqual(previous)
+      previous = ghostCopiesFade(n)
     }
   })
 
-  it('поправка на предразмытие: замер GPU в зоне гашения ложится в ±10 % диаметра', () => {
-    for (const [height, estimates] of Object.entries(GPU_ESTIMATES)) {
-      for (const diameter of [30, 35, 40, 45, 50, 55]) {
-        const ratio = (SOURCE_DIAMETER_GAIN * estimates[diameter]) / diameter
-
-        expect(ratio, `${height} строк, ${diameter} px`).toBeGreaterThan(0.9)
-        expect(ratio, `${height} строк, ${diameter} px`).toBeLessThan(1.1)
-      }
+  it('замер GPU: диски до 200 px — призраки полные, от 550 px — погашены у всех копий', () => {
+    for (const table of Object.values(GPU_COPIES)) {
+      for (const diameter of [142, 200]) expect(ghostCopiesFade(table[diameter][1])).toBe(1)
+      for (const diameter of [550, 700, 900]) expect(ghostCopiesFade(table[diameter][0])).toBe(0)
     }
   })
 
-  it('замер GPU: звезда 12–30 px — призраки полные, диск от 55 px — погашены', () => {
-    for (const estimates of Object.values(GPU_ESTIMATES)) {
-      for (const diameter of [12, 20, 30]) expect(ghostSizeFade(SOURCE_DIAMETER_GAIN * estimates[diameter])).toBe(1)
-      for (const diameter of [55, 60]) expect(ghostSizeFade(SOURCE_DIAMETER_GAIN * estimates[diameter])).toBe(0)
-    }
-  })
-
-  it('замер GPU: раздробленный диск оценивается вдвое дальше конца гашения', () => {
-    // Наименьшая оценка источника раздробленного диска (80–200 px, 4 положения)
-    expect(SOURCE_DIAMETER_GAIN * GPU_SPLIT_MIN_ESTIMATE).toBeGreaterThan(1.9 * GHOST_FADE_PIXELS.end)
-  })
-
-  // CPU-зеркало без предразмытия занижает оценку относительно GPU: проверки
-  // копий ниже строже реального конвейера
-  it('компактная звезда и диск 30 px — призраки полные на обоих экранах', () => {
-    for (const [width, height] of BUFFERS) {
-      for (const diameter of [6, 12, 30]) {
-        const sources = diskSources(width, height, 0.4, 0.55, diameter)
-
-        expect(sources, `${height} строк, ${diameter} px`).toHaveLength(1)
-        expect(fadeOf(sources[0], height), `${height} строк, ${diameter} px`).toBeGreaterThan(0.99)
-      }
-    }
-  })
-
-  it('кадр владельца 2026-10-08: диск 142 px дробился на копии — погашены все', () => {
+  it('кадр владельца 2026-10-08 (диск 142 px): призраки есть и вместе не ярче одного источника', () => {
     const sources = diskSources(2100, 1080, 0.26, 0.582, 142)
+    const windows = sourceWindows(sources, flareGridSize(2100, 1080))
+    const total = sources.reduce((sum, s) => sum + s.flux, 0)
+    const together = sources.reduce((sum, s, k) => sum + s.flux * sourceGain(windows[k].flux), 0)
 
     expect(sources.length).toBeGreaterThanOrEqual(2)
-    for (const source of sources) expect(fadeOf(source, 1080)).toBe(0)
+    for (const w of windows) expect(ghostCopiesFade(effectiveCopies(w.flux, w.fluxSquared))).toBe(1)
+    expect(together).toBeCloseTo(fluxResponse(total), 12)
   })
 
-  it('копий не видно: если отбор дробит диск, гаснут все его источники', () => {
+  it('компактная звезда: один источник, окно — он сам', () => {
     for (const [width, height] of BUFFERS) {
-      for (const diameter of [40, 50, 60, 70, 80, 100, 140, 200, 300]) {
-        for (const [u, v] of [
-          [0.4, 0.55],
-          [0.413, 0.571],
-          [0.427, 0.538]
-        ]) {
-          const sources = diskSources(width, height, u, v, diameter)
-          if (sources.length < 2) continue
-          for (const source of sources) expect(fadeOf(source, height), `${height} строк, ${diameter} px, (${u}, ${v})`).toBe(0)
-        }
-      }
+      const sources = diskSources(width, height, 0.4, 0.55, 12)
+      const [w] = sourceWindows(sources, flareGridSize(width, height))
+
+      expect(sources).toHaveLength(1)
+      expect(effectiveCopies(w.flux, w.fluxSquared)).toBeCloseTo(1, 12)
+    }
+  })
+
+  it('CPU-конвейер: диск 700 px погашен у всех копий на обоих экранах', () => {
+    for (const [width, height] of BUFFERS) {
+      const sources = diskSources(width, height, 0.45, 0.52, 700)
+      const windows = sourceWindows(sources, flareGridSize(width, height))
+
+      expect(sources.length).toBeGreaterThan(10)
+      for (const w of windows) expect(ghostCopiesFade(effectiveCopies(w.flux, w.fluxSquared)), `${height} строк`).toBe(0)
     }
   })
 })

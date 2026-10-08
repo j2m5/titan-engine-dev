@@ -24,7 +24,6 @@ const fragmentShader: string = `
     bool isMax = self > 0.0;
     vec4 sumFlux = vec4(0.0);
     vec2 moment = vec2(0.0);
-    float rawSum = 0.0;
 
     for (int dy = -1; dy <= 1; dy++) {
       for (int dx = -1; dx <= 1; dx++) {
@@ -36,7 +35,6 @@ const fragmentShader: string = `
         if ((dx != 0 || dy != 0) && (nf.a > self || (nf.a == self && nIndex < selfIndex))) isMax = false;
         sumFlux += nf;
         moment += nf.a * nc.xy;
-        rawSum += nc.z;
       }
     }
 
@@ -46,14 +44,14 @@ const fragmentShader: string = `
     }
 
     #ifdef OUTPUT_CENTROID
-      gl_FragColor = vec4(moment / sumFlux.a, rawSum, 1.0);
+      gl_FragColor = vec4(moment / sumFlux.a, 0.0, 1.0);
     #else
       gl_FragColor = sumFlux;
     #endif
   }
 `
 
-/** Проход отбора: поток блока (как у сбора) или его центр и сырой поток; невыбранная ячейка — нули */
+/** Проход отбора: поток блока (как у сбора) или его центр; невыбранная ячейка — нули */
 export class FlareSelectMaterial extends ShaderMaterial {
   constructor(output: 'flux' | 'centroid', centroidBuffer: Texture) {
     super({

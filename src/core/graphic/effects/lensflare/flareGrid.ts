@@ -16,11 +16,6 @@ export const MAX_CELL_TEXELS = 64
 /** Радиус окрестности локального контраста, тексели его буфера (LocalContrastMaterial) */
 export const LOCAL_CONTRAST_RADIUS = 8
 
-/** Радиус локального контраста в пикселях 1080p: зависит от высоты буфера */
-export function contrastRadiusPixels(sourceHeight: number): number {
-  return (LOCAL_CONTRAST_RADIUS * FLUX_REFERENCE_HEIGHT) / Math.max(sourceHeight, 1)
-}
-
 /**
  * Зеркало LocalContrastMaterial по яркости: тексель минус среднее четырёх
  * соседей на LOCAL_CONTRAST_RADIUS, не меньше нуля; за краем буфера —
@@ -70,30 +65,21 @@ export interface GatheredGrid {
   size: FlareGridSize
   /** Поток ячейки (по яркости), доли высоты кадра² */
   flux: Float64Array
-  /** Поток ячейки во входе локального контраста, доли высоты кадра² */
-  rawFlux: Float64Array
   /** Центр яркости ячейки в координатах кадра: пары x, y */
   centroid: Float64Array
 }
 
 /**
  * Зеркало сбора: texels — яркость текселей буфера построчно снизу вверх (как
- * texelFetch), raw — то же для входа локального контраста. Границы ячейки —
- * те же, что в шейдере: [floor(c·w), floor((c+1)·w)).
+ * texelFetch). Границы ячейки — те же, что в шейдере: [floor(c·w), floor((c+1)·w)).
  */
-export function gatherGrid(
-  texels: ArrayLike<number>,
-  width: number,
-  height: number,
-  raw: ArrayLike<number> = texels
-): GatheredGrid {
+export function gatherGrid(texels: ArrayLike<number>, width: number, height: number): GatheredGrid {
   const size = flareGridSize(width, height)
   const aspect = width / height
   const areaPerTexel = 1 / (height * height)
   const cellWidth = width / size.cols
   const cellHeight = height / size.rows
   const flux = new Float64Array(size.cols * size.rows)
-  const rawFlux = new Float64Array(size.cols * size.rows)
   const centroid = new Float64Array(size.cols * size.rows * 2)
 
   for (let cy = 0; cy < size.rows; cy++) {
@@ -103,7 +89,6 @@ export function gatherGrid(
       const y0 = Math.floor(cy * cellHeight)
       const y1 = Math.min(height, Math.floor((cy + 1) * cellHeight))
       let sum = 0
-      let rawSum = 0
       let mx = 0
       let my = 0
 
@@ -112,7 +97,6 @@ export function gatherGrid(
           const l = texels[y * width + x]
           const [fx, fy] = frameCoord((x + 0.5) / width, (y + 0.5) / height, aspect)
           sum += l
-          rawSum += raw[y * width + x]
           mx += l * fx
           my += l * fy
         }
@@ -120,21 +104,18 @@ export function gatherGrid(
 
       const i = cy * size.cols + cx
       flux[i] = sum * areaPerTexel
-      rawFlux[i] = rawSum * areaPerTexel
       centroid[2 * i] = sum > 0 ? mx / sum : 0
       centroid[2 * i + 1] = sum > 0 ? my / sum : 0
     }
   }
 
-  return { size, flux, rawFlux, centroid }
+  return { size, flux, centroid }
 }
 
 export interface FlareSource {
   cell: number
   /** Поток блока 3×3, доли высоты кадра² */
   flux: number
-  /** Поток блока во входе локального контраста: знаменатель оценки размера источника */
-  rawFlux: number
   /** Центр блока, взвешенный потоком, в координатах кадра */
   centroid: [number, number]
 }
@@ -156,7 +137,6 @@ export function selectMaxima(grid: GatheredGrid): FlareSource[] {
 
       let isMax = true
       let sum = 0
-      let rawSum = 0
       let mx = 0
       let my = 0
 
@@ -170,15 +150,46 @@ export function selectMaxima(grid: GatheredGrid): FlareSource[] {
           const neighbour = grid.flux[n]
           if ((dx !== 0 || dy !== 0) && (neighbour > self || (neighbour === self && n < index))) isMax = false
           sum += neighbour
-          rawSum += grid.rawFlux[n]
           mx += neighbour * grid.centroid[2 * n]
           my += neighbour * grid.centroid[2 * n + 1]
         }
       }
 
-      if (isMax) sources.push({ cell: index, flux: sum, rawFlux: rawSum, centroid: [mx / sum, my / sum] })
+      if (isMax) sources.push({ cell: index, flux: sum, centroid: [mx / sum, my / sum] })
     }
   }
 
   return sources
+}
+
+/**
+ * Полуширина окна источников в ячейках (±600 px 1080p). Копии одного
+ * раздробленного диска лежат на кольце ~0.42 его диаметра: окно видит все
+ * копии диска до ~700 px.
+ */
+export const SOURCE_WINDOW_CELLS = 20
+
+export interface SourceWindow {
+  /** Сумма потоков выбранных источников окна, доли высоты кадра² */
+  flux: number
+  /** Сумма их квадратов: (Σ)² / Σ² — эффективное число копий */
+  fluxSquared: number
+}
+
+/** Зеркало FlareWindowMaterial: окно ±SOURCE_WINDOW_CELLS ячеек вокруг каждого выбранного источника */
+export function sourceWindows(sources: readonly FlareSource[], size: FlareGridSize): SourceWindow[] {
+  const at = (source: FlareSource): [number, number] => [source.cell % size.cols, Math.floor(source.cell / size.cols)]
+
+  return sources.map((source) => {
+    const [x, y] = at(source)
+    let flux = 0
+    let fluxSquared = 0
+    for (const other of sources) {
+      const [ox, oy] = at(other)
+      if (Math.abs(ox - x) > SOURCE_WINDOW_CELLS || Math.abs(oy - y) > SOURCE_WINDOW_CELLS) continue
+      flux += other.flux
+      fluxSquared += other.flux * other.flux
+    }
+    return { flux, fluxSquared }
+  })
 }

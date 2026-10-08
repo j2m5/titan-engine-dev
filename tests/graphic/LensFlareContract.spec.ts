@@ -3,7 +3,7 @@ import type { Mock } from 'vitest'
 import { BLOOM_OPTIONS, createEffectPasses } from '@/core/graphic/Postprocessing'
 import { LensFlareEffect, lensFlareEffectOptionsDefaults } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { FLARE_GHOSTS } from '@/core/graphic/effects/lensflare/flareGhosts'
-import { LOCAL_CONTRAST_RADIUS, contrastRadiusPixels } from '@/core/graphic/effects/lensflare/flareGrid'
+import { LOCAL_CONTRAST_RADIUS } from '@/core/graphic/effects/lensflare/flareGrid'
 import { glslFloat } from '@/core/graphic/effects/lensflare/glslLiteral'
 import { lensFlare } from '@/config/lensFlare'
 
@@ -34,6 +34,7 @@ const writeSequence = (effect: LensFlareEffect, renderer: { setRenderTarget: Moc
     effect.gridCentroidTarget,
     effect.sourceFluxTarget,
     effect.sourceCentroidTarget,
+    effect.sourceWindowTarget,
     effect.ghostTarget
   ]
   return renderer.setRenderTarget.mock.calls.map(([target]) => target).filter((target) => own.includes(target))
@@ -148,7 +149,8 @@ describe('LensFlareEffect: порядок проходов и адреса за�
       effect.gridCentroidTarget, // 7. сбор центров
       effect.sourceFluxTarget, // 8. отбор: поток
       effect.sourceCentroidTarget, // 9. отбор: центр
-      effect.ghostTarget // 10. призраки
+      effect.sourceWindowTarget, // 10. окно источников
+      effect.ghostTarget // 11. призраки
     ])
   })
 
@@ -158,11 +160,17 @@ describe('LensFlareEffect: порядок проходов и адреса за�
 
     expect(effect.gridFluxMaterial.uniforms.inputBuffer.value).toBe(effect.renderTarget1.texture)
     expect(effect.gridCentroidMaterial.uniforms.inputBuffer.value).toBe(effect.renderTarget1.texture)
-    // Сырой поток — вход локального контраста: предразмытие в renderTarget2
-    expect(effect.gridCentroidMaterial.uniforms.rawBuffer.value).toBe(effect.renderTarget2.texture)
     expect(effect.selectFluxMaterial.uniforms.inputBuffer.value).toBe(effect.gridFluxTarget.texture)
     expect(effect.selectFluxMaterial.uniforms.centroidBuffer.value).toBe(effect.gridCentroidTarget.texture)
     expect(effect.selectCentroidMaterial.uniforms.centroidBuffer.value).toBe(effect.gridCentroidTarget.texture)
+  })
+
+  it('окно читает выбранные источники, призраки — окно', () => {
+    const effect = new LensFlareEffect()
+    runUpdate(effect)
+
+    expect(effect.windowMaterial.uniforms.inputBuffer.value).toBe(effect.sourceFluxTarget.texture)
+    expect(effect.ghostMaterial.uniforms.sourceWindow.value).toBe(effect.sourceWindowTarget.texture)
   })
 
   it('призраки пишутся в очищенный таргет', () => {
@@ -205,8 +213,8 @@ describe('LensFlareEffect: ресайз', () => {
     expect(effect.ghostGeometry.instanceCount).toBe(64 * 36 * FLARE_GHOSTS.length)
     expect(effect.ghostMaterial.uniforms.aspect.value).toBeCloseTo(16 / 9, 12)
     expect(effect.gridFluxMaterial.uniforms.areaPerTexel.value).toBeCloseTo(1 / 540 ** 2, 15)
-    // Буфер 540 строк: радиус контраста 8 текселей = 16 px 1080p
-    expect(effect.ghostMaterial.uniforms.contrastPixels.value).toBe(contrastRadiusPixels(540))
+    expect(effect.sourceWindowTarget.width).toBe(64)
+    expect(effect.windowMaterial.uniforms.gridSize.value.x).toBe(64)
   })
 
   it('ресайз: сетка и инстансы следуют за аспектом без пересборки', () => {
@@ -386,7 +394,8 @@ describe('LensFlareEffect: инициализация проходов', () => {
       effect.gridFluxMaterial,
       effect.gridCentroidMaterial,
       effect.selectFluxMaterial,
-      effect.selectCentroidMaterial
+      effect.selectCentroidMaterial,
+      effect.windowMaterial
     ]) {
       expect(material.defines.FRAMEBUFFER_PRECISION_HIGH).toBe('1')
     }
