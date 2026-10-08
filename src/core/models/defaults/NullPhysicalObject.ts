@@ -9,7 +9,6 @@ class NullPhysicalObject implements IPhysicalObject {
   public mass: number
   public radius: number
   public axialTilt: number
-  public orbitalPeriod: number
   public rotationPeriod: number
   public temperature: number
 
@@ -20,7 +19,6 @@ class NullPhysicalObject implements IPhysicalObject {
     this.mass = MoonMass / 10
     this.radius = 1000
     this.axialTilt = 0
-    this.orbitalPeriod = 10
     this.rotationPeriod = 10
     this.temperature = 0
   }

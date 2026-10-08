@@ -622,7 +622,7 @@ const REQUIRED_NUMBERS = {
     'period'
   ],
   rotationObjects: ['meridianAngle', 'ascendingNode', 'inclination', 'period'],
-  physicalObjects: ['mass', 'radius', 'axialTilt', 'orbitalPeriod', 'rotationPeriod', 'temperature'],
+  physicalObjects: ['mass', 'radius', 'axialTilt', 'rotationPeriod', 'temperature'],
   placements: ['x', 'y', 'z']
 } as const satisfies { [K in keyof DatabaseSnapshot]?: ReadonlyArray<keyof DatabaseSnapshot[K][number]> }
 
@@ -907,12 +907,12 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
         message: `physicalObjects#${phys.id} (actor ${phys.actorId}) has non-positive radius: ${phys.radius}`
       })
     }
-    if (phys.orbitalPeriod < 0 || phys.rotationPeriod < 0) {
+    if (phys.rotationPeriod < 0) {
       issues.push({
         level: 'warning',
         collection: 'physicalObjects',
         entity: phys.id,
-        message: `physicalObjects#${phys.id} (actor ${phys.actorId}) has negative period`
+        message: `physicalObjects#${phys.id} (actor ${phys.actorId}) has negative rotation period`
       })
     }
   }

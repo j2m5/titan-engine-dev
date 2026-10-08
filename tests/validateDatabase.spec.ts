@@ -113,7 +113,6 @@ describe('validateDatabase — якорь атмосферы к планете',
       mass: 1,
       radius: planetRadius,
       axialTilt: 0,
-      orbitalPeriod: 1,
       rotationPeriod: 1,
       temperature: 0
     })
@@ -340,7 +339,6 @@ describe('validateDatabase — физика', () => {
       mass: 0,
       radius: 1,
       axialTilt: 0,
-      orbitalPeriod: 1,
       rotationPeriod: 1,
       temperature: 0
     })
@@ -461,7 +459,6 @@ describe('validateDatabase — предупреждения о полноте', 
       mass: 1,
       radius: 1,
       axialTilt: 0,
-      orbitalPeriod: 0,
       rotationPeriod: 1,
       temperature: 5000
     })
@@ -808,7 +805,6 @@ describe('validateDatabase — обязательные числа', () => {
       mass: 1,
       radius: null as unknown as number,
       axialTilt: 0,
-      orbitalPeriod: 1,
       rotationPeriod: 1,
       temperature: 0
     })
