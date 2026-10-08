@@ -476,7 +476,23 @@ class AsteroidRingSystem extends Group {
 
     // `IRenderingObject.data` — это `Record<string, unknown>`, форма утверждается локально
     const renderData = model.renderingObject?.getAttribute('data') as IRingRenderingObject | undefined
-    this.config = {
+    this.config = AsteroidRingSystem.resolveConfig(model, configOverrides)
+    this.moonlets = resolveRingMoonlets(renderData, model.getAttribute('name', '') as string)
+    this.ringGapsTu = ringGapsOf(this.moonlets, toThreeJSUnits)
+
+    this.__setup()
+  }
+
+  /**
+   * Итоговый конфиг системы: DEFAULT_CONFIG < данные модели < configOverrides.
+   * Вынесен из конструктора, чтобы прогрев (prewarmArchetypes) считал ключи
+   * библиотеки архетипов из того же конфига, что и сама система.
+   */
+  public static resolveConfig(model: Actor, configOverrides: Partial<AsteroidRingConfig> = {}): AsteroidRingConfig {
+    // `IRenderingObject.data` — это `Record<string, unknown>`, форма утверждается локально
+    const renderData = model.renderingObject?.getAttribute('data') as IRingRenderingObject | undefined
+
+    return {
       ...DEFAULT_CONFIG,
       innerRadiusKm: renderData?.innerRadius ?? 70000,
       outerRadiusKm: renderData?.outerRadius ?? 140000,
@@ -488,10 +504,21 @@ class AsteroidRingSystem extends Group {
       ...AsteroidRingSystem.__modelVisualOverrides(renderData),
       ...configOverrides
     } as AsteroidRingConfig
-    this.moonlets = resolveRingMoonlets(renderData, model.getAttribute('name', '') as string)
-    this.ringGapsTu = ringGapsOf(this.moonlets, toThreeJSUnits)
+  }
 
-    this.__setup()
+  /**
+   * Запечь архетипы обоих ярусов (L0 и Near) в модульный кэш библиотеки, не
+   * строя систему. Пояс строит стример лениво, на первом подлёте, и синхронный
+   * бейк форм (десятки–сотни мс на профиль) приходился ровно на кадр подлёта.
+   * Прогрев при сборке сцены переносит его под экран загрузки; стример затем
+   * берёт те же геометрии из кэша — ключи из того же resolveConfig.
+   */
+  public static prewarmArchetypes(model: Actor, configOverrides: Partial<AsteroidRingConfig> = {}): void {
+    const cfg = AsteroidRingSystem.resolveConfig(model, configOverrides)
+    const asteroidSize = toThreeJSUnits(cfg.asteroidSizeKm)
+
+    getArchetypeGeometries(cfg.profile, cfg.archetypeCount, cfg.asteroidShapeDetail, asteroidSize)
+    getArchetypeGeometries(cfg.profile, cfg.archetypeCount, cfg.asteroidShapeNearDetail, asteroidSize)
   }
 
   /**
@@ -899,9 +926,14 @@ class AsteroidRingSystem extends Group {
     const arm = resourceStorage.getTexture(`asteroids/${set}_arm_2k.jpg`)
     if (!diff || !nor || !arm) return
 
-    // Текстуры уже загружены на GPU (initTexture при прелоаде) — смена wrap
-    // без needsUpdate не переустановит sampler, трипланар получит ClampToEdge
+    // Текстуры уже залиты на GPU (initTexture при прелоаде) — с Repeat из данных
+    // ресурса (resources.ts). Смена wrap после заливки требует needsUpdate, а
+    // это полная перезаливка трёх 2K-текстур с мипами в кадре подлёта —
+    // поэтому только если данные Repeat не задали: без него трипланар
+    // получил бы ClampToEdge
     for (const map of [diff, nor, arm]) {
+      if (map.wrapS === RepeatWrapping && map.wrapT === RepeatWrapping) continue
+
       map.wrapS = map.wrapT = RepeatWrapping
       map.needsUpdate = true
     }
