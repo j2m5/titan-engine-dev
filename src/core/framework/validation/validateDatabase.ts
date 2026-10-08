@@ -602,6 +602,51 @@ function checkAsteroidBeltShapes(
   }
 }
 
+/**
+ * Обязательные числовые поля строк (необязательные — direction, lagrange — в
+ * списке нет). Форма редактора пишет пустое поле как null, мусор — как NaN, а
+ * генератор сериализует любое не-конечное число в null: такая строка даёт
+ * NaN-позиции и вращение (тело пропадает со сцены) и ломает тип
+ * сгенерированного файла. Поэтому ошибка, а не предупреждение — сохранение
+ * блокируется.
+ */
+const REQUIRED_NUMBERS = {
+  orbits: [
+    'semiMajorAxis',
+    'eccentricity',
+    'inclination',
+    'argOfPeriapsis',
+    'ascendingNode',
+    'meanAnomalyAtEpoch',
+    'epoch',
+    'period'
+  ],
+  rotationObjects: ['meridianAngle', 'ascendingNode', 'inclination', 'period'],
+  physicalObjects: ['mass', 'radius', 'axialTilt', 'orbitalPeriod', 'rotationPeriod', 'temperature'],
+  placements: ['x', 'y', 'z']
+} as const satisfies { [K in keyof DatabaseSnapshot]?: ReadonlyArray<keyof DatabaseSnapshot[K][number]> }
+
+function checkRequiredNumbers(db: DatabaseSnapshot, issues: ValidationIssue[]): void {
+  for (const collection of Object.keys(REQUIRED_NUMBERS) as Array<keyof typeof REQUIRED_NUMBERS>) {
+    const fields: readonly string[] = REQUIRED_NUMBERS[collection]
+
+    for (const row of db[collection] as unknown as Array<Record<string, unknown> & { id: number }>) {
+      for (const field of fields) {
+        const value = row[field]
+
+        if (typeof value === 'number' && Number.isFinite(value)) continue
+
+        issues.push({
+          level: 'error',
+          collection,
+          entity: row.id,
+          message: `${collection}#${row.id}.${field} must be a finite number, got ${String(value)}`
+        })
+      }
+    }
+  }
+}
+
 function buildIdSet<T extends { id: number }>(rows: T[]): Set<number> {
   const set = new Set<number>()
   for (const row of rows) set.add(row.id)
@@ -840,6 +885,9 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
   checkHasOneCardinality(db.physicalObjects, 'physicalObjects', issues)
   checkHasOneCardinality(db.renderingObjects, 'renderingObjects', issues)
   checkHasOneCardinality(db.placements, 'placements', issues)
+
+  // --- 6a. Обязательные числа: null/NaN/Infinity — ошибка (см. REQUIRED_NUMBERS) ---
+  checkRequiredNumbers(db, issues)
 
   // --- 6b. Физически невозможные значения (warning) ---
   for (const phys of db.physicalObjects) {

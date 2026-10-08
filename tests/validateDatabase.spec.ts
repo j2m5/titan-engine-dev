@@ -754,6 +754,75 @@ describe('validateDatabase — лунки колец', () => {
   })
 })
 
+describe('validateDatabase — обязательные числа', () => {
+  // Форма редактора пишет пустое поле как null, мусор — как NaN; генератор
+  // сериализует не-конечное в null — тело с такой орбитой пропадает со сцены
+  const orbit = (patch: Record<string, unknown> = {}) => ({
+    id: 1,
+    actorId: 11,
+    semiMajorAxis: 1,
+    eccentricity: 0,
+    inclination: 0,
+    argOfPeriapsis: 0,
+    ascendingNode: 0,
+    meanAnomalyAtEpoch: 0,
+    epoch: 2451545,
+    period: 0,
+    ...patch
+  })
+
+  function withOrbit(patch: Record<string, unknown>): DatabaseSnapshot {
+    const db = baseSnapshot()
+    db.actors.push(planet(11, 10))
+    db.orbits.push(orbit(patch) as unknown as DatabaseSnapshot['orbits'][number])
+    return db
+  }
+
+  it.each([
+    ['null (пустое поле формы)', null],
+    ['NaN (мусор в поле)', NaN],
+    ['Infinity', Infinity],
+    ['строка', '1']
+  ])('%s в обязательном поле орбиты — ошибка, сохранение блокируется', (_name: string, value: unknown) => {
+    const result = validateDatabase(withOrbit({ semiMajorAxis: value }))
+
+    expect(result.ok).toBe(false)
+    expect(
+      result.errors.some((e) => e.collection === 'orbits' && /semiMajorAxis must be a finite number/.test(e.message))
+    ).toBe(true)
+  })
+
+  it('конечные числа во всех обязательных полях — ошибок формы чисел нет', () => {
+    const result = validateDatabase(withOrbit({}))
+
+    expect(result.errors.filter((e) => /must be a finite number/.test(e.message))).toHaveLength(0)
+  })
+
+  it('ловит null в физобъекте, вращении и размещении', () => {
+    const db = baseSnapshot()
+    db.actors.push(planet(11, 10))
+    db.physicalObjects.push({
+      id: 1,
+      actorId: 11,
+      parentId: null,
+      mass: 1,
+      radius: null as unknown as number,
+      axialTilt: 0,
+      orbitalPeriod: 1,
+      rotationPeriod: 1,
+      temperature: 0
+    })
+    db.rotationObjects.push({ id: 1, actorId: 11, meridianAngle: 0, ascendingNode: 0, inclination: NaN, period: 1 })
+    db.placements.push({ id: 1, actorId: 10, x: 0, y: null as unknown as number, z: 0 })
+
+    const messages = validateDatabase(db).errors.map((e) => e.message)
+
+    expect(messages).toContain('physicalObjects#1.radius must be a finite number, got null')
+    expect(messages).toContain('rotationObjects#1.inclination must be a finite number, got NaN')
+    expect(messages).toContain('placements#1.y must be a finite number, got null')
+  })
+})
+
 describe('validateDatabase — реальный database (базлайн)', () => {
   it('текущие данные приложения валидны (0 errors)', async () => {
     const { Scenarios } = await import('@/config/scenarios')

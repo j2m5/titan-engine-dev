@@ -63,6 +63,12 @@ export function useEditorDraft(database: Map<string, unknown[]>, scenarios: Scen
   const [draft, setDraft] = useState<DatabaseSnapshot>(() => snapshotFromDatabase(database))
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState('')
+  /**
+   * Сохранение в полёте. Флаг состояния для этого не годится: второй клик до
+   * перерисовки видит в замыкании ещё false — и второй набор файлов уходил
+   * параллельно первому
+   */
+  const inFlight = useRef(false)
 
   /**
    * Монотонные счётчики per-table
@@ -111,6 +117,9 @@ export function useEditorDraft(database: Map<string, unknown[]>, scenarios: Scen
       return
     }
 
+    if (inFlight.current) return
+
+    inFlight.current = true
     setSaving(true)
     setSaveStatus('Generating & writing…')
 
@@ -121,6 +130,7 @@ export function useEditorDraft(database: Map<string, unknown[]>, scenarios: Scen
     } catch (error) {
       setSaveStatus(`Failed: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
+      inFlight.current = false
       setSaving(false)
     }
   }, [draft, scenarios, validation])

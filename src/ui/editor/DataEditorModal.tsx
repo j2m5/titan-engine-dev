@@ -49,7 +49,9 @@ const DataEditorModal: FC<Closable & { visible: boolean }> = ({ visible, onClose
           ? saveStatus || `${validation.warnings.length} warning(s)`
           : `${validation.errors.length} error(s) — cannot save`}
       </span>
-      <TitanButton onClick={save}>{saving ? 'Saving…' : 'Save to generated'}</TitanButton>
+      <TitanButton onClick={save} disabled={saving}>
+        {saving ? 'Saving…' : 'Save to generated'}
+      </TitanButton>
       <TitanButton onClick={onClose}>Close</TitanButton>
     </TitanFlex>
   )
