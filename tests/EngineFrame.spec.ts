@@ -91,6 +91,8 @@ function makeEngine() {
 
   return {
     engine,
+    renderer,
+    postprocessing,
     sceneObserver,
     sceneManager,
     cameraController,
@@ -158,5 +160,47 @@ describe('Engine: подключение периодического перес
     engine.start()
 
     expect(astroControls.setSurface).toHaveBeenCalledWith(surface)
+  })
+})
+
+describe('Engine: сбой кадра не останавливает цикл', () => {
+  it('исключение посреди кадра не выходит в цикл three, следующий кадр запрошен и рисуется', () => {
+    const { engine, renderer, sceneManager, postprocessing } = makeEngine()
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    vi.mocked(sceneManager.update).mockImplementationOnce(() => {
+      throw new Error('onClosestChange')
+    })
+
+    expect(() => engine.start()).not.toThrow()
+    expect(postprocessing.render).not.toHaveBeenCalled()
+
+    const frame = vi.mocked(renderer.setAnimationLoop).mock.calls.at(-1)![0] as () => void
+
+    expect(frame).toBeTypeOf('function')
+
+    frame()
+
+    expect(postprocessing.render).toHaveBeenCalledTimes(1)
+    error.mockRestore()
+  })
+
+  it('постоянный сбой пишет в консоль один раз, а не каждый кадр', () => {
+    const { engine, renderer, sceneManager } = makeEngine()
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    vi.mocked(sceneManager.update).mockImplementation(() => {
+      throw new Error('всегда')
+    })
+
+    engine.start()
+
+    const frame = vi.mocked(renderer.setAnimationLoop).mock.calls.at(-1)![0] as () => void
+
+    frame()
+    frame()
+
+    expect(error).toHaveBeenCalledTimes(1)
+    error.mockRestore()
   })
 })

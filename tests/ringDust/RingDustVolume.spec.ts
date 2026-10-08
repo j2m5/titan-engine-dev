@@ -130,6 +130,38 @@ describe('RingDustVolume', () => {
     expect(u.uDustRadialMapScale.value).toBeGreaterThan(0)
   })
 
+  it('dispose освобождает свои текстуры профилей (радиальную и дуг), один раз', () => {
+    const volume = new RingDustVolume({
+      innerRadius: 70,
+      outerRadius: 140,
+      dustScaleHeight: 0.5,
+      dustDensity: 0.01,
+      dustColor: new Color(0x9b968c),
+      anglePower: 2,
+      nearFade: 20,
+      maxSteps: 16,
+      planetRadius: 0,
+      radialProfile: new Float32Array([1, 1, 0.2, 1, 1, 1, 1, 1]),
+      angularProfile: new Float32Array([1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+    })
+    const u = volume.dustMaterial.uniforms
+    const radial = u.uDustRadialMap.value as Texture
+    const angular = u.uDustAngularMap.value as Texture
+    const radialDisposed = vi.fn()
+    const angularDisposed = vi.fn()
+
+    expect(radial).not.toBeNull()
+    expect(angular).not.toBeNull()
+    radial.addEventListener('dispose', radialDisposed)
+    angular.addEventListener('dispose', angularDisposed)
+
+    volume.dispose()
+    volume.dispose()
+
+    expect(radialDisposed).toHaveBeenCalledTimes(1)
+    expect(angularDisposed).toHaveBeenCalledTimes(1)
+  })
+
   it('lightAtOrigin прокидывается в дефайн материала; по умолчанию его нет', () => {
     expect(makeVolume().dustMaterial.defines.DUST_LIGHT_AT_ORIGIN).toBeUndefined()
     const volume = new RingDustVolume({

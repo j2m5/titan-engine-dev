@@ -69,6 +69,21 @@ class Nebula extends Object3D {
     if (this.densityBaker) {
       this.volume.material.setBakedDensityTexture(this.densityBaker.bake(this.params))
     }
+
+    // optional call: renderer stubs in tests expose a domElement without addEventListener
+    this.renderer.domElement?.addEventListener?.('webglcontextrestored', this.onContextRestored)
+  }
+
+  /**
+   * A lost context wipes render-target contents: three recreates them empty, so the
+   * baked density field and the impostor would come back blank. three's own
+   * listener was registered first (WebGLRenderer constructor) — the context is ready.
+   */
+  private readonly onContextRestored = (): void => {
+    if (this.densityBaker) {
+      this.volume.material.setBakedDensityTexture(this.densityBaker.bake(this.params))
+    }
+    this.baker.invalidate()
   }
 
   public updateObject(ctx: UpdateContext): void {
@@ -115,6 +130,7 @@ class Nebula extends Object3D {
   }
 
   public dispose(): void {
+    this.renderer.domElement?.removeEventListener?.('webglcontextrestored', this.onContextRestored)
     this.volume.dispose()
     this.volume.geometry.dispose()
     this.volume.material.dispose()

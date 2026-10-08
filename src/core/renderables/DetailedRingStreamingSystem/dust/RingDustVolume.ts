@@ -91,6 +91,12 @@ class RingDustVolume extends Mesh implements DepthVolume, Disposable {
   public readonly boundingRadius: number
 
   private registry: DepthVolumeRegistry | null
+  /**
+   * Свои DataTexture профилей. Живут только в юниформах материала, а
+   * material.dispose() их не трогает — без явного освобождения каждая смена
+   * сценария оставляла их на GPU
+   */
+  private readonly profileTextures: Texture[] = []
 
   public constructor(config: RingDustVolumeConfig) {
     const geometry = new SphereGeometry(config.outerRadius * RADIAL_PADDING, 32, 16)
@@ -138,10 +144,12 @@ class RingDustVolume extends Mesh implements DepthVolume, Disposable {
     if (radial) {
       this.dustMaterial.uniforms.uDustRadialMap.value = radial.texture
       this.dustMaterial.uniforms.uDustRadialMapScale.value = radial.scale
+      this.profileTextures.push(radial.texture)
     }
     if (angular) {
       this.dustMaterial.uniforms.uDustAngularMap.value = angular.texture
       this.dustMaterial.uniforms.uDustAngularMapScale.value = angular.scale
+      this.profileTextures.push(angular.texture)
     }
 
     // Порядок относительно 2D-текстуры кольца и камней задаёт не renderOrder,
@@ -171,10 +179,16 @@ class RingDustVolume extends Mesh implements DepthVolume, Disposable {
     this.dustMaterial.uniforms.uSceneDepthEnabled.value = 0
   }
 
-  /** Снимает объём с реестра пасса. Идемпотентно; геометрию и материал освобождает обход дерева */
+  /**
+   * Снимает объём с реестра пасса и освобождает текстуры профилей.
+   * Идемпотентно; геометрию и материал освобождает обход дерева
+   */
   public dispose(): void {
     this.registry?.unregister(this)
     this.registry = null
+
+    for (const texture of this.profileTextures) texture.dispose()
+    this.profileTextures.length = 0
   }
 }
 

@@ -90,10 +90,12 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
       // а силуэт LOD-0 (геометрия сферы) сглаживается — без этого на стыке
       // LOD менялось бы качество кромки. fwidth — ДО ветвления
       float alpha = 1.0 - smoothstep(1.0 - fwidth(r) * 1.5, 1.0, r);
-      if (alpha <= 0.0) {
-        gl_FragColor = vec4(0.0);
-        return;
-      }
+
+      // Раннего выхода за диском нет: bdField берёт fwidth (footprint и порог
+      // разрывов), а производные в неоднородном потоке не определены — на
+      // кромке пиксели квада 2×2, ушедшие в return, портили fwidth соседям
+      // внутри диска. Поле считается во всём кваде, за диском результат
+      // отбрасывается в самом конце
 
       // Псевдосфера: нормаль восстанавливается из позиции внутри квада,
       // mu — она же по построению (взгляд вдоль -Z экрана)
@@ -112,7 +114,9 @@ export const BrownDwarfImpostorShaderTemplate: ShaderProps = {
       vec3 color = bdShade(field, mu, dir, uColorCloud, uColorCloudHigh, uColorHot, uColorHotDeep,
                            uOpticalDepth, uGapGlow, uLimbDarkening, time, uBreathAmplitude);
 
-      gl_FragColor = vec4(color, alpha);
+      // За диском (alpha = 0) — прозрачный ноль, а не цвет поля: при mu = 0
+      // затемнение к краю вырождено, NaN размазал бы блум
+      gl_FragColor = alpha > 0.0 ? vec4(color, alpha) : vec4(0.0);
 
       ${ShaderChunk['tonemapping_fragment']}
       ${ShaderChunk['colorspace_fragment']}

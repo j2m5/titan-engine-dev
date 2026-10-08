@@ -41,6 +41,9 @@ class Engine {
    */
   private readonly stats: Stats | null = config('showStats') ? new Stats() : null
 
+  /** Уже выведенные ошибки кадра: постоянный сбой пишет в консоль один раз, а не каждый кадр */
+  private readonly reportedFrameErrors: Set<string> = new Set()
+
   public constructor(
     private sceneManager: SceneManager,
     private sceneObserver: SceneObserver,
@@ -155,7 +158,32 @@ class Engine {
     this.camera.adjust(event.deltaY)
   }
 
+  /**
+   * Цикл three без защиты: исключение из колбэка обрывает цепочку
+   * requestAnimationFrame, а флаг isAnimating остаётся поднят — повторный
+   * setAnimationLoop цикл уже не запускает, рендер стоит до выхода в меню.
+   * Сбой кадра теряет только этот кадр.
+   */
   private onFrameRendered(): void {
+    try {
+      this.renderFrame()
+    } catch (error) {
+      this.reportFrameError(error)
+    }
+
+    this.renderer.setAnimationLoop(this.boundOnFrameRendered)
+  }
+
+  private reportFrameError(error: unknown): void {
+    const key = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+
+    if (this.reportedFrameErrors.has(key)) return
+
+    this.reportedFrameErrors.add(key)
+    console.error('[Engine] сбой кадра, кадр пропущен:', error)
+  }
+
+  private renderFrame(): void {
     const delta: number = this.renderClock.getDelta()
 
     this.stats?.update()
@@ -192,8 +220,6 @@ class Engine {
     this.labelRenderer.render(this.scene, this.renderCamera)
     this.sceneManager.updateMarkers()
     this.postprocessing.render(delta)
-
-    this.renderer.setAnimationLoop(this.boundOnFrameRendered)
   }
 
   private onResize(): void {

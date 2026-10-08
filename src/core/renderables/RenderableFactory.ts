@@ -365,6 +365,10 @@ class RenderableFactory {
 
     const previous: Object3D = lod.levels[0].object
 
+    // Ориентацию тела пишет DynamicNode.updateObject, а гейт свапает из тика
+    // наблюдателя — ПОСЛЕ него в том же кадре: без копии новая поверхность
+    // кадр рисовалась бы неповёрнутой
+    next.quaternion.copy(previous.quaternion)
     lod.remove(previous)
     lod.levels[0].object = next
     lod.add(next)
