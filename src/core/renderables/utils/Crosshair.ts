@@ -5,6 +5,7 @@ import { UpdateContext } from '@/core/UpdateContext'
 class Crosshair extends CSS2DObject {
   private arrow: HTMLElement
   private pos: Vector3 = new Vector3()
+  private ndc: Vector3 = new Vector3()
   private dir: Vector2 = new Vector2()
   private edge: Vector2 = new Vector2()
 
@@ -46,16 +47,11 @@ class Crosshair extends CSS2DObject {
   }
 
   public updateObject(ctx: UpdateContext): void {
-    const worldPosition = this.getWorldPosition(this.pos)
-    worldPosition.project(ctx.camera)
-
-    const inView =
-      worldPosition.z > -1 &&
-      worldPosition.z < 1 &&
-      worldPosition.x >= -1 &&
-      worldPosition.x <= 1 &&
-      worldPosition.y >= -1 &&
-      worldPosition.y <= 1
+    const view = this.getWorldPosition(this.pos).applyMatrix4(ctx.camera.matrixWorldInverse)
+    const ndc = this.ndc.copy(view).applyMatrix4(ctx.camera.projectionMatrix)
+    // Окно по z — то же, по которому CSS2DRenderer показывает сам прицел: за far
+    // прицел скрыт, и стрелка остаётся единственным указателем
+    const inView = ndc.z > -1 && ndc.z < 1 && Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1
 
     if (inView) {
       this.arrow.style.display = 'none'
@@ -63,7 +59,11 @@ class Crosshair extends CSS2DObject {
       return
     }
 
-    this.updateArrow(worldPosition)
+    // За камерой (z вида > 0) деление на отрицательный w зеркалит x и y: без
+    // возврата стрелка показывала бы в противоположную от цели сторону
+    if (view.z > 0) ndc.set(-ndc.x, -ndc.y, ndc.z)
+
+    this.updateArrow(ndc)
   }
 
   private createArrow(): HTMLElement {
@@ -87,7 +87,9 @@ class Crosshair extends CSS2DObject {
   private updateArrow(ndc: Vector3): void {
     this.arrow.style.display = 'block'
 
-    const dir = this.dir.set(ndc.x, ndc.y).normalize()
+    // Цель строго позади — направления на экране нет, (0, 0) дал бы NaN в
+    // проекции на край. Стрелка вниз: «развернись»
+    const dir = ndc.x === 0 && ndc.y === 0 ? this.dir.set(0, -1) : this.dir.set(ndc.x, ndc.y).normalize()
 
     const edge = this.projectToScreenEdge(dir, 0.97)
 
