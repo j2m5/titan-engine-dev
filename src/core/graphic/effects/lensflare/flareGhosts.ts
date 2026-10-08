@@ -98,6 +98,37 @@ export function ghostVignette(source: readonly [number, number], aspect: number,
   return Math.pow(Math.max(1 - r * r, 1e-6), power)
 }
 
+/**
+ * Гашение призраков крупного источника по диаметру, пиксели 1080p: до start
+ * призраки полные, к end гаснут. От диска крупнее ячейки сетки локальный
+ * контраст оставляет кольцо, и отбор дробит его на несколько максимумов —
+ * копии призраков. Сетка 36 строк дробит диски от ~60 px: end держать ниже.
+ */
+export const GHOST_FADE_PIXELS = { start: 35, end: 50 } as const
+
+/**
+ * Поправка оценки диаметра на предразмытие: Kawase смягчает кромку диска,
+ * доля потока после контраста падает, и без поправки диск D px оценивается
+ * в ≈1.33·D. Замер на GPU (буферы 540 и 1080 строк) — в тестах.
+ */
+export const SOURCE_DIAMETER_GAIN = 0.75
+
+/**
+ * Оценка диаметра источника, пиксели 1080p. От диска локальный контраст
+ * оставляет кольцо шириной в свой радиус: доля потока ≈ радиус / диаметр.
+ * Источник мельче радиуса контраста оценивается не меньше чем в сам радиус.
+ */
+export function sourceDiameterPixels(flux: number, rawFlux: number, contrastPixels: number): number {
+  return flux > 0 ? (SOURCE_DIAMETER_GAIN * contrastPixels * rawFlux) / flux : 0
+}
+
+/** Множитель призраков по диаметру источника: smoothstep от 1 до 0 на [start, end] */
+export function ghostSizeFade(diameterPixels: number): number {
+  const { start, end } = GHOST_FADE_PIXELS
+  const t = Math.min(Math.max((diameterPixels - start) / (end - start), 0), 1)
+  return 1 - t * t * (3 - 2 * t)
+}
+
 /** Энергия без калибровки: доля потока / площадь профиля (R · R·q · интеграл) */
 function rawEnergy(ghost: FlareGhost): number {
   return ghost.share / (ghost.radius * ghost.radius * GHOST_SQUEEZE * profileIntegral(ghost.profile))

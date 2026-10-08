@@ -13,6 +13,37 @@ export const FLUX_REFERENCE_HEIGHT = 1080
 /** Верхняя граница цикла сбора: текселей ячейки по оси (хватает до 8K) */
 export const MAX_CELL_TEXELS = 64
 
+/** Радиус окрестности локального контраста, тексели его буфера (LocalContrastMaterial) */
+export const LOCAL_CONTRAST_RADIUS = 8
+
+/** Радиус локального контраста в пикселях 1080p: зависит от высоты буфера */
+export function contrastRadiusPixels(sourceHeight: number): number {
+  return (LOCAL_CONTRAST_RADIUS * FLUX_REFERENCE_HEIGHT) / Math.max(sourceHeight, 1)
+}
+
+/**
+ * Зеркало LocalContrastMaterial по яркости: тексель минус среднее четырёх
+ * соседей на LOCAL_CONTRAST_RADIUS, не меньше нуля; за краем буфера —
+ * крайний тексель (ClampToEdge).
+ */
+export function localContrast(texels: ArrayLike<number>, width: number, height: number): Float64Array {
+  const r = LOCAL_CONTRAST_RADIUS
+  const out = new Float64Array(width * height)
+
+  for (let y = 0; y < height; y++) {
+    const row = y * width
+    const up = Math.min(y + r, height - 1) * width
+    const down = Math.max(y - r, 0) * width
+    for (let x = 0; x < width; x++) {
+      const wide =
+        0.25 * (texels[row + Math.min(x + r, width - 1)] + texels[row + Math.max(x - r, 0)] + texels[up + x] + texels[down + x])
+      out[row + x] = Math.max(texels[row + x] - wide, 0)
+    }
+  }
+
+  return out
+}
+
 export interface FlareGridSize {
   cols: number
   rows: number
@@ -39,21 +70,30 @@ export interface GatheredGrid {
   size: FlareGridSize
   /** Поток ячейки (по яркости), доли высоты кадра² */
   flux: Float64Array
+  /** Поток ячейки во входе локального контраста, доли высоты кадра² */
+  rawFlux: Float64Array
   /** Центр яркости ячейки в координатах кадра: пары x, y */
   centroid: Float64Array
 }
 
 /**
  * Зеркало сбора: texels — яркость текселей буфера построчно снизу вверх (как
- * texelFetch). Границы ячейки — те же, что в шейдере: [floor(c·w), floor((c+1)·w)).
+ * texelFetch), raw — то же для входа локального контраста. Границы ячейки —
+ * те же, что в шейдере: [floor(c·w), floor((c+1)·w)).
  */
-export function gatherGrid(texels: ArrayLike<number>, width: number, height: number): GatheredGrid {
+export function gatherGrid(
+  texels: ArrayLike<number>,
+  width: number,
+  height: number,
+  raw: ArrayLike<number> = texels
+): GatheredGrid {
   const size = flareGridSize(width, height)
   const aspect = width / height
   const areaPerTexel = 1 / (height * height)
   const cellWidth = width / size.cols
   const cellHeight = height / size.rows
   const flux = new Float64Array(size.cols * size.rows)
+  const rawFlux = new Float64Array(size.cols * size.rows)
   const centroid = new Float64Array(size.cols * size.rows * 2)
 
   for (let cy = 0; cy < size.rows; cy++) {
@@ -63,6 +103,7 @@ export function gatherGrid(texels: ArrayLike<number>, width: number, height: num
       const y0 = Math.floor(cy * cellHeight)
       const y1 = Math.min(height, Math.floor((cy + 1) * cellHeight))
       let sum = 0
+      let rawSum = 0
       let mx = 0
       let my = 0
 
@@ -71,6 +112,7 @@ export function gatherGrid(texels: ArrayLike<number>, width: number, height: num
           const l = texels[y * width + x]
           const [fx, fy] = frameCoord((x + 0.5) / width, (y + 0.5) / height, aspect)
           sum += l
+          rawSum += raw[y * width + x]
           mx += l * fx
           my += l * fy
         }
@@ -78,18 +120,21 @@ export function gatherGrid(texels: ArrayLike<number>, width: number, height: num
 
       const i = cy * size.cols + cx
       flux[i] = sum * areaPerTexel
+      rawFlux[i] = rawSum * areaPerTexel
       centroid[2 * i] = sum > 0 ? mx / sum : 0
       centroid[2 * i + 1] = sum > 0 ? my / sum : 0
     }
   }
 
-  return { size, flux, centroid }
+  return { size, flux, rawFlux, centroid }
 }
 
 export interface FlareSource {
   cell: number
   /** Поток блока 3×3, доли высоты кадра² */
   flux: number
+  /** Поток блока во входе локального контраста: знаменатель оценки размера источника */
+  rawFlux: number
   /** Центр блока, взвешенный потоком, в координатах кадра */
   centroid: [number, number]
 }
@@ -111,6 +156,7 @@ export function selectMaxima(grid: GatheredGrid): FlareSource[] {
 
       let isMax = true
       let sum = 0
+      let rawSum = 0
       let mx = 0
       let my = 0
 
@@ -124,12 +170,13 @@ export function selectMaxima(grid: GatheredGrid): FlareSource[] {
           const neighbour = grid.flux[n]
           if ((dx !== 0 || dy !== 0) && (neighbour > self || (neighbour === self && n < index))) isMax = false
           sum += neighbour
+          rawSum += grid.rawFlux[n]
           mx += neighbour * grid.centroid[2 * n]
           my += neighbour * grid.centroid[2 * n + 1]
         }
       }
 
-      if (isMax) sources.push({ cell: index, flux: sum, centroid: [mx / sum, my / sum] })
+      if (isMax) sources.push({ cell: index, flux: sum, rawFlux: rawSum, centroid: [mx / sum, my / sum] })
     }
   }
 

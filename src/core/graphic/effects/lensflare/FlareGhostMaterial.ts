@@ -5,8 +5,10 @@ import {
   DISC_RIM_WIDTH,
   FLARE_GHOSTS,
   GHOST_CUTOFF,
+  GHOST_FADE_PIXELS,
   GHOST_SQUEEZE,
   RING_WIDTH,
+  SOURCE_DIAMETER_GAIN,
   ghostEnergy,
   lumaNormalized,
   profileExtent,
@@ -33,11 +35,16 @@ const vertexShader: string = `
   ${ghostTable}
   #define GHOST_SQUEEZE ${glslFloat(GHOST_SQUEEZE)}
   #define GHOST_CUTOFF ${glslFloat(GHOST_CUTOFF)}
+  #define GHOST_FADE_START ${glslFloat(GHOST_FADE_PIXELS.start)}
+  #define GHOST_FADE_END ${glslFloat(GHOST_FADE_PIXELS.end)}
+  #define SOURCE_DIAMETER_GAIN ${glslFloat(SOURCE_DIAMETER_GAIN)}
 
   uniform sampler2D sourceFlux;
   uniform sampler2D sourceCentroid;
   uniform vec2 gridSize;
   uniform float aspect;
+  // Радиус локального контраста в пикселях 1080p: мера размера источника
+  uniform float contrastPixels;
   uniform float ghostAmount;
   uniform float intensity;
   uniform float ghostVignette;
@@ -58,13 +65,18 @@ const vertexShader: string = `
     int cols = int(gridSize.x);
     ivec2 cell = ivec2(cellIndex % cols, cellIndex / cols);
     vec4 flux = texelFetch(sourceFlux, cell, 0);
-    vec2 source = texelFetch(sourceCentroid, cell, 0).xy;
+    vec4 sourceData = texelFetch(sourceCentroid, cell, 0);
+    vec2 source = sourceData.xy;
 
     // Виньетирование: источник у угла кадра гасит призраков; показатель 0 — единица
     float corner = 0.5 * sqrt(aspect * aspect + 1.0);
     float r = min(length(source) / corner, 1.0);
     float vignette = exp2(ghostVignette * log2(max(1.0 - r * r, 1e-6)));
-    vec3 color = flux.rgb * GHOST_COLOR[ghost] * vignette;
+    // Крупный диск отбор дробит на копии — его призраки гаснут.
+    // Зеркала — sourceDiameterPixels и ghostSizeFade (flareGhosts.ts)
+    float diameter = SOURCE_DIAMETER_GAIN * contrastPixels * sourceData.z / max(flux.a, 1e-30);
+    float sizeFade = 1.0 - smoothstep(GHOST_FADE_START, GHOST_FADE_END, diameter);
+    vec3 color = flux.rgb * GHOST_COLOR[ghost] * vignette * sizeFade;
     float peak = flareLuma(color) * GHOST_PEAK[ghost] * ghostAmount * intensity;
 
     // Невыбранная ячейка или призрак тусклее отсечки — квад за пределами клипа
@@ -139,6 +151,7 @@ export class FlareGhostMaterial extends ShaderMaterial {
         sourceCentroid: new Uniform(sourceCentroid),
         gridSize: new Uniform(new Vector2(1, 1)),
         aspect: new Uniform(1),
+        contrastPixels: new Uniform(1),
         ghostAmount: shared.ghostAmount,
         intensity: shared.intensity,
         ghostVignette: new Uniform(2),
@@ -154,9 +167,11 @@ export class FlareGhostMaterial extends ShaderMaterial {
     })
   }
 
-  setGrid(cols: number, rows: number, aspect: number): void {
+  /** contrastPixels — радиус локального контраста в пикселях 1080p (contrastRadiusPixels) */
+  setGrid(cols: number, rows: number, aspect: number, contrastPixels: number): void {
     ;(this.uniforms.gridSize.value as Vector2).set(cols, rows)
     this.uniforms.aspect.value = aspect
+    this.uniforms.contrastPixels.value = contrastPixels
   }
 
   get ghostVignette(): number {

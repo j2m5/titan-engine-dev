@@ -3,7 +3,15 @@ import { AddEquation, CustomBlending, OneFactor, Texture, Uniform, Vector2 } fro
 import { FlareGhostMaterial } from '@/core/graphic/effects/lensflare/FlareGhostMaterial'
 import { createSpriteQuad } from '@/core/graphic/effects/lensflare/flareSprites'
 import { glslFloat } from '@/core/graphic/effects/lensflare/glslLiteral'
-import { FLARE_GHOSTS, ghostEnergy, lumaNormalized, profileExtent, profilePeak } from '@/core/graphic/effects/lensflare/flareGhosts'
+import {
+  FLARE_GHOSTS,
+  GHOST_FADE_PIXELS,
+  SOURCE_DIAMETER_GAIN,
+  ghostEnergy,
+  lumaNormalized,
+  profileExtent,
+  profilePeak
+} from '@/core/graphic/effects/lensflare/flareGhosts'
 
 function floatArray(source: string, name: string): number[] {
   const match = source.match(new RegExp(`const float ${name}\\[\\d+\\] = float\\[\\d+\\]\\(([^)]*)\\);`))
@@ -86,6 +94,21 @@ describe('FlareGhostMaterial: формулы', () => {
     expect(vert).toContain('if (flux.a <= 0.0 || peak < GHOST_CUTOFF)')
   })
 
+  it('крупный источник гасится: оценка диаметра и пороги — из TS', () => {
+    expect(vert).toContain(`#define GHOST_FADE_START ${glslFloat(GHOST_FADE_PIXELS.start)}`)
+    expect(vert).toContain(`#define GHOST_FADE_END ${glslFloat(GHOST_FADE_PIXELS.end)}`)
+    // Зеркала — sourceDiameterPixels и ghostSizeFade
+    expect(vert).toContain(`#define SOURCE_DIAMETER_GAIN ${glslFloat(SOURCE_DIAMETER_GAIN)}`)
+    expect(vert).toContain('float diameter = SOURCE_DIAMETER_GAIN * contrastPixels * sourceData.z / max(flux.a, 1e-30);')
+    expect(vert).toContain('float sizeFade = 1.0 - smoothstep(GHOST_FADE_START, GHOST_FADE_END, diameter);')
+    expect(vert).toContain('vec3 color = flux.rgb * GHOST_COLOR[ghost] * vignette * sizeFade;')
+  })
+
+  it('без зарезервированного слова centroid: в GLSL ES 3.00 это квалификатор, шейдер не соберётся', () => {
+    expect(vert).not.toMatch(/\bcentroid\b/)
+    expect(frag).not.toMatch(/\bcentroid\b/)
+  })
+
   it('вершинник без luminance() — вычисляет локально', () => {
     expect(vert).toContain('float flareLuma(vec3 c)')
     expect(vert).not.toContain('luminance(')
@@ -120,11 +143,12 @@ describe('FlareGhostMaterial: проводка', () => {
     expect(material.depthWrite).toBe(false)
   })
 
-  it('setGrid: размер сетки и аспект', () => {
-    material.setGrid(64, 36, 16 / 9)
+  it('setGrid: размер сетки, аспект и радиус контраста в пикселях 1080p', () => {
+    material.setGrid(64, 36, 16 / 9, 16)
 
     expect(material.uniforms.gridSize.value).toEqual(new Vector2(64, 36))
     expect(material.uniforms.aspect.value).toBeCloseTo(16 / 9, 12)
+    expect(material.uniforms.contrastPixels.value).toBe(16)
   })
 
   it('ручки виньетирования и каёмки', () => {

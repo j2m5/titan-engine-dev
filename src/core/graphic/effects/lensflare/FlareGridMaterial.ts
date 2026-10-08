@@ -1,4 +1,4 @@
-import { NoBlending, ShaderMaterial, Uniform, Vector2 } from 'three'
+import { NoBlending, ShaderMaterial, Uniform, Vector2, type Texture } from 'three'
 import { MAX_CELL_TEXELS } from './flareGrid'
 
 const vertexShader: string = `
@@ -17,6 +17,8 @@ const fragmentShader: string = `
   #define MAX_CELL_TEXELS ${MAX_CELL_TEXELS}
 
   uniform sampler2D inputBuffer;
+  // Вход локального контраста, того же размера: сырой поток для оценки размера источника
+  uniform sampler2D rawBuffer;
   // Размер буфера локального контраста в текселях и сетки в ячейках
   uniform vec2 sourceSize;
   uniform vec2 gridSize;
@@ -32,8 +34,8 @@ const fragmentShader: string = `
 
     vec3 flux = vec3(0.0);
     float fluxLum = 0.0;
+    float rawLum = 0.0;
     vec2 moment = vec2(0.0);
-    float peak = 0.0;
 
     for (int j = 0; j < MAX_CELL_TEXELS; j++) {
       int y = lo.y + j;
@@ -47,21 +49,23 @@ const fragmentShader: string = `
         flux += c;
         fluxLum += l;
         moment += l * vec2((uv.x - 0.5) * aspect, uv.y - 0.5);
-        peak = max(peak, l);
+        #ifdef OUTPUT_CENTROID
+          rawLum += luminance(texelFetch(rawBuffer, ivec2(x, y), 0).rgb);
+        #endif
       }
     }
 
     #ifdef OUTPUT_CENTROID
-      gl_FragColor = vec4(fluxLum > 0.0 ? moment / fluxLum : vec2(0.0), peak, 1.0);
+      gl_FragColor = vec4(fluxLum > 0.0 ? moment / fluxLum : vec2(0.0), rawLum * areaPerTexel, 1.0);
     #else
       gl_FragColor = vec4(flux * areaPerTexel, fluxLum * areaPerTexel);
     #endif
   }
 `
 
-/** Проход сбора: поток (rgb по каналам, a по яркости) или центр яркости (xy) и пик (z) */
+/** Проход сбора: поток (rgb по каналам, a по яркости) или центр яркости (xy) и сырой поток (z) */
 export class FlareGridMaterial extends ShaderMaterial {
-  constructor(output: 'flux' | 'centroid') {
+  constructor(output: 'flux' | 'centroid', rawBuffer: Texture | null = null) {
     super({
       name: output === 'flux' ? 'FlareGridFluxMaterial' : 'FlareGridCentroidMaterial',
       vertexShader,
@@ -69,6 +73,7 @@ export class FlareGridMaterial extends ShaderMaterial {
       defines: output === 'centroid' ? { OUTPUT_CENTROID: '1' } : {},
       uniforms: {
         inputBuffer: new Uniform(null),
+        rawBuffer: new Uniform(rawBuffer),
         sourceSize: new Uniform(new Vector2(1, 1)),
         gridSize: new Uniform(new Vector2(1, 1)),
         areaPerTexel: new Uniform(1)

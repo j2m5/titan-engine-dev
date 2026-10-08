@@ -24,6 +24,17 @@ describe('FlareGridMaterial: сбор сетки', () => {
     expect(frag).toContain('fluxLum > 0.0 ? moment / fluxLum : vec2(0.0)')
   })
 
+  it('центр несёт в z сырой поток — вход локального контраста, как rawFlux у gatherGrid', () => {
+    expect(frag).toContain('rawLum += luminance(texelFetch(rawBuffer, ivec2(x, y), 0).rgb);')
+    expect(frag).toContain('gl_FragColor = vec4(fluxLum > 0.0 ? moment / fluxLum : vec2(0.0), rawLum * areaPerTexel, 1.0);')
+  })
+
+  it('сырой буфер подключается снаружи', () => {
+    const raw = new Texture()
+
+    expect(new FlareGridMaterial('centroid', raw).uniforms.rawBuffer.value).toBe(raw)
+  })
+
   it('координаты кадра — те же, что frameCoord: ((u − 0.5)·a, v − 0.5)', () => {
     expect(frag).toContain('vec2((uv.x - 0.5) * aspect, uv.y - 0.5)')
   })
@@ -53,6 +64,11 @@ describe('FlareSelectMaterial: отбор максимумов', () => {
   it('выбор требует ненулевого потока — делитель центра не ноль', () => {
     expect(frag).toContain('bool isMax = self > 0.0;')
     expect(frag).toContain('moment / sumFlux.a')
+  })
+
+  it('центр блока несёт в z сырой поток блока, как rawFlux у selectMaxima', () => {
+    expect(frag).toContain('rawSum += nc.z;')
+    expect(frag).toContain('gl_FragColor = vec4(moment / sumFlux.a, rawSum, 1.0);')
   })
 
   it('соседи за краем сетки пропускаются', () => {

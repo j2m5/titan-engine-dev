@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   FLARE_GRID_ROWS,
+  LOCAL_CONTRAST_RADIUS,
   MAX_CELL_TEXELS,
+  contrastRadiusPixels,
   flareGridSize,
   fluxToPixels,
   frameCoord,
   gatherGrid,
+  localContrast,
   selectMaxima,
   type GatheredGrid
 } from '@/core/graphic/effects/lensflare/flareGrid'
@@ -66,6 +69,39 @@ describe('сетка источников: поток', () => {
   it('центр кадра в координатах кадра — ноль', () => {
     expect(frameCoord(0.5, 0.5, 16 / 9)).toEqual([0, 0])
     expect(frameCoord(1, 1, 2)).toEqual([1, 0.5])
+  })
+})
+
+describe('локальный контраст: зеркало', () => {
+  it('плато гаснет, одиночный тексель проходит целиком', () => {
+    const texels = new Float64Array(960 * 540)
+    for (let y = 100; y < 200; y++) for (let x = 100; x < 200; x++) texels[y * 960 + x] = 5
+    texels[400 * 960 + 600] = 10
+    const lc = localContrast(texels, 960, 540)
+
+    expect(lc[150 * 960 + 150]).toBe(0)
+    expect(lc[400 * 960 + 600]).toBe(10)
+  })
+
+  it('кромка плато остаётся полосой шириной в радиус контраста', () => {
+    const texels = new Float64Array(960 * 540)
+    for (let y = 100; y < 200; y++) for (let x = 100; x < 200; x++) texels[y * 960 + x] = 4
+    const lc = localContrast(texels, 960, 540)
+
+    expect(lc[150 * 960 + 100]).toBe(1)
+    expect(lc[150 * 960 + 100 + LOCAL_CONTRAST_RADIUS - 1]).toBe(1)
+    expect(lc[150 * 960 + 100 + LOCAL_CONTRAST_RADIUS]).toBe(0)
+  })
+
+  it('за краем буфера — крайний тексель (ClampToEdge): ровный кадр гаснет и у края', () => {
+    const lc = localContrast(new Float64Array(960 * 540).fill(3), 960, 540)
+
+    expect(lc.every((v) => v === 0)).toBe(true)
+  })
+
+  it('радиус контраста в пикселях 1080p: тексели буфера → высота кадра', () => {
+    expect(contrastRadiusPixels(1080)).toBe(LOCAL_CONTRAST_RADIUS)
+    expect(contrastRadiusPixels(540)).toBe(2 * LOCAL_CONTRAST_RADIUS)
   })
 })
 
@@ -131,12 +167,29 @@ describe('сетка источников: отбор максимумов', () 
     const flux = new Float64Array(12)
     flux[5] = 1
     flux[6] = 1
-    const grid: GatheredGrid = { size: { cols: 4, rows: 3 }, flux, centroid: new Float64Array(24) }
+    const grid: GatheredGrid = { size: { cols: 4, rows: 3 }, flux, rawFlux: flux, centroid: new Float64Array(24) }
     const sources = selectMaxima(grid)
 
     expect(sources).toHaveLength(1)
     expect(sources[0].cell).toBe(5)
     expect(sources[0].flux).toBe(2)
+  })
+
+  it('выбор несёт сырой поток блока — сумму входа до локального контраста', () => {
+    // Пятно с хвостом 5σ = 15 текселей в центре ячейки целиком внутри блока 3×3
+    const raw = blobTexels(960, 540, 307.5, 202.5, 3, 10)
+    const lc = localContrast(raw, 960, 540)
+    const [source] = selectMaxima(gatherGrid(lc, 960, 540, raw))
+
+    expect(source.rawFlux / totalFlux(raw, 540)).toBeCloseTo(1, 6)
+    expect(source.flux).toBeLessThan(source.rawFlux)
+  })
+
+  it('без сырого буфера сырой поток равен потоку', () => {
+    const texels = blobTexels(960, 540, 300, 200, 2, 10)
+    const [source] = selectMaxima(gatherGrid(texels, 960, 540))
+
+    expect(source.rawFlux).toBe(source.flux)
   })
 
   it('плато: равномерная полоса даёт конечные выборы без NaN', () => {

@@ -3,6 +3,8 @@ import type { Mock } from 'vitest'
 import { BLOOM_OPTIONS, createEffectPasses } from '@/core/graphic/Postprocessing'
 import { LensFlareEffect, lensFlareEffectOptionsDefaults } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { FLARE_GHOSTS } from '@/core/graphic/effects/lensflare/flareGhosts'
+import { LOCAL_CONTRAST_RADIUS, contrastRadiusPixels } from '@/core/graphic/effects/lensflare/flareGrid'
+import { glslFloat } from '@/core/graphic/effects/lensflare/glslLiteral'
 import { lensFlare } from '@/config/lensFlare'
 
 /** Мок рендерера: интересна последовательность setRenderTarget; очистка и её цвет нужны спрайтам */
@@ -156,6 +158,8 @@ describe('LensFlareEffect: порядок проходов и адреса за�
 
     expect(effect.gridFluxMaterial.uniforms.inputBuffer.value).toBe(effect.renderTarget1.texture)
     expect(effect.gridCentroidMaterial.uniforms.inputBuffer.value).toBe(effect.renderTarget1.texture)
+    // Сырой поток — вход локального контраста: предразмытие в renderTarget2
+    expect(effect.gridCentroidMaterial.uniforms.rawBuffer.value).toBe(effect.renderTarget2.texture)
     expect(effect.selectFluxMaterial.uniforms.inputBuffer.value).toBe(effect.gridFluxTarget.texture)
     expect(effect.selectFluxMaterial.uniforms.centroidBuffer.value).toBe(effect.gridCentroidTarget.texture)
     expect(effect.selectCentroidMaterial.uniforms.centroidBuffer.value).toBe(effect.gridCentroidTarget.texture)
@@ -201,6 +205,8 @@ describe('LensFlareEffect: ресайз', () => {
     expect(effect.ghostGeometry.instanceCount).toBe(64 * 36 * FLARE_GHOSTS.length)
     expect(effect.ghostMaterial.uniforms.aspect.value).toBeCloseTo(16 / 9, 12)
     expect(effect.gridFluxMaterial.uniforms.areaPerTexel.value).toBeCloseTo(1 / 540 ** 2, 15)
+    // Буфер 540 строк: радиус контраста 8 текселей = 16 px 1080p
+    expect(effect.ghostMaterial.uniforms.contrastPixels.value).toBe(contrastRadiusPixels(540))
   })
 
   it('ресайз: сетка и инстансы следуют за аспектом без пересборки', () => {
@@ -351,6 +357,11 @@ describe('LensFlareEffect: локальный контраст', () => {
     expect(effect.localContrastMaterial.uniforms.texelSize.value.y).toBeCloseTo(1 / 256, 10)
   })
 
+  it('радиус окрестности — константа из TS: им же меряется размер источника', () => {
+    expect(new LensFlareEffect().localContrastMaterial.fragmentShader).toContain(
+      `#define LOCAL_CONTRAST_RADIUS ${glslFloat(LOCAL_CONTRAST_RADIUS)}`
+    )
+  })
 })
 
 describe('LensFlareEffect: инициализация проходов', () => {

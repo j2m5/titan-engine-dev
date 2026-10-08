@@ -1,4 +1,6 @@
 import { NoBlending, ShaderMaterial, Uniform, Vector2, type ShaderMaterialParameters, type Texture } from 'three'
+import { LOCAL_CONTRAST_RADIUS } from './flareGrid'
+import { glslFloat } from './glslLiteral'
 
 const vertexShader: string = `
   out vec2 vUv;
@@ -14,7 +16,9 @@ const vertexShader: string = `
  * яркий компактный ПИК от яркой ПЛОЩАДИ: плато гасится, пик проходит.
  *
  * Выход питает сетку источников (FlareGridMaterial): без него яркое плато —
- * диск звезды, диск ЧД — превращало бы в источник каждую свою ячейку.
+ * диск звезды, диск ЧД — превращало бы в источник каждую свою ячейку. От
+ * крупного диска остаётся кольцо по кромке; по доле потока, пережившей
+ * контраст, призраки меряют размер источника (flareGhosts.ts).
  *
  * Отдельный проход, а не выборка внутри сбора: внутри это стоило бы заметно
  * больше обращений к текстуре на пиксель.
@@ -23,7 +27,7 @@ const fragmentShader: string = `
   // Радиус окрестности в текселях сэмплируемого буфера: граница между «пиком» и
   // «плато». Плато шире отсекается, уже — проходит. Константа, а не юниформ:
   // масштаб различения, а не элемент вида; смена требует пересборки шейдера
-  #define LOCAL_CONTRAST_RADIUS 8.0
+  #define LOCAL_CONTRAST_RADIUS ${glslFloat(LOCAL_CONTRAST_RADIUS)}
 
   uniform sampler2D inputBuffer;
   uniform vec2 texelSize;

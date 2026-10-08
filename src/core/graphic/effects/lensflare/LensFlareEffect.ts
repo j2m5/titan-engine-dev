@@ -22,7 +22,7 @@ import { FlareGridMaterial } from './FlareGridMaterial'
 import { FlareSelectMaterial } from './FlareSelectMaterial'
 import { FlareGhostMaterial } from './FlareGhostMaterial'
 import { createSpriteQuad } from './flareSprites'
-import { flareGridSize, type FlareGridSize } from './flareGrid'
+import { contrastRadiusPixels, flareGridSize, type FlareGridSize } from './flareGrid'
 import { FLARE_GHOSTS } from './flareGhosts'
 
 const fragmentShader: string = `
@@ -221,7 +221,8 @@ export class LensFlareEffect extends Effect {
     this.sourceFluxTarget = createGridTarget('LensFlare.SourceFlux')
     this.sourceCentroidTarget = createGridTarget('LensFlare.SourceCentroid')
     this.gridFluxMaterial = new FlareGridMaterial('flux')
-    this.gridCentroidMaterial = new FlareGridMaterial('centroid')
+    // Сырой поток для оценки размера источника — вход локального контраста
+    this.gridCentroidMaterial = new FlareGridMaterial('centroid', this.renderTarget2.texture)
     this.gridFluxPass = new ShaderPass(this.gridFluxMaterial)
     this.gridCentroidPass = new ShaderPass(this.gridCentroidMaterial)
     this.selectFluxMaterial = new FlareSelectMaterial('flux', this.gridCentroidTarget.texture)
@@ -345,7 +346,7 @@ export class LensFlareEffect extends Effect {
     this.selectCentroidMaterial.setGrid(cols, rows)
 
     const aspect = width > 0 && height > 0 ? width / height : 1
-    this.ghostMaterial.setGrid(cols, rows, aspect)
+    this.ghostMaterial.setGrid(cols, rows, aspect, contrastRadiusPixels(height))
     this.ghostGeometry.instanceCount = cols * rows * FLARE_GHOSTS.length
   }
 
