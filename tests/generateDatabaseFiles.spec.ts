@@ -56,7 +56,6 @@ function syntheticSnapshot(): DatabaseSnapshot {
         mass: 5.9736e24,
         radius: 6360,
         axialTilt: 23.43,
-        orbitalPeriod: 0,
         rotationPeriod: 23.9,
         temperature: 0
       }
@@ -137,7 +136,6 @@ describe('generateDatabaseFiles — структура и контракт', () 
       mass: 6.176e20,
       radius: 536,
       axialTilt: 0,
-      orbitalPeriod: 1,
       rotationPeriod: 10,
       temperature: 0
     })

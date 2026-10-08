@@ -52,7 +52,7 @@ describe('категория пульсара', () => {
       orbits: [],
       rotationObjects: [],
       physicalObjects: [
-        { id: 1, actorId: 2, parentId: null, mass: 2.8e30, radius: 10, axialTilt: 0, orbitalPeriod: 1, rotationPeriod: 1, temperature: 1e6 }
+        { id: 1, actorId: 2, parentId: null, mass: 2.8e30, radius: 10, axialTilt: 0, rotationPeriod: 1, temperature: 1e6 }
       ],
       renderingObjects: [{ id: 1, actorId: 2, data: { exposureBias: 1 } }],
       placements: [{ id: 1, actorId: 2, x: 1, y: 0, z: 0 }],

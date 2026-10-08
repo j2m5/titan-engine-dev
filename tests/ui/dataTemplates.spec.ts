@@ -38,7 +38,6 @@ function snapshotWithTemplate(alias: string, categoryId: number, data: unknown):
         mass: 1,
         radius: bottomRadius,
         axialTilt: 0,
-        orbitalPeriod: 1,
         rotationPeriod: 1,
         temperature: 0
       }

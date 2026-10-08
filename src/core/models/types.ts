@@ -122,7 +122,6 @@ export interface IPhysicalObject {
   mass: number
   radius: number
   axialTilt: number
-  orbitalPeriod: number
   rotationPeriod: number
   temperature: number
 }

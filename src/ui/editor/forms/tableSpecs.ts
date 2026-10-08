@@ -58,7 +58,6 @@ export const physicalObjectsSpec: TableSpec = {
     { key: 'mass', label: 'Mass (kg)', kind: 'number', step: 1 },
     { key: 'radius', label: 'Radius', kind: 'number', step: 0.1 },
     { key: 'axialTilt', label: 'Axial tilt', kind: 'number', step: 0.01 },
-    { key: 'orbitalPeriod', label: 'Orbital period', kind: 'number', step: 0.0001 },
     { key: 'rotationPeriod', label: 'Rotation period', kind: 'number', step: 0.0001 },
     { key: 'temperature', label: 'Temperature', kind: 'number', step: 1 }
   ],
@@ -69,7 +68,6 @@ export const physicalObjectsSpec: TableSpec = {
     mass: 0,
     radius: 1,
     axialTilt: 0,
-    orbitalPeriod: 1,
     rotationPeriod: 1,
     temperature: 0
   })
