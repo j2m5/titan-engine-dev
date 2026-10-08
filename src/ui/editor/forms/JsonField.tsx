@@ -16,15 +16,26 @@ export interface JsonFieldProps {
   onChange(value: unknown): void
 }
 
+/** Текст уже описывает это значение — с точностью до пробелов и переносов */
+function describesValue(text: string, value: unknown): boolean {
+  try {
+    return JSON.stringify(JSON.parse(text)) === JSON.stringify(value ?? {})
+  } catch {
+    return false
+  }
+}
+
 const JsonField: FC<JsonFieldProps> = ({ label, value, cloneOptions, templates, rows = 10, onChange }) => {
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [cloneId, setCloneId] = useState('')
   const [templateId, setTemplateId] = useState('')
 
-  // синхронизация при смене записи извне: показываем форматированный JSON
+  // Синхронизация при смене записи извне: показываем форматированный JSON.
+  // Своё же значение, вернувшееся пропом после ввода, текст не трогает —
+  // иначе каждое валидное нажатие переформатировало поле и курсор прыгал в конец
   useEffect(() => {
-    setText(JSON.stringify(value ?? {}, null, 2))
+    setText((current) => (describesValue(current, value) ? current : JSON.stringify(value ?? {}, null, 2)))
     setError(null)
   }, [value])
 
