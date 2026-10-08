@@ -11,12 +11,11 @@ import { shapeModelManifestPaths } from '@/core/renderables/DetailedRingStreamin
  */
 
 /**
- * Файлы, которые код грузит напрямую, мимо строк БД: текстуры бликов
- * (`LensFlareEffect`: Storage.url) и глоу солнца (`GalaxyShader`:
- * resourceStorage.getTexture по имени). Новый такой файл обязан попасть сюда —
- * иначе манифест его не увидит и деплой останется без него.
+ * Файлы, которые код грузит напрямую, мимо строк БД: глоу солнца
+ * (`GalaxyShader`: resourceStorage.getTexture по имени). Новый такой файл
+ * обязан попасть сюда — иначе манифест его не увидит и деплой останется без него.
  */
-export const CODE_REFERENCED_PATHS: readonly string[] = ['lenscolor.png', 'lensstar.png', 'sun_glow.png']
+export const CODE_REFERENCED_PATHS: readonly string[] = ['sun_glow.png']
 
 /**
  * Пути ресурсов БД + производные `.aux` height-карт (рантайм выводит путь

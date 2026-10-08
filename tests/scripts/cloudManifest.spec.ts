@@ -33,3 +33,10 @@ describe('cloudManifestPaths: список файлов, нужных ранта
     expect([...paths].sort()).toEqual(paths)
   })
 })
+
+describe('CODE_REFERENCED_PATHS: блик объектива', () => {
+  it('PNG объектива больше не грузятся кодом — их нет в белом списке', () => {
+    expect(CODE_REFERENCED_PATHS).not.toContain('lenscolor.png')
+    expect(CODE_REFERENCED_PATHS).not.toContain('lensstar.png')
+  })
+})
