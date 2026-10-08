@@ -21,6 +21,7 @@ import {
   CustomBlending,
   FloatType,
   GLSL3,
+  HalfFloatType,
   LinearFilter,
   Mesh,
   NoBlending,
@@ -31,6 +32,7 @@ import {
   RGBAFormat,
   Scene,
   Texture,
+  type TextureDataType,
   Uniform,
   Vector3,
   WebGL3DRenderTarget,
@@ -286,10 +288,29 @@ function setAdditiveBlending(mat: RawShaderMaterial, additive: boolean): void {
   }
 }
 
-function createRT(w: number, h: number): WebGLRenderTarget {
+/**
+ * Тип текстур LUT. FloatType — только при полной поддержке float-таргетов:
+ * рендер в RGBA32F (EXT_color_buffer_float), линейная фильтрация
+ * (OES_texture_float_linear) и аддитивный бленд накопления порядков рассеяния
+ * (EXT_float_blend). Без любого из них (Safari на iOS, часть мобильных GPU)
+ * float-LUT с LinearFilter неполна, сэмплер отдаёт чёрное — атмосферы гаснут,
+ * а без бленда не накапливается многократное рассеяние. Half float
+ * фильтруется и блендится в ядре WebGL2, им же живёт кадр композера.
+ */
+export function lutTextureType(renderer: WebGLRenderer): TextureDataType {
+  const extensions = renderer.extensions
+  const fullFloat =
+    extensions.has('EXT_color_buffer_float') &&
+    extensions.has('OES_texture_float_linear') &&
+    extensions.has('EXT_float_blend')
+
+  return fullFloat ? FloatType : HalfFloatType
+}
+
+function createRT(w: number, h: number, type: TextureDataType): WebGLRenderTarget {
   const rt = new WebGLRenderTarget(w, h, {
     depthBuffer: false,
-    type: FloatType,
+    type,
     format: RGBAFormat
   })
   rt.texture.minFilter = LinearFilter
@@ -300,10 +321,10 @@ function createRT(w: number, h: number): WebGLRenderTarget {
   return rt
 }
 
-function create3DRT(w: number, h: number, d: number): WebGL3DRenderTarget {
+function create3DRT(w: number, h: number, d: number, type: TextureDataType): WebGL3DRenderTarget {
   const rt = new WebGL3DRenderTarget(w, h, d, {
     depthBuffer: false,
-    type: FloatType,
+    type,
     format: RGBAFormat
   })
   rt.texture.minFilter = LinearFilter
@@ -342,17 +363,20 @@ class AtmosphereLUTGenerator {
   private readonly multipleScatteringAccumMat: RawShaderMaterial
 
   private readonly scatteringOrders: number
+  /** Тип всех таргетов, выходных и временных: см. lutTextureType */
+  private readonly lutType: TextureDataType
 
   public constructor(renderer: WebGLRenderer, scatteringOrders = DEFAULT_SCATTERING_ORDERS) {
     this.renderer = renderer
     this.scatteringOrders = scatteringOrders
+    this.lutType = lutTextureType(renderer)
     this.mesh = new Mesh(new PlaneGeometry(2, 2))
     this.scene.add(this.mesh)
 
     // Output render targets
-    this.transmittanceRT = createRT(TRANSMITTANCE_W, TRANSMITTANCE_H)
-    this.scatteringRT = create3DRT(SCATTERING_W, SCATTERING_H, SCATTERING_D)
-    this.irradianceRT = createRT(IRRADIANCE_W, IRRADIANCE_H)
+    this.transmittanceRT = createRT(TRANSMITTANCE_W, TRANSMITTANCE_H, this.lutType)
+    this.scatteringRT = create3DRT(SCATTERING_W, SCATTERING_H, SCATTERING_D, this.lutType)
+    this.irradianceRT = createRT(IRRADIANCE_W, IRRADIANCE_H, this.lutType)
 
     // Create materials — all include baseTextureUniforms() for atmosphere.js uniforms
     this.transmittanceMat = createMaterial(TRANSMITTANCE_FRAG)
@@ -415,10 +439,10 @@ class AtmosphereLUTGenerator {
     this.setAtmosphereOnAllMaterials(config)
 
     // Temp render targets
-    const deltaIrradianceRT = createRT(IRRADIANCE_W, IRRADIANCE_H)
-    const deltaRayleighRT = create3DRT(SCATTERING_W, SCATTERING_H, SCATTERING_D)
-    const deltaMieRT = create3DRT(SCATTERING_W, SCATTERING_H, SCATTERING_D)
-    const deltaScatteringDensityRT = create3DRT(SCATTERING_W, SCATTERING_H, SCATTERING_D)
+    const deltaIrradianceRT = createRT(IRRADIANCE_W, IRRADIANCE_H, this.lutType)
+    const deltaRayleighRT = create3DRT(SCATTERING_W, SCATTERING_H, SCATTERING_D, this.lutType)
+    const deltaMieRT = create3DRT(SCATTERING_W, SCATTERING_H, SCATTERING_D, this.lutType)
+    const deltaScatteringDensityRT = create3DRT(SCATTERING_W, SCATTERING_H, SCATTERING_D, this.lutType)
     // Reuse deltaRayleigh memory for deltaMultipleScattering (not needed simultaneously)
     const deltaMultipleScatteringRT = deltaRayleighRT
 
