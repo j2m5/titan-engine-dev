@@ -255,6 +255,15 @@ describe('импостор коричневого карлика', () => {
     body.dispose()
   })
 
+  it('поле с fwidth считается в однородном потоке: раннего выхода до bdField нет, кромка — выбором в конце', () => {
+    const fragment = BrownDwarfImpostorShaderTemplate.fragmentShader
+    const main = fragment.slice(fragment.indexOf('void main()'))
+
+    expect(main.indexOf('bdField(')).toBeGreaterThan(-1)
+    expect(main.slice(0, main.indexOf('bdField('))).not.toMatch(/\breturn\s*;|\bdiscard\s*;/)
+    expect(main).toContain('gl_FragColor = alpha > 0.0 ? vec4(color, alpha) : vec4(0.0);')
+  })
+
   it('не имеет собственного множителя яркости', () => {
     // Любой множитель поверх воссоздал бы шов на переключении
     expect(BrownDwarfImpostorShaderTemplate.uniforms).not.toHaveProperty('uImpostorBrightness')
