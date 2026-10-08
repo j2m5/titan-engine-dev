@@ -7,6 +7,7 @@ import AudioPlayer from '@/ui/components/common/audio/AudioPlayer'
 import TutorialContent from '@/ui/components/common/TutorialContent'
 import SettingsContent from '@/ui/components/common/SettingsContent'
 import ObjectList from '@/ui/components/common/ObjectList'
+import BodyInfoPanel from '@/ui/components/common/bodyInfo/BodyInfoPanel'
 import NotificationMessage from '@/ui/components/common/NotificationMessage'
 import CameraSpeed from '@/ui/components/common/CameraSpeed'
 import ModalWindow from '@/ui/components/common/ModalWindow'
@@ -23,6 +24,7 @@ const App = observer(() => {
     <>
       <MainAppBar />
       <ObjectList />
+      <BodyInfoPanel />
       <CameraSpeed />
       <ModalWindow
         title="Tutorial"
