@@ -44,7 +44,7 @@ describe('WaterShaderTemplate: строковые ассерты (Френель
   })
 
   it('Френель Шлика-класса: pow(1 - max(dot(viewDir, normal), 0), 5)', () => {
-    expect(frag).toContain('float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 5.0);')
+    expect(frag).toContain('float fresnel = pow(1.0 - clamp(dot(viewDir, normal), 0.0, 1.0), 5.0);')
   })
 
   it('итоговый цвет смешивается к тинту по Френелю', () => {

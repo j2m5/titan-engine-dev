@@ -484,7 +484,7 @@ export const WaterShaderTemplate: ShaderProps = {
       // Френель Шлика-класса: грань тела светлеет к тинту — грубая замена
       // честному отражению неба/окружения, которого у Task 4 («базовый вид»)
       // ещё нет. Показатель 5 — классический ход Шлика при F0≈0.
-      float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 5.0);
+      float fresnel = pow(1.0 - clamp(dot(viewDir, normal), 0.0, 1.0), 5.0);
       vec3 color = mix(baseColor, uWaterFresnelTint, fresnel);
 
       // Приёмочная волна 4, №2 (владелец: звёзды сквозь воду на горизонте) —
@@ -585,7 +585,7 @@ export const WaterShaderTemplate: ShaderProps = {
         vec3 waveDiffuseLight = vec3(0.0);
         sunLight(waveNormal, 0.5, waveDiffuseLight);
 
-        float waveTheta = max(dot(viewDir, waveNormal), 0.0);
+        float waveTheta = clamp(dot(viewDir, waveNormal), 0.0, 1.0);
         float waveRf0 = 0.3;
         float waveReflectance = waveRf0 + (1.0 - waveRf0) * pow((1.0 - waveTheta), 5.0);
         vec3 waveScatter = max(0.0, dot(waveNormal, viewDir)) * baseColor;

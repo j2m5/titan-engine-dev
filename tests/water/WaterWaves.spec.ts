@@ -731,6 +731,8 @@ function normalizeIndent(source: string): string {
     .join('\n')
 }
 
+// 2026-10-08: Френель базового пути — clamp(…, 0, 1) вместо max(…, 0): dot > 1
+// после нормализации давал pow отрицательного основания (NaN на ANGLE/D3D)
 const BASELINE_FRAGMENT_SHADER = `
     precision highp float;
 
@@ -815,7 +817,7 @@ const BASELINE_FRAGMENT_SHADER = `
       // Френель Шлика-класса: грань тела светлеет к тинту — грубая замена
       // честному отражению неба/окружения, которого у Task 4 («базовый вид»)
       // ещё нет. Показатель 5 — классический ход Шлика при F0≈0.
-      float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 5.0);
+      float fresnel = pow(1.0 - clamp(dot(viewDir, normal), 0.0, 1.0), 5.0);
       vec3 color = mix(baseColor, uWaterFresnelTint, fresnel);
 
       // Приёмочная волна 4, №2 (владелец: звёзды сквозь воду на горизонте) —
