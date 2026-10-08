@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LOD, Texture } from 'three'
+import { LOD, Quaternion, Texture, Vector3 } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
@@ -141,6 +141,24 @@ describe('RenderableFactory: подмена нулевого уровня LOD', 
     expect(after).toBeInstanceOf(Planet)
     expect(node.renderable).toBe(after)
     expect(lodOf(node).children).not.toContain(terrain)
+  })
+
+  it('свап в обе стороны переносит ориентацию тела — кадр после свапа не рисуется неповёрнутым', () => {
+    const node = factory.make(moon) as DynamicNode
+    const spin = new Quaternion().setFromAxisAngle(new Vector3(0.3, 1, 0).normalize(), 1.2)
+
+    // ориентацию пишет DynamicNode.updateObject в начале кадра, свап — позже
+    lodOf(node).levels[0].object.quaternion.copy(spin)
+    heightFieldStorage['maps'].set(heightPathOf(moon)!, flatMap())
+    factory.upgradePlanetToTerrain(node)
+
+    const terrain = lodOf(node).levels[0].object
+
+    expect(terrain.quaternion.angleTo(spin)).toBeLessThan(1e-6)
+
+    factory.downgradeTerrainToPlanet(node)
+
+    expect(lodOf(node).levels[0].object.quaternion.angleTo(spin)).toBeLessThan(1e-6)
   })
 
   it('даунгрейд легаси-узла идемпотентен', () => {
