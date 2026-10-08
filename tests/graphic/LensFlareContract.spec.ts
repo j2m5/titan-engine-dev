@@ -425,7 +425,7 @@ describe('LensFlareEffect: значения приёмки', () => {
   it('стартовые значения призраков — по расчёту, не замер', () => {
     expect(lensFlare.lensFlare.ghostAmount).toBe(1)
     expect(lensFlare.lensFlare.ghostVignette).toBe(2)
-    expect(lensFlare.lensFlare.ghostChromatic).toBe(0.04)
+    expect(lensFlare.lensFlare.ghostChromatic).toBe(1)
   })
 
   it('ручек Чепмена больше нет', () => {

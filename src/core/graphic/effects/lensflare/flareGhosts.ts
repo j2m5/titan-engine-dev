@@ -1,70 +1,70 @@
 import { FLUX_REFERENCE_HEIGHT } from './flareGrid'
 
 /**
- * Призраки анаморфного объектива: изображения диафрагмы — вертикальные овалы
- * фиксированного размера (доли высоты кадра), по оси «источник — центр кадра».
- * CPU-модуль: таблица, профили и фотометрия; GLSL FlareGhostMaterial
- * собирается из этих чисел.
+ * Призраки анаморфного объектива: мягкие вертикальные овалы фиксированного
+ * размера (доли высоты кадра) по оси «источник — центр кадра». Облик —
+ * по Shadertoy 4sX3Rs (mu6k): купола и ореол без ободков, каналы R/G/B
+ * разнесены по оси. CPU-модуль: таблица, профили и фотометрия; GLSL
+ * FlareGhostMaterial собирается из этих чисел.
  */
 
-export type GhostProfile = 'disc' | 'ring'
+/**
+ * Профиль по нормированному радиусу ρ (1 — край овала, за ним ноль):
+ * купол 1 − ρ^p — p 1.6 острый центр, 2.4 купол, 5.5 плоский диск с мягким
+ * краем; ореол — лоренциан с ядром core (доля радиуса), доведённый до нуля на ρ = 1
+ */
+export type GhostProfile = { kind: 'dome'; power: number } | { kind: 'halo'; core: number }
 
 export interface FlareGhost {
-  /** Положение: центр призрака g = m·s, s — источник в координатах кадра */
+  /** Положение зелёного канала: центр призрака g = m·s, s — источник в координатах кадра */
   m: number
   /** Полувысота овала, доля высоты кадра */
   radius: number
   profile: GhostProfile
   /** Оттенок; нормируется по яркости */
   tint: readonly [number, number, number]
-  /** Доля потока источника, относительная: абсолют задаёт калибровка */
-  share: number
+  /** Пиковая яркость относительно других призраков: абсолют задаёт калибровка */
+  peak: number
+  /** Разнос каналов по оси: красный в m·(1 − δ)·s, синий в m·(1 + δ)·s */
+  spread: number
 }
 
 /** Полуширина / полувысота овала: вертикальный — анаморфная подпись */
 export const GHOST_SQUEEZE = 0.6
-/** Ширина мягкого края диска, доля радиуса */
-export const DISC_EDGE = 0.15
-/** Обод диска: прибавка яркости и ширина, центр — у начала мягкого края */
-export const DISC_RIM_GAIN = 0.35
-export const DISC_RIM_WIDTH = 0.08
-/** Ширина кольца, доля радиуса */
-export const RING_WIDTH = 0.06
 /** Пиковая экранная яркость, ниже которой квад призрака схлопывается */
 export const GHOST_CUTOFF = 1e-3
 
+/**
+ * Семейства референса. Его положения заданы в искажённом пространстве
+ * uv·|uv|; здесь — эквивалентные m и радиусы для источника на ~0.4 высоты
+ * кадра от центра. Пики и оттенки — соотношения каналов референса.
+ */
 export const FLARE_GHOSTS: readonly FlareGhost[] = [
-  { m: 0.75, radius: 0.025, profile: 'disc', tint: [0.55, 0.85, 1.0], share: 0.5 },
-  { m: 0.45, radius: 0.06, profile: 'ring', tint: [0.35, 0.55, 1.0], share: 0.3 },
-  { m: 0.2, radius: 0.035, profile: 'disc', tint: [0.35, 0.95, 0.85], share: 0.4 },
-  { m: -0.15, radius: 0.09, profile: 'disc', tint: [0.5, 0.45, 1.0], share: 0.25 },
-  { m: -0.4, radius: 0.03, profile: 'disc', tint: [1.0, 0.72, 0.35], share: 0.5 },
-  { m: -0.7, radius: 0.05, profile: 'ring', tint: [0.55, 0.85, 1.0], share: 0.35 },
-  { m: -1.0, radius: 0.12, profile: 'disc', tint: [0.35, 0.55, 1.0], share: 0.15 },
-  { m: -1.3, radius: 0.04, profile: 'disc', tint: [0.45, 1.0, 0.8], share: 0.4 }
+  // f6: острое пурпурное пятно между источником и центром
+  { m: 0.22, radius: 0.039, profile: { kind: 'dome', power: 1.6 }, tint: [1, 0.5, 0.83], peak: 0.049, spread: 0.077 },
+  // f4: тёплый купол за центром
+  { m: -0.31, radius: 0.105, profile: { kind: 'dome', power: 2.4 }, tint: [1, 0.83, 0.5], peak: 0.066, spread: 0.11 },
+  // f5: огромный бледный диск; каналы разъезжаются в радугу
+  { m: -0.3, radius: 0.33, profile: { kind: 'dome', power: 5.5 }, tint: [1, 1, 1], peak: 0.026, spread: 0.5 },
+  // f2: большой мягкий ореол далеко за центром
+  { m: -1.4, radius: 0.8, profile: { kind: 'halo', core: 0.26 }, tint: [1, 0.92, 0.84], peak: 0.3, spread: 0.059 }
 ]
 
-function smoothstep(edge0: number, edge1: number, x: number): number {
-  const t = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0), 1)
-  return t * t * (3 - 2 * t)
-}
-
-/** Профиль по нормированному радиусу ρ (1 — край овала) */
 export function ghostProfile(rho: number, profile: GhostProfile): number {
-  if (profile === 'ring') {
-    const d = (rho - 1) / RING_WIDTH
-    return Math.exp(-d * d)
+  if (rho >= 1) return 0
+  if (profile.kind === 'halo') {
+    const c2 = profile.core * profile.core
+    const edge = 1 / (1 + 1 / c2)
+    return (1 / (1 + (rho * rho) / c2) - edge) / (1 - edge)
   }
-  const rim = (rho - (1 - DISC_EDGE)) / DISC_RIM_WIDTH
-  return (1 - smoothstep(1 - DISC_EDGE, 1, rho)) * (1 + DISC_RIM_GAIN * Math.exp(-rim * rim))
+  return 1 - Math.pow(rho, profile.power)
 }
 
 const PROFILE_STEPS = 20000
-const PROFILE_SPAN = 2
 
-/** Интеграл профиля по нормированной плоскости: 2π ∫ f(ρ) ρ dρ */
+/** Интеграл профиля по нормированному кругу: 2π ∫₀¹ f(ρ) ρ dρ */
 export function profileIntegral(profile: GhostProfile): number {
-  const h = PROFILE_SPAN / PROFILE_STEPS
+  const h = 1 / PROFILE_STEPS
   let sum = 0
   for (let i = 0; i < PROFILE_STEPS; i++) {
     const rho = (i + 0.5) * h
@@ -73,16 +73,15 @@ export function profileIntegral(profile: GhostProfile): number {
   return 2 * Math.PI * sum * h
 }
 
-/** Максимум профиля */
-export function profilePeak(profile: GhostProfile): number {
-  let peak = 0
-  for (let i = 0; i <= PROFILE_STEPS; i++) peak = Math.max(peak, ghostProfile((i * PROFILE_SPAN) / PROFILE_STEPS, profile))
-  return peak
-}
-
-/** ρ, за которым профиль ниже 1e-3 пика — граница квада */
-export function profileExtent(profile: GhostProfile): number {
-  return profile === 'ring' ? 1 + RING_WIDTH * Math.sqrt(Math.log(1000)) : 1
+/** Центры каналов R, G, B в координатах кадра; chromatic — множитель разноса */
+export function ghostChannelCenters(
+  ghost: FlareGhost,
+  source: readonly [number, number],
+  chromatic: number
+): [[number, number], [number, number], [number, number]] {
+  const k = ghost.m * ghost.spread * chromatic
+  const at = (m: number): [number, number] => [m * source[0], m * source[1]]
+  return [at(ghost.m - k), at(ghost.m), at(ghost.m + k)]
 }
 
 /** Оттенок с единичной яркостью (Rec. 709) */
@@ -129,11 +128,6 @@ export function ghostSizeFade(diameterPixels: number): number {
   return 1 - t * t * (3 - 2 * t)
 }
 
-/** Энергия без калибровки: доля потока / площадь профиля (R · R·q · интеграл) */
-function rawEnergy(ghost: FlareGhost): number {
-  return ghost.share / (ghost.radius * ghost.radius * GHOST_SQUEEZE * profileIntegral(ghost.profile))
-}
-
 /**
  * Калибровка (расчёт, не замер): звезда 12 px при farGlowGain 3 (поток 3400)
  * в центре кадра при intensity 0.1 даёт самый яркий призрак 0.05 до AgX.
@@ -142,13 +136,13 @@ export const GHOST_REFERENCE = { fluxPixels: 3400, peak: 0.05, intensity: 0.1 } 
 
 export const GHOST_SCALE: number = (() => {
   const fluxFrame = GHOST_REFERENCE.fluxPixels / FLUX_REFERENCE_HEIGHT ** 2
-  const brightest = Math.max(...FLARE_GHOSTS.map((g) => rawEnergy(g) * profilePeak(g.profile) * fluxFrame))
-  return GHOST_REFERENCE.peak / (GHOST_REFERENCE.intensity * brightest)
+  const brightest = Math.max(...FLARE_GHOSTS.map((g) => g.peak))
+  return GHOST_REFERENCE.peak / (GHOST_REFERENCE.intensity * fluxFrame * brightest)
 })()
 
-/** Яркость профиля 1 на единицу потока (доли высоты кадра²), с калибровкой */
+/** Яркость пика профиля на единицу потока (доли высоты кадра²), с калибровкой */
 export function ghostEnergy(ghost: FlareGhost): number {
-  return GHOST_SCALE * rawEnergy(ghost)
+  return GHOST_SCALE * ghost.peak
 }
 
 /** Пиковая экранная яркость призрака белого источника */
@@ -159,5 +153,5 @@ export function ghostPeakOnScreen(
   ghostAmount: number,
   intensity: number
 ): number {
-  return ghostEnergy(ghost) * profilePeak(ghost.profile) * fluxFrame * vignette * ghostAmount * intensity
+  return ghostEnergy(ghost) * fluxFrame * vignette * ghostAmount * intensity
 }

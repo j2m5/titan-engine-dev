@@ -81,7 +81,7 @@ export const lensFlareEffectOptionsDefaults = {
   intensity: 0.1,
   ghostAmount: 1,
   ghostVignette: 2,
-  ghostChromatic: 0.04,
+  ghostChromatic: 1,
   streakAmount: 0
 } satisfies LensFlareEffectOptions
 

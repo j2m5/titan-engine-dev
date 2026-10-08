@@ -1,18 +1,12 @@
 import { AddEquation, CustomBlending, OneFactor, ShaderMaterial, Uniform, Vector2, type Texture } from 'three'
 import {
-  DISC_EDGE,
-  DISC_RIM_GAIN,
-  DISC_RIM_WIDTH,
   FLARE_GHOSTS,
   GHOST_CUTOFF,
   GHOST_FADE_PIXELS,
   GHOST_SQUEEZE,
-  RING_WIDTH,
   SOURCE_DIAMETER_GAIN,
   ghostEnergy,
-  lumaNormalized,
-  profileExtent,
-  profilePeak
+  lumaNormalized
 } from './flareGhosts'
 import { glslFloat } from './glslLiteral'
 
@@ -24,10 +18,11 @@ const ghostTable: string = `
   #define GHOST_COUNT ${count}
   const float GHOST_M[${count}] = ${floats(FLARE_GHOSTS.map((g) => g.m))};
   const float GHOST_RADIUS[${count}] = ${floats(FLARE_GHOSTS.map((g) => g.radius))};
-  const float GHOST_RING[${count}] = ${floats(FLARE_GHOSTS.map((g) => (g.profile === 'ring' ? 1 : 0)))};
-  const float GHOST_PEAK[${count}] = ${floats(FLARE_GHOSTS.map((g) => profilePeak(g.profile)))};
-  const float GHOST_EXTENT[${count}] = ${floats(FLARE_GHOSTS.map((g) => profileExtent(g.profile)))};
-  // Оттенок с единичной яркостью × энергия (доля потока / площадь профиля, с калибровкой)
+  // Показатель купола или ядро ореола (GHOST_HALO = 1)
+  const float GHOST_SHAPE[${count}] = ${floats(FLARE_GHOSTS.map((g) => (g.profile.kind === 'dome' ? g.profile.power : g.profile.core)))};
+  const float GHOST_HALO[${count}] = ${floats(FLARE_GHOSTS.map((g) => (g.profile.kind === 'halo' ? 1 : 0)))};
+  const float GHOST_SPREAD[${count}] = ${floats(FLARE_GHOSTS.map((g) => g.spread))};
+  // Оттенок с единичной яркостью × пик на единицу потока (с калибровкой)
   const vec3 GHOST_COLOR[${count}] = vec3[${count}](${colors.map((c) => `vec3(${c.map(glslFloat).join(', ')})`).join(', ')});
 `
 
@@ -50,9 +45,13 @@ const vertexShader: string = `
   uniform float ghostVignette;
   uniform float ghostChromatic;
 
-  out vec2 vLocal;
+  // Смещение от центра зелёного канала, доли высоты кадра
+  out vec2 vOffset;
+  flat out vec2 vDelta;
+  flat out vec2 vRadius;
   flat out vec3 vColor;
-  flat out float vRing;
+  flat out float vShape;
+  flat out float vHalo;
 
   // Rec. 709 — те же веса, что у lumaNormalized (flareGhosts.ts); встроенная функция есть только во фрагменте
   float flareLuma(vec3 c) {
@@ -77,7 +76,7 @@ const vertexShader: string = `
     float diameter = SOURCE_DIAMETER_GAIN * contrastPixels * sourceData.z / max(flux.a, 1e-30);
     float sizeFade = 1.0 - smoothstep(GHOST_FADE_START, GHOST_FADE_END, diameter);
     vec3 color = flux.rgb * GHOST_COLOR[ghost] * vignette * sizeFade;
-    float peak = flareLuma(color) * GHOST_PEAK[ghost] * ghostAmount * intensity;
+    float peak = flareLuma(color) * ghostAmount * intensity;
 
     // Невыбранная ячейка или призрак тусклее отсечки — квад за пределами клипа
     if (flux.a <= 0.0 || peak < GHOST_CUTOFF) {
@@ -85,49 +84,47 @@ const vertexShader: string = `
       return;
     }
 
-    float reach = GHOST_EXTENT[ghost] * (1.0 + ghostChromatic);
-    vec2 halfSize = GHOST_RADIUS[ghost] * vec2(GHOST_SQUEEZE, 1.0) * reach;
+    // Каналы на оси: красный в центре − delta, синий в центре + delta (ghostChannelCenters)
     vec2 center = GHOST_M[ghost] * source;
+    vec2 delta = GHOST_M[ghost] * GHOST_SPREAD[ghost] * ghostChromatic * source;
+    vec2 radius = GHOST_RADIUS[ghost] * vec2(GHOST_SQUEEZE, 1.0);
+    vec2 halfSize = radius + abs(delta);
     vec2 frame = center + position.xy * halfSize;
 
-    // Нормированные координаты овала: ρ = 1 — его край
-    vLocal = position.xy * reach;
+    vOffset = position.xy * halfSize;
+    vDelta = delta;
+    vRadius = radius;
     vColor = color;
-    vRing = GHOST_RING[ghost];
+    vShape = GHOST_SHAPE[ghost];
+    vHalo = GHOST_HALO[ghost];
     gl_Position = vec4(2.0 * frame.x / aspect, 2.0 * frame.y, 0.0, 1.0);
   }
 `
 
 const fragmentShader: string = `
-  #define DISC_EDGE ${glslFloat(DISC_EDGE)}
-  #define DISC_RIM_GAIN ${glslFloat(DISC_RIM_GAIN)}
-  #define DISC_RIM_WIDTH ${glslFloat(DISC_RIM_WIDTH)}
-  #define RING_WIDTH ${glslFloat(RING_WIDTH)}
-
-  uniform float ghostChromatic;
-
-  in vec2 vLocal;
+  in vec2 vOffset;
+  flat in vec2 vDelta;
+  flat in vec2 vRadius;
   flat in vec3 vColor;
-  flat in float vRing;
+  flat in float vShape;
+  flat in float vHalo;
 
-  // Зеркало — ghostProfile (flareGhosts.ts)
+  // Зеркало — ghostProfile (flareGhosts.ts); у обоих профилей пик 1 в центре
   float ghostProfile(float rho) {
-    if (vRing > 0.5) {
-      float d = (rho - 1.0) / RING_WIDTH;
-      return exp(-d * d);
+    if (rho >= 1.0) return 0.0;
+    if (vHalo > 0.5) {
+      float edge = 1.0 / (1.0 + 1.0 / (vShape * vShape));
+      return (1.0 / (1.0 + rho * rho / (vShape * vShape)) - edge) / (1.0 - edge);
     }
-    float rim = (rho - (1.0 - DISC_EDGE)) / DISC_RIM_WIDTH;
-    return (1.0 - smoothstep(1.0 - DISC_EDGE, 1.0, rho)) * (1.0 + DISC_RIM_GAIN * exp(-rim * rim));
+    return 1.0 - pow(rho, vShape);
   }
 
   void main() {
-    float rho = length(vLocal);
-    // Каёмка: радиус по каналам R·(1 ± χ) — красный снаружи, синий внутри;
-    // энергия канала сохраняется: площадь масштабируется как (1 ± χ)²
+    // Каналы — один профиль со сдвигом по оси: энергия каждого сохраняется
     vec3 profile = vec3(
-      ghostProfile(rho / (1.0 + ghostChromatic)) / ((1.0 + ghostChromatic) * (1.0 + ghostChromatic)),
-      ghostProfile(rho),
-      ghostProfile(rho / (1.0 - ghostChromatic)) / ((1.0 - ghostChromatic) * (1.0 - ghostChromatic))
+      ghostProfile(length((vOffset + vDelta) / vRadius)),
+      ghostProfile(length(vOffset / vRadius)),
+      ghostProfile(length((vOffset - vDelta) / vRadius))
     );
     gl_FragColor = vec4(min(vColor * profile, vec3(60000.0)), 1.0);
   }
@@ -155,7 +152,7 @@ export class FlareGhostMaterial extends ShaderMaterial {
         ghostAmount: shared.ghostAmount,
         intensity: shared.intensity,
         ghostVignette: new Uniform(2),
-        ghostChromatic: new Uniform(0.04)
+        ghostChromatic: new Uniform(1)
       },
       blending: CustomBlending,
       blendEquation: AddEquation,
@@ -188,7 +185,7 @@ export class FlareGhostMaterial extends ShaderMaterial {
   }
 
   set ghostChromatic(value: number) {
-    // доля радиуса; 1 − χ — делитель синего канала, держим вдали от нуля
-    this.uniforms.ghostChromatic.value = Math.min(Math.max(value, 0), 0.5)
+    // множитель разноса из таблицы; при 2 красный канал f5 доходит до центра кадра
+    this.uniforms.ghostChromatic.value = Math.min(Math.max(value, 0), 2)
   }
 }

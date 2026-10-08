@@ -4,20 +4,18 @@ import {
   GHOST_CUTOFF,
   GHOST_FADE_PIXELS,
   GHOST_REFERENCE,
-  GHOST_SCALE,
   GHOST_SQUEEZE,
-  RING_WIDTH,
   SOURCE_DIAMETER_GAIN,
+  ghostChannelCenters,
   ghostEnergy,
   ghostPeakOnScreen,
   ghostProfile,
   ghostSizeFade,
   ghostVignette,
   lumaNormalized,
-  profileExtent,
   profileIntegral,
-  profilePeak,
-  sourceDiameterPixels
+  sourceDiameterPixels,
+  type GhostProfile
 } from '@/core/graphic/effects/lensflare/flareGhosts'
 import {
   FLUX_REFERENCE_HEIGHT,
@@ -72,21 +70,25 @@ const GPU_ESTIMATES: Record<number, Record<number, number>> = {
 const GPU_SPLIT_MIN_ESTIMATE = 129
 
 describe('призраки: таблица', () => {
-  it('восемь призраков, положения конечны и не в центре', () => {
-    expect(FLARE_GHOSTS).toHaveLength(8)
+  it('четыре семейства референса: острое пятно, купол, большой плоский диск, ореол', () => {
+    expect(FLARE_GHOSTS).toHaveLength(4)
+    expect(FLARE_GHOSTS.map((g) => (g.profile.kind === 'dome' ? g.profile.power : 'halo'))).toEqual([1.6, 2.4, 5.5, 'halo'])
     for (const g of FLARE_GHOSTS) {
       expect(Number.isFinite(g.m)).toBe(true)
       expect(Math.abs(g.m)).toBeGreaterThan(0.1)
-      expect(Math.abs(g.m)).toBeLessThanOrEqual(1.5)
+      expect(g.spread).toBeGreaterThan(0)
     }
+  })
+
+  it('ореол — самый яркий по пику и самый далёкий за центром кадра', () => {
+    const halo = FLARE_GHOSTS.find((g) => g.profile.kind === 'halo')!
+
+    expect(halo.peak).toBe(Math.max(...FLARE_GHOSTS.map((g) => g.peak)))
+    expect(halo.m).toBe(Math.min(...FLARE_GHOSTS.map((g) => g.m)))
   })
 
   it('овалы вертикальные — анаморфная подпись', () => {
     expect(GHOST_SQUEEZE).toBeLessThan(1)
-  })
-
-  it('ровно один тёплый призрак, остальные холодные', () => {
-    expect(FLARE_GHOSTS.filter((g) => g.tint[0] > g.tint[2])).toHaveLength(1)
   })
 
   it('оттенок нормирован по яркости', () => {
@@ -95,27 +97,65 @@ describe('призраки: таблица', () => {
 })
 
 describe('призраки: профили', () => {
-  it('диск: центр 1, обод светлее середины, за краем ноль', () => {
-    expect(ghostProfile(0, 'disc')).toBeCloseTo(1, 6)
-    expect(ghostProfile(0.85, 'disc')).toBeGreaterThan(ghostProfile(0.5, 'disc'))
-    expect(ghostProfile(1, 'disc')).toBe(0)
-  })
+  const dome = (power: number): GhostProfile => ({ kind: 'dome', power })
+  const halo: GhostProfile = { kind: 'halo', core: 0.26 }
 
-  it('кольцо: пик на радиусе 1, в центре ноль', () => {
-    expect(ghostProfile(1, 'ring')).toBe(1)
-    expect(ghostProfile(0, 'ring')).toBeLessThan(1e-12)
-  })
-
-  it('интеграл кольца — 2π·w·√π, диска — между мягким кругом и кругом с ободом', () => {
-    expect(profileIntegral('ring')).toBeCloseTo(2 * Math.PI * RING_WIDTH * Math.sqrt(Math.PI), 4)
-    expect(profileIntegral('disc')).toBeGreaterThan(Math.PI * 0.85 ** 2)
-    expect(profileIntegral('disc')).toBeLessThan(Math.PI * 1.35)
-  })
-
-  it('граница квада покрывает профиль: за ней меньше 1e-3 пика', () => {
-    for (const p of ['disc', 'ring'] as const) {
-      expect(ghostProfile(profileExtent(p) + 1e-6, p) / profilePeak(p)).toBeLessThan(1e-3)
+  it('без обода: максимум 1 в центре, к краю монотонно до нуля, за краем ноль', () => {
+    for (const profile of [dome(1.6), dome(2.4), dome(5.5), halo]) {
+      expect(ghostProfile(0, profile)).toBe(1)
+      let previous = 1
+      for (let rho = 0.01; rho <= 1; rho += 0.01) {
+        const value = ghostProfile(rho, profile)
+        expect(value).toBeLessThanOrEqual(previous)
+        previous = value
+      }
+      expect(ghostProfile(1, profile)).toBeCloseTo(0, 12)
+      expect(ghostProfile(1.2, profile)).toBe(0)
     }
+  })
+
+  it('чем больше показатель купола, тем площе вершина', () => {
+    expect(ghostProfile(0.5, dome(5.5))).toBeGreaterThan(ghostProfile(0.5, dome(2.4)))
+    expect(ghostProfile(0.5, dome(2.4))).toBeGreaterThan(ghostProfile(0.5, dome(1.6)))
+  })
+
+  it('ореол: узкое ядро и длинный хвост', () => {
+    expect(ghostProfile(0.26, halo)).toBeLessThan(0.55)
+    expect(ghostProfile(0.6, halo)).toBeGreaterThan(0.05)
+  })
+
+  it('интегралы — замкнутые формы: купол π·p/(p+2), ореол 2π/(1−L)·(c²/2·ln(1+1/c²) − L/2)', () => {
+    for (const power of [1.6, 2.4, 5.5]) expect(profileIntegral(dome(power))).toBeCloseTo((Math.PI * power) / (power + 2), 5)
+    const c = 0.26
+    const edge = 1 / (1 + 1 / (c * c))
+    const expected = ((2 * Math.PI) / (1 - edge)) * ((c * c * Math.log(1 + 1 / (c * c))) / 2 - edge / 2)
+    expect(profileIntegral(halo)).toBeCloseTo(expected, 5)
+  })
+})
+
+describe('призраки: хроматика сдвигом по оси', () => {
+  const source: [number, number] = [0.5, -0.2]
+
+  it('зелёный — в m·s, красный ближе к центру кадра, синий дальше', () => {
+    for (const g of FLARE_GHOSTS) {
+      const [red, green, blue] = ghostChannelCenters(g, source, 1)
+
+      expect(green[0]).toBeCloseTo(g.m * source[0], 12)
+      expect(green[1]).toBeCloseTo(g.m * source[1], 12)
+      expect(Math.hypot(...red)).toBeLessThan(Math.hypot(...green))
+      expect(Math.hypot(...blue)).toBeGreaterThan(Math.hypot(...green))
+      expect(Math.hypot(blue[0] - red[0], blue[1] - red[1])).toBeCloseTo(2 * Math.abs(g.m * g.spread) * Math.hypot(...source), 12)
+    }
+  })
+
+  it('множитель 0 — каналы совпадают, 2 — разнос вдвое', () => {
+    const g = FLARE_GHOSTS[2]
+    const [red0, , blue0] = ghostChannelCenters(g, source, 0)
+    const [red1, , blue1] = ghostChannelCenters(g, source, 1)
+    const [red2, , blue2] = ghostChannelCenters(g, source, 2)
+
+    expect(red0).toEqual(blue0)
+    expect(Math.hypot(blue2[0] - red2[0], blue2[1] - red2[1])).toBeCloseTo(2 * Math.hypot(blue1[0] - red1[0], blue1[1] - red1[1]), 12)
   })
 })
 
@@ -128,17 +168,9 @@ describe('призраки: энергия', () => {
     expect(Math.max(...peaks)).toBeCloseTo(0.05, 10)
   })
 
-  it('вдвое больший призрак с той же долей вчетверо тусклее', () => {
-    const g = FLARE_GHOSTS[0]
-
-    expect(ghostEnergy({ ...g, radius: g.radius * 2 }) / ghostEnergy(g)).toBeCloseTo(0.25, 10)
-  })
-
-  it('яркость × площадь = доля потока × калибровка — у всех призраков одинаково', () => {
-    for (const g of FLARE_GHOSTS) {
-      const area = g.radius * g.radius * GHOST_SQUEEZE * profileIntegral(g.profile)
-      expect((ghostEnergy(g) * area) / g.share).toBeCloseTo(GHOST_SCALE, 6)
-    }
+  it('пики соотносятся как в референсе', () => {
+    const [first] = FLARE_GHOSTS
+    for (const g of FLARE_GHOSTS) expect(ghostEnergy(g) / ghostEnergy(first)).toBeCloseTo(g.peak / first.peak, 12)
   })
 
   it('фоновая звезда (поток 3) не рисует ни одного призрака', () => {

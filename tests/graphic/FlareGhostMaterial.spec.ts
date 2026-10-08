@@ -8,9 +8,7 @@ import {
   GHOST_FADE_PIXELS,
   SOURCE_DIAMETER_GAIN,
   ghostEnergy,
-  lumaNormalized,
-  profileExtent,
-  profilePeak
+  lumaNormalized
 } from '@/core/graphic/effects/lensflare/flareGhosts'
 
 function floatArray(source: string, name: string): number[] {
@@ -57,12 +55,14 @@ describe('createSpriteQuad', () => {
 })
 
 describe('FlareGhostMaterial: таблица в шейдере — из TS', () => {
-  it('положения, радиусы, пики и границы', () => {
+  it('положения, радиусы, формы профиля и разнос каналов', () => {
+    const shape = (g: (typeof FLARE_GHOSTS)[number]): number => (g.profile.kind === 'dome' ? g.profile.power : g.profile.core)
+
     expect(floatArray(vert, 'GHOST_M')).toEqual(FLARE_GHOSTS.map((g) => Number(glslFloat(g.m))))
     expect(floatArray(vert, 'GHOST_RADIUS')).toEqual(FLARE_GHOSTS.map((g) => Number(glslFloat(g.radius))))
-    expect(floatArray(vert, 'GHOST_PEAK')).toEqual(FLARE_GHOSTS.map((g) => Number(glslFloat(profilePeak(g.profile)))))
-    expect(floatArray(vert, 'GHOST_EXTENT')).toEqual(FLARE_GHOSTS.map((g) => Number(glslFloat(profileExtent(g.profile)))))
-    expect(floatArray(vert, 'GHOST_RING')).toEqual(FLARE_GHOSTS.map((g) => (g.profile === 'ring' ? 1 : 0)))
+    expect(floatArray(vert, 'GHOST_SHAPE')).toEqual(FLARE_GHOSTS.map((g) => Number(glslFloat(shape(g)))))
+    expect(floatArray(vert, 'GHOST_HALO')).toEqual(FLARE_GHOSTS.map((g) => (g.profile.kind === 'halo' ? 1 : 0)))
+    expect(floatArray(vert, 'GHOST_SPREAD')).toEqual(FLARE_GHOSTS.map((g) => Number(glslFloat(g.spread))))
   })
 
   it('цвет запечён: нормированный оттенок × энергия призрака', () => {
@@ -89,8 +89,13 @@ describe('FlareGhostMaterial: формулы', () => {
     expect(vert).toContain('exp2(ghostVignette * log2(max(1.0 - r * r, 1e-6)))')
   })
 
-  it('отсечка по экранной яркости с ghostAmount и intensity', () => {
-    expect(vert).toContain('float peak = flareLuma(color) * GHOST_PEAK[ghost] * ghostAmount * intensity;')
+  it('хроматика: каналы на оси в центре ∓ m·δ·χ·s, квад расширен на сдвиг', () => {
+    expect(vert).toContain('vec2 delta = GHOST_M[ghost] * GHOST_SPREAD[ghost] * ghostChromatic * source;')
+    expect(vert).toContain('vec2 halfSize = radius + abs(delta);')
+  })
+
+  it('отсечка по экранной яркости с ghostAmount и intensity: пик профиля 1', () => {
+    expect(vert).toContain('float peak = flareLuma(color) * ghostAmount * intensity;')
     expect(vert).toContain('if (flux.a <= 0.0 || peak < GHOST_CUTOFF)')
   })
 
@@ -114,13 +119,17 @@ describe('FlareGhostMaterial: формулы', () => {
     expect(vert).not.toContain('luminance(')
   })
 
-  it('каёмка: красный снаружи, синий внутри', () => {
-    expect(frag).toContain(
-      'ghostProfile(rho / (1.0 + ghostChromatic)) / ((1.0 + ghostChromatic) * (1.0 + ghostChromatic))'
-    )
-    expect(frag).toContain(
-      'ghostProfile(rho / (1.0 - ghostChromatic)) / ((1.0 - ghostChromatic) * (1.0 - ghostChromatic))'
-    )
+  it('каналы: красный в центре − сдвиг (ближе к центру кадра), синий в центре + сдвиг', () => {
+    expect(frag).toContain('ghostProfile(length((vOffset + vDelta) / vRadius))')
+    expect(frag).toContain('ghostProfile(length(vOffset / vRadius))')
+    expect(frag).toContain('ghostProfile(length((vOffset - vDelta) / vRadius))')
+  })
+
+  it('профили — зеркало ghostProfile: купол 1 − ρ^p, ореол — лоренциан, доведённый до нуля на краю', () => {
+    expect(frag).toContain('if (rho >= 1.0) return 0.0;')
+    expect(frag).toContain('float edge = 1.0 / (1.0 + 1.0 / (vShape * vShape));')
+    expect(frag).toContain('return (1.0 / (1.0 + rho * rho / (vShape * vShape)) - edge) / (1.0 - edge);')
+    expect(frag).toContain('return 1.0 - pow(rho, vShape);')
   })
 
   it('потолок half-float', () => {
@@ -151,7 +160,7 @@ describe('FlareGhostMaterial: проводка', () => {
     expect(material.uniforms.contrastPixels.value).toBe(16)
   })
 
-  it('ручки виньетирования и каёмки', () => {
+  it('ручки виньетирования и разноса каналов', () => {
     material.ghostVignette = 3
     material.ghostChromatic = 0.05
 
@@ -163,14 +172,14 @@ describe('FlareGhostMaterial: проводка', () => {
     expect(material.ghostChromatic).toBe(0.05)
   })
 
-  it('каёмка: зажата в [0, 0.5]', () => {
-    material.ghostChromatic = 2
-    expect(material.ghostChromatic).toBe(0.5)
+  it('разнос каналов: множитель зажат в [0, 2]', () => {
+    material.ghostChromatic = 3
+    expect(material.ghostChromatic).toBe(2)
 
     material.ghostChromatic = -1
     expect(material.ghostChromatic).toBe(0)
 
-    material.ghostChromatic = 0.05
-    expect(material.ghostChromatic).toBe(0.05)
+    material.ghostChromatic = 1.5
+    expect(material.ghostChromatic).toBe(1.5)
   })
 })
