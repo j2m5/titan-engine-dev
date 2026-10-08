@@ -57,13 +57,13 @@ describe('GLSL: вращение камня (InstancedAsteroidShaderTemplate, L0
     expect(v).toContain(
       'float spinAngle = 2.0 * PI * (uSpinTime * (m / 12.0) / uSpinPeriod + hashSurface11(shapeSeed + 29.29));'
     )
-    // Родригес: v' = v·cosA + (axis × v)·sinA + axis·(axis·v)·(1 − cosA) — позиция и нормаль
+    // Родригес в матричной форме R = cosA·I + sinA·[k]× + (1 − cosA)·k·kᵀ: та же
+    // матрица вращает геометрию и уходит в vObjToView (свет видит повёрнутую нормаль)
+    expect(v).toContain('mat3 spin = mat3(1.0);')
     expect(v).toContain(
-      'shapedPos = shapedPos * cosA + cross(spinAxis, shapedPos) * sinA + spinAxis * dot(spinAxis, shapedPos) * (1.0 - cosA);'
+      'spin = cosA * mat3(1.0) + sinA * mat3(0.0, spinAxis.z, -spinAxis.y, -spinAxis.z, 0.0, spinAxis.x, spinAxis.y, -spinAxis.x, 0.0) + (1.0 - cosA) * outerProduct(spinAxis, spinAxis);'
     )
-    expect(v).toContain(
-      'shapedNormal = shapedNormal * cosA + cross(spinAxis, shapedNormal) * sinA + spinAxis * dot(spinAxis, shapedNormal) * (1.0 - cosA);'
-    )
+    expect(v).toContain('shapedPos = spin * restPos;')
 
     // Гейт целиком раньше пересборки world-позиции из instanceMatrix
     expect(v.indexOf('if (uSpinPeriod > 0.0)')).toBeLessThan(
@@ -300,5 +300,48 @@ describe('AsteroidBelt: __createStreamer передаёт spinPeriodHours (ча�
 
     const streamer = beltInternalsOf(belt).streamer!
     expect(poolOf(streamer).geometryMaterial.uniforms.uSpinPeriod.value).toBe(0)
+  })
+})
+
+describe('вращение камня: текстура привязана к камню', () => {
+  it('домен узора и трипланара — поза ДО вращения, вращение — в матрице объект→view', () => {
+    const v = withoutComments(InstancedAsteroidShaderTemplate.vertexShader)
+
+    // Узор (surfDir) и трипланар берут vObjectPos/vObjectNormal: из повёрнутой
+    // позы текстура стояла бы в пространстве, а камень крутился под ней
+    expect(v).toContain('vec3 restPos = shapedPos;')
+    expect(v).toContain('vec3 restNormal = shapedNormal;')
+    expect(v).toContain('vObjectPos = restPos;')
+    expect(v).toContain('vObjectNormal = restNormal;')
+    expect(v).toContain('vObjToView = normalMatrix * instanceNormalMatrix * spin;')
+    expect(v.indexOf('vec3 restPos = shapedPos;')).toBeLessThan(v.indexOf('if (uSpinPeriod > 0.0)'))
+  })
+
+  it('матрица в колонках GLSL совпадает с формулой Родригеса (знак и транспонирование)', () => {
+    // Повтор GLSL-выражения: mat3(c0, c1, c2) — по колонкам, mat3 * v = Σ c_i·v_i
+    const glslSpin = (k: [number, number, number], angle: number) => {
+      const cosA = Math.cos(angle)
+      const sinA = Math.sin(angle)
+      const skew = [0, k[2], -k[1], -k[2], 0, k[0], k[1], -k[0], 0]
+      const outer = [k[0] * k[0], k[1] * k[0], k[2] * k[0], k[0] * k[1], k[1] * k[1], k[2] * k[1], k[0] * k[2], k[1] * k[2], k[2] * k[2]]
+      const identity = [1, 0, 0, 0, 1, 0, 0, 0, 1]
+
+      return identity.map((value: number, i: number) => cosA * value + sinA * skew[i] + (1 - cosA) * outer[i])
+    }
+    const apply = (m: number[], p: [number, number, number]): [number, number, number] => [
+      m[0] * p[0] + m[3] * p[1] + m[6] * p[2],
+      m[1] * p[0] + m[4] * p[1] + m[7] * p[2],
+      m[2] * p[0] + m[5] * p[1] + m[8] * p[2]
+    ]
+
+    for (const seed of [0.11, 0.37, 0.73]) {
+      const axis = spinAxis(seed)
+      const angle = 2 * Math.PI * spinPhase(seed) + 0.9
+      const v0: [number, number, number] = [0.3, -0.8, 0.52]
+      const expected = rodrigues(v0, axis, angle)
+      const actual = apply(glslSpin(axis, angle), v0)
+
+      actual.forEach((value: number, i: number) => expect(value).toBeCloseTo(expected[i], 12))
+    }
   })
 })

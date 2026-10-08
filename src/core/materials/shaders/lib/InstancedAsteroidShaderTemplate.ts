@@ -207,6 +207,15 @@ export function instancedAsteroidShaderSource(
       // вершинника, НЕ варьинг: ULP-джиттер интерполяции сюда не попадает).
       // uSpinPeriod <= 0 — блок не исполняется, всё ниже тождественно прежнему
       // (кольца по умолчанию).
+      //
+      // Поза ДО вращения — домен узора и трипланара (vObjectPos/vObjectNormal):
+      // текстура привязана к камню. Из повёрнутой позы узор стоял бы в
+      // пространстве, а камень крутился под ним. Само вращение — матрицей в
+      // vObjToView: освещение видит повёрнутую нормаль
+      vec3 restPos = shapedPos;
+      vec3 restNormal = shapedNormal;
+      mat3 spin = mat3(1.0);
+
       if (uSpinPeriod > 0.0) {
         vec3 spinAxis = normalize(vec3(
           hashSurface11(shapeSeed + 13.13),
@@ -222,9 +231,10 @@ export function instancedAsteroidShaderSource(
         float spinAngle = 2.0 * PI * (uSpinTime * (m / 12.0) / uSpinPeriod + hashSurface11(shapeSeed + 29.29));
         float cosA = cos(spinAngle);
         float sinA = sin(spinAngle);
-        // Родригес: v' = v·cosA + (axis × v)·sinA + axis·(axis·v)·(1 − cosA)
-        shapedPos = shapedPos * cosA + cross(spinAxis, shapedPos) * sinA + spinAxis * dot(spinAxis, shapedPos) * (1.0 - cosA);
-        shapedNormal = shapedNormal * cosA + cross(spinAxis, shapedNormal) * sinA + spinAxis * dot(spinAxis, shapedNormal) * (1.0 - cosA);
+        // Родригес в матричной форме: R = cosA·I + sinA·[k]× + (1 − cosA)·k·kᵀ
+        // (mat3 по колонкам; [k]× v = k × v)
+        spin = cosA * mat3(1.0) + sinA * mat3(0.0, spinAxis.z, -spinAxis.y, -spinAxis.z, 0.0, spinAxis.x, spinAxis.y, -spinAxis.x, 0.0) + (1.0 - cosA) * outerProduct(spinAxis, spinAxis);
+        shapedPos = spin * restPos;
       }
 
       vec4 worldPosition = instanceMatrix * vec4(shapedPos, 1.0);
@@ -254,9 +264,9 @@ export function instancedAsteroidShaderSource(
       // геом. нормаль объекта (нормаль больше не возмущается процедурно) и
       // матрица объект→view — трипланарная деталь (см. чанк TriplanarDetail)
       // применяется к геометрической нормали во фрагменте.
-      vObjectPos = shapedPos;
-      vObjectNormal = shapedNormal;
-      vObjToView = normalMatrix * instanceNormalMatrix;
+      vObjectPos = restPos;
+      vObjectNormal = restNormal;
+      vObjToView = normalMatrix * instanceNormalMatrix * spin;
       vFade = instanceFade;
       // Freshness фасет разлома + cavity кратерных чаш из запекания (см. attribute
       // выше); резервные каналы zw не прокидываем
