@@ -4,7 +4,7 @@ import { Actor } from '@/core/models/Actor'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { StarOuterLayerShaderTemplate } from '@/core/materials/shaders/lib/StarOuterLayerShaderTemplate'
 import { UpdateContext } from '@/core/UpdateContext'
-import { buildStarPalette, StarPalette } from '@/core/materials/shaders/lib/helpers'
+import { buildStarPalette, DEFAULT_STAR_TEMPERATURE_K, StarPalette } from '@/core/materials/shaders/lib/helpers'
 import { buildProminenceGeometry } from '@/core/renderables/utils/prominenceGeometry'
 
 /**
@@ -56,7 +56,10 @@ class StarOuterLayer extends Mesh {
       blending: NormalBlending
     })
 
-    const temperature: number = this.model.physicalObject?.getAttribute('temperature', 3000) ?? 3000
+    // Дефолт общий с диском и билбордом: свой (3000K) красил бы протуберанцы
+    // звезды без температуры в красный при солнечном диске
+    const temperature: number =
+      this.model.physicalObject?.getAttribute('temperature', DEFAULT_STAR_TEMPERATURE_K) ?? DEFAULT_STAR_TEMPERATURE_K
     const palette: StarPalette = buildStarPalette(temperature, 1500)
     this.material.uniforms.uColorCool.value.setRGB(palette.cool.r, palette.cool.g, palette.cool.b)
     this.material.uniforms.uColorBase.value.setRGB(palette.base.r, palette.base.g, palette.base.b)
