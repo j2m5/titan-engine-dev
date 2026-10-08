@@ -23,6 +23,7 @@ import { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import { LeakDetector } from '@/core/lifecycle/LeakDetector'
 import { TextureBudget } from '@/core/streaming/TextureBudget'
 import { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGenerator'
+import { BodyInfoService } from '@/core/bodyInfo/BodyInfoService'
 import { SyncTerrainPatchBuilder, type TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import { WorkerTerrainPatchBuilder } from '@/core/terrain/worker/WorkerTerrainPatchBuilder'
 
@@ -32,6 +33,12 @@ class AppServiceProvider extends ServiceProvider {
     this.app.singleton(Tokens.CameraController, () => new CameraController())
 
     this.app.singleton(Tokens.SceneObserver, () => new SceneObserver())
+
+    // Живые величины карточки объекта; опрашивает стор, только пока карточка открыта
+    this.app.singleton(
+      Tokens.BodyInfoService,
+      (c: Container) => new BodyInfoService(c.get(Tokens.Scene), c.get(Tokens.Camera), c.get(Tokens.SimulationClock))
+    )
 
     this.app.singleton(
       Tokens.CameraCollision,
