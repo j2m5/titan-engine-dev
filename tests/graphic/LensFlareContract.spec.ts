@@ -302,8 +302,8 @@ describe('LensFlareEffect: потолок яркости источника шт
   }
 
   const WHITE_TINT = [1, 1, 1] as const
-  /** Sirius B: wdShade упирается в потолок HDR 64 во всех трёх каналах */
-  const SIRIUS_B = [64, 64, 64] as const
+  /** Sirius B: wdShade упирается в потолок WD_HDR_CEILING 32 во всех трёх каналах */
+  const SIRIUS_B = [32, 32, 32] as const
   /** Обычная звезда: starEnergy максимум 3.0 * STAR_CORE_INTENSITY 4.0 */
   const STAR = [12, 11, 10] as const
 

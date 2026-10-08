@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { SaveFunction } from '@/ui/types'
 import { notificationStore } from '@/ui/mobx/NotificationStore'
 
@@ -18,6 +18,11 @@ export function useDebounce(
     [saveFunction, delay]
   )
 
+  // Уход компонента или смена функции сохранения: отложенная правка
+  // сохраняется сразу и той функцией, для которой сделана, — не теряется и
+  // не стреляет после размонтирования
+  useEffect(() => () => debouncedSave.flush(), [debouncedSave])
+
   const handleChange = (newValue: string) => {
     setValue(newValue)
     debouncedSave(newValue)
@@ -26,11 +31,29 @@ export function useDebounce(
   return [value, handleChange]
 }
 
-function debounce<TArgs extends unknown[]>(fn: (...args: TArgs) => void, delay: number): (...args: TArgs) => void {
-  let timer: number | null = null
+interface Debounced<TArgs extends unknown[]> {
+  (...args: TArgs): void
+  /** Выполнить отложенный вызов немедленно; без отложенного — ничего */
+  flush(): void
+}
 
-  return function (...args: TArgs) {
-    if (timer) window.clearTimeout(timer)
-    timer = window.setTimeout(() => fn(...args), delay)
+function debounce<TArgs extends unknown[]>(fn: (...args: TArgs) => void, delay: number): Debounced<TArgs> {
+  let timer: number | null = null
+  let pending: TArgs | null = null
+
+  const flush = (): void => {
+    if (timer !== null) window.clearTimeout(timer)
+    timer = null
+    const args = pending
+    pending = null
+    if (args) fn(...args)
   }
+
+  const debounced = (...args: TArgs): void => {
+    pending = args
+    if (timer !== null) window.clearTimeout(timer)
+    timer = window.setTimeout(flush, delay)
+  }
+
+  return Object.assign(debounced, { flush })
 }
