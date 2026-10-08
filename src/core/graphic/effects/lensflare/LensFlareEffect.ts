@@ -21,17 +21,14 @@ import { LocalContrastMaterial } from './LocalContrastMaterial'
 import { FlareGridMaterial } from './FlareGridMaterial'
 import { FlareSelectMaterial } from './FlareSelectMaterial'
 import { FlareGhostMaterial } from './FlareGhostMaterial'
-import { FlareStarburstMaterial } from './FlareStarburstMaterial'
 import { createSpriteQuad } from './flareSprites'
 import { flareGridSize, type FlareGridSize } from './flareGrid'
 import { FLARE_GHOSTS } from './flareGhosts'
 
 const fragmentShader: string = `
   uniform sampler2D ghostBuffer;
-  uniform sampler2D starburstBuffer;
   uniform sampler2D streakBuffer;
   uniform float ghostAmount;
-  uniform float starburstAmount;
   uniform float streakAmount;
   uniform float intensity;
 
@@ -39,7 +36,6 @@ const fragmentShader: string = `
     // Множители здесь, а не в проходах: при пропуске проходов устаревшее
     // содержимое буферов умножается на ноль
     vec3 flare = texture(ghostBuffer, uv).rgb * ghostAmount
-      + texture(starburstBuffer, uv).rgb * starburstAmount
       + texture(streakBuffer, uv).rgb * streakAmount;
     outputColor = vec4(inputColor.rgb + flare * intensity, inputColor.a);
   }
@@ -61,8 +57,6 @@ export interface LensFlareEffectOptions {
   ghostAmount?: number
   ghostVignette?: number
   ghostChromatic?: number
-  starburstAmount?: number
-  starburstMinFlux?: number
   thresholdLevel?: number
   streakAmount?: number
   streakThreshold?: number
@@ -73,10 +67,8 @@ export interface LensFlareEffectOptions {
 
 export interface LensFlareEffectUniforms {
   ghostBuffer: Uniform<Texture | null>
-  starburstBuffer: Uniform<Texture | null>
   streakBuffer: Uniform<Texture | null>
   ghostAmount: Uniform<number>
-  starburstAmount: Uniform<number>
   streakAmount: Uniform<number>
   intensity: Uniform<number>
 }
@@ -90,8 +82,6 @@ export const lensFlareEffectOptionsDefaults = {
   ghostAmount: 1,
   ghostVignette: 2,
   ghostChromatic: 0.04,
-  starburstAmount: 1,
-  starburstMinFlux: 200,
   streakAmount: 0
 } satisfies LensFlareEffectOptions
 
@@ -115,9 +105,9 @@ function createHalfFloatTarget(name: string): WebGLRenderTarget {
 }
 
 /**
- * Блик объектива: анаморфные призраки и starburst — спрайты от ярких ячеек
- * буфера локального контраста, плюс анаморфный штрих. Эффект видит только
- * яркие пиксели кадра и ничего не знает об источниках сцены.
+ * Блик объектива: анаморфные призраки — спрайты от ярких ячеек буфера
+ * локального контраста, плюс анаморфный штрих. Эффект видит только яркие
+ * пиксели кадра и ничего не знает об источниках сцены.
  *
  * Reference (штрих и порог): https://www.froyok.fr/blog/2021-09-ue4-custom-lens-flare/
  */
@@ -154,19 +144,16 @@ export class LensFlareEffect extends Effect {
   readonly selectFluxPass: ShaderPass
   readonly selectCentroidPass: ShaderPass
 
-  // Спрайты: призраки — четверть разрешения, лучи — в renderTarget2.
+  // Спрайты призраков — четверть разрешения.
   // Поля верхнего уровня: Effect.dispose() обходит Object.keys(this)
   readonly ghostTarget: WebGLRenderTarget
   readonly ghostGeometry: InstancedBufferGeometry
   readonly ghostMaterial: FlareGhostMaterial
-  readonly starburstGeometry: InstancedBufferGeometry
-  readonly starburstMaterial: FlareStarburstMaterial
 
   gridSize: FlareGridSize = flareGridSize(1, 1)
 
   private readonly ghostScene: Scene = new Scene()
-  private readonly starburstScene: Scene = new Scene()
-  // Вершинные шейдеры спрайтов пишут клип-координаты сами — камера формальная
+  // Вершинный шейдер спрайтов пишет клип-координаты сам — камера формальная
   private readonly spriteCamera: OrthographicCamera = new OrthographicCamera()
   private readonly clearColor: Color = new Color()
 
@@ -182,8 +169,6 @@ export class LensFlareEffect extends Effect {
       ghostAmount,
       ghostVignette,
       ghostChromatic,
-      starburstAmount,
-      starburstMinFlux,
       thresholdLevel,
       streakAmount,
       streakThreshold,
@@ -198,7 +183,6 @@ export class LensFlareEffect extends Effect {
     // Ручки, общие композиту и спрайтам: одни объекты Uniform
     const shared = {
       ghostAmount: new Uniform(ghostAmount),
-      starburstAmount: new Uniform(starburstAmount),
       streakAmount: new Uniform(streakAmount),
       intensity: new Uniform(intensity)
     }
@@ -209,7 +193,6 @@ export class LensFlareEffect extends Effect {
       uniforms: new Map<string, Uniform>(
         Object.entries({
           ghostBuffer: new Uniform(null),
-          starburstBuffer: new Uniform(null),
           streakBuffer: new Uniform(null),
           ...shared
         } satisfies LensFlareEffectUniforms)
@@ -257,18 +240,7 @@ export class LensFlareEffect extends Effect {
     ghostMesh.frustumCulled = false
     this.ghostScene.add(ghostMesh)
 
-    this.starburstGeometry = createSpriteQuad()
-    this.starburstMaterial = new FlareStarburstMaterial(
-      { starburstAmount: shared.starburstAmount, intensity: shared.intensity },
-      this.sourceFluxTarget.texture,
-      this.sourceCentroidTarget.texture
-    )
-    const starburstMesh = new Mesh(this.starburstGeometry, this.starburstMaterial)
-    starburstMesh.frustumCulled = false
-    this.starburstScene.add(starburstMesh)
-
     this.uniforms.get('ghostBuffer').value = this.ghostTarget.texture
-    this.uniforms.get('starburstBuffer').value = this.renderTarget2.texture
     this.uniforms.get('streakBuffer').value = this.streakTarget.texture
 
     this.resolution = new Resolution(this, resolutionX, resolutionY, resolutionScale)
@@ -276,7 +248,6 @@ export class LensFlareEffect extends Effect {
 
     this.ghostVignette = ghostVignette
     this.ghostChromatic = ghostChromatic
-    this.starburstMinFlux = starburstMinFlux
     if (thresholdLevel !== undefined) this.thresholdLevel = thresholdLevel
     if (streakThreshold !== undefined) this.streakMaterial.streakThreshold = streakThreshold
     if (streakScale !== undefined) this.streakMaterial.streakScale = streakScale
@@ -316,18 +287,14 @@ export class LensFlareEffect extends Effect {
 
     this.localContrastPass.render(renderer, this.renderTarget2, this.renderTarget1)
 
-    const ghosts = this.ghostAmount !== 0
-    const starburst = this.starburstAmount !== 0
-    if (!ghosts && !starburst) return
+    if (this.ghostAmount === 0) return
 
     this.gridFluxPass.render(renderer, this.renderTarget1, this.gridFluxTarget)
     this.gridCentroidPass.render(renderer, this.renderTarget1, this.gridCentroidTarget)
     this.selectFluxPass.render(renderer, this.gridFluxTarget, this.sourceFluxTarget)
     this.selectCentroidPass.render(renderer, this.gridFluxTarget, this.sourceCentroidTarget)
 
-    if (ghosts) this.renderSprites(renderer, this.ghostScene, this.ghostTarget)
-    // renderTarget2 после локального контраста свободен
-    if (starburst) this.renderSprites(renderer, this.starburstScene, this.renderTarget2)
+    this.renderSprites(renderer, this.ghostScene, this.ghostTarget)
   }
 
   /** Спрайты сложением в очищенный таргет; состояние очистки рендерера возвращается */
@@ -379,17 +346,14 @@ export class LensFlareEffect extends Effect {
 
     const aspect = width > 0 && height > 0 ? width / height : 1
     this.ghostMaterial.setGrid(cols, rows, aspect)
-    this.starburstMaterial.setGrid(cols, rows, aspect)
     this.ghostGeometry.instanceCount = cols * rows * FLARE_GHOSTS.length
-    this.starburstGeometry.instanceCount = cols * rows
   }
 
   override dispose(): void {
     super.dispose()
-    // Геометрии в обход Effect.dispose не попадают — он разбирает только
+    // Геометрия в обход Effect.dispose не попадает — он разбирает только
     // Texture/Material/WebGLRenderTarget/Pass
     this.ghostGeometry.dispose()
-    this.starburstGeometry.dispose()
   }
 
   get intensity(): number {
@@ -406,14 +370,6 @@ export class LensFlareEffect extends Effect {
 
   set ghostAmount(value: number) {
     this.uniforms.get('ghostAmount').value = value
-  }
-
-  get starburstAmount(): number {
-    return this.uniforms.get('starburstAmount').value
-  }
-
-  set starburstAmount(value: number) {
-    this.uniforms.get('starburstAmount').value = value
   }
 
   get streakAmount(): number {
@@ -438,14 +394,6 @@ export class LensFlareEffect extends Effect {
 
   set ghostChromatic(value: number) {
     this.ghostMaterial.ghostChromatic = value
-  }
-
-  get starburstMinFlux(): number {
-    return this.starburstMaterial.starburstMinFlux
-  }
-
-  set starburstMinFlux(value: number) {
-    this.starburstMaterial.starburstMinFlux = value
   }
 
   get thresholdLevel(): number {

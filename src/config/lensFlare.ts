@@ -4,8 +4,7 @@
  *
  * Свечением вокруг ярких пикселей владеет `BloomEffect` (`BLOOM_OPTIONS`),
  * здесь только артефакты объектива: призраки (вертикальные овалы диафрагмы,
- * таблица — `flareGhosts.ts`), starburst (шесть дифракционных лучей,
- * `flareStarburst.ts`) и анаморфный штрих.
+ * таблица — `flareGhosts.ts`) и анаморфный штрих.
  */
 export interface LensFlareConfig {
   lensFlare: {
@@ -17,14 +16,6 @@ export interface LensFlareConfig {
     ghostVignette: number
     /** Цветная каёмка призраков: радиус по каналам R·(1 ± χ), доля радиуса; [0, 0.5], сеттер зажимает */
     ghostChromatic: number
-    /** Энергия лучей starburst; 0 — лучей нет */
-    starburstAmount: number
-    /**
-     * Порог лучей: поток источника в пикселях 1080p × яркость. Ориентиры:
-     * звезда 12 px при farGlowGain 3 ≈ 3400, белый карлик 6 px ≈ 1100,
-     * яркая фоновая звезда ≈ 3. Вход плавный — до удвоенного порога
-     */
-    starburstMinFlux: number
     /**
      * Сила анаморфного штриха; 0 — штриха нет. Штрих стоит 129 выборок на
      * пиксель четверти разрешения плюс проход Kawase, готовящий его источник;
@@ -59,9 +50,9 @@ export interface LensFlareConfig {
 }
 
 /**
- * Значения призраков и лучей стартовые, по расчёту (калибровки в
- * flareGhosts.ts и flareStarburst.ts), не замер — приёмка по виду за
- * владельцем. Сила штриха и intensity выбраны владельцем.
+ * Значения призраков стартовые, по расчёту (калибровка в flareGhosts.ts),
+ * не замер — приёмка по виду за владельцем. Сила штриха и intensity выбраны
+ * владельцем.
  */
 export const lensFlare: LensFlareConfig = {
   lensFlare: {
@@ -69,8 +60,6 @@ export const lensFlare: LensFlareConfig = {
     ghostAmount: 1,
     ghostVignette: 2,
     ghostChromatic: 0.04,
-    starburstAmount: 1,
-    starburstMinFlux: 200,
     streakAmount: 0.005,
     streakThreshold: 0.3,
     streakScale: 5,

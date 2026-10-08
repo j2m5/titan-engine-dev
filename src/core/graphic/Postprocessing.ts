@@ -95,8 +95,6 @@ export function createEffectPasses(camera: PerspectiveCamera): readonly [EffectP
     ghostAmount: config('lensFlare.ghostAmount'),
     ghostVignette: config('lensFlare.ghostVignette'),
     ghostChromatic: config('lensFlare.ghostChromatic'),
-    starburstAmount: config('lensFlare.starburstAmount'),
-    starburstMinFlux: config('lensFlare.starburstMinFlux'),
     streakAmount: config('lensFlare.streakAmount'),
     streakThreshold: config('lensFlare.streakThreshold'),
     streakScale: config('lensFlare.streakScale'),

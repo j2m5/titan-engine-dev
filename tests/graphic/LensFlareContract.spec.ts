@@ -66,54 +66,55 @@ describe('LensFlareEffect: контракт блика объектива', () =
       intensity: 0.2,
       ghostAmount: 0.7,
       ghostVignette: 3,
-      ghostChromatic: 0.05,
-      starburstAmount: 0.5,
-      starburstMinFlux: 300
+      ghostChromatic: 0.05
     })
 
     expect(effect.uniforms.get('intensity').value).toBe(0.2)
     expect(effect.uniforms.get('ghostAmount').value).toBe(0.7)
-    expect(effect.uniforms.get('starburstAmount').value).toBe(0.5)
     expect(effect.ghostMaterial.ghostVignette).toBe(3)
     expect(effect.ghostMaterial.ghostChromatic).toBe(0.05)
-    expect(effect.starburstMaterial.starburstMinFlux).toBe(300)
   })
 })
 
 describe('LensFlareEffect: композит', () => {
-  it('множители призраков, лучей и штриха — в композите: устаревшие буферы при пропуске умножаются на ноль', () => {
+  it('множители призраков и штриха — в композите: устаревшие буферы при пропуске умножаются на ноль', () => {
     const source = new LensFlareEffect().getFragmentShader()
 
     expect(source).toContain('texture(ghostBuffer, uv).rgb * ghostAmount')
-    expect(source).toContain('texture(starburstBuffer, uv).rgb * starburstAmount')
     expect(source).toContain('texture(streakBuffer, uv).rgb * streakAmount')
     expect(source).toContain('outputColor = vec4(inputColor.rgb + flare * intensity, inputColor.a);')
   })
 
-  it('композит читает призраков из ghostTarget, лучи из renderTarget2, штрих из streakTarget', () => {
+  it('лучей starburst нет: ни буфера в композите, ни прохода, ни ручек', () => {
+    const effect = new LensFlareEffect()
+
+    expect(effect.getFragmentShader()).not.toContain('starburst')
+    expect(effect.uniforms.has('starburstBuffer')).toBe(false)
+    expect('starburstMaterial' in effect).toBe(false)
+    for (const key of ['starburstAmount', 'starburstMinFlux']) {
+      expect(key in lensFlare.lensFlare).toBe(false)
+    }
+  })
+
+  it('композит читает призраков из ghostTarget, штрих из streakTarget', () => {
     const effect = new LensFlareEffect()
 
     expect(effect.uniforms.get('ghostBuffer').value).toBe(effect.ghostTarget.texture)
-    expect(effect.uniforms.get('starburstBuffer').value).toBe(effect.renderTarget2.texture)
     expect(effect.uniforms.get('streakBuffer').value).toBe(effect.streakTarget.texture)
   })
 
-  it('спрайты делят с композитом сами объекты Uniform', () => {
+  it('призраки делят с композитом сами объекты Uniform', () => {
     const effect = new LensFlareEffect()
 
     expect(effect.ghostMaterial.uniforms.ghostAmount).toBe(effect.uniforms.get('ghostAmount'))
     expect(effect.ghostMaterial.uniforms.intensity).toBe(effect.uniforms.get('intensity'))
-    expect(effect.starburstMaterial.uniforms.starburstAmount).toBe(effect.uniforms.get('starburstAmount'))
-    expect(effect.starburstMaterial.uniforms.intensity).toBe(effect.uniforms.get('intensity'))
   })
 
-  it('спрайты читают выбранные источники', () => {
+  it('призраки читают выбранные источники', () => {
     const effect = new LensFlareEffect()
 
     expect(effect.ghostMaterial.uniforms.sourceFlux.value).toBe(effect.sourceFluxTarget.texture)
     expect(effect.ghostMaterial.uniforms.sourceCentroid.value).toBe(effect.sourceCentroidTarget.texture)
-    expect(effect.starburstMaterial.uniforms.sourceFlux.value).toBe(effect.sourceFluxTarget.texture)
-    expect(effect.starburstMaterial.uniforms.sourceCentroid.value).toBe(effect.sourceCentroidTarget.texture)
   })
 
   it('PNG объектива больше не грузятся', () => {
@@ -145,8 +146,7 @@ describe('LensFlareEffect: порядок проходов и адреса за�
       effect.gridCentroidTarget, // 7. сбор центров
       effect.sourceFluxTarget, // 8. отбор: поток
       effect.sourceCentroidTarget, // 9. отбор: центр
-      effect.ghostTarget, // 10. призраки
-      effect.renderTarget2 // 11. лучи — в освободившийся renderTarget2
+      effect.ghostTarget // 10. призраки
     ])
   })
 
@@ -161,11 +161,11 @@ describe('LensFlareEffect: порядок проходов и адреса за�
     expect(effect.selectCentroidMaterial.uniforms.centroidBuffer.value).toBe(effect.gridCentroidTarget.texture)
   })
 
-  it('спрайты пишутся в очищенный таргет', () => {
+  it('призраки пишутся в очищенный таргет', () => {
     const effect = new LensFlareEffect()
     const renderer = runUpdate(effect)
 
-    expect(renderer.clear).toHaveBeenCalledTimes(2)
+    expect(renderer.clear).toHaveBeenCalledTimes(1)
     expect(renderer.clear).toHaveBeenCalledWith(true, false, false)
   })
 })
@@ -179,27 +179,12 @@ describe('LensFlareEffect: пропуск проходов', () => {
     expect(written).not.toContain(effect.streakTarget)
   })
 
-  it('нулевые призраки и лучи — сетка, отбор и спрайты не выполняются', () => {
-    const effect = new LensFlareEffect({ ghostAmount: 0, starburstAmount: 0, streakAmount: 0 })
+  it('нулевые призраки — сетка, отбор и спрайты не выполняются', () => {
+    const effect = new LensFlareEffect({ ghostAmount: 0, streakAmount: 0 })
     const renderer = runUpdate(effect)
 
     expect(writeSequence(effect, renderer)).toEqual([effect.renderTarget1, effect.renderTarget2, effect.renderTarget1])
     expect(renderer.clear).not.toHaveBeenCalled()
-  })
-
-  it('нулевые призраки — призрачный таргет не пишется, лучи пишутся', () => {
-    const effect = new LensFlareEffect({ ghostAmount: 0 })
-    const written = writeSequence(effect, runUpdate(effect))
-
-    expect(written).not.toContain(effect.ghostTarget)
-    expect(written[written.length - 1]).toBe(effect.renderTarget2)
-  })
-
-  it('нулевые лучи — последний проход — призраки', () => {
-    const effect = new LensFlareEffect({ starburstAmount: 0 })
-    const written = writeSequence(effect, runUpdate(effect))
-
-    expect(written[written.length - 1]).toBe(effect.ghostTarget)
   })
 })
 
@@ -214,7 +199,6 @@ describe('LensFlareEffect: ресайз', () => {
     expect(effect.ghostTarget.width).toBe(480)
     expect(effect.ghostTarget.height).toBe(270)
     expect(effect.ghostGeometry.instanceCount).toBe(64 * 36 * FLARE_GHOSTS.length)
-    expect(effect.starburstGeometry.instanceCount).toBe(64 * 36)
     expect(effect.ghostMaterial.uniforms.aspect.value).toBeCloseTo(16 / 9, 12)
     expect(effect.gridFluxMaterial.uniforms.areaPerTexel.value).toBeCloseTo(1 / 540 ** 2, 15)
   })
@@ -226,8 +210,8 @@ describe('LensFlareEffect: ресайз', () => {
 
     expect(effect.gridSize.cols).toBe(86)
     expect(effect.gridCentroidTarget.width).toBe(86)
-    expect(effect.starburstGeometry.instanceCount).toBe(86 * 36)
-    expect(effect.starburstMaterial.uniforms.aspect.value).toBeCloseTo(2560 / 1080, 12)
+    expect(effect.ghostGeometry.instanceCount).toBe(86 * 36 * FLARE_GHOSTS.length)
+    expect(effect.ghostMaterial.uniforms.aspect.value).toBeCloseTo(2560 / 1080, 12)
   })
 
   it('нулевой кадр: аспект конечен, сетка конечна', () => {
@@ -366,6 +350,7 @@ describe('LensFlareEffect: локальный контраст', () => {
     expect(effect.localContrastMaterial.uniforms.texelSize.value.x).toBeCloseTo(1 / 512, 10)
     expect(effect.localContrastMaterial.uniforms.texelSize.value.y).toBeCloseTo(1 / 256, 10)
   })
+
 })
 
 describe('LensFlareEffect: инициализация проходов', () => {
@@ -398,9 +383,9 @@ describe('LensFlareEffect: инициализация проходов', () => {
 })
 
 describe('LensFlareEffect: разборка ресурсов', () => {
-  it('таргеты, материалы спрайтов и геометрии освобождаются штатным dispose', () => {
+  it('таргеты, материал и геометрия призраков освобождаются штатным dispose', () => {
     // Effect.dispose() обходит Object.keys(this) и разбирает Texture/Material/
-    // WebGLRenderTarget/Pass; геометрии в этот список не входят — их
+    // WebGLRenderTarget/Pass; геометрия в этот список не входит — её
     // освобождает переопределение dispose
     const effect = new LensFlareEffect()
     const disposed = vi.fn()
@@ -408,18 +393,14 @@ describe('LensFlareEffect: разборка ресурсов', () => {
       target.addEventListener('dispose', disposed)
     }
     const ghostGeometry = vi.spyOn(effect.ghostGeometry, 'dispose')
-    const starburstGeometry = vi.spyOn(effect.starburstGeometry, 'dispose')
     const ghostMaterial = vi.spyOn(effect.ghostMaterial, 'dispose')
-    const starburstMaterial = vi.spyOn(effect.starburstMaterial, 'dispose')
     const streakSourcePass = vi.spyOn(effect.streakSourcePass, 'dispose')
 
     effect.dispose()
 
     expect(disposed).toHaveBeenCalledTimes(4)
     expect(ghostGeometry).toHaveBeenCalled()
-    expect(starburstGeometry).toHaveBeenCalled()
     expect(ghostMaterial).toHaveBeenCalled()
-    expect(starburstMaterial).toHaveBeenCalled()
     expect(streakSourcePass).toHaveBeenCalled()
   })
 })
@@ -430,12 +411,10 @@ describe('LensFlareEffect: значения приёмки', () => {
     expect(lensFlare.lensFlare.intensity).toBe(0.1)
   })
 
-  it('стартовые значения призраков и лучей — по расчёту, не замер', () => {
+  it('стартовые значения призраков — по расчёту, не замер', () => {
     expect(lensFlare.lensFlare.ghostAmount).toBe(1)
     expect(lensFlare.lensFlare.ghostVignette).toBe(2)
     expect(lensFlare.lensFlare.ghostChromatic).toBe(0.04)
-    expect(lensFlare.lensFlare.starburstAmount).toBe(1)
-    expect(lensFlare.lensFlare.starburstMinFlux).toBe(200)
   })
 
   it('ручек Чепмена больше нет', () => {
@@ -463,8 +442,6 @@ describe('createEffectPasses: ручки блика из конфига', () => 
     expect(effect.ghostAmount).toBe(cfg.ghostAmount)
     expect(effect.ghostVignette).toBe(cfg.ghostVignette)
     expect(effect.ghostChromatic).toBe(cfg.ghostChromatic)
-    expect(effect.starburstAmount).toBe(cfg.starburstAmount)
-    expect(effect.starburstMinFlux).toBe(cfg.starburstMinFlux)
     expect(effect.streakAmount).toBe(cfg.streakAmount)
     expect(effect.thresholdLevel).toBe(BLOOM_OPTIONS.luminanceThreshold)
   })
