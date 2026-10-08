@@ -1,4 +1,5 @@
 import { BlendFunction, Effect } from 'postprocessing'
+import { SRGBColorSpace } from 'three'
 
 /**
  * Дизеринг финального пасса: ломает бандинг 8-битного квантования
@@ -7,6 +8,12 @@ import { BlendFunction, Effect } from 'postprocessing'
  *
  * Амплитуда — один LSB 8-бит (±0.5/255): ниже порога заметности,
  * но достаточно, чтобы полосы рассыпались в шум.
+ *
+ * LSB — это шаг ЭКРАННОГО кода, поэтому шум кладётся в sRGB-кодированный
+ * цвет: эффект объявляет `inputColorSpace = SRGBColorSpace`, и пасс не
+ * раскодирует вход после грейдинга. В линейном свете тот же ±0.5/255 после
+ * кодирования у чёрного вырастал в ~±6/255 (наклон sRGB у нуля — 12.92):
+ * тени зернились, а клампованная снизу половина шума поднимала чёрное.
  *
  * Некон­волюционный: живёт в одном пассе с ChromaticAberration,
  * ПОСЛЕДНИМ — после него только квантование в канвас.
@@ -25,6 +32,7 @@ const fragmentShader = /* glsl */ `
 class DitheringEffect extends Effect {
   public constructor() {
     super('DitheringEffect', fragmentShader, { blendFunction: BlendFunction.NORMAL })
+    this.inputColorSpace = SRGBColorSpace
   }
 }
 
