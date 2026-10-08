@@ -57,6 +57,11 @@ class ImpostorBaker {
     return this.bakeCamera.quaternion
   }
 
+  /** Force a rebake on the next shouldRebake (the RT content was lost with the context). */
+  public invalidate(): void {
+    this.baked = false
+  }
+
   /** True if no bake yet, or the view direction has rotated past the threshold. */
   public shouldRebake(center: Vector3, cameraPosition: Vector3, thresholdRad: number): boolean {
     if (!this.baked) return true

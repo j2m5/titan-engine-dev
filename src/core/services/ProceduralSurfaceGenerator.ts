@@ -64,10 +64,18 @@ function resolutionFor(radiusKm: number): [width: number, height: number] {
  * значение из sRGB-строки), а таргет помечен `SRGBColorSpace`: тонкая
  * цветопередача палитры — ручка приёмки, не механики генератора.
  */
+type ProceduralParams = ReturnType<typeof validateProceduralSurface>
+
 class ProceduralSurfaceGenerator {
   private readonly targets: Map<number, WebGLRenderTarget> = new Map()
+  /** Параметры каждого таргета — для повторного рендера после потери контекста */
+  private readonly params: Map<number, ProceduralParams> = new Map()
 
-  public constructor(private readonly renderer: WebGLRenderer) {}
+  public constructor(private readonly renderer: WebGLRenderer) {
+    // Синглтон на сессию: слушатель живёт столько же, как у HeightFieldGate.
+    // Опциональный вызов: заглушки рендерера в тестах отдают domElement без addEventListener
+    this.renderer.domElement?.addEventListener?.('webglcontextrestored', this.onContextRestored)
+  }
 
   public ensureDiffuse(actor: Actor): string {
     const actorId = actor.getAttribute('id', -1) as number
@@ -95,6 +103,7 @@ class ProceduralSurfaceGenerator {
     this.render(target, params)
 
     this.targets.set(actorId, target)
+    this.params.set(actorId, params)
     resourceStorage.addTexture(target.texture)
 
     return key
@@ -113,9 +122,24 @@ class ProceduralSurfaceGenerator {
     }
 
     this.targets.clear()
+    this.params.clear()
   }
 
-  private render(target: WebGLRenderTarget, params: ReturnType<typeof validateProceduralSurface>): void {
+  /**
+   * Потеря контекста стирает содержимое таргетов: three пересоздаёт их пустыми,
+   * диффуз тела стал бы чёрным. Текстуры в resourceStorage те же — достаточно
+   * перерисовать. Слушатель three зарегистрирован раньше (конструктор
+   * WebGLRenderer): контекст уже готов.
+   */
+  private readonly onContextRestored = (): void => {
+    for (const [actorId, target] of this.targets) {
+      const params = this.params.get(actorId)
+
+      if (params) this.render(target, params)
+    }
+  }
+
+  private render(target: WebGLRenderTarget, params: ProceduralParams): void {
     const offset = seedOffset(params.seed)
 
     const scene = new Scene()

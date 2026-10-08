@@ -19,6 +19,8 @@ class BrunetonAtmosphere extends Object3D implements Acceptable<IObject3DVisitor
   public model: Actor
 
   private lutGenerator!: AtmosphereLUTGenerator
+  /** Конфиг, из которого посчитаны LUT, — для пересчёта после потери контекста */
+  private lutConfig!: AtmosphereConfig
 
   public constructor(
     model: Actor,
@@ -53,7 +55,10 @@ class BrunetonAtmosphere extends Object3D implements Acceptable<IObject3DVisitor
     }
 
     this.lutGenerator = new AtmosphereLUTGenerator(this.renderer)
+    this.lutConfig = adjusted
     const lut = this.lutGenerator.generate(adjusted)
+    // опциональный вызов: заглушки рендерера в тестах отдают domElement без addEventListener
+    this.renderer.domElement?.addEventListener?.('webglcontextrestored', this.onContextRestored)
 
     this.name = this.model.getAttribute('name', '') + 'Atmosphere'
 
@@ -73,7 +78,18 @@ class BrunetonAtmosphere extends Object3D implements Acceptable<IObject3DVisitor
    */
   public dispose(): void {
     this.registry.unregister(this.model.getAttribute('id', -1) as number)
+    this.renderer.domElement?.removeEventListener?.('webglcontextrestored', this.onContextRestored)
     this.lutGenerator.dispose()
+  }
+
+  /**
+   * Потеря контекста стирает содержимое таргетов: three пересоздаёт их пустыми,
+   * и атмосфера по нулевым LUT рисовалась бы чёрной. Таргеты генератора те же,
+   * поэтому запись реестра остаётся верной — достаточно пересчитать. Слушатель
+   * three зарегистрирован раньше (конструктор WebGLRenderer): контекст уже готов.
+   */
+  private readonly onContextRestored = (): void => {
+    this.lutGenerator.generate(this.lutConfig)
   }
 
   public accept(visitor: IObject3DVisitor): void {
