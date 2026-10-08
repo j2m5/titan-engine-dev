@@ -1,5 +1,5 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
-import { Uniform, Color } from 'three'
+import { Uniform, Color, ShaderChunk } from 'three'
 
 export const StarOuterLayerShaderTemplate: ShaderProps = {
   uniforms: {
@@ -16,6 +16,11 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
   },
   vertexShader: `
     precision highp float;
+
+    // Логарифмическая глубина, как у остальной сцены: без неё глубина ≈ 1.0 и
+    // материал с depthTest проигрывает тест любому телу независимо от расстояния
+    ${ShaderChunk['common']}
+    ${ShaderChunk['logdepthbuf_pars_vertex']}
 
     // Атрибуты строит buildProminenceGeometry (renderables/utils/prominenceGeometry.ts).
     // Лента — дуга между двумя основаниями петли на единичной сфере
@@ -124,10 +129,14 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
       vColor = mix(uColorCool, uColorBase, aRibbonRandom.z) * uProtuberanceIntensity;
 
       gl_Position = projectionMatrix * vec4(pV, 1.0);
+
+      ${ShaderChunk['logdepthbuf_vertex']}
     }
   `,
   fragmentShader: `
     precision highp float;
+
+    ${ShaderChunk['logdepthbuf_pars_fragment']}
 
     varying float vSide;
     varying float vOpacity;
@@ -140,6 +149,8 @@ export const StarOuterLayerShaderTemplate: ShaderProps = {
       float alpha = smoothstep(1.0, 0.0, abs(vSide));
       alpha *= alpha;
       alpha *= vOpacity;
+
+      ${ShaderChunk['logdepthbuf_fragment']}
 
       gl_FragColor = vec4(vColor * alpha, alpha * uAlphaBlended);
     }

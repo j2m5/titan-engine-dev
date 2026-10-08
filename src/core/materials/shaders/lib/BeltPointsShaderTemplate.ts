@@ -1,5 +1,5 @@
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
-import { Color, Uniform } from 'three'
+import { Color, ShaderChunk, Uniform } from 'three'
 
 /**
  * Шаблон дальнего слоя пояса астероидов — облако точек (см. BeltPointLayer,
@@ -24,6 +24,11 @@ export const BeltPointsShaderTemplate: ShaderProps = {
     uLightColor: new Uniform(new Color(1, 1, 1))
   },
   vertexShader: `
+    // Логарифмическая глубина, как у остальной сцены: без неё глубина ≈ 1.0 и
+    // материал с depthTest проигрывает тест любому телу независимо от расстояния
+    ${ShaderChunk['common']}
+    ${ShaderChunk['logdepthbuf_pars_vertex']}
+
     attribute float size;
 
     uniform float uPointScale;
@@ -44,12 +49,16 @@ export const BeltPointsShaderTemplate: ShaderProps = {
       vFlux = fluxSide * fluxSide;
       gl_Position = projectionMatrix * mvPosition;
 
+      ${ShaderChunk['logdepthbuf_vertex']}
+
       // Комплемент per-instance fade L1-биллборда на этой же дистанции (см. докблок выше)
       float camDist = length(mvPosition.xyz);
       vFarGate = smoothstep(uMaxDistance * 0.6, uMaxDistance, camDist);
     }
   `,
   fragmentShader: `
+    ${ShaderChunk['logdepthbuf_pars_fragment']}
+
     uniform vec3 uColor;
 
     #ifdef USE_LIGHT_TINT
@@ -74,6 +83,8 @@ export const BeltPointsShaderTemplate: ShaderProps = {
       #else
         vec3 color = uColor;
       #endif
+
+      ${ShaderChunk['logdepthbuf_fragment']}
 
       gl_FragColor = vec4(color, alpha);
     }
