@@ -5,6 +5,7 @@ import {
   MathUtils,
   Object3D,
   PerspectiveCamera,
+  Quaternion,
   Texture,
   Vector3,
   WebGLRenderer,
@@ -49,6 +50,11 @@ class ImpostorBaker {
 
   public get texture(): Texture {
     return this.target.texture
+  }
+
+  /** World orientation of the last bake's camera: the billboard must match it */
+  public get orientation(): Quaternion {
+    return this.bakeCamera.quaternion
   }
 
   /** True if no bake yet, or the view direction has rotated past the threshold. */

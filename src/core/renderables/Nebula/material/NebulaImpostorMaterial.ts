@@ -36,7 +36,12 @@ class NebulaImpostorMaterial extends ShaderMaterial {
         void main() {
           vUv = uv;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-          gl_Position.z = (log2(max(1e-6, 1.0 + gl_Position.w)) * uLogDepthBufFC - 1.0) * gl_Position.w;
+          // Past camera.far the log depth exceeds 1 and would clip the whole quad.
+          // The projection itself never clips there (near/far ~1e-15 rounds
+          // (f+n)/(f-n) to 1 in float32), so the raymarch renders at any distance;
+          // clamped to the far plane the impostor does too and sits behind
+          // everything, like scene geometry past far (gl_FragDepth clamps to 1).
+          gl_Position.z = min(log2(max(1e-6, 1.0 + gl_Position.w)) * uLogDepthBufFC - 1.0, 1.0) * gl_Position.w;
         }
       `,
       fragmentShader: `
