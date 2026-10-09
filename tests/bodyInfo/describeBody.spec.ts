@@ -43,6 +43,26 @@ describe('describeBody: справка из тех же моделей, что �
     expect(sgr.physics!.relativeRadius).toBeNull()
   })
 
+  it('чёрная дыра: температура из данных — это диск (Disk temperature), период из физобъекта — анимация диска, не вращение', () => {
+    const sgr = describeId(43)
+
+    expect(sgr.physics!.temperatureK).toBeNull()
+    expect(sgr.physics!.diskTemperatureK).toBe(6500)
+    expect(sgr.rotation).toBeNull()
+  })
+
+  it('чёрная дыра без диска (компаньон NGC 1851E): нет ни температуры диска, ни вращения', () => {
+    const companion = describeId(149)
+
+    expect(companion.physics!.diskTemperatureK).toBeNull()
+    expect(companion.rotation).toBeNull()
+  })
+
+  it('у звезды температура обычная, температуры диска нет', () => {
+    expect(describeId(4).physics!.diskTemperatureK).toBeNull()
+    expect(describeId(4).physics!.temperatureK).toBe(5778)
+  })
+
   it('Луна: период вращения из строки вращения (655.7 ч), а не из физобъекта (15542 ч)', () => {
     expect(describeId(19).rotation!.periodHours).toBeCloseTo(655.72, 1)
   })

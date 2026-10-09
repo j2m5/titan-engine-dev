@@ -57,7 +57,8 @@ function physicsOf(actor: Actor, kind: string): BodyPhysics | null {
     gravityMs2: blackHole ? null : gm / radiusM ** 2,
     escapeKms: blackHole ? null : Math.sqrt((2 * gm) / radiusM) / 1000,
     schwarzschildKm: blackHole ? (2 * gm) / C_SI ** 2 / 1000 : null,
-    temperatureK: temperature > 0 ? temperature : null,
+    temperatureK: !blackHole && temperature > 0 ? temperature : null,
+    diskTemperatureK: blackHole && temperature > 0 ? temperature : null,
     luminositySun:
       temperature > 0 && LUMINOUS.includes(kind)
         ? (radiusKm / SUN_RADIUS_KM) ** 2 * (temperature / SUN_TEMPERATURE_K) ** 4
@@ -65,8 +66,15 @@ function physicsOf(actor: Actor, kind: string): BodyPhysics | null {
   }
 }
 
-/** Вращение — из той же модели, что крутит сцену: строка вращения, иначе физобъект */
-function rotationOf(actor: Actor): BodyRotation | null {
+/**
+ * Вращение — из той же модели, что крутит сцену: строка вращения, иначе
+ * физобъект. У чёрной дыры rotationPeriod физобъекта — период вращения
+ * аккреционного диска (BlackHoleParameters), а не самой дыры: без строки
+ * вращения блока нет.
+ */
+function rotationOf(actor: Actor, kind: string): BodyRotation | null {
+  if (kind === 'blackHole' && !actor.rotation) return null
+
   const orientation: OrientationModel = new OrientationModel(actor)
 
   if (!(orientation.period > 0)) return null
@@ -102,7 +110,7 @@ export function describeBody(actor: Actor): BodyReference {
     typeLabel: actor.category?.getAttribute('name') ?? '',
     primaryName: primaryOf(actor)?.getAttribute('name') ?? null,
     physics: physicsOf(actor, kind),
-    rotation: rotationOf(actor),
+    rotation: rotationOf(actor, kind),
     orbit: orbitOf(actor)
   }
 }

@@ -53,6 +53,16 @@ describe('BodyInfoPanel', () => {
     expect(text).toContain('Orbital speed (rel. to Sun)')
   })
 
+  it('чёрная дыра: «Disk temperature», без периода вращения', () => {
+    act(() => root.render(<BodyInfoPanel />))
+    act(() => bodyInfoStore.open(Actor.find(43)!))
+
+    const text = container.textContent!
+
+    expect(text).toContain('Disk temperature')
+    expect(text).not.toContain('Rotation period')
+  })
+
   it('крестик закрывает', () => {
     act(() => root.render(<BodyInfoPanel />))
     act(() => bodyInfoStore.open(Actor.find(7)!))

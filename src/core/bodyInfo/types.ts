@@ -20,6 +20,8 @@ export interface BodyPhysics {
   escapeKms: number | null
   schwarzschildKm: number | null
   temperatureK: number | null
+  /** У чёрной дыры temperature физобъекта — температура аккреционного диска (BlackHoleParameters) */
+  diskTemperatureK: number | null
   luminositySun: number | null
 }
 

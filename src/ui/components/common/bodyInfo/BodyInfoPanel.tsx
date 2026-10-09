@@ -47,6 +47,8 @@ function referenceRows(reference: BodyReference): Row[] {
     }
     if (physics.temperatureK !== null)
       rows.push({ label: 'Temperature', value: formatWithUnit(physics.temperatureK, 'K') })
+    if (physics.diskTemperatureK !== null)
+      rows.push({ label: 'Disk temperature', value: formatWithUnit(physics.diskTemperatureK, 'K') })
     if (physics.luminositySun !== null)
       rows.push({ label: 'Luminosity', value: formatWithUnit(physics.luminositySun, 'L☉') })
   }
