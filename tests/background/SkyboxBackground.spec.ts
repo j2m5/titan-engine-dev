@@ -42,7 +42,7 @@ describe('SkyboxBackground: собственный фоновый проход',
     expect(material.uniforms.uGaiaMinLod).toBe(gaiaSkyUniforms.uGaiaMinLod)
   })
 
-  it('режим gaia: фон без кубмапы сценария, небо запускается; dispose приложения его гасит', async () => {
+  it('режим gaia: фон без кубмапы сценария, небо запускается; возврат в меню его не гасит', async () => {
     const scene = new Scene()
     const engine = {
       dispose: vi.fn(() => {
@@ -81,8 +81,10 @@ describe('SkyboxBackground: собственный фоновый проход',
     expect(gaiaSky.start).toHaveBeenCalledTimes(2)
     expect(scene.children.filter((child) => child instanceof SkyboxBackground)).toHaveLength(1)
 
+    // Application.dispose — это «назад к сценариям»: небо общее для сессии и
+    // не должно качаться заново при каждой смене сценария
     application.dispose()
-    expect(gaiaSky.dispose).toHaveBeenCalledTimes(1)
+    expect(gaiaSky.dispose).not.toHaveBeenCalled()
   })
 
   it('два run() подряд не копят лишние проходы фона', async () => {

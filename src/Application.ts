@@ -37,8 +37,11 @@ class Application {
     private cameraCollision?: Pick<CameraCollision, 'clear'>,
     /** Сессионный синглтон: кэш узлов карточки объекта держит граф прошлого сценария через .parent. */
     private bodyInfoService?: Pick<BodyInfoService, 'clear'>,
-    /** Небо Gaia (режим gaia): живёт вне графа сцены, общее для сценариев */
-    private gaiaSky?: Pick<GaiaSky, 'start' | 'dispose'>
+    /**
+     * Небо Gaia (режим gaia): сессионный синглтон вне графа сцены. dispose()
+     * приложения — это «назад к сценариям», небо при этом не освобождается
+     */
+    private gaiaSky?: Pick<GaiaSky, 'start'>
   ) {}
 
   /**
@@ -125,7 +128,6 @@ class Application {
 
   public dispose(): void {
     this.teardown()
-    this.gaiaSky?.dispose()
     this.resourceObserver.scenario = null
   }
 }
