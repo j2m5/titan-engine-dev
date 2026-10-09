@@ -18,6 +18,9 @@ import { createGravitationalLensPass } from '@/core/graphic/effects/lens/Gravita
 import { DepthVolumePass } from '@/core/graphic/passes/DepthVolumePass'
 import { BlackHolePass } from '@/core/graphic/passes/BlackHolePass'
 import { OverlayPass } from '@/core/graphic/passes/OverlayPass'
+import { LensFrontSorter } from '@/core/graphic/passes/LensFrontSorter'
+import { LensFrontSplitPass } from '@/core/graphic/passes/LensFrontSplitPass'
+import { LensFrontPass } from '@/core/graphic/passes/LensFrontPass'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { ExposureEffect } from '@/core/graphic/effects/grading/ExposureEffect'
 import { ColorGradeEffect } from '@/core/graphic/effects/grading/ColorGradeEffect'
@@ -182,18 +185,26 @@ class Postprocessing {
    * Оверлеи (линии орбит) — после линз: схематичные линии не искривляются,
    * атмосфера следом тонирует их как прежде.
    *
+   * Прозрачное перед активной чёрной дырой (кольца, гало, импосторы, объёмы)
+   * размечает LensFrontSplitPass до основного прохода, рисует LensFrontPass
+   * поверх лензированного кадра — иначе проходы дыры берут его как фон.
+   * Оверлеи идут после него: линии орбит остаются поверх всего.
+   *
    * Атмосфера — СВОЙ пасс между линзой и HDR-проходом: она тонирует и гало
    * пыли, а блум считает яркость по входу своего пасса, значит должен видеть
    * уже затуманенный кадр.
    */
   public buildPasses(): readonly Pass[] {
     const [hdrPass, ldrPass] = createEffectPasses(this.camera)
+    const lensFront = new LensFrontSorter(this.scene, this.camera, this.lensRegistry, this.depthVolumeRegistry)
 
     return [
+      new LensFrontSplitPass(lensFront),
       new RenderPass(this.scene, this.camera),
-      new DepthVolumePass(this.camera, this.depthVolumeRegistry),
+      new DepthVolumePass(this.camera, this.depthVolumeRegistry, lensFront),
       new BlackHolePass(this.camera, this.lensRegistry),
       createGravitationalLensPass(this.camera, this.lensRegistry),
+      new LensFrontPass(this.scene, this.camera, lensFront),
       new OverlayPass(this.scene, this.camera),
       createAtmospherePass(this.camera, this.atmosphereRegistry, readAtmosphereDebugView()),
       hdrPass,
