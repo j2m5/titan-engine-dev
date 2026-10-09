@@ -2,6 +2,14 @@
 export type BackgroundSource = 'gaia' | 'cubemap'
 
 /**
+ * Источник из окружения сборки (VITE_SKY_SOURCE): тайлы Gaia лежат только
+ * локально, публичное демо собирается на кубмапе (deploy.yml)
+ */
+export function resolveBackgroundSource(value: string | undefined): BackgroundSource {
+  return value === 'cubemap' ? 'cubemap' : 'gaia'
+}
+
+/**
  * Конфиг фона сцены. Кубмапа восьмибитная: без подъёма (gain = 1) самая яркая
  * звезда в ней равна 1.0. С подъёмом ВЕСЬ сигнал (после вычитания пьедестала)
  * умножается на gain ещё до расширения хайлайтов и способен сам пробить порог
@@ -12,7 +20,7 @@ export type BackgroundSource = 'gaia' | 'cubemap'
  */
 export interface BackgroundConfig {
   background: {
-    /** Смена — перезагрузкой страницы; грузится только выбранный источник */
+    /** Из VITE_SKY_SOURCE, смена — пересборкой; грузится только выбранный источник */
     source: BackgroundSource
     gaia: {
       /** Сдвиг яркости неба Gaia в стопах; пропорции звёзд и полосы — из данных */
@@ -56,7 +64,7 @@ export interface BackgroundConfig {
  */
 export const background: BackgroundConfig = {
   background: {
-    source: 'gaia',
+    source: resolveBackgroundSource(import.meta.env.VITE_SKY_SOURCE),
     gaia: {
       // Замер 2026-10-10: полоса (среднее p90–p99 по небу) = прежней кубмапе после подъёма
       exposureStops: -6.7,
