@@ -2,6 +2,7 @@ import { makeAutoObservable, runInAction } from 'mobx'
 import { Application } from '@/Application'
 import { ScenarioConfig } from '@/config/scenarios'
 import { timeStore } from '@/ui/mobx/TimeStore'
+import { bodyInfoStore } from '@/ui/mobx/BodyInfoStore'
 import { notificationStore } from '@/ui/mobx/NotificationStore'
 import { PerspectiveCamera, Vector3 } from 'three'
 import { scenarioContext } from '@/core/scenario/ScenarioContext'
@@ -38,6 +39,8 @@ class EngineStore implements LoadingProgressReporter {
   }
 
   public async setScenario(payload: ScenarioConfig | null): Promise<void> {
+    // Карточка принадлежит сценарию: выход в меню и смена сценария её закрывают
+    bodyInfoStore.close()
     scenarioContext.set(payload)
 
     if (!payload) {

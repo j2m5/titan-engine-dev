@@ -51,6 +51,29 @@ describe('Application.teardown', () => {
     expect(order).toEqual(['engine', 'collision'])
   })
 
+  it('отпускает кэш узлов карточки объекта после разборки графа', () => {
+    const order: string[] = []
+    const engine = { dispose: vi.fn(() => order.push('engine')), start: vi.fn() } as unknown as Engine
+    const observer = {} as unknown as ResourceObserver
+    vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
+    const bodyInfo = { clear: vi.fn(() => order.push('bodyInfo')) }
+
+    new Application(
+      engine,
+      observer,
+      new Scene(),
+      leakDetector,
+      heightFieldGate,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      bodyInfo
+    ).teardown()
+
+    expect(order).toEqual(['engine', 'bodyInfo'])
+  })
+
   it('сбрасывает кеш узлов гейта карт высот', () => {
     const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
     const observer = {} as unknown as ResourceObserver

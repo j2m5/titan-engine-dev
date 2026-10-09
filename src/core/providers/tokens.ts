@@ -14,6 +14,7 @@ import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import type { LensRegistry } from '@/core/services/LensRegistry'
 import type { SimulationClock } from '@/core/time/SimulationClock'
+import type { BodyInfoService } from '@/core/bodyInfo/BodyInfoService'
 import type { CameraController } from '@/core/camera/CameraController'
 import type { Settings } from '@/core/ports/Settings'
 import type { NotificationSink } from '@/core/ports/NotificationSink'
@@ -61,5 +62,6 @@ export const Tokens = {
   LeakDetector: token<LeakDetector>('LeakDetector'),
   TextureBudget: token<TextureBudget>('TextureBudget'),
   ProceduralSurfaceGenerator: token<ProceduralSurfaceGenerator>('ProceduralSurfaceGenerator'),
-  TerrainPatchBuilder: token<TerrainPatchBuilder>('TerrainPatchBuilder')
+  TerrainPatchBuilder: token<TerrainPatchBuilder>('TerrainPatchBuilder'),
+  BodyInfoService: token<BodyInfoService>('BodyInfoService')
 } as const

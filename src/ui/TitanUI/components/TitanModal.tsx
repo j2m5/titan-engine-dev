@@ -2,12 +2,7 @@ import { FC, useEffect, useRef } from 'react'
 import { TitanModalProps } from '@titanui/types'
 import TitanContainer from '@titanui/components/TitanContainer'
 import TitanDivider from '@titanui/components/TitanDivider'
-
-/**
- * Открытые окна в порядке открытия: Escape и обход Tab — только у верхнего,
- * иначе Escape над двумя окнами (туториал поверх настроек) закрыл бы оба.
- */
-const openModals: symbol[] = []
+import { isEditable, openModals } from '@titanui/components/modalStack'
 
 const FOCUSABLE: string =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -19,13 +14,6 @@ function focusablesIn(root: HTMLElement): HTMLElement[] {
 
     return style.display !== 'none' && style.visibility !== 'hidden'
   })
-}
-
-/** Escape в поле ввода окно не закрывает: в редакторе это стоило бы правки */
-function isEditable(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false
-
-  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
 }
 
 const TitanModal: FC<TitanModalProps> = ({

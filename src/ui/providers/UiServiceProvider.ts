@@ -6,6 +6,7 @@ import { engineStore } from '@/ui/mobx/EngineStore'
 import { menuStore } from '@/ui/mobx/MenuStore'
 import { timeStore } from '@/ui/mobx/TimeStore'
 import { cameraStore } from '@/ui/mobx/CameraStore'
+import { bodyInfoStore } from '@/ui/mobx/BodyInfoStore'
 
 /**
  * Регистрирует UI-стороны портов и подключает observable-зеркала к
@@ -24,6 +25,7 @@ class UiServiceProvider extends ServiceProvider {
     timeStore.connect(this.app.get(Tokens.SimulationClock))
     cameraStore.connect(this.app.get(Tokens.CameraController))
     engineStore.connect(this.app.get(Tokens.Camera), this.app.get(Tokens.CameraCollision))
+    bodyInfoStore.connect(this.app.get(Tokens.BodyInfoService))
   }
 }
 

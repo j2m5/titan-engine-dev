@@ -6,12 +6,13 @@ import TitanList from '@titanui/components/TitanList'
 import TitanListItem from '@titanui/components/TitanListItem'
 import TitanFlex from '@titanui/components/TitanFlex'
 import TitanIconButton from '@titanui/components/TitanIconButton'
-import { CrosshairIcon, PlanetIcon, RocketLaunchIcon, SunIcon } from '@phosphor-icons/react'
+import { CrosshairIcon, InfoIcon, PlanetIcon, RocketLaunchIcon, SunIcon } from '@phosphor-icons/react'
 import { Actor } from '@/core/models/Actor'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
 import { OBSERVED_TYPES } from '@/core/services/SceneObserver'
 import { engineStore } from '@/ui/mobx/EngineStore'
 import { cameraStore } from '@/ui/mobx/CameraStore'
+import { bodyInfoStore } from '@/ui/mobx/BodyInfoStore'
 
 const ObjectList = observer(() => {
   const filter = (actor: Actor): boolean =>
@@ -62,6 +63,18 @@ const ObjectList = observer(() => {
           <TitanFlex align="center" justify="between" width="100%">
             <div>{actor.attributes.name!}</div>
             <div style={{ justifySelf: 'start' }}>
+              <TitanIconButton
+                title={bodyInfoStore.isOpen(actor) ? 'Hide info' : 'Info'}
+                height="auto"
+                width="auto"
+                onClick={(event) => {
+                  // Карточка не выбирает тело: клик не всплывает в строку (handleSelect вешает прицел)
+                  event.stopPropagation()
+                  bodyInfoStore.toggle(actor)
+                }}
+              >
+                <InfoIcon size={20} weight={bodyInfoStore.isOpen(actor) ? 'fill' : 'regular'} />
+              </TitanIconButton>
               <TitanIconButton
                 title={isFollowing(actor) ? 'Stop following' : 'Follow'}
                 height="auto"
