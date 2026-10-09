@@ -16,6 +16,7 @@ import { sceneDepthFunctions, sceneDepthUniforms } from '@/core/materials/shader
 import { triplanarDetailFunctions, triplanarDetailUniforms } from '@/core/materials/shaders/lib/chunks/TriplanarDetail'
 import { terrainDetailFunctions, terrainDetailUniforms } from '@/core/materials/shaders/lib/chunks/TerrainDetail'
 import { skyboxSampleFunctions, skyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
+import { skySampleFunctions, skySampleUniforms } from '@/core/materials/shaders/lib/chunks/SkySample'
 import { sunTransmittanceFunctions, sunTransmittanceUniforms } from '@/core/materials/shaders/lib/chunks/SunTransmittance'
 import { giantDetailFunctions, giantDetailUniforms } from '@/core/materials/shaders/lib/chunks/GiantDetail'
 import { terrainMacroDetailFunctions, terrainMacroDetailUniforms } from '@/core/materials/shaders/lib/chunks/TerrainMacroDetail'
@@ -67,6 +68,8 @@ export const AppShaderChunk: Record<string, string> = {
   terrainDetailFunctions,
   skyboxSampleUniforms,
   skyboxSampleFunctions,
+  skySampleUniforms,
+  skySampleFunctions,
   sunTransmittanceUniforms,
   sunTransmittanceFunctions,
   giantDetailUniforms,
