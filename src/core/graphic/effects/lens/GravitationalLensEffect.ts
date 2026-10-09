@@ -1,6 +1,6 @@
 import { Effect, EffectAttribute, EffectPass } from 'postprocessing'
 import { Matrix3, PerspectiveCamera, Uniform, Vector3, WebGLRenderTarget, WebGLRenderer } from 'three'
-import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
+import { createSkyUniforms } from '@/core/materials/shaders/lib/chunks/SkySample'
 import { buildGravitationalLensFragment, LENS_SLOTS } from '@/core/graphic/effects/lens/gravitationalLensShader'
 import type { LensRegistry } from '@/core/services/LensRegistry'
 
@@ -30,8 +30,9 @@ export class GravitationalLensEffect extends Effect {
       ['uLogFarFactor', new Uniform(Math.log2(camera.far + 1))],
       ['skybox', new Uniform(null)]
     ])
-    for (const [name, uniform] of Object.entries(createSkyboxSampleUniforms())) {
-      uniforms.set(name, new Uniform(uniform.value))
+    // Общие экземпляры (режим gaia): подъём уровня загрузки неба доходит сам
+    for (const [name, uniform] of Object.entries(createSkyUniforms())) {
+      uniforms.set(name, uniform as Uniform)
     }
 
     super('GravitationalLensEffect', buildGravitationalLensFragment(), {
