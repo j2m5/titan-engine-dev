@@ -18,14 +18,27 @@ function stubActor(): Actor {
 describe('шейдер ЧД: фон побега — копия кадра, кубмапа как подстраховка', () => {
   const frag: string = BlackHoleShaderTemplate.fragmentShader
 
-  it('объявляет копию кадра и sampleBackground; все побеги идут через неё, кубмапа напрямую — только внутри', () => {
+  it('объявляет копию кадра и sampleBackground; небо — только подстраховки внутри, фон читается один раз', () => {
     expect(frag).toContain('uniform sampler2D uSceneColor;')
     expect(frag).toContain('uniform sampler2D uSceneDepth;')
     expect(frag).toContain('uniform float uSceneEnabled;')
-    expect(frag).toContain('vec3 sampleBackground(vec3 direction)')
-    // Определение + три подстраховки внутри sampleBackground — и ни одного прямого вызова в ветках
-    expect((frag.match(/sampleSkybox\(/g) ?? []).length).toBe(4)
-    expect((frag.match(/sampleBackground\(/g) ?? []).length).toBeGreaterThanOrEqual(5)
+    expect(frag).toContain('vec3 sampleBackground(vec3 direction, vec3 dDx, vec3 dDy)')
+    // Три подстраховки неба внутри sampleBackground — и ни одной в ветках
+    expect((frag.match(/sampleSky\(/g) ?? []).length).toBe(3)
+    // Определение + единственный вызов после веток
+    expect((frag.match(/sampleBackground\(/g) ?? []).length).toBe(2)
+  })
+
+  it('ветки фон не читают: производные побега — после веток, discard — после производных', () => {
+    const main = frag.slice(frag.indexOf('void main()'))
+    const tracer = frag.slice(frag.indexOf('vec3 traceGeodesic('), frag.indexOf('void main()'))
+
+    expect(tracer).not.toContain('sampleBackground(')
+    expect(main.indexOf('traceGeodesic(')).toBeLessThan(main.indexOf('vec3 escapeDx = dFdx(escape);'))
+    expect(main.indexOf('vec3 escapeDx = dFdx(escape);')).toBeLessThan(
+      main.indexOf('if (!cameraInside && b > simulationRs) discard;')
+    )
+    expect(main.indexOf('discard;')).toBeLessThan(main.indexOf('sampleBackground(escape, escapeDx, escapeDy)'))
   })
 
   it('проекция побега: направление → вид (crModelViewMatrix), → клип (crProjectionMatrix); за экраном и перед плоскостью сближения — кубмапа', () => {

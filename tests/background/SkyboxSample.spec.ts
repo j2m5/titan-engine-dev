@@ -1,7 +1,27 @@
 import { AppShaderChunk } from '@/core/materials/shaders/lib/chunks'
 import { createSkyboxSampleUniforms, skyboxSampleFunctions, skyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
 import { background } from '@/config/background'
+import { RawShaderMaterial } from 'three'
 import { BlackHoleShaderTemplate } from '@/core/renderables/BlackHole/BlackHoleShaderTemplate'
+import { BlackHoleMaterial } from '@/core/renderables/BlackHole/BlackHoleMaterial'
+import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
+import { SkyboxBackground } from '@/core/renderables/SkyboxBackground'
+import { createSkyUniforms } from '@/core/materials/shaders/lib/chunks/SkySample'
+import { Actor } from '@/core/models/Actor'
+
+/**
+ * Мышиный actor: BlackHoleParameters читает только physicalObject.mass —
+ * тот же приём, что в tests/blackHole/BlackHoleBackgroundSource.spec.ts
+ */
+function stubBlackHoleActor(): Actor {
+  return {
+    physicalObject: {
+      getAttribute: (key: string, def?: unknown): unknown => (key === 'mass' ? 8.54e36 : def)
+    },
+    renderingObject: null,
+    getAttribute: (key: string, def?: unknown): unknown => (key === 'name' ? 'Sagittarius A*' : def)
+  } as unknown as Actor
+}
 
 describe('SkyboxSample: общая выборка фона с расширением хайлайтов', () => {
   it('чанки зарегистрированы — иначе include молча раскроется в пустоту', () => {
@@ -58,26 +78,25 @@ describe('SkyboxSample: общая выборка фона с расширени
   })
 })
 
-describe('Чёрная дыра: линзированный фон через общий чанк', () => {
+describe('Чёрная дыра: небо через общий чанк', () => {
   const source = BlackHoleShaderTemplate.fragmentShader
 
-  it('подключает чанки выборки', () => {
-    expect(source).toContain('#include <skyboxSampleUniforms>')
-    expect(source).toContain('#include <skyboxSampleFunctions>')
+  it('подключает чанки неба и не сэмплит кубмапу сама', () => {
+    expect(source).toContain('#include <skySampleUniforms>')
+    expect(source).toContain('#include <skySampleFunctions>')
+    expect(source).not.toContain('sampleSkyboxHdr(')
+    expect(source).not.toContain('texture(skybox,')
   })
 
-  it('зовёт общую функцию и не сэмплит кубмапу сам', () => {
-    expect(source).toContain('sampleSkyboxHdr(skybox,')
-    expect(source).not.toContain('texture(skybox, vec3(')
-  })
+  it('фон и ЧД ссылаются на одни и те же экземпляры юниформов неба', () => {
+    const skyboxBackground = new SkyboxBackground(null)
+    const blackHoleMaterial = new BlackHoleMaterial(new BlackHoleParameters(stubBlackHoleActor()))
+    const bgUniforms = (skyboxBackground.material as RawShaderMaterial).uniforms
 
-  it('ориентация линзированного пути — общий юниформ uSkyFlipX, не своя копия', () => {
-    // Отдельной ручки envMapFlipX здесь нет:
-    // её убрали, потому что разный знак флипа у двух потребителей одной
-    // кубмапы зеркалит линзированное небо относительно окружающего.
-    // Ручка ориентации осталась, но теперь общая с прямым фоном
-    expect(source).toContain('sampleSkyboxHdr(skybox, direction, uSkyFlipX)')
-    expect(source).not.toContain('envMapFlipX')
+    for (const key of Object.keys(createSkyUniforms())) {
+      expect(blackHoleMaterial.uniforms[key]).toBe(bgUniforms[key])
+    }
+    blackHoleMaterial.dispose()
   })
 })
 

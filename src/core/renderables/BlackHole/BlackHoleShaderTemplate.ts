@@ -1,7 +1,7 @@
 import { IUniform, Matrix4, Texture, Uniform, Vector2, Vector3 } from 'three'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
 import { config } from '@/core/framework/config'
-import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
+import { createSkyUniforms } from '@/core/materials/shaders/lib/chunks/SkySample'
 
 /**
  * Шейдер чёрной дыры, этап 3: лензирование Шварцшильда + аккреционный диск
@@ -22,8 +22,8 @@ import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/
  * кроссфейдом против намотки спирали
  *
  * Эмиссия диска пишется в HDR (> 1.0) — Bloom композера подхватывает её
- * по порогу 1.0; фон после общей sampleSkyboxHdr (подъём + расширение
- * хайлайтов) тоже способен превысить 1.0 и блумить сам
+ * по порогу 1.0; небо из общего чанка (SkySample) тоже способно превысить
+ * 1.0 и блумить само
  */
 
 /**
@@ -103,12 +103,10 @@ export function createBlackHoleUniforms(parameters: BlackHoleParameters): Record
     skybox: new Uniform(null),
 
     /**
-     * Порог/сила расширения хайлайтов и флип ориентации кубмапы по X — общий
-     * набор, что и у собственного фонового прохода (см. `createSkyboxSampleUniforms`
-     * в SkyboxSample): оба потребителя обязаны сэмплировать одну кубмапу
-     * одинаково, иначе на границе сферы симуляции возникает ступенька яркости.
+     * Юниформы неба — общий набор всех мест чтения фона (SkySample): в режиме
+     * gaia те же экземпляры, что у фонового прохода, расхождение невозможно
      */
-    ...createSkyboxSampleUniforms()
+    ...createSkyUniforms()
   }
 }
 
@@ -177,8 +175,8 @@ export const BlackHoleShaderTemplate = {
     uniform float uSceneEnabled;
     uniform mat4 crProjectionMatrix;
 
-    #include <skyboxSampleUniforms>
-    #include <skyboxSampleFunctions>
+    #include <skySampleUniforms>
+    #include <skySampleFunctions>
 
     in vec3 vPositionRs;
     in vec3 vCameraRs;
@@ -214,33 +212,23 @@ export const BlackHoleShaderTemplate = {
     // (см. deflectionLut.ts)
     const float WEAK_FIELD_B = 8.0;
 
-    vec3 sampleSkybox(vec3 direction) {
-      // Выборка вынесена в общий чанк: её же зовёт собственный фоновый проход.
-      // Прежде здесь стояла копия, и любое расхождение с рендером фона давало
-      // ступеньку яркости на границе сферы симуляции — теперь расхождение
-      // невозможно по построению. uSkyFlipX — тот же юниформ (тот же знак),
-      // что и у прямого фона: оба потребителя подают в кубмапу мировые
-      // направления (меш ЧД никогда не вращается), поэтому ориентация ОБЯЗАНА
-      // совпадать, а не может отличаться.
-      return sampleSkyboxHdr(skybox, direction, uSkyFlipX);
-    }
-
     // Фон побега луча: пиксель КАДРА по спроецированному направлению — тела,
-    // лучи и туманности за дырой лензируются сильным полем. Кубмапа — вне
+    // лучи и туманности за дырой лензируются сильным полем. Небо — вне
     // BlackHolePass, за экраном (и при p.w ≤ 0) и для объекта перед плоскостью
-    // наибольшего сближения: он не за линзой и копироваться не должен
-    vec3 sampleBackground(vec3 direction) {
-      if (uSceneEnabled < 0.5) return sampleSkybox(direction);
+    // наибольшего сближения: он не за линзой и копироваться не должен.
+    // dDx/dDy — экранные производные направления для фильтра звёзд неба
+    vec3 sampleBackground(vec3 direction, vec3 dDx, vec3 dDy) {
+      if (uSceneEnabled < 0.5) return sampleSky(direction, dDx, dDy);
       vec3 dirView = normalize(mat3(crModelViewMatrix) * direction);
       vec4 p = crProjectionMatrix * vec4(dirView, 0.0);
       vec2 uv = p.xy / max(p.w, 1e-6) * 0.5 + 0.5;
-      if (p.w <= 0.0 || any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return sampleSkybox(direction);
+      if (p.w <= 0.0 || any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return sampleSky(direction, dDx, dDy);
       // crModelViewMatrix camera-relative: столбец переноса — центр дыры в виде
       vec3 centerView = crModelViewMatrix[3].xyz;
       float tMid = dot(centerView, dirView);
       float z = texture(uSceneDepth, uv).r;
       float sceneT = z >= 1.0 - 1e-6 ? 1e30 : (exp2(z * uSceneLogFarFactor) - 1.0) / max(-dirView.z, 1e-6);
-      if (sceneT < tMid) return sampleSkybox(direction);
+      if (sceneT < tMid) return sampleSky(direction, dDx, dDy);
       return texture(uSceneColor, uv).rgb;
     }
 
@@ -330,9 +318,15 @@ export const BlackHoleShaderTemplate = {
     }
 
     // Честное интегрирование уравнения Бине в плоскости геодезической
-    // с накоплением пересечений диска front-to-back
-    vec3 traceGeodesic(vec3 cameraRs, vec3 rayDir, float tEnter, float b, out int crossings) {
+    // с накоплением пересечений диска front-to-back. Фон здесь не читается:
+    // производные направления побега нужны в равномерном потоке (см. main)
+    vec3 traceGeodesic(vec3 cameraRs, vec3 rayDir, float tEnter, float b,
+                       out int crossings, out float opacity, out vec3 escape, out bool escaped) {
       crossings = 0;
+      opacity = 0.0;
+      // Захваченный луч: значение не читается, нужно лишь для производных соседей
+      escape = rayDir;
+      escaped = false;
 
       vec3 p0 = cameraRs + tEnter * rayDir;
       float r0 = length(p0);
@@ -345,7 +339,8 @@ export const BlackHoleShaderTemplate = {
 
       // вырожденный луч точно в центр / из центра
       if (tangential < 1e-4) {
-        return radial > 0.0 ? sampleBackground(rayDir) : vec3(0.0);
+        escaped = radial > 0.0;
+        return vec3(0.0);
       }
 
       vec3 e2 = e2v / tangential;
@@ -365,7 +360,6 @@ export const BlackHoleShaderTemplate = {
       vec3 prev = p0;
 
       vec3 accumulated = vec3(0.0);
-      float opacity = 0.0;
 
       for (int i = 0; i < MAX_STEPS; i++) {
         if (phi > PHI_MAX) break;                                // навивка — захват
@@ -404,7 +398,7 @@ export const BlackHoleShaderTemplate = {
         // наружную часть отклонения (полное − хорда), которую прямые отрезки
         // вне сферы не набирают; на границе с LUT-веткой суммы совпадают
         if (r > simulationRs && dot(pos, pos) > dot(prev, prev)) {
-          vec3 escape = normalize(pos - prev);
+          escape = normalize(pos - prev);
           if (enteredFromOutside) {
             float delta = texture(outsideLut, vec2((0.5 + (b / simulationRs) * 255.0) / 256.0, 0.5)).r;
             vec3 toCenter = -pos - dot(-pos, escape) * escape;
@@ -414,7 +408,8 @@ export const BlackHoleShaderTemplate = {
               escape = normalize(cos(delta) * escape + sin(delta) * inward);
             }
           }
-          return accumulated + (1.0 - opacity) * sampleBackground(escape);
+          escaped = true;
+          return accumulated;
         }
 
         prev = pos;
@@ -435,10 +430,6 @@ export const BlackHoleShaderTemplate = {
 
       bool cameraInside = dot(cameraRs, cameraRs) < simulationRs * simulationRs;
 
-      // Меш описан вокруг сферы (MESH_MARGIN): границу зоны задаёт аналитический
-      // b, а не грани — снаружи кадр сдвигает GravitationalLensEffect с b > R
-      if (!cameraInside && b > simulationRs) discard;
-
       // дистанция входа луча в зону симуляции (0 — камера внутри)
       float tEnter = cameraInside
         ? 0.0
@@ -453,10 +444,13 @@ export const BlackHoleShaderTemplate = {
 
       vec3 color = vec3(0.0);
       int crossings = 0;
+      float opacity = 0.0;
+      vec3 escape = rayDir;
+      bool escaped = true;
 
       if (uLensing < 0.5) {
         // дебаг-режим этапа 1: неизогнутый passthrough (эталон бесшовности)
-        color = sampleBackground(rayDir);
+        escape = rayDir;
       } else if (!cameraInside && b > weakFieldB) {
         // LUT-ветка: ПОЛНОЕ отклонение луча из таблицы (deflectionLut.ts,
         // старт интегратора далеко за зоной). На краю зоны α = 2/R и далее,
@@ -473,10 +467,22 @@ export const BlackHoleShaderTemplate = {
         // ряд дальнего поля экранного прохода. 255.0/256.0 — это (SIZE-1)/SIZE
         float alphaIn = texture(deflectionLut, vec2((0.5 + t * 255.0) / 256.0, 0.5)).r;
         vec3 inward = -normalize(cameraRs + tMid * rayDir);
-        color = sampleBackground(cos(alphaIn) * rayDir + sin(alphaIn) * inward);
+        escape = cos(alphaIn) * rayDir + sin(alphaIn) * inward;
       } else {
-        color = traceGeodesic(cameraRs, rayDir, tEnter, b, crossings);
+        color = traceGeodesic(cameraRs, rayDir, tEnter, b, crossings, opacity, escape, escaped);
       }
+
+      // Производные побега — в равномерном потоке, после веток: внутри
+      // ветвлений dFdx не определён, а фильтру звёзд нужен отпечаток пикселя
+      vec3 escapeDx = dFdx(escape);
+      vec3 escapeDy = dFdy(escape);
+
+      // Меш описан вокруг сферы (MESH_MARGIN): границу зоны задаёт аналитический
+      // b, а не грани — снаружи кадр сдвигает GravitationalLensEffect с b > R.
+      // discard только после производных: иначе у четвёрок на кромке они рвутся
+      if (!cameraInside && b > simulationRs) discard;
+
+      if (escaped) color += (1.0 - opacity) * sampleBackground(escape, escapeDx, escapeDy);
 
       // дебаг-визуализация пересечений кольца диска: 1 — красный, 2 — зелёный, 3+ — синий
       if (uDebugCrossings > 0.5 && crossings > 0) {
