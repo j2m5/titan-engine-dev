@@ -194,4 +194,26 @@ describe('DepthVolumePass', () => {
 
     expect(log.targets[1]).toBeNull()
   })
+
+  it('передние объёмы (перед линзой) пропускает — их рисует LensFrontPass', () => {
+    const registry = new DepthVolumeRegistry()
+    const front = makeVolume(registry)
+    const back = makeVolume(registry)
+    const { renderer, log } = makeRenderer(camera)
+    const pass = new DepthVolumePass(camera, registry, { isFrontVolume: (v) => v === front })
+
+    pass.render(renderer, inputBuffer, outputBuffer)
+
+    expect(log.scenes).toEqual([copySceneOf(pass), back])
+  })
+
+  it('все объёмы передние — ни копии глубины, ни рендера', () => {
+    const registry = new DepthVolumeRegistry()
+    makeVolume(registry)
+    const { renderer } = makeRenderer(camera)
+
+    new DepthVolumePass(camera, registry, { isFrontVolume: () => true }).render(renderer, inputBuffer, outputBuffer)
+
+    expect(renderer.render).not.toHaveBeenCalled()
+  })
 })

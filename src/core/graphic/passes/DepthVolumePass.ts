@@ -6,6 +6,62 @@ import { DEPTH_VOLUME_LAYER, type DepthVolume } from '@/core/graphic/passes/Dept
 /** Тип упаковки глубины библиотека объявляет, но не экспортирует — берём из сигнатуры Pass */
 type DepthPacking = Parameters<Pass['setDepthTexture']>[1]
 
+/** Фильтр передних объёмов (LensFrontSorter подходит структурно) */
+export interface FrontVolumeFilter {
+  isFrontVolume(volume: DepthVolume): boolean
+}
+
+/**
+ * Объёмы от дальнего к ближнему по дальней кромке: расстояние центра до камеры
+ * + радиус описанной сферы (boundingRadius в мировом масштабе). Объёмы с общим
+ * центром (кокон туманности и пояс вокруг одной звезды) так упорядочиваются по
+ * охвату, а не по порядку регистрации — блендинг «поверх» зависит от порядка.
+ */
+export function orderFarToNear(volumes: readonly DepthVolume[], camera: Object3D): DepthVolume[] {
+  const cameraWorld = camera.getWorldPosition(new Vector3())
+  const position = new Vector3()
+  const scale = new Vector3()
+  const farExtent = new Map<DepthVolume, number>()
+  for (const volume of volumes) {
+    volume.getWorldPosition(position)
+    volume.getWorldScale(scale)
+    const worldRadius = (volume.boundingRadius ?? 0) * Math.max(scale.x, scale.y, scale.z)
+    farExtent.set(volume, position.distanceTo(cameraWorld) + worldRadius)
+  }
+  return [...volumes].sort((a, b) => farExtent.get(b)! - farExtent.get(a)!)
+}
+
+/**
+ * Объёмы в target камерой на DEPTH_VOLUME_LAYER: каждому на время рендера
+ * привязана копия глубины сцены. Маска камеры и автообновление теней
+ * возвращаются
+ */
+export function drawDepthVolumes(
+  renderer: WebGLRenderer,
+  target: WebGLRenderTarget | null,
+  camera: PerspectiveCamera,
+  volumes: readonly DepthVolume[],
+  sceneDepth: Texture,
+  resolution: Vector2
+): void {
+  const mask = camera.layers.mask
+  const shadowMapAutoUpdate = renderer.shadowMap.autoUpdate
+  const logFarFactor = Math.log2(camera.far + 1)
+
+  camera.layers.set(DEPTH_VOLUME_LAYER)
+  renderer.shadowMap.autoUpdate = false
+  renderer.setRenderTarget(target)
+
+  for (const volume of volumes) {
+    volume.bindSceneDepth(sceneDepth, resolution, logFarFactor)
+    renderer.render(volume, camera)
+    volume.unbindSceneDepth()
+  }
+
+  camera.layers.mask = mask
+  renderer.shadowMap.autoUpdate = shadowMapAutoUpdate
+}
+
 /**
  * DepthVolumePass — объёмные эффекты (пыль колец, туманности) поверх
  * отрендеренной сцены с обрывом марша по её глубине.
@@ -35,6 +91,9 @@ type DepthPacking = Parameters<Pass['setDepthTexture']>[1]
  * целой сцены второй раз за кадр не нужен. Перед рендером объёму привязывается
  * копия глубины, после — отвязывается: рендер объёма вне пасса (запекание
  * импостора) идёт без обрезки.
+ *
+ * Объёмы перед активной чёрной дырой пропускаются — их рисует LensFrontPass
+ * поверх лензированного кадра.
  */
 export class DepthVolumePass extends Pass {
   /** Копия глубины сцены во float-таргет; открыта под тесты */
@@ -42,17 +101,14 @@ export class DepthVolumePass extends Pass {
 
   private readonly sceneCamera: PerspectiveCamera
   private readonly registry: DepthVolumeRegistry
+  private readonly front: FrontVolumeFilter | null
   private readonly resolution = new Vector2(1, 1)
-  private readonly visibleVolumes: DepthVolume[] = []
-  private readonly cameraWorld = new Vector3()
-  private readonly volumeWorld = new Vector3()
-  private readonly volumeScale = new Vector3()
-  private readonly farExtent = new WeakMap<DepthVolume, number>()
 
-  public constructor(camera: PerspectiveCamera, registry: DepthVolumeRegistry) {
+  public constructor(camera: PerspectiveCamera, registry: DepthVolumeRegistry, front?: FrontVolumeFilter) {
     super('DepthVolumePass')
     this.sceneCamera = camera
     this.registry = registry
+    this.front = front ?? null
     this.needsSwap = false
     this.needsDepthTexture = true
     // BasicDepthPacking → FloatType-таргет, глубина в .r без упаковки
@@ -79,58 +135,27 @@ export class DepthVolumePass extends Pass {
     deltaTime?: number,
     stencilTest?: boolean
   ): void {
-    const volumes = this.collectVisibleFarToNear()
+    // Передние объёмы (перед активной линзой) рисует LensFrontPass после линз
+    const volumes = orderFarToNear(
+      this.registry.volumes().filter((v) => isVisibleInTree(v) && !(this.front?.isFrontVolume(v) ?? false)),
+      this.sceneCamera
+    )
     if (volumes.length === 0) return
 
     this.depthCopy.render(renderer, inputBuffer, outputBuffer, deltaTime, stencilTest)
-
-    const camera = this.sceneCamera
-    const mask = camera.layers.mask
-    const shadowMapAutoUpdate = renderer.shadowMap.autoUpdate
-    const logFarFactor = Math.log2(camera.far + 1)
-
-    camera.layers.set(DEPTH_VOLUME_LAYER)
-    renderer.shadowMap.autoUpdate = false
-    renderer.setRenderTarget(this.renderToScreen ? null : inputBuffer)
-
-    for (const volume of volumes) {
-      volume.bindSceneDepth(this.depthCopy.texture, this.resolution, logFarFactor)
-      renderer.render(volume, camera)
-      volume.unbindSceneDepth()
-    }
-
-    camera.layers.mask = mask
-    renderer.shadowMap.autoUpdate = shadowMapAutoUpdate
+    drawDepthVolumes(
+      renderer,
+      this.renderToScreen ? null : inputBuffer,
+      this.sceneCamera,
+      volumes,
+      this.depthCopy.texture,
+      this.resolution
+    )
   }
 
   public override dispose(): void {
     this.depthCopy.dispose()
     super.dispose()
-  }
-
-  /**
-   * Объёмы, у которых видна вся цепочка предков (рендер корня предков не
-   * проверяет), от дальнего к ближнему по дальней кромке: расстояние центра
-   * до камеры + радиус описанной сферы (boundingRadius в мировом масштабе).
-   * Объёмы с общим центром (кокон туманности и пояс вокруг одной звезды)
-   * так упорядочиваются по охвату, а не по порядку регистрации — блендинг
-   * «поверх» у обоих зависит от порядка.
-   */
-  private collectVisibleFarToNear(): DepthVolume[] {
-    const out = this.visibleVolumes
-    out.length = 0
-    this.sceneCamera.getWorldPosition(this.cameraWorld)
-    for (const volume of this.registry.volumes()) {
-      if (!isVisibleInTree(volume)) continue
-      volume.getWorldPosition(this.volumeWorld)
-      volume.getWorldScale(this.volumeScale)
-      const worldRadius =
-        (volume.boundingRadius ?? 0) * Math.max(this.volumeScale.x, this.volumeScale.y, this.volumeScale.z)
-      this.farExtent.set(volume, this.volumeWorld.distanceTo(this.cameraWorld) + worldRadius)
-      out.push(volume)
-    }
-    out.sort((a, b) => this.farExtent.get(b)! - this.farExtent.get(a)!)
-    return out
   }
 }
 
