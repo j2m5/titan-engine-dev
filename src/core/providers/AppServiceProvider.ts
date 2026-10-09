@@ -185,7 +185,8 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.ProceduralSurfaceGenerator),
           c.get(Tokens.RenderableFactory),
           c.get(Tokens.TerrainPatchBuilder),
-          c.get(Tokens.CameraCollision)
+          c.get(Tokens.CameraCollision),
+          c.get(Tokens.BodyInfoService)
         )
     )
 

@@ -10,6 +10,7 @@ import type { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfa
 import type { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import type { TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import type { CameraCollision } from '@/core/services/CameraCollision'
+import type { BodyInfoService } from '@/core/bodyInfo/BodyInfoService'
 import { SkyboxBackground } from '@/core/renderables/SkyboxBackground'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
 
@@ -31,7 +32,9 @@ class Application {
     /** Сессионный синглтон: при смене сценария снимаются регистрации полей, воркер не завершается. */
     private terrainPatchBuilder?: TerrainPatchBuilder,
     /** Сессионный синглтон: кэш коллайдеров держит разобранные тела до первого кадра нового сценария. */
-    private cameraCollision?: Pick<CameraCollision, 'clear'>
+    private cameraCollision?: Pick<CameraCollision, 'clear'>,
+    /** Сессионный синглтон: кэш узлов карточки объекта держит граф прошлого сценария через .parent. */
+    private bodyInfoService?: Pick<BodyInfoService, 'clear'>
   ) {}
 
   /**
@@ -54,6 +57,8 @@ class Application {
     this.engine.dispose()
     // Коллайдеры ссылаются на только что разобранные узлы и карты высот
     this.cameraCollision?.clear()
+    // Карточка объекта — тоже: её кэш узлов держит разобранный граф
+    this.bodyInfoService?.clear()
     // Отсоединённые сферы — тоже граф: разбираются до текстур, и их dispose
     // отпускает поля у строителя раньше releaseAll.
     this.renderableFactory?.clearPendingUpgrades()

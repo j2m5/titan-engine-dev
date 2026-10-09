@@ -64,6 +64,19 @@ describe('BodyInfoService.measure', () => {
     expect(service.measure(Actor.find(8)!)).toBeNull()
   })
 
+  it('clear отпускает запомненные узлы: через .parent они держали бы граф прошлого сценария', () => {
+    const { service, earth, sun } = stand()
+    const nodes = (service as unknown as { nodes: Map<number, unknown> }).nodes
+
+    service.measure(earth)
+    service.measure(sun)
+    expect(nodes.size).toBeGreaterThan(0)
+
+    service.clear()
+
+    expect(nodes.size).toBe(0)
+  })
+
   it('узел отцеплен после смены сценария — null, кэш не держит мёртвый узел', () => {
     const { service, earth, scene, earthNode } = stand()
 

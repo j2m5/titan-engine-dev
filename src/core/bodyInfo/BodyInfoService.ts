@@ -95,6 +95,15 @@ class BodyInfoService {
     return primary ? relativeSpeedKms(actor, primary, this.clock.epoch) : null
   }
 
+  /**
+   * Разборка сценария: отпустить запомненные узлы. disposeSceneTree отцепляет
+   * только корень поддерева, связи parent/children внутри остаются — один
+   * узел в кэше держал бы весь граф прошлого сценария (геометрии, пулы).
+   */
+  public clear(): void {
+    this.nodes.clear()
+  }
+
   /** Кэш узлов сверяется с графом: после смены сценария прежний узел отцеплен */
   private nodeOf(actor: Actor): Object3D | null {
     const id: number | undefined = idOf(actor)
