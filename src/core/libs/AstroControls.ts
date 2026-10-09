@@ -1,5 +1,6 @@
 import { Camera, EventDispatcher, Quaternion, Sphere, Spherical, Vector2, Vector3 } from 'three'
 import { freeLookRotate, isFreeLook, orbitAngleScale, type SurfaceProbe } from '@/core/libs/surfaceCamera'
+import { isEditableTarget } from '@/core/helpers/isEditableTarget'
 
 type AstroControlsEventMap = {
   change: { data: Vector3 }
@@ -180,7 +181,9 @@ class AstroControls extends EventDispatcher<AstroControlsEventMap> {
   }
 
   private keydown(event: KeyboardEvent): void {
-    if (event.altKey || !this.enabled) {
+    // Набор текста в поле (поиск по объектам) — не команда камере. keyup не
+    // фильтруется: отпускание всегда сбрасывает движение, ничего не залипнет
+    if (event.altKey || !this.enabled || isEditableTarget(event.target)) {
       return
     }
 
