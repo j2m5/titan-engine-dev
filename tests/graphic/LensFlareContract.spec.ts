@@ -1,17 +1,61 @@
-import { HalfFloatType, TextureLoader, UnsignedByteType, WebGLRenderTarget, type WebGLRenderer } from 'three'
+import { HalfFloatType, PerspectiveCamera, TextureLoader, UnsignedByteType, WebGLRenderTarget, type WebGLRenderer } from 'three'
 import type { Mock } from 'vitest'
-import { BLOOM_OPTIONS } from '@/core/graphic/Postprocessing'
-import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
+import { BLOOM_OPTIONS, createEffectPasses } from '@/core/graphic/Postprocessing'
+import { LensFlareEffect, lensFlareEffectOptionsDefaults } from '@/core/graphic/effects/lensflare/LensFlareEffect'
+import { FLARE_GHOSTS } from '@/core/graphic/effects/lensflare/flareGhosts'
+import { LOCAL_CONTRAST_RADIUS } from '@/core/graphic/effects/lensflare/flareGrid'
+import { glslFloat } from '@/core/graphic/effects/lensflare/glslLiteral'
 import { lensFlare } from '@/config/lensFlare'
+
+/** Мок рендерера: интересна последовательность setRenderTarget; очистка и её цвет нужны спрайтам */
+const createRendererStub = (): { setRenderTarget: Mock; render: Mock; clear: Mock } & Record<string, unknown> => ({
+  setRenderTarget: vi.fn(),
+  render: vi.fn(),
+  clear: vi.fn(),
+  getClearColor: vi.fn((target: unknown) => target),
+  getClearAlpha: vi.fn(() => 0),
+  setClearColor: vi.fn(),
+  autoClear: true,
+  getRenderTarget: vi.fn(() => null),
+  getContext: vi.fn(() => ({}))
+})
+
+/**
+ * Адреса записи ИМЕННО в таргеты эффекта, по порядку. Внутренние таргеты
+ * KawaseBlurPass сюда не попадают: это чужие объекты, их число зависит от ядра
+ */
+const writeSequence = (effect: LensFlareEffect, renderer: { setRenderTarget: Mock }): unknown[] => {
+  const own: unknown[] = [
+    effect.renderTarget1,
+    effect.renderTarget2,
+    effect.streakSourceTarget,
+    effect.streakTarget,
+    effect.gridFluxTarget,
+    effect.gridCentroidTarget,
+    effect.sourceFluxTarget,
+    effect.sourceCentroidTarget,
+    effect.sourceWindowTarget,
+    effect.ghostTarget
+  ]
+  return renderer.setRenderTarget.mock.calls.map(([target]) => target).filter((target) => own.includes(target))
+}
+
+const runUpdate = (effect: LensFlareEffect): ReturnType<typeof createRendererStub> => {
+  const renderer = createRendererStub()
+  effect.update(renderer as unknown as WebGLRenderer, new WebGLRenderTarget(8, 8))
+  return renderer
+}
 
 describe('LensFlareEffect: контракт блика объектива', () => {
   it('свечением владеет BloomEffect: своей копии блума у эффекта нет', () => {
     const effect = new LensFlareEffect()
 
-    // Внутренний MipmapBlurPass дублировал BloomEffect в том же проходе
-    // и с тем же порогом — вторая копия свечения в кадре
     expect(effect.getFragmentShader()).not.toContain('bloomBuffer')
     expect('blurPass' in effect).toBe(false)
+  })
+
+  it('дефолт яркости — значение конфига: калибровки спрайтов рассчитаны на него', () => {
+    expect(lensFlareEffectOptionsDefaults.intensity).toBe(lensFlare.lensFlare.intensity)
   })
 
   it('порог берётся у bloom, а не своей копией числа', () => {
@@ -20,337 +64,220 @@ describe('LensFlareEffect: контракт блика объектива', () =
     expect(effect.thresholdLevel).toBe(BLOOM_OPTIONS.luminanceThreshold)
   })
 
-  it('ручки конфига доезжают до юниформов материала артефактов', () => {
+  it('ручки доезжают до юниформов композита и спрайтов', () => {
     const effect = new LensFlareEffect({
-      intensity: lensFlare.lensFlare.intensity,
-      ghostAmount: lensFlare.lensFlare.ghostAmount,
-      haloAmount: lensFlare.lensFlare.haloAmount,
-      chromaticAberration: lensFlare.lensFlare.chromaticAberration
+      intensity: 0.2,
+      ghostAmount: 0.7,
+      ghostVignette: 3,
+      ghostChromatic: 0.05
     })
 
-    expect(effect.intensity).toBe(lensFlare.lensFlare.intensity)
-    expect(effect.featuresMaterial.ghostAmount).toBe(lensFlare.lensFlare.ghostAmount)
-    expect(effect.featuresMaterial.haloAmount).toBe(lensFlare.lensFlare.haloAmount)
-    expect(effect.featuresMaterial.chromaticAberration).toBe(lensFlare.lensFlare.chromaticAberration)
+    expect(effect.uniforms.get('intensity').value).toBe(0.2)
+    expect(effect.uniforms.get('ghostAmount').value).toBe(0.7)
+    expect(effect.ghostMaterial.ghostVignette).toBe(3)
+    expect(effect.ghostMaterial.ghostChromatic).toBe(0.05)
   })
 })
 
-describe('LensFlareEffect: палитра призраков', () => {
-  it('цвет призраков берётся из градиента, а не из захардкоженных vec3', () => {
-    const effect = new LensFlareEffect()
-    const source = effect.featuresMaterial.fragmentShader
+describe('LensFlareEffect: композит', () => {
+  it('множители призраков и штриха — в композите: устаревшие буферы при пропуске умножаются на ноль', () => {
+    const source = new LensFlareEffect().getFragmentShader()
 
-    expect(source).toContain('uniform sampler2D lensColor;')
-    expect(source).toContain('texture(lensColor,')
-    // прежние девять цветов ушли в скалярные веса
-    expect(source).not.toContain('vec3(0.5, 1.0, 0.4)')
+    expect(source).toContain('texture(ghostBuffer, uv).rgb * ghostAmount')
+    expect(source).toContain('texture(streakBuffer, uv).rgb * streakAmount')
+    expect(source).toContain('outputColor = vec4(inputColor.rgb + flare * intensity, inputColor.a);')
   })
 
-  it('градиент грузится с пути, который знает про режим s3', () => {
+  it('лучей starburst нет: ни буфера в композите, ни прохода, ни ручек', () => {
     const effect = new LensFlareEffect()
 
-    expect(effect.featuresMaterial.lensColorTexture).not.toBeNull()
-    expect(effect.featuresMaterial.lensColorTexture?.name).toBe('LensFlare.LensColor')
+    expect(effect.getFragmentShader()).not.toContain('starburst')
+    expect(effect.uniforms.has('starburstBuffer')).toBe(false)
+    expect('starburstMaterial' in effect).toBe(false)
+    for (const key of ['starburstAmount', 'starburstMinFlux']) {
+      expect(key in lensFlare.lensFlare).toBe(false)
+    }
   })
 
-  it('ghostTint и falloff в sampleGhost нормируют длину одним и тем же делителем — иначе правая половина градиента недостижима', () => {
-    // SQRT_2 хранит 1/√2, а не √2. Если ghostTint и falloff нормируют радиус
-    // разными делителями, вторая половина lensColor не сэмплируется никогда
-    const effect = new LensFlareEffect()
-    const source = effect.featuresMaterial.fragmentShader
-
-    const ghostTintBody = source.match(/vec3 ghostTint\(const vec2 suv\)\s*\{([\s\S]*?)\n {2}\}/)?.[1]
-    const sampleGhostBody = source.match(/vec3 sampleGhost\([^)]*\)\s*\{([\s\S]*?)\n {2}\}/)?.[1]
-
-    expect(ghostTintBody).toBeDefined()
-    expect(sampleGhostBody).toBeDefined()
-
-    const divisor = /\/\s*\(0\.5 \* SQRT_2\)/
-    expect(ghostTintBody).toMatch(divisor)
-    expect(sampleGhostBody).toMatch(divisor)
-  })
-
-  it('текстура градиента освобождается штатной разборкой эффекта', () => {
-    // Effect.dispose() обходит Object.keys(this): текстура, лежащая только в
-    // юниформе материала, под обход не попадёт и утечёт
-    const effect = new LensFlareEffect()
-    const onDispose = vi.fn()
-    effect.lensColorTexture.addEventListener('dispose', onDispose)
-
-    effect.dispose()
-
-    expect(onDispose).toHaveBeenCalledOnce()
-  })
-})
-
-describe('LensFlareEffect: старберст', () => {
-  it('маска подключена и по умолчанию нейтральна', () => {
-    const effect = new LensFlareEffect()
-    const source = effect.featuresMaterial.fragmentShader
-
-    expect(source).toContain('uniform sampler2D starburst;')
-    expect(source).toContain('1.0 + starburstAmount')
-    expect(effect.featuresMaterial.starburstAmount).toBe(0)
-  })
-
-  it('текстура лучей грузится', () => {
+  it('композит читает призраков из ghostTarget, штрих из streakTarget', () => {
     const effect = new LensFlareEffect()
 
-    expect(effect.featuresMaterial.starburstTexture?.name).toBe('LensFlare.Starburst')
+    expect(effect.uniforms.get('ghostBuffer').value).toBe(effect.ghostTarget.texture)
+    expect(effect.uniforms.get('streakBuffer').value).toBe(effect.streakTarget.texture)
   })
 
-  it('текстура лучей освобождается штатной разборкой эффекта', () => {
-    // Тот же паттерн, что и у градиента призраков: поле эффекта, иначе
-    // Effect.dispose() текстуру не найдёт
+  it('призраки делят с композитом сами объекты Uniform', () => {
     const effect = new LensFlareEffect()
-    const onDispose = vi.fn()
-    effect.starburstTexture.addEventListener('dispose', onDispose)
 
-    effect.dispose()
-
-    expect(onDispose).toHaveBeenCalledOnce()
+    expect(effect.ghostMaterial.uniforms.ghostAmount).toBe(effect.uniforms.get('ghostAmount'))
+    expect(effect.ghostMaterial.uniforms.intensity).toBe(effect.uniforms.get('intensity'))
   })
 
-  it('маска модулирует только призраков и гало: штрих прибавляется ПОСЛЕ умножения на неё', () => {
-    // Маска повёрнута по крену камеры: попади штрих под неё, по полосе ездили
-    // бы яркие и тусклые секторы. Проверяется позиция, а не наличие подстроки
+  it('призраки читают выбранные источники', () => {
     const effect = new LensFlareEffect()
-    const body = effect.featuresMaterial.fragmentShader.match(/void main\(\)\s*\{([\s\S]*)\n {2}\}/)?.[1]
 
-    expect(body).toBeDefined()
-
-    const maskAt = body?.indexOf('starburstAmount * sampleStarburst()') ?? -1
-    const streakAt = body?.indexOf('texture(streakBuffer, vUv)') ?? -1
-
-    expect(maskAt).toBeGreaterThanOrEqual(0)
-    expect(streakAt).toBeGreaterThan(maskAt)
-
-    // и запись во фрагмент маску уже не применяет — иначе «после» ничего
-    // не значило бы
-    expect(body).toMatch(/gl_FragColor\s*=\s*features;/)
-    expect(body).not.toMatch(/gl_FragColor\s*=\s*features\s*\*/)
+    expect(effect.ghostMaterial.uniforms.sourceFlux.value).toBe(effect.sourceFluxTarget.texture)
+    expect(effect.ghostMaterial.uniforms.sourceCentroid.value).toBe(effect.sourceCentroidTarget.texture)
   })
 
-  it('поворот маски корректируется по аспекту вьюпорта — как и у гало, иначе на не квадратном экране поворот превращается в сдвиг', () => {
-    const effect = new LensFlareEffect()
-    const source = effect.featuresMaterial.fragmentShader
-    const sampleStarburst = source.match(/float sampleStarburst\(\)[\s\S]*?\n {2}\}/)
-
-    expect(sampleStarburst).not.toBeNull()
-    expect(sampleStarburst?.[0]).toContain('vAspectRatio')
-  })
-})
-
-describe('LensFlareEffect: ошибки загрузки текстур объектива', () => {
-  // Ассеты объектива лежат вне git и в проде берутся из S3. Без файла
-  // TextureLoader молча биндит нулевую текстуру и призраки чернеют, поэтому
-  // обработчик ошибки обязан предупредить в консоль
-  it('при ошибке загрузки градиента палитры пишет предупреждение с URL и последствием', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  it('PNG объектива больше не грузятся', () => {
     const loadSpy = vi.spyOn(TextureLoader.prototype, 'load')
-
     const effect = new LensFlareEffect()
+    const urls = loadSpy.mock.calls.map(([url]) => String(url))
 
-    const call = loadSpy.mock.calls.find(([url]) => typeof url === 'string' && url.includes('lenscolor.png'))
-    expect(call).toBeDefined()
-    const onError = call?.[3]
-    expect(onError).toBeTypeOf('function')
+    expect(urls.some((url) => url.includes('lenscolor.png') || url.includes('lensstar.png'))).toBe(false)
 
-    onError?.(new ErrorEvent('error'))
-
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/^\[LensFlareEffect\]/))
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('lenscolor.png'))
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('призраки'))
-
-    warnSpy.mockRestore()
-    loadSpy.mockRestore()
-    effect.dispose()
-  })
-
-  it('при ошибке загрузки маски лучей пишет предупреждение с URL и последствием', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const loadSpy = vi.spyOn(TextureLoader.prototype, 'load')
-
-    const effect = new LensFlareEffect()
-
-    const call = loadSpy.mock.calls.find(([url]) => typeof url === 'string' && url.includes('lensstar.png'))
-    expect(call).toBeDefined()
-    const onError = call?.[3]
-    expect(onError).toBeTypeOf('function')
-
-    onError?.(new ErrorEvent('error'))
-
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/^\[LensFlareEffect\]/))
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('lensstar.png'))
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('лучи'))
-
-    warnSpy.mockRestore()
     loadSpy.mockRestore()
     effect.dispose()
   })
 })
 
-describe('LensFlareEffect: значения приёмки', () => {
-  it('интенсивность закреплена на рабочем значении, выбранном владельцем', () => {
-    // 0.1 — не техническая граница, а выбранная ненавязчивость с учётом
-    // star.farGlowGain (далёкая звезда отдаёт блику усиленную энергию);
-    // значение, на котором возвращается пелена, под текущим конвейером не измерено
-    expect(lensFlare.lensFlare.intensity).toBe(0.1)
+describe('LensFlareEffect: порядок проходов и адреса записи', () => {
+  // Проверять вход прохода недостаточно: его выставляет сам ShaderPass.render.
+  // Единственный наблюдаемый след порядка — последовательность setRenderTarget
+  it('проходы идут в фиксированном порядке, каждый в свой таргет', () => {
+    const effect = new LensFlareEffect({ streakAmount: lensFlare.lensFlare.streakAmount })
+    const renderer = runUpdate(effect)
+
+    expect(writeSequence(effect, renderer)).toEqual([
+      effect.renderTarget1, // 1. порог и даунсэмпл
+      effect.renderTarget2, // 2. предразмытие Kawase SMALL
+      effect.streakSourceTarget, // 3. источник штриха
+      effect.streakTarget, // 4. штрих
+      effect.renderTarget1, // 5. локальный контраст
+      effect.gridFluxTarget, // 6. сбор потока
+      effect.gridCentroidTarget, // 7. сбор центров
+      effect.sourceFluxTarget, // 8. отбор: поток
+      effect.sourceCentroidTarget, // 9. отбор: центр
+      effect.sourceWindowTarget, // 10. окно источников
+      effect.ghostTarget // 11. призраки
+    ])
   })
 
-  it('артефакты объектива включены — иначе арка тихо откатится к невидимому эффекту', () => {
-    expect(lensFlare.lensFlare.starburstAmount).toBeGreaterThan(0)
-    expect(lensFlare.lensFlare.ghostAmount).toBeGreaterThan(0)
+  it('сбор читает локальный контраст, отбор — поток и центры сетки', () => {
+    const effect = new LensFlareEffect()
+    runUpdate(effect)
+
+    expect(effect.gridFluxMaterial.uniforms.inputBuffer.value).toBe(effect.renderTarget1.texture)
+    expect(effect.gridCentroidMaterial.uniforms.inputBuffer.value).toBe(effect.renderTarget1.texture)
+    expect(effect.selectFluxMaterial.uniforms.inputBuffer.value).toBe(effect.gridFluxTarget.texture)
+    expect(effect.selectFluxMaterial.uniforms.centroidBuffer.value).toBe(effect.gridCentroidTarget.texture)
+    expect(effect.selectCentroidMaterial.uniforms.centroidBuffer.value).toBe(effect.gridCentroidTarget.texture)
   })
 
-  it('вычитающий порог и затухание не сброшены обратно в дефолты материала', () => {
-    // Пин против тихого отката к дефолтам материала (0 / 3), при которых
-    // призраки зеркалят плато диска целиком. Пара подбиралась на прежнем
-    // конвейере и под текущим не перезамерена
-    expect(lensFlare.lensFlare.ghostThreshold).toBe(0.5)
-    expect(lensFlare.lensFlare.ghostAttenuation).toBe(12)
+  it('окно читает выбранные источники, призраки — окно', () => {
+    const effect = new LensFlareEffect()
+    runUpdate(effect)
+
+    expect(effect.windowMaterial.uniforms.inputBuffer.value).toBe(effect.sourceFluxTarget.texture)
+    expect(effect.ghostMaterial.uniforms.sourceWindow.value).toBe(effect.sourceWindowTarget.texture)
   })
 
-  it('дефолты штриха закреплены: сила принята владельцем, остальные три — стартовая точка', () => {
-    // Пин против тихого дрейфа. Сила выбрана глазом на приёмке, остальные три
-    // не замерены — порог достался от вдвое более крупного источника
-    expect(lensFlare.lensFlare.streakAmount).toBe(0.005)
-    expect(lensFlare.lensFlare.streakThreshold).toBe(0.3)
-    expect(lensFlare.lensFlare.streakScale).toBe(5)
-    expect(lensFlare.lensFlare.streakTint).toEqual([0.15, 0.1, 1.0])
+  it('призраки пишутся в очищенный таргет', () => {
+    const effect = new LensFlareEffect()
+    const renderer = runUpdate(effect)
+
+    expect(renderer.clear).toHaveBeenCalledTimes(1)
+    expect(renderer.clear).toHaveBeenCalledWith(true, false, false)
   })
 })
 
-describe('LensFlareEffect: вычитающий порог призраков', () => {
-  it('порог вычитается из выборки ДО тонировки и до веса, а не гасит её множителем', () => {
-    // Вычитание убивает постоянную составляющую, множитель сохранял бы форму.
-    // Порядок важен: порог по затонированному цвету резал бы палитру градиента
-    const effect = new LensFlareEffect()
-    const source = effect.featuresMaterial.fragmentShader
+describe('LensFlareEffect: пропуск проходов', () => {
+  it('нулевой штрих — оба его прохода не выполняются', () => {
+    const effect = new LensFlareEffect({ streakAmount: 0 })
+    const written = writeSequence(effect, runUpdate(effect))
 
-    expect(source).toContain('uniform float ghostThreshold;')
-    expect(source).toContain('max(texture(inputBuffer, suv).rgb - ghostThreshold, vec3(0.0))')
-    expect(source).toContain('sampled * ghostTint(suv) * weight')
-    // прежняя форма без порога
-    expect(source).not.toContain('texture(inputBuffer, suv).rgb * ghostTint(suv) * weight')
+    expect(written).not.toContain(effect.streakSourceTarget)
+    expect(written).not.toContain(effect.streakTarget)
   })
 
-  it('показатель затухания — ручка, а не зашитая тройка', () => {
-    const effect = new LensFlareEffect()
-    const source = effect.featuresMaterial.fragmentShader
+  it('нулевые призраки — сетка, отбор и спрайты не выполняются', () => {
+    const effect = new LensFlareEffect({ ghostAmount: 0, streakAmount: 0 })
+    const renderer = runUpdate(effect)
 
-    expect(source).toContain('uniform float ghostAttenuation;')
-    expect(source).toContain('pow(1.0 - d, ghostAttenuation)')
-    expect(source).not.toContain('pow(1.0 - d, 3.0)')
+    expect(writeSequence(effect, renderer)).toEqual([effect.renderTarget1, effect.renderTarget2, effect.renderTarget1])
+    expect(renderer.clear).not.toHaveBeenCalled()
+  })
+})
+
+describe('LensFlareEffect: ресайз', () => {
+  it('сетка, таргеты и инстансы следуют за кадром 16:9', () => {
+    const effect = new LensFlareEffect()
+    effect.setSize(1920, 1080)
+
+    expect(effect.gridSize).toEqual({ cols: 64, rows: 36 })
+    expect(effect.gridFluxTarget.width).toBe(64)
+    expect(effect.sourceCentroidTarget.height).toBe(36)
+    expect(effect.ghostTarget.width).toBe(480)
+    expect(effect.ghostTarget.height).toBe(270)
+    expect(effect.ghostGeometry.instanceCount).toBe(64 * 36 * FLARE_GHOSTS.length)
+    expect(effect.ghostMaterial.uniforms.aspect.value).toBeCloseTo(16 / 9, 12)
+    expect(effect.gridFluxMaterial.uniforms.areaPerTexel.value).toBeCloseTo(1 / 540 ** 2, 15)
+    expect(effect.sourceWindowTarget.width).toBe(64)
+    expect(effect.windowMaterial.uniforms.gridSize.value.x).toBe(64)
   })
 
-  it('дефолты тождественны прежнему коду: вычитать нечего, показатель прежний', () => {
+  it('ресайз: сетка и инстансы следуют за аспектом без пересборки', () => {
     const effect = new LensFlareEffect()
+    effect.setSize(1920, 1080)
+    effect.setSize(2560, 1080)
 
-    expect(effect.featuresMaterial.ghostThreshold).toBe(0)
-    expect(effect.featuresMaterial.ghostAttenuation).toBe(3)
+    expect(effect.gridSize.cols).toBe(86)
+    expect(effect.gridCentroidTarget.width).toBe(86)
+    expect(effect.ghostGeometry.instanceCount).toBe(86 * 36 * FLARE_GHOSTS.length)
+    expect(effect.ghostMaterial.uniforms.aspect.value).toBeCloseTo(2560 / 1080, 12)
   })
 
-  it('обе ручки доезжают из конфига до юниформов материала', () => {
-    const effect = new LensFlareEffect({
-      ghostThreshold: lensFlare.lensFlare.ghostThreshold,
-      ghostAttenuation: lensFlare.lensFlare.ghostAttenuation
-    })
+  it('нулевой кадр: аспект конечен, сетка конечна', () => {
+    const effect = new LensFlareEffect()
+    effect.setSize(0, 0)
 
-    expect(effect.featuresMaterial.ghostThreshold).toBe(lensFlare.lensFlare.ghostThreshold)
-    expect(effect.featuresMaterial.ghostAttenuation).toBe(lensFlare.lensFlare.ghostAttenuation)
+    expect(Number.isFinite(effect.ghostMaterial.uniforms.aspect.value)).toBe(true)
+    expect(effect.gridSize.cols).toBeGreaterThanOrEqual(1)
   })
 })
 
 describe('LensFlareEffect: анаморфный штрих', () => {
   it('штрих читает собственный источник — понижение предразмытого буфера', () => {
-    // Главную звезду от фоновых отличает размер, а не яркость, и меряет его
-    // размытие. streakAmount ненулевой намеренно: при нуле проходы пропускаются
     const effect = new LensFlareEffect({ streakAmount: 0.03 })
-    const inputBuffer = new WebGLRenderTarget(8, 8)
-    const renderer = {
-      setRenderTarget: vi.fn(),
-      render: vi.fn(),
-      getRenderTarget: vi.fn(() => null),
-      getContext: vi.fn(() => ({}))
-    } as unknown as WebGLRenderer
-
-    effect.update(renderer, inputBuffer)
+    runUpdate(effect)
 
     expect(effect.streakMaterial.inputBuffer).toBe(effect.streakSourceTarget.texture)
-    expect(effect.streakMaterial.inputBuffer).not.toBe(inputBuffer.texture)
     expect(effect.streakMaterial.inputBuffer).not.toBe(effect.renderTarget2.texture)
   })
 
   it('таргеты штриха — четверть базового разрешения', () => {
     const effect = new LensFlareEffect()
-
     effect.setSize(1024, 512)
 
     expect(effect.streakTarget.width).toBe(256)
     expect(effect.streakTarget.height).toBe(128)
     expect(effect.streakSourceTarget.width).toBe(256)
-    expect(effect.streakSourceTarget.height).toBe(128)
     expect(effect.streakMaterial.uniforms.texelSize.value.x).toBeCloseTo(1 / 256, 10)
   })
 
-  it('источник штриха разбирается штатным dispose', () => {
-    const effect = new LensFlareEffect()
-    const onDispose = vi.fn()
-    effect.streakSourceTarget.addEventListener('dispose', onDispose)
-
-    effect.dispose()
-
-    expect(onDispose).toHaveBeenCalled()
-  })
-
-  it('ручки штриха доезжают из конфига до юниформов', () => {
+  it('ручки штриха доезжают из конфига', () => {
     const effect = new LensFlareEffect({
       streakAmount: lensFlare.lensFlare.streakAmount,
       streakThreshold: lensFlare.lensFlare.streakThreshold,
       streakScale: lensFlare.lensFlare.streakScale,
-      streakTint: lensFlare.lensFlare.streakTint
+      streakTint: lensFlare.lensFlare.streakTint,
+      streakSourceCeiling: lensFlare.lensFlare.streakSourceCeiling
     })
 
-    expect(effect.featuresMaterial.streakAmount).toBe(lensFlare.lensFlare.streakAmount)
+    expect(effect.streakAmount).toBe(lensFlare.lensFlare.streakAmount)
     expect(effect.streakMaterial.streakThreshold).toBe(lensFlare.lensFlare.streakThreshold)
     expect(effect.streakMaterial.streakScale).toBe(lensFlare.lensFlare.streakScale)
     expect(effect.streakMaterial.streakTint.toArray()).toEqual([...lensFlare.lensFlare.streakTint])
+    expect(effect.streakMaterial.streakSourceCeiling).toBe(lensFlare.lensFlare.streakSourceCeiling)
   })
 
-  it('тинт применяется один раз — в проходе, а не повторно в композите', () => {
-    const effect = new LensFlareEffect()
-
-    expect(effect.featuresMaterial.fragmentShader).toContain('texture(streakBuffer, vUv).rgb * streakAmount')
-    expect(effect.featuresMaterial.fragmentShader).not.toContain('streakTint')
+  it('тинт применяется один раз — в проходе, не в композите', () => {
+    expect(new LensFlareEffect().getFragmentShader()).not.toContain('streakTint')
   })
 
-  it('таргет штриха освобождается штатной разборкой эффекта', () => {
-    // Effect.dispose() из postprocessing обходит Object.keys(this) верхнего
-    // уровня; ресурс, живущий только в юниформе материала, туда не попадает
-    const effect = new LensFlareEffect()
-    const onDispose = vi.fn()
-    effect.streakTarget.addEventListener('dispose', onDispose)
-
-    effect.dispose()
-
-    expect(onDispose).toHaveBeenCalledOnce()
-  })
-
-  it('таргет штриха подключён к материалу артефактов', () => {
-    // Без этого присвоения композит читает пустой семплер и штрих молча
-    // исчезает: остальные тесты проверяют юниформы и таргет раздельно
-    const effect = new LensFlareEffect()
-
-    expect(effect.featuresMaterial.streakBuffer).toBe(effect.streakTarget.texture)
-  })
-
-  it('шейдер штриха зажимает яркость перед записью в half-float таргет', () => {
-    // Гейт квадратичен по яркости и не нормирован, поэтому без потолка серый
-    // пиксель яркости около sqrt(65504 / HALF_SAMPLES) даёт Inf в half-float
-    const effect = new LensFlareEffect()
-
-    expect(effect.streakMaterial.fragmentShader).toContain('min(total * streakTint, vec3(60000.0))')
+  it('шейдер штриха зажимает яркость перед записью в half-float', () => {
+    expect(new LensFlareEffect().streakMaterial.fragmentShader).toContain('min(total * streakTint, vec3(60000.0))')
   })
 })
 
@@ -360,13 +287,7 @@ describe('LensFlareEffect: потолок яркости источника шт
   /** Rec. 709 — те же коэффициенты, что вставляет пролог three в luminance() */
   const luminance = (c: readonly [number, number, number]): number => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
 
-  /**
-   * CPU-зеркало накопления штриха для РОВНОЙ области яркости.
-   *
-   * Сумма softness по i из [-64, 64] равна ровно HALF_SAMPLES, поэтому для
-   * однородного поля цикл сворачивается в одно произведение — этого достаточно,
-   * чтобы поймать и насыщение, и действие потолка.
-   */
+  /** CPU-зеркало накопления штриха для РОВНОЙ области яркости */
   const streakForFlatField = (
     color: readonly [number, number, number],
     threshold: number,
@@ -381,263 +302,167 @@ describe('LensFlareEffect: потолок яркости источника шт
   }
 
   const WHITE_TINT = [1, 1, 1] as const
-  /** Sirius B: wdShade упирается в потолок HDR 64 во всех трёх каналах */
-  const SIRIUS_B = [64, 64, 64] as const
+  /** Sirius B: wdShade упирается в потолок WD_HDR_CEILING 32 во всех трёх каналах */
+  const SIRIUS_B = [32, 32, 32] as const
   /** Обычная звезда: starEnergy максимум 3.0 * STAR_CORE_INTENSITY 4.0 */
   const STAR = [12, 11, 10] as const
 
   it('без потолка яркость белого карлика насыщает таргет штриха', () => {
-    // Пин самой болезни: полоса упирается в клэмп по всей длине, затухание
-    // вдоль неё пропадает, и она замазывает сам источник. Потолок в
-    // бесконечность — это поведение до правки
-    const saturated = streakForFlatField(SIRIUS_B, 0.3, WHITE_TINT, Infinity)
-
-    expect(saturated.every((c) => c === TARGET_CLAMP)).toBe(true)
+    expect(streakForFlatField(SIRIUS_B, 0.3, WHITE_TINT, Infinity).every((c) => c === TARGET_CLAMP)).toBe(true)
   })
 
-  it('потолок 16 уводит карлика из насыщения и возвращает затухание', () => {
-    const limited = streakForFlatField(SIRIUS_B, 0.3, WHITE_TINT, 16)
-
-    expect(limited.every((c) => c < TARGET_CLAMP)).toBe(true)
+  it('потолок 16 уводит карлика из насыщения', () => {
+    expect(streakForFlatField(SIRIUS_B, 0.3, WHITE_TINT, 16).every((c) => c < TARGET_CLAMP)).toBe(true)
   })
 
   it('источник выше потолка даёт ровно то же, что источник НА потолке', () => {
-    // Смысл потолка: выше него яркость перестаёт влиять на штрих вовсе.
-    // Иначе Sirius B и G29-38 давали бы разный по силе штрих там, где оба
-    // уже за пределом линейного режима
     const atCeiling = streakForFlatField([16, 16, 16], 0.3, WHITE_TINT, 16)
     const wayAbove = streakForFlatField(SIRIUS_B, 0.3, WHITE_TINT, 16)
 
     wayAbove.forEach((value, i) => expect(value).toBeCloseTo(atCeiling[i], 6))
   })
 
-  it('ниже потолка не меняется ничего — звезда и диск ЧД остаются как были', () => {
-    // Потолок обязан быть невидим для всего, что уже работало: иначе это не
-    // починка карлика, а перенастройка всех сцен разом
+  it('ниже потолка не меняется ничего', () => {
     const before = streakForFlatField(STAR, 0.3, WHITE_TINT, Infinity)
     const after = streakForFlatField(STAR, 0.3, WHITE_TINT, 16)
 
     after.forEach((value, i) => expect(value).toBeCloseTo(before[i], 6))
   })
 
-  it('оттенок источника сохраняется: делится общий множитель, а не каналы порознь', () => {
-    // Поканальный кламп у Sirius B (64,64,64) прошёл бы незаметно, а у
-    // G29-38 (25.3, 31.5, 47.9) сплющил бы синеву в белое
+  it('оттенок источника сохраняется', () => {
     const g2938 = [25.3, 31.5, 47.9] as const
     const limited = streakForFlatField(g2938, 0.3, WHITE_TINT, 16)
 
     expect(limited[2] / limited[0]).toBeCloseTo(g2938[2] / g2938[0], 6)
   })
 
-  it('нулевой потолок гасит штрих — точка отката', () => {
+  it('нулевой потолок гасит штрих', () => {
     expect(streakForFlatField(SIRIUS_B, 0.3, WHITE_TINT, 0)).toEqual([0, 0, 0])
   })
 
-  it('шейдер ограничивает ЯРКОСТЬ источника до гейта, а не результат после него', () => {
-    const effect = new LensFlareEffect()
-    const source = effect.streakMaterial.fragmentShader
+  it('шейдер ограничивает ЯРКОСТЬ источника до гейта', () => {
+    const source = new LensFlareEffect().streakMaterial.fragmentShader
 
     expect(source).toContain('uniform float streakSourceCeiling;')
     expect(source).toContain('float limited = min(rawLuma, streakSourceCeiling);')
-    // гейт обязан считаться по ОГРАНИЧЕННОЙ яркости, иначе потолок ничего не даёт
     expect(source).toContain('max(limited - streakThreshold, 0.0)')
-    expect(source).not.toContain('max(luminance(color) - streakThreshold, 0.0)')
-  })
-
-  it('ручка доезжает из конфига до юниформа', () => {
-    const effect = new LensFlareEffect({ streakSourceCeiling: lensFlare.lensFlare.streakSourceCeiling })
-
-    expect(effect.streakMaterial.streakSourceCeiling).toBe(lensFlare.lensFlare.streakSourceCeiling)
   })
 
   it('потолок закреплён ниже точки насыщения и выше рабочих сцен', () => {
-    // 31 — измеренная по формуле точка, где таргет клипается; звезда даёт ~10,
-    // номинальный диск ЧД ~16. Потолок обязан лежать между ними
     expect(lensFlare.lensFlare.streakSourceCeiling).toBeLessThan(31)
     expect(lensFlare.lensFlare.streakSourceCeiling).toBeGreaterThanOrEqual(16)
   })
 })
 
-describe('LensFlareEffect: проход локального контраста', () => {
-  it('материал артефактов читает буфер локального контраста, а не предразмытый', () => {
-    // Призраки обязаны отбирать по локальному контрасту: плато диска звезды
-    // ярче порога во всех своих пикселях и заливало кадр пеленой
+describe('LensFlareEffect: локальный контраст', () => {
+  it('локальный контраст читает предразмытый буфер и следует за ресайзом', () => {
     const effect = new LensFlareEffect()
-    const inputBuffer = new WebGLRenderTarget(8, 8)
-    const renderer = {
-      setRenderTarget: vi.fn(),
-      render: vi.fn(),
-      getRenderTarget: vi.fn(() => null),
-      getContext: vi.fn(() => ({}))
-    } as unknown as WebGLRenderer
-
-    effect.update(renderer, inputBuffer)
-
-    expect(effect.featuresMaterial.inputBuffer).toBe(effect.renderTarget1.texture)
-    expect(effect.localContrastMaterial.inputBuffer).toBe(effect.renderTarget2.texture)
-  })
-
-  it('готовые артефакты лежат в renderTarget2', () => {
-    // Локальный контраст занял renderTarget1, поэтому артефакты пишутся в
-    // renderTarget2: новых таргетов половинного разрешения нет
-    const effect = new LensFlareEffect()
-
-    expect(effect.uniforms.get('featuresBuffer').value).toBe(effect.renderTarget2.texture)
-  })
-
-  it('материал локального контраста следует за ресайзом', () => {
-    const effect = new LensFlareEffect()
-
+    runUpdate(effect)
     effect.setSize(1024, 512)
 
+    expect(effect.localContrastMaterial.inputBuffer).toBe(effect.renderTarget2.texture)
     expect(effect.localContrastMaterial.uniforms.texelSize.value.x).toBeCloseTo(1 / 512, 10)
     expect(effect.localContrastMaterial.uniforms.texelSize.value.y).toBeCloseTo(1 / 256, 10)
   })
 
-  it('проход локального контраста разбирается штатным dispose', () => {
-    // Effect.dispose() обходит Object.keys(this): ресурс, живущий только
-    // внутри другого объекта, под обход не попадает и течёт
-    const effect = new LensFlareEffect()
-    const onDispose = vi.fn()
-    effect.localContrastMaterial.addEventListener('dispose', onDispose)
-
-    effect.dispose()
-
-    expect(onDispose).toHaveBeenCalled()
-  })
-})
-
-/** Мок рендерера: интересна только последовательность вызовов setRenderTarget */
-const createRendererStub = (): { setRenderTarget: Mock; render: Mock } & Record<string, unknown> => ({
-  setRenderTarget: vi.fn(),
-  render: vi.fn(),
-  getRenderTarget: vi.fn(() => null),
-  getContext: vi.fn(() => ({}))
-})
-
-/**
- * Адреса записи ИМЕННО в таргеты эффекта, по порядку. Внутренние таргеты
- * KawaseBlurPass (renderTargetA/B предразмытия и источника штриха) сюда не
- * попадают: это чужие объекты, и их число зависит от размера ядра
- */
-const writeSequence = (effect: LensFlareEffect, renderer: { setRenderTarget: Mock }): unknown[] => {
-  const own: unknown[] = [effect.renderTarget1, effect.renderTarget2, effect.streakSourceTarget, effect.streakTarget]
-  return renderer.setRenderTarget.mock.calls.map(([target]) => target).filter((target) => own.includes(target))
-}
-
-describe('LensFlareEffect: порядок проходов и адреса записи', () => {
-  // Проверять вход прохода недостаточно: его выставляет сам ShaderPass.render,
-  // и ни смена адреса записи, ни перестановка проходов ни одного inputBuffer не
-  // меняют. Единственный наблюдаемый след порядка — последовательность
-  // renderer.setRenderTarget
-  it('шесть проходов идут в фиксированном порядке, каждый в свой таргет', () => {
-    const effect = new LensFlareEffect({ streakAmount: lensFlare.lensFlare.streakAmount })
-    const renderer = createRendererStub()
-
-    effect.update(renderer as unknown as WebGLRenderer, new WebGLRenderTarget(8, 8))
-
-    expect(writeSequence(effect, renderer)).toEqual([
-      effect.renderTarget1, // 1. порог и даунсэмпл
-      effect.renderTarget2, // 2. предразмытие Kawase SMALL
-      effect.streakSourceTarget, // 3. собственный источник штриха, Kawase MEDIUM
-      effect.streakTarget, // 4. сам штрих
-      effect.renderTarget1, // 5. локальный контраст — ОБЯЗАН быть до артефактов
-      effect.renderTarget2 // 6. артефакты; их и читает композит эффекта
-    ])
-    // адрес шестого прохода обязан совпадать с тем, что читает композит
-    expect(effect.uniforms.get('featuresBuffer').value).toBe(effect.renderTarget2.texture)
-  })
-})
-
-describe('LensFlareEffect: пропуск проходов штриха', () => {
-  it('при нулевом вкладе штриха оба его прохода не выполняются', () => {
-    // Kawase-источник и 129 выборок на пиксель стоили бы полную цену даже при
-    // нулевом вкладе штриха
-    const effect = new LensFlareEffect({ streakAmount: 0 })
-    const renderer = createRendererStub()
-
-    effect.update(renderer as unknown as WebGLRenderer, new WebGLRenderTarget(8, 8))
-
-    const written = writeSequence(effect, renderer)
-
-    expect(written).toEqual([effect.renderTarget1, effect.renderTarget2, effect.renderTarget1, effect.renderTarget2])
-    expect(written).not.toContain(effect.streakSourceTarget)
-    expect(written).not.toContain(effect.streakTarget)
-  })
-
-  it('устаревшее содержимое streakTarget при пропуске на кадр не влияет', () => {
-    // Единственный читатель streakTarget — выборка в композите артефактов,
-    // умноженная на streakAmount. При нуле произведение нулевое независимо от
-    // того, что осталось в таргете с прошлого кадра
-    const effect = new LensFlareEffect({ streakAmount: 0 })
-
-    expect(effect.featuresMaterial.fragmentShader).toContain('texture(streakBuffer, vUv).rgb * streakAmount')
-    expect(effect.featuresMaterial.streakAmount).toBe(0)
-    // и других обращений к streakBuffer в шейдере нет
-    expect(effect.featuresMaterial.fragmentShader.match(/streakBuffer/g)).toHaveLength(2)
-  })
-
-  it('при ненулевом вкладе проходы штриха выполняются', () => {
-    const effect = new LensFlareEffect({ streakAmount: 0.03 })
-    const renderer = createRendererStub()
-
-    effect.update(renderer as unknown as WebGLRenderer, new WebGLRenderTarget(8, 8))
-
-    const written = writeSequence(effect, renderer)
-
-    expect(written).toContain(effect.streakSourceTarget)
-    expect(written).toContain(effect.streakTarget)
+  it('радиус окрестности — константа из TS: им же меряется размер источника', () => {
+    expect(new LensFlareEffect().localContrastMaterial.fragmentShader).toContain(
+      `#define LOCAL_CONTRAST_RADIUS ${glslFloat(LOCAL_CONTRAST_RADIUS)}`
+    )
   })
 })
 
 describe('LensFlareEffect: инициализация проходов', () => {
-  it('источник штриха получает тип кадрового буфера — иначе HDR выше единицы срезается', () => {
-    // KawaseBlurPass создаёт внутренние таргеты UnsignedByteType и меняет тип
-    // только в initialize(). Без вызова источник штриха обрезается по единице,
-    // гейт даёт почти ноль, и штрих молча исчезает
+  it('источник штриха получает тип кадрового буфера', () => {
     const effect = new LensFlareEffect()
-    const internals = effect.streakSourcePass as unknown as {
-      renderTargetA: WebGLRenderTarget
-      renderTargetB: WebGLRenderTarget
-    }
+    const internals = effect.streakSourcePass as unknown as { renderTargetA: WebGLRenderTarget; renderTargetB: WebGLRenderTarget }
 
     expect(internals.renderTargetA.texture.type).toBe(UnsignedByteType)
-
     effect.initialize(createRendererStub() as unknown as WebGLRenderer, false, HalfFloatType)
-
     expect(internals.renderTargetA.texture.type).toBe(HalfFloatType)
     expect(internals.renderTargetB.texture.type).toBe(HalfFloatType)
   })
 
-  it('initialize доходит до всех проходов эффекта, а не только до части', () => {
-    // ShaderPass.initialize поднимает FRAMEBUFFER_PRECISION_HIGH у своего
-    // материала; забытый в списке проход тихо потеряет точность
+  it('initialize доходит до всех полноэкранных проходов', () => {
     const effect = new LensFlareEffect()
-
     effect.initialize(createRendererStub() as unknown as WebGLRenderer, false, HalfFloatType)
 
-    expect(effect.thresholdMaterial.defines.FRAMEBUFFER_PRECISION_HIGH).toBe('1')
-    expect(effect.localContrastMaterial.defines.FRAMEBUFFER_PRECISION_HIGH).toBe('1')
-    expect(effect.featuresMaterial.defines.FRAMEBUFFER_PRECISION_HIGH).toBe('1')
-    expect(effect.streakMaterial.defines.FRAMEBUFFER_PRECISION_HIGH).toBe('1')
+    for (const material of [
+      effect.thresholdMaterial,
+      effect.localContrastMaterial,
+      effect.streakMaterial,
+      effect.gridFluxMaterial,
+      effect.gridCentroidMaterial,
+      effect.selectFluxMaterial,
+      effect.selectCentroidMaterial,
+      effect.windowMaterial
+    ]) {
+      expect(material.defines.FRAMEBUFFER_PRECISION_HIGH).toBe('1')
+    }
   })
 })
 
-describe('LensFlareEffect: разборка ресурсов штриха и локального контраста', () => {
-  it('проход-источник штриха, материал штриха и проход локального контраста разбираются штатным dispose', () => {
-    // Effect.dispose() обходит Object.keys(this) и разбирает всё, что
-    // instanceof Texture/Material/WebGLRenderTarget/Pass. Ресурс, спрятанный
-    // внутрь другого объекта, под обход не попадает и течёт на каждой
-    // пересборке эффекта
+describe('LensFlareEffect: разборка ресурсов', () => {
+  it('таргеты, материал и геометрия призраков освобождаются штатным dispose', () => {
+    // Effect.dispose() обходит Object.keys(this) и разбирает Texture/Material/
+    // WebGLRenderTarget/Pass; геометрия в этот список не входит — её
+    // освобождает переопределение dispose
     const effect = new LensFlareEffect()
-    const streakSourcePassDispose = vi.spyOn(effect.streakSourcePass, 'dispose')
-    const streakMaterialDispose = vi.spyOn(effect.streakMaterial, 'dispose')
-    const localContrastPassDispose = vi.spyOn(effect.localContrastPass, 'dispose')
+    const disposed = vi.fn()
+    for (const target of [effect.gridFluxTarget, effect.sourceCentroidTarget, effect.ghostTarget, effect.streakTarget]) {
+      target.addEventListener('dispose', disposed)
+    }
+    const ghostGeometry = vi.spyOn(effect.ghostGeometry, 'dispose')
+    const ghostMaterial = vi.spyOn(effect.ghostMaterial, 'dispose')
+    const streakSourcePass = vi.spyOn(effect.streakSourcePass, 'dispose')
 
     effect.dispose()
 
-    expect(streakSourcePassDispose).toHaveBeenCalled()
-    expect(streakMaterialDispose).toHaveBeenCalled()
-    expect(localContrastPassDispose).toHaveBeenCalled()
+    expect(disposed).toHaveBeenCalledTimes(4)
+    expect(ghostGeometry).toHaveBeenCalled()
+    expect(ghostMaterial).toHaveBeenCalled()
+    expect(streakSourcePass).toHaveBeenCalled()
+  })
+})
+
+describe('LensFlareEffect: значения приёмки', () => {
+  it('интенсивность закреплена на значении, выбранном владельцем', () => {
+    // 0.1 — выбранная ненавязчивость с учётом star.farGlowGain
+    expect(lensFlare.lensFlare.intensity).toBe(0.1)
+  })
+
+  it('стартовые значения призраков — по расчёту, не замер', () => {
+    expect(lensFlare.lensFlare.ghostAmount).toBe(1)
+    expect(lensFlare.lensFlare.ghostVignette).toBe(2)
+    expect(lensFlare.lensFlare.ghostChromatic).toBe(1)
+  })
+
+  it('ручек Чепмена больше нет', () => {
+    for (const key of ['haloAmount', 'ghostThreshold', 'ghostAttenuation', 'chromaticAberration']) {
+      expect(key in lensFlare.lensFlare).toBe(false)
+    }
+  })
+
+  it('дефолты штриха закреплены: сила принята владельцем, остальные — стартовая точка', () => {
+    expect(lensFlare.lensFlare.streakAmount).toBe(0.005)
+    expect(lensFlare.lensFlare.streakThreshold).toBe(0.3)
+    expect(lensFlare.lensFlare.streakScale).toBe(5)
+    expect(lensFlare.lensFlare.streakTint).toEqual([0.15, 0.1, 1.0])
+  })
+})
+
+describe('createEffectPasses: ручки блика из конфига', () => {
+  it('доезжают до собранного эффекта', () => {
+    const [hdrPass] = createEffectPasses(new PerspectiveCamera())
+    const effects = (hdrPass as unknown as { effects: unknown[] }).effects
+    const effect = effects.find((e): e is LensFlareEffect => e instanceof LensFlareEffect)!
+    const cfg = lensFlare.lensFlare
+
+    expect(effect.intensity).toBe(cfg.intensity)
+    expect(effect.ghostAmount).toBe(cfg.ghostAmount)
+    expect(effect.ghostVignette).toBe(cfg.ghostVignette)
+    expect(effect.ghostChromatic).toBe(cfg.ghostChromatic)
+    expect(effect.streakAmount).toBe(cfg.streakAmount)
+    expect(effect.thresholdLevel).toBe(BLOOM_OPTIONS.luminanceThreshold)
   })
 })

@@ -91,14 +91,10 @@ export function createEffectPasses(camera: PerspectiveCamera): readonly [EffectP
   const bloomEffect: BloomEffect = new BloomEffect({ ...BLOOM_OPTIONS })
 
   const lensFlareEffect: LensFlareEffect = new LensFlareEffect({
-    camera,
     intensity: config('lensFlare.intensity'),
     ghostAmount: config('lensFlare.ghostAmount'),
-    ghostThreshold: config('lensFlare.ghostThreshold'),
-    ghostAttenuation: config('lensFlare.ghostAttenuation'),
-    haloAmount: config('lensFlare.haloAmount'),
-    chromaticAberration: config('lensFlare.chromaticAberration'),
-    starburstAmount: config('lensFlare.starburstAmount'),
+    ghostVignette: config('lensFlare.ghostVignette'),
+    ghostChromatic: config('lensFlare.ghostChromatic'),
     streakAmount: config('lensFlare.streakAmount'),
     streakThreshold: config('lensFlare.streakThreshold'),
     streakScale: config('lensFlare.streakScale'),

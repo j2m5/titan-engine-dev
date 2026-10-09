@@ -41,7 +41,6 @@ const MAX_TICK_DELTA_SECONDS: number = 0.1
 class SceneObserver extends EventEmitter<{
   change: [Vector3]
   ClosestChange: [ObservableRecord]
-  distanceChange: [SceneObserverRecord]
 }> {
   private _observable: AstroControls | null = null
   private _scene: Scene | null = null
@@ -143,7 +142,6 @@ class SceneObserver extends EventEmitter<{
   }
 
   public add({ name, data }: SceneObserverRecord): void {
-    this.emit('distanceChange', { name, data })
     this.data.set(name, data)
   }
 
