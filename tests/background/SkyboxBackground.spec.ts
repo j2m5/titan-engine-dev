@@ -1,5 +1,6 @@
 import { SkyboxBackground } from '@/core/renderables/SkyboxBackground'
-import { CubeTexture, Scene } from 'three'
+import { CubeTexture, RawShaderMaterial, Scene } from 'three'
+import { gaiaSkyUniforms } from '@/core/sky/gaiaSkyUniforms'
 import { readFileSync } from 'fs'
 import { Application } from '@/Application'
 import { disposeSceneTree } from '@/core/lifecycle/disposeSceneTree'
@@ -26,12 +27,62 @@ describe('SkyboxBackground: собственный фоновый проход',
     expect(material.depthWrite).toBe(false)
   })
 
-  it('выборка идёт через общий чанк, своей копии нет', () => {
+  it('выборка идёт через общий чанк неба с производными луча, своей копии нет', () => {
     const source = readFileSync('src/core/renderables/SkyboxBackground.ts', 'utf8')
 
-    expect(source).toContain('#include <skyboxSampleFunctions>')
-    expect(source).toContain('sampleSkyboxHdr(')
+    expect(source).toContain('#include <skySampleFunctions>')
+    expect(source).toContain('sampleSky(dir, dFdx(dir), dFdy(dir))')
     expect(source).not.toContain('texture(skybox,')
+  })
+
+  it('юниформы неба — общие экземпляры GaiaSky (режим gaia)', () => {
+    const material = new SkyboxBackground(null).material as RawShaderMaterial
+
+    expect(material.uniforms.uGaiaGalaxy).toBe(gaiaSkyUniforms.uGaiaGalaxy)
+    expect(material.uniforms.uGaiaMinLod).toBe(gaiaSkyUniforms.uGaiaMinLod)
+  })
+
+  it('режим gaia: фон без кубмапы сценария, небо запускается; dispose приложения его гасит', async () => {
+    const scene = new Scene()
+    const engine = {
+      dispose: vi.fn(() => {
+        for (const child of [...scene.children]) disposeSceneTree(child)
+      }),
+      start: vi.fn()
+    } as unknown as Engine
+    const observer = {
+      scenario: null,
+      loadPrimaryTextures: vi.fn(() => Promise.resolve()),
+      sceneBackground: null,
+      map: new Map()
+    } as unknown as ResourceObserver
+    const leakDetector = { record: () => null } as unknown as LeakDetector
+    const heightFieldGate = { recompute: vi.fn(), dispose: vi.fn(), clearNodeCache: vi.fn() } as never
+    const gaiaSky = { start: vi.fn(() => null), dispose: vi.fn() }
+    vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
+
+    const application = new Application(
+      engine,
+      observer,
+      scene,
+      leakDetector,
+      heightFieldGate,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      gaiaSky
+    )
+
+    await application.run(Scenarios[0])
+    await application.run(Scenarios[0])
+
+    expect(gaiaSky.start).toHaveBeenCalledTimes(2)
+    expect(scene.children.filter((child) => child instanceof SkyboxBackground)).toHaveLength(1)
+
+    application.dispose()
+    expect(gaiaSky.dispose).toHaveBeenCalledTimes(1)
   })
 
   it('два run() подряд не копят лишние проходы фона', async () => {

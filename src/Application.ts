@@ -11,6 +11,8 @@ import type { RenderableFactory } from '@/core/renderables/RenderableFactory'
 import type { TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import type { CameraCollision } from '@/core/services/CameraCollision'
 import type { BodyInfoService } from '@/core/bodyInfo/BodyInfoService'
+import type { GaiaSky } from '@/core/sky/GaiaSky'
+import { config } from '@/core/framework/config'
 import { SkyboxBackground } from '@/core/renderables/SkyboxBackground'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
 
@@ -34,7 +36,9 @@ class Application {
     /** Сессионный синглтон: кэш коллайдеров держит разобранные тела до первого кадра нового сценария. */
     private cameraCollision?: Pick<CameraCollision, 'clear'>,
     /** Сессионный синглтон: кэш узлов карточки объекта держит граф прошлого сценария через .parent. */
-    private bodyInfoService?: Pick<BodyInfoService, 'clear'>
+    private bodyInfoService?: Pick<BodyInfoService, 'clear'>,
+    /** Небо Gaia (режим gaia): живёт вне графа сцены, общее для сценариев */
+    private gaiaSky?: Pick<GaiaSky, 'start' | 'dispose'>
   ) {}
 
   /**
@@ -92,7 +96,11 @@ class Application {
     this.resourceObserver.scenario = scenario
     await this.resourceObserver.loadPrimaryTextures()
 
-    if (!this.resourceObserver.sceneBackground) {
+    if (config('background.source') === 'gaia') {
+      // Повторный start() ничего не делает: небо уже грузится или загружено
+      void this.gaiaSky?.start()
+      this.scene.add(new SkyboxBackground(null))
+    } else if (!this.resourceObserver.sceneBackground) {
       console.warn('[Application] Кубическая карта фона сценария не загружена, сцена останется без фона')
     } else {
       // Собственный проход вместо scene.background: только так расширение
@@ -117,6 +125,7 @@ class Application {
 
   public dispose(): void {
     this.teardown()
+    this.gaiaSky?.dispose()
     this.resourceObserver.scenario = null
   }
 }

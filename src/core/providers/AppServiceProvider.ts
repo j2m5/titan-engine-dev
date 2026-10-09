@@ -26,6 +26,7 @@ import { ProceduralSurfaceGenerator } from '@/core/services/ProceduralSurfaceGen
 import { BodyInfoService } from '@/core/bodyInfo/BodyInfoService'
 import { SyncTerrainPatchBuilder, type TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import { WorkerTerrainPatchBuilder } from '@/core/terrain/worker/WorkerTerrainPatchBuilder'
+import { GaiaSky } from '@/core/sky/GaiaSky'
 
 class AppServiceProvider extends ServiceProvider {
   public register(): void {
@@ -55,6 +56,8 @@ class AppServiceProvider extends ServiceProvider {
     this.app.singleton(Tokens.AtmosphereRegistry, () => new AtmosphereRegistry())
     this.app.singleton(Tokens.DepthVolumeRegistry, () => new DepthVolumeRegistry())
     this.app.singleton(Tokens.LensRegistry, () => new LensRegistry())
+    // Небо одно на приложение: грузится при первом сценарии, не перезагружается
+    this.app.singleton(Tokens.GaiaSky, (c: Container) => new GaiaSky(c.get(Tokens.Renderer)))
 
     // Один генератор на сцену (владение рендерером — по прецеденту
     // BrunetonAtmosphere, см. докблок ProceduralSurfaceGenerator): его
@@ -186,7 +189,8 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.RenderableFactory),
           c.get(Tokens.TerrainPatchBuilder),
           c.get(Tokens.CameraCollision),
-          c.get(Tokens.BodyInfoService)
+          c.get(Tokens.BodyInfoService),
+          c.get(Tokens.GaiaSky)
         )
     )
 
