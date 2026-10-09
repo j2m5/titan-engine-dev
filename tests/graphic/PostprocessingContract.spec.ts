@@ -11,6 +11,8 @@ import { DepthVolumePass } from '@/core/graphic/passes/DepthVolumePass'
 import { GravitationalLensEffect } from '@/core/graphic/effects/lens/GravitationalLensEffect'
 import { BlackHolePass } from '@/core/graphic/passes/BlackHolePass'
 import { OverlayPass } from '@/core/graphic/passes/OverlayPass'
+import { LensFrontSplitPass } from '@/core/graphic/passes/LensFrontSplitPass'
+import { LensFrontPass } from '@/core/graphic/passes/LensFrontPass'
 
 describe('Postprocessing: контракт цветового конвейера', () => {
   it('тонмаппинг реально применяется: NORMAL-бленд, не DST-заглушка', () => {
@@ -106,17 +108,28 @@ describe('Postprocessing: пасс атмосферы', () => {
       new DepthVolumeRegistry()
     ).buildPasses()
 
-    expect(passes).toHaveLength(8)
-    expect(passes[0]).toBeInstanceOf(RenderPass)
-    expect(passes[1]).toBeInstanceOf(DepthVolumePass)
+    expect(passes).toHaveLength(10)
+    // Разметка прозрачного перед линзой — до основного прохода
+    expect(passes[0]).toBeInstanceOf(LensFrontSplitPass)
+    expect(passes[1]).toBeInstanceOf(RenderPass)
+    expect(passes[2]).toBeInstanceOf(DepthVolumePass)
     // Меш дыры — за объёмами (сэмплирует кадр с ними), линза — следом; оверлеи
-    // (линии орбит) — поверх лензированного кадра, до атмосферы
-    expect(passes[2]).toBeInstanceOf(BlackHolePass)
-    expect((passes[3] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(GravitationalLensEffect)
-    expect(passes[4]).toBeInstanceOf(OverlayPass)
-    expect((passes[5] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(AtmosphereEffect)
-    expect(passes[6]).toBeInstanceOf(EffectPass)
-    expect(passes[7]).toBeInstanceOf(EffectPass)
+    // (линии орбит) — поверх лензированного кадра, затем прозрачное перед
+    // линзой — до атмосферы, которая тонирует и его
+    expect(passes[3]).toBeInstanceOf(BlackHolePass)
+    expect((passes[4] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(GravitationalLensEffect)
+    expect(passes[5]).toBeInstanceOf(OverlayPass)
+    expect(passes[6]).toBeInstanceOf(LensFrontPass)
+    expect((passes[7] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(AtmosphereEffect)
+    expect(passes[8]).toBeInstanceOf(EffectPass)
+    expect(passes[9]).toBeInstanceOf(EffectPass)
+
+    // Один сортировщик на разметку, объёмы и отрисовку
+    const sorterOf = (pass: unknown): unknown =>
+      (pass as { sorter?: unknown }).sorter ?? (pass as { front?: unknown }).front
+    expect(sorterOf(passes[0])).toBeDefined()
+    expect(sorterOf(passes[2])).toBe(sorterOf(passes[0]))
+    expect(sorterOf(passes[6])).toBe(sorterOf(passes[0]))
   })
 })
 
