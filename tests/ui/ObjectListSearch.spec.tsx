@@ -73,6 +73,11 @@ function rowCount(): number {
 }
 
 describe('ObjectList: поиск по объектам', () => {
+  it('поле — в шапке списка, вне прокручиваемой области: не уезжает при прокрутке и не встаёт к скроллбару', () => {
+    expect(field().closest('.titan-list')).toBeNull()
+    expect(field().closest('.titan-list-header')).not.toBeNull()
+  })
+
   it('ввод сужает список до совпадений по имени', () => {
     const all = rowCount()
 

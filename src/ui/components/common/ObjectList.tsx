@@ -120,16 +120,19 @@ const ObjectList = observer(() => {
   }
 
   return (
-    <TitanList style={{ position: 'fixed', right: '10px', top: '80px', zIndex: 9999 }}>
-      <TitanInput
-        value={query}
-        placeholder="Search objects…  /"
-        ariaLabel="Search objects"
-        inputRef={searchRef}
-        style={{ margin: '4px 8px' }}
-        onKeyDown={handleSearchKey}
-        onChange={setQuery}
-      />
+    <TitanList
+      style={{ position: 'fixed', right: '10px', top: '80px', zIndex: 9999 }}
+      header={
+        <TitanInput
+          value={query}
+          placeholder="Search objects…  /"
+          ariaLabel="Search objects"
+          inputRef={searchRef}
+          onKeyDown={handleSearchKey}
+          onChange={setQuery}
+        />
+      }
+    >
       {visible.length === 0 && <TitanListItem>No matches</TitanListItem>}
       {visible.map((actor: Actor) => (
         <TitanListItem key={actor.attributes.id} icon={icon(actor)} onClick={() => handleSelect(actor)}>
