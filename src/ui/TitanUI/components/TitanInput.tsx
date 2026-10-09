@@ -12,6 +12,9 @@ const TitanInput: FC<TitanInputProps> = ({
   max,
   step,
   style = {},
+  inputRef,
+  ariaLabel,
+  onKeyDown,
   onChange
 }) => {
   const isColor = type === 'color'
@@ -28,6 +31,9 @@ const TitanInput: FC<TitanInputProps> = ({
         min={min}
         max={max}
         step={step}
+        ref={inputRef}
+        aria-label={ariaLabel}
+        onKeyDown={onKeyDown}
         onChange={(e) => onChange(e.target.value)}
       />
     </label>
