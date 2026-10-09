@@ -113,13 +113,13 @@ describe('Postprocessing: пасс атмосферы', () => {
     expect(passes[0]).toBeInstanceOf(LensFrontSplitPass)
     expect(passes[1]).toBeInstanceOf(RenderPass)
     expect(passes[2]).toBeInstanceOf(DepthVolumePass)
-    // Меш дыры — за объёмами (сэмплирует кадр с ними), линза — следом; оверлеи
-    // (линии орбит) — поверх лензированного кадра, затем прозрачное перед
-    // линзой — до атмосферы, которая тонирует и его
+    // Меш дыры — за объёмами (сэмплирует кадр с ними), линза — следом; затем
+    // прозрачное перед линзой и поверх всего — оверлеи (линии орбит), иначе
+    // линия уходила бы под кольцо переднего тела; всё — до атмосферы
     expect(passes[3]).toBeInstanceOf(BlackHolePass)
     expect((passes[4] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(GravitationalLensEffect)
-    expect(passes[5]).toBeInstanceOf(OverlayPass)
-    expect(passes[6]).toBeInstanceOf(LensFrontPass)
+    expect(passes[5]).toBeInstanceOf(LensFrontPass)
+    expect(passes[6]).toBeInstanceOf(OverlayPass)
     expect((passes[7] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(AtmosphereEffect)
     expect(passes[8]).toBeInstanceOf(EffectPass)
     expect(passes[9]).toBeInstanceOf(EffectPass)
@@ -129,7 +129,7 @@ describe('Postprocessing: пасс атмосферы', () => {
       (pass as { sorter?: unknown }).sorter ?? (pass as { front?: unknown }).front
     expect(sorterOf(passes[0])).toBeDefined()
     expect(sorterOf(passes[2])).toBe(sorterOf(passes[0]))
-    expect(sorterOf(passes[6])).toBe(sorterOf(passes[0]))
+    expect(sorterOf(passes[5])).toBe(sorterOf(passes[0]))
   })
 })
 

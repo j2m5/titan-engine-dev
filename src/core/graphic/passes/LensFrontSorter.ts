@@ -2,7 +2,7 @@ import { Vector3, type Camera, type Material, type Object3D } from 'three'
 import type { LensRegistry } from '@/core/services/LensRegistry'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { DynamicNode } from '@/core/renderables/utils/DynamicNode'
-import { LENS_FRONT_LAYER, isSceneFrameConsumer, type DepthVolume } from '@/core/graphic/passes/DepthVolume'
+import { LENS_FRONT_DEPTH_LAYER, LENS_FRONT_LAYER, isSceneFrameConsumer, type DepthVolume } from '@/core/graphic/passes/DepthVolume'
 import { isVisibleInTree } from '@/core/graphic/passes/DepthVolumePass'
 
 /** Маска одного слоя 0 — переносятся только такие объекты, и возвращаются на неё же */
@@ -23,13 +23,16 @@ export function isInFrontOfLens(center: Vector3, camera: Vector3, lens: Vector3)
   return distance < closest
 }
 
+function materialsOf(object: Object3D): readonly Material[] {
+  const material = (object as Object3D & { material?: Material | Material[] }).material
+  if (material === undefined) return []
+  return Array.isArray(material) ? material : [material]
+}
+
 /** Прозрачное, без записи глубины или только глубина (препасс прозрачного) */
 function isFrontCandidate(object: Object3D): boolean {
   if (object.layers.mask !== DEFAULT_LAYER_MASK) return false
-  const material = (object as Object3D & { material?: Material | Material[] }).material
-  if (material === undefined) return false
-  const materials = Array.isArray(material) ? material : [material]
-  return materials.some((m) => m.transparent || !m.depthWrite || !m.colorWrite)
+  return materialsOf(object).some((m) => m.transparent || !m.depthWrite || !m.colorWrite)
 }
 
 const isDynamicNode = (object: Object3D): boolean => object instanceof DynamicNode
@@ -46,6 +49,7 @@ const isDynamicNode = (object: Object3D): boolean => object instanceof DynamicNo
  */
 export class LensFrontSorter {
   private readonly moved: Object3D[] = []
+  private depthWriters = false
   private readonly volumes: DepthVolume[] = []
   private readonly lensCenters: Vector3[] = []
   private readonly lensBodies = new Set<Object3D>()
@@ -76,6 +80,12 @@ export class LensFrontSorter {
     for (const object of this.moved) object.layers.set(0)
     this.moved.length = 0
     this.volumes.length = 0
+    this.depthWriters = false
+  }
+
+  /** Среди перенесённых есть пишущие глубину (слой LENS_FRONT_DEPTH_LAYER) */
+  public hasDepthWriters(): boolean {
+    return this.depthWriters
   }
 
   public frontObjects(): readonly Object3D[] {
@@ -117,6 +127,10 @@ export class LensFrontSorter {
       }
       if (front && isFrontCandidate(child)) {
         child.layers.set(LENS_FRONT_LAYER)
+        if (materialsOf(child).some((m) => m.depthWrite)) {
+          child.layers.enable(LENS_FRONT_DEPTH_LAYER)
+          this.depthWriters = true
+        }
         this.moved.push(child)
       }
       this.visit(child, front)

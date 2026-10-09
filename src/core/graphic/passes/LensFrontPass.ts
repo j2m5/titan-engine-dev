@@ -1,6 +1,6 @@
 import { BasicDepthPacking, Vector2, type PerspectiveCamera, type Scene, type Texture, type WebGLRenderer, type WebGLRenderTarget } from 'three'
 import { DepthCopyPass, Pass } from 'postprocessing'
-import { LENS_FRONT_LAYER } from '@/core/graphic/passes/DepthVolume'
+import { LENS_FRONT_DEPTH_LAYER, LENS_FRONT_LAYER } from '@/core/graphic/passes/DepthVolume'
 import { drawDepthVolumes, orderFarToNear } from '@/core/graphic/passes/DepthVolumePass'
 import { DepthRestoreMaterial } from '@/core/graphic/passes/DepthRestoreMaterial'
 import type { LensFrontSorter } from '@/core/graphic/passes/LensFrontSorter'
@@ -12,11 +12,13 @@ type DepthPacking = Parameters<Pass['setDepthTexture']>[1]
  * LensFrontPass — прозрачное перед активной линзой поверх лензированного кадра.
  *
  * LensFrontSorter перенёс такие объекты на LENS_FRONT_LAYER, а передние объёмы
- * DepthVolumePass пропустил. Здесь, после проходов линз и оверлеев, до
+ * DepthVolumePass пропустил. Здесь, после проходов линз, до оверлеев и
  * атмосферы: (1) возврат глубины сцены в текущий буфер — после EffectPass линз
  * композер рисует во второй буфер с чужой глубиной, а кольцо за телом планеты
- * должно оставаться скрытым; (2) сцена с маской слоя 27; (3) передние объёмы со
- * своей копией глубины; (4) слои назад. Атмосфера следом тонирует всё как
+ * должно оставаться скрытым; (2) сцена с маской слоя 27, а глубина пишущих
+ * её объектов (слой 26) — ещё и в буфер с глубиной сцены, которую читают
+ * атмосфера и копия для объёмов; (3) передние объёмы со своей копией
+ * глубины; (4) слои назад. Атмосфера следом тонирует всё как
  * в основном проходе.
  */
 export class LensFrontPass extends Pass {
@@ -87,6 +89,19 @@ export class LensFrontPass extends Pass {
       renderer.shadowMap.autoUpdate = false
       renderer.setRenderTarget(target)
       renderer.render(this.frontScene, camera)
+
+      // Глубина сцены живёт в другом буфере композера: без этой записи
+      // атмосфера туманила бы кольцо, а пыль не обрывалась бы на нём
+      if (this.sorter.hasDepthWriters() && outputBuffer !== null && outputBuffer.depthTexture === this.sceneDepth) {
+        const color = renderer.state.buffers.color
+        camera.layers.set(LENS_FRONT_DEPTH_LAYER)
+        color.setMask(false)
+        color.setLocked(true)
+        renderer.setRenderTarget(outputBuffer)
+        renderer.render(this.frontScene, camera)
+        color.setLocked(false)
+        color.setMask(true)
+      }
 
       camera.layers.mask = mask
       renderer.shadowMap.autoUpdate = shadowMapAutoUpdate

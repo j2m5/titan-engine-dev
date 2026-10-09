@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { Group, Mesh, MeshBasicMaterial, Object3D, PerspectiveCamera, Scene, Vector3 } from 'three'
 import { LensFrontSorter, isInFrontOfLens } from '@/core/graphic/passes/LensFrontSorter'
-import { LENS_FRONT_LAYER, type DepthVolume } from '@/core/graphic/passes/DepthVolume'
+import { LENS_FRONT_DEPTH_LAYER, LENS_FRONT_LAYER, type DepthVolume } from '@/core/graphic/passes/DepthVolume'
 import { LensRegistry } from '@/core/services/LensRegistry'
 import { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 
 const FRONT_MASK = 1 << LENS_FRONT_LAYER
+/** Перенесённый объект, пишущий глубину: ещё и слой глубины */
+const WRITES_MASK = FRONT_MASK | (1 << LENS_FRONT_DEPTH_LAYER)
 
 /** Тело в тестах — группа с флагом: настоящий DynamicNode требует орбитальных моделей актора */
 const isBody = (object: Object3D): boolean => object.userData.body === true
@@ -87,9 +89,9 @@ describe('LensFrontSorter: разметка тел перед активной �
 
     sorter.split()
 
-    expect(transparent.layers.mask).toBe(FRONT_MASK)
+    expect(transparent.layers.mask).toBe(WRITES_MASK)
     expect(noDepthWrite.layers.mask).toBe(FRONT_MASK)
-    expect(prepass.layers.mask).toBe(FRONT_MASK)
+    expect(prepass.layers.mask).toBe(WRITES_MASK)
     expect(opaque.layers.mask).toBe(1)
     expect(sorter.frontObjects()).toEqual([transparent, noDepthWrite, prepass])
   })
@@ -103,7 +105,7 @@ describe('LensFrontSorter: разметка тел перед активной �
 
     sorter.split()
 
-    expect(mixed.layers.mask).toBe(FRONT_MASK)
+    expect(mixed.layers.mask).toBe(WRITES_MASK)
   })
 
   it('объект с нестандартной маской слоёв не трогается', () => {
@@ -146,7 +148,7 @@ describe('LensFrontSorter: разметка тел перед активной �
 
     sorter.split()
 
-    expect(ring.layers.mask).toBe(FRONT_MASK)
+    expect(ring.layers.mask).toBe(WRITES_MASK)
     expect(moonHalo.layers.mask).toBe(1)
   })
 
@@ -165,7 +167,29 @@ describe('LensFrontSorter: разметка тел перед активной �
 
     sorter.split()
 
-    expect(glow.layers.mask).toBe(FRONT_MASK)
+    expect(glow.layers.mask).toBe(WRITES_MASK)
+  })
+
+  it('пишущие глубину отмечены слоем глубины: их глубину LensFrontPass дописывает в буфер сцены', () => {
+    const { scene, sorter } = setup()
+    const near = body(0, 0, 5)
+    const glowOnly = mesh({ transparent: true, depthWrite: false })
+    near.add(glowOnly)
+    scene.add(near)
+
+    sorter.split()
+    expect(glowOnly.layers.mask).toBe(FRONT_MASK)
+    expect(sorter.hasDepthWriters()).toBe(false)
+
+    const prepass = mesh({ colorWrite: false })
+    near.add(prepass)
+    sorter.split()
+    expect(prepass.layers.mask).toBe(WRITES_MASK)
+    expect(sorter.hasDepthWriters()).toBe(true)
+
+    sorter.restore()
+    expect(prepass.layers.mask).toBe(1)
+    expect(sorter.hasDepthWriters()).toBe(false)
   })
 
   it('объекты вне тел (фон, скайбокс) не переносятся даже перед дырой', () => {

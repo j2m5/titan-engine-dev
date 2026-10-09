@@ -188,6 +188,7 @@ class Postprocessing {
    * Прозрачное перед активной чёрной дырой (кольца, гало, импосторы, объёмы)
    * размечает LensFrontSplitPass до основного прохода, рисует LensFrontPass
    * поверх лензированного кадра — иначе проходы дыры берут его как фон.
+   * Оверлеи идут после него: линии орбит остаются поверх всего.
    *
    * Атмосфера — СВОЙ пасс между линзой и HDR-проходом: она тонирует и гало
    * пыли, а блум считает яркость по входу своего пасса, значит должен видеть
@@ -203,8 +204,8 @@ class Postprocessing {
       new DepthVolumePass(this.camera, this.depthVolumeRegistry, lensFront),
       new BlackHolePass(this.camera, this.lensRegistry),
       createGravitationalLensPass(this.camera, this.lensRegistry),
-      new OverlayPass(this.scene, this.camera),
       new LensFrontPass(this.scene, this.camera, lensFront),
+      new OverlayPass(this.scene, this.camera),
       createAtmospherePass(this.camera, this.atmosphereRegistry, readAtmosphereDebugView()),
       hdrPass,
       ldrPass
