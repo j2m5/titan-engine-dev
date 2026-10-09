@@ -58,9 +58,10 @@ export const background: BackgroundConfig = {
   background: {
     source: 'gaia',
     gaia: {
-      // Калибруется замером в задаче проверки на GPU
-      exposureStops: 0,
-      starCeiling: 10
+      // Замер 2026-10-10: полоса (среднее p90–p99 по небу) = прежней кубмапе после подъёма
+      exposureStops: -6.7,
+      // Замер 2026-10-10: поток ячейки Сириуса в 1080p ≤ 64 px·яркость — призрак ≤ 1/10 калиброванного
+      starCeiling: 5
     },
     highlightThreshold: 0.4,
     highlightBoost: 9,
