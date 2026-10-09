@@ -28,9 +28,17 @@ const gaiaFunctions = `
   // Единица площади галактики — центральный тексель грани, (1/1024)² ср
   const float GAIA_TEXEL_AREA_INV = 1048576.0;
 
-  // Звёзды в отпечатке пикселя × scale (порт DefaultStarColor). Звезда — точка
-  // с треугольным весом в экранных пикселях, позиция в текселе — хеш битов её
-  // цвета. Грубые уровни — средние, уже яркость: scale к ним не идёт
+  // Мягкий потолок: выше C — логарифм, гладко в C, цветность сохраняется
+  vec3 gaiaCeiling(vec3 color) {
+    float y = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    return y > uGaiaStarCeiling ? color * (uGaiaStarCeiling * (1.0 + log(y / uGaiaStarCeiling)) / y) : color;
+  }
+
+  // Звёзды в отпечатке пикселя (порт DefaultStarColor), scale — экспозиция на
+  // площадь пикселя. Звезда — точка с треугольным весом в экранных пикселях,
+  // позиция в текселе — хеш битов её цвета. Потолок — на звезду ДО раскладки по
+  // пикселям: иначе энергия яркой звезды зависела бы от субпиксельной позиции и
+  // свечение блума дышало бы при повороте. Грубые уровни — средние, уже яркость
   vec3 gaiaStars(vec3 dir, vec3 dxDir, vec3 dyDir, float scale) {
     vec3 absDir = abs(dir);
     float maxComp = max(absDir.x, max(absDir.y, absDir.z));
@@ -56,7 +64,7 @@ const gaiaFunctions = `
     vec3 result = vec3(0.0);
     if (lod > GAIA_MAX_FOOTPRINT_LOD || abs(det) <= 1e-6 * dot(dUv, dUv)) {
       // Исходное направление — у Брунетона здесь переставленное
-      result = textureGrad(uGaiaStarsCoarse, dir, dxDir, dyDir).rgb;
+      result = textureGrad(uGaiaStarsCoarse, dir, dxDir, dyDir).rgb * uGaiaExposure;
     } else {
       float lodWidth = (0.5 * GAIA_CUBE_SIZE) / exp2(lod);
       mat2 toScreenPixels = inverse(mat2(dxUv, dyUv));
@@ -71,10 +79,9 @@ const gaiaFunctions = `
           vec2 subTexel = vec2((floatBitsToInt(star.rb) >> 8) % 257) / 257.0 - 0.5;
           vec2 starPixels = toScreenPixels * (uv - texelUv + subTexel / lodWidth);
           vec2 overlap = max(vec2(1.0) - abs(starPixels), 0.0);
-          result += star * overlap.x * overlap.y;
+          result += gaiaCeiling(star * scale) * overlap.x * overlap.y;
         }
       }
-      result *= scale;
     }
     return result;
   }
@@ -88,11 +95,7 @@ const gaiaFunctions = `
     vec3 galaxy = textureGrad(uGaiaGalaxy, d, dx, dy).rgb * GAIA_GALAXY_SCALE;
     // Поток звёзд → яркость: площадь пикселя в текселях, не меньше одного
     float pixelArea = max(length(cross(dx, dy)) * GAIA_TEXEL_AREA_INV, 1.0);
-    vec3 sky = (galaxy + gaiaStars(d, dx, dy, 1.0 / pixelArea)) * uGaiaExposure;
-    // Мягкий потолок: выше C — логарифм, гладко в C, цветность сохраняется
-    float y = dot(sky, vec3(0.2126, 0.7152, 0.0722));
-    if (y > uGaiaStarCeiling) sky *= uGaiaStarCeiling * (1.0 + log(y / uGaiaStarCeiling)) / y;
-    return sky;
+    return galaxy * uGaiaExposure + gaiaStars(d, dx, dy, uGaiaExposure / pixelArea);
   }
 `
 

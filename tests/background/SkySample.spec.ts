@@ -63,9 +63,18 @@ describe('SkySample: общий чанк неба', () => {
       expect(functions).toContain('(floatBitsToInt(star.rb) >> 8) % 257')
     })
 
-    it('экспозиция и мягкий потолок: логарифм выше C', () => {
-      expect(functions).toContain('* uGaiaExposure')
-      expect(functions).toContain('uGaiaStarCeiling * (1.0 + log(y / uGaiaStarCeiling)) / y')
+    it('мягкий потолок — на каждую звезду до раскладки по пикселям: энергия не зависит от субпиксельной позиции', () => {
+      const code = stripComments(functions)
+      expect(code).toContain('uGaiaStarCeiling * (1.0 + log(y / uGaiaStarCeiling)) / y')
+      expect(code).toContain('result += gaiaCeiling(star * scale) * overlap.x * overlap.y;')
+      expect(code.slice(code.indexOf('vec3 sampleSky('))).not.toContain('gaiaCeiling(')
+    })
+
+    it('экспозиция — у галактики, у звёзд через scale и у грубых уровней', () => {
+      const code = stripComments(functions)
+      expect(code).toContain('galaxy * uGaiaExposure')
+      expect(code).toContain('uGaiaExposure / pixelArea')
+      expect(code).toContain('textureGrad(uGaiaStarsCoarse, dir, dxDir, dyDir).rgb * uGaiaExposure')
     })
 
     it('сэмплеры highp: хеш позиции звезды читает биты float', () => {
