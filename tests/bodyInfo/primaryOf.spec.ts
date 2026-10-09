@@ -1,5 +1,6 @@
 import { Actor } from '@/core/models/Actor'
 import { primaryOf } from '@/core/bodyInfo/primaryOf'
+import { relativeSpeedKms } from '@/core/bodyInfo/worldVelocity'
 
 const nameOf = (id: number): string | null => primaryOf(Actor.find(id)!)?.getAttribute('name') ?? null
 
@@ -29,5 +30,20 @@ describe('primaryOf: вокруг чего тело обращается по с
     expect(nameOf(4)).toBeNull()
     expect(nameOf(61)).toBe('Tatoo I')
     expect(nameOf(60)).toBeNull()
+  })
+})
+
+describe('primaryOf: двойная звезда — планеты обращаются вокруг барицентра пары', () => {
+  // Tatoo I — 61 % массы системы: не доминирует и пары с планетами не образует
+  it.each([62, 63, 64])('планета %i (Tatooine, Ohann, Adriana) → Tatoo system barycenter', (id: number) => {
+    expect(nameOf(id)).toBe('Tatoo system barycenter')
+  })
+
+  it('скорость Tatooine относительно главного тела ровная, а не качается с периодом пары (40.8 сут)', () => {
+    const tatooine = Actor.find(62)!
+    const primary = primaryOf(tatooine)!
+    const speeds = [0, 10, 20, 30].map((days: number) => relativeSpeedKms(tatooine, primary, 2451545 + days))
+
+    expect(Math.max(...speeds) - Math.min(...speeds)).toBeLessThan(1)
   })
 })

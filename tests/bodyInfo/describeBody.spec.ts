@@ -75,6 +75,40 @@ describe('describeBody: справка из тех же моделей, что �
     expect(orbit.periodDays).toBeCloseTo(686.98, 1)
   })
 
+  it('Земля: орбита вокруг Солнца — орбита барицентра Земля–Луна (1 а.е., 365.26 сут), а не колебание вокруг него', () => {
+    const orbit = describeId(7).orbit!
+
+    expect(orbit.semiMajorAxisAu).toBeCloseTo(1, 3)
+    expect(orbit.periodDays).toBeCloseTo(365.256, 2)
+  })
+
+  it('Плутон: орбита барицентра системы Плутона (39.5 а.е., 90 560 сут)', () => {
+    const orbit = describeId(14).orbit!
+
+    expect(orbit.semiMajorAxisAu).toBeCloseTo(39.49, 1)
+    expect(orbit.periodDays).toBeCloseTo(90560, 0)
+  })
+
+  it('Луна: относительная орбита пары — сумма полуосей Луны и Земли вокруг барицентра', () => {
+    const expected: number =
+      (Actor.find(19)!.orbit!.getAttribute('semiMajorAxis') ?? 0) +
+      (Actor.find(7)!.orbit!.getAttribute('semiMajorAxis') ?? 0)
+
+    expect(describeId(19).orbit!.semiMajorAxisAu).toBeCloseTo(expected, 9)
+    expect(describeId(19).primaryName).toBe('Earth')
+  })
+
+  it('Солнце — центр системы: блока орбиты нет (своя орбита вокруг барицентра — не «обращение вокруг»)', () => {
+    expect(describeId(4).orbit).toBeNull()
+  })
+
+  it('Tatooine: «Orbits Tatoo system barycenter» и своя орбита вокруг него (1.5 а.е.)', () => {
+    const tatooine = describeId(62)
+
+    expect(tatooine.primaryName).toBe('Tatoo system barycenter')
+    expect(tatooine.orbit!.semiMajorAxisAu).toBeCloseTo(1.5, 3)
+  })
+
   it('у тела без орбиты блока орбиты нет (Sgr A* в барицентре)', () => {
     expect(describeId(43).orbit).toBeNull()
   })

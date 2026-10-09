@@ -2,7 +2,7 @@ import type { Actor } from '@/core/models/Actor'
 import { OrientationModel } from '@/core/libs/OrientationModel'
 import { KeplerianModel } from '@/core/libs/KeplerianModel'
 import { SolarMass } from '@/core/constants'
-import { primaryOf } from '@/core/bodyInfo/primaryOf'
+import { orbitalContext, type OrbitalContext } from '@/core/bodyInfo/primaryOf'
 import type { BodyOrbit, BodyPhysics, BodyReference, BodyRotation, RelativeValue } from '@/core/bodyInfo/types'
 
 /** Гравитационная постоянная, СИ */
@@ -86,15 +86,24 @@ function rotationOf(actor: Actor, kind: string): BodyRotation | null {
   }
 }
 
-function orbitOf(actor: Actor): BodyOrbit | null {
-  if (!actor.orbit) return null
+/**
+ * Орбита обращения вокруг главного тела, а не строка орбиты самого тела: у
+ * Земли это орбита барицентра Земля–Луна вокруг Солнца (её собственная строка —
+ * колебание вокруг барицентра с периодом Луны). У пары с общим периодом
+ * относительная орбита — сумма полуосей обоих членов вокруг барицентра. Центр
+ * системы (Солнце) блока орбиты не имеет.
+ */
+function orbitOf(context: OrbitalContext): BodyOrbit | null {
+  if (!context.primary || !context.orbiter.orbit) return null
 
-  const model: KeplerianModel = new KeplerianModel(actor)
+  const model: KeplerianModel = new KeplerianModel(context.orbiter)
 
   if (!(model.semiMajorAxis > 0)) return null
 
+  const pairSemiMajorAxis: number = context.pair?.orbit ? new KeplerianModel(context.pair).semiMajorAxis : 0
+
   return {
-    semiMajorAxisAu: model.semiMajorAxis,
+    semiMajorAxisAu: model.semiMajorAxis + pairSemiMajorAxis,
     eccentricity: model.eccentricity,
     inclinationDeg: model.inclination,
     periodDays: model.isElliptic ? model.period : null
@@ -103,14 +112,15 @@ function orbitOf(actor: Actor): BodyOrbit | null {
 
 /** Справка о теле для карточки: значения с единицами в именах полей, без форматирования */
 export function describeBody(actor: Actor): BodyReference {
+  const context: OrbitalContext = orbitalContext(actor)
   const kind: string = actor.category?.getAttribute('alias') ?? ''
 
   return {
     name: actor.getAttribute('name', ''),
     typeLabel: actor.category?.getAttribute('name') ?? '',
-    primaryName: primaryOf(actor)?.getAttribute('name') ?? null,
+    primaryName: context.primary?.getAttribute('name') ?? null,
     physics: physicsOf(actor, kind),
     rotation: rotationOf(actor, kind),
-    orbit: orbitOf(actor)
+    orbit: orbitOf(context)
   }
 }
