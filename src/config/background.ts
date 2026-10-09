@@ -1,3 +1,6 @@
+/** Источник неба: каталожное небо Брунетона или прежняя кубмапа сценария */
+export type BackgroundSource = 'gaia' | 'cubemap'
+
 /**
  * Конфиг фона сцены. Кубмапа восьмибитная: без подъёма (gain = 1) самая яркая
  * звезда в ней равна 1.0. С подъёмом ВЕСЬ сигнал (после вычитания пьедестала)
@@ -9,7 +12,18 @@
  */
 export interface BackgroundConfig {
   background: {
-    /** Ниже этого значения фон не меняется вовсе */
+    /** Смена — перезагрузкой страницы; грузится только выбранный источник */
+    source: BackgroundSource
+    gaia: {
+      /** Сдвиг яркости неба Gaia в стопах; пропорции звёзд и полосы — из данных */
+      exposureStops: number
+      /**
+       * Мягкий потолок яркости неба в единицах кадра (порог блума — 1.0):
+       * выше — логарифм. Держит ярчайшие звёзды ниже порога заметных призраков
+       */
+      starCeiling: number
+    }
+    /** Только для source 'cubemap'. Ниже этого значения фон не меняется вовсе */
     highlightThreshold: number
     /** Во сколько раз растягивается превышение порога; 1 — расширение выключено */
     highlightBoost: number
@@ -42,6 +56,12 @@ export interface BackgroundConfig {
  */
 export const background: BackgroundConfig = {
   background: {
+    source: 'gaia',
+    gaia: {
+      // Калибруется замером в задаче проверки на GPU
+      exposureStops: 0,
+      starCeiling: 10
+    },
     highlightThreshold: 0.4,
     highlightBoost: 9,
     floor: 0.000303,
