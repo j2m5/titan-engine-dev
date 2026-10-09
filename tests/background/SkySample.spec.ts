@@ -49,6 +49,11 @@ describe('SkySample: общий чанк неба', () => {
       expect(functions.indexOf('abs(det)')).toBeLessThan(functions.indexOf('inverse('))
     })
 
+    it('у gaiaStars один выход: ранний return перед динамическим циклом ANGLE считает неинициализированным', () => {
+      const body = stripComments(functions.slice(functions.indexOf('vec3 gaiaStars('), functions.indexOf('vec3 sampleSky(')))
+      expect(body.match(/\breturn\b/g)).toHaveLength(1)
+    })
+
     it('константы данных Брунетона', () => {
       expect(functions).toContain('const float GAIA_CUBE_SIZE = 2048.0;')
       expect(functions).toContain('const float GAIA_MAX_FOOTPRINT_SIZE = 4.0;')

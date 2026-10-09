@@ -51,29 +51,32 @@ const gaiaFunctions = `
     float lod = max(ceil(max(log2(footprint.x), log2(footprint.y))), uGaiaMinLod);
     // Нулевые или коллинеарные производные: inverse ниже дал бы NaN
     float det = dxUv.x * dyUv.y - dxUv.y * dyUv.x;
+    // Один выход: ранний return перед динамическим циклом ANGLE (HLSL)
+    // помечает как «возможно неинициализированный» результат
+    vec3 result = vec3(0.0);
     if (lod > GAIA_MAX_FOOTPRINT_LOD || abs(det) <= 1e-6 * dot(dUv, dUv)) {
       // Исходное направление — у Брунетона здесь переставленное
-      return textureGrad(uGaiaStarsCoarse, dir, dxDir, dyDir).rgb;
-    }
-
-    float lodWidth = (0.5 * GAIA_CUBE_SIZE) / exp2(lod);
-    mat2 toScreenPixels = inverse(mat2(dxUv, dyUv));
-    ivec2 ij0 = ivec2(floor((uv - dUv) * lodWidth));
-    ivec2 ij1 = ivec2(floor((uv + dUv) * lodWidth));
-    vec3 sum = vec3(0.0);
-    for (int j = ij0.y; j <= ij1.y; ++j) {
-      for (int i = ij0.x; i <= ij1.x; ++i) {
-        vec2 texelUv = (vec2(i, j) + 0.5) / lodWidth;
-        vec3 texelDir = vec3(texelUv * d.z, d.z);
-        texelDir = axis == 1 ? texelDir.zyx : (axis == 2 ? texelDir.xzy : texelDir);
-        vec3 star = textureLod(uGaiaStars, texelDir, lod).rgb;
-        vec2 subTexel = vec2((floatBitsToInt(star.rb) >> 8) % 257) / 257.0 - 0.5;
-        vec2 starPixels = toScreenPixels * (uv - texelUv + subTexel / lodWidth);
-        vec2 overlap = max(vec2(1.0) - abs(starPixels), 0.0);
-        sum += star * overlap.x * overlap.y;
+      result = textureGrad(uGaiaStarsCoarse, dir, dxDir, dyDir).rgb;
+    } else {
+      float lodWidth = (0.5 * GAIA_CUBE_SIZE) / exp2(lod);
+      mat2 toScreenPixels = inverse(mat2(dxUv, dyUv));
+      ivec2 ij0 = ivec2(floor((uv - dUv) * lodWidth));
+      ivec2 ij1 = ivec2(floor((uv + dUv) * lodWidth));
+      for (int j = ij0.y; j <= ij1.y; ++j) {
+        for (int i = ij0.x; i <= ij1.x; ++i) {
+          vec2 texelUv = (vec2(i, j) + 0.5) / lodWidth;
+          vec3 texelDir = vec3(texelUv * d.z, d.z);
+          texelDir = axis == 1 ? texelDir.zyx : (axis == 2 ? texelDir.xzy : texelDir);
+          vec3 star = textureLod(uGaiaStars, texelDir, lod).rgb;
+          vec2 subTexel = vec2((floatBitsToInt(star.rb) >> 8) % 257) / 257.0 - 0.5;
+          vec2 starPixels = toScreenPixels * (uv - texelUv + subTexel / lodWidth);
+          vec2 overlap = max(vec2(1.0) - abs(starPixels), 0.0);
+          result += star * overlap.x * overlap.y;
+        }
       }
+      result *= scale;
     }
-    return sum * scale;
+    return result;
   }
 
   // Небо по направлению dir (мир сцены); dDirDx/dDirDy — его экранные
