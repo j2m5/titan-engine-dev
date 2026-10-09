@@ -13,6 +13,7 @@ import type { SceneObserver } from '@/core/services/SceneObserver'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import type { LensRegistry } from '@/core/services/LensRegistry'
+import type { GaiaSky } from '@/core/sky/GaiaSky'
 import type { SimulationClock } from '@/core/time/SimulationClock'
 import type { BodyInfoService } from '@/core/bodyInfo/BodyInfoService'
 import type { CameraController } from '@/core/camera/CameraController'
@@ -43,6 +44,7 @@ export const Tokens = {
   AtmosphereRegistry: token<AtmosphereRegistry>('AtmosphereRegistry'),
   DepthVolumeRegistry: token<DepthVolumeRegistry>('DepthVolumeRegistry'),
   LensRegistry: token<LensRegistry>('LensRegistry'),
+  GaiaSky: token<GaiaSky>('GaiaSky'),
   CameraCollision: token<CameraCollision>('CameraCollision'),
   HeightFieldGate: token<HeightFieldGate>('HeightFieldGate'),
   SimulationClock: token<SimulationClock>('SimulationClock'),

@@ -1,3 +1,14 @@
+/** Источник неба: каталожное небо Брунетона или прежняя кубмапа сценария */
+export type BackgroundSource = 'gaia' | 'cubemap'
+
+/**
+ * Источник из окружения сборки (VITE_SKY_SOURCE): тайлы Gaia лежат только
+ * локально, публичное демо собирается на кубмапе (deploy.yml)
+ */
+export function resolveBackgroundSource(value: string | undefined): BackgroundSource {
+  return value === 'cubemap' ? 'cubemap' : 'gaia'
+}
+
 /**
  * Конфиг фона сцены. Кубмапа восьмибитная: без подъёма (gain = 1) самая яркая
  * звезда в ней равна 1.0. С подъёмом ВЕСЬ сигнал (после вычитания пьедестала)
@@ -9,7 +20,18 @@
  */
 export interface BackgroundConfig {
   background: {
-    /** Ниже этого значения фон не меняется вовсе */
+    /** Из VITE_SKY_SOURCE, смена — пересборкой; грузится только выбранный источник */
+    source: BackgroundSource
+    gaia: {
+      /** Сдвиг яркости неба Gaia в стопах; пропорции звёзд и полосы — из данных */
+      exposureStops: number
+      /**
+       * Мягкий потолок яркости неба в единицах кадра (порог блума — 1.0):
+       * выше — логарифм. Держит ярчайшие звёзды ниже порога заметных призраков
+       */
+      starCeiling: number
+    }
+    /** Только для source 'cubemap'. Ниже этого значения фон не меняется вовсе */
     highlightThreshold: number
     /** Во сколько раз растягивается превышение порога; 1 — расширение выключено */
     highlightBoost: number
@@ -42,6 +64,14 @@ export interface BackgroundConfig {
  */
 export const background: BackgroundConfig = {
   background: {
+    source: resolveBackgroundSource(import.meta.env.VITE_SKY_SOURCE),
+    gaia: {
+      // Замер 2026-10-10: полоса (среднее p90–p99 по небу) = прежней кубмапе после подъёма
+      exposureStops: -6.7,
+      // Замер 2026-10-10: поток ячейки Сириуса в 1080p ≤ 64 px·яркость при любом
+      // субпиксельном сдвиге — призрак ≤ 1/10 калиброванного
+      starCeiling: 19
+    },
     highlightThreshold: 0.4,
     highlightBoost: 9,
     floor: 0.000303,

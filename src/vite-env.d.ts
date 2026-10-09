@@ -6,6 +6,7 @@ interface ImportMetaEnv {
   readonly VITE_FILE_BUCKET: string
   readonly VITE_S3_URL: string
   readonly VITE_SHOW_STATS_PANEL: string
+  readonly VITE_SKY_SOURCE?: 'gaia' | 'cubemap'
 }
 
 interface ImportMeta {

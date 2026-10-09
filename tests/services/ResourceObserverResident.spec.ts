@@ -5,6 +5,7 @@ import { TextureBudget } from '@/core/streaming/TextureBudget'
 import { Resource } from '@/core/models/Resource'
 import { Scenarios } from '@/config/scenarios'
 import { resourceStorage } from '@/core/services/ResourceStorage'
+import { config } from '@/core/framework/config'
 import type { SceneObserver } from '@/core/services/SceneObserver'
 import type { TextureProvider } from '@/core/textures/TextureProvider'
 import type { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
@@ -60,7 +61,9 @@ describe('ResourceObserver: резидентные берутся из lifecycle
 
     // Кубмапа собирается отдельным путём — шесть граней одним запросом под
     // собственным именем, проверяется по факту обращения, а не поэлементно.
-    expect(requested).toContain(cubeName)
+    // Небу Gaia она не нужна — в этом режиме её не запрашивают вовсе
+    if (config('background.source') === 'cubemap') expect(requested).toContain(cubeName)
+    else expect(requested).not.toContain(cubeName)
 
     resourceStorage.deleteAllTextures()
   })

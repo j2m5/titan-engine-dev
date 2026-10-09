@@ -22,6 +22,7 @@ import { minBodyPixelsToPriorityThreshold } from '@/core/streaming/angularCutoff
 import { STEEP_DETAIL_PATHS } from '@/core/terrain/steepDetailPaths'
 import { heightPathOf } from '@/core/terrain/heightPath'
 import { config } from '@/core/framework/config'
+import type { BackgroundSource } from '@/config/background'
 import { streaming } from '@/config/streaming'
 
 /**
@@ -42,6 +43,11 @@ const MIN_DISTANCE: number = 1e-9
  * карты не разворачиваются в кандидатов `collectCandidates` вовсе.
  */
 const MIN_ACTOR_PRIORITY: number = minBodyPixelsToPriorityThreshold(streaming.streaming.minBodyPixels)
+
+/** Кубмапа сценария нужна только прежнему фону: небо Gaia её не читает */
+export function sceneCubeIds(skybox: readonly number[], source: BackgroundSource): readonly number[] {
+  return source === 'cubemap' ? skybox : []
+}
 
 /**
  * Наблюдатель за ресурсами, отвечающий жизненный цикл ресурсов
@@ -300,7 +306,7 @@ class ResourceObserver {
       this.cube = Resource.query()
         .where({ resourceType: 'cube' })
         .get()
-        .whereIn('id', this.scenario.skybox)
+        .whereIn('id', [...sceneCubeIds(this.scenario.skybox, config('background.source'))])
         .toJSON() as IResource[]
     }
   }

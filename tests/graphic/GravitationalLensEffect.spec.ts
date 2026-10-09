@@ -5,6 +5,7 @@ import { GravitationalLensEffect, createGravitationalLensPass } from '@/core/gra
 import { LENS_SLOTS } from '@/core/graphic/effects/lens/gravitationalLensShader'
 import { LensRegistry, LensEntry } from '@/core/services/LensRegistry'
 import { farFieldDeflection } from '@/core/renderables/BlackHole/deflectionLut'
+import { gaiaSkyUniforms } from '@/core/sky/gaiaSkyUniforms'
 
 const noRenderer = null as unknown as WebGLRenderer
 const noBuffer = null as unknown as WebGLRenderTarget
@@ -106,10 +107,31 @@ describe('GravitationalLensEffect: экранный проход дальнег�
     expect(frag).toContain('if (b <= R) continue;')
     expect(frag).toContain('if (sceneT < tMid) continue;')
     expect(frag).toContain('texture2D(inputBuffer, uv2)')
-    expect(frag).toContain('sampleSkyboxHdr(skybox, world, uSkyFlipX)')
+    expect(frag).toContain('sampleSky(world, dSkyDx, dSkyDy)')
     expect(frag).toContain('exp2(z * uLogFarFactor) - 1.0')
     // Коэффициенты ряда в GLSL совпадают с CPU-зеркалом с точностью литералов
     const glslAt = (b: number) => 2 / b + 2.9452431 / (b * b) + 5.3333333 / (b * b * b)
     for (const b of [8, 27, 100]) expect(Math.abs(glslAt(b) - farFieldDeflection(b))).toBeLessThan(1e-7)
+  })
+
+  it('GLSL: поле направления неба непрерывно — без масок b ≤ R и «объект перед», производные после цикла', () => {
+    const frag = new GravitationalLensEffect(cameraAtOrigin(), new LensRegistry()).getFragmentShader()!
+    const fieldStart = frag.indexOf('vec3 skyDir = d;')
+    const derivatives = frag.indexOf('vec3 dSkyDx = dFdx(skyWorld);')
+    const masked = frag.indexOf('if (b <= R) continue;')
+
+    expect(fieldStart).toBeGreaterThan(-1)
+    expect(derivatives).toBeGreaterThan(fieldStart)
+    expect(masked).toBeGreaterThan(derivatives)
+    const field = frag.slice(fieldStart, derivatives)
+    expect(field).not.toContain('b <= R')
+    expect(field).not.toContain('sceneT')
+  })
+
+  it('юниформы неба — общие экземпляры: подъём уровня загрузки доходит без раздачи', () => {
+    const effect = new GravitationalLensEffect(cameraAtOrigin(), new LensRegistry())
+
+    expect(effect.uniforms.get('uGaiaMinLod')).toBe(gaiaSkyUniforms.uGaiaMinLod)
+    expect(effect.uniforms.get('uGaiaGalaxy')).toBe(gaiaSkyUniforms.uGaiaGalaxy)
   })
 })

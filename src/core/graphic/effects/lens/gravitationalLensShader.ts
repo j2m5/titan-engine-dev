@@ -1,4 +1,4 @@
-import { skyboxSampleFunctions, skyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
+import { skySampleFunctions, skySampleUniforms } from '@/core/materials/shaders/lib/chunks/SkySample'
 
 /** Слотов линз в одном проходе: сцены с двумя дырами — уже двойная система */
 export const LENS_SLOTS = 2
@@ -11,8 +11,8 @@ export const LENS_SLOTS = 2
  * (b в rs; зеркало deflectionLut.farFieldDeflection), и кадр читается по
  * сдвинутому направлению. Внутри меша (b ≤ R) кадр уже лензирован шейдером дыры
  * полным отклонением из LUT — на кромке обе величины совпадают, поле сдвига
- * гладкое. Сдвинутая выборка, попавшая в диск меша или за экран, берёт
- * кубмапу фона по направлению — иначе сильное поле лензировалось бы дважды.
+ * гладкое. Сдвинутая выборка, попавшая в диск меша или за экран, читает небо
+ * по направлению — иначе сильное поле лензировалось бы дважды.
  *
  * Не сдвигаются: пиксели с глубиной сцены ближе плоскости наибольшего
  * сближения (объект перед линзой) и кадры с камерой внутри сферы (там весь
@@ -29,8 +29,8 @@ export function buildGravitationalLensFragment(): string {
   uniform mat4 uCameraWorldMatrix;
   uniform float uLogFarFactor;
   uniform samplerCube skybox;
-  ${skyboxSampleUniforms}
-  ${skyboxSampleFunctions}
+  ${skySampleUniforms}
+  ${skySampleFunctions}
 
   // Ряд дальнего поля Шварцшильда, b в rs (зеркало deflectionLut.farFieldDeflection)
   float lensFarField(float b) {
@@ -50,6 +50,27 @@ export function buildGravitationalLensFragment(): string {
     // расстояние вдоль луча — w / (−d.z)
     float z = texture2D(depthBuffer, uv).r;
     float sceneT = z >= 1.0 - 1e-6 ? 1e30 : (exp2(z * uLogFarFactor) - 1.0) / max(-d.z, 1e-6);
+
+    // Поле направления неба — для КАЖДОГО пикселя и непрерывное: сдвиг первой
+    // линзой перед камерой без масок b ≤ R и «объект перед»; маски ниже решают
+    // только, где оно читается. С масками у кромки соседи несли бы направления,
+    // разнесённые на α(R): огромные производные и кольцо мыла на шве
+    vec3 skyDir = d;
+    for (int i = 0; i < ${LENS_SLOTS}; i++) {
+      if (i >= uCount) break;
+      vec3 c = uCenterView[i];
+      float tMid = dot(c, d);
+      if (tMid <= 0.0) continue;
+      vec3 perp = c - tMid * d;
+      float b = max(length(perp), 1e-9 * uRs[i]);
+      float alpha = lensFarField(max(b / uRs[i], 1e-3));
+      skyDir = normalize(cos(alpha) * d + sin(alpha) * (perp / b));
+      break;
+    }
+    vec3 skyWorld = normalize(mat3(uCameraWorldMatrix) * skyDir);
+    // Производные — после цикла, в равномерном потоке
+    vec3 dSkyDx = dFdx(skyWorld);
+    vec3 dSkyDy = dFdy(skyWorld);
 
     vec3 color = inputColor.rgb;
     for (int i = 0; i < ${LENS_SLOTS}; i++) {
@@ -84,7 +105,7 @@ export function buildGravitationalLensFragment(): string {
         color = texture2D(inputBuffer, uv2).rgb;
       } else {
         vec3 world = normalize(mat3(uCameraWorldMatrix) * d2);
-        color = sampleSkyboxHdr(skybox, world, uSkyFlipX);
+        color = sampleSky(world, dSkyDx, dSkyDy);
       }
       break;                                     // одна линза на пиксель
     }

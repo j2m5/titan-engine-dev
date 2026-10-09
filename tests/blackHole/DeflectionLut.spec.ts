@@ -195,7 +195,7 @@ describe('шейдер ЧД: аналитика слабого поля заме
     expect(frag).toContain('uniform highp sampler2D outsideLut;')
     expect(frag).toContain('texture(outsideLut, vec2((0.5 + (b / simulationRs) * 255.0) / 256.0, 0.5)).r')
     expect(frag).toMatch(/cos\(delta\) \* escape \+ sin\(delta\) \* inward/)
-    expect(frag).toContain('traceGeodesic(cameraRs, rayDir, tEnter, b, crossings)')
+    expect(frag).toContain('traceGeodesic(cameraRs, rayDir, tEnter, b, crossings, opacity, escape, escaped)')
   })
 })
 

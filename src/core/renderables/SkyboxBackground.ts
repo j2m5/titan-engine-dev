@@ -1,25 +1,24 @@
 import { BufferAttribute, BufferGeometry, CubeTexture, GLSL3, Mesh, RawShaderMaterial, Uniform } from 'three'
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
-import { createSkyboxSampleUniforms } from '@/core/materials/shaders/lib/chunks/SkyboxSample'
+import { createSkyUniforms } from '@/core/materials/shaders/lib/chunks/SkySample'
 
 /**
- * Собственный проход фона вместо `scene.background`.
- *
- * Забран у three ради единственной вещи: расширение хайлайтов обязано
- * применяться и к прямому фону, и к линзированному фону чёрной дыры одной и
- * той же функцией. Внутренний фоновый шейдер three не проходит через
- * `onBeforeCompile`, поэтому патчить его нельзя.
+ * Собственный проход фона вместо `scene.background`: небо читается общим
+ * чанком (SkySample) — тем же, что у лензированного фона чёрной дыры, иначе на
+ * кромке сферы линзы ступенька. Внутренний фоновый шейдер three через
+ * `onBeforeCompile` не проходит, патчить его нельзя.
  *
  * Полноэкранный треугольник, а не куб: не нужно ни следить за камерой, ни
  * подбирать размер под `far`, ни думать о логарифмической глубине.
  *
  * Геометрия и материал — обычные поля `Mesh`, поэтому обход дерева сцены при
  * разборке сценария (`disposeSceneTree`) освобождает их сам; отдельного
- * `dispose()` здесь не нужно. Текстуру в конструктор передают снаружи и не
- * освобождают — она принадлежит `resourceStorage`.
+ * `dispose()` здесь не нужно. Кубмапу (режим cubemap) передают снаружи и не
+ * освобождают — она принадлежит `resourceStorage`; в режиме gaia — null, небом
+ * владеет GaiaSky.
  */
 class SkyboxBackground extends Mesh {
-  public constructor(texture: CubeTexture) {
+  public constructor(texture: CubeTexture | null) {
     // Треугольник, накрывающий клип-пространство: две вершины уходят за
     // пределы экрана, растр отсекает лишнее сам
     const geometry = new BufferGeometry()
@@ -29,15 +28,9 @@ class SkyboxBackground extends Mesh {
       glslVersion: GLSL3,
       uniforms: {
         skybox: new Uniform(texture),
-        // Ориентация прямого фона:
-        // three рисует фоновую кубмапу «изнутри», с инверсией X, а свой проход
-        // этой инверсии не наследует — без компенсации Млечный Путь выходит
-        // зеркальным (проверено сравнением кадров «до»/«после» по положению
-        // пылевой прожилки относительно маркера Земли). Юниформ `uSkyFlipX`
-        // общий с линзированным путём ЧД (см. `createSkyboxSampleUniforms`) —
-        // оба потребителя смотрят на одну кубмапу из мировых направлений, и
-        // расхождение флипа зеркалит одно изображение относительно другого.
-        ...createSkyboxSampleUniforms()
+        // Юниформы неба: в режиме gaia — общие экземпляры GaiaSky; в режиме
+        // cubemap — ручки кубмапы с флипом X (см. `createSkyboxSampleUniforms`)
+        ...createSkyUniforms()
       },
       // Вершинник без #include, но прогоняется через prepareSource тем же
       // способом, что и фрагментник: собирается напрямую, минуя конструктор
@@ -69,15 +62,17 @@ class SkyboxBackground extends Mesh {
 
         uniform samplerCube skybox;
 
-        #include <skyboxSampleUniforms>
-        #include <skyboxSampleFunctions>
+        #include <skySampleUniforms>
+        #include <skySampleFunctions>
 
         in vec3 vRay;
 
         layout(location = 0) out vec4 fragColor;
 
         void main() {
-          fragColor = vec4(sampleSkyboxHdr(skybox, normalize(vRay), uSkyFlipX), 1.0);
+          // Производные — до любых ветвлений: по ним фильтр звёзд берёт отпечаток пикселя
+          vec3 dir = normalize(vRay);
+          fragColor = vec4(sampleSky(dir, dFdx(dir), dFdy(dir)), 1.0);
         }
       `),
 
