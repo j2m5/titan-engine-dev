@@ -9,6 +9,7 @@ import {
   diffContent,
   etagMatchesMd5,
   headersUpToDate,
+  isDryRun,
   isFolderMarker,
   listAllObjects,
   runConcurrent,
@@ -20,6 +21,21 @@ import {
 const MD5 = 'ca0c175a33b38e0f105e5d30b06bb2e6'
 const file = (path: string, size = 10, md5 = MD5): LocalFile => ({ path, size, md5 })
 const object = (key: string, size = 10, etag: string | undefined = `"${MD5}"`): RemoteObject => ({ key, size, etag })
+
+describe('isDryRun: только план', () => {
+  it('флаг после «--» доходит до скрипта', () => {
+    expect(isDryRun(['node', 'cloud-sync.ts', '--dry-run'], {})).toBe(true)
+  })
+
+  it('без «--» npm забирает --dry-run себе (npm_config_dry_run) — всё равно план, не синк', () => {
+    expect(isDryRun(['node', 'cloud-sync.ts'], { npm_config_dry_run: 'true' })).toBe(true)
+  })
+
+  it('без флага — синк', () => {
+    expect(isDryRun(['node', 'cloud-sync.ts'], {})).toBe(false)
+    expect(isDryRun(['node', 'cloud-sync.ts'], { npm_config_dry_run: 'false' })).toBe(false)
+  })
+})
 
 describe('etagMatchesMd5: ETag объекта против MD5 файла', () => {
   it('кавычки и регистр не важны', () => {

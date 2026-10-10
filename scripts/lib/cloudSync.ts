@@ -4,6 +4,11 @@
  * удаления. Диск и сеть — в scripts/cloud-sync.ts
  */
 
+/** Только план: `npm run cloud:sync --dry-run` без «--» npm забирает себе (npm_config_dry_run) */
+export function isDryRun(argv: readonly string[], env: Readonly<Record<string, string | undefined>>): boolean {
+  return argv.includes('--dry-run') || env.npm_config_dry_run === 'true'
+}
+
 /** Браузер хранит копию и ревалидирует по ETag: неизменённый файл — 304 без тела */
 export const CLOUD_CACHE_CONTROL = 'no-cache'
 

@@ -21,6 +21,7 @@ import {
   diffContent,
   etagMatchesMd5,
   headersUpToDate,
+  isDryRun,
   isFolderMarker,
   listAllObjects,
   runConcurrent,
@@ -47,7 +48,7 @@ const REGION = 'ru-central1'
 const HASH_CONCURRENCY = 4
 const UPLOAD_CONCURRENCY = 4
 const REQUEST_CONCURRENCY = 16
-const dryRun = process.argv.includes('--dry-run')
+const dryRun = isDryRun(process.argv, process.env)
 const deleteOrphans = process.argv.includes('--delete')
 
 function fail(message: string): never {
