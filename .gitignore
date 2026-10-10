@@ -21,6 +21,7 @@ docs/BACKLOG.md
 .superpowers
 .claudeignore
 CLAUDE.md
+AGENTS.md
 
 # Editor directories and files
 .vscode/*
