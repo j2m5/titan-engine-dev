@@ -74,6 +74,13 @@ export const TERRACE_WOBBLE = 0.7
 export const TERRACE_RISER = 0.5
 /** Потолок множителя собственного уклона на уступе: не круче 2.5× — иначе низкое солнце даёт чёрную линию. */
 export const TERRACE_SLOPE_MUL_MAX = 2.5
+/**
+ * Доля профиля в наклоне нормали: ступенчатость при низком солнце держат тени
+ * уступов (terraceCastShadow), полный наклон давал у линии тени склона
+ * чередование «площадка светлее / уступ темнее». Линейна — средний уклон стены
+ * сохраняется до потолка.
+ */
+export const TERRACE_NORMAL_SCALE = 0.5
 export const TERRACE_SHADE = 0.07
 /** Маска покрытия террас по значению fbm: ниже LO — нет полок, выше HI — полная. */
 export const TERRACE_COVER_LO = 0.1
@@ -145,9 +152,9 @@ export function terraceCastShadow(
   return 1 + (lit - 1) * smoothstep(0, TERRACE_SHADOW_K_FADE, k)
 }
 
-/** Множитель собственного уклона 1 + m, m = clamp(k·derivative, −1, MUL_MAX − 1) — строка нормали террас в чанке. */
+/** Множитель собственного уклона 1 + m, m = clamp(NORMAL_SCALE·k·derivative, −1, MUL_MAX − 1) — строка нормали террас в чанке. */
 export function terraceSlopeMultiplier(k: number, derivative: number): number {
-  return 1 + Math.max(-1, Math.min(TERRACE_SLOPE_MUL_MAX - 1, k * derivative))
+  return 1 + Math.max(-1, Math.min(TERRACE_SLOPE_MUL_MAX - 1, TERRACE_NORMAL_SCALE * k * derivative))
 }
 
 /**

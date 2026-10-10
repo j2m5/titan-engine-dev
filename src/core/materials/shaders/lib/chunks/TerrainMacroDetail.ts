@@ -49,6 +49,9 @@ export const terrainMacroDetailFunctions = /* glsl */ `
   #define TERRACE_RISER 0.5
   // Потолок множителя уклона на уступе (1 + k·tp.y ≤ 2.5)
   #define TERRACE_SLOPE_MUL_MAX 2.5
+  // Доля профиля в наклоне нормали: ступенчатость при низком солнце держат
+  // тени уступов, полный наклон чередовал полосы у линии тени склона
+  #define TERRACE_NORMAL_SCALE 0.5
   #define TERRACE_SHADE 0.07
   // Покрытие террас маской fbm: полки пятнами на стене, не сплошной изогипсой
   #define TERRACE_COVER_LO 0.1
@@ -187,7 +190,7 @@ export const terrainMacroDetailFunctions = /* glsl */ `
       float k = uMacroTerraceStrength * gate * distFade * terraceWeight * cover;
       // площадка (tp.y = −1) положе, уступ круче — модуляция собственного уклона;
       // множитель 1 + m в [0, TERRACE_SLOPE_MUL_MAX]
-      float m = clamp(k * tp.y, -1.0, TERRACE_SLOPE_MUL_MAX - 1.0);
+      float m = clamp(TERRACE_NORMAL_SCALE * k * tp.y, -1.0, TERRACE_SLOPE_MUL_MAX - 1.0);
       nLocal = normalize(nLocal - m * slopeVec);
       // тень уступа — окклюзия формы, не цвет
       occlusion *= max(1.0 - TERRACE_SHADE * k * max(tp.x, 0.0), 0.0);

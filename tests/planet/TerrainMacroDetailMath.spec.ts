@@ -5,6 +5,7 @@ import {
   STREAK_STRETCH,
   TERRACE_RISER,
   TERRACE_SLOPE_MUL_MAX,
+  TERRACE_NORMAL_SCALE,
   cavityGain,
   distFade,
   macroFadeMetersFor,
@@ -130,7 +131,9 @@ describe('terrainMacroDetailMath: направленные формы склон
     expect(Math.abs(sum / n)).toBeLessThan(1e-3)
   })
 
-  it('множитель уклона 1 + k·tp.y в [0, 2.5] при k ∈ [0, 1] (и выше); средняя модуляция ≈ 0 до порога потолка', () => {
+  it('множитель уклона 1 + 0.5·k·tp.y в [0, 2.5]; средняя модуляция ≈ 0 до порога потолка', () => {
+    // ступенчатость при низком солнце держат тени уступов — наклон нормали вдвое слабее
+    expect(TERRACE_NORMAL_SCALE).toBe(0.5)
     expect(TERRACE_SLOPE_MUL_MAX).toBe(2.5)
     for (const k of [0, 0.25, 0.5, 0.75, 1, 2]) {
       const n = 4000
@@ -141,13 +144,12 @@ describe('terrainMacroDetailMath: направленные формы склон
         expect(m).toBeLessThanOrEqual(2.5)
         sum += m - 1
       }
-      // потолок не включается при k·max(tp.y) = 2k ≤ 1.5; при k = 1 срезает пик уступа: −0.068 (вывод в отчёте)
-      if (k <= 0.75) expect(Math.abs(sum / n)).toBeLessThan(1e-3)
-      if (k === 1) expect(Math.abs(sum / n)).toBeLessThan(0.07)
+      // потолок не включается при 0.5·k·max(tp.y) = k ≤ 1.5: средний уклон стены сохраняется
+      if (k <= 1) expect(Math.abs(sum / n)).toBeLessThan(1e-3)
     }
-    expect(terraceSlopeMultiplier(0.5, 2)).toBeCloseTo(2, 12)
-    expect(terraceSlopeMultiplier(1, 2)).toBeCloseTo(2.5, 12)
-    expect(terraceSlopeMultiplier(1, -1)).toBeCloseTo(0, 12)
+    expect(terraceSlopeMultiplier(0.5, 2)).toBeCloseTo(1.5, 12)
+    expect(terraceSlopeMultiplier(1, 2)).toBeCloseTo(2, 12)
+    expect(terraceSlopeMultiplier(1, -1)).toBeCloseTo(0.5, 12)
   })
 
   it('вес ступенчатости по уступу: 1 при уступе ≥ 2 px, 0 при ≤ 1 px, монотонен', () => {
