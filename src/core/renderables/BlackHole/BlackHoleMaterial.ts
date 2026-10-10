@@ -14,6 +14,7 @@ import {
 import { degToRad } from 'three/src/math/MathUtils'
 import { config } from '@/core/framework/config'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
+import { blackHoleDiskIntensity } from '@/core/renderables/BlackHole/diskEmission'
 import { BlackHoleNoiseTexture } from '@/core/renderables/BlackHole/BlackHoleNoiseTexture'
 import { BlackHoleShaderTemplate, createBlackHoleUniforms } from '@/core/renderables/BlackHole/BlackHoleShaderTemplate'
 import { createDeflectionLutTexture, createOutsideLutTexture } from '@/core/renderables/BlackHole/deflectionLut'
@@ -130,6 +131,7 @@ class BlackHoleMaterial extends RawShaderMaterial {
     // меш не вращается и не масштабируется, поэтому достаточно вычитания трансляции
     this._localCameraPos.set(cw[12] - mw[12], cw[13] - mw[13], cw[14] - mw[14])
     this.uniforms.localCameraPos.value.copy(this._localCameraPos)
+    this.uniforms.uDiskIntensity.value = blackHoleDiskIntensity(this.parameters, this._localCameraPos.length())
 
     // ── 5. Логарифмическая глубина ──
     // `far` объявлен не в базовой Camera, а в Perspective/Orthographic; для

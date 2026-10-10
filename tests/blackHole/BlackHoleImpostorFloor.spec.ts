@@ -120,11 +120,10 @@ describe('BlackHole: калибровка под порог блума', () => {
     expect(config('blackHole.impostorPixels')).toBeLessThanOrEqual(config('blackHole.lodPixels'))
   })
 
-  it('дефолтная эмиссия диска перешагивает порог блума с запасом', () => {
-    // blackbody нормирован по максимальному каналу, дальше профиль съедает
-    // примерно 0.35 — при 6 пик выходил ~2.1 на пороге 1.0, и диск еле блумил
+  it('дальняя эмиссия сохраняет запас над порогом блума при более тихом ближнем плане', () => {
     const parameters = new BlackHoleParameters(stubActor(9000))
 
-    expect(parameters.diskIntensity).toBe(12)
+    expect(parameters.diskIntensity).toBe(6)
+    expect(parameters.diskIntensity * parameters.diskFarGain).toBe(288)
   })
 })

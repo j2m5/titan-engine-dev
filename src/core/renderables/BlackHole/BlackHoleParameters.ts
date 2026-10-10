@@ -16,8 +16,10 @@ export interface IBlackHoleRenderingObject {
   diskOuterRadius?: number
   /** Радиус зоны симуляции лензирования (bounding-сфера), км. По умолчанию: max(27·rsVisual, 2·diskOuterRadius) */
   simulationRadius?: number
-  /** HDR-множитель эмиссии диска, калибруется под Bloom (порог 1.0). По умолчанию 12 */
+  /** Базовый HDR-множитель эмиссии вблизи диска. По умолчанию 6 */
   diskIntensity?: number
+  /** Предельное усиление эмиссии вдали от диска; 1 — без усиления. По умолчанию 48 */
+  diskFarGain?: number
   /** Масштаб турбулентности диска. По умолчанию 1 */
   diskNoiseScale?: number
   /** Зерно шума диска, даёт разнообразие между дырами. По умолчанию id актора */
@@ -90,6 +92,7 @@ class BlackHoleParameters {
   public readonly rotationPeriod: number
 
   public readonly diskIntensity: number
+  public readonly diskFarGain: number
   public readonly diskNoiseScale: number
   public readonly diskNoiseSeed: number
   public readonly dopplerStrength: number
@@ -159,10 +162,8 @@ class BlackHoleParameters {
       }
     }
 
-    // 12, а не 6: blackbody нормирован по максимальному каналу, а профиль
-    // (gravShift² ≈ 0.44 на внутреннем крае × шум ≈ 0.8) съедает ещё втрое —
-    // при 6 пик выходил ~2.1 на пороге блума 1.0, и диск еле светился
-    this.diskIntensity = data.diskIntensity ?? 12
+    this.diskIntensity = data.diskIntensity ?? 6
+    this.diskFarGain = data.diskFarGain ?? 48
     this.diskNoiseScale = data.diskNoiseScale ?? 1
     this.diskNoiseSeed = data.diskNoiseSeed ?? model.getAttribute('id', 0)
     this.dopplerStrength = data.dopplerStrength ?? 0.6
