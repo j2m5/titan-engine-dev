@@ -265,6 +265,12 @@ export const TerrainShaderTemplate: ShaderProps = {
         occlusion *= clamp(1.0 + uCavityStrength * cavity, 0.0, 2.0);
       #endif
 
+      // Единичное НА солнце в системе тела — общий вход тени облаков, марша тени
+      // рельефа и тени уступов террас
+      vec3 sunLocal = -normalize(vLocalLightDirection);
+      // Доля прямого света за тенью уступов террас (средняя полоса); 1 — свет
+      float terraceShadow = 1.0;
+
       #ifdef USE_TERRAIN_MACRO_DETAIL
         // Данные рельефа читает хост: чанк не сэмплит slope-карту. Канал B —
         // только под USE_CAVITY (без гейта карта может быть без полости).
@@ -277,7 +283,7 @@ export const TerrainShaderTemplate: ShaderProps = {
         #ifdef USE_CAVITY
           macroCavity = (macroSlopeSample.z * 255.0 - 128.0) / 127.0;
         #endif
-        applyTerrainMacroDetail(nLocal, albedoMul, occlusion, dirLocal, eastLocal, macroSlope, length(macroMapSlope), macroCavity, uv, length(vViewPosition));
+        applyTerrainMacroDetail(nLocal, albedoMul, occlusion, terraceShadow, dirLocal, eastLocal, sunLocal, macroSlope, length(macroMapSlope), macroCavity, uv, length(vViewPosition));
       #endif
 
       #ifdef USE_WATER_EDGE
@@ -301,14 +307,14 @@ export const TerrainShaderTemplate: ShaderProps = {
 
       ${planetSurfaceLightBegin}
 
-      // Единичное НА солнце в системе тела — общий вход тени облаков и марша тени рельефа
-      vec3 sunLocal = -normalize(vLocalLightDirection);
       #ifdef USE_CLOUD_SHADOW
         // тот же закон, что у воды (чанк CloudLayer); muS = dot(dirLocal, sunLocal)
         cloudShadow = cloudShadowAt(dirLocal, sunLocal, muS);
       #endif
 
       ${planetSurfaceDirectGain}
+      // тень уступов террас — как тень рельефа, только прямой свет
+      directGain *= terraceShadow;
 
       #ifdef USE_TERRAIN_SHADOW
         // только прямой свет; при N·L ≤ 0 mix ниже даёт directGain нулевой вес — марш не платится

@@ -97,7 +97,7 @@ describe('TerrainMacroDetail: направленные формы склона (
   })
 
   it('террасы: фаза от vHeightMeters (не от позиции), наклон модулирует slopeVec производной профиля', () => {
-    const terr = fn.slice(fn.indexOf('vec2 tp = terraceProfile('), fn.indexOf('TERRACE_SHADE * k'))
+    const terr = fn.slice(fn.indexOf('float terracePhase = '), fn.indexOf('TERRACE_SHADE * k'))
     expect(terr).toContain('vHeightMeters / max(uMacroTerraceStepMeters, 1e-3) + TERRACE_WOBBLE * fbmValue')
     // потолок: множитель уклона 1 + m в [0, TERRACE_SLOPE_MUL_MAX]
     expect(terr).toContain('float m = clamp(k * tp.y, -1.0, TERRACE_SLOPE_MUL_MAX - 1.0);')
