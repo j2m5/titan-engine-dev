@@ -20,3 +20,7 @@ Neptune
 
 Pluto and Charon
 ![pluto](https://github.com/user-attachments/assets/cfec26e7-d187-44a5-bedd-507374ccc5e5)
+
+## Data sources
+
+Background sky: [gaia_sky_map](https://github.com/ebruneton/gaia_sky_map) by Eric Bruneton, built from the ESA Gaia DR2 and Tycho-2 star catalogues; used with the author's permission for non-commercial purposes.
