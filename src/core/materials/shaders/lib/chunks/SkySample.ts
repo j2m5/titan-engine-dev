@@ -113,9 +113,12 @@ const gaiaFunctions = `
 `
 
 const cubemapFunctions = `${skyboxSampleFunctions}
-  // Прежняя кубмапа: производные и усиление не нужны
+  // Прежняя кубмапа, усиление не нужно. В проходах линзы выборка стоит в
+  // ветвлениях и цикле с break — неявный texture() там ANGLE переводит на
+  // нулевой мип без анизотропии; явные производные это снимают
   vec3 sampleSkyLensed(vec3 dir, vec3 dDirDx, vec3 dDirDy, vec3 dPixDx, vec3 dPixDy) {
-    return sampleSkyboxHdr(skybox, dir, uSkyFlipX);
+    vec3 flip = vec3(uSkyFlipX, 1.0, 1.0);
+    return skyboxHdrFromRaw(textureGrad(skybox, flip * dir, flip * dDirDx, flip * dDirDy).rgb);
   }
 
   vec3 sampleSky(vec3 dir, vec3 dDirDx, vec3 dDirDy) {

@@ -115,6 +115,14 @@ describe('SkySample: общий чанк неба', () => {
       expect(buildSkySampleUniforms('cubemap')).toBe(skyboxSampleUniforms)
     })
 
+    it('sampleSkyLensed — явные производные: в ветвлениях и цикле линзы неявный texture() дал бы нулевой мип', () => {
+      const code = buildSkySampleFunctions('cubemap')
+      const lensed = code.slice(code.indexOf('vec3 sampleSkyLensed('), code.indexOf('vec3 sampleSky('))
+      expect(lensed).toContain('textureGrad(skybox, flip * dir, flip * dDirDx, flip * dDirDy)')
+      expect(lensed).not.toMatch(/\btexture\(/)
+      expect(code).toContain('vec3 skyboxHdrFromRaw(vec3 raw)')
+    })
+
     it('sampleSkyLensed — та же кубмапа, лишние аргументы игнорируются', () => {
       expect(buildSkySampleFunctions('cubemap')).toContain(
         'vec3 sampleSkyLensed(vec3 dir, vec3 dDirDx, vec3 dDirDy, vec3 dPixDx, vec3 dPixDy)'
