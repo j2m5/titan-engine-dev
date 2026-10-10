@@ -67,7 +67,7 @@ export const background: BackgroundConfig = {
     source: resolveBackgroundSource(import.meta.env.VITE_SKY_SOURCE),
     gaia: {
       // Замер 2026-10-10: полоса (среднее p90–p99 по небу) = прежней кубмапе после подъёма
-      exposureStops: -6.7,
+      exposureStops: -5,
       // Замер 2026-10-10: поток ячейки Сириуса в 1080p ≤ 64 px·яркость при любом
       // субпиксельном сдвиге — призрак ≤ 1/10 калиброванного
       starCeiling: 19
