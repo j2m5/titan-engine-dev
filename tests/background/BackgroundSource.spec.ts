@@ -3,7 +3,7 @@ import { readFileSync } from 'fs'
 import { resolveBackgroundSource } from '@/config/background'
 
 describe('источник неба из окружения сборки', () => {
-  it('по умолчанию — небо Gaia: тайлы лежат локально', () => {
+  it('по умолчанию — небо Gaia', () => {
     expect(resolveBackgroundSource(undefined)).toBe('gaia')
   })
 
@@ -11,9 +11,10 @@ describe('источник неба из окружения сборки', () =>
     expect(resolveBackgroundSource('cubemap')).toBe('cubemap')
   })
 
-  it('публичное демо собирается на кубмапе: тайлов Gaia в бакете нет', () => {
+  it('публичное демо собирается на небе Gaia: тайлы в бакете по манифесту облака', () => {
     const workflow = readFileSync('.github/workflows/deploy.yml', 'utf8')
+    const value = /VITE_SKY_SOURCE:\s*(\S+)/.exec(workflow)?.[1]
 
-    expect(workflow).toMatch(/VITE_SKY_SOURCE:\s*cubemap/)
+    expect(resolveBackgroundSource(value)).toBe('gaia')
   })
 })

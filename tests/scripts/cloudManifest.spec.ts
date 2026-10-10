@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CODE_REFERENCED_PATHS, cloudManifestPaths } from '../../scripts/lib/cloudManifest'
 import type { IResource } from '@/core/models/types'
+import { gaiaTilePath, gaiaTiles } from '@/core/sky/gaiaTiles'
 
 const row = (id: number, path: string): IResource => ({ id, resourceType: 'diffuse', lifecycle: 'streamable', path })
 
@@ -38,5 +39,18 @@ describe('CODE_REFERENCED_PATHS: блик объектива', () => {
   it('PNG объектива больше не грузятся кодом — их нет в белом списке', () => {
     expect(CODE_REFERENCED_PATHS).not.toContain('lenscolor.png')
     expect(CODE_REFERENCED_PATHS).not.toContain('lensstar.png')
+  })
+})
+
+describe('cloudManifestPaths: тайлы неба Gaia (данные Брунетона, с разрешения автора)', () => {
+  it('включает все 516 тайлов путём, по которому их запрашивает рантайм', () => {
+    const paths = new Set(cloudManifestPaths([]))
+    const tiles = gaiaTiles()
+
+    expect(tiles).toHaveLength(516)
+    for (const tile of tiles) {
+      expect(gaiaTilePath(tile)).toBe(`sky/gaia/${tile.name}.dat`)
+      expect(paths.has(gaiaTilePath(tile))).toBe(true)
+    }
   })
 })

@@ -8,6 +8,7 @@ import {
   GAIA_MAX_FINE_STAR_LEVEL,
   GaiaLevelTracker,
   gaiaTiles,
+  gaiaTilePath,
   planGaiaUploads,
   type GaiaTextureKey,
   type GaiaTile
@@ -15,11 +16,8 @@ import {
 
 export type GaiaSkyRenderer = Pick<WebGLRenderer, 'getContext' | 'state' | 'properties' | 'extensions' | 'capabilities'>
 
-/** Каталог тайлов в хранилище (локально — public/images/textures/sky/gaia) */
-export const GAIA_TILE_DIRECTORY = 'sky/gaia'
-
 export const fetchGaiaTile: GaiaTileFetcher = async (tile) => {
-  const response = await fetch(Storage.url(`${GAIA_TILE_DIRECTORY}/${tile.name}.dat`))
+  const response = await fetch(Storage.url(gaiaTilePath(tile)))
   if (!response.ok) throw new Error(`${tile.name}: HTTP ${response.status}`)
   return response.arrayBuffer()
 }

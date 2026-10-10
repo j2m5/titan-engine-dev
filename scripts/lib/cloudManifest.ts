@@ -1,6 +1,7 @@
 import type { IResource } from '@/core/models/types'
 import { terrainAuxPathFor } from '@/core/terrain/terrainAuxFormat'
 import { shapeModelManifestPaths } from '@/core/renderables/DetailedRingStreamingSystem/archetypes/shapeModelPaths'
+import { gaiaTilePath, gaiaTiles } from '@/core/sky/gaiaTiles'
 
 /**
  * Манифест облака: точный список файлов под `storage/images/textures`,
@@ -24,8 +25,13 @@ export const CODE_REFERENCED_PATHS: readonly string[] = ['sun_glow.png']
  */
 export function cloudManifestPaths(resources: readonly IResource[]): string[] {
   // Реальные модели форм астероидов: строк в БД нет, имена живут в профилях
-  // породы (AsteroidProfiles.shapeModels), рантайм грузит их сам
-  const paths = new Set<string>([...CODE_REFERENCED_PATHS, ...shapeModelManifestPaths()])
+  // породы (AsteroidProfiles.shapeModels), рантайм грузит их сам. Тайлы неба
+  // Gaia (данные Брунетона, с разрешения автора) — по раскладке gaiaTiles
+  const paths = new Set<string>([
+    ...CODE_REFERENCED_PATHS,
+    ...shapeModelManifestPaths(),
+    ...gaiaTiles().map(gaiaTilePath)
+  ])
 
   for (const resource of resources) {
     paths.add(resource.path)

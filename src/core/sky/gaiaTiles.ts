@@ -24,6 +24,14 @@ export interface GaiaTile {
   readonly name: string
 }
 
+/** Каталог тайлов от корня текстур (локально — public/images/textures/sky/gaia) */
+export const GAIA_TILE_DIRECTORY = 'sky/gaia'
+
+/** Путь файла тайла от корня текстур — общий для рантайма и манифеста облака */
+export function gaiaTilePath(tile: Pick<GaiaTile, 'name'>): string {
+  return `${GAIA_TILE_DIRECTORY}/${tile.name}.dat`
+}
+
 export type GaiaTextureKey = 'galaxy' | 'stars' | 'starsCoarse'
 
 export interface GaiaTileLevel {

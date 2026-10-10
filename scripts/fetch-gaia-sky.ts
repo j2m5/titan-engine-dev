@@ -8,8 +8,9 @@ import { gaiaTileByteLength, gaiaTiles, type GaiaTile } from '@/core/sky/gaiaTil
  *
  * Запуск: npm run fetch:gaia-sky
  *
- * Тайлы без лицензии на перераспространение: только локально. Папка под
- * правилом .gitignore `**\/textures/`; в бакет и манифест не заливать.
+ * Данные Брунетона — с разрешения автора, для некоммерческого использования.
+ * Папка под правилом .gitignore `**\/textures/`; в бакет — по манифесту
+ * облака (npm run cloud:sync).
  * Файлы нужной длины пропускаются — повторный запуск докачивает недостающее
  */
 const SOURCE = 'https://ebruneton.github.io/gaia_sky_map'

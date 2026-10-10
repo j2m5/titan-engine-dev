@@ -2,8 +2,8 @@
 export type BackgroundSource = 'gaia' | 'cubemap'
 
 /**
- * Источник из окружения сборки (VITE_SKY_SOURCE): тайлы Gaia лежат только
- * локально, публичное демо собирается на кубмапе (deploy.yml)
+ * Источник из окружения сборки (VITE_SKY_SOURCE): по умолчанию небо Gaia —
+ * тайлы в бакете по манифесту облака; кубмапа — запасной источник
  */
 export function resolveBackgroundSource(value: string | undefined): BackgroundSource {
   return value === 'cubemap' ? 'cubemap' : 'gaia'
