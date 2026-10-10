@@ -21,6 +21,7 @@
     "build:sculpt-heightmap": "vite-node scripts/sculpt-heightmap.ts --",
     "build:ice-archetype": "vite-node scripts/build-ice-archetype.ts --",
     "cloud:manifest": "vite-node scripts/cloud-manifest.ts --",
+    "cloud:sync": "vite-node scripts/cloud-sync.ts --",
     "build:archetype-set": "vite-node scripts/build-archetype-set.ts --",
     "build:shape-models": "vite-node scripts/build-shape-models.ts --",
     "build:terrain-aux": "vite-node scripts/build-terrain-aux.ts --",
@@ -47,6 +48,7 @@
     "three": "^0.182.0"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1149.0",
     "@eslint/js": "^9.21.0",
     "@types/animejs": "^3.1.13",
     "@types/node": "^22.13.10",
