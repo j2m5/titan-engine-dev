@@ -1,9 +1,11 @@
 import {
+  Camera,
   DoubleSide,
   Group,
   Mesh,
   MeshBasicMaterial,
   RingGeometry,
+  Scene,
   ShaderMaterial,
   SphereGeometry,
   Vector3,
@@ -13,6 +15,7 @@ import { degToRad } from 'three/src/math/MathUtils'
 import { Actor } from '@/core/models/Actor'
 import { UpdateContext } from '@/core/UpdateContext'
 import { BlackHoleParameters } from '@/core/renderables/BlackHole/BlackHoleParameters'
+import { blackHoleDiskIntensity } from '@/core/renderables/BlackHole/diskEmission'
 import { BlackHoleNoiseTexture } from '@/core/renderables/BlackHole/BlackHoleNoiseTexture'
 import { config } from '@/core/framework/config'
 import { worldSizeForPixels } from '@/core/helpers/apparentSize'
@@ -114,6 +117,14 @@ class BlackHoleImpostor extends Group {
       ring.name = this.name + 'Ring'
       ring.userData.type = 'blackHole'
       ring.userData.clickable = true
+      const ringMaterial: ShaderMaterial = this.ringMaterial
+      ring.onBeforeRender = (_renderer: WebGLRenderer, _scene: Scene, camera: Camera): void => {
+        this.worldPosition.setFromMatrixPosition(this.matrixWorld)
+        this.cameraPosition.setFromMatrixPosition(camera.matrixWorld)
+        ringMaterial.uniforms.uDiskIntensity.value = blackHoleDiskIntensity(
+          this.parameters, this.worldPosition.distanceTo(this.cameraPosition)
+        )
+      }
       this.add(ring)
     }
   }
