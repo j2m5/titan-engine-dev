@@ -42,7 +42,8 @@ export const LENS_FRONT_DEPTH_LAYER = 26
  * глубину сцены, после — отвязывается, чтобы рендер вне пасса шёл без них
  */
 export interface SceneFrameConsumer extends Object3D {
-  bindSceneFrame(sceneColor: Texture, sceneDepth: Texture, logFarFactor: number): void
+  /** skyLayer — слой видимого неба кадра (SkyLayer), того же размера, что копии */
+  bindSceneFrame(sceneColor: Texture, sceneDepth: Texture, skyLayer: Texture, logFarFactor: number): void
   unbindSceneFrame(): void
 }
 

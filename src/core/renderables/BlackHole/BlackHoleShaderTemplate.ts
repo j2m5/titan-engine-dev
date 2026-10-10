@@ -90,6 +90,8 @@ export function createBlackHoleUniforms(parameters: BlackHoleParameters): Record
      */
     uSceneColor: new Uniform<Texture | null>(null),
     uSceneDepth: new Uniform<Texture | null>(null),
+    /** Слой видимого неба кадра (SkyLayer): вычитается из копии в ветке кадра */
+    uSkyLayer: new Uniform<Texture | null>(null),
     uSceneLogFarFactor: new Uniform(1),
     uSceneEnabled: new Uniform(0),
     /** Дебаг: подкраска пикселей по числу пересечений плоскости диска */
@@ -171,6 +173,8 @@ export const BlackHoleShaderTemplate = {
     // Копия кадра от BlackHolePass (см. sampleBackground)
     uniform sampler2D uSceneColor;
     uniform sampler2D uSceneDepth;
+    // Слой видимого неба кадра (SkyLayer): вычитается из копии в ветке кадра
+    uniform sampler2D uSkyLayer;
     uniform float uSceneLogFarFactor;
     uniform float uSceneEnabled;
     uniform mat4 crProjectionMatrix;
@@ -213,23 +217,27 @@ export const BlackHoleShaderTemplate = {
     const float WEAK_FIELD_B = 8.0;
 
     // Фон побега луча: пиксель КАДРА по спроецированному направлению — тела,
-    // лучи и туманности за дырой лензируются сильным полем. Небо — вне
-    // BlackHolePass, за экраном (и при p.w ≤ 0) и для объекта перед плоскостью
-    // наибольшего сближения: он не за линзой и копироваться не должен.
-    // dDx/dDy — экранные производные направления для фильтра звёзд неба
-    vec3 sampleBackground(vec3 direction, vec3 dDx, vec3 dDy) {
-      if (uSceneEnabled < 0.5) return sampleSky(direction, dDx, dDy);
+    // лучи и туманности за дырой лензируются сильным полем, а видимое в копии
+    // небо заменяется небом по искривлённому лучу (вычитание слоя, см.
+    // SkyLayer). Только небо — вне BlackHolePass, за экраном (и при p.w ≤ 0) и
+    // для объекта перед плоскостью наибольшего сближения: он не за линзой и
+    // копироваться не должен. dDx/dDy — производные побега, dPixDx/dPixDy —
+    // неотклонённого луча пикселя (площадь пикселя и усиление звёзд)
+    vec3 sampleBackground(vec3 direction, vec3 dDx, vec3 dDy, vec3 dPixDx, vec3 dPixDy) {
+      if (uSceneEnabled < 0.5) return sampleSkyLensed(direction, dDx, dDy, dPixDx, dPixDy);
       vec3 dirView = normalize(mat3(crModelViewMatrix) * direction);
       vec4 p = crProjectionMatrix * vec4(dirView, 0.0);
       vec2 uv = p.xy / max(p.w, 1e-6) * 0.5 + 0.5;
-      if (p.w <= 0.0 || any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return sampleSky(direction, dDx, dDy);
+      if (p.w <= 0.0 || any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return sampleSkyLensed(direction, dDx, dDy, dPixDx, dPixDy);
       // crModelViewMatrix camera-relative: столбец переноса — центр дыры в виде
       vec3 centerView = crModelViewMatrix[3].xyz;
       float tMid = dot(centerView, dirView);
       float z = texture(uSceneDepth, uv).r;
       float sceneT = z >= 1.0 - 1e-6 ? 1e30 : (exp2(z * uSceneLogFarFactor) - 1.0) / max(-dirView.z, 1e-6);
-      if (sceneT < tMid) return sampleSky(direction, dDx, dDy);
-      return texture(uSceneColor, uv).rgb;
+      if (sceneT < tMid) return sampleSkyLensed(direction, dDx, dDy, dPixDx, dPixDy);
+      // max: под поглощающей туманностью копия = T·небо + свечение, разность ниже нуля
+      vec4 layer = texture(uSkyLayer, uv);
+      return max(texture(uSceneColor, uv).rgb - layer.rgb, vec3(0.0)) + layer.a * sampleSkyLensed(direction, dDx, dDy, dPixDx, dPixDy);
     }
 
     // Аналитический планковский blackbody: CIE-аппроксимация локуса → XYZ → linear sRGB,
@@ -423,6 +431,12 @@ export const BlackHoleShaderTemplate = {
       vec3 cameraRs = vCameraRs;
       vec3 rayDir = normalize(vPositionRs - cameraRs);
 
+      // Производные неотклонённого луча пикселя — до ветвлений: площадь
+      // пикселя и усиление звёзд линзой (sampleSkyLensed). Меш не вращается —
+      // объектные направления совпадают с мировыми
+      vec3 rayDx = dFdx(rayDir);
+      vec3 rayDy = dFdy(rayDir);
+
       // геометрия прицельного параметра (дыра в нуле объектного пространства)
       float tMid = -dot(cameraRs, rayDir);
       float b2 = dot(cameraRs, cameraRs) - tMid * tMid;
@@ -482,7 +496,7 @@ export const BlackHoleShaderTemplate = {
       // discard только после производных: иначе у четвёрок на кромке они рвутся
       if (!cameraInside && b > simulationRs) discard;
 
-      if (escaped) color += (1.0 - opacity) * sampleBackground(escape, escapeDx, escapeDy);
+      if (escaped) color += (1.0 - opacity) * sampleBackground(escape, escapeDx, escapeDy, rayDx, rayDy);
 
       // дебаг-визуализация пересечений кольца диска: 1 — красный, 2 — зелёный, 3+ — синий
       if (uDebugCrossings > 0.5 && crossings > 0) {

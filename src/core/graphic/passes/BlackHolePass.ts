@@ -1,5 +1,6 @@
 import {
   BasicDepthPacking,
+  type CubeTexture,
   HalfFloatType,
   type PerspectiveCamera,
   type Texture,
@@ -10,6 +11,7 @@ import { CopyPass, DepthCopyPass, Pass } from 'postprocessing'
 import type { LensRegistry } from '@/core/services/LensRegistry'
 import { BLACK_HOLE_LAYER, isSceneFrameConsumer, type SceneFrameConsumer } from '@/core/graphic/passes/DepthVolume'
 import { isVisibleInTree } from '@/core/graphic/passes/DepthVolumePass'
+import { SkyLayer } from '@/core/graphic/passes/SkyLayer'
 
 type DepthPacking = Parameters<Pass['setDepthTexture']>[1]
 
@@ -28,18 +30,26 @@ type DepthPacking = Parameters<Pass['setDepthTexture']>[1]
  * (те же записи, что у экранного прохода дальнего поля), слой BLACK_HOLE_LAYER
  * включается на камере только на время рендера. Кадр без дыры не стоит ничего:
  * копии не делаются.
+ *
+ * Перед мешами рисуется слой видимого неба (SkyLayer, общий с дальним полем
+ * линзы): ветки кадра вычитают его из копии и читают небо по искривлённому
+ * лучу. Кадр без дыры слой гасит (reset).
  */
 export class BlackHolePass extends Pass {
   public readonly depthCopy: DepthCopyPass
   public readonly colorCopy: CopyPass
+  public readonly skyLayer: SkyLayer
   private readonly sceneCamera: PerspectiveCamera
   private readonly registry: LensRegistry
   private readonly visible: SceneFrameConsumer[] = []
+  /** Кубмапа фона первой видимой дыры (режим cubemap; в режиме gaia — null) */
+  private background: CubeTexture | null = null
 
-  public constructor(camera: PerspectiveCamera, registry: LensRegistry) {
+  public constructor(camera: PerspectiveCamera, registry: LensRegistry, skyLayer: SkyLayer = new SkyLayer()) {
     super('BlackHolePass')
     this.sceneCamera = camera
     this.registry = registry
+    this.skyLayer = skyLayer
     this.needsSwap = false
     this.needsDepthTexture = true
     this.depthCopy = new DepthCopyPass({ depthPacking: BasicDepthPacking })
@@ -58,6 +68,7 @@ export class BlackHolePass extends Pass {
   public override setSize(width: number, height: number): void {
     this.depthCopy.setSize(width, height)
     this.colorCopy.setSize(width, height)
+    this.skyLayer.setSize(width, height)
   }
 
   public override render(
@@ -68,7 +79,10 @@ export class BlackHolePass extends Pass {
     stencilTest?: boolean
   ): void {
     const meshes = this.collectVisible()
-    if (meshes.length === 0) return
+    if (meshes.length === 0) {
+      this.skyLayer.reset()
+      return
+    }
 
     this.depthCopy.render(renderer, inputBuffer, outputBuffer, deltaTime, stencilTest)
     this.colorCopy.render(renderer, inputBuffer, outputBuffer, deltaTime, stencilTest)
@@ -77,13 +91,17 @@ export class BlackHolePass extends Pass {
     const mask = camera.layers.mask
     const shadowMapAutoUpdate = renderer.shadowMap.autoUpdate
     const logFarFactor = Math.log2(camera.far + 1)
+    renderer.shadowMap.autoUpdate = false
+
+    // Видимое небо кадра — до мешей: его вычитают из копии проходы линзы
+    this.skyLayer.render(renderer, camera, this.depthCopy.texture, this.background)
+    const skyLayer = this.skyLayer.target.texture
 
     camera.layers.set(BLACK_HOLE_LAYER)
-    renderer.shadowMap.autoUpdate = false
     renderer.setRenderTarget(this.renderToScreen ? null : inputBuffer)
 
     for (const mesh of meshes) {
-      mesh.bindSceneFrame(this.colorCopy.texture, this.depthCopy.texture, logFarFactor)
+      mesh.bindSceneFrame(this.colorCopy.texture, this.depthCopy.texture, skyLayer, logFarFactor)
       renderer.render(mesh, camera)
       mesh.unbindSceneFrame()
     }
@@ -96,9 +114,11 @@ export class BlackHolePass extends Pass {
   private collectVisible(): SceneFrameConsumer[] {
     const out = this.visible
     out.length = 0
+    this.background = null
     for (const entry of this.registry.entries()) {
       const object = entry.object
       if (!isSceneFrameConsumer(object) || !isVisibleInTree(object)) continue
+      if (out.length === 0) this.background = entry.background()
       out.push(object)
     }
     return out
@@ -107,6 +127,7 @@ export class BlackHolePass extends Pass {
   public override dispose(): void {
     this.depthCopy.dispose()
     this.colorCopy.dispose()
+    this.skyLayer.dispose()
     super.dispose()
   }
 }

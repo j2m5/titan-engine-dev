@@ -150,10 +150,11 @@ class BlackHoleMaterial extends RawShaderMaterial {
     this.uniforms.uTime.value = epoch - Math.floor(epoch / wrap) * wrap
   }
 
-  /** Копия кадра от BlackHolePass (см. uSceneEnabled в шаблоне) */
-  public bindSceneFrame(sceneColor: Texture, sceneDepth: Texture, logFarFactor: number): void {
+  /** Копия кадра и слой неба от BlackHolePass (см. uSceneEnabled в шаблоне) */
+  public bindSceneFrame(sceneColor: Texture, sceneDepth: Texture, skyLayer: Texture, logFarFactor: number): void {
     this.uniforms.uSceneColor.value = sceneColor
     this.uniforms.uSceneDepth.value = sceneDepth
+    this.uniforms.uSkyLayer.value = skyLayer
     this.uniforms.uSceneLogFarFactor.value = logFarFactor
     this.uniforms.uSceneEnabled.value = 1
   }
@@ -161,6 +162,7 @@ class BlackHoleMaterial extends RawShaderMaterial {
   public unbindSceneFrame(): void {
     this.uniforms.uSceneColor.value = null
     this.uniforms.uSceneDepth.value = null
+    this.uniforms.uSkyLayer.value = null
     this.uniforms.uSceneEnabled.value = 0
   }
 

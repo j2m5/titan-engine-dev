@@ -40,12 +40,17 @@ export const skyboxSampleUniforms = `
  * вдвое.
  */
 export const skyboxSampleFunctions = `
-  vec3 sampleSkyboxHdr(samplerCube tex, vec3 direction, float flipX) {
-    vec3 raw = texture(tex, vec3(flipX * direction.x, direction.yz)).rgb;
+  // Подъём и расширение хайлайтов исходной выборки; общий для неявной выборки
+  // фона и явной (textureGrad) в проходах линзы
+  vec3 skyboxHdrFromRaw(vec3 raw) {
     vec3 lifted = max(raw - uSkyFloor, vec3(0.0)) * uSkyGain;
     vec3 excess = max(raw - uSkyHighlightThreshold, vec3(0.0));
 
     return lifted + excess * (uSkyHighlightBoost - 1.0);
+  }
+
+  vec3 sampleSkyboxHdr(samplerCube tex, vec3 direction, float flipX) {
+    return skyboxHdrFromRaw(texture(tex, vec3(flipX * direction.x, direction.yz)).rgb);
   }
 `
 

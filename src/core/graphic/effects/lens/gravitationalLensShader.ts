@@ -12,7 +12,9 @@ export const LENS_SLOTS = 2
  * сдвинутому направлению. Внутри меша (b ≤ R) кадр уже лензирован шейдером дыры
  * полным отклонением из LUT — на кромке обе величины совпадают, поле сдвига
  * гладкое. Сдвинутая выборка, попавшая в диск меша или за экран, читает небо
- * по направлению — иначе сильное поле лензировалось бы дважды.
+ * по направлению — иначе сильное поле лензировалось бы дважды. В ветке кадра
+ * видимое в нём небо (слой SkyLayer) вычитается и заменяется небом по
+ * сдвинутому лучу — звёзды остаются точками, с усилением линзы.
  *
  * Не сдвигаются: пиксели с глубиной сцены ближе плоскости наибольшего
  * сближения (объект перед линзой) и кадры с камерой внутри сферы (там весь
@@ -29,6 +31,8 @@ export function buildGravitationalLensFragment(): string {
   uniform mat4 uCameraWorldMatrix;
   uniform float uLogFarFactor;
   uniform samplerCube skybox;
+  // Слой видимого неба кадра (SkyLayer): вычитается из кадра в ветке кадра
+  uniform sampler2D uSkyLayer;
   ${skySampleUniforms}
   ${skySampleFunctions}
 
@@ -71,6 +75,10 @@ export function buildGravitationalLensFragment(): string {
     // Производные — после цикла, в равномерном потоке
     vec3 dSkyDx = dFdx(skyWorld);
     vec3 dSkyDy = dFdy(skyWorld);
+    // Неотклонённый мировой луч пикселя: площадь пикселя и усиление звёзд
+    vec3 pixWorld = normalize(mat3(uCameraWorldMatrix) * d);
+    vec3 dPixDx = dFdx(pixWorld);
+    vec3 dPixDy = dFdy(pixWorld);
 
     vec3 color = inputColor.rgb;
     for (int i = 0; i < ${LENS_SLOTS}; i++) {
@@ -101,11 +109,14 @@ export function buildGravitationalLensFragment(): string {
         float sceneT2 = z2 >= 1.0 - 1e-6 ? 1e30 : (exp2(z2 * uLogFarFactor) - 1.0) / max(-d2.z, 1e-6);
         behindLens = !(sceneT2 < tMid2);
       }
+      vec3 world = normalize(mat3(uCameraWorldMatrix) * d2);
       if (onScreen && b2 > R && behindLens) {
-        color = texture2D(inputBuffer, uv2).rgb;
+        // Видимое в кадре небо заменяется небом по лучу (вычитание слоя);
+        // max: под поглощающей туманностью разность уходит ниже нуля
+        vec4 layer = texture2D(uSkyLayer, uv2);
+        color = max(texture2D(inputBuffer, uv2).rgb - layer.rgb, vec3(0.0)) + layer.a * sampleSkyLensed(world, dSkyDx, dSkyDy, dPixDx, dPixDy);
       } else {
-        vec3 world = normalize(mat3(uCameraWorldMatrix) * d2);
-        color = sampleSky(world, dSkyDx, dSkyDy);
+        color = sampleSkyLensed(world, dSkyDx, dSkyDy, dPixDx, dPixDy);
       }
       break;                                     // одна линза на пиксель
     }

@@ -3,6 +3,7 @@ import { Matrix3, PerspectiveCamera, Uniform, Vector3, WebGLRenderTarget, WebGLR
 import { createSkyUniforms } from '@/core/materials/shaders/lib/chunks/SkySample'
 import { buildGravitationalLensFragment, LENS_SLOTS } from '@/core/graphic/effects/lens/gravitationalLensShader'
 import type { LensRegistry } from '@/core/services/LensRegistry'
+import type { SkyLayer } from '@/core/graphic/passes/SkyLayer'
 
 /**
  * Экранный проход дальнего поля гравитационной линзы: сдвигает готовый кадр
@@ -13,12 +14,14 @@ import type { LensRegistry } from '@/core/services/LensRegistry'
 export class GravitationalLensEffect extends Effect {
   private readonly camera: PerspectiveCamera
   private readonly registry: LensRegistry
+  /** Слой видимого неба кадра: рисует BlackHolePass, вычитается в ветке кадра */
+  public readonly skyLayer: SkyLayer | null
   private readonly cameraWorld = new Vector3()
   private readonly center = new Vector3()
   private readonly viewRotation = new Matrix3()
   private filled = 0
 
-  public constructor(camera: PerspectiveCamera, registry: LensRegistry) {
+  public constructor(camera: PerspectiveCamera, registry: LensRegistry, skyLayer: SkyLayer | null = null) {
     const uniforms = new Map<string, Uniform>([
       ['uCount', new Uniform(0)],
       ['uCenterView', new Uniform(Array.from({ length: LENS_SLOTS }, () => new Vector3()))],
@@ -28,7 +31,8 @@ export class GravitationalLensEffect extends Effect {
       ['uProjectionInverse', new Uniform(camera.projectionMatrixInverse)],
       ['uCameraWorldMatrix', new Uniform(camera.matrixWorld)],
       ['uLogFarFactor', new Uniform(Math.log2(camera.far + 1))],
-      ['skybox', new Uniform(null)]
+      ['skybox', new Uniform(null)],
+      ['uSkyLayer', new Uniform(null)]
     ])
     // Общие экземпляры (режим gaia): подъём уровня загрузки неба доходит сам
     for (const [name, uniform] of Object.entries(createSkyUniforms())) {
@@ -42,6 +46,7 @@ export class GravitationalLensEffect extends Effect {
 
     this.camera = camera
     this.registry = registry
+    this.skyLayer = skyLayer
   }
 
   /** Линз в кадре после последнего update */
@@ -86,9 +91,15 @@ export class GravitationalLensEffect extends Effect {
 
     this.filled = count
     this.uniforms.get('uCount')!.value = count
+    // Слой рисует BlackHolePass в этом же кадре; без линз — не держим текстуру
+    this.uniforms.get('uSkyLayer')!.value = count > 0 ? (this.skyLayer?.texture ?? null) : null
   }
 }
 
-export function createGravitationalLensPass(camera: PerspectiveCamera, registry: LensRegistry): EffectPass {
-  return new EffectPass(camera, new GravitationalLensEffect(camera, registry))
+export function createGravitationalLensPass(
+  camera: PerspectiveCamera,
+  registry: LensRegistry,
+  skyLayer: SkyLayer | null = null
+): EffectPass {
+  return new EffectPass(camera, new GravitationalLensEffect(camera, registry, skyLayer))
 }
