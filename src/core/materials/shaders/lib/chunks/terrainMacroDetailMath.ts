@@ -74,6 +74,13 @@ export const TERRACE_WOBBLE = 0.7
 export const TERRACE_RISER = 0.5
 /** Потолок множителя собственного уклона на уступе: не круче 2.5× — иначе низкое солнце даёт чёрную линию. */
 export const TERRACE_SLOPE_MUL_MAX = 2.5
+/**
+ * Доля профиля в наклоне нормали: ступенчатость при низком солнце держат тени
+ * уступов (terraceCastShadow), полный наклон давал у линии тени склона
+ * чередование «площадка светлее / уступ темнее». Линейна — средний уклон стены
+ * сохраняется до потолка.
+ */
+export const TERRACE_NORMAL_SCALE = 0.5
 export const TERRACE_SHADE = 0.07
 /** Маска покрытия террас по значению fbm: ниже LO — нет полок, выше HI — полная. */
 export const TERRACE_COVER_LO = 0.1
@@ -110,9 +117,44 @@ export function terraceProfile(phase: number): { value: number; derivative: numb
   return { value: rise - t, derivative: dRise - 1 }
 }
 
-/** Множитель собственного уклона 1 + m, m = clamp(k·derivative, −1, MUL_MAX − 1) — строка нормали террас в чанке. */
+/** Кромка уступа — максимум профиля: dRise = 1 при r(1 − r) = RISER/6 (ближний к верху корень) */
+const TERRACE_EDGE_R: number = 0.5 + 0.5 * Math.sqrt(1 - (2 * TERRACE_RISER) / 3)
+export const TERRACE_EDGE_PHASE: number = TERRACE_RISER * TERRACE_EDGE_R
+export const TERRACE_EDGE_PROFILE: number = TERRACE_EDGE_R * TERRACE_EDGE_R * (3 - 2 * TERRACE_EDGE_R) - TERRACE_EDGE_PHASE
+/** Ступень слабее этого k (10 % силы по умолчанию) гасит свою тень плавно: без ступени тени нет */
+export const TERRACE_SHADOW_K_FADE = 0.05
+
+/**
+ * Тень уступов на площадках ниже — зеркало terraceCastShadow чанка. Солнце со
+ * стороны верха склона: кромка ближайшего уступа выше по склону закрывает луч,
+ * если k·(кромка − профиль) > u·max(tgE/s − 1, 0); u — фаза до кромки, tgE —
+ * высота солнца в плоскости линии падения (sunUp/sunUphill), s — уклон. Кромка
+ * — приближение окклюдера: точный максимум лежит чуть ниже по склону, тень
+ * занижается на доли фазы. Доля прямого света: 1 — свет.
+ */
+export function terraceCastShadow(
+  phase: number,
+  k: number,
+  sunUp: number,
+  sunUphill: number,
+  slopeTan: number,
+  phaseFootprint: number
+): number {
+  if (k <= 0 || sunUp <= 0 || sunUphill <= 1e-4) return 1
+  const t = phase - Math.floor(phase)
+  const edgeAhead = TERRACE_EDGE_PHASE - t
+  const u = edgeAhead - Math.floor(edgeAhead)
+  const g = Math.max(sunUp / (sunUphill * Math.max(slopeTan, 1e-4)) - 1, 0)
+  const f = k * (TERRACE_EDGE_PROFILE - terraceProfile(phase).value) - g * u
+  const w = (2 * k + g) * phaseFootprint + 1e-4
+  const lit = 1 - smoothstep(-w, w, f)
+
+  return 1 + (lit - 1) * smoothstep(0, TERRACE_SHADOW_K_FADE, k)
+}
+
+/** Множитель собственного уклона 1 + m, m = clamp(NORMAL_SCALE·k·derivative, −1, MUL_MAX − 1) — строка нормали террас в чанке. */
 export function terraceSlopeMultiplier(k: number, derivative: number): number {
-  return 1 + Math.max(-1, Math.min(TERRACE_SLOPE_MUL_MAX - 1, k * derivative))
+  return 1 + Math.max(-1, Math.min(TERRACE_SLOPE_MUL_MAX - 1, TERRACE_NORMAL_SCALE * k * derivative))
 }
 
 /**

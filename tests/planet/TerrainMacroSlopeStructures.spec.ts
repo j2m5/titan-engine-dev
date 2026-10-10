@@ -11,6 +11,7 @@ import {
   STREAK_STRETCH,
   TERRACE_RISER,
   TERRACE_SLOPE_MUL_MAX,
+  TERRACE_NORMAL_SCALE,
   TERRACE_COVER_HI,
   TERRACE_COVER_LO,
   TERRACE_SHADE,
@@ -28,6 +29,7 @@ describe('TerrainMacroDetail: направленные формы склона (
     expect(fn).toContain(`#define TERRACE_WOBBLE ${TERRACE_WOBBLE}\n`)
     expect(fn).toContain(`#define TERRACE_RISER ${TERRACE_RISER}\n`)
     expect(fn).toContain(`#define TERRACE_SLOPE_MUL_MAX ${TERRACE_SLOPE_MUL_MAX}\n`)
+    expect(fn).toContain(`#define TERRACE_NORMAL_SCALE ${TERRACE_NORMAL_SCALE}\n`)
     expect(fn).toContain(`#define TERRACE_SHADE ${TERRACE_SHADE}\n`)
     expect(fn).toContain(`#define TERRACE_COVER_LO ${TERRACE_COVER_LO}\n`)
     expect(fn).toContain(`#define TERRACE_COVER_HI ${TERRACE_COVER_HI}\n`)
@@ -97,10 +99,10 @@ describe('TerrainMacroDetail: направленные формы склона (
   })
 
   it('террасы: фаза от vHeightMeters (не от позиции), наклон модулирует slopeVec производной профиля', () => {
-    const terr = fn.slice(fn.indexOf('vec2 tp = terraceProfile('), fn.indexOf('TERRACE_SHADE * k'))
+    const terr = fn.slice(fn.indexOf('float terracePhase = '), fn.indexOf('TERRACE_SHADE * k'))
     expect(terr).toContain('vHeightMeters / max(uMacroTerraceStepMeters, 1e-3) + TERRACE_WOBBLE * fbmValue')
     // потолок: множитель уклона 1 + m в [0, TERRACE_SLOPE_MUL_MAX]
-    expect(terr).toContain('float m = clamp(k * tp.y, -1.0, TERRACE_SLOPE_MUL_MAX - 1.0);')
+    expect(terr).toContain('float m = clamp(TERRACE_NORMAL_SCALE * k * tp.y, -1.0, TERRACE_SLOPE_MUL_MAX - 1.0);')
     expect(terr).toContain('nLocal = normalize(nLocal - m * slopeVec);')
     expect(terr).toContain('* terraceWeight')
     expect(terr).not.toContain('vPosition')

@@ -49,10 +49,19 @@ export const terrainMacroDetailFunctions = /* glsl */ `
   #define TERRACE_RISER 0.5
   // Потолок множителя уклона на уступе (1 + k·tp.y ≤ 2.5)
   #define TERRACE_SLOPE_MUL_MAX 2.5
+  // Доля профиля в наклоне нормали: ступенчатость при низком солнце держат
+  // тени уступов, полный наклон чередовал полосы у линии тени склона
+  #define TERRACE_NORMAL_SCALE 0.5
   #define TERRACE_SHADE 0.07
   // Покрытие террас маской fbm: полки пятнами на стене, не сплошной изогипсой
   #define TERRACE_COVER_LO 0.1
   #define TERRACE_COVER_HI 0.4
+  // Кромка уступа — максимум профиля: dRise = 1 при r(1 − r) = RISER/6
+  #define TERRACE_EDGE_R (0.5 + 0.5 * sqrt(1.0 - 2.0 * TERRACE_RISER / 3.0))
+  #define TERRACE_EDGE_PHASE (TERRACE_RISER * TERRACE_EDGE_R)
+  #define TERRACE_EDGE_PROFILE (TERRACE_EDGE_R * TERRACE_EDGE_R * (3.0 - 2.0 * TERRACE_EDGE_R) - TERRACE_EDGE_PHASE)
+  // Ступень слабее этого k гасит свою тень плавно: без ступени тени нет
+  #define TERRACE_SHADOW_K_FADE 0.05
 
   // Профиль террасы, период 1: уступ — подъём на [0, RISER], площадка —
   // линейный спад. x — значение (0 на концах периода), y — производная по фазе
@@ -62,6 +71,20 @@ export const terrainMacroDetailFunctions = /* glsl */ `
     float rise = r * r * (3.0 - 2.0 * r);
     float dRise = t < TERRACE_RISER ? 6.0 * r * (1.0 - r) / TERRACE_RISER : 0.0;
     return vec2(rise - t, dRise - 1.0);
+  }
+
+  // Тень уступов на площадках ниже (солнце со стороны верха склона): кромка
+  // ближайшего уступа выше по склону закрывает луч, если
+  // k·(кромка − профиль) > u·max(tgE/s − 1, 0); u — фаза до кромки, tgE —
+  // высота солнца в плоскости линии падения, s — уклон. Сюда же попадает
+  // самозатенение уступа круче солнца. Доля прямого света: 1 — свет
+  float terraceCastShadow(float phase, float profile, float k, float sunUp, float sunUphill, float slopeTan, float phaseFootprint) {
+    if (k <= 0.0 || sunUp <= 0.0 || sunUphill <= 1e-4) return 1.0;
+    float u = fract(TERRACE_EDGE_PHASE - fract(phase));
+    float g = max(sunUp / (sunUphill * max(slopeTan, 1e-4)) - 1.0, 0.0);
+    float f = k * (TERRACE_EDGE_PROFILE - profile) - g * u;
+    float w = (2.0 * k + g) * phaseFootprint + 1e-4;
+    return mix(1.0, 1.0 - smoothstep(-w, w, f), smoothstep(0.0, TERRACE_SHADOW_K_FADE, k));
   }
 
   // Струи одной плоскости трипланара: uv — координаты плоскости в периодах,
@@ -106,7 +129,7 @@ export const terrainMacroDetailFunctions = /* glsl */ `
   // gateSlopeLen — уклон ТОЛЬКО карты: наклон полосы B (до ~0.13 tan на холмах)
   // в сумме открывал бы гейт на пологих равнинах, и террасы читались бы
   // горизонталями топокарты; slope (с полосой) задаёт лишь направление стока
-  void applyMacroSlopeStructures(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, vec3 dirLocal, vec3 eastLocal, vec2 slope, float gateSlopeLen, float contrast, float distFade, vec3 qs, float streakWeight, float terraceWeight, float fbmValue) {
+  void applyMacroSlopeStructures(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, inout float terraceShadow, vec3 dirLocal, vec3 eastLocal, vec3 sunLocal, vec2 slope, float gateSlopeLen, float contrast, float distFade, vec3 qs, float streakWeight, float terraceWeight, float terracePhaseFootprint, float fbmValue) {
     float gate = smoothstep(uMacroStructureSlope.x, uMacroStructureSlope.y, gateSlopeLen);
     if (gate <= 0.0) return;
     float slopeLen = length(slope);
@@ -161,15 +184,18 @@ export const terrainMacroDetailFunctions = /* glsl */ `
     if (uMacroTerraceStrength > 0.0) {
       // Производная берётся по h; член вобла TERRACE_WOBBLE·∇fbm (~6 % при
       // дефолтах) намеренно опущен
-      vec2 tp = terraceProfile(vHeightMeters / max(uMacroTerraceStepMeters, 1e-3) + TERRACE_WOBBLE * fbmValue);
+      float terracePhase = vHeightMeters / max(uMacroTerraceStepMeters, 1e-3) + TERRACE_WOBBLE * fbmValue;
+      vec2 tp = terraceProfile(terracePhase);
       float cover = smoothstep(TERRACE_COVER_LO, TERRACE_COVER_HI, fbmValue);
       float k = uMacroTerraceStrength * gate * distFade * terraceWeight * cover;
       // площадка (tp.y = −1) положе, уступ круче — модуляция собственного уклона;
       // множитель 1 + m в [0, TERRACE_SLOPE_MUL_MAX]
-      float m = clamp(k * tp.y, -1.0, TERRACE_SLOPE_MUL_MAX - 1.0);
+      float m = clamp(TERRACE_NORMAL_SCALE * k * tp.y, -1.0, TERRACE_SLOPE_MUL_MAX - 1.0);
       nLocal = normalize(nLocal - m * slopeVec);
       // тень уступа — окклюзия формы, не цвет
       occlusion *= max(1.0 - TERRACE_SHADE * k * max(tp.x, 0.0), 0.0);
+      // тень кромки на площадке ниже — только прямой свет (хост: directGain)
+      terraceShadow = terraceCastShadow(terracePhase, tp.x, k, dot(sunLocal, dirLocal), -dot(sunLocal, d), slopeLen, terracePhaseFootprint);
     }
   }
 
@@ -194,7 +220,9 @@ export const terrainMacroDetailFunctions = /* glsl */ `
 
   // slope — уклон карты + наклон полосы B (усиление fbm и направление форм);
   // gateSlopeLen — |уклон карты| для гейта форм склона (см. applyMacroSlopeStructures)
-  void applyTerrainMacroDetail(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, vec3 dirLocal, vec3 eastLocal, vec2 slope, float gateSlopeLen, float cavity, vec2 uv, float viewDistance) {
+  // sunLocal — единичное на солнце в системе тела; terraceShadow — доля прямого
+  // света за тенью уступов (1 — свет), хост умножает на неё directGain
+  void applyTerrainMacroDetail(inout vec3 nLocal, inout vec3 albedoMul, inout float occlusion, inout float terraceShadow, vec3 dirLocal, vec3 eastLocal, vec3 sunLocal, vec2 slope, float gateSlopeLen, float cavity, vec2 uv, float viewDistance) {
     // След — от гладкого домена ДО варпа и ДО раннего выхода (однородный поток в кваде)
     vec3 q = dirLocal * (uBodyRadiusUnits / max(uMacroPeriodUnits, 1e-6));
     float footprint = length(fwidth(q));
@@ -209,6 +237,8 @@ export const terrainMacroDetailFunctions = /* glsl */ `
     // След террас по УСТУПУ: шаг фазы на пиксель / RISER; уступ уже ~2 px гасит
     // ступенчатость (модуляцию нормали и тень) — остаётся средний уклон
     float terraceWeight = 1.0 - smoothstep(0.5, 1.0, fwidth(vHeightMeters) / (max(uMacroTerraceStepMeters, 1e-3) * TERRACE_RISER));
+    // След фазы на пиксель — ширина сглаживания края тени уступа
+    float terracePhaseFootprint = fwidth(vHeightMeters) / max(uMacroTerraceStepMeters, 1e-3);
 
     float eastLen = length(eastLocal);
     if (eastLen < 1e-4) return; // полюс: тангенс вырожден
@@ -245,6 +275,6 @@ export const terrainMacroDetailFunctions = /* glsl */ `
     // геометрия полосы: гребни светлее, лощины темнее — там же, где бугры
     albedoMul *= clamp(1.0 + uMidbandShade * distFade * vMidShade.x, 0.0, 2.0);
 
-    applyMacroSlopeStructures(nLocal, albedoMul, occlusion, dirLocal, eastLocal, slope, gateSlopeLen, contrast, distFade, qs, streakWeight, terraceWeight, h);
+    applyMacroSlopeStructures(nLocal, albedoMul, occlusion, terraceShadow, dirLocal, eastLocal, sunLocal, slope, gateSlopeLen, contrast, distFade, qs, streakWeight, terraceWeight, terracePhaseFootprint, h);
   }
 `
