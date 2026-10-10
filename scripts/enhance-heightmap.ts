@@ -27,9 +27,10 @@ import { argument } from './lib/cliArguments'
  * растянутые проекцией полюса иначе задают норму всей карте (докблок lib).
  *
  * Меркурий (DEM 8192×4096, тексель ≈ 1.87 км):
- *   npm run build:enhance-heightmap -- --dem mercury_height.prev.raw
- *     --bump mercury.jpg --radius-meters 2440000 --band-low-km 20 --band-high-km 2
- *     --norm-belt --amplitude-meters 900 --out mercury_height.raw
+ *   npm run build:enhance-heightmap -- --dem storage/local/textures/planets/mercury/mercury_height.prev.raw
+ *     --bump storage/local/textures/planets/mercury/mercury_displacement_16k.png
+ *     --radius-meters 2440000 --band-low-km 40 --band-high-km 2
+ *     --norm-belt --amplitude-meters 2400 --out mercury_height.raw
  * Дальше — slope-карта и компаньон: `build:slopemap` (--cavity off) и
  * `build:terrain-aux` по новому файлу высот.
  */
