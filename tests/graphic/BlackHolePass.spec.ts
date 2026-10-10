@@ -26,6 +26,7 @@ function makeRenderer(camera: PerspectiveCamera) {
   const log = { current: null as unknown, targets: [] as unknown[], masks: [] as number[], scenes: [] as unknown[] }
   const renderer = {
     shadowMap: { autoUpdate: true },
+    getRenderTarget: () => log.current as WebGLRenderTarget | null,
     setRenderTarget: vi.fn((target: unknown) => {
       log.current = target
     }),
@@ -65,6 +66,7 @@ describe('BlackHolePass', () => {
     const colorTarget = (pass.colorCopy as unknown as { renderTarget: WebGLRenderTarget }).renderTarget
     expect(colorTarget.width).toBe(640)
     expect(colorTarget.height).toBe(360)
+    expect([pass.skyLayer.target.width, pass.skyLayer.target.height]).toEqual([640, 360])
   })
 
   it('без видимой дыры не рендерит ничего: ни копий, ни меша', () => {
@@ -75,21 +77,24 @@ describe('BlackHolePass', () => {
     const { renderer, log } = makeRenderer(camera)
     const depthSpy = vi.spyOn(pass.depthCopy, 'render').mockImplementation(() => {})
     const colorSpy = vi.spyOn(pass.colorCopy, 'render').mockImplementation(() => {})
+    const reset = vi.spyOn(pass.skyLayer, 'reset')
 
     pass.render(renderer, inputBuffer, outputBuffer)
 
+    expect(reset).toHaveBeenCalledOnce()
     expect(depthSpy).not.toHaveBeenCalled()
     expect(colorSpy).not.toHaveBeenCalled()
     expect(log.scenes).toHaveLength(0)
   })
 
-  it('видимый меш: обе копии, слой BLACK_HOLE_LAYER на время рендера, кадр привязан и отвязан, маска восстановлена', () => {
+  it('видимый меш: копии, слой неба до меша, BLACK_HOLE_LAYER на время меша, кадр привязан и отвязан, маска восстановлена', () => {
     const registry = new LensRegistry()
     const hole = new BlackHole(stubActor(), observer, registry)
     const pass = new BlackHolePass(camera, registry)
     const { renderer, log } = makeRenderer(camera)
     vi.spyOn(pass.depthCopy, 'render').mockImplementation(() => {})
     vi.spyOn(pass.colorCopy, 'render').mockImplementation(() => {})
+    const layerRender = vi.spyOn(pass.skyLayer, 'render')
     const bind = vi.spyOn(hole, 'bindSceneFrame')
     const unbind = vi.spyOn(hole, 'unbindSceneFrame')
     const maskBefore = camera.layers.mask
@@ -97,12 +102,25 @@ describe('BlackHolePass', () => {
     pass.setSize(640, 360)
     pass.render(renderer, inputBuffer, outputBuffer)
 
-    expect(log.scenes).toEqual([hole])
-    expect(log.masks).toEqual([1 << BLACK_HOLE_LAYER])
-    expect(log.targets).toEqual([inputBuffer])
-    expect(bind).toHaveBeenCalledWith(pass.colorCopy.texture, pass.depthCopy.texture, Math.log2(camera.far + 1))
+    expect(layerRender).toHaveBeenCalledWith(renderer, camera, pass.depthCopy.texture, null)
+    expect(log.scenes).toEqual([pass.skyLayer.mesh, hole])
+    expect(log.masks).toEqual([maskBefore, 1 << BLACK_HOLE_LAYER])
+    expect(log.targets).toEqual([pass.skyLayer.target, inputBuffer])
+    expect(bind).toHaveBeenCalledWith(
+      pass.colorCopy.texture,
+      pass.depthCopy.texture,
+      pass.skyLayer.target.texture,
+      Math.log2(camera.far + 1)
+    )
     expect(unbind).toHaveBeenCalledOnce()
     expect(camera.layers.mask).toBe(maskBefore)
     expect(hole.layers.mask).toBe(1 << BLACK_HOLE_LAYER)
+  })
+
+  it('dispose освобождает слой неба', () => {
+    const pass = new BlackHolePass(camera, new LensRegistry())
+    const dispose = vi.spyOn(pass.skyLayer, 'dispose')
+    pass.dispose()
+    expect(dispose).toHaveBeenCalledOnce()
   })
 })

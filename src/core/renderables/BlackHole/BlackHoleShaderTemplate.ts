@@ -90,6 +90,8 @@ export function createBlackHoleUniforms(parameters: BlackHoleParameters): Record
      */
     uSceneColor: new Uniform<Texture | null>(null),
     uSceneDepth: new Uniform<Texture | null>(null),
+    /** Слой видимого неба кадра (SkyLayer): вычитается из копии в ветке кадра */
+    uSkyLayer: new Uniform<Texture | null>(null),
     uSceneLogFarFactor: new Uniform(1),
     uSceneEnabled: new Uniform(0),
     /** Дебаг: подкраска пикселей по числу пересечений плоскости диска */

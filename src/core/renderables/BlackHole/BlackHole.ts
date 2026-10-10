@@ -79,9 +79,9 @@ class BlackHole extends Mesh implements SceneFrameConsumer {
     }
   }
 
-  /** Копия кадра от BlackHolePass: побег луча читает кадр, а не только кубмапу */
-  public bindSceneFrame(sceneColor: Texture, sceneDepth: Texture, logFarFactor: number): void {
-    this.material.bindSceneFrame(sceneColor, sceneDepth, logFarFactor)
+  /** Копия кадра и слой неба от BlackHolePass: побег луча читает кадр, а не только небо */
+  public bindSceneFrame(sceneColor: Texture, sceneDepth: Texture, skyLayer: Texture, logFarFactor: number): void {
+    this.material.bindSceneFrame(sceneColor, sceneDepth, skyLayer, logFarFactor)
   }
 
   public unbindSceneFrame(): void {
