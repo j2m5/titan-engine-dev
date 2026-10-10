@@ -24,8 +24,7 @@ jobs:
       VITE_S3_URL: https://storage.yandexcloud.net
       VITE_FILE_BUCKET: textures
       VITE_SHOW_STATS_PANEL: false
-      # Тайлов неба Gaia в бакете нет — демо на прежней кубмапе
-      VITE_SKY_SOURCE: cubemap
+      VITE_SKY_SOURCE: gaia
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
