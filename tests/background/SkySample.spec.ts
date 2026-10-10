@@ -50,7 +50,7 @@ describe('SkySample: общий чанк неба', () => {
     })
 
     it('у gaiaStars один выход: ранний return перед динамическим циклом ANGLE считает неинициализированным', () => {
-      const body = stripComments(functions.slice(functions.indexOf('vec3 gaiaStars('), functions.indexOf('vec3 sampleSky(')))
+      const body = stripComments(functions.slice(functions.indexOf('vec3 gaiaStars('), functions.indexOf('vec3 sampleSkyLensed(')))
       expect(body.match(/\breturn\b/g)).toHaveLength(1)
     })
 
@@ -70,11 +70,24 @@ describe('SkySample: общий чанк неба', () => {
       expect(code.slice(code.indexOf('vec3 sampleSky('))).not.toContain('gaiaCeiling(')
     })
 
-    it('экспозиция — у галактики, у звёзд через scale и у грубых уровней', () => {
+    it('экспозиция — у галактики, у звёзд через scale (с усилением) и у грубых уровней', () => {
       const code = stripComments(functions)
       expect(code).toContain('galaxy * uGaiaExposure')
-      expect(code).toContain('uGaiaExposure / pixelArea')
+      expect(code).toContain('uGaiaExposure * amplification / pixelArea')
       expect(code).toContain('textureGrad(uGaiaStarsCoarse, dir, dxDir, dyDir).rgb * uGaiaExposure')
+    })
+
+    it('контракт линзы: sampleSkyLensed(луч, производные луча, производные пикселя); sampleSky — обёртка', () => {
+      expect(functions).toContain('vec3 sampleSkyLensed(vec3 dir, vec3 dDirDx, vec3 dDirDy, vec3 dPixDx, vec3 dPixDy)')
+      expect(functions).toContain('return sampleSkyLensed(dir, dDirDx, dDirDy, dDirDx, dDirDy);')
+    })
+
+    it('усиление по Брунетону: omega / omega′ с потолком 1e6, площадь — от неотклонённого луча', () => {
+      const code = stripComments(functions)
+      expect(code).toContain('float omega = length(cross(uGaiaOrientation * dPixDx, uGaiaOrientation * dPixDy));')
+      expect(code).toContain('float omegaPrime = length(cross(dx, dy));')
+      expect(code).toContain('float amplification = min(omega / max(omegaPrime, 1e-30), 1e6);')
+      expect(code).toContain('float pixelArea = max(omega * GAIA_TEXEL_AREA_INV, 1.0);')
     })
 
     it('сэмплеры highp: хеш позиции звезды читает биты float', () => {
@@ -100,6 +113,12 @@ describe('SkySample: общий чанк неба', () => {
     it('sampleSky зовёт прежнюю sampleSkyboxHdr; юниформы — прежний набор', () => {
       expect(buildSkySampleFunctions('cubemap')).toContain('return sampleSkyboxHdr(skybox, dir, uSkyFlipX);')
       expect(buildSkySampleUniforms('cubemap')).toBe(skyboxSampleUniforms)
+    })
+
+    it('sampleSkyLensed — та же кубмапа, лишние аргументы игнорируются', () => {
+      expect(buildSkySampleFunctions('cubemap')).toContain(
+        'vec3 sampleSkyLensed(vec3 dir, vec3 dDirDx, vec3 dDirDy, vec3 dPixDx, vec3 dPixDy)'
+      )
     })
   })
 

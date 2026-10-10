@@ -86,21 +86,38 @@ const gaiaFunctions = `
     return result;
   }
 
-  // Небо по направлению dir (мир сцены); dDirDx/dDirDy — его экранные
-  // производные, посчитанные вызывающим до ветвлений
-  vec3 sampleSky(vec3 dir, vec3 dDirDx, vec3 dDirDy) {
+  // Небо по лучу, отклонённому линзой (порт SceneColor Брунетона): dir и
+  // dDirDx/dDirDy — отклонённый луч и его экранные производные, dPixDx/dPixDy —
+  // производные НЕотклонённого луча пикселя (всё в мире сцены, посчитано
+  // вызывающим до ветвлений). Точечные звёзды усиливаются на omega / omega',
+  // площадь пикселя — от неотклонённого луча; галактику линза не усиливает.
+  // Производные пикселя поворачиваются той же матрицей: при совпадающих
+  // аргументах omega == omega' бит-в-бит и усиление ровно 1
+  vec3 sampleSkyLensed(vec3 dir, vec3 dDirDx, vec3 dDirDy, vec3 dPixDx, vec3 dPixDy) {
     vec3 d = uGaiaOrientation * dir;
     vec3 dx = uGaiaOrientation * dDirDx;
     vec3 dy = uGaiaOrientation * dDirDy;
     vec3 galaxy = textureGrad(uGaiaGalaxy, d, dx, dy).rgb * GAIA_GALAXY_SCALE;
+    float omega = length(cross(uGaiaOrientation * dPixDx, uGaiaOrientation * dPixDy));
+    float omegaPrime = length(cross(dx, dy));
+    float amplification = min(omega / max(omegaPrime, 1e-30), 1e6);
     // Поток звёзд → яркость: площадь пикселя в текселях, не меньше одного
-    float pixelArea = max(length(cross(dx, dy)) * GAIA_TEXEL_AREA_INV, 1.0);
-    return galaxy * uGaiaExposure + gaiaStars(d, dx, dy, uGaiaExposure / pixelArea);
+    float pixelArea = max(omega * GAIA_TEXEL_AREA_INV, 1.0);
+    return galaxy * uGaiaExposure + gaiaStars(d, dx, dy, uGaiaExposure * amplification / pixelArea);
+  }
+
+  // Небо по неотклонённому лучу (фон, слой неба): усиление ровно 1
+  vec3 sampleSky(vec3 dir, vec3 dDirDx, vec3 dDirDy) {
+    return sampleSkyLensed(dir, dDirDx, dDirDy, dDirDx, dDirDy);
   }
 `
 
 const cubemapFunctions = `${skyboxSampleFunctions}
-  // Прежняя кубмапа: производные не нужны
+  // Прежняя кубмапа: производные и усиление не нужны
+  vec3 sampleSkyLensed(vec3 dir, vec3 dDirDx, vec3 dDirDy, vec3 dPixDx, vec3 dPixDy) {
+    return sampleSkyboxHdr(skybox, dir, uSkyFlipX);
+  }
+
   vec3 sampleSky(vec3 dir, vec3 dDirDx, vec3 dDirDy) {
     return sampleSkyboxHdr(skybox, dir, uSkyFlipX);
   }
