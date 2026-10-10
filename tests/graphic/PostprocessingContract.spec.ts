@@ -118,6 +118,9 @@ describe('Postprocessing: пасс атмосферы', () => {
     // линия уходила бы под кольцо переднего тела; всё — до атмосферы
     expect(passes[3]).toBeInstanceOf(BlackHolePass)
     expect((passes[4] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(GravitationalLensEffect)
+    // Слой неба общий: рисует BlackHolePass, читает дальнее поле линзы
+    const lensEffect = (passes[4] as unknown as { effects: GravitationalLensEffect[] }).effects[0]
+    expect(lensEffect.skyLayer).toBe((passes[3] as BlackHolePass).skyLayer)
     expect(passes[5]).toBeInstanceOf(LensFrontPass)
     expect(passes[6]).toBeInstanceOf(OverlayPass)
     expect((passes[7] as unknown as { effects: Effect[] }).effects[0]).toBeInstanceOf(AtmosphereEffect)

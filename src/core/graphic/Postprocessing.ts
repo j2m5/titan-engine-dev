@@ -15,6 +15,7 @@ import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { LensRegistry } from '@/core/services/LensRegistry'
 import { createGravitationalLensPass } from '@/core/graphic/effects/lens/GravitationalLensEffect'
+import { SkyLayer } from '@/core/graphic/passes/SkyLayer'
 import { DepthVolumePass } from '@/core/graphic/passes/DepthVolumePass'
 import { BlackHolePass } from '@/core/graphic/passes/BlackHolePass'
 import { OverlayPass } from '@/core/graphic/passes/OverlayPass'
@@ -197,13 +198,15 @@ class Postprocessing {
   public buildPasses(): readonly Pass[] {
     const [hdrPass, ldrPass] = createEffectPasses(this.camera)
     const lensFront = new LensFrontSorter(this.scene, this.camera, this.lensRegistry, this.depthVolumeRegistry)
+    // Слой видимого неба: рисует BlackHolePass, читает дальнее поле линзы
+    const skyLayer = new SkyLayer()
 
     return [
       new LensFrontSplitPass(lensFront),
       new RenderPass(this.scene, this.camera),
       new DepthVolumePass(this.camera, this.depthVolumeRegistry, lensFront),
-      new BlackHolePass(this.camera, this.lensRegistry),
-      createGravitationalLensPass(this.camera, this.lensRegistry),
+      new BlackHolePass(this.camera, this.lensRegistry, skyLayer),
+      createGravitationalLensPass(this.camera, this.lensRegistry, skyLayer),
       new LensFrontPass(this.scene, this.camera, lensFront),
       new OverlayPass(this.scene, this.camera),
       createAtmospherePass(this.camera, this.atmosphereRegistry, readAtmosphereDebugView()),

@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { Object3D, PerspectiveCamera, Vector3, WebGLRenderer, WebGLRenderTarget } from 'three'
+import { Object3D, PerspectiveCamera, Texture, Vector3, WebGLRenderer, WebGLRenderTarget } from 'three'
 import { EffectAttribute, EffectPass } from 'postprocessing'
 import { GravitationalLensEffect, createGravitationalLensPass } from '@/core/graphic/effects/lens/GravitationalLensEffect'
 import { LENS_SLOTS } from '@/core/graphic/effects/lens/gravitationalLensShader'
 import { LensRegistry, LensEntry } from '@/core/services/LensRegistry'
 import { farFieldDeflection } from '@/core/renderables/BlackHole/deflectionLut'
 import { gaiaSkyUniforms } from '@/core/sky/gaiaSkyUniforms'
+import { SkyLayer, type SkyLayerRenderer } from '@/core/graphic/passes/SkyLayer'
 
 const noRenderer = null as unknown as WebGLRenderer
 const noBuffer = null as unknown as WebGLRenderTarget
@@ -107,7 +108,7 @@ describe('GravitationalLensEffect: экранный проход дальнег�
     expect(frag).toContain('if (b <= R) continue;')
     expect(frag).toContain('if (sceneT < tMid) continue;')
     expect(frag).toContain('texture2D(inputBuffer, uv2)')
-    expect(frag).toContain('sampleSky(world, dSkyDx, dSkyDy)')
+    expect(frag).toContain('sampleSkyLensed(world, dSkyDx, dSkyDy, dPixDx, dPixDy)')
     expect(frag).toContain('exp2(z * uLogFarFactor) - 1.0')
     // Коэффициенты ряда в GLSL совпадают с CPU-зеркалом с точностью литералов
     const glslAt = (b: number) => 2 / b + 2.9452431 / (b * b) + 5.3333333 / (b * b * b)
@@ -133,5 +134,35 @@ describe('GravitationalLensEffect: экранный проход дальнег�
 
     expect(effect.uniforms.get('uGaiaMinLod')).toBe(gaiaSkyUniforms.uGaiaMinLod)
     expect(effect.uniforms.get('uGaiaGalaxy')).toBe(gaiaSkyUniforms.uGaiaGalaxy)
+  })
+
+  it('GLSL: ветка кадра — max(кадр − слой, 0) + слой.a · небо по лучу; производные пикселя — после цикла поля', () => {
+    const frag = new GravitationalLensEffect(cameraAtOrigin(), new LensRegistry()).getFragmentShader()!
+
+    expect(frag).toContain('uniform sampler2D uSkyLayer;')
+    expect(frag).toContain('vec4 layer = texture2D(uSkyLayer, uv2);')
+    expect(frag).toContain(
+      'color = max(texture2D(inputBuffer, uv2).rgb - layer.rgb, vec3(0.0)) + layer.a * sampleSkyLensed(world, dSkyDx, dSkyDy, dPixDx, dPixDy);'
+    )
+    const pixel = frag.indexOf('vec3 dPixDx = dFdx(pixWorld);')
+    expect(pixel).toBeGreaterThan(frag.indexOf('vec3 dSkyDx = dFdx(skyWorld);'))
+    expect(pixel).toBeLessThan(frag.indexOf('if (b <= R) continue;'))
+  })
+
+  it('слой неба — из общего SkyLayer при линзах, null без них', () => {
+    const registry = new LensRegistry()
+    const skyLayer = new SkyLayer()
+    const fake = { getRenderTarget: () => null, setRenderTarget: () => {}, render: () => {} } as unknown as SkyLayerRenderer
+    skyLayer.render(fake, cameraAtOrigin(), new Texture(), null)
+    const lens = lensAt(new Vector3(0, 0, -1000))
+    registry.register(lens)
+    const effect = new GravitationalLensEffect(cameraAtOrigin(), registry, skyLayer)
+
+    effect.update(noRenderer, noBuffer)
+    expect(effect.uniforms.get('uSkyLayer')!.value).toBe(skyLayer.target.texture)
+
+    registry.unregister(lens)
+    effect.update(noRenderer, noBuffer)
+    expect(effect.uniforms.get('uSkyLayer')!.value).toBeNull()
   })
 })
