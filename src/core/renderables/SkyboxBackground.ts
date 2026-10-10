@@ -1,5 +1,5 @@
 import { BufferAttribute, BufferGeometry, CubeTexture, GLSL3, Mesh, RawShaderMaterial, Uniform } from 'three'
-import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
+import { SKY_VERTEX_SHADER, buildSkyFragmentShader } from '@/core/renderables/skyShader'
 import { createSkyUniforms } from '@/core/materials/shaders/lib/chunks/SkySample'
 
 /**
@@ -32,49 +32,9 @@ class SkyboxBackground extends Mesh {
         // cubemap — ручки кубмапы с флипом X (см. `createSkyboxSampleUniforms`)
         ...createSkyUniforms()
       },
-      // Вершинник без #include, но прогоняется через prepareSource тем же
-      // способом, что и фрагментник: собирается напрямую, минуя конструктор
-      // AbstractShader, и застраховаться от будущего немого include дешевле,
-      // чем полагаться на то, что он не понадобится
-      vertexShader: AbstractShader.prepareSource(/* glsl */ `
-        precision highp float;
-
-        uniform mat4 projectionMatrix;
-        uniform mat4 viewMatrix;
-
-        in vec3 position;
-
-        out vec3 vRay;
-
-        void main() {
-          vec4 clip = vec4(position.xy, 1.0, 1.0);
-
-          // Луч из клип-пространства обратно в мировое. inverse() здесь дёшев:
-          // вершин ровно три, а не миллион
-          vec4 eye = inverse(projectionMatrix) * clip;
-          vRay = (inverse(viewMatrix) * vec4(eye.xy, -1.0, 0.0)).xyz;
-
-          gl_Position = clip;
-        }
-      `),
-      fragmentShader: AbstractShader.prepareSource(/* glsl */ `
-        precision highp float;
-
-        uniform samplerCube skybox;
-
-        #include <skySampleUniforms>
-        #include <skySampleFunctions>
-
-        in vec3 vRay;
-
-        layout(location = 0) out vec4 fragColor;
-
-        void main() {
-          // Производные — до любых ветвлений: по ним фильтр звёзд берёт отпечаток пикселя
-          vec3 dir = normalize(vRay);
-          fragColor = vec4(sampleSky(dir, dFdx(dir), dFdy(dir)), 1.0);
-        }
-      `),
+      // Общий с SkyLayer шейдер: значения неба совпадают бит-в-бит
+      vertexShader: SKY_VERTEX_SHADER,
+      fragmentShader: buildSkyFragmentShader(false),
 
       depthTest: false,
       depthWrite: false

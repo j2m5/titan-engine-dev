@@ -1,6 +1,7 @@
 import { SkyboxBackground } from '@/core/renderables/SkyboxBackground'
 import { CubeTexture, RawShaderMaterial, Scene } from 'three'
 import { gaiaSkyUniforms } from '@/core/sky/gaiaSkyUniforms'
+import { SKY_VERTEX_SHADER, buildSkyFragmentShader } from '@/core/renderables/skyShader'
 import { readFileSync } from 'fs'
 import { Application } from '@/Application'
 import { disposeSceneTree } from '@/core/lifecycle/disposeSceneTree'
@@ -27,12 +28,15 @@ describe('SkyboxBackground: собственный фоновый проход',
     expect(material.depthWrite).toBe(false)
   })
 
-  it('выборка идёт через общий чанк неба с производными луча, своей копии нет', () => {
-    const source = readFileSync('src/core/renderables/SkyboxBackground.ts', 'utf8')
+  it('шейдер фона — общий модуль неба: чанк, производные луча, своей копии нет', () => {
+    const source = readFileSync('src/core/renderables/skyShader.ts', 'utf8')
+    const material = new SkyboxBackground(null).material as RawShaderMaterial
 
     expect(source).toContain('#include <skySampleFunctions>')
-    expect(source).toContain('sampleSky(dir, dFdx(dir), dFdy(dir))')
-    expect(source).not.toContain('texture(skybox,')
+    expect(source).toContain('vec3 sky = sampleSky(dir, dFdx(dir), dFdy(dir));')
+    expect(material.fragmentShader).toBe(buildSkyFragmentShader(false))
+    expect(material.vertexShader).toBe(SKY_VERTEX_SHADER)
+    expect(material.fragmentShader).not.toContain('texture(skybox,')
   })
 
   it('юниформы неба — общие экземпляры GaiaSky (режим gaia)', () => {
