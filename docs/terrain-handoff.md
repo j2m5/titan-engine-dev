@@ -31,7 +31,7 @@
 
 **Марс** (R 3 390 000 м): p99.9 0.6139 → 0.5718 (−6.9 %) — решение владельца: цена честного фильтра, принято; порог СТОП раската по p99.9 поднят до 10 %. `slopeRange` 1 без изменений (клип 0.0013 %); пол атмосферы (актор 48) −8495.62890625 → **−8507.4521484375** (из `[РАЗОШЁЛСЯ]` прогона `build:terrain-aux-all`).
 
-Откат (вне git): переименовать `<тело>_height.prestripe.raw`/`.prestripe.aux`/`<тело>_slope.prestripe.webp` обратно в живые имена + Луна: `slopeRange` ресурса 48 обратно в 2; Марс: пол актора 48 обратно в −8495.62890625. Заливка в бакет (за владельцем): `planets/moon/moon_height.raw`, `moon_height.aux`, `moon_slope.webp`, `planets/mars/mars_height.raw`, `mars_height.aux`, `mars_slope.webp`.
+Откат (вне git): вернуть `<тело>_height.prestripe.raw`/`.prestripe.aux`/`<тело>_slope.prestripe.webp` из `storage/local/textures/` (тот же путь) в живой каталог и переименовать в живые имена + Луна: `slopeRange` ресурса 48 обратно в 2; Марс: пол актора 48 обратно в −8495.62890625. Заливка в бакет (за владельцем): `planets/moon/moon_height.raw`, `moon_height.aux`, `moon_slope.webp`, `planets/mars/mars_height.raw`, `mars_height.aux`, `mars_slope.webp`.
 
 ### Раскат: 35 тел с входом скульпта и все 55 slope-карт (2026-10-04)
 
@@ -67,9 +67,9 @@ Slope-карты всех 55 тел пересобраны `build:slopemaps-all`
 
 Худшие остатки (наибольший шов полосы после): Венера G 17.2× на 76.3°, Земля G 16.6× на −77.7°, Венера R 14.7× на −59.2° (шов старого фильтра enhance во входе, см. «Открыто»), Марс высота 14.5× на 71.1° (во входе, см. пилот), Харон G 14.5× на 76.6° — у Венеры/Земли скульпта нет, шов до и после тот же. Венера G 17.2× на 76.3° — в самом DEM (его максимум на 76.33°), Земля — данные карт; Венера R 14.7× на −59.2° — не данные, а шов enhance (см. «Открыто»).
 
-Откат (вне git): `<тело>_height.prestripe.raw`/`.prestripe.aux` у 35 тел и `<тело>_slope.prestripe.webp` у всех 55 — обратно в живые имена + три пола выше. Заливка в бакет (за владельцем): `*_height.raw` + `*_height.aux` 35 тел скульпта, `*_slope.webp` всех 55 тел охвата (`npm run cloud:manifest`).
+Откат (вне git): `<тело>_height.prestripe.raw`/`.prestripe.aux` у 35 тел и `<тело>_slope.prestripe.webp` у всех 55 лежат в `storage/local/textures/` (тот же путь) — вернуть в живой каталог и переименовать в живые имена + три пола выше. Заливка в бакет (за владельцем): `*_height.raw` + `*_height.aux` 35 тел скульпта, `*_slope.webp` всех 55 тел охвата (`npm run cloud:manifest`).
 
-**Команды по группам** (R — `physicalObjects`, км × 1000; выход — живая карта рядом со slope; перед заменой — копия `.prestripe`):
+**Команды по группам** (R — `physicalObjects`, км × 1000; выход — живая карта рядом со slope; перед заменой — копия `.prestripe` в `storage/local/textures/` по тому же пути):
 
 | группа | вход скульпта | команда |
 |---|---|---|
@@ -78,7 +78,7 @@ Slope-карты всех 55 тел пересобраны `build:slopemaps-all`
 | Плутон, Церера | `storage/local/textures/planets/<тело>/<тело>_height.prev.raw` | то же |
 | Ганимед, Ио, Тритон, Европа, Харон, Диона, Седна, Макемаке, Дисномия | `storage/local/textures/planets/<тело>/<тело>_height.presculpt.raw` | то же |
 | Эрида | `storage/local/textures/planets/eris/eris_height.presculpt.raw` | то же, но `--gain-convex 1.0 --gain-concave 0.3` |
-| 22 тела волны 2026-09-05 | `<живой каталог>/<тело>_height.prev.raw` (storage/images) | то же |
+| 22 тела волны 2026-09-05 | `storage/local/textures/<каталог тела>/<тело>_height.prev.raw` | то же |
 | slope (все 55) | живая `.raw` | `npm run build:slopemaps-all` или `npm run build:slopemap -- --in <.raw> --out <_slope.webp> --radius-meters <R> --slope-range <БД>` (+ `--cavity off` для `NO_CAVITY_ACTOR_IDS`) |
 | aux и полы | — | `npm run build:terrain-aux-all`; `[РАЗОШЁЛСЯ]` → пол в `renderingObjects` |
 | замер | — | `npm run measure:stripes -- --height <живая .raw> [--before <вход>] [--slope <.webp> --slope-range <БД>] --check-lat <широты>` |
@@ -494,6 +494,8 @@ Follow-up список (не сделано в этой арке, кандида
 **Инструмент:** `npm run cloud:manifest` (`scripts/cloud-manifest.ts` + чистая `scripts/lib/cloudManifest.ts`, тесты) — белый список синка: пути всех ресурсов БД + производные `.aux` height-карт + `CODE_REFERENCED_PATHS` (sun_glow — грузятся кодом мимо БД; новый такой файл ОБЯЗАН добавляться в эту константу). Пути в stdout по одному на строку, сводка в stderr; `--check` — только сверка; файл манифеста без файла на диске = exit 1 (мёртвая строка БД или потерянный артефакт — синкать нельзя). Итог на 2026-08-31: 248 файлов, 2324 МиБ. Рулинг: синк бакета ТОЛЬКО по манифесту, чёрные списки паттернов не заводить.
 
 **Перенос локального (2026-08-31):** всё вне манифеста (179 файлов, 3.63 ГиБ — бэкапы .prev/.presculpt, elevation/displacement-исходники, ETOPO1, *_bump.jpg, main-6000, сироты) перенесено в `storage/local/textures/` С СОХРАНЕНИЕМ структуры путей; в `storage/images/textures` остались ровно 248 файлов манифеста — владелец льёт папку в бакет как есть. ⚠️ Входы конвейера теперь в storage/local: `inputPath` записей BODIES батча и команды enhance/sculpt в этом хендоффе указывают на СТАРЫЕ пути — перед регенерацией карты вернуть её исходник на место (или поправить путь в команде на storage/local/textures/...). Бэкапы-откаты арок тоже там.
+
+**Перенос бэкапов (2026-10-10):** остаток вне манифеста — откаты арок `.prev` (66), `.prev-synth` (48), `.prestripe` (129), исходники форм `asteroids/shapes-src` (16) и карты отвергнутых тел пояса Cindrel/Vasque (6) — перенесён в `storage/local/textures/` с сохранением путей. Все «точки отката рядом с картами» в этом хендоффе теперь там: откат — вернуть файл в живой каталог и переименовать; команды с `storage/images/.../*.prev.*` читать как `storage/local/...`. В `storage/images/textures` — ровно манифест плюс `sky/gaia/` (тайлы неба Брунетона: только локально, в бакет до разрешения не лить). Новые бэкапы класть сразу в `storage/local/textures/`, иначе папку нельзя лить в бакет целиком.
 
 Попутно: **мёртвые строки 17/18 (`asteroid.jpg`/`asteroid_bump.jpg`) удалены из БД** — файлов не было на диске, пивотов и обращений из кода нет (legacy до библиотеки архетипов астероидов); нашлись именно сверкой манифеста.
 

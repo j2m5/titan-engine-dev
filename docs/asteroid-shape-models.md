@@ -16,7 +16,7 @@
    5°, порядок колонок определяется по диапазонам). Имя файла без расширения,
    в нижнем регистре, становится именем архетипа и обязано совпадать со
    строкой в `shapeModels` профиля. Исходники лежат в
-   `storage/images/textures/asteroids/shapes-src/` (в манифест не входят).
+   `storage/local/textures/asteroids/shapes-src/` — вне папки заливки бакета.
 2. `npm run build:shape-models -- --src <папка>` — центрирование по объёмному
    центроиду, нормировка максимального радиуса в 1, два яруса
    (`scripts/lib/shapeModel.ts`, `TIER_TRIANGLES`), запись в
