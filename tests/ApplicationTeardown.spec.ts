@@ -18,7 +18,7 @@ describe('Application.teardown', () => {
 
   it('разбирает граф до освобождения текстур', () => {
     const order: string[] = []
-    const engine = { dispose: vi.fn(() => order.push('engine')), start: vi.fn() } as unknown as Engine
+    const engine = { dispose: vi.fn(() => order.push('engine')), initialize: vi.fn(), start: vi.fn() } as unknown as Engine
     const observer = {} as unknown as ResourceObserver
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {
       order.push('textures')
@@ -30,7 +30,7 @@ describe('Application.teardown', () => {
   })
 
   it('отменяет идущий полёт к объекту: иначе анимация утащит камеру нового сценария', () => {
-    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    const engine = { dispose: vi.fn(), initialize: vi.fn(), start: vi.fn() } as unknown as Engine
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
     const cancel = vi.spyOn(CameraToObjectTransition, 'cancelActive')
 
@@ -41,7 +41,7 @@ describe('Application.teardown', () => {
 
   it('отпускает кэш коллизии камеры после разборки графа', () => {
     const order: string[] = []
-    const engine = { dispose: vi.fn(() => order.push('engine')), start: vi.fn() } as unknown as Engine
+    const engine = { dispose: vi.fn(() => order.push('engine')), initialize: vi.fn(), start: vi.fn() } as unknown as Engine
     const observer = {} as unknown as ResourceObserver
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
     const cameraCollision = { clear: vi.fn(() => order.push('collision')) }
@@ -53,7 +53,7 @@ describe('Application.teardown', () => {
 
   it('отпускает кэш узлов карточки объекта после разборки графа', () => {
     const order: string[] = []
-    const engine = { dispose: vi.fn(() => order.push('engine')), start: vi.fn() } as unknown as Engine
+    const engine = { dispose: vi.fn(() => order.push('engine')), initialize: vi.fn(), start: vi.fn() } as unknown as Engine
     const observer = {} as unknown as ResourceObserver
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
     const bodyInfo = { clear: vi.fn(() => order.push('bodyInfo')) }
@@ -75,7 +75,7 @@ describe('Application.teardown', () => {
   })
 
   it('сбрасывает кеш узлов гейта карт высот', () => {
-    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    const engine = { dispose: vi.fn(), initialize: vi.fn(), start: vi.fn() } as unknown as Engine
     const observer = {} as unknown as ResourceObserver
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
     const clearNodeCache = vi.fn()
@@ -87,7 +87,7 @@ describe('Application.teardown', () => {
   })
 
   it('dispose() выполняет ту же разборку', () => {
-    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    const engine = { dispose: vi.fn(), initialize: vi.fn(), start: vi.fn() } as unknown as Engine
     const observer = { scenario: null } as unknown as ResourceObserver
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
 
@@ -98,7 +98,7 @@ describe('Application.teardown', () => {
   })
 
   it('свежее приложение не вызывает record() при первой разборке сессии', () => {
-    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    const engine = { dispose: vi.fn(), initialize: vi.fn(), start: vi.fn() } as unknown as Engine
     const observer = {} as unknown as ResourceObserver
     const recordSpy = vi.fn(() => null)
     const detector = { record: recordSpy } as unknown as LeakDetector
@@ -110,7 +110,7 @@ describe('Application.teardown', () => {
   })
 
   it('вызывает record() при разборке после того как сценарий уже был загружен', async () => {
-    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    const engine = { dispose: vi.fn(), initialize: vi.fn(), start: vi.fn() } as unknown as Engine
     const observer = {
       scenario: null,
       loadPrimaryTextures: vi.fn(() => Promise.resolve()),
@@ -131,7 +131,7 @@ describe('Application.teardown', () => {
   })
 
   it('повторная разборка свежего приложения тоже не вызывает record(), пока ничего не загружено', () => {
-    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    const engine = { dispose: vi.fn(), initialize: vi.fn(), start: vi.fn() } as unknown as Engine
     const observer = {} as unknown as ResourceObserver
     const recordSpy = vi.fn(() => null)
     const detector = { record: recordSpy } as unknown as LeakDetector
@@ -146,7 +146,7 @@ describe('Application.teardown', () => {
   })
 
   it('после dispose() флаг загрузки не сбрасывается — следующая разборка снова вызывает record()', async () => {
-    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    const engine = { dispose: vi.fn(), initialize: vi.fn(), start: vi.fn() } as unknown as Engine
     const observer = {
       scenario: null,
       loadPrimaryTextures: vi.fn(() => Promise.resolve()),
@@ -169,7 +169,7 @@ describe('Application.teardown', () => {
   })
 
   it('зовёт releaseAll строителя патчей, но не dispose — воркер живёт до выгрузки страницы', () => {
-    const engine = { dispose: vi.fn(), start: vi.fn() } as unknown as Engine
+    const engine = { dispose: vi.fn(), initialize: vi.fn(), start: vi.fn() } as unknown as Engine
     const observer = {} as unknown as ResourceObserver
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
     const builder = { offThread: true, mapCopies: 2, acquire: vi.fn(), request: vi.fn(), requestShadow: vi.fn(), requestNearTile: vi.fn(), release: vi.fn(), releaseAll: vi.fn(), dispose: vi.fn() }
@@ -183,7 +183,7 @@ describe('Application.teardown', () => {
   it('engine.dispose до clearPendingUpgrades фабрики, та — до releaseAll строителя', () => {
     // releaseAll только после разборки всех групп: запоздалый release отпустил бы новую регистрацию того же поля
     const order: string[] = []
-    const engine = { dispose: vi.fn(() => order.push('engine')), start: vi.fn() } as unknown as Engine
+    const engine = { dispose: vi.fn(() => order.push('engine')), initialize: vi.fn(), start: vi.fn() } as unknown as Engine
     const observer = {} as unknown as ResourceObserver
     vi.spyOn(resourceStorage, 'deleteAllTextures').mockImplementation(() => {})
     const builder = {

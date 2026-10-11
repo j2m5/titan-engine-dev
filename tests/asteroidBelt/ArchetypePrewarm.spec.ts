@@ -13,6 +13,8 @@ import type { Actor } from '@/core/models/Actor'
 import type { ResourceObserver } from '@/core/services/ResourceObserver'
 import type { IAsteroidBeltRenderingObject, IRingRenderingObject } from '@/core/models/types'
 import type { UpdateContext } from '@/core/UpdateContext'
+import type { ImpostorLease } from '@/core/renderables/DetailedRingStreamingSystem/impostors/impostorTypes'
+import type { AsteroidImpostorLibrary } from '@/core/renderables/DetailedRingStreamingSystem/impostors/AsteroidImpostorLibrary'
 
 /**
  * Стример пояса строится лениво, на первом подлёте. Всё тяжёлое, что он делал
@@ -96,6 +98,24 @@ function frameAt(belt: AsteroidBelt, x: number): void {
 }
 
 describe('Пояс: формы камней печёт сборка сцены, а не кадр подлёта', () => {
+  it('берёт аренду до создания стримера, на подлёте переиспользует и освобождает один раз', () => {
+    const unsubscribe = vi.fn(), lease: ImpostorLease = {
+      current: () => ({ generation: 1, state: 'legacy', atlas: null, revisions: [], slotLayers: new Int32Array(), halfExtents: new Float32Array(), reason: null }),
+      allowsAtlas: () => true, useProceduralFallback: vi.fn(), acquireGeometry: () => null, prepareSurfaceAverages: vi.fn(), subscribe: vi.fn(() => unsubscribe), release: vi.fn()
+    }
+    const service = { acquire: vi.fn(() => lease), registerMaterialVariant: vi.fn() }
+    const belt = new AsteroidBelt(beltActor({ ...BELT_DATA, sizeRangeKm: [0.5, 61.251] }), null, service as unknown as AsteroidImpostorLibrary)
+    expect(service.acquire).toHaveBeenCalledTimes(1)
+    expect((belt as unknown as { streamer: unknown }).streamer).toBeNull()
+    frameAt(belt, fromAstronomicalUnits(50))
+    const streamer = belt.children.find(c => c instanceof AsteroidRingSystem) as AsteroidRingSystem
+    expect(streamer).toBeDefined()
+    expect(service.acquire).toHaveBeenCalledTimes(1)
+    expect(lease.subscribe).toHaveBeenCalledTimes(1)
+    streamer.dispose(); belt.dispose(); belt.dispose()
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+    expect(lease.release).toHaveBeenCalledTimes(1)
+  })
   it('сборка пояса печёт оба яруса архетипов; создание стримера на подлёте ничего не печёт', () => {
     buildSpy.mockClear()
 

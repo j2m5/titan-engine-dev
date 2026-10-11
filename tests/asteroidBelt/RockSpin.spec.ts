@@ -18,7 +18,6 @@ vi.mock('@/core/renderables/DetailedRingStreamingSystem/RingAlphaReadback', () =
   readRingBandBins: vi.fn(() => null)
 }))
 
-import { InstancedAsteroidShaderTemplate } from '@/core/materials/shaders/lib/InstancedAsteroidShaderTemplate'
 import { InstancedAsteroidShader } from '@/core/materials/shaders/InstancedAsteroidShader'
 import { AsteroidRingSystem, type AsteroidRingConfig } from '@/core/renderables/DetailedRingStreamingSystem'
 import { RenderableFactory } from '@/core/renderables/RenderableFactory'
@@ -45,7 +44,7 @@ describe('GLSL: вращение камня (InstancedAsteroidShaderTemplate, L0
   })
 
   it('вся ветка вращения — под гейтом if (uSpinPeriod > 0.0), ДО instanceMatrix', () => {
-    const v = withoutComments(InstancedAsteroidShaderTemplate.vertexShader)
+    const v = withoutComments(new InstancedAsteroidShader().vertexShader)
 
     expect(v).toContain('if (uSpinPeriod > 0.0) {')
     // Ось/период — из shapeSeed (тот же хеш, что форма), НЕ варьинг
@@ -75,6 +74,13 @@ describe('GLSL: вращение камня (InstancedAsteroidShaderTemplate, L0
     const l1 = withoutComments(billboardVertexSource())
     expect(l1).not.toContain('uSpinPeriod')
     expect(l1).not.toContain('uSpinTime')
+  })
+
+  it('атласный L1 использует общую позу, legacy остаётся доступен', () => {
+    const v = withoutComments(billboardVertexSource(true))
+    expect(v).toContain('asteroidSpinMatrix(seed)')
+    expect(v).toContain('uImpostorReady > 0.5 && instanceDetailEnd > 0.0')
+    expect(v).toContain('float archK = mix(0.85, 1.3')
   })
 })
 
@@ -305,7 +311,7 @@ describe('AsteroidBelt: __createStreamer передаёт spinPeriodHours (ча�
 
 describe('вращение камня: текстура привязана к камню', () => {
   it('домен узора и трипланара — поза ДО вращения, вращение — в матрице объект→view', () => {
-    const v = withoutComments(InstancedAsteroidShaderTemplate.vertexShader)
+    const v = withoutComments(new InstancedAsteroidShader().vertexShader)
 
     // Узор (surfDir) и трипланар берут vObjectPos/vObjectNormal: из повёрнутой
     // позы текстура стояла бы в пространстве, а камень крутился под ней
@@ -313,8 +319,8 @@ describe('вращение камня: текстура привязана к к
     expect(v).toContain('vec3 restNormal = shapedNormal;')
     expect(v).toContain('vObjectPos = restPos;')
     expect(v).toContain('vObjectNormal = restNormal;')
-    expect(v).toContain('vObjToView = normalMatrix * instanceNormalMatrix * spin;')
-    expect(v.indexOf('vec3 restPos = shapedPos;')).toBeLessThan(v.indexOf('if (uSpinPeriod > 0.0)'))
+    expect(v).toContain('vObjToView = normalMatrix * asteroidNormalMatrix(mat3(instanceMatrix), spin);')
+    expect(v.indexOf('vec3 restPos = shapedPos;')).toBeLessThan(v.indexOf('mat3 spin = asteroidSpinMatrix(shapeSeed)'))
   })
 
   it('матрица в колонках GLSL совпадает с формулой Родригеса (знак и транспонирование)', () => {

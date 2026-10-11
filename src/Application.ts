@@ -15,9 +15,11 @@ import type { GaiaSky } from '@/core/sky/GaiaSky'
 import { config } from '@/core/framework/config'
 import { SkyboxBackground } from '@/core/renderables/SkyboxBackground'
 import { CameraToObjectTransition } from '@/core/transitions/CameraToObjectTransition'
+import type { AsteroidImpostorLibrary } from '@/core/renderables/DetailedRingStreamingSystem/impostors/AsteroidImpostorLibrary'
 
 class Application {
   private everLoaded: boolean = false
+  private runGeneration = 0
 
   public constructor(
     private engine: Engine,
@@ -41,7 +43,8 @@ class Application {
      * Небо Gaia (режим gaia): сессионный синглтон вне графа сцены. dispose()
      * приложения — это «назад к сценариям», небо при этом не освобождается
      */
-    private gaiaSky?: Pick<GaiaSky, 'start'>
+    private gaiaSky?: Pick<GaiaSky, 'start'>,
+    private asteroidImpostors?: Pick<AsteroidImpostorLibrary, 'prepareInitial' | 'clear'>
   ) {}
 
   /**
@@ -58,10 +61,12 @@ class Application {
    * долгоживущих ресурсов — как эталон он объявил бы утечкой всё подряд.
    */
   public teardown(): void {
+    this.runGeneration++
     // Полёт к объекту — до всего остального: anime пишет позицию камеры
     // каждый кадр и иначе утащил бы её в новом сценарии к цели старого
     CameraToObjectTransition.cancelActive()
     this.engine.dispose()
+    this.asteroidImpostors?.clear()
     // Коллайдеры ссылаются на только что разобранные узлы и карты высот
     this.cameraCollision?.clear()
     // Карточка объекта — тоже: её кэш узлов держит разобранный граф
@@ -95,9 +100,11 @@ class Application {
 
   public async run(scenario: ScenarioConfig): Promise<void> {
     this.teardown()
+    const generation = this.runGeneration
 
     this.resourceObserver.scenario = scenario
     await this.resourceObserver.loadPrimaryTextures()
+    if (generation !== this.runGeneration) return
 
     if (config('background.source') === 'gaia') {
       // Повторный start() ничего не делает: небо уже грузится или загружено
@@ -112,6 +119,9 @@ class Application {
     }
 
     this.everLoaded = true
+    this.engine.initialize()
+    await this.asteroidImpostors?.prepareInitial()
+    if (generation !== this.runGeneration) return
     this.engine.start()
 
     // Подписка HeightFieldGate на ClosestChange уже стоит — она встаёт в его

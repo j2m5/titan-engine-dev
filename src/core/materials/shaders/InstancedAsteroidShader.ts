@@ -19,6 +19,11 @@ interface InstancedAsteroidUniforms {
   uRockArmMap: Texture | null
   uDetailMapsEnabled: number
   uDetailScale: number
+  uImpostorReady: number
+  uLodVolumetric: number
+  uDetailStartFraction: number
+  uDetailAverageDiffuse: Vector3
+  uDetailAverageArm: Vector3
   uDetailSaturation: number
   uDetailBrightness: number
   uDetailNormalScale: number
@@ -86,6 +91,11 @@ class InstancedAsteroidShader extends AbstractShader<keyof InstancedAsteroidUnif
       uRockArmMap: new Uniform(null),
       uDetailMapsEnabled: new Uniform(0),
       uDetailScale: new Uniform(1),
+      uImpostorReady: new Uniform(0),
+      uLodVolumetric: new Uniform(0),
+      uDetailStartFraction: new Uniform(0.75),
+      uDetailAverageDiffuse: new Uniform(new Vector3(1, 1, 1)),
+      uDetailAverageArm: new Uniform(new Vector3(1, 1, 0)),
       uDetailSaturation: new Uniform(0.35),
       uDetailBrightness: new Uniform(1.6),
       uDetailNormalScale: new Uniform(1),

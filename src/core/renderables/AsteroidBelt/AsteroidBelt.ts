@@ -21,6 +21,8 @@ import {
   type AsteroidProfileName
 } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidProfiles'
 import { resolveLightTint } from '@/core/helpers/lightSource'
+import type { AsteroidImpostorLibrary } from '@/core/renderables/DetailedRingStreamingSystem/impostors/AsteroidImpostorLibrary'
+import type { RingImpostorRegistration } from '@/core/renderables/DetailedRingStreamingSystem/AsteroidRingSystem'
 
 /** Средняя дистанция состояния Mid — до неё стример спит, а не создаётся заново (см. спеку §4) */
 const MID_THRESHOLD_AU = 1
@@ -63,6 +65,8 @@ class AsteroidBelt extends Group {
 
   private lodState: BeltLodState = BeltLodState.Far
   private streamer: AsteroidRingSystem | null = null
+  private readonly impostorRegistration: RingImpostorRegistration | null
+  private disposed = false
   private readonly dustVolume: RingDustVolume | null
   /** Точечная россыпь дальнего слоя — создана и видима всегда (в отличие от стримера); кроссфейд с L1 — в её шейдере */
   private readonly pointLayer: BeltPointLayer
@@ -71,7 +75,7 @@ class AsteroidBelt extends Group {
   private readonly _worldPos = new Vector3()
   private readonly _localLightDir = new Vector3()
 
-  public constructor(model: Actor, depthVolumeRegistry: DepthVolumeRegistry | null = null) {
+  public constructor(model: Actor, depthVolumeRegistry: DepthVolumeRegistry | null = null, impostors: AsteroidImpostorLibrary | null = null) {
     super()
     this.actor = model
     this.depthVolumeRegistry = depthVolumeRegistry
@@ -109,6 +113,7 @@ class AsteroidBelt extends Group {
     // Стример строится лениво, на первом подлёте; формы камней печём сейчас,
     // под экраном загрузки, а не в кадре подлёта (см. prewarmArchetypes)
     AsteroidRingSystem.prewarmArchetypes(this.actor, this.__streamerOverrides())
+    this.impostorRegistration = impostors ? AsteroidRingSystem.registerImpostors(this.actor, this.__streamerOverrides(), impostors, false) : null
 
     this.name = 'AsteroidBelt'
   }
@@ -183,7 +188,7 @@ class AsteroidBelt extends Group {
   }
 
   private __createStreamer(): AsteroidRingSystem {
-    return new AsteroidRingSystem(this.actor, this.__streamerOverrides(), this.depthVolumeRegistry, shapeModelStorage)
+    return new AsteroidRingSystem(this.actor, this.__streamerOverrides(), this.depthVolumeRegistry, shapeModelStorage, this.impostorRegistration)
   }
 
   /** Конфиг стримера поверх данных кольца — общий для прогрева и самой постройки */
@@ -277,6 +282,10 @@ class AsteroidBelt extends Group {
   }
 
   public dispose(): void {
+    if (this.disposed) return
+    this.disposed = true
+    this.streamer?.dispose()
+    this.impostorRegistration?.lease.release()
     this.dustVolume?.dispose()
     this.pointLayer.dispose()
   }

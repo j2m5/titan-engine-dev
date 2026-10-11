@@ -26,12 +26,16 @@ class ShapeModelStorage {
   }
 
   private async fetchModel(path: string): Promise<ShapeModelData | null> {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30_000)
     try {
-      const response = await this.fetchFn(Storage.url(path))
+      const response = await this.fetchFn(Storage.url(path), { signal: controller.signal })
       if (!response.ok) return null
       return parseShapeModel(await response.arrayBuffer())
     } catch {
       return null
+    } finally {
+      clearTimeout(timeout)
     }
   }
 }

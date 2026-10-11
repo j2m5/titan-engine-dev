@@ -27,7 +27,7 @@ describe('InstancedAsteroidShaderTemplate: surfaceData (freshness/cavity)', () =
   })
 
   it('фрагментник объявляет varying и модулирует альбедо/specStrength/surfAO', () => {
-    const frag = InstancedAsteroidShaderTemplate.fragmentShader
+    const frag = new InstancedAsteroidShader().fragmentShader
     expect(frag).toContain('varying vec2 vSurfaceData;')
     expect(frag).toContain('albedo *= 1.0 + uFreshnessBrighten * vSurfaceData.x;')
     expect(frag).toContain('specStrength *= 1.0 + 0.5 * vSurfaceData.x;')
@@ -35,7 +35,7 @@ describe('InstancedAsteroidShaderTemplate: surfaceData (freshness/cavity)', () =
   })
 
   it('модуляция идёт ПОСЛЕ трипланарного блока и ДО перехода нормали во view', () => {
-    const frag = InstancedAsteroidShaderTemplate.fragmentShader
+    const frag = new InstancedAsteroidShader().fragmentShader
     const triplanarEnd = frag.indexOf('specPower = max(specPower * gloss, 2.0);')
     const modulation = frag.indexOf('albedo *= 1.0 + uFreshnessBrighten * vSurfaceData.x;')
     const viewTransform = frag.indexOf('normal = normalize(vObjToView * objN);')
@@ -45,7 +45,7 @@ describe('InstancedAsteroidShaderTemplate: surfaceData (freshness/cavity)', () =
   })
 
   it('НЕ хеширует vSurfaceData во фрагментнике (прямое использование, ULP-правило)', () => {
-    const frag = InstancedAsteroidShaderTemplate.fragmentShader
+    const frag = new InstancedAsteroidShader().fragmentShader
     expect(frag).not.toMatch(/hash\w*\([^)]*vSurfaceData/)
   })
 

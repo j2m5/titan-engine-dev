@@ -27,7 +27,7 @@ import { AngularDensityProfile } from './AngularDensityProfile'
 import { ringLightDirection } from './ringLightDirection'
 import { SectorGrid, SectorGridConfig } from './SectorGrid'
 import { AsteroidGenerator, GeneratorConfig } from './AsteroidGenerator'
-import { InstancePool, PoolLayerConfig } from './InstancePool'
+import { InstancePool, PoolLayerConfig, instancePoolCapacities } from './InstancePool'
 import { SectorManager, LODThresholds } from './SectorManager'
 import { CascadeSet } from './CascadeSet'
 import type { CascadeSpec } from './cascadeScale'
@@ -46,6 +46,22 @@ import { archetypeLayout, getArchetypeGeometries } from './archetypes/ArchetypeL
 import type { ShapeModelStorage } from './archetypes/ShapeModelStorage'
 import { shapeModelGeometry } from './archetypes/ShapeModelFormat'
 import { createMoonletMesh } from './moonletMesh'
+import { config as appConfig } from '@/core/framework/config'
+import { resolveLightTint } from '@/core/helpers/lightSource'
+import type { AsteroidImpostorLibrary } from './impostors/AsteroidImpostorLibrary'
+import { AsteroidImpostorBinding } from './impostors/AsteroidImpostorBinding'
+import { impostorSourceFingerprint } from './impostors/impostorSources'
+import { instanceAttributeBytes } from './impostors/impostorBudget'
+import { wrapAsteroidSpinTime } from './impostors/impostorPose'
+import type { AsteroidSurfaceAverageValues, ImpostorLease, ImpostorSourceDescriptor } from './impostors/impostorTypes'
+
+export interface RingImpostorRegistration {
+  lease: ImpostorLease
+  releaseOnDispose: boolean
+  averages?: AsteroidSurfaceAverageValues
+  pending?: Promise<void>
+  appearanceFailed?: boolean
+}
 
 /**
  * Масштабная высота тумана на камнях (rockFog) в долях ТОЛЩИНЫ ленты.
@@ -459,6 +475,7 @@ class AsteroidRingSystem extends Group {
 
   /** Система разобрана: асинхронные приходы (модели форм, лунки) ничего не делают */
   private disposed = false
+  private impostorBinding: AsteroidImpostorBinding | null = null
 
   /** Сигмы размытия кромок (units сцены): из bleedFraction × ширина или из ringGapBleedKm/dustBleedKm — см. __setup */
   private bleedSigmaTu: { rocks: number; dust: number } = { rocks: 0, dust: 0 }
@@ -467,7 +484,8 @@ class AsteroidRingSystem extends Group {
     model: Actor,
     configOverrides: Partial<AsteroidRingConfig> = {},
     dustRegistry: DepthVolumeRegistry | null = null,
-    shapeModels: ShapeModelStorage | null = null
+    shapeModels: ShapeModelStorage | null = null,
+    private readonly impostorRegistration: RingImpostorRegistration | null = null
   ) {
     super()
     this.model = model
@@ -519,6 +537,33 @@ class AsteroidRingSystem extends Group {
 
     getArchetypeGeometries(cfg.profile, cfg.archetypeCount, cfg.asteroidShapeDetail, asteroidSize)
     getArchetypeGeometries(cfg.profile, cfg.archetypeCount, cfg.asteroidShapeNearDetail, asteroidSize)
+  }
+
+  public static describeImpostors(model: Actor, overrides: Partial<AsteroidRingConfig> = {}): { source: ImpostorSourceDescriptor; instanceBytes: number } {
+    const cfg = AsteroidRingSystem.resolveConfig(model, overrides)
+    const { realModels } = archetypeLayout(cfg.profile, cfg.archetypeCount)
+    return {
+      source: { profile: cfg.profile, count: cfg.archetypeCount, detailL0: cfg.asteroidShapeDetail, detailNear: cfg.asteroidShapeNearDetail,
+        realModels, sourceFingerprint: impostorSourceFingerprint(realModels), bakeVersion: appConfig('asteroidImpostor.bakeVersion') },
+      instanceBytes: instanceAttributeBytes(instancePoolCapacities(cfg.maxL0Instances, cfg.maxL0NearInstances, cfg.maxL1Instances, cfg.archetypeCount))
+    }
+  }
+
+  public static registerImpostors(model: Actor, overrides: Partial<AsteroidRingConfig>, library: AsteroidImpostorLibrary,
+    releaseOnDispose: boolean): RingImpostorRegistration {
+    const { source, instanceBytes } = this.describeImpostors(model, overrides), cfg = this.resolveConfig(model, overrides)
+    const registration: RingImpostorRegistration = { lease: library.acquire(source, instanceBytes), releaseOnDispose }
+    if (!registration.lease.allowsAtlas()) return registration
+    library.registerMaterialVariant(source, { ice: cfg.iceVariety !== undefined, cascade: cfg.cascades !== undefined, lightTint: resolveLightTint(model).active })
+    const set = ASTEROID_PROFILES[cfg.profile].detailSet
+    const diff = resourceStorage.getTexture(`asteroids/${set}_diff_2k.jpg`), arm = resourceStorage.getTexture(`asteroids/${set}_arm_2k.jpg`)
+    const nor = resourceStorage.getTexture(`asteroids/${set}_nor_gl_2k.jpg`)
+    if (diff && arm && nor) {
+      registration.pending = registration.lease.prepareSurfaceAverages(diff, arm).then(averages => {
+        registration.averages = averages
+      }, () => { registration.appearanceFailed = true }).finally(() => { registration.pending = undefined })
+    }
+    return registration
   }
 
   /**
@@ -645,7 +690,8 @@ class AsteroidRingSystem extends Group {
       asteroidSize * 2.5,
       this.model,
       cfg.cascades !== undefined,
-      cfg.iceVariety !== undefined
+      cfg.iceVariety !== undefined,
+      this.impostorRegistration?.lease.allowsAtlas() ?? false
     )
 
     // Добавить рендер-объекты (L0 + L1). С плавающим началом они дети группы
@@ -664,7 +710,7 @@ class AsteroidRingSystem extends Group {
     l0ShapeMaterial.uniforms.uSpinPeriod.value = cfg.spinPeriodHours * 3600
 
     // Реальные модели форм в хвост библиотеки — асинхронно, поверх заглушек
-    this.__requestShapeModels(asteroidSize)
+    if (!this.impostorRegistration) this.__requestShapeModels(asteroidSize)
     this.__buildMoonlets(nearGeometries[0], asteroidSize)
 
     // Макро-облик — профиль, тоже только L0
@@ -794,6 +840,8 @@ class AsteroidRingSystem extends Group {
     this.cascadeGrids = grids
     this.cascadeGenerators = generators
     this.cascades = new CascadeSet(managers)
+    l0ShapeMaterial.uniforms.uLodVolumetric.value = grids[0].volumetric ? 1 : 0
+    l0ShapeMaterial.uniforms.uDetailStartFraction.value = appConfig('asteroidImpostor.detailStartFraction')
 
     // --- Процедурный профиль плотности пояса (см. densityProfileSource) ---
     // Готовый массив вместо текстуры: строим сразу, __tryBuildDensityProfile
@@ -911,6 +959,20 @@ class AsteroidRingSystem extends Group {
       this.rotateX(degToRad(90))
     }
 
+    if (this.impostorRegistration) {
+      const registration = this.impostorRegistration
+      this.impostorBinding = new AsteroidImpostorBinding(registration.lease, this.pool, asteroidSize)
+      const applyAverages = (): void => {
+        if (this.disposed) return
+        if (registration.averages) {
+          this.pool.geometryMaterial.uniforms.uDetailAverageDiffuse.value.copy(registration.averages.diffuse)
+          this.pool.geometryMaterial.uniforms.uDetailAverageArm.value.copy(registration.averages.arm)
+        }
+        this.impostorBinding?.setAppearanceReady(!registration.appearanceFailed && !registration.pending)
+      }
+      applyAverages()
+      if (registration.pending) void registration.pending.then(applyAverages)
+    }
     this.name = 'AsteroidRingSystem'
   }
 
@@ -971,8 +1033,7 @@ class AsteroidRingSystem extends Group {
     const spinPeriod = this.pool.geometryMaterial.uniforms.uSpinPeriod.value
     if (spinPeriod > 0) {
       const simSeconds = getJ2000SecondsFromJD(ctx.epoch)
-      const wrap = 12 * spinPeriod
-      this.pool.geometryMaterial.uniforms.uSpinTime.value = simSeconds - Math.floor(simSeconds / wrap) * wrap
+      this.pool.geometryMaterial.uniforms.uSpinTime.value = wrapAsteroidSpinTime(simSeconds, spinPeriod)
     }
 
     // Проверить видимость parent'а
@@ -1244,6 +1305,9 @@ class AsteroidRingSystem extends Group {
   public dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.impostorBinding?.dispose()
+    this.impostorBinding = null
+    if (this.impostorRegistration?.releaseOnDispose) this.impostorRegistration.lease.release()
 
     this.bandTexture?.dispose()
     this.bandTexture = null

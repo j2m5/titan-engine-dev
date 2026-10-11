@@ -55,6 +55,8 @@ import { syncRenderableMaterials } from '@/core/materials/materialSync'
 import { EclipseSystem } from '@/core/eclipse/EclipseSystem'
 import { SyncTerrainPatchBuilder, type TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 
+import type { AsteroidImpostorLibrary } from '@/core/renderables/DetailedRingStreamingSystem/impostors/AsteroidImpostorLibrary'
+
 class RenderableFactory {
   /** Затмения: тела регистрируются в createPlanet, раздача — SceneManager.update */
   public readonly eclipses: EclipseSystem
@@ -76,7 +78,8 @@ class RenderableFactory {
      */
     private readonly refreshObservation: () => void = () => {},
     /** Реестр гравитационных линз для экранного прохода дальнего поля; без него дыра лензирует только внутри меша */
-    private readonly lensRegistry: LensRegistry | null = null
+    private readonly lensRegistry: LensRegistry | null = null,
+    private readonly asteroidImpostors: AsteroidImpostorLibrary | null = null
   ) {
     this.eclipses = new EclipseSystem(this.atmosphereRegistry)
   }
@@ -542,7 +545,8 @@ class RenderableFactory {
     const lod = new LOD()
     const base = new Ring(actor)
     const detailed = new Ring(actor)
-    detailed.add(new AsteroidRingSystem(actor, {}, this.depthVolumeRegistry, shapeModelStorage))
+    const registration = this.asteroidImpostors ? AsteroidRingSystem.registerImpostors(actor, {}, this.asteroidImpostors, true) : null
+    detailed.add(new AsteroidRingSystem(actor, {}, this.depthVolumeRegistry, shapeModelStorage, registration))
 
     const distanceLod = toThreeJSUnits(ringData.outerRadius * 2)
 
@@ -584,7 +588,7 @@ class RenderableFactory {
     node.name = actor.getAttribute('name', '')
     // renderable намеренно null: как у туманности, пояс — Group-контейнер без
     // собственных geometry/material, маркера и прицела у него нет
-    node.add(new AsteroidBelt(actor, this.depthVolumeRegistry))
+    node.add(new AsteroidBelt(actor, this.depthVolumeRegistry, this.asteroidImpostors))
 
     return node
   }

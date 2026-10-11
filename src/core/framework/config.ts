@@ -16,6 +16,7 @@ import { terrain } from '@/config/terrain'
 import { streaming } from '@/config/streaming'
 import { planetImpostor } from '@/config/planetImpostor'
 import { sphereDetail } from '@/config/sphereDetail'
+import { asteroidImpostor } from '@/config/asteroidImpostor'
 
 type PrevDepth = [never, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
@@ -60,5 +61,6 @@ export const config = createConfig({
   ...streaming,
   ...planetImpostor,
   ...sphereDetail,
+  ...asteroidImpostor,
   database
 })

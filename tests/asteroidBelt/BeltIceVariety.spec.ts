@@ -43,7 +43,7 @@ const makeRingActor = (data: Partial<IRingRenderingObject> = {}): Actor =>
     }
   }) as unknown as Actor
 
-describe('Кольцо: программы камней без ледяной примеси — побайтно прежние', () => {
+describe('Кольцо: программы камней без ледяной примеси', () => {
   it('L0/Near и билборд кольца: тексты вершинника и фрагментника совпадают со снимком, дефайна нет', () => {
     const pool = poolOf(new AsteroidRingSystem(makeRingActor()))
 
@@ -104,13 +104,14 @@ describe('Материалы с ледяной примесью: дефайн, �
     expect(fs).toContain('float lunarMix = mix(uLunarMix, uIceLunarMix, vIce);')
     expect(fs).toContain('float surfaceAmbient = mix(uSurfaceAmbient, uIceSurfaceAmbient, vIce);')
 
-    expect(fs).toContain('applyAsteroidSurface(surfDir, vTintSeed, vDomainOffset, rockColor, uColorJitter')
-    expect(fs).toContain('float specStrength = specularStrength;')
-    expect(fs).toContain('float specPower = specularPower;')
-    expect(fs).toContain('asteroidRegolithDiffuse(NdotL, NdotV, cosPhase, lunarMix, uOppositionSurge)')
-    expect(fs).toContain('mix(vec3(1.0), albedo, specularTint)')
-    expect(fs).toContain('* direct + surfaceAmbient)')
-    expect(fs).toContain('* direct * uLightColor + surfaceAmbient)')
+    expect(fs).toContain('AsteroidAppearanceProfile(rockColor, specularStrength, specularPower, specularTint, lunarMix, surfaceAmbient)')
+    expect(fs).toContain('applyAsteroidSurface(surfDir, vTintSeed, vDomainOffset, profile.rockColor, uColorJitter')
+    expect(fs).toContain('float specStrength = profile.specularStrength;')
+    expect(fs).toContain('float specPower = profile.specularPower;')
+    expect(fs).toContain('asteroidRegolithDiffuse(NdotL, NdotV, cosPhase, profile.lunarMix, uOppositionSurge)')
+    expect(fs).toContain('mix(vec3(1.0), albedo, profile.specularTint)')
+    expect(fs).toContain('* direct + profile.surfaceAmbient)')
+    expect(fs).toContain('* direct * uLightColor + profile.surfaceAmbient)')
     // Единственное вхождение — определение в чанке шумов (анти-ULP-джиттер)
     expect((l0.fragmentShader.match(/hashSurface11\(/g) ?? []).length).toBe(1)
   })

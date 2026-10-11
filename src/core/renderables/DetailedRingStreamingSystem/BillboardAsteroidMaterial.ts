@@ -1,4 +1,8 @@
-import { ShaderMaterial, Color, ShaderChunk, Vector3 } from 'three'
+import { ShaderMaterial, Color, ShaderChunk, Vector3, Vector4, Uniform } from 'three'
+import { InstancedAsteroidShader } from '@/core/materials/shaders/InstancedAsteroidShader'
+import { atlasImpostorShaders } from '@/core/materials/shaders/lib/chunks/AsteroidImpostor'
+import { IMPOSTOR_SLOT_CAPACITY } from './impostors/impostorLayout'
+import type { ImpostorSnapshot } from './impostors/impostorTypes'
 import { ringDustFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
 import { asteroidBrdfFunctions } from '@/core/materials/shaders/lib/chunks/AsteroidBrdf'
 import {
@@ -178,6 +182,8 @@ const BILLBOARD_VERTEX_SHADER = billboardVertexShader(false)
  * 4. Правильная day/night сторона: тёмная сторона астероида = сторона от звезды
  */
 class BillboardAsteroidMaterial extends ShaderMaterial {
+  private legacyProgram?: { vertexShader: string; fragmentShader: string }
+  private atlasProgram?: { vertexShader: string; fragmentShader: string }
   /**
    * `model` — актор кольца (тот же вход, что у L0 `InstancedAsteroidMaterial`,
    * резолвер сам поднимается к корню дерева); `undefined` — тинт выключен.
@@ -189,7 +195,7 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
    * цвет ледяного профиля, выбор тот же, что у L0. false (дефолт) — путь
    * колец, текст программы прежний.
    */
-  public constructor(model?: Actor, useCascadeFade: boolean = false, useIceVariety: boolean = false) {
+  public constructor(model?: Actor, useCascadeFade: boolean = false, useIceVariety: boolean = false, atlasMode: boolean = false) {
     const lightTint = model ? resolveLightTint(model) : { active: false, color: new Color(1, 1, 1) }
     // Лёд — строковой композицией, как и в вершиннике: без опции текст прежний
     const iceFragmentDecl = useIceVariety ? asteroidIceBillboardFragmentDecl : ''
@@ -386,6 +392,42 @@ class BillboardAsteroidMaterial extends ShaderMaterial {
       depthWrite: true,
       depthTest: true
     })
+    if (atlasMode) {
+      this.legacyProgram = { vertexShader: this.vertexShader, fragmentShader: this.fragmentShader }
+      const source = atlasImpostorShaders(this.vertexShader, this.fragmentShader, useIceVariety)
+      this.atlasProgram = source
+      this.vertexShader = source.vertexShader
+      this.fragmentShader = source.fragmentShader
+      this.uniforms = { ...new InstancedAsteroidShader({ iceVariety: useIceVariety }).uniforms, ...this.uniforms,
+        uImpostorReady: new Uniform(0), uImpostorNormalDepth: new Uniform(null), uImpostorSurfaceCoverage: new Uniform(null),
+        uImpostorLayout: new Uniform(new Vector4(8, 64, 6, 0)), uImpostorPhysicalSize: new Uniform(1),
+        uImpostorSlotLayers: new Uniform(new Int32Array(IMPOSTOR_SLOT_CAPACITY)),
+        uImpostorHalfExtents: new Uniform(new Float32Array(IMPOSTOR_SLOT_CAPACITY)) }
+    }
+  }
+
+  public setImpostorSnapshot(snapshot: ImpostorSnapshot | null): void {
+    if (!this.uniforms.uImpostorReady) return
+    const program = snapshot?.state === 'ready' ? this.atlasProgram : snapshot?.reason ? this.legacyProgram : undefined
+    if (program && (this.vertexShader !== program.vertexShader || this.fragmentShader !== program.fragmentShader)) {
+      this.vertexShader = program.vertexShader
+      this.fragmentShader = program.fragmentShader
+      this.needsUpdate = true
+    }
+    this.uniforms.uImpostorReady.value = 0
+    this.uniforms.uImpostorNormalDepth.value = null
+    this.uniforms.uImpostorSurfaceCoverage.value = null
+    if (snapshot?.state !== 'ready' || !snapshot.atlas) return
+    if (snapshot.slotLayers.length > IMPOSTOR_SLOT_CAPACITY || snapshot.halfExtents.length !== snapshot.slotLayers.length) throw new RangeError('Некорректная таблица архетипов')
+    this.uniforms.uImpostorSlotLayers.value.fill(0)
+    this.uniforms.uImpostorHalfExtents.value.fill(0)
+    this.uniforms.uImpostorSlotLayers.value.set(snapshot.slotLayers)
+    this.uniforms.uImpostorHalfExtents.value.set(snapshot.halfExtents)
+    const atlas = snapshot.atlas, layout = atlas.layout
+    this.uniforms.uImpostorNormalDepth.value = atlas.normalDepth
+    this.uniforms.uImpostorSurfaceCoverage.value = atlas.surfaceCoverage
+    this.uniforms.uImpostorLayout.value.set(layout.gridSize, layout.frameSize, layout.maxSampleMip, 0)
+    this.uniforms.uImpostorReady.value = 1
   }
 }
 

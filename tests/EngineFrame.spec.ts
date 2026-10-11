@@ -73,6 +73,7 @@ function makeEngine() {
     setSize: vi.fn()
   }
   const renderCamera = new PerspectiveCamera()
+  const impostors = { pumpFrame: vi.fn((): void => void order.push('impostors')) }
 
   const engine = new Engine(
     sceneManager,
@@ -86,7 +87,8 @@ function makeEngine() {
     astroControls as unknown as AstroControls,
     new Clock(),
     postprocessing,
-    cameraCollision as unknown as CameraCollision
+    cameraCollision as unknown as CameraCollision,
+    impostors
   )
 
   return {
@@ -100,12 +102,20 @@ function makeEngine() {
     cameraCollision,
     labelRenderer,
     renderCamera,
+    impostors,
     surface,
     order
   }
 }
 
 describe('Engine: подключение периодического пересчёта к кадровому циклу', () => {
+  it('выполняет один шаг импосторов после маркеров перед рендером', () => {
+    const { engine, impostors, order } = makeEngine()
+    engine.start()
+    expect(impostors.pumpFrame).toHaveBeenCalledTimes(1)
+    expect(order.indexOf('markers')).toBeLessThan(order.indexOf('impostors'))
+    expect(order.indexOf('impostors')).toBeLessThan(order.indexOf('render'))
+  })
   it('start() зовёт sceneObserver.tick — единственная нить между частью 2 и работающим приложением', () => {
     // Спека части 2 требовала этот тест, план его отменил на неверной
     // посылке: `Engine.onFrameRendered` зовёт `sceneObserver.tick(delta)`, но
@@ -150,6 +160,7 @@ describe('Engine: подключение периодического перес
       'surface',
       'labels',
       'markers',
+      'impostors',
       'render'
     ])
   })

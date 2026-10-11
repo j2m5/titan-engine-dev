@@ -1,3 +1,5 @@
+import { asteroidAppearanceFunctions } from './AsteroidAppearance'
+import { asteroidPoseFunctions } from './AsteroidPose'
 import { ringShadowFragment, ringShadowFunctions, ringShadowUniforms } from './RingShadow'
 import { noiseFunctions } from './Noise'
 import { starSurface } from './StarSurface'
@@ -53,6 +55,8 @@ export const AppShaderChunk: Record<string, string> = {
   giantStarSurface,
   giantStarShell,
   asteroidShapeFunctions,
+  asteroidPoseFunctions,
+  asteroidAppearanceFunctions,
   asteroidSurfaceFunctions,
   asteroidBrdfFunctions,
   slopeNormalUniforms,
