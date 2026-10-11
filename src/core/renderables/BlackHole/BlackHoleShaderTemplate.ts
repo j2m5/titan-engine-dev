@@ -172,7 +172,7 @@ export const BlackHoleShaderTemplate = {
     uniform samplerCube skybox;
     // Копия кадра от BlackHolePass (см. sampleBackground)
     uniform sampler2D uSceneColor;
-    uniform sampler2D uSceneDepth;
+    uniform highp sampler2D uSceneDepth;
     // Слой видимого неба кадра (SkyLayer): вычитается из копии в ветке кадра
     uniform sampler2D uSkyLayer;
     uniform float uSceneLogFarFactor;
@@ -510,17 +510,26 @@ export const BlackHoleShaderTemplate = {
 
       // ── Логарифмическая глубина ──
       // снаружи — передняя поверхность сферы (точка входа луча),
-      // внутри — фактическая геометрия (задняя стенка), чтобы объекты
-      // внутри зоны оставались видимыми при пролёте камеры сквозь неё
+      // внутри при взгляде к дыре — плоскость сближения: тела за ней уже
+      // попадают в sampleBackground, перед ней остаются в основном кадре
       float wEye;
-      if (cameraInside) {
+      if (cameraInside && tMid > 0.0) {
+        vec3 rayView = mat3(crModelViewMatrix) * rayDir;
+        wEye = 1.0 + tMid * rsUnits * max(-rayView.z, 0.0);
+      } else if (cameraInside) {
         wEye = vFragDepth;
       } else {
         vec3 entryObjectSpace = (cameraRs + tEnter * rayDir) * rsUnits;
         vec4 mvEntry = crModelViewMatrix * vec4(entryObjectSpace, 1.0);
         wEye = 1.0 - mvEntry.z;
       }
-      gl_FragDepth = log2(max(wEye, 1e-6)) * logDepthBufFC * 0.5;
+      float depth = log2(max(wEye, 1e-6)) * logDepthBufFC * 0.5;
+      if (cameraInside && tMid <= 0.0 && uSceneEnabled > 0.5) {
+        // От дыры: цвет заменяется, но глубина поверхности нужна атмосфере.
+        // Читается безопасная копия того же пикселя, без фильтрации границ
+        depth = min(depth, texelFetch(uSceneDepth, ivec2(gl_FragCoord.xy), 0).r);
+      }
+      gl_FragDepth = depth;
     }
   `
 }

@@ -20,7 +20,7 @@ describe('шейдер ЧД: фон побега — копия кадра, ку
 
   it('объявляет копию кадра, слой неба и sampleBackground; все чтения неба — sampleSkyLensed', () => {
     expect(frag).toContain('uniform sampler2D uSceneColor;')
-    expect(frag).toContain('uniform sampler2D uSceneDepth;')
+    expect(frag).toContain('uniform highp sampler2D uSceneDepth;')
     expect(frag).toContain('uniform sampler2D uSkyLayer;')
     expect(frag).toContain('uniform float uSceneEnabled;')
     expect(frag).toContain('vec3 sampleBackground(vec3 direction, vec3 dDx, vec3 dDy, vec3 dPixDx, vec3 dPixDy)')
