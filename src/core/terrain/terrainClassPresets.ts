@@ -3,7 +3,7 @@ import type { IPlanetRenderingObject } from '@/core/models/types'
 import { readRenderingData } from '@/core/helpers/renderingData'
 import { TERRAIN_CLASSES, terrainClassOf, type TerrainClass } from './terrainClass'
 
-/** Ручки, которые пресет может задавать: ни одна не проставлена в БД (страж TerrainClassData.spec). */
+/** Ручки пресета; явно заданные значения тела имеют приоритет. */
 export const TERRAIN_PRESET_KEYS: readonly (keyof IPlanetRenderingObject)[] = [
   'terrainAmbient', 'terrainOcclusionDirect', 'steepTint', 'midbandShade', 'macroStreakStrength', 'macroTerraceStrength',
   'iceGlintStrength', 'frostStrength', 'frostLineMeters', 'frostLineWidthMeters', 'frostPolarDropMeters',

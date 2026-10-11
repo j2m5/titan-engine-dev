@@ -1,11 +1,7 @@
 import { ActorResource, RenderingObjects, Resources } from '@storage/database'
 import { IActorResource, IRenderingObject, IResource } from '@/core/models/types'
 
-/**
- * Страж данных средней полосы: сегодня вакуумный (ручка нигде не задана) —
- * ловит первую правку БД владельца. Полоса гейтится slope-картой, поэтому
- * ручка без привязанного slope-ресурса означала бы молча мёртвую запись.
- */
+/** Средняя полоса требует slope-карту; настройки лун Darkness индивидуальны. */
 describe('Данные средней полосы детали рельефа', () => {
   const withMacro = RenderingObjects.filter(
     (row: IRenderingObject): boolean => (row.data as { macroStrength?: unknown } | undefined)?.macroStrength !== undefined
@@ -35,14 +31,24 @@ describe('Данные средней полосы детали рельефа',
     expect(withoutSlope).toEqual([])
   })
 
-  it('ручки форм склона в БД не проставлены (арка A — глобальные дефолты); 55 тел на macroStrength 0.25', () => {
+  it('формы склона настроены у 12 лун Darkness; у остальных 55 тел прежняя сила средней полосы', () => {
     const structureKeys = ['macroStreakStrength', 'macroStreakScaleKm', 'macroTerraceStrength', 'macroTerraceStepMeters', 'macroStreakChart']
     const withStructures = RenderingObjects.filter((row: IRenderingObject): boolean =>
       structureKeys.some((key: string): boolean => (row.data as Record<string, unknown> | undefined)?.[key] !== undefined)
     )
-    expect(withStructures).toEqual([])
-    expect(withMacro.length).toBe(55)
-    expect(withMacro.every((row: IRenderingObject): boolean => (row.data as { macroStrength: number }).macroStrength === 0.25)).toBe(true)
+    const moonIds = [150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161]
+    const iceMoonIds = [151, 153, 154, 156, 157, 158, 159]
+    expect(withStructures.map((row) => row.actorId).sort((a, b) => a - b)).toEqual(moonIds)
+    expect(withMacro).toHaveLength(67)
+    const standard = withMacro.filter((row) => !moonIds.includes(row.actorId))
+    expect(standard).toHaveLength(55)
+    expect(standard.every((row) => row.data.macroStrength === 0.25)).toBe(true)
+    for (const row of withStructures) {
+      const icy = iceMoonIds.includes(row.actorId)
+      expect(row.data.macroStrength, `actorId ${row.actorId}`).toBe(icy ? 0.18 : 0.25)
+      const explicit = Object.fromEntries(structureKeys.filter((key) => row.data[key] !== undefined).map((key) => [key, row.data[key]]))
+      expect(explicit, `actorId ${row.actorId}`).toEqual({ macroTerraceStrength: icy ? 0.15 : 0.35 })
+    }
   })
 
   it('ручки геометрии средней полосы (арка B) в БД не проставлены — дефолты глобальные, живут в midbandParams.ts', () => {

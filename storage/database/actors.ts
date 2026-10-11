@@ -150,5 +150,17 @@ export const Actors: IActor[] = [
   { id: 146, categoryId: 7, parentId: 141, name: "Crab synchrotron glow", description: "", color: "#9fc4ff" },
   { id: 147, categoryId: 1, parentId: null, name: "NGC 1851E system", description: "", color: "#ffffff" },
   { id: 148, categoryId: 12, parentId: 147, name: "PSR J0514-4002E", description: "", color: "#bcd4ff" },
-  { id: 149, categoryId: 2, parentId: 147, name: "NGC 1851E companion", description: "", color: "#ffffff" }
+  { id: 149, categoryId: 2, parentId: 147, name: "NGC 1851E companion", description: "", color: "#ffffff" },
+  { id: 150, categoryId: 4, parentId: 90, name: "Skell", description: "Тёмная каменистая луна сразу за внешней кромкой колец. Серебристые гребни выделяются на графитовом реголите.", color: "#626c7b" },
+  { id: 151, categoryId: 4, parentId: 90, name: "Vesper", description: "Жемчужно-серая внутренняя луна с тёмными впадинами и светлыми ледяными возвышенностями.", color: "#c0cbd0" },
+  { id: 152, categoryId: 4, parentId: 90, name: "Kharos", description: "Охристая кратерная луна: тёмная вулканическая порода и медно-бурые поля старого реголита.", color: "#b9784e" },
+  { id: 153, categoryId: 4, parentId: 90, name: "Nacre", description: "Небольшая белая ледяная луна с голубыми низинами. Внутренний участник цепочки Nacre–Rime–Orphne с периодами 1:2:4.", color: "#d2edeb" },
+  { id: 154, categoryId: 4, parentId: 90, name: "Rime", description: "Бирюзовый ледяной мир с контрастными уступами и тёмными впадинами. Средний участник цепочки периодов 1:2:4.", color: "#8dbfc1" },
+  { id: 155, categoryId: 4, parentId: 90, name: "Orphne", description: "Серо-лиловая каменно-ледяная луна с пыльными плато. Внешний участник цепочки периодов 1:2:4.", color: "#b59aac" },
+  { id: 156, categoryId: 4, parentId: 90, name: "Veyra", description: "Крупная холодная луна с белыми нагорьями и стально-синими низинами под безвоздушным небом.", color: "#a7c1df" },
+  { id: 157, categoryId: 4, parentId: 90, name: "Pallid", description: "Самая большая луна Darkness. Светлая кора цвета слоновой кости, серые котловины и широкие горные области.", color: "#e3e5d9" },
+  { id: 158, categoryId: 4, parentId: 90, name: "Sable", description: "Тёмная ледяная луна: угольные равнины перемежаются холодными светлыми участками. Орбита заметно наклонена к кольцам.", color: "#637b82" },
+  { id: 159, categoryId: 4, parentId: 90, name: "Threnody", description: "Розовато-лиловая луна с рассечённой ледяной поверхностью. Высокий наклон орбиты поднимает её далеко над плоскостью колец.", color: "#b791a6" },
+  { id: 160, categoryId: 4, parentId: 90, name: "Morrow", description: "Небольшой захваченный спутник с серо-розовыми скальными областями. Обращается против вращения Darkness по вытянутой орбите.", color: "#aa99a5" },
+  { id: 161, categoryId: 4, parentId: 90, name: "Nadir", description: "Самая далёкая луна: тёмное бурое тело с большой ударной котловиной. Медленная ретроградная орбита проходит по окраине системы спутников.", color: "#94694e" }
 ]
