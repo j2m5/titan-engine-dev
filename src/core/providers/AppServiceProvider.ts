@@ -27,6 +27,8 @@ import { BodyInfoService } from '@/core/bodyInfo/BodyInfoService'
 import { SyncTerrainPatchBuilder, type TerrainPatchBuilder } from '@/core/terrain/terrainPatchBuilder'
 import { WorkerTerrainPatchBuilder } from '@/core/terrain/worker/WorkerTerrainPatchBuilder'
 import { GaiaSky } from '@/core/sky/GaiaSky'
+import { AsteroidImpostorLibrary } from '@/core/renderables/DetailedRingStreamingSystem/impostors/AsteroidImpostorLibrary'
+import { shapeModelStorage } from '@/core/renderables/DetailedRingStreamingSystem/archetypes/ShapeModelStorage'
 
 class AppServiceProvider extends ServiceProvider {
   public register(): void {
@@ -58,6 +60,9 @@ class AppServiceProvider extends ServiceProvider {
     this.app.singleton(Tokens.LensRegistry, () => new LensRegistry())
     // Небо одно на приложение: грузится при первом сценарии, не перезагружается
     this.app.singleton(Tokens.GaiaSky, (c: Container) => new GaiaSky(c.get(Tokens.Renderer)))
+    this.app.singleton(Tokens.AsteroidImpostorLibrary, (c: Container) => new AsteroidImpostorLibrary(
+      c.get(Tokens.Renderer), config('asteroidImpostor'), shapeModelStorage, c.get(Tokens.LoadingProgressReporter)
+    ))
 
     // Один генератор на сцену (владение рендерером — по прецеденту
     // BrunetonAtmosphere, см. докблок ProceduralSurfaceGenerator): его
@@ -96,7 +101,8 @@ class AppServiceProvider extends ServiceProvider {
           // свап поверхности по готовности рельефа идёт вне тика HeightFieldGate:
           // снимок наблюдения пересобирать больше некому (см. докблок параметра)
           () => c.get(Tokens.SceneObserver).refreshObservableObjects(),
-          c.get(Tokens.LensRegistry)
+          c.get(Tokens.LensRegistry),
+          c.get(Tokens.AsteroidImpostorLibrary)
         )
     )
 
@@ -139,7 +145,8 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.AstroControls),
           c.get(Tokens.Clock),
           c.get(Tokens.Postprocessing),
-          c.get(Tokens.CameraCollision)
+          c.get(Tokens.CameraCollision),
+          c.get(Tokens.AsteroidImpostorLibrary)
         )
     )
 
@@ -190,7 +197,8 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.TerrainPatchBuilder),
           c.get(Tokens.CameraCollision),
           c.get(Tokens.BodyInfoService),
-          c.get(Tokens.GaiaSky)
+          c.get(Tokens.GaiaSky),
+          c.get(Tokens.AsteroidImpostorLibrary)
         )
     )
 

@@ -2,6 +2,18 @@ import { BufferGeometry, InstancedBufferAttribute, InstancedMesh, Object3D, Plan
 import { InstancedAsteroidMaterial } from '@/core/materials/InstancedAsteroidMaterial'
 import type { Actor } from '@/core/models/Actor'
 import { BillboardAsteroidMaterial } from './BillboardAsteroidMaterial'
+import type { PreparedImpostorUpdate } from './impostors/impostorTypes'
+import { trackImpostorGeometry } from './impostors/impostorGeometry'
+
+/** Фактические ёмкости, включая запас и округление каждого архетипа. */
+export function instancePoolCapacities(l0Max: number, nearMax: number, l1Max: number, archetypeCount: number): readonly number[] {
+  if (!Number.isInteger(archetypeCount) || archetypeCount < 1) throw new RangeError('Нужен хотя бы один архетип')
+  return [
+    ...new Array<number>(archetypeCount).fill(Math.ceil(l0Max / archetypeCount * 1.5)),
+    ...new Array<number>(archetypeCount).fill(Math.ceil(nearMax / archetypeCount * 1.5)),
+    l1Max
+  ]
+}
 
 /**
  * Уровень детализации — используется МЕНЕДЖЕРОМ для решений (какой стрим
@@ -97,6 +109,7 @@ class InstancePool {
 
   /** Dirty-флаги для отложенного commit атрибута порога fade билборда, по стримам */
   private dirtyMaxDistanceStreams: Set<number> = new Set()
+  private readonly dirtyImpostorAttributes = new Set<InstancedBufferAttribute>()
 
   /**
    * @param l0Config Ёмкость L0 (Geometry, обычный detail).
@@ -127,7 +140,8 @@ class InstancePool {
     billboardSize: number,
     model?: Actor,
     useCascadeFade: boolean = false,
-    useIceVariety: boolean = false
+    useIceVariety: boolean = false,
+    private atlasAttributes: boolean = false
   ) {
     if (l0Geometries.length !== nearGeometries.length) {
       throw new Error(
@@ -140,8 +154,9 @@ class InstancePool {
     // Ёмкость КАЖДОГО Geometry-стрима больше "справедливой" доли maxInstances/K:
     // страховка от локальной фрагментации (сектор с архетипом-меньшинством не
     // должен упираться в потолок раньше, чем исчерпан суммарный бюджет).
-    const streamCapacity = Math.ceil((l0Config.maxInstances / streamCount) * 1.5)
-    const nearStreamCapacity = Math.ceil((nearConfig.maxInstances / streamCount) * 1.5)
+    const capacities = instancePoolCapacities(l0Config.maxInstances, nearConfig.maxInstances, l1Config.maxInstances, streamCount)
+    const streamCapacity = capacities[0]
+    const nearStreamCapacity = capacities[streamCount]
 
     this.geometryMaterial = new InstancedAsteroidMaterial(model, undefined, useIceVariety)
     this.geometryMeshes = []
@@ -172,7 +187,7 @@ class InstancePool {
 
     // --- Billboard-стрим (индекс 2·streamCount) ---
     const l1Geometry = new PlaneGeometry(billboardSize, billboardSize)
-    this.billboardMaterial = new BillboardAsteroidMaterial(model, useCascadeFade, useIceVariety)
+    this.billboardMaterial = new BillboardAsteroidMaterial(model, useCascadeFade, useIceVariety, atlasAttributes)
     this.billboardMesh = new InstancedMesh(l1Geometry, this.billboardMaterial, l1Config.maxInstances)
     this.billboardMesh.count = 0
     this.billboardMesh.frustumCulled = false
@@ -187,6 +202,10 @@ class InstancePool {
       'instanceMaxDistance',
       new InstancedBufferAttribute(new Float32Array(l1Config.maxInstances), 1)
     )
+    if (atlasAttributes) {
+      l1Geometry.setAttribute('instanceArchetype', new InstancedBufferAttribute(new Float32Array(l1Config.maxInstances), 1))
+      l1Geometry.setAttribute('instanceDetailEnd', new InstancedBufferAttribute(new Float32Array(l1Config.maxInstances), 1))
+    }
 
     this.streams.push({
       mesh: this.billboardMesh,
@@ -225,7 +244,12 @@ class InstancePool {
     // Пишется тем же кодом, что и instanceOrigin (см. SectorManager.writeSectorOrigins),
     // хотя читает его только материал билборда — держим адресацию единой для всех тиров.
     streamGeometry.setAttribute('instanceMaxDistance', new InstancedBufferAttribute(new Float32Array(capacity), 1))
+    if (this.impostorAttributes) {
+      streamGeometry.setAttribute('instanceDetailEnd', new InstancedBufferAttribute(new Float32Array(capacity), 1))
+      streamGeometry.setAttribute('instanceDetailMix', new InstancedBufferAttribute(new Float32Array(capacity), 1))
+    }
 
+    trackImpostorGeometry(streamGeometry)
     const mesh = new InstancedMesh(streamGeometry, material, capacity)
     mesh.count = 0
     mesh.frustumCulled = false
@@ -251,33 +275,63 @@ class InstancePool {
    * геометрии библиотеки (кэш) не трогаются.
    */
   public replaceArchetypeGeometry(k: number, l0Geometry: BufferGeometry, nearGeometry: BufferGeometry): void {
-    this.__swapStreamGeometry(this.geometryMeshes[k], l0Geometry)
-    this.__swapStreamGeometry(this.nearMeshes[k], nearGeometry)
+    const update = this.prepareArchetypeGeometry(k, l0Geometry, nearGeometry)
+    update.commit()
+    update.dispose()
   }
 
-  private __swapStreamGeometry(mesh: InstancedMesh | undefined, source: BufferGeometry): void {
-    if (!mesh) return
-    const old = mesh.geometry
-    const fade = old.getAttribute('instanceFade')
-    // Смещение сектора от плавающего начала переезжает вместе с fade: оно
-    // пер-инстансное состояние стрима, а не свойство формы (см. writeOrigins)
-    const origin = old.getAttribute('instanceOrigin')
-    const maxDistance = old.getAttribute('instanceMaxDistance')
+  public prepareArchetypeGeometry(k: number, l0Geometry: BufferGeometry, nearGeometry: BufferGeometry): PreparedImpostorUpdate {
+    const pairs = [[this.geometryMeshes[k], l0Geometry], [this.nearMeshes[k], nearGeometry]] as const
+    const swaps = pairs.filter(([mesh]) => mesh !== undefined).map(([mesh, source]) => ({
+      mesh, old: mesh.geometry, next: this.__wrapStreamGeometry(mesh.geometry, source)
+    }))
+    let committed = false, disposed = false
+    return {
+      commit: () => {
+        if (committed || disposed) return
+        for (const { mesh, next } of swaps) mesh.geometry = next
+        committed = true
+      },
+      dispose: () => {
+        if (disposed) return
+        disposed = true
+        for (const swap of swaps) {
+          const wrapper = committed ? swap.old : swap.next
+          wrapper.dispose()
+        }
+      }
+    }
+  }
+
+  private __wrapStreamGeometry(old: BufferGeometry, source: BufferGeometry): BufferGeometry {
     const streamGeometry = new BufferGeometry()
     for (const attrName of Object.keys(source.attributes)) {
       streamGeometry.setAttribute(attrName, source.getAttribute(attrName))
     }
     if (source.getIndex() !== null) streamGeometry.setIndex(source.getIndex())
-    streamGeometry.setAttribute('instanceFade', fade)
-    streamGeometry.setAttribute('instanceOrigin', origin)
-    streamGeometry.setAttribute('instanceMaxDistance', maxDistance)
-    mesh.geometry = streamGeometry
-    old.dispose()
+    for (const name of Object.keys(old.attributes)) {
+      const attribute = old.getAttribute(name)
+      if (attribute instanceof InstancedBufferAttribute) streamGeometry.setAttribute(name, attribute)
+    }
+    trackImpostorGeometry(streamGeometry)
+    return streamGeometry
   }
 
   /** Количество Geometry-стримов (K архетипов). */
   public get geometryStreamCount(): number {
     return this.geometryMeshes.length
+  }
+
+  public get impostorAttributes(): boolean { return this.atlasAttributes }
+
+  /** Только после потери контекста, пока новые VBO ещё не созданы. */
+  public dropImpostorAttributes(): void {
+    this.atlasAttributes = false
+    for (const stream of this.streams) for (const name of ['instanceArchetype', 'instanceDetailEnd', 'instanceDetailMix']) {
+      stream.mesh.geometry.deleteAttribute(name)
+    }
+    this.dirtyImpostorAttributes.clear()
+    this.geometryMaterial.uniforms.uImpostorReady.value = 0
   }
 
   /** Индекс первого Near-стрима (== K). Near-стримы занимают K..2K-1. */
@@ -411,6 +465,33 @@ class InstancePool {
     this.dirtyMaxDistanceStreams.add(stream)
   }
 
+  public writeArchetypes(allocation: Allocation, ids: Int32Array): void {
+    if (!this.impostorAttributes) return
+    if (ids.length !== allocation.count) throw new RangeError('Число ID не совпадает с аллокацией')
+    const attr = this.streams[allocation.stream].mesh.geometry.getAttribute('instanceArchetype') as InstancedBufferAttribute | undefined
+    if (!attr) return
+    ;(attr.array as Float32Array).set(ids, allocation.offset)
+    attr.addUpdateRange(allocation.offset, allocation.count)
+    this.dirtyImpostorAttributes.add(attr)
+  }
+
+  public writeDetailEnd(allocation: Allocation, value: number): void {
+    this.writeImpostorScalar(allocation, 'instanceDetailEnd', value)
+  }
+
+  public writeDetailMix(allocation: Allocation, value: number): void {
+    this.writeImpostorScalar(allocation, 'instanceDetailMix', value)
+  }
+
+  private writeImpostorScalar({ stream, offset, count }: Allocation, name: string, value: number): void {
+    if (!this.impostorAttributes) return
+    const attr = this.streams[stream].mesh.geometry.getAttribute(name) as InstancedBufferAttribute | undefined
+    if (!attr) return
+    ;(attr.array as Float32Array).fill(value, offset, offset + count)
+    attr.addUpdateRange(offset, count)
+    this.dirtyImpostorAttributes.add(attr)
+  }
+
   /**
    * Применить все накопленные изменения к GPU-буферам.
    *
@@ -446,6 +527,11 @@ class InstancePool {
       InstancePool.coalesceRanges(attr)
       attr.needsUpdate = true
     }
+    for (const attr of this.dirtyImpostorAttributes) {
+      InstancePool.coalesceRanges(attr)
+      attr.needsUpdate = true
+    }
+    this.dirtyImpostorAttributes.clear()
 
     this.dirtyStreams.clear()
     this.dirtyFadeStreams.clear()
@@ -570,6 +656,9 @@ class InstancePool {
     fade.fill(0, offset, offset + count)
     fadeAttr.addUpdateRange(offset, count)
     this.dirtyFadeStreams.add(stream)
+    for (const name of ['instanceArchetype', 'instanceDetailEnd', 'instanceDetailMix']) {
+      this.writeImpostorScalar({ stream, offset, count }, name, 0)
+    }
   }
 
   private defragFreeList(freeList: FreeRange[]): void {
@@ -609,7 +698,10 @@ class InstancePool {
    * Полный сброс всех буферов и free-lists (всех стримов, включая billboard).
    */
   public reset(): void {
-    for (const s of this.streams) {
+    for (const [stream, s] of this.streams.entries()) {
+      for (const name of ['instanceArchetype', 'instanceDetailEnd', 'instanceDetailMix']) {
+        this.writeImpostorScalar({ stream, offset: 0, count: s.capacity }, name, 0)
+      }
       s.freeList = [{ offset: 0, count: s.capacity }]
       s.hwm = 0
       s.failures = 0

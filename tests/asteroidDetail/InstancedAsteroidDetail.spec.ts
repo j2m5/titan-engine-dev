@@ -9,7 +9,7 @@ class TestShader extends AbstractShader {
 
 describe('InstancedAsteroidShaderTemplate: трипланарный PBR-микрослой', () => {
   it('фрагментник вызывает трипланарные выборки за флагом uDetailMapsEnabled', () => {
-    const f = InstancedAsteroidShaderTemplate.fragmentShader
+    const f = new TestShader(InstancedAsteroidShaderTemplate).fragmentShader
     expect(f).toContain('uDetailMapsEnabled > 0.5')
     expect(f).toContain('triplanarWeights')
     expect(f).toContain('triplanarAlbedo')
@@ -18,7 +18,7 @@ describe('InstancedAsteroidShaderTemplate: трипланарный PBR-микр
   })
 
   it('передаёт uRock*-самплеры аргументами — вызовы параметризованы', () => {
-    const f = InstancedAsteroidShaderTemplate.fragmentShader
+    const f = new TestShader(InstancedAsteroidShaderTemplate).fragmentShader
     expect(f).toContain('triplanarAlbedo(uRockDiffMap, vObjectPos, triW, triOffset)')
     expect(f).toContain('triplanarNormal(uRockNorMap, vObjectPos, geomN, triW, triOffset)')
     expect(f).toContain('triplanarArm(uRockArmMap, vObjectPos, triW, triOffset)')

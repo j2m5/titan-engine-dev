@@ -18,7 +18,7 @@ vi.mock('@/core/renderables/DetailedRingStreamingSystem/RingAlphaReadback', () =
 
 import { bandTint, columnFraction, layerShadow, layerTau } from './tauMirror'
 import { ringDustRaymarchFunctions, ringDustUniforms } from '@/core/materials/shaders/lib/chunks/RingDust'
-import { InstancedAsteroidShaderTemplate } from '@/core/materials/shaders/lib/InstancedAsteroidShaderTemplate'
+import { InstancedAsteroidShader } from '@/core/materials/shaders/InstancedAsteroidShader'
 import { BillboardAsteroidMaterial } from '@/core/renderables/DetailedRingStreamingSystem/BillboardAsteroidMaterial'
 import { RingDustRaymarchMaterial } from '@/core/renderables/DetailedRingStreamingSystem/dust/RingDustRaymarchMaterial'
 import { AsteroidRingSystem } from '@/core/renderables/DetailedRingStreamingSystem'
@@ -125,7 +125,7 @@ describe('RingDust GLSL: слой кольца и полосы', () => {
   })
 
   it('L0: тень слоя гасит прямой свет (диффуз и блик), тинт ложится на альбедо до микрослоя', () => {
-    const fs = InstancedAsteroidShaderTemplate.fragmentShader
+    const fs = new InstancedAsteroidShader().fragmentShader
     expect(fs).toContain('float direct = planetShadow * ringLayerShadow(vRingPos);')
     expect(fs).toContain('lightIntensity * surfAO * direct')
     expect(fs).toContain('max(NdotL, 0.0) * direct')

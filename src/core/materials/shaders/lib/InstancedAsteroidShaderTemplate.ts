@@ -56,6 +56,8 @@ export const InstancedAsteroidShaderTemplate: ShaderProps = {
     uRockArmMap: new Uniform(null),
     uDetailMapsEnabled: new Uniform(0),
     uDetailScale: new Uniform(1),
+    uDetailAverageDiffuse: new Uniform(new Vector3(1, 1, 1)),
+    uDetailAverageArm: new Uniform(new Vector3(1, 1, 0)),
     uDetailSaturation: new Uniform(0.35),
     uDetailBrightness: new Uniform(1.6),
     uDetailNormalScale: new Uniform(1),
@@ -146,12 +148,16 @@ export function instancedAsteroidShaderSource(
     uniform float uShapeAmpMin;
     uniform float uShapeAmpMax;
     uniform float uShapeFreq;
+    uniform float uImpostorReady;
+    uniform float uLodVolumetric;
+    uniform float uDetailStartFraction;
+    attribute float instanceDetailEnd;
+    attribute float instanceDetailMix;
     // Вращение камня: uSpinPeriod — номинальный период в секундах СИМУЛЯЦИИ
     // (часы данных → секунды на CPU, 0 — выкл); uSpinTime — время симуляции
     // (ctx.epoch, не рендер-часы), свёрнутое на CPU по кратному 12·uSpinPeriod
     // (см. AsteroidRingSystem.updateObject) — отдельный от прочих юниформ времени движка
-    uniform float uSpinPeriod;
-    uniform float uSpinTime;${iceVertexDecl}
+${iceVertexDecl}
 
     // Per-instance fade [0..1] — плавные LOD/sector-переходы (см. InstancePool.writeFade)
     attribute float instanceFade;
@@ -176,6 +182,7 @@ export function instancedAsteroidShaderSource(
     varying vec3 vObjectNormal;
     varying mat3 vObjToView;
     varying float vFade;
+    varying float vAsteroidDetailWeight;
     varying vec2 vSurfaceData;
     // Пер-инстансные хеши сида считаются ЗДЕСЬ и едут во фрагмент готовыми:
     // сырой сид через хеш во фрагментнике превращает ULP-джиттер интерполяции
@@ -187,6 +194,7 @@ export function instancedAsteroidShaderSource(
 
     #include <noiseFunctions>
     #include <asteroidShapeFunctions>
+#include <asteroidPoseFunctions>
 
     void main() {
       // Деформация силуэта: сид рисунка контура — хеш от МЕСТНОЙ позиции
@@ -196,9 +204,18 @@ export function instancedAsteroidShaderSource(
       // выражение то же, что было.
       // Амплитуда — второй, декоррелированный хеш той же позиции → каждый
       // камень получает свою «изрезанность» из диапазона [min,max].
+      if (abs(determinant(mat3(instanceMatrix))) < 1e-20) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+      vAsteroidDetailWeight = 1.0;
+      if (uImpostorReady > 0.5 && instanceDetailEnd > 0.0) {
+        vec3 cameraLocal = -inverse(mat3(modelViewMatrix)) * modelViewMatrix[3].xyz;
+        vec3 cameraDelta = instanceOrigin + instanceMatrix[3].xyz - cameraLocal;
+        float distance = uLodVolumetric > 0.5 ? length(cameraDelta) : length(cameraDelta.xz);
+        float q = 1.0 - smoothstep(uDetailStartFraction * instanceDetailEnd, instanceDetailEnd, distance);
+        vAsteroidDetailWeight = q * instanceDetailMix;
+      }
       float shapeSeed = hash13(instanceMatrix[3].xyz);
       float ampSeed = hash13(instanceMatrix[3].xyz * 1.37 + 11.7);
-      float shapeAmp = mix(uShapeAmpMin, uShapeAmpMax, ampSeed);
+      float shapeAmp = mix(uShapeAmpMin, uShapeAmpMax, ampSeed) * vAsteroidDetailWeight;
       vec3 shapedPos;
       vec3 shapedNormal;
       deformAsteroid(position, normal, shapeSeed, shapeAmp, shapedPos, shapedNormal);
@@ -214,28 +231,8 @@ export function instancedAsteroidShaderSource(
       // vObjToView: освещение видит повёрнутую нормаль
       vec3 restPos = shapedPos;
       vec3 restNormal = shapedNormal;
-      mat3 spin = mat3(1.0);
-
-      if (uSpinPeriod > 0.0) {
-        vec3 spinAxis = normalize(vec3(
-          hashSurface11(shapeSeed + 13.13),
-          hashSurface11(shapeSeed + 17.17),
-          hashSurface11(shapeSeed + 19.19)
-        ) * 2.0 - 1.0);
-        // Ставка вращения — m/12, m ∈ [6,18] целыми шагами: на волне
-        // 12·uSpinPeriod любой инстанс делает целое число m оборотов, поэтому
-        // свёртка uSpinTime (CPU) не рвёт фазу ни одному камню. min(...,18) —
-        // страж на случай hash ровно 1 (floor дал бы 13, а не 12)
-        float m = min(6.0 + floor(hashSurface11(shapeSeed + 23.23) * 13.0), 18.0);
-        // Фаза из хеша: без неё все камни разом проходят исходную позу на каждой волне
-        float spinAngle = 2.0 * PI * (uSpinTime * (m / 12.0) / uSpinPeriod + hashSurface11(shapeSeed + 29.29));
-        float cosA = cos(spinAngle);
-        float sinA = sin(spinAngle);
-        // Родригес в матричной форме: R = cosA·I + sinA·[k]× + (1 − cosA)·k·kᵀ
-        // (mat3 по колонкам; [k]× v = k × v)
-        spin = cosA * mat3(1.0) + sinA * mat3(0.0, spinAxis.z, -spinAxis.y, -spinAxis.z, 0.0, spinAxis.x, spinAxis.y, -spinAxis.x, 0.0) + (1.0 - cosA) * outerProduct(spinAxis, spinAxis);
-        shapedPos = spin * restPos;
-      }
+      mat3 spin = asteroidSpinMatrix(shapeSeed);
+      shapedPos = spin * restPos;
 
       vec4 worldPosition = instanceMatrix * vec4(shapedPos, 1.0);
       // Абсолютная позиция в системе кольца: смещение сектора + локальная
@@ -249,7 +246,6 @@ export function instancedAsteroidShaderSource(
       vRingPos = worldPosition.xyz + uOriginOffset;
 
       vec4 viewLightDirection = viewMatrix * vec4(lightPosition, 1.0);
-      mat3 instanceNormalMatrix = mat3(instanceMatrix);
 
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
@@ -266,7 +262,7 @@ export function instancedAsteroidShaderSource(
       // применяется к геометрической нормали во фрагменте.
       vObjectPos = restPos;
       vObjectNormal = restNormal;
-      vObjToView = normalMatrix * instanceNormalMatrix * spin;
+      vObjToView = normalMatrix * asteroidNormalMatrix(mat3(instanceMatrix), spin);
       vFade = instanceFade;
       // Freshness фасет разлома + cavity кратерных чаш из запекания (см. attribute
       // выше); резервные каналы zw не прокидываем
@@ -322,6 +318,7 @@ export function instancedAsteroidShaderSource(
     varying vec3 vObjectNormal;
     varying mat3 vObjToView;
     varying float vFade;
+    varying float vAsteroidDetailWeight;
     varying vec2 vSurfaceData;
     // Готовые пер-инстансные хеши из вершинника (анти-ULP-джиттер, см. вершинник)
     varying float vTintSeed;
@@ -335,6 +332,7 @@ export function instancedAsteroidShaderSource(
     #include <triplanarDetailFunctions>
     #include <ringDustUniforms>
     #include <ringDustFunctions>
+#include <asteroidAppearanceFunctions>
 
     // Interleaved gradient noise (Jimenez) — экранный дизер для fade-переходов.
     float fadeDither(vec2 fragCoord) {
@@ -354,129 +352,10 @@ export function instancedAsteroidShaderSource(
       if (vFade < 0.0) fadeThresh = 1.0 - fadeThresh;
       if (fadeMag < fadeThresh) discard;
 
-      vec3 surfDir = normalize(vObjectPos);${iceFragmentLocals}
-
-      // Макро-облик: альбедо (джиттер/мотл/maria), рельеф больше не возмущает
-      // нормаль процедурно — нормаль геометрическая, деталь несёт PBR-микрослой.
-      vec3 albedo = applyAsteroidSurface(surfDir, vTintSeed, vDomainOffset, ${knob.rockColor}, uColorJitter, uTintStrength, uMariaStrength);
-      // Тинт по цвету полосы кольца на радиусе камня (см. чанк RingDust): вблизи
-      // камни несут ту же палитру, что кольцо издали. До микрослоя — тот ложится сверху
-      albedo *= ringBandTint(length(vRingPos.xz));
-
-      // Геометрическая объектная нормаль; трипланарная дельта нормали (ниже)
-      // применяется к ней. AO — единственный источник теперь ARM-карта микрослоя.
-      vec3 objN = normalize(vObjectNormal);
-      float surfAO = 1.0;
-
-      // --- Фотограмметрический PBR-микрослой (трипланар, см. чанк TriplanarDetail) ---
-      // Текстура = структура (яркость/нормаль/шероховатость), цвет = грейдинг
-      // профиля. Пер-инстансный сдвиг проекции — против повторов пятен на соседях.
-      float specStrength = ${knob.specularStrength};
-      float specPower = ${knob.specularPower};
-      if (uDetailMapsEnabled > 0.5) {
-        vec3 geomN = normalize(vObjectNormal);
-        vec3 triW = triplanarWeights(geomN);
-        // Сдвиг проекции — готовый хеш из вершинника (анти-ULP-джиттер)
-        vec2 triOffset = vTriOffset;
-
-        // Альбедо: десатурированная структура текстуры × грейд профиля.
-        // uDetailBrightness компенсирует среднюю яркость диффуза (< 1.0)
-        vec3 detail = triplanarAlbedo(uRockDiffMap, vObjectPos, triW, triOffset);
-        float detailLum = dot(detail, vec3(0.299, 0.587, 0.114));
-        vec3 structureTint = mix(vec3(detailLum), detail, uDetailSaturation);
-        albedo *= structureTint * uDetailBrightness;
-
-        // Нормаль: тангенциальная дельта whiteout-нормали поверх геометрической —
-        // микрорельеф ложится на форму, не искажая крупный силуэт
-        vec3 nDetail = triplanarNormal(uRockNorMap, vObjectPos, geomN, triW, triOffset);
-        objN = normalize(objN + uDetailNormalScale * (nDetail - geomN));
-
-        // ARM: r=AO (умножается в каверн-AO), g=roughness (глушит блик)
-        vec3 arm = triplanarArm(uRockArmMap, vObjectPos, triW, triOffset);
-        surfAO *= mix(1.0, arm.r, uDetailAoInfluence);
-        float gloss = 1.0 - arm.g * uDetailRoughInfluence;
-        specStrength *= gloss;
-        specPower = max(specPower * gloss, 2.0);
-      }
-
-      // Запечённые атрибуты породы: свежий скол разлома светлее и глаже
-      // (меньше реголита), днища кратеров затенены (см. ArchetypeShape.surfaceAt)
-      albedo *= 1.0 + uFreshnessBrighten * vSurfaceData.x;
-      specStrength *= 1.0 + 0.5 * vSurfaceData.x;
-      surfAO *= 1.0 - uCavityShade * vSurfaceData.y;
-
-      // Объектная нормаль → view; учёт ориентации грани
-      vec3 normal = normalize(vObjToView * objN);
-      if (!gl_FrontFacing) normal = -normal;
-
-      vec3 lightDirection = normalize(vViewLightDirection);
-      vec3 viewDir = normalize(vViewPosition);
-      float NdotL = dot(normal, lightDirection);
-      float NdotV = dot(normal, viewDir);
-      float cosPhase = dot(lightDirection, viewDir);
-
-      // Диффуз реголита (см. чанк AsteroidBrdf): Ламберт/Ломмель-Зелигер по
-      // профилю + оппозиционный пик — камень ровный по диску, с резким лимбом
-      float lightIntensity = asteroidRegolithDiffuse(NdotL, NdotV, cosPhase, ${knob.lunarMix}, uOppositionSurge);
-
-      // Тень планеты (умбра): та же аналитическая модель, что у пыли и 2D-кольца
-      // (ringDustPlanetShadow), поэтому граница тени совпадает между слоями. Гасит
-      // ТОЛЬКО прямой свет звезды (диффуз + блик ниже); эмбиент остаётся → камень
-      // в тени не проваливается в глухой ноль (floor 0.04, как у прочих слоёв).
-      float planetShadow = ringDustPlanetShadow(vRingPos);
-      // Самозатенение слоя кольца: камни и пыль над точкой вдоль луча звезды
-      // (ringLayerShadow). Прямой свет = тень планеты × тень слоя
-      float direct = planetShadow * ringLayerShadow(vRingPos);
-
-      // Planetshine: второй источник — планета рядом; ложится на альбедо с AO,
-      // в умбре фаза сама уходит в ноль
-      float shine = asteroidPlanetshine(normal, normalize(vPlanetDirView), vRingPos, uDustLightDirRing, uDustPlanetRadius);
-
-      // Planetshine — второй источник света: цвет звезды его не касается.
-      #ifdef USE_LIGHT_TINT
-        vec3 finalColor = albedo * (lightIntensity * surfAO * direct * uLightColor + ${knob.surfaceAmbient});
-      #else
-        vec3 finalColor = albedo * (lightIntensity * surfAO * direct + ${knob.surfaceAmbient});
-      #endif
-      finalColor += albedo * uPlanetshineColor * (uPlanetshineStrength * shine * surfAO);
-
-      // Подсветка от листа кольца (см. AsteroidBrdf): свет звезды, рассеянный
-      // освещённым листом; тень планеты гасит её вместе с листом, тень слоя — нет
-      // (лист и есть источник). Цвет листа — полоса в линейном: байты sRGB-текстуры
-      // декодируются, NoColorSpace — как есть (так их показывает меш кольца)
-      if (uRingBandEnabled > 0.5 && uRingshineStrength > 0.0) {
-        float ringR = length(vRingPos.xz);
-        vec3 band = ringBandAt(ringR).rgb;
-        vec3 sheetColor = mix(band, pow(band, vec3(2.2)), uRingBandSrgb);
-        vec3 ringshine = asteroidRingshine(normal, normalize(vRingNormalView), vRingPos, uDustLightDirRing, ringLayerTau(ringR), sheetColor, uLayerHalfThickness);
-        #ifdef USE_LIGHT_TINT
-          finalColor += albedo * ringshine * (uRingshineStrength * planetShadow * surfAO) * uLightColor;
-        #else
-          finalColor += albedo * ringshine * (uRingshineStrength * planetShadow * surfAO);
-        #endif
-      }
-
-      // Blinn-Phong блик (металл/лёд), только на освещённой стороне, со спекуляр-AA.
-      vec3 halfVec = normalize(lightDirection + viewDir);
-      // Спекуляр-AA (B4): на дальних/мелких камнях нормаль сильно меняется в
-      // пределах пикселя → узкий блик «фейерит». Разброс нормали оцениваем
-      // экранными производными и по нему (Toksvig-подобно) расширяем блик:
-      // снижаем эффективную жёсткость И силу, гася подпиксельные вспышки.
-      // var→0 (близко/гладко): множитель 1, блик как есть.
-      float specNormalVar = dot(dFdx(normal), dFdx(normal)) + dot(dFdy(normal), dFdy(normal));
-      float specToksvig = 1.0 / (1.0 + specPower * specNormalVar);
-      float specPowerAA = specPower * specToksvig;
-      float spec = pow(max(dot(normal, halfVec), 0.0), specPowerAA) * specStrength * specToksvig;
-      vec3 specColor = mix(vec3(1.0), albedo, ${knob.specularTint});
-      // Гейт блика — сырой косинус к свету, а не LS-диффуз (тот к лимбу доходит до 2)
-      #ifdef USE_LIGHT_TINT
-        finalColor += spec * specColor * uLightColor * max(NdotL, 0.0) * direct;
-      #else
-        finalColor += spec * specColor * max(NdotL, 0.0) * direct;
-      #endif
-
-      // Аэроперспектива: камни тонут в пылевой дымке с расстоянием
-      finalColor = ringDustApplyFog(finalColor, vRingPos);
+${iceFragmentLocals}
+      AsteroidAppearanceProfile profile = AsteroidAppearanceProfile(${knob.rockColor}, ${knob.specularStrength}, ${knob.specularPower}, ${knob.specularTint}, ${knob.lunarMix}, ${knob.surfaceAmbient});
+      vec3 finalColor = shadeAsteroid(vObjectPos, vObjectNormal, vObjToView, vViewPosition, vViewLightDirection,
+        vPlanetDirView, vRingNormalView, vRingPos, vSurfaceData, vTintSeed, vDomainOffset, vTriOffset, vAsteroidDetailWeight, profile);
 
       gl_FragColor = vec4(finalColor, 1.0);
 

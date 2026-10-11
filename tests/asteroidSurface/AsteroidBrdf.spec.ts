@@ -1,3 +1,4 @@
+import { InstancedAsteroidShader } from '@/core/materials/shaders/InstancedAsteroidShader'
 import { planetshine, regolithDiffuse } from './brdfMirror'
 import { asteroidBrdfFunctions } from '@/core/materials/shaders/lib/chunks/AsteroidBrdf'
 import { AppShaderChunk } from '@/core/materials/shaders/lib/chunks'
@@ -84,10 +85,10 @@ describe('AsteroidBrdf GLSL: одна модель для L0 и L1', () => {
   })
 
   it('L0: диффуз через реголит, блик гейтится сырым NdotL, planetshine ложится на альбедо', () => {
-    const fs = InstancedAsteroidShaderTemplate.fragmentShader
+    const fs = new InstancedAsteroidShader().fragmentShader
     const vs = InstancedAsteroidShaderTemplate.vertexShader
-    expect(fs).toContain('#include <asteroidBrdfFunctions>')
-    expect(fs).toContain('asteroidRegolithDiffuse(NdotL, NdotV, cosPhase, uLunarMix, uOppositionSurge)')
+    expect(InstancedAsteroidShaderTemplate.fragmentShader).toContain('#include <asteroidBrdfFunctions>')
+    expect(fs).toContain('asteroidRegolithDiffuse(NdotL, NdotV, cosPhase, profile.lunarMix, uOppositionSurge)')
     expect(fs).toContain('asteroidPlanetshine(normal, normalize(vPlanetDirView), vRingPos, uDustLightDirRing, uDustPlanetRadius)')
     expect(fs).toContain('uPlanetshineColor * (uPlanetshineStrength * shine')
     // Блик — только на освещённой стороне по сырому косинусу, не по LS-диффузу (тот до 2)

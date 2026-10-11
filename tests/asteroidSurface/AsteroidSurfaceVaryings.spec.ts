@@ -31,6 +31,6 @@ describe('L0 вершинный шейдер: varyings облика', () => {
     expect(shader.vertexShader).toContain('varying vec3 vObjectNormal')
     expect(shader.vertexShader).toContain('varying mat3 vObjToView')
     expect(shader.vertexShader).toContain('vObjectNormal = restNormal')
-    expect(shader.vertexShader).toContain('vObjToView = normalMatrix * instanceNormalMatrix * spin')
+    expect(shader.vertexShader).toContain('vObjToView = normalMatrix * asteroidNormalMatrix(mat3(instanceMatrix), spin)')
   })
 })

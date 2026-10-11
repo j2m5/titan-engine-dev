@@ -70,7 +70,7 @@ describe('asteroidRingshine — шейдеры', () => {
   })
 
   it('L0 и L1: вызов под uRingBandEnabled, сила uRingshineStrength, тень планеты, цвет листа по пространству текстуры', () => {
-    const l0 = InstancedAsteroidShaderTemplate.fragmentShader
+    const l0 = new InstancedAsteroidShader().fragmentShader
     const l1 = new BillboardAsteroidMaterial().fragmentShader
     for (const frag of [l0, l1]) {
       expect(frag).toContain('uniform float uRingshineStrength;')

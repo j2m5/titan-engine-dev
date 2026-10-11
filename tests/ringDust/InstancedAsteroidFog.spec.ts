@@ -27,7 +27,7 @@ describe('InstancedAsteroidShaderTemplate dust fog (L0)', () => {
 
   it('passes ring-local position to fragment and applies fog', () => {
     expect(InstancedAsteroidShaderTemplate.vertexShader).toContain('vRingPos')
-    expect(InstancedAsteroidShaderTemplate.fragmentShader).toContain('ringDustApplyFog(finalColor, vRingPos)')
+    expect(new TestShader(InstancedAsteroidShaderTemplate).fragmentShader).toContain('ringDustApplyFog(finalColor, vRingPos)')
   })
 
   it('resolves ring dust includes through AbstractShader', () => {

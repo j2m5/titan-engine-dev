@@ -2,6 +2,7 @@ import { Frustum, Matrix4, Sphere, Vector3 } from 'three'
 import { SectorGrid, SectorInfo, SectorBounds, sectorCenter } from './SectorGrid'
 import { AsteroidGenerator } from './AsteroidGenerator'
 import { InstancePool, LODLevel, Allocation } from './InstancePool'
+import { advanceDetailMix, detailEndDistance } from './impostors/impostorDetail'
 
 /**
  * Конфигурация LOD-порогов
@@ -54,6 +55,8 @@ interface SectorState {
   fade: number
   /** Целевое значение fade */
   fadeTarget: number
+  /** Непрерывный вес деталей, независимый от видимости сектора. */
+  detailMix: number
   /** Помечен для удаления после завершения fade-out */
   pendingRemoval: boolean
   /** Уходящий тир во время кросс-фейда смены LOD (null вне перехода) */
@@ -276,6 +279,9 @@ class SectorManager {
 
     const data = this.generator.generateMatrices(seed, count, bounds)
     this.pool.writeMatrices(stream, allocation.offset, data)
+    if (this.pool.impostorAttributes) {
+      this.pool.writeArchetypes(allocation, this.generator.archetypeAssignment(seed, count, this.pool.geometryStreamCount))
+    }
     this.pool.writeFade(stream, allocation.offset, allocation.count, 0.0)
     this.writeSectorOrigins([allocation], bounds)
 
@@ -464,9 +470,12 @@ class SectorManager {
       instanceCount,
       fade: 0.0,
       fadeTarget: 1.0,
+      detailMix: lodLevel === LODLevel.Billboard ? 0 : 1,
       pendingRemoval: false,
       outgoing: null
     }
+
+    this.writeSectorDetails(state, allocations)
 
     this.activeSectors.set(info.key, state)
     return true
@@ -520,8 +529,17 @@ class SectorManager {
     // fade=0 уже записан в буфер внутри allocateForLOD — повторной записи не требуется.
     state.fade = 0.0
     state.fadeTarget = 1.0
+    this.writeSectorDetails(state, allocations)
 
     return true
+  }
+
+  private writeSectorDetails(state: SectorState, allocations: Allocation[]): void {
+    const end = detailEndDistance(this.thresholds.l0MaxDistance, state.info.boundingRadius)
+    for (const allocation of allocations) {
+      this.pool.writeDetailEnd(allocation, end)
+      this.pool.writeDetailMix(allocation, state.detailMix)
+    }
   }
 
   /**
@@ -532,6 +550,12 @@ class SectorManager {
     const toRemove: string[] = []
 
     for (const [key, state] of this.activeSectors) {
+      const nextMix = advanceDetailMix(state.detailMix, state.lodLevel === LODLevel.Billboard ? 0 : 1, delta, this.fadeSpeed)
+      if (nextMix !== state.detailMix) {
+        state.detailMix = nextMix
+        for (const allocation of state.allocations) this.pool.writeDetailMix(allocation, nextMix)
+        for (const allocation of state.outgoing?.allocations ?? []) this.pool.writeDetailMix(allocation, nextMix)
+      }
       if (state.fade !== state.fadeTarget) {
         if (state.fade < state.fadeTarget) {
           state.fade = Math.min(state.fade + step, state.fadeTarget)

@@ -52,7 +52,8 @@ describe('SkyboxBackground: собственный фоновый проход',
       dispose: vi.fn(() => {
         for (const child of [...scene.children]) disposeSceneTree(child)
       }),
-      start: vi.fn()
+      start: vi.fn(),
+      initialize: vi.fn()
     } as unknown as Engine
     const observer = {
       scenario: null,
@@ -106,7 +107,8 @@ describe('SkyboxBackground: собственный фоновый проход',
       dispose: vi.fn(() => {
         for (const child of [...scene.children]) disposeSceneTree(child)
       }),
-      start: vi.fn()
+      start: vi.fn(),
+      initialize: vi.fn()
     } as unknown as Engine
     const observer = {
       scenario: null,

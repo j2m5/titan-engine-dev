@@ -13,6 +13,31 @@ const okResponse = (buffer: ArrayBuffer): Response =>
   ({ ok: true, status: 200, arrayBuffer: async () => buffer }) as unknown as Response
 
 describe('ShapeModelStorage: загрузка реальных моделей форм', () => {
+  it('прерывает зависший fetch через 30 секунд и кэширует null', async () => {
+    vi.useFakeTimers()
+    try {
+      let signal: AbortSignal | null = null
+      const fetchFn: typeof fetch = async (_url, init) => {
+        signal = init?.signal ?? null
+        return new Promise<Response>((_resolve, reject) => signal?.addEventListener('abort', () => reject(new DOMException('Отменено', 'AbortError'))))
+      }
+      const storage = new ShapeModelStorage(fetchFn), pending = storage.load('itokawa', 'l0')
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect((signal as AbortSignal | null)?.aborted).toBe(true)
+      await expect(pending).resolves.toBeNull()
+      expect(storage.load('itokawa', 'l0')).toBe(pending)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally { vi.useRealTimers() }
+  })
+
+  it('снимает таймер успешного запроса', async () => {
+    vi.useFakeTimers()
+    try {
+      const storage = new ShapeModelStorage(async () => okResponse(sampleBuffer()))
+      expect(await storage.load('itokawa', 'l0')).not.toBeNull()
+      expect(vi.getTimerCount()).toBe(0)
+    } finally { vi.useRealTimers() }
+  })
   it('грузит по пути формата через Storage.url и отдаёт данные модели', async () => {
     const fetchMock = vi.fn(async () => okResponse(sampleBuffer()))
     const storage = new ShapeModelStorage(fetchMock as unknown as typeof fetch)
