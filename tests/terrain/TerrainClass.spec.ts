@@ -1,11 +1,8 @@
-import { RenderingObjects } from '@storage/database'
-import type { IRenderingObject } from '@/core/models/types'
 import { Actor } from '@/core/models/Actor'
 import { TERRAIN_CLASSES, terrainArchetypeOf, terrainClassOf, type TerrainClass } from '@/core/terrain/terrainClass'
 
 const terraformed = (): Actor[] =>
-  RenderingObjects.filter((row: IRenderingObject) => (row.data as { macroStrength?: number } | undefined)?.macroStrength === 0.25)
-    .map((row: IRenderingObject) => Actor.find(row.actorId)!)
+  Actor.all().filter((actor) => actor.resources.where('resourceType', 'height').first() !== undefined).all()
 
 describe('terrainArchetypeOf', () => {
   it('точный путь набора → архетип; прочее → null', () => {
@@ -25,21 +22,17 @@ describe('terrainClassOf', () => {
     )
   })
 
-  it('распределение 55 терраформных тел', () => {
+  it('распределение 67 терраформных тел', () => {
     const bodies = terraformed()
-    expect(bodies).toHaveLength(55)
+    expect(bodies).toHaveLength(67)
     const counts = new Map<TerrainClass | null, number>()
     for (const body of bodies) {
       const cls = terrainClassOf(body)
       counts.set(cls, (counts.get(cls) ?? 0) + 1)
     }
     expect(Object.fromEntries(counts)).toEqual({
-      // +4 тела системы W26 (Emberon, Halcyra I/II, Nivalis): общий детальный
-      // набор rocky_trail; у Nivalis есть атмосфера — она в rocky-atmosphere,
-      // остальные три без атмосферы — в rocky-airless.
-      // +1 Isvara (Алькаид): ледяной набор + атмосфера — ice-atmosphere.
-      'rocky-airless': 19, 'rocky-atmosphere': 5, 'ice-airless': 23, 'ice-atmosphere': 1, 'sand-atmosphere': 3,
-      'sand-airless': 2, 'volcanic-atmosphere': 1, 'volcanic-airless': 1
+      'rocky-airless': 23, 'rocky-atmosphere': 5, 'ice-airless': 30, 'ice-atmosphere': 1, 'sand-atmosphere': 3,
+      'sand-airless': 2, 'volcanic-atmosphere': 1, 'volcanic-airless': 2
     })
   })
 

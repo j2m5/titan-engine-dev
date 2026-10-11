@@ -261,13 +261,8 @@ describe('TerrainMaterial: проводка cavity (гейт USE_CAVITY, юни�
   })
 })
 
-// Счётный инвариант данных (Task 3, дополнен Task 6 аркой воды): охват
-// выводится ПРОГРАММНО из БД — акторы с height-ресурсом (путь заканчивается
-// на _height.raw), минус фотомозаичные {5, 6, 8, 19, 7} (Меркурий, Венера,
-// Марс, Луна, Земля — реальные снимки/DEM, cavity им не полагается).
-// Ожидание — ровно 50 тел (45 прежних + 4 процедурных тела системы W26 —
-// Emberon, Halcyra I/II, Nivalis — + 1 Isvara системы Алькаид).
-describe('Счётный инвариант: cavityStrength у 50 терраформных тел (Task 3 + Task 6)', () => {
+// Cavity — у тел с картой высот, кроме фотомозаичных поверхностей.
+describe('Охват cavityStrength терраформных тел', () => {
   const PHOTOMOSAIC_ACTOR_IDS: readonly number[] = [5, 6, 8, 19, 7]
 
   const heightActorIds = new Set(
@@ -280,11 +275,11 @@ describe('Счётный инвариант: cavityStrength у 50 террафо
 
   const coverageActorIds = [...heightActorIds].filter((id) => !PHOTOMOSAIC_ACTOR_IDS.includes(id))
 
-  it('охват — ровно 50 тел', () => {
-    expect(coverageActorIds.length).toBe(50)
+  it('охват — 62 тела, включая 12 лун Darkness', () => {
+    expect(coverageActorIds.length).toBe(62)
   })
 
-  it('у всех 50 тел охвата data.cavityStrength > 0', () => {
+  it('у всех тел охвата data.cavityStrength > 0', () => {
     for (const actorId of coverageActorIds) {
       const renderingObject = RenderingObjects.find((ro) => ro.actorId === actorId)
 
@@ -308,22 +303,15 @@ describe('Счётный инвариант: cavityStrength у 50 террафо
     }
   })
 
-  // Фикс-волна финального ревью, находка 4: прежние два теста выше проверяют
-  // ручку ТОЛЬКО на множестве, выведенном из heightActorIds — лишняя ручка на
-  // теле ВНЕ этого множества (газовый гигант — легаси-материал, никогда не
-  // несёт height-ресурс с суффиксом _height.raw) прошла бы обоими зелёной.
-  // Этот тест считает cavityStrength>0 по ВСЕЙ таблице RenderingObjects
-  // напрямую — единственный, кто ловит лишнюю ручку у тела вне охвата.
-  // Дискриминация подтверждена мутацией (руками, не в этом файле): временная
-  // строка cavityStrength: 0.35 у Нептуна (renderingObjects id 4, actorId 13,
-  // легаси-bump гигант) дала RED только на этом тесте, была отменена.
-  it('ровно 50 строк RenderingObjects несут cavityStrength (не только заявленный охват)', () => {
+  it('cavityStrength задан ровно у тел охвата, без лишних записей', () => {
     const withCavity = RenderingObjects.filter((ro) => {
       const data = ro.data as { cavityStrength?: number }
 
       return typeof data.cavityStrength === 'number' && data.cavityStrength > 0
     })
 
-    expect(withCavity.length).toBe(50)
+    expect(withCavity.map((row) => row.actorId).sort((a, b) => a - b)).toEqual(
+      [...coverageActorIds].sort((a, b) => a - b)
+    )
   })
 })

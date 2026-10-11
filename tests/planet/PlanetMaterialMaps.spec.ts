@@ -1432,10 +1432,11 @@ describe('поверхность планеты: у каждого терраф�
     }
   )
 
-  // Раскладка спеки архетипов (2026-08-24) после раската ice (2026-08-30) и Isvara системы Алькаид: 24 ледяных тела —
-  // ледяные луны Юпитера/Сатурна/Урана/Нептуна, Плутон/Харон, КБО, Оханн II (тёмно-серый диффуз);
-  // Оханн I (бурый диффуз) остался камнем. Япет/Каллисто — тёмный лёд, откат на камень = строка пивота.
-  const ICE_ACTOR_IDS = [14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 69, 133] as const
+  // Ледяной набор включает тёмный лёд и семь лун Darkness.
+  const ICE_ACTOR_IDS = [
+    14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 69, 133,
+    151, 153, 154, 156, 157, 158, 159
+  ] as const
 
   const archetype = (actorId: number): string | null =>
     archetypeOf(Actor.find(actorId)!.resources.where('resourceType', 'detailDiffuse').first()!.getAttribute('path') as string)
@@ -1444,11 +1445,9 @@ describe('поверхность планеты: у каждого терраф�
     expect(archetype(actorId)).toBe('ice')
   })
 
-  // Раскладка sand/volcanic (2026-08-31, приёмка пилотов пройдена): sand — Марс, Титан, Татуин,
-  // Гермесса (66) и Адриана IV (74) — тёплые песчаные диффузы; Гомрассен/Хенини/Адриана II — серые,
-  // остались камнем. volcanic — Венера (6) и Ио (20).
+  // Песок: Марс, Титан, Татуин, Гуэрмесса, Адриана IV; вулканическая порода: Венера, Ио, Kharos.
   const SAND_ACTOR_IDS = [8, 29, 62, 66, 74] as const
-  const VOLCANIC_ACTOR_IDS = [6, 20] as const
+  const VOLCANIC_ACTOR_IDS = [6, 20, 152] as const
 
   it.each(SAND_ACTOR_IDS)('actorId %i — песчаный архетип', (actorId) => {
     expect(archetype(actorId)).toBe('sand')
@@ -1462,6 +1461,6 @@ describe('поверхность планеты: у каждого терраф�
     const iceActors = terraformActors.filter((actor) => archetype(actor.getAttribute('id') as number) === 'ice')
     expect(iceActors.map((actor) => actor.getAttribute('id')).sort((a, b) => Number(a) - Number(b))).toEqual([...ICE_ACTOR_IDS])
 
-    for (const actorId of [19, 5, 65, 68]) expect(archetype(actorId), `actorId ${actorId}`).toBe('rocky_trail')
+    for (const actorId of [19, 5, 65, 68, 150, 155, 160, 161]) expect(archetype(actorId), `actorId ${actorId}`).toBe('rocky_trail')
   })
 })

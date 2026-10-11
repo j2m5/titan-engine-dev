@@ -35,5 +35,17 @@ export const RotationObjects: IRotationObject[] = [
   { id: 29, actorId: 139, meridianAngle: 0, ascendingNode: 40, inclination: 1.2, period: 0, direction: 1 },
   { id: 30, actorId: 140, meridianAngle: 0, ascendingNode: 40, inclination: 1.2, period: 0, direction: 1 },
   { id: 31, actorId: 142, meridianAngle: 0, ascendingNode: 125, inclination: 62, period: 0.0000092, direction: 1 },
-  { id: 32, actorId: 148, meridianAngle: 0, ascendingNode: 60, inclination: 30, period: 0.0000000647, direction: 1 }
+  { id: 32, actorId: 148, meridianAngle: 0, ascendingNode: 60, inclination: 30, period: 0.0000000647, direction: 1 },
+  { id: 33, actorId: 150, meridianAngle: 252.9847359461, ascendingNode: 180.0787166317, inclination: 78.93777445564, period: 29.39597286873, direction: 1 },
+  { id: 34, actorId: 151, meridianAngle: 325.9014947872, ascendingNode: 180.4933505496, inclination: 78.26547776276, period: 50.83210966859, direction: 1 },
+  { id: 35, actorId: 152, meridianAngle: 119.2270334968, ascendingNode: 178.8635854898, inclination: 78.25266238057, period: 87.94516018374, direction: 1 },
+  { id: 36, actorId: 153, meridianAngle: 321.8769525519, ascendingNode: 180.6417833024, inclination: 79.19321107525, period: 150.1643557404, direction: 1 },
+  { id: 37, actorId: 154, meridianAngle: 288.8308668582, ascendingNode: 180.8859121258, inclination: 79.28844865808, period: 300.3287114808, direction: 1 },
+  { id: 38, actorId: 155, meridianAngle: 335.7305885255, ascendingNode: 181.423281604, inclination: 79.4790240749, period: 600.6574229617, direction: 1 },
+  { id: 39, actorId: 156, meridianAngle: 341.3182215099, ascendingNode: 183.277409376, inclination: 77.29507887465, period: 1266.124767397, direction: 1 },
+  { id: 40, actorId: 157, meridianAngle: 61.01239020392, ascendingNode: 175.8316775898, inclination: 73.23172691248, period: 2780.412679784, direction: 1 },
+  { id: 41, actorId: 158, meridianAngle: 30.4805963634, ascendingNode: 168.410737551, inclination: 86.70555883214, period: 6242.120258179, direction: 1 },
+  { id: 42, actorId: 159, meridianAngle: 44.6442495123, ascendingNode: 232.5163876284, inclination: 109.0652988111, period: 38.6, direction: 1 },
+  { id: 43, actorId: 160, meridianAngle: 311.4293307631, ascendingNode: 12.01084899152, inclination: 56.74773610852, period: 19.7, direction: 1 },
+  { id: 44, actorId: 161, meridianAngle: 89.2828081056, ascendingNode: 26.2605986533, inclination: 118.5714781713, period: 61.3, direction: 1 }
 ]
