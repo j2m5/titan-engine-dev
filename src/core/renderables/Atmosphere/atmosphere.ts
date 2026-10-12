@@ -1163,15 +1163,24 @@ export const atmosphereShader = /* glsl */ `
       shadow_transmittance = GetTransmittance(atmosphere, transmittance_texture,
           r, mu, d, ray_r_mu_intersects_ground);
     }
-    scattering = scattering - shadow_transmittance * scattering_p;
-    single_mie_scattering =
-        single_mie_scattering - shadow_transmittance * single_mie_scattering_p;
+    IrradianceSpectrum single_mie_scattering_full = single_mie_scattering;
+    // Интерполяция близких LUT-сэмплов может дать отрицательную разность
+    // на коротком луче у заката. Ограничиваем физически неотрицательный вклад
+    // сегмента до экстраполяции Ми, которая иначе усиливает погрешность.
+    scattering = max(scattering - shadow_transmittance * scattering_p, vec3(0.0));
+    single_mie_scattering = max(
+        single_mie_scattering - shadow_transmittance * single_mie_scattering_p, vec3(0.0));
   #ifdef COMBINED_SCATTERING_TEXTURES
-    single_mie_scattering = GetExtrapolatedSingleMieScattering(
-        atmosphere, vec4(scattering, single_mie_scattering.r));
+    // При почти нулевой красной разности восстановление остальных каналов
+    // может завысить вклад. Часть луча не может рассеять больше всего луча.
+    single_mie_scattering = min(GetExtrapolatedSingleMieScattering(
+        atmosphere, vec4(scattering, single_mie_scattering.r)), single_mie_scattering_full);
   #endif
-    single_mie_scattering = single_mie_scattering *
-        smoothstep(Number(0.0), Number(0.01), mu_s);
+    // Освещённость вдоль луча уже учтена в LUT через GetTransmittanceToSun.
+    // Отсечка Ми по mu_s начала луча (hack оригинала для земного горизонта)
+    // гасила и его освещённую часть: с орбиты начало лежит на top_radius,
+    // и mu_s = 0 рисовал отдельную резкую границу внутри серпа планеты.
+    // Как и GetSkyRadiance, сохраняем рассеяние, рассчитанное для всего пути.
     return scattering * RayleighPhaseFunction(nu) + single_mie_scattering *
         MiePhaseFunction(atmosphere.mie_phase_function_g, nu);
   }
