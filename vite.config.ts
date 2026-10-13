@@ -17,6 +17,14 @@ export default defineConfig({
   },
   // воркер постройки патчей — ES-модуль (new Worker(..., { type: 'module' }))
   worker: { format: 'es' },
+  build: {
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        cloudLab: path.resolve(__dirname, 'cloud-lab.html')
+      }
+    }
+  },
   test: {
     globals: true,
     environment: 'jsdom',

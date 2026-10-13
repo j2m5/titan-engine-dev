@@ -6,6 +6,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:clouds:gpu": "node scripts/check-cloud-lab.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
@@ -36,6 +37,9 @@
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
+    "@takram/three-atmosphere": "0.19.1",
+    "@takram/three-clouds": "0.7.6",
+    "@takram/three-geospatial": "0.9.1",
     "@three.ez/instanced-mesh": "^0.3.13",
     "animejs": "^3.2.2",
     "dayjs": "^1.11.13",
