@@ -43,8 +43,9 @@ export interface LensFlareConfig {
      * Гейт штриха квадратичен по яркости: сумма для ровной области равна
      * примерно `L * (L - streakThreshold) * HALF_SAMPLES`, и предел half-float
      * достигается около `L = 31`. Ориентиры: звезда около 10, номинальный диск
-     * чёрной дыры около 16, белый карлик до 32 (потолок WD_HDR_CEILING). Ноль
-     * гасит штрих целиком.
+     * чёрной дыры около 16, белый карлик до 32 (потолок WD_HDR_CEILING).
+     * Рабочий потолок ниже этих пиков: он также ограничивает засветку от
+     * крупных HDR-областей после уменьшения общего bloom. Ноль гасит штрих.
      */
     streakSourceCeiling: number
   }
@@ -52,8 +53,9 @@ export interface LensFlareConfig {
 
 /**
  * Значения призраков стартовые, по расчёту (калибровка в flareGhosts.ts),
- * не замер — приёмка по виду за владельцем. Сила штриха и intensity выбраны
- * владельцем.
+ * не замер — приёмка по виду за владельцем. Штрих перекалиброван вместе с
+ * общим bloom: меньшая сила, менее насыщенный синий и более низкий потолок
+ * источника. Общая intensity сохраняет принятую калибровку призраков.
  */
 export const lensFlare: LensFlareConfig = {
   lensFlare: {
@@ -61,10 +63,10 @@ export const lensFlare: LensFlareConfig = {
     ghostAmount: 1,
     ghostVignette: 2,
     ghostChromatic: 1,
-    streakAmount: 0.005,
+    streakAmount: 0.002,
     streakThreshold: 0.3,
     streakScale: 5,
-    streakTint: [0.15, 0.1, 1.0],
-    streakSourceCeiling: 16
+    streakTint: [0.25, 0.35, 0.7],
+    streakSourceCeiling: 6
   }
 }

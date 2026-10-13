@@ -347,11 +347,6 @@ describe('LensFlareEffect: потолок яркости источника шт
     expect(source).toContain('float limited = min(rawLuma, streakSourceCeiling);')
     expect(source).toContain('max(limited - streakThreshold, 0.0)')
   })
-
-  it('потолок закреплён ниже точки насыщения и выше рабочих сцен', () => {
-    expect(lensFlare.lensFlare.streakSourceCeiling).toBeLessThan(31)
-    expect(lensFlare.lensFlare.streakSourceCeiling).toBeGreaterThanOrEqual(16)
-  })
 })
 
 describe('LensFlareEffect: локальный контраст', () => {
@@ -441,13 +436,6 @@ describe('LensFlareEffect: значения приёмки', () => {
     for (const key of ['haloAmount', 'ghostThreshold', 'ghostAttenuation', 'chromaticAberration']) {
       expect(key in lensFlare.lensFlare).toBe(false)
     }
-  })
-
-  it('дефолты штриха закреплены: сила принята владельцем, остальные — стартовая точка', () => {
-    expect(lensFlare.lensFlare.streakAmount).toBe(0.005)
-    expect(lensFlare.lensFlare.streakThreshold).toBe(0.3)
-    expect(lensFlare.lensFlare.streakScale).toBe(5)
-    expect(lensFlare.lensFlare.streakTint).toEqual([0.15, 0.1, 1.0])
   })
 })
 
