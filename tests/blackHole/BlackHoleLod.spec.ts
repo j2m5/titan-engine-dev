@@ -48,14 +48,14 @@ describe('LOD чёрной дыры (ApparentSizeLod с blackHole.lodPixels): ж
     ).toBeCloseTo(config('blackHole.lodPixels'), 6)
   })
 
-  it('после ресайза вьюпорта updateObject пересчитывает дистанцию', () => {
+  it('после ресайза вьюпорта updateView пересчитывает дистанцию', () => {
     const renderer = stubRenderer(1080)
     const lod = makeLod(renderer)
     const before: number = lod.levels[1].distance
     const ctx: UpdateContext = { camera: new PerspectiveCamera(FOV), delta: 0, epoch: 0, elapsed: 0 }
 
     renderer.domElement.height = 540
-    lod.updateObject(ctx)
+    lod.updateView(ctx.camera)
 
     expect(lod.levels[1].distance).toBeCloseTo(before / 2, 6)
   })
@@ -64,7 +64,7 @@ describe('LOD чёрной дыры (ApparentSizeLod с blackHole.lodPixels): ж
     const lod = makeLod(stubRenderer(1080))
     const ctx: UpdateContext = { camera: new PerspectiveCamera(FOV), delta: 0, epoch: 0, elapsed: 0 }
 
-    lod.updateObject(ctx)
+    lod.updateView(ctx.camera)
 
     expect(lod.levels[1].hysteresis).toBe(config('blackHole.lodHysteresis'))
     expect(config('blackHole.lodHysteresis')).toBeGreaterThan(0)
@@ -86,14 +86,14 @@ describe('LOD чёрной дыры (ApparentSizeLod с blackHole.lodPixels): ж
     expect(blackHole.blackHole.lodPixels).toBe(45)
   })
 
-  it('смена fov камеры пересчитывает дистанцию через updateObject', () => {
+  it('смена fov камеры пересчитывает дистанцию через updateView', () => {
     // Порог задан в пикселях: узкий fov растягивает пиксели по углу, дистанция
-    // растёт. updateObject читает живой ctx.camera.fov — не замороженный
+    // растёт. updateView читает живой camera.fov — не замороженный
     const renderer = stubRenderer(1080)
     const lod = makeLod(renderer)
     const ctx: UpdateContext = { camera: new PerspectiveCamera(25), delta: 0, epoch: 0, elapsed: 0 }
 
-    lod.updateObject(ctx)
+    lod.updateView(ctx.camera)
 
     expect(lod.levels[1].distance).toBe(lod.switchDistance(25))
     expect(lod.switchDistance(25)).toBeGreaterThan(lod.switchDistance(FOV))

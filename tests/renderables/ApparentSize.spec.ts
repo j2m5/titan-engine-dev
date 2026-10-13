@@ -100,12 +100,12 @@ describe('стык LOD звезды', () => {
     const renderer: WebGLRenderer = stubRenderer(1080)
     const { lod, disk, star, camera, ctx } = makeJunction(renderer)
 
-    lod.updateObject(ctx)
+    lod.updateView(ctx.camera)
 
     const switchDistance: number = lod.levels[1].distance
 
     camera.position.set(switchDistance, 0, 0)
-    star.updateObject(ctx)
+    star.updateView(ctx.camera)
 
     expect(apparentSizeAtDistance(diskWorldSize(disk), switchDistance, FOV, 1080)).toBeCloseTo(
       STAR_IMPOSTOR_PIXELS,
@@ -122,12 +122,12 @@ describe('стык LOD звезды', () => {
     const { lod, disk, star, camera, ctx } = makeJunction(renderer)
 
     renderer.domElement.height = 540
-    lod.updateObject(ctx)
+    lod.updateView(ctx.camera)
 
     const switchDistance: number = lod.levels[1].distance
 
     camera.position.set(switchDistance, 0, 0)
-    star.updateObject(ctx)
+    star.updateView(ctx.camera)
 
     expect(apparentSizeAtDistance(diskWorldSize(disk), switchDistance, FOV, 540)).toBeCloseTo(STAR_IMPOSTOR_PIXELS, 6)
     expect(apparentSizeAtDistance(star.scale.x, switchDistance, FOV, 540)).toBeCloseTo(STAR_IMPOSTOR_PIXELS, 6)
@@ -141,7 +141,7 @@ describe('стык LOD звезды', () => {
     const { lod, star, camera, ctx } = makeJunction(renderer)
     const node = new Object3D()
 
-    lod.updateObject(ctx)
+    lod.updateView(ctx.camera)
 
     const switchDistance: number = lod.levels[1].distance
     // порядок смещения барицентра двойной системы — доли дистанции переключения
@@ -151,7 +151,7 @@ describe('стык LOD звезды', () => {
     node.position.set(offset, 0, 0)
     camera.position.set(offset + switchDistance, 0, 0)
 
-    star.updateObject(ctx)
+    star.updateView(ctx.camera)
 
     expect(apparentSizeAtDistance(star.scale.x, switchDistance, FOV, 1080)).toBeCloseTo(STAR_IMPOSTOR_PIXELS, 6)
   })
@@ -159,12 +159,12 @@ describe('стык LOD звезды', () => {
   it('гистерезис доезжает до уровня билборда и переживает пересчёт дистанции', () => {
     // Прямое переключение (диск → билборд) происходит на нетронутой дистанции
     // стыка — гистерезис по контракту three ужимает порог только при уже
-    // видимом билборде. StarLod.updateObject пишет только levels[1].distance
+    // видимом билборде. StarLod.updateView пишет только levels[1].distance
     // и хранимый addLevel'ом hysteresis затирать не должен
     const renderer: WebGLRenderer = stubRenderer(1080)
     const { lod, ctx } = makeJunction(renderer)
 
-    lod.updateObject(ctx)
+    lod.updateView(ctx.camera)
 
     expect(lod.levels[1].hysteresis).toBe(config('star.lodHysteresis'))
     expect(config('star.lodHysteresis')).toBeGreaterThan(0)

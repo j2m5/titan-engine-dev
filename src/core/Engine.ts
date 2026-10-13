@@ -220,6 +220,8 @@ class Engine {
     this.cameraCollision.resolve()
     // после коллизии: высота над рельефом — по уже вытолкнутой позиции
     this.astroControls.setSurface(this.cameraCollision.nearestSurface())
+    // Импосторы и свечение должны видеть камеру после follow и коллизий.
+    this.sceneManager.updateView(this.renderCamera)
     this.labelRenderer.render(this.scene, this.renderCamera)
     this.sceneManager.updateMarkers()
     this.asteroidImpostors?.pumpFrame()

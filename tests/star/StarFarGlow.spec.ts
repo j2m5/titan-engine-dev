@@ -77,7 +77,7 @@ describe('StarLod: усиление свечения пишется в общи�
   it('издалека — полное усиление из конфига', () => {
     const lod = new StarLod(RADIUS_KM, fakeRenderer)
 
-    lod.updateObject(contextAt(lod.switchDistance(FOV) * 10))
+    lod.updateView(contextAt(lod.switchDistance(FOV) * 10).camera)
 
     expect(lod.glowGain.value).toBe(config('star.farGlowGain'))
   })
@@ -85,7 +85,7 @@ describe('StarLod: усиление свечения пишется в общи�
   it('вблизи — единица: диск крупнее порога затухания', () => {
     const lod = new StarLod(RADIUS_KM, fakeRenderer)
 
-    lod.updateObject(contextAt(lod.switchDistance(FOV) / 10))
+    lod.updateView(contextAt(lod.switchDistance(FOV) / 10).camera)
 
     expect(lod.glowGain.value).toBe(1)
   })
@@ -93,7 +93,7 @@ describe('StarLod: усиление свечения пишется в общи�
   it('на дистанции переключения — значение для 12 px', () => {
     const lod = new StarLod(RADIUS_KM, fakeRenderer, { gain: 2.5, fadePixels: 40 })
 
-    lod.updateObject(contextAt(lod.switchDistance(FOV)))
+    lod.updateView(contextAt(lod.switchDistance(FOV)).camera)
 
     expect(lod.glowGain.value).toBeCloseTo(starFarGlowGain(STAR_IMPOSTOR_PIXELS, 2.5, 40), 6)
   })
@@ -105,7 +105,7 @@ describe('StarLod: усиление свечения пишется в общи�
     const far = lod.switchDistance(FOV) * 10
 
     lod.position.set(far, 0, 0)
-    lod.updateObject(contextAt(far + lod.switchDistance(FOV) / 10))
+    lod.updateView(contextAt(far + lod.switchDistance(FOV) / 10).camera)
 
     expect(lod.glowGain.value).toBe(1)
   })

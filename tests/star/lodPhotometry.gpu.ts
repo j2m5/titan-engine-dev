@@ -123,6 +123,7 @@ export function checkStarLodPhotometry(): {
                 sphere.position.set(x * unitsPerPixel, y * unitsPerPixel, 0)
                 impostor.position.copy(sphere.position)
                 impostor.updateObject(ctx)
+                impostor.updateView(camera)
                 sphere.visible = true
                 impostor.visible = false
                 const body = measure()
