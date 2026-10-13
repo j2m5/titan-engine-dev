@@ -87,7 +87,12 @@ export const FakeStarShaderTemplate: ShaderProps = {
       // (WebGL2, деривативы в ядре): AA-кромка и экранный масштаб зерна.
       // Билборд живёт на STAR_IMPOSTOR_PIXELS, поэтому fade тут по факту
       // ноль — и диск на дистанции переключения приходит к тому же нулю
-      float alpha = 1.0 - smoothstep(1.0 - fwidth(r) * 1.5, 1.0, r);
+      // Полоса AA центрирована на r = 1: сглаживание только внутрь съедало
+      // площадь 12px-диска и 20–27% его энергии на переходе со сферы.
+      // Минимальная ширина сохраняет строгий порядок границ smoothstep
+      // даже в центре симметричного пиксельного квада, где fwidth(r) = 0.
+      float edgeWidth = max(0.5 * fwidth(r), 1e-6);
+      float alpha = 1.0 - smoothstep(1.0 - edgeWidth, 1.0 + edgeWidth, r);
       float fade = starGranulationFade(starDomainPerPixel(noiseDomain)) * uGranulation;
 
       if (alpha <= 0.0) {
