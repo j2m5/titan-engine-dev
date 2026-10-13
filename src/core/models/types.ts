@@ -10,6 +10,7 @@ import type {
 import { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { NebulaRenderingData } from '@/core/renderables/Nebula/NebulaRenderingData'
 import type { ProceduralSurfaceParams } from '@/core/terrain/proceduralSurfaceParams'
+import type { CloudConfig } from '@/core/clouds/CloudConfig'
 import type { BeltStructure } from '@/core/renderables/DetailedRingStreamingSystem/beltDensityProfile'
 
 export type ValueOf<T> = T[keyof T]
@@ -176,6 +177,7 @@ export interface IActorBoundResource extends IResource {
 }
 
 export interface IPlanetRenderingObject {
+  clouds?: CloudConfig
   emission: number
   /** Множитель наклона нормали из slope-карты (чанк SlopeNormal, USE_SLOPE): 1 = физически честно. Отсутствие поля = 0 → плоско. */
   bumpScale?: number
