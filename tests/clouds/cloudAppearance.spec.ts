@@ -1,6 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 import { CloudsEffect } from '@takram/three-clouds'
-import { DataTexture, RGBAFormat, SRGBColorSpace, PerspectiveCamera, Quaternion, Vector3, Texture } from 'three'
+import {
+  DataTexture,
+  RGBAFormat,
+  SRGBColorSpace,
+  PerspectiveCamera,
+  Quaternion,
+  Vector3,
+  Texture,
+  Matrix3,
+  Matrix4
+} from 'three'
 import { validCloudConfig } from './cloudFixtures'
 import { resolveCloudConfig } from '@/core/clouds/validateCloudConfig'
 import { prepareCloudAppearanceTextures } from '@/labs/jupiter-clouds/cloudAppearanceTextures'
@@ -13,7 +23,86 @@ const source = () =>
     2,
     RGBAFormat
   )
+
+// Interpret only vector addition and matrix/component multiplication, so the regression
+// exercises the emitted GLSL coordinate expressions rather than a copied transformation.
+function evaluateNoiseExpression(expression: string, values: Record<string, Vector3 | Matrix3>): Vector3 {
+  const tokens = expression.match(/\w+|[()+*]/g) ?? []
+  let cursor = 0
+  const operand = (): Vector3 | Matrix3 => {
+    if (tokens[cursor] === '(') {
+      cursor++
+      const value = sum()
+      if (tokens[cursor++] !== ')') throw new Error('Unbalanced shader expression')
+      return value
+    }
+    const value = values[tokens[cursor++]]
+    if (!value) throw new Error('Unknown shader operand')
+    return value.clone()
+  }
+  const product = (): Vector3 | Matrix3 => {
+    let value = operand()
+    while (tokens[cursor] === '*') {
+      cursor++
+      const right = operand()
+      if (!(right instanceof Vector3)) throw new Error('Expected vector multiplier')
+      value = value instanceof Matrix3 ? right.applyMatrix3(value) : value.multiply(right)
+    }
+    return value
+  }
+  const sum = (): Vector3 | Matrix3 => {
+    const value = product()
+    while (tokens[cursor] === '+') {
+      cursor++
+      const right = product()
+      if (!(value instanceof Vector3) || !(right instanceof Vector3)) throw new Error('Expected vector addition')
+      value.add(right)
+    }
+    return value
+  }
+  const result = sum()
+  if (!(result instanceof Vector3) || cursor !== tokens.length) throw new Error('Unsupported shader expression')
+  return result
+}
 describe('cloud appearance', () => {
+  it('preserves planet noise coordinates with geographic turbulence at high quality', () => {
+    const effect = new CloudsEffect(new PerspectiveCamera())
+    effect.qualityPreset = 'high'
+    const original = source(),
+      maps = prepareCloudAppearanceTextures(validCloudConfig().layers[0], () => original)
+    const binding = bindCloudAppearance(effect, validCloudConfig(), maps)
+    const rotation = new Quaternion().setFromAxisAngle(new Vector3(1, 2, 3).normalize(), 0.71)
+    binding.setPlanetRotation(rotation)
+    expect(effect.turbulence).toBe(true)
+    for (const pass of [effect.cloudsPass, effect.shadowPass]) {
+      const shader = pass.currentMaterial.fragmentShader
+      const values = {
+        position: new Vector3(0.12, 0.25, 0.4).applyQuaternion(rotation),
+        evolution: new Vector3(0.01, -0.02, 0.03).applyQuaternion(rotation),
+        turbulence: new Vector3(0.09, 0.04, -0.05),
+        cloudECEFToPlanet: new Matrix3().setFromMatrix4(
+          new Matrix4().makeRotationFromQuaternion(rotation.clone().invert())
+        ),
+        shapeRepeat: new Vector3(1, 1, 1),
+        shapeDetailRepeat: new Vector3(1, 1, 1),
+        shapeOffset: new Vector3(0.03, 0.06, 0.01),
+        shapeDetailOffset: new Vector3(0.03, 0.06, 0.01)
+      }
+      for (const [name, expected] of [
+        ['shapePosition', [0.25, 0.33, 0.39]],
+        ['detailPosition', [0.24, 0.35, 0.36]]
+      ] as const) {
+        const expression = shader.match(new RegExp(`vec3 ${name} = ([^;]+);`))?.[1]
+        if (!expression) throw new Error(`Missing ${name}`)
+        const actual = evaluateNoiseExpression(expression, values).toArray()
+        expected.forEach((value, i) => expect(actual[i]).toBeCloseTo(value, 10))
+      }
+    }
+    binding.dispose()
+    maps.dispose()
+    original.dispose()
+    effect.dispose()
+  })
   it('rejects independently valid mask and multiple layer profiles', () => {
     const config = validCloudConfig()
     const pattern = config.layers[0].pattern

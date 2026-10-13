@@ -59,14 +59,14 @@ export function adaptCloudAppearanceShader(source: string, pass: 'cloud' | 'shad
   shader = replaceExactlyOnce(
     shader,
     '(position + evolution + turbulence) * shapeRepeat',
-    '(cloudECEFToPlanet * (position + evolution + turbulence)) * shapeRepeat',
+    '(cloudECEFToPlanet * (position + evolution) + turbulence) * shapeRepeat',
     pass,
     'shape position'
   )
   shader = replaceExactlyOnce(
     shader,
     '(position + turbulence) * shapeDetailRepeat',
-    '(cloudECEFToPlanet * (position + turbulence)) * shapeDetailRepeat',
+    '(cloudECEFToPlanet * position + turbulence) * shapeDetailRepeat',
     pass,
     'erosion position'
   )

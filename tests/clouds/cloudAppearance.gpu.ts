@@ -220,6 +220,43 @@ export async function checkCloudAppearance(useAdapter = true): Promise<CloudAppe
           report.samples++
         }
       }
+    if (binding) {
+      clouds.qualityPreset = 'high'
+      for (const rotation of rotations) {
+        binding.setPlanetRotation(rotation)
+        for (const [passName, pass] of [
+          ['cloud', clouds.cloudsPass],
+          ['shadow', clouds.shadowPass]
+        ] as const) {
+          for (const [name, expected] of [
+            ['shapePosition', [0.25, 0.33, 0.39]],
+            ['detailPosition', [0.24, 0.35, 0.36]]
+          ] as const) {
+            const statement = pass.currentMaterial.fragmentShader.match(new RegExp(`vec3 ${name} = [^;]+;`))?.[0]
+            if (!statement) throw new Error(`Missing shader noise expression ${name}`)
+            const actual = run(
+              `${statement} result=vec4(${name},1.);`,
+              'uniform mat3 cloudECEFToPlanet; uniform vec3 position,evolution,turbulence,shapeRepeat,shapeDetailRepeat,shapeOffset,shapeDetailOffset;',
+              {
+                cloudECEFToPlanet: pass.currentMaterial.uniforms.cloudECEFToPlanet,
+                position: { value: new Vector3(0.12, 0.25, 0.4).applyQuaternion(rotation) },
+                evolution: { value: new Vector3(0.01, -0.02, 0.03).applyQuaternion(rotation) },
+                turbulence: { value: new Vector3(0.09, 0.04, -0.05) },
+                shapeRepeat: { value: new Vector3(1, 1, 1) },
+                shapeDetailRepeat: { value: new Vector3(1, 1, 1) },
+                shapeOffset: { value: new Vector3(0.03, 0.06, 0.01) },
+                shapeDetailOffset: { value: new Vector3(0.03, 0.06, 0.01) }
+              }
+            )
+            const error = Math.max(...expected.map((value, i) => Math.abs(actual[i] - value)))
+            if (error > 1 / 255)
+              throw new Error(
+                `Planet-fixed turbulence regression: ${passName} ${name} error=${error}, actual=${JSON.stringify(actual.slice(0, 3))}, expected=${JSON.stringify(expected)}`
+              )
+          }
+        }
+      }
+    }
     const cloudSource = clouds.cloudsPass.currentMaterial.fragmentShader
     const multiply = cloudSource.slice(
       cloudSource.indexOf('// Finally multiply by scattering.') + '// Finally multiply by scattering.'.length,
