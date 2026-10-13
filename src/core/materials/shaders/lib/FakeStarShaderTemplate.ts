@@ -85,29 +85,28 @@ export const FakeStarShaderTemplate: ShaderProps = {
 
       // ВСЕ производные — ДО ветвления, в равномерном потоке управления
       // (WebGL2, деривативы в ядре): AA-кромка и экранный масштаб зерна.
-      // Билборд живёт на STAR_IMPOSTOR_PIXELS, поэтому fade тут по факту
-      // ноль — и диск на дистанции переключения приходит к тому же нулю
+      // Билборд живёт на STAR_IMPOSTOR_PIXELS, где грануляция уже погашена,
+      // как и у диска на дистанции переключения.
       // Полоса AA центрирована на r = 1: сглаживание только внутрь съедало
       // площадь 12px-диска и 20–27% его энергии на переходе со сферы.
       // Минимальная ширина сохраняет строгий порядок границ smoothstep
       // даже в центре симметричного пиксельного квада, где fwidth(r) = 0.
       float edgeWidth = max(0.5 * fwidth(r), 1e-6);
       float alpha = 1.0 - smoothstep(1.0 - edgeWidth, 1.0 + edgeWidth, r);
-      float fade = starGranulationFade(starDomainPerPixel(noiseDomain)) * uGranulation;
+      float domainPerPixel = starDomainPerPixel(noiseDomain);
 
       if (alpha <= 0.0) {
         gl_FragColor = vec4(0.0);
         return;
       }
 
-      float t = starGranulationT(vec4(noiseDomain, uTime), fade);
-      vec3 granule = starGranuleColor(t, uColorCool, uColorBase, uColorHot);
-      float energy = starEnergy(t, uCoreIntensity);
+      vec3 radiance = starGranulationRadiance(vec4(noiseDomain, uTime), uGranulation, domainPerPixel,
+                                            uColorCool, uColorBase, uColorHot, uCoreIntensity);
       vec3 limb = starLimb(mu, uLimbCoeff);
 
       // uGlowGain — свечение издалека, общий объект с диском (StarLod).
       // Потолок HDR — тот же, что у диска и атмосферы
-      vec3 color = min(granule * energy * limb * uGlowGain, vec3(64.0));
+      vec3 color = min(radiance * limb * uGlowGain, vec3(64.0));
 
       gl_FragColor = vec4(color, alpha);
     }

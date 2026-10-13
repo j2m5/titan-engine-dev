@@ -114,7 +114,7 @@ describe('FakeStar: контракт материала', () => {
 })
 
 describe('FakeStar: зерно погашено той же мерой, что у диска', () => {
-  it('импостор меряет экранный масштаб СВОЕГО домена и подаёт фейд в грануляцию', () => {
+  it('импостор передаёт экранный масштаб СВОЕГО домена в фильтр грануляции', () => {
     // Домен тот же, что у диска (uRadius * 0.05 против vPosition * 0.05 при
     // |vPosition| = R), значит на дистанции переключения мера совпадает и
     // погасшее зерно билборда стыкуется с погасшим зерном диска
@@ -122,8 +122,8 @@ describe('FakeStar: зерно погашено той же мерой, что �
     const frag = star.material.fragmentShader
 
     expect(frag).toContain('vec3 noiseDomain = vec3(c, mu) * uRadius * 0.05;')
-    expect(frag).toContain('starGranulationFade(starDomainPerPixel(noiseDomain))')
-    expect(frag).toContain('starGranulationT(vec4(noiseDomain, uTime), fade)')
+    expect(frag).toContain('float domainPerPixel = starDomainPerPixel(noiseDomain);')
+    expect(frag).toContain('starGranulationRadiance(vec4(noiseDomain, uTime), uGranulation, domainPerPixel,')
   })
 
   it('производные считаются ДО выхода по альфе — равномерный поток управления', () => {

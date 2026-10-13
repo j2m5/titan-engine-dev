@@ -60,17 +60,11 @@ export const StarShaderTemplate: ShaderProps = {
       // тот же домен воспроизводит импостор (uRadius * 0.05)
       vec3 noiseDomain = vPosition * 0.05;
 
-      // Зерно гаснет по экранному масштабу ячеек, а не по расстоянию до
-      // камеры: мера общая с импостором (чанк starSurface), поэтому на
-      // переключении LOD погасшая поверхность стыкуется сама собой. Побочно
-      // домен сжат ракурсом у кромки — грануляция тускнеет к лимбу, как у Солнца
-      // uGranulation — конвективная активность: у горячих звёзд зерна нет,
-      // fade 0 ещё и не считает шесть октав шума
-      float fade = starGranulationFade(starDomainPerPixel(noiseDomain)) * uGranulation;
-      float t = starGranulationT(vec4(noiseDomain, time), fade);
-
-      vec3 granule = starGranuleColor(t, uColorCool, spectralColor, uColorHot);
-      float energy = starEnergy(t, uCoreIntensity);
+      // Общая с импостором мера в единицах домена на пиксель. Каждая
+      // октава фильтруется по своей частоте, в том числе у сжатого лимба.
+      float domainPerPixel = starDomainPerPixel(noiseDomain);
+      vec3 radiance = starGranulationRadiance(vec4(noiseDomain, time), uGranulation, domainPerPixel,
+                                            uColorCool, spectralColor, uColorHot, uCoreIntensity);
 
       // Лимбовое потемнение: mu — косинус (нормаль сферы, луч на камеру)
       vec3 normalW = normalize(vPositionW - vCenterW);
@@ -82,7 +76,7 @@ export const StarShaderTemplate: ShaderProps = {
       // у крупного диска ровно 1.
       // Потолок HDR — тот же, что у атмосферы (half-float буфер, AgX-плечо);
       // без усиления пик ~12 — потолок срабатывает только при uCoreIntensity ≈ 21+ (защитный предел)
-      vec3 color = min(granule * energy * limb * uGlowGain, vec3(64.0));
+      vec3 color = min(radiance * limb * uGlowGain, vec3(64.0));
 
       gl_FragColor = vec4(color, 1.0);
 

@@ -129,7 +129,7 @@ describe('диск и билборд держат ОДИН юниформ уси
   it('шаблоны умножают энергию на усиление ДО потолка HDR', () => {
     for (const template of [StarShaderTemplate, FakeStarShaderTemplate]) {
       expect(template.fragmentShader).toContain('uniform float uGlowGain;')
-      expect(template.fragmentShader).toContain('min(granule * energy * limb * uGlowGain, vec3(64.0))')
+      expect(template.fragmentShader).toContain('min(radiance * limb * uGlowGain, vec3(64.0))')
       expect((template.uniforms.uGlowGain as Uniform<number>).value).toBe(1)
     }
   })
