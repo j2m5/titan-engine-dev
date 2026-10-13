@@ -214,10 +214,35 @@ try {
     return {baselineError, checks: m.checkPlanetDepth()};
   })`)
   const occlusion = await evaluate(`import('/tests/clouds/cloudOcclusion.gpu.ts').then(m => m.checkCloudOcclusion())`)
+  const appearance = await evaluate(
+    `import('/tests/clouds/cloudAppearance.gpu.ts').then(m => m.checkCloudAppearance(${process.env.CLOUD_APPEARANCE_BASELINE !== '1'}))`
+  )
+  console.log('Cloud appearance', JSON.stringify(appearance))
+  if (
+    appearance.samples < 12 ||
+    appearance.maxCloudUvError > 1 / 255 ||
+    appearance.maxShadowUvError > 1 / 255 ||
+    appearance.maxColorError > 3 / 255 ||
+    appearance.maxAlphaDifference > 1 / 255 ||
+    appearance.maxShadowDifference > 1 / 255 ||
+    !appearance.resourcesReleased
+  )
+    throw new Error('Cloud appearance GPU regression')
   const disposed = await evaluate(
     `(() => { window.dispatchEvent(new PageTransitionEvent('pagehide')); return document.querySelectorAll('.cloud-viewport canvas').length === 0; })()`
   )
-  const report = { measurements, comparisons, surfaceContrast, depth, occlusion, stoppedClouds, disposed, gpu, errors }
+  const report = {
+    measurements,
+    comparisons,
+    surfaceContrast,
+    depth,
+    occlusion,
+    appearance,
+    stoppedClouds,
+    disposed,
+    gpu,
+    errors
+  }
   await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report, null, 2))
   if (errors.length || gpu.glError) throw new Error('Shader/runtime errors in cloud lab')
