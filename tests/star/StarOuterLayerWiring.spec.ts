@@ -3,6 +3,9 @@ import { Actor } from '@/core/models/Actor'
 import { StarOuterLayerShaderTemplate } from '@/core/materials/shaders/lib/StarOuterLayerShaderTemplate'
 import { buildProminenceGeometry } from '@/core/renderables/utils/prominenceGeometry'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import type { WebGLRenderer } from 'three'
+
+const renderer = { domElement: { height: 1080 } } as unknown as WebGLRenderer
 
 function stubStar(temperature: number): Actor {
   return {
@@ -14,8 +17,8 @@ function stubStar(temperature: number): Actor {
 
 describe('StarOuterLayer: пер-звёздные юниформы (клон, не шаблонные ссылки)', () => {
   it('два инстанса с разными температурами не разделяют объекты юниформов и имеют разные палитры', () => {
-    const hot = new StarOuterLayer(stubStar(6400))
-    const cool = new StarOuterLayer(stubStar(3500))
+    const hot = new StarOuterLayer(stubStar(6400), renderer)
+    const cool = new StarOuterLayer(stubStar(3500), renderer)
 
     expect(hot.material.uniforms.uColorBase).not.toBe(cool.material.uniforms.uColorBase)
     expect(hot.material.uniforms.uColorCool).not.toBe(cool.material.uniforms.uColorCool)
@@ -59,7 +62,7 @@ describe('StarOuterLayer: масштаб меша — мировой радиу�
     // репо живёт встречная конвенция: Star печёт радиус в SphereGeometry и
     // оставляет scale = 1. Приведи StarOuterLayer к ней — и ленты схлопнутся в
     // полоски шириной 0.00086 мировых единиц, а поймать это будет нечем
-    const layer = new StarOuterLayer(stubStar(5700))
+    const layer = new StarOuterLayer(stubStar(5700), renderer)
 
     // stubStar отдаёт 100 на любой атрибут кроме temperature, в том числе radius
     expect(layer.scale.x).toBeCloseTo(toThreeJSUnits(100), 10)

@@ -146,3 +146,32 @@ describe('buildProminenceGeometry: границы параметров', () => {
     expect(() => buildProminenceGeometry({ ribbonCount: 0 })).toThrow(/ribbonCount/)
   })
 })
+
+describe('buildProminenceGeometry: постепенное включение лент', () => {
+  it('частичный drawRange берёт ленты из разных участков набора, а не одну группу', () => {
+    const geometry = buildProminenceGeometry({ ribbonCount: 64, segmentsPerRibbon: 2 })
+    try {
+      const indices = geometry.index!.array
+      const quarters = new Set<number>()
+      for (let i = 0; i < 4; i++) quarters.add(Math.floor(indices[i * 6] / (4 * 16)))
+      expect(quarters.size).toBe(4)
+    } finally { geometry.dispose() }
+  })
+
+  it('порядок гашения совпадает с drawRange и не теряет ленты при неполной степени двойки', () => {
+    const geometry = buildProminenceGeometry({ ribbonCount: 13, segmentsPerRibbon: 4 })
+    try {
+      const indices = geometry.index!.array
+      const rank = geometry.getAttribute('aRibbonOrder')
+      expect(rank).toBeDefined()
+      const ribbons = new Set<number>()
+      for (let order = 0; order < 13; order++) {
+        ribbons.add(Math.floor(indices[order * 18] / 8))
+        for (let i = order * 18; i < (order + 1) * 18; i++) {
+          expect(rank.getX(indices[i])).toBe(order)
+        }
+      }
+      expect(ribbons.size).toBe(13)
+    } finally { geometry.dispose() }
+  })
+})

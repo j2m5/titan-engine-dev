@@ -149,7 +149,7 @@ class RenderableFactory {
     // Один объект усиления на оба уровня: стык LOD по яркости сведён
     const lodl1 = new Star(actor, lod.glowGain)
     const lodl2 = new FakeStar(actor, this.renderer, lod.glowGain)
-    const starOuterLayer = new StarOuterLayer(actor)
+    const starOuterLayer = new StarOuterLayer(actor, this.renderer)
 
     lodl1.add(starOuterLayer)
 

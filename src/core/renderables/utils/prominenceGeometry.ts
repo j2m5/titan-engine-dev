@@ -64,6 +64,7 @@ export function buildProminenceGeometry(options?: ProminenceGeometryOptions): Bu
   const footA = new Float32Array(vertexCount * 3)
   const footB = new Float32Array(vertexCount * 3)
   const ribbonRandom = new Float32Array(vertexCount * 3)
+  const ribbonOrder = new Float32Array(vertexCount)
   // Uint32, а не Uint16: на дефолтах вершин ровно 65536, то есть последний
   // индекс — последнее представимое в 16 битах число. Любая правка плотности
   // заворачивала бы хвост индексов в начало буфера молча
@@ -111,7 +112,6 @@ export function buildProminenceGeometry(options?: ProminenceGeometryOptions): Bu
       // Середина сегмента, а не его край: фаза никогда не равна 0 или 1, и
       // выгиб дуги sin(phase * PI) не вырождается в ноль на концах ленты
       const phase: number = (segment + 0.5) / segmentsPerRibbon
-      const base: number = 2 * (r * segmentsPerRibbon + segment)
 
       for (let side = 0; side <= 1; side++) {
         ribbon[ribbonCursor++] = phase
@@ -130,16 +130,33 @@ export function buildProminenceGeometry(options?: ProminenceGeometryOptions): Bu
         ribbonRandom[randomCursor++] = colorMix
       }
 
-      // Два треугольника на СТЫК соседних сегментов: у последнего сегмента
-      // ленты следующего нет, поэтому стыков на один меньше
-      if (segment < segmentsPerRibbon - 1) {
-        indices[indexCursor++] = base
-        indices[indexCursor++] = base + 1
-        indices[indexCursor++] = base + 2
-        indices[indexCursor++] = base + 2
-        indices[indexCursor++] = base + 1
-        indices[indexCursor++] = base + 3
-      }
+    }
+  }
+
+  // Соседние исходные ленты принадлежат одной вспышке. Разворот битов
+  // распределяет префикс drawRange по всему набору: снижение детализации
+  // прореживает арки, а не удаляет целые регионы один за другим.
+  const bits = Math.ceil(Math.log2(ribbonCount))
+  let order = 0
+  for (let i = 0; i < 2 ** bits; i++) {
+    let source = i, r = 0
+    for (let bit = 0; bit < bits; bit++) {
+      r = r * 2 + source % 2
+      source = Math.floor(source / 2)
+    }
+    if (r >= ribbonCount) continue
+
+    const start = r * segmentsPerRibbon * 2
+    ribbonOrder.fill(order++, start, start + segmentsPerRibbon * 2)
+    // Два треугольника на стык соседних сечений одной ленты.
+    for (let segment = 0; segment < segmentsPerRibbon - 1; segment++) {
+      const base = start + 2 * segment
+      indices[indexCursor++] = base
+      indices[indexCursor++] = base + 1
+      indices[indexCursor++] = base + 2
+      indices[indexCursor++] = base + 2
+      indices[indexCursor++] = base + 1
+      indices[indexCursor++] = base + 3
     }
   }
 
@@ -149,6 +166,7 @@ export function buildProminenceGeometry(options?: ProminenceGeometryOptions): Bu
   geometry.setAttribute('aFootA', new BufferAttribute(footA, 3))
   geometry.setAttribute('aFootB', new BufferAttribute(footB, 3))
   geometry.setAttribute('aRibbonRandom', new BufferAttribute(ribbonRandom, 3))
+  geometry.setAttribute('aRibbonOrder', new BufferAttribute(ribbonOrder, 1))
   geometry.setIndex(new BufferAttribute(indices, 1))
 
   return geometry
