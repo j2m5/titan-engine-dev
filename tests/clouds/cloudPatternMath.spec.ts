@@ -29,9 +29,9 @@ it('keeps dark appearance cloudy and a black mask empty', () => {
   const appearance = validCloudConfig().layers[0].pattern
   if (appearance.kind !== 'appearance') throw new Error('Expected appearance')
   const mask = { kind: 'mask', map: appearance.map, decode: appearance.decode } as const
-  expect(coverageFromScalar(0, appearance)).toBe(0.6)
-  expect(coverageFromScalar(1, appearance)).toBe(0.95)
-  expect(coverageFromScalar(0.5, appearance)).toBeCloseTo(0.775)
+  expect(coverageFromScalar(0, appearance)).toBe(0.1)
+  expect(coverageFromScalar(1, appearance)).toBeCloseTo(0.45)
+  expect(coverageFromScalar(0.5, appearance)).toBeCloseTo(0.275)
   expect(coverageFromScalar(0, mask)).toBe(0)
   expect(coverageFromScalar(1, { ...appearance, coverageRange: [0, 1] })).toBe(1)
 })

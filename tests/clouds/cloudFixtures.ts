@@ -16,7 +16,7 @@ export function validCloudConfig(): EnabledCloudConfig {
           kind: 'appearance',
           map: { resourceId: 32 },
           decode: { channel: 'luminance', inputRange: [0, 1], exponent: 1, invert: false, sampleSpace: 'encoded' },
-          coverageRange: [0.6, 0.95]
+          coverageRange: [0.1, 0.45]
         },
         color: { kind: 'map', map: { resourceId: 32 }, strength: 1 },
         detail: { seed: 0x4a757069, shapeScaleMeters: 120000, erosionScaleMeters: 12000, erosionStrength: 0.4 },

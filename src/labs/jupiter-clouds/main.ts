@@ -24,7 +24,7 @@ root.innerHTML = `
       <option value="low">Низкое</option><option value="medium" selected>Среднее</option><option value="high">Высокое</option>
     </select></label>
     <details class="distance-controls"><summary>Расстояние появления</summary>
-      <p>Над верхней границей облаков, км</p>
+      <p>Расстояние до облачного слоя, км</p>
       <label class="control-row"><span>Полный объём</span><input id="cloud-full-distance" type="number" min="0" max="99999" value="100" step="10" /></label>
       <label class="control-row"><span>Отключение вдали</span><input id="cloud-cutoff-distance" type="number" min="1" max="100000" value="1000" step="10" /></label>
     </details>
@@ -74,10 +74,13 @@ async function initialize(): Promise<void> {
       viewport,
       (stats) => {
         if (failed) return
-        status.hidden = true
+        status.hidden = stats.appearanceState === 'ready'
+        if (stats.appearanceMessage) status.textContent = stats.appearanceMessage
         root.dataset.state = 'ready'
         root.dataset.frames = String(stats.frames)
         root.dataset.cloudFrames = String(stats.cloudFrames)
+        root.dataset.shadowFrames = String(stats.shadowFrames)
+        root.dataset.appearanceState = stats.appearanceState
         root.dataset.cloudOpacity = String(stats.cloudOpacity)
         root.querySelector<HTMLElement>('#cloud-detail')!.textContent =
           stats.cloudOpacity > 0 ? `Объём: ${Math.round(stats.cloudOpacity * 100)}%` : 'Объём отключён'

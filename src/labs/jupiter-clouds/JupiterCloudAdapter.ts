@@ -1,16 +1,31 @@
 import { AtmosphereParameters, DensityProfileLayer } from '@takram/three-atmosphere'
 import { CloudsEffect, type CloudsQualityPreset } from '@takram/three-clouds'
 import { Ellipsoid } from '@takram/three-geospatial'
-import { Color, PerspectiveCamera, Vector3 } from 'three'
+import { Color, PerspectiveCamera, Vector3, Texture, RepeatWrapping, ClampToEdgeWrapping } from 'three'
 import { RenderingObjects } from '@storage/database'
 import type {
   AtmosphereConfig,
   DensityProfileLayer as TitanDensityLayer
 } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { adaptCloudDepth } from './planetDepth'
+import { createJupiterCloudProfile } from './jupiterCloudProfile'
 
-export const CLOUD_BASE_METRES = 10000
-export const CLOUD_HEIGHT_METRES = 20000
+const defaultLayer = createJupiterCloudProfile().layers[0]
+export const CLOUD_BASE_METRES = defaultLayer.baseAltitudeMeters
+export const CLOUD_HEIGHT_METRES = defaultLayer.thicknessMeters
+
+/** An owned view uses the same canonical UV transform as the appearance shaders. */
+export function createCloudSurfaceView(source: Texture, longitudeOffsetRadians: number): Texture {
+  const view = source.clone()
+  view.offset.set(longitudeOffsetRadians / (2 * Math.PI), 0)
+  view.repeat.set(1, 1)
+  view.center.set(0, 0)
+  view.rotation = 0
+  view.wrapS = RepeatWrapping
+  view.wrapT = ClampToEdgeWrapping
+  view.needsUpdate = true
+  return view
+}
 
 /** Takram's radii are metres, but Bruneton's density profiles and coefficients remain in kilometres. */
 export function createJupiterAtmosphere(): { config: AtmosphereConfig; atmosphere: AtmosphereParameters } {

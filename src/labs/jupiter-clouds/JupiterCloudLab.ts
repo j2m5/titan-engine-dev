@@ -7,6 +7,7 @@ import {
   MeshBasicMaterial,
   NoToneMapping,
   PerspectiveCamera,
+  Quaternion,
   Scene,
   SphereGeometry,
   Texture,
@@ -15,10 +16,19 @@ import {
 } from 'three'
 import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
 import { applyCloudView, CloudFlight, type CloudView } from './CloudFlight'
-import { createJupiterAtmosphere, createJupiterClouds, setJupiterCloudQuality } from './JupiterCloudAdapter'
+import { createJupiterAtmosphere, createJupiterClouds, setJupiterCloudQuality, createCloudSurfaceView } from './JupiterCloudAdapter'
 import { createCloudTextures } from './cloudTextures'
 import { PlanetAerialPerspectiveEffect, applyAnalyticPlanetDepth } from './planetDepth'
 import { cloudOpacityAtAltitude, DEFAULT_CLOUD_DISTANCE, type CloudDistanceRange } from './cloudDistance'
+import { ActorResource } from '@storage/database'
+import { resolveCloudConfig } from '@/core/clouds/validateCloudConfig'
+import { createJupiterCloudProfile } from './jupiterCloudProfile'
+import { assertCloudAppearanceSupport, bindCloudAppearance, type CloudAppearanceBinding } from './cloudAppearance'
+import { prepareCloudAppearanceTextures, type CloudAppearanceTextures, type CloudTextureResolver } from './cloudAppearanceTextures'
+
+export interface JupiterCloudLabOptions {
+  resolveCloudTexture?: CloudTextureResolver
+}
 
 export interface CloudLabStats {
   altitudeKm: number
@@ -26,6 +36,9 @@ export interface CloudLabStats {
   frames: number
   cloudOpacity: number
   cloudFrames: number
+  shadowFrames: number
+  appearanceState: 'ready' | 'unavailable'
+  appearanceMessage: string | null
 }
 
 /** Experimental renderer: Titan atmosphere data/LUTs, Takram cloud and atmosphere composition. */
@@ -36,6 +49,12 @@ export class JupiterCloudLab {
   private readonly planetConfig = createJupiterAtmosphere()
   private readonly clouds = createJupiterClouds(this.camera, this.planetConfig.atmosphere)
   private readonly textures = createCloudTextures()
+  private readonly profile = createJupiterCloudProfile()
+  private appearanceTextures?: CloudAppearanceTextures
+  private appearanceBinding?: CloudAppearanceBinding
+  private surfaceView?: Texture
+  private appearanceReady = false
+  private appearanceMessage: string | null = null
   private readonly generator: AtmosphereLUTGenerator
   private readonly atmosphere: PlanetAerialPerspectiveEffect
   private readonly composer: EffectComposer
@@ -52,6 +71,7 @@ export class JupiterCloudLab {
   private cloudsEnabled = true
   private cloudOpacity = 0
   private cloudFrames = 0
+  private shadowFrames = 0
   private resetShadowHistory = true
   private cloudDistance: CloudDistanceRange = { ...DEFAULT_CLOUD_DISTANCE }
   private quality: CloudsQualityPreset = 'medium'
@@ -62,7 +82,8 @@ export class JupiterCloudLab {
     private readonly container: HTMLElement,
     private readonly onStats: (stats: CloudLabStats) => void,
     private readonly onError: (error: Error) => void,
-    private readonly surfaceTexture: Texture
+    private readonly surfaceTexture: Texture,
+    options: JupiterCloudLabOptions = {}
   ) {
     try {
       this.renderer = new WebGLRenderer({ antialias: false, logarithmicDepthBuffer: true })
@@ -85,7 +106,6 @@ export class JupiterCloudLab {
       const radius = this.planetConfig.atmosphere.bottomRadius
       this.clouds.worldToECEFMatrix.makeTranslation(0, 0, radius)
       applyAnalyticPlanetDepth(this.clouds)
-      this.clouds.localWeatherTexture = this.textures.weather
       this.clouds.shapeTexture = this.textures.shape
       this.clouds.shapeDetailTexture = this.textures.detail
       this.clouds.stbnTexture = this.textures.noise
@@ -139,10 +159,39 @@ export class JupiterCloudLab {
         }
       }
 
-      surfaceTexture.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy())
-      this.planet = new Mesh(new SphereGeometry(radius, 512, 256), new MeshBasicMaterial({ map: surfaceTexture }))
+      const shadowPass = this.clouds.shadowPass.currentPass
+      const renderShadow = shadowPass.render
+      const countShadowFrame = (): void => { this.shadowFrames++ }
+      shadowPass.render = function (...args): ReturnType<typeof renderShadow> {
+        const result = renderShadow.apply(this, args)
+        countShadowFrame()
+        return result
+      }
+
+      this.surfaceView = createCloudSurfaceView(surfaceTexture, this.profile.mapping.longitudeOffsetRadians)
+      this.surfaceView.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy())
+      this.planet = new Mesh(new SphereGeometry(radius, 512, 256), new MeshBasicMaterial({ map: this.surfaceView }))
       this.planet.position.z = -radius
       this.scene.add(this.planet)
+      // Recoverable appearance preparation must leave the planet and atmosphere usable.
+      try {
+        const ids = new Set(ActorResource.filter((entry) => entry.actorId === 10).map((entry) => entry.resourceId))
+        const result = resolveCloudConfig(this.profile, ids)
+        if (result.state !== 'configured') throw new Error('Invalid Jupiter cloud profile')
+        assertCloudAppearanceSupport(result.config)
+        const textureById = new Map<number, Texture>([[32, surfaceTexture]])
+        this.appearanceTextures = prepareCloudAppearanceTextures(
+          result.config.layers[0], options.resolveCloudTexture ?? ((id) => textureById.get(id))
+        )
+        this.appearanceBinding = bindCloudAppearance(this.clouds, result.config, this.appearanceTextures)
+        this.appearanceReady = true
+      } catch (error) {
+        this.appearanceBinding?.dispose()
+        this.appearanceTextures?.dispose()
+        this.appearanceBinding = undefined
+        this.appearanceTextures = undefined
+        this.appearanceMessage = `Объёмные облака недоступны: ${error instanceof Error ? error.message : String(error)}`
+      }
       this.composer = new EffectComposer(this.renderer, { frameBufferType: HalfFloatType, multisampling: 0 })
       this.composer.addPass(new RenderPass(this.scene, this.camera))
       // Keep the two depth consumers in one pass, as in Takram's vanilla example.
@@ -197,13 +246,20 @@ export class JupiterCloudLab {
     this.cloudsEnabled = enabled
   }
 
+  setPlanetRotation(rotation: Quaternion): void {
+    this.planet.quaternion.copy(rotation).normalize()
+    this.appearanceBinding?.setPlanetRotation(this.planet.quaternion)
+    this.clearHistory()
+  }
+
   setCloudDistance(range: CloudDistanceRange): void {
     cloudOpacityAtAltitude(this.flight.altitude, range) // Validate before accepting UI values.
     this.cloudDistance = { ...range }
   }
 
   private updateCloudVisibility(): void {
-    const opacity = this.cloudsEnabled ? cloudOpacityAtAltitude(this.flight.altitude, this.cloudDistance) : 0
+    const volumeEnabled = this.cloudsEnabled && this.appearanceReady
+    const opacity = volumeEnabled ? cloudOpacityAtAltitude(this.flight.altitude, this.cloudDistance) : 0
     const entering = this.cloudOpacity === 0 && opacity > 0
     this.cloudOpacity = opacity
     this.atmosphere.setCloudOpacity(opacity)
@@ -242,7 +298,10 @@ export class JupiterCloudLab {
         frameMs: this.frameMs,
         frames: this.frames,
         cloudOpacity: this.cloudOpacity,
-        cloudFrames: this.cloudFrames
+        cloudFrames: this.cloudFrames,
+        shadowFrames: this.shadowFrames,
+        appearanceState: this.appearanceReady ? 'ready' : 'unavailable',
+        appearanceMessage: this.appearanceMessage
       })
       this.elapsed = 0
     }
@@ -264,8 +323,11 @@ export class JupiterCloudLab {
     }
     this.planet?.geometry.dispose()
     this.planet?.material.dispose()
-    this.surfaceTexture.dispose()
+    this.appearanceBinding?.dispose()
+    this.appearanceTextures?.dispose()
+    this.surfaceView?.dispose()
     this.textures.dispose()
+    this.surfaceTexture.dispose()
     this.generator?.dispose()
     this.renderer?.dispose()
     this.renderer?.forceContextLoss()

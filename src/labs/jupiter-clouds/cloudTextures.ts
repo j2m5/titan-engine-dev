@@ -1,10 +1,8 @@
 import { CloudShape, CloudShapeDetail } from '@takram/three-clouds'
-import { Data3DTexture, DataTexture, NearestFilter, RedFormat, RepeatWrapping, RGBAFormat } from 'three'
+import { Data3DTexture, NearestFilter, RedFormat, RepeatWrapping } from 'three'
 
 /** Local procedural assets: no CDN, storage bucket, or Earth weather-map seams. */
 export function createCloudTextures() {
-  const weather = new DataTexture(new Uint8Array([140, 0, 0, 0]), 1, 1, RGBAFormat)
-  weather.needsUpdate = true
   const shape = new CloudShape()
   const detail = new CloudShapeDetail()
 
@@ -25,12 +23,10 @@ export function createCloudTextures() {
   noise.needsUpdate = true
 
   return {
-    weather,
     shape,
     detail,
     noise,
     dispose(): void {
-      weather.dispose()
       shape.dispose()
       detail.dispose()
       noise.dispose()

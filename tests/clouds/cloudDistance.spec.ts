@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import { cloudOpacityAtAltitude } from '@/labs/jupiter-clouds/cloudDistance'
+import { createJupiterCloudProfile } from '@/labs/jupiter-clouds/jupiterCloudProfile'
+import { cloudShellDistance, cloudVolumeOpacity } from '@/core/clouds/cloudLod'
 
 describe('distance-limited cloud detail', () => {
+  it('uses distance to the lower boundary for a narrow custom range', () => {
+    expect(cloudOpacityAtAltitude(5000, { full: 0, cutoff: 10000 })).toBeCloseTo(0.5)
+  })
+
+  it('retains the existing default distance transition with the profile', () => {
+    const profile = createJupiterCloudProfile()
+    for (const altitude of [5000, 20000, 45000, 130000, 580000, 1030000, 90000000]) {
+      expect(cloudOpacityAtAltitude(altitude)).toBeCloseTo(
+        cloudVolumeOpacity(cloudShellDistance(altitude, profile.layers), profile.lod), 10
+      )
+    }
+  })
   it('keeps the orbital appearance unchanged and disables volume beyond the cutoff', () => {
     for (const altitude of [1030000, 2000000, 90000000]) {
       expect(cloudOpacityAtAltitude(altitude)).toBe(0)
