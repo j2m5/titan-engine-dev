@@ -4,12 +4,43 @@ import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve, dirname } from 'node:path'
 
-export async function withCloudProbeBrowser({ url, outputDir, width = 1280, height = 800 }, run) {
+export function createCdpTransport(socket, onEvent, timeoutMs = 190000) {
+  let id = 0
+  let closed = false
+  const pending = new Map()
+  const close = () => {
+    closed = true
+    for (const request of pending.values()) { clearTimeout(request.timer); request.reject(new Error('CDP transport closed')) }
+    pending.clear()
+  }
+  socket.onclose = close
+  socket.onerror = close
+  socket.onmessage = event => {
+    const msg = JSON.parse(event.data)
+    if (!msg.id) { onEvent(msg); return }
+    const request = pending.get(msg.id)
+    if (!request) return
+    clearTimeout(request.timer)
+    pending.delete(msg.id)
+    if (msg.error) request.reject(new Error(JSON.stringify(msg.error)))
+    else request.resolve(msg.result)
+  }
+  return (method, params = {}) => new Promise((resolve, reject) => {
+    if (closed) { reject(new Error('CDP transport closed')); return }
+    const next = ++id
+    const timer = setTimeout(() => { pending.delete(next); reject(new Error(`CDP timeout: ${method}`)) }, timeoutMs)
+    pending.set(next, { resolve, reject, timer })
+    try { socket.send(JSON.stringify({ id: next, method, params })) }
+    catch (error) { clearTimeout(timer); pending.delete(next); reject(error) }
+  })
+}
+
+export async function withCloudProbeBrowser({ url, outputDir, width = 1280, height = 800, offline = false, expectedError = () => false }, run) {
   const parsed = new URL(url)
   if (
     !['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname) ||
     parsed.protocol !== 'http:' ||
-    parsed.pathname !== '/tests/clouds/earth/probe.html'
+    !['/tests/clouds/earth/probe.html', '/earth-cloud-lab.html', '/cloud-lab.html'].includes(parsed.pathname)
   )
     throw new Error('Cloud probe requires local probe.html')
   const profilePrefix = resolve(tmpdir(), 'earth-cloud-probe-')
@@ -67,29 +98,16 @@ export async function withCloudProbeBrowser({ url, outputDir, width = 1280, heig
       socket.onopen = resolve
       socket.onerror = reject
     })
-    let id = 0
-    const pending = new Map()
     const errors = webglErrors
-    socket.onmessage = (event) => {
-      const msg = JSON.parse(event.data)
-      if (msg.id) {
-        const promise = pending.get(msg.id)
-        if (!promise) return
-        pending.delete(msg.id)
-        if (msg.error) promise.reject(new Error(JSON.stringify(msg.error)))
-        else promise.resolve(msg.result)
-      } else if (msg.method === 'Log.entryAdded' && /WebGL|GL_INVALID|GL_/i.test(msg.params.entry.text)) {
+    const requests = []
+    const send = createCdpTransport(socket, (msg) => {
+      if (msg.method === 'Network.requestWillBeSent') requests.push(msg.params.request.url)
+      else if (msg.method === 'Log.entryAdded' && /WebGL|GL_INVALID|GL_/i.test(msg.params.entry.text)) {
         if (errors.length < 20) errors.push(msg.params.entry)
       } else if (msg.method === 'Runtime.exceptionThrown') errors.push(msg.params.exceptionDetails)
       else if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error')
         errors.push(msg.params.args.map((arg) => arg.value ?? arg.description))
-    }
-    const send = (method, params = {}) =>
-      new Promise((resolve, reject) => {
-        const next = ++id
-        pending.set(next, { resolve, reject })
-        socket.send(JSON.stringify({ id: next, method, params }))
-      })
+    })
     closeBrowser = () => send('Browser.close')
     const evaluate = async (expression) => {
       const result = await send('Runtime.evaluate', {
@@ -104,10 +122,12 @@ export async function withCloudProbeBrowser({ url, outputDir, width = 1280, heig
     await send('Page.enable')
     await send('Runtime.enable')
     await send('Log.enable')
+    await send('Network.enable')
+    if (offline) await send('Network.setBlockedURLs', { urls: ['https://*', 'http://*'], urlPatterns: [{ urlPattern: `${parsed.origin}/*`, block: false }, { urlPattern: '*', block: true }] })
     await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false })
     await send('Page.navigate', { url })
     for (let i = 0; i < 100; i++) {
-      if (await evaluate("document.body?.dataset.ready === 'true'")) break
+      if (await evaluate("document.body?.dataset.ready === 'true' || document.querySelector('#earth-cloud-lab')?.dataset.state === 'ready' || document.querySelector('#cloud-lab')?.dataset.state === 'ready'")) break
       if (i === 99) throw new Error('Probe page did not become ready')
       await sleep(100)
     }
@@ -116,8 +136,9 @@ export async function withCloudProbeBrowser({ url, outputDir, width = 1280, heig
       const result = await send('Page.captureScreenshot', { format: 'png' })
       await writeFile(resolve(outputDir, `${name}.png`), Buffer.from(result.data, 'base64'))
     }
-    const result = await run({ evaluate, screenshot, webglErrors })
-    if (webglErrors.length) throw new Error(`Probe runtime/WebGL errors: ${JSON.stringify(webglErrors)}`)
+    const result = await run({ evaluate, screenshot, webglErrors, requests, send })
+    const unexpected = webglErrors.filter(error => !expectedError(error))
+    if (unexpected.length) throw new Error(`Probe runtime/WebGL errors: ${JSON.stringify(unexpected)}`)
     return result
   } finally {
     if (closeBrowser) await Promise.race([closeBrowser().catch(() => {}), sleep(1000)])
