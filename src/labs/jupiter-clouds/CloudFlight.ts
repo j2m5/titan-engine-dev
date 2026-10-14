@@ -1,6 +1,13 @@
 import { PerspectiveCamera, Vector3 } from 'three'
 
 export type CloudView = 'orbit' | 'approach' | 'above' | 'inside' | 'below'
+export interface CloudFlightOptions {
+  minAltitude?: number
+  maxAltitude?: number
+  minSpeed?: number
+  speedScale?: number
+  label?: string
+}
 
 /** World origin is the point (0, 0, R) on the planet, so near-cloud positions stay small. */
 export function applyCloudView(camera: PerspectiveCamera, view: CloudView, radius: number): void {
@@ -13,12 +20,13 @@ export function applyCloudView(camera: PerspectiveCamera, view: CloudView, radiu
   camera.updateMatrixWorld()
 }
 
-export function constrainCloudCamera(camera: PerspectiveCamera, radius: number): void {
+export function constrainCloudCamera(camera: PerspectiveCamera, radius: number, limits: Pick<CloudFlightOptions, 'minAltitude' | 'maxAltitude'> = {}): void {
   const position = camera.position
   const distance = Math.hypot(position.x, position.y, position.z + radius)
-  const limited = Math.min(radius + 2e8, Math.max(radius + 500, distance))
+  const minimum = limits.minAltitude ?? 500
+  const limited = Math.min(radius + (limits.maxAltitude ?? 2e8), Math.max(radius + minimum, distance))
   if (limited === distance) return
-  if (distance === 0) position.set(0, 0, 500)
+  if (distance === 0) position.set(0, 0, minimum)
   else position.set(position.x, position.y, position.z + radius).multiplyScalar(limited / distance).z -= radius
 }
 
@@ -34,10 +42,11 @@ export class CloudFlight {
   constructor(
     private readonly camera: PerspectiveCamera,
     private readonly canvas: HTMLCanvasElement,
-    private readonly radius: number
+    private readonly radius: number,
+    private readonly flightOptions: CloudFlightOptions = {}
   ) {
     canvas.tabIndex = 0
-    canvas.setAttribute('aria-label', 'Полёт над Юпитером: перетаскивание мышью, WASD и Q/E')
+    canvas.setAttribute('aria-label', flightOptions.label ?? 'Полёт над Юпитером: перетаскивание мышью, WASD и Q/E')
     const options = { signal: this.abort.signal }
     canvas.addEventListener(
       'keydown',
@@ -94,7 +103,7 @@ export class CloudFlight {
         event.preventDefault()
         this.updateAxes()
         camera.position.addScaledVector(this.forward, -Math.sign(event.deltaY) * this.speed() * 0.35)
-        constrainCloudCamera(camera, radius)
+        constrainCloudCamera(camera, radius, flightOptions)
       },
       { ...options, passive: false }
     )
@@ -106,7 +115,7 @@ export class CloudFlight {
   }
 
   private speed(): number {
-    return Math.max(500, this.altitude * 0.6)
+    return Math.max(this.flightOptions.minSpeed ?? 500, this.altitude * (this.flightOptions.speedScale ?? 0.6))
   }
 
   private updateAxes(): void {
@@ -128,7 +137,7 @@ export class CloudFlight {
       .normalize()
     const boost = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? 5 : 1
     this.camera.position.addScaledVector(this.direction, this.speed() * boost * Math.min(delta, 0.05))
-    constrainCloudCamera(this.camera, this.radius)
+    constrainCloudCamera(this.camera, this.radius, this.flightOptions)
   }
 
   dispose(): void {

@@ -21,7 +21,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, 'index.html'),
-        cloudLab: path.resolve(__dirname, 'cloud-lab.html')
+        cloudLab: path.resolve(__dirname, 'cloud-lab.html'),
+        earthCloudLab: path.resolve(__dirname, 'earth-cloud-lab.html')
       }
     }
   },

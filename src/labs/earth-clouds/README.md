@@ -1,5 +1,36 @@
 # Earth cloud source maps
 
+## Earth laboratory
+
+Open `/earth-cloud-lab.html` on the Vite development server (the isolated worktree
+uses http://127.0.0.1:8086). The five view buttons place the camera at 20000,
+110, 12, 6 and 2 km. Drag to look, use WASD to fly, Q/E to change height,
+Shift to accelerate and the wheel to move forward/backward. Earth flight is
+limited to 100 m–40000 km. Quality, cloud toggle and Sun angle remain usable
+when volume preparation fails; the visible message explains the latched failure.
+The toggle disables both the far map and near clouds/shadows.
+
+The initial Earth profile has a 4–8 km shell, extinction 0.0015/m and detail
+scales 12 km/1.2 km. Volume fades by distance to the shell: full at 62 km and
+off at 142 km. The atmosphere spans radii 6360–6420 km. Both endpoints render
+the same physical atmosphere and surface into half-float HDR targets, then
+blend `C=(1-w)*C_far+w*C_near` before one AgX presentation pass. The near
+endpoint includes full cloud overlay and shadow strength; LOD applies once.
+
+Preparation alone reports `prepared`; only a successful volume update and
+near surface render reports `ready`. Compilation/preparation errors latch
+`unavailable` until reload and keep the far surface map and flight usable.
+Fatal far/presentation errors stop the session and display an error. Camera,
+Sun, rotation, quality, size, DPR and off/on changes reset temporal history
+before the next positive-weight frame. No volume warm-up runs in orbit.
+The depth adaptation analytically intersects the single spherical planet;
+additional terrain or meshes require a scene-depth solution.
+
+`npm run test:clouds:earth:gpu` runs the local map probe; the explicit
+`--probe=surface` and `--probe=composition` options check the other endpoints.
+
+## Source provenance and decoding
+
 The four JPEGs are the project's original maps, downloaded on 2026-10-14 from
 `https://storage.yandexcloud.net/textures/planets/earth/`. They are stored without
 resizing or recoloring. Dimensions and SHA256 were measured with `sharp.metadata()`

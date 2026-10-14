@@ -82,8 +82,8 @@ export async function checkEarthSurface(): Promise<EarthGpuProbeReport> {
     report.checks++
     report.maxError = Math.max(error, report.maxError)
   }
-  let sun = new Vector3(0, 0, 1),
-    distance = 1000,
+  const sun = new Vector3(0, 0, 1)
+  let distance = 1000,
     frame = 0
   function sync() {
     camera.position.set(0, 0, 6360000 + distance).applyMatrix4(mesh.matrix)
