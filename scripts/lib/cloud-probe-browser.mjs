@@ -1,0 +1,134 @@
+import { spawn } from 'node:child_process'
+import { mkdir, writeFile, readFile, mkdtemp, rm } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { resolve, dirname } from 'node:path'
+
+export async function withCloudProbeBrowser({ url, outputDir, width = 1280, height = 800 }, run) {
+  const parsed = new URL(url)
+  if (
+    !['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname) ||
+    parsed.protocol !== 'http:' ||
+    parsed.pathname !== '/tests/clouds/earth/probe.html'
+  )
+    throw new Error('Cloud probe requires local probe.html')
+  const profilePrefix = resolve(tmpdir(), 'earth-cloud-probe-')
+  const webglErrors = []
+  const chromePath =
+    process.env.CHROME_BIN ??
+    [
+      'C:/Program Files/Google/Chrome/Application/chrome.exe',
+      'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/usr/bin/google-chrome',
+      '/usr/bin/chromium'
+    ].find(existsSync)
+  if (!chromePath) throw new Error('Set CHROME_BIN to a Chromium executable')
+  await mkdir(outputDir, { recursive: true })
+  const profile = await mkdtemp(profilePrefix)
+  const chrome = spawn(
+    chromePath,
+    [
+      '--headless=new',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--disable-background-networking',
+      '--remote-debugging-port=0',
+      `--user-data-dir=${profile}`,
+      `--window-size=${width},${height}`,
+      '--enable-webgl',
+      '--ignore-gpu-blocklist',
+      'about:blank'
+    ],
+    { windowsHide: true, stdio: 'ignore' }
+  )
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+  let socket
+  let closeBrowser
+  let startupError
+  chrome.on('error', (error) => {
+    startupError = error
+  })
+  try {
+    let targets
+    for (let i = 0; i < 100; i++) {
+      if (startupError) throw startupError
+      try {
+        const port = Number((await readFile(resolve(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0])
+        targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
+        break
+      } catch {
+        await sleep(100)
+      }
+    }
+    if (!targets) throw new Error('Chrome debugging endpoint did not start')
+    socket = new WebSocket(targets.find((target) => target.type === 'page').webSocketDebuggerUrl)
+    await new Promise((resolve, reject) => {
+      socket.onopen = resolve
+      socket.onerror = reject
+    })
+    let id = 0
+    const pending = new Map()
+    const errors = webglErrors
+    socket.onmessage = (event) => {
+      const msg = JSON.parse(event.data)
+      if (msg.id) {
+        const promise = pending.get(msg.id)
+        if (!promise) return
+        pending.delete(msg.id)
+        if (msg.error) promise.reject(new Error(JSON.stringify(msg.error)))
+        else promise.resolve(msg.result)
+      } else if (msg.method === 'Log.entryAdded' && /WebGL|GL_INVALID|GL_/i.test(msg.params.entry.text)) {
+        if (errors.length < 20) errors.push(msg.params.entry)
+      } else if (msg.method === 'Runtime.exceptionThrown') errors.push(msg.params.exceptionDetails)
+      else if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error')
+        errors.push(msg.params.args.map((arg) => arg.value ?? arg.description))
+    }
+    const send = (method, params = {}) =>
+      new Promise((resolve, reject) => {
+        const next = ++id
+        pending.set(next, { resolve, reject })
+        socket.send(JSON.stringify({ id: next, method, params }))
+      })
+    closeBrowser = () => send('Browser.close')
+    const evaluate = async (expression) => {
+      const result = await send('Runtime.evaluate', {
+        expression,
+        awaitPromise: true,
+        returnByValue: true,
+        timeout: 180000
+      })
+      if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails))
+      return result.result.value
+    }
+    await send('Page.enable')
+    await send('Runtime.enable')
+    await send('Log.enable')
+    await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false })
+    await send('Page.navigate', { url })
+    for (let i = 0; i < 100; i++) {
+      if (await evaluate("document.body?.dataset.ready === 'true'")) break
+      if (i === 99) throw new Error('Probe page did not become ready')
+      await sleep(100)
+    }
+    const screenshot = async (name) => {
+      if (!/^[a-zA-Z0-9_-]+$/.test(name)) throw new Error('Invalid screenshot name')
+      const result = await send('Page.captureScreenshot', { format: 'png' })
+      await writeFile(resolve(outputDir, `${name}.png`), Buffer.from(result.data, 'base64'))
+    }
+    const result = await run({ evaluate, screenshot, webglErrors })
+    if (webglErrors.length) throw new Error(`Probe runtime/WebGL errors: ${JSON.stringify(webglErrors)}`)
+    return result
+  } finally {
+    if (closeBrowser) await Promise.race([closeBrowser().catch(() => {}), sleep(1000)])
+    socket?.close()
+    chrome.kill()
+    const resolvedProfile = resolve(profile)
+    if (
+      dirname(resolvedProfile) === resolve(tmpdir()) &&
+      resolvedProfile.startsWith(profilePrefix) &&
+      resolvedProfile !== profilePrefix
+    )
+      await rm(resolvedProfile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }).catch(() => {})
+  }
+}

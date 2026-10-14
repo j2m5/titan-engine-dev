@@ -3,7 +3,7 @@ import type { CloudPattern, ScalarDecode } from './CloudConfig'
 export type Rgba = readonly [number, number, number, number]
 export type CloudInputColorSpace = 'srgb' | 'linear'
 
-const srgbToLinear = (value: number): number => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+export const srgbToLinear = (value: number): number => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
 const linearToSrgb = (value: number): number =>
   value <= 0.0031308 ? value * 12.92 : 1.055 * value ** (1 / 2.4) - 0.055
 const unit = (value: unknown): value is number =>
