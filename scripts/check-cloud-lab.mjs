@@ -344,7 +344,7 @@ try {
     }
     const marker=new T.DataTexture(data,width,height,T.RGBAFormat);
     marker.colorSpace=T.SRGBColorSpace; marker.needsUpdate=true;
-    let lab,stats,errors=[],markerDisposals=0,weatherDisposals=0,colorDisposals=0,surfaceDisposals=0;
+    let lab,stats,errors=[],markerDisposals=0,weatherDisposals=0,colorDisposals=0,surfaceDisposals=0,markerTarget,markerPass;
     marker.addEventListener('dispose',()=>markerDisposals++);
     const markerHost=host(); let rotation;
     try {
@@ -353,6 +353,33 @@ try {
       lab.appearanceTextures.color.addEventListener('dispose',()=>colorDisposals++);
       lab.surfaceView.addEventListener('dispose',()=>surfaceDisposals++);
       lab.setView('above'); await waitFrames(lab,16);
+      const {ShaderPass} = await import('/node_modules/.vite/deps/postprocessing.js');
+      markerTarget=new T.WebGLRenderTarget(320,200,{depthBuffer:false});
+      const markerMaterial=new T.ShaderMaterial({
+        uniforms:{map:{value:null}},
+        vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
+        // Normalize radiance into chromaticity to compare geography despite quality-dependent brightness.
+        fragmentShader:'uniform sampler2D map;varying vec2 vUv;void main(){vec4 c=texture2D(map,vUv);float s=c.r+c.g+c.b;gl_FragColor=vec4(s>1e-8?c.rgb/s:vec3(0.),c.a);}',
+        depthTest:false,depthWrite:false
+      });
+      markerPass=new ShaderPass(markerMaterial);
+      const cloudMarker = () => {
+        markerMaterial.uniforms.map.value=lab.clouds.cloudsPass.outputBuffer;
+        markerPass.render(lab.renderer,null,markerTarget);
+        const bytes=new Uint8Array(320*200*4);
+        lab.renderer.readRenderTargetPixels(markerTarget,0,0,320,200,bytes);
+        lab.renderer.setRenderTarget(null);
+        const sum=[0,0,0];let weight=0;
+        for(let y=40;y<160;y++) for(let x=60;x<260;x++) {
+          const i=(y*320+x)*4,alpha=bytes[i+3]/255;
+          for(let c=0;c<3;c++) sum[c]+=alpha*bytes[i+c]/255;
+          weight+=alpha;
+        }
+        if(weight<100) throw new Error('Isolated cloud marker is missing');
+        return sum.map(v=>v/weight);
+      };
+      const markerDistance=(a,b)=>Math.max(...a.map((v,i)=>Math.abs(v-b[i])));
+      const initialCloudMarker=cloudMarker();
       const average = bytes => {
         const sum=[0,0,0]; let count=0;
         for(let y=40;y<160;y++) for(let x=60;x<260;x++) {
@@ -366,11 +393,22 @@ try {
       const noise=[lab.clouds.shapeTexture,lab.clouds.shapeDetailTexture,lab.clouds.stbnTexture];
       const maps=[lab.appearanceTextures.weather,lab.appearanceTextures.color];
       const seed=lab.clouds.shapeOffset.toArray(),detailSeed=lab.clouds.shapeDetailOffset.toArray();
-      lab.setPlanetRotation(new T.Quaternion().setFromAxisAngle(new T.Vector3(0,1,0),0.7));
-      await waitFrames(lab,16);
-      const rotatedCloudColor=average(framePixels(lab));
+      lab.setPlanetRotation(new T.Quaternion().setFromAxisAngle(new T.Vector3(0,1,0),1.6));
+      // Negative control: deliberately disconnect cloud geography while the surface rotates.
       const matrix=lab.clouds.cloudsPass.currentMaterial.uniforms.cloudECEFToPlanet.value;
       const expected=new T.Matrix3().setFromMatrix4(new T.Matrix4().makeRotationFromQuaternion(lab.planet.quaternion.clone().invert()));
+      matrix.identity();
+      await waitFrames(lab,16);
+      const disconnectedCloudMarker=cloudMarker();
+      matrix.copy(expected);
+      lab.setQuality('medium');
+      await waitFrames(lab,16);
+      const rotatedCloudColor=average(framePixels(lab));
+      const rotatedCloudMarker=cloudMarker();
+      const cloudRotationDifference=markerDistance(initialCloudMarker,rotatedCloudMarker);
+      const disconnectedRotationDifference=markerDistance(initialCloudMarker,disconnectedCloudMarker);
+      if(cloudRotationDifference<.04 || disconnectedRotationDifference>=.04)
+        throw new Error('Full cloud marker rotation assertion/control failed: '+JSON.stringify({initialCloudMarker,rotatedCloudMarker,disconnectedCloudMarker,cloudRotationDifference,disconnectedRotationDifference}));
       if(matrix.elements.some((v,i)=>Math.abs(v-expected.elements[i])>1e-10)) throw new Error('Rotation binding mismatch');
       // Visible marker geography on the original surface survives a quality round trip.
       lab.setCloudsEnabled(false); await waitFrames(lab);
@@ -378,7 +416,10 @@ try {
       lab.setCloudsEnabled(true);
       const qualities=[];
       for(const quality of ['medium','low','high','medium']) {
-        lab.setQuality(quality); await waitFrames(lab);
+        lab.setQuality(quality); await waitFrames(lab,16);
+        const isolatedCloudMarker=cloudMarker();
+        const markerError=markerDistance(isolatedCloudMarker,rotatedCloudMarker);
+        if(markerError>.04) throw new Error('Full cloud marker changed through quality cycle: '+JSON.stringify({quality,markerError,isolatedCloudMarker,rotatedCloudMarker}));
         const cloud=lab.clouds;
         if(noise.some((v,i)=>v!==[cloud.shapeTexture,cloud.shapeDetailTexture,cloud.stbnTexture][i]) ||
           maps.some((v,i)=>v!==[lab.appearanceTextures.weather,lab.appearanceTextures.color][i]) ||
@@ -387,7 +428,7 @@ try {
           cloud.cloudsPass.currentMaterial.uniforms.cloudECEFToPlanet.value!==matrix ||
           cloud.shadowPass.currentMaterial.uniforms.cloudECEFToPlanet.value!==matrix)
           throw new Error('Quality changed geography or owned resources');
-        qualities.push({quality,cloudFrames:lab.cloudFrames,shadowFrames:lab.shadowFrames,frameMs:stats?.frameMs});
+        qualities.push({quality,cloudFrames:lab.cloudFrames,shadowFrames:lab.shadowFrames,frameMs:stats?.frameMs,isolatedCloudMarker,markerError});
       }
       lab.setCloudsEnabled(false); await waitFrames(lab);
       const afterPixels=framePixels(lab);
@@ -395,9 +436,11 @@ try {
       if(markerPixelDifferences>50) throw new Error('Visible marker geography changed through quality cycle');
       rotation={before,after:[lab.cloudFrames,lab.shadowFrames],qualities,markerPixelDifferences,
         unrotatedCloudColor,rotatedCloudColor,
+        initialCloudMarker,rotatedCloudMarker,disconnectedCloudMarker,cloudRotationDifference,disconnectedRotationDifference,
         texturesBefore:lab.renderer.info.memory.textures,errors};
       if(rotation.after.some((v,i)=>v<=before[i]) || errors.length) throw new Error('Complete cloud/shadow passes did not render');
     } finally {
+      markerPass?.dispose();markerTarget?.dispose();
       lab?.dispose(); lab?.dispose(); if(!lab) marker.dispose();
       if(rotation) Object.assign(rotation,{texturesAfter:lab.renderer.info.memory.textures,
         markerDisposals,weatherDisposals,colorDisposals,surfaceDisposals,canvasRemoved:!markerHost.querySelector('canvas')});
@@ -415,6 +458,10 @@ try {
     appearance.maxColorError > 3 / 255 ||
     appearance.maxAlphaDifference > 1 / 255 ||
     appearance.maxShadowDifference > 1 / 255 ||
+    appearance.maxSeamMipError > 2 / 255 ||
+    appearance.maxMappedColorError > 2 / 255 ||
+    appearance.seamControlError < 0.3 ||
+    appearance.mappedControlError < 0.1 ||
     !appearance.resourcesReleased
   )
     throw new Error('Cloud appearance GPU regression')

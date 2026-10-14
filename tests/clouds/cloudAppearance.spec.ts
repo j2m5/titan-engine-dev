@@ -65,6 +65,26 @@ function evaluateNoiseExpression(expression: string, values: Record<string, Vect
   return result
 }
 describe('cloud appearance', () => {
+  it.each(['image', 'data'] as const)('uses intrinsic color width for %s texture mip bias', (kind) => {
+    // The real binding must use uploaded pixels, not an image's displayed dimensions.
+    const image = document.createElement('img')
+    image.width = 128
+    Object.defineProperty(image, 'naturalWidth', { value: 4096 })
+    const color = kind === 'image' ? new Texture(image) : source()
+    const weather = source()
+    const effect = new CloudsEffect(new PerspectiveCamera())
+    const maps = { weather, color, constantColorLinear: [1, 1, 1] as const, colorStrength: 1, dispose() {} }
+    const binding = bindCloudAppearance(effect, validCloudConfig(), maps)
+    try {
+      expect(effect.cloudsPass.currentMaterial.uniforms.cloudColorMipBias.value).toBe(kind === 'image' ? 11 : 0)
+      expect(color.image.width).toBe(kind === 'image' ? 128 : 2)
+    } finally {
+      binding.dispose()
+      color.dispose()
+      weather.dispose()
+      effect.dispose()
+    }
+  })
   it('preserves planet noise coordinates with geographic turbulence at high quality', () => {
     const effect = new CloudsEffect(new PerspectiveCamera())
     effect.qualityPreset = 'high'

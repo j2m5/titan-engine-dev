@@ -49,12 +49,20 @@ describe('Jupiter cloud adapter', () => {
   it('aligns the owned surface view with longitude-offset map sampling without mutating its source', () => {
     const source = new Texture()
     source.offset.set(0.03, 0.07)
+    source.repeat.set(0.5, 0.7)
+    source.rotation = 0.3
+    source.matrixAutoUpdate = false
+    source.updateMatrix()
+    const sourceMatrix = source.matrix.clone()
     const view = createCloudSurfaceView(source, Math.PI / 2)
     expect(view).not.toBe(source)
     expect(view.source).toBe(source.source)
     expect(source.offset.toArray()).toEqual([0.03, 0.07])
     expect(view.wrapS).toBe(RepeatWrapping)
-    view.updateMatrix()
+    expect(source.matrix).toEqual(sourceMatrix)
+    expect(source.repeat.toArray()).toEqual([0.5, 0.7])
+    expect(source.rotation).toBe(0.3)
+    expect(source.matrixAutoUpdate).toBe(false)
     const uv = new Vector2(0.9, 0.4)
     view.transformUv(uv)
     expect(uv.x).toBeCloseTo(0.15)

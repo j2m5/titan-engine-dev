@@ -23,6 +23,7 @@ export function createCloudSurfaceView(source: Texture, longitudeOffsetRadians: 
   view.rotation = 0
   view.wrapS = RepeatWrapping
   view.wrapT = ClampToEdgeWrapping
+  view.updateMatrix()
   view.needsUpdate = true
   return view
 }

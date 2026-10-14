@@ -5,6 +5,7 @@ import {
   Matrix3,
   Mesh,
   NearestFilter,
+  NearestMipmapNearestFilter,
   NoBlending,
   PerspectiveCamera,
   PlaneGeometry,
@@ -13,6 +14,7 @@ import {
   RepeatWrapping,
   RGBAFormat,
   Scene,
+  SRGBColorSpace,
   Vector3,
   Vector4,
   WebGLRenderer,
@@ -28,6 +30,10 @@ export type CloudAppearanceGpuReport = {
   maxColorError: number
   maxAlphaDifference: number
   maxShadowDifference: number
+  maxSeamMipError: number
+  maxMappedColorError: number
+  seamControlError: number
+  mappedControlError: number
   resourcesReleased: boolean
 }
 
@@ -87,19 +93,24 @@ export async function checkCloudAppearance(useAdapter = true): Promise<CloudAppe
     maxColorError: 0,
     maxAlphaDifference: 0,
     maxShadowDifference: 0,
+    maxSeamMipError: 0,
+    maxMappedColorError: 0,
+    seamControlError: 0,
+    mappedControlError: 0,
     resourcesReleased: false
   }
-  const run = (body: string, declarations: string, uniforms: RawShaderMaterial['uniforms']): number[] => {
+  const run = (body: string, declarations: string, uniforms: RawShaderMaterial['uniforms'], width = 1, height = 1): number[] => {
     for (const [name, uniform] of Object.entries(uniforms)) {
       if (material.uniforms[name]) material.uniforms[name].value = uniform.value
       else material.uniforms[name] = { value: uniform.value }
     }
     material.fragmentShader = `precision highp float; precision highp sampler2D; out vec4 result; ${declarations} void main(){${body}}`
     material.needsUpdate = true
+    target.setSize(width, height)
     renderer.setRenderTarget(target)
     renderer.render(scene, new Camera())
-    const pixel = new Uint8Array(4)
-    renderer.readRenderTargetPixels(target, 0, 0, 1, 1, pixel)
+    const pixel = new Uint8Array(width * height * 4)
+    renderer.readRenderTargetPixels(target, 0, 0, width, height, pixel)
     if (renderer.getContext().getError()) throw new Error('Appearance probe WebGL error')
     return Array.from(pixel, (value) => value / 255)
   }
@@ -258,6 +269,55 @@ export async function checkCloudAppearance(useAdapter = true): Promise<CloudAppe
       }
     }
     const cloudSource = clouds.cloudsPass.currentMaterial.fragmentShader
+    // Two-pixel derivative quads cross each longitude representation's seam.
+    // A 0.04 UV footprint on a 64-pixel map has log2(2.56) LOD;
+    // nearest mip selection therefore reads independently populated level one.
+    const mipTexture = new DataTexture(new Uint8Array(64 * 32 * 4), 64, 32, RGBAFormat)
+    mipTexture.mipmaps = Array.from({ length: 7 }, (_, level) => {
+      const width = Math.max(1, 64 >> level), height = Math.max(1, 32 >> level)
+      const data = new Uint8Array(width * height * 4)
+      for (let i = 0; i < data.length; i += 4) data.set([Math.round(255 * level / 6), 0, 0, 255], i)
+      return { data, width, height }
+    })
+    mipTexture.minFilter = NearestMipmapNearestFilter
+    mipTexture.magFilter = NearestFilter
+    mipTexture.wrapS = RepeatWrapping
+    mipTexture.needsUpdate = true
+    try {
+      for (const pass of [clouds.cloudsPass, clouds.shadowPass]) {
+        const source = pass.currentMaterial.fragmentShader
+        const mip = extract(source, 'getMipLevel')
+        const declarations = `uniform sampler2D localWeatherTexture; uniform mat3 cloudECEFToPlanet; uniform float cloudLongitudeOffset,probeLongitude;
+          struct WeatherSample {vec4 heightFraction;vec4 density;};
+          uniform vec4 minLayerHeights,maxLayerHeights,shapeAlteringBiases,shadowLayerMask;
+          vec4 remapClamped(vec4 x,vec4 low,vec4 high){return clamp((x-low)/(high-low),0.,1.);}
+          ${extract(source, 'getGlobeUv')} ${mip} ${extract(source, 'shapeAlteringFunction')} ${extract(source, 'sampleWeather')}`
+        for (const longitude of [0.95, 0.45]) {
+          const body = `float phi=6.283185307179586*(probeLongitude+gl_FragCoord.x*.04);
+            vec2 uv=getGlobeUv(vec3(-cos(phi),0.,sin(phi))); float mip=getMipLevel(uv);
+            result=vec4(mip/8.,sampleWeather(uv,.5,mip).density.r,0.,1.);`
+          const uniforms = {
+            localWeatherTexture: { value: mipTexture }, cloudECEFToPlanet: { value: new Matrix3() },
+            cloudLongitudeOffset: { value: 0 }, probeLongitude: { value: longitude },
+            minLayerHeights: { value: new Vector4(0, 0, 0, 0) }, maxLayerHeights: { value: new Vector4(1, 1, 1, 1) },
+            shapeAlteringBiases: { value: new Vector4(1, 1, 1, 1) }, shadowLayerMask: { value: new Vector4(1, 0, 0, 0) }
+          }
+          const pixels = run(body, declarations, uniforms, 4, 2)
+          const expectedMip = Math.log2(64 * 0.04) / 8
+          for (let i = 0; i < pixels.length; i += 4) {
+            report.maxSeamMipError = Math.max(report.maxSeamMipError, Math.abs(pixels[i] - expectedMip), Math.abs(pixels[i + 1] - 43 / 255))
+          }
+          // Fault control: removing the alternate longitude derivatives overestimates seam LOD.
+          const faulty = declarations.replace('min(abs(dxA.x), abs(dxB.x))', 'abs(dxA.x)').replace('min(abs(dyA.x), abs(dyB.x))', 'abs(dyA.x)')
+          const control = run(body, faulty, uniforms, 4, 2)
+          report.seamControlError = Math.max(report.seamControlError, Math.abs(control[0] - expectedMip))
+        }
+      }
+      if (report.maxSeamMipError > 2 / 255 || report.seamControlError < 0.3)
+        throw new Error(`Seam derivative/mip regression: ${JSON.stringify(report)}`)
+    } finally {
+      mipTexture.dispose()
+    }
     const multiply = cloudSource.slice(
       cloudSource.indexOf('// Finally multiply by scattering.') + '// Finally multiply by scattering.'.length,
       cloudSource.indexOf('#ifdef POWDER', cloudSource.indexOf('// Finally multiply by scattering.'))
@@ -283,6 +343,31 @@ export async function checkCloudAppearance(useAdapter = true): Promise<CloudAppe
       [0, 0, 1, 1],
       [1, 0, 0, 0]
     ]
+    // Real mapped branch with an sRGB GPU upload; neither missing nor double decoding
+    // can match this independently evaluated homogeneous scattering integral.
+    const mappedTexture = new DataTexture(new Uint8Array([128, 64, 192, 255]), 1, 1, RGBAFormat)
+    mappedTexture.colorSpace = SRGBColorSpace
+    mappedTexture.needsUpdate = true
+    try {
+      const body = `MediaSample media; media.scattering=1.; media.extinction=1.; vec2 uv=vec2(.5); float mipLevel=0.,stepSize=1.; vec3 radiance=vec3(1.),radianceIntegral=vec3(0.); float transmittanceIntegral=1.; ${multiply} ${integral} result=vec4(radianceIntegral,1.-transmittanceIntegral);`
+      const declarations = 'struct MediaSample{float scattering;float extinction;}; uniform bool cloudUseColorMap; uniform sampler2D cloudColorTexture; uniform vec3 cloudConstantColor; uniform float cloudColorStrength,cloudColorMipBias;'
+      const uniforms = { cloudUseColorMap: { value: true }, cloudColorTexture: { value: mappedTexture }, cloudConstantColor: { value: new Vector3(1, 1, 1) }, cloudColorStrength: { value: 0.75 }, cloudColorMipBias: { value: 0 } }
+      const expectedAlpha = 1 - Math.exp(-1)
+      const expected = [128, 64, 192].map(byte => expectedAlpha * (0.25 + 0.75 * Math.pow((byte / 255 + 0.055) / 1.055, 2.4)))
+      const output = run(body, declarations, uniforms)
+      report.maxMappedColorError = Math.max(...expected.map((value, i) => Math.abs(output[i] - value)))
+      report.maxAlphaDifference = Math.max(report.maxAlphaDifference, Math.abs(output[3] - expectedAlpha))
+      // Missing decoding control uses the same actual scattering code with a linear upload.
+      mappedTexture.colorSpace = ''
+      mappedTexture.needsUpdate = true
+      const control = run(body, declarations, uniforms)
+      report.mappedControlError = Math.max(...expected.map((value, i) => Math.abs(control[i] - value)))
+      if (report.maxMappedColorError > 2 / 255 || report.mappedControlError < 0.1)
+        throw new Error(`Mapped sRGB scattering regression: ${JSON.stringify(report)}`)
+      report.maxAlphaDifference = Math.max(report.maxAlphaDifference, Math.abs(control[3] - output[3]))
+    } finally {
+      mappedTexture.dispose()
+    }
     for (const extinction of [0, 1]) {
       const outputs = values.map(([r, g, b, strength]) =>
         run(

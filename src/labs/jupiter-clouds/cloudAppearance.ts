@@ -40,7 +40,13 @@ export function bindCloudAppearance(
     cloudConstantColor: { value: new Vector3(...textures.constantColorLinear) },
     cloudColorStrength: { value: textures.colorStrength },
     cloudColorMipBias: {
-      value: textures.color ? Math.log2(textures.color.image.width / textures.weather.image.width) : 0
+      value: textures.color
+        ? Math.log2(
+            (typeof HTMLImageElement !== 'undefined' && textures.color.image instanceof HTMLImageElement
+              ? textures.color.image.naturalWidth
+              : textures.color.image.width) / textures.weather.image.width
+          )
+        : 0
     }
   }
   const previous = {
