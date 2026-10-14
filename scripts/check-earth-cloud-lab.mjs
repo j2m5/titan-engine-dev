@@ -3,9 +3,13 @@ import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { withCloudProbeBrowser } from './lib/cloud-probe-browser.mjs'
 
-if (process.argv.slice(2).some((arg) => !['--probe=maps', '--probe=surface'].includes(arg)))
-  throw new Error('Supported probes: --probe=maps, --probe=surface')
-const probe = process.argv.includes('--probe=surface') ? 'surface' : 'maps'
+if (process.argv.slice(2).some((arg) => !['--probe=maps', '--probe=surface', '--probe=composition'].includes(arg)))
+  throw new Error('Supported probes: --probe=maps, --probe=surface, --probe=composition')
+const probe = process.argv.includes('--probe=composition')
+  ? 'composition'
+  : process.argv.includes('--probe=surface')
+    ? 'surface'
+    : 'maps'
 const outputDir = resolve(dirname(fileURLToPath(import.meta.url)), '../tmpscreenshots/earth-cloud-lab')
 await mkdir(outputDir, { recursive: true })
 const report = await withCloudProbeBrowser(
@@ -15,9 +19,11 @@ const report = await withCloudProbeBrowser(
   },
   async ({ evaluate, webglErrors }) => {
     const result = await evaluate(
-      probe === 'surface'
-        ? "import('/tests/clouds/earth/earthSurface.gpu.ts').then(m => m.checkEarthSurface())"
-        : "import('/tests/clouds/earth/earthCloudTextures.gpu.ts').then(m => m.checkEarthCloudTextures())"
+      probe === 'composition'
+        ? "import('/tests/clouds/earth/earthComposition.gpu.ts').then(m => m.checkEarthComposition())"
+        : probe === 'surface'
+          ? "import('/tests/clouds/earth/earthSurface.gpu.ts').then(m => m.checkEarthSurface())"
+          : "import('/tests/clouds/earth/earthCloudTextures.gpu.ts').then(m => m.checkEarthCloudTextures())"
     )
     return { [probe]: result, webglErrors }
   }
