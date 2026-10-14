@@ -3,7 +3,7 @@ import type { CloudsEffect } from '@takram/three-clouds'
 import type { PerspectiveCamera } from 'three'
 import { RenderingObjects } from '@storage/database'
 import type { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
-import { createPlanetCloudEffect, toTakramAtmosphere } from '@/labs/planet-clouds/planetCloudAdapter'
+import { applyPlanetCloudLayer, createPlanetCloudEffect, toTakramAtmosphere } from '@/labs/planet-clouds/planetCloudAdapter'
 import { createEarthCloudProfile } from './earthCloudProfile'
 
 export type EarthCloudQuality = 'low' | 'medium' | 'high'
@@ -43,19 +43,7 @@ export function setEarthCloudQuality(clouds: CloudsEffect, quality: EarthCloudQu
 export function createEarthClouds(camera: PerspectiveCamera, atmosphere: AtmosphereParameters): CloudsEffect {
   const clouds = createPlanetCloudEffect(camera, atmosphere)
   const layer = createEarthCloudProfile().layers[0]
-  clouds.cloudLayers.reset().set([
-    {
-      channel: 'r',
-      altitude: layer.baseAltitudeMeters,
-      height: layer.thicknessMeters,
-      densityScale: 1,
-      shapeAmount: 1,
-      shapeDetailAmount: layer.detail.erosionStrength,
-      shadow: layer.castsShadow
-    }
-  ])
-  clouds.scatteringCoefficient = layer.extinctionPerMeter
-  clouds.absorptionCoefficient = 0
+  applyPlanetCloudLayer(clouds, layer)
   setEarthCloudQuality(clouds, 'medium')
   return clouds
 }

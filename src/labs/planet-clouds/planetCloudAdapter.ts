@@ -2,6 +2,7 @@ import { AtmosphereParameters, DensityProfileLayer } from '@takram/three-atmosph
 import { CloudsEffect } from '@takram/three-clouds'
 import { Ellipsoid } from '@takram/three-geospatial'
 import { Color, PerspectiveCamera, Vector3 } from 'three'
+import type { CloudLayerConfig } from '@/core/clouds/CloudConfig'
 import type {
   AtmosphereConfig,
   DensityProfileLayer as TitanDensityLayer
@@ -31,6 +32,22 @@ export function toTakramAtmosphere(config: AtmosphereConfig): AtmosphereParamete
     groundAlbedo: new Color(...config.groundAlbedo),
     muSMin: config.muSMin
   })
+}
+
+export function applyPlanetCloudLayer(clouds: CloudsEffect, layer: CloudLayerConfig): void {
+  clouds.cloudLayers.reset().set([
+    {
+      channel: 'r',
+      altitude: layer.baseAltitudeMeters,
+      height: layer.thicknessMeters,
+      densityScale: 1,
+      shapeAmount: 1,
+      shapeDetailAmount: layer.detail.erosionStrength,
+      shadow: layer.castsShadow
+    }
+  ])
+  clouds.scatteringCoefficient = layer.extinctionPerMeter
+  clouds.absorptionCoefficient = 0
 }
 
 export function createPlanetCloudEffect(camera: PerspectiveCamera, atmosphere: AtmosphereParameters): CloudsEffect {

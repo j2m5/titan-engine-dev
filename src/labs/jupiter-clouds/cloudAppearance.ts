@@ -1,6 +1,7 @@
 import type { CloudsEffect } from '@takram/three-clouds'
 import { Matrix3, Matrix4, Quaternion, Vector3 } from 'three'
 import type { EnabledCloudConfig } from '@/core/clouds/CloudConfig'
+import { applyPlanetCloudLayer } from '@/labs/planet-clouds/planetCloudAdapter'
 import type { CloudAppearanceTextures } from './cloudAppearanceTextures'
 import { adaptCloudAppearanceShader } from './cloudAppearanceShader'
 
@@ -69,22 +70,10 @@ export function bindCloudAppearance(
     Object.assign(material.uniforms, shared)
     material.needsUpdate = true
   })
-  clouds.cloudLayers.reset().set([
-    {
-      channel: 'r',
-      altitude: layer.baseAltitudeMeters,
-      height: layer.thicknessMeters,
-      densityScale: 1,
-      shapeAmount: 1,
-      shapeDetailAmount: layer.detail.erosionStrength,
-      shadow: layer.castsShadow
-    }
-  ])
+  applyPlanetCloudLayer(clouds, layer)
   clouds.localWeatherTexture = textures.weather
   clouds.localWeatherRepeat.setScalar(1)
   clouds.localWeatherOffset.setScalar(0)
-  clouds.scatteringCoefficient = layer.extinctionPerMeter
-  clouds.absorptionCoefficient = 0
   clouds.coverage = 1
   clouds.shapeRepeat.setScalar(1 / layer.detail.shapeScaleMeters)
   clouds.shapeDetailRepeat.setScalar(1 / layer.detail.erosionScaleMeters)
