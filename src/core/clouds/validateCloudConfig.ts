@@ -158,7 +158,7 @@ class CloudReader {
 }
 
 export function resolveCloudConfig(value: unknown, availableResourceIds: ReadonlySet<number>): CloudConfigResult {
-  if (value === undefined) return { state: 'legacy' }
+  if (value === undefined) return { state: 'unconfigured' }
   const reader = new CloudReader(availableResourceIds)
   const data = reader.object(value, 'clouds')
   if (data.enabled === false) return { state: 'off' }
@@ -187,7 +187,7 @@ export function resolveCloudConfig(value: unknown, availableResourceIds: Readonl
   }
   const config = {
     enabled: true as const,
-    farAppearance: reader.choice(data.farAppearance, 'farAppearance', ['base-texture', 'separate-layer']),
+    farAppearance: reader.choice(data.farAppearance, 'farAppearance', ['base-texture', 'surface-map']),
     mapping: {
       frame: reader.choice(mapping.frame, 'mapping.frame', ['planet-fixed']),
       projection: reader.choice(mapping.projection, 'mapping.projection', ['equirectangular']),

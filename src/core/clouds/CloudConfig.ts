@@ -28,7 +28,7 @@ export type CloudConfig =
   | { enabled: false }
   | {
       enabled: true
-      farAppearance: 'base-texture' | 'separate-layer'
+      farAppearance: 'base-texture' | 'surface-map'
       mapping: { frame: 'planet-fixed'; projection: 'equirectangular'; longitudeOffsetRadians: number }
       lod: { fullDistanceMeters: number; cutoffDistanceMeters: number }
       layers: CloudLayerConfig[]
@@ -36,7 +36,7 @@ export type CloudConfig =
 export type EnabledCloudConfig = Extract<CloudConfig, { enabled: true }>
 export type CloudConfigIssue = { path: string; message: string }
 export type CloudConfigResult =
-  | { state: 'legacy' }
+  | { state: 'unconfigured' }
   | { state: 'off' }
   | { state: 'configured'; config: EnabledCloudConfig }
   | { state: 'invalid'; issues: CloudConfigIssue[] }

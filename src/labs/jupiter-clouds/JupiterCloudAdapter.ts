@@ -1,13 +1,9 @@
-import { AtmosphereParameters, DensityProfileLayer } from '@takram/three-atmosphere'
-import { CloudsEffect, type CloudsQualityPreset } from '@takram/three-clouds'
-import { Ellipsoid } from '@takram/three-geospatial'
-import { Color, PerspectiveCamera, Vector3, Texture, RepeatWrapping, ClampToEdgeWrapping } from 'three'
+import type { AtmosphereParameters } from '@takram/three-atmosphere'
+import type { CloudsEffect, CloudsQualityPreset } from '@takram/three-clouds'
+import { PerspectiveCamera, Texture, RepeatWrapping, ClampToEdgeWrapping } from 'three'
 import { RenderingObjects } from '@storage/database'
-import type {
-  AtmosphereConfig,
-  DensityProfileLayer as TitanDensityLayer
-} from '@/core/renderables/Atmosphere/AtmosphereConfig'
-import { adaptCloudDepth } from './planetDepth'
+import type { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
+import { createPlanetCloudEffect, toTakramAtmosphere } from '@/labs/planet-clouds/planetCloudAdapter'
 import { createJupiterCloudProfile } from './jupiterCloudProfile'
 
 const defaultLayer = createJupiterCloudProfile().layers[0]
@@ -33,28 +29,7 @@ export function createJupiterAtmosphere(): { config: AtmosphereConfig; atmospher
   const row = RenderingObjects.find((entry) => entry.actorId === 49)
   if (!row) throw new Error('Jupiter atmosphere configuration is missing')
   const config = structuredClone(row.data) as unknown as AtmosphereConfig
-  const profile = (layers: [TitanDensityLayer, TitanDensityLayer]): [DensityProfileLayer, DensityProfileLayer] =>
-    layers.map(
-      (layer) =>
-        new DensityProfileLayer(layer.width, layer.expTerm, layer.expScale, layer.linearTerm, layer.constantTerm)
-    ) as [DensityProfileLayer, DensityProfileLayer]
-  const atmosphere = new AtmosphereParameters({
-    bottomRadius: config.bottomRadius * 1000,
-    topRadius: config.topRadius * 1000,
-    solarIrradiance: new Vector3(...config.solarIrradiance),
-    sunAngularRadius: config.sunAngularRadius,
-    rayleighDensity: profile(config.rayleighDensity),
-    rayleighScattering: new Vector3(...config.rayleighScattering),
-    mieDensity: profile(config.mieDensity),
-    mieScattering: new Vector3(...config.mieScattering),
-    mieExtinction: new Vector3(...config.mieExtinction),
-    miePhaseFunctionG: config.miePhaseFunctionG,
-    absorptionDensity: profile(config.absorptionDensity),
-    absorptionExtinction: new Vector3(...config.absorptionExtinction),
-    groundAlbedo: new Color(...config.groundAlbedo),
-    muSMin: config.muSMin
-  })
-  return { config, atmosphere }
+  return { config, atmosphere: toTakramAtmosphere(config) }
 }
 
 export function setJupiterCloudQuality(clouds: CloudsEffect, quality: CloudsQualityPreset): void {
@@ -79,9 +54,7 @@ export function setJupiterCloudQuality(clouds: CloudsEffect, quality: CloudsQual
 }
 
 export function createJupiterClouds(camera: PerspectiveCamera, atmosphere: AtmosphereParameters): CloudsEffect {
-  const clouds = new CloudsEffect(camera, undefined, atmosphere)
-  clouds.ellipsoid = new Ellipsoid(atmosphere.bottomRadius, atmosphere.bottomRadius, atmosphere.bottomRadius)
-  clouds.correctAltitude = false
+  const clouds = createPlanetCloudEffect(camera, atmosphere)
   clouds.cloudLayers.reset().set([
     {
       channel: 'r',
@@ -98,16 +71,5 @@ export function createJupiterClouds(camera: PerspectiveCamera, atmosphere: Atmos
   clouds.shapeDetailRepeat.setScalar(1 / 12000)
   setJupiterCloudQuality(clouds, 'medium')
 
-  // Upstream 0.7.6 hardcodes WGS84 in copyCameraSettings, even with another ellipsoid.
-  // Patch this single instance, after upstream updates matrices/depth/jitter. No global mutation.
-  const material = clouds.cloudsPass.currentMaterial
-  const copyCameraSettings = material.copyCameraSettings.bind(material)
-  const position = new Vector3()
-  material.copyCameraSettings = (activeCamera): void => {
-    copyCameraSettings(activeCamera)
-    activeCamera.getWorldPosition(position).applyMatrix4(clouds.worldToECEFMatrix)
-    material.uniforms.cameraHeight.value = position.length() - atmosphere.bottomRadius
-  }
-  adaptCloudDepth(clouds)
   return clouds
 }

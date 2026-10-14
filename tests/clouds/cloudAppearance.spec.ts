@@ -123,14 +123,26 @@ describe('cloud appearance', () => {
     original.dispose()
     effect.dispose()
   })
-  it('rejects independently valid mask and multiple layer profiles', () => {
+  it('accepts surface-map mask and rejects mismatched pairs, unsupported patterns and multiple layers', () => {
     const config = validCloudConfig()
     const pattern = config.layers[0].pattern
     if (pattern.kind !== 'appearance') throw new Error('fixture')
-    config.farAppearance = 'separate-layer'
+    config.farAppearance = 'surface-map'
     config.layers[0].pattern = { kind: 'mask', map: pattern.map, decode: pattern.decode }
     expect(resolveCloudConfig(config, new Set([32])).state).toBe('configured')
+    expect(() => assertCloudAppearanceSupport(config)).not.toThrow()
+    config.farAppearance = 'base-texture'
     expect(() => assertCloudAppearanceSupport(config)).toThrow(/unsupported/i)
+    const wrongPair = validCloudConfig()
+    wrongPair.farAppearance = 'surface-map'
+    expect(() => assertCloudAppearanceSupport(wrongPair)).toThrow(/unsupported/i)
+    for (const pattern of [
+      { kind: 'uniform', coverage: 1 },
+      { kind: 'procedural', coverage: 1, scaleMeters: 100, bandStrength: 0 }
+    ] as const) {
+      config.layers[0].pattern = pattern
+      expect(() => assertCloudAppearanceSupport(config)).toThrow(/unsupported/i)
+    }
     const multiple = validCloudConfig()
     multiple.layers.push({ ...multiple.layers[0], id: 'second' })
     expect(() => assertCloudAppearanceSupport(multiple)).toThrow(/unsupported/i)

@@ -5,13 +5,19 @@ import { createJupiterCloudProfile } from '@/labs/jupiter-clouds/jupiterCloudPro
 import { validCloudConfig } from './cloudFixtures'
 
 const ids = new Set([32, 26, 37])
-it('distinguishes legacy, off and configured without consulting resources for inactive modes', () => {
+it('reports the removed far appearance at its field', () => {
+  const result = resolveCloudConfig({ ...validCloudConfig(), farAppearance: 'separate-layer' }, ids)
+  expect(result.state).toBe('invalid')
+  if (result.state !== 'invalid') throw new Error('Expected invalid')
+  expect(result.issues).toEqual(expect.arrayContaining([expect.objectContaining({ path: 'farAppearance' })]))
+})
+it('distinguishes unconfigured, off and configured without consulting resources for inactive modes', () => {
   const unused = {
     has: () => {
       throw new Error('Resource lookup')
     }
   } as unknown as ReadonlySet<number>
-  expect(resolveCloudConfig(undefined, unused)).toEqual({ state: 'legacy' })
+  expect(resolveCloudConfig(undefined, unused)).toEqual({ state: 'unconfigured' })
   expect(resolveCloudConfig({ enabled: false }, unused)).toEqual({ state: 'off' })
   expect(resolveCloudConfig(validCloudConfig(), ids).state).toBe('configured')
 })
@@ -44,7 +50,7 @@ const patterns: CloudPattern[] = [
   validCloudConfig().layers[0].pattern
 ]
 it.each(patterns)('accepts pattern $kind and both color/far representations', (pattern) => {
-  for (const farAppearance of ['base-texture', 'separate-layer'] as const) {
+  for (const farAppearance of ['base-texture', 'surface-map'] as const) {
     const config = validCloudConfig()
     config.farAppearance = farAppearance
     config.layers[0].pattern = pattern
@@ -91,6 +97,7 @@ const invalidFields: [string, unknown][] = [
   ['layers.0.color.kind', 'unknown'],
   ['layers.0.color.map', null],
   ['farAppearance', 'unknown'],
+  ['farAppearance', 'separate-layer'],
   ['mapping.frame', 'unknown'],
   ['mapping.projection', 'unknown'],
   ['mapping.longitudeOffsetRadians', NaN],

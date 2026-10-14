@@ -6,11 +6,13 @@ import { adaptCloudAppearanceShader } from './cloudAppearanceShader'
 
 export function assertCloudAppearanceSupport(config: EnabledCloudConfig): void {
   if (
-    config.farAppearance !== 'base-texture' ||
     config.layers.length !== 1 ||
-    config.layers[0].pattern.kind !== 'appearance'
+    !(
+      (config.farAppearance === 'base-texture' && config.layers[0].pattern.kind === 'appearance') ||
+      (config.farAppearance === 'surface-map' && config.layers[0].pattern.kind === 'mask')
+    )
   )
-    throw new Error('Unsupported cloud appearance: requires one appearance layer and base-texture far appearance')
+    throw new Error('Unsupported cloud appearance: requires one base-texture/appearance or surface-map/mask layer')
 }
 
 export type CloudAppearanceBinding = { setPlanetRotation(rotation: Quaternion): void; dispose(): void }
@@ -67,19 +69,17 @@ export function bindCloudAppearance(
     Object.assign(material.uniforms, shared)
     material.needsUpdate = true
   })
-  clouds.cloudLayers
-    .reset()
-    .set([
-      {
-        channel: 'r',
-        altitude: layer.baseAltitudeMeters,
-        height: layer.thicknessMeters,
-        densityScale: 1,
-        shapeAmount: 1,
-        shapeDetailAmount: layer.detail.erosionStrength,
-        shadow: layer.castsShadow
-      }
-    ])
+  clouds.cloudLayers.reset().set([
+    {
+      channel: 'r',
+      altitude: layer.baseAltitudeMeters,
+      height: layer.thicknessMeters,
+      densityScale: 1,
+      shapeAmount: 1,
+      shapeDetailAmount: layer.detail.erosionStrength,
+      shadow: layer.castsShadow
+    }
+  ])
   clouds.localWeatherTexture = textures.weather
   clouds.localWeatherRepeat.setScalar(1)
   clouds.localWeatherOffset.setScalar(0)
