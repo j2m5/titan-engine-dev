@@ -4,6 +4,7 @@ import { SphereSurfaceShaderTemplate } from '@/core/materials/shaders/lib/Sphere
 import { PlanetAerialPerspectiveEffect } from '@/labs/jupiter-clouds/planetDepth'
 import { createEarthSurfaceMaterials, type EarthSurfaceOptions } from '@/labs/earth-clouds/EarthSurfaceMaterial'
 import { buildEarthSurfaceShader } from '@/labs/earth-clouds/earthSurfaceShader'
+import { buildEarthCloudShadowGLSL } from '@/labs/earth-clouds/earthCloudShadowShader'
 
 function fixture() {
   const owned = Array.from({ length: 6 }, () => new DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1))
@@ -33,6 +34,47 @@ function fixture() {
   }
 }
 describe('Earth surface materials', () => {
+  it.each([
+    ['getShadowUv', /getShadowUv\(const vec3 worldPosition/, 'getShadowUv(const vec4 worldPosition'],
+    [
+      'getFadedCascadeIndex',
+      /getFadedCascadeIndex\(([\s\S]*?)vec2 intervals\[SHADOW_CASCADE_COUNT\]/,
+      'getFadedCascadeIndex($1vec2 intervals[4]'
+    ]
+  ])('rejects incompatible same-arity %s parameters before near rendering', (name, anchor, replacement) => {
+    const f = fixture()
+    let pair: ReturnType<typeof createEarthSurfaceMaterials> | undefined
+    try {
+      const original = f.options.shadowReferenceShader
+      f.options.shadowReferenceShader = original.replace(anchor, replacement)
+      expect(f.options.shadowReferenceShader).not.toBe(original)
+      expect(() => buildEarthCloudShadowGLSL(f.options.shadowReferenceShader)).toThrow(
+        new RegExp(`signature changed: ${name}`)
+      )
+      pair = createEarthSurfaceMaterials(f.options)
+      expect(pair.volumeError?.message).toMatch(new RegExp(`signature changed: ${name}`))
+      expect(pair.far.uniforms.diffuseMap.value.image).toBe(f.options.textures.surface.image)
+      pair.setMapEnabled(false)
+      expect(pair.far.uniforms.earthSurfaceMapEnabled.value).toBe(false)
+      expect(() => pair!.bindShadow(null)).not.toThrow()
+    } finally {
+      pair?.dispose()
+      f.dispose()
+    }
+  })
+  it('accepts whitespace and input/precision qualifier variation in compatible helper parameters', () => {
+    const f = fixture()
+    try {
+      const reference = f.options.shadowReferenceShader.replace(
+        /getShadowUv\(const vec3 worldPosition, const int cascadeIndex\)/,
+        'getShadowUv( in highp vec3 worldPosition , in mediump int cascadeIndex )'
+      )
+      expect(reference).not.toBe(f.options.shadowReferenceShader)
+      expect(() => buildEarthCloudShadowGLSL(reference)).not.toThrow()
+    } finally {
+      f.dispose()
+    }
+  })
   it('isolates borrowed texture transforms, preserves metres and suppresses legacy cloud paths', () => {
     const f = fixture()
     f.options.textures.surface.offset.set(0.3, 0.4)
