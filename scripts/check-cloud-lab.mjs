@@ -397,10 +397,12 @@ try {
       // Negative control: deliberately disconnect cloud geography while the surface rotates.
       const matrix=lab.clouds.cloudsPass.currentMaterial.uniforms.cloudECEFToPlanet.value;
       const expected=new T.Matrix3().setFromMatrix4(new T.Matrix4().makeRotationFromQuaternion(lab.planet.quaternion.clone().invert()));
+      if(matrix.elements.some((v,i)=>Math.abs(v-expected.elements[i])>1e-10)) throw new Error('Rotation binding mismatch');
+      const actualRotationMatrix=matrix.clone();
       matrix.identity();
       await waitFrames(lab,16);
       const disconnectedCloudMarker=cloudMarker();
-      matrix.copy(expected);
+      matrix.copy(actualRotationMatrix);
       lab.setQuality('medium');
       await waitFrames(lab,16);
       const rotatedCloudColor=average(framePixels(lab));
@@ -409,7 +411,6 @@ try {
       const disconnectedRotationDifference=markerDistance(initialCloudMarker,disconnectedCloudMarker);
       if(cloudRotationDifference<.04 || disconnectedRotationDifference>=.04)
         throw new Error('Full cloud marker rotation assertion/control failed: '+JSON.stringify({initialCloudMarker,rotatedCloudMarker,disconnectedCloudMarker,cloudRotationDifference,disconnectedRotationDifference}));
-      if(matrix.elements.some((v,i)=>Math.abs(v-expected.elements[i])>1e-10)) throw new Error('Rotation binding mismatch');
       // Visible marker geography on the original surface survives a quality round trip.
       lab.setCloudsEnabled(false); await waitFrames(lab);
       const markerPixels=framePixels(lab);
