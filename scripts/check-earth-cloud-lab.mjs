@@ -3,7 +3,9 @@ import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { withCloudProbeBrowser } from './lib/cloud-probe-browser.mjs'
 
-if (process.argv.slice(2).some((arg) => arg !== '--probe=maps')) throw new Error('Supported probe: --probe=maps')
+if (process.argv.slice(2).some((arg) => !['--probe=maps', '--probe=surface'].includes(arg)))
+  throw new Error('Supported probes: --probe=maps, --probe=surface')
+const probe = process.argv.includes('--probe=surface') ? 'surface' : 'maps'
 const outputDir = resolve(dirname(fileURLToPath(import.meta.url)), '../tmpscreenshots/earth-cloud-lab')
 await mkdir(outputDir, { recursive: true })
 const report = await withCloudProbeBrowser(
@@ -12,11 +14,13 @@ const report = await withCloudProbeBrowser(
     outputDir
   },
   async ({ evaluate, webglErrors }) => {
-    const maps = await evaluate(
-      "import('/tests/clouds/earth/earthCloudTextures.gpu.ts').then(m => m.checkEarthCloudTextures())"
+    const result = await evaluate(
+      probe === 'surface'
+        ? "import('/tests/clouds/earth/earthSurface.gpu.ts').then(m => m.checkEarthSurface())"
+        : "import('/tests/clouds/earth/earthCloudTextures.gpu.ts').then(m => m.checkEarthCloudTextures())"
     )
-    return { maps, webglErrors }
+    return { [probe]: result, webglErrors }
   }
 )
-await writeFile(resolve(outputDir, 'maps-report.json'), JSON.stringify(report, null, 2))
+await writeFile(resolve(outputDir, `${probe}-report.json`), JSON.stringify(report, null, 2))
 console.log(JSON.stringify(report, null, 2))
