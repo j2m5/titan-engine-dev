@@ -5,7 +5,7 @@ import type { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { Engine } from '@/core/Engine'
 import { SceneManager } from '@/core/services/SceneManager'
 import type { SceneObserver } from '@/core/services/SceneObserver'
-import type { SimulationClock } from '@/core/time/SimulationClock'
+import { SimulationClock } from '@/core/time/SimulationClock'
 import type { CameraController, CameraFollowUpdate } from '@/core/camera/CameraController'
 import type { AstroControls } from '@/core/libs/AstroControls'
 import type { Postprocessing } from '@/core/graphic/Postprocessing'
@@ -18,6 +18,7 @@ import { StarLod } from '@/core/renderables/utils/StarLod'
 import { Star } from '@/core/renderables/Star'
 import { FakeStar } from '@/core/renderables/utils/FakeStar'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
+import { DAY } from '@/core/constants'
 
 /**
  * Стенд по образцу `EngineDispose.spec.ts`, но `renderer.domElement`/
@@ -83,19 +84,21 @@ function makeEngine(scene = new Scene(), manager?: SceneManager) {
     setSize: vi.fn()
   }
   const renderCamera = new PerspectiveCamera()
+  const simulationClock = new SimulationClock(0)
+  const renderClock = new Clock()
   const impostors = { pumpFrame: vi.fn((): void => void order.push('impostors')) }
 
   const engine = new Engine(
     manager ?? sceneManager,
     sceneObserver,
-    { advance: vi.fn(), epoch: 0 } as unknown as SimulationClock,
+    simulationClock,
     cameraController as unknown as CameraController,
     renderer,
     labelRenderer as unknown as CSS2DRenderer,
     scene,
     renderCamera,
     astroControls as unknown as AstroControls,
-    new Clock(),
+    renderClock,
     postprocessing,
     cameraCollision as unknown as CameraCollision,
     impostors
@@ -112,11 +115,45 @@ function makeEngine(scene = new Scene(), manager?: SceneManager) {
     cameraCollision,
     labelRenderer,
     renderCamera,
+    simulationClock,
+    renderClock,
     impostors,
     surface,
     order
   }
 }
+
+describe('Engine: время кадра', () => {
+  it.each([0, 4, 12])('учитывает всё время между кадрами при работе контролов %s мс', (workMs) => {
+    let nowMs = 0
+    const now = vi.spyOn(performance, 'now').mockImplementation(() => nowMs)
+    const { engine, renderer, labelRenderer, sceneManager, simulationClock, renderClock, astroControls } = makeEngine()
+
+    astroControls.update.mockImplementation(() => {
+      nowMs += workMs
+    })
+
+    try {
+      renderClock.start()
+      nowMs = 16
+      engine.start()
+      nowMs = 32
+      engine.update()
+      nowMs = 48
+      engine.update()
+
+      const contexts = vi.mocked(sceneManager.update).mock.calls.map(([ctx]) => ctx)
+      expect(contexts.map((ctx) => ctx.delta)).toEqual([0.016, 0.016, 0.016])
+      expect(contexts.map((ctx) => ctx.elapsed)).toEqual([0.016, 0.032, 0.048])
+      expect(simulationClock.epoch * DAY).toBeCloseTo(0.048, 12)
+    } finally {
+      engine.dispose()
+      renderer.domElement.remove()
+      labelRenderer.domElement.remove()
+      now.mockRestore()
+    }
+  })
+})
 
 describe('Engine: подключение периодического пересчёта к кадровому циклу', () => {
   it('выполняет один шаг импосторов после маркеров перед рендером', () => {

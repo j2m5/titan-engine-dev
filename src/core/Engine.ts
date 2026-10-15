@@ -197,7 +197,9 @@ class Engine {
     const ctx: UpdateContext = {
       delta,
       epoch: this.clock.epoch,
-      elapsed: this.renderClock.getElapsedTime(),
+      // getElapsedTime() снова вызывает getDelta() и отнимает время работы
+      // выше у следующего кадра. Нужен снимок, уже обновлённый в начале кадра.
+      elapsed: this.renderClock.elapsedTime,
       camera: this.renderCamera
     }
 
