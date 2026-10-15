@@ -7,7 +7,7 @@ const probes = {
   maps: ['earthCloudTextures', 'checkEarthCloudTextures', 'earth-cloud-maps', 151],
   surface: ['earthSurface', 'checkEarthSurface', 'earth-surface', 62],
   composition: ['earthComposition', 'checkEarthComposition', 'earth-composition', 29],
-  lifecycle: ['earthLab', 'checkEarthLab', 'earth-lifecycle', 136]
+  lifecycle: ['earthLab', 'checkEarthLab', 'earth-lifecycle', 163]
 }
 const args = process.argv.slice(2)
 if (args.length > 1 || args.some((arg) => !/^--probe=(maps|surface|composition|lifecycle|all)$/.test(arg)))
@@ -128,6 +128,7 @@ if (!args.length)
           `(async()=>{const root=document.querySelector('#earth-cloud-lab');let last;for(let i=0;i<31;i++)last=await new Promise(requestAnimationFrame);const before={...root.dataset};const samples=[];for(let i=0;i<120;i++){const now=await new Promise(requestAnimationFrame);samples.push(now-last);last=now}const sorted=[...samples].sort((a,b)=>a-b);return {median:sorted[59],p95:sorted[113],samples,before,after:{...root.dataset},quality:document.querySelector('#quality').value,width:innerWidth,height:innerHeight,dpr:devicePixelRatio}})()`
         )
         const result = performance[view]
+        result.counterSampling = 'periodic telemetry snapshots; not synchronized to RAF interval boundaries'
         result.counterDeltas = Object.fromEntries(
           ['frames', 'cloudFrames', 'shadowFrames', 'farFrames', 'nearFrames'].map((key) => [
             key,

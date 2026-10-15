@@ -6,7 +6,10 @@ import type { CloudView } from '@/labs/jupiter-clouds/CloudFlight'
 import type { EarthCloudQuality } from './EarthCloudAdapter'
 
 const root = document.querySelector<HTMLElement>('#earth-cloud-lab')!
-root.innerHTML = `
+function mount(): () => void {
+  root.dataset.state = 'loading'
+  for (const key of Object.keys(root.dataset)) if (key !== 'state') delete root.dataset[key]
+  root.innerHTML = `
   <div class="cloud-viewport"></div>
   <section class="cloud-panel" aria-label="Управление облаками Земли">
     <a class="back-link" href="./">← TitanEngine</a>
@@ -33,73 +36,133 @@ root.innerHTML = `
   </section>
   <div class="cloud-status" role="status">Загрузка карт Земли…</div>
 `
-const status = root.querySelector<HTMLElement>('.cloud-status')!
-const abort = new AbortController()
-const events = { signal: abort.signal }
-let lab: EarthCloudLab | undefined
-let disposed = false
-let failed = false
-let session: ReturnType<typeof startEarthCloudSession> | undefined
+  const status = root.querySelector<HTMLElement>('.cloud-status')!
+  const abort = new AbortController()
+  const events = { signal: abort.signal }
+  let lab: EarthCloudLab | undefined
+  let disposed = false
+  let failed = false
+  let session: ReturnType<typeof startEarthCloudSession> | undefined
 
-function fail(error: Error): void {
-  if (disposed) return
-  failed = true
-  status.hidden = false
-  status.textContent = error.message
-  status.setAttribute('role', 'alert')
-  root.dataset.state = 'error'
-  console.error(error)
-}
-function publish(stats: EarthCloudLabStats): void {
-  if (disposed || failed) return
-  root.dataset.state = 'ready'
-  for (const key of ['altitudeKm', 'volumeWeight', 'frames', 'cloudFrames', 'shadowFrames', 'farFrames', 'nearFrames', 'volumeState'] as const)
-    root.dataset[key] = String(stats[key])
-  status.hidden = stats.volumeState !== 'unavailable'
-  if (stats.volumeMessage) status.textContent = stats.volumeMessage
-  root.querySelector<HTMLElement>('#cloud-detail')!.textContent = stats.volumeMessage ??
-    (stats.volumeWeight > 0 ? `Объём: ${Math.round(stats.volumeWeight * 100)}%` : 'Объём отключён вдали')
-  root.querySelector<HTMLElement>('#altitude')!.textContent = `${stats.altitudeKm.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} км`
-  root.querySelector<HTMLElement>('#frame-time')!.textContent = `${stats.frameMs.toFixed(1)} мс`
-}
-root.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(button => {
-  button.addEventListener('click', () => {
-    lab?.setView(button.dataset.view as CloudView)
-    root.querySelectorAll('[data-view]').forEach(other => other.setAttribute('aria-pressed', String(other === button)))
-  }, events)
-})
-root.querySelector<HTMLInputElement>('#clouds-enabled')!.addEventListener('change', event => lab?.setCloudsEnabled((event.target as HTMLInputElement).checked), events)
-root.querySelector<HTMLSelectElement>('#quality')!.addEventListener('change', event => lab?.setQuality((event.target as HTMLSelectElement).value as EarthCloudQuality), events)
-root.querySelector<HTMLInputElement>('#sun-angle')!.addEventListener('input', event => {
-  const degrees = Number((event.target as HTMLInputElement).value)
-  root.querySelector<HTMLOutputElement>('#sun-value')!.value = `${degrees}°`
-  lab?.setSunAngle(degrees)
-}, events)
-
-// Allow the loading state to paint before GPU LUT preparation.
-let startupFrame = requestAnimationFrame(() => {
-  startupFrame = requestAnimationFrame(() => {
+  function fail(error: Error): void {
     if (disposed) return
-    session = startEarthCloudSession({
-      load: loadEarthTextures,
-      create: textures => new EarthCloudLab(root.querySelector<HTMLElement>('.cloud-viewport')!, publish, fail, textures),
-      onReady: ready => {
-        lab = ready
-        root.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('button, input, select').forEach(control => { control.disabled = false })
-        publish(ready.getStats())
+    failed = true
+    status.hidden = false
+    status.textContent = error.message
+    status.setAttribute('role', 'alert')
+    root.dataset.state = 'error'
+    console.error(error)
+  }
+  function publish(stats: EarthCloudLabStats): void {
+    if (disposed || failed) return
+    root.dataset.state = 'ready'
+    for (const key of [
+      'altitudeKm',
+      'volumeWeight',
+      'frames',
+      'cloudFrames',
+      'shadowFrames',
+      'farFrames',
+      'nearFrames',
+      'volumeState'
+    ] as const)
+      root.dataset[key] = String(stats[key])
+    status.hidden = stats.volumeState !== 'unavailable'
+    if (stats.volumeMessage) status.textContent = stats.volumeMessage
+    root.querySelector<HTMLElement>('#cloud-detail')!.textContent =
+      stats.volumeMessage ??
+      (stats.volumeWeight > 0 ? `Объём: ${Math.round(stats.volumeWeight * 100)}%` : 'Объём отключён вдали')
+    root.querySelector<HTMLElement>('#altitude')!.textContent =
+      `${stats.altitudeKm.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} км`
+    root.querySelector<HTMLElement>('#frame-time')!.textContent = `${stats.frameMs.toFixed(1)} мс`
+  }
+  root.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((button) => {
+    button.addEventListener(
+      'click',
+      () => {
+        lab?.setView(button.dataset.view as CloudView)
+        root
+          .querySelectorAll('[data-view]')
+          .forEach((other) => other.setAttribute('aria-pressed', String(other === button)))
       },
-      onError: fail
+      events
+    )
+  })
+  root
+    .querySelector<HTMLInputElement>('#clouds-enabled')!
+    .addEventListener('change', (event) => lab?.setCloudsEnabled((event.target as HTMLInputElement).checked), events)
+  root
+    .querySelector<HTMLSelectElement>('#quality')!
+    .addEventListener(
+      'change',
+      (event) => lab?.setQuality((event.target as HTMLSelectElement).value as EarthCloudQuality),
+      events
+    )
+  root.querySelector<HTMLInputElement>('#sun-angle')!.addEventListener(
+    'input',
+    (event) => {
+      const degrees = Number((event.target as HTMLInputElement).value)
+      root.querySelector<HTMLOutputElement>('#sun-value')!.value = `${degrees}°`
+      lab?.setSunAngle(degrees)
+    },
+    events
+  )
+
+  // Allow the loading state to paint before GPU LUT preparation.
+  let startupFrame = requestAnimationFrame(() => {
+    startupFrame = requestAnimationFrame(() => {
+      if (disposed) return
+      session = startEarthCloudSession({
+        load: loadEarthTextures,
+        create: (textures) =>
+          new EarthCloudLab(root.querySelector<HTMLElement>('.cloud-viewport')!, publish, fail, textures),
+        onReady: (ready) => {
+          lab = ready
+          root
+            .querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('button, input, select')
+            .forEach((control) => {
+              control.disabled = false
+            })
+          publish(ready.getStats())
+        },
+        onError: fail
+      })
     })
   })
-})
-function dispose(): void {
-  if (disposed) return
-  disposed = true
-  cancelAnimationFrame(startupFrame)
-  abort.abort()
-  session?.dispose()
-  session = undefined
-  lab = undefined
+  function dispose(): void {
+    if (disposed) return
+    disposed = true
+    cancelAnimationFrame(startupFrame)
+    abort.abort()
+    session?.dispose()
+    session = undefined
+    lab = undefined
+  }
+  return dispose
 }
-window.addEventListener('pagehide', dispose, events)
-if (import.meta.hot) import.meta.hot.dispose(dispose)
+
+// Lifecycle listeners survive a cached departure; each mount owns its UI and load.
+const lifecycle = new AbortController()
+let release: (() => void) | undefined = mount()
+function disposePage(): void {
+  release?.()
+  release = undefined
+  lifecycle.abort()
+}
+window.addEventListener(
+  'pagehide',
+  (event) => {
+    release?.()
+    release = undefined
+    if (!event.persisted) disposePage()
+  },
+  { signal: lifecycle.signal }
+)
+window.addEventListener(
+  'pageshow',
+  (event) => {
+    if (event.persisted && !release) release = mount()
+  },
+  { signal: lifecycle.signal }
+)
+if (import.meta.hot) import.meta.hot.dispose(disposePage)

@@ -91,7 +91,9 @@ Jupiter's sequential GPU suite also passed: 72 appearance samples, map/rotation,
 depth/occlusion, fallback/disposal controls and no GL/runtime errors.
 
 `tmpscreenshots/earth-cloud-lab/all-report.json` contains the actual page states,
-counter deltas and all 120 raw RAF intervals for each view. Measurements below
+counter deltas from periodic telemetry snapshots and all 120 raw RAF intervals
+for each view. Counter snapshots are not synchronized to interval boundaries.
+Measurements below
 used one browser at 1280×800 / DPR1 / medium, after discarding the first 30 RAF
 intervals. GPU: ANGLE / AMD Radeon(TM) Graphics (0x1638), Direct3D11. No build or
 second GPU suite ran concurrently. These are whole-frame intervals including
