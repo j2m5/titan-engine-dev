@@ -48,18 +48,23 @@ export function drawDepthVolumes(
   const shadowMapAutoUpdate = renderer.shadowMap.autoUpdate
   const logFarFactor = Math.log2(camera.far + 1)
 
-  camera.layers.set(DEPTH_VOLUME_LAYER)
-  renderer.shadowMap.autoUpdate = false
-  renderer.setRenderTarget(target)
+  try {
+    camera.layers.set(DEPTH_VOLUME_LAYER)
+    renderer.shadowMap.autoUpdate = false
+    renderer.setRenderTarget(target)
 
-  for (const volume of volumes) {
-    volume.bindSceneDepth(sceneDepth, resolution, logFarFactor)
-    renderer.render(volume, camera)
-    volume.unbindSceneDepth()
+    for (const volume of volumes) {
+      try {
+        volume.bindSceneDepth(sceneDepth, resolution, logFarFactor)
+        renderer.render(volume, camera)
+      } finally {
+        volume.unbindSceneDepth()
+      }
+    }
+  } finally {
+    camera.layers.mask = mask
+    renderer.shadowMap.autoUpdate = shadowMapAutoUpdate
   }
-
-  camera.layers.mask = mask
-  renderer.shadowMap.autoUpdate = shadowMapAutoUpdate
 }
 
 /**

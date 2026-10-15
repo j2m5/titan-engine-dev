@@ -92,23 +92,28 @@ export class BlackHolePass extends Pass {
     const mask = camera.layers.mask
     const shadowMapAutoUpdate = renderer.shadowMap.autoUpdate
     const logFarFactor = Math.log2(camera.far + 1)
-    renderer.shadowMap.autoUpdate = false
+    try {
+      renderer.shadowMap.autoUpdate = false
 
-    // Видимое небо кадра — до мешей: его вычитают из копии проходы линзы
-    this.skyLayer.render(renderer, camera, this.depthCopy.texture, this.background)
-    const skyLayer = this.skyLayer.target.texture
+      // Видимое небо кадра — до мешей: его вычитают из копии проходы линзы
+      this.skyLayer.render(renderer, camera, this.depthCopy.texture, this.background)
+      const skyLayer = this.skyLayer.target.texture
 
-    camera.layers.set(BLACK_HOLE_LAYER)
-    renderer.setRenderTarget(this.renderToScreen ? null : inputBuffer)
+      camera.layers.set(BLACK_HOLE_LAYER)
+      renderer.setRenderTarget(this.renderToScreen ? null : inputBuffer)
 
-    for (const mesh of meshes) {
-      mesh.bindSceneFrame(this.colorCopy.texture, this.depthCopy.texture, skyLayer, logFarFactor)
-      renderer.render(mesh, camera)
-      mesh.unbindSceneFrame()
+      for (const mesh of meshes) {
+        try {
+          mesh.bindSceneFrame(this.colorCopy.texture, this.depthCopy.texture, skyLayer, logFarFactor)
+          renderer.render(mesh, camera)
+        } finally {
+          mesh.unbindSceneFrame()
+        }
+      }
+    } finally {
+      camera.layers.mask = mask
+      renderer.shadowMap.autoUpdate = shadowMapAutoUpdate
     }
-
-    camera.layers.mask = mask
-    renderer.shadowMap.autoUpdate = shadowMapAutoUpdate
   }
 
   /** Меши L0 из реестра с видимой цепочкой предков (импостор активен → L0 скрыт) */

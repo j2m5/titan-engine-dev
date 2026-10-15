@@ -162,6 +162,7 @@ export function readAtmosphereDebugView(search: string = location.search): numbe
 
 class Postprocessing {
   public composer: EffectComposer | null = null
+  private lensFront: LensFrontSorter | null = null
 
   public constructor(
     private readonly renderer: WebGLRenderer,
@@ -200,6 +201,7 @@ class Postprocessing {
   public buildPasses(): readonly Pass[] {
     const [hdrPass, ldrPass] = createEffectPasses(this.camera)
     const lensFront = new LensFrontSorter(this.scene, this.camera, this.lensRegistry, this.depthVolumeRegistry)
+    this.lensFront = lensFront
     // Слой видимого неба: рисует BlackHolePass, читает дальнее поле линзы
     const skyLayer = new SkyLayer()
 
@@ -228,7 +230,12 @@ class Postprocessing {
   }
 
   public render(delta?: number): void {
-    this.composer?.render(delta)
+    try {
+      this.composer?.render(delta)
+    } finally {
+      // Earlier passes can fail before LensFrontPass gets to restore the split.
+      this.lensFront?.restore()
+    }
   }
 
   /**
@@ -285,7 +292,13 @@ class Postprocessing {
   }
 
   public dispose(): void {
-    this.composer?.dispose()
+    try {
+      this.composer?.dispose()
+    } finally {
+      const lensFront = this.lensFront
+      this.lensFront = null
+      lensFront?.restore()
+    }
   }
 }
 

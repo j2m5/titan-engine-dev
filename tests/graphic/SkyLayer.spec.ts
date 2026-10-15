@@ -39,6 +39,20 @@ describe('skyShader: фон и слой — один источник', () => {
 })
 
 describe('SkyLayer', () => {
+  it.each([null, new WebGLRenderTarget(4, 4)])('restores its saved target and invalidates an earlier result after failure (%s)', (previous) => {
+    const layer = new SkyLayer()
+    const { renderer } = fakeRenderer(previous)
+    const camera = new PerspectiveCamera()
+    layer.render(renderer, camera, new Texture(), null)
+    const error = new Error('sky draw')
+    vi.mocked(renderer.render).mockImplementationOnce(() => { throw error })
+    expect(() => layer.render(renderer, camera, new Texture(), null)).toThrow(error)
+    expect(renderer.getRenderTarget()).toBe(previous)
+    expect(layer.texture).toBeNull()
+    layer.render(renderer, camera, new Texture(), null)
+    expect(renderer.getRenderTarget()).toBe(previous)
+    expect(layer.texture).toBe(layer.target.texture)
+  })
   const camera = new PerspectiveCamera(50, 1, 0.1, 10)
 
   it('цель — half-float, линейная фильтрация, без глубины; материал из общего шейдера', () => {

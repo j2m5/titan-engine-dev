@@ -83,6 +83,39 @@ describe('LensFrontSplitPass: разметка до основного прох�
 })
 
 describe('LensFrontPass: прозрачное перед линзой поверх лензированного кадра', () => {
+  it.each([true, false].flatMap((shadows) => [1, 2, 3, 4, 5].map((draw) => ({ shadows, draw }))))(
+    'restores state after draw $draw fails (shadows=$shadows)', ({ shadows, draw }) => {
+      const camera = new PerspectiveCamera()
+      camera.layers.mask = 0x25
+      const volume = Object.assign(new Object3D(), { bindSceneDepth: vi.fn(), unbindSceneDepth: vi.fn() }) as unknown as DepthVolume
+      const sorter = sorterStub([new Object3D()], [volume], true)
+      const pass = new LensFrontPass(new Scene(), camera, sorter as unknown as LensFrontSorter)
+      const depth = new DepthTexture(4, 4)
+      pass.setDepthTexture(depth)
+      const input = new WebGLRenderTarget(4, 4)
+      const output = new WebGLRenderTarget(4, 4)
+      output.depthTexture = depth
+      const { renderer, color } = makeRenderer(camera)
+      renderer.shadowMap.autoUpdate = shadows
+      const error = new Error(`draw ${draw}`)
+      let count = 0
+      renderer.render.mockImplementation(() => { if (++count === draw) throw error })
+      expect(() => pass.render(renderer, input, output)).toThrow(error)
+      expect(sorter.restore).toHaveBeenCalledOnce()
+      expect(camera.layers.mask).toBe(0x25)
+      expect(renderer.shadowMap.autoUpdate).toBe(shadows)
+      expect(color.locked).toBe(false)
+      expect(color.mask).toBe(true)
+      expect(volume.unbindSceneDepth).toHaveBeenCalledTimes(draw === 5 ? 1 : 0)
+      renderer.render.mockImplementation(() => {})
+      pass.render(renderer, input, output)
+      expect(sorter.restore).toHaveBeenCalledTimes(2)
+      expect(camera.layers.mask).toBe(0x25)
+      expect(renderer.shadowMap.autoUpdate).toBe(shadows)
+      expect(color.locked).toBe(false)
+      expect(color.mask).toBe(true)
+    }
+  )
   const camera = new PerspectiveCamera(50, 1, 1e-6, 1000)
   const scene = new Scene()
   const inputBuffer = new WebGLRenderTarget(4, 4)

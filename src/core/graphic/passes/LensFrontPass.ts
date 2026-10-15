@@ -64,62 +64,68 @@ export class LensFrontPass extends Pass {
     deltaTime?: number,
     stencilTest?: boolean
   ): void {
-    const objects = this.sorter.frontObjects()
-    const volumes = this.sorter.frontVolumes()
-    if (objects.length === 0 && volumes.length === 0) {
-      this.sorter.restore()
-      return
-    }
-
-    const target = this.renderToScreen ? null : inputBuffer
-
-    // Буфер с привязанной глубиной сцены (свопа не было) её уже несёт;
-    // сэмплировать собственный аттачмент — feedback loop
-    if (this.sceneDepth !== null && inputBuffer?.depthTexture !== this.sceneDepth) {
-      renderer.setRenderTarget(target)
-      renderer.render(this.scene, this.camera)
-    }
-
-    if (objects.length > 0) {
-      const camera = this.sceneCamera
-      const mask = camera.layers.mask
-      const shadowMapAutoUpdate = renderer.shadowMap.autoUpdate
-
-      camera.layers.set(LENS_FRONT_LAYER)
-      renderer.shadowMap.autoUpdate = false
-      renderer.setRenderTarget(target)
-      renderer.render(this.frontScene, camera)
-
-      // Глубина сцены живёт в другом буфере композера: без этой записи
-      // атмосфера туманила бы кольцо, а пыль не обрывалась бы на нём
-      if (this.sorter.hasDepthWriters() && outputBuffer !== null && outputBuffer.depthTexture === this.sceneDepth) {
-        const color = renderer.state.buffers.color
-        camera.layers.set(LENS_FRONT_DEPTH_LAYER)
-        color.setMask(false)
-        color.setLocked(true)
-        renderer.setRenderTarget(outputBuffer)
-        renderer.render(this.frontScene, camera)
-        color.setLocked(false)
-        color.setMask(true)
+    try {
+      const objects = this.sorter.frontObjects()
+      const volumes = this.sorter.frontVolumes()
+      if (objects.length === 0 && volumes.length === 0) {
+        return
       }
 
-      camera.layers.mask = mask
-      renderer.shadowMap.autoUpdate = shadowMapAutoUpdate
-    }
+      const target = this.renderToScreen ? null : inputBuffer
 
-    if (volumes.length > 0) {
-      this.depthCopy.render(renderer, inputBuffer, outputBuffer, deltaTime, stencilTest)
-      drawDepthVolumes(
-        renderer,
-        target,
-        this.sceneCamera,
-        orderFarToNear(volumes, this.sceneCamera),
-        this.depthCopy.texture,
-        this.resolution
-      )
-    }
+      // Буфер с привязанной глубиной сцены (свопа не было) её уже несёт;
+      // сэмплировать собственный аттачмент — feedback loop
+      if (this.sceneDepth !== null && inputBuffer?.depthTexture !== this.sceneDepth) {
+        renderer.setRenderTarget(target)
+        renderer.render(this.scene, this.camera)
+      }
 
-    this.sorter.restore()
+      if (objects.length > 0) {
+        const camera = this.sceneCamera
+        const mask = camera.layers.mask
+        const shadowMapAutoUpdate = renderer.shadowMap.autoUpdate
+
+        try {
+          camera.layers.set(LENS_FRONT_LAYER)
+          renderer.shadowMap.autoUpdate = false
+          renderer.setRenderTarget(target)
+          renderer.render(this.frontScene, camera)
+
+          // Глубина сцены живёт в другом буфере композера: без этой записи
+          // атмосфера туманила бы кольцо, а пыль не обрывалась бы на нём
+          if (this.sorter.hasDepthWriters() && outputBuffer !== null && outputBuffer.depthTexture === this.sceneDepth) {
+            const color = renderer.state.buffers.color
+            camera.layers.set(LENS_FRONT_DEPTH_LAYER)
+            try {
+              color.setMask(false)
+              color.setLocked(true)
+              renderer.setRenderTarget(outputBuffer)
+              renderer.render(this.frontScene, camera)
+            } finally {
+              color.setLocked(false)
+              color.setMask(true)
+            }
+          }
+        } finally {
+          camera.layers.mask = mask
+          renderer.shadowMap.autoUpdate = shadowMapAutoUpdate
+        }
+      }
+
+      if (volumes.length > 0) {
+        this.depthCopy.render(renderer, inputBuffer, outputBuffer, deltaTime, stencilTest)
+        drawDepthVolumes(
+          renderer,
+          target,
+          this.sceneCamera,
+          orderFarToNear(volumes, this.sceneCamera),
+          this.depthCopy.texture,
+          this.resolution
+        )
+      }
+    } finally {
+      this.sorter.restore()
+    }
   }
 
   public override dispose(): void {

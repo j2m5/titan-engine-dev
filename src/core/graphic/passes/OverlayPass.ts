@@ -32,12 +32,14 @@ export class OverlayPass extends Pass {
     const mask = camera.layers.mask
     const shadowMapAutoUpdate = renderer.shadowMap.autoUpdate
 
-    camera.layers.set(OVERLAY_LAYER)
-    renderer.shadowMap.autoUpdate = false
-    renderer.setRenderTarget(this.renderToScreen ? null : inputBuffer)
-    renderer.render(this.overlayScene, camera)
-
-    camera.layers.mask = mask
-    renderer.shadowMap.autoUpdate = shadowMapAutoUpdate
+    try {
+      camera.layers.set(OVERLAY_LAYER)
+      renderer.shadowMap.autoUpdate = false
+      renderer.setRenderTarget(this.renderToScreen ? null : inputBuffer)
+      renderer.render(this.overlayScene, camera)
+    } finally {
+      camera.layers.mask = mask
+      renderer.shadowMap.autoUpdate = shadowMapAutoUpdate
+    }
   }
 }
