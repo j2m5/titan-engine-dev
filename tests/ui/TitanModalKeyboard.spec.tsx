@@ -55,6 +55,34 @@ function modal(
 }
 
 describe('TitanModal: Escape', () => {
+  it('uses opening order for visual layers and Escape, including reopening the earlier DOM modal', () => {
+    const closeA = vi.fn()
+    const closeB = vi.fn()
+    const show = (a: boolean, b: boolean): void => render(<>
+      {modal('A', a, closeA)}
+      {modal('B', b, closeB)}
+    </>)
+    const dialog = (title: string): HTMLElement => container.querySelector(`[aria-label="${title}"]`)!
+    const expectATop = (): void => {
+      expect(Number(dialog('A').style.zIndex || 0)).toBeGreaterThan(Number(dialog('B').style.zIndex || 0))
+      expect(dialog('A').contains(document.activeElement)).toBe(true)
+      press('Escape')
+      expect(closeA).toHaveBeenCalledTimes(1)
+      expect(closeB).not.toHaveBeenCalled()
+      closeA.mockClear()
+    }
+
+    show(true, false)
+    show(true, true)
+    show(false, true)
+    show(true, true)
+    expectATop()
+    show(false, true)
+    expect(dialog('B').contains(document.activeElement)).toBe(true)
+    show(true, true)
+    expectATop()
+  })
+
   it('закрывает только верхнее из двух открытых окон', () => {
     const closeSettings = vi.fn()
     const closeTutorial = vi.fn()
@@ -94,6 +122,23 @@ describe('TitanModal: Escape', () => {
 })
 
 describe('TitanModal: фокус', () => {
+  it('does not restore a background modal opener over the active dialog', () => {
+    const opener = document.createElement('button')
+    document.body.appendChild(opener)
+    opener.focus()
+    const show = (a: boolean, b: boolean): void => render(<>
+      {modal('A', a, () => {})}
+      {modal('B', b, () => {})}
+    </>)
+    show(false, true)
+    show(true, true)
+    const active = container.querySelector<HTMLElement>('[aria-label="A"] button')!
+    active.focus()
+    show(true, false)
+    expect(document.activeElement).toBe(active)
+    opener.remove()
+  })
+
   it('при открытии уходит в окно, после закрытия возвращается на кнопку, что его открыла', () => {
     const opener = document.createElement('button')
 
