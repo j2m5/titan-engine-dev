@@ -29,6 +29,16 @@ import { TERRAIN_SHADOW_PENUMBRA_FLOOR } from '@/core/materials/shaders/lib/chun
  * рельефа (дальняя карта и ближняя плитка), блеск льда, иней.
  */
 class TerrainMaterial extends PlanetSurfaceMaterial {
+  // Three.js accepts custom attribute names; its base type lists only built-in defaults.
+  declare defaultAttributeValues: PlanetSurfaceMaterial['defaultAttributeValues'] & {
+    patchCenter: [number, number, number]
+    midShade: [number, number]
+    morphDelta: [number, number, number]
+    patchMorph: [number]
+    midShadeParent: [number, number]
+    midTiltParent: [number, number]
+  }
+
   /** Множитель полутени собственной тени рельефа (ручка данных) — читает syncTerrainShadow. */
   private shadowSoftness: number = 1
 
