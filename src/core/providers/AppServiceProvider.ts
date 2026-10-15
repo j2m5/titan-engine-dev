@@ -73,8 +73,8 @@ class AppServiceProvider extends ServiceProvider {
       (c: Container) => new ProceduralSurfaceGenerator(c.get(Tokens.Renderer))
     )
 
-    // Один воркер на сессию: синглтон переживает смену сценария
-    // (Application.teardown снимает только регистрации полей). Без Worker или
+    // Строитель — сессионный синглтон; воркер пересоздаётся после освобождения сценария.
+    // Application.teardown отменяет очередь и освобождает регистрации. Без Worker или
     // при отказе его конструктора (CSP, file://) — синхронный фолбэк.
     this.app.singleton(Tokens.TerrainPatchBuilder, (): TerrainPatchBuilder => {
       if (typeof Worker === 'undefined') return new SyncTerrainPatchBuilder()

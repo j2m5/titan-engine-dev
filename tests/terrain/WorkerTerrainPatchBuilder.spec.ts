@@ -68,9 +68,117 @@ class FakeWorker implements WorkerLike {
 }
 
 describe('WorkerTerrainPatchBuilder: строитель поверх воркера', () => {
+  it('recreates lazily after repeated reset, re-registers the same field and rejects saved old handlers', () => {
+    const workers = [new FakeWorker(), new FakeWorker()]
+    const factory = vi.fn(() => workers[factory.mock.calls.length - 1])
+    const builder = new WorkerTerrainPatchBuilder(factory)
+    const field = makeField()
+    const oldDone = vi.fn()
+    builder.request(patchJob(field, 0, 0, 0), oldDone, unexpectedError)
+    builder.requestShadow(field, oldDone)
+    builder.requestNearTile(field, nearParams([0, 0, 1]), oldDone, unexpectedError)
+    const oldMessage = workers[0].onmessage!
+    const oldError = workers[0].onerror!
+    const oldMessageError = workers[0].onmessageerror!
+    builder.releaseAll()
+    builder.releaseAll()
+    expect(factory).toHaveBeenCalledTimes(1)
+    expect(workers[0].onmessage).toBeNull()
+    expect(workers[0].onerror).toBeNull()
+    expect(workers[0].onmessageerror).toBeNull()
+    const results: PatchBuildResult[] = []
+    const job = patchJob(field, 0, 0, 0)
+    builder.acquire(field)
+    builder.request(job, (r) => results.push(r), unexpectedError)
+    expect(factory).toHaveBeenCalledTimes(2)
+    // Deliver real handler responses through the saved callback after the new generation starts.
+    oldError('late failure')
+    oldMessageError('late deserialization failure')
+    oldMessage({ data: { type: 'error', requestId: 1, message: 'late protocol error' } })
+    workers[0].onmessage = oldMessage
+    workers[0].pump()
+    expect(oldDone).not.toHaveBeenCalled()
+    expect(results).toHaveLength(0)
+    expect(builder.offThread).toBe(true)
+    workers[1].pump()
+    expect(results).toHaveLength(1)
+    expectMatchesFreshBuild(results[0].arrays, job)
+    const oldIds = workers[0].sent.flatMap((m) => 'requestId' in m ? [m.requestId] : [])
+    const newId = workers[1].sent.flatMap((m) => 'requestId' in m ? [m.requestId] : [])[0]
+    expect(newId).toBeGreaterThan(Math.max(...oldIds))
+    const fieldIds = workers.map((w) => w.sent.flatMap((m) => m.type === 'registerField' ? [m.fieldId] : [])[0])
+    expect(fieldIds[1]).toBeGreaterThan(fieldIds[0])
+    builder.release(field)
+    workers[1].pump()
+    expect(workers[1].state.fields.size).toBe(0)
+    builder.dispose()
+  })
+
+  it.each(['acquire', 'patch', 'shadow', 'near'] as const)('recreation failure at %s preserves permanent fallback semantics', (first) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const worker = new FakeWorker()
+    const factory = vi.fn(() => {
+      if (factory.mock.calls.length > 1) throw new Error('recreation blocked')
+      return worker
+    })
+    const builder = new WorkerTerrainPatchBuilder(factory)
+    const field = makeField()
+    builder.releaseAll()
+    const patch: PatchBuildResult[] = []
+    const shadows: ShadowHeightBits[] = []
+    const nearDone = vi.fn()
+    const nearError = vi.fn()
+    const job = patchJob(field, 0, 0, 0)
+    const actions = {
+      acquire: () => builder.acquire(field),
+      patch: () => builder.request(job, (r) => patch.push(r), unexpectedError),
+      shadow: () => builder.requestShadow(field, (r) => shadows.push(r)),
+      near: () => builder.requestNearTile(field, nearParams([0, 0, 1]), nearDone, nearError)
+    }
+    actions[first]()
+    for (const kind of ['acquire', 'patch', 'shadow', 'near'] as const) if (kind !== first) actions[kind]()
+    expect(patch).toHaveLength(1)
+    expectMatchesFreshBuild(patch[0].arrays, job)
+    expect(shadows).toHaveLength(1)
+    expect(Array.from(shadows[0].bits)).toEqual(Array.from(buildShadowHeightBits(field.heightMap).bits))
+    expect(nearDone).not.toHaveBeenCalled()
+    expect(nearError).toHaveBeenCalledOnce()
+    expect(builder.offThread).toBe(false)
+    builder.releaseAll()
+    builder.acquire(field)
+    expect(factory).toHaveBeenCalledTimes(2)
+    expect(warn).toHaveBeenCalledOnce()
+    builder.dispose()
+    vi.restoreAllMocks()
+  })
+
+  it('releaseAll cancels patch, shadow and near-tile callbacks without requiring dispose', () => {
+    const worker = new FakeWorker()
+    const builder = new WorkerTerrainPatchBuilder(() => worker)
+    const field = makeField()
+    const done = vi.fn()
+    const error = vi.fn()
+    builder.request(patchJob(field, 0, 0, 0), done, error)
+    builder.requestShadow(field, done)
+    builder.requestNearTile(field, nearParams([0, 0, 1]), done, error)
+    const savedMessage = worker.onmessage!
+    const savedError = worker.onerror!
+    const savedMessageError = worker.onmessageerror!
+    builder.releaseAll()
+    expect(worker.terminated).toBe(true)
+    savedError('abandoned worker error')
+    savedMessageError('abandoned deserialize error')
+    worker.onmessage = savedMessage
+    worker.pump()
+    expect(done).not.toHaveBeenCalled()
+    expect(error).not.toHaveBeenCalled()
+    expect(builder.offThread).toBe(true)
+    builder.dispose()
+  })
+
   it('регистрация поля один раз на два запроса; приходы вызывают onDone с массивами ядра; release при нуле ссылок шлёт releaseField', () => {
     const worker = new FakeWorker()
-    const builder = new WorkerTerrainPatchBuilder(worker)
+    const builder = new WorkerTerrainPatchBuilder(() => worker)
     const field = makeField()
     const results: PatchBuildResult[] = []
     const job = patchJob(field, 0, 1, 0)
@@ -98,7 +206,7 @@ describe('WorkerTerrainPatchBuilder: строитель поверх ворке�
 
   it('флаг morph уходит в build, приход несёт морф-массивы; null — без них', () => {
     const worker = new FakeWorker()
-    const builder = new WorkerTerrainPatchBuilder(worker)
+    const builder = new WorkerTerrainPatchBuilder(() => worker)
     const field = makeField()
     const results: PatchBuildResult[] = []
     const jobs = [true, false, null].map((morph) => ({ ...patchJob(field, 0, 1, 0, 0.001, morph), level: 4 }))
@@ -118,7 +226,7 @@ describe('WorkerTerrainPatchBuilder: строитель поверх ворке�
 
   it('регистрация уходит раньше первого build; releaseAll снимает все поля; dispose завершает воркер, поздний приход не зовёт onDone', () => {
     const worker = new FakeWorker()
-    const builder = new WorkerTerrainPatchBuilder(worker)
+    const builder = new WorkerTerrainPatchBuilder(() => worker)
     const a = makeField(),
       b = makeField()
     const job = (field: TerrainHeightField) => patchJob(field, 0, 0, 0, 0)
@@ -130,7 +238,7 @@ describe('WorkerTerrainPatchBuilder: строитель поверх ворке�
     const types = worker.sent.map((m) => m.type)
     expect(types.indexOf('registerField')).toBeLessThan(types.indexOf('build'))
     builder.releaseAll()
-    expect(worker.sent.filter((m) => m.type === 'releaseField')).toHaveLength(2)
+    expect(worker.terminated).toBe(true)
     builder.dispose()
     expect(worker.terminated).toBe(true)
     worker.pump() // ответы на build уже в очереди фейка — после dispose игнорируются
@@ -146,7 +254,7 @@ describe('WorkerTerrainPatchBuilder: отказ воркера — откат н
   function setup() {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const worker = new FakeWorker()
-    const builder = new WorkerTerrainPatchBuilder(worker)
+    const builder = new WorkerTerrainPatchBuilder(() => worker)
     const field = makeField()
     const jobA = patchJob(field, 0, 1, 0)
     const jobB = patchJob(field, 3, 0, 1)
@@ -205,7 +313,7 @@ describe('WorkerTerrainPatchBuilder: отказ воркера — откат н
 
   it('карта тени: запрос уходит после регистрации поля, ответ отдаёт биты низкой карты', () => {
     const worker = new FakeWorker()
-    const builder = new WorkerTerrainPatchBuilder(worker)
+    const builder = new WorkerTerrainPatchBuilder(() => worker)
     const field = makeField()
     const got: ShadowHeightBits[] = []
     builder.requestShadow(field, (bits) => got.push(bits))
@@ -223,7 +331,7 @@ describe('WorkerTerrainPatchBuilder: отказ воркера — откат н
   it('карта тени: отказ воркера строит её на главном потоке, поздний ответ не зовёт onDone второй раз', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const worker = new FakeWorker()
-    const builder = new WorkerTerrainPatchBuilder(worker)
+    const builder = new WorkerTerrainPatchBuilder(() => worker)
     const field = makeField()
     const got: ShadowHeightBits[] = []
     builder.requestShadow(field, (bits) => got.push(bits))
@@ -247,7 +355,7 @@ describe('WorkerTerrainPatchBuilder: отказ воркера — откат н
 
   it('плитка ближней тени: запрос после регистрации, ответ воркера — те же числа, что у прямого бейка', () => {
     const worker = new FakeWorker()
-    const builder = new WorkerTerrainPatchBuilder(worker)
+    const builder = new WorkerTerrainPatchBuilder(() => worker)
     const field = makeField()
     const params = nearParams([0.3, 0.5, 0.8])
     const got: Float32Array[] = []
@@ -265,7 +373,7 @@ describe('WorkerTerrainPatchBuilder: отказ воркера — откат н
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     expect(new SyncTerrainPatchBuilder().offThread).toBe(false)
     const worker = new FakeWorker()
-    const builder = new WorkerTerrainPatchBuilder(worker)
+    const builder = new WorkerTerrainPatchBuilder(() => worker)
     expect(builder.offThread).toBe(true)
     worker.fail('onerror', 'сбой')
     expect(builder.offThread).toBe(false)
@@ -276,7 +384,7 @@ describe('WorkerTerrainPatchBuilder: отказ воркера — откат н
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     expect(new SyncTerrainPatchBuilder().mapCopies).toBe(1)
     const worker = new FakeWorker()
-    const builder = new WorkerTerrainPatchBuilder(worker)
+    const builder = new WorkerTerrainPatchBuilder(() => worker)
     expect(builder.mapCopies).toBe(2)
     worker.fail('onerror', 'сбой')
     expect(builder.mapCopies).toBe(1)
@@ -284,13 +392,13 @@ describe('WorkerTerrainPatchBuilder: отказ воркера — откат н
   })
 
   it('mapCopies: после dispose — 1', () => {
-    const builder = new WorkerTerrainPatchBuilder(new FakeWorker())
+    const builder = new WorkerTerrainPatchBuilder(() => new FakeWorker())
     builder.dispose()
     expect(builder.mapCopies).toBe(1)
   })
 
   it('offThread: после dispose — false', () => {
-    const builder = new WorkerTerrainPatchBuilder(new FakeWorker())
+    const builder = new WorkerTerrainPatchBuilder(() => new FakeWorker())
     builder.dispose()
     expect(builder.offThread).toBe(false)
   })
@@ -299,7 +407,7 @@ describe('WorkerTerrainPatchBuilder: отказ воркера — откат н
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const bake = vi.spyOn(SyncTerrainPatchBuilder.prototype, 'requestNearTile')
     const worker = new FakeWorker()
-    const builder = new WorkerTerrainPatchBuilder(worker)
+    const builder = new WorkerTerrainPatchBuilder(() => worker)
     const field = makeField()
     const params = nearParams([0.3, 0.5, 0.8])
     const got: Float32Array[] = []
@@ -320,7 +428,7 @@ describe('WorkerTerrainPatchBuilder: отказ воркера — откат н
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const bake = vi.spyOn(SyncTerrainPatchBuilder.prototype, 'requestNearTile')
     const worker = new FakeWorker()
-    const builder = new WorkerTerrainPatchBuilder(worker)
+    const builder = new WorkerTerrainPatchBuilder(() => worker)
     const field = makeField()
     worker.fail('onerror', 'сбой')
     const got: Float32Array[] = []
@@ -335,7 +443,7 @@ describe('WorkerTerrainPatchBuilder: отказ воркера — откат н
   it('плитка ближней тени: error-ответ воркера по её requestId — тот же путь отказа, onError', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const worker = new FakeWorker()
-    const builder = new WorkerTerrainPatchBuilder(worker)
+    const builder = new WorkerTerrainPatchBuilder(() => worker)
     const field = makeField()
     const errors: unknown[] = []
     builder.requestNearTile(field, nearParams([0.3, 0.5, 0.8]), unexpectedError, (e) => errors.push(e))
@@ -380,7 +488,7 @@ describe('WorkerTerrainPatchBuilder: исключения на главном п
 
   it('исключение при сборке регистрации не оставляет записи: следующий acquire регистрирует поле заново', () => {
     const worker = new FakeWorker()
-    const builder = new WorkerTerrainPatchBuilder(worker)
+    const builder = new WorkerTerrainPatchBuilder(() => worker)
     const field = makeField()
     const slice = vi.spyOn(field.heightMap.data, 'slice').mockImplementationOnce(() => {
       throw new RangeError('нет памяти под копию карты')
@@ -406,7 +514,7 @@ describe('WorkerTerrainPatchBuilder: исключения на главном п
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     const worker = new FakeWorker()
-    const builder = new WorkerTerrainPatchBuilder(worker)
+    const builder = new WorkerTerrainPatchBuilder(() => worker)
     const broken = makeField()
     const jobA = patchJob(broken, 0, 1, 0)
     const jobB = patchJob(makeField(), 3, 0, 1)
@@ -471,7 +579,7 @@ describe('WorkerTerrainPatchBuilder: releaseField идёт в очереди п�
   it('разборка группы при 24 build в очереди: error и отката нет, поле снято; новая группа на том же поле — новый fieldId и ready', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const worker = new FakeWorker()
-    const builder = new WorkerTerrainPatchBuilder(worker)
+    const builder = new WorkerTerrainPatchBuilder(() => worker)
     const field = makeField()
     const builds = (from = 0): number => worker.sent.slice(from).filter((m) => m.type === 'build').length
     const errors = (): number => worker.replies.filter((m) => m.type === 'error').length

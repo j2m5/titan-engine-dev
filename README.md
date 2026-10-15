@@ -111,6 +111,15 @@ for (const [path, name] of probes) {
 
 Context restoration tests in Vitest dispatch mocked DOM events. The ImageBitmap lifecycle GPU probe forces real context loss/restoration on an isolated renderer, verifies identical rendered pixels after source re-upload, and checks that final texture disposal closes the bitmap. It does not cover full application recovery. To check application recovery, open a WebGL scenario, obtain its WebGL context from the renderer in the debugger, call `WEBGL_lose_context.loseContext()`, then `restoreContext()` and confirm the scene renders again.
 
+The native terrain worker cancellation check runs independently of the GPU checks. With the development server running, await it in the browser console:
+
+```js
+const { checkWorkerCancellation } = await import('/tests/terrain/WorkerCancellation.browser.ts');
+console.log(await checkWorkerCancellation());
+```
+
+It queues three synthetic 1024² near-shadow tiles, releases the scenario, and checks that no abandoned callbacks run and a new native-worker result matches the warmed result. Reported timings describe this controlled synthetic load, not a production benchmark; the check has no millisecond performance threshold.
+
 ## Data editor
 
 The data editor is available in development mode only. Saves made there go through the Vite development server and update files in `storage/database`; the production preview and GitHub Pages build have no save API. Review and back up edited database files before committing them.

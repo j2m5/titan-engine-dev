@@ -33,7 +33,7 @@ class Application {
     private proceduralSurfaceGenerator?: ProceduralSurfaceGenerator,
     /** Ждущие апгрейды поверхности живут вне графа сцены — engine.dispose() их не видит. */
     private renderableFactory?: Pick<RenderableFactory, 'clearPendingUpgrades'>,
-    /** Сессионный синглтон: при смене сценария снимаются регистрации полей, воркер не завершается. */
+    /** Сессионный синглтон: при смене сценария отменяет задания и пересоздаёт воркер при следующем обращении. */
     private terrainPatchBuilder?: TerrainPatchBuilder,
     /** Сессионный синглтон: кэш коллайдеров держит разобранные тела до первого кадра нового сценария. */
     private cameraCollision?: Pick<CameraCollision, 'clear'>,
@@ -80,7 +80,7 @@ class Application {
     // куче до следующего поиска того же имени — гейт синглтон-сессии, а
     // не пересоздаётся при смене сценария.
     this.heightFieldGate.clearNodeCache()
-    // Остаток регистраций полей (request без acquire); сам воркер переживает смену сценария.
+    // Отменяем оставшиеся задания и регистрации; новый воркер появится при следующем обращении.
     this.terrainPatchBuilder?.releaseAll()
     // Инвариант владения: генератор рантайм-диффуза процедурных тел — общий
     // синглтон сцены (см. AppServiceProvider), а не собственность акторов —
