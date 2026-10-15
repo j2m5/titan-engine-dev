@@ -129,3 +129,10 @@ See the [project audit](docs/project-audit-2026-10-15.md) for findings and remed
 ## Data sources
 
 Background sky: [gaia_sky_map](https://github.com/ebruneton/gaia_sky_map) by Eric Bruneton, built from the ESA Gaia DR2 and Tycho-2 star catalogues; used with the author's permission for non-commercial purposes.
+
+The live moving-target flight regression uses the actual anime timeline, CameraController and SceneObserver. Run it separately while the app is idle; it takes about seven seconds and checks follow cancellation, arrival distance, aim, and control/speed restoration. It clears its timers and flight in a final cleanup block.
+
+```js
+const { checkMovingTargetFlight } = await import('/tests/transitions/MovingTargetFlight.browser.ts');
+console.log(await checkMovingTargetFlight());
+```

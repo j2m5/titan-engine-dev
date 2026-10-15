@@ -28,10 +28,10 @@ vi.mock('animejs', () => {
   return { default: Object.assign(vi.fn(), { timeline }) }
 })
 
-import { PerspectiveCamera, Vector3 } from 'three'
+import { Object3D, PerspectiveCamera, Scene, Vector3 } from 'three'
 import { CameraToObjectTransition, decideFlight } from '@/core/transitions/CameraToObjectTransition'
 import type { SceneObserver, ObservableRecord } from '@/core/services/SceneObserver'
-import type { CameraController } from '@/core/camera/CameraController'
+import { CameraController } from '@/core/camera/CameraController'
 import type { NotificationSink, SystemNotification } from '@/core/ports/NotificationSink'
 import type { MenuController } from '@/core/ports/MenuController'
 import type { AstroControls } from '@/core/libs/AstroControls'
@@ -69,7 +69,9 @@ describe('decideFlight', () => {
 
 interface Rig {
   run: (name: string) => Promise<void>
-  camera: { speed: number; setSpeed: ReturnType<typeof vi.fn> }
+  camera: CameraController & { setSpeed: ReturnType<typeof vi.fn> }
+  scene: Scene
+  objects: Map<string, Object3D>
   notifications: SystemNotification[]
   renderCamera: PerspectiveCamera
   records: Map<string, ObservableRecord>
@@ -81,17 +83,16 @@ function rig(): Rig {
   const renderCamera = new PerspectiveCamera()
   const records = new Map<string, ObservableRecord>()
   const notifications: SystemNotification[] = []
-  const camera = {
-    speed: 10,
-    setSpeed: vi.fn((value: number): void => {
-      camera.speed = value
-    })
-  }
+  const camera = new CameraController()
+  camera.setSpeed(10)
+  vi.spyOn(camera, 'setSpeed')
+  const scene = new Scene()
+  const objects = new Map<string, Object3D>()
   const sceneObserver = {
+    scene,
+    get objects(): Object3D[] { return Array.from(objects.values()) },
     getData: (name: string): ObservableRecord | undefined => records.get(name),
-    get cameraPosition(): Vector3 {
-      return renderCamera.position.clone()
-    }
+    cameraPosition: new Vector3(999, 999, 999)
   } as unknown as SceneObserver
   const sink: NotificationSink = { dispatch: (n: SystemNotification): void => void notifications.push(n) }
   const controls = { enabled: true }
@@ -111,12 +112,13 @@ function rig(): Rig {
     await instance.handle()
   }
 
-  return { run, camera, notifications, renderCamera, records, controls }
+  return { run, camera: camera as Rig['camera'], notifications, renderCamera, records, controls, scene, objects }
 }
 
 function actor(name: string): Actor {
   return {
     attributes: { name },
+    getAttribute: () => name,
     category: { getAttribute: () => 'planet' },
     physicalObject: { getAttribute: () => 100 }
   } as unknown as Actor
@@ -124,6 +126,11 @@ function actor(name: string): Actor {
 
 /** Запись наблюдателя для тела в точке position относительно камеры */
 function record(r: Rig, name: string, position: Vector3): void {
+  const object = new Object3D()
+  object.model = actor(name)
+  object.position.copy(position)
+  r.scene.add(object)
+  r.objects.set(name, object)
   r.records.set(name, { name, position, distance: position.distanceTo(r.renderCamera.position) })
 }
 
@@ -155,7 +162,7 @@ describe('CameraToObjectTransition — полёт к объекту идемпо
 
     await r.run('Mars')
     // анимация разогнала камеру
-    r.camera.speed = 123456
+    r.camera.setSpeed(123456)
     await r.run('Venus')
 
     expect(timelines).toHaveLength(2)
@@ -229,7 +236,7 @@ describe('CameraToObjectTransition — полёт к объекту идемпо
     now.mockReturnValue(1000)
     update({})
     // за 0.5 с камера прошла 500 км по диагонали — не по одной оси X
-    r.renderCamera.position.set(toThreeJSUnits(300), 0, -toThreeJSUnits(400))
+    r.objects.get('Mars')!.position.add(new Vector3(toThreeJSUnits(300), 0, -toThreeJSUnits(400)))
     now.mockReturnValue(1500)
     update({})
 
@@ -244,7 +251,7 @@ describe('CameraToObjectTransition — полёт к объекту идемпо
     await r.run('Mars')
     // begin анимации выключил управление, полёт разогнал камеру
     r.controls.enabled = false
-    r.camera.speed = 999
+    r.camera.setSpeed(999)
 
     CameraToObjectTransition.cancelActive()
 
@@ -264,5 +271,118 @@ describe('CameraToObjectTransition — полёт к объекту идемпо
 
   it('cancelActive без полёта ничего не делает', () => {
     expect(() => CameraToObjectTransition.cancelActive()).not.toThrow()
+  })
+})
+
+function step(timeline: FakeTimeline, index: number, progress: number): void {
+  const params = timeline.steps[index]
+  ;(params.targets as { t: number }).t = progress
+  ;(params.update as () => void)()
+}
+
+describe('live flight geometry and ownership', () => {
+  beforeEach(() => {
+    CameraToObjectTransition.cancelActive()
+    timelines.length = 0
+  })
+
+  it('exits follow, rebases after turn, and arrives at the live world target', async () => {
+    const r = rig()
+    record(r, 'Mars', new Vector3(0, 0, -10000))
+    const parent = new Object3D()
+    r.scene.add(parent)
+    parent.attach(r.objects.get('Mars')!)
+    r.camera.setFollowTarget(new Object3D())
+    await r.run('Mars')
+    expect(r.camera.followTarget).toBeNull()
+    expect(r.controls.enabled).toBe(false)
+    expect(timelines[0].steps.map(params => params.duration)).toEqual([2000, 5000])
+    for (const params of timelines[0].steps) {
+      expect(params.targets).not.toBe(r.renderCamera.position)
+      expect(params.targets).toEqual({ t: 0 })
+      expect(params).not.toHaveProperty('x')
+      expect(params).not.toHaveProperty('y')
+      expect(params).not.toHaveProperty('z')
+    }
+    parent.position.set(3000, 2000, 0)
+    step(timelines[0], 0, 1)
+    const beforeTravel = r.renderCamera.position.clone()
+    ;(timelines[0].steps[1].begin as () => void)()
+    step(timelines[0], 1, 0)
+    expect(r.renderCamera.position.distanceTo(beforeTravel)).toBeLessThan(1e-10)
+    parent.position.set(5000, -3000, -1000)
+    step(timelines[0], 1, 1)
+    const target = r.objects.get('Mars')!.getWorldPosition(new Vector3())
+    expect(r.renderCamera.position.distanceTo(target)).toBeCloseTo(toThreeJSUnits(100) * 3, 8)
+    expect(r.renderCamera.getWorldDirection(new Vector3()).dot(target.sub(r.renderCamera.position).normalize())).toBeCloseTo(1, 10)
+    complete(timelines[0])
+    expect(r.controls.enabled).toBe(true)
+    expect(r.camera.speed).toBe(10)
+    expect(r.camera.followTarget).toBeNull()
+  })
+
+  it('ignored same-target and already-arrived clicks preserve follow', async () => {
+    const r = rig()
+    record(r, 'Mars', new Vector3(0, 0, -10000))
+    await r.run('Mars')
+    const followed = new Object3D()
+    r.camera.setFollowTarget(followed)
+    await r.run('Mars')
+    expect(r.camera.followTarget).toBe(followed)
+    CameraToObjectTransition.cancelActive()
+    r.renderCamera.position.copy(r.objects.get('Mars')!.position).add(new Vector3(0, 0, toThreeJSUnits(100) * 3))
+    r.renderCamera.lookAt(r.objects.get('Mars')!.position)
+    await r.run('Mars')
+    expect(timelines).toHaveLength(1)
+    expect(r.camera.followTarget).toBe(followed)
+  })
+
+  it('redirect uses actual camera and all stale callbacks are inert after redirect and cancel', async () => {
+    const r = rig()
+    record(r, 'Mars', new Vector3(0, 0, -10000))
+    record(r, 'Venus', new Vector3(10000, 0, 0))
+    await r.run('Mars')
+    step(timelines[0], 1, 0.5)
+    r.renderCamera.position.set(50, 60, 70)
+    r.camera.setFollowTarget(new Object3D())
+    await r.run('Venus')
+    expect(r.camera.followTarget).toBeNull()
+    step(timelines[1], 1, 0)
+    expect(r.renderCamera.position.toArray()).toEqual([50, 60, 70])
+    const checkStale = (timeline: FakeTimeline): void => {
+      const position = r.renderCamera.position.clone()
+      const rotation = r.renderCamera.quaternion.clone()
+      const speed = r.camera.speed
+      const enabled = r.controls.enabled
+      const notifications = r.notifications.length
+      for (const params of timeline.steps) {
+        for (const callback of ['begin', 'update', 'complete']) {
+          if (typeof params[callback] === 'function') (params[callback] as () => void)()
+        }
+      }
+      expect(r.renderCamera.position.equals(position)).toBe(true)
+      expect(r.renderCamera.quaternion.equals(rotation)).toBe(true)
+      expect(r.camera.speed).toBe(speed)
+      expect(r.controls.enabled).toBe(enabled)
+      expect(r.notifications).toHaveLength(notifications)
+    }
+    checkStale(timelines[0])
+    CameraToObjectTransition.cancelActive()
+    checkStale(timelines[1])
+  })
+
+  it.each([0, 1])('cancels removed target during step %i despite retained observer reference', async index => {
+    const r = rig()
+    record(r, 'Mars', new Vector3(0, 0, -10000))
+    await r.run('Mars')
+    r.objects.get('Mars')!.removeFromParent()
+    const position = r.renderCamera.position.clone()
+    step(timelines[0], index, 1)
+    complete(timelines[0])
+    expect(r.renderCamera.position.equals(position)).toBe(true)
+    expect(r.controls.enabled).toBe(true)
+    expect(r.camera.speed).toBe(10)
+    expect(r.notifications).toHaveLength(0)
+    expect(timelines[0].pause).toHaveBeenCalled()
   })
 })
