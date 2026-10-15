@@ -17,7 +17,7 @@ import {
   type CloudAppearanceTextures
 } from '@/labs/jupiter-clouds/cloudAppearanceTextures'
 import { bindCloudAppearance } from '@/labs/jupiter-clouds/cloudAppearance'
-import { createEarthCloudProfile } from '@/labs/earth-clouds/earthCloudProfile'
+import { createEarthCloudProfile } from '@/core/clouds/profiles/earthCloudProfile'
 import { createGpuReadback, extractShaderFunction, type EarthGpuProbeReport } from './gpuTestHarness'
 
 export async function checkEarthCloudTextures(): Promise<EarthGpuProbeReport> {

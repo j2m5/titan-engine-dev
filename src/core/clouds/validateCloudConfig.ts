@@ -7,6 +7,7 @@ import type {
   CloudPattern,
   ScalarDecode
 } from './CloudConfig'
+import type { SurfaceCloudMap } from './SceneCloudConfig'
 
 type RecordValue = Record<string, unknown>
 
@@ -89,15 +90,27 @@ class CloudReader {
           }
     }
     const map = this.map(data.map, path + '.map')
+    if (kind === 'mask' && data.encoding === 'rgb-cloud-map') return { kind, encoding: 'rgb-cloud-map', map }
+    if (kind === 'mask' && data.encoding !== undefined && data.encoding !== 'scalar') {
+      this.issue(path + '.encoding', 'Unknown variant')
+    }
     const decode = this.decode(data.decode, path + '.decode')
     return kind === 'mask'
-      ? { kind, map, decode }
+      ? { kind, ...(data.encoding === 'scalar' ? { encoding: 'scalar' as const } : {}), map, decode }
       : {
           kind,
           map,
           decode,
           coverageRange: this.tuple(data.coverageRange, path + '.coverageRange', true)
         }
+  }
+  mapping(value: unknown): SurfaceCloudMap['mapping'] {
+    const mapping = this.object(value, 'mapping')
+    return {
+      frame: this.choice(mapping.frame, 'mapping.frame', ['planet-fixed']),
+      projection: this.choice(mapping.projection, 'mapping.projection', ['equirectangular']),
+      longitudeOffsetRadians: this.number(mapping.longitudeOffsetRadians, 'mapping.longitudeOffsetRadians')
+    }
   }
   color(value: unknown, path: string): CloudColor {
     const data = this.object(value, path)
@@ -166,7 +179,7 @@ export function resolveCloudConfig(value: unknown, availableResourceIds: Readonl
     reader.issue('enabled', 'Expected a boolean')
     return { state: 'invalid', issues: reader.issues }
   }
-  const mapping = reader.object(data.mapping, 'mapping')
+  const mapping = reader.mapping(data.mapping)
   const lod = reader.object(data.lod, 'lod')
   const fullDistanceMeters = reader.number(lod.fullDistanceMeters, 'lod.fullDistanceMeters', 0)
   const cutoffDistanceMeters = reader.number(lod.cutoffDistanceMeters, 'lod.cutoffDistanceMeters', 0)
@@ -188,13 +201,27 @@ export function resolveCloudConfig(value: unknown, availableResourceIds: Readonl
   const config = {
     enabled: true as const,
     farAppearance: reader.choice(data.farAppearance, 'farAppearance', ['base-texture', 'surface-map']),
-    mapping: {
-      frame: reader.choice(mapping.frame, 'mapping.frame', ['planet-fixed']),
-      projection: reader.choice(mapping.projection, 'mapping.projection', ['equirectangular']),
-      longitudeOffsetRadians: reader.number(mapping.longitudeOffsetRadians, 'mapping.longitudeOffsetRadians')
-    },
+    mapping,
     lod: { fullDistanceMeters, cutoffDistanceMeters },
     layers
   }
   return reader.issues.length > 0 ? { state: 'invalid', issues: reader.issues } : { state: 'configured', config }
+}
+
+export function resolveSurfaceCloudMap(
+  value: SurfaceCloudMap,
+  availableResourceIds: ReadonlySet<number>
+): {
+  far: SurfaceCloudMap | null
+  issues: CloudConfigIssue[]
+} {
+  const reader = new CloudReader(availableResourceIds)
+  const pattern = reader.pattern(value.pattern, 'pattern')
+  const mapping = reader.mapping(value.mapping)
+  const color = reader.color(value.color, 'color')
+  if (pattern.kind !== 'mask') reader.issue('pattern.kind', 'Surface clouds require a mask')
+  return {
+    far: reader.issues.length === 0 && pattern.kind === 'mask' ? { pattern, mapping, color } : null,
+    issues: reader.issues
+  }
 }

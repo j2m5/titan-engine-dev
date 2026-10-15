@@ -28,7 +28,7 @@ import { createEarthSurfaceMaterials, type EarthSurfaceOptions } from '@/labs/ea
 import type { EarthGpuProbeReport } from './gpuTestHarness'
 import { createGpuReadback, extractShaderFunction } from './gpuTestHarness'
 import { createEarthClouds, createEarthAtmosphere } from '@/labs/earth-clouds/EarthCloudAdapter'
-import { createEarthCloudProfile } from '@/labs/earth-clouds/earthCloudProfile'
+import { createEarthCloudProfile } from '@/core/clouds/profiles/earthCloudProfile'
 import { bindCloudAppearance } from '@/labs/jupiter-clouds/cloudAppearance'
 import { prepareRgbCloudTextures } from '@/labs/earth-clouds/earthCloudTextures'
 

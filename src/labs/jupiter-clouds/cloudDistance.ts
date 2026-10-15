@@ -1,5 +1,5 @@
 import { cloudShellDistance, cloudVolumeOpacity } from '@/core/clouds/cloudLod'
-import { createJupiterCloudProfile } from './jupiterCloudProfile'
+import { createJupiterCloudProfile } from '@/core/clouds/profiles/jupiterCloudProfile'
 
 const profile = createJupiterCloudProfile()
 

@@ -3,7 +3,7 @@ import { PerspectiveCamera, Uniform } from 'three'
 import { createEarthAtmosphere, createEarthClouds, setEarthCloudQuality } from '@/labs/earth-clouds/EarthCloudAdapter'
 import { bindEarthCloudLighting, adaptEarthCloudLightingShader } from '@/labs/earth-clouds/earthCloudLighting'
 import { bindCloudAppearance } from '@/labs/jupiter-clouds/cloudAppearance'
-import { createEarthCloudProfile } from '@/labs/earth-clouds/earthCloudProfile'
+import { createEarthCloudProfile } from '@/core/clouds/profiles/earthCloudProfile'
 import { DataTexture } from 'three'
 
 const anchor = 'return vec4(radianceIntegral, remapClamped(transmittanceIntegral, 1.0, minTransmittance));'

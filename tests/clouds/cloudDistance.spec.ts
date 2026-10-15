@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { cloudOpacityAtAltitude } from '@/labs/jupiter-clouds/cloudDistance'
-import { createJupiterCloudProfile } from '@/labs/jupiter-clouds/jupiterCloudProfile'
+import { createJupiterCloudProfile } from '@/core/clouds/profiles/jupiterCloudProfile'
 import { cloudShellDistance, cloudVolumeOpacity } from '@/core/clouds/cloudLod'
 
 describe('distance-limited cloud detail', () => {
@@ -12,7 +12,8 @@ describe('distance-limited cloud detail', () => {
     const profile = createJupiterCloudProfile()
     for (const altitude of [5000, 20000, 45000, 130000, 580000, 1030000, 90000000]) {
       expect(cloudOpacityAtAltitude(altitude)).toBeCloseTo(
-        cloudVolumeOpacity(cloudShellDistance(altitude, profile.layers), profile.lod), 10
+        cloudVolumeOpacity(cloudShellDistance(altitude, profile.layers), profile.lod),
+        10
       )
     }
   })

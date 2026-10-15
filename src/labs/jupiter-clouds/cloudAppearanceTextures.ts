@@ -28,6 +28,9 @@ export function prepareCloudAppearanceTextures(
   resolveTexture: CloudTextureResolver
 ): CloudAppearanceTextures {
   if (layer.pattern.kind !== 'appearance' && layer.pattern.kind !== 'mask') throw new Error('Unsupported cloud pattern')
+  const pattern = layer.pattern
+  if (pattern.kind === 'mask' && pattern.encoding === 'rgb-cloud-map')
+    throw new Error('RGB cloud maps require RGB preparation')
   const resource = (id: number): Texture => {
     const texture = resolveTexture(id)
     if (!texture) throw new Error(`Cloud texture resource ${id} is unavailable`)
@@ -44,10 +47,10 @@ export function prepareCloudAppearanceTextures(
         const from = ((original.flipY ? height - y - 1 : y) * width + x) * 4
         const scalar = decodeCloudScalar(
           [bytes[from] / 255, bytes[from + 1] / 255, bytes[from + 2] / 255, bytes[from + 3] / 255],
-          layer.pattern.decode,
+          pattern.decode,
           space
         )
-        output[(y * width + x) * 4] = Math.round(255 * coverageFromScalar(scalar, layer.pattern))
+        output[(y * width + x) * 4] = Math.round(255 * coverageFromScalar(scalar, pattern))
       }
     weather = new DataTexture(output, width, height, RGBAFormat)
     weather.colorSpace = NoColorSpace

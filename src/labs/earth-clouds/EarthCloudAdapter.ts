@@ -8,7 +8,7 @@ import {
   createPlanetCloudEffect,
   toTakramAtmosphere
 } from '@/labs/planet-clouds/planetCloudAdapter'
-import { createEarthCloudProfile } from './earthCloudProfile'
+import { createEarthCloudProfile } from '@/core/clouds/profiles/earthCloudProfile'
 
 export type EarthCloudQuality = 'low' | 'medium' | 'high'
 

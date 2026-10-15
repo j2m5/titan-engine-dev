@@ -4,7 +4,7 @@ import { PerspectiveCamera, Texture, RepeatWrapping, ClampToEdgeWrapping } from 
 import { RenderingObjects } from '@storage/database'
 import type { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { createPlanetCloudEffect, toTakramAtmosphere } from '@/labs/planet-clouds/planetCloudAdapter'
-import { createJupiterCloudProfile } from './jupiterCloudProfile'
+import { createJupiterCloudProfile } from '@/core/clouds/profiles/jupiterCloudProfile'
 
 const defaultLayer = createJupiterCloudProfile().layers[0]
 export const CLOUD_BASE_METRES = defaultLayer.baseAltitudeMeters

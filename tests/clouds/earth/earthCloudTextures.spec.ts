@@ -4,7 +4,7 @@ import { decodeRgbCloud } from '@/labs/earth-clouds/rgbCloudMap'
 import { prepareRgbCloudTextures } from '@/labs/earth-clouds/earthCloudTextures'
 import { readCloudImagePixels } from '@/labs/planet-clouds/cloudImagePixels'
 import { prepareCloudAppearanceTextures } from '@/labs/jupiter-clouds/cloudAppearanceTextures'
-import { createEarthCloudProfile } from '@/labs/earth-clouds/earthCloudProfile'
+import { createEarthCloudProfile } from '@/core/clouds/profiles/earthCloudProfile'
 
 const texture = (values: number[], width: number, height: number) =>
   new DataTexture(new Uint8Array(values.flatMap((x) => [x, x, x, 255])), width, height, RGBAFormat)
@@ -143,7 +143,13 @@ describe('Earth RGB cloud preparation', () => {
   })
   it('prepares ordinary masks without appearance coverageRange', () => {
     const source = texture([64], 1, 1)
-    const maps = prepareCloudAppearanceTextures(createEarthCloudProfile().layers[0], () => source)
+    const layer = createEarthCloudProfile().layers[0]
+    layer.pattern = {
+      kind: 'mask',
+      map: { resourceId: 26 },
+      decode: { channel: 'r', inputRange: [0, 1], exponent: 1, invert: false, sampleSpace: 'linear' }
+    }
+    const maps = prepareCloudAppearanceTextures(layer, () => source)
     expect((maps.weather.image.data as Uint8Array)[0]).toBe(64)
     maps.dispose()
     source.dispose()

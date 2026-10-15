@@ -9,7 +9,8 @@ export type ScalarDecode = {
 export type CloudPattern =
   | { kind: 'uniform'; coverage: number }
   | { kind: 'procedural'; coverage: number; scaleMeters: number; bandStrength: number }
-  | { kind: 'mask'; map: CloudMapRef; decode: ScalarDecode }
+  | { kind: 'mask'; encoding?: 'scalar'; map: CloudMapRef; decode: ScalarDecode }
+  | { kind: 'mask'; encoding: 'rgb-cloud-map'; map: CloudMapRef }
   | { kind: 'appearance'; map: CloudMapRef; decode: ScalarDecode; coverageRange: [number, number] }
 export type CloudColor =
   | { kind: 'constant'; srgb: [number, number, number] }

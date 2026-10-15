@@ -3,7 +3,8 @@ import type { CloudPattern, ScalarDecode } from './CloudConfig'
 export type Rgba = readonly [number, number, number, number]
 export type CloudInputColorSpace = 'srgb' | 'linear'
 
-export const srgbToLinear = (value: number): number => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+export const srgbToLinear = (value: number): number =>
+  value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
 const linearToSrgb = (value: number): number =>
   value <= 0.0031308 ? value * 12.92 : 1.055 * value ** (1 / 2.4) - 0.055
 const unit = (value: unknown): value is number =>
@@ -56,7 +57,7 @@ export function decodeCloudScalar(rgba: Rgba, decode: ScalarDecode, inputColorSp
 
 export function coverageFromScalar(
   scalar: number,
-  pattern: Extract<CloudPattern, { kind: 'mask' | 'appearance' }>
+  pattern: Exclude<Extract<CloudPattern, { kind: 'mask' | 'appearance' }>, { encoding: 'rgb-cloud-map' }>
 ): number {
   if (!unit(scalar) || !pattern || (pattern.kind !== 'mask' && pattern.kind !== 'appearance')) {
     throw new RangeError('Invalid scalar or mapped cloud pattern')

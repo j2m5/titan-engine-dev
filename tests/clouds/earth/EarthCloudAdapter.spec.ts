@@ -3,7 +3,7 @@ import { DataTexture, Matrix3, PerspectiveCamera, Quaternion, RGBAFormat, Vector
 import { RenderingObjects } from '@storage/database'
 import { resolveCloudConfig } from '@/core/clouds/validateCloudConfig'
 import { cloudShellDistance, cloudVolumeOpacity } from '@/core/clouds/cloudLod'
-import { createEarthCloudProfile } from '@/labs/earth-clouds/earthCloudProfile'
+import { createEarthCloudProfile } from '@/core/clouds/profiles/earthCloudProfile'
 import { createEarthAtmosphere, createEarthClouds, setEarthCloudQuality } from '@/labs/earth-clouds/EarthCloudAdapter'
 import { toTakramAtmosphere } from '@/labs/planet-clouds/planetCloudAdapter'
 import { bindCloudAppearance } from '@/labs/jupiter-clouds/cloudAppearance'

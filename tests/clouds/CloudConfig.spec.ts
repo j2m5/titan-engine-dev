@@ -1,10 +1,49 @@
 import { expect, it } from 'vitest'
 import { resolveCloudConfig } from '@/core/clouds/validateCloudConfig'
 import type { CloudPattern } from '@/core/clouds/CloudConfig'
-import { createJupiterCloudProfile } from '@/labs/jupiter-clouds/jupiterCloudProfile'
+import { createJupiterCloudProfile } from '@/core/clouds/profiles/jupiterCloudProfile'
 import { validCloudConfig } from './cloudFixtures'
 
 const ids = new Set([32, 26, 37])
+it('accepts RGB cloud masks without scalar decode and rejects unknown encodings', () => {
+  const config = validCloudConfig()
+  const layer = config.layers[0]
+  const pattern = { kind: 'mask', encoding: 'rgb-cloud-map', map: { resourceId: 26 } }
+  const rgb = { ...config, layers: [{ ...layer, pattern }] }
+  expect(resolveCloudConfig(rgb, ids)).toMatchObject({ state: 'configured', config: { layers: [{ pattern }] } })
+  expect(resolveCloudConfig(rgb, new Set([32])).state).toBe('invalid')
+  expect(
+    resolveCloudConfig({ ...rgb, layers: [{ ...layer, pattern: { ...pattern, encoding: 'unknown' } }] }, ids).state
+  ).toBe('invalid')
+})
+it('preserves legacy scalar decode with omitted or explicit scalar encoding', () => {
+  const config = validCloudConfig()
+  const pattern = {
+    kind: 'mask',
+    map: { resourceId: 26 },
+    decode: { channel: 'g', inputRange: [0.2, 0.9], exponent: 2, invert: true, sampleSpace: 'encoded' }
+  }
+  for (const encoding of [undefined, 'scalar']) {
+    const result = resolveCloudConfig(
+      { ...config, layers: [{ ...config.layers[0], pattern: { ...pattern, encoding } }] },
+      ids
+    )
+    expect(result).toMatchObject({ state: 'configured', config: { layers: [{ pattern: { decode: pattern.decode } }] } })
+  }
+})
+it('rejects unknown mask encoding even when its scalar decode is valid', () => {
+  const config = validCloudConfig()
+  const layer = config.layers[0]
+  expect(
+    resolveCloudConfig(
+      {
+        ...config,
+        layers: [{ ...layer, pattern: { ...layer.pattern, kind: 'mask', encoding: 'unknown' } }]
+      },
+      ids
+    ).state
+  ).toBe('invalid')
+})
 it('reports the removed far appearance at its field', () => {
   const result = resolveCloudConfig({ ...validCloudConfig(), farAppearance: 'separate-layer' }, ids)
   expect(result.state).toBe('invalid')

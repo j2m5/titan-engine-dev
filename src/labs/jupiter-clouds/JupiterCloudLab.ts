@@ -16,15 +16,24 @@ import {
 } from 'three'
 import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
 import { applyCloudView, CloudFlight, type CloudView } from './CloudFlight'
-import { createJupiterAtmosphere, createJupiterClouds, setJupiterCloudQuality, createCloudSurfaceView } from './JupiterCloudAdapter'
+import {
+  createJupiterAtmosphere,
+  createJupiterClouds,
+  setJupiterCloudQuality,
+  createCloudSurfaceView
+} from './JupiterCloudAdapter'
 import { createCloudTextures } from './cloudTextures'
 import { PlanetAerialPerspectiveEffect, applyAnalyticPlanetDepth } from './planetDepth'
 import { cloudOpacityAtAltitude, DEFAULT_CLOUD_DISTANCE, type CloudDistanceRange } from './cloudDistance'
 import { ActorResource } from '@storage/database'
 import { resolveCloudConfig } from '@/core/clouds/validateCloudConfig'
-import { createJupiterCloudProfile } from './jupiterCloudProfile'
+import { createJupiterCloudProfile } from '@/core/clouds/profiles/jupiterCloudProfile'
 import { assertCloudAppearanceSupport, bindCloudAppearance, type CloudAppearanceBinding } from './cloudAppearance'
-import { prepareCloudAppearanceTextures, type CloudAppearanceTextures, type CloudTextureResolver } from './cloudAppearanceTextures'
+import {
+  prepareCloudAppearanceTextures,
+  type CloudAppearanceTextures,
+  type CloudTextureResolver
+} from './cloudAppearanceTextures'
 
 export interface JupiterCloudLabOptions {
   resolveCloudTexture?: CloudTextureResolver
@@ -161,7 +170,9 @@ export class JupiterCloudLab {
 
       const shadowPass = this.clouds.shadowPass.currentPass
       const renderShadow = shadowPass.render
-      const countShadowFrame = (): void => { this.shadowFrames++ }
+      const countShadowFrame = (): void => {
+        this.shadowFrames++
+      }
       shadowPass.render = function (...args): ReturnType<typeof renderShadow> {
         const result = renderShadow.apply(this, args)
         countShadowFrame()
@@ -181,7 +192,8 @@ export class JupiterCloudLab {
         assertCloudAppearanceSupport(result.config)
         const textureById = new Map<number, Texture>([[32, surfaceTexture]])
         this.appearanceTextures = prepareCloudAppearanceTextures(
-          result.config.layers[0], options.resolveCloudTexture ?? ((id) => textureById.get(id))
+          result.config.layers[0],
+          options.resolveCloudTexture ?? ((id) => textureById.get(id))
         )
         this.appearanceBinding = bindCloudAppearance(this.clouds, result.config, this.appearanceTextures)
         this.appearanceReady = true

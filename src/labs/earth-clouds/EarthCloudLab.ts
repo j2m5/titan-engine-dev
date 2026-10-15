@@ -31,7 +31,7 @@ import {
   type EarthCloudQuality
 } from './EarthCloudAdapter'
 import type { EarthTextures } from './earthAssets'
-import { createEarthCloudProfile } from './earthCloudProfile'
+import { createEarthCloudProfile } from '@/core/clouds/profiles/earthCloudProfile'
 import { prepareRgbCloudTextures } from './earthCloudTextures'
 import { bindEarthCloudLighting } from './earthCloudLighting'
 import { createEarthSurfaceMaterials, type EarthSurfacePair } from './EarthSurfaceMaterial'
@@ -180,7 +180,17 @@ export class EarthCloudLab {
           this.appearance = options.prepareCloudMaps
             ? options.prepareCloudMaps(textures.clouds)
             : prepareRgbCloudTextures(textures.clouds, { color: resolved.config.layers[0].color })
-          this.binding = bindCloudAppearance(this.clouds, resolved.config, this.appearance)
+          // RGB preparation already produced scalar weather; keep the source descriptor intact.
+          const bindingConfig = structuredClone(resolved.config)
+          const sourcePattern = bindingConfig.layers[0].pattern
+          if (sourcePattern.kind !== 'mask') throw new Error('Expected an Earth cloud mask')
+          bindingConfig.layers[0].pattern = {
+            kind: 'mask',
+            encoding: 'scalar',
+            map: sourcePattern.map,
+            decode: { channel: 'r', inputRange: [0, 1], exponent: 1, invert: false, sampleSpace: 'linear' }
+          }
+          this.binding = bindCloudAppearance(this.clouds, bindingConfig, this.appearance)
           this.restorePasses.push(bindEarthCloudLighting(this.clouds, this.radius))
           this.clouds.shapeVelocity.set(0, 0, 0)
           setEarthCloudQuality(this.clouds, 'medium')

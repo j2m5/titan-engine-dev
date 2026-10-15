@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { PerspectiveCamera, Texture, Vector2, RepeatWrapping, DataTexture, RGBAFormat, Quaternion, Vector3, Matrix3 } from 'three'
-import { createJupiterCloudProfile } from '@/labs/jupiter-clouds/jupiterCloudProfile'
+import {
+  PerspectiveCamera,
+  Texture,
+  Vector2,
+  RepeatWrapping,
+  DataTexture,
+  RGBAFormat,
+  Quaternion,
+  Vector3,
+  Matrix3
+} from 'three'
+import { createJupiterCloudProfile } from '@/core/clouds/profiles/jupiterCloudProfile'
 import { prepareCloudAppearanceTextures } from '@/labs/jupiter-clouds/cloudAppearanceTextures'
 import { bindCloudAppearance } from '@/labs/jupiter-clouds/cloudAppearance'
 import {
@@ -20,7 +30,8 @@ describe('Jupiter cloud adapter', () => {
     const binding = bindCloudAppearance(clouds, profile, maps)
     binding.setPlanetRotation(new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), 0.6))
     const matrix = (clouds.cloudsPass.currentMaterial.uniforms.cloudECEFToPlanet.value as Matrix3).clone()
-    const seed = clouds.shapeOffset.clone(), detailSeed = clouds.shapeDetailOffset.clone()
+    const seed = clouds.shapeOffset.clone(),
+      detailSeed = clouds.shapeDetailOffset.clone()
     try {
       for (const quality of ['medium', 'low', 'high', 'medium'] as const) {
         setJupiterCloudQuality(clouds, quality)

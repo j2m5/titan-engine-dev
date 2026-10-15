@@ -11,6 +11,7 @@ import {
 } from '@/core/models/types'
 import { NEBULA_SHAPE_IDS } from '@/core/renderables/Nebula/NebulaParams'
 import { ringMoonletProblems } from '@/core/renderables/DetailedRingStreamingSystem/ringMoonlets'
+import { resolveCloudConfig } from '@/core/clouds/validateCloudConfig'
 
 /**
  * Валидатор целостности данных приложения.
@@ -530,7 +531,11 @@ function checkNebulaShapes(
  * источник, что у резолвера кольца): радиус орбиты внутри кольца,
  * положительные размер и щель, известная модель формы, не больше 4 лунок.
  */
-function checkRingMoonlets(rows: IRenderingObject[], aliasByActor: Map<number, string>, issues: ValidationIssue[]): void {
+function checkRingMoonlets(
+  rows: IRenderingObject[],
+  aliasByActor: Map<number, string>,
+  issues: ValidationIssue[]
+): void {
   for (const row of rows) {
     if (aliasByActor.get(row.actorId) !== 'ring') continue
     for (const problem of ringMoonletProblems(asRecord(row.data) ?? {})) {
@@ -940,6 +945,23 @@ export function validateDatabase(db: DatabaseSnapshot, scenarios: ScenarioRefs[]
 
   // --- 6c. Форма данных атмосфер (битая структура роняет LUT-генератор в рантайме) ---
   checkAtmosphereShapes(db.renderingObjects, issues)
+  for (const row of db.renderingObjects) {
+    const ids = new Set(
+      db.actorResource
+        .filter((link) => link.actorId === row.actorId && resourceIds.has(link.resourceId))
+        .map((link) => link.resourceId)
+    )
+    const result = resolveCloudConfig(row.data?.clouds, ids)
+    if (result.state !== 'invalid') continue
+    for (const issue of result.issues) {
+      issues.push({
+        level: 'error',
+        collection: 'renderingObjects',
+        entity: row.actorId,
+        message: `Actor ${row.actorId} clouds.${issue.path}: ${issue.message}`
+      })
+    }
+  }
 
   // --- 6d. Якорь атмосферы: bottomRadius == радиус родительской планеты ---
   checkAtmosphereAnchoring(db.renderingObjects, db.actors, db.physicalObjects, issues)
