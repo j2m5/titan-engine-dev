@@ -68,6 +68,10 @@ export function TablePanel({ spec, editor }: { spec: TableSpec; editor: UseEdito
           spec={spec}
           row={selected}
           draft={draft}
+          getJsonInput={(field) => selectedId === null ? undefined : editor.getJsonInput(spec.table, selectedId, field)}
+          onJsonInputChange={(field, state) => {
+            if (selectedId !== null) editor.setJsonInput(spec.table, selectedId, field, state)
+          }}
           onChange={(updated) => upsert(spec.table, updated as never)}
           onDelete={handleDelete}
         />

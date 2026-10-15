@@ -4,6 +4,11 @@ import TitanSelect from '@titanui/components/TitanSelect'
 import { TitanSelectOption } from '@titanui/types'
 import { DataTemplate } from '@/ui/editor/forms/dataTemplates'
 
+export interface JsonInputState {
+  text: string
+  error: string | null
+}
+
 export interface JsonFieldProps {
   label: string
   /** текущее значение (объект) */
@@ -13,6 +18,8 @@ export interface JsonFieldProps {
   /** заготовки data по категориям */
   templates?: DataTemplate[]
   rows?: number
+  inputState?: JsonInputState
+  onInputChange?(state: JsonInputState): void
   onChange(value: unknown): void
 }
 
@@ -25,9 +32,13 @@ function describesValue(text: string, value: unknown): boolean {
   }
 }
 
-const JsonField: FC<JsonFieldProps> = ({ label, value, cloneOptions, templates, rows = 10, onChange }) => {
-  const [text, setText] = useState('')
-  const [error, setError] = useState<string | null>(null)
+const JsonField: FC<JsonFieldProps> = ({ label, value, cloneOptions, templates, rows = 10, inputState, onInputChange, onChange }) => {
+  const [localInput, setLocalInput] = useState<JsonInputState>(() => ({
+    text: JSON.stringify(value ?? {}, null, 2), error: null
+  }))
+  const { text, error } = onInputChange
+    ? inputState ?? { text: JSON.stringify(value ?? {}, null, 2), error: null }
+    : localInput
   const [cloneId, setCloneId] = useState('')
   const [templateId, setTemplateId] = useState('')
 
@@ -35,27 +46,31 @@ const JsonField: FC<JsonFieldProps> = ({ label, value, cloneOptions, templates, 
   // Своё же значение, вернувшееся пропом после ввода, текст не трогает —
   // иначе каждое валидное нажатие переформатировало поле и курсор прыгал в конец
   useEffect(() => {
-    setText((current) => (describesValue(current, value) ? current : JSON.stringify(value ?? {}, null, 2)))
-    setError(null)
-  }, [value])
+    if (onInputChange) return
+    setLocalInput((current) => ({
+      text: describesValue(current.text, value) ? current.text : JSON.stringify(value ?? {}, null, 2),
+      error: null
+    }))
+  }, [value, onInputChange])
+
+  const updateInput = (state: JsonInputState): void => {
+    if (onInputChange) onInputChange(state)
+    else setLocalInput(state)
+  }
 
   const handleText = (next: string): void => {
-    setText(next)
     try {
       const parsed = JSON.parse(next)
-      setError(null)
+      updateInput({ text: next, error: null })
       onChange(parsed)
     } catch (e) {
-      // не поднимаем наверх битый JSON — держим последнее валидное значение,
-      // показываем ошибку парсинга, save заблокируется при пустой/битой data
-      setError(e instanceof Error ? e.message : 'Invalid JSON')
+      updateInput({ text: next, error: e instanceof Error ? e.message : 'Invalid JSON' })
     }
   }
 
   /** общая подстановка блока data: и клон записи, и заготовка категории */
   const applyData = (data: unknown): void => {
-    setText(JSON.stringify(data ?? {}, null, 2))
-    setError(null)
+    updateInput({ text: JSON.stringify(data ?? {}, null, 2), error: null })
     onChange(data)
   }
 

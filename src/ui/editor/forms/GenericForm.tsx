@@ -7,7 +7,7 @@ import TitanFlex from '@titanui/components/TitanFlex'
 import { TitanSelectOption } from '@titanui/types'
 import { DatabaseSnapshot } from '@/core/framework/validation/validateDatabase'
 import { FieldSpec, TableSpec } from '@/ui/editor/forms/fieldSpec'
-import JsonField from '@/ui/editor/forms/JsonField'
+import JsonField, { JsonInputState } from '@/ui/editor/forms/JsonField'
 import { shortenResourcePath } from '@/ui/editor/forms/shortenResourcePath'
 
 export interface GenericFormProps {
@@ -18,9 +18,11 @@ export interface GenericFormProps {
   draft: DatabaseSnapshot
   onChange(row: Record<string, unknown>): void
   onDelete(): void
+  getJsonInput?(field: string): JsonInputState | undefined
+  onJsonInputChange?(field: string, state: JsonInputState): void
 }
 
-const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelete }) => {
+const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelete, getJsonInput, onJsonInputChange }) => {
   if (!row) {
     return <div style={{ color: '#888', padding: '20px' }}>Select a record or create a new one.</div>
   }
@@ -165,10 +167,12 @@ const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelet
 
         return (
           <JsonField
-            key={field.key}
+            key={`${row.id}:${field.key}`}
             label={field.label}
             value={value}
             rows={field.rows}
+            inputState={getJsonInput?.(field.key)}
+            onInputChange={onJsonInputChange ? (state) => onJsonInputChange(field.key, state) : undefined}
             cloneOptions={field.cloneFrom ? cloneOptions : undefined}
             templates={field.templates}
             onChange={(v) => update(field.key, v)}
