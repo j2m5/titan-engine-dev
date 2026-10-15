@@ -42,6 +42,15 @@ npm run preview
 
 `npm test` runs typecheck and starts Vitest in watch mode; add `-- --run` to run once in CI or a terminal. The optional `npm run test:perf` checks performance budgets and is timing sensitive, so run it separately from correctness checks.
 
+### Rebuilding the Google Sans webfont
+
+The checked-in `GoogleSans-Regular.woff2` is a lossless WOFF2 conversion of the full `GoogleSans-Regular.ttf` source, made with `wawoff2@2.0.1`. To reproduce it without adding font tooling to the application dependencies, install the codec into a temporary prefix and run its converter from the repository root:
+
+```powershell
+npm.cmd install --prefix .superpowers/sdd/2026-10-15-audit-remediation/font-tools wawoff2@2.0.1 --ignore-scripts --no-audit --no-fund
+node .superpowers/sdd/2026-10-15-audit-remediation/font-tools/node_modules/wawoff2/bin/woff2_compress.js src/ui/TitanUI/assets/fonts/GoogleSans-Regular.ttf src/ui/TitanUI/assets/fonts/GoogleSans-Regular.woff2
+```
+
 ## Environment
 
 Copy [`.env.example`](.env.example) to `.env` and adjust the build-time settings as needed. Vite embeds every `VITE_` value into browser code, so these settings are public and must not contain credentials.
