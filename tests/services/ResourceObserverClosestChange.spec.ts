@@ -6,6 +6,9 @@ import { resourceStorage } from '@/core/services/ResourceStorage'
 import { Actor } from '@/core/models/Actor'
 import { Scenarios } from '@/config/scenarios'
 import { config } from '@/core/framework/config'
+import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
+import { TerrainMaterial } from '@/core/materials/TerrainMaterial'
+import { PlaceholderTexture } from '@/core/textures/PlaceholderTexture'
 import type { SceneObserver, ObservableRecord } from '@/core/services/SceneObserver'
 import type { TextureProvider } from '@/core/textures/TextureProvider'
 import type { TextureRequest, LoadResult } from '@/core/textures/types'
@@ -113,6 +116,104 @@ function makeObserver(
 describe('ResourceObserver: closestChange end-to-end', () => {
   afterEach(() => {
     resourceStorage.deleteAllTextures()
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it.each(['observed', 'direct', 'in-flight'] as const)('resets the actual diffuse binding after delayed eviction (%s)', async (mode) => {
+    vi.useFakeTimers()
+    vi.spyOn(PlaceholderTexture, 'get').mockReturnValue(makeTexture())
+    for (const name of ['', 'default.png', 'night.jpg']) {
+      const texture = makeTexture()
+      texture.name = name
+      resourceStorage.addTexture(texture)
+    }
+    let finish!: (result: LoadResult) => void
+    const load = async (request: TextureRequest): Promise<LoadResult> => {
+      const texture = makeTexture()
+      texture.name = request.name
+      if (mode === 'in-flight') return new Promise<LoadResult>((resolve) => { finish = resolve })
+      return { ok: true, texture }
+    }
+    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = SOLAR_SYSTEM
+    const actor = [...observer.map.values()].find((actor) => actor.getAttribute('name') === 'Uranus')!
+    const material = new SphereSurfaceMaterial(actor)
+    const mesh = new Mesh()
+    mesh.name = 'Uranus'
+    Object.defineProperty(mesh, 'renderable', { value: { material } })
+    scene.add(mesh)
+    const actorId = actor.getAttribute('id')!
+    // A direct caller can have a material in the scene without an actor in the scenario map.
+    if (mode === 'direct') observer.scenario = null
+    if (mode !== 'direct') data.set('Uranus', record('Uranus', 300))
+    const pending = mode === 'direct'
+      ? (observer as unknown as { loadPath: (candidate: { actorId: number; name: string; path: string; typeRank: number; actorPriority: number }) => Promise<void> }).loadPath({ actorId, name: 'Uranus', path: 'planets/uranus/uranus.png', typeRank: 0, actorPriority: 1 })
+      : handlers.ClosestChange(record('Uranus', 300))
+    if (mode === 'in-flight') {
+      data.clear()
+      await handlers.ClosestChange(record('Uranus', 10000))
+      await handlers.ClosestChange(record('Uranus', 10000))
+      const texture = makeTexture()
+      texture.name = 'planets/uranus/uranus.png'
+      finish({ ok: true, texture })
+    }
+    await pending
+    const texture = resourceStorage.getTexture('planets/uranus/uranus.png')!
+    const dispose = vi.spyOn(texture, 'dispose')
+    expect(material.uniforms.diffuseMap.value).toBe(texture)
+    data.clear()
+    await handlers.ClosestChange(record('Uranus', 10000))
+    await handlers.ClosestChange(record('Uranus', 10000))
+    expect(material.uniforms.diffuseMap.value).toBe(texture)
+    vi.advanceTimersByTime(11_000)
+    await handlers.ClosestChange(record('Uranus', 10000))
+    expect(dispose).toHaveBeenCalledOnce()
+    expect(material.uniforms.diffuseMap.value).toBe(resourceStorage.getTexture('default.png'))
+    material.dispose()
+  })
+
+  it('removes actual shared detail bindings from former and current owners on final eviction', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(PlaceholderTexture, 'get').mockReturnValue(makeTexture())
+    for (const name of ['', 'default.png', 'night.jpg']) {
+      const texture = makeTexture()
+      texture.name = name
+      resourceStorage.addTexture(texture)
+    }
+    const load = async (request: TextureRequest): Promise<LoadResult> => {
+      const texture = makeTexture()
+      texture.name = request.name
+      return { ok: true, texture }
+    }
+    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 20, load)
+    observer.scenario = HORUSET_SYSTEM
+    const materials = ['Korriban I', 'Korriban II'].map((name) => {
+      const actor = [...observer.map.values()].find((actor) => actor.getAttribute('name') === name)!
+      const material = new TerrainMaterial(actor)
+      const mesh = new Mesh()
+      mesh.name = name
+      Object.defineProperty(mesh, 'renderable', { value: { material } })
+      scene.add(mesh)
+      data.set(name, record(name, 100))
+      return material
+    })
+    await handlers.ClosestChange(record('Korriban I', 100))
+    const path = 'terrain/rocky_trail_diff.webp'
+    const texture = resourceStorage.getTexture(path)!
+    for (const material of materials) expect(material.uniforms.uDetailDiffMap.value).toBe(texture)
+    data.delete('Korriban I')
+    await handlers.ClosestChange(record('Korriban II', 100))
+    vi.advanceTimersByTime(11_000)
+    await handlers.ClosestChange(record('Korriban II', 100))
+    expect(resourceStorage.getTexture(path)).toBe(texture)
+    data.clear()
+    await handlers.ClosestChange(record('Korriban II', 10000))
+    for (const material of materials) {
+      expect(material.uniforms.uDetailDiffMap.value).toBeNull()
+      expect(material.uniforms.uDetailLayerGates.value.y).toBe(0)
+      material.dispose()
+    }
   })
 
   it('провал пересчёта не улетает необработанным reject: подписка гасит ошибку и логирует', async () => {

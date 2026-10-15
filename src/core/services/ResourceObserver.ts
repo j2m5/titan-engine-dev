@@ -6,7 +6,7 @@ import { SceneObserver } from '@/core/services/SceneObserver'
 import { TextureProvider } from '@/core/textures/TextureProvider'
 import type { LoadResult, TextureRequest } from '@/core/textures/types'
 import { cubeTextureRequest, textureRequestFrom } from '@/core/textures/textureRequest'
-import { CubeTexture, DefaultLoadingManager, Scene } from 'three'
+import { CubeTexture, Scene } from 'three'
 import { LoadingProgressReporter } from '@/core/ports/LoadingProgressReporter'
 import { NotificationSink } from '@/core/ports/NotificationSink'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -107,6 +107,8 @@ class ResourceObserver {
    * оно всё ещё в этой карте.
    */
   private readonly pathActors: Map<string, Set<number>> = new Map()
+  /** Material bindings outlive current demand, including direct loadPath callers. */
+  private readonly boundOwners: Map<string, Map<number, string>> = new Map()
   /**
    * Счётчик сбросов сценария. `loadPath` захватывает значение до первого
    * `await`: если к моменту догрузки оно изменилось, сценарий сменился посреди
@@ -194,6 +196,7 @@ class ResourceObserver {
     this.attempted.clear()
     this.pathLoads.clear()
     this.pathActors.clear()
+    this.boundOwners.clear()
     this.lastDecisionLine = ''
     this._map.clear()
     this.setMap()
@@ -214,7 +217,9 @@ class ResourceObserver {
    * отдаёт текстуру, размещение — здесь.
    */
   public async loadPrimaryTextures(): Promise<void> {
-    this.reportLoadErrors()
+    const epoch: number = this.epoch
+    const cube: IResource[] = [...this.cube]
+    const resident: IResource[] = [...this.resident]
 
     // Прогресс экрана загрузки считается здесь, а не счётчиком three:
     // DefaultLoadingManager копит файлы за всю сессию, и полоса шла назад
@@ -223,20 +228,26 @@ class ResourceObserver {
     // полоса не дошла бы до конца.
     let loaded: number = 0
     const advance = (name: string, files: number): void => {
+      if (this.epoch !== epoch) return
       loaded += files
       this.loadingProgress.setAsset(name)
       this.loadingProgress.setProgress(loaded)
     }
 
     this.loadingProgress.setAsset('')
-    this.loadingProgress.setTotal(this.cube.length + this.resident.length)
+    this.loadingProgress.setTotal(cube.length + resident.length)
     this.loadingProgress.setProgress(0)
 
-    if (this.cube.length) {
-      const request: TextureRequest = cubeTextureRequest(this.cube)
-      const background = await this.tryLoad(request)
+    if (cube.length) {
+      const request: TextureRequest = cubeTextureRequest(cube)
+      const background = await this.tryLoad(request, epoch)
 
-      advance(request.name, this.cube.length)
+      if (this.epoch !== epoch) {
+        if (background?.ok) background.texture.dispose()
+        return
+      }
+
+      advance(request.name, cube.length)
 
       if (background?.ok) {
         this._sceneBackground = background.texture as CubeTexture
@@ -248,22 +259,27 @@ class ResourceObserver {
       this._sceneBackground = null
     }
 
-    await this.loadInto(this.resident, (name: string): void => advance(name, 1))
+    await this.loadInto(resident, (name: string): void => advance(name, 1), epoch)
 
-    this.loadingProgress.setAsset('')
+    if (this.epoch === epoch) this.loadingProgress.setAsset('')
   }
 
   /**
    * Загружает пачку ресурсов и размещает удавшиеся в реестре. Провалившиеся
-   * молча пропускаются: провайдер уже вернул заглушку, а сообщение
-   * пользователю шлёт DefaultLoadingManager.onError. onSettled зовётся по
+   * пропускаются: провайдер уже вернул заглушку, а сообщение
+   * пользователю шлёт tryLoad для актуальной эпохи запроса. onSettled зовётся по
    * завершении каждого ресурса — и удачного, и провалившегося.
    */
-  private async loadInto(resources: IResource[], onSettled: (name: string) => void): Promise<void> {
+  private async loadInto(resources: IResource[], onSettled: (name: string) => void, epoch: number): Promise<void> {
     await Promise.all(
       resources.map(async (resource: IResource): Promise<void> => {
         const request: TextureRequest = textureRequestFrom(resource)
-        const result = await this.tryLoad(request)
+        const result = await this.tryLoad(request, epoch)
+
+        if (this.epoch !== epoch) {
+          if (result?.ok) result.texture.dispose()
+          return
+        }
 
         onSettled(request.name)
 
@@ -283,17 +299,13 @@ class ResourceObserver {
    * обработчика нет ни в одном звене, так что без перехвата здесь приложение
    * зависает на экране загрузки без сообщения.
    */
-  private async tryLoad(request: TextureRequest): Promise<LoadResult | null> {
+  private async tryLoad(request: TextureRequest, epoch: number = this.epoch): Promise<LoadResult | null> {
     try {
-      return await this.textures.load(request)
+      const result = await this.textures.load(request)
+      if (!result.ok) this.reportLoadError(request, result.error, epoch)
+      return result
     } catch (cause) {
-      const error: Error = cause instanceof Error ? cause : new Error(String(cause))
-
-      this.notifications.dispatch({
-        type: 'error',
-        message: `The error occurred while loading: ${request.name} (${error.message})`
-      })
-
+      this.reportLoadError(request, cause, epoch)
       return null
     }
   }
@@ -344,14 +356,17 @@ class ResourceObserver {
   }
 
   /**
-   * Сообщения об ошибках загрузки — от DefaultLoadingManager: он видит каждый
-   * файл, в том числе грани кубмапы и стриминг по ходу игры. Прогресс экрана
-   * загрузки считает loadPrimaryTextures сам (см. там).
+   * Уведомление принадлежит запросу, а не глобальному LoadingManager:
+   * его onError мог быть заменён новым сценарием до ошибки старого запроса.
+   * Сетевые и конфигурационные ошибки дают одно уведомление на запрос.
    */
-  private reportLoadErrors(): void {
-    DefaultLoadingManager.onError = (url: string): void => {
-      this.notifications.dispatch({ type: 'error', message: `The error occurred while loading: ${url}` })
-    }
+  private reportLoadError(request: TextureRequest, cause: unknown, epoch: number): void {
+    if (this.epoch !== epoch) return
+    const error: Error = cause instanceof Error ? cause : new Error(String(cause))
+    this.notifications.dispatch({
+      type: 'error',
+      message: `The error occurred while loading: ${request.name} (${error.message})`
+    })
   }
 
   /**
@@ -500,8 +515,8 @@ class ResourceObserver {
    * `candidates`) и никогда не попал бы в `decision.evict` сам по себе —
    * без явной чистки он завис бы в `loaded` без единого кандидата навсегда.
    * `evictOrphanedPaths` находит такие пути (загружены, но нет записи в
-   * свежем `pathActors`) и вытесняет их напрямую, по владельцам из
-   * `previousOwners` — снимка `pathActors` ДО перестройки.
+   * свежем `pathActors`) и вытесняет их напрямую. `boundOwners` хранит
+   * материальные привязки до фактического вытеснения, независимо от спроса.
    */
   private collectCandidates(): { candidates: MapCandidate[]; cutoffCount: number } {
     const candidates: MapCandidate[] = []
@@ -551,6 +566,7 @@ class ResourceObserver {
 
         owners.add(actorId)
 
+        if (this.loaded.has(path)) this.rememberOwners(path, actorId, record.name)
         if (this.loaded.has(path) && !previousOwners.get(path)?.has(actorId)) catchUp.add(actorId)
       }
 
@@ -587,7 +603,7 @@ class ResourceObserver {
       }
     }
 
-    this.evictOrphanedPaths(previousOwners)
+    this.evictOrphanedPaths()
 
     return { candidates, cutoffCount }
   }
@@ -600,11 +616,9 @@ class ResourceObserver {
    * больше НИКЕМ не запрошен, а `decideStreaming` о нём не узнает, потому
    * что видит только текущих `candidates`.
    *
-   * Владелец резолвится по `previousOwners` — снимку `pathActors` ДО
-   * перестройки в этом же вызове `collectCandidates`; путь без владельца
-   * даже там (не должно происходить в норме — см. `evictPath`) вытесняется
-   * фиктивным заявителем: `evictPath` безопасно не находит для него узел
-   * сцены и просто чистит бухгалтерию/реестр.
+   * Владельцев материалов хранит `boundOwners`: их привязки переживают
+   * несколько пересчётов без спроса и защитный интервал резидентности.
+   * `evictPath` обрабатывает всех владельцев один раз на путь.
    *
    * Два гварда защищают от порчи состояния, а не только от лишней работы:
    *
@@ -628,25 +642,14 @@ class ResourceObserver {
    * resourceType (2.0–2.2), а не STEEP_TYPE_RANKS (2.31–2.33) — допущение
    * безвредно, пока единственный потребитель ранга — бинарный isDiffuse-гейт.
    */
-  private evictOrphanedPaths(previousOwners: ReadonlyMap<string, Set<number>>): void {
+  private evictOrphanedPaths(): void {
     for (const path of [...this.loaded]) {
       if (this.pathActors.has(path)) continue
       if (this.inFlight.has(path)) continue
       if (Date.now() - (this.loadedAt.get(path) ?? 0) < MIN_RESIDENCY_MS) continue
 
       const typeRank: number = mapTypeRank(Resource.where({ path }).first()?.getAttribute('resourceType') ?? '')
-      const owners: Set<number> = previousOwners.get(path) ?? new Set()
-
-      if (!owners.size) {
-        this.evictPath({ actorId: -1, name: '', path, typeRank, actorPriority: 0 })
-        continue
-      }
-
-      for (const actorId of owners) {
-        const name: string = this._map.get(actorId)?.getAttribute('name') ?? ''
-
-        this.evictPath({ actorId, name, path, typeRank, actorPriority: 0 })
-      }
+      this.evictPath({ actorId: -1, name: '', path, typeRank, actorPriority: 0 })
     }
   }
 
@@ -678,9 +681,8 @@ class ResourceObserver {
    * Материал сбрасывается на заглушку (`resetMaterial`) только если путь —
    * диффуз (ранг 0): потеря второстепенной карты не убивает тело, оно
    * обязано пережить частичный набор (`updateMaterial`). Трогаются материалы
-   * ВСЕХ текущих владельцев пути (`pathActors`), а не только заявителя
-   * `candidate` — путь мог быть общим на несколько тел, и все они теряют
-   * текстуру одновременно.
+   * ВСЕХ владельцев привязок пути (`boundOwners`) и текущих заявителей
+   * (`pathActors`): бывший заявитель тоже может ещё держать текстуру.
    *
    * Материал каждого совладельца трогается в своём `try/catch`: сломанный
    * материал ОДНОГО тела не должен ни оборвать откат остальных совладельцев,
@@ -688,7 +690,7 @@ class ResourceObserver {
    * без текстуры навсегда.
    */
   public evictPath(candidate: MapCandidate): void {
-    const owners: ReadonlySet<number> = this.pathActors.get(candidate.path) ?? new Set([candidate.actorId])
+    const owners: ReadonlySet<number> = this.materialOwners(candidate.path, candidate.actorId)
     const isDiffuse: boolean = candidate.typeRank === MAP_TYPE_RANK.diffuse
 
     this.loaded.delete(candidate.path)
@@ -700,17 +702,28 @@ class ResourceObserver {
         this.withActorMaterial(
           actorId,
           (material: AbstractShaderMaterial): void => (isDiffuse ? material.resetMaterial() : material.updateMaterial()),
-          actorId === candidate.actorId ? candidate.name : undefined
+          this.boundOwners.get(candidate.path)?.get(actorId) ?? (actorId === candidate.actorId ? candidate.name : undefined)
         )
       } catch {
         // см. докблок выше
       }
     }
+    this.boundOwners.delete(candidate.path)
   }
 
-  /** Владельцы пути для материального фан-аута — из `pathActors`, либо кандидат-заявитель, если путь пришёл в обход `collectCandidates` (прямой вызов). */
+  /** Remember bindings until storage removal and material reset have both completed. */
+  private rememberOwners(path: string, actorId: number, name: string): void {
+    const owners = this.boundOwners.get(path) ?? new Map<number, string>()
+    for (const id of this.pathActors.get(path) ?? []) {
+      owners.set(id, this._map.get(id)?.getAttribute('name') ?? '')
+    }
+    owners.set(actorId, name)
+    this.boundOwners.set(path, owners)
+  }
+
+  /** Current demand plus all materials that may still hold the texture. */
   private materialOwners(path: string, fallbackActorId: number): ReadonlySet<number> {
-    return this.pathActors.get(path) ?? new Set([fallbackActorId])
+    return new Set([fallbackActorId, ...(this.pathActors.get(path) ?? []), ...(this.boundOwners.get(path)?.keys() ?? [])])
   }
 
   /**
@@ -768,6 +781,7 @@ class ResourceObserver {
     const path: string = candidate.path
     const epoch: number = this.epoch
 
+    this.rememberOwners(path, candidate.actorId, candidate.name)
     this.inFlight.add(path)
     this.loaded.add(path)
 
@@ -831,7 +845,7 @@ class ResourceObserver {
         this.withActorMaterial(
           actorId,
           (material: AbstractShaderMaterial): void => material.updateMaterial(),
-          actorId === candidate.actorId ? candidate.name : undefined
+          this.boundOwners.get(path)?.get(actorId) ?? (actorId === candidate.actorId ? candidate.name : undefined)
         )
       }
     } catch {
@@ -880,12 +894,13 @@ class ResourceObserver {
         this.withActorMaterial(
           actorId,
           (material: AbstractShaderMaterial): void => (isDiffuse ? material.resetMaterial() : material.updateMaterial()),
-          actorId === candidate.actorId ? candidate.name : undefined
+          this.boundOwners.get(candidate.path)?.get(actorId) ?? (actorId === candidate.actorId ? candidate.name : undefined)
         )
       } catch {
         // см. докблок выше
       }
     }
+    this.boundOwners.delete(candidate.path)
   }
 }
 
