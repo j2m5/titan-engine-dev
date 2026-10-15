@@ -86,6 +86,8 @@ npm run cloud:manifest -- --check
 
 ## Tests and GPU checks
 
+`npm test -- --run` works from a clean clone without the external resource archive. Measurements of actual water textures and terrain heightmaps run only when the corresponding local files exist; Vitest reports those measurements as skipped otherwise. Water precision guards and the moonlet upload-manifest checks always run. A present but invalid water texture still fails its measurements. Use `npm run cloud:manifest -- --check` to require all runtime resources locally before uploading them.
+
 The standard Vitest suite runs in jsdom. It covers CPU and UI behavior but does not execute the `.gpu.ts` probes, which require a real WebGL2 browser context. Start `npm run dev`, open the app in WebGL2-capable Chrome or Firefox, and paste this into the browser developer console. The sequence awaits each probe and stops on a thrown failure; the black-hole depth probe runs with both 0 and 4 samples.
 
 ```js

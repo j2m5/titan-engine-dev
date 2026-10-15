@@ -1,6 +1,6 @@
-import { existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { RenderingObjects } from '@storage/database'
+import { cloudManifestPaths } from '../../scripts/lib/cloudManifest'
 import {
   applyRingGapsToBins,
   RING_GAP_EDGE_FRACTION,
@@ -181,10 +181,12 @@ describe('резолверы и проблемы данных лунок', () =>
     expect(ringMoonletProblems(both)).toHaveLength(2)
   })
 
-  it('каждая модель из списка лежит в репозитории (оба яруса)', () => {
+  it('каждая разрешённая модель включена в манифест облака (оба яруса)', () => {
+    const paths = cloudManifestPaths([])
+
     for (const name of RING_MOONLET_MODELS) {
-      expect(existsSync(`storage/images/textures/asteroids/shapes/${name}_l0.bin`), name).toBe(true)
-      expect(existsSync(`storage/images/textures/asteroids/shapes/${name}_near.bin`), name).toBe(true)
+      expect(paths).toContain(`asteroids/shapes/${name}_l0.bin`)
+      expect(paths).toContain(`asteroids/shapes/${name}_near.bin`)
     }
   })
 })
