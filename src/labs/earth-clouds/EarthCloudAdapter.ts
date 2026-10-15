@@ -3,10 +3,31 @@ import type { CloudsEffect } from '@takram/three-clouds'
 import type { PerspectiveCamera } from 'three'
 import { RenderingObjects } from '@storage/database'
 import type { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
-import { applyPlanetCloudLayer, createPlanetCloudEffect, toTakramAtmosphere } from '@/labs/planet-clouds/planetCloudAdapter'
+import {
+  applyPlanetCloudLayer,
+  createPlanetCloudEffect,
+  toTakramAtmosphere
+} from '@/labs/planet-clouds/planetCloudAdapter'
 import { createEarthCloudProfile } from './earthCloudProfile'
 
 export type EarthCloudQuality = 'low' | 'medium' | 'high'
+
+/** Takram 0.7.6 obtains the array texture handle before binding its target.
+ * Initialize it first so the first current/resolve draw attaches every layer.
+ */
+export function prepareEarthCloudTargets(clouds: CloudsEffect): () => void {
+  const restores = [clouds.shadowPass.currentPass, clouds.shadowPass.resolvePass].map((pass) => {
+    const original = pass.render
+    pass.render = function (...args: Parameters<typeof original>) {
+      args[0].initRenderTarget(args[2])
+      return original.apply(this, args)
+    }
+    return () => {
+      pass.render = original
+    }
+  })
+  return () => restores.forEach((restore) => restore())
+}
 
 export function createEarthAtmosphere(): { config: AtmosphereConfig; atmosphere: AtmosphereParameters } {
   const row = RenderingObjects.find((entry) => entry.actorId === 47)

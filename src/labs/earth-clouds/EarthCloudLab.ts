@@ -1,5 +1,19 @@
 import type { CloudsEffect } from '@takram/three-clouds'
-import { Data3DTexture, HalfFloatType, Mesh, NoToneMapping, PerspectiveCamera, Quaternion, Scene, SphereGeometry, SRGBColorSpace, Texture, Vector2, Vector3, WebGLRenderer } from 'three'
+import {
+  Data3DTexture,
+  HalfFloatType,
+  Mesh,
+  NoToneMapping,
+  PerspectiveCamera,
+  Quaternion,
+  Scene,
+  SphereGeometry,
+  SRGBColorSpace,
+  Texture,
+  Vector2,
+  Vector3,
+  WebGLRenderer
+} from 'three'
 import { ActorResource } from '@storage/database'
 import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
 import { resolveCloudConfig } from '@/core/clouds/validateCloudConfig'
@@ -9,7 +23,13 @@ import { createCloudTextures } from '@/labs/jupiter-clouds/cloudTextures'
 import { applyAnalyticPlanetDepth, PlanetAerialPerspectiveEffect } from '@/labs/jupiter-clouds/planetDepth'
 import { bindCloudAppearance, type CloudAppearanceBinding } from '@/labs/jupiter-clouds/cloudAppearance'
 import type { CloudAppearanceTextures } from '@/labs/jupiter-clouds/cloudAppearanceTextures'
-import { createEarthAtmosphere, createEarthClouds, setEarthCloudQuality, type EarthCloudQuality } from './EarthCloudAdapter'
+import {
+  createEarthAtmosphere,
+  createEarthClouds,
+  prepareEarthCloudTargets,
+  setEarthCloudQuality,
+  type EarthCloudQuality
+} from './EarthCloudAdapter'
 import type { EarthTextures } from './earthAssets'
 import { createEarthCloudProfile } from './earthCloudProfile'
 import { prepareRgbCloudTextures } from './earthCloudTextures'
@@ -83,37 +103,70 @@ export class EarthCloudLab {
     try {
       const planetConfig = createEarthAtmosphere()
       this.radius = planetConfig.atmosphere.bottomRadius
-      const renderer = this.renderer = new WebGLRenderer({ antialias: false, logarithmicDepthBuffer: true })
+      const renderer = (this.renderer = new WebGLRenderer({ antialias: false, logarithmicDepthBuffer: true }))
       renderer.toneMapping = NoToneMapping
       renderer.toneMappingExposure = 1
       renderer.outputColorSpace = SRGBColorSpace
       renderer.debug.onShaderError = (gl, program, vertex, fragment) => {
-        throw new Error(`Earth cloud lab shader compilation failed: ${[gl.getProgramInfoLog(program), gl.getShaderInfoLog(vertex), gl.getShaderInfoLog(fragment)].join('\n')}`)
+        throw new Error(
+          `Earth cloud lab shader compilation failed: ${[gl.getProgramInfoLog(program), gl.getShaderInfoLog(vertex), gl.getShaderInfoLog(fragment)].join('\n')}`
+        )
       }
       container.append(renderer.domElement)
       renderer.domElement.addEventListener('webglcontextlost', this.contextLost)
       this.noise = createCloudTextures()
       this.generator = new AtmosphereLUTGenerator(renderer)
       const lut = this.generator.generate(planetConfig.config)
-      const textureProps = { transmittanceTexture: lut.transmittance, scatteringTexture: lut.scattering as Data3DTexture, irradianceTexture: lut.irradiance }
-      const aerialOptions = { ...textureProps, correctAltitude: false, correctGeometricError: false, sky: true, sun: true, moon: false, sunLight: false, skyLight: false, shadow: null, shadowLength: null }
+      const textureProps = {
+        transmittanceTexture: lut.transmittance,
+        scatteringTexture: lut.scattering as Data3DTexture,
+        irradianceTexture: lut.irradiance
+      }
+      const aerialOptions = {
+        ...textureProps,
+        correctAltitude: false,
+        correctGeometricError: false,
+        sky: true,
+        sun: true,
+        moon: false,
+        sunLight: false,
+        skyLight: false,
+        shadow: null,
+        shadowLength: null
+      }
       this.farAerial = new PlanetAerialPerspectiveEffect(this.camera, aerialOptions, planetConfig.atmosphere)
       this.nearAerial = new PlanetAerialPerspectiveEffect(this.camera, aerialOptions, planetConfig.atmosphere)
       for (const aerial of [this.farAerial, this.nearAerial]) {
         aerial.worldToECEFMatrix.makeTranslation(0, 0, this.radius)
         aerial.stbnTexture = this.noise.noise
       }
-      this.materials = createEarthSurfaceMaterials({ textures, radiusMeters: this.radius, atmosphere: planetConfig.config, lut: textureProps, stbnTexture: this.noise.noise, longitudeOffsetRadians: this.profile.mapping.longitudeOffsetRadians, shadowReferenceShader: this.nearAerial.getFragmentShader() })
+      this.materials = createEarthSurfaceMaterials({
+        textures,
+        radiusMeters: this.radius,
+        atmosphere: planetConfig.config,
+        lut: textureProps,
+        stbnTexture: this.noise.noise,
+        longitudeOffsetRadians: this.profile.mapping.longitudeOffsetRadians,
+        shadowReferenceShader: this.nearAerial.getFragmentShader()
+      })
       this.geometry = new SphereGeometry(this.radius, 512, 256)
       this.planet = new Mesh(this.geometry, this.materials.far)
       this.planet.position.z = -this.radius
       this.scene.add(this.planet)
-      this.composer = new EarthCloudComposer({ renderer, camera: this.camera, scene: this.scene, planet: this.planet, materials: this.materials, farAerial: this.farAerial, nearAerial: this.nearAerial })
+      this.composer = new EarthCloudComposer({
+        renderer,
+        camera: this.camera,
+        scene: this.scene,
+        planet: this.planet,
+        materials: this.materials,
+        farAerial: this.farAerial,
+        nearAerial: this.nearAerial
+      })
       if (this.materials.volumeError) this.state.fail(this.materials.volumeError)
       else {
         try {
           // Actor 7 owns Earth maps; atmosphere reference 47 supplies the physical profile.
-          const ids = new Set(ActorResource.filter(entry => entry.actorId === 7).map(entry => entry.resourceId))
+          const ids = new Set(ActorResource.filter((entry) => entry.actorId === 7).map((entry) => entry.resourceId))
           const resolved = resolveCloudConfig(this.profile, ids)
           if (resolved.state !== 'configured') throw new Error('Invalid Earth cloud profile')
           this.clouds = createEarthClouds(this.camera, planetConfig.atmosphere)
@@ -129,6 +182,7 @@ export class EarthCloudLab {
           setEarthCloudQuality(this.clouds, 'medium')
           this.clouds.skipRendering = true
           this.clouds.initialize(renderer, false, HalfFloatType)
+          this.restorePasses.push(prepareEarthCloudTargets(this.clouds))
           // Count successful underlying draws, including multi-pass implementations.
           this.countPass(this.clouds.cloudsPass.currentPass, () => this.cloudFrames++)
           this.countPass(this.clouds.shadowPass.currentPass, () => this.shadowFrames++)
@@ -139,11 +193,27 @@ export class EarthCloudLab {
           this.state.fail(error instanceof Error ? error : new Error(String(error)))
         }
       }
-      this.flight = new CloudFlight(this.camera, renderer.domElement, this.radius, { minAltitude: 100, maxAltitude: 40000000, minSpeed: 50, speedScale: 0.3, label: 'Полёт над Землёй: перетаскивание мышью, WASD и Q/E' })
+      this.flight = new CloudFlight(this.camera, renderer.domElement, this.radius, {
+        minAltitude: 100,
+        maxAltitude: 40000000,
+        minSpeed: 50,
+        speedScale: 0.3,
+        label: 'Полёт над Землёй: перетаскивание мышью, WASD и Q/E'
+      })
       this.observer = new ResizeObserver(() => this.resize())
       this.observer.observe(container)
       this.resize()
       this.setSunAngle(35)
+      // A measured cloud edge (about 15°S) shows volume structure in the demo.
+      // This rotates the planet and its binding together; map coordinates stay canonical.
+      const phi = 0.08203125 * Math.PI * 2,
+        theta = (1 - 0.4140625) * Math.PI
+      this.setPlanetRotation(
+        new Quaternion().setFromUnitVectors(
+          new Vector3(-Math.cos(phi) * Math.sin(theta), Math.cos(theta), Math.sin(phi) * Math.sin(theta)),
+          new Vector3(0, 0, 1)
+        )
+      )
       this.setView('orbit')
       if (options.autoStart !== false) this.frameRequest = requestAnimationFrame(this.render)
     } catch (error) {
@@ -159,7 +229,9 @@ export class EarthCloudLab {
       count()
       return result
     }
-    this.restorePasses.push(() => { pass.render = original })
+    this.restorePasses.push(() => {
+      pass.render = original
+    })
   }
 
   private readonly contextLost = (event: Event): void => {
@@ -185,7 +257,7 @@ export class EarthCloudLab {
   }
   setSunAngle(degrees: number): void {
     if (this.disposed) return
-    const angle = degrees * Math.PI / 180
+    const angle = (degrees * Math.PI) / 180
     this.sunDirection.set(Math.sin(angle), 0, Math.cos(angle))
     this.clouds?.sunDirection.copy(this.sunDirection)
     this.farAerial?.sunDirection.copy(this.sunDirection)
@@ -200,7 +272,8 @@ export class EarthCloudLab {
   }
   resize(): void {
     if (this.disposed || !this.renderer) return
-    const width = Math.max(1, this.container.clientWidth), height = Math.max(1, this.container.clientHeight)
+    const width = Math.max(1, this.container.clientWidth),
+      height = Math.max(1, this.container.clientHeight)
     this.dpr = Math.min(window.devicePixelRatio, 1.5)
     this.renderer.setPixelRatio(this.dpr)
     this.renderer.setSize(width, height, false)
@@ -212,7 +285,10 @@ export class EarthCloudLab {
     this.state.invalidate()
   }
   private clearVolume(): void {
-    if (this.nearAerial) { this.nearAerial.overlay = null; this.nearAerial.shadow = null }
+    if (this.nearAerial) {
+      this.nearAerial.overlay = null
+      this.nearAerial.shadow = null
+    }
     this.materials?.bindShadow(null)
   }
   renderFrame(deltaSeconds: number): void {
@@ -225,25 +301,41 @@ export class EarthCloudLab {
       this.binding?.setPlanetRotation(this.planet!.quaternion)
       const renderer = this.renderer!
       renderer.getDrawingBufferSize(this.size)
-      this.materials!.updateFrame({ camera: this.camera, planetMatrixWorld: this.planet!.matrixWorld, worldToECEFMatrix: this.farAerial!.worldToECEFMatrix, sunDirection: this.sunDirection, resolution: this.size, frame: this.frames })
-      const requestedWeight = cloudVolumeOpacity(cloudShellDistance(this.flight!.altitude, this.profile.layers), this.profile.lod)
+      this.materials!.updateFrame({
+        camera: this.camera,
+        planetMatrixWorld: this.planet!.matrixWorld,
+        worldToECEFMatrix: this.farAerial!.worldToECEFMatrix,
+        sunDirection: this.sunDirection,
+        resolution: this.size,
+        frame: this.frames
+      })
+      const requestedWeight = cloudVolumeOpacity(
+        cloudShellDistance(this.flight!.altitude, this.profile.layers),
+        this.profile.lod
+      )
       const request = this.state.begin(requestedWeight, this.cloudsEnabled)
       if (request.resetHistory && this.clouds) {
         this.clouds.setSize(this.size.x + 4, this.size.y + 4)
         this.clouds.setSize(this.size.x, this.size.y)
       }
-      const result = this.composer!.render({ ...request, deltaSeconds, updateVolume: (input, dt) => {
-        const clouds = this.clouds!
-        const alpha = clouds.shadowPass.resolveMaterial.uniforms.temporalAlpha
-        const previous = alpha.value
-        if (request.resetHistory) alpha.value = 1
-        try {
-          clouds.update(renderer, input, dt)
-          const overlay = clouds.atmosphereOverlay
-          if (overlay === null) throw new Error('Cloud update produced no overlay')
-          return { overlay, shadow: clouds.atmosphereShadow }
-        } finally { alpha.value = previous }
-      } })
+      const result = this.composer!.render({
+        ...request,
+        deltaSeconds,
+        updateVolume: (input, dt) => {
+          const clouds = this.clouds!
+          const alpha = clouds.shadowPass.resolveMaterial.uniforms.temporalAlpha
+          const previous = alpha.value
+          if (request.resetHistory) alpha.value = 1
+          try {
+            clouds.update(renderer, input, dt)
+            const overlay = clouds.atmosphereOverlay
+            if (overlay === null) throw new Error('Cloud update produced no overlay')
+            return { overlay, shadow: clouds.atmosphereShadow }
+          } finally {
+            alpha.value = previous
+          }
+        }
+      })
       this.state.complete(result)
       this.volumeWeight = result.effectiveWeight
       if (result.volumeError) this.clearVolume()
@@ -251,7 +343,10 @@ export class EarthCloudLab {
       if (result.nearRendered) this.nearFrames++
       this.frames++
       this.elapsed += deltaSeconds
-      if (this.elapsed >= 0.2) { this.elapsed = 0; this.onStats(this.getStats()) }
+      if (this.elapsed >= 0.2) {
+        this.elapsed = 0
+        this.onStats(this.getStats())
+      }
     } catch (error) {
       this.dispose()
       this.onError(error instanceof Error ? error : new Error(String(error)))
@@ -259,7 +354,18 @@ export class EarthCloudLab {
   }
   getStats(): EarthCloudLabStats {
     const { volumeState, volumeMessage } = this.state.snapshot()
-    return { altitudeKm: (this.flight?.altitude ?? this.camera.position.z) / 1000, frameMs: this.frameMs, frames: this.frames, volumeWeight: this.volumeWeight, cloudFrames: this.cloudFrames, shadowFrames: this.shadowFrames, farFrames: this.farFrames, nearFrames: this.nearFrames, volumeState, volumeMessage }
+    return {
+      altitudeKm: (this.flight?.altitude ?? this.camera.position.z) / 1000,
+      frameMs: this.frameMs,
+      frames: this.frames,
+      volumeWeight: this.volumeWeight,
+      cloudFrames: this.cloudFrames,
+      shadowFrames: this.shadowFrames,
+      farFrames: this.farFrames,
+      nearFrames: this.nearFrames,
+      volumeState,
+      volumeMessage
+    }
   }
   private readonly render = (time: number): void => {
     if (this.disposed) return
@@ -270,7 +376,10 @@ export class EarthCloudLab {
     if (!this.disposed) this.frameRequest = requestAnimationFrame(this.render)
   }
   private releaseVolume(): void {
-    this.restorePasses.splice(0).forEach(restore => restore())
+    this.restorePasses
+      .splice(0)
+      .reverse()
+      .forEach((restore) => restore())
     // Restore borrowed material mutations before destroying those materials.
     this.binding?.dispose()
     this.binding = undefined
@@ -287,7 +396,10 @@ export class EarthCloudLab {
     this.renderer?.domElement.removeEventListener('webglcontextlost', this.contextLost)
     this.flight?.dispose()
     if (this.composer) this.composer.dispose()
-    else { this.farAerial?.dispose(); this.nearAerial?.dispose() }
+    else {
+      this.farAerial?.dispose()
+      this.nearAerial?.dispose()
+    }
     this.releaseVolume()
     this.geometry?.dispose()
     this.materials?.dispose()

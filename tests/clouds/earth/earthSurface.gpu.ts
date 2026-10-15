@@ -16,6 +16,9 @@ import {
   WebGLRenderer,
   WebGLRenderTarget,
   DataUtils,
+  Quaternion,
+  Vector4,
+  Matrix3,
   type ShaderMaterial,
   type Texture
 } from 'three'
@@ -23,6 +26,11 @@ import type { AtmosphereShadow } from '@takram/three-atmosphere'
 import { PlanetAerialPerspectiveEffect } from '@/labs/jupiter-clouds/planetDepth'
 import { createEarthSurfaceMaterials, type EarthSurfaceOptions } from '@/labs/earth-clouds/EarthSurfaceMaterial'
 import type { EarthGpuProbeReport } from './gpuTestHarness'
+import { createGpuReadback, extractShaderFunction } from './gpuTestHarness'
+import { createEarthClouds, createEarthAtmosphere } from '@/labs/earth-clouds/EarthCloudAdapter'
+import { createEarthCloudProfile } from '@/labs/earth-clouds/earthCloudProfile'
+import { bindCloudAppearance } from '@/labs/jupiter-clouds/cloudAppearance'
+import { prepareRgbCloudTextures } from '@/labs/earth-clouds/earthCloudTextures'
 
 export async function checkEarthSurface(): Promise<EarthGpuProbeReport> {
   const renderer = new WebGLRenderer(),
@@ -138,6 +146,9 @@ export async function checkEarthSurface(): Promise<EarthGpuProbeReport> {
     }
   }
   try {
+    const geographic = checkGeographicBindings(pair)
+    report.checks += geographic.checks
+    report.maxError = Math.max(report.maxError, geographic.maxError)
     // Compile and render the complete real materials before instrumenting values.
     const baseline = render(pair.far)
     check(render(pair.near), baseline, 'near ignores black map')
@@ -269,5 +280,194 @@ export async function checkEarthSurface(): Promise<EarthGpuProbeReport> {
     renderer.forceContextLoss()
   }
   if (!report.resourcesReleased) throw new Error('Surface probe resources leaked')
+  return report
+}
+
+/** Exercise shader functions taken from the actual bound passes with their real uniforms. */
+function checkGeographicBindings(pair: ReturnType<typeof createEarthSurfaceMaterials>) {
+  const gpu = createGpuReadback()
+  const camera = new PerspectiveCamera()
+  const clouds = createEarthClouds(camera, createEarthAtmosphere().atmosphere)
+  // Every row/column differs, including both sides of the seam and polar rows.
+  const bytes = Uint8Array.from(Array.from({ length: 32 }, (_, i) => [32 + i * 6, 32 + i * 6, 32 + i * 6, 255]).flat())
+  const source = new DataTexture(bytes, 8, 4, RGBAFormat)
+  source.minFilter = source.magFilter = NearestFilter
+  source.needsUpdate = true
+  const maps = prepareRgbCloudTextures(source)
+  maps.weather.minFilter = maps.weather.magFilter = NearestFilter
+  const binding = bindCloudAppearance(clouds, createEarthCloudProfile(), maps)
+  const rotation = new Quaternion().setFromAxisAngle(new Vector3(1, 2, 3).normalize(), 0.63)
+  const translation = new Vector3(8e7, -5e7, 3e7)
+  const planet = new Matrix4().makeRotationFromQuaternion(rotation)
+  const worldToECEF = new Matrix4()
+  const farSource = pair.far.fragmentShader
+  const canonicalUv = farSource.match(/vec3 earthDirection[^]*?vec2 uv = [^;]+;/)![0]
+  const codec = farSource.slice(farSource.indexOf('struct RgbCloudSample'), farSource.indexOf('void main()'))
+  const sourceMap = pair.far.uniforms.earthCloudMap.value
+  const longitude = pair.far.uniforms.earthLongitudeOffset.value
+  pair.far.uniforms.earthCloudMap.value = source
+  pair.far.uniforms.earthLongitudeOffset.value = 0
+  const shadowData = new Float32Array(32 * 4)
+  for (let i = 0; i < 32; i++) {
+    const a = Math.sqrt((32 + i * 6) / 255)
+    shadowData.set([0, a, a, 0], i * 4)
+  }
+  const shadowMap = new DataArrayTexture(shadowData, 8, 4, 1)
+  shadowMap.type = FloatType
+  shadowMap.minFilter = shadowMap.magFilter = NearestFilter
+  shadowMap.needsUpdate = true
+  const descriptor: AtmosphereShadow = {
+    map: shadowMap,
+    mapSize: new Vector2(8, 4),
+    cascadeCount: 1,
+    intervals: [new Vector2(0, 1)],
+    matrices: [new Matrix4()],
+    inverseMatrices: [new Matrix4()],
+    far: 100000,
+    topHeight: 8000
+  }
+  const receiverSource = pair.near.fragmentShader
+  const receiverSample = () =>
+    gpu.run(
+      'vec2 uv=earthShadowGetShadowUv(probeWorld,0);float tau=earthShadowReadShadowOpticalDepth(uv,1.,0);gl_FragColor=vec4(tau,0.,0.,0.);',
+      `precision highp sampler2DArray;uniform mat4 earthShadowShadowMatrices[1];uniform sampler2DArray earthShadowShadowBuffer;uniform vec3 probeWorld;${extractShaderFunction(receiverSource, 'earthShadowGetShadowUv')}${extractShaderFunction(receiverSource, 'earthShadowReadShadowOpticalDepth')}`,
+      { ...pair.near.uniforms, probeWorld: { value: world } }
+    )
+  const point = new Vector3(),
+    world = new Vector3()
+  const report = { checks: 0, maxError: 0 }
+  let released = false
+  const check = (actual: number[], expected: number[], label: string) => {
+    const error = Math.max(...actual.map((value, i) => Math.abs(value - expected[i])))
+    if (!Number.isFinite(error) || error > 2 / 255)
+      throw new Error(`${label}: ${JSON.stringify({ actual, expected, error })}`)
+    report.maxError = Math.max(report.maxError, error)
+    report.checks++
+  }
+  const weatherDeclarations =
+    'struct WeatherSample {vec4 heightFraction;vec4 density;};uniform sampler2D localWeatherTexture;uniform vec4 minLayerHeights,maxLayerHeights,shapeAlteringBiases,shadowLayerMask;uniform mat3 cloudECEFToPlanet;uniform float cloudLongitudeOffset;uniform mat4 worldToECEFMatrix;uniform vec3 probeWorld;vec4 remapClamped(vec4 x,vec4 a,vec4 b){return clamp((x-a)/(b-a),0.,1.);}'
+  const sample = (pass: typeof clouds.cloudsPass | typeof clouds.shadowPass) => {
+    const material = pass.currentMaterial
+    const shader = material.fragmentShader
+    return gpu.run(
+      'vec2 uv=getGlobeUv((worldToECEFMatrix*vec4(probeWorld,1.)).xyz);gl_FragColor=sampleWeather(uv,6000.,0.).density;',
+      `${pass === clouds.shadowPass ? '#define SHADOW\n' : ''}${weatherDeclarations}${extractShaderFunction(shader, 'getGlobeUv')}${extractShaderFunction(shader, 'shapeAlteringFunction')}${extractShaderFunction(shader, 'sampleWeather')}`,
+      {
+        ...material.uniforms,
+        probeWorld: { value: world },
+        minLayerHeights: { value: new Vector4(4000, 0, 0, 0) },
+        maxLayerHeights: { value: new Vector4(8000, 1, 1, 1) },
+        shapeAlteringBiases: { value: new Vector4(1, 1, 1, 1) },
+        shadowLayerMask: { value: new Vector4(1, 0, 0, 0) }
+      }
+    )
+  }
+  try {
+    binding.setPlanetRotation(rotation)
+    let translationRejects = 0,
+      rotationRejects = 0,
+      receiverRejects = 0
+    for (const [u, v] of [
+      [0.001, 0.375],
+      [0.999, 0.625],
+      [0.1875, 0.999],
+      [0.6875, 0.001],
+      [0.4375, 0.625]
+    ]) {
+      const phi = u * Math.PI * 2,
+        theta = (1 - v) * Math.PI
+      point
+        .set(-Math.cos(phi) * Math.sin(theta), Math.cos(theta), Math.sin(phi) * Math.sin(theta))
+        .multiplyScalar(6366000)
+      world.copy(point).applyMatrix4(planet)
+      const baseline = sample(clouds.cloudsPass)
+      check(sample(clouds.shadowPass), baseline, 'cloud/shadow geographic marker')
+      const far = gpu.run(
+        `${canonicalUv}gl_FragColor=vec4(decodeRgbCloud(texture2D(earthCloudMap,uv).rgb).coverage,0.,0.,0.);`,
+        `#define PI 3.141592653589793\n#define PI2 6.283185307179586\nuniform vec3 vPosition;uniform float earthLongitudeOffset;uniform sampler2D earthCloudMap;${codec}`,
+        { ...pair.far.uniforms, vPosition: { value: point } }
+      )
+      check(baseline, far, 'far map / bound volume geography')
+      const shadowProjection = new Matrix4()
+        .makeScale(1e-8, 1e-8, 0)
+        .multiply(new Matrix4().makeRotationFromQuaternion(rotation.clone().invert()))
+      shadowProjection.elements[12] = 2 * u - 1 - point.x * 1e-8
+      shadowProjection.elements[13] = 2 * v - 1 - point.y * 1e-8
+      descriptor.matrices[0].copy(shadowProjection)
+      pair.bindShadow(descriptor)
+      pair.updateFrame({
+        camera,
+        planetMatrixWorld: planet,
+        worldToECEFMatrix: worldToECEF,
+        sunDirection: new Vector3(0, 0, 1),
+        resolution: new Vector2(1, 1),
+        frame: 0
+      })
+      check(receiverSample(), far, 'actual shadow receiver geographic marker')
+      planet.setPosition(translation)
+      worldToECEF.makeTranslation(-translation.x, -translation.y, -translation.z)
+      clouds.worldToECEFMatrix.copy(worldToECEF)
+      camera.position.copy(world).add(translation)
+      camera.updateMatrixWorld()
+      world.copy(point).applyMatrix4(planet)
+      descriptor.matrices[0].copy(shadowProjection).multiply(worldToECEF)
+      pair.updateFrame({
+        camera,
+        planetMatrixWorld: planet,
+        worldToECEFMatrix: worldToECEF,
+        sunDirection: new Vector3(0, 0, 1),
+        resolution: new Vector2(1, 1),
+        frame: 0
+      })
+      check(sample(clouds.cloudsPass), baseline, 'translated volume marker')
+      check(sample(clouds.shadowPass), baseline, 'translated shadow marker')
+      check(receiverSample(), far, 'translated actual receiver marker')
+      // Keep the mutation in force until the failed GPU sample has been asserted.
+      const original = worldToECEF.clone()
+      try {
+        clouds.worldToECEFMatrix.identity()
+        const broken = sample(clouds.cloudsPass)
+        if (Math.abs(broken[0] - baseline[0]) > 0.02) translationRejects++
+      } finally {
+        clouds.worldToECEFMatrix.copy(original)
+      }
+      const matrix = clouds.cloudsPass.currentMaterial.uniforms.cloudECEFToPlanet.value as Matrix3
+      const saved = matrix.clone()
+      try {
+        matrix.identity()
+        const broken = sample(clouds.cloudsPass)
+        if (Math.abs(broken[0] - baseline[0]) > 0.02) rotationRejects++
+      } finally {
+        matrix.copy(saved)
+      }
+      const receiverMatrix = pair.near.uniforms.earthShadowShadowMatrices.value[0] as Matrix4
+      const receiverSaved = receiverMatrix.clone()
+      try {
+        receiverMatrix.copy(shadowProjection)
+        if (Math.abs(receiverSample()[0] - far[0]) > 0.02) receiverRejects++
+      } finally {
+        receiverMatrix.copy(receiverSaved)
+      }
+      planet.setPosition(0, 0, 0)
+      worldToECEF.identity()
+      clouds.worldToECEFMatrix.identity()
+    }
+    if (!translationRejects || !rotationRejects || !receiverRejects)
+      throw new Error(
+        `Geographic negative controls escaped: ${translationRejects}/${rotationRejects}/${receiverRejects}`
+      )
+    report.checks += 3
+  } finally {
+    pair.far.uniforms.earthCloudMap.value = sourceMap
+    pair.far.uniforms.earthLongitudeOffset.value = longitude
+    pair.bindShadow(null)
+    binding.dispose()
+    maps.dispose()
+    source.dispose()
+    shadowMap.dispose()
+    clouds.dispose()
+    released = gpu.dispose()
+  }
+  if (!released) throw new Error('Geographic resources leaked')
   return report
 }
