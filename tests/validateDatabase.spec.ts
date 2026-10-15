@@ -795,6 +795,30 @@ describe('validateDatabase — обязательные числа', () => {
     expect(result.errors.filter((e) => /must be a finite number/.test(e.message))).toHaveLength(0)
   })
 
+  it.each([
+    ['parabolic eccentricity', { semiMajorAxis: 1, eccentricity: 1 }, /eccentricity must be less than 1 or greater than 1/],
+    ['negative eccentricity', { semiMajorAxis: 1, eccentricity: -0.01 }, /eccentricity must be non-negative/],
+    ['negative axis for ellipse', { semiMajorAxis: -1, eccentricity: 0.5 }, /semiMajorAxis must be positive for an ellipse/],
+    ['positive axis for hyperbola', { semiMajorAxis: 1, eccentricity: 1.5 }, /semiMajorAxis must be negative for a hyperbola/],
+    ['zero axis with nonzero eccentricity', { semiMajorAxis: 0, eccentricity: 0.5 }, /zero semiMajorAxis requires zero eccentricity/],
+    ['negative axis for circle', { semiMajorAxis: -1, eccentricity: 0 }, /semiMajorAxis must be positive for an ellipse/]
+  ])('rejects unsupported orbit domain: %s', (_name, patch, errorPattern) => {
+    const result = validateDatabase(withOrbit(patch))
+
+    expect(result.ok).toBe(false)
+    expect(result.errors.some((issue) => issue.collection === 'orbits' && issue.entity === 1 && errorPattern.test(issue.message))).toBe(true)
+  })
+
+  it.each([
+    ['stationary NullOrbit default', { semiMajorAxis: 0, eccentricity: 0 }],
+    ['ellipse approaching parabolic boundary', { semiMajorAxis: 1, eccentricity: 1 - Number.EPSILON }],
+    ['hyperbola approaching parabolic boundary', { semiMajorAxis: -1, eccentricity: 1 + Number.EPSILON }]
+  ])('accepts supported orbit domain: %s', (_name, patch) => {
+    const result = validateDatabase(withOrbit(patch))
+
+    expect(result.errors.filter((issue) => issue.collection === 'orbits')).toHaveLength(0)
+  })
+
   it('ловит null в физобъекте, вращении и размещении', () => {
     const db = baseSnapshot()
     db.actors.push(planet(11, 10))
