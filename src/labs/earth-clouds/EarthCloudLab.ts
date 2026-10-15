@@ -33,6 +33,7 @@ import {
 import type { EarthTextures } from './earthAssets'
 import { createEarthCloudProfile } from './earthCloudProfile'
 import { prepareRgbCloudTextures } from './earthCloudTextures'
+import { bindEarthCloudLighting } from './earthCloudLighting'
 import { createEarthSurfaceMaterials, type EarthSurfacePair } from './EarthSurfaceMaterial'
 import { EarthCloudComposer } from './EarthCloudComposer'
 import { EarthCloudState } from './earthCloudState'
@@ -180,6 +181,7 @@ export class EarthCloudLab {
             ? options.prepareCloudMaps(textures.clouds)
             : prepareRgbCloudTextures(textures.clouds, { color: resolved.config.layers[0].color })
           this.binding = bindCloudAppearance(this.clouds, resolved.config, this.appearance)
+          this.restorePasses.push(bindEarthCloudLighting(this.clouds, this.radius))
           this.clouds.shapeVelocity.set(0, 0, 0)
           setEarthCloudQuality(this.clouds, 'medium')
           this.clouds.skipRendering = true

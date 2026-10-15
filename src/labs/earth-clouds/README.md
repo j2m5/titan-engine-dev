@@ -201,6 +201,15 @@ it suppresses 64–80% of local radiance. This coefficient was not calibrated
 for Earth's per-metre medium. Genuine Beer attenuation, cloud shadows and
 atmospheric tint remain active, so white scattering preserves shaded/night clouds.
 
+Earth also converts integrated cloud radiance to the surface's normalized noon
+white, before the cloud's separate aerial perspective. Its fixed datum reference
+is `solar_irradiance * SUN_SPECTRAL_RADIANCE_TO_LUMINANCE * max(Tzenith(datum), .001) / PI`;
+the surface datum is the same radius in kilometres. Dividing by this RGB reference
+once preserves direct/sky/ground ratios and leaves alpha, shadows and atmospheric
+inscatter unchanged. This bridges the legacy surface white convention; angular
+transport, real cloud shadows, altitude and surface ambient differences still
+produce different far/near shading. It is not a fitted brightness gain.
+
 The source texture's flipY is baked into derived rows. Source wrapping, matrix
 and color space are preserved. The shared image reader keeps Jupiter's default
 1024-wide HTML image reduction and full-size byte DataTexture path.

@@ -92,6 +92,15 @@ export async function checkEarthLab(): Promise<EarthGpuProbeReport> {
       assert(uniforms.cloudConstantColor.value.equals(new Vector3(1, 1, 1)), 'Default Earth is not neutral white')
       assert(uniforms.cloudColorStrength.value === 1, 'Default Earth color strength')
       assert(clouds.powderScale === 0, 'Earth powder darkening enabled')
+      assert(
+        uniforms.earthLightingDatumKm?.value === Reflect.get(lab, 'materials').far.uniforms.uAtmoDatumRadius.value,
+        'Cloud reference datum differs from surface datum'
+      )
+      assert(
+        clouds.cloudsPass.currentMaterial.fragmentShader.split('radianceIntegral /= earthCloudReferenceWhite;')
+          .length === 2,
+        'Default Earth reference conversion missing or duplicated'
+      )
     }
     assertWhiteScattering()
     for (const quality of ['low', 'high', 'medium'] as const) {
