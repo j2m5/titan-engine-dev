@@ -126,7 +126,7 @@ const GenericForm: FC<GenericFormProps> = ({ spec, row, draft, onChange, onDelet
             key={field.key}
             label={field.label}
             value={value === null || value === undefined ? '' : String(value)}
-            placeholder={field.nullable ? '— none —' : undefined}
+            placeholder={field.nullable ? '— none —' : '— select —'}
             options={fkOptions(field.references, field.optionLabel, excludeId)}
             invalid={!field.nullable && (value === null || value === undefined)}
             onChange={(v) => update(field.key, v === '' ? null : Number(v))}
