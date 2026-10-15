@@ -35,7 +35,7 @@ function impostorOf(nebula: Nebula): NebulaImpostor {
 function bakedImpostor(camera: PerspectiveCamera): NebulaImpostor {
   const nebula = new Nebula(fakeRenderer, { size: 500 })
 
-  nebula.updateObject({ delta: 0, epoch: 0, elapsed: 0, camera })
+  nebula.updateView(camera)
 
   const impostor = impostorOf(nebula)
 

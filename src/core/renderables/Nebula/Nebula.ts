@@ -5,7 +5,6 @@ import { NebulaImpostor } from '@/core/renderables/Nebula/volume/NebulaImpostor'
 import { ImpostorBaker } from '@/core/renderables/Nebula/volume/ImpostorBaker'
 import { NebulaDensityBaker } from '@/core/renderables/Nebula/volume/NebulaDensityBaker'
 import { IMPOSTOR_FRAME_FILL, selectLOD } from '@/core/renderables/Nebula/volume/lod'
-import { UpdateContext } from '@/core/UpdateContext'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 
 const REBAKE_ANGLE = 0.15 // rad (~8.6°): rebake the impostor past this view-dir change
@@ -86,8 +85,10 @@ class Nebula extends Object3D {
     this.baker.invalidate()
   }
 
-  public updateObject(ctx: UpdateContext): void {
-    const camera = ctx.camera
+  /** Select and bake the representation after camera follow and collision. */
+  public updateView(camera: PerspectiveCamera): void {
+    // Projection runs before either renderer refreshes the camera matrices.
+    camera.updateWorldMatrix(true, false)
     const { blend } = selectLOD(this.projectedScreenRadius(camera), this.params.quality.forceLOD)
 
     const impostorVisible = blend < 1

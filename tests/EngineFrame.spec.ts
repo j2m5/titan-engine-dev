@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import '@/core/framework/TitanThree'
-import { Clock, Group, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three'
+import { Clock, Group, PerspectiveCamera, Scene, Vector2, Vector3, WebGLRenderer } from 'three'
 import type { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { Engine } from '@/core/Engine'
 import { SceneManager } from '@/core/services/SceneManager'
@@ -19,6 +19,9 @@ import { Star } from '@/core/renderables/Star'
 import { FakeStar } from '@/core/renderables/utils/FakeStar'
 import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { DAY } from '@/core/constants'
+import { Nebula } from '@/core/renderables/Nebula'
+import { NebulaVolume } from '@/core/renderables/Nebula/volume/NebulaVolume'
+import { NebulaImpostor } from '@/core/renderables/Nebula/volume/NebulaImpostor'
 
 /**
  * Стенд по образцу `EngineDispose.spec.ts`, но `renderer.domElement`/
@@ -219,6 +222,67 @@ describe('Engine: подключение периодического перес
     engine.start()
 
     expect(astroControls.setSurface).toHaveBeenCalledWith(surface)
+  })
+})
+
+describe('Engine: Nebula uses the final camera in the current frame', () => {
+  it.each([true, false])('selects the final LOD after follow and collision (ending near: %s)', (endingNear) => {
+    const scene = new Scene()
+    const manager = new SceneManager(
+      { update() {} } as unknown as MarkerManager,
+      { showOrbitLines: false } as Settings,
+      scene,
+      { eclipses: { update() {} } } as unknown as RenderableFactory
+    )
+    const frame = makeEngine(scene, manager)
+    const camera = frame.renderCamera
+    camera.fov = 50
+    camera.aspect = 16 / 9
+    camera.updateProjectionMatrix()
+    camera.position.set(0, 0, endingNear ? 1e6 : 800)
+    camera.updateMatrixWorld()
+    const bakeDirections: Vector3[] = []
+    const matricesAtBake: Vector3[] = []
+    const renderer = {
+      getSize: (v: Vector2) => v.set(1920, 1080),
+      getRenderTarget: () => null,
+      setRenderTarget() {},
+      getClearAlpha: () => 1,
+      setClearAlpha() {},
+      clear() {},
+      render: (_volume: NebulaVolume, bakeCamera: PerspectiveCamera) => {
+        bakeDirections.push(bakeCamera.position.clone().normalize())
+        matricesAtBake.push(new Vector3().setFromMatrixPosition(camera.matrixWorld))
+      }
+    } as unknown as WebGLRenderer
+    const nebula = new Nebula(renderer, { size: 500, quality: { bake3DTexture: false } })
+    scene.add(nebula)
+    const volume = nebula.children.find((child) => child instanceof NebulaVolume)!
+    const impostor = nebula.children.find((child) => child instanceof NebulaImpostor)!
+    frame.cameraController.updateFollow.mockImplementation(() => {
+      // Collision must cross the threshold after follow, before view selection.
+      camera.position.set(0, 0, endingNear ? 5e5 : 500)
+      return null
+    })
+    frame.cameraCollision.resolve.mockImplementation(() => {
+      camera.position.set(endingNear ? 0 : 1e6, 0, endingNear ? 800 : 0)
+      camera.rotation.set(0, endingNear ? 0 : Math.PI / 2, 0)
+    })
+
+    try {
+      frame.engine.start()
+
+      expect(volume.visible).toBe(endingNear)
+      expect(impostor.visible).toBe(!endingNear)
+      expect(bakeDirections).toHaveLength(endingNear ? 0 : 1)
+      if (!endingNear) {
+        expect(bakeDirections[0].distanceTo(new Vector3(1, 0, 0))).toBeLessThan(1e-10)
+        expect(matricesAtBake[0].distanceTo(camera.position)).toBeLessThan(1e-10)
+      }
+      expect(frame.postprocessing.render).toHaveBeenCalledOnce()
+    } finally {
+      nebula.dispose()
+    }
   })
 })
 

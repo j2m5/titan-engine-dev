@@ -42,10 +42,10 @@ describe('Nebula construction', () => {
     expect(hidden.length).toBe(1)
   })
 
-  it('updateObject runs without throwing', () => {
+  it('updateView runs without throwing', () => {
     const nebula = new Nebula(fakeRenderer)
     expect(() =>
-      nebula.updateObject({ delta: 0, epoch: 0, elapsed: 0, camera: new PerspectiveCamera() })
+      nebula.updateView(new PerspectiveCamera())
     ).not.toThrow()
   })
 

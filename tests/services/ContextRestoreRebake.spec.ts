@@ -162,7 +162,7 @@ describe('Восстановление контекста: одноразовы�
     camera.lookAt(0, 0, 0)
     camera.updateMatrixWorld()
 
-    const frame = (): void => nebula.updateObject({ delta: 0, epoch: 0, elapsed: 0, camera })
+    const frame = (): void => nebula.updateView(camera)
 
     frame()
     frame()
