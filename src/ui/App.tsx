@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { observer } from 'mobx-react-lite'
 import HomePage from '@/ui/components/layout/HomePage'
 import LoadingScreen from '@/ui/components/layout/LoadingScreen'
@@ -19,6 +19,12 @@ import { modalWindowStore } from '@/ui/mobx/ModalWindowStore'
 const App = observer(() => {
   const [currentTrackIndex, setCurrentTrackIndex] = useState(-1)
   const currentTrack: ITrack = audioPlayerStore.tracks[currentTrackIndex]
+  const audioWindowVisible = Boolean(engineStore.scenario)
+    && !engineStore.appLoadingStatus && modalWindowStore.audioPlayerWindowState
+
+  useEffect(() => {
+    if (audioWindowVisible) void audioPlayerStore.ensureMetadata()
+  }, [audioWindowVisible])
 
   const whenAppIsLoaded = (
     <>
