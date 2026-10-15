@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CubeTexture, DefaultLoadingManager, Scene, Texture } from 'three'
+import { CubeTexture, DefaultLoadingManager, ImageBitmapLoader, Scene, Texture } from 'three'
+import { ImageBitmapStrategy } from '@/core/textures/strategies/ImageBitmapStrategy'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { TextureBudget } from '@/core/streaming/TextureBudget'
@@ -85,12 +86,16 @@ describe('ResourceObserver primary cancellation', () => {
     await liveRun
     const assetCount = progress.setAsset.mock.calls.length
     const progressCount = progress.setProgress.mock.calls.length
-    const staleTexture = new Texture()
+    const close = vi.fn()
+    const bitmap = { width: 2, height: 2, close } as unknown as ImageBitmap
+    const strategy = new ImageBitmapStrategy({ loadAsync: async () => bitmap } as unknown as ImageBitmapLoader)
+    const staleTexture = await strategy.load({ paths: ['stale.png'], name: 'stale', params: {}, resourceType: 'diffuse' })
     staleTexture.name = texture.name
     const dispose = vi.spyOn(staleTexture, 'dispose')
     old.resolve({ ok: true, texture: staleTexture })
     await oldRun
     expect(dispose).toHaveBeenCalledOnce()
+    expect(close).toHaveBeenCalledOnce()
     expect(resourceStorage.getTexture(texture.name)).toBe(texture)
     expect(resourceStorage.getCountTextures()).toBe(1)
     expect(progress.setAsset).toHaveBeenCalledTimes(assetCount)

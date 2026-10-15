@@ -98,6 +98,7 @@ const probes = [
   ['/tests/star/cameraFinalization.gpu.ts', 'checkStarCameraFinalization'],
   ['/tests/star/prominences.gpu.ts', 'checkStarProminences'],
   ['/tests/graphic/stellarBloom.gpu.ts', 'checkStellarBloom'],
+  ['/tests/textures/ImageBitmapLifecycle.gpu.ts', 'checkImageBitmapLifecycle'],
 ];
 for (const [path, name] of probes) {
   const module = await import(path);
@@ -108,7 +109,7 @@ for (const [path, name] of probes) {
 }
 ```
 
-Context restoration tests in Vitest dispatch mocked DOM events. To check actual browser recovery, open a WebGL scenario, obtain its WebGL context from the renderer in the debugger, call `WEBGL_lose_context.loseContext()`, then `restoreContext()` and confirm the scene renders again. The GPU probes do not cover full application interaction or context-loss recovery.
+Context restoration tests in Vitest dispatch mocked DOM events. The ImageBitmap lifecycle GPU probe forces real context loss/restoration on an isolated renderer, verifies identical rendered pixels after source re-upload, and checks that final texture disposal closes the bitmap. It does not cover full application recovery. To check application recovery, open a WebGL scenario, obtain its WebGL context from the renderer in the debugger, call `WEBGL_lose_context.loseContext()`, then `restoreContext()` and confirm the scene renders again.
 
 ## Data editor
 

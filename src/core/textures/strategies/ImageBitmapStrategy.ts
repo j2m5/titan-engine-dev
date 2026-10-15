@@ -39,7 +39,17 @@ class ImageBitmapStrategy implements TextureLoadStrategy {
   public async load(request: TextureRequest): Promise<Texture> {
     const bitmap: ImageBitmap = await this.loader.loadAsync(Storage.url(request.paths[0]))
 
-    return new CanvasTexture(bitmap)
+    const texture = new CanvasTexture(bitmap)
+    // This app keeps Three.Cache disabled and shares this Texture between materials,
+    // never cloned Textures/Sources. The texture owns its bitmap; dispose is final
+    // release. Keep the source open through uploads and renderer context restoration.
+    const release = (): void => {
+      texture.removeEventListener('dispose', release)
+      bitmap.close()
+    }
+    texture.addEventListener('dispose', release)
+
+    return texture
   }
 }
 

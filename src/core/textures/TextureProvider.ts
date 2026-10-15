@@ -44,14 +44,17 @@ class TextureProvider {
       )
     }
 
+    let texture: Texture | undefined
     try {
-      const texture: Texture = await strategy.load(request)
+      texture = await strategy.load(request)
 
       applyTextureParameters(texture, request, this.renderer)
       this.renderer.initTexture(texture)
 
       return { ok: true, texture }
     } catch (cause) {
+      // Loading transferred ownership, but the caller never received this result.
+      if (texture && !PlaceholderTexture.isShared(texture)) texture.dispose()
       const error: Error = cause instanceof Error ? cause : new Error(String(cause))
 
       // Кубмапе заглушки нет: подменить CubeTexture обычной текстурой нечем,
