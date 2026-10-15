@@ -7,11 +7,12 @@ const probes = {
   maps: ['earthCloudTextures', 'checkEarthCloudTextures', 'earth-cloud-maps', 151],
   surface: ['earthSurface', 'checkEarthSurface', 'earth-surface', 62],
   composition: ['earthComposition', 'checkEarthComposition', 'earth-composition', 29],
+  lighting: ['earthCloudLighting', 'checkEarthCloudLighting', 'earth-cloud-lighting', 12],
   lifecycle: ['earthLab', 'checkEarthLab', 'earth-lifecycle', 163]
 }
 const args = process.argv.slice(2)
-if (args.length > 1 || args.some((arg) => !/^--probe=(maps|surface|composition|lifecycle|all)$/.test(arg)))
-  throw new Error('Supported probes: maps, surface, composition, lifecycle, all')
+if (args.length > 1 || args.some((arg) => !/^--probe=(maps|surface|composition|lighting|lifecycle|all)$/.test(arg)))
+  throw new Error('Supported probes: maps, surface, composition, lighting, lifecycle, all')
 const probe = args[0]?.split('=')[1] ?? 'all'
 const pageUrl = process.env.EARTH_CLOUD_LAB_URL ?? 'http://127.0.0.1:8086/earth-cloud-lab.html'
 const outputDir = resolve(dirname(fileURLToPath(import.meta.url)), '../tmpscreenshots/earth-cloud-lab')

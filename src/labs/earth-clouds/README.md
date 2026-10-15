@@ -26,11 +26,14 @@ before the next positive-weight frame. No volume warm-up runs in orbit.
 The depth adaptation analytically intersects the single spherical planet;
 additional terrain or meshes require a scene-depth solution.
 
-`npm run test:clouds:earth:gpu` runs maps, surface, composition and lifecycle probes,
+`npm run test:clouds:earth:gpu` runs maps, surface, composition, lighting and lifecycle probes,
 then exercises actual page controls, saves the five views/qualities/Sun states and
 two continuous descents, and measures RAF frame intervals. Explicit
-`--probe=maps|surface|composition|lifecycle|all` runs only the selected probes;
+`--probe=maps|surface|composition|lighting|lifecycle|all` runs only the selected probes;
 unknown names fail. Reports and PNGs live in `tmpscreenshots/earth-cloud-lab/`.
+The lighting probe checks the derived reference white and rejects omitted or
+double conversion. Run it alone with `node scripts/check-earth-cloud-lab.mjs --probe=lighting`;
+the default run and `--probe=all` include it automatically.
 
 The demo faces source UV `(0.08203125, 0.4140625)`, about 15°S, by rotating the
 planet and its cloud binding together. A decoded 64px source patch has coverage
