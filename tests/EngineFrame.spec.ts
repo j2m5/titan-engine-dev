@@ -127,6 +127,49 @@ function makeEngine(scene = new Scene(), manager?: SceneManager) {
 }
 
 describe('Engine: время кадра', () => {
+  it('freezes simulation and active elapsed across a stopped interval', () => {
+    let nowMs = 0
+    const now = vi.spyOn(performance, 'now').mockImplementation(() => nowMs)
+    const { engine, renderer, labelRenderer, sceneManager, simulationClock, renderClock } = makeEngine()
+
+    try {
+      engine.start()
+      nowMs = 16
+      engine.update()
+      engine.start()
+      nowMs = 100
+      const epochBeforePause = simulationClock.epoch
+      engine.stop()
+      engine.stop()
+
+      nowMs = 60_016
+      engine.start()
+      const resumedEpoch = simulationClock.epoch
+      nowMs = 60_032
+      engine.update()
+      engine.stop()
+      engine.dispose()
+      const epochBeforeReinitialize = simulationClock.epoch
+      nowMs = 120_032
+      engine.start()
+      const reinitializedEpoch = simulationClock.epoch
+      nowMs = 120_048
+      engine.update()
+
+      const contexts = vi.mocked(sceneManager.update).mock.calls.map(([ctx]) => ctx)
+      expect(resumedEpoch).toBe(epochBeforePause)
+      expect(reinitializedEpoch).toBe(epochBeforeReinitialize)
+      expect(contexts.map((ctx) => ctx.delta)).toEqual([0, 0.016, 0, 0.016, 0, 0.016])
+      expect(contexts.map((ctx) => ctx.elapsed)).toEqual([0, 0.016, 0.016, 0.032, 0.032, 0.048])
+      expect(renderClock.elapsedTime).toBeCloseTo(0.048, 12)
+    } finally {
+      engine.dispose()
+      renderer.domElement.remove()
+      labelRenderer.domElement.remove()
+      now.mockRestore()
+    }
+  })
+
   it.each([0, 4, 12])('учитывает всё время между кадрами при работе контролов %s мс', (workMs) => {
     let nowMs = 0
     const now = vi.spyOn(performance, 'now').mockImplementation(() => nowMs)
@@ -146,9 +189,9 @@ describe('Engine: время кадра', () => {
       engine.update()
 
       const contexts = vi.mocked(sceneManager.update).mock.calls.map(([ctx]) => ctx)
-      expect(contexts.map((ctx) => ctx.delta)).toEqual([0.016, 0.016, 0.016])
-      expect(contexts.map((ctx) => ctx.elapsed)).toEqual([0.016, 0.032, 0.048])
-      expect(simulationClock.epoch * DAY).toBeCloseTo(0.048, 12)
+      expect(contexts.map((ctx) => ctx.delta)).toEqual([0, 0.016, 0.016])
+      expect(contexts.map((ctx) => ctx.elapsed)).toEqual([0, 0.016, 0.032])
+      expect(simulationClock.epoch * DAY).toBeCloseTo(0.032, 12)
     } finally {
       engine.dispose()
       renderer.domElement.remove()

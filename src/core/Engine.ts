@@ -106,6 +106,9 @@ class Engine {
 
   public start(): void {
     if (!this.running) {
+      const elapsed = this.renderClock.elapsedTime
+      this.renderClock.start()
+      this.renderClock.elapsedTime = elapsed
       this.running = true
       if (!this.initialized) this.initialize()
 
@@ -115,6 +118,14 @@ class Engine {
 
   public stop(): void {
     this.renderer.setAnimationLoop(null)
+
+    if (this.running) {
+      const elapsed = this.renderClock.elapsedTime
+      this.renderClock.stop()
+      // Clock.stop() samples a partial frame. Keep elapsed aligned with deltas
+      // already delivered to the simulation.
+      this.renderClock.elapsedTime = elapsed
+    }
 
     this.running = false
   }
