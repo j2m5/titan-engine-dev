@@ -15,6 +15,7 @@ describe('Earth cloud adapter', () => {
     expect(resolveCloudConfig(profile, new Set([24, 26, 27, 91])).state).toBe('configured')
     expect(profile.farAppearance).toBe('surface-map')
     expect(profile.layers).toHaveLength(1)
+    expect(profile.layers[0].color).toEqual({ kind: 'constant', srgb: [1, 1, 1] })
     for (const [height, weight] of [
       [20000000, 0],
       [150000, 0],
@@ -106,6 +107,7 @@ describe('Earth cloud adapter', () => {
           minSecondaryStepSize: 100,
           maxIterationCountToSun: sunSteps
         })
+        expect(clouds.powderScale).toBe(0)
         expect(clouds.lightShafts).toBe(false)
         expect(clouds.haze).toBe(false)
         expect(clouds.turbulence).toBe(false)

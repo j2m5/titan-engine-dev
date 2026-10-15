@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { DataTexture, Texture, RGBAFormat, SRGBColorSpace, NoColorSpace } from 'three'
+import { Color, DataTexture, Texture, RGBAFormat, SRGBColorSpace, NoColorSpace } from 'three'
 import { decodeRgbCloud } from '@/labs/earth-clouds/rgbCloudMap'
 import { prepareRgbCloudTextures } from '@/labs/earth-clouds/earthCloudTextures'
 import { readCloudImagePixels } from '@/labs/planet-clouds/cloudImagePixels'
@@ -9,6 +9,45 @@ import { createEarthCloudProfile } from '@/labs/earth-clouds/earthCloudProfile'
 const texture = (values: number[], width: number, height: number) =>
   new DataTexture(new Uint8Array(values.flatMap((x) => [x, x, x, 255])), width, height, RGBAFormat)
 describe('Earth RGB cloud preparation', () => {
+  it('selects white scattering without changing weather or owning a color map', () => {
+    const source = texture([0, 64, 128, 255], 2, 2)
+    source.colorSpace = SRGBColorSpace
+    const original = vi.spyOn(source, 'dispose')
+    const mapped = prepareRgbCloudTextures(source, { maxWidth: 1 })
+    const white = prepareRgbCloudTextures(source, { maxWidth: 1, color: { kind: 'constant', srgb: [1, 1, 1] } })
+    expect(white.weather.image.data).toEqual(mapped.weather.image.data)
+    expect(white.color).toBeNull()
+    expect(white.constantColorLinear).toEqual([1, 1, 1])
+    expect(white.colorStrength).toBe(1)
+    const weather = vi.spyOn(white.weather, 'dispose')
+    white.dispose()
+    white.dispose()
+    expect(weather).toHaveBeenCalledTimes(1)
+    expect(original).not.toHaveBeenCalled()
+    mapped.dispose()
+    source.dispose()
+  })
+  it('converts constants once and gives explicit color precedence over legacy strength', () => {
+    const source = texture([128], 1, 1)
+    const constant = prepareRgbCloudTextures(source, {
+      color: { kind: 'constant', srgb: [0.25, 0.5, 0.75] },
+      colorStrength: 0.1
+    })
+    expect(constant.constantColorLinear).toEqual(new Color().setRGB(0.25, 0.5, 0.75, SRGBColorSpace).toArray())
+    expect(constant.colorStrength).toBe(1)
+    const mapped = prepareRgbCloudTextures(source, {
+      color: { kind: 'map', map: { resourceId: 26 }, strength: 0.6 },
+      colorStrength: 0.1
+    })
+    const legacy = prepareRgbCloudTextures(source, { colorStrength: 0.2 })
+    expect(mapped.color!.image.data).toEqual(legacy.color!.image.data)
+    expect(mapped.colorStrength).toBe(0.6)
+    expect(legacy.colorStrength).toBe(0.2)
+    constant.dispose()
+    mapped.dispose()
+    legacy.dispose()
+    source.dispose()
+  })
   it('decodes before reduction', () => {
     const source = texture([0, 255], 2, 1)
     source.colorSpace = SRGBColorSpace

@@ -99,11 +99,11 @@ intervals. GPU: ANGLE / AMD Radeon(TM) Graphics (0x1638), Direct3D11. No build o
 second GPU suite ran concurrently. These are whole-frame intervals including
 VSync and scheduling, not GPU timings or a universal performance threshold.
 
-| View | Median interval (ms) | p95 interval (ms) | Δ frames/cloud/shadow/far/near |
-| --- | ---: | ---: | --- |
-| Orbit, 20000km | 16.7 | 16.8 | 120 / 0 / 0 / 120 / 0 |
-| Transition, 110km | 33.4 | 50.1 | 120 / 120 / 120 / 120 / 120 |
-| Above, 12km | 66.8 | 83.5 | 120 / 120 / 120 / 0 / 120 |
+| View              | Median interval (ms) | p95 interval (ms) | Δ frames/cloud/shadow/far/near |
+| ----------------- | -------------------: | ----------------: | ------------------------------ |
+| Orbit, 20000km    |                 16.7 |              16.8 | 120 / 0 / 0 / 120 / 0          |
+| Transition, 110km |                 33.4 |              50.1 | 120 / 120 / 120 / 120 / 120    |
+| Above, 12km       |                 66.8 |              83.5 | 120 / 120 / 120 / 0 / 120      |
 
 First-use shader compilation can pause the page: the first approach capture's
 telemetry showed 4838.1ms and the first low-quality switch 2552.5ms. Those samples
@@ -185,11 +185,21 @@ if any asset fails. Its returned `dispose` is idempotent and deduplicates textur
 once, decodes coverage as `sqrt(mean(linearRGB))`, and computes linear albedo as
 `min(linearRGB / max(coverage, 1e-4), 1)`. It averages decoded fields using area
 overlap before quantizing to bytes. The default maximum width is 2048, so the
-8192 × 4096 cloud source produces 2048 × 1024 weather/color maps. It never
-upscales. The original source remains owned by its loader; preparation owns only
-its two derived textures. Weather R is coverage and its other channels are zero.
-Color RGB is linear albedo and alpha is 255. Derived maps have NoColorSpace,
+8192 × 4096 cloud source produces a 2048 × 1024 weather map. It never
+upscales. Earth's resolved profile selects constant white scattering, converted
+from sRGB once; preparation owns only weather and returns no color texture.
+Omitting the color option retains derived map preparation. Explicit map color
+uses the supplied source RGB and its declared strength; explicit color overrides
+the legacy colorStrength option. Map mode owns both derived textures.
+Weather R is coverage and its other channels are zero. Derived color RGB is
+linear albedo and alpha is 255. Derived maps have NoColorSpace,
 flipY=false, repeated longitude, clamped latitude, mipmaps and linear filtering.
+
+Earth disables the inherited artistic powder factor
+`1 - .8 * exp(-extinction * 150)`: at Earth's maximum extinction .0015/m,
+it suppresses 64–80% of local radiance. This coefficient was not calibrated
+for Earth's per-metre medium. Genuine Beer attenuation, cloud shadows and
+atmospheric tint remain active, so white scattering preserves shaded/night clouds.
 
 The source texture's flipY is baked into derived rows. Source wrapping, matrix
 and color space are preserved. The shared image reader keeps Jupiter's default

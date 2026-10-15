@@ -176,7 +176,9 @@ export class EarthCloudLab {
           this.clouds.shapeTexture = this.noise.shape
           this.clouds.shapeDetailTexture = this.noise.detail
           this.clouds.stbnTexture = this.noise.noise
-          this.appearance = (options.prepareCloudMaps ?? prepareRgbCloudTextures)(textures.clouds)
+          this.appearance = options.prepareCloudMaps
+            ? options.prepareCloudMaps(textures.clouds)
+            : prepareRgbCloudTextures(textures.clouds, { color: resolved.config.layers[0].color })
           this.binding = bindCloudAppearance(this.clouds, resolved.config, this.appearance)
           this.clouds.shapeVelocity.set(0, 0, 0)
           setEarthCloudQuality(this.clouds, 'medium')

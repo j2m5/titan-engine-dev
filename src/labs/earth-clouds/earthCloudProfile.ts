@@ -17,7 +17,7 @@ export function createEarthCloudProfile(): EnabledCloudConfig {
           map: { resourceId: 26 },
           decode: { channel: 'r', inputRange: [0, 1], exponent: 1, invert: false, sampleSpace: 'linear' }
         },
-        color: { kind: 'map', map: { resourceId: 26 }, strength: 1 },
+        color: { kind: 'constant', srgb: [1, 1, 1] },
         detail: { seed: 0x45617274, shapeScaleMeters: 12000, erosionScaleMeters: 1200, erosionStrength: 0.35 },
         castsShadow: true
       }

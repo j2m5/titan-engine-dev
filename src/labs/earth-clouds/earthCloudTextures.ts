@@ -6,26 +6,34 @@ import {
   RepeatWrapping,
   ClampToEdgeWrapping,
   LinearMipmapLinearFilter,
-  LinearFilter
+  LinearFilter,
+  Color,
+  SRGBColorSpace
 } from 'three'
+import type { CloudColor } from '@/core/clouds/CloudConfig'
 import { readCloudImagePixels } from '@/labs/planet-clouds/cloudImagePixels'
 import type { CloudAppearanceTextures } from '@/labs/jupiter-clouds/cloudAppearanceTextures'
 import { decodeRgbCloud } from './rgbCloudMap'
 
 export function prepareRgbCloudTextures(
   source: Texture,
-  options: { maxWidth?: number; colorStrength?: number } = {}
+  options: { maxWidth?: number; colorStrength?: number; color?: CloudColor } = {}
 ): CloudAppearanceTextures {
   const maxWidth = options.maxWidth ?? 2048
-  const colorStrength = options.colorStrength ?? 1
+  const choice = options.color
+  const colorStrength = choice ? (choice.kind === 'map' ? choice.strength : 1) : (options.colorStrength ?? 1)
   if (!Number.isInteger(maxWidth) || maxWidth <= 0) throw new RangeError('Invalid cloud maxWidth')
   if (!Number.isFinite(colorStrength) || colorStrength < 0 || colorStrength > 1)
     throw new RangeError('Invalid cloud colorStrength')
+  if (choice?.kind === 'constant' && choice.srgb.some((value) => !Number.isFinite(value) || value < 0 || value > 1))
+    throw new RangeError('Invalid cloud constant color')
+  const linear = choice?.kind === 'constant' ? new Color().setRGB(...choice.srgb, SRGBColorSpace) : new Color(1, 1, 1)
+  const constantColorLinear: [number, number, number] = [linear.r, linear.g, linear.b]
   const { bytes, width: sw, height: sh, space } = readCloudImagePixels(source, null)
   const dw = Math.min(sw, maxWidth),
     dh = Math.max(1, Math.round((sh * dw) / sw))
   const weatherBytes = new Uint8Array(dw * dh * 4),
-    colorBytes = new Uint8Array(dw * dh * 4)
+    colorBytes = choice?.kind === 'constant' ? null : new Uint8Array(dw * dh * 4)
   const overlap = (a0: number, a1: number, b0: number, b1: number) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0))
   for (let y = 0; y < dh; y++)
     for (let x = 0; x < dw; x++) {
@@ -42,13 +50,15 @@ export function prepareRgbCloudTextures(
             at = (row * sw + sx) * 4
           const decoded = decodeRgbCloud([bytes[at] / 255, bytes[at + 1] / 255, bytes[at + 2] / 255], space)
           sums[0] += decoded.coverage * weight
-          for (let c = 0; c < 3; c++) sums[c + 1] += decoded.albedo[c] * weight
+          if (colorBytes) for (let c = 0; c < 3; c++) sums[c + 1] += decoded.albedo[c] * weight
           area += weight
         }
       const at = (y * dw + x) * 4
       weatherBytes[at] = Math.round((255 * sums[0]) / area)
-      for (let c = 0; c < 3; c++) colorBytes[at + c] = Math.round((255 * sums[c + 1]) / area)
-      colorBytes[at + 3] = 255
+      if (colorBytes) {
+        for (let c = 0; c < 3; c++) colorBytes[at + c] = Math.round((255 * sums[c + 1]) / area)
+        colorBytes[at + 3] = 255
+      }
     }
   const make = (data: Uint8Array) => {
     const texture = new DataTexture(data, dw, dh, RGBAFormat)
@@ -63,18 +73,18 @@ export function prepareRgbCloudTextures(
     return texture
   }
   const weather = make(weatherBytes),
-    color = make(colorBytes)
+    color = colorBytes ? make(colorBytes) : null
   let disposed = false
   return {
     weather,
     color,
-    constantColorLinear: [1, 1, 1],
+    constantColorLinear,
     colorStrength,
     dispose() {
       if (disposed) return
       disposed = true
       weather.dispose()
-      color.dispose()
+      color?.dispose()
     }
   }
 }

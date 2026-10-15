@@ -58,6 +58,8 @@ export function setEarthCloudQuality(clouds: CloudsEffect, quality: EarthCloudQu
   clouds.lightShafts = false
   clouds.haze = false
   clouds.turbulence = false
+  // The inherited powder exponent is not calibrated for Earth's per-metre extinction.
+  clouds.powderScale = 0
   clouds.shadow.maxFar = 200000
 }
 

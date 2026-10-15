@@ -71,7 +71,8 @@ export async function checkEarthLab(): Promise<EarthGpuProbeReport> {
       Reflect.get(lab, 'appearance').weather,
       Reflect.get(lab, 'appearance').color,
       Reflect.get(lab, 'geometry')
-    ]
+    ].filter((resource) => resource !== null)
+    const originalResourceCount = resources.length
     const disposals = resources.map(() => 0)
     resources.forEach((resource, i) => resource.addEventListener('dispose', () => disposals[i]++))
     const assert = (condition: boolean, label: string) => {
@@ -84,6 +85,19 @@ export async function checkEarthLab(): Promise<EarthGpuProbeReport> {
       return lab.getStats()
     }
     const renderer = Reflect.get(lab, 'renderer') as WebGLRenderer
+    const assertWhiteScattering = () => {
+      const clouds = Reflect.get(lab, 'clouds')
+      const uniforms = clouds.cloudsPass.currentMaterial.uniforms
+      assert(uniforms.cloudUseColorMap.value === false, 'Default Earth still uses color map')
+      assert(uniforms.cloudConstantColor.value.equals(new Vector3(1, 1, 1)), 'Default Earth is not neutral white')
+      assert(uniforms.cloudColorStrength.value === 1, 'Default Earth color strength')
+      assert(clouds.powderScale === 0, 'Earth powder darkening enabled')
+    }
+    assertWhiteScattering()
+    for (const quality of ['low', 'high', 'medium'] as const) {
+      lab.setQuality(quality)
+      assertWhiteScattering()
+    }
     const deletedHandles = new Map<object, number>()
     const restoreDeletes: (() => void)[] = []
     const targetLabels: string[] = []
@@ -432,13 +446,13 @@ export async function checkEarthLab(): Promise<EarthGpuProbeReport> {
       // postprocessing calls inputBuffer.dispose once more while detaching its
       // depth texture after deallocation. Count actual WebGL handle deletions.
       report.resourcesReleased =
-        disposals.slice(0, 7).every((count) => count === 1) &&
-        disposals.slice(7).every((count) => count >= 1) &&
+        disposals.slice(0, originalResourceCount).every((count) => count === 1) &&
+        disposals.slice(originalResourceCount).every((count) => count >= 1) &&
         Array.from(deletedHandles.values()).every((count) => count === 1) &&
         deletedHandles.size > 0 &&
         renderer.info.memory.textures === 0
       Object.assign(report, {
-        targetDisposals: targetLabels.map((name, i) => ({ name, events: disposals[i + 7] })),
+        targetDisposals: targetLabels.map((name, i) => ({ name, events: disposals[i + originalResourceCount] })),
         deletedGpuHandles: deletedHandles.size
       })
       restoreDeletes.forEach((restore) => restore())
