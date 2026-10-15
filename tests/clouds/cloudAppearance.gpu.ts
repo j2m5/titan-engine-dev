@@ -72,9 +72,9 @@ export async function checkCloudAppearance(useAdapter = true): Promise<CloudAppe
   texture.minFilter = texture.magFilter = NearestFilter
   texture.needsUpdate = true
   let maps:
-    | ReturnType<typeof import('@/labs/jupiter-clouds/cloudAppearanceTextures').prepareCloudAppearanceTextures>
+    | ReturnType<typeof import('@/core/clouds/appearance/cloudAppearanceTextures').prepareCloudAppearanceTextures>
     | undefined
-  let binding: ReturnType<typeof import('@/labs/jupiter-clouds/cloudAppearance').bindCloudAppearance> | undefined
+  let binding: ReturnType<typeof import('@/core/clouds/appearance/cloudAppearance').bindCloudAppearance> | undefined
   const target = new WebGLRenderTarget(1, 1, { depthBuffer: false })
   const geometry = new PlaneGeometry(2, 2)
   const material = new RawShaderMaterial({
@@ -99,7 +99,13 @@ export async function checkCloudAppearance(useAdapter = true): Promise<CloudAppe
     mappedControlError: 0,
     resourcesReleased: false
   }
-  const run = (body: string, declarations: string, uniforms: RawShaderMaterial['uniforms'], width = 1, height = 1): number[] => {
+  const run = (
+    body: string,
+    declarations: string,
+    uniforms: RawShaderMaterial['uniforms'],
+    width = 1,
+    height = 1
+  ): number[] => {
     for (const [name, uniform] of Object.entries(uniforms)) {
       if (material.uniforms[name]) material.uniforms[name].value = uniform.value
       else material.uniforms[name] = { value: uniform.value }
@@ -118,8 +124,8 @@ export async function checkCloudAppearance(useAdapter = true): Promise<CloudAppe
     const config = validCloudConfig()
     config.mapping.longitudeOffsetRadians = 0.23
     if (useAdapter) {
-      const texturesPath = '/src/labs/jupiter-clouds/cloudAppearanceTextures.ts'
-      const adapterPath = '/src/labs/jupiter-clouds/cloudAppearance.ts'
+      const texturesPath = '/src/core/clouds/appearance/cloudAppearanceTextures.ts'
+      const adapterPath = '/src/core/clouds/appearance/cloudAppearance.ts'
       const preparation = await import(/* @vite-ignore */ texturesPath)
       const adapter = await import(/* @vite-ignore */ adapterPath)
       const prepared: NonNullable<typeof maps> = preparation.prepareCloudAppearanceTextures(
@@ -274,9 +280,10 @@ export async function checkCloudAppearance(useAdapter = true): Promise<CloudAppe
     // nearest mip selection therefore reads independently populated level one.
     const mipTexture = new DataTexture(new Uint8Array(64 * 32 * 4), 64, 32, RGBAFormat)
     mipTexture.mipmaps = Array.from({ length: 7 }, (_, level) => {
-      const width = Math.max(1, 64 >> level), height = Math.max(1, 32 >> level)
+      const width = Math.max(1, 64 >> level),
+        height = Math.max(1, 32 >> level)
       const data = new Uint8Array(width * height * 4)
-      for (let i = 0; i < data.length; i += 4) data.set([Math.round(255 * level / 6), 0, 0, 255], i)
+      for (let i = 0; i < data.length; i += 4) data.set([Math.round((255 * level) / 6), 0, 0, 255], i)
       return { data, width, height }
     })
     mipTexture.minFilter = NearestMipmapNearestFilter
@@ -297,18 +304,28 @@ export async function checkCloudAppearance(useAdapter = true): Promise<CloudAppe
             vec2 uv=getGlobeUv(vec3(-cos(phi),0.,sin(phi))); float mip=getMipLevel(uv);
             result=vec4(mip/8.,sampleWeather(uv,.5,mip).density.r,0.,1.);`
           const uniforms = {
-            localWeatherTexture: { value: mipTexture }, cloudECEFToPlanet: { value: new Matrix3() },
-            cloudLongitudeOffset: { value: 0 }, probeLongitude: { value: longitude },
-            minLayerHeights: { value: new Vector4(0, 0, 0, 0) }, maxLayerHeights: { value: new Vector4(1, 1, 1, 1) },
-            shapeAlteringBiases: { value: new Vector4(1, 1, 1, 1) }, shadowLayerMask: { value: new Vector4(1, 0, 0, 0) }
+            localWeatherTexture: { value: mipTexture },
+            cloudECEFToPlanet: { value: new Matrix3() },
+            cloudLongitudeOffset: { value: 0 },
+            probeLongitude: { value: longitude },
+            minLayerHeights: { value: new Vector4(0, 0, 0, 0) },
+            maxLayerHeights: { value: new Vector4(1, 1, 1, 1) },
+            shapeAlteringBiases: { value: new Vector4(1, 1, 1, 1) },
+            shadowLayerMask: { value: new Vector4(1, 0, 0, 0) }
           }
           const pixels = run(body, declarations, uniforms, 4, 2)
           const expectedMip = Math.log2(64 * 0.04) / 8
           for (let i = 0; i < pixels.length; i += 4) {
-            report.maxSeamMipError = Math.max(report.maxSeamMipError, Math.abs(pixels[i] - expectedMip), Math.abs(pixels[i + 1] - 43 / 255))
+            report.maxSeamMipError = Math.max(
+              report.maxSeamMipError,
+              Math.abs(pixels[i] - expectedMip),
+              Math.abs(pixels[i + 1] - 43 / 255)
+            )
           }
           // Fault control: removing the alternate longitude derivatives overestimates seam LOD.
-          const faulty = declarations.replace('min(abs(dxA.x), abs(dxB.x))', 'abs(dxA.x)').replace('min(abs(dyA.x), abs(dyB.x))', 'abs(dyA.x)')
+          const faulty = declarations
+            .replace('min(abs(dxA.x), abs(dxB.x))', 'abs(dxA.x)')
+            .replace('min(abs(dyA.x), abs(dyB.x))', 'abs(dyA.x)')
           const control = run(body, faulty, uniforms, 4, 2)
           report.seamControlError = Math.max(report.seamControlError, Math.abs(control[0] - expectedMip))
         }
@@ -350,10 +367,19 @@ export async function checkCloudAppearance(useAdapter = true): Promise<CloudAppe
     mappedTexture.needsUpdate = true
     try {
       const body = `MediaSample media; media.scattering=1.; media.extinction=1.; vec2 uv=vec2(.5); float mipLevel=0.,stepSize=1.; vec3 radiance=vec3(1.),radianceIntegral=vec3(0.); float transmittanceIntegral=1.; ${multiply} ${integral} result=vec4(radianceIntegral,1.-transmittanceIntegral);`
-      const declarations = 'struct MediaSample{float scattering;float extinction;}; uniform bool cloudUseColorMap; uniform sampler2D cloudColorTexture; uniform vec3 cloudConstantColor; uniform float cloudColorStrength,cloudColorMipBias;'
-      const uniforms = { cloudUseColorMap: { value: true }, cloudColorTexture: { value: mappedTexture }, cloudConstantColor: { value: new Vector3(1, 1, 1) }, cloudColorStrength: { value: 0.75 }, cloudColorMipBias: { value: 0 } }
+      const declarations =
+        'struct MediaSample{float scattering;float extinction;}; uniform bool cloudUseColorMap; uniform sampler2D cloudColorTexture; uniform vec3 cloudConstantColor; uniform float cloudColorStrength,cloudColorMipBias;'
+      const uniforms = {
+        cloudUseColorMap: { value: true },
+        cloudColorTexture: { value: mappedTexture },
+        cloudConstantColor: { value: new Vector3(1, 1, 1) },
+        cloudColorStrength: { value: 0.75 },
+        cloudColorMipBias: { value: 0 }
+      }
       const expectedAlpha = 1 - Math.exp(-1)
-      const expected = [128, 64, 192].map(byte => expectedAlpha * (0.25 + 0.75 * Math.pow((byte / 255 + 0.055) / 1.055, 2.4)))
+      const expected = [128, 64, 192].map(
+        (byte) => expectedAlpha * (0.25 + 0.75 * Math.pow((byte / 255 + 0.055) / 1.055, 2.4))
+      )
       const output = run(body, declarations, uniforms)
       report.maxMappedColorError = Math.max(...expected.map((value, i) => Math.abs(output[i] - value)))
       report.maxAlphaDifference = Math.max(report.maxAlphaDifference, Math.abs(output[3] - expectedAlpha))

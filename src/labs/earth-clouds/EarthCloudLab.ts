@@ -19,10 +19,10 @@ import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/Atmosphere
 import { resolveCloudConfig } from '@/core/clouds/validateCloudConfig'
 import { cloudShellDistance, cloudVolumeOpacity } from '@/core/clouds/cloudLod'
 import { CloudFlight, type CloudView } from '@/labs/jupiter-clouds/CloudFlight'
-import { createCloudTextures } from '@/labs/jupiter-clouds/cloudTextures'
+import { createCloudTextures } from '@/core/clouds/takram/cloudTextures'
 import { applyAnalyticPlanetDepth, PlanetAerialPerspectiveEffect } from '@/labs/jupiter-clouds/planetDepth'
-import { bindCloudAppearance, type CloudAppearanceBinding } from '@/labs/jupiter-clouds/cloudAppearance'
-import type { CloudAppearanceTextures } from '@/labs/jupiter-clouds/cloudAppearanceTextures'
+import { bindCloudAppearance, type CloudAppearanceBinding } from '@/core/clouds/appearance/cloudAppearance'
+import type { CloudAppearanceTextures } from '@/core/clouds/appearance/cloudAppearanceTextures'
 import {
   createEarthAtmosphere,
   createEarthClouds,
@@ -32,7 +32,7 @@ import {
 } from './EarthCloudAdapter'
 import type { EarthTextures } from './earthAssets'
 import { createEarthCloudProfile } from '@/core/clouds/profiles/earthCloudProfile'
-import { prepareRgbCloudTextures } from './earthCloudTextures'
+import { prepareCloudSource } from '@/core/clouds/appearance/prepareCloudSource'
 import { bindEarthCloudLighting } from './earthCloudLighting'
 import { createEarthSurfaceMaterials, type EarthSurfacePair } from './EarthSurfaceMaterial'
 import { EarthCloudComposer } from './EarthCloudComposer'
@@ -177,20 +177,13 @@ export class EarthCloudLab {
           this.clouds.shapeTexture = this.noise.shape
           this.clouds.shapeDetailTexture = this.noise.detail
           this.clouds.stbnTexture = this.noise.noise
-          this.appearance = options.prepareCloudMaps
-            ? options.prepareCloudMaps(textures.clouds)
-            : prepareRgbCloudTextures(textures.clouds, { color: resolved.config.layers[0].color })
-          // RGB preparation already produced scalar weather; keep the source descriptor intact.
-          const bindingConfig = structuredClone(resolved.config)
-          const sourcePattern = bindingConfig.layers[0].pattern
-          if (sourcePattern.kind !== 'mask') throw new Error('Expected an Earth cloud mask')
-          bindingConfig.layers[0].pattern = {
-            kind: 'mask',
-            encoding: 'scalar',
-            map: sourcePattern.map,
-            decode: { channel: 'r', inputRange: [0, 1], exponent: 1, invert: false, sampleSpace: 'linear' }
+          const prepared = prepareCloudSource(resolved.config, () => textures.clouds)
+          this.appearance = prepared.textures
+          if (options.prepareCloudMaps) {
+            prepared.dispose()
+            this.appearance = options.prepareCloudMaps(textures.clouds)
           }
-          this.binding = bindCloudAppearance(this.clouds, bindingConfig, this.appearance)
+          this.binding = bindCloudAppearance(this.clouds, prepared.config, this.appearance)
           this.restorePasses.push(bindEarthCloudLighting(this.clouds, this.radius))
           this.clouds.shapeVelocity.set(0, 0, 0)
           setEarthCloudQuality(this.clouds, 'medium')

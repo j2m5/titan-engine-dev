@@ -10,8 +10,12 @@ import {
   SRGBColorSpace,
   Texture
 } from 'three'
-import { readCloudImagePixels } from '@/labs/planet-clouds/cloudImagePixels'
-import type { CloudLayerConfig } from '@/core/clouds/CloudConfig'
+import {
+  readCloudImagePixels,
+  reduceCloudPixels,
+  createCloudTextureView
+} from '@/core/clouds/appearance/cloudImagePixels'
+import type { CloudColor, CloudLayerConfig } from '@/core/clouds/CloudConfig'
 import { coverageFromScalar, decodeCloudScalar } from '@/core/clouds/cloudPatternMath'
 
 export type CloudTextureResolver = (resourceId: number) => Texture | undefined
@@ -21,6 +25,31 @@ export type CloudAppearanceTextures = {
   constantColorLinear: readonly [number, number, number]
   colorStrength: number
   dispose(): void
+}
+
+export function prepareCloudColor(
+  choice: CloudColor,
+  resolveTexture: CloudTextureResolver
+): Pick<CloudAppearanceTextures, 'color' | 'constantColorLinear' | 'colorStrength'> {
+  const constant = new Color()
+  let color: Texture | null = null
+  if (choice.kind === 'map') {
+    const source = resolveTexture(choice.map.resourceId)
+    if (!source) throw new Error(`Cloud texture resource ${choice.map.resourceId} is unavailable`)
+    readCloudImagePixels(source)
+    color = createCloudTextureView(source)
+    color.wrapS = RepeatWrapping
+    color.wrapT = ClampToEdgeWrapping
+    color.minFilter = LinearMipmapLinearFilter
+    color.magFilter = LinearFilter
+    color.generateMipmaps = true
+    color.needsUpdate = true
+  } else constant.setRGB(...choice.srgb, SRGBColorSpace)
+  return {
+    color,
+    constantColorLinear: [constant.r, constant.g, constant.b],
+    colorStrength: choice.kind === 'map' ? choice.strength : 1
+  }
 }
 
 export function prepareCloudAppearanceTextures(
@@ -40,18 +69,24 @@ export function prepareCloudAppearanceTextures(
     color: Texture | null = null
   try {
     const original = resource(layer.pattern.map.resourceId)
-    const { bytes, width, height, space } = readCloudImagePixels(original)
-    const output = new Uint8Array(width * height * 4)
-    for (let y = 0; y < height; y++)
-      for (let x = 0; x < width; x++) {
-        const from = ((original.flipY ? height - y - 1 : y) * width + x) * 4
+    const { bytes, width: sw, height: sh, space } = readCloudImagePixels(original)
+    const width = original instanceof DataTexture ? sw : Math.min(sw, 1024)
+    const height = Math.max(1, Math.round((sh * width) / sw))
+    const output = reduceCloudPixels(
+      sw,
+      sh,
+      width,
+      height,
+      (from) => {
         const scalar = decodeCloudScalar(
           [bytes[from] / 255, bytes[from + 1] / 255, bytes[from + 2] / 255, bytes[from + 3] / 255],
           pattern.decode,
           space
         )
-        output[(y * width + x) * 4] = Math.round(255 * coverageFromScalar(scalar, pattern))
-      }
+        return [coverageFromScalar(scalar, pattern)]
+      },
+      1
+    )
     weather = new DataTexture(output, width, height, RGBAFormat)
     weather.colorSpace = NoColorSpace
     weather.wrapS = RepeatWrapping
@@ -61,25 +96,13 @@ export function prepareCloudAppearanceTextures(
     weather.generateMipmaps = true
     weather.flipY = false
     weather.needsUpdate = true
-    const constant = new Color()
-    if (layer.color.kind === 'map') {
-      const colorSource = resource(layer.color.map.resourceId)
-      readCloudImagePixels(colorSource)
-      color = colorSource.clone()
-      color.wrapS = RepeatWrapping
-      color.wrapT = ClampToEdgeWrapping
-      color.minFilter = LinearMipmapLinearFilter
-      color.magFilter = LinearFilter
-      color.generateMipmaps = true
-      color.needsUpdate = true
-    } else constant.setRGB(...layer.color.srgb, SRGBColorSpace)
+    const appearance = prepareCloudColor(layer.color, resolveTexture)
+    color = appearance.color
     let disposed = false
     const ownedWeather = weather
     return {
       weather,
-      color,
-      constantColorLinear: [constant.r, constant.g, constant.b],
-      colorStrength: layer.color.kind === 'map' ? layer.color.strength : 1,
+      ...appearance,
       dispose() {
         if (disposed) return
         disposed = true

@@ -1,15 +1,37 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { DataTexture, Matrix3, PerspectiveCamera, Quaternion, RGBAFormat, Vector3 } from 'three'
 import { RenderingObjects } from '@storage/database'
 import { resolveCloudConfig } from '@/core/clouds/validateCloudConfig'
 import { cloudShellDistance, cloudVolumeOpacity } from '@/core/clouds/cloudLod'
 import { createEarthCloudProfile } from '@/core/clouds/profiles/earthCloudProfile'
 import { createEarthAtmosphere, createEarthClouds, setEarthCloudQuality } from '@/labs/earth-clouds/EarthCloudAdapter'
-import { toTakramAtmosphere } from '@/labs/planet-clouds/planetCloudAdapter'
-import { bindCloudAppearance } from '@/labs/jupiter-clouds/cloudAppearance'
-import type { CloudAppearanceTextures } from '@/labs/jupiter-clouds/cloudAppearanceTextures'
+import { toTakramAtmosphere } from '@/core/clouds/takram/planetCloudAdapter'
+import { bindCloudAppearance } from '@/core/clouds/appearance/cloudAppearance'
+import type { CloudAppearanceTextures } from '@/core/clouds/appearance/cloudAppearanceTextures'
+import { prepareCloudTargets } from '@/core/clouds/takram/prepareCloudTargets'
 
 describe('Earth cloud adapter', () => {
+  it('initializes both array targets before drawing and restores wrappers only once', () => {
+    const clouds = createEarthClouds(new PerspectiveCamera(), createEarthAtmosphere().atmosphere)
+    const order: string[] = []
+    const passes = [clouds.shadowPass.currentPass, clouds.shadowPass.resolvePass]
+    const spies = passes.map((pass, i) =>
+      vi.spyOn(pass, 'render').mockImplementation(() => {
+        order.push(`draw-${i}`)
+      })
+    )
+    const restore = prepareCloudTargets(clouds)
+    const renderer = { initRenderTarget: (target: unknown) => order.push(`init-${target}`) }
+    passes.forEach((pass, i) => pass.render(renderer as never, null as never, i as never))
+    expect(order).toEqual(['init-0', 'draw-0', 'init-1', 'draw-1'])
+    restore()
+    const replacement = () => {}
+    passes[0].render = replacement
+    restore()
+    expect(passes[0].render).toBe(replacement)
+    spies.forEach((spy) => spy.mockRestore())
+    clouds.dispose()
+  })
   it('uses one Earth shell and disables volume on orbit', () => {
     const profile = createEarthCloudProfile()
     expect(resolveCloudConfig(profile, new Set([24, 26, 27, 91])).state).toBe('configured')

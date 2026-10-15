@@ -61,7 +61,12 @@ export async function withCloudProbeBrowser(
   if (
     !['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname) ||
     parsed.protocol !== 'http:' ||
-    !['/tests/clouds/earth/probe.html', '/earth-cloud-lab.html', '/cloud-lab.html'].includes(parsed.pathname)
+    ![
+      '/tests/clouds/earth/probe.html',
+      '/tests/clouds/scene/probe.html',
+      '/earth-cloud-lab.html',
+      '/cloud-lab.html'
+    ].includes(parsed.pathname)
   )
     throw new Error('Cloud probe requires local probe.html')
   const profilePrefix = resolve(tmpdir(), 'earth-cloud-probe-')

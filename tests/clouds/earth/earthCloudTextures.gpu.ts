@@ -10,13 +10,13 @@ import {
   Vector4
 } from 'three'
 import { CloudsEffect } from '@takram/three-clouds'
-import { rgbCloudMapGLSL } from '@/labs/earth-clouds/rgbCloudMap'
-import { prepareRgbCloudTextures } from '@/labs/earth-clouds/earthCloudTextures'
+import { rgbCloudMapGLSL } from '@/core/clouds/appearance/rgbCloudMap'
+import { prepareRgbCloudTextures } from '@/core/clouds/appearance/rgbCloudTextures'
 import {
   prepareCloudAppearanceTextures,
   type CloudAppearanceTextures
-} from '@/labs/jupiter-clouds/cloudAppearanceTextures'
-import { bindCloudAppearance } from '@/labs/jupiter-clouds/cloudAppearance'
+} from '@/core/clouds/appearance/cloudAppearanceTextures'
+import { bindCloudAppearance } from '@/core/clouds/appearance/cloudAppearance'
 import { createEarthCloudProfile } from '@/core/clouds/profiles/earthCloudProfile'
 import { createGpuReadback, extractShaderFunction, type EarthGpuProbeReport } from './gpuTestHarness'
 
@@ -110,8 +110,15 @@ export async function checkEarthCloudTextures(): Promise<EarthGpuProbeReport> {
       }
     const plain = nearest(new DataTexture(new Uint8Array([64, 0, 0, 255]), 1, 1, RGBAFormat))
     owned.add(plain)
-    const config = createEarthCloudProfile(),
-      mask = prepareCloudAppearanceTextures(config.layers[0], () => plain)
+    const config = createEarthCloudProfile()
+    // This case intentionally exercises authored scalar semantics, independent of the RGB default profile.
+    config.layers[0].pattern = {
+      kind: 'mask',
+      encoding: 'scalar',
+      map: { resourceId: 26 },
+      decode: { channel: 'r', inputRange: [0, 1], exponent: 1, invert: false, sampleSpace: 'linear' }
+    }
+    const mask = prepareCloudAppearanceTextures(config.layers[0], () => plain)
     maps.push(mask)
     nearest(mask.weather)
     binding = bindCloudAppearance(clouds, config, mask)

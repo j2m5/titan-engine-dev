@@ -1,7 +1,7 @@
 import type { CloudsEffect } from '@takram/three-clouds'
 import { Matrix3, Matrix4, Quaternion, Vector3 } from 'three'
 import type { EnabledCloudConfig } from '@/core/clouds/CloudConfig'
-import { applyPlanetCloudLayer } from '@/labs/planet-clouds/planetCloudAdapter'
+import { applyPlanetCloudLayer } from '@/core/clouds/takram/planetCloudAdapter'
 import type { CloudAppearanceTextures } from './cloudAppearanceTextures'
 import { adaptCloudAppearanceShader } from './cloudAppearanceShader'
 
@@ -70,7 +70,7 @@ export function bindCloudAppearance(
     Object.assign(material.uniforms, shared)
     material.needsUpdate = true
   })
-  applyPlanetCloudLayer(clouds, layer)
+  applyPlanetCloudLayer(clouds, config)
   clouds.localWeatherTexture = textures.weather
   clouds.localWeatherRepeat.setScalar(1)
   clouds.localWeatherOffset.setScalar(0)

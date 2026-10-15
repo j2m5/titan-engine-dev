@@ -144,7 +144,14 @@ try {
       await evaluate(`document.querySelector('#clouds-enabled').click()`)
       await settle()
       const after = await detailState()
-      if (before.opacity !== 0 || before.frames !== 0 || before.shadows !== 0 || after.frames !== before.frames || after.shadows !== before.shadows || before.appearance !== 'ready')
+      if (
+        before.opacity !== 0 ||
+        before.frames !== 0 ||
+        before.shadows !== 0 ||
+        after.frames !== before.frames ||
+        after.shadows !== before.shadows ||
+        before.appearance !== 'ready'
+      )
         throw new Error('Distant clouds must have no opacity and perform no rendering')
       await screenshot('orbit-without-clouds')
       await evaluate(`document.querySelector('#clouds-enabled').click()`)
@@ -159,9 +166,9 @@ try {
       await screenshot('below-without-clouds')
       await evaluate(`document.querySelector('#clouds-enabled').click()`)
       await settle()
-      await send('Input.dispatchMouseEvent', {type:'mousePressed',x:800,y:400,button:'left',clickCount:1})
-      await send('Input.dispatchMouseEvent', {type:'mouseMoved',x:803,y:401,button:'left',buttons:1})
-      await send('Input.dispatchMouseEvent', {type:'mouseReleased',x:803,y:401,button:'left',clickCount:1})
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: 800, y: 400, button: 'left', clickCount: 1 })
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 803, y: 401, button: 'left', buttons: 1 })
+      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 803, y: 401, button: 'left', clickCount: 1 })
       await settle()
       await screenshot('below-small-motion')
       await settle()
@@ -173,7 +180,11 @@ try {
   const stoppedClouds = await detailState()
   await settle()
   const stoppedAgain = await detailState()
-  if (stoppedClouds.opacity !== 0 || stoppedAgain.frames !== stoppedClouds.frames || stoppedAgain.shadows !== stoppedClouds.shadows)
+  if (
+    stoppedClouds.opacity !== 0 ||
+    stoppedAgain.frames !== stoppedClouds.frames ||
+    stoppedAgain.shadows !== stoppedClouds.shadows
+  )
     throw new Error('Cloud and shadow rendering did not stop after leaving the detail range')
   await evaluate(
     `document.querySelector('[data-view="above"]').click(); document.querySelector('#clouds-enabled').click()`
@@ -235,8 +246,8 @@ try {
   console.log('Cloud appearance', JSON.stringify(appearance))
   const integration = await evaluate(`(async () => {
     const {JupiterCloudLab} = await import('/src/labs/jupiter-clouds/JupiterCloudLab.ts');
-    const {prepareCloudAppearanceTextures} = await import('/src/labs/jupiter-clouds/cloudAppearanceTextures.ts');
-    const {createJupiterCloudProfile} = await import('/src/labs/jupiter-clouds/jupiterCloudProfile.ts');
+    const {prepareCloudAppearanceTextures} = await import('/src/core/clouds/appearance/cloudAppearanceTextures.ts');
+    const {createJupiterCloudProfile} = await import('/src/core/clouds/profiles/jupiterCloudProfile.ts');
     const {default: imageUrl} = await import('/src/labs/jupiter-clouds/assets/jupiter.jpg?url');
     const T = await import('/node_modules/.vite/deps/three.js');
     const waitFrames = (lab, n = 8) => new Promise((resolve, reject) => {

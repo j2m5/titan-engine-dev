@@ -3,7 +3,10 @@ import type { CloudsEffect, CloudsQualityPreset } from '@takram/three-clouds'
 import { PerspectiveCamera, Texture, RepeatWrapping, ClampToEdgeWrapping } from 'three'
 import { RenderingObjects } from '@storage/database'
 import type { AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
-import { createPlanetCloudEffect, toTakramAtmosphere } from '@/labs/planet-clouds/planetCloudAdapter'
+import { createPlanetCloudEffect, toTakramAtmosphere } from '@/core/clouds/takram/planetCloudAdapter'
+import { adaptCloudDepth } from '@/labs/jupiter-clouds/planetDepth'
+import { createCloudTextureView } from '@/core/clouds/appearance/cloudImagePixels'
+import { setCloudQuality } from '@/core/clouds/takram/cloudQuality'
 import { createJupiterCloudProfile } from '@/core/clouds/profiles/jupiterCloudProfile'
 
 const defaultLayer = createJupiterCloudProfile().layers[0]
@@ -12,7 +15,7 @@ export const CLOUD_HEIGHT_METRES = defaultLayer.thicknessMeters
 
 /** An owned view uses the same canonical UV transform as the appearance shaders. */
 export function createCloudSurfaceView(source: Texture, longitudeOffsetRadians: number): Texture {
-  const view = source.clone()
+  const view = createCloudTextureView(source)
   view.offset.set(longitudeOffsetRadians / (2 * Math.PI), 0)
   view.repeat.set(1, 1)
   view.center.set(0, 0)
@@ -33,28 +36,13 @@ export function createJupiterAtmosphere(): { config: AtmosphereConfig; atmospher
 }
 
 export function setJupiterCloudQuality(clouds: CloudsEffect, quality: CloudsQualityPreset): void {
-  clouds.qualityPreset = quality
-  // The terrestrial defaults cap the march at 100–200 km. Orbit is much farther away.
-  clouds.clouds.maxRayDistance = 5e8
-  clouds.clouds.maxIterationCount = quality === 'low' ? 128 : quality === 'medium' ? 256 : 384
-  clouds.clouds.minStepSize = quality === 'low' ? 800 : quality === 'medium' ? 400 : 200
-  clouds.resolutionScale = quality === 'low' ? 0.65 : quality === 'medium' ? 0.8 : 1
-  clouds.clouds.maxStepSize = 4000
-  // Upstream grows the FIRST step with camera-to-shell distance (90,000 km in the orbit preset).
-  // Its terrestrial 1.01 factor skips our entire 20 km shell before taking the first sample.
-  clouds.clouds.perspectiveStepScale = 1.000001
-  clouds.clouds.minDensity = 1e-7
-  clouds.clouds.minExtinction = 1e-7
-  clouds.clouds.minSecondaryStepSize = 1000
-  clouds.clouds.maxIterationCountToSun = quality === 'high' ? 4 : 2
-  clouds.lightShafts = false
-  clouds.haze = false
-  clouds.turbulence = false
-  clouds.shadow.maxFar = 200000
+  if (quality === 'ultra') throw new RangeError('Unsupported Jupiter cloud quality: ultra')
+  setCloudQuality(clouds, 'giant', quality)
 }
 
 export function createJupiterClouds(camera: PerspectiveCamera, atmosphere: AtmosphereParameters): CloudsEffect {
   const clouds = createPlanetCloudEffect(camera, atmosphere)
+  adaptCloudDepth(clouds)
   clouds.cloudLayers.reset().set([
     {
       channel: 'r',

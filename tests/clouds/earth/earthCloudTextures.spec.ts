@@ -1,14 +1,28 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Color, DataTexture, Texture, RGBAFormat, SRGBColorSpace, NoColorSpace } from 'three'
-import { decodeRgbCloud } from '@/labs/earth-clouds/rgbCloudMap'
-import { prepareRgbCloudTextures } from '@/labs/earth-clouds/earthCloudTextures'
-import { readCloudImagePixels } from '@/labs/planet-clouds/cloudImagePixels'
-import { prepareCloudAppearanceTextures } from '@/labs/jupiter-clouds/cloudAppearanceTextures'
+import { decodeRgbCloud } from '@/core/clouds/appearance/rgbCloudMap'
+import { prepareRgbCloudTextures } from '@/core/clouds/appearance/rgbCloudTextures'
+import { readCloudImagePixels } from '@/core/clouds/appearance/cloudImagePixels'
+import { prepareCloudAppearanceTextures } from '@/core/clouds/appearance/cloudAppearanceTextures'
 import { createEarthCloudProfile } from '@/core/clouds/profiles/earthCloudProfile'
 
 const texture = (values: number[], width: number, height: number) =>
   new DataTexture(new Uint8Array(values.flatMap((x) => [x, x, x, 255])), width, height, RGBAFormat)
 describe('Earth RGB cloud preparation', () => {
+  it('keeps the 2048 width ceiling even when callers request a larger bound', () => {
+    const source = texture(new Array(4096).fill(255), 4096, 1)
+    const maps = prepareRgbCloudTextures(source, { maxWidth: 4096 })
+    expect(maps.weather.image.width).toBe(2048)
+    maps.dispose()
+    source.dispose()
+  })
+  it('bounds tall sources by height while preserving aspect', () => {
+    const source = texture(new Array(2 * 2048).fill(255), 2, 2048)
+    const maps = prepareRgbCloudTextures(source)
+    expect([maps.weather.image.width, maps.weather.image.height]).toEqual([1, 1024])
+    maps.dispose()
+    source.dispose()
+  })
   it('selects white scattering without changing weather or owning a color map', () => {
     const source = texture([0, 64, 128, 255], 2, 2)
     source.colorSpace = SRGBColorSpace
@@ -129,7 +143,7 @@ describe('Earth RGB cloud preparation', () => {
       .spyOn(HTMLCanvasElement.prototype, 'getContext')
       .mockReturnValue({ drawImage, getImageData } as never)
     try {
-      expect(readCloudImagePixels(new Texture(image), null)).toMatchObject({ width: 5, height: 3, bytes })
+      expect(readCloudImagePixels(new Texture(image))).toMatchObject({ width: 5, height: 3, bytes })
       expect(drawImage).toHaveBeenCalledWith(image, 0, 0, 5, 3)
       getImageData.mockImplementation(() => {
         throw new Error('tainted canvas')

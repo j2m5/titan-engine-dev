@@ -29,8 +29,8 @@ import type { EarthGpuProbeReport } from './gpuTestHarness'
 import { createGpuReadback, extractShaderFunction } from './gpuTestHarness'
 import { createEarthClouds, createEarthAtmosphere } from '@/labs/earth-clouds/EarthCloudAdapter'
 import { createEarthCloudProfile } from '@/core/clouds/profiles/earthCloudProfile'
-import { bindCloudAppearance } from '@/labs/jupiter-clouds/cloudAppearance'
-import { prepareRgbCloudTextures } from '@/labs/earth-clouds/earthCloudTextures'
+import { bindCloudAppearance } from '@/core/clouds/appearance/cloudAppearance'
+import { prepareRgbCloudTextures } from '@/core/clouds/appearance/rgbCloudTextures'
 
 export async function checkEarthSurface(): Promise<EarthGpuProbeReport> {
   const renderer = new WebGLRenderer(),

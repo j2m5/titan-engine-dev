@@ -1,6 +1,6 @@
 import type { CloudsEffect } from '@takram/three-clouds'
 import { Uniform } from 'three'
-import { replaceExactlyOnce } from '@/labs/jupiter-clouds/cloudAppearanceShader'
+import { replaceExactlyOnce } from '@/core/clouds/appearance/cloudAppearanceShader'
 
 const returnAnchor = 'return vec4(radianceIntegral, remapClamped(transmittanceIntegral, 1.0, minTransmittance));'
 const installed = new WeakSet<object>()

@@ -13,8 +13,8 @@ import {
 } from 'three'
 import { validCloudConfig } from './cloudFixtures'
 import { resolveCloudConfig } from '@/core/clouds/validateCloudConfig'
-import { prepareCloudAppearanceTextures } from '@/labs/jupiter-clouds/cloudAppearanceTextures'
-import { assertCloudAppearanceSupport, bindCloudAppearance } from '@/labs/jupiter-clouds/cloudAppearance'
+import { prepareCloudAppearanceTextures } from '@/core/clouds/appearance/cloudAppearanceTextures'
+import { assertCloudAppearanceSupport, bindCloudAppearance } from '@/core/clouds/appearance/cloudAppearance'
 
 const source = () =>
   new DataTexture(
@@ -159,7 +159,8 @@ describe('cloud appearance', () => {
     const spy = vi.spyOn(original, 'dispose')
     const maps = prepareCloudAppearanceTextures(validCloudConfig().layers[0], () => original)
     expect(maps.color).not.toBe(original)
-    expect(maps.color?.source).toBe(original.source)
+    expect(maps.color?.source).not.toBe(original.source)
+    expect(maps.color?.image.data).toBe(original.image.data)
     const weatherDispose = vi.spyOn(maps.weather, 'dispose')
     const colorDispose = vi.spyOn(maps.color!, 'dispose')
     maps.dispose()

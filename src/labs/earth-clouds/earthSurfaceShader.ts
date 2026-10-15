@@ -1,5 +1,5 @@
 import { AbstractShader } from '@/core/materials/shaders/AbstractShader'
-import { rgbCloudMapGLSL } from './rgbCloudMap'
+import { rgbCloudMapGLSL } from '@/core/clouds/appearance/rgbCloudMap'
 import { buildEarthCloudShadowGLSL } from './earthCloudShadowShader'
 
 function replace(source: string, anchor: string, replacement: string, stage: string): string {

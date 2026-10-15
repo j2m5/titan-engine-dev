@@ -8,6 +8,7 @@
   "scripts": {
     "test:clouds:gpu": "node scripts/check-cloud-lab.mjs",
     "test:clouds:earth:gpu": "node scripts/check-earth-cloud-lab.mjs",
+    "test:clouds:scene:gpu": "node scripts/check-scene-clouds.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

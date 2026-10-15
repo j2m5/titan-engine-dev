@@ -1,3 +1,5 @@
+import { prepareCloudSource } from '@/core/clouds/appearance/prepareCloudSource'
+import { prepareCloudTargets } from '@/core/clouds/takram/prepareCloudTargets'
 import type { CloudsEffectChangeEvent, CloudsQualityPreset } from '@takram/three-clouds'
 import { EffectComposer, EffectPass, RenderPass, ToneMappingEffect, ToneMappingMode } from 'postprocessing'
 import {
@@ -22,18 +24,21 @@ import {
   setJupiterCloudQuality,
   createCloudSurfaceView
 } from './JupiterCloudAdapter'
-import { createCloudTextures } from './cloudTextures'
+import { createCloudTextures } from '@/core/clouds/takram/cloudTextures'
 import { PlanetAerialPerspectiveEffect, applyAnalyticPlanetDepth } from './planetDepth'
 import { cloudOpacityAtAltitude, DEFAULT_CLOUD_DISTANCE, type CloudDistanceRange } from './cloudDistance'
 import { ActorResource } from '@storage/database'
 import { resolveCloudConfig } from '@/core/clouds/validateCloudConfig'
 import { createJupiterCloudProfile } from '@/core/clouds/profiles/jupiterCloudProfile'
-import { assertCloudAppearanceSupport, bindCloudAppearance, type CloudAppearanceBinding } from './cloudAppearance'
 import {
-  prepareCloudAppearanceTextures,
+  assertCloudAppearanceSupport,
+  bindCloudAppearance,
+  type CloudAppearanceBinding
+} from '@/core/clouds/appearance/cloudAppearance'
+import {
   type CloudAppearanceTextures,
   type CloudTextureResolver
-} from './cloudAppearanceTextures'
+} from '@/core/clouds/appearance/cloudAppearanceTextures'
 
 export interface JupiterCloudLabOptions {
   resolveCloudTexture?: CloudTextureResolver
@@ -83,6 +88,7 @@ export class JupiterCloudLab {
   private shadowFrames = 0
   private resetShadowHistory = true
   private cloudDistance: CloudDistanceRange = { ...DEFAULT_CLOUD_DISTANCE }
+  private restoreCloudTargets?: () => void
   private quality: CloudsQualityPreset = 'medium'
   private readonly contextLost: (event: Event) => void
   private readonly cloudChange: (event: CloudsEffectChangeEvent) => void
@@ -168,6 +174,7 @@ export class JupiterCloudLab {
         }
       }
 
+      this.restoreCloudTargets = prepareCloudTargets(this.clouds)
       const shadowPass = this.clouds.shadowPass.currentPass
       const renderShadow = shadowPass.render
       const countShadowFrame = (): void => {
@@ -191,11 +198,9 @@ export class JupiterCloudLab {
         if (result.state !== 'configured') throw new Error('Invalid Jupiter cloud profile')
         assertCloudAppearanceSupport(result.config)
         const textureById = new Map<number, Texture>([[32, surfaceTexture]])
-        this.appearanceTextures = prepareCloudAppearanceTextures(
-          result.config.layers[0],
-          options.resolveCloudTexture ?? ((id) => textureById.get(id))
-        )
-        this.appearanceBinding = bindCloudAppearance(this.clouds, result.config, this.appearanceTextures)
+        const prepared = prepareCloudSource(result.config, options.resolveCloudTexture ?? ((id) => textureById.get(id)))
+        this.appearanceTextures = prepared.textures
+        this.appearanceBinding = bindCloudAppearance(this.clouds, prepared.config, this.appearanceTextures)
         this.appearanceReady = true
       } catch (error) {
         this.appearanceBinding?.dispose()
@@ -328,6 +333,7 @@ export class JupiterCloudLab {
     this.flight?.dispose()
     if (this.cloudChange) this.clouds.events.removeEventListener('change', this.cloudChange)
     if (this.contextLost) this.renderer?.domElement.removeEventListener('webglcontextlost', this.contextLost)
+    this.restoreCloudTargets?.()
     if (this.composer) this.composer.dispose()
     else {
       this.clouds.dispose()

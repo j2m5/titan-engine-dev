@@ -11,8 +11,8 @@ import {
   SRGBColorSpace
 } from 'three'
 import type { CloudColor } from '@/core/clouds/CloudConfig'
-import { readCloudImagePixels } from '@/labs/planet-clouds/cloudImagePixels'
-import type { CloudAppearanceTextures } from '@/labs/jupiter-clouds/cloudAppearanceTextures'
+import { readCloudImagePixels } from '@/core/clouds/appearance/cloudImagePixels'
+import type { CloudAppearanceTextures } from '@/core/clouds/appearance/cloudAppearanceTextures'
 import { decodeRgbCloud } from './rgbCloudMap'
 
 export function prepareRgbCloudTextures(
@@ -29,9 +29,10 @@ export function prepareRgbCloudTextures(
     throw new RangeError('Invalid cloud constant color')
   const linear = choice?.kind === 'constant' ? new Color().setRGB(...choice.srgb, SRGBColorSpace) : new Color(1, 1, 1)
   const constantColorLinear: [number, number, number] = [linear.r, linear.g, linear.b]
-  const { bytes, width: sw, height: sh, space } = readCloudImagePixels(source, null)
-  const dw = Math.min(sw, maxWidth),
-    dh = Math.max(1, Math.round((sh * dw) / sw))
+  const { bytes, width: sw, height: sh, space } = readCloudImagePixels(source)
+  const scale = Math.min(1, Math.min(maxWidth, 2048) / sw, 1024 / sh)
+  const dw = Math.max(1, Math.floor(sw * scale)),
+    dh = Math.max(1, Math.floor(sh * scale))
   const weatherBytes = new Uint8Array(dw * dh * 4),
     colorBytes = choice?.kind === 'constant' ? null : new Uint8Array(dw * dh * 4)
   const overlap = (a0: number, a1: number, b0: number, b1: number) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0))
@@ -46,8 +47,7 @@ export function prepareRgbCloudTextures(
       for (let sy = Math.floor(y0); sy < Math.ceil(y1); sy++)
         for (let sx = Math.floor(x0); sx < Math.ceil(x1); sx++) {
           const weight = overlap(x0, x1, sx, sx + 1) * overlap(y0, y1, sy, sy + 1)
-          const row = source.flipY ? sh - 1 - sy : sy,
-            at = (row * sw + sx) * 4
+          const at = (sy * sw + sx) * 4
           const decoded = decodeRgbCloud([bytes[at] / 255, bytes[at + 1] / 255, bytes[at + 2] / 255], space)
           sums[0] += decoded.coverage * weight
           if (colorBytes) for (let c = 0; c < 3; c++) sums[c + 1] += decoded.albedo[c] * weight

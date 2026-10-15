@@ -11,8 +11,8 @@ import {
   Matrix3
 } from 'three'
 import { createJupiterCloudProfile } from '@/core/clouds/profiles/jupiterCloudProfile'
-import { prepareCloudAppearanceTextures } from '@/labs/jupiter-clouds/cloudAppearanceTextures'
-import { bindCloudAppearance } from '@/labs/jupiter-clouds/cloudAppearance'
+import { prepareCloudAppearanceTextures } from '@/core/clouds/appearance/cloudAppearanceTextures'
+import { bindCloudAppearance } from '@/core/clouds/appearance/cloudAppearance'
 import {
   createJupiterAtmosphere,
   createJupiterClouds,
@@ -67,7 +67,8 @@ describe('Jupiter cloud adapter', () => {
     const sourceMatrix = source.matrix.clone()
     const view = createCloudSurfaceView(source, Math.PI / 2)
     expect(view).not.toBe(source)
-    expect(view.source).toBe(source.source)
+    expect(view.source).not.toBe(source.source)
+    expect(view.image).toBe(source.image)
     expect(source.offset.toArray()).toEqual([0.03, 0.07])
     expect(view.wrapS).toBe(RepeatWrapping)
     expect(source.matrix).toEqual(sourceMatrix)

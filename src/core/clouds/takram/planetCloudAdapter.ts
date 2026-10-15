@@ -2,12 +2,11 @@ import { AtmosphereParameters, DensityProfileLayer } from '@takram/three-atmosph
 import { CloudsEffect } from '@takram/three-clouds'
 import { Ellipsoid } from '@takram/three-geospatial'
 import { Color, PerspectiveCamera, Vector3 } from 'three'
-import type { CloudLayerConfig } from '@/core/clouds/CloudConfig'
+import type { EnabledCloudConfig } from '@/core/clouds/CloudConfig'
 import type {
   AtmosphereConfig,
   DensityProfileLayer as TitanDensityLayer
 } from '@/core/renderables/Atmosphere/AtmosphereConfig'
-import { adaptCloudDepth } from '@/labs/jupiter-clouds/planetDepth'
 
 /** Scene radii are metres; Bruneton coefficients and density profiles remain in kilometres. */
 export function toTakramAtmosphere(config: AtmosphereConfig): AtmosphereParameters {
@@ -34,7 +33,8 @@ export function toTakramAtmosphere(config: AtmosphereConfig): AtmosphereParamete
   })
 }
 
-export function applyPlanetCloudLayer(clouds: CloudsEffect, layer: CloudLayerConfig): void {
+export function applyPlanetCloudLayer(clouds: CloudsEffect, config: EnabledCloudConfig): void {
+  const layer = config.layers[0]
   clouds.cloudLayers.reset().set([
     {
       channel: 'r',
@@ -64,6 +64,5 @@ export function createPlanetCloudEffect(camera: PerspectiveCamera, atmosphere: A
     activeCamera.getWorldPosition(position).applyMatrix4(clouds.worldToECEFMatrix)
     material.uniforms.cameraHeight.value = position.length() - atmosphere.bottomRadius
   }
-  adaptCloudDepth(clouds)
   return clouds
 }

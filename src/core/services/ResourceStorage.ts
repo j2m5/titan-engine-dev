@@ -1,9 +1,37 @@
 import type { Texture } from 'three'
 import { Collection } from '@/core/framework/support/Collection'
 import { PlaceholderTexture } from '@/core/textures/PlaceholderTexture'
+import type { CloudSourceStamp } from '@/core/clouds/CloudSources'
 
 class ResourceStorage {
   private _textures: Collection<Texture> = new Collection()
+  private readonly textureRevisions = new Map<string, number>()
+  private readonly textureListeners = new Set<(key: string) => void>()
+
+  private notifyTextureChange(key: string): void {
+    this.textureRevisions.set(key, (this.textureRevisions.get(key) ?? 0) + 1)
+    for (const listener of this.textureListeners) listener(key)
+  }
+
+  public getTextureSnapshot(key: string): CloudSourceStamp | undefined {
+    const texture = this.getTexture(key)
+    return texture
+      ? {
+          texture,
+          image: texture.image,
+          revision: this.textureRevisions.get(key) ?? 0,
+          textureVersion: texture.version,
+          sourceVersion: texture.source.version
+        }
+      : undefined
+  }
+
+  public subscribeTextureChanges(listener: (key: string) => void): () => void {
+    this.textureListeners.add(listener)
+    return () => {
+      this.textureListeners.delete(listener)
+    }
+  }
 
   public get textures(): Collection<Texture> {
     return this._textures
@@ -33,6 +61,7 @@ class ResourceStorage {
 
   public addTexture(texture: Texture): void {
     this._textures.push(texture)
+    this.notifyTextureChange(texture.name)
   }
 
   /**
@@ -49,6 +78,8 @@ class ResourceStorage {
    * ради учёта которого существует эта арка.
    */
   public deleteTexture(key: string): void {
+    if (!this.isExistsTexture(key)) return
+    this.notifyTextureChange(key)
     this._textures.where('name', key).each((texture: Texture): void => {
       texture.dispose()
     })
@@ -57,6 +88,11 @@ class ResourceStorage {
   }
 
   public deleteAllTextures(): void {
+    const keys = new Set<string>()
+    this._textures.each((texture: Texture): void => {
+      keys.add(texture.name)
+    })
+    for (const key of keys) this.notifyTextureChange(key)
     this._textures.each((texture: Texture): void => {
       texture.dispose()
     })
