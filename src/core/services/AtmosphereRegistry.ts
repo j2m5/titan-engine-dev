@@ -6,6 +6,8 @@ import type { AtmosphereLUTs } from '@/core/renderables/Atmosphere/AtmosphereLUT
 /** Запись атмосферы для полноэкранного эффекта. LUT принадлежат узлу. */
 export interface AtmosphereEntry {
   actorId: number
+  generation: number
+  ready: boolean
   name: string
   /** Узел сцены: `matrixWorld` — центр оболочки (читается эффектом в момент рендера, без лага кадра) */
   object: Object3D
@@ -24,9 +26,26 @@ export interface AtmosphereEntry {
  */
 export class AtmosphereRegistry {
   private readonly byActor = new Map<number, AtmosphereEntry>()
+  private generation = 0
 
   public register(entry: AtmosphereEntry): void {
+    entry.generation = ++this.generation
     this.byActor.set(entry.actorId, entry)
+  }
+
+  public markPending(actorId: number): void {
+    this.publish(actorId, false)
+  }
+
+  public markReady(actorId: number): void {
+    this.publish(actorId, true)
+  }
+
+  private publish(actorId: number, ready: boolean): void {
+    const entry = this.byActor.get(actorId)
+    if (!entry) return
+    entry.ready = ready
+    entry.generation = ++this.generation
   }
 
   public unregister(actorId: number): void {

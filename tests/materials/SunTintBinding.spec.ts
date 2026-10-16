@@ -30,6 +30,8 @@ function config(): AtmosphereConfig {
 function entry(): AtmosphereEntry {
   return {
     actorId: ATMO_ACTOR_ID,
+    generation: 0,
+    ready: true,
     name: 'EarthAtmosphere',
     object: new Object3D(),
     config: config(),

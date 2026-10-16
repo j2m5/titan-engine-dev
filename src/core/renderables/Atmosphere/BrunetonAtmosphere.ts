@@ -59,11 +59,14 @@ class BrunetonAtmosphere extends Object3D implements Acceptable<IObject3DVisitor
     const lut = this.lutGenerator.generate(adjusted)
     // опциональный вызов: заглушки рендерера в тестах отдают domElement без addEventListener
     this.renderer.domElement?.addEventListener?.('webglcontextrestored', this.onContextRestored)
+    this.renderer.domElement?.addEventListener?.('webglcontextlost', this.onContextLost)
 
     this.name = this.model.getAttribute('name', '') + 'Atmosphere'
 
     this.registry.register({
       actorId: this.model.getAttribute('id', -1) as number,
+      generation: 0,
+      ready: true,
       name: this.name,
       object: this,
       config: adjusted,
@@ -77,8 +80,10 @@ class BrunetonAtmosphere extends Object3D implements Acceptable<IObject3DVisitor
    * target'ах генератора. Вызывать при демонтаже сцены.
    */
   public dispose(): void {
-    this.registry.unregister(this.model.getAttribute('id', -1) as number)
+    const actorId = this.model.getAttribute('id', -1) as number
+    if (this.registry.get(actorId)?.object === this) this.registry.unregister(actorId)
     this.renderer.domElement?.removeEventListener?.('webglcontextrestored', this.onContextRestored)
+    this.renderer.domElement?.removeEventListener?.('webglcontextlost', this.onContextLost)
     this.lutGenerator.dispose()
   }
 
@@ -89,7 +94,16 @@ class BrunetonAtmosphere extends Object3D implements Acceptable<IObject3DVisitor
    * three зарегистрирован раньше (конструктор WebGLRenderer): контекст уже готов.
    */
   private readonly onContextRestored = (): void => {
+    const actorId = this.model.getAttribute('id', -1) as number
+    if (this.registry.get(actorId)?.object !== this) return
+    this.registry.markPending(actorId)
     this.lutGenerator.generate(this.lutConfig)
+    this.registry.markReady(actorId)
+  }
+
+  private readonly onContextLost = (): void => {
+    const actorId = this.model.getAttribute('id', -1) as number
+    if (this.registry.get(actorId)?.object === this) this.registry.markPending(actorId)
   }
 
   public accept(visitor: IObject3DVisitor): void {

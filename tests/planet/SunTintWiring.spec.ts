@@ -20,7 +20,10 @@ function earth(): Actor {
 }
 
 function diffusePathOf(actor: Actor): string {
-  return actor.resources.where('resourceType', 'diffuse' as ResourceType).first()!.getAttribute('path') as string
+  return actor.resources
+    .where('resourceType', 'diffuse' as ResourceType)
+    .first()!
+    .getAttribute('path') as string
 }
 
 function seedTexture(name: string, width: number = 4, height: number = 2): void {
@@ -95,6 +98,8 @@ function stubActorWithZeroRadiusAtmosphere(atmosphereActorId: number): Actor {
 function entry(): AtmosphereEntry {
   return {
     actorId: ATMO_ACTOR_ID,
+    generation: 0,
+    ready: true,
     name: 'EarthAtmosphere',
     object: new Object3D(),
     config: config(),
@@ -103,7 +108,10 @@ function entry(): AtmosphereEntry {
 }
 
 describe.each([
-  ['SphereSurfaceMaterial', (actor: Actor, registry?: AtmosphereRegistry) => new SphereSurfaceMaterial(actor, registry)],
+  [
+    'SphereSurfaceMaterial',
+    (actor: Actor, registry?: AtmosphereRegistry) => new SphereSurfaceMaterial(actor, registry)
+  ],
   ['TerrainMaterial', (actor: Actor, registry?: AtmosphereRegistry) => new TerrainMaterial(actor, registry)]
 ])('%s.syncSunTint: запись реестра → дефайн и юниформы', (_name, make) => {
   beforeEach(seedPlaceholderKeys)

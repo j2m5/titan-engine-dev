@@ -16,6 +16,31 @@ export const sceneCloudProbeRegistry: Partial<
     }
   >
 > = {
+  lighting: {
+    load: () => import('./lighting.gpu'),
+    requiredCases: [
+      'white-star',
+      'colored-star',
+      'zenith',
+      'limb',
+      'near-bottom',
+      'datum-bottom-offset',
+      'fixed-alpha-aerial',
+      'negative-controls',
+      'fresh-resolved',
+      'noon',
+      'terminator',
+      'night',
+      'alpha-depth-shadow-invariance',
+      'eclipse-direct',
+      'reset-recreation',
+      'single-public-update',
+      'shader-failure-restoration',
+      'borrowed-ownership',
+      'unsupported-projection',
+      'foreground-slot-order'
+    ]
+  },
   depth: {
     load: () => import('./depth.gpu'),
     requiredCases: [
