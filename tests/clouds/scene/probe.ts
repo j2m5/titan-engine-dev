@@ -1,4 +1,5 @@
 export type SceneCloudProbeName =
+  | 'scheduling'
   | 'maps'
   | 'depth'
   | 'lighting'
@@ -25,6 +26,20 @@ export const sceneCloudProbeRegistry: Partial<
     }
   >
 > = {
+  scheduling: {
+    load: async () => ({
+      run: async () => {
+        const report = await (await import('./pipeline.gpu')).run('scheduling')
+        return { ...report, name: 'scheduling', cases: report.cases.filter((id) => id.startsWith('simulation-')) }
+      }
+    }),
+    requiredCases: [
+      'simulation-presentation-invariance',
+      'simulation-normal-frame-progression',
+      'simulation-pending-readiness-invariance',
+      'simulation-mutation-negative-control'
+    ]
+  },
   pipeline: {
     load: () => import('./pipeline.gpu'),
     requiredCases: [

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Texture } from 'three'
 import { Actor } from '@/core/models/Actor'
 import { CloudRegistry } from '@/core/services/CloudRegistry'
@@ -11,9 +11,13 @@ import { heightFieldStorage } from '@/core/services/HeightFieldStorage'
 import { heightPathOf } from '@/core/terrain/heightPath'
 import { createTestContainer } from '../../helpers/createTestContainer'
 import { Tokens } from '@/core/providers/tokens'
+beforeEach(() => {
+  vi.stubGlobal('createImageBitmap', async () => ({ width: 1, height: 1, close: () => {} }))
+})
 afterEach(() => {
   heightFieldStorage.clear()
   resourceStorage.deleteAllTextures()
+  vi.unstubAllGlobals()
 })
 describe('stable body cloud registration', () => {
   it('resolves one cloud registry and runtime through actual application providers', () => {
@@ -28,6 +32,7 @@ describe('stable body cloud registration', () => {
       '',
       'default.png',
       'night.jpg',
+      'star.png',
       actor.resources.where('resourceType', 'diffuse').first()!.getAttribute('path')!
     ]) {
       const texture = new Texture()

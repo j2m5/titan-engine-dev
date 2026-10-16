@@ -6,9 +6,13 @@ import { withCloudProbeBrowser } from './lib/cloud-probe-browser.mjs'
 const args = process.argv.slice(2)
 if (
   args.length > 1 ||
-  args.some((arg) => !/^--probe=(maps|depth|lighting|readiness|receivers|pipeline|lifecycle|flight|all)$/.test(arg))
+  args.some(
+    (arg) => !/^--probe=(maps|depth|lighting|readiness|receivers|pipeline|scheduling|lifecycle|flight|all)$/.test(arg)
+  )
 )
-  throw new Error('Supported probes: maps, depth, lighting, readiness, receivers, pipeline, lifecycle, flight, all')
+  throw new Error(
+    'Supported probes: maps, depth, lighting, readiness, receivers, pipeline, scheduling, lifecycle, flight, all'
+  )
 const probe = args[0]?.split('=')[1] ?? 'all'
 const outputDir = resolve(dirname(fileURLToPath(import.meta.url)), '../tmpscreenshots/scene-clouds')
 await mkdir(outputDir, { recursive: true })

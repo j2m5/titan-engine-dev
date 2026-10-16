@@ -45,6 +45,7 @@ import type { SceneCloudProbeReport } from './probe'
 import jupiterUrl from '../../../src/labs/jupiter-clouds/assets/jupiter.jpg'
 import earthUrl from '../../../src/labs/earth-clouds/assets/earth_clouds.jpg'
 import { checkSamplerBudget } from './samplerBudget.gpu'
+import { verifySimulationPresentations } from './SimulationPresentationProbe'
 
 /** Observes actual inputBuffer before it is reused by the composer. No extra scene tick. */
 class ObservePass extends Pass {
@@ -57,7 +58,7 @@ class ObservePass extends Pass {
     this.observe(input.texture)
   }
 }
-export async function run(fixture: 'full' | 'ownership' = 'full'): Promise<SceneCloudProbeReport> {
+export async function run(fixture: 'full' | 'ownership' | 'scheduling' = 'full'): Promise<SceneCloudProbeReport> {
   const report: SceneCloudProbeReport = {
     name: 'pipeline',
     checks: 0,
@@ -201,7 +202,7 @@ export async function run(fixture: 'full' | 'ownership' = 'full'): Promise<Scene
     equalMaterial.dispose()
     equalQuad.geometry.dispose()
     report.cases.push('equal-hdr-endpoints')
-    for (const actorId of [7, 10]) {
+    for (const actorId of fixture === 'scheduling' ? [7] : [7, 10]) {
       const container = createTestContainer(),
         scene = new Scene(),
         camera = new PerspectiveCamera(45, 1, 1e-6, 1.5e8)
@@ -221,7 +222,7 @@ export async function run(fixture: 'full' | 'ownership' = 'full'): Promise<Scene
         resourceType: actorId === 7 ? 'cloud' : 'diffuse'
       })
       Storage.url = originalUrl
-      if (fixture === 'ownership') {
+      if (fixture !== 'full') {
         const original = source.image as ImageBitmap
         source.image = await createImageBitmap(original, 0, 0, 8, 4)
         original.close()
@@ -229,7 +230,7 @@ export async function run(fixture: 'full' | 'ownership' = 'full'): Promise<Scene
       }
       const loadMs = performance.now() - loadStart
       check(
-        fixture === 'ownership' || (source.image.width === 8192 && source.image.height === 4096),
+        fixture !== 'full' || (source.image.width === 8192 && source.image.height === 4096),
         'full native streamed source dimensions'
       )
       source.name = cloudResource.getAttribute('path')!
@@ -402,7 +403,7 @@ export async function run(fixture: 'full' | 'ownership' = 'full'): Promise<Scene
       observer.disconnect()
       const prepMs = completedAt - prepStart
       check(
-        (fixture === 'ownership' || pendingFrames > 1) && camera.position.distanceTo(positionBefore) > 0,
+        (fixture !== 'full' || pendingFrames > 1) && camera.position.distanceTo(positionBefore) > 0,
         `real camera/far frame progression during preparation: ${actorId} frames${pendingFrames} slices${slices.length} ${JSON.stringify(runtime.diagnostics)}`
       )
       check(Math.max(...slices) < 50, `preparation slice long task ${Math.max(...slices)}ms`)
@@ -433,7 +434,37 @@ export async function run(fixture: 'full' | 'ownership' = 'full'): Promise<Scene
         maxBaseline: Math.max(...farBaseline),
         peakCanonicalBytes: source.image.width * source.image.height * 4
       })
-      for (const weight of [0.25, 0.5, 0.75, 1, 0]) {
+      if (fixture === 'scheduling') {
+        heightFieldStorage['maps'].set(heightPathOf(actor)!, {
+          width: 4,
+          height: 2,
+          minMeters: -1000,
+          maxMeters: 1000,
+          data: new Uint16Array(8).fill(32768)
+        })
+        check(factory.upgradePlanetToTerrain(node), 'scheduling uses actual terrain/water')
+        Object.assign(report, {
+          simulationPresentations: await verifySimulationPresentations(
+            renderer,
+            scene,
+            camera,
+            container.get(Tokens.SceneManager),
+            post,
+            runtime,
+            node,
+            setDistance,
+            profile.lod.fullDistanceMeters,
+            profile.lod.cutoffDistanceMeters
+          )
+        })
+        report.cases.push(
+          'simulation-presentation-invariance',
+          'simulation-normal-frame-progression',
+          'simulation-pending-readiness-invariance',
+          'simulation-mutation-negative-control'
+        )
+      }
+      for (const weight of fixture === 'scheduling' ? [] : [0.25, 0.5, 0.75, 1, 0]) {
         // Invert the authored smoothstep LOD; source/config and body generation remain fixed.
         let lo = 0,
           hi = 1
