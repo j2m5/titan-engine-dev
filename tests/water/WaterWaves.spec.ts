@@ -874,7 +874,8 @@ describe('Паритет: без USE_WATER_WAVES компилируемый фр
   // во фрагментник живёт под своим гейтом, вне гейта прибавилось только
   // объявление варьинга vLocalLightDirection — оно в снимке выше.
   it('вырезав все блоки #ifdef USE_WATER_WAVES...#endif, получаем ровно снимок ДО Task 1', () => {
-    const stripped = stripGuardedBlock(stripGuardedBlock(stripGuardedBlock(frag, 'USE_WATER_WAVES'), 'USE_WATER_CLOUD'), 'USE_SUN_TINT')
+    const colorFrag = stripGuardedBlock(frag, 'SCENE_CLOUD_WATER_DEPTH')
+    const stripped = stripGuardedBlock(stripGuardedBlock(stripGuardedBlock(colorFrag, 'USE_WATER_WAVES'), 'USE_WATER_CLOUD'), 'USE_SUN_TINT')
 
     expect(normalizeIndent(normalizeBlankLines(stripped))).toBe(normalizeIndent(normalizeBlankLines(BASELINE_FRAGMENT_SHADER)))
   })

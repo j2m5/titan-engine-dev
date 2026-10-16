@@ -16,6 +16,29 @@ export const sceneCloudProbeRegistry: Partial<
     }
   >
 > = {
+  depth: {
+    load: () => import('./depth.gpu'),
+    requiredCases: [
+      'above-inside-below-layer',
+      'low-medium-jitter',
+      'visible-water',
+      'seabed-below-datum',
+      'terrain-peak-above-8km',
+      'dry-shore',
+      'zero-absorption-shore-final-alpha',
+      'tiny-positive-final-alpha-water',
+      'zero-final-alpha-branch-fixture',
+      'positive-coverage-shore',
+      'water-waves-foam-variant',
+      'foreground-opaque',
+      'alpha-cut-solid',
+      'alpha-cut-hole',
+      'planet-horizon',
+      'failure-restoration',
+      'msaa',
+      'no-msaa'
+    ]
+  },
   maps: {
     load: () => import('./sourceMaps.gpu'),
     requiredCases: [

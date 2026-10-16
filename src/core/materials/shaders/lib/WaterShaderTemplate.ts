@@ -168,6 +168,10 @@ export const WaterShaderTemplate: ShaderProps = {
     ${ShaderChunk['logdepthbuf_pars_fragment']}
 
     uniform sampler2D uSlopeMap;
+    #ifdef SCENE_CLOUD_WATER_DEPTH
+      uniform sampler2D sceneCloudOpaqueDepth;
+      uniform vec2 sceneCloudViewport;
+    #endif
     uniform vec3 uWaterColor;
     uniform vec3 uWaterShallowColor;
     uniform float uWaterAlphaDeep;
@@ -821,6 +825,14 @@ export const WaterShaderTemplate: ShaderProps = {
         vec3 cloudRadiance = cloudLitRadiance(cloudPremul, cloudDir, -normalize(vLocalLightDirection));
         cloudRadiance *= eclipseLight(cloudDir * (uBodyRadiusUnits + uCloudHeightUnits));
         color = color * (1.0 - cloudAlphaSlant) + cloudRadiance;
+      #endif
+
+      #ifdef SCENE_CLOUD_WATER_DEPTH
+        if (alpha <= 0.0) discard;
+        float opaqueDepth = texture2D(sceneCloudOpaqueDepth, gl_FragCoord.xy / sceneCloudViewport).r;
+        if (gl_FragDepth > opaqueDepth) discard;
+        gl_FragColor = vec4(0.0);
+        return;
       #endif
 
       gl_FragColor = vec4(color, alpha);

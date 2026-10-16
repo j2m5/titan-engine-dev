@@ -1,5 +1,5 @@
 import { ShaderMaterialParameters } from 'three/src/materials/ShaderMaterial'
-import { Color, CubeTexture, Texture, Uniform } from 'three'
+import { Color, CubeTexture, Texture, Uniform, ShaderMaterial, Vector2, NoBlending } from 'three'
 import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { Actor } from '@/core/models/Actor'
 import { WaterShader } from '@/core/materials/shaders/WaterShader'
@@ -40,6 +40,40 @@ const WATER_REFLECTION_ENABLED_BY_OWNER: boolean = false
  * вода за рельефом (с обратной стороны тела) не рисуется поверх него.
  */
 class WaterMaterial extends AbstractShaderMaterial {
+  private sceneCloudDepthMaterial: ShaderMaterial | null = null
+  private sceneCloudDepthDefines = ''
+
+  /** Separate program; uniforms are borrowed from the current color material. */
+  public getSceneCloudDepthMaterial(opaqueDepth: Texture, viewport: Vector2): ShaderMaterial {
+    if (!this.sceneCloudDepthMaterial) {
+      this.sceneCloudDepthMaterial = new ShaderMaterial().copy(this)
+      this.sceneCloudDepthMaterial.transparent = false
+      this.sceneCloudDepthMaterial.depthWrite = true
+      this.sceneCloudDepthMaterial.colorWrite = false
+      this.sceneCloudDepthMaterial.blending = NoBlending
+    }
+    const depth = this.sceneCloudDepthMaterial
+    depth.visible = this.visible
+    const signature = JSON.stringify(this.defines)
+    if (signature !== this.sceneCloudDepthDefines) {
+      depth.defines = { ...this.defines, SCENE_CLOUD_WATER_DEPTH: 1 }
+      depth.needsUpdate = true
+      this.sceneCloudDepthDefines = signature
+    }
+    depth.uniforms = {
+      ...this.uniforms,
+      sceneCloudOpaqueDepth: new Uniform(opaqueDepth),
+      sceneCloudViewport: new Uniform(viewport)
+    }
+    return depth
+  }
+
+  public override dispose(): void {
+    this.sceneCloudDepthMaterial?.dispose()
+    this.sceneCloudDepthMaterial = null
+    this.sceneCloudDepthDefines = ''
+    super.dispose()
+  }
   public model: Actor
 
   /** Снимок дефайнов конструирования — см. PlanetSurfaceMaterial.baseDefines, тот же приём. */
@@ -235,7 +269,10 @@ class WaterMaterial extends AbstractShaderMaterial {
     if (image?.width && image.height) {
       const radiusMeters = this.uniforms.uFoamRadiusMeters.value
       this.uniforms.uSlopeTexel.value.set(1 / image.width, 1 / image.height)
-      this.uniforms.uSlopeTexelMeters.value.set((2 * Math.PI * radiusMeters) / image.width, (Math.PI * radiusMeters) / image.height)
+      this.uniforms.uSlopeTexelMeters.value.set(
+        (2 * Math.PI * radiusMeters) / image.width,
+        (Math.PI * radiusMeters) / image.height
+      )
     } else {
       this.uniforms.uSlopeTexel.value.set(0, 0)
       this.uniforms.uSlopeTexelMeters.value.set(0, 0)
