@@ -105,6 +105,10 @@ class WaterSphere extends TerrainPatchGroup {
     return this.sharedMaterial
   }
 
+  public get sceneCloudReceiver() {
+    return this.sharedMaterial.sceneCloudReceiver
+  }
+
   protected configurePatchMesh(mesh: Mesh): void {
     mesh.renderOrder = WATER_RENDER_ORDER
     mesh.userData.clickable = false
@@ -136,7 +140,8 @@ class WaterSphere extends TerrainPatchGroup {
     // облака — у материала рельефа-родителя: его кадр (fade по высоте) прошёл раньше, обход сверху вниз
     const host = (this.parent as { material?: unknown } | null)?.material
     if (host instanceof TerrainMaterial) {
-      const cloudMap = host.defines.USE_CLOUD !== undefined ? ((host.uniforms.cloudMap.value as Texture | null) ?? null) : null
+      const cloudMap =
+        host.defines.USE_CLOUD !== undefined ? ((host.uniforms.cloudMap.value as Texture | null) ?? null) : null
       this.sharedMaterial.syncClouds(cloudMap, host.uniforms.uCloudOpacity.value as number)
     }
   }

@@ -25,6 +25,28 @@ export const sceneCloudProbeRegistry: Partial<
     }
   >
 > = {
+  receivers: {
+    load: () => import('./receivers.gpu'),
+    requiredCases: [
+      'transparent-water-single-coverage',
+      'oblique-datum',
+      'body-rotation',
+      'rgb-original-source',
+      'sphere-terrain-uv-handoff',
+      'shoreline',
+      'sphere-shadow',
+      'terrain-shadow',
+      'water-shadow',
+      'night-only',
+      'ambient-only',
+      'direct-only',
+      'glint-only',
+      'moving-shadow',
+      'scalar-decoding',
+      'scalar-color-same-different-missing',
+      'borrowed-ownership'
+    ]
+  },
   readiness: {
     load: () => import('./readiness.gpu'),
     requiredCases: [

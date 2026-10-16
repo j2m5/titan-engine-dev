@@ -177,7 +177,7 @@ export class SceneCloudBackend {
         atmosphereBottomRadiusMeters: atmosphere.config.bottomRadius * 1000,
         historyGeneration: this.historyGeneration,
         overlay,
-        shadow: effect.atmosphereShadow,
+        shadow: this.prepared.config.layers[0].castsShadow ? effect.atmosphereShadow : null,
         stbn: this.noise.noise
       }
     } catch (error) {

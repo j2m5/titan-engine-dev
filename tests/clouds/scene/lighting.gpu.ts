@@ -247,6 +247,10 @@ export async function run(): Promise<SceneCloudProbeReport> {
       entry
     )
     check(renderer.debug.onShaderError === originalHandler, 'renderer error handler restored')
+    check(
+      prepared.config.layers[0].castsShadow || output.shadow === null,
+      'noncasting layer publishes no external shadow'
+    )
     lastHistoryGeneration = output.historyGeneration
     return sample(output.overlay)
   }
@@ -561,6 +565,10 @@ void main() {
     check(render(resetFrame).every(Number.isFinite), 'reset produced a fresh finite output')
     check(lastHistoryGeneration === generationBefore + 1, 'history reset increments output generation')
     check(publicUpdates === 1, 'one public update per backend render')
+    prepared.config.layers[0].castsShadow = false
+    render(resetFrame)
+    prepared.config.layers[0].castsShadow = true
+    report.cases.push('casts-shadow-false-output')
     const invalid = { ...resetFrame, camera: resetFrame.camera.clone() }
     invalid.camera.near = 1e-8 / UNIT
     invalid.camera.far = 1e9 / UNIT
@@ -571,7 +579,7 @@ void main() {
     } catch (error) {
       invalidProjection = /projection/.test(String(error))
     }
-    check(invalidProjection && publicUpdates === 1, 'nonfinite far-frustum rejected before public update/output')
+    check(invalidProjection && publicUpdates === 2, 'nonfinite far-frustum rejected before public update/output')
     check(prepared.config.layers[0].baseAltitudeMeters === 4000, 'datum copy did not mutate prepared source config')
     check(borrowedDisposals === 0, 'effect recreation did not dispose borrowed preparation or LUTs')
     const failedCheck = renderer.debug.checkShaderErrors

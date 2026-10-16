@@ -104,6 +104,10 @@ class TerrainSphere extends TerrainPatchGroup {
   }
 
   /** Контракт ResourceObserver: у renderable один материал на все патчи. */
+  public get sceneCloudReceiver() {
+    return this.sharedMaterial.sceneCloudReceiver
+  }
+
   public get material(): TerrainMaterial {
     return this.sharedMaterial
   }

@@ -212,6 +212,11 @@ export const planetSurfaceLightBegin = `
 
 /** Окклюзия на прямом свете — ручкой: 0 — AO не гасит солнце (физика), 1 — множит. */
 export const planetSurfaceDirectGain = `
+      float sceneCloudSunVisibility = 1.0;
+      #ifdef SCENE_CLOUD_RECEIVER
+        sceneCloudSunVisibility = sceneCloudSampleSunTransmittanceMeters(sceneCloudPositionMeters(-vViewPosition));
+        cloudShadow *= sceneCloudSunVisibility;
+      #endif
       float directGain = mix(1.0, occlusion, uTerrainOcclusionDirect) * cloudShadow;
 `
 
@@ -243,7 +248,7 @@ export const planetSurfaceDirectLight = `
 /** Сборка: день, ночь, облака, терминатор, тень кольца, кламп блума; кончается заготовкой бликов. */
 export const planetSurfaceComposite = `
       // lambert = 0 — тинт на всём диффузе
-      vec3 dayColor = surfaceAlbedo * mix(sunTintMix * eclipse, lit, uTerrainLambert);
+      vec3 dayColor = surfaceAlbedo * mix(sunTintMix * eclipse * sceneCloudSunVisibility, lit, uTerrainLambert);
 
       // Ночная и облачная карты есть не у всех тел: без гейта корректность
       // держалась бы на правиле GL «непривязанная текстура читается чёрной».
@@ -317,6 +322,9 @@ export const planetSurfaceFragmentOutput = `
       // Потолок глинта: планета целиком остаётся далеко под half-float/AgX.
       // Потолок 4.0 оставляет запас под блики (пик глинта воды ≈ 0.027·uWaterGlintGain;
       // у льда и мокрой кромки свои пики).
+      #ifdef SCENE_CLOUD_RECEIVER
+        finalColor = sceneCloudFarComposite(finalColor, -vViewPosition, vLocalDir, -vLocalLightDirection);
+      #endif
       gl_FragColor = vec4(min(finalColor, vec3(4.0)), 1.0);
 
       ${ShaderChunk['tonemapping_fragment']}

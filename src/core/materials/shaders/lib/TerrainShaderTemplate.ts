@@ -345,13 +345,13 @@ export const TerrainShaderTemplate: ShaderProps = {
       #ifdef USE_WATER_EDGE
         // Блеск мокрой кромки — тот же глинт без карты, силой WET_GLOSS
         finalColor += glintEdge * blinnPhongGlint(normal, lightDirection, viewDir) * WET_GLOSS
-                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * eclipse;
+                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * sceneCloudSunVisibility * eclipse;
       #endif
 
       #ifdef USE_TERRAIN_GLINT
         // лёд блестит, снег (шероховатость ≈ 1) и дальний план — нет
         finalColor += terrainIceGlint(normal, lightDirection, viewDir, terrainRoughness) * uIceGlintStrength
-                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * eclipse;
+                    * smoothstep(0.0, 0.15, NdotLraw) * ringShadowFactor * terrainShadow * sceneCloudSunVisibility * eclipse;
       #endif
 
       ${planetSurfaceFragmentOutput}

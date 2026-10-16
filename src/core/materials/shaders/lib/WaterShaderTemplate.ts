@@ -524,6 +524,9 @@ export const WaterShaderTemplate: ShaderProps = {
         vec3 cloudShadowSun = -normalize(vLocalLightDirection);
         cloudShadow = cloudShadowAt(cloudShadowDir, cloudShadowSun, dot(cloudShadowDir, cloudShadowSun));
       #endif
+      #ifdef SCENE_CLOUD_RECEIVER
+        cloudShadow *= sceneCloudSampleSunTransmittanceMeters(sceneCloudPositionMeters(-vViewPosition));
+      #endif
       #ifdef USE_SUN_TINT
         color *= mix(vec3(uWaterNightFloor), sunTintFactor * cloudShadow * eclipse, dayFactor);
       #else
@@ -835,6 +838,9 @@ export const WaterShaderTemplate: ShaderProps = {
         return;
       #endif
 
+      #ifdef SCENE_CLOUD_RECEIVER
+        color = sceneCloudFarComposite(color, -vViewPosition, vLocalDir, -vLocalLightDirection);
+      #endif
       gl_FragColor = vec4(color, alpha);
 
       ${ShaderChunk['tonemapping_fragment']}

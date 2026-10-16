@@ -8,6 +8,12 @@ import { applyEclipseUniforms, type EclipseUniformData } from '@/core/eclipse/ec
 import { SunTintBinding } from '@/core/materials/SunTintBinding'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
+import { terrainDataOf } from '@/core/terrain/terrainClassPresets'
+import {
+  bindSceneCloudReceiver,
+  sceneCloudReceiverDefines,
+  type SceneCloudReceiver
+} from '@/core/clouds/receivers/SceneCloudReceiver'
 import { resolveLightTint } from '@/core/helpers/lightSource'
 
 /**
@@ -40,6 +46,7 @@ const WATER_REFLECTION_ENABLED_BY_OWNER: boolean = false
  * вода за рельефом (с обратной стороны тела) не рисуется поверх него.
  */
 class WaterMaterial extends AbstractShaderMaterial {
+  public readonly sceneCloudReceiver: SceneCloudReceiver
   private sceneCloudDepthMaterial: ShaderMaterial | null = null
   private sceneCloudDepthDefines = ''
 
@@ -69,6 +76,7 @@ class WaterMaterial extends AbstractShaderMaterial {
   }
 
   public override dispose(): void {
+    this.sceneCloudReceiver.dispose()
     this.sceneCloudDepthMaterial?.dispose()
     this.sceneCloudDepthMaterial = null
     this.sceneCloudDepthDefines = ''
@@ -204,6 +212,10 @@ class WaterMaterial extends AbstractShaderMaterial {
       ...(lightTint.active && { USE_LIGHT_TINT: '1' })
     }
     this.defines = { ...this.baseDefines }
+    this.sceneCloudReceiver = bindSceneCloudReceiver(this, 'water')
+    const data = terrainDataOf(model)
+    this.uniforms.sceneCloudAmbient.value = data.terrainAmbient ?? 0.15
+    this.uniforms.sceneCloudAmbientSunRef.value = data.terrainAmbientSunRef ?? 0.3
   }
 
   private static resolveSlopePath(model: Actor): string | undefined {
@@ -323,9 +335,10 @@ class WaterMaterial extends AbstractShaderMaterial {
   private rebuildDefines(): void {
     this.defines = {
       ...this.baseDefines,
+      ...sceneCloudReceiverDefines(this),
       ...(this.hasWaterDepth && { USE_WATER_DEPTH: '1' }),
       ...(this.hasWaterWaves && { USE_WATER_WAVES: '1' }),
-      ...(this.hasWaterCloud && { USE_WATER_CLOUD: '1' }),
+      ...(this.defines.SCENE_CLOUD_RECEIVER === undefined && this.hasWaterCloud && { USE_WATER_CLOUD: '1' }),
       // Пересборка от снимка стирает и дефайн тинта — он не про карты и живёт
       // своей синхронизацией (см. syncSunTint), поэтому восстанавливается
       // здесь же по текущей записи реестра.
@@ -368,7 +381,7 @@ class WaterMaterial extends AbstractShaderMaterial {
     // облака вернёт ближайший syncClouds
     this.hasWaterCloud = false
     this.uniforms.uWaterCloudMap.value = null
-    this.defines = { ...this.baseDefines }
+    this.defines = { ...this.baseDefines, ...sceneCloudReceiverDefines(this) }
     // Снимок конструирования тинта не знает — проводка забывает запись, чтобы
     // ближайший syncSunTint увидел смену и вернул дефайн одним рекомпилом.
     this.sunTint.reset()

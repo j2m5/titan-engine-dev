@@ -15,6 +15,11 @@ import { ATMOSPHERE_CATEGORY_ID } from '@/core/constants'
 import { resolveLightTint } from '@/core/helpers/lightSource'
 import { applyEclipseUniforms, type EclipseUniformData } from '@/core/eclipse/eclipseUniforms'
 import { resolveStarRadiusKm } from '@/core/terrain/starRadius'
+import {
+  bindSceneCloudReceiver,
+  sceneCloudReceiverDefines,
+  type SceneCloudReceiver
+} from '@/core/clouds/receivers/SceneCloudReceiver'
 import { sunTangent } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
 
 /**
@@ -44,6 +49,7 @@ export interface SurfaceMaps {
  * в updatePath / resetPath.
  */
 abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
+  public readonly sceneCloudReceiver: SceneCloudReceiver
   public model: Actor
 
   /**
@@ -82,13 +88,19 @@ abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
   /** Угловой радиус солнца из данных атмосферы тела; undefined — нет атмосферы. */
   private readonly atmosphereSunAngularRadius: number | undefined
 
-  protected constructor(model: Actor, atmosphereRegistry: AtmosphereRegistry | undefined, shader: PlanetSurfaceShader<string>) {
+  protected constructor(
+    model: Actor,
+    atmosphereRegistry: AtmosphereRegistry | undefined,
+    shader: PlanetSurfaceShader<string>
+  ) {
     super()
     this.model = model
     // Дочерняя атмосфера резолвится один раз — толщина и actorId читаются из одного актора
     this.atmosphereActor = model.children.where('categoryId', ATMOSPHERE_CATEGORY_ID).first()
     const radiusKm: number = this.model.physicalObject?.getAttribute('radius') ?? 0
-    this.cloudAtmosphereThicknessUnits = PlanetSurfaceMaterial.resolveCloudAtmosphereThicknessUnits(this.atmosphereActor)
+    this.cloudAtmosphereThicknessUnits = PlanetSurfaceMaterial.resolveCloudAtmosphereThicknessUnits(
+      this.atmosphereActor
+    )
     this.bodyRadiusUnits = toThreeJSUnits(radiusKm)
     this.sunTint = new SunTintBinding(
       this,
@@ -115,6 +127,7 @@ abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
       ...(this.lightTint.active && { USE_LIGHT_TINT: '1' })
     }
     this.defines = { ...this.baseDefines }
+    this.sceneCloudReceiver = bindSceneCloudReceiver(this, 'bumpMap' in uniforms ? 'terrain' : 'sphere')
 
     // Цвет света звезды — юниформ материала, не шейдера: дефолт белый, значение копируется один раз
     this.uniforms.uLightColor = new Uniform(new Color(1, 1, 1))
@@ -212,17 +225,19 @@ abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
     this.uniforms.nightMap.value = nightMap
     this.uniforms.cloudMap.value = cloudMap
 
-    const pathDefines = this.updatePath({ planetData, cloudMap, specularMap })
+    const migrated = this.defines.SCENE_CLOUD_RECEIVER !== undefined
+    const pathDefines = this.updatePath({ planetData, cloudMap: migrated ? undefined : cloudMap, specularMap })
 
     // Набор собирается от снимка конструирования, а не поверх прошлого: только
     // так дефайн ушедшей карты исчезает вместе с ней (см. baseDefines).
     this.defines = {
       ...this.baseDefines,
+      ...sceneCloudReceiverDefines(this),
       ...pathDefines,
       ...(nightMap && { USE_NIGHT: '1' }),
       // Облачный слой — при наличии cloudMap; у поверхности его гасит высотный
       // fade (uCloudOpacity → 0 к середине толщины атмосферы)
-      ...(cloudMap && { USE_CLOUD: '1' }),
+      ...(!migrated && cloudMap && { USE_CLOUD: '1' }),
       // Пересборка от снимка стирает и дефайны атмосферных LUT — они не про
       // карты и живут своей синхронизацией, поэтому восстанавливаются здесь же
       // по текущей записи реестра (иначе стриминг карт гасил бы тинт до
@@ -244,12 +259,16 @@ abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
 
     // Возврат к состоянию «карт нет» — это и есть снимок конструирования:
     // поимённый список дефайнов пришлось бы держать в синхроне вручную
-    this.defines = { ...this.baseDefines }
+    this.defines = { ...this.baseDefines, ...sceneCloudReceiverDefines(this) }
     // Снимок конструирования тинта не знает — проводка забывает запись, чтобы
     // ближайший syncSunTint увидел смену и вернул дефайн одним рекомпилом.
     this.sunTint.reset()
 
     this.needsUpdate = true
+  }
+  public override dispose(): void {
+    this.sceneCloudReceiver.dispose()
+    super.dispose()
   }
 }
 
