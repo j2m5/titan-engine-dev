@@ -16,8 +16,11 @@ import type { CloudFrame } from '@/core/clouds/scene/CloudFrame'
 import type { SceneCloudOutput } from '@/core/clouds/takram/SceneCloudBackend'
 import { sceneCloudMapGLSL } from './sceneCloudMapShader'
 import { buildSceneCloudShadowGLSL } from './sceneCloudShadowShader'
+import { sceneCloudProgramSignature, syncSceneCloudNearMaterial } from './sceneCloudEndpointMaterial'
 
 export interface SceneCloudReceiver {
+  getEndpointMaterial(endpoint: 'far' | 'near'): ShaderMaterial
+  retryEndpointMaterial(): void
   setFarMap(
     map: SurfaceCloudMap | null,
     source: import('three').Texture | null,
@@ -57,7 +60,7 @@ export function bindSceneCloudReceiver(
   const noise = new Data3DTexture(new Uint8Array(1), 1, 1, 1)
   noise.format = RedFormat
   neutral.needsUpdate = noise.needsUpdate = true
-  const u = material.uniforms
+  let u = material.uniforms
   const values = {
     sceneCloudFarEnabled: false,
     sceneCloudHasFrame: false,
@@ -101,11 +104,22 @@ export function bindSceneCloudReceiver(
     sceneCloudShadowFrame: 0
   }
   for (const [name, value] of Object.entries(values)) u[name] = new Uniform(value)
-  // The functions are always compiled; endpoint switching is uniforms only.
+  const receiverUniforms = Object.fromEntries(Object.keys(values).map((name) => [name, u[name]]))
+  function currentUniforms() {
+    u = material.uniforms
+    for (const name of Object.keys(receiverUniforms)) {
+      u[name] ??= receiverUniforms[name]
+      receiverUniforms[name] = u[name]
+    }
+  }
+  // Static programs keep far-map and near-shadow sampler closures mutually exclusive.
   material.defines.SCENE_CLOUD_SHADOW_CASCADE_COUNT = 1
   let disposed = false,
     far = false,
     near = false
+  let nearMaterial: ShaderMaterial | null = null,
+    nearSignature = '',
+    retryEpoch = 0
   function migrate() {
     if (material.defines.SCENE_CLOUD_RECEIVER !== undefined) return
     material.defines.SCENE_CLOUD_RECEIVER = 1
@@ -123,9 +137,45 @@ export function bindSceneCloudReceiver(
     u.sceneCloudFarEnabled.value = far && !near && !disposed
   }
   return {
+    getEndpointMaterial(endpoint) {
+      if (disposed) throw new Error('Scene cloud receiver is disposed')
+      currentUniforms()
+      if (endpoint === 'far') return material
+      const signature = sceneCloudProgramSignature(material)
+      nearMaterial ??= new ShaderMaterial()
+      syncSceneCloudNearMaterial(material, nearMaterial)
+      if (retryEpoch) {
+        const key = nearMaterial.customProgramCacheKey()
+        nearMaterial.customProgramCacheKey = () => `${key};scene-cloud-near-retry-${retryEpoch}`
+      }
+      if (signature !== nearSignature) {
+        nearSignature = signature
+        nearMaterial.needsUpdate = true
+      }
+      return nearMaterial
+    },
+    retryEndpointMaterial() {
+      if (disposed) return
+      nearMaterial?.dispose()
+      nearMaterial = null
+      nearSignature = ''
+      retryEpoch++
+    },
     setFarMap(map, source, colorSource) {
       if (disposed) return
+      currentUniforms()
       migrate()
+      const layout = {
+        SCENE_CLOUD_FAR_MAP: map ? 1 : undefined,
+        SCENE_CLOUD_FAR_COLOR:
+          map && map.pattern.encoding !== 'rgb-cloud-map' && map.color.kind === 'map' ? 1 : undefined
+      }
+      for (const [name, value] of Object.entries(layout))
+        if (material.defines[name] !== value) {
+          if (value === undefined) delete material.defines[name]
+          else material.defines[name] = value
+          material.needsUpdate = true
+        }
       far = map !== null && source !== null
       u.sceneCloudMap.value = source
       const mappedColor = map?.pattern.encoding !== 'rgb-cloud-map' && map?.color.kind === 'map'
@@ -154,6 +204,7 @@ export function bindSceneCloudReceiver(
     },
     setEndpoint(frame, output) {
       if (disposed) return
+      currentUniforms()
       migrate()
       clearShadow()
       near = !!(frame && output && frame.serial === output.frame.serial && frame.actorId === output.frame.actorId)
@@ -203,6 +254,7 @@ export function bindSceneCloudReceiver(
     },
     dispose() {
       if (disposed) return
+      currentUniforms()
       disposed = true
       near = false
       far = false
@@ -213,6 +265,8 @@ export function bindSceneCloudReceiver(
       u.sceneCloudHasFrame.value = false
       neutral.dispose()
       noise.dispose()
+      nearMaterial?.dispose()
+      nearMaterial = null
     }
   }
 }

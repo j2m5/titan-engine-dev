@@ -36,6 +36,7 @@ vec3 sceneCloudLinearToSrgb(vec3 x) {
   return mix(12.92 * x, 1.055 * pow(max(x, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), x));
 }
 vec3 sceneCloudFarComposite(vec3 baseColor, vec3 viewPositionSceneUnits, vec3 radialFallback, vec3 sunFallback) {
+  #if !defined(SCENE_CLOUD_NEAR) && defined(SCENE_CLOUD_FAR_MAP)
   if (!sceneCloudFarEnabled) return baseColor;
   vec3 direction = sceneCloudDatumDirection(viewPositionSceneUnits, radialFallback);
   float phi = dot(direction.xz, direction.xz) > 1e-12 ? atan(direction.z, -direction.x) : 0.0;
@@ -43,7 +44,9 @@ vec3 sceneCloudFarComposite(vec3 baseColor, vec3 viewPositionSceneUnits, vec3 ra
   vec4 sampleValue = texture2D(sceneCloudMap, uv);
   float coverage;
   vec3 albedo = sceneCloudColor;
-  if (sceneCloudMappedColor) albedo = mix(vec3(1.0), texture2D(sceneCloudColorMap, uv).rgb, sceneCloudColorStrength);
+  #ifdef SCENE_CLOUD_FAR_COLOR
+    if (sceneCloudMappedColor) albedo = mix(vec3(1.0), texture2D(sceneCloudColorMap, uv).rgb, sceneCloudColorStrength);
+  #endif
   if (sceneCloudEncoding == 1) {
     RgbCloudSample cloud = decodeRgbCloud(sampleValue.rgb);
     coverage = cloud.coverage;
@@ -69,5 +72,8 @@ vec3 sceneCloudFarComposite(vec3 baseColor, vec3 viewPositionSceneUnits, vec3 ra
   lighting = mix(tint * sceneCloudLightColor * smoothstep(-0.08, 0.25, muS), lighting, sceneCloudLambert);
   vec3 cloudColor = albedo * lighting * eclipseLight(direction * uBodyRadiusUnits);
   return mix(baseColor, cloudColor, coverage);
+  #else
+    return baseColor;
+  #endif
 }
 `

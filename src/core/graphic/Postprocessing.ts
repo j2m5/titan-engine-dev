@@ -6,22 +6,18 @@ import {
   EffectComposer,
   EffectPass,
   Pass,
-  RenderPass,
   ToneMappingEffect,
   ToneMappingMode
 } from 'postprocessing'
-import { createAtmospherePass } from '@/core/graphic/effects/atmosphere/AtmosphereEffect'
+import type { AtmosphereEffect } from '@/core/graphic/effects/atmosphere/AtmosphereEffect'
+import { captureAtmosphereFrame } from './effects/atmosphere/atmosphereFrame'
+import { createSceneEndpointPasses } from './sceneEndpointPasses'
+import { SceneCloudRuntime } from '@/core/clouds/SceneCloudRuntime'
+import { CloudBlendPass } from './clouds/CloudBlendPass'
+import { SceneCloudComposition, CloudEndpointCapturePass } from './clouds/SceneCloudComposition'
 import type { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { LensRegistry } from '@/core/services/LensRegistry'
-import { createGravitationalLensPass } from '@/core/graphic/effects/lens/GravitationalLensEffect'
-import { SkyLayer } from '@/core/graphic/passes/SkyLayer'
-import { DepthVolumePass } from '@/core/graphic/passes/DepthVolumePass'
-import { BlackHolePass } from '@/core/graphic/passes/BlackHolePass'
-import { OverlayPass } from '@/core/graphic/passes/OverlayPass'
-import { LensFrontSorter } from '@/core/graphic/passes/LensFrontSorter'
-import { LensFrontSplitPass } from '@/core/graphic/passes/LensFrontSplitPass'
-import { LensFrontPass } from '@/core/graphic/passes/LensFrontPass'
 import { LensFlareEffect } from '@/core/graphic/effects/lensflare/LensFlareEffect'
 import { ExposureEffect } from '@/core/graphic/effects/grading/ExposureEffect'
 import { ColorGradeEffect } from '@/core/graphic/effects/grading/ColorGradeEffect'
@@ -160,6 +156,11 @@ export function readAtmosphereDebugView(search: string = location.search): numbe
 
 class Postprocessing {
   public composer: EffectComposer | null = null
+  private prefix: readonly Pass[] = []
+  private atmosphere: AtmosphereEffect | null = null
+  private composition: SceneCloudComposition | null = null
+  private blend = new CloudBlendPass()
+  private serial = 0
 
   public constructor(
     private readonly renderer: WebGLRenderer,
@@ -167,7 +168,8 @@ class Postprocessing {
     private readonly camera: PerspectiveCamera,
     private readonly atmosphereRegistry: AtmosphereRegistry,
     private readonly depthVolumeRegistry: DepthVolumeRegistry,
-    private readonly lensRegistry: LensRegistry = new LensRegistry()
+    private readonly lensRegistry: LensRegistry = new LensRegistry(),
+    public readonly cloudRuntime?: SceneCloudRuntime
   ) {}
 
   /**
@@ -197,22 +199,17 @@ class Postprocessing {
    */
   public buildPasses(): readonly Pass[] {
     const [hdrPass, ldrPass] = createEffectPasses(this.camera)
-    const lensFront = new LensFrontSorter(this.scene, this.camera, this.lensRegistry, this.depthVolumeRegistry)
-    // Слой видимого неба: рисует BlackHolePass, читает дальнее поле линзы
-    const skyLayer = new SkyLayer()
-
-    return [
-      new LensFrontSplitPass(lensFront),
-      new RenderPass(this.scene, this.camera),
-      new DepthVolumePass(this.camera, this.depthVolumeRegistry, lensFront),
-      new BlackHolePass(this.camera, this.lensRegistry, skyLayer),
-      createGravitationalLensPass(this.camera, this.lensRegistry, skyLayer),
-      new LensFrontPass(this.scene, this.camera, lensFront),
-      new OverlayPass(this.scene, this.camera),
-      createAtmospherePass(this.camera, this.atmosphereRegistry, readAtmosphereDebugView()),
-      hdrPass,
-      ldrPass
-    ]
+    const endpoint = createSceneEndpointPasses({
+      scene: this.scene,
+      camera: this.camera,
+      atmosphereRegistry: this.atmosphereRegistry,
+      depthVolumeRegistry: this.depthVolumeRegistry,
+      lensRegistry: this.lensRegistry,
+      atmosphereDebugView: readAtmosphereDebugView()
+    })
+    this.prefix = endpoint.passes
+    this.atmosphere = endpoint.atmosphere
+    return [...endpoint.passes, ...(this.cloudRuntime ? [this.blend] : []), hdrPass, ldrPass]
   }
 
   public initialize(): void {
@@ -223,10 +220,64 @@ class Postprocessing {
     })
 
     for (const pass of this.buildPasses()) this.composer.addPass(pass)
+    if (this.cloudRuntime)
+      this.composition = new SceneCloudComposition(this.renderer, this.scene, this.camera, this.cloudRuntime, () => {
+        const endpoint = createSceneEndpointPasses({
+          scene: this.scene,
+          camera: this.camera,
+          atmosphereRegistry: this.atmosphereRegistry,
+          depthVolumeRegistry: this.depthVolumeRegistry,
+          lensRegistry: this.lensRegistry,
+          atmosphereDebugView: readAtmosphereDebugView()
+        })
+        const composer = new EffectComposer(this.renderer, {
+          depthBuffer: true,
+          frameBufferType: HalfFloatType,
+          multisampling: 8
+        })
+        composer.autoRenderToScreen = false
+        const capture = new CloudEndpointCapturePass()
+        for (const pass of [...endpoint.passes, capture]) {
+          pass.renderToScreen = false
+          composer.addPass(pass)
+        }
+        return { composer, atmosphere: endpoint.atmosphere, capture }
+      })
   }
 
   public render(delta?: number): void {
-    this.composer?.render(delta)
+    if (!this.composer) return
+    this.scene.updateMatrixWorld(true)
+    this.camera.updateMatrixWorld(true)
+    const snapshot = captureAtmosphereFrame(this.camera, this.atmosphereRegistry, ++this.serial)
+    this.atmosphere?.setFrame(snapshot)
+    this.atmosphere?.setCloudOverlay(null)
+    const lensActive = this.lensRegistry.entries().some((entry) => {
+      let visible = true
+      entry.object.traverseAncestors((parent) => {
+        if (!parent.visible) visible = false
+      })
+      return visible && entry.object.visible
+    })
+    const plan = this.cloudRuntime?.beginFrame(
+      this.camera,
+      this.renderer.getDrawingBufferSize(new Vector2()),
+      this.serial,
+      delta ?? 0,
+      snapshot,
+      lensActive,
+      readAtmosphereDebugView()
+    )
+    const near = plan ? this.composition?.prepare(plan, snapshot) : null
+    for (const pass of this.prefix) pass.enabled = !near || near.weight < 1
+    this.blend.setNear(near?.texture ?? null, near?.weight ?? 0)
+    try {
+      this.composer.render(delta)
+      this.cloudRuntime?.recordPasses({ farRenders: !near || near.weight < 1 ? 1 : 0, finalRenders: 1 })
+    } finally {
+      this.blend.setNear(null, 0)
+      this.atmosphere?.setFrame(null)
+    }
   }
 
   /**
@@ -236,6 +287,7 @@ class Postprocessing {
    */
   public setSize(width: number, height: number): void {
     this.composer?.setSize(width, height)
+    this.composition?.setSize(width, height)
   }
 
   /**
@@ -271,19 +323,25 @@ class Postprocessing {
 
     try {
       this.composer?.setSize(size.width, size.height, false)
+      this.composition?.setSize(size.width, size.height)
       this.render()
       blob = new Promise((resolve: (value: Blob | null) => void): void => canvas.toBlob(resolve, 'image/png'))
     } finally {
       this.renderer.setSize(cssSize.width, cssSize.height, false)
       this.renderer.setPixelRatio(pixelRatio)
       this.composer?.setSize(cssSize.width, cssSize.height, false)
+      this.composition?.setSize(cssSize.width, cssSize.height)
     }
 
     return blob
   }
 
   public dispose(): void {
+    this.composition?.dispose()
+    this.composition = null
+    this.cloudRuntime?.invalidate(null)
     this.composer?.dispose()
+    this.composer = null
   }
 }
 

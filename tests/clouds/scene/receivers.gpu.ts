@@ -29,6 +29,7 @@ import type { CloudFrame } from '@/core/clouds/scene/CloudFrame'
 import type { SceneCloudOutput } from '@/core/clouds/takram/SceneCloudBackend'
 import type { SurfaceCloudMap } from '@/core/clouds/SceneCloudConfig'
 import type { SceneCloudProbeReport } from './probe'
+import { withSceneCloudMaterials } from '@/core/graphic/clouds/sceneCloudMaterialScope'
 
 // Controlled geometry/model/map/shadow fixtures; the three color materials and their receivers are production code.
 function actor(): Actor {
@@ -166,7 +167,13 @@ export async function run(): Promise<SceneCloudProbeReport> {
   const read = (): Float32Array => {
     renderer.setRenderTarget(target)
     renderer.clear()
-    renderer.render(scene, camera)
+    const bindings = new Map(
+      materials.map((m) => [
+        m,
+        m.sceneCloudReceiver.getEndpointMaterial(m.uniforms.sceneCloudShadowEnabled.value ? 'near' : 'far')
+      ])
+    )
+    withSceneCloudMaterials(scene, bindings, () => renderer.render(scene, camera))
     const result = new Float32Array(33 * 33 * 4)
     renderer.readRenderTargetPixels(target, 0, 0, 33, 33, result)
     return result

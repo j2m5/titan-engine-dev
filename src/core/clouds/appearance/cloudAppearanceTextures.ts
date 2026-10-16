@@ -31,13 +31,23 @@ export function prepareCloudColor(
   choice: CloudColor,
   resolveTexture: CloudTextureResolver
 ): Pick<CloudAppearanceTextures, 'color' | 'constantColorLinear' | 'colorStrength'> {
+  const source = choice.kind === 'map' ? resolveTexture(choice.map.resourceId) : undefined
+  if (choice.kind === 'map') {
+    if (!source) throw new Error(`Cloud texture resource ${choice.map.resourceId} is unavailable`)
+    readCloudImagePixels(source)
+  }
+  return finalizeCloudColor(choice, source)
+}
+
+/** Caller must validate the borrowed image before constructing its independent sampler view. */
+export function finalizeCloudColor(
+  choice: CloudColor,
+  source?: Texture
+): Pick<CloudAppearanceTextures, 'color' | 'constantColorLinear' | 'colorStrength'> {
   const constant = new Color()
   let color: Texture | null = null
   if (choice.kind === 'map') {
-    const source = resolveTexture(choice.map.resourceId)
-    if (!source) throw new Error(`Cloud texture resource ${choice.map.resourceId} is unavailable`)
-    readCloudImagePixels(source)
-    color = createCloudTextureView(source)
+    color = createCloudTextureView(source!)
     color.wrapS = RepeatWrapping
     color.wrapT = ClampToEdgeWrapping
     color.minFilter = LinearMipmapLinearFilter

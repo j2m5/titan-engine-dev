@@ -92,7 +92,8 @@ export function buildSceneCloudShadowGLSL(reference: string): string {
     .replace(/\bSHADOW_CASCADE_COUNT\b/g, 'SCENE_CLOUD_SHADOW_CASCADE_COUNT')
     .replace(/\bSHADOW_SAMPLE_COUNT\b/g, 'SCENE_CLOUD_SHADOW_SAMPLE_COUNT')
     .replace(/\bMETER_TO_LENGTH_UNIT\b/g, 'SCENE_CLOUD_SHADOW_METER_TO_LENGTH_UNIT')
-  return `precision highp sampler3D;
+  return `#ifdef SCENE_CLOUD_NEAR
+  precision highp sampler3D;
   precision highp sampler2DArray;
   #define SCENE_CLOUD_SHADOW_SAMPLE_COUNT 8
   #define SCENE_CLOUD_SHADOW_METER_TO_LENGTH_UNIT 0.001
@@ -114,5 +115,8 @@ export function buildSceneCloudShadowGLSL(reference: string): string {
     float radius=sceneCloudShadowGetShadowRadius(positionMeters);
     float tau=sceneCloudShadowSampleShadowOpticalDepth(positionMeters,positionMeters * 0.001,radius,sceneCloudShadowGetSTBN());
     return exp(-tau);
-  }`
+  }
+  #else
+  float sceneCloudSampleSunTransmittanceMeters(vec3 positionMeters) { return 1.0; }
+  #endif`
 }

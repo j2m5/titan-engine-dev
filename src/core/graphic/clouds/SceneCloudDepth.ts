@@ -96,7 +96,7 @@ export class SceneCloudDepth {
     const meshes: Array<{ object: Mesh; material: Material | Material[] }> = []
     this.scene.traverse((object) => {
       const mesh = object as Mesh
-      if (!mesh.material) return
+      if (!mesh.isMesh || !mesh.material) return
       meshes.push({ object: mesh, material: mesh.material })
       for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
         if (!flags.has(material))

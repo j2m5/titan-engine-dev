@@ -1,3 +1,4 @@
+import { createCloudReduction } from './cloudPreparationSteps'
 import {
   Texture,
   DataTexture,
@@ -15,6 +16,79 @@ export interface CloudImagePixels {
   height: number
   space: CloudInputColorSpace
   rowOrigin: 'bottom'
+}
+
+/** Bounded native-size reads, with identical canonical row mapping to the sync entry. */
+export function* readCloudImagePixelSteps(
+  texture: Texture,
+  measured?: (stage: 'allocation' | 'native', milliseconds: number) => void
+): Generator<void, CloudImagePixels> {
+  const space =
+    texture.colorSpace === SRGBColorSpace
+      ? 'srgb'
+      : texture.colorSpace === NoColorSpace || texture.colorSpace === LinearSRGBColorSpace
+        ? 'linear'
+        : undefined
+  if (!space) throw new Error(`Unsupported cloud texture colorSpace: ${texture.colorSpace}`)
+  const image = texture.image
+  const bitmap = typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap
+  const html = typeof HTMLImageElement !== 'undefined' && image instanceof HTMLImageElement
+  const width = html ? image.naturalWidth : image?.width,
+    height = html ? image.naturalHeight : image?.height
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0)
+    throw new Error('Unsupported, closed or unloaded cloud resource image')
+  const data = texture instanceof DataTexture
+  if (data) {
+    if (
+      texture.format !== RGBAFormat ||
+      texture.type !== UnsignedByteType ||
+      !(image.data instanceof Uint8Array || image.data instanceof Uint8ClampedArray) ||
+      image.data.length !== width * height * 4
+    )
+      throw new Error('Unsupported cloud DataTexture image; expected unsigned byte RGBA')
+  } else if (!bitmap && !(html && image.complete)) throw new Error('Unsupported or unloaded cloud resource image')
+  const allocationStart = performance.now()
+  const canonical =
+    data && !(image.data instanceof Uint8ClampedArray)
+      ? new Uint8Array(width * height * 4)
+      : new Uint8ClampedArray(width * height * 4)
+  measured?.('allocation', performance.now() - allocationStart)
+  const flip = bitmap ? false : texture.flipY
+  const canvas = data ? null : document.createElement('canvas')
+  if (canvas) {
+    canvas.width = Math.min(1024, width)
+    canvas.height = Math.min(16, height)
+  }
+  const context = canvas?.getContext('2d', { colorSpace: 'srgb', willReadFrequently: true })
+  if (!data && !context) throw new Error('Cloud resource image requires an sRGB Canvas 2D context')
+  for (let y = 0; y < height; y += 16)
+    for (let x = 0; x < width; x += 1024) {
+      const w = Math.min(1024, width - x),
+        h = Math.min(16, height - y)
+      let bytes: Uint8Array | Uint8ClampedArray
+      try {
+        if (data) bytes = image.data
+        else {
+          const nativeStart = performance.now()
+          context!.clearRect(0, 0, w, h)
+          context!.drawImage(image, x, y, w, h, 0, 0, w, h)
+          bytes = context!.getImageData(0, 0, w, h, { colorSpace: 'srgb' }).data
+          measured?.('native', performance.now() - nativeStart)
+        }
+      } catch (cause) {
+        throw new Error(
+          `Cloud resource image is unreadable: ${cause instanceof Error ? cause.message : String(cause)}`,
+          { cause }
+        )
+      }
+      for (let row = 0; row < h; row++) {
+        const from = data ? ((y + row) * width + x) * 4 : row * w * 4
+        const dest = ((flip ? height - 1 - y - row : y + row) * width + x) * 4
+        canonical.set(bytes.subarray(from, from + w * 4), dest)
+      }
+      yield
+    }
+  return { bytes: canonical, width, height, space, rowOrigin: 'bottom' }
 }
 
 /** Read at native resolution. GPU upload ignores flipY for an already oriented ImageBitmap. */
@@ -78,26 +152,11 @@ export function reduceCloudPixels(
   decode: (index: number) => readonly number[],
   channels: number
 ): Uint8Array {
-  const output = new Uint8Array(dw * dh * 4)
-  const overlap = (a: number, b: number, c: number, d: number) => Math.max(0, Math.min(b, d) - Math.max(a, c))
-  for (let y = 0; y < dh; y++)
-    for (let x = 0; x < dw; x++) {
-      const x0 = (x * sw) / dw,
-        x1 = ((x + 1) * sw) / dw,
-        y0 = (y * sh) / dh,
-        y1 = ((y + 1) * sh) / dh
-      const sums = new Array<number>(channels).fill(0)
-      let area = 0
-      for (let sy = Math.floor(y0); sy < Math.ceil(y1); sy++)
-        for (let sx = Math.floor(x0); sx < Math.ceil(x1); sx++) {
-          const weight = overlap(x0, x1, sx, sx + 1) * overlap(y0, y1, sy, sy + 1)
-          const decoded = decode((sy * sw + sx) * 4)
-          for (let c = 0; c < channels; c++) sums[c] += decoded[c] * weight
-          area += weight
-        }
-      for (let c = 0; c < channels; c++) output[(y * dw + x) * 4 + c] = Math.round((255 * sums[c]) / area)
-    }
-  return output
+  const reduction = createCloudReduction(sw, sh, dw, dh, decode, channels)
+  while (!reduction.step(Infinity)) {
+    /* synchronous lab caller */
+  }
+  return reduction.output
 }
 
 /** A separate Source prevents derivative uploads from advancing the borrowed source version. */

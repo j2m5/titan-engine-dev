@@ -54,6 +54,11 @@ export function assertSceneCloudProjection(camera: PerspectiveCamera): void {
 /** Owns one public CloudsEffect and noise set. Prepared source textures and scene LUTs are borrowed. */
 export class SceneCloudBackend {
   private static programEpoch = 0
+  private readonly counts = { cloudUpdates: 0, shadowUpdates: 0 }
+  /** Logical attempts entering the one public update, not completed GPU draw counts. */
+  public get updateCounts(): Readonly<{ cloudUpdates: number; shadowUpdates: number }> {
+    return this.counts
+  }
   private effect!: CloudsEffect
   private noise: ReturnType<typeof createCloudTextures>
   private appearance!: CloudAppearanceBinding
@@ -165,6 +170,8 @@ export class SceneCloudBackend {
         this.initialized = true
       }
       // Exactly one public update owns both current/resolve draws and cloud shadows.
+      this.counts.cloudUpdates++
+      this.counts.shadowUpdates++
       effect.update(renderer, inputBuffer, frame.deltaSeconds)
       compilation.check()
       const overlay = effect.atmosphereOverlay?.map

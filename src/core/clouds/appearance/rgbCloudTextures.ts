@@ -1,3 +1,4 @@
+import { reduceCloudPixels } from './cloudImagePixels'
 import {
   DataTexture,
   Texture,
@@ -33,33 +34,26 @@ export function prepareRgbCloudTextures(
   const scale = Math.min(1, Math.min(maxWidth, 2048) / sw, 1024 / sh)
   const dw = Math.max(1, Math.floor(sw * scale)),
     dh = Math.max(1, Math.floor(sh * scale))
-  const weatherBytes = new Uint8Array(dw * dh * 4),
-    colorBytes = choice?.kind === 'constant' ? null : new Uint8Array(dw * dh * 4)
-  const overlap = (a0: number, a1: number, b0: number, b1: number) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0))
-  for (let y = 0; y < dh; y++)
-    for (let x = 0; x < dw; x++) {
-      const x0 = (x * sw) / dw,
-        x1 = ((x + 1) * sw) / dw,
-        y0 = (y * sh) / dh,
-        y1 = ((y + 1) * sh) / dh
-      const sums = [0, 0, 0, 0]
-      let area = 0
-      for (let sy = Math.floor(y0); sy < Math.ceil(y1); sy++)
-        for (let sx = Math.floor(x0); sx < Math.ceil(x1); sx++) {
-          const weight = overlap(x0, x1, sx, sx + 1) * overlap(y0, y1, sy, sy + 1)
-          const at = (sy * sw + sx) * 4
-          const decoded = decodeRgbCloud([bytes[at] / 255, bytes[at + 1] / 255, bytes[at + 2] / 255], space)
-          sums[0] += decoded.coverage * weight
-          if (colorBytes) for (let c = 0; c < 3; c++) sums[c + 1] += decoded.albedo[c] * weight
-          area += weight
-        }
-      const at = (y * dw + x) * 4
-      weatherBytes[at] = Math.round((255 * sums[0]) / area)
-      if (colorBytes) {
-        for (let c = 0; c < 3; c++) colorBytes[at + c] = Math.round((255 * sums[c + 1]) / area)
-        colorBytes[at + 3] = 255
-      }
+  const reduced = reduceCloudPixels(
+    sw,
+    sh,
+    dw,
+    dh,
+    (at) => {
+      const value = decodeRgbCloud([bytes[at] / 255, bytes[at + 1] / 255, bytes[at + 2] / 255], space)
+      return [value.coverage, ...value.albedo]
+    },
+    choice?.kind === 'constant' ? 1 : 4
+  )
+  const weatherBytes = new Uint8Array(dw * dh * 4)
+  const colorBytes = choice?.kind === 'constant' ? null : new Uint8Array(dw * dh * 4)
+  for (let at = 0; at < reduced.length; at += 4) {
+    weatherBytes[at] = reduced[at]
+    if (colorBytes) {
+      for (let c = 0; c < 3; c++) colorBytes[at + c] = reduced[at + c + 1]
+      colorBytes[at + 3] = 255
     }
+  }
   const make = (data: Uint8Array) => {
     const texture = new DataTexture(data, dw, dh, RGBAFormat)
     texture.colorSpace = NoColorSpace

@@ -1,8 +1,45 @@
 import { expect, it } from 'vitest'
 import { SceneCloudDepth } from '@/core/graphic/clouds/SceneCloudDepth'
 import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
-import { Texture, Vector2 } from 'three'
+import { Texture, Vector2, Group, Scene, Mesh, MeshBasicMaterial, PerspectiveCamera, Color, Vector4 } from 'three'
+import type { CloudFrame } from '@/core/clouds/scene/CloudFrame'
 import type { Actor } from '@/core/models/Actor'
+it('visits drawn meshes without assigning read-only material owners on terrain/water groups', () => {
+  const scene = new Scene(),
+    group = new Group(),
+    material = new MeshBasicMaterial()
+  Object.defineProperty(group, 'material', { get: () => material })
+  group.add(new Mesh(undefined, material))
+  scene.add(group)
+  const renderer = {
+    autoClear: true,
+    capabilities: { maxSamples: 0 },
+    getContext: () => ({ getContextAttributes: () => ({ antialias: false }) }),
+    getRenderTarget: () => null,
+    getActiveCubeFace: () => 0,
+    getActiveMipmapLevel: () => 0,
+    getViewport: (value: Vector4) => value.set(0, 0, 8, 8),
+    getScissor: (value: Vector4) => value.set(0, 0, 8, 8),
+    getScissorTest: () => false,
+    getClearColor: (value: Color) => value.set(0),
+    getClearAlpha: () => 1,
+    setClearColor: () => {},
+    setRenderTarget: () => {},
+    setViewport: () => {},
+    setScissor: () => {},
+    setScissorTest: () => {},
+    clear: () => {},
+    render: () => {}
+  }
+  const depth = new SceneCloudDepth(renderer as never, scene)
+  expect(() =>
+    depth.render({ viewport: new Vector2(8, 8), serial: 1, sceneCamera: new PerspectiveCamera() } as CloudFrame)
+  ).not.toThrow()
+  expect(material.visible).toBe(true)
+  expect(material.colorWrite).toBe(true)
+  depth.dispose()
+  material.dispose()
+})
 it('provides a depth service and cached water variants', () => {
   expect(typeof SceneCloudDepth).toBe('function')
   expect(typeof WaterMaterial.prototype.getSceneCloudDepthMaterial).toBe('function')
@@ -15,11 +52,18 @@ it('caches a separate depth program while borrowing current uniforms and retaini
     renderingObject: { getAttribute: () => ({}) }
   } as unknown as Actor
   const water = new WaterMaterial(actor)
+  water.alphaTest = 0.37
+  water.alphaToCoverage = true
   const texture = new Texture(),
     viewport = new Vector2(10, 12)
   const version = water.version
+  water.uniforms.sceneCloudMap.value = texture
+  const borrowedVersion = texture.source.version
   const depth = water.getSceneCloudDepthMaterial(texture, viewport)
+  expect(texture.source.version).toBe(borrowedVersion)
   expect(depth).not.toBe(water)
+  expect(depth.alphaTest).toBe(0.37)
+  expect(depth.alphaToCoverage).toBe(true)
   expect(depth.transparent).toBe(false)
   expect(depth.depthWrite).toBe(true)
   expect(depth.uniforms.uTime).toBe(water.uniforms.uTime)

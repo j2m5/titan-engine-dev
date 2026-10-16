@@ -53,7 +53,16 @@ class WaterMaterial extends AbstractShaderMaterial {
   /** Separate program; uniforms are borrowed from the current color material. */
   public getSceneCloudDepthMaterial(opaqueDepth: Texture, viewport: Vector2): ShaderMaterial {
     if (!this.sceneCloudDepthMaterial) {
-      this.sceneCloudDepthMaterial = new ShaderMaterial().copy(this)
+      // ShaderMaterial.copy clones Texture uniforms and advances their shared Source version.
+      // Copy the program/state without uniforms; below we explicitly borrow the owner's uniforms.
+      const source: ShaderMaterial = Object.create(this)
+      Object.defineProperties(source, {
+        uniforms: { value: {} },
+        uniformsGroups: { value: [] },
+        userData: { value: {} }
+      })
+      this.sceneCloudDepthMaterial = new ShaderMaterial().copy(source)
+      this.sceneCloudDepthMaterial.uniformsGroups = this.uniformsGroups
       this.sceneCloudDepthMaterial.transparent = false
       this.sceneCloudDepthMaterial.depthWrite = true
       this.sceneCloudDepthMaterial.colorWrite = false

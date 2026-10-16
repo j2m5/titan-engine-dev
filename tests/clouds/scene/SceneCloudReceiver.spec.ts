@@ -69,6 +69,109 @@ function fixture() {
   return { frame, output, material, receiver: bindSceneCloudReceiver(material, 'sphere') }
 }
 describe('scene cloud receiver endpoints', () => {
+  it('reinstalls owned receiver Uniforms after an owner dictionary reset', () => {
+    const f = fixture(),
+      frameUniform = f.material.uniforms.sceneCloudHasFrame
+    f.material.uniforms = { replacement: { value: 42 } }
+    f.receiver.setEndpoint(f.frame, null)
+    expect(f.material.uniforms.sceneCloudHasFrame).toBe(frameUniform)
+    expect(frameUniform.value).toBe(true)
+    const near = f.receiver.getEndpointMaterial('near')
+    expect(near.uniforms.replacement).toBe(f.material.uniforms.replacement)
+    expect(near.uniforms.sceneCloudHasFrame).toBe(frameUniform)
+    f.receiver.dispose()
+  })
+  it('preserves inherited alpha accessors without version churn on unchanged acquisition', () => {
+    const f = fixture()
+    f.material.alphaTest = 0.37
+    f.material.alphaToCoverage = true
+    const near = f.receiver.getEndpointMaterial('near')
+    expect(near.alphaTest).toBe(0.37)
+    expect(near.alphaToCoverage).toBe(true)
+    const version = near.version
+    expect(f.receiver.getEndpointMaterial('near')).toBe(near)
+    expect(near.version).toBe(version)
+    f.material.alphaTest = 0.62
+    expect(f.receiver.getEndpointMaterial('near').alphaTest).toBe(0.62)
+    expect(near.version).toBe(version)
+    f.receiver.dispose()
+  })
+  it('owns stable far and near programs while borrowing live uniforms and textures', () => {
+    const f = fixture(),
+      source = new Texture()
+    f.receiver.setFarMap(map, source)
+    const far = f.receiver.getEndpointMaterial('far')
+    const near = f.receiver.getEndpointMaterial('near')
+    expect(far).toBe(f.material)
+    expect(near).not.toBe(far)
+    expect(near.uniforms.sceneCloudMap).toBe(far.uniforms.sceneCloudMap)
+    const dictionary = near.uniforms
+    expect(far.defines.SCENE_CLOUD_FAR_MAP).toBe(1)
+    expect(far.defines.SCENE_CLOUD_FAR_COLOR).toBeUndefined()
+    expect(near.defines.SCENE_CLOUD_NEAR).toBe(1)
+    const version = near.version
+    for (let i = 0; i < 3; i++) {
+      f.receiver.setEndpoint(f.frame, f.output)
+      expect(f.receiver.getEndpointMaterial('near')).toBe(near)
+      f.receiver.setEndpoint(f.frame, null)
+      expect(f.receiver.getEndpointMaterial('far')).toBe(far)
+    }
+    expect(near.version).toBe(version)
+    far.defines.USE_STREAMED_DETAIL = 1
+    far.needsUpdate = true
+    expect(f.receiver.getEndpointMaterial('near')).toBe(near)
+    expect(near.defines.USE_STREAMED_DETAIL).toBe(1)
+    const replacements = { ...far.uniforms, sceneCloudMap: { value: null }, streamed: { value: source } }
+    const sourceIdentity = source.source,
+      sourceVersion = source.source.version
+    far.uniforms = replacements
+    f.receiver.setFarMap(map, source)
+    expect(replacements.sceneCloudMap.value).toBe(source)
+    far.visible = false
+    far.depthWrite = false
+    far.opacity = 0.3
+    const hook = () => {}
+    far.onBeforeRender = hook
+    const stableVersion = near.version
+    expect(f.receiver.getEndpointMaterial('near').uniforms).toBe(dictionary)
+    expect(near.uniforms.sceneCloudMap).toBe(replacements.sceneCloudMap)
+    expect(near.uniforms.streamed).toBe(replacements.streamed)
+    expect(near.visible).toBe(false)
+    expect(near.depthWrite).toBe(false)
+    expect(near.opacity).toBe(0.3)
+    expect(near.onBeforeRender).toBe(hook)
+    expect(near.version).toBe(stableVersion + 1)
+    const namesVersion = near.version
+    f.receiver.getEndpointMaterial('near')
+    expect(near.version).toBe(namesVersion)
+    expect(source.source).toBe(sourceIdentity)
+    expect(source.source.version).toBe(sourceVersion)
+    let released = 0,
+      borrowed = 0
+    near.addEventListener('dispose', () => released++)
+    source.addEventListener('dispose', () => borrowed++)
+    f.receiver.dispose()
+    f.receiver.dispose()
+    expect(released).toBe(1)
+    expect(borrowed).toBe(0)
+    expect(far.uniforms.sceneCloudMap.value).toBeNull()
+    expect(() => f.receiver.getEndpointMaterial('near')).toThrow('disposed')
+  })
+  it('retires a failed near program only at an explicit retry boundary', () => {
+    const f = fixture()
+    const first = f.receiver.getEndpointMaterial('near')
+    const key = first.customProgramCacheKey()
+    let disposed = 0
+    first.addEventListener('dispose', () => disposed++)
+    f.receiver.retryEndpointMaterial()
+    expect(disposed).toBe(1)
+    const recovered = f.receiver.getEndpointMaterial('near')
+    expect(recovered).not.toBe(first)
+    expect(recovered.customProgramCacheKey()).not.toBe(key)
+    expect(f.receiver.getEndpointMaterial('near')).toBe(recovered)
+    expect(f.receiver.getEndpointMaterial('far')).toBe(f.material)
+    f.receiver.dispose()
+  })
   it('rejects an unknown raw shadow implementation instead of guessing how to add a fade', () => {
     const reference = new AerialPerspectiveEffect()
     try {

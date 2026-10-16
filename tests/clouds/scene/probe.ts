@@ -25,6 +25,24 @@ export const sceneCloudProbeRegistry: Partial<
     }
   >
 > = {
+  pipeline: {
+    load: () => import('./pipeline.gpu'),
+    requiredCases: [
+      'full-material-sampler-budget',
+      'receiver-link-failure-recovery',
+      'earth-main-composition',
+      'jupiter-main-composition',
+      'far-fallback',
+      'responsive-large-source',
+      'linear-hdr-mix',
+      'single-frame-schedule',
+      'equal-hdr-endpoints',
+      'terrain-water-main-composition',
+      'near-failure-restoration',
+      'foreground-slot-insertion',
+      'async-tiled-bitmap-equivalence'
+    ]
+  },
   receivers: {
     load: () => import('./receivers.gpu'),
     requiredCases: [
