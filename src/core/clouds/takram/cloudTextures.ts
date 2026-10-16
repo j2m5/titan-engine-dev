@@ -1,16 +1,19 @@
 import { CloudShape, CloudShapeDetail } from '@takram/three-clouds'
 import { Data3DTexture, NearestFilter, RedFormat, RepeatWrapping, type BufferGeometry, type Mesh } from 'three'
+import { appendProgramCacheKey } from '@/core/graphic/effects/atmosphere/shaderCompilationScope'
 
 /** Pinned 0.7.6 allocates one private plane per procedural texture, but omits it from dispose(). */
-function ownedGeometry(texture: CloudShape | CloudShapeDetail): BufferGeometry {
+function ownedGeometry(texture: CloudShape | CloudShapeDetail, programCacheKey?: string): BufferGeometry {
   const mesh = (texture as unknown as { mesh?: Mesh }).mesh
   if (!mesh?.isMesh || !mesh.geometry?.isBufferGeometry || typeof mesh.geometry.dispose !== 'function')
     throw new Error('Unsupported pinned cloud procedural texture: expected instance-owned mesh.geometry')
+  if (Array.isArray(mesh.material)) throw new Error('Unsupported pinned cloud procedural texture material layout')
+  appendProgramCacheKey(mesh.material, programCacheKey)
   return mesh.geometry
 }
 
 /** Local procedural assets: no CDN, storage bucket, or Earth weather-map seams. */
-export function createCloudTextures() {
+export function createCloudTextures(programCacheKey?: string) {
   const releases: Array<() => void> = []
   let disposed = false
   const dispose = (): void => {
@@ -29,11 +32,11 @@ export function createCloudTextures() {
   try {
     const shape = new CloudShape()
     releases.push(() => shape.dispose())
-    const shapeGeometry = ownedGeometry(shape)
+    const shapeGeometry = ownedGeometry(shape, programCacheKey)
     releases.push(() => shapeGeometry.dispose())
     const detail = new CloudShapeDetail()
     releases.push(() => detail.dispose())
-    const detailGeometry = ownedGeometry(detail)
+    const detailGeometry = ownedGeometry(detail, programCacheKey)
     if (detailGeometry === shapeGeometry)
       throw new Error('Unsupported pinned cloud procedural texture: geometry must be instance-owned, not shared')
     releases.push(() => detailGeometry.dispose())

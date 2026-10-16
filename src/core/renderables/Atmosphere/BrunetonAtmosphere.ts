@@ -3,7 +3,7 @@ import { Acceptable } from '@/core/services/visitors/Acceptable'
 import { IObject3DVisitor } from '@/core/services/visitors/IObject3DVisitor'
 import { Actor } from '@/core/models/Actor'
 import { requireRenderingData } from '@/core/helpers/renderingData'
-import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
+import { AtmosphereLUTGenerator, type AtmosphereLUTs } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
 import { AtmosphereConfig, tintSolarIrradiance } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { resolveLightTint } from '@/core/helpers/lightSource'
 import { adjustAtmosphereForTerrainFloor } from '@/core/renderables/Atmosphere/terrainFloorAdjust'
@@ -18,7 +18,7 @@ import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 class BrunetonAtmosphere extends Object3D implements Acceptable<IObject3DVisitor> {
   public model: Actor
 
-  private lutGenerator!: AtmosphereLUTGenerator
+  private lutGenerator: AtmosphereLUTGenerator | null = null
   /** Конфиг, из которого посчитаны LUT, — для пересчёта после потери контекста */
   private lutConfig!: AtmosphereConfig
 
@@ -54,9 +54,8 @@ class BrunetonAtmosphere extends Object3D implements Acceptable<IObject3DVisitor
       solarIrradiance: tintSolarIrradiance(floorAdjusted.solarIrradiance, resolveLightTint(this.model).color)
     }
 
-    this.lutGenerator = new AtmosphereLUTGenerator(this.renderer)
     this.lutConfig = adjusted
-    const lut = this.lutGenerator.generate(adjusted)
+    const lut = this.generateLUTs()
     // опциональный вызов: заглушки рендерера в тестах отдают domElement без addEventListener
     this.renderer.domElement?.addEventListener?.('webglcontextrestored', this.onContextRestored)
     this.renderer.domElement?.addEventListener?.('webglcontextlost', this.onContextLost)
@@ -84,20 +83,35 @@ class BrunetonAtmosphere extends Object3D implements Acceptable<IObject3DVisitor
     if (this.registry.get(actorId)?.object === this) this.registry.unregister(actorId)
     this.renderer.domElement?.removeEventListener?.('webglcontextrestored', this.onContextRestored)
     this.renderer.domElement?.removeEventListener?.('webglcontextlost', this.onContextLost)
-    this.lutGenerator.dispose()
+    this.lutGenerator?.dispose()
+    this.lutGenerator = null
+  }
+
+  private generateLUTs(): AtmosphereLUTs {
+    const generator = (this.lutGenerator ??= new AtmosphereLUTGenerator(this.renderer))
+    try {
+      return generator.generate(this.lutConfig)
+    } catch (error) {
+      generator.dispose()
+      this.lutGenerator = null
+      throw error
+    }
   }
 
   /**
    * Потеря контекста стирает содержимое таргетов: three пересоздаёт их пустыми,
-   * и атмосфера по нулевым LUT рисовалась бы чёрной. Таргеты генератора те же,
-   * поэтому запись реестра остаётся верной — достаточно пересчитать. Слушатель
+   * и атмосфера по нулевым LUT рисовалась бы чёрной. После неудачи генератор
+   * пересоздаётся; новые LUT публикуются только после полного успеха. Слушатель
    * three зарегистрирован раньше (конструктор WebGLRenderer): контекст уже готов.
    */
   private readonly onContextRestored = (): void => {
     const actorId = this.model.getAttribute('id', -1) as number
     if (this.registry.get(actorId)?.object !== this) return
     this.registry.markPending(actorId)
-    this.lutGenerator.generate(this.lutConfig)
+    const lut = this.generateLUTs()
+    const entry = this.registry.get(actorId)
+    if (entry?.object !== this) return
+    entry.lut = lut
     this.registry.markReady(actorId)
   }
 

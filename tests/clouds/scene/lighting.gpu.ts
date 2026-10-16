@@ -579,10 +579,17 @@ void main() {
       '#error scene_cloud_fixture_compile\n' + afterReset.cloudsPass.currentMaterial.fragmentShader
     afterReset.cloudsPass.currentMaterial.needsUpdate = true
     let failed = false
+    const shaderFailureStart = Date.now()
     try {
       render(resetFrame)
     } catch (error) {
       failed = /shader|scene_cloud_fixture_compile/i.test(String(error))
+    }
+    report.expectedShaderFailureWindows = [{ start: shaderFailureStart, end: Date.now() + 1 }]
+    for (let i = 0; i < 16; i++) {
+      const code = renderer.getContext().getError()
+      if (code === 0) break
+      check(code === renderer.getContext().INVALID_OPERATION, 'intentional failed shader draw GL error')
     }
     check(failed, 'shader compile failure is not published as success')
     check(

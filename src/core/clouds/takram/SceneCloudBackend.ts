@@ -22,6 +22,10 @@ import { createCloudTextures } from './cloudTextures'
 import { setCloudQuality } from './cloudQuality'
 import { prepareCloudTargets } from './prepareCloudTargets'
 import { installSceneCloudPatches, type SceneCloudPatchBinding } from './sceneCloudLighting'
+import {
+  appendProgramCacheKey,
+  captureShaderCompilation
+} from '@/core/graphic/effects/atmosphere/shaderCompilationScope'
 
 export interface SceneCloudOutput {
   frame: CloudFrame
@@ -49,8 +53,9 @@ export function assertSceneCloudProjection(camera: PerspectiveCamera): void {
 
 /** Owns one public CloudsEffect and noise set. Prepared source textures and scene LUTs are borrowed. */
 export class SceneCloudBackend {
+  private static programEpoch = 0
   private effect!: CloudsEffect
-  private readonly noise: ReturnType<typeof createCloudTextures>
+  private noise: ReturnType<typeof createCloudTextures>
   private appearance!: CloudAppearanceBinding
   private patches!: SceneCloudPatchBinding
   private restoreTargets!: () => void
@@ -72,7 +77,7 @@ export class SceneCloudBackend {
     this.atmosphereGeneration = atmosphere.generation
     this.width = frame.viewport.x
     this.height = frame.viewport.y
-    this.noise = createCloudTextures()
+    this.noise = createCloudTextures(this.programCacheSuffix())
     try {
       this.createEffect()
     } catch (error) {
@@ -84,6 +89,13 @@ export class SceneCloudBackend {
   private createEffect(): void {
     const effect = createPlanetCloudEffect(this.frame.camera, toTakramAtmosphere(this.atmosphere.config))
     this.effect = effect
+    for (const material of [
+      effect.cloudsPass.currentMaterial,
+      effect.cloudsPass.resolveMaterial,
+      effect.shadowPass.currentMaterial,
+      effect.shadowPass.resolveMaterial
+    ])
+      appendProgramCacheKey(material, this.programCacheSuffix())
     try {
       const config = structuredClone(this.prepared.config)
       config.layers[0].baseAltitudeMeters = cloudLayerAltitude(
@@ -140,21 +152,13 @@ export class SceneCloudBackend {
     this.appearance.setPlanetRotation(frame.planetRotation)
     this.patches.update(frame, depth, atmosphere)
     effect.setDepthTexture(depth.texture, BasicDepthPacking)
-    const previousHandler = renderer.debug.onShaderError
-    const previousCheck = renderer.debug.checkShaderErrors
+    const compilation = captureShaderCompilation(renderer, 'Scene cloud')
     const target = renderer.getRenderTarget(),
       face = renderer.getActiveCubeFace(),
       mip = renderer.getActiveMipmapLevel()
     const viewport = renderer.getViewport(new Vector4()),
       scissor = renderer.getScissor(new Vector4())
     const scissorTest = renderer.getScissorTest()
-    renderer.debug.checkShaderErrors = true
-    renderer.debug.onShaderError = (gl, program, vertex, fragment): void => {
-      previousHandler?.(gl, program, vertex, fragment)
-      throw new Error(
-        `Scene cloud shader compilation failed: ${gl.getProgramInfoLog(program)} ${gl.getShaderInfoLog(vertex)} ${gl.getShaderInfoLog(fragment)}`
-      )
-    }
     try {
       if (!this.initialized) {
         effect.initialize(renderer, false, HalfFloatType)
@@ -162,6 +166,7 @@ export class SceneCloudBackend {
       }
       // Exactly one public update owns both current/resolve draws and cloud shadows.
       effect.update(renderer, inputBuffer, frame.deltaSeconds)
+      compilation.check()
       const overlay = effect.atmosphereOverlay?.map
       if (!overlay || overlay !== effect.cloudsPass.outputBuffer)
         throw new Error('Scene cloud update produced no resolved overlay')
@@ -175,14 +180,29 @@ export class SceneCloudBackend {
         shadow: effect.atmosphereShadow,
         stbn: this.noise.noise
       }
+    } catch (error) {
+      // Failed programs may be cached with foreign references. Retire every owned material
+      // and give only subsequent attempts a new public cache-key epoch.
+      if (compilation.failed) SceneCloudBackend.programEpoch++
+      this.releaseEffect()
+      if (compilation.failed) {
+        this.noise.dispose()
+        this.noise = createCloudTextures(this.programCacheSuffix())
+      }
+      this.historyGeneration++
+      this.createEffect()
+      throw error
     } finally {
-      renderer.debug.onShaderError = previousHandler
-      renderer.debug.checkShaderErrors = previousCheck
+      compilation.restore()
       renderer.setRenderTarget(target, face, mip)
       renderer.setViewport(viewport)
       renderer.setScissor(scissor)
       renderer.setScissorTest(scissorTest)
     }
+  }
+
+  private programCacheSuffix(): string | undefined {
+    return SceneCloudBackend.programEpoch ? `scene-cloud-retry-${SceneCloudBackend.programEpoch}` : undefined
   }
 
   public resetHistory(): void {

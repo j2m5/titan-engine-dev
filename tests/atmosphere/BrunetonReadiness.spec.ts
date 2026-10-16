@@ -54,6 +54,7 @@ describe('Bruneton LUT readiness owner', () => {
     const owner = new BrunetonAtmosphere(model, renderer, registry)
     try {
       const entry = registry.get(2)!
+      const initialLut = entry.lut
       expect(entry.ready).toBe(true)
       const initial = entry.generation
       listeners.get('webglcontextlost')!()
@@ -69,6 +70,7 @@ describe('Bruneton LUT readiness owner', () => {
       listeners.get('webglcontextrestored')!()
       expect(entry.ready).toBe(true)
       expect(entry.generation).toBeGreaterThan(failedGeneration)
+      expect(entry.lut).not.toBe(initialLut)
       const replacement = { ...entry, object: new Object3D() }
       registry.register(replacement)
       const replacementGeneration = replacement.generation
@@ -81,7 +83,7 @@ describe('Bruneton LUT readiness owner', () => {
       owner.dispose()
     }
     expect(registry.size).toBe(1)
-    expect(gpu.disposals).toBe(1)
+    expect(gpu.disposals).toBe(2) // Failed generator retired, successful retry owned until disposal.
     registry.unregister(2)
     expect(listeners.size).toBe(0)
   })

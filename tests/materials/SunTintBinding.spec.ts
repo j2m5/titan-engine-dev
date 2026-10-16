@@ -59,6 +59,41 @@ function target(): SunTintTarget {
 }
 
 describe('SunTintBinding: запись реестра → дефайн и юниформы', () => {
+  it('gates pending LUTs and rebinds same-entry generations/handles without recompiling active defines', () => {
+    const registry = new AtmosphereRegistry(),
+      e = entry(),
+      material = target()
+    registry.register(e)
+    const binding = new SunTintBinding(material, registry, ATMO_ACTOR_ID, DATUM_RADIUS_KM)
+    binding.sync()
+    registry.markPending(ATMO_ACTOR_ID)
+    binding.sync()
+    expect(binding.active).toBe(false)
+    expect(material.uniforms.uAtmoTransmittance.value).toBeNull()
+    expect(material.uniforms.uAtmoIrradiance.value).toBeNull()
+    const lut = { transmittance: new Texture(), scattering: new Texture(), irradiance: new Texture() }
+    e.lut = lut
+    binding.sync()
+    expect(material.uniforms.uAtmoTransmittance.value).toBeNull()
+    registry.markReady(ATMO_ACTOR_ID)
+    binding.sync()
+    expect(binding.active).toBe(true)
+    expect(material.uniforms.uAtmoTransmittance.value).toBe(lut.transmittance)
+    expect(material.uniforms.uAtmoIrradiance.value).toBe(lut.irradiance)
+    const defines = material.defines
+    material.needsUpdate = false
+    e.config.bottomRadius = 6350
+    registry.markReady(ATMO_ACTOR_ID)
+    binding.sync()
+    expect(material.uniforms.uAtmoBottomRadius.value).toBe(6350)
+    expect(material.needsUpdate).toBe(false)
+    const replacement = new Texture()
+    e.lut.transmittance = replacement
+    binding.sync()
+    expect(material.uniforms.uAtmoTransmittance.value).toBe(replacement)
+    expect(material.defines).toBe(defines)
+    expect(material.needsUpdate).toBe(false)
+  })
   it('запись есть → дефайн, подогнанные радиусы, LUT по ссылке, датум конструктора', () => {
     const registry = new AtmosphereRegistry()
     const e = entry()

@@ -1,10 +1,19 @@
-export type SceneCloudProbeName = 'maps' | 'depth' | 'lighting' | 'receivers' | 'pipeline' | 'lifecycle' | 'flight'
+export type SceneCloudProbeName =
+  | 'maps'
+  | 'depth'
+  | 'lighting'
+  | 'readiness'
+  | 'receivers'
+  | 'pipeline'
+  | 'lifecycle'
+  | 'flight'
 export interface SceneCloudProbeReport {
   name: string
   checks: number
   maxError: number
   resourcesReleased: boolean
   cases: string[]
+  expectedShaderFailureWindows?: Array<{ start: number; end: number }>
 }
 
 export const sceneCloudProbeRegistry: Partial<
@@ -16,6 +25,19 @@ export const sceneCloudProbeRegistry: Partial<
     }
   >
 > = {
+  readiness: {
+    load: () => import('./readiness.gpu'),
+    requiredCases: [
+      'initial-default-shader-failure',
+      'restore-retry',
+      'deferred-previous-handler',
+      'failed-program-retirement',
+      'backend-retry',
+      'noise-retry',
+      'same-renderer-recovery',
+      'state-restoration'
+    ]
+  },
   lighting: {
     load: () => import('./lighting.gpu'),
     requiredCases: [
