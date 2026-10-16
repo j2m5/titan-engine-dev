@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { PerspectiveCamera, Vector2 } from 'three'
+import { PerspectiveCamera, Scene, Vector2 } from 'three'
+import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { Postprocessing } from '@/core/graphic/Postprocessing'
 
 const MAX_RENDERBUFFER_SIZE = 0x84e8
@@ -10,6 +11,7 @@ interface Rig {
   log: string[]
   render: ReturnType<typeof vi.fn>
   blob: Blob
+  canvas: { toBlob: (callback: (value: Blob | null) => void, type?: string) => void }
 }
 
 /**
@@ -41,7 +43,7 @@ function rig(cssWidth: number, cssHeight: number, pixelRatio: number, maxSize: n
     }
   }
   const camera = new PerspectiveCamera(50, cssWidth / cssHeight, 0.1, 1000)
-  const pp = new Postprocessing(renderer as never, null as never, camera, null as never, null as never)
+  const pp = new Postprocessing(renderer as never, new Scene(), camera, new AtmosphereRegistry(), null as never)
   const render = vi.fn((): void => {
     log.push('composer.render')
   })
@@ -53,10 +55,37 @@ function rig(cssWidth: number, cssHeight: number, pixelRatio: number, maxSize: n
     render
   } as never
 
-  return { pp, camera, log, render, blob }
+  return { pp, camera, log, render, blob, canvas: renderer.domElement }
 }
 
 describe('Postprocessing.captureScreenshot — 4K «как на экране»', () => {
+  it('uses delta zero and invalidates both capture and restored history even when render throws', async () => {
+    const { pp, render } = rig(1600, 900, 1.5)
+    const invalidate = vi.spyOn(pp, 'invalidateCloudHistory')
+    const draw = vi.spyOn(pp, 'render')
+    await pp.captureScreenshot()
+    expect(draw).toHaveBeenCalledWith(0)
+    expect(invalidate).toHaveBeenCalledTimes(2)
+    render.mockImplementation(() => {
+      throw Error('capture render failure')
+    })
+    expect(() => pp.captureScreenshot()).toThrow('capture render failure')
+    expect(invalidate).toHaveBeenCalledTimes(4)
+  })
+  it('restores dimensions and history when toBlob throws inside its promise', async () => {
+    const { pp, canvas, log } = rig(1600, 900, 1.5)
+    const invalidate = vi.spyOn(pp, 'invalidateCloudHistory')
+    canvas.toBlob = () => {
+      throw Error('encoder failure')
+    }
+    await expect(pp.captureScreenshot()).rejects.toThrow('encoder failure')
+    expect(invalidate).toHaveBeenCalledTimes(2)
+    expect(log.slice(-3)).toEqual([
+      'renderer.setSize(1600, 900, false)',
+      'renderer.setPixelRatio(1.5)',
+      'composer.setSize(1600, 900, false)'
+    ])
+  })
   it('порядок: pixelRatio 1 → ресайз без стиля → рендер → toBlob → возврат CSS-размера → pixelRatio → пассы', async () => {
     const { pp, log, blob } = rig(1920, 1080, 2)
 

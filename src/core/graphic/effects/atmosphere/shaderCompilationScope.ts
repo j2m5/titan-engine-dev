@@ -15,25 +15,42 @@ export interface ShaderCompilationScope {
 }
 
 /** Three's render/compile stacks are not exception-safe. Never throw from its diagnostic callback. */
-export function captureShaderCompilation(renderer: WebGLRenderer, label: string): ShaderCompilationScope {
+export function captureShaderCompilation(
+  renderer: WebGLRenderer,
+  label: string,
+  observeFailure?: (reentrant: boolean) => void
+): ShaderCompilationScope {
   const previous = renderer.debug.onShaderError
   const previousCheck = renderer.debug.checkShaderErrors
   let failure: Error | null = null
   let restored = false
+  let diagnosticDepth = 0
   renderer.debug.checkShaderErrors = true
   renderer.debug.onShaderError = (gl, program, vertex, fragment): void => {
-    let detail = 'diagnostics unavailable'
+    const reentrant = diagnosticDepth++ > 0
     try {
-      detail = `${gl.getProgramInfoLog(program)} ${gl.getShaderInfoLog(vertex)} ${gl.getShaderInfoLog(fragment)}`
-    } catch (error) {
-      detail = String(error)
+      let detail = 'diagnostics unavailable'
+      // Snapshot attribution before previous callbacks can initiate arbitrary nested rendering.
+      try {
+        observeFailure?.(reentrant)
+      } catch (error) {
+        detail += `; observer: ${String(error)}`
+      }
+      try {
+        detail = `${gl.getProgramInfoLog(program)} ${gl.getShaderInfoLog(vertex)} ${gl.getShaderInfoLog(fragment)}`
+      } catch (error) {
+        detail = String(error)
+      }
+      const diagnostic = new Error(`${label} shader compilation failed: ${detail}`)
+      failure ??= diagnostic
+      try {
+        previous?.(gl, program, vertex, fragment)
+      } catch (error) {
+        diagnostic.message += `; previous handler: ${String(error)}`
+      }
+    } finally {
+      diagnosticDepth--
     }
-    try {
-      previous?.(gl, program, vertex, fragment)
-    } catch (error) {
-      detail += `; previous handler: ${String(error)}`
-    }
-    failure ??= new Error(`${label} shader compilation failed: ${detail}`)
   }
   return {
     get failed() {

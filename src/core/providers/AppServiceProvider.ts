@@ -139,7 +139,8 @@ class AppServiceProvider extends ServiceProvider {
           c.get(Tokens.AtmosphereRegistry),
           c.get(Tokens.DepthVolumeRegistry),
           c.get(Tokens.LensRegistry),
-          c.get(Tokens.SceneCloudRuntime)
+          c.get(Tokens.SceneCloudRuntime),
+          c.get(Tokens.Settings)
         )
     )
 

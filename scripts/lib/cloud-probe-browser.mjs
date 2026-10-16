@@ -31,7 +31,7 @@ export function createCdpTransport(socket, onEvent, timeoutMs = 190000) {
     if (msg.error) request.reject(new Error(JSON.stringify(msg.error)))
     else request.resolve(msg.result)
   }
-  return (method, params = {}) =>
+  return (method, params = {}, requestTimeoutMs = timeoutMs) =>
     new Promise((resolve, reject) => {
       if (closed) {
         reject(new Error('CDP transport closed'))
@@ -41,7 +41,7 @@ export function createCdpTransport(socket, onEvent, timeoutMs = 190000) {
       const timer = setTimeout(() => {
         pending.delete(next)
         reject(new Error(`CDP timeout: ${method}`))
-      }, timeoutMs)
+      }, requestTimeoutMs)
       pending.set(next, { resolve, reject, timer })
       try {
         socket.send(JSON.stringify({ id: next, method, params }))
@@ -139,15 +139,21 @@ export async function withCloudProbeBrowser(
       } else if (msg.method === 'Runtime.exceptionThrown') errors.push(msg.params.exceptionDetails)
       else if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error')
         errors.push(msg.params.args.map((arg) => arg.value ?? arg.description))
+      else if (msg.method === 'Runtime.consoleAPICalled' && msg.params.args[0]?.value === 'SCENE_CLOUD_LIFECYCLE_PHASE')
+        console.log(msg.params.args[1]?.value)
     })
     closeBrowser = () => send('Browser.close')
-    const evaluate = async (expression) => {
-      const result = await send('Runtime.evaluate', {
-        expression,
-        awaitPromise: true,
-        returnByValue: true,
-        timeout: 180000
-      })
+    const evaluate = async (expression, timeoutMs = 180000) => {
+      const result = await send(
+        'Runtime.evaluate',
+        {
+          expression,
+          awaitPromise: true,
+          returnByValue: true,
+          timeout: timeoutMs
+        },
+        timeoutMs + 10000
+      )
       if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails))
       return result.result.value
     }

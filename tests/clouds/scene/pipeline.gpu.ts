@@ -461,6 +461,7 @@ export async function run(fixture: 'full' | 'ownership' | 'scheduling' = 'full')
           'simulation-presentation-invariance',
           'simulation-normal-frame-progression',
           'simulation-pending-readiness-invariance',
+          'simulation-screenshot-invariance',
           'simulation-mutation-negative-control'
         )
       }

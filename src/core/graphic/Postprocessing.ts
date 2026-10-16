@@ -24,6 +24,7 @@ import { ColorGradeEffect } from '@/core/graphic/effects/grading/ColorGradeEffec
 import { DitheringEffect } from '@/core/graphic/effects/dithering/DitheringEffect'
 import { config } from '@/core/framework/config'
 import { screenshotSize, type ScreenshotSize } from '@/core/graphic/screenshot'
+import type { Settings } from '@/core/ports/Settings'
 
 // Опции эффектов вынесены в константы под контракт-тесты
 // (tests/graphic/PostprocessingContract.spec.ts)
@@ -161,6 +162,29 @@ class Postprocessing {
   private composition: SceneCloudComposition | null = null
   private blend = new CloudBlendPass()
   private serial = 0
+  private contextLost = false
+  private restoreAfterLoss = false
+  private readonly onContextLost = (event: Event): void => {
+    event.preventDefault()
+    this.restoreAfterLoss ||= this.composer !== null
+    this.contextLost = true
+    this.cloudRuntime?.setContextLost(true)
+    this.blend.setNear(null, 0)
+    this.atmosphere?.setCloudOverlay(null)
+    this.releaseComposers()
+  }
+  private readonly onContextRestored = (): void => {
+    if (!this.contextLost) return
+    const initialized = this.restoreAfterLoss
+    this.restoreAfterLoss = false
+    this.contextLost = false
+    this.cloudRuntime?.setContextLost(false)
+    if (initialized) {
+      this.initialize()
+      const size = this.renderer.getSize(new Vector2())
+      this.setSize(size.x, size.y)
+    }
+  }
 
   public constructor(
     private readonly renderer: WebGLRenderer,
@@ -169,8 +193,16 @@ class Postprocessing {
     private readonly atmosphereRegistry: AtmosphereRegistry,
     private readonly depthVolumeRegistry: DepthVolumeRegistry,
     private readonly lensRegistry: LensRegistry = new LensRegistry(),
-    public readonly cloudRuntime?: SceneCloudRuntime
-  ) {}
+    public readonly cloudRuntime?: SceneCloudRuntime,
+    private readonly settings?: Pick<Settings, 'showClouds' | 'cloudQuality'>
+  ) {
+    this.cloudRuntime?.bindRenderer(this.renderer)
+    this.attachContextListeners()
+  }
+  private attachContextListeners(): void {
+    this.renderer.domElement?.addEventListener?.('webglcontextlost', this.onContextLost)
+    this.renderer.domElement?.addEventListener?.('webglcontextrestored', this.onContextRestored)
+  }
 
   /**
    * Список пассов в порядке рендера. Вынесен из `initialize()`: composer
@@ -213,6 +245,15 @@ class Postprocessing {
   }
 
   public initialize(): void {
+    this.attachContextListeners()
+    this.contextLost = this.renderer.getContext?.().isContextLost?.() ?? this.contextLost
+    this.cloudRuntime?.setContextLost(this.contextLost)
+    if (this.contextLost) {
+      this.restoreAfterLoss = true
+      return
+    }
+    if (this.composer) return
+    this.blend = new CloudBlendPass()
     this.composer = new EffectComposer(this.renderer, {
       depthBuffer: true,
       frameBufferType: HalfFloatType,
@@ -246,7 +287,8 @@ class Postprocessing {
   }
 
   public render(delta?: number): void {
-    if (!this.composer) return
+    if (!this.composer || this.contextLost) return
+    if (this.settings) this.cloudRuntime?.setOptions(this.settings.showClouds, this.settings.cloudQuality)
     this.scene.updateMatrixWorld(true)
     this.camera.updateMatrixWorld(true)
     const snapshot = captureAtmosphereFrame(this.camera, this.atmosphereRegistry, ++this.serial)
@@ -289,6 +331,11 @@ class Postprocessing {
     this.composer?.setSize(width, height)
     this.composition?.setSize(width, height)
   }
+  public invalidateCloudHistory(): void {
+    this.blend.setNear(null, 0)
+    this.atmosphere?.setCloudOverlay(null)
+    this.cloudRuntime?.resetHistory()
+  }
 
   /**
    * Снимок текущего кадра в 4K «как на экране» (screenshotSize): высота 2160,
@@ -319,29 +366,47 @@ class Postprocessing {
     const canvas: HTMLCanvasElement = this.renderer.domElement
     let blob: Promise<Blob | null>
 
-    this.renderer.setPixelRatio(1)
-
     try {
+      this.invalidateCloudHistory()
+      this.renderer.setPixelRatio(1)
       this.composer?.setSize(size.width, size.height, false)
       this.composition?.setSize(size.width, size.height)
-      this.render()
+      this.render(0)
       blob = new Promise((resolve: (value: Blob | null) => void): void => canvas.toBlob(resolve, 'image/png'))
     } finally {
       this.renderer.setSize(cssSize.width, cssSize.height, false)
       this.renderer.setPixelRatio(pixelRatio)
       this.composer?.setSize(cssSize.width, cssSize.height, false)
       this.composition?.setSize(cssSize.width, cssSize.height)
+      this.invalidateCloudHistory()
     }
 
     return blob
   }
 
-  public dispose(): void {
+  private releaseComposers(): void {
+    const target = this.renderer.getRenderTarget?.()
+    if (
+      target &&
+      this.composer &&
+      (target === this.composer.inputBuffer || target === this.composer.outputBuffer) &&
+      !this.renderer.getContext?.().isContextLost?.()
+    )
+      this.renderer.setRenderTarget(null)
     this.composition?.dispose()
     this.composition = null
-    this.cloudRuntime?.invalidate(null)
     this.composer?.dispose()
     this.composer = null
+    this.prefix = []
+    this.atmosphere = null
+  }
+  public dispose(): void {
+    this.restoreAfterLoss = false
+    this.renderer.domElement?.removeEventListener?.('webglcontextlost', this.onContextLost)
+    this.renderer.domElement?.removeEventListener?.('webglcontextrestored', this.onContextRestored)
+    this.cloudRuntime?.resetScenario()
+    this.releaseComposers()
+    this.contextLost = false
   }
 }
 

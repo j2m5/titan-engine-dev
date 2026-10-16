@@ -118,6 +118,10 @@ class BrunetonAtmosphere extends Object3D implements Acceptable<IObject3DVisitor
   private readonly onContextLost = (): void => {
     const actorId = this.model.getAttribute('id', -1) as number
     if (this.registry.get(actorId)?.object === this) this.registry.markPending(actorId)
+    // Retire old GPU callbacks before Three rebuilds the context. CPU config and
+    // the pending entry survive; only the next successful generator publishes LUTs.
+    this.lutGenerator?.dispose()
+    this.lutGenerator = null
   }
 
   public accept(visitor: IObject3DVisitor): void {

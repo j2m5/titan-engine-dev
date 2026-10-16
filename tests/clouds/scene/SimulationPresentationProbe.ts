@@ -196,16 +196,33 @@ export async function verifySimulationPresentations(
         throw Error('Actual scene redraws not observed')
       frames.push(frame)
     }
+    const capture: Frame = { weight: 1, before: snapshot(), draws: [] }
+    current = capture
+    const captureBlob = await post.captureScreenshot()
+    current = null
+    const captureAfter = snapshot()
+    if (!captureBlob || !invariant(capture) || JSON.stringify(capture.before) !== JSON.stringify(captureAfter))
+      throw Error('Screenshot advanced real simulation/animation ' + JSON.stringify({ capture, captureAfter }))
+    if (!capture.draws.some((draw) => draw.scene)) throw Error('Screenshot did not render the actual scene')
     const negative: Frame = { weight: 1, before: snapshot(), draws: [] }
     current = negative
     inject = true
     engine.update()
     current = null
     if (invariant(negative)) throw Error('Detector missed controlled draw-time clock mutation')
-    return { frames, negativeControlDetected: true, negative, inputDeltaSeconds: 0.25 }
+    return {
+      frames,
+      capture,
+      captureAfter,
+      captureBytes: captureBlob.size,
+      negativeControlDetected: true,
+      negative,
+      inputDeltaSeconds: 0.25
+    }
   } finally {
     current = null
     engine.stop()
+    engine.releaseRendererContextBinding()
     manager.initialize = oldManagerInitialize
     post.initialize = oldPostInitialize
     clock.advance = oldAdvance

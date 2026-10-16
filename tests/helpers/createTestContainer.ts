@@ -79,7 +79,7 @@ export function createTestContainer(): Container {
     movementSpeed: 0
   } as unknown as AstroControls)
 
-  const settings: Settings = { showMarkers: false, showOrbitLines: false }
+  const settings: Settings = { showMarkers: false, showOrbitLines: false, showClouds: true, cloudQuality: 'medium' }
   const notificationSink: NotificationSink = { dispatch: () => {} }
   const loadingProgressReporter: LoadingProgressReporter = {
     setAsset: () => {},

@@ -35,9 +35,18 @@ const report = await withCloudProbeBrowser(
     if (!names.length) throw new Error('No scene cloud probes registered')
     const probes = {}
     for (const name of names) {
-      probes[name] = await evaluate(
-        `import('/tests/clouds/scene/probe.ts').then(m => m.runSceneCloudProbe(${JSON.stringify(name)}))`
-      )
+      try {
+        probes[name] = await evaluate(
+          `import('/tests/clouds/scene/probe.ts').then(m => m.runSceneCloudProbe(${JSON.stringify(name)}))`,
+          name === 'lifecycle' ? 600000 : undefined
+        )
+      } catch (error) {
+        await writeFile(
+          resolve(outputDir, `${name}-failure-report.json`),
+          JSON.stringify({ error: String(error), webglErrors }, null, 2)
+        )
+        throw error
+      }
       expectedShaderFailureWindows.push(...(probes[name].expectedShaderFailureWindows ?? []))
     }
     return { probes, webglErrors }

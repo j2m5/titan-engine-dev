@@ -26,6 +26,23 @@ export const sceneCloudProbeRegistry: Partial<
     }
   >
 > = {
+  lifecycle: {
+    load: () => import('./lifecycle.gpu'),
+    requiredCases: [
+      'quality-and-off',
+      'bad-instance-shader-retry',
+      'nonselected-depth-context-latch',
+      'unknown-near-context-latch',
+      'source-eviction-reload',
+      'same-id-new-bitmap',
+      'independent-far-color',
+      'scenario-pending-cancellation',
+      'resize-dpr-4k-return',
+      'webgl-loss-restore',
+      'borrowed-ownership',
+      'stable-enter-leave'
+    ]
+  },
   scheduling: {
     load: async () => ({
       run: async () => {
@@ -37,6 +54,7 @@ export const sceneCloudProbeRegistry: Partial<
       'simulation-presentation-invariance',
       'simulation-normal-frame-progression',
       'simulation-pending-readiness-invariance',
+      'simulation-screenshot-invariance',
       'simulation-mutation-negative-control'
     ]
   },

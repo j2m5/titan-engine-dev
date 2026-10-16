@@ -15,6 +15,8 @@ import { prepareCloudSourceAsync } from './appearance/prepareCloudSourceAsync'
 import { assertCloudAppearanceSupport } from './appearance/cloudAppearance'
 import { sceneCloudProgramSignature } from './receivers/sceneCloudEndpointMaterial'
 import type { SceneCloudReceiver } from './receivers/SceneCloudReceiver'
+import { shouldResetCloudHistory, type CloudHistoryStamp } from './scene/cloudLifecycle'
+import { CloudCompilationFailures, type CloudCompilationEvidence } from './scene/cloudCompilationFailure'
 
 export type CloudFallbackReason =
   | 'unconfigured'
@@ -72,19 +74,26 @@ export class SceneCloudRuntime {
   private readonly sources = new Map<number, { body: CloudBodyEntry; sources: CloudSources }>()
   private readonly stop: () => void
   private enabled = true
-  private quality: CloudQuality = 'high'
+  private quality: CloudQuality = 'medium'
+  private contextLost = false
+  private scenarioEpoch = 0
+  private discontinuity = 0
+  private history: CloudHistoryStamp | null = null
+  private readonly atmosphereGenerations = new Map<AtmosphereEntry, number>()
+  private readonly lostAtmospheres = new Map<AtmosphereEntry, number>()
   private selected: CloudBodyEntry | null = null
   private key = ''
   private generation = 0
   private abort: AbortController | null = null
   private prepared: Prepared | null = null
   private backend: ReturnType<SceneCloudRuntimeDeps['createBackend']> | null = null
+  private targetSize: readonly [number, number] | null = null
   private output: SceneCloudOutput | null = null
   private plan: CloudFramePlan | null = null
   private disposed = false
   private failure: unknown = null
   private failedLayout: string | null = null
-  private readonly retryReceivers = new Set<SceneCloudReceiver>()
+  private readonly compilationFailures = new CloudCompilationFailures()
   private readonly stats: CloudDiagnostics = {
     actorId: null,
     state: 'unconfigured',
@@ -118,11 +127,72 @@ export class SceneCloudRuntime {
     })
   }
   public setOptions(enabled: boolean, quality: CloudQuality): void {
+    if (this.disposed) return
     if (this.enabled === enabled && this.quality === quality) return
     this.enabled = enabled
     this.quality = quality
     this.release()
+    if (!enabled) this.clearFarMaps()
+  }
+  public bindRenderer(renderer: WebGLRenderer): void {
+    this.compilationFailures.bind(renderer)
+  }
+  private clearFarMaps(): void {
+    for (const body of this.registry.entries())
+      for (const receiver of this.registry.receivers(body.actorId)) receiver.setFarMap(null, null)
+  }
+  public setContextLost(lost: boolean): void {
+    if (this.disposed || this.contextLost === lost) return
+    this.contextLost = lost
+    if (lost) this.compilationFailures.lost()
+    else this.compilationFailures.restored()
+    if (lost) {
+      this.lostAtmospheres.clear()
+      for (const [entry, generation] of this.atmosphereGenerations) this.lostAtmospheres.set(entry, generation)
+    }
+    this.release()
+    this.clearFarMaps()
+    for (const body of this.registry.entries())
+      for (const receiver of this.registry.receivers(body.actorId)) receiver.retryEndpointMaterial()
+    this.stats.state = lost ? 'context-lost' : 'waiting'
+    this.stats.reason = lost ? 'context-lost' : 'atmosphere'
+  }
+  public resetScenario(): void {
+    if (this.disposed) return
+    this.scenarioEpoch++
+    this.release()
+    this.clearFarMaps()
+    for (const { sources } of this.sources.values()) sources.dispose()
+    this.sources.clear()
+    this.frames.clear()
+    this.atmosphereGenerations.clear()
+    this.lostAtmospheres.clear()
+    this.selected = null
+    this.failure = null
+    this.stats.actorId = null
+    this.stats.state = 'unconfigured'
+    this.stats.reason = 'unconfigured'
+  }
+  public resetHistory(): void {
+    if (this.disposed) return
+    this.discontinuity++
+    this.output = null
+    this.plan = null
+    this.stats.effectiveWeight = 0
     this.useEndpoint(null, null)
+  }
+  /** Physical drawing-buffer pixels; never creates a far-only GPU owner. */
+  public setSize(width: number, height: number): void {
+    if (
+      this.disposed ||
+      this.contextLost ||
+      !this.backend ||
+      (this.targetSize?.[0] === width && this.targetSize[1] === height)
+    )
+      return
+    this.resetHistory()
+    this.backend.setSize(width, height)
+    this.targetSize = [width, height]
   }
   private release(): void {
     this.generation++
@@ -131,12 +201,16 @@ export class SceneCloudRuntime {
     this.output = null
     this.plan = null
     this.stats.effectiveWeight = 0
+    // Clear borrowed output handles before their owning targets are destroyed.
+    this.useEndpoint(null, null)
     this.backend?.dispose()
     this.backend = null
+    this.targetSize = null
     this.prepared?.dispose()
     this.prepared = null
     this.key = ''
     this.failedLayout = null
+    this.history = null
   }
   private fallback(reason: CloudFallbackReason): null {
     this.stats.reason = reason
@@ -154,6 +228,10 @@ export class SceneCloudRuntime {
     atmosphereDebugView: number
   ): CloudFramePlan | null {
     if (this.disposed) return null
+    if (this.contextLost) {
+      this.stats.state = 'context-lost'
+      return this.fallback('context-lost')
+    }
     this.output = null
     this.plan = null
     this.stats.effectiveWeight = 0
@@ -181,7 +259,7 @@ export class SceneCloudRuntime {
       owner.sources.poll()
       const frame = captureCloudFrame(body, camera, viewport, serial, deltaSeconds)
       this.frames.set(body.actorId, frame)
-      const map = body.descriptor.far
+      const map = this.enabled ? body.descriptor.far : null
       const source = map ? (owner.sources.read(map.pattern.map.resourceId)?.texture ?? null) : null
       const color =
         map?.pattern.encoding !== 'rgb-cloud-map' && map?.color.kind === 'map'
@@ -195,7 +273,6 @@ export class SceneCloudRuntime {
       }
     }
     if (!this.enabled) {
-      this.release()
       this.stats.state = 'waiting'
       return this.fallback('off')
     }
@@ -217,7 +294,11 @@ export class SceneCloudRuntime {
     const slot =
       atmosphere.serial === serial
         ? atmosphere.slots.find(
-            (s) => s.entry.bodyActorId === body.actorId && s.entry.ready && s.generation === s.entry.generation
+            (s) =>
+              s.entry.bodyActorId === body.actorId &&
+              s.entry.ready &&
+              s.generation === s.entry.generation &&
+              (!this.lostAtmospheres.has(s.entry) || this.lostAtmospheres.get(s.entry) !== s.generation)
           )
         : undefined
     if (!frame || !slot || lensActive || atmosphereDebugView) {
@@ -226,19 +307,28 @@ export class SceneCloudRuntime {
       return this.fallback(lensActive ? 'lens' : atmosphereDebugView ? 'debug-view' : 'atmosphere')
     }
     const config = body.descriptor.volume!
+    this.atmosphereGenerations.set(slot.entry, slot.generation)
+    this.lostAtmospheres.delete(slot.entry)
     const candidate = candidates.find((c) => c.actorId === id)!
     const weight = cloudVolumeOpacity(candidate.shellDistanceMeters, config.lod)
     this.stats.requestedWeight = weight
+    const key = JSON.stringify([body.descriptor, this.quality, slot.entry.actorId, slot.generation])
+    if (
+      !this.compilationFailures.retry(
+        this.retryBoundary(key),
+        this.registry.entries().flatMap((entry) => this.registry.receivers(entry.actorId))
+      )
+    ) {
+      this.stats.state = 'error'
+      return this.fallback('error')
+    }
     if (this.stats.state === 'error' && this.failedLayout !== null && this.failedLayout !== this.receiverLayout()) {
       this.release()
       this.stats.state = 'waiting'
     }
-    const key = JSON.stringify([body.descriptor, this.quality, slot.entry.actorId, slot.generation])
     if (key !== this.key) {
       this.release()
       this.key = key
-      for (const receiver of this.retryReceivers) receiver.retryEndpointMaterial()
-      this.retryReceivers.clear()
       try {
         assertCloudAppearanceSupport(config)
       } catch (error) {
@@ -299,6 +389,8 @@ export class SceneCloudRuntime {
     plan: CloudFramePlan,
     depth: SceneCloudDepthFrame
   ): SceneCloudOutput | null {
+    this.bindRenderer(renderer)
+    if (this.compilationFailures.current?.recovery === 'context') return null
     if (plan !== this.plan || !this.prepared || !this.selected) return null
     this.sources.get(this.selected.actorId)!.sources.poll()
     if (!this.prepared || plan !== this.plan) return null
@@ -311,6 +403,21 @@ export class SceneCloudRuntime {
         this.quality
       )
       const backend = this.backend
+      this.targetSize = [plan.frame.viewport.x, plan.frame.viewport.y]
+      const nextHistory: CloudHistoryStamp = {
+        actorId: plan.frame.actorId,
+        scenarioEpoch: this.scenarioEpoch,
+        sourceGeneration: this.generation,
+        atmosphereGeneration: plan.atmosphere.generation,
+        quality: this.quality,
+        viewport: [plan.frame.viewport.x, plan.frame.viewport.y],
+        projection: plan.frame.camera.projectionMatrix.elements.slice(),
+        cameraPositionMeters: plan.frame.camera.position.clone(),
+        cameraRotation: plan.frame.camera.quaternion.clone(),
+        cutoffDistanceMeters: this.selected.descriptor.volume!.lod.cutoffDistanceMeters,
+        explicitDiscontinuity: this.discontinuity
+      }
+      if (this.history && shouldResetCloudHistory(this.history, nextHistory)) backend.resetHistory()
       const clouds = backend.updateCounts.cloudUpdates,
         shadows = backend.updateCounts.shadowUpdates
       let output: SceneCloudOutput
@@ -330,7 +437,9 @@ export class SceneCloudRuntime {
       )
         throw new Error('Stale cloud output')
       this.output = output
+      this.history = nextHistory
       this.stats.state = 'ready'
+      this.failure = null
       return output
     } catch (error) {
       this.invalidate('error', error)
@@ -338,7 +447,12 @@ export class SceneCloudRuntime {
     }
   }
   public useEndpoint(plan: CloudFramePlan | null, output: SceneCloudOutput | null): void {
-    const valid = plan !== null && plan === this.plan && output !== null && output === this.output
+    const valid =
+      !this.compilationFailures.current &&
+      plan !== null &&
+      plan === this.plan &&
+      output !== null &&
+      output === this.output
     if (valid) this.stats.effectiveWeight = plan.requestedWeight
     else if (plan) this.stats.effectiveWeight = 0
     if (valid) this.stats.state = 'active'
@@ -358,8 +472,22 @@ export class SceneCloudRuntime {
         : []
     )
   }
+  private retryBoundary(key = this.key): string {
+    return JSON.stringify([key, this.generation, this.receiverLayout()])
+  }
+  public getEndpointMaterialOwners(plan: CloudFramePlan): ReadonlyMap<ShaderMaterial, SceneCloudReceiver> {
+    this.getEndpointMaterialBindings(plan)
+    return new Map(
+      this.registry.receivers(plan.frame.actorId).map((receiver) => [receiver.getEndpointMaterial('near'), receiver])
+    )
+  }
   public getEndpointMaterialBindings(plan: CloudFramePlan): ReadonlyMap<ShaderMaterial, ShaderMaterial> {
-    if (plan !== this.plan || this.output?.frame !== plan.frame || this.selected?.actorId !== plan.frame.actorId)
+    if (
+      this.compilationFailures.current ||
+      plan !== this.plan ||
+      this.output?.frame !== plan.frame ||
+      this.selected?.actorId !== plan.frame.actorId
+    )
       throw new Error('Near materials require the accepted current cloud output')
     return new Map(
       this.registry
@@ -367,16 +495,18 @@ export class SceneCloudRuntime {
         .map((receiver) => [receiver.getEndpointMaterial('far'), receiver.getEndpointMaterial('near')])
     )
   }
-  public invalidate(reason: CloudFallbackReason, cause?: unknown, retryNearProgram = false): void {
-    this.failure = cause ?? null
+  public invalidate(reason: CloudFallbackReason, cause?: unknown, compilation?: CloudCompilationEvidence): void {
+    const original =
+      this.compilationFailures.current?.cause ??
+      (compilation && this.stats.state === 'error' && this.failure !== null ? this.failure : cause)
+    if (compilation) this.compilationFailures.record(original, compilation, this.retryBoundary())
+    this.failure = original ?? null
     this.output = null
     this.plan = null
     this.stats.effectiveWeight = 0
     this.stats.reason = reason
     this.stats.state = reason === 'context-lost' ? 'context-lost' : 'error'
     this.failedLayout = this.receiverLayout()
-    if (retryNearProgram && this.selected)
-      for (const receiver of this.registry.receivers(this.selected.actorId)) this.retryReceivers.add(receiver)
     this.useEndpoint(null, null)
   }
   public recordPasses(counts: Partial<CloudPassCounts>): void {
@@ -386,12 +516,12 @@ export class SceneCloudRuntime {
     return { ...this.stats }
   }
   public get error(): unknown {
-    return this.failure
+    return this.compilationFailures.current?.cause ?? this.failure
   }
   public dispose(): void {
     if (this.disposed) return
-    this.useEndpoint(null, null)
-    this.release()
+    this.compilationFailures.dispose()
+    this.resetScenario()
     this.disposed = true
     this.stop()
     for (const { sources } of this.sources.values()) sources.dispose()

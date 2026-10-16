@@ -5,15 +5,19 @@ import { AtmosphereRegistry } from '@/core/services/AtmosphereRegistry'
 import { BrunetonAtmosphere } from '@/core/renderables/Atmosphere/BrunetonAtmosphere'
 import { EMPTY_LAYER, expLayer, type AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 
-const gpu = vi.hoisted(() => ({ fail: false, disposals: 0 }))
+const gpu = vi.hoisted(() => ({ fail: false, disposals: 0, constructions: 0, events: [] as string[] }))
 // The external GPU operation is replaced; owner events and registry publication remain real.
 vi.mock('@/core/renderables/Atmosphere/AtmosphereLUTGenerator', () => ({
   AtmosphereLUTGenerator: class {
+    constructor() {
+      gpu.constructions++
+    }
     generate() {
       if (gpu.fail) throw Error('fixture LUT failure')
       return { transmittance: {}, scattering: {}, irradiance: {} }
     }
     dispose() {
+      gpu.events.push('dispose')
       gpu.disposals++
     }
   }
@@ -49,8 +53,15 @@ describe('Bruneton LUT readiness owner', () => {
       renderingObject: { getAttribute: () => config }
     } as unknown as Actor
     const registry = new AtmosphereRegistry()
+    const markPending = registry.markPending.bind(registry)
+    vi.spyOn(registry, 'markPending').mockImplementation((id) => {
+      gpu.events.push('pending')
+      markPending(id)
+    })
     gpu.fail = false
     gpu.disposals = 0
+    gpu.constructions = 0
+    gpu.events = []
     const owner = new BrunetonAtmosphere(model, renderer, registry)
     try {
       const entry = registry.get(2)!
@@ -58,6 +69,9 @@ describe('Bruneton LUT readiness owner', () => {
       expect(entry.ready).toBe(true)
       const initial = entry.generation
       listeners.get('webglcontextlost')!()
+      expect(gpu.events.slice(-2)).toEqual(['pending', 'dispose'])
+      expect(gpu.disposals).toBe(1)
+      expect(gpu.constructions).toBe(1)
       expect(entry.ready).toBe(false)
       expect(entry.generation).toBeGreaterThan(initial)
       const pending = entry.generation
@@ -68,6 +82,7 @@ describe('Bruneton LUT readiness owner', () => {
       const failedGeneration = entry.generation
       gpu.fail = false
       listeners.get('webglcontextrestored')!()
+      expect(gpu.constructions).toBe(3)
       expect(entry.ready).toBe(true)
       expect(entry.generation).toBeGreaterThan(failedGeneration)
       expect(entry.lut).not.toBe(initialLut)
@@ -83,7 +98,7 @@ describe('Bruneton LUT readiness owner', () => {
       owner.dispose()
     }
     expect(registry.size).toBe(1)
-    expect(gpu.disposals).toBe(2) // Failed generator retired, successful retry owned until disposal.
+    expect(gpu.disposals).toBe(3) // Loss retires old context; failed retry and final current owner are retired separately.
     registry.unregister(2)
     expect(listeners.size).toBe(0)
   })

@@ -1,4 +1,4 @@
-import type { Texture } from 'three'
+import type { Texture, WebGLRenderer } from 'three'
 import { Collection } from '@/core/framework/support/Collection'
 import { PlaceholderTexture } from '@/core/textures/PlaceholderTexture'
 import type { CloudSourceStamp } from '@/core/clouds/CloudSources'
@@ -64,6 +64,15 @@ class ResourceStorage {
     this.notifyTextureChange(texture.name)
   }
 
+  /** Device loss invalidates GPU allocations, not source content or streaming residency. */
+  public invalidateTextureGpuHandles(): void {
+    const textures = new Set<Texture>()
+    this._textures.each((texture: Texture) => {
+      textures.add(texture)
+    })
+    for (const texture of textures) texture.dispose()
+  }
+
   /**
    * Диспоузит КАЖДУЮ текстуру с этим именем, а не только первую найденную.
    *
@@ -106,3 +115,51 @@ class ResourceStorage {
 }
 
 export const resourceStorage: ResourceStorage = new ResourceStorage()
+
+type StorageRenderer = Pick<WebGLRenderer, 'domElement' | 'getContext'>
+type GpuOwner = Pick<ResourceStorage, 'invalidateTextureGpuHandles'>
+const contextBindings = new WeakMap<StorageRenderer, { owner: GpuOwner; leases: number; remove(): void }>()
+
+/** One application renderer owns the singleton storage. Texture.dispose broadcasts to all renderers.
+ * Keep this lease across scenario/menu teardown; release only with the renderer's final owner.
+ */
+export function bindResourceStorageContext(renderer: StorageRenderer, storage: GpuOwner = resourceStorage): () => void {
+  let binding = contextBindings.get(renderer)
+  if (binding && binding.owner !== storage) throw new Error('Renderer already has a different resource storage owner')
+  if (!binding) {
+    let active = true,
+      lost = false
+    const onLost = () => {
+      if (!active || lost) return
+      lost = true
+      storage.invalidateTextureGpuHandles()
+    }
+    const onRestored = () => {
+      if (active) lost = false
+    }
+    renderer.domElement.addEventListener('webglcontextlost', onLost)
+    renderer.domElement.addEventListener('webglcontextrestored', onRestored)
+    binding = {
+      owner: storage,
+      leases: 0,
+      remove() {
+        active = false
+        renderer.domElement.removeEventListener('webglcontextlost', onLost)
+        renderer.domElement.removeEventListener('webglcontextrestored', onRestored)
+      }
+    }
+    contextBindings.set(renderer, binding)
+    if (renderer.getContext?.().isContextLost?.()) onLost()
+  }
+  binding.leases++
+  const current = binding
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    if (--current.leases === 0) {
+      current.remove()
+      contextBindings.delete(renderer)
+    }
+  }
+}

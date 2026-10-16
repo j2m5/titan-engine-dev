@@ -7,6 +7,8 @@ import type { SceneCloudOutput } from '@/core/clouds/takram/SceneCloudBackend'
 import { SceneCloudDepth } from './SceneCloudDepth'
 import { withSceneCloudMaterials } from './sceneCloudMaterialScope'
 import { captureShaderCompilation } from '@/core/graphic/effects/atmosphere/shaderCompilationScope'
+import type { CloudCompilationEvidence } from '@/core/clouds/scene/cloudCompilationFailure'
+import type { SceneCloudReceiver } from '@/core/clouds/receivers/SceneCloudReceiver'
 export function cloudEndpointSchedule(weight: number): { far: boolean; near: boolean } {
   return { far: weight < 1, near: weight > 0 }
 }
@@ -60,8 +62,23 @@ export class SceneCloudComposition {
       clearAlpha = renderer.getClearAlpha()
     const background = this.scene.background,
       override = this.scene.overrideMaterial
-    const compilation = captureShaderCompilation(renderer, 'Scene cloud endpoint')
-    let nearStarted = false
+    let stage: CloudCompilationEvidence['stage'] = 'setup',
+      currentReceiver: SceneCloudReceiver | null = null
+    let contextRequired = false
+    const failedReceivers = new Set<SceneCloudReceiver>()
+    let ownedReceivers: readonly SceneCloudReceiver[] = []
+    const compilation = captureShaderCompilation(renderer, 'Scene cloud endpoint', (reentrant) => {
+      if (!reentrant && stage === 'near' && currentReceiver) failedReceivers.add(currentReceiver)
+      else contextRequired = true
+    })
+    const evidence = (): CloudCompilationEvidence | undefined =>
+      compilation.failed
+        ? {
+            stage,
+            recovery: contextRequired || failedReceivers.size === 0 ? 'context' : 'owned-near',
+            receivers: contextRequired ? [] : ownedReceivers
+          }
+        : undefined
     try {
       this.depth ??= new SceneCloudDepth(renderer, this.scene)
       if (!this.near) {
@@ -70,24 +87,41 @@ export class SceneCloudComposition {
         this.near.composer.setSize(css.x, css.y, false)
       }
       this.runtime.recordPasses({ depthPasses: 1 })
+      stage = 'depth'
       const depth = this.depth.render(plan.frame)
       compilation.check()
+      stage = 'backend'
       const output = this.runtime.renderVolume(renderer, this.near.composer.inputBuffer, plan, depth)
-      if (!output) return null
+      if (!output) {
+        compilation.check()
+        return null
+      }
       this.runtime.useEndpoint(plan, output)
       this.near.atmosphere.setFrame(frameSnapshot)
       this.near.atmosphere.setCloudOverlay(output)
       this.runtime.recordPasses({ nearRenders: 1 })
-      withSceneCloudMaterials(this.scene, this.runtime.getEndpointMaterialBindings(plan), () => {
-        nearStarted = true
-        this.near!.composer.render(plan.frame.deltaSeconds)
-      })
+      stage = 'near'
+      const owners = this.runtime.getEndpointMaterialOwners(plan)
+      ownedReceivers = [...new Set(owners.values())]
+      withSceneCloudMaterials(
+        this.scene,
+        this.runtime.getEndpointMaterialBindings(plan),
+        () => {
+          this.near!.composer.render(plan.frame.deltaSeconds)
+        },
+        {
+          owners,
+          set: (receiver) => {
+            currentReceiver = receiver
+          }
+        }
+      )
       compilation.check()
       const texture = this.near.capture.texture
       if (!texture) throw new Error('Near cloud endpoint produced no completed input buffer')
       return { output, texture, weight: plan.requestedWeight }
     } catch (error) {
-      this.runtime.invalidate('error', error, compilation.failed && nearStarted)
+      this.runtime.invalidate('error', error, evidence())
       return null
     } finally {
       compilation.restore()
@@ -111,6 +145,9 @@ export class SceneCloudComposition {
   }
   public setSize(width: number, height: number): void {
     this.cssSize = new Vector2(width, height)
+    const physical = this.renderer.getDrawingBufferSize(new Vector2())
+    this.runtime.setSize(physical.x, physical.y)
+    this.depth?.setSize(physical.x, physical.y)
     this.near?.composer.setSize(width, height, false)
   }
   public dispose(): void {

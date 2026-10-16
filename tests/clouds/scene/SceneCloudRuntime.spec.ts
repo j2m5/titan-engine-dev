@@ -137,6 +137,205 @@ function fixture(pending = false) {
 }
 afterEach(() => resourceStorage.deleteAllTextures())
 describe('scene cloud runtime', () => {
+  it('keeps the original backend cause when the enclosing compilation scope adds fatal evidence', () => {
+    const f = fixture(),
+      cause = Error('original backend render cause')
+    f.begin()
+    f.runtime.invalidate('error', cause)
+    f.runtime.invalidate('error', Error('outer observed compilation'), { stage: 'backend', recovery: 'context' })
+    expect(f.runtime.error).toBe(cause)
+    f.runtime.dispose()
+  })
+  it.each(['depth', 'near'] as const)(
+    'does not clear context-only %s shader failure through options, layout, source or scenario',
+    (stage) => {
+      const f = fixture()
+      f.begin()
+      const cause = Error('unknown receiver failure')
+      f.runtime.invalidate('error', cause, { stage, recovery: 'context' })
+      f.runtime.setOptions(false, 'low')
+      f.begin()
+      f.runtime.setOptions(true, 'high')
+      f.receiver.getEndpointMaterial('far').defines.GENUINE_UNRELATED_LAYOUT = 1
+      f.entry.generation++
+      expect(f.begin()).toBeNull()
+      f.runtime.resetScenario()
+      expect(f.begin()).toBeNull()
+      expect(f.runtime.error).toBe(cause)
+      f.runtime.setContextLost(false)
+      expect(f.begin()).toBeNull()
+      f.runtime.setContextLost(true)
+      f.runtime.setContextLost(false)
+      f.entry.generation++
+      expect(f.begin()).not.toBeNull()
+      f.runtime.dispose()
+    }
+  )
+  it.each(['replace', 'bitmap', 'evict'] as const)(
+    'invalidates pending volume for independent scalar far-color %s without owning borrowed inputs',
+    async (kind) => {
+      const f = fixture(true)
+      f.body.resourcePaths = new Map([
+        [26, 'runtime-test'],
+        [27, 'runtime-color']
+      ])
+      f.body.descriptor.far = {
+        mapping: f.body.descriptor.volume!.mapping,
+        pattern: {
+          kind: 'mask',
+          encoding: 'scalar',
+          map: { resourceId: 26 },
+          decode: { channel: 'r', inputRange: [0, 1], exponent: 1, invert: false, sampleSpace: 'encoded' }
+        },
+        color: { kind: 'map', map: { resourceId: 27 }, strength: 1 }
+      }
+      const color = new DataTexture(new Uint8Array([32, 64, 128, 255]), 1, 1)
+      color.name = 'runtime-color'
+      resourceStorage.addTexture(color)
+      const colorDispose = vi.spyOn(color, 'dispose'),
+        preparedDispose = vi.spyOn(f.prepared, 'dispose')
+      f.begin()
+      expect(f.receiver.setFarMap.mock.lastCall![2]).toBe(color)
+      if (kind === 'replace') {
+        const next = new Texture()
+        next.name = color.name
+        resourceStorage.addTexture(next)
+      }
+      if (kind === 'bitmap') color.image = { data: new Uint8Array([128, 64, 32, 255]), width: 1, height: 1 }
+      if (kind === 'evict') resourceStorage.deleteTexture(color.name)
+      f.complete()
+      await Promise.resolve()
+      expect(preparedDispose).toHaveBeenCalledOnce()
+      expect(f.receiver.setFarMap.mock.lastCall!.slice(0, 2)).toEqual([null, null])
+      expect(f.createBackend).not.toHaveBeenCalled()
+      expect(colorDispose).toHaveBeenCalledTimes(kind === 'evict' ? 1 : 0)
+      f.runtime.dispose()
+    }
+  )
+  it('immediately resizes owned targets and clears capture-era output without an extra draw', () => {
+    const f = fixture(),
+      plan = f.begin()!,
+      target = new WebGLRenderTarget()
+    const output = f.runtime.renderVolume({} as never, target, plan, {
+      serial: plan.frame.serial,
+      viewport: size,
+      texture: new Texture(),
+      sceneLogFarFactor: 1,
+      sceneUnitsToMeters: 1
+    })!
+    f.runtime.useEndpoint(plan, output)
+    f.runtime.setSize(48, 36)
+    expect(f.backend.setSize).toHaveBeenCalledWith(48, 36)
+    expect(f.runtime.diagnostics.effectiveWeight).toBe(0)
+    expect(f.receiver.setEndpoint.mock.lastCall![1]).toBeNull()
+    expect(f.backend.render).toHaveBeenCalledOnce()
+    f.runtime.setSize(48, 36)
+    expect(f.backend.setSize).toHaveBeenCalledOnce()
+    f.runtime.dispose()
+    target.dispose()
+  })
+  it('does not allocate or resize GPU owners for far-only, lost, or disposed runtimes', () => {
+    const f = fixture()
+    f.runtime.setSize(100, 100)
+    expect(f.createBackend).not.toHaveBeenCalled()
+    f.runtime.setContextLost(true)
+    f.runtime.setSize(100, 100)
+    f.runtime.dispose()
+    f.runtime.setSize(100, 100)
+    expect(f.backend.setSize).not.toHaveBeenCalled()
+  })
+  it.each(['scenario', 'quality', 'context', 'dispose', 'eviction', 'bitmap'] as const)(
+    'rejects ignored-abort preparation after %s',
+    async (kind) => {
+      const f = fixture(true)
+      const source = resourceStorage.getTexture('runtime-test')!
+      const borrowedDispose = vi.spyOn(source, 'dispose')
+      const dispose = vi.spyOn(f.prepared, 'dispose')
+      f.begin()
+      if (kind === 'scenario') f.runtime.resetScenario()
+      if (kind === 'quality') f.runtime.setOptions(true, 'low')
+      if (kind === 'context') f.runtime.setContextLost(true)
+      if (kind === 'dispose') f.runtime.dispose()
+      if (kind === 'eviction') resourceStorage.deleteTexture('runtime-test')
+      if (kind === 'bitmap') source.image = { data: new Uint8Array([1, 2, 3, 255]), width: 1, height: 1 }
+      f.complete()
+      await Promise.resolve()
+      expect(dispose).toHaveBeenCalledTimes(1)
+      expect(f.createBackend).not.toHaveBeenCalled()
+      expect(f.receiver.setEndpoint.mock.calls.every((call) => call[1] === null)).toBe(true)
+      expect(borrowedDispose).toHaveBeenCalledTimes(kind === 'eviction' ? 1 : 0)
+      f.runtime.dispose()
+    }
+  )
+  it('clears near bindings before disposing output owners and keeps off far maps cleared', () => {
+    const f = fixture(),
+      plan = f.begin()!,
+      target = new WebGLRenderTarget()
+    const output = f.runtime.renderVolume({} as never, target, plan, {
+      serial: plan.frame.serial,
+      viewport: size,
+      texture: new Texture(),
+      sceneLogFarFactor: 1,
+      sceneUnitsToMeters: 1
+    })!
+    f.runtime.useEndpoint(plan, output)
+    const events: string[] = []
+    f.receiver.setEndpoint.mockImplementation((_frame, current) => {
+      if (current === null) events.push('clear')
+    })
+    f.backend.dispose.mockImplementation(() => {
+      events.push('dispose')
+    })
+    f.runtime.setOptions(false, 'medium')
+    expect(events.indexOf('clear')).toBeLessThan(events.indexOf('dispose'))
+    f.begin()
+    expect(f.receiver.setFarMap.mock.lastCall!.slice(0, 2)).toEqual([null, null])
+    f.runtime.dispose()
+    target.dispose()
+  })
+  it('holds context loss until a current ready LUT and fresh successful output exist', () => {
+    const f = fixture()
+    f.begin()
+    f.runtime.setContextLost(true)
+    expect(f.begin()).toBeNull()
+    expect(f.runtime.diagnostics.state).toBe('context-lost')
+    f.entry.ready = false
+    f.runtime.setContextLost(false)
+    expect(f.begin()).toBeNull()
+    expect(f.runtime.diagnostics.effectiveWeight).toBe(0)
+    f.entry.generation++
+    f.entry.ready = true
+    expect(f.begin()).not.toBeNull()
+    expect(f.runtime.diagnostics.effectiveWeight).toBe(0)
+    f.runtime.dispose()
+  })
+  it('resets backend history only on discontinuity and cloned local camera changes', () => {
+    const f = fixture(),
+      target = new WebGLRenderTarget()
+    const draw = () => {
+      const plan = f.begin()!
+      return f.runtime.renderVolume({} as never, target, plan, {
+        serial: plan.frame.serial,
+        viewport: size,
+        texture: new Texture(),
+        sceneLogFarFactor: 1,
+        sceneUnitsToMeters: 1
+      })
+    }
+    draw()
+    const initial = f.backend.resetHistory.mock.calls.length
+    f.camera.position.x += SpaceScale / 1000
+    draw()
+    expect(f.backend.resetHistory).toHaveBeenCalledTimes(initial)
+    f.camera.position.x += (100000 * SpaceScale) / 1000
+    draw()
+    expect(f.backend.resetHistory).toHaveBeenCalledTimes(initial + 1)
+    f.runtime.resetHistory()
+    draw()
+    expect(f.backend.resetHistory).toHaveBeenCalledTimes(initial + 2)
+    f.runtime.dispose()
+    target.dispose()
+  })
   it('latches a receiver link failure and retries its owned program once after a real layout change', () => {
     const f = fixture(),
       plan = f.begin()!
@@ -151,7 +350,7 @@ describe('scene cloud runtime', () => {
     })
     expect(f.runtime.getEndpointMaterialBindings(plan).size).toBe(1)
     const failure = Error('near receiver link')
-    f.runtime.invalidate('error', failure, true)
+    f.runtime.invalidate('error', failure, { stage: 'near', recovery: 'owned-near', receivers: [f.receiver] })
     expect(f.begin()).toBeNull()
     expect(f.runtime.error).toBe(failure)
     expect(f.receiver.retryEndpointMaterial).not.toHaveBeenCalled()
