@@ -4,6 +4,7 @@ const probes: { title: string; path: string; name: string; args?: unknown[] }[] 
   { title: 'nebula seed', path: 'nebula/rendering', name: 'checkNebulaSeed' },
   { title: 'nebula world precision', path: 'nebula/rendering', name: 'checkNebulaWorldPrecision' },
   { title: 'nebula bake state', path: 'nebula/rendering', name: 'checkNebulaBakeState' },
+  { title: 'nebula baked program', path: 'nebula/bakedProgram', name: 'checkNebulaBakedProgram' },
   { title: 'nebula absorption', path: 'nebula/rendering', name: 'checkNebulaAbsorption' },
   { title: 'nebula gas dust optics', path: 'nebula/gasDust', name: 'checkNebulaGasDustOptics' },
   { title: 'nebula gas dust fields', path: 'nebula/gasDust', name: 'checkNebulaGasDustFields' },

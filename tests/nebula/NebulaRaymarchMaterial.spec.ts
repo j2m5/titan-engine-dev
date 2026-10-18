@@ -1,4 +1,4 @@
-import { Vector3 } from 'three'
+import { Texture, Vector3 } from 'three'
 import { NebulaRaymarchMaterial } from '@/core/renderables/Nebula/material/NebulaRaymarchMaterial'
 import { mergeNebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { sceneDepthFunctions, sceneDepthUniforms } from '@/core/materials/shaders/lib/chunks/SceneDepth'
@@ -42,6 +42,48 @@ describe('NebulaRaymarchMaterial: перекрытие по глубине сц�
 })
 
 describe('NebulaRaymarchMaterial', () => {
+  it('changes GPU programs only when density readiness changes and invalidates temporal content on replacement', () => {
+    const material = new NebulaRaymarchMaterial(mergeNebulaParams())
+    const first = new Texture(), second = new Texture()
+    const initialVersion = material.version, initialRevision = material.temporalRevision
+    try {
+      material.setBakedDensityTexture(null)
+      expect(material.version).toBe(initialVersion)
+      expect(material.temporalRevision).toBe(initialRevision)
+
+      material.setBakedDensityTexture(first)
+      expect(material.version).toBe(initialVersion + 1)
+      expect(material.uniforms.uDensityTex.value).toBe(first)
+      expect(material.temporalRevision).toBe(initialRevision + 1)
+      const readyVersion = material.version
+
+      material.setBakedDensityTexture(first)
+      expect(material.version).toBe(readyVersion)
+      expect(material.temporalRevision).toBe(initialRevision + 1)
+
+      material.setBakedDensityTexture(second)
+      expect(material.version).toBe(readyVersion)
+      expect(material.uniforms.uDensityTex.value).toBe(second)
+      expect(material.temporalRevision).toBe(initialRevision + 2)
+
+      material.setBakedDensityTexture(null)
+      expect(material.version).toBe(readyVersion + 1)
+      expect(material.uniforms.uDensityReady.value).toBe(0)
+      expect(material.temporalRevision).toBe(initialRevision + 3)
+    } finally { material.dispose(); first.dispose(); second.dispose() }
+  })
+
+  it('does not enable a baked program when baking is disabled', () => {
+    const material = new NebulaRaymarchMaterial(mergeNebulaParams({ quality: { bake3DTexture: false } }))
+    const texture = new Texture(), version = material.version, revision = material.temporalRevision
+    try {
+      material.setBakedDensityTexture(texture)
+      expect(material.version).toBe(version)
+      expect(material.temporalRevision).toBe(revision)
+      expect(material.uniforms.uDensityTex).toBeUndefined()
+    } finally { material.dispose(); texture.dispose() }
+  })
+
   it('constructs with uniforms derived from params', () => {
     const mat = new NebulaRaymarchMaterial(mergeNebulaParams({ quality: { maxSteps: 64 } }))
     expect(mat.uniforms.uMaxSteps.value).toBe(64)

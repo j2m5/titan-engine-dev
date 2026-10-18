@@ -122,9 +122,19 @@ export const nebulaRaymarchFragment = `
   // fragment output, so we declare our own (needed to sample the baked sampler3D).
   layout(location = 0) out vec4 fragColor;
   layout(location = 1) out vec4 temporalPosition;
-  #include <noiseFunctions>
-  ${nebulaNoiseChunk}
-  ${nebulaDensityChunk}
+  #ifdef NEB_BAKED_ONLY
+    // Complete RG8 field: exclude procedural noise from the compiled program,
+    // including the secondary light march. The material selects this variant
+    // only while a completed texture is bound.
+    uniform highp sampler3D uDensityTex;
+    vec2 nebulaMedium(vec3 p) {
+      return textureLod(uDensityTex, p * 0.5 + 0.5, 0.0).rg;
+    }
+  #else
+    #include <noiseFunctions>
+    ${nebulaNoiseChunk}
+    ${nebulaDensityChunk}
+  #endif
   ${nebulaColorChunk}
 
   varying vec3 vLocalPos;

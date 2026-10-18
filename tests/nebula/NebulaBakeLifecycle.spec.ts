@@ -26,7 +26,7 @@ describe('Nebula bake lifecycle', () => {
   it('submits no constructor work and publishes only complete density and impostor generations', () => {
     const { create, volumeOf, frame, render, queue } = setup()
     const nebula = create()
-    const u = volumeOf(nebula).material.uniforms
+    const material = volumeOf(nebula).material, u = material.uniforms, initialVersion = material.version
     try {
       expect(render).not.toHaveBeenCalled()
       expect(u.uDensityReady.value).toBe(0)
@@ -34,8 +34,10 @@ describe('Nebula bake lifecycle', () => {
       expect(render).toHaveBeenCalledTimes(60)
       expect(u.uDensityReady.value).toBe(0)
       expect(u.uLodBlend.value).toBe(1)
+      expect(material.version).toBe(initialVersion)
       frame(nebula)
       expect(u.uDensityReady.value).toBe(1)
+      expect(material.version).toBe(initialVersion + 1)
       expect(u.uDensityTex.value).not.toBeNull()
       for (let i = 0; i < 3; i++) frame(nebula)
       expect(u.uLodBlend.value).toBe(1)
@@ -72,20 +74,23 @@ describe('Nebula bake lifecycle', () => {
   it('restoration cancels partial work, falls back to live rendering and obeys the same budget', () => {
     const { create, volumeOf, frame, canvas, render, queue } = setup()
     const nebula = create()
-    const u = volumeOf(nebula).material.uniforms
+    const material = volumeOf(nebula).material, u = material.uniforms
     try {
       for (let i = 0; i < 20; i++) frame(nebula)
       expect(u.uLodBlend.value).toBe(0)
+      const readyVersion = material.version
       render.mockClear()
       canvas.dispatchEvent(new Event('webglcontextrestored'))
       expect(render).not.toHaveBeenCalled()
       expect(u.uDensityReady.value).toBe(0)
       expect(u.uLodBlend.value).toBe(1)
+      expect(material.version).toBe(readyVersion + 1)
       for (let i = 0; i < 19; i++) frame(nebula)
       expect(u.uLodBlend.value).toBe(1)
       frame(nebula)
       expect(u.uLodBlend.value).toBe(0)
       expect(render).toHaveBeenCalledTimes(80)
+      expect(material.version).toBe(readyVersion + 2)
     } finally { nebula.dispose() }
     canvas.dispatchEvent(new Event('webglcontextrestored'))
     queue.pumpFrame()
@@ -104,6 +109,24 @@ describe('Nebula bake lifecycle', () => {
       expect(volumeOf(nebula).material.uniforms.uLodBlend.value).toBe(1)
       frame(nebula)
       expect(render).toHaveBeenCalledTimes(1)
+    } finally { nebula.dispose() }
+  })
+
+  it('returns to the procedural program when impostor baking fails after density is ready', () => {
+    const { create, volumeOf, frame, render, queue } = setup()
+    const nebula = create(), material = volumeOf(nebula).material
+    try {
+      for (let i = 0; i < 16; i++) frame(nebula)
+      expect(material.uniforms.uDensityReady.value).toBe(1)
+      const readyVersion = material.version
+      render.mockImplementationOnce(() => { throw new Error('Impostor GPU failure') })
+      expect(() => frame(nebula)).toThrow('Impostor GPU failure')
+      expect(material.version).toBe(readyVersion + 1)
+      expect(material.uniforms.uDensityReady.value).toBe(0)
+      expect(material.uniforms.uDensityTex.value).toBeNull()
+      expect(material.uniforms.uLodBlend.value).toBe(1)
+      expect(queue.pendingCount).toBe(0)
+      expect(queue.allocatedBytes).toBe(0)
     } finally { nebula.dispose() }
   })
 

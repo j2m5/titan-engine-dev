@@ -103,12 +103,20 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
     u.uLightFalloff.value = params.lighting.falloffRadius
   }
 
-  /** Bind the precomputed 3D density field (only meaningful when NEB_BAKED). */
+  /** Publish a complete field, or return to the live fallback on invalidation. */
   public setBakedDensityTexture(texture: Texture | null): void {
     if (this.uniforms.uDensityTex) {
       if (this.uniforms.uDensityTex.value !== texture) this.temporalRevision++
       this.uniforms.uDensityTex.value = texture
       this.uniforms.uDensityReady.value = texture ? 1 : 0
+      const ready = texture !== null
+      if (ready !== (this.defines.NEB_BAKED_ONLY !== undefined)) {
+        // Two cached programs: live fallback and texture-only sampling. Replacing
+        // a ready field only updates uniforms; it must not request recompilation.
+        if (ready) this.defines.NEB_BAKED_ONLY = ''
+        else delete this.defines.NEB_BAKED_ONLY
+        this.needsUpdate = true
+      }
     }
   }
 
