@@ -148,7 +148,9 @@ export const nebulaDensityChunk = `
   // interpolation approximate the live field; unfinished bakes use live noise.
   vec2 nebulaMedium(vec3 p) {
   #ifdef NEB_BAKED
-    if (uDensityReady > 0.5) return texture(uDensityTex, p * 0.5 + 0.5).rg;
+    // The baked field has one level with trilinear spatial filtering. Explicit
+    // LOD avoids implicit derivatives inside divergent view/light marches.
+    if (uDensityReady > 0.5) return textureLod(uDensityTex, p * 0.5 + 0.5, 0.0).rg;
   #endif
     // Порядок ветвей — как в NebulaField.sampleDensity: при uBoundaryWarp 0 сначала
     // граница и ранний выход (варп не считается впустую), при > 0 вектор варпа

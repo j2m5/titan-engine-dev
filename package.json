@@ -34,7 +34,8 @@
     "test": "npm run typecheck && vitest",
     "test:perf": "vitest run --mode perf --no-file-parallelism tests/terrain/midbandBuildBudget.spec.ts tests/asteroidBelt/SectorGridLazy.spec.ts",
     "test:browser": "playwright test",
-    "benchmark:browser": "playwright test --config playwright.soak.config.ts"
+    "benchmark:browser": "playwright test --config playwright.soak.config.ts",
+    "benchmark:nebula": "playwright test --config playwright.nebula.config.ts"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

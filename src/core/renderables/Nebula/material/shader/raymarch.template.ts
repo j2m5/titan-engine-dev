@@ -249,16 +249,21 @@ export const nebulaRaymarchFragment = `
   void main() {
     vec4 result = vec4(0.0);
     temporalPosition = vec4(0.0);
-    if (!nebulaLowResolution(result)) {
-      vec3 ro = uCameraLocal;
-      vec3 rd = normalize(vLocalPos - ro);
-      result = vec4(0.0);
-      // Dynamic branches skip the entire march for far LOD. Reconstruction
-      // already includes this LOD mix and opacity; apply them only once.
-      if (uLodBlend < 1.0) result += sampleImpostor(ro, rd) * (1.0 - uLodBlend);
-      if (uLodBlend > 0.0) result += marchNebula(ro, rd, temporalPosition) * uLodBlend;
-      result *= uOpacityScale;
+    if (nebulaLowResolution(result)) {
+      // Keep reconstruction as an early fragment exit. On ANGLE/D3D11 the
+      // inverse branch retained the march's GPU cost even for reconstructed
+      // pixels. Zero premultiplied RGBA is also a no-op for our blend state.
+      fragColor = result;
+      return;
     }
+    vec3 ro = uCameraLocal;
+    vec3 rd = normalize(vLocalPos - ro);
+    result = vec4(0.0);
+    // Dynamic branches skip the entire march for far LOD. Reconstruction
+    // already includes this LOD mix and opacity; apply them only once.
+    if (uLodBlend < 1.0) result += sampleImpostor(ro, rd) * (1.0 - uLodBlend);
+    if (uLodBlend > 0.0) result += marchNebula(ro, rd, temporalPosition) * uLodBlend;
+    result *= uOpacityScale;
     // Transparent self-emission (absorption=0) still adds radiance to the scene.
     if (result.a <= 0.0 && all(lessThanEqual(result.rgb, vec3(0.0)))) discard;
     fragColor = result;
