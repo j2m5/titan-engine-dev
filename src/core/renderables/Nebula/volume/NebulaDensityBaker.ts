@@ -28,7 +28,7 @@ const bakeVertex = `
 
 // Computes the STATIC density (compute branch — no NEB_BAKED define) for each
 // voxel of the current Z slice. Same density chunks the marcher uses, so the
-// baked field == the live field. Output is the [0,1] density in the R channel.
+// baked field samples the live field. Output is [0,1] density, quantised to R8.
 const bakeFragment = `
   precision highp float;
   out vec4 fragColor;
@@ -60,6 +60,8 @@ class NebulaDensityBaker {
   private readonly camera = new Camera()
   private readonly mesh: Mesh
   public readonly resolution: number
+  private nextLayer = 0
+  private active = false
 
   public constructor(
     private readonly renderer: WebGLRenderer,
@@ -97,22 +99,47 @@ class NebulaDensityBaker {
     return this.target.texture
   }
 
-  /** Render every Z slice; returns the filled 3D density texture. */
-  public bake(params: NebulaParams): Texture {
+  /** Start a new generation without submitting GPU work. */
+  public start(params: NebulaParams): void {
     applyDensityUniforms(this.material.uniforms, params)
+    this.nextLayer = 0
+    this.active = true
+  }
 
+  /** Submit at most maxLayers slices. True means this generation is complete. */
+  public step(maxLayers = 1): boolean {
+    if (!this.active) return true
     const renderer = this.renderer
     const prevTarget = renderer.getRenderTarget()
-    for (let layer = 0; layer < this.resolution; layer++) {
-      this.material.uniforms.u_layer.value = layer
-      renderer.setRenderTarget(this.target, layer)
-      renderer.render(this.scene, this.camera)
+    const prevLayer = renderer.getActiveCubeFace()
+    const prevMip = renderer.getActiveMipmapLevel()
+    try {
+      const end = Math.min(this.resolution, this.nextLayer + Math.max(0, Math.floor(maxLayers)))
+      while (this.nextLayer < end) {
+        this.material.uniforms.u_layer.value = this.nextLayer
+        renderer.setRenderTarget(this.target, this.nextLayer)
+        renderer.render(this.scene, this.camera)
+        this.nextLayer++
+      }
+      if (this.nextLayer === this.resolution) this.active = false
+    } catch (error) {
+      this.active = false
+      throw error
+    } finally {
+      renderer.setRenderTarget(prevTarget, prevLayer, prevMip)
     }
-    renderer.setRenderTarget(prevTarget)
+    return !this.active
+  }
+
+  /** Render every Z slice; returns the filled 3D density texture. */
+  public bake(params: NebulaParams): Texture {
+    this.start(params)
+    this.step(this.resolution)
     return this.target.texture
   }
 
   public dispose(): void {
+    this.active = false
     this.target.dispose()
     this.material.dispose()
     this.mesh.geometry.dispose()

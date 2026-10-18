@@ -27,6 +27,11 @@ describe('NebulaParams', () => {
     expect(mergeNebulaParams({ quality: { resolutionScale: 0 } }).quality.resolutionScale).toBe(0.25)
   })
 
+  it('normalizes fractional bake dimensions before allocating and rendering texture layers', () => {
+    const params = mergeNebulaParams({ quality: { bakeResolution: 64.5 } })
+    expect(params.quality.bakeResolution).toBe(65)
+  })
+
   it('produces independent Color/Vector3 clones per call', () => {
     const a = mergeNebulaParams()
     const b = mergeNebulaParams()

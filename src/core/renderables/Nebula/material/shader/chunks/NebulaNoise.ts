@@ -2,11 +2,13 @@
 // Built on snoise(vec3) provided by <noiseFunctions>.
 // CPU mirror lives in fields/valueNoise.ts (fbm3) and NebulaField.noiseField.
 export const nebulaNoiseChunk = `
+  uniform vec3 uNoiseOffset;
+
   float nebFbm(vec3 p, int octaves, float lacunarity, float gain) {
     float sum = 0.0; float amp = 0.5; float freq = 1.0; float norm = 0.0;
     for (int i = 0; i < 8; i++) {
       if (i >= octaves) break;
-      sum += amp * snoise(p * freq);
+      sum += amp * snoise(p * freq + uNoiseOffset);
       norm += amp;
       amp *= gain; freq *= lacunarity;
     }

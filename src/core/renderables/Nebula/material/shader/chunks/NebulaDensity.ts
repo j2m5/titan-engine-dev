@@ -29,6 +29,7 @@ export const nebulaDensityChunk = `
 
   #ifdef NEB_BAKED
     uniform highp sampler3D uDensityTex;    // precomputed static density field
+    uniform float uDensityReady;
   #endif
 
   // Показатель раздувания лепестков песочных часов. Единица дала бы конусы,
@@ -89,7 +90,7 @@ export const nebulaDensityChunk = `
   // offset (snoise has no seed). Single octave: dust lanes are broad and low-freq,
   // so extra octaves would only add per-step cost. Mirror: NebulaField.dustMask.
   float nebulaDust(vec3 p) {
-    float n = snoise(p * 0.9 + vec3(55.5));
+    float n = snoise(p * 0.9 + vec3(55.5) + uNoiseOffset);
     return clamp(1.0 - abs(n), 0.0, 1.0);
   }
 
@@ -119,7 +120,7 @@ export const nebulaDensityChunk = `
       carve *= 1.0 - uCavityStrength[i] * inside;
     }
     if (uWorleyStrength > 0.001) {
-      vec2 f = cellular3d(p * 1.7);
+      vec2 f = cellular3d(p * 1.7 + uNoiseOffset);
       float walls = mix(1.0, smoothstep(0.0, 0.4, f.y - f.x), uWorleyStrength);
       carve *= walls;
     }
@@ -130,11 +131,12 @@ export const nebulaDensityChunk = `
   // pow(clamp(boundary * (noise + lobes)) * cavities, contrast), + GPU Worley.
   // When NEB_BAKED, the (static) field is read from a precomputed 3D texture
   // instead of evaluating fbm+Worley per step. The 3D-bake material runs the
-  // compute branch (no define) to fill that texture, so baked == live.
+  // compute branch (no define) to fill that texture. R8 quantisation and trilinear
+  // interpolation approximate the live field; unfinished bakes use live noise.
   float nebulaDensity(vec3 p) {
   #ifdef NEB_BAKED
-    return texture(uDensityTex, p * 0.5 + 0.5).r;
-  #else
+    if (uDensityReady > 0.5) return texture(uDensityTex, p * 0.5 + 0.5).r;
+  #endif
     // Порядок ветвей — как в NebulaField.sampleDensity: при uBoundaryWarp 0 сначала
     // граница и ранний выход (варп не считается впустую), при > 0 вектор варпа
     // нужен уже для границы: контур перестаёт быть аналитической сферой/эллипсоидом
@@ -158,6 +160,5 @@ export const nebulaDensityChunk = `
     d *= nebCavities(p);
     d = pow(clamp(d, 0.0, 1.0), uContrast);
     return clamp(d, 0.0, 1.0);
-  #endif
   }
 `

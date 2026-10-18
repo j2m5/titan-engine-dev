@@ -1,5 +1,5 @@
 import { vi } from 'vitest'
-import { Camera, Object3D, PerspectiveCamera, Vector3, WebGLRenderer } from 'three'
+import { Camera, Color, Object3D, PerspectiveCamera, Vector3, WebGLRenderer } from 'three'
 import { ImpostorBaker } from '@/core/renderables/Nebula/volume/ImpostorBaker'
 import { DEPTH_VOLUME_LAYER } from '@/core/graphic/passes/DepthVolume'
 
@@ -10,9 +10,12 @@ describe('ImpostorBaker', () => {
     const render = vi.fn()
     const renderer = {
       getRenderTarget: () => null,
+      getActiveCubeFace: () => 0,
+      getActiveMipmapLevel: () => 0,
       setRenderTarget: () => {},
       getClearAlpha: () => 1,
-      setClearAlpha: () => {},
+      getClearColor: (color: Color) => color.set(0),
+      setClearColor: () => {},
       clear: () => {},
       render
     } as unknown as WebGLRenderer

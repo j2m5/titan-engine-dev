@@ -1,6 +1,13 @@
 import { test, runProbe } from './probe'
 
 const probes: { title: string; path: string; name: string; args?: unknown[] }[] = [
+  { title: 'nebula seed', path: 'nebula/rendering', name: 'checkNebulaSeed' },
+  { title: 'nebula world precision', path: 'nebula/rendering', name: 'checkNebulaWorldPrecision' },
+  { title: 'nebula bake state', path: 'nebula/rendering', name: 'checkNebulaBakeState' },
+  { title: 'nebula absorption', path: 'nebula/rendering', name: 'checkNebulaAbsorption' },
+  { title: 'nebula LOD composition', path: 'nebula/rendering', name: 'checkNebulaLodComposition' },
+  { title: 'nebula diagonal bake', path: 'nebula/rendering', name: 'checkNebulaDiagonalBake' },
+  { title: 'nebula incremental baking', path: 'nebula/rendering', name: 'checkNebulaIncrementalBaking' },
   { title: 'atmosphere terminator', path: 'atmosphere/terminator', name: 'checkAtmosphereTerminator' },
   { title: 'black hole depth (0 samples)', path: 'blackHole/insideDepth', name: 'checkBlackHoleInsideDepth', args: [0] },
   { title: 'black hole depth (4 samples)', path: 'blackHole/insideDepth', name: 'checkBlackHoleInsideDepth', args: [4] },

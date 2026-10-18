@@ -15,6 +15,7 @@ import Stats from 'three/examples/jsm/libs/stats.module'
 import { clampPixelRatio } from '@/core/graphic/renderingFactories'
 import { resolveCrosshairAnchor } from '@/core/helpers/resolveCrosshairAnchor'
 import type { AsteroidImpostorLibrary } from '@/core/renderables/DetailedRingStreamingSystem/impostors/AsteroidImpostorLibrary'
+import type { NebulaBakeQueue } from '@/core/renderables/Nebula/volume/NebulaBakeQueue'
 
 class Engine {
   private readonly canvas: HTMLCanvasElement
@@ -58,7 +59,8 @@ class Engine {
     private renderClock: Clock,
     private postprocessing: Postprocessing,
     private cameraCollision: CameraCollision,
-    private readonly asteroidImpostors?: Pick<AsteroidImpostorLibrary, 'pumpFrame'>
+    private readonly asteroidImpostors?: Pick<AsteroidImpostorLibrary, 'pumpFrame'>,
+    private readonly nebulaBakes?: Pick<NebulaBakeQueue, 'pumpFrame'>
   ) {
     this.canvas = this.renderer.domElement
     this.overlay = this.labelRenderer.domElement
@@ -238,6 +240,7 @@ class Engine {
     this.labelRenderer.render(this.scene, this.renderCamera)
     this.sceneManager.updateMarkers()
     this.asteroidImpostors?.pumpFrame()
+    this.nebulaBakes?.pumpFrame()
     this.postprocessing.render(delta)
   }
 

@@ -34,7 +34,7 @@ describe('NebulaRaymarchMaterial: перекрытие по глубине сц�
     expect(fs).toContain('tf = min(tf, sceneDepthRayT(mat3(modelViewMatrix) * rdLocal))')
     // Обрезка стоит ДО проверки пустого интервала: луч, упёршийся в поверхность
     // раньше входа в куб, уходит в discard
-    expect(fs.indexOf('sceneDepthRayT(')).toBeLessThan(fs.indexOf('if (tf <= tn) discard'))
+    expect(fs.indexOf('sceneDepthRayT(')).toBeLessThan(fs.indexOf('if (tf <= tn) return vec4(0.0)'))
     expect(fs).not.toContain('gl_FragDepth')
     expect(fs).not.toContain('vFragDepth')
     expect(make().vertexShader).not.toContain('vFragDepth')

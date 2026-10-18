@@ -1,6 +1,7 @@
 import { IUniform, Matrix3, Vector4 } from 'three'
 import { NEBULA_SHAPE_IDS, NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { shapeRotationMatrix } from '@/core/renderables/Nebula/fields/NebulaField'
+import { hash3 } from '@/core/renderables/Nebula/fields/valueNoise'
 
 /**
  * Set the density-FIELD uniforms (boundary / noise / lobes / cavities / Worley) on a
@@ -9,6 +10,13 @@ import { shapeRotationMatrix } from '@/core/renderables/Nebula/fields/NebulaFiel
  * march-only uniforms (steps, palette/dust/light, density absorption, opacity, time).
  */
 export function applyDensityUniforms(u: Record<string, IUniform>, params: NebulaParams): void {
+  // Hash on the CPU to keep arbitrary integer seeds out of float32 GLSL math.
+  // Keep the original pattern for the default seed; other seeds now select
+  // distinct noise domains in both the live marcher and the density bake.
+  const seed = params.seed | 0
+  if (seed === 1337) u.uNoiseOffset.value.set(0, 0, 0)
+  else u.uNoiseOffset.value.set(hash3(1, 0, 0, seed) * 128, hash3(0, 1, 0, seed) * 128, hash3(0, 0, 1, seed) * 128)
+
   // Код берётся из единой таблицы, а не из цепочки тернарников: с пятью формами
   // забытая ветка молча означала бы «эллипсоид»
   u.uShape.value = NEBULA_SHAPE_IDS[params.shape] ?? NEBULA_SHAPE_IDS.ellipsoid

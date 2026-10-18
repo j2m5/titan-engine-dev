@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import '@/core/framework/TitanThree'
-import { Clock, Group, PerspectiveCamera, Scene, Vector2, Vector3, WebGLRenderer } from 'three'
+import { Clock, Color, Group, PerspectiveCamera, Scene, Vector2, Vector3, WebGLRenderer } from 'three'
 import type { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer'
 import { Engine } from '@/core/Engine'
 import { SceneManager } from '@/core/services/SceneManager'
@@ -21,14 +21,14 @@ import { toThreeJSUnits } from '@/core/helpers/scaling'
 import { DAY } from '@/core/constants'
 import { Nebula } from '@/core/renderables/Nebula'
 import { NebulaVolume } from '@/core/renderables/Nebula/volume/NebulaVolume'
-import { NebulaImpostor } from '@/core/renderables/Nebula/volume/NebulaImpostor'
+import { NebulaBakeQueue } from '@/core/renderables/Nebula/volume/NebulaBakeQueue'
 
 /**
  * Стенд по образцу `EngineDispose.spec.ts`, но `renderer.domElement`/
  * `labelRenderer.domElement` — настоящие DOM-элементы: `initialize()` делает
  * `document.body.appendChild`, голая заглушка `{ style: {} }` там падает.
  */
-function makeEngine(scene = new Scene(), manager?: SceneManager) {
+function makeEngine(scene = new Scene(), manager?: SceneManager, queue?: NebulaBakeQueue) {
   const order: string[] = []
   const canvas = document.createElement('canvas')
   const overlay = document.createElement('div')
@@ -90,6 +90,7 @@ function makeEngine(scene = new Scene(), manager?: SceneManager) {
   const simulationClock = new SimulationClock(0)
   const renderClock = new Clock()
   const impostors = { pumpFrame: vi.fn((): void => void order.push('impostors')) }
+  const nebulaBakes = { pumpFrame: vi.fn(() => { order.push('nebulaBakes'); queue?.pumpFrame() }) }
 
   const engine = new Engine(
     manager ?? sceneManager,
@@ -104,7 +105,8 @@ function makeEngine(scene = new Scene(), manager?: SceneManager) {
     renderClock,
     postprocessing,
     cameraCollision as unknown as CameraCollision,
-    impostors
+    impostors,
+    nebulaBakes
   )
 
   return {
@@ -121,6 +123,7 @@ function makeEngine(scene = new Scene(), manager?: SceneManager) {
     simulationClock,
     renderClock,
     impostors,
+    nebulaBakes,
     surface,
     order
   }
@@ -202,6 +205,15 @@ describe('Engine: время кадра', () => {
 })
 
 describe('Engine: подключение периодического пересчёта к кадровому циклу', () => {
+  it('pumps the shared nebula queue once after view selection and before rendering', () => {
+    const { engine, nebulaBakes, order } = makeEngine()
+    try {
+      engine.start()
+      expect(nebulaBakes.pumpFrame).toHaveBeenCalledOnce()
+      expect(order.indexOf('view')).toBeLessThan(order.indexOf('nebulaBakes'))
+      expect(order.indexOf('nebulaBakes')).toBeLessThan(order.indexOf('render'))
+    } finally { engine.dispose() }
+  })
   it('выполняет один шаг импосторов после маркеров перед рендером', () => {
     const { engine, impostors, order } = makeEngine()
     engine.start()
@@ -255,6 +267,7 @@ describe('Engine: подключение периодического перес
       'labels',
       'markers',
       'impostors',
+      'nebulaBakes',
       'render'
     ])
   })
@@ -277,7 +290,8 @@ describe('Engine: Nebula uses the final camera in the current frame', () => {
       scene,
       { eclipses: { update() {} } } as unknown as RenderableFactory
     )
-    const frame = makeEngine(scene, manager)
+    const queue = new NebulaBakeQueue({ maxCpuMs: Infinity })
+    const frame = makeEngine(scene, manager, queue)
     const camera = frame.renderCamera
     camera.fov = 50
     camera.aspect = 16 / 9
@@ -289,19 +303,21 @@ describe('Engine: Nebula uses the final camera in the current frame', () => {
     const renderer = {
       getSize: (v: Vector2) => v.set(1920, 1080),
       getRenderTarget: () => null,
+      getActiveCubeFace: () => 0,
+      getActiveMipmapLevel: () => 0,
       setRenderTarget() {},
       getClearAlpha: () => 1,
-      setClearAlpha() {},
+      getClearColor: (color: Color) => color.set(0),
+      setClearColor() {},
       clear() {},
       render: (_volume: NebulaVolume, bakeCamera: PerspectiveCamera) => {
         bakeDirections.push(bakeCamera.position.clone().normalize())
         matricesAtBake.push(new Vector3().setFromMatrixPosition(camera.matrixWorld))
       }
     } as unknown as WebGLRenderer
-    const nebula = new Nebula(renderer, { size: 500, quality: { bake3DTexture: false } })
+    const nebula = new Nebula(renderer, { size: 500, quality: { bake3DTexture: false } }, null, queue)
     scene.add(nebula)
     const volume = nebula.children.find((child) => child instanceof NebulaVolume)!
-    const impostor = nebula.children.find((child) => child instanceof NebulaImpostor)!
     frame.cameraController.updateFollow.mockImplementation(() => {
       // Collision must cross the threshold after follow, before view selection.
       camera.position.set(0, 0, endingNear ? 5e5 : 500)
@@ -315,14 +331,17 @@ describe('Engine: Nebula uses the final camera in the current frame', () => {
     try {
       frame.engine.start()
 
-      expect(volume.visible).toBe(endingNear)
-      expect(impostor.visible).toBe(!endingNear)
-      expect(bakeDirections).toHaveLength(endingNear ? 0 : 1)
+      expect(volume.visible).toBe(true)
+      // A partial far image must not replace the live fallback.
+      expect(volume.material.uniforms.uLodBlend.value).toBe(1)
+      expect(bakeDirections).toHaveLength(endingNear ? 0 : 4)
       if (!endingNear) {
         expect(bakeDirections[0].distanceTo(new Vector3(1, 0, 0))).toBeLessThan(1e-10)
         expect(matricesAtBake[0].distanceTo(camera.position)).toBeLessThan(1e-10)
       }
       expect(frame.postprocessing.render).toHaveBeenCalledOnce()
+      for (let i = 0; i < 3; i++) frame.engine.update()
+      expect(volume.material.uniforms.uLodBlend.value).toBe(endingNear ? 1 : 0)
     } finally {
       nebula.dispose()
     }

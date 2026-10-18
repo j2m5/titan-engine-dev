@@ -1,16 +1,21 @@
-import { Group, PerspectiveCamera, Quaternion, Scene, Vector2, Vector3, WebGLRenderer } from 'three'
+import { Color, Group, Object3D, PerspectiveCamera, Quaternion, Scene, Vector2, Vector3, WebGLRenderer } from 'three'
 import { Nebula } from '@/core/renderables/Nebula'
 import { NebulaImpostor } from '@/core/renderables/Nebula/volume/NebulaImpostor'
 import { NebulaImpostorMaterial } from '@/core/renderables/Nebula/material/NebulaImpostorMaterial'
 import { fromAstronomicalUnits } from '@/core/helpers/scaling'
 import { three } from '@/config/three'
+import { ImpostorBaker } from '@/core/renderables/Nebula/volume/ImpostorBaker'
+import { NebulaVolume } from '@/core/renderables/Nebula/volume/NebulaVolume'
 
 const fakeRenderer = {
   getSize: (v: Vector2) => v.set(1920, 1080),
   getRenderTarget: () => null,
+  getActiveCubeFace: () => 0,
+  getActiveMipmapLevel: () => 0,
   setRenderTarget: () => {},
   getClearAlpha: () => 1,
-  setClearAlpha: () => {},
+  getClearColor: (color: Color) => color.set(0),
+  setClearColor: () => {},
   clear: () => {},
   render: () => {}
 } as unknown as WebGLRenderer
@@ -28,23 +33,68 @@ function farCamera(roll: number = 0): PerspectiveCamera {
   return camera
 }
 
-function impostorOf(nebula: Nebula): NebulaImpostor {
-  return nebula.children.find((c) => c instanceof NebulaImpostor) as NebulaImpostor
+function impostorOf(nebula: Nebula): Object3D {
+  return nebula.getObjectByName('NebulaImpostorFrame')!
 }
 
-function bakedImpostor(camera: PerspectiveCamera): NebulaImpostor {
-  const nebula = new Nebula(fakeRenderer, { size: 500 })
-
+function completeView(nebula: Nebula, camera: PerspectiveCamera): void {
   nebula.updateView(camera)
+  for (let frame = 0; frame < 300 && nebula.bakeQueue.pendingCount; frame++) nebula.bakeQueue.pumpFrame()
+  expect(nebula.bakeQueue.pendingCount).toBe(0)
+}
 
-  const impostor = impostorOf(nebula)
-
-  expect(impostor.visible).toBe(true)
-
-  return impostor
+function bakedImpostor(camera: PerspectiveCamera): Object3D {
+  const nebula = new Nebula(fakeRenderer, { size: 500, quality: { bake3DTexture: false } })
+  try {
+    completeView(nebula, camera)
+    expect((nebula.children[0] as NebulaVolume).material.uniforms.uLodBlend.value).toBe(0)
+    return impostorOf(nebula)
+  } finally { nebula.dispose() }
 }
 
 describe('Импостор туманности: ориентация квада — от камеры запекания', () => {
+  it('uses the camera world position for the bake and invalidates it when the camera parent moves', () => {
+    const parent = new Group()
+    const camera = new PerspectiveCamera(50, 1, 0.01, 1e12)
+    parent.position.set(1e6, 0, 0)
+    camera.position.z = 1e6
+    parent.add(camera)
+    const nebula = new Nebula(fakeRenderer, { size: 500, quality: { bake3DTexture: false } })
+    try {
+      completeView(nebula, camera)
+      const expected = new PerspectiveCamera()
+      expected.position.set(1e6, 0, 1e6)
+      expected.lookAt(0, 0, 0)
+      expect(impostorOf(nebula).quaternion.angleTo(expected.quaternion)).toBeLessThan(1e-6)
+
+      parent.position.x = -1e6
+      completeView(nebula, camera)
+      expected.position.x = -1e6
+      expected.lookAt(0, 0, 0)
+      expect(impostorOf(nebula).quaternion.angleTo(expected.quaternion)).toBeLessThan(1e-6)
+    } finally {
+      nebula.dispose()
+    }
+  })
+
+  it('restores volume visibility and opacity when an impostor rebake fails', () => {
+    const nebula = new Nebula(fakeRenderer, { size: 500, quality: { bake3DTexture: false } })
+    const volume = nebula.children.find(child => child instanceof NebulaVolume) as NebulaVolume
+    completeView(nebula, farCamera())
+    const failedBake = vi.spyOn(ImpostorBaker.prototype, 'step').mockImplementation(() => { throw new Error('bake failed') })
+    try {
+      const camera = farCamera()
+      camera.position.x *= -1
+      expect(() => completeView(nebula, camera)).toThrow('bake failed')
+      expect(volume.visible).toBe(true)
+      expect(volume.material.uniforms.uOpacityScale.value).toBe(1)
+      expect(volume.material.uniforms.uLodBlend.value).toBe(1)
+    } finally {
+      failedBake.mockRestore()
+      nebula.dispose()
+    }
+  })
+
   it('квад повёрнут как камера, смотрящая на центр с мировым up — узор запекания ложится без поворота', () => {
     const camera = farCamera()
     const impostor = bakedImpostor(camera)
@@ -59,16 +109,16 @@ describe('Импостор туманности: ориентация квада
   it('крен камеры (Q/E) не крутит изображение: ни при запекании, ни в кадре', () => {
     const level = bakedImpostor(farCamera()).quaternion.clone()
     const rolledCamera = farCamera(0.7)
-    const impostor = bakedImpostor(rolledCamera)
-
-    expect(impostor.quaternion.angleTo(level)).toBeLessThan(1e-6)
-
-    // кадр с накренённой камерой ориентацию не трогает
-    const before = impostor.quaternion.clone()
-
-    impostor.onBeforeRender(fakeRenderer, new Scene(), rolledCamera, impostor.geometry, impostor.material, new Group())
-
-    expect(impostor.quaternion.angleTo(before)).toBe(0)
+    const nebula = new Nebula(fakeRenderer, { size: 500, quality: { bake3DTexture: false } })
+    try {
+      completeView(nebula, rolledCamera)
+      const impostor = impostorOf(nebula)
+      expect(impostor.quaternion.angleTo(level)).toBeLessThan(1e-6)
+      const before = impostor.quaternion.clone()
+      const volume = nebula.children[0] as NebulaVolume
+      volume.onBeforeRender(fakeRenderer, new Scene(), rolledCamera, volume.geometry, volume.material, new Group())
+      expect(impostor.quaternion.angleTo(before)).toBe(0)
+    } finally { nebula.dispose() }
   })
 
   it('setOrientation копирует ориентацию, а не держит ссылку', () => {

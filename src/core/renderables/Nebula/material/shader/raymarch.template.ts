@@ -1,4 +1,4 @@
-import { Color, IUniform, Matrix3, Uniform, Vector2, Vector3, Vector4 } from 'three'
+import { Color, IUniform, Matrix3, Matrix4, Uniform, Vector2, Vector3, Vector4 } from 'three'
 import { ShaderProps } from '@/core/materials/shaders/AbstractShader'
 import { nebulaNoiseChunk } from './chunks/NebulaNoise'
 import { nebulaDensityChunk } from './chunks/NebulaDensity'
@@ -13,6 +13,7 @@ export function createNebulaUniforms(): Record<string, IUniform> {
   return {
     uMaxSteps: new Uniform(96),
     uTime: new Uniform(0),
+    uNoiseOffset: new Uniform(new Vector3()),
     uShape: new Uniform(0),
     uInvAxis: new Uniform(new Vector3(1, 1, 1)),
     uShapeThickness: new Uniform(0.35),
@@ -27,8 +28,11 @@ export function createNebulaUniforms(): Record<string, IUniform> {
     uRidged: new Uniform(0.4),
     uContrast: new Uniform(1.6),
     uEmissiveIntensity: new Uniform(1.6),
-    uDensityScale: new Uniform(4.0), // optical thickness / absorption per step
-    uOpacityScale: new Uniform(1.0), // crossfade against the impostor
+    uDensityScale: new Uniform(4.0), // absorption per unit of local path length
+    uOpacityScale: new Uniform(1.0),
+    uLodBlend: new Uniform(1.0), // mix premultiplied images BEFORE compositing
+    uImpostorMap: new Uniform(null),
+    uLocalToImpostor: new Uniform(new Matrix4()),
     // Глубина сцены (чанк SceneDepth): привязывает DepthVolumePass перед рендером;
     // по умолчанию выключена — запекание импостора маршит без обрезки
     uSceneDepth: new Uniform(null),
@@ -69,9 +73,9 @@ export function createNebulaUniforms(): Record<string, IUniform> {
 
 export const nebulaRaymarchVertex = `
   precision highp float;
-  varying vec3 vLocalPos;      // proxy-local position [-1,1]
+  varying vec3 vLocalPos;
   void main() {
-    vLocalPos = position;       // unit-cube geometry in [-1,1]
+    vLocalPos = position;       // raster proxy encloses density and impostor
     // modelViewMatrix, NOT modelMatrix followed by viewMatrix. Three builds it on
     // the CPU in double precision, so a proxy standing far from the world origin
     // has its offset cancelled against the camera BEFORE the values drop to
@@ -109,10 +113,12 @@ export const nebulaRaymarchFragment = `
   uniform float uEmissiveIntensity;
   uniform float uDensityScale;
   uniform float uOpacityScale;
+  uniform float uLodBlend;
+  uniform sampler2D uImpostorMap;
+  uniform mat4 uLocalToImpostor;
 
-  // Camera position in proxy-local space via the model matrix inverse.
-  uniform mat4 uInvModelMatrix;
-  uniform vec3 uCameraWorld;
+  // Computed on the CPU, before large world coordinates lose float32 precision.
+  uniform vec3 uCameraLocal;
 
   // Scene depth for the ray cut (SceneDepth chunk, bound by DepthVolumePass).
   // Three does not declare modelViewMatrix in the fragment prefix but uploads it
@@ -138,9 +144,7 @@ export const nebulaRaymarchFragment = `
     return fract(sin(dot(uv, vec2(12.9898, 78.233))) * 43758.5453);
   }
 
-  void main() {
-    vec3 roLocal = (uInvModelMatrix * vec4(uCameraWorld, 1.0)).xyz;
-    vec3 rdLocal = normalize(vLocalPos - roLocal);
+  vec4 marchNebula(vec3 roLocal, vec3 rdLocal) {
     vec2 hit = intersectBox(roLocal, rdLocal);
     float tn = max(hit.x, 0.0);
     float tf = hit.y;
@@ -149,7 +153,7 @@ export const nebulaRaymarchFragment = `
     // collapses and is discarded. rdLocal is proxy-local; mat3(modelViewMatrix)
     // carries the proxy scale into view space, so no normalisation here.
     tf = min(tf, sceneDepthRayT(mat3(modelViewMatrix) * rdLocal));
-    if (tf <= tn) discard;
+    if (tf <= tn) return vec4(0.0);
 
     int steps = int(uMaxSteps);
     float dt = (tf - tn) / uMaxSteps;
@@ -163,7 +167,9 @@ export const nebulaRaymarchFragment = `
       float d = nebulaDensity(p);
       if (d > 0.001) {
         float dust = nebulaDust(p);
-        float a = clamp(d * dt * uDensityScale, 0.0, 1.0);
+        // Beer-Lambert: splitting a homogeneous segment into more steps leaves
+        // its total transmittance unchanged.
+        float a = 1.0 - exp(-d * dt * uDensityScale);
         vec3 c = nebulaColor(d, dust, p, rdLocal) * uEmissiveIntensity;
         accum += transmittance * a * c;
         transmittance *= (1.0 - a);
@@ -172,8 +178,33 @@ export const nebulaRaymarchFragment = `
       t += dt;
     }
     float alpha = 1.0 - transmittance;
-    if (alpha < 0.002) discard;
-    fragColor = vec4(accum, alpha) * uOpacityScale; // premultiplied; scaled for crossfade
+    if (alpha < 0.002) return vec4(0.0);
+    return vec4(accum, alpha);
+  }
+
+  vec4 sampleImpostor(vec3 ro, vec3 rd) {
+    // Intersect the current ray with the LAST completed bake's billboard plane.
+    // This reproduces its orientation without rotating the texture with camera roll.
+    vec3 origin = (uLocalToImpostor * vec4(ro, 1.0)).xyz;
+    vec3 direction = mat3(uLocalToImpostor) * rd;
+    if (abs(direction.z) < 1e-6) return vec4(0.0);
+    float t = -origin.z / direction.z;
+    if (t < 0.0 || t > sceneDepthRayT(mat3(modelViewMatrix) * rd)) return vec4(0.0);
+    vec2 uv = (origin.xy + direction.xy * t) * 0.5 + 0.5;
+    if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return vec4(0.0);
+    return texture(uImpostorMap, uv);
+  }
+
+  void main() {
+    vec3 ro = uCameraLocal;
+    vec3 rd = normalize(vLocalPos - ro);
+    vec4 result = vec4(0.0);
+    // Dynamic branches skip the entire march for the far LOD and the texture
+    // lookup for the near LOD. A single source-over operation follows the mix.
+    if (uLodBlend < 1.0) result += sampleImpostor(ro, rd) * (1.0 - uLodBlend);
+    if (uLodBlend > 0.0) result += marchNebula(ro, rd) * uLodBlend;
+    if (result.a <= 0.0) discard;
+    fragColor = result * uOpacityScale;
   }
 `
 

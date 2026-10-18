@@ -56,6 +56,8 @@ export function createTestContainer(): Container {
       return v
     },
     getRenderTarget: () => null,
+    getActiveCubeFace: () => 0,
+    getActiveMipmapLevel: () => 0,
     setRenderTarget: () => {},
     clear: () => {},
     capabilities: { getMaxAnisotropy: () => 8 }

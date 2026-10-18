@@ -68,7 +68,7 @@ export interface NebulaParams {
   shapeRotation: Vector3
   axisRatios: Vector3 // anisotropy (x,y,z)
   edgeFalloff: number
-  density: number // optical thickness / absorption per step; lower = more transparent
+  density: number // absorption per unit of local path length; lower = more transparent
 
   lobes: NebulaLobe[]
   cavities: NebulaCavity[]
@@ -325,7 +325,7 @@ export function mergeNebulaParams(
   Object.assign(result.quality, overrides.quality)
 
   result.quality.resolutionScale = clamp(result.quality.resolutionScale, 0.25, 1)
-  result.quality.bakeResolution = clamp(result.quality.bakeResolution, 64, 256)
+  result.quality.bakeResolution = clamp(Math.round(result.quality.bakeResolution), 64, 256)
   result.quality.maxSteps = clamp(Math.round(result.quality.maxSteps), 8, 256)
 
   return result

@@ -1,15 +1,16 @@
-import { BackSide, BoxGeometry, Camera, Mesh, Scene, Texture, Vector2, Vector3, WebGLRenderer } from 'three'
+import { BackSide, BoxGeometry, Camera, Matrix4, Mesh, Object3D, Scene, Texture, Vector2, Vector3, WebGLRenderer } from 'three'
 import { NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { NebulaRaymarchMaterial } from '@/core/renderables/Nebula/material/NebulaRaymarchMaterial'
 import { UpdateContext } from '@/core/UpdateContext'
 import { DEPTH_VOLUME_LAYER, type DepthVolume } from '@/core/graphic/passes/DepthVolume'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import type { Disposable } from '@/core/lifecycle/Disposable'
+import { IMPOSTOR_FRAME_FILL } from './lod'
 
 /**
- * Bounding-proxy mesh for the volumetric raymarch. The geometry is a unit cube
- * in [-1,1]; the container scales it to physical size. BackSide so the volume
- * still renders when the camera is inside it.
+ * Raster proxy for the density cube [-1,1] and the oriented impostor plane.
+ * The larger [-2,2] geometry encloses both representations; the shader still
+ * integrates density only in [-1,1]. BackSide supports cameras inside the proxy.
  *
  * Lives in the scene graph (the main pass updates its matrices) but is drawn by
  * DepthVolumePass: it sits on DEPTH_VOLUME_LAYER and is listed in the registry, so
@@ -19,11 +20,13 @@ import type { Disposable } from '@/core/lifecycle/Disposable'
 class NebulaVolume extends Mesh implements DepthVolume, Disposable {
   declare public material: NebulaRaymarchMaterial
 
-  /** Описанная сфера единичного куба [-1, 1]³ (масштаб мира — у пасса) */
-  public readonly boundingRadius = Math.sqrt(3)
+  /** Bounds actual density + billboard, rather than the larger raster proxy. */
+  public readonly boundingRadius = Math.max(Math.sqrt(3), Math.SQRT2 / IMPOSTOR_FRAME_FILL)
 
   private static readonly _cameraWorld = new Vector3()
   private static readonly _starLocal = new Vector3()
+  private readonly inverseWorld = new Matrix4()
+  private impostorFrame: Object3D | null = null
 
   /** Star world position (lighting), or null. Transformed to local space per frame. */
   private readonly starWorld: Vector3 | null
@@ -34,7 +37,7 @@ class NebulaVolume extends Mesh implements DepthVolume, Disposable {
   private registry: DepthVolumeRegistry | null
 
   public constructor(params: NebulaParams, registry: DepthVolumeRegistry | null = null) {
-    super(new BoxGeometry(2, 2, 2), new NebulaRaymarchMaterial(params))
+    super(new BoxGeometry(4, 4, 4), new NebulaRaymarchMaterial(params))
     this.material.side = BackSide
     this.frustumCulled = false
     this.layers.set(DEPTH_VOLUME_LAYER)
@@ -49,15 +52,26 @@ class NebulaVolume extends Mesh implements DepthVolume, Disposable {
     // ("parasitic parallax") under camera translation — same reasoning as BlackHole.
     this.onBeforeRender = (_renderer: WebGLRenderer, _scene: Scene, camera: Camera): void => {
       const u = this.material.uniforms
-      u.uInvModelMatrix.value.copy(this.matrixWorld).invert()
+      this.inverseWorld.copy(this.matrixWorld).invert()
       camera.getWorldPosition(NebulaVolume._cameraWorld)
-      u.uCameraWorld.value.copy(NebulaVolume._cameraWorld)
+      // Cancel large world translations in CPU double precision, before GLSL's
+      // float32 uniforms lose the small camera-to-volume displacement.
+      u.uCameraLocal.value.copy(NebulaVolume._cameraWorld).applyMatrix4(this.inverseWorld)
+      if (this.impostorFrame) {
+        this.impostorFrame.updateWorldMatrix(true, false)
+        u.uLocalToImpostor.value.copy(this.impostorFrame.matrixWorld).invert().multiply(this.matrixWorld)
+      }
       if (this.starWorld) {
         // world star position -> proxy-local space (same transform the marcher uses)
-        u.uStarLocal.value.copy(NebulaVolume._starLocal.copy(this.starWorld).applyMatrix4(u.uInvModelMatrix.value))
+        u.uStarLocal.value.copy(NebulaVolume._starLocal.copy(this.starWorld).applyMatrix4(this.inverseWorld))
       }
       this.material.updateMaterial(this._elapsed)
     }
+  }
+
+  public setImpostor(texture: Texture, frame: Object3D): void {
+    this.material.uniforms.uImpostorMap.value = texture
+    this.impostorFrame = frame
   }
 
   public updateObject(ctx: UpdateContext): void {

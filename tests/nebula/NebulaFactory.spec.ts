@@ -17,6 +17,8 @@ const fakeRenderer = {
     return v
   },
   getRenderTarget: () => null,
+  getActiveCubeFace: () => 0,
+  getActiveMipmapLevel: () => 0,
   setRenderTarget: () => {},
   render: () => {}
 } as unknown as WebGLRenderer

@@ -3,7 +3,6 @@ import {
   Color,
   CustomBlending,
   GLSL3,
-  Matrix4,
   OneFactor,
   OneMinusSrcAlphaFactor,
   Texture,
@@ -21,8 +20,7 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
     const { uniforms, vertexShader, fragmentShader, defines } = new NebulaRaymarchShader().toJSON()
     this.uniforms = {
       ...uniforms,
-      uInvModelMatrix: new Uniform(new Matrix4()),
-      uCameraWorld: new Uniform(new Vector3())
+      uCameraLocal: new Uniform(new Vector3())
     }
     this.vertexShader = vertexShader
     this.fragmentShader = fragmentShader
@@ -32,10 +30,10 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
     this.glslVersion = GLSL3
 
     if (params.quality.bake3DTexture) {
-      // compile the texture-sampling branch; Nebula bakes the field and assigns
-      // the texture via setBakedDensityTexture before the first render.
+      // Use procedural density until the entire queued texture is ready.
       this.defines = { ...this.defines, NEB_BAKED: '' }
       this.uniforms.uDensityTex = new Uniform(null)
+      this.uniforms.uDensityReady = new Uniform(0)
     }
 
     this.transparent = true
@@ -48,8 +46,7 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
     // The shader outputs PREMULTIPLIED (accum, alpha), so composite premultiplied
     // (One, OneMinusSrcAlpha) = correct front-to-back "over". This (a) avoids the
     // alpha double-apply NormalBlending would cause (thin regions stay correct),
-    // and (b) makes uOpacityScale a LINEAR fade, so the raymarch<->impostor
-    // crossfade conserves energy (the impostor uses the same blend equation).
+    // and (b) composites the shader's premultiplied LOD mix exactly once.
     this.blending = CustomBlending
     this.blendEquation = AddEquation
     this.blendSrc = OneFactor
@@ -98,8 +95,11 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
   }
 
   /** Bind the precomputed 3D density field (only meaningful when NEB_BAKED). */
-  public setBakedDensityTexture(texture: Texture): void {
-    if (this.uniforms.uDensityTex) this.uniforms.uDensityTex.value = texture
+  public setBakedDensityTexture(texture: Texture | null): void {
+    if (this.uniforms.uDensityTex) {
+      this.uniforms.uDensityTex.value = texture
+      this.uniforms.uDensityReady.value = texture ? 1 : 0
+    }
   }
 
   // Параметр опционален, чтобы сохранить совместимость с сигнатурой базового
