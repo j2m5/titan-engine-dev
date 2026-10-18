@@ -91,7 +91,7 @@ class Nebula extends Object3D {
   /** Reserve the maximum resident texture footprint before creating any targets. */
   private ensureBakers(): void {
     if (this.baker || this.bakeFailed || this.disposed) return
-    const densityBytes = this.params.quality.bake3DTexture ? this.params.quality.bakeResolution ** 3 : 0
+    const densityBytes = this.params.quality.bake3DTexture ? this.params.quality.bakeResolution ** 3 * 2 : 0 // gas + dust RG8
     const impostorBytes = 2 * IMPOSTOR_RESOLUTION ** 2 * 8 // front + staging RGBA16F
     if (!this.bakeQueue.reserve(this, densityBytes + impostorBytes)) return
     try {

@@ -6,7 +6,7 @@ import {
   Mesh,
   NoColorSpace,
   PlaneGeometry,
-  RedFormat,
+  RGFormat,
   Scene,
   ShaderMaterial,
   Texture,
@@ -28,7 +28,7 @@ const bakeVertex = `
 
 // Computes the STATIC density (compute branch — no NEB_BAKED define) for each
 // voxel of the current Z slice. Same density chunks the marcher uses, so the
-// baked field samples the live field. Output is [0,1] density, quantised to R8.
+// baked field samples the live field. Output is [0,1] gas/dust, quantised to RG8.
 const bakeFragment = `
   precision highp float;
   out vec4 fragColor;
@@ -42,14 +42,14 @@ const bakeFragment = `
   void main() {
     vec3 uvw = vec3(gl_FragCoord.xy / u_resolution, (u_layer + 0.5) / u_resolution);
     vec3 p = uvw * 2.0 - 1.0; // [-1,1] local space, matching the marcher's sample
-    fragColor = vec4(nebulaDensity(p), 0.0, 0.0, 1.0);
+    fragColor = vec4(nebulaMedium(p), 0.0, 1.0);
   }
 `
 
 /**
  * Bakes the static nebula density field into a 3D texture once, so the marcher
  * samples 1 trilinear fetch per step instead of evaluating fbm + Worley. Renders
- * slice-by-slice into a WebGL3DRenderTarget (R8, ~2 MB at 128³), following the
+ * slice-by-slice into a WebGL3DRenderTarget (RG8, 4 MiB at 128³), following the
  * project's AtmosphereLUTGenerator pattern. Self-contained: own RT + offscreen
  * scene, no postprocessing/scene-graph changes.
  */
@@ -70,7 +70,7 @@ class NebulaDensityBaker {
     this.resolution = resolution
     this.target = new WebGL3DRenderTarget(resolution, resolution, resolution, {
       type: UnsignedByteType,
-      format: RedFormat,
+      format: RGFormat,
       depthBuffer: false
     })
     this.target.texture.minFilter = LinearFilter

@@ -48,7 +48,7 @@ describe('Nebula bake lifecycle', () => {
   })
 
   it('shares the per-frame and memory limits, then admits a waiting nebula after disposal', () => {
-    const bytes = 64 ** 3 + 2 * 512 ** 2 * 8
+    const bytes = 64 ** 3 * 2 + 2 * 512 ** 2 * 8
     const { create, volumeOf, frame, render, queue } = setup(bytes)
     const first = create()
     const second = create()

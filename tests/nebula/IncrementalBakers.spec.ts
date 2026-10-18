@@ -1,4 +1,4 @@
-import { Color, Object3D, PerspectiveCamera, Vector3, WebGLRenderer, WebGLRenderTarget } from 'three'
+import { Color, Object3D, PerspectiveCamera, RGFormat, UnsignedByteType, Vector3, WebGLRenderer, WebGLRenderTarget } from 'three'
 import { DEFAULT_NEBULA_PARAMS } from '@/core/renderables/Nebula/NebulaParams'
 import { NebulaDensityBaker } from '@/core/renderables/Nebula/volume/NebulaDensityBaker'
 import { ImpostorBaker } from '@/core/renderables/Nebula/volume/ImpostorBaker'
@@ -29,6 +29,15 @@ function rendererFixture() {
 }
 
 describe('incremental nebula bakers', () => {
+  it('stores gas and dust together in an uncompressed two-channel byte texture', () => {
+    const baker = new NebulaDensityBaker(rendererFixture().renderer, 64)
+    try {
+      expect(baker.texture.format).toBe(RGFormat)
+      expect(baker.texture.type).toBe(UnsignedByteType)
+      expect(baker.texture.generateMipmaps).toBe(false)
+    } finally { baker.dispose() }
+  })
+
   it('submits one density layer per step, restarts and stops when complete', () => {
     const f = rendererFixture()
     const baker = new NebulaDensityBaker(f.renderer, 3)

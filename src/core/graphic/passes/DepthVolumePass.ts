@@ -2,6 +2,7 @@ import { BasicDepthPacking, type Object3D, type PerspectiveCamera, type Texture,
 import { DepthCopyPass, Pass } from 'postprocessing'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import { DEPTH_VOLUME_LAYER, type DepthVolume } from '@/core/graphic/passes/DepthVolume'
+import { DepthVolumeResolutionRenderer } from './DepthVolumeResolutionRenderer'
 
 /** Тип упаковки глубины библиотека объявляет, но не экспортирует — берём из сигнатуры Pass */
 type DepthPacking = Parameters<Pass['setDepthTexture']>[1]
@@ -42,7 +43,8 @@ export function drawDepthVolumes(
   camera: PerspectiveCamera,
   volumes: readonly DepthVolume[],
   sceneDepth: Texture,
-  resolution: Vector2
+  resolution: Vector2,
+  scaled?: DepthVolumeResolutionRenderer
 ): void {
   const mask = camera.layers.mask
   const shadowMapAutoUpdate = renderer.shadowMap.autoUpdate
@@ -52,11 +54,13 @@ export function drawDepthVolumes(
     camera.layers.set(DEPTH_VOLUME_LAYER)
     renderer.shadowMap.autoUpdate = false
     renderer.setRenderTarget(target)
+    scaled?.prepare(volumes, resolution)
 
     for (const volume of volumes) {
       try {
         volume.bindSceneDepth(sceneDepth, resolution, logFarFactor)
-        renderer.render(volume, camera)
+        if (scaled) scaled.render(renderer, target, camera, volume, sceneDepth, resolution, logFarFactor)
+        else renderer.render(volume, camera)
       } finally {
         volume.unbindSceneDepth()
       }
@@ -108,6 +112,7 @@ export class DepthVolumePass extends Pass {
   private readonly registry: DepthVolumeRegistry
   private readonly front: FrontVolumeFilter | null
   private readonly resolution = new Vector2(1, 1)
+  private readonly scaled = new DepthVolumeResolutionRenderer()
 
   public constructor(camera: PerspectiveCamera, registry: DepthVolumeRegistry, front?: FrontVolumeFilter) {
     super('DepthVolumePass')
@@ -145,7 +150,7 @@ export class DepthVolumePass extends Pass {
       this.registry.volumes().filter((v) => isVisibleInTree(v) && !(this.front?.isFrontVolume(v) ?? false)),
       this.sceneCamera
     )
-    if (volumes.length === 0) return
+    if (volumes.length === 0) { this.scaled.prepare(volumes, this.resolution); return }
 
     this.depthCopy.render(renderer, inputBuffer, outputBuffer, deltaTime, stencilTest)
     drawDepthVolumes(
@@ -154,11 +159,13 @@ export class DepthVolumePass extends Pass {
       this.sceneCamera,
       volumes,
       this.depthCopy.texture,
-      this.resolution
+      this.resolution,
+      this.scaled
     )
   }
 
   public override dispose(): void {
+    this.scaled.dispose()
     this.depthCopy.dispose()
     super.dispose()
   }

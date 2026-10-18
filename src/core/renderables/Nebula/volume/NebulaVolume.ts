@@ -2,7 +2,7 @@ import { BackSide, BoxGeometry, Camera, Matrix4, Mesh, Object3D, Scene, Texture,
 import { NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { NebulaRaymarchMaterial } from '@/core/renderables/Nebula/material/NebulaRaymarchMaterial'
 import { UpdateContext } from '@/core/UpdateContext'
-import { DEPTH_VOLUME_LAYER, type DepthVolume } from '@/core/graphic/passes/DepthVolume'
+import { DEPTH_VOLUME_LAYER, type TemporalDepthVolume } from '@/core/graphic/passes/DepthVolume'
 import type { DepthVolumeRegistry } from '@/core/services/DepthVolumeRegistry'
 import type { Disposable } from '@/core/lifecycle/Disposable'
 import { IMPOSTOR_FRAME_FILL } from './lod'
@@ -17,7 +17,7 @@ import { IMPOSTOR_FRAME_FILL } from './lod'
  * the marcher can cut its ray at the scene depth. Without a registry (tests,
  * standalone scenes) the volume exists in the graph but no pass draws it.
  */
-class NebulaVolume extends Mesh implements DepthVolume, Disposable {
+class NebulaVolume extends Mesh implements TemporalDepthVolume, Disposable {
   declare public material: NebulaRaymarchMaterial
 
   /** Bounds actual density + billboard, rather than the larger raster proxy. */
@@ -35,6 +35,7 @@ class NebulaVolume extends Mesh implements DepthVolume, Disposable {
   private _elapsed: number = 0
 
   private registry: DepthVolumeRegistry | null
+  private readonly quality: NebulaParams['quality']
 
   public constructor(params: NebulaParams, registry: DepthVolumeRegistry | null = null) {
     super(new BoxGeometry(4, 4, 4), new NebulaRaymarchMaterial(params))
@@ -42,6 +43,7 @@ class NebulaVolume extends Mesh implements DepthVolume, Disposable {
     this.frustumCulled = false
     this.layers.set(DEPTH_VOLUME_LAYER)
     this.registry = registry
+    this.quality = params.quality
     this.registry?.register(this)
     this.starWorld = params.lighting.starPosition ? params.lighting.starPosition.clone() : null
 
@@ -92,6 +94,41 @@ class NebulaVolume extends Mesh implements DepthVolume, Disposable {
   /** Unbound right after: the impostor bake renders this volume without a scene depth. */
   public unbindSceneDepth(): void {
     this.material.uniforms.uSceneDepthEnabled.value = 0
+  }
+
+  /** Far impostors are already cheap texture draws; keep them at native resolution. */
+  public get resolutionScale(): number {
+    return this.material.uniforms.uLodBlend.value <= 0 ? 1 : this.quality.resolutionScale
+  }
+
+  public bindLowResolution(texture: Texture, size: Vector2): void {
+    const u = this.material.uniforms
+    u.uLowResolutionMap.value = texture
+    u.uLowResolutionSize.value.copy(size)
+    u.uLowResolutionEnabled.value = 1
+  }
+
+  public unbindLowResolution(): void {
+    this.material.uniforms.uLowResolutionEnabled.value = 0
+    this.material.uniforms.uLowResolutionMap.value = null
+  }
+
+  public get temporalBlend(): number {
+    return this.material.uniforms.uLodBlend.value >= 1 ? this.quality.temporalBlend : 0
+  }
+
+  public get temporalRevision(): number {
+    return this.material.temporalRevision + this.material.version
+  }
+
+  public bindTemporalCapture(jitter: number): void {
+    this.material.uniforms.uTemporalCapture.value = 1
+    this.material.uniforms.uTemporalJitter.value = jitter
+  }
+
+  public unbindTemporalCapture(): void {
+    this.material.uniforms.uTemporalCapture.value = 0
+    this.material.uniforms.uTemporalJitter.value = 0
   }
 
   /** Leaves the pass registry. Idempotent; geometry/material are owned by the container. */

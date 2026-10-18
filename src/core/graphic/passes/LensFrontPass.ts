@@ -4,6 +4,7 @@ import { LENS_FRONT_DEPTH_LAYER, LENS_FRONT_LAYER } from '@/core/graphic/passes/
 import { drawDepthVolumes, orderFarToNear } from '@/core/graphic/passes/DepthVolumePass'
 import { DepthRestoreMaterial } from '@/core/graphic/passes/DepthRestoreMaterial'
 import type { LensFrontSorter } from '@/core/graphic/passes/LensFrontSorter'
+import { DepthVolumeResolutionRenderer } from './DepthVolumeResolutionRenderer'
 
 /** Тип упаковки глубины библиотека объявляет, но не экспортирует — берём из сигнатуры Pass */
 type DepthPacking = Parameters<Pass['setDepthTexture']>[1]
@@ -27,6 +28,7 @@ export class LensFrontPass extends Pass {
 
   private sceneDepth: Texture | null = null
   private readonly resolution = new Vector2(1, 1)
+  private readonly scaled = new DepthVolumeResolutionRenderer()
 
   public constructor(
     private readonly frontScene: Scene,
@@ -67,6 +69,7 @@ export class LensFrontPass extends Pass {
     try {
       const objects = this.sorter.frontObjects()
       const volumes = this.sorter.frontVolumes()
+      if (volumes.length === 0) this.scaled.prepare(volumes, this.resolution)
       if (objects.length === 0 && volumes.length === 0) {
         return
       }
@@ -120,7 +123,8 @@ export class LensFrontPass extends Pass {
           this.sceneCamera,
           orderFarToNear(volumes, this.sceneCamera),
           this.depthCopy.texture,
-          this.resolution
+          this.resolution,
+          this.scaled
         )
       }
     } finally {
@@ -129,6 +133,7 @@ export class LensFrontPass extends Pass {
   }
 
   public override dispose(): void {
+    this.scaled.dispose()
     this.depthCopy.dispose()
     this.restoreMaterial.dispose()
     super.dispose()

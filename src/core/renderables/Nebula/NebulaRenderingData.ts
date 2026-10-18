@@ -33,6 +33,8 @@ export interface NebulaRenderingData {
   axisRatios?: NebulaTriple
   edgeFalloff?: number
   density?: number
+  gas?: Partial<NebulaParams['gas']>
+  structure?: { direction?: NebulaTriple; stretch?: number }
   lobes?: Array<{ center?: NebulaTriple; radius?: number; weight?: number; seed?: number }>
   cavities?: Array<{ center?: NebulaTriple; radius?: number; strength?: number }>
   noise?: Partial<NebulaParams['noise']>
@@ -46,7 +48,7 @@ export interface NebulaRenderingData {
     innerColor?: string
     outerColor?: string
   }
-  dust?: { strength?: number; threshold?: number; color?: string }
+  dust?: { strength?: number; threshold?: number; color?: string; seed?: number | null; frequency?: number; contrast?: number }
   lighting?: {
     /** Мировая точка источника; фиксируется при конструировании и за звездой не следит */
     starPosition?: NebulaTriple | null
@@ -56,6 +58,10 @@ export interface NebulaRenderingData {
     color?: string
     /** Радиус спада света от звезды, локальные единицы; 0 — без спада */
     falloffRadius?: number
+    /** null/omitted: legacy lighting; number: HG anisotropy in [-0.9,0.9]. */
+    anisotropy?: number | null
+    /** Light-path optical depth scale, [0,1]; 0 disables self-shadowing. */
+    shadowStrength?: number
   }
   quality?: Partial<NebulaParams['quality']>
 }
@@ -89,6 +95,8 @@ export function nebulaParamsFromData(data: NebulaRenderingData): NebulaParams {
   if (data.axisRatios) overrides.axisRatios = toVector(data.axisRatios)
   if (data.edgeFalloff !== undefined) overrides.edgeFalloff = data.edgeFalloff
   if (data.density !== undefined) overrides.density = data.density
+  if (data.gas) overrides.gas = { ...data.gas }
+  if (data.structure) overrides.structure = { direction: toVector(data.structure.direction), stretch: data.structure.stretch }
 
   if (data.lobes) {
     overrides.lobes = data.lobes.map((lobe) => ({
@@ -126,6 +134,9 @@ export function nebulaParamsFromData(data: NebulaRenderingData): NebulaParams {
     overrides.dust = {
       strength: data.dust.strength,
       threshold: data.dust.threshold,
+      seed: data.dust.seed,
+      frequency: data.dust.frequency,
+      contrast: data.dust.contrast,
       color: data.dust.color ? new Color(data.dust.color) : undefined
     }
   }
@@ -136,7 +147,9 @@ export function nebulaParamsFromData(data: NebulaRenderingData): NebulaParams {
       scatterStrength: data.lighting.scatterStrength,
       ambient: data.lighting.ambient,
       color: data.lighting.color ? new Color(data.lighting.color) : undefined,
-      falloffRadius: data.lighting.falloffRadius
+      falloffRadius: data.lighting.falloffRadius,
+      anisotropy: data.lighting.anisotropy,
+      shadowStrength: data.lighting.shadowStrength
     }
   }
 

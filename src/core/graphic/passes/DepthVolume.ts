@@ -75,3 +75,31 @@ export interface DepthVolume extends Object3D {
   bindSceneDepth(sceneDepth: Texture, resolution: Vector2, logFarFactor: number): void
   unbindSceneDepth(): void
 }
+
+/** Optional capability: reconstruct a reduced image, raymarching depth edges natively. */
+export interface ScaledDepthVolume extends DepthVolume {
+  readonly resolutionScale: number
+  bindLowResolution(texture: Texture, size: Vector2): void
+  unbindLowResolution(): void
+}
+
+export function isScaledDepthVolume(volume: DepthVolume): volume is ScaledDepthVolume {
+  const candidate = volume as Partial<ScaledDepthVolume>
+  return typeof candidate.resolutionScale === 'number' &&
+    typeof candidate.bindLowResolution === 'function' && typeof candidate.unbindLowResolution === 'function'
+}
+
+/** Optional local-position metadata for independent, per-volume history. */
+export interface TemporalDepthVolume extends ScaledDepthVolume {
+  readonly temporalBlend: number
+  readonly temporalRevision: number
+  bindTemporalCapture(jitter: number): void
+  unbindTemporalCapture(): void
+}
+
+export function isTemporalDepthVolume(volume: DepthVolume): volume is TemporalDepthVolume {
+  const candidate = volume as Partial<TemporalDepthVolume>
+  return isScaledDepthVolume(volume) && typeof candidate.temporalBlend === 'number' &&
+    typeof candidate.temporalRevision === 'number' && typeof candidate.bindTemporalCapture === 'function' &&
+    typeof candidate.unbindTemporalCapture === 'function'
+}

@@ -13,13 +13,17 @@ import { AbstractShaderMaterial } from '@/core/materials/AbstractShaderMaterial'
 import { NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { NebulaRaymarchShader } from './NebulaRaymarchShader'
 import { applyDensityUniforms } from '@/core/renderables/Nebula/material/densityUniforms'
+import { createNebulaBlueNoiseTexture } from './NebulaBlueNoise'
 
 class NebulaRaymarchMaterial extends AbstractShaderMaterial {
+  private readonly blueNoise = createNebulaBlueNoiseTexture()
+
   public constructor(params: NebulaParams) {
     super()
     const { uniforms, vertexShader, fragmentShader, defines } = new NebulaRaymarchShader().toJSON()
     this.uniforms = {
       ...uniforms,
+      uBlueNoise: new Uniform(this.blueNoise),
       uCameraLocal: new Uniform(new Vector3())
     }
     this.vertexShader = vertexShader
@@ -56,13 +60,16 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
   }
 
   public setUniformsFromParams(params: NebulaParams): void {
+    this.temporalRevision++
     const u = this.uniforms
     // density-field uniforms (shared with the 3D-bake material)
     applyDensityUniforms(u, params)
 
     u.uMaxSteps.value = params.quality.maxSteps
+    u.uLightSteps.value = params.quality.lightSteps
     u.uEmissiveIntensity.value = params.palette.emissiveIntensity
     u.uDensityScale.value = params.density
+    u.uGasAbsorption.value = params.gas.absorption
 
     const pal = params.palette
     const lastStop = pal.stops[pal.stops.length - 1]?.color ?? new Color(0xffffff)
@@ -84,9 +91,11 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
 
     u.uDustColor.value.copy(params.dust.color)
     u.uDustStrength.value = params.dust.strength
-    u.uDustThreshold.value = params.dust.threshold
 
     u.uScatterStrength.value = params.lighting.scatterStrength
+    u.uPhaseHG.value = params.lighting.anisotropy !== null ? 1 : 0
+    u.uAnisotropy.value = params.lighting.anisotropy ?? 0
+    u.uShadowStrength.value = params.lighting.shadowStrength
     u.uAmbient.value = params.lighting.ambient
     u.uHasStar.value = params.lighting.starPosition ? 1 : 0
     u.uLightTint.value = params.lighting.color ? 1 : 0
@@ -97,10 +106,14 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
   /** Bind the precomputed 3D density field (only meaningful when NEB_BAKED). */
   public setBakedDensityTexture(texture: Texture | null): void {
     if (this.uniforms.uDensityTex) {
+      if (this.uniforms.uDensityTex.value !== texture) this.temporalRevision++
       this.uniforms.uDensityTex.value = texture
       this.uniforms.uDensityReady.value = texture ? 1 : 0
     }
   }
+
+  /** Content changes must not reuse an image of the previous density field. */
+  public temporalRevision = 0
 
   // Параметр опционален, чтобы сохранить совместимость с сигнатурой базового
   // AbstractShaderMaterial.updateMaterial(): void, которую разделяют остальные
@@ -111,6 +124,11 @@ class NebulaRaymarchMaterial extends AbstractShaderMaterial {
 
   public resetMaterial(): void {
     this.uniforms.uTime.value = 0
+  }
+
+  public override dispose(): void {
+    this.blueNoise.dispose()
+    super.dispose()
   }
 }
 

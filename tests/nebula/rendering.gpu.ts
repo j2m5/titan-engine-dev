@@ -2,7 +2,7 @@ import {
   Color, Data3DTexture, DataTexture, DataUtils, FloatType, HalfFloatType, PerspectiveCamera, RedFormat, Scene, Vector2, Vector3,
   WebGL3DRenderTarget, WebGLRenderer, WebGLRenderTarget
 } from 'three'
-import { mergeNebulaParams } from '@/core/renderables/Nebula/NebulaParams'
+import { mergeNebulaParams, type DeepPartial, type NebulaParams } from '@/core/renderables/Nebula/NebulaParams'
 import { NebulaVolume } from '@/core/renderables/Nebula/volume/NebulaVolume'
 import { NebulaDensityBaker } from '@/core/renderables/Nebula/volume/NebulaDensityBaker'
 import { ImpostorBaker } from '@/core/renderables/Nebula/volume/ImpostorBaker'
@@ -71,7 +71,7 @@ export function checkNebulaAbsorption(): { expectedAlpha: number; alphas: number
 }
 
 /** LOD at one camera must be an exact premultiplied mix of the two endpoints. */
-export function checkNebulaLodComposition(): { imageError: number } {
+export function checkNebulaLodComposition(overrides: DeepPartial<NebulaParams> = {}): { imageError: number; endpointDifference: number } {
   const renderer = new WebGLRenderer()
   // Select the middle of the 150..450 CSS-pixel LOD interval, read a small RT.
   renderer.setSize(1024, 1024)
@@ -80,13 +80,14 @@ export function checkNebulaLodComposition(): { imageError: number } {
   const camera = new PerspectiveCamera(50, 1, 0.01, 1e12)
   camera.position.z = 1024 / (2 * Math.tan(25 * Math.PI / 180) * 300)
   camera.layers.enable(DEPTH_VOLUME_LAYER)
-  const nebula = new Nebula(renderer, { size: 1, quality: { bake3DTexture: false, maxSteps: 32 } })
+  const nebula = new Nebula(renderer, { ...overrides, size: 1, quality: { bake3DTexture: false, maxSteps: 32 } })
   const volume = nebula.children[0] as NebulaVolume
   const depth = new DataTexture(new Float32Array(SIZE * SIZE).fill(Math.log2(camera.position.z + 0.2) / Math.log2(camera.far + 1)), SIZE, SIZE, RedFormat, FloatType)
   depth.needsUpdate = true
   scene.add(nebula)
   try {
     let imageError = 0
+    let endpointDifference = 0
     for (const scenario of ['base', 'roll', 'translated', 'depth']) {
       if (scenario === 'roll') camera.rotateZ(0.7)
       if (scenario === 'translated') {
@@ -103,15 +104,18 @@ export function checkNebulaLodComposition(): { imageError: number } {
       nebula.params.quality.forceLOD = 'raymarch'
       nebula.updateView(camera)
       const near = capture(renderer, scene, camera)
-      if (relativeError(near, far) < 0.001) throw new Error('LOD probe did not exercise distinct endpoints')
+      endpointDifference = Math.max(endpointDifference, relativeError(near, far))
       nebula.params.quality.forceLOD = 'auto'
       nebula.updateView(camera)
       const mixed = capture(renderer, scene, camera)
       const expected = Float32Array.from(near, (value, index) => (value + far[index]) * 0.5)
       imageError = Math.max(imageError, relativeError(expected, mixed))
     }
+    // A depth cut can make both representations almost empty. Require distinct
+    // endpoints somewhere in the probe, while checking the mix in every case.
+    if (endpointDifference < 0.001) throw new Error('LOD probe did not exercise distinct endpoints')
     if (imageError > 0.002) throw new Error(`Nebula LOD loses brightness/alpha: ${imageError}`)
-    return { imageError }
+    return { imageError, endpointDifference }
   } finally {
     nebula.dispose()
     depth.dispose()
