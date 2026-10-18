@@ -150,7 +150,11 @@ export const nebulaDensityChunk = `
   #ifdef NEB_BAKED
     // The baked field has one level with trilinear spatial filtering. Explicit
     // LOD avoids implicit derivatives inside divergent view/light marches.
-    if (uDensityReady > 0.5) return textureLod(uDensityTex, p * 0.5 + 0.5, 0.0).rg;
+    // Keep the fallback in an explicit else: ANGLE/D3D11 reports X4000 on the
+    // function return when this texture return precedes the procedural body.
+    if (uDensityReady > 0.5) {
+      return textureLod(uDensityTex, p * 0.5 + 0.5, 0.0).rg;
+    } else {
   #endif
     // Порядок ветвей — как в NebulaField.sampleDensity: при uBoundaryWarp 0 сначала
     // граница и ранний выход (варп не считается впустую), при > 0 вектор варпа
@@ -186,5 +190,8 @@ export const nebulaDensityChunk = `
       dust = b * carve * pow(mask, uDustContrast);
     }
     return clamp(vec2(d, dust), 0.0, 1.0);
+  #ifdef NEB_BAKED
+    }
+  #endif
   }
 `
