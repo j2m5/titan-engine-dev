@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CubeTexture, DefaultLoadingManager, ImageBitmapLoader, Scene, Texture } from 'three'
+import { CubeTexture, DefaultLoadingManager, Scene, Texture } from 'three'
 import { ImageBitmapStrategy } from '@/core/textures/strategies/ImageBitmapStrategy'
 import { ResourceObserver } from '@/core/services/ResourceObserver'
 import { resourceStorage } from '@/core/services/ResourceStorage'
@@ -18,7 +18,7 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-function fixture(load: (request: TextureRequest) => Promise<LoadResult>) {
+function fixture(load: TextureProvider['load']) {
   const progress = { setAsset: vi.fn(), setTotal: vi.fn(), setProgress: vi.fn() }
   const notifications = { dispatch: vi.fn() }
   const observer = new ResourceObserver(
@@ -33,6 +33,27 @@ function fixture(load: (request: TextureRequest) => Promise<LoadResult>) {
 }
 
 describe('ResourceObserver primary cancellation', () => {
+  it('aborts the old primary transport on scenario exit and keeps the new transport live', async () => {
+    const old = deferred<LoadResult>()
+    const live = deferred<LoadResult>()
+    const signals: (AbortSignal | undefined)[] = []
+    const { observer } = fixture((_request, signal) => {
+      signals.push(signal)
+      return signals.length === 1 ? old.promise : live.promise
+    })
+    const first = observer.loadPrimaryTextures()
+    const resident = observer.resident
+    observer.scenario = null
+    expect(signals[0]?.aborted).toBe(true)
+    observer.scenario = Scenarios[1]
+    observer.cube = []
+    observer.resident = resident
+    const second = observer.loadPrimaryTextures()
+    expect(signals[1]?.aborted).toBe(false)
+    old.resolve({ ok: false, texture: null, error: new Error('old') })
+    live.resolve({ ok: false, texture: null, error: new Error('live') })
+    await Promise.all([first, second])
+  })
   const originalOnError = DefaultLoadingManager.onError
   afterEach(() => {
     resourceStorage.deleteAllTextures()
@@ -88,7 +109,7 @@ describe('ResourceObserver primary cancellation', () => {
     const progressCount = progress.setProgress.mock.calls.length
     const close = vi.fn()
     const bitmap = { width: 2, height: 2, close } as unknown as ImageBitmap
-    const strategy = new ImageBitmapStrategy({ loadAsync: async () => bitmap } as unknown as ImageBitmapLoader)
+    const strategy = new ImageBitmapStrategy({ loadAsync: async () => bitmap })
     const staleTexture = await strategy.load({ paths: ['stale.png'], name: 'stale', params: {}, resourceType: 'diffuse' })
     staleTexture.name = texture.name
     const dispose = vi.spyOn(staleTexture, 'dispose')

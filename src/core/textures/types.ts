@@ -33,5 +33,5 @@ export type LoadResult =
 /** Стратегия загрузки одного семейства форматов. Бросает при сбое. */
 export interface TextureLoadStrategy {
   supports(request: TextureRequest): boolean
-  load(request: TextureRequest): Promise<Texture>
+  load(request: TextureRequest, signal?: AbortSignal): Promise<Texture>
 }

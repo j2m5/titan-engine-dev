@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { CanvasTexture, ImageBitmapLoader, MeshBasicMaterial, Texture, type WebGLRenderer } from 'three'
+import { CanvasTexture, MeshBasicMaterial, Texture, type WebGLRenderer } from 'three'
 import { resourceStorage } from '@/core/services/ResourceStorage'
 import { ImageBitmapStrategy } from '@/core/textures/strategies/ImageBitmapStrategy'
 import { TextureProvider } from '@/core/textures/TextureProvider'
@@ -11,7 +11,7 @@ const request: TextureRequest = { paths: ['owned.png'], name: 'owned.png', resou
 async function raster() {
   const close = vi.fn()
   const bitmap = { width: 2, height: 2, close } as unknown as ImageBitmap
-  const strategy = new ImageBitmapStrategy({ loadAsync: async () => bitmap } as unknown as ImageBitmapLoader)
+  const strategy = new ImageBitmapStrategy({ loadAsync: async () => bitmap })
   return { close, texture: await strategy.load(request) }
 }
 

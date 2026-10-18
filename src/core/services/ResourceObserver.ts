@@ -24,6 +24,17 @@ import { heightPathOf } from '@/core/terrain/heightPath'
 import { config } from '@/core/framework/config'
 import type { BackgroundSource } from '@/config/background'
 import { streaming } from '@/config/streaming'
+import { abortError, isAbortError } from '@/core/textures/cancellation'
+
+interface PathLoad {
+  controller: AbortController
+  promise: Promise<LoadResult | null>
+}
+
+function ignoreCancellation(cause: unknown): null {
+  if (!isAbortError(cause)) throw cause
+  return null
+}
 
 /**
  * Сколько миллисекунд путь защищён от вытеснения после загрузки.
@@ -118,13 +129,14 @@ class ResourceObserver {
    * пути: под тем же ключом может уже лежать живая запись новой эпохи.
    */
   private epoch: number = 0
+  private epochController = new AbortController()
   /**
    * Путь → промис ещё не завершившейся загрузки. Два актора, разделяющие путь
    * и загружаемые одновременно, иначе задваивают запрос: проверка реестра не
    * спасает — в этот момент путь не зарегистрирован никем, первый заявитель
    * его тоже ещё грузит, и второй Texture остаётся недостижимым навсегда.
    */
-  private readonly pathLoads: Map<string, Promise<LoadResult | null>> = new Map()
+  private readonly pathLoads: Map<string, PathLoad> = new Map()
   /** Последняя напечатанная dev-сводка решения — гейт спама `logDecision`. */
   private lastDecisionLine: string = ''
 
@@ -190,6 +202,9 @@ class ResourceObserver {
     this._scenario = scenario
     this._sceneBackground = null
     this.epoch += 1
+    this.epochController.abort()
+    for (const load of this.pathLoads.values()) load.controller.abort()
+    this.epochController = new AbortController()
     this.loaded.clear()
     this.loadedAt.clear()
     this.inFlight.clear()
@@ -218,6 +233,7 @@ class ResourceObserver {
    */
   public async loadPrimaryTextures(): Promise<void> {
     const epoch: number = this.epoch
+    const signal = this.epochController.signal
     const cube: IResource[] = [...this.cube]
     const resident: IResource[] = [...this.resident]
 
@@ -240,7 +256,7 @@ class ResourceObserver {
 
     if (cube.length) {
       const request: TextureRequest = cubeTextureRequest(cube)
-      const background = await this.tryLoad(request, epoch)
+      const background = await this.tryLoad(request, epoch, signal).catch(ignoreCancellation)
 
       if (this.epoch !== epoch) {
         if (background?.ok) background.texture.dispose()
@@ -259,7 +275,7 @@ class ResourceObserver {
       this._sceneBackground = null
     }
 
-    await this.loadInto(resident, (name: string): void => advance(name, 1), epoch)
+    await this.loadInto(resident, (name: string): void => advance(name, 1), epoch, signal)
 
     if (this.epoch === epoch) this.loadingProgress.setAsset('')
   }
@@ -270,11 +286,11 @@ class ResourceObserver {
    * пользователю шлёт tryLoad для актуальной эпохи запроса. onSettled зовётся по
    * завершении каждого ресурса — и удачного, и провалившегося.
    */
-  private async loadInto(resources: IResource[], onSettled: (name: string) => void, epoch: number): Promise<void> {
+  private async loadInto(resources: IResource[], onSettled: (name: string) => void, epoch: number, signal: AbortSignal): Promise<void> {
     await Promise.all(
       resources.map(async (resource: IResource): Promise<void> => {
         const request: TextureRequest = textureRequestFrom(resource)
-        const result = await this.tryLoad(request, epoch)
+        const result = await this.tryLoad(request, epoch, signal).catch(ignoreCancellation)
 
         if (this.epoch !== epoch) {
           if (result?.ok) result.texture.dispose()
@@ -299,12 +315,13 @@ class ResourceObserver {
    * обработчика нет ни в одном звене, так что без перехвата здесь приложение
    * зависает на экране загрузки без сообщения.
    */
-  private async tryLoad(request: TextureRequest, epoch: number = this.epoch): Promise<LoadResult | null> {
+  private async tryLoad(request: TextureRequest, epoch: number = this.epoch, signal: AbortSignal = this.epochController.signal): Promise<LoadResult | null> {
     try {
-      const result = await this.textures.load(request)
-      if (!result.ok) this.reportLoadError(request, result.error, epoch)
+      const result = await this.textures.load(request, signal)
+      if (!result.ok && !signal.aborted) this.reportLoadError(request, result.error, epoch)
       return result
     } catch (cause) {
+      if (signal.aborted || isAbortError(cause)) throw abortError()
       this.reportLoadError(request, cause, epoch)
       return null
     }
@@ -620,17 +637,10 @@ class ResourceObserver {
    * несколько пересчётов без спроса и защитный интервал резидентности.
    * `evictPath` обрабатывает всех владельцев один раз на путь.
    *
-   * Два гварда защищают от порчи состояния, а не только от лишней работы:
-   *
-   * `inFlight` — путь в полёте у орфана пропускается ЦЕЛИКОМ. `loadPath`
-   * захватывает `epoch`, но не факт орфанности: догрузка после `await`
-   * безусловно зарегистрирует текстуру в `resourceStorage` и выставит
-   * `loadedAt`, ничего не зная о том, что путь уже вычищен ЗДЕСЬ. Вычисти
-   * его сейчас — и после резолва текстура осталась бы резидентной вне
-   * `this.loaded` (мы её оттуда уже убрали) и вне бюджета навсегда: следующий
-   * орфан-проход ходит по `this.loaded`, а пути в нём больше нет, чтобы
-   * заметить пропажу. Путь достроится штатно и станет настоящим орфаном
-   * (без `inFlight`) на следующем такте — там и вытеснится.
+   * Незавершённая загрузка без спроса отменяется сразу. Её бронь снимается
+   * синхронно, а поздний ответ проверяет идентичность брони и освобождается.
+   * Поэтому повторный спрос на тот же путь может начать новую загрузку,
+   * не дожидаясь завершения старого декодирования.
    *
    * `MIN_RESIDENCY_MS` — та же защита от дребезга, что и у бюджетного
    * вытеснения (`isPinned` в `closestChange`): тело, приоритет которого
@@ -643,6 +653,15 @@ class ResourceObserver {
    * безвредно, пока единственный потребитель ранга — бинарный isDiffuse-гейт.
    */
   private evictOrphanedPaths(): void {
+    for (const [path, load] of this.pathLoads) {
+      if (this.pathActors.has(path)) continue
+      // Release this reservation synchronously: renewed demand can start in this epoch.
+      this.pathLoads.delete(path)
+      this.inFlight.delete(path)
+      this.loaded.delete(path)
+      this.boundOwners.delete(path)
+      load.controller.abort()
+    }
     for (const path of [...this.loaded]) {
       if (this.pathActors.has(path)) continue
       if (this.inFlight.has(path)) continue
@@ -778,69 +797,47 @@ class ResourceObserver {
    * `loaded` без текстуры и без шанса на повтор.
    */
   private async loadPath(candidate: MapCandidate): Promise<void> {
-    const path: string = candidate.path
-    const epoch: number = this.epoch
+    const path = candidate.path
+    const epoch = this.epoch
+    let reservation = this.pathLoads.get(path)
+    let owner = false
+    const current = (): boolean => this.epoch === epoch &&
+      (!reservation || (this.pathLoads.get(path) === reservation && !reservation.controller.signal.aborted))
 
     this.rememberOwners(path, candidate.actorId, candidate.name)
     this.inFlight.add(path)
     this.loaded.add(path)
-
     try {
-      let ok: boolean = true
-
-      try {
-        if (!resourceStorage.getTexture(path)) {
-          let pending: Promise<LoadResult | null> | undefined = this.pathLoads.get(path)
-          let owner: boolean = false
-
-          if (!pending) {
-            const resource: Resource | undefined = Resource.where({ path }).first()
-
-            if (resource) {
-              pending = this.tryLoad(textureRequestFrom(resource.toJSON() as IResource))
-              this.pathLoads.set(path, pending)
-              owner = true
-            }
-          }
-
-          if (pending) {
-            const result = await pending
-
-            // Только владелец убирает бронь, и только СВОЮ: сценарий мог
-            // смениться, пока мы ждали, `scenario` уже очистил `pathLoads`
-            // целиком, а по этому же пути мог появиться НОВЫЙ (уже живой)
-            // претендент — сверка на равенство промиса не даёт снять чужую бронь.
-            if (owner && this.pathLoads.get(path) === pending) this.pathLoads.delete(path)
-
-            if (this.epoch !== epoch) {
-              if (owner && result?.ok && result.texture) result.texture.dispose()
-
-              return
-            }
-
-            if (!result || !result.ok || !result.texture) {
-              ok = false
-            } else if (!resourceStorage.getTexture(path)) {
-              // Сосед по той же брони мог зарегистрировать текстуру, пока мы
-              // ждали тот же промис — реестр проверяется заново, а не вслепую.
-              this.budget.measure(path, result.texture)
-              resourceStorage.addTexture(result.texture)
-            }
+      let ok = true
+      if (!resourceStorage.getTexture(path)) {
+        if (!reservation) {
+          const resource = Resource.where({ path }).first()
+          if (resource) {
+            const controller = new AbortController()
+            reservation = { controller, promise: this.tryLoad(textureRequestFrom(resource.toJSON() as IResource), epoch, controller.signal) }
+            this.pathLoads.set(path, reservation)
+            owner = true
           }
         }
-      } finally {
-        if (this.epoch === epoch) this.inFlight.delete(path)
+        if (reservation) {
+          const result = await reservation.promise
+          if (!current()) {
+            if (owner && result?.ok) result.texture.dispose()
+            return
+          }
+          if (!result?.ok) ok = false
+          else if (!resourceStorage.getTexture(path)) {
+            this.budget.measure(path, result.texture)
+            resourceStorage.addTexture(result.texture)
+          }
+        }
       }
-
-      if (this.epoch !== epoch) return
-
+      if (!current()) return
       if (!ok) {
         this.handleLoadFailure(candidate)
         return
       }
-
       this.loadedAt.set(path, Date.now())
-
       for (const actorId of this.materialOwners(path, candidate.actorId)) {
         this.withActorMaterial(
           actorId,
@@ -848,14 +845,20 @@ class ResourceObserver {
           this.boundOwners.get(path)?.get(actorId) ?? (actorId === candidate.actorId ? candidate.name : undefined)
         )
       }
-    } catch {
-      // Сценарий мог смениться, пока мы были внутри — устаревший бросок не
-      // вправе трогать состояние, которое уже либо очищено сеттером
-      // `scenario`, либо принадлежит чужой живой загрузке того же пути (тот
-      // же инвариант, что и у обычного провала, см. докблок `epoch`).
-      if (this.epoch !== epoch) return
-
-      this.handleLoadFailure(candidate)
+    } catch (cause) {
+      if (current()) {
+        if (isAbortError(cause)) {
+          this.loaded.delete(path)
+          this.loadedAt.delete(path)
+          this.boundOwners.delete(path)
+        } else this.handleLoadFailure(candidate)
+      }
+    } finally {
+      // Every continuation owns both its epoch and its exact path reservation.
+      if (current()) {
+        this.inFlight.delete(path)
+        if (owner) this.pathLoads.delete(path)
+      }
     }
   }
 

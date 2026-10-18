@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeAll, afterAll, type MockInstance } from 'vitest'
-import { CubeTexture, CubeTextureLoader, ImageBitmapLoader, SRGBColorSpace, Texture } from 'three'
+import { CubeTexture, SRGBColorSpace, Texture } from 'three'
 import type { WebGLRenderer } from 'three'
 import { TextureProvider } from '@/core/textures/TextureProvider'
 import { PlaceholderTexture } from '@/core/textures/PlaceholderTexture'
+import { BitmapTransport } from '@/core/textures/BitmapTransport'
 import { ImageBitmapStrategy } from '@/core/textures/strategies/ImageBitmapStrategy'
 import type { TextureLoadStrategy, TextureRequest } from '@/core/textures/types'
 
@@ -18,25 +19,6 @@ const stubCanvas = (): HTMLCanvasElement =>
     height: 0,
     getContext: () => ({ fillStyle: '', fillRect: () => undefined })
   }) as unknown as HTMLCanvasElement
-
-/**
- * jsdom не определяет `createImageBitmap` — конструктор `ImageBitmapLoader`
- * при его отсутствии печатает `console.warn`. Тесты ниже вызывают
- * `ImageBitmapStrategy.create()` не подставным, а настоящим `ImageBitmapLoader`
- * (иначе не проверить ни дефолтный порядок стратегий, ни реальные опции
- * декода), поэтому глобал подставляется на время теста — тем же приёмом,
- * каким сам `ImageBitmapLoader` проверяет его наличие.
- */
-function withCreateImageBitmapStub<T>(run: () => T): T {
-  const original = globalThis.createImageBitmap
-  globalThis.createImageBitmap = (() => Promise.resolve({}) as unknown) as typeof globalThis.createImageBitmap
-
-  try {
-    return run()
-  } finally {
-    globalThis.createImageBitmap = original
-  }
-}
 
 function rendererSpy(): { renderer: WebGLRenderer; initTexture: ReturnType<typeof vi.fn> } {
   const initTexture = vi.fn()
@@ -180,63 +162,25 @@ describe('TextureProvider', () => {
     await expect(provider.load(single('planets/earth.tga'))).rejects.toThrow(/стратеги/i)
   })
 
-  it('без явного списка стратегий шестигранный запрос не достаётся растровой стратегии', async () => {
-    // Закрепляет дефолтную проводку целиком: провайдер, построенный без
-    // явного списка стратегий, отдаёт шестигранный запрос настоящему
-    // CubeTextureLoader и не долетает до ImageBitmapLoader. loadAsync
-    // подменён на этапе сети — jsdom не умеет ни живой fetch картинок, ни
-    // настоящую декодировку битмапа, — но supports()/выбор стратегии
-    // остаются настоящими.
-    //
-    // Это НЕ проверка порядка двух стратегий в списке: порядок тут ни при
-    // чём и не может ни при чём быть. ImageBitmapStrategy.supports()
-    // отбрасывает любой запрос с paths.length !== 1, а CubeStrategy.supports()
-    // берёт только paths.length === 6 — предикаты дизъюнктны по форме запроса.
-    // От шестигранного запроса кубовую стратегию защищает эта взаимная
-    // исключаемость предикатов, а не то, в каком порядке они стоят в
-    // дефолтном массиве.
-    const cubeLoadAsync = vi.spyOn(CubeTextureLoader.prototype, 'loadAsync').mockResolvedValue(new CubeTexture())
-    const imageLoadAsync = vi
-      .spyOn(ImageBitmapLoader.prototype, 'loadAsync')
-      .mockRejectedValue(new Error('растровая стратегия не должна вызываться для кубмапы'))
-
+  it('routes default cube requests through six unflipped bitmap loads', async () => {
+    const load = vi.spyOn(BitmapTransport.prototype, 'loadAsync').mockImplementation(async () => ({ close: vi.fn() } as unknown as ImageBitmap))
     try {
       const { renderer } = rendererSpy()
-      const provider = withCreateImageBitmapStub(() => new TextureProvider(renderer))
-
-      const result = await provider.load(cube())
-
-      expect(cubeLoadAsync).toHaveBeenCalled()
-      expect(imageLoadAsync).not.toHaveBeenCalled()
+      const result = await new TextureProvider(renderer).load(cube())
       expect(result.ok).toBe(true)
-    } finally {
-      cubeLoadAsync.mockRestore()
-      imageLoadAsync.mockRestore()
-    }
+      expect(result.texture).toBeInstanceOf(CubeTexture)
+      expect(load).toHaveBeenCalledTimes(6)
+      for (const call of load.mock.calls) expect(call[2]).toEqual({ imageOrientation: 'none', premultiplyAlpha: 'none', colorSpaceConversion: 'none' })
+      result.texture?.dispose()
+    } finally { load.mockRestore() }
   })
 
-  it('ImageBitmapStrategy.create() включает переворот на этапе декода и сохраняет premultiplyAlpha', () => {
-    // three хранит опции загрузчика как есть — см. ImageBitmapLoader.js:
-    // setOptions(options) { this.options = options }. Для источника ImageBitmap
-    // рендерер three игнорирует texture.flipY, поэтому переворот обязан быть
-    // выставлен именно тут, на loader.options, а не понадеявшись на дефолт.
-    //
-    // premultiplyAlpha: 'none' обязан быть повторён явно по той же причине:
-    // setOptions заменяет объект опций целиком, а ImageBitmapLoader.js по
-    // умолчанию ставит { premultiplyAlpha: 'none' }, чтобы совпасть с
-    // Texture.premultiplyAlpha === false. Пропусти его здесь — и
-    // createImageBitmap откатится к спековому 'default' (в Chrome обычно
-    // предумноженный), а three для ImageBitmap-источника это уже не поправит.
-    const setOptionsSpy = vi.spyOn(ImageBitmapLoader.prototype, 'setOptions')
-
+  it('decodes default raster textures flipped without premultiplication or color conversion', async () => {
+    const load = vi.spyOn(BitmapTransport.prototype, 'loadAsync').mockResolvedValue({ close: vi.fn() } as unknown as ImageBitmap)
     try {
-      withCreateImageBitmapStub(() => ImageBitmapStrategy.create())
-
-      expect(setOptionsSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ imageOrientation: 'flipY', premultiplyAlpha: 'none' })
-      )
-    } finally {
-      setOptionsSpy.mockRestore()
-    }
+      const texture = await ImageBitmapStrategy.create().load(single())
+      expect(load.mock.calls[0][2]).toEqual({ imageOrientation: 'flipY', premultiplyAlpha: 'none', colorSpaceConversion: 'none' })
+      texture.dispose()
+    } finally { load.mockRestore() }
   })
 })

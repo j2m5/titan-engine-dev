@@ -72,7 +72,7 @@ type StreamingInternals = {
   inFlight: Set<string>
   attempted: Map<string, number>
   pathActors: Map<string, Set<number>>
-  pathLoads: Map<string, Promise<LoadResult | null>>
+  pathLoads: Map<string, { controller: AbortController; promise: Promise<LoadResult | null> }>
 }
 
 function streamingState(observer: ResourceObserver): StreamingInternals {
@@ -114,13 +114,104 @@ function makeObserver(
 }
 
 describe('ResourceObserver: closestChange end-to-end', () => {
+  it('releases a bare AbortError reservation without backoff or material fallback and retries on renewed demand', async () => {
+    let calls = 0
+    const load = vi.fn(async (request: TextureRequest, signal?: AbortSignal): Promise<LoadResult> => {
+      expect(signal?.aborted).toBe(false)
+      calls++
+      if (calls === 1) throw new DOMException('transport cancelled', 'AbortError')
+      const texture = makeTexture()
+      texture.name = request.name
+      return { ok: true, texture }
+    })
+    const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 8, load)
+    observer.scenario = SOLAR_SYSTEM
+    const mesh = new Mesh()
+    mesh.name = 'Saturn'
+    const material = { resetMaterial: vi.fn(), updateMaterial: vi.fn() }
+    Object.defineProperty(mesh, 'renderable', { value: { material } })
+    scene.add(mesh)
+    data.set('Saturn', record('Saturn', 300))
+    await handlers.ClosestChange(record('Saturn', 300))
+    const state = streamingState(observer)
+    expect(state.attempted.size).toBe(0)
+    expect(state.loaded.size).toBe(0)
+    expect(state.inFlight.size).toBe(0)
+    expect(state.pathLoads.size).toBe(0)
+    expect(material.resetMaterial).not.toHaveBeenCalled()
+    expect(resourceStorage.getTexture('planets/saturn/saturn.jpg')).toBeUndefined()
+    await handlers.ClosestChange(record('Saturn', 300))
+    expect(load).toHaveBeenCalledTimes(2)
+    expect(resourceStorage.getTexture('planets/saturn/saturn.jpg')).toBeDefined()
+    expect(material.updateMaterial).toHaveBeenCalledOnce()
+  })
+  it('retains shared in-flight demand while another actor still needs the path', async () => {
+    const pending: { signal?: AbortSignal; request: TextureRequest; resolve: (result: LoadResult) => void }[] = []
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 16, (request, signal) => new Promise((resolve) => {
+      pending.push({ signal, request, resolve })
+    }))
+    observer.scenario = HORUSET_SYSTEM
+    data.set('Korriban I', record('Korriban I', 100))
+    data.set('Korriban II', record('Korriban II', 100))
+    const first = handlers.ClosestChange(record('Korriban I', 100))
+    const shared = pending.find((load) => load.request.paths[0] === 'terrain/rocky_trail_diff.webp')!
+    expect(shared).toBeDefined()
+    data.delete('Korriban I')
+    const second = handlers.ClosestChange(record('Korriban II', 100))
+    expect(shared.signal?.aborted).toBe(false)
+    expect(pending.filter((load) => load.request.paths[0] === shared.request.paths[0])).toHaveLength(1)
+    data.clear()
+    await handlers.ClosestChange(record('Korriban II', 10000))
+    expect(shared.signal?.aborted).toBe(true)
+    for (const load of pending) load.resolve({ ok: true, texture: makeTexture() })
+    await Promise.all([first, second])
+  })
+  it.each(['resolve', 'reject'] as const)('cancels orphan demand and protects an immediate same-epoch restart from late %s', async (settlement) => {
+    const pending: { signal?: AbortSignal; resolve: (result: LoadResult) => void; reject: (error: Error) => void; request: TextureRequest }[] = []
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, (request, signal) => new Promise<LoadResult>((resolve, reject) => {
+      pending.push({ request, signal, resolve, reject })
+    }))
+    observer.scenario = SOLAR_SYSTEM
+    data.set('Mercury', record('Mercury', 0.01))
+    const first = handlers.ClosestChange(record('Mercury', 0.01))
+    expect(pending.length).toBeGreaterThan(0)
+    data.clear()
+    await handlers.ClosestChange(record('Mercury', 1000))
+    expect(pending.every((load) => load.signal?.aborted)).toBe(true)
+    const old = [...pending]
+    data.set('Mercury', record('Mercury', 0.01))
+    const second = handlers.ClosestChange(record('Mercury', 0.01))
+    const current = pending.slice(old.length)
+    expect(current.length).toBe(old.length)
+    const disposed = vi.fn()
+    for (const load of old) {
+      if (settlement === 'reject') load.reject(new Error('late failure'))
+      else {
+        const texture = makeTexture()
+        texture.addEventListener('dispose', disposed)
+        load.resolve({ ok: true, texture })
+      }
+    }
+    await first
+    expect(streamingState(observer).attempted.size).toBe(0)
+    expect(streamingState(observer).inFlight.size).toBe(current.length)
+    if (settlement === 'resolve') expect(disposed).toHaveBeenCalledTimes(old.length)
+    for (const load of current) {
+      const texture = makeTexture()
+      texture.name = load.request.name
+      load.resolve({ ok: true, texture })
+    }
+    await second
+    expect(streamingState(observer).inFlight.size).toBe(0)
+    expect(streamingState(observer).attempted.size).toBe(0)
+  })
   afterEach(() => {
     resourceStorage.deleteAllTextures()
     vi.useRealTimers()
     vi.restoreAllMocks()
   })
 
-  it.each(['observed', 'direct', 'in-flight'] as const)('resets the actual diffuse binding after delayed eviction (%s)', async (mode) => {
+  it.each(['observed', 'direct'] as const)('resets the actual diffuse binding after delayed eviction (%s)', async (mode) => {
     vi.useFakeTimers()
     vi.spyOn(PlaceholderTexture, 'get').mockReturnValue(makeTexture())
     for (const name of ['', 'default.png', 'night.jpg']) {
@@ -128,11 +219,9 @@ describe('ResourceObserver: closestChange end-to-end', () => {
       texture.name = name
       resourceStorage.addTexture(texture)
     }
-    let finish!: (result: LoadResult) => void
     const load = async (request: TextureRequest): Promise<LoadResult> => {
       const texture = makeTexture()
       texture.name = request.name
-      if (mode === 'in-flight') return new Promise<LoadResult>((resolve) => { finish = resolve })
       return { ok: true, texture }
     }
     const { observer, handlers, data, scene } = makeObserver(SIZE_8K * 8, load)
@@ -150,14 +239,6 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const pending = mode === 'direct'
       ? (observer as unknown as { loadPath: (candidate: { actorId: number; name: string; path: string; typeRank: number; actorPriority: number }) => Promise<void> }).loadPath({ actorId, name: 'Uranus', path: 'planets/uranus/uranus.png', typeRank: 0, actorPriority: 1 })
       : handlers.ClosestChange(record('Uranus', 300))
-    if (mode === 'in-flight') {
-      data.clear()
-      await handlers.ClosestChange(record('Uranus', 10000))
-      await handlers.ClosestChange(record('Uranus', 10000))
-      const texture = makeTexture()
-      texture.name = 'planets/uranus/uranus.png'
-      finish({ ok: true, texture })
-    }
     await pending
     const texture = resourceStorage.getTexture('planets/uranus/uranus.png')!
     const dispose = vi.spyOn(texture, 'dispose')
@@ -337,11 +418,11 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     await handlers['ClosestChange'](record('Mercury', 300))
 
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury.jpg' }))
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury_slope.webp' }))
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/ceres/ceres.jpg' }))
-    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/ceres/ceres_slope.webp' }))
-    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury_bump.jpg' }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury.jpg' }), expect.any(AbortSignal))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury_slope.webp' }), expect.any(AbortSignal))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/ceres/ceres.jpg' }), expect.any(AbortSignal))
+    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/ceres/ceres_slope.webp' }), expect.any(AbortSignal))
+    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury_bump.jpg' }), expect.any(AbortSignal))
     expect(load).toHaveBeenCalledTimes(3)
   })
 
@@ -360,12 +441,12 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     data.set('Earth', record('Earth', 300))
     await handlers['ClosestChange'](record('Earth', 300))
 
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth_clouds.jpg' }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth_clouds.jpg' }), expect.any(AbortSignal))
     // Остальные потоковые карты Земли — по-прежнему честные кандидаты.
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth.jpg' }))
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth_night.jpg' }))
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth_specular.jpg' }))
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth_slope.webp' }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth.jpg' }), expect.any(AbortSignal))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth_night.jpg' }), expect.any(AbortSignal))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth_specular.jpg' }), expect.any(AbortSignal))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/earth/earth_slope.webp' }), expect.any(AbortSignal))
   })
 
   it('второй пересчёт, пока актор ещё грузится, не переспрашивает и не вытесняет его', async () => {
@@ -827,8 +908,8 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     // не грузятся вовсе.
     await handlers['ClosestChange'](record('Mercury', 300))
     expect(load).toHaveBeenCalledTimes(2)
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury.jpg' }))
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury_slope.webp' }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury.jpg' }), expect.any(AbortSignal))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury_slope.webp' }), expect.any(AbortSignal))
 
     // Цикл 2: sizeOf теперь отдаёт честный SIZE_8K на путь (не слепую
     // оценку) — пара уже вдвое дороже всего бюджета. Меркурий по-прежнему
@@ -868,7 +949,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
 
     // Реальный путь ПЛАНЕТЫ — не resident-текстура кольца (её вообще не
     // просят: `lifecycle !== 'streamable'`) и не пустой список атмосферы.
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/saturn/saturn.jpg' }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/saturn/saturn.jpg' }), expect.any(AbortSignal))
     expect(load).toHaveBeenCalledTimes(1)
 
     // collectCandidates больше не бьёт по ORM за каждое наблюдаемое тело —
@@ -966,7 +1047,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     data.set('Mercury', record('Mercury', 300))
     await handlers['ClosestChange'](record('Mercury', 300))
 
-    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury.jpg' }))
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ name: 'planets/mercury/mercury.jpg' }), expect.any(AbortSignal))
   })
 
   it('регрессия владельца в миниатюре: далёкая субпиксельная "планета" не отжимает бюджет у detail ближней', async () => {
@@ -999,7 +1080,7 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     const state = streamingState(observer)
 
     expect(state.loaded.has(MOON_DETAIL_NORMAL2)).toBe(true)
-    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: URANUS_DIFFUSE }))
+    expect(load).not.toHaveBeenCalledWith(expect.objectContaining({ name: URANUS_DIFFUSE }), expect.any(AbortSignal))
   })
 
   it('после истечения бэкоффа провалившийся путь снова предлагается к загрузке', async () => {
@@ -1081,68 +1162,37 @@ describe('ResourceObserver: closestChange end-to-end', () => {
     vi.useRealTimers()
   })
 
-  it('орфан-очистка не трогает путь, ушедший под порог, пока он ещё в полёте — гонка, не утечка', async () => {
-    // Фикс-раунд ре-ревью (Medium-High): без гварда `inFlight` орфан-чистка
-    // делала бы loaded.delete + deleteTexture в ПУСТОТУ (реестр ещё ничего не
-    // зарегистрировал — путь в полёте), а loadPath после await всё равно
-    // регистрирует текстуру и ставит loadedAt, НЕ ЗНАЯ, что путь уже
-    // выселили отсюда. Текстура осталась бы резидентной вне `loaded` и вне
-    // бюджета навсегда: следующий орфан-проход ходит по `this.loaded`, а
-    // пути там уже нет, чтобы заметить пропажу.
-    const hold: { resolve: ((result: LoadResult) => void) | null } = { resolve: null }
-
-    const load = vi.fn((request: TextureRequest): Promise<LoadResult> => {
+  it('releases orphan in-flight reservations and disposes their late result', async () => {
+    let finish!: (result: LoadResult) => void
+    let signal: AbortSignal | undefined
+    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, (request, abortSignal) => {
       if (request.name === 'planets/uranus/uranus.png') {
-        return new Promise<LoadResult>((resolve) => {
-          hold.resolve = resolve
-        })
+        signal = abortSignal
+        return new Promise<LoadResult>((resolve) => { finish = resolve })
       }
-
       const texture = makeBigTexture()
       texture.name = request.name
-      return Promise.resolve({ ok: true as const, texture })
+      return Promise.resolve({ ok: true, texture })
     })
-
-    const { observer, handlers, data } = makeObserver(SIZE_8K * 8, load)
     observer.scenario = SOLAR_SYSTEM
-
-    const URANUS_DIFFUSE = 'planets/uranus/uranus.png'
+    const path = 'planets/uranus/uranus.png'
     const state = streamingState(observer)
-
-    // Цикл 1: Уран близко — диффуз стартует загрузку, держится открытым
-    // (эмулирует загрузку "в полёте" на момент падения приоритета).
     data.set('Uranus', record('Uranus', 300))
-    const inFlight: Promise<void> = handlers['ClosestChange'](record('Uranus', 300))
-
-    expect(state.inFlight.has(URANUS_DIFFUSE)).toBe(true)
-    expect(state.loaded.has(URANUS_DIFFUSE)).toBe(true)
-
-    // Цикл 2: Уран отодвинулся раньше, чем загрузка успела резолвиться —
-    // орфан-чистка обязана ПРОПУСТИТЬ путь целиком (он всё ещё inFlight).
+    const loading = handlers.ClosestChange(record('Uranus', 300))
+    expect(state.inFlight.has(path)).toBe(true)
     data.set('Uranus', record('Uranus', 10000))
-    await handlers['ClosestChange'](record('Uranus', 10000))
-
-    expect(state.loaded.has(URANUS_DIFFUSE)).toBe(true)
-    expect(state.inFlight.has(URANUS_DIFFUSE)).toBe(true)
-
-    // Резолвим загрузку — loadPath регистрирует текстуру штатно. Реестр ищет
-    // по texture.name (в проде его проставляет applyTextureParameters).
-    const resolvedTexture = makeBigTexture()
-    resolvedTexture.name = URANUS_DIFFUSE
-    hold.resolve?.({ ok: true, texture: resolvedTexture })
-    await inFlight
-
-    expect(resourceStorage.getTexture(URANUS_DIFFUSE)).toBeDefined()
-    expect(state.loaded.has(URANUS_DIFFUSE)).toBe(true)
-    expect(state.inFlight.has(URANUS_DIFFUSE)).toBe(false)
-
-    // Цикл 3: Уран по-прежнему далеко (не кандидат) — теперь путь настоящий
-    // орфан (loaded, не inFlight). Прошло 0 мс с loadedAt — свежий орфан,
-    // MIN_RESIDENCY_MS его защищает: ещё НЕ вытеснен.
-    await handlers['ClosestChange'](record('Uranus', 10000))
-
-    expect(state.loaded.has(URANUS_DIFFUSE)).toBe(true)
-    expect(resourceStorage.getTexture(URANUS_DIFFUSE)).toBeDefined()
+    await handlers.ClosestChange(record('Uranus', 10000))
+    expect(signal?.aborted).toBe(true)
+    expect(state.loaded.has(path)).toBe(false)
+    expect(state.inFlight.has(path)).toBe(false)
+    const texture = makeBigTexture()
+    texture.name = path
+    const dispose = vi.spyOn(texture, 'dispose')
+    finish({ ok: true, texture })
+    await loading
+    expect(dispose).toHaveBeenCalledOnce()
+    expect(resourceStorage.getTexture(path)).toBeUndefined()
+    expect(state.attempted.has(path)).toBe(false)
   })
 
   it('свежезагруженный орфан не вытесняется (гистерезис отсечки); устаревший — вытесняется', async () => {

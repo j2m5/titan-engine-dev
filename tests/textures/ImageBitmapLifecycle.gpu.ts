@@ -1,5 +1,5 @@
 import {
-  ImageBitmapLoader, Mesh, MeshBasicMaterial, OrthographicCamera,
+  Mesh, MeshBasicMaterial, OrthographicCamera,
   PlaneGeometry, Scene, Texture, WebGLRenderer, WebGLRenderTarget
 } from 'three'
 import { ImageBitmapStrategy } from '@/core/textures/strategies/ImageBitmapStrategy'
@@ -40,7 +40,7 @@ export async function checkImageBitmapLifecycle(): Promise<{
       200, 80, 40, 255, 200, 80, 40, 255, 200, 80, 40, 255, 200, 80, 40, 255
     ]), 2, 2))
     const source = bitmap
-    const strategy = new ImageBitmapStrategy({ loadAsync: async () => source } as unknown as ImageBitmapLoader)
+    const strategy = new ImageBitmapStrategy({ loadAsync: async () => source })
     texture = await strategy.load({ name: 'lifecycle', paths: ['lifecycle.png'], resourceType: 'diffuse', params: {} })
     material.map = texture
     const scene = new Scene()

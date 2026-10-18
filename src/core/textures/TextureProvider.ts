@@ -4,6 +4,7 @@ import { PlaceholderTexture } from '@/core/textures/PlaceholderTexture'
 import { CubeStrategy } from '@/core/textures/strategies/CubeStrategy'
 import { ImageBitmapStrategy } from '@/core/textures/strategies/ImageBitmapStrategy'
 import type { LoadResult, TextureLoadStrategy, TextureRequest } from '@/core/textures/types'
+import { abortError, checkAborted, isAbortError } from '@/core/textures/cancellation'
 
 /** Число граней кубической карты — запрос такой формы заглушке не подлежит. */
 const CUBE_FACE_COUNT: number = 6
@@ -30,7 +31,8 @@ class TextureProvider {
     this.strategies = strategies ?? [CubeStrategy.create(), ImageBitmapStrategy.create()]
   }
 
-  public async load(request: TextureRequest): Promise<LoadResult> {
+  public async load(request: TextureRequest, signal?: AbortSignal): Promise<LoadResult> {
+    checkAborted(signal)
     const strategy: TextureLoadStrategy | undefined = this.strategies.find((s: TextureLoadStrategy): boolean =>
       s.supports(request)
     )
@@ -46,15 +48,18 @@ class TextureProvider {
 
     let texture: Texture | undefined
     try {
-      texture = await strategy.load(request)
+      texture = await strategy.load(request, signal)
+      checkAborted(signal)
 
       applyTextureParameters(texture, request, this.renderer)
+      checkAborted(signal)
       this.renderer.initTexture(texture)
 
       return { ok: true, texture }
     } catch (cause) {
       // Loading transferred ownership, but the caller never received this result.
       if (texture && !PlaceholderTexture.isShared(texture)) texture.dispose()
+      if (signal?.aborted || isAbortError(cause)) throw abortError()
       const error: Error = cause instanceof Error ? cause : new Error(String(cause))
 
       // Кубмапе заглушки нет: подменить CubeTexture обычной текстурой нечем,
