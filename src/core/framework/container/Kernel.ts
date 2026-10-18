@@ -13,18 +13,30 @@ type ProviderConstructor = new (app: Container) => ServiceProvider
 class Kernel {
   private readonly container: Container = new Container()
   private booted: boolean = false
+  private instances: ServiceProvider[] | null = null
+  private registeredCount: number = 0
+  private bootedCount: number = 0
 
   public constructor(private readonly providers: ProviderConstructor[]) {}
 
   public bootstrap(): Container {
     if (this.booted) return this.container
 
-    const instances: ServiceProvider[] = this.providers.map(
+    const instances: ServiceProvider[] = this.instances ??= this.providers.map(
       (Provider: ProviderConstructor) => new Provider(this.container)
     )
 
-    for (const provider of instances) provider.register()
-    for (const provider of instances) provider.boot()
+    // Retry a failed boot with the existing singleton graph. Re-registering
+    // completed providers would replace live renderers and their listeners.
+    // A provider that throws must itself make its incomplete phase resumable.
+    while (this.registeredCount < instances.length) {
+      instances[this.registeredCount].register()
+      this.registeredCount++
+    }
+    while (this.bootedCount < instances.length) {
+      instances[this.bootedCount].boot()
+      this.bootedCount++
+    }
 
     this.booted = true
 

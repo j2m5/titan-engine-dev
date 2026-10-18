@@ -14,6 +14,7 @@ import { bodyInfoStore } from '@/ui/mobx/BodyInfoStore'
  * UI «встречается» с контейнером; ядро про этот провайдер не знает.
  */
 class UiServiceProvider extends ServiceProvider {
+  private connectedCount: number = 0
   public register(): void {
     this.app.instance(Tokens.Settings, settingsStore)
     this.app.instance(Tokens.NotificationSink, notificationStore)
@@ -22,10 +23,23 @@ class UiServiceProvider extends ServiceProvider {
   }
 
   public boot(): void {
-    timeStore.connect(this.app.get(Tokens.SimulationClock))
-    cameraStore.connect(this.app.get(Tokens.CameraController))
-    engineStore.connect(this.app.get(Tokens.Camera), this.app.get(Tokens.CameraCollision))
-    bodyInfoStore.connect(this.app.get(Tokens.BodyInfoService))
+    // Resolve everything before subscribing stores. A failed resolution can
+    // retry against the existing container without duplicating subscriptions.
+    const clock = this.app.get(Tokens.SimulationClock)
+    const controller = this.app.get(Tokens.CameraController)
+    const camera = this.app.get(Tokens.Camera)
+    const collision = this.app.get(Tokens.CameraCollision)
+    const bodyInfo = this.app.get(Tokens.BodyInfoService)
+    const connections = [
+      () => timeStore.connect(clock),
+      () => cameraStore.connect(controller),
+      () => engineStore.connect(camera, collision),
+      () => bodyInfoStore.connect(bodyInfo)
+    ]
+    while (this.connectedCount < connections.length) {
+      connections[this.connectedCount]()
+      this.connectedCount++
+    }
   }
 }
 

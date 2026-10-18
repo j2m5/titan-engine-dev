@@ -3,6 +3,7 @@ import type { Actor } from '@/core/models/Actor'
 import { describeBody } from '@/core/bodyInfo/describeBody'
 import type { BodyLive, BodyReference } from '@/core/bodyInfo/types'
 import type { BodyInfoService } from '@/core/bodyInfo/BodyInfoService'
+import { engineStore } from '@/ui/mobx/EngineStore'
 
 /**
  * Состояние карточки объекта. Справка считается один раз при открытии, живые
@@ -79,3 +80,4 @@ class BodyInfoStore {
 
 export { BodyInfoStore }
 export const bodyInfoStore: BodyInfoStore = new BodyInfoStore()
+engineStore.registerScenarioCleanup(() => bodyInfoStore.close())
