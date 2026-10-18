@@ -45,7 +45,7 @@ const DataEditorModal: FC<Closable & { visible: boolean }> = ({ visible, onClose
   const actions = (
     <TitanFlex align="center" style={{ gap: '10px' }}>
       <span style={{ fontSize: '12px', color: validation.ok && !hasFieldErrors ? '#bbbbbb' : '#c0392b' }}>
-        {hasFieldErrors ? 'Invalid JSON — cannot save' : validation.ok
+        {hasFieldErrors ? 'Invalid input — cannot save' : validation.ok
           ? saveStatus || `${validation.warnings.length} warning(s)`
           : `${validation.errors.length} error(s) — cannot save`}
       </span>

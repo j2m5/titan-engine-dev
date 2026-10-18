@@ -211,7 +211,7 @@ it('the real editor modal disables Save for invalid JSON, including after switch
   const original = container.querySelector('textarea')!.value
   act(() => inputJson('{ invalid'))
   expect(saveButton().disabled).toBe(true)
-  expect(container.textContent).toContain('Invalid JSON — cannot save')
+  expect(container.textContent).toContain('Invalid input — cannot save')
   switchTo('Actors')
   expect(saveButton().disabled).toBe(true)
   switchTo('Rendering')

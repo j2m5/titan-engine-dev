@@ -7,6 +7,8 @@ import { DataTemplate } from '@/ui/editor/forms/dataTemplates'
 export interface JsonInputState {
   text: string
   error: string | null
+  /** Rendering controls apply only while the row's actor has this category. */
+  category?: string
 }
 
 export interface JsonFieldProps {
@@ -100,9 +102,9 @@ const JsonField: FC<JsonFieldProps> = ({ label, value, cloneOptions, templates, 
 
   return (
     <div className="titan-field" style={{ gridColumn: '1 / -1' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+      <div className="json-field-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
         <span className="titan-field-label">{label}</span>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div className="json-field-actions" style={{ display: 'flex', gap: '8px' }}>
           {templates && templates.length > 0 && (
             <div style={{ minWidth: '180px' }}>
               <TitanSelect

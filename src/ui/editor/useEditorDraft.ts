@@ -24,6 +24,17 @@ type TableName = keyof DatabaseSnapshot
 type JsonInputs = Record<string, JsonInputState & { table: TableName; id: number }>
 const inputKey = (table: TableName, id: number, field: string): string => JSON.stringify([table, id, field])
 
+function hasInvalidInput(inputs: JsonInputs, draft: DatabaseSnapshot): boolean {
+  return Object.values(inputs).some((input) => {
+    if (input.error === null) return false
+    if (!input.category) return true
+    const row = draft.renderingObjects.find((entry) => entry.id === input.id)
+    const actor = draft.actors.find((entry) => entry.id === row?.actorId)
+    return input.table === 'renderingObjects' &&
+      draft.categories.find((entry) => entry.id === actor?.categoryId)?.alias === input.category
+  })
+}
+
 /** любая запись таблицы имеет числовой id */
 interface WithId {
   id: number
@@ -138,11 +149,11 @@ export function useEditorDraft(database: Map<string, unknown[]>, scenarios: Scen
 
   // валидация черновика на каждый рендер — дёшево, данные невелики
   const validation = useMemo(() => validateDatabase(draft, scenarios), [draft, scenarios])
-  const hasFieldErrors = Object.values(jsonInputs).some((input) => input.error !== null)
+  const hasFieldErrors = hasInvalidInput(jsonInputs, draft)
 
   const save = useCallback(async (): Promise<void> => {
-    if (Object.values(jsonInputsRef.current).some((input) => input.error !== null)) {
-      setSaveStatus('Cannot save: invalid JSON. Fix field errors first.')
+    if (hasInvalidInput(jsonInputsRef.current, draftRef.current)) {
+      setSaveStatus('Cannot save: invalid input. Fix field errors first.')
       return
     }
     const currentDraft = draftRef.current

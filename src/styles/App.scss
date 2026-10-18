@@ -172,18 +172,70 @@ body {
 
 .titan-editor-body {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: minmax(230px, 0.8fr) minmax(0, 2fr);
   gap: 18px;
   align-items: start;
 }
 
 .titan-editor-list {
+  min-width: 0;
+  position: sticky;
+  top: 0;
   border-right: 1px solid #444444;
   padding-right: 14px;
 }
 
 .titan-editor-form {
+  min-width: 0;
   min-height: 300px;
+}
+
+.nebula-editor {
+  grid-column: 1 / -1;
+  min-width: 0;
+  color: #ddd;
+
+  .nebula-editor-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+  .nebula-editor-legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .nebula-editor-hint, .nebula-editor-error { font-size: 12px; line-height: 1.5; margin: 8px 0 12px; }
+  .nebula-editor-hint { color: #aaa; }
+  .nebula-editor-error { color: #f28b82; }
+  .nebula-editor-section {
+    border: 1px solid #444;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    padding: 12px;
+
+    > summary { cursor: pointer; font-size: 14px; font-weight: 500; }
+    > summary:focus-visible { @include index.titan-focus-ring; }
+  }
+  .nebula-editor-control { min-width: 0; }
+  .nebula-editor-wide { grid-column: 1 / -1; }
+  .nebula-editor-vector { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .nebula-editor-field-footer { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+  .nebula-editor-field-footer > span { margin: 4px 0 0; }
+  .nebula-editor-reset {
+    flex-shrink: 0; margin: 4px 0 0; padding: 2px 0; background: none; border: 0;
+    color: #aaa; font: inherit; font-size: 11px; cursor: pointer;
+    &:hover { color: #fff; }
+    &:focus-visible { @include index.titan-focus-ring; }
+  }
+  .titan-input { box-sizing: border-box; min-width: 0; }
+  // JsonField's template/clone toolbar wraps inside the narrower parameter panel.
+  .json-field-toolbar, .json-field-actions { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+}
+
+@media (max-width: 700px) {
+  .titan-editor-body { grid-template-columns: minmax(0, 1fr); }
+  .titan-editor-list {
+    position: static;
+    padding-right: 0;
+    border-right: 0;
+    > .titan-list { max-height: 150px !important; min-width: 0; }
+  }
+  .nebula-editor {
+    .titan-form-grid, .nebula-editor-vector { grid-template-columns: minmax(0, 1fr); }
+  }
 }
 
 .titan-editor-issues {
