@@ -282,5 +282,7 @@
 
 ## Справочные контракты
 
+Продолжение аудита: [пять улучшений от 18 октября, проверки и новые наблюдения](project-hardening-2026-10-18.md).
+
 - [Three.js: освобождение ресурсов](https://threejs.org/manual/pages/how-to-dispose-of-objects.html) — освобождение текстур, владение ImageBitmap, повторное создание ресурса после `dispose()`.
 - [React: select](https://react.dev/reference/react-dom/components/select) — значение управляемого select должно соответствовать существующей option.

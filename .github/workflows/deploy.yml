@@ -18,6 +18,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     env:
       VITE_APP_NAME: Titan Engine
       VITE_FS_DRIVER: s3
@@ -35,6 +36,18 @@ jobs:
       - run: npm run lint
       - run: npm test -- --run
       - run: npm run build -- --base=/${{ github.event.repository.name }}/
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - name: Upload browser diagnostics
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-checks
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
         with:

@@ -32,7 +32,9 @@
     "measure:detail-stats": "vite-node scripts/measure-detail-stats.ts --",
     "preview": "vite preview",
     "test": "npm run typecheck && vitest",
-    "test:perf": "vitest run --mode perf --no-file-parallelism tests/terrain/midbandBuildBudget.spec.ts tests/asteroidBelt/SectorGridLazy.spec.ts"
+    "test:perf": "vitest run --mode perf --no-file-parallelism tests/terrain/midbandBuildBudget.spec.ts tests/asteroidBelt/SectorGridLazy.spec.ts",
+    "test:browser": "playwright test",
+    "benchmark:browser": "playwright test --config playwright.soak.config.ts"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
@@ -41,7 +43,7 @@
     "dayjs": "^1.11.13",
     "mobx": "^6.13.6",
     "mobx-react-lite": "^4.1.0",
-    "music-metadata": "^11.13.0",
+    "music-metadata": "^11.16.1",
     "postprocessing": "^6.37.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -50,6 +52,7 @@
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.1149.0",
     "@eslint/js": "^9.21.0",
+    "@playwright/test": "1.64.1",
     "@types/animejs": "^3.1.13",
     "@types/node": "^22.13.10",
     "@types/react": "^19.0.10",
@@ -64,11 +67,11 @@
     "path": "^0.12.7",
     "prettier": "^3.5.3",
     "sass": "^1.85.1",
-    "sharp": "^0.35.3",
+    "sharp": "0.35.5",
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.24.1",
-    "vite": "7.1.11",
+    "vite": "7.3.7",
     "vite-node": "^3.2.4",
-    "vitest": "^3.2.4"
+    "vitest": "4.1.11"
   }
 }

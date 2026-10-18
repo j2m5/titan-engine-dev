@@ -10,20 +10,21 @@ export async function checkTextureCancellationAndCube(abortUrl: string): Promise
   cancellation: string; pixels: number[][]; expected: number[][]; closedWidths: number[]
 }> {
   const manager = new LoadingManager()
-  let started!: () => void
-  const start = new Promise<void>((resolve) => { started = resolve })
   manager.setURLModifier(() => abortUrl)
-  manager.onStart = () => started()
   const controller = new AbortController()
-  const loading = ImageBitmapStrategy.create(manager).load({
-    paths: ['abort.png'], name: 'abort', resourceType: 'diffuse', params: {}
-  }, controller.signal)
-  // Give Chromium a turn to dispatch the actual network request before cancellation.
-  await start
-  await new Promise((resolve) => setTimeout(resolve, 100))
-  controller.abort()
+  // Install before fetch. The runner signals only after native Chromium observes HTTP headers.
+  const abortAfterHeaders = (): void => controller.abort()
+  window.addEventListener('titan-test-texture-response', abortAfterHeaders, { once: true })
   let cancellation = ''
-  try { await loading } catch (cause) { cancellation = (cause as Error).name }
+  try {
+    await ImageBitmapStrategy.create(manager).load({
+      paths: ['abort.png'], name: 'abort', resourceType: 'diffuse', params: {}
+    }, controller.signal)
+  } catch (cause) {
+    cancellation = (cause as Error).name
+  } finally {
+    window.removeEventListener('titan-test-texture-response', abortAfterHeaders)
+  }
   if (cancellation !== 'AbortError') throw new Error(`Transport did not abort: ${cancellation}`)
 
   const renderer = new WebGLRenderer()

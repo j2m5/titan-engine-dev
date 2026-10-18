@@ -88,7 +88,26 @@ npm run cloud:manifest -- --check
 
 `npm test -- --run` works from a clean clone without the external resource archive. Measurements of actual water textures and terrain heightmaps run only when the corresponding local files exist; Vitest reports those measurements as skipped otherwise. Water precision guards and the moonlet upload-manifest checks always run. A present but invalid water texture still fails its measurements. Use `npm run cloud:manifest -- --check` to require all runtime resources locally before uploading them.
 
-The standard Vitest suite runs in jsdom. It covers CPU and UI behavior but does not execute the `.gpu.ts` probes, which require a real WebGL2 browser context. Start `npm run dev`, open the app in WebGL2-capable Chrome or Firefox, and paste this into the browser developer console. The sequence awaits each probe and stops on a thrown failure; the black-hole depth probe runs with both 0 and 4 samples.
+The standard Vitest suite runs in jsdom. GPU and native-browser checks run separately in Playwright with real WebGL2, isolated pages and one worker:
+
+```sh
+npx playwright install chromium
+npm run build
+npm run test:browser
+```
+
+The runner starts its own development server on port 8091 and production preview on 8092, using the built application's base path. It runs the GPU probes, native worker and camera-flight checks, real HTTP texture cancellation, and a production first-screen check. Missing WebGL2, failed assertions, browser exceptions and console/shader errors fail the run. CI installs Chromium and its system dependencies and requires these checks before deploying; reports, traces and diagnostics are retained for seven days. Local outputs are in `playwright-report/` and `test-results/`.
+
+The default browser checks use SwiftShader so CI does not need a physical GPU. Atmosphere LUT generation can take several minutes in software and has its own 15-minute timeout; numerical tolerances are unchanged. To compare the checks on installed Chrome and its native GPU in PowerShell:
+
+```powershell
+$env:TITAN_BROWSER_CHANNEL = 'chrome'
+$env:TITAN_BROWSER_GPU = 'native'
+npm run test:browser
+Remove-Item Env:TITAN_BROWSER_CHANNEL, Env:TITAN_BROWSER_GPU
+```
+
+For an individual manual probe, start `npm run dev`, open the app in WebGL2-capable Chrome or Firefox, and paste the following into the browser developer console. The sequence stops on a thrown failure; the black-hole depth probe runs with both 0 and 4 samples.
 
 ```js
 const probes = [
@@ -121,6 +140,31 @@ console.log(await checkWorkerCancellation());
 ```
 
 It queues three synthetic 1024² near-shadow tiles, releases the scenario, and checks that no abandoned callbacks run and a new native-worker result matches the warmed result. Reported timings describe this controlled synthetic load, not a production benchmark; the check has no millisecond performance threshold.
+
+### Sustained scenario measurements
+
+With the real resource archive mapped as described above, run:
+
+```sh
+npm run benchmark:browser
+```
+
+This starts a separate local server on port 8093 and uses the browser's native GPU at 1280×720, DPR 1. It warms Solar system, Sagittarius A* and Alkaid once, then repeats six rounds with a ten-second camera orbit per scenario (18 measured scenario runs). This is an opt-in development-build measurement; it is not part of deployment CI. Missing assets or browser errors fail it instead of recording placeholder scenes as successful measurements.
+
+The command writes `benchmark-results/scenario-soak.json` even if measurement setup or a run fails. The report includes environment, startup times, frame interval p50/p95/p99/max, active and post-teardown resource counts, JS heap after explicit GC, request counts, warnings and failed requests. Warmup rows are separate from per-scenario summaries. The run asserts reuse of one renderer, context and canvas, and rejects software-rendering fallback. Counts are not VRAM bytes; persistent Gaia/renderer caches remain between scenarios. Compare warmed rows for the same scenario and hardware before concluding there is a leak or performance regression. No universal FPS threshold is imposed.
+
+To change duration, scenario IDs or use installed Chrome, for example:
+
+```powershell
+$env:TITAN_BROWSER_CHANNEL = 'chrome'
+$env:TITAN_SOAK_ROUNDS = '10'
+$env:TITAN_SOAK_DWELL_MS = '15000'
+$env:TITAN_SOAK_SCENARIOS = '1,2,13'
+npm run benchmark:browser
+Remove-Item Env:TITAN_BROWSER_CHANNEL, Env:TITAN_SOAK_ROUNDS, Env:TITAN_SOAK_DWELL_MS, Env:TITAN_SOAK_SCENARIOS
+```
+
+The first screen loads independently of the simulation runtime. Its production browser check enforces zero WebGL contexts before selection and a 600 kB uncompressed JavaScript budget; selecting a scenario requests the deferred runtime. See [hardening results](docs/project-hardening-2026-10-18.md) for the measured before/after comparison and dependency audit.
 
 ## Data editor
 
