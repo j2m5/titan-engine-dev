@@ -5,6 +5,31 @@ import { CloudsEffect } from '@takram/three-clouds'
 import { PerspectiveCamera } from 'three'
 
 describe('main scene cloud light units', () => {
+  it('validates the sun-march call before publishing any scene-reference patch', () => {
+    const clouds = new CloudsEffect(new PerspectiveCamera())
+    const current = clouds.cloudsPass.currentMaterial
+    const original = current.fragmentShader
+    const resolve = clouds.cloudsPass.resolveMaterial
+    const originalResolve = resolve.fragmentShader
+    const originalUniforms = { ...current.uniforms }
+    const anchor = 'float opticalDepth = marchOpticalDepth('
+    try {
+      for (const invalid of [original.replace(anchor, 'float opticalDepth = changedSunMarch('), original + anchor]) {
+        current.fragmentShader = invalid
+        expect(() => installSceneCloudPatches(clouds, true)).toThrow(/expected one replacement/)
+        expect(current.fragmentShader).toBe(invalid)
+        expect(resolve.fragmentShader).toBe(originalResolve)
+        expect(current.uniforms).toEqual(originalUniforms)
+      }
+      current.fragmentShader = original
+      const binding = installSceneCloudPatches(clouds, true)
+      binding.dispose()
+      expect(current.fragmentShader).toBe(original)
+      expect(resolve.fragmentShader).toBe(originalResolve)
+    } finally {
+      clouds.dispose()
+    }
+  })
   it('rejects changed resolve anchors atomically and restores the resolve on disposal', () => {
     const clouds = new CloudsEffect(new PerspectiveCamera())
     const resolve = clouds.cloudsPass.resolveMaterial

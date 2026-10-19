@@ -38,6 +38,7 @@ import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
 import type { Actor } from '@/core/models/Actor'
 import type { SceneCloudProbeReport } from './probe'
 import { checkSceneCloudTemporalResolve } from './temporalResolve.gpu'
+import { checkSceneCloudSunShadow } from './sunShadow.gpu'
 
 const SIZE = 33,
   UNIT = SpaceScale / 1000,
@@ -708,6 +709,11 @@ void main() {
       report.cases.push(label)
     }
     report.cases.push('alpha-depth-shadow-invariance')
+
+    const shadowFrame = frame(origin, endpoint)
+    shadowFrame.sceneLight = farReceiver.getLightSettings!()
+    checkSceneCloudSunShadow(recreate(shadowFrame).cloudsPass.currentMaterial.fragmentShader, draw, check)
+    report.cases.push('scene-reference-sun-shadow-partition')
 
     for (const sun of [new Vector3(0, 0, 1), new Vector3(1, 0, 0), new Vector3(0, 0, -1)]) {
       const f = frame(origin, endpoint, sun)

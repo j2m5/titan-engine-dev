@@ -10,6 +10,7 @@ import { adaptSceneCloudAerial, sceneCloudAerialUniformsGlsl } from './sceneClou
 import { sceneCloudLightGLSL } from '@/core/clouds/receivers/sceneCloudLight'
 import { sunTransmittanceFunctions } from '@/core/materials/shaders/lib/chunks/SunTransmittance'
 import { adaptSceneCloudTemporalResolve } from './sceneCloudTemporal'
+import { adaptSceneCloudSunShadow } from './sceneCloudSunShadow'
 
 export function cloudLightScale(
   irradiance: readonly [number, number, number],
@@ -102,6 +103,7 @@ ${integratedReturn}`,
     'ground eclipse'
   )
   if (sceneReferenceLighting) {
+    shader = adaptSceneCloudSunShadow(shader)
     shader = replaceExactlyOnce(
       shader,
       'vec3 radianceIntegral = vec3(0.0);',

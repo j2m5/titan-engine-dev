@@ -337,5 +337,74 @@ acceptance: on 2026-10-19 the user inspected the result live, reported a signifi
 improvement and approved committing these iterations. Wind, multiple cloud layers, volume profiles
 for Saturn, Venus, Uranus or Neptune, and a dedicated cloud editor remain deferred.
 
+### Local sun self-shadow and stable sampling (2026-10-19)
+
+The scene-reference sun march now resolves a fixed 1.2 km neighbourhood, matching
+Earth's erosion scale, with the existing low/medium/high budgets of 1/2/4 samples.
+Geometric intervals concentrate samples near the current point; midpoint sampling
+avoids adding temporal variance from a second jittered ray. The existing distance
+LOD still reduces the sample count. The march clips to the cloud-top sphere using
+`maxHeight`, including layers that do not cast a shadow map.
+
+The local integral hands its full interval length to the Beer shadow map (BSM),
+which supplies the remaining path. Previously it returned the last jittered
+sample position, causing overlapping coverage. A homogeneous 120 m GPU regression
+initially produced optical depth 0.22 instead of 0.12. Zero local samples now
+return zero distance and optical depth, leaving the BSM tail intact; the old 0.5
+optical-depth fallback is removed. The sample count also stays within budget at
+zero jitter. This fixes the interval contract; BSM remains an approximation of
+the actual heterogeneous cloud field.
+
+This patch applies to terrestrial scene-reference lighting. Density, authored
+coverage, erosion, primary ray budgets, temporal resolve and shadow-map output
+are retained. The physical lab and giant lighting paths retain their existing
+march. No texture, uniform or render target is added. Source patches validate
+their anchors before publication and restore on disposal.
+
+Using the previous 256-frame warmup and 64-frame temporal protocol, stationary
+mean absolute red-channel frame change was 0.00005941 before and 0.00005944 after.
+During the same 1.5-degree rotation it was 0.00037314 / 0.00035449; moving frames
+include true scene change. Mean opacity differed by less than 0.000001 at rest
+and matched during rotation. In opaque pixels (alpha > 0.8), the p10–p90 span of
+red radiance divided by opacity increased from 0.02565 to 0.03882 above the layer,
+and from 0.04873 to 0.07234 at its edge. These are spatial shading measurements,
+not perceptual quality scores. Near views remain soft; finer cloud-shape work is
+still open. The user inspected this lighting iteration live and approved committing it.
+
+The final paired timing run reused the same browser, GPU, viewport, epoch and
+three camera poses documented above. Each variant settled for 120 frames with
+terrain/water present, then collected 181 nondisjoint GPU samples after 30 warmup
+frames. Old/new order was reversed inside the layer. Resource counts matched
+within each pair: terrain/water 114/60, 117/60, 102/57; resident geometries
+229/232/241 and textures 121/121/120. Results in milliseconds:
+
+| View | GPU p50 before / after | GPU p95 before / after | CPU p50 before / after |
+| --- | --- | --- | --- |
+| Above, 12 km | 7.72 / 7.64 | 8.92 / 8.43 | 7.4 / 7.5 |
+| Inside, 6 km | 7.22 / 7.23 | 7.93 / 7.97 | 7.4 / 7.5 |
+| Transition, 110 km | 8.08 / 8.24 | 8.99 / 9.45 | 7.9 / 8.1 |
+
+The above-layer cloud pass itself measured GPU p50 3.88 / 3.85 ms. This supports
+retaining the local frame budget, not a claimed speedup. Raw paired timings and
+production screenshots are in `tmpscreenshots/cloud-tuning/sun-shadow-perf/`.
+Temporal baselines are the `legacy` entries of `sun-shadow-temporal-final/`;
+the final sampling variant is `mid1200` in `sun-shadow-midpoints/`.
+
+The lighting GPU probe passes 1094 checks across 34 cases. Its new regression
+executes the installed sun-march function against analytic media: uniform paths,
+empty rays, a sub-kilometre blocker, quality/mip/jitter bounds and a linear density
+ramp. It also uses the real Earth-radius intersection at 120 m and 0.5 m below
+the cloud top with a zero shadow-top fixture. Full production march checks retain
+day/terminator/night alpha, depth and shadow invariance, eclipse behaviour and
+owned-resource release. The analytic tail fixture verifies interval bookkeeping,
+not BSM reconstruction accuracy in heterogeneous clouds.
+
+The focused cloud suite passes 380 tests in 39 files; typecheck, production build
+and lint excluding local `.superpowers/**` pass. The composition GPU probe passes
+790 checks across 17 cases, and lifecycle passes 147 across 14, including quality
+changes, capture resize and WebGL context restoration. Deliberate shader failures
+are classified by their injection windows. The full baseline-dependent flight
+probe was not repeated for this bounded lighting change.
+
 Pinned integration versions: `@takram/three-clouds` 0.7.6,
 `@takram/three-atmosphere` 0.19.1, `@takram/three-geospatial` 0.9.1.

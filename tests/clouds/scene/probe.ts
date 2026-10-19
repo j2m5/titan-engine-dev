@@ -174,6 +174,7 @@ export const sceneCloudProbeRegistry: Partial<
       'scene-reference-owner-tint',
       'giant-physical-source',
       'scene-reference-march-invariants',
+      'scene-reference-sun-shadow-partition',
       'scene-reference-real-eclipse'
     ]
   },
