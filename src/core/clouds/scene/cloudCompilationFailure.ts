@@ -1,5 +1,6 @@
 import type { WebGLRenderer } from 'three'
 import type { SceneCloudReceiver } from '../receivers/SceneCloudReceiver'
+import { getRendererContextGeneration } from '@/core/services/ResourceStorage'
 
 export interface CloudCompilationEvidence {
   stage: 'setup' | 'depth' | 'backend' | 'near'
@@ -9,6 +10,7 @@ export interface CloudCompilationEvidence {
 interface Failure extends CloudCompilationEvidence {
   cause: unknown
   boundary: string
+  contextGeneration: number | null
 }
 const contextFailures = new WeakMap<WebGLRenderer, Failure>()
 
@@ -18,12 +20,25 @@ export class CloudCompilationFailures {
   private failure: Failure | null = null
   private sawLoss = false
   public bind(renderer: WebGLRenderer): void {
-    if (this.renderer && this.renderer !== renderer) this.failure = null
+    if (this.renderer && this.renderer !== renderer) {
+      this.failure = null
+      this.sawLoss = false
+    }
+    if (!this.renderer && this.failure) this.failure.contextGeneration = getRendererContextGeneration(renderer)
     this.renderer = renderer
-    if (this.failure?.recovery === 'context') contextFailures.set(renderer, this.failure)
+    const failure = this.current
+    if (failure?.recovery === 'context') contextFailures.set(renderer, failure)
   }
   public get current(): Failure | null {
-    return (this.renderer && contextFailures.get(this.renderer)) || this.failure
+    if (!this.renderer) return this.failure
+    const generation = getRendererContextGeneration(this.renderer)
+    // Retire private references even when a newer shared failure masks them.
+    if (this.failure?.contextGeneration !== null && this.failure && this.failure.contextGeneration < generation)
+      this.failure = null
+    const shared = contextFailures.get(this.renderer)
+    if (shared && shared.contextGeneration !== null && shared.contextGeneration < generation)
+      contextFailures.delete(this.renderer)
+    return contextFailures.get(this.renderer) ?? this.failure
   }
   public record(cause: unknown, evidence: CloudCompilationEvidence, boundary: string): void {
     const previous = this.current
@@ -36,7 +51,8 @@ export class CloudCompilationFailures {
       recovery,
       receivers: recovery === 'owned-near' ? receivers : undefined,
       cause: previous?.cause ?? cause,
-      boundary: previous?.boundary ?? boundary
+      boundary: previous?.boundary ?? boundary,
+      contextGeneration: this.renderer ? getRendererContextGeneration(this.renderer) : null
     }
     if (recovery === 'context' && this.renderer) contextFailures.set(this.renderer, this.failure)
   }

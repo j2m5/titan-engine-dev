@@ -33,6 +33,8 @@ export const sceneCloudProbeRegistry: Partial<
       'bad-instance-shader-retry',
       'nonselected-depth-context-latch',
       'unknown-near-context-latch',
+      'menu-depth-context-recovery',
+      'menu-near-context-recovery',
       'source-eviction-reload',
       'same-id-new-bitmap',
       'independent-far-color',

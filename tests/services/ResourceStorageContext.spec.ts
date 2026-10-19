@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Texture, type WebGLRenderer } from 'three'
-import { bindResourceStorageContext, resourceStorage } from '@/core/services/ResourceStorage'
+import {
+  bindResourceStorageContext,
+  getRendererContextGeneration,
+  resourceStorage
+} from '@/core/services/ResourceStorage'
 import { Engine } from '@/core/Engine'
 
 afterEach(() => resourceStorage.deleteAllTextures())
@@ -11,6 +15,35 @@ function renderer(lost = false) {
   } as unknown as WebGLRenderer
 }
 describe('resource owner context lifecycle', () => {
+  it('keeps a monotonic observed context generation across final release/rebind and ignores unpaired events', () => {
+    const active = renderer(),
+      owner = { invalidateTextureGpuHandles: vi.fn() }
+    let release = bindResourceStorageContext(active, owner)
+    const emit = (type: string) => active.domElement.dispatchEvent(new Event(type))
+    try {
+      emit('webglcontextrestored')
+      expect(getRendererContextGeneration(active)).toBe(0)
+      emit('webglcontextlost')
+      emit('webglcontextlost')
+      expect(getRendererContextGeneration(active)).toBe(0)
+      emit('webglcontextrestored')
+      emit('webglcontextrestored')
+      expect(getRendererContextGeneration(active)).toBe(1)
+      release()
+      emit('webglcontextlost')
+      emit('webglcontextrestored')
+      release = bindResourceStorageContext(active, owner)
+      expect(getRendererContextGeneration(active)).toBe(1)
+      emit('webglcontextrestored')
+      expect(getRendererContextGeneration(active)).toBe(1)
+      emit('webglcontextlost')
+      emit('webglcontextrestored')
+      expect(getRendererContextGeneration(active)).toBe(2)
+      expect(owner.invalidateTextureGpuHandles).toHaveBeenCalledTimes(2)
+    } finally {
+      release()
+    }
+  })
   it('keeps the Engine-owned binding across scenario disposal and releases it only at final renderer cleanup', () => {
     const active = renderer(),
       texture = new Texture()

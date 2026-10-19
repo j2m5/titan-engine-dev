@@ -5,6 +5,7 @@ import {
   DataTexture,
   Object3D,
   PerspectiveCamera,
+  Scene,
   ShaderMaterial,
   Texture,
   Vector2,
@@ -13,7 +14,8 @@ import {
 import { SceneCloudRuntime } from '@/core/clouds/SceneCloudRuntime'
 import { CloudRegistry, type CloudBodyEntry } from '@/core/services/CloudRegistry'
 import { createEarthCloudProfile } from '@/core/clouds/profiles/earthCloudProfile'
-import { resourceStorage } from '@/core/services/ResourceStorage'
+import { bindResourceStorageContext, resourceStorage } from '@/core/services/ResourceStorage'
+import { Postprocessing } from '@/core/graphic/Postprocessing'
 import { prepareCloudSource } from '@/core/clouds/appearance/prepareCloudSource'
 import type { SceneCloudOutput } from '@/core/clouds/takram/SceneCloudBackend'
 import type { AtmosphereEntry } from '@/core/services/AtmosphereRegistry'
@@ -102,7 +104,7 @@ function fixture(pending = false) {
       return {
         frame,
         atmosphereActorId: 8,
-        atmosphereGeneration: 1,
+        atmosphereGeneration: entry.generation,
         atmosphereBottomRadiusMeters: 6360000,
         historyGeneration: 0,
         overlay: new Texture(),
@@ -137,6 +139,70 @@ function fixture(pending = false) {
 }
 afterEach(() => resourceStorage.deleteAllTextures())
 describe('scene cloud runtime', () => {
+  it.each(['depth', 'near'] as const)(
+    'accepts fresh output after a latched %s failure and menu-time context recovery',
+    (stage) => {
+      const f = fixture(),
+        canvas = document.createElement('canvas')
+      let lost = false
+      const renderer = {
+        domElement: canvas,
+        getContext: () => ({ isContextLost: () => lost }),
+        getRenderTarget: () => null
+      }
+      const release = bindResourceStorageContext(renderer as never)
+      const post = new Postprocessing(
+        renderer as never,
+        new Scene(),
+        f.camera,
+        null as never,
+        null as never,
+        undefined,
+        f.runtime
+      )
+      const composer = () => ({ dispose() {} }) as never
+      const target = new WebGLRenderTarget()
+      try {
+        post.composer = composer()
+        f.begin()
+        const failure = Error('menu retained compilation failure')
+        f.runtime.invalidate('error', failure, { stage, recovery: 'context' })
+        post.dispose()
+        // A restore assertion/event alone must never release a retained failed program.
+        canvas.dispatchEvent(new Event('webglcontextrestored'))
+        f.runtime.setContextLost(false)
+        expect(f.begin()).toBeNull()
+        expect(f.runtime.error).toBe(failure)
+        lost = true
+        canvas.dispatchEvent(new Event('webglcontextlost'))
+        lost = false
+        canvas.dispatchEvent(new Event('webglcontextrestored'))
+        f.entry.generation++
+        f.entry.ready = true
+        post.composer = composer()
+        post.initialize()
+        expect(f.runtime.diagnostics.effectiveWeight).toBe(0)
+        const plan = f.begin()
+        expect(plan, 'genuine menu recovery must unlock a fresh plan').not.toBeNull()
+        const output = f.runtime.renderVolume(renderer as never, target, plan!, {
+          serial: plan!.frame.serial,
+          viewport: size,
+          texture: new Texture(),
+          sceneLogFarFactor: 1,
+          sceneUnitsToMeters: 1
+        })
+        expect(output).not.toBeNull()
+        f.runtime.useEndpoint(plan, output)
+        expect(f.runtime.diagnostics.effectiveWeight).toBeGreaterThan(0)
+        expect(f.runtime.error).toBeNull()
+      } finally {
+        post.dispose()
+        f.runtime.dispose()
+        target.dispose()
+        release()
+      }
+    }
+  )
   it('keeps the original backend cause when the enclosing compilation scope adds fatal evidence', () => {
     const f = fixture(),
       cause = Error('original backend render cause')

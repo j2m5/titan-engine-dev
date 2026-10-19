@@ -3,8 +3,49 @@ import type { WebGLRenderer } from 'three'
 import type { SceneCloudReceiver } from '@/core/clouds/receivers/SceneCloudReceiver'
 import { CloudCompilationFailures } from '@/core/clouds/scene/cloudCompilationFailure'
 import { captureShaderCompilation } from '@/core/graphic/effects/atmosphere/shaderCompilationScope'
+import { bindResourceStorageContext } from '@/core/services/ResourceStorage'
 
 describe('cloud compilation failure boundary', () => {
+  it('consumes only an observed restoration, across reconstruction and owner release/rebind, without reviving old failures', () => {
+    const canvas = document.createElement('canvas'),
+      renderer = {
+        domElement: canvas,
+        getContext: () => ({ isContextLost: () => false })
+      } as unknown as WebGLRenderer
+    const owner = { invalidateTextureGpuHandles() {} }
+    let release = bindResourceStorageContext(renderer, owner)
+    const first = new CloudCompilationFailures(),
+      cause = Error('old context')
+    first.bind(renderer)
+    first.record(cause, { stage: 'depth', recovery: 'context' }, 'old')
+    try {
+      canvas.dispatchEvent(new Event('webglcontextrestored'))
+      expect(first.retry('unpaired', [])).toBe(false)
+      canvas.dispatchEvent(new Event('webglcontextlost'))
+      canvas.dispatchEvent(new Event('webglcontextrestored'))
+      release()
+      release = bindResourceStorageContext(renderer, owner)
+      const next = new CloudCompilationFailures()
+      next.bind(renderer)
+      expect(next.current).toBeNull()
+      expect(first.current).toBeNull()
+      first.bind(renderer)
+      expect(first.current).toBeNull()
+      const freshCause = Error('new context failure')
+      next.record(freshCause, { stage: 'near', recovery: 'context' }, 'new')
+      expect(first.current?.cause).toBe(freshCause)
+      release()
+      release = bindResourceStorageContext(renderer, owner)
+      canvas.dispatchEvent(new Event('webglcontextrestored'))
+      expect(next.retry('rebound/unpaired', [])).toBe(false)
+      canvas.dispatchEvent(new Event('webglcontextlost'))
+      canvas.dispatchEvent(new Event('webglcontextrestored'))
+      expect(next.current).toBeNull()
+      expect(first.current).toBeNull()
+    } finally {
+      release()
+    }
+  })
   it('classifies a nested diagnostic from the previous handler as context-only, preserving first attribution', () => {
     const receiver = { retryEndpointMaterial: vi.fn() } as unknown as SceneCloudReceiver,
       failures = new CloudCompilationFailures(),

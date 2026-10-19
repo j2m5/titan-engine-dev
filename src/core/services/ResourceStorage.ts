@@ -119,6 +119,13 @@ export const resourceStorage: ResourceStorage = new ResourceStorage()
 type StorageRenderer = Pick<WebGLRenderer, 'domElement' | 'getContext'>
 type GpuOwner = Pick<ResourceStorage, 'invalidateTextureGpuHandles'>
 const contextBindings = new WeakMap<StorageRenderer, { owner: GpuOwner; leases: number; remove(): void }>()
+// Observations belong to the renderer lifetime, including gaps between binding leases.
+const contextGenerations = new WeakMap<StorageRenderer, number>()
+
+/** Advances only when the lifetime binding observes a loss followed by restoration. */
+export function getRendererContextGeneration(renderer: StorageRenderer): number {
+  return contextGenerations.get(renderer) ?? 0
+}
 
 /** One application renderer owns the singleton storage. Texture.dispose broadcasts to all renderers.
  * Keep this lease across scenario/menu teardown; release only with the renderer's final owner.
@@ -135,7 +142,9 @@ export function bindResourceStorageContext(renderer: StorageRenderer, storage: G
       storage.invalidateTextureGpuHandles()
     }
     const onRestored = () => {
-      if (active) lost = false
+      if (!active || !lost) return
+      lost = false
+      contextGenerations.set(renderer, getRendererContextGeneration(renderer) + 1)
     }
     renderer.domElement.addEventListener('webglcontextlost', onLost)
     renderer.domElement.addEventListener('webglcontextrestored', onRestored)

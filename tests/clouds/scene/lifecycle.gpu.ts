@@ -25,7 +25,11 @@ import { SceneCloudBackend } from '@/core/clouds/takram/SceneCloudBackend'
 import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
 import { createEarthCloudProfile } from '@/core/clouds/profiles/earthCloudProfile'
 import { prepareCloudSource } from '@/core/clouds/appearance/prepareCloudSource'
-import { bindResourceStorageContext, resourceStorage } from '@/core/services/ResourceStorage'
+import {
+  bindResourceStorageContext,
+  getRendererContextGeneration,
+  resourceStorage
+} from '@/core/services/ResourceStorage'
 import { BrunetonAtmosphere } from '@/core/renderables/Atmosphere/BrunetonAtmosphere'
 import { EMPTY_LAYER, expLayer, type AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { SpaceScale } from '@/core/constants'
@@ -230,6 +234,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
   }
   const windows: Array<{ start: number; end: number }> = []
   const measurements: unknown[] = []
+  const menuRecoveries: unknown[] = []
   const started = performance.now(),
     phases: unknown[] = []
   const phase = (name: string) => {
@@ -263,11 +268,26 @@ export async function run(): Promise<SceneCloudProbeReport> {
     flags.push({ label, codes, start, end })
     windows.push({ start, end })
   }
-  const restoreContext = async (label: string, retireFailedFixture?: () => void) => {
+  const restoreContext = async (label: string, retireFailedFixture?: () => void, duringMenu = false) => {
     phase(`${label}: loss begin`)
     const evictWithoutReupload = texture('lifecycle-loss-eviction')
     borrowedReadable(evictWithoutReupload)
     const sourceBeforeLoss = resourceStorage.getTextureSnapshot(evictWithoutReupload.name)!
+    const contextGeneration = getRendererContextGeneration(renderer)
+    if (duringMenu) {
+      const cause = runtime.error
+      check(cause !== null, 'menu exit starts with a latched compilation cause')
+      post.dispose()
+      stopReceiver()
+      stopBody()
+      check(
+        post.composer === null && registry.entries().length === 0,
+        'menu exit releases scene composition and registration'
+      )
+      runtime.setContextLost(false)
+      check(runtime.error === cause, 'unpaired restore assertion cannot clear menu failure')
+      phase(`${label}: scenario disposed before loss`)
+    }
     checkGL(`${label} before loss`)
     const extension = gl.getExtension('WEBGL_lose_context')
     check(!!extension, 'context-loss extension available')
@@ -295,7 +315,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
       'production storage loss binding preserves borrowed source identity and content stamps'
     )
     check(
-      runtime.diagnostics.state === 'context-lost' &&
+      runtime.diagnostics.state === (duringMenu ? 'unconfigured' : 'context-lost') &&
         runtime.diagnostics.effectiveWeight === 0 &&
         !atmospheres.get(8)!.ready,
       'actual loss clears output and LUT readiness'
@@ -312,6 +332,10 @@ export async function run(): Promise<SceneCloudProbeReport> {
     await frame()
     extension!.restoreContext()
     await restored
+    check(
+      getRendererContextGeneration(renderer) === contextGeneration + 1,
+      'lifetime binding observes one genuine context generation'
+    )
     resourceStorage.deleteTexture(evictWithoutReupload.name)
     checkGL(`${label} source eviction after restore without reupload`)
     check(
@@ -320,9 +344,30 @@ export async function run(): Promise<SceneCloudProbeReport> {
         runtime.diagnostics.effectiveWeight === 0,
       'restore waits for current ready LUT and fresh output'
     )
+    if (duringMenu) {
+      check(
+        post.composer === null && registry.entries().length === 0,
+        'menu restore never resurrects disposed composition'
+      )
+      stopBody = registry.register(body)
+      stopReceiver = registry.bindReceiver(7, receiver)
+      initialize()
+      check(runtime.diagnostics.effectiveWeight === 0, 'reentry requires first fresh cloud output')
+      phase(`${label}: initialized after menu restore`)
+    }
     post.composer!.autoRenderToScreen = false
     for (const pass of post.composer!.passes) pass.renderToScreen = false
     draw()
+    if (duringMenu) {
+      check(runtime.error === null, 'fresh context clears old menu compilation cause')
+      menuRecoveries.push({
+        label,
+        contextGenerationBefore: contextGeneration,
+        contextGenerationAfter: getRendererContextGeneration(renderer),
+        readyLutGeneration: atmospheres.get(8)!.generation,
+        effectiveWeight: runtime.diagnostics.effectiveWeight
+      })
+    }
     checkGL(`${label} restored fresh frame`)
     phase(`${label}: fresh restored output`)
   }
@@ -392,7 +437,12 @@ export async function run(): Promise<SceneCloudProbeReport> {
     report.cases.push('bad-instance-shader-retry')
     phase('owned-near retry completed')
     checkGL('owned near recovery')
-    for (const stage of ['depth', 'near'] as const) {
+    for (const { stage, duringMenu } of [
+      { stage: 'depth', duringMenu: false },
+      { stage: 'near', duringMenu: false },
+      { stage: 'depth', duringMenu: true },
+      { stage: 'near', duringMenu: true }
+    ] as const) {
       const bad = new ShaderMaterial({
         transparent: stage === 'near',
         vertexShader: 'void main(){gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
@@ -444,13 +494,23 @@ export async function run(): Promise<SceneCloudProbeReport> {
       )
       scene.remove(nonselected)
       // Retain the failed material/program until the genuine context cache reset.
-      await restoreContext(`nonselected ${stage}`, () => {
-        bad.dispose()
-        badGeometry.dispose()
-      })
+      await restoreContext(
+        `${duringMenu ? 'menu ' : ''}nonselected ${stage}`,
+        () => {
+          bad.dispose()
+          badGeometry.dispose()
+        },
+        duringMenu
+      )
       settings.cloudQuality = 'low'
       draw()
-      report.cases.push(stage === 'depth' ? 'nonselected-depth-context-latch' : 'unknown-near-context-latch')
+      report.cases.push(
+        duringMenu
+          ? `menu-${stage}-context-recovery`
+          : stage === 'depth'
+            ? 'nonselected-depth-context-latch'
+            : 'unknown-near-context-latch'
+      )
     }
     // A same-ID bitmap mutation without a storage event must be detected before publication.
     deferred = true
@@ -618,6 +678,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
       nearOffRetained,
       cycles,
       measurements,
+      menuRecoveries,
       backendSizes,
       currentTextures: allocated(),
       borrowedColorUuid: color.uuid,
