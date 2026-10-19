@@ -381,7 +381,7 @@ export async function run(fixture: 'full' | 'ownership' | 'scheduling' = 'full')
         await new Promise(requestAnimationFrame)
         const frameStart = performance.now()
         camera.position.x += unit
-        post.render(0)
+        post.render(1 / 60)
         if (runtime.diagnostics.effectiveWeight > 0 && !firstActivationMs)
           firstActivationMs = performance.now() - frameStart
         const now = performance.now()
@@ -399,7 +399,7 @@ export async function run(fixture: 'full' | 'ownership' | 'scheduling' = 'full')
         }
         previous = now
         if (performance.now() - prepStart > 120000) throw Error('Preparation timed out')
-      } while (runtime.diagnostics.state === 'preparing')
+      } while (['preparing', 'prepared', 'warming'].includes(runtime.diagnostics.state))
       observer.disconnect()
       const prepMs = completedAt - prepStart
       check(
@@ -415,6 +415,17 @@ export async function run(fixture: 'full' | 'ownership' | 'scheduling' = 'full')
         runtime.diagnostics.effectiveWeight > 0,
         `fresh output activates near: ${JSON.stringify(runtime.diagnostics)}`
       )
+      const fadeWeights = [runtime.diagnostics.effectiveWeight]
+      while (Math.abs(runtime.diagnostics.effectiveWeight - runtime.diagnostics.requestedWeight) > 1e-8) {
+        await new Promise(requestAnimationFrame)
+        post.render(1 / 60)
+        const weight = runtime.diagnostics.effectiveWeight
+        check(weight > fadeWeights[fadeWeights.length - 1], 'successful activation advances smoothly')
+        fadeWeights.push(weight)
+        if (fadeWeights.length > 60) throw Error('Cloud activation fade did not finish')
+      }
+      check(fadeWeights[0] < 0.1 && fadeWeights.length > 10, 'first ready output fades from the far endpoint')
+      if (!report.cases.includes('gpu-warmup-and-activation-fade')) report.cases.push('gpu-warmup-and-activation-fade')
       measurements.push({
         actorId,
         source: [source.image.width, source.image.height],
@@ -465,6 +476,14 @@ export async function run(fixture: 'full' | 'ownership' | 'scheduling' = 'full')
           'simulation-mutation-negative-control'
         )
       }
+      const settlePrograms = async () => {
+        const start = performance.now()
+        do {
+          await new Promise(requestAnimationFrame)
+          post.render(0)
+          if (performance.now() - start > 120000) throw Error('Receiver compilation timed out')
+        } while (runtime.diagnostics.reason === 'preparing')
+      }
       for (const weight of fixture === 'scheduling' ? [] : [0.25, 0.5, 0.75, 1, 0]) {
         // Invert the authored smoothstep LOD; source/config and body generation remain fixed.
         let lo = 0,
@@ -496,12 +515,16 @@ export async function run(fixture: 'full' | 'ownership' | 'scheduling' = 'full')
             'surface swap retains body/source generation'
           )
           report.cases.push('terrain-water-main-composition')
+          await settlePrograms()
         }
         const before = runtime.diagnostics
         post.render(0)
         const after = runtime.diagnostics
         check(after.finalRenders - before.finalRenders === 1, 'one final render')
-        check(after.depthPasses - before.depthPasses === (weight > 0 ? 1 : 0), 'one eligible depth orchestration')
+        check(
+          after.depthPasses - before.depthPasses === (weight > 0 ? 1 : 0),
+          `one eligible depth orchestration ${actorId}/${weight}: ${JSON.stringify(after)}`
+        )
         check(
           after.cloudUpdates - before.cloudUpdates === (weight > 0 ? 1 : 0) &&
             after.shadowUpdates - before.shadowUpdates === (weight > 0 ? 1 : 0),
@@ -531,7 +554,7 @@ export async function run(fixture: 'full' | 'ownership' | 'scheduling' = 'full')
             }
             owner.needsUpdate = true
             const start = Date.now()
-            post.render(0)
+            await settlePrograms()
             report.expectedShaderFailureWindows ??= []
             report.expectedShaderFailureWindows.push({ start, end: Date.now() + 1 })
             // Intentional invalid draw errors are confined to this demonstrated failure window.
@@ -567,7 +590,7 @@ export async function run(fixture: 'full' | 'ownership' | 'scheduling' = 'full')
             const retryStart = performance.now()
             while (runtime.diagnostics.effectiveWeight === 0 && performance.now() - retryStart < 90000) {
               await new Promise(requestAnimationFrame)
-              post.render(0)
+              post.render(1 / 60)
             }
             check(
               runtime.diagnostics.effectiveWeight > 0 && runtime.diagnostics.reason === null,

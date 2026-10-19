@@ -2,9 +2,13 @@ import type { AtmosphereShadow } from '@takram/three-atmosphere'
 import type { CloudsEffect } from '@takram/three-clouds'
 import {
   BasicDepthPacking,
+  Camera,
   Data3DTexture,
   HalfFloatType,
+  Mesh,
+  PlaneGeometry,
   PerspectiveCamera,
+  Scene,
   Texture,
   Vector4,
   WebGLRenderer,
@@ -19,6 +23,7 @@ import type { SceneCloudDepthFrame } from '@/core/graphic/clouds/SceneCloudDepth
 import type { AtmosphereEntry } from '@/core/services/AtmosphereRegistry'
 import { createPlanetCloudEffect, toTakramAtmosphere } from './planetCloudAdapter'
 import { createCloudTextures } from './cloudTextures'
+import { CloudProgramWarmup } from './CloudProgramWarmup'
 import { setCloudQuality } from './cloudQuality'
 import { prepareCloudTargets } from './prepareCloudTargets'
 import { installSceneCloudPatches, type SceneCloudPatchBinding } from './sceneCloudLighting'
@@ -59,12 +64,17 @@ export class SceneCloudBackend {
   public get updateCounts(): Readonly<{ cloudUpdates: number; shadowUpdates: number }> {
     return this.counts
   }
+  public get shadowCascadeCount(): number {
+    return this.effect.shadow.cascadeCount
+  }
   private effect!: CloudsEffect
   private noise: ReturnType<typeof createCloudTextures>
   private appearance!: CloudAppearanceBinding
   private patches!: SceneCloudPatchBinding
   private restoreTargets!: () => void
   private initialized = false
+  private readonly warmup = new CloudProgramWarmup()
+  private warmupStarted = false
   private disposed = false
   private historyGeneration = 0
   private atmosphereGeneration: number
@@ -92,6 +102,8 @@ export class SceneCloudBackend {
   }
 
   private createEffect(): void {
+    this.warmup.clear()
+    this.warmupStarted = false
     const effect = createPlanetCloudEffect(this.frame.camera, toTakramAtmosphere(this.atmosphere.config))
     this.effect = effect
     for (const material of [
@@ -133,6 +145,59 @@ export class SceneCloudBackend {
       this.releaseEffect()
       throw error
     }
+  }
+
+  /** Compile the exact first-draw variants while the live scene keeps its far endpoint. */
+  public prepare(renderer: WebGLRenderer, inputBuffer: WebGLRenderTarget): boolean {
+    if (this.disposed) throw new Error('Scene cloud backend is disposed')
+    if (!renderer.extensions.has('KHR_parallel_shader_compile')) return true
+    if (!this.warmupStarted) {
+      const effect = this.effect,
+        camera = new Camera(),
+        scene = new Scene(),
+        geometry = new PlaneGeometry(2, 2)
+      const target = renderer.getRenderTarget(),
+        face = renderer.getActiveCubeFace(),
+        mip = renderer.getActiveMipmapLevel()
+      const viewport = renderer.getViewport(new Vector4()),
+        scissor = renderer.getScissor(new Vector4()),
+        test = renderer.getScissorTest()
+      try {
+        if (!this.initialized) {
+          effect.initialize(renderer, false, HalfFloatType)
+          this.initialized = true
+        }
+        const { mapSize, cascadeCount } = effect.shadow
+        effect.shadowPass.setSize(mapSize.x, mapSize.y, cascadeCount)
+        effect.cloudsPass.setShadowSize(mapSize.x, mapSize.y, cascadeCount)
+        effect.cloudsPass.currentMaterial.copyCameraSettings(this.frame.camera)
+        effect.cloudsPass.currentMaterial.depthPacking = BasicDepthPacking
+        effect.cloudsPass.currentMaterial.localWeatherChannels = effect.cloudLayers.localWeatherChannels
+        effect.shadowPass.currentMaterial.localWeatherChannels = effect.cloudLayers.localWeatherChannels
+        renderer.setRenderTarget(inputBuffer)
+        for (const material of [
+          effect.cloudsPass.currentMaterial,
+          effect.cloudsPass.resolveMaterial,
+          effect.shadowPass.currentMaterial,
+          effect.shadowPass.resolveMaterial
+        ]) {
+          const mesh = new Mesh(geometry, material)
+          // Pinned CloudsMaterial chooses logarithmic depth and powder defines here.
+          material.onBeforeRender(renderer, scene, camera, geometry, mesh, null as never)
+          scene.add(mesh)
+        }
+        for (const mesh of this.noise.warmupMeshes) this.warmup.compile(renderer, mesh, camera)
+        this.warmup.compile(renderer, scene, camera)
+        this.warmupStarted = true
+      } finally {
+        geometry.dispose()
+        renderer.setRenderTarget(target, face, mip)
+        renderer.setViewport(viewport)
+        renderer.setScissor(scissor)
+        renderer.setScissorTest(test)
+      }
+    }
+    return this.warmup.ready()
   }
 
   public render(
@@ -232,6 +297,7 @@ export class SceneCloudBackend {
   }
 
   private releaseEffect(): void {
+    this.warmup.clear()
     this.restoreTargets?.()
     this.patches?.dispose()
     this.appearance?.dispose()

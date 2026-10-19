@@ -1,7 +1,10 @@
 import { Pass } from 'postprocessing'
-import { DataTexture, ShaderMaterial, Texture, WebGLRenderer, WebGLRenderTarget } from 'three'
+import { DataTexture, ShaderMaterial, Texture, Vector4, WebGLRenderer, WebGLRenderTarget } from 'three'
+import { CloudProgramWarmup } from '@/core/clouds/takram/CloudProgramWarmup'
 /** Complete linear HDR endpoints, before the shared grading and tone mapping passes. */
 export class CloudBlendPass extends Pass {
+  private readonly warmup = new CloudProgramWarmup()
+  private warmupStarted = false
   private readonly neutral = new DataTexture(new Uint8Array(4), 1, 1)
   private readonly material = new ShaderMaterial({
     depthTest: false,
@@ -22,6 +25,27 @@ export class CloudBlendPass extends Pass {
     this.material.uniforms.sceneCloudNear.value = texture ?? this.neutral
     this.material.uniforms.sceneCloudWeight.value = texture ? Math.max(0, Math.min(1, weight)) : 0
   }
+  public prepare(renderer: WebGLRenderer, input: WebGLRenderTarget): boolean {
+    if (!this.warmupStarted) {
+      const target = renderer.getRenderTarget(),
+        face = renderer.getActiveCubeFace(),
+        mip = renderer.getActiveMipmapLevel()
+      const viewport = renderer.getViewport(new Vector4()),
+        scissor = renderer.getScissor(new Vector4()),
+        test = renderer.getScissorTest()
+      try {
+        renderer.setRenderTarget(input)
+        this.warmup.compile(renderer, this.scene, this.camera)
+        this.warmupStarted = true
+      } finally {
+        renderer.setRenderTarget(target, face, mip)
+        renderer.setViewport(viewport)
+        renderer.setScissor(scissor)
+        renderer.setScissorTest(test)
+      }
+    }
+    return this.warmup.ready()
+  }
   public override render(
     renderer: WebGLRenderer,
     inputBuffer: WebGLRenderTarget,
@@ -32,6 +56,7 @@ export class CloudBlendPass extends Pass {
     renderer.render(this.scene, this.camera)
   }
   public override dispose(): void {
+    this.warmup.clear()
     this.material.uniforms.sceneCloudNear.value = null
     this.material.uniforms.inputBuffer.value = null
     this.neutral.dispose()

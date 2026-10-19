@@ -21,7 +21,7 @@ import type { SceneCloudLightSettings } from './sceneCloudLight'
 
 export interface SceneCloudReceiver {
   getLightSettings?(): SceneCloudLightSettings
-  getEndpointMaterial(endpoint: 'far' | 'near'): ShaderMaterial
+  getEndpointMaterial(endpoint: 'far' | 'near', shadowCascadeCount?: number): ShaderMaterial
   retryEndpointMaterial(): void
   setFarMap(
     map: SurfaceCloudMap | null,
@@ -122,7 +122,8 @@ export function bindSceneCloudReceiver(
     near = false
   let nearMaterial: ShaderMaterial | null = null,
     nearSignature = '',
-    retryEpoch = 0
+    retryEpoch = 0,
+    shadowCascadeCount = 1
   function clearShadow() {
     u.sceneCloudShadowEnabled.value = false
     u.sceneCloudShadowShadowBuffer.value = neutral
@@ -149,13 +150,19 @@ export function bindSceneCloudReceiver(
         sunAngularRadius: u.uAtmoSunAngularRadius?.value ?? 0
       }
     },
-    getEndpointMaterial(endpoint) {
+    getEndpointMaterial(endpoint, preparedCascadeCount) {
       if (disposed) throw new Error('Scene cloud receiver is disposed')
       currentUniforms()
       if (endpoint === 'far') return material
-      const signature = sceneCloudProgramSignature(material)
+      if (preparedCascadeCount !== undefined) {
+        if (!Number.isInteger(preparedCascadeCount) || preparedCascadeCount < 1 || preparedCascadeCount > 4)
+          throw new Error('Scene cloud cascade count must be 1..4')
+        shadowCascadeCount = preparedCascadeCount
+      }
+      const signature = `${sceneCloudProgramSignature(material)};cascades:${shadowCascadeCount}`
       nearMaterial ??= new ShaderMaterial()
       syncSceneCloudNearMaterial(material, nearMaterial)
+      nearMaterial.defines.SCENE_CLOUD_SHADOW_CASCADE_COUNT = shadowCascadeCount
       if (retryEpoch) {
         const key = nearMaterial.customProgramCacheKey()
         nearMaterial.customProgramCacheKey = () => `${key};scene-cloud-near-retry-${retryEpoch}`
@@ -233,10 +240,7 @@ export function bindSceneCloudReceiver(
           count = shadow.cascadeCount
         if (!Number.isInteger(count) || count < 1 || count > 4)
           throw new Error('Scene cloud cascade count must be 1..4')
-        if (material.defines.SCENE_CLOUD_SHADOW_CASCADE_COUNT !== count) {
-          material.defines.SCENE_CLOUD_SHADOW_CASCADE_COUNT = count
-          material.needsUpdate = true
-        }
+        shadowCascadeCount = count
         u.sceneCloudShadowEnabled.value = true
         u.sceneCloudShadowShadowBuffer.value = shadow.map
         u.sceneCloudShadowStbnTexture.value = output.stbn

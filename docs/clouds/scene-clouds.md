@@ -408,3 +408,166 @@ probe was not repeated for this bounded lighting change.
 
 Pinned integration versions: `@takram/three-clouds` 0.7.6,
 `@takram/three-atmosphere` 0.19.1, `@takram/three-geospatial` 0.9.1.
+
+### Cold activation and gradual appearance (2026-10-19)
+
+The main scene now keeps the far endpoint through source preparation, shader
+compilation and one hidden complete near frame. Shader readiness is polled from
+the render loop with `KHR_parallel_shader_compile`; no timer or promise retains
+disposed cloud materials. The pinned Three r182 adapter checks both program and
+shader completion before first-use reflection. Failed links retain Three's normal
+checked-draw diagnostics and the existing owned-program recovery boundary.
+Without the extension, the renderer follows its synchronous compilation path.
+See the [KHR extension specification](https://registry.khronos.org/webgl/extensions/KHR_parallel_shader_compile/).
+
+Preparation includes procedural noise, cloud/shadow current and resolve passes,
+depth composition, water depth, near surface materials and the final cloud blend.
+Near receivers use the actual quality preset's cascade count before compilation.
+Publishing shadows no longer changes the far owner's cascade define; medium/high
+activation previously caused redundant near and subsequent far/depth compilation.
+
+A WebGL2 fence follows the hidden near frame. Polling uses a zero timeout; while
+the GPU is busy the far endpoint remains selected. Once signaled, the compositor
+renders the current camera/frame again before exposing its output. Cancellation,
+source/body generation changes and disposal delete the pending fence and clear
+compilation references. This does not advance the simulation clock or render a
+stale prepared camera view.
+
+Successful activation multiplies the existing distance LOD weight by a 0.6-second
+smoothstep. Only completed active presentations advance it, once per frame serial;
+individual deltas are capped at 50 ms so a loading pause cannot skip the fade.
+Zero-delta screenshots do not advance it, and history resets for capture/resize
+do not restart it. Turning clouds off/on or replacing their prepared source does.
+Cloud density, lighting, temporal resolve and steady quality budgets are retained.
+
+The cold-start comparison used fresh headless Chrome sessions, NVIDIA RTX 5070 Ti
+through ANGLE/D3D11, 1280 x 800, DPR 1, medium quality, epoch JD 2451545 and a
+70 km sunward Earth view. Instrumentation records CPU submission time and RAF
+intervals independently; first-use GPU timer queries can include queued driver
+work and are not treated as isolated shader execution costs.
+
+| Measurement | Before | After |
+| --- | --- | --- |
+| CPU frame that first selects a nonzero volume weight | 5904.2 ms | 13.0 ms |
+| First nonzero weight | 1.0 | 0.0197 |
+| Subsequent appearance transition | Immediate | 555.4 ms / 58 frames |
+| Maximum RAF interval within the visible transition | No fade | 13.6 ms |
+| Maximum source-preparation work slice | 4.1 ms | 4.6 ms |
+
+The new first visible frame still follows a 1580 ms interval while the hidden
+first GPU workload retires. Other cold terrain/water compilation produced a
+2493.7 ms CPU frame, with a maximum 2498.7 ms RAF interval across the whole boot.
+Thus the change moves preparation ahead of the visible transition and removes
+redundant compilation; it does not eliminate all cold stalls. Source preparation
+wall time was 6.78 / 7.15 seconds in these full-scene boots, including scheduling
+and competing scene work. These measurements do not establish steady FPS gains
+or performance on weaker cards. Discrete GPUs are the target; the previous AMD
+integrated GPU is not a required hardware floor. Low/medium preset cost reduction
+and measurements on other discrete GPUs remain separate work.
+
+Raw startup frames, program events, screenshot and comparison values are retained
+locally in `tmpscreenshots/cloud-tuning/startup-final/`; the earlier cold reference
+is in `startup-baseline/`. The pipeline GPU probe passes 880 checks across 18
+cases, readiness 75 across 9, lifecycle 147 across 14, and simulation scheduling
+70 across 5. They cover smooth activation, shader recovery, quality changes,
+capture/resize, context restoration, ownership release and simulation invariance.
+Expected invalid-shader draws are retired and their diagnostics delivered before
+closing each explicit failure window; ordinary rendering errors remain failures.
+
+The complete unit suite passes 5366 tests in 552 files, with 4 configured skips;
+TypeScript, production build and lint excluding local `.superpowers/**` pass.
+Deterministic composition tests additionally cover a pending fence, fresh output
+after signaling, cancellation/generation replacement, and wait failure restoration.
+The full baseline-dependent flight probe was not repeated for this iteration.
+
+Steady rendering was checked separately after the full suite/build finished.
+The same three medium-quality views settled for 120 frames with terrain/water
+present, followed by 30 warmup frames and 181 nondisjoint GPU samples per stage.
+GPU p50/p95 was 8.14/9.40 ms above, 7.43/8.20 ms inside and 8.57/9.57 ms in the
+distance transition; cloud-pass p50 above was 3.96 ms. Counts matched the earlier
+sun-shadow views: terrain/water 114/60, 117/60, 102/57; geometries 229/232/241 and
+textures 121/121/120. Compared with the earlier run, these medians are slightly
+higher; separate boots are not sufficient to attribute the difference.
+
+A diagnostic pair then bypassed only the already-completed preparation checks
+in the same live scene, retaining all normal draws and cloud quality. The order
+was reversed for the inside view. Production/bypass CPU p50 was 8.1/7.9,
+8.1/7.9 and 8.7/8.8 ms; GPU p50 was 8.31/8.05, 7.44/7.47 and 8.89/8.91 ms.
+Resources matched within each pair (227/230/239 geometries, 121/121/120 textures).
+This does not establish zero overhead, but no consistent GPU increase from the
+preparation checks appeared across the views. There is no steady speedup claim.
+The production frames and raw samples are in `startup-steady-final/` and the
+paired control in `startup-steady-paired/`, under `tmpscreenshots/cloud-tuning/`.
+
+The user inspected the cold-activation iteration live and reported an improvement
+before authorizing the following steady-cost work.
+
+### Terrestrial low/medium buffer budgets (2026-10-19)
+
+Terrestrial low and medium now use resolution scales 0.5 and 0.7 instead of
+0.65 and 0.8. At a 1920 x 1080 render size, their resolved cloud/history buffers
+are 960 x 540 and 1344 x 756. This removes 40.8% and 23.4% of the respective
+buffer pixel area; these percentages do not describe total VRAM or frame cost.
+The existing sparse temporal reconstruction and HDR composition remain in use.
+High, giant presets, primary march steps, sun samples, authored coverage, density
+and lighting parameters are unchanged. The shared preset also serves the Earth lab.
+
+Initial 1280 x 800 trials compared resolution, larger primary steps and both
+together. Larger steps raised above-layer mean opacity by about 4% on low and
+6% on medium, so the retained change only reduces buffer resolution. Fine details
+become softer, particularly on low; this is a quality/cost tradeoff.
+
+The final paired run used one headless Chrome 155 session, RTX 5070 Ti through
+ANGLE/D3D11, 1920 x 1080 at DPR 1, epoch JD 2451545 and fixed Earth views.
+Each variant settled for 120 frames with terrain/water present, then collected
+181 nondisjoint GPU samples after 30 stage warmup frames. The legacy variant
+overrode only resolution after applying the real production preset; order was
+reversed inside the layer. Median GPU times in milliseconds:
+
+| Quality / view | Cloud pass before / after | Whole frame before / after |
+| --- | --- | --- |
+| Low, above 12 km | 1.367 / 0.852 | 8.427 / 7.994 |
+| Low, inside 6 km | 0.720 / 0.562 | 7.663 / 7.519 |
+| Low, transition 110 km | 0.978 / 0.649 | 8.721 / 8.877 |
+| Medium, above 12 km | 6.345 / 5.060 | 11.265 / 9.970 |
+| Medium, inside 6 km | 2.816 / 2.448 | 8.179 / 8.060 |
+| Medium, transition 110 km | 4.284 / 3.135 | 11.032 / 9.942 |
+
+Cloud-pass savings were 22-38% on low and 13-27% on medium in these views.
+Whole-frame results vary, including a small increase in the low transition view;
+this is not an equivalent FPS improvement. Terrain/water counts matched within
+pairs: 132/60 for low above/inside, 138/60 for medium above/inside, 120/60 for
+both transitions. Resource counts also matched except the first pair, where the
+measurement helper allocated its readback target and plane after the legacy timing
+(253/121 to 254/122 geometries/textures); the helper does not draw during timings.
+No unit tests, builds or other owned GPU probes ran alongside these measurements.
+
+After 128 fixed warmup frames, raw cloud-output mean opacity differed by at most
+0.00094 on low and 0.000071 on medium across the three views. Pixelwise alpha MAE
+was 0.00189-0.00586 on low and 0.00070-0.00435 on medium, measured at 512 x 288.
+The 64-frame stationary sequences at 256 x 144 had mean absolute red-channel
+frame change 0.00008254 / 0.00008826 on low and 0.00005350 / 0.00005479 on medium.
+Corresponding alpha changes were 0.00007008 / 0.00008388 and
+0.00007427 / 0.00007497. These small increases are retained tradeoffs, not noise
+improvements. The same sequences also cover 1.5- and 6-degree rotations; their
+frame differences include real motion and smoothing, so they are not perceptual
+quality scores. Static production/legacy screenshots retain similar broad form.
+Live visual acceptance of these presets and measurements on weaker discrete
+cards remain open; this GPU alone cannot establish a new hardware minimum.
+
+Raw samples, environment, resource counts and paired production screenshots are
+in `tmpscreenshots/cloud-tuning/quality-final-1080/`; initial candidate comparisons
+are in `quality-candidates/`. The adapter regression checks actual output-buffer
+dimensions through medium/low/high/medium changes at 1080p, alongside existing
+geography, density and march-budget checks. It failed with the old dimensions
+before the preset change and passes with the new sizes.
+
+The lighting GPU probe passes 1094 checks across 34 cases, composition passes
+881 across 18, and lifecycle passes 147 across 14. These cover real cloud lighting,
+activation/composition, quality changes, 4K capture resize, context restoration and
+owned-resource release. The full baseline-dependent flight probe was not repeated.
+
+The full unit suite passes 5366 tests in 552 files, with 4 configured skips.
+TypeScript, production build, lint excluding local `.superpowers/**`, and formatting
+of the changed preset/adapter test pass. Independent review found no code issues;
+live perceptual acceptance and weaker-card measurements remain as described above.

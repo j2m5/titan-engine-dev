@@ -126,7 +126,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
       throw error
     }
   }
-  const expectedFailure = (work: () => unknown): Error => {
+  const expectedFailure = async (work: () => unknown): Promise<Error> => {
     const start = Date.now()
     let failure: Error | undefined
     try {
@@ -134,6 +134,10 @@ export async function run(): Promise<SceneCloudProbeReport> {
     } catch (error) {
       failure = error instanceof Error ? error : Error(String(error))
     } finally {
+      // Retire the deliberately invalid draw before closing its diagnostic window.
+      // ANGLE can otherwise report it during the following asynchronous compilation.
+      renderer.getContext().finish()
+      await new Promise(requestAnimationFrame)
       windows.push({ start, end: Date.now() + 1 })
     }
     check(
@@ -193,7 +197,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
     // Null is the production default handler. The checker must force diagnostics even with checks initially false.
     injectNext = true
     const initialState = setState()
-    expectedFailure(() => {
+    await expectedFailure(() => {
       owner = new BrunetonAtmosphere(model, renderer, registry)
     })
     check(!registry.get(2), 'failed initial LUT never registered ready')
@@ -225,7 +229,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
     renderer.debug.onShaderError = previous
     injectNext = true
     const restoreState = setState()
-    const error = expectedFailure(() => events.onContextRestored())
+    const error = await expectedFailure(() => events.onContextRestored())
     check(
       error.message.includes('prior handler sentinel') && priorCalls === 1,
       'previous throwing callback chained and deferred'
@@ -308,7 +312,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
     const failedCloudKey = failedEffect.cloudsPass.currentMaterial.customProgramCacheKey()
     injectNext = true // First actual draw belongs to owned procedural noise.
     const backendState = setState()
-    expectedFailure(cloudRender)
+    await expectedFailure(cloudRender)
     stateRestored(backendState, null)
     check(
       active() !== failedEffect && noise() !== failedNoise,
@@ -336,7 +340,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
       throw Error('backend prior handler sentinel')
     }
     const cloudPrevious = renderer.debug.onShaderError
-    const backendFailure = expectedFailure(cloudRender)
+    const backendFailure = await expectedFailure(cloudRender)
     check(backendFailure.message.includes('backend prior handler sentinel'), 'backend defers previous throwing handler')
     stateRestored(secondState, cloudPrevious)
     check(
@@ -350,6 +354,29 @@ export async function run(): Promise<SceneCloudProbeReport> {
     check(renderer.getContext().getError() === 0, 'successful cloud retry has no GL errors')
     ordinaryRender()
     report.cases.push('backend-retry', 'noise-retry', 'same-renderer-recovery', 'state-restoration')
+    backend.resetHistory()
+    active().cloudsPass.currentMaterial.fragmentShader =
+      '#error scene_cloud_readiness_fixture\n' + active().cloudsPass.currentMaterial.fragmentShader
+    active().cloudsPass.currentMaterial.needsUpdate = true
+    const prepareBackend = async () => {
+      const start = performance.now()
+      while (!backend!.prepare(renderer, input)) {
+        if (performance.now() - start > 60000) throw Error('Backend shader preparation timed out')
+        await new Promise(requestAnimationFrame)
+      }
+    }
+    const preparedState = setState()
+    await prepareBackend()
+    stateRestored(preparedState, null)
+    await expectedFailure(cloudRender)
+    await prepareBackend()
+    const preparedRecovery = cloudRender()
+    check(
+      preparedRecovery.historyGeneration > secondRecovery.historyGeneration,
+      'prepared invalid program retries a fresh generation'
+    )
+    check(renderer.getContext().getError() === 0, 'prepared shader retry has no residual GL errors')
+    report.cases.push('prepared-shader-failure-recovery')
     check(returnedFailedDraws >= 3, 'actual failed draws returned normally before errors were propagated')
   } finally {
     backend?.dispose()

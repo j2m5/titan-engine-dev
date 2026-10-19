@@ -127,15 +127,17 @@ describe('Earth cloud adapter', () => {
     const matrix = (clouds.cloudsPass.currentMaterial.uniforms.cloudECEFToPlanet.value as Matrix3).clone()
     const seed = clouds.shapeOffset.clone(),
       detailSeed = clouds.shapeDetailOffset.clone()
+    clouds.setSize(1920, 1080)
     try {
-      for (const [quality, resolution, minStep, iterations, sunSteps] of [
-        ['medium', 0.8, 50, 512, 2],
-        ['low', 0.65, 100, 256, 1],
-        ['high', 1, 25, 768, 4],
-        ['medium', 0.8, 50, 512, 2]
+      for (const [quality, bufferSize, minStep, iterations, sunSteps] of [
+        ['medium', [1344, 756], 50, 512, 2],
+        ['low', [960, 540], 100, 256, 1],
+        ['high', [1920, 1080], 25, 768, 4],
+        ['medium', [1344, 756], 50, 512, 2]
       ] as const) {
         setEarthCloudQuality(clouds, quality)
-        expect(clouds.resolutionScale).toBe(resolution)
+        const { width, height } = clouds.cloudsPass.outputBuffer.image
+        expect([width, height]).toEqual(bufferSize)
         expect(clouds.clouds).toMatchObject({
           minStepSize: minStep,
           maxStepSize: 1000,

@@ -206,8 +206,14 @@ export async function run(): Promise<SceneCloudProbeReport> {
     for (const pass of post.composer!.passes) pass.renderToScreen = false
   }
   initialize()
-  const draw = () => {
-    post.render(0)
+  const draw = async () => {
+    const start = performance.now()
+    do {
+      post.render(1 / 60)
+      if (runtime.diagnostics.reason === 'error' || performance.now() - start > 60000) break
+      if (runtime.diagnostics.effectiveWeight > 0) break
+      await new Promise(requestAnimationFrame)
+    } while (runtime.diagnostics.effectiveWeight === 0)
     check(
       runtime.diagnostics.effectiveWeight > 0,
       `fresh volume: ${runtime.diagnostics.reason} ${String(runtime.error)}`
@@ -357,7 +363,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
     }
     post.composer!.autoRenderToScreen = false
     for (const pass of post.composer!.passes) pass.renderToScreen = false
-    draw()
+    await draw()
     if (duringMenu) {
       check(runtime.error === null, 'fresh context clears old menu compilation cause')
       menuRecoveries.push({
@@ -381,7 +387,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
     const baselineTextures = allocated()
     phase('pre-cloud borrowed ownership baseline')
     settings.showClouds = true
-    draw()
+    await draw()
     settings.showClouds = false
     post.render(0)
     const nearOffRetained = { ...renderer.info.memory }
@@ -394,10 +400,10 @@ export async function run(): Promise<SceneCloudProbeReport> {
       'off clears maps and stops extra passes'
     )
     settings.showClouds = true
-    draw()
+    await draw()
     for (const quality of ['low', 'high', 'medium'] as const) {
       settings.cloudQuality = quality
-      draw()
+      await draw()
       check(runtime.diagnostics.effectiveWeight > 0, `${quality} fresh output`)
       phase(`${quality} quality fresh output`)
     }
@@ -432,7 +438,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
       'cached failed program remains latched'
     )
     settings.cloudQuality = 'low'
-    draw()
+    await draw()
     check(mesh.material === material, 'exact material owner restored')
     report.cases.push('bad-instance-shader-retry')
     phase('owned-near retry completed')
@@ -503,7 +509,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
         duringMenu
       )
       settings.cloudQuality = 'low'
-      draw()
+      await draw()
       report.cases.push(
         duringMenu
           ? `menu-${stage}-context-recovery`
@@ -526,7 +532,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
       'stale new-bitmap completion disposed exactly once'
     )
     deferred = false
-    draw()
+    await draw()
     resourceStorage.deleteTexture('lifecycle-density')
     check(
       material.uniforms.sceneCloudMap.value === null && !material.uniforms.sceneCloudShadowEnabled.value,
@@ -535,7 +541,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
     post.render(0)
     check(runtime.diagnostics.effectiveWeight === 0, 'missing source holds far fallback')
     source = texture('lifecycle-density')
-    draw()
+    await draw()
     report.cases.push('source-eviction-reload', 'same-id-new-bitmap')
     // Independent scalar far color remains independently tracked while density preparation is pending.
     body.descriptor.far = {
@@ -553,7 +559,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
     resourceStorage.deleteTexture('lifecycle-color')
     check(material.uniforms.sceneCloudColorMap.value === null, 'independent far color clears before eviction disposal')
     color = texture('lifecycle-color', 64)
-    draw()
+    await draw()
     check(
       material.uniforms.sceneCloudColorMap.value === color && material.uniforms.sceneCloudColorMap.value !== source,
       'independent far color reload never substitutes density'
@@ -577,7 +583,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
     stopReceiver = registry.bindReceiver(7, receiver)
     settings.cloudQuality = 'low'
     initialize()
-    draw()
+    await draw()
     report.cases.push('scenario-pending-cancellation')
     phase('source and pending scenario transitions completed')
     checkGL('source and scenario transitions')
@@ -586,7 +592,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
     post.setSize(32, 18)
     camera.aspect = 32 / 18
     camera.updateProjectionMatrix()
-    draw()
+    await draw()
     check(renderer.getDrawingBufferSize(new Vector2()).equals(new Vector2(64, 36)), 'physical DPR size')
     const beforeCapture = runtime.diagnostics.cloudUpdates
     const captureStart = performance.now()
@@ -636,7 +642,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
         runtime.diagnostics.effectiveWeight === 0,
       'failed capture restores owned target sizes and history before next draw'
     )
-    draw()
+    await draw()
     report.cases.push('resize-dpr-4k-return')
     phase('3840x2160 success/failure targets restored')
     checkGL('3840x2160 capture and failure finally')
@@ -653,7 +659,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
     camera.updateProjectionMatrix()
     const cycles: unknown[] = []
     for (let i = 0; i < 3; i++) {
-      draw()
+      await draw()
       post.dispose()
       stopReceiver()
       stopBody()

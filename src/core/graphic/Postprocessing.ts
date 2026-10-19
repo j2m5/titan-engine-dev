@@ -310,7 +310,13 @@ class Postprocessing {
       lensActive,
       readAtmosphereDebugView()
     )
-    const near = plan ? this.composition?.prepare(plan, snapshot) : null
+    const blendReady = plan ? this.blend.prepare(this.renderer, this.composer.inputBuffer) : false
+    if (!plan) this.composition?.cancelPreparation()
+    const near = plan
+      ? blendReady
+        ? this.composition?.prepare(plan, snapshot)
+        : this.cloudRuntime?.deferVolume(plan)
+      : null
     for (const pass of this.prefix) pass.enabled = !near || near.weight < 1
     this.blend.setNear(near?.texture ?? null, near?.weight ?? 0)
     try {

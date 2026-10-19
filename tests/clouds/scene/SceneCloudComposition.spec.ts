@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { Color, Texture, Vector2, Vector4, WebGLRenderTarget } from 'three'
 import {
   SceneCloudComposition,
@@ -19,6 +19,7 @@ describe('cloud endpoint composition', () => {
       autoClear: true,
       shadowMap: { autoUpdate: true },
       capabilities: { maxSamples: 0 },
+      extensions: { has: () => false },
       getContext: () => ({ getContextAttributes: () => ({ antialias: false }) }),
       getRenderTarget: () => null,
       getActiveCubeFace: () => 0,
@@ -38,9 +39,14 @@ describe('cloud endpoint composition', () => {
       render: () => {}
     }
     const runtime = {
+      preparationGeneration: 0,
+      prepareVolume: () => true,
+      diagnostics: { state: 'prepared' },
+      getPreparationMaterialBindings: () => new Map(),
+      getEndpointMaterialOwners: () => new Map(),
       recordPasses: () => {},
       useEndpoint: () => {},
-      invalidate: () => {},
+      invalidate: vi.fn(),
       renderVolume: () => ({}),
       getEndpointMaterialBindings: () => new Map()
     }
@@ -65,6 +71,11 @@ describe('cloud endpoint composition', () => {
       {} as never
     )
     expect(result).toBeNull()
+    expect(runtime.invalidate).toHaveBeenCalledWith(
+      'error',
+      expect.objectContaining({ message: 'overlay render failed' }),
+      undefined
+    )
     expect(camera.layers.mask).toBe(1)
     expect(renderer.shadowMap.autoUpdate).toBe(true)
     expect(renderer.autoClear).toBe(true)

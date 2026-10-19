@@ -100,7 +100,8 @@ export const sceneCloudProbeRegistry: Partial<
       'terrain-water-main-composition',
       'near-failure-restoration',
       'foreground-slot-insertion',
-      'async-tiled-bitmap-equivalence'
+      'async-tiled-bitmap-equivalence',
+      'gpu-warmup-and-activation-fade'
     ]
   },
   receivers: {
@@ -137,7 +138,8 @@ export const sceneCloudProbeRegistry: Partial<
       'backend-retry',
       'noise-retry',
       'same-renderer-recovery',
-      'state-restoration'
+      'state-restoration',
+      'prepared-shader-failure-recovery'
     ]
   },
   lighting: {

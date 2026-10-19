@@ -154,10 +154,13 @@ export async function verifySimulationPresentations(
           started = performance.now()
         do {
           await new Promise(requestAnimationFrame)
-          oldPost.call(post, 0)
+          oldPost.call(post, 1 / 60)
           if (performance.now() - started > 15000 || runtime.diagnostics.reason === 'error')
             throw Error('Tiny scheduling fixture failed readiness: ' + String(runtime.error))
-        } while (runtime.diagnostics.effectiveWeight === 0)
+        } while (
+          Math.abs(runtime.diagnostics.effectiveWeight - runtime.diagnostics.requestedWeight) > 1e-6 ||
+          runtime.diagnostics.effectiveWeight === 0
+        )
         if (JSON.stringify(snapshot()) !== JSON.stringify(beforeReady))
           throw Error('Presentation-only readiness warmup advanced simulation/animation')
       }

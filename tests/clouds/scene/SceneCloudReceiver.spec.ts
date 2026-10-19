@@ -69,6 +69,28 @@ function fixture() {
   return { frame, output, material, receiver: bindSceneCloudReceiver(material, 'sphere') }
 }
 describe('scene cloud receiver endpoints', () => {
+  it('prepares the actual near cascade layout without recompiling the far owner on activation', () => {
+    const f = fixture()
+    try {
+      const farVersion = f.material.version
+      const near = f.receiver.getEndpointMaterial('near', 3)
+      const nearVersion = near.version
+      expect(near.defines.SCENE_CLOUD_SHADOW_CASCADE_COUNT).toBe(3)
+      f.output.shadow!.cascadeCount = 3
+      f.output.shadow!.intervals = Array.from({ length: 3 }, () => new Vector2(0, 1))
+      f.output.shadow!.matrices = Array.from({ length: 3 }, () => new Matrix4())
+      f.output.shadow!.inverseMatrices = Array.from({ length: 3 }, () => new Matrix4())
+      f.receiver.setEndpoint(f.frame, f.output)
+      expect(f.receiver.getEndpointMaterial('near').version).toBe(nearVersion)
+      expect(f.material.version).toBe(farVersion)
+      expect(f.material.defines.SCENE_CLOUD_SHADOW_CASCADE_COUNT).toBe(1)
+      f.receiver.setEndpoint(null, null)
+      expect(f.receiver.getEndpointMaterial('near').version).toBe(nearVersion)
+      expect(f.material.uniforms.sceneCloudShadowEnabled.value).toBe(false)
+    } finally {
+      f.receiver.dispose()
+    }
+  })
   it('refreshes cached programs for live shader and layout changes without relying on owner.version', () => {
     const f = fixture()
     try {

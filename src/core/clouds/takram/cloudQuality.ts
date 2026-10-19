@@ -4,9 +4,11 @@ import type { CloudQualityProfile, CloudQuality } from '@/core/clouds/SceneCloud
 export function setCloudQuality(clouds: CloudsEffect, profile: CloudQualityProfile, quality: CloudQuality): void {
   if (profile === 'terrestrial') {
     clouds.qualityPreset = quality
+    // Scale the cloud buffers while retaining the march's density and lighting.
+    // At 1080p, low/medium resolve 960x540 / 1344x756 before HDR composition.
     const values = {
-      low: { resolution: 0.65, minStep: 100, iterations: 256, sunSteps: 1 },
-      medium: { resolution: 0.8, minStep: 50, iterations: 512, sunSteps: 2 },
+      low: { resolution: 0.5, minStep: 100, iterations: 256, sunSteps: 1 },
+      medium: { resolution: 0.7, minStep: 50, iterations: 512, sunSteps: 2 },
       high: { resolution: 1, minStep: 25, iterations: 768, sunSteps: 4 }
     }[quality]
     clouds.resolutionScale = values.resolution

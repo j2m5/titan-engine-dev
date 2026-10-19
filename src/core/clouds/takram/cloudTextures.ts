@@ -3,13 +3,13 @@ import { Data3DTexture, NearestFilter, RedFormat, RepeatWrapping, type BufferGeo
 import { appendProgramCacheKey } from '@/core/graphic/effects/atmosphere/shaderCompilationScope'
 
 /** Pinned 0.7.6 allocates one private plane per procedural texture, but omits it from dispose(). */
-function ownedGeometry(texture: CloudShape | CloudShapeDetail, programCacheKey?: string): BufferGeometry {
+function ownedMesh(texture: CloudShape | CloudShapeDetail, programCacheKey?: string): Mesh<BufferGeometry> {
   const mesh = (texture as unknown as { mesh?: Mesh }).mesh
   if (!mesh?.isMesh || !mesh.geometry?.isBufferGeometry || typeof mesh.geometry.dispose !== 'function')
     throw new Error('Unsupported pinned cloud procedural texture: expected instance-owned mesh.geometry')
   if (Array.isArray(mesh.material)) throw new Error('Unsupported pinned cloud procedural texture material layout')
   appendProgramCacheKey(mesh.material, programCacheKey)
-  return mesh.geometry
+  return mesh
 }
 
 /** Local procedural assets: no CDN, storage bucket, or Earth weather-map seams. */
@@ -32,11 +32,13 @@ export function createCloudTextures(programCacheKey?: string) {
   try {
     const shape = new CloudShape()
     releases.push(() => shape.dispose())
-    const shapeGeometry = ownedGeometry(shape, programCacheKey)
+    const shapeMesh = ownedMesh(shape, programCacheKey)
+    const shapeGeometry = shapeMesh.geometry
     releases.push(() => shapeGeometry.dispose())
     const detail = new CloudShapeDetail()
     releases.push(() => detail.dispose())
-    const detailGeometry = ownedGeometry(detail, programCacheKey)
+    const detailMesh = ownedMesh(detail, programCacheKey)
+    const detailGeometry = detailMesh.geometry
     if (detailGeometry === shapeGeometry)
       throw new Error('Unsupported pinned cloud procedural texture: geometry must be instance-owned, not shared')
     releases.push(() => detailGeometry.dispose())
@@ -62,6 +64,7 @@ export function createCloudTextures(programCacheKey?: string) {
       shape,
       detail,
       noise,
+      warmupMeshes: [shapeMesh, detailMesh],
       dispose
     }
   } catch (error) {

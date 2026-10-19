@@ -40,7 +40,16 @@ export interface CloudDiagnostics {
   /** Missing declared far sources, independent from the selected volume fallback. */
   farFallbacks: ReadonlyArray<Readonly<{ actorId: number; reason: 'resources' }>>
   actorId: number | null
-  state: 'unconfigured' | 'waiting' | 'preparing' | 'prepared' | 'ready' | 'active' | 'error' | 'context-lost'
+  state:
+    | 'unconfigured'
+    | 'waiting'
+    | 'preparing'
+    | 'prepared'
+    | 'warming'
+    | 'ready'
+    | 'active'
+    | 'error'
+    | 'context-lost'
   requestedWeight: number
   effectiveWeight: number
   reason: CloudFallbackReason
@@ -63,7 +72,10 @@ export interface SceneCloudRuntimeDeps {
     prepared: Prepared,
     profile: CloudQualityProfile,
     quality: CloudQuality
-  ) => Pick<SceneCloudBackend, 'render' | 'resetHistory' | 'setSize' | 'dispose' | 'updateCounts'>
+  ) => Pick<
+    SceneCloudBackend,
+    'prepare' | 'render' | 'resetHistory' | 'setSize' | 'dispose' | 'updateCounts' | 'shadowCascadeCount'
+  >
   prepare: (
     config: EnabledCloudConfig,
     resolveTexture: (id: number) => Texture | undefined,
@@ -92,6 +104,8 @@ export class SceneCloudRuntime {
   private targetSize: readonly [number, number] | null = null
   private output: SceneCloudOutput | null = null
   private plan: CloudFramePlan | null = null
+  private activationSeconds = 0
+  private activationSerial: number | null = null
   private disposed = false
   private failure: unknown = null
   private failedLayout: string | null = null
@@ -109,6 +123,9 @@ export class SceneCloudRuntime {
     farRenders: 0,
     nearRenders: 0,
     finalRenders: 0
+  }
+  public get preparationGeneration(): number {
+    return this.generation
   }
   public constructor(
     private readonly registry: CloudRegistry,
@@ -200,6 +217,8 @@ export class SceneCloudRuntime {
     this.targetSize = [width, height]
   }
   private release(): void {
+    this.activationSeconds = 0
+    this.activationSerial = null
     this.generation++
     this.abort?.abort()
     this.abort = null
@@ -460,16 +479,65 @@ export class SceneCloudRuntime {
       return null
     }
   }
-  public useEndpoint(plan: CloudFramePlan | null, output: SceneCloudOutput | null): void {
+  public prepareVolume(renderer: WebGLRenderer, input: WebGLRenderTarget, plan: CloudFramePlan): boolean {
+    if (plan !== this.plan || !this.prepared || !this.selected) return false
+    try {
+      this.backend ??= this.deps.createBackend(
+        plan.frame,
+        plan.atmosphere,
+        this.prepared,
+        this.selected.descriptor.qualityProfile,
+        this.quality
+      )
+      if (!this.backend.prepare(renderer, input)) {
+        this.deferVolume(plan)
+        return false
+      }
+      return true
+    } catch (error) {
+      this.invalidate('error', error)
+      return false
+    }
+  }
+  public deferVolume(plan: CloudFramePlan): null {
+    if (plan === this.plan) {
+      this.stats.state = 'warming'
+      this.stats.reason = 'preparing'
+    }
+    return null
+  }
+  /** Compilation may borrow near materials before any cloud texture is publishable. */
+  public getPreparationMaterialBindings(plan: CloudFramePlan): ReadonlyMap<ShaderMaterial, ShaderMaterial> {
+    if (plan !== this.plan || !this.prepared || this.selected?.actorId !== plan.frame.actorId)
+      throw new Error('Cloud compilation requires the current prepared plan')
+    return new Map(
+      this.registry
+        .receivers(plan.frame.actorId)
+        .map((receiver) => [
+          receiver.getEndpointMaterial('far'),
+          receiver.getEndpointMaterial('near', this.backend?.shadowCascadeCount)
+        ])
+    )
+  }
+  public useEndpoint(plan: CloudFramePlan | null, output: SceneCloudOutput | null, activate = true): void {
     const valid =
       !this.compilationFailures.current &&
       plan !== null &&
       plan === this.plan &&
       output !== null &&
       output === this.output
-    if (valid) this.stats.effectiveWeight = plan.requestedWeight
-    else if (plan) this.stats.effectiveWeight = 0
-    if (valid) this.stats.state = 'active'
+    if (valid && activate) {
+      if (this.activationSerial !== plan.frame.serial) {
+        const delta = Number.isFinite(plan.frame.deltaSeconds)
+          ? Math.max(0, Math.min(0.05, plan.frame.deltaSeconds))
+          : 0
+        this.activationSeconds = Math.min(0.6, this.activationSeconds + delta)
+        this.activationSerial = plan.frame.serial
+      }
+      const t = this.activationSeconds / 0.6
+      this.stats.effectiveWeight = plan.requestedWeight * t * t * (3 - 2 * t)
+    } else if (plan) this.stats.effectiveWeight = 0
+    if (valid && activate) this.stats.state = 'active'
     for (const body of this.registry.entries())
       for (const receiver of this.registry.receivers(body.actorId))
         receiver.setEndpoint(
@@ -510,6 +578,8 @@ export class SceneCloudRuntime {
     )
   }
   public invalidate(reason: CloudFallbackReason, cause?: unknown, compilation?: CloudCompilationEvidence): void {
+    this.activationSeconds = 0
+    this.activationSerial = null
     const original =
       this.compilationFailures.current?.cause ??
       (compilation && this.stats.state === 'error' && this.failure !== null ? this.failure : cause)

@@ -1,5 +1,17 @@
 import { Pass, type EffectComposer } from 'postprocessing'
-import { Color, PerspectiveCamera, Scene, Texture, Vector2, Vector4, WebGLRenderer, WebGLRenderTarget } from 'three'
+import {
+  Color,
+  Mesh,
+  PerspectiveCamera,
+  Scene,
+  ShaderMaterial,
+  Texture,
+  Vector2,
+  Vector4,
+  WebGLRenderer,
+  WebGLRenderTarget
+} from 'three'
+import { CloudProgramWarmup } from '@/core/clouds/takram/CloudProgramWarmup'
 import type { CloudFramePlan, SceneCloudRuntime } from '@/core/clouds/SceneCloudRuntime'
 import type { AtmosphereFrameSnapshot } from '@/core/graphic/effects/atmosphere/atmosphereFrame'
 import type { AtmosphereEffect } from '@/core/graphic/effects/atmosphere/AtmosphereEffect'
@@ -33,6 +45,21 @@ export class SceneCloudComposition {
   private depth: SceneCloudDepth | null = null
   private near: ReturnType<SceneCloudComposition['createNearEndpoint']> | null = null
   private cssSize: Vector2 | null = null
+  private readonly warmup = new CloudProgramWarmup()
+  private warmedMaterials = new Map<ShaderMaterial, number>()
+  private preparationGeneration = -1
+  private gpuFence: WebGLSync | null = null
+  private gpuReady = false
+
+  public cancelPreparation(): void {
+    if (this.gpuFence) (this.renderer.getContext() as WebGL2RenderingContext).deleteSync(this.gpuFence)
+    this.gpuFence = null
+    this.gpuReady = false
+    this.preparationGeneration = -1
+    this.warmup.clear()
+    this.warmedMaterials.clear()
+    this.depth?.resetPreparation()
+  }
   public constructor(
     private readonly renderer: WebGLRenderer,
     private readonly scene: Scene,
@@ -80,12 +107,48 @@ export class SceneCloudComposition {
           }
         : undefined
     try {
+      if (this.preparationGeneration !== this.runtime.preparationGeneration) {
+        this.cancelPreparation()
+        this.preparationGeneration = this.runtime.preparationGeneration
+      }
+      if (this.gpuFence) {
+        const gl = renderer.getContext() as WebGL2RenderingContext
+        const status = gl.clientWaitSync(this.gpuFence, 0, 0)
+        if (status === gl.TIMEOUT_EXPIRED) return this.runtime.deferVolume(plan)
+        gl.deleteSync(this.gpuFence)
+        this.gpuFence = null
+        if (status === gl.WAIT_FAILED) throw new Error('Cloud GPU warmup fence failed')
+        this.gpuReady = true
+      }
       this.depth ??= new SceneCloudDepth(renderer, this.scene)
       if (!this.near) {
         this.near = this.createNearEndpoint()
         const css = this.cssSize ?? renderer.getSize(new Vector2())
         this.near.composer.setSize(css.x, css.y, false)
       }
+      const backendReady = this.runtime.prepareVolume(renderer, this.near.composer.inputBuffer, plan)
+      if (this.runtime.diagnostics.state === 'error') return null
+      const bindings = this.runtime.getPreparationMaterialBindings(plan)
+      if ([...bindings.values()].some((material) => this.warmedMaterials.get(material) !== material.version)) {
+        this.warmup.clear()
+        renderer.setRenderTarget(this.near.composer.inputBuffer)
+        withSceneCloudMaterials(this.scene, bindings, () => {
+          this.scene.traverseVisible((object) => {
+            const mesh = object as Mesh
+            if (
+              mesh.isMesh &&
+              (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).some((material) =>
+                [...bindings.values()].includes(material as ShaderMaterial)
+              )
+            )
+              this.warmup.compile(renderer, mesh, this.camera, this.scene)
+          })
+        })
+        this.warmedMaterials = new Map([...bindings.values()].map((material) => [material, material.version]))
+      }
+      const depthReady = this.depth.prepare(plan.frame)
+      const materialsReady = this.warmup.ready()
+      if (!backendReady || !materialsReady || !depthReady) return this.runtime.deferVolume(plan)
       this.runtime.recordPasses({ depthPasses: 1 })
       stage = 'depth'
       const depth = this.depth.render(plan.frame)
@@ -96,7 +159,7 @@ export class SceneCloudComposition {
         compilation.check()
         return null
       }
-      this.runtime.useEndpoint(plan, output)
+      this.runtime.useEndpoint(plan, output, this.gpuReady)
       this.near.atmosphere.setFrame(frameSnapshot)
       this.near.atmosphere.setCloudOverlay(output)
       this.runtime.recordPasses({ nearRenders: 1 })
@@ -119,7 +182,16 @@ export class SceneCloudComposition {
       compilation.check()
       const texture = this.near.capture.texture
       if (!texture) throw new Error('Near cloud endpoint produced no completed input buffer')
-      return { output, texture, weight: plan.requestedWeight }
+      if (!this.gpuReady) {
+        // Shader completion alone does not cover driver specialization on first draw.
+        // Keep the far endpoint until this first complete GPU workload has retired.
+        const gl = renderer.getContext() as WebGL2RenderingContext
+        this.gpuFence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)
+        if (!this.gpuFence) throw new Error('Cloud GPU warmup fence could not be created')
+        gl.flush()
+        return this.runtime.deferVolume(plan)
+      }
+      return { output, texture, weight: this.runtime.diagnostics.effectiveWeight }
     } catch (error) {
       this.runtime.invalidate('error', error, evidence())
       return null
@@ -151,6 +223,7 @@ export class SceneCloudComposition {
     this.near?.composer.setSize(width, height, false)
   }
   public dispose(): void {
+    this.cancelPreparation()
     this.near?.composer.dispose()
     this.near = null
     this.depth?.dispose()

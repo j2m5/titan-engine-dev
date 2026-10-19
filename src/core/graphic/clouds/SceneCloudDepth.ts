@@ -23,6 +23,7 @@ import { SpaceScale } from '@/core/constants'
 import type { CloudFrame } from '@/core/clouds/scene/CloudFrame'
 import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
 import { sceneCloudDepthFragment, sceneCloudDepthVertex } from './sceneCloudDepthShader'
+import { CloudProgramWarmup } from '@/core/clouds/takram/CloudProgramWarmup'
 
 export interface SceneCloudDepthFrame {
   texture: Texture
@@ -54,6 +55,47 @@ export class SceneCloudDepth {
     uniforms: { opaqueDepth: { value: null }, waterDepth: { value: null } }
   })
   private readonly quad = new Mesh(new PlaneGeometry(2, 2), this.combineMaterial)
+  private readonly warmup = new CloudProgramWarmup()
+  private warmupStarted = false
+  public resetPreparation(): void {
+    this.warmup.clear()
+    this.warmupStarted = false
+  }
+
+  public prepare(frame: CloudFrame): boolean {
+    if (!this.warmupStarted) {
+      const renderer = this.renderer,
+        target = renderer.getRenderTarget(),
+        face = renderer.getActiveCubeFace(),
+        mip = renderer.getActiveMipmapLevel()
+      const viewport = renderer.getViewport(new Vector4()),
+        scissor = renderer.getScissor(new Vector4()),
+        test = renderer.getScissorTest()
+      try {
+        this.setSize(frame.viewport.x, frame.viewport.y)
+        renderer.setRenderTarget(this.resolved)
+        this.warmup.compile(renderer, this.combineScene, this.combineCamera)
+        for (const pass of [this.opaqueCopy, this.waterCopy])
+          this.warmup.compile(renderer, new Mesh(this.quad.geometry, pass.fullscreenMaterial!), this.combineCamera)
+        this.scene.traverseVisible((object) => {
+          const mesh = object as Mesh
+          if (!mesh.isMesh) return
+          for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material])
+            if (material instanceof WaterMaterial) {
+              const depth = material.getSceneCloudDepthMaterial(this.opaqueCopy.texture, frame.viewport)
+              this.warmup.compile(renderer, new Mesh(mesh.geometry, depth), frame.sceneCamera, this.scene)
+            }
+        })
+        this.warmupStarted = true
+      } finally {
+        renderer.setRenderTarget(target, face, mip)
+        renderer.setViewport(viewport)
+        renderer.setScissor(scissor)
+        renderer.setScissorTest(test)
+      }
+    }
+    return this.warmup.ready()
+  }
 
   public constructor(
     private readonly renderer: WebGLRenderer,
@@ -166,6 +208,7 @@ export class SceneCloudDepth {
     }
   }
   public dispose(): void {
+    this.warmup.clear()
     for (const target of [this.opaque, this.water, this.resolved]) target.dispose()
     this.opaqueCopy.dispose()
     this.waterCopy.dispose()

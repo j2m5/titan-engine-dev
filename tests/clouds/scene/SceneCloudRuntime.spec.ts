@@ -95,6 +95,8 @@ function fixture(pending = false) {
   )
   const counts = { cloudUpdates: 0, shadowUpdates: 0 }
   const backend = {
+    shadowCascadeCount: 3,
+    prepare: vi.fn(() => true),
     get updateCounts() {
       return counts
     },
@@ -118,9 +120,9 @@ function fixture(pending = false) {
   }
   const createBackend = vi.fn(() => backend),
     runtime = new SceneCloudRuntime(registry, { prepare, createBackend })
-  const begin = (lens = false) => {
+  const begin = (lens = false, delta = 0.016) => {
     const atmo = snapshot()
-    return runtime.beginFrame(camera, size, atmo.serial, 0.016, atmo, lens, 0)
+    return runtime.beginFrame(camera, size, atmo.serial, delta, atmo, lens, 0)
   }
   return {
     registry,
@@ -139,6 +141,70 @@ function fixture(pending = false) {
 }
 afterEach(() => resourceStorage.deleteAllTextures())
 describe('scene cloud runtime', () => {
+  it('fades successful frames in without consuming preparation time or advancing twice per output', () => {
+    const f = fixture()
+    const input = new WebGLRenderTarget()
+    const present = (delta: number, activate = true) => {
+      const plan = f.begin(false, delta)!
+      const output = f.runtime.renderVolume({} as never, input, plan, {
+        serial: plan.frame.serial,
+        viewport: size,
+        texture: new Texture(),
+        sceneLogFarFactor: 1,
+        sceneUnitsToMeters: 1
+      })!
+      f.runtime.useEndpoint(plan, output, activate)
+      const weight = f.runtime.diagnostics.effectiveWeight
+      f.runtime.useEndpoint(plan, output, activate)
+      expect(f.runtime.diagnostics.effectiveWeight).toBe(weight)
+      return weight
+    }
+    try {
+      for (let i = 0; i < 10; i++) f.begin(false, 1)
+      expect(present(5, false)).toBe(0)
+      const first = present(5)
+      expect(first).toBeGreaterThan(0)
+      expect(first).toBeLessThan(0.1)
+      let previous = first
+      for (let i = 0; i < 40; i++) {
+        const next = present(0.016)
+        expect(next).toBeGreaterThanOrEqual(previous)
+        previous = next
+      }
+      expect(previous).toBe(1)
+      f.runtime.resetHistory()
+      expect(present(0)).toBe(1)
+      f.runtime.setOptions(false, 'medium')
+      f.runtime.setOptions(true, 'medium')
+      expect(present(0.016)).toBeLessThan(0.1)
+    } finally {
+      f.runtime.dispose()
+      input.dispose()
+    }
+  })
+  it('holds the far endpoint while GPU programs prepare and rejects a cancelled preparation plan', () => {
+    const f = fixture(),
+      input = new WebGLRenderTarget()
+    try {
+      f.backend.prepare.mockReturnValue(false)
+      const plan = f.begin()!
+      expect(f.runtime.prepareVolume({} as never, input, plan)).toBe(false)
+      expect(f.runtime.diagnostics).toMatchObject({
+        state: 'warming',
+        reason: 'preparing',
+        effectiveWeight: 0,
+        cloudUpdates: 0,
+        shadowUpdates: 0
+      })
+      f.runtime.setOptions(false, 'medium')
+      expect(f.runtime.prepareVolume({} as never, input, plan)).toBe(false)
+      expect(f.backend.prepare).toHaveBeenCalledOnce()
+      expect(f.backend.dispose).toHaveBeenCalledOnce()
+    } finally {
+      f.runtime.dispose()
+      input.dispose()
+    }
+  })
   it.each(['add', 'replace', 'evict'] as const)(
     'keeps pending Earth preparation across unused actor texture %s',
     async (kind) => {
@@ -610,7 +676,8 @@ describe('scene cloud runtime', () => {
     expect(output.shadow).toBeNull()
     expect(f.backend.render).toHaveBeenCalledTimes(1)
     f.runtime.useEndpoint(plan, output)
-    expect(f.runtime.diagnostics.effectiveWeight).toBe(1)
+    expect(f.runtime.diagnostics.effectiveWeight).toBeGreaterThan(0)
+    expect(f.runtime.diagnostics.effectiveWeight).toBeLessThan(1)
     f.begin()
     f.runtime.useEndpoint(plan, output)
     expect(f.runtime.diagnostics.effectiveWeight).toBe(0)
