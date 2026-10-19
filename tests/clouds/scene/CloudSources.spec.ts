@@ -10,6 +10,34 @@ const make = (name = 'scene-cloud-test') => {
 }
 afterEach(() => resourceStorage.deleteAllTextures())
 describe('cloud source generations', () => {
+  it('retains declared missing source interests across notifications without watching unused actor paths', () => {
+    const invalidated = vi.fn()
+    const sources = new CloudSources(
+      new Map([
+        [26, 'density'],
+        [27, 'independent-color'],
+        [99, 'unused-night']
+      ]),
+      invalidated
+    )
+    try {
+      expect(sources.read(26)).toBeUndefined()
+      expect(sources.read(27)).toBeUndefined()
+      resourceStorage.addTexture(make('unused-night'))
+      expect(invalidated).not.toHaveBeenCalled()
+      resourceStorage.addTexture(make('density'))
+      expect(invalidated).toHaveBeenCalledTimes(1)
+      // Both are declared dependencies even though a previous change cleared their stamps.
+      resourceStorage.addTexture(make('independent-color'))
+      expect(invalidated).toHaveBeenCalledTimes(2)
+      resourceStorage.deleteTexture('density')
+      expect(invalidated).toHaveBeenCalledTimes(3)
+      resourceStorage.deleteTexture('unused-night')
+      expect(invalidated).toHaveBeenCalledTimes(3)
+    } finally {
+      sources.dispose()
+    }
+  })
   it('exposes live stamps without fabricating missing resources', () => {
     expect(resourceStorage.getTextureSnapshot('missing')).toBeUndefined()
     const texture = make()

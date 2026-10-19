@@ -1,4 +1,5 @@
 import { rgbCloudMapGLSL } from '@/core/clouds/appearance/rgbCloudMap'
+import { sceneCloudLightGLSL } from './sceneCloudLight'
 
 /** Camera-relative inputs project water and its seabed onto one datum and one coverage. */
 export const sceneCloudMapGLSL = `
@@ -15,6 +16,7 @@ uniform vec2 sceneCloudInputRange;
 uniform float sceneCloudExponent;
 uniform bool sceneCloudInvert, sceneCloudEncodedScalar;
 ${rgbCloudMapGLSL}
+${sceneCloudLightGLSL}
 
 vec3 sceneCloudPositionMeters(vec3 viewPositionSceneUnits) {
   return (sceneCloudViewToLocal * vec4(viewPositionSceneUnits * sceneCloudUnitsToMeters, 1.0)).xyz;
@@ -63,14 +65,18 @@ vec3 sceneCloudFarComposite(vec3 baseColor, vec3 viewPositionSceneUnits, vec3 ra
   #ifdef USE_SUN_TINT
     tint = mix(vec3(1.0), sunTint(muS), uSunTintStrength);
   #endif
-  vec3 sky = clamp(muS / max(sceneCloudAmbientSunRef, 1e-3), 0.0, 1.0) * tint;
+  vec3 skyTint = vec3(0.0);
+  float skyStrength = 0.0;
   #if defined(USE_SKY_AMBIENT) && defined(USE_SUN_TINT)
-    if (uSkyAmbientStrength > 0.0) sky = mix(sky, skyAmbientTint(muS), uSkyAmbientStrength);
+    if (uSkyAmbientStrength > 0.0) {
+      skyStrength = uSkyAmbientStrength;
+      skyTint = skyAmbientTint(muS);
+    }
   #endif
-  vec3 direct = tint * sceneCloudLightColor;
-  vec3 lighting = mix(sceneCloudAmbient * sky, direct, max(muS, 0.0));
-  lighting = mix(tint * sceneCloudLightColor * smoothstep(-0.08, 0.25, muS), lighting, sceneCloudLambert);
-  vec3 cloudColor = albedo * lighting * eclipseLight(direction * uBodyRadiusUnits);
+  vec3 sky = sceneCloudSkyLight(muS, tint, sceneCloudAmbientSunRef, skyTint, skyStrength);
+  vec3 direct, ambient;
+  sceneCloudSplitLight(muS, tint, sky, sceneCloudLightColor, sceneCloudLambert, sceneCloudAmbient, direct, ambient);
+  vec3 cloudColor = albedo * (direct + ambient) * eclipseLight(direction * uBodyRadiusUnits);
   return mix(baseColor, cloudColor, coverage);
   #else
     return baseColor;

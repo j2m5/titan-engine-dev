@@ -302,6 +302,165 @@ void main() {
     const origin = new Vector3(0, 0, RADIUS + 50000),
       endpoint = new Vector3(0, 0, RADIUS + 6000)
 
+    // Compare the production source-light function with an independently rendered
+    // original far receiver. The same owner supplies all live policy values.
+    const farReceiver = surface.sceneCloudReceiver
+    const profile = createEarthCloudProfile()
+    const pattern = profile.layers[0].pattern
+    if (pattern.kind !== 'mask') throw new Error('Earth reference requires its authored map')
+    farReceiver.setFarMap({ pattern, mapping: profile.mapping, color: profile.layers[0].color }, white)
+    const sourceSample = (
+      mu: number,
+      tau: number,
+      phase: number,
+      visibility = 1,
+      lambert = 1,
+      albedo = new Vector3(1, 1, 1),
+      tinted = false,
+      physicalControl = false,
+      skyStrength = 0.6
+    ): { value: number[]; far: number[] } => {
+      const f = frame(
+        origin,
+        endpoint,
+        new Vector3(Math.sqrt(Math.max(0, 1 - mu * mu)), 0, mu),
+        new Color(0.6, 0.8, 0.3)
+      )
+      f.lambert = lambert
+      surface.uniforms.sceneCloudAmbient.value = 0.15
+      surface.uniforms.sceneCloudAmbientSunRef.value = 0.3
+      if (tinted) {
+        surface.defines.USE_SUN_TINT = 1
+        surface.defines.USE_SKY_AMBIENT = 1
+        Object.assign(surface.uniforms, {
+          uAtmoTransmittance: new Uniform(entry.lut.transmittance),
+          uAtmoIrradiance: new Uniform(entry.lut.irradiance),
+          uAtmoBottomRadius: new Uniform(entry.config.bottomRadius),
+          uAtmoTopRadius: new Uniform(entry.config.topRadius),
+          uAtmoDatumRadius: new Uniform(RADIUS * 0.001),
+          uAtmoSunAngularRadius: new Uniform(entry.config.sunAngularRadius),
+          uSunTintStrength: new Uniform(0.7),
+          uSkyAmbientStrength: new Uniform(skyStrength)
+        })
+      } else {
+        delete surface.defines.USE_SUN_TINT
+        delete surface.defines.USE_SKY_AMBIENT
+      }
+      surface.needsUpdate = true
+      farReceiver.setEndpoint(f, null)
+      f.sceneLight = farReceiver.getLightSettings!()
+      renderer.setRenderTarget(input)
+      renderer.clear()
+      renderer.render(surfaceScene, camera)
+      const far = sample(input.texture).slice(0, 3)
+      const renderFrame = physicalControl ? { ...f, sceneLight: undefined } : f
+      const effect = recreate(renderFrame)
+      const physicalShader = effect.cloudsPass.currentMaterial.fragmentShader
+      const normalizationStart = physicalShader.indexOf('vec3 sceneCloudTargetWhite =')
+      const normalizationStop = physicalShader.indexOf(NORMALIZATION, normalizationStart) + NORMALIZATION.length
+      if (physicalControl) check(normalizationStart >= 0, 'negative control uses actual physical conversion')
+      diagnostics(
+        effect,
+        physicalControl
+          ? `vec3 sky;
+        vec3 sun = getCloudsSunSkyIrradiance(sceneProbeEndpoint, 6000.0, sky);
+        vec3 radianceIntegral = sun * approximateMultipleScattering(${tau.toFixed(6)}, ${phase.toFixed(6)})
+          + sky * RECIPROCAL_PI4 * skyLightScale;
+        ${physicalShader.slice(normalizationStart, normalizationStop)}
+        color = vec4(radianceIntegral, .4);`
+          : `float attenuation = approximateMultipleScattering(${tau.toFixed(6)}, ${phase.toFixed(6)})
+        / max(approximateMultipleScattering(0.0, ${phase.toFixed(6)}), 1e-6);
+        color = vec4(sceneCloudReferenceLight(dot(normalize(sceneProbeEndpoint), sunDirection), attenuation, 1.0, vec3(${visibility.toFixed(6)}))
+          * vec3(${albedo.x.toFixed(6)}, ${albedo.y.toFixed(6)}, ${albedo.z.toFixed(6)}), .4);`
+      )
+      setEndpoints(effect, origin, endpoint)
+      return { value: render(renderFrame), far }
+    }
+    const physicalControl = sourceSample(0.6, 0, -0.7, 1, 1, new Vector3(1, 1, 1), false, true)
+    check(
+      !within(physicalControl.value.slice(0, 3), physicalControl.far),
+      `old physical source fails actual far envelope: ${JSON.stringify(physicalControl)}`
+    )
+    console.info('scene-reference physical negative control', JSON.stringify(physicalControl))
+    report.cases.push('scene-reference-physical-negative-control')
+    const skyDisabled = sourceSample(0.6, 0, -0.7, 1, 1, new Vector3(1, 1, 1), true, false, 0)
+    const skyNegative = sourceSample(0.6, 0, -0.7, 1, 1, new Vector3(1, 1, 1), true, false, -0.5)
+    close(skyNegative.far, skyDisabled.far, 'nonpositive owner sky strength preserves original disabled far mixing')
+    close(skyNegative.value, skyDisabled.value, 'nonpositive owner sky strength preserves disabled source mixing')
+    report.cases.push('scene-reference-nonpositive-sky-strength')
+    for (const lambert of [0, 0.4, 1])
+      for (const mu of [-1, -0.05, 0, 0.6, 1])
+        for (const phase of [-0.7, 0.8]) {
+          const actual = sourceSample(mu, 0, phase, 1, lambert)
+          close(
+            actual.value.slice(0, 3),
+            actual.far,
+            `scene reference unshadowed far envelope mu${mu}/L${lambert}/phase${phase}`
+          )
+          close(actual.value.slice(3), [0.4], 'source-light alpha untouched')
+        }
+    for (const phase of [-0.7, 0.8]) {
+      let previous = sourceSample(0.6, 0, phase).value
+      for (const tau of [0.5, 2, 10]) {
+        const actual = sourceSample(0.6, tau, phase).value
+        check(
+          actual.slice(0, 3).every((v, i) => v <= previous[i] + 0.002 && v >= 0),
+          'sun optical depth only attenuates calibrated direct light'
+        )
+        close(actual.slice(3), [0.4], 'optical-depth light policy preserves alpha')
+        previous = actual
+      }
+    }
+    close(sourceSample(-1, 0, -0.7).value.slice(0, 3), [0, 0, 0], 'night has no unconditional white floor')
+    close(
+      sourceSample(0.6, 0, -0.7, 0).value.slice(0, 3),
+      [0, 0, 0],
+      'eclipse multiplies complete scene cloud light, never phase reference'
+    )
+    const whiteSource = sourceSample(0.6, 0, -0.7).value
+    const coloredSource = sourceSample(0.6, 0, -0.7, 1, 1, new Vector3(0.2, 0.5, 0.8)).value
+    close(
+      coloredSource.slice(0, 3),
+      whiteSource.slice(0, 3).map((v, i) => v * [0.2, 0.5, 0.8][i]),
+      'source albedo retains its authored linear multiplier'
+    )
+    const tinted = sourceSample(0.6, 0, -0.7, 1, 1, new Vector3(1, 1, 1), true)
+    close(tinted.value.slice(0, 3), tinted.far, 'current far owner tint/LUT geometry matches calibrated source')
+    report.cases.push(
+      'scene-reference-white-limit',
+      'scene-reference-optical-depth',
+      'scene-reference-night-eclipse',
+      'scene-reference-albedo-alpha',
+      'scene-reference-owner-tint'
+    )
+    farReceiver.setFarMap(null, null)
+    delete surface.defines.USE_SUN_TINT
+    delete surface.defines.USE_SKY_AMBIENT
+    surface.needsUpdate = true
+
+    // A giant profile keeps the existing physical branch even if a main receiver
+    // snapshot is present. Standalone labs keep their own adapter unchanged.
+    {
+      const f = frame(origin, endpoint)
+      f.sceneLight = farReceiver.getLightSettings!()
+      ;(backend as SceneCloudBackend | null)?.dispose()
+      backend = new SceneCloudBackend(f, entry, prepared, 'giant', 'low')
+      const effect = activeEffect()
+      effect.shadowMaps.mapSize.set(32, 32)
+      const shader = effect.cloudsPass.currentMaterial.fragmentShader
+      const start = shader.indexOf('vec3 sceneCloudTargetWhite =')
+      const stop = shader.indexOf(NORMALIZATION, start) + NORMALIZATION.length
+      check(start >= 0 && stop > start, 'giant retains physical-unit normalization')
+      diagnostics(
+        effect,
+        `vec3 sky; vec3 radianceIntegral = GetSunAndSkyIrradiance(vec3(0.,0.,sceneCloudDatumKm), vec3(0.,0.,1.), vec3(0.,0.,1.), sky) / PI;
+        ${shader.slice(start, stop)} color = vec4(radianceIntegral, .4);`
+      )
+      setEndpoints(effect, origin, endpoint)
+      close(render(f), [0.99, 0.99, 0.99, 0.4], 'giant physical branch remains unchanged with main owner snapshot')
+      report.cases.push('giant-physical-source')
+    }
+
     for (const [label, light] of [
       ['white-star', new Color(1, 1, 1)],
       ['colored-star', new Color(0.6, 0.8, 0.3)]
@@ -518,6 +677,30 @@ void main() {
     }
     report.cases.push('alpha-depth-shadow-invariance')
 
+    for (const sun of [new Vector3(0, 0, 1), new Vector3(1, 0, 0), new Vector3(0, 0, -1)]) {
+      const f = frame(origin, endpoint, sun)
+      f.sceneLight = farReceiver.getLightSettings!()
+      const calibrated = recreate(f)
+      const actual = render(f)
+      const actualDepth = sample(calibrated.cloudsPass.resolveMaterial.uniforms.depthVelocityBuffer.value!)
+      const actualShadow = sample(calibrated.atmosphereShadow!.map, true)
+      const legacyFrame = { ...f, sceneLight: undefined }
+      const legacy = recreate(legacyFrame)
+      const reference = render(legacyFrame)
+      unchanged([actual[3]], [reference[3]], 'scene-reference source preserves fresh actual march alpha')
+      unchanged(
+        actualDepth,
+        sample(legacy.cloudsPass.resolveMaterial.uniforms.depthVelocityBuffer.value!),
+        'scene-reference source preserves actual front depth'
+      )
+      unchanged(
+        actualShadow,
+        sample(legacy.atmosphereShadow!.map, true),
+        'scene-reference source preserves actual optical shadows'
+      )
+    }
+    report.cases.push('scene-reference-march-invariants')
+
     // Isolate only the actual march's direct source: skylight/ground and aerial exposure are separate terms.
     const directFrame = frame(origin, endpoint)
     entry.config.exposure = 0
@@ -526,6 +709,14 @@ void main() {
     direct.groundBounceScale = 0
     const sunlit = render(directFrame)
     check(sunlit[0] + sunlit[1] + sunlit[2] > 1e-5, 'real direct source is nonzero before eclipse')
+    const calibratedDirectFrame = { ...directFrame, sceneLight: farReceiver.getLightSettings!() }
+    const calibratedDirect = recreate(calibratedDirectFrame)
+    calibratedDirect.skyLightScale = 0
+    const calibratedSunlit = render(calibratedDirectFrame)
+    check(
+      calibratedSunlit[0] + calibratedSunlit[1] + calibratedSunlit[2] > 1e-5,
+      'calibrated actual direct source exists before eclipse'
+    )
     entry.eclipse = {
       count: 1,
       star: new Vector3(0, 0, 149597870),
@@ -539,9 +730,20 @@ void main() {
     const eclipsed = render(directFrame)
     close(eclipsed.slice(0, 3), [0, 0, 0], 'real march total eclipse direct irradiance', 1e-5)
     close([eclipsed[3]], [sunlit[3]], 'eclipse preserves weather opacity', 1e-6)
+    const calibratedEclipsedEffect = recreate(calibratedDirectFrame)
+    calibratedEclipsedEffect.skyLightScale = 0
+    const calibratedEclipsed = render(calibratedDirectFrame)
+    close(
+      calibratedEclipsed.slice(0, 3),
+      [0, 0, 0],
+      'calibrated real march eclipse is not cancelled by phase reference',
+      1e-5
+    )
+    close([calibratedEclipsed[3]], [calibratedSunlit[3]], 'calibrated eclipse preserves weather opacity', 1e-6)
     delete entry.eclipse
     entry.config.exposure = 1.4
     report.cases.push('eclipse-direct')
+    report.cases.push('scene-reference-real-eclipse')
 
     // Public history reset recreates the instance and rebinds all borrowed data.
     const resetFrame = frame(origin, endpoint)

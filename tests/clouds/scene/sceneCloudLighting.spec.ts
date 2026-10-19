@@ -5,6 +5,32 @@ import { CloudsEffect } from '@takram/three-clouds'
 import { PerspectiveCamera } from 'three'
 
 describe('main scene cloud light units', () => {
+  it('installs the scene-reference branch atomically without adding LUT samplers or a second unit conversion', () => {
+    const clouds = new CloudsEffect(new PerspectiveCamera())
+    const material = clouds.cloudsPass.currentMaterial
+    const original = material.fragmentShader
+    const samplers = (shader: string) => [...shader.matchAll(/uniform\s+(?:highp\s+)?sampler\w+\s+/g)].length
+    try {
+      material.fragmentShader = original.replace(
+        'radiance += skyIrradiance * RECIPROCAL_PI4 * skyGradient * skyLightScale;',
+        'radiance += vec3(0.0);'
+      )
+      const invalid = material.fragmentShader
+      expect(() => installSceneCloudPatches(clouds, true)).toThrow()
+      expect(material.fragmentShader).toBe(invalid)
+      material.fragmentShader = original
+      const binding = installSceneCloudPatches(clouds, true)
+      expect(samplers(material.fragmentShader)).toBe(samplers(original))
+      expect(material.fragmentShader).not.toContain(
+        'radianceIntegral *= sceneCloudTargetWhite / sceneCloudReferenceWhite;'
+      )
+      expect(material.fragmentShader).toContain('sceneCloudReferenceLight')
+      binding.dispose()
+      expect(material.fragmentShader).toBe(original)
+    } finally {
+      clouds.dispose()
+    }
+  })
   it('patches pinned anchors atomically, refuses duplicate installation and restores idempotently', () => {
     const clouds = new CloudsEffect(new PerspectiveCamera())
     const cloud = clouds.cloudsPass.currentMaterial,

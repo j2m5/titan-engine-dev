@@ -17,8 +17,10 @@ import type { SceneCloudOutput } from '@/core/clouds/takram/SceneCloudBackend'
 import { sceneCloudMapGLSL } from './sceneCloudMapShader'
 import { buildSceneCloudShadowGLSL } from './sceneCloudShadowShader'
 import { sceneCloudProgramSignature, syncSceneCloudNearMaterial } from './sceneCloudEndpointMaterial'
+import type { SceneCloudLightSettings } from './sceneCloudLight'
 
 export interface SceneCloudReceiver {
+  getLightSettings?(): SceneCloudLightSettings
   getEndpointMaterial(endpoint: 'far' | 'near'): ShaderMaterial
   retryEndpointMaterial(): void
   setFarMap(
@@ -130,6 +132,23 @@ export function bindSceneCloudReceiver(
     u.sceneCloudFarEnabled.value = far && !near && !disposed
   }
   return {
+    getLightSettings() {
+      if (disposed) throw new Error('Scene cloud receiver is disposed')
+      currentUniforms()
+      const sunTintEnabled = material.defines.USE_SUN_TINT !== undefined
+      return {
+        ambient: u.sceneCloudAmbient.value,
+        ambientSunRef: u.sceneCloudAmbientSunRef.value,
+        sunTintEnabled,
+        skyAmbientEnabled: sunTintEnabled && material.defines.USE_SKY_AMBIENT !== undefined,
+        sunTintStrength: u.uSunTintStrength?.value ?? 0,
+        skyAmbientStrength: u.uSkyAmbientStrength?.value ?? 0,
+        bottomRadiusKm: u.uAtmoBottomRadius?.value ?? 0,
+        topRadiusKm: u.uAtmoTopRadius?.value ?? 0,
+        datumRadiusKm: u.uAtmoDatumRadius?.value ?? 0,
+        sunAngularRadius: u.uAtmoSunAngularRadius?.value ?? 0
+      }
+    },
     getEndpointMaterial(endpoint) {
       if (disposed) throw new Error('Scene cloud receiver is disposed')
       currentUniforms()

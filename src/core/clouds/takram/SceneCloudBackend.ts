@@ -109,7 +109,10 @@ export class SceneCloudBackend {
         config.layers[0].baseAltitudeMeters
       )
       this.appearance = bindCloudAppearance(effect, config, this.prepared.textures)
-      this.patches = installSceneCloudPatches(effect)
+      this.patches = installSceneCloudPatches(
+        effect,
+        this.profile === 'terrestrial' && this.frame.sceneLight !== undefined
+      )
       this.restoreTargets = prepareCloudTargets(effect)
       setCloudQuality(effect, this.profile, this.quality)
       effect.haze = false

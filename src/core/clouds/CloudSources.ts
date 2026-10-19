@@ -22,6 +22,9 @@ const sameStamp = (a: CloudSourceStamp | undefined, b: CloudSourceStamp | undefi
 /** Watches borrowed storage entries only. Its owner drops derived bindings in invalidate synchronously. */
 export class CloudSources {
   private readonly stamps = new Map<number, CloudSourceStamp | undefined>()
+  // Actor resources also contain terrain, night and water maps. Only an actual
+  // cloud read (including a missing source) establishes a dependency.
+  private readonly dependencies = new Set<string>()
   private readonly paths: ReadonlyMap<number, string>
   private readonly stop: () => void
   private disposed = false
@@ -32,7 +35,7 @@ export class CloudSources {
   ) {
     this.paths = new Map(paths)
     this.stop = resourceStorage.subscribeTextureChanges((key) => {
-      if (![...this.paths.values()].includes(key)) return
+      if (!this.dependencies.has(key)) return
       this.stamps.clear()
       this.invalidate()
     })
@@ -42,6 +45,7 @@ export class CloudSources {
     if (this.disposed) return undefined
     const path = this.paths.get(resourceId)
     if (path === undefined) return undefined
+    this.dependencies.add(path)
     const stamp = resourceStorage.getTextureSnapshot(path)
     this.stamps.set(resourceId, stamp)
     return stamp
@@ -64,5 +68,6 @@ export class CloudSources {
     this.disposed = true
     this.stop()
     this.stamps.clear()
+    this.dependencies.clear()
   }
 }

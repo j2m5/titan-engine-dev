@@ -139,6 +139,44 @@ function fixture(pending = false) {
 }
 afterEach(() => resourceStorage.deleteAllTextures())
 describe('scene cloud runtime', () => {
+  it.each(['add', 'replace', 'evict'] as const)(
+    'keeps pending Earth preparation across unused actor texture %s',
+    async (kind) => {
+      const f = fixture(true)
+      f.body.resourcePaths = new Map([
+        [26, 'runtime-test'],
+        [99, 'unused-earth-night']
+      ])
+      const unused = new Texture()
+      unused.name = 'unused-earth-night'
+      if (kind !== 'add') resourceStorage.addTexture(unused)
+      const borrowed = resourceStorage.getTexture('runtime-test')!
+      const borrowedDispose = vi.spyOn(borrowed, 'dispose')
+      const derivativeDispose = vi.spyOn(f.prepared, 'dispose')
+      try {
+        expect(f.begin()).toBeNull()
+        expect(f.runtime.diagnostics.state).toBe('preparing')
+        if (kind === 'add') resourceStorage.addTexture(unused)
+        if (kind === 'replace') {
+          const replacement = new Texture()
+          replacement.name = unused.name
+          resourceStorage.addTexture(replacement)
+        }
+        if (kind === 'evict') resourceStorage.deleteTexture(unused.name)
+        expect(f.runtime.diagnostics.state).toBe('preparing')
+        f.begin()
+        expect(f.prepare).toHaveBeenCalledOnce()
+        f.complete()
+        await Promise.resolve()
+        expect(f.runtime.diagnostics.state).toBe('prepared')
+        expect(f.begin()).not.toBeNull()
+        expect(derivativeDispose).not.toHaveBeenCalled()
+        expect(borrowedDispose).not.toHaveBeenCalled()
+      } finally {
+        f.runtime.dispose()
+      }
+    }
+  )
   it('reports missing far source/color per body without replacing the selected volume reason and clears lifecycle snapshots', () => {
     const f = fixture()
     const far = {

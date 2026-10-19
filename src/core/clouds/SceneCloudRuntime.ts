@@ -264,7 +264,11 @@ export class SceneCloudRuntime {
         this.sources.set(body.actorId, owner)
       }
       owner.sources.poll()
-      const frame = captureCloudFrame(body, camera, viewport, serial, deltaSeconds)
+      const sceneLight = this.registry
+        .receivers(body.actorId)
+        .find((receiver) => receiver.getLightSettings)
+        ?.getLightSettings?.()
+      const frame = captureCloudFrame(body, camera, viewport, serial, deltaSeconds, sceneLight)
       this.frames.set(body.actorId, frame)
       const map = this.enabled ? body.descriptor.far : null
       const source = map ? (owner.sources.read(map.pattern.map.resourceId)?.texture ?? null) : null

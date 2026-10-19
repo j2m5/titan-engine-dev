@@ -14,6 +14,7 @@ export interface SceneCloudProbeReport {
   maxError: number
   resourcesReleased: boolean
   cases: string[]
+  scope?: 'full' | 'peak'
   expectedShaderFailureWindows?: Array<{ start: number; end: number }>
 }
 
@@ -26,6 +27,30 @@ export const sceneCloudProbeRegistry: Partial<
     }
   >
 > = {
+  flight: {
+    load: () => import('./flight.gpu'),
+    requiredCases: [
+      'production-solar-boot',
+      'earth-altitude-path',
+      'jupiter-altitude-path',
+      'frame-budget',
+      'control-flight',
+      'capture-no-simulation',
+      'day-terminator-night',
+      'body-rotation-follow-collision',
+      'sphere-terrain-water',
+      'quick-body-switch',
+      'settings-toggle',
+      'authored-neptune',
+      'authored-korriban',
+      'real-lens-scenario',
+      'isolated-main-performance',
+      'stable-scenario-exits',
+      'original-peak-depth',
+      'moving-limb-consecutive',
+      'same-pose-far-near-reference'
+    ]
+  },
   lifecycle: {
     load: () => import('./lifecycle.gpu'),
     requiredCases: [
@@ -137,7 +162,17 @@ export const sceneCloudProbeRegistry: Partial<
       'shader-failure-restoration',
       'borrowed-ownership',
       'unsupported-projection',
-      'foreground-slot-order'
+      'foreground-slot-order',
+      'scene-reference-white-limit',
+      'scene-reference-physical-negative-control',
+      'scene-reference-nonpositive-sky-strength',
+      'scene-reference-optical-depth',
+      'scene-reference-night-eclipse',
+      'scene-reference-albedo-alpha',
+      'scene-reference-owner-tint',
+      'giant-physical-source',
+      'scene-reference-march-invariants',
+      'scene-reference-real-eclipse'
     ]
   },
   depth: {
@@ -179,15 +214,39 @@ export const sceneCloudProbeRegistry: Partial<
   }
 }
 
+/** A focused closure reports only the cases it actually executes. */
+export function getSceneCloudFlightScope(start?: string): { start: 'full' | 'peak'; requiredCases: readonly string[] } {
+  if (start !== undefined && start !== 'peak') throw new Error('SCENE_CLOUD_FLIGHT_START only accepts peak')
+  const requiredCases = sceneCloudProbeRegistry.flight!.requiredCases
+  const completedEarthCases = new Set([
+    'earth-altitude-path',
+    'frame-budget',
+    'control-flight',
+    'capture-no-simulation',
+    'day-terminator-night',
+    'body-rotation-follow-collision',
+    'sphere-terrain-water',
+    'isolated-main-performance'
+  ])
+  return {
+    start: start ?? 'full',
+    requiredCases: start === 'peak' ? requiredCases.filter((id) => !completedEarthCases.has(id)) : requiredCases
+  }
+}
+
 export async function runSceneCloudProbe(name: SceneCloudProbeName): Promise<SceneCloudProbeReport> {
   const probe = sceneCloudProbeRegistry[name]
   if (!probe) throw new Error(`Unimplemented or unknown scene cloud probe: ${name}`)
   const report = await (await probe.load()).run()
-  const missing = probe.requiredCases.filter((id) => !report.cases.includes(id))
+  const requiredCases =
+    name === 'flight'
+      ? getSceneCloudFlightScope(Reflect.get(window, '__sceneCloudFlightStart')).requiredCases
+      : probe.requiredCases
+  const missing = requiredCases.filter((id) => !report.cases.includes(id))
   if (
     report.name !== name ||
     missing.length ||
-    report.checks < probe.requiredCases.length ||
+    report.checks < requiredCases.length ||
     !Number.isFinite(report.maxError) ||
     !report.resourcesReleased
   )

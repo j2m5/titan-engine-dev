@@ -69,6 +69,49 @@ function fixture() {
   return { frame, output, material, receiver: bindSceneCloudReceiver(material, 'sphere') }
 }
 describe('scene cloud receiver endpoints', () => {
+  it('snapshots the current far owner lighting without adding independent settings', () => {
+    const f = fixture()
+    try {
+      f.material.defines.USE_SUN_TINT = 1
+      f.material.defines.USE_SKY_AMBIENT = 1
+      Object.assign(f.material.uniforms, {
+        uSunTintStrength: { value: 0.7 },
+        uSkyAmbientStrength: { value: 0.6 },
+        uAtmoBottomRadius: { value: 6350 },
+        uAtmoTopRadius: { value: 6430 },
+        uAtmoDatumRadius: { value: 6371 },
+        uAtmoSunAngularRadius: { value: 0.004 }
+      })
+      f.material.uniforms.sceneCloudAmbient.value = 0.21
+      f.material.uniforms.sceneCloudAmbientSunRef.value = 0.4
+      const snapshot = f.receiver.getLightSettings!()
+      expect(snapshot).toEqual({
+        ambient: 0.21,
+        ambientSunRef: 0.4,
+        sunTintEnabled: true,
+        skyAmbientEnabled: true,
+        sunTintStrength: 0.7,
+        skyAmbientStrength: 0.6,
+        bottomRadiusKm: 6350,
+        topRadiusKm: 6430,
+        datumRadiusKm: 6371,
+        sunAngularRadius: 0.004
+      })
+      f.material.uniforms.sceneCloudAmbient.value = 0.32
+      f.material.uniforms.uSunTintStrength.value = 0.2
+      delete f.material.defines.USE_SUN_TINT
+      const changed = f.receiver.getLightSettings!()
+      expect(changed.ambient).toBe(0.32)
+      expect(changed.sunTintStrength).toBe(0.2)
+      expect(changed.sunTintEnabled).toBe(false)
+      expect(changed.skyAmbientEnabled).toBe(false)
+      expect(snapshot.ambient).toBe(0.21)
+      expect(snapshot.sunTintStrength).toBe(0.7)
+    } finally {
+      f.receiver.dispose()
+      f.material.dispose()
+    }
+  })
   it('reinstalls owned receiver Uniforms after an owner dictionary reset', () => {
     const f = fixture(),
       frameUniform = f.material.uniforms.sceneCloudHasFrame

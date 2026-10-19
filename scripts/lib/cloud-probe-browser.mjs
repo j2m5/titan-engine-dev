@@ -4,6 +4,57 @@ import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve, dirname } from 'node:path'
 
+export function observeBrowserExit(child, close) {
+  let failure
+  child.once('exit', (code, signal) => {
+    if (code !== 0) failure = new Error(`Browser exited: code ${code}, signal ${signal}`)
+    close()
+  })
+  return {
+    check() {
+      if (failure) throw failure
+    }
+  }
+}
+
+export function assertNoUnexpectedCloudErrors(errors, expectedError = () => false) {
+  const unexpected = errors.filter((error) => !expectedError(error))
+  if (unexpected.length) throw new Error(`Probe runtime/WebGL errors: ${JSON.stringify(unexpected)}`)
+}
+
+export async function runCloudProbeEvaluation(evaluate, name, requiredCases, runId, timeoutMs = 180000) {
+  const completion = await evaluate(
+    `(async () => {
+    let rafFrames = 0, active = true, raf;
+    const tick = () => { if (active) { rafFrames++; raf = requestAnimationFrame(tick); } };
+    raf = requestAnimationFrame(tick);
+    try {
+      const module = await import('/tests/clouds/scene/probe.ts');
+      const report = await module.runSceneCloudProbe(${JSON.stringify(name)});
+      await new Promise(requestAnimationFrame);
+      return { runId: ${JSON.stringify(runId)}, rafFrames, report };
+    } finally { active = false; cancelAnimationFrame(raf); }
+  })()`,
+    timeoutMs
+  )
+  if (completion?.runId !== runId) throw new Error(`Stale probe report: ${name}`)
+  if (!(completion.rafFrames > 0)) throw new Error(`No RAF progression: ${name}`)
+  const report = completion.report
+  if (
+    !report ||
+    report.name !== name ||
+    !Array.isArray(report.cases) ||
+    requiredCases.some((id) => !report.cases.includes(id)) ||
+    !Number.isInteger(report.checks) ||
+    report.checks < requiredCases.length ||
+    !Number.isFinite(report.maxError) ||
+    report.maxError < 0 ||
+    report.resourcesReleased !== true
+  )
+    throw new Error(`Incomplete scene cloud probe ${name}: ${JSON.stringify(completion)}`)
+  return report
+}
+
 export function createCdpTransport(socket, onEvent, timeoutMs = 190000) {
   let id = 0
   let closed = false
@@ -103,12 +154,14 @@ export async function withCloudProbeBrowser(
   let socket
   let closeBrowser
   let startupError
+  const exitState = observeBrowserExit(chrome, () => socket?.close())
   chrome.on('error', (error) => {
     startupError = error
   })
   try {
     let targets
     for (let i = 0; i < 100; i++) {
+      exitState.check()
       if (startupError) throw startupError
       try {
         const port = Number((await readFile(resolve(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0])
@@ -140,6 +193,8 @@ export async function withCloudProbeBrowser(
       else if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error')
         errors.push(msg.params.args.map((arg) => arg.value ?? arg.description))
       else if (msg.method === 'Runtime.consoleAPICalled' && msg.params.args[0]?.value === 'SCENE_CLOUD_LIFECYCLE_PHASE')
+        console.log(msg.params.args[1]?.value)
+      else if (msg.method === 'Runtime.consoleAPICalled' && msg.params.args[0]?.value === 'SCENE_CLOUD_FLIGHT_PHASE')
         console.log(msg.params.args[1]?.value)
     })
     closeBrowser = () => send('Browser.close')
@@ -186,8 +241,8 @@ export async function withCloudProbeBrowser(
       await writeFile(resolve(outputDir, `${name}.png`), Buffer.from(result.data, 'base64'))
     }
     const result = await run({ evaluate, screenshot, webglErrors, requests, send })
-    const unexpected = webglErrors.filter((error) => !expectedError(error))
-    if (unexpected.length) throw new Error(`Probe runtime/WebGL errors: ${JSON.stringify(unexpected)}`)
+    exitState.check()
+    assertNoUnexpectedCloudErrors(webglErrors, expectedError)
     return result
   } finally {
     if (closeBrowser) await Promise.race([closeBrowser().catch(() => {}), sleep(1000)])

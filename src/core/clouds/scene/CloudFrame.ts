@@ -1,6 +1,7 @@
 import { Color, PerspectiveCamera, Quaternion, Vector2, Vector3 } from 'three'
 import { SpaceScale } from '@/core/constants'
 import type { CloudBodyEntry } from '@/core/services/CloudRegistry'
+import type { SceneCloudLightSettings } from '@/core/clouds/receivers/sceneCloudLight'
 
 export interface CloudFrame {
   serial: number
@@ -15,13 +16,15 @@ export interface CloudFrame {
   sunDirection: Vector3
   lightColor: Color
   lambert: number
+  sceneLight?: SceneCloudLightSettings
 }
 export function captureCloudFrame(
   body: CloudBodyEntry,
   camera: PerspectiveCamera,
   viewport: Vector2,
   serial: number,
-  deltaSeconds: number
+  deltaSeconds: number,
+  sceneLight?: SceneCloudLightSettings
 ): CloudFrame | null {
   const surface = body.getSurface()
   if (!surface || !(body.datumRadiusMeters > 0) || viewport.x <= 0 || viewport.y <= 0) return null
@@ -53,7 +56,8 @@ export function captureCloudFrame(
     viewport: viewport.clone(),
     sunDirection: centerWorld.clone().negate().normalize(),
     lightColor: body.lightColor.clone(),
-    lambert: body.lambert
+    lambert: body.lambert,
+    sceneLight
   }
 }
 export function cloudLayerAltitude(datumMeters: number, bottomMeters: number, baseMeters: number): number {
