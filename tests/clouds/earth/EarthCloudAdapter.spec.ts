@@ -104,7 +104,7 @@ describe('Earth cloud adapter', () => {
       const active = Array.from(clouds.cloudLayers).filter((layer) => layer.height > 0)
       expect(active).toHaveLength(1)
       expect(active[0]).toMatchObject({ altitude: 4000, height: 4000, densityScale: 1, shadow: true })
-      expect(clouds.scatteringCoefficient).toBe(0.0015)
+      expect(clouds.scatteringCoefficient).toBe(createEarthCloudProfile().layers[0].extinctionPerMeter)
       expect(clouds.absorptionCoefficient).toBe(0)
     } finally {
       clouds.dispose()
@@ -156,8 +156,14 @@ describe('Earth cloud adapter', () => {
         expect(clouds.shadow.maxFar).toBe(200000)
         const active = Array.from(clouds.cloudLayers).filter((layer) => layer.height > 0)
         expect(active).toHaveLength(1)
-        expect(active[0]).toMatchObject({ altitude: 4000, height: 4000, densityScale: 1, shadow: true })
-        expect(clouds.scatteringCoefficient).toBe(0.0015)
+        expect(active[0]).toMatchObject({
+          altitude: 4000,
+          height: 4000,
+          densityScale: 1,
+          shapeDetailAmount: before.layers[0].detail.erosionStrength,
+          shadow: true
+        })
+        expect(clouds.scatteringCoefficient).toBe(before.layers[0].extinctionPerMeter)
         expect(clouds.absorptionCoefficient).toBe(0)
         expect(clouds.shapeRepeat.x).toBe(1 / 12000)
         expect(clouds.shapeDetailRepeat.x).toBe(1 / 1200)

@@ -571,3 +571,92 @@ The full unit suite passes 5366 tests in 552 files, with 4 configured skips.
 TypeScript, production build, lint excluding local `.superpowers/**`, and formatting
 of the changed preset/adapter test pass. Independent review found no code issues;
 live perceptual acceptance and weaker-card measurements remain as described above.
+
+### Close cloud form and reprojection precision (2026-10-20)
+
+Cloud-hit velocity now reconstructs the hit in view space from the normalized
+view ray and Euclidean front distance. The existing `viewReprojectionMatrix`
+combines current/previous camera translations on the CPU in double precision.
+Previously, projecting a float32 body-relative hit at planetary radius introduced
+false motion even with a stationary camera. The current Bayer jitter convention
+is retained; no new uniforms, texture fetches or passes are needed.
+
+The GPU regression executes the installed velocity block against a CPU-projected
+physical world point. It covers zero/Earth/Jupiter radii, stationary cameras,
+translation, rotation, three Bayer phases and 10 m / 200 m / 2000 km hit distances,
+including rotated ECEF coordinates and altitude correction. Its tolerance is
+0.002 pixels at 1920 x 1080. Before the fix, the stationary Earth/10 m case failed
+with 27.33 pixels of error. Anchor validation still occurs before shader publication.
+
+Earth's extinction is now 0.003/m instead of 0.0015/m, with erosion strength 0.65
+instead of 0.35. This strengthens cloud cores and internal shading while opening
+small breaks around their edges. The 12 km shape period, 1.2 km erosion period,
+authored weather, shell and quality budgets remain the same. The shared Earth lab
+uses the same profile. Low still disables detail erosion, so only its extinction
+changes; medium/high use both parameters. Terrain/water cloud shadows also become
+denser. The distant surface-map endpoint remains independently authored.
+
+Controlled candidates compared larger main shapes, stronger erosion, increased
+extinction and cubic history reconstruction. Larger shapes stayed too soft, while
+cubic reconstruction amplified stationary variation. Extinction 0.006/m gave
+stronger form but raised above-layer stationary red-channel variation from about
+0.000055 to 0.000206 at 1080p, so the retained profile uses the more moderate value.
+The correction to velocity alone reduced edge-view stationary red/alpha variation
+from 0.000282/0.000542 to 0.000130/0.000239 with the original density. These are
+raw-buffer frame differences, not perceptual quality scores; the denser final
+profile changes both contrast and opacity and must be evaluated separately.
+
+The final paired medium run used Chrome 155, RTX 5070 Ti / ANGLE D3D11,
+1920 x 1080, DPR 1 and fixed epoch JD 2451545. Each pose settled for 120 frames,
+then warmed its variant for 128 draws. Timings use another 30 warmup frames and
+181 nondisjoint GPU samples per stage; inside-layer order is reversed. The legacy
+variant restores both the old profile and old velocity block on the live instance.
+No unit tests, builds or other owned GPU probes ran alongside the measurements.
+
+| Medium / view | Cloud pass before / after | Whole frame before / after |
+| --- | --- | --- |
+| Above 12 km | 4.767 / 4.620 ms | 10.128 / 9.623 ms |
+| Inside 6 km | 2.425 / 1.639 ms | 8.011 / 8.305 ms |
+| Transition 110 km | 2.838 / 2.735 ms | 9.742 / 9.596 ms |
+
+Cloud-pass medians are lower in all three views; whole-frame results include a
+0.294 ms increase inside the layer, so this is not a uniform FPS improvement.
+Resources match within each pair: 248 geometries / 122 textures above and inside,
+253 / 121 in transition; terrain/water counts are 132/60 and 120/60 respectively.
+
+After fixed warmup, stationary 64-frame sequences read the raw cloud buffer at
+640 x 360. Final red/alpha mean absolute frame changes are 0.000100/0.000094 above
+and 0.000213/0.000408 at the edge, versus 0.000055/0.000075 and 0.000282/0.000542
+before. The final profile therefore retains more above-layer shading variation
+for stronger form while reducing edge variation by about 25%. Maximum false
+stationary edge velocity drops from 3.60 resolved pixels to 0.000257. Slow/fast
+rotations of 1.5/6 degrees over 64 frames are also recorded; their frame differences
+include real motion and changed contrast, so they are not ghosting scores.
+
+Final medium images and samples are in
+`tmpscreenshots/cloud-tuning/appearance-balanced-1080/`. Candidate comparisons
+are in `appearance-shape/`, `appearance-core/` and `appearance-final-1080/` (the
+last contains the rejected 0.006/m profile). The user inspected the final iteration
+live and approved it for commit and push.
+
+Low was checked separately with the same protocol, including its disabled detail
+erosion. Cloud-pass medians before/after are 0.902/0.882 ms above, 0.566/0.304 ms
+inside and 0.653/0.660 ms in transition; whole-frame medians are 8.242/8.149,
+7.539/7.380 and 8.724/8.950 ms. Counts match within pairs (251 geometries /
+122 textures above/inside, 256/121 in transition). Low remains visibly softer,
+with slightly higher transition cost in this run. Screenshots and raw timings
+are in `tmpscreenshots/cloud-tuning/appearance-balanced-low-1080/`.
+
+The final lighting GPU probe passes 1310 checks across 35 cases, composition
+passes 882 across 18, and lifecycle passes 147 across 14. These cover camera
+precision, lighting, near/far activation, quality switches, 4K capture and context
+restoration. Expected shader-failure diagnostics stay inside their explicit
+injection windows. The shared Earth lab lighting probe passes all 12 checks.
+The full baseline-dependent flight probe was not repeated for this iteration.
+Independent read-only review found no defects in the reprojection or profile
+integration. Measurements on other GPUs remain open.
+
+The full unit suite passes 5366 tests in 552 files, with 4 configured skips.
+TypeScript, production build, lint excluding local `.superpowers/**`, and formatting
+of all changed TypeScript files pass. The adapter regression also preserves the
+authored extinction and erosion strength through low/medium/high round trips.

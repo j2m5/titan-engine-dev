@@ -160,6 +160,7 @@ export const sceneCloudProbeRegistry: Partial<
       'alpha-depth-shadow-invariance',
       'temporal-opacity-independent-of-light',
       'temporal-fresh-pixel-accumulation',
+      'cloud-hit-reprojection-precision',
       'eclipse-direct',
       'reset-recreation',
       'single-public-update',

@@ -90,6 +90,10 @@ describe('main scene cloud light units', () => {
     try {
       for (const invalid of [
         original.replace('float getRayDistanceToScene(', 'float missingDepth('),
+        original.replace(
+          'vec3 frontPositionWorld = ecefToWorld(frontPosition);',
+          'vec3 frontPositionWorld = frontPosition;'
+        ),
         original + original
       ]) {
         cloud.fragmentShader = invalid

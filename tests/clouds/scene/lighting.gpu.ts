@@ -39,6 +39,7 @@ import type { Actor } from '@/core/models/Actor'
 import type { SceneCloudProbeReport } from './probe'
 import { checkSceneCloudTemporalResolve } from './temporalResolve.gpu'
 import { checkSceneCloudSunShadow } from './sunShadow.gpu'
+import { checkSceneCloudReprojection } from './reprojection.gpu'
 
 const SIZE = 33,
   UNIT = SpaceScale / 1000,
@@ -327,6 +328,8 @@ void main() {
     report.cases.push('temporal-opacity-independent-of-light')
     checkSceneCloudTemporalResolve(renderer, close)
     report.cases.push('temporal-fresh-pixel-accumulation')
+    checkSceneCloudReprojection(recreate(frame(origin, endpoint)), draw, check)
+    report.cases.push('cloud-hit-reprojection-precision')
 
     // Compare the production source-light function with an independently rendered
     // original far receiver. The same owner supplies all live policy values.

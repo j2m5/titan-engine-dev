@@ -69,6 +69,15 @@ float getRayDistanceToScene(const vec3 rayDirection, out float viewZ) {
     'scene cloud',
     'getRayDistanceToScene'
   )
+  // Planet-sized float32 positions lose subpixel motion near the camera. The existing
+  // view reprojection matrix cancels the camera translation on the CPU in double precision.
+  shader = replaceExactlyOnce(
+    shader,
+    'vec3 frontPositionWorld = ecefToWorld(frontPosition);\n      vec4 prevClip = reprojectionMatrix * vec4(frontPositionWorld, 1.0);',
+    'vec3 frontView = normalize(vViewPosition) * frontDepth;\n      vec4 prevClip = viewReprojectionMatrix * vec4(frontView, 1.0);',
+    'scene cloud',
+    'cloud-hit reprojection'
+  )
   const integratedReturn = 'return vec4(radianceIntegral, remapClamped(transmittanceIntegral, 1.0, minTransmittance));'
   if (!sceneReferenceLighting)
     shader = replaceExactlyOnce(

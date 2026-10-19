@@ -11,7 +11,7 @@ export function createEarthCloudProfile(): EnabledCloudConfig {
         id: 'earth-main',
         baseAltitudeMeters: 4000,
         thicknessMeters: 4000,
-        extinctionPerMeter: 0.0015,
+        extinctionPerMeter: 0.003,
         pattern: {
           kind: 'mask',
           encoding: 'rgb-cloud-map',
@@ -22,7 +22,7 @@ export function createEarthCloudProfile(): EnabledCloudConfig {
           seed: 0x45617274,
           shapeScaleMeters: 12000,
           erosionScaleMeters: 1200,
-          erosionStrength: 0.35,
+          erosionStrength: 0.65,
           // Move the envelope peak from ~14% to ~34% of the shell height.
           verticalProfileBias: 0.65
         },
