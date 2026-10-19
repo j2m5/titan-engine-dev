@@ -9,13 +9,12 @@ import {
   Texture
 } from 'three'
 import type { EnabledCloudConfig } from '../CloudConfig'
-import { coverageFromScalar, decodeCloudScalar } from '../cloudPatternMath'
 import { assertCloudAppearanceSupport } from './cloudAppearance'
 import { finalizeCloudColor } from './cloudAppearanceTextures'
 import { readCloudImagePixelSteps } from './cloudImagePixels'
 import { createCloudReduction } from './cloudPreparationSteps'
 import type { prepareCloudSource } from './prepareCloudSource'
-import { decodeRgbCloud } from './rgbCloudMap'
+import { compileCloudByteCoverage } from './cloudByteCoverage'
 
 export interface CloudPreparationOptions {
   signal?: AbortSignal
@@ -123,33 +122,7 @@ export async function prepareCloudSourceAsync(
   const scale = rgb ? Math.min(1, 2048 / sw, 1024 / sh) : 1
   const width = rgb ? Math.max(1, Math.floor(sw * scale)) : source instanceof DataTexture ? sw : Math.min(sw, 1024)
   const height = rgb ? Math.max(1, Math.floor(sh * scale)) : Math.max(1, Math.round((sh * width) / sw))
-  const reduction = createCloudReduction(
-    sw,
-    sh,
-    width,
-    height,
-    (at) => {
-      const sample: [number, number, number, number] = [
-        bytes[at] / 255,
-        bytes[at + 1] / 255,
-        bytes[at + 2] / 255,
-        bytes[at + 3] / 255
-      ]
-      return [
-        rgb
-          ? decodeRgbCloud([sample[0], sample[1], sample[2]], space).coverage
-          : coverageFromScalar(
-              decodeCloudScalar(
-                sample,
-                (pattern as Exclude<typeof pattern, { encoding: 'rgb-cloud-map' }>).decode,
-                space
-              ),
-              pattern as Exclude<typeof pattern, { encoding: 'rgb-cloud-map' }>
-            )
-      ]
-    },
-    1
-  )
+  const reduction = createCloudReduction(sw, sh, width, height, compileCloudByteCoverage(bytes, pattern, space), 1)
   while (!reduction.step(256)) await checkpoint()
   options.measured?.('reduce', performance.now() - reduceStart)
   await checkpoint()

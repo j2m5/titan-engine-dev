@@ -56,6 +56,56 @@ describe('resumable cloud preparation', () => {
     }
     expect(step.output[0]).toBe(128)
   })
+  it('matches the untouched sync oracle at the Earth cap with asymmetric fractional source areas', async () => {
+    const source = new DataTexture(
+      Uint8Array.from({ length: 2049 * 3 * 4 }, (_, i) => (i * 53) % 256),
+      2049,
+      3
+    )
+    source.colorSpace = SRGBColorSpace
+    const config = createEarthCloudProfile(),
+      before = structuredClone(config),
+      version = source.version
+    const dispose = vi.spyOn(source, 'dispose')
+    const sync = prepareCloudSource(config, () => source)
+    const result = await prepareCloudSourceAsync(config, () => source, { yield: async () => {}, budgetMs: 0 })
+    expect(result.textures.weather.image.width).toBe(2048)
+    expect(result.textures.weather.image.height).toBe(2)
+    expect(result.textures.weather.image.data).toEqual(sync.textures.weather.image.data)
+    expect(config).toEqual(before)
+    result.dispose()
+    sync.dispose()
+    expect(source.version).toBe(version)
+    expect(dispose).not.toHaveBeenCalled()
+  })
+  it.each(['abort', 'replace-image'] as const)(
+    'cancels during bounded reduction without publishing derivatives (%s)',
+    async (mode) => {
+      const source = new DataTexture(new Uint8Array(2049 * 3 * 4), 2049, 3)
+      const dispose = vi.spyOn(source, 'dispose'),
+        control = new AbortController()
+      let reducing = false,
+        reducedYield = false
+      await expect(
+        prepareCloudSourceAsync(createEarthCloudProfile(), () => source, {
+          signal: control.signal,
+          budgetMs: 0,
+          measured: (stage) => {
+            if (stage === 'read') reducing = true
+          },
+          yield: async () => {
+            if (reducing) {
+              reducedYield = true
+              if (mode === 'abort') control.abort()
+              else source.image = { ...source.image }
+            }
+          }
+        })
+      ).rejects.toMatchObject({ name: 'AbortError' })
+      expect(reducedYield).toBe(true)
+      expect(dispose).not.toHaveBeenCalled()
+    }
+  )
   it('rejects promptly on cancellation during a yield and leaves borrowed textures intact', async () => {
     const source = new DataTexture(new Uint8Array(1024 * 4), 1024, 1)
     const dispose = vi.spyOn(source, 'dispose')
