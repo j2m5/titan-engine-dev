@@ -402,7 +402,6 @@ const BASELINE_FRAGMENT_SHADER = `
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
-    varying vec3 vLocalViewDir;
     varying vec3 vDetailPos;
     // Блик воды — общий чанк (и с легаси-сферой тела): нужен и без USE_WATER_WAVES
     #include <waterGlintFunctions>
@@ -489,7 +488,6 @@ const BASELINE_FRAGMENT_SHADER = `
       float dayFactor = smoothstep(-0.08, 0.25, NdotL);
       // Затмение: свет звезды в точке датума с учётом тел-соседей (1 — без затмения)
       vec3 eclipse = eclipseLight(normalize(vLocalDir) * uBodyRadiusUnits);
-      // Тень облаков на воде (чанк CloudLayer, тот же закон, что на суше) — только прямой свет
       float cloudShadow = 1.0;
       color *= mix(vec3(uWaterNightFloor), vec3(cloudShadow) * eclipse, dayFactor);
 
@@ -595,7 +593,6 @@ const BASELINE_VERTEX_SHADER = `
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
-    varying vec3 vLocalViewDir;
     varying vec3 vDetailPos;
 
     // Водная оболочка — всегда патчи кубосферы (тот же TerrainPatchPool, что и
@@ -635,7 +632,6 @@ const BASELINE_VERTEX_SHADER = `
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
       // Взгляд в системе тела (облачный слой) — из view-space, как у суши (TerrainShaderTemplate)
-      vLocalViewDir = transpose(mat3(modelMatrix)) * (transpose(mat3(viewMatrix)) * mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
 
       ${ShaderChunk['logdepthbuf_vertex']}

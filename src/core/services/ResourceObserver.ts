@@ -147,10 +147,12 @@ class ResourceObserver {
     // ClosestChange щёлкает дважды в секунду по тику: без .catch любой бросок
     // из пересчёта — тихий unhandled rejection. Промис возвращается наружу
     // (не void): тесты ждут завершение конвейера через await хендлера.
-    this.sceneObserver.subscribe('ClosestChange', (): Promise<void> =>
-      this.closestChange().catch((cause: unknown): void => {
-        console.error('[streaming] пересчёт состава видеопамяти провалился', cause)
-      })
+    this.sceneObserver.subscribe(
+      'ClosestChange',
+      (): Promise<void> =>
+        this.closestChange().catch((cause: unknown): void => {
+          console.error('[streaming] пересчёт состава видеопамяти провалился', cause)
+        })
     )
     this.setResidentTextures()
   }
@@ -518,7 +520,7 @@ class ResourceObserver {
 
       // Облачный слой ВЕРНУЛСЯ решением владельца (2026-08-19, приёмочная
       // волна 4, №3) — фильтр 'cloud' из кандидатов streaming (приёмочная
-      // волна 2, №2) снят: USE_CLOUD снова ставится при cloudMap (см.
+      // волна 2, №2) снят: scene cloud receiver снова ставится при cloudMap (см.
       // PlanetSurfaceMaterial.updateMaterial), карту снова стоит стримить.
       const streamableResources: Resource[] = actor.resources
         .filter((resource: Resource): boolean => resource.getAttribute('lifecycle') === 'streamable')
@@ -699,7 +701,8 @@ class ResourceObserver {
       try {
         this.withActorMaterial(
           actorId,
-          (material: AbstractShaderMaterial): void => (isDiffuse ? material.resetMaterial() : material.updateMaterial()),
+          (material: AbstractShaderMaterial): void =>
+            isDiffuse ? material.resetMaterial() : material.updateMaterial(),
           actorId === candidate.actorId ? candidate.name : undefined
         )
       } catch {
@@ -729,7 +732,11 @@ class ResourceObserver {
    * `TerrainSphere`, а не самим `.renderable` узла (см. докблок
    * `WaterSphere.material`), и раньше не входила в этот фан-аут вовсе.
    */
-  private withActorMaterial(actorId: number, fn: (material: AbstractShaderMaterial) => void, fallbackName?: string): void {
+  private withActorMaterial(
+    actorId: number,
+    fn: (material: AbstractShaderMaterial) => void,
+    fallbackName?: string
+  ): void {
     const name: string | undefined = this._map.get(actorId)?.getAttribute('name') ?? fallbackName
 
     if (!name) return
@@ -879,7 +886,8 @@ class ResourceObserver {
       try {
         this.withActorMaterial(
           actorId,
-          (material: AbstractShaderMaterial): void => (isDiffuse ? material.resetMaterial() : material.updateMaterial()),
+          (material: AbstractShaderMaterial): void =>
+            isDiffuse ? material.resetMaterial() : material.updateMaterial(),
           actorId === candidate.actorId ? candidate.name : undefined
         )
       } catch {

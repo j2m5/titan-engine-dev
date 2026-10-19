@@ -113,6 +113,7 @@ export function bindSceneCloudReceiver(
     }
   }
   // Static programs keep far-map and near-shadow sampler closures mutually exclusive.
+  material.defines.SCENE_CLOUD_RECEIVER = 1
   material.defines.SCENE_CLOUD_SHADOW_CASCADE_COUNT = 1
   let disposed = false,
     far = false,
@@ -120,14 +121,6 @@ export function bindSceneCloudReceiver(
   let nearMaterial: ShaderMaterial | null = null,
     nearSignature = '',
     retryEpoch = 0
-  function migrate() {
-    if (material.defines.SCENE_CLOUD_RECEIVER !== undefined) return
-    material.defines.SCENE_CLOUD_RECEIVER = 1
-    delete material.defines.USE_CLOUD
-    delete material.defines.USE_CLOUD_SHADOW
-    delete material.defines.USE_WATER_CLOUD
-    material.needsUpdate = true
-  }
   function clearShadow() {
     u.sceneCloudShadowEnabled.value = false
     u.sceneCloudShadowShadowBuffer.value = neutral
@@ -164,7 +157,6 @@ export function bindSceneCloudReceiver(
     setFarMap(map, source, colorSource) {
       if (disposed) return
       currentUniforms()
-      migrate()
       const layout = {
         SCENE_CLOUD_FAR_MAP: map ? 1 : undefined,
         SCENE_CLOUD_FAR_COLOR:
@@ -205,7 +197,6 @@ export function bindSceneCloudReceiver(
     setEndpoint(frame, output) {
       if (disposed) return
       currentUniforms()
-      migrate()
       clearShadow()
       near = !!(frame && output && frame.serial === output.frame.serial && frame.actorId === output.frame.actorId)
       u.sceneCloudHasFrame.value = frame !== null

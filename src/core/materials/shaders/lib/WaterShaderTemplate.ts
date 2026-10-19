@@ -48,15 +48,7 @@ const defaultUniforms = {
   uWaterRippleStrength: new Uniform(1),
   uWaterDepthRangeMeters: new Uniform(200),
   uWaterPixelAngle: new Uniform(WATER_DEFAULT_PIXEL_ANGLE),
-  // облачный слой над водой — карта и высотный fade материала рельефа (WaterMaterial.syncClouds)
-  uWaterCloudMap: new Uniform(null),
-  uWaterCloudOpacity: new Uniform(1),
-  // Облачный слой (чанк CloudLayer): радиус тела и ручки слоя — ставит WaterShader по данным тела
   uBodyRadiusUnits: new Uniform(0),
-  uCloudHeightUnits: new Uniform(0),
-  uCloudHeightKm: new Uniform(0),
-  uCloudLightSoftness: new Uniform(0.1),
-  uCloudShadowStrength: new Uniform(0),
   // Ряд волн (арка water-shader, Task 1) — все четыре инертны без
   // USE_WATER_WAVES (гейт по наличию waterNormal-текстуры, см. WaterMaterial):
   // сэмплер null, uTime/scale нулевые заглушки — реальные значения
@@ -115,7 +107,6 @@ export const WaterShaderTemplate: ShaderProps = {
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
-    varying vec3 vLocalViewDir;
     varying vec3 vDetailPos;
 
     // Водная оболочка — всегда патчи кубосферы (тот же TerrainPatchPool, что и
@@ -155,7 +146,6 @@ export const WaterShaderTemplate: ShaderProps = {
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
       // Взгляд в системе тела (облачный слой) — из view-space, как у суши (TerrainShaderTemplate)
-      vLocalViewDir = transpose(mat3(modelMatrix)) * (transpose(mat3(viewMatrix)) * mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
 
       ${ShaderChunk['logdepthbuf_vertex']}
@@ -189,7 +179,6 @@ export const WaterShaderTemplate: ShaderProps = {
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
-    varying vec3 vLocalViewDir;
     varying vec3 vDetailPos;
     // Блик воды — общий чанк (и с легаси-сферой тела): нужен и без USE_WATER_WAVES
     #include <waterGlintFunctions>
@@ -216,25 +205,11 @@ export const WaterShaderTemplate: ShaderProps = {
       uniform float uWaterDepthRangeMeters;
     #endif
 
-    #ifdef USE_WATER_CLOUD
-      #ifndef USE_WATER_DEPTH
-        #include <terrainUvFunctions>
-      #endif
-      uniform sampler2D uWaterCloudMap;
-      uniform float uWaterCloudOpacity;
-    #endif
 
     #ifdef USE_SUN_TINT
       #include <sunTransmittanceFunctions>
     #endif
 
-    #ifdef USE_WATER_CLOUD
-      // Облачный слой (чанк CloudLayer) — тот же, что у суши; имена суши — макросами на юниформы воды
-      #define cloudMap uWaterCloudMap
-      #define uCloudOpacity uWaterCloudOpacity
-      #include <cloudLayerUniforms>
-      #include <cloudLayerFunctions>
-    #endif
 
     #ifdef USE_WATER_WAVES
       uniform sampler2D uWaterNormalMap;
@@ -517,13 +492,7 @@ export const WaterShaderTemplate: ShaderProps = {
       float dayFactor = smoothstep(-0.08, 0.25, NdotL);
       // Затмение: свет звезды в точке датума с учётом тел-соседей (1 — без затмения)
       vec3 eclipse = eclipseLight(normalize(vLocalDir) * uBodyRadiusUnits);
-      // Тень облаков на воде (чанк CloudLayer, тот же закон, что на суше) — только прямой свет
       float cloudShadow = 1.0;
-      #ifdef USE_WATER_CLOUD
-        vec3 cloudShadowDir = normalize(vLocalDir);
-        vec3 cloudShadowSun = -normalize(vLocalLightDirection);
-        cloudShadow = cloudShadowAt(cloudShadowDir, cloudShadowSun, dot(cloudShadowDir, cloudShadowSun));
-      #endif
       #ifdef SCENE_CLOUD_RECEIVER
         cloudShadow *= sceneCloudSampleSunTransmittanceMeters(sceneCloudPositionMeters(-vViewPosition));
       #endif
@@ -817,18 +786,6 @@ export const WaterShaderTemplate: ShaderProps = {
       // потолок: искры блумят, кляксы — нет; под пеной блика нет; gain 1 — прежний ближний вид
       color += min(glint, WATER_GLINT_CEILING) * uWaterGlintGain * (1.0 - foam);
 
-      #ifdef USE_WATER_CLOUD
-        // Облака над морем — тот же чанк, что на суше: параллакс, утолщение, свет слоя. Альфа воды не
-        // меняется: рельеф под водой несёт те же облака, и после смешивания выходит ровно
-        // «облако поверх (вода поверх суши)»
-        vec3 cloudPremul;
-        vec3 cloudDir;
-        float cloudAlphaSlant;
-        cloudLayerSample(normalize(vLocalDir), normalize(vLocalViewDir), cloudPremul, cloudAlphaSlant, cloudDir);
-        vec3 cloudRadiance = cloudLitRadiance(cloudPremul, cloudDir, -normalize(vLocalLightDirection));
-        cloudRadiance *= eclipseLight(cloudDir * (uBodyRadiusUnits + uCloudHeightUnits));
-        color = color * (1.0 - cloudAlphaSlant) + cloudRadiance;
-      #endif
 
       #ifdef SCENE_CLOUD_WATER_DEPTH
         if (alpha <= 0.0) discard;

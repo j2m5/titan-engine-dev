@@ -1,3 +1,12 @@
+import { Resources } from '@storage/database'
+import { ImageBitmapStrategy } from '@/core/textures/strategies/ImageBitmapStrategy'
+import { Storage } from '@/core/framework/file/Storage'
+import { readCloudImagePixels } from '@/core/clouds/appearance/cloudImagePixels'
+import { resolveSceneClouds } from '@/core/clouds/resolveSceneClouds'
+import { CloudRegistry } from '@/core/services/CloudRegistry'
+import { SceneCloudRuntime } from '@/core/clouds/SceneCloudRuntime'
+import { resourceStorage } from '@/core/services/ResourceStorage'
+import { SRGBColorSpace } from 'three'
 import {
   Color,
   Data3DTexture,
@@ -204,6 +213,132 @@ export async function run(): Promise<SceneCloudProbeReport> {
     return { coverage, cloud: rgb.map((value, channel) => Math.min(value / coverage, 1) * [0.7, 0.8, 0.9][channel]) }
   }
   try {
+    // Catalog far-only owners use real JPEG/PNG decoding through the production loader.
+    // These are deterministic encoded fixtures, not the authored Task9 image assets.
+    for (const [actorId, resourceId, mime] of [
+      [13, 37, 'image/jpeg'],
+      [88, 113, 'image/png']
+    ] as const) {
+      const resource = Resources.find((r) => r.id === resourceId)!
+      const canvas = document.createElement('canvas')
+      canvas.width = canvas.height = 8
+      const ctx = canvas.getContext('2d')!
+      ctx.fillStyle = 'rgb(64,96,128)'
+      ctx.fillRect(0, 0, 8, 8)
+      const blob = await new Promise<Blob>((resolve, reject) =>
+        canvas.toBlob((b) => (b ? resolve(b) : reject(Error('fixture encoding failed'))), mime, 0.95)
+      )
+      check(blob.type === mime, 'catalog image MIME ' + resourceId)
+      const url = URL.createObjectURL(blob),
+        originalUrl = Storage.url
+      let source: import('three').Texture | undefined
+      const registry = new CloudRegistry()
+      let backendCalls = 0,
+        prepareCalls = 0
+      const runtime = new SceneCloudRuntime(registry, {
+        prepare: () => {
+          prepareCalls++
+          throw Error('far-only preparation')
+        },
+        createBackend: () => {
+          backendCalls++
+          throw Error('far-only volume')
+        }
+      })
+      try {
+        Storage.url = () => url
+        source = await ImageBitmapStrategy.create().load({
+          paths: [resource.path],
+          name: resource.path,
+          params: {},
+          resourceType: resource.resourceType
+        })
+        Storage.url = originalUrl
+        source.name = resource.path
+        source.colorSpace = SRGBColorSpace
+        source.wrapS = RepeatWrapping
+        source.needsUpdate = true
+        check(
+          resource.colorSpace === 'srgb' && source.image instanceof ImageBitmap,
+          'catalog source ImageBitmap/sRGB ' + resourceId
+        )
+        resourceStorage.addTexture(source)
+        const decoded = readCloudImagePixels(source)
+        const rgb = new Color().setRGB(
+          decoded.bytes[0] / 255,
+          decoded.bytes[1] / 255,
+          decoded.bytes[2] / 255,
+          SRGBColorSpace
+        )
+        const components = [rgb.r, rgb.g, rgb.b]
+        const coverage = Math.sqrt((rgb.r + rgb.g + rgb.b) / 3)
+        const descriptor = resolveSceneClouds(actorId, undefined, new Set([resourceId]))
+        check(
+          descriptor.volume === null && descriptor.far?.pattern.map.resourceId === resourceId,
+          'catalog far-only descriptor'
+        )
+        scene.position.z = -1e-6
+        registry.register({
+          actorId,
+          object: scene,
+          getSurface: () => ground,
+          datumRadiusMeters: radius,
+          descriptor,
+          resourcePaths: new Map([[resourceId, resource.path]]),
+          lightColor: new Color(0.7, 0.8, 0.9),
+          lambert: 0
+        })
+        for (const material of materials) registry.bindReceiver(actorId, material.sceneCloudReceiver)
+        for (const alpha of [0, 0.5, 1]) {
+          water.uniforms.uWaterAlphaDeep.value = alpha
+          setMap(null)
+          const before = sample(read())
+          const serial = 900 + alpha
+          check(
+            runtime.beginFrame(
+              camera,
+              new Vector2(33, 33),
+              serial,
+              0.016,
+              { serial, slots: [], dropped: [] },
+              false,
+              0
+            ) === null,
+            'far-only no volume plan'
+          )
+          const after = sample(read())
+          after.forEach((v, i) =>
+            close(
+              v,
+              before[i] * (1 - coverage) + Math.min(components[i] / coverage, 1) * [0.7, 0.8, 0.9][i] * coverage,
+              'encoded catalog single composite ' + resourceId,
+              0.005
+            )
+          )
+        }
+        const beforeClose = [source.image.width, source.image.height]
+        runtime.dispose()
+        check(
+          source.image.width === beforeClose[0] && source.image.height === beforeClose[1],
+          'far-only borrows decoded image'
+        )
+        check(
+          backendCalls === 0 &&
+            prepareCalls === 0 &&
+            runtime.diagnostics.depthPasses === 0 &&
+            runtime.diagnostics.shadowUpdates === 0,
+          'far-only zero near allocations/depth/shadow'
+        )
+        report.cases.push('far-only-' + actorId + '-' + resourceId + '-' + mime.split('/')[1])
+      } finally {
+        Storage.url = originalUrl
+        runtime.dispose()
+        resourceStorage.deleteTexture(resource.path)
+        source?.image.close()
+        URL.revokeObjectURL(url)
+        scene.position.z = 0
+      }
+    }
     // RGB source is the original sampler. A separately authored white near color must not whiten it.
     for (const angle of [0, 0.8]) {
       f = frame()

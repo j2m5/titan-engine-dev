@@ -30,7 +30,9 @@ export function terrainLit(i: TerrainLitInput): Vec3 {
   const l = Math.max(i.ndotl, 0)
   const tint = i.sunTint ?? [1, 1, 1]
   const directGain = mix(1, i.occlusion, i.kDirect) * i.cloudShadow
-  const lit = i.skyTerm.map((s: number, c: number): number => mix(i.ambient * s * i.occlusion, directGain * tint[c], l)) as Vec3
+  const lit = i.skyTerm.map((s: number, c: number): number =>
+    mix(i.ambient * s * i.occlusion, directGain * tint[c], l)
+  ) as Vec3
   return lit.map((v: number, c: number): number => mix(tint[c], v, i.lambert)) as Vec3
 }
 
@@ -41,21 +43,13 @@ export function terrainSkyTerm(greyFloor: number, sunTint: Vec3, skyAmbient: Vec
 
 export interface ComposeInput {
   night: Vec3
-  /** радиация облака (премультиплирована, освещена) */
-  cloudColor: Vec3
-  cloudAlpha: number
   dayColor: Vec3
   dayFactor: number
   lambert: number
 }
 
-/** Композиция: облака своим светом слоя (cloudColor — уже cloudRadiance), огни гаснут под облаками, суша под landGate. */
+/** Base surface composition before the scene cloud receiver. */
 export function composeTerrain(i: ComposeInput): Vec3 {
   const landGate = mix(i.dayFactor, 1, i.lambert)
-  return i.night.map((n: number, c: number): number =>
-    n * (1 - i.dayFactor) * (1 - i.cloudAlpha) + i.cloudColor[c] + i.dayColor[c] * (1 - i.cloudAlpha) * landGate
-  ) as Vec3
+  return i.night.map((n: number, c: number): number => n * (1 - i.dayFactor) + i.dayColor[c] * landGate) as Vec3
 }
-
-// Тень облаков переехала в зеркало облачного слоя; реэкспорт для прежних импортов
-export { CLOUD_SHADOW_MIN_COS, cloudShadowUvOffset } from './cloudLayerMath'

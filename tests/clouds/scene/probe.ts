@@ -81,6 +81,8 @@ export const sceneCloudProbeRegistry: Partial<
   receivers: {
     load: () => import('./receivers.gpu'),
     requiredCases: [
+      'far-only-13-37-jpeg',
+      'far-only-88-113-png',
       'transparent-water-single-coverage',
       'oblique-datum',
       'body-rotation',

@@ -139,6 +139,67 @@ function fixture(pending = false) {
 }
 afterEach(() => resourceStorage.deleteAllTextures())
 describe('scene cloud runtime', () => {
+  it('reports missing far source/color per body without replacing the selected volume reason and clears lifecycle snapshots', () => {
+    const f = fixture()
+    const far = {
+      ...f.body,
+      actorId: 13,
+      descriptor: {
+        ...f.body.descriptor,
+        volume: null,
+        far: {
+          ...f.body.descriptor.far!,
+          pattern: {
+            kind: 'mask' as const,
+            map: { resourceId: 37 },
+            decode: {
+              channel: 'r' as const,
+              inputRange: [0, 1] as [number, number],
+              exponent: 1,
+              invert: false,
+              sampleSpace: 'linear' as const
+            }
+          },
+          color: { kind: 'map' as const, map: { resourceId: 38 }, strength: 1 }
+        }
+      },
+      resourcePaths: new Map([
+        [37, 'far-pattern'],
+        [38, 'far-color']
+      ])
+    }
+    const unregister = f.registry.register(far)
+    expect(f.begin()).not.toBeNull()
+    expect(f.runtime.diagnostics.actorId).toBe(7)
+    expect(f.runtime.diagnostics.reason).toBeNull()
+    expect(f.runtime.diagnostics.farFallbacks).toEqual([{ actorId: 13, reason: 'resources' }])
+    for (const name of ['far-pattern', 'far-color']) {
+      const source = new DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1)
+      source.name = name
+      resourceStorage.addTexture(source)
+      f.begin()
+      expect(f.runtime.diagnostics.farFallbacks).toEqual(
+        name === 'far-pattern' ? [{ actorId: 13, reason: 'resources' }] : []
+      )
+    }
+    resourceStorage.deleteTexture('far-color')
+    f.begin()
+    expect(f.runtime.diagnostics.reason).toBeNull()
+    expect(f.runtime.diagnostics.farFallbacks).toEqual([{ actorId: 13, reason: 'resources' }])
+    f.runtime.setOptions(false, 'medium')
+    expect(f.runtime.diagnostics.farFallbacks).toEqual([])
+    f.runtime.setOptions(true, 'medium')
+    f.begin()
+    unregister()
+    expect(f.runtime.diagnostics.farFallbacks).toEqual([])
+    f.registry.register(far)
+    f.begin()
+    expect(f.runtime.diagnostics.farFallbacks).toHaveLength(1)
+    f.runtime.resetScenario()
+    expect(f.runtime.diagnostics.farFallbacks).toEqual([])
+    f.runtime.dispose()
+  })
+
   it.each(['depth', 'near'] as const)(
     'accepts fresh output after a latched %s failure and menu-time context recovery',
     (stage) => {

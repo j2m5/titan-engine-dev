@@ -579,7 +579,12 @@ class RenderableFactory {
     for (const resource of actor.resources) paths.set(resource.getAttribute('id')!, resource.getAttribute('path')!)
     const data = readRenderingData<IPlanetRenderingObject>(actor)
     const descriptor = resolveSceneClouds(actor.getAttribute('id')!, data?.clouds, new Set(paths.keys()))
-    if (descriptor.volume !== null || descriptor.state === 'off' || descriptor.state === 'invalid') {
+    if (
+      descriptor.far !== null ||
+      descriptor.volume !== null ||
+      descriptor.state === 'off' ||
+      descriptor.state === 'invalid'
+    ) {
       const entry: CloudBodyEntry = {
         actorId: actor.getAttribute('id')!,
         object: node,

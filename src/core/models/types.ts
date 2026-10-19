@@ -400,11 +400,6 @@ export interface IPlanetRenderingObject {
   /** Композиция света суши (арка «Свет»): резолвер terrainLightParams.ts, дефолты глобальные. */
   terrainOcclusionDirect?: number
   skyAmbientStrength?: number
-  cloudShadowStrength?: number
-  /** Высота облачного слоя, км (тень и параллакс); дефолт 6 */
-  cloudHeightKm?: number
-  /** Мягкость терминатора облаков; дефолт 0.1 */
-  cloudLightSoftness?: number
   /** Доля закона реголита (Lommel–Seeliger) против ламберта, [0, 1]; дефолт — 1 без атмосферы, 0 с ней */
   regolithMix?: number
   /** Сила оппозиционного всплеска реголита; дефолт 0.3; при regolithMix = 0 не действует */

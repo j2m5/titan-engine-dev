@@ -285,7 +285,13 @@ describe('TerrainMaterial: slope-карта у тел с честным рель
     const material = new SphereSurfaceMaterial(moon())
     material.updateMaterial()
 
-    for (const define of ['USE_TERRAIN_UV', 'USE_SLOPE', 'USE_TERRAIN_DETAIL', 'USE_TERRAIN_SHADOW', 'USE_CLOUD_SHADOW']) {
+    for (const define of [
+      'USE_TERRAIN_UV',
+      'USE_SLOPE',
+      'USE_TERRAIN_DETAIL',
+      'USE_TERRAIN_SHADOW',
+      'USE_CLOUD_SHADOW'
+    ]) {
       expect(material.defines[define], define).toBeUndefined()
     }
     // slope-сэмплера у сферы нет вовсе
@@ -316,44 +322,6 @@ describe('TerrainMaterial: slope-карта у тел с честным рель
     expect(terrain.defines.USE_SPECULAR).toBeUndefined()
     // загруженная карта высот рельефный путь действительно включила
     expect(terrain.defines.USE_TERRAIN_SHADOW).toBe('1')
-  })
-
-  it('USE_CLOUD_SHADOW — только при cloudMap И загруженной карте высот (через updateMaterial)', () => {
-    seedTexture(pathOf('cloud'))
-    seedEarthHeightMap()
-
-    const material = new TerrainMaterial(earth())
-    material.updateMaterial()
-
-    expect(material.defines.USE_CLOUD).toBe('1')
-    expect(material.defines.USE_CLOUD_SHADOW).toBe('1')
-
-    // сфера тени облаков не рисует вовсе
-    const sphere = new SphereSurfaceMaterial(earth())
-    sphere.updateMaterial()
-    expect(sphere.defines.USE_CLOUD).toBe('1')
-    expect(sphere.defines.USE_CLOUD_SHADOW).toBeUndefined()
-  })
-
-  it('без карты высот тень облаков молчит даже при cloudMap; без cloudMap — при карте высот', () => {
-    seedTexture(pathOf('cloud'))
-    const noHeight = new TerrainMaterial(earth())
-    noHeight.updateMaterial()
-    expect(noHeight.defines.USE_CLOUD).toBe('1')
-    expect(noHeight.defines.USE_CLOUD_SHADOW).toBeUndefined()
-
-    seedMoonHeightMap()
-    const noCloud = new TerrainMaterial(moon())
-    // Только фикстура: у тела без облачной строки путь падает в `?? ''`, а
-    // заглушку с пустым именем сеет seedPlaceholderKeys (нужна конструктору —
-    // кольца). В рантайме под '' в реестре ничего нет (getTextureOrMake
-    // плейсхолдер НЕ регистрирует), и Луна там честно бесоблачна — снимаем
-    // заглушку после постройки материала, чтобы гейт мерился по данным.
-    resourceStorage.deleteTexture('')
-    noCloud.updateMaterial()
-    // карта высот увидена (тень рельефа включилась), облаков нет — тени облаков нет
-    expect(noCloud.defines.USE_TERRAIN_SHADOW).toBe('1')
-    expect(noCloud.defines.USE_CLOUD_SHADOW).toBeUndefined()
   })
 
   // Патчи рельефа несут только position/patchCenter: вершинник рельефа берёт
@@ -616,34 +584,44 @@ describe('поверхность планеты: данные Ио — height/sl
 // рантайм-генератором из proceduralSurface — инвариант «диффуз есть» этого
 // describe им больше не подходит, свой страж — PROCEDURAL_ACTOR_IDS ниже.
 const BATCH_ACTOR_IDS = [20, 22, 28, 29, 30, 36, 37, 38, 73, 83] as const
-const TERRAFORM_RESOURCE_TYPES = ['height', 'slope', 'detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const
+const TERRAFORM_RESOURCE_TYPES = [
+  'height',
+  'slope',
+  'detailDiffuse',
+  'detailNormal',
+  'detailArm',
+  'detailNormal2'
+] as const
 
 describe(`поверхность планеты: счётные инварианты батча ${BATCH_ACTOR_IDS.length} спутников`, () => {
-  it.each(BATCH_ACTOR_IDS)('actorId %i: пара height+slope, wrapS у slope и диффуза, bumpScale 1, ровно 6 терраформных связок', (actorId) => {
-    const actor = Actor.find(actorId)!
-    const height = actor.resources.where('resourceType', 'height').first()
-    const slope = actor.resources.where('resourceType', 'slope').first()
-    const diffuse = actor.resources.where('resourceType', 'diffuse').first()
+  it.each(BATCH_ACTOR_IDS)(
+    'actorId %i: пара height+slope, wrapS у slope и диффуза, bumpScale 1, ровно 6 терраформных связок',
+    (actorId) => {
+      const actor = Actor.find(actorId)!
+      const height = actor.resources.where('resourceType', 'height').first()
+      const slope = actor.resources.where('resourceType', 'slope').first()
+      const diffuse = actor.resources.where('resourceType', 'diffuse').first()
 
-    expect(height, `actorId ${actorId}: height`).toBeDefined()
-    expect(slope, `actorId ${actorId}: slope`).toBeDefined()
-    expect(slope!.getAttribute('wrapS'), `actorId ${actorId}: slope wrapS`).toBe(RepeatWrapping)
-    expect(diffuse!.getAttribute('wrapS'), `actorId ${actorId}: diffuse wrapS`).toBe(RepeatWrapping)
+      expect(height, `actorId ${actorId}: height`).toBeDefined()
+      expect(slope, `actorId ${actorId}: slope`).toBeDefined()
+      expect(slope!.getAttribute('wrapS'), `actorId ${actorId}: slope wrapS`).toBe(RepeatWrapping)
+      expect(diffuse!.getAttribute('wrapS'), `actorId ${actorId}: diffuse wrapS`).toBe(RepeatWrapping)
 
-    const data = actor.renderingObject!.getAttribute('data') as Record<string, unknown>
-    expect(data.bumpScale, `actorId ${actorId}: bumpScale`).toBe(1)
+      const data = actor.renderingObject!.getAttribute('data') as Record<string, unknown>
+      expect(data.bumpScale, `actorId ${actorId}: bumpScale`).toBe(1)
 
-    const terraformLinks = actor.resources.whereIn('resourceType', [...TERRAFORM_RESOURCE_TYPES]).count()
-    expect(terraformLinks, `actorId ${actorId}: терраформные связки`).toBe(6)
-  })
+      const terraformLinks = actor.resources.whereIn('resourceType', [...TERRAFORM_RESOURCE_TYPES]).count()
+      expect(terraformLinks, `actorId ${actorId}: терраформные связки`).toBe(6)
+    }
+  )
 
   it('у Корribан-тел (93-99) РАЗНЫЕ resourceId height/slope — общей карты больше нет', () => {
     const korribanActorIds = [93, 94, 95, 96, 97, 98, 99] as const
-    const heightIds = korribanActorIds.map(
-      (actorId) => Actor.find(actorId)!.resources.where('resourceType', 'height').first()!.getAttribute('id')
+    const heightIds = korribanActorIds.map((actorId) =>
+      Actor.find(actorId)!.resources.where('resourceType', 'height').first()!.getAttribute('id')
     )
-    const slopeIds = korribanActorIds.map(
-      (actorId) => Actor.find(actorId)!.resources.where('resourceType', 'slope').first()!.getAttribute('id')
+    const slopeIds = korribanActorIds.map((actorId) =>
+      Actor.find(actorId)!.resources.where('resourceType', 'slope').first()!.getAttribute('id')
     )
 
     expect(new Set(heightIds).size, 'height resourceId должны быть уникальны').toBe(korribanActorIds.length)
@@ -659,25 +637,28 @@ describe(`поверхность планеты: счётные инвариан
 const PROCEDURAL_ACTOR_IDS = [65, 66, 67, 68, 69, 70, 71, 72, 74, 93, 94, 95, 96, 97, 98, 99] as const
 
 describe('поверхность планеты: процедурные тела (луны Коррибана)', () => {
-  it.each(PROCEDURAL_ACTOR_IDS)('actorId %i: proceduralSurface валиден, diffuse-ресурса нет, height+slope есть, slope repeat, bumpScale 1, ровно 4 детальные связки', (actorId) => {
-    const actor = Actor.find(actorId)!
-    const data = actor.renderingObject!.getAttribute('data') as Record<string, unknown>
-    expect(() => validateProceduralSurface(data.proceduralSurface, String(actorId))).not.toThrow()
-    expect(actor.resources.where('resourceType', 'diffuse').count()).toBe(0)
-    expect(actor.resources.where('resourceType', 'height').count()).toBe(1)
-    expect(actor.resources.where('resourceType', 'slope').count()).toBe(1)
+  it.each(PROCEDURAL_ACTOR_IDS)(
+    'actorId %i: proceduralSurface валиден, diffuse-ресурса нет, height+slope есть, slope repeat, bumpScale 1, ровно 4 детальные связки',
+    (actorId) => {
+      const actor = Actor.find(actorId)!
+      const data = actor.renderingObject!.getAttribute('data') as Record<string, unknown>
+      expect(() => validateProceduralSurface(data.proceduralSurface, String(actorId))).not.toThrow()
+      expect(actor.resources.where('resourceType', 'diffuse').count()).toBe(0)
+      expect(actor.resources.where('resourceType', 'height').count()).toBe(1)
+      expect(actor.resources.where('resourceType', 'slope').count()).toBe(1)
 
-    const slope = actor.resources.where('resourceType', 'slope').first()!
-    expect(slope.getAttribute('wrapS'), `actorId ${actorId}: slope wrapS`).toBe(RepeatWrapping)
-    expect(data.bumpScale, `actorId ${actorId}: bumpScale`).toBe(1)
+      const slope = actor.resources.where('resourceType', 'slope').first()!
+      expect(slope.getAttribute('wrapS'), `actorId ${actorId}: slope wrapS`).toBe(RepeatWrapping)
+      expect(data.bumpScale, `actorId ${actorId}: bumpScale`).toBe(1)
 
-    // 4 детальные связки — терраформная шестёрка минус height+slope, которые
-    // уже проверены выше отдельно (страж компенсации 93-99: диффуз тела
-    // генерируется рантаймом, но детальный слой всё равно файловый).
-    for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
-      expect(actor.resources.where('resourceType', type).count(), `actorId ${actorId}: ${type}`).toBe(1)
+      // 4 детальные связки — терраформная шестёрка минус height+slope, которые
+      // уже проверены выше отдельно (страж компенсации 93-99: диффуз тела
+      // генерируется рантаймом, но детальный слой всё равно файловый).
+      for (const type of ['detailDiffuse', 'detailNormal', 'detailArm', 'detailNormal2'] as const) {
+        expect(actor.resources.where('resourceType', type).count(), `actorId ${actorId}: ${type}`).toBe(1)
+      }
     }
-  })
+  )
 
   it('терраформные тела БЕЗ proceduralSurface по-прежнему несут diffuse-ресурс', () => {
     for (const actorId of [19, 8, 25]) {
@@ -809,23 +790,26 @@ describe('поверхность планеты: данные Плутона —
 const NINE_BODIES_ACTOR_IDS = [5, 6, 8, 9, 14, 15, 16, 17, 18] as const
 
 describe('поверхность планеты: счётные инварианты девяти твёрдых тел (планеты + карликовые)', () => {
-  it.each(NINE_BODIES_ACTOR_IDS)('actorId %i: пара height+slope, wrapS у slope и диффуза, bumpScale 1, ровно 6 терраформных связок', (actorId) => {
-    const actor = Actor.find(actorId)!
-    const height = actor.resources.where('resourceType', 'height').first()
-    const slope = actor.resources.where('resourceType', 'slope').first()
-    const diffuse = actor.resources.where('resourceType', 'diffuse').first()
+  it.each(NINE_BODIES_ACTOR_IDS)(
+    'actorId %i: пара height+slope, wrapS у slope и диффуза, bumpScale 1, ровно 6 терраформных связок',
+    (actorId) => {
+      const actor = Actor.find(actorId)!
+      const height = actor.resources.where('resourceType', 'height').first()
+      const slope = actor.resources.where('resourceType', 'slope').first()
+      const diffuse = actor.resources.where('resourceType', 'diffuse').first()
 
-    expect(height, `actorId ${actorId}: height`).toBeDefined()
-    expect(slope, `actorId ${actorId}: slope`).toBeDefined()
-    expect(slope!.getAttribute('wrapS'), `actorId ${actorId}: slope wrapS`).toBe(RepeatWrapping)
-    expect(diffuse!.getAttribute('wrapS'), `actorId ${actorId}: diffuse wrapS`).toBe(RepeatWrapping)
+      expect(height, `actorId ${actorId}: height`).toBeDefined()
+      expect(slope, `actorId ${actorId}: slope`).toBeDefined()
+      expect(slope!.getAttribute('wrapS'), `actorId ${actorId}: slope wrapS`).toBe(RepeatWrapping)
+      expect(diffuse!.getAttribute('wrapS'), `actorId ${actorId}: diffuse wrapS`).toBe(RepeatWrapping)
 
-    const data = actor.renderingObject!.getAttribute('data') as Record<string, unknown>
-    expect(data.bumpScale, `actorId ${actorId}: bumpScale`).toBe(1)
+      const data = actor.renderingObject!.getAttribute('data') as Record<string, unknown>
+      expect(data.bumpScale, `actorId ${actorId}: bumpScale`).toBe(1)
 
-    const terraformLinks = actor.resources.whereIn('resourceType', [...TERRAFORM_RESOURCE_TYPES]).count()
-    expect(terraformLinks, `actorId ${actorId}: терраформные связки`).toBe(6)
-  })
+      const terraformLinks = actor.resources.whereIn('resourceType', [...TERRAFORM_RESOURCE_TYPES]).count()
+      expect(terraformLinks, `actorId ${actorId}: терраформные связки`).toBe(6)
+    }
+  )
 })
 
 // Диона (actorId 27) — терраформная арка Task 2 стандартизации: реальная луна
@@ -1007,23 +991,26 @@ describe('поверхность планеты: данные Коррибана
 const TASK2_19_ACTOR_IDS = [24, 25, 26, 27, 31, 32, 33, 34, 35, 62, 88] as const
 
 describe('поверхность планеты: счётные инварианты 19 тел Task 2 стандартизации', () => {
-  it.each(TASK2_19_ACTOR_IDS)('actorId %i: пара height+slope, wrapS у slope и диффуза, bumpScale 1, ровно 6 терраформных связок', (actorId) => {
-    const actor = Actor.find(actorId)!
-    const height = actor.resources.where('resourceType', 'height').first()
-    const slope = actor.resources.where('resourceType', 'slope').first()
-    const diffuse = actor.resources.where('resourceType', 'diffuse').first()
+  it.each(TASK2_19_ACTOR_IDS)(
+    'actorId %i: пара height+slope, wrapS у slope и диффуза, bumpScale 1, ровно 6 терраформных связок',
+    (actorId) => {
+      const actor = Actor.find(actorId)!
+      const height = actor.resources.where('resourceType', 'height').first()
+      const slope = actor.resources.where('resourceType', 'slope').first()
+      const diffuse = actor.resources.where('resourceType', 'diffuse').first()
 
-    expect(height, `actorId ${actorId}: height`).toBeDefined()
-    expect(slope, `actorId ${actorId}: slope`).toBeDefined()
-    expect(slope!.getAttribute('wrapS'), `actorId ${actorId}: slope wrapS`).toBe(RepeatWrapping)
-    expect(diffuse!.getAttribute('wrapS'), `actorId ${actorId}: diffuse wrapS`).toBe(RepeatWrapping)
+      expect(height, `actorId ${actorId}: height`).toBeDefined()
+      expect(slope, `actorId ${actorId}: slope`).toBeDefined()
+      expect(slope!.getAttribute('wrapS'), `actorId ${actorId}: slope wrapS`).toBe(RepeatWrapping)
+      expect(diffuse!.getAttribute('wrapS'), `actorId ${actorId}: diffuse wrapS`).toBe(RepeatWrapping)
 
-    const data = actor.renderingObject!.getAttribute('data') as Record<string, unknown>
-    expect(data.bumpScale, `actorId ${actorId}: bumpScale`).toBe(1)
+      const data = actor.renderingObject!.getAttribute('data') as Record<string, unknown>
+      expect(data.bumpScale, `actorId ${actorId}: bumpScale`).toBe(1)
 
-    const terraformLinks = actor.resources.whereIn('resourceType', [...TERRAFORM_RESOURCE_TYPES]).count()
-    expect(terraformLinks, `actorId ${actorId}: терраформные связки`).toBe(6)
-  })
+      const terraformLinks = actor.resources.whereIn('resourceType', [...TERRAFORM_RESOURCE_TYPES]).count()
+      expect(terraformLinks, `actorId ${actorId}: терраформные связки`).toBe(6)
+    }
+  )
 })
 
 // Ключ тела по actorId — тот же порядок, что в task-2-report.md (таблица
@@ -1061,15 +1048,19 @@ function dirOf(resourcePath: string): string {
 
 describe('поверхность планеты: 19 тел Task 2 — пути не перепутаны и не подменены', () => {
   it('все 19 height-путей уникальны, все 19 slope-путей уникальны — ни одна карта не шарится между телами', () => {
-    const heightPaths = TASK2_19_ACTOR_IDS.map(
-      (actorId) => Actor.find(actorId)!.resources.where('resourceType', 'height').first()!.getAttribute('path')
+    const heightPaths = TASK2_19_ACTOR_IDS.map((actorId) =>
+      Actor.find(actorId)!.resources.where('resourceType', 'height').first()!.getAttribute('path')
     )
-    const slopePaths = TASK2_19_ACTOR_IDS.map(
-      (actorId) => Actor.find(actorId)!.resources.where('resourceType', 'slope').first()!.getAttribute('path')
+    const slopePaths = TASK2_19_ACTOR_IDS.map((actorId) =>
+      Actor.find(actorId)!.resources.where('resourceType', 'slope').first()!.getAttribute('path')
     )
 
-    expect(new Set(heightPaths).size, 'height-пути должны быть уникальны — общего размера 19').toBe(TASK2_19_ACTOR_IDS.length)
-    expect(new Set(slopePaths).size, 'slope-пути должны быть уникальны — общего размера 19').toBe(TASK2_19_ACTOR_IDS.length)
+    expect(new Set(heightPaths).size, 'height-пути должны быть уникальны — общего размера 19').toBe(
+      TASK2_19_ACTOR_IDS.length
+    )
+    expect(new Set(slopePaths).size, 'slope-пути должны быть уникальны — общего размера 19').toBe(
+      TASK2_19_ACTOR_IDS.length
+    )
   })
 
   it.each(TASK2_19_ACTOR_IDS)(
@@ -1120,7 +1111,6 @@ describe('SphereSurfaceMaterial: гейты ночной и облачной к�
     material.updateMaterial()
 
     expect(material.defines.USE_NIGHT).toBeUndefined()
-    expect(material.defines.USE_CLOUD).toBeUndefined()
   })
 
   // Облачный слой ВЕРНУЛСЯ решением владельца (2026-08-19, приёмочная волна
@@ -1138,7 +1128,6 @@ describe('SphereSurfaceMaterial: гейты ночной и облачной к�
     material.updateMaterial()
 
     expect(material.defines.USE_NIGHT).toBe('1')
-    expect(material.defines.USE_CLOUD).toBe('1')
   })
 
   it('resetMaterial снимает оба дефайна', () => {
@@ -1150,12 +1139,10 @@ describe('SphereSurfaceMaterial: гейты ночной и облачной к�
     const material = new SphereSurfaceMaterial(earth())
     material.updateMaterial()
     expect(material.defines.USE_NIGHT).toBe('1')
-    expect(material.defines.USE_CLOUD).toBe('1')
 
     material.resetMaterial()
 
     expect(material.defines.USE_NIGHT).toBeUndefined()
-    expect(material.defines.USE_CLOUD).toBeUndefined()
   })
 })
 
@@ -1434,12 +1421,14 @@ describe('поверхность планеты: у каждого терраф�
 
   // Ледяной набор включает тёмный лёд и семь лун Darkness.
   const ICE_ACTOR_IDS = [
-    14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 69, 133,
-    151, 153, 154, 156, 157, 158, 159
+    14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 69, 133, 151, 153, 154, 156,
+    157, 158, 159
   ] as const
 
   const archetype = (actorId: number): string | null =>
-    archetypeOf(Actor.find(actorId)!.resources.where('resourceType', 'detailDiffuse').first()!.getAttribute('path') as string)
+    archetypeOf(
+      Actor.find(actorId)!.resources.where('resourceType', 'detailDiffuse').first()!.getAttribute('path') as string
+    )
 
   it.each(ICE_ACTOR_IDS)('actorId %i — ледяной архетип', (actorId) => {
     expect(archetype(actorId)).toBe('ice')
@@ -1459,8 +1448,11 @@ describe('поверхность планеты: у каждого терраф�
 
   it('ледяных тел в базе ровно столько, сколько в раскладке — и контрольные тела на камне', () => {
     const iceActors = terraformActors.filter((actor) => archetype(actor.getAttribute('id') as number) === 'ice')
-    expect(iceActors.map((actor) => actor.getAttribute('id')).sort((a, b) => Number(a) - Number(b))).toEqual([...ICE_ACTOR_IDS])
+    expect(iceActors.map((actor) => actor.getAttribute('id')).sort((a, b) => Number(a) - Number(b))).toEqual([
+      ...ICE_ACTOR_IDS
+    ])
 
-    for (const actorId of [19, 5, 65, 68, 150, 155, 160, 161]) expect(archetype(actorId), `actorId ${actorId}`).toBe('rocky_trail')
+    for (const actorId of [19, 5, 65, 68, 150, 155, 160, 161])
+      expect(archetype(actorId), `actorId ${actorId}`).toBe('rocky_trail')
   })
 })

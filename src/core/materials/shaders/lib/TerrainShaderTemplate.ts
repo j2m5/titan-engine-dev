@@ -307,10 +307,6 @@ export const TerrainShaderTemplate: ShaderProps = {
 
       ${planetSurfaceLightBegin}
 
-      #ifdef USE_CLOUD_SHADOW
-        // тот же закон, что у воды (чанк CloudLayer); muS = dot(dirLocal, sunLocal)
-        cloudShadow = cloudShadowAt(dirLocal, sunLocal, muS);
-      #endif
 
       ${planetSurfaceDirectGain}
       // тень уступов террас — как тень рельефа, только прямой свет

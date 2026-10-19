@@ -16,7 +16,6 @@ export const planetSurfaceDefaultUniforms = {
   uLightColor: new Uniform(new Color(1, 1, 1)),
   diffuseMap: new Uniform(null),
   nightMap: new Uniform(null),
-  cloudMap: new Uniform(null),
   emission: new Uniform(1),
   uNightThreshold: new Uniform(0.06),
   uNightSoftness: new Uniform(0.18),
@@ -26,8 +25,6 @@ export const planetSurfaceDefaultUniforms = {
   uTerrainAmbient: new Uniform(0.15),
   // N·L (геометрический) полного пола: ниже пол ∝ солнцу над горизонтом, у терминатора → 0
   uTerrainAmbientSunRef: new Uniform(0.3),
-  // Высотный fade облачного слоя: 1 — слой виден целиком (см. cloudOpacityForAltitude)
-  uCloudOpacity: new Uniform(1),
   // Закон реголита (USE_REGOLITH): доля Ломмеля–Зелигера и всплеск
   uRegolithMix: new Uniform(0),
   uOppositionSurge: new Uniform(0.3)
@@ -41,7 +38,6 @@ export const planetSurfaceVaryings = `
     varying vec3 vLocalLightDirection;
     varying vec3 vViewPosition;
     varying vec3 vLocalDir;
-    varying vec3 vLocalViewDir;
 `
 
 /** Пролог вершинника: точность, чанки three, позиция звезды, varying'и. */
@@ -80,9 +76,6 @@ export const planetSurfaceVertexOutputs = `
       vLocalDir = vertexDir;
       vViewLightDirection = normalize(viewLightDirection.xyz - mvPosition.xyz);
       vLocalLightDirection = localLightDirection;
-      // Взгляд в системе тела (облачный слой) — из view-space: mvPosition точен у RTC-патчей,
-      // а worldPosition − cameraPosition в float32 теряет километры на больших координатах
-      vLocalViewDir = transpose(mat3(modelMatrix)) * (transpose(mat3(viewMatrix)) * mvPosition.xyz);
       vViewPosition = -mvPosition.xyz;
 `
 
@@ -95,16 +88,13 @@ export const planetSurfaceFragmentPars = `
 
     uniform sampler2D diffuseMap;
     uniform sampler2D nightMap;
-    uniform sampler2D cloudMap;
-    uniform float uCloudOpacity;
     uniform float emission;
     uniform float uNightThreshold;
     uniform float uNightSoftness;
     uniform float uTerrainLambert;
     uniform float uTerrainAmbient;
     uniform float uTerrainAmbientSunRef;
-    // Радиус тела в единицах сцены: длина дуги uv в тени облаков, параллаксе
-    // и dip облачного слоя, домен средней полосы — нужен без гейта полосы
+    // Радиус тела в единицах сцены: затмения и домен средней полосы.
     uniform float uBodyRadiusUnits;
     // Доля окклюзии на ПРЯМОМ свете: 0 — AO/полость не гасят солнце (физика),
     // 1 — окклюзия множит и прямой свет
@@ -129,11 +119,6 @@ export const planetSurfaceFragmentFunctions = `
       #include <sunTransmittanceFunctions>
     #endif
 
-    // Облачный слой на высоте h: параллакс, утолщение у края, свет слоя, тень (чанк CloudLayer)
-    #ifdef USE_CLOUD
-      #include <cloudLayerUniforms>
-      #include <cloudLayerFunctions>
-    #endif
 
     // Закон реголита безатмосферных тел (Lommel–Seeliger + оппозиционный всплеск) — функция чанка AsteroidBrdf
     #ifdef USE_REGOLITH
@@ -181,7 +166,6 @@ export const planetSurfaceLightBegin = `
       // (см. вершинник) — минус даёт +1 в зените.
       float muS = dot(normalize(vLocalDir), -normalize(vLocalLightDirection));
 
-      // Цвет солнца сквозь атмосферу: прямой свет поверхности и серый пол; облака берут sunTintAt на своей высоте (чанк CloudLayer).
       // Небо из irradiance-LUT пропускание уже несёт — второй раз его не множить
       vec3 sunTintMix = vec3(1.0);
       #ifdef USE_SUN_TINT
@@ -257,17 +241,6 @@ export const planetSurfaceComposite = `
         nightColor = texture2D(nightMap, uv).rgb;
       #endif
 
-      // Облачный слой (чанк CloudLayer): точка слоя на луче взгляда, покрытие с утолщением
-      // у края, свет в точке слоя — уже с высотным fade; без карты слой нулевой
-      vec3 cloudRadiance = vec3(0.0);
-      float cloudAlphaSlant = 0.0;
-      #ifdef USE_CLOUD
-        vec3 cloudPremul;
-        vec3 cloudDir;
-        cloudLayerSample(normalize(vLocalDir), normalize(vLocalViewDir), cloudPremul, cloudAlphaSlant, cloudDir);
-        cloudRadiance = cloudLitRadiance(cloudPremul, cloudDir, -normalize(vLocalLightDirection));
-        cloudRadiance *= eclipseLight(cloudDir * (uBodyRadiusUnits + uCloudHeightUnits));
-      #endif
 
       // Огни городов: порог с мягкостью (квадрат душил середину и оставлял
       // ореол вокруг агломераций). Тинт по яркости: тусклые окраины
@@ -289,11 +262,10 @@ export const planetSurfaceComposite = `
       float nightGate = 1.0 - smoothstep(-0.05, 0.12, terminatorNdotL);
       night *= nightGate;
 
-      // Поверхность под ламбертом самогасится (пол → 0 за горизонтом). Облака освещает свет
-      // слоя (тинт и цвет звезды — внутри cloudRadiance), огни городов гаснут под облаками.
+      // Поверхность под ламбертом самогасится (пол → 0 за горизонтом).
       float landGate = mix(dayFactor, 1.0, uTerrainLambert);
-      vec3 day = cloudRadiance + dayColor * (1.0 - cloudAlphaSlant) * landGate;
-      vec3 finalColor = night * (1.0 - dayFactor) * (1.0 - cloudAlphaSlant) + day;
+      vec3 day = dayColor * landGate;
+      vec3 finalColor = night * (1.0 - dayFactor) + day;
       finalColor = clamp(finalColor, 0.0, 1.0);
 
       // Единый теневой множитель кольца: гасит и диффуз, и блик ниже

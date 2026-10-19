@@ -22,30 +22,15 @@ import {
 } from '@/core/clouds/receivers/SceneCloudReceiver'
 import { sunTangent } from '@/core/materials/shaders/lib/chunks/terrainShadowMath'
 
-/**
- * Opacity облачного слоя от высоты камеры над поверхностью: 1.0 из космоса
- * (alt ≥ H, вся толщина атмосферы над камерой), линейно к 0 на середине
- * толщины (alt = 0.5·H), 0 ниже. Чистая функция от alt/H — юнит-независима
- * (числитель и знаменатель в одних юнитах), считается на CPU и уходит в
- * юниформ готовым числом.
- */
-export function cloudOpacityForAltitude(altitudeUnits: number, atmosphereThicknessUnits: number): number {
-  const half = 0.5 * Math.max(atmosphereThicknessUnits, 1e-6) // гард от деления на 0/отрицательной толщины (битые данные)
-
-  return Math.max(0, Math.min(1, (altitudeUnits - half) / half))
-}
-
 /** Карты и данные тела, общие для обоих путей, — вход пути в updateMaterial. */
 export interface SurfaceMaps {
   planetData: IPlanetRenderingObject
-  cloudMap: Texture | undefined
   specularMap: Texture | undefined
 }
 
 /**
  * Общая база материалов поверхности планеты (сфера и патчи рельефа):
- * атмосфера-ребёнок, радиус, закатный тинт, цвет света звезды, высотный fade
- * облаков, общие карты и дефайны. Свои карты, юниформы и дефайны путь ставит
+ * атмосфера-ребёнок, радиус, закатный тинт, цвет света звезды, общие карты и дефайны. Свои карты, юниформы и дефайны путь ставит
  * в updatePath / resetPath.
  */
 abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
@@ -65,16 +50,6 @@ abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
 
   /** Дочерний актор-атмосфера (резолвится один раз); undefined — атмосферы нет. */
   protected readonly atmosphereActor: Actor | undefined
-
-  /**
-   * Толщина атмосферы тела (top−bottom radius, юниты сцены) — резолвится один
-   * раз по дочернему актору-атмосфере. `undefined` — атмосферы нет (или у неё
-   * нет renderingObject.data): opacity облаков держится константой 1.
-   */
-  private readonly cloudAtmosphereThicknessUnits: number | undefined
-
-  /** Радиус тела (юниты сцены); 0 у стаб-акторов тестов без physicalObject. */
-  private readonly bodyRadiusUnits: number
 
   /** Проводка закатного тинта из реестра атмосфер — общая с водной оболочкой (см. SunTintBinding). */
   private readonly sunTint: SunTintBinding
@@ -98,10 +73,6 @@ abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
     // Дочерняя атмосфера резолвится один раз — толщина и actorId читаются из одного актора
     this.atmosphereActor = model.children.where('categoryId', ATMOSPHERE_CATEGORY_ID).first()
     const radiusKm: number = this.model.physicalObject?.getAttribute('radius') ?? 0
-    this.cloudAtmosphereThicknessUnits = PlanetSurfaceMaterial.resolveCloudAtmosphereThicknessUnits(
-      this.atmosphereActor
-    )
-    this.bodyRadiusUnits = toThreeJSUnits(radiusKm)
     this.sunTint = new SunTintBinding(
       this,
       atmosphereRegistry,
@@ -134,38 +105,6 @@ abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
     ;(this.uniforms.uLightColor.value as Color).copy(this.lightTint.color)
   }
 
-  private static resolveCloudAtmosphereThicknessUnits(atmosphereActor: Actor | undefined): number | undefined {
-    if (!atmosphereActor) return undefined
-
-    const config = readRenderingData<AtmosphereConfig>(atmosphereActor)
-
-    if (!config) return undefined
-
-    return toThreeJSUnits(config.topRadius - config.bottomRadius)
-  }
-
-  /**
-   * Высотный fade облаков — каждый активный кадр (дистанция камера-тело
-   * меняется каждый кадр). Мировые позиции — на вызывающей стороне, здесь
-   * только вычитание и формула. Без атмосферы opacity держится константой 1.
-   */
-  public updateCloudOpacity(cameraWorldPosition: Vector3, modelWorldPosition: Vector3): void {
-    if (this.cloudAtmosphereThicknessUnits === undefined) {
-      this.uniforms.uCloudOpacity.value = 1
-
-      return
-    }
-
-    const altitudeUnits = cameraWorldPosition.distanceTo(modelWorldPosition) - this.bodyRadiusUnits
-
-    this.uniforms.uCloudOpacity.value = cloudOpacityForAltitude(altitudeUnits, this.cloudAtmosphereThicknessUnits)
-  }
-
-  /**
-   * Тинт солнца у терминатора — каждый видимый кадр (Planet.updateObject,
-   * TerrainSphere.onVisibleUpdate); механика в SunTintBinding (общей с водной
-   * оболочкой), здесь только точка входа материала.
-   */
   public syncSunTint(): void {
     this.sunTint.sync()
   }
@@ -211,9 +150,6 @@ abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
     const nightMap: Texture | undefined = resourceStorage.getTexture(
       this.model.resources.where('resourceType', 'night').first()?.getAttribute('path') ?? ''
     )
-    const cloudMap: Texture | undefined = resourceStorage.getTexture(
-      this.model.resources.where('resourceType', 'cloud').first()?.getAttribute('path') ?? ''
-    )
     const specularMap: Texture | undefined = resourceStorage.getTexture(
       this.model.resources.where('resourceType', 'specular').first()?.getAttribute('path') ?? ''
     )
@@ -223,10 +159,8 @@ abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
 
     this.uniforms.diffuseMap.value = diffuseMap
     this.uniforms.nightMap.value = nightMap
-    this.uniforms.cloudMap.value = cloudMap
 
-    const migrated = this.defines.SCENE_CLOUD_RECEIVER !== undefined
-    const pathDefines = this.updatePath({ planetData, cloudMap: migrated ? undefined : cloudMap, specularMap })
+    const pathDefines = this.updatePath({ planetData, specularMap })
 
     // Набор собирается от снимка конструирования, а не поверх прошлого: только
     // так дефайн ушедшей карты исчезает вместе с ней (см. baseDefines).
@@ -235,9 +169,6 @@ abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
       ...sceneCloudReceiverDefines(this),
       ...pathDefines,
       ...(nightMap && { USE_NIGHT: '1' }),
-      // Облачный слой — при наличии cloudMap; у поверхности его гасит высотный
-      // fade (uCloudOpacity → 0 к середине толщины атмосферы)
-      ...(!migrated && cloudMap && { USE_CLOUD: '1' }),
       // Пересборка от снимка стирает и дефайны атмосферных LUT — они не про
       // карты и живут своей синхронизацией, поэтому восстанавливаются здесь же
       // по текущей записи реестра (иначе стриминг карт гасил бы тинт до
@@ -253,7 +184,6 @@ abstract class PlanetSurfaceMaterial extends AbstractShaderMaterial {
   public resetMaterial(): void {
     this.uniforms.diffuseMap.value = resourceStorage.getTextureOrMake('default.png')
     this.uniforms.nightMap.value = resourceStorage.getTextureOrMake('night.jpg')
-    this.uniforms.cloudMap.value = null
 
     this.resetPath()
 

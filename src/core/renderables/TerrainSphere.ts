@@ -53,13 +53,9 @@ class TerrainSphere extends TerrainPatchGroup {
   public model: Actor
   private readonly sharedMaterial: TerrainMaterial
 
-  // Скретчи кадра (см. TerrainPatchGroup.cameraWorldScratch — тот же приём,
-  // приватный там, недоступен подклассу): облачный высотный fade нужен
-  // РОВНО в момент onVisibleUpdate, а не после (TerrainPatchGroup.
-  // updateObject считает свой cameraWorldScratch ПОСЛЕ onVisibleUpdate —
-  // повторное использование читало бы позицию камеры прошлого кадра).
-  private readonly cloudCameraWorldScratch = new Vector3()
-  private readonly cloudSelfWorldScratch = new Vector3()
+  // World-space scratch positions used by surface lighting and detail updates.
+  private readonly surfaceCameraWorldScratch = new Vector3()
+  private readonly selfWorldScratch = new Vector3()
   private readonly cameraLocalScratch = new Vector3()
 
   /** Плитка ближней тени у камеры: владеет текстурой, материал только читает. */
@@ -124,11 +120,10 @@ class TerrainSphere extends TerrainPatchGroup {
    * записи пустой (сравнение по ссылке внутри).
    */
   protected onVisibleUpdate(ctx: UpdateContext): void {
-    ctx.camera.getWorldPosition(this.cloudCameraWorldScratch)
-    this.getWorldPosition(this.cloudSelfWorldScratch)
-    this.sharedMaterial.updateCloudOpacity(this.cloudCameraWorldScratch, this.cloudSelfWorldScratch)
+    ctx.camera.getWorldPosition(this.surfaceCameraWorldScratch)
+    this.getWorldPosition(this.selfWorldScratch)
     this.sharedMaterial.syncSunTint()
-    this.sharedMaterial.syncTerrainShadow(this.cloudSelfWorldScratch)
+    this.sharedMaterial.syncTerrainShadow(this.selfWorldScratch)
     this.syncNearTile()
   }
 
@@ -156,7 +151,7 @@ class TerrainSphere extends TerrainPatchGroup {
 
       return
     }
-    const cameraLocal = this.worldToLocal(this.cameraLocalScratch.copy(this.cloudCameraWorldScratch))
+    const cameraLocal = this.worldToLocal(this.cameraLocalScratch.copy(this.surfaceCameraWorldScratch))
     this.sharedMaterial.setNearTile(this.nearTile.update(cameraLocal))
   }
 }

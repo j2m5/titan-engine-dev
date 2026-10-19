@@ -37,6 +37,8 @@ export interface CloudFramePlan {
   requestedWeight: number
 }
 export interface CloudDiagnostics {
+  /** Missing declared far sources, independent from the selected volume fallback. */
+  farFallbacks: ReadonlyArray<Readonly<{ actorId: number; reason: 'resources' }>>
   actorId: number | null
   state: 'unconfigured' | 'waiting' | 'preparing' | 'prepared' | 'ready' | 'active' | 'error' | 'context-lost'
   requestedWeight: number
@@ -95,6 +97,7 @@ export class SceneCloudRuntime {
   private failedLayout: string | null = null
   private readonly compilationFailures = new CloudCompilationFailures()
   private readonly stats: CloudDiagnostics = {
+    farFallbacks: [],
     actorId: null,
     state: 'unconfigured',
     requestedWeight: 0,
@@ -117,6 +120,7 @@ export class SceneCloudRuntime {
       ...dependencies
     }
     this.stop = registry.subscribe((id) => {
+      this.stats.farFallbacks = this.stats.farFallbacks.filter((entry) => entry.actorId !== id)
       this.sources.get(id)?.sources.dispose()
       this.sources.delete(id)
       this.frames.delete(id)
@@ -138,6 +142,7 @@ export class SceneCloudRuntime {
     this.compilationFailures.bind(renderer)
   }
   private clearFarMaps(): void {
+    this.stats.farFallbacks = []
     for (const body of this.registry.entries())
       for (const receiver of this.registry.receivers(body.actorId)) receiver.setFarMap(null, null)
   }
@@ -237,6 +242,8 @@ export class SceneCloudRuntime {
     this.stats.effectiveWeight = 0
     this.stats.requestedWeight = 0
     const bodies = this.registry.entries()
+    const farFallbacks: Array<{ actorId: number; reason: 'resources' }> = []
+    this.stats.farFallbacks = farFallbacks
     // Far datum frames are current even when volume is off, pending, or unsupported.
     for (const body of bodies) {
       let owner = this.sources.get(body.actorId)
@@ -267,6 +274,9 @@ export class SceneCloudRuntime {
             ? source
             : (owner.sources.read(map.color.map.resourceId)?.texture ?? null)
           : null
+      const requiresColor = map?.pattern.encoding !== 'rgb-cloud-map' && map?.color.kind === 'map'
+      if (map && (!source || (requiresColor && !color)))
+        farFallbacks.push({ actorId: body.actorId, reason: 'resources' })
       for (const receiver of this.registry.receivers(body.actorId)) {
         receiver.setFarMap(map, source, color)
         receiver.setEndpoint(frame, null)
@@ -513,7 +523,7 @@ export class SceneCloudRuntime {
     for (const [key, value] of Object.entries(counts)) this.stats[key as keyof CloudPassCounts] += value
   }
   public get diagnostics(): Readonly<CloudDiagnostics> {
-    return { ...this.stats }
+    return { ...this.stats, farFallbacks: this.stats.farFallbacks.map((entry) => ({ ...entry })) }
   }
   public get error(): unknown {
     return this.compilationFailures.current?.cause ?? this.failure
