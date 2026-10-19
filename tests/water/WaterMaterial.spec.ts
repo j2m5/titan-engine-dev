@@ -378,7 +378,7 @@ describe('WaterMaterial: slope-путь резолвится один раз (н
     return { actor, whereSpy }
   }
 
-  it('caches slope, waterNormal and the terrain class lookup used for common cloud lighting', () => {
+  it('caches slope, waterNormal and the terrain class lookup used for scene receiver ambient defaults', () => {
     seedSlopeTexture()
     const { actor, whereSpy } = stubActorWithSpy()
 

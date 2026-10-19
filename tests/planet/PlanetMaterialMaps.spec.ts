@@ -1102,27 +1102,20 @@ describe('поверхность планеты: зачистка облаков
   })
 })
 
-describe('SphereSurfaceMaterial: гейты ночной и облачной карт', () => {
+describe('SphereSurfaceMaterial: гейт ночной карты', () => {
   beforeEach(() => seedPlaceholderKeys())
   afterEach(() => resourceStorage.deleteAllTextures())
 
-  it('без ночной и облачной карт дефайны не ставятся', () => {
+  it('без ночной карты дефайн не ставится', () => {
     const material = new SphereSurfaceMaterial(earth())
     material.updateMaterial()
 
     expect(material.defines.USE_NIGHT).toBeUndefined()
   })
 
-  // Облачный слой ВЕРНУЛСЯ решением владельца (2026-08-19, приёмочная волна
-  // 4, №3): рулинг приёмочной волны 2 (№2 — полосы на полюсах от терраформной
-  // равнопрямоугольной UV-развёртки) снят — идея владельца в том, что
-  // высотный fade (uCloudOpacity, см. describe ниже) гасит слой ДО того, как
-  // камера подлетает достаточно близко для видимых полос.
-  it('с загруженными картами дефайны появляются', () => {
+  it('загруженная ночная карта включает дефайн', () => {
     const nightPath = earth().resources.where('resourceType', 'night').first()!.getAttribute('path') as string
-    const cloudPath = earth().resources.where('resourceType', 'cloud').first()!.getAttribute('path') as string
     seedTexture(nightPath, 4096, 2048)
-    seedTexture(cloudPath, 8192, 4096)
 
     const material = new SphereSurfaceMaterial(earth())
     material.updateMaterial()
@@ -1130,11 +1123,9 @@ describe('SphereSurfaceMaterial: гейты ночной и облачной к�
     expect(material.defines.USE_NIGHT).toBe('1')
   })
 
-  it('resetMaterial снимает оба дефайна', () => {
+  it('resetMaterial снимает дефайн ночной карты', () => {
     const nightPath = earth().resources.where('resourceType', 'night').first()!.getAttribute('path') as string
-    const cloudPath = earth().resources.where('resourceType', 'cloud').first()!.getAttribute('path') as string
     seedTexture(nightPath, 4096, 2048)
-    seedTexture(cloudPath, 8192, 4096)
 
     const material = new SphereSurfaceMaterial(earth())
     material.updateMaterial()

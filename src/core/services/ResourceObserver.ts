@@ -518,10 +518,9 @@ class ResourceObserver {
 
       if (!actor) continue
 
-      // Облачный слой ВЕРНУЛСЯ решением владельца (2026-08-19, приёмочная
-      // волна 4, №3) — фильтр 'cloud' из кандидатов streaming (приёмочная
-      // волна 2, №2) снят: scene cloud receiver снова ставится при cloudMap (см.
-      // PlanetSurfaceMaterial.updateMaterial), карту снова стоит стримить.
+      // Stream authored cloud resources along with the other streamable maps.
+      // RenderableFactory registers declared sources and material receivers;
+      // CloudSources tracks residency and SceneCloudRuntime binds ready maps.
       const streamableResources: Resource[] = actor.resources
         .filter((resource: Resource): boolean => resource.getAttribute('lifecycle') === 'streamable')
         .toArray()
