@@ -2,15 +2,22 @@ import { ShaderMaterial } from 'three'
 
 const hookIds = new WeakMap<object, number>()
 let nextHookId = 0
+const signatures = new WeakMap<
+  ShaderMaterial,
+  {
+    vertex: string
+    fragment: string
+    settings: string
+    signature: string
+  }
+>()
 function hookId(value: object): number {
   if (!hookIds.has(value)) hookIds.set(value, ++nextHookId)
   return hookIds.get(value)!
 }
 /** Only program inputs, never uniform values or owner.version. */
 export function sceneCloudProgramSignature(owner: ShaderMaterial): string {
-  return JSON.stringify([
-    owner.vertexShader,
-    owner.fragmentShader,
+  const settings = [
     Object.entries(owner.defines).sort(([a], [b]) => a.localeCompare(b)),
     owner.glslVersion,
     owner.extensions,
@@ -34,7 +41,25 @@ export function sceneCloudProgramSignature(owner: ShaderMaterial): string {
     hookId(owner.onBeforeCompile),
     owner.customProgramCacheKey(),
     Object.keys(owner.uniforms).sort()
-  ])
+  ]
+  const settingsSignature = JSON.stringify(settings)
+  const cached = signatures.get(owner)
+  if (
+    cached?.vertex === owner.vertexShader &&
+    cached.fragment === owner.fragmentShader &&
+    cached.settings === settingsSignature
+  )
+    return cached.signature
+  // Shader sources dominate this string's size. Unchanged materials reuse the
+  // full signature; live defines, hooks and uniform layout are still checked.
+  const signature = JSON.stringify([owner.vertexShader, owner.fragmentShader, ...settings])
+  signatures.set(owner, {
+    vertex: owner.vertexShader,
+    fragment: owner.fragmentShader,
+    settings: settingsSignature,
+    signature
+  })
+  return signature
 }
 
 /** ShaderMaterial.copy normally clones borrowed Texture Sources and UniformsGroups. */

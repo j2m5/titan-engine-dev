@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { SceneCloudDepth } from '@/core/graphic/clouds/SceneCloudDepth'
 import { WaterMaterial } from '@/core/renderables/Water/WaterMaterial'
 import { Texture, Vector2, Group, Scene, Mesh, MeshBasicMaterial, PerspectiveCamera, Color, Vector4 } from 'three'
@@ -11,6 +11,22 @@ it('visits drawn meshes without assigning read-only material owners on terrain/w
   Object.defineProperty(group, 'material', { get: () => material })
   group.add(new Mesh(undefined, material))
   scene.add(group)
+  const empty = { first: () => undefined, isNotEmpty: () => false }
+  const actor = {
+    children: { where: () => empty },
+    resources: { where: () => empty },
+    renderingObject: { getAttribute: () => ({}) }
+  } as unknown as Actor
+  const water = new WaterMaterial(actor),
+    hiddenWater = new WaterMaterial(actor)
+  const waterMeshes = [new Mesh(undefined, water), new Mesh(undefined, water)]
+  group.add(...waterMeshes)
+  const hidden = new Group()
+  hidden.visible = false
+  hidden.add(new Mesh(undefined, hiddenWater))
+  scene.add(hidden)
+  const syncWater = vi.spyOn(water, 'getSceneCloudDepthMaterial')
+  const syncHidden = vi.spyOn(hiddenWater, 'getSceneCloudDepthMaterial')
   const renderer = {
     autoClear: true,
     capabilities: { maxSamples: 0 },
@@ -37,8 +53,17 @@ it('visits drawn meshes without assigning read-only material owners on terrain/w
   ).not.toThrow()
   expect(material.visible).toBe(true)
   expect(material.colorWrite).toBe(true)
+  expect(syncWater).toHaveBeenCalledTimes(1)
+  expect(syncHidden).not.toHaveBeenCalled()
+  for (const mesh of waterMeshes) expect(mesh.material).toBe(water)
+  hidden.visible = true
+  depth.render({ viewport: new Vector2(8, 8), serial: 2, sceneCamera: new PerspectiveCamera() } as CloudFrame)
+  expect(syncWater).toHaveBeenCalledTimes(2)
+  expect(syncHidden).toHaveBeenCalledTimes(1)
   depth.dispose()
   material.dispose()
+  water.dispose()
+  hiddenWater.dispose()
 })
 it('provides a depth service and cached water variants', () => {
   expect(typeof SceneCloudDepth).toBe('function')

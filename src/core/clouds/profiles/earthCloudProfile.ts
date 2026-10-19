@@ -18,7 +18,14 @@ export function createEarthCloudProfile(): EnabledCloudConfig {
           map: { resourceId: 26 }
         },
         color: { kind: 'constant', srgb: [1, 1, 1] },
-        detail: { seed: 0x45617274, shapeScaleMeters: 12000, erosionScaleMeters: 1200, erosionStrength: 0.35 },
+        detail: {
+          seed: 0x45617274,
+          shapeScaleMeters: 12000,
+          erosionScaleMeters: 1200,
+          erosionStrength: 0.35,
+          // Move the envelope peak from ~14% to ~34% of the shell height.
+          verticalProfileBias: 0.65
+        },
         castsShadow: true
       }
     ]

@@ -43,6 +43,7 @@ export function applyPlanetCloudLayer(clouds: CloudsEffect, config: EnabledCloud
       densityScale: 1,
       shapeAmount: 1,
       shapeDetailAmount: layer.detail.erosionStrength,
+      shapeAlteringBias: layer.detail.verticalProfileBias ?? 0.35,
       shadow: layer.castsShadow
     }
   ])

@@ -22,7 +22,14 @@ export type CloudLayerConfig = {
   extinctionPerMeter: number
   pattern: CloudPattern
   color: CloudColor
-  detail: { seed: number; shapeScaleMeters: number; erosionScaleMeters: number; erosionStrength: number }
+  detail: {
+    seed: number
+    shapeScaleMeters: number
+    erosionScaleMeters: number
+    erosionStrength: number
+    /** Vertical envelope exponent in (0, 1]; omitted preserves the legacy 0.35 profile. */
+    verticalProfileBias?: number
+  }
   castsShadow: boolean
 }
 export type CloudConfig =

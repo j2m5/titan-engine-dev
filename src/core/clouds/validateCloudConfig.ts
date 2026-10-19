@@ -163,7 +163,18 @@ class CloudReader {
           Infinity,
           true
         ),
-        erosionStrength: this.number(detail.erosionStrength, path + '.detail.erosionStrength', 0, 1)
+        erosionStrength: this.number(detail.erosionStrength, path + '.detail.erosionStrength', 0, 1),
+        ...(detail.verticalProfileBias !== undefined
+          ? {
+              verticalProfileBias: this.number(
+                detail.verticalProfileBias,
+                path + '.detail.verticalProfileBias',
+                0,
+                1,
+                true
+              )
+            }
+          : {})
       },
       castsShadow: this.boolean(data.castsShadow, path + '.castsShadow')
     }

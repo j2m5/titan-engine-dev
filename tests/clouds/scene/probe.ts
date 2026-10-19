@@ -156,6 +156,8 @@ export const sceneCloudProbeRegistry: Partial<
       'terminator',
       'night',
       'alpha-depth-shadow-invariance',
+      'temporal-opacity-independent-of-light',
+      'temporal-fresh-pixel-accumulation',
       'eclipse-direct',
       'reset-recreation',
       'single-public-update',

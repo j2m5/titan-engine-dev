@@ -37,6 +37,7 @@ import type { CloudFrame } from '@/core/clouds/scene/CloudFrame'
 import { SphereSurfaceMaterial } from '@/core/materials/SphereSurfaceMaterial'
 import type { Actor } from '@/core/models/Actor'
 import type { SceneCloudProbeReport } from './probe'
+import { checkSceneCloudTemporalResolve } from './temporalResolve.gpu'
 
 const SIZE = 33,
   UNIT = SpaceScale / 1000,
@@ -301,6 +302,30 @@ void main() {
     surface.needsUpdate = true
     const origin = new Vector3(0, 0, RADIUS + 50000),
       endpoint = new Vector3(0, 0, RADIUS + 6000)
+
+    // Exercise the actual resolve's clipping kernel. Changing RGB must not pull
+    // opacity toward the current frame, while opacity still rejects stale edges.
+    const temporal = recreate(frame(origin, endpoint)).cloudsPass.resolveMaterial.fragmentShader
+    const alphaKernel = temporal.match(/vec4 clipAABB\([^]*?\n\}/)?.[0]
+    check(!!alphaKernel, 'pinned temporal resolve exposes one clipping kernel')
+    for (const [rgb, alpha, expectedRgb, expectedAlpha] of [
+      [0.3, 0.5, 0.3, 0.5],
+      [0.9, 0.5, 0.4, 0.5],
+      [0.0, 0.5, 0.2, 0.5],
+      [0.3, 0.9, 0.3, 0.6],
+      [0.9, 0.1, 0.4, 0.2]
+    ]) {
+      const actual = draw(
+        `${alphaKernel}\nvoid main(){gl_FragColor=clipAABB(vec4(.3,.3,.3,.4),
+          vec4(${rgb.toFixed(1)},${rgb.toFixed(1)},${rgb.toFixed(1)},${alpha.toFixed(1)}),
+          vec4(.2,.2,.2,.2),vec4(.4,.4,.4,.6));}`,
+        {}
+      )
+      close(actual, [expectedRgb, expectedRgb, expectedRgb, expectedAlpha], 'independent temporal opacity', 1e-6)
+    }
+    report.cases.push('temporal-opacity-independent-of-light')
+    checkSceneCloudTemporalResolve(renderer, close)
+    report.cases.push('temporal-fresh-pixel-accumulation')
 
     // Compare the production source-light function with an independently rendered
     // original far receiver. The same owner supplies all live policy values.
@@ -641,9 +666,11 @@ void main() {
       const f = frame(origin, endpoint, sun)
       const effect = recreate(f)
       const fresh = render(f)
+      const freshCurrent = sample(effect.cloudsPass.resolveMaterial.uniforms.colorBuffer.value!)
       const freshDepth = sample(effect.cloudsPass.resolveMaterial.uniforms.depthVelocityBuffer.value!)
       const freshShadow = sample(effect.atmosphereShadow!.map, true)
       const resolved = render(f)
+      const resolvedCurrent = sample(effect.cloudsPass.resolveMaterial.uniforms.colorBuffer.value!)
       const resolvedDepth = sample(effect.cloudsPass.resolveMaterial.uniforms.depthVelocityBuffer.value!)
       const resolvedShadow = sample(effect.atmosphereShadow!.map, true)
       check(fresh.every(Number.isFinite) && resolved.every(Number.isFinite), `${label} finite marched HDR`)
@@ -656,11 +683,16 @@ void main() {
         ''
       )
       control.cloudsPass.currentMaterial.needsUpdate = true
-      for (const [i, expected, expectedDepth, expectedShadow] of [
-        [0, fresh, freshDepth, freshShadow],
-        [1, resolved, resolvedDepth, resolvedShadow]
+      for (const [i, expected, expectedDepth, expectedShadow, expectedCurrent] of [
+        [0, fresh, freshDepth, freshShadow, freshCurrent],
+        [1, resolved, resolvedDepth, resolvedShadow, resolvedCurrent]
       ] as const) {
         const unscaled = render(f)
+        unchanged(
+          [sample(control.cloudsPass.resolveMaterial.uniforms.colorBuffer.value!)[3]],
+          [expectedCurrent[3]],
+          `${label}/${i} light-only current march alpha invariant`
+        )
         unchanged([unscaled[3]], [expected[3]], `${label}/${i} light-only alpha invariant`)
         unchanged(
           sample(control.cloudsPass.resolveMaterial.uniforms.depthVelocityBuffer.value!),

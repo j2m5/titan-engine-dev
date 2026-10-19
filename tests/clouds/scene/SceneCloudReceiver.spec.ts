@@ -69,6 +69,48 @@ function fixture() {
   return { frame, output, material, receiver: bindSceneCloudReceiver(material, 'sphere') }
 }
 describe('scene cloud receiver endpoints', () => {
+  it('refreshes cached programs for live shader and layout changes without relying on owner.version', () => {
+    const f = fixture()
+    try {
+      const near = f.receiver.getEndpointMaterial('near')
+      const ownerVersion = f.material.version
+      for (const change of [
+        () => {
+          f.material.vertexShader += '\n// vertex replacement'
+        },
+        () => {
+          f.material.fragmentShader += '\n// fragment replacement'
+        },
+        () => {
+          f.material.defines.LIVE_LAYOUT = 1
+        },
+        () => {
+          f.material.onBeforeCompile = () => {}
+        },
+        () => {
+          f.material.customProgramCacheKey = () => 'replacement-program'
+        },
+        () => {
+          f.material.uniforms.added = { value: 1 }
+        }
+      ]) {
+        const version = near.version
+        change()
+        expect(f.receiver.getEndpointMaterial('near')).toBe(near)
+        expect(near.version).toBe(version + 1)
+        f.receiver.getEndpointMaterial('near')
+        expect(near.version).toBe(version + 1)
+      }
+      const version = near.version
+      f.material.uniforms.added.value = 2
+      f.receiver.getEndpointMaterial('near')
+      expect(near.version).toBe(version)
+      expect(f.material.version).toBe(ownerVersion)
+    } finally {
+      f.receiver.dispose()
+      f.material.dispose()
+    }
+  })
   it('snapshots the current far owner lighting without adding independent settings', () => {
     const f = fixture()
     try {

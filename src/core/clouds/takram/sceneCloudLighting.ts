@@ -9,6 +9,7 @@ import type { AtmosphereEntry } from '@/core/services/AtmosphereRegistry'
 import { adaptSceneCloudAerial, sceneCloudAerialUniformsGlsl } from './sceneCloudAerial'
 import { sceneCloudLightGLSL } from '@/core/clouds/receivers/sceneCloudLight'
 import { sunTransmittanceFunctions } from '@/core/materials/shaders/lib/chunks/SunTransmittance'
+import { adaptSceneCloudTemporalResolve } from './sceneCloudTemporal'
 
 export function cloudLightScale(
   irradiance: readonly [number, number, number],
@@ -50,6 +51,9 @@ export function installSceneCloudPatches(clouds: CloudsEffect, sceneReferenceLig
   const material = clouds.cloudsPass.currentMaterial
   const originalShader = material.fragmentShader
   const originalUniforms = { ...material.uniforms }
+  const resolveMaterial = clouds.cloudsPass.resolveMaterial
+  const originalResolveShader = resolveMaterial.fragmentShader
+  const resolveShader = adaptSceneCloudTemporalResolve(originalResolveShader)
   let shader = replaceExactlyOnce(
     originalShader,
     /float getRayDistanceToScene\([^]*?\n\}/g,
@@ -221,6 +225,8 @@ ${sceneReferenceLighting ? sourceUniformsGlsl + sourceTintFunctions + sceneCloud
   material.fragmentShader = shader
   Object.assign(material.uniforms, uniforms)
   material.needsUpdate = true
+  resolveMaterial.fragmentShader = resolveShader
+  resolveMaterial.needsUpdate = true
   installed.add(clouds)
   let disposed = false
   return {
@@ -260,6 +266,8 @@ ${sceneReferenceLighting ? sourceUniformsGlsl + sourceTintFunctions + sceneCloud
       if (disposed) return
       disposed = true
       material.fragmentShader = originalShader
+      resolveMaterial.fragmentShader = originalResolveShader
+      resolveMaterial.needsUpdate = true
       for (const name of Object.keys(uniforms)) {
         if (name in originalUniforms) material.uniforms[name] = originalUniforms[name]
         else delete material.uniforms[name]

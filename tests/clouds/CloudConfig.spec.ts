@@ -5,6 +5,24 @@ import { createJupiterCloudProfile } from '@/core/clouds/profiles/jupiterCloudPr
 import { validCloudConfig } from './cloudFixtures'
 
 const ids = new Set([32, 26, 37])
+it('preserves an optional vertical profile bias through validation without changing legacy configs', () => {
+  const config = validCloudConfig()
+  const detail = { ...config.layers[0].detail, verticalProfileBias: 0.65 }
+  const result = resolveCloudConfig({ ...config, layers: [{ ...config.layers[0], detail }] }, ids)
+  expect(result).toMatchObject({ state: 'configured', config: { layers: [{ detail }] } })
+  expect(resolveCloudConfig(config, ids)).toEqual({ state: 'configured', config })
+})
+it.each([0, -0.1, 1.01, NaN, Infinity, null, '0.65'])(
+  'rejects an invalid vertical profile bias %j at its field',
+  (verticalProfileBias) => {
+    const config = validCloudConfig()
+    const detail = { ...config.layers[0].detail, verticalProfileBias }
+    expect(resolveCloudConfig({ ...config, layers: [{ ...config.layers[0], detail }] }, ids)).toMatchObject({
+      state: 'invalid',
+      issues: [expect.objectContaining({ path: 'layers[0].detail.verticalProfileBias' })]
+    })
+  }
+)
 it('accepts RGB cloud masks without scalar decode and rejects unknown encodings', () => {
   const config = validCloudConfig()
   const layer = config.layers[0]

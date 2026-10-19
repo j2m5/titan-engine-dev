@@ -5,6 +5,31 @@ import { CloudsEffect } from '@takram/three-clouds'
 import { PerspectiveCamera } from 'three'
 
 describe('main scene cloud light units', () => {
+  it('rejects changed resolve anchors atomically and restores the resolve on disposal', () => {
+    const clouds = new CloudsEffect(new PerspectiveCamera())
+    const resolve = clouds.cloudsPass.resolveMaterial
+    const original = resolve.fragmentShader
+    const current = clouds.cloudsPass.currentMaterial
+    const originalCurrent = current.fragmentShader
+    try {
+      for (const anchor of ['vec4 clipAABB(', 'if (currentFrame) {', 'outputColor = clippedColor;']) {
+        const invalid = original.replace(anchor, '')
+        resolve.fragmentShader = invalid
+        expect(() => installSceneCloudPatches(clouds)).toThrow(/expected one replacement/)
+        expect(resolve.fragmentShader).toBe(invalid)
+        expect(current.fragmentShader).toBe(originalCurrent)
+      }
+      resolve.fragmentShader = original
+      const binding = installSceneCloudPatches(clouds)
+      expect(resolve.fragmentShader).not.toBe(original)
+      binding.dispose()
+      binding.dispose()
+      expect(resolve.fragmentShader).toBe(original)
+      expect(current.fragmentShader).toBe(originalCurrent)
+    } finally {
+      clouds.dispose()
+    }
+  })
   it('installs the scene-reference branch atomically without adding LUT samplers or a second unit conversion', () => {
     const clouds = new CloudsEffect(new PerspectiveCamera())
     const material = clouds.cloudsPass.currentMaterial

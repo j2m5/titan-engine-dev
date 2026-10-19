@@ -94,7 +94,7 @@ export class SceneCloudDepth {
       override = this.scene.overrideMaterial
     const flags = new Map<Material, { visible: boolean; colorWrite: boolean; depthWrite: boolean }>()
     const meshes: Array<{ object: Mesh; material: Material | Material[] }> = []
-    this.scene.traverse((object) => {
+    this.scene.traverseVisible((object) => {
       const mesh = object as Mesh
       if (!mesh.isMesh || !mesh.material) return
       meshes.push({ object: mesh, material: mesh.material })
@@ -126,12 +126,14 @@ export class SceneCloudDepth {
       renderer.setRenderTarget(null)
       this.opaqueCopy.render(renderer, null, null)
       for (const [material, saved] of flags) material.visible = saved.visible
+      const waterMaterials = new Map<WaterMaterial, Material>()
+      for (const material of flags.keys()) {
+        if (material instanceof WaterMaterial)
+          waterMaterials.set(material, material.getSceneCloudDepthMaterial(this.opaqueCopy.texture, this.viewport))
+        else material.visible = false
+      }
       for (const { object, material } of meshes) {
-        const replace = (m: Material): Material => {
-          if (m instanceof WaterMaterial) return m.getSceneCloudDepthMaterial(this.opaqueCopy.texture, this.viewport)
-          m.visible = false
-          return m
-        }
+        const replace = (m: Material): Material => waterMaterials.get(m as WaterMaterial) ?? m
         object.material = Array.isArray(material) ? material.map(replace) : replace(material)
       }
       renderer.setRenderTarget(this.water)
