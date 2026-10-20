@@ -4,7 +4,7 @@ import { OCEAN_CREST_SHARPNESS, OCEAN_WARP_K, OCEAN_WARP_STRENGTH, OCEAN_WAVES }
 const waves = OCEAN_WAVES.map(wave => {
   const k = wave.direction.map(v => (2 * Math.PI * v) / wave.period)
   const frequency = Math.sqrt(9.81 * Math.hypot(...k))
-  return `waterOceanBand(mod(p, ${glslFloat(wave.period)}), up, time, footprint, gain, warp, warpGradient,
+  return `waterOceanBand(mod(p, ${glslFloat(wave.period)}), up, time, pixelDx, pixelDy, gain, warp, warpGradient,
     vec3(${k.map(glslFloat).join(', ')}), ${glslFloat(frequency)}, ${glslFloat(wave.amplitude)},
     ${glslFloat(wave.phase)}, surface, amplitude);`
 }).join('\n')
@@ -17,21 +17,24 @@ export const waterOceanFunctions = /* glsl */ `
     float variance;
   };
 
-  void waterOceanBand(vec3 p, vec3 up, float time, float footprint, float gain,
+  void waterOceanBand(vec3 p, vec3 up, float time, vec3 pixelDx, vec3 pixelDy, float gain,
       float warp, vec3 warpGradient, vec3 k, float frequency, float waveAmplitude,
       float initialPhase, inout WaterOceanSurface surface, inout float amplitude) {
-    float kLength = length(k);
-    float weight = waterOctaveWeight(PI / kLength, footprint);
+    vec3 phaseGradient = k + warpGradient;
+    float phaseFootprint = max(1e-6, max(abs(dot(phaseGradient, pixelDx)), abs(dot(phaseGradient, pixelDy))));
+    float fundamental = waterOctaveWeight(2.0 * PI, phaseFootprint);
+    float harmonic = waterOctaveWeight(PI, phaseFootprint);
     float a = waveAmplitude * gain;
     float phase = dot(p, k) - frequency * time + initialPhase + warp;
-    surface.height += a * weight * (sin(phase) - ${glslFloat(OCEAN_CREST_SHARPNESS)} * cos(2.0 * phase));
-    surface.gradient += a * weight * (cos(phase) + ${glslFloat(2 * OCEAN_CREST_SHARPNESS)} * sin(2.0 * phase)) * (k + warpGradient);
-    float tangentK2 = max(0.0, dot(k, k) - pow(dot(k, up), 2.0));
-    surface.variance += (1.0 - weight * weight) * a * a * tangentK2 * ${glslFloat(0.5 + 2 * OCEAN_CREST_SHARPNESS ** 2)};
-    amplitude += a * weight;
+    surface.height += a * (fundamental * sin(phase) - ${glslFloat(OCEAN_CREST_SHARPNESS)} * harmonic * cos(2.0 * phase));
+    surface.gradient += a * (fundamental * cos(phase) + ${glslFloat(2 * OCEAN_CREST_SHARPNESS)} * harmonic * sin(2.0 * phase)) * phaseGradient;
+    float tangentK2 = max(0.0, dot(phaseGradient, phaseGradient) - pow(dot(phaseGradient, up), 2.0));
+    surface.variance += a * a * tangentK2 * (0.5 * (1.0 - fundamental * fundamental)
+      + ${glslFloat(2 * OCEAN_CREST_SHARPNESS ** 2)} * (1.0 - harmonic * harmonic));
+    amplitude += a * fundamental;
   }
 
-  WaterOceanSurface waterOceanSurface(vec3 p, vec3 up, float time, float footprint, float strength) {
+  WaterOceanSurface waterOceanSurface(vec3 p, vec3 up, float time, vec3 pixelDx, vec3 pixelDy, float strength) {
     WaterOceanSurface surface = WaterOceanSurface(0.0, vec3(0.0), 0.0, 0.0);
     float gain = clamp(strength, 0.0, 3.0);
     float amplitude = 0.0;
@@ -47,14 +50,14 @@ export const waterOceanFunctions = /* glsl */ `
 
   // Two bounded height queries add local relief without moving the coarse
   // planetary shell. Fade the offset at the horizon where height mapping folds.
-  WaterOceanSurface waterOceanRelief(vec3 p, vec3 up, vec3 toEye, float time, float footprint, float strength) {
+  WaterOceanSurface waterOceanRelief(vec3 p, vec3 up, vec3 toEye, float time, vec3 pixelDx, vec3 pixelDy, float strength) {
     float mu = max(dot(up, toEye), 0.0);
     vec3 tangentView = toEye - up * dot(up, toEye);
     float relief = smoothstep(0.08, 0.35, mu);
-    WaterOceanSurface surface = waterOceanSurface(p, up, time, footprint, strength);
+    WaterOceanSurface surface = waterOceanSurface(p, up, time, pixelDx, pixelDy, strength);
     for (int i = 0; i < 2; ++i) {
       vec3 offset = tangentView * clamp(surface.height / max(mu, 0.15), -8.0, 8.0) * relief;
-      surface = waterOceanSurface(p + offset, up, time, footprint, strength);
+      surface = waterOceanSurface(p + offset, up, time, pixelDx, pixelDy, strength);
     }
     return surface;
   }
@@ -81,13 +84,17 @@ export const waterOceanFunctions = /* glsl */ `
 
 /** Runs after the distant material/glint and before the shared cloud overlay. */
 export const waterOceanShading = /* glsl */ `
+  // Differentiate the unwrapped position before the divergent near-water branch.
+  // Project each wave onto both pixel axes; grazing pixels are highly elongated.
+  vec3 oceanPixelDx = dFdx(posM);
+  vec3 oceanPixelDy = dFdy(posM);
   float oceanBlend = 1.0 - smoothstep(8.0, 32.0, waveFootprint);
   if (oceanBlend > 0.0) {
     vec3 oceanUp = waveDirLocal;
     vec3 oceanView = -normalize(vLocalViewDir);
     vec3 oceanSun = -normalize(vLocalLightDirection);
     WaterOceanSurface ocean = waterOceanRelief(posM, oceanUp, oceanView,
-      uTime * uWaterWaveSpeed, waveFootprint, uWaterRippleStrength);
+      uTime * uWaterWaveSpeed, oceanPixelDx, oceanPixelDy, uWaterRippleStrength);
     // Broad reflection normals and fine sun normals have different bandwidths.
     // Reuse the already filtered ripple samples; no derivatives in this branch.
     vec3 oceanNormal = normalize(oceanUp - ocean.gradient + fineRipple * 0.12);
@@ -103,18 +110,18 @@ export const waterOceanShading = /* glsl */ `
     #endif
     vec3 oceanDirect = waterSunColor * oceanSunTint * cloudShadow * eclipse
       * smoothstep(0.0, 0.015, oceanSunHeight);
-    vec3 oceanAmbient = vec3(uWaterNightFloor) + vec3(0.12) * oceanDay;
+    vec3 oceanAmbient = vec3(uWaterNightFloor) + 0.12 * oceanDay * eclipse;
     #ifdef USE_SKY_AMBIENT
-      oceanAmbient = vec3(uWaterNightFloor) + 0.12 * skyAmbientTint(oceanSunHeight);
+      oceanAmbient = vec3(uWaterNightFloor) + 0.12 * skyAmbientTint(oceanSunHeight) * eclipse;
     #endif
     vec3 oceanSky;
     #if defined(USE_WATER_SKY) && defined(USE_SUN_TINT)
-      // The LUT already includes sunlight colour and dusk attenuation.
-      oceanSky = waterSkyRadiance(oceanUp, oceanRay, oceanSun);
+      // The LUT includes sunlight colour and dusk, but no dynamic occluders.
+      oceanSky = waterSkyRadiance(oceanUp, oceanRay, oceanSun, eclipse);
     #else
       float skyZenith = clamp(dot(oceanUp, oceanRay), 0.0, 1.0);
       oceanSky = mix(uWaterFresnelTint, uWaterFresnelTint * ZENITH_DARKEN, sqrt(skyZenith));
-      oceanSky *= mix(vec3(uWaterNightFloor), oceanSunTint, oceanDay);
+      oceanSky *= mix(vec3(uWaterNightFloor), oceanSunTint, oceanDay * eclipse);
     #endif
     float oceanDiffuse = max(dot(oceanNormal, oceanSun), 0.0);
     vec3 oceanScatter = baseColor * (oceanAmbient + oceanDirect * (0.25 + 0.65 * oceanDiffuse));

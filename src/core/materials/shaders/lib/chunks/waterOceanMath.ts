@@ -38,9 +38,14 @@ export interface OceanSurface {
   variance: number
 }
 
+export interface OceanPixelFootprint {
+  dx: Vec3
+  dy: Vec3
+}
+
 /** Metres, seconds, body-local outward normal. Derivatives are analytic. */
 export function sampleOceanSurface(
-  position: Vec3, up: Vec3, time: number, footprint: number, strength: number
+  position: Vec3, up: Vec3, time: number, footprint: number, strength: number, pixel?: OceanPixelFootprint
 ): OceanSurface {
   const normal = normalize(up)
   const gain = clamp(strength, 0, 3)
@@ -56,16 +61,24 @@ export function sampleOceanSurface(
   for (const wave of OCEAN_WAVES) {
     const k = wave.direction.map(v => (2 * Math.PI * v) / wave.period)
     const kLength = Math.hypot(...k)
-    // Filter the second harmonic as well as the fundamental.
-    const weight = octaveWeight(Math.PI / kLength, Math.max(footprint, 1e-6))
+    const phaseGradient = k.map((v, i) => v + warpGradient[i])
+    const phaseFootprint = Math.max(1e-6, pixel
+      ? Math.max(Math.abs(dot(phaseGradient, pixel.dx)), Math.abs(dot(phaseGradient, pixel.dy)))
+      : Math.hypot(...phaseGradient) * footprint)
+    // A long pixel along a crest can still resolve its wave. Filter the crest
+    // harmonic independently so that it cannot erase the broader fundamental.
+    const fundamental = octaveWeight(2 * Math.PI, phaseFootprint)
+    const harmonic = octaveWeight(Math.PI, phaseFootprint)
     const a = wave.amplitude * gain
     const phase = dot(periodic(wave.period), k) - Math.sqrt(9.81 * kLength) * time + wave.phase + warp
-    height += a * weight * (Math.sin(phase) - OCEAN_CREST_SHARPNESS * Math.cos(2 * phase))
-    amplitude += a * weight
-    const derivative = a * weight * (Math.cos(phase) + 2 * OCEAN_CREST_SHARPNESS * Math.sin(2 * phase))
-    for (let i = 0; i < 3; i++) gradient[i] += derivative * (k[i] + warpGradient[i])
-    const tangentK2 = Math.max(0, kLength * kLength - dot(k, normal) ** 2)
-    variance += (1 - weight * weight) * a * a * tangentK2 * (0.5 + 2 * OCEAN_CREST_SHARPNESS ** 2)
+    height += a * (fundamental * Math.sin(phase) - OCEAN_CREST_SHARPNESS * harmonic * Math.cos(2 * phase))
+    amplitude += a * fundamental
+    const derivative = a * (fundamental * Math.cos(phase) + 2 * OCEAN_CREST_SHARPNESS * harmonic * Math.sin(2 * phase))
+    for (let i = 0; i < 3; i++) gradient[i] += derivative * phaseGradient[i]
+    const tangentK2 = Math.max(0, dot(phaseGradient, phaseGradient) - dot(phaseGradient, normal) ** 2)
+    variance += a * a * tangentK2 * (
+      0.5 * (1 - fundamental * fundamental) + 2 * OCEAN_CREST_SHARPNESS ** 2 * (1 - harmonic * harmonic)
+    )
   }
   const radialGradient = dot(gradient, normal)
   for (let i = 0; i < 3; i++) gradient[i] -= normal[i] * radialGradient

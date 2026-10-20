@@ -40,7 +40,7 @@ export const waterSkyFunctions = /* glsl */ `
     uniform float uWaterSkyExposure;
     uniform float uWaterSkyHdrKnee;
 
-    vec3 waterSkyRadiance(vec3 up, vec3 reflectedRay, vec3 sun) {
+    vec3 waterSkyRadiance(vec3 up, vec3 reflectedRay, vec3 sun, vec3 eclipse) {
       // Density profiles and extinction are used during precomputation only;
       // runtime lookup needs radii, scattering coefficients and phase function.
       DensityProfileLayer zeroLayer = DensityProfileLayer(0.0, 0.0, 0.0, 0.0, 0.0);
@@ -57,7 +57,9 @@ export const waterSkyFunctions = /* glsl */ `
       vec3 transmittance;
       vec3 sky = GetSkyRadiance(atmosphere, uAtmoTransmittance,
         uWaterSkyScattering, uWaterSkyScattering, up * radius, ray, 0.0, sun, transmittance);
-      sky = max(sky * uWaterSkyExposure, vec3(0.0));
+      // Match the visible atmosphere: attenuate solar radiance before its
+      // nonlinear HDR knee, including coloured light transmitted in the umbra.
+      sky = max(sky * eclipse * uWaterSkyExposure, vec3(0.0));
       return min(min(sky, vec3(1.0)) + max(sky - 1.0, 0.0) * uWaterSkyHdrKnee, vec3(64.0));
     }
     ${cleanup}

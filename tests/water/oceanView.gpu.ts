@@ -15,6 +15,7 @@ import { sunTransmittanceUniforms } from '@/core/materials/shaders/lib/chunks/Su
 import { AtmosphereLUTGenerator } from '@/core/renderables/Atmosphere/AtmosphereLUTGenerator'
 import { type AtmosphereConfig } from '@/core/renderables/Atmosphere/AtmosphereConfig'
 import { RenderingObjects } from '@storage/database'
+import { checkOceanRegressions } from './oceanRegressions.gpu'
 
 const metersPerUnit = 1000 / SpaceScale
 const radius = 6360000
@@ -146,7 +147,7 @@ export async function checkOceanView(options: { baseline?: BaselineShader; captu
       void main() {
         vec2 p = (vUv * 2.0 - 1.0) * tan(0.5235987756);
         vec3 ray = mat3(uProbeCameraRotation) * normalize(vec3(p.x * uProbeAspect, p.y, -1.0));
-        gl_FragColor = vec4(waterSkyRadiance(vec3(0, 1, 0), ray, uProbeSun), 1.0);
+        gl_FragColor = vec4(waterSkyRadiance(vec3(0, 1, 0), ray, uProbeSun, vec3(1.0)), 1.0);
         ${ShaderChunk.colorspace_fragment}
       }
     `
@@ -301,6 +302,7 @@ export async function checkOceanView(options: { baseline?: BaselineShader; captu
     }
     mesh.geometry = nearGeometry
     setView(12, 100)
+    const regressions = checkOceanRegressions({ material, camera, height, read, setView })
     // Matched before/after timing at the screenshot resolution, separate from
     // the smaller numerical readbacks. This measures water only, not scene FPS.
     target.setSize(960, 600)
@@ -336,7 +338,7 @@ export async function checkOceanView(options: { baseline?: BaselineShader; captu
     check(errors.length === 0, errors.join('\n'))
     return {
       device, resolution: [width, height], animationDifference, foamDifference, wrapDifference, orbitalDifference, compositionError,
-      timing: { resolution: [960, 600], beforeMs, afterMs }, variants,
+      timing: { resolution: [960, 600], beforeMs, afterMs }, variants, regressions,
       luminance: { day: average(near), grazing: average(grazing), dusk: average(dusk), night: average(night) },
       captures
     }

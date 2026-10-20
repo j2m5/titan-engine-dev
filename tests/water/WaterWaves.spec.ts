@@ -101,11 +101,13 @@ describe('WaterShaderTemplate: getNoiseWeighted — структура Water.js,
     expect(frag).toContain('float t = uTime * uWaterWaveSpeed;')
   })
 
-  it('крупные октавы без Grad-выборок (мипы решают сами); Grad и производные — только в чанке мелких октав', () => {
+  it('крупные текстурные октавы используют автоматические мипы без Grad-выборок и явных производных', () => {
     expect(frag).toContain('#include <waterOctavesFunctions>')
-    expect(frag).not.toContain('texture2DGradEXT')
-    expect(frag).not.toContain('dFdx')
-    expect(frag).not.toContain('dFdy')
+    const noise = frag.match(/vec4 getNoiseWeighted\([^]*?\n\s*\}/)?.[0]
+    expect(noise).toBeDefined()
+    expect(noise).not.toContain('texture2DGradEXT')
+    expect(noise).not.toContain('dFdx')
+    expect(noise).not.toContain('dFdy')
   })
 })
 

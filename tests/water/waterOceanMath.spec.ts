@@ -13,6 +13,38 @@ const sample = (p = point, n = up, time = 3.7, footprint = 0.01, strength = 1) =
   sampleOceanSurface(p, n, time, footprint, strength)
 
 describe('ocean surface continuity', () => {
+  it('removes bands that are unresolved along a grazing pixel', () => {
+    // 10 m altitude, 1000 m range, 50 degrees / 1080p. The old scalar
+    // footprint is only 4.32 m although adjacent rays span 86.52 m.
+    const surface = sampleOceanSurface(point, up, 3.7, 4.32, 1, {
+      dx: [0.864, 0, 0], dy: [0, 0, 86.52]
+    })
+    expect(surface.height).toBe(0)
+    expect(surface.gradient).toEqual([0, 0, 0])
+    expect(surface.variance).toBeGreaterThan(0)
+  })
+
+  it('preserves waves resolved across a pixel elongated along the crests', () => {
+    let squaredHeight = 0
+    for (let i = 0; i < 32; i++) {
+      const surface = sampleOceanSurface([i * 13.7, 0, i * 7.3], up, 3.7, 140, 1, {
+        dx: [119, 0, -75], dy: [0.01, 0, 0.01]
+      })
+      squaredHeight += surface.height ** 2
+    }
+    expect(Math.sqrt(squaredHeight / 32)).toBeGreaterThan(0.4)
+  })
+
+  it('retains the unfiltered height and slope when a pixel resolves every band', () => {
+    const reference = sample(point, up, 3.7, 0.001)
+    const projected = sampleOceanSurface(point, up, 3.7, 0.001, 1, {
+      dx: [0.001, 0, 0], dy: [0, 0, 0.001]
+    })
+    expect(projected.height).toBeCloseTo(reference.height, 12)
+    projected.gradient.forEach((value, i) => expect(value).toBeCloseTo(reference.gradient[i], 12))
+    expect(projected.variance).toBe(0)
+  })
+
   it('does not repeat the same height tile every 160 metres', () => {
     // Regression: harmonically related crossing waves produced a visible waffle
     // pattern. Compare actual fields, not the generator's chosen wave parameters.
