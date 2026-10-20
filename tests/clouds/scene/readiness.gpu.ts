@@ -135,8 +135,15 @@ export async function run(): Promise<SceneCloudProbeReport> {
       failure = error instanceof Error ? error : Error(String(error))
     } finally {
       // Retire the deliberately invalid draw before closing its diagnostic window.
-      // ANGLE can otherwise report it during the following asynchronous compilation.
-      renderer.getContext().finish()
+      // A readback, unlike finish() on the browser command stream, also waits for
+      // deferred ANGLE output-type validation. Drain its errors inside the window.
+      renderer.readRenderTargetPixels(target, 0, 0, 1, 1, new Float32Array(4))
+      const gl = renderer.getContext()
+      for (let i = 0; i < 16; i++) {
+        const code = gl.getError()
+        if (code === 0) break
+        check(code === gl.INVALID_OPERATION, 'only intentional invalid-program GL operations are drained')
+      }
       await new Promise(requestAnimationFrame)
       windows.push({ start, end: Date.now() + 1 })
     }
@@ -144,12 +151,6 @@ export async function run(): Promise<SceneCloudProbeReport> {
       !!failure && /shader compilation failed/i.test(failure.message),
       'descriptive shader error outside actual render'
     )
-    const gl = renderer.getContext()
-    for (let i = 0; i < 16; i++) {
-      const code = gl.getError()
-      if (code === 0) break
-      check(code === gl.INVALID_OPERATION, 'only intentional invalid-program GL operations are drained')
-    }
     check(escapedRenderErrors === 0, 'shader and previous-handler errors never escape inside renderer.render')
     return failure!
   }

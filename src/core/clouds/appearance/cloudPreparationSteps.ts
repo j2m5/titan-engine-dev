@@ -1,4 +1,4 @@
-/** Fractional area reduction. A step bounds source samples, even inside one destination pixel. */
+/** Area reduction. A step bounds source samples, even inside one destination pixel. */
 export function createCloudReduction(
   sw: number,
   sh: number,
@@ -8,6 +8,10 @@ export function createCloudReduction(
   channels: number
 ) {
   const output = new Uint8Array(dw * dh * 4)
+  const blockWidth = sw / dw,
+    blockHeight = sh / dh
+  if (Number.isInteger(blockWidth) && blockWidth >= 1 && Number.isInteger(blockHeight) && blockHeight >= 1)
+    return alignedReduction(sw, dw, dh, blockWidth, blockHeight, decode, channels, output)
   let x = 0,
     y = 0,
     sx = 0,
@@ -50,6 +54,55 @@ export function createCloudReduction(
             x = 0
             y++
           }
+        }
+      }
+      return y === dh
+    }
+  }
+}
+
+/** Integral blocks have unit overlap for every source pixel. Keep the same
+ * row-major summation and quantize only after a complete destination pixel.
+ */
+function alignedReduction(
+  sw: number,
+  dw: number,
+  dh: number,
+  blockWidth: number,
+  blockHeight: number,
+  decode: (index: number) => readonly number[],
+  channels: number,
+  output: Uint8Array
+) {
+  const area = blockWidth * blockHeight,
+    rowSkip = (sw - blockWidth) * 4,
+    sums = new Array<number>(channels).fill(0)
+  let x = 0,
+    y = 0,
+    sx = 0,
+    sy = 0,
+    index = 0
+  return {
+    output,
+    step(samples: number): boolean {
+      while (y < dh && samples-- > 0) {
+        const decoded = decode(index)
+        for (let c = 0; c < channels; c++) sums[c] += decoded[c]
+        index += 4
+        if (++sx === blockWidth) {
+          sx = 0
+          sy++
+          index += rowSkip
+        }
+        if (sy === blockHeight) {
+          for (let c = 0; c < channels; c++) output[(y * dw + x) * 4 + c] = Math.round((255 * sums[c]) / area)
+          sums.fill(0)
+          sy = 0
+          if (++x === dw) {
+            x = 0
+            y++
+          }
+          index = (y * blockHeight * sw + x * blockWidth) * 4
         }
       }
       return y === dh

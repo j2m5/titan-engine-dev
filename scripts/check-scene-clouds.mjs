@@ -48,16 +48,16 @@ const report = await withCloudProbeBrowser(
           )
           requiredCases = scope.requiredCases
           const baselineDir = process.env.SCENE_CLOUD_BASELINE_DIR
-          if (!baselineDir) throw new Error('Set SCENE_CLOUD_BASELINE_DIR to the saved main-scene baseline directory')
-          const terrain = JSON.parse(await readFile(resolve(baselineDir, 'terrain-evidence.json'), 'utf8'))
-          const loaded = JSON.parse(await readFile(resolve(baselineDir, 'loaded-evidence.json'), 'utf8'))
-          const { p50, p95, gpu, userAgent, viewport, dpr, rendererPixelRatio, memory, programs } = terrain.sample
-          const baseline = {
-            terrain: {
-              pose: terrain.pose,
-              sample: { p50, p95, gpu, userAgent, viewport, dpr, rendererPixelRatio, memory, programs }
-            },
-            loaded: { phases: loaded.phases.map(({ pose }) => ({ pose })) }
+          let baseline = null
+          if (baselineDir) {
+            const terrain = JSON.parse(await readFile(resolve(baselineDir, 'terrain-evidence.json'), 'utf8'))
+            const { p50, p95, gpu, userAgent, viewport, dpr, rendererPixelRatio, memory, programs } = terrain.sample
+            baseline = {
+              terrain: {
+                pose: terrain.pose,
+                sample: { p50, p95, gpu, userAgent, viewport, dpr, rendererPixelRatio, memory, programs }
+              }
+            }
           }
           await send('Page.navigate', { url: new URL('/', pageUrl).href })
           const waitFor = async (expression, label) => {
@@ -144,7 +144,7 @@ const report = await withCloudProbeBrowser(
         if (name === 'flight')
           await writeFile(
             resolve(outputDir, 'flight-progress.json'),
-            JSON.stringify(await evaluate('window.__sceneCloudFlightEvidence').catch(() => null), null, 2)
+            JSON.stringify((await evaluate('window.__sceneCloudFlightEvidence').catch(() => null)) ?? null, null, 2)
           )
         await writeFile(
           resolve(outputDir, `${name}-failure-report.json`),

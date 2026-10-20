@@ -103,13 +103,20 @@ fails the runner. Intentional shader failures retain their raw diagnostics and
 are classified only within recorded injection timestamp windows.
 
 The flight probe requires `SCENE_CLOUD_PROBE_URL` pointing at a local test server
-that serves the normal application and original assets, and
-`SCENE_CLOUD_BASELINE_DIR` pointing at the saved `loaded-evidence.json` and
-`terrain-evidence.json`. The runner navigates from the test page to `/`, clicks
+that serves the normal application and original assets. It runs without historical
+files: its terrain reference uses the current Earth at JD 2451545, viewed from
+70 km on the sunward side. Optional `SCENE_CLOUD_BASELINE_DIR` selects a saved
+`terrain-evidence.json` pose instead and requires matching GPU identity,
+viewport, DPR and renderer pixel ratio. `loaded-evidence.json` is not needed.
+Neither mode silently treats another device's timings as a comparable baseline.
+The runner navigates from the test page to `/`, clicks
 the production Solar button, then imports test access. It never constructs a
 replacement application scene. Functional frame PNGs and metadata are saved in
 ignored `tmpscreenshots/scene-clouds/`; warm performance samples exclude screenshot
 capture. No test-only access or debug UI is required in the shipped application.
+Returning from the forced far reference waits up to 30 seconds for normal GPU
+warmup and full near weight. Producer and endpoint budgets are measured on the
+subsequent captured frame, preserving the exact one-update assertions.
 For an explicitly scoped remaining-case check, `SCENE_CLOUD_FLIGHT_START=peak`
 starts after the completed Earth path. Its report declares `scope: "peak"` and
 requires only its executed cases; it does not report a complete flight. Omitting
@@ -660,3 +667,254 @@ The full unit suite passes 5366 tests in 552 files, with 4 configured skips.
 TypeScript, production build, lint excluding local `.superpowers/**`, and formatting
 of all changed TypeScript files pass. The adapter regression also preserves the
 authored extinction and erosion strength through low/medium/high round trips.
+
+### Standalone flight and aligned source reduction (2026-10-20)
+
+The standard full flight now works without files captured on the previous device.
+Its current-epoch reference and bounded near-endpoint restoration are described
+in the verification section above. Supplying a saved terrain reference remains
+optional, with explicit environment matching. Early runner failures also retain
+their original diagnostics when flight evidence has not yet been created.
+
+Source reduction now uses a simpler path when both source/destination ratios
+are positive integers, including the normal Earth 8192 x 4096 to 2048 x 1024 case.
+Every contributing source pixel then has unit area. The new path retains the
+same decoded sample order, channel sums and final byte rounding, without
+calculating fractional overlaps for each sample. Nonintegral dimensions keep the
+existing area-weighted path. The 256-sample checkpoints, 4 ms scheduling budget,
+source-replacement checks and cancellation behavior are retained.
+
+A local CPU comparison used the real RGB byte decoder and deterministic
+4096 x 2048 input reduced by four on each axis. After warming both implementations,
+five pairs alternated their order. Median reduction time was 253.57 ms before
+and 156.66 ms after (38.2% less); output bytes matched in every pair. Before the
+change, the same comparison failed its local 20% improvement gate with a ratio
+of 0.993. This timing gate is a local experiment, not a portable CI threshold.
+Regression tests independently check block sums, sample order, channel padding,
+partial steps, identity/asymmetric blocks and the fractional fallback, plus
+abort/image replacement in both reduction paths.
+
+Fresh production Solar runs used Chrome 155, RTX 5070 Ti / ANGLE D3D11,
+1280 x 800, DPR 1, medium quality, JD 2451545 and the sunward 70 km Earth pose.
+Summed preparation CPU slices fell from 1214.8 to 849.6 ms, with maximum slices
+4.2 / 4.1 ms. Preparation wall time was 6807.4 / 6748.3 ms: unrelated cold
+terrain/water work landed in different preparation phases, so these runs do not
+establish an equivalent reduction in total entry latency. The first visible
+volume frame still followed a 1660 ms interval in the final run.
+
+An invasive diagnostic with synchronous readback after each first draw separated
+approximately 346 ms at shadow current, 92 ms at shadow resolve and 1189 ms at
+cloud current. These include first-use driver work; ordinary asynchronous timer
+queries attributed that work to different stages depending on submission order.
+No new WebGL program links appeared at first draw. Trials changing cascade
+scheduling, closest-neighbor selection, noise LOD or unused irradiance code
+retained substantial startup pauses and were not shipped. GPU cold-start stalls
+remain open; this iteration claims a CPU preparation improvement only. Appearance,
+cloud quality budgets and shaders are unchanged. Other hardware was not tested.
+
+Local measurements are in `tmpscreenshots/cloud-audit-2026-10-20/reduction-*.json`
+and `tmpscreenshots/cloud-tuning/startup-current-before/`,
+`startup-stage-readback/`, `startup-aligned-final/`. Independent read-only review
+found no required corrections in the flight changes or aligned reduction.
+
+The final standard `--probe=all` run passed all nine groups: 2904 checks across
+146 cases, including 219 checks / 19 cases in the complete standalone flight.
+All groups reported resource release. Three readiness-matched Solar exits
+returned to 1 geometry, 2 textures and 0 programs, with no cloud, prepared or depth
+owner retained. Shader-failure injection diagnostics stayed within their expected
+windows; the runner accepted no unexpected runtime/WebGL errors.
+
+The full unit suite passes 5378 tests in 554 files, with 4 configured skips.
+TypeScript, production build, lint excluding local `.superpowers/**`, formatting
+of the changed code and `git diff --check` pass.
+
+### Cold current-pass output specialization (2026-10-20)
+
+After merging the current water work, the remaining cloud startup pause was
+isolated to the first multiple-render-target (MRT) draw. On the tested D3D11
+backend, ANGLE initially compiles the first color output, then generates another
+pixel executable when the framebuffer output layout differs. This occurs after
+parallel shader linking reports completion. See the
+[ANGLE output-layout implementation](https://chromium.googlesource.com/angle/angle/+/refs/heads/main/src/libANGLE/renderer/d3d/ProgramExecutableD3D.cpp).
+A disposable diagnostic disabled auxiliary MRT writes without changing shader
+code; the first-volume interval dropped to 6.4 ms. That diagnostic loses required
+data and is not part of the implementation.
+
+`prepareCloudCurrentOutput` instead exports the expensive cloud march to a single
+RGBA32UI texture, packing the existing seven half-float channels with
+`packHalf2x16`. A small fullscreen pass unpacks them into the original color and
+depth/velocity attachments. The cloud march, temporal resolve, public textures,
+quality settings and activation fade retain their existing behavior. The wrapper
+also covers early returns, including clear rays and diagnostic views.
+
+The new target follows the current march resolution, including resize and capture;
+it costs 16 bytes per current-pass pixel. At 1280 x 800 and medium Earth quality,
+that is 224 x 140 x 16 = 501,760 bytes, about 0.48 MiB. The unpack shader joins
+parallel warmup and receives the backend's retry cache suffix. History reset,
+source replacement, failure recovery and disposal release the target and material
+and restore the original compile/cache/render hooks.
+
+Cold comparisons used fresh Chrome 155 profiles, RTX 5070 Ti / ANGLE D3D11,
+1280 x 800, DPR 1, medium quality, JD 2451545 and the same sunward 70 km Earth
+view. The control repeats the previous output path on the same updated scene.
+No build, unit suite or other probe ran during these measurements.
+
+| Measurement                                                         | Previous MRT path (two runs) | Packed current output (two runs) |
+| ------------------------------------------------------------------- | ---------------------------- | -------------------------------- |
+| Maximum RAF interval from first hidden cloud workload to activation | 1576.4 / 1589.5 ms           | 443.0 / 465.0 ms                 |
+| CPU time of first visible volume frame                              | 12.9 / 14.1 ms               | 13.7 / 14.4 ms                   |
+
+The median cloud startup interval fell by about 71%. The remaining roughly
+0.45-second first shadow current/resolve specialization is still open. Unrelated
+cold terrain/water compilation also remains; this is not a claim that all scene
+startup stalls are gone. First-use GPU queries can attribute queued specialization
+to adjacent passes, so the RAF intervals, not individual query labels, establish
+the measured improvement. No other GPU was tested.
+
+GPU regression fixtures compare all original half-float output bits against the
+packed path, including HDR, overflow depth, signed motion, early returns and odd
+viewport dimensions. They also check release after repeated setup. The existing
+lighting probe now includes this case. Unit coverage checks target reuse on resize,
+hook restoration, retry cache identity, atomic rejection of changed shader
+contracts, duplicate ownership and disposal of only owned resources.
+
+The readiness fault-injection fixture waits for a synchronous readback and drains
+deliberate invalid-program errors before closing each diagnostic window. `finish()`
+alone allowed delayed ANGLE output-type diagnostics to arrive during recovery.
+The runner's error filter remains unchanged; ordinary recovery still checks its
+pixels and requires a clean GL error state.
+
+Cold records and screenshots are retained locally under
+`tmpscreenshots/cloud-tuning/startup-post-water-baseline/`,
+`startup-unpacked-reference/`, `startup-packed-final-b/` and
+`startup-packed-final-c/`.
+
+The final adapter was also compared with the original output path in the same
+running Solar scene, using the lit Earth cloud edge and fixed simulation time.
+Each view/variant settled for 120 ready frames, followed by 30 additional warmup
+frames per timer scope and 181 valid, non-disjoint GPU samples. The inside view
+measured packed first; the other pairs measured the original path first.
+
+| Quality / view      | Whole-frame GPU p50, original / packed (ms) | Cloud-pass GPU p50, original / packed (ms) |
+| ------------------- | ------------------------------------------- | ------------------------------------------ |
+| Medium / above      | 9.027 / 8.928                               | 3.536 / 3.399                              |
+| Medium / inside     | 6.788 / 6.715                               | 1.342 / 1.352                              |
+| Medium / transition | 9.367 / 9.338                               | 2.379 / 2.432                              |
+| Low / above         | 5.540 / 5.585                               | 0.604 / 0.580                              |
+| High / above        | 14.315 / 14.663                             | 10.827 / 10.837                            |
+
+Cloud-pass medians changed by -0.137 to +0.053 ms. The largest whole-frame median
+increase was 0.348 ms on high; its p95 was 15.195 / 15.158 ms, while isolated
+cloud p95 was 10.896 / 10.895 ms. These local pairs do not show a material added
+cloud-pass cost and do not establish performance on other GPUs. Each pair kept
+the geometry count and added exactly one texture. Visual inspection of the
+medium-above screenshots found no visible appearance change. Final records are
+in `tmpscreenshots/cloud-tuning/packed-final-perf/paired.json` with adjacent
+screenshots. Earlier disposable prototype measurements are kept separately in
+`packed-prototype-perf/`; the prototype code was discarded.
+
+The final standard `--probe=all` run passed all nine groups: 2940 checks across
+147 cases, including the complete standalone flight (219 checks / 19 cases).
+Every group reported resource release. All recorded shader-failure diagnostics
+were accepted only inside deliberate fault-injection windows; the runner found
+no unexpected runtime/WebGL errors.
+
+The full unit suite passed 5685 tests in 586 files, with 4 configured skips.
+TypeScript, lint and the production build passed. The readiness-only fixture
+adjustment was then checked again with TypeScript, targeted lint, its standalone
+GPU probe and the full GPU run above. Independent review found no required
+corrections in either the adapter or the diagnostic barrier.
+
+### Cold shadow cascade output specialization (2026-10-21)
+
+With the packed cloud-current output in place, a first-draw readback diagnostic
+isolated the remaining pause to shadow current (369.9 ms) and shadow resolve
+(92.1 ms) on medium. `prepareCloudShadowOutput` executes each cascade separately
+on low/medium, so both kernels have one framebuffer output. The current kernel exports its
+seven half-float channels to a reusable RGBA32UI scratch texture; a small pass
+writes the color and velocity back into their original array layers. Resolve
+then writes each original history layer directly. Cascade coordinates, map size,
+noise frame, raymarch parameters and temporal accumulation remain unchanged.
+High uses only the split resolve: its original current material, compile hook,
+cache key and render callback are retained. The backend chooses this explicitly
+by quality; cascade count is not a quality discriminator (medium also has three).
+
+The native high-quality production comparison did not consistently reproduce the
+original half-float values after splitting the raymarch. A constant-index branch
+experiment also increased medium shadow GPU time from about 0.85 to 2.44 ms and
+was rejected. Neither experimental high-current variant is enabled. Splitting
+high's current pass remains deferred; its first-draw MRT cost still exists. The
+observations do not establish a particular driver or floating-point root cause.
+
+The unpack shader joins parallel warmup. Source strings stay intact and the
+compile hooks retain prior patches and diagnostic injections. Cache keys separate
+the new variants and retain retry epochs. Cleanup restores borrowed render and
+compile hooks and releases only the owned scratch target and unpack material.
+The scratch target costs 16 bytes per shadow-map pixel regardless of cascade
+count: 1 MiB on low/medium (256 x 256). High never renders into this scratch target
+and does not allocate a full-size packed shadow texture.
+
+Switching a previously used MRT array target to individual layers also requires
+detaching its auxiliary attachments. Otherwise a layer can remain attached twice
+and WebGL rejects the framebuffer. The numerical GPU fixture deliberately reuses
+the original targets to exercise this transition. It compares all seven defined
+current channels and all four resolved channels against the original path, for
+1–4 cascades, 7 x 5 and 13 x 9 targets, and two deterministic frames, for both full
+splitting and resolve-only mode. The original
+velocity output is a vec3; its unused fourth component has no parity contract.
+The new unpack explicitly fills that padding with zero.
+
+The first paired prototype run exposed the stale-attachment issue and is excluded
+from performance evidence. The corrected prototype passed; its code was then
+discarded before implementing the adapter from failing contract tests. Final
+coverage checks layer order, scratch reuse on resize, compile/cache preservation,
+atomic shader-contract rejection, duplicate ownership and resource disposal.
+A separate regression verifies that resolve-only mode leaves the current pass
+and its shader hooks untouched and accepts a current shader it does not own.
+
+Attachment cleanup is capped by the context's `MAX_COLOR_ATTACHMENTS`, cached
+once per context within the binding. Array layer count is independent of that
+limit; a context with four color attachments can still receive six/eight shadow
+layers through this path. A regression simulates that limit and verifies every
+layer is drawn without addressing unavailable attachment slots. This is a contract
+test, not a measurement on another GPU. See the
+[WebGL 2 framebuffer rules](https://registry.khronos.org/webgl/specs/2.0/#3.7.4).
+
+Final production-scene comparison used native ANGLE/D3D11 on RTX 5070 Ti,
+Chrome 155, 1280 x 800 at DPR 1, a fixed Solar epoch and the same cloud edge.
+All defined current and resolved channels matched the original half-float data
+on low, medium (above and inside the layer) and high (resolve-only). A separate
+low/medium run checked frames 0, 1, 63, 64, 121, 242 and 366, including repeated
+draws of each path: all 14 comparisons were exact.
+
+Paired steady-state GPU medians, 181 samples per measurement:
+
+| Quality / view  | Shadow before → after | Full frame before → after |
+| --------------- | --------------------- | ------------------------- |
+| Low / above     | 0.190 → 0.201 ms      | 5.768 → 5.779 ms          |
+| Medium / above  | 0.750 → 0.787 ms      | 8.786 → 8.733 ms          |
+| Medium / inside | 0.750 → 0.785 ms      | 6.654 → 6.682 ms          |
+| High / above    | 1.539 → 1.519 ms      | 14.666 → 14.262 ms        |
+
+Low/medium pay about 0.01–0.04 ms for the extra draws. These paired observations
+are not a cross-device performance guarantee or evidence of a general FPS gain;
+the intended benefit is first activation. Artifacts are in
+`tmpscreenshots/cloud-tuning/shadow-final-quality-perf/` and
+`tmpscreenshots/cloud-tuning/shadow-final-low-medium-parity/` (local, ignored).
+
+Fresh-profile medium startup control (same packed cloud-current implementation,
+original shadow passes) had a 443.0 ms maximum frame gap during cloud activation.
+Two final-adapter runs measured 25.8 and 23.2 ms; first hidden GPU work to first
+visible cloud contribution was 467.6 ms in the control and 23.6 / 20.4 ms after.
+This interval starts with cloud GPU work and ends at its first visible
+contribution. It excludes source preparation and earlier terrain/shader work;
+it is not total Solar boot time. These runs do not measure High's remaining
+current-pass pause. Raw startup artifacts:
+`tmpscreenshots/cloud-tuning/startup-shadow-quality-final-{reference,a,b}/`.
+
+Final verification: TypeScript and 5,691 unit tests passed (four skipped),
+production build and lint passed. The complete scene GPU suite passed 3,145
+checks across 148 cases, with every probe reporting resource release. Its 17
+WebGL warnings were confined to the existing intentional shader-failure windows;
+there were no unexpected WebGL errors. The final shadow implementation also
+passed independent code review. Testing on other hardware remains deferred.

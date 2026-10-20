@@ -40,6 +40,8 @@ import type { SceneCloudProbeReport } from './probe'
 import { checkSceneCloudTemporalResolve } from './temporalResolve.gpu'
 import { checkSceneCloudSunShadow } from './sunShadow.gpu'
 import { checkSceneCloudReprojection } from './reprojection.gpu'
+import { checkSceneCloudCurrentOutput } from './currentOutput.gpu'
+import { checkSceneCloudShadowOutput } from './shadowOutput.gpu'
 
 const SIZE = 33,
   UNIT = SpaceScale / 1000,
@@ -281,6 +283,10 @@ void main() {
   }
   const aerialCall = 'applyAerialPerspective(sceneProbeOrigin, sceneProbeEndpoint, 0.0, color);'
   try {
+    checkSceneCloudCurrentOutput(renderer, check)
+    report.cases.push('packed-current-output')
+    checkSceneCloudShadowOutput(renderer, check)
+    report.cases.push('single-output-shadows')
     // Independent actual main SphereSurfaceMaterial at white datum/noon, before aerial/AgX.
     const empty = { first: () => undefined, isNotEmpty: () => false }
     const model = {

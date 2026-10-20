@@ -78,10 +78,15 @@ describe('resumable cloud preparation', () => {
     expect(source.version).toBe(version)
     expect(dispose).not.toHaveBeenCalled()
   })
-  it.each(['abort', 'replace-image'] as const)(
-    'cancels during bounded reduction without publishing derivatives (%s)',
-    async (mode) => {
-      const source = new DataTexture(new Uint8Array(2049 * 3 * 4), 2049, 3)
+  it.each([
+    ['abort', 2049, 3],
+    ['replace-image', 2049, 3],
+    ['abort', 4096, 4],
+    ['replace-image', 4096, 4]
+  ] as const)(
+    'cancels during bounded reduction without publishing derivatives (%s, %sx%s)',
+    async (mode, width, height) => {
+      const source = new DataTexture(new Uint8Array(width * height * 4), width, height)
       const dispose = vi.spyOn(source, 'dispose'),
         control = new AbortController()
       let reducing = false,

@@ -145,6 +145,8 @@ export const sceneCloudProbeRegistry: Partial<
   lighting: {
     load: () => import('./lighting.gpu'),
     requiredCases: [
+      'packed-current-output',
+      'single-output-shadows',
       'white-star',
       'colored-star',
       'zenith',

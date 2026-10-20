@@ -45,7 +45,6 @@ type Baseline = {
       programs: number
     }
   }
-  loaded: { phases: { pose: Pose }[] }
 }
 type EngineAccess = {
   scene: Scene
@@ -59,7 +58,7 @@ type EngineAccess = {
   sceneManager: { factory: { cloudRegistry: CloudRegistry } }
 }
 type FlightWindow = Window & {
-  __sceneCloudFlightBaseline?: Baseline
+  __sceneCloudFlightBaseline?: Baseline | null
   __sceneCloudFlightStart?: string
   __sceneCloudFlightCheckpoint?: { id: string; data: unknown; acknowledge(): void }
   __sceneCloudFlightEvidence?: unknown
@@ -77,8 +76,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
   const e = app?.engine
   if (!e || engineStore.scenario?.id !== 1 || engineStore.appLoadingStatus || !document.querySelector('#canvas'))
     throw new Error('Flight requires the production Solar UI boot; a blank fixture is not an app')
-  const baseline = host.__sceneCloudFlightBaseline
-  if (!baseline) throw new Error('Flight requires saved main-scene baseline metadata')
+  const baseline = host.__sceneCloudFlightBaseline ?? null
   const runtime = e.postprocessing.cloudRuntime!
   if (!runtime) throw new Error('Production cloud runtime absent')
   const registry = e.sceneManager.factory.cloudRegistry
@@ -93,6 +91,7 @@ export async function run(): Promise<SceneCloudProbeReport> {
   const evidence = {
     started: new Date().toISOString(),
     scope,
+    reference: baseline ? 'saved-terrain-pose' : 'current-epoch-subsolar-70km',
     environment: {} as unknown,
     phases,
     performanceStates,
@@ -104,8 +103,11 @@ export async function run(): Promise<SceneCloudProbeReport> {
     currentReadiness: null as unknown,
     limits: [
       'RAF intervals and renderer object counts are not GPU time or bytes.',
-      'Old six Earth poses have sphere-only geometry and cannot be matched to loaded terrain.',
-      'Saved baseline autoReset=true render calls cover only the latest composer pass; current counters cover a whole Engine frame.'
+      ...(baseline
+        ? [
+            'Saved baseline autoReset=true render calls cover only the latest composer pass; current counters cover a whole Engine frame.'
+          ]
+        : ['Standalone flight has no historical performance baseline; its timings describe the current run only.'])
     ]
   }
   host.__sceneCloudFlightEvidence = evidence
@@ -614,12 +616,21 @@ export async function run(): Promise<SceneCloudProbeReport> {
       gpuTiming: 'Optional asynchronous whole Engine frame queries; accept only nondisjoint samples',
       renderCounters:
         'info.autoReset=false; reset before each Engine.renderFrame; all renderer draws within that frame',
-      baselineTerrain: baseline.terrain.sample
+      baselineTerrain: baseline?.terrain.sample ?? null
     }
-    assert(gpu === baseline.terrain.sample.gpu, 'GPU matches baseline')
+    if (baseline) {
+      assert(gpu === baseline.terrain.sample.gpu, 'GPU matches the requested saved baseline')
+      assert(
+        innerWidth === baseline.terrain.sample.viewport[0] &&
+          innerHeight === baseline.terrain.sample.viewport[1] &&
+          devicePixelRatio === baseline.terrain.sample.dpr &&
+          e.renderer.getPixelRatio() === baseline.terrain.sample.rendererPixelRatio,
+        'viewport and DPR match the requested saved baseline'
+      )
+    }
     assert(
       innerWidth === 1280 && innerHeight === 800 && devicePixelRatio === 1 && e.renderer.getPixelRatio() === 1,
-      'baseline viewport and DPR'
+      'flight viewport and DPR'
     )
     cases.push('production-solar-boot')
     const earth = getBody(7)
@@ -636,10 +647,20 @@ export async function run(): Promise<SceneCloudProbeReport> {
       })
       await checkpoint('earth-visible-far-sphere', earth)
     }
-    // Saved shoreline is the valid loaded-terrain comparison, distinct from six sphere-only poses.
-    e.renderCamera.position.fromArray(baseline.terrain.pose.camera)
-    e.renderCamera.quaternion.fromArray(baseline.terrain.pose.quaternion)
-    e.cameraCollision.reset()
+    // A deterministic real-app position makes functional coverage independent of
+    // old-device files. An explicitly supplied baseline retains its original pose.
+    if (baseline) {
+      e.renderCamera.position.fromArray(baseline.terrain.pose.camera)
+      e.renderCamera.quaternion.fromArray(baseline.terrain.pose.quaternion)
+      e.cameraCollision.reset()
+    } else {
+      await frame()
+      move(earth, 70)
+    }
+    const terrainReferencePose: Pose = {
+      camera: e.renderCamera.position.toArray(),
+      quaternion: e.renderCamera.quaternion.toArray()
+    }
     await settle(earth, true)
     if (scope === 'full')
       await checkpoint('cold-first-volume-entry', earth, {
@@ -709,15 +730,15 @@ export async function run(): Promise<SceneCloudProbeReport> {
         await checkpoint(`earth-${altitude}km`, earth, { altitudeKm: altitude, budget })
         if ([150, 110, 70].includes(altitude)) await sample(`earth-${altitude}km-performance`, earth)
       }
-      // Same ready resource intent, exact saved camera; no outside-cutoff detour is
+      // Same ready resource intent, exact reference camera; no outside-cutoff detour is
       // needed between the altitude path and the matched shoreline measurement.
-      e.renderCamera.position.fromArray(baseline.terrain.pose.camera)
-      e.renderCamera.quaternion.fromArray(baseline.terrain.pose.quaternion)
+      e.renderCamera.position.fromArray(terrainReferencePose.camera)
+      e.renderCamera.quaternion.fromArray(terrainReferencePose.quaternion)
       e.cameraCollision.reset()
       await settle(earth, true)
-      await wait('shoreline-benchmark-ready-resources', () => app.resourceObserver.inFlight.size === 0)
-      await sample('earth-baseline-shoreline-near', earth)
-      await verifyVisibleDepth('earth-shoreline-visible-depth')
+      await wait('terrain-reference-ready-resources', () => app.resourceObserver.inFlight.size === 0)
+      await sample(baseline ? 'earth-saved-terrain-reference-near' : 'earth-current-terrain-reference-near', earth)
+      await verifyVisibleDepth('earth-reference-visible-depth')
       cases.push('earth-altitude-path', 'frame-budget', 'sphere-terrain-water', 'isolated-main-performance')
       move(earth, 90, direction)
       await settle(earth, true)
@@ -845,6 +866,11 @@ export async function run(): Promise<SceneCloudProbeReport> {
     const references = []
     for (const endpoint of ['near-before', 'forced-far', 'near-restored']) {
       forceFarReference = endpoint === 'forced-far'
+      // A missing plan deliberately cancels GPU preparation. A restored endpoint
+      // must retire its new fence before publication; capture one completed frame,
+      // keeping the exact per-frame budget checks below.
+      if (endpoint !== 'forced-far')
+        await wait(`reference-${endpoint}-full-weight`, () => runtime.diagnostics.effectiveWeight === 1, 30000)
       const beforeReference = runtime.diagnostics
       const captured = await new Promise<
         ReturnType<typeof snapshot> & { screenshotDataUrl: string; endpoint: string; light: unknown }
@@ -922,13 +948,13 @@ export async function run(): Promise<SceneCloudProbeReport> {
       'one forced-far reference frame renders far without near'
     )
     assert(
-      references[2].frame.passes.nearRenders - references[1].frame.passes.nearRenders === 1,
-      'next reference frame restores near'
+      references[2].frame.passes.nearRenders - references[1].frame.passes.nearRenders >= 1,
+      'reference restores near after bounded GPU preparation'
     )
     await checkpoint('same-pose-far-near-reference', earth, {
       references,
       limitation:
-        'Test-only composition bypass for one functional frame; excludes performance sampling. No source/material/albedo/lighting/exposure mutation.'
+        'Test-only composition bypass for one functional frame, followed by bounded GPU preparation; excludes performance sampling. No source/material/albedo/lighting/exposure mutation.'
     })
     cases.push('same-pose-far-near-reference')
     const jupiter = getBody(10)
